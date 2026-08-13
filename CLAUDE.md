@@ -1159,6 +1159,25 @@ LLVM-RED'den çıkıp çalışıyor.
 - **Kalan 3 kaçırma** (T002 modül · T007 generic bound · T001 generic method)
   ayrı ve büyük kökler.
 
+### 🔴 D-427: D-424 SÜRÜCÜ DERLEMESİNİ KIRMIŞ + YENİ KAPI `calistir_surucu_diff`
+- **19 dosya HİÇBİR kapının altında değildi** (`drivers/virtio` 10 +
+  `tests/drivers/virtio` 9). D-424'ün tip kapısı eklenince self onları
+  DERLEYEMEZ oldu: `status` C=11def/SELF=0, `virtio_mmio` 63/0, `virtqueue_bind`
+  68/0. Hiçbir kapı görmedi.
+- **⚠⚠ D-424'ün ön koşulunu 502 dosyada ölçüp "yanlış-pozitif SIFIR" demiştim;
+  o listede `drivers/` YOKTU.** Kendi dersimi ("parite sayısı yalnız ölçülen
+  yüzey kadar geniştir", D-420) KENDİ KAPIMA uygulamayı atladım.
+  **ÖN KOŞUL ÖLÇÜMÜNÜN KAPSAMI DA AYRICA DOĞRULANMALI** — dersi yazmış olmak
+  onu uygulamaya yetmiyor (bu oturumda ikinci kez).
+- **Kök:** C `src/ana.c` `kullan_yeni_bicim` = `segment<=1 ∨ seçili ∨ alias`.
+  Hiçbiri değilse (`kullan a::b::c;`) **LEGACY DÜZLEŞTİRME**: tüm üst düzey
+  adlar görünür, `dışa`/`genel` gerekmez, T041 UYGULANMAZ. Self ayırmıyordu →
+  düz `sabit`ler özel sayılıp sahte T002. **Yardımcı (`kullan_yeni_bicim_mi`)
+  ZATEN VARDI**, `modul_yukle` çağırmıyordu.
+- **Kalan 2 muafiyet (CP005) ÖLÇÜLDÜ:** minimal şekillerde kural C ile BİREBİR;
+  gerçek dosyada tüketen işlev BAŞKA DOSYADA ve self çapraz-dosya **imzalarını**
+  taşımıyor (yalnız adları) → "check paritesi SIĞ" kökü.
+
 ### ✓ D-426: K2 KAPANDI — aggregate payload'ında birim tip `i8`
 `sonuç<boş,X>`/`seçimlik<boş>` payload yuvası artık C ile birebir (`{i8,i8,i32}`).
 **Onarım İKİ parçalı, tek başına tip eşlemesi YETMEZDİ:** (1) `ll_tip_alan` —

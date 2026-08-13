@@ -5,6 +5,63 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-427 [YÜKSEK] — 🔴 D-424 SÜRÜCÜ DERLEMESİNİ KIRMIŞ: legacy import + YENİ KAPI (2026-08-13)
+
+### Nasıl bulundu — "ölçülmemiş yüzey var mı?" sorusu
+Kalan 3 kaçırmanın üçü de C'nin KENDİ sınırlaması çıkınca (modül-kapsamlı tip
+çözümü · generic bound'da method · generic yapı literali) onları taklit etmek
+yerine bu oturumun en çok kazandıran sorusunu sordum. `find`+kapı karşılaştırması
+**19 dosyanın hiçbir kapının altında olmadığını** gösterdi:
+`drivers/virtio` (10) + `tests/drivers/virtio` (9).
+
+### 🔴 GÖNDERDİĞİM REGRESYON
+```
+status.kem        C=11def  SELF=0def (exit 1)
+virtio_mmio.kem   C=63def  SELF=0def
+virtqueue_bind    C=68def  SELF=0def
+```
+D-424'ün `--llvm` tip kapısı, self-host'un ÖNCEDEN VAR OLAN sahte T002'lerini
+ÖLÜMCÜL hâle getirdi. Öncesinde `--llvm` checker'ı çağırmadığı için zararsızdı.
+
+> **⚠ D-424'ün ön koşulunu 502 dosyada ölçüp "yanlış-pozitif SIFIR" demiştim;
+> o listede `drivers/` YOKTU.** Kendi dersimi — "parite sayısı yalnız ölçülen
+> yüzey kadar geniştir" (D-420) — KENDİ KAPIMA uygulamayı atladım. Ders iki kez
+> yazılmış olması onu uygulamaya yetmiyor: **ön koşul ölçümünün KAPSAMI da
+> ayrıca doğrulanmalı.**
+
+### Kök: legacy çok-segmentli `kullan`
+C'nin kuralı kaynakta yazılı (`src/ana.c` `kullan_yeni_bicim`):
+```c
+segment_sayi <= 1  ∨  secili_sayi > 0  ∨  alias_ad != NULL   → YENİ biçim
+```
+Hiçbiri değilse (`kullan drivers::virtio::constants;`) modül **LEGACY
+DÜZLEŞTİRME** yolundan yüklenir: TÜM üst düzey adlar görünür, `dışa`/`genel`
+gerekmez, private-by-default (T041) UYGULANMAZ.
+
+Self-host bu ayrımı yapmıyordu → `constants.kem`'deki düz `sabit`ler ÖZEL
+sayılıp sahte T002 üretiyordu (`status.kem`'de 19 tanı).
+**Yardımcı ZATEN VARDI** (`kullan_yeni_bicim_mi`, D-399/400'de codegen yolu
+için yazılmış) — `modul_yukle` onu çağırmıyordu.
+
+**Sonuç:** sürücüler 11/63/68 define ile C'ye birebir; yanlış-pozitif **6 → 2**.
+
+### 🎯 YENİ KAPI `calistir_surucu_diff`
+Kör nokta KAPI OLMADIĞI İÇİN vardı. Kapı iki şey ölçer: `--check` paritesi
+(kod+satır+sütun) **ve** `--llvm` YAPISAL paritesi (`define` kümesi = ad +
+DÖNÜŞ TİPİ; sürücüler host'ta linklenmez → `baremetal_diff` deseni).
+D-424'ün pozitif-iddia dalı da içeride: oracle tip hatasıyla reddediyorsa self
+de reddetmeli.
+
+### Kalan 2 muafiyet — ÖLÇÜLDÜ, ayrı kök
+`CP005` (`virtio_blk_config_test`, `virtio_mmio_mock_test`). **Minimal
+şekillerde kural C ile BİREBİR çalışıyor** (2 probe ölçüldü) — yani CP005
+mantığı doğru. Gerçek dosyadaki fark: tüketen işlev BAŞKA DOSYADA ve self
+çapraz-dosya **İMZALARINI** taşımıyor, yalnız ADLARI → parametrenin lineer
+olduğunu bilmiyor → `yetki<MMIO>` sızıntı sanılıyor. Bu, CLAUDE.md'de kayıtlı
+**"check paritesi SIĞ"** kökü (`mat::topla(20)` yanlış aritesi de aynı sınıf).
+
+---
+
 ## D-426 — K2 kapandı: aggregate payload'ında birim tip `i8` (2026-08-13)
 
 `yapi_diff` muafiyet envanterinin K2 kökü. D-422'de ölçülmüştü, onarılmamıştı:

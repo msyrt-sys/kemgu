@@ -11009,6 +11009,16 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
     lex_et(&değişken mp);
     değişken mkok: tam32 = parse_program(&değişken mp);
     değişken mdiz: metin = dizin_al(rel);   // transitif importer dizini
+    // D-427: LEGACY ÇOK-SEGMENTLİ `kullan a::b::c;` DÜZLEŞTİRME yolundadır.
+    // C `ana.c`:153 + `kullan_yeni_bicim`: yeni biçim = TEK SEGMENT ∨ seçili
+    // import ∨ alias. Bunların HİÇBİRİ değilse modül eski (düzleştiren) yoldan
+    // yüklenir ve TÜM üst düzey adlar görünür olur — `dışa`/`genel` istemez,
+    // private-by-default (T041) UYGULANMAZ.
+    // Self-host bu ayrımı yapmıyordu → `drivers/virtio/*` gibi legacy import
+    // kullanan dosyalarda düz `sabit`ler ÖZEL sayılıp sahte T002 üretiliyordu
+    // (`status.kem`de 19 tanı). D-424'ün tip kapısıyla birlikte bu ÖLÜMCÜL
+    // hâle geldi: self sürücüleri DERLEYEMEZ oldu (C 11/63/68 define, self 0).
+    değişken legacy: mantıksal = kullan_yeni_bicim_mi(p, modul_yol) == yanlış;
     değişken cb: tam32 = dizi_al(mp.a_cb, mkok);
     değişken cs: tam32 = dizi_al(mp.a_cs, mkok);
     değişken ci: tam32 = 0;
@@ -11024,9 +11034,16 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
         // D-363 T041 (private-by-default): DOSYA-modülünün `genel` İŞARETSİZ
         // üyeleri dışarıdan erişilemez. `dışa` sarmalı ve `genel` işaretlisi muaf;
         // dosya-içi `modül m { }` blokları bu yola girmediği için doğal olarak muaf.
-        eğer tanim_kind_mi(cad) ve (gen_isaretli_mi(&değişken mp, c) == yanlış) {
-            dizi_ekle(p.priv_mod, son_segment(modul_yol));
-            dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
+        eğer tanim_kind_mi(cad) {
+            eğer legacy {
+                // Legacy düzleştirme: ad DOĞRUDAN görünür, özel değil.
+                g_ekle(p, dizi_al(mp.a_deg, c));
+            } değilse {
+                eğer gen_isaretli_mi(&değişken mp, c) == yanlış {
+                    dizi_ekle(p.priv_mod, son_segment(modul_yol));
+                    dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
+                }
+            }
         }
         eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
         ci = ci + 1;
