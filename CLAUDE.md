@@ -1159,6 +1159,22 @@ LLVM-RED'den çıkıp çalışıyor.
 - **Kalan 3 kaçırma** (T002 modül · T007 generic bound · T001 generic method)
   ayrı ve büyük kökler.
 
+### ⛔ D-430 (NEGATİF SONUÇ): `cv_*` çapraz taşıma — YAZILDI, GERİ ALINDI
+- `surucu_diff`in kalan 5 muafiyetinin kökünü "çeşit varyantları çapraz-dosya
+  taşınmıyor" diye kaydetmiştim. **Yanlış kaydetmişim** — eksik tanılar tek tek
+  izlenince: **T011** = C `Virtqueue`yi tanımıyor, self D-429 sayesinde TANIYOR
+  (self C'den DAHA yetenekli; eşleşmek yetenek silmek olurdu) · **M001** =
+  skrutini `sonuç<..>`, `çeşit` DEĞİL. İkisinin de `cv_*` ile ilgisi YOK.
+- **AYRIMCI PROBE: C ÇAPRAZ-DOSYA KAPSAYICILIK YAPMIYOR.** `dışa çeşit Renk`
+  + eksik varyantlı `eşleş` → C **OK**. Parite `cv_*` taşımasını GEREKTİRMİYOR.
+  > Gelecekte "çapraz-dosya çeşit kapsayıcılığı" işine girişmeden önce bunu
+  > oku — **C'nin kendisi yapmıyor**, parite hattında yapılacak bir iş DEĞİL.
+- **Neden geri alındı:** kod semantik olarak doğru görünüyordu ama **hiçbir
+  ölçüm onu ayırt edemedi.** Ayırt edilemeyen kod DOĞRULANMAMIŞ yüzeydir.
+  "Doğru görünüyor" bu repoda yeterli değil.
+- Yan bulgu (ÖNCEDEN VAR, ölçüldü): tek-segment `kullan` + private `çeşit` →
+  self fazladan T011. Ölümcül değil (C zaten T002 ile reddediyor).
+
 ### 🎯 D-429: ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA — "check paritesi SIĞ" kökü
 - `modul_yukle` yalnız ADLARI hasat ediyordu; İMZALAR (arite, param tipleri,
   param **LİNEERLİĞİ**) ve YAPI kayıtları dosya-yerel kalıyordu → sahte CP005

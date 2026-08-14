@@ -41,12 +41,19 @@ fi
 #   kayıtları yoktu) GİTTİ. `virtio_blk_config_test` ve `virtio_mmio_mock_test`
 #   listeden ÇIKARILDI — 7 → 5.
 #
-# KALAN 5 — HEPSİ KAÇIRMA YÖNÜNDE (self daha müsamahakâr; derlemeyi KIRMAZ):
-#   T011 (bilinmeyen tip) · M001 (eşleş kapsayıcılık) · T001 · T020.
-#   Kök: taşınan bilgi ADLAR + İMZALAR ile sınırlı; `çeşit` varyantları ve
-#   bileşik tip TEMSİLİ hâlâ dosya-yerel (`cv_*` tabloları taşınmıyor).
-#   ⚠ `alan_tn`/`fn_ptn` düğüm indeksleri de taşınamaz (`-1`) — muhafazakâr
-#   tarafa düşerler, yani tanı KAÇIRIRLAR, sahte tanı ÜRETMEZLER.
+# KALAN 5 — HEPSİ KAÇIRMA YÖNÜNDE (self daha müsamahakâr; derlemeyi KIRMAZ).
+# ⚠ KÖKLERİ D-430'da TEK TEK İZLENDİ; ilk kaydettiğim gerekçe ("çeşit
+#   varyantları taşınmıyor") YANLIŞTI ve `cv_*` taşıması hiçbir şeyi
+#   değiştirmedi (yazıldı, ölçüldü, GERİ ALINDI):
+#     T011 → C `Virtqueue`yi TANIMIYOR ve T011 veriyor; self D-429'un yapı
+#            taşımasıyla TANIYOR. Yani self burada C'den DAHA YETENEKLİ —
+#            eşleşmek YETENEK SİLMEK olurdu.
+#     M001 → skrutini `sonuç<T,H>`, `çeşit` DEĞİL. Ayrıca ölçüldü:
+#            **C çapraz-dosya kapsayıcılık HİÇ yapmıyor** (`dışa çeşit` +
+#            eksik varyant → C = OK), yani parite bunu gerektirmiyor.
+#     T001/T020 → bileşik tip temsilinin çapraz-dosya sınırları.
+# ⚠ `alan_tn`/`fn_ptn` düğüm indeksleri taşınamaz (`-1`) — muhafazakâr tarafa
+#   düşerler, yani tanı KAÇIRIRLAR, sahte tanı ÜRETMEZLER.
 MUAF="virtio_blk virtio_blk_oku virtio_blk_init_test
 virtio_blk_oku_test virtqueue_bind_test"
 muaf_mi() {

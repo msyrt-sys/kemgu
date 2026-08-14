@@ -5,6 +5,47 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-430 (NEGATİF SONUÇ) — `cv_*` çapraz taşıma YAZILDI ve GERİ ALINDI (2026-08-14)
+
+D-429'un doğal devamı sanılan iş: `surucu_diff`in kalan 5 muafiyetinin kökü
+"`çeşit` varyantları çapraz-dosya taşınmıyor" diye kaydedilmişti. `cv_*`
+tablolarının kopyalanması yazıldı (27 satır, `cv_pb` yeniden tabanlanarak) —
+**ve HİÇBİR ölçülebilir etkisi olmadı.** Geri alındı.
+
+### Ölçüm — kökü YANLIŞ kaydetmişim
+Kalan 5 muafiyetin eksik tanıları tek tek izlendi:
+- **T011** (`virtio_blk:47`, `-> Virtqueue`): **C** `Virtqueue`yi TANIMIYOR ve
+  T011 veriyor; self D-429'un yapı taşımasıyla TANIYOR → self burada C'den
+  DAHA YETENEKLİ. Eşleşmek YETENEK SİLMEK olurdu; `cv_*` ile ilgisi YOK.
+- **M001** (`eşleş sonuc`): skrutini `sonuç<tam32, BagHatasi>` — `sonuç`
+  dalı, `çeşit` dalı DEĞİL. `cv_*` ile ilgisi YOK.
+
+### AYRIMCI PROBE: C ÇAPRAZ-DOSYA KAPSAYICILIK YAPMIYOR
+```
+dışa çeşit Renk { Kirmizi, Yesil, Mavi }      (renk.kem)
+kullan renk;  eşleş r { Kirmizi => .. Yesil => .. }   ← Mavi EKSİK
+C = OK        ESKİ self = OK        D-430 self = OK
+```
+C eksik varyanta **OK** diyor. Yani parite `cv_*` taşımasını GEREKTİRMİYOR.
+
+### Neden geri alındı
+Kod semantik olarak "doğru" görünüyordu (self çapraz-dosya varyantları
+bilmeli) — ama **hiçbir ölçüm onu ayırt edemedi.** Ayırt edilemeyen kod
+DOĞRULANMAMIŞ yüzeydir: yararı gösterilemez, riski gerçektir. Bu repoda
+kural ölçmektir; "doğru görünüyor" yeterli değildir.
+
+> **KAYDA DEĞER NEGATİF SONUÇ:** gelecekte "çapraz-dosya çeşit kapsayıcılığı"
+> işine girişmeden önce bunu oku — **C'nin kendisi yapmıyor**, dolayısıyla
+> parite hattında yapılacak bir iş DEĞİL.
+
+### Yan bulgu (ÖNCEDEN VAR, D-429/430 sokmadı — ölçüldü)
+Tek-segment `kullan renk;` + private `çeşit` → self fazladan **T011** veriyor,
+C vermiyor. Eski ikiliyle doğrulandı: **D-429 öncesinde de aynı.** Ölümcül
+değil (o şekilde C zaten T002 ile reddediyor, iki taraf da IR üretmiyor) ama
+korpusta olmayan bir yanlış-pozitif olarak duruyor.
+
+---
+
 ## D-429 [YÜKSEK] — ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA (2026-08-14)
 
 `surucu_diff`in **7 muafiyetinin TAMAMININ** ortak kökü ve CLAUDE.md'de kayıtlı
