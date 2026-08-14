@@ -1240,6 +1240,29 @@ IMMEDIATE'a dokunmaz, tipler eşitse no-op). D-422'de eşlemeyi tek yere koyup
 `{i8, void, i8}` üretmiştim — bu kez üretici ve tüketici birlikte değişti.
 `yapi_diff` muafiyeti **26 → 25**.
 
+### 📐 K1 HEDEF BİÇİMİ TAM ÖLÇÜLDÜ (D-430; uygulanmadı — sıfırdan ölçme)
+`yapi_diff`in en büyük muafiyet kökü (9 dosya). C ile self yan yana:
+```
+C   : define i1 @buyuk_mu(ptr %rho, i32 %a, i32 %b)
+        %5 = icmp sgt i32 %3, %4
+        ret i1 %5                      ← zext YOK, doğrudan
+      çağrı yeri: %4 = call i1 @buyuk_mu(...)  +  br i1 %4   (dönüşüm YOK)
+      yapı alanı: %K = type { i1 }  ·  store i1 / load i1
+      parametre : define i32 @isle(ptr %rho, i1 %b)
+SELF: define i32 @buyuk_mu(...)
+        %6 = icmp sgt i32 %4, %5
+        %7 = zext i1 %6 to i32         ← self i32'ye genişletiyor
+        ret i32 %7
+```
+**Onarım ÜÇ yerde eşgüdüm ister** (D-422'nin `{i8, void, i8}` dersi): dönüş
+tipi eşlemesi (`islev_donus_tip`) + `ret` uyarlaması (`int_uydur` ile
+`trunc i32→i1`) + ÇAĞRI YERİ (dönüş i1 ise `eğer`/aritmetik bağlamına uyarlama).
+Ayrıca yapı alanı/alloca/load/store yolları. `mantıksal` değerleri aritmetiğe
+ve karşılaştırmalara aktığı için yüzey GENİŞ.
+**Ertelenme gerekçesi:** kazanç YALNIZ yapısal (iki taraf da doğru çalışıyor,
+exit/stdout aynı), risk ise çekirdek skaler yol. Bu oturumda tam bu sınıftan
+İKİ regresyon çıktı (D-422 `{i8,void,i8}`, D-424 sürücü derlemesi).
+
 ### ⚠ K1 (`mantıksal` → i1) ÖLÇÜLDÜ ama BİLİNÇLİ ERTELENDİ
 `yapi_diff` muafiyetlerinin en büyük kökü (9 dosya). C `mantıksal`ı **her
 yerde** `i1` yapar: `%K = type { i1 }` · `define i1 @f` · `i1 %b` param ·
