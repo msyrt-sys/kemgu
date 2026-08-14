@@ -1038,6 +1038,60 @@ static void test_shutdown_yanit(void) {
     fclose(cikti);
 }
 
+/* === D-432: semanticTokens/full ===
+ * TURKCE KAYNAK BILINCLI: LSP `data` icindeki sutun ve uzunluk UTF-16 KOD
+ * BIRIMI cinsindendir, BAYT degil. `olc` 5 BAYT ama 3 UTF-16 birimidir —
+ * bayt kullanan bir uygulama burada kayar ve ASCII testte GORUNMEZ. */
+static void test_semantictokens_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* Kaynak: `işlev ölç(x: tam32) -> tam32 { ver x + 42; }` */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///s.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev \\u00f6l\\u00e7(x: tam32) -> tam32 { ver x + 42; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":20,"
+        "\"method\":\"textDocument/semanticTokens/full\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///s.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;   /* initialize, diag, semtok, shutdown */
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *ys = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, ys->govde, ys->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        JsonDeger *data = result ? json_alan(result, "data") : NULL;
+        ok = data && data->tip == JSON_DIZI && data->veri.dizi.sayi >= 15
+          && (data->veri.dizi.sayi % 5) == 0;   /* 5'li gruplar */
+        if (ok) {
+            JsonDeger **e = data->veri.dizi.elemanlar;
+            /* [0] `işlev` : satir 0, sutun 0, uzunluk 5, keyword(0) */
+            ok = e[0]->veri.tamsayi == 0 && e[1]->veri.tamsayi == 0
+              && e[2]->veri.tamsayi == 5 && e[3]->veri.tamsayi == 0;
+            /* [1] `ölç` : ayni satir, +6 sutun, uzunluk 3 (UTF-16!), variable(4)
+             * ⚠ BAYT sayilsaydi uzunluk 5 olurdu — kapinin ASIL disi budur. */
+            if (ok) {
+                ok = e[5]->veri.tamsayi == 0 && e[6]->veri.tamsayi == 6
+                  && e[7]->veri.tamsayi == 3 && e[8]->veri.tamsayi == 4;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("semanticTokens UTF-16 sutun/uzunluk dogru", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 int main(void) {
     printf("KEMGU LSP Server Test Paketi\n");
     printf("==============================\n");
@@ -1068,6 +1122,9 @@ int main(void) {
     printf("\n--- LSP v3 (incremental sync) ---\n");
     test_incremental_aralik_degisimi();
     test_incremental_ekleme();
+
+    printf("\n--- LSP v3 (semanticTokens) ---\n");
+    test_semantictokens_turkce();
 
     printf("\n--- UTF-16 konum donusumu ---\n");
     test_utf16_hover_turkce();

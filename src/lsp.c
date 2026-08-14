@@ -605,6 +605,12 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
                  "\"completionProvider\":{\"triggerCharacters\":[\".\"]},"
                  "\"documentSymbolProvider\":true,"
                  "\"referencesProvider\":true,"
+                 /* D-432: semanticTokens (full). Legend SIRASI kritik —
+                  * `data` icindeki tokenType INDEKSTIR, ad degil. */
+                 "\"semanticTokensProvider\":{\"legend\":{"
+                 "\"tokenTypes\":[\"keyword\",\"string\",\"number\","
+                 "\"operator\",\"variable\"],"
+                 "\"tokenModifiers\":[]},\"full\":true},"
                  "\"diagnosticProvider\":{\"interFileDependencies\":false,"
                  "\"workspaceDiagnostics\":false}"
                  "},\"serverInfo\":{\"name\":\"kemgu-lsp\",\"version\":\"0.2\"}}}");
@@ -979,6 +985,101 @@ static void documentsymbol_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) 
     json_yazici_serbest(&y);
 }
 
+/* === semanticTokens (LSP v3) — D-432 ===
+ * Kaynak LEXER'dir: her token zaten satir/sutun/uzunluk tasiyor, ayrica
+ * anahtar kelime / literal / operator ayrimi lexer'da YAPILMIS durumda.
+ * AST'den turetmek gereksiz olurdu (ve hatali kaynakta AST YOK — lexer ise
+ * yine de token uretir, yani sozdizimi renklendirme HATALI dosyada da calisir).
+ *
+ * ⚠ LSP `data` KODLAMASI: 5'li gruplar ve DELTA'lidir —
+ *   [deltaSatir, deltaBaslangic, uzunluk, tokenTipi, tokenDegistirici]
+ * deltaBaslangic AYNI SATIRDA onceki token'a gore, satir degisince MUTLAK.
+ * Sutun ve uzunluk UTF-16 KOD BIRIMI cinsindendir (bayt DEGIL) — Turkce
+ * kaynakta bayt kullanmak konumlari kaydirir.
+ *
+ * Legend indeksleri (capabilities'teki SIRAYLA ayni olmali):
+ *   0 keyword · 1 string · 2 number · 3 operator · 4 variable
+ * Eslesmeyen token (noktali virgul, parantez vb.) ATLANIR — LSP istemcisi
+ * atlanan araligi renklendirmez, bu gecerlidir. */
+static int semtok_tipi(TokenTipi t) {
+    switch (t) {
+    case TOK_METIN: case TOK_HAM_METIN: case TOK_KARAKTER: return 1;
+    case TOK_TAMSAYI: case TOK_ONDALIK: return 2;
+    case TOK_TANIMLAYICI: return 4;
+    /* Operatorler — atama/aritmetik/karsilastirma/bit. */
+    case TOK_ARTI: case TOK_EKSI: case TOK_YILDIZ: case TOK_BOLU:
+    case TOK_MOD: case TOK_ESIT: case TOK_ESIT_ESIT: case TOK_ESIT_DEGIL:
+    case TOK_KUCUK: case TOK_BUYUK: case TOK_KUCUK_ESIT: case TOK_BUYUK_ESIT:
+    case TOK_ARTI_ESIT: case TOK_EKSI_ESIT: case TOK_YILDIZ_ESIT:
+    case TOK_BOLU_ESIT: case TOK_MOD_ESIT:
+    case TOK_VE_BIT: case TOK_VEYA_BIT: case TOK_OZVEYA_BIT: case TOK_DEGIL_BIT:
+    case TOK_SOLA_KAYDIR: case TOK_SAGA_KAYDIR:
+    case TOK_OK: case TOK_KALIN_OK:
+        return 3;
+    default:
+        /* anahtar_kelime.c tablosundaki her sey keyword; kalan noktalama
+         * (`;` `,` `(` `{` ...) ve TOK_DOSYA_SONU/TOK_HATALI atlanir. */
+        return -2;
+    }
+}
+
+static void semantictokens_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"result\":{\"data\":[");
+
+    int once = 1, onceki_satir = 0, onceki_kar = 0;
+    if (belge && belge->icerik) {
+        Lexer lx;
+        lexer_baslat(&lx, belge->icerik, "lsp");
+        for (;;) {
+            Token tk = lexer_sonraki_token(&lx);
+            if (tk.tip == TOK_DOSYA_SONU) break;
+            int tip = semtok_tipi(tk.tip);
+            if (tip == -2) {
+                /* Anahtar kelime araligi: lexer.h'deki enum blogu
+                 * TOK_EGER (ilk deger) .. TOK_GENEL (son anahtar kelime);
+                 * hemen ardindan "Literaller" blogu gelir.
+                 * ⚠ Ilk yazimda araligi TOK_ISLEV'den baslatmistim — enumun
+                 * ILK 6 anahtar kelimesi (eger/degilse/için/iken/eşleş/ver)
+                 * disarida kalirdi. Sinirlar lexer.h'den OLCULDU.
+                 * Noktalama (`;` `,` `(` ...) ve TOK_HATALI atlanir. */
+                if (tk.tip >= TOK_EGER && tk.tip <= TOK_GENEL) tip = 0;
+                else continue;
+            }
+            int bas_ofset = (int)(tk.baslangic - belge->icerik);
+            if (bas_ofset < 0 || bas_ofset > belge->icerik_uz) continue;
+            int son_ofset = bas_ofset + tk.uzunluk;
+            if (son_ofset > belge->icerik_uz) son_ofset = belge->icerik_uz;
+
+            int satir0 = tk.satir > 0 ? tk.satir - 1 : 0;
+            int kar = lsp_karakter(belge, tk.satir, tk.sutun);
+            int uz16 = utf16_say(belge->icerik, bas_ofset, son_ofset);
+            if (uz16 <= 0) continue;
+
+            int d_satir = satir0 - onceki_satir;
+            int d_kar = (d_satir == 0) ? (kar - onceki_kar) : kar;
+            if (d_satir < 0 || d_kar < 0) continue;   /* geriye giden token: atla */
+
+            if (!once) json_yaz(&y, ",");
+            json_yaz_int(&y, d_satir); json_yaz(&y, ",");
+            json_yaz_int(&y, d_kar);   json_yaz(&y, ",");
+            json_yaz_int(&y, uz16);    json_yaz(&y, ",");
+            json_yaz_int(&y, tip);     json_yaz(&y, ",0");
+            once = 0;
+            onceki_satir = satir0;
+            onceki_kar = kar;
+        }
+    }
+    json_yaz(&y, "]}}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
 /* === Completion === */
 
 static const char *KEYWORDS[] = {
@@ -1174,6 +1275,8 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
             documentsymbol_yanitla(cikti, istek, &belge);
         } else if (strcmp(yontem, "textDocument/references") == 0) {
             references_yanitla(cikti, istek, &belge);
+        } else if (strcmp(yontem, "textDocument/semanticTokens/full") == 0) {
+            semantictokens_yanitla(cikti, istek, &belge);   /* D-432 */
         }
         /* Bilinmeyen request id'li ise yanitsiz birakiyoruz (LSP kabul edilebilir) */
 

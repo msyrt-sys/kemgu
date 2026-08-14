@@ -910,8 +910,27 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   `documentSymbolProvider ✓` (roadmap'te yoktu, bonus) · hover/definition/
   completion ✓. İşlenen metotlar: didOpen/didChange/didClose/hover/definition/
   completion/documentSymbol/references.
-  **KALAN yalnız 2:** `semanticTokens` · `workspace/*` (şu an
-  `workspaceDiagnostics: false`, hiç `workspace/` metodu yok).
+  ~~**KALAN yalnız 2:** `semanticTokens` · `workspace/*`~~
+  ✓ **D-432: `semanticTokens/full` EKLENDİ.** Kaynak **LEXER**'dir (AST değil):
+  token zaten satır/sütun/uzunluk taşır, anahtar kelime/literal/operatör ayrımı
+  lexer'da YAPILMIŞ ve **hatalı kaynakta AST yokken bile token üretilir** →
+  sözdizimi renklendirme bozuk dosyada da çalışır. Legend: keyword · string ·
+  number · operator · variable.
+  - **⚠ `data` DELTA'lı ve UTF-16'dır:** `[Δsatır, Δbaşlangıç, uzunluk, tip, 0]`;
+    Δbaşlangıç aynı satırda önceki token'a göre, satır değişince MUTLAK. Sütun
+    ve uzunluk **UTF-16 kod birimi** — `ölç` 5 BAYT ama 3 birimdir. Bayt
+    kullanmak ASCII testte GÖRÜNMEZ; test bilerek Türkçe kaynak kullanır
+    (sabotaj S15 = bayt'a çevir → test ✗).
+  - **⚠ Anahtar kelime aralığı `lexer.h`'den ÖLÇÜLDÜ:** `TOK_EGER` .. `TOK_GENEL`.
+    İlk yazımda `TOK_ISLEV`'den başlatmıştım — enumun ilk 6 anahtar kelimesi
+    (`eğer`/`değilse`/`için`/`iken`/`eşleş`/`ver`) dışarıda kalırdı.
+  - **⚠ BAYAT ARTEFAKT (bu oturumda 3. artefakt tuzağı):** sabotajı geri alınca
+    `make` `build/test_lsp.exe`i YENİDEN KURMADI → test 21/22 kaldı ve kaynak
+    TEMİZKEN sahte kırmızı verdi. `rm -f build/test_lsp.exe` → 22/22.
+    Sabotaj döngüsünden sonra ilgili **test ikilisini de** sil, yalnız `.o`yu
+    değil. (Diğer ikisi: `build/codegen.exe` dosya kilidi, `git stash` sonrası
+    bayat obje.)
+  **KALAN yalnız 1:** `workspace/*` (`workspaceDiagnostics: false`).
 - ~~**LLVM v4** (dizi param/return, dizi length, generic islev codegen)~~ ✓ **ZATEN YAPILMIŞ**
   (2026-07-17 ölçümü — bu madde ESKİMİŞTİ, sonraki işlerde D-085/D-088 vb. ile kapanmış ama
   roadmap güncellenmemiş). Ampirik doğrulama (derle+çalıştır+exit): dizi param `topla(xs:
