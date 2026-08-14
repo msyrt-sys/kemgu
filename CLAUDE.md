@@ -904,7 +904,14 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   sessiz-miscompile riski; explicit `*v` seçildi (AST tip bilinir, loud>silent).
 - **Inter-procedural escape analizi** (callee escape özetleri — escape.c v2)
 - ~~**`hiç`/`değer` ifade desteği + pattern binding**~~ ✓ C2.5 (sonuç/seçimlik value codegen: yapıcılar + eşleş destructuring + binding). ~~Kalan: custom ADT/enum + eşleş exhaustiveness~~ ✓ **ZATEN YAPILMIŞ** (2026-07-25 ölçümü): çeşit ADT var (D-302/D-306) ve exhaustiveness **M001** ile denetleniyor — eksik varyantı adıyla söyler (`M001: esles exhaustive degil — eksik varyant(lar): [Mavi]`). Madde eskimişti.
-- **LSP v3** (incremental sync, workspace, semanticTokens, references)
+- **LSP v3** — ⚠ **KISMEN YAPILMIŞ (D-431'de ölçüldü, madde eskimişti).**
+  `src/lsp.c` sürüm **0.2**; capabilities'ten okundu:
+  `textDocumentSync: 2` (**incremental ✓**) · `referencesProvider ✓` ·
+  `documentSymbolProvider ✓` (roadmap'te yoktu, bonus) · hover/definition/
+  completion ✓. İşlenen metotlar: didOpen/didChange/didClose/hover/definition/
+  completion/documentSymbol/references.
+  **KALAN yalnız 2:** `semanticTokens` · `workspace/*` (şu an
+  `workspaceDiagnostics: false`, hiç `workspace/` metodu yok).
 - ~~**LLVM v4** (dizi param/return, dizi length, generic islev codegen)~~ ✓ **ZATEN YAPILMIŞ**
   (2026-07-17 ölçümü — bu madde ESKİMİŞTİ, sonraki işlerde D-085/D-088 vb. ile kapanmış ama
   roadmap güncellenmemiş). Ampirik doğrulama (derle+çalıştır+exit): dizi param `topla(xs:
@@ -930,7 +937,17 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   checker_diff 49/49, bootstrap FIXPOINT). Self-host'ta tip nesnesi yok → parser lineer
   yapı ADLARINI kaydeder (`ly_ad`), mevcut L001/L002 makinesi otomatik işler.
   ~~**Kalan (V2.1):** alan-bazlı taşıma~~ ✓ **D-315** (bağlama başına bit-maske; ikinci taşıma L002; kısmi taşınmış yapı TAŞINAMAZ, yalnız imha; geçici değer red). ✓ **D-316 self-host portu TAMAM** (11/11 birebir; iki sessiz parite kaybı ölçümle bulundu: `deg_lineer_mi` ERISIM dalı + `fn_plin` lineer-yapı parametresi). ✓ **D-317: L-COND/L-LOOP de self-host'ta** (8/8 birebir; anlık-görüntü YIĞINI — iç-içe eğer/eşleş için şart). **Lineer alt-sistemde parite borcu KALMADI.** ✓ **D-318: `eşleş` YAPI DESENİ eklendi** (yeni sözdizimi, Mehmet onaylı): `Yapi { alan1, alan2 } =>` — lineer yapıda desen yapıyı TÜKETİR, alanlar bağlanır; TÜM alanlar zorunlu (T012), bilinmeyen alan T009. C+self-host parite, --ast dump paritesi yan-kanalla korundu. İcat EDİLMEYEN: yeniden-adlandırma, rest-deseni `..`, iç-içe desen.
-- **Linear stdlib:** `Dosya`, `OTP_Anahtar`, `Kilit` runtime tipleri (Spec B.6)
+- **Linear stdlib** (Spec B.6) — ⚠ **KARIŞIK DURUM (D-431'de ölçüldü):**
+  - `OTP_Anahtar` ✓ **YAPILMIŞ** — `stdlib/kripto/anahtar.kem`, 11 `tekkez` kullanımı.
+  - `Dosya` ⚠ **VAR AMA LİNEER DEĞİL** — `stdlib/dosya.kem` mevcut, ama
+    `sonuç<T,E>` stiliyle; `tekkez` kullanımı **0**. Lineer yapmak, kullanıcı
+    kodunu kıran bir **API tipi değişikliğidir** → Mehmet'in kararı.
+  - `Kilit` ✗ **YOK** — ama **runtime primitifleri ZATEN VAR**:
+    `kdl_kilit_init` / `kdl_kilit_gir` / `kdl_kilit_cik` / `kdl_kilit_yok_et`
+    (`runtime/kdl_runtime.c`, kanal implementasyonu bunları kullanıyor;
+    Windows `CRITICAL_SECTION` / POSIX `pthread_mutex`). Eksik olan yalnız
+    KEMGU-düzeyi yerleşik adlar + stdlib sarmalı → **yeni yerleşik adı = dil
+    yüzeyi**, Mehmet'e sorulmalı.
 - **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
 
 ### Self-host AŞAMA durumu (D-035..D-087)
