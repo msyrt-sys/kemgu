@@ -35,21 +35,20 @@ fi
 # dosya-başına tanı KODLARINI çıkarınca 7 olduğu görüldü (D-406 dersi:
 # "muafiyet listesine yazdığın gerekçe de bir İDDİADIR — ÖLÇ").
 #
-# HEPSİ TEK KÖK SINIFI: self-host çapraz-dosya BİLGİSİNİ taşımıyor. D-427 ad
-# GÖRÜNÜRLÜĞÜNÜ onardı (legacy düzleştirme) ama iki tablo hâlâ dosya-yerel:
-#   (a) İŞLEV İMZALARI (fn_psay/fn_ptip/fn_plin) → parametrenin lineer olduğu
-#       bilinmiyor → `yetki<MMIO>` sızıntı sanılıyor = sahte CP005.
-#       Minimal şekillerde kural C ile BİREBİR çalışır (2 probe ölçüldü) —
-#       yani CP005 mantığı DOĞRU, eksik olan yalnız imza taşıması.
-#   (b) YAPI KAYITLARI (yapi_ad/alan_*) → `Virtqueue`, `BlkYapilandirma` gibi
-#       başka modüldeki yapı tipleri `yapi_var_mi`de bulunamıyor = sahte T002.
-# Aynı kök EKSİK tanı yönünde de görünür (T011/M001/T001/T020): C modül
-# AST'sini yükleyip tipleri biliyor, self bilmiyor.
+# ✓ D-429: YANLIŞ-POZİTİFLERİN TAMAMI KAPANDI. Çapraz-dosya İMZA + YAPI
+#   kayıtları artık taşınıyor (`capraz_imza_tasi`) → sahte CP005 (parametre
+#   lineerliği bilinmiyordu) ve sahte T002 (`Virtqueue`/`BlkYapilandirma` yapı
+#   kayıtları yoktu) GİTTİ. `virtio_blk_config_test` ve `virtio_mmio_mock_test`
+#   listeden ÇIKARILDI — 7 → 5.
 #
-# CLAUDE.md'de kayıtlı "check paritesi SIĞ" kökünün ta kendisi
-# (`mat::topla(20)` yanlış aritesi de aynı sınıf).
-MUAF="virtio_blk virtio_blk_oku virtio_blk_config_test virtio_blk_init_test
-virtio_blk_oku_test virtio_mmio_mock_test virtqueue_bind_test"
+# KALAN 5 — HEPSİ KAÇIRMA YÖNÜNDE (self daha müsamahakâr; derlemeyi KIRMAZ):
+#   T011 (bilinmeyen tip) · M001 (eşleş kapsayıcılık) · T001 · T020.
+#   Kök: taşınan bilgi ADLAR + İMZALAR ile sınırlı; `çeşit` varyantları ve
+#   bileşik tip TEMSİLİ hâlâ dosya-yerel (`cv_*` tabloları taşınmıyor).
+#   ⚠ `alan_tn`/`fn_ptn` düğüm indeksleri de taşınamaz (`-1`) — muhafazakâr
+#   tarafa düşerler, yani tanı KAÇIRIRLAR, sahte tanı ÜRETMEZLER.
+MUAF="virtio_blk virtio_blk_oku virtio_blk_init_test
+virtio_blk_oku_test virtqueue_bind_test"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1

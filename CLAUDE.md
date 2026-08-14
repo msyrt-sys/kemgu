@@ -1159,6 +1159,25 @@ LLVM-RED'den çıkıp çalışıyor.
 - **Kalan 3 kaçırma** (T002 modül · T007 generic bound · T001 generic method)
   ayrı ve büyük kökler.
 
+### 🎯 D-429: ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA — "check paritesi SIĞ" kökü
+- `modul_yukle` yalnız ADLARI hasat ediyordu; İMZALAR (arite, param tipleri,
+  param **LİNEERLİĞİ**) ve YAPI kayıtları dosya-yerel kalıyordu → sahte CP005
+  (`yetki<MMIO>` param lineerliği bilinmiyor) + sahte T002 (`Virtqueue` yok).
+- **MANTIĞI İKİNCİ KEZ YAZMA:** `imza_kaydet`/`yapi_kaydet` `p`'den okur;
+  çapraz sürüm tüm yardımcı zincirinin ikizini isterdi (D-407 tuzağı). Çözüm:
+  `genel_topla`yı **modülün KENDİ `Ayr`inde** koştur, sonra düz paralel dizileri
+  kopyala (`capraz_imza_tasi`, `fn_pbase`/`yapi_abase` yeniden tabanlanır).
+- **⚠ DÜĞÜM İNDEKSLERİ TAŞINAMAZ** (`fn_ptn`, `alan_tn` → `-1`): düğüm `mp`'ye
+  ait, `p`'de başka şeye denk gelir. Tüketiciler ÖNCEDEN ölçüldü —
+  `t14_muaf_isaretle` `tn < 0`u muhafazakâr karşılar → **tanı KAÇIRIR, sahte
+  tanı ÜRETMEZ.**
+- **ÖLÇÜM COMMIT'TEN ÖNCE, TÜM REPO** (D-427'nin dersi uygulandı):
+  **589 dosya · yanlış-pozitif 0 · fark 46** (34'ü lex/parse fikstürü).
+  Öncesi/sonrası aynı yüzeyde: **YP 2 → 0, kaçırma 12 → 12** (artmadı).
+  İki bağımsız ölçüm uyuştu.
+- `surucu_diff` muafiyeti **7 → 5**; kalan 5 hepsi kaçırma yönünde
+  (`çeşit` varyantları / bileşik tip temsili hâlâ dosya-yerel — `cv_*`).
+
 ### 🎯 D-428: YENİ KAPI `calistir_check_genis` — kapısız kalan 6 yüzey
 - **126/126 (7 muaf).** `test/snapshots` (82 dosya!) · `test/ornekler/eski` ·
   `test/stdlib` · `test/asan_matris` · `test/crossfile` · `stdlib/` kökü.

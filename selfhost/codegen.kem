@@ -10997,6 +10997,71 @@ işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
     ver yanlış;
 }
 // Bir modülü yükle: dışa-export adlarını p.g_isim'e ekle; kullan'ı transitif izle.
+// ---- D-429: ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA ----
+// Self-host `modul_yukle` yalnız ADLARI hasat ediyordu; İMZALAR (arite, param
+// tipleri, param LİNEERLİĞİ) ve YAPI kayıtları dosya-yerel kalıyordu. Sonuç
+// (ölçüldü, `surucu_diff`in 7 muafiyetinin TAMAMI):
+//   · `yetki<MMIO>` parametresinin lineer olduğu bilinmiyor → sahte CP005
+//   · `Virtqueue`/`BlkYapilandirma` `yapi_var_mi`de yok → sahte T002
+//   · C'nin verdiği T010/T001/T011/M001 tanıları KAÇIRILIYOR
+// CLAUDE.md'deki "check paritesi SIĞ" kökü (`mat::topla(20)` yanlış aritesi de
+// bu sınıf).
+//
+// YAKLAŞIM: `genel_topla`yı MODÜLÜN KENDİ `Ayr`inde koştur (indeksleri orada
+// DOĞRU), sonra düz paralel dizileri kopyala. Böylece `imza_kaydet`/`yapi_kaydet`
+// mantığı TEK YERDE kalır — iki ayrı uygulama yazmak D-407'nin ayrışma tuzağı.
+//
+// ⚠ DÜĞÜM İNDEKSLERİ TAŞINAMAZ: `fn_ptn` ve `alan_tn` bir AST düğümünü
+// gösterir ve o düğüm `mp`'ye aittir; `p`'de başka bir şeye denk gelir.
+// -1 yazılır. Tüketiciler ölçüldü: `fn_ptn`in TEK okuyucusu var
+// (`t14_muaf_isaretle`, `tn < 0`u zaten muhafazakâr karşılar → muafiyet yok);
+// `alan_tn` benzer şekilde `tip_node_dizi_mi`/`t14_muaf_isaretle` yolundan
+// geçer. Yani -1 = "bilinmiyor" ve muhafazakâr tarafa düşer.
+işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
+    // (a) İŞLEV İMZALARI
+    değişken fn: tam32 = dizi_boyut(mp.fn_ad);
+    değişken i: tam32 = 0;
+    iken i < fn {
+        eğer fn_kayitli_mi(p, dizi_al(mp.fn_ad, i)) == yanlış {
+            dizi_ekle(p.fn_ad, dizi_al(mp.fn_ad, i));
+            dizi_ekle(p.fn_donus, dizi_al(mp.fn_donus, i));
+            değişken ps: tam32 = dizi_al(mp.fn_psay, i);
+            dizi_ekle(p.fn_psay, ps);
+            dizi_ekle(p.fn_pbase, dizi_boyut(p.fn_ptip));   // YENİDEN TABANLA
+            değişken mb: tam32 = dizi_al(mp.fn_pbase, i);
+            değişken j: tam32 = 0;
+            iken j < ps {
+                dizi_ekle(p.fn_ptip, dizi_al(mp.fn_ptip, mb + j));
+                dizi_ekle(p.fn_ptn, 0 - 1);                 // düğüm taşınamaz
+                dizi_ekle(p.fn_plin, dizi_al(mp.fn_plin, mb + j));
+                dizi_ekle(p.fn_pdizi, dizi_al(mp.fn_pdizi, mb + j));
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    // (b) YAPI KAYITLARI
+    değişken yn: tam32 = dizi_boyut(mp.yapi_ad);
+    değişken k: tam32 = 0;
+    iken k < yn {
+        eğer yapi_idx_bul(p, dizi_al(mp.yapi_ad, k)) < 0 {
+            dizi_ekle(p.yapi_ad, dizi_al(mp.yapi_ad, k));
+            dizi_ekle(p.yapi_abase, dizi_boyut(p.alan_ad));  // YENİDEN TABANLA
+            değişken an: tam32 = dizi_al(mp.yapi_acount, k);
+            değişken ab: tam32 = dizi_al(mp.yapi_abase, k);
+            değişken q: tam32 = 0;
+            iken q < an {
+                dizi_ekle(p.alan_ad, dizi_al(mp.alan_ad, ab + q));
+                dizi_ekle(p.alan_tip, dizi_al(mp.alan_tip, ab + q));
+                dizi_ekle(p.alan_tn, 0 - 1);                 // düğüm taşınamaz
+                q = q + 1;
+            }
+            dizi_ekle(p.yapi_acount, an);
+        }
+        k = k + 1;
+    }
+    ver 0;
+}
 işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) -> tam32 {
     değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
     değişken gi: tam32 = 0;
@@ -11019,6 +11084,9 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
     // (`status.kem`de 19 tanı). D-424'ün tip kapısıyla birlikte bu ÖLÜMCÜL
     // hâle geldi: self sürücüleri DERLEYEMEZ oldu (C 11/63/68 define, self 0).
     değişken legacy: mantıksal = kullan_yeni_bicim_mi(p, modul_yol) == yanlış;
+    // D-429: modülün İMZA + YAPI tablolarını KENDİ Ayr'inde kur, sonra taşı.
+    genel_topla(&değişken mp, mkok);
+    capraz_imza_tasi(p, &değişken mp);
     değişken cb: tam32 = dizi_al(mp.a_cb, mkok);
     değişken cs: tam32 = dizi_al(mp.a_cs, mkok);
     değişken ci: tam32 = 0;

@@ -5,6 +5,57 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-429 [YÜKSEK] — ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA (2026-08-14)
+
+`surucu_diff`in **7 muafiyetinin TAMAMININ** ortak kökü ve CLAUDE.md'de kayıtlı
+**"check paritesi SIĞ"** kökü. Self-host `modul_yukle` yalnız ADLARI hasat
+ediyordu; İMZALAR (arite, param tipleri, param **LİNEERLİĞİ**) ve YAPI kayıtları
+dosya-yerel kalıyordu:
+- `yetki<MMIO>` parametresinin lineer olduğu bilinmiyor → **sahte CP005**
+- `Virtqueue`/`BlkYapilandirma` `yapi_var_mi`de yok → **sahte T002**
+- C'nin verdiği T010/T001/T011/M001 tanıları KAÇIRILIYOR
+
+### Yaklaşım: mantığı İKİNCİ KEZ YAZMA
+`imza_kaydet`/`yapi_kaydet` `p`'den okuyor; çapraz sürüm yazmak tüm yardımcı
+zincirinin (`donus_str`, `param_say`, `param_tip_str`, `param_lineer_mi`,
+`tip_str`…) ikizini gerektirirdi — **D-407'nin ayrışma tuzağı.**
+Bunun yerine: `genel_topla`yı **modülün KENDİ `Ayr`inde** koştur (indeksler
+orada DOĞRU), sonra düz paralel dizileri kopyala (`capraz_imza_tasi`),
+`fn_pbase`/`yapi_abase` yeniden tabanlanarak. Mantık TEK YERDE kalır.
+
+### ⚠ DÜĞÜM İNDEKSLERİ TAŞINAMAZ — ve bu GÜVENLİ tarafa düşer
+`fn_ptn` ve `alan_tn` bir AST düğümünü gösterir; o düğüm `mp`'ye aittir ve
+`p`'de BAŞKA bir şeye denk gelir. `-1` yazılır. **Tüketiciler önceden ölçüldü:**
+`fn_ptn`in TEK okuyucusu var (`t14_muaf_isaretle`) ve `tn < 0`u zaten
+muhafazakâr karşılar → muafiyet verilmez. Yani `-1` = "bilinmiyor" ve
+**tanı KAÇIRIR, sahte tanı ÜRETMEZ.**
+
+### ÖLÇÜM — bu kez COMMIT'TEN ÖNCE, TÜM REPO
+D-427'de ön koşulu 502 dosyada ölçmüş, `drivers/` listede olmadığı için
+regresyon göndermiştim. Bu kez `find` ile **589 dosyanın tamamı**:
+```
+589 dosya · YANLIŞ-POZİTİF = 0 · fark = 46 (hepsi KAÇIRMA yönünde)
+```
+46'nın 34'ü `lex_korpus`(22)+`parse_korpus`(12) — lexer/parser fikstürleri,
+tip denetimi için tasarlanmamışlar. Gerçek yüzeyde **12**.
+
+**ÖNCESİ/SONRASI (aynı yüzey, iki ikili — bağımsız iki ölçüm uyuştu):**
+```
+ESKİ (D-429 öncesi): yanlış-pozitif=2  kaçırma=12
+YENİ (D-429):        yanlış-pozitif=0  kaçırma=12
+```
+Yani: **iki yanlış-pozitif kapandı, kaçırma ARTMADI.** Saf iyileşme.
+(Değişiklik self'i SIKILAŞTIRDIĞI için kaçırmanın artmaması beklenirdi ama
+"beklenirdi" bir tahmindir — ölçüldü.)
+
+### `surucu_diff` muafiyeti 7 → 5
+Çıkanlar: `virtio_blk_config_test`, `virtio_mmio_mock_test` (CP005 kökü).
+Kalan 5 HEPSİ kaçırma yönünde (T011/M001/T001/T020) — derlemeyi KIRMAZ.
+Kökleri: `çeşit` varyantları ve bileşik tip TEMSİLİ hâlâ dosya-yerel
+(`cv_*` tabloları taşınmıyor) + düğüm indekslerinin `-1` olması.
+
+---
+
 ## D-428 — YENİ KAPI `check_genis`: kapısız kalan 6 yüzey (2026-08-13)
 
 D-427'nin dersini genelleştirdim: **elle taranan ölçüm eskir, kapı eskimez.**
