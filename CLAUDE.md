@@ -955,9 +955,20 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 - **GENİŞ ÖLÇÜM 131/131 TAM PARİTE:** `stdlib` + `stdlib/temel` + `test/ornekler` +
   `kütüphane` + `test/moduller` yüzeyinde C oracle ile **sıfır fark** — ne
   yanlış-pozitif ne eksik tanı (`kem_os.kem` dâhil).
-- **Kapılar:** `checker_diff` **148/148** (0 muaf) · `parser_diff` 13/13 ·
-  `codegen_diff` 113/113 · sürücü 4 mod × 2 sürücü + FIXPOINT · `check_kapisi`
-  210/217 (0 RED) · C birim **903 test**.
+  > **⚠⚠ BU İDDİA YÜZEY-SINIRLIYDI — D-420'de düzeltildi.** O ölçüm
+  > `test/cg_korpus`, `test/snapshots`, `selfhost/` ve `drivers/virtio`
+  > yüzeylerini **HİÇ kapsamıyordu**. Tümü tarandığında sapmalar çıktı
+  > (D-420: 5 yanlış-pozitif; D-427: `drivers/` derlemesi KIRIK).
+  > **Parite sayısı yalnız ölçülen yüzey kadar geniştir.** Güncel durum ve
+  > kapı listesi için aşağıdaki D-420 → D-430 bölümlerine bak.
+- **Kapılar (O GÜNKÜ hâl — GÜNCEL DEĞİL):** `checker_diff` 148/148 ·
+  `parser_diff` 13/13 · `codegen_diff` 113/113 · sürücü 4 mod × 2 sürücü +
+  FIXPOINT · `check_kapisi` 210/217 · C birim 903 test.
+  **GÜNCEL kapı listesi (D-430 itibarıyla, 11 kapı):** `checker_diff` 150/150 ·
+  `codegen_diff` 140/140 · `yapi_diff` 117/117 (25 muaf) · `codegen_genis` 70/70 ·
+  `modul_codegen` 21/21 · `ct_bariyer` 13/13 · `baremetal_diff` 4/4 ·
+  `surucu_diff` 13/13 (5 muaf) · `check_genis` 126/126 (7 muaf) ·
+  `parser_diff` 13/13 · `self_driver` 4 mod × 2 sürücü + BOOTSTRAP FIXPOINT.
 - **Bileşik tip temsili (D-377..D-386):** `Dizi<E>` · `seçimlik<T>` · `sonuç<T,H>` ·
   `&T`/`&değişken T`/`*T` · `tekkez<T>`/`yetki<R>` · `görev<T>`/`kanal<T>` ·
   `olarak` ifadesinin tipi · yapı ALAN tipleri · `eşleş` desen-bağlama tipleri ·
@@ -1500,9 +1511,12 @@ tabanlar. Kusur tartışmasız ve onarım bounded, ama hangi hatta yürüneceği
 - **(ESKİ NOT) `Dizi<kesirli64>` OKUMA yolu İKİ TARAFTA DA bozuk.** `kdl_dizi_al_tam` i32
   döndürüyor; geri okuyan bir test **C oracle'da da** yanlış sonuç verdi. Yazma
   yolu D-408'de düzeldi, okuma açık.
-- **Sıradaki kapısız yüzeyler:** `test/snapshots` (81 dosya), `test/ornekler/eski`
-  (16), `test/asan_matris` (12), `test/stdlib` (9), `test/crossfile` (2).
-  `test/check_korpus` D-408'de ölçüldü (31/32).
+- ~~**Sıradaki kapısız yüzeyler:** `test/snapshots` (81), `test/ornekler/eski`
+  (16), `test/asan_matris` (12), `test/stdlib` (9), `test/crossfile` (2)~~
+  ✓ **D-428: HEPSİ KAPI ALTINDA** (`calistir_check_genis`, 126/126, 7 muaf).
+  Ayrıca D-427: `drivers/virtio` + `tests/drivers/virtio` (19 dosya) →
+  `calistir_surucu_diff`. **Bilinen kapısız `.kem` yüzeyi KALMADI**
+  (`lex_korpus`/`parse_korpus` kendi kapılarında: `--token`/`parser_diff`).
 
 - 🎯🎯 **D-407: `test/moduller` 18/18, MUAFİYET LİSTESİ BOŞ.** Nitelikli
   (üç segmentli) çeşit yapıcısı: codegen'in kolu solu yalnız `TANIMLAYICI`
