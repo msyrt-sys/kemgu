@@ -931,6 +931,26 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     değil. (Diğer ikisi: `build/codegen.exe` dosya kilidi, `git stash` sonrası
     bayat obje.)
   **KALAN yalnız 1:** `workspace/*` (`workspaceDiagnostics: false`).
+
+### 🔴 D-433: LSP TEK BELGE TUTUYORDU — ikinci dosya birinciyi EZİYORDU
+`workspace/*`'a başlarken ölçtüm: sunucu `Belge belge;` (TEK yapı) tutuyordu.
+`didOpen` her çağrıda `belge_set` ile ÜZERİNE yazıyordu → **gerçek editörde
+ikinci dosya açılınca birincinin hover/definition/diagnostic'i bozulur.**
+VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönderir.
+- **`workspace/*`'ı bunun ÜSTÜNE kurmak sahte olurdu:** tek-belge bir sunucuda
+  "workspace symbol" adı yanıltıcıdır (yalnız açık dosyayı arar). Önce MODEL
+  düzeltildi — özellik eklemeden önce altındaki varsayımı ölç.
+- Onarım: `BelgeTablo` (URI→Belge, dinamik dizi, boşalan yuva geri kullanılır).
+  Dispatch `textDocument/` önekini yakalayıp `istek_uri` ile çözer; `didOpen`
+  yuva AÇAR, diğerleri yalnız ARAR (bilinmeyen uri → handler çağrılmaz).
+  Handler imzaları DEĞİŞMEDİ (`Belge *`) → değişim yüzeyi dar kaldı.
+- Test `test_cok_belge_izolasyon`: iki dosya aç, BİRİNCİYE `documentSymbol` sor
+  → `alfa` gelmeli. Tek-belge modelde `beta` gelirdi. **Sabotaj S16**
+  (`tablo_ac` daima ilk yuvayı döndürsün) → **23/23 → 22/23** ✅
+- **⚠ SABOTAJ İLK DENEMEDE UYGULANMADI** (`perl` deseni tutmadı, `grep` 0) ve
+  kapı YEŞİL kaldı — bu oturumda DÖRDÜNCÜ kez. Sayıyı doğrulamadan sonuca
+  bakma; `perl -0pi` çok satırlı desenlerde sessizce eşleşmiyor, **Edit aracı
+  kullan**.
 - ~~**LLVM v4** (dizi param/return, dizi length, generic islev codegen)~~ ✓ **ZATEN YAPILMIŞ**
   (2026-07-17 ölçümü — bu madde ESKİMİŞTİ, sonraki işlerde D-085/D-088 vb. ile kapanmış ama
   roadmap güncellenmemiş). Ampirik doğrulama (derle+çalıştır+exit): dizi param `topla(xs:

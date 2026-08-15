@@ -163,6 +163,68 @@ static void belge_set(Belge *b, const char *uri, int uri_uz,
     b->semboller = NULL;
 }
 
+/* === D-433: ÇOK-BELGE TABLOSU ===
+ * Sunucu tek bir `Belge` tutuyordu: ikinci bir dosya açılınca birincisi
+ * EZİLİYORDU. Gerçek editör kullanımında bu, hover/definition/diagnostic'in
+ * yanlış dosyaya bakması demekti (VS Code birden çok dosyayı açık tutar ve
+ * her isteği KENDİ uri'siyle gönderir).
+ * WARN: `workspace` metotlari bunun USTUNE kurulur — tek-belge bir sunucuda
+ * "workspace symbol" adı yanıltıcı olurdu; önce model düzeltildi. */
+typedef struct BelgeTablo {
+    Belge *belgeler;   /* dinamik dizi; kullanılmayan yuvada uri == NULL */
+    int sayi;
+    int kapasite;
+} BelgeTablo;
+
+static void belge_temizle(Belge *b);
+
+/* URI ile ara. Bulunamazsa NULL. */
+static Belge *tablo_bul(BelgeTablo *t, const char *uri, int uri_uz) {
+    if (!t || !uri) return NULL;
+    for (int i = 0; i < t->sayi; i++) {
+        Belge *b = &t->belgeler[i];
+        if (!b->uri) continue;
+        if ((int)strlen(b->uri) == uri_uz && memcmp(b->uri, uri, (size_t)uri_uz) == 0)
+            return b;
+    }
+    return NULL;
+}
+
+/* URI ile ara; yoksa BOŞ bir yuva ayır (uri henüz atanmaz — belge_set atar). */
+static Belge *tablo_ac(BelgeTablo *t, const char *uri, int uri_uz) {
+    Belge *b = tablo_bul(t, uri, uri_uz);
+    if (b) return b;
+    for (int i = 0; i < t->sayi; i++) {           /* boşalmış yuvayı geri kullan */
+        if (!t->belgeler[i].uri) return &t->belgeler[i];
+    }
+    if (t->sayi >= t->kapasite) {
+        int yeni = t->kapasite ? t->kapasite * 2 : 4;
+        Belge *p = (Belge *)realloc(t->belgeler, (size_t)yeni * sizeof(Belge));
+        if (!p) return NULL;                       /* bellek yok → istek yok sayılır */
+        t->belgeler = p;
+        t->kapasite = yeni;
+    }
+    Belge *nb = &t->belgeler[t->sayi++];
+    memset(nb, 0, sizeof(Belge));
+    return nb;
+}
+
+static void tablo_temizle(BelgeTablo *t) {
+    if (!t) return;
+    for (int i = 0; i < t->sayi; i++) belge_temizle(&t->belgeler[i]);
+    free(t->belgeler);
+    t->belgeler = NULL; t->sayi = 0; t->kapasite = 0;
+}
+
+/* İstekten `params.textDocument.uri` çıkar (yoksa NULL). */
+static const char *istek_uri(JsonDeger *istek, int *uz) {
+    JsonDeger *params = json_alan(istek, "params");
+    if (!params) return NULL;
+    JsonDeger *td = json_alan(params, "textDocument");
+    if (!td) return NULL;
+    return json_metin(json_alan(td, "uri"), uz);
+}
+
 static void belge_temizle(Belge *b) {
     free(b->uri);
     free(b->icerik);
@@ -1216,8 +1278,8 @@ static void close_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
 /* === Server loop === */
 
 int lsp_server_calistir(FILE *girdi, FILE *cikti) {
-    Belge belge;
-    memset(&belge, 0, sizeof(belge));
+    BelgeTablo tablo;                 /* D-433: URI başına bir belge */
+    memset(&tablo, 0, sizeof(tablo));
     DiagCtx dc;
     memset(&dc, 0, sizeof(dc));
     kapanis_isteniyor = 0;
@@ -1259,24 +1321,39 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
             break;
         } else if (strcmp(yontem, "initialized") == 0) {
             /* no-op */
-        } else if (strcmp(yontem, "textDocument/didOpen") == 0) {
-            open_or_change_isle(cikti, istek, &belge, &dc, 0);
-        } else if (strcmp(yontem, "textDocument/didChange") == 0) {
-            open_or_change_isle(cikti, istek, &belge, &dc, 1);
-        } else if (strcmp(yontem, "textDocument/didClose") == 0) {
-            close_isle(cikti, istek, &belge, &dc);
-        } else if (strcmp(yontem, "textDocument/hover") == 0) {
-            hover_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/definition") == 0) {
-            definition_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/completion") == 0) {
-            completion_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/documentSymbol") == 0) {
-            documentsymbol_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/references") == 0) {
-            references_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/semanticTokens/full") == 0) {
-            semantictokens_yanitla(cikti, istek, &belge);   /* D-432 */
+        } else if (strncmp(yontem, "textDocument/", 13) == 0) {
+            /* D-433: her `textDocument` istegi KENDI uri'sine çözülür.
+             * didOpen yoksa yuva açar; diğerleri yalnız ARAR — bilinmeyen
+             * uri'de `belge` NULL kalır ve handler'lar bunu zaten
+             * karşılıyor (hepsi `belge && belge->prog` denetler). */
+            int uri_uz = 0;
+            const char *uri = istek_uri(istek, &uri_uz);
+            if (uri) {
+                int acilis = (strcmp(yontem, "textDocument/didOpen") == 0);
+                Belge *belge = acilis ? tablo_ac(&tablo, uri, uri_uz)
+                                      : tablo_bul(&tablo, uri, uri_uz);
+                if (belge) {
+                    if (acilis) {
+                        open_or_change_isle(cikti, istek, belge, &dc, 0);
+                    } else if (strcmp(yontem, "textDocument/didChange") == 0) {
+                        open_or_change_isle(cikti, istek, belge, &dc, 1);
+                    } else if (strcmp(yontem, "textDocument/didClose") == 0) {
+                        close_isle(cikti, istek, belge, &dc);
+                    } else if (strcmp(yontem, "textDocument/hover") == 0) {
+                        hover_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/definition") == 0) {
+                        definition_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/completion") == 0) {
+                        completion_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/documentSymbol") == 0) {
+                        documentsymbol_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/references") == 0) {
+                        references_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/semanticTokens/full") == 0) {
+                        semantictokens_yanitla(cikti, istek, belge);   /* D-432 */
+                    }
+                }
+            }
         }
         /* Bilinmeyen request id'li ise yanitsiz birakiyoruz (LSP kabul edilebilir) */
 
@@ -1284,7 +1361,7 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
         free(govde);
     }
 
-    belge_temizle(&belge);
+    tablo_temizle(&tablo);
     diag_temizle(&dc);
     return exit_kodu;
 }

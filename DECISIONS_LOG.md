@@ -5,6 +5,96 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-433 [YÜKSEK] — 🔴 LSP TEK BELGE TUTUYORDU: ikinci dosya birinciyi eziyordu (2026-08-14)
+
+`workspace/*`'a başlarken **altındaki varsayımı ölçtüm** ve gerçek bir kusur
+buldum: sunucu `Belge belge;` (TEK yapı) tutuyordu ve her `didOpen`
+`belge_set` ile ÜZERİNE yazıyordu.
+
+**Gerçek editörde sonucu:** VS Code birden çok dosyayı açık tutar ve her
+isteği KENDİ `uri`siyle gönderir → ikinci dosya açılınca birincinin
+hover / definition / documentSymbol / diagnostic'i BOZULUR.
+
+### `workspace/*` bunun ÜSTÜNE kurulamazdı
+Tek-belge bir sunucuda "workspace symbol" adı **yanıltıcıdır** — yalnız açık
+dosyayı arar. Roadmap maddesini "yapıldı" diye kapatmak, bu oturumun defalarca
+yakaladığı sınıftan bir sahtelik olurdu. **Özellik eklemeden önce altındaki
+modeli ölç.**
+
+### Onarım — değişim yüzeyi DAR tutuldu
+`BelgeTablo` (URI→Belge; dinamik dizi, boşalan yuva geri kullanılır) +
+dispatch'te `textDocument/` önekini yakalayıp `istek_uri` ile çözme.
+`didOpen` yuva AÇAR, diğerleri yalnız ARAR (bilinmeyen uri → handler hiç
+çağrılmaz). **Handler imzaları DEĞİŞMEDİ** (`Belge *`) — hepsi zaten tek
+belge işaretçisi alıyordu, bu yüzden refactor küçük kaldı.
+
+### Test + sabotaj
+`test_cok_belge_izolasyon`: iki dosya aç (`a.kem`/`alfa`, `b.kem`/`beta`),
+sonra **BİRİNCİYE** `documentSymbol` sor → `alfa` gelmeli. Tek-belge modelde
+`beta` gelirdi. **Sabotaj S16** (`tablo_ac` daima ilk yuvayı döndürsün) →
+**23/23 → 22/23** ✅
+
+### ⚠ SABOTAJ İLK DENEMEDE UYGULANMADI — bu oturumda DÖRDÜNCÜ kez
+`perl -0pi` deseni tutmadı (`grep` 0) ve kapı YEŞİL kaldı. Sayıyı
+doğrulamasam "kapı zayıf" diye kaydedecektim.
+> **KURAL: çok satırlı desende `perl -0pi` sessizce eşleşmeyebilir — Edit
+> aracını kullan, ve sabotajın uygulandığını HER ZAMAN `grep` ile doğrula.**
+
+---
+
+## D-432 — LSP `semanticTokens/full` (2026-08-14)
+
+D-431'de LSP v3'ün kısmen yapılmış olduğu ölçülmüştü; kalan iki parçadan biri.
+Dil yüzeyine DOKUNMAZ (yeni yerleşik ad/tip yok) — karar beklemeden
+yapılabilen tek roadmap kalemiydi.
+
+### Kaynak seçimi: AST DEĞİL LEXER
+Token zaten satır/sütun/uzunluk taşıyor; anahtar kelime / literal / operatör
+ayrımı lexer'da YAPILMIŞ. Asıl gerekçe: **hatalı kaynakta AST YOKTUR ama lexer
+yine de token üretir** → sözdizimi renklendirme BOZUK dosyada da çalışır.
+AST'den türetmek bu özelliği kaybettirirdi.
+
+Legend (SIRA KRİTİK — `data` içindeki tokenType İNDEKSTİR, ad değil):
+`0 keyword · 1 string · 2 number · 3 operator · 4 variable`
+
+### İki hata ölçümle yakalandı
+1. **Anahtar kelime aralığı.** `TOK_ISLEV`'den başlatmıştım; `lexer.h`
+   okununca bloğun `TOK_EGER`'den (enumun İLK değeri) başladığı görüldü →
+   ilk 6 anahtar kelime (`eğer`/`değilse`/`için`/`iken`/`eşleş`/`ver`)
+   dışarıda kalırdı. Sınırlar kaynaktan ÖLÇÜLDÜ: `TOK_EGER .. TOK_GENEL`.
+2. **UTF-16 vs BAYT.** `data` içindeki sütun ve uzunluk UTF-16 KOD BİRİMİ'dir.
+   `ölç` = 5 BAYT ama 3 BİRİM. Test bilerek Türkçe kaynak kullanır; kodlama
+   elle çözülerek doğrulandı (`işlev` 0,0,5,0 · `ölç` 0,6,3,4 · `->` 0,7,2,3 ·
+   `42` 0,2,2,2). **Sabotaj S15** (bayt farkı kullan) → test ✗.
+   **ASCII bir test bu hatayı GÖRMEZDİ.**
+
+`data` kodlaması DELTA'lıdır: `[Δsatır, Δbaşlangıç, uzunluk, tip, değiştirici]`;
+Δbaşlangıç aynı satırda önceki token'a göre, satır değişince MUTLAK.
+
+### ⚠ BAYAT ARTEFAKT (bu oturumda 3. artefakt tuzağı)
+Sabotajı geri alınca `make` `build/test_lsp.exe`i YENİDEN KURMADI → kaynak
+TEMİZKEN test 21/22 sahte kırmızı verdi. `rm -f build/test_lsp.exe` → 22/22.
+**Sabotaj döngüsünden sonra ilgili TEST İKİLİSİNİ de sil, yalnız `.o`yu değil.**
+(Diğerleri: `build/codegen.exe` dosya kilidi · `git stash` sonrası bayat obje.)
+
+---
+
+## D-431 — Roadmap üç maddesi ölçüldü: ikisi eskimiş (2026-08-14)
+
+CLAUDE.md'nin KENDİ dersi uygulandı: *"roadmap maddelerini başlamadan ÖLÇ —
+eskimiş olabilir"* (D-085'te LLVM v4 zaten yapılmış çıkmıştı).
+
+| madde | ölçülen durum |
+|---|---|
+| **LSP v3** | **KISMEN YAPILMIŞ** — sürüm 0.2: `textDocumentSync: 2` (incremental ✓), `referencesProvider` ✓, `documentSymbolProvider` ✓ (roadmap'te hiç yoktu). Kalan: `semanticTokens` (→D-432), `workspace/*` |
+| **Linear stdlib** | `OTP_Anahtar` ✓ (11 `tekkez`) · `Dosya` ⚠ VAR ama `sonuç<T,E>` stilinde, `tekkez` **0** · `Kilit` ✗ YOK — **ama runtime primitifleri ZATEN VAR** (`kdl_kilit_init/gir/cik/yok_et`, kanal implementasyonu kullanıyor) |
+| **Inter-procedural escape** | HÂLÂ v1 — ama `escape.c`:292 gösteriyor ki analiz **SOUND**: her çağrı argümanı ESC_CAGIRAN'a yükseltiliyor. v2 bir **KESİNLİK** işi (sızıntı azaltma), güvenlik açığı DEĞİL. Yorumun kendisi: *"sızıntı bir hata, UAF bir felaket"* |
+
+**İkisi Mehmet'in karar sınıfında:** lineer `Dosya` = kullanıcı kodunu kıran API
+tipi değişikliği · `Kilit` = yeni yerleşik ad (dil yüzeyi).
+
+---
+
 ## D-430 (NEGATİF SONUÇ) — `cv_*` çapraz taşıma YAZILDI ve GERİ ALINDI (2026-08-14)
 
 D-429'un doğal devamı sanılan iş: `surucu_diff`in kalan 5 muafiyetinin kökü

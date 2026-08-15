@@ -1092,6 +1092,58 @@ static void test_semantictokens_turkce(void) {
     fclose(cikti);
 }
 
+/* === D-433: COK-BELGE ===
+ * Sunucu tek `Belge` tutuyordu: IKINCI dosya acilinca BIRINCISI eziliyordu.
+ * Bu test iki dosyayi acar, sonra BIRINCISINE documentSymbol sorar — tek-belge
+ * modelde birinci dosyanin sembolleri KAYBOLMUS olurdu (bos dizi donerdi). */
+static void test_cok_belge_izolasyon(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* a.kem: `işlev alfa() -> tam32 { ver 1; }` */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///a.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev alfa() -> tam32 { ver 1; }\"}}}");
+    /* b.kem: `işlev beta() -> tam32 { ver 2; }` — a.kem'i EZMEMELI */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///b.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev beta() -> tam32 { ver 2; }\"}}}");
+    /* BIRINCI dosyanin sembolleri hala erisilebilir mi? */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":30,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///a.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    /* initialize, diag(a), diag(b), documentSymbol, shutdown */
+    int ok = yanit_sayisi(y) == 5;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 3);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = result && result->tip == JSON_DIZI && result->veri.dizi.sayi == 1;
+        if (ok) {
+            JsonDeger *s0 = result->veri.dizi.elemanlar[0];
+            int nu = 0;
+            const char *nm = json_metin(json_alan(s0, "name"), &nu);
+            /* a.kem'in sembolu `alfa` olmali — `beta` ise belge EZILMIS demektir */
+            ok = nm && nu == 4 && memcmp(nm, "alfa", 4) == 0;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("cok-belge: ikinci didOpen birinciyi EZMEZ", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 int main(void) {
     printf("KEMGU LSP Server Test Paketi\n");
     printf("==============================\n");
@@ -1125,6 +1177,9 @@ int main(void) {
 
     printf("\n--- LSP v3 (semanticTokens) ---\n");
     test_semantictokens_turkce();
+
+    printf("\n--- LSP v3 (cok-belge) ---\n");
+    test_cok_belge_izolasyon();
 
     printf("\n--- UTF-16 konum donusumu ---\n");
     test_utf16_hover_turkce();
