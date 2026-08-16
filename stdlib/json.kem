@@ -1,0 +1,159 @@
+// KEMGU Stdlib — JSON YAZICI (serileştirme)
+// =============================================================================
+//
+// SAF KEMGU: yeni yerleşik ad / runtime primitifi GEREKMEZ. Yalnız mevcut
+// `metin_*` yerleşikleri kullanılır. Bu aynı zamanda DOGFOODING'dir —
+// derleyiciyi gerçek bir programla zorlar.
+//
+// ⚠ KAPSAM (bilinçli, dürüst): bu dosya YAZICIDIR, ayrıştırıcı DEĞİL.
+// Ayrıştırıcı ayrı bir artımdır; yarım bir "JSON modülü" bırakmamak için
+// yazıcı kendi başına TAM tutuldu (JsonDeger kurma + metne çevirme).
+//
+// ⚠ KEMGU DİZGİ LİTERALİNDE KAÇIŞ YOKTUR — `\n` de `\"` de `\\` de literaldir
+// (D-400/D-409/D-416'da üç kez ölçüldü). Bu yüzden JSON kaçışları BAYT
+// değerinden üretilir: `yb(34)` yerine burada `bayt_metin(34)` kullanılır,
+// çünkü `yb` stdout'a YAZAR, biz METİN üretiyoruz.
+// =============================================================================
+
+// JSON değer ağacı. Dizi/nesne için KEMGU'nun `Dizi<T>`si kullanılır; nesne
+// anahtar ve değerleri PARALEL iki dizide tutulur (KEMGU'da harita tipi yok).
+çeşit JsonDeger {
+    Bos,
+    Mantik(mantıksal),
+    Sayi(tam64),
+    Metin(metin),
+    Dizi(Dizi<JsonDeger>),
+    Nesne(Dizi<metin>, Dizi<JsonDeger>)
+}
+
+// -----------------------------------------------------------------------------
+// Bayt → tek karakterlik metin. KEMGU'da karakter literalinden metin üretmek
+// için doğrudan yol yok; `metin_kes` ile bir sabitten kesmek de her bayt için
+// ayrı sabit ister. Kaçış gereken 8 baytı açıkça tablo hâlinde veriyoruz.
+// -----------------------------------------------------------------------------
+// ⚠ `metin_kes(s, baslangic, uzunluk)` 0-TABANLIDIR (runtime'dan ölçüldü:
+// `kdl_metin_kes` doğrudan `s + baslangic` yapar). 1-tabanlı varsaymak her
+// dizginin İLK KARAKTERİNİ düşürür — bu modülü çalıştırınca öyle oldu
+// (`"iki"` → `"ki"`, anahtar `ad` → `d`). Tip kontrolü bunu YAKALAMAZ.
+//
+// KEMGU dizgi literalinde kaçış YOKTUR: `"\""` kaynakta İKİ karakterdir
+// (`\` ve `"`), `"\\"` de iki karakterdir (`\` ve `\`). Bu yüzden ikinci
+// karakteri (indeks 1) kesiyoruz.
+işlev tirnak() -> metin { ver metin_kes("\"", 1, 1); }   // tek `"` (bayt 34)
+işlev ters_bolu() -> metin { ver metin_kes("\\", 1, 1); } // tek `\` (bayt 92)
+
+// JSON dizgi kaçışı: `"` ve `\` ters-bölü ile, kontrol karakterleri \u00XX.
+işlev kacisla(s: metin) -> metin {
+    değişken sonuc: metin = "";
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(s);
+    iken i < n {
+        değişken b: tam8 = metin_bayt(s, i);
+        eğer b == 34 {
+            sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), tirnak()));
+        } değilse {
+            eğer b == 92 {
+                sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), ters_bolu()));
+            } değilse {
+                eğer b == 10 { sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), "n")); }
+                değilse {
+                    eğer b == 13 { sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), "r")); }
+                    değilse {
+                        eğer b == 9 { sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), "t")); }
+                        değilse {
+                            // Diğer her bayt AYNEN geçer (UTF-8 çok baytlıları dâhil —
+                            // JSON UTF-8'i doğrudan kabul eder, \u kaçışı ZORUNLU değil).
+                            sonuc = metin_birlestir(sonuc, metin_kes(s, i, 1));
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// -----------------------------------------------------------------------------
+// Serileştirme. Özyineli; iç içe dizi/nesne desteklenir.
+// -----------------------------------------------------------------------------
+işlev yaz(d: JsonDeger) -> metin {
+    eşleş d {
+        JsonDeger::Bos => { ver "null"; }
+        JsonDeger::Mantik(b) => {
+            eğer b { ver "true"; }
+            ver "false";
+        }
+        JsonDeger::Sayi(n) => { ver sayi_metin(n); }
+        JsonDeger::Metin(s) => {
+            değişken t: metin = tirnak();
+            ver metin_birlestir(t, metin_birlestir(kacisla(s), t));
+        }
+        JsonDeger::Dizi(ogeler) => { ver json_dizi_yaz(ogeler); }
+        JsonDeger::Nesne(anahtarlar, degerler) => { ver nesne_yaz(anahtarlar, degerler); }
+    }
+    ver "null";
+}
+
+işlev json_dizi_yaz(ogeler: Dizi<JsonDeger>) -> metin {
+    değişken sonuc: metin = "[";
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(ogeler);
+    iken i < n {
+        eğer i > 0 { sonuc = metin_birlestir(sonuc, ","); }
+        sonuc = metin_birlestir(sonuc, yaz(dizi_al(ogeler, i)));
+        i = i + 1;
+    }
+    ver metin_birlestir(sonuc, "]");
+}
+
+// ⚠ Anahtar sayısı değer sayısından FAZLAysa fazlalık ATLANIR (kısa olanı esas
+// alırız). Sessiz kırpma yerine patlamak daha iyi olurdu ama bu modülde panik
+// yok — çağıran iki diziyi eşit uzunlukta kurmakla yükümlü.
+işlev nesne_yaz(anahtarlar: Dizi<metin>, degerler: Dizi<JsonDeger>) -> metin {
+    değişken sonuc: metin = "{";
+    değişken n: tam32 = dizi_boyut(anahtarlar);
+    değişken m: tam32 = dizi_boyut(degerler);
+    eğer m < n { n = m; }
+    değişken t: metin = tirnak();
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer i > 0 { sonuc = metin_birlestir(sonuc, ","); }
+        sonuc = metin_birlestir(sonuc, t);
+        sonuc = metin_birlestir(sonuc, kacisla(dizi_al(anahtarlar, i)));
+        sonuc = metin_birlestir(sonuc, t);
+        sonuc = metin_birlestir(sonuc, ":");
+        sonuc = metin_birlestir(sonuc, yaz(dizi_al(degerler, i)));
+        i = i + 1;
+    }
+    ver metin_birlestir(sonuc, "}");
+}
+
+// tam64 → ondalık metin (negatif dâhil). KEMGU'da sayı→metin yerleşiği yok.
+işlev sayi_metin(n: tam64) -> metin {
+    eğer n == 0 { ver "0"; }
+    değişken negatif: mantıksal = n < 0;
+    değişken kalan: tam64 = n;
+    eğer negatif { kalan = 0 - n; }
+    değişken basamaklar: metin = "";
+    iken kalan > 0 {
+        değişken d: tam64 = kalan % 10;
+        basamaklar = metin_birlestir(rakam(d), basamaklar);
+        kalan = kalan / 10;
+    }
+    eğer negatif { ver metin_birlestir("-", basamaklar); }
+    ver basamaklar;
+}
+
+işlev rakam(d: tam64) -> metin {
+    eğer d == 0 { ver "0"; }
+    eğer d == 1 { ver "1"; }
+    eğer d == 2 { ver "2"; }
+    eğer d == 3 { ver "3"; }
+    eğer d == 4 { ver "4"; }
+    eğer d == 5 { ver "5"; }
+    eğer d == 6 { ver "6"; }
+    eğer d == 7 { ver "7"; }
+    eğer d == 8 { ver "8"; }
+    ver "9";
+}

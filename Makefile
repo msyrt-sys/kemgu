@@ -649,6 +649,26 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		fi; \
 	done
 	@echo "Tum stdlib modulleri --check gecti!"
+	@# D-435: `--check` YETMEZ. stdlib/json.kem yazilirken IKI kusur yalnizca
+	@# CALISTIRINCA cikti ve --check ikisini de TEMIZ gecmisti:
+	@#   metin_kes 0-TABANLI (her dizginin ILK karakteri dusuyordu) ·
+	@#   metin_bayt tam8 doner.
+	@# Bu yuzden calistirilabilir test dosyalari DERLENIR ve KOSULUR;
+	@# exit 0 beklenir (test dosyasi hatali karsilastirma basina bit toplar).
+	@echo "stdlib davranis testleri (derle + calistir)..."
+	@for mod in json; do \
+		f="stdlib/$$mod.kem"; test_f="test/stdlib/test_$$mod.kem"; \
+		[ -f "$$f" ] && [ -f "$$test_f" ] || continue; \
+		c="$(BUILD)/_run_$$mod.kem"; cat "$$f" "$$test_f" > "$$c"; \
+		./$(BUILD)/kemgu$(EXE) --llvm "$$c" > "$(BUILD)/_run_$$mod.ll" 2>/dev/null || \
+			{ echo "FAIL(IR): $$mod"; exit 1; }; \
+		clang -x ir "$(BUILD)/_run_$$mod.ll" -x none $(BUILD)/kdl_runtime.o \
+			-o "$(BUILD)/_run_$$mod$(EXE)" 2>/dev/null || \
+			{ echo "FAIL(link): $$mod"; exit 1; }; \
+		./$(BUILD)/_run_$$mod$(EXE) || { echo "FAIL(kosum): $$mod"; exit 1; }; \
+		rm -f "$$c" "$(BUILD)/_run_$$mod.ll" "$(BUILD)/_run_$$mod$(EXE)"; \
+	done
+	@echo "stdlib davranis testleri gecti!"
 
 # Kripto bundle kontrolu — stdlib/kripto.kem + stdlib/kripto/*.kem birlikte
 # her bir test/stdlib/test_kripto*.kem dosyasi ile karistirilir.

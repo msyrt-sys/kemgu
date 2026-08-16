@@ -971,7 +971,19 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
   Dizi<tam32>)`→42 ✓, dizi dönüş `yap() -> Dizi<tam32>`→42 ✓, `dizi_boyut`→3 ✓, generic
   `kimlik<T>(x:T)->T` → 42 ✓, generic+metin → 5 ✓. **DERS:** roadmap maddelerini başlamadan
   ölç — eskimiş olabilir.
-- **Stdlib network/JSON/regex** (runtime altyapı sonra)
+- **Stdlib network/JSON/regex** — D-435'te ölçüldü:
+  - **JSON** ✗ YOK (`stdlib/` içinde json modülü yok; `src/json.c` LSP'nin C
+    ayrıştırıcısı, KEMGU tarafı DEĞİL). **Karar GEREKTİRMEZ:** saf KEMGU ile
+    yazılabilir — `metin_bayt`/`metin_kes`/`metin_uzunluk`/`metin_birlestir`/
+    `metin_esit` yerleşikleri VAR, `çeşit` ADT ve `sonuç<T,E>` VAR.
+    Ayrıca **dogfooding**: derleyiciyi gerçek bir programla zorlar.
+  - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
+  - **regex** — saf KEMGU yazılabilir ama büyük; JSON'dan sonra.
+- **Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
+  **YOK** (`kdl_semafor`/`barrier` bulunamadı; yalnız `kdl_kilit_*` var) →
+  yeni yerleşik = dil yüzeyi, Mehmet'in kararı.
+- **`kanal` bare-metal (.kem)** — D-435: `runtime/*.kem` ve `kem_os.kem`'de
+  `kanal_*` kullanımı YOK. ABI hazır ama test/kullanım yok.
 - **Linear V2:** ~~L005 (koşullu tüketim tutarlılığı)~~ ✓ **D-311** — tüketim takibi
   akış-duyarsız SAYAÇTI; hem YANLIŞ REDDEDİYOR (`eğer p { kullan(t); } değilse { imha(t); }`
   = spec'in kanonik örneği → L002, yani koşullu imha İMKÂNSIZDI) hem YANLIŞ KABUL EDİYORDU

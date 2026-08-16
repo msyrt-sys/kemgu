@@ -1,0 +1,76 @@
+// KEMGU Stdlib Testi — JSON yazıcı
+// =============================================================================
+// Bu dosya `stdlib/json.kem` ile BİRLEŞTİRİLEREK derlenir.
+//
+// ⚠ TİP KONTROLÜ YETMEZ — bu modülü yazarken iki kusur YALNIZ ÇALIŞTIRINCA
+// çıktı ve `--check` ikisini de TEMİZ geçmişti:
+//   1. `metin_kes` 0-TABANLI (1-tabanlı sanmıştım) → her dizginin İLK
+//      KARAKTERİ düşüyordu: `"iki"` → `"ki"`, anahtar `ad` → `d`.
+//   2. `metin_bayt` `tam8` döner, `tam32` değil (bunu --check yakaladı).
+// Bu yüzden test exit koduyla DAVRANIŞ ölçer, yalnız derlenmeyi değil.
+//
+// Beklenen çıktı (satır satır):
+//   null / true / -4207 / "a\\\"b" / [1,"iki"] / {"ad":"ölç"}
+// `"a\"b"` KEMGU'da 4 karakterdir (kaçış YOK): a \ " b
+// → JSON kaçışı: a + \\ + \" + b
+
+işlev json_test_esit(beklenen: metin, gercek: metin, kod: tam32) -> tam32 {
+    eğer metin_esit(beklenen, gercek) { ver 0; }
+    yazdir_metin("BEKLENEN:");
+    yazdir_metin(beklenen);
+    yazdir_metin("GERCEK  :");
+    yazdir_metin(gercek);
+    ver kod;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    h = h + json_test_esit("null", yaz(JsonDeger::Bos), 1);
+    h = h + json_test_esit("true", yaz(JsonDeger::Mantik(doğru)), 2);
+    h = h + json_test_esit("false", yaz(JsonDeger::Mantik(yanlış)), 4);
+    h = h + json_test_esit("0", yaz(JsonDeger::Sayi(0)), 8);
+    h = h + json_test_esit("-4207", yaz(JsonDeger::Sayi(0 - 4207)), 16);
+
+    // Kaçış: kaynak `a\"b` (4 karakter) → JSON `"a\\\"b"`
+    değişken bekk: metin = metin_birlestir(tirnak(), "a");
+    bekk = metin_birlestir(bekk, ters_bolu());
+    bekk = metin_birlestir(bekk, ters_bolu());
+    bekk = metin_birlestir(bekk, ters_bolu());
+    bekk = metin_birlestir(bekk, tirnak());
+    bekk = metin_birlestir(bekk, "b");
+    bekk = metin_birlestir(bekk, tirnak());
+    h = h + json_test_esit(bekk, yaz(JsonDeger::Metin("a\"b")), 32);
+
+    // Dizi — ilk karakter düşme kusurunun ASIL yakalandığı yer
+    değişken d: Dizi<JsonDeger> = [];
+    dizi_ekle(d, JsonDeger::Sayi(1));
+    dizi_ekle(d, JsonDeger::Metin("iki"));
+    değişken bekd: metin = metin_birlestir("[1,", tirnak());
+    bekd = metin_birlestir(bekd, "iki");
+    bekd = metin_birlestir(bekd, tirnak());
+    bekd = metin_birlestir(bekd, "]");
+    h = h + json_test_esit(bekd, yaz(JsonDeger::Dizi(d)), 64);
+
+    // Nesne + TÜRKÇE UTF-8 (çok baytlı karakter aynen geçmeli)
+    değişken ks: Dizi<metin> = [];
+    dizi_ekle(ks, "ad");
+    değişken vs: Dizi<JsonDeger> = [];
+    dizi_ekle(vs, JsonDeger::Metin("ölç"));
+    değişken bekn: metin = metin_birlestir("{", tirnak());
+    bekn = metin_birlestir(bekn, "ad");
+    bekn = metin_birlestir(bekn, tirnak());
+    bekn = metin_birlestir(bekn, ":");
+    bekn = metin_birlestir(bekn, tirnak());
+    bekn = metin_birlestir(bekn, "ölç");
+    bekn = metin_birlestir(bekn, tirnak());
+    bekn = metin_birlestir(bekn, "}");
+    h = h + json_test_esit(bekn, yaz(JsonDeger::Nesne(ks, vs)), 128);
+
+    // Boş dizi / boş nesne
+    değişken bd: Dizi<JsonDeger> = [];
+    h = h + json_test_esit("[]", yaz(JsonDeger::Dizi(bd)), 256);
+
+    eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); }
+    ver h;
+}
