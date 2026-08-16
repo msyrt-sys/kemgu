@@ -5,6 +5,43 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-434 — LSP `workspace/symbol`: LSP v3 roadmap maddesi KAPANDI (2026-08-14)
+
+D-433'ten SONRA anlamlı hâle gelen özellik. Tek-belge bir sunucuda "workspace
+symbol" yalnız açık dosyayı arardı ve **ad yanıltıcı olurdu**; artık
+`BelgeTablo`daki TÜM açık belgeler geziliyor.
+
+### ⚠ SymbolKind ≠ CompletionItemKind
+İki AYRI LSP enumu. `completion_yanitla` bilerek CompletionItemKind kullanır
+(`islev`=3); `workspace/symbol` ve `documentSymbol` **SymbolKind** ister
+(`islev`=12, `sabit`=14, `yapı`=23, `çeşit`=10, `özellik`=11).
+`documentSymbol`un değerleri kaynaktan OKUNDU ve yeniden kullanıldı —
+karıştırmak istemciye yanlış ikon/gruplama gösterirdi. Test bunu ayrıca
+denetler (`kind == 12`, 3 DEĞİL).
+
+### Sorgu eşleşmesi
+ASCII-küçültmeli alt-dizi (LSP istemcileri harf duyarsız bekler); boş sorgu =
+hepsi. Konumlar UTF-16'ya çevrilir (`lsp_karakter` + `utf16_say`).
+
+### SINIR (bilinçli, dürüst)
+Yalnız **AÇIK** belgeler taranır. Diski gezip tüm projeyi indekslemek ayrı bir
+iştir (dosya sistemi tarama + izleme); "açık dosyalar" LSP'de geçerli ve
+yaygın bir workspace tanımıdır. Bunu belgede saklamıyorum.
+
+### Test + sabotaj
+`test_workspace_symbol_capraz`: iki dosyada `ortakbir`/`ortakiki`, sorgu
+`"ortak"` → **2 sonuç, FARKLI uri'lerle**. Aynı uri iki kez gelirse çapraz
+arama yok demektir. Bu test aynı zamanda D-433'ün İKİNCİ kanıtıdır — tek-belge
+modelde imkânsızdı.
+**Sabotaj S17** (döngüyü `i < 1`e indir) → **24/24 → 23/24** ✅
+(Bu kez `perl` değil **Edit** kullanıldı — D-433'te öğrenilen ders.)
+
+**LSP v3 roadmap maddesi TAMAMEN KAPANDI:** hover · definition · completion ·
+documentSymbol · references · incremental sync · semanticTokens · çok-belge ·
+workspace/symbol.
+
+---
+
 ## D-433 [YÜKSEK] — 🔴 LSP TEK BELGE TUTUYORDU: ikinci dosya birinciyi eziyordu (2026-08-14)
 
 `workspace/*`'a başlarken **altındaki varsayımı ölçtüm** ve gerçek bir kusur

@@ -1144,6 +1144,62 @@ static void test_cok_belge_izolasyon(void) {
     fclose(cikti);
 }
 
+/* === D-434: workspace/symbol ===
+ * ASIL KANIT: sorgu IKI FARKLI dosyadan sonuc dondurmeli. Tek-belge modelde
+ * (D-433 oncesi) bu IMKANSIZDI — o yuzden bu test ayni zamanda cok-belge
+ * modelinin ISE YARADIGININ ikinci kanitidir. */
+static void test_workspace_symbol_capraz(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///a.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev ortakbir() -> tam32 { ver 1; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///b.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev ortakiki() -> tam32 { ver 2; }\"}}}");
+    /* "ortak" IKI dosyada da gecer -> 2 sonuc, FARKLI uri'lerle */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"workspace/symbol\","
+        "\"params\":{\"query\":\"ortak\"}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 5;   /* init, diag(a), diag(b), ws, shutdown */
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yw = yanit_n(y, 3);
+        JsonDeger *j = json_ayrist(a, yw->govde, yw->content_length, NULL);
+        JsonDeger *r = json_alan(j, "result");
+        ok = r && r->tip == JSON_DIZI && r->veri.dizi.sayi == 2;
+        if (ok) {
+            /* IKI FARKLI uri gelmeli — ayni uri iki kez ise capraz arama YOK */
+            int u0 = 0, u1 = 0;
+            JsonDeger *l0 = json_alan(r->veri.dizi.elemanlar[0], "location");
+            JsonDeger *l1 = json_alan(r->veri.dizi.elemanlar[1], "location");
+            const char *s0 = l0 ? json_metin(json_alan(l0, "uri"), &u0) : NULL;
+            const char *s1 = l1 ? json_metin(json_alan(l1, "uri"), &u1) : NULL;
+            ok = s0 && s1 && !(u0 == u1 && memcmp(s0, s1, (size_t)u0) == 0);
+            /* SymbolKind: islev = 12 (CompletionItemKind 3 DEGIL) */
+            if (ok) {
+                JsonDeger *k = json_alan(r->veri.dizi.elemanlar[0], "kind");
+                ok = k && k->tip == JSON_TAMSAYI && k->veri.tamsayi == 12;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("workspace/symbol: IKI dosyadan sonuc + SymbolKind", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 int main(void) {
     printf("KEMGU LSP Server Test Paketi\n");
     printf("==============================\n");
@@ -1180,6 +1236,9 @@ int main(void) {
 
     printf("\n--- LSP v3 (cok-belge) ---\n");
     test_cok_belge_izolasyon();
+
+    printf("\n--- LSP v3 (workspace/symbol) ---\n");
+    test_workspace_symbol_capraz();
 
     printf("\n--- UTF-16 konum donusumu ---\n");
     test_utf16_hover_turkce();

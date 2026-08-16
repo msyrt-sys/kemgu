@@ -930,7 +930,21 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     Sabotaj döngüsünden sonra ilgili **test ikilisini de** sil, yalnız `.o`yu
     değil. (Diğer ikisi: `build/codegen.exe` dosya kilidi, `git stash` sonrası
     bayat obje.)
-  **KALAN yalnız 1:** `workspace/*` (`workspaceDiagnostics: false`).
+  ~~**KALAN yalnız 1:** `workspace/*`~~ ✓ **D-434: `workspace/symbol` EKLENDİ
+  → LSP v3 MADDESİ TAMAMEN KAPANDI.**
+  - **⚠ SymbolKind ≠ CompletionItemKind** — iki AYRI enum. `completion`
+    bilerek CompletionItemKind kullanır (`islev`=3); `workspace/symbol` ve
+    `documentSymbol` **SymbolKind** ister (`islev`=12 · `sabit`=14 ·
+    `yapı`=23 · `çeşit`=10 · `özellik`=11). Değerler `documentSymbol`dan
+    OKUNDU; karıştırmak istemciye yanlış ikon gösterir. Test `kind == 12`
+    denetler.
+  - **SINIR (bilinçli):** yalnız AÇIK belgeler taranır. Diski gezip projeyi
+    indekslemek ayrı iş (FS tarama + izleme); "açık dosyalar" LSP'de geçerli
+    bir workspace tanımıdır.
+  - Test `test_workspace_symbol_capraz`: iki dosya, sorgu `"ortak"` →
+    2 sonuç **FARKLI uri**'lerle (aynı uri iki kez = çapraz arama YOK).
+    **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
+    değil **Edit** kullanıldı (D-433'ün dersi).
 
 ### 🔴 D-433: LSP TEK BELGE TUTUYORDU — ikinci dosya birinciyi EZİYORDU
 `workspace/*`'a başlarken ölçtüm: sunucu `Belge belge;` (TEK yapı) tutuyordu.

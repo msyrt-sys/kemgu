@@ -669,6 +669,7 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
                  "\"referencesProvider\":true,"
                  /* D-432: semanticTokens (full). Legend SIRASI kritik —
                   * `data` icindeki tokenType INDEKSTIR, ad degil. */
+                 "\"workspaceSymbolProvider\":true,"   /* D-434 */
                  "\"semanticTokensProvider\":{\"legend\":{"
                  "\"tokenTypes\":[\"keyword\",\"string\",\"number\","
                  "\"operator\",\"variable\"],"
@@ -1142,6 +1143,99 @@ static void semantictokens_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) 
     json_yazici_serbest(&y);
 }
 
+/* === workspace/symbol (LSP v3) — D-434 ===
+ * ⚠ SADECE D-433'ten SONRA ANLAMLI: sunucu tek belge tutarken "workspace
+ * symbol" yalnız açık dosyayı arardı ve ad YANILTICI olurdu. Artık
+ * `BelgeTablo`daki TÜM açık belgeler gezilir.
+ *
+ * ⚠ SymbolKind ≠ CompletionItemKind. Bunlar AYRI LSP enumlarıdır ve
+ * `completion_yanitla` bilerek CompletionItemKind (islev=3) kullanır.
+ * Burada `documentSymbol`un SymbolKind'ı yeniden kullanılır (islev=12,
+ * sabit=14, yapı=23, çeşit=10, özellik=11) — ikisini karıştırmak istemciye
+ * yanlış ikon/gruplama gösterir.
+ *
+ * SINIR (bilinçli, dürüst): yalnız AÇIK belgeler taranır. Diske bakıp tüm
+ * projeyi indekslemek ayrı bir iştir (dosya sistemi gezme + izleme);
+ * "açık dosyalar" LSP'de geçerli ve yaygın bir workspace tanımıdır. */
+static int ws_kind(const char *kat) {
+    if (!kat) return 13;                        /* Variable */
+    if (strcmp(kat, "islev") == 0) return 12;   /* Function */
+    if (strcmp(kat, "sabit") == 0) return 14;   /* Constant */
+    if (strcmp(kat, "yapi") == 0) return 23;    /* Struct */
+    if (strcmp(kat, "cesit") == 0) return 10;   /* Enum */
+    if (strcmp(kat, "ozellik") == 0) return 11; /* Interface */
+    return 13;
+}
+
+/* ASCII-küçültmeli alt-dizi araması (LSP istemcileri harf duyarsız bekler). */
+static int ws_eslesir(const char *ad, int ad_uz, const char *q, int q_uz) {
+    if (q_uz <= 0) return 1;                    /* boş sorgu = hepsi */
+    if (q_uz > ad_uz) return 0;
+    for (int i = 0; i + q_uz <= ad_uz; i++) {
+        int j = 0;
+        while (j < q_uz) {
+            char a = ad[i + j], b = q[j];
+            if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+            if (b >= 'A' && b <= 'Z') b = (char)(b - 'A' + 'a');
+            if (a != b) break;
+            j++;
+        }
+        if (j == q_uz) return 1;
+    }
+    return 0;
+}
+
+static void workspacesymbol_yanitla(FILE *cikti, JsonDeger *istek,
+                                    BelgeTablo *tablo) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"result\":[");
+
+    int q_uz = 0;
+    const char *q = NULL;
+    JsonDeger *params = json_alan(istek, "params");
+    if (params) q = json_metin(json_alan(params, "query"), &q_uz);
+
+    int once = 1;
+    for (int i = 0; tablo && i < tablo->sayi; i++) {
+        Belge *b = &tablo->belgeler[i];
+        if (!b->uri) continue;
+        for (BelgeSembol *s = b->semboller; s; s = s->sonraki) {
+            if (!s->ad || s->ad_uz <= 0) continue;
+            if (!ws_eslesir(s->ad, s->ad_uz, q, q_uz)) continue;
+            if (!once) json_yaz(&y, ",");
+            json_yaz(&y, "{\"name\":");
+            json_yaz_metin_lit_n(&y, s->ad, (size_t)s->ad_uz);
+            json_yaz(&y, ",\"kind\":");
+            json_yaz_int(&y, ws_kind(s->kategori));
+            json_yaz(&y, ",\"location\":{\"uri\":");
+            json_yaz_metin_lit(&y, b->uri);
+            json_yaz(&y, ",\"range\":");
+            /* Tanim adinin araligi; sutunlar UTF-16'ya cevrilir. */
+            int sat0 = s->satir > 0 ? s->satir - 1 : 0;
+            int kar0 = lsp_karakter(b, s->satir, s->sutun);
+            int kar1 = kar0 + utf16_say(s->ad, 0, s->ad_uz);
+            json_yaz(&y, "{\"start\":{\"line\":");
+            json_yaz_int(&y, sat0);
+            json_yaz(&y, ",\"character\":");
+            json_yaz_int(&y, kar0);
+            json_yaz(&y, "},\"end\":{\"line\":");
+            json_yaz_int(&y, sat0);
+            json_yaz(&y, ",\"character\":");
+            json_yaz_int(&y, kar1);
+            json_yaz(&y, "}}}}");
+            once = 0;
+        }
+    }
+    json_yaz(&y, "]}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
 /* === Completion === */
 
 static const char *KEYWORDS[] = {
@@ -1321,6 +1415,8 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
             break;
         } else if (strcmp(yontem, "initialized") == 0) {
             /* no-op */
+        } else if (strcmp(yontem, "workspace/symbol") == 0) {
+            workspacesymbol_yanitla(cikti, istek, &tablo);   /* D-434 */
         } else if (strncmp(yontem, "textDocument/", 13) == 0) {
             /* D-433: her `textDocument` istegi KENDI uri'sine çözülür.
              * didOpen yoksa yuva açar; diğerleri yalnız ARAR — bilinmeyen
