@@ -157,3 +157,213 @@ işlev rakam(d: tam64) -> metin {
     eğer d == 8 { ver "8"; }
     ver "9";
 }
+
+// =============================================================================
+// JSON AYRIŞTIRICI (D-436) — ikinci artım
+// =============================================================================
+// Özyineli-inişli. Durum bir `&değişken` yapıda taşınır (KEMGU'da global
+// mutable durum yok; küresel de bu iş için yanlış olurdu).
+//
+// ⚠ `metin_kes` ve `metin_bayt` 0-TABANLIDIR (D-435'te ölçüldü) — `poz`
+// doğrudan bayt indeksidir.
+//
+// Hata yolu: `sonuç<JsonDeger, metin>`. Panik YOK, çökmezlik korunur.
+// SINIR (bilinçli): sayılar yalnız TAMSAYI (`tam64`); ondalık/üstel JSON
+// sayıları REDDEDİLİR (`JsonDeger::Sayi` zaten tam64 taşıyor — sessizce
+// kırpmak yerine açık hata). `\uXXXX` kaçışı da REDDEDİLİR (UTF-16 vekil
+// çiftleri ayrı iş); diğer kaçışlar (`\" \ \/ \n \r \t \b \f`) desteklenir.
+
+yapı JsonAyristirici { girdi: metin; poz: tam32; }
+
+işlev ja_bitti(a: &değişken JsonAyristirici) -> mantıksal {
+    ver a.poz >= metin_uzunluk(a.girdi);
+}
+
+// Geçerli bayt; dosya sonunda 0 döner (JSON'da 0 baytı geçerli değil).
+işlev ja_bak(a: &değişken JsonAyristirici) -> tam32 {
+    eğer ja_bitti(a) { ver 0; }
+    ver metin_bayt(a.girdi, a.poz) olarak tam32;
+}
+
+işlev ja_bosluk_atla(a: &değişken JsonAyristirici) -> tam32 {
+    iken ja_bitti(a) == yanlış {
+        değişken b: tam32 = ja_bak(a);
+        eğer (b == 32) veya (b == 9) veya (b == 10) veya (b == 13) {
+            a.poz = a.poz + 1;
+        } değilse { ver 0; }
+    }
+    ver 0;
+}
+
+// Beklenen sabit sözcük (`true`/`false`/`null`) girdide bu konumda mı?
+işlev ja_sozcuk_mu(a: &değişken JsonAyristirici, s: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(s);
+    eğer a.poz + n > metin_uzunluk(a.girdi) { ver yanlış; }
+    ver metin_esit(metin_kes(a.girdi, a.poz, n), s);
+}
+
+işlev ja_deger(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    ja_bosluk_atla(a);
+    eğer ja_bitti(a) { ver hata("beklenmeyen girdi sonu"); }
+    değişken b: tam32 = ja_bak(a);
+
+    eğer b == 110 {                       // 'n' → null
+        eğer ja_sozcuk_mu(a, "null") { a.poz = a.poz + 4; ver tamam(JsonDeger::Bos); }
+        ver hata("gecersiz sozcuk (null bekleniyordu)");
+    }
+    eğer b == 116 {                       // 't' → true
+        eğer ja_sozcuk_mu(a, "true") { a.poz = a.poz + 4; ver tamam(JsonDeger::Mantik(doğru)); }
+        ver hata("gecersiz sozcuk (true bekleniyordu)");
+    }
+    eğer b == 102 {                       // 'f' → false
+        eğer ja_sozcuk_mu(a, "false") { a.poz = a.poz + 5; ver tamam(JsonDeger::Mantik(yanlış)); }
+        ver hata("gecersiz sozcuk (false bekleniyordu)");
+    }
+    eğer b == 34 { ver ja_metin(a); }        // '"'
+    eğer b == 91 { ver ja_dizi(a); }         // '['
+    eğer b == 123 { ver ja_nesne(a); }       // '{'
+    eğer (b == 45) veya ((b >= 48) ve (b <= 57)) { ver ja_sayi(a); }
+    ver hata("beklenmeyen karakter");
+}
+
+// Dizgi: açılış `"` tüketilmiş DEĞİL — burada tüketilir.
+işlev ja_metin(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    a.poz = a.poz + 1;                       // açılış tırnağı
+    değişken sonuc: metin = "";
+    iken doğru {
+        eğer ja_bitti(a) { ver hata("dizgi kapanmadan girdi bitti"); }
+        değişken b: tam32 = ja_bak(a);
+        eğer b == 34 { a.poz = a.poz + 1; ver tamam(JsonDeger::Metin(sonuc)); }
+        eğer b == 92 {                       // ters bölü → kaçış
+            a.poz = a.poz + 1;
+            eğer ja_bitti(a) { ver hata("kacis yarim kaldi"); }
+            değişken k: tam32 = ja_bak(a);
+            a.poz = a.poz + 1;
+            eğer k == 34 { sonuc = metin_birlestir(sonuc, tirnak()); }
+            değilse { eğer k == 92 { sonuc = metin_birlestir(sonuc, ters_bolu()); }
+            değilse { eğer k == 47 { sonuc = metin_birlestir(sonuc, "/"); }
+            değilse { eğer k == 110 { sonuc = metin_birlestir(sonuc, satir_sonu()); }
+            değilse { eğer k == 116 { sonuc = metin_birlestir(sonuc, sekme()); }
+            değilse { eğer k == 114 { sonuc = metin_birlestir(sonuc, satir_basi()); }
+            değilse {
+                // `\uXXXX` ve bilinmeyen kaçışlar: SESSİZ KABUL ETME.
+                ver hata("desteklenmeyen kacis");
+            } } } } } }
+        } değilse {
+            sonuc = metin_birlestir(sonuc, metin_kes(a.girdi, a.poz, 1));
+            a.poz = a.poz + 1;
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+// Kaçış hedefleri — KEMGU literalinde kaçış olmadığı için bayt kesimiyle.
+işlev satir_sonu() -> metin { ver metin_kes("\n", 1, 1); }   // kaynak: `\` + `n`
+işlev sekme() -> metin { ver metin_kes("\t", 1, 1); }
+işlev satir_basi() -> metin { ver metin_kes("\r", 1, 1); }
+
+işlev ja_sayi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    değişken negatif: mantıksal = yanlış;
+    eğer ja_bak(a) == 45 { negatif = doğru; a.poz = a.poz + 1; }
+    eğer ja_bitti(a) { ver hata("sayi yarim"); }
+    değişken b0: tam32 = ja_bak(a);
+    eğer (b0 < 48) veya (b0 > 57) { ver hata("sayi bekleniyordu"); }
+    // ⚠ KEMGU'da `break` YOK → döngü bayrakla sonlandırılır.
+    değişken deger: tam64 = 0;
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer ja_bitti(a) { devam = yanlış; }
+        değilse {
+            değişken b: tam32 = ja_bak(a);
+            eğer (b < 48) veya (b > 57) { devam = yanlış; }
+            değilse {
+                deger = deger * 10 + ((b - 48) olarak tam64);
+                a.poz = a.poz + 1;
+            }
+        }
+    }
+    eğer negatif { deger = 0 - deger; }
+    ver tamam(JsonDeger::Sayi(deger));
+}
+
+işlev ja_dizi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    a.poz = a.poz + 1;                       // '['
+    değişken ogeler: Dizi<JsonDeger> = [];
+    ja_bosluk_atla(a);
+    eğer ja_bak(a) == 93 { a.poz = a.poz + 1; ver tamam(JsonDeger::Dizi(ogeler)); }
+    iken doğru {
+        eşleş ja_deger(a) {
+            tamam(v) => { dizi_ekle(ogeler, v); }
+            hata(m) => { ver hata(m); }
+        }
+        ja_bosluk_atla(a);
+        değişken b: tam32 = ja_bak(a);
+        eğer b == 44 { a.poz = a.poz + 1; }
+        değilse {
+            eğer b == 93 { a.poz = a.poz + 1; ver tamam(JsonDeger::Dizi(ogeler)); }
+            ver hata("dizide , veya ] bekleniyordu");
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+işlev ja_nesne(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    a.poz = a.poz + 1;                       // '{'
+    değişken anahtarlar: Dizi<metin> = [];
+    değişken degerler: Dizi<JsonDeger> = [];
+    ja_bosluk_atla(a);
+    eğer ja_bak(a) == 125 {
+        a.poz = a.poz + 1;
+        ver tamam(JsonDeger::Nesne(anahtarlar, degerler));
+    }
+    iken doğru {
+        ja_bosluk_atla(a);
+        eğer ja_bak(a) != 34 { ver hata("nesne anahtari dizgi olmali"); }
+        eşleş ja_metin(a) {
+            tamam(k) => {
+                eşleş k {
+                    JsonDeger::Metin(ks) => { dizi_ekle(anahtarlar, ks); }
+                    JsonDeger::Bos => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Mantik(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Sayi(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Dizi(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Nesne(x, y) => { ver hata("ic hata: anahtar"); }
+                }
+            }
+            hata(m) => { ver hata(m); }
+        }
+        ja_bosluk_atla(a);
+        eğer ja_bak(a) != 58 { ver hata("anahtardan sonra : bekleniyordu"); }
+        a.poz = a.poz + 1;
+        eşleş ja_deger(a) {
+            tamam(v) => { dizi_ekle(degerler, v); }
+            hata(m) => { ver hata(m); }
+        }
+        ja_bosluk_atla(a);
+        değişken b: tam32 = ja_bak(a);
+        eğer b == 44 { a.poz = a.poz + 1; }
+        değilse {
+            eğer b == 125 {
+                a.poz = a.poz + 1;
+                ver tamam(JsonDeger::Nesne(anahtarlar, degerler));
+            }
+            ver hata("nesnede , veya } bekleniyordu");
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+// Genel giriş noktası: tüm girdiyi tüketmeli (arta kalan = hata).
+işlev json_ayristir(girdi: metin) -> sonuç<JsonDeger, metin> {
+    değişken a: JsonAyristirici = JsonAyristirici { girdi: girdi, poz: 0 };
+    değişken r: sonuç<JsonDeger, metin> = ja_deger(&değişken a);
+    eşleş r {
+        hata(m) => { ver hata(m); }
+        tamam(v) => {
+            ja_bosluk_atla(&değişken a);
+            eğer ja_bitti(&değişken a) == yanlış { ver hata("girdi sonunda artik var"); }
+            ver tamam(v);
+        }
+    }
+    ver hata("ulasilmaz");
+}

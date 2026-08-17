@@ -71,6 +71,79 @@ işlev main() -> tam32 {
     değişken bd: Dizi<JsonDeger> = [];
     h = h + json_test_esit("[]", yaz(JsonDeger::Dizi(bd)), 256);
 
-    eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); }
-    ver h;
+    // ---------------------------------------------------------------------
+    // AYRIŞTIRICI (D-436)
+    // ⚠ Test GİRDİLERİ `tirnak()` ile kurulur: KEMGU dizgi literalinde kaçış
+    // YOKTUR, yani `"{\"a\":1}"` kaynakta GERÇEK ters-bölü içerir ve ayrıştırıcı
+    // haklı olarak reddeder. İlk denememde tam bu yüzden sahte bir başarısızlık
+    // aldım — kusur testteydi, ayrıştırıcıda değil.
+    // ---------------------------------------------------------------------
+    h = h + json_ayristir_esit("null", 512);
+    h = h + json_ayristir_esit("true", 1024);
+    h = h + json_ayristir_esit("-4207", 2048);
+    h = h + json_ayristir_esit("[1,2,[3]]", 4096);
+    h = h + json_ayristir_esit("[]", 8192);
+    h = h + json_ayristir_esit("{}", 16384);
+
+    // Boşluk toleransı: girdi boşluklu, ÇIKTI sıkışık olmalı
+    değişken t2: metin = tirnak();
+    değişken bosluklu: metin = metin_birlestir("[ 1 , ", metin_birlestir(t2, "x"));
+    bosluklu = metin_birlestir(bosluklu, t2);
+    bosluklu = metin_birlestir(bosluklu, " ]");
+    h = h + json_ayristir_beklenen(bosluklu,
+            metin_birlestir("[1,", metin_birlestir(t2, metin_birlestir("x", metin_birlestir(t2, "]")))),
+            32768);
+
+    // Nesne + TÜRKÇE UTF-8 round-trip
+    değişken nes: metin = metin_birlestir("{", t2);
+    nes = metin_birlestir(nes, "ad"); nes = metin_birlestir(nes, t2);
+    nes = metin_birlestir(nes, ":"); nes = metin_birlestir(nes, t2);
+    nes = metin_birlestir(nes, "ölç"); nes = metin_birlestir(nes, t2);
+    nes = metin_birlestir(nes, "}");
+    h = h + json_ayristir_esit(nes, 65536);
+
+    // HATA yollari — panik YOK, sonuç<> ile
+    h = h + json_ayristir_hata_mi("[1,2", 131072);
+    h = h + json_ayristir_hata_mi("1 2", 262144);
+    h = h + json_ayristir_hata_mi("{1:2}", 524288);
+    h = h + json_ayristir_hata_mi("", 1048576);
+
+    eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); ver 0; }
+    // ⚠ ÇIKIŞ KODU 8 BİTE MASKELENİR. `h`'yi doğrudan döndürmek ölümcül bir
+    // kapı zayıflığıydı: 262144 = 0x40000 → düşük bayt 0 → BAŞARISIZLIK
+    // "geçti" gibi görünüyordu (sabotaj S19 bunu ortaya çıkardı: mesaj
+    // basıldı ama kapı yeşil kaldı). Bayrak toplamı yalnız TEŞHİS içindir;
+    // kapıya giden değer 1'e sıkıştırılır.
+    yazdir_metin("json: BASARISIZ");
+    ver 1;
+}
+
+// ROUND-TRIP: yaz(ayristir(x)) == x  (kanonik girdi icin)
+işlev json_ayristir_esit(g: metin, kod: tam32) -> tam32 {
+    ver json_ayristir_beklenen(g, g, kod);
+}
+
+işlev json_ayristir_beklenen(g: metin, beklenen: metin, kod: tam32) -> tam32 {
+    eşleş json_ayristir(g) {
+        tamam(v) => { ver json_test_esit(beklenen, yaz(v), kod); }
+        hata(m) => {
+            yazdir_metin(metin_birlestir("AYRISTIRMA HATASI: ", m));
+            yazdir_metin(g);
+            ver kod;
+        }
+    }
+    ver kod;
+}
+
+// Gecersiz girdi HATA dondurmeli (panik DEGIL, sessiz kabul DEGIL).
+işlev json_ayristir_hata_mi(g: metin, kod: tam32) -> tam32 {
+    eşleş json_ayristir(g) {
+        tamam(v) => {
+            yazdir_metin("HATA BEKLENIYORDU ama kabul edildi:");
+            yazdir_metin(g);
+            ver kod;
+        }
+        hata(m) => { ver 0; }
+    }
+    ver kod;
 }
