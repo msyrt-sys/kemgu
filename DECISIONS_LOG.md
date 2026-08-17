@@ -5,6 +5,80 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-437 [YÜKSEK] — 🔴 DERLEYİCİ HATASI: çeşit payload'ından `Dizi<metin>` okumak SEGFAULT
+
+**Dogfooding'in tam da aradığı bulgu.** `stdlib/json.kem`e erişimci
+(`json_alan`) eklerken çıktı; erişimciler GERİ ALINDI (ağaç yeşil kalsın),
+kusur burada kayıtlı.
+
+### MİNİMAL TEKRAR ÜRETİM
+```kemgu
+çeşit V { Bos, Tek(Dizi<metin>) }
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = []; dizi_ekle(d, "a");
+    eşleş V::Tek(d) {
+        V::Tek(a) => { eğer metin_esit(dizi_al(a,0),"a") { ver 42; } ver 1; }
+        V::Bos => { ver 3; }
+    }
+    ver 2;
+}
+```
+→ **exit 139 (segfault)**. Beklenen 42.
+
+### KÖK — YANLIŞ ERİŞİMCİ SONEKİ (IR'dan okundu)
+```
+ÇEŞİT PAYLOAD'ından (BOZUK):
+  %18 = call i32 @kdl_dizi_al_tam(ptr %16, i32 %17)
+  %20 = call i1  @kdl_metin_esit(i32 %18, ptr %19)      ← i32, işaretçi yerine
+
+PARAMETREDEN (ÇALIŞAN):
+  %4  = call ptr @kdl_dizi_al_ptr(ptr %2, i32 %3)
+  %6  = call i1  @kdl_metin_esit(ptr %4, ptr %5)
+```
+Dizi bir **çeşit payload BAĞLAMASINDAN** geldiğinde derleyici ELEMAN TİPİNİ
+kaybediyor → `_tam` (i32) erişimcisini seçiyor → i32'yi işaretçi olarak
+geçiriyor → segfault.
+
+**⚠ LLVM `declare i1 @kdl_metin_esit(ptr, ptr)` ile çağrıdaki `i32`
+uyuşmazlığını SESSİZCE KABUL ETTİ** — D-295'in aynı dersi. Derleme temiz,
+çökme çalışma anında.
+
+### KAPSAM ÖLÇÜLDÜ (7 şekil) — "iki payload" ya da "dizi payload" DEĞİL
+| şekil | sonuç |
+|---|---|
+| `Cift(tam32, tam32)` | ✅ 42 |
+| `Cift(Dizi<tam32>, tam32)` | ✅ 42 |
+| `Cift(tam32, Dizi<tam32>)` | ✅ 42 |
+| `Cift(Dizi<tam32>, Dizi<tam32>)` | ✅ 42 |
+| **`Tek(Dizi<metin>)` + eleman OKU** | 🔴 **139** |
+| **`Cift(Dizi<metin>, Dizi<tam32>)` + metin OKU** | 🔴 **139** |
+| `Cift(Dizi<metin>, Dizi<tam32>)`, metin OKUMADAN | ✅ 42 |
+
+Yani kusur **İŞARETÇİ-elemanlı diziyi çeşit payload'ından okumakta**.
+`Dizi<metin>` PARAMETRE olarak sorunsuz (`nesne_yaz` bunu kullanıyor ve
+çalışıyor) — bağlamanın payload'dan gelmesi belirleyici.
+
+### Sınıfı: `Dizi<kesirli64>` ile AYNI (CLAUDE.md'de kayıtlı)
+İkisi de "erişimci soneki yanlış" — orada `_tam` 8 baytlık double'a,
+burada `_tam` işaretçiye uygulanıyor. **Fark:** `Dizi<kesirli64>` yalnız
+YANLIŞ DEĞER üretiyordu (bellek güvenliği sorunu yok, eleman boyutu 8'di);
+bu ise **ÇÖKÜYOR**.
+
+### Neden ŞİMDİ onarılmadı
+Kusur `src/llvm.c`te — yani ORACLE'da. Onarım hem C'yi hem self-host'u
+ilgilendirir ve tüm parite kapılarını yeniden koşmayı gerektirir; ayrı ve
+sınırlı bir iş olarak duruyor. **Ama bu bir TASARIM kararı değil, düpedüz
+bir kusur** — `Dizi<kesirli64>`den farkı, orada oracle'ın davranışını
+DEĞİŞTİRMEK gerekiyordu, burada yalnız doğru erişimciyi seçmek gerekiyor.
+
+### Engellediği iş
+`stdlib/json.kem` erişimcileri (`json_alan`/`json_indeks`/`json_sayi_al`/
+`json_metin_al`/`json_mantik_al`/`json_uzunluk`). `json_uzunluk` ve
+`json_indeks` TEK BAŞLARINA çalışıyor (ölçüldü); yalnız anahtar arayan
+`json_alan` çöküyor. Kusur kapanınca hepsi geri eklenebilir.
+
+---
+
 ## D-434 — LSP `workspace/symbol`: LSP v3 roadmap maddesi KAPANDI (2026-08-14)
 
 D-433'ten SONRA anlamlı hâle gelen özellik. Tek-belge bir sunucuda "workspace

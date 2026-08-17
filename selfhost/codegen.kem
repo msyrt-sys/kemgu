@@ -3142,6 +3142,35 @@ işlev tip_birlestir(a: metin, b: metin) -> metin {
     ver a;
 }
 // CG8: Dizi<T> tip düğümü → eleman LLVM tipi ("" Dizi değilse).
+// [D-437] Çeşit varyantının k. payload'ı `Dizi<T>` ise T'nin IR'ı, değilse "".
+// Kusur: payload bağlaması ELEMAN TİPİNİ taşımıyordu → `dizi_al(a, i)`
+// `cg_aelem` boş görüp i32'ye düşüyor → `kdl_dizi_al_tam` route ediyor →
+// `Dizi<metin>`de ptr'i i32 okuyup `metin_esit`e i32 geçiriyor → SEGFAULT.
+// LLVM `declare` uyuşmazlığını SESSİZCE kabul ettiği için (D-295) derleme
+// temiz kalıyordu; çökme çalışma anındaydı.
+// Tip DÜĞÜMÜ değil DİZGİ üzerinden: `cv_pt` payload tiplerini dizgi tutar
+// (`"Dizi<metin>"`), düğüm indeksi taşınmaz.
+işlev cesit_payload_elem(p: &değişken Ayr, cad: metin, vad: metin, k: tam32) -> metin {
+    değişken pb: tam32 = cesit_varyant_pb(p, cad, vad);
+    eğer pb < 0 { ver ""; }
+    eğer (pb + k) >= dizi_boyut(p.cv_pt) { ver ""; }
+    değişken pt: metin = dizi_al(p.cv_pt, pb + k);
+    değişken ic: metin = dizi_ic_tip(pt);
+    eğer metin_esit(ic, "?") { ver ""; }
+    // Eleman ADINDAN IR — `ll_tip`in TIP_BASIT dalıyla AYNI eşleme.
+    eğer metin_esit(ic, "tam8") veya metin_esit(ic, "dtam8") { ver "i8"; }
+    eğer metin_esit(ic, "tam16") veya metin_esit(ic, "dtam16") { ver "i16"; }
+    eğer metin_esit(ic, "tam64") veya metin_esit(ic, "dtam64") { ver "i64"; }
+    eğer metin_esit(ic, "kesirli32") { ver "float"; }
+    eğer metin_esit(ic, "kesirli64") { ver "double"; }
+    eğer metin_esit(ic, "metin") { ver "ptr"; }
+    eğer yapi_var_mi(p, ic) { ver ir_tip_ad(ic); }
+    eğer cesit_var_mi(p, ic) {
+        eğer cesit_enum_mi(p, ic) { ver "i8"; }
+        ver cesit_struct_ir(p, ic);
+    }
+    ver "i32";
+}
 işlev ll_eleman_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer tip_idx < 0 { ver ""; }
     eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_DIZI") {
@@ -5718,7 +5747,11 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                             yaz_str("  "); yaz_str(ba2); yaz_str(" = alloca "); yaz_str(pt2); yb(10);
                             yaz_str("  store "); yaz_str(pt2); yaz_str(" "); yaz_str(pv2);
                             yaz_str(", ptr "); yaz_str(ba2); yb(10);
-                            cg_var_ekle(p, bad2, ba2, pt2, "", "");
+                            // [D-437] payload `Dizi<T>` ise ELEMAN TİPİNİ taşı.
+                            // Yoksa `dizi_al` i32'ye düşüp `Dizi<metin>`de
+                            // ptr'i i32 okur → segfault (C llvm.c aynası).
+                            cg_var_ekle(p, bad2, ba2, pt2, "",
+                                        cesit_payload_elem(p, ccad, son_segment(pad), k));
                             k = k + 1;
                         }
                     }

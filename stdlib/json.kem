@@ -168,6 +168,16 @@ işlev rakam(d: tam64) -> metin {
 // doğrudan bayt indeksidir.
 //
 // Hata yolu: `sonuç<JsonDeger, metin>`. Panik YOK, çökmezlik korunur.
+// ⚠ İKİ SINIR DA DİL YÜZEYİ KARARI GEREKTİRİR (D-436'da ölçüldü — saf KEMGU
+// ile AŞILAMAZLAR, denemeden önce bunu oku):
+//   · `\uXXXX`: kod noktası → UTF-8 baytları üretmek için BAYT→METİN gerekir.
+//     `metin_bayt` tersi YOK; `yaz_bayt` stdout'a YAZAR, metin ÜRETMEZ.
+//     0x80-0xFF aralığındaki baytlar tek başına geçerli UTF-8 literali
+//     olmadığı için 256'lık bir tablo da kurulamaz. → yeni yerleşik gerekir.
+//   · ONDALIK sayı: `kesirli64` → `metin` yerleşiği YOK. `ondalik_bicimle`
+//     bir METİN alır (float lexeme'i yeniden biçimler), sayı almaz.
+//     → serileştirme imkânsız, yeni yerleşik gerekir.
+//
 // SINIR (bilinçli): sayılar yalnız TAMSAYI (`tam64`); ondalık/üstel JSON
 // sayıları REDDEDİLİR (`JsonDeger::Sayi` zaten tam64 taşıyor — sessizce
 // kırpmak yerine açık hata). `\uXXXX` kaçışı da REDDEDİLİR (UTF-16 vekil
@@ -366,4 +376,99 @@ işlev json_ayristir(girdi: metin) -> sonuç<JsonDeger, metin> {
         }
     }
     ver hata("ulasilmaz");
+}
+
+
+// =============================================================================
+// ERİŞİMCİLER (D-437)
+// =============================================================================
+// `seçimlik<T>` döner — `hiç` "yok ya da yanlış tip" demektir. Java'nın
+// `get()` → NullPointerException tuzağına düşmüyoruz; her erişim açık.
+//
+// ⚠ Bu blok bir DERLEYİCİ KUSURU açığa çıkarmıştı: çeşit payload'ından gelen
+// `Dizi<metin>`den eleman okumak SEGFAULT veriyordu (yanlış erişimci soneki).
+// Kusur D-437'de hem `src/llvm.c`te hem `selfhost/codegen.kem`de onarıldı;
+// regresyon fikstürü: `test/snapshots/cesit_payload_dizi_metin.kem`.
+
+işlev json_alan(d: JsonDeger, anahtar: metin) -> seçimlik<JsonDeger> {
+    eşleş d {
+        JsonDeger::Nesne(anahtarlar, degerler) => {
+            değişken n: tam32 = dizi_boyut(anahtarlar);
+            değişken m: tam32 = dizi_boyut(degerler);
+            eğer m < n { n = m; }
+            değişken i: tam32 = 0;
+            iken i < n {
+                eğer metin_esit(dizi_al(anahtarlar, i), anahtar) {
+                    ver değer(dizi_al(degerler, i));
+                }
+                i = i + 1;
+            }
+            ver hiç;
+        }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// ⚠ Sınır kontrolü BURADA: `dizi_al` aralık dışında runtime panik verir —
+// kütüphane çökmemeli, `hiç` dönmeli.
+işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
+    eşleş d {
+        JsonDeger::Dizi(ogeler) => {
+            eğer i < 0 { ver hiç; }
+            eğer i >= dizi_boyut(ogeler) { ver hiç; }
+            ver değer(dizi_al(ogeler, i));
+        }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev json_sayi_al(d: JsonDeger) -> seçimlik<tam64> {
+    eşleş d {
+        JsonDeger::Sayi(n) => { ver değer(n); }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev json_metin_al(d: JsonDeger) -> seçimlik<metin> {
+    eşleş d {
+        JsonDeger::Metin(s) => { ver değer(s); }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev json_uzunluk(d: JsonDeger) -> tam32 {
+    eşleş d {
+        JsonDeger::Dizi(ogeler) => { ver dizi_boyut(ogeler); }
+        JsonDeger::Nesne(anahtarlar, degerler) => {
+            değişken n: tam32 = dizi_boyut(anahtarlar);
+            değişken m: tam32 = dizi_boyut(degerler);
+            eğer m < n { ver m; }
+            ver n;
+        }
+        JsonDeger::Bos => { ver 0; }
+        JsonDeger::Mantik(x) => { ver 0; }
+        JsonDeger::Sayi(x) => { ver 0; }
+        JsonDeger::Metin(x) => { ver 0; }
+    }
+    ver 0;
 }

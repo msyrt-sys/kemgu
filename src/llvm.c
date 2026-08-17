@@ -6251,6 +6251,29 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                                 alt->veri.desen_tanimlayici.ad,
                                 alt->veri.desen_tanimlayici.ad_uzunluk,
                                 1, ar, pcopy);
+                            /* [D-437] Payload `Dizi<T>` ise ELEMAN TİPİNİ de
+                             * bağlamaya taşı. Aksi halde `dizi_al(a, i)`
+                             * `vi->eleman_llvm_tip == NULL` görüp i32'ye düşer
+                             * → `kdl_dizi_al_tam` route eder → `Dizi<metin>`de
+                             * ptr'i i32 okuyup `metin_esit`e i32 geçirir →
+                             * SEGFAULT. LLVM `declare` uyuşmazlığını SESSİZCE
+                             * kabul ettiği için (D-295) derleme temiz kalıyor,
+                             * çökme çalışma anında oluyordu.
+                             * D-029'un yapı-alanı (`s.xs`) düzeltmesiyle AYNI
+                             * sınıf; üçüncü kaynak olan payload bağlaması
+                             * atlanmıştı. `Dizi<kesirli64>` de aynı aile ama o
+                             * yalnız yanlış DEĞER veriyor, bu ÇÖKÜYOR. */
+                            const Dugum *pt =
+                                cd->veri.cesit.varyant_payload_tipleri[vi][j];
+                            if (pt && pt->tip == DUGUM_TIP_DIZI) {
+                                const Dugum *ea = pt->veri.tip_dizi.eleman_tip;
+                                const char *eir = ea ? ast_tip_to_ir(g, ea) : NULL;
+                                if (eir) {
+                                    g->isimler->eleman_llvm_tip = eir;
+                                    g->isimler->eleman_tip_ast = ea;
+                                    g->isimler->dinamik_dizi_mi = 1;
+                                }
+                            }
                         }
                     }
                 }

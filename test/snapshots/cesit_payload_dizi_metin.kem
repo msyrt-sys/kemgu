@@ -1,0 +1,17 @@
+// D-437 REGRESYON FİKSTÜRÜ — çeşit payload'ından `Dizi<metin>` okumak.
+// ⚠ ŞU AN SEGFAULT VERİYOR (exit 139); doğrusu 42.
+// Kök: dizi çeşit payload BAĞLAMASINDAN geldiğinde eleman tipi kayboluyor →
+//   call i32 @kdl_dizi_al_tam   (doğrusu: ptr @kdl_dizi_al_ptr)
+//   call i1 @kdl_metin_esit(i32 %N, ptr %M)   ← i32 işaretçi yerine
+// LLVM declare uyuşmazlığını SESSİZCE kabul eder (D-295) → derleme temiz.
+// `Dizi<metin>` PARAMETRE olarak sorunsuz; belirleyici olan payload bağlaması.
+çeşit V { Bos, Tek(Dizi<metin>) }
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = [];
+    dizi_ekle(d, "a");
+    eşleş V::Tek(d) {
+        V::Tek(a) => { eğer metin_esit(dizi_al(a, 0), "a") { ver 42; } ver 1; }
+        V::Bos => { ver 3; }
+    }
+    ver 2;
+}

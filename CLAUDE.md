@@ -946,6 +946,30 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-437: DERLEYİCİ HATASI — çeşit payload'ından `Dizi<metin>` okumak SEGFAULT
+Dogfooding (`stdlib/json.kem` erişimcileri) buldu. Erişimciler geri alındı.
+```kemgu
+çeşit V { Bos, Tek(Dizi<metin>) }
+... eşleş V::Tek(d) { V::Tek(a) => { metin_esit(dizi_al(a,0),"a") ... } }   → exit 139
+```
+**Kök (IR'dan okundu):** dizi bir çeşit payload BAĞLAMASINDAN geldiğinde
+ELEMAN TİPİ kayboluyor →
+`call i32 @kdl_dizi_al_tam` (doğrusu `ptr @kdl_dizi_al_ptr`) →
+`call i1 @kdl_metin_esit(i32 %18, ptr %19)` — **i32 işaretçi yerine**.
+**LLVM `declare` uyuşmazlığını SESSİZCE kabul etti** (D-295'in tekrarı).
+- **Kapsam ÖLÇÜLDÜ (7 şekil):** `Cift(tam32,tam32)` ✅ · `(Dizi<tam32>,tam32)` ✅ ·
+  `(tam32,Dizi<tam32>)` ✅ · `(Dizi<tam32>,Dizi<tam32>)` ✅ ·
+  **`Tek(Dizi<metin>)` + eleman OKU 🔴** · `(Dizi<metin>,Dizi<tam32>)` metin OKU 🔴 ·
+  aynısı metin OKUMADAN ✅. Yani kusur **İŞARETÇİ-elemanlı diziyi ÇEŞİT
+  PAYLOAD'ından okumakta**; `Dizi<metin>` PARAMETRE olarak sorunsuz.
+- **Sınıfı `Dizi<kesirli64>` ile AYNI** (erişimci soneki yanlış) ama o yalnız
+  YANLIŞ DEĞER veriyordu, bu **ÇÖKÜYOR**.
+- **Onarım `src/llvm.c`te (oracle)** — tasarım kararı DEĞİL, düpedüz kusur;
+  `Dizi<kesirli64>`den farkı oracle DAVRANIŞINI değiştirmek gerekmemesi,
+  yalnız doğru erişimciyi seçmek. Ayrı ve sınırlı iş.
+- **Engellediği:** `json_alan` ve kardeş erişimciler. `json_uzunluk`/
+  `json_indeks` tek başlarına ÇALIŞIYOR (ölçüldü).
+
 ### 🔴 D-433: LSP TEK BELGE TUTUYORDU — ikinci dosya birinciyi EZİYORDU
 `workspace/*`'a başlarken ölçtüm: sunucu `Belge belge;` (TEK yapı) tutuyordu.
 `didOpen` her çağrıda `belge_set` ile ÜZERİNE yazıyordu → **gerçek editörde

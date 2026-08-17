@@ -108,6 +108,61 @@ işlev main() -> tam32 {
     h = h + json_ayristir_hata_mi("{1:2}", 524288);
     h = h + json_ayristir_hata_mi("", 1048576);
 
+    // ---------------------------------------------------------------------
+    // ERİŞİMCİLER (D-437) — bu blok bir DERLEYİCİ KUSURU açığa çıkarmıştı:
+    // çeşit payload'ından gelen `Dizi<metin>`den eleman okumak SEGFAULT
+    // veriyordu (yanlış erişimci soneki: `_tam` yerine `_ptr` olmalıydı).
+    // Kusur hem `src/llvm.c` hem `selfhost/codegen.kem`de onarıldı.
+    // ---------------------------------------------------------------------
+    değişken t3: metin = tirnak();
+    değişken og: metin = metin_birlestir("{", t3);
+    og = metin_birlestir(og, "ad"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, ":"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, "ölç"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, ","); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, "xs"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, ":[10,20]}");
+    eşleş json_ayristir(og) {
+        hata(m) => { yazdir_metin("erisimci: ayristirma HATASI"); h = h + 1; }
+        tamam(v) => {
+            // anahtar → metin (SEGFAULT veren yol)
+            eşleş json_alan(v, "ad") {
+                değer(a) => {
+                    eşleş json_metin_al(a) {
+                        değer(s) => { h = h + json_test_esit("ölç", s, 1); }
+                        hiç => { yazdir_metin("ad: tip yanlis"); h = h + 1; }
+                    }
+                }
+                hiç => { yazdir_metin("ad: alan YOK"); h = h + 1; }
+            }
+            // olmayan anahtar → hiç
+            eşleş json_alan(v, "yokboyle") {
+                değer(a) => { yazdir_metin("olmayan anahtar KABUL EDILDI"); h = h + 1; }
+                hiç => { }
+            }
+            // dizi uzunluğu + ARALIK DIŞI indeks (panik ETMEMELİ)
+            eşleş json_alan(v, "xs") {
+                değer(xs) => {
+                    eğer json_uzunluk(xs) != 2 { yazdir_metin("uzunluk yanlis"); h = h + 1; }
+                    eşleş json_indeks(xs, 9) {
+                        değer(e) => { yazdir_metin("aralik disi KABUL EDILDI"); h = h + 1; }
+                        hiç => { }
+                    }
+                    eşleş json_indeks(xs, 1) {
+                        değer(e) => {
+                            eşleş json_sayi_al(e) {
+                                değer(n) => { eğer n != 20 { yazdir_metin("idx1 yanlis"); h = h + 1; } }
+                                hiç => { yazdir_metin("idx1 sayi degil"); h = h + 1; }
+                            }
+                        }
+                        hiç => { yazdir_metin("idx1 YOK"); h = h + 1; }
+                    }
+                }
+                hiç => { yazdir_metin("xs YOK"); h = h + 1; }
+            }
+        }
+    }
+
     eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); ver 0; }
     // ⚠ ÇIKIŞ KODU 8 BİTE MASKELENİR. `h`'yi doğrudan döndürmek ölümcül bir
     // kapı zayıflığıydı: 262144 = 0x40000 → düşük bayt 0 → BAŞARISIZLIK
