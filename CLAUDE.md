@@ -946,6 +946,42 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-440: `metin` üzerinde `==` İŞARETÇİ karşılaştırıyor + KOŞMAYAN TESTLER
+D-439 bitince "hangi yüzey kapısız?" diye ölçtüm: `calistir_stdlib_check`
+13 test dosyasını `--check`ten geçiriyor ama **davranışsal olarak yalnız
+`json`u** koşuyordu. Kör nokta ölçüldü — `main`'den çağrılan test sayısı:
+**metin 1/89** · opsiyonel 1/29 · dosya 1/27 · karsilastir 1/20 ·
+sayisal 1/20 · dizi 62/99 · matematik 34/81. ~185 testin çoğu HİÇ KOŞMUYOR.
+- **Sakladığı kusur (IR'dan ölçüldü):**
+  `a == b` → `icmp eq ptr` · `metin_esit(a,b)` → `call @kdl_metin_esit`.
+  `esit_mi` yalnızca `ver a == b;` idi. **Literaller tekilleştirildiği için
+  literal↔literal TESADÜFEN doğru** → koşan tek test geçiyordu. Hesaplanmış
+  metinde sessiz yanlış: `esit_mi(birlestir("","b"), "b")` → **yanlış**.
+  `dosya.kem`'in **15 boş-yol koruması hiç ateşlenmiyordu** (ampirik).
+- **⚠ DİL SORUSU MEHMET'E — DEĞİŞTİRİLMEDİ.** `==`in `metin` anlamı dil
+  yüzeyidir. (a) içerik karşılaştırsın, ya da (b) `metin` üzerinde `==`
+  **REDDEDİLSİN** (loud > silent). Şimdiki hâl üçüncü ve en kötüsü:
+  **kabul et, sessizce yanlış cevap ver.**
+- **Yapılan (dil değişikliği YOK):** adı/belgesi içerik eşitliği vaat eden
+  kütüphane yerleri `metin_esit`/`metin_uzunluk`a çevrildi (`esit_mi`,
+  `farkli_mi`, `bos_mu`, `dolu_mu`, `handle_gecerli_mi` + dosya.kem 15 koruma).
+  `test_metin.kem` main'i **1 → 57** test çağırıyor; kapının davranış
+  döngüsüne `metin` eklendi. **Sabotaj S26** → kapı KIRMIZI ✅
+- **⚠ BEKLENTİLER MEKANİK TÜRETİLEMEZ:** "`_hayir`→yanlış, diğeri→doğru"
+  kuralım 9 başarısızlığın **4'ünde YANLIŞ ALARM** verdi — ad beklentiyi
+  değil GİRDİYİ tarif ediyor (`test_harf_karisik` = `sadece_harf_mi("abc123")`
+  → yanlış dönmeli). `/tmp`de ölçtüğüm için depoya yanlış beklenti girmedi.
+  Ayrıca `test_kes_aralik_ters` yanlış modele dayanıyordu (`kes`in 3. argümanı
+  UZUNLUK, aralık SONU değil) → iki doğru testle değiştirildi.
+  `sadece_harf_mi("")` → yanlış DOĞRUDUR (uygulamada açık `L == 0` dalı).
+- **DERS: KOŞMAYAN TEST, OLMAYAN TESTTEN DAHA KÖTÜDÜR** — yeşil `--check` +
+  dolu test dosyası kapsam YANILSAMASI yaratır. Dosyanın kendi yorumu kusuru
+  zaten biliyordu (yerel `metin_es` yardımcısıyla dolanmış); bilgi ORADAYDI
+  ama hiçbir kapı zorlamıyordu.
+- **KALAN (aynı sınıf):** opsiyonel/dosya/karsilastir/sayisal main'leri hâlâ
+  tek test çağırıyor; `dizi`/`matematik` exit-42 sözleşmesi kullandığı için
+  kapının exit-0 döngüsüne eklenemez.
+
 ### 🔴 D-439: ÇEŞİT PAYLOAD'INDAN AGREGAT-ELEMANLI DİZİ — self-host LLVM-RED
 D-437/D-438 erişimcileri açılınca `stdlib/json.kem` **C'de geçiyor, self-host'ta
 derlenmiyordu**. **ÜÇ AYRI KÖK**, her biri bir öncekini onarınca çıktı:

@@ -656,7 +656,12 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@# Bu yuzden calistirilabilir test dosyalari DERLENIR ve KOSULUR;
 	@# exit 0 beklenir (test dosyasi hatali karsilastirma basina bit toplar).
 	@echo "stdlib davranis testleri (derle + calistir)..."
-	@for mod in json; do \
+	@# D-440: `metin` eklendi. Oncesinde test_metin.kem'in main'i 89 test
+	@# islevinden YALNIZ BIRINI cagiriyordu; kalan 88 derleniyor ama HIC
+	@# KOSMUYORDU. Tam bu kor nokta gercek bir kusuru sakliyordu: `esit_mi`
+	@# icerik degil ISARETCI karsilastiriyordu (`==` metinde `icmp eq ptr`).
+	@# Kapiya eklenen modulun main'i exit 0 sozlesmesine uymalidir.
+	@for mod in json metin; do \
 		f="stdlib/$$mod.kem"; test_f="test/stdlib/test_$$mod.kem"; \
 		[ -f "$$f" ] && [ -f "$$test_f" ] || continue; \
 		c="$(BUILD)/_run_$$mod.kem"; cat "$$f" "$$test_f" > "$$c"; \

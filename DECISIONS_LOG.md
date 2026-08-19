@@ -5,6 +5,91 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-440 [YÜKSEK] — 🔴 `metin` üzerinde `==` İŞARETÇİ karşılaştırıyor (sessiz yanlış cevap)
+
+D-439 bitince "hangi yüzey kapısız?" diye ölçtüm. `calistir_stdlib_check`
+13 test dosyasını `--check`ten geçiriyor ama **davranışsal olarak yalnız
+`json`u** koşuyordu — oysa D-435'in dersi tam olarak "`--check` YETMEZ" idi.
+
+### Kör noktanın büyüklüğü (ölçüldü)
+| modül | test işlevi | `main`'den çağrılan |
+|---|---|---|
+| metin | 89 | **1** |
+| dizi | 99 | 62 |
+| matematik | 81 | 34 |
+| opsiyonel | 29 | **1** |
+| dosya | 27 | **1** |
+| karsilastir | 20 | **1** |
+| sayisal | 20 | **1** |
+
+`opsiyonel`in kendi yorumu itiraf ediyor: *"main yalnız bir tanesi çağırıp
+`--check` için entry sağlar"*. ~185 test işlevinin çoğu **hiç koşmuyordu**.
+
+### Kör noktanın sakladığı kusur
+`metin`in koşmayan testleri bağlanınca 9 başarısızlık çıktı; izlenince kök
+**tek**ti ve dil düzeyindeydi:
+```
+a == b               →  icmp eq ptr %10, %11          ← İŞARETÇİ
+metin_esit(a, b)     →  call i1 @kdl_metin_esit(...)  ← İÇERİK (doğru)
+```
+`stdlib/metin.kem`'in `esit_mi`si yalnızca `ver a == b;` idi. **Literaller
+tekilleştirildiği için literal↔literal TESADÜFEN doğru sonuç verir** — bu
+yüzden koşan tek test (`esit_mi("merhaba","merhaba")`) geçiyordu. Hesaplanmış
+metinlerde sessizce yanlış:
+```
+esit_mi(birlestir("", "b"), "b")        →  yanlış   (doğrusu doğru)
+esit_mi(kes("merhaba", 0, 3), "mer")    →  yanlış   (doğrusu doğru)
+```
+**`dosya.kem`de 15 boş-yol koruması** (`eğer yol == ""`) aynı sebeple
+**hiç ateşlenmiyordu** — hesaplanmış boş dizgi geçip gidiyordu. Ampirik
+doğrulandı: onarım öncesi "KORUMA ATESLENMEDI", sonrası "ATESLENDI".
+
+### ⚠ DİL SORUSU — MEHMET'E (KARAR VERİLMEDİ, DEĞİŞTİRİLMEDİ)
+`==`in `metin` üzerindeki anlamı bir **dil yüzeyi** sorusudur; sessizce
+değiştirmedim. İki seçenek:
+- **(a)** `==` içerik karşılaştırsın (`kdl_metin_esit` çağrısına düşür).
+- **(b)** `==`i `metin` üzerinde **REDDET** (tanı) → `metin_esit` zorunlu.
+  Sessiz yanlış cevabı derleme hatasına çevirir (loud > silent).
+Şu anki hâl üçüncü ve en kötü seçenek: **kabul edip sessizce yanlış cevap.**
+
+### Bu artımda YAPILAN (dil değişikliği YOK)
+Kütüphane kusurları — adı/belgesi içerik eşitliği vaat eden yerlerde
+`metin_esit`/`metin_uzunluk` kullanıldı: `esit_mi`, `farkli_mi`, `bos_mu`,
+`dolu_mu`, `handle_gecerli_mi` + `dosya.kem`in 15 koruması.
+`test_metin.kem`in `main`i **1 → 57** test çağıracak şekilde yazıldı ve
+`calistir_stdlib_check`in davranış döngüsüne `metin` eklendi.
+
+### ⚠ BEKLENTİLER MEKANİK TÜRETİLEMEZ — kuralım 9'da 4 YANLIŞ ALARM verdi
+"`_hayir` → yanlış, diğerleri → doğru" kuralını yazıp uyguladım; 4 vaka
+kuralın kendi hatasıydı çünkü **ad beklentiyi değil GİRDİYİ tarif ediyor**
+(`test_harf_karisik` = `sadece_harf_mi("abc123")` → yanlış dönmeli).
+`/tmp`de ölçtüğüm için depoya yanlış beklenti girmedi.
+**Kural yazmak ucuz, kuralı doğrulamak asıl iş.**
+
+Ayrıca `test_kes_aralik_ters` **yanlış bir zihinsel modele** dayanıyordu:
+`kes`in 3. argümanı UZUNLUK'tur, aralık SONU değil → `kes("merhaba",5,2)`
+= `"ba"`, `""` değil. Test hiç koşmadığı için yanlışlığı görünmüyordu.
+İki doğru testle değiştirildi (`_uzunluk_semantigi`, `_uzunluk_tasan`).
+
+`sadece_harf_mi("")` / `sadece_rakam_mi("")` → **yanlış** DOĞRUDUR:
+uygulamada açık `eğer L == 0 { ver yanlış; }` var, yani bilinçli sözleşme.
+Kütüphaneyi değiştirmedim, testi gerçeğe göre yazdım.
+
+### Doğrulama
+- `calistir_stdlib_check`: `json: TUM TESTLER GECTI` + `metin: TUM MANTIKSAL
+  TESTLER GECTI`.
+- **Sabotaj S26** (`esit_mi`yi `a == b`e döndür) → kapı KIRMIZI
+  (`FAIL(kosum): metin`, make Error 1). Uygulandığı `grep` sayısıyla
+  doğrulandı — `perl` çok satırlı deseni yine tutmamıştı (CRLF).
+
+### Ders
+**Koşmayan test, olmayan testten DAHA KÖTÜDÜR** — yeşil bir `--check` ve
+dolu bir test dosyası kapsam YANILSAMASI yaratır. Dosyanın kendi yorumu
+(satır 199-202) kusuru zaten biliyordu ve yerel bir `metin_es` yardımcısıyla
+etrafından dolaşmıştı; bilgi ORADAYDI ama hiçbir kapı zorlamıyordu.
+
+---
+
 ## D-439 [YÜKSEK] — 🔴 ÇEŞİT PAYLOAD'INDAN AGREGAT-ELEMANLI DİZİ (self-host LLVM-RED)
 
 D-437/D-438'in erişimcileri açıldıktan sonra `stdlib/json.kem` **C oracle'da
