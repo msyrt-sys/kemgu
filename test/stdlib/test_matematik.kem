@@ -35,6 +35,22 @@ işlev test_isaret_sifir() -> tam32 { ver isaret(0); }
 // --- kuvvet ---
 işlev test_kuvvet_2_10() -> tam32 { ver kuvvet(2, 10); }
 işlev test_kuvvet_3_4() -> tam32 { ver kuvvet(3, 4); }
+// ⚠⚠ D-441: BU TEST MATEMATİKSEL OLARAK YANLIŞ BİR SONUCU SABİTLER.
+// `kuvvet(5, 0)` → **5** döner; doğrusu **1**'dir (x⁰ = 1).
+//
+// Sebep bir kusur değil, ÖLÇÜLMÜŞ bir dil sınırı: generic `T` içinde
+// `ver 1;` yazmak `T020: ver tipi işlev dönüş tipi ile uyumsuz` verir —
+// sayısal literali `T`ye bağlayacak constraint sistemi henüz yok.
+// `stdlib/temel/matematik.kem` bunu yorumunda itiraf ediyor ("constraint
+// sistemi yokken `bir<T>()` yazılamaz"); `sayisal.kem`'in `us`u da aynı.
+// İddiayı ölçtüm — ESKİMEMİŞ, hâlâ geçerli.
+//
+// `x / x` tip kontrolünden GEÇİYOR ama daha kötü: `x = 0` için sıfıra
+// bölme (çökme), oysa 0⁰ geleneksel olarak 1 — yanlış cevabı çökmeyle
+// takas etmek iyileştirme değildir.
+//
+// Bu test MEVCUT davranışı sabitler ki sınır SESSİZ olmasın: değeri
+// düzeltirsek test kırmızıya döner ve karar bilinçli alınır.
 işlev test_kuvvet_5_0() -> tam32 { ver kuvvet(5, 0); }
 
 // --- kok_tam ---
@@ -207,5 +223,22 @@ işlev main() -> tam32 {
     eğer test_us_mod_buyuk() != 48576 { ver 32; }
     eğer değil test_palindrom_12321() { ver 33; }
     eğer test_obeb_dizi_buyuk() != 25 { ver 34; }
+    // D-441: 47 test daha `main`'den HİÇ ÇAĞRILMIYORDU. Hepsi ölçüldü;
+    // 46'sı matematiksel olarak doğru, biri değil. Aşağıdakiler o kör
+    // noktadan kurtarıldı — beklentiler matematiksel gerçekten alındı.
+    eğer değil test_asal_2() { ver 35; }
+    eğer test_asal_4()       { ver 36; }
+    eğer test_asal_9()       { ver 37; }
+    eğer değil test_asal_97() { ver 38; }
+    eğer test_faktoriyel_0() != 1   { ver 39; }
+    eğer test_faktoriyel_5() != 120 { ver 40; }
+    eğer test_fibonacci_10() != 55  { ver 41; }
+    eğer test_kok_144()      != 12  { ver 43; }
+    eğer test_kuvvet_2_10()  != 1024 { ver 44; }
+    eğer test_kuvvet_3_4()   != 81  { ver 45; }
+    // ⚠ 5 DOĞRU DEĞİL — bilinen dil sınırı, yukarıdaki nota bak (doğrusu 1).
+    eğer test_kuvvet_5_0()   != 5   { ver 46; }
+    eğer test_isaret_negatif() != (0 - 1) { ver 47; }
+    eğer test_mutlak_negatif() != 7 { ver 48; }
     ver 42;
 }

@@ -5,6 +5,70 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-441 [ORTA] — koşmayan testlerin ikinci partisi + `kuvvet(x,0)` sınırı görünür kılındı
+
+D-440 `metin`i kurtardı; aynı kör nokta taraması diğer modüllerde sürdürüldü.
+
+### Kurtarılan testler
+| modül | önce | sonra |
+|---|---|---|
+| opsiyonel | 1/29 | **29/29** |
+| karsilastir | 1/20 | **20/20** |
+| sayisal | 1/20 | **20/20** |
+| matematik | 34/81 | **47/81** |
+
+Kapının davranış döngüsü `json metin` → `json metin opsiyonel karsilastir
+sayisal`. Beklentiler **uydurulmadı**: `karsilastir`/`sayisal`da kaynaktaki
+yorumlardan (`// -1`, `// 12`), `opsiyonel`de yardımcı gövdelerinden okundu
+(`guvenli_ters(10)` = `1000/10` = 100, `varsayilan_uretici()` = 42).
+Belirsiz tek nokta `sirali_mi([])` uygulamadan ölçüldü (`n < 2 → doğru`).
+Bu üç modülde **kusur çıkmadı** — ama artık 69 test gerçekten koşuyor.
+
+### 🔴 KAPIDA SESSİZ ATLAMA VARDI
+Döngü `[ -f "$f" ] || continue` kullanıyordu ve modülü yalnız `stdlib/`
+altında arıyordu. `karsilastir`/`sayisal` **`stdlib/temel/`** altında —
+olduğu gibi eklesem kapı onları **sessizce atlar, yeşil kalır ve hiçbir şey
+ölçmezdi**. Yol çözümü eklendi ve eksik dosya artık **sert hata**.
+D-395'in dersi ("kapı sessiz düşen dalı olmayacak biçimde yazılır") bu kez
+kendi eklediğim satırda karşıma çıktı.
+
+### 🔴 `kuvvet(5, 0)` → 5 (doğrusu 1)
+`matematik`in çağrılmayan 47 testi tek tek koşturulup matematiksel gerçeğe
+karşı denetlendi: **46'sı doğru**, biri değil.
+- Kök bir kusur DEĞİL, **ölçülmüş bir dil sınırı**: generic `T` içinde
+  `ver 1;` → **`T020`**. `stdlib/temel/matematik.kem` yorumunda itiraf
+  ediyor ("constraint sistemi yokken `bir<T>()` yazılamaz"); `sayisal.kem`in
+  `us`u aynı ("n=0 yerine 'özür dilerim' sonucu").
+- **İddiayı ÖLÇTÜM — eskimemiş.** D-401 generic monomorfizasyonu eklemişti,
+  bu yüzden yorumun bayat olma ihtimali gerçekti; değilmiş.
+- **`x / x` cazip ama DAHA KÖTÜ:** tip kontrolünden geçiyor, ancak `x = 0`
+  için sıfıra bölme (çökme) — oysa 0⁰ geleneksel olarak 1.
+  **Yanlış cevabı çökmeyle takas etmek iyileştirme değildir.**
+- **Davranış DEĞİŞTİRİLMEDİ.** Test mevcut değeri sabitler ve neden yanlış
+  olduğunu yazar → sınır artık SESSİZ değil; düzeltilirse test kırmızıya
+  döner ve karar bilinçli alınır.
+
+### ⚠ MEHMET'E — küçük karar
+`kuvvet(x, 0)` matematiksel olarak yanlış. Seçenekler: (a) böyle kalsın
+(şu an: belgelenmiş + testle sabit), (b) doğru davranan generic-olmayan
+`kuvvet_tam(x: tam32, n: tam32)` eklensin, (c) `kuvvet` generic olmaktan
+çıkarılsın (kırıcı). Constraint sistemi gelince (a) kendiliğinden çözülür.
+
+### Doğrulama
+`calistir_stdlib_check`: json · metin · opsiyonel · karsilastir · sayisal
+hepsi geçiyor. `matematik` exit 42.
+**Sabotaj S27** (`obe`nin Öklid adımını boz) → kapı KIRMIZI
+(`S: obe`, `S: ekok`, make Error 1). `grep` sayısıyla doğrulandı.
+
+### Kalan (aynı sınıf)
+`dizi` 37 test hâlâ çağrılmıyor; `dosya` 26 test çağrılmıyor **ama ayrı
+muamele istiyor** — testleri çalışma dizininde gerçek dosyalar yaratıyor
+(`a.txt`, `log.txt`, …) ve çoğu `sonuç<T,E>` dönüyor → geçici dizin +
+temizlik gerekir. `dizi`/`matematik` exit-42 sözleşmesi kullandığı için
+kapının exit-0 döngüsüne olduğu gibi eklenemez.
+
+---
+
 ## D-440 [YÜKSEK] — 🔴 `metin` üzerinde `==` İŞARETÇİ karşılaştırıyor (sessiz yanlış cevap)
 
 D-439 bitince "hangi yüzey kapısız?" diye ölçtüm. `calistir_stdlib_check`

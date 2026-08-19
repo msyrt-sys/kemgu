@@ -946,6 +946,34 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🟡 D-441: koşmayan testlerin 2. partisi + `kuvvet(x,0)` sınırı görünür kılındı
+D-440'ın kör-nokta taraması sürdürüldü. Kurtarılan: **opsiyonel 1/29 → 29**,
+**karsilastir 1/20 → 20**, **sayisal 1/20 → 20**, **matematik 34/81 → 47**.
+Kapının davranış döngüsü: `json metin` → `+ opsiyonel karsilastir sayisal`.
+Beklentiler uydurulmadı (kaynak yorumları / yardımcı gövdeleri / uygulamadan
+ölçüm). Bu üç modülde **kusur çıkmadı** ama artık 69 test gerçekten koşuyor.
+- **🔴 KAPIDA SESSİZ ATLAMA VARDI:** döngü `[ -f "$f" ] || continue` idi ve
+  yalnız `stdlib/` altına bakıyordu; `karsilastir`/`sayisal` **`stdlib/temel/`**
+  altında → olduğu gibi eklesem kapı onları **sessizce atlar, yeşil kalır,
+  hiçbir şey ölçmezdi**. Yol çözümü + eksik dosya artık **sert hata**.
+  D-395'in dersi bu kez kendi eklediğim satırda karşıma çıktı.
+- **🔴 `kuvvet(5,0)` → 5 (doğrusu 1).** `matematik`in çağrılmayan 47 testi
+  matematiksel gerçeğe karşı denetlendi: 46'sı doğru, biri değil. Kök bir
+  kusur DEĞİL, **ölçülmüş dil sınırı**: generic `T` içinde `ver 1;` → **T020**
+  (constraint sistemi yok). **İddiayı ölçtüm — eskimemiş** (D-401 mono'yu
+  eklediği için bayat olma ihtimali gerçekti).
+  **`x / x` cazip ama DAHA KÖTÜ:** tip kontrolünden geçer, `x=0`da sıfıra
+  bölme = ÇÖKME; oysa 0⁰ geleneksel olarak 1. **Yanlış cevabı çökmeyle takas
+  etmek iyileştirme değildir.** Davranış DEĞİŞTİRİLMEDİ; test mevcut değeri
+  sabitler + nedenini yazar → sınır artık SESSİZ değil.
+  **⚠ MEHMET'E küçük karar:** (a) böyle kalsın · (b) generic-olmayan
+  `kuvvet_tam` eklensin · (c) `kuvvet` generic olmaktan çıksın (kırıcı).
+- **Sabotaj S27** (`obe`nin Öklid adımını boz) → kapı KIRMIZI ✅
+- **Kalan:** `dizi` 37 test; `dosya` 26 test **ayrı muamele ister** (çalışma
+  dizininde gerçek dosya yaratıyor + `sonuç<T,E>` iddiaları → geçici dizin
+  ve temizlik). `dizi`/`matematik` exit-42 sözleşmesi kullandığı için kapının
+  exit-0 döngüsüne olduğu gibi eklenemez.
+
 ### 🔴 D-440: `metin` üzerinde `==` İŞARETÇİ karşılaştırıyor + KOŞMAYAN TESTLER
 D-439 bitince "hangi yüzey kapısız?" diye ölçtüm: `calistir_stdlib_check`
 13 test dosyasını `--check`ten geçiriyor ama **davranışsal olarak yalnız

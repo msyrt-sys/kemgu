@@ -113,5 +113,29 @@ işlev test_en_sik_bos() -> tam32 {
 }
 
 işlev main() -> tam32 {
-    ver test_dizi_toplam();
+    değişken h: tam32 = 0;
+    // Beklentilerin TAMAMI kaynaktaki yorumlardan alındı — uydurulmadı.
+    eğer test_ortalama_iki()      != 15 { yazdir_metin("S: ortalama_iki"); h = h + 1; }
+    eğer test_obe()               != 12 { yazdir_metin("S: obe"); h = h + 1; }
+    eğer test_ekok()              != 12 { yazdir_metin("S: ekok"); h = h + 1; }
+    eğer test_dizi_toplam()       != 20 { yazdir_metin("S: dizi_toplam"); h = h + 1; }
+    eğer test_dizi_say()          != 3  { yazdir_metin("S: dizi_say"); h = h + 1; }
+    eğer test_dizi_ortalama()     != 4  { yazdir_metin("S: dizi_ortalama"); h = h + 1; }
+    eğer test_dizi_ortalama_bos() != 0  { yazdir_metin("S: dizi_ortalama_bos"); h = h + 1; }
+    eğer test_dizi_min()          != 1  { yazdir_metin("S: dizi_min"); h = h + 1; }
+    eğer test_dizi_maks()         != 9  { yazdir_metin("S: dizi_maks"); h = h + 1; }
+    eğer test_dizi_min_bos()      != 7  { yazdir_metin("S: dizi_min_bos"); h = h + 1; }
+    eğer test_varyans()           != 2  { yazdir_metin("S: varyans"); h = h + 1; }
+    eğer test_std_sapma()         != 1  { yazdir_metin("S: std_sapma"); h = h + 1; }
+    eğer test_karekok()           != 12 { yazdir_metin("S: karekok"); h = h + 1; }
+    eğer test_karekok_kucuk()     != 1  { yazdir_metin("S: karekok_kucuk"); h = h + 1; }
+    eğer test_dizi_aralik()       != 8  { yazdir_metin("S: dizi_aralik"); h = h + 1; }
+    eğer test_medyan_tek()        != 3  { yazdir_metin("S: medyan_tek"); h = h + 1; }
+    eğer test_medyan_cift()       != 2  { yazdir_metin("S: medyan_cift"); h = h + 1; }
+    eğer test_medyan_bos()        != 7  { yazdir_metin("S: medyan_bos"); h = h + 1; }
+    eğer test_en_sik()            != 2  { yazdir_metin("S: en_sik"); h = h + 1; }
+    eğer test_en_sik_bos()        != 7  { yazdir_metin("S: en_sik_bos"); h = h + 1; }
+    eğer h == 0 { yazdir_metin("sayisal: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("sayisal: BASARISIZ");
+    ver 1;
 }

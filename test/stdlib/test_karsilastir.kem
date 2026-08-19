@@ -103,5 +103,30 @@ işlev test_en_kucuk_dizi_bos() -> tam32 {
 }
 
 işlev main() -> tam32 {
-    ver test_karsilastir_kucuk();
+    değişken h: tam32 = 0;
+    eğer değil test_esit_mi()              { yazdir_metin("B: esit_mi"); h = h + 1; }
+    eğer değil test_sirali_mi_evet()       { yazdir_metin("B: sirali_mi_evet"); h = h + 1; }
+    eğer      test_sirali_mi_hayir()       { yazdir_metin("B: sirali_mi_hayir"); h = h + 1; }
+    eğer değil test_sirali_mi_tek()        { yazdir_metin("B: sirali_mi_tek"); h = h + 1; }
+    // n < 2 -> doğru (uygulamadan OKUNDU, varsayılmadı)
+    eğer değil test_sirali_mi_bos()        { yazdir_metin("B: sirali_mi_bos"); h = h + 1; }
+    eğer değil test_ters_sirali_mi_evet()  { yazdir_metin("B: ters_sirali_evet"); h = h + 1; }
+    eğer      test_ters_sirali_mi_hayir()  { yazdir_metin("B: ters_sirali_hayir"); h = h + 1; }
+    eğer değil test_dizi_esit_evet()       { yazdir_metin("B: dizi_esit_evet"); h = h + 1; }
+    eğer      test_dizi_esit_hayir()       { yazdir_metin("B: dizi_esit_hayir"); h = h + 1; }
+    // tam32 — beklentiler kaynaktaki YORUMLARDAN alındı
+    eğer test_karsilastir_kucuk()        != (0 - 1) { yazdir_metin("S: karsilastir_kucuk"); h = h + 1; }
+    eğer test_en_kucuk_uc()              != 2       { yazdir_metin("S: en_kucuk_uc"); h = h + 1; }
+    eğer test_karsilastir_ters_artan()   != 1       { yazdir_metin("S: ters_artan"); h = h + 1; }
+    eğer test_karsilastir_ters_azalan()  != (0 - 1) { yazdir_metin("S: ters_azalan"); h = h + 1; }
+    eğer test_dizi_karsilastir_kucuk()   != (0 - 1) { yazdir_metin("S: dk_kucuk"); h = h + 1; }
+    eğer test_dizi_karsilastir_buyuk()   != 1       { yazdir_metin("S: dk_buyuk"); h = h + 1; }
+    eğer test_dizi_karsilastir_prefix()  != (0 - 1) { yazdir_metin("S: dk_prefix"); h = h + 1; }
+    eğer test_dizi_karsilastir_esit()    != 0       { yazdir_metin("S: dk_esit"); h = h + 1; }
+    eğer test_en_kucuk_dizi()            != 1       { yazdir_metin("S: en_kucuk_dizi"); h = h + 1; }
+    eğer test_en_buyuk_dizi()            != 9       { yazdir_metin("S: en_buyuk_dizi"); h = h + 1; }
+    eğer test_en_kucuk_dizi_bos()        != 7       { yazdir_metin("S: en_kucuk_dizi_bos"); h = h + 1; }
+    eğer h == 0 { yazdir_metin("karsilastir: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("karsilastir: BASARISIZ");
+    ver 1;
 }

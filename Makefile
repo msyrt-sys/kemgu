@@ -661,9 +661,16 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@# KOSMUYORDU. Tam bu kor nokta gercek bir kusuru sakliyordu: `esit_mi`
 	@# icerik degil ISARETCI karsilastiriyordu (`==` metinde `icmp eq ptr`).
 	@# Kapiya eklenen modulun main'i exit 0 sozlesmesine uymalidir.
-	@for mod in json metin; do \
-		f="stdlib/$$mod.kem"; test_f="test/stdlib/test_$$mod.kem"; \
-		[ -f "$$f" ] && [ -f "$$test_f" ] || continue; \
+	@# D-441: modul `stdlib/` ya da `stdlib/temel/` altinda olabilir; yol
+	@# COZULUR. Eksik dosya artik SESSIZCE ATLANMAZ (eski `|| continue`
+	@# sessiz atlamaydi: yanlis adla eklenen bir modul kapiyi yesil birakip
+	@# HICBIR SEY olcmezdi — D-395'in tam olarak uyardigi desen).
+	@for mod in json metin opsiyonel karsilastir sayisal; do \
+		f="stdlib/$$mod.kem"; \
+		[ -f "$$f" ] || f="stdlib/temel/$$mod.kem"; \
+		test_f="test/stdlib/test_$$mod.kem"; \
+		[ -f "$$f" ] || { echo "FAIL(kaynak yok): $$mod"; exit 1; }; \
+		[ -f "$$test_f" ] || { echo "FAIL(test yok): $$mod"; exit 1; }; \
 		c="$(BUILD)/_run_$$mod.kem"; cat "$$f" "$$test_f" > "$$c"; \
 		./$(BUILD)/kemgu$(EXE) --llvm "$$c" > "$(BUILD)/_run_$$mod.ll" 2>/dev/null || \
 			{ echo "FAIL(IR): $$mod"; exit 1; }; \
