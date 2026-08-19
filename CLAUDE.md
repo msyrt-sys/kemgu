@@ -946,6 +946,39 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-439: ÇEŞİT PAYLOAD'INDAN AGREGAT-ELEMANLI DİZİ — self-host LLVM-RED
+D-437/D-438 erişimcileri açılınca `stdlib/json.kem` **C'de geçiyor, self-host'ta
+derlenmiyordu**. **ÜÇ AYRI KÖK**, her biri bir öncekini onarınca çıktı:
+1. **Satır içi agregat by-value sayılmıyordu.** C çeşidi ADLANDIRIR
+   (`%V = type {i8,i32}`) ve `'%'` kuralıyla yakalar; self satır içi `{i8, i32}`
+   yayar → aynı eleman C'de by-value, self'te SKALER →
+   `kdl_dizi_ekle_tam(i32 <agregat>)`. `dizi_eleman_yapi_mi` + `dizi_eleman_byte`
+   `'{'` önekine genişletildi (boyut de bozuktu: sabit `"4"`).
+2. **Payload tipi checker dizgisinde SİLİNİYORDU.** `cv_pt` = `tip_str` çıktısı;
+   `bilinen_tip_mi` kullanıcı tipini saymaz → `Dizi<W>` → `"?"`. Bu
+   muhafazakârlık **checker için DOĞRU** (D-378) → gevşetilmedi; codegen için
+   yeni yan-kanal **`cv_ptn`** (payload tip DÜĞÜMÜ) + `ll_eleman_tip`.
+   **DERS: aynı tabloyu iki tüketici farklı doğrulukta okuyorsa, birini
+   diğerinin muhafazakârlığına mahkûm etme — ham gerçeği ayrı kanalda taşı.**
+3. **Payload YUVASI ile REGISTER genişliği ayrışıyordu** (`Sayi(0-4207)`: yuva
+   i64, register i32). D-426'nın SİMETRİĞİ → aynı `int_uydur`. **Ön koşul
+   ölçüldü: D-439 ÖNCESİNDE de vardı.**
+- **🔴 KENDİ ONARIMIM REGRESYON ÜRETTİ, kapı yakaladı** (`codegen_diff` 141→140).
+  `'{'` genişletmesi yüklemi paylaşan **dizi-DIŞI** çağrı yerine sızdı: 5083 dalı
+  kapanış içindir ve mono-çeşit bağlamını GERİ ALIR → `Kap<metin>.o` bağlamı
+  düşüyor, yapıcı BASE `{i8,i32}` ile kuruluyor. Ayrı DAR yüklem
+  (`dizi_eleman_yapi_dar_mi`) eklendi.
+  **⚠ İLK SUÇLADIĞIM YER YANLIŞTI** — akıl yürütmeyle `int_uydur`u ve 4067'yi
+  suçladım, **ampirik bisect üçünü de eledi.** Yüklem GÖVDESİNDEKİ soru ile
+  ÇAĞRI YERİNDEKİ soru ayrı şeydir; paylaşılan yüklemi genişletmek tüm çağrı
+  yerlerini birden değiştirir.
+- Fikstür `test/cg_korpus/cg_cesit_dizi_agregat.kem` → C=42, SELF=42
+  (agregat elemanlı dizi + **kendine referanslı** çeşit + i64 yuva + skaler dal).
+  **Sabotaj 3/3** (S22/S23/S24) → hepsi LINK-RED ✅
+- Kapılar: `codegen_diff` 141/141 · `yapi_diff` 118/118 · `checker_diff` 150/150.
+- **DERS: dogfooding tip kontrolünün göremediğini görüyor.** `--check` bu
+  programı baştan beri temiz geçiriyordu; üç kusur da yalnız IR üretimindeydi.
+
 ### 🔴 D-438: İÇ İÇE `dizi_al` eleman tipini KAYBEDİYORDU (SEGFAULT)
 D-437'yi onardıktan sonra **komşu şekilleri ölçerek** bulundu (4 şekil denendi,
 3'ü temiz). `Dizi<Dizi<metin>>` üzerinde `dizi_al(dizi_al(d,0),0)`:
@@ -1014,11 +1047,17 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
   `kimlik<T>(x:T)->T` → 42 ✓, generic+metin → 5 ✓. **DERS:** roadmap maddelerini başlamadan
   ölç — eskimiş olabilir.
 - **Stdlib network/JSON/regex** — D-435'te ölçüldü:
-  - **JSON** ✗ YOK (`stdlib/` içinde json modülü yok; `src/json.c` LSP'nin C
-    ayrıştırıcısı, KEMGU tarafı DEĞİL). **Karar GEREKTİRMEZ:** saf KEMGU ile
-    yazılabilir — `metin_bayt`/`metin_kes`/`metin_uzunluk`/`metin_birlestir`/
-    `metin_esit` yerleşikleri VAR, `çeşit` ADT ve `sonuç<T,E>` VAR.
-    Ayrıca **dogfooding**: derleyiciyi gerçek bir programla zorlar.
+  - **JSON** ✓ **YAPILDI** — `stdlib/json.kem` (saf KEMGU): `JsonDeger` çeşit
+    ADT + yazıcı (D-435) + özyineli-inişli ayrıştırıcı (D-436) + erişimciler
+    (D-437). Testi `test/stdlib/test_json.kem`, `calistir_stdlib_check`
+    kapısında derlenip ÇALIŞTIRILIR. **İki derleyicide de** `exit 0`.
+    **Dogfooding beklendiği gibi ödedi: ÜÇ derleyici kusuru buldu** — D-437
+    (çeşit payload'ından `Dizi<metin>` = SEGFAULT), D-438 (iç içe `dizi_al`
+    eleman tipini kaybediyor = SEGFAULT), D-439 (agregat elemanlı dizi,
+    self-host LLVM-RED, 3 kök). Üçü de `--check`ten TEMİZ geçiyordu.
+    **KALAN sınırlar (ikisi de yeni YERLEŞİK ister = dil yüzeyi, Mehmet'in
+    kararı):** `\uXXXX` kaçışı (bayt→metin yerleşiği yok) ve ondalıklı sayı
+    (`kesirli64`→`metin` yerleşiği yok). İkisi de ÖLÇÜLDÜ, varsayılmadı.
   - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
   - **regex** — saf KEMGU yazılabilir ama büyük; JSON'dan sonra.
 - **Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi

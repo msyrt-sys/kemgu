@@ -5,6 +5,80 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-439 [YÜKSEK] — 🔴 ÇEŞİT PAYLOAD'INDAN AGREGAT-ELEMANLI DİZİ (self-host LLVM-RED)
+
+D-437/D-438'in erişimcileri açıldıktan sonra `stdlib/json.kem` **C oracle'da
+geçiyor, self-host'ta derlenmiyordu**. Dogfooding üçüncü kez derleyici kusuru
+buldu; bu kez **parite** kusuru (C doğru, self-host yanlış).
+
+### Bulgu
+```
+SELF: '%43' defined with type '{i8, i32, i64, ptr, ptr, ptr, ptr}' but expected 'i32'
+C   : call void @kdl_dizi_ekle_yapi(...)      SELF: kdl_dizi_ekle_tam(i32 <agregat>)
+erişimci dağılımı  C: _yapi 4/5 · SELF: _yapi 1  (6 çağrı yerinde ayrışma)
+```
+
+### ÜÇ AYRI KÖK — her biri bir öncekini onarınca ortaya çıktı
+Tek ölçümle görülemezlerdi; sırayla açıldılar.
+
+**(1) Satır içi agregat by-value sayılmıyordu.** C çeşidi **ADLANDIRIR**
+(`%V = type {i8, i32}`) ve `dizi_eleman_struct_mi` onu `'%'` kuralıyla yakalar.
+Self-host çeşidi **satır içi** yayar (`{i8, i32}`) → aynı eleman C'de by-value,
+self'te SKALER. `dizi_eleman_yapi_mi` + `dizi_eleman_byte` `'{'` önekine
+genişletildi (`{ ptr, ptr }` bunun özel hâli; kolu ÖNCE bırakıldı ki kapanış
+çıktısı bayt-birebir kalsın). Boyut de bozuktu: sabit `"4"` 8 baytlık agregatı
+4 baytlık gözeye sıkıştırıyordu.
+
+**(2) Payload tipi checker dizgisinde SİLİNİYORDU.** `cv_pt`, `tip_str`in
+çıktısını tutar; `tip_str` `bilinen_tip_mi` ile korunur ve o **kullanıcı
+tipini saymaz** → `Dizi<W>` → `"?"` → `cesit_payload_elem` erken `""` döner.
+Bu muhafazakârlık **checker için DOĞRU** (D-378 generic ertelemesi) —
+gevşetmek tanı davranışını geniş biçimde değiştirirdi. Çözüm: codegen
+checker'ın dizgisine değil **tip DÜĞÜMÜNE** baksın → yeni yan-kanal
+`cv_ptn` (payload tip düğüm indeksleri) + `ll_eleman_tip`. Dizgi yolu yedek
+kalır.
+> **DERS: aynı tabloyu iki tüketici farklı doğrulukta okuyorsa, birini
+> diğerinin muhafazakârlığına mahkûm etme — ham gerçeği ayrı kanalda taşı.**
+
+**(3) Payload YUVASI ile REGISTER genişliği ayrışıyordu.** `Sayi(0 - 4207)`:
+yuva `i64`, register `i32`. C beklenen tipi ifadeye YAYAR (`add i64 0, 4207`);
+self i32 hesaplayıp i64 yuvaya yazıyordu. D-426'nın **simetriği** (orada yuva
+DARALIYORDU) → aynı `int_uydur` mekanizması. **Ön koşul ölçüldü: bu sapma
+D-439 ÖNCESİNDE de vardı** (HEAD ikilisiyle LINK-RED) — yeni değil, açığa
+çıkmış.
+
+### 🔴 KENDİ ONARIMIM BİR REGRESYON ÜRETTİ (kapı yakaladı)
+`codegen_diff` **141 → 140**: `cg_mono_yapi_field_cesit`. `'{'` genişletmesi,
+yüklemi paylaşan **iki dizi-DIŞI** çağrı yerine sızdı. Asıl zarar 5083'teydi:
+o dal **kapanış fat value** içindir ve bir önceki satırın kurduğu mono-çeşit
+bağlamını GERİ ALIR (yorumu zaten `"{ ptr, ptr }" tagged-union DEĞİL` diyor).
+`Kap<metin>.o = {i8, ptr}` oraya girince bağlam düşüyor, yapıcı BASE
+`{i8, i32}` ile kuruluyor → `store i32 <ptr>`. Ayrı DAR yüklem
+(`dizi_eleman_yapi_dar_mi`) eklendi ve iki taşıyıcı-sorusu sitesinde kullanıldı.
+- **⚠ İLK SUÇLADIĞIM YER YANLIŞTI.** Akıl yürütmeyle `int_uydur`u ve 4067'yi
+  suçladım; **ampirik bisect üçünü de eledi** ve 5083'ü gösterdi.
+  Yüklem gövdesinde "hangi soru soruluyor" ile çağrı yerinde "hangi soru
+  soruluyor" AYRI ŞEYLERDİR; paylaşılan yüklemi genişletmek çağrı yerlerinin
+  hepsini birden değiştirir.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_cesit_dizi_agregat.kem` (C=42, SELF=42) —
+  agregat elemanlı dizi + **kendine referanslı** çeşit + i64 yuva + skaler dal.
+- **Sabotaj 3/3 yakalandı** (S22 `'{'` kolu · S23 `cv_ptn` · S24 `int_uydur`),
+  üçü de LINK-RED. Her sabotajın uygulandığı `grep` SAYISIYLA doğrulandı.
+- Kapılar: `codegen_diff` **141/141** · `yapi_diff` **118/118** ·
+  `checker_diff` **150/150**.
+- `stdlib/json.kem` + testi artık **iki derleyicide de** `exit 0 |
+  json: TUM TESTLER GECTI`.
+
+### Ders
+**Dogfooding, tip kontrolünün göremediğini görüyor.** `--check` bu programı
+baştan beri temiz geçiriyordu; üç kusurun üçü de yalnız IR üretiminde vardı ve
+ikisi LLVM'in sessizce kabul ettiği sınıftandı. Gerçek bir kütüphane yazmak,
+korpus dosyası yazmaktan farklı şekiller üretiyor.
+
+---
+
 ## D-438 [YÜKSEK] — 🔴 İÇ İÇE `dizi_al` eleman tipini KAYBEDİYORDU (SEGFAULT)
 
 D-437'yi onardıktan sonra **"aynı sınıftan başka kaynak var mı?"** diye
