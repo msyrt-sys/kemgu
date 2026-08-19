@@ -946,6 +946,24 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-438: İÇ İÇE `dizi_al` eleman tipini KAYBEDİYORDU (SEGFAULT)
+D-437'yi onardıktan sonra **komşu şekilleri ölçerek** bulundu (4 şekil denendi,
+3'ü temiz). `Dizi<Dizi<metin>>` üzerinde `dizi_al(dizi_al(d,0),0)`:
+dış çağrı `_ptr` (doğru), **iç çağrı `_tam`** → `metin_esit(i32, ptr)` → 139.
+- **⚠ ÖNCE "bunu ben mi soktum?" diye ölçtüm:** aynı şekil **çeşitsiz de
+  çöküyor** → D-437'nin yan etkisi DEĞİL, önceden var olan AYRI kusur.
+  Ara değişkene alınınca çalışıyor → kusur yalnız **İSİMSİZ ARA DEĞERDE**.
+- **Kök:** `dizi_al` yerleşiğinin arg0 dispatch'i yalnız `TANIMLAYICI`/`ERISIM`
+  tanıyordu; `CAGRI`/`INDEKS` dalı YOKTU. `heap_dizi_eleman_ast`in `CAGRI`
+  dalı da yalnız KULLANICI işlevlerini tanıyordu (`dizi_al` YERLEŞİK → NULL).
+- **Onarım:** C'de özyineli `dizi_al` dalı + `else if (arg0)` ortak-makine kolu.
+  Self-host'ta `son_elem` yalnız IR DİZGİSİ tuttuğu için (`Dizi<Dizi<metin>>`
+  → "ptr", iç tip kayıp) yeni kanal **`cg_aelem2`** + `son_elem2` eklendi.
+- Fikstür `test/cg_korpus/cg_ic_ice_dizi_metin.kem` → C=42, SELF=42.
+  **Sabotaj S21** → 139 ✅
+- **DERS: bir kusuru onardıktan sonra KOMŞU ŞEKİLLERİ ölç.** D-437 tek başına
+  "kapandı" görünüyordu; dört ek şekil bir SEGFAULT daha açığa çıkardı.
+
 ### 🔴 D-437: DERLEYİCİ HATASI — çeşit payload'ından `Dizi<metin>` okumak SEGFAULT
 Dogfooding (`stdlib/json.kem` erişimcileri) buldu. Erişimciler geri alındı.
 ```kemgu

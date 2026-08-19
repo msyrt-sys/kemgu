@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-438 [YÜKSEK] — 🔴 İÇ İÇE `dizi_al` eleman tipini KAYBEDİYORDU (SEGFAULT)
+
+D-437'yi onardıktan sonra **"aynı sınıftan başka kaynak var mı?"** diye
+ölçtüm. Dört komşu şekil denendi; üçü temiz, biri değil.
+
+### Bulgu
+```kemgu
+değişken d: Dizi<Dizi<metin>> = [];  dizi_ekle(d, ic);
+metin_esit(dizi_al(dizi_al(d, 0), 0), "a")     → exit 139
+```
+```
+%14 = call ptr @kdl_dizi_al_ptr(...)    ← DIŞ çağrı: doğru
+%16 = call i32 @kdl_dizi_al_tam(...)    ← İÇ çağrı: YANLIŞ
+%18 = call i1  @kdl_metin_esit(i32, ptr) → segfault
+```
+
+### ⚠ ÖNCE "BUNU BEN Mİ SOKTUM?" DİYE ÖLÇTÜM
+Aynı şekli **çeşitsiz** denedim → **o da çöküyor**. Yani D-437 onarımının yan
+etkisi DEĞİL, önceden var olan AYRI bir kusur. (D-437'nin kodu yalnız
+`eşleş` payload dalının içinde; bu şekilde `eşleş` hiç yok.)
+Ara değişkene alınınca ÇALIŞIYOR (`değişken j = dizi_al(d,0)`) — bağlı isim
+tip taşır. Kusur yalnız **İSİMSİZ ARA DEĞERDE**.
+
+### Kök
+`dizi_al` yerleşiğinin arg0 dispatch'i yalnız `DUGUM_TANIMLAYICI` ve
+`DUGUM_ERISIM` tanıyordu; `DUGUM_CAGRI` (iç içe `dizi_al`) ve `DUGUM_INDEKS`
+dalı YOKTU → eleman tipi bilinmiyor → i32 fallback → yanlış erişimci.
+Ayrıca `heap_dizi_eleman_ast`'in `DUGUM_CAGRI` dalı yalnız KULLANICI
+işlevlerini (`islev_bul`) tanıyordu; `dizi_al` bir YERLEŞİK olduğu için
+NULL dönüyordu.
+
+### Onarım — mevcut makine yeniden kullanıldı
+- **C (`src/llvm.c`):** `heap_dizi_eleman_ast`'e `dizi_al` dalı (ÖZYİNELİ:
+  `dizi_al(X,i)`nin elemanı = X'in elemanının elemanı) + yerleşik dispatch'e
+  `else if (arg0)` kolu (ortak makineden çöz).
+- **Self-host (`selfhost/codegen.kem`):** `son_elem` yalnız IR DİZGİSİ tutar
+  (`Dizi<Dizi<metin>>` → "ptr"), iç tip kaybolur → yeni kanal `cg_aelem2`
+  (elemanın elemanı) + `son_elem2`; `dizi_al` sonucunda `son_elem = elem2`.
+
+### Doğrulama
+Fikstür `test/cg_korpus/cg_ic_ice_dizi_metin.kem`: **C=42, SELF=42**.
+**Sabotaj S21** (yerleşik dispatch dalını etkisizleştir) → **exit 139**.
+TAM TAKIM: "Tum testler gecti!"
+
+### Ders
+**Bir kusuru onardıktan sonra KOMŞU ŞEKİLLERİ ölç.** D-437 tek başına
+"kapandı" görünüyordu; aynı sınıftan ikinci kaynak yalnızca dört ek şekil
+denenerek bulundu. Üçü temiz çıktı — yani ölçüm ucuzdu ve bir SEGFAULT daha
+kapattı.
+
+---
+
 ## D-437 [YÜKSEK] — 🔴 DERLEYİCİ HATASI: çeşit payload'ından `Dizi<metin>` okumak SEGFAULT
 
 **Dogfooding'in tam da aradığı bulgu.** `stdlib/json.kem`e erişimci

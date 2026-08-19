@@ -1777,6 +1777,27 @@ static const Dugum *heap_dizi_eleman_ast(LlvmGen *g, const Dugum *nesne) {
     case DUGUM_ERISIM:
         return dizi_alan_eleman_ast(g, nesne);
     case DUGUM_CAGRI: {
+        /* [D-438] `dizi_al(X, i)` YERLESIGI: eleman tipi X.eleman.eleman.
+         * Bu dal olmadan ic ice `dizi_al(dizi_al(d,0),0)` eleman tipini
+         * KAYBEDER -> i32 fallback -> `Dizi<Dizi<metin>>`de ic dizi
+         * elemanini ptr yerine i32 okur -> SEGFAULT. D-437 ile AYNI
+         * SINIF (erisimci soneki) ama AYRI kaynak: orada payload
+         * BAGLAMASI, burada ISIMSIZ ARA DEGER. Cesitle ILGISIZ —
+         * cesitsiz de coker (olculdu), D-437 onariminin yan etkisi
+         * DEGIL. Ara degiskene alininca calisiyordu (bagli isim tip
+         * tasir); bu dal ayni bilgiyi ifade zincirinde kurtarir. */
+        if (nesne->veri.cagri.hedef &&
+            nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+            nesne->veri.cagri.hedef->veri.tanimlayici.uzunluk == 7 &&
+            memcmp(nesne->veri.cagri.hedef->veri.tanimlayici.metin,
+                   "dizi_al", 7) == 0 &&
+            nesne->veri.cagri.sayi >= 1) {
+            const Dugum *ic = heap_dizi_eleman_ast(g,
+                nesne->veri.cagri.argumanlar[0]);
+            if (ic && ic->tip == DUGUM_TIP_DIZI)
+                return ic->veri.tip_dizi.eleman_tip;
+            return NULL;
+        }
         if (nesne->veri.cagri.hedef &&
             nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
             const char *ad = nesne->veri.cagri.hedef->veri.tanimlayici.metin;
@@ -4271,6 +4292,20 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         const char *et = dizi_alan_eleman_ir(g, arg0);
                         if (et) dizi_eleman_beklenen = et;
                         dizi_deger_eleman_ast = dizi_alan_eleman_ast(g, arg0);
+                    } else if (arg0) {
+                        /* [D-438] TANIMLAYICI/ERISIM disi arg0: ic ice
+                         * dizi_al, indeksleme ya da islev donusu. Ortak
+                         * heap_dizi_eleman_ast makinesinden cozulur.
+                         * Bu dal YOKTU -> eleman tipi kaybolup i32'ye
+                         * dusuyordu; Dizi<Dizi<metin>> icin ic elemani
+                         * ptr yerine i32 okuyup SEGFAULT veriyordu.
+                         * D-437 ile AYNI SINIF, AYRI kaynak. */
+                        const Dugum *ea = heap_dizi_eleman_ast(g, arg0);
+                        if (ea) {
+                            const char *et = ast_tip_to_ir(g, ea);
+                            if (et) dizi_eleman_beklenen = et;
+                            dizi_deger_eleman_ast = ea;
+                        }
                     }
                 }
             }
