@@ -646,5 +646,50 @@ işlev main() -> tam32 {
     eğer test_tum_mu_generic_hayir() { ver 61; }
     eğer değil test_bir_mu_generic_evet() { ver 62; }
     eğer test_bir_mu_generic_hayir() { ver 63; }
+    // [D-442] Bu 37 test `main`'den HİÇ ÇAĞRILMIYORDU. Çağrılınca altısı
+    // ÇÖP (işaretçi) değer döndürdü — hepsi `değişken r = f();` gibi
+    // ANNOTASYONSUZ bir heap-dizi bağlamasını `r[0]` ile indeksliyordu.
+    // Kök derleyicideydi (bkz. D-442): eleman tipi ve heap-lik bağlama
+    // yerinde kaydedilmiyordu → `getelementptr i32, ptr` ile KdlDizi
+    // BAŞLIĞI veri gibi okunuyor ve runtime sınır kontrolü ATLANIYORDU.
+    // Beklentiler kaynaktaki yorumlardan ve nesnel anlamdan alındı.
+    eğer test_al_iyi()              != 20 { ver 64; }
+    eğer değil test_al_sinir_dis()        { ver 65; }
+    eğer değil test_bir_mu_evet()         { ver 66; }
+    eğer test_bir_mu_hayir()              { ver 67; }
+    eğer değil test_bos_mu_evet()         { ver 68; }
+    eğer test_bos_mu_hayir()              { ver 69; }
+    eğer test_bul_var()             != 30 { ver 70; }
+    eğer test_carpim()              != 24 { ver 71; }
+    eğer değil test_dizi_metin()          { ver 72; }
+    eğer değil test_dolu_mu()             { ver 73; }
+    eğer test_esit_eleman_farkli()        { ver 74; }
+    eğer değil test_esit_evet()           { ver 75; }
+    eğer test_esit_uzunluk_farkli()       { ver 76; }
+    eğer test_harita_yerinde()      != 12 { ver 77; }
+    eğer değil test_icerir_evet()         { ver 78; }
+    eğer test_icerir_hayir()              { ver 79; }
+    eğer değil test_ilk_bos()             { ver 80; }
+    eğer test_ilk_dolu()            != 10 { ver 81; }
+    eğer test_indeks_bul()          != 2  { ver 82; }
+    eğer test_indirgeme_carpim()    != 24 { ver 83; }
+    eğer test_indirgeme_maks()      != 8  { ver 84; }
+    eğer test_indirgeme_toplam()    != 15 { ver 85; }
+    eğer test_maks()                != 8  { ver 86; }
+    eğer test_min()                 != 1  { ver 87; }
+    eğer test_pipeline()            != 5  { ver 88; }
+    eğer test_say()                 != 3  { ver 89; }
+    eğer test_sirala()              != 1  { ver 90; }
+    // ⚠ Ad yanıltıcı: TERS SIRALI GİRDİYE `sirala` uygular (ters sıralama DEĞİL).
+    eğer test_sirala_tersi()        != 1  { ver 91; }
+    eğer test_son_dolu()            != 30 { ver 92; }
+    eğer test_ters_cevir()          != 3  { ver 93; }
+    eğer test_ters_cevir_bos()      != 0  { ver 94; }
+    eğer test_ters_cevir_tek()      != 42 { ver 95; }
+    eğer test_toplam()              != 15 { ver 96; }
+    eğer değil test_tum_mu_evet()         { ver 97; }
+    eğer test_tum_mu_hayir()              { ver 98; }
+    eğer test_uzunluk_0()           != 0  { ver 99; }
+    eğer test_uzunluk_3()           != 3  { ver 100; }
     ver 42;
 }

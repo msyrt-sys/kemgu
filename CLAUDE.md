@@ -946,6 +946,39 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-442: annotasyonsuz heap-dizi bağlaması — sessiz yanlış cevap + SINIR KONTROLÜ ATLANMASI
+D-441'in taraması `dizi`ye geldi: 37 test çağrılmıyordu; çağrılınca **altısı
+çöp (işaretçi) değer** döndürdü. Ortak desen `değişken r = f();` + `r[0]`.
+```
+(A) değişken a = yap(); a[0]        → ÇÖP     (B) annotasyonlu → 42 ✓
+(C) yap()[0] → 42 ✓                 (D) dizi_al(a,0) → 42 ✓  ← TESADÜF
+IR(A): getelementptr i32, ptr  → KdlDizi BAŞLIĞI veri gibi okunuyor
+```
+- **🔴 BELLEK GÜVENLİĞİ:** heap yolu runtime sınır-kontrollüdür, ham GEP
+  değil. `a[1000]` (1 elemanlı dizide): **C exit 0, sessizce okudu**;
+  SELF `PANIK: dizi sınır ihlali`. "Buffer overflow imkânsız" invaryantının
+  doğrudan ihlaliydi. **Self-host DOĞRU, C oracle YANLIŞTI** — paritenin
+  ters yönü.
+- **⚠ ÖLÇÜM İKİ KEZ YANLIŞ TEŞHİSTEN KURTARDI:** (1) "`dizi_al` çözüyor"
+  sandım — hayır, `dizi_eleman_beklenen > beklenen > i32` sırası yüzünden
+  **çağrı bağlamı** (`yazdir_metin` → "ptr") doğru cevabı veriyordu;
+  (2) `heap_dizi_eleman_ast`in TANIMLAYICI dalı da aynı kurulmayan bayrağa
+  bağlıymış. **Tek kök:** annotasyonsuz bağlama ne eleman tipini ne heap-liği
+  kaydeder.
+- **Onarım KÖKTE** (tüketicide değil) → INDEKS · `dizi_al`/`dizi_yaz` · `için`
+  hepsi aynı bilgiyi görür (D-407). C: annotasyonsuz dalda
+  `heap_dizi_eleman_ast` ile `eleman_llvm_tip`/`eleman_tip_ast`/
+  `dinamik_dizi_mi`. Self: `fn_ret` "ptr" tutup elemanı sildiği için yeni
+  paralel tablo **`fn_relem`** + çağrıda `son_elem` yayılımı (self'in belirtisi
+  farklıydı: `add ptr` = LLVM-RED, sessiz değil).
+- Fikstür `cg_annotasyonsuz_heap_dizi.kem` → C=42, SELF=42.
+  **Sabotaj 2/2** (S28 C → fikstür 1 + OOB yeniden sessiz; S29 self → LLVM-RED).
+  Kapılar: `codegen_diff` **143/143** · `yapi_diff` **120/120** ·
+  `checker_diff` 150/150. `dizi` main **62 → 99**.
+- **DERS: koşmayan testler bir BELLEK-GÜVENLİĞİ açığını saklıyordu.** Kusur
+  `--check`ten, üç parite kapısından ve tam takımdan görünmüyordu — çünkü onu
+  tetikleyen şekil hiçbir korpusta YOKTU.
+
 ### 🟡 D-441: koşmayan testlerin 2. partisi + `kuvvet(x,0)` sınırı görünür kılındı
 D-440'ın kör-nokta taraması sürdürüldü. Kurtarılan: **opsiyonel 1/29 → 29**,
 **karsilastir 1/20 → 20**, **sayisal 1/20 → 20**, **matematik 34/81 → 47**.

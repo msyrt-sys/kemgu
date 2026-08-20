@@ -5595,6 +5595,35 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         g->isimler->dizi_uzunluk =
                             d->veri.degisken.deger->veri.dizi_olustur.sayi;
                     }
+                    /* [D-442] ANNOTASYONSUZ heap dizi baglamasi.
+                     * `degisken a = yap();` (yap -> Dizi<T>) icin eleman tipi
+                     * ve heap-lik HIC KAYDEDILMIYORDU. Sonuclari:
+                     *   a[0]  -> `getelementptr i32, ptr` ile KdlDizi BASLIGI
+                     *            veri gibi okunuyordu = SESSIZ YANLIS CEVAP,
+                     *            ve heap yolunun RUNTIME SINIR KONTROLU
+                     *            ATLANIYORDU (a[1000] tek elemanli dizide
+                     *            sessizce okundu, exit 0 — olculdu). Bu,
+                     *            "buffer overflow imkansiz" invaryantinin
+                     *            ihlaliydi. Self-host DOGRU davraniyordu
+                     *            (panik: dizi sinir ihlali) -> parite de
+                     *            bu onarimla saglanir.
+                     *   dizi_al(a,i) -> yalnizca CAGRI BAGLAMI beklenen tipi
+                     *            verdiginde dogru cikiyordu (tesadüf).
+                     * Kok TEK: bagliligi bildirim yerinde kaydet -> INDEKS,
+                     * dizi_al/dizi_yaz ve `icin` dongusu HEPSI ayni bilgiyi
+                     * gorur (D-407: ayni soruyu iki yerde ayri yanitlama).
+                     * Yigin dizi literali (DUGUM_DIZI_OLUSTUR) bu yola GIRMEZ:
+                     * heap_dizi_eleman_ast onun icin NULL doner. */
+                    if (!g->isimler->eleman_llvm_tip) {
+                        const Dugum *hea = heap_dizi_eleman_ast(
+                            g, d->veri.degisken.deger);
+                        if (hea) {
+                            const char *het = ast_tip_to_ir(g, hea);
+                            g->isimler->eleman_llvm_tip = het ? het : "i32";
+                            g->isimler->eleman_tip_ast = hea;
+                            g->isimler->dinamik_dizi_mi = 1;
+                        }
+                    }
                     /* V2-F1: lambda değeri artık fat value { ptr, ptr } (dv.tip)
                      * → alloca/store/load yukarıda jenerik. closure_mu set'i KALKTI
                      * (closure'luk env!=null ile, değerin parçası). */

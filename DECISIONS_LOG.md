@@ -5,6 +5,71 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-442 [KRİTİK] — 🔴 annotasyonsuz heap-dizi bağlaması: sessiz yanlış cevap + SINIR KONTROLÜ ATLANMASI
+
+D-441'in kör-nokta taraması `dizi`ye geldi: 37 test `main`den hiç
+çağrılmıyordu. Çağrılınca **altısı çöp (işaretçi görünümlü) değer** döndürdü.
+Hepsinin ortak deseni `değişken r = f();` + `r[0]` idi.
+
+### Bulgu — dört şekil ölçüldü
+```
+(A) değişken a = yap();       a[0]   →  ÇÖP     (yap() -> Dizi<tam32>)
+(B) değişken b: Dizi<tam32> = yap();  b[0]  →  42 ✓
+(C) yap()[0]                          →  42 ✓
+(D) dizi_al(a, 0)                     →  42 ✓  ← TESADÜF, aşağıya bak
+```
+IR: (A) için `getelementptr i32, ptr %7` + `load` — yani **KdlDizi BAŞLIĞI
+veri gibi okunuyor**.
+
+### 🔴 BELLEK GÜVENLİĞİ — yalnız yanlış değer değil
+Heap yolu runtime **sınır-kontrollüdür**; ham GEP yolu değil:
+```
+C   : a[1000]  (1 elemanlı dizide)  →  exit 0, sessizce okudu  ← İHLAL
+SELF: a[1000]                       →  PANIK: dizi sınır ihlali (i=1000, boyut=1)
+```
+Bu, CLAUDE.md'nin "buffer overflow dil tasarımı seviyesinde imkânsız"
+invaryantının doğrudan ihlaliydi. **Self-host DOĞRU, C oracle YANLIŞTI** —
+alışılmış paritenin ters yönü.
+
+### ⚠ ÖLÇÜM BENİ İKİ KEZ YANLIŞ TEŞHİSTEN KURTARDI
+1. "`dizi_al` doğru çözüyor, demek eleman tipi kurtarılabiliyor" dedim.
+   **Yanlış.** `dizi_al` `dizi_eleman_beklenen > beklenen > i32` sırasını
+   kullanır; probe'da sonuç `yazdir_metin`e gidiyordu, yani **bağlam**
+   `beklenen="ptr"` veriyordu. Bağlamsız kullanımda o da çözemiyor.
+2. `heap_dizi_eleman_ast`in TANIMLAYICI dalı `dinamik_dizi_mi` ister; o bayrak
+   da kurulmuyordu → "iki mekanizma var" hipotezi de çürüdü.
+**Tek kök vardı:** annotasyonsuz bağlama ne eleman tipini ne heap-liği kaydeder.
+
+### Onarım — kök, tüketici değil
+Bağlama yerinde kaydedilir; INDEKS · `dizi_al`/`dizi_yaz` · `için` döngüsü
+HEPSİ aynı bilgiyi görür (D-407: aynı soruyu iki yerde ayrı yanıtlama).
+- **C (`src/llvm.c`):** annotasyonsuz dalda `heap_dizi_eleman_ast` ile
+  `eleman_llvm_tip` + `eleman_tip_ast` + `dinamik_dizi_mi` kurulur.
+  Yığın dizi literali bu yola GİRMEZ (o düğüm için yardımcı NULL döner).
+- **Self-host (`selfhost/codegen.kem`):** `fn_ret` yalnız `"ptr"` tutar ve
+  elemanı siler → yeni paralel tablo **`fn_relem`** (`islev_donus_elem`,
+  `ll_eleman_tip` üzerinden) + çağrı sonucunda `son_elem` yayılımı.
+  Self-host'un belirtisi farklıydı (`add ptr` = LLVM-RED, sessiz değil).
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_annotasyonsuz_heap_dizi.kem` → **C=42, SELF=42**
+  (annotasyonsuz / annotasyonlu / doğrudan çağrı / `Dizi<metin>` / `için`).
+- **Sabotaj 2/2:** S28 (C bloğunu etkisizleştir) → fikstür exit 1 **ve OOB
+  yeniden sessiz**; S29 (self `fn_relem` yayılımı) → LLVM-RED.
+- Kapılar: `codegen_diff` **143/143** · `yapi_diff` **120/120** ·
+  `checker_diff` 150/150 · `stdlib_check` 5 modül.
+- `dizi` testleri: `main` **62 → 99**; altı çöp değer artık doğru
+  (`harita_yerinde` 12, `pipeline` 5, `sirala` 1, `ters_cevir` 3,
+  `ters_cevir_tek` 42, `sirala_tersi` 1).
+
+### Ders
+**Koşmayan testler bir bellek-güvenliği açığını saklıyordu.** D-440'ta
+"koşmayan test, olmayan testten daha kötüdür" demiştim; bu, o dersin en
+pahalı örneği — kusur `--check`ten, üç parite kapısından ve tam takımdan
+görünmüyordu, çünkü onu tetikleyen şekil hiçbir korpusta yoktu.
+
+---
+
 ## D-441 [ORTA] — koşmayan testlerin ikinci partisi + `kuvvet(x,0)` sınırı görünür kılındı
 
 D-440 `metin`i kurtardı; aynı kör nokta taraması diğer modüllerde sürdürüldü.
