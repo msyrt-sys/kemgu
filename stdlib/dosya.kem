@@ -22,10 +22,23 @@ işlev gecersiz_handle() -> metin {
 }
 
 // Handle geçerli mi.
-// ⚠ D-440: `h != ""` İŞARETÇİ karşılaştırmasıdır — `gecersiz_handle()`
-// dışındaki yollardan gelen boş dizgiyi GEÇERLİ sayardı.
+//
+// ⚠⚠ D-443: BURADA `metin_uzunluk` KULLANILAMAZ — ve bu, D-440'ta benim
+// soktuğum bir REGRESYONDU. `h` bir DİZGİ DEĞİL: `kdl_dosya_ac` `void*`
+// (`FILE*`) döner ve KEMGU tarafında `metin` olarak tiplenir. `metin_uzunluk`
+// o işaretçiyi C dizgisi gibi okur → anlamsız sonuç; ölçümde TÜM YAZMA YOLU
+// koptu ("dosya acilamadi", dosya yaratıldığı hâlde).
+// `h != ""` burada İÇERİK karşılaştırması değil, `gecersiz_handle()`in
+// döndürdüğü SENTİNEL ile adres karşılaştırmasıdır — yani TAŞIYICIDIR.
+//
+// ⚠ İKİSİ DE TAM DOĞRU DEĞİL: `dosya_ac` başarısızlıkta NULL döner, `""`
+// değil; NULL != &"" olduğu için bu yüklem AÇILAMAYAN dosyayı GEÇERLİ sayar.
+// Kök neden bir tip tasarımı sorunudur — opak bir handle `metin` olarak
+// tipleniyor. Doğru çözüm ayrı bir handle tipi ya da null-sorgu yerleşiği;
+// ikisi de DİL YÜZEYİ kararı (Mehmet). Buradaki dizgi hilesi, o karar
+// verilene kadar MEVCUT davranışı korur.
 işlev handle_gecerli_mi(h: metin) -> mantıksal {
-    ver metin_uzunluk(h) > 0;
+    ver h != "";
 }
 
 // =============================================================================

@@ -1,9 +1,15 @@
 // KEMGU Stdlib Testi — Dosya
 // =================================
 //
-// Bu dosya `stdlib/dosya.kem` ile birleştirilerek --check edilir.
-// Tüm body'ler stub olduğu için testler tip uyumunu doğrular,
-// gerçek dosya I/O davranışını test etmez (runtime primitif yok).
+// Bu dosya `stdlib/dosya.kem` ile birleştirilerek DERLENİR ve ÇALIŞTIRILIR.
+//
+// ⚠ D-443: Yukarıdaki cümle eskiden "tüm body'ler stub, gerçek I/O test
+// edilmez (runtime primitif yok)" diyordu. Runtime primitifleri Madde G ile
+// EKLENDİ ama yorum güncellenmedi ve `main` 27 testten YALNIZ BİRİNİ
+// çağırmaya devam etti — yani gerçek I/O hiç doğrulanmadı. Artık `main`
+// deterministik yolları koşar VE gerçek bir gidiş-dönüş yapar
+// (yaz → oku → doğrula → sil), yarattığı dosyayı KENDİSİ temizler.
+// Kapı depo kökünde koştuğu için temizlik zorunludur.
 
 // --- handle yardımcıları ---
 işlev test_gecersiz_handle() -> mantıksal {
@@ -117,7 +123,133 @@ işlev test_iki_ac_kapat() -> sonuç<tam32, metin> {
     ver kapat("a.txt");
 }
 
+// [D-443] Bu `main` ÖNCEDEN 27 test işlevinden YALNIZ BİRİNİ çağırıyordu.
+// Dosyanın başlık yorumu da eskimişti ("runtime primitif yok" — oysa Madde G
+// ile eklendi), yani hiçbir şey GERÇEK I/O'yu doğrulamıyordu.
+//
+// İki bölüm: (1) ortamdan BAĞIMSIZ deterministik yollar — var olmayan dosya
+// ve boş yol; boş-yol korumaları D-440'ta onarıldı ve burada kapıya bağlanır.
+// (2) GERÇEK gidiş-dönüş: yaz → oku → doğrula → sil. Yarattığı her dosyayı
+// KENDİSİ temizler; kapı depo kökünde koştuğu için bu şart.
+
+// D-443: mesaj DA denetlenir. İlk sürüm yalnız "hata mı" diye bakıyordu;
+// sabotaj S30 (boş-yol koşulunu boz) SESSİZ kaldı çünkü çağrı yine hata
+// döndü — ama BAŞKA bir hata ("silinemedi"). Hangi kuralın ateşlediğini
+// ölçmeyen bir kapı, o kuralı ölçmüyor demektir.
+işlev bekle_hata_m(ad: metin, bek: metin, r: sonuç<metin, metin>) -> tam32 {
+    eşleş r {
+        hata(e) => {
+            eğer metin_esit(e, bek) { ver 0; }
+            yazdir_metin(metin_birlestir(metin_birlestir(metin_birlestir(
+                "BASARISIZ ", ad), metin_birlestir(": beklenen ", bek)),
+                metin_birlestir(", gelen ", e)));
+            ver 1;
+        }
+        tamam(v) => { yazdir_metin(metin_birlestir("BASARISIZ (hata bekleniyordu): ", ad)); ver 1; }
+    }
+    ver 1;
+}
+
+işlev bekle_hata_t(ad: metin, bek: metin, r: sonuç<tam32, metin>) -> tam32 {
+    eşleş r {
+        hata(e) => {
+            eğer metin_esit(e, bek) { ver 0; }
+            yazdir_metin(metin_birlestir(metin_birlestir(metin_birlestir(
+                "BASARISIZ ", ad), metin_birlestir(": beklenen ", bek)),
+                metin_birlestir(", gelen ", e)));
+            ver 1;
+        }
+        tamam(v) => { yazdir_metin(metin_birlestir("BASARISIZ (hata bekleniyordu): ", ad)); ver 1; }
+    }
+    ver 1;
+}
+
+işlev bekle_hata_t64(ad: metin, bek: metin, r: sonuç<tam64, metin>) -> tam32 {
+    eşleş r {
+        hata(e) => {
+            eğer metin_esit(e, bek) { ver 0; }
+            yazdir_metin(metin_birlestir(metin_birlestir(metin_birlestir(
+                "BASARISIZ ", ad), metin_birlestir(": beklenen ", bek)),
+                metin_birlestir(", gelen ", e)));
+            ver 1;
+        }
+        tamam(v) => { yazdir_metin(metin_birlestir("BASARISIZ (hata bekleniyordu): ", ad)); ver 1; }
+    }
+    ver 1;
+}
+
+işlev bekle_tamam_t(ad: metin, r: sonuç<tam32, metin>) -> tam32 {
+    eşleş r {
+        tamam(v) => { ver 0; }
+        hata(e) => { yazdir_metin(metin_birlestir(metin_birlestir("BASARISIZ ", ad), metin_birlestir(": ", e))); ver 1; }
+    }
+    ver 1;
+}
+
+// GERÇEK gidiş-dönüş — runtime primitiflerini fiilen çalıştırır.
+işlev gidis_donus() -> tam32 {
+    değişken h: tam32 = 0;
+    değişken yol: metin = "kemgu_test_gd.txt";
+    değişken icerik: metin = "merhaba ölç";
+    h = h + bekle_tamam_t("yaz_metin", yaz_metin(yol, icerik));
+    eğer değil var_mi(yol) { yazdir_metin("BASARISIZ: yazilan dosya var_mi=yanlis"); h = h + 1; }
+    eşleş oku_metin(yol) {
+        tamam(v) => {
+            // UTF-8 çok baytlı karakter aynen dönmeli
+            eğer değil metin_esit(v, icerik) {
+                yazdir_metin(metin_birlestir("BASARISIZ: okunan icerik farkli: ", v));
+                h = h + 1;
+            }
+        }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ oku_metin: ", e)); h = h + 1; }
+    }
+    // TEMİZLİK — kapı depo kökünde koşar, artefakt bırakma
+    h = h + bekle_tamam_t("sil", sil(yol));
+    eğer var_mi(yol) { yazdir_metin("BASARISIZ: silinen dosya hala var"); h = h + 1; }
+    ver h;
+}
+
 işlev main() -> tam32 {
-    eğer test_handle_gecerli_evet() { ver 0; }
+    değişken h: tam32 = 0;
+    // (1) handle + mod sabitleri
+    eğer değil test_gecersiz_handle()      { yazdir_metin("B: gecersiz_handle"); h = h + 1; }
+    eğer değil test_handle_gecerli_evet()  { yazdir_metin("B: handle_gecerli_evet"); h = h + 1; }
+    eğer      test_handle_gecerli_hayir()  { yazdir_metin("B: handle_gecerli_hayir"); h = h + 1; }
+    eğer değil metin_esit(test_mod_okuma(),  "okuma")  { yazdir_metin("M: mod_okuma"); h = h + 1; }
+    eğer değil metin_esit(test_mod_yazma(),  "yazma")  { yazdir_metin("M: mod_yazma"); h = h + 1; }
+    eğer değil metin_esit(test_mod_ekleme(), "ekleme") { yazdir_metin("M: mod_ekleme"); h = h + 1; }
+    // (2) BOŞ YOL korumalari — D-440'ta onarildi, burada kapiya baglanir
+    h = h + bekle_hata_m("ac_bos_yol", "bos yol", test_ac_bos_yol());
+    h = h + bekle_hata_t("kapat_bos", "gecersiz handle", test_kapat_bos());
+    h = h + bekle_hata_m("oku_metin_bos_yol", "bos yol", test_oku_metin_bos_yol());
+    h = h + bekle_hata_t("yaz_metin_bos_yol", "bos yol", test_yaz_metin_bos_yol());
+    h = h + bekle_hata_t("sil_bos", "bos yol", test_sil_bos());
+    h = h + bekle_hata_t("kopyala_hata", "bos hedef", test_kopyala_hata());
+    h = h + bekle_hata_t("yeniden_adlandir_hata", "bos eski yol", test_yeniden_adlandir_hata());
+    eğer test_var_mi_bos() { yazdir_metin("B: var_mi_bos"); h = h + 1; }
+    // (3) VAR OLMAYAN dosya — deterministik hata
+    // ⚠⚠ D-443: BU SATIR MATEMATİKSEL DEĞİL, MANTIKSAL OLARAK YANLIŞ BİR
+    // SONUCU SABİTLER. `ac("dosya.txt", okuma)` VAR OLMAYAN dosyada
+    // `tamam` döner; doğrusu `hata`dır. Kök: `dosya_ac` başarısızlıkta
+    // NULL döner ama handle `metin` olarak tiplendiği için geçerlilik
+    // sınaması `h != ""` (sentinel adres karşılaştırması) ile yapılır;
+    // NULL da `""` DEĞİLDİR → geçerli sayılır. Onarımı bir TİP TASARIMI
+    // kararı ister (ayrı handle tipi ya da null-sorgu yerleşiği) — bkz.
+    // stdlib/dosya.kem `handle_gecerli_mi` notu. Mevcut davranış burada
+    // SABİTLENİR ki sınır SESSİZ olmasın: düzeltilince bu satır kırmızıya
+    // döner ve karar bilinçli alınır.
+    eşleş test_ac_iyi() {
+        tamam(v) => { }   // ← bilinen-yanlış: hata olmalıydı
+        hata(e)  => { yazdir_metin("ac_iyi(yok) artik HATA donuyor — D-443 notunu guncelle"); h = h + 1; }
+    }
+    h = h + bekle_hata_m("oku_metin(yok)", "dosya yok", test_oku_metin());
+    h = h + bekle_hata_t64("boyut(yok)", "dosya yok", test_boyut());
+    h = h + bekle_hata_t("kopyala(yok)", "kaynak yok", test_kopyala());
+    h = h + bekle_hata_t("yeniden_adlandir(yok)", "yeniden adlandirilamadi", test_yeniden_adlandir());
+    eğer test_var_mi_dolu() { yazdir_metin("B: var_mi_dolu (yok olmali)"); h = h + 1; }
+    // (4) GERÇEK I/O gidiş-dönüşü (kendi temizliğini yapar)
+    h = h + gidis_donus();
+    eğer h == 0 { yazdir_metin("dosya: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("dosya: BASARISIZ");
     ver 1;
 }

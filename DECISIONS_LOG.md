@@ -5,6 +5,64 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-443 [YÜKSEK] — `dosya` kör noktası + 🔴 D-440'IN SOKTUĞU REGRESYON + zayıf kapı
+
+Kör-nokta envanterinin son modülü. `test_dosya.kem`in `main`i 27 testten
+**birini** çağırıyordu ve başlık yorumu da eskimişti: *"tüm body'ler stub,
+gerçek I/O test edilmez (runtime primitif yok)"* — oysa primitifler Madde G
+ile eklenmişti. Yani **gerçek dosya I/O'sunu hiçbir şey doğrulamıyordu.**
+
+### 🔴 D-440'ta BEN BİR REGRESYON SOKMUŞUM
+`handle_gecerli_mi(h)`ı `h != ""` → `metin_uzunluk(h) > 0` yaptım. **Yanlıştı.**
+`h` bir DİZGİ DEĞİL: `kdl_dosya_ac` **`void*` (`FILE*`)** döner ve KEMGU
+tarafında `metin` olarak tiplenir. `metin_uzunluk` o işaretçiyi C dizgisi gibi
+okur. Ölçüm:
+```
+yaz_metin → "dosya acilamadi"   (dosya YARATILDIĞI hâlde)
+oku_metin → boş
+sil       → "silinemedi"        (dosya duruyor)
+```
+Yani **tüm yazma yolu koptu.** Oradaki `h != ""` içerik karşılaştırması değil,
+`gecersiz_handle()`in sentinel'iyle ADRES karşılaştırmasıydı — **taşıyıcıydı.**
+Geri alındı.
+- **Hiçbir kapı görmedi:** `dosya` davranış döngüsünde yoktu ve `main`in
+  çağırdığı tek test `handle_gecerli_mi("dosya.txt")` — gerçek bir dizgi
+  geçtiği için doğru kalıyordu.
+- **DERS: bir idiom "yanlış görünüyor" diye düzeltilmeden önce, o tipin
+  GERÇEKTEN ne taşıdığı ölçülmeli.** D-440'ta `metin`i dizgi sandım; burada
+  opak bir işaretçiydi. Aynı sözdizimi, iki farklı anlam.
+
+### ⚠ ALTTAKİ ASIL KUSUR (dil yüzeyi — Mehmet'e)
+İkisi de tam doğru değil: `dosya_ac` başarısızlıkta **NULL** döner, `""` değil;
+`NULL != &""` olduğu için yüklem **açılamayan dosyayı GEÇERLİ sayar**
+(`ac("yok.txt")` → `tamam`). Kök bir **tip tasarımı** sorunudur: opak handle
+`metin` olarak tipleniyor. Çözüm ayrı bir handle tipi ya da null-sorgu
+yerleşiği — ikisi de dil yüzeyi. Mevcut davranış testte SABİTLENDİ (D-441'in
+`kuvvet(5,0)` deseni) ki sınır sessiz kalmasın.
+
+### Yapılan
+`main` **1 → 20** test çağırıyor: handle/mod sabitleri · boş-yol korumaları
+(D-440'ın onardığı davranış artık kapıda) · var olmayan dosya hataları ·
+ve **GERÇEK GİDİŞ-DÖNÜŞ** (yaz → oku → UTF-8 doğrula → sil), yarattığı dosyayı
+**kendisi temizler** (kapı depo kökünde koşar; artefakt bırakılmadığı ölçüldü).
+Kapı döngüsü: `+ dosya` (toplam **6 modül**).
+
+### 🔴 ZAYIF KAPI SABOTAJLA BULUNDU
+İlk sürüm yalnız "hata mı?" diye bakıyordu. **Sabotaj S30** (`sil`in boş-yol
+koşulunu boz) **SESSİZ KALDI** — çağrı yine hata döndü, ama BAŞKA bir hata
+("silinemedi"). `grep` sabotajın uygulandığını doğruladı, yani kapı gerçekten
+zayıftı. Yardımcılar **beklenen mesajı** da denetleyecek şekilde güçlendirildi;
+**S31** (aynı sabotaj) → `BASARISIZ sil_bos: beklenen bos yol, gelen silinemedi`
+→ make Error 1. Beklenen mesajlar **kaynaktan** okundu (gözlemden değil —
+`kopyala` için "kaynak okunamadi" tahminim yanlıştı, doğrusu "kaynak yok").
+**Bir kuralın hangi yolla ateşlendiğini ölçmeyen kapı, o kuralı ölçmüyordur.**
+
+### Doğrulama
+`calistir_stdlib_check`: json · metin · opsiyonel · karsilastir · sayisal ·
+**dosya** — hepsi geçiyor, depo kökünde artefakt yok.
+
+---
+
 ## D-442 [KRİTİK] — 🔴 annotasyonsuz heap-dizi bağlaması: sessiz yanlış cevap + SINIR KONTROLÜ ATLANMASI
 
 D-441'in kör-nokta taraması `dizi`ye geldi: 37 test `main`den hiç

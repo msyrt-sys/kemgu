@@ -665,7 +665,9 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@# COZULUR. Eksik dosya artik SESSIZCE ATLANMAZ (eski `|| continue`
 	@# sessiz atlamaydi: yanlis adla eklenen bir modul kapiyi yesil birakip
 	@# HICBIR SEY olcmezdi — D-395'in tam olarak uyardigi desen).
-	@for mod in json metin opsiyonel karsilastir sayisal; do \
+	@# D-443: `dosya` eklendi — GERCEK I/O yapar (yaz/oku/sil) ve yarattigi
+	@# dosyayi KENDISI temizler. Kapi depo kokunde kostugu icin bu sart.
+	@for mod in json metin opsiyonel karsilastir sayisal dosya; do \
 		f="stdlib/$$mod.kem"; \
 		[ -f "$$f" ] || f="stdlib/temel/$$mod.kem"; \
 		test_f="test/stdlib/test_$$mod.kem"; \

@@ -946,6 +946,37 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-443: `dosya` kör noktası + D-440'IN SOKTUĞU REGRESYON + zayıf kapı
+Kör-nokta envanterinin son modülü: `main` 27 testten **birini** çağırıyordu,
+başlık yorumu da eskimişti ("stub, runtime primitif yok" — oysa Madde G ile
+eklendi) → **gerçek dosya I/O'sunu hiçbir şey doğrulamıyordu.**
+- **🔴 D-440'ta BEN REGRESYON SOKMUŞUM.** `handle_gecerli_mi`ı
+  `h != ""` → `metin_uzunluk(h) > 0` yaptım. `h` DİZGİ DEĞİL:
+  `kdl_dosya_ac` **`void*` (`FILE*`)** döner, KEMGU'da `metin` tiplenir.
+  Ölçüm: `yaz_metin`→"dosya acilamadi" (dosya YARATILDIĞI hâlde), okuma boş,
+  `sil`→"silinemedi" → **tüm yazma yolu koptu.** Oradaki `h != ""` içerik
+  değil, `gecersiz_handle()` sentinel'iyle ADRES karşılaştırmasıydı =
+  TAŞIYICI. Geri alındı. **Hiçbir kapı görmedi** (`dosya` döngüde yoktu;
+  çağrılan tek test gerçek bir dizgi geçiyordu).
+  **DERS: bir idiomu "yanlış görünüyor" diye düzeltmeden önce o tipin
+  GERÇEKTEN ne taşıdığını ölç.** Aynı sözdizimi, iki farklı anlam.
+- **⚠ ALTTAKİ ASIL KUSUR (dil yüzeyi — Mehmet'e):** `dosya_ac` başarısızlıkta
+  **NULL** döner, `""` değil → `NULL != &""` olduğu için yüklem **açılamayan
+  dosyayı GEÇERLİ sayar** (`ac("yok.txt")` → `tamam`). Kök: opak handle
+  `metin` olarak tipleniyor. Çözüm ayrı handle tipi ya da null-sorgu
+  yerleşiği. Mevcut davranış testte SABİTLENDİ (D-441 deseni).
+- **Yapılan:** `main` **1 → 20**; handle/mod · boş-yol korumaları (D-440'ın
+  davranışı artık kapıda) · var-olmayan-dosya hataları · **GERÇEK GİDİŞ-DÖNÜŞ**
+  (yaz→oku→UTF-8 doğrula→sil), yarattığı dosyayı **kendisi temizler**.
+  Kapı döngüsü **6 modül**.
+- **🔴 ZAYIF KAPI SABOTAJLA BULUNDU:** ilk sürüm yalnız "hata mı?" bakıyordu;
+  **S30 SESSİZ KALDI** (çağrı yine hata döndü ama BAŞKA hata). `grep`
+  uygulandığını doğruladı → kapı gerçekten zayıftı. Yardımcılar **beklenen
+  mesajı** da denetler oldu; **S31** → `beklenen bos yol, gelen silinemedi`,
+  make Error 1. Mesajlar **kaynaktan** okundu (gözlemden değil — `kopyala`
+  tahminim yanlıştı). **Bir kuralın HANGİ YOLLA ateşlendiğini ölçmeyen kapı,
+  o kuralı ölçmüyordur.**
+
 ### 🔴 D-442: annotasyonsuz heap-dizi bağlaması — sessiz yanlış cevap + SINIR KONTROLÜ ATLANMASI
 D-441'in taraması `dizi`ye geldi: 37 test çağrılmıyordu; çağrılınca **altısı
 çöp (işaretçi) değer** döndürdü. Ortak desen `değişken r = f();` + `r[0]`.
