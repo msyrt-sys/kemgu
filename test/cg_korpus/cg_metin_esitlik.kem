@@ -1,18 +1,20 @@
 // [D-449] `metin` üzerinde `==`/`!=` İÇERİK karşılaştırır.
+//
 // Öncesinde `icmp eq ptr` yayılıyordu = İŞARETÇİ karşılaştırması. Literaller
 // tekilleştirildiği için literal↔literal TESADÜFEN doğru sonuç veriyordu —
-// kusur tam bu yüzden yıllarca görünmedi. HESAPLANMIŞ metinde sessizce yanlış.
+// kusur tam bu yüzden görünmüyordu. HESAPLANMIŞ metinde sessizce yanlış.
 //
-// Dört yol birlikte sınanır; üçü ayrı mekanizma:
-//   (a) yerel değişken   (b) işlev parametresi
-//   (c) generic çıplak-T parametresi (ikame metin-liği taşımalı)
-//   (d) `için` döngü değişkeni — `Dizi<T>` elemanının metin-liği
-// (c)+(d) `stdlib/dizi.kem`in generic aramalarının (`icerir`/`bul`/
-// `indeks_bul`) tam kullandığı yol; onlar bu onarımdan önce BOZUKTU.
+// Üç yol birlikte sınanır (üçü ayrı mekanizma):
+//   (a) yerel değişken
+//   (b) işlev parametresi
+//   (c) `için` döngü değişkeni — `Dizi<E>` elemanının metin-liği
+// (c), `stdlib/dizi.kem`in generic aramalarının (`icerir`/`bul`/`indeks_bul`)
+// kullandığı yoldur; bu onarımdan önce `Dizi<metin>` araması BOZUKTU.
+// GENERIC çıplak-T yolu ayrı dosyada: cg_metin_esitlik_generic.kem (K4 muaf).
 // Exit: 42
 
-işlev es_param(a: metin, b: metin) -> mantıksal { ver a == b; }
-işlev es_gen<T>(a: T, b: T) -> mantıksal { ver a == b; }
+işlev es_param(a: metin, b: metin) -> tam32 { eğer a == b { ver 1; } ver 0; }
+
 işlev ara(xs: Dizi<metin>, hedef: metin) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
@@ -26,18 +28,16 @@ işlev main() -> tam32 {
     // (a) yerel — iki AYRI tahsis, aynı içerik
     değişken u: metin = metin_birlestir("ab", "c");
     değişken v: metin = metin_birlestir("a", "bc");
-    eğer u == v { t = t + 10; }            // 10
+    eğer u == v { t = t + 20; }            // 20
     eğer u != v { t = t + 100; }           // ateşlememeli
     // farklı içerik
     değişken w: metin = metin_birlestir("a", "bd");
-    eğer u != w { t = t + 6; }             // 16
+    eğer u != w { t = t + 6; }             // 26
     eğer u == w { t = t + 100; }           // ateşlememeli
     // (b) parametre
-    eğer es_param(u, v) { t = t + 6; }     // 22
-    // (c) generic çıplak-T
-    eğer es_gen(u, v) { t = t + 10; }      // 32
-    eğer es_gen(u, w) { t = t + 100; }     // ateşlememeli
-    // (d) `için` döngü değişkeni
+    eğer es_param(u, v) == 1 { t = t + 6; }   // 32
+    eğer es_param(u, w) == 1 { t = t + 100; } // ateşlememeli
+    // (c) `için` döngü değişkeni
     değişken d: Dizi<metin> = [];
     dizi_ekle(d, metin_birlestir("x", "y"));
     dizi_ekle(d, metin_birlestir("ab", "c"));

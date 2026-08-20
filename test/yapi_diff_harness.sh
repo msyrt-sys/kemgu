@@ -54,8 +54,14 @@ cg_rho_sahip_confined cg_rho_sahip_kacis"
 # (K4) generic BASE gövdesi → self yayar, C atlar (D-401: self çıkarsaması
 #      kısmî olduğu için base gövde gerekli; atlamayı denemek 11/18→8/18
 #      regresyonu verdi, geri alındı).
+#      [D-449] `cg_metin_esitlik_generic` AYNI sınıf, yeni giren. `metin ==`
+#      fikstürünün GENERIC yolu bilerek ayrı dosyaya alındı: ana fikstür
+#      (`cg_metin_esitlik`) böylece yapısal kapının TAM denetimi altında kalır
+#      ve muafiyet yalnız generic dosyaya düşer. Davranışsal eşdeğerlik
+#      (`codegen_diff`) İKİSİNDE de ölçülür — muaf olan yalnız `define` kümesi.
 MUAF_K4="cg_generic_mono cg_generic_sonuc_ptr cg_modul_alias cg_modul_capraz
-cg_modul_generic cg_modul_transitif cgmodul_mat cgmodul_zincir"
+cg_modul_generic cg_modul_transitif cgmodul_mat cgmodul_zincir
+cg_metin_esitlik_generic"
 
 MUAF="$MUAF_K1 $MUAF_K2 $MUAF_K3 $MUAF_K4"
 muaf_mi() { case " $(echo $MUAF) " in *" $1 "*) return 0;; esac; return 1; }

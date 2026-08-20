@@ -1,0 +1,29 @@
+// [D-449] `metin` üzerinde `==` — GENERIC ÇIPLAK-T yolu.
+//
+// Ana fikstürden (cg_metin_esitlik.kem) AYRI tutulur: generic işlev, self-host'ta
+// specialization'ın YANINDA BASE gövdesini de yayar (K4 / D-401 V1 sınırı), bu da
+// `yapi_diff`te bilinen bir sapmadır. Ayırmanın amacı, ana fikstürün YAPISAL
+// kapının tam denetimi altında kalması; muafiyet yalnız bu dosyaya düşer.
+// Davranışsal eşdeğerlik (`codegen_diff`) HER İKİ dosyada da ölçülür.
+//
+// Sınanan: T=metin instantiation'ında ikame METİN-LİĞİ taşımalı; taşımazsa
+// generic gövdedeki `a == b` işaretçi karşılaştırmasına döner ve
+// `stdlib/dizi.kem`in generic aramaları sessizce bozulur.
+// Exit: 42
+
+işlev es_gen<T>(a: T, b: T) -> tam32 { eğer a == b { ver 1; } ver 0; }
+
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    // İki AYRI tahsis, aynı içerik → içerik karşılaştırması doğru olmalı
+    değişken u: metin = metin_birlestir("ab", "c");
+    değişken v: metin = metin_birlestir("a", "bc");
+    eğer es_gen(u, v) == 1 { t = t + 40; }
+    // Farklı içerik → eşleşmemeli
+    değişken w: metin = metin_birlestir("a", "bd");
+    eğer es_gen(u, w) == 1 { t = t + 100; }
+    // Tamsayı instantiation'ı BOZULMAMALI (aynı generic, T=tam32)
+    eğer es_gen(7, 7) == 1 { t = t + 2; }
+    eğer es_gen(7, 8) == 1 { t = t + 100; }
+    ver t;
+}
