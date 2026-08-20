@@ -5,6 +5,34 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-445 [ORTA] — bağlanan testler KOŞMUYORDU: kapı sabit exit 0 varsayıyordu
+
+D-441'de `dizi`nin `main`ini 62→99, `matematik`inkini 34→47 teste bağladım.
+**Ama hiçbir kapı onları çalıştırmıyordu.** `calistir_stdlib_check`in davranış
+döngüsü çıkışın **0** olmasını bekliyor; bu iki modül BAŞARIDA **42** döner
+(kendi sözleşmeleri). Sabit varsayım yüzünden ikisi de listeye alınamamış,
+yani **146 test bağlanmış ama koşulmuyordu.**
+
+- **Kusur "eksik satır" değil, SABİT VARSAYIMDI.** Döngü girdisi artık
+  `modul:beklenen_cikis` çifti; beklenen çıkış AÇIK yazılır. Örtük 0 varsayımı,
+  farklı sözleşmeli modülleri sessizce dışarıda bırakıyordu — D-441'de kendi
+  eklediğim "sessiz atlama" kusurunun (yol çözümü) kardeşi.
+- Kapı: 6 → **8 modül**. `dizi`/`matematik` başarıda hiçbir şey basmaz, o
+  yüzden çıktıya bakarak koştuklarını ANLAYAMAZSIN — bu da sabotajın neden
+  şart olduğunun bir örneği.
+- **Sabotaj S32** (`dizi:42` → `dizi:41`) →
+  `FAIL(kosum): dizi - beklenen cikis 41, gelen 42`, MAKE EXIT 2. Modülün
+  gerçekten koştuğu ve çıkış denetiminin çalıştığı böyle kanıtlandı.
+- Yan düzeltme: hata mesajındaki em-dash konsol kodlamasında bozuluyordu
+  (`â€”`); Makefile kabuk çıktısı ASCII'ye çevrildi.
+
+### Ders
+**Bir testi yazmak, bağlamak ve KOŞTURMAK üç ayrı iştir.** D-441'de ikisini
+yapıp üçüncüsünü atlamıştım ve arada geçen dört artım boyunca fark etmedim —
+çünkü kapı yeşildi ve o iki modül çıktıya hiçbir şey yazmıyordu.
+
+---
+
 ## D-444 [DÜŞÜK] — D-443'ün açtığı E3 muafiyeti + 🔴 ÖLÇÜM ARACIM BAŞARISIZLIĞI MASKELİYORDU
 
 ### 🔴 `make ... | tail` ÇIKIŞ KODUNU MASKELER

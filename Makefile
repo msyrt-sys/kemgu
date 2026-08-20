@@ -667,7 +667,14 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@# HICBIR SEY olcmezdi — D-395'in tam olarak uyardigi desen).
 	@# D-443: `dosya` eklendi — GERCEK I/O yapar (yaz/oku/sil) ve yarattigi
 	@# dosyayi KENDISI temizler. Kapi depo kokunde kostugu icin bu sart.
-	@for mod in json metin opsiyonel karsilastir sayisal dosya; do \
+	@# D-445: girdi artik `modul:beklenen_cikis` ciftidir. `dizi` ve `matematik`
+	@# BASARIDA 42 doner (kendi sozlesmeleri); once bu yuzden dongude YOKLARDI
+	@# ve main'leri baglanmis olmasina ragmen HICBIR KAPI onlari CALISTIRMIYORDU
+	@# (dizi 99 + matematik 47 test). Beklenen cikis ACIK yazilir — sabit 0
+	@# varsaymak o iki modulu sessizce disarida birakiyordu.
+	@for spec in json:0 metin:0 opsiyonel:0 karsilastir:0 sayisal:0 dosya:0 \
+	             dizi:42 matematik:42; do \
+		mod=$${spec%%:*}; bek=$${spec##*:}; \
 		f="stdlib/$$mod.kem"; \
 		[ -f "$$f" ] || f="stdlib/temel/$$mod.kem"; \
 		test_f="test/stdlib/test_$$mod.kem"; \
@@ -679,7 +686,9 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		clang -x ir "$(BUILD)/_run_$$mod.ll" -x none $(BUILD)/kdl_runtime.o \
 			-o "$(BUILD)/_run_$$mod$(EXE)" 2>/dev/null || \
 			{ echo "FAIL(link): $$mod"; exit 1; }; \
-		./$(BUILD)/_run_$$mod$(EXE) || { echo "FAIL(kosum): $$mod"; exit 1; }; \
+		./$(BUILD)/_run_$$mod$(EXE); rc=$$?; \
+		[ "$$rc" = "$$bek" ] || \
+			{ echo "FAIL(kosum): $$mod - beklenen cikis $$bek, gelen $$rc"; exit 1; }; \
 		rm -f "$$c" "$(BUILD)/_run_$$mod.ll" "$(BUILD)/_run_$$mod$(EXE)"; \
 	done
 	@echo "stdlib davranis testleri gecti!"

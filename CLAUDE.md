@@ -946,6 +946,20 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🟡 D-445: bağlanan testler KOŞMUYORDU — kapı sabit exit 0 varsayıyordu
+D-441'de `dizi` main'ini 62→99, `matematik`inkini 34→47 teste bağladım ama
+**hiçbir kapı onları çalıştırmıyordu**: davranış döngüsü çıkışın **0** olmasını
+bekliyor, bu ikisi BAŞARIDA **42** döner (kendi sözleşmeleri) → **146 test
+bağlanmış ama koşulmuyordu.**
+- Kusur "eksik satır" değil **SABİT VARSAYIM**. Döngü girdisi artık
+  `modul:beklenen_cikis`; beklenen çıkış AÇIK yazılır. Kapı 6 → **8 modül**.
+- `dizi`/`matematik` başarıda hiçbir şey BASMAZ → çıktıya bakarak koştuklarını
+  anlayamazsın. **Sabotaj S32** (`dizi:42`→`dizi:41`) →
+  `FAIL(kosum): dizi - beklenen cikis 41, gelen 42`, MAKE EXIT 2.
+- **DERS: bir testi YAZMAK, BAĞLAMAK ve KOŞTURMAK üç ayrı iştir.** İkisini
+  yapıp üçüncüsünü atlamıştım ve dört artım boyunca fark etmedim — kapı
+  yeşildi ve o modüller çıktıya hiçbir şey yazmıyordu.
+
 ### 🔴 D-444: `make | tail` ÇIKIŞ KODUNU MASKELİYORDU + D-443'ün E3 muafiyeti
 - **ÖLÇÜM ARACI KUSURU:** tam takımı `mingw32-make test_tumu 2>&1 | tail -N`
   ile koşturuyordum; boru hattının çıkış kodu **`tail`in**dir → `make` KIRMIZI
