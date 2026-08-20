@@ -946,6 +946,25 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-444: `make | tail` ÇIKIŞ KODUNU MASKELİYORDU + D-443'ün E3 muafiyeti
+- **ÖLÇÜM ARACI KUSURU:** tam takımı `mingw32-make test_tumu 2>&1 | tail -N`
+  ile koşturuyordum; boru hattının çıkış kodu **`tail`in**dir → `make` KIRMIZI
+  iken bildirim **"exit code 0"** dedi. O koşumda takım gerçekten başarısızdı
+  (`check_genis` 127/128) ve yalnız son satırları okuduğum için gördüm.
+  Önceki koşumlar gerçekten yeşildi ("Tum testler gecti!" yazıyordu) ama bu
+  şansa dayanıyordu. **KURAL: `make`i boruya bağlarken `${PIPESTATUS[0]}`
+  yazdır.** "Kapı sessiz düşmesin" ilkesini ÖLÇÜM ARACINA uygulamamıştım.
+- **Sapma yeni kusur DEĞİL:** D-443'ün gerçek I/O gidiş-dönüşü
+  `eşleş oku_metin(...)` kolları getirdi; `check_genis` dosyaları TEK BAŞINA
+  denetler ve skrutini tanımsızken **C desen bağlamalarını hiç kurmaz**
+  (`v`/`e` → T002), self bağlayıp susar (C 46 / self 36; fark = o 10 kaskad
+  satırı). Harness'ta **zaten tanımlı E3 sınıfı** — listedeki diğerleri de
+  (`test_metin`/`test_sonuc`/`test_json`) modülle birleştirilmek üzere yazılmış
+  dosyalar. `test_dosya` eklendi → **127/127 (9 muaf)**.
+  Soundness sorunu yok (ikisi de reddediyor); birleştirilmiş hâli
+  `stdlib_check`te temiz. **Kapatılabilir borç:** self-host `eşleş`te skrutini
+  çözülemezse desen bağlamalarını kaydetmemeli — ayrı ve riskli hata-yolu işi.
+
 ### 🔴 D-443: `dosya` kör noktası + D-440'IN SOKTUĞU REGRESYON + zayıf kapı
 Kör-nokta envanterinin son modülü: `main` 27 testten **birini** çağırıyordu,
 başlık yorumu da eskimişti ("stub, runtime primitif yok" — oysa Madde G ile

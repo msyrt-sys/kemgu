@@ -38,14 +38,21 @@ fi
 #        tip_alias
 # (E3) `eşleş` desen bağlamında kaçırma (self daha müsamahakâr): C `değer(v)` /
 #      `hata(m)` kolunda T002/T011 veriyor, self vermiyor.
-#        test_metin · test_sonuc · heap_dizi_metin · test_json
+#        test_metin · test_sonuc · heap_dizi_metin · test_json · test_dosya
 #      ⚠ `test_json` (D-436): bu dosyalar MODÜLLE BİRLEŞTİRİLEREK derlenmek
 #      üzere yazılmıştır (bkz. `calistir_stdlib_check`); TEK BAŞINA ölçülünce
 #      doğal olarak T002 dolu olurlar. Gerçek fark yalnız 4 satırdır ve hepsi
 #      `hata(m) =>` bağlamasındaki `m` içindir — E3'ün ta kendisi (C 57, self
 #      53 tanı). Modülle BİRLEŞTİRİLMİŞ hâli `stdlib_check`te TEMİZ geçer.
+#      ⚠ `test_dosya` (D-443): AYNI sınıf, YENİ giren. O dosyaya gerçek I/O
+#      gidiş-dönüşü eklenince `eşleş oku_metin(...)` kolları oluştu; skrutini
+#      (modülsüz derlemede) tanımsız olduğu için C desen bağlamalarını HİÇ
+#      kurmuyor ve `v`/`e` kullanımları T002 alıyor, self bağlayıp susuyor
+#      (C 46, self 36 tanı — fark yalnız bu 10 kaskad satırı). Kusur DEĞİL,
+#      hata-kaskadı derinliği farkı; birleştirilmiş hâli `stdlib_check`te
+#      TEMİZ geçer.
 MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
-tip_alias test_metin test_sonuc heap_dizi_metin test_json"
+tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1

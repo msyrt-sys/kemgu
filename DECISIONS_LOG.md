@@ -5,6 +5,39 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-444 [DÜŞÜK] — D-443'ün açtığı E3 muafiyeti + 🔴 ÖLÇÜM ARACIM BAŞARISIZLIĞI MASKELİYORDU
+
+### 🔴 `make ... | tail` ÇIKIŞ KODUNU MASKELER
+Tam takımı `mingw32-make test_tumu 2>&1 | tail -N` ile koşturuyordum. Boru
+hattının çıkış kodu **`tail`in**dir → `make` KIRMIZI olduğu hâlde arka plan
+bildirimi **"exit code 0"** dedi. Bu koşumda takım gerçekten başarısızdı
+(`calistir_check_genis` 127/128) ve yalnızca çıktının son satırlarını okuduğum
+için fark ettim.
+- Önceki koşumlar gerçekten yeşildi (çıktılarında "Tum testler gecti!" vardı),
+  yani geçmiş sonuçlar geçersiz DEĞİL — ama şansa dayanıyordu.
+- **KURAL: `make`i boruya bağlarken `${PIPESTATUS[0]}` yazdır.** "Exit 0"
+  gördüğüm için yeşil saymak, bu depodaki "kapı sessiz düşmesin" ilkesinin
+  ölçüm aracına uygulanmamış hâliydi.
+
+### Sapmanın kendisi — YENİ KUSUR DEĞİL, MEVCUT SINIFA GİRİŞ
+D-443'te `test_dosya.kem`e gerçek I/O gidiş-dönüşü eklenince
+`eşleş oku_metin(...)` kolları oluştu. `check_genis` bu dosyaları **tek
+başına** (modülsüz) denetler; skrutini tanımsız olduğunda **C desen
+bağlamalarını HİÇ KURMAZ** → `v`/`e` kullanımları `T002` alır. Self-host
+bağlayıp susar (C 46, self 36 tanı; fark tam olarak o 10 kaskad satırı).
+Bu, harness'ta **zaten tanımlı E3 sınıfıdır** ve listedeki diğer dosyalar da
+(`test_metin`, `test_sonuc`, `test_json`) aynı gerekçeyle orada: hepsi
+modülle BİRLEŞTİRİLEREK derlenmek üzere yazılmıştır. `test_dosya` eklendi;
+kapı **127/127 (9 muaf)**.
+- **Soundness sorunu YOK:** iki derleyici de dosyayı reddediyor; fark yalnız
+  kaskad derinliği. Birleştirilmiş hâli `stdlib_check`te TEMİZ geçer.
+- **Kapatılabilir borç:** self-host `eşleş`te skrutini çözülemediğinde desen
+  bağlamalarını kaydetmemeli. Ayrı ve riskli bir hata-yolu işi (150 dosyalık
+  `checker_diff` + 128 dosyalık `check_genis` üzerinde yanlış-pozitif riski),
+  bu yüzden bilinçli olarak ertelendi.
+
+---
+
 ## D-443 [YÜKSEK] — `dosya` kör noktası + 🔴 D-440'IN SOKTUĞU REGRESYON + zayıf kapı
 
 Kör-nokta envanterinin son modülü. `test_dosya.kem`in `main`i 27 testten
