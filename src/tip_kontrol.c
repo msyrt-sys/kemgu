@@ -250,6 +250,15 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("yazdir_metin", 12, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-450] yazdir_hata(s: metin) -> boş — STDERR. Tanılar/uyarılar stdout'u
+     * KİRLETMEDEN yazılır: derleyici çıktısı (IR) ve tanı metni ayrı akışlara
+     * gitmeli, aksi hâlde `--llvm | clang` boru hattı tanıyı IR sanıp patlar. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("yazdir_hata", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* Track B C1: isaretsiz + onaltilik yazdirma (bare-metal hata ayiklama
      * + adres yazimi icin). Host runtime'da henuz implement edilmedi;
      * link asamasinda eksik sembol uyari verebilir — bare-metal akis icin

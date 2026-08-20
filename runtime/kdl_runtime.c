@@ -67,6 +67,21 @@ void kdl_yazdir_metin(const char *s) {
     }
 }
 
+/* [D-450] STDERR yazicisi — `kdl_yazdir_metin`in birebir aynasi, yalniz
+ * akis stderr. Tanilar stdout'u KIRLETMEMELI: derleyici ciktisi (IR) ve
+ * tani mesajlari ayri akislara gitmeli, aksi halde `--llvm | clang` boru
+ * hatti tani metnini IR sanip patlar. `kdl_hata_yazdir` zaten vardi ama
+ * HICBIR derleyicide KEMGU yerlesigi olarak acilmamisti; bu ad
+ * `yazdir_` onek ailesine katilir (self-host esleme ONEK tabanli). */
+void kdl_yazdir_hata(const char *s) {
+    if (s) {
+        fputs(s, stderr);
+        fputc('\n', stderr);
+    } else {
+        fputs("(bos)\n", stderr);
+    }
+}
+
 void kdl_yazdir_tam(int32_t n) {
     printf("%d\n", n);
 }

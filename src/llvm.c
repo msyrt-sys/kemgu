@@ -4889,6 +4889,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * fputs yoluna gider. */
                 cagri_adi = "kdl_yazdir_metin"; cagri_adi_uz = 16;
                 param_beklenen[0] = "ptr"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "yazdir_hata", 11) == 0) {
+                /* [D-450] STDERR — tanilar stdout'u kirletmemeli. */
+                cagri_adi = "kdl_yazdir_hata"; cagri_adi_uz = 15;
+                param_beklenen[0] = "ptr"; builtin_donus = "void";
             } else if (cagri_adi_uz == 20 &&
                        memcmp(cagri_adi, "yazdir_isaretsiz_tam", 20) == 0) {
                 cagri_adi = "kdl_yazdir_isaretsiz_tam"; cagri_adi_uz = 24;
@@ -7446,6 +7451,7 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_yaz_tam64(i64)\n", out);
     /* Track B: yazdir_metin -> kdl_yazdir_metin (bare-metal/host ortak) */
     fputs("declare void @kdl_yazdir_metin(ptr)\n", out);
+    fputs("declare void @kdl_yazdir_hata(ptr)\n", out);   /* [D-450] */
     fputs("declare void @kdl_yazdir_isaretsiz_tam(i32)\n", out);
     fputs("declare void @kdl_yazdir_isaretsiz_tam64(i64)\n", out);
     fputs("declare void @kdl_yazdir_onaltilik(i64)\n", out);

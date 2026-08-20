@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-450 [ORTA] — KARAR 3: `yazdir_hata` (stderr yerleşiği) + D-424'ün borcu kapandı
+
+Mehmet'in onayladığı sıralamada 2. madde. **İş beklenenden küçük çıktı:**
+`kdl_hata_yazdir` runtime'da ZATEN vardı (stderr'e yazıyor) ama **hiçbir
+derleyicide KEMGU yerleşiği olarak açılmamıştı** — yazılacak yeni runtime
+mantığı yoktu, yalnızca bağlantı eksikti.
+
+### Adlandırma: `yazdir_hata`, `hata_yazdir` DEĞİL
+İki gerekçe, ikisi de ölçüldü:
+- Self-host'un yerleşik→`kdl_` eşlemesi **ÖNEK TABANLI** (`yazdir_` →
+  `kdl_yazdir_`). `yazdir_hata` bu aileye katılır ve **yeni eşleme kuralı
+  gerektirmez**; `hata_yazdir` özel bir dal isterdi.
+- `hata` bir ANAHTAR KELİMEDİR (`sonuç` yapıcısı). Ona bitişik bir ad seçmek
+  gereksiz risk.
+Runtime'a `kdl_yazdir_hata` eklendi (`kdl_yazdir_metin`in birebir aynası,
+yalnız akış `stderr`). Mevcut `kdl_hata_yazdir` dokunulmadan bırakıldı.
+
+### Neden stdout'a yazmak OLMAZ
+Derleyici çıktısı (IR) stdout'a, tanı metni stderr'e gitmeli. Aynı akış
+`--llvm | clang` boru hattını bozar: tanı metni IR sanılır. Bu invaryant zaten
+**her codegen kapısı tarafından örtük olarak korunuyor** — self-host tanıyı
+stdout'a yazsaydı üretilen IR bozulur ve `clang` tüm korpusta patlardı.
+
+### D-424'ün borcu KAPANDI
+D-424'ün kodundaki yorum aynen şunu diyordu: *"Tanılar stdout'a YAZILMAZ: C
+onları stderr'e yazar... self-host'ta stderr yazıcısı yok (yeni yerleşik = dil
+yüzeyi değişikliği, **Mehmet'in kararı**)."* Karar verildi. Self-host `--llvm`
+tip kapısı artık tanıları stderr'e basıyor:
+```
+C   : exit=1 · stdout 0 bayt · stderr "hata[T002]: tanimsiz sembol"
+SELF: exit=1 · stdout 0 bayt · stderr "T002 1 30"
+```
+Öncesinde self-host **hiçbir şey basmıyordu**. Biçim farkı kasıtlı: self-host
+`--check` ile AYNI kompakt biçimi (kod/satır/sütun) kullanır; parite kapıları
+zaten o biçimi karşılaştırıyor.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_yazdir_hata.kem` → **C=42, SELF=42**; iki
+  derleyicide de stdout ve stderr AYRI ve doğru içerikte.
+- **Sabotaj S37** (C eşlemesini `kdl_yazdir_metin`e çevir) → stderr BOŞALDI,
+  stdout 2 satıra çıktı (kirlenme) — yönlendirmenin gerçekten ölçüldüğü kanıt.
+- Kapılar: `codegen_diff` **146/146** · `yapi_diff` **122/122** ·
+  `checker_diff` **150/150** · `ct_bariyer` 13/13 · `modul_codegen` 21/21.
+
+### ⚠ Süreç notu — CRLF çapası sessizce ıskalıyor
+`src/tip_kontrol.c` yaması **sessizce uygulanmadı**: dosya CRLF, benim python
+çapam `\n` kullanıyordu. Betik "ok" bastı çünkü `str.replace` eşleşme
+bulamayınca sessizce hiçbir şey yapmaz. `grep` ile doğrulanmasa eksik yerleşikle
+devam edecektim. **Yamadan sonra sayıyı doğrula** — bu oturumda 4. tekrar.
+
+---
+
 ## D-449 [YÜKSEK] — KARAR 1+2: `metin` üzerinde `==` İÇERİK karşılaştırır + opak dosya handle'ı
 
 Mehmet iki açık kararı verdi (D-440 ve D-443'te sunulmuştu). Sırayla uygulandı

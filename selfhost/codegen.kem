@@ -3711,6 +3711,7 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_yaz_tam64(i64)"); yb(10);
     yaz_str("declare void @kdl_yaz_bayt(i32)"); yb(10);
     yaz_str("declare void @kdl_yazdir_metin(ptr)"); yb(10);
+    yaz_str("declare void @kdl_yazdir_hata(ptr)"); yb(10);   // [D-450]
     yaz_str("declare void @kdl_yazdir_satir()"); yb(10);
     yaz_str("declare i32 @kdl_oku_karakter()"); yb(10);
     yaz_str("declare void @kdl_panik(ptr)"); yb(10);
@@ -7757,6 +7758,7 @@ işlev g_ekle(p: &değişken Ayr, ad: metin) -> tam32 { dizi_ekle(p.g_isim, ad);
 işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "yazdir"); g_ekle(p, "yazdir_tam"); g_ekle(p, "yazdir_tam64");
     g_ekle(p, "yazdir_satir"); g_ekle(p, "yazdir_metin"); g_ekle(p, "yazdir_karakter");
+    g_ekle(p, "yazdir_hata");   // [D-450] STDERR
     g_ekle(p, "yazdir_isaretsiz_tam"); g_ekle(p, "yazdir_isaretsiz_tam64");
     g_ekle(p, "yazdir_onaltilik"); g_ekle(p, "yaz_tam"); g_ekle(p, "yaz_tam64");
     g_ekle(p, "yaz_bayt"); g_ekle(p, "yaz_karakter"); g_ekle(p, "yaz_onaltilik");
@@ -8069,6 +8071,7 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "yaz_tam64", "boş", ["tam64"]);
     yerlesik_ekle(p, "yaz_bayt", "boş", ["tam32"]);
     yerlesik_ekle(p, "ondalik_bicimle", "metin", ["metin"]);
+    yerlesik_ekle(p, "yazdir_hata", "boş", ["metin"]);   // [D-450] STDERR
     yerlesik_ekle(p, "yazdir_metin", "boş", ["metin"]);
     yerlesik_ekle(p, "yazdir_isaretsiz_tam", "boş", ["dtam32"]);
     yerlesik_ekle(p, "yazdir_isaretsiz_tam64", "boş", ["dtam64"]);
@@ -11877,10 +11880,12 @@ işlev main() -> tam32 {
     // D-422'de 3 idi; T011 ve M004 kökleri kapandı). Yanlış-pozitif kalsaydı
     // bu kapı GEÇERLİ programları reddederdi.
     //
-    // Tanılar stdout'a YAZILMAZ: C onları stderr'e yazar, stdout'u BOŞ bırakır;
-    // self-host'ta stderr yazıcısı yok (yeni yerleşik = dil yüzeyi değişikliği,
-    // Mehmet'in kararı). Bu yüzden C ile gözlenebilir sözleşme —boş stdout +
-    // çıkış 1— korunur, tanı metni atlanır. Tanılar `--check` ile alınır.
+    // [D-450] Tanılar artık STDERR'e YAZILIR. D-424'te bu borç açıkça
+    // kaydedilmişti: "self-host'ta stderr yazıcısı yok (yeni yerleşik = dil
+    // yüzeyi değişikliği, Mehmet'in kararı)" — o karar verildi ve
+    // `yazdir_hata` yerleşiği eklendi. Böylece C ile gözlenebilir sözleşme
+    // tam eşdeğer: BOŞ stdout + tanı metni stderr'de + çıkış 1.
+    // stdout'a yazmak OLMAZ: `--llvm | clang` boru hattı tanıyı IR sanardı.
     eğer tip_atla == 0 {
         değişken pk: Ayr = ayr_olustur(kaynak);
         pk.hedef_mim = mim;
@@ -11888,7 +11893,18 @@ işlev main() -> tam32 {
         değişken kokk: tam32 = parse_program(&değişken pk);
         pk.giris_dizin = dizin_al(yol);
         kontrol_program(&değişken pk, kokk);
-        eğer dizi_boyut(pk.th_kod) > 0 { ver 1; }
+        eğer dizi_boyut(pk.th_kod) > 0 {
+            değişken hi: tam32 = 0;
+            iken hi < dizi_boyut(pk.th_kod) {
+                değişken sat: metin = metin_birlestir(dizi_al(pk.th_kod, hi), " ");
+                sat = metin_birlestir(sat, tam64_str(dizi_al(pk.th_sat, hi) olarak tam64));
+                sat = metin_birlestir(sat, " ");
+                sat = metin_birlestir(sat, tam64_str(dizi_al(pk.th_sut, hi) olarak tam64));
+                yazdir_hata(sat);
+                hi = hi + 1;
+            }
+            ver 1;
+        }
     }
     // --llvm (varsayılan)
     // D-399: çapraz-dosya modüller. Giriş `kullan` içeriyorsa modül kaynakları

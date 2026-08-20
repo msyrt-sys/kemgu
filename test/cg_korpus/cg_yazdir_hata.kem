@@ -1,0 +1,19 @@
+// [D-450] `yazdir_hata` — STDERR yazıcısı.
+//
+// Neden gerekli: derleyici çıktısı (IR) stdout'a, tanı metni stderr'e gitmeli.
+// Aynı akışa yazmak `--llvm | clang` boru hattını bozar (tanı IR sanılır).
+// D-424 bu borcu açıkça kaydetmişti: self-host `--llvm` tip kapısı tanıları
+// BASAMIYORDU çünkü stderr yazıcısı yoktu.
+//
+// Bu fikstür yalnız DERLENİP ÇALIŞTIĞINI ve iki derleyicide AYNI davrandığını
+// ölçer. stdout/stderr AYRIMININ kendisi zaten her codegen kapısı tarafından
+// örtük olarak korunuyor: self-host tanıyı stdout'a yazsaydı üretilen IR
+// bozulur ve `clang` tüm korpusta patlardı.
+// Exit: 42
+
+işlev main() -> tam32 {
+    yazdir_hata("cg_yazdir_hata: bu satir STDERR'e gitmeli");
+    // Aynı çalıştırmada stdout da kullanılabilmeli (akışlar bağımsız).
+    yazdir_metin("cg_yazdir_hata: bu satir STDOUT'a gitmeli");
+    ver 42;
+}

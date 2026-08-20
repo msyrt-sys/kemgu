@@ -946,6 +946,32 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-450 (KARAR 3): `yazdir_hata` stderr yerleşiği — D-424'ün borcu kapandı
+`kdl_hata_yazdir` runtime'da ZATEN vardı ama **hiçbir derleyicide yerleşik
+olarak açılmamıştı** → yazılacak yeni runtime mantığı yoktu, yalnız bağlantı.
+- **Ad `yazdir_hata` (ters değil):** self-host eşlemesi ÖNEK tabanlı
+  (`yazdir_` → `kdl_yazdir_`) → yeni kural gerekmez; ayrıca `hata` bir
+  ANAHTAR KELİME, ona bitişik ad seçmek gereksiz risk. Runtime'a
+  `kdl_yazdir_hata` eklendi (`kdl_yazdir_metin` aynası, akış stderr).
+- **stdout'a yazmak OLMAZ:** IR stdout'a, tanı stderr'e gitmeli; aynı akış
+  `--llvm | clang` boru hattını bozar. Bu invaryant **her codegen kapısı
+  tarafından örtük korunuyor** (tanı stdout'a gitse IR bozulur, clang patlar).
+- **D-424'ün borcu KAPANDI.** O kodun yorumu "stderr yazıcısı yok (… Mehmet'in
+  kararı)" diyordu. Artık:
+  `C: exit=1, stdout 0 bayt, stderr "hata[T002]…"` ·
+  `SELF: exit=1, stdout 0 bayt, stderr "T002 1 30"`.
+  Öncesinde self-host **hiçbir şey basmıyordu**. Biçim farkı kasıtlı: self-host
+  `--check` ile aynı kompakt biçimi kullanır.
+- Fikstür `cg_yazdir_hata.kem` → C=42, SELF=42; akışlar ikisinde de ayrı.
+  **Sabotaj S37** (C eşlemesini `kdl_yazdir_metin`e çevir) → stderr BOŞALDI,
+  stdout kirlendi ✅
+- Kapılar: `codegen_diff` 146/146 · `yapi_diff` 122/122 · `checker_diff`
+  150/150 · `ct_bariyer` 13/13 · `modul_codegen` 21/21.
+- **⚠ CRLF ÇAPASI SESSİZCE ISKALIYOR:** `tip_kontrol.c` yaması uygulanmadı
+  (dosya CRLF, çapa `\n`); `str.replace` eşleşme bulamayınca SESSİZCE hiçbir
+  şey yapar. `grep` ile doğrulanmasa eksik yerleşikle devam edecektim.
+  **Yamadan sonra sayıyı doğrula** — bu oturumda 4. tekrar.
+
 ### 🎯 D-449 (KARAR 1+2): `metin` üzerinde `==` artık İÇERİK karşılaştırıyor
 Mehmet'in kararı: iki seçenekten **(a) içerik karşılaştırması**. Belirleyici
 kanıt ölçümdü — `stdlib/dizi.kem`in generic aramaları (`icerir<T>`, `bul<T>`,
