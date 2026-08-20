@@ -946,6 +946,20 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### ✅ D-448: oracle değişiklikleri QEMU'da doğrulandı (D-442/D-446 sonrası)
+D-442 ve D-446 `src/llvm.c`ye dokundu ve **hiçbir host kapısı KEMGU-OS'un
+gerçekten BOOT ettiğini ölçmüyor** (OS hedefleri QEMU ister, `test_tumu`da
+yoklar — D-447'de bunun MEŞRU olduğu saptandı). Oracle'a dokunduktan sonra
+bunu elle doğrulamak şart:
+- `calistir_qemu_smoke` → EXIT 0, seri çıktı doğru (`Merhaba KEMGU`, `42`).
+- `calistir_kem_os_arm` → **EXIT 0, 24 faz** (MMU FAULT/ÇEVİRİ · TRAP · TIMER ·
+  PREEMPT · EL0 SYSCALL · İZOLASYON · UART RX · FS SYSCALL · SHELL · SPAWN ·
+  ADRES ALANI · ELF YÜKLE · W^X · DTB · DİSK/FS RW · NET/ARP · PING CANLI).
+- **Sonuç: oracle onarımları OS'u kırmadı.** ~140 QEMU hedefinin tamamını
+  `test_tumu`ya bağlamak koşum süresini saatlere çıkarır — bu bir **derleme
+  politikası** kararıdır (Mehmet). Ama **oracle'a (`src/llvm.c`) dokunan her
+  değişiklikten sonra en az bu ikisi elle koşulmalı.**
+
 ### 🎯 D-447: kapı envanteri denetimi — 5 kapı daha takıma bağlandı
 D-446'nın dersini ("kapı envanterini periyodik olarak `test_tumu`nun
 çağırdıklarıyla karşılaştır") AYNI TURDA uyguladım.
