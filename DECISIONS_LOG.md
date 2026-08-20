@@ -5,6 +5,58 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-446 [KRİTİK] — 🔴 `sabitsüre<T>` İMZASIZLIĞI KAYBEDİYORDU: SHA-256/ChaCha20 SESSİZCE YANLIŞTI
+
+`test_tumu`nun çağırdığı kapıları saydım. **`calistir_kripto_kosum` listede
+YOK** — tanımlı, `.PHONY`de kayıtlı, ama hiçbir hedeften çağrılmıyor. Elle
+koşturdum: **KIRMIZI.**
+```
+✅ KONTROL  — sabit tablolar          (kapı sağlam)
+❌ ChaCha20 quarter-round — RFC 8439 §2.1.1
+❌ SHA-256("abc")        — NIST FIPS 180-4 App. B.1
+```
+
+### Önce "ben mi kırdım?" diye ölçtüm
+Oturumda `src/llvm.c`ye dokunmuştum (D-442). D-438 tabanını ayrı bir worktree'ye
+çıkarıp koşturdum: **birebir aynı iki hata** → kusur ÖNCEDEN VARDI.
+
+### Kök — harness'ın kendi hipotezi doğru çıktı
+Harness başlığı yazıyordu: *"İmzasızlık kaybı `>>`yi `ashr`e çevirir ve
+SHA-256/ChaCha20 rotasyonları yüksek bit set olan girdilerde SESSİZCE yanlış
+sonuç verir. Tip kontrolü bunu göremez — yalnız koşum görebilir."*
+Bundle IR'ında **15 `ashr` / 2 `lshr`**. Ayrımcı probe (4 şekil):
+```
+dtam32 param            → lshr ✓      sabitsüre<dtam32> param  → ashr ✗
+dtam32 yerel            → lshr ✓      sabitsüre<dtam32> yerel  → ashr ✗
+```
+Yani kusur **tam olarak `sabitsüre<>` sarmalayıcısında.** `ast_tip_to_ir`
+sarmalayıcıyı ZATEN açıyordu (runtime'da T'dir, zero-overhead);
+`ast_tip_isaretsiz_mi` AÇMIYORDU → `DUGUM_TIP_BASIT` olmadığı için hemen `0`,
+yani **imzalı** sayılıyor. `stdlib/kripto` tamamen `sabitsüre<dtamN>` üzerine
+kurulu olduğundan tüm rotasyonlar bozuluyordu.
+
+### Onarım — iki derleyicide de tek satırlık açma
+- C (`src/llvm.c`): `ast_tip_isaretsiz_mi` `DUGUM_TIP_SABITSURE` sarmalayıcısını
+  soyar.
+- Self-host (`selfhost/codegen.kem`): `ll_isz` aynı soymayı yapar
+  (`TIP_SABITSURE` → çocuk). Self-host'ta da AYNI boşluk ölçüldü ve kapandı;
+  4/4 şekil iki tarafta da `lshr`.
+
+### Doğrulama
+`calistir_kripto_kosum`: **3/3 vektör GEÇTİ** (KONTROL + ChaCha20 QR +
+SHA-256("abc")). Kapı `test_tumu`ya BAĞLANDI — artık her koşumda ölçülüyor.
+**Sabotaj S33** (C'deki soymayı etkisizleştir) → kapı yeniden KIRMIZI, Error 1.
+
+### Ders
+**Var olan ama çağrılmayan kapı, olmayan kapıdan daha tehlikelidir** — varlığı
+"bu alan ölçülüyor" yanılsaması yaratır. D-445'te "yazmak/bağlamak/koşturmak
+üç ayrı iştir" demiştim; bu, aynı dersin **güvenlik** sonucu: kapı yazılmış,
+gerçek kusurlar bulmuş (kurulduğu gün 2 tane), sonra `test_tumu`ya
+bağlanmamış ve kripto sessizce bozulmuş.
+**Kapı envanterini periyodik olarak `test_tumu`nun çağırdıklarıyla karşılaştır.**
+
+---
+
 ## D-445 [ORTA] — bağlanan testler KOŞMUYORDU: kapı sabit exit 0 varsayıyordu
 
 D-441'de `dizi`nin `main`ini 62→99, `matematik`inkini 34→47 teste bağladım.

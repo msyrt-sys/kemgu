@@ -946,6 +946,29 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-446: `sabitsüre<T>` İMZASIZLIĞI KAYBEDİYORDU — SHA-256/ChaCha20 SESSİZCE YANLIŞ
+`test_tumu`nun çağırdığı kapıları saydım: **`calistir_kripto_kosum` YOK** —
+tanımlı, `.PHONY`de kayıtlı, ama hiçbir hedeften çağrılmıyor. Elle koşturdum:
+**KIRMIZI** (ChaCha20 QR ve SHA-256("abc") ikisi de).
+- **Önce "ben mi kırdım?" diye ölçtüm:** D-438 tabanını ayrı worktree'ye
+  çıkarıp koşturdum → birebir aynı iki hata, kusur ÖNCEDEN VARDI.
+- **Kök — harness'ın kendi hipotezi doğru çıktı.** Bundle IR'ında
+  **15 `ashr` / 2 `lshr`**. Ayrımcı probe:
+  `dtam32` param/yerel → **lshr ✓**, `sabitsüre<dtam32>` param/yerel → **ashr ✗**.
+  Kusur TAM OLARAK sarmalayıcıda: `ast_tip_to_ir` `sabitsüre<T>`yi ZATEN
+  açıyordu (runtime'da T, zero-overhead), **`ast_tip_isaretsiz_mi` AÇMIYORDU**
+  → `TIP_BASIT` olmadığı için 0 = imzalı. `stdlib/kripto` tamamen
+  `sabitsüre<dtamN>` üzerine kurulu → tüm rotasyonlar bozuktu.
+- **Onarım iki derleyicide de tek satırlık soyma:** C `ast_tip_isaretsiz_mi`,
+  self-host `ll_isz` (`TIP_SABITSURE` → çocuk). Self'te de AYNI boşluk vardı;
+  4/4 şekil artık iki tarafta `lshr`.
+- `calistir_kripto_kosum`: **3/3 vektör GEÇTİ**; kapı **`test_tumu`ya BAĞLANDI**.
+  **Sabotaj S33** → yeniden KIRMIZI, Error 1.
+- **DERS: VAR OLAN AMA ÇAĞRILMAYAN KAPI, OLMAYAN KAPIDAN DAHA TEHLİKELİDİR** —
+  varlığı "bu alan ölçülüyor" yanılsaması yaratır. D-445'in
+  "yazmak/bağlamak/koşturmak üç ayrı iştir" dersinin **güvenlik** sonucu.
+  **Kapı envanterini periyodik olarak `test_tumu`nun çağırdıklarıyla karşılaştır.**
+
 ### 🟡 D-445: bağlanan testler KOŞMUYORDU — kapı sabit exit 0 varsayıyordu
 D-441'de `dizi` main'ini 62→99, `matematik`inkini 34→47 teste bağladım ama
 **hiçbir kapı onları çalıştırmıyordu**: davranış döngüsü çıkışın **0** olmasını

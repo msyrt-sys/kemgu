@@ -2529,11 +2529,22 @@ işlev dtam_ad_mi(t: metin) -> tam32 {
       veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver 1; }
     ver 0;
 }
-// D-337: AST tip düğümü işaretsiz mi? (yalnız TIP_BASIT dtamN — C ile birebir)
+// D-337: AST tip düğümü işaretsiz mi? (TIP_BASIT dtamN — C ile birebir)
+// D-446: `sabitsüre<T>` SARMALAYICISI AÇILIR. `ll_tip` bu sarmalayıcıyı zaten
+// açıyordu (runtime'da T'dir, zero-overhead), bu yüklem açmıyordu → TIP_BASIT
+// olmadığı için hemen 0, yani İMZALI sayılıyordu. Sonuç: `>>` `lshr` yerine
+// `ashr` yayılıyor ve `stdlib/kripto` tamamen `sabitsüre<dtamN>` üzerine
+// kurulu olduğu için SHA-256/ChaCha20 rotasyonları yüksek bit set olan
+// girdilerde SESSİZCE YANLIŞ sonuç veriyordu. C ile birebir onarım.
 işlev ll_isz(p: &değişken Ayr, tip_idx: tam32) -> tam32 {
     eğer tip_idx < 0 { ver 0; }
-    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_BASIT") == yanlış { ver 0; }
-    ver dtam_ad_mi(dizi_al(p.a_deg, tip_idx));
+    değişken t: tam32 = tip_idx;
+    iken metin_esit(dizi_al(p.a_ad, t), "TIP_SABITSURE") {
+        eğer dizi_al(p.a_cs, t) < 1 { ver 0; }
+        t = dizi_al(p.cocuk, dizi_al(p.a_cb, t));
+    }
+    eğer metin_esit(dizi_al(p.a_ad, t), "TIP_BASIT") == yanlış { ver 0; }
+    ver dtam_ad_mi(dizi_al(p.a_deg, t));
 }
 // D-337: değişken/parametre işaretsiz mi? (cg_var_bul ile AYNI arama yönü/sınırı —
 // blok-kapsam gölgelemesinde tip ve imzasızlık AYNI slot'tan gelmeli).

@@ -1545,6 +1545,19 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
 
 /* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi? */
 static int ast_tip_isaretsiz_mi(const Dugum *tip_d) {
+    /* [D-446] `sabitsüre<T>` runtime'da T'dir (zero-overhead) — IMZASIZLIK da
+     * T'den gelir. `ast_tip_to_ir` bu sarmalayiciyi ZATEN aciyordu (yukarida),
+     * bu yuklem ACMIYORDU: `sabitsüre<dtam32>` DUGUM_TIP_BASIT olmadigi icin
+     * hemen 0 donuyor, yani IMZALI sayiliyordu. Sonuc: `>>` `lshr` yerine
+     * `ashr` yayiliyordu ve stdlib/kripto TAMAMEN `sabitsüre<dtamN>` uzerine
+     * kurulu oldugu icin SHA-256/ChaCha20 rotasyonlari yuksek bit set olan
+     * girdilerde SESSIZCE YANLIS sonuc veriyordu (bilinen-cevap kapisi
+     * olculdu: ChaCha20 QR ve SHA-256("abc") ikisi de KIRMIZI).
+     * Olcum (C oracle): dtam32 param -> lshr, sabitsüre<dtam32> param -> ashr;
+     * yerel degiskende de ayni. Yani kusur TAM OLARAK bu sarmalayicidaydi. */
+    while (tip_d && tip_d->tip == DUGUM_TIP_SABITSURE) {
+        tip_d = tip_d->veri.tip_sabitsure.ic_tip;
+    }
     if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
     return tip_d->veri.tip_basit.ad_uzunluk >= 4 &&
            memcmp(tip_d->veri.tip_basit.ad, "dtam", 4) == 0;
