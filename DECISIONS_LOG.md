@@ -5,6 +5,76 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-449 [YÜKSEK] — KARAR 1+2: `metin` üzerinde `==` İÇERİK karşılaştırır + opak dosya handle'ı
+
+Mehmet iki açık kararı verdi (D-440 ve D-443'te sunulmuştu). Sırayla uygulandı
+ve **ikisinin bağlı olduğu ancak uygulayınca ortaya çıktı.**
+
+### KARAR 1 — `==` içerik karşılaştırsın (reddetme DEĞİL)
+Belirleyici kanıt ölçümdü: `stdlib/dizi.kem`in generic aramaları
+(`icerir<T>`/`bul<T>`/`indeks_bul<T>`/`say<T>`/`benzersiz<T>`) `x == hedef`
+üzerine kurulu → **`Dizi<metin>` araması sessizce BOZUKTU** (ampirik:
+`icerir(d, "ab")` → BULAMADI). Seçenek (b) (`==`i `metin` üzerinde reddet) o
+şekilleri **yazılamaz** hâle getirirdi: constraint sistemi olmadığı için
+kullanıcının `T` özel-dalı yazma kaçışı yok. (a) hem sessiz yanlışı kapatır
+hem beş generic işlevi bedavaya onarır.
+
+**Mekanizma = `isaretsiz`in birebir aynası** — IR'ın sildiği bir KEMGU tip
+özelliği için yan kanal:
+- C: `IfadeSonuc.metin_mi`, `LlvmIsim.metin_mi`, `IslevKayit.donus_metin`,
+  `TipSubst.metin_mi`, `ast_tip_metin_mi`, `tip_metin_mi_subst`.
+- Self-host: `ifade_metin` yüklemi (`ifade_isz` aynası) + `cg_amet` /
+  `cg_aemet` / `fn_rmet` / `mono_smet` / `fs_sm` / `ll_met` / `ll_met_subst`.
+
+**DÖRT yolun hepsi gerekliydi** ve fikstür dördünü birden ölçer:
+yerel değişken · işlev parametresi · **generic çıplak-T ikamesi** ·
+**`için` döngü değişkeni** (`Dizi<T>` eleman metin-liği). İlk üçü çalışırken
+`dizi.kem` HÂLÂ bozuktu — eksik olan döngü değişkeniydi.
+
+**⚠ Yamayı yanlış yere koydum (bu oturumda 2. kez).** İki parametre-kayıt yolu
+var; lifted-lambda olanını yamamıştım. Tahminle değil **enstrümantasyonla**
+bulundu: "DBG param" satırı hiç basılmayınca yerin yanlış olduğu anlaşıldı.
+
+**⚠ Sıfır uyarı hedefi:** yeni alan 81 `IfadeSonuc` başlatıcısını eksik bıraktı
+(`-Wmissing-field-initializers`). Derleyicinin verdiği satır numaralarıyla
+mekanik yamandı; 4'ü dizgi içinde virgül taşıdığı için (`"{ ptr, ptr }"`)
+koruma tarafından ATLANDI ve elle düzeltildi — **koruma bozulmayı önledi.**
+
+### KARAR 2 — dosya handle'ı: `dosya_gecerli` / `dosya_gecersiz`
+**Karar 1, karar 2'yi ZORUNLU kıldı.** `==` içerik karşılaştırınca
+`handle_gecerli_mi` tamamen çöktü: `metin_esit(FILE*, "")` işaretçiyi C dizgisi
+gibi okuyor. Yani opak handle `metin` olarak kaldıkça geçerlilik sınaması
+YAZILAMAZ — D-443'te "tip tasarımı sorunu" diye kaydedilenin kanıtı.
+- İki yeni yerleşik: `dosya_gecersiz() -> metin` (**NULL** sentinel) ve
+  `dosya_gecerli(h) -> mantıksal` (runtime null-sorgusu). Runtime tarafı
+  `kdl_dosya_gecersiz` / `kdl_dosya_gecerli`.
+- **Geçersizliğin İKİ TEMSİLİ vardı** — `gecersiz_handle()`in döndürdüğü `""`
+  ve `dosya_ac`ın NULL'ı — ve her kod yolu yalnız BİRİNİ yakalıyordu. Bu,
+  D-443'teki regresyonun da kökeniydi. Tek temsile (NULL) indirgendi.
+- **D-443'ün bilinen-yanlış davranışı KAPANDI:** `ac("yok.txt")` artık `tamam`
+  değil **`hata`** dönüyor. D-441/D-443 deseniyle sabitlenen test tam da
+  tasarlandığı gibi kırmızıya dönüp bunu bildirdi; sonra gerçeğe göre
+  güncellendi. **Sabitlenmiş bilinen-yanlış testler işe yarıyor.**
+- **Kalan (bilinçli, belgelendi):** `kapat("")` gibi rastgele bir `metin`in
+  handle OLMADIĞI anlaşılamaz (boş dizgi geçerli bir işaretçidir). Bunu ancak
+  `tekkez<Dosya>` (madde 4) kapatır.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_metin_esitlik.kem` → **C=42, SELF=42**.
+- **Sabotaj S35** (C `metin`-== dalı) ve **S36** (self dalı) → ikisi de
+  **exit 106** (42 değil).
+- Kapılar: `codegen_diff` 143/143 · `checker_diff` 150/150 ·
+  `yapi_diff` 120/120 · `stdlib_check` 8 modül · `kripto_kosum` 3/3 ·
+  `llvm_test` 286/286 · `snapshot_test` 50/50.
+
+### Ders
+**İki "bağımsız" karar aslında bağlıydı ve bunu ancak UYGULAYINCA gördüm.**
+Öneri listesinde 1 ve 2'yi ayrı maddeler olarak sunmuştum; 1'i uygulamak 2'yi
+zorunlu kıldı çünkü aynı idiomu (`h != ""`) paylaşıyorlardı. Sıralı uygulama
+bunu ortaya çıkardı — hepsini birden planlamak çıkarmazdı.
+
+---
+
 ## D-447 [YÜKSEK] — kapı envanteri denetimi: 5 kapı daha takıma bağlandı
 
 D-446'nın dersini ("kapı envanterini periyodik olarak `test_tumu`nun

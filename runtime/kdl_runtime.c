@@ -1041,6 +1041,21 @@ const char *kdl_dosya_oku(const char *yol) {
 }
 
 /* dosya_var_mi — fopen kontrolu (stat yerine portable) */
+/* [D-449] Opak dosya handle'i GECERLI mi (NULL degil mi)?
+ * `handle != ""` idiomu ARTIK CALISMAZ: D-449 ile `metin` uzerindeki
+ * `==`/`!=` ICERIK karsilastirmasina dondu ve handle bir DIZGI DEGIL,
+ * `FILE*`tir — icerik olarak okunmasi anlamsizdir. Null sorgusu
+ * runtime'a ait; dilde ifade edilemez. */
+/* [D-449] GECERSIZ handle sabiti = NULL. Onceden `gecersiz_handle()`
+ * bos DIZGI ("") donuyordu ve gecerlilik sinamasi ISARETCI kimligiyle
+ * yapiliyordu (`h != ""`). `==` icerik karsilastirmasina donunce o idiom
+ * coktu; ayrica `dosya_ac` basarisizlikta NULL doner, yani GECERSIZLIGIN
+ * IKI FARKLI TEMSILI vardi ve her kod yolu yalnizca BIRINI yakaliyordu.
+ * Tek temsil: NULL. */
+void *kdl_dosya_gecersiz(void) { return NULL; }
+
+int kdl_dosya_gecerli(void *f) { return f != NULL ? 1 : 0; }
+
 int kdl_dosya_var_mi(const char *yol) {
     if (!yol) return 0;
     FILE *f = kdl_fopen_utf8(yol, "rb");

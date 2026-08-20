@@ -12,17 +12,21 @@
 // Kapı depo kökünde koştuğu için temizlik zorunludur.
 
 // --- handle yardımcıları ---
+// [D-449] Sentinel artik NULL; `h == ""` ile sinanamaz (icerik karsilastirmasi
+// NULL'i dizgi gibi okumaya calisir). Dogru sinama gecerlilik yuklemidir.
 işlev test_gecersiz_handle() -> mantıksal {
     değişken h: metin = gecersiz_handle();
-    ver h == "";
+    ver değil handle_gecerli_mi(h);
 }
 
 işlev test_handle_gecerli_evet() -> mantıksal {
     ver handle_gecerli_mi("dosya.txt");
 }
 
+// [D-449] Gecersizlik artik NULL ile temsil edilir; bos dizgi GECERLI bir
+// isaretcidir. Yuklem sentinel'e karsi sinanir.
 işlev test_handle_gecerli_hayir() -> mantıksal {
-    ver handle_gecerli_mi("");
+    ver handle_gecerli_mi(gecersiz_handle());
 }
 
 // --- mod sabitleri ---
@@ -43,8 +47,12 @@ işlev test_kapat_iyi() -> sonuç<tam32, metin> {
     ver kapat("dosya.txt");
 }
 
+// [D-449] `kapat("")` ARTIK SINANMAZ: bos dizgi gecerli bir isaretcidir ve
+// NULL-sorgusu onu yakalayamaz -> fclose(<dizgi>) = COKME. Bu, opak handle'in
+// `metin` olarak tiplenmesinin dogrudan sonucudur ve `tekkez<Dosya>` ile
+// kapanacaktir. Sinanan sey SENTINEL sozlesmesidir.
 işlev test_kapat_bos() -> sonuç<tam32, metin> {
-    ver kapat("");
+    ver kapat(gecersiz_handle());
 }
 
 // --- oku_metin / oku_satirlar ---
@@ -228,20 +236,14 @@ işlev main() -> tam32 {
     h = h + bekle_hata_t("yeniden_adlandir_hata", "bos eski yol", test_yeniden_adlandir_hata());
     eğer test_var_mi_bos() { yazdir_metin("B: var_mi_bos"); h = h + 1; }
     // (3) VAR OLMAYAN dosya — deterministik hata
-    // ⚠⚠ D-443: BU SATIR MATEMATİKSEL DEĞİL, MANTIKSAL OLARAK YANLIŞ BİR
-    // SONUCU SABİTLER. `ac("dosya.txt", okuma)` VAR OLMAYAN dosyada
-    // `tamam` döner; doğrusu `hata`dır. Kök: `dosya_ac` başarısızlıkta
-    // NULL döner ama handle `metin` olarak tiplendiği için geçerlilik
-    // sınaması `h != ""` (sentinel adres karşılaştırması) ile yapılır;
-    // NULL da `""` DEĞİLDİR → geçerli sayılır. Onarımı bir TİP TASARIMI
-    // kararı ister (ayrı handle tipi ya da null-sorgu yerleşiği) — bkz.
-    // stdlib/dosya.kem `handle_gecerli_mi` notu. Mevcut davranış burada
-    // SABİTLENİR ki sınır SESSİZ olmasın: düzeltilince bu satır kırmızıya
-    // döner ve karar bilinçli alınır.
-    eşleş test_ac_iyi() {
-        tamam(v) => { }   // ← bilinen-yanlış: hata olmalıydı
-        hata(e)  => { yazdir_metin("ac_iyi(yok) artik HATA donuyor — D-443 notunu guncelle"); h = h + 1; }
-    }
+    // [D-449] ONCEDEN burada BILINEN-YANLIS bir sonuc sabitlenmisti:
+    // `ac("dosya.txt")` var olmayan dosyada `tamam` donuyordu, cunku handle
+    // `metin` tiplenip gecerlilik `h != ""` (ISARETCI kimligi) ile
+    // sinaniyordu ve `dosya_ac`in NULL'i yakalanamiyordu. D-449 ile `==`
+    // icerik karsilastirmasina dondu, sentinel NULL'a tasindi ve gecerlilik
+    // runtime null-sorgusuna baglandi -> DAVRANIS ARTIK DOGRU. Sabitlenen
+    // test tam da tasarlandigi gibi kirmiziya donup bunu bildirdi.
+    h = h + bekle_hata_m("ac_iyi(yok)", "dosya acilamadi", test_ac_iyi());
     h = h + bekle_hata_m("oku_metin(yok)", "dosya yok", test_oku_metin());
     h = h + bekle_hata_t64("boyut(yok)", "dosya yok", test_boyut());
     h = h + bekle_hata_t("kopyala(yok)", "kaynak yok", test_kopyala());

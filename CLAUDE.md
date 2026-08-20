@@ -946,6 +946,53 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-449 (KARAR 1+2): `metin` üzerinde `==` artık İÇERİK karşılaştırıyor
+Mehmet'in kararı: iki seçenekten **(a) içerik karşılaştırması**. Belirleyici
+kanıt ölçümdü — `stdlib/dizi.kem`in generic aramaları (`icerir<T>`, `bul<T>`,
+`indeks_bul<T>`, `say<T>`, `benzersiz<T>`) `x == hedef` üzerine kurulu, yani
+**`Dizi<metin>` araması sessizce BOZUKTU**. Seçenek (b) (`==`i reddet) o
+şekilleri kullanıcının kaçış yolu olmadan YAZILAMAZ hâle getirirdi
+(constraint sistemi yok → `T` için özel dal yazılamıyor).
+- **Mekanizma `isaretsiz`in birebir aynası** (IR'ın sildiği bir KEMGU tip
+  özelliği için yan kanal): C'de `IfadeSonuc.metin_mi` + `LlvmIsim.metin_mi` +
+  `IslevKayit.donus_metin` + `TipSubst.metin_mi`; self-host'ta `ifade_metin`
+  yüklemi (`ifade_isz` aynası) + `cg_amet`/`cg_aemet`/`fn_rmet`/`mono_smet`.
+- **DÖRT yol da gerekliydi** (fikstür dördünü birden ölçer): yerel · parametre ·
+  **generic çıplak-T ikamesi** · **`için` döngü değişkeni** (`Dizi<T>` eleman
+  metin-liği). İlk üçü çalışırken `dizi.kem` hâlâ bozuktu — döngü değişkeni
+  eksikti.
+- **⚠ YAMAYI YANLIŞ YERE KOYDUM** (bu oturumda 2. kez): iki parametre-kayıt
+  yolu var; lifted-lambda olanını yamamıştım. Tahminle değil **enstrümantasyonla**
+  bulundu — "DBG param" hiç basılmayınca yer yanlış demekti.
+- **⚠ SIFIR UYARI:** yeni alan 81 `IfadeSonuc` başlatıcısını eksik bıraktı
+  (`-Wmissing-field-initializers`). Derleyicinin verdiği satır numaralarıyla
+  yamandı; 4'ü dizgi içinde virgül taşıdığı için (`"{ ptr, ptr }"`) koruma
+  tarafından atlandı ve elle düzeltildi — **koruma bozulmayı önledi.**
+
+### 🎯 D-449 (KARAR 2 devamı): dosya handle'ı — `dosya_gecerli` / `dosya_gecersiz`
+Madde 1, madde 2'yi **zorunlu** kıldı: `==` içerik karşılaştırınca
+`handle_gecerli_mi` tamamen çöktü (`metin_esit(FILE*, "")` işaretçiyi dizgi
+gibi okuyor). Yani opak handle `metin` kaldıkça geçerlilik sınaması
+YAZILAMAZ — D-443'te "tip tasarımı sorunu" diye kaydedilen şeyin kanıtı.
+- İki yeni yerleşik: `dosya_gecersiz() -> metin` (**NULL** sentinel) ve
+  `dosya_gecerli(h) -> mantıksal` (runtime null-sorgusu).
+- **Geçersizliğin İKİ temsili vardı** (`""` sentinel + `dosya_ac`'ın NULL'ı) ve
+  her kod yolu yalnız birini yakalıyordu. Tek temsile (NULL) indirgendi.
+- **D-443'ün bilinen-yanlış davranışı KAPANDI:** `ac("yok.txt")` artık `tamam`
+  değil **`hata`** dönüyor. D-441/D-443 deseniyle sabitlenen test tam da
+  tasarlandığı gibi kırmızıya dönüp bunu bildirdi — sonra gerçeğe göre
+  güncellendi.
+- **Kalan (bilinçli):** `kapat("")` gibi rastgele bir `metin`in handle olmadığı
+  ANLAŞILAMAZ (boş dizgi geçerli bir işaretçidir). Bu, `tekkez<Dosya>`nın
+  (madde 4) çözeceği şeydir; testte açıkça belgelendi.
+
+### Doğrulama
+Fikstür `test/cg_korpus/cg_metin_esitlik.kem` → **C=42, SELF=42**.
+**Sabotaj S35** (C dalı) ve **S36** (self dalı) → ikisi de **exit 106**.
+Kapılar: `codegen_diff` **143/143** · `checker_diff` **150/150** ·
+`yapi_diff` **120/120** · `stdlib_check` 8 modül · `kripto_kosum` 3/3 ·
+`llvm_test` 286/286 · `snapshot_test` 50/50.
+
 ### ✅ D-448: oracle değişiklikleri QEMU'da doğrulandı (D-442/D-446 sonrası)
 D-442 ve D-446 `src/llvm.c`ye dokundu ve **hiçbir host kapısı KEMGU-OS'un
 gerçekten BOOT ettiğini ölçmüyor** (OS hedefleri QEMU ister, `test_tumu`da

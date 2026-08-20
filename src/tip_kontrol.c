@@ -340,6 +340,20 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_kapat", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-449] dosya_gecersiz() -> metin — GECERSIZ handle sabiti (NULL). */
+    {
+        EKLE_BUILTIN("dosya_gecersiz", 14, NULL, 0, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* [D-449] dosya_gecerli(h: metin) -> mantıksal — opak handle null-sorgusu.
+     * `h != ""` ARTIK KULLANILAMAZ: `metin` uzerinde `!=` icerik karsilastirir
+     * (D-449) ve handle bir DIZGI DEGIL, `FILE*`tir. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_gecerli", 13, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
     /* dosya_var_mi(yol: metin) -> mantıksal */
     {
         TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));

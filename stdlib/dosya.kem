@@ -17,8 +17,14 @@
 // =============================================================================
 
 // Geçersiz handle göstergesi (boş metin).
+// ⚠ [D-449] GEÇERSİZ handle = NULL, boş dizgi DEĞİL.
+// Önceden `""` dönüyordu ve geçerlilik sınaması `h != ""` ile İŞARETÇİ
+// KİMLİĞİ üzerinden yapılıyordu. `metin` üzerinde `==`/`!=` içerik
+// karşılaştırmasına dönünce (D-449) o idiom çöktü. Ayrıca `dosya_ac`
+// başarısızlıkta NULL döndüğü için geçersizliğin İKİ AYRI TEMSİLİ vardı ve
+// her kod yolu yalnızca birini yakalıyordu (D-443'te ölçülmüştü).
 işlev gecersiz_handle() -> metin {
-    ver "";
+    ver dosya_gecersiz();
 }
 
 // Handle geçerli mi.
@@ -38,7 +44,7 @@ işlev gecersiz_handle() -> metin {
 // ikisi de DİL YÜZEYİ kararı (Mehmet). Buradaki dizgi hilesi, o karar
 // verilene kadar MEVCUT davranışı korur.
 işlev handle_gecerli_mi(h: metin) -> mantıksal {
-    ver h != "";
+    ver dosya_gecerli(h);
 }
 
 // =============================================================================
