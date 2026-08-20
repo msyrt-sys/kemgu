@@ -5,6 +5,77 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-451 [YÜKSEK] — KARAR 3: `Dizi<kesirli64>` / `Dizi<kesirli32>` onarıldı
+
+Önerilen sıralamada 3. madde. D-417'de "ölçüldü, oracle değişikliği ister"
+diye kaydedilmişti; onay geldi.
+
+### İddia ESKİMİŞTİ — ölçüm önce yapıldı
+CLAUDE.md `C exit 7, self exit 1` diyordu. **Bugün ikisi de LINK-RED.**
+Davranış sessizden gürültülüye kaymış (iyi yönde), ama kayıt eskimişti.
+Ayrıca belgelenenden **daha fazla kusur** vardı:
+```
+%6  = fadd double 0.0, 20.0
+call void @kdl_dizi_ekle_tam(ptr, ptr, i32 %6)   ← double, i32 imzasina
+%12 = fadd double 0.0, 0.0                        ← INDEKS de double olmus!
+%13 = call i32 @kdl_dizi_al_tam(ptr %11, i32 %12) ← i32 donus, double bekleniyor
+```
+
+### Kök 1 — erişimci soneği (belgelenen)
+Runtime dizi API'si tamsayı/işaretçi taşır. Eleman **bayt genişliği zaten
+doğruydu** (`kdl_dizi_olustur` eleman_byte = 8) — yanlış olan yalnızca
+**erişimci soneğiydi**. Bu yüzden bellek güvenliği sorunu YOKTU, değerler
+bozuluyordu.
+**Runtime değişikliği GEREKMEDİ:** `_tam64` 8 baytı `int64` taşır, yani
+BİTLER korunur. Derleyici yazarken `bitcast double->i64`, okurken tersini
+yapar. `kesirli32` için aynısı `_tam` + `i32` ile.
+
+### Kök 2 — İNDEKS tip sızıntısı (belgelenmemişti)
+`dizi_deger_arg = 1` hem `dizi_ekle(d,e)` (arg1 = ELEMAN) hem `dizi_al(d,i)`
+(arg1 = **İNDEKS**) için kullanılıyordu → eleman tipi indekse forward
+ediliyordu. Tamsayı elemanda MASKELİ (`int_donustur` i64→i32 çevirir), ama
+`Dizi<kesirli64>`de indeks literali `fadd double 0.0, 0.0` doğuyor ve
+`int_donustur` float→int çevirmediği için `i32 %<double>` yayılıyordu.
+`dizi_al` için `dizi_deger_arg = -1` (eleman-değeri argümanı YOK).
+
+### DÖRT AYRI KOD NOKTASI — biri diğerini onarmıyor
+Ölçümle bulundu: yalnız yerleşiği onarınca `xs[0]+xs[1]` **44**, `için`
+döngüsü **0** verdi. Hepsi ayrı emisyon yeri:
+`dizi_al` yerleşiği · `xs[i]` indeksleme · `için x: xs` · annotasyonlu
+literal dizi (`dizi_literal_heap_emit`ten AYRI ikinci bir nokta).
+
+### 🔴 SELF-HOST'TA KENDİ ONARIMIM BELLEK-GÜVENLİĞİ SINIFINA TAŞIYORDU
+Self-host eleman tipini **DİZİDEN değil DEĞERDEN** alıyordu (`et = p.son_tip`).
+`Dizi<kesirli32>` + `dizi_ekle(xs, 20.0)`: literal `double` doğar → taşıyıcı
+`i64` seçilir → **4 baytlık gözeye 8 BAYT yazılır = HEAP TAŞMASI**.
+Onarımdan ÖNCE `_tam` ile 4 bayt yazılıp yalnız DEĞER bozuluyordu; taşıyıcı
+mantığını diziden beslemeden eklemek kusuru **daha kötü** hâle getiriyordu.
+Ölçülüp düzeltildi: dizinin eleman tipi OTORİTER, gerekirse `fptrunc`.
+
+### Yan kazanç — ÖNCEDEN VAR OLAN self-host kusuru kapandı
+Aynı "dizi otoriter" kuralı tamsayıya uzatılınca `Dizi<tam64>` de düzeldi:
+`dizi_ekle(xs, 20)` literali i32 doğup `_tam` (4 bayt) ile yazılıyor ama
+`_tam64` (8 bayt) ile okunuyordu. **Ölçüldü: bu değişikliklerden ÖNCE de
+self 20 veriyordu, C 42** — yani benim regresyonum DEĞİL, C↔self parite
+boşluğuydu ve hiçbir korpusta o şekil yoktu.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_kesirli_dizi.kem` → **C=42, SELF=42**. Altı
+  ekseni birden ölçer: dizi_al · indeksleme · `için` · literal dizi ·
+  `dizi_yaz` · `kesirli32` (taşıyıcı i32) + TAMSAYI regresyon koruması.
+- **Sabotaj S38** (C taşıyıcısını kapat) → LINK-RED.
+  **Sabotaj S39** (self-host "dizi otoriter" kuralını kapat) → **exit 41**.
+- Kapılar: `codegen_diff` **146/146** · `yapi_diff` **122/122** ·
+  `checker_diff` **150/150** · `llvm_test` 286/286 · `snapshot_test` 50/50.
+
+### Ders
+**Bir onarım, kusuru daha kötü bir sınıfa taşıyabilir.** Taşıyıcı mantığını
+self-host'a eklemek "değer yanlış"ı "heap taşması"na çeviriyordu; yalnızca
+`kesirli32` şeklini ayrıca ölçtüğüm için yakalandı. Kesirli64 tek başına
+sınansaydı yeşil görünüp gönderilecekti.
+
+---
+
 ## D-450 [ORTA] — KARAR 3: `yazdir_hata` (stderr yerleşiği) + D-424'ün borcu kapandı
 
 Mehmet'in onayladığı sıralamada 2. madde. **İş beklenenden küçük çıktı:**

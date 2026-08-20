@@ -1366,11 +1366,18 @@ static const Dugum *dizi_tip_sar(LlvmGen *g, const Dugum *eleman_ast) {
  * (i64/ptr ayrı; i8/i16/i32 → tam varyantı, i32 genişlikte taşınır). dizi_al/
  * dizi_yaz built-in'leri ile `[]` lowering'i AYNI seçimi paylaşsın diye ortak. */
 static const char *kdl_al_fn(const char *et) {
+    /* [D-451] kesirli eleman: bit-desen TASIYICI tamsayida saklanir
+     * (double->i64, float->i32). Runtime bayt genisligi zaten dogru
+     * (kdl_dizi_olustur eleman_byte), yalniz ERISIMCI SONEKI yanlisti. */
+    if (et && strcmp(et, "double") == 0) return "kdl_dizi_al_tam64";
+    if (et && strcmp(et, "float") == 0) return "kdl_dizi_al_tam";
     if (et && strcmp(et, "i64") == 0) return "kdl_dizi_al_tam64";
     if (et && strcmp(et, "ptr") == 0) return "kdl_dizi_al_ptr";
     return "kdl_dizi_al_tam";
 }
 static const char *kdl_yaz_fn(const char *et) {
+    if (et && strcmp(et, "double") == 0) return "kdl_dizi_yaz_tam64";   /* [D-451] */
+    if (et && strcmp(et, "float") == 0) return "kdl_dizi_yaz_tam";      /* [D-451] */
     if (et && strcmp(et, "i64") == 0) return "kdl_dizi_yaz_tam64";
     if (et && strcmp(et, "ptr") == 0) return "kdl_dizi_yaz_ptr";
     return "kdl_dizi_yaz_tam";
@@ -1389,6 +1396,32 @@ static const char *kdl_al_donus_ir(const char *et) {
  * memcpy) yolundan gitmelidir. Fat value'yu skaler sanmak, 16 baytlik
  * agregati `kdl_dizi_ekle_tam(i32)` imzasina gecirirdi (olculdu: LLVM bunu
  * SESSIZCE kabul ediyordu → bozuk dizi). */
+/* [D-451] Kesirli dizi elemani icin TASIYICI tamsayi tipi; kesirli degilse NULL.
+ *
+ * Runtime'in dizi API'si tamsayi/isaretci tasir (kdl_dizi_*_tam / _tam64 / _ptr).
+ * `Dizi<kesirli64>` icin eleman BAYT GENISLIGI zaten dogruydu (kdl_dizi_olustur
+ * eleman_byte = 8) — yanlis olan yalnizca ERISIMCI SONEGIYDI: `double` deger
+ * `_tam` (i32) imzasina geciriliyordu. Bellek guvenligi sorunu YOKTU (genislik
+ * dogru), yalnizca degerler bozuluyordu; su anda ise LLVM-RED (olculdu).
+ *
+ * Cozum RUNTIME DEGISIKLIGI GEREKTIRMEZ: `_tam64` 8 bayti int64 olarak
+ * tasir, yani BITLER korunur. Derleyici yaz yolunda `bitcast double -> i64`,
+ * oku yolunda `bitcast i64 -> double` yapar. kesirli32 icin ayni sey i32 ile. */
+static const char *dizi_kesirli_tasiyici(const char *et) {
+    if (!et) return NULL;
+    if (strcmp(et, "double") == 0) return "i64";
+    if (strcmp(et, "float") == 0) return "i32";
+    return NULL;
+}
+
+/* [D-451] `%r = bitcast <src> %<reg> to <dst>` yay; yeni reg dondur. */
+static int dizi_bitcast_emit(LlvmGen *g, int reg,
+                             const char *src, const char *dst) {
+    int r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = bitcast %s %%%d to %s\n", r, src, reg, dst);
+    return r;
+}
+
 static int dizi_eleman_struct_mi(const char *et) {
     if (!et) return 0;
     if (et[0] == '%') return 1;
@@ -1506,12 +1539,25 @@ static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
             dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
             continue;
         }
-        int vr = int_donustur(g, v.reg, v.tip, elem_ir);
-        const char *fn = "kdl_dizi_ekle_tam";
-        if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-        else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        /* [D-451] kesirli eleman → tasiyici tamsayiya bitcast; erisimci
+         * sonegi tasiyiciya gore. `[1.5, 2.5]` literal dizisi de bu yoldan. */
+        const char *kt_lit = dizi_kesirli_tasiyici(elem_ir);
+        const char *ekle_tip = elem_ir;
+        int vr;
+        const char *fn;
+        if (kt_lit) {
+            vr = dizi_bitcast_emit(g, v.reg, elem_ir, kt_lit);
+            ekle_tip = kt_lit;
+            fn = (strcmp(kt_lit, "i64") == 0)
+                 ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+        } else {
+            vr = int_donustur(g, v.reg, v.tip, elem_ir);
+            fn = "kdl_dizi_ekle_tam";
+            if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+            else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        }
         fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                fn, dizi_rho, kdl_reg, elem_ir, vr);   /* F4.2b: aynı ρ */
+                fn, dizi_rho, kdl_reg, ekle_tip, vr);   /* F4.2b: aynı ρ */
     }
     g->beklenen_tip = eski_bt;
     IfadeSonuc s = { kdl_reg, "ptr", 0, 0};
@@ -3357,6 +3403,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         return dizi_struct_al_emit(g, v_load, idx_r, et);
                     }
                     const char *fn = "kdl_dizi_al_tam";
+                    /* [D-451] kesirli eleman: tasiyici tamsayi oku + bitcast.
+                     * Bu INDEKSLEME yolu (`xs[i]`), `dizi_al` yerlesiginden
+                     * AYRI bir kod noktasidir — ikisini de onarmak sart
+                     * (olculdu: yalniz yerlesigi onarinca `xs[0]+xs[1]` 44). */
+                    const char *kt_ix = dizi_kesirli_tasiyici(et);
+                    if (kt_ix) {
+                        fn = (strcmp(kt_ix, "i64") == 0)
+                             ? "kdl_dizi_al_tam64" : "kdl_dizi_al_tam";
+                        int raw = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                            raw, kt_ix, fn, v_load, idx_r);
+                        int fr = dizi_bitcast_emit(g, raw, kt_ix, et);
+                        IfadeSonuc sf = { fr, et, 0, 0};
+                        return sf;
+                    }
                     if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                     else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
                     int rr = yeni_reg(g);
@@ -4381,6 +4443,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (adi_uz == 8 && memcmp(adi, "dizi_yaz", 8) == 0) {
                     dizi_deger_arg = 2;  /* dizi_yaz: değer = arg[2] */
                 }
+                /* [D-451] `dizi_al(d, i)`de arg[1] INDEKStir, ELEMAN DEGERI
+                 * DEGIL. Eleman tipini oraya forward etmek indeksi eleman
+                 * tipinde degerlendirir. Tamsayi elemanda MASKELI kalir
+                 * (int_donustur i64->i32 cevirir) ama `Dizi<kesirli64>`de
+                 * indeks literali `fadd double 0.0, 0.0` olarak dogar ve
+                 * `int_donustur` float->int cevirmedigi icin `i32 %<double>`
+                 * yayilir = LLVM-RED. Olculdu. */
+                if (dizi_al_mi) {
+                    dizi_deger_arg = -1;   /* eleman-degeri argumani YOK */
+                }
                 if (dizi_built_in && n >= 1) {
                     const Dugum *arg0 = d->veri.cagri.argumanlar[0];
                     if (arg0 && arg0->tip == DUGUM_TANIMLAYICI) {
@@ -5121,12 +5193,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
                 const char *fn;
                 const char *cast_tip = et;
+                /* [D-451] kesirli eleman → bit-deseni tasiyici tamsayiya
+                 * bitcast et; erisimci sonegi tasiyiciya gore secilir. */
+                const char *kes_tas = dizi_kesirli_tasiyici(et);
+                int ev;
+                if (kes_tas) {
+                    fn = (strcmp(kes_tas, "i64") == 0)
+                         ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+                    cast_tip = kes_tas;
+                    ev = (n > 1) ? dizi_bitcast_emit(g, args[1].reg,
+                                                     et, kes_tas) : 0;
+                } else {
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                 else { fn = "kdl_dizi_ekle_tam"; cast_tip = "i32"; }
-                int ev = (n > 1) ? int_donustur(g, args[1].reg,
+                ev = (n > 1) ? int_donustur(g, args[1].reg,
                                                  args[1].tip, cast_tip)
                                  : 0;
+                }
                 fprintf(g->out,
                     "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
                     fn, g->rho_ref, args[0].reg, cast_tip, ev);   /* V2-F4.2a: ρ */
@@ -5149,6 +5233,20 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     return dizi_struct_al_emit(g, args[0].reg, idx_i32, et);
                 }
                 const char *fn;
+                /* [D-451] kesirli eleman → tasiyici tamsayi olarak OKU, sonra
+                 * bitcast ile kesirliye don. Bitler korunur. */
+                const char *kes_tas_al = dizi_kesirli_tasiyici(et);
+                if (kes_tas_al) {
+                    fn = (strcmp(kes_tas_al, "i64") == 0)
+                         ? "kdl_dizi_al_tam64" : "kdl_dizi_al_tam";
+                    int raw = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        raw, kes_tas_al, fn, args[0].reg, idx_i32);
+                    int fr = dizi_bitcast_emit(g, raw, kes_tas_al, et);
+                    IfadeSonuc sf = { fr, et, 0, 0};
+                    return sf;
+                }
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
                 else { fn = "kdl_dizi_al_tam"; et = "i32"; }
@@ -5179,11 +5277,21 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
                 const char *fn;
                 const char *cast_tip = et;
+                const char *kes_tas_y = dizi_kesirli_tasiyici(et);   /* [D-451] */
+                int ev;
+                if (kes_tas_y) {
+                    fn = (strcmp(kes_tas_y, "i64") == 0)
+                         ? "kdl_dizi_yaz_tam64" : "kdl_dizi_yaz_tam";
+                    cast_tip = kes_tas_y;
+                    ev = (n > 2) ? dizi_bitcast_emit(g, args[2].reg,
+                                                     et, kes_tas_y) : 0;
+                } else {
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_yaz_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_yaz_ptr";
                 else { fn = "kdl_dizi_yaz_tam"; cast_tip = "i32"; }
-                int ev = (n > 2) ? int_donustur(g, args[2].reg,
+                ev = (n > 2) ? int_donustur(g, args[2].reg,
                                                  args[2].tip, cast_tip) : 0;
+                }
                 fprintf(g->out,
                     "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
                     fn, args[0].reg, idx_i32, cast_tip, ev);
@@ -5585,13 +5693,30 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         dizi_struct_ekle_emit(g, kdl_reg, v.reg, eleman_tip);
                         continue;
                     }
-                    int vr = int_donustur(g, v.reg, v.tip, eleman_tip);
-                    const char *fn = "kdl_dizi_ekle_tam";
-                    if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-                    else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                    /* [D-451] kesirli eleman → tasiyici tamsayiya bitcast.
+                     * Bu, ANNOTASYONLU `değişken xs: Dizi<kesirli64> = [..]`
+                     * yolunun KENDI emisyon noktasi — `dizi_literal_heap_emit`
+                     * ile AYRI. Yalniz digerleri onarilinca literal dizi
+                     * `_tam`e `double` geciriyordu ve LLVM bunu SESSIZCE kabul
+                     * edip 0 uretiyordu (olculdu; D-295 sinifi). */
+                    const char *kt_l2 = dizi_kesirli_tasiyici(eleman_tip);
+                    const char *e_tip2 = eleman_tip;
+                    int vr;
+                    const char *fn;
+                    if (kt_l2) {
+                        vr = dizi_bitcast_emit(g, v.reg, eleman_tip, kt_l2);
+                        e_tip2 = kt_l2;
+                        fn = (strcmp(kt_l2, "i64") == 0)
+                             ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+                    } else {
+                        vr = int_donustur(g, v.reg, v.tip, eleman_tip);
+                        fn = "kdl_dizi_ekle_tam";
+                        if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+                        else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                    }
                     fprintf(g->out,
                         "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                        fn, dizi_rho, kdl_reg, eleman_tip, vr);   /* F4.2b: aynı ρ */
+                        fn, dizi_rho, kdl_reg, e_tip2, vr);   /* F4.2b: aynı ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */
@@ -6114,9 +6239,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
              * Diger dizi yollarindaki (INDEKS/dizi_al/ekle/yaz) by-value
              * yonlendirmesi VARDI; yalniz `için` dalinda eksikti. */
             int el_reg;
+            const char *kt_dg = dizi_kesirli_tasiyici(et);   /* [D-451] */
             if (dizi_eleman_struct_mi(et)) {
                 IfadeSonuc es = dizi_struct_al_emit(g, kdl_ptr, i_load, et);
                 el_reg = es.reg;
+            } else if (kt_dg) {
+                /* [D-451] kesirli eleman: tasiyici tamsayi oku + bitcast.
+                 * `için` dali INDEKS/dizi_al'dan AYRI bir kod noktasidir;
+                 * yalniz digerleri onarilinca bu dal `Dizi<kesirli64>`de
+                 * toplami 0 veriyordu (olculdu). */
+                fn_al = (strcmp(kt_dg, "i64") == 0)
+                        ? "kdl_dizi_al_tam64" : "kdl_dizi_al_tam";
+                int raw = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        raw, kt_dg, fn_al, kdl_ptr, i_load);
+                el_reg = dizi_bitcast_emit(g, raw, kt_dg, et);
             } else {
                 el_reg = yeni_reg(g);
                 fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",

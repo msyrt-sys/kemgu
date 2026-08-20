@@ -946,6 +946,40 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-451 (KARAR 3): `Dizi<kesirli64>` / `Dizi<kesirli32>` ONARILDI
+D-417'nin "ölçüldü ama oracle değişikliği ister" maddesi; onay geldi.
+- **⚠ İDDİA ESKİMİŞTİ:** CLAUDE.md `C exit 7, self exit 1` diyordu; **bugün
+  ikisi de LINK-RED** (sessizden gürültülüye kaymış). Ayrıca belgelenenden
+  FAZLA kusur vardı — **İNDEKS de `double`a dönüşüyordu**.
+- **Kök 1 (belgelenen): erişimci soneği.** Eleman BAYT GENİŞLİĞİ zaten
+  doğruydu (`eleman_byte`=8) → bellek güvenliği sorunu YOKTU, değer bozuktu.
+  **Runtime değişikliği GEREKMEDİ:** `_tam64` 8 baytı int64 taşır, BİTLER
+  korunur; derleyici `bitcast double↔i64` (kesirli32'de `_tam` + i32) yapar.
+- **Kök 2 (belgelenmemişti): İNDEKS tip sızıntısı.** `dizi_deger_arg = 1`
+  hem `dizi_ekle(d,e)` (arg1=ELEMAN) hem `dizi_al(d,i)` (arg1=**İNDEKS**)
+  için kullanılıyordu. Tamsayıda MASKELİ (`int_donustur` çevirir), kesirlide
+  indeks `fadd double 0.0, 0.0` doğuyor → `i32 %<double>`. `dizi_al` için
+  `dizi_deger_arg = -1`.
+- **DÖRT AYRI KOD NOKTASI**, biri diğerini onarmıyor (ölçüldü: yalnız
+  yerleşiği onarınca `xs[0]+xs[1]`=**44**, `için`=**0**): `dizi_al` yerleşiği ·
+  `xs[i]` indeksleme · `için x: xs` · annotasyonlu literal dizi.
+- **🔴 KENDİ ONARIMIM SELF-HOST'TA KUSURU DAHA KÖTÜ SINIFA TAŞIYORDU.**
+  Self-host eleman tipini DİZİDEN değil DEĞERDEN alıyor (`et = p.son_tip`);
+  `Dizi<kesirli32>` + `dizi_ekle(xs, 20.0)` → literal `double` → taşıyıcı
+  `i64` → **4 baytlık gözeye 8 BAYT = HEAP TAŞMASI**. Öncesinde yalnız DEĞER
+  bozuktu. Dizinin eleman tipi OTORİTER yapıldı (+ gerekirse `fptrunc`).
+  **Yalnızca `kesirli32` şeklini AYRICA ölçtüğüm için yakalandı.**
+- **Yan kazanç:** aynı kural tamsayıya uzatılınca **önceden var olan** bir
+  self-host kusuru kapandı — `Dizi<tam64>`de literal i32 doğup `_tam`
+  (4 bayt) yazılıyor, `_tam64` (8 bayt) okunuyordu. **Ölçüldü: bu
+  değişikliklerden ÖNCE de self 20 / C 42** → benim regresyonum DEĞİL.
+- Fikstür `cg_kesirli_dizi.kem` → C=42, SELF=42 (altı ekseni birden ölçer).
+  **Sabotaj S38** (C taşıyıcı) → LINK-RED · **S39** (self dizi-otoriter) → 41.
+- Kapılar: `codegen_diff` 146/146 · `yapi_diff` 122/122 · `checker_diff`
+  150/150 · `llvm_test` 286/286 · `snapshot_test` 50/50.
+- **DERS: bir onarım kusuru DAHA KÖTÜ bir sınıfa taşıyabilir.** Kesirli64 tek
+  başına sınansaydı yeşil görünüp gönderilecekti.
+
 ### 🎯 D-450 (KARAR 3): `yazdir_hata` stderr yerleşiği — D-424'ün borcu kapandı
 `kdl_hata_yazdir` runtime'da ZATEN vardı ama **hiçbir derleyicide yerleşik
 olarak açılmamıştı** → yazılacak yeni runtime mantığı yoktu, yalnız bağlantı.
@@ -1937,7 +1971,8 @@ tüm `runtime/*.kem` + `kem_os.kem` BİRLEŞTİRİLİYOR. Kapı o birimi ölçü
   çünkü `sed` `builtin_ret`in void dalını değiştirmişti, `islev_donus_tip`i
   değil. Doğru satırla 0/3. **Sessizlik önce sabotajı şüpheli kılar** (D-402).
 
-### 🔶 `Dizi<kesirli64>` — DE-RİSK EDİLDİ, ama ORACLE DEĞİŞİKLİĞİ İSTİYOR (D-417 sonrası)
+### ✅ (TARİHÎ) `Dizi<kesirli64>` — **D-451'DE ÇÖZÜLDÜ**. Aşağıdaki ölçümler ESKİMİŞTİR
+(o gün C exit 7 / self exit 1 idi; D-451 öncesinde ikisi de LINK-RED olmuştu).
 **Ölçüldü:** `değişken t = xs[0] + xs[1]` → C **exit 7**, self-host **exit 1**
 (doğrusu 42). İkisi de yanlış ve **farklı** biçimde yanlış — yani bu bir parite
 işi DEĞİL, gerçek bir dil kusuru.

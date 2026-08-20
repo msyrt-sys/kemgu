@@ -1,24 +1,59 @@
-// D-408: `Dizi<kesirli64>` literal EKLEME argümanı `i32` olarak basılıyordu →
-// `call void @kdl_dizi_ekle_tam(ptr, ptr, i32 1.5)` — LLVM REDDEDER
-// ("floating point constant invalid for type"). Self-host bu dosyayı hiç
-// derleyemiyordu.
+// [D-451] `Dizi<kesirli64>` / `Dizi<kesirli32>` — okuma VE yazma.
 //
-// ⚠ C'NİN DAVRANIŞI TAKLİT EDİLDİ, "DOĞRUSU" DEĞİL: C `_tam` sonekini korur ama
-// argümanı DOĞAL tipiyle geçer — `@kdl_dizi_ekle_tam(ptr, ptr, double %3)`,
-// kendi `declare ... i32`siyle UYUŞMAZ; LLVM sessizce kabul eder (D-295).
-// Parite hedefi C ile aynı davranış (D-388'deki `free` → i32 notuyla aynı).
+// Runtime dizi API'si tamsayı/işaretçi taşır. Eleman BAYT GENİŞLİĞİ zaten
+// doğruydu (`kdl_dizi_olustur` eleman_byte) — yanlış olan ERİŞİMCİ SONEĞİYDİ:
+// `double` değer `_tam` (i32) imzasına geçiriliyordu. Çözüm runtime
+// DEĞİŞİKLİĞİ İSTEMEZ: `_tam64` 8 baytı int64 taşır, BİTLER korunur; derleyici
+// yazarken `bitcast double->i64`, okurken tersini yapar.
 //
-// ⚠ SINIR — ELEMANI GERİ OKUMUYORUZ: `kdl_dizi_al_tam` i32 döndürdüğü için
-// `Dizi<kesirli64>` okuması C'DE DE bozuk (ölçüldü: geri okuyan bir sürüm C
-// oracle'da exit 2 verdi). Bu dosya YALNIZ oluşturma yolunu kapılar — C'nin
-// desteklemediği bir şeyi test etmek kapıyı değil probe'u sınar.
-// Kesirli dizi OKUMA yolu ayrı bir kusurdur ve HENÜZ AÇIKTIR (iki tarafta da).
-işlev kesirli_dizi_olustur() -> tam32 {
-    değişken xs: Dizi<kesirli64> = [1.5, 2.5];
-    ver dizi_boyut(xs);        // 2
+// DÖRT AYRI KOD NOKTASI sınanır — her biri ayrı emisyon yeri, biri onarılınca
+// diğerleri kendiliğinden düzelmiyor (ölçüldü):
+//   (a) `dizi_al` yerleşiği     (b) `xs[i]` indeksleme
+//   (c) `için x: xs` döngüsü    (d) annotasyonlu literal dizi `[1.5, 2.5]`
+// Ayrıca `dizi_yaz` (yerinde güncelleme) ve `kesirli32` (taşıyıcı i32) ve
+// TAMSAYI kontrolü (regresyon koruması) ölçülür.
+// Exit: 42
+
+işlev topla_indeks(xs: Dizi<kesirli64>) -> kesirli64 { ver xs[0] + xs[1]; }
+
+işlev topla_dongu(xs: Dizi<kesirli64>) -> kesirli64 {
+    değişken t: kesirli64 = 0.0;
+    için x: xs { t = t + x; }
+    ver t;
 }
 
 işlev main() -> tam32 {
-    eğer kesirli_dizi_olustur() != 2 { ver 1; }
-    ver 42;
+    değişken t: tam32 = 0;
+
+    // (a) dizi_al yerleşiği
+    değişken a: Dizi<kesirli64> = [];
+    dizi_ekle(a, 4.0); dizi_ekle(a, 6.0);
+    t = t + ((dizi_al(a, 0) + dizi_al(a, 1)) olarak tam32);        // 10
+
+    // (b) indeksleme + (c) döngü — aynı diziden
+    t = t + (topla_indeks(a) olarak tam32);                        // 20
+    t = t + (topla_dongu(a) olarak tam32);                         // 30
+
+    // (d) annotasyonlu LİTERAL dizi (kendi emisyon noktası)
+    değişken b: Dizi<kesirli64> = [2.5, 3.5];
+    t = t + ((b[0] + b[1]) olarak tam32);                          // 36
+
+    // dizi_yaz — yerinde güncelleme
+    dizi_yaz(a, 0, 1.0); dizi_yaz(a, 1, 2.0);
+    t = t + ((dizi_al(a, 0) + dizi_al(a, 1)) olarak tam32);        // 39
+
+    // kesirli32 — TAŞIYICI i32 (double DEĞİL). Göze 4 bayt; 8 bayt yazmak
+    // heap taşması olurdu, o yüzden eleman tipi DİZİDEN alınmalı.
+    değişken c: Dizi<kesirli32> = [];
+    dizi_ekle(c, 1.0); dizi_ekle(c, 1.0);
+    t = t + ((dizi_al(c, 0) + dizi_al(c, 1)) olarak tam32);        // 41
+
+    // TAMSAYI kontrolü — kesirli yol tamsayıyı BOZMAMALI. Ayrıca literal
+    // genişliği diziden gelmeli (`tam64` gözeye i32 yazıp i64 okumak
+    // yazma/okuma ayrışmasıydı; self-host'ta ölçüldü).
+    değişken d: Dizi<tam64> = [];
+    dizi_ekle(d, 1); dizi_ekle(d, 0);
+    t = t + ((dizi_al(d, 0) + dizi_al(d, 1)) olarak tam32);        // 42
+
+    ver t;
 }

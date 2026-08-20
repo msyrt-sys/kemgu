@@ -3394,7 +3394,26 @@ işlev dizi_eleman_byte(elem: metin) -> metin {
     ver "4";
 }
 // CG8: değer tipi → kdl_dizi_ekle_* sonek (tam/tam64/ptr).
+// [D-451] KESİRLİ eleman → TAŞIYICI tamsayı tipi ("i64"/"i32"); değilse "".
+// Runtime dizi API'si tamsayı/işaretçi taşır. `Dizi<kesirli64>`de eleman BAYT
+// GENİŞLİĞİ zaten doğruydu (eleman_byte=8) — yanlış olan ERİŞİMCİ SONEĞİYDİ.
+// Çözüm runtime değişikliği İSTEMEZ: `_tam64` 8 baytı int64 taşır, BİTLER
+// korunur; derleyici yazarken `bitcast double->i64`, okurken tersini yapar.
+işlev kes_tasiyici(et: metin) -> metin {
+    eğer metin_esit(et, "double") { ver "i64"; }
+    eğer metin_esit(et, "float") { ver "i32"; }
+    ver "";
+}
+// [D-451] `%r = bitcast <src> <op> to <dst>` yay; yeni reg döner.
+işlev bitcast_uret(p: &değişken Ayr, op: metin, src: metin, dst: metin) -> metin {
+    değişken r: metin = reg_str(yeni_reg(p));
+    yaz_str("  "); yaz_str(r); yaz_str(" = bitcast "); yaz_str(src);
+    yaz_str(" "); yaz_str(op); yaz_str(" to "); yaz_str(dst); yb(10);
+    ver r;
+}
 işlev dizi_ekle_sonek(et: metin) -> metin {
+    eğer metin_esit(et, "double") { ver "tam64"; }   // [D-451] taşıyıcı i64
+    eğer metin_esit(et, "float") { ver "tam"; }      // [D-451] taşıyıcı i32
     eğer metin_esit(et, "i64") { ver "tam64"; }
     eğer metin_esit(et, "ptr") { ver "ptr"; }
     ver "tam";
@@ -3410,17 +3429,26 @@ işlev dizi_arg_tip(et: metin) -> metin {
     // LLVM tarafından REDDEDİLİYORDU ("floating point constant invalid for
     // type"). Burada C'nin DAVRANIŞI taklit edilir, "doğrusu" değil — parite
     // hedefi bu (D-388'deki `free` → i32 notuyla aynı gerekçe).
-    eğer metin_esit(et, "double") { ver "double"; }
-    eğer metin_esit(et, "float") { ver "float"; }
+    // [D-451] ARTIK TAŞIYICI TİPİ. D-408'de C'nin BOZUK davranışı bilerek
+    // taklit ediliyordu ("C'nin DAVRANIŞI taklit edilir, doğrusu değil");
+    // C onarıldı (bitcast + doğru sonek), self-host da izliyor.
+    eğer metin_esit(et, "double") { ver "i64"; }
+    eğer metin_esit(et, "float") { ver "i32"; }
     ver "i32";
 }
 // CG8: eleman tipi → kdl_dizi_al_* sonek + dönüş tipi.
 işlev dizi_al_sonek(elem: metin) -> metin {
+    eğer metin_esit(elem, "double") { ver "tam64"; }   // [D-451] taşıyıcı
+    eğer metin_esit(elem, "float") { ver "tam"; }      // [D-451] taşıyıcı
     eğer metin_esit(elem, "ptr") { ver "ptr"; }
     eğer metin_esit(elem, "i64") { ver "tam64"; }
     ver "tam";
 }
+// [D-451] Çağrının HAM dönüş tipi = TAŞIYICI. Kesirli elemanda çağrı yeri
+// sonucu `bitcast` ile gerçek tipe (double/float) çevirmeli.
 işlev dizi_al_rettip(elem: metin) -> metin {
+    eğer metin_esit(elem, "double") { ver "i64"; }
+    eğer metin_esit(elem, "float") { ver "i32"; }
     eğer metin_esit(elem, "ptr") { ver "ptr"; }
     eğer metin_esit(elem, "i64") { ver "i64"; }
     ver "i32";
@@ -4880,12 +4908,47 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         eğer metin_esit(fad, "dizi_ekle") {
             değişken d2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            // [D-451] DİZİNİN eleman tipi OTORİTERDİR. Eleman tipini DEĞERDEN
+            // almak `Dizi<kesirli32>`de ölümcül: `dizi_ekle(xs, 20.0)` literali
+            // `double` doğar, taşıyıcı i64 seçilir ve 4 baytlık gözeye 8 BAYT
+            // yazılır = HEAP TAŞMASI. (Onarımdan önce `_tam` ile 4 bayt yazılıp
+            // yalnız DEĞER bozuluyordu; taşıyıcı mantığını diziden beslemeden
+            // eklemek kusuru bellek-güvenliği sınıfına taşıyordu — ölçüldü.)
+            değişken dizi_elem: metin = p.son_elem;
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken et: metin = p.son_tip;
+            eğer metin_uzunluk(dizi_elem) > 0 {
+                eğer metin_esit(dizi_elem, et) == yanlış {
+                    // Kesirli daraltma: double literal → float göze.
+                    eğer metin_esit(et, "double") ve metin_esit(dizi_elem, "float") {
+                        değişken ft: metin = reg_str(yeni_reg(p));
+                        yaz_str("  "); yaz_str(ft); yaz_str(" = fptrunc double ");
+                        yaz_str(e); yaz_str(" to float"); yb(10);
+                        e = ft;
+                        et = "float";
+                    }
+                    // [D-451] TAMSAYI genişliği de diziden gelmeli. ÖNCEDEN VAR
+                    // OLAN kusur (ölçüldü: bu değişikliklerden ÖNCE de SELF
+                    // `Dizi<tam64>` toplamını 20 veriyordu, C 42): literal `20`
+                    // i32 doğuyor, `_tam` (4 bayt) ile yazılıyor ama okuma
+                    // `_tam64` (8 bayt) — yazma/okuma genişliği ayrışıyor.
+                    değilse {
+                        eğer int_ll_mi(dizi_elem) ve int_ll_mi(et) {
+                            p.son_tip = et;
+                            e = int_uydur(p, e, dizi_elem, ifade_isz(p, dizi_al(p.cocuk, cb + 2)));
+                            et = dizi_elem;
+                        }
+                    }
+                }
+            }
             eğer dizi_eleman_yapi_mi(et) {   // D-342: by-value eleman
                 dizi_yapi_ekle_emit(p, p.rho_ref, d2, et, e);
             }
             değilse {
+                // [D-451] kesirli eleman -> tasiyici tamsayiya bitcast (bitler korunur).
+                eğer metin_uzunluk(kes_tasiyici(et)) > 0 {
+                    e = bitcast_uret(p, e, et, kes_tasiyici(et));
+                }
                 yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
                 yaz_str(p.rho_ref); yaz_str(", ptr ");   // V2-F4.2a: ρ
                 yaz_str(d2); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
@@ -4902,6 +4965,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 dizi_yapi_yaz_emit(p, dy, iy, vty, vy);
             }
             değilse {
+                // [D-451] kesirli eleman -> tasiyici tamsayiya bitcast (bitler korunur).
+                eğer metin_uzunluk(kes_tasiyici(vty)) > 0 {
+                    vy = bitcast_uret(p, vy, vty, kes_tasiyici(vty));
+                }
                 yaz_str("  call void @kdl_dizi_yaz_"); yaz_str(dizi_ekle_sonek(vty)); yaz_str("(ptr ");
                 yaz_str(dy); yaz_str(", i32 "); yaz_str(iy); yaz_str(", "); yaz_str(dizi_arg_tip(vty));
                 yaz_str(" "); yaz_str(vy); yaz_str(")"); yb(10);
@@ -4928,6 +4995,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // D-438: sonucun ELEMAN tipi = arg0-un elemaninin elemani.
             // Bu olmadan ic ice `dizi_al(dizi_al(d,0),0)` i32-e duser -> SEGFAULT.
             p.son_tip = dizi_al_rettip(elem); p.son_elem = elem2; p.son_elem2 = ""; p.son_ref = "";
+            // [D-451] kesirli eleman: TAŞIYICI okundu → gerçek tipe bitcast.
+            eğer metin_uzunluk(kes_tasiyici(elem)) > 0 {
+                değişken fr3: metin = bitcast_uret(p, rs3, kes_tasiyici(elem), elem);
+                p.son_tip = elem;
+                ver fr3;
+            }
             ver rs3;
         }
         // D-322: KAPANIŞ ÇAĞRISI — hedef, fat value { fnptr, envptr } tutan yerel
@@ -5453,6 +5526,10 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 i = i + 1;
             }
             değilse {
+                // [D-451] kesirli eleman -> tasiyici tamsayiya bitcast (bitler korunur).
+                eğer metin_uzunluk(kes_tasiyici(et)) > 0 {
+                    e = bitcast_uret(p, e, et, kes_tasiyici(et));
+                }
                 yaz_str("  call void @kdl_dizi_ekle_"); yaz_str(dizi_ekle_sonek(et)); yaz_str("(ptr ");
                 yaz_str(drho); yaz_str(", ptr ");   // V2-F4.2b: aynı yönlendirilmiş ρ
                 yaz_str(dr); yaz_str(", "); yaz_str(dizi_arg_tip(et)); yaz_str(" "); yaz_str(e); yaz_str(")"); yb(10);
@@ -5512,6 +5589,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         yaz_str(" @kdl_dizi_al_"); yaz_str(dizi_al_sonek(elem)); yaz_str("(ptr "); yaz_str(arr);
         yaz_str(", i32 "); yaz_str(i2); yaz_str(")"); yb(10);
         p.son_tip = dizi_al_rettip(elem); p.son_elem = ""; p.son_ref = "";
+        // [D-451] kesirli eleman: TAŞIYICI okundu → gerçek tipe bitcast.
+        eğer metin_uzunluk(kes_tasiyici(elem)) > 0 {
+            değişken frx: metin = bitcast_uret(p, rs, kes_tasiyici(elem), elem);
+            p.son_tip = elem;
+            ver frx;
+        }
         ver rs;
     }
     // D-322: GENEL KAPANIŞ. `|params| gövde` → fat value { @lambda_N, env }.
@@ -5888,6 +5971,12 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             yaz_str("  "); yaz_str(elr); yaz_str(" = call "); yaz_str(dizi_al_rettip(et));
             yaz_str(" @kdl_dizi_al_"); yaz_str(dizi_al_sonek(et)); yaz_str("(ptr "); yaz_str(kp);
             yaz_str(", i32 "); yaz_str(il); yaz_str(")"); yb(10);
+            // [D-451] kesirli eleman: TAŞIYICI okundu → gerçek tipe bitcast.
+            // `için` dalı INDEKS/`dizi_al`dan AYRI kod noktasıdır; C'de yalnız
+            // diğerleri onarılınca `Dizi<kesirli64>` toplamı 0 veriyordu.
+            eğer metin_uzunluk(kes_tasiyici(et)) > 0 {
+                elr = bitcast_uret(p, elr, kes_tasiyici(et), et);
+            }
         }
         yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(elr); yaz_str(", ptr "); yaz_str(xa); yb(10);
         // F4.3 a2: en-dış döngü (dongu_d 0→1) → gövde-girişinde ρ_iter yarat (per-iterasyon).
@@ -6354,6 +6443,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer dizi_eleman_yapi_mi(vty2) {   // D-342: by-value eleman
                 dizi_yapi_yaz_emit(p, taban, iy2, vty2, vy2);
                 ver 0;
+            }
+            // [D-451] kesirli eleman -> tasiyici tamsayiya bitcast (bitler korunur).
+            eğer metin_uzunluk(kes_tasiyici(vty2)) > 0 {
+                vy2 = bitcast_uret(p, vy2, vty2, kes_tasiyici(vty2));
             }
             yaz_str("  call void @kdl_dizi_yaz_"); yaz_str(dizi_ekle_sonek(vty2)); yaz_str("(ptr ");
             yaz_str(taban); yaz_str(", i32 "); yaz_str(iy2); yaz_str(", "); yaz_str(dizi_arg_tip(vty2));
