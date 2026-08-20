@@ -5,6 +5,55 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-447 [YÜKSEK] — kapı envanteri denetimi: 5 kapı daha takıma bağlandı
+
+D-446'nın dersini ("kapı envanterini periyodik olarak `test_tumu`nun
+çağırdıklarıyla karşılaştır") HEMEN uyguladım — yazıp bırakmak yerine.
+
+### Ölçüm
+`Makefile`de **204** `calistir_*` hedefi tanımlı, `test_tumu` **54** tanesini
+çağırıyor. Kalan 150'nin ezici çoğunluğu `_arm` / `_x86` / `_bare_metal` /
+QEMU hedefleri — host'ta koşamazlar, dışarıda olmaları MEŞRU. Bu gürültü
+elenince geriye **9 host-koşabilir aday** kaldı; ikisi belgeli biçimde kapı
+değil (`*_bootstrap` oran raporlar), biri zaten geçişli koşuyor
+(`kripto_check`, `stdlib_check`in ön koşulu).
+
+### Bağlanan 5 kapı
+| kapı | sonuç |
+|---|---|
+| `parser_diff` | 13/13 — **CLAUDE.md'nin güncel 11-kapı listesinde YAZILI ama takımda değildi** |
+| `lexer_diff` | 22/22 |
+| `asan_matris` | 12/12 |
+| `arm64_test` | ARM64 cross-compile doğrulaması |
+| `asan_denetim` | 137 PASS (aşağıya bak) |
+
+`parser_diff`in durumu özellikle dikkat çekici: belgede kapı olarak sayılıyor,
+sayısı bile yazılı (13/13), ama hiçbir toplu koşumda ölçülmüyordu. **Belgede
+"kapı" yazması, koştuğu anlamına gelmiyor.**
+
+### `asan_denetim` KIRMIZIYDI — ama kusur değil
+FAIL=2: `kem_mmio_ham` ve `kem_pointer`, host'ta **eşlenmemiş MMIO adresi**
+(`0x0a000000` — QEMU virt) okuyor; ASan haklı olarak access-violation basıyor.
+Bu, D-395'te ZATEN ölçülmüş meşru sınıf: *"C DE segfault ediyor, self-host
+BİREBİR aynı → parite doğru, kusur değil"*. İkisi de bare-metal keşif dosyası
+ve host'ta çalışamaz; doğru koşum yeri QEMU hedefleri. Betiğin mevcut
+ALLOWLIST mekanizmasına gerekçesiyle eklendi → **PASS=137 FAIL=0 ALLOW=4**.
+- Muafiyet **kabul edilebilirliği genişletmiyor** (D-421 kuralı): "bu program
+  geçerli" demiyor, "bu dosya host'ta koşamaz" diyor.
+
+### Doğrulama
+**Sabotaj S34** — `selfhost/parser.kem`de `"TANIMLAYICI"` → `"TANIMLAYICI_S34"`:
+`parser_diff` **13/13 → 0/13**, Error 1. Kapının gerçekten koştuğu ve ölçtüğü
+böyle kanıtlandı.
+`test_tumu` artık **59 kapı** çağırıyor (54'ten).
+
+### Ders
+D-446'da dersi yazdım, D-447'de UYGULADIM ve **beş kapı daha** ortaya çıktı.
+Bu oturumda "dersi yazmak onu uygulamaya yetmiyor" hatasını (D-427'de kendi
+kaydettiğim) tekrarlamamak için denetimi aynı turda yaptım.
+
+---
+
 ## D-446 [KRİTİK] — 🔴 `sabitsüre<T>` İMZASIZLIĞI KAYBEDİYORDU: SHA-256/ChaCha20 SESSİZCE YANLIŞTI
 
 `test_tumu`nun çağırdığı kapıları saydım. **`calistir_kripto_kosum` listede

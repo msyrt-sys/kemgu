@@ -28,7 +28,13 @@ mkdir -p "$TMP"
 #     allowlist'te kalır (güvensiz-eşi).
 #   Sınıf B (lambda/closure) KAPANDI (D-071): karma temsil (yakalamasız→bare fn-ptr,
 #     yakalamalı→closure). 04_islev/10_lambda/25_closure_capture/42_lambda_hesap artık PASS.
-ALLOWLIST="35_binary_search 40_dizi_islemler"
+#   [D-447] BARE-METAL MMIO — kusur DEĞİL, ortam sınırı. `kem_mmio_ham` ve
+#     `kem_pointer` host'ta EŞLENMEMİŞ MMIO adresi (0x0a000000 — QEMU virt)
+#     okur; ASan haklı olarak access-violation basar. D-395'te ölçülmüştü:
+#     "C DE segfault ediyor, self-host BİREBİR aynı → parite doğru, kusur
+#     değil". Bu iki dosya bare-metal keşif dosyasıdır ve host'ta ÇALIŞAMAZ;
+#     doğru koşum yeri QEMU hedefleridir (`calistir_kem_pointer_arm` vb.).
+ALLOWLIST="35_binary_search 40_dizi_islemler kem_mmio_ham kem_pointer"
 
 pass=0; fail=0; skip=0; allow=0
 for f in test/ornekler/*.kem test/snapshots/*.kem; do

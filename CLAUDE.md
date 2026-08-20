@@ -946,6 +946,27 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-447: kapı envanteri denetimi — 5 kapı daha takıma bağlandı
+D-446'nın dersini ("kapı envanterini periyodik olarak `test_tumu`nun
+çağırdıklarıyla karşılaştır") AYNI TURDA uyguladım.
+- **Ölçüm:** 204 `calistir_*` hedefi tanımlı, `test_tumu` 54'ünü çağırıyor.
+  Kalan 150'nin çoğu `_arm`/`_x86`/`_bare_metal`/QEMU — host'ta koşamaz,
+  dışarıda olmaları MEŞRU. Geriye **9 host-koşabilir aday**; 2'si belgeli
+  biçimde kapı değil (`*_bootstrap` oran raporlar), 1'i geçişli koşuyor.
+- **Bağlanan 5:** `parser_diff` 13/13 · `lexer_diff` 22/22 ·
+  `asan_matris` 12/12 · `arm64_test` · `asan_denetim` 137 PASS.
+  **`parser_diff` CLAUDE.md'nin güncel 11-kapı listesinde YAZILIYDI ama hiçbir
+  toplu koşumda ölçülmüyordu** — belgede "kapı" yazması koştuğu anlamına
+  gelmiyor.
+- **`asan_denetim` KIRMIZIYDI ama kusur değil:** `kem_mmio_ham`/`kem_pointer`
+  host'ta eşlenmemiş MMIO (`0x0a000000`) okuyor. D-395'te ölçülmüş meşru sınıf
+  ("C DE segfault ediyor, parite doğru"). ALLOWLIST'e gerekçesiyle eklendi →
+  PASS=137 FAIL=0. Muafiyet kabul edilebilirliği GENİŞLETMİYOR (D-421): "bu
+  dosya host'ta koşamaz" diyor, "bu program geçerli" demiyor.
+- **Sabotaj S34** (`selfhost/parser.kem`: `"TANIMLAYICI"` → `"TANIMLAYICI_S34"`)
+  → `parser_diff` **13/13 → 0/13**, Error 1 ✅
+- `test_tumu` artık **59 kapı** çağırıyor.
+
 ### 🔴 D-446: `sabitsüre<T>` İMZASIZLIĞI KAYBEDİYORDU — SHA-256/ChaCha20 SESSİZCE YANLIŞ
 `test_tumu`nun çağırdığı kapıları saydım: **`calistir_kripto_kosum` YOK** —
 tanımlı, `.PHONY`de kayıtlı, ama hiçbir hedeften çağrılmıyor. Elle koşturdum:
