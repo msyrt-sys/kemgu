@@ -63,7 +63,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_check_genis kemgu_self calistir_self_driver bench test_tumu
+.PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_check_genis calistir_qemu_cekirdek kemgu_self calistir_self_driver bench test_tumu
 .PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal bench test_tumu
 
 # === Ana hedef ===
@@ -566,6 +566,42 @@ calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # D-428: KAPISIZ KALAN yüzeylerde `--check` paritesi. Dizin sayımı yapılınca
 # `test/snapshots` (82 dosya) başta olmak üzere ALTI yüzeyin daha kapısız olduğu
 # görüldü. Elle taranan ölçüm eskir; kapı eskimez (D-427'nin dersi).
+
+# =============================================================================
+# [D-453] QEMU CEKIRDEK KAPISI — oracle degisikliklerinin bare-metal kanidi
+# =============================================================================
+#
+# NEDEN: ~128 QEMU hedefinin HICBIRI test_tumu'da degil ve bu MESRUDUR (D-447'de
+# olculdu: host'ta kosamazlar). Ama bunun bir bedeli var — D-448'de saptandi:
+# `src/llvm.c`ye dokunan bir degisiklik KEMGU-OS'u kirsa HICBIR HOST KAPISI
+# GORMEZ. D-448 o gun iki hedefi ELLE kosturmustu; elle kosturulan olcum kapi
+# DEGILDIR (D-395'in dersi).
+#
+# NEDEN TAM SUPURME DEGIL: 128 hedefin tamami kosum suresini saatlere cikarir
+# ve o zaman kimse calistirmaz — bugunkunden daha kotu olur. Bu kapi BES
+# TEMSILCI kosar; ~83 saniye (olculdu).
+#
+# SECIM GEREKCESI (her biri AYRI bir riski kapsar, hepsi SELF-HOST uretimli
+# oldugu icin IKI derleyicinin bare-metal uzlasmasini da olcerler):
+#   qemu_smoke            asgari bare-metal boot (en hizli saglik sinyali)
+#   kem_os_arm            24 fazli entegre OS (en genis yuzey)
+#   sha256_selfhost_arm   IMZASIZ kaydirma (lshr) bare-metal'de
+#     UYARI: bu dosya `sabitsure` KULLANMAZ, duz `dtam32` kullanir (olculdu:
+#     86 dtam32, 0 sabitsure) — yani D-446'nin `sabitsure` sarmalayici
+#     kusurunu KAPSAMAZ. O risk `calistir_kripto_kosum` ile takimda.
+#     Ilk yazimda "D-446 alani" diye isaretlemistim; SABOTAJ bunu curuttu
+#     (sabitsure soymasini bozdum, kapi YESIL kaldi). Kapsadigi sey
+#     `ast_tip_isaretsiz_mi`nin dtamN yolu — S42 ile dogrulandi.
+#   virtio_selfhost_arm   surucu: yapi + isaretci agirlikli
+#   bignum_selfhost_arm   tamsayi genislikleri / carry yayilimi (D-451 alani)
+#
+# QEMU yoksa alt hedefler kendileri zarifce atlar (command -v guard) — kapi
+# QEMU'suz makinede KIRMIZI OLMAZ.
+calistir_qemu_cekirdek: calistir_qemu_smoke calistir_sha256_selfhost_arm \
+                        calistir_virtio_selfhost_arm calistir_bignum_selfhost_arm \
+                        calistir_kem_os_arm
+	@echo "=== QEMU cekirdek kapisi: 5/5 temsilci gecti ==="
+
 calistir_check_genis: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
 	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
@@ -5545,7 +5581,7 @@ calistir_uart_pl011_bare_metal:
 	@echo "  (yok — temiz)"
 	@echo "PL011 bare-metal dogrulamasi basarili!"
 
-test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_check_genis calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_checker_diff calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test
+test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_check_genis calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test
 	@echo "Tum testler gecti!"
 
 # === Lean 4 ispat sistemi (DRF V1 mekanize — Faz A2+) ===

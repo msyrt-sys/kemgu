@@ -946,6 +946,28 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-453 (KARAR 5): `calistir_qemu_cekirdek` — oracle'ın bare-metal kanıtı
+D-448 saptamıştı: `src/llvm.c`ye dokunan bir değişiklik KEMGU-OS'u kırsa
+**hiçbir host kapısı görmez**. O gün iki hedefi ELLE koşturmuştum — ama
+**elle koşturulan ölçüm kapı DEĞİLDİR** (D-395).
+- **Tam süpürme DEĞİL:** ~128 QEMU hedefi koşumu saatlere çıkarır, o zaman
+  kimse çalıştırmaz. Beş temsilci: `qemu_smoke` (boot) · `kem_os_arm` (24 faz:
+  asm/MMU/syscall) · `sha256_selfhost_arm` (imzasız kaydırma) ·
+  `virtio_selfhost_arm` (yapı+işaretçi) · `bignum_selfhost_arm` (tamsayı
+  genişlikleri). **Ölçüldü: 79 saniye** → o kadar ucuz olduğu için `test_tumu`ya
+  DOĞRUDAN bağlandı (elle hatırlanacak kural bırakmak yerine). QEMU yoksa alt
+  hedefler zarifçe atlar → QEMU'suz makinede kırmızı olmaz.
+- **⚠ SABOTAJ BİR GEREKÇEMİ ÇÜRÜTTÜ:** `sha256_selfhost_arm`ı "D-446/sabitsüre
+  alanı" diye işaretlemiştim; **S41** (sabitsüre soymasını boz) → kapı YEŞİL
+  kaldı. Ölçtüm: o dosya **`sabitsüre` KULLANMIYOR** (86 `dtam32`, 0 sabitsüre).
+  O risk `kripto_kosum` ile zaten takımda. **Gerekçe metni de bir İDDİADIR —
+  ölç** (D-406'nın dersi, bu kez kendi yazdığım gerekçede).
+- **⚠ İkinci sabotaj UYGULANMADI ve yeşil verdi:** S42'nin ilk denemesi
+  "DESEN YOK" bastı (CRLF) ama kapı yeşil çıktığı için bir an "kapı zayıf"
+  diye kaydedecektim. **Sabotajın sessizliği önce SABOTAJI şüpheli kılar**
+  (D-402). `grep`le doğrulanıp Edit ile uygulandı → **EXIT 2**.
+- `test_tumu` artık **60 kapı** çağırıyor.
+
 ### 🎯 D-452 (KARAR 4): dosya handle'ı `yapı tekkez Dosya` — lineer opak tip
 D-443'ün kök nedeni (*"opak handle `metin` olarak tipleniyor"*) ve D-449'un
 açık borcu (`kapat("")` yakalanamıyor) KAPANDI.

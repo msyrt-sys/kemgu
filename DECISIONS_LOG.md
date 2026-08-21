@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-453 [ORTA] — KARAR 5: `calistir_qemu_cekirdek` — oracle değişikliklerinin bare-metal kanıtı
+
+Önerilen sıralamada 5. madde. D-448 şunu saptamıştı: `src/llvm.c`ye dokunan
+bir değişiklik KEMGU-OS'u kırsa **hiçbir host kapısı görmez**. O gün iki hedefi
+ELLE koşturmuştum — ama **elle koşturulan ölçüm kapı DEĞİLDİR** (D-395).
+
+### Neden tam süpürme değil
+~128 QEMU hedefinin tamamı koşum süresini saatlere çıkarır ve o zaman kimse
+çalıştırmaz — bugünkünden daha kötü olur. Bu kapı **beş temsilci** koşar:
+**ölçüldü, 79 saniye.** O kadar ucuz olduğu için `test_tumu`ya doğrudan
+bağlandı (elle hatırlanması gereken bir kural bırakmak yerine).
+
+| hedef | kapsadığı risk |
+|---|---|
+| `qemu_smoke` | asgari bare-metal boot |
+| `kem_os_arm` | 24 fazlı entegre OS (asm · MMU · syscall · sürücü) |
+| `sha256_selfhost_arm` | imzasız kaydırma (`lshr`) bare-metal'de |
+| `virtio_selfhost_arm` | sürücü: yapı + işaretçi ağırlıklı |
+| `bignum_selfhost_arm` | tamsayı genişlikleri / carry yayılımı |
+
+QEMU yoksa alt hedefler kendileri zarifçe atlar (`command -v` guard) — kapı
+QEMU'suz makinede KIRMIZI OLMAZ.
+
+### ⚠ SABOTAJ BİR GEREKÇEMİ ÇÜRÜTTÜ
+`sha256_selfhost_arm`ı "sabitsüre / D-446 alanı" diye işaretlemiştim.
+**S41** (D-446'nın `sabitsüre` soymasını boz) → kapı **YEŞİL KALDI**. Ölçtüm:
+`sha256_selfhost.kem` **`sabitsüre` KULLANMIYOR** — 86 düz `dtam32`, 0
+`sabitsüre`. Yani o riski kapsamıyor (o risk `calistir_kripto_kosum` ile zaten
+takımda). Yorum gerçeğe göre düzeltildi.
+**Muafiyet/gerekçe metni de bir İDDİADIR — ölç** (D-406'nın dersinin tekrarı;
+bu kez kendi yazdığım gerekçede).
+
+### ⚠ İkinci sabotaj UYGULANMADI ve yeşil sonuç verdi
+**S42**'nin ilk denemesi "DESEN YOK" bastı (CRLF; python `\n` çapası) ama kapı
+yeşil çıktığı için bir an "kapı zayıf" diye kaydedecektim. **Sabotajın
+sessizliği önce SABOTAJI şüpheli kılar** (D-402). `grep` sayısıyla doğrulanıp
+Edit ile uygulandı → kapı **EXIT 2**: `qemu_smoke` geçiyor, sonraki hedef
+düşüyor. Kapı gerçekten ölçüyor.
+
+### Doğrulama
+Temiz ağaçta `calistir_qemu_cekirdek` → **5/5, EXIT 0, 79s**.
+Sabotaj **S42** (`ast_tip_isaretsiz_mi`'yi daima 0 yap) → **EXIT 2**.
+`test_tumu` artık **60 kapı** çağırıyor.
+
+---
+
 ## D-452 [YÜKSEK] — KARAR 4: dosya handle'ı `yapı tekkez Dosya` (lineer opak tip)
 
 Önerilen sıralamada 4. madde. D-443'te kök neden *"opak handle `metin` olarak
