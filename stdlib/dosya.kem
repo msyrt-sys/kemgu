@@ -43,6 +43,11 @@ işlev gecersiz_handle() -> metin {
 // tipleniyor. Doğru çözüm ayrı bir handle tipi ya da null-sorgu yerleşiği;
 // ikisi de DİL YÜZEYİ kararı (Mehmet). Buradaki dizgi hilesi, o karar
 // verilene kadar MEVCUT davranışı korur.
+// ⚠ [D-452] ARTIK İÇ KULLANIM İÇİN. Kamu API'si `Dosya` (lineer) tipini
+// kullanır ve GEÇERSİZ bir `Dosya` YOKTUR — başarısızlık `hata` ile döner.
+// Bu yüklem yalnız HAM `dosya_ac` sonucunu sınamak için kalır ve tek işlev
+// içinde aç-kapat yapan yollarda (yaz_metin/ekle/kopyala) kullanılır; oralarda
+// handle KAÇMAZ, dolayısıyla lineer sarmalayıcıya gerek yoktur.
 işlev handle_gecerli_mi(h: metin) -> mantıksal {
     ver dosya_gecerli(h);
 }
@@ -56,19 +61,44 @@ işlev mod_okuma() -> metin { ver "okuma"; }
 işlev mod_yazma() -> metin { ver "yazma"; }
 işlev mod_ekleme() -> metin { ver "ekleme"; }
 
-// Ac — yol ve mod ile dosya handle doner.
-işlev ac(yol: metin, mod: metin) -> sonuç<metin, metin> {
+// =============================================================================
+// [D-452] AÇIK DOSYA — LİNEER OPAK TİP
+// =============================================================================
+//
+// Handle artık `metin` DEĞİL, lineer bir yapı. D-443'te kök neden şöyle
+// kaydedilmişti: *"opak handle `metin` olarak tipleniyor"* — D-449 bunun
+// somut bedelini gösterdi (`kapat("")` yakalanamıyordu, çünkü boş dizgi
+// geçerli bir işaretçidir). Lineer tip üç hatayı DERLEME ZAMANINDA kapatır:
+//
+//   kapat("")            → T001  (rastgele `metin` handle DEĞİLDİR)
+//   kapat(d); kapat(d)   → L002  (çift kapatma / kullan-sonra-kapat)
+//   açıp kapatmamak      → L001  (sızıntı)
+//
+// Üçü de ÖLÇÜLDÜ. Mekanizma yeni değil: `yapı tekkez` (D-313) ve onun
+// L001/L002/L-COND/L-LOOP makinesi zaten vardı — eksik olan yalnız dosya
+// handle'ının o tipe taşınmasıydı.
+//
+// ⚠ `h` alanı lineer DEĞİLDİR (`metin`), bu yüzden `d.h` okunabilir; lineer
+// olan SARMALAYICIDIR. Kısmi taşıma yasağı (D-315) yalnız lineer ALANLAR
+// içindir.
+yapı tekkez Dosya { h: metin; }
+
+// Aç — yol ve mod ile AÇIK DOSYA döner. Başarısızlıkta `hata` (D-449: artık
+// gerçekten hata döner; öncesinde NULL handle `tamam` sayılıyordu).
+işlev ac(yol: metin, mod: metin) -> sonuç<Dosya, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     eğer metin_uzunluk(mod) == 0 { ver hata("bos mod"); }
     değişken h: metin = dosya_ac(yol, mod);
     eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
-    ver tamam(h);
+    ver tamam(Dosya { h: h });
 }
 
-// Kapat — handle'i kapat.
-işlev kapat(h: metin) -> sonuç<tam32, metin> {
-    eğer değil handle_gecerli_mi(h) { ver hata("gecersiz handle"); }
-    dosya_kapat(h);
+// Kapat — açık dosyayı TÜKETİR. Çağrıdan sonra `d` kullanılamaz (L002).
+işlev kapat(d: Dosya) -> sonuç<tam32, metin> {
+    değişken hh: metin = d.h;
+    imha(d);                     // sarmalayıcıyı tüket
+    eğer değil handle_gecerli_mi(hh) { ver hata("gecersiz handle"); }
+    dosya_kapat(hh);
     ver tamam(0);
 }
 

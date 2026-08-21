@@ -5,6 +5,78 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-452 [YÜKSEK] — KARAR 4: dosya handle'ı `yapı tekkez Dosya` (lineer opak tip)
+
+Önerilen sıralamada 4. madde. D-443'te kök neden *"opak handle `metin` olarak
+tipleniyor"* diye kaydedilmiş, D-449'da bedeli ölçülmüştü (`kapat("")`
+yakalanamıyordu, çünkü boş dizgi geçerli bir işaretçidir).
+
+### Altyapı HAZIRDI — önce ölçüldü
+Tasarlamadan önce dört probe koşuldu: `yapı tekkez` + `imha` çalışıyor,
+sızıntı **L001**, çift tüketim **L002**, ve önemlisi `sonuç<Dosya, metin>`
+desen bağlaması da C'de **L001** veriyor. Yani D-301'in `görev<T>` için
+kaydettiği "`sonuç` içinde lineerlik kaybolur" sınırı `yapı tekkez`e
+UYGULANMIYORDU. Yazılacak yeni makine yoktu — yalnız handle'ı o tipe taşımak.
+
+### Kazanım — üçü de DERLEME ZAMANINDA
+```
+kapat("")            → T001   (rastgele `metin` handle DEĞİLDİR)
+kapat(d); kapat(d)   → L002   (çift kapatma / kullan-sonra-kapat)
+açıp kapatmamak      → L001   (sızıntı)
+```
+**D-449'un açıkça "kapatılabilir borç" diye kaydettiği sınır KAPANDI.**
+
+### Değişimin yüzeyi DAR
+`stdlib/dosya.kem`in 17 işlevinden yalnız **`ac` ve `kapat`** handle'ı dışarı
+veriyor. Diğer beş kullanım (`yaz_metin`/`ekle`/`ekle_satir`/`kopyala`) tek
+işlev içinde aç-kapat yapıyor — handle KAÇMIYOR, hapsedilmiş; ham yerleşikle
+kalmaları güvenli ve `handle_gecerli_mi` onlar için iç yardımcı olarak duruyor.
+
+### 🔴 Yol üstünde ÜÇ ayrı gizli kusur çıktı
+1. **D-450'nin kendi boşluğu.** `dosya_gecersiz` yerleşiğinin CODEGEN dönüş
+   tipini self-host'ta bağlamayı atlamışım → `call void @kdl_dosya_gecersiz()`
+   + `ret ptr 0` (LLVM-RED). **Hiçbir kapı görmedi** çünkü korpusta onu
+   çağıran dosya yoktu; `stdlib/dosya.kem` kullanmaya başlayınca çıktı.
+2. **Self-host lineer izleme `yapı tekkez`i görmüyordu.** `desen_bagla_tip`
+   yalnız ÖNEK arıyordu (`görev<`/`tekkez<`/`yetki<`) ama lineer yapının tip
+   adı düz bir tanımlayıcıdır (`Dosya`) — önek YOK. **Ölçüldü: bu boşluk
+   D-452 ÖNCESİNDE de vardı** (C=L001, SELF=OK), benim yan etkim değil.
+3. **`checker.kem` AYRI bir uygulama.** `checker_diff` `selfhost/codegen.kem`i
+   değil `selfhost/checker.kem`i kullanıyor; D-449/D-450 yerleşikleri oraya
+   hiç eklenmemişti (T002). CLAUDE.md'nin "üç ayrı uygulama var" uyarısı bu
+   turda somutlaştı.
+
+### ⚠ Üç yanlış teşhis, üçünü de ENSTRÜMANTASYON düzeltti
+`sonuç<Dosya,…>` sızıntısını self-host'a taşırken sırayla şunları denedim ve
+her biri YETMEDİ: (a) `lineer_yapi_mi` koşulu — `bt` "?" geliyordu;
+(b) `TIP_KULLANICI` dalı — yine "?"; (c) `fn_rlin` yan kanalı — arama BOŞ
+dönüyordu. Hata ayıklama çıktısı gerçeği gösterdi:
+- `bt = "?"` çünkü checker dizgisi kullanıcı tipini SİLİYOR (D-378
+  muhafazakârlığı) → ham gerçek ayrı kanalda taşınmalı (**D-439'un dersi**).
+- `fn_rlin`i önce **`imza_topla`ya** (CODEGEN ön-geçişi) koymuşum; checker
+  `imza_kaydet` kullanıyor (**D-420'nin dersi: "bu yolda kim dolduruyor?"**).
+- Son olarak `fn_rlin` `fn_ad` ile PARALEL indeksleniyor ama `yerlesik_ekle`
+  yalnız `fn_ad`a ekliyordu → **indeksler kaydı**, `imza_kaydet` doğru değeri
+  yazdığı hâlde arama boş dönüyordu.
+
+### Doğrulama
+- Üç korpus fikstürü **muafiyetsiz** eklendi (negatif İKİ + pozitif BİR —
+  D-425'in dersi: pozitif şekil olmadan toptan sıkılaştırma kapıyı GEÇER):
+  `tc22_01_dosya_lineer` (L001) · `tc22_02_dosya_cift_kapat` (L002) ·
+  `tc22_03_dosya_temiz` (tanı YOK).
+- `checker_diff` **153/153 (0 muaf)** — parite tam, muafiyet listesi hâlâ boş.
+- **Sabotaj S40** (`lineer_yapi_mi` + `fn_rlin` dallarını kapat) → iki fikstür
+  KIRMIZI, Error.
+- `stdlib_check`: `dosya: TUM TESTLER GECTI` (C ve self-host, artefakt yok).
+
+### Kalan (bilinçli)
+`kapat("")` C'de T001 alır; self-host'ta T001 **verilmez** (kullanıcı yapı
+parametresi için argüman tip denetimi self-host'ta yok). Bu, `checker_diff`
+korpusuna eklenemeyecek bir şekildir — soundness sorunu değil (self daha
+müsamahakâr), ama kayda geçti.
+
+---
+
 ## D-451 [YÜKSEK] — KARAR 3: `Dizi<kesirli64>` / `Dizi<kesirli32>` onarıldı
 
 Önerilen sıralamada 3. madde. D-417'de "ölçüldü, oracle değişikliği ister"

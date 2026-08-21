@@ -946,6 +946,43 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-452 (KARAR 4): dosya handle'ı `yapı tekkez Dosya` — lineer opak tip
+D-443'ün kök nedeni (*"opak handle `metin` olarak tipleniyor"*) ve D-449'un
+açık borcu (`kapat("")` yakalanamıyor) KAPANDI.
+- **Altyapı HAZIRDI — önce ölçüldü.** Dört probe: `yapı tekkez`+`imha` ✓,
+  sızıntı L001 ✓, çift tüketim L002 ✓, ve `sonuç<Dosya,metin>` desen bağlaması
+  da C'de L001 veriyor. D-301'in `görev<T>` için kaydettiği "`sonuç` içinde
+  lineerlik kaybolur" sınırı `yapı tekkez`e UYGULANMIYORMUŞ.
+- **Kazanım (üçü de derleme zamanında):** `kapat("")` → **T001** ·
+  `kapat(d); kapat(d)` → **L002** · açıp kapatmamak → **L001**.
+- **Yüzey DAR:** 17 işlevden yalnız `ac`/`kapat` handle'ı dışarı veriyor;
+  diğer beş kullanım tek işlev içinde aç-kapat (handle KAÇMIYOR).
+- **🔴 Yol üstünde ÜÇ gizli kusur çıktı:**
+  1. **D-450'nin kendi boşluğu** — `dosya_gecersiz`in self-host CODEGEN dönüş
+     tipi bağlanmamış (`ret ptr 0` = LLVM-RED). Hiçbir kapı görmedi çünkü
+     korpusta onu çağıran dosya YOKTU.
+  2. **Self-host lineer izleme `yapı tekkez`i görmüyordu** — `desen_bagla_tip`
+     yalnız ÖNEK arıyordu (`görev<`/`tekkez<`/`yetki<`); lineer yapının adı düz
+     tanımlayıcı (`Dosya`). **Ölçüldü: D-452 ÖNCESİNDE de vardı** (C=L001,
+     SELF=OK) — yan etkim değil.
+  3. **`checker.kem` AYRI uygulama** — `checker_diff` onu kullanıyor ve
+     D-449/D-450 yerleşikleri oraya hiç eklenmemişti (T002). CLAUDE.md'nin
+     "üç ayrı uygulama var" uyarısı somutlaştı.
+- **⚠ ÜÇ YANLIŞ TEŞHİS, üçünü de ENSTRÜMANTASYON düzeltti:** (a) `bt` "?"
+  geliyordu — checker dizgisi kullanıcı tipini SİLİYOR (**D-439**: ham gerçeği
+  ayrı kanalda taşı → `fn_rlin`); (b) `fn_rlin`i `imza_topla`ya (CODEGEN
+  ön-geçişi) koymuşum, checker `imza_kaydet` kullanıyor (**D-420**: "bu yolda
+  kim dolduruyor?"); (c) `fn_rlin` `fn_ad` ile PARALEL ama `yerlesik_ekle`
+  yalnız `fn_ad`a ekliyordu → **indeksler kaydı**, kayıt doğruyken arama boş
+  dönüyordu.
+- **Doğrulama:** üç korpus fikstürü **muafiyetsiz** (negatif 2 + pozitif 1 —
+  D-425: pozitif şekil olmadan toptan sıkılaştırma kapıyı GEÇER).
+  `checker_diff` **153/153 (0 muaf)**. **Sabotaj S40** → iki fikstür KIRMIZI.
+  `stdlib_check`: `dosya: TUM TESTLER GECTI` (C + self, artefakt yok).
+- **Kalan (bilinçli):** `kapat("")` C'de T001, self-host'ta tanı YOK (kullanıcı
+  yapı parametresi için argüman tip denetimi self'te yok). Soundness sorunu
+  değil (self daha müsamahakâr); korpusa konamaz, kayda geçti.
+
 ### 🎯 D-451 (KARAR 3): `Dizi<kesirli64>` / `Dizi<kesirli32>` ONARILDI
 D-417'nin "ölçüldü ama oracle değişikliği ister" maddesi; onay geldi.
 - **⚠ İDDİA ESKİMİŞTİ:** CLAUDE.md `C exit 7, self exit 1` diyordu; **bugün
@@ -1411,9 +1448,9 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
   ~~**Kalan (V2.1):** alan-bazlı taşıma~~ ✓ **D-315** (bağlama başına bit-maske; ikinci taşıma L002; kısmi taşınmış yapı TAŞINAMAZ, yalnız imha; geçici değer red). ✓ **D-316 self-host portu TAMAM** (11/11 birebir; iki sessiz parite kaybı ölçümle bulundu: `deg_lineer_mi` ERISIM dalı + `fn_plin` lineer-yapı parametresi). ✓ **D-317: L-COND/L-LOOP de self-host'ta** (8/8 birebir; anlık-görüntü YIĞINI — iç-içe eğer/eşleş için şart). **Lineer alt-sistemde parite borcu KALMADI.** ✓ **D-318: `eşleş` YAPI DESENİ eklendi** (yeni sözdizimi, Mehmet onaylı): `Yapi { alan1, alan2 } =>` — lineer yapıda desen yapıyı TÜKETİR, alanlar bağlanır; TÜM alanlar zorunlu (T012), bilinmeyen alan T009. C+self-host parite, --ast dump paritesi yan-kanalla korundu. İcat EDİLMEYEN: yeniden-adlandırma, rest-deseni `..`, iç-içe desen.
 - **Linear stdlib** (Spec B.6) — ⚠ **KARIŞIK DURUM (D-431'de ölçüldü):**
   - `OTP_Anahtar` ✓ **YAPILMIŞ** — `stdlib/kripto/anahtar.kem`, 11 `tekkez` kullanımı.
-  - `Dosya` ⚠ **VAR AMA LİNEER DEĞİL** — `stdlib/dosya.kem` mevcut, ama
-    `sonuç<T,E>` stiliyle; `tekkez` kullanımı **0**. Lineer yapmak, kullanıcı
-    kodunu kıran bir **API tipi değişikliğidir** → Mehmet'in kararı.
+  - `Dosya` ✓ **YAPILDI (D-452)** — `yapı tekkez Dosya`. `ac` artık
+    `sonuç<Dosya, metin>` döner, `kapat(d: Dosya)` TÜKETİR. `kapat("")` → T001,
+    çift kapatma → L002, kapatmayı unutmak → L001 (üçü de derleme zamanında).
   - `Kilit` ✗ **YOK** — ama **runtime primitifleri ZATEN VAR**:
     `kdl_kilit_init` / `kdl_kilit_gir` / `kdl_kilit_cik` / `kdl_kilit_yok_et`
     (`runtime/kdl_runtime.c`, kanal implementasyonu bunları kullanıyor;

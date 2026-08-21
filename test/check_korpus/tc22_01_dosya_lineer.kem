@@ -1,0 +1,19 @@
+// [D-452] Lineer dosya handle'i — kapatmayi UNUTMAK sizintidir (L001).
+// D-443'te kok neden "opak handle `metin` olarak tipleniyor" diye kaydedilmis,
+// D-449'da bedeli olculmustu (`kapat("")` yakalanamiyordu). `yapi tekkez`
+// bunu derleme zamanina tasir.
+yapı tekkez Dosya { h: metin; }
+
+işlev ac(yol: metin) -> sonuç<Dosya, metin> {
+    değişken h: metin = dosya_ac(yol, "okuma");
+    eğer değil dosya_gecerli(h) { ver hata("acilamadi"); }
+    ver tamam(Dosya { h: h });
+}
+
+işlev main() -> tam32 {
+    eşleş ac("a.txt") {
+        tamam(d) => { ver 0; }      // L001: `d` tuketilmedi
+        hata(e)  => { ver 1; }
+    }
+    ver 2;
+}

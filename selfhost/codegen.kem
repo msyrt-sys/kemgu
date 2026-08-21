@@ -58,6 +58,13 @@ yapı Ayr {
     cg_aemet: Dizi<metin>;
     // [D-449] fn_ad ile paralel: işlevin dönüş tipi `metin` ise "1".
     fn_rmet: Dizi<metin>;
+    // [D-452] fn_ad ile paralel: işlevin dönüşü `sonuç<K,E>` / `seçimlik<K>` ve
+    // K bir LİNEER YAPI ise K'nin ADI; değilse "". Checker'ın tip DİZGİSİ
+    // (`bilinen_tip_mi`) kullanıcı tipini saymadığı için `sonuç<Dosya,metin>`
+    // → "?" olur ve desen bağlamasının lineerliği KAYBOLUR. D-439'un dersi:
+    // ham gerçeği AYRI KANALDA taşı, tüketiciyi checker'ın muhafazakârlığına
+    // mahkûm etme.
+    fn_rlin: Dizi<metin>;
     // [D-449] generic tip param adı → o instantiation'da metin mi ("1"/"")
     mono_smet: Dizi<metin>;  // [D-449] mono_sp ile paralel: o ikame metin mi ("1"/"")
                              // ("i8"/"i16"/"i32"/"i64"); değilse "". deref-read yük-tipi (C pointee_llvm_tip aynası).
@@ -3636,6 +3643,12 @@ işlev builtin_ret(ad: metin) -> metin {
     eğer metin_esit(ad, "metin_esit") veya metin_esit(ad, "metin_icerir") veya metin_esit(ad, "metin_baslar")
          veya metin_esit(ad, "metin_biter") veya metin_esit(ad, "dosya_var_mi")
          veya metin_esit(ad, "dosya_gecerli") { ver "i1"; }
+    // [D-452] `dosya_gecersiz()` PTR döner (NULL sentinel). D-450'de yerleşik
+    // adı/imzası eklendi ama CODEGEN DÖNÜŞ TİPİ atlandı → self-host
+    // `call void @kdl_dosya_gecersiz()` + `ret ptr 0` yayıyordu (LLVM-RED).
+    // HİÇBİR KAPI GÖRMEDİ çünkü korpusta onu çağıran dosya yoktu; ancak
+    // `stdlib/dosya.kem` onu kullanmaya başlayınca ortaya çıktı.
+    eğer metin_esit(ad, "dosya_gecersiz") { ver "ptr"; }
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
          veya metin_esit(ad, "arg_sayi") veya metin_esit(ad, "oku_karakter") { ver "i32"; }
     eğer metin_esit(ad, "dosya_boyut") { ver "i64"; }
@@ -3929,6 +3942,53 @@ işlev fn_risz_bul(p: &değişken Ayr, ad: metin) -> tam32 {
         i = i + 1;
     }
     ver 0;
+}
+// [D-452] İşlevin dönüşü `sonuç<K,E>` / `seçimlik<K>` ve K LİNEER YAPI ise
+// K'nin adı; değilse "". `islev_donus_met` aynası.
+işlev islev_donus_lin(p: &değişken Ayr, idx: tam32) -> metin {
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ca: metin = dizi_al(p.a_ad, c);
+        eğer metin_esit(ca, "PARAMETRE") == yanlış ve metin_esit(ca, "BLOK") == yanlış {
+            // `sonuç<K,E>` ve `seçimlik<K>`: K = ilk tip argümanı.
+            eğer metin_esit(ca, "TIP_SONUC") veya metin_esit(ca, "TIP_SECIMLIK") {
+                eğer dizi_al(p.a_cs, c) < 1 { ver ""; }
+                değişken k: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+                // [D-452] Kullanıcı tipi İKİ şekilde gelebilir: `TIP_BASIT`
+                // (düz ad) ya da `TIP_KULLANICI` (adı çocuk[0]'daki
+                // TANIMLAYICI düğümünde — D-369). İkisi de karşılanmalı;
+                // yalnız TIP_BASIT aramak `Dosya`yı KAÇIRIYORDU (ölçüldü).
+                değişken kad: metin = "";
+                eğer metin_esit(dizi_al(p.a_ad, k), "TIP_BASIT") { kad = dizi_al(p.a_deg, k); }
+                değilse {
+                    eğer metin_esit(dizi_al(p.a_ad, k), "TIP_KULLANICI") {
+                        eğer dizi_al(p.a_cs, k) > 0 {
+                            değişken kn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, k));
+                            kad = dizi_al(p.a_deg, kn);
+                        }
+                        değilse { kad = dizi_al(p.a_deg, k); }
+                    }
+                }
+                eğer metin_uzunluk(kad) == 0 { ver ""; }
+                eğer lineer_yapi_mi(p, kad) { ver kad; }
+            }
+            ver "";
+        }
+        i = i + 1;
+    }
+    ver "";
+}
+// [D-452] fn_ad ile paralel arama (fn_rmet deseni — kendi sınırıyla gez).
+işlev fn_rlin_bul(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fn_rlin) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver dizi_al(p.fn_rlin, i); }
+        i = i + 1;
+    }
+    ver "";
 }
 // [D-449] işlevin dönüş tipi `metin` mi? (fn_risz deseni — kendi sınırıyla gez.)
 işlev fn_rmet_bul(p: &değişken Ayr, ad: metin) -> tam32 {
@@ -7543,6 +7603,7 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
             dizi_ekle(p.fn_ret, islev_donus_tip(p, c));
             dizi_ekle(p.fn_risz, isz_str(islev_donus_isz(p, c)));   // D-337
             dizi_ekle(p.fn_rmet, isz_str(islev_donus_met(p, c)));   // [D-449]
+            dizi_ekle(p.fn_rlin, islev_donus_lin(p, c));   // [D-452]
             dizi_ekle(p.fn_relem, islev_donus_elem(p, c));   // D-442
             dizi_ekle(p.fn_node, c);   // D-309: call-graph kapanışı
         }
@@ -7563,6 +7624,7 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
                     dizi_ekle(p.fn_ret, islev_donus_tip(p, m));
                     dizi_ekle(p.fn_risz, isz_str(islev_donus_isz(p, m)));   // D-337
                     dizi_ekle(p.fn_rmet, isz_str(islev_donus_met(p, m)));   // [D-449]
+                    dizi_ekle(p.fn_rlin, islev_donus_lin(p, m));   // [D-452]
                     dizi_ekle(p.fn_relem, islev_donus_elem(p, m));   // D-442
                     dizi_ekle(p.fn_node, m);   // D-309
                 }
@@ -8122,6 +8184,11 @@ işlev param_tip_str(p: &değişken Ayr, param_idx: tam32) -> metin {
 // olurdu ve zaten denetlenmez → listeye ALINMADI (sessizlik, yanlış tanı değil).
 işlev yerlesik_ekle(p: &değişken Ayr, ad: metin, dt: metin, pt: Dizi<metin>) -> tam32 {
     dizi_ekle(p.fn_ad, ad);
+    // [D-452] `fn_rlin` `fn_ad` ile PARALEL indekslenir; yerleşikler de
+    // `fn_ad`a eklendiği için buraya da boş bir yuva GEREKİR. Yoksa indeksler
+    // KAYAR ve `fn_rlin_bul` yanlış satırı okur — ölçümde `imza_kaydet`
+    // "ac2 -> Dosya" kaydettiği hâlde arama BOŞ dönüyordu.
+    dizi_ekle(p.fn_rlin, "");
     dizi_ekle(p.fn_donus, dt);
     dizi_ekle(p.fn_psay, dizi_boyut(pt));
     dizi_ekle(p.fn_pbase, dizi_boyut(p.fn_ptip));
@@ -8206,6 +8273,12 @@ işlev imza_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     değişken dt: metin = donus_str(p, fn);
     eğer bilinen_tip_mi(dt) { dizi_ekle(p.fn_donus, dt); }   // D-377
     değilse { dizi_ekle(p.fn_donus, "?"); }
+    // [D-452] CHECKER yolunun kendi kaydı. `fn_rlin` `imza_topla`da (CODEGEN
+    // ön-geçişi) da doldurulur ama CHECKER oradan geçmez — D-420'nin dersi:
+    // "codegen.kem TEK DOSYA ama İKİ YOL; bir tabloyu yeni bir yerden okumadan
+    // önce BU YOLDA KİM DOLDURUYOR diye sor." İlk denemede bu atlanmış ve
+    // `sonuç<Dosya,metin>` sızıntısı self-host'ta sessiz kalmıştı.
+    dizi_ekle(p.fn_rlin, islev_donus_lin(p, fn));
     dizi_ekle(p.fn_psay, param_say(p, fn));
     dizi_ekle(p.fn_pbase, dizi_boyut(p.fn_ptip));   // param tiplerinin başlangıcı
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
@@ -9901,7 +9974,7 @@ işlev yerel_tip_ata(p: &değişken Ayr, ad: metin, t: metin) -> tam32 {
     ver 0;
 }
 // Kolun deseni `değer(v)`/`tamam(v)`/`hata(e)` ise bağlamanın tipini ata.
-işlev desen_bagla_tip(p: &değişken Ayr, des: tam32, st: metin) -> tam32 {
+işlev desen_bagla_tip(p: &değişken Ayr, des: tam32, st: metin, skr: tam32) -> tam32 {
     eğer des < 0 { ver 0; }
     eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPICI") == yanlış { ver 0; }
     eğer dizi_al(p.a_cs, des) < 1 { ver 0; }
@@ -9920,8 +9993,36 @@ işlev desen_bagla_tip(p: &değişken Ayr, des: tam32, st: metin) -> tam32 {
     // D-386: bağlanan tip LİNEERSE bağlama lineer dilime girer. C bu bağlama
     // için KONUM 0:0 basar (sembol kaynakta bir konuma karşılık gelmiyor).
     değişken bt: metin = var_tip(p, bad);
+    // [D-452] LİNEER YAPI (`yapı tekkez K`) da buraya girmeli. Yüklem yalnız
+    // ÖNEK arıyordu (`görev<`/`tekkez<`/`yetki<`) ama lineer yapının tip adı
+    // düz bir tanımlayıcıdır (`Dosya`) — önek YOK. Sonuç: `eşleş ac(..) {
+    // tamam(d) => ... }` kolunda `d` lineer sayılmıyor, sızıntı (L001) ve
+    // çift tüketim (L002) SESSİZCE geçiyordu. C bunları veriyordu.
+    // ÖLÇÜLDÜ: boşluk D-452 ÖNCESİNDE de vardı (C=L001, SELF=OK) — bu
+    // değişikliklerin yan etkisi değil, `stdlib/dosya.kem` lineer tipe
+    // taşınınca ORTAYA ÇIKAN mevcut bir eksik.
     eğer metin_baslar(bt, "görev<") veya metin_baslar(bt, "tekkez<")
-      veya metin_baslar(bt, "yetki<") { lin_ekle(p, bad, 0, 0); }
+      veya metin_baslar(bt, "yetki<") veya lineer_yapi_mi(p, bt) {
+        lin_ekle(p, bad, 0, 0);
+        ver 0;
+    }
+    // [D-452] `bt` "?" ise checker dizgisi kullanıcı tipini SİLMİŞTİR
+    // (`bilinen_tip_mi` onu saymaz — D-378 muhafazakârlığı, checker için
+    // DOĞRU). Ham gerçek `fn_rlin` yan kanalındadır: skrutini bir ÇAĞRIYSA
+    // ve çağrılan işlev `sonuç<K,E>`/`seçimlik<K>` (K lineer yapı) dönüyorsa
+    // BAŞARI kolunun bağlaması lineerdir. `hata(e)` kolu lineer DEĞİLDİR.
+    eğer metin_esit(vad, "tamam") veya metin_esit(vad, "değer") {
+        eğer skr >= 0 {
+            eğer metin_esit(dizi_al(p.a_ad, skr), "CAGRI") {
+                değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, skr));
+                eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") {
+                    eğer metin_uzunluk(fn_rlin_bul(p, dizi_al(p.a_deg, h))) > 0 {
+                        lin_ekle(p, bad, 0, 0);
+                    }
+                }
+            }
+        }
+    }
     ver 0;
 }
 işlev esles_skrutini_tipi(p: &değişken Ayr, kosul: tam32) -> metin {
@@ -10819,7 +10920,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer dizi_al(p.a_cs, kol_d) > 0 {
                 değişken des: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, kol_d));
                 // D-385: desen bağlamasının TİPİ skrutininden gelir (gövdeden ÖNCE).
-                desen_bagla_tip(p, des, esles_skrutini_tipi(p, dizi_al(p.cocuk, eb)));
+                desen_bagla_tip(p, des, esles_skrutini_tipi(p, dizi_al(p.cocuk, eb)), dizi_al(p.cocuk, eb));
                 // D-357 (C): desen varyantı + payload aritesi (gövdeden ÖNCE).
                 m002_desen_kontrol(p, des, esles_cesit_adi(p, dizi_al(p.cocuk, eb)));
                 eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPI") {
@@ -11850,7 +11951,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         sk_pending: 0,
         reg: 0,
         cg_ad: [], cg_areg: [], cg_atip: [], cg_aref: [], son_ref: "", cg_base: 0,
-        cg_aelem: [], cg_aelem2: [], cg_apointee: [], cg_apisz: [], cg_aic: [], cg_aisz: [], cg_amet: [], cg_aemet: [], fn_rmet: [], mono_smet: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
+        cg_aelem: [], cg_aelem2: [], cg_apointee: [], cg_apisz: [], cg_aic: [], cg_aisz: [], cg_amet: [], cg_aemet: [], fn_rmet: [], fn_rlin: [], mono_smet: [], beklenen_elem: "", son_elem: "", beklenen_ll: "", beklenen_yapi: "",
         beklenen_elem_ic: "", son_elem2: "", son_ic: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], cv_ptn: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,

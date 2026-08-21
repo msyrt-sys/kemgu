@@ -1,0 +1,18 @@
+// [D-452] Ayni handle'i IKI KEZ kapatmak L002 (kullan-sonra-kapat ile ayni
+// sinif). Lineer tip olmadan bu calisma-zamani UB'siydi.
+yapı tekkez Dosya { h: metin; }
+
+işlev ac(yol: metin) -> sonuç<Dosya, metin> {
+    değişken h: metin = dosya_ac(yol, "okuma");
+    eğer değil dosya_gecerli(h) { ver hata("acilamadi"); }
+    ver tamam(Dosya { h: h });
+}
+işlev kapat(d: Dosya) -> tam32 { değişken hh: metin = d.h; imha(d); dosya_kapat(hh); ver 0; }
+
+işlev main() -> tam32 {
+    eşleş ac("a.txt") {
+        tamam(d) => { kapat(d); kapat(d); ver 0; }   // L002
+        hata(e)  => { ver 1; }
+    }
+    ver 2;
+}
