@@ -5104,6 +5104,22 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 }
             }
             /* Madde G: dosya_* built-in -> kdl_dosya_* */
+            /* [D-455] kilit_* -> kdl_kilit_* (dosya_* ile ayni onek deseni). */
+            else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "kilit_", 6) == 0) {
+                static char kdl_kilit_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_kilit_buf, "kdl_", 4);
+                memcpy(kdl_kilit_buf + 4, cagri_adi, (size_t)n);
+                kdl_kilit_buf[4 + n] = '\0';
+                cagri_adi = kdl_kilit_buf; cagri_adi_uz = 4 + n;
+                if (n == 13 && memcmp(kdl_kilit_buf + 4, "kilit_olustur", 13) == 0) {
+                    kdl_donus = "ptr";
+                } else {
+                    /* al / birak / yok: void, tek opak handle argumani */
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "void";
+                }
+            }
             else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "dosya_", 6) == 0) {
                 static char kdl_dosya_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
@@ -7541,6 +7557,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
     fputs("declare i1 @kdl_dosya_gecerli(ptr)\n", out);   /* [D-449] */
     fputs("declare ptr @kdl_dosya_gecersiz()\n", out);   /* [D-449] */
+    fputs("declare ptr @kdl_kilit_olustur()\n", out);    /* [D-455] */
+    fputs("declare void @kdl_kilit_al(ptr)\n", out);     /* [D-455] */
+    fputs("declare void @kdl_kilit_birak(ptr)\n", out);  /* [D-455] */
+    fputs("declare void @kdl_kilit_yok(ptr)\n", out);    /* [D-455] */
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);

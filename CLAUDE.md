@@ -946,6 +946,42 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-455 (KARAR 7): `Kilit` kapsamlı mutex + İKİ self-host parite boşluğu
+Sıralamanın son maddesi. **⚠ Kendi gerekçem yanlıştı:** öneride "runtime
+primitifleri hazır" demiştim; ölçüm gösterdi ki mevcut `kdl_kilit_*`
+**`static`** ve **`KdlKanal*`** alıyor (kanala gömülü) — genel amaçlı API
+DEĞİL. Bağımsız `KdlKilit` + `kdl_kilit_olustur/_al/_birak/_yok` YAZILDI
+(opak `void*`, thread'siz derlemede NO-OP). **Gerekçe metni de bir iddiadır —
+ölç** (D-453'ün dersi, üst üste 2. kez kendi gerekçemde).
+- **Tasarım: kapsamlı API.** `kilitle(k, || {...})`; ham `al`/`bırak` çifti
+  DIŞA VERİLMEZ (unutulmuş-bırak = deadlock, çift-bırak = UB). Kapanışlar iki
+  derleyicide de çalıştığı için (D-322) sahiplik dile devredilebiliyor.
+- **`Kilit` LİNEER DEĞİL** ve bu bilinçli: `Dosya` (D-452) tam bir kez
+  tüketilmeli, kilit ise DEFALARCA kullanılır — lineerlik ikinci `kilitle`yi
+  imkânsız kılardı. Test bunu açıkça ölçer.
+- **🔴 İki ÖNCEDEN VAR OLAN self-host parite boşluğu açığa çıktı** (C doğru,
+  self GEÇERSİZ IR):
+  1. **Adlandırılmış işlevi değer olarak geçirmek** (`cagir(kirk)`): C fat
+     value `{ptr @kirk, ptr null}` yayıyor; self adı bilinmeyen değişken sanıp
+     `load i32, ptr ` (BOŞ operand) üretiyordu. **D-391'in `sabit` dalıyla AYNI
+     SINIF** — onun yanına işlev-değeri dalı eklendi.
+  2. **İç içe kapanış:** `lam_kuyruk_emit` kuyruk boyutunu BAŞTA BİR KEZ
+     alıyordu → emit sırasında kuyruğa giren lambda hiç yayılmıyordu
+     (`use of undefined value '@lambda_N'`). **Kuyruk SABİT NOKTAYA kadar
+     işlenmeli** (C'nin `bekleyenler` worklist'i zaten böyle — D-401).
+- **⚠ Test beklentim yanlıştı:** `|| { n = n + 40; ver n; }` ile yakalanan
+  YEREL değişkeni mutasyona uğratıp dışarıdan okumaya çalıştım → görünmedi.
+  Kilit kusuru DEĞİL: kapanış çevreyi KOPYALAYARAK yakalar (D-309). Paylaşılan
+  durum için doğru yol küresel + `güvensiz` (test (d) tam bunu yapar).
+- **⚠ `uygula` ANAHTAR KELİMEDİR** — fikstürde işlev adı yapınca P014 aldım;
+  D-323 tam bu tuzağı kaydetmişti. `cagir` olarak değiştirildi.
+- **Doğrulama:** `kilit` testi C ve SELF'te exit 0 (test (d) **gerçek
+  iki-thread'li karşılıklı dışlama** ölçer: iki `görev`, küresel sayaç = 2).
+  `stdlib_check` döngüsü **9 modül**. Fikstür `cg_islev_deger_ic_ice.kem` →
+  C=42, SELF=42, `define` kümesi BİREBİR (muaf DEĞİL).
+  **Sabotaj 2/2** (S43 işlev-değeri · S44 kuyruk) → ikisi de LINK-RED.
+  Kapılar: `codegen_diff` **148/148** · `yapi_diff` **123/123**.
+
 ### 🎯 D-454 (KARAR 6): `bir()` / `sıfır()` intrinsic'leri — `kuvvet(x,0)` onarıldı
 D-441'de `kuvvet<T>(x,0)`in **x** döndürdüğü (doğrusu 1) ölçülmüş ve testle
 SABİTLENMİŞTİ; kök bir kusur değil **dil sınırıydı**: generic `T` içinde
@@ -1505,82 +1541,13 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
   - `Dosya` ✓ **YAPILDI (D-452)** — `yapı tekkez Dosya`. `ac` artık
     `sonuç<Dosya, metin>` döner, `kapat(d: Dosya)` TÜKETİR. `kapat("")` → T001,
     çift kapatma → L002, kapatmayı unutmak → L001 (üçü de derleme zamanında).
-  - `Kilit` ✗ **YOK** — ama **runtime primitifleri ZATEN VAR**:
-    `kdl_kilit_init` / `kdl_kilit_gir` / `kdl_kilit_cik` / `kdl_kilit_yok_et`
-    (`runtime/kdl_runtime.c`, kanal implementasyonu bunları kullanıyor;
-    Windows `CRITICAL_SECTION` / POSIX `pthread_mutex`). Eksik olan yalnız
-    KEMGU-düzeyi yerleşik adlar + stdlib sarmalı → **yeni yerleşik adı = dil
-    yüzeyi**, Mehmet'e sorulmalı.
-- **Self-host bootstrap** (uzun vade — KEMGU ile KEMGU)
-
-### Self-host AŞAMA durumu (D-035..D-087)
-- ~~AŞAMA 1: lexer self-host~~ ✓ (sıfır-diff bootstrap)
-- ~~AŞAMA 2: parser + checker self-host~~ ✓ (`--ast`/`--checkdump` sıfır-diff)
-- ~~AŞAMA 3: codegen self-host (CG1-CG9a)~~ ✓ (semantik exit-kod eşdeğerlik; CG8 dizi dâhil)
-- ~~AŞAMA 5: codegen self-compile FIXPOINT~~ ✓ **D-085/D-087** (stage1==stage2 + 4 bileşen
-  doğruluk: lexer46+parser46+**checker46**+codegen-fixpoint, `calistir_codegen_bootstrap`)
-- ~~**AŞAMA 4: tek self-host kemgu binary (driver)**~~ ✓ **D-086** — `selfhost/codegen.kem`
-  artık birleşik driver: checker + `--token/--parse/--check/--llvm` dispatch →
-  `build/kemgu_self.exe` (no-flag→--llvm geri uyum). `make calistir_self_driver`:
-  HEM C-derlenmiş HEM **self-host-derlenmiş** driver 4 modda C oracle ile eşleşir
-  (TOKEN 22/22, PARSE 12/12, CHECK 48/48, LLVM 56/56) + driver kendini fixpoint olarak
-  üretir (21728 satır IR kararlı).
-- **SIRADA:** tek-kaynak konsolidasyon (checker.kem ↔ driver) — checker mantığı iki yerde
-  (driver + Aşama 2 referans checker.kem); ileride driver tek-kaynak olabilir.
-
-### 🎯 SELF-HOST CHECKER PARİTESİ TAMAMLANDI (D-350..D-387, 2026-08-06)
-**Ölçülmüş durum — yukarıdaki "26 tanı kodu / kalan ~48" notu ARTIK GEÇERSİZ:**
-- **Self-host tanı kodu: 70** (D-350'de 24). Kalan `T015`/`T023` **ÖLÜ** (C parser'ı
-  o şekilleri zaten reddediyor) → **portlanacak tanı kodu KALMADI.**
-- **GENİŞ ÖLÇÜM 131/131 TAM PARİTE:** `stdlib` + `stdlib/temel` + `test/ornekler` +
-  `kütüphane` + `test/moduller` yüzeyinde C oracle ile **sıfır fark** — ne
-  yanlış-pozitif ne eksik tanı (`kem_os.kem` dâhil).
-  > **⚠⚠ BU İDDİA YÜZEY-SINIRLIYDI — D-420'de düzeltildi.** O ölçüm
-  > `test/cg_korpus`, `test/snapshots`, `selfhost/` ve `drivers/virtio`
-  > yüzeylerini **HİÇ kapsamıyordu**. Tümü tarandığında sapmalar çıktı
-  > (D-420: 5 yanlış-pozitif; D-427: `drivers/` derlemesi KIRIK).
-  > **Parite sayısı yalnız ölçülen yüzey kadar geniştir.** Güncel durum ve
-  > kapı listesi için aşağıdaki D-420 → D-430 bölümlerine bak.
-- **Kapılar (O GÜNKÜ hâl — GÜNCEL DEĞİL):** `checker_diff` 148/148 ·
-  `parser_diff` 13/13 · `codegen_diff` 113/113 · sürücü 4 mod × 2 sürücü +
-  FIXPOINT · `check_kapisi` 210/217 · C birim 903 test.
-  **GÜNCEL kapı listesi (D-430 itibarıyla, 11 kapı):** `checker_diff` 150/150 ·
-  `codegen_diff` 140/140 · `yapi_diff` 117/117 (25 muaf) · `codegen_genis` 70/70 ·
-  `modul_codegen` 21/21 · `ct_bariyer` 13/13 · `baremetal_diff` 4/4 ·
-  `surucu_diff` 13/13 (5 muaf) · `check_genis` 126/126 (7 muaf) ·
-  `parser_diff` 13/13 · `self_driver` 4 mod × 2 sürücü + BOOTSTRAP FIXPOINT.
-- **Bileşik tip temsili (D-377..D-386):** `Dizi<E>` · `seçimlik<T>` · `sonuç<T,H>` ·
-  `&T`/`&değişken T`/`*T` · `tekkez<T>`/`yetki<R>` · `görev<T>`/`kanal<T>` ·
-  `olarak` ifadesinin tipi · yapı ALAN tipleri · `eşleş` desen-bağlama tipleri ·
-  Katman 2 intrinsik dönüşleri. **KALAN:** `işlev(..)->T` — temsil biçimi bir
-  TASARIM kararıdır, **Mehmet'e sorulmadan sabitlenmeyecek**.
-- **`görev<T>` LİNEERDİR** (`kanal<T>` değil) — D-384.
-
-### 🎯 SELF-HOST CODEGEN PARİTESİ TAMAMLANDI (D-388..D-394, 2026-08-06)
-Checker paritesi doygunlaşınca ölçüm CODEGEN'e çevrildi. `codegen_diff` yalnız
-`cg_korpus` üzerinde koşuyordu; `test/ornekler` + `stdlib/temel`e karşı ölçünce
-**31 sapma** çıktı. Yedi partide kapatıldı:
-- **⚠ DÜZELTME (D-395): "GERÇEK SAPMA SIFIR" İDDİAM YANLIŞTI.** Elle koşturduğum
-  ölçüm döngüsünde link başarısızlıkları **sessizce `fark` sayılıp yazdırılmıyordu**;
-  ben o iki dosyayı "beklenen bare-metal segfault" sandım. Kapıyı Makefile'a bağlayıp
-  koşunca gerçek yüz çıktı: `gorev_temel` ve `matris_carpim` **GERÇEKTEN
-  başarısız** (aşağıda). Doğru sayı 65/67'dir, 65/65 değil.
-  **DERS: elle koşturulan ölçüm döngüsü kapı DEĞİLDİR** — kapı sessiz düşen dalı
-  olmayacak biçimde yazılır ve `[ "$fail" -eq 0 ]` ile biter. Ölçümü kapıya
-  bağlamadan "sıfır sapma" DEME.
-- Bare-metal keşif dosyaları (`kem_mmio_ham`, `kem_pointer`) host'ta eşlenmemiş
-  MMIO adresi okuyor → **C DE segfault ediyor**, self-host BİREBİR aynı → parite
-  doğru, kusur değil, muafiyet gerekmez. (`03_kontrol.kem` exit 151 de ÇÖKME
-  DEĞİL: kaynağın kendisi `120+30+1=151` yazıyor — "exit>128 = çökme" yanıltıcı.)
-- **`codegen_diff` 113 → 119** (0 muaf) + **YENİ KAPI `calistir_codegen_genis`**
-  (D-395): `test/ornekler` + `stdlib/temel` üzerinde exit koduna EK OLARAK
-  **stdout** karşılaştırır. `codegen_diff`in dar korpusu bu 31 sapmanın HİÇBİRİNİ
-  görmüyordu; `bignum_selfhost` iki tarafta da exit 0 verirken stdout'ta `0`
-  yerine yığın adresi basıyordu — yalnız exit'e bakan kapı bunu KAÇIRIR.
-  Durum: **65/67, 2 muaf** (aşağıdaki iki kök).
-- **🎯 MUAFİYET LİSTESİ BOŞALDI — kapı 67/67.** Kurulduğunda 2 satır vardı;
-  ikisi de kapatıldı (D-396, D-397). Tasarlandığı gibi: muafiyet listesi
-  küçülmek içindir.
+  - `Kilit` ✓ **YAPILDI (D-455)** — `stdlib/kilit.kem`, KAPSAMLI API:
+    `kilitle(k, || { ... })`. Ham `al`/`bırak` çifti BİLEREK dışa verilmez
+    (unutulmuş-bırak = deadlock, çift-bırak = UB). **`Kilit` LİNEER DEĞİL** —
+    kilit defalarca kullanılır; lineerlik ikinci `kilitle`yi engellerdi.
+    ⚠ Öneri yazılırken "runtime primitifleri hazır" denmişti; ÖLÇÜM düzeltti:
+    mevcut `kdl_kilit_*` `static` ve `KdlKanal*` alıyor (kanala gömülü) →
+    bağımsız `KdlKilit` + 4 dışa-verilen işlev YAZILDI.
   - ~~`matris_carpim`~~ ✓ **D-397: SIMD `vektör<T,N>` eklendi.** **DÖRT ayrı
     kök**, her biri bir öncekini onarınca ortaya çıktı (tek ölçümle
     görülemezlerdi): (1) `ll_tip` → `"<N x T>"`; (2) `vektor_doldur`/`_eleman`/

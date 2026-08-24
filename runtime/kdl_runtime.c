@@ -803,6 +803,82 @@ typedef struct {
 #endif
 } KdlKanal;
 
+/* ===================================================================
+ * [D-455] BAGIMSIZ KILIT (mutex) — KEMGU `Kilit` tipinin runtime'i.
+ * -------------------------------------------------------------------
+ * Yukaridaki kdl_kilit_* yardimcilari KANAL'a gomuludur (`static`, KdlKanal*
+ * alir) — genel amacli bir kilit API'si DEGILDIR. Onerirken "runtime
+ * primitifleri hazir" demistim; OLCUM bunu duzeltti: hazir olan yalniz
+ * kanal-ici kilit; bagimsiz kilit YENI runtime kodu ister.
+ *
+ * Handle OPAK bir isaretcidir; KEMGU tarafinda `yapi Kilit { h: metin; }`
+ * icinde tasinir ve kullanici ONA HIC DOKUNMAZ — yalnizca `kilitle(k, ||{..})`
+ * kapsamli API'si uzerinden kullanilir (bkz. stdlib/kilit.kem). Bu, D-443'te
+ * kaydedilen "opak handle `metin` olarak tipleniyor" tuzagini onler: handle
+ * KACMAZ, uzerinde `==`/`metin_uzunluk` cagrilmaz.
+ *
+ * Thread'siz derlemede (KDL_THREAD_* tanimsiz) islemler NO-OP'tur: tek
+ * thread'de kilit gereksizdir ve boylece bare-metal/host-thread'siz yollar
+ * kirilmaz. */
+typedef struct {
+#ifdef KDL_THREAD_WIN
+    CRITICAL_SECTION cs;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t mtx;
+#endif
+    int aktif;
+} KdlKilit;
+
+void *kdl_kilit_olustur(void) {
+    KdlKilit *k = (KdlKilit *)calloc(1, sizeof(KdlKilit));
+    if (!k) return NULL;
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&k->cs);
+    k->aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    if (pthread_mutex_init(&k->mtx, NULL) != 0) { free(k); return NULL; }
+    k->aktif = 1;
+#else
+    k->aktif = 0;   /* thread yok → no-op kilit */
+#endif
+    return (void *)k;
+}
+
+void kdl_kilit_al(void *p) {
+    KdlKilit *k = (KdlKilit *)p;
+    if (!k || !k->aktif) return;
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&k->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&k->mtx);
+#endif
+}
+
+void kdl_kilit_birak(void *p) {
+    KdlKilit *k = (KdlKilit *)p;
+    if (!k || !k->aktif) return;
+#ifdef KDL_THREAD_WIN
+    LeaveCriticalSection(&k->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_unlock(&k->mtx);
+#endif
+}
+
+void kdl_kilit_yok(void *p) {
+    KdlKilit *k = (KdlKilit *)p;
+    if (!k) return;
+    if (k->aktif) {
+#ifdef KDL_THREAD_WIN
+        DeleteCriticalSection(&k->cs);
+#elif defined(KDL_THREAD_POSIX)
+        pthread_mutex_destroy(&k->mtx);
+#endif
+    }
+    free(k);
+}
+
+
 /* Portable kilit yardimcilari */
 static void kdl_kilit_init(KdlKanal *k) {
 #ifdef KDL_THREAD_WIN

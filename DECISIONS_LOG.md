@@ -5,6 +5,74 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-455 [YÜKSEK] — KARAR 7: `Kilit` (kapsamlı mutex) + İKİ self-host parite boşluğu
+
+Önerilen sıralamanın son maddesi. Öneriyi yazarken *"runtime primitifleri
+hazır"* demiştim — **ÖLÇÜM BUNU DÜZELTTİ.**
+
+### ⚠ Kendi gerekçem yanlıştı
+`kdl_kilit_init` / `_gir` / `_cik` / `_yok_et` gerçekten VAR ama:
+- **`static`** (dışa verilmiyor), ve
+- **`KdlKanal *`** alıyorlar — kanal implementasyonuna gömülüler, genel amaçlı
+  bir kilit API'si DEĞİLLER.
+
+Yani bağımsız `Kilit` YENİ runtime kodu istedi: `KdlKilit` tipi +
+`kdl_kilit_olustur` / `_al` / `_birak` / `_yok` (opak `void*`, thread'siz
+derlemede NO-OP). **Gerekçe metni de bir iddiadır — ölç** (D-453'ün dersi,
+üst üste ikinci kez kendi yazdığım gerekçede çıktı).
+
+### Tasarım: kapsamlı API, ham `al`/`bırak` DIŞA VERİLMEZ
+```
+kilitle(k, || { ... })     // kilidi açma yolu programcının elinden alınır
+```
+Ham çift iki hata sınıfını davet eder: unutulmuş `bırak` (deadlock) ve çift
+`bırak` (UB). Kapanışlar iki derleyicide de çalıştığı için (D-322) sahiplik
+dile devredilebiliyor.
+- **`Kilit` LİNEER DEĞİL** (`yapı tekkez` değil) ve bu bilinçli: dosya
+  handle'ı (D-452) tam bir kez tüketilmelidir, kilit ise DEFALARCA kullanılır.
+  Lineer yapmak ikinci `kilitle` çağrısını imkânsız kılardı. Test bunu açıkça
+  ölçer (b maddesi).
+- Handle opaktır ve `yapı Kilit` içinde taşınır; kullanıcı ona hiç dokunmaz →
+  D-443'ün "opak handle `metin` olarak tipleniyor" tuzağı tekrarlanmaz
+  (handle KAÇMAZ).
+
+### 🔴 İki ÖNCEDEN VAR OLAN self-host parite boşluğu açığa çıktı
+Her ikisi de C'de doğruydu, self-host'ta GEÇERSİZ IR üretiyordu:
+1. **Adlandırılmış işlevi değer olarak geçirmek** (`cagir(kirk)`): C fat value
+   `{ ptr @kirk, ptr null }` yayıyor; self-host adı BİLİNMEYEN DEĞİŞKEN sanıp
+   `load i32, ptr ` (BOŞ operand) üretiyordu. **D-391'in `sabit` dalıyla AYNI
+   SINIF, aynı belirti** — o dalın hemen yanına işlev-değeri dalı eklendi.
+2. **İç içe kapanış** (lifted lambda gövdesinde başka bir lambda):
+   `lam_kuyruk_emit` kuyruk boyutunu **BAŞTA BİR KEZ** alıyordu; emit sırasında
+   kuyruğa giren yeni lambda hiç yayılmıyordu → `use of undefined value
+   '@lambda_N'`. **Kuyruk SABİT NOKTAYA kadar işlenmeli** — C'nin `bekleyenler`
+   worklist'i zaten böyle çalışıyor (D-401). Tek satırlık onarım.
+
+### ⚠ Test beklentim yanlıştı: yakalanan yerel MUTASYONU görünmez
+İlk testte `kilitle(k, || { n = n + 40; ver n; })` yazıp dışarıdan `n`i
+okumaya çalıştım → C'de "yan etki gorunmedi". **Kilit kusuru DEĞİL:** kapanış
+çevreyi KOPYALAYARAK yakalar (heap env kopyası, D-309). Paylaşılan durum için
+doğru yol küresel + `güvensiz`tir; test (d) maddesinde tam bunu yapıyor.
+
+### ⚠ `uygula` bir ANAHTAR KELİMEDİR
+Fikstürde yardımcı işleve `uygula` adını verdim → **P014**. D-323 tam bu
+tuzağı kaydetmişti ("eski testte işlev adı olarak `uygula` kullanılmıştı").
+`cagir` olarak değiştirildi.
+
+### Doğrulama
+- `stdlib/kilit.kem` + `test/stdlib/test_kilit.kem` → **C ve SELF: exit 0**,
+  `kilit: TUM TESTLER GECTI`. Test (d) maddesi **GERÇEK iki-thread'li
+  karşılıklı dışlama** ölçer (iki `görev`, küresel sayaç, sonuç tam 2).
+- Kapı: `calistir_stdlib_check` davranış döngüsüne `kilit:0` eklendi (9 modül).
+- Fikstür `test/cg_korpus/cg_islev_deger_ic_ice.kem` → **C=42, SELF=42**;
+  `define` kümesi BİREBİR (muaf DEĞİL).
+- **Sabotaj 2/2:** S43 (işlev-değeri dalını kaldır) → LINK-RED ·
+  S44 (kuyruğu sabit boyuta döndür) → LINK-RED.
+- Kapılar: `codegen_diff` **148/148** · `yapi_diff` **123/123** ·
+  `stdlib_check` 9 modül.
+
+---
+
 ## D-454 [ORTA] — KARAR 6: `bir()` / `sıfır()` birim-değer intrinsic'leri + `kuvvet(x,0)` onarıldı
 
 Önerilen sıralamada 6. madde. D-441'de `kuvvet<T>(x, 0)`in **x** döndürdüğü

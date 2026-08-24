@@ -3617,6 +3617,7 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
     eğer metin_baslar(ad, "otp_") { ver metin_birlestir("kdl_", ad); }
     eğer metin_baslar(ad, "metin_") veya metin_baslar(ad, "dosya_") veya metin_baslar(ad, "yaz_")
          veya metin_baslar(ad, "yazdir_") veya metin_baslar(ad, "arg_")
+         veya metin_baslar(ad, "kilit_")   // [D-455]
          veya metin_esit(ad, "oku_karakter") veya metin_esit(ad, "ondalik_bicimle") {
         ver metin_birlestir("kdl_", ad);
     }
@@ -3649,6 +3650,8 @@ işlev builtin_ret(ad: metin) -> metin {
     // HİÇBİR KAPI GÖRMEDİ çünkü korpusta onu çağıran dosya yoktu; ancak
     // `stdlib/dosya.kem` onu kullanmaya başlayınca ortaya çıktı.
     eğer metin_esit(ad, "dosya_gecersiz") { ver "ptr"; }
+    eğer metin_esit(ad, "kilit_olustur") { ver "ptr"; }   // [D-455] opak handle
+    // kilit_al / kilit_birak / kilit_yok → void (aşağıdaki varsayılana düşer)
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
          veya metin_esit(ad, "arg_sayi") veya metin_esit(ad, "oku_karakter") { ver "i32"; }
     eğer metin_esit(ad, "dosya_boyut") { ver "i64"; }
@@ -3719,7 +3722,11 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_dosya_kapat(ptr)"); yb(10);
     yaz_str("declare i1 @kdl_dosya_var_mi(ptr)"); yb(10);
     yaz_str("declare i1 @kdl_dosya_gecerli(ptr)"); yb(10);   // [D-449]
-    yaz_str("declare ptr @kdl_dosya_gecersiz()"); yb(10);   // [D-449]
+    yaz_str("declare ptr @kdl_dosya_gecersiz()"); yb(10);
+    yaz_str("declare ptr @kdl_kilit_olustur()"); yb(10);      // [D-455]
+    yaz_str("declare void @kdl_kilit_al(ptr)"); yb(10);       // [D-455]
+    yaz_str("declare void @kdl_kilit_birak(ptr)"); yb(10);    // [D-455]
+    yaz_str("declare void @kdl_kilit_yok(ptr)"); yb(10);      // [D-455]   // [D-449]
     yaz_str("declare i32 @kdl_dosya_sil(ptr)"); yb(10);
     yaz_str("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)"); yb(10);
     yaz_str("declare i64 @kdl_dosya_boyut(ptr)"); yb(10);
@@ -4473,6 +4480,28 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 eğer metin_esit(stip, "") == yanlış { p.son_tip = stip; }
                 p.beklenen_ll = sbek;
                 ver sr;
+            }
+        }
+        // [D-455] Yerel/param/sabit DEĞİLSE üst-düzey İŞLEV olabilir: adı DEĞER
+        // konumunda kullanmak (`sar(kirk)`) fat value `{ ptr @kirk, ptr null }`
+        // üretir — env yok, yani bare fn-ptr (çağrı yerindeki env==null runtime
+        // dispatch'i bunu zaten ayırıyor, D-322). C bunu yapıyordu; self-host
+        // adı BİLİNMEYEN DEĞİŞKEN sanıp `load i32, ptr ` (BOŞ operand) yayıyordu
+        // = geçersiz IR. D-391'in `sabit` dalıyla AYNI SINIF, aynı belirti.
+        eğer metin_esit(areg, "") {
+            değişken fadv: metin = fn_coz(p, dizi_al(p.a_deg, idx));
+            eğer metin_esit(fadv, "") == yanlış {
+                değişken f0: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(f0);
+                yaz_str(" = insertvalue { ptr, ptr } undef, ptr @");
+                yaz_str(fadv); yaz_str(", 0"); yb(10);
+                değişken f1: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(f1);
+                yaz_str(" = insertvalue { ptr, ptr } "); yaz_str(f0);
+                yaz_str(", ptr null, 1"); yb(10);
+                p.son_tip = "{ ptr, ptr }"; p.son_ref = ""; p.son_elem = "";
+                p.son_ic = fn_ret_bul(p, fadv);   // D-293: bildirilen dönüş IR'ı
+                ver f1;
             }
         }
         değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, idx));
@@ -7446,10 +7475,14 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
     ver 0;
 }
 // D-300: tüm kuyruğa alınmış lifted-lambda'ları emit et (emit_tanimlar SONRASI).
+// [D-455] Kuyruk SABİT NOKTAYA kadar işlenir. Öncesinde boyut BAŞTA BİR KEZ
+// alınıyordu; bir lambda emit edilirken İÇİNDEN yeni bir lambda kuyruğa
+// girerse (İÇ İÇE KAPANIŞ) o hiç yayılmıyordu → `use of undefined value
+// '@lambda_N'` (ölçüldü: `görev_başlat(|| kilitle(k, || {...}))`).
+// C'nin `bekleyenler` worklist'i zaten böyle çalışıyor (D-401).
 işlev lam_kuyruk_emit(p: &değişken Ayr) -> tam32 {
-    değişken n: tam32 = dizi_boyut(p.lam_node);
     değişken i: tam32 = 0;
-    iken i < n {
+    iken i < dizi_boyut(p.lam_node) {
         lam_emit(p, i);
         i = i + 1;
     }
@@ -7959,7 +7992,9 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "arg_sayi"); g_ekle(p, "arg_al");
     g_ekle(p, "dosya_ac"); g_ekle(p, "dosya_kapat"); g_ekle(p, "dosya_oku");
     g_ekle(p, "dosya_yaz"); g_ekle(p, "dosya_boyut"); g_ekle(p, "dosya_var_mi");
-    g_ekle(p, "dosya_gecerli"); g_ekle(p, "dosya_gecersiz");   // [D-449]
+    g_ekle(p, "dosya_gecerli"); g_ekle(p, "dosya_gecersiz");
+    g_ekle(p, "kilit_olustur"); g_ekle(p, "kilit_al");   // [D-455]
+    g_ekle(p, "kilit_birak"); g_ekle(p, "kilit_yok");   // [D-455]   // [D-449]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
@@ -8275,6 +8310,10 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "dosya_kapat", "boş", ["metin"]);
     yerlesik_ekle(p, "dosya_gecerli", "mantıksal", ["metin"]);   // [D-449]
     yerlesik_ekle(p, "dosya_gecersiz", "metin", bos);   // [D-449]
+    yerlesik_ekle(p, "kilit_olustur", "metin", bos);   // [D-455]
+    yerlesik_ekle(p, "kilit_al", "boş", ["metin"]);   // [D-455]
+    yerlesik_ekle(p, "kilit_birak", "boş", ["metin"]);   // [D-455]
+    yerlesik_ekle(p, "kilit_yok", "boş", ["metin"]);   // [D-455]
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
     yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);

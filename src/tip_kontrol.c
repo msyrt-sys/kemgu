@@ -354,6 +354,29 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_gecersiz", 14, NULL, 0, tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* [D-455] Bagimsiz kilit (mutex). Handle OPAKtir ve kullanici ONA HIC
+     * DOKUNMAZ — yalnizca `stdlib/kilit.kem`in kapsamli `kilitle(k, ||{..})`
+     * API'si uzerinden kullanilir. Ham al/birak cifti kasitli olarak stdlib'de
+     * DISA VERILMEZ: unutulmus-birak ve cift-birak hatalarini davet eder. */
+    {
+        EKLE_BUILTIN("kilit_olustur", 13, NULL, 0, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("kilit_al", 8, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("kilit_birak", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("kilit_yok", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* [D-449] dosya_gecerli(h: metin) -> mantıksal — opak handle null-sorgusu.
      * `h != ""` ARTIK KULLANILAMAZ: `metin` uzerinde `!=` icerik karsilastirir
      * (D-449) ve handle bir DIZGI DEGIL, `FILE*`tir. */

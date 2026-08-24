@@ -1855,7 +1855,9 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "arg_sayi"); g_ekle(p, "arg_al");
     g_ekle(p, "dosya_ac"); g_ekle(p, "dosya_kapat"); g_ekle(p, "dosya_oku");
     g_ekle(p, "dosya_yaz"); g_ekle(p, "dosya_boyut"); g_ekle(p, "dosya_var_mi");
-    g_ekle(p, "dosya_gecerli"); g_ekle(p, "dosya_gecersiz");   // [D-449]
+    g_ekle(p, "dosya_gecerli"); g_ekle(p, "dosya_gecersiz");
+    g_ekle(p, "kilit_olustur"); g_ekle(p, "kilit_al");   // [D-455]
+    g_ekle(p, "kilit_birak"); g_ekle(p, "kilit_yok");   // [D-455]   // [D-449]
     g_ekle(p, "yazdir_hata");   // [D-450]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
@@ -2167,7 +2169,11 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "dosya_yaz", "tam32", ["metin", "metin"]);
     yerlesik_ekle(p, "dosya_kapat", "boş", ["metin"]);
     yerlesik_ekle(p, "dosya_gecerli", "mantıksal", ["metin"]);   // [D-449]
-    yerlesik_ekle(p, "dosya_gecersiz", "metin", bos);   // [D-449]
+    yerlesik_ekle(p, "dosya_gecersiz", "metin", bos);
+    yerlesik_ekle(p, "kilit_olustur", "metin", bos);   // [D-455]
+    yerlesik_ekle(p, "kilit_al", "boş", ["metin"]);   // [D-455]
+    yerlesik_ekle(p, "kilit_birak", "boş", ["metin"]);   // [D-455]
+    yerlesik_ekle(p, "kilit_yok", "boş", ["metin"]);   // [D-455]   // [D-449]
     yerlesik_ekle(p, "yazdir_hata", "boş", ["metin"]);   // [D-450] STDERR
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);

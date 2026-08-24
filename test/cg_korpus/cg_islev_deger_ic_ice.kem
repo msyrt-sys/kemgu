@@ -1,0 +1,35 @@
+// [D-455] İki AYRI self-host parite boşluğu — ikisi de `Kilit` işi sırasında
+// ortaya çıktı ve ikisi de ÖNCEDEN VAR OLAN kusurlardı (C doğruydu).
+//
+// (A) ADLANDIRILMIŞ İŞLEVİ değer olarak geçirmek: `sar(kirk)`.
+//     C fat value `{ ptr @kirk, ptr null }` yayıyordu; self-host adı
+//     BİLİNMEYEN DEĞİŞKEN sanıp `load i32, ptr ` (BOŞ operand) üretiyordu
+//     = geçersiz IR. D-391'in `sabit` dalıyla AYNI SINIF, aynı belirti.
+//
+// (B) İÇ İÇE KAPANIŞ: lifted bir lambda'nın gövdesinde başka bir lambda.
+//     `lam_kuyruk_emit` kuyruk boyutunu BAŞTA BİR KEZ alıyordu; emit sırasında
+//     kuyruğa giren yeni lambda hiç yayılmıyordu → `use of undefined value
+//     '@lambda_N'`. Kuyruk SABİT NOKTAYA kadar işlenmeli (C'nin `bekleyenler`
+//     worklist'i zaten böyle — D-401).
+// Exit: 42
+
+işlev kirk() -> tam32 { ver 40; }
+
+işlev cagir(f: işlev() -> tam32) -> tam32 { ver f(); }
+
+// (B) gövdesinde YENİ bir kapanış üreten bir kapanış çağırır.
+// ⚠ İşlev adı `cagir` — `uygula` bir ANAHTAR KELİMEDİR (D-323'te de aynı
+// tuzağa düşülmüştü); işlev adı olarak kullanmak P014 verir.
+işlev ic_ice() -> tam32 {
+    ver cagir(|| {
+        ver cagir(|| { ver 2; });
+    });
+}
+
+işlev main() -> tam32 {
+    // (A) adlandırılmış işlev → işlev-değeri
+    değişken a: tam32 = cagir(kirk);          // 40
+    // (B) iç içe kapanış
+    değişken b: tam32 = ic_ice();              // 2
+    ver a + b;                                  // 42
+}

@@ -708,7 +708,7 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@# ve main'leri baglanmis olmasina ragmen HICBIR KAPI onlari CALISTIRMIYORDU
 	@# (dizi 99 + matematik 47 test). Beklenen cikis ACIK yazilir — sabit 0
 	@# varsaymak o iki modulu sessizce disarida birakiyordu.
-	@for spec in json:0 metin:0 opsiyonel:0 karsilastir:0 sayisal:0 dosya:0 \
+	@for spec in json:0 metin:0 opsiyonel:0 karsilastir:0 sayisal:0 dosya:0 kilit:0 \
 	             dizi:42 matematik:42; do \
 		mod=$${spec%%:*}; bek=$${spec##*:}; \
 		f="stdlib/$$mod.kem"; \
