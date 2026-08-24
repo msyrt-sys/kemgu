@@ -59,9 +59,14 @@ cg_rho_sahip_confined cg_rho_sahip_kacis"
 #      (`cg_metin_esitlik`) böylece yapısal kapının TAM denetimi altında kalır
 #      ve muafiyet yalnız generic dosyaya düşer. Davranışsal eşdeğerlik
 #      (`codegen_diff`) İKİSİNDE de ölçülür — muaf olan yalnız `define` kümesi.
+#      [D-454] `cg_birim_deger` AYNI sınıf. D-449'da fikstürü bölerek muafiyeti
+#      dar tutabilmiştim (generic yol ayrı dosyaya alınmıştı); BURADA bölmek
+#      çare DEĞİL — `bir()`/`sıfır()` zaten yalnız generic gövdede anlamlıdır,
+#      yani her yol bir generic işlev gerektirir. Davranışsal eşdeğerlik
+#      (`codegen_diff`) ölçülmeye devam ediyor; muaf olan yalnız `define` kümesi.
 MUAF_K4="cg_generic_mono cg_generic_sonuc_ptr cg_modul_alias cg_modul_capraz
 cg_modul_generic cg_modul_transitif cgmodul_mat cgmodul_zincir
-cg_metin_esitlik_generic"
+cg_metin_esitlik_generic cg_birim_deger"
 
 MUAF="$MUAF_K1 $MUAF_K2 $MUAF_K3 $MUAF_K4"
 muaf_mi() { case " $(echo $MUAF) " in *" $1 "*) return 0;; esac; return 1; }

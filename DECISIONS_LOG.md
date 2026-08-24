@@ -5,6 +5,69 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-454 [ORTA] — KARAR 6: `bir()` / `sıfır()` birim-değer intrinsic'leri + `kuvvet(x,0)` onarıldı
+
+Önerilen sıralamada 6. madde. D-441'de `kuvvet<T>(x, 0)`in **x** döndürdüğü
+(doğrusu 1) ölçülmüş ve testle SABİTLENMİŞTİ; kök bir kusur değil, **dil
+sınırıydı**: generic `T` içinde `ver 1;` yazmak `T020` verir.
+
+### İddia ÖNCE ölçüldü — hâlâ geçerliydi
+`ver 1;` bir generic gövdede → `T020`. `kuvvet(5,0)` → **5**. D-401'in generic
+monomorfizasyonu bu iddiayı bayatlatmış olabilirdi; olmamış.
+
+### Çözüm: tam constraint sistemi DEĞİL, iki dar intrinsic
+`bir()` ve `sıfır()` dönüş tipini **BEKLENEN TİPTEN** alır (`hiç` gibi
+bağlamsal). Generic gövdede beklenen `T`dir; monomorfizasyonda somutlaşır ve
+codegen doğru genişlik/kind'da **sabit yayar** — çağrı değil (`@bir` diye bir
+sembol yoktur).
+
+`sayisal.kem`in kendi yorumu bu çözümü zaten işaret ediyordu: *"tipik bir
+yaklaşım `sifir<T>()` + `bir<T>()` helper'ı"*. Yorum çözümü biliyordu, kimse
+yazmamıştı.
+
+**Neden `kuvvet_tam` eklenmedi:** geçici bir boşluk için KALICI API borcu
+olurdu; constraint sistemi gelince elde gereksiz ikinci bir ad kalır ve silmek
+yeni bir kırılma olur. **Neden `x / x` değil:** tip kontrolünden geçer ama
+`x = 0`da sıfıra bölme = ÇÖKME; oysa 0⁰ geleneksel olarak 1. Yanlış cevabı
+çökmeyle takas etmek iyileştirme değildir (D-441'de ölçülmüştü).
+
+### Uygulama
+- C: `tip_kontrol.c` → `tip_belirle_beklenen` içinde özel-durum (dönüş =
+  beklenen; `tip_sayisal_mi` generic param için "deferred true").
+  `llvm.c` → beklenen IR tipinde `add`/`fadd` sabiti.
+- Self-host: `codegen.kem` çağrı dalı + `checker.kem`/`codegen.kem` yerleşik ad
+  kaydı.
+- `stdlib/temel/matematik.kem` `kuvvet` ve `stdlib/temel/sayisal.kem` `us`
+  onarıldı.
+
+### ⚠ İki yanlış yerleştirme, ikisini de DERLEYİCİ yakaladı
+1. Özel-durumu önce `tip_belirle`ye koydum — orada `beklenen` YOK
+   (`'beklenen' undeclared`). Doğru yer `tip_belirle_beklenen`.
+2. `"sıfır"` UTF-8 dizgisini `"s\xc4\xb1f\xc4\xb1r"` yazdım → **"hex escape
+   sequence out of range"**: `\xb1`den sonra gelen `f` HEX RAKAMDIR.
+   CLAUDE.md'nin tam olarak uyardığı tuzak; concatenation ile ayrıldı.
+3. Self-host'ta beklenen tipi yalnız `beklenen_ll`den okudum — o kanal YALNIZ
+   tagged-union taşır, skaler taşımaz → `double` instantiation'ında
+   `add i32 0, 1` yayıldı (LLVM-RED). Zincir `beklenen_ll` → `beklenen_elem`
+   → `cur_ret` olarak düzeltildi.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_birim_deger.kem` → **C=42, SELF=42**. Dört
+  instantiation (tam32 · tam64 · kesirli64 · `sıfır()`) + birim elemanın
+  GERÇEK bir indirgemede kullanımı (boş dizide çarpım = 1).
+- **Sabotaj S43** (`bir()`i daima 0 yap) → **exit 33**.
+- D-441'in sabitlediği test gerçeğe göre güncellendi: `test_kuvvet_5_0() != 1`.
+  **Sabitlenmiş bilinen-yanlış test tam da tasarlandığı gibi kırmızıya dönüp
+  bunu bildirdi** (D-449'da `ac("yok.txt")` ile aynı desen — ikinci kez işe
+  yaradı).
+- Kapılar: `codegen_diff` **147/147** · `checker_diff` **153/153 (0 muaf)** ·
+  `yapi_diff` **122/122** · `stdlib_check` 8 modül.
+- `yapi_diff`te fikstür bilinen **K4** sınıfına (generic BASE gövdesi, D-401
+  V1) düşüyor. D-449'da fikstürü bölerek muafiyeti dar tutabilmiştim; burada
+  bölmek çare DEĞİL — `bir()` zaten yalnız generic gövdede anlamlıdır.
+
+---
+
 ## D-453 [ORTA] — KARAR 5: `calistir_qemu_cekirdek` — oracle değişikliklerinin bare-metal kanıtı
 
 Önerilen sıralamada 5. madde. D-448 şunu saptamıştı: `src/llvm.c`ye dokunan

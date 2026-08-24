@@ -1,0 +1,44 @@
+// [D-454] `bir()` / `sıfır()` — birim değer intrinsic'leri.
+//
+// Generic bir işlevde `ver 1;` yazmak T020 verir: sayısal literali `T`ye
+// bağlayacak constraint sistemi YOK. Bu, D-441'de ölçülen `kuvvet<T>(x, 0)`
+// = x kusurunun KÖKÜYDÜ (5⁰ = 5 dönüyordu).
+//
+// Çözüm tam constraint sistemi DEĞİL, iki DAR intrinsic: dönüş tipi BEKLENEN
+// TİPTEN gelir (`hiç` gibi bağlamsal). Generic gövdede beklenen `T`dir;
+// monomorfizasyonda somutlaşır ve codegen doğru genişlik/kind'da SABİT yayar.
+// Çağrı DEĞİL sabit üretilir — `@bir` diye bir sembol yoktur.
+//
+// Dört instantiation birden ölçülür (biri diğerini onarmıyor): tam32 · tam64 ·
+// kesirli64 · `sıfır()` dalı. Ayrıca birim ELEMAN olarak kullanımı (fold).
+// Exit: 42
+
+işlev birim<T>(x: T, n: tam32) -> T {
+    eğer n == 0 { ver bir(); }
+    eğer n == 9 { ver sıfır(); }
+    ver x;
+}
+
+// Birim eleman gerçek bir indirgemede: boş dizide çarpımsal birim 1 olmalı.
+işlev carpim<T>(xs: Dizi<T>) -> T {
+    değişken s: T = bir();
+    için x: xs { s = s * x; }
+    ver s;
+}
+
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    t = t + birim(5, 0);                                 // 1   tam32
+    t = t + (birim(7 olarak tam64, 0) olarak tam32);     // 2   tam64
+    t = t + (birim(2.5, 0) olarak tam32);                // 3   kesirli64
+    t = t + birim(9, 9);                                 // 3   sıfır()
+    // boş dizi → çarpımsal birim
+    değişken bos: Dizi<tam32> = [];
+    t = t + carpim(bos);                                 // 4
+    // dolu dizi → 2*3 = 6
+    değişken d: Dizi<tam32> = [];
+    dizi_ekle(d, 2); dizi_ekle(d, 3);
+    t = t + carpim(d);                                   // 10
+    t = t + birim(32, 1);                                // 42  (x yolu)
+    ver t;
+}

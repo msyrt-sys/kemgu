@@ -1860,6 +1860,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
+    g_ekle(p, "bir"); g_ekle(p, "sıfır");   // [D-454]
     g_ekle(p, "tekkez_olustur"); g_ekle(p, "sabitsüre_olustur");
     g_ekle(p, "delege"); g_ekle(p, "geri_al");
     g_ekle(p, "görev_başlat"); g_ekle(p, "görev_birleştir");

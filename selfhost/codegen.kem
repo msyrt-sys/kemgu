@@ -4876,6 +4876,34 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             ct_bariyer_yaz();
             ver sv2;
         }
+        // [D-454] bir() / sıfır() — birim değer intrinsic'leri. Tip kontrolü
+        // dönüş tipini BEKLENEN'den verir; codegen o IR tipinde SABİT yayar.
+        // Çağrı DEĞİL sabit üretilir: `@bir` diye bir sembol YOKTUR.
+        eğer metin_esit(fad, "bir") veya metin_esit(fad, "sıfır") {
+            // Beklenen tipin kaynağı: agregat bağlamı (`beklenen_ll`) → yoksa
+            // `beklenen_elem` (dizi elemanı) → yoksa `cur_ret` (mevcut işlevin
+            // dönüşü; `ver bir();` bağlamı bu). `beklenen_ll` YALNIZ tagged-union
+            // taşır, skaler taşımaz — ilk denemede yalnız onu okudum ve `double`
+            // instantiation'ında `add i32 0, 1` yayıldı (LLVM-RED, ölçüldü).
+            değişken bt: metin = p.beklenen_ll;
+            eğer metin_uzunluk(bt) == 0 { bt = p.beklenen_elem; }
+            eğer metin_uzunluk(bt) == 0 { bt = p.cur_ret; }
+            eğer metin_uzunluk(bt) == 0 { bt = "i32"; }
+            değişken br: metin = reg_str(yeni_reg(p));
+            eğer kesirli_ll_mi(bt) {
+                yaz_str("  "); yaz_str(br); yaz_str(" = fadd "); yaz_str(bt);
+                yaz_str(" 0.0, ");
+                eğer metin_esit(fad, "bir") { yaz_str("1.0"); } değilse { yaz_str("0.0"); }
+                yb(10);
+            } değilse {
+                yaz_str("  "); yaz_str(br); yaz_str(" = add "); yaz_str(bt);
+                yaz_str(" 0, ");
+                eğer metin_esit(fad, "bir") { yaz_str("1"); } değilse { yaz_str("0"); }
+                yb(10);
+            }
+            p.son_tip = bt; p.son_elem = ""; p.son_ref = "";
+            ver br;
+        }
         eğer metin_esit(fad, "tekkez_olustur") ve (cs == 2) {
             // D-319: tekkez_olustur(e) — PASS-THROUGH (sıfır talimat). Lineer
             // muhasebe tamamen tip kontrolde; bu dal olmadan genel çağrı yoluna
@@ -7935,6 +7963,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
+    g_ekle(p, "bir"); g_ekle(p, "sıfır");   // [D-454]
     g_ekle(p, "tekkez_olustur"); g_ekle(p, "sabitsüre_olustur");
     g_ekle(p, "delege"); g_ekle(p, "geri_al");
     g_ekle(p, "görev_başlat"); g_ekle(p, "görev_birleştir");

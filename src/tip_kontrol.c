@@ -4289,6 +4289,48 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         return tip_belirle(tk, d);
     }
 
+    /* [D-454] Birim-deger intrinsic'leri: bir() / sıfır().
+     *
+     * Generic bir islevde `ver 1;` yazmak T020 verir — sayisal literali `T`ye
+     * baglayacak constraint sistemi YOK (olculdu; iddia guncel). Bu, D-441'de
+     * kaydedilen `kuvvet<T>(x, 0)` = x kusurunun KOKUYDU.
+     *
+     * Cozum tam constraint sistemi DEGIL, iki DAR intrinsic: donus tipi
+     * BEKLENEN TIPTEN gelir (`hiç` gibi baglamsal) — bu yuzden burada,
+     * `tip_belirle_beklenen` icinde ele alinir; `tip_belirle`de `beklenen`
+     * YOKTUR (ilk denemede oraya koymustum, derleyici yakaladi).
+     * Generic govdede beklenen `T`dir; monomorfizasyonda somutlasir ve codegen
+     * dogru genislikte sabit yayar. Yalniz `kuvvet` degil, HER generic
+     * indirgemenin birim elemani boylece yazilabilir olur. */
+    if (d->tip == DUGUM_CAGRI && d->veri.cagri.hedef &&
+        d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+        const char *bad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+        int buz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+        /* "sıfır" UTF-8 = s \xc4\xb1 f \xc4\xb1 r (7 byte). Escape'ten sonra
+         * 'f' HEX RAKAMDIR → concatenation ZORUNLU (CLAUDE.md UTF-8 kurali;
+         * ilk yazimda "hex escape out of range" uyarisi aldim). */
+        int bir_mi = (buz == 3 && memcmp(bad, "bir", 3) == 0);
+        int sifir_mi = (buz == 7 &&
+                        memcmp(bad, "s\xc4\xb1" "f\xc4\xb1" "r", 7) == 0);
+        if (bir_mi || sifir_mi) {
+            if (d->veri.cagri.sayi != 0) {
+                tip_hata(tk, d, "T010",
+                    bir_mi ? "bir() arguman almaz" : "sifir() arguman almaz");
+                return t_hata(tk);
+            }
+            /* Beklenen SAYISAL olmali. Generic param icin `tip_sayisal_mi`
+             * "deferred true" doner (ADIM 23) → denetim instantiation'a
+             * ertelenir. */
+            if (!tip_sayisal_mi(beklenen)) {
+                tip_hata(tk, d, "T003",
+                    bir_mi ? "bir() yalniz sayisal tipte kullanilabilir"
+                           : "sifir() yalniz sayisal tipte kullanilabilir");
+                return t_hata(tk);
+            }
+            return (TipBilgisi *)beklenen;
+        }
+    }
+
     switch (d->tip) {
         case DUGUM_TAM:
             /* Sayi literali context tamsayi tipine gore */

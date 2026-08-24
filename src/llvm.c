@@ -5300,6 +5300,28 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = { rr, "i32", 0, 0};
                 return s;
             }
+            /* [D-454] bir() / sıfır() — birim deger intrinsic'leri.
+             * Tip kontrolu donus tipini BEKLENEN'den verir; codegen burada o
+             * IR tipinde SABIT yayar. Generic govdede beklenen `T`dir ve
+             * monomorfizasyonda somutlasir, dolayisiyla dogru genislik/kind
+             * (i32/i64/float/double) kendiliginden gelir.
+             * Cagri DEGIL sabit yayilir: `@bir` diye bir sembol YOKTUR. */
+            else if ((cagri_adi_uz == 3 && memcmp(cagri_adi, "bir", 3) == 0) ||
+                     (cagri_adi_uz == 7 &&
+                      memcmp(cagri_adi, "s\xc4\xb1" "f\xc4\xb1" "r", 7) == 0)) {
+                int bir_mi = (cagri_adi_uz == 3);
+                const char *bt = (beklenen && *beklenen) ? beklenen : "i32";
+                int rr = yeni_reg(g);
+                if (tip_kesirli_mi(bt)) {
+                    fprintf(g->out, "  %%%d = fadd %s 0.0, %s\n",
+                            rr, bt, bir_mi ? "1.0" : "0.0");
+                } else {
+                    fprintf(g->out, "  %%%d = add %s 0, %d\n",
+                            rr, bt, bir_mi ? 1 : 0);
+                }
+                IfadeSonuc s = { rr, bt, 0, 0};
+                return s;
+            }
             else if (cagri_adi_uz == 10 &&
                      memcmp(cagri_adi, "dizi_boyut", 10) == 0) {
                 int rr = yeni_reg(g);

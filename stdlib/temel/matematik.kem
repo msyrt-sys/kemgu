@@ -59,8 +59,13 @@ işlev isaret<T>(x: T) -> tam32 {
 // Generic versiyon constraint satisfaction (Sayı/Tam özelliği) sonrası.
 
 // Kuvvet — x^n. n=0 için x döner (constraint sistemi yokken "bir<T>()" yazılamaz).
+// [D-454] x⁰ = 1. ESKİDEN `ver x;` idi — matematiksel olarak YANLIŞTI ama
+// generic `T` içinde `ver 1;` yazmak T020 veriyordu (sayısal literali T'ye
+// bağlayacak constraint sistemi yok). `bir()` intrinsic'i tam bu boşluk için
+// eklendi: dönüş tipi BEKLENEN'den gelir, monomorfizasyonda somutlaşır.
+// D-441 bu kusuru testle SABİTLEMİŞTİ; artık gerçek değer dönüyor.
 işlev kuvvet<T>(x: T, n: tam32) -> T {
-    eğer n == 0 { ver x; }
+    eğer n == 0 { ver bir(); }
     değişken sonuc: T = x;
     değişken i: tam32 = 1;
     iken i < n {

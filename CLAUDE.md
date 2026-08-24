@@ -946,6 +946,38 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-454 (KARAR 6): `bir()` / `sıfır()` intrinsic'leri — `kuvvet(x,0)` onarıldı
+D-441'de `kuvvet<T>(x,0)`in **x** döndürdüğü (doğrusu 1) ölçülmüş ve testle
+SABİTLENMİŞTİ; kök bir kusur değil **dil sınırıydı**: generic `T` içinde
+`ver 1;` → `T020`.
+- **İddia ÖNCE ölçüldü, hâlâ geçerliydi** (D-401 mono'yu eklediği için
+  bayatlamış olabilirdi; olmamış).
+- **Çözüm tam constraint sistemi DEĞİL, iki DAR intrinsic:** dönüş tipi
+  BEKLENEN'den gelir (`hiç` gibi bağlamsal); monomorfizasyonda somutlaşır,
+  codegen doğru genişlik/kind'da **SABİT yayar** — `@bir` diye sembol yok.
+  `sayisal.kem`in kendi yorumu bu çözümü zaten işaret ediyordu ("tipik bir
+  yaklaşım `sifir<T>()` + `bir<T>()` helper'ı"); yorum biliyordu, kimse
+  yazmamıştı.
+- **`kuvvet_tam` EKLENMEDİ:** geçici boşluk için KALICI API borcu olurdu.
+  **`x / x` de DEĞİL:** `x=0`da sıfıra bölme = ÇÖKME; yanlış cevabı çökmeyle
+  takas etmek iyileştirme değildir (D-441).
+- **⚠ Üç yanlış yerleştirme, üçünü de derleyici/ölçüm yakaladı:**
+  (a) özel-durumu önce `tip_belirle`ye koydum — orada `beklenen` YOK; doğru yer
+  `tip_belirle_beklenen`. (b) `"s\xc4\xb1f\xc4\xb1r"` → **hex escape out of
+  range**: `\xb1`den sonraki `f` HEX RAKAM (CLAUDE.md'nin tam uyardığı tuzak).
+  (c) self-host'ta beklenen tipi yalnız `beklenen_ll`den okudum — o kanal YALNIZ
+  tagged-union taşır → `double`da `add i32 0, 1` (LLVM-RED); zincir
+  `beklenen_ll` → `beklenen_elem` → `cur_ret` yapıldı.
+- Fikstür `cg_birim_deger.kem` → C=42, SELF=42 (tam32 · tam64 · kesirli64 ·
+  `sıfır()` + boş dizide çarpımsal birim). **Sabotaj S43** → exit 33.
+- D-441'in sabitlediği test gerçeğe göre güncellendi (`!= 1`). **Sabitlenmiş
+  bilinen-yanlış test tam da tasarlandığı gibi kırmızıya dönüp bildirdi** —
+  D-449'daki `ac("yok.txt")` ile aynı desen, ikinci kez işe yaradı.
+- Kapılar: `codegen_diff` 147/147 · `checker_diff` 153/153 (0 muaf) ·
+  `yapi_diff` 122/122 · `stdlib_check` 8 modül. Fikstür `yapi_diff`te bilinen
+  **K4** (generic BASE gövdesi) sınıfında; bölmek çare değil çünkü `bir()`
+  zaten yalnız generic gövdede anlamlıdır.
+
 ### 🎯 D-453 (KARAR 5): `calistir_qemu_cekirdek` — oracle'ın bare-metal kanıtı
 D-448 saptamıştı: `src/llvm.c`ye dokunan bir değişiklik KEMGU-OS'u kırsa
 **hiçbir host kapısı görmez**. O gün iki hedefi ELLE koşturmuştum — ama
@@ -1287,8 +1319,8 @@ Beklentiler uydurulmadı (kaynak yorumları / yardımcı gövdeleri / uygulamada
   bölme = ÇÖKME; oysa 0⁰ geleneksel olarak 1. **Yanlış cevabı çökmeyle takas
   etmek iyileştirme değildir.** Davranış DEĞİŞTİRİLMEDİ; test mevcut değeri
   sabitler + nedenini yazar → sınır artık SESSİZ değil.
-  **⚠ MEHMET'E küçük karar:** (a) böyle kalsın · (b) generic-olmayan
-  `kuvvet_tam` eklensin · (c) `kuvvet` generic olmaktan çıksın (kırıcı).
+  **✓ KAPANDI (D-454):** `bir()` intrinsic'i eklendi; `kuvvet(x,0)` artık 1 döner.
+  Seçenek (b) `kuvvet_tam` bilinçli olarak REDDEDİLDİ (kalıcı API borcu).
 - **Sabotaj S27** (`obe`nin Öklid adımını boz) → kapı KIRMIZI ✅
 - **Kalan:** `dizi` 37 test; `dosya` 26 test **ayrı muamele ister** (çalışma
   dizininde gerçek dosya yaratıyor + `sonuç<T,E>` iddiaları → geçici dizin
