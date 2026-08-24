@@ -1285,11 +1285,12 @@ eklendi) → **gerçek dosya I/O'sunu hiçbir şey doğrulamıyordu.**
   çağrılan tek test gerçek bir dizgi geçiyordu).
   **DERS: bir idiomu "yanlış görünüyor" diye düzeltmeden önce o tipin
   GERÇEKTEN ne taşıdığını ölç.** Aynı sözdizimi, iki farklı anlam.
-- **⚠ ALTTAKİ ASIL KUSUR (dil yüzeyi — Mehmet'e):** `dosya_ac` başarısızlıkta
-  **NULL** döner, `""` değil → `NULL != &""` olduğu için yüklem **açılamayan
-  dosyayı GEÇERLİ sayar** (`ac("yok.txt")` → `tamam`). Kök: opak handle
-  `metin` olarak tipleniyor. Çözüm ayrı handle tipi ya da null-sorgu
-  yerleşiği. Mevcut davranış testte SABİTLENDİ (D-441 deseni).
+- ~~**⚠ ALTTAKİ ASIL KUSUR (dil yüzeyi — Mehmet'e):** `dosya_ac` başarısızlıkta
+  **NULL** döner, `""` değil → yüklem **açılamayan dosyayı GEÇERLİ sayar**
+  (`ac("yok.txt")` → `tamam`). Kök: opak handle `metin` olarak tipleniyor.~~
+  ✓ **KAPANDI:** null-sorgu yerleşiği **D-449** (`dosya_gecerli`/`dosya_gecersiz`
+  → `ac("yok.txt")` artık `hata` döner), ayrı handle tipi **D-452**
+  (`yapı tekkez Dosya`). Sabitlenen test tasarlandığı gibi kırmızıya döndü.
 - **Yapılan:** `main` **1 → 20**; handle/mod · boş-yol korumaları (D-440'ın
   davranışı artık kapıda) · var-olmayan-dosya hataları · **GERÇEK GİDİŞ-DÖNÜŞ**
   (yaz→oku→UTF-8 doğrula→sil), yarattığı dosyayı **kendisi temizler**.
@@ -1358,10 +1359,10 @@ Beklentiler uydurulmadı (kaynak yorumları / yardımcı gövdeleri / uygulamada
   **✓ KAPANDI (D-454):** `bir()` intrinsic'i eklendi; `kuvvet(x,0)` artık 1 döner.
   Seçenek (b) `kuvvet_tam` bilinçli olarak REDDEDİLDİ (kalıcı API borcu).
 - **Sabotaj S27** (`obe`nin Öklid adımını boz) → kapı KIRMIZI ✅
-- **Kalan:** `dizi` 37 test; `dosya` 26 test **ayrı muamele ister** (çalışma
-  dizininde gerçek dosya yaratıyor + `sonuç<T,E>` iddiaları → geçici dizin
-  ve temizlik). `dizi`/`matematik` exit-42 sözleşmesi kullandığı için kapının
-  exit-0 döngüsüne olduğu gibi eklenemez.
+- ~~**Kalan:** `dizi` 37 test; `dosya` 26 test ayrı muamele ister; exit-42
+  sözleşmesi kapının exit-0 döngüsüne eklenemez.~~ ✓ **ÜÇÜ DE KAPANDI:**
+  `dizi` **D-442** (99 test; bir BELLEK-GÜVENLİĞİ açığı buldu), `dosya`
+  **D-443** (19 test, yarattığı dosyayı kendi temizler), exit-42 **D-445**.
 
 ### 🔴 D-440: `metin` üzerinde `==` İŞARETÇİ karşılaştırıyor + KOŞMAYAN TESTLER
 D-439 bitince "hangi yüzey kapısız?" diye ölçtüm: `calistir_stdlib_check`
@@ -1375,10 +1376,13 @@ sayisal 1/20 · dizi 62/99 · matematik 34/81. ~185 testin çoğu HİÇ KOŞMUYO
   literal↔literal TESADÜFEN doğru** → koşan tek test geçiyordu. Hesaplanmış
   metinde sessiz yanlış: `esit_mi(birlestir("","b"), "b")` → **yanlış**.
   `dosya.kem`'in **15 boş-yol koruması hiç ateşlenmiyordu** (ampirik).
-- **⚠ DİL SORUSU MEHMET'E — DEĞİŞTİRİLMEDİ.** `==`in `metin` anlamı dil
-  yüzeyidir. (a) içerik karşılaştırsın, ya da (b) `metin` üzerinde `==`
-  **REDDEDİLSİN** (loud > silent). Şimdiki hâl üçüncü ve en kötüsü:
-  **kabul et, sessizce yanlış cevap ver.**
+- ~~**⚠ DİL SORUSU MEHMET'E — DEĞİŞTİRİLMEDİ.** `==`in `metin` anlamı dil
+  yüzeyidir: (a) içerik karşılaştırsın, ya da (b) **REDDEDİLSİN**. Şimdiki hâl
+  üçüncü ve en kötüsü: kabul et, sessizce yanlış cevap ver.~~
+  ✓ **KARARLAŞTI — D-449: seçenek (a).** `==` metinde artık İÇERİK
+  karşılaştırır (dört yol: yerel · parametre · generic çıplak-T · `için`
+  döngü değişkeni). Seçenek (b) ölçümle elendi: `Dizi<metin>` aramalarını
+  (`icerir`/`bul`/`say`) kullanıcıya kaçış yolu bırakmadan yazılamaz kılardı.
 - **Yapılan (dil değişikliği YOK):** adı/belgesi içerik eşitliği vaat eden
   kütüphane yerleri `metin_esit`/`metin_uzunluk`a çevrildi (`esit_mi`,
   `farkli_mi`, `bos_mu`, `dolu_mu`, `handle_gecerli_mi` + dosya.kem 15 koruma).
@@ -1395,9 +1399,13 @@ sayisal 1/20 · dizi 62/99 · matematik 34/81. ~185 testin çoğu HİÇ KOŞMUYO
   dolu test dosyası kapsam YANILSAMASI yaratır. Dosyanın kendi yorumu kusuru
   zaten biliyordu (yerel `metin_es` yardımcısıyla dolanmış); bilgi ORADAYDI
   ama hiçbir kapı zorlamıyordu.
-- **KALAN (aynı sınıf):** opsiyonel/dosya/karsilastir/sayisal main'leri hâlâ
+- ~~**KALAN (aynı sınıf):** opsiyonel/dosya/karsilastir/sayisal main'leri hâlâ
   tek test çağırıyor; `dizi`/`matematik` exit-42 sözleşmesi kullandığı için
-  kapının exit-0 döngüsüne eklenemez.
+  kapının exit-0 döngüsüne eklenemez.~~ ✓ **KAPANDI.** opsiyonel 29 ·
+  karsilastir 20 · sayisal 20 (**D-441**) · dosya 19 (**D-443**) ·
+  dizi 99 (**D-442**) · matematik 47 (**D-441**) · metin 57 (D-440).
+  exit-42 sözleşmesi **D-445**'te çözüldü: kapı döngüsü artık
+  `modül:beklenen_çıkış` alıyor (9 modül).
 
 ### 🔴 D-439: ÇEŞİT PAYLOAD'INDAN AGREGAT-ELEMANLI DİZİ — self-host LLVM-RED
 D-437/D-438 erişimcileri açılınca `stdlib/json.kem` **C'de geçiyor, self-host'ta
