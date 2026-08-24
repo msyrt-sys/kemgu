@@ -52,7 +52,13 @@ fi
 #      hata-kaskadı derinliği farkı; birleştirilmiş hâli `stdlib_check`te
 #      TEMİZ geçer.
 MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
-tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya"
+#      ⚠ `test_kilit` (D-455): AYNI sınıf, yeni giren. Tek başına (modülsüz)
+#      `kilitle`/`Kilit` tanımsızdır; C, `görev_başlat(|| kilitle(k, ..))`
+#      atamasına AYRICA T001 basar (kapanışın dönüş tipi çözülemediği için),
+#      self-host basmaz → fark tam 2 kaskad satırı (C 10, self 8 tanı).
+#      Soundness sorunu YOK: ikisi de dosyayı reddediyor. Modülle
+#      BİRLEŞTİRİLMİŞ hâli `stdlib_check`te TEMİZ geçer (C ve self: exit 0).
+tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1
