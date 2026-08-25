@@ -946,6 +946,82 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-464: kapsayıcı `eşleş` + işaretçi/kesirli dönüş → GEÇERSİZ IR
+Gövdesi **kapsayıcı bir `eşleş`** olan ve `metin`/`kesirli64` dönen **HER**
+işlev derlenmiyordu: ulaşılamaz düşüş yolunda ham `ret ptr 0` / `ret double 0`
+yayılıyordu → *"integer constant must have integer type"*. LINK-RED, yani
+sessiz DEĞİL — ama kullanıcıyı GEÇERLİ bir programı yeniden yazmaya zorluyordu.
+- **D-407 DESENİ:** doğru mantık C'de **D-304'ten beri VARDI** ve yorumu bile
+  `ret ptr 0`ın geçersizliğini yazıyordu — ama YALNIZ lifted-lambda yolunda.
+  Sıradan işlev yoluna hiç uygulanmamıştı. Self-host'ta da aynı boşluk
+  (`ret_bos_yaz` yalnız `void`ü ayırıyordu, D-418).
+- **Şekil KEMGU'da ÇOK DOĞAL** (`sonuç`/`seçimlik` üzerine kurulu her kod) ama
+  **hiçbir korpus dosyası içermiyordu** → kaçmıştı. D-463'ün yakalama API'sini
+  kullanan İLK test bu duvara anında çarptı.
+- **⚠ FİKSTÜR YAZARKEN ÜÇ AYRI ÖNCEDEN-VAR-OLAN KUSUR ÇIKTI** (üçü de
+  `git stash` ile doğrulandı; hepsi kayıtlı tek sınırın görünümleri —
+  **yapıcılar ancak BEKLENEN TİP bilindiğinde çözülür**):
+  çıplak `hiç` ARGÜMAN olarak (C: "tanimsiz tanimlayici", **self KABUL EDER**) ·
+  `değer(1)` ARGÜMAN olarak · `o = değer(k)` ATAMA olarak (ikisi de `@değer`
+  tanımsız). **Fikstür bilerek DAR** tutuldu (yapıcılar yalnız annotasyonlu
+  başlatıcıda): bunları içine almak DÖNÜŞ YOLU yerine yapıcı çözümünü ölçerdi,
+  kapı **yanlış sebeple** kırmızı olurdu (D-421'in dersi). **Bu üçü AÇIK.**
+- **Doğrulama:** `cg_kapsayici_esles_donus.kem` → C=42, SELF=42; ham
+  `ret ptr 0` SIFIR, `ret ptr null` 2 + `ret double 0.0` 1 (birebir).
+  **Sabotaj 2/2** (S63 C · S64 self) → ikisi de LINK-RED.
+  ⚠ S63 ilk denemede UYGULANMADI (`perl` satır aralığı tutmadı, `grep` 0) ve
+  kapı yeşil kaldı — sessizlik önce SABOTAJI şüpheli kılar (D-402).
+  Kapılar: `codegen_diff` **154/154** · `yapi_diff` **129/129**.
+
+### 🎯 D-463: regex YAKALAMA GRUPLARI — doğrusallık korundu
+Mehmet'in kararı **(a)**: genel eşleşme **EN UZUN** kalır (D-461'in sözleşmesi
+bozulmaz), **yakalama ayrımı ÖNCELİK tabanlıdır**. Seçenek (b) tam POSIX
+alt-ifade kuralı REDDEDİLDİ (yarım uygulamak ince ve **sessiz** yanlış
+yakalamalar üretirdi); (c) genel anlambilimi değiştirmek 29 ölçümü kırardı.
+- **Mekanizma:** Pike VM'de iş parçacığı başına yuva dizisi. Epsilon-kapanışı
+  bir DFS'tir ve yuva dizisi bu DFS boyunca **PAYLAŞILIR**; `KAYDET` (op 8)
+  eski değeri saklar, özyinelemeden sonra **GERİ ALIR**. Kopya YALNIZ yaprak
+  listeye eklenirken alınır → çatallanma başına kopya maliyeti YOK.
+- **Öncelik kuralı EK MEKANİZMA İSTEMEDİ:** `damga` bir komuta İLK ulaşanı
+  tutuyor ve `CATAL` sol kolu (`a`) sağdan (`b`) önce ekliyor.
+- Numara **AÇILIŞ PARANTEZİ** sırasında ayrılır (`((a)(b))` → dış 1).
+  Yakalanmamış grup **-1**'dir, boş dizgi DEĞİL.
+- **⚠⚠ İKİ AYRI KURAL — kendi testimde karıştırdım, ÖLÇÜM DÜZELTTİ:**
+  genel eşleşme uzunluğu **EN UZUN** kazanır; yakalama ayrımı yalnız **EŞİT
+  UZUNLUKTAKİ** eşleşmeler arasında öncelikle belirlenir. `(a)|(ab)` üzerinde
+  `"ab"` → sağ kol daha UZUN eşler, öncelik **devreye girmez**. Önceliğin
+  gerçekten ölçüldüğü vaka ayrıca eklendi (`(a)|(a)`).
+- **⚠ `nyuva == 0` KORUMASI:** yakalamasız koşumda `yuva` BOŞTUR; korumasız
+  `KAYDET` runtime **sınır ihlali** verirdi.
+- **🎯 DOĞRUSALLIK YENİDEN ÖLÇÜLDÜ** (asıl risk buydu): `(a+)+b` **yakalamalı**
+  sürümde girdi **20 → 320 (16 KAT)** büyürken süre 254–529 ms bandında kaldı;
+  boş program tabanı ~309 ms. D-461'in tezi yakalamayla birlikte AYAKTA.
+- **Sabotaj 2/2:** S61 (grup başlangıç yuvası) · S62 (yaprak yuva kopyası).
+
+### 🎯 D-462: YENİ KAPI `calistir_belge_kapisi` — kendi ilk koşumunda kusur buldu
+"Kod var ama hiçbir ölçüm ateşlemiyor" sınıfı bu depoda **DÖRT kez elle**
+yakalandı (D-458 `\b`/`\f` · D-461 `\d\w\s` · D-462 `\" \\ \/`) ve her
+seferinde gerçek bir şey sakladı. *Elle taranan ölçüm eskir, kapı eskimez.*
+- **KAPI KENDİ İLK KOŞUMUNDA BİR BOŞLUK BULDU:** `\u`nun **BAŞARI** yolu hiç
+  ölçülmüyordu. Ölçüyor sanılan satır `json_kacis_bayt("aAb", 65, ...)` idi —
+  **içinde ters bölü YOK**, kaçış hiç ateşlenmiyordu; "vekil çifti" testi de
+  kaynakta DÜZ EMOJİ kullanıyordu. D-458 bunları "destekleniyor" saymıştı.
+  **ÖNCE kusur mu diye ölçtüm:** hepsi doğru çalışıyor → eksik olan yalnız ÖLÇÜM.
+- **Kapsam bilerek DAR** (yalnız `json.kem` kaçış kolları): genel bir "belge
+  iddiası" tarayıcısı yanlış-pozitif üretip kapıyı gürültüye çevirirdi. Kapı
+  kolları **KODDAN**, ölçümleri **TESTTEN** okur; prozadan tahmin YOK.
+  Bilinmeyen kol eklenirse kapı *"eşleme tablosuna EKLE"* diyerek KIRMIZI olur.
+- **⚠ ARGÜMAN ÇIKARIMI `grep -oE` İLE YAPILAMAZ:** POSIX ERE'de tembel
+  niceleyici yoktur ve çağrılar ÇOK SATIRLI olabilir → ilk sürüm İKİ
+  yanlış-pozitif verdi. **Ölçüm aracının kendisi yanlıştı, kod değil.** Awk
+  artık parantez derinliği izler.
+- **⚠ KAYNAKTA KAÇIŞ DİZİSİ BİRLEŞTİRMEYLE KURULUR:** düzenleme araçları
+  `A`i "A"ya **ÇÖZÜYOR** (bu artımda iki kez) ve ölçüm sessizce
+  anlamsızlaşıyor. `ters_bolu()` + `"u0041b"` deseni kullan.
+- **⚠ SÜREÇTE İKİ HATAM:** Türkçe `.kem`de `sed -i` kullandım (yasak) ·
+  `git checkout` ile sabotajı geri alırken **commit'lenmemiş** testlerimi de
+  sildim. Sabotaj 2/2 (S1 `\/` · S2b her iki `\u`).
+
 ### 🎯 D-461: `stdlib/regex.kem` — Thompson NFA (ReDoS'a kapalı), saf KEMGU
 Roadmap'in son büyük stdlib maddesi. **Yeni yerleşik / runtime primitifi
 GEREKMEDİ** — mevcut `metin_*` yeterli (D-435'te ölçülmüştü, doğru çıktı).
@@ -1790,6 +1866,11 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     yerleşik GEREKMEDİ). **Thompson NFA (Pike VM), geri izleme DEĞİL** →
     ReDoS'a kapalı; doğrusallık ÖLÇÜLDÜ (girdi 8× büyürken süre sabit).
     Bedeli: geri-referans yok (bilinçli takas). Testi `stdlib_check`te.
+    **YAKALAMA GRUPLARI D-463'te EKLENDİ** (`ara_gruplar`/`grup_metin`/
+    `grup_sayisi`); doğrusallık yakalamayla birlikte yeniden ölçüldü (16×).
+    **KALAN (bilinçli):** `\D \W \S` · `{n,m}` · tembel niceleyici ·
+    geri-referans. Son ikisi GERİ İZLEME gerektirir → ReDoS bağışıklığını
+    çöpe atardı; eklenmeyecekler.
 - ~~**Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
   **YOK** → yeni yerleşik = dil yüzeyi, Mehmet'in kararı.~~
   ✓ **YAPILDI — D-456.** `stdlib/semafor.kem` (**kapsamlı**: `semaforda(s,
