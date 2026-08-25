@@ -399,6 +399,21 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("metin_tam_gecerli", 17, p, 1,
                      tip_olustur_basit(a, TIP_MANTIKSAL));
     }
+    /* [D-460] metin -> kesirli64 (`metin_tam`in simetrigi). JSON sayi
+     * dilbilgisi: [-]rakam+[.rakam+][(e|E)[+|-]rakam+], TAMAMEN tuketilmis.
+     * `strtod` tek basina "0x10"/"inf"/"nan"/bastaki boslugu kabul ederdi. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kesirli", 13, p, 1,
+                     tip_olustur_basit(a, TIP_KESIRLI64));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kesirli_gecerli", 21, p, 1,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
 
     /* [D-458] kod_metin(kod: tam32) -> metin — Unicode kod noktasi -> UTF-8.
      * HAM BAYT->METIN BILEREK YOK: `metin`in gecerli-UTF-8 degismezi korunur.

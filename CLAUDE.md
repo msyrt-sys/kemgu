@@ -946,6 +946,34 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### ✓ D-460: JSON `Ondalik` varyantı + `metin_kesirli` (askıdaki 2. iş)
+- **`JsonDeger`e `Ondalik(kesirli64)` eklendi**; yazıcı `kesirli_metin` (D-457,
+  kayıpsız) ile geri yazar, ayrıştırıcı `.`/`e`/`E` görünce ondalık dala girer.
+  **M001 kapsayıcılık denetimi eksik 7 kolu tek tek bildirdi** — ADT değişimini
+  güvenli kılan tam olarak buydu (test dosyasındaki bir yardımcıyı da yakaladı).
+- **⚠ TAMSAYI ve ONDALIK AYRI VARYANTLAR, sessizce dönüşmezler:** `json_sayi_al`
+  ondalığa `hiç`, `json_ondalik_al` tamsayıya `hiç` döner. Gerekçe: 2^53 üstü
+  tamsayılar `kesirli64`de KAYIPSIZ DEĞİLDİR — otomatik dönüşüm `Sayi`nın tam64
+  kesinliğini sessizce bozardı.
+- **Yeni yerleşik `metin_kesirli` + `metin_kesirli_gecerli`** (`metin_tam`ın
+  simetriği). **Saf KEMGU'da basamak toplamak REDDEDİLDİ:** `tam + kesir/10^k`
+  uzun ondalıklarda doğru-yuvarlanmış sonucu kaçırır ve D-457'nin gidiş-dönüş
+  garantisini bozardı. Geçerlilik JSON dilbilgisidir; `strtod` tek başına
+  `"0x10"`, `"inf"`, `"nan"`, `"+1"` ve baştaki boşluğu KABUL EDERDİ.
+- **🎯 SABOTAJ SESSİZ KALDI VE BİR KÖR NOKTA AÇTI.** S58 (yüklemi daima 1 yap)
+  `test_json`i yeşil bıraktı: `"1."` zaten **ayrıştırıcının kendi denetiminde**
+  reddediliyor, yüklem o yoldan **hiç ateşlenmiyor** (savunma katmanı). Yani
+  yüklemi ölçen kapı YOKTU. Ayrı fikstür (`cg_metin_kesirli.kem`) yüklemi
+  DOĞRUDAN çağırıyor → S58 artık exit 7. **Bir kuralın hangi yolla ateşlendiğini
+  ölçmeyen kapı o kuralı ölçmüyordur** (D-443'ün tekrarı; bu kez sessizlik
+  sabotajın değil KAPININ eksikliğiydi).
+- **Doğrulama:** `cg_metin_kesirli.kem` → C=42, SELF=42; `test_json.kem`e 10
+  ondalık ölçümü (gidiş-dönüş + `[1,1.5]` karışık dizi + tamsayı yolunun
+  bozulmadığı + `1.`/`1e`/`1e+` reddi). **Sabotaj 2/2:** S57 (ondalık dalını
+  kapat) → 6 ayrıştırma hatası · S58 (yüklem) → fikstür 7.
+  Kapılar: `codegen_diff` **153/153** · `checker_diff` **153/153 (0 muaf)** ·
+  `yapi_diff` **128/128** · `check_genis` **130/130** · `stdlib_check` 11 modül.
+
 ### 🔴 D-459: `tam_metin`/`metin_tam` + YERLEŞİK ÇAĞRI SONUCU METİN-LİĞİNİ KAYBEDİYORDU
 Öneri sırasının 1. maddesi (askıya alınmıştı — ön koşulu bir oracle kusuruydu).
 - **🔴 ÖN KOŞUL KUSURU (D-449'un kaçırdığı):** çağrı sonucunun `metin_mi`

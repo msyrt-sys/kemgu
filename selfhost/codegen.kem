@@ -3674,6 +3674,8 @@ işlev builtin_ret(ad: metin) -> metin {
     eğer metin_esit(ad, "tam_metin") { ver "ptr"; }   // [D-459]
     eğer metin_esit(ad, "metin_tam") { ver "i64"; }   // [D-459]
     eğer metin_esit(ad, "metin_tam_gecerli") { ver "i1"; }   // [D-459]
+    eğer metin_esit(ad, "metin_kesirli") { ver "double"; }   // [D-460]
+    eğer metin_esit(ad, "metin_kesirli_gecerli") { ver "i1"; }   // [D-460]
     eğer metin_esit(ad, "kod_gecerli") { ver "i1"; }   // [D-458]
     // kilit_al / kilit_birak / kilit_yok → void (aşağıdaki varsayılana düşer)
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
@@ -3757,6 +3759,8 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_tam_metin(i64)"); yb(10);   // [D-459]
     yaz_str("declare i64 @kdl_metin_tam(ptr)"); yb(10);   // [D-459]
     yaz_str("declare i1 @kdl_metin_tam_gecerli(ptr)"); yb(10);   // [D-459]
+    yaz_str("declare double @kdl_metin_kesirli(ptr)"); yb(10);   // [D-460]
+    yaz_str("declare i1 @kdl_metin_kesirli_gecerli(ptr)"); yb(10);   // [D-460]
     yaz_str("declare i1 @kdl_kod_gecerli(i32)"); yb(10);   // [D-458]
     yaz_str("declare void @kdl_semafor_al(ptr)"); yb(10);       // [D-456]
     yaz_str("declare void @kdl_semafor_birak(ptr)"); yb(10);    // [D-456]
@@ -8075,6 +8079,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "kesirli_metin");   // [D-457]
     g_ekle(p, "kod_metin"); g_ekle(p, "kod_gecerli");   // [D-458]
     g_ekle(p, "tam_metin"); g_ekle(p, "metin_tam"); g_ekle(p, "metin_tam_gecerli");   // [D-459]
+    g_ekle(p, "metin_kesirli"); g_ekle(p, "metin_kesirli_gecerli");   // [D-460]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
@@ -8407,6 +8412,8 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "tam_metin", "metin", ["tam64"]);   // [D-459]
     yerlesik_ekle(p, "metin_tam", "tam64", ["metin"]);   // [D-459]
     yerlesik_ekle(p, "metin_tam_gecerli", "mantıksal", ["metin"]);   // [D-459]
+    yerlesik_ekle(p, "metin_kesirli", "kesirli64", ["metin"]);   // [D-460]
+    yerlesik_ekle(p, "metin_kesirli_gecerli", "mantıksal", ["metin"]);   // [D-460]
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
     yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);

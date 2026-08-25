@@ -192,6 +192,26 @@ işlev main() -> tam32 {
     h = h + json_ayristir_hata_mi(json_dizgi("a\u00ZZb"), 3);           // geçersiz hex
     h = h + json_ayristir_hata_mi(json_dizgi("a\u12"), 5);              // yarım kalmış
 
+    // ---- [D-460] ONDALIK / ÜSTEL sayılar ----
+    // Ayrıştırıcı artık `Ondalik(kesirli64)` üretir; yazıcı `kesirli_metin`
+    // (D-457, kayıpsız kısa gidiş-dönüş) ile geri yazar. Bu yüzden test
+    // GİDİŞ-DÖNÜŞ ölçer: `0.1` yuvarlanarak `0.10000000000000001` olmamalı.
+    // ⚠ TAMSAYI ile ONDALIK AYRI varyantlardır: `[1,1.5]` ilkini `Sayi`,
+    // ikincisini `Ondalik` yapar. Sessizce birbirine dönüştürmek `Sayi`nın
+    // tam64 kesinliğini bozardı (2^53 üstü tamsayılar kesirli64'te kayıpsız
+    // DEĞİLDİR) — o yüzden `json_sayi_al` ondalığa `hiç` döner ve tersi de.
+    h = h + json_ayristir_esit("1.5", 3);
+    h = h + json_ayristir_esit("-0.25", 6);
+    h = h + json_ayristir_esit("0.1", 12);
+    h = h + json_ayristir_beklenen("2.5e3", "2500", 24);
+    h = h + json_ayristir_beklenen("1e-3", "0.001", 48);
+    h = h + json_ayristir_esit("[1,1.5]", 96);
+    h = h + json_ayristir_esit("42", 192);        // tamsayı YOLU BOZULMAMALI
+    // Eksik/yarım ondalık: SESSİZ KABUL ETME
+    h = h + json_ayristir_hata_mi("1.", 384);
+    h = h + json_ayristir_hata_mi("1e", 768);
+    h = h + json_ayristir_hata_mi("1e+", 1536);
+
     eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); ver 0; }
     // ⚠ ÇIKIŞ KODU 8 BİTE MASKELENİR. `h`'yi doğrudan döndürmek ölümcül bir
     // kapı zayıflığıydı: 262144 = 0x40000 → düşük bayt 0 → BAŞARISIZLIK
@@ -260,6 +280,7 @@ işlev json_kacis_bayt(ic: metin, beklenen_bayt: tam32, kod: tam32) -> tam32 {
                     ver 0;
                 }
                 JsonDeger::Bos => { ver kod; }
+                JsonDeger::Ondalik(x) => { ver kod; }   // [D-460]
                 JsonDeger::Mantik(x) => { ver kod; }
                 JsonDeger::Sayi(x) => { ver kod; }
                 JsonDeger::Dizi(x) => { ver kod; }

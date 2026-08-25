@@ -21,6 +21,7 @@
     Bos,
     Mantik(mantıksal),
     Sayi(tam64),
+    Ondalik(kesirli64),   // [D-460] JSON ondalik/ustel sayi
     Metin(metin),
     Dizi(Dizi<JsonDeger>),
     Nesne(Dizi<metin>, Dizi<JsonDeger>)
@@ -85,6 +86,7 @@ işlev yaz(d: JsonDeger) -> metin {
             ver "false";
         }
         JsonDeger::Sayi(n) => { ver sayi_metin(n); }
+        JsonDeger::Ondalik(x) => { ver kesirli_metin(x); }   // [D-460]
         JsonDeger::Metin(s) => {
             değişken t: metin = tirnak();
             ver metin_birlestir(t, metin_birlestir(kacisla(s), t));
@@ -352,6 +354,9 @@ işlev geri_sil() -> metin { ver kod_metin(8); }    // \b
 işlev sayfa_ileri() -> metin { ver kod_metin(12); } // \f
 
 işlev ja_sayi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    // [D-460] Sayının BAŞLANGIÇ konumu: ondalık çıkarsa ham metni buradan
+    // keseceğiz (işaret dâhil). Sonradan geriye sayarak hesaplamak kırılgandı.
+    değişken bas: tam32 = a.poz;
     değişken negatif: mantıksal = yanlış;
     eğer ja_bak(a) == 45 { negatif = doğru; a.poz = a.poz + 1; }
     eğer ja_bitti(a) { ver hata("sayi yarim"); }
@@ -370,6 +375,61 @@ işlev ja_sayi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
                 a.poz = a.poz + 1;
             }
         }
+    }
+    // [D-460] ONDALIK / ÜSTEL. Buraya kadar TAMSAYI kısmı okundu; şimdi `.`
+    // ya da `e/E` geliyorsa sayı ondalıktır.
+    //
+    // ⚠ Değeri BURADA aritmetikle kurmuyoruz. `tam + kesir/10^k` biriktirmek
+    // uzun ondalıklarda DOĞRU-YUVARLANMIŞ sonucu kaçırır ve D-457'nin kurduğu
+    // gidiş-dönüş garantisini bozar. Bunun yerine sayının METNİ toplanıp
+    // `metin_kesirli` (strtod) ile çevrilir — tek doğru-yuvarlama noktası.
+    değişken ondalik: mantıksal = yanlış;
+    eğer ja_bitti(a) == yanlış {
+        değişken n1: tam32 = ja_bak(a);
+        eğer n1 == 46 veya n1 == 101 veya n1 == 69 { ondalik = doğru; }
+    }
+    eğer ondalik {
+        // Kesir kısmı
+        eğer ja_bak(a) == 46 {
+            a.poz = a.poz + 1;
+            eğer ja_bitti(a) { ver hata("ondalik kismi eksik"); }
+            eğer (ja_bak(a) < 48) veya (ja_bak(a) > 57) { ver hata("ondalik kismi eksik"); }
+            değişken d2: mantıksal = doğru;
+            iken d2 {
+                eğer ja_bitti(a) { d2 = yanlış; }
+                değilse {
+                    değişken bb: tam32 = ja_bak(a);
+                    eğer (bb < 48) veya (bb > 57) { d2 = yanlış; }
+                    değilse { a.poz = a.poz + 1; }
+                }
+            }
+        }
+        // Üstel kısım
+        eğer ja_bitti(a) == yanlış {
+            değişken e0: tam32 = ja_bak(a);
+            eğer e0 == 101 veya e0 == 69 {
+                a.poz = a.poz + 1;
+                eğer ja_bitti(a) { ver hata("ustel kismi eksik"); }
+                değişken s0: tam32 = ja_bak(a);
+                eğer s0 == 43 veya s0 == 45 { a.poz = a.poz + 1; }
+                eğer ja_bitti(a) { ver hata("ustel kismi eksik"); }
+                eğer (ja_bak(a) < 48) veya (ja_bak(a) > 57) { ver hata("ustel kismi eksik"); }
+                değişken d3: mantıksal = doğru;
+                iken d3 {
+                    eğer ja_bitti(a) { d3 = yanlış; }
+                    değilse {
+                        değişken cc: tam32 = ja_bak(a);
+                        eğer (cc < 48) veya (cc > 57) { d3 = yanlış; }
+                        değilse { a.poz = a.poz + 1; }
+                    }
+                }
+            }
+        }
+        değişken ham: metin = metin_kes(a.girdi, bas, a.poz - bas);
+        // Yüklem ZORUNLU: `metin_kesirli` geçersizde 0 döner ve bu gerçek bir
+        // 0'dan ayırt edilemezdi (D-459'un aynı gerekçesi).
+        eğer metin_kesirli_gecerli(ham) == yanlış { ver hata("gecersiz ondalik sayi"); }
+        ver tamam(JsonDeger::Ondalik(metin_kesirli(ham)));
     }
     eğer negatif { deger = 0 - deger; }
     ver tamam(JsonDeger::Sayi(deger));
@@ -415,6 +475,7 @@ işlev ja_nesne(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
                     JsonDeger::Bos => { ver hata("ic hata: anahtar"); }
                     JsonDeger::Mantik(x) => { ver hata("ic hata: anahtar"); }
                     JsonDeger::Sayi(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Ondalik(x) => { ver hata("ic hata: anahtar"); }   // [D-460]
                     JsonDeger::Dizi(x) => { ver hata("ic hata: anahtar"); }
                     JsonDeger::Nesne(x, y) => { ver hata("ic hata: anahtar"); }
                 }
@@ -487,6 +548,7 @@ işlev json_alan(d: JsonDeger, anahtar: metin) -> seçimlik<JsonDeger> {
         JsonDeger::Bos => { ver hiç; }
         JsonDeger::Mantik(x) => { ver hiç; }
         JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Ondalik(x) => { ver hiç; }   // [D-460]
         JsonDeger::Metin(x) => { ver hiç; }
         JsonDeger::Dizi(x) => { ver hiç; }
     }
@@ -505,6 +567,7 @@ işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
         JsonDeger::Bos => { ver hiç; }
         JsonDeger::Mantik(x) => { ver hiç; }
         JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Ondalik(x) => { ver hiç; }   // [D-460]
         JsonDeger::Metin(x) => { ver hiç; }
         JsonDeger::Nesne(x, y) => { ver hiç; }
     }
@@ -514,6 +577,9 @@ işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
 işlev json_sayi_al(d: JsonDeger) -> seçimlik<tam64> {
     eşleş d {
         JsonDeger::Sayi(n) => { ver değer(n); }
+        // [D-460] `json_sayi_al` TAMSAYI erişimcisidir: ondalık bir değeri
+        // sessizce kırpmak yerine `hiç` döner. Ondalık için `json_ondalik_al`.
+        JsonDeger::Ondalik(x) => { ver hiç; }
         JsonDeger::Bos => { ver hiç; }
         JsonDeger::Mantik(x) => { ver hiç; }
         JsonDeger::Metin(x) => { ver hiç; }
@@ -529,6 +595,7 @@ işlev json_metin_al(d: JsonDeger) -> seçimlik<metin> {
         JsonDeger::Bos => { ver hiç; }
         JsonDeger::Mantik(x) => { ver hiç; }
         JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Ondalik(x) => { ver hiç; }   // [D-460]
         JsonDeger::Dizi(x) => { ver hiç; }
         JsonDeger::Nesne(x, y) => { ver hiç; }
     }
@@ -547,7 +614,29 @@ işlev json_uzunluk(d: JsonDeger) -> tam32 {
         JsonDeger::Bos => { ver 0; }
         JsonDeger::Mantik(x) => { ver 0; }
         JsonDeger::Sayi(x) => { ver 0; }
+        JsonDeger::Ondalik(x) => { ver 0; }   // [D-460]
         JsonDeger::Metin(x) => { ver 0; }
     }
     ver 0;
+}
+
+// [D-460] Ondalık erişimcisi. `json_sayi_al` TAMSAYI içindir ve ondalık bir
+// değere `hiç` döner (sessiz kırpma YOK); bu da onun ikizidir.
+//
+// ⚠ TAMSAYI bir JSON değeri burada da `hiç` döner: `1` ve `1.0` JSON'da FARKLI
+// yazımlardır ve ayrıştırıcı ikisini farklı varyanta koyar. Sessizce
+// birbirine dönüştürmek, `Sayi`nın tam64 kesinliğini ondalığa taşırdı
+// (2^53 üstü tamsayılar `kesirli64`de KAYIPSIZ DEĞİLDİR). Çağıran hangisini
+// beklediğini bilmeli.
+işlev json_ondalik_al(d: JsonDeger) -> seçimlik<kesirli64> {
+    eşleş d {
+        JsonDeger::Ondalik(x) => { ver değer(x); }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
 }

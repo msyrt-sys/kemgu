@@ -5154,10 +5154,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                            (n == 11 && memcmp(kdl_buf + 4, "metin_biter", 11) == 0) ||
                            (n == 10 && memcmp(kdl_buf + 4, "metin_esit", 10) == 0) ||
                            /* [D-459] yuklem: gecerli bir tamsayi metni mi */
-                           (n == 17 && memcmp(kdl_buf + 4, "metin_tam_gecerli", 17) == 0)) {
+                           (n == 17 && memcmp(kdl_buf + 4, "metin_tam_gecerli", 17) == 0) ||
+                           /* [D-460] */
+                           (n == 21 && memcmp(kdl_buf + 4, "metin_kesirli_gecerli", 21) == 0)) {
                     kdl_donus = "i1";
                 } else if (n == 9 && memcmp(kdl_buf + 4, "metin_tam", 9) == 0) {
                     kdl_donus = "i64";   /* [D-459] tam64 doner */
+                } else if (n == 13 && memcmp(kdl_buf + 4, "metin_kesirli", 13) == 0) {
+                    kdl_donus = "double";   /* [D-460] */
                 } else {
                     kdl_donus = "ptr";
                 }
@@ -7681,6 +7685,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_tam_metin(i64)\n", out);        /* [D-459] */
     fputs("declare i64 @kdl_metin_tam(ptr)\n", out);        /* [D-459] */
     fputs("declare i1 @kdl_metin_tam_gecerli(ptr)\n", out); /* [D-459] */
+    fputs("declare double @kdl_metin_kesirli(ptr)\n", out);      /* [D-460] */
+    fputs("declare i1 @kdl_metin_kesirli_gecerli(ptr)\n", out);  /* [D-460] */
     fputs("declare ptr @kdl_kod_metin(i32)\n", out);        /* [D-458] */
     fputs("declare i1 @kdl_kod_gecerli(i32)\n", out);       /* [D-458] */
     fputs("declare ptr @kdl_kesirli_metin(double)\n", out); /* [D-457] */

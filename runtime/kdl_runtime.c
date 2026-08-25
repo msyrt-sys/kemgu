@@ -377,6 +377,42 @@ int64_t kdl_metin_tam(const char *s) {
     return (int64_t)strtoll(s, NULL, 10);
 }
 
+/* [D-460] metin -> kesirli64. `kdl_metin_tam`in SIMETRIGI, ayni gerekce:
+ * basarisizlik SESSIZ OLMASIN diye ayrik yuklem disa verilir.
+ *
+ * NEDEN SAF KEMGU'DA TOPLAMA YAPILMADI: basamaklari `tam + kesir/10^k` diye
+ * biriktirmek uzun ondalıklarda DOGRU-YUVARLANMIS sonucu kacirir ve D-457'nin
+ * kurdugu GIDIS-DONUS garantisini bozar (`kesirli_metin(metin_kesirli(x))`
+ * artik x'e donmezdi). `strtod` dogru yuvarlar.
+ *
+ * Gecerlilik JSON sayi dilbilgisidir: [-]rakam+[.rakam+][(e|E)[+|-]rakam+]
+ * ve bastan sona TAMAMEN tuketilmis olmali. `strtod` tek basina "0x10", "inf",
+ * "nan" ve bastaki boslugu KABUL EDERDI -- JSON bunlari kabul ETMEZ. */
+int32_t kdl_metin_kesirli_gecerli(const char *s) {
+    const char *p = s;
+    if (!s) return 0;
+    if (*p == '-') p++;                       /* JSON: `+` YOK, yalniz `-` */
+    if (!(*p >= '0' && *p <= '9')) return 0;
+    while (*p >= '0' && *p <= '9') p++;
+    if (*p == '.') {
+        p++;
+        if (!(*p >= '0' && *p <= '9')) return 0;   /* "1." GECERSIZ */
+        while (*p >= '0' && *p <= '9') p++;
+    }
+    if (*p == 'e' || *p == 'E') {
+        p++;
+        if (*p == '+' || *p == '-') p++;
+        if (!(*p >= '0' && *p <= '9')) return 0;
+        while (*p >= '0' && *p <= '9') p++;
+    }
+    return (*p == '\0') ? 1 : 0;
+}
+
+double kdl_metin_kesirli(const char *s) {
+    if (!kdl_metin_kesirli_gecerli(s)) return 0.0;
+    return strtod(s, NULL);
+}
+
 /* ============================================================================
  * [D-458] Unicode KOD NOKTASI -> metin (UTF-8).
  *
