@@ -175,7 +175,22 @@ işlev main() -> tam32 {
     h = h + json_kacis_bayt("a\rb", 13, 8388608);      // \r → 13 (ÖNCE harf 'r')
     h = h + json_kacis_bayt("a\bb", 8, 16777216);      // \b → 8  (KOL YOKTU)
     h = h + json_kacis_bayt("a\fb", 12, 33554432);     // \f → 12 (KOL YOKTU)
-    h = h + json_kacis_bayt("aAb", 65, 67108864); // A → 'A'
+    // ⚠ [D-462] AŞAĞIDAKİ SATIR BİR KAÇIŞ ÖLÇMÜYOR: `"aAb"` içinde ters bölü
+    // YOK, yani `\u` kolu HİÇ ateşlenmiyor — "A → 'A'" yorumu doğru ama
+    // önemsiz. `\u`nun BAŞARI yolu (ve vekil çiftleri) yalnız REDDETME
+    // senaryolarıyla sınanıyordu; D-458 bunu "destekleniyor" diye kaydetmişti.
+    // Bu boşluğu `calistir_belge_kapisi` KENDİ İLK KOŞUMUNDA buldu.
+    h = h + json_kacis_bayt("aAb", 65, 67108864); // (kaçışsız kontrol — kalsın)
+    // ⚠ Kaçış dizisi KAYNAKTA birleştirmeyle kurulur: bu dosyayı düzenleyen
+    // araçlar `A`i "A"ya ÇÖZÜYOR (bu artımda iki kez yaşandı) ve ölçüm
+    // sessizce anlamsızlaşıyor. Aşağıdaki `u0000` testi de aynı sebeple böyle.
+    h = h + json_kacis_bayt(
+        metin_birlestir("a", metin_birlestir(ters_bolu(), "u0041b")), 65, 13);
+    // VEKİL ÇİFTİ: yüksek+alçak vekil → U+1F600 = F0 9F 98 80; 0xF0 = -16
+    h = h + json_kacis_bayt(
+        metin_birlestir("a", metin_birlestir(ters_bolu(),
+            metin_birlestir("uD83D", metin_birlestir(ters_bolu(), "uDE00b")))),
+        0 - 16, 15);
     // ğ → ğ = C4 9F; ilk bayt 0xC4. `metin_bayt` tam8 döner (işaretli) →
     // 0xC4 = -60. Beklentiyi UYDURMUYORUZ: işaretli tam8 değeri yazılır.
     h = h + json_kacis_bayt("ağb", 0 - 60, 134217728);
