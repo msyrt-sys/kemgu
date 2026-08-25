@@ -191,9 +191,17 @@ işlev rakam(d: tam64) -> metin {
 //     yazıldığı için `3.14159265358979` daha DERLEME ANINDA `3.14159` oluyordu.
 //     Kayıpsız dönüştürücü tek başına yetmezdi; veri zaten kaybolmuştu.
 //
-// SINIR (bilinçli): sayılar yalnız TAMSAYI (`tam64`); ondalık/üstel JSON
-// sayıları REDDEDİLİR (`JsonDeger::Sayi` zaten tam64 taşıyor — sessizce
-// kırpmak yerine açık hata).
+// [D-460] SAYILAR: ondalık/üstel ARTIK DESTEKLENİYOR. `.`/`e`/`E` görülünce
+// ayrıştırıcı `Ondalik(kesirli64)` üretir; yazıcı `kesirli_metin` (D-457,
+// kayıpsız + locale bağımsız) ile geri yazar.
+// ⚠ TAMSAYI ve ONDALIK AYRI VARYANTLARDIR ve sessizce birbirine DÖNÜŞMEZLER:
+// `[1, 1.5]` ilkini `Sayi`, ikincisini `Ondalik` yapar; `json_sayi_al`
+// ondalığa `hiç`, `json_ondalik_al` tamsayıya `hiç` döner. Gerekçe: 2^53 üstü
+// tamsayılar `kesirli64`de KAYIPSIZ DEĞİLDİR — otomatik dönüşüm `Sayi`nın
+// tam64 kesinliğini sessizce bozardı.
+// ⚠ Bu satır D-460'a kadar "ondalık REDDEDİLİR" diyordu — ESKİMİŞTİ. Aynı
+// dosyada `\b`/`\f` için de belge kodu yanlış anlatmıştı (aşağıya bak); bir
+// dosyanın kendi yorumu bir İDDİADIR, ölçülmeden doğru sayılamaz.
 // [D-458] `\uXXXX` ARTIK DESTEKLENİYOR (UTF-16 vekil çiftleri dâhil); yalnız
 // U+0000 reddedilir (`metin` NUL-sonlandırmalı). Kaçış kümesi TAM:
 // `\" \\ \/ \n \r \t \b \f \uXXXX`.
