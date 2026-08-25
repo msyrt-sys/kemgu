@@ -946,6 +946,47 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-458: `kod_metin` + JSON `\n` SESSİZCE `n` HARFİNE ÇÖZÜLÜYORDU
+Öneri sırasının 4. maddesi (`\uXXXX`). Yerleşik küçük; **açığa çıkardığı kusur
+sessiz veri bozulmasıydı.**
+- **Yerleşikler:** `kod_metin(kod: tam32) -> metin` + `kod_gecerli(kod) ->
+  mantıksal`. UTF-8 kodlayıcı runtime'da **zaten vardı** (`kdl_yazdir_karakter`)
+  ama stdout'a yazıyordu — D-450'nin deseni: yeni algoritma yok, çıkışı tampona
+  al. `json.kem`'in "saf KEMGU ile AŞILAMAZ, denemeden önce oku" notu bu yüzden
+  ESKİMİŞTİ.
+- **HAM BAYT→METİN BİLEREK YOK:** `metin`in geçerli-UTF-8 olma değişmezi
+  korunmalı; ham bayt primitifi geçersiz dizgi kurmaya izin verirdi. UTF-16
+  **vekil çiftleri** çağıranda (`json.kem`) saf KEMGU aritmetiğiyle birleşir.
+- **⚠ KOD 0 GEÇERSİZDİR — ölçülmüş karar, keyfi değil:** KEMGU `metin`i
+  NUL-sonlandırmalı C dizgisidir (`metin_uzunluk`→`strlen`, `birlestir`→`strlen`,
+  ölçüldü) → **gömülü NUL TEMSİL EDİLEMEZ**. Geçerli saysaydık `` sessizce
+  düşerdi. Loud > silent: `json.kem` açık hata veriyor.
+- **🔴 KUSUR — `satir_sonu()`/`sekme()`/`satir_basi()` HARF DÖNDÜRÜYORDU.**
+  `metin_kes("\n", 1, 1)` ile kuruluyorlardı; KEMGU'da kaçış YOKTUR (D-400/
+  D-409/D-416'da üç kez kaydedilmiş) → `"\n"` iki karakterdir ve indeks 1
+  **`n` HARFİDİR (bayt 110, ölçüldü)**. Yani JSON `"a\nb"` sessizce **`anb`**
+  çözülüyordu — SESSİZ VERİ BOZULMASI, hiçbir test ölçmüyordu.
+  `tirnak()`/`ters_bolu()` aynı idiomu kullanır ama **DOĞRUdurlar** (bayt 34/92
+  ölçüldü): orada istenen karakter zaten `\`den sonraki bayttır. **Aynı idiom,
+  iki farklı sonuç — ölçmeden "hepsi bozuk" ya da "hepsi doğru" demek yanlış.**
+- **🔴 `\b` ve `\f` KOLLARI HİÇ YOKTU** — başlık yorumu ikisini de "desteklenir"
+  diye sayıyordu (kollar yalnız 34/92/47/110/114/116). Belgeyi koda uydurmak
+  yerine **eksik kollar eklendi** (JSON standardı gerektiriyor).
+- **⚠ ARAÇ TUZAKLARI (üçü de ölçümle yakalandı):** (1) yorumuma `` yazmak
+  dosyaya **GERÇEK NUL baytı** soktu ve lexer'ı kırdı — iki kez; kaçış
+  birleştirmeyle kuruldu. (2) `awk` ile yazılan sabotaj `\\n`i gerçek satır
+  sonuna çevirip **geçersiz KEMGU üretti** → ölçüm geçersizdi, Edit ile
+  tekrarlandı (deponun kendi kuralı). (3) Kabuk heredoc'unda `$1` ikamesi kaçtı
+  → bayt 49 ölçtüm; **ölçüm aracı da yanlış olabilir.**
+- **Doğrulama:** fikstür `cg_kod_metin.kem` → C=42, SELF=42 (1/2/3/4 baytlık
+  kodlama + sınır 0x10FFFF DAHİL + geçersizler). `test_json.kem`e 12 yeni ölçüm:
+  kaçışlar **BAYT DEĞERİYLE** denetlenir ("hata döndü mü" YETMEZ — D-443).
+  **Sabotaj 3/3:** S52 (`satir_sonu`u eski hâline döndür) → `kacis YANLIS bayt
+  cozdu` · S53 (`kod_gecerli` daima 1) → fikstür 7 + `` KABUL EDİLDİ ·
+  S54 (self-host önek eşlemesi) → LINK-RED.
+  Kapılar: `codegen_diff` **151/151** · `checker_diff` **153/153 (0 muaf)** ·
+  `yapi_diff` **126/126** · `check_genis` **130/130** · `stdlib_check` 11 modül.
+
 ### 🔴 D-457: `kesirli_metin` + KESİRLİ LİTERALLER DERLEME ANINDA KIRPILIYORDU
 Öneri sırasının 3. maddesi (`kesirli64` → `metin`). Yerleşik küçük, **yol
 üstünde çıkan iki kusur büyük.**
@@ -1614,10 +1655,10 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     (çeşit payload'ından `Dizi<metin>` = SEGFAULT), D-438 (iç içe `dizi_al`
     eleman tipini kaybediyor = SEGFAULT), D-439 (agregat elemanlı dizi,
     self-host LLVM-RED, 3 kök). Üçü de `--check`ten TEMİZ geçiyordu.
-    **KALAN sınırlar (ikisi de yeni YERLEŞİK ister = dil yüzeyi, Mehmet'in
-    kararı):** `\uXXXX` kaçışı (bayt→metin yerleşiği yok). ÖLÇÜLDÜ, varsayılmadı.
-    **Ondalıklı sayı ✓ D-457'de KÖKÜ kalktı** (`kesirli_metin` eklendi, kayıpsız
-    + locale bağımsız); geriye yalnız kütüphane işi kaldı (`Ondalik` varyantı +
+    **KALAN sınırların İKİSİ DE KAPANDI:** `\uXXXX` ✓ **D-458** (`kod_metin` +
+    `kod_gecerli`; vekil çiftleri saf KEMGU'da, U+0000 açıkça reddedilir) ·
+    ondalıklı sayı ✓ **D-457** (`kesirli_metin`, kayıpsız + locale bağımsız).
+    Ondalıkta geriye yalnız **kütüphane işi** kaldı (`Ondalik` varyantı +
     ayrıştırıcı + 8 `eşleş` kolu) — dil yüzeyi kararı DEĞİL.
   - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
   - **regex** — saf KEMGU yazılabilir ama büyük; JSON'dan sonra.

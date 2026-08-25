@@ -170,10 +170,15 @@ işlev rakam(d: tam64) -> metin {
 // Hata yolu: `sonuç<JsonDeger, metin>`. Panik YOK, çökmezlik korunur.
 // ⚠ İKİ SINIR DA DİL YÜZEYİ KARARI GEREKTİRİR (D-436'da ölçüldü — saf KEMGU
 // ile AŞILAMAZLAR, denemeden önce bunu oku):
-//   · `\uXXXX`: kod noktası → UTF-8 baytları üretmek için BAYT→METİN gerekir.
-//     `metin_bayt` tersi YOK; `yaz_bayt` stdout'a YAZAR, metin ÜRETMEZ.
-//     0x80-0xFF aralığındaki baytlar tek başına geçerli UTF-8 literali
-//     olmadığı için 256'lık bir tablo da kurulamaz. → yeni yerleşik gerekir.
+//   · ~~`\uXXXX`: kod noktası → UTF-8 baytları üretmek için BAYT→METİN
+//     gerekir~~ → **D-458'de EKLENDİ**: `kod_metin(kod) -> metin` +
+//     `kod_gecerli(kod)`. Not ESKİMİŞTİ: UTF-8 kodlayıcı runtime'da ZATEN
+//     vardı (`kdl_yazdir_karakter`), yalnız stdout'a yazıyordu. Vekil çiftleri
+//     aşağıda SAF KEMGU aritmetiğiyle birleştirilir; yerleşik yalnız tek kod
+//     noktasını kodlar (ham bayt→metin BİLEREK yok — `metin`in geçerli-UTF-8
+//     değişmezi korunur).
+//     ⚠ U+0000 REDDEDİLİR: `metin` NUL-sonlandırmalıdır, gömülü NUL temsil
+//     edilemez — sessizce düşürmek yerine açık hata.
 //   · ~~ONDALIK sayı: `kesirli64` → `metin` yerleşiği YOK~~ → **D-457'de
 //     EKLENDİ**: `kesirli_metin(x: kesirli64) -> metin`, locale bağımsız ve
 //     KAYIPSIZ (kısa gidiş-dönüş). Yani bu sınırın KÖKÜ kalktı; geriye yalnız
@@ -186,8 +191,12 @@ işlev rakam(d: tam64) -> metin {
 //
 // SINIR (bilinçli): sayılar yalnız TAMSAYI (`tam64`); ondalık/üstel JSON
 // sayıları REDDEDİLİR (`JsonDeger::Sayi` zaten tam64 taşıyor — sessizce
-// kırpmak yerine açık hata). `\uXXXX` kaçışı da REDDEDİLİR (UTF-16 vekil
-// çiftleri ayrı iş); diğer kaçışlar (`\" \ \/ \n \r \t \b \f`) desteklenir.
+// kırpmak yerine açık hata).
+// [D-458] `\uXXXX` ARTIK DESTEKLENİYOR (UTF-16 vekil çiftleri dâhil); yalnız
+// U+0000 reddedilir (`metin` NUL-sonlandırmalı). Kaçış kümesi TAM:
+// `\" \\ \/ \n \r \t \b \f \uXXXX`.
+// ⚠ Bu satır önceden `\b` ve `\f`yi "desteklenir" sayıyordu ama KOLLARI YOKTU
+// (ölçüldü) — belge kodu YANLIŞ anlatıyordu; eksik kollar eklendi.
 
 yapı JsonAyristirici { girdi: metin; poz: tam32; }
 
@@ -261,10 +270,40 @@ işlev ja_metin(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
             değilse { eğer k == 110 { sonuc = metin_birlestir(sonuc, satir_sonu()); }
             değilse { eğer k == 116 { sonuc = metin_birlestir(sonuc, sekme()); }
             değilse { eğer k == 114 { sonuc = metin_birlestir(sonuc, satir_basi()); }
+            // [D-458] `\b` ve `\f` KOLLARI EKSİKTİ: başlık yorumu ikisini de
+            // "desteklenir" diye sayıyordu ama hiçbir kol 98/102 değildi →
+            // geçerli JSON reddediliyordu. Belgeyi koda uydurmak yerine EKSİK
+            // KOLLAR eklendi (JSON standardı ikisini de gerektirir).
+            değilse { eğer k == 98 { sonuc = metin_birlestir(sonuc, geri_sil()); }
+            değilse { eğer k == 102 { sonuc = metin_birlestir(sonuc, sayfa_ileri()); }
+            değilse { eğer k == 117 {
+                // [D-458] `\uXXXX`. Vekil çifti aritmetiği SAF KEMGU'dadır;
+                // yerleşik (`kod_metin`) yalnız TEK kod noktasını kodlar.
+                değişken hi: tam32 = ja_hex4(a);
+                eğer hi < 0 { ver hata("gecersiz \\u kacisi"); }
+                değişken kod: tam32 = hi;
+                eğer hi >= 55296 ve hi <= 56319 {        // D800-DBFF: yüksek vekil
+                    // Ardından ZORUNLU olarak `\uDC00-DFFF` gelmeli.
+                    eğer ja_bitti(a) { ver hata("vekil cifti yarim kaldi"); }
+                    eğer ja_bak(a) != 92 { ver hata("vekil cifti yarim kaldi"); }
+                    a.poz = a.poz + 1;
+                    eğer ja_bitti(a) { ver hata("vekil cifti yarim kaldi"); }
+                    eğer ja_bak(a) != 117 { ver hata("vekil cifti yarim kaldi"); }
+                    a.poz = a.poz + 1;
+                    değişken lo: tam32 = ja_hex4(a);
+                    eğer lo < 56320 veya lo > 57343 { ver hata("gecersiz dusuk vekil"); }
+                    kod = 65536 + (hi - 55296) * 1024 + (lo - 56320);
+                }
+                // Yalnız-vekil, aşırı kod ve U+0000 burada YAKALANIR.
+                // ⚠ U+0000 GEÇERSİZDİR: KEMGU `metin`i NUL-sonlandırmalıdır,
+                // gömülü NUL temsil edilemez — sessizce düşürmek yerine açık hata.
+                eğer kod_gecerli(kod) == yanlış { ver hata("temsil edilemeyen kod noktasi"); }
+                sonuc = metin_birlestir(sonuc, kod_metin(kod));
+            }
             değilse {
-                // `\uXXXX` ve bilinmeyen kaçışlar: SESSİZ KABUL ETME.
+                // Bilinmeyen kaçışlar: SESSİZ KABUL ETME.
                 ver hata("desteklenmeyen kacis");
-            } } } } } }
+            } } } } } } } } }
         } değilse {
             sonuc = metin_birlestir(sonuc, metin_kes(a.girdi, a.poz, 1));
             a.poz = a.poz + 1;
@@ -274,9 +313,43 @@ işlev ja_metin(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
 }
 
 // Kaçış hedefleri — KEMGU literalinde kaçış olmadığı için bayt kesimiyle.
-işlev satir_sonu() -> metin { ver metin_kes("\n", 1, 1); }   // kaynak: `\` + `n`
-işlev sekme() -> metin { ver metin_kes("\t", 1, 1); }
-işlev satir_basi() -> metin { ver metin_kes("\r", 1, 1); }
+// [D-458] 🔴 BUNLAR BOZUKTU — ÖLÇÜLDÜ, tahmin edilmedi.
+// Eski hâlleri `metin_kes("\n", 1, 1)` idi. KEMGU dizgi literalinde KAÇIŞ YOKTUR
+// (D-400/D-409/D-416 — üç kez kaydedilmiş): `"\n"` iki karakterdir (`\` ve `n`),
+// dolayısıyla indeks 1 SATIR SONU DEĞİL **`n` HARFİDİR** (bayt 110, ölçüldü).
+// Sonuç: JSON `"a\nb"` sessizce `anb` olarak çözülüyordu — SESSİZ VERİ BOZULMASI.
+// `tirnak()`/`ters_bolu()` aynı idiomu kullanır ama onlar DOĞRU (bayt 34 ve 92
+// ölçüldü): orada istenen karakterin kendisi zaten `\`den sonraki bayttır.
+// Artık kod noktasından üretiliyorlar (D-458 `kod_metin`) — hem doğru hem açık.
+// [D-458] Dört onaltılık rakam oku → kod birimi. Hata: -1 (KEMGU'da exception
+// yok; `sonuç` döndürmek çağrı yerini iki kat şişirirdi ve -1 kod birimi
+// aralığında GEÇERSİZDİR, yani sessiz bir değerle karışmaz).
+işlev hex_deger(b: tam32) -> tam32 {
+    eğer b >= 48 ve b <= 57 { ver b - 48; }        // 0-9
+    eğer b >= 97 ve b <= 102 { ver b - 87; }       // a-f
+    eğer b >= 65 ve b <= 70 { ver b - 55; }        // A-F
+    ver -1;
+}
+
+işlev ja_hex4(a: &değişken JsonAyristirici) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        eğer ja_bitti(a) { ver -1; }
+        değişken d: tam32 = hex_deger(ja_bak(a));
+        eğer d < 0 { ver -1; }
+        toplam = toplam * 16 + d;
+        a.poz = a.poz + 1;
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+işlev satir_sonu() -> metin { ver kod_metin(10); }
+işlev sekme() -> metin { ver kod_metin(9); }
+işlev satir_basi() -> metin { ver kod_metin(13); }
+işlev geri_sil() -> metin { ver kod_metin(8); }    // \b
+işlev sayfa_ileri() -> metin { ver kod_metin(12); } // \f
 
 işlev ja_sayi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
     değişken negatif: mantıksal = yanlış;

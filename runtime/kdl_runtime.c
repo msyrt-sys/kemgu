@@ -348,6 +348,64 @@ const char *kdl_tam_to_metin(int32_t n) {
 }
 
 /* ============================================================================
+ * [D-458] Unicode KOD NOKTASI -> metin (UTF-8).
+ *
+ * NEDEN HAM BAYT DEGIL KOD NOKTASI: `metin`in GECERLI UTF-8 olma degismezi
+ * korunmalidir. Ham bir bayt->metin primitifi kullaniciya gecersiz dizgi kurma
+ * imkani verirdi (0x80-0xFF tek basina gecerli UTF-8 degildir) -- dilin "yanlis
+ * olan yazilamaz" durusuna aykiri bir foot-gun. UTF-16 VEKIL CIFTLERI cagiranda
+ * (stdlib/json.kem) saf KEMGU aritmetigiyle birlestirilir; bu yerlesik yalnizca
+ * TEK bir kod noktasini kodlar.
+ *
+ * Kodlama mantigi YENI DEGIL: `kdl_yazdir_karakter` ayni 4 arali kodlayiciyi
+ * zaten iceriyordu ama stdout'a YAZIYORDU (D-450'nin deseni: algoritma vardi,
+ * cikisi tampona almak gerekti).
+ *
+ * GECERLILIK AYRI YUKLEMDE (`kdl_kod_gecerli`, D-449 deseni): gecersiz kod icin
+ * bos dizgi donmek TEK BASINA sessiz olurdu; cagiran once soruP acik hata
+ * uretebilsin diye yuklem disa verilir.
+ *
+ * ⚠ KOD 0 (NUL) GECERSIZ SAYILIR -- ve bu OLCULMUS bir karardir, keyfi degil:
+ * KEMGU `metin`i NUL-SONLANDIRMALI C dizgisidir (`kdl_metin_uzunluk` -> strlen,
+ * `kdl_metin_birlestir` -> strlen). Yani GOMULU NUL TEMSIL EDILEMEZ; gecerli
+ * saysaydik ` ` SESSIZCE DUSERDI. Loud > silent: cagiran acik hata versin.
+ * ========================================================================= */
+int32_t kdl_kod_gecerli(int32_t kod) {
+    uint32_t c = (uint32_t)kod;
+    if (kod <= 0) return 0;               /* 0 = temsil edilemez (yukaridaki not) */
+    if (c > 0x10FFFFu) return 0;          /* Unicode ust siniri */
+    if (c >= 0xD800u && c <= 0xDFFFu) return 0;   /* yalniz vekil (lone surrogate) */
+    return 1;
+}
+
+const char *kdl_kod_metin(int32_t kod) {
+    char *out = (char *)kdl_sizan_al(8);
+    unsigned char *b;
+    uint32_t c = (uint32_t)kod;
+    int n = 0;
+    if (!out) return "";
+    b = (unsigned char *)out;
+    if (!kdl_kod_gecerli(kod)) { out[0] = 0; return out; }
+    if (c < 0x80u) {
+        b[n++] = (unsigned char)c;
+    } else if (c < 0x800u) {
+        b[n++] = (unsigned char)(0xC0u | (c >> 6));
+        b[n++] = (unsigned char)(0x80u | (c & 0x3Fu));
+    } else if (c < 0x10000u) {
+        b[n++] = (unsigned char)(0xE0u | (c >> 12));
+        b[n++] = (unsigned char)(0x80u | ((c >> 6) & 0x3Fu));
+        b[n++] = (unsigned char)(0x80u | (c & 0x3Fu));
+    } else {
+        b[n++] = (unsigned char)(0xF0u | (c >> 18));
+        b[n++] = (unsigned char)(0x80u | ((c >> 12) & 0x3Fu));
+        b[n++] = (unsigned char)(0x80u | ((c >> 6) & 0x3Fu));
+        b[n++] = (unsigned char)(0x80u | (c & 0x3Fu));
+    }
+    b[n] = 0;
+    return out;
+}
+
+/* ============================================================================
  * [D-457] kesirli64 -> metin. LOCALE BAGIMSIZ + GIDIS-DONUS (round-trip) tam.
  *
  * NEDEN "%g" YETMEZ (mevcut kdl_ondalik_bicimle onu kullanir): "%g" ALTI

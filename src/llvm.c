@@ -5126,6 +5126,21 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "void";
                 }
             }
+            /* [D-458] kod_metin / kod_gecerli -> kdl_* (i32 alir) */
+            else if (cagri_adi_uz == 9 &&
+                     memcmp(cagri_adi, "kod_metin", 9) == 0) {
+                cagri_adi = "kdl_kod_metin"; cagri_adi_uz = 13;
+                param_beklenen[0] = "i32";
+                kdl_donus = "ptr";
+            }
+            else if (cagri_adi_uz == 11 &&
+                     memcmp(cagri_adi, "kod_gecerli", 11) == 0) {
+                cagri_adi = "kdl_kod_gecerli"; cagri_adi_uz = 15;
+                param_beklenen[0] = "i32";
+                /* `dosya_gecerli` (D-449) ile AYNI desen: runtime `int32_t`
+                 * doner (deger kesin 0/1), IR `i1` bildirir. */
+                kdl_donus = "i1";
+            }
             /* [D-457] kesirli_metin -> kdl_kesirli_metin (double alir, ptr doner) */
             else if (cagri_adi_uz == 13 &&
                      memcmp(cagri_adi, "kesirli_metin", 13) == 0) {
@@ -7592,6 +7607,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_kilit_al(ptr)\n", out);     /* [D-455] */
     fputs("declare void @kdl_kilit_birak(ptr)\n", out);  /* [D-455] */
     fputs("declare void @kdl_kilit_yok(ptr)\n", out);    /* [D-455] */
+    fputs("declare ptr @kdl_kod_metin(i32)\n", out);        /* [D-458] */
+    fputs("declare i1 @kdl_kod_gecerli(i32)\n", out);       /* [D-458] */
     fputs("declare ptr @kdl_kesirli_metin(double)\n", out); /* [D-457] */
     fputs("declare ptr @kdl_semafor_olustur(i32)\n", out);  /* [D-456] */
     fputs("declare void @kdl_semafor_al(ptr)\n", out);      /* [D-456] */

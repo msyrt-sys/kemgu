@@ -163,6 +163,35 @@ işlev main() -> tam32 {
         }
     }
 
+    // ---- [D-458] Kaçış çözümü: kontrol karakterleri, \b \f ve \uXXXX ----
+    // 🔴 Bunlar ÖNCEDEN BOZUKTU ve hiçbir test ölçmüyordu: `satir_sonu()` vb.
+    // `metin_kes("\n",1,1)` ile kuruluyordu; KEMGU'da kaçış OLMADIĞI için bu
+    // SATIR SONU değil `n` HARFİDİR (bayt 110, ölçüldü) → `"a\nb"` sessizce
+    // `anb` çözülüyordu. Ayrıca `\b`/`\f` kolları hiç yoktu (belge "desteklenir"
+    // dediği hâlde). Test artık BAYT DEĞERİNİ denetler, yalnız "hata döndü mü"yü
+    // değil — D-443'ün dersi: hangi yolla ateşlendiğini ölçmeyen kapı ölçmüyordur.
+    h = h + json_kacis_bayt("a\nb", 10, 2097152);      // \n → 10 (ÖNCE harf 'n' idi)
+    h = h + json_kacis_bayt("a\tb", 9, 4194304);       // \t → 9  (ÖNCE harf 't')
+    h = h + json_kacis_bayt("a\rb", 13, 8388608);      // \r → 13 (ÖNCE harf 'r')
+    h = h + json_kacis_bayt("a\bb", 8, 16777216);      // \b → 8  (KOL YOKTU)
+    h = h + json_kacis_bayt("a\fb", 12, 33554432);     // \f → 12 (KOL YOKTU)
+    h = h + json_kacis_bayt("aAb", 65, 67108864); // A → 'A'
+    // ğ → ğ = C4 9F; ilk bayt 0xC4. `metin_bayt` tam8 döner (işaretli) →
+    // 0xC4 = -60. Beklentiyi UYDURMUYORUZ: işaretli tam8 değeri yazılır.
+    h = h + json_kacis_bayt("ağb", 0 - 60, 134217728);
+    // VEKİL ÇİFTİ: 😀 → U+1F600 (😀) = F0 9F 98 80; 0xF0 = -16
+    h = h + json_kacis_bayt("a😀b", 0 - 16, 268435456);
+
+    // Geçersiz kaçışlar HATA vermeli (sessiz kabul DEĞİL).
+    // ⚠ U+0000 kaçışını BİRLEŞTİRMEYLE kuruyoruz: kaynağa altı-haneli hâlini
+    // yazmak bu dosyaya GERÇEK bir NUL baytı sokup lexer'ı kırdı (bu artımda
+    // iki kez yaşandı — CLAUDE.md'nin "kaçış yok" dersinin yeni bir biçimi).
+    h = h + json_ayristir_hata_mi(
+        json_dizgi(metin_birlestir("a", metin_birlestir(ters_bolu(), "u0000b"))), 536870912);
+    h = h + json_ayristir_hata_mi(json_dizgi("a\uD800b"), 1073741824);  // yalnız yüksek vekil
+    h = h + json_ayristir_hata_mi(json_dizgi("a\u00ZZb"), 3);           // geçersiz hex
+    h = h + json_ayristir_hata_mi(json_dizgi("a\u12"), 5);              // yarım kalmış
+
     eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); ver 0; }
     // ⚠ ÇIKIŞ KODU 8 BİTE MASKELENİR. `h`'yi doğrudan döndürmek ölümcül bir
     // kapı zayıflığıydı: 262144 = 0x40000 → düşük bayt 0 → BAŞARISIZLIK
@@ -199,6 +228,44 @@ işlev json_ayristir_hata_mi(g: metin, kod: tam32) -> tam32 {
             ver kod;
         }
         hata(m) => { ver 0; }
+    }
+    ver kod;
+}
+
+// [D-458] JSON dizgi belgesi kur: `"` + icerik + `"`.
+işlev json_dizgi(ic: metin) -> metin {
+    değişken t: metin = tirnak();
+    ver metin_birlestir(t, metin_birlestir(ic, t));
+}
+
+// [D-458] Kacis COZUMUNU BAYT DUZEYINDE olcer.
+// Girdi `ic` KEMGU kaynaginda ters-bolu ICERIR (kacis yok, D-400) — yani
+// ayristiriciya gercek bir JSON kacisi gider. Cozulen dizginin 1. baytinin
+// beklenen deger olup olmadigina bakariz: "hata donmedi" YETMEZ, D-443.
+işlev json_kacis_bayt(ic: metin, beklenen_bayt: tam32, kod: tam32) -> tam32 {
+    eşleş json_ayristir(json_dizgi(ic)) {
+        hata(m) => {
+            yazdir_metin("kacis REDDEDILDI ama kabul edilmeliydi:");
+            yazdir_metin(ic);
+            ver kod;
+        }
+        tamam(v) => {
+            eşleş v {
+                JsonDeger::Metin(s) => {
+                    eğer metin_bayt(s, 1) olarak tam32 != beklenen_bayt {
+                        yazdir_metin("kacis YANLIS bayt cozdu:");
+                        yazdir_metin(ic);
+                        ver kod;
+                    }
+                    ver 0;
+                }
+                JsonDeger::Bos => { ver kod; }
+                JsonDeger::Mantik(x) => { ver kod; }
+                JsonDeger::Sayi(x) => { ver kod; }
+                JsonDeger::Dizi(x) => { ver kod; }
+                JsonDeger::Nesne(x, y) => { ver kod; }
+            }
+        }
     }
     ver kod;
 }

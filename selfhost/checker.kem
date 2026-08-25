@@ -1863,6 +1863,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "bariyer_olustur"); g_ekle(p, "bariyer_bekle");   // [D-456]
     g_ekle(p, "bariyer_yok");   // [D-456]
     g_ekle(p, "kesirli_metin");   // [D-457]
+    g_ekle(p, "kod_metin"); g_ekle(p, "kod_gecerli");   // [D-458]
     g_ekle(p, "yazdir_hata");   // [D-450]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
@@ -2187,6 +2188,8 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "bariyer_bekle", "boş", ["metin"]);   // [D-456]
     yerlesik_ekle(p, "bariyer_yok", "boş", ["metin"]);   // [D-456]
     yerlesik_ekle(p, "kesirli_metin", "metin", ["kesirli64"]);   // [D-457]
+    yerlesik_ekle(p, "kod_metin", "metin", ["tam32"]);   // [D-458]
+    yerlesik_ekle(p, "kod_gecerli", "mantıksal", ["tam32"]);   // [D-458]
     yerlesik_ekle(p, "yazdir_hata", "boş", ["metin"]);   // [D-450] STDERR
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);

@@ -1,0 +1,35 @@
+// [D-458] kod_metin / kod_gecerli yerlesikleri — C ve self-host IR paritesi.
+//
+// Kodlama mantigi runtime'da ZATEN vardi (kdl_yazdir_karakter) ama stdout'a
+// yaziyordu; burada olculen: ad eslemesi, donus tipleri (metin -> ptr,
+// mantiksal -> i1) ve argüman genisligi (i32).
+//
+// HAM BAYT->METIN BILEREK YOK: `metin`in gecerli-UTF-8 degismezi korunur.
+// Exit: 42
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // (a) ASCII: 1 bayt
+    eğer metin_uzunluk(kod_metin(65)) != 1 { h = h + 1; }
+    // (b) Turkce ğ (U+011F): 2 bayt
+    eğer metin_uzunluk(kod_metin(287)) != 2 { h = h + 1; }
+    // (c) euro (U+20AC): 3 bayt
+    eğer metin_uzunluk(kod_metin(8364)) != 3 { h = h + 1; }
+    // (d) emoji (U+1F600): 4 bayt — vekil DEGIL, dogrudan kod noktasi
+    eğer metin_uzunluk(kod_metin(128512)) != 4 { h = h + 1; }
+    // (e) icerik dogrulugu: kod_metin(65) == "A"
+    eğer metin_esit(kod_metin(65), "A") == yanlış { h = h + 1; }
+
+    // (f) GECERLILIK: 0 (temsil edilemez), yalniz vekil, asiri, negatif
+    eğer kod_gecerli(0) { h = h + 1; }
+    eğer kod_gecerli(55296) { h = h + 1; }       // D800
+    eğer kod_gecerli(57343) { h = h + 1; }       // DFFF
+    eğer kod_gecerli(1114112) { h = h + 1; }     // 0x110000
+    eğer kod_gecerli(0 - 5) { h = h + 1; }
+    eğer kod_gecerli(65) == yanlış { h = h + 1; }
+    eğer kod_gecerli(1114111) == yanlış { h = h + 1; }   // 0x10FFFF sinir DAHIL
+
+    eğer h == 0 { ver 42; }
+    ver 7;
+}

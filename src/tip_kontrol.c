@@ -377,6 +377,24 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("kilit_yok", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-458] kod_metin(kod: tam32) -> metin — Unicode kod noktasi -> UTF-8.
+     * HAM BAYT->METIN BILEREK YOK: `metin`in gecerli-UTF-8 degismezi korunur.
+     * Vekil ciftleri cagiranda (json.kem) saf KEMGU ile birlestirilir.
+     * kod_gecerli(kod) -> mantiksal: gecersizde bos dizgi TEK BASINA sessiz
+     * olurdu; cagiran once sorup ACIK hata uretsin (D-449 deseni).
+     * ⚠ kod 0 GECERSIZDIR: `metin` NUL-sonlandirmali, gomulu NUL temsil
+     * edilemez -- gecerli saysaydik sessizce duserdi. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("kod_metin", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("kod_gecerli", 11, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
     /* [D-457] kesirli_metin(x: kesirli64) -> metin — LOCALE BAGIMSIZ, kayipsiz
      * (kisa gidis-donus). `ondalik_bicimle` bunun YERINE GECMEZ: o `metin`
      * alir (derleyicinin kendi float LEXEME'ini bicimler) ve "%g" ile ALTI
