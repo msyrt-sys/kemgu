@@ -182,6 +182,21 @@ işlev main() -> tam32 {
     // VEKİL ÇİFTİ: 😀 → U+1F600 (😀) = F0 9F 98 80; 0xF0 = -16
     h = h + json_kacis_bayt("a😀b", 0 - 16, 268435456);
 
+    // [D-462] AYRIŞTIRICI tarafında `\" \\ \/` — KAPSAM BOŞLUĞUYDU.
+    // Kollar (34/92/47) `ja_metin`de VARDI ve doğru çalışıyordu (ölçüldü), ama
+    // bayt düzeyinde HİÇBİR ÖLÇÜM ateşlemiyordu: `\"` ve `\\` yalnız YAZICI
+    // tarafında (`yaz`) sınanıyordu, `\/` hiç sınanmıyordu. Kusur değil kapsam
+    // boşluğu — ama D-461'in 1. kör noktasıyla AYNI SINIF (kod var, --check
+    // geçiyor, hiçbir kapı zorlamıyor).
+    // ⚠ KEMGU'da kaçış YOKTUR → `"a\\b"` kaynakta 4 karakterdir (a,\,\,b), yani
+    // JSON kaçış dizisinin ta kendisi. `\"` ise KEMGU literalini kapatacağı için
+    // `tirnak()` ile kurulur.
+    h = h + json_kacis_bayt("a\\b", 92, 7);   // \\ → ters bölü (92)
+    h = h + json_kacis_bayt("a\/b", 47, 9);   // \/ → eğik çizgi (47)
+    h = h + json_kacis_bayt(
+        metin_birlestir("a", metin_birlestir(ters_bolu(),
+            metin_birlestir(tirnak(), "b"))), 34, 11);   // \" → tırnak (34)
+
     // Geçersiz kaçışlar HATA vermeli (sessiz kabul DEĞİL).
     // ⚠ U+0000 kaçışını BİRLEŞTİRMEYLE kuruyoruz: kaynağa altı-haneli hâlini
     // yazmak bu dosyaya GERÇEK bir NUL baytı sokup lexer'ı kırdı (bu artımda
