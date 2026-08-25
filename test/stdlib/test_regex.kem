@@ -49,6 +49,35 @@ işlev rx_tam(desen: metin, girdi: metin, beklenen: mantıksal, kod: tam32) -> t
     ver kod;
 }
 
+// [D-463] YAKALAMA GRUBU ölçümü: k. grubun METNİ beklenenle aynı mı?
+// `beklenen` özel değerleri: "<yok>" = eşleşme yok, "<yakalanmadi>" = grup
+// eşleşmedi (yuva -1). Bu ikisini AYIRMAK şart: boş dizgi ile karıştırmak
+// `(a)|b` gibi desenlerde sessiz yanlış cevap üretirdi.
+işlev rx_grup(desen: metin, girdi: metin, k: tam32,
+              beklenen: metin, kod: tam32) -> tam32 {
+    değişken gercek: metin = "<derleme hatasi>";
+    eşleş derle(desen) {
+        hata(m) => { }
+        tamam(r) => {
+            eşleş ara_gruplar(&değişken r, girdi) {
+                hiç => { gercek = "<yok>"; }
+                değer(y) => {
+                    eşleş grup_metin(girdi, y, k) {
+                        hiç => { gercek = "<yakalanmadi>"; }
+                        değer(t) => { gercek = t; }
+                    }
+                }
+            }
+        }
+    }
+    eğer metin_esit(gercek, beklenen) { ver 0; }
+    yazdir_metin("GRUP YANLIS:");
+    yazdir_metin(desen); yazdir_metin(girdi);
+    yazdir_metin("beklenen:"); yazdir_metin(beklenen);
+    yazdir_metin("gelen   :"); yazdir_metin(gercek);
+    ver kod;
+}
+
 işlev main() -> tam32 {
     değişken h: tam32 = 0;
 
@@ -153,6 +182,45 @@ işlev main() -> tam32 {
             }
         }
     }
+
+    // ---- [D-463] YAKALAMA GRUPLARI ----------------------------------------
+    h = h + rx_grup("(a+)b", "xaaab", 1, "aaa", 100);
+    h = h + rx_grup("(a)(b)", "ab", 1, "a", 101);
+    h = h + rx_grup("(a)(b)", "ab", 2, "b", 102);
+    // İÇ İÇE: numara AÇILIŞ PARANTEZİ sırasına göre — dış grup 1'dir.
+    // İçeriden numaralasaydık dış gruba 3 düşerdi; Perl/POSIX geleneği bu.
+    h = h + rx_grup("((a)(b))", "ab", 1, "ab", 103);
+    h = h + rx_grup("((a)(b))", "ab", 2, "a", 104);
+    h = h + rx_grup("((a)(b))", "ab", 3, "b", 105);
+    // YAKALANMAMIŞ grup boş dizgi DEĞİLDİR (yuva -1). Karıştırmak sessiz
+    // yanlış cevap olurdu: `(a)|b` üzerinde `b` eşleşir, g1 yakalanmaz.
+    h = h + rx_grup("(a)|b", "b", 1, "<yakalanmadi>", 106);
+    h = h + rx_grup("(a)|b", "a", 1, "a", 107);
+    h = h + rx_grup("(x)", "y", 1, "<yok>", 108);
+    // Aralık dışı grup numarası → `hiç` (panik DEĞİL).
+    h = h + rx_grup("(a)", "a", 5, "<yakalanmadi>", 109);
+    h = h + rx_grup("(a)", "a", 0, "<yakalanmadi>", 110);
+    // Sınıf + niceleyici birlikte
+    h = h + rx_grup("([0-9]+)", "ab123cd", 1, "123", 111);
+    // ⚠ UTF-8 KOD NOKTASI düzeyi: `(...)` ÜÇ KARAKTER yakalar, üç BAYT değil.
+    // Bayt düzeyinde çalışan bir motor burada düşerdi (`çığ` 6 bayttır).
+    h = h + rx_grup("(...)", "çığ", 1, "çığ", 112);
+    // Gruplu YILDIZ: son yineleme kazanır (Perl/POSIX ortak davranışı)
+    h = h + rx_grup("(ab)*", "abab", 1, "ab", 113);
+    // ⚠⚠ İKİ KURAL AYRIDIR ve karıştırmak kolaydır — bu testi yazarken BEN
+    // karıştırdım, ölçüm düzeltti:
+    //   · GENEL EŞLEŞME uzunluğu: EN UZUN (leftmost-longest) kazanır.
+    //   · YAKALAMA ayrımı: yalnız EŞİT UZUNLUKTAKİ eşleşmeler arasında,
+    //     ÖNCELİK (alternatifin sol kolu) kazanır.
+    // `(a)|(ab)` üzerinde "ab": sağ kol 2 karakter eşler, sol kol 1 —
+    // uzunluk kuralı SAĞ kolu seçer, öncelik DEVREYE GİRMEZ. Dolayısıyla
+    // g1 yakalanmaz, g2 = "ab". (Beklentimi "a" yazmıştım; yanlıştı.)
+    h = h + rx_grup("(a)|(ab)", "ab", 1, "<yakalanmadi>", 114);
+    h = h + rx_grup("(a)|(ab)", "ab", 2, "ab", 115);
+    // ÖNCELİĞİN GERÇEKTEN ölçüldüğü vaka: iki kol AYNI uzunlukta eşler →
+    // burada uzunluk ayırt edemez, SOL kol kazanmalıdır.
+    h = h + rx_grup("(a)|(a)", "a", 1, "a", 116);
+    h = h + rx_grup("(a)|(a)", "a", 2, "<yakalanmadi>", 117);
 
     eğer h == 0 { yazdir_metin("regex: TUM TESTLER GECTI"); ver 0; }
     yazdir_metin("regex: BASARISIZ");

@@ -17,9 +17,25 @@
 // BEDELİ AÇIK: GERİ-REFERANS (`\1`) DESTEKLENMEZ — çünkü geri-referans zaten
 // geri izlemeyi ZORUNLU KILAN şeydir. Bu bir eksiklik değil, bilinçli takas.
 //
-// V1'DE OLMAYANLAR (dürüstçe): geri-referans · tembel niceleyiciler (`*?`) ·
-// `{n,m}` · YAKALAMA GRUPLARI. Gruplar yalnız gruplama içindir. Yakalama Pike
-// VM'e eklenebilir (thread başına konum dizisi) ama ayrı bir artımdır.
+// OLMAYANLAR (dürüstçe): geri-referans · tembel niceleyiciler (`*?`) · `{n,m}`
+// · `\D \W \S`. Geri-referans ve tembel niceleyici GERİ İZLEME gerektirir,
+// yani yukarıdaki ReDoS bağışıklığını çöpe atardı — bilinçli takas.
+//
+// [D-463] YAKALAMA GRUPLARI VAR: `ara_gruplar` + `grup_metin` + `grup_sayisi`.
+// Doğrusallık KORUNDU (ölçüldü: `(a+)+b` girdisi 20→320, 16 kat büyürken süre
+// sabit bandda). Yakalama, Pike VM'de iş parçacığı başına yuva dizisiyle
+// yapılır; kopya YALNIZ yaprak eklenirken çıkar (epsilon-kapanışı DFS'inde
+// yuva paylaşılır, KAYDET sonrası GERİ ALINIR) — bu yüzden çatallanma başına
+// kopya maliyeti yoktur.
+//
+// ⚠⚠ İKİ AYRI KURAL — karıştırmak kolay (bu modülün testini yazarken
+// karıştırıldı, ölçüm düzeltti):
+//   · GENEL EŞLEŞME uzunluğu  : EN UZUN (leftmost-longest) kazanır.
+//   · YAKALAMA ayrımı          : yalnız EŞİT UZUNLUKTAKİ eşleşmeler arasında
+//     ÖNCELİK (alternatifin SOL kolu) kazanır.
+// `(a)|(ab)` üzerinde "ab" → sağ kol daha UZUN eşler, öncelik devreye GİRMEZ.
+// POSIX'in "her alt-ifade de ayrıca en uzun" kuralı UYGULANMAZ: yarım
+// uygulamak ince ve sessiz yanlış yakalamalar üretirdi.
 //
 // UTF-8: eşleme KOD NOKTASI düzeyindedir, bayt değil. `.` bir KARAKTER eşler —
 // `çığ` üç karakterdir, altı bayt değil (Türkçe DNA gereği).
@@ -49,6 +65,8 @@ yapı Regex {
     cls_bas: Dizi<tam32>;
     cls_adet: Dizi<tam32>;
     cls_ters: Dizi<tam32>;
+    // [D-463] Yakalama grubu sayısı; yuva sayısı = 2 * grup_say.
+    grup_say: tam32;
 }
 
 // Ayrıştırma durumu: desen + konum.
@@ -65,6 +83,9 @@ yapı RxAyr {
     cls_bas: Dizi<tam32>;
     cls_adet: Dizi<tam32>;
     cls_ters: Dizi<tam32>;
+    // [D-463] Görülen yakalama grubu sayısı. Numara AÇILIŞ PARANTEZİ sırasına
+    // göre verilir (Perl/POSIX geleneği): `((a)(b))` → dış 1, `(a)` 2, `(b)` 3.
+    grup_say: tam32;
 }
 
 // ---- Eşleşme sonucu ---------------------------------------------------------
@@ -123,7 +144,10 @@ işlev rx_cp_uzunluk(s: metin, i: tam32) -> tam32 {
     Secenek(Dizi<RxDugum>),
     Yildiz(Dizi<RxDugum>),
     Arti(Dizi<RxDugum>),
-    Opsiyon(Dizi<RxDugum>)
+    Opsiyon(Dizi<RxDugum>),
+    // [D-463] YAKALAMA GRUBU. İlk yük = grup NUMARASI (1'den başlar).
+    // Grup k'nın yuvaları: 2*(k-1) = başlangıç, 2*(k-1)+1 = bitiş.
+    Grup(tam32, Dizi<RxDugum>)
 }
 
 işlev rx_bitti(a: &değişken RxAyr) -> mantıksal {
@@ -244,10 +268,17 @@ işlev rx_atom(a: &değişken RxAyr) -> RxDugum {
     değişken c: tam32 = rx_bak(a);
     eğer c == 40 {                       // (
         rx_ilerle(a);
+        // [D-463] Numara AÇILIŞTA ayrılır — iç gruplar ayrıştırılmadan ÖNCE.
+        // İçeriden sonra ayırsaydık `((a)(b))` dış gruba 3 verirdi; Perl/POSIX
+        // geleneği açılış parantezi sırasıdır ve kullanıcı beklentisi budur.
+        a.grup_say = a.grup_say + 1;
+        değişken no: tam32 = a.grup_say;
         değişken ic: RxDugum = rx_alt(a);
         eğer rx_bak(a) != 41 { rx_hata(a,"kapanmamis grup"); }
         değilse { rx_ilerle(a); }
-        ver ic;                          // V1: grup YALNIZ gruplama (yakalama yok)
+        değişken kutu: Dizi<RxDugum> = [];
+        dizi_ekle(kutu, ic);
+        ver RxDugum::Grup(no, kutu);
     }
     eğer c == 91 { rx_ilerle(a); ver rx_sinif(a); }        // [
     eğer c == 46 { rx_ilerle(a); ver RxDugum::Her; }       // .
@@ -333,6 +364,13 @@ işlev rx_derle_dugum(r: &değişken Regex, d: RxDugum) -> tam32 {
         RxDugum::Bas => { rx_yay(r, 6, 0, 0); }
         RxDugum::Son => { rx_yay(r, 7, 0, 0); }
         RxDugum::Bosluk => { }
+        // [D-463] Grup: gövdeyi KAYDET komutlarıyla sarar (op 8, `a` = yuva no).
+        // KAYDET epsilon'dur — girdi TÜKETMEZ, `rx_ekle`nin kapanışında işlenir.
+        RxDugum::Grup(no, ic) => {
+            rx_yay(r, 8, 2 * (no - 1), 0);          // grup başlangıcı
+            rx_derle_dugum(r, dizi_al(ic, 0));
+            rx_yay(r, 8, 2 * (no - 1) + 1, 0);      // grup bitişi
+        }
         RxDugum::Birlestir(ps) => {
             değişken i: tam32 = 0;
             iken i < dizi_boyut(ps) {
@@ -401,7 +439,8 @@ işlev rx_derle_dugum(r: &değişken Regex, d: RxDugum) -> tam32 {
 işlev derle(desen: metin) -> sonuç<Regex, metin> {
     değişken a: RxAyr = RxAyr {
         desen: desen, poz: 0, hatali: yanlış, mesaj: "",
-        cr_alt: [], cr_ust: [], cls_bas: [], cls_adet: [], cls_ters: []
+        cr_alt: [], cr_ust: [], cls_bas: [], cls_adet: [], cls_ters: [],
+        grup_say: 0
     };
     değişken agac: RxDugum = rx_alt(&değişken a);
     // Artık girdi kaldıysa desen bozuktur — örn. kapanmamış `)`.
@@ -413,7 +452,8 @@ işlev derle(desen: metin) -> sonuç<Regex, metin> {
     değişken r: Regex = Regex {
         op: [], a: [], b: [],
         cr_alt: a.cr_alt, cr_ust: a.cr_ust,
-        cls_bas: a.cls_bas, cls_adet: a.cls_adet, cls_ters: a.cls_ters
+        cls_bas: a.cls_bas, cls_adet: a.cls_adet, cls_ters: a.cls_ters,
+        grup_say: a.grup_say
     };
     rx_derle_dugum(&değişken r, agac);
     rx_yay(&değişken r, 4, 0, 0);   // ESLES
@@ -450,30 +490,59 @@ işlev rx_sinif_eslesir(r: &değişken Regex, idx: tam32, c: tam32) -> mantıksa
 // çağırana YANSIR (ölçüldü, varsayılmadı). Bu yüzden `&değişken` gerekmez ve
 // imza sade kalır — referans işaretlemek burada yanlış bir güvence verirdi
 // (kopya semantiği yok).
-işlev rx_ekle(r: &değişken Regex, liste: Dizi<tam32>,
+// [D-463] `yuva` = ÇALIŞMA yuva dizisi (nyuva eleman). Epsilon-kapanışı bir
+// DFS'tir ve `yuva` bu DFS boyunca PAYLAŞILIR: KAYDET eski değeri saklar,
+// özyinelemeden sonra GERİ ALIR. Böylece her çatallanmada kopya çıkarmayız —
+// kopya YALNIZ yaprak listeye eklenirken alınır. Doğrusallık korunur.
+//
+// ⚠ KOPYA ŞART: `Dizi<T>` değerle geçse de HEAP-DESTEKLİDİR ve mutasyon
+// çağırana yansır (D-461'de ölçüldü). Yaprakta kopyalamazsak sonraki bir
+// KAYDET, listeye çoktan girmiş iş parçacığının yuvalarını da bozardı —
+// sessiz yanlış yakalama.
+işlev rx_ekle(r: &değişken Regex, liste: Dizi<tam32>, liste_y: Dizi<tam32>,
               damga: Dizi<tam32>, nesil: tam32,
-              pc: tam32, poz: tam32, uzunluk: tam32) -> tam32 {
+              pc: tam32, poz: tam32, uzunluk: tam32,
+              yuva: Dizi<tam32>, nyuva: tam32) -> tam32 {
     eğer dizi_al(damga, pc) == nesil { ver 0; }   // zaten eklendi
     dizi_yaz(damga, pc, nesil);
     değişken op: tam32 = dizi_al(r.op, pc);
     eğer op == 2 {   // CATAL
-        rx_ekle(r, liste, damga, nesil, dizi_al(r.a, pc), poz, uzunluk);
-        rx_ekle(r, liste, damga, nesil, dizi_al(r.b, pc), poz, uzunluk);
+        // Sol kol ÖNCE: `damga` ilk ulaşanı tuttuğu için öncelik buradan doğar.
+        rx_ekle(r, liste, liste_y, damga, nesil, dizi_al(r.a, pc), poz, uzunluk, yuva, nyuva);
+        rx_ekle(r, liste, liste_y, damga, nesil, dizi_al(r.b, pc), poz, uzunluk, yuva, nyuva);
         ver 0;
     }
     eğer op == 3 {   // ATLA
-        rx_ekle(r, liste, damga, nesil, dizi_al(r.a, pc), poz, uzunluk);
+        rx_ekle(r, liste, liste_y, damga, nesil, dizi_al(r.a, pc), poz, uzunluk, yuva, nyuva);
         ver 0;
     }
     eğer op == 6 {   // ^
-        eğer poz == 0 { rx_ekle(r, liste, damga, nesil, pc + 1, poz, uzunluk); }
+        eğer poz == 0 { rx_ekle(r, liste, liste_y, damga, nesil, pc + 1, poz, uzunluk, yuva, nyuva); }
         ver 0;
     }
     eğer op == 7 {   // $
-        eğer poz == uzunluk { rx_ekle(r, liste, damga, nesil, pc + 1, poz, uzunluk); }
+        eğer poz == uzunluk { rx_ekle(r, liste, liste_y, damga, nesil, pc + 1, poz, uzunluk, yuva, nyuva); }
         ver 0;
     }
+    eğer op == 8 {   // KAYDET — yuvaya konumu yaz, DFS sonrası GERİ AL
+        değişken n: tam32 = dizi_al(r.a, pc);
+        // ⚠ Yakalamasız koşumda (`nyuva == 0`) `yuva` BOŞTUR; korumasız
+        // `dizi_al` runtime SINIR İHLALİ verirdi. KAYDET epsilon olduğu için
+        // atlamak semantik olarak doğrudur — yalnız kayıt düşer.
+        eğer n >= nyuva {
+            rx_ekle(r, liste, liste_y, damga, nesil, pc + 1, poz, uzunluk, yuva, nyuva);
+            ver 0;
+        }
+        değişken eski: tam32 = dizi_al(yuva, n);
+        dizi_yaz(yuva, n, poz);
+        rx_ekle(r, liste, liste_y, damga, nesil, pc + 1, poz, uzunluk, yuva, nyuva);
+        dizi_yaz(yuva, n, eski);
+        ver 0;
+    }
+    // Yaprak: girdi tüketen komut. Yuvaların KOPYASI listeye yazılır.
     dizi_ekle(liste, pc);
+    değişken i: tam32 = 0;
+    iken i < nyuva { dizi_ekle(liste_y, dizi_al(yuva, i)); i = i + 1; }
     ver 0;
 }
 
@@ -484,25 +553,48 @@ işlev rx_ekle(r: &değişken Regex, liste: Dizi<tam32>,
 // motorların "ilk bulunan" (leftmost-first) davranışı alternatif SIRASINA
 // bağlıdır; Thompson simülasyonunda tüm kollar EŞ ZAMANLI ilerlediği için
 // sıraya bağlı bir "ilk" yoktur — en uzunu bildirmek tek tutarlı seçimdir.
-işlev rx_kosum(r: &değişken Regex, s: metin, bas: tam32) -> tam32 {
+// [D-463] `son_yuva` ÇIKIŞ parametresidir: en uzun eşleşmeyi bulan iş
+// parçacığının yakalama yuvaları buraya yazılır (yoksa dokunulmaz).
+işlev rx_kosum_y(r: &değişken Regex, s: metin, bas: tam32,
+                 son_yuva: Dizi<tam32>, nyuva: tam32) -> tam32 {
     değişken n: tam32 = dizi_boyut(r.op);
     değişken L: tam32 = metin_uzunluk(s);
     değişken damga: Dizi<tam32> = [];
     değişken i: tam32 = 0;
     iken i < n { dizi_ekle(damga, 0 - 1); i = i + 1; }
 
+    değişken yuva: Dizi<tam32> = [];
+    i = 0;
+    iken i < nyuva { dizi_ekle(yuva, 0 - 1); i = i + 1; }
+
     değişken simdi: Dizi<tam32> = [];
+    değişken simdi_y: Dizi<tam32> = [];
     değişken nesil: tam32 = 0;
-    rx_ekle(r, simdi, damga, nesil, 0, bas, L);
+    rx_ekle(r, simdi, simdi_y, damga, nesil, 0, bas, L, yuva, nyuva);
 
     değişken enuzun: tam32 = 0 - 1;
     değişken poz: tam32 = bas;
     değişken calis: mantıksal = doğru;
     iken calis {
         // Bu konumda ESLES var mı?
+        // ⚠ İlk ESLES'te DURULUR: liste öncelik sırasındadır, dolayısıyla
+        // aynı bitiş konumunda birden çok ESLES varsa EN YÜKSEK ÖNCELİKLİnin
+        // yakalamaları kazanır. Genel eşleşme yine EN UZUN olanıdır (dış döngü
+        // daha uzun bir bitiş bulursa `enuzun` üzerine yazılır).
         değişken k: tam32 = 0;
+        değişken bulundu: mantıksal = yanlış;
         iken k < dizi_boyut(simdi) {
-            eğer dizi_al(r.op, dizi_al(simdi, k)) == 4 { enuzun = poz - bas; }
+            eğer dizi_al(r.op, dizi_al(simdi, k)) == 4 {
+                eğer bulundu == yanlış {
+                    bulundu = doğru;
+                    enuzun = poz - bas;
+                    değişken q: tam32 = 0;
+                    iken q < nyuva {
+                        dizi_yaz(son_yuva, q, dizi_al(simdi_y, k * nyuva + q));
+                        q = q + 1;
+                    }
+                }
+            }
             k = k + 1;
         }
         eğer poz >= L { calis = yanlış; }
@@ -512,32 +604,49 @@ işlev rx_kosum(r: &değişken Regex, s: metin, bas: tam32) -> tam32 {
                 değişken c: tam32 = rx_cp(s, poz);
                 değişken adim: tam32 = rx_cp_uzunluk(s, poz);
                 değişken sonraki: Dizi<tam32> = [];
+                değişken sonraki_y: Dizi<tam32> = [];
                 nesil = nesil + 1;
                 değişken j: tam32 = 0;
                 iken j < dizi_boyut(simdi) {
                     değişken pc: tam32 = dizi_al(simdi, j);
                     değişken op: tam32 = dizi_al(r.op, pc);
+                    // Bu iş parçacığının yuvalarını ÇALIŞMA dizisine yükle.
+                    // (`rx_ekle` DFS boyunca bunu mutasyona uğratıp geri alır.)
+                    değişken q: tam32 = 0;
+                    iken q < nyuva {
+                        dizi_yaz(yuva, q, dizi_al(simdi_y, j * nyuva + q));
+                        q = q + 1;
+                    }
                     eğer op == 0 {
                         eğer dizi_al(r.a, pc) == c {
-                            rx_ekle(r, sonraki, damga, nesil, pc + 1, poz + adim, L);
+                            rx_ekle(r, sonraki, sonraki_y, damga, nesil, pc + 1, poz + adim, L, yuva, nyuva);
                         }
                     }
                     eğer op == 1 {
-                        rx_ekle(r, sonraki, damga, nesil, pc + 1, poz + adim, L);
+                        rx_ekle(r, sonraki, sonraki_y, damga, nesil, pc + 1, poz + adim, L, yuva, nyuva);
                     }
                     eğer op == 5 {
                         eğer rx_sinif_eslesir(r, dizi_al(r.a, pc), c) {
-                            rx_ekle(r, sonraki, damga, nesil, pc + 1, poz + adim, L);
+                            rx_ekle(r, sonraki, sonraki_y, damga, nesil, pc + 1, poz + adim, L, yuva, nyuva);
                         }
                     }
                     j = j + 1;
                 }
                 simdi = sonraki;
+                simdi_y = sonraki_y;
                 poz = poz + adim;
             }
         }
     }
     ver enuzun;
+}
+
+// [D-463] Yakalamasız sarmalayıcı — mevcut çağrı yerleri (ve 29 ölçüm)
+// DEĞİŞMEDEN çalışsın diye. Yuva sayısı 0 ise KAYDET komutları yine
+// çalışır ama hiçbir yuvaya yazılmaz (`nyuva == 0` → döngüler boş geçer).
+işlev rx_kosum(r: &değişken Regex, s: metin, bas: tam32) -> tam32 {
+    değişken bos: Dizi<tam32> = [];
+    ver rx_kosum_y(r, s, bas, bos, 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -556,6 +665,49 @@ işlev ara(r: &değişken Regex, s: metin) -> seçimlik<Eslesme> {
         değilse { i = i + rx_cp_uzunluk(s, i); }
     }
     ver hiç;
+}
+
+// [D-463] Desendeki yakalama grubu sayısı.
+işlev grup_sayisi(r: &değişken Regex) -> tam32 { ver r.grup_say; }
+
+// [D-463] Arama + YAKALAMA. Dönüş: düz yuva dizisi
+//   [g1_bas, g1_son, g2_bas, g2_son, ...]   (BAYT indeksleri)
+// Eşleşmeyen grup için İKİ yuva da -1'dir (`(a)|b` deseni `b`yi eşlerse g1
+// yakalanmamıştır — bu `0` ile KARIŞTIRILMAMALIDIR, o yüzden -1).
+// Eşleşme yoksa `hiç` döner.
+//
+// ⚠ ANLAMBİLİM (bilinçli, D-463): genel eşleşme EN UZUN olandır (motorun
+// mevcut sözleşmesi korunur), ama YAKALAMA ayrımı ÖNCELİK TABANLIDIR —
+// POSIX'in "her alt-ifade de ayrıca en uzun" kuralı UYGULANMAZ. POSIX
+// kuralını yarım uygulamak, ince ve sessiz yanlış yakalamalar üretirdi;
+// öncelik kuralı ise deterministiktir ve alternatifin SOL kolu kazanır.
+işlev ara_gruplar(r: &değişken Regex, s: metin) -> seçimlik<Dizi<tam32>> {
+    değişken ny: tam32 = 2 * r.grup_say;
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        değişken yuv: Dizi<tam32> = [];
+        değişken q: tam32 = 0;
+        iken q < ny { dizi_ekle(yuv, 0 - 1); q = q + 1; }
+        değişken u: tam32 = rx_kosum_y(r, s, i, yuv, ny);
+        eğer u >= 0 { ver değer(yuv); }
+        eğer i >= L { devam = yanlış; }
+        değilse { i = i + rx_cp_uzunluk(s, i); }
+    }
+    ver hiç;
+}
+
+// [D-463] `ara_gruplar` yuvalarından k. grubun METNİNİ çıkarır (k 1'den başlar).
+// Yakalanmamış grup ya da aralık dışı k → `hiç`.
+işlev grup_metin(s: metin, yuvalar: Dizi<tam32>, k: tam32) -> seçimlik<metin> {
+    eğer k < 1 { ver hiç; }
+    eğer 2 * k > dizi_boyut(yuvalar) { ver hiç; }
+    değişken b: tam32 = dizi_al(yuvalar, 2 * (k - 1));
+    değişken e: tam32 = dizi_al(yuvalar, 2 * (k - 1) + 1);
+    eğer b < 0 { ver hiç; }
+    eğer e < b { ver hiç; }
+    ver değer(metin_kes(s, b, e - b));
 }
 
 // Desen metnin TAMAMINI eşliyor mu?
