@@ -1,0 +1,47 @@
+// [D-465] `hiç`/`değer`/`tamam`/`hata` yapıcıları ARGÜMAN ve ATAMA
+// pozisyonunda çözülemiyordu.
+//
+// Kayıtlı sınır: yapıcılar ancak BEKLENEN TİP bilindiğinde çözülür. Mekanizma
+// (`yapici_uret` + `beklenen_tip`) ZATEN VARDI — ama bağlamı kuran kapılar
+// dardı: C'de argüman bağlamı YALNIZ `Dizi<T>` için (D-070), atama bağlamı
+// YALNIZ dinamik dizi için (D-092) kuruluyordu. Self-host'ta da aynı boşluk.
+// Sonuç:
+//   f(hiç)         -> C "tanimsiz tanimlayici" (durur), self `@değer`/`@hiç` RED
+//   f(değer(42))   -> her iki derleyicide `@değer` tanımsız = LINK-RED
+//   o = değer(42)  -> aynı
+//
+// Bu şekiller KEMGU'da çok doğaldır ama hiçbir korpus dosyası içermiyordu.
+// D-464'ün fikstürünü yazarken çıktılar ve o artımda BİLEREK kapsam dışı
+// bırakılmışlardı (kapı yanlış sebeple kırmızı olmasın diye, D-421).
+// Exit: 42
+
+işlev sec_topla(o: seçimlik<tam32>) -> tam32 {
+    eşleş o {
+        değer(v) => { ver v; }
+        hiç => { ver 0; }
+    }
+}
+
+işlev son_topla(r: sonuç<tam32, metin>) -> tam32 {
+    eşleş r {
+        tamam(v) => { ver v; }
+        hata(m) => { ver 0; }
+    }
+}
+
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    // (a) ÇIPLAK `hiç` argüman olarak
+    t = t + sec_topla(hiç);              // +0
+    // (b) `değer(N)` argüman olarak
+    t = t + sec_topla(değer(20));        // +20
+    // (c) `tamam(N)` argüman olarak (sonuç<> yolu)
+    t = t + son_topla(tamam(10));        // +10
+    // (d) `hata(m)` argüman olarak
+    t = t + son_topla(hata("bos"));      // +0
+    // (e) ATAMA pozisyonu — annotasyonlu yerele sonradan yazma
+    değişken o: seçimlik<tam32> = hiç;
+    o = değer(12);
+    t = t + sec_topla(o);                // +12
+    ver t;                               // 42
+}

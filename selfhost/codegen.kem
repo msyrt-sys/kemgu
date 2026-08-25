@@ -5306,7 +5306,21 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         değişken i: tam32 = 1;
         iken i < cs {
+            // [D-465] ARGÜMAN BAĞLAMI: parametrenin IR tipi bir tagged-union
+            // (`{...}` = seçimlik/sonuç) ise `beklenen_ll`i ÖNCEDEN kur; yoksa
+            // `f(hiç)` / `f(değer(42))` yapıcıları çözülemiyor ve `@değer`
+            // tanımsız kalıyor (LINK-RED). C'de aynı boşluk vardı ve orada da
+            // bağlam YALNIZ `Dizi<T>` için kuruluyordu (D-070) — mekanizma
+            // vardı, kapısı dardı.
+            değişken ab_eski: metin = p.beklenen_ll;
+            eğer kullanici == 1 {
+                değişken apt: metin = param_ir_tip(p, fname, i - 1);
+                eğer metin_uzunluk(apt) > 0 {
+                    eğer bayt(apt, 0) == 123 { p.beklenen_ll = apt; }
+                }
+            }
             değişken av: metin = ifade_uret(p, dizi_al(p.cocuk, cb + i));
+            p.beklenen_ll = ab_eski;
             değişken at: metin = p.son_tip;
             // D-393: ARGÜMAN, PARAMETRENİN BİLDİRİLEN IR tipine genişletilmeli.
             // Eskiden argümanın DOĞAL tipi basılıyordu → `f(a: dtam64, ..)` için
@@ -6578,7 +6592,17 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 yaz_str(", ptr @"); yaz_str(dizi_al(p.a_deg, lhs)); yb(10);
                 ver 0;
             }
+            // [D-465] ATAMA BAĞLAMI: hedefin IR tipi tagged-union (`{...}`) ise
+            // `beklenen_ll`i ÖNCEDEN kur — `o = değer(k)` yapıcısı aksi hâlde
+            // çözülemiyor (`@değer` tanımsız, LINK-RED). ⚠ Tip, değer ÜRETİLMEDEN
+            // ÖNCE okunmalı; sonra okumak geç kalır.
+            değişken vt0: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, lhs));
+            değişken at_eski: metin = p.beklenen_ll;
+            eğer metin_uzunluk(vt0) > 0 {
+                eğer bayt(vt0, 0) == 123 { p.beklenen_ll = vt0; }
+            }
             değişken v: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            p.beklenen_ll = at_eski;
             değişken vt: metin = cg_var_tip_bul(p, dizi_al(p.a_deg, lhs));
             // D-310: i64-taşıyıcı → hedef değişken genişliği. D-337: kaynak
             // işaretsizse zext (dtam8 → dtam32 ataması 200'ü korur, -56 değil).

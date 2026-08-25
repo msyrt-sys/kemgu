@@ -56,6 +56,10 @@ typedef struct LlvmIsim {
      * KdlDizi* mı olduğunu ve [j] eleman tipini recursive çözmek için
      * (heap_dizi_eleman_ast). arena_ayir_sifir → varsayılan NULL (init-uyarısı yok). */
     const Dugum *eleman_tip_ast;
+    /* [D-465] Bagimanin BILDIRILEN tip AST dugumu (annotasyon). ATAMA yolunda
+     * `o = değer(k)` gibi yapicilarin beklenen_tip'ini kurmak icin gerekli;
+     * `eleman_tip_ast` yalnizca DIZI elemani tasir, genel tip tasimaz. */
+    const Dugum *tip_ast;
     /* Adim 3 (B v2): heap dizi (KdlDizi*) ise 1; stack [N x T] ise 0.
      * dizi literal değişken annot ile heap olarak allocate edildiyse,
      * arr[i] sintaksi kdl_dizi_al ile route edilir. */
@@ -5112,8 +5116,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (ik && ik->ast && ik->ast->tip == DUGUM_ISLEV &&
                         i < ik->ast->veri.islev.param_sayi) {
                         const Dugum *pp = ik->ast->veri.islev.parametreler[i];
+                        /* [D-465] `seçimlik<T>` / `sonuç<T,H>` parametreleri de
+                         * beklenen_tip kurmali. Oncesinde SADECE Dizi<T> vardi
+                         * (D-070) -> `f(hiç)` ve `f(değer(42))` yapicilari
+                         * cozulemiyordu: C "tanimsiz tanimlayici" ile durur,
+                         * self-host `@değer` tanimsiz IR yayar. Mekanizma
+                         * ZATEN VARDI (yapici_uret + beklenen_tip), yalnizca
+                         * kapisi dardi. */
                         if (pp && pp->veri.parametre.tip &&
-                            pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
+                            (pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI ||
+                             pp->veri.parametre.tip->tip == DUGUM_TIP_SECIMLIK ||
+                             pp->veri.parametre.tip->tip == DUGUM_TIP_SONUC)) {
                             g->beklenen_tip = pp->veri.parametre.tip;
                         }
                     }
@@ -5917,6 +5930,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         ast_tip_isaretsiz_mi(d->veri.degisken.tip);
                     g->isimler->metin_mi =
                         ast_tip_metin_mi(d->veri.degisken.tip);   /* [D-449] */
+                    g->isimler->tip_ast = d->veri.degisken.tip;    /* [D-465] */
                     /* D-293: `değişken f: işlev() -> T = || ...` → T'nin IR'i.
                      * Fat value ("{ ptr, ptr }") T'yi siler; closure çağrı yeri
                      * dönüş tipini BURADAN alır (bkz. kapanis_donus_ir). */
@@ -6044,6 +6058,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
                 g->isimler->metin_mi =
                     ast_tip_metin_mi(d->veri.degisken.tip);        /* [D-449] */
+                g->isimler->tip_ast = d->veri.degisken.tip;         /* [D-465] */
                 g->isimler->kapanis_donus_ir =
                     kapanis_donus_ir_al(g, d->veri.degisken.tip);   /* D-293 */
                 g->isimler->gorev_ic_ir =
@@ -6087,8 +6102,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
                                 v.reg, i->reg_no);
                     } else {
+                        /* [D-465] `o = değer(k)` / `r = hata(m)`: hedefin
+                         * BILDIRILEN tipi yapicinin beklenen_tip'ini kurmali.
+                         * Oncesinde ATAMA yolu beklenen_tip'i YALNIZ dinamik
+                         * dizi icin kuruyordu (D-092) -> yapici cozulemiyor ve
+                         * `@değer` tanimsiz kaliyordu (LINK-RED). Ayni sinif,
+                         * ayni cozum: mekanizma vardi, kapisi dardi. */
+                        const Dugum *at_eski_bt = g->beklenen_tip;
+                        if (i->tip_ast &&
+                            (i->tip_ast->tip == DUGUM_TIP_SECIMLIK ||
+                             i->tip_ast->tip == DUGUM_TIP_SONUC)) {
+                            g->beklenen_tip = i->tip_ast;
+                        }
                         IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                                    i->llvm_tip);
+                        g->beklenen_tip = at_eski_bt;
                         int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
                         fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                                 i->llvm_tip, rr, i->reg_no);
