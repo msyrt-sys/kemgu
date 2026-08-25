@@ -973,10 +973,24 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   `git stash` ile ölçüldü: **D-456 tabanında da vardı**, yan etkim DEĞİL —
   hiçbir korpus dosyasında negatif kesirli literal yokmuş. C `fsub double 0.0,
   %n` yayar; self artık `kesirli_ll_mi` ile ayırıp `fsub` yayıyor.
-- **⚠ KENDİ HATAM:** `test_tumu` KOŞARKEN kaynağı değiştirdim (D-402'nin tam
+- **⚠ KENDİ HATAM (1):** `test_tumu` KOŞARKEN kaynağı değiştirdim (D-402'nin tam
   uyardığı şey) → o koşum `SELF-HOST BOOTSTRAP: BAŞARISIZ` verdi. **Gerçek
   gerileme DEĞİL**, stage1/stage2 farklı kaynaktan kuruldu; sonuç GEÇERSİZ
   sayılıp temiz yeniden koşuldu. Uzun koşum sürerken kaynağa dokunma.
+- **⚠⚠ KENDİ HATAM (2) — `cp` İLE GERİ ALMA `make`İ KANDIRIR.** Sabotaj (S49)
+  sonrası `src/ast.c`yi `cp` ile geri aldım; `cp` mtime'ı **kopyalama anına**
+  set eder ve `build/ast.o` **AYNI SANİYEDE** üretilmişti → `make` objeyi
+  GÜNCEL saydı, **sabotajlı obje yerinde kaldı.** Sonuç: kaynak TEMİZKEN
+  `codegen_diff` 149/150 (`C exit=7 ≠ KEMGU exit=42`) — sahte kırmızı, üstelik
+  onarımın kendisini geri almış gibi görünüyordu. Teşhis: kaynakta yama VAR
+  (`grep`), ikili ESKİ davranıyor, `ls` mtime'ları eşit.
+  **KURAL: sabotaj döngüsünden sonra ilgili `.o`yu VE ikiliyi `rm -f` et; salt
+  `make` yetmez.** (D-432 aynı dersi TEST ikilisi için kaydetmişti; bu kez
+  ARADAKİ obje idi. Aynı sınıfın üçüncü tekrarı.)
+  **Ayrıca: "kapı tek başına yeşildi ama takımda kırmızı" ilk olarak ARTEFAKT
+  şüphesi doğurur** — sıra: (a) kaynakta yama duruyor mu, (b) ikili gerçekten
+  o davranışı mı gösteriyor, (c) `rm -f` + yeniden kur, (d) hâlâ kırmızıysa
+  gerçek kusur.
 - **Doğrulama:** fikstür `cg_kesirli_metin.kem` → C=42, SELF=42; `--ast`/
   `--parse` ve IR C↔self **birebir**. **Sabotaj 3/3:** S49 (tek kaynağı `%g`ye
   döndür) → C exit 7 · S50 (self lexeme biçimlemesi) → SELF exit 7 ·
