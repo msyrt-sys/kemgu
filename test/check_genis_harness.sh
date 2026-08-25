@@ -51,14 +51,27 @@ fi
 #      (C 46, self 36 tanı — fark yalnız bu 10 kaskad satırı). Kusur DEĞİL,
 #      hata-kaskadı derinliği farkı; birleştirilmiş hâli `stdlib_check`te
 #      TEMİZ geçer.
+#      D-456: test_semafor / test_bariyer — test_kilit ile BIREBIR ayni sekil.
+#      Tek basina (modulsuz) semaforda/bekle tanimsizdir; C, gorev_baslat(|| ..)
+#      ATAMASINA ayrica T001 basar (kapanisin donus tipi cozulemiyor), self-host
+#      basmaz -> fark tam 2 kaskad satiri (semafor C 10 / self 8; bariyer C 13 /
+#      self 11). Fark satirlarinin HANGI satirlar oldugu OLCULDU: ikisinde de
+#      "degisken gN: sonuc<gorev<tam32>, metin> =". Birlestirilmis halleri
+#      calistir_stdlib_check'te TEMIZ gecer (C ve self: exit 0).
+#
+# ⚠⚠ MUAF DIZGISININ ICINE ACIKLAMA YAZMA (D-456'da isirdi). Bu bir cift
+# tirnakli dizgidir: icine yazilan her CIPLAK KELIME bir muafiyet adi olur
+# (aciklamama "bariyer" yazmistim -> stdlib/bariyer.kem sessizce muaf oldu) ve
+# her BACKTICK komut ikamesi tetikler ("stdlib_check: command not found").
+# Aciklamalar YALNIZ bu yorum blogunda; dizginin icinde SADECE dosya adlari.
+#      D-455: test_kilit — AYNI sinif. Tek basina (modulsuz) kilitle/Kilit
+#      tanimsizdir; C, gorev_baslat(|| kilitle(k, ..)) atamasina AYRICA T001
+#      basar (kapanisin donus tipi cozulemiyor), self-host basmaz -> fark tam
+#      2 kaskad satiri (C 10, self 8 tani). Birlestirilmis hali
+#      calistir_stdlib_check'te TEMIZ gecer (C ve self: exit 0).
 MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
-#      ⚠ `test_kilit` (D-455): AYNI sınıf, yeni giren. Tek başına (modülsüz)
-#      `kilitle`/`Kilit` tanımsızdır; C, `görev_başlat(|| kilitle(k, ..))`
-#      atamasına AYRICA T001 basar (kapanışın dönüş tipi çözülemediği için),
-#      self-host basmaz → fark tam 2 kaskad satırı (C 10, self 8 tanı).
-#      Soundness sorunu YOK: ikisi de dosyayı reddediyor. Modülle
-#      BİRLEŞTİRİLMİŞ hâli `stdlib_check`te TEMİZ geçer (C ve self: exit 0).
-tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit"
+tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit
+test_semafor test_bariyer"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1

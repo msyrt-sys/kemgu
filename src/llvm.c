@@ -5120,6 +5120,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "void";
                 }
             }
+            /* [D-456] semafor_* / bariyer_* -> kdl_* (kilit_* ile ayni desen).
+             * `_olustur` tam32 alir + opak ptr doner; digerleri ptr alir, void. */
+            else if ((cagri_adi_uz >= 8 && memcmp(cagri_adi, "semafor_", 8) == 0) ||
+                     (cagri_adi_uz >= 8 && memcmp(cagri_adi, "bariyer_", 8) == 0)) {
+                static char kdl_snk_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_snk_buf, "kdl_", 4);
+                memcpy(kdl_snk_buf + 4, cagri_adi, (size_t)n);
+                kdl_snk_buf[4 + n] = '\0';
+                cagri_adi = kdl_snk_buf; cagri_adi_uz = 4 + n;
+                if (n == 15 && memcmp(kdl_snk_buf + 4 + 8, "olustur", 7) == 0) {
+                    param_beklenen[0] = "i32";
+                    kdl_donus = "ptr";
+                } else {
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "void";
+                }
+            }
             else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "dosya_", 6) == 0) {
                 static char kdl_dosya_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
@@ -7561,6 +7579,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_kilit_al(ptr)\n", out);     /* [D-455] */
     fputs("declare void @kdl_kilit_birak(ptr)\n", out);  /* [D-455] */
     fputs("declare void @kdl_kilit_yok(ptr)\n", out);    /* [D-455] */
+    fputs("declare ptr @kdl_semafor_olustur(i32)\n", out);  /* [D-456] */
+    fputs("declare void @kdl_semafor_al(ptr)\n", out);      /* [D-456] */
+    fputs("declare void @kdl_semafor_birak(ptr)\n", out);   /* [D-456] */
+    fputs("declare void @kdl_semafor_yok(ptr)\n", out);     /* [D-456] */
+    fputs("declare ptr @kdl_bariyer_olustur(i32)\n", out);  /* [D-456] */
+    fputs("declare void @kdl_bariyer_bekle(ptr)\n", out);   /* [D-456] */
+    fputs("declare void @kdl_bariyer_yok(ptr)\n", out);     /* [D-456] */
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);

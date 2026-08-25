@@ -1,0 +1,63 @@
+// KEMGU Stdlib Testi — Bariyer
+// ============================
+//
+// [D-456] `stdlib/bariyer.kem` ile BİRLEŞTİRİLEREK derlenir ve ÇALIŞTIRILIR.
+// Başarıda exit 0, aksi hâlde 1.
+//
+// Sınanan: (a) tek katılımcıda `bekle` ilerler, (b) YENİDEN kullanılabilirlik,
+// (c) GERÇEK buluşma: iki görev + `main` (hedef 3).
+//
+// ⚠ (c) bariyerin ASIL özelliğini ölçer. `bariyer_bekle` hiçbir şey yapmasaydı
+// `main` sayacı görevler artırmadan ÖNCE okur ve 0 görürdü. Bu yüzden burada
+// `görev_birleştir` bilerek buluşmadan SONRAya bırakılmıştır — `birleştir`
+// zaten beklediği için, onu önce çağırmak bariyeri anlamsız kılar ve testi
+// sahte-yeşile çevirirdi.
+
+küresel değişken sayac: tam32 = 0;
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // (a) tek katılımcılı bariyer: `bekle` hemen ilerlemeli (asılmamalı)
+    değişken tek: Bariyer = olustur(1);
+    bekle(tek);
+    // (b) YENİDEN KULLANILABİLİR: ikinci tur da ilerlemeli. Bariyer nesil
+    // sayacı tutmasaydı bu satır asılabilirdi.
+    bekle(tek);
+    yok_et(tek);
+
+    // (c) GERÇEK buluşma: 2 görev + main = 3 katılımcı.
+    değişken b: Bariyer = olustur(3);
+    değişken g1: sonuç<görev<tam32>, metin> =
+        görev_başlat(|| {
+            güvensiz { sayac = sayac + 1; }
+            ver bekle(b);
+        });
+    değişken g2: sonuç<görev<tam32>, metin> =
+        görev_başlat(|| {
+            güvensiz { sayac = sayac + 1; }
+            ver bekle(b);
+        });
+
+    // main de bariyerde bekler — döndüğünde İKİ görev de artırmış OLMALIDIR.
+    bekle(b);
+    değişken buluşmada: tam32 = 0;
+    güvensiz { buluşmada = sayac; }
+    eğer buluşmada != 2 {
+        yazdir_metin("BASARISIZ: bulusma saglanmadi (sayac 2 degil)"); h = h + 1;
+    }
+
+    eşleş g1 {
+        tamam(t1) => { görev_birleştir(t1); }
+        hata(e1)  => { yazdir_metin("BASARISIZ: gorev1 baslatilamadi"); h = h + 1; }
+    }
+    eşleş g2 {
+        tamam(t2) => { görev_birleştir(t2); }
+        hata(e2)  => { yazdir_metin("BASARISIZ: gorev2 baslatilamadi"); h = h + 1; }
+    }
+    yok_et(b);
+
+    eğer h == 0 { yazdir_metin("bariyer: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("bariyer: BASARISIZ");
+    ver 1;
+}

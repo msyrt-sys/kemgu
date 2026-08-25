@@ -878,6 +878,189 @@ void kdl_kilit_yok(void *p) {
     free(k);
 }
 
+/* ============================================================================
+ * [D-456] SEMAFOR + BARIYER — genel amacli eszamanlilik primitifleri.
+ *
+ * NEDEN YENI KOD: mevcut `kdl_kosul_*` yardimcilari `static` ve `KdlKanal *`
+ * aliyor — kanal implementasyonuna gomuludurler, disa verilebilir bir API
+ * DEGILLER. D-455'te `kdl_kilit_*` icin ayni durum olculmustu; bu blok o
+ * blogun birebir kardesidir (opak `void *`, thread'siz derlemede NO-OP).
+ *
+ * Bekleme HER ZAMAN `while (kosul)` dongusundedir — sahte uyanma (spurious
+ * wakeup) ve "uyandirdiktan sonra baskasi kapti" yarisi icin (kanal kodunun
+ * ayni disiplini).
+ * ========================================================================= */
+
+typedef struct {
+#ifdef KDL_THREAD_WIN
+    CRITICAL_SECTION cs;
+    CONDITION_VARIABLE musait;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t mtx;
+    pthread_cond_t musait;
+#endif
+    int sayac;     /* mevcut izin sayisi */
+    int aktif;
+} KdlSemafor;
+
+void *kdl_semafor_olustur(int32_t baslangic) {
+    KdlSemafor *s = (KdlSemafor *)calloc(1, sizeof(KdlSemafor));
+    if (!s) return NULL;
+    s->sayac = (baslangic < 0) ? 0 : (int)baslangic;
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&s->cs);
+    InitializeConditionVariable(&s->musait);
+    s->aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    if (pthread_mutex_init(&s->mtx, NULL) != 0) { free(s); return NULL; }
+    if (pthread_cond_init(&s->musait, NULL) != 0) {
+        pthread_mutex_destroy(&s->mtx); free(s); return NULL;
+    }
+    s->aktif = 1;
+#else
+    s->aktif = 0;   /* thread yok -> no-op */
+#endif
+    return (void *)s;
+}
+
+void kdl_semafor_al(void *p) {
+    KdlSemafor *s = (KdlSemafor *)p;
+    if (!s) return;
+    if (!s->aktif) { if (s->sayac > 0) s->sayac--; return; }
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&s->cs);
+    while (s->sayac <= 0) SleepConditionVariableCS(&s->musait, &s->cs, INFINITE);
+    s->sayac--;
+    LeaveCriticalSection(&s->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&s->mtx);
+    while (s->sayac <= 0) pthread_cond_wait(&s->musait, &s->mtx);
+    s->sayac--;
+    pthread_mutex_unlock(&s->mtx);
+#endif
+}
+
+void kdl_semafor_birak(void *p) {
+    KdlSemafor *s = (KdlSemafor *)p;
+    if (!s) return;
+    if (!s->aktif) { s->sayac++; return; }
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&s->cs);
+    s->sayac++;
+    WakeConditionVariable(&s->musait);
+    LeaveCriticalSection(&s->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&s->mtx);
+    s->sayac++;
+    pthread_cond_signal(&s->musait);
+    pthread_mutex_unlock(&s->mtx);
+#endif
+}
+
+void kdl_semafor_yok(void *p) {
+    KdlSemafor *s = (KdlSemafor *)p;
+    if (!s) return;
+    if (s->aktif) {
+#ifdef KDL_THREAD_WIN
+        DeleteCriticalSection(&s->cs);
+        /* CONDITION_VARIABLE'in yok-etme cagrisi yok (Win32). */
+#elif defined(KDL_THREAD_POSIX)
+        pthread_cond_destroy(&s->musait);
+        pthread_mutex_destroy(&s->mtx);
+#endif
+    }
+    free(s);
+}
+
+/* --- Bariyer: `hedef` kadar katilimci bulusana dek HEPSI bekler. ---------
+ * `nesil` sayaci YENIDEN KULLANIM icin sarttir: son gelen sayaci sifirlar ve
+ * nesli artirir; bekleyenler KENDI nesillerinin degismesini bekler. Yalnizca
+ * `vardi == hedef` beklemek, hizli bir thread ikinci tura girip sayaci tekrar
+ * artirdiginda kacirilmis-uyandirma uretirdi. */
+typedef struct {
+#ifdef KDL_THREAD_WIN
+    CRITICAL_SECTION cs;
+    CONDITION_VARIABLE gecti;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t mtx;
+    pthread_cond_t gecti;
+#endif
+    int hedef;
+    int vardi;
+    unsigned nesil;
+    int aktif;
+} KdlBariyer;
+
+void *kdl_bariyer_olustur(int32_t hedef) {
+    KdlBariyer *b = (KdlBariyer *)calloc(1, sizeof(KdlBariyer));
+    if (!b) return NULL;
+    b->hedef = (hedef < 1) ? 1 : (int)hedef;
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&b->cs);
+    InitializeConditionVariable(&b->gecti);
+    b->aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    if (pthread_mutex_init(&b->mtx, NULL) != 0) { free(b); return NULL; }
+    if (pthread_cond_init(&b->gecti, NULL) != 0) {
+        pthread_mutex_destroy(&b->mtx); free(b); return NULL;
+    }
+    b->aktif = 1;
+#else
+    b->aktif = 0;   /* thread yok -> tek katilimci, bekleme anlamsiz */
+#endif
+    return (void *)b;
+}
+
+void kdl_bariyer_bekle(void *p) {
+    KdlBariyer *b = (KdlBariyer *)p;
+    if (!b || !b->aktif) return;   /* tek thread: bariyer no-op */
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&b->cs);
+    {
+        unsigned benim = b->nesil;
+        b->vardi++;
+        if (b->vardi >= b->hedef) {
+            b->vardi = 0; b->nesil++;
+            WakeAllConditionVariable(&b->gecti);
+        } else {
+            while (b->nesil == benim)
+                SleepConditionVariableCS(&b->gecti, &b->cs, INFINITE);
+        }
+    }
+    LeaveCriticalSection(&b->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&b->mtx);
+    {
+        unsigned benim = b->nesil;
+        b->vardi++;
+        if (b->vardi >= b->hedef) {
+            b->vardi = 0; b->nesil++;
+            pthread_cond_broadcast(&b->gecti);
+        } else {
+            while (b->nesil == benim)
+                pthread_cond_wait(&b->gecti, &b->mtx);
+        }
+    }
+    pthread_mutex_unlock(&b->mtx);
+#endif
+}
+
+void kdl_bariyer_yok(void *p) {
+    KdlBariyer *b = (KdlBariyer *)p;
+    if (!b) return;
+    if (b->aktif) {
+#ifdef KDL_THREAD_WIN
+        DeleteCriticalSection(&b->cs);
+#elif defined(KDL_THREAD_POSIX)
+        pthread_cond_destroy(&b->gecti);
+        pthread_mutex_destroy(&b->mtx);
+#endif
+    }
+    free(b);
+}
+
 
 /* Portable kilit yardimcilari */
 static void kdl_kilit_init(KdlKanal *k) {

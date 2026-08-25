@@ -1,0 +1,46 @@
+// KEMGU Stdlib — Semafor (sayılı izin)
+// ====================================
+//
+// [D-456] KAPSAMLI (scoped) API — `kilit.kem` (D-455) ile AYNI gerekçe ve
+// aynı biçim. Ham `al`/`bırak` çifti BİLEREK dışa verilmez:
+//   - unutulmuş `bırak`  → izinler tükenir, bekleyenler sonsuza dek asılı
+//   - fazladan `bırak`   → sayaç şişer, karşılıklı dışlama SESSİZCE kaybolur
+// İkinci hata sınıfı kilitten DAHA sinsidir: program çalışmaya devam eder ve
+// yalnızca eşzamanlılık altında yanlış davranır.
+//
+// `semaforda(s, || { ... })` her iki hatayı da yapısal olarak imkânsız kılar.
+//
+// Semafor ile kilit arasındaki fark: kilit tek girişlidir, semafor `n` eş
+// zamanlı girişe izin verir. `semafor_olustur(1)` bir kilit gibi davranır ama
+// SAHİPLİK kavramı yoktur — bir görevin aldığı izni başka bir görev bırakabilir.
+// Bu, kaynak havuzu (bağlantı, tampon) sınırlamak için doğru araçtır.
+//
+// Handle OPAKtır ve `Semafor` yapısı içinde taşınır; kullanıcı ona HİÇ
+// dokunmaz (D-443'ün "opak handle `metin` olarak tipleniyor" tuzağı).
+//
+// ⚠ `Semafor` LİNEER DEĞİLDİR — kilit ile aynı gerekçe: defalarca kullanılır.
+// ⚠ Thread'siz derlemede runtime tarafı NO-OP'tur.
+
+yapı Semafor {
+    h: metin;   // opak runtime handle'ı (KdlSemafor*)
+}
+
+// `baslangic` kadar izinle yeni bir semafor yarat.
+işlev olustur(baslangic: tam32) -> Semafor {
+    ver Semafor { h: semafor_olustur(baslangic) };
+}
+
+// Bir izin tutarak `f`i çalıştır ve sonucunu döndür. İzin HER durumda bırakılır.
+// İzin yoksa bırakılana dek BLOKLAR.
+işlev semaforda(s: Semafor, f: işlev() -> tam32) -> tam32 {
+    semafor_al(s.h);
+    değişken r: tam32 = f();
+    semafor_birak(s.h);
+    ver r;
+}
+
+// Semaforu yok et. Bundan sonra kullanılmamalıdır.
+işlev yok_et(s: Semafor) -> tam32 {
+    semafor_yok(s.h);
+    ver 0;
+}

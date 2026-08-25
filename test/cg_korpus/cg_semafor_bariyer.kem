@@ -1,0 +1,30 @@
+// [D-456] semafor_* / bariyer_* yerleşikleri — C ve self-host IR paritesi.
+//
+// Kapsam BİLEREK tek-thread'lidir: `cg_korpus` kapısı çıkış kodu karşılaştırır
+// ve çok-thread'li bir fikstür zamanlamaya bağlı olurdu. GERÇEK eşzamanlılık
+// `test/stdlib/test_semafor.kem` ve `test_bariyer.kem`te ölçülür (iki görev +
+// küresel sayaç). Burada ölçülen: ad eşlemesi, dönüş tipleri (kurucular ptr,
+// diğerleri void) ve argüman genişliği (kurucu i32 alır).
+// Exit: 42
+
+işlev main() -> tam32 {
+    // Semafor: iki izin, ikisini de al, ikisini de geri ver, sonra tekrar al.
+    // `bırak` çalışmasaydı üçüncü `al` SONSUZA DEK BLOKLARDI.
+    değişken s: metin = semafor_olustur(2);
+    semafor_al(s);
+    semafor_al(s);
+    semafor_birak(s);
+    semafor_birak(s);
+    semafor_al(s);
+    semafor_birak(s);
+    semafor_yok(s);
+
+    // Bariyer: tek katılımcı → `bekle` ilerlemeli; nesil sayacı sayesinde
+    // İKİNCİ tur da ilerlemeli (yeniden kullanılabilirlik).
+    değişken b: metin = bariyer_olustur(1);
+    bariyer_bekle(b);
+    bariyer_bekle(b);
+    bariyer_yok(b);
+
+    ver 42;
+}

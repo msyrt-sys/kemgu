@@ -3618,6 +3618,7 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
     eğer metin_baslar(ad, "metin_") veya metin_baslar(ad, "dosya_") veya metin_baslar(ad, "yaz_")
          veya metin_baslar(ad, "yazdir_") veya metin_baslar(ad, "arg_")
          veya metin_baslar(ad, "kilit_")   // [D-455]
+         veya metin_baslar(ad, "semafor_") veya metin_baslar(ad, "bariyer_")   // [D-456]
          veya metin_esit(ad, "oku_karakter") veya metin_esit(ad, "ondalik_bicimle") {
         ver metin_birlestir("kdl_", ad);
     }
@@ -3651,6 +3652,9 @@ işlev builtin_ret(ad: metin) -> metin {
     // `stdlib/dosya.kem` onu kullanmaya başlayınca ortaya çıktı.
     eğer metin_esit(ad, "dosya_gecersiz") { ver "ptr"; }
     eğer metin_esit(ad, "kilit_olustur") { ver "ptr"; }   // [D-455] opak handle
+    // [D-456] semafor/bariyer kurucuları da opak handle döner; al/bırak/bekle/yok → void.
+    eğer metin_esit(ad, "semafor_olustur") { ver "ptr"; }
+    eğer metin_esit(ad, "bariyer_olustur") { ver "ptr"; }
     // kilit_al / kilit_birak / kilit_yok → void (aşağıdaki varsayılana düşer)
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
          veya metin_esit(ad, "arg_sayi") veya metin_esit(ad, "oku_karakter") { ver "i32"; }
@@ -3727,6 +3731,13 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_kilit_al(ptr)"); yb(10);       // [D-455]
     yaz_str("declare void @kdl_kilit_birak(ptr)"); yb(10);    // [D-455]
     yaz_str("declare void @kdl_kilit_yok(ptr)"); yb(10);      // [D-455]   // [D-449]
+    yaz_str("declare ptr @kdl_semafor_olustur(i32)"); yb(10);   // [D-456]
+    yaz_str("declare void @kdl_semafor_al(ptr)"); yb(10);       // [D-456]
+    yaz_str("declare void @kdl_semafor_birak(ptr)"); yb(10);    // [D-456]
+    yaz_str("declare void @kdl_semafor_yok(ptr)"); yb(10);      // [D-456]
+    yaz_str("declare ptr @kdl_bariyer_olustur(i32)"); yb(10);   // [D-456]
+    yaz_str("declare void @kdl_bariyer_bekle(ptr)"); yb(10);    // [D-456]
+    yaz_str("declare void @kdl_bariyer_yok(ptr)"); yb(10);      // [D-456]
     yaz_str("declare i32 @kdl_dosya_sil(ptr)"); yb(10);
     yaz_str("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)"); yb(10);
     yaz_str("declare i64 @kdl_dosya_boyut(ptr)"); yb(10);
@@ -7995,6 +8006,10 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "dosya_gecerli"); g_ekle(p, "dosya_gecersiz");
     g_ekle(p, "kilit_olustur"); g_ekle(p, "kilit_al");   // [D-455]
     g_ekle(p, "kilit_birak"); g_ekle(p, "kilit_yok");   // [D-455]   // [D-449]
+    g_ekle(p, "semafor_olustur"); g_ekle(p, "semafor_al");   // [D-456]
+    g_ekle(p, "semafor_birak"); g_ekle(p, "semafor_yok");   // [D-456]
+    g_ekle(p, "bariyer_olustur"); g_ekle(p, "bariyer_bekle");   // [D-456]
+    g_ekle(p, "bariyer_yok");   // [D-456]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
@@ -8314,6 +8329,13 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "kilit_al", "boş", ["metin"]);   // [D-455]
     yerlesik_ekle(p, "kilit_birak", "boş", ["metin"]);   // [D-455]
     yerlesik_ekle(p, "kilit_yok", "boş", ["metin"]);   // [D-455]
+    yerlesik_ekle(p, "semafor_olustur", "metin", ["tam32"]);   // [D-456]
+    yerlesik_ekle(p, "semafor_al", "boş", ["metin"]);   // [D-456]
+    yerlesik_ekle(p, "semafor_birak", "boş", ["metin"]);   // [D-456]
+    yerlesik_ekle(p, "semafor_yok", "boş", ["metin"]);   // [D-456]
+    yerlesik_ekle(p, "bariyer_olustur", "metin", ["tam32"]);   // [D-456]
+    yerlesik_ekle(p, "bariyer_bekle", "boş", ["metin"]);   // [D-456]
+    yerlesik_ekle(p, "bariyer_yok", "boş", ["metin"]);   // [D-456]
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
     yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);

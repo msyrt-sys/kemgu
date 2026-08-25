@@ -377,6 +377,46 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("kilit_yok", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-456] semafor_* / bariyer_* — `kilit_*` ile AYNI desen: opak handle
+     * `metin` olarak tasinir, `yapi Semafor` / `yapi Bariyer` icinde saklanir,
+     * KACMAZ. Ham al/birak cifti stdlib'de DISA VERILMEZ; yalnizca kapsamli
+     * `semaforda(s, ||{..})` uzerinden kullanilir (Mehmet'in karari). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("semafor_olustur", 15, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("semafor_al", 10, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("semafor_birak", 13, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("semafor_yok", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("bariyer_olustur", 15, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("bariyer_bekle", 13, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("bariyer_yok", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* [D-449] dosya_gecerli(h: metin) -> mantıksal — opak handle null-sorgusu.
      * `h != ""` ARTIK KULLANILAMAZ: `metin` uzerinde `!=` icerik karsilastirir
      * (D-449) ve handle bir DIZGI DEGIL, `FILE*`tir. */

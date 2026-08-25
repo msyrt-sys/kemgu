@@ -730,7 +730,7 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     (test_gorev_rt [14]-[16]): bayrak 0 → +1 sızıntı, 1 → +0. C↔self 10/10 birebir +
     FIXPOINT. Kendi kanıtımda 2 kusur ölçümle yakalandı (`kanal_gönder` bayt uzunluğu
     13≠14; **ifade-form lambda gövdesi P1'i atlıyordu** = soundness deliği).
-  - Semaforlar / bariyerler (Plan Karar F V2)
+  - ~~Semaforlar / bariyerler (Plan Karar F V2)~~ ✓ **D-456**
   - `kanal` KEMGU-OS'ta (bare-metal .kem): ABI hazır (aynı imza), test yok
 - ~~**Lambda ifade-form dönüş-tipi çıkarsama**~~ ✓ **D-293**: lifted lambda dönüşü artık
   gövdenin doğal IR tipinden çıkarsanıyor (eskiden SABİT i32 → `|| "selam"` / `|| 3.5`
@@ -945,6 +945,48 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     2 sonuç **FARKLI uri**'lerle (aynı uri iki kez = çapraz arama YOK).
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
+
+### 🎯 D-456: `Semafor` + `Bariyer` (kapsamlı API) + `check_genis` muafiyet warty
+İkinci öneri turunun 2. maddesi; Mehmet **kapsamlı API** dedi.
+- **Runtime YENİ kod istedi** (D-455'in aynısı, önce ölçüldü): mevcut
+  `kdl_kosul_*` **`static`** ve **`KdlKanal*`** alıyor — kanala gömülü, dışa
+  verilebilir API değil. Bağımsız `KdlSemafor`/`KdlBariyer` + 7 dışa-verilen
+  işlev yazıldı (opak `void*`, thread'siz derlemede NO-OP).
+- **⚠ BARİYERDE KAPSAM BİLEREK YOK — ve bu bir eksiklik değil.** Kapsam
+  `kilit`/`semafor`da GERÇEK bir hata sınıfını (unutulmuş/çift `bırak`) yapısal
+  olarak imkânsız kılar. Bariyerin eşlenecek çifti YOKTUR: `bekle` tek çağrıdır.
+  `bariyerde(b, ||{..})` yazmak yalnız `bekle`yi süsler; **önlediği bir hata
+  olmadan kapsam görüntüsü vermek okuyucuyu var olmayan bir güvence konusunda
+  yanıltır.** Semaforda kapsam ayrıca kilitten DAHA değerlidir: fazladan `bırak`
+  sayacı şişirir ve karşılıklı dışlama **sessizce** kaybolur.
+- **Bariyerde `nesil` sayacı ŞART** (yeniden kullanım): yalnız `vardi == hedef`
+  beklemek, hızlı bir thread ikinci tura girip sayacı tekrar artırdığında
+  kaçırılmış-uyandırma üretir. Bekleme her yerde `while (koşul)` döngüsünde.
+- **🔴 YOL ÜSTÜNDE: `check_genis` MUAFİYET LİSTESİ SESSİZCE ŞİŞMİŞ.** Açıklama
+  metinleri `MUAF="..."` **çift tırnaklı dizgisinin İÇİNE** yazılmış (D-436'dan
+  beri, D-455'te ben de ekledim) → dizgideki her **çıplak kelime bir muafiyet
+  adı** olur ve her **backtick komut ikamesi** tetikler. Ölçüldü: **72 token,
+  yalnız ~10'u gerçek dosya adı** (`T001`, `exit`, `de`, `tam`, `self` …).
+  Kusuru kendi notumdaki "bariyer" kelimesi `stdlib/bariyer.kem`i muaf edince
+  yakaladım (`⚠ MUAF ama artık EŞLEŞİYOR` uyarısı + `stdlib_check: command not
+  found`). **Ölçüldü: hiçbir gerçek dosya kaçmamış** (çöp token'lar hiçbir
+  taranan dosya adıyla çakışmıyor) — yani gizli bir gerileme YOK, ama gizli bir
+  TUZAK vardı. Dizgi temizlendi: **72 → 12 token, hepsi dosya adı.**
+  **KURAL: muafiyet dizgisinin içine açıklama yazma; açıklama yorum bloğunda.**
+- **Doğrulama:** `semafor`/`bariyer` testleri C ve SELF'te exit 0; ikisi de
+  **GERÇEK çok-thread'li** ölçüm yapar (semafor: iki görev + tek izin + küresel
+  sayaç = 2; bariyer: iki görev + `main` = 3 katılımcı, buluşmadan SONRA okunur
+  — `görev_birleştir` bilerek sonraya bırakıldı, önce çağrılsaydı bariyeri
+  anlamsız kılıp testi sahte-yeşile çevirirdi). `stdlib_check` **11 modül**.
+  Fikstür `cg_semafor_bariyer.kem` → C=42, SELF=42 (muaf DEĞİL).
+  **Sabotaj 4/4:** S45 (`bariyer_bekle` no-op) → buluşma kayboldu, exit 1 ·
+  S46 (`semafor_birak` no-op) → **exit 124 (asıldı)** · S47 (self-host önek
+  eşlemesi) → LINK-RED · S48 (muafiyeti çıkar) → kapı kırmızı.
+  Kapılar: `codegen_diff` **149/149** · `checker_diff` **153/153 (0 muaf)** ·
+  `yapi_diff` **124/124** · `check_genis` **130/130**.
+- **⚠ YAN ÖLÇÜM:** self-host `--check` tanı BASSA DA daima **exit 0** döner
+  (`test_json` 63 tanıyla da 0), C ise 1. Genel ve önceden var olan SÜRÜCÜ
+  davranışı; `--check` kapıları dump karşılaştırdığı için görünmüyor. Ayrı iş.
 
 ### 🎯 D-455 (KARAR 7): `Kilit` kapsamlı mutex + İKİ self-host parite boşluğu
 Sıralamanın son maddesi. **⚠ Kendi gerekçem yanlıştı:** öneride "runtime
@@ -1521,9 +1563,13 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     (`kesirli64`→`metin` yerleşiği yok). İkisi de ÖLÇÜLDÜ, varsayılmadı.
   - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
   - **regex** — saf KEMGU yazılabilir ama büyük; JSON'dan sonra.
-- **Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
-  **YOK** (`kdl_semafor`/`barrier` bulunamadı; yalnız `kdl_kilit_*` var) →
-  yeni yerleşik = dil yüzeyi, Mehmet'in kararı.
+- ~~**Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
+  **YOK** → yeni yerleşik = dil yüzeyi, Mehmet'in kararı.~~
+  ✓ **YAPILDI — D-456.** `stdlib/semafor.kem` (**kapsamlı**: `semaforda(s,
+  ||{..})`; ham `al`/`bırak` dışa verilmez) + `stdlib/bariyer.kem`
+  (`bekle(b)` — **kapsam bilerek YOK**, eşlenecek çift olmadığı için süs
+  olurdu). D-435'in "primitif yok" saptaması doğruydu; mevcut `kdl_kosul_*`
+  `static` + `KdlKanal*` (kanala gömülü) → bağımsız runtime yazıldı.
 - **`kanal` bare-metal (.kem)** — D-435: `runtime/*.kem` ve `kem_os.kem`'de
   `kanal_*` kullanımı YOK. ABI hazır ama test/kullanım yok.
 - **Linear V2:** ~~L005 (koşullu tüketim tutarlılığı)~~ ✓ **D-311** — tüketim takibi
