@@ -125,6 +125,35 @@ işlev main() -> tam32 {
         }
     }
 
+    // (j) HAZIR SINIFLAR `\d \w \s`.
+    // ⚠ Bunlar kodda vardı ve `--check`ten geçiyorlardı ama HİÇBİR ÖLÇÜM
+    // ateşlemiyordu — D-458'de `\b`/`\f`nin "destekleniyor" yazılıp kolunun
+    // hiç olmaması bu sınıfın ta kendisiydi. Kendi denetimimde yakalandı.
+    // ⚠ KEMGU dizgi literalinde kaçış YOK: aşağıdaki `"\d+"` kaynakta ZATEN
+    // ters bölü + `d` + `+` üç karakteridir — istenen tam olarak budur.
+    h = h + rx_dene("\d+", "ab123cd", doğru, 4194304);
+    h = h + rx_dene("\d+", "abcd", yanlış, 8388608);
+    h = h + rx_tam("\w+", "abc_123", doğru, 16777216);
+    h = h + rx_dene("\s+", "a  b", doğru, 33554432);
+    h = h + rx_dene("\s", "ab", yanlış, 67108864);
+
+    // (k) BOŞ EŞLEŞME davranışı — ÖLÇÜLDÜ, varsayılmadı.
+    // `a*` "bbb" üzerinde 4 boş eşleşme verir ve `degistir` `-b-b-b-` üretir;
+    // bu, Python `re.sub('a*','-','bbb')` ile BİREBİR aynıdır. Sabitlenmesinin
+    // sebebi: boş eşleşmede ilerlememek SONSUZ DÖNGÜ olurdu, bir karakter
+    // atlamak ise sessiz bir tasarım kararıdır — sessiz kalmasın.
+    eşleş derle("a*") {
+        hata(m) => { yazdir_metin("derleme hatasi: a*"); h = h + 1; }
+        tamam(r) => {
+            eğer dizi_boyut(tum_bul(&değişken r, "bbb")) != 4 {
+                yazdir_metin("bos eslesme sayisi yanlis"); h = h + 1;
+            }
+            eğer metin_esit(degistir(&değişken r, "bbb", "-"), "-b-b-b-") == yanlış {
+                yazdir_metin("bos eslesme degistir yanlis"); h = h + 1;
+            }
+        }
+    }
+
     eğer h == 0 { yazdir_metin("regex: TUM TESTLER GECTI"); ver 0; }
     yazdir_metin("regex: BASARISIZ");
     ver 1;

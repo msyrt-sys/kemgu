@@ -982,9 +982,25 @@ GEREKMEDİ** — mevcut `metin_*` yeterli (D-435'te ölçülmüştü, doğru ç�
   kullandım; `awk`ta `&` "tüm eşleşme" demek olduğu için **17 satırı bozdum**
   (`rx_bitti(rx_bitti(a)değişken a)`). Edit ile onarıldı. Kural zaten CLAUDE.md'de
   yazılıydı — **yazılı olması uygulamaya yetmiyor.**
-- **Doğrulama:** `test/stdlib/test_regex.kem` — 22 ölçüm (literal/niceleyici/
-  alternatif/sınıf/çapa/UTF-8/bozuk desen/ReDoS/`tum_bul`/`degistir`).
-  C ve SELF'te **exit 0**. `stdlib_check` döngüsü **12 modül**.
+- **🎯 KENDİ DENETİMİM İKİ KÖR NOKTA BULDU (merge öncesi adversarial denetim):**
+  1. **`\d \w \s` kodda vardı, `--check`ten geçiyordu, ama HİÇBİR ÖLÇÜM
+     ateşlemiyordu** — D-458'de `\b`/`\f`nin "destekleniyor" yazılıp kolunun hiç
+     olmamasıyla AYNI SINIF. Test eklendi; **sabotaj S60** (`\d`yi `[A-F]` yap)
+     → `YANLIS SONUC: \d+ / ab123cd`.
+  2. **Boş eşleşme davranışı sessiz bir tasarım kararıydı.** Ölçüldü: `a*` on
+     `"bbb"` → 4 eşleşme, `degistir` → `-b-b-b-` — **Python `re.sub` ile
+     BİREBİR**. Varsaydığım doğruydu ama ölçmeden bırakmak yanlış olurdu;
+     sabitlendi (boş eşleşmede ilerlememek SONSUZ DÖNGÜ olurdu).
+- **`check_genis` muafiyeti (E3):** tek başına `derle` tanımsız → C `hata(m) =>`
+  kolundaki `m` için 2 T002 basar, self bağlayıp susar (C 14 / self 12).
+  `test_kilit`/`test_semafor`/`test_bariyer` ile aynı sınıf. Not **yorum
+  bloğuna** yazıldı — D-456'da dizginin içine yazmanın kapıyı sessizce
+  zayıflattığı ölçülmüştü.
+- **Doğrulama:** `test/stdlib/test_regex.kem` — **29 ölçüm** (literal/niceleyici/
+  alternatif/sınıf/çapa/UTF-8/bozuk desen/ReDoS/`tum_bul`/`degistir`/hazır
+  sınıflar/boş eşleşme). C ve SELF'te **exit 0**. `stdlib_check` **12 modül**;
+  `check_genis` **131/131 (13 muaf)**. **Sabotaj 2/2:** S59 (nesil damgası) →
+  45 sn ASILDI · S60 (`\d` sınıfı) → kırmızı.
 
 ### ✓ D-460: JSON `Ondalik` varyantı + `metin_kesirli` (askıdaki 2. iş)
 - **`JsonDeger`e `Ondalik(kesirli64)` eklendi**; yazıcı `kesirli_metin` (D-457,

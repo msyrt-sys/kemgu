@@ -51,6 +51,11 @@ fi
 #      (C 46, self 36 tanı — fark yalnız bu 10 kaskad satırı). Kusur DEĞİL,
 #      hata-kaskadı derinliği farkı; birleştirilmiş hâli `stdlib_check`te
 #      TEMİZ geçer.
+#      D-461: test_regex — AYNI E3 sinifi. Tek basina `derle` tanimsizdir; C,
+#      `hata(m) =>` kolundaki `m` icin IKI T002 basar (skrutini cozulemeyince
+#      desen baglamalarini HIC kurmuyor), self-host baglayip susuyor -> fark
+#      tam 2 kaskad satiri (C 14 / self 12), ikisi de satir 15 sutun 47.
+#      Birlestirilmis hali calistir_stdlib_check'te TEMIZ gecer (C ve self: 0).
 #      D-456: test_semafor / test_bariyer — test_kilit ile BIREBIR ayni sekil.
 #      Tek basina (modulsuz) semaforda/bekle tanimsizdir; C, gorev_baslat(|| ..)
 #      ATAMASINA ayrica T001 basar (kapanisin donus tipi cozulemiyor), self-host
@@ -71,7 +76,7 @@ fi
 #      calistir_stdlib_check'te TEMIZ gecer (C ve self: exit 0).
 MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
 tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit
-test_semafor test_bariyer"
+test_semafor test_bariyer test_regex"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1
