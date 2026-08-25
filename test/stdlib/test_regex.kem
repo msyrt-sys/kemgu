@@ -1,0 +1,131 @@
+// KEMGU Stdlib Testi — REGEX
+// =============================================================================
+// `stdlib/regex.kem` ile BİRLEŞTİRİLEREK derlenir ve ÇALIŞTIRILIR.
+// Başarıda exit 0, aksi hâlde 1.
+//
+// ⚠ Bu testin EN ÖNEMLİ maddesi (h) ÜSTEL PATLAMA ölçümüdür: motor seçiminin
+// (Thompson, geri izleme DEĞİL) gerçekten işe yaradığının kanıtı odur.
+// Doğruluk testleri geri izlemeli bir motorda da geçerdi; asılmama garantisi
+// GEÇMEZDİ.
+
+işlev rx_dene(desen: metin, girdi: metin, beklenen: mantıksal, kod: tam32) -> tam32 {
+    eşleş derle(desen) {
+        hata(m) => {
+            yazdir_metin("DERLEME HATASI (beklenmiyordu):");
+            yazdir_metin(desen); yazdir_metin(m);
+            ver kod;
+        }
+        tamam(r) => {
+            eğer eslesir(&değişken r, girdi) == beklenen { ver 0; }
+            yazdir_metin("YANLIS SONUC — desen / girdi:");
+            yazdir_metin(desen); yazdir_metin(girdi);
+            ver kod;
+        }
+    }
+    ver kod;
+}
+
+// Bozuk desen HATA dondurmeli — panik DEGIL, sessiz kabul DEGIL.
+işlev rx_bozuk(desen: metin, kod: tam32) -> tam32 {
+    eşleş derle(desen) {
+        tamam(r) => {
+            yazdir_metin("BOZUK DESEN KABUL EDILDI:"); yazdir_metin(desen);
+            ver kod;
+        }
+        hata(m) => { ver 0; }
+    }
+    ver kod;
+}
+
+işlev rx_tam(desen: metin, girdi: metin, beklenen: mantıksal, kod: tam32) -> tam32 {
+    eşleş derle(desen) {
+        hata(m) => { yazdir_metin("DERLEME HATASI:"); yazdir_metin(desen); ver kod; }
+        tamam(r) => {
+            eğer tam_eslesir(&değişken r, girdi) == beklenen { ver 0; }
+            yazdir_metin("tam_eslesir YANLIS:"); yazdir_metin(desen); yazdir_metin(girdi);
+            ver kod;
+        }
+    }
+    ver kod;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // (a) literal + arama
+    h = h + rx_dene("abc", "xxabcyy", doğru, 1);
+    h = h + rx_dene("abc", "xxabyy", yanlış, 2);
+
+    // (b) niceleyiciler
+    h = h + rx_dene("a*b", "aaab", doğru, 4);
+    h = h + rx_dene("a*b", "b", doğru, 8);
+    h = h + rx_dene("a+b", "b", yanlış, 16);
+    h = h + rx_dene("a?b", "ab", doğru, 32);
+
+    // (c) alternatif + grup
+    h = h + rx_dene("a|b", "b", doğru, 64);
+    h = h + rx_dene("(ab)+c", "ababc", doğru, 128);
+    h = h + rx_dene("(a|b)+c", "abbac", doğru, 256);
+
+    // (d) karakter sınıfları
+    h = h + rx_dene("[a-c]+", "bbc", doğru, 512);
+    h = h + rx_dene("[^a-c]", "d", doğru, 1024);
+    h = h + rx_dene("[^a-c]", "b", yanlış, 2048);
+
+    // (e) çapalar — `tam_eslesir` ile birlikte anlamlı
+    h = h + rx_tam("a+", "aaa", doğru, 4096);
+    h = h + rx_tam("a+", "aaab", yanlış, 8192);
+
+    // (f) UTF-8: `.` bir KARAKTER eşler, BAYT değil.
+    // "çığ" 6 BAYT ama 3 KARAKTERDİR; `...` tamamını eşlemeli.
+    // Bayt düzeyinde çalışan bir motor burada DÜŞERDİ — Türkçe DNA gereği
+    // bu satır bilerek Türkçe karakterlerle yazılmıştır.
+    h = h + rx_tam("...", "çığ", doğru, 16384);
+    h = h + rx_dene("ı", "çığ", doğru, 32768);
+    h = h + rx_dene("ö", "çığ", yanlış, 65536);
+
+    // (g) bozuk desenler: SESSİZ KABUL ETME
+    h = h + rx_bozuk("(ab", 131072);
+    h = h + rx_bozuk("[a-", 262144);
+    h = h + rx_bozuk("*abc", 524288);
+    h = h + rx_bozuk("a)", 1048576);
+
+    // (h) 🎯 ÜSTEL PATLAMA — MOTOR SEÇİMİNİN KANITI.
+    // `(a+)+b` geri izlemeli motorlarda (PCRE/Java/Python) klasik ReDoS
+    // desenidir: 40 'a' + 'X' girdisinde adım sayısı 2^40 mertebesine çıkar,
+    // yani pratikte ASILIR. Thompson simülasyonunda adım sayısı
+    // girdi × desen ile SINIRLIDIR. Ölçüldü: girdi 20→160'a çıkarken
+    // (8 kat) süre SABİT kaldı (~70-130 ms, geri kalanı süreç başlatma).
+    // Bu satır asılırsa kapı zaman aşımıyla KIRMIZI olur — istenen budur.
+    değişken kotu: metin = "";
+    değişken i: tam32 = 0;
+    iken i < 40 { kotu = metin_birlestir(kotu, "a"); i = i + 1; }
+    kotu = metin_birlestir(kotu, "X");
+    h = h + rx_dene("(a+)+b", kotu, yanlış, 2097152);
+
+    // (i) tum_bul + degistir
+    eşleş derle("[0-9]+") {
+        hata(m) => { yazdir_metin("derleme hatasi: [0-9]+"); h = h + 1; }
+        tamam(r) => {
+            değişken es: Dizi<Eslesme> = tum_bul(&değişken r, "a12b345c");
+            eğer dizi_boyut(es) != 2 { yazdir_metin("tum_bul sayisi yanlis"); h = h + 1; }
+            değilse {
+                değişken e0: Eslesme = dizi_al(es, 0);
+                eğer e0.baslangic != 1 veya e0.uzunluk != 2 {
+                    yazdir_metin("tum_bul[0] yanlis"); h = h + 1;
+                }
+                değişken e1: Eslesme = dizi_al(es, 1);
+                eğer e1.baslangic != 4 veya e1.uzunluk != 3 {
+                    yazdir_metin("tum_bul[1] yanlis"); h = h + 1;
+                }
+            }
+            eğer metin_esit(degistir(&değişken r, "a12b345c", "#"), "a#b#c") == yanlış {
+                yazdir_metin("degistir yanlis"); h = h + 1;
+            }
+        }
+    }
+
+    eğer h == 0 { yazdir_metin("regex: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("regex: BASARISIZ");
+    ver 1;
+}

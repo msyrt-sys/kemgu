@@ -946,6 +946,46 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-461: `stdlib/regex.kem` — Thompson NFA (ReDoS'a kapalı), saf KEMGU
+Roadmap'in son büyük stdlib maddesi. **Yeni yerleşik / runtime primitifi
+GEREKMEDİ** — mevcut `metin_*` yeterli (D-435'te ölçülmüştü, doğru çıktı).
+- **⚠⚠ MOTOR SEÇİMİ TEZDEN ÇIKAR: Thompson simülasyonu (Pike VM), GERİ İZLEME
+  DEĞİL.** PCRE/Java/Python geri izlemelidir ve `(a+)+b` masum görünürken uzun
+  girdide ÜSTELE çıkar (ReDoS). **Çökmezlik vaat eden bir dilin stdlib'i,
+  kullanıcının fark edemeyeceği bir desende ASILAMAZ** — bu tam olarak D-296'da
+  reddedilen sınıf ("safety korunuyor, liveness kayboluyor").
+  **BEDELİ AÇIK: geri-referans (`\1`) YOK** — çünkü geri-referans zaten geri
+  izlemeyi ZORUNLU KILAN şeydir. Eksiklik değil, bilinçli takas.
+- **🎯 DOĞRUSALLIK ÖLÇÜLDÜ, İDDİA EDİLMEDİ:** `(a+)+b` deseni, girdi
+  **20 → 160** (8 kat) büyürken süre **SABİT** kaldı (466/441/439/498 ms).
+  Boş program 367 ms → regex'in payı ~70-130 ms ve **girdiyle büyümüyor**.
+  Geri izlemeli bir motor N=40'ta zaten pratikte asılırdı.
+- **⚠ ÇEKİRDEK İNVARYANT — geri izlemeden kaçınmak TEK BAŞINA YETMEZ:** her
+  girdi konumunda bir komut en fazla BİR KEZ etkin listeye girmeli (`nesil`
+  damgası). **Sabotaj S59** (tekilleştirmeyi kaldır) → aynı test **45 sn'de
+  ASILDI (exit 124)**, normalde 0.5 sn. Yani damga taşıyıcı, süs değil.
+- **UTF-8 KOD NOKTASI düzeyinde:** `.` bir KARAKTER eşler. Test bilerek Türkçe:
+  `...` deseni `çığ`ı (6 BAYT, 3 KARAKTER) tam eşler — bayt düzeyinde çalışan
+  bir motor burada DÜŞERDİ.
+- **Kapsam (V1, dürüstçe):** literal · `.` · `*` `+` `?` · `|` · `()` ·
+  `[a-c]`/`[^a-c]` · `^` `$` · `\d \w \s` · kaçışlar.
+  **YOK:** geri-referans · tembel niceleyici · `{n,m}` · **yakalama grupları**
+  (gruplar yalnız gruplama) · `\D \W \S`. Yakalama Pike VM'e eklenebilir
+  (thread başına konum dizisi) ama ayrı artım.
+- **"En uzun" (leftmost-longest) seçildi:** Thompson'da tüm kollar EŞ ZAMANLI
+  ilerler, yani geri izlemenin "ilk bulunan"ı gibi ALTERNATİF SIRASINA bağlı bir
+  cevap yoktur — en uzunu bildirmek tek tutarlı seçim.
+- **Yol üstünde ölçülenler:** `Dizi<T>` DEĞERLE geçse de HEAP-DESTEKLİ, mutasyon
+  çağırana yansır (`&değişken` gereksiz — referans işaretlemek yanlış güvence
+  verirdi) · yapı alanları `;` ile ayrılır, `,` ile değil.
+- **⚠ KENDİ KURALIMI ÇİĞNEDİM:** Türkçe UTF-8 `.kem` dosyasında `awk`/`perl`
+  kullandım; `awk`ta `&` "tüm eşleşme" demek olduğu için **17 satırı bozdum**
+  (`rx_bitti(rx_bitti(a)değişken a)`). Edit ile onarıldı. Kural zaten CLAUDE.md'de
+  yazılıydı — **yazılı olması uygulamaya yetmiyor.**
+- **Doğrulama:** `test/stdlib/test_regex.kem` — 22 ölçüm (literal/niceleyici/
+  alternatif/sınıf/çapa/UTF-8/bozuk desen/ReDoS/`tum_bul`/`degistir`).
+  C ve SELF'te **exit 0**. `stdlib_check` döngüsü **12 modül**.
+
 ### ✓ D-460: JSON `Ondalik` varyantı + `metin_kesirli` (askıdaki 2. iş)
 - **`JsonDeger`e `Ondalik(kesirli64)` eklendi**; yazıcı `kesirli_metin` (D-457,
   kayıpsız) ile geri yazar, ayrıştırıcı `.`/`e`/`E` görünce ondalık dala girer.
@@ -1730,7 +1770,10 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     Ondalıkta geriye yalnız **kütüphane işi** kaldı (`Ondalik` varyantı +
     ayrıştırıcı + 8 `eşleş` kolu) — dil yüzeyi kararı DEĞİL.
   - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
-  - **regex** — saf KEMGU yazılabilir ama büyük; JSON'dan sonra.
+  - **regex** ✓ **YAPILDI — D-461.** `stdlib/regex.kem`, saf KEMGU (yeni
+    yerleşik GEREKMEDİ). **Thompson NFA (Pike VM), geri izleme DEĞİL** →
+    ReDoS'a kapalı; doğrusallık ÖLÇÜLDÜ (girdi 8× büyürken süre sabit).
+    Bedeli: geri-referans yok (bilinçli takas). Testi `stdlib_check`te.
 - ~~**Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
   **YOK** → yeni yerleşik = dil yüzeyi, Mehmet'in kararı.~~
   ✓ **YAPILDI — D-456.** `stdlib/semafor.kem` (**kapsamlı**: `semaforda(s,

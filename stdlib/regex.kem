@@ -1,0 +1,615 @@
+// KEMGU Stdlib — REGEX (düzenli ifadeler)
+// =============================================================================
+// SAF KEMGU: yeni yerleşik / runtime primitifi GEREKMEZ.
+//
+// ⚠⚠ MOTOR SEÇİMİ: THOMPSON NFA SİMÜLASYONU (Pike VM), GERİ İZLEME DEĞİL.
+// Bu, bu modülün en önemli kararıdır ve KEMGU'nun tezinden çıkar.
+//
+// Yaygın motorlar (PCRE, Java, Python) geri izlemelidir ve `(a+)+b` gibi masum
+// görünen bir desen uzun bir girdide ÜSTEL zamana çıkar (ReDoS). ÇÖKMEZLİK
+// vaat eden bir dilin standart kütüphanesi, kullanıcının fark edemeyeceği bir
+// desende ASILAMAZ. Bu tam olarak D-296'da reddedilen sınıftır: "safety
+// korunuyor, liveness kayboluyor."
+//
+// Thompson simülasyonu girdi × desen boyutunda GARANTİLİ DOĞRUSALDIR: her
+// girdi konumunda etkin durum listesi işlenir, geri izleme YOKTUR.
+//
+// BEDELİ AÇIK: GERİ-REFERANS (`\1`) DESTEKLENMEZ — çünkü geri-referans zaten
+// geri izlemeyi ZORUNLU KILAN şeydir. Bu bir eksiklik değil, bilinçli takas.
+//
+// V1'DE OLMAYANLAR (dürüstçe): geri-referans · tembel niceleyiciler (`*?`) ·
+// `{n,m}` · YAKALAMA GRUPLARI. Gruplar yalnız gruplama içindir. Yakalama Pike
+// VM'e eklenebilir (thread başına konum dizisi) ama ayrı bir artımdır.
+//
+// UTF-8: eşleme KOD NOKTASI düzeyindedir, bayt değil. `.` bir KARAKTER eşler —
+// `çığ` üç karakterdir, altı bayt değil (Türkçe DNA gereği).
+//
+// Hata yolu: `sonuç<Regex, metin>`. Bozuk desen PANİK DEĞİL DEĞER döndürür.
+// =============================================================================
+
+// ---- Komut kodları (Pike VM) ------------------------------------------------
+// 0 KAR   : a = kod noktası
+// 1 HER   : `.` (satır sonu DÂHİL — V1'de `s` bayrağı yok, bu belgelenmiştir)
+// 2 CATAL : a, b = iki hedef (epsilon)
+// 3 ATLA  : a = hedef (epsilon)
+// 4 ESLES  : kabul
+// 5 SINIF : a = sınıf indeksi
+// 6 BAS   : `^` (yalnız konum 0)
+// 7 SON   : `$` (yalnız girdi sonu)
+
+yapı Regex {
+    op: Dizi<tam32>;
+    a: Dizi<tam32>;
+    b: Dizi<tam32>;
+    // Karakter sınıfları: aralıklar DÜZ dizilerde tutulur; her sınıf bir
+    // [bas, bas+adet) penceresidir. KEMGU'da iç içe dizi yerine paralel düz
+    // diziler kullanmak (json.kem'in nesne deseni) hem basit hem ölçülebilir.
+    cr_alt: Dizi<tam32>;
+    cr_ust: Dizi<tam32>;
+    cls_bas: Dizi<tam32>;
+    cls_adet: Dizi<tam32>;
+    cls_ters: Dizi<tam32>;
+}
+
+// Ayrıştırma durumu: desen + konum.
+yapı RxAyr {
+    desen: metin;
+    poz: tam32;
+    hatali: mantıksal;
+    mesaj: metin;
+    // Karakter sınıfları AYRIŞTIRMA sırasında toplanır; `derle` sonunda
+    // Regex'e taşınır. AST'de yalnızca İNDEKS taşınır — böylece `RxDugum`
+    // çeşidi sabit boyutlu kalır ve özyineleme sadeleşir.
+    cr_alt: Dizi<tam32>;
+    cr_ust: Dizi<tam32>;
+    cls_bas: Dizi<tam32>;
+    cls_adet: Dizi<tam32>;
+    cls_ters: Dizi<tam32>;
+}
+
+// ---- Eşleşme sonucu ---------------------------------------------------------
+yapı Eslesme {
+    baslangic: tam32;   // BAYT indeksi (metin_kes ile doğrudan kullanılır)
+    uzunluk: tam32;
+}
+
+// -----------------------------------------------------------------------------
+// UTF-8 okuma. `metin_bayt` İŞARETLİ `tam8` döner → 0..255'e çevirmek şart
+// (stdlib/metin.kem'deki `karakter_sayisi` ile aynı idiom).
+// -----------------------------------------------------------------------------
+işlev rx_bayt(s: metin, i: tam32) -> tam32 {
+    değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+    eğer u < 0 { u = u + 256; }
+    ver u;
+}
+
+// `i` konumundaki kod noktasını çöz. Dönüş: kod noktası.
+işlev rx_cp(s: metin, i: tam32) -> tam32 {
+    değişken b0: tam32 = rx_bayt(s, i);
+    eğer b0 < 128 { ver b0; }
+    eğer b0 >= 240 {
+        ver ((b0 - 240) * 262144) + ((rx_bayt(s, i+1) - 128) * 4096)
+          + ((rx_bayt(s, i+2) - 128) * 64) + (rx_bayt(s, i+3) - 128);
+    }
+    eğer b0 >= 224 {
+        ver ((b0 - 224) * 4096) + ((rx_bayt(s, i+1) - 128) * 64)
+          + (rx_bayt(s, i+2) - 128);
+    }
+    ver ((b0 - 192) * 64) + (rx_bayt(s, i+1) - 128);
+}
+
+// `i` konumundaki kod noktasının BAYT uzunluğu.
+işlev rx_cp_uzunluk(s: metin, i: tam32) -> tam32 {
+    değişken b0: tam32 = rx_bayt(s, i);
+    eğer b0 >= 240 { ver 4; }
+    eğer b0 >= 224 { ver 3; }
+    eğer b0 >= 192 { ver 2; }
+    ver 1;
+}
+
+// -----------------------------------------------------------------------------
+// AST. Özyineleme `Dizi<RxDugum>` üzerinden kurulur (json.kem'in `Dizi` ile
+// özyinelenen `JsonDeger` deseni) — KEMGU'da doğrudan özyineli payload yerine
+// tek elemanlı dizi "kutu" görevi görür.
+// -----------------------------------------------------------------------------
+çeşit RxDugum {
+    Kar(tam32),
+    Her,
+    Sinif(tam32),
+    Bas,
+    Son,
+    Bosluk,                        // boş dizi/alternatif kolu (epsilon)
+    Birlestir(Dizi<RxDugum>),
+    Secenek(Dizi<RxDugum>),
+    Yildiz(Dizi<RxDugum>),
+    Arti(Dizi<RxDugum>),
+    Opsiyon(Dizi<RxDugum>)
+}
+
+işlev rx_bitti(a: &değişken RxAyr) -> mantıksal {
+    ver a.poz >= metin_uzunluk(a.desen);
+}
+işlev rx_bak(a: &değişken RxAyr) -> tam32 {
+    eğer rx_bitti(a) { ver 0 - 1; }
+    ver rx_cp(a.desen, a.poz);
+}
+işlev rx_ilerle(a: &değişken RxAyr) -> tam32 {
+    değişken c: tam32 = rx_bak(a);
+    a.poz = a.poz + rx_cp_uzunluk(a.desen, a.poz);
+    ver c;
+}
+işlev rx_hata(a: &değişken RxAyr, m: metin) -> tam32 {
+    // İLK hatayı koru: sonraki kollar da hata basarsa asıl neden kaybolurdu.
+    eğer a.hatali == yanlış { a.hatali = doğru; a.mesaj = m; }
+    ver 0;
+}
+
+// -----------------------------------------------------------------------------
+// DESEN AYRIŞTIRICI — özyineli inişli.
+//   alt      := birlesim ('|' birlesim)*
+//   birlesim := nicelik*
+//   nicelik  := atom ('*' | '+' | '?')*
+//   atom     := '(' alt ')' | '[' sinif ']' | '.' | '^' | '$' | '\' kacis | harf
+// -----------------------------------------------------------------------------
+
+// Kaçış çözümü. ⚠ KEMGU dizgi literalinde kaçış YOKTUR (D-400/D-409/D-416), yani
+// kullanıcı `"\d"` yazamaz; deseni `"\d"` diye yazar ve bu KAYNAKTA ZATEN iki
+// karakterdir (`\` ve `d`). Yani burada gördüğümüz `\` GERÇEK bir ters bölüdür.
+işlev rx_kacis(a: &değişken RxAyr) -> RxDugum {
+    eğer rx_bitti(a) { rx_hata(a,"desen ters bolu ile bitti"); ver RxDugum::Bosluk; }
+    değişken c: tam32 = rx_ilerle(a);
+    eğer c == 110 { ver RxDugum::Kar(10); }   // \n
+    eğer c == 116 { ver RxDugum::Kar(9); }    // \t
+    eğer c == 114 { ver RxDugum::Kar(13); }   // \r
+    // \d \w \s: hazır sınıflar. Ters çevrilmişleri (\D \W \S) V1'de YOK —
+    // eklemek kolay ama ölçülmemiş bir şeyi "destekleniyor" diye yazmam.
+    eğer c == 100 { ver RxDugum::Sinif(rx_hazir_sinif(a, 0)); }   // \d
+    eğer c == 119 { ver RxDugum::Sinif(rx_hazir_sinif(a, 1)); }   // \w
+    eğer c == 115 { ver RxDugum::Sinif(rx_hazir_sinif(a, 2)); }   // \s
+    // Diğer her şey KENDİSİ: \. \* \[ \ \( ...
+    ver RxDugum::Kar(c);
+}
+
+// Hazır sınıf kaydet (0=\d 1=\w 2=\s) ve indeksini döndür.
+işlev rx_hazir_sinif(a: &değişken RxAyr, tur: tam32) -> tam32 {
+    değişken bas: tam32 = dizi_boyut(a.cr_alt);
+    eğer tur == 0 {
+        dizi_ekle(a.cr_alt, 48); dizi_ekle(a.cr_ust, 57);
+    }
+    eğer tur == 1 {
+        dizi_ekle(a.cr_alt, 48); dizi_ekle(a.cr_ust, 57);
+        dizi_ekle(a.cr_alt, 65); dizi_ekle(a.cr_ust, 90);
+        dizi_ekle(a.cr_alt, 97); dizi_ekle(a.cr_ust, 122);
+        dizi_ekle(a.cr_alt, 95); dizi_ekle(a.cr_ust, 95);
+    }
+    eğer tur == 2 {
+        dizi_ekle(a.cr_alt, 32); dizi_ekle(a.cr_ust, 32);
+        dizi_ekle(a.cr_alt, 9);  dizi_ekle(a.cr_ust, 13);
+    }
+    değişken adet: tam32 = dizi_boyut(a.cr_alt) - bas;
+    dizi_ekle(a.cls_bas, bas);
+    dizi_ekle(a.cls_adet, adet);
+    dizi_ekle(a.cls_ters, 0);
+    ver dizi_boyut(a.cls_bas) - 1;
+}
+
+// `[` görüldükten SONRA çağrılır; `]`e kadar okur.
+işlev rx_sinif(a: &değişken RxAyr) -> RxDugum {
+    değişken ters: tam32 = 0;
+    eğer rx_bak(a) == 94 { ters = 1; rx_ilerle(a); }   // ^
+    değişken bas: tam32 = dizi_boyut(a.cr_alt);
+    değişken kapandi: mantıksal = yanlış;
+    // ⚠ `]` İLK konumdaysa literaldir (POSIX geleneği) — `[]]` geçerlidir.
+    değişken ilk: mantıksal = doğru;
+    iken kapandi == yanlış {
+        eğer rx_bitti(a) { rx_hata(a,"kapanmamis karakter sinifi"); kapandi = doğru; }
+        değilse {
+            değişken c: tam32 = rx_bak(a);
+            eğer c == 93 ve ilk == yanlış { rx_ilerle(a); kapandi = doğru; }
+            değilse {
+                rx_ilerle(a);
+                eğer c == 92 {
+                    // Sınıf içinde kaçış: yalnız KARAKTER kaçışları anlamlı.
+                    eğer rx_bitti(a) { rx_hata(a,"sinif icinde yarim kacis"); }
+                    değilse { c = rx_ilerle(a); }
+                }
+                // Aralık mı? `a-z` — ama `-` SON konumdaysa literaldir.
+                değişken alt: tam32 = c;
+                değişken ust: tam32 = c;
+                eğer rx_bak(a) == 45 {
+                    // `-`den sonra `]` geliyorsa `-` literaldir.
+                    değişken kaydet: tam32 = a.poz;
+                    rx_ilerle(a);
+                    eğer rx_bitti(a) veya rx_bak(a) == 93 { a.poz = kaydet; }
+                    değilse { ust = rx_ilerle(a); }
+                }
+                eğer ust < alt { rx_hata(a,"ters karakter araligi"); }
+                dizi_ekle(a.cr_alt, alt);
+                dizi_ekle(a.cr_ust, ust);
+                ilk = yanlış;
+            }
+        }
+    }
+    değişken adet: tam32 = dizi_boyut(a.cr_alt) - bas;
+    eğer adet == 0 { rx_hata(a,"bos karakter sinifi"); }
+    dizi_ekle(a.cls_bas, bas);
+    dizi_ekle(a.cls_adet, adet);
+    dizi_ekle(a.cls_ters, ters);
+    ver RxDugum::Sinif(dizi_boyut(a.cls_bas) - 1);
+}
+
+// ---- atom -------------------------------------------------------------------
+işlev rx_atom(a: &değişken RxAyr) -> RxDugum {
+    eğer rx_bitti(a) { ver RxDugum::Bosluk; }
+    değişken c: tam32 = rx_bak(a);
+    eğer c == 40 {                       // (
+        rx_ilerle(a);
+        değişken ic: RxDugum = rx_alt(a);
+        eğer rx_bak(a) != 41 { rx_hata(a,"kapanmamis grup"); }
+        değilse { rx_ilerle(a); }
+        ver ic;                          // V1: grup YALNIZ gruplama (yakalama yok)
+    }
+    eğer c == 91 { rx_ilerle(a); ver rx_sinif(a); }        // [
+    eğer c == 46 { rx_ilerle(a); ver RxDugum::Her; }       // .
+    eğer c == 94 { rx_ilerle(a); ver RxDugum::Bas; }       // ^
+    eğer c == 36 { rx_ilerle(a); ver RxDugum::Son; }       // $
+    eğer c == 92 { rx_ilerle(a); ver rx_kacis(a); }        // ters bölü
+    // ⚠ `*` `+` `?` burada ATOM OLARAK gelirse desen bozuktur (`*abc`):
+    // sessizce literal saymak kullanıcıyı yanıltırdı.
+    eğer c == 42 veya c == 43 veya c == 63 {
+        rx_hata(a,"niceleyici oncesinde atom yok");
+        rx_ilerle(a);
+        ver RxDugum::Bosluk;
+    }
+    rx_ilerle(a);
+    ver RxDugum::Kar(c);
+}
+
+// ---- nicelik ----------------------------------------------------------------
+işlev rx_nicelik(a: &değişken RxAyr) -> RxDugum {
+    değişken d: RxDugum = rx_atom(a);
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        değişken c: tam32 = rx_bak(a);
+        eğer c == 42 { rx_ilerle(a); değişken k1: Dizi<RxDugum> = []; dizi_ekle(k1, d); d = RxDugum::Yildiz(k1); }
+        değilse { eğer c == 43 { rx_ilerle(a); değişken k2: Dizi<RxDugum> = []; dizi_ekle(k2, d); d = RxDugum::Arti(k2); }
+        değilse { eğer c == 63 { rx_ilerle(a); değişken k3: Dizi<RxDugum> = []; dizi_ekle(k3, d); d = RxDugum::Opsiyon(k3); }
+        değilse { devam = yanlış; } } }
+    }
+    ver d;
+}
+
+// ---- birleşim ---------------------------------------------------------------
+işlev rx_birlesim(a: &değişken RxAyr) -> RxDugum {
+    değişken parcalar: Dizi<RxDugum> = [];
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer rx_bitti(a) { devam = yanlış; }
+        değilse {
+            değişken c: tam32 = rx_bak(a);
+            eğer c == 124 veya c == 41 { devam = yanlış; }   // | veya )
+            değilse {
+                değişken onceki: tam32 = a.poz;
+                dizi_ekle(parcalar, rx_nicelik(a));
+                // Güvenlik: ayrıştırıcı ilerlemediyse SONSUZ DÖNGÜ olurdu.
+                // Hata durumunda konum sabit kalabilir; o zaman zorla ilerle.
+                eğer a.poz == onceki { devam = yanlış; }
+            }
+        }
+    }
+    eğer dizi_boyut(parcalar) == 0 { ver RxDugum::Bosluk; }
+    ver RxDugum::Birlestir(parcalar);
+}
+
+// ---- alternatif -------------------------------------------------------------
+işlev rx_alt(a: &değişken RxAyr) -> RxDugum {
+    değişken kollar: Dizi<RxDugum> = [];
+    dizi_ekle(kollar, rx_birlesim(a));
+    iken rx_bak(a) == 124 {
+        rx_ilerle(a);
+        dizi_ekle(kollar, rx_birlesim(a));
+    }
+    eğer dizi_boyut(kollar) == 1 { ver dizi_al(kollar, 0); }
+    ver RxDugum::Secenek(kollar);
+}
+
+// -----------------------------------------------------------------------------
+// THOMPSON DERLEYİCİ. Komutlar sırayla yayılır; ileri atlamalar `dizi_yaz` ile
+// SONRADAN yamanır (klasik yama listesi yerine tek hedefli yamalar yeterli,
+// çünkü her yapı en fazla iki hedefe dallanır).
+// -----------------------------------------------------------------------------
+işlev rx_yay(r: &değişken Regex, op: tam32, a: tam32, b: tam32) -> tam32 {
+    dizi_ekle(r.op, op);
+    dizi_ekle(r.a, a);
+    dizi_ekle(r.b, b);
+    ver dizi_boyut(r.op) - 1;
+}
+
+işlev rx_derle_dugum(r: &değişken Regex, d: RxDugum) -> tam32 {
+    eşleş d {
+        RxDugum::Kar(c) => { rx_yay(r, 0, c, 0); }
+        RxDugum::Her => { rx_yay(r, 1, 0, 0); }
+        RxDugum::Sinif(i) => { rx_yay(r, 5, i, 0); }
+        RxDugum::Bas => { rx_yay(r, 6, 0, 0); }
+        RxDugum::Son => { rx_yay(r, 7, 0, 0); }
+        RxDugum::Bosluk => { }
+        RxDugum::Birlestir(ps) => {
+            değişken i: tam32 = 0;
+            iken i < dizi_boyut(ps) {
+                rx_derle_dugum(r, dizi_al(ps, i));
+                i = i + 1;
+            }
+        }
+        RxDugum::Secenek(ks) => {
+            // (a|b|c): her kol için CATAL; son kolda çatal yok.
+            //   CATAL L_kol, L_sonraki
+            //   <kol> ; ATLA L_son
+            değişken sonlar: Dizi<tam32> = [];
+            değişken n: tam32 = dizi_boyut(ks);
+            değişken i: tam32 = 0;
+            iken i < n {
+                eğer i + 1 < n {
+                    değişken c: tam32 = rx_yay(r, 2, 0, 0);
+                    dizi_yaz(r.a, c, dizi_boyut(r.op));      // ilk hedef: kol
+                    rx_derle_dugum(r, dizi_al(ks, i));
+                    dizi_ekle(sonlar, rx_yay(r, 3, 0, 0));   // ATLA (yamalanacak)
+                    dizi_yaz(r.b, c, dizi_boyut(r.op));      // ikinci hedef: sonraki
+                }
+                değilse { rx_derle_dugum(r, dizi_al(ks, i)); }
+                i = i + 1;
+            }
+            değişken son: tam32 = dizi_boyut(r.op);
+            değişken j: tam32 = 0;
+            iken j < dizi_boyut(sonlar) {
+                dizi_yaz(r.a, dizi_al(sonlar, j), son);
+                j = j + 1;
+            }
+        }
+        RxDugum::Yildiz(ks) => {
+            //   L1: CATAL L2, L3
+            //   L2: <gövde> ; ATLA L1
+            //   L3:
+            değişken l1: tam32 = rx_yay(r, 2, 0, 0);
+            dizi_yaz(r.a, l1, dizi_boyut(r.op));
+            rx_derle_dugum(r, dizi_al(ks, 0));
+            değişken j2: tam32 = rx_yay(r, 3, 0, 0);
+            dizi_yaz(r.a, j2, l1);
+            dizi_yaz(r.b, l1, dizi_boyut(r.op));
+        }
+        RxDugum::Arti(ks) => {
+            //   L1: <gövde> ; CATAL L1, L3
+            değişken l1: tam32 = dizi_boyut(r.op);
+            rx_derle_dugum(r, dizi_al(ks, 0));
+            değişken c: tam32 = rx_yay(r, 2, 0, 0);
+            dizi_yaz(r.a, c, l1);
+            dizi_yaz(r.b, c, dizi_boyut(r.op));
+        }
+        RxDugum::Opsiyon(ks) => {
+            //   CATAL L2, L3 ; L2: <gövde> ; L3:
+            değişken c: tam32 = rx_yay(r, 2, 0, 0);
+            dizi_yaz(r.a, c, dizi_boyut(r.op));
+            rx_derle_dugum(r, dizi_al(ks, 0));
+            dizi_yaz(r.b, c, dizi_boyut(r.op));
+        }
+    }
+    ver 0;
+}
+
+// -----------------------------------------------------------------------------
+// DERLEME GİRİŞİ. Bozuk desen PANİK DEĞİL DEĞER döndürür.
+// -----------------------------------------------------------------------------
+işlev derle(desen: metin) -> sonuç<Regex, metin> {
+    değişken a: RxAyr = RxAyr {
+        desen: desen, poz: 0, hatali: yanlış, mesaj: "",
+        cr_alt: [], cr_ust: [], cls_bas: [], cls_adet: [], cls_ters: []
+    };
+    değişken agac: RxDugum = rx_alt(&değişken a);
+    // Artık girdi kaldıysa desen bozuktur — örn. kapanmamış `)`.
+    eğer a.hatali == yanlış ve rx_bitti(&değişken a) == yanlış {
+        rx_hata(&değişken a, "desen sonunda artik var");
+    }
+    eğer a.hatali { ver hata(a.mesaj); }
+
+    değişken r: Regex = Regex {
+        op: [], a: [], b: [],
+        cr_alt: a.cr_alt, cr_ust: a.cr_ust,
+        cls_bas: a.cls_bas, cls_adet: a.cls_adet, cls_ters: a.cls_ters
+    };
+    rx_derle_dugum(&değişken r, agac);
+    rx_yay(&değişken r, 4, 0, 0);   // ESLES
+    ver tamam(r);
+}
+
+// -----------------------------------------------------------------------------
+// PIKE VM — Thompson simülasyonu.
+//
+// ⚠ ÇEKİRDEK İNVARYANT: her girdi konumunda bir komut EN FAZLA BİR KEZ etkin
+// listeye girer (`nesil` damgasıyla). Bu tekilleştirme olmadan `(a*)*` gibi
+// desenlerde aynı durum defalarca eklenir ve motor ÜSTELE döner — yani geri
+// izlemeden kaçınmanın tek başına yetmediği yer burasıdır.
+// -----------------------------------------------------------------------------
+
+// Sınıf eşleşmesi (ters çevirme dâhil).
+işlev rx_sinif_eslesir(r: &değişken Regex, idx: tam32, c: tam32) -> mantıksal {
+    değişken bas: tam32 = dizi_al(r.cls_bas, idx);
+    değişken adet: tam32 = dizi_al(r.cls_adet, idx);
+    değişken bulundu: mantıksal = yanlış;
+    değişken i: tam32 = 0;
+    iken i < adet {
+        eğer c >= dizi_al(r.cr_alt, bas + i) ve c <= dizi_al(r.cr_ust, bas + i) {
+            bulundu = doğru;
+        }
+        i = i + 1;
+    }
+    eğer dizi_al(r.cls_ters, idx) == 1 { ver bulundu == yanlış; }
+    ver bulundu;
+}
+
+// Epsilon kapanışı: pc'yi listeye ekle, CATAL/ATLA/çapaları izle.
+// ⚠ `Dizi<T>` DEĞERLE geçirilir ama HEAP-DESTEKLİDİR: `dizi_ekle`/`dizi_yaz`
+// çağırana YANSIR (ölçüldü, varsayılmadı). Bu yüzden `&değişken` gerekmez ve
+// imza sade kalır — referans işaretlemek burada yanlış bir güvence verirdi
+// (kopya semantiği yok).
+işlev rx_ekle(r: &değişken Regex, liste: Dizi<tam32>,
+              damga: Dizi<tam32>, nesil: tam32,
+              pc: tam32, poz: tam32, uzunluk: tam32) -> tam32 {
+    eğer dizi_al(damga, pc) == nesil { ver 0; }   // zaten eklendi
+    dizi_yaz(damga, pc, nesil);
+    değişken op: tam32 = dizi_al(r.op, pc);
+    eğer op == 2 {   // CATAL
+        rx_ekle(r, liste, damga, nesil, dizi_al(r.a, pc), poz, uzunluk);
+        rx_ekle(r, liste, damga, nesil, dizi_al(r.b, pc), poz, uzunluk);
+        ver 0;
+    }
+    eğer op == 3 {   // ATLA
+        rx_ekle(r, liste, damga, nesil, dizi_al(r.a, pc), poz, uzunluk);
+        ver 0;
+    }
+    eğer op == 6 {   // ^
+        eğer poz == 0 { rx_ekle(r, liste, damga, nesil, pc + 1, poz, uzunluk); }
+        ver 0;
+    }
+    eğer op == 7 {   // $
+        eğer poz == uzunluk { rx_ekle(r, liste, damga, nesil, pc + 1, poz, uzunluk); }
+        ver 0;
+    }
+    dizi_ekle(liste, pc);
+    ver 0;
+}
+
+// `bas` BAYT konumundan başlayarak EN UZUN eşleşmeyi arar.
+// Dönüş: eşleşen BAYT uzunluğu, ya da -1 (eşleşme yok).
+//
+// ⚠ "EN UZUN" (leftmost-longest) seçildi, POSIX geleneği. Geri izlemeli
+// motorların "ilk bulunan" (leftmost-first) davranışı alternatif SIRASINA
+// bağlıdır; Thompson simülasyonunda tüm kollar EŞ ZAMANLI ilerlediği için
+// sıraya bağlı bir "ilk" yoktur — en uzunu bildirmek tek tutarlı seçimdir.
+işlev rx_kosum(r: &değişken Regex, s: metin, bas: tam32) -> tam32 {
+    değişken n: tam32 = dizi_boyut(r.op);
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken damga: Dizi<tam32> = [];
+    değişken i: tam32 = 0;
+    iken i < n { dizi_ekle(damga, 0 - 1); i = i + 1; }
+
+    değişken simdi: Dizi<tam32> = [];
+    değişken nesil: tam32 = 0;
+    rx_ekle(r, simdi, damga, nesil, 0, bas, L);
+
+    değişken enuzun: tam32 = 0 - 1;
+    değişken poz: tam32 = bas;
+    değişken calis: mantıksal = doğru;
+    iken calis {
+        // Bu konumda ESLES var mı?
+        değişken k: tam32 = 0;
+        iken k < dizi_boyut(simdi) {
+            eğer dizi_al(r.op, dizi_al(simdi, k)) == 4 { enuzun = poz - bas; }
+            k = k + 1;
+        }
+        eğer poz >= L { calis = yanlış; }
+        değilse {
+            eğer dizi_boyut(simdi) == 0 { calis = yanlış; }
+            değilse {
+                değişken c: tam32 = rx_cp(s, poz);
+                değişken adim: tam32 = rx_cp_uzunluk(s, poz);
+                değişken sonraki: Dizi<tam32> = [];
+                nesil = nesil + 1;
+                değişken j: tam32 = 0;
+                iken j < dizi_boyut(simdi) {
+                    değişken pc: tam32 = dizi_al(simdi, j);
+                    değişken op: tam32 = dizi_al(r.op, pc);
+                    eğer op == 0 {
+                        eğer dizi_al(r.a, pc) == c {
+                            rx_ekle(r, sonraki, damga, nesil, pc + 1, poz + adim, L);
+                        }
+                    }
+                    eğer op == 1 {
+                        rx_ekle(r, sonraki, damga, nesil, pc + 1, poz + adim, L);
+                    }
+                    eğer op == 5 {
+                        eğer rx_sinif_eslesir(r, dizi_al(r.a, pc), c) {
+                            rx_ekle(r, sonraki, damga, nesil, pc + 1, poz + adim, L);
+                        }
+                    }
+                    j = j + 1;
+                }
+                simdi = sonraki;
+                poz = poz + adim;
+            }
+        }
+    }
+    ver enuzun;
+}
+
+// -----------------------------------------------------------------------------
+// GENEL API
+// -----------------------------------------------------------------------------
+
+// Desen metnin HERHANGİ bir yerinde eşleşiyor mu? (arama)
+işlev ara(r: &değişken Regex, s: metin) -> seçimlik<Eslesme> {
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        değişken u: tam32 = rx_kosum(r, s, i);
+        eğer u >= 0 { ver değer(Eslesme { baslangic: i, uzunluk: u }); }
+        eğer i >= L { devam = yanlış; }
+        değilse { i = i + rx_cp_uzunluk(s, i); }
+    }
+    ver hiç;
+}
+
+// Desen metnin TAMAMINI eşliyor mu?
+işlev tam_eslesir(r: &değişken Regex, s: metin) -> mantıksal {
+    ver rx_kosum(r, s, 0) == metin_uzunluk(s);
+}
+
+// Eşleşme VAR MI? (`ara`nın mantıksal kısayolu)
+işlev eslesir(r: &değişken Regex, s: metin) -> mantıksal {
+    eşleş ara(r, s) {
+        değer(e) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// Tüm eşleşmeleri bul (çakışmayan, soldan sağa).
+// ⚠ BOŞ EŞLEŞME (`a*` gibi) sonsuz döngü riskidir: eşleşme uzunluğu 0 ise
+// bir KARAKTER ilerleriz. Bu davranış testte açıkça sabitlenmiştir.
+işlev tum_bul(r: &değişken Regex, s: metin) -> Dizi<Eslesme> {
+    değişken sonuc: Dizi<Eslesme> = [];
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        değişken u: tam32 = rx_kosum(r, s, i);
+        eğer u > 0 {
+            dizi_ekle(sonuc, Eslesme { baslangic: i, uzunluk: u });
+            i = i + u;
+        }
+        değilse {
+            eğer u == 0 { dizi_ekle(sonuc, Eslesme { baslangic: i, uzunluk: 0 }); }
+            eğer i >= L { devam = yanlış; }
+            değilse { i = i + rx_cp_uzunluk(s, i); }
+        }
+        eğer i > L { devam = yanlış; }
+    }
+    ver sonuc;
+}
+
+// Tüm eşleşmeleri `yeni` ile değiştir.
+işlev degistir(r: &değişken Regex, s: metin, yeni: metin) -> metin {
+    değişken parcalar: Dizi<Eslesme> = tum_bul(r, s);
+    değişken cikti: metin = "";
+    değişken son: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(parcalar) {
+        değişken e: Eslesme = dizi_al(parcalar, i);
+        eğer e.baslangic >= son {
+            cikti = metin_birlestir(cikti, metin_kes(s, son, e.baslangic - son));
+            cikti = metin_birlestir(cikti, yeni);
+            son = e.baslangic + e.uzunluk;
+        }
+        i = i + 1;
+    }
+    ver metin_birlestir(cikti, metin_kes(s, son, metin_uzunluk(s) - son));
+}
