@@ -7431,7 +7431,20 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         if (strcmp(donus, "void") == 0) {
             fputs("  ret void\n", g->out);
         } else {
-            fprintf(g->out, "  ret %s 0\n", donus);
+            /* [D-464] Tipe UYGUN sifir deger. `ret ptr 0` ve `ret double 0`
+             * GECERSIZ IR'dir ("integer constant must have integer type").
+             * Bu mantik D-304'te LIFTED LAMBDA yolunda ZATEN vardi (asagida,
+             * `!term` dali) ama SIRADAN islev yoluna hic uygulanmamisti --
+             * D-407 deseni: ayni soruyu iki yerde ayri yanitlayan kod ayrisir.
+             * Tetikleyen sekil: govdesi KAPSAYICI bir `esles` olan ve `metin`
+             * donen islev (dusus yolu ULASILAMAZ ama yine de yayilir). KEMGU'da
+             * `sonuc`/`secimlik` uzerine kurulu kodda cok dogal bir sekildir;
+             * hicbir korpus dosyasi icermedigi icin kacmisti. */
+            const char *sifir = "0";
+            if (strcmp(donus, "ptr") == 0) sifir = "null";
+            else if (strcmp(donus, "float") == 0 || strcmp(donus, "double") == 0)
+                sifir = "0.0";
+            fprintf(g->out, "  ret %s %s\n", donus, sifir);
         }
     }
     fputs("}\n\n", g->out);

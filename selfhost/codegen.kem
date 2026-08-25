@@ -4162,9 +4162,22 @@ işlev islev_donus_tip(p: &değişken Ayr, idx: tam32) -> metin {
 // "expected instruction opcode"); değersiz `ver;` ve örtük fonksiyon-sonu
 // dönüşü bu yoldan geçer. Dönüş tipi void'e çevrilince (islev_donus_tip) bu
 // uyarlama da ŞART oldu — biri olmadan diğeri IR'ı bozar.
+// [D-464] Tipe UYGUN sıfır değer. `ret ptr 0` / `ret double 0` GEÇERSİZ IR'dir
+// ("integer constant must have integer type") — C oracle'da da AYNI boşluk
+// vardı ve orada doğru mantık lifted-lambda yolunda zaten duruyordu (D-407:
+// aynı soruyu iki yerde ayrı yanıtlayan kod ayrışır). Tetikleyen şekil:
+// gövdesi KAPSAYICI bir `eşleş` olan ve `metin` dönen işlev.
 işlev ret_bos_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("  ret "); yaz_str(p.cur_ret);
-    eğer metin_esit(p.cur_ret, "void") == yanlış { yaz_str(" 0"); }
+    eğer metin_esit(p.cur_ret, "void") == yanlış {
+        eğer metin_esit(p.cur_ret, "ptr") { yaz_str(" null"); }
+        değilse {
+            eğer metin_esit(p.cur_ret, "double") veya metin_esit(p.cur_ret, "float") {
+                yaz_str(" 0.0");
+            }
+            değilse { yaz_str(" 0"); }
+        }
+    }
     yb(10);
     ver 0;
 }
