@@ -377,6 +377,29 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("kilit_yok", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-459] tam64 <-> metin.
+     * GENISLIK tam64'tur, tam32 DEGIL: `JsonDeger::Sayi` tam64 tasir ve
+     * KEMGU'da ORTUK DONUSUM YOKTUR -> tam32 alan bir yerlesik JSON yolundan
+     * cagrilamazdi. tam32 cagiranlar acik `olarak tam64` yazar.
+     * `metin_tam` BASARISIZLIGI SESSIZ OLMASIN diye ayrik yuklemle gelir
+     * (D-449/D-458 deseni): "abc" -> 0 ile gercek "0" ayirt edilemezdi. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("tam_metin", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_tam", 9, p, 1, tip_olustur_basit(a, TIP_TAM64));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_tam_gecerli", 17, p, 1,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
     /* [D-458] kod_metin(kod: tam32) -> metin — Unicode kod noktasi -> UTF-8.
      * HAM BAYT->METIN BILEREK YOK: `metin`in gecerli-UTF-8 degismezi korunur.
      * Vekil ciftleri cagiranda (json.kem) saf KEMGU ile birlestirilir.

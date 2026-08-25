@@ -1618,6 +1618,41 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
  * `&metin` ve `Dizi<metin>` KASITLI olarak metin DEGIL — `==` yalnizca DOGRUDAN
  * metin degerlerinde icerik karsilastirmasina doner; referans/dizi kimlik
  * semantigini degistirmek ayri bir karardir. */
+/* [D-459] Yerlesik cagri sonucu GERCEK bir dizgi mi?
+ *
+ * NEDEN KURATE LISTE, "donus tipi metin mi" DEGIL: tip tablosunda `metin`
+ * donen 21 yerlesik var ama hepsi DIZGI DEGIL --
+ *   · `bellek_al` / `bellek_kopyala` -> HAM BELLEK
+ *   · `dosya_ac` / `kilit_olustur` / `semafor_olustur` / `bariyer_olustur`
+ *     -> OPAK HANDLE
+ * Bunlari icerik karsilastirmasina sokmak YANLIS olurdu (`bellek_al(8) ==
+ * bellek_al(8)` isaretci esitligi sormalidir; olculdu: iki derleyici de
+ * dogru davraniyordu, bu liste o dogrulugu KORUR).
+ *
+ * ⚠ Bu listenin AYNISI `selfhost/codegen.kem`deki `ifade_metin`in CAGRI
+ * dalindadir. Ikisi ayrisirsa `codegen_diff` sessizce kayar (D-407: ayni
+ * soruyu iki yerde ayri yanitlayan kod er ya da gec ayrisir) -- birini
+ * degistirirken digerini de degistir. */
+static int builtin_metin_donus_mu(const char *ad, int uz) {
+    static const char *liste[] = {
+        "metin_birlestir", "metin_kes", "metin_kirp", "metin_yer_degistir",
+        "metin_kucuk", "metin_buyuk",
+        "metin_kucuk_tr", "metin_buyuk_tr",
+        "metin_kucuk_ascii", "metin_buyuk_ascii",
+        "dosya_oku", "dosya_gecersiz", "arg_al", "ondalik_bicimle",
+        "kesirli_metin",   /* D-457 */
+        "kod_metin",       /* D-458 */
+        "tam_metin"        /* D-459 */
+    };
+    size_t i;
+    if (!ad || uz <= 0) return 0;
+    for (i = 0; i < sizeof(liste) / sizeof(liste[0]); i++) {
+        if ((int)strlen(liste[i]) == uz && memcmp(liste[i], ad, (size_t)uz) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 static int ast_tip_metin_mi(const Dugum *tip_d) {
     while (tip_d && tip_d->tip == DUGUM_TIP_SABITSURE) {
         tip_d = tip_d->veri.tip_sabitsure.ic_tip;
@@ -4643,6 +4678,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
 
             const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
             int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+            /* [D-459] `cagri_adi` asagida `kdl_*`e YENIDEN YAZILIR; yerlesigin
+             * ORIJINAL adini metin-lik sorgusu icin sakla (bkz. 5482). */
+            const char *ozgun_cagri_adi = cagri_adi;
+            int ozgun_cagri_adi_uz = cagri_adi_uz;
             /* D-001: ik onek-fallback ile farkli (mangled) ad altinda
              * bulunduysa cagri adini ona cevir (@modul.ad). */
             if (ik && (ik->ad_uz != cagri_adi_uz ||
@@ -4960,6 +4999,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                        memcmp(cagri_adi, "yaz_tam64", 9) == 0) {
                 cagri_adi = "kdl_yaz_tam64"; cagri_adi_uz = 13;
                 param_beklenen[0] = "i64"; builtin_donus = "void";
+            /* [D-459] tam_metin `i64` alir -> eslemesi BU (ERKEN) merdivende
+             * OLMALI: `param_beklenen` argumanlar DEGERLENDIRILMEDEN once
+             * okunur (bkz. ~5082). Asagidaki gec merdivene koyunca deger
+             * `i32` olarak gecti ve LLVM bunu SESSIZCE kabul etti (D-295) ->
+             * `tam_metin(0 - 4207)` yanlis dizgi uretti. Iki merdiven var ve
+             * hangisine yazdigin ONEMLI. */
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "tam_metin", 9) == 0) {
+                cagri_adi = "kdl_tam_metin"; cagri_adi_uz = 13;
+                param_beklenen[0] = "i64"; builtin_donus = "ptr";
             } else if (cagri_adi_uz == 12 &&
                        memcmp(cagri_adi, "yazdir_metin", 12) == 0) {
                 /* Bare-metal hedef icin: yazdir_metin -> kdl_yazdir_metin
@@ -5103,8 +5152,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 } else if ((n == 12 && memcmp(kdl_buf + 4, "metin_icerir", 12) == 0) ||
                            (n == 12 && memcmp(kdl_buf + 4, "metin_baslar", 12) == 0) ||
                            (n == 11 && memcmp(kdl_buf + 4, "metin_biter", 11) == 0) ||
-                           (n == 10 && memcmp(kdl_buf + 4, "metin_esit", 10) == 0)) {
+                           (n == 10 && memcmp(kdl_buf + 4, "metin_esit", 10) == 0) ||
+                           /* [D-459] yuklem: gecerli bir tamsayi metni mi */
+                           (n == 17 && memcmp(kdl_buf + 4, "metin_tam_gecerli", 17) == 0)) {
                     kdl_donus = "i1";
+                } else if (n == 9 && memcmp(kdl_buf + 4, "metin_tam", 9) == 0) {
+                    kdl_donus = "i64";   /* [D-459] tam64 doner */
                 } else {
                     kdl_donus = "ptr";
                 }
@@ -5478,8 +5531,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
+            /* [D-459] Yerlesikte `ik == NULL` oldugu icin metin-lik BILGISI
+             * KAYBOLUYORDU: `metin_birlestir("","b") == "b"` `icmp eq ptr`
+             * yayip C'de exit 7 veriyordu (self-host DOGRU yapiyordu, parite
+             * ters yonde). Annotasyonlu bir baglama (`degisken a: metin = ...`)
+             * bilgiyi tasidigi icin kusur yalnizca DOGRUDAN cagri ve
+             * ANNOTASYONSUZ baglama seklinde gorunuyordu -- bu yuzden D-449'un
+             * korpusundan kacmisti. */
             IfadeSonuc s = { r, donus, ik ? ik->donus_isaretsiz : 0,
-                             ik ? ik->donus_metin : 0 };   /* [D-449] */
+                             ik ? ik->donus_metin
+                                : builtin_metin_donus_mu(ozgun_cagri_adi,
+                                                         ozgun_cagri_adi_uz) };
             return s;
         }
 
@@ -5911,6 +5973,15 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
                     g->isimler->isaretsiz = dv.isaretsiz;  /* D-005 */
+                    /* [D-459] ANNOTASYONSUZ dal: metin-ligi de DEGERDEN devral
+                     * (`isaretsiz` ile birebir ayni gerekce -- IR'in sildigi bir
+                     * KEMGU tip ozelligi yan kanalda tasinir). Eksikligi:
+                     * `degisken a = metin_birlestir("","b"); a == "b"` ->
+                     * `icmp eq ptr` (C exit 7; self-host 42 -- parite TERS
+                     * yonde). Annotasyonlu dal zaten `ast_tip_metin_mi` ile
+                     * dogruydu, bu yuzden kusur yalnizca annotasyonsuz sekilde
+                     * gorunuyordu ve D-449'un korpusundan kacmisti. */
+                    g->isimler->metin_mi = dv.metin_mi;
                     /* D-325: tahmin varsa cagri yeri de AYNI donusu gorsun. */
                     if (lam_tahmin) g->isimler->kapanis_donus_ir = lam_tahmin;
                     /* D-293 NOT: kapanis_donus_ir burada AYARLANMAZ (tahmin yoksa) — bu dal
@@ -7607,6 +7678,9 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_kilit_al(ptr)\n", out);     /* [D-455] */
     fputs("declare void @kdl_kilit_birak(ptr)\n", out);  /* [D-455] */
     fputs("declare void @kdl_kilit_yok(ptr)\n", out);    /* [D-455] */
+    fputs("declare ptr @kdl_tam_metin(i64)\n", out);        /* [D-459] */
+    fputs("declare i64 @kdl_metin_tam(ptr)\n", out);        /* [D-459] */
+    fputs("declare i1 @kdl_metin_tam_gecerli(ptr)\n", out); /* [D-459] */
     fputs("declare ptr @kdl_kod_metin(i32)\n", out);        /* [D-458] */
     fputs("declare i1 @kdl_kod_gecerli(i32)\n", out);       /* [D-458] */
     fputs("declare ptr @kdl_kesirli_metin(double)\n", out); /* [D-457] */

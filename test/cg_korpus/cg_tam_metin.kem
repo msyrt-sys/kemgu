@@ -1,0 +1,41 @@
+// [D-459] tam_metin / metin_tam / metin_tam_gecerli + YERLESIK CAGRI SONUCUNUN
+// METIN-LIGI.
+//
+// UC AYRI SEY olculur:
+//  (A) tam64 <-> metin gidis-donus, GENISLIK dahil (2^33 tam32'ye SIGMAZ).
+//      Argumanin `i64` olarak gecmesi SART: `i32` gecirmek LLVM tarafindan
+//      SESSIZCE kabul edilir (D-295) ve yanlis dizgi uretir.
+//  (B) metin_tam BASARISIZLIGI SESSIZ DEGIL: ayrik yuklem.
+//  (C) yerlesik cagri sonucunun metin-ligi: `metin_birlestir(..) == ".."`
+//      icerik karsilastirmali olmali. Onceden C'de `icmp eq ptr` yayiliyordu
+//      (self-host DOGRU yapiyordu -- parite TERS yonde).
+// Exit: 42
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // (A) gidis-donus + genislik
+    eğer metin_esit(tam_metin(0), "0") == yanlış { h = h + 1; }
+    eğer metin_esit(tam_metin(0 - 4207), "-4207") == yanlış { h = h + 1; }
+    eğer metin_esit(tam_metin(8589934592), "8589934592") == yanlış { h = h + 1; }
+    eğer metin_tam("8589934592") != 8589934592 { h = h + 1; }
+    eğer metin_tam("-9") != 0 - 9 { h = h + 1; }
+
+    // (B) gecerlilik yuklemi — sessiz 0 ile gercek "0" ayirt edilebilmeli
+    eğer metin_tam_gecerli("abc") { h = h + 1; }
+    eğer metin_tam_gecerli("") { h = h + 1; }
+    eğer metin_tam_gecerli("12ab") { h = h + 1; }
+    eğer metin_tam_gecerli(" 12") { h = h + 1; }
+    eğer metin_tam_gecerli("-") { h = h + 1; }
+    eğer metin_tam_gecerli("0") == yanlış { h = h + 1; }
+    eğer metin_tam("0") != 0 { h = h + 1; }
+
+    // (C) yerlesik cagri sonucu metin-ligini TASIMALI — uc sekil
+    eğer metin_birlestir("", "b") == "b" { } değilse { h = h + 1; }   // dogrudan
+    değişken a = metin_birlestir("", "b");                            // annotasyonsuz
+    eğer a == "b" { } değilse { h = h + 1; }
+    eğer tam_metin(42) == "42" { } değilse { h = h + 1; }             // yeni yerlesik
+
+    eğer h == 0 { ver 42; }
+    ver 7;
+}

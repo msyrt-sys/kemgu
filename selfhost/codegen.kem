@@ -3621,11 +3621,23 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
          veya metin_baslar(ad, "semafor_") veya metin_baslar(ad, "bariyer_")   // [D-456]
          veya metin_esit(ad, "kesirli_metin")   // [D-457]
          veya metin_baslar(ad, "kod_")   // [D-458]
+         veya metin_esit(ad, "tam_metin")   // [D-459]
          veya metin_esit(ad, "oku_karakter") veya metin_esit(ad, "ondalik_bicimle") {
         ver metin_birlestir("kdl_", ad);
     }
     ver "";
 }
+// [D-459] Yerleşiğin `indeks`inci parametresinin BİLDİRİLEN IR tipi ("" =
+// bilinmiyor/genişletme gerekmez). C oracle'ın `param_beklenen` tablosunun
+// karşılığıdır; yalnız GENİŞLETME gerektiren (i64) durumlar listelenir —
+// gereksiz yere büyütmek her yerleşiği elle takip etmeyi zorunlu kılardı.
+işlev builtin_param_ir(ad: metin, indeks: tam32) -> metin {
+    eğer indeks != 0 { ver ""; }
+    eğer metin_esit(ad, "tam_metin") { ver "i64"; }     // D-459
+    eğer metin_esit(ad, "yaz_tam64") { ver "i64"; }     // ÖNCEDEN eksikti
+    ver "";
+}
+
 // Built-in dönüş LLVM tipi (sonek-bazlı).
 işlev builtin_ret(ad: metin) -> metin {
     // D-388: öneğe uymayan yerleşiklerin DÖNÜŞ tipleri. Ad eşlemesi tek başına
@@ -3659,6 +3671,9 @@ işlev builtin_ret(ad: metin) -> metin {
     eğer metin_esit(ad, "bariyer_olustur") { ver "ptr"; }
     eğer metin_esit(ad, "kesirli_metin") { ver "ptr"; }   // [D-457]
     eğer metin_esit(ad, "kod_metin") { ver "ptr"; }   // [D-458]
+    eğer metin_esit(ad, "tam_metin") { ver "ptr"; }   // [D-459]
+    eğer metin_esit(ad, "metin_tam") { ver "i64"; }   // [D-459]
+    eğer metin_esit(ad, "metin_tam_gecerli") { ver "i1"; }   // [D-459]
     eğer metin_esit(ad, "kod_gecerli") { ver "i1"; }   // [D-458]
     // kilit_al / kilit_birak / kilit_yok → void (aşağıdaki varsayılana düşer)
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
@@ -3739,6 +3754,9 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_semafor_olustur(i32)"); yb(10);   // [D-456]
     yaz_str("declare ptr @kdl_kesirli_metin(double)"); yb(10);   // [D-457]
     yaz_str("declare ptr @kdl_kod_metin(i32)"); yb(10);   // [D-458]
+    yaz_str("declare ptr @kdl_tam_metin(i64)"); yb(10);   // [D-459]
+    yaz_str("declare i64 @kdl_metin_tam(ptr)"); yb(10);   // [D-459]
+    yaz_str("declare i1 @kdl_metin_tam_gecerli(ptr)"); yb(10);   // [D-459]
     yaz_str("declare i1 @kdl_kod_gecerli(i32)"); yb(10);   // [D-458]
     yaz_str("declare void @kdl_semafor_al(ptr)"); yb(10);       // [D-456]
     yaz_str("declare void @kdl_semafor_birak(ptr)"); yb(10);    // [D-456]
@@ -4047,9 +4065,21 @@ işlev ifade_metin(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken fad: metin = dizi_al(p.a_deg, h);
         // `metin_*` yerleşiklerinin METİN DÖNENLERİ (uzunluk/bayt/içerir/
         // başlar/biter/eşit BOOLEAN ya da SAYI döner — onlar metin DEĞİL).
+        // ⚠ [D-459] BU LİSTENİN AYNISI `src/llvm.c`de `builtin_metin_donus_mu`
+        // olarak durur. İkisi ayrışırsa `codegen_diff` sessizce kayar (D-407);
+        // birini değiştirirken DİĞERİNİ DE değiştir.
+        // Listede OLMAYANLAR bilinçlidir: `bellek_al`/`bellek_kopyala` HAM
+        // BELLEK, `dosya_ac`/`kilit_olustur`/`semafor_olustur`/`bariyer_olustur`
+        // OPAK HANDLE — onları içerik karşılaştırmasına sokmak YANLIŞ olurdu.
         eğer metin_esit(fad, "metin_birlestir") veya metin_esit(fad, "metin_kes")
           veya metin_esit(fad, "metin_kucuk") veya metin_esit(fad, "metin_buyuk")
+          veya metin_esit(fad, "metin_kucuk_tr") veya metin_esit(fad, "metin_buyuk_tr")
+          veya metin_esit(fad, "metin_kucuk_ascii") veya metin_esit(fad, "metin_buyuk_ascii")
           veya metin_esit(fad, "metin_kirp") veya metin_esit(fad, "metin_yer_degistir")
+          veya metin_esit(fad, "arg_al") veya metin_esit(fad, "ondalik_bicimle")
+          veya metin_esit(fad, "kesirli_metin")   // [D-457]
+          veya metin_esit(fad, "kod_metin")       // [D-458]
+          veya metin_esit(fad, "tam_metin")       // [D-459]
           veya metin_esit(fad, "dosya_oku") veya metin_esit(fad, "dosya_gecersiz") { ver 1; }
         ver fn_rmet_bul(p, fad);
     }
@@ -5271,6 +5301,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             eğer kullanici == 1 {
                 değişken pt: metin = param_ir_tip(p, fname, i - 1);
                 eğer metin_esit(pt, "i64") ve (metin_esit(at, "i64") == yanlış) {
+                    av = i64_genislet(p, av, at);
+                    at = "i64";
+                }
+            }
+            // [D-459] YERLEŞİKLER de genişletilmeli. D-393 bu genişletmeyi
+            // YALNIZ kullanıcı işlevleri için eklemişti; yerleşikler dışarıda
+            // kalmıştı (ÖNCEDEN VAR OLAN boşluk — `yaz_tam64` de aynı şekilde
+            // `i32` geçiyordu, ölçüldü). C oracle bunu `param_beklenen` ile
+            // ARGÜMANLAR DEĞERLENDİRİLMEDEN ÖNCE yapar; burada değerlendirme
+            // sonrası genişletmek eşdeğerdir çünkü sonuç aynı IR'dır.
+            değilse {
+                değişken bpt: metin = builtin_param_ir(fad, i - 1);
+                eğer metin_esit(bpt, "i64") ve (metin_esit(at, "i64") == yanlış) {
                     av = i64_genislet(p, av, at);
                     at = "i64";
                 }
@@ -8031,6 +8074,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "bariyer_yok");   // [D-456]
     g_ekle(p, "kesirli_metin");   // [D-457]
     g_ekle(p, "kod_metin"); g_ekle(p, "kod_gecerli");   // [D-458]
+    g_ekle(p, "tam_metin"); g_ekle(p, "metin_tam"); g_ekle(p, "metin_tam_gecerli");   // [D-459]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
@@ -8360,6 +8404,9 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "kesirli_metin", "metin", ["kesirli64"]);   // [D-457]
     yerlesik_ekle(p, "kod_metin", "metin", ["tam32"]);   // [D-458]
     yerlesik_ekle(p, "kod_gecerli", "mantıksal", ["tam32"]);   // [D-458]
+    yerlesik_ekle(p, "tam_metin", "metin", ["tam64"]);   // [D-459]
+    yerlesik_ekle(p, "metin_tam", "tam64", ["metin"]);   // [D-459]
+    yerlesik_ekle(p, "metin_tam_gecerli", "mantıksal", ["metin"]);   // [D-459]
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
     yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);

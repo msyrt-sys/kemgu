@@ -946,6 +946,47 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-459: `tam_metin`/`metin_tam` + YERLEŞİK ÇAĞRI SONUCU METİN-LİĞİNİ KAYBEDİYORDU
+Öneri sırasının 1. maddesi (askıya alınmıştı — ön koşulu bir oracle kusuruydu).
+- **🔴 ÖN KOŞUL KUSURU (D-449'un kaçırdığı):** çağrı sonucunun `metin_mi`
+  bilgisi **yalnız kullanıcı işlevlerinden** alınıyordu (`ik ? ik->donus_metin :
+  0`); yerleşikte `ik == NULL` → bilgi kayboluyordu. Ölçüldü:
+  `metin_birlestir("","b") == "b"` → **C exit 7** (`icmp eq ptr`),
+  **self-host 42** — **parite TERS yönde** (D-442'nin sınıfı).
+  Annotasyonlu bağlama bilgiyi taşıdığı için kusur yalnız **doğrudan çağrı** ve
+  **annotasyonsuz bağlama** şeklinde görünüyordu; D-449'un korpusundan bu yüzden
+  kaçmıştı.
+- **KÜRATE LİSTE, "dönüş tipi metin mi" DEĞİL:** tip tablosunda `metin` dönen
+  **21** yerleşik var ama hepsi dizgi değil — `bellek_al`/`bellek_kopyala` HAM
+  BELLEK, `dosya_ac`/`kilit_olustur`/`semafor_olustur`/`bariyer_olustur` OPAK
+  HANDLE. Onları içerik karşılaştırmasına sokmak YANLIŞ olurdu (ölçüldü:
+  `bellek_al(8) == bellek_al(8)` iki derleyicide de doğru davranıyordu; liste o
+  doğruluğu KORUR). **Aynı liste iki yerde** (`builtin_metin_donus_mu` +
+  self-host `ifade_metin`) — D-407 gereği ikisi birlikte değişmeli.
+- **Yerleşikler:** `tam_metin(tam64) -> metin`, `metin_tam(metin) -> tam64`,
+  `metin_tam_gecerli(metin) -> mantıksal`. **Genişlik tam64'tür, tam32 DEĞİL:**
+  `JsonDeger::Sayi` tam64 taşır ve KEMGU'da örtük dönüşüm YOKTUR → tam32 alan
+  bir yerleşik JSON yolundan çağrılamazdı.
+- **Eski `kdl_metin_to_tam` KALDIRILDI** (`atoi` sarmalı, çağrısı yoktu):
+  başarısızlığı SESSİZDİ (`"abc"` → 0, gerçek `"0"`dan ayırt edilemez). Ölü kodu
+  bırakmak, sonraki okuyucunun onu "hazır primitif" sanıp sessiz-başarısız yolu
+  yeniden açmasına davetiye olurdu. Yerine ayrık yüklem (D-449/D-458 deseni);
+  kural: isteğe bağlı işaret + EN AZ BİR rakam + TAMAMEN tüketilmiş (`"12ab"` ve
+  `" 12"` GEÇERSİZ — `strtoll` tek başına ikisini de kabul ederdi).
+- **⚠ İKİ MERDİVEN VAR, HANGİSİNE YAZDIĞIN ÖNEMLİ.** `tam_metin`i önce GEÇ
+  merdivene koydum; `param_beklenen` argümanlar **değerlendirilmeden önce**
+  okunuyor (~5082) → değer `i32` geçti, LLVM **sessizce kabul etti** (D-295) ve
+  `tam_metin(0 - 4207)` yanlış dizgi üretti. Eşleme ERKEN merdivene taşındı.
+- **🔴 YAN BULGU (önceden var):** self-host'ta D-393'ün i64 genişletmesi
+  **yalnız kullanıcı işlevleri** içindi; yerleşikler dışarıdaydı → `yaz_tam64`
+  de `i32` geçiyordu (ölçüldü, dokunmadığım bir yerleşik). `builtin_param_ir`
+  ile kapandı; `yaz_tam64` yan kazanç olarak düzeldi.
+- **Doğrulama:** fikstür `cg_tam_metin.kem` → C=42, SELF=42 (gidiş-dönüş +
+  2^33 genişliği + yüklem + üç metin-lik şekli). **Sabotaj 2/2:** S55 (kürate
+  yüklemi kaldır) → C exit 7 · S56 (self-host yerleşik genişletmesi) → SELF 7.
+  Kapılar: `codegen_diff` **152/152** · `checker_diff` **153/153 (0 muaf)** ·
+  `yapi_diff` **127/127**.
+
 ### 🔴 D-458: `kod_metin` + JSON `\n` SESSİZCE `n` HARFİNE ÇÖZÜLÜYORDU
 Öneri sırasının 4. maddesi (`\uXXXX`). Yerleşik küçük; **açığa çıkardığı kusur
 sessiz veri bozulmasıydı.**

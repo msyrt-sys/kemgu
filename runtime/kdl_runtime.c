@@ -333,18 +333,48 @@ const char *kdl_metin_birlestir(const char *a, const char *b) {
     return yeni;
 }
 
-/* Metni tam sayiya cevirir (atoi sarmali) */
-int32_t kdl_metin_to_tam(const char *s) {
-    if (!s) return 0;
-    return (int32_t)atoi(s);
+/* [D-459] `kdl_metin_to_tam` KALDIRILDI: hicbir cagricisi yoktu (olculdu, iki
+ * derleyicide de yerlesik olarak acilmamisti) ve `atoi` sarmali oldugu icin
+ * BASARISIZLIGI SESSIZDI. Yerine `kdl_metin_tam` + `kdl_metin_tam_gecerli`
+ * (asagida). Olu kodu birakmak, sonraki bir okuyucunun onu "hazir primitif"
+ * sanip sessiz-basarisiz yolu yeniden acmasina davetiye olurdu. */
+
+/* ============================================================================
+ * [D-459] tam64 <-> metin.
+ *
+ * ⚠ ESKI `kdl_tam_to_metin` (int32_t, "%d") BUNUNLA DEGISTIRILDI: hicbir
+ * cagricisi yoktu (olculdu) ve `tam32` genisligi JSON icin YETMEZ --
+ * `JsonDeger::Sayi` `tam64` tasir ve KEMGU'da ORTUK DONUSUM YOKTUR, yani
+ * `tam32` alan bir yerlesik o yoldan cagrilamazdi. `tam32` cagiranlar acik
+ * `olarak tam64` yazar.
+ *
+ * `kdl_metin_tam` ESKI `kdl_metin_to_tam`in yerini alir; o `atoi` sarmaliydi
+ * ve BASARISIZLIGI SESSIZDI (`metin_tam("abc")` -> 0, gercek bir "0"dan
+ * AYIRT EDILEMEZ). Burada ayrik bir yuklem (`kdl_metin_tam_gecerli`) disa
+ * verilir ki cagiran ACIK hata uretebilsin (D-449/D-458 deseni).
+ * Gecerlilik kurali: istege bagli isaret + EN AZ BIR rakam + bastan sona
+ * TAMAMEN tuketilmis olmali (bastaki/sondaki bosluk KABUL EDILMEZ; "12ab"
+ * GECERSIZDIR -- strtoll tek basina bunu kabul ederdi).
+ * ========================================================================= */
+const char *kdl_tam_metin(int64_t n) {
+    char *buf = (char *)kdl_sizan_al(24);  /* V2-F4.1: sızan → bölge */
+    if (!buf) return NULL;
+    snprintf(buf, 24, "%lld", (long long)n);
+    return buf;
 }
 
-/* tam32 -> metin (heap, format "%d") */
-const char *kdl_tam_to_metin(int32_t n) {
-    char *buf = (char *)kdl_sizan_al(16);  /* V2-F4.1: sızan → bölge */
-    if (!buf) return NULL;
-    snprintf(buf, 16, "%d", n);
-    return buf;
+int32_t kdl_metin_tam_gecerli(const char *s) {
+    const char *p = s;
+    int rakam = 0;
+    if (!s) return 0;
+    if (*p == '+' || *p == '-') p++;
+    while (*p >= '0' && *p <= '9') { p++; rakam = 1; }
+    return (rakam && *p == '\0') ? 1 : 0;
+}
+
+int64_t kdl_metin_tam(const char *s) {
+    if (!kdl_metin_tam_gecerli(s)) return 0;
+    return (int64_t)strtoll(s, NULL, 10);
 }
 
 /* ============================================================================
