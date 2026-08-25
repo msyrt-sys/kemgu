@@ -174,9 +174,15 @@ işlev rakam(d: tam64) -> metin {
 //     `metin_bayt` tersi YOK; `yaz_bayt` stdout'a YAZAR, metin ÜRETMEZ.
 //     0x80-0xFF aralığındaki baytlar tek başına geçerli UTF-8 literali
 //     olmadığı için 256'lık bir tablo da kurulamaz. → yeni yerleşik gerekir.
-//   · ONDALIK sayı: `kesirli64` → `metin` yerleşiği YOK. `ondalik_bicimle`
-//     bir METİN alır (float lexeme'i yeniden biçimler), sayı almaz.
-//     → serileştirme imkânsız, yeni yerleşik gerekir.
+//   · ~~ONDALIK sayı: `kesirli64` → `metin` yerleşiği YOK~~ → **D-457'de
+//     EKLENDİ**: `kesirli_metin(x: kesirli64) -> metin`, locale bağımsız ve
+//     KAYIPSIZ (kısa gidiş-dönüş). Yani bu sınırın KÖKÜ kalktı; geriye yalnız
+//     KÜTÜPHANE işi kaldı: `JsonDeger`e `Ondalik(kesirli64)` varyantı eklemek
+//     + ayrıştırıcıda ondalık/üstel sözdizimini kabul etmek + 8 `eşleş` kolunu
+//     genişletmek. Ayrı bir artım olarak yapılacak — dil yüzeyi kararı DEĞİL.
+//     ⚠ D-457 yol üstünde şunu da onardı: kesirli literaller IR'a `%g` ile
+//     yazıldığı için `3.14159265358979` daha DERLEME ANINDA `3.14159` oluyordu.
+//     Kayıpsız dönüştürücü tek başına yetmezdi; veri zaten kaybolmuştu.
 //
 // SINIR (bilinçli): sayılar yalnız TAMSAYI (`tam64`); ondalık/üstel JSON
 // sayıları REDDEDİLİR (`JsonDeger::Sayi` zaten tam64 taşıyor — sessizce

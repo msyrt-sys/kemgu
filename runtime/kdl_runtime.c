@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <locale.h>      /* [D-457] localeconv() — ondalik ayiracini olcmek icin */
 #include "kdl_bolge.h"   /* V2-F4.1: bölge (region) arena allokatörü (F4.0/D-099) */
 
 /* === V2-F4.1 (D-100): sızan tahsisleri global bölgeye yönlendir ===
@@ -205,7 +206,17 @@ const char *kdl_ondalik_bicimle(const char *lex) {
     double d = strtod(buf, NULL);
     char *out = (char *)kdl_sizan_al(64);  /* V2-F4.1: sızan → bölge */
     if (!out) return "0";
-    snprintf(out, 64, "%g", d);
+    /* [D-457] "%g" ALTI anlamli basamak verir -> self-host, kesirli LEXEME'i
+     * `3.14159265358979` -> `3.14159` yapiyordu; bu deger hem `--ast` dokumune
+     * hem LLVM IR'ina gidiyor, yani DERLEME ZAMANINDA SESSIZ VERI KAYBIYDI.
+     * C oracle'in `kesirli_kisa_bicimle`'siyle AYNI kural (kisa gidis-donus). */
+    {
+        int p;
+        for (p = 15; p <= 17; p++) {
+            snprintf(out, 64, "%.*g", p, d);
+            if (strtod(out, NULL) == d) break;
+        }
+    }
     return out;
 }
 
@@ -334,6 +345,50 @@ const char *kdl_tam_to_metin(int32_t n) {
     if (!buf) return NULL;
     snprintf(buf, 16, "%d", n);
     return buf;
+}
+
+/* ============================================================================
+ * [D-457] kesirli64 -> metin. LOCALE BAGIMSIZ + GIDIS-DONUS (round-trip) tam.
+ *
+ * NEDEN "%g" YETMEZ (mevcut kdl_ondalik_bicimle onu kullanir): "%g" ALTI
+ * anlamli basamak verir -> 3.14159265358979 "3.14159" olur. Bu bir bicimleme
+ * tercihi degil VERI KAYBIDIR; JSON yazicisi icin kabul edilemez.
+ *
+ * KISA GIDIS-DONUS: %.15g / %.16g / %.17g sirayla denenir, strtod ile GERI
+ * OKUNUP bit-esitligi dogrulanir; ilk tutan kullanilir. Boylece hem en kisa
+ * hem KAYIPSIZ gosterim cikar (0.1 -> "0.1", 1/3 -> tam 17 basamak).
+ *
+ * LOCALE: bu depoda hicbir yerde setlocale CAGRILMIYOR (olculdu) -> C
+ * programlari varsayilan "C" locale'dedir ve "%g" zaten NOKTA uretir. Yine de
+ * localeconv() ile gercek ayirac OKUNUP '.' ile degistirilir: runtime baska
+ * bir programa gomulup o program setlocale(LC_ALL,"tr_TR") cagirirsa VIRGUL
+ * uretilirdi ve JSON ciktisi SESSIZCE bozulurdu. Varsayima degil olcume dayan.
+ *
+ * inf/nan: "inf" / "-inf" / "nan" dizgileri uretilir. JSON'da bu degerler YOK;
+ * cagiran (json yazicisi) bunlari reddetmelidir -- burada sessizce "0" uretmek
+ * yanlis veriyi gecerli gostermek olurdu.
+ * ========================================================================= */
+const char *kdl_kesirli_metin(double d) {
+    char *out = (char *)kdl_sizan_al(40);
+    if (!out) return "0";
+    if (d != d) { memcpy(out, "nan", 4); return out; }
+    if (d > 1.7976931348623157e308) { memcpy(out, "inf", 4); return out; }
+    if (d < -1.7976931348623157e308) { memcpy(out, "-inf", 5); return out; }
+    {
+        int p;
+        for (p = 15; p <= 17; p++) {
+            snprintf(out, 40, "%.*g", p, d);
+            if (strtod(out, NULL) == d) break;
+        }
+    }
+    {   /* Ondalik ayiraci NE OLURSA OLSUN '.' yap (yukaridaki gerekce). */
+        const char *ay = localeconv()->decimal_point;
+        if (ay && ay[0] && ay[0] != '.') {
+            char *q = strchr(out, ay[0]);
+            if (q) *q = '.';
+        }
+    }
+    return out;
 }
 
 /* === J2: Genisletilmis metin primitifleri (Madde A) ===

@@ -51,11 +51,16 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             fputc('\n', c);
             break;
 
-        case DUGUM_KESIRLI:
-            fprintf(c, " %g", d->veri.kesirli.deger);
+        case DUGUM_KESIRLI: {
+            /* [D-457] "%g" ALTI basamaga kirpiyordu — dokum ve IR AYNI
+             * yardimciyi kullanmali (TEK KAYNAK, D-407). */
+            char kbuf[64];
+            kesirli_kisa_bicimle(d->veri.kesirli.deger, kbuf, sizeof(kbuf));
+            fprintf(c, " %s", kbuf);
             konum_yaz(c, d);
             fputc('\n', c);
             break;
+        }
 
         case DUGUM_METIN:
             fputc(' ', c);
@@ -432,7 +437,12 @@ void ast_duz_yaz(const Dugum *d, FILE *c, int derinlik) {
     /* --- deger (skaler yük) --- */
     switch (d->tip) {
         case DUGUM_TAM: fprintf(c, "%" PRId64, d->veri.tam.deger); break;
-        case DUGUM_KESIRLI: fprintf(c, "%g", d->veri.kesirli.deger); break;
+        case DUGUM_KESIRLI: {   /* [D-457] TEK KAYNAK: bkz. ast.h */
+            char kbuf[64];
+            kesirli_kisa_bicimle(d->veri.kesirli.deger, kbuf, sizeof(kbuf));
+            fputs(kbuf, c);
+            break;
+        }
         case DUGUM_METIN:
             duz_kacis_yaz(c, d->veri.metin_lit.metin, d->veri.metin_lit.uzunluk); break;
         case DUGUM_KARAKTER: fprintf(c, "U+%04X", d->veri.karakter.kod_noktasi); break;

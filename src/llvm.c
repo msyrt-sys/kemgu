@@ -3272,8 +3272,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* LLVM IR ondalik literali her zaman decimal point gerektirir.
              * %g 2.0'i "2" yapabilir — emin olmak icin formatla, sonra
              * gerekirse ".0" ekle. */
+            /* [D-457] "%g" ALTI anlamli basamak verir -> `3.14159265358979`
+             * IR'a `3.14159` olarak yaziliyordu: DERLEME ZAMANINDA SESSIZ VERI
+             * KAYBI. `kesirli_kisa_bicimle` (ast.c) kisa gidis-donus yapar ve
+             * ayni yardimciyi `--ast` dokumu de kullanir (TEK KAYNAK, D-407).
+             * 2.0 hala "2" uretir -> asagidaki ".0" eki KORUNUR. */
             char buf[64];
-            int n = snprintf(buf, sizeof(buf), "%g", d->veri.kesirli.deger);
+            int n = kesirli_kisa_bicimle(d->veri.kesirli.deger,
+                                         buf, sizeof(buf));
             int decimal_var = 0;
             for (int i = 0; i < n; i++) {
                 if (buf[i] == '.' || buf[i] == 'e' ||
@@ -5119,6 +5125,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     param_beklenen[0] = "ptr";
                     kdl_donus = "void";
                 }
+            }
+            /* [D-457] kesirli_metin -> kdl_kesirli_metin (double alir, ptr doner) */
+            else if (cagri_adi_uz == 13 &&
+                     memcmp(cagri_adi, "kesirli_metin", 13) == 0) {
+                cagri_adi = "kdl_kesirli_metin"; cagri_adi_uz = 17;
+                param_beklenen[0] = "double";
+                kdl_donus = "ptr";
             }
             /* [D-456] semafor_* / bariyer_* -> kdl_* (kilit_* ile ayni desen).
              * `_olustur` tam32 alir + opak ptr doner; digerleri ptr alir, void. */
@@ -7579,6 +7592,7 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_kilit_al(ptr)\n", out);     /* [D-455] */
     fputs("declare void @kdl_kilit_birak(ptr)\n", out);  /* [D-455] */
     fputs("declare void @kdl_kilit_yok(ptr)\n", out);    /* [D-455] */
+    fputs("declare ptr @kdl_kesirli_metin(double)\n", out); /* [D-457] */
     fputs("declare ptr @kdl_semafor_olustur(i32)\n", out);  /* [D-456] */
     fputs("declare void @kdl_semafor_al(ptr)\n", out);      /* [D-456] */
     fputs("declare void @kdl_semafor_birak(ptr)\n", out);   /* [D-456] */

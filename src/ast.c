@@ -1,8 +1,22 @@
 #include "ast.h"
 
 #include <string.h>   /* memcpy, strlen */
+#include <stdio.h>    /* [D-457] snprintf */
+#include <stdlib.h>   /* [D-457] strtod */
 
 /* === Yardimcilar === */
+
+/* [D-457] Bkz. ast.h — kisa gidis-donus (round-trip) kesirli bicimleme.
+ * TEK KAYNAK: hem `--ast` dokumu hem LLVM IR bunu kullanir. */
+int kesirli_kisa_bicimle(double deger, char *tampon, size_t boyut) {
+    int p, n = 0;
+    if (!tampon || boyut == 0) return 0;
+    for (p = 15; p <= 17; p++) {
+        n = snprintf(tampon, boyut, "%.*g", p, deger);
+        if (strtod(tampon, NULL) == deger) break;
+    }
+    return n;
+}
 
 char *ast_string_kopyala(Arena *a, const char *kaynak, int uzunluk) {
     if (!a || !kaynak || uzunluk <= 0) return NULL;

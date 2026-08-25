@@ -1,0 +1,30 @@
+// [D-457] kesirli64 -> metin (kayipsiz, locale bagimsiz) + KESIRLI LITERAL
+// hassasiyeti.
+//
+// ⚠ Bu fikstur IKI kusuru birden olcer ve ikincisi yerlesikten BAGIMSIZDIR:
+// derleyici kesirli literali IR'a "%g" ile yaziyordu -> ALTI anlamli basamak
+// -> `3.14159265358979` daha derleme aninda `3.14159` oluyordu. Yani kayipsiz
+// bir donusturucu eklemek TEK BASINA yetmezdi: veri zaten kaybolmustu.
+// Exit: 42
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // (a) kisa gosterim: 0.1 "0.1" olmali, "0.10000000000000001" DEGIL.
+    // Ham %.17g kullansaydik bu satir duserdi — kisa gidis-donus sart.
+    eğer metin_esit(kesirli_metin(0.1), "0.1") == yanlış { h = h + 1; }
+
+    // (b) UZUN literal: hem literalin kendisi hem donusum kayipsiz olmali.
+    eğer metin_esit(kesirli_metin(3.14159265358979), "3.14159265358979") == yanlış {
+        h = h + 1;
+    }
+
+    // (c) tam sayi degerli kesirli: "42" (JSON'da gecerli sayi).
+    eğer metin_esit(kesirli_metin(42.0), "42") == yanlış { h = h + 1; }
+
+    // (d) negatif + kucuk kesir
+    eğer metin_esit(kesirli_metin(-0.5), "-0.5") == yanlış { h = h + 1; }
+
+    eğer h == 0 { ver 42; }
+    ver 7;
+}

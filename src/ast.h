@@ -645,4 +645,15 @@ Dugum *dugum_ver(Arena *a, Dugum *deger, int satir, int sutun);
 
 Dugum *dugum_hata(Arena *a, int satir, int sutun);
 
+/* [D-457] Kesirli degeri KAYIPSIZ ve EN KISA bicimde yazar (kisa gidis-donus:
+ * %.15g/%.16g/%.17g sirayla denenir, strtod ile geri okunup bit-esitligi
+ * dogrulanir). Doner: yazilan karakter sayisi.
+ *
+ * ⚠ TEK KAYNAK OLMASI SART: bu deger hem `--ast` dokumune hem LLVM IR'ina
+ * gider. Iki yerde ayri bicimlemek `parser_diff`i sessizce ayristirir (D-407:
+ * ayni soruyu iki yerde ayri yanitlayan kod er ya da gec ayrisir).
+ * Onceki hal "%g" idi -> ALTI anlamli basamak -> 3.14159265358979 degeri hem
+ * dokumde hem IR'da "3.14159" oluyordu: DERLEME ZAMANINDA SESSIZ VERI KAYBI. */
+int kesirli_kisa_bicimle(double deger, char *tampon, size_t boyut);
+
 #endif /* KEMGU_AST_H */

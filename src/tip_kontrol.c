@@ -377,6 +377,18 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("kilit_yok", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-457] kesirli_metin(x: kesirli64) -> metin — LOCALE BAGIMSIZ, kayipsiz
+     * (kisa gidis-donus). `ondalik_bicimle` bunun YERINE GECMEZ: o `metin`
+     * alir (derleyicinin kendi float LEXEME'ini bicimler) ve "%g" ile ALTI
+     * anlamli basamaga kirpar.
+     * ⚠ kesirli32 icin acik `olarak kesirli64` gerekir — KEMGU'da ortuk
+     * donusum YOKTUR (dil kurali). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_KESIRLI64);
+        EKLE_BUILTIN("kesirli_metin", 13, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
     /* [D-456] semafor_* / bariyer_* — `kilit_*` ile AYNI desen: opak handle
      * `metin` olarak tasinir, `yapi Semafor` / `yapi Bariyer` icinde saklanir,
      * KACMAZ. Ham al/birak cifti stdlib'de DISA VERILMEZ; yalnizca kapsamli

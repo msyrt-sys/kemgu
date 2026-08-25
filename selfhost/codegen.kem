@@ -3619,6 +3619,7 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
          veya metin_baslar(ad, "yazdir_") veya metin_baslar(ad, "arg_")
          veya metin_baslar(ad, "kilit_")   // [D-455]
          veya metin_baslar(ad, "semafor_") veya metin_baslar(ad, "bariyer_")   // [D-456]
+         veya metin_esit(ad, "kesirli_metin")   // [D-457]
          veya metin_esit(ad, "oku_karakter") veya metin_esit(ad, "ondalik_bicimle") {
         ver metin_birlestir("kdl_", ad);
     }
@@ -3655,6 +3656,7 @@ işlev builtin_ret(ad: metin) -> metin {
     // [D-456] semafor/bariyer kurucuları da opak handle döner; al/bırak/bekle/yok → void.
     eğer metin_esit(ad, "semafor_olustur") { ver "ptr"; }
     eğer metin_esit(ad, "bariyer_olustur") { ver "ptr"; }
+    eğer metin_esit(ad, "kesirli_metin") { ver "ptr"; }   // [D-457]
     // kilit_al / kilit_birak / kilit_yok → void (aşağıdaki varsayılana düşer)
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
          veya metin_esit(ad, "arg_sayi") veya metin_esit(ad, "oku_karakter") { ver "i32"; }
@@ -3732,6 +3734,7 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_kilit_birak(ptr)"); yb(10);    // [D-455]
     yaz_str("declare void @kdl_kilit_yok(ptr)"); yb(10);      // [D-455]   // [D-449]
     yaz_str("declare ptr @kdl_semafor_olustur(i32)"); yb(10);   // [D-456]
+    yaz_str("declare ptr @kdl_kesirli_metin(double)"); yb(10);   // [D-457]
     yaz_str("declare void @kdl_semafor_al(ptr)"); yb(10);       // [D-456]
     yaz_str("declare void @kdl_semafor_birak(ptr)"); yb(10);    // [D-456]
     yaz_str("declare void @kdl_semafor_yok(ptr)"); yb(10);      // [D-456]
@@ -5461,7 +5464,18 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer metin_esit(op, "neg") {
             değişken r: tam32 = yeni_reg(p);
             değişken rs: metin = reg_str(r);
-            yaz_str("  "); yaz_str(rs); yaz_str(" = sub "); yaz_str(xt); yaz_str(" 0, "); yaz_str(x); yb(10);
+            // [D-457] KESIRLI operandda `sub <ty> 0, x` GEÇERSİZ IR'dır
+            // ("integer constant must have integer type"): sıfır sabiti de
+            // kesirli yazılmalı ve komut `fsub` olmalı. C oracle `fsub double
+            // 0.0, %n` yayar. ÖNCEDEN VAR OLAN kusur — hiçbir korpus dosyasında
+            // negatif kesirli literal yoktu, bu yüzden hiçbir kapı görmemişti.
+            eğer kesirli_ll_mi(xt) {
+                yaz_str("  "); yaz_str(rs); yaz_str(" = fsub "); yaz_str(xt);
+                yaz_str(" 0.0, "); yaz_str(x); yb(10);
+            }
+            değilse {
+                yaz_str("  "); yaz_str(rs); yaz_str(" = sub "); yaz_str(xt); yaz_str(" 0, "); yaz_str(x); yb(10);
+            }
             p.son_tip = xt;
             ver rs;
         }
@@ -8010,6 +8024,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "semafor_birak"); g_ekle(p, "semafor_yok");   // [D-456]
     g_ekle(p, "bariyer_olustur"); g_ekle(p, "bariyer_bekle");   // [D-456]
     g_ekle(p, "bariyer_yok");   // [D-456]
+    g_ekle(p, "kesirli_metin");   // [D-457]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
@@ -8336,6 +8351,7 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "bariyer_olustur", "metin", ["tam32"]);   // [D-456]
     yerlesik_ekle(p, "bariyer_bekle", "boş", ["metin"]);   // [D-456]
     yerlesik_ekle(p, "bariyer_yok", "boş", ["metin"]);   // [D-456]
+    yerlesik_ekle(p, "kesirli_metin", "metin", ["kesirli64"]);   // [D-457]
     yerlesik_ekle(p, "dosya_var_mi", "mantıksal", ["metin"]);
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
     yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);

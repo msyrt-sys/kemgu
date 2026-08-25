@@ -946,6 +946,48 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🔴 D-457: `kesirli_metin` + KESİRLİ LİTERALLER DERLEME ANINDA KIRPILIYORDU
+Öneri sırasının 3. maddesi (`kesirli64` → `metin`). Yerleşik küçük, **yol
+üstünde çıkan iki kusur büyük.**
+- **Yerleşik:** `kesirli_metin(x: kesirli64) -> metin` — **locale bağımsız** ve
+  **kayıpsız**. `setlocale` bu depoda HİÇBİR YERDE çağrılmıyor (ölçüldü) → C
+  programları varsayılan `"C"` locale'dedir, `%g` zaten nokta üretir; yine de
+  `localeconv()` ile gerçek ayıraç okunup `.` yapılır (runtime başka bir
+  programa gömülüp o program `setlocale(LC_ALL,"tr_TR")` çağırırsa JSON çıktısı
+  SESSİZCE virgülle bozulurdu). **Varsayıma değil ölçüme dayan.**
+- **KISA GİDİŞ-DÖNÜŞ:** `%.15g/%.16g/%.17g` sırayla denenir, `strtod` ile geri
+  okunup bit-eşitliği doğrulanır. `0.1` → `"0.1"` (ham `%.17g`
+  `"0.10000000000000001"` verirdi), `1/3` → 16 basamak. Fikstürün (a) maddesi
+  tam bunu kilitler.
+- **🔴 KUSUR 1 — KESİRLİ LİTERAL DERLEME ANINDA KIRPILIYORDU.** `%g` ALTI
+  anlamlı basamak verir → `3.14159265358979` daha IR'a yazılırken `3.14159`
+  oluyordu, **her iki derleyicide** ve hem `--ast` dökümünde hem IR'da.
+  **Kayıpsız bir dönüştürücü TEK BAŞINA yetmezdi — veri zaten kaybolmuştu.**
+  Onarım **TEK KAYNAK** (`kesirli_kisa_bicimle`, `ast.c`): döküm ve IR aynı
+  yardımcıyı çağırır. Ayrı ayrı biçimlemek `parser_diff`i SESSİZCE ayrıştırırdı
+  (D-407: aynı soruyu iki yerde ayrı yanıtlayan kod ayrışır). Self-host tarafı
+  `kdl_ondalik_bicimle` (aynı kural) — o dizgi parse'ta AST'ye girip hem
+  `--parse` dökümüne hem IR'a aktığı için tek noktadan onarılır.
+- **🔴 KUSUR 2 — self-host'ta kesirli TEKLİ EKSİ geçersiz IR:**
+  `sub double 0, 0.5` → *"integer constant must have integer type"*.
+  `git stash` ile ölçüldü: **D-456 tabanında da vardı**, yan etkim DEĞİL —
+  hiçbir korpus dosyasında negatif kesirli literal yokmuş. C `fsub double 0.0,
+  %n` yayar; self artık `kesirli_ll_mi` ile ayırıp `fsub` yayıyor.
+- **⚠ KENDİ HATAM:** `test_tumu` KOŞARKEN kaynağı değiştirdim (D-402'nin tam
+  uyardığı şey) → o koşum `SELF-HOST BOOTSTRAP: BAŞARISIZ` verdi. **Gerçek
+  gerileme DEĞİL**, stage1/stage2 farklı kaynaktan kuruldu; sonuç GEÇERSİZ
+  sayılıp temiz yeniden koşuldu. Uzun koşum sürerken kaynağa dokunma.
+- **Doğrulama:** fikstür `cg_kesirli_metin.kem` → C=42, SELF=42; `--ast`/
+  `--parse` ve IR C↔self **birebir**. **Sabotaj 3/3:** S49 (tek kaynağı `%g`ye
+  döndür) → C exit 7 · S50 (self lexeme biçimlemesi) → SELF exit 7 ·
+  S51 (`fsub` onarımını geri al) → LINK-RED.
+  Kapılar: `parser_diff` **13/13** · `codegen_diff` **150/150** ·
+  `checker_diff` **153/153 (0 muaf)** · `yapi_diff` **125/125** ·
+  `snapshot_test` **50/50**.
+- **KALAN (kütüphane işi, dil yüzeyi kararı DEĞİL):** `json.kem`e
+  `Ondalik(kesirli64)` varyantı + ayrıştırıcıda ondalık/üstel sözdizimi +
+  8 `eşleş` kolu. Ondalık sınırının KÖKÜ kalktı.
+
 ### 🎯 D-456: `Semafor` + `Bariyer` (kapsamlı API) + `check_genis` muafiyet warty
 İkinci öneri turunun 2. maddesi; Mehmet **kapsamlı API** dedi.
 - **Runtime YENİ kod istedi** (D-455'in aynısı, önce ölçüldü): mevcut
@@ -1559,8 +1601,10 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     eleman tipini kaybediyor = SEGFAULT), D-439 (agregat elemanlı dizi,
     self-host LLVM-RED, 3 kök). Üçü de `--check`ten TEMİZ geçiyordu.
     **KALAN sınırlar (ikisi de yeni YERLEŞİK ister = dil yüzeyi, Mehmet'in
-    kararı):** `\uXXXX` kaçışı (bayt→metin yerleşiği yok) ve ondalıklı sayı
-    (`kesirli64`→`metin` yerleşiği yok). İkisi de ÖLÇÜLDÜ, varsayılmadı.
+    kararı):** `\uXXXX` kaçışı (bayt→metin yerleşiği yok). ÖLÇÜLDÜ, varsayılmadı.
+    **Ondalıklı sayı ✓ D-457'de KÖKÜ kalktı** (`kesirli_metin` eklendi, kayıpsız
+    + locale bağımsız); geriye yalnız kütüphane işi kaldı (`Ondalik` varyantı +
+    ayrıştırıcı + 8 `eşleş` kolu) — dil yüzeyi kararı DEĞİL.
   - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
   - **regex** — saf KEMGU yazılabilir ama büyük; JSON'dan sonra.
 - ~~**Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
