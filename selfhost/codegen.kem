@@ -1641,12 +1641,23 @@ işlev vir_ekle(liste: metin, oge: metin) -> metin {
 // yayar. Sıfır çalışma-zamanı maliyeti değil, KASITLI bir engel: yokluğu link
 // hatası VERMEZ, IR geçerli kalır, program çalışır — yalnız sabit-süre garantisi
 // sessizce kaybolur.
-// ⚠ MİMARİ KORUMASI YOK ve bu BİLİNÇLİ: C `--mimari aarch64`te DE x86 lfence
-// yayıyor (ölçüldü). Tartışmalı ama parite hedefi C'nin DAVRANIŞI; burada
-// "düzeltmek" oracle'dan sapmak olurdu (D-388/D-408 ile aynı gerekçe).
+// [D-468] MİMARİYE GÖRE BARİYER. Eski not "MİMARİ KORUMASI YOK ve bu BİLİNÇLİ"
+// diyordu (oracle da koşulsuz x86 lfence yayıyordu, ölçülmüştü) — o gerekçe
+// ARTIK GEÇERSİZ: oracle D-468'de mimariye göre dallandı, parite hedefi de
+// onunla birlikte kaydı. `llvm.x86.sse2.lfence` ARM64 hedefinde GEÇERSİZDİR.
+// ARM64 karşılığı `csdb` (Consumption of Speculative Data Barrier) — ARM'ın
+// Spectre-v1 için resmî önerisi. Adaylar ölçüldü: `isb` komut senkronizasyonu
+// (farklı amaç), `dsb sy` tam veri bariyeri (yanlış araç), `sb` ARMv8.5
+// gerektiriyor (temel ARMv8'de DERLENMİYOR → reddedildi). `csdb` hint
+// uzayındadır → desteklemeyen çekirdekte NOP'a düşer (güvenli bozulma).
 // `declare` GEREKMEZ — LLVM bilinen intrinsic'leri metinsel IR'da otomatik
 // bildirir (ölçüldü: C hiç declare yaymıyor; D-397 reduce ile aynı).
-işlev ct_bariyer_yaz() -> tam32 {
+işlev ct_bariyer_yaz_mim(mim: metin) -> tam32 {
+    eğer metin_esit(mim, "arm64") veya metin_esit(mim, "aarch64") {
+        yaz_str("  call void asm sideeffect "); yb(34); yaz_str("csdb"); yb(34);
+        yaz_str(", "); yb(34); yb(34); yaz_str("()"); yb(10);
+        ver 0;
+    }
     yaz_str("  call void @llvm.x86.sse2.lfence()"); yb(10);
     ver 0;
 }
@@ -4979,7 +4990,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // program çalışır: **sabit-süre disiplininde SESSİZ GÜVENLİK
             // REGRESYONU**. D-408'de "sabitsüre_olustur'u yarım yapmıyorum"
             // derken aynı kusuru `ifşa`da işlemiştim.
-            ct_bariyer_yaz();
+            ct_bariyer_yaz_mim(p.hedef_mim);   // [D-468]
             ver iv2;
         }
         // D-417: `sabitsüre_olustur(e)` — değer PASS-THROUGH + spekülasyon
@@ -4987,7 +4998,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // yaşar; IR'daki tek izi bu bariyerdir.
         eğer metin_esit(fad, "sabitsüre_olustur") ve (cs == 2) {
             değişken sv2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
-            ct_bariyer_yaz();
+            ct_bariyer_yaz_mim(p.hedef_mim);   // [D-468]
             ver sv2;
         }
         // [D-454] bir() / sıfır() — birim değer intrinsic'leri. Tip kontrolü

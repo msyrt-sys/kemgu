@@ -51,12 +51,41 @@ for f in $(grep -rl "sabitsüre_olustur\|ifşa(" --include=*.kem test stdlib kü
     cn=$(printf '%s' "$c_ir" | grep -c "llvm.x86.sse2.lfence")
     sn=$(printf '%s' "$s_ir" | grep -c "llvm.x86.sse2.lfence")
 
-    if [ "$cn" -eq "$sn" ]; then
-        pass=$((pass+1))
-    else
-        echo "  🔴 $b — bariyer sayısı: C=$cn ≠ KEMGU=$sn"
-        fail=$((fail+1))
+    if [ "$cn" -ne "$sn" ]; then
+        echo "  🔴 $b — x86 bariyer sayısı: C=$cn ≠ KEMGU=$sn"
+        fail=$((fail+1)); continue
     fi
+
+    # [D-468] ARM64 DALI DA ÖLÇÜLMELİ. Bu kapı yalnız x86 `lfence` sayıyordu;
+    # ARM64 bariyeri eklendiğinde o dal HİÇBİR ölçümle korunmuyor olurdu —
+    # yani `--mimari arm64`de bariyeri düşüren bir değişiklik SESSİZCE geçerdi.
+    # Tam olarak bu kapının var oluş gerekçesi (D-417): davranışsal kapılar
+    # güvenlik özelliğini göremez, o yüzden YAPIYI sayıyoruz. Aynı mantık yeni
+    # mimariye de uygulanmalı, yoksa kapı yarısı kör kalır.
+    #
+    # ⚠ SAYILAR EŞİT OLMALI: aynı program, aynı sayıda bariyer — yalnız komut
+    # değişir (x86 `lfence` ↔ ARM64 `csdb`). Sayı düşerse bariyer kayboluyordur.
+    c_arm=$("$KEMGU"   --llvm --mimari arm64 "$f" 2>/dev/null)
+    s_arm=$("$CODEGEN" --llvm --mimari arm64 "$f" 2>/dev/null)
+    ca=$(printf '%s' "$c_arm" | grep -c "csdb")
+    sa=$(printf '%s' "$s_arm" | grep -c "csdb")
+    ca_lf=$(printf '%s' "$c_arm" | grep -c "llvm.x86.sse2.lfence")
+    sa_lf=$(printf '%s' "$s_arm" | grep -c "llvm.x86.sse2.lfence")
+
+    if [ "$ca" -ne "$sa" ]; then
+        echo "  🔴 $b — ARM64 bariyer sayısı: C=$ca ≠ KEMGU=$sa"
+        fail=$((fail+1)); continue
+    fi
+    if [ "$ca" -ne "$cn" ]; then
+        echo "  🔴 $b — ARM64 bariyer sayısı x86'dan FARKLI (x86=$cn arm64=$ca)"
+        fail=$((fail+1)); continue
+    fi
+    # ARM64 hedefinde x86 lfence yayılması GEÇERSİZ IR'dır — sızıntı olmamalı.
+    if [ "$ca_lf" -ne 0 ] || [ "$sa_lf" -ne 0 ]; then
+        echo "  🔴 $b — ARM64 hedefinde x86 lfence SIZDI (C=$ca_lf KEMGU=$sa_lf)"
+        fail=$((fail+1)); continue
+    fi
+    pass=$((pass+1))
 done
 echo "=== sabit-süre bariyer paritesi: $pass/$((pass+fail)) dosya ($atla atlandı) ==="
 [ "$fail" -eq 0 ]

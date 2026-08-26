@@ -4044,9 +4044,39 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if ((_is_olustur || _is_ifsa) && d->veri.cagri.sayi == 1) {
                     IfadeSonuc inner = ifade_uret(g,
                         d->veri.cagri.argumanlar[0], beklenen);
-                    /* x86 lfence speculation barrier — Spectre v1 mitigation.
-                     * Modern LLVM intrinsic; declare gerekmez (built-in). */
-                    fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+                    /* [D-468] SPEKULASYON BARIYERI — MIMARIYE GORE.
+                     *
+                     * ONCEDEN x86 `lfence` KOSULSUZ yayiliyordu; `--mimari
+                     * aarch64`te bile. `llvm.x86.sse2.lfence` ARM64 hedefinde
+                     * GECERSIZDIR -> sabit-sure disiplini kullanan her program
+                     * ARM'da derlenmezdi. Simdi gizli kaliyor cunku ARM
+                     * kapilari `sabitsure` KULLANMIYOR (D-453'te olculdu:
+                     * sha256_selfhost_arm 86 dtam32, 0 sabitsure) -- yani
+                     * kusur LATENT. ARM64'e (DGX Spark) tasinirken host
+                     * testleri de ARM derlenecegi icin YUZEYE CIKARDI.
+                     *
+                     * ARM64 karsiligi `csdb` (Consumption of Speculative Data
+                     * Barrier) -- ARM'in Spectre-v1 icin RESMI onerisi ve
+                     * `lfence`in bu koddaki amaciyla birebir ayni. Adaylar
+                     * OLCULDU (aarch64-unknown-none-elf ile derlenerek):
+                     *   csdb (inline asm)      -> `csdb`      ✅ SECILDI
+                     *   llvm.aarch64.isb(15)   -> `isb`       komut senk., agir
+                     *   llvm.aarch64.dsb(15)   -> `dsb sy`    tam veri bariyeri
+                     *   sb (inline asm)        -> ARMv8.5 GEREKIR, REDDEDILDI
+                     * `csdb` hint uzayindadir -> destegi olmayan eski
+                     * cekirdeklerde NOP'a duser (guvenli bozulma). */
+                    /* ⚠ ETIKET "arm64"dur, "aarch64" DEGIL (ana.c
+                     * `llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf")`
+                     * -- ilki ETIKET, ikincisi TRIPLE). Ilk yazimda "aarch64"
+                     * ile karsilastirmistim: kosul HIC TUTMAZDI ve ARM64'te
+                     * yine x86 lfence yayilirdi. Iki ad da kabul edilir. */
+                    if (strcmp(llvm_hedef_mimari(), "arm64") == 0 ||
+                        strcmp(llvm_hedef_mimari(), "aarch64") == 0) {
+                        fputs("  call void asm sideeffect \"csdb\", \"\"()\n",
+                              g->out);
+                    } else {
+                        fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+                    }
                     return inner;
                 }
                 /* Linear Types V1: tekkez_olustur(e) -> tekkez<T>.

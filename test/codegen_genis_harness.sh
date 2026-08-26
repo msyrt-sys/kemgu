@@ -39,11 +39,19 @@ link_retry() {   # $1=ll  $2=exe
     return 1
 }
 run_exe() {   # $1=exe  $2=stdout dosyasi ; RC global
-    "$1" > "$2" 2>&1; RC=$?
+    # [D-468] ZAMAN AŞIMI ŞART. Bu kapı GERÇEK programları çalıştırıyor ve
+    # zaman aşımı YOKTU: bloklanan tek bir program (kanal/görev kilitlenmesi,
+    # stdin bekleyen kod) kapıyı SONSUZA DEK asardı. Bu ölçüldü — bir tam
+    # takım koşumu tam burada 2.5 saat boyunca hiçbir çıktı vermeden asılı
+    # kaldı. Asılan kapı, sessiz kapı kadar kötüdür: kimse onu koşturmaz.
+    # (Aynı sınıf `ag_kosum`da S66 sabotajıyla yakalanıp orada da `timeout`
+    # ile kapatılmıştı — D-466.)
+    timeout 30 "$1" > "$2" 2>&1; RC=$?
     deneme=0
+    # 127 = Defender/exec yarışı (D-413) — ortamsal, yeniden dene.
     while [ "$RC" -eq 127 ] && [ "$deneme" -lt 12 ]; do
         sleep 0.3
-        "$1" > "$2" 2>&1; RC=$?
+        timeout 30 "$1" > "$2" 2>&1; RC=$?
         deneme=$((deneme+1))
     done
     return 0
