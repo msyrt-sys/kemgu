@@ -1,0 +1,14 @@
+// [D-466] Gercek TCP gidis-donusu — `calistir_ag_kosum` kapisinin istemcisi.
+// Yerel dinleyiciye baglanir, gonderir, okur, kapatir. Exit 42 = tam basari.
+işlev main() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 58421);
+    geri_al(y);
+    eğer soket_gecerli(h) == yanlış { yazdir_metin("BAGLANAMADI"); ver 1; }
+    eğer soket_gonder(h, "SELAM-SUNUCU") != 12 { yazdir_metin("GONDERIM YANLIS"); ver 2; }
+    değişken cevap: metin = soket_al(h, 64);
+    soket_kapat(h);
+    eğer metin_esit(cevap, "MERHABA-KEMGU") { yazdir_metin("GIDIS-DONUS TAMAM"); ver 42; }
+    yazdir_metin("BEKLENMEYEN CEVAP:"); yazdir_metin(cevap);
+    ver 3;
+}

@@ -445,6 +445,33 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("kesirli_metin", 13, p, 1, tip_olustur_basit(a, TIP_METIN));
     }
 
+    /* [D-466] soket_* — `soket_baglan` YETKI ister ve intrinsic olarak
+     * islenir (yukarida). Kalan dordu yetki ISTEMEZ: baglanti kurulduktan
+     * sonra BAGLANTININ KENDISI yetkidir (nesne-yetki modeli, `Dosya` deseni).
+     * Handle opaktir ve `yapi tekkez Baglanti` icinde tasinir; KACMAZ. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("soket_gecerli", 13, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("soket_gonder", 12, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("soket_al", 8, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("soket_kapat", 11, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+
     /* [D-456] semafor_* / bariyer_* — `kilit_*` ile AYNI desen: opak handle
      * `metin` olarak tasinir, `yapi Semafor` / `yapi Bariyer` icinde saklanir,
      * KACMAZ. Ham al/birak cifti stdlib'de DISA VERILMEZ; yalnizca kapsamli
@@ -897,6 +924,25 @@ static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
     if (!mmio) {
         tip_hata(tk, arg, "MM002",
                  "mmio islemi ilk argumani yetki<MMIO> olmali");
+    }
+}
+
+/* [D-466] Ag islemleri: arg'in yetki<Soket> olup olmadigini dogrular.
+ * y ODUNC alinir — TUKETILMEZ (mmio_yetki_kontrol'un birebir kardesi).
+ *
+ * ⚠ `Soket` kaynak tipi ZATEN AYRILMISTI (yetki_olustur kaynak_tipi = 2);
+ * yeni bir `Ag` adi EKLENMEDI. Ayni kavrama ikinci ad vermek D-407 sinifidir:
+ * iki ad er ya da gec ayrisir. */
+static void ag_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    TipBilgisi *y = tip_belirle(tk, arg);
+    if (y->kategori == TIP_HATA) return;
+    const TipBilgisi *k = tip_yetki_kaynak(y);
+    int soket = (tip_yetki_mi(y) && k && k->kategori == TIP_YAPI &&
+                 k->veri.yapi.ad && k->veri.yapi.ad_uzunluk == 5 &&
+                 memcmp(k->veri.yapi.ad, "Soket", 5) == 0);
+    if (!soket) {
+        tip_hata(tk, arg, "MM002",
+                 "ag islemi ilk argumani yetki<Soket> olmali");
     }
 }
 
@@ -3371,6 +3417,47 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * y ÖDÜNÇ alinir: delege/kanal_al gibi TÜKETİLMEZ. Surucu tek
              * yetkiyle bircok register'a erisir; tuketim yalniz geri_al ile.
              * Donus duz tam32 (Karar 4 — sonuc<> degil, WCET icin). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 12 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "soket_baglan", 12) == 0) {
+                /* [D-466] soket_baglan(y: yetki<Soket>, host: metin,
+                 *                      port: tam32) -> metin  (opak handle)
+                 *
+                 * YETKI YALNIZ BURADA istenir. Baglanti kurulduktan sonra
+                 * gonder/al/kapat yetki ISTEMEZ: nesne-yetki modelinde
+                 * BAGLANTININ KENDISI yetkidir (`Dosya` ile ayni tasarim).
+                 * Her cagrida yetki istemek guvenlik EKLEMEZ, yalnizca
+                 * kullaniciyi yetkiyi her yere tasimaya zorlardi. */
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "soket_baglan tam 3 arguman gerektirir "
+                        "(y: yetki<Soket>, host: metin, port: tam32)");
+                    return t_hata(tk);
+                }
+                ag_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                {
+                    TipBilgisi *h = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_METIN));
+                    if (h->kategori != TIP_HATA && h->kategori != TIP_METIN) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                                 "soket_baglan host argumani metin olmali");
+                    }
+                }
+                {
+                    TipBilgisi *pr = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[2],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (pr->kategori != TIP_HATA && !tip_tamsayi_mi(pr)) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                                 "soket_baglan port argumani tamsayi olmali");
+                    }
+                }
+                /* y TUKETILMEZ (odunc) — mmio deseni */
+                return tip_olustur_basit(tk->arena, TIP_METIN);
+            }
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
                 d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&

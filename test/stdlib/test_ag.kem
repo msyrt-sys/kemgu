@@ -1,0 +1,66 @@
+// stdlib/ag.kem davranış testleri [D-466]
+// =============================================================================
+// ⚠ BU DOSYA MODÜLLE BİRLEŞTİRİLEREK derlenir (`calistir_stdlib_check`).
+//
+// KAPSAM: yalnız DIŞ BAĞIMLILIĞI OLMAYAN yollar — doğrulama hataları ve
+// bağlanamama. GERÇEK GİDİŞ-DÖNÜŞ burada DEĞİL, `calistir_ag_kosum` kapısında
+// ölçülür (orası bir yerel dinleyici başlatır). Sebep: bu kapı sürekli koşar
+// ve bir dinleyiciye bağımlı olsaydı ortamdan ötürü aralıklı kırmızı verirdi
+// — "aralıklı kapı" en kötü kapı türüdür, insanlar onu görmezden gelmeyi
+// öğrenir.
+//
+// LİNEER GARANTİLER (L001/L002) BURADA ÖLÇÜLEMEZ: onlar DERLEME ZAMANI
+// hatalarıdır, yani o programlar DERLENMEZ. Onların yeri `check_korpus`
+// fikstürleridir (tc24_*).
+// =============================================================================
+
+işlev ag_hata_mi(s: sonuç<Baglanti, metin>, beklenen: metin, kod: tam32) -> tam32 {
+    eşleş s {
+        tamam(b) => {
+            yazdir_metin("BAGLANDI ama hata bekleniyordu");
+            kapat(b);
+            ver kod;
+        }
+        hata(m) => {
+            eğer metin_esit(m, beklenen) == yanlış {
+                yazdir_metin("YANLIS HATA MESAJI:");
+                yazdir_metin(m);
+                yazdir_metin("beklenen:");
+                yazdir_metin(beklenen);
+                ver kod;
+            }
+            ver 0;
+        }
+    }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // (a) boş host reddedilmeli
+    değişken y1: yetki<Soket> = yetki_olustur(2, 3);
+    h = h + ag_hata_mi(baglan(y1, "", 80), "gecersiz host veya port", 1);
+
+    // (b) port 0 geçersiz
+    değişken y2: yetki<Soket> = yetki_olustur(2, 3);
+    h = h + ag_hata_mi(baglan(y2, "127.0.0.1", 0), "gecersiz host veya port", 2);
+
+    // (c) port 65536 geçersiz (üst sınır TAM olarak ölçülür)
+    değişken y3: yetki<Soket> = yetki_olustur(2, 3);
+    h = h + ag_hata_mi(baglan(y3, "127.0.0.1", 65536), "gecersiz host veya port", 4);
+
+    // (d) 65535 GEÇERLİ bir porttur — sınır hatası olmadığını kanıtlar.
+    //     Bağlantı kurulamaz (dinleyen yok) ama hata "baglanti kurulamadi"
+    //     olmalı, "gecersiz port" DEĞİL. Bu ayrım olmadan (c) testi
+    //     "> 65535" yerine ">= 65535" yazsam da geçerdi.
+    değişken y4: yetki<Soket> = yetki_olustur(2, 3);
+    h = h + ag_hata_mi(baglan(y4, "127.0.0.1", 65535), "baglanti kurulamadi", 8);
+
+    // (e) kapalı porta bağlanma başarısız olmalı (port 9 = discard, kapalı)
+    değişken y5: yetki<Soket> = yetki_olustur(2, 3);
+    h = h + ag_hata_mi(baglan(y5, "127.0.0.1", 9), "baglanti kurulamadi", 16);
+
+    eğer h == 0 { yazdir_metin("ag: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("ag: BASARISIZ");
+    ver h;
+}

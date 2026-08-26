@@ -1,0 +1,83 @@
+// KEMGU Stdlib — AĞ (TCP istemci) [D-466]
+// =============================================================================
+// V1 KAPSAMI BİLEREK DAR: yalnız TCP İSTEMCİ. Dinleyici YOK, TLS YOK.
+// TLS ayrı bir kampanyadır: sertifika doğrulamayı yanlış yapmak SESSİZ bir
+// güvenlik açığıdır ve bu deponun en çok kaçındığı sınıftır. Yarım bir TLS,
+// TLS olmamasından DAHA TEHLİKELİDİR (kullanıcı korunduğunu sanır).
+//
+// İKİ GÜVENLİK KATMANI:
+//
+//  1. YETKİ (`yetki<Soket>`) — bağlantı açmak YETKİ İSTER. Yetkisi olmayan kod
+//     ağa çıkamaz; bu derleme zamanında zorlanır. `Soket` kaynak tipi dilde
+//     ZATEN ayrılmıştı (`yetki_olustur` kaynak_tipi = 2) — yeni bir ad
+//     uydurulmadı.
+//     ⚠ YETKİ `baglan` TARAFINDAN TÜKETİLİR (`geri_al`). Bu, dilin yerleşik
+//     deseni — `drivers/virtio`daki `virtio_mmio_status_oku` birebir böyle
+//     yapıyor: yetki parametresi SAHİPLENİLİR ve sonda iade edilir. Aksi hâlde
+//     `yetki<R>` parametresi işlev sonunda CP005 ("scope sonunda tüketilmedi")
+//     verir — ölçüldü. Yani BİR YETKİ = BİR BAĞLANTI; ikinci bağlantı için
+//     yeni bir `yetki_olustur(2, ...)` gerekir. Bu bir sınırlama değil,
+//     yetkinin ne yetkilendirdiğini kesinleştiren bir tasarımdır.
+//
+//  2. LİNEERLİK (`yapı tekkez Baglanti`) — açılan bağlantı TAM BİR KEZ
+//     kapatılmak zorundadır:
+//       · kapatmayı unutmak      -> L001 (derleme zamanı)
+//       · iki kez kapatmak       -> L002 (derleme zamanı)
+//     Yani SOKET SIZINTISI yapısal olarak imkânsızdır. `Dosya` (D-452) ile
+//     birebir aynı desen.
+//
+// SINIRLAR (dürüstçe):
+//   · `al` NUL-sonlandırmalı `metin` döner → GÖMÜLÜ NUL İÇEREN İKİLİ VERİ
+//     KIRPILIR. V1 bilinçli olarak METİN protokolleri içindir (HTTP, SMTP,
+//     satır tabanlı protokoller). İkili veri için ayrı bir bayt-dizi API'si
+//     gerekir.
+//   · Zaman aşımı yok — `al` veri gelene dek BLOKLAR.
+//   · `al` tek çağrıda en fazla `azami` bayt okur; tam mesaj için çağıran
+//     döngü kurmalıdır (TCP akış protokolüdür, mesaj sınırı YOKTUR).
+// =============================================================================
+
+yapı tekkez Baglanti { h: metin; }
+
+// Bağlan — host:port'a TCP bağlantısı açar. `y` TÜKETİLİR (yukarıdaki not).
+// ⚠ Doğrulamalar `geri_al`DAN ÖNCE yapılamaz: erken `ver` yetkiyi tüketmeden
+// çıkardı ve CP005 verirdi. Bu yüzden yetki ÖNCE iade edilir, hata sonra
+// döndürülür — sıra keyfi değil, lineerlik gereği.
+işlev baglan(y: yetki<Soket>, host: metin, port: tam32) -> sonuç<Baglanti, metin> {
+    değişken gecerli_giris: mantıksal = doğru;
+    eğer metin_uzunluk(host) == 0 { gecerli_giris = yanlış; }
+    eğer port < 1 { gecerli_giris = yanlış; }
+    eğer port > 65535 { gecerli_giris = yanlış; }
+    değişken h: metin = "";
+    eğer gecerli_giris { h = soket_baglan(y, host, port); }
+    geri_al(y);
+    eğer gecerli_giris == yanlış { ver hata("gecersiz host veya port"); }
+    eğer soket_gecerli(h) == yanlış { ver hata("baglanti kurulamadi"); }
+    ver tamam(Baglanti { h: h });
+}
+
+// Gönder — `b` ÖDÜNÇ alınır (referans), tüketilmez; aynı bağlantıda
+// defalarca gönderilebilir. Dönüş: gönderilen BAYT sayısı.
+// ⚠ Kısmi yazma runtime'da döngüyle çözülür; buraya ulaşan sayı TAMAMIDIR.
+işlev gonder(b: &Baglanti, veri: metin) -> sonuç<tam32, metin> {
+    değişken n: tam32 = soket_gonder(b.h, veri);
+    eğer n < 0 { ver hata("gonderim basarisiz"); }
+    ver tamam(n);
+}
+
+// Al — en fazla `azami` bayt okur.
+// ⚠ BOŞ DİZGİ = karşı taraf bağlantıyı KAPATTI (hata DEĞİL). Bu ayrımı
+// silmek, kapanmış bağlantıyı sonsuza dek okumaya çalışan bir döngü üretirdi.
+işlev al(b: &Baglanti, azami: tam32) -> sonuç<metin, metin> {
+    eğer azami < 1 { ver hata("azami en az 1 olmali"); }
+    değişken s: metin = soket_al(b.h, azami);
+    eğer soket_gecerli(s) == yanlış { ver hata("okuma basarisiz"); }
+    ver tamam(s);
+}
+
+// Kapat — bağlantıyı TÜKETİR. Çağrıdan sonra `b` kullanılamaz (L002).
+işlev kapat(b: Baglanti) -> sonuç<tam32, metin> {
+    değişken hh: metin = b.h;
+    imha(b);
+    eğer soket_kapat(hh) != 0 { ver hata("kapatma basarisiz"); }
+    ver tamam(0);
+}

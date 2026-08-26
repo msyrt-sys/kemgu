@@ -4214,6 +4214,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     IfadeSonuc s = { 0, "void", 0, 0};
                     return s;
                 }
+                /* [D-466] soket_baglan(y, host, port) -> ptr (opak handle).
+                 * ⚠ YETKI ARGUMANI IR'A GECMEZ: derleme-zamani ispatidir
+                 * (mmio deseni). Onek-tabanli eslemeye BIRAKILAMAZ -- o,
+                 * ucunu de gecirirdi ve `kdl_soket_baglan(host, port)` ile
+                 * arite uyusmazligi olusurdu; LLVM bunu SESSIZCE kabul eder
+                 * (D-295) ve cagri yanlis registerlardan okurdu. */
+                if (_uz == 12 && memcmp(_ca, "soket_baglan", 12) == 0 &&
+                    d->veri.cagri.sayi == 3) {
+                    IfadeSonuc h = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "ptr");
+                    IfadeSonuc pt = ifade_uret(g,
+                        d->veri.cagri.argumanlar[2], "i32");
+                    int p32 = int_donustur(g, pt.reg, pt.tip, "i32");
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call ptr @kdl_soket_baglan(ptr %%%d, i32 %%%d)\n",
+                        r, h.reg, p32);
+                    /* ⚠ metin_mi = 0: handle OPAK ISARETCIDIR, dizgi DEGIL.
+                     * 1 verseydik `==` icerik karsilastirmasina donerdi ve
+                     * `kdl_metin_esit(FILE*-benzeri, ...)` isaretciyi dizgi
+                     * gibi okurdu -- D-459'un kurate listesi handle'lari tam
+                     * bu yuzden disarida birakiyor. */
+                    IfadeSonuc s = { r, "ptr", 0, 0 };
+                    return s;
+                }
                 /* MMIO Foundation: mmio_oku32(y, adres) -> i32.
                  * y compile-time yetki ispati (runtime'a gecmez — WCET).
                  * adres i64'e genisletilir; kdl_mmio_oku32 cagrilir
@@ -5217,6 +5242,44 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 cagri_adi = "kdl_kesirli_metin"; cagri_adi_uz = 17;
                 param_beklenen[0] = "double";
                 kdl_donus = "ptr";
+            }
+            /* [D-466] soket_* -> kdl_soket_*. `soket_baglan` YETKI argumani
+             * alir ama IR'da yetki TASINMAZ (checker'da tuketilmis bir
+             * kontroldur) -> runtime imzasi (host, port). */
+            /* ⚠ ONEK DEGIL TAM ESLESME: `memcmp(cagri_adi, "soket_", 6)`
+             * yazmistim ve derleyicinin KENDI yardimcisi `soket_kontrol`u
+             * (selfhost/codegen.kem icinde) de yakaladi -> `@kdl_soket_kontrol`
+             * tanimsiz (olculdu: self-host derlenemedi). Onek eslemesi
+             * ad-YAKALAYICIDIR; kapali bir kume icin tam eslesme sart. */
+            else if ((cagri_adi_uz == 12 &&
+                      memcmp(cagri_adi, "soket_baglan", 12) == 0) ||
+                     (cagri_adi_uz == 12 &&
+                      memcmp(cagri_adi, "soket_gonder", 12) == 0) ||
+                     (cagri_adi_uz == 8 &&
+                      memcmp(cagri_adi, "soket_al", 8) == 0) ||
+                     (cagri_adi_uz == 11 &&
+                      memcmp(cagri_adi, "soket_kapat", 11) == 0) ||
+                     (cagri_adi_uz == 13 &&
+                      memcmp(cagri_adi, "soket_gecerli", 13) == 0)) {
+                static char kdl_sok_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_sok_buf, "kdl_", 4);
+                memcpy(kdl_sok_buf + 4, cagri_adi, (size_t)n);
+                kdl_sok_buf[4 + n] = '\0';
+                cagri_adi = kdl_sok_buf; cagri_adi_uz = 4 + n;
+                /* NOT: `soket_baglan` buraya ULASMAZ — yukaridaki intrinsic
+                 * onu daha once yakalar (yetki argumanini dusurmek icin). */
+                if (n == 8 && memcmp(kdl_sok_buf + 4, "soket_al", 8) == 0) {
+                    param_beklenen[0] = "ptr"; param_beklenen[1] = "i32";
+                    kdl_donus = "ptr";
+                } else if (n == 13 && memcmp(kdl_sok_buf + 4, "soket_gecerli", 13) == 0) {
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "i1";
+                } else {
+                    /* gonder / kapat -> i32 */
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "i32";
+                }
             }
             /* [D-456] semafor_* / bariyer_* -> kdl_* (kilit_* ile ayni desen).
              * `_olustur` tam32 alir + opak ptr doner; digerleri ptr alir, void. */
@@ -7738,6 +7801,11 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_bariyer_olustur(i32)\n", out);  /* [D-456] */
     fputs("declare void @kdl_bariyer_bekle(ptr)\n", out);   /* [D-456] */
     fputs("declare void @kdl_bariyer_yok(ptr)\n", out);     /* [D-456] */
+    fputs("declare ptr @kdl_soket_baglan(ptr, i32)\n", out);  /* [D-466] */
+    fputs("declare i32 @kdl_soket_gonder(ptr, ptr)\n", out);  /* [D-466] */
+    fputs("declare ptr @kdl_soket_al(ptr, i32)\n", out);      /* [D-466] */
+    fputs("declare i32 @kdl_soket_kapat(ptr)\n", out);        /* [D-466] */
+    fputs("declare i1 @kdl_soket_gecerli(ptr)\n", out);       /* [D-466] */
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);

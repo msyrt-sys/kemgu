@@ -47,6 +47,29 @@ static void *kdl_sizan_al(uint64_t n) {
 }
 
 /* B2 (genisletilmis): Gercek thread bind — Windows + POSIX (Linux/macOS/ARM64) */
+/* [D-466] TCP ISTEMCI soketleri. Thread makrolarindan AYRI tutuluyor: bir
+ * platformda thread olup soket olmamasi (ya da tersi) mumkun. Bare-metal'de
+ * ikisi de tanimsizdir ve tum soket cagrilari GUVENLI HATA doner -- sessizce
+ * "basarili" demezler.
+ *
+ * ⚠ SIRA ONEMLI: `winsock2.h` `windows.h`ten ONCE gelmeli. Tersi durumda
+ * windows.h eski `winsock.h` (v1) cekiyor ve derleyici acikca uyariyor
+ * ("Please include winsock2.h before windows.h") -- olculdu. Bu yuzden soket
+ * blogu thread blogunun USTUNDE duruyor; yer degistirirse uyari geri gelir. */
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define KDL_SOKET_WIN 1
+#define KDL_SOKET_VAR 1
+#elif defined(__linux__) || defined(__APPLE__) || defined(__unix__)
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#define KDL_SOKET_POSIX 1
+#define KDL_SOKET_VAR 1
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #define KDL_THREAD_VAR 1
@@ -412,6 +435,250 @@ double kdl_metin_kesirli(const char *s) {
     if (!kdl_metin_kesirli_gecerli(s)) return 0.0;
     return strtod(s, NULL);
 }
+
+/* ============================================================================
+ * [D-466] TCP ISTEMCI soketleri (yalniz istemci; dinleyici ve TLS V1'de YOK).
+ *
+ * SOZLESME -- her cagri ya BASARILI olur ya da HATA doner; sessiz basarisizlik
+ * YOK. Hata yolu KEMGU tarafinda `sonuc<T, metin>` ile temsil edilir; buradaki
+ * donusler o sarmalayicinin okudugu ham degerlerdir:
+ *   kdl_soket_baglan -> handle (void*) ya da NULL
+ *   kdl_soket_gonder -> gonderilen BAYT sayisi ya da -1
+ *   kdl_soket_al     -> okunan metin ya da NULL  (0 bayt = baglanti kapandi,
+ *                       bos dizgi olarak doner -- NULL'dan AYRI)
+ *
+ * ⚠ WINSOCK BASLATMA: Windows'ta soket kullanmadan once WSAStartup SART.
+ * Tembel (ilk kullanimda) yapilir; WSACleanup CAGRILMAZ -- surec omru boyunca
+ * acik kalmasi dogrudur ve erken temizlik baska bir kutuphanenin soketlerini
+ * KIRARDI (runtime baska bir programa gomulebilir, D-457'nin locale dersinin
+ * ayni sinifi).
+ *
+ * ⚠ Handle icin `int` DEGIL ayri bir yapi kullaniliyor: Windows'ta SOCKET
+ * `UINT_PTR`tir (64-bit) ve `int`e sigdirmak 64-bit'te BILGI KAYBIDIR. Ayrica
+ * KEMGU tarafinda handle `yapi tekkez Baglanti` icinde tasindigi icin opak
+ * kalmasi ZATEN gerekiyor.
+ * ========================================================================= */
+#ifdef KDL_SOKET_VAR
+typedef struct {
+#ifdef KDL_SOKET_WIN
+    SOCKET s;
+#else
+    int s;
+#endif
+} KdlSoket;
+
+#ifdef KDL_SOKET_WIN
+/* ⚠⚠ WINSOCK CALISMA-ZAMANINDA YUKLENIR (LoadLibrary/GetProcAddress), BAGLAMA
+ * ZAMANINDA DEGIL. Gerekce OLCULDU: `ws2_32`ye baglanma zamani bagimliligi
+ * eklemek, kdl_runtime.o'yu kullanan HER programin link satirini bozuyordu --
+ * depoda 41 Makefile + 18 harness = ~59 baglama noktasi, ustelik bare-metal
+ * yollari ws2_32 ALMAMALI. Olculdu: `-lws2_32` olmadan EN BASIT program bile
+ * "undefined symbol: WSAStartup" ile dusuyor.
+ *
+ * ILKE: yeni bir yetenek, onu KULLANMAYAN programlarin baglama sozlesmesini
+ * DEGISTIRMEMELI. Dinamik yukleme bunu saglar; link yuzeyi hic degismez.
+ *
+ * DLL bulunamazsa tum soket cagrilari GUVENLI HATA doner (sessiz basari YOK). */
+typedef int (WSAAPI *KdlFnWSAStartup)(WORD, LPWSADATA);
+typedef int (WSAAPI *KdlFnGetaddrinfo)(const char *, const char *,
+                                       const struct addrinfo *,
+                                       struct addrinfo **);
+typedef void (WSAAPI *KdlFnFreeaddrinfo)(struct addrinfo *);
+typedef SOCKET (WSAAPI *KdlFnSocket)(int, int, int);
+typedef int (WSAAPI *KdlFnConnect)(SOCKET, const struct sockaddr *, int);
+typedef int (WSAAPI *KdlFnSend)(SOCKET, const char *, int, int);
+typedef int (WSAAPI *KdlFnRecv)(SOCKET, char *, int, int);
+typedef int (WSAAPI *KdlFnClosesocket)(SOCKET);
+
+static int kdl_wsa_durum = 0;   /* 0=denenmedi 1=hazir -1=yok */
+static KdlFnGetaddrinfo   kdl_p_getaddrinfo;
+static KdlFnFreeaddrinfo  kdl_p_freeaddrinfo;
+static KdlFnSocket        kdl_p_socket;
+static KdlFnConnect       kdl_p_connect;
+static KdlFnSend          kdl_p_send;
+static KdlFnRecv          kdl_p_recv;
+static KdlFnClosesocket   kdl_p_closesocket;
+
+static int kdl_wsa_baslat(void) {
+    HMODULE m;
+    KdlFnWSAStartup p_start;
+    WSADATA wd;
+    if (kdl_wsa_durum != 0) return kdl_wsa_durum == 1;
+    kdl_wsa_durum = -1;                    /* basarisiz varsay; ancak hepsi
+                                            * cozulurse 1'e cikar */
+    m = LoadLibraryA("ws2_32.dll");
+    if (!m) return 0;
+    /* ⚠ CAST ZINCIRI OLCULEREK SECILDI (sifir-uyari hedefi):
+     *   (Fn)(void*)GetProcAddress(..)      -> -Wpedantic: ISO C islev<->nesne
+     *                                         isaretcisi donusumunu yasaklar
+     *   (Fn)GetProcAddress(..)             -> -Wcast-function-type: FARPROC
+     *                                         ile imza uyusmuyor
+     *   (Fn)(void (*)(void))GetProcAddress -> TEMIZ (GCC'nin belgeledigi yol)
+     * Ilk iki bicim 16 ve 7 uyari uretti; ucuncusu 0. */
+    p_start            = (KdlFnWSAStartup)(void (*)(void))GetProcAddress(m, "WSAStartup");
+    kdl_p_getaddrinfo  = (KdlFnGetaddrinfo)(void (*)(void))GetProcAddress(m, "getaddrinfo");
+    kdl_p_freeaddrinfo = (KdlFnFreeaddrinfo)(void (*)(void))GetProcAddress(m, "freeaddrinfo");
+    kdl_p_socket       = (KdlFnSocket)(void (*)(void))GetProcAddress(m, "socket");
+    kdl_p_connect      = (KdlFnConnect)(void (*)(void))GetProcAddress(m, "connect");
+    kdl_p_send         = (KdlFnSend)(void (*)(void))GetProcAddress(m, "send");
+    kdl_p_recv         = (KdlFnRecv)(void (*)(void))GetProcAddress(m, "recv");
+    kdl_p_closesocket  = (KdlFnClosesocket)(void (*)(void))GetProcAddress(m, "closesocket");
+    if (!p_start || !kdl_p_getaddrinfo || !kdl_p_freeaddrinfo ||
+        !kdl_p_socket || !kdl_p_connect || !kdl_p_send ||
+        !kdl_p_recv || !kdl_p_closesocket) {
+        return 0;   /* eksik sembol -> guvenli hata */
+    }
+    if (p_start(MAKEWORD(2, 2), &wd) != 0) return 0;
+    /* WSACleanup CAGRILMAZ: surec omru boyunca acik kalmasi dogrudur; erken
+     * temizlik ayni surecteki BASKA bir kutuphanenin soketlerini kirardi
+     * (runtime baska bir programa gomulebilir -- D-457'nin locale dersi). */
+    kdl_wsa_durum = 1;
+    return 1;
+}
+#endif
+
+/* Cagri yerleri TEK BICIM kalsin diye makro katmani: Windows'ta calisma-zamani
+ * isaretcisi, POSIX'te dogrudan libc cagrisi. */
+#ifdef KDL_SOKET_WIN
+#define KDL_GETADDRINFO   kdl_p_getaddrinfo
+#define KDL_FREEADDRINFO  kdl_p_freeaddrinfo
+#define KDL_SOCKET        kdl_p_socket
+#define KDL_CONNECT       kdl_p_connect
+#define KDL_SEND          kdl_p_send
+#define KDL_RECV          kdl_p_recv
+#define KDL_KAPAT_SOKET   kdl_p_closesocket
+#elif defined(KDL_SOKET_POSIX)
+#define KDL_GETADDRINFO   getaddrinfo
+#define KDL_FREEADDRINFO  freeaddrinfo
+#define KDL_SOCKET        socket
+#define KDL_CONNECT       connect
+#define KDL_SEND          send
+#define KDL_RECV          recv
+#define KDL_KAPAT_SOKET   close
+#endif
+#endif  /* KDL_SOKET_VAR */
+
+void *kdl_soket_baglan(const char *host, int32_t port) {
+#ifdef KDL_SOKET_VAR
+    struct addrinfo ipucu, *sonuc = NULL, *it;
+    char pbuf[16];
+    KdlSoket *k;
+    if (!host || port <= 0 || port > 65535) return NULL;
+#ifdef KDL_SOKET_WIN
+    if (!kdl_wsa_baslat()) return NULL;
+#endif
+    snprintf(pbuf, sizeof(pbuf), "%d", (int)port);
+    memset(&ipucu, 0, sizeof(ipucu));
+    ipucu.ai_family = AF_UNSPEC;      /* IPv4 ve IPv6 ikisi de */
+    ipucu.ai_socktype = SOCK_STREAM;  /* TCP */
+    if (KDL_GETADDRINFO(host, pbuf, &ipucu, &sonuc) != 0) return NULL;
+    /* Adres listesindeki HER adayi dene: getaddrinfo birden fazla dondurur ve
+     * ilkinin basarisiz olmasi hosta ulasilamadigi anlamina GELMEZ (IPv6-only
+     * ilk aday cok yaygin). */
+    for (it = sonuc; it != NULL; it = it->ai_next) {
+#ifdef KDL_SOKET_WIN
+        SOCKET s = KDL_SOCKET(it->ai_family, it->ai_socktype, it->ai_protocol);
+        if (s == INVALID_SOCKET) continue;
+        if (KDL_CONNECT(s, it->ai_addr, (int)it->ai_addrlen) == 0) {
+            KDL_FREEADDRINFO(sonuc);
+            k = (KdlSoket *)calloc(1, sizeof(KdlSoket));
+            if (!k) { KDL_KAPAT_SOKET(s); return NULL; }
+            k->s = s;
+            return (void *)k;
+        }
+        KDL_KAPAT_SOKET(s);
+#else
+        int s = KDL_SOCKET(it->ai_family, it->ai_socktype, it->ai_protocol);
+        if (s < 0) continue;
+        if (KDL_CONNECT(s, it->ai_addr, it->ai_addrlen) == 0) {
+            KDL_FREEADDRINFO(sonuc);
+            k = (KdlSoket *)calloc(1, sizeof(KdlSoket));
+            if (!k) { KDL_KAPAT_SOKET(s); return NULL; }
+            k->s = s;
+            return (void *)k;
+        }
+        KDL_KAPAT_SOKET(s);
+#endif
+    }
+    KDL_FREEADDRINFO(sonuc);
+    return NULL;
+#else
+    (void)host; (void)port;
+    return NULL;   /* soket yok -> GUVENLI HATA (sessiz basari DEGIL) */
+#endif
+}
+
+int32_t kdl_soket_gonder(void *p, const char *veri) {
+#ifdef KDL_SOKET_VAR
+    KdlSoket *k = (KdlSoket *)p;
+    size_t n, yazilan = 0;
+    if (!k || !veri) return -1;
+    n = strlen(veri);
+    /* ⚠ send() KISMI yazabilir. Tek cagriyla yetinmek sessiz veri KAYBIDIR;
+     * tamami yazilana dek donguye girilir. */
+    while (yazilan < n) {
+#ifdef KDL_SOKET_WIN
+        int r = KDL_SEND(k->s, veri + yazilan, (int)(n - yazilan), 0);
+        if (r == SOCKET_ERROR) return -1;
+#else
+        ssize_t r = KDL_SEND(k->s, veri + yazilan, n - yazilan, 0);
+        if (r < 0) return -1;
+#endif
+        if (r == 0) return -1;
+        yazilan += (size_t)r;
+    }
+    return (int32_t)yazilan;
+#else
+    (void)p; (void)veri;
+    return -1;
+#endif
+}
+
+const char *kdl_soket_al(void *p, int32_t azami) {
+#ifdef KDL_SOKET_VAR
+    KdlSoket *k = (KdlSoket *)p;
+    char *buf;
+    if (!k || azami <= 0) return NULL;
+    if (azami > 1048576) azami = 1048576;   /* 1 MiB tavan */
+    buf = (char *)kdl_sizan_al((size_t)azami + 1);
+    if (!buf) return NULL;
+#ifdef KDL_SOKET_WIN
+    {
+        int r = KDL_RECV(k->s, buf, azami, 0);
+        if (r == SOCKET_ERROR) return NULL;
+        buf[r] = '\0';
+    }
+#else
+    {
+        ssize_t r = KDL_RECV(k->s, buf, (size_t)azami, 0);
+        if (r < 0) return NULL;
+        buf[r] = '\0';
+    }
+#endif
+    /* r == 0 -> karsi taraf kapatti; BOS DIZGI doner (NULL'dan AYRI).
+     * ⚠ metin NUL-sonlandirmalidir (D-458): gomulu NUL iceren ikili veri
+     * KIRPILIR. V1 bilincli olarak METIN protokolleri icindir. */
+    return buf;
+#else
+    (void)p; (void)azami;
+    return NULL;
+#endif
+}
+
+int32_t kdl_soket_kapat(void *p) {
+#ifdef KDL_SOKET_VAR
+    KdlSoket *k = (KdlSoket *)p;
+    if (!k) return -1;
+    KDL_KAPAT_SOKET(k->s);
+    free(k);
+    return 0;
+#else
+    (void)p;
+    return -1;
+#endif
+}
+
+int32_t kdl_soket_gecerli(void *p) { return p != NULL ? 1 : 0; }
 
 /* ============================================================================
  * [D-458] Unicode KOD NOKTASI -> metin (UTF-8).
