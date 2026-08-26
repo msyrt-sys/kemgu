@@ -251,7 +251,22 @@ static void T17_birlestir_non_gorev(void) {
 }
 
 static void T18_gorev_tuketilmedi_v1_limit(void) {
-    /* Karar 1 (D-30x) V1 KNOWN-LIMIT — sonuç sarmasinin bedeli.
+    /* [D-467] BU SINIR KAPANDI — asagidaki tarihi not ARTIK GECERSIZDIR,
+     * belge olarak birakildi.
+     *
+     * Bu test bilerek "bilinen-YANLIS davranisi" sabitliyordu ve tam
+     * tasarlandigi gibi calisti: D-467 sinirini kapatinca KIRMIZIYA DONDU ve
+     * durumu bildirdi (D-441/D-443'te de ayni desen ise yaramisti).
+     *
+     * ⚠ Asagidaki "V2 DOGRU COZUM" notu ONGORULUYDU ve BIREBIR dogru cikti:
+     * ozyinelemeyi TEK BASINA yapmak gercekten tum `esles`-acan pozitif
+     * testleri L001'e dusurdu; `esles` skrutini tuketimi eklenince duzeldi.
+     * Uygulanan onarim uc parcali: (1) tip_lineer_mi ozyinelemesi,
+     * (2) ATILAN lineer deger (ifade-deyimi), (3) `esles` skrutinisini BASTA
+     * BIR KEZ tuket. Ayrica "gecersiz tip = lineer yukumluluk yok" korumasi.
+     *
+     * ---- TARIHI NOT (D-467 oncesi durum) ----
+     * Karar 1 (D-30x) V1 KNOWN-LIMIT — sonuç sarmasinin bedeli.
      *
      * gorev_baslat artik `sonuç<görev<T>, metin>` doner (görev<T> DEGIL).
      * görev<T> lineerdir (tip_lineer_mi), ama onu KAPSAYAN sonuç V1'de lineer
@@ -272,8 +287,10 @@ static void T18_gorev_tuketilmedi_v1_limit(void) {
      * dusururdu. Bkz. DECISIONS_LOG D-30x. */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 1);\n");
-    test_sonuc("D18: sonuç<görev> eşleş'siz dusme -> V1'de L001 YOK "
-               "(KNOWN-LIMIT; V2: lineer yayilim)", h == 0);
+    /* [D-467] ARTIK L001 VERIR: `sonuç<görev<T>, metin>` lineer sayilir ve
+     * `esles` ile ACILMADAN dusen baglama kaynak sizintisidir. */
+    test_sonuc("D18: sonuç<görev> eşleş'siz dusme -> L001 (D-467: lineer "
+               "yayilim; ONCE V1'de tanı YOKTU)", h >= 1);
 }
 
 /* ========================================================================

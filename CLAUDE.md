@@ -705,10 +705,14 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
   `görev_başlat` artık `görev<T>` değil **`sonuç<görev<T>, metin>`** döner (panik yerine
   DEĞER — çökmezlik). Runtime spawn başarısızsa NULL döner; codegen dallanmasız
   `{i8,ptr,ptr}` ile sarar (görev<T>+metin ikisi de ptr → aggregate T-bağımsız). C+self-host
-  paritesi + FIXPOINT. **Bedel (V1 known-limit, T18):** `sonuç` içindeki lineer `görev<T>`
+  paritesi + FIXPOINT. ~~**Bedel (V1 known-limit, T18):** `sonuç` içindeki lineer `görev<T>`
   için L001 leak uyarısı tetiklenmez (`tip_lineer_mi` sonuç'a özyinelemez) — eşleş'siz
-  düşen görev join edilmez; bellek-güvenliği değil liveness kaybı. V2: lineer-yayılım +
-  eşleş lineer-tüketimi. **Ergonomi:** her görev_başlat bir `eşleş` ister (`?`-yayılımı V2).
+  düşen görev join edilmez.~~ ✓ **KAPANDI — D-467.** Sınır yalnız `görev<T>` için
+  görülmüştü ama `Dosya` (D-452) ve `Baglanti` (D-466) aynı deseni sonradan
+  kullanınca **sessizce yayıldı** — üç alt-sistemde birden sızıntı, tanı yok.
+  Onarım üç parçalı (özyineleme + atılan-lineer-değer + `eşleş` skrutini
+  tüketimi); T18 testi bilinen-yanlışı sabitlediği için tam tasarlandığı gibi
+  kırmızıya dönüp bildirdi. **Ergonomi:** her görev_başlat bir `eşleş` ister (`?`-yayılımı V2).
   Hata tipi V1'de `metin`; payload'lı `çeşit` gelince `GörevHata`ya yükseltilebilir.
 - **⚠ TEST ALTYAPISI (D-297):** `test_llvm.c` / `test_simd_llvm.c` geçici dosya yolları artık
   **PID ile benzersiz** (`build/test_llvm_<pid>.kem` …) ve koşum sonunda siliniyor. Sabit yol,
