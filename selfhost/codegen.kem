@@ -11244,6 +11244,12 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken eb: tam32 = dizi_al(p.a_cb, idx);
         değişken ec: tam32 = dizi_al(p.a_cs, idx);
         eğer ec > 0 { kontrol_dugum(p, dizi_al(p.cocuk, eb)); }
+        // [D-470] LİNEER SKRUTİNİYİ BİR KEZ TÜKET (checker.kem ile aynı;
+        // D-467'nin C tarafındaki genellemesinin karşılığı). Öncesinde yalnız
+        // `DESEN_YAPI` dalında tüketiliyordu → `tamam(t)`/`değer(t)` yapıcı
+        // desenlerinde tüketilmiyordu ve düzgün AÇILAN bağlama L001 alıyordu.
+        // Kol başına tüketmek ikinci kolda sahte L002 verirdi.
+        eğer ec > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, eb)); }
         değişken en0: tam32 = lin_dilim_n(p);
         değişken eb0: tam32 = lin_snap_it(p);
         değişken kol_n: tam32 = ec - 1;
@@ -11263,7 +11269,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 // D-357 (C): desen varyantı + payload aritesi (gövdeden ÖNCE).
                 m002_desen_kontrol(p, des, esles_cesit_adi(p, dizi_al(p.cocuk, eb)));
                 eğer metin_esit(dizi_al(p.a_ad, des), "DESEN_YAPI") {
-                    lin_tuket_dugum(p, dizi_al(p.cocuk, eb));
+                    // [D-470] Skrutini tüketimi YUKARI TAŞINDI (bir kez,
+                    // kollardan önce); burada tekrar tüketmek sahte L002 verir.
                     desen_yapi_dogrula(p, des);
                 }
             }
@@ -11334,6 +11341,13 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 eğer lfi >= 0 {
                     eğer dizi_al(p.lin_fnk, lfi) == 1 { lin_tuket_dugum(p, hedef); }
                 }
+            }
+            // [D-470] YAPICI ARGÜMANI (`tamam`/`değer`/`hata`) lineer değeri
+            // TÜKETİR (checker.kem ile aynı). Öncesinde `ver tamam(t)` bile
+            // L001 veriyordu → lineer değer `sonuç` İÇİNDE döndürülemiyordu.
+            eğer (metin_esit(fad, "tamam") veya metin_esit(fad, "değer")
+                  veya metin_esit(fad, "hata")) ve ((hc - 1) == 1) {
+                lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
             }
             değişken ps: tam32 = fn_psay_bul(p, fad);
             eğer ps >= 0 {                        // kullanıcı işlevi → arite bilinir
@@ -11453,6 +11467,10 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             } değilse {
                 değişken val: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, aa));
                 kontrol_dugum(p, val);
+                // [D-470] LİNEER YAPI ALANI DEĞERİ TÜKETİR (checker.kem ile
+                // aynı). Öncesinde `S { t: t }` tüketmiyordu → lineer bir
+                // değeri bir yapıya KOYMAK imkânsızdı.
+                lin_tuket_dugum(p, val);
                 değişken ft: metin = alan_tip_bul(p, tad, fad);
                 eğer metin_esit(ft, "?") == yanlış {
                     değişken vt: metin = ifade_tip(p, val, ft);
