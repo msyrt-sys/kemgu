@@ -3,7 +3,11 @@
 # 4 örnek (D-071) + 1 (V2-F1, D-097): derle (--llvm) + link + çalıştır → beklenen
 # exit. ASan ile UB/leak yok.
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}; RT=${RT:-build/kdl_runtime.o}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}; RT=${RT:-build/kdl_runtime.o}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/lambdav2); mkdir -p "$TMP"
 pass=0; fail=0
 calistir() {  # ad dosya beklenen_rc

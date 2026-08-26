@@ -17,7 +17,11 @@
 # Çıkış: 0 = tüm matris hem değer-doğru (42) hem ASan/UBSan-temiz; 1 = ihlal.
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-./build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-./build/kemgu${EXE}}
 RT_OBJ="build/kdl_runtime.o build/kdl_runtime_mmio.o"
 RT_SRC="runtime/kdl_runtime.c runtime/kdl_runtime_mmio.c"
 DIR="test/asan_matris"

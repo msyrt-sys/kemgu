@@ -14,8 +14,12 @@
 # Kullanım: bash test/modul_codegen_harness.sh  (veya make calistir_modul_codegen)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
-CODEGEN=${CODEGEN:-build/codegen.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
+CODEGEN=${CODEGEN:-build/codegen${EXE}}
 RT=${RT:-build/kdl_runtime.o}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/modcg); mkdir -p "$TMP"
 

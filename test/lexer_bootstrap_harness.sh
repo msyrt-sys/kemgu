@@ -12,7 +12,11 @@
 # Çıkış: 0 = tüm korpus sıfır-diff; 1 = en az bir fark.
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/lexboot); mkdir -p "$TMP"
 

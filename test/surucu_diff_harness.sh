@@ -21,8 +21,12 @@
 # Kullanım: bash test/surucu_diff_harness.sh (veya make calistir_surucu_diff)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
-CODEGEN=${CODEGEN:-build/codegen.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
+CODEGEN=${CODEGEN:-build/codegen${EXE}}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/surdiff); mkdir -p "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then

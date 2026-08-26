@@ -19,9 +19,13 @@
 # Kullanım: bash test/selfhost_driver_harness.sh  (veya make calistir_self_driver)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
-SELF=${SELF:-build/kemgu_self.exe}
+SELF=${SELF:-build/kemgu_self${EXE}}
 SELF2=${SELF2:-build/kemgu_self2.exe}
 SRC=${SRC:-selfhost/codegen.kem}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/selfdrv); mkdir -p "$TMP"

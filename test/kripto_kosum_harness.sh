@@ -20,7 +20,11 @@
 # Kullanım: bash test/kripto_kosum_harness.sh  (veya make calistir_kripto_kosum)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
 TEST=${TEST:-test/stdlib/test_kripto_kosum.kem}
 # Paralel koşumda birbirini ezmesin (D-297 dersi): PID ile benzersiz yol.

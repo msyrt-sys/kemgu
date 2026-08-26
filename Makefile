@@ -54,6 +54,14 @@ else
     endif
 endif
 
+# [D-469] EXE'yi harness'lara AKTAR. Oncesinde 27 harness'in 25'i
+# `build/kemgu.exe`yi SABIT yaziyordu ve Makefile onlara hicbir degisken
+# GECIRMIYORDU (24 cagridan yalniz 9'u KEMGU=/CODEGEN= veriyordu, `export` 0).
+# Linux/DGX Spark'ta ikili `build/kemgu` (uzantisiz) olacagi icin harness'lar
+# onu BULAMAZDI: derleyici tasinir, KAPILAR TASINMAZDI -- ve kapisiz bir
+# tasima bu depoda en tehlikeli sey.
+export EXE
+
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \

@@ -11,7 +11,11 @@
 # geçmek ZORUNDA. Geçmeyecekse MUAF listesine GEREKÇESİYLE yazılmalı — sessiz
 # birikme yerine açık karar.
 set -u
-KEMGU="${KEMGU:-build/kemgu.exe}"
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU="${KEMGU:-build/kemgu${EXE}}"
 [ -x "$KEMGU" ] || KEMGU="build/kemgu"
 [ -x "$KEMGU" ] || { echo "⏭  $KEMGU yok — atlandı"; exit 0; }
 
