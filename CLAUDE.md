@@ -950,6 +950,85 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🚚 D-469: test altyapısı `EXE`-farkında + varsayılan triple platformdan
+DGX Spark (yerli ARM64/Linux) taşımasının kalan iki ön koşulu. İkisi de
+mekanik; **dil ya da kapı semantiği DEĞİŞMEDİ.**
+- **🔴 ASIL RİSK: derleyici taşınır, KAPILAR TAŞINMAZDI.** Ölçüldü: 27
+  harness'ın **25'i** `build/kemgu.exe`yi SABİT yazıyor · Makefile 24 harness
+  çağrısının yalnız **9'una** değişken geçiriyor · `export` **0**. Linux'ta
+  ikili `build/kemgu` (uzantısız) olacağı için harness'lar onu **bulamazdı**.
+  **Kapısız bir taşıma bu depoda en tehlikeli şeydir.**
+  Onarım: `export EXE` + 32 varsayılanın `build/X${EXE}`ye çevrilmesi + her
+  harness'a **kendine yeten tespit** (make'siz doğrudan çağrımda `set -u`
+  altında ÇÖKMESİN diye).
+- **⚠ ÖLÇÜM BİR HATAMI YAKALADI — `${EXE:=}` DEĞİL `${EXE=}`.** İki noktalı
+  biçim **boşu da "tanımsız" sayar** → Makefile'ın Linux'ta vereceği `EXE=`
+  (boş) otomatik-tespit tarafından EZİLİRDİ ve bayat bir `build/kemgu.exe`
+  duruyorsa yanlış uzantı seçilirdi. Ölçüm: `EXE=''` → `build/kemgu` ·
+  `EXE` tanımsız → `build/kemgu.exe`.
+- **Varsayılan triple SABİT `x86_64-pc-windows-gnu` idi** → Linux'ta üretilen
+  her IR yanlış triple taşırdı. clang çoğu durumda yine derler, yani **SESSİZ**
+  bir yanlışlık; ARM64'te veri modeli/çağrı sözleşmesi açısından ciddi sapma.
+  Makefile `PLATFORM`/`ARCH`'ı ZATEN tespit ediyordu; eksik olan makronun
+  ondan BESLENMESİYDİ.
+- **⚠ DOĞRULAMANIN SINIRI (dürüstçe):** Windows davranışı BİREBİR korundu ama
+  **Linux/ARM64'te gerçekten çalıştığı BURADA KANITLANAMAZ** — yalnız "doğru
+  yolu arıyor" ve "doğru triple seçilecek" ölçüldü. Gerçek kanıt DGX Spark'taki
+  ilk tam koşumdur; orada farklı çıkan hiçbir şey "platform farkı" diye
+  geçiştirilmemeli (bu depoda parite sapmalarının sessiz kalma eğilimi
+  defalarca ölçüldü).
+
+### 🎯 D-468: ARM64 spekülasyon bariyeri (`csdb`) + kapı mimari-farkında
+`sabitsüre` disiplini **koşulsuz** x86 `lfence` yayıyordu — `--mimari arm64`te
+bile. O komut ARM64 hedefinde **GEÇERSİZDİR**, yani sabit-süre kullanan 15
+dosya ARM'da derlenmezdi. Kusur LATENT kaldı çünkü ARM kapıları `sabitsüre`
+KULLANMIYOR (D-453'te ölçülmüştü); yerli ARM64'e taşınırken yüzeye çıkardı.
+- **BARİYER SEÇİMİ ÖLÇÜLDÜ** (aarch64 hedefiyle gerçekten derlenerek):
+  `csdb` → **seçildi** (ARM'ın Spectre-v1 için resmî önerisi, `lfence`in bu
+  koddaki amacıyla birebir) · `llvm.aarch64.isb(15)` → `isb` (komut senk.,
+  farklı amaç) · `llvm.aarch64.dsb(15)` → `dsb sy` (yanlış araç) ·
+  `sb` → **ARMv8.5 GEREKTİRİR, temel ARMv8'de DERLENMİYOR → reddedildi**.
+  `csdb` hint uzayındadır → desteklemeyen çekirdekte NOP'a düşer.
+- **⚠ ETİKET `"arm64"`, `"aarch64"` DEĞİL** (`ana.c`:
+  `llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf")` — ilki ETİKET,
+  ikincisi TRIPLE). İlk yazımda `"aarch64"` ile karşılaştırdım: koşul HİÇ
+  TUTMAZDI ve ARM64'te yine `lfence` yayılırdı.
+- **KAPI YARISI KÖR KALACAKTI:** `ct_bariyer` yalnız x86 `lfence` sayıyordu;
+  ARM64 dalı hiçbir ölçümle korunmazdı ve orada bariyeri düşüren bir değişiklik
+  **sessizce** geçerdi — tam olarak bu kapının var oluş gerekçesi (D-417).
+  Kapı artık ARM64'te de sayıyor, sayıların x86 ile EŞİT olduğunu ve ARM
+  hedefine `lfence` SIZMADIĞINI denetliyor. **Sabotaj 2/2** (S67 C · S68 self)
+  → ikisi de 13/13 → 6/13.
+- **AYRICA `codegen_genis`e ZAMAN AŞIMI eklendi.** Yoktu ve bir tam takım
+  koşumu tam orada **2.5 SAAT** çıktısız asılı kaldı (ölçüldü: `make` + 10
+  `bash` canlı, HİÇBİR derleyici süreci yok = bloke). `ag_kosum`da S66 ile
+  yakalanan sınıfın aynısı. **Asılan kapı, sessiz kapı kadar kötüdür.**
+- **⚠ SÜREÇTE KENDİ KURALIMI ÇİĞNEDİM:** tam takım koşarken performans ölçümü
+  için üç kapıyı ELLE koşturdum. İkisi `build/codegen.exe` yazıyor (38 ayrı
+  yerden!) — D-297/D-414'te kayıtlı çarpışma sınıfı, üstelik **aynı oturumda
+  paralelleştirmenin ÖN KOŞULU olarak kendim işaretlemiştim.** Kuralı yazmış
+  olmak uygulamaya yetmiyor.
+
+### 📐 TAKIM SÜRESİ ÖLÇÜLDÜ (D-468/469 sırasında) — darboğaz ORTAMDA
+Tam koşum ~45 dk. Sebep tahmin edilmedi, **ölçüldü**:
+- **Süreç başlatma bu makinede 96–170 ms.** `/usr/bin/true` (hiçbir iş
+  yapmayan, güvenilen ikili) **96 ms**; `cmd /c exit` 146 ms. Linux'ta 1–5 ms.
+  Windows + MSYS2 katmanının bedeli (gerçek `fork` yok).
+- **Yeni üretilen `.exe`nin İLK çalıştırması ~194 ms fazladan** (Defender;
+  gerçek-zamanlı koruma AÇIK). Aynı exe tekrar: 183 ms.
+- **Link süresi KARARLI** (570–639 ms, %10 varyans) → CPU-bağımlı; disk/bellek
+  darboğazı YOK. `-O0` yalnız **%14** kazandırıyor → **UYGULANMADI**: depoda
+  `-O2` inline'ının gerçek bir kusuru MASKELEDİĞİ ölçülmüş (D-289); 90 ms için
+  kusur-maskeleme riski kötü takas.
+- Kapı süreleri: `codegen_diff` **309 sn** · `yapi_diff` 124 · `checker_diff`
+  **70** (clang ÇAĞIRMIYOR — dosya başına 0.44 sn vs codegen_diff'te 2.0 sn;
+  clang payının doğrudan kanıtı).
+- **Kabaca %65'i süreç doğurma + Defender**, ~%25'i gerçek derleme.
+- **Yapısal kalanlar (uygulanmadı, öneri):** `codegen.exe` **13 kez** yeniden
+  kuruluyor (~36 sn tekrar) · 62 kapı **seri** koşuyor, makine 12 çekirdekli.
+  ⚠ `make -j` ÖN KOŞULU paylaşılan tek yapımdır: `build/codegen.exe` **38**,
+  `build/codegen.ll` **18** ayrı yerden yazılıyor → paralelde çarpışır (D-297).
+
 ### 🎯 D-466: `stdlib/ag.kem` — TCP istemci (`yetki<Soket>` + `tekkez Baglanti`)
 Mehmet'in kararı: network, **yalnız TCP istemci**, yetki + lineer bağlantı.
 - **⚠ ADI `Ağ` DEĞİL `Soket`:** ölçüm gösterdi ki `Soket` yetki sisteminde
