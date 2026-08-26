@@ -5612,6 +5612,41 @@ calistir_uart_pl011_bare_metal:
 test_tumu: calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test
 	@echo "Tum testler gecti!"
 
+# ============================================================================
+# [D-473] PARALEL TAKIM KOSUMU.
+#
+# NEDEN DEGERLI — OLCULDU, TAHMIN EDILMEDI: takim suresinin ~%65'i ORTAMSAL.
+# Bu makinede surec baslatma 96-170 ms (Linux'ta 1-5 ms; `/usr/bin/true` bile
+# 96 ms) ve yeni uretilen her `.exe`nin ILK calistirmasi ~194 ms fazladan
+# (Defender). Bunlar CPU'yu MESGUL ETMEZ -> 12 cekirdekte ortusurler.
+# Link suresi ise KARARLI (570-639 ms, %10 varyans) = CPU-bagimli.
+#
+# ⚠ `-j` BILEREK VARSAYILAN DEGIL, AYRI HEDEF.
+# Gomulu paralellik, aralikli bir kirmizi ciktiginda "kod mu, yaris mi?"
+# sorusunu HER SEFERINDE acar. Bu depoda carpisma kaynakli SAHTE KIRMIZI iki
+# kez olculdu (D-297: ayni testin iki es zamanli kosumu; D-414: `codegen.exe`
+# uzerine es zamanli yazim -> 134/135 sahte kirmizi) ve bir kez GERCEK bir
+# gerilemeyi geri almaya yaklastirdi. Supheli bir kirmizida `test_tumu`ya
+# (seri) dusmek TESHIS ARACIDIR -- onu kaybetmek pahaliya mal olur.
+#
+# ON KOSUL D-471'DE SAGLANDI: `codegen.exe`/`codegen.ll` artik TEK hedef
+# (oncesinde 38 ve 18 ayri yerden yaziliyordu = kesin carpisma). Kalan yuzey
+# OLCULDU ve TEMIZ: 22/27 harness `mktemp`, `kripto_kosum` PID-benzersiz dizin
+# (`build/_kripto_kosum_$$`), `belge_kapisi`/`check_kapisi`/`ct_bariyer` hic
+# dosya YAZMIYOR, cift yazilan `kdl_uart_pl011_aarch64.o` ise `test_tumu`da
+# HIC KOSMUYOR.
+#
+# Kullanim:  mingw32-make test_tumu_paralel        (cekirdek sayisi otomatik)
+#            mingw32-make test_tumu_paralel J=4    (elle sinir)
+J ?= $(shell nproc 2>/dev/null || echo 4)
+test_tumu_paralel:
+	@echo "=== PARALEL takim kosumu (-j$(J)) ==="
+	@echo "UYARI: Kirmizi cikarsa ONCE seri kosumla dogrula (make test_tumu):"
+	@echo "   carpisma kaynakli SAHTE kirmizi bu depoda iki kez olculdu."
+	@echo "   (Bu satirlarda BACKTICK KULLANMA: kabuk komut ikamesi tetikler ve"
+	@echo "    ic ice bir make baslatir -- D-456'da kayitli tuzak, burada isirdi.)"
+	@$(MAKE) -j$(J) test_tumu
+
 # === Lean 4 ispat sistemi (DRF V1 mekanize — Faz A2+) ===
 # Bkz. belgeler/KEMGU_DRF_Mekanize_Spec.md §5
 #

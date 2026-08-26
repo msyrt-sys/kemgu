@@ -21,6 +21,30 @@
  * dogru goruntulemek icin chcp 65001 (varsayilan Win11) yeterli.
  */
 
+/* ============================================================================
+ * [D-474] POSIX OZELLIK-TEST MAKROSU — HER #include'DAN ONCE GELMELI.
+ *
+ * `-std=c11` KATI ISO demektir: glibc `__STRICT_ANSI__` gorunce POSIX
+ * bildirimlerini GIZLER. Sonuc, Linux'ta DERLEME HATASI:
+ *   struct addrinfo   -> "storage size ... isn't known"  (netdb.h gizli)
+ *   struct timeval    -> ayni
+ *   posix_memalign    -> "implicit declaration"
+ *
+ * ⚠ WINDOWS'TA GORUNMEZ: MinGW bu gizlemeyi YAPMAZ, o yuzden kusur burada
+ * derlenirken hicbir uyari vermiyordu. "Benim makinemde derleniyor" capraz
+ * platform kodda YETERSIZ KANITTIR -- bu dosya WSL'de ILK derlendiginde
+ * ANINDA patladi.
+ *
+ * ⚠ KUSUR YENI DEGIL: `posix_memalign` SIMD artimindan beri buradaydi (git
+ * ile dogrulandi), yani Linux derlemesi UZUN SUREDIR kirikti ve hicbir olcum
+ * bunu gostermiyordu -- cunku Linux'ta HIC DERLENMEMISTI.
+ *
+ * 200112L = POSIX.1-2001: `posix_memalign`, `getaddrinfo`, `struct addrinfo`
+ * ve `SO_RCVTIMEO` icin yeterli. Windows dallarini ETKILEMEZ. */
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200112L
+#endif
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -65,6 +89,10 @@ static void *kdl_sizan_al(uint64_t n) {
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
+/* [D-474] `struct timeval` (SO_RCVTIMEO icin) BURADAN gelir. `sys/socket.h`in
+ * onu getirecegini VARSAYMISTIM -- katı POSIX'te GETIRMEZ ve Linux'ta
+ * "storage size of 'tv' isn't known" verir. Varsayim yerine acik include. */
+#include <sys/time.h>
 /* [D-470] `errno` (EAGAIN/EWOULDBLOCK = okuma zaman asimi) POSIX dalinda
  * kullaniliyor. ⚠ Bu eksiklik Windows'ta GIZLI KALIRDI: o dal `#ifdef` ile
  * disarida oldugu icin burada derleme HATA VERMEZ, Linux'ta ise VERIRDI.
