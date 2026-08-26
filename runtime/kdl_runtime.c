@@ -65,6 +65,11 @@ static void *kdl_sizan_al(uint64_t n) {
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
+/* [D-470] `errno` (EAGAIN/EWOULDBLOCK = okuma zaman asimi) POSIX dalinda
+ * kullaniliyor. ⚠ Bu eksiklik Windows'ta GIZLI KALIRDI: o dal `#ifdef` ile
+ * disarida oldugu icin burada derleme HATA VERMEZ, Linux'ta ise VERIRDI.
+ * Capraz-platform kodda "benim makinemde derleniyor" YETERSIZ KANITTIR. */
+#include <errno.h>
 #include <unistd.h>
 #define KDL_SOKET_POSIX 1
 #define KDL_SOKET_VAR 1
@@ -489,6 +494,13 @@ typedef int (WSAAPI *KdlFnConnect)(SOCKET, const struct sockaddr *, int);
 typedef int (WSAAPI *KdlFnSend)(SOCKET, const char *, int, int);
 typedef int (WSAAPI *KdlFnRecv)(SOCKET, char *, int, int);
 typedef int (WSAAPI *KdlFnClosesocket)(SOCKET);
+typedef int (WSAAPI *KdlFnSetsockopt)(SOCKET, int, int, const char *, int);
+/* ⚠ [D-470] `WSAGetLastError` de DINAMIK yuklenmeli. Dogrudan cagirmak
+ * ws2_32'ye BAGLAMA ZAMANI bagimliligi getirir ve D-466'da kurulan ilkeyi
+ * ciger: "yeni bir yetenek, onu KULLANMAYAN programlarin baglama sozlesmesini
+ * DEGISTIRMEMELI". Ilk yazimda dogrudan cagirdim ve link ANINDA kirildi
+ * ("undefined symbol: WSAGetLastError") -- ilke kendi ihlalini yakaladi. */
+typedef int (WSAAPI *KdlFnWSAGetLastError)(void);
 
 static int kdl_wsa_durum = 0;   /* 0=denenmedi 1=hazir -1=yok */
 static KdlFnGetaddrinfo   kdl_p_getaddrinfo;
@@ -498,6 +510,8 @@ static KdlFnConnect       kdl_p_connect;
 static KdlFnSend          kdl_p_send;
 static KdlFnRecv          kdl_p_recv;
 static KdlFnClosesocket   kdl_p_closesocket;
+static KdlFnSetsockopt    kdl_p_setsockopt;   /* [D-470] zaman asimi */
+static KdlFnWSAGetLastError kdl_p_wsalasterr;   /* [D-470] */
 
 static int kdl_wsa_baslat(void) {
     HMODULE m;
@@ -523,9 +537,11 @@ static int kdl_wsa_baslat(void) {
     kdl_p_send         = (KdlFnSend)(void (*)(void))GetProcAddress(m, "send");
     kdl_p_recv         = (KdlFnRecv)(void (*)(void))GetProcAddress(m, "recv");
     kdl_p_closesocket  = (KdlFnClosesocket)(void (*)(void))GetProcAddress(m, "closesocket");
+    kdl_p_setsockopt   = (KdlFnSetsockopt)(void (*)(void))GetProcAddress(m, "setsockopt");
+    kdl_p_wsalasterr   = (KdlFnWSAGetLastError)(void (*)(void))GetProcAddress(m, "WSAGetLastError");
     if (!p_start || !kdl_p_getaddrinfo || !kdl_p_freeaddrinfo ||
         !kdl_p_socket || !kdl_p_connect || !kdl_p_send ||
-        !kdl_p_recv || !kdl_p_closesocket) {
+        !kdl_p_recv || !kdl_p_closesocket || !kdl_p_setsockopt || !kdl_p_wsalasterr) {
         return 0;   /* eksik sembol -> guvenli hata */
     }
     if (p_start(MAKEWORD(2, 2), &wd) != 0) return 0;
@@ -547,6 +563,7 @@ static int kdl_wsa_baslat(void) {
 #define KDL_SEND          kdl_p_send
 #define KDL_RECV          kdl_p_recv
 #define KDL_KAPAT_SOKET   kdl_p_closesocket
+#define KDL_SETSOCKOPT    kdl_p_setsockopt
 #elif defined(KDL_SOKET_POSIX)
 #define KDL_GETADDRINFO   getaddrinfo
 #define KDL_FREEADDRINFO  freeaddrinfo
@@ -555,8 +572,64 @@ static int kdl_wsa_baslat(void) {
 #define KDL_SEND          send
 #define KDL_RECV          recv
 #define KDL_KAPAT_SOKET   close
+#define KDL_SETSOCKOPT    setsockopt
 #endif
+
+/* ----------------------------------------------------------------------------
+ * [D-470] OKUMA ZAMAN ASIMI.
+ *
+ * NEDEN: `recv` SINIRSIZ bloklar. Olu bir karsi tarafla konusan program
+ * SONSUZA DEK bekler -- ve bu, D-296'da acikca REDDEDILEN sinifin ta kendisi
+ * ("safety korunuyor, liveness kayboluyor"). Cokmezlik vaat eden bir dilin
+ * stdlib'i asilamaz. `connect`in ISLETIM SISTEMINDE zaten bir ust siniri var
+ * (~20 sn), yani asilma riski YALNIZCA `recv`de -- olculdu, bu yuzden V1
+ * kapsami okuma zaman asimidir.
+ *
+ * ⚠ PLATFORM FARKI OLCULDU: ayni sabit adi (`SO_RCVTIMEO`) iki farkli ARGUMAN
+ * TIPI ister -- Windows DWORD MILISANIYE, POSIX `struct timeval`. Yanlis tipi
+ * gecirmek SESSIZCE cop bir zaman asimi kurar (derleyici sikayet etmez, cunku
+ * ikisi de `const char *`e cast edilir). Iki dal AYRI yazildi.
+ *
+ * ms <= 0  -> zaman asimini KALDIR (sonsuz bekleme). Kullanicinin acikca
+ *             isteyebilecegi mesru bir secim; varsayilan DEGIL.
+ * -------------------------------------------------------------------------- */
+static int kdl_soket_zaman_uygula(void *p, int32_t ms) {
+    KdlSoket *k = (KdlSoket *)p;
+    if (!k) return -1;
+#ifdef KDL_SOKET_WIN
+    {
+        DWORD t = (ms > 0) ? (DWORD)ms : 0;   /* 0 = sonsuz (Winsock) */
+        if (KDL_SETSOCKOPT(k->s, SOL_SOCKET, SO_RCVTIMEO,
+                           (const char *)&t, (int)sizeof(t)) != 0) return -1;
+    }
+#else
+    {
+        struct timeval tv;
+        tv.tv_sec  = (ms > 0) ? (ms / 1000) : 0;
+        tv.tv_usec = (ms > 0) ? ((ms % 1000) * 1000) : 0;   /* 0/0 = sonsuz */
+        if (KDL_SETSOCKOPT(k->s, SOL_SOCKET, SO_RCVTIMEO,
+                           (const char *)&tv, (socklen_t)sizeof(tv)) != 0) return -1;
+    }
+#endif
+    return 0;
+}
 #endif  /* KDL_SOKET_VAR */
+
+/* [D-470] Son `al` cagrisi ZAMAN ASIMI yuzunden mi basarisiz oldu?
+ * Ayri bir yuklem, cunku `sonuc<metin, metin>` sarmalayicisinin DOGRU HATA
+ * MESAJINI uretebilmesi icin sebebi bilmesi gerekiyor. */
+static int kdl_soket_zaman_asti_bayrak = 0;
+
+int32_t kdl_soket_zaman_asti(void) { return kdl_soket_zaman_asti_bayrak; }
+
+int32_t kdl_soket_zaman_asimi(void *p, int32_t ms) {
+#ifdef KDL_SOKET_VAR
+    return kdl_soket_zaman_uygula(p, ms);
+#else
+    (void)p; (void)ms;
+    return -1;
+#endif
+}
 
 void *kdl_soket_baglan(const char *host, int32_t port) {
 #ifdef KDL_SOKET_VAR
@@ -642,16 +715,27 @@ const char *kdl_soket_al(void *p, int32_t azami) {
     if (azami > 1048576) azami = 1048576;   /* 1 MiB tavan */
     buf = (char *)kdl_sizan_al((size_t)azami + 1);
     if (!buf) return NULL;
+    kdl_soket_zaman_asti_bayrak = 0;   /* [D-470] her okumada sifirla */
 #ifdef KDL_SOKET_WIN
     {
         int r = KDL_RECV(k->s, buf, azami, 0);
-        if (r == SOCKET_ERROR) return NULL;
+        if (r == SOCKET_ERROR) {
+            /* [D-470] ZAMAN ASIMI ile GERCEK HATA ayrilmali. Ayirmadan
+             * ikisi de "okuma basarisiz" gorunurdu ve cagiran yeniden mi
+             * denemeli yoksa baglantiyi mi birakmali BILEMEZDI. */
+            if (kdl_p_wsalasterr() == WSAETIMEDOUT) kdl_soket_zaman_asti_bayrak = 1;
+            return NULL;
+        }
         buf[r] = '\0';
     }
 #else
     {
         ssize_t r = KDL_RECV(k->s, buf, (size_t)azami, 0);
-        if (r < 0) return NULL;
+        if (r < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                kdl_soket_zaman_asti_bayrak = 1;
+            return NULL;
+        }
         buf[r] = '\0';
     }
 #endif

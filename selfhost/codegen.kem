@@ -3638,6 +3638,7 @@ işlev builtin_kdl_ad(ad: metin) -> metin {
          veya metin_esit(ad, "soket_baglan") veya metin_esit(ad, "soket_gonder")
          veya metin_esit(ad, "soket_al") veya metin_esit(ad, "soket_kapat")
          veya metin_esit(ad, "soket_gecerli")
+         veya metin_esit(ad, "soket_zaman_asimi") veya metin_esit(ad, "soket_zaman_asti")   // [D-470]
          veya metin_esit(ad, "kesirli_metin")   // [D-457]
          veya metin_baslar(ad, "kod_")   // [D-458]
          veya metin_esit(ad, "tam_metin")   // [D-459]
@@ -3692,6 +3693,8 @@ işlev builtin_ret(ad: metin) -> metin {
     eğer metin_esit(ad, "soket_baglan") { ver "ptr"; }
     eğer metin_esit(ad, "soket_al") { ver "ptr"; }
     eğer metin_esit(ad, "soket_gecerli") { ver "i1"; }
+    eğer metin_esit(ad, "soket_zaman_asti") { ver "i1"; }        // [D-470]
+    eğer metin_esit(ad, "soket_zaman_asimi") { ver "i32"; }      // [D-470]
     eğer metin_esit(ad, "soket_gonder") { ver "i32"; }
     eğer metin_esit(ad, "soket_kapat") { ver "i32"; }
     eğer metin_esit(ad, "kesirli_metin") { ver "ptr"; }   // [D-457]
@@ -3798,6 +3801,8 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_soket_al(ptr, i32)"); yb(10);       // [D-466]
     yaz_str("declare i32 @kdl_soket_kapat(ptr)"); yb(10);         // [D-466]
     yaz_str("declare i1 @kdl_soket_gecerli(ptr)"); yb(10);        // [D-466]
+    yaz_str("declare i32 @kdl_soket_zaman_asimi(ptr, i32)"); yb(10);  // [D-470]
+    yaz_str("declare i1 @kdl_soket_zaman_asti()"); yb(10);            // [D-470]
     yaz_str("declare i32 @kdl_dosya_sil(ptr)"); yb(10);
     yaz_str("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)"); yb(10);
     yaz_str("declare i64 @kdl_dosya_boyut(ptr)"); yb(10);
@@ -8150,6 +8155,7 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "bariyer_yok");   // [D-456]
     g_ekle(p, "soket_baglan"); g_ekle(p, "soket_gonder");   // [D-466]
     g_ekle(p, "soket_al"); g_ekle(p, "soket_kapat"); g_ekle(p, "soket_gecerli");   // [D-466]
+    g_ekle(p, "soket_zaman_asimi"); g_ekle(p, "soket_zaman_asti");   // [D-470]
     g_ekle(p, "kesirli_metin");   // [D-457]
     g_ekle(p, "kod_metin"); g_ekle(p, "kod_gecerli");   // [D-458]
     g_ekle(p, "tam_metin"); g_ekle(p, "metin_tam"); g_ekle(p, "metin_tam_gecerli");   // [D-459]
@@ -8484,6 +8490,8 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "soket_al", "metin", ["metin", "tam32"]);   // [D-466]
     yerlesik_ekle(p, "soket_kapat", "tam32", ["metin"]);   // [D-466]
     yerlesik_ekle(p, "soket_gecerli", "mantıksal", ["metin"]);   // [D-466]
+    yerlesik_ekle(p, "soket_zaman_asimi", "tam32", ["metin", "tam32"]);   // [D-470]
+    yerlesik_ekle(p, "soket_zaman_asti", "mantıksal", bos);   // [D-470]
     yerlesik_ekle(p, "kesirli_metin", "metin", ["kesirli64"]);   // [D-457]
     yerlesik_ekle(p, "kod_metin", "metin", ["tam32"]);   // [D-458]
     yerlesik_ekle(p, "kod_gecerli", "mantıksal", ["tam32"]);   // [D-458]

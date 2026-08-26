@@ -454,6 +454,20 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         p[0] = tip_olustur_basit(a, TIP_METIN);
         EKLE_BUILTIN("soket_gecerli", 13, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
     }
+    /* [D-470] soket_zaman_asimi(h, ms) -> tam32 (0=ok) : okuma zaman asimi.
+     * soket_zaman_asti() -> mantiksal : son `al` ZAMAN ASIMI yuzunden mi
+     * basarisiz oldu (gercek hatadan AYIRT ETMEK icin -- ayirmadan cagiran
+     * yeniden mi denemeli yoksa baglantiyi mi birakmali bilemez). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("soket_zaman_asimi", 17, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+    {
+        EKLE_BUILTIN("soket_zaman_asti", 16, NULL, 0,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
     {
         TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
         p[0] = tip_olustur_basit(a, TIP_METIN);
@@ -2216,8 +2230,15 @@ static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
             hata = 1;
         }
-        /* Linear Types Spec V1: alan tekkez ise deger baglamadan move */
-        if (alan_tipi && alan_tipi->kategori == TIP_TEKKEZ) {
+        /* Linear Types Spec V1: alan tekkez ise deger baglamadan move.
+         * [D-470] KOSUL `TIP_TEKKEZ` ILE SINIRLIYDI -> `yapi tekkez K`
+         * (D-313'te eklenen LINEER YAPI) ve `gorev<T>` / `yetki<R>` alanlari
+         * KAPSANMIYORDU: `S { t: t }` lineer `t`yi TUKETMIS SAYMIYOR, sonra
+         * scope sonunda L001 patliyordu -- yani lineer bir degeri bir yapiya
+         * KOYMAK IMKANSIZDI. `tip_lineer_mi` zaten dogru soruyu soruyor;
+         * kategori karsilastirmasi onun yerine gecirildi.
+         * Olculdu: D-467/D-470 ONCESINDE de vardi. */
+        if (tip_lineer_mi(alan_tipi)) {
             lineer_tuket_eger_baglamaysa(tk, aa->veri.alan_atama.deger);
         }
     }
@@ -2811,11 +2832,24 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (uz == 6 && memcmp(ad, "de\xc4\x9f" "er", 6) == 0) {
                     TipBilgisi *iç = tip_belirle(tk,
                         d->veri.cagri.argumanlar[0]);
+                    /* [D-470] YAPICI ARGUMANI LINEER DEGERI TUKETIR.
+                     * Onceden tuketmiyordu -> `ver tamam(t)` bile L001
+                     * veriyordu, yani lineer bir deger `sonuc`/`secimlik`
+                     * ICINDE DONDURULEMIYORDU. Bu, dilin kendi "sahiplen ve
+                     * iade et" desenini (drivers/virtio) `sonuc` ile birlikte
+                     * KULLANILAMAZ kiliyordu. Olculdu: D-467/D-470 ONCESINDE
+                     * de vardi -- bu artimin yan etkisi DEGIL.
+                     * D-320'nin "cagri argumaninda tuketim" kuraliyla AYNI
+                     * SINIF: deger baska bir yapiya TASINIYOR. */
+                    lineer_tuket_eger_baglamaysa(tk,
+                        d->veri.cagri.argumanlar[0]);
                     return tip_olustur_secimlik(tk->arena, iç);
                 }
                 /* "tamam" (5 byte) */
                 if (uz == 5 && memcmp(ad, "tamam", 5) == 0) {
                     TipBilgisi *deg = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    lineer_tuket_eger_baglamaysa(tk,   /* [D-470] */
                         d->veri.cagri.argumanlar[0]);
                     TipBilgisi *hata = tip_olustur_basit(tk->arena,
                         TIP_BILINMIYOR);
@@ -2824,6 +2858,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* "hata" (4 byte) */
                 if (uz == 4 && memcmp(ad, "hata", 4) == 0) {
                     TipBilgisi *h = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    lineer_tuket_eger_baglamaysa(tk,   /* [D-470] */
                         d->veri.cagri.argumanlar[0]);
                     TipBilgisi *deg = tip_olustur_basit(tk->arena,
                         TIP_BILINMIYOR);

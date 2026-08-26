@@ -1,0 +1,19 @@
+// [D-470] Yapıcı argümanı (`tamam`/`değer`/`hata`) lineer değeri TÜKETİR.
+// Öncesinde tüketmiyordu → `ver tamam(t)` bile L001 veriyordu, yani lineer bir
+// değer `sonuç`/`seçimlik` İÇİNDE DÖNDÜRÜLEMİYORDU. Bu, dilin kendi "sahiplen
+// ve iade et" desenini (drivers/virtio) `sonuç` ile kullanılamaz kılıyordu.
+// DOĞRU kullanım — tanı ÜRETMEMELİ.
+// ⚠ Yapı literali `eşleş` BAŞINDA yazılamaz (yapi_olusturma_izni) — önce
+// değişkene bağlanır.
+yapı tekkez T { h: metin; }
+
+işlev ilet(t: T) -> sonuç<T, metin> { ver tamam(t); }
+
+işlev main() -> tam32 {
+    değişken t0: T = T { h: "x" };
+    değişken r: sonuç<T, metin> = ilet(t0);
+    eşleş r {
+        tamam(t) => { imha(t); ver 42; }
+        hata(m) => { ver 1; }
+    }
+}

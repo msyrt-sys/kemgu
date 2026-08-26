@@ -52,26 +52,99 @@ işlev baglan(y: yetki<Soket>, host: metin, port: tam32) -> sonuç<Baglanti, met
     geri_al(y);
     eğer gecerli_giris == yanlış { ver hata("gecersiz host veya port"); }
     eğer soket_gecerli(h) == yanlış { ver hata("baglanti kurulamadi"); }
+    // [D-470] VARSAYILAN OKUMA ZAMAN AŞIMI: 30 sn. Varsayılan olmadan zaman
+    // aşımı "isteğe bağlı özellik" olurdu ve kimse çağırmazdı → asılma riski
+    // aynen sürerdi. 30 sn, yavaş sunucuyu yanlışlıkla kesmeyecek kadar uzun,
+    // asılmayı fark edilir kılacak kadar kısa. Sonsuz isteyen açıkça
+    // `zaman_asimi_ayarla(b, 0)` çağırır.
+    soket_zaman_asimi(h, 30000);
     ver tamam(Baglanti { h: h });
 }
 
 // Gönder — `b` ÖDÜNÇ alınır (referans), tüketilmez; aynı bağlantıda
 // defalarca gönderilebilir. Dönüş: gönderilen BAYT sayısı.
 // ⚠ Kısmi yazma runtime'da döngüyle çözülür; buraya ulaşan sayı TAMAMIDIR.
-işlev gonder(b: &Baglanti, veri: metin) -> sonuç<tam32, metin> {
+// ⚠ HATA YOLU BAĞLANTIYI KAPATIR — ölçülmüş bir zorunluluk, tercih değil.
+// `hata(metin)` içine `Baglanti` sığmaz; iade edilmezse işlevin KENDİSİ L001
+// alır (lineer yükümlülük tüketilmedi). Tek tutarlı seçenek: hatada bağlantıyı
+// GERÇEKTEN kapat (`soket_kapat`) ve lineer yükümlülüğü `imha` ile bitir.
+// Yalnız `imha` YETMEZDİ: lineer takip susar ama İŞLETİM SİSTEMİ soketi sızar.
+// Anlambilim savunulabilir: başarısız bir G/Ç zaten çoğu zaman bağlantının
+// öldüğü anlamına gelir (fail-fast).
+işlev gonder(b: Baglanti, veri: metin) -> sonuç<Baglanti, metin> {
+    // ⚠ AÇIK `değilse` ŞART: erken `ver` içeren bir `eğer` bloğu lineer
+    // tüketim analizinde dal-sonu SAYILMIYOR (L005: "bir dal tüketiyor,
+    // diğeri tüketmiyor"). İki dalı da açıkça yazmak tek geçerli biçim.
     değişken n: tam32 = soket_gonder(b.h, veri);
-    eğer n < 0 { ver hata("gonderim basarisiz"); }
-    ver tamam(n);
+    eğer n < 0 {
+        soket_kapat(b.h);
+        imha(b);
+        ver hata("gonderim basarisiz");
+    } değilse {
+        ver tamam(b);
+    }
+}
+
+// Okuma sonucu: bağlantı GERİ verilir + okunan veri. `Baglanti` lineer olduğu
+// için bu yapı da `tekkez` olmak ZORUNDA (LR002: sıradan yapı lineer alan
+// içeremez).
+yapı tekkez AlSonuc { b: Baglanti; veri: metin; }
+
+// [D-470] Okuma zaman aşımı — milisaniye. `ms <= 0` sonsuz bekleme demektir.
+//
+// ⚠ NEDEN VAR: `al` zaman aşımı olmadan SONSUZA DEK bloklar. Ölü bir karşı
+// tarafla konuşan program asılır — bu, D-296'da açıkça REDDEDİLEN sınıfın ta
+// kendisi ("safety korunuyor, liveness kayboluyor"). Çökmezlik vaat eden bir
+// dilin kütüphanesi asılamaz.
+//
+// ⚠ `baglan` MAKUL BİR VARSAYILAN kurar (aşağıya bak). Varsayılan olmasaydı
+// zaman aşımı "isteğe bağlı bir özellik" olurdu, kimse çağırmazdı ve asılma
+// riski aynen sürerdi. Sonsuz beklemeyi isteyen açıkça `0` verir.
+// ⚠⚠ İMZA `&Baglanti` DEĞİL — bağlantı SAHİPLENİLİR ve İADE EDİLİR.
+// Bu bir tercih değil, lineer sistemin ZORLADIĞI tek biçim: `Baglanti`
+// `yapı tekkez` olduğu için `&b` almak **L004** verir ("lineer tipte referans
+// alınamaz"). D-466'da `gonder`/`al`ı `&Baglanti` ile yazmıştım ve o hâlleri
+// ÇAĞRILAMAZDI — ölçüldü, `git stash` ile D-467 ÖNCESİNDE de L004 verdiği
+// doğrulandı. Yani API'nin yarısı ÖLÜ KODDU ve hiçbir ölçüm göstermiyordu:
+// `test_ag` onları hiç çağırmamış, `istemci.kem` ham yerleşikleri kullanmış.
+// Dilin yerleşik deseni `drivers/virtio`da duruyor (sahiplen + iade).
+// BEDELİ AÇIK: her çağrı bir `eşleş` ister. Lineer sahiplik zincirini
+// kopmadan taşımanın karşılığı budur.
+işlev zaman_asimi_ayarla(b: Baglanti, ms: tam32) -> sonuç<Baglanti, metin> {
+    eğer soket_zaman_asimi(b.h, ms) != 0 { ver hata("zaman asimi ayarlanamadi"); }
+    ver tamam(b);
 }
 
 // Al — en fazla `azami` bayt okur.
 // ⚠ BOŞ DİZGİ = karşı taraf bağlantıyı KAPATTI (hata DEĞİL). Bu ayrımı
 // silmek, kapanmış bağlantıyı sonsuza dek okumaya çalışan bir döngü üretirdi.
-işlev al(b: &Baglanti, azami: tam32) -> sonuç<metin, metin> {
-    eğer azami < 1 { ver hata("azami en az 1 olmali"); }
-    değişken s: metin = soket_al(b.h, azami);
-    eğer soket_gecerli(s) == yanlış { ver hata("okuma basarisiz"); }
-    ver tamam(s);
+işlev al(b: Baglanti, azami: tam32) -> sonuç<AlSonuc, metin> {
+    // ⚠ İÇ İÇE `eğer/değilse` yerine TEK dallanma: iç içe yapıda lineer analiz
+    // L005 veriyordu (dış `değilse` içindeki iç dallanmanın her iki kolunun da
+    // tükettiğini göremiyor). Geçersiz `azami` burada 0 baytlık okumaya
+    // dönüştürülür ve aynı hata yolundan geçer — tek çıkış noktası.
+    değişken s: metin = "";
+    değişken okundu: mantıksal = yanlış;
+    eğer azami >= 1 {
+        s = soket_al(b.h, azami);
+        okundu = soket_gecerli(s);
+    }
+    eğer okundu == yanlış {
+        // [D-470] ZAMAN AŞIMI ile GERÇEK HATA AYRILIR. Ayırmasaydık ikisi de
+        // "okuma basarisiz" görünürdü ve çağıran YENİDEN DENEMELİ Mİ yoksa
+        // bağlantıyı BIRAKMALI MI bilemezdi — sessizce yanlış karar verirdi.
+        // ⚠ V1 SINIRI: zaman aşımında da bağlantı KAPANIR (yukarıdaki hata
+        // yolu kuralı). Yeniden denemeye izin vermek `hata` kolunun bağlantıyı
+        // taşıyabilmesini gerektirir — payload'lı `çeşit` işi, ayrı artım.
+        değişken zaman: mantıksal = soket_zaman_asti();
+        soket_kapat(b.h);
+        imha(b);
+        eğer zaman { ver hata("zaman asimi"); }
+        eğer azami < 1 { ver hata("azami en az 1 olmali"); }
+        ver hata("okuma basarisiz");
+    } değilse {
+        ver tamam(AlSonuc { b: b, veri: s });
+    }
 }
 
 // Kapat — bağlantıyı TÜKETİR. Çağrıdan sonra `b` kullanılamaz (L002).

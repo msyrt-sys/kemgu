@@ -1,0 +1,13 @@
+// [D-470] Onarım FAZLA GEVŞETMEMELİ: yapıcıya verilen değer TÜKETİLİR, yani
+// öncesinde imha edilmişse bu İKİNCİ tüketimdir → L002.
+// ⚠ Bu NEGATİF fikstür şart: yalnız pozitifler olsaydı, "yapıcı argümanını
+// her zaman tüketilmiş say" diyen ama L002'yi de susturan bir sabotaj kapıdan
+// GEÇERDİ (D-425).
+yapı tekkez T { h: metin; }
+
+işlev main() -> tam32 {
+    değişken t: T = T { h: "x" };
+    imha(t);
+    değişken r: sonuç<T, metin> = tamam(t);   // ikinci tüketim -> L002
+    ver 0;
+}

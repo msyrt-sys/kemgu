@@ -5290,7 +5290,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      (cagri_adi_uz == 11 &&
                       memcmp(cagri_adi, "soket_kapat", 11) == 0) ||
                      (cagri_adi_uz == 13 &&
-                      memcmp(cagri_adi, "soket_gecerli", 13) == 0)) {
+                      memcmp(cagri_adi, "soket_gecerli", 13) == 0) ||
+                     (cagri_adi_uz == 17 &&
+                      memcmp(cagri_adi, "soket_zaman_asimi", 17) == 0) ||
+                     (cagri_adi_uz == 16 &&
+                      memcmp(cagri_adi, "soket_zaman_asti", 16) == 0)) {
                 static char kdl_sok_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
                 memcpy(kdl_sok_buf, "kdl_", 4);
@@ -5305,6 +5309,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 } else if (n == 13 && memcmp(kdl_sok_buf + 4, "soket_gecerli", 13) == 0) {
                     param_beklenen[0] = "ptr";
                     kdl_donus = "i1";
+                } else if (n == 16 &&
+                           memcmp(kdl_sok_buf + 4, "soket_zaman_asti", 16) == 0) {
+                    kdl_donus = "i1";   /* [D-470] argumansiz yuklem */
+                } else if (n == 17 &&
+                           memcmp(kdl_sok_buf + 4, "soket_zaman_asimi", 17) == 0) {
+                    param_beklenen[0] = "ptr"; param_beklenen[1] = "i32";
+                    kdl_donus = "i32";
                 } else {
                     /* gonder / kapat -> i32 */
                     param_beklenen[0] = "ptr";
@@ -7836,6 +7847,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_soket_al(ptr, i32)\n", out);      /* [D-466] */
     fputs("declare i32 @kdl_soket_kapat(ptr)\n", out);        /* [D-466] */
     fputs("declare i1 @kdl_soket_gecerli(ptr)\n", out);       /* [D-466] */
+    fputs("declare i32 @kdl_soket_zaman_asimi(ptr, i32)\n", out); /* [D-470] */
+    fputs("declare i1 @kdl_soket_zaman_asti()\n", out);           /* [D-470] */
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
