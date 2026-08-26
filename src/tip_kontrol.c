@@ -5757,6 +5757,19 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             if (dt && dt->kategori == TIP_REFERANS && dt->veri.referans.hedef) {
                 dt = dt->veri.referans.hedef;
             }
+            /* [D-467] LINEER SKRUTINIYI BIR KEZ TUKET.
+             * Onceden yalnizca YAPI DESENI dalinda tuketiliyordu; yapici
+             * desenlerinde (`tamam(b)` / `hata(m)`) tuketilmiyordu. `sonuc`
+             * lineer YAPILINCA (yukaridaki tip_lineer_mi ozyinelemesi) bu
+             * eksiklik ortaya cikti: `esles s { ... }` ile duzgun ACILAN bir
+             * parametre bile L001 aliyordu -- yani onarim yanlis-pozitif
+             * uretiyordu. Skrutini `esles`e girerken TUKETILIR; kollarin
+             * payload'lari ayri baglamalardir ve kendi L001 takiplerine tabidir.
+             * Burasi (kol basi degil) BIR KEZ calisir -- kol basina tuketmek
+             * ikinci kolda sahte L002 verirdi. */
+            if (tip_lineer_mi(dt)) {
+                lineer_tuket_eger_baglamaysa(tk, d->veri.esles.deger);
+            }
             /* Sabitsüre Spec V1 CT001 SABITSURE_MATCH: scrutinee sabitsure
              * olamaz — kol seçimi gizli bilgiyle dallanır. */
             if (tip_sabitsure_mi(dt)) {
@@ -5846,8 +5859,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                                 fs.lineer_scope_seviyesi = tk->scope_seviyesi;
                                 sembol_ekle(tk->scope, tk->arena, &fs);
                             }
-                            /* Yapiyi TUKET (lineer ise); lineer degilse no-op. */
-                            lineer_tuket_eger_baglamaysa(tk, d->veri.esles.deger);
+                            /* [D-467] Skrutini artik ESLES'IN BASINDA bir kez
+                             * tuketiliyor (yapici desenleri de kapsasin diye).
+                             * Burada TEKRAR tuketmek IKINCI tuketim sayilip
+                             * sahte L002 uretiyordu (test L79 bunu yakaladi:
+                             * `esles s { Sahip { x } => { imha(x); } }`).
+                             * Eski tek-noktali tuketim bilerek KALDIRILDI. */
                         }
                     } else if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
                         /* x => govde — x'in tipi dt */
@@ -6092,9 +6109,26 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_IFADE_DEYIMI:
-            tip_belirle(tk, d->veri.ifade_deyimi.ifade);
+        case DUGUM_IFADE_DEYIMI: {
+            /* [D-467] ATILAN LINEER DEGER. Bir ifade-deyimi degerini HICBIR
+             * YERE baglamaz; uretilen deger lineerse o an SIZAR ve baska
+             * hicbir kontrol bunu yakalayamaz (bagli olmadigi icin scope
+             * sonundaki L001 taramasina da girmez).
+             *
+             * Olculdu -- bu dal olmadan UC API'nin belgelenmis garantisi
+             * cagiran sonucu YOK SAYINCA sessizce kayboluyordu:
+             *   ac("x","w");            (Dosya)
+             *   gorev_baslat(|| ..);    (gorev<T>)
+             *   baglan(y, host, port);  (Baglanti)
+             * Ucu de "OK" veriyordu. */
+            TipBilgisi *it = tip_belirle(tk, d->veri.ifade_deyimi.ifade);
+            if (it && tip_lineer_mi(it)) {
+                tip_hata(tk, d->veri.ifade_deyimi.ifade, "L001",
+                         "lineer deger uretildi ama TUKETILMEDI "
+                         "(sonuc bir degiskene baglanip `esles` ile acilmali)");
+            }
             break;
+        }
 
         case DUGUM_HATA:
             break;

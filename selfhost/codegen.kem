@@ -9193,6 +9193,20 @@ işlev g001_hata(p: &değişken Ayr, idx: tam32) -> tam32 {
 // ---- D-353: "yanlış şekil" tanıları — T005/T006/T007/T008/T027 ----
 // Ortak kalıp: ifadenin tipi BİLİNEN bir skaler, ama bağlam yapı / dizi / işlev
 // şekli istiyor. "?" (emin değil) → kontrol ATLANIR (yanlış-pozitif yok).
+// [D-467] Bu düğümün KONUMUNDA verilmiş bir tanı var mı? "Geçersiz tip =
+// lineer yükümlülük yok" kuralı için; C bunu TIP_HATA'dan bilir, self-host'ta
+// tip nesnesi olmadığı için TANI KAYDINDAN okunur.
+işlev dugumde_hata_var(p: &değişken Ayr, idx: tam32, kod: metin) -> mantıksal {
+    değişken s: tam32 = dizi_al(p.a_sat, idx);
+    değişken u: tam32 = dizi_al(p.a_sut, idx);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.th_kod) {
+        eğer metin_esit(dizi_al(p.th_kod, i), kod)
+          ve dizi_al(p.th_sat, i) == s ve dizi_al(p.th_sut, i) == u { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
 işlev sekil_hata(p: &değişken Ayr, idx: tam32, kod: metin) -> tam32 {
     dizi_ekle(p.th_kod, kod);
     dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
@@ -10406,6 +10420,38 @@ işlev tip_node_tekkez_mi(ad: metin) -> mantıksal {
     ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI")
       veya metin_esit(ad, "TIP_GOREV");
 }
+// [D-467] LİNEER YAYILIM: `sonuç<T,H>` / `seçimlik<T>` taşıdığı değer lineerse
+// KENDİSİ de lineerdir. Bu özyineleme YOKKEN `sonuç` bir KAÇIŞ DELİĞİYDİ ve
+// ÜÇ alt-sistemde birden sessiz sızıntı üretiyordu (Dosya D-452 · görev<T>
+// D-301 · Baglanti D-466) — üçü de "kapatmayı unutmak derleme zamanında
+// yakalanır" diye belgelenmişti.
+// ⚠ Ad-tabanlı `tip_node_tekkez_mi` yetmez: DÜĞÜM İNDEKSİ gerekir ki
+// çocuklara inilebilsin. HATA tarafı da sayılır — `sonuç<tam32, Tutamac>`
+// da lineerdir; hata yolundaki sızıntı değer yolundakinden farklı değildir.
+// ⚠ AD `tip_node_lineer_mi` DEĞİL: o ad ZATEN kullanılıyor (LR002'nin yapı
+// alanı denetimi, ~11753) ve BAŞKA bir soru soruyor — düz ad tabanlı, özyineli
+// değil, `yapı tekkez`i saymaz. C derleyicisi çakışmayı T024 ile yakaladı.
+işlev tip_node_lin_ic(p: &değişken Ayr, tn: tam32) -> mantıksal {
+    eğer tn < 0 { ver yanlış; }
+    değişken ad: metin = dizi_al(p.a_ad, tn);
+    eğer tip_node_tekkez_mi(ad) {
+        eğer metin_esit(ad, "TIP_GOREV") ve tip_kesirli_arg_mi(p, tn) { ver yanlış; }
+        ver doğru;
+    }
+    eğer metin_esit(ad, "TIP_BASIT") ve lineer_yapi_mi(p, dizi_al(p.a_deg, tn)) {
+        ver doğru;
+    }
+    eğer metin_esit(ad, "TIP_SONUC") veya metin_esit(ad, "TIP_SECIMLIK") {
+        değişken cb: tam32 = dizi_al(p.a_cb, tn);
+        değişken cs: tam32 = dizi_al(p.a_cs, tn);
+        değişken i: tam32 = 0;
+        iken i < cs {
+            eğer tip_node_lin_ic(p, dizi_al(p.cocuk, cb + i)) { ver doğru; }
+            i = i + 1;
+        }
+    }
+    ver yanlış;
+}
 işlev lin_yetki_mi(p: &değişken Ayr, i: tam32) -> mantıksal {
     eğer i < 0 { ver yanlış; }
     eğer i >= dizi_boyut(p.lin_yet) { ver yanlış; }
@@ -10624,6 +10670,13 @@ işlev deg_lineer_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
         // L001/L002 akış-izleme makinesi ayrı kod olmadan devreye girer.
         eğer metin_esit(dizi_al(p.a_ad, c0), "TIP_BASIT")
           ve lineer_yapi_mi(p, dizi_al(p.a_deg, c0)) { ver doğru; }
+        // [D-467] `sonuç<T,H>` / `seçimlik<T>` içindeki lineer değer.
+        // ⚠ GEÇERSİZ TİP = LİNEER YÜKÜMLÜLÜK YOK (C, TIP_HATA'da lineerliği
+        // düşürür; `görev<kesirli*>` için aynı ilke yukarıda zaten var).
+        eğer tip_node_lin_ic(p, c0) {
+            eğer dugumde_hata_var(p, idx, "T001") { ver yanlış; }
+            ver doğru;
+        }
     }
     değişken vc: tam32 = son_cocuk(p, idx);
     // D-316: değer bir lineer ALAN erişimiyse (kısmi taşıma) bağlama LİNEERDİR.
@@ -10981,6 +11034,22 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
       veya metin_esit(ad, "KURESEL") {
         t14_muaf_isaretle(p, son_cocuk(p, idx), annot_node(p, idx));
         m4_isaretle(p, son_cocuk(p, idx), annot_node(p, idx));   // D-423
+    }
+    // [D-467] ATILAN LİNEER DEĞER: bir ifade-deyimi değerini hiçbir yere
+    // bağlamaz; üretilen değer lineerse O AN sızar ve başka hiçbir kontrol
+    // yakalayamaz (bağlı olmadığı için scope sonundaki L001 taramasına da
+    // girmez). C ile birebir: `ac();` / `görev_başlat(..);` / `baglan(..);`
+    // üçü de sessizce geçiyordu.
+    eğer metin_esit(ad, "IFADE_DEYIMI") ve (dizi_al(p.a_cs, idx) > 0) {
+        değişken ie: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_esit(dizi_al(p.a_ad, ie), "CAGRI") ve (dizi_al(p.a_cs, ie) > 0) {
+            değişken fh: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, ie));
+            eğer metin_esit(dizi_al(p.a_ad, fh), "TANIMLAYICI") {
+                eğer metin_uzunluk(fn_rlin_bul(p, dizi_al(p.a_deg, fh))) > 0 {
+                    sekil_hata(p, ie, "L001");
+                }
+            }
+        }
     }
     eğer metin_esit(ad, "VER") ve (p.aktif_fn >= 0) ve (dizi_al(p.a_cs, idx) > 0) {
         t14_muaf_isaretle(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)),
