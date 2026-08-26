@@ -17,6 +17,12 @@
 # Çıkış: 0 = tüm matris hem değer-doğru (42) hem ASan/UBSan-temiz; 1 = ihlal.
 # ============================================================================
 set -u
+# [D-471] ZAMAN ASIMI SART. Bu kapi GERCEK programlari calistiriyor ve
+# zaman asimi YOKTU: bloklanan tek bir program kapiyi SONSUZA DEK asar.
+# Bu sinifin UCUNCU ornegi (ag_kosum D-466, codegen_genis D-468, burasi).
+# Bu oturumda tam takim IKI KEZ saatlerce asili kaldi (2.5 sa ve 1.5 sa).
+# ASan altinda program yavastir -> sinir cömert (60 sn), ama SONSUZ DEGIL.
+# Asilan kapi, sessiz kapi kadar kotudur: kimse onu kosturmaz.
 # [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
 # (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
 # varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
@@ -38,10 +44,10 @@ for f in "$DIR"/m*.kem; do
     fi
     # 1) Sanitizer'sız: değer doğruluğu (exit 42)
     clang -x ir "$TMP/m.ll" -x none $RT_OBJ -o "$TMP/n.exe" 2>/dev/null
-    "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
+    timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
     # 2) ASan/UBSan: bellek güvenliği (exit 42 + 0 ihlal)
     clang -fsanitize=address,undefined -x ir "$TMP/m.ll" -x none $RT_SRC -o "$TMP/a.exe" 2>/dev/null
-    aout=$("$TMP/a.exe" 2>&1); arc=$?
+    aout=$(timeout 60 "$TMP/a.exe" 2>&1); arc=$?
     viol=$(echo "$aout" | grep -ciE "AddressSanitizer|runtime error|SUMMARY:.*[Ss]anitizer")
     if [ "$nrc" = "42" ] && [ "$arc" = "42" ] && [ "$viol" = "0" ]; then
         echo "  ✓ $b"; pass=$((pass+1))

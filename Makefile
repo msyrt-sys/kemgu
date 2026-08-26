@@ -540,35 +540,51 @@ calistir_lambda_test: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 
 # SELF-HOST codegen (selfhost/codegen.kem) — Aşama 3 / D-072. KEMGU-codegen IR'ı
 # C-codegen ile SEMANTİK (exit-kod) eşdeğerlik üzerinden doğrular. Korpus: test/cg_korpus/.
-calistir_codegen_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
-	@CODEGEN=build/codegen.exe bash test/codegen_diff_harness.sh
+# ============================================================================
+# [D-471] PAYLASILAN SELF-HOST DERLEYICI YAPIMI — tek hedef, tek kurulum.
+#
+# ONCEDEN: 10 ayri hedef `codegen.exe`yi ELLE kuruyordu (ayni iki satir
+# kopyalanmis). Uc ayri soruna TEK KOK:
+#   1. TEKRAR EDEN IS: her kurulum ~2.8 sn (kemgu 1.28 + clang 1.53, olculdu)
+#      -> tam takimda ~36 sn bosuna.
+#   2. BAYAT ARTEFAKT: bu oturumda TESHISI DORT KEZ SAPTIRDI. En sert ornek:
+#      self-host "hicbir tani" gosterdi, sapma GORUNMEDI; ikili yeniden
+#      kurulunca ortaya cikti. Asil bedel budur -- sure degil.
+#   3. CARPISMA: `build/codegen.exe` 38, `build/codegen.ll` 18 ayri yerden
+#      YAZILIYOR. Es zamanli iki kosum birbirini ezer (D-297/D-414) ve bu
+#      oturumda bir tam takimi 2.5 SAAT astirdi.
+#
+# Hedef olarak tanimlaninca make BAGIMLILIGA bakar: kaynak degismediyse
+# YENIDEN KURMAZ, degistiyse KURAR. `.ll` ara dosyasi da hedefe baglidir.
+# ⚠ Bu ayni zamanda `make -j`nin ON KOSULUDUR: paralel kosumda tek yazar olur.
+# ============================================================================
+$(BUILD)/codegen.ll: selfhost/codegen.kem $(BUILD)/kemgu$(EXE) | $(BUILD)
+	@$(BUILD)/kemgu$(EXE) --llvm selfhost/codegen.kem > $@ 2>/dev/null
+
+$(BUILD)/codegen$(EXE): $(BUILD)/codegen.ll $(BUILD)/kdl_runtime.o
+	@clang -x ir $(BUILD)/codegen.ll -x none $(BUILD)/kdl_runtime.o -o $@ 2>/dev/null
+
+calistir_codegen_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
+	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/codegen_diff_harness.sh
 
 # D-395: GENİŞ codegen eşdeğerlik kapısı. calistir_codegen_diff dar korpusta
 # (test/cg_korpus/) koşar; bu kapı GERÇEK programlarda (test/ornekler + stdlib/temel)
 # exit koduna EK OLARAK stdout'u da karşılaştırır. Yazılmadan önce bu yüzeyde 31
 # sapma birikmişti ve codegen_diff hiçbirini görmüyordu.
-calistir_codegen_genis: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_codegen_genis: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/codegen_genis_harness.sh
 
 # D-418: BARE-METAL / ARM64 yapı paritesi kapısı. runtime/*.kem host'ta
 # LINKLENMEZ -> davranissal kapilarin HEPSI bu yuzeyi atliyordu ve self-host
 # --mimari bayragini hic tanimadigi icin bare-metal kodu DERLEYEMIYORDU BILE.
-calistir_baremetal_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_baremetal_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/baremetal_diff_harness.sh
 
 # D-417: SABİT-SÜRE spekülasyon bariyeri kapısı. Davranışsal kapılar bu kusuru
 # GÖREMEZ: bariyeri silince codegen_diff 139/139 YEŞİL kaldı (sabotaj S159),
 # bariyer sayısı 10 -> 0 düştü. Güvenlik özelliklerinde "program doğru çalıştı"
 # yetersiz kanıttır — bu kapı YAPIYI (bariyer sayısını) C ile karşılaştırır.
-calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/ct_bariyer_harness.sh
 
 # D-428: KAPISIZ KALAN yüzeylerde `--check` paritesi. Dizin sayımı yapılınca
@@ -618,22 +634,16 @@ calistir_belge_kapisi:
 # [D-466] GERCEK TCP gidis-donusu — yerel dinleyici + HER IKI derleyici.
 # `stdlib_check` yalnizca dis bagimliligi olmayan yollari olcer; pozitif yol
 # bir karsi taraf ister ve o ayri kapida.
-calistir_ag_kosum: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_ag_kosum: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/ag_kosum_harness.sh
 
-calistir_check_genis: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_check_genis: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/check_genis_harness.sh
 
 # D-427: VirtIO SÜRÜCÜ yüzeyi. 19 dosya HİÇBİR kapının altında değildi ve
 # D-424'ün tip kapısı eklenince self-host onları DERLEYEMEZ oldu (C 11/63/68
 # define, self 0) — hiçbir kapı görmedi. Kör nokta kapı olmadığı için vardı.
-calistir_surucu_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_surucu_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/surucu_diff_harness.sh
 
 # D-422: HOST korpusunda YAPISAL IR paritesi. Tek oturumda AYNI sınıftan ÜÇ
@@ -641,17 +651,13 @@ calistir_surucu_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # `sonuç<bos,X>` payload → i32, `mantıksal` dönüş → i32). Üçü de geçerli IR
 # üretir ve exit/stdout DEĞİŞTİRMEZ; LLVM uyuşmazlığı sessizce kabul eder
 # (D-295). `baremetal_diff` bunu ölçer ama yalnız `runtime/` yüzeyinde.
-calistir_yapi_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_yapi_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/yapi_diff_harness.sh
 
 # D-402: ÇAPRAZ-DOSYA MODÜL codegen kapısı. test/moduller hiçbir kapının altında
 # DEĞİLDİ; D-401b regresyonu (11/18 → 9/18, biri SESSİZ YANLIŞ CEVAP) yalnız elle
 # ölçümle yakalandı — codegen_diff ve codegen_genis ikisi de yeşildi.
-calistir_modul_codegen: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/codegen.ll 2>/dev/null
-	@clang -x ir build/codegen.ll -x none build/kdl_runtime.o -o build/codegen.exe 2>/dev/null
+calistir_modul_codegen: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=build/codegen.exe bash test/modul_codegen_harness.sh
 
 # SELF-HOST bootstrap (Aşama 5): KEMGU-codegen-built lexer, C-codegen-built lexer ile

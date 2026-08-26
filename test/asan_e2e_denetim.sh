@@ -15,6 +15,12 @@
 # Çıkış kodu: 0 = tüm çalışabilir örnekler ASan-temiz; 1 = en az bir ihlal.
 # ============================================================================
 set -u
+# [D-471] ZAMAN ASIMI SART. Bu kapi GERCEK programlari calistiriyor ve
+# zaman asimi YOKTU: bloklanan tek bir program kapiyi SONSUZA DEK asar.
+# Bu sinifin UCUNCU ornegi (ag_kosum D-466, codegen_genis D-468, burasi).
+# Bu oturumda tam takim IKI KEZ saatlerce asili kaldi (2.5 sa ve 1.5 sa).
+# ASan altinda program yavastir -> sinir cömert (60 sn), ama SONSUZ DEGIL.
+# Asilan kapi, sessiz kapi kadar kotudur: kimse onu kosturmaz.
 # [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
 # (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
 # varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
@@ -51,7 +57,7 @@ for f in test/ornekler/*.kem test/snapshots/*.kem; do
               -o "$TMP/a.exe" 2>/dev/null; then
         skip=$((skip+1)); continue
     fi
-    out=$("$TMP/a.exe" 2>&1)
+    out=$(timeout 60 "$TMP/a.exe" 2>&1)
     if echo "$out" | grep -qiE "AddressSanitizer|runtime error|SUMMARY:.*[Ss]anitizer"; then
         echo "  🔴 ASAN/UBSAN: $base"
         echo "$out" | grep -iE "ERROR|overflow|misalign|use-after|SUMMARY" | head -2
