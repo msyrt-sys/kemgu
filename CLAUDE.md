@@ -946,6 +946,65 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-466: `stdlib/ag.kem` — TCP istemci (`yetki<Soket>` + `tekkez Baglanti`)
+Mehmet'in kararı: network, **yalnız TCP istemci**, yetki + lineer bağlantı.
+- **⚠ ADI `Ağ` DEĞİL `Soket`:** ölçüm gösterdi ki `Soket` yetki sisteminde
+  **ZATEN AYRILMIŞ** (`yetki_olustur` kaynak_tipi **2**, dilin kendi sabit
+  listesinde: `1=Dosya 2=Soket 3=Bellek 4=Donanim 5=OTP_Anahtar 6=MMIO`).
+  Aynı kavrama ikinci ad vermek **D-407 sınıfıdır** — iki ad er ya da geç
+  ayrışır. Kavram aynı, var olan ad kullanıldı.
+- **İKİ GÜVENLİK KATMANI, üçü de DERLEME ZAMANINDA ölçüldü:** yetkisiz
+  bağlanma **MM002** · kapatmayı unut **L001** · iki kez kapat **L002** ·
+  doğru kullanım TEMİZ. `checker_diff` **156/156, SIFIR muafiyet**.
+  **Pozitif fikstür ŞART** (`tc24_03`): yalnız negatifler olsaydı "her şeyi
+  reddet" sabotajı kapıdan GEÇERDİ (D-425).
+- **🔴 KENDİ NOTUM YANLIŞTI, DERLEYİCİ DÜZELTTİ:** "yetki ÖDÜNÇ alınır"
+  yazmıştım; `yetki<R>` **parametresi** işlev sonunda **CP005** verir. Dilin
+  yerleşik deseni `drivers/virtio`da duruyor (sahiplen + sonda `geri_al`).
+  Yani **BİR YETKİ = BİR BAĞLANTI**. Not gerçeğe uyduruldu.
+- **🔴 WINSOCK ÇALIŞMA-ZAMANINDA YÜKLENİR** (`LoadLibrary`/`GetProcAddress`),
+  bağlama zamanında DEĞİL. Önce doğrudan bağlanma denendi ve ÖLÇÜLDÜ:
+  `-lws2_32` bağımlılığı **EN BASİT programı bile** kırıyor ("undefined
+  symbol: WSAStartup") — depoda **41 Makefile + 18 harness = ~59 bağlama
+  noktası** var ve bare-metal yolları ws2_32 **ALMAMALI**.
+  **İLKE: yeni bir yetenek, onu KULLANMAYAN programların bağlama sözleşmesini
+  DEĞİŞTİRMEMELİ.** Link yüzeyi hiç değişmedi.
+  Cast zinciri de ölçüldü: `(Fn)(void*)` → **16 uyarı**, `(Fn)` → **7**,
+  `(Fn)(void(*)(void))` → **0**. Sıfır uyarı korundu.
+- **🔴 ÖNEK EŞLEMESİ AD-YAKALAYICIDIR:** `soket_` öneği derleyicinin **KENDİ**
+  yardımcısı `soket_kontrol`u da yakaladı → `@kdl_soket_kontrol` tanımsız,
+  **self-host DERLENEMEDİ**. Kapalı bir küme için **TAM EŞLEŞME** kullanıldı
+  (iki derleyicide de). Mevcut `metin_`/`dosya_`/`kilit_` önekleri çakışma
+  olmadığı için çalışıyor — bu bir tasarım güvencesi değil, ŞANS.
+- **🎯 SABOTAJ KAPIYI DÜZELTTİ (S66):** yetki argümanını atlamayı kaldırınca
+  kapı kırmızı olmak yerine **ASILDI** — dinleyici gelmeyen bağlantıyı
+  sonsuza dek bekliyordu. **Asılan kapı, sessiz kapı kadar kötüdür**: kimse
+  10 dakika bekleyen bir testi koşturmaz. `timeout 15` + dinleyiciyi öldürme
+  eklendi; S66 artık temiz kırmızı veriyor. **S65** (`soket_gecerli` daima 1)
+  → `ag: BASARISIZ`, make exit 2.
+- **YENİ KAPI `calistir_ag_kosum`:** GERÇEK TCP gidiş-dönüşü, **her iki
+  derleyicide**. `stdlib_check` yalnızca dış bağımlılığı olmayan yolları
+  ölçer (doğrulama + bağlanamama); pozitif yol bir karşı taraf ister ve
+  sürekli koşan kapıya konsaydı ortamdan ötürü **ARALIKLI kırmızı** verirdi.
+  `test_tumu` artık **62 kapı** çağırıyor.
+- **V1 SINIRLARI (kodda yazılı):** dinleyici YOK · **TLS YOK** (yarım TLS,
+  TLS olmamasından TEHLİKELİDİR — kullanıcı korunduğunu sanır) · zaman aşımı
+  yok · `al` NUL-sonlandırmalı `metin` döner → **gömülü NUL içeren İKİLİ VERİ
+  KIRPILIR** (V1 bilinçli olarak metin protokolleri içindir).
+
+### 🔴 D-465: yapıcılar ARGÜMAN ve ATAMA pozisyonunda çözülmüyordu
+`hiç` / `değer(N)` / `tamam(N)` / `hata(m)` şu şekillerde DÜŞÜYORDU:
+`f(hiç)` (C "tanimsiz tanimlayici", self `@hiç` RED) · `f(değer(42))` ve
+`o = değer(42)` (her iki derleyicide `@değer` tanımsız = LINK-RED).
+- Şekiller KEMGU'da **ÇOK DOĞAL** (`sonuç`/`seçimlik` üzerine kurulu her kod)
+  ama **hiçbir korpus dosyası içermiyordu**. D-464'ün fikstürünü yazarken
+  çıktılar ve o artımda **BİLEREK** kapsam dışı bırakılmışlardı (kapı yanlış
+  sebeple kırmızı olmasın diye — D-421); kayda geçirilmişti, sonra kapandı.
+- **KÖK: mekanizma ZATEN VARDI** (`yapici_uret` + `beklenen_tip`/`beklenen_ll`);
+  **BAĞLAMI KURAN KAPILAR DARDI.** C'de argüman bağlamı yalnız `Dizi<T>` için
+  (D-070), atama bağlamı yalnız dinamik dizi için (D-092) kuruluyordu.
+  Onarım ikisinde de mevcut koşulun genişletilmesi — **icat edilen şey YOK**.
+
 ### 🔴 D-464: kapsayıcı `eşleş` + işaretçi/kesirli dönüş → GEÇERSİZ IR
 Gövdesi **kapsayıcı bir `eşleş`** olan ve `metin`/`kesirli64` dönen **HER**
 işlev derlenmiyordu: ulaşılamaz düşüş yolunda ham `ret ptr 0` / `ret double 0`
@@ -1861,7 +1920,15 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     ondalıklı sayı ✓ **D-457** (`kesirli_metin`, kayıpsız + locale bağımsız).
     Ondalıkta geriye yalnız **kütüphane işi** kaldı (`Ondalik` varyantı +
     ayrıştırıcı + 8 `eşleş` kolu) — dil yüzeyi kararı DEĞİL.
-  - **network** — runtime soket primitifi yok → yeni yerleşik = dil yüzeyi.
+  - **network** ✓ **YAPILDI — D-466.** `stdlib/ag.kem`, **yalnız TCP
+    istemci**. İki güvenlik katmanı, ikisi de derleme zamanında: `yetki<Soket>`
+    (yetkisiz kod ağa çıkamaz) + `yapı tekkez Baglanti` (kapatmayı unutmak
+    **L001**, iki kez kapatmak **L002** → soket sızıntısı yapısal olarak
+    imkânsız). Winsock **çalışma zamanında** yüklenir; bağlama yüzeyi hiç
+    değişmedi. Gerçek gidiş-dönüş `calistir_ag_kosum` kapısında, **her iki
+    derleyicide**. **KALAN (bilinçli, ayrı kampanya):** dinleyici · **TLS**
+    (yarım TLS, TLS olmamasından tehlikelidir) · zaman aşımı · ikili veri
+    (V1 `metin` döndüğü için gömülü NUL kırpılır).
   - **regex** ✓ **YAPILDI — D-461.** `stdlib/regex.kem`, saf KEMGU (yeni
     yerleşik GEREKMEDİ). **Thompson NFA (Pike VM), geri izleme DEĞİL** →
     ReDoS'a kapalı; doğrusallık ÖLÇÜLDÜ (girdi 8× büyürken süre sabit).
