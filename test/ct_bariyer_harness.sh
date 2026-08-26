@@ -52,8 +52,13 @@ for f in $(grep -rl "sabitsüre_olustur\|ifşa(" --include=*.kem test stdlib kü
     s_ir=$("$CODEGEN" --llvm "$f" 2>/dev/null) || {
         echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }
 
-    cn=$(printf '%s' "$c_ir" | grep -c "llvm.x86.sse2.lfence")
-    sn=$(printf '%s' "$s_ir" | grep -c "llvm.x86.sse2.lfence")
+    # [D-475] YALNIZ ÇAĞRILARI SAY, `declare`ı DEĞİL. Bir bildirim BARİYER
+    # DEĞİLDİR; onu saymak "kaç bariyer yayıldı" sorusunu yanlış yanıtlar.
+    # Ölçüldü: intrinsic declare'leri eklenince (IR'ın kendi kendine yeterli
+    # olması için ŞART) çıplak ad araması x86 tarafını +1 şişirdi ve kapı
+    # 13/13 → 6/13 düştü — kusur kodda değil, ÖLÇÜMDEYDİ.
+    cn=$(printf '%s' "$c_ir" | grep -c "call void @llvm.x86.sse2.lfence")
+    sn=$(printf '%s' "$s_ir" | grep -c "call void @llvm.x86.sse2.lfence")
 
     if [ "$cn" -ne "$sn" ]; then
         echo "  🔴 $b — x86 bariyer sayısı: C=$cn ≠ KEMGU=$sn"

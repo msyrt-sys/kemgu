@@ -3803,6 +3803,47 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare i1 @kdl_soket_gecerli(ptr)"); yb(10);        // [D-466]
     yaz_str("declare i32 @kdl_soket_zaman_asimi(ptr, i32)"); yb(10);  // [D-470]
     yaz_str("declare i1 @kdl_soket_zaman_asti()"); yb(10);            // [D-470]
+    // [D-475] LLVM INTRINSIC BİLDİRİMLERİ — EKSİKTİLER (C ile birebir).
+    // ⚠ Üretilen IR KENDİ KENDİNE YETERLİ DEĞİLDİ: Clang 22 (Windows) çağrıyı
+    // declare'siz hoşgörüyor, Clang 15 (Linux) "use of undefined value" ile
+    // REDDEDİYOR. Kusur yalnızca yeni araç zincirinin hoşgörüsüyle gizlenmişti.
+    // Kullanılmayan declare LLVM'de zararsızdır → desteklenen matris yayılır.
+    // ⚠ YALNIZ x86 HEDEFİNDE. Koşulsuz yaydığımda ARM64 çıktısına bir x86
+    // intrinsic'i SIZDI ve `ct_bariyer` kapısı anında yakaladı (13/13 → 6/13);
+    // fazladan sayılan 1 tam bu declare satırıydı. Kapının D-468'deki var oluş
+    // gerekçesi buydu.
+    eğer metin_esit(p.hedef_mim, "arm64") == yanlış {
+        yaz_str("declare void @llvm.x86.sse2.lfence()"); yb(10);
+    }
+    değişken vw: Dizi<tam32> = [2, 4, 8, 16];
+    değişken ie: Dizi<metin> = ["i8", "i16", "i32", "i64"];
+    değişken fe: Dizi<metin> = ["float", "double"];
+    değişken fm: Dizi<metin> = ["f32", "f64"];
+    değişken vi: tam32 = 0;
+    iken vi < dizi_boyut(vw) {
+        değişken n: tam32 = dizi_al(vw, vi);
+        değişken bi: tam32 = 0;
+        iken bi < dizi_boyut(ie) {
+            değişken t: metin = dizi_al(ie, bi);
+            yaz_str("declare "); yaz_str(t);
+            yaz_str(" @llvm.vector.reduce.add.v"); yaz_tam(n); yaz_str(t);
+            yaz_str("(<"); yaz_tam(n); yaz_str(" x "); yaz_str(t); yaz_str(">)");
+            yb(10);
+            bi = bi + 1;
+        }
+        değişken fi: tam32 = 0;
+        iken fi < dizi_boyut(fe) {
+            değişken ft: metin = dizi_al(fe, fi);
+            yaz_str("declare "); yaz_str(ft);
+            yaz_str(" @llvm.vector.reduce.fadd.v"); yaz_tam(n);
+            yaz_str(dizi_al(fm, fi));
+            yaz_str("("); yaz_str(ft); yaz_str(", <"); yaz_tam(n);
+            yaz_str(" x "); yaz_str(ft); yaz_str(">)");
+            yb(10);
+            fi = fi + 1;
+        }
+        vi = vi + 1;
+    }
     yaz_str("declare i32 @kdl_dosya_sil(ptr)"); yb(10);
     yaz_str("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)"); yb(10);
     yaz_str("declare i64 @kdl_dosya_boyut(ptr)"); yb(10);

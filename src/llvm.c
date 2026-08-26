@@ -7849,6 +7849,54 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i1 @kdl_soket_gecerli(ptr)\n", out);       /* [D-466] */
     fputs("declare i32 @kdl_soket_zaman_asimi(ptr, i32)\n", out); /* [D-470] */
     fputs("declare i1 @kdl_soket_zaman_asti()\n", out);           /* [D-470] */
+    /* ============================================================
+     * [D-475] LLVM INTRINSIC BILDIRIMLERI — EKSIKTILER.
+     *
+     * ⚠ ONCEKI YORUM YANLISTI: "Modern LLVM intrinsic; declare gerekmez
+     * (built-in)" yaziyordu. OLCUM CURUTTU -- WSL'de Clang 15 ile:
+     *     error: use of undefined value '@llvm.x86.sse2.lfence'
+     *     error: use of undefined value '@llvm.vector.reduce.add.v4i32'
+     * Clang 22 (Windows) bunlari HOSGORUYORDU; Clang 15 gormuyor. Yani
+     * urettigimiz IR KENDI KENDINE YETERLI DEGILDI ve bu yalnizca yeni
+     * araç zincirinin hosgorusuyle gizlenmisti.
+     *
+     * Kullanilmayan `declare` LLVM'de ZARARSIZDIR -> desteklenen matris
+     * bir kerede yayilir. Alternatif (kullanilanlari toplayip sonda yazmak)
+     * akis yapisini degistirirdi; kazanci yok.
+     * ============================================================ */
+    /* ⚠ YALNIZ x86 HEDEFINDE: bunu KOSULSUZ yaydigimda ARM64 ciktisina bir
+     * x86 intrinsic'i SIZDI ve `ct_bariyer` kapisi ANINDA yakaladi (13/13 ->
+     * 6/13, "ARM64 bariyer sayisi x86'dan FARKLI: x86=N+1 arm64=N" -- fazladan
+     * 1 tam bu declare satiriydi). Kapinin D-468'deki var olus gerekcesi
+     * buydu; kendi hatami kendi kapim buldu. */
+    /* ⚠⚠ ETIKET "arm64", "aarch64" DEGIL (`ana.c`:
+     * `llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf")` -- ilki ETIKET,
+     * ikincisi TRIPLE). Ilk yazimda "aarch64" ile karsilastirdim: kosul HIC
+     * TUTMADI ve declare ARM64 ciktisina SIZMAYA DEVAM ETTI.
+     * ⚠ BU TUZAK D-468'DE ZATEN KAYITLIYDI ve ayni oturumda IKINCI KEZ isirdi
+     * -- yazili olmasi uygulamaya yetmiyor. Kapi yine yakaladi. */
+    if (strcmp(llvm_hedef_mimari(), "arm64") != 0) {
+        fputs("declare void @llvm.x86.sse2.lfence()\n", out);
+    }
+    {
+        static const char *ie[] = { "i8", "i16", "i32", "i64" };
+        static const char *fe[] = { "float", "double" };
+        static const char *fm[] = { "f32", "f64" };
+        static const int   nw[] = { 2, 4, 8, 16 };
+        size_t a, b;
+        for (a = 0; a < sizeof(nw) / sizeof(nw[0]); a++) {
+            for (b = 0; b < sizeof(ie) / sizeof(ie[0]); b++) {
+                fprintf(out,
+                    "declare %s @llvm.vector.reduce.add.v%d%s(<%d x %s>)\n",
+                    ie[b], nw[a], ie[b], nw[a], ie[b]);
+            }
+            for (b = 0; b < sizeof(fe) / sizeof(fe[0]); b++) {
+                fprintf(out,
+                    "declare %s @llvm.vector.reduce.fadd.v%d%s(%s, <%d x %s>)\n",
+                    fe[b], nw[a], fm[b], fe[b], nw[a], fe[b]);
+            }
+        }
+    }
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
