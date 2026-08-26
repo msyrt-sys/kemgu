@@ -1187,9 +1187,12 @@ GEREKMEDİ** — mevcut `metin_*` yeterli (D-435'te ölçülmüştü, doğru ç�
   bir motor burada DÜŞERDİ.
 - **Kapsam (V1, dürüstçe):** literal · `.` · `*` `+` `?` · `|` · `()` ·
   `[a-c]`/`[^a-c]` · `^` `$` · `\d \w \s` · kaçışlar.
-  **YOK:** geri-referans · tembel niceleyici · `{n,m}` · **yakalama grupları**
-  (gruplar yalnız gruplama) · `\D \W \S`. Yakalama Pike VM'e eklenebilir
-  (thread başına konum dizisi) ama ayrı artım.
+  **YOK (V1'de):** geri-referans · tembel niceleyici · `{n,m}` · **yakalama
+  grupları** (gruplar yalnız gruplama) · `\D \W \S`.
+  ⚠ **BU SATIR ESKİDİ:** yakalama grupları **D-463**'te, `\D \W \S` ve
+  `{n,m}` **D-472**'de eklendi. Kalan gerçek YOK'lar: geri-referans ve tembel
+  niceleyici — ikisi de geri izleme gerektirdiği için BİLİNÇLİ olarak
+  eklenmeyecek.
 - **"En uzun" (leftmost-longest) seçildi:** Thompson'da tüm kollar EŞ ZAMANLI
   ilerler, yani geri izlemenin "ilk bulunan"ı gibi ALTERNATİF SIRASINA bağlı bir
   cevap yoktur — en uzunu bildirmek tek tutarlı seçim.
@@ -2018,9 +2021,16 @@ VS Code birden çok dosyayı açık tutar ve her isteği KENDİ `uri`siyle gönd
     Bedeli: geri-referans yok (bilinçli takas). Testi `stdlib_check`te.
     **YAKALAMA GRUPLARI D-463'te EKLENDİ** (`ara_gruplar`/`grup_metin`/
     `grup_sayisi`); doğrusallık yakalamayla birlikte yeniden ölçüldü (16×).
-    **KALAN (bilinçli):** `\D \W \S` · `{n,m}` · tembel niceleyici ·
-    geri-referans. Son ikisi GERİ İZLEME gerektirir → ReDoS bağışıklığını
-    çöpe atardı; eklenmeyecekler.
+    ~~**KALAN (bilinçli):** `\D \W \S` · `{n,m}`~~ ✓ **D-472'de EKLENDİ.**
+    `\D \W \S` YENİ MEKANİZMA İSTEMEDİ: sınıf makinesi `cls_ters` bayrağını
+    ZATEN taşıyordu (`[^a-c]` onu kullanıyor) → maliyet tek parametre.
+    `{n,m}` **AÇILIM** ile (n zorunlu + (m-n) opsiyonel kopya); Pike VM komut
+    kümesi HİÇ DEĞİŞMEDİ → **ReDoS bağışıklığı korundu, yeniden ölçüldü**
+    (`(a+){2,8}b`, girdi 20→320 = 16 kat, süre sabit). Açılım programı
+    büyüttüğü için ÜST SINIR var (`RX_TEKRAR_AZAMI = 1000`) ve aşılınca
+    **açık hata** verir — sessiz kırpma yok.
+    **KALAN (bilinçli):** tembel niceleyici · geri-referans. İkisi de GERİ
+    İZLEME gerektirir → ReDoS bağışıklığını çöpe atardı; eklenmeyecekler.
 - ~~**Semaforlar / bariyerler** (Plan Karar F V2) — D-435: runtime primitifi
   **YOK** → yeni yerleşik = dil yüzeyi, Mehmet'in kararı.~~
   ✓ **YAPILDI — D-456.** `stdlib/semafor.kem` (**kapsamlı**: `semaforda(s,

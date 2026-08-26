@@ -43,6 +43,11 @@
 // Hata yolu: `sonuç<Regex, metin>`. Bozuk desen PANİK DEĞİL DEĞER döndürür.
 // =============================================================================
 
+// [D-472] `{n,m}` açılımının ÜST SINIRI. Açılım program boyutunu n (ya da m)
+// kat büyütür; sınırsız bırakmak `a{1000000}` ile belleği tüketirdi. Sessizce
+// kırpmak yerine AÇIK HATA verilir — kullanıcı ne olduğunu bilmeli.
+sabit RX_TEKRAR_AZAMI: tam32 = 1000;
+
 // ---- Komut kodları (Pike VM) ------------------------------------------------
 // 0 KAR   : a = kod noktası
 // 1 HER   : `.` (satır sonu DÂHİL — V1'de `s` bayrağı yok, bu belgelenmiştir)
@@ -187,15 +192,25 @@ işlev rx_kacis(a: &değişken RxAyr) -> RxDugum {
     eğer c == 114 { ver RxDugum::Kar(13); }   // \r
     // \d \w \s: hazır sınıflar. Ters çevrilmişleri (\D \W \S) V1'de YOK —
     // eklemek kolay ama ölçülmemiş bir şeyi "destekleniyor" diye yazmam.
-    eğer c == 100 { ver RxDugum::Sinif(rx_hazir_sinif(a, 0)); }   // \d
-    eğer c == 119 { ver RxDugum::Sinif(rx_hazir_sinif(a, 1)); }   // \w
-    eğer c == 115 { ver RxDugum::Sinif(rx_hazir_sinif(a, 2)); }   // \s
+    eğer c == 100 { ver RxDugum::Sinif(rx_hazir_sinif(a, 0, 0)); }   // \d
+    eğer c == 119 { ver RxDugum::Sinif(rx_hazir_sinif(a, 1, 0)); }   // \w
+    eğer c == 115 { ver RxDugum::Sinif(rx_hazir_sinif(a, 2, 0)); }   // \s
+    // [D-472] Ters çevrilmiş hazır sınıflar. V1'de "YOK" diye kaydedilmişti;
+    // sınıf makinesi `cls_ters`i zaten taşıdığı için maliyeti TEK PARAMETRE.
+    eğer c == 68 { ver RxDugum::Sinif(rx_hazir_sinif(a, 0, 1)); }    // \D
+    eğer c == 87 { ver RxDugum::Sinif(rx_hazir_sinif(a, 1, 1)); }    // \W
+    eğer c == 83 { ver RxDugum::Sinif(rx_hazir_sinif(a, 2, 1)); }    // \S
     // Diğer her şey KENDİSİ: \. \* \[ \ \( ...
     ver RxDugum::Kar(c);
 }
 
 // Hazır sınıf kaydet (0=\d 1=\w 2=\s) ve indeksini döndür.
-işlev rx_hazir_sinif(a: &değişken RxAyr, tur: tam32) -> tam32 {
+// [D-472] `ters` parametresi `\D` `\W` `\S` için. Sınıf makinesi `cls_ters`
+// bayrağını ZATEN taşıyordu (`[^a-c]` onu kullanıyor) — yani ters çevrilmiş
+// hazır sınıflar YENİ MEKANİZMA İSTEMEDİ, yalnız var olan bayrağın
+// beslenmesini. V1'de "YOK" diye kaydedilmişlerdi; maliyeti ölçünce tek
+// parametre olduğu görüldü.
+işlev rx_hazir_sinif(a: &değişken RxAyr, tur: tam32, ters: tam32) -> tam32 {
     değişken bas: tam32 = dizi_boyut(a.cr_alt);
     eğer tur == 0 {
         dizi_ekle(a.cr_alt, 48); dizi_ekle(a.cr_ust, 57);
@@ -213,7 +228,7 @@ işlev rx_hazir_sinif(a: &değişken RxAyr, tur: tam32) -> tam32 {
     değişken adet: tam32 = dizi_boyut(a.cr_alt) - bas;
     dizi_ekle(a.cls_bas, bas);
     dizi_ekle(a.cls_adet, adet);
-    dizi_ekle(a.cls_ters, 0);
+    dizi_ekle(a.cls_ters, ters);   // [D-472]
     ver dizi_boyut(a.cls_bas) - 1;
 }
 
@@ -305,9 +320,67 @@ işlev rx_nicelik(a: &değişken RxAyr) -> RxDugum {
         eğer c == 42 { rx_ilerle(a); değişken k1: Dizi<RxDugum> = []; dizi_ekle(k1, d); d = RxDugum::Yildiz(k1); }
         değilse { eğer c == 43 { rx_ilerle(a); değişken k2: Dizi<RxDugum> = []; dizi_ekle(k2, d); d = RxDugum::Arti(k2); }
         değilse { eğer c == 63 { rx_ilerle(a); değişken k3: Dizi<RxDugum> = []; dizi_ekle(k3, d); d = RxDugum::Opsiyon(k3); }
-        değilse { devam = yanlış; } } }
+        değilse { eğer c == 123 { d = rx_tekrar(a, d); }   // [D-472] {n,m}
+        değilse { devam = yanlış; } } } }
     }
     ver d;
+}
+
+// [D-472] `{n}` / `{n,}` / `{n,m}` — AÇILIM ile.
+//
+// ⚠ AÇILIM SEÇİLDİ, YENİ KOMUT DEĞİL: `a{2,4}` → `a a a? a?` (n zorunlu kopya
+// + (m-n) opsiyonel kopya). `a? a?` ile `(a(a)?)?` aynı kümeyi eşler, o yüzden
+// iç içe kurmaya gerek yok. Böylece Pike VM'in komut kümesi HİÇ DEĞİŞMEZ ve
+// ReDoS bağışıklığı olduğu gibi kalır: program BÜYÜR, karakter başına iş
+// büyümez (D-461'in tezi korunur).
+//
+// ⚠ ÜST SINIR VAR (`RX_TEKRAR_AZAMI`): `a{1000000}` açılımı belleği tüketirdi.
+// Sessizce kırpmak yerine AÇIK HATA — kullanıcı ne olduğunu bilmeli.
+//
+// ⚠ AST KOPYASI PAYLAŞIMLIDIR: `RxDugum` payload'ı `Dizi<RxDugum>` ve heap
+// destekli, yani kopyalar aynı çocuk dizisini PAYLAŞIR. Derleyici AST'yi
+// yalnız OKUDUĞU için bu güvenlidir (mutasyon yok) — ama ileride AST üzerinde
+// dönüşüm yapılırsa bu varsayım KIRILIR.
+işlev rx_tekrar(a: &değişken RxAyr, d: RxDugum) -> RxDugum {
+    rx_ilerle(a);   // `{`
+    değişken n: tam32 = 0;
+    değişken n_var: mantıksal = yanlış;
+    iken (rx_bak(a) >= 48) ve (rx_bak(a) <= 57) {
+        n = n * 10 + (rx_ilerle(a) - 48); n_var = doğru;
+    }
+    eğer n_var == yanlış { rx_hata(a, "{} icinde sayi yok"); ver d; }
+    değişken m: tam32 = n;
+    değişken ustsuz: mantıksal = yanlış;
+    eğer rx_bak(a) == 44 {           // `,`
+        rx_ilerle(a);
+        eğer (rx_bak(a) >= 48) ve (rx_bak(a) <= 57) {
+            m = 0;
+            iken (rx_bak(a) >= 48) ve (rx_bak(a) <= 57) { m = m * 10 + (rx_ilerle(a) - 48); }
+        } değilse { ustsuz = doğru; }
+    }
+    eğer rx_bak(a) != 125 { rx_hata(a, "kapanmamis {n,m}"); ver d; }
+    rx_ilerle(a);   // `}`
+    eğer n > RX_TEKRAR_AZAMI { rx_hata(a, "{n,m} alt siniri cok buyuk"); ver d; }
+    eğer (ustsuz == yanlış) ve (m > RX_TEKRAR_AZAMI) { rx_hata(a, "{n,m} ust siniri cok buyuk"); ver d; }
+    eğer (ustsuz == yanlış) ve (m < n) { rx_hata(a, "{n,m} icinde m < n"); ver d; }
+
+    değişken parcalar: Dizi<RxDugum> = [];
+    değişken i: tam32 = 0;
+    iken i < n { dizi_ekle(parcalar, d); i = i + 1; }
+    eğer ustsuz {
+        // `{n,}` = n kopya + Yildiz (sinirsiz kuyruk)
+        değişken ky: Dizi<RxDugum> = []; dizi_ekle(ky, d);
+        dizi_ekle(parcalar, RxDugum::Yildiz(ky));
+    } değilse {
+        değişken j: tam32 = n;
+        iken j < m {
+            değişken ko: Dizi<RxDugum> = []; dizi_ekle(ko, d);
+            dizi_ekle(parcalar, RxDugum::Opsiyon(ko));
+            j = j + 1;
+        }
+    }
+    // `a{0}` → hiçbir şey eşlemeyen boş birleştirme (epsilon). Doğru davranış.
+    ver RxDugum::Birlestir(parcalar);
 }
 
 // ---- birleşim ---------------------------------------------------------------

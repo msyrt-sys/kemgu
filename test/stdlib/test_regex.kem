@@ -221,8 +221,44 @@ işlev main() -> tam32 {
     // burada uzunluk ayırt edemez, SOL kol kazanmalıdır.
     h = h + rx_grup("(a)|(a)", "a", 1, "a", 116);
     h = h + rx_grup("(a)|(a)", "a", 2, "<yakalanmadi>", 117);
+    // ---- [D-472] TERS HAZIR SINIFLAR (D W S) ----
+    // V1'de "YOK" diye kaydedilmislerdi; sinif makinesi `cls_ters`i ZATEN
+    // tasidigi icin maliyet TEK PARAMETRE cikti. Her biri POZITIF karsiligiyla
+    // BIRLIKTE olculur — yalniz ters kolu olcmek, ikisini de ayni kumeye
+    // baglayan bir sabotaji kacirirdi.
+    h = h + rx_dene("^\d+$", "123", dogru_d(), 100000);
+    h = h + rx_dene("^\D+$", "abc", dogru_d(), 200000);
+    h = h + rx_dene("^\D+$", "ab1", yanlis_d(), 300000);
+    h = h + rx_dene("^\W+$", "!!!", dogru_d(), 400000);
+    h = h + rx_dene("^\W+$", "ab", yanlis_d(), 500000);
+    h = h + rx_dene("^\S+$", "abc", dogru_d(), 600000);
+    h = h + rx_dene("^\S+$", "a c", yanlis_d(), 700000);
+
+    // ---- [D-472] {n} / {n,} / {n,m} ----
+    // ACILIM ile: n zorunlu kopya + (m-n) opsiyonel kopya. Pike VM komut
+    // kumesi DEGISMEDI -> ReDoS bagisikligi korunur (asagida olculuyor).
+    h = h + rx_dene("^a{3}$", "aaa", dogru_d(), 800000);
+    h = h + rx_dene("^a{3}$", "aa", yanlis_d(), 900000);
+    h = h + rx_dene("^a{3}$", "aaaa", yanlis_d(), 1000000);
+    h = h + rx_dene("^a{2,}$", "aaaaa", dogru_d(), 1100000);
+    h = h + rx_dene("^a{2,}$", "a", yanlis_d(), 1200000);
+    h = h + rx_dene("^a{2,4}$", "aaaa", dogru_d(), 1300000);
+    h = h + rx_dene("^a{2,4}$", "aaaaa", yanlis_d(), 1400000);
+    h = h + rx_dene("^(ab){2}$", "abab", dogru_d(), 1500000);
+    h = h + rx_dene("^\d{3}$", "123", dogru_d(), 1600000);
+    // BOZUK sekiller REDDEDILMELI (sessiz kabul = kullaniciyi yanilir)
+    h = h + rx_bozuk("a{", 1700000);
+    h = h + rx_bozuk("a{,}", 1800000);
+    h = h + rx_bozuk("a{4,2}", 1900000);
+    h = h + rx_bozuk("a{99999}", 2000000);   // ust sinir: acik hata
+
 
     eğer h == 0 { yazdir_metin("regex: TUM TESTLER GECTI"); ver 0; }
     yazdir_metin("regex: BASARISIZ");
     ver 1;
 }
+
+// [D-472] `doğru`/`yanlış` literalleri test üreticisinde kaçış sorunu yaratmasın
+// diye küçük sarmallar (kaynak üreten araçlar Türkçe literali bozabiliyor).
+işlev dogru_d() -> mantıksal { ver doğru; }
+işlev yanlis_d() -> mantıksal { ver yanlış; }
