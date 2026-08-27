@@ -1019,42 +1019,44 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
-### 🔴 AÇIK BULGU (D-501): sıfıra bölme SÜRECİ ÖLDÜRÜYOR — "çökmezlik" ihlali
-**Kararın Mehmet'te** (aşağıda üç seçenek). Değişmez avının 3. ekseninde çıktı.
+### ✅ D-501→D-502 KAPANDI: sıfıra bölme artık **temiz duruyor**
+**Mehmet seçenek (b)'yi seçti** — çalışma zamanı panik. Gerekçe tutarlılık:
+**dil zaten dizi sınırı için panik seçmişti** (`xs[10]` `sonuç` döndürmüyor,
+paniklıyor). (c) `sonuç<T,H>` bölmeyi diziden *daha katı* yapardı.
 
-**ALTI ŞEKLİN ALTISI DA `SIGFPE` (exit 136), tanı YOK, panik mesajı YOK:**
 ```
-a / 0   (tam32)    a % 0    INT_MIN / -1    tam64 / 0    dtam32 / 0
-ve DÜZ LİTERAL `10 / 0` bile --check'ten TEMİZ geçiyor
-IR: `sdiv i32 %6, %7` — hiçbir koruma yok (LLVM'de UB)
+ÖNCE:  a/0 · a%0 · tam64 · dtam32 · literal 10/0  →  SIGFPE exit 136, mesaj YOK
+SONRA: hepsi  →  PANIK: sifira bolme, exit 134   ·   84/2 → 42 (etkilenmedi)
 ```
-Dilin manşet iddiası: *"Çökmezlik: Exception yok (`sonuç<T,H>`)"*. Program
-donanım hatasıyla ölüyor — ne değer, ne tanı, ne panik.
+Mekanizma dizi sınır ihlaliyle **birebir** (D-069): inline `icmp` + `br` +
+`kdl_panik(noreturn)` + `unreachable`. Yeni tanı kodu YOK, tip değişikliği YOK.
 
-**⚠ YENİ KEŞİF DEĞİL, ELE ALINMAMIŞ BİLİNEN DAVRANIŞ:** D-441'de `kuvvet(x,0)`
-için `x / x` çözümü *tam bu yüzden* reddedilmişti (*"x=0'da sıfıra bölme =
-ÇÖKME"*). Yani biliniyordu, ama bir değişmez ihlali olarak hiç işlenmedi ve
-**hiçbir kapı ölçmüyor**.
+**İki bilinçli daraltma:** yalnız **tamsayı** (kesirli 0-bölme IEEE-754'te
+tanımlı, tuzak değil) · **sabit sıfır-olmayan** bölende kontrol yayılmaz
+(gereksiz dal); sıfır literalinde yayılır ki `10 / 0` da temiz dursun.
 
-**ETKİ ALANI SIFIR:** korpusta sıfıra bölen kod YOK (ilk grep 3 dosya
-gösterdi, üçü de `0xFF48` gibi HEX YORUMU — yanlış-pozitif).
+**⚠⚠ YOL ÜSTÜNDE İKİ TUZAĞA DÜŞTÜM, İKİSİ DE KAYITLIYDI:**
+1. **Bayat ikili** — Windows'ta derleyip WSL'de ölçtüm; IR doğruydu ama
+   runtime hâlâ SIGFPE veriyordu. *Kendi D-500 listemdeki madde.*
+2. **🔴 KEMGU DİZGİ LİTERALİNDE KAÇIŞ YOK** (D-400/409/416'da ÜÇ KEZ
+   kayıtlı) — self-host'a `c\"…\00\"` yazdım, düz ters bölü bastı,
+   **`codegen_diff` 0/157**, tüm IR geçersiz oldu. Doğrusu `yb(34)`/`yb(92)`
+   ve o desen zaten `@.gorev_hata_str` satırında duruyordu.
+   **⚠ `yapi_diff` bu felaketi GÖRMEDİ** (132/132 yeşil) — yalnız `define`
+   kümesine bakıyor. Yakalayan `codegen_diff` oldu: davranışsal ve yapısal
+   kapıların birbirini tamamlamasının somut kanıtı.
 
-**ONARIM TEK NOKTADA:** `src/llvm.c:3648-3650` — div/rem'in yayıldığı tek yer.
-`kdl_panik(const char *)` runtime'da ZATEN VAR ve dizi sınır ihlali onu
-kullanıyor (`PANIK: dizi sınır ihlali (i=10, boyut=3)`).
+**YENİ KAPI `calistir_sifir_bolme`** — 10 ölçüm, **her iki derleyicide**.
+`normal.kem` (84/2 → 42) bilerek var: yalnız negatif şekiller olsaydı
+"her bölmeyi panikletir" sabotajı kapıdan GEÇERDİ (D-425).
+**Sabotaj 2/2:** S81 (C) · S82 (self) → dört şeklin dördü de `exit=136`
+yakalandı, `HARNESS rc=1`; geri alınca rc=0.
+⚠ İlk sabotaj ölçümümde `| tail -3` hem çıkış kodunu MASKELEDİ (rc=0 gösterdi)
+hem kanıtı kırptı (yalnız 1 dosya göründü) — D-444/D-500'ün tekrarı.
 
-**SEÇENEKLER:**
-- **(a) Derleme zamanı red** — yalnız literal `10 / 0`'ı yakalar; `b=0`
-  değişkenini kaçırır. Tek başına YETERSİZ.
-- **(b) Çalışma zamanı panik** — dizi sınırının BİREBİR deseni. Yeni tanı kodu
-  YOK, tip değişikliği YOK, ev üslubuyla tutarlı. *Önerim bu.*
-- **(c) `/` → `sonuç<T,H>`** — "hata değerdir" DNA'sına en sadık, ama **tip
-  değişikliği**: her bölme `eşleş` ister, tüm stdlib etkilenir.
-
-⚠ **ÖLÇÜM ARACI DERSİ (D-500'e ek):** `-fsanitize=undefined` **ham IR
-girdisine kontrol EKLEMEZ** — UBSan enstrümantasyonu C→IR aşamasında olur.
-Sanitizer'lı ilk koşumlarım `exit=1` gösterip bu sınıfı TAMAMEN MASKELEDİ;
-gerçek sinyal (136/SIGFPE) ancak sanitizer'sız koşumda göründü.
+**Kapılar:** codegen_diff 157/157 · yapi_diff 132/132 · checker_diff 163/163 ·
+self_driver **FIXPOINT ✓** · llvm_test 286/286 · snapshot 50/50.
+`test_tumu` **68 kapı**.
 
 ### ✅ D-497→D-499 KAPANDI: `ver &yerel` artık **G006** ile reddediliyor
 **Mehmet seçenek (b)'yi seçti** — ayrı kod. Gerekçe deponun kendi

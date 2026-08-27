@@ -3662,6 +3662,33 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fputs("  ; ikili op desteklenmiyor\n", g->out);
                     return sol;
             }
+            /* [D-502] SIFIRA BOLME KORUYUCUSU — cokmezlik degismezi.
+             * OLCULDU (D-501): korumasiz sdiv/srem alti seklin altisinda da
+             * SIGFPE (exit 136) veriyordu; tani YOK, panik mesaji YOK, ve duz
+             * literal 10/0 bile --check ten temiz geciyordu.
+             * MEKANIZMA dizi sinir ihlaliyle BIREBIR (D-069): inline icmp + br
+             * + kdl_panik(noreturn) + unreachable. Yeni tani kodu YOK, tip
+             * degisikligi YOK — dil zaten dizi icin panik SECMISTI.
+             * ⚠ YALNIZ TAMSAYI: kesirli 0-bolme IEEE-754 te TANIMLI (inf/nan),
+             *   tuzak DEGIL -> korunmaz.
+             * ⚠ SABIT SIFIR-OLMAYAN bolende kontrol YAYILMAZ (yaygin durum;
+             *   gereksiz dal). Sifir literalinde YAYILIR ki 10/0 da temiz dursun. */
+            if (!kesirli && (d->veri.ikili.op == OP_BOLU || d->veri.ikili.op == OP_MOD)
+                && !(d->veri.ikili.sag && d->veri.ikili.sag->tip == DUGUM_TAM
+                     && d->veri.ikili.sag->veri.tam.deger != 0)) {
+                int z_r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = icmp eq %s %%%d, 0\n",
+                        z_r, sol.tip, sag_r);
+                int L_z = yeni_label(g);
+                int L_ok = yeni_label(g);
+                fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        z_r, L_z, L_ok);
+                fprintf(g->out, "bb%d:\n", L_z);
+                fprintf(g->out,
+                    "  call void @kdl_panik(ptr @.str.sifir_bolme_panik)\n");
+                fprintf(g->out, "  unreachable\n");
+                fprintf(g->out, "bb%d:\n", L_ok);
+            }
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = %s %s %%%d, %%%d\n",
                     r, op, sol.tip, sol.reg, sag_r);
@@ -7972,6 +7999,12 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_panik(ptr)\n", out);
     fputs("@.str.dizi_sinir_panik = private constant "
           "[26 x i8] c\"dizi sinir ihlali (stack)\\00\"\n", out);
+    /* [D-502] Sifira bolme paniği — dizi sinir ihlali ile AYNI mekanizma
+     * (kdl_panik noreturn). "Cokmezlik" degismezi: `a / 0` SIGFPE ile sureci
+     * OLDURMEK yerine TEMIZ DURUR. Olculdu (D-501): korumasiz `sdiv` alti
+     * seklin altisinda da exit 136 / SIGFPE veriyordu, tani YOK. */
+    fputs("@.str.sifir_bolme_panik = private constant "
+          "[13 x i8] c\"sifira bolme\\00\"\n", out);
 
     /* Adim 1: CLI args + OTP */
     fputs("declare i32 @kdl_arg_sayi()\n", out);

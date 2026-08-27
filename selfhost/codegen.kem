@@ -3880,6 +3880,11 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare void @kdl_yazdir_satir()"); yb(10);
     yaz_str("declare i32 @kdl_oku_karakter()"); yb(10);
     yaz_str("declare void @kdl_panik(ptr)"); yb(10);
+    // [D-502] ⚠ KEMGU DIZGI LITERALINDE KACIS YOKTUR (D-400/409/416):
+    // "c...00" yazmak DUZ TERS BOLU basar ve TUM IR gecersiz olur
+    // (olculdu: codegen_diff 0/157). Tirnak yb(34), ters bolu yb(92).
+    yaz_str("@.str.sifir_bolme_panik = private constant [13 x i8] c"); yb(34);
+    yaz_str("sifira bolme"); yb(92); yaz_str("00"); yb(34); yb(10);
     ver 0;
 }
 // ============================================================================
@@ -5595,6 +5600,32 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         // aritmetik (+ - * / %) + mantıksal (ve/veya → and/or): tek komut.
         // D3 Öncelik-1: float/double → f-varyant (fadd/...); aksi tamsayı.
+        // [D-502] SIFIRA BOLME KORUYUCUSU — C llvm.c ile BIREBIR.
+        // Olculdu (D-501): korumasiz sdiv/srem SIGFPE ile SURECI OLDURUYORDU
+        // (exit 136), tani YOK. Mekanizma dizi sinir ihlaliyle ayni (D-069).
+        // YALNIZ TAMSAYI: kesirli 0-bolme IEEE-754 te tanimli, tuzak degil.
+        // SABIT SIFIR-OLMAYAN bolende kontrol YAYILMAZ (gereksiz dal).
+        eğer (metin_esit(op, "/") veya metin_esit(op, "%"))
+          ve (kesirli_ll_mi(optip) == yanlış) {
+            değişken sn: tam32 = dizi_al(p.cocuk, cb + 1);
+            değişken sabit_sifirsiz: mantıksal = yanlış;
+            eğer metin_esit(dizi_al(p.a_ad, sn), "TAM") {
+                eğer (metin_esit(dizi_al(p.a_deg, sn), "0") == yanlış) { sabit_sifirsiz = doğru; }
+            }
+            eğer sabit_sifirsiz == yanlış {
+                değişken zr: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(zr); yaz_str(" = icmp eq ");
+                yaz_str(optip); yaz_str(" "); yaz_str(sag); yaz_str(", 0"); yb(10);
+                değişken Lz: metin = yeni_label(p);
+                değişken Lok: metin = yeni_label(p);
+                yaz_str("  br i1 "); yaz_str(zr); yaz_str(", label %"); yaz_str(Lz);
+                yaz_str(", label %"); yaz_str(Lok); yb(10);
+                etiket_yaz(p, Lz);
+                yaz_str("  call void @kdl_panik(ptr @.str.sifir_bolme_panik)"); yb(10);
+                yaz_str("  unreachable"); yb(10);
+                etiket_yaz(p, Lok);
+            }
+        }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
         değişken mnem: metin = ll_ikili(op, bisz);
