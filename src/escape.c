@@ -618,6 +618,23 @@ static int ky_ad_esit(const Dugum *d, const char *ad, int uz) {
         && memcmp(d->veri.tanimlayici.metin, ad, (size_t)uz) == 0;
 }
 
+/* [D-495] `olarak` (cast) ESCAPE SEMANTIGINI DEGISTIRMEZ: `p olarak metin`
+ * hala p'nin DEGERIDIR. Kaci s sorusu icin katmani soy. Ham isaretcilerde bu
+ * sekil KACINILMAZDIR (`bellek_kopyala(yeni olarak metin, ...)`). */
+static const Dugum *cast_soy(const Dugum *d) {
+    while (d && d->tip == DUGUM_TIP_DONUSTUR) d = d->veri.tip_donustur.kaynak;
+    return d;
+}
+
+/* [D-495] Argumanlarini SAKLAMAYAN bellek yerlesikleri — KURATE LISTE.
+ * ⚠⚠ `bellek_serbest` BILEREK YOK VE BU KRITIK: o `free`e eslesir. Onu
+ * hapsedilmis saymak, hem ACIK `free` hem BOLGE serbesti calisirdi = CIFT
+ * SERBEST. Liste "isaretci parametresi alan her yerlesik" DEGIL, "argumanini
+ * TUTMAYAN yerlesik" demektir (D-459'un kurate-liste disiplini). */
+static int ky_bellek_builtin_tutmaz(const char *ad, int uz) {
+    return (uz == 14 && memcmp(ad, "bellek_kopyala", 14) == 0);
+}
+
 static int ky_dizi_builtin_confined(const char *ad, int uz) {
     /* Diziyi RETAIN ETMEYEN, yalnız oku/yerinde-değiştir builtin'leri. */
     return (uz == 7  && memcmp(ad, "dizi_al", 7) == 0)
@@ -693,6 +710,13 @@ static int ky_var_gecer(const Dugum *d, const char *ad, int uz) {
                 || ky_var_gecer(d->veri.ikili.sag, ad, uz);
         case DUGUM_TEKLI: return ky_var_gecer(d->veri.tekli.operand, ad, uz);
         case DUGUM_ERISIM: return ky_var_gecer(d->veri.erisim.nesne, ad, uz);
+        case DUGUM_TIP_DONUSTUR:
+            /* [D-495] Cast TAM OLARAK kaynagini icerir — `default: return 1`
+             * (bilinmeyen -> konservatif "geciyor") burada GEREKSIZ KATIYDI ve
+             * `bellek_kopyala(yeni olarak metin, eski olarak metin, ..)`
+             * seklinde HER IKI isaretcinin de hapsedilmesini dusuruyordu.
+             * Bisect ile bulundu: cast'siz ayni sekil GECIYORDU. */
+            return ky_var_gecer(d->veri.tip_donustur.kaynak, ad, uz);
         default: return 1;  /* bilinmeyen → konservatif "geçiyor" */
     }
 }
@@ -735,10 +759,20 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                 /* [D-488] KULLANICI ISLEVI OZETI: arg TAM OLARAK bu degiskense ve
                  * cagrilan f onu SAKLAMIYORSA (ky_confined(f.govde, param)) hapsedilme
                  * KORUNUR. Kanit bulunamazsa asagidaki eski DENY yolu isler. */
-                if (ky_ad_esit(d->veri.cagri.argumanlar[i], ad, uz)
+                if (ky_ad_esit(cast_soy(d->veri.cagri.argumanlar[i]), ad, uz)
                     && h && h->tip == DUGUM_TANIMLAYICI
                     && ea_param_tutmuyor(ea_fn_bul(h->veri.tanimlayici.metin,
                                                    h->veri.tanimlayici.uzunluk), i))
+                    continue;
+                /* [D-495] SAKLAMAYAN BELLEK YERLESIGI: `bellek_kopyala` (memcpy)
+                 * argumanini TUTMAZ -> hapsedilme KORUNUR. Cast katmani soyulur
+                 * cunku ham isaretci bu yerlesiklere DAIMA `olarak metin` ile
+                 * gecer. ⚠ `bellek_serbest` (free) listede YOK: onu hapsedilmis
+                 * saymak CIFT SERBEST uretirdi (acik free + bolge serbesti). */
+                if (h && h->tip == DUGUM_TANIMLAYICI
+                    && ky_bellek_builtin_tutmaz(h->veri.tanimlayici.metin,
+                                                h->veri.tanimlayici.uzunluk)
+                    && ky_ad_esit(cast_soy(d->veri.cagri.argumanlar[i]), ad, uz))
                     continue;
                 if (!ky_confined(d->veri.cagri.argumanlar[i], ad, uz)) return 0;
             }
@@ -792,6 +826,12 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                 return 1;
             return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
         case DUGUM_ERISIM: return ky_confined(d->veri.erisim.nesne, ad, uz);
+        case DUGUM_TIP_DONUSTUR:
+            /* [D-495] Cast bir DEGERI donusturur; isaretciyi SIZDIRMAZ.
+             * `ky_var_gecer` ikizi burada da sart: `sonuc = v[2] olarak tam32`
+             * varsayilan yola dusup REDDEDILIYORDU (cast dali yoktu), oysa o
+             * yalnizca bir OKUMADIR. Kaynak neyse hapsedilme onun sorusudur. */
+            return ky_confined(d->veri.tip_donustur.kaynak, ad, uz);
         case DUGUM_DIZI_OLUSTUR:
             for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
                 if (!ky_confined(d->veri.dizi_olustur.elemanlar[i], ad, uz)) return 0;

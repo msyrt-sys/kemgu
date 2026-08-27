@@ -91,7 +91,12 @@ ALLOWLIST="35_binary_search 40_dizi_islemler kem_mmio_ham kem_pointer"
 #     TOPLU serbest ediliyor -> o dosya GERCEKTEN sizintisiz (olculdu: 0).
 #     Kalan 8 dosyanin sizintisi ya KACAN isaretci (kanit yok -> bilincli
 #     malloc) ya kapanis env kopyasi ya kanal tamponudur.
-SIZINTI_MUAF="bolge_al_grow bolge_al_tam64 bolge_al_tam8 kanal_mesaj gorev_temel 25_closure_capture 29_linear_closure 43_closure_param"
+#     ⚠ [D-495] TUM `bolge_al_*` DOSYALARI LISTEDEN CIKTI (4 -> 0). `bölge_al`
+#     artik hapsedilme kaniti varken ρ_yerel'den tahsis ediyor; olculdu:
+#     grow/tam64/tam8/struct hepsi cikis=42, sizinti=0, UAF=0.
+#     KALAN 5 sizinti BASKA KOKENDEN: kapanis HEAP env kopyasi (3) + kanal
+#     tamponu + gorev. Onlar `bölge_al` ekseninde DEGIL.
+SIZINTI_MUAF="kanal_mesaj gorev_temel 25_closure_capture 29_linear_closure 43_closure_param"
 
 pass=0; fail=0; skip=0; allow=0; sizinti_muaf_sayi=0
 for f in test/ornekler/*.kem test/snapshots/*.kem; do
