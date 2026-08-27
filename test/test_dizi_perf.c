@@ -11,6 +11,15 @@
  * Bench cikti: her programin toplam suresi + her birim ekle suresi.
  */
 
+/* [D-481] `WEXITSTATUS` bir MAKRODUR ve <sys/wait.h>DEN gelir. Eksikken
+ * derleyici onu ORTUK ISLEV sanip devam etti; hata LINK ZAMANINDA cikti:
+ *   undefined reference to `WEXITSTATUS'
+ * Windows'ta gorunmez -- o dal `#ifdef` ile disarida.
+ * ⚠ D-477'de bu dosyalari "zaten dogru" diye ELEMISTIM: `WEXITSTATUS`
+ * GECIYOR diye bakmistim, ama GORUNMEK != DOGRU OLMAK. */
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,15 +101,24 @@ static void test_capacity_temel(void) {
 }
 
 static void test_kapasite_ayarla(void) {
-    /* dizi_kapasite_ayarla(d, 1000) -> dizi_kapasite -> 1000 */
+    /* dizi_kapasite_ayarla(d, 200) -> dizi_kapasite -> 200 (D-481: 8-bit) */
     double sn;
     int rc = derle_ve_olc(
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken d: Dizi<tam32> = dizi_olustur(0); "
-        "dizi_kapasite_ayarla(d, 1000); "
+        "dizi_kapasite_ayarla(d, 200); "
         "ver dizi_kapasite(d); }",
         "cap_ayarla", &sn);
-    test_sonuc("dizi_kapasite_ayarla(d, 1000) -> 1000", rc == 1000);
+    /* [D-481] ⚠ 1000 BIR CIKIS KODU OLARAK TASINAMAZ: POSIX 8 BITE MASKELER
+     * (1000 & 255 = 232) -- olculdu. Windows'ta geciyordu (Win32 32-bit cikis
+     * kodu tasir), Linux'ta dusuyordu. KAPASITE MANTIGI DOGRU; tasinabilir
+     * olmayan sey TESTIN DEGERI CIKIS KODUYLA TASIMASIYDI.
+     * D-477'de ayni sinif SIMD testinde (8x40=320) duzeltilmisti; bu, o
+     * taramanin KACIRDIGI ikinci vakaydi. Bu kez tum test dosyalari
+     * `rc == <255 ustu>` icin TARANDI ve baska vaka KALMADI.
+     * 200 <= 255: ayni sorulari sorar (ayarla -> kapasite), tasinabilir. */
+    test_sonuc("dizi_kapasite_ayarla(d, 200) -> 200 (8-bit sinirinda)",
+               rc == 200);
     printf("       sure: %.3f sn\n", sn);
 }
 
