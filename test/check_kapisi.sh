@@ -17,7 +17,12 @@ set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 KEMGU="${KEMGU:-build/kemgu${EXE}}"
 [ -x "$KEMGU" ] || KEMGU="build/kemgu"
-[ -x "$KEMGU" ] || { echo "⏭  $KEMGU yok — atlandı"; exit 0; }
+# [D-487] EKSIK IKILI = HATA (D-486 dersinin genellemesi). Hedef
+# `$(BUILD)/kemgu$(EXE)`e BAGIMLI -> make yolunda ikili GARANTI, yani bu
+# dal OLU KOD; tek islevi bir YOL HATASINI SESSIZCE YUTMAKTI. Yukaridaki
+# yedek satiri bu kapiyi Linux'ta KURTARDI; D-486'da sekiz kardesi
+# kurtaramadi ve takim SAHTE YESIL verdi.
+[ -x "$KEMGU" ] || { echo "🔴 HATA: kemgu ikilisi YOK ($KEMGU) — kapı KOŞMADI"; exit 1; }
 
 # --- MUAF LİSTESİ (her satır: dosya|gerekçe) ---
 # Muafiyet KALICI DEĞİL: gerekçe ortadan kalkarsa satır silinmeli.
