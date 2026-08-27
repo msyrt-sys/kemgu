@@ -64,6 +64,33 @@ if [ "$NC" -ne 2 ]; then
     hata=1
 fi
 
+
+# --- [D-494] F4.4: `bölge_al` hapsedilme yönlendirmesi -----------------------
+# ⚠ AYNI SINIF, AYNI KORLUK: özet çalışsa da çalışmasa da program 42 döner ve
+# ASan TEMİZ görünür (sızıntı bir ASan hatası DEĞİLDİR; LeakSanitizer ise
+# Windows'ta YOKTUR). Yapısal ölçüm ŞART.
+#   hapsedilmiş işaretçi (yalnız deref)  -> kdl_bolge_ayir(ρ_yerel)
+#   kaçan işaretçi (döndürülür)          -> malloc  (serbest EDİLMEZ, UAF YOK)
+F2=test/cg_korpus/cg_bolge_al_hapsedilme.kem
+if [ -f "$F2" ]; then
+    IR2=$("$KEMGU" --llvm "$F2" 2>/dev/null) || { echo "🔴 HATA: $F2 için IR üretilemedi"; exit 1; }
+    NA=$(echo "$IR2" | grep -cE "call ptr @kdl_bolge_ayir\(")
+    NM=$(echo "$IR2" | grep -cE "call ptr @malloc\(")
+    if [ "$NA" -ne 1 ]; then
+        echo "  🔴 bölge_al: hapsedilmiş tahsis ρ_yerel'de DEĞİL (beklenen 1, gelen $NA)"
+        echo "     → F4.4 gerilemesi: kanıt kurulmuyor, tahsis yine sızıyor"
+        hata=1
+    fi
+    if [ "$NM" -ne 1 ]; then
+        echo "  🔴 bölge_al: kaçan tahsis malloc'ta DEĞİL (beklenen 1, gelen $NM)"
+        echo "     → SAĞLAMSIZ: kaçan işaretçi ρ_yerel'de serbest edilir = UAF"
+        hata=1
+    fi
+    [ "$hata" -eq 0 ] && echo "    bölge_al: ρ_yerel=$NA malloc=$NM — DOĞRU"
+else
+    echo "🔴 HATA: fikstür YOK ($F2)"; exit 1
+fi
+
 if [ "$hata" -eq 0 ]; then
     echo "=== bölge yönlendirme (çağrılan-özeti): ρ_yerel=$NY ρ_caller=$NC — DOĞRU ==="
 else

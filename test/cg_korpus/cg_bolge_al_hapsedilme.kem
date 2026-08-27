@@ -1,0 +1,33 @@
+// [D-494] F4.4 ilk adimi: `bölge_al` HAPSEDILME KANITI varken ρ_yerel'den
+// tahsis eder (islev sonunda TOPLU serbest); kanit yoksa ESKI ham `malloc`
+// yolu korunur (sizar ama UAF YOK).
+//
+// ⚠ DAVRANISSAL OLARAK AYRIM YAPMAZ: iki yol da 42 doner, ASan da temiz
+// gorunur. Yapisal ayrimi `calistir_bolge_yonlendirme` kapisi olcer.
+
+// (a) HAPSEDILMIS — isaretci yalniz deref edilir, disari CIKMAZ.
+işlev hapsedilmis() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken p: *tam32 = bölge_al(y, 4);
+    geri_al(y);
+    değişken s: tam32 = 0;
+    güvensiz { p[0] = 20; p[1] = 22; s = p[0] + p[1]; }
+    ver s;
+}
+
+// (b) KACAN — isaretci DONDURULUR. ρ_yerel'e koymak UAF olurdu.
+işlev kacan() -> *tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken q: *tam32 = bölge_al(y, 4);
+    geri_al(y);
+    güvensiz { q[0] = 7; }
+    ver q;
+}
+
+işlev main() -> tam32 {
+    değişken a: tam32 = hapsedilmis();
+    değişken r: *tam32 = kacan();
+    değişken b: tam32 = 0;
+    güvensiz { b = r[0]; }
+    ver a + b - 7;
+}

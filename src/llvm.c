@@ -4122,8 +4122,27 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = mul i64 %%%d, %%%d\n",
                             tot, n64, szi);
                     int buf = yeni_reg(g);
-                    fprintf(g->out,
-                        "  %%%d = call ptr @malloc(i64 %%%d)\n", buf, tot);
+                    /* [D-494] F4.4 ILK ADIMI — "gercek arena V2" (kodun kendi
+                     * yorumu). ONCEDEN KOSULSUZ ham `malloc` yayiliyordu ve
+                     * SONUC HIC SERBEST EDILMIYORDU (LeakSanitizer D-483'te
+                     * gorunur kildi; Windows'ta LSan YOKTU, sizinti 3 yildir
+                     * oradaydi).
+                     *
+                     * ⚠ SAGLAMLIK: ρ_yerel YALNIZ POZITIF hapsedilme kaniti
+                     * varken kullanilir (D-309/D-488 deseni). Kanit yoksa ESKI
+                     * yol (malloc) AYNEN korunur -> sizar ama UAF YOK.
+                     * "sizinti bir hata, UAF bir felaket" (escape.c'nin kendi
+                     * takasi). Kanit `ky_confined` ile kurulur ve `&p` KACIS
+                     * sayilir, `*p` sayilmaz (D-494 deref ayrimi). */
+                    if (g->aktif_escape && g->rho_yerel
+                        && escape_kesin_yerel(g->aktif_escape, d)) {
+                        fprintf(g->out,
+                            "  %%%d = call ptr @kdl_bolge_ayir(ptr %s, i64 %%%d)\n",
+                            buf, g->rho_yerel, tot);
+                    } else {
+                        fprintf(g->out,
+                            "  %%%d = call ptr @malloc(i64 %%%d)\n", buf, tot);
+                    }
                     IfadeSonuc s = { buf, "ptr", 0, 0};
                     return s;
                 }
@@ -7905,6 +7924,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_global_bolge_al()\n", out);
     fputs("declare ptr @kdl_bolge_olustur()\n", out);       /* F4.2b: ρ_yerel aç */
     fputs("declare void @kdl_bolge_serbest(ptr)\n", out);   /* F4.2b: ρ_yerel serbest */
+    /* [D-494] F4.4: `bölge_al` artık kanıtlıysa bölgeden tahsis eder.
+     * Bildirim ŞART — yoksa LINK-RED (D-475: üretilen IR KENDİ KENDİNE
+     * YETMELİ; orada da eksik declare'ler aynı biçimde yakalanmıştı). */
+    fputs("declare ptr @kdl_bolge_ayir(ptr, i64)\n", out);
     /* Katman 2 (Concurrency / DRF V1): görev_başlat / görev_birleştir hedefleri.
      * basla_kapanis(fn, fn, env): fn BİLEREK iki kez — C tarafında iki farklı
      * tipli fn-ptr parametresi (bare/kapanış), cast-siz dispatch için. */

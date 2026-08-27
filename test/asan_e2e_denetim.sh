@@ -86,7 +86,12 @@ mkdir -p "$TMP"
 ALLOWLIST="35_binary_search 40_dizi_islemler kem_mmio_ham kem_pointer"
 
 # [D-483] Yalnız LeakSanitizer sızıntısı hoşgörülen dosyalar (yukarıdaki not).
-SIZINTI_MUAF="bolge_al_grow bolge_al_struct bolge_al_tam64 bolge_al_tam8 kanal_mesaj gorev_temel 25_closure_capture 29_linear_closure 43_closure_param"
+#     ⚠ [D-494] `bolge_al_struct` BU LISTEDEN CIKARILDI: `bölge_al` artik
+#     hapsedilme kaniti varken ρ_yerel'den tahsis ediyor ve islev sonunda
+#     TOPLU serbest ediliyor -> o dosya GERCEKTEN sizintisiz (olculdu: 0).
+#     Kalan 8 dosyanin sizintisi ya KACAN isaretci (kanit yok -> bilincli
+#     malloc) ya kapanis env kopyasi ya kanal tamponudur.
+SIZINTI_MUAF="bolge_al_grow bolge_al_tam64 bolge_al_tam8 kanal_mesaj gorev_temel 25_closure_capture 29_linear_closure 43_closure_param"
 
 pass=0; fail=0; skip=0; allow=0; sizinti_muaf_sayi=0
 for f in test/ornekler/*.kem test/snapshots/*.kem; do

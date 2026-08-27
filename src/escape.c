@@ -777,7 +777,20 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
         case DUGUM_IKILI:
             return ky_confined(d->veri.ikili.sol, ad, uz)
                 && ky_confined(d->veri.ikili.sag, ad, uz);
-        case DUGUM_TEKLI: return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
+        case DUGUM_TEKLI:
+            /* [D-494] DEREFERANS ISARETCIYI SIZDIRMAZ — `&` SIZDIRIR.
+             * Eskiden ikisi de ayni yoldan gecip `*p`yi de KACIS sayiyordu
+             * (operand cıplak `p` -> 0). Bu, ham isaretcileri (`bölge_al`
+             * sonucu) YAPISAL OLARAK hapsedilemez kiliyordu: ham isaretci
+             * DAIMA deref edilir.
+             * SAGLAMLIK: `*p` p'nin DEGERINI degil, GOSTERDIGI SEYI okur/yazar
+             * -> p disari cikmaz. `&p` ise p'nin ADRESINI verir -> KACIS.
+             * `*p` icindeki daha derin kullanimlar YINE denetlenir (`**p`,
+             * `*(f(p))` gibi sekiller ozyineli olarak dogru sonuclanir). */
+            if (d->veri.tekli.op == OP_DEREFERANS
+                && ky_ad_esit(d->veri.tekli.operand, ad, uz))
+                return 1;
+            return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
         case DUGUM_ERISIM: return ky_confined(d->veri.erisim.nesne, ad, uz);
         case DUGUM_DIZI_OLUSTUR:
             for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
@@ -806,6 +819,27 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
     if (!d) return;
     switch (d->tip) {
         case DUGUM_DEGISKEN:
+            /* [D-494] `değişken V: *T = bölge_al(...)` — HAM ISARETCI dali.
+             * `bölge_al` D-415'ten beri GERCEK bir tahsistir (`malloc`) ve
+             * HIC serbest edilmiyordu; kodun kendi yorumu bunu "v1
+             * malloc-VEKALETEN (gercek arena V2)" diye isaretlemisti.
+             * V confined ise CAGRI dugumu kesin_yerel -> codegen onu
+             * ρ_yerel'den tahsis eder ve islev sonunda TOPLU serbest edilir. */
+            if (d->veri.degisken.tip
+                && d->veri.degisken.tip->tip == DUGUM_TIP_POINTER
+                && d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_CAGRI
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0) {
+                const Dugum *h = d->veri.degisken.deger->veri.cagri.hedef;
+                if (h && h->tip == DUGUM_TANIMLAYICI
+                    && h->veri.tanimlayici.uzunluk == 9
+                    && memcmp(h->veri.tanimlayici.metin, "b\xc3\xb6lge_al", 9) == 0
+                    && ky_confined(fn_govde, d->veri.degisken.ad,
+                                   d->veri.degisken.ad_uzunluk)) {
+                    kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                    ky_set(ea, d->veri.degisken.deger);
+                }
+            }
             if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
                 && d->veri.degisken.deger
                 && d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR
