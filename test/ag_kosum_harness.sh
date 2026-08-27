@@ -24,7 +24,14 @@ PORT=58421
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/agkosum); mkdir -p "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
-    echo "ℹ codegen.exe yok — kapı atlandı."; exit 0
+# [D-486] EKSIK IKILI = HATA, ATLAMA DEGIL. Bu kapinin make hedefi
+# `$(BUILD)/codegen$(EXE)`e BAGIMLIDIR -> make uzerinden ikili GARANTI.
+# Yani bu dal make yolunda OLU KOD; tek islevi bir YOL HATASINI SESSIZCE
+# YUTMAKTI. Olculdu: Makefile `CODEGEN=build/codegen.exe` diye SABIT
+# geciyordu -> Linux'ta ikilinin adi `build/codegen` -> SEKIZ parite
+# kapisi birden atlandi ve `make` yine 0 dondu (tam takim YESIL gorundu).
+# D-446'nin sinifi: var olan ama kosmayan kapi, olmayandan tehlikelidir.
+    echo "🔴 HATA: codegen ikilisi YOK ($CODEGEN) — kapı KOŞMADI"; exit 1
 fi
 
 DINLE="$TMP/dinleyici.exe"

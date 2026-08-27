@@ -22,9 +22,11 @@ KORPUS=${KORPUS:-test/cg_korpus}
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/cgdiff); mkdir -p "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
-    echo "ℹ codegen.exe yok (selfhost/codegen.kem henüz CG1'de — D-072 ADIM-0)."
-    echo "   Oracle hazır; codegen.exe derlenince diff koşar. (test_tumu'ya CG1'de bağlanır.)"
-    exit 0
+    # [D-486] Bu mesaj BAYATTI (D-072/CG1 donemi); kapi artik 155/155.
+    # Hedef `$(BUILD)/codegen$(EXE)`e BAGIMLI -> make yolunda ikili GARANTI,
+    # yani bu dal OLU KOD ve tek islevi bir yol hatasini yutmakti.
+    echo "🔴 HATA: codegen ikilisi YOK ($CODEGEN) — kapı KOŞMADI"
+    exit 1
 fi
 
 # Win11 flakiness: freshly-linked .exe Defender taramasında ilk exec'te 127 verebilir
