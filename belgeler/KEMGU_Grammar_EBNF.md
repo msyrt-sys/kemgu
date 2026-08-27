@@ -254,3 +254,93 @@ varsa yapı oluşturma olarak parse et.
 - Çıkarma mı? (ikili)
 
 **Çözüm:** `*` ile aynı — Pratt parser prefix/infix ayrımı ile çözer.
+
+---
+
+## 6. Sonradan Eklenen Dil Yüzeyi (D-492'de senkronlandı)
+
+> **⚠ Bu bölüm 2026-08-27'de eklendi.** Belgenin gövdesi 2026-05-09'dan beri
+> dokunulmamıştı; o tarihten sonra dile eşzamanlılık, lineer tipler, yetki ve
+> SIMD girdi. Ölçüldü: **41 anahtar kelimenin 16'sı gramerde YOKTU (%39).**
+> Dili tarif etmeyen bir gramer, olmayandan tehlikelidir — ona göre uygulama
+> yazan yanlış yazar. `calistir_anahtar_kelime_kapisi` bu sürüklenmeyi sabitler.
+>
+> **Aşağıdaki üretimler KORPUSTAN ÖLÇÜLDÜ, icat edilmedi** (`test/cg_korpus/`,
+> `stdlib/`). Ölçülemeyenler bölümün sonunda AYRI ve açıkça işaretli.
+
+### 6.1 Tip kurucuları (hepsi generic, `<>` ile)
+
+```
+tekkez_tip      = "tekkez" "<" tip ">" ;              (* Linear Types V1 *)
+görev_tip       = "görev" "<" tip ">" ;               (* Concurrency V1 *)
+kanal_tip       = "kanal" "<" tip ">" ;
+yetki_tip       = "yetki" "<" kaynak_adı ">" ;        (* Capability V1 *)
+sabitsüre_tip   = "sabitsüre" "<" tip ">" ;           (* sabit-süre disiplini *)
+vektör_tip      = "vektör" "<" tip "," tam_literal ">" ;   (* SIMD V1 *)
+
+kaynak_adı      = "Dosya" | "Soket" | "Bellek" | "Donanim"
+                | "OTP_Anahtar" | "MMIO" ;
+```
+`kaynak_adı` **kapalı bir kümedir** ve dilin kendi sabit listesindendir
+(`yetki_olustur` kaynak_tipi 1–6). Yeni ad eklemek dil yüzeyi değişikliğidir.
+
+`gönderen<T>` / `alan<T>` kanal **yön uçlarıdır** (D-303) ve anahtar kelime
+DEĞİLDİR — tip pozisyonunda kullanıcı-generic tipi olarak çözülürler, böylece
+`alan` serbest bir tanımlayıcı olarak kalır.
+
+### 6.2 Yapıcılar ve desenler
+
+```
+seçimlik_yapıcı = "değer" "(" ifade ")" | "hiç" ;
+sonuç_yapıcı    = "tamam" "(" ifade ")" | "hata" "(" ifade ")" ;
+```
+Bunlar **bağlamsaldır**: ancak beklenen tip bilindiğinde çözülürler
+(annotasyonlu bağlama · `ver` · çağrı argümanı · atama — D-465).
+Desen konumunda aynı biçimler bağlama yapar (`tamam(v) =>`).
+
+### 6.3 Lineer tüketim
+
+```
+kullan_ifadesi  = "kullan" "(" ifade ")" ;   (* YALNIZ tekkez<T> — L007 *)
+imha_ifadesi    = "imha" "(" ifade ")" ;     (* her lineer değeri alır *)
+```
+**⚠ `kullan` bağlam-duyarlıdır:** üst düzeyde `kullan a::b;` bir *import*,
+ifade konumunda `kullan(t)` bir *lineer tüketim*tir. Aynı kelime, iki dilbilgisi.
+
+### 6.4 Yetki
+
+```
+yetki_olustur   = "yetki_olustur" "(" ifade "," ifade ")" ;  (* kaynak_tipi, izin *)
+geri_al_ifadesi = "geri_al" "(" ifade ")" ;                  (* TÜKETİR — CP005 *)
+```
+`yetki<R>` **lineerdir**: işlev sonunda tüketilmezse CP005. `mmio_*` ve
+`bölge_al` ödünç alır, `geri_al` tüketir.
+
+### 6.5 Eşzamanlılık yerleşikleri
+
+```
+görev_başlat    = "görev_başlat" "(" lambda ")" ;   (* sonuç<görev<T>, metin> *)
+görev_birleştir = "görev_birleştir" "(" ifade ")" ;
+kanal_oluştur   = "kanal_oluştur" "(" ifade ")" ;   (* kapasite; T bağlamdan *)
+kanal_gönder    = "kanal_gönder" "(" ifade "," ifade ")" ;
+kanal_al        = "kanal_al" "(" ifade ")" ;
+dondur          = "dondur" "(" ifade ")" ;          (* V1: identity *)
+```
+`görev_başlat` **`görev<T>` değil `sonuç<görev<T>, metin>` döner** (D-301):
+spawn başarısızlığı panik değil DEĞERdir (çökmezlik). Bu yüzden her çağrı bir
+`eşleş` ister.
+
+### 6.6 İşlev niteleyicisi
+
+```
+işlev_tanımı    = [ "gerçekzamanlı" ] [ "genel" ] [ "çıplak" ]
+                  "işlev" tanımlayıcı ... ;
+```
+Ölçüldü: `gerçekzamanlı işlev pid_hesapla(...)` (Realtime Spec V1).
+
+### 6.7 ⚠ ÖLÇÜLEMEYENLER — sözdizimi UYDURULMADI
+
+`kendin` · `delege` · `bölge` anahtar kelimedirler (lexer tablosunda) ama
+**korpusta gerçek kullanımları BULUNAMADI** — yalnız anahtar kelime
+listelerinde geçiyorlar. Onlar için üretim yazmak *icat* olurdu; bu bölüm
+bilerek boş bırakıldı. Kullanımları ortaya çıkınca ölçülüp eklenmelidir.

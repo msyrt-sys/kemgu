@@ -29,13 +29,13 @@ make test_tumu
 # Sadece lexer testleri
 make calistir_lexer_test
 
-# Sadece arena testleri (YAPILACAK — parser fazında eklenecek)
+# Sadece arena testleri (VAR — 19/19; "YAPILACAK" notu D-492'de düzeltildi)
 make calistir_arena_test
 
-# Sadece AST testleri (YAPILACAK — parser fazında eklenecek)
+# Sadece AST testleri (VAR — 31/31)
 make calistir_ast_test
 
-# Sadece parser testleri (YAPILACAK — parser fazında eklenecek)
+# Sadece parser testleri (VAR — 90/90)
 make calistir_parser_test
 
 # Bellek kontrolü (AddressSanitizer)
@@ -193,7 +193,7 @@ Sayı ayracı:        1_000_000
 Raw string:         r#"..."#
 ```
 
-### 35 Anahtar Kelime
+### 41 Anahtar Kelime (D-492: "35" idi, ÖLÇÜLDÜ 41)
 ```
 eğer, değilse, için, iken, eşleş, ver, işlev, yapı, özellik, modül,
 değişken, sabit, doğru, yanlış, boş, ve, veya, değil, kullan, dışa,
@@ -636,7 +636,14 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 ./x.exe; echo $?    # → 42 ✓
 ```
 
-**Test sayısı:** 505/505 (önceki 501 + 4 generic işlev) + 3 stdlib --check geçti
+**Test sayısı (TARİHÎ — ADIM 23 anı):** 505/505 + 3 stdlib --check.
+
+> ⚠ **[D-492] BU SAYI ÇOK ESKİDİR — güncel ölçü `make test_tumu`dur.**
+> Bugün tek başına `llvm_test` **286**, `checker_diff` **162**, `codegen_diff`
+> **156**; `test_tumu` **66 kapı** çağırıyor. Belgeye gömülü test sayıları
+> yazıldıkları gün doğru, ertesi gün bayattır — bu dosyada üç ayrı yerde
+> yaşandı (bu satır · yukarıdaki "YAPILACAK" yorumları · `SORRY_TRACKER.md`
+> D-491). **Sayıyı belgeye gömmek yerine kapının kendisini koştur.**
 
 ### ADIM (Konsolidasyon) — Linear Types Spec V1 (`tekkez<T>` + `kullan` + `imha`)
 Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md`.
