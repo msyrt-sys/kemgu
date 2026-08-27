@@ -1,0 +1,24 @@
+# [D-482] SATIR SONU POLITIKASI — capraz platform (Windows + Linux/DGX Spark).
+#
+# NEDEN VAR: `core.autocrlf=true` (bu depoda AYARLI) checkout'ta metin
+# dosyalarini CRLF'e cevirir. Bu, Windows'ta zararsizdi ama WSL'de tam takimi
+# DURDURDU:
+#   test/ciplak_region_free_harness.sh: line 30: syntax error near
+#   unexpected token `$'{\r''
+# Bash `\r`yi sozdiziminin PARCASI sayar. Olculdu: 27 harness'in 4'u CRLF'ti
+# (digerleri bu oturumda yeniden yazildigi icin LF olmustu -- yani sorun
+# rastgele dagilmisti, hepsi ya da hicbiri degil).
+#
+# KABUK BETIKLERI HICBIR PLATFORMDA CRLF OLMAMALI. Windows'ta MSYS2/Git Bash
+# LF'i sorunsuz okur; Linux CRLF'i okuyamaz. Yani LF TEK DOGRU SECIMDIR.
+*.sh text eol=lf
+
+# Anlik goruntuler ve korpus: LF sabitlenirse `snapshot_test`in normallestirme
+# ihtiyaci azalir (D-479 normallestirmeyi ZATEN ekledi -- bu ek bir katman,
+# onun YERINE GECMEZ: git ayari makineden makineye degisebilir, normallestirme
+# ise kodda durur).
+*.ast text eol=lf
+*.kem text eol=lf
+
+# Makefile sekme-duyarlidir; CRLF bazi make surumlerinde sorun cikarir.
+Makefile text eol=lf
