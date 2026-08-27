@@ -18,6 +18,15 @@
  * Test ASan ile dogrulanir.
  */
 
+
+/* [D-488] Cagrilan-ozeti tablosu PROGRAM GENELINDEDIR ve ARENA-destekli:
+ * tuketiciler (llvm.c / tip_kontrol.c) ISLEV BASINA taze EscapeAnaliz kurar,
+ * yani tabloyu orada tutmak her isleve yeniden kurdururdu (O(F^2)). Arena
+ * cagiran tarafindan serbest birakildigi icin ayrica free GEREKMEZ. */
+static struct EaFnKayit *g_fn_tablo = NULL;
+static int g_fn_sayi = 0;
+static const Dugum *g_fn_program = NULL;
+
 #define KAYIT_BASLANGIC_KAP 16
 #define BAG_BASLANGIC_KAP   16
 
@@ -497,6 +506,112 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
  * lambda yakalama, &var, var yeniden-atama) → DENY (ρ_caller). Default-deny =
  * inşa-gereği sound (principle 1+3). Skaler-eleman kısıtı llvm tarafında. */
 
+/* ===================================================================
+ * [D-488] INTERPROCEDURAL PARAMETRE-TUTMA OZETI
+ * ===================================================================
+ * SORU: `f(xs)` cagrisinda f, xs'i SAKLIYOR MU (retain)? Saklamiyorsa
+ * xs'in hapsedilme kaniti KORUNUR -> ρ_yerel'de serbest edilebilir.
+ *
+ * ⚠ YENI ANALIZ YAZILMADI. Bu soru `ky_confined(f.govde, param_adi)` ile
+ * BIREBIR AYNIDIR ve o yuklem F4.2b'de 18-UAF avindan gecmis, kanitlanmis
+ * makinedir: `ver p` -> 0, lambda yakalama -> 0, kuresele/agregaya atama
+ * -> 0, `g(p)` -> 0 (ozyineli sorgu), BILINMEYEN DUGUM -> 0.
+ *
+ * SAGLAMLIK (default-DENY her eksende):
+ *   - cagrilan bilinmiyorsa (yerlesik / dolayli / bagli-olmayan ad) -> DENY
+ *   - govde YOKSA (yalniz imza) -> DENY
+ *   - OZYINELEME (f -> f) -> DENY (fn_devam yigini; sonlanma garantisi)
+ *   - yigin dolarsa -> DENY
+ * Yani "kanit bulamadim" DAIMA eski (konservatif) davranisa duser.
+ */
+typedef struct EaFnKayit {
+    const char *ad;
+    int uz;
+    const Dugum *islev;
+} EaFnKayit;
+
+/* ky_confined ile karsilikli ozyineli — ileri bildirim. */
+static int ky_confined(const Dugum *d, const char *ad, int uz);
+
+/* Analiz suresince aktif tablo. ky_confined imzasi DEGISTIRILMEDI (dosya
+ * icinde ~30 ozyineli cagri yeri var; imza degisikligi degisim yuzeyini
+ * gereksiz genisletirdi). Tek is parcacikli derleyici. */
+
+static void ea_fn_ekle(Arena *a, const Dugum *fn, int *kap) {
+    if (!fn || fn->tip != DUGUM_ISLEV || !fn->veri.islev.govde) return;
+    if (g_fn_sayi >= *kap) {
+        int yeni = *kap ? *kap * 2 : 64;
+        EaFnKayit *t = (EaFnKayit *)arena_ayir_sifir(a, (size_t)yeni * sizeof(EaFnKayit));
+        if (!t) return;                     /* tahsis yok -> tablo buyumez -> DENY */
+        for (int i = 0; i < g_fn_sayi; i++) t[i] = g_fn_tablo[i];
+        g_fn_tablo = t; *kap = yeni;
+    }
+    g_fn_tablo[g_fn_sayi].ad = fn->veri.islev.ad;
+    g_fn_tablo[g_fn_sayi].uz = fn->veri.islev.ad_uzunluk;
+    g_fn_tablo[g_fn_sayi].islev = fn;
+    g_fn_sayi++;
+}
+
+static void ea_fn_topla(Arena *a, const Dugum *d, int *kap) {
+    if (!d) return;
+    switch (d->tip) {
+        case DUGUM_PROGRAM:
+            for (int i = 0; i < d->veri.program.sayi; i++)
+                ea_fn_topla(a, d->veri.program.uyeler[i], kap);
+            return;
+        case DUGUM_MODUL:
+            for (int i = 0; i < d->veri.modul.sayi; i++)
+                ea_fn_topla(a, d->veri.modul.uyeler[i], kap);
+            return;
+        case DUGUM_DISA: ea_fn_topla(a, d->veri.disa.tanim, kap); return;
+        case DUGUM_ISLEV: ea_fn_ekle(a, d, kap); return;
+        default: return;
+    }
+}
+
+void escape_fn_tablo_kur(Arena *a, const Dugum *program) {
+    if (!a || !program) return;
+    if (g_fn_program == program) return;    /* ayni program -> yeniden kurma */
+    g_fn_tablo = NULL; g_fn_sayi = 0;
+    int kap = 0;
+    ea_fn_topla(a, program, &kap);
+    g_fn_program = program;
+}
+
+static const Dugum *ea_fn_bul(const char *ad, int uz) {
+    if (!ad || !g_fn_tablo) return NULL;
+    for (int i = 0; i < g_fn_sayi; i++) {
+        const EaFnKayit *k = &g_fn_tablo[i];
+        if (k->uz == uz && k->ad && memcmp(k->ad, ad, (size_t)uz) == 0)
+            return k->islev;
+    }
+    return NULL;   /* bilinmeyen -> cagiran DENY'e duser */
+}
+
+/* f'in idx. parametresi govdede HAPSEDILMIS mi (yani f onu SAKLAMIYOR mu)? */
+static const Dugum *g_fn_devam[32];
+static int g_fn_devam_sayi = 0;
+
+static int ea_param_tutmuyor(const Dugum *fn, int idx) {
+    if (!fn || fn->tip != DUGUM_ISLEV) return 0;
+    if (!fn->veri.islev.govde) return 0;                  /* yalniz imza -> DENY */
+    if (idx < 0 || idx >= fn->veri.islev.param_sayi) return 0;
+    const Dugum *p = fn->veri.islev.parametreler[idx];
+    if (!p || p->tip != DUGUM_PARAMETRE || !p->veri.parametre.ad) return 0;
+
+    /* OZYINELEME KORUYUCUSU: f zaten degerlendirilmekteyse DENY. Hem
+     * sonlanmayi garanti eder hem konservatif taraftadir. */
+    for (int i = 0; i < g_fn_devam_sayi; i++)
+        if (g_fn_devam[i] == fn) return 0;
+    if (g_fn_devam_sayi >= 32) return 0;        /* yigin doldu -> DENY */
+
+    g_fn_devam[g_fn_devam_sayi++] = fn;
+    int r = ky_confined(fn->veri.islev.govde,
+                        p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
+    g_fn_devam_sayi--;
+    return r;
+}
+
 static int ky_ad_esit(const Dugum *d, const char *ad, int uz) {
     return d && d->tip == DUGUM_TANIMLAYICI
         && d->veri.tanimlayici.uzunluk == uz
@@ -617,6 +732,14 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
             if (!ky_confined(h, ad, uz)) return 0;
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 if (i == 0 && safe0) continue;  /* dizi_*(var, ...) ilk arg tuketildi */
+                /* [D-488] KULLANICI ISLEVI OZETI: arg TAM OLARAK bu degiskense ve
+                 * cagrilan f onu SAKLAMIYORSA (ky_confined(f.govde, param)) hapsedilme
+                 * KORUNUR. Kanit bulunamazsa asagidaki eski DENY yolu isler. */
+                if (ky_ad_esit(d->veri.cagri.argumanlar[i], ad, uz)
+                    && h && h->tip == DUGUM_TANIMLAYICI
+                    && ea_param_tutmuyor(ea_fn_bul(h->veri.tanimlayici.metin,
+                                                   h->veri.tanimlayici.uzunluk), i))
+                    continue;
                 if (!ky_confined(d->veri.cagri.argumanlar[i], ad, uz)) return 0;
             }
             return 1;
@@ -762,6 +885,13 @@ void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
 
 void escape_analiz_program(EscapeAnaliz *ea, const Dugum *program) {
     if (!program) return;
+
+    /* [D-488] Bu yol (program-genelinde gezinme) tabloyu KENDISI kurar.
+     * Derleyicinin gercek yolu `escape_analiz_islev`tir (islev basina) —
+     * orada tablo `escape_fn_tablo_kur` ile ONCEDEN kurulmus olmalidir;
+     * kurulmamissa ea_fn_bul NULL doner -> eski konservatif davranis. */
+    escape_fn_tablo_kur(ea->arena, program);
+
 
     /* Recursive: islevleri bul (program -> modul -> disa -> islev) */
     switch (program->tip) {

@@ -109,9 +109,22 @@ typedef struct EscapeAnaliz {
      * capture sound backstop — lexical scope: yalniz bu fn'in lambda'si bu fn'in
      * lokalini yakalar; block-form capture takibi v1'de yok). */
     int islev_lambda_icerir;
+
 } EscapeAnaliz;
 
 void escape_baslat(EscapeAnaliz *ea, Arena *a);
+
+/* [D-488] INTERPROCEDURAL PARAMETRE-TUTMA OZETI — program basinda BIR KEZ kur.
+ * `f(xs)` cagrisinda xs'in hapsedilme kaniti KOSULSUZ dusuyordu (yalniz
+ * beyaz-listeli dizi-yerlesiginin 0. konumu muafti) -> gercek programlarda
+ * rho_yerel yonlendirmesi ~%1'e iniyordu (OLCULDU: parser.kem 0/35,
+ * checker.kem 1/181, codegen.kem 3/267).
+ * YENI ANALIZ ICAT EDILMEDI: "f, p'yi SAKLIYOR MU?" sorusu `ky_confined` ile
+ * BIREBIR AYNIDIR (ver p -> DENY, lambda yakalama -> DENY, kuresele/agregaya
+ * atama -> DENY, bilinmeyen dugum -> DENY). Kanit makinesi cagri yerine tasindi.
+ * Cagrilmazsa tablo bos kalir -> tum sorgular DENY -> ESKI davranis (guvenli).
+ * Tablo ARENA-desteklidir; ayrica serbest birakma GEREKMEZ. */
+void escape_fn_tablo_kur(Arena *a, const Dugum *program);
 
 /* Dahili malloc/realloc edilmis tablolari serbest birak. */
 void escape_serbest(EscapeAnaliz *ea);

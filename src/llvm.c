@@ -8135,6 +8135,12 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         }
     }
 
+    /* [D-488] Cagrilan-ozeti tablosunu KULLAN GENISLETMESINDEN SONRA kur:
+     * ice aktarilan islevler de tabloda olmali. Escape analizi asagida ISLEV
+     * BASINA kosar ve `f(xs)` cagrisinda f'in ozetini sorar; tablo yoksa tum
+     * sorgular DENY doner (= eski konservatif davranis). */
+    escape_fn_tablo_kur(a, program);
+
     /* Pre-pass: yapilari kayit et */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];

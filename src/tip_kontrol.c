@@ -6525,6 +6525,10 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
 void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
+    /* [D-488] Cagrilan-ozeti tablosunu ISLEV DONGUSUNDEN ONCE kur: escape
+     * analizi islev basina kosar ve `f(xs)` cagrisinda f'in ozetini sorar.
+     * Kurulmazsa tum sorgular DENY doner (= eski konservatif davranis). */
+    escape_fn_tablo_kur(tk->arena, program);
     pre_populate(tk, program);
     /* A faz-2: tum moduller kayitli — kullan baglarini kur (dongusel
      * import bildirim sirasi onemsiz). */

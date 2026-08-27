@@ -1,0 +1,26 @@
+// [D-488] Cagrilan-ozeti: `f(xs)` cagrisinda f xs'i SAKLAMIYORSA hapsedilme
+// kaniti korunur -> dizi ρ_yerel'de tahsis edilir (islev sonunda serbest).
+// Saklıyorsa (parametreyi dondurur) ρ_caller'da KALIR.
+//
+// ⚠ BU DOSYA DAVRANISSAL OLARAK AYRIM YAPMAZ: iki yol da 42 doner. Yapisal
+// ayrimi `calistir_bolge_yonlendirme` kapisi olcer (D-417'nin dersi).
+
+// (a) SAKLAMAZ — yalnız okur
+işlev topla(xs: Dizi<tam32>) -> tam32 {
+    ver dizi_al(xs, 0) + dizi_al(xs, 1);
+}
+
+// (b) SAKLAR — parametreyi geri dondurur
+işlev aynen(ys: Dizi<tam32>) -> Dizi<tam32> {
+    ver ys;
+}
+
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [20, 22];
+    değişken t: tam32 = topla(a);
+
+    değişken b: Dizi<tam32> = [1, 2];
+    değişken c: Dizi<tam32> = aynen(b);
+
+    ver t + dizi_al(c, 0) - 1;
+}
