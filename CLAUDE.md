@@ -1019,6 +1019,43 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
+### 🔴 AÇIK BULGU (D-501): sıfıra bölme SÜRECİ ÖLDÜRÜYOR — "çökmezlik" ihlali
+**Kararın Mehmet'te** (aşağıda üç seçenek). Değişmez avının 3. ekseninde çıktı.
+
+**ALTI ŞEKLİN ALTISI DA `SIGFPE` (exit 136), tanı YOK, panik mesajı YOK:**
+```
+a / 0   (tam32)    a % 0    INT_MIN / -1    tam64 / 0    dtam32 / 0
+ve DÜZ LİTERAL `10 / 0` bile --check'ten TEMİZ geçiyor
+IR: `sdiv i32 %6, %7` — hiçbir koruma yok (LLVM'de UB)
+```
+Dilin manşet iddiası: *"Çökmezlik: Exception yok (`sonuç<T,H>`)"*. Program
+donanım hatasıyla ölüyor — ne değer, ne tanı, ne panik.
+
+**⚠ YENİ KEŞİF DEĞİL, ELE ALINMAMIŞ BİLİNEN DAVRANIŞ:** D-441'de `kuvvet(x,0)`
+için `x / x` çözümü *tam bu yüzden* reddedilmişti (*"x=0'da sıfıra bölme =
+ÇÖKME"*). Yani biliniyordu, ama bir değişmez ihlali olarak hiç işlenmedi ve
+**hiçbir kapı ölçmüyor**.
+
+**ETKİ ALANI SIFIR:** korpusta sıfıra bölen kod YOK (ilk grep 3 dosya
+gösterdi, üçü de `0xFF48` gibi HEX YORUMU — yanlış-pozitif).
+
+**ONARIM TEK NOKTADA:** `src/llvm.c:3648-3650` — div/rem'in yayıldığı tek yer.
+`kdl_panik(const char *)` runtime'da ZATEN VAR ve dizi sınır ihlali onu
+kullanıyor (`PANIK: dizi sınır ihlali (i=10, boyut=3)`).
+
+**SEÇENEKLER:**
+- **(a) Derleme zamanı red** — yalnız literal `10 / 0`'ı yakalar; `b=0`
+  değişkenini kaçırır. Tek başına YETERSİZ.
+- **(b) Çalışma zamanı panik** — dizi sınırının BİREBİR deseni. Yeni tanı kodu
+  YOK, tip değişikliği YOK, ev üslubuyla tutarlı. *Önerim bu.*
+- **(c) `/` → `sonuç<T,H>`** — "hata değerdir" DNA'sına en sadık, ama **tip
+  değişikliği**: her bölme `eşleş` ister, tüm stdlib etkilenir.
+
+⚠ **ÖLÇÜM ARACI DERSİ (D-500'e ek):** `-fsanitize=undefined` **ham IR
+girdisine kontrol EKLEMEZ** — UBSan enstrümantasyonu C→IR aşamasında olur.
+Sanitizer'lı ilk koşumlarım `exit=1` gösterip bu sınıfı TAMAMEN MASKELEDİ;
+gerçek sinyal (136/SIGFPE) ancak sanitizer'sız koşumda göründü.
+
 ### ✅ D-497→D-499 KAPANDI: `ver &yerel` artık **G006** ile reddediliyor
 **Mehmet seçenek (b)'yi seçti** — ayrı kod. Gerekçe deponun kendi
 konvansiyonu: `T005/T006/T007/T008/T027` *aynı kalıp* olduğu hâlde **beş ayrı
