@@ -104,6 +104,24 @@ typedef struct EscapeAnaliz {
     int ver_baglaminda;
     int degisti;               /* bu pass'ta kategori degisti mi? */
 
+    /* [D-496] ⚠⚠ BU BAYRAK KURULUYOR AMA HIC OKUNMUYOR — ÖLÇÜLDÜ.
+     * Yorumu bir "sound backstop" VAAT EDIYOR (aşağıda, F4.2b'den) ama
+     * `llvm.c` ve `bolge_atama.c` onu HIC SORGULAMIYOR. Yani tarif edilen
+     * koruma PRATIKTE YOK.
+     *
+     * ⚠ ANCAK BU BIR SOUNDNESS DELIGI DEGIL — iddia edilmedi, ÖLÇÜLDÜ.
+     * Yerini IKI BASKA (ve daha KESKIN) mekanizma tutuyor:
+     *   1. Kaçan kapanış işaretçi yakalarsa **G005** DERLEME ZAMANINDA
+     *      reddeder (ölçüldü: `ver || dizi_al(xs,0)` -> G005). Gürültülü.
+     *   2. Kaçmayan kapanışta `ky_confined`in DUGUM_LAMBDA dalı yakalanan
+     *      HER değişkenin hapsedilmesini DÜŞÜRÜR -> dizi ρ_caller'a gider
+     *      (ölçüldü: `kdl_dizi_olustur(ptr %rho, ...)`).
+     * (2) bu bayraktan DAHA İYİDİR: değişken-başına, işlev-geneli değil.
+     *
+     * ⚠ ÖLÜ KOD OLARAK BIRAKMAK RISKLIDIR (D-459'un dersi: ölü kodu bırakmak
+     * sonraki okuyucuyu ona GÜVENMEYE davet eder). Silinmedi çünkü F4.4'ün
+     * kapanış-env ekseni buraya bağlanabilir; ama o gün gelene kadar bu not
+     * "bu bayrak seni KORUMUYOR" diyor. */
     /* F4.2b: analiz edilen islev govdesinde EN AZ BIR lambda var mi? Varsa
      * free-routing GUARD'i o islevde ρ_yerel yonlendirmeyi KAPATIR (closure
      * capture sound backstop — lexical scope: yalniz bu fn'in lambda'si bu fn'in
