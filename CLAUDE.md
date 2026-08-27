@@ -965,6 +965,35 @@ KEZ** saatlerce asılı kaldı (2.5 sa ve 1.5 sa). **Asılan kapı, sessiz kapı
 kadar kötüdür** — kimse onu koşturmaz. (`ag_kosum` D-466 ve `codegen_genis`
 D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
 
+### ⛔ D-490 (NEGATİF SONUÇ): QEMU zayıf belleği MODELLEMİYOR — kapı EKLENMEDİ
+D-489'un 1. sınırını (*"x86-TSO'da geçmek ARM64'te kanıt değildir"*) kapatmak
+için ARM64'e bakıldı. **İki ölçüm, iki negatif sonuç:**
+- **`kanal` bare-metal, o sınırı KAPATMAZ.** `kem_os` QEMU'da **`-smp` olmadan**
+  koşuyor (Makefile:1616) → **tek çekirdek**. Tek çekirdekli preemptive
+  zamanlayıcıda bağlam anahtarları tam bariyerdir; zayıf bellek hiç zorlanmaz.
+  Madde OS bütünlüğü için hâlâ değerli, ama **DRF doğrulaması sağlamaz.**
+- **🎯 QEMU TCG ÖNBELLEĞİ VE ZAYIF BELLEĞİ MODELLEMİYOR — ÖLÇÜLDÜ.**
+  `test/bare_metal/smp_queue_arm.c` (2 çekirdek, gerçek `ldaxr`/`stxr` kilit,
+  iş-çalma kuyruğu) üzerinde `dc civac` + `dc ivac` + eşlik eden `dsb sy`
+  komutlarının **dördü de `nop`a çevrildi** → test **birebir aynı sonuçla
+  GEÇTİ** (toplam=20540).
+  - **Sonuç 1:** o dosyadaki bariyerler **doğru ve gerekli** (gerçek donanımda
+    onlarsız bozulur) ama **hiçbir kapı zorlamıyor** — sessizce silinseler
+    QEMU kapısı yeşil kalır. Not dosyanın başlığına yazıldı.
+  - **Sonuç 2:** QEMU üzerine kurulacak bir "zayıf bellek" kapısı **hiçbir şey
+    kanıtlamaz** → böyle bir kapı **EKLENMEDİ** (D-425: yanlışın gözlenebilir
+    olduğu şekli ölçemeyen kapı, kapı değildir).
+  - **Sonuç 3 (DGX Spark için eyleme dönük):** gerçek doğrulama **yalnız
+    fiziksel ARM64 donanımında** yapılabilir. Oraya taşınınca `smp_queue_arm`
+    ilk koşulacaklardan olmalı ve **aynı sabotaj orada TEKRARLANMALI** —
+    gerçek donanımda **KIRMIZI** olması beklenir; olmazsa test yeterince
+    zorlamıyordur.
+- **⚠ ARAÇ HATASI ÜÇ KEZ:** `perl -0pi` deseni tutmadı (sessiz) · `sed`
+  `\n`'i **gerçek satır sonuna** çevirip C dizgisini bozdu (derleme
+  başarısız, kapı hiçbir şey basmadı) · ancak dosyadan okunan hazır satırla
+  doğru uygulandı. **Sabotajın sessizliği önce SABOTAJI şüpheli kılar**
+  (D-402) — bu turda ilk "geçti" sonucu GEÇERSİZDİ.
+
 ### 🎯 D-487→D-489: sessiz atlama temizligi · escape v2 · DRF gorunurlugu
 - **D-487 — tum harness yuzeyi sessiz atlama icin tarandi.** D-486'yi tek
   noktada birakmak yanlis olurdu. Uc kalinti, ucu de ÖLÇÜLDÜ: `ag_kosum`
