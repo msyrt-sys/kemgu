@@ -965,6 +965,56 @@ KEZ** saatlerce asılı kaldı (2.5 sa ve 1.5 sa). **Asılan kapı, sessiz kapı
 kadar kötüdür** — kimse onu koşturmaz. (`ag_kosum` D-466 ve `codegen_genis`
 D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
 
+### 🐧 D-485/D-486: BARE-METAL LINUX'TA + "yeşil takım" bir İDDİADIR
+`lld` + `qemu-system-x86` kurulunca bare-metal cephesi açıldı.
+- **D-485 `16#` bash'e özgü.** `kem_os_arm` LINCHPIN fazında düştü
+  (`arithmetic expression: expecting EOF`). Ubuntu'da `/bin/sh` **dash**,
+  Windows/MSYS'te bash → kusur orada GÖRÜNMEZ. **Ölçüldü:** `$((0x...))`
+  HER İKİSİNDE çalışır, `16#` yalnız bash'te.
+  `SHELL := /bin/bash` **seçilmedi** (tüm tariflerin kabuğunu değiştirir);
+  dar düzeltme. Tek vaka olduğu VARSAYILMADI — tarif satırları bashism için
+  tarandı (`[[`, `<<<`, `source`, diziler, `N#`), başka gerçek vaka YOK.
+- **🎯 KEMGU-OS LINUX'TA TAM BOOT EDİYOR — 24 fazın TAMAMI, 15 sn:** MMU
+  çeviri/fault · gerçek trap · timer IRQ · preemption · EL0 syscall · süreç
+  izolasyonu · disk/FS · ağ ARP + **PING CANLI** · ELF yükleme · W^X · DTB.
+  `qemu_cekirdek` 5/5 (53 sn). **Sürüm farkı ÖLÇÜLDÜ, sorun çıkarmadı:**
+  clang 15 / ld.lld 14.
+- **🔴🔴 D-486 — SEKİZ PARİTE KAPISI SESSİZCE ATLANIYORDU.** Tam takım
+  `rc=0` + "Tum testler gecti!" verdi; koşum SONRASI dürüstlük kontrolü
+  yeşilin bir kısmının **İÇİ BOŞ** olduğunu gösterdi:
+  `ct_bariyer · yapi_diff · modul_codegen · surucu_diff · check_genis ·
+  codegen_genis · baremetal_diff · ag_kosum` — sekizi de atlandı, `make`
+  yine **0** döndü.
+  **Kök:** Makefile `CODEGEN=build/codegen.exe` diye SABİT geçiyordu;
+  Linux'ta ad `build/codegen`. **D-469'un ikinci yarısı görülmemiş** —
+  o artım 32 varsayılanı çevirdi ama harness'lara GEÇİLEN değişkenler
+  taramanın dışında kaldı.
+  **İKİ KATMANLI ONARIM, yalnız yolu düzeltmek YETMEZDİ:** (1) `$(EXE)`;
+  (2) **ATLAMA → SERT HATA** (9 harness). Dokuz hedefin hepsi
+  `$(BUILD)/codegen$(EXE)`e BAĞIMLI → make yolunda ikili GARANTİ, yani o dal
+  **ölü koddu** ve tek işlevi tam da böyle bir yol hatasını yutmaktı.
+  Yalnız (1) yapılsaydı kapı bugün yeşil olurdu ama **sessiz dal dururdu.**
+  `codegen_diff`in atlama mesajı ayrıca BAYATTI (D-072/CG1 dönemine atıf,
+  oysa kapı 155/155).
+  **⚠ KENDİ YAMAM HATA YAPTI:** `ag_kosum`da DİNLEYİCİ dalını da sertleştirdim
+  (awk deseni ikinci dala taştı). O AYRI ve MEŞRU bir atlama — gerçek TCP
+  karşı tarafı ORTAMA bağlı (D-466). Geri alındı.
+  **Sabotaj S70** (sabit `.exe`e dön) → `rc=2` + açık mesaj; sertleştirme
+  ÖNCESİNDE aynı sabotaj **rc=0** verirdi.
+- **⚠⚠ GENEL DERS: "TAM TAKIM YEŞİL" BİR SONUÇ DEĞİL, BİR İDDİADIR.**
+  `rc=0` gördükten sonra **kapı sayısını ve ATLAMA izlerini AYRICA ölç.**
+  D-446 aynı dersi "çağrılmayan kapı" için vermişti; bu, "çağrılan ama
+  koşmayan kapı" biçimi.
+
+### 📊 LINUX vs WINDOWS — atlamasız tam takım
+```
+Windows  ~45 dk        (62 kapı)
+WSL       15 dk 47 sn  (62 kapı, 0 atlama, 0 kırmızı)   ≈ 3×
+```
+⚠ İkisi de sıcak yapım; soğuk koşum WSL'de 28 dk ölçüldü. Kazanç
+paralelleştirmeden DEĞİL ortamdan geliyor (D-468: süreç doğurma 96–170 ms
++ Defender ≈ %65). `checker_diff` **35×**, `self_driver` **6.6×**.
+
 ### 🐧 D-474→D-484: LINUX/WSL TAŞIMASI — on bir kusur, hepsi TAŞINABİLİRLİK
 Takım Windows'ta ~45 dk sürüyordu ve darboğazın **%65'i ortamsaldı** (süreç
 doğurma 96–170 ms + Defender). WSL'e geçildi. **Derleyicinin ÖZÜ taşınabilir
