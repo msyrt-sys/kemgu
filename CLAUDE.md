@@ -950,6 +950,76 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
     **Sabotaj S17** (döngüyü `i < 1`) → 24/24 → 23/24 ✅ — bu kez `perl`
     değil **Edit** kullanıldı (D-433'ün dersi).
 
+### 🎯 D-470: `ag.kem` okuma zaman aşımı + lineer yapıcı/alan tüketimi
+D-466'nın açık bıraktığı zaman aşımı eklendi (`zaman_asimi_ayarla`). Yol
+üstünde lineer kuralların **yapıcı argümanı** ve **yapı alanı** konumlarında
+tüketim saymadığı ölçüldü ve onarıldı; **D-470 devamı** ile aynı kurallar
+`selfhost/codegen.kem`'e portlandı (D-407 gereği: aynı soruyu iki yerde ayrı
+yanıtlayan kod ayrışır).
+
+### 🎯 D-471: paylaşılan `codegen.exe` hedefi + asan kapılarına zaman aşımı
+`build/codegen.exe` **38 ayrı yerden** yazılıyordu (D-297'nin çarpışma sınıfı)
+ve 13 kez yeniden kuruluyordu (~36 sn tekrar). Tek Makefile hedefine indirildi.
+Ayrıca **iki ASan kapısında zaman aşımı YOKTU**; bu oturumda tam takım **İKİ
+KEZ** saatlerce asılı kaldı (2.5 sa ve 1.5 sa). **Asılan kapı, sessiz kapı
+kadar kötüdür** — kimse onu koşturmaz. (`ag_kosum` D-466 ve `codegen_genis`
+D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
+
+### 🐧 D-474→D-484: LINUX/WSL TAŞIMASI — on bir kusur, hepsi TAŞINABİLİRLİK
+Takım Windows'ta ~45 dk sürüyordu ve darboğazın **%65'i ortamsaldı** (süreç
+doğurma 96–170 ms + Defender). WSL'e geçildi. **Derleyicinin ÖZÜ taşınabilir
+çıktı** — `codegen_diff` 155/155, `checker_diff` 162/162, bootstrap FIXPOINT
+Linux'ta da birebir. Çıkan on bir kusurun **hiçbiri derleyici mantığında
+değil**, hepsi test altyapısının Windows varsayımlarındaydı.
+- **D-474 POSIX özellik-test makrosu.** `-std=c11` KATI ISO'dur → glibc POSIX
+  bildirimlerini GİZLER. `_POSIX_C_SOURCE` **her `#include`dan ÖNCE** gelmeli.
+  Linux derlemesi tamamen KIRIKTI.
+- **D-475 eksik LLVM intrinsic bildirimleri.** Üretilen IR **kendi kendine
+  yetmiyordu**; Windows'ta clang toleranslıydı, Linux'ta değil.
+- **D-476/D-478/D-484 ASan × ASLR entropisi.** Modern çekirdekte ASan gölge
+  belleği çakışır → ikili **BAŞLANGIÇTA SESSİZCE ÇÖKER** (exit 139, rapor YOK).
+  `setarch -R` çözer. **ÜÇ ARTIMDA KAPANDI ve bu kendi başına bir ders:**
+  D-476 kusuru buldu, D-478 "hangi ikililer ASan'lı" listesini ÜÇ KEZ eksik
+  yazıp sonunda listeyi KALDIRDI, **D-484 ise D-478'in Makefile dışında kalan
+  yarısını** (kendi ASan ikilisini kuran iki harness) kapattı.
+  **DERS: "listeyi kaldır, hepsine uygula" dediğinde HANGİ hepsi olduğunu ölç.**
+- **D-477/D-481 `system()` ve çıkış kodu.** POSIX'te `system()` **BEKLEME
+  DURUMU** döner, çıkış kodu değil (`WEXITSTATUS` şart) ve çıkış kodu **8 BİTE
+  MASKELENİR** — `1000 & 255 = 232`. Windows 32-bit taşıdığı için ikisi de
+  görünmezdi. **Mantık DOĞRUYDU; taşınabilir olmayan şey testin değeri çıkış
+  koduyla taşımasıydı.**
+- **D-479 satır sonları.** `.ast` anlık görüntüleri CRLF; Linux çıktısı LF →
+  50/50 düştü. **Normalleştirme doğru çözüm, dosyaları LF yapmak DEĞİL** —
+  kusuru bir platformdan diğerine taşımak olurdu.
+- **D-480 `usleep` → `nanosleep`** · **D-482 `.gitattributes`** (kabuk
+  betikleri LF).
+- **🎯 LEAKSANITIZER: LINUX'UN KAZANDIRDIĞI YENİ ÖLÇÜM (D-483).** Windows ASan
+  runtime'ında LeakSanitizer **BULUNMAZ** → 7 sızıntı HEP ORADAYDI, proje HİÇ
+  GÖRMEMİŞTİ. Yığın izi OKUNDU: `bölge_al` + kapanış env kopyası + kanal
+  tamponu. **Kusur DEĞİL, belgelenmiş tasarım durumu** — `kdl_sizan_al`
+  runtime'da açıkça "sızan tahsis kısayolu" ve yorumu toplu serbestin **F4.4**
+  olduğunu söylüyor. `ALLOWLIST`E EKLENMEDİ (o dosyayı TAMAMEN atlar, UAF
+  denetimini de kapatırdı); ayrı ve DAR `SIZINTI_MUAF` yalnız sızıntı
+  satırlarını süzer. `detect_leaks=0` REDDEDİLDİ — Linux'un tek yeni ölçüm
+  yeteneğini çöpe atardı.
+  **⚠ Başarısızlık kümesi TURLAR ARASINDA DEĞİŞİYOR** (`görev`/`kanal` thread
+  kullanıyor) → bu alan F4.4'e kadar TAM BELİRLENİMCİ DEĞİL.
+- **⚠⚠ İKİ ELEME HATASI, ikisi de aynı sınıf:** D-481'de `WEXITSTATUS`
+  *geçiyor* diye iki dosyayı "zaten doğru" saydım — `#include` eksikti.
+  D-482'de "düz kullanımların çoğu yorumdur" dedim — ikisi gerçek atamaydı.
+  **GÖRÜNMEK ≠ DOĞRU OLMAK.**
+- **⚠ ÖLÇÜM ARACIM İKİ KEZ YANLIŞTI:** `apt-get -s update` (geçersiz birleşim)
+  olmayan bir ağ hatası bildirdi; `grep -c` `declare` satırını saydı.
+
+### 📐 PARALELLEŞTİRME ÖLÇÜLDÜ — KAZANÇ SIFIR (Amdahl)
+`make -j` uygulandı (`test_tumu_paralel`) ama **ölçüm fayda göstermedi**:
+`self_driver` tek başına takımın **%60'ı** ve seri. Paralelleştirme
+darboğazı değiştirmiyor. **Gerçek kazanç WSL'den geldi:** `checker_diff`
+**35×**, `self_driver` **6.6×**.
+
+### ⏳ BEKLEYEN: `lld-15`
+Bare-metal/QEMU kapıları WSL'de onu bekliyor: `wsl sudo apt-get install -y lld-15`.
+
 ### 🚚 D-469: test altyapısı `EXE`-farkında + varsayılan triple platformdan
 DGX Spark (yerli ARM64/Linux) taşımasının kalan iki ön koşulu. İkisi de
 mekanik; **dil ya da kapı semantiği DEĞİŞMEDİ.**
