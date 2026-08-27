@@ -9,9 +9,21 @@
 #
 # OLCULEN INVARYANT (`test/cg_korpus/cg_bolge_ozet.kem`):
 #   dizi `a` -> SAKLAMAYAN `topla`ya gecer -> ρ_yerel  (kdl_bolge_olustur)
-#   dizi `b` -> SAKLAYAN   `aynen`e gecer -> ρ_caller (kdl_global_bolge_al)
+#   dizi `b` -> SAKLAYAN   `aynen`e gecer  -> ρ_caller (donduruyor)
+#   dizi `d` -> SAKLAYAN   `sakla`ya gecer -> ρ_caller (YAPI ALANINA yaziyor —
+#                          `stdlib/regex.kem`in GERCEK deseni: Regex.op: Dizi<tam32>)
 # Ikisi de ayni bolgeye giderse ozet ya HIC calismiyor (ikisi de caller) ya da
 # SAGLAMSIZ (ikisi de yerel = saklanan dizi serbest edilir = UAF).
+#
+# ⚠⚠ OLCULDU: SAGLAMSIZ HAL BU FIKSTURDE GOZLENEBILIR DEGILDIR.
+# Sabotaj S73b (`ea_param_tutmuyor` daima 1 = saklanan dizi de ρ_yerel'e) ile
+# olculdu: program exit=42 VERDI ve ASan/UBSan SIFIR bulgu bastı. Sebep:
+# ρ_yerel serbest birakmasi `main` SONUNDA olur, okumalar ondan ONCE biter.
+# Yani bu kapi kaldirilirsa D-488'in sagligini olcen HICBIR SEY KALMAZ:
+# davranissal kapilar da, ASan da SESSIZ kalir.
+# D-417'nin dersinin (spekulasyon bariyeri) ampirik tekrari:
+# "program dogru calisti" + "ASan temiz" BELLEK-YONETIMI ozelliginde
+# YETERSIZ KANITTIR.
 # ============================================================================
 set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
@@ -46,8 +58,8 @@ if [ "$NY" -ne 1 ]; then
     echo "     → çağrılan-özeti çalışmıyor (D-488 gerilemesi)"
     hata=1
 fi
-if [ "$NC" -ne 1 ]; then
-    echo "  🔴 SAKLAYAN çağrıya giden dizi ρ_caller'da DEĞİL (beklenen 1, gelen $NC)"
+if [ "$NC" -ne 2 ]; then
+    echo "  🔴 SAKLAYAN çağrılara giden diziler ρ_caller'da DEĞİL (beklenen 2, gelen $NC)"
     echo "     → özet SAĞLAMSIZ: saklanan dizi serbest edilir = UAF"
     hata=1
 fi
