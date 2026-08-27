@@ -76,6 +76,15 @@ export EXE
 # YAPMAZ ve root ISTEMEZ (alternatifi `sysctl vm.mmap_rnd_bits=28` idi -- kalici
 # ve root gerektiriyor, kullanicinin makinesini degistirmek DOGRU DEGIL).
 # Windows'ta bos kalir -> davranis BIREBIR aynidir.
+#
+# ⚠ [D-478] TUM test kosum satirlarina uygulanir, "ASan olanlara" DEGIL.
+# Once desen tahminiyle bir LISTE tuttum ve UC KEZ EKSIK cikti: once
+# `test_wcet` takimi durdurdu, sonra `test_lexer`, sonra 8 tane daha.
+# `nm | grep __asan_init` ile YER GERCEGI olculunce listem IKI YONDE de
+# yanlisti (eksikler VE fazlalar). SENKRONDA TUTULMASI GEREKEN LISTE KAYAR
+# (D-407). ASan'siz bir ikiliyi `setarch -R` ile kosturmak ZARARSIZDIR --
+# yalnizca o kosum icin ASLR kapanir. Liste tutmak yerine sinifi komple
+# kapatmak hem daha kisa hem daha saglam.
 ifeq ($(PLATFORM),windows)
     ASAN_RUN :=
 else
@@ -332,7 +341,7 @@ $(BUILD)/test_bench$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
 	$(CC) $(CFLAGS) -I$(SRCDIR) -o $@ $^
 
 bench: $(BUILD)/test_bench$(EXE) $(BUILD)/kemgu$(EXE)
-	./$(BUILD)/test_bench$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_bench$(EXE)
 
 # === Gelismis parser fuzzer (4 mod x 5000 iter, ASan + UBSan) — src-bugfix ===
 # Mod a: random keyword/operator karisigi — parser bug-fix dogrulamasi
@@ -350,7 +359,7 @@ $(BUILD)/test_fuzz_advanced$(EXE): $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c \
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -I$(SRCDIR) -o $@ $^
 
 calistir_fuzz_advanced: $(BUILD)/test_fuzz_advanced$(EXE)
-	./$(BUILD)/test_fuzz_advanced$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_fuzz_advanced$(EXE)
 
 
 # === KDL Runtime (ADIM 33 — compile + link entegrasyonu) ===
@@ -415,7 +424,7 @@ $(BUILD):
 # === Test calistirma hedefleri ===
 
 test: $(BUILD)/test_lexer$(EXE)
-	./$(BUILD)/test_lexer$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_lexer$(EXE)
 
 calistir_lexer_test: test
 
@@ -426,7 +435,7 @@ calistir_ast_test: $(BUILD)/test_ast$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_ast$(EXE)
 
 calistir_parser_test: $(BUILD)/test_parser$(EXE)
-	./$(BUILD)/test_parser$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_parser$(EXE)
 
 calistir_tip_test: $(BUILD)/test_tip$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_tip$(EXE)
@@ -435,46 +444,46 @@ calistir_sembol_test: $(BUILD)/test_sembol$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_sembol$(EXE)
 
 calistir_tip_kontrol_test: $(BUILD)/test_tip_kontrol$(EXE)
-	./$(BUILD)/test_tip_kontrol$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_tip_kontrol$(EXE)
 
 calistir_gorev_rt_test: $(BUILD)/test_gorev_rt$(EXE)
-	./$(BUILD)/test_gorev_rt$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_gorev_rt$(EXE)
 
 calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_bolge$(EXE)
 
 calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
-	./$(BUILD)/test_bolge_atama$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_bolge_atama$(EXE)
 
 calistir_escape_test: $(BUILD)/test_escape$(EXE)
-	./$(BUILD)/test_escape$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_escape$(EXE)
 
 calistir_json_test: $(BUILD)/test_json$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_json$(EXE)
 
 calistir_lsp_test: $(BUILD)/test_lsp$(EXE)
-	./$(BUILD)/test_lsp$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_lsp$(EXE)
 
 calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
-	./$(BUILD)/test_llvm$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_llvm$(EXE)
 
 calistir_llvm_dogrula_test: $(BUILD)/test_llvm_dogrula$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_llvm_dogrula$(EXE)
 
 calistir_linear_test: $(BUILD)/test_linear$(EXE)
-	./$(BUILD)/test_linear$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_linear$(EXE)
 
 calistir_sabitsure_test: $(BUILD)/test_sabitsure$(EXE)
-	./$(BUILD)/test_sabitsure$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_sabitsure$(EXE)
 
 calistir_wcet_test: $(BUILD)/test_wcet$(EXE)
-	./$(BUILD)/test_wcet$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_wcet$(EXE)
 
 calistir_capability_test: $(BUILD)/test_capability$(EXE)
-	./$(BUILD)/test_capability$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_capability$(EXE)
 
 calistir_mmio_test: $(BUILD)/test_mmio$(EXE)
-	./$(BUILD)/test_mmio$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_mmio$(EXE)
 
 # MMIO runtime'in bare-metal (volatile) varyantinin DERLENDIGINI dogrula.
 # (Calistirma yok — gercek MMIO host'ta segfault verir; sadece compile.)
@@ -484,31 +493,31 @@ calistir_mmio_bare_metal: | $(BUILD)
 	@echo "MMIO bare-metal (volatile) varyanti derlendi: kdl_runtime_mmio_bare.o"
 
 calistir_drf_test: $(BUILD)/test_drf$(EXE)
-	./$(BUILD)/test_drf$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_drf$(EXE)
 
 calistir_simd_test: $(BUILD)/test_simd$(EXE)
-	./$(BUILD)/test_simd$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_simd$(EXE)
 
 calistir_simd_llvm_test: $(BUILD)/test_simd_llvm$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	./$(BUILD)/test_simd_llvm$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_simd_llvm$(EXE)
 
 calistir_snapshot_test: $(BUILD)/test_snapshot$(EXE) $(BUILD)/kemgu$(EXE)
-	./$(BUILD)/test_snapshot$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_snapshot$(EXE)
 
 calistir_fuzz_test: $(BUILD)/test_fuzz$(EXE)
-	./$(BUILD)/test_fuzz$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_fuzz$(EXE)
 
 calistir_runtime_link_test: $(BUILD)/test_runtime_link$(EXE)
-	./$(BUILD)/test_runtime_link$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_runtime_link$(EXE)
 
 calistir_kdl_bolge_test: $(BUILD)/test_kdl_bolge$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_kdl_bolge$(EXE)
 
 calistir_otp_cli_test: $(BUILD)/test_otp_cli$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	./$(BUILD)/test_otp_cli$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_otp_cli$(EXE)
 
 calistir_dizi_perf_test: $(BUILD)/test_dizi_perf$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	./$(BUILD)/test_dizi_perf$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_dizi_perf$(EXE)
 
 # Stdlib tip-kontrolu — saf KEMGU stdlib modullerinin --check'ten gecmesi
 # Kutuphane dosyasi varsa karsilik gelen test/stdlib/test_<modul>.kem ile
