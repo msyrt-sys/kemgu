@@ -1053,6 +1053,17 @@ kasıtlı fikstür → SIFIR yanlış-pozitif.**
 **Kapılar:** checker_diff **163/163** · check_kapisi 262/269 (0 RED) ·
 check_genis 133/133 · codegen_diff 157/157 · self_driver **FIXPOINT ✓**
 
+**TAM TAKIM DOĞRULAMASI (G006 sonrası, dil yüzeyi değişikliği):**
+```
+67 kapı · rc=0 · 0 kırmızı · 0 atlama · 83 dk 4 sn
+SELF-HOST BOOTSTRAP: FIXPOINT ✓ (stage1 IR == stage2 IR, 73.860 satır birebir)
+```
+⚠ Süre önceki koşumun (35 dk) iki katı — sebep **tahmin edilmedi**: bu koşum
+`src/tip_kontrol.c` + iki self-host dosyası değiştiği için çok daha fazla
+yeniden derleme yaptı. Kapı sayısı ve sonuçlar aynı.
+**FIXPOINT en anlamlı sinyal:** yeni dil kuralı bootstrap zincirinin hiçbir
+yerinde sapma yaratmadı.
+
 ### ⛔ D-490 (NEGATİF SONUÇ): QEMU zayıf belleği MODELLEMİYOR — kapı EKLENMEDİ
 D-489'un 1. sınırını (*"x86-TSO'da geçmek ARM64'te kanıt değildir"*) kapatmak
 için ARM64'e bakıldı. **İki ölçüm, iki negatif sonuç:**
