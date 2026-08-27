@@ -1,0 +1,52 @@
+// ⚠⚠ [D-497] BU DOSYA BILINEN-YANLIS DAVRANISI SABITLER — ONAYLAMAZ.
+//
+// Bes seklin BESI DE bugun `--check`ten TEMIZ geciyor, oysa hepsi bir
+// YERELIN ADRESINI cerceve disina cikariyor. Uretilen IR kendi yigin
+// cercevesine isaretci donduruyor (`%0 = alloca i32 ... ret ptr %0`).
+// OLCULDU: araya yigini ezen bir cagri koyunca
+//     -O0 -> *p = 1     -O2 -> *p = 90      (dogrusu 40)
+// SESSIZ YANLIS CEVAP, iki optimizasyon seviyesinde FARKLI degerler.
+//
+// Bu, dilin MANSET degismezine aykiridir ("use-after-free dil tasarimi
+// seviyesinde imkansiz") ve ASan BUNU YAKALAMIYOR (olculdu:
+// detect_stack_use_after_return=1 ile bile exit 42, sifir bulgu) — yani
+// mevcut 67 kapinin HICBIRI bu sinifi gormuyor.
+//
+// NEDEN KORPUSTA: kural landiginda bu dosyanin `--checkdump` ciktisi
+// DEGISECEK ve `checker_diff` bunu SOYLEYECEK. Boylece bulgu sessizce
+// kaybolamaz. Onarim geldiginde beklenen dump guncellenmelidir.
+//
+// ⚠ ONARIM YAPILMADI: bir TANI kodu ister ve o DIL YUZEYI karariddir
+// (Mehmet). Secenekler CLAUDE.md'de "ACIK GUVENLIK BULGUSU" maddesinde.
+
+yapı KutuRef { p: &tam32; }
+yapı Nokta { x: tam32; }
+
+// (1) yerel skalerin adresi
+işlev yerel_adres() -> &tam32 {
+    değişken a: tam32 = 40;
+    ver &a;
+}
+
+// (2) parametrenin adresi
+işlev param_adres(a: tam32) -> &tam32 {
+    ver &a;
+}
+
+// (3) yerel yapinin ALANININ adresi
+işlev alan_adres() -> &tam32 {
+    değişken n: Nokta = Nokta { x: 7 };
+    ver &n.x;
+}
+
+// (4) degistirilebilir referans olarak
+işlev yerel_adres_degisken() -> &değişken tam32 {
+    değişken a: tam32 = 3;
+    ver &değişken a;
+}
+
+// (5) yerelin adresi YAPI ALANINDA kaciyor
+işlev yapida_kacar() -> KutuRef {
+    değişken a: tam32 = 5;
+    ver KutuRef { p: &a };
+}
