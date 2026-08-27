@@ -1517,8 +1517,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	fi
 	@KULADR=$$(llvm-nm $(BUILD)/kem_os.elf | grep -E ' T kul_test$$' | awk '{print $$1}'); \
 	if [ -z "$$KULADR" ]; then echo "FAIL: kul_test final ELF'te tanimli degil"; exit 1; fi; \
-	KULDEC=$$((16#$$KULADR)); \
-	if [ $$KULDEC -lt $$((16#42000000)) ] || [ $$KULDEC -ge $$((16#42200000)) ]; then \
+	KULDEC=$$((0x$$KULADR)); \
+	if [ $$KULDEC -lt $$((0x42000000)) ] || [ $$KULDEC -ge $$((0x42200000)) ]; then \
 		echo "FAIL: kul_test adresi .user araliginda DEGIL (0x$$KULADR) — routing basarisiz, hala kernel .text'te"; exit 1; \
 	fi; \
 	echo "  (kul_test .kem-define + wire + final ELF adresi 0x$$KULADR [.user araliginda 0x42000000-0x421FFFFF] — GERCEK .kem kod EL0'da routed)"
