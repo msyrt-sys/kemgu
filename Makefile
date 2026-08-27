@@ -62,6 +62,26 @@ endif
 # tasima bu depoda en tehlikeli sey.
 export EXE
 
+# [D-476] ASan + YUKSEK ASLR ENTROPISI — modern Linux cekirdeklerinde CAKISIYOR.
+#
+# OLCULDU (WSL2, cekirdek 6.6, clang 15): ASan ile derlenen `test_arena`
+# SEGFAULT ediyor (exit 139, stderr BOS -- yani ASan'in kendi hata mesaji bile
+# cikmiyor). Ayni kaynak:
+#   ASan'siz derleme        -> 19/19 GECTI
+#   `setarch -R` ile ASan   -> 19/19 GECTI
+# Yani KEMGU kusuru DEGIL: ASan'in golge bellek haritasi, cekirdegin yuksek
+# ASLR entropisiyle cakisiyor. Windows'ta gorunmez (farkli ASan runtime).
+#
+# `setarch -R` yalnizca O KOSUM icin ASLR'yi kapatir; kalici sistem degisikligi
+# YAPMAZ ve root ISTEMEZ (alternatifi `sysctl vm.mmap_rnd_bits=28` idi -- kalici
+# ve root gerektiriyor, kullanicinin makinesini degistirmek DOGRU DEGIL).
+# Windows'ta bos kalir -> davranis BIREBIR aynidir.
+ifeq ($(PLATFORM),windows)
+    ASAN_RUN :=
+else
+    ASAN_RUN := $(shell command -v setarch >/dev/null 2>&1 && echo "setarch -R")
+endif
+
 SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/lexer.c $(SRCDIR)/arena.c $(SRCDIR)/ast.c $(SRCDIR)/ast_yazdir.c \
        $(SRCDIR)/parser.c $(SRCDIR)/ifade.c $(SRCDIR)/tip.c $(SRCDIR)/sembol.c \
@@ -400,19 +420,19 @@ test: $(BUILD)/test_lexer$(EXE)
 calistir_lexer_test: test
 
 calistir_arena_test: $(BUILD)/test_arena$(EXE)
-	./$(BUILD)/test_arena$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_arena$(EXE)
 
 calistir_ast_test: $(BUILD)/test_ast$(EXE)
-	./$(BUILD)/test_ast$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_ast$(EXE)
 
 calistir_parser_test: $(BUILD)/test_parser$(EXE)
 	./$(BUILD)/test_parser$(EXE)
 
 calistir_tip_test: $(BUILD)/test_tip$(EXE)
-	./$(BUILD)/test_tip$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_tip$(EXE)
 
 calistir_sembol_test: $(BUILD)/test_sembol$(EXE)
-	./$(BUILD)/test_sembol$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_sembol$(EXE)
 
 calistir_tip_kontrol_test: $(BUILD)/test_tip_kontrol$(EXE)
 	./$(BUILD)/test_tip_kontrol$(EXE)
@@ -421,7 +441,7 @@ calistir_gorev_rt_test: $(BUILD)/test_gorev_rt$(EXE)
 	./$(BUILD)/test_gorev_rt$(EXE)
 
 calistir_bolge_test: $(BUILD)/test_bolge$(EXE)
-	./$(BUILD)/test_bolge$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_bolge$(EXE)
 
 calistir_bolge_atama_test: $(BUILD)/test_bolge_atama$(EXE)
 	./$(BUILD)/test_bolge_atama$(EXE)
@@ -430,7 +450,7 @@ calistir_escape_test: $(BUILD)/test_escape$(EXE)
 	./$(BUILD)/test_escape$(EXE)
 
 calistir_json_test: $(BUILD)/test_json$(EXE)
-	./$(BUILD)/test_json$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_json$(EXE)
 
 calistir_lsp_test: $(BUILD)/test_lsp$(EXE)
 	./$(BUILD)/test_lsp$(EXE)
@@ -439,7 +459,7 @@ calistir_llvm_test: $(BUILD)/test_llvm$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_r
 	./$(BUILD)/test_llvm$(EXE)
 
 calistir_llvm_dogrula_test: $(BUILD)/test_llvm_dogrula$(EXE)
-	./$(BUILD)/test_llvm_dogrula$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_llvm_dogrula$(EXE)
 
 calistir_linear_test: $(BUILD)/test_linear$(EXE)
 	./$(BUILD)/test_linear$(EXE)
@@ -482,7 +502,7 @@ calistir_runtime_link_test: $(BUILD)/test_runtime_link$(EXE)
 	./$(BUILD)/test_runtime_link$(EXE)
 
 calistir_kdl_bolge_test: $(BUILD)/test_kdl_bolge$(EXE)
-	./$(BUILD)/test_kdl_bolge$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_kdl_bolge$(EXE)
 
 calistir_otp_cli_test: $(BUILD)/test_otp_cli$(EXE) $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	./$(BUILD)/test_otp_cli$(EXE)
@@ -830,7 +850,7 @@ $(BUILD)/test_uart_pl011$(EXE): runtime/kdl_runtime_uart_pl011.c \
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
 calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE)
-	./$(BUILD)/test_uart_pl011$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_uart_pl011$(EXE)
 
 # === Bare-metal yazdir_* port (PL011 backend, mock test) ===
 $(BUILD)/test_yazdir_bare$(EXE): runtime/kdl_runtime_uart_pl011.c \
@@ -839,7 +859,7 @@ $(BUILD)/test_yazdir_bare$(EXE): runtime/kdl_runtime_uart_pl011.c \
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
 calistir_yazdir_bare_test: $(BUILD)/test_yazdir_bare$(EXE)
-	./$(BUILD)/test_yazdir_bare$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_yazdir_bare$(EXE)
 
 # === yazdir_bare bare-metal cross-compile dogrulamasi ===
 calistir_yazdir_bare_bare_metal:
@@ -5512,7 +5532,7 @@ $(BUILD)/test_uart_vtable$(EXE): runtime/kdl_runtime_uart_pl011.c \
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
 calistir_uart_vtable_test: $(BUILD)/test_uart_vtable$(EXE)
-	./$(BUILD)/test_uart_vtable$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_uart_vtable$(EXE)
 
 # === Panik handler host testi (Clang64, ASan aktif) ===
 $(BUILD)/test_panik$(EXE): runtime/kdl_runtime_uart_pl011.c \
@@ -5521,7 +5541,7 @@ $(BUILD)/test_panik$(EXE): runtime/kdl_runtime_uart_pl011.c \
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
 calistir_panik_test: $(BUILD)/test_panik$(EXE)
-	./$(BUILD)/test_panik$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_panik$(EXE)
 
 # === Panik handler bare-metal cross-compile (ARM64) ===
 calistir_panik_bare_metal:
@@ -5553,7 +5573,7 @@ $(BUILD)/test_uart_16550$(EXE): runtime/kdl_runtime_uart_16550.c \
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
 calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE)
-	./$(BUILD)/test_uart_16550$(EXE)
+	$(ASAN_RUN) ./$(BUILD)/test_uart_16550$(EXE)
 
 # === 16550A bare-metal cross-compile (x86_64 freestanding) ===
 calistir_uart_16550_bare_metal:
