@@ -1019,6 +1019,40 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
+### 🔴🔴 AÇIK GÜVENLİK BULGUSU (D-497): yerelin adresi ÇERÇEVEYİ AŞABİLİYOR
+**Kararın Mehmet'te** — onarım yeni bir tanı kodu ister ve o dil yüzeyidir.
+
+F4.4'ün kapanış-env eksenini ölçerken çıktı. **`ver &yerel` `--check`ten
+TEMİZ geçiyor** ve sarkan yığın işaretçisi üretiyor:
+```
+işlev g() -> &tam32 { değişken a: tam32 = 40; ver &a; }   → --check: OK
+IR:  %0 = alloca i32 ... ret ptr %0      (kendi çerçevesine işaretçi)
+araya çağrı koyup okuyunca:  -O0 → *p = 1 · -O2 → *p = 90   (doğrusu 40)
+```
+**Sessiz yanlış cevap**, iki optimizasyon seviyesinde FARKLI yanlış değerler.
+Bu, dilin manşet değişmezine doğrudan aykırı (*"use-after-free dil tasarımı
+seviyesinde imkânsız"*) ve `KEMGU-novelty-pozisyon.md` *"iyi-tipli program →
+dangling pointer YOK"* diyor.
+
+**BEŞ ŞEKLİN BEŞİ DE KABUL EDİLİYOR** (ölçüldü):
+`ver &yerel` · `ver &parametre` · `ver &yerel_yapı.alan` ·
+`ver &değişken yerel` · yerelin adresi **yapı alanında** kaçarken.
+
+**ETKİ ALANI DAR:** hiçbir mevcut kod buna dayanmıyor. Tek korpus eşleşmesi
+`test/parse_korpus/p1_03_onek_sonek.kem` ve o **yalnız `--parse`** fikstürü —
+derlenip koşulmuyor. Yani onarım korpusu kırmaz.
+
+**NEDEN KENDİM ONARMADIM:** onarım bir TANI ister; oturum kuralı *"yeni tanı
+kodu İCAT ETME"* diyor ve tanı kodu eklemek dil yüzeyi kararıdır.
+Anlamca en yakın mevcut kod **G005** (*"işaretçi yakalayan closure frame'i
+aşamaz"*) — aynı sınıf (işaretçi, gösterdiği çerçeveyi aşıyor) ama metni
+closure'a özgü. Seçenekler: (a) G005'in kapsamını düz işleve genişlet,
+(b) yeni kod (ör. G006), (c) bilinçli sınır olarak belgele.
+
+⚠ **ASan BUNU YAKALAMIYOR** (ölçüldü: `detect_stack_use_after_return=1` ile
+bile exit 42, sıfır bulgu) — ölü yığın gözesi hâlâ okunabilir durumda. Yani
+mevcut kapıların HİÇBİRİ bu sınıfı görmez; D-488'in dersinin tekrarı.
+
 ### ⛔ D-490 (NEGATİF SONUÇ): QEMU zayıf belleği MODELLEMİYOR — kapı EKLENMEDİ
 D-489'un 1. sınırını (*"x86-TSO'da geçmek ARM64'te kanıt değildir"*) kapatmak
 için ARM64'e bakıldı. **İki ölçüm, iki negatif sonuç:**
