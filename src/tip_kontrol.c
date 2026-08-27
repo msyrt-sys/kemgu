@@ -925,10 +925,34 @@ static TipBilgisi *dizi_arg_coz(TipBilgisi *t) {
     return NULL;
 }
 
+/* [D-503] ODUNC NOKTASINDA CANLILIK: yetki ODUNC alinabilir (mmio_*, bolge_al,
+ * soket_*) ama IPTAL EDILMIS (geri_al ile tuketilmis) bir yetkiyi odunc almak
+ * YASAK. OLCULDU (D-503): `geri_al(y); mmio_yaz32(y, ..)` --check ten TEMIZ
+ * geciyordu — iptal edilmis yetkiyle DONANIMA YAZMA. Yetki sisteminin varlik
+ * sebebi tam olarak bunu engellemekti.
+ *
+ * ⚠ YENI TANI KODU YOK: mevcut CP005 ("move sonrasi erisim") ayni anlamdir;
+ * eksik olan yalnizca ODUNC yolunda SORULMAMASIYDI. Tuketim yolu
+ * (lineer_tuket_eger_baglamaysa) bunu ZATEN denetliyordu.
+ *
+ * ⚠ TUKETMEZ — yalnizca canliligi sorar (odunc semantigi korunur). */
+static void yetki_canli_kontrol(TipKontrol *tk, const Dugum *arg) {
+    if (!arg || arg->tip != DUGUM_TANIMLAYICI) return;
+    if (tk->lineer_sondaj > 0) return;   /* sondaj ziyaretinde defter tutma */
+    Sembol *s = sembol_bul_yazilabilir(tk->scope,
+        arg->veri.tanimlayici.metin, arg->veri.tanimlayici.uzunluk);
+    if (!s || !s->tip || s->tip->kategori != TIP_YETKI) return;
+    if (s->lineer_tuketildi >= 1) {
+        tip_hata(tk, arg, "CP005",
+            "iptal edilmis yetki<R> odunc alinamaz (geri_al sonrasi erisim)");
+    }
+}
+
 /* MMIO Foundation: arg'in yetki<MMIO> (veya tekkez<yetki<MMIO>>) olup
  * olmadigini dogrular. y ODUNC alinir — TUKETILMEZ (geri_al ile tuketilir).
  * yetki<MMIO> degilse MM002 raporlanir. */
 static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    yetki_canli_kontrol(tk, arg);   /* [D-503] */
     TipBilgisi *y = tip_belirle(tk, arg);
     if (y->kategori == TIP_HATA) return;
     const TipBilgisi *k = tip_yetki_kaynak(y);
@@ -948,6 +972,7 @@ static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
  * yeni bir `Ag` adi EKLENMEDI. Ayni kavrama ikinci ad vermek D-407 sinifidir:
  * iki ad er ya da gec ayrisir. */
 static void ag_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    yetki_canli_kontrol(tk, arg);   /* [D-503] */
     TipBilgisi *y = tip_belirle(tk, arg);
     if (y->kategori == TIP_HATA) return;
     const TipBilgisi *k = tip_yetki_kaynak(y);
@@ -964,6 +989,7 @@ static void ag_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
  * ÖDÜNÇ alır (mmio deseni — TÜKETMEZ). v1'de R kısıtlanmaz; gerçek
  * arena (V2) AYNI imzayla R'yi kullanacak (evrim-koruyan). */
 static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    yetki_canli_kontrol(tk, arg);   /* [D-503] */
     TipBilgisi *y = tip_belirle(tk, arg);
     if (y->kategori == TIP_HATA) return;
     if (!tip_yetki_mi(y)) {

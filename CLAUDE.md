@@ -1019,6 +1019,45 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
+### 🎯 D-503: iptal edilmiş yetki ÖDÜNÇ ALINAMAZ (değişmez avının 5. ekseni)
+**ÖLÇÜLEN AÇIK:** `geri_al(y)` **sonrası** `mmio_yaz32(y, …)` `--check`ten
+**TEMİZ** geçiyordu — iptal edilmiş yetkiyle **donanıma yazma**. Yetki
+sisteminin varlık sebebi tam olarak bunu engellemekti.
+```
+geri_al(y); mmio_yaz32(y,..)   ÖNCE: OK   SONRA: CP005
+geri_al(y); mmio_oku32/64(y,..) ÖNCE: OK   SONRA: CP005
+geri_al(y); bölge_al(y, 4)      ÖNCE: OK   SONRA: CP005
+mmio_yaz32(y,..); geri_al(y)    OK (geçerli sıra — yanlış-pozitif YOK)
+```
+**KÖK:** tüketim yolu (`geri_al`, çağrı argümanı) canlılığı **ZATEN**
+denetliyordu (`lineer_tuketildi >= 1` → CP005); **ödünç** yolu
+(`mmio_*` · `bölge_al` · `soket_*`) denetlemiyordu. Üç kardeş doğrulayıcının
+üçü de *"ÖDÜNÇ alınır — TÜKETİLMEZ"* diyor ama bağlamanın **hâlâ canlı**
+olduğunu sormuyordu.
+
+**YENİ TANI KODU YOK:** mevcut **CP005** (*"move sonrası erişim"*) zaten bu
+anlamdır. Eksik olan kural değil, kuralın **sorulmadığı yerdi** — D-502'nin
+aynı gerekçesi.
+
+**⚠ ÜÇ AYRI UYGULAMA TUZAĞI (CLAUDE.md'de yazılı, yine ısırdı):**
+portu önce `codegen.kem`'e yaptım; **`checker_diff` `checker.kem`'i ölçüyor**.
+Kapı kırmızı kaldı ve bir an onarımı yanlış sandım. *Bir kuralı portlarken
+HANGİ kapının HANGİ uygulamayı okuduğunu önce ölç.*
+
+**⚠ YANLIŞ-POZİTİF TARAMASI STASH'LE YAPILDI:** 630 dosyada 4 dosya CP005
+veriyordu; **dördü de değişiklikten ÖNCE aynı sayıyı** veriyordu (kasıtlı
+CP005 fikstürleri, `test_ag.kem` dâhil) → **sıfır yeni yanlış-pozitif**.
+"Ad CP005 içeriyor, demek fikstürdür" demedim; taban değeri ölçtüm.
+
+**Fikstür `tc40_01`** — üç ihlal + **bir GEÇERLİ sıra**. Yalnız negatifler
+olsaydı *"her ödüncü reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+⚠ Numara üç kez çakıştı (tc26/tc27/tc28 dolu) — `ls | grep -oE "^tc[0-9]+"`
+ile boş numara **ölçülmeli**, tahmin edilmemeli.
+
+**Sabotaj 2/2:** S83 (C) → fikstür `OK`'e döndü, açık geri geldi ·
+S84 (self) → `checker_diff` 164→163, rc=2.
+**Kapılar:** checker_diff **164/164 (0 muaf)** · sıfır uyarı 38/0.
+
 ### ✅ D-501→D-502 KAPANDI: sıfıra bölme artık **temiz duruyor**
 **Mehmet seçenek (b)'yi seçti** — çalışma zamanı panik. Gerekçe tutarlılık:
 **dil zaten dizi sınırı için panik seçmişti** (`xs[10]` `sonuç` döndürmüyor,

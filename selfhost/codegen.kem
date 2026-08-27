@@ -9741,6 +9741,7 @@ işlev mmio_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer n != bek { sekil_hata(p, idx, "MM001"); ver doğru; }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
+    yetki_canli_kontrol(p, a0);   // [D-503]
     eğer metin_esit(bag_yetki_kaynak_ifade(p, a0), "MMIO") == yanlış
       ve kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "MM002"); }
     değişken a1: tam32 = dizi_al(p.cocuk, cb + 2);
@@ -9761,6 +9762,7 @@ işlev soket_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer n != 3 { sekil_hata(p, idx, "MM001"); ver doğru; }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
+    yetki_canli_kontrol(p, a0);   // [D-503]
     eğer metin_esit(bag_yetki_kaynak_ifade(p, a0), "Soket") == yanlış
       ve kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "MM002"); }
     değişken a2: tam32 = dizi_al(p.cocuk, cb + 3);
@@ -10181,8 +10183,29 @@ işlev cesit_arg_tipi(p: &değişken Ayr, tn: tam32, cad: metin, k: tam32) -> me
 //   arite ≠ 2                            → BL002  (BL001'den ÖNCE, erken dönüş)
 // Beklenen tip düğümü D-423'ün `m4_*` işaretlemesinden okunur — o registry
 // çeşit yapıcısına ÖZEL değildir, HER CAGRI düğümünü işaretler.
+// [D-503] ODUNC NOKTASINDA CANLILIK — C tip_kontrol.c yetki_canli_kontrol aynasi.
+// OLCULDU: `geri_al(y); mmio_yaz32(y, ..)` --check ten TEMIZ geciyordu — iptal
+// edilmis yetkiyle DONANIMA YAZMA. Tuketim yolu (lin_tuket_dugum) canliligi ZATEN
+// denetliyordu; ODUNC yolu denetlemiyordu. YENI TANI KODU YOK: mevcut CP005.
+// ⚠ TUKETMEZ — yalnizca canliligi sorar (odunc semantigi korunur).
+işlev yetki_canli_kontrol(p: &değişken Ayr, node: tam32) -> tam32 {
+    eğer p.tuk_kapali > 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver 0; }
+    değişken idx: tam32 = lin_idx(p, dizi_al(p.a_deg, node));
+    eğer idx < 0 { ver 0; }
+    eğer dizi_al(p.lin_yet, idx) != 1 { ver 0; }   // yalniz yetki baglamasi
+    eğer dizi_al(p.lin_tuk, idx) >= 1 {
+        dizi_ekle(p.th_kod, "CP005");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
+    }
+    ver 0;
+}
 işlev bolge_al_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer metin_esit(fad, "bölge_al") == yanlış { ver yanlış; }
+    eğer (dizi_al(p.a_cs, idx) - 1) == 2 {
+        yetki_canli_kontrol(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));   // [D-503]
+    }
     eğer (dizi_al(p.a_cs, idx) - 1) != 2 {
         sekil_hata(p, idx, "BL002");
         ver doğru;

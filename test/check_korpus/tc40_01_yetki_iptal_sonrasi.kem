@@ -1,0 +1,37 @@
+// [D-503] IPTAL EDILMIS YETKI ODUNC ALINAMAZ.
+// OLCULEN ACIK: `geri_al(y)` SONRASI `mmio_yaz32(y, ..)` --check ten TEMIZ
+// geciyordu — iptal edilmis yetkiyle DONANIMA YAZMA. Yetki sisteminin varlik
+// sebebi tam olarak bunu engellemekti.
+//
+// KOK: tuketim yolu (geri_al, cagri argumani) canliligi ZATEN denetliyordu;
+// ODUNC yolu (mmio_* / bolge_al / soket_*) denetlemiyordu. Yeni tani kodu
+// GEREKMEDI — mevcut CP005 ("move sonrasi erisim") ayni anlamdir.
+//
+// ⚠ GECERLI kullanim (iptal ONCESI odunc) ASAGIDA ayrica var: yalniz negatif
+// sekiller olsaydi "her odunc reddedilsin" sabotaji kapidan GECERDI (D-425).
+
+çıplak işlev iptal_sonrasi_yaz() {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 3);
+    geri_al(y);
+    güvensiz { mmio_yaz32(y, 1000, 7); }      // CP005
+}
+
+çıplak işlev iptal_sonrasi_oku() {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 3);
+    geri_al(y);
+    güvensiz { değişken v: tam32 = mmio_oku32(y, 1000); }   // CP005
+}
+
+işlev iptal_sonrasi_bolge() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    geri_al(y);
+    değişken p: *tam32 = bölge_al(y, 4);      // CP005
+    ver 0;
+}
+
+// GECERLI: odunc ONCE, iptal SONRA — tani OLMAMALI.
+çıplak işlev gecerli_sira() {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 3);
+    güvensiz { mmio_yaz32(y, 1000, 7); }
+    geri_al(y);
+}
