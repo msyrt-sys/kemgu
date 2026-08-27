@@ -3164,6 +3164,50 @@ Belge dosyaları: Türkçe.
 
 ---
 
+## ⚠⚠ ÖLÇÜM ARACI KONTROL LİSTESİ (D-500 — en sık tekrarlayan hata sınıfı)
+
+Bu depoda **kusurdan çok ölçüm aracı yanıldı.** Tek bir oturumda **sekiz** vaka
+sayıldı ve biri **beş tur** kaybettirdi. Sonuç sürekli aynı: *olmayan bir kusuru
+kovalamak* ya da *gerçek bir kusuru yeşil sanmak.*
+
+**KURAL: Beklenmedik bir sonuç önce ARACI şüpheli kılar, kodu değil.**
+Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklaması
+ölçümün kendisidir.
+
+### Koşmadan önce
+- [ ] **İkiliyi nasıl çağırıyorum?** Harness'ın çağrımını **oku**, taklit etme.
+      *(D-499: harness `kemcheck.exe "$f"` — BAYRAKSIZ. Ben `--checkdump`
+      geçtim, ikili bayrağı dosya adı sandı, boş çıktı verdi.)*
+- [ ] **Yeni kuralı sınamadan önce ESKİ bir kural aynı yoldan çıkıyor mu?**
+      *(T020 de sessizdi → sorun kancada değil çağrımdaydı.)*
+- [ ] **Başarı kodu ne?** `cmd || fail++` yalnız 0'ı başarı sayar.
+      *(D-489: bu testin başarı kodu 42 → 300/300 "başarısız" bastım.)*
+- [ ] **`&&` zincirli sessiz kurulum YOK.** Her adımın rc'sini ayrı yazdır.
+      *(D-499: ikili hiç oluşmamıştı, "OK" bayat binaridan geliyordu.)*
+- [ ] **Boruya bağlarken `${PIPESTATUS[0]}`.** *(D-444: `make | tail` → exit
+      kodu `tail`ın.)*
+
+### Yamadan sonra
+- [ ] **Yama gerçekten uygulandı mı?** `grep -c` ile SAY.
+      *(D-490/D-402: `perl`/`sed` deseni sessizce tutmadı, kapı yeşil kaldı.)*
+- [ ] **`sed`/`awk` Türkçe UTF-8 `.kem`/`.c` dosyasında KULLANMA** — Edit aracı.
+      *(D-461: `awk`ta `&` "tüm eşleşme" demek → 17 satır bozuldu.
+      D-490: `sed` `\n`'i gerçek satır sonuna çevirip C dizgisini kırdı.)*
+- [ ] **Sabotaj döngüsünden sonra `.o` VE ikiliyi `rm -f`.**
+      *(D-457: `cp` mtime'ı bozar, make objeyi güncel sanır.)*
+
+### Sonucu okurken
+- [ ] **Çok satırlı tanı çıktısını `head -1` ile karşılaştırma.** *(D-420/D-425:
+      "yanlış kod" sandığım şey "eksik satır"dı.)*
+- [ ] **Filtre çıktı satırına mı, içeriğe mi uygulanıyor?** *(D-491:
+      `grep -v "^\s*--"` dosya:satır önekine takıldı → yorum filtresi hiç
+      çalışmadı.)*
+- [ ] **Türkçe kaynakta düz `grep '"[a-z]+"'` hex-escape'li adları KAÇIRIR.**
+      *(D-492: 41 anahtar kelimenin 25'ini buldum, eksik listesi yanlış çıktı.)*
+- [ ] **`exit 127` ortamsaldır, `exit 139` DEĞİLDİR.** 139 → bellek hatası, aç.
+- [ ] **`rc=0` bir SONUÇ değil bir İDDİADIR.** Kapı sayısını ve atlama izlerini
+      AYRICA ölç. *(D-486: sekiz kapı sessizce atlanıyordu, make yine 0 döndü.)*
+
 ## Bu Oturumun Çalışma Kuralları
 
 - Her dosya yazıldıktan sonra `make` çalıştır, sıfır uyarı hedefi (`-Wall -Wextra -Wpedantic`)
