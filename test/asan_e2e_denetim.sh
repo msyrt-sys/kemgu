@@ -27,6 +27,16 @@ set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 KEMGU=${KEMGU:-./build/kemgu${EXE}}
 RT="runtime/kdl_runtime.c runtime/kdl_runtime_mmio.c"
+# [D-484] ASLR ENTROPISI — ASan ikilisi SESSIZCE COKER (exit 139, rapor YOK).
+# OLCULDU (WSL, m04_ref_buyume): setarch'siz 15 kosumda 5 cokme, `setarch -R`
+# ile 15/15 temiz. Cikti tamamen sessiz -- ASan HICBIR SEY basmiyor, yani
+# "ihlal=0" oldugu halde kapi kirmizi olur ve kok gorunmez.
+# D-478 bu duzeltmeyi Makefile'in KOSUM SATIRLARINA uygulamisti; kendi ASan
+# ikilisini KURAN VE KOSTURAN harness'lar o kapsamin DISINDA kalmis.
+# ⚠ `command -v setarch` YETMEZ: bazi cekirdeklerde setarch VAR ama -R
+# BASARISIZ olur -> gercekten CALISTIGINI olc.
+ASAN_RUN=""
+if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/asan_denetim)
 mkdir -p "$TMP"
 
@@ -89,7 +99,7 @@ for f in test/ornekler/*.kem test/snapshots/*.kem; do
               -o "$TMP/a.exe" 2>/dev/null; then
         skip=$((skip+1)); continue
     fi
-    out=$(timeout 60 "$TMP/a.exe" 2>&1)
+    out=$($ASAN_RUN timeout 60 "$TMP/a.exe" 2>&1)
     # [D-483] Sızıntı-muaf dosyalarda YALNIZ LeakSanitizer satırlarını süz.
     # Diğer her ASan/UBSan bulgusu (use-after-free, overflow, misalign)
     # AYNEN kırmızı yapar — muafiyet DAR tutuldu.

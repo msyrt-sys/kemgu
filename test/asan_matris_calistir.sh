@@ -31,6 +31,16 @@ KEMGU=${KEMGU:-./build/kemgu${EXE}}
 RT_OBJ="build/kdl_runtime.o build/kdl_runtime_mmio.o"
 RT_SRC="runtime/kdl_runtime.c runtime/kdl_runtime_mmio.c"
 DIR="test/asan_matris"
+# [D-484] ASLR ENTROPISI — ASan ikilisi SESSIZCE COKER (exit 139, rapor YOK).
+# OLCULDU (WSL, m04_ref_buyume): setarch'siz 15 kosumda 5 cokme, `setarch -R`
+# ile 15/15 temiz. Cikti tamamen sessiz -- ASan HICBIR SEY basmiyor, yani
+# "ihlal=0" oldugu halde kapi kirmizi olur ve kok gorunmez.
+# D-478 bu duzeltmeyi Makefile'in KOSUM SATIRLARINA uygulamisti; kendi ASan
+# ikilisini KURAN VE KOSTURAN harness'lar o kapsamin DISINDA kalmis.
+# ⚠ `command -v setarch` YETMEZ: bazi cekirdeklerde setarch VAR ama -R
+# BASARISIZ olur -> gercekten CALISTIGINI olc.
+ASAN_RUN=""
+if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/asan_matris); mkdir -p "$TMP"
 pass=0; fail=0
 
@@ -47,7 +57,7 @@ for f in "$DIR"/m*.kem; do
     timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
     # 2) ASan/UBSan: bellek güvenliği (exit 42 + 0 ihlal)
     clang -fsanitize=address,undefined -x ir "$TMP/m.ll" -x none $RT_SRC -o "$TMP/a.exe" 2>/dev/null
-    aout=$(timeout 60 "$TMP/a.exe" 2>&1); arc=$?
+    aout=$($ASAN_RUN timeout 60 "$TMP/a.exe" 2>&1); arc=$?
     viol=$(echo "$aout" | grep -ciE "AddressSanitizer|runtime error|SUMMARY:.*[Ss]anitizer")
     if [ "$nrc" = "42" ] && [ "$arc" = "42" ] && [ "$viol" = "0" ]; then
         echo "  ✓ $b"; pass=$((pass+1))
