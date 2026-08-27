@@ -1,5 +1,32 @@
 # SORRY_TRACKER — Plan v2 Onarim Gecici Borc Takibi
 
+> ## ⚠⚠ [D-491] BU BELGE 2026-05'TEN BERI BAYATTI — GUNCEL DURUM ASAGIDA
+> **Asagidaki haftalik tablo 47 `sorry`ye kadar cikiyor. GERCEK SAYI 0.**
+>
+> Olculdu (2026-08-27, `proofs/**/*.lean`, blok-yorum satirlari HARIC):
+> * gercek `sorry` : **0**
+> * gercek `axiom` : **0**
+> * son ispat commit'i: `fea2211` (2026-07-27, D-333 BET koprusu, 21/21 kural)
+>
+> Yani Adim 7 hedefi ("0 sorry") **TUTTURULMUS** ama bu belge guncellenmemis.
+> Belge, gercekte kapanmis bir borcu ACIK gosteriyordu.
+>
+> ### ⚠ AMA "0 sorry" != "ISPATLAR GECIYOR"
+> Bu sayi **grep ile** olculdu. `lake build` BU MAKINEDE KOSULMADI cunku Lean
+> KURULU DEGIL (olculdu: `lake`/`lean` PATH'te yok). Bir dosyada tip hatasi
+> olsa grep bunu GORMEZ. Ispatlarin gercekten gectigi ancak `lake build` ile
+> dogrulanabilir.
+>
+> ### ⚠ VE HICBIR KAPI BUNU ZORLAMIYOR
+> `calistir_lean_aksiyom` hedefi VAR ama `test_tumu`ya BAGLI DEGIL ve Lean
+> yoksa **sessizce atliyor**. Yani stratejik bir varlik (DRF/bellek-guvenligi
+> mekanizasyonu) takim tarafindan HIC olculmuyor.
+> Bunu `test_tumu`ya baglamak Lean kurulumunu ZORUNLU kilar; bu bir
+> **derleme politikasi** karari (Mehmet). Sessizce-atlayan bir kapi eklemek
+> BILINCLI OLARAK REDDEDILDI — D-486/D-490'da kapatilan kapsam yanilsamasinin
+> ta kendisidir.
+
+
 **Branch:** `feature/drf-onarim-v2-WIP` (yalnizca bu branch'te `sorry` kabul)
 **Politika:** Her `sorry` icin `-- TODO: Adim N'de discharge_X ile dolacak` yorumu zorunlu.
 **Hedef:** Adim 7 (Discharge Lemma ailesi + No-Fault catı teoremi) tamamlandiginda **0 sorry**.
