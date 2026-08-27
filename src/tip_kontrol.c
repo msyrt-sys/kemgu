@@ -977,7 +977,96 @@ static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
-static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);  /* D-304 ileri bildirim */
+/* ===================================================================
+ * [D-499] G006 — YERELIN ADRESI CERCEVEYI ASAMAZ
+ * ===================================================================
+ * D-497'de OLCULEN acik: `ver &yerel` `--check`ten TEMIZ geciyordu ve
+ * KENDI YIGIN CERCEVESINE isaretci donduruyordu
+ * (`%0 = alloca i32 ... ret ptr %0`). Araya yigini ezen bir cagri koyunca
+ * `-O0 -> 1`, `-O2 -> 90` (dogrusu 40): SESSIZ YANLIS CEVAP, iki
+ * optimizasyon seviyesinde FARKLI degerler. ASan BUNU YAKALAMIYOR
+ * (detect_stack_use_after_return=1 ile bile sifir bulgu) -> mevcut 67
+ * kapinin HICBIRI bu sinifi gormuyordu.
+ *
+ * G005 ILE AYNI DEGISMEZ ("isaretci gosterdigi cerceveyi asamaz") ama
+ * AYRI KOD: G005 `DUGUM_LAMBDA`da, kosulu "lambda kaciyor + isaretci
+ * yakaliyor"; bu ise `&` onekinde. Deponun konvansiyonu ayni desenin
+ * farkli site'lari icin AYRI kod (T005/T006/T007/T008/T027 — D-353).
+ * Ayri kod = mesaj her site icin KESIN kalir, `grep G005` tek kurali bulur.
+ *
+ * ⚠ OVER-REJECT YOK (G005'in kendi ilkesi): YALNIZCA kok tanimlayici
+ * ISLEV CERCEVESI ICINDE (SCOPE_ISLEV/SCOPE_BLOK) cozulebiliyorsa
+ * bildirilir. Kuresel (SCOPE_MODUL/GLOBAL) adresi GECERLIDIR — kuresel
+ * cerceveyi asar. Cozulemeyen kok (ör. `&*p`) BILDIRILMEZ. */
+static int g006_yerel_mi(TipKontrol *tk, const char *ad, int uz) {
+    for (Scope *s = tk->scope; s; s = s->parent) {
+        if (sembol_bul_yerel(s, ad, uz))
+            return s->kategori == SCOPE_BLOK || s->kategori == SCOPE_ISLEV;
+        /* Cerceve sinirini gectik: buradan sonrasi kuresel/modul -> GECERLI */
+        if (s->kategori == SCOPE_MODUL || s->kategori == SCOPE_GLOBAL) break;
+    }
+    return 0;
+}
+
+/* `&x`, `&k.alan`, `&d[i]` -> kok tanimlayici. `&*p` -> NULL (isaretci
+ * dereferansi bir YEREL degildir; bildirilmez). */
+static const Dugum *g006_kok(const Dugum *d) {
+    while (d) {
+        if (d->tip == DUGUM_TANIMLAYICI) return d;
+        if (d->tip == DUGUM_ERISIM)      { d = d->veri.erisim.nesne; continue; }
+        if (d->tip == DUGUM_INDEKS)      { d = d->veri.indeks.nesne; continue; }
+        return NULL;
+    }
+    return NULL;
+}
+
+/* Donen ifadede cerceve-disina cikan bir yerel-adres var mi?
+ * ⚠ CAGRI ARGUMANLARINA INILMEZ: `ver f(&a)` &a'yi DONDURMEZ, f'in
+ * sonucunu dondurur -> orada bildirmek YANLIS-POZITIF olurdu. */
+static const Dugum *g006_bul(TipKontrol *tk, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TEKLI
+        && (d->veri.tekli.op == OP_REF || d->veri.tekli.op == OP_REF_DEGISKEN)) {
+        const Dugum *k = g006_kok(d->veri.tekli.operand);
+        if (k && g006_yerel_mi(tk, k->veri.tanimlayici.metin,
+                                   k->veri.tanimlayici.uzunluk))
+            return d;
+        return NULL;
+    }
+    if (d->tip == DUGUM_TIP_DONUSTUR)
+        return g006_bul(tk, d->veri.tip_donustur.kaynak);
+    if (d->tip == DUGUM_YAPI_OLUSTUR) {
+        for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+            Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+            if (aa && aa->tip == DUGUM_ALAN_ATAMA) {
+                const Dugum *r = g006_bul(tk, aa->veri.alan_atama.deger);
+                if (r) return r;
+            }
+        }
+        return NULL;
+    }
+    if (d->tip == DUGUM_DIZI_OLUSTUR) {
+        for (int i = 0; i < d->veri.dizi_olustur.sayi; i++) {
+            const Dugum *r = g006_bul(tk, d->veri.dizi_olustur.elemanlar[i]);
+            if (r) return r;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+static void g006_denetle(TipKontrol *tk, const Dugum *deger) {
+    const Dugum *r = g006_bul(tk, deger);
+    if (r) {
+        tip_hata(tk, r, "G006",
+            "yerelin adresi cerceveyi asamaz (donen isaretci olu yigin gozesini "
+            "gosterir): degeri KOPYALA olarak dondur, cagirandan referans al ya da "
+            "bolgeden tahsis et");
+    }
+}
+
+static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);
+static void g006_denetle(TipKontrol *tk, const Dugum *deger);  /* [D-499] */  /* D-304 ileri bildirim */
 
 /* === Madde D: Generic call inference helpers (paralel session, kullanilmaz) ===
  *
@@ -4393,6 +4482,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tk->lambda_blok_cikarsama = eski_cik;
                 tk->lambda_blok_donus = eski_bd;
             } else {
+                /* [D-499] G006: IFADE-FORMU lambdada `ver` DUGUMU YOKTUR —
+                 * govdenin KENDISI donus degeridir. `|| &a` de ayni sarkan
+                 * isaretciyi uretir (olculdu: lifted lambda kendi alloca'sina
+                 * `ret ptr` veriyor), o yuzden burada AYRICA denetlenir.
+                 * ⚠ G005 BUNU YAKALAMAZ: G005 ISARETCI yakalamasi ister,
+                 * burada yakalanan SKALER (D-323'ten beri serbest). */
+                g006_denetle(tk, d->veri.lambda.govde);
                 donus = tip_belirle(tk, d->veri.lambda.govde);
             }
             tk->scope = gov_eski;
@@ -4834,6 +4930,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
  * ======================================================================== */
 
 static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);
+static void g006_denetle(TipKontrol *tk, const Dugum *deger);  /* [D-499] */
 static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d);
 
 /* === 1. Gecis: yapi/islev/sabit sembollerini global'e ekle === */
@@ -5622,6 +5719,11 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_VER: {
+            /* [D-499] G006: yerelin adresi cerceveyi asamaz. `ver`in TUM
+             * bicimlerinden ONCE denetlenir (lambda blok-cikarsama dali da
+             * dahil) — `|| &a` de ayni sarkan isaretciyi uretir (olculdu:
+             * lifted lambda kendi alloca'sina ret ptr veriyor). */
+            g006_denetle(tk, d->veri.ver.deger);
             /* D-304: blok-form lambda dönüş çıkarsaması — `ver <e>` tipini
              * KAYDET (aktif_donus_tipi'ye karşı kontrol yerine). İlk `ver`
              * kazanır; sonrakiler tutarlı varsayılır (well-typed lambda). */

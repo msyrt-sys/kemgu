@@ -1,24 +1,23 @@
-// ⚠⚠ [D-497] BU DOSYA BILINEN-YANLIS DAVRANISI SABITLER — ONAYLAMAZ.
+// [D-499] G006 — YERELIN ADRESI CERCEVEYI ASAMAZ. Bes seklin BESI DE G006 verir.
 //
-// Bes seklin BESI DE bugun `--check`ten TEMIZ geciyor, oysa hepsi bir
-// YERELIN ADRESINI cerceve disina cikariyor. Uretilen IR kendi yigin
-// cercevesine isaretci donduruyor (`%0 = alloca i32 ... ret ptr %0`).
-// OLCULDU: araya yigini ezen bir cagri koyunca
-//     -O0 -> *p = 1     -O2 -> *p = 90      (dogrusu 40)
-// SESSIZ YANLIS CEVAP, iki optimizasyon seviyesinde FARKLI degerler.
+// TARIHCE: bu dosya D-498'de BILINEN-YANLIS davranisi SABITLEMEK icin eklendi
+// (o gun besi de `--check`ten TEMIZ geciyordu). D-499'da kural landi ve dosya
+// tam tasarlandigi gibi KIRMIZIYA DONUP kendini bildirdi; beklenen ciktisi
+// guncellendi. Sabitlenen-bilinen-yanlis deseninin DORDUNCU basarili kullanimi
+// (D-441/D-443/D-449).
 //
-// Bu, dilin MANSET degismezine aykiridir ("use-after-free dil tasarimi
-// seviyesinde imkansiz") ve ASan BUNU YAKALAMIYOR (olculdu:
-// detect_stack_use_after_return=1 ile bile exit 42, sifir bulgu) — yani
-// mevcut 67 kapinin HICBIRI bu sinifi gormuyor.
+// OLCULEN ACIK (D-497): `ver &yerel` KENDI YIGIN CERCEVESINE isaretci
+// donduruyordu (`%0 = alloca i32 ... ret ptr %0`). Araya yigini ezen bir cagri
+// koyunca -O0 -> 1, -O2 -> 90 (dogrusu 40): SESSIZ YANLIS CEVAP, iki
+// optimizasyon seviyesinde FARKLI degerler. ASan BUNU YAKALAMIYOR
+// (detect_stack_use_after_return=1 ile bile sifir bulgu) -> onarim oncesi
+// mevcut 67 kapinin HICBIRI bu sinifi gormuyordu.
 //
-// NEDEN KORPUSTA: kural landiginda bu dosyanin `--checkdump` ciktisi
-// DEGISECEK ve `checker_diff` bunu SOYLEYECEK. Boylece bulgu sessizce
-// kaybolamaz. Onarim geldiginde beklenen dump guncellenmelidir.
-//
-// ⚠ ONARIM YAPILMADI: bir TANI kodu ister ve o DIL YUZEYI karariddir
-// (Mehmet). Secenekler CLAUDE.md'de "ACIK GUVENLIK BULGUSU" maddesinde.
-
+// ⚠ BURADA OLMAYAN SEKILLER BILINCLI (over-reject yok):
+//   `&kuresel`   GECERLIDIR — kuresel cerceveyi asar
+//   `&*p`        BILDIRILMEZ — kok cozulemez (isaretci dereferansi yerel degil)
+//   `f(&a)`      BILDIRILMEZ — cagri &a'yi DONDURMEZ
+// Bunlarin GECERLI kaldigi ayrica olculdu; kural yalniz kesin oldugunda konusur.
 yapı KutuRef { p: &tam32; }
 yapı Nokta { x: tam32; }
 

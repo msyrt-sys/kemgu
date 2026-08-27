@@ -4538,6 +4538,88 @@ işlev g005_ad_kaciyor_mu(p: &değişken Ayr, node: tam32, ad: metin) -> mantık
     }
     ver yanlış;
 }
+// ===== D-499: G006 (yerelin adresi çerçeveyi aşamaz) — C tip_kontrol.c aynası =====
+// C kuralı: `ver` (ve İFADE-FORMU lambda gövdesi) içinde `&x` / `&değişken x`
+// varsa ve `x`in kökü AKTİF ÇERÇEVEDE tanımlıysa → G006. Küresel adresi
+// GEÇERLİDİR (küresel çerçeveyi aşar). Çözülemeyen kök (`&*p`) BİLDİRİLMEZ —
+// over-reject yok (G005'in kendi ilkesi).
+// KONUM: `&` düğümü (TEKLI), C ile birebir.
+
+// `&x`, `&k.alan`, `&d[i]` → kök TANIMLAYICI düğümü; `&*p` → -1.
+// ⚠ `eğer/değilse` zinciri yerine ACIK ERKEN DONUS: ilk surumde `değilse`
+// bağlanması yüzünden ERISIM inişi sessizce düşüyordu (ölçüldü: `&n` çalışıyor,
+// `&n.x` çalışmıyordu) — yapıyı belirsiz bırakmamak daha ucuz.
+işlev g006_kok(p: &değişken Ayr, node: tam32) -> tam32 {
+    değişken n: tam32 = node;
+    değişken tur: tam32 = 0;
+    iken (n >= 0) ve (tur < 64) {
+        değişken t: metin = dizi_al(p.a_ad, n);
+        eğer metin_esit(t, "TANIMLAYICI") { ver n; }
+        eğer metin_esit(t, "ERISIM") == yanlış {
+            eğer metin_esit(t, "INDEKS") == yanlış { ver 0 - 1; }
+        }
+        eğer dizi_al(p.a_cs, n) < 1 { ver 0 - 1; }
+        n = dizi_al(p.cocuk, dizi_al(p.a_cb, n));
+        tur = tur + 1;
+    }
+    ver 0 - 1;
+}
+
+// Dönen ifadede çerçeve dışına çıkan yerel-adres var mı? Bulursa `&` düğümü.
+// ⚠ ÇAĞRI ARGÜMANLARINA İNİLMEZ: `ver f(&a)` &a'yı DÖNDÜRMEZ (yanlış-pozitif).
+işlev g006_bul(p: &değişken Ayr, node: tam32) -> tam32 {
+    eğer node < 0 { ver 0 - 1; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    eğer metin_esit(t, "TEKLI") {
+        değişken op: metin = dizi_al(p.a_deg, node);
+        eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {   // ⚠ parser ASCII "&degisken" yazar (Türkçe DEĞİL) — ölçüldü
+            eğer cs > 0 {
+                değişken k: tam32 = g006_kok(p, dizi_al(p.cocuk, cb));
+                eğer k >= 0 {
+                    eğer yerel_var_mi(p, dizi_al(p.a_deg, k)) { ver node; }
+                }
+            }
+        }
+        ver 0 - 1;
+    }
+    eğer metin_esit(t, "TIP_DONUSTUR") {
+        eğer cs > 0 { ver g006_bul(p, dizi_al(p.cocuk, cb)); }
+        ver 0 - 1;
+    }
+    eğer metin_esit(t, "YAPI_OLUSTUR") veya metin_esit(t, "DIZI_OLUSTUR") {
+        değişken i: tam32 = 0;
+        iken i < cs {
+            değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+            // YAPI_OLUSTUR çocukları ALAN_ATAMA; değeri onun ilk çocuğu.
+            eğer metin_esit(dizi_al(p.a_ad, c), "ALAN_ATAMA") {
+                eğer dizi_al(p.a_cs, c) > 0 {
+                    değişken r: tam32 = g006_bul(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c)));
+                    eğer r >= 0 { ver r; }
+                }
+            }
+            değilse {
+                değişken r2: tam32 = g006_bul(p, c);
+                eğer r2 >= 0 { ver r2; }
+            }
+            i = i + 1;
+        }
+        ver 0 - 1;
+    }
+    ver 0 - 1;
+}
+
+işlev g006_denetle(p: &değişken Ayr, node: tam32) -> tam32 {
+    değişken r: tam32 = g006_bul(p, node);
+    eğer r >= 0 {
+        dizi_ekle(p.th_kod, "G006");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, r));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, r));
+    }
+    ver 0;
+}
+
 işlev g005_yaz(p: &değişken Ayr, lam: tam32) -> tam32 {
     dizi_ekle(p.th_kod, "G005");
     dizi_ekle(p.th_sat, dizi_al(p.a_sat, lam));
@@ -5308,9 +5390,19 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
     }
     eğer metin_esit(ad, "VER") {
+        // [D-499] G006 C ile AYNI SIRADA: `ver` dalinin EN BASINDA (C'de de
+        // `case DUGUM_VER` girisinde) -> coklu tanida sira C ile birebir kalir.
+        eğer dizi_al(p.a_cs, idx) > 0 { g006_denetle(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
         t020_kontrol(p, idx);
         eğer dizi_al(p.a_cs, idx) > 0 { g005_dogrudan_kontrol(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }   // D-324
         eğer dizi_al(p.a_cs, idx) > 0 { lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx))); }
+    }
+    // [D-499] G006: IFADE-FORMU lambdada `ver` DUGUMU YOKTUR — govdenin
+    // KENDISI donus degeridir (govde = SON cocuk). BLOK-formu zaten VER
+    // kancasindan gecer. C ile birebir: orada da yalniz `else` (ifade) dali.
+    eğer metin_esit(ad, "LAMBDA") ve (dizi_al(p.a_cs, idx) > 0) {
+        değişken gb: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + dizi_al(p.a_cs, idx) - 1);
+        eğer metin_esit(dizi_al(p.a_ad, gb), "BLOK") == yanlış { g006_denetle(p, gb); }
     }
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); ct_ikili_kontrol(p, idx); }   // TC3e/f + T028 + D-367
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004

@@ -1019,39 +1019,39 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
-### 🔴🔴 AÇIK GÜVENLİK BULGUSU (D-497): yerelin adresi ÇERÇEVEYİ AŞABİLİYOR
-**Kararın Mehmet'te** — onarım yeni bir tanı kodu ister ve o dil yüzeyidir.
+### ✅ D-497→D-499 KAPANDI: `ver &yerel` artık **G006** ile reddediliyor
+**Mehmet seçenek (b)'yi seçti** — ayrı kod. Gerekçe deponun kendi
+konvansiyonu: `T005/T006/T007/T008/T027` *aynı kalıp* olduğu hâlde **beş ayrı
+kod** (D-353). Ayrı kod = mesaj her site için kesin kalır, `grep G005` tek
+kuralı bulur.
 
-F4.4'ün kapanış-env eksenini ölçerken çıktı. **`ver &yerel` `--check`ten
-TEMİZ geçiyor** ve sarkan yığın işaretçisi üretiyor:
-```
-işlev g() -> &tam32 { değişken a: tam32 = 40; ver &a; }   → --check: OK
-IR:  %0 = alloca i32 ... ret ptr %0      (kendi çerçevesine işaretçi)
-araya çağrı koyup okuyunca:  -O0 → *p = 1 · -O2 → *p = 90   (doğrusu 40)
-```
-**Sessiz yanlış cevap**, iki optimizasyon seviyesinde FARKLI yanlış değerler.
-Bu, dilin manşet değişmezine doğrudan aykırı (*"use-after-free dil tasarımı
-seviyesinde imkânsız"*) ve `KEMGU-novelty-pozisyon.md` *"iyi-tipli program →
-dangling pointer YOK"* diyor.
+**Uygulandı:** C (`ver` + ifade-formu lambda gövdesi) · `selfhost/checker.kem`
+· `selfhost/codegen.kem`. Beş şeklin beşinde **kod+satır+sütun birebir**.
 
-**BEŞ ŞEKLİN BEŞİ DE KABUL EDİLİYOR** (ölçüldü):
-`ver &yerel` · `ver &parametre` · `ver &yerel_yapı.alan` ·
-`ver &değişken yerel` · yerelin adresi **yapı alanında** kaçarken.
+**Sağlamlık daraltmaları** (G005'in kendi *"over-reject yok"* ilkesi):
+`&küresel` GEÇERLİ · `&*p` bildirilmez (kök çözülemez) · **çağrı argümanlarına
+inilmez** (`ver f(&a)` `&a`'yı döndürmez). **625 dosya tarandı, tek eşleşme
+kasıtlı fikstür → SIFIR yanlış-pozitif.**
 
-**ETKİ ALANI DAR:** hiçbir mevcut kod buna dayanmıyor. Tek korpus eşleşmesi
-`test/parse_korpus/p1_03_onek_sonek.kem` ve o **yalnız `--parse`** fikstürü —
-derlenip koşulmuyor. Yani onarım korpusu kırmaz.
+**⚠⚠ BU TURDA ÜÇ ÖLÇÜM ARACI HATASI, biri BEŞ TUR kaybettirdi:**
+1. **Self-host ikilisini `--checkdump` bayrağıyla çağırdım; harness onu
+   BAYRAKSIZ çağırıyor** (`kemcheck.exe "$f"`). İkili bayrağı dosya adı sanıp
+   boş çıktı verdi → "kanca ateşlenmiyor" diye **olmayan bir kusuru** kovaladım.
+   **Mevcut bir tanıyla (T020) sınayınca ortaya çıktı** — o da sessizdi, yani
+   sorun kancada değil ÇAĞRIMDAYDI. *Yeni bir kuralı sınamadan önce ESKİ bir
+   kuralın aynı yoldan çıktığını doğrula.*
+2. `&&` zincirli sessiz kurulum → **hiç var olmayan** ikiliyle ölçtüm.
+3. İç içe kabukta `\&` kaçışı test dosyasını bozdu (C bile P001 verdi).
 
-**NEDEN KENDİM ONARMADIM:** onarım bir TANI ister; oturum kuralı *"yeni tanı
-kodu İCAT ETME"* diyor ve tanı kodu eklemek dil yüzeyi kararıdır.
-Anlamca en yakın mevcut kod **G005** (*"işaretçi yakalayan closure frame'i
-aşamaz"*) — aynı sınıf (işaretçi, gösterdiği çerçeveyi aşıyor) ama metni
-closure'a özgü. Seçenekler: (a) G005'in kapsamını düz işleve genişlet,
-(b) yeni kod (ör. G006), (c) bilinçli sınır olarak belgele.
+**Gerçek iki kusur ancak araç temizlenince göründü:**
+- `eğer/değilse` bağlanması `ERISIM` inişini **sessizce** düşürüyordu
+  (`&n` çalışıyor, `&n.x` çalışmıyordu) → açık erken-dönüşle yeniden yazıldı.
+- **Self-host parser'ı ASCII `"&degisken"` yazar, Türkçe `"&değişken"` DEĞİL.**
 
-⚠ **ASan BUNU YAKALAMIYOR** (ölçüldü: `detect_stack_use_after_return=1` ile
-bile exit 42, sıfır bulgu) — ölü yığın gözesi hâlâ okunabilir durumda. Yani
-mevcut kapıların HİÇBİRİ bu sınıfı görmez; D-488'in dersinin tekrarı.
+**Sabotaj 2/2:** S79 (C'de kapat) → fikstür 5×G006 → OK · S80 (self'te kapat)
+→ `checker_diff` 163→162, rc=2.
+**Kapılar:** checker_diff **163/163** · check_kapisi 262/269 (0 RED) ·
+check_genis 133/133 · codegen_diff 157/157 · self_driver **FIXPOINT ✓**
 
 ### ⛔ D-490 (NEGATİF SONUÇ): QEMU zayıf belleği MODELLEMİYOR — kapı EKLENMEDİ
 D-489'un 1. sınırını (*"x86-TSO'da geçmek ARM64'te kanıt değildir"*) kapatmak
