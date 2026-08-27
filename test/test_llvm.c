@@ -40,11 +40,38 @@ static void test_sonuc(const char *ad, int durum) {
 #define SUREC_NO() ((int)_getpid())
 #else
 #include <unistd.h>
+#include <sys/wait.h>
 #define DEV_NULL "/dev/null"
 #define KEMGU_BIN "./build/kemgu"
 #define YOL_ONEK "./build/"
 #define SUREC_NO() ((int)getpid())
 #endif
+
+/* ============================================================================
+ * [D-477] `system()` DONUS DEGERI IKI PLATFORMDA FARKLI ANLAMA GELIR.
+ *
+ * Windows : CIKIS KODUNU dogrudan doner        -> exit 42  => 42
+ * POSIX   : BEKLEME DURUMU doner (wait status) -> exit 42  => 42<<8 = 10752
+ *
+ * OLCULDU: bu ayrim yapilmadan `test_llvm` Linux'ta 286 testin 240'ini
+ * BASARISIZ sayiyordu. Gecen 46 test tam olarak SIFIR bekleyenlerdi
+ * (0<<8 == 0) -- yani basari orani bile kusuru dogruluyor.
+ * Windows'ta GORUNMEZ: orada ham deger zaten cikis kodudur.
+ *
+ * ⚠ Sinyalle olen surec (segfault) `WIFEXITED` degildir; ona 139 (128+SIGSEGV)
+ * verilir -- kabuk gelenegiyle ayni, cunku testlerin bir kismi tam da o degeri
+ * bekliyor (bare-metal MMIO korpusu, D-395).
+ * ========================================================================= */
+static int cikis_kodu(int system_rc) {
+#ifdef _WIN32
+    return system_rc;
+#else
+    if (system_rc == -1) return -1;
+    if (WIFEXITED(system_rc)) return WEXITSTATUS(system_rc);
+    if (WIFSIGNALED(system_rc)) return 128 + WTERMSIG(system_rc);
+    return system_rc;
+#endif
+}
 
 /* === D-297: gecici dosya yollari SUREC-BENZERSIZ ===
  * Eskiden SABITTI (build/test_llvm_temp.{kem,ll,exe}). Ayni testin IKI ES
@@ -165,7 +192,7 @@ static int derle_calistir_ic(const char *kemgu_kaynak, int tip_atla) {
     /* Calistir */
     snprintf(komut, sizeof(komut), "%s", EXE_PATH);
     rc = system(komut);
-    return rc;
+    return cikis_kodu(rc);   /* [D-477] POSIX'te ham deger BEKLEME DURUMUDUR */
 }
 
 /* Mevcut bir .kem dosyasini --llvm | clang ile derle + calistir, exit code
@@ -189,7 +216,7 @@ static int derle_dosya_ve_calistir(const char *kem_yol) {
 #endif
     if (system(komut) != 0) return -1;
     snprintf(komut, sizeof(komut), "%s", EXE_PATH);
-    return system(komut);
+    return cikis_kodu(system(komut));   /* [D-477] */
 }
 
 /* `kemgu --llvm <kem_yol>` ciktisini LLVM 'opt -passes=verify'dan gecir.
