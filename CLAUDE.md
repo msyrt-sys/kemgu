@@ -640,7 +640,7 @@ echo 'işlev main() -> tam32 { ver 1 + 2 * 3 + 35; }' > x.kem
 
 > ⚠ **[D-492] BU SAYI ÇOK ESKİDİR — güncel ölçü `make test_tumu`dur.**
 > Bugün tek başına `llvm_test` **286**, `checker_diff` **162**, `codegen_diff`
-> **156**; `test_tumu` **66 kapı** çağırıyor. Belgeye gömülü test sayıları
+> **156**; `test_tumu` **67 kapı** çağırıyor. Belgeye gömülü test sayıları
 > yazıldıkları gün doğru, ertesi gün bayattır — bu dosyada üç ayrı yerde
 > yaşandı (bu satır · yukarıdaki "YAPILACAK" yorumları · `SORRY_TRACKER.md`
 > D-491). **Sayıyı belgeye gömmek yerine kapının kendisini koştur.**
@@ -971,6 +971,53 @@ Ayrıca **iki ASan kapısında zaman aşımı YOKTU**; bu oturumda tam takım **
 KEZ** saatlerce asılı kaldı (2.5 sa ve 1.5 sa). **Asılan kapı, sessiz kapı
 kadar kötüdür** — kimse onu koşturmaz. (`ag_kosum` D-466 ve `codegen_genis`
 D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
+
+### 🎯 D-493→D-495: sıfır-uyarı kapısı · F4.4 `bölge_al` ekseni KAPANDI
+- **D-493 — "sıfır uyarı hedefi" İLAN EDİLMİŞ ama ÖLÇÜLMÜYORDU.** Bayraklar
+  var, `-Werror` YOK, hiçbir kapı zorlamıyordu → uyarı sessizce sızabilirdi.
+  **Önce kuralın tutup tutmadığını ölçtüm** (kapıyı ilan etmeden): 0 uyarı,
+  yani sabitlenecek gerileme yok. **`-Werror` DEĞİL ayrı kapı:** bu depo ÜÇ
+  derleyici kullanıyor; `-Werror` yeni bir sürümde yapımı TAMAMEN kırardı,
+  kapı ise yalnız kırmızı olur. **`build/`e DOKUNMAZ** (geçici dizin —
+  D-297 çarpışma sınıfı). Kapsam `src/`+`runtime/` 38 dosya; `test/*.c`
+  bilerek dışarıda (sınır zorlayan kod, gürültü olurdu).
+  **⚠ Kapım ilk sürümde yanlıştı, kod değil:** 4 `runtime/` dosyası
+  `-DKEMGU_UART_MOCK` ister ve olmadan bilerek `#error` verir.
+  **Kırmızı önce KAPIYI şüpheli kılar.** Doğrulama: GCC 16 · clang · GCC 11.
+
+- **🎯 D-494 — F4.4'ün NE OLDUĞU ÖLÇÜMLE DEĞİŞTİ.** `kdl_bolge_serbest`
+  **ZATEN** gerçek toplu serbesttir → F4.4 "toplu serbest YAZ" değil,
+  **"ÇAĞRILMADIĞI YERİ BUL"**muş. Sızıntı izi OKUNDU (D-405'te tahminle
+  yanlış kök seçmiştim): `bölge_al(y,n)` **koşulsuz ham `malloc`** yayıyordu
+  ve sonuç hiç serbest edilmiyordu — adı "bölgeden al" olan yerleşik
+  bölgeden tahsis ETMİYORDU. Artık hapsedilme kanıtı VARSA
+  `kdl_bolge_ayir(ρ_yerel, n)`; kanıt YOKSA eski `malloc` **aynen** kalır
+  (sızar ama UAF yok — *"sızıntı bir hata, UAF bir felaket"*).
+
+- **🎯 D-495 — `bölge_al` EKSENİ TAMAMEN KAPANDI, muafiyet 9 → 5.**
+  ```
+  bolge_al_grow  2→0   tam64 1→0   tam8 1→0   struct 0→0
+  hepsi: exit 42 · UAF 0 · çift-serbest 0
+  ```
+  Üç kural: **`bellek_kopyala`(memcpy) argümanını TUTMAZ** → kürate beyaz
+  liste · `ky_var_gecer`e cast dalı · `ky_confined`e cast dalı.
+  **⚠⚠ `bellek_serbest`(free) BİLEREK LİSTEDE YOK VE BU KRİTİK:** onu
+  hapsedilmiş saymak hem açık `free` hem bölge serbestını çalıştırırdı =
+  **ÇİFT SERBEST**. Liste *"işaretçi alan her yerleşik"* değil,
+  *"argümanını TUTMAYAN yerleşik"* demektir (D-459 disiplini).
+  - **⚠⚠ İKİ CAST KÖKÜ BİSECT'LE BULUNDU, akıl yürütmeyle DEĞİL.** memcpy
+    kuralından sonra `bolge_al_grow` HÂLÂ malloc yayıyordu. Üç küçük vaka:
+    tek işaretçi+memcpy GEÇİYOR, iki işaretçi+memcpy DÜŞÜYOR → kök
+    `ky_var_gecer`in `default: return 1` dalıydı. Onu onarınca `tam8` hâlâ
+    düşüyordu → aynı boşluk `ky_confined`de de vardı. **D-438'in "komşu
+    şekilleri ölç" dersi ÜÇÜNCÜ kez karşılığını verdi.**
+  - **KALAN 5 SIZINTI BAŞKA KÖKENDEN** (kapanış heap env ×3 · kanal tamponu ·
+    görev) — `bölge_al` ekseninde DEĞİL. "Hepsi halloldu" DEĞİL.
+    ⚠ Kapanış env'i **bilinçli** heap kopyasıdır (D-309); serbest bırakmak
+    *"kapanış artık ölü mü"* sorusunu ister — hapsedilme kanıtından FARKLI
+    ve daha zor bir soru, muhtemelen tasarım kararı.
+  - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
+    ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
 ### ⛔ D-490 (NEGATİF SONUÇ): QEMU zayıf belleği MODELLEMİYOR — kapı EKLENMEDİ
 D-489'un 1. sınırını (*"x86-TSO'da geçmek ARM64'te kanıt değildir"*) kapatmak
