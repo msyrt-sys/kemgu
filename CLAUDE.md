@@ -965,6 +965,74 @@ KEZ** saatlerce asılı kaldı (2.5 sa ve 1.5 sa). **Asılan kapı, sessiz kapı
 kadar kötüdür** — kimse onu koşturmaz. (`ag_kosum` D-466 ve `codegen_genis`
 D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
 
+### 🎯 D-487→D-489: sessiz atlama temizligi · escape v2 · DRF gorunurlugu
+- **D-487 — tum harness yuzeyi sessiz atlama icin tarandi.** D-486'yi tek
+  noktada birakmak yanlis olurdu. Uc kalinti, ucu de ÖLÇÜLDÜ: `ag_kosum`
+  dinleyicisi **meşru** (gerçek TCP karşı tarafı ortama bağlı, sertleştirmek
+  kapıyı ortam-kırılgan yapardı) · `lean_aksiyom` `test_tumu`da **değil** →
+  sahte yeşil üretmiyor · `check_kapisi` takımda **ve** hedefi ikiliye bağımlı
+  → **sertleştirildi**. O kapı D-486'dan **kıl payı** kurtulmuş: bir yedek
+  satırı doğru ikiliyi bulmuş — yani doğruluk **tasarım değil tesadüftü**.
+  **⚠ İlk sabotajım tetiklenmedi** ve "kapı zayıf" diye kaydedecektim; değildi,
+  yedek satırı kötü değeri geçersiz kılıyordu → **sabotaj yanlıştı** (D-402).
+  **`test_tumu` yüzeyinde sessiz atlama KALMADI.**
+
+- **🎯 D-488 — INTERPROCEDURAL PARAMETRE-TUTMA OZETI (escape v2).**
+  `f(xs)` çağrısında xs'in **hapsedilme kanıtı koşulsuz düşüyordu** → gerçek
+  programlarda ρ_yerel yönlendirmesi ~%1'e iniyordu:
+  ```
+  dosya          toplam  ÖNCE  SONRA  (tavan)
+  parser.kem        35      0     22     22
+  checker.kem      181      1     23     23
+  codegen.kem      267      3     25     25
+  regex.kem         27      1      2      5
+  ```
+  **YENİ ANALİZ İCAT EDİLMEDİ:** *"f, p'yi saklıyor mu?"* sorusu
+  `ky_confined(f.govde, param)` ile **birebir aynıdır** ve o yüklem 18-UAF
+  avından geçmiş makinedir. Kanıt çağrı yerine taşındı. Her eksende
+  **default-DENY**: bilinmeyen çağrılan · gövdesiz imza · **özyineleme** ·
+  yığın taşması · kurulmamış tablo → hepsi eski konservatif yola düşer.
+  - **⚠⚠ İKİ ÖLÇÜM HATASI, ikisi de "değmez" sonucuna götürüyordu.**
+    (1) **Yanlış düğmeyi ölçtüm:** `escape_kategori`nin arg-yükseltmesini
+    kapattım, hiçbir şey değişmedi — çünkü `bolge_yerel_yonlendir` onu
+    **hiç okumuyor**, `escape_kesin_yerel` okuyor.
+    (2) **Tavanı temsili olmayan korpusta ölçtüm:** 154 tahsisin 2'si (%1,3)
+    → "değmez" diye kaydedecektim. D-420: *kapsam sayısı yalnız ölçülen yüzey
+    kadar geniştir.*
+  - **⚠ Kendi uyarıma yakalandım:** tabloyu `escape_analiz_program`da kurdum ve
+    yorumuna "`escape_analiz_islev` doğrudan çağrılırsa tablo BOŞ kalır"
+    yazdım. Ölçtüm: derleyici `escape_analiz_program`ı **hiç çağırmıyor**.
+    Tablo arena-destekli program-genelinde statiğe çevrildi.
+  - **`regex` 2/5 KUSUR DEĞİL:** dizileri **yapı alanlarında** saklıyor
+    (`Regex.op: Dizi<tam32>`) → ρ_caller'da kalmaları DOĞRU. **Tavan bir hedef
+    değildir** — kontrolü tümüyle kapatan sağlamsız bir üst sınırdır.
+  - **🎯 YENİ YAPISAL KAPI `calistir_bolge_yonlendirme`** (1 yerel / 2 caller).
+    **⚠⚠ EN ÖNEMLİ ÖLÇÜM:** sağlamsız hâlde (S73b) program **exit 42** verdi ve
+    **ASan SIFIR bulgu** bastı — ρ_yerel serbestı `main` sonunda, okumalar
+    ondan önce. Yani bu kapı kaldırılırsa D-488'in sağlığını ölçen **hiçbir şey
+    kalmaz**. D-417'nin ampirik tekrarı: *"program doğru çalıştı" + "ASan
+    temiz" bir bellek-yönetimi özelliğinde YETERSİZ KANITTIR.*
+    Sabotaj **iki yönde** ayırt ediyor: devre dışı vs sağlamsız.
+
+- **🎯 D-489 — DRF: FENCE EMIT GEREKMİYOR (ölçüldü).** Roadmap "C++11 weak
+  memory fence emit" diyordu; ölçüm maddeyi DEĞİŞTİRDİ:
+  (a) `kdl_gorev_*`/`kdl_kanal_*` **declare'lerinde hiçbir nitelik yok** →
+  LLVM etraflarında yeniden sıralama yapamaz; (b) runtime **gerçek OS
+  primitifleri** kullanıyor (pthread mutex/condvar · CriticalSection) — bunlar
+  spec gereği tam bellek bariyeri. HB kenarları **zaten kuruluyor**.
+  **Asıl boşluk ÖLÇÜMDÜ:** Lean'de ispatlı (gerçek `sorry` **0**; ⚠
+  `SORRY_TRACKER.md` **BAYAT**, 47 diyor) ama çalışan derleyicide görünürlüğü
+  **hiçbir şey ölçmüyordu**. Yeni kapı `calistir_drf_gorunurluk`: sekiz
+  küresele yaz → kanala jeton → alıcıda sekizini oku (`-O2` bilerek).
+  Ayırt edicilik: senkronizasyonlu **0/300**, senkronizasyonsuz **300/300**.
+  - **⚠⚠ İKİ DÜRÜST SINIR (harness başlığında da yazılı):** x86-TSO **güçlü**
+    bir modeldir → ARM64'te doğruluk KANITLAMAZ (orada koşulamıyor: `görev`/
+    `kanal`ın bare-metal kullanımı **sıfır**) · senkronizasyonsuz karşı-örnek
+    **deterministik** düşüyor → bu ZAMANLAMA etkisidir, saf bellek-sıralama
+    değil.
+  - **⚠ Ölçüm aracım yine yanıldı:** `cmd || fail++` — bu testin BAŞARI KODU
+    **42**; 300/300 "başarısız" bastım ve bir an gerçek ihlal sandım.
+
 ### 🐧 D-485/D-486: BARE-METAL LINUX'TA + "yeşil takım" bir İDDİADIR
 `lld` + `qemu-system-x86` kurulunca bare-metal cephesi açıldı.
 - **D-485 `16#` bash'e özgü.** `kem_os_arm` LINCHPIN fazında düştü
