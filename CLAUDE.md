@@ -1019,6 +1019,43 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
+### 🎯 DEĞİŞMEZ AVI (D-497→D-505): altı eksen, dört açık, dördü de kapandı
+Yöntem: dilin **ilan ettiği her garantiyi** düşmanca şekillerle sınamak ve
+sonucu üç kategoriye ayırmak — derleme zamanı red (iyi) · çalışma zamanı
+panik (iyi) · **sessiz yanlış / UB (AÇIK)**.
+
+| Eksen | Sonuç |
+|---|---|
+| Buffer overflow | ✅ tutuyordu — `PANIK: dizi sınır ihlali (i=10, boyut=3)`; `metin_kes` kırpıyor, ASan temiz |
+| Null pointer | ✅ tutuyordu — runtime metin yerleşiklerini tutarlı NULL-koruyor |
+| Çökmezlik | 🔴 `a/0` → SIGFPE → **D-502** (panik) |
+| Lineer tipler | ✅ **en sağlam** — 5 kaçış yolunun 5'i (yapı alanı LR002 · referans L004 · dizi/kapanış/`sonuç` L001) |
+| Yetki | 🔴 `geri_al` sonrası ödünç → **D-503** (CP005) |
+| DRF | 🔴 iki görev aynı diziye yazıyor → **D-505** (L002) |
+
+**DÖRT AÇIĞIN ORTAK DESENİ — bu, avın asıl bulgusudur:**
+> Kural ya **belgede vardı** (R-YAKALAMA-THREAD spec'te yazılı, DRF Lean'de
+> ispatlı) ya da **mekanizma koddaydı** (CP005 tüketim yolunda çalışıyor,
+> `kdl_panik` dizi sınırında kullanılıyor). Eksik olan kural değil,
+> **kuralın SORULMADIĞI YERDİ.**
+> Bu yüzden dördünün üçü **yeni tanı kodu GEREKTİRMEDİ** (L002/CP005 yeniden
+> kullanıldı); yalnız D-499 (G006) yeni kod istedi ve o da Mehmet'in kararıydı.
+
+**⚠ PROBE'UN KENDİSİ SIK SIK YANLIŞTI — sonuç okunmadan önce probe ölçülmeli:**
+- `mantıksal olarak tam32` **E002** verir (örtük dönüşüm yok) → 3 probe geçersizdi
+- `metin_bayt` `tam8` döner, `dtam8` değil → T001
+- DRF'de ilk 3 probe **L001 ile maskelendi** (görev birleştirilmemişti)
+- DRF'de 4. probe **sıralı koştu** (birinci görev ikinciden ÖNCE birleştirildi)
+  → yarış hiç oluşmadı; ikisi de canlı olacak biçimde iç içe kurulunca çıktı
+- `-fsanitize=undefined` **ham IR girdisine kontrol EKLEMEZ** (UBSan C→IR
+  aşamasında enstrümante eder) → sıfıra bölmeyi maskeledi, `sdiv`i IR'da
+  okuyunca görüldü
+
+**⚠ ASan BU SINIFLARIN İKİSİNİ GÖRMÜYOR:** `ver &yerel` (D-497) ve sıfıra
+bölme — `detect_stack_use_after_return=1` ile bile sessiz. Yani bir güvenlik
+değişmezi için *"program çalıştı + ASan temiz"* **yetersiz kanıttır** (D-417
+ve D-488'in üçüncü tekrarı).
+
 ### ✅ D-504→D-505 KAPANDI: `görev` yakalaması artık SAHİPLİK TAŞIYOR
 **Mehmet seçenek (a)'yı seçti.** Spec'in kendi kuralı uygulandı — icat YOK:
 ```
