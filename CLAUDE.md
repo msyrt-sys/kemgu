@@ -1101,6 +1101,28 @@ thread'den `kanal_al`. Taban değer **stash ile** ölçüldü (0→1 = yeni).
 check_genis 133/133 · codegen_diff 157/157 · drf_gorunurluk 100/100 ·
 sıfır uyarı 38/0.
 
+
+**⚠⚠ TAM TAKIM İKİ KEZ DARALTTIRDI — hedefli kapılar yeşilken:**
+1. `drf_test` [38] → **gerileme DEĞİL**, sabitlenmiş V1 sınırı tam
+   tasarlandığı gibi kırmızıya döndü (beşinci kez; beklenti `h>=1` yapıldı).
+2. `stdlib_check` → **GERÇEK yanlış-pozitif**: `stdlib/bariyer.kem`.
+   `Bariyer`/`Semafor`/`Kilit` **kullanıcı YAPISIDIR** (opak `metin` handle
+   sarmalar) ve threadler arası **senkronizasyon için TASARLANMIŞTIR** —
+   tip kategorisiyle `Dizi<T>`den ayırt edilemezler.
+
+**SONUÇ — KURAL `Dizi<T>` İLE SINIRLANDI** (ölçüme dayalı üç gerekçe):
+- `metin` **DEĞİŞMEZ** (yerinde yazma API'si YOK; `metin_*` hepsi yeni metin
+  döndürür) → paylaşımı güvenli, taşıma gereksiz
+- sync primitifleri kullanıcı yapısıdır ve paylaşım **kasıtlıdır**
+- `Dizi<T>` yerinde mutasyona uğrar (`dizi_yaz`) + heap-paylaşılır →
+  D-504'ün ölçtüğü yarış **tam olarak budur**
+
+**⚠ KALAN AÇIK (dürüstçe):** `Dizi<T>` **İÇEREN** bir kullanıcı yapısı iki
+göreve yakalanırsa hâlâ yakalanmaz. Kapatmak için dilde *"bu tip
+paylaşılabilir"* işareti gerekir (Rust'ın `Send`/`Sync`'i gibi) — **dil
+yüzeyi kararı, icat edilmedi.** Bu artım ÖLÇÜLEN açığı kapatır, hepsini
+değil.
+
 **⚠ SINIR (dürüstçe):** kural YALNIZ `görev_başlat`ın DOĞRUDAN lambda
 argümanını tarar. Ada bağlı kapanış (`değişken f = || …; görev_başlat(f)`)
 bu yoldan geçmez — G005 orayı ayrıca kapsıyor ama taşıma işaretlenmez.

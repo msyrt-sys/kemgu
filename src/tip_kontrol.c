@@ -870,6 +870,23 @@ static int yakalama_isaretci_benzeri(const TipBilgisi *t) {
  * ⚠ `yakalama_isaretci_benzeri` DEGISTIRILMEDI: onu G005 de okuyor ve orada
  *   kanal ISARETCIDIR (kacan closure'da hala tehlikeli). Ayni tabloyu iki
  *   tuketici farkli doğrulukta okuyorsa birini digerine mahkum etme (D-439). */
+/* [D-505 daraltma] TASIMA YALNIZ `Dizi<T>` ICIN. Olculdu:
+   - `metin` DEGISMEZ (yerinde yazma API'si YOK: metin_* hepsi YENI metin
+     dondurur) -> paylasimi guvenli, tasima GEREKSIZ.
+   - `Bariyer`/`Semafor`/`Kilit` KULLANICI YAPISIDIR (opak `metin` handle
+     sarmalar) ve threadler arasi SENKRONIZASYON icin TASARLANMISTIR.
+     Ilk surum bunlari reddetti -> `stdlib_check` KIRMIZI (olculdu).
+   - `Dizi<T>` yerinde MUTASYONA ugrar (`dizi_yaz`) ve heap-destekli
+     paylasilir -> D-504'un olctugu yaris TAM OLARAK budur.
+
+   ⚠ KALAN ACIK (durustce): `Dizi<T>` ICEREN bir KULLANICI YAPISI iki goreve
+   yakalanirsa hala yakalanmaz. Kapatmak icin dilde "bu tip paylasilabilir"
+   isareti gerekir (Rust'in Send/Sync'i gibi) — DIL YUZEYI karari, icat
+   edilmedi. Bu artim OLCULEN acigi kapatir, hepsini degil. */
+static int gorev_tasima_gerekli(const TipBilgisi *t) {
+    return t && t->kategori == TIP_DIZI;
+}
+
 static int gorev_tasima_muaf(const TipBilgisi *t) {
     if (!t) return 0;
     if (t->kategori == TIP_KANAL) return 1;
@@ -894,8 +911,8 @@ static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
          * isaretle (tarama sirasinda isaretlemek ayni lambda icindeki
          * ikinci kullanimi sahte L002 yapardi). */
         if (tk->gorev_kapanis_derinlik > 0
-            && !(sem && gorev_tasima_muaf(sem->tip))
-            && (!sem || yakalama_isaretci_benzeri(sem->tip))
+            && sem && gorev_tasima_gerekli(sem->tip)
+            && !gorev_tasima_muaf(sem->tip)
             && tk->tasinan_sayi < 64) {
             int zaten = 0;
             for (int i = 0; i < tk->tasinan_sayi; i++) {

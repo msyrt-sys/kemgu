@@ -4552,8 +4552,17 @@ işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> 
         eğer g005_govde_bildirimi_mi(p, govde, ad) { ver 0; }
         eğer g005_yerel_mi(p, ad) == yanlış { ver 0; }
         değişken vt: metin = var_tip(p, ad);
+        // [D-505 daraltma] TAŞIMA YALNIZ `Dizi<T>` İÇİN — ölçüldü:
+        //   `metin` DEĞİŞMEZ (yerinde yazma API'si yok) → paylaşımı güvenli
+        //   `Bariyer`/`Semafor`/`Kilit` KULLANICI YAPISIDIR ve threadler arası
+        //     senkronizasyon için TASARLANMIŞTIR (ilk sürüm reddetti →
+        //     `stdlib_check` KIRMIZI)
+        //   `Dizi<T>` yerinde mutasyona uğrar + heap-paylaşılır → D-504'ün
+        //     ölçtüğü yarış TAM OLARAK budur
+        // ⚠ KALAN AÇIK: `Dizi<T>` İÇEREN kullanıcı yapısı hâlâ yakalanmaz;
+        //   kapatmak için dilde "paylaşılabilir" işareti gerekir (dil yüzeyi).
+        eğer metin_baslar(vt, "Dizi<") == yanlış { ver 0; }
         eğer gtas_muaf_tip_mi(vt) { ver 0; }
-        eğer g005_skaler_tip_mi(vt) { ver 0; }
         eğer gtas_var_mi(p, ad) == yanlış { dizi_ekle(p.gtas_ad, ad); }
         ver 0;
     }
