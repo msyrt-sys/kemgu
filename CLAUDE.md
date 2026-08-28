@@ -1019,6 +1019,50 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
+### 🔴🔴 AÇIK BULGU (D-504): güvenli kodda GERÇEK VERİ YARIŞI — karar Mehmet'te
+Değişmez avının 6. ve son ekseni (**DRF**) en ciddi açığı buldu.
+
+**ÖLÇÜLDÜ — hiç `güvensiz` yok, `--check` SIFIR tanı veriyor:**
+```
+iki görev AYNI Dizi<tam32>'e 50.000'er artırma
+beklenen 100000 · gözlenen 62868 / 58426 / 71619   → %30-40 KAYIP
+8/8 koşumda kayıp güncelleme
+```
+`Dizi<T>` heap-desteklidir (`KdlDizi*`) ve kapanış env'i **işaretçiyi
+kopyalar** → iki görev AYNI tamponu yazar.
+
+**KÖK — kodun KENDİ yorumunda yazılı.** `escape.c:315` `görev_başlat(|| …)`
+lambdalarını G005'ten MUAF tutuyor, gerekçe:
+> *"görev'in KENDİ sahiplik modeli (R-YAKALAMA-THREAD) vardır"*
+
+**Ama o model UYGULANMAMIŞ.** D-496'nın birebir aynı deseni: belgelenen bir
+koruma pratikte yok. Farkı, buradaki sonucun **gerçek bir veri yarışı** olması.
+
+**⚠ BU BİR TASARIM SORUSU DEĞİL — SPEC İLE UYGULAMA ARASINDA BOŞLUK.**
+`KEMGU_Bellek_Modeli.md` kuralı zaten tanımlamış (satır 144, 323):
+```
+∀ vᵢ ∈ YD(c) : sahiplik_transfer(vᵢ, ρ_yeni)    [R-YAKALAMA-THREAD]
+"Closure yakalama: → move → kaynak erişim kaybeder ∎"
+```
+`∎` = DRF sağlamlık ispatının parçası. Yani **Lean'de ispatlanan teoremin
+ÖNCÜLÜ derleyicide zorlanmıyor.**
+
+**ETKİ ALANI ÖLÇÜLDÜ:** 20 dosya `görev_başlat` kullanıyor; kaba tarama
+hiçbirinin kapanışta işaretçi-benzeri yakalamadığını gösteriyor → onarımın
+korpusu kırma riski düşük (kesin sayı ölçülmedi).
+
+**SEÇENEKLER:**
+- **(a) R-YAKALAMA-THREAD'i uygula, İŞARETÇİ-benzeri yakalamayla DARALT.**
+  Yakalanan `Dizi`/`metin`/`&T`/yapı **taşınır** (tüketilir) → sonraki
+  kullanım mevcut **L002**. Skaler yakalama etkilenmez (kopya, yarışamaz).
+  Bu daraltma G005'in kendi D-323 daraltmasının aynısı. **Yeni tanı kodu YOK.**
+- **(b) Yeni DRF kodu** ("iki görev arasında paylaşılan yakalama").
+- **(c) Bilinçli sınır olarak belgele** — ama o zaman *"veri yarışı yok"*
+  iddiası ve Lean teoremi bu boşlukla birlikte okunmalı.
+
+**Önerim (a):** spec'in kendi kuralı, mevcut lineer makine yeterli, yeni kod
+gerekmiyor, ve daraltma deponun kendi emsaline (D-323) dayanıyor.
+
 ### 🎯 D-503: iptal edilmiş yetki ÖDÜNÇ ALINAMAZ (değişmez avının 5. ekseni)
 **ÖLÇÜLEN AÇIK:** `geri_al(y)` **sonrası** `mmio_yaz32(y, …)` `--check`ten
 **TEMİZ** geçiyordu — iptal edilmiş yetkiyle **donanıma yazma**. Yetki
