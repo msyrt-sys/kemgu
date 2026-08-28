@@ -505,15 +505,22 @@ static void T37_dizi_yakala_pozitif(void) {
                h == 0);
 }
 
-static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
-    /* D38: V1 KNOWN-LIMIT — non-linear capture sonrası çağıran thread'in
-     * yakalanan Dizi'ye erişimi V1 tip kontrolünde yakalanmıyor.
-     * V2 hedefi (Plan §9 risk tablosu: inter-procedural escape analizi):
-     * R-YAKALAMA-THREAD'in compile-time enforcement'i Dizi/yapı için
-     * bölge sahipliği transferi sonrası ihlal hata vermeli.
+static void T38_dizi_yakala_sonrasi_erisim(void) {
+    /* [D-505] KAPANDI — bu test V1 SINIRINI sabitliyordu ve tam tasarlandığı
+     * gibi kırmızıya dönüp kendini bildirdi. Eski yorumu aynen koruyorum:
+     *   "V2 hedefi: R-YAKALAMA-THREAD'in compile-time enforcement'i ...
+     *    V1 davranışı: 0 hata ... V2'de h >= 1 olmalıdır."
+     * Beklenti artık h >= 1.
      *
-     * V1 davranışı: 0 hata (V1 tip kontrol bu pattern'i yakalamıyor).
-     * Bu test V1 sınırını dokümante eder; V2'de h >= 1 olmalıdır. */
+     * ⚠ D-504'te ÖLÇÜLEN AÇIK: iki görev aynı Dizi<tam32>'e yazıyordu, hiç
+     * `güvensiz` yoktu, --check SIFIR tanı veriyordu; çalışma zamanında
+     * 100000 yerine 62868/58426/71619 (8/8 koşumda kayıp).
+     * D-505 spec'in kendi kuralını uyguladı (Bellek Modeli sat.144):
+     *   ∀ v ∈ YD(c) : sahiplik_transfer(v, ρ_yeni)
+     * Raporlanan kod L002 (yeni tanı kodu YOK).
+     *
+     * Sabitlenen-bilinen-yanlış deseninin BEŞİNCİ başarılı kullanımı
+     * (D-441/D-443/D-449/D-454/burası). */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
         "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]) {\n"
@@ -521,9 +528,9 @@ static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
         "        hata(e) => {}\n"
         "    }\n"
         "    de\xc4\x9fi\xc5\x9fken s: tam32 = xs[1];\n");
-    test_sonuc("D38: Dizi capture sonrasi erisim V1 KNOWN-LIMIT "
-               "(V1: 0 hata, V2: hata bekleniyor)",
-               h == 0);
+    test_sonuc("D38: Dizi capture sonrasi erisim -> L002 "
+               "(D-505: R-YAKALAMA-THREAD uygulandi)",
+               h >= 1);
 }
 
 static void T39_dondur_idempotent_degil(void) {
@@ -767,7 +774,7 @@ int main(void) {
 
     /* D37-D39: Patch P2 — non-linear capture + dondur idempotency */
     T37_dizi_yakala_pozitif();
-    T38_dizi_yakala_sonrasi_erisim_v1_limit();
+    T38_dizi_yakala_sonrasi_erisim();
     T39_dondur_idempotent_degil();
 
     /* D40-D44: kanal_oluştur (R-KANAL kurucusu — D-292) */
