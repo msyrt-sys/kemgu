@@ -107,6 +107,22 @@ typedef struct TipKontrol {
                                       oldugu icin skaler yakalama (deger kopyasi)
                                       cerceve asiminda dangling URETEMEZ; isaretci
                                       kopyasi ise gosterdigi bolgeyi asabilir. */
+    /* [D-505] R-YAKALAMA-THREAD (Bellek Modeli sat.144/323):
+     * gorev_baslat kapanisi ISARETCI-benzeri yakaladiginda SAHIPLIK THREADE
+     * TASINIR -> kaynak erisimi kaybeder. Spec ZATEN boyle diyordu ( DRF
+     * saglamlik ispatinin parcasi) ama UYGULANMAMISTI: iki gorev ayni
+     * Dizi<T>ye yaziyordu ve --check SIFIR tani veriyordu (D-504: 100000
+     * yerine 62868 gozlendi).
+     * ⚠ SKALER YAKALAMA ETKILENMEZ (D-323 daraltmasinin AYNISI): env HEAP
+     *   kopyasidir, skaler kopya YARISAMAZ.
+     * gorev_kapanis_derinlik: gorev_baslat argumani kontrol edilirken >0.
+     * tasinan_*: lambda TARANIRKEN toplanir, lambda BITINCE isaretlenir
+     *   (tarama sirasinda isaretlemek ayni lambda icindeki 2. kullanimi
+     *    sahte L002 yapardi). */
+    int gorev_kapanis_derinlik;
+    const char *tasinan_ad[64];
+    int tasinan_uz[64];
+    int tasinan_sayi;
     Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
     /* G005: aktif islev govdesinin escape analizi (forward DFA, src/escape.c).
      * DUGUM_ISLEV govde kontrolu sirasinda kurulur; lambda case ESC_CAGIRAN

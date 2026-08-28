@@ -1019,49 +1019,54 @@ D-468 ile birlikte bu sınıfın ÜÇÜNCÜ örneği.)
   - Sağlamlık korundu: kaçan işaretçi HÂLÂ `malloc`ta ve kapı bunu ayrıca
     ölçer (`bölge_al: ρ_yerel=1 malloc=1`).
 
-### 🔴🔴 AÇIK BULGU (D-504): güvenli kodda GERÇEK VERİ YARIŞI — karar Mehmet'te
-Değişmez avının 6. ve son ekseni (**DRF**) en ciddi açığı buldu.
-
-**ÖLÇÜLDÜ — hiç `güvensiz` yok, `--check` SIFIR tanı veriyor:**
+### ✅ D-504→D-505 KAPANDI: `görev` yakalaması artık SAHİPLİK TAŞIYOR
+**Mehmet seçenek (a)'yı seçti.** Spec'in kendi kuralı uygulandı — icat YOK:
 ```
-iki görev AYNI Dizi<tam32>'e 50.000'er artırma
-beklenen 100000 · gözlenen 62868 / 58426 / 71619   → %30-40 KAYIP
-8/8 koşumda kayıp güncelleme
+∀ vᵢ ∈ YD(c) : sahiplik_transfer(vᵢ, ρ_yeni)   [R-YAKALAMA-THREAD]
 ```
-`Dizi<T>` heap-desteklidir (`KdlDizi*`) ve kapanış env'i **işaretçiyi
-kopyalar** → iki görev AYNI tamponu yazar.
+`KEMGU_Bellek_Modeli.md` sat.144/323. **Yeni tanı kodu YOK** — mevcut **L002**.
 
-**KÖK — kodun KENDİ yorumunda yazılı.** `escape.c:315` `görev_başlat(|| …)`
-lambdalarını G005'ten MUAF tutuyor, gerekçe:
-> *"görev'in KENDİ sahiplik modeli (R-YAKALAMA-THREAD) vardır"*
+**KAPANAN AÇIK (D-504):** iki görev aynı `Dizi<tam32>`'e yazıyordu, hiç
+`güvensiz` yoktu, `--check` sıfır tanı veriyordu; çalışma zamanında 100000
+yerine **62868 / 58426 / 71619** (8/8 koşumda kayıp). Artık **L002**.
 
-**Ama o model UYGULANMAMIŞ.** D-496'nın birebir aynı deseni: belgelenen bir
-koruma pratikte yok. Farkı, buradaki sonucun **gerçek bir veri yarışı** olması.
+**İKİ BİLİNÇLİ DARALTMA — ikisi de fikstürde POZİTİF olarak ölçülüyor:**
+- **Skaler yakalama muaf:** env HEAP kopyasıdır, skaler kopya yarışamaz
+  (G005'in kendi D-323 daraltmasının aynısı).
+- **`kanal<T>` muaf:** threadler arası paylaşım için TASARLANMIŞTIR; R-KANAL
+  transferi kanal **yükü** içindir, kanalın **kendisi** için değil.
+  **⚠ Muafiyet AYRI yüklemle** (`gorev_tasima_muaf`) — `yakalama_isaretci_benzeri`
+  DEĞİŞTİRİLMEDİ, çünkü onu G005 de okuyor ve orada kanal hâlâ işaretçidir
+  (kaçan closure'da tehlikeli). *Aynı tabloyu iki tüketici farklı doğrulukta
+  okuyorsa birini diğerine mahkûm etme* (D-439).
 
-**⚠ BU BİR TASARIM SORUSU DEĞİL — SPEC İLE UYGULAMA ARASINDA BOŞLUK.**
-`KEMGU_Bellek_Modeli.md` kuralı zaten tanımlamış (satır 144, 323):
-```
-∀ vᵢ ∈ YD(c) : sahiplik_transfer(vᵢ, ρ_yeni)    [R-YAKALAMA-THREAD]
-"Closure yakalama: → move → kaynak erişim kaybeder ∎"
-```
-`∎` = DRF sağlamlık ispatının parçası. Yani **Lean'de ispatlanan teoremin
-ÖNCÜLÜ derleyicide zorlanmıyor.**
+**⚠ MUAFİYET ÖLÇÜMLE BULUNDU, TASARLANMADI:** ilk sürüm **üç gerçek programı**
+reddetti (`cg_gorev_kanal` · `cg_rho_sahip_kacis` · **kendi D-489 kapı
+fikstürüm** `drf_gorunurluk`). Üçü de aynı şekil: kanalı göreve yakala, ana
+thread'den `kanal_al`. Taban değer **stash ile** ölçüldü (0→1 = yeni).
 
-**ETKİ ALANI ÖLÇÜLDÜ:** 20 dosya `görev_başlat` kullanıyor; kaba tarama
-hiçbirinin kapanışta işaretçi-benzeri yakalamadığını gösteriyor → onarımın
-korpusu kırma riski düşük (kesin sayı ölçülmedi).
+**⚠⚠ ÜÇ UYGULAMA HATASI, üçü de ölçümle yakalandı:**
+1. **SEGFAULT (exit 139).** `TipKontrol` alanları **tek tek** başlatılıyor
+   (`memset`/`arena_ayir_sifir` DEĞİL) → eklediğim `tasinan_sayi` çöp okundu.
+   Deponun kendi kuralı (*"`arena_ayir_sifir` tercih et"*) tam bunu uyarıyordu.
+2. **Self-host lambdanın KENDİ gövdesini suçladı** (fazladan L002 23:42/33:42):
+   işaretlemeyi gövde gezilmeden ÖNCE yapıyordum → çağrı çocukları
+   gezildikten SONRAYA taşındı.
+3. **`fad` kapsam dışı** (T002): iki çıkış noktasından biri onu görmüyor →
+   yardımcı çağrılan adını kendisi türetiyor.
 
-**SEÇENEKLER:**
-- **(a) R-YAKALAMA-THREAD'i uygula, İŞARETÇİ-benzeri yakalamayla DARALT.**
-  Yakalanan `Dizi`/`metin`/`&T`/yapı **taşınır** (tüketilir) → sonraki
-  kullanım mevcut **L002**. Skaler yakalama etkilenmez (kopya, yarışamaz).
-  Bu daraltma G005'in kendi D-323 daraltmasının aynısı. **Yeni tanı kodu YOK.**
-- **(b) Yeni DRF kodu** ("iki görev arasında paylaşılan yakalama").
-- **(c) Bilinçli sınır olarak belgele** — ama o zaman *"veri yarışı yok"*
-  iddiası ve Lean teoremi bu boşlukla birlikte okunmalı.
+**SIFIR YANLIŞ-POZİTİF:** 631 dosya tarandı; L002 veren 8 dosyanın **hepsi
+önceden var olan** kasıtlı fikstür (11 → 3 muafiyetle → 8, taban ile tutarlı).
 
-**Önerim (a):** spec'in kendi kuralı, mevcut lineer makine yeterli, yeni kod
-gerekmiyor, ve daraltma deponun kendi emsaline (D-323) dayanıyor.
+**Sabotaj 2/2:** S85 (C) → fikstür `OK`, yarış geri geldi · S86 (self) →
+`checker_diff` 165→164.
+**Kapılar:** checker_diff **165/165 (0 muaf)** · check_kapisi 262/269 (0 RED) ·
+check_genis 133/133 · codegen_diff 157/157 · drf_gorunurluk 100/100 ·
+sıfır uyarı 38/0.
+
+**⚠ SINIR (dürüstçe):** kural YALNIZ `görev_başlat`ın DOĞRUDAN lambda
+argümanını tarar. Ada bağlı kapanış (`değişken f = || …; görev_başlat(f)`)
+bu yoldan geçmez — G005 orayı ayrıca kapsıyor ama taşıma işaretlenmez.
 
 ### 🎯 D-503: iptal edilmiş yetki ÖDÜNÇ ALINAMAZ (değişmez avının 5. ekseni)
 **ÖLÇÜLEN AÇIK:** `geri_al(y)` **sonrası** `mmio_yaz32(y, …)` `--check`ten

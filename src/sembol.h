@@ -57,6 +57,10 @@ typedef struct Sembol {
      * scope sonunda 0 = L001. */
     int lineer_tuketildi;          /* 0 = henuz tuketilmedi; 1+ = tuketim sayisi */
     int lineer_scope_seviyesi;     /* tanim aninda scope derinligi */
+    /* [D-505] R-YAKALAMA-THREAD: bu baglama bir gorev kapanisina ISARETCI
+     * olarak yakalandi -> SAHIPLIK THREAD E TASINDI, kaynak erisimi kaybetti.
+     * Bellek Modeli sat.144: forall v in YD(c): sahiplik_transfer(v, rho_yeni). */
+    int gorev_tasindi;
     /* D-315 (Linear V2.1) — KISMI TASIMA: `yapı tekkez` baglamasinin hangi
      * LINEER alanlari disari tasindi (bit i = i. alan). 32 alandan fazlasi
      * icin kismi tasima muhafazakar reddedilir (maske tasar). 0 = el degmemis. */

@@ -126,6 +126,10 @@ yapı Ayr {
     lin_maske: Dizi<tam32>;  // D-316: kısmi taşıma — hangi lineer alanlar taşındı (bit)
     lin_fnk: Dizi<tam32>;    // D-321: bağlama tekkez<işlev(...)> mü (LC-3 çağrı tüketimi)
     lin_yet: Dizi<tam32>;    // D-365: 1 = bağlama `yetki<R>` — L001/L002/L004 yerine CP005
+    // [D-505] R-YAKALAMA-THREAD: sahipliği görev thread'ine TAŞINMIŞ bağlama
+    // ADLARI. `yerel`e PARALEL DİZİ DEĞİL — 3 kayıt noktası ve 16 paralel dizi
+    // var, 12'ncisini eklemek kırılgan olurdu. İşlev girişinde sıfırlanır.
+    gtas_ad: Dizi<metin>;
     lin_tek: Dizi<tam32>;    // D-355: 1 = bağlamanın KESİN `yapı tekkez` olduğu biliniyor.
                              // 0 = tekkez<T> VEYA bilinmiyor (annotasyonsuz `değişken k =
                              // tekkez_olustur(..)` de 0) → L007 YALNIZ 1'de verilir.
@@ -1821,7 +1825,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_rlin: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -4522,6 +4526,64 @@ işlev g005_ptr_yakalar_mi(p: &değişken Ayr, node: tam32, lam: tam32, govde: t
     }
     ver yanlış;
 }
+// [D-505] Sahipliği göreve TAŞINMIŞ bir ad mı?
+işlev gtas_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.gtas_ad) {
+        eğer metin_esit(dizi_al(p.gtas_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// [D-505] `kanal<T>` MUAF: threadler arası paylaşım için TASARLANMIŞTIR
+// (R-KANAL transferi kanal YÜKÜ içindir, kanalın KENDİSİ için değil).
+// ⚠ `g005_skaler_tip_mi` DEĞİŞTİRİLMEDİ: onu G005 de okuyor ve orada kanal
+// hâlâ işaretçidir (kaçan closure'da tehlikeli) — D-439'un dersi.
+işlev gtas_muaf_tip_mi(t: metin) -> mantıksal {
+    ver metin_baslar(t, "kanal<");
+}
+// [D-505] `g005_ptr_yakalar_mi`nin İKİZİ: BULMAK yerine TOPLAR.
+işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> tam32 {
+    eğer node < 0 { ver 0; }
+    değişken t: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken ad: metin = dizi_al(p.a_deg, node);
+        eğer g005_lam_param_mi(p, lam, ad) { ver 0; }
+        eğer g005_govde_bildirimi_mi(p, govde, ad) { ver 0; }
+        eğer g005_yerel_mi(p, ad) == yanlış { ver 0; }
+        değişken vt: metin = var_tip(p, ad);
+        eğer gtas_muaf_tip_mi(vt) { ver 0; }
+        eğer g005_skaler_tip_mi(vt) { ver 0; }
+        eğer gtas_var_mi(p, ad) == yanlış { dizi_ekle(p.gtas_ad, ad); }
+        ver 0;
+    }
+    eğer metin_esit(t, "LAMBDA") { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, node);
+    değişken cs: tam32 = dizi_al(p.a_cs, node);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        gtas_topla(p, dizi_al(p.cocuk, cb + i), lam, govde);
+        i = i + 1;
+    }
+    ver 0;
+}
+// [D-505] `görev_başlat(|| ..)` ise yakalananları TAŞINMIŞ işaretle.
+// ⚠ ÇAĞRI ÇOCUKLARI GEZİLDİKTEN SONRA çağrılmalı: önce çağrılırsa lambdanın
+// KENDİ gövdesindeki kullanım sahte L002 alır (ölçüldü: checker_diff 163/165,
+// fazladan L002 23:42 ve 33:42 — lambdaların İÇİ).
+// ⚠ ÇAĞRILAN ADINI KENDİSİ TÜRETİR: iki çağrı yerinden biri `fad`in kapsamı
+// DIŞINDA (o `eğer` bloğunda tanımlı) — T002 ile ölçüldü.
+işlev gtas_gorev_isaretle(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken h0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+    eğer metin_esit(dizi_al(p.a_ad, h0), "TANIMLAYICI") == yanlış { ver 0; }
+    eğer metin_esit(dizi_al(p.a_deg, h0), "görev_başlat") == yanlış { ver 0; }
+    değişken glam: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+    eğer metin_esit(dizi_al(p.a_ad, glam), "LAMBDA") == yanlış { ver 0; }
+    değişken ggv: tam32 = son_cocuk(p, glam);
+    eğer ggv >= 0 { gtas_topla(p, ggv, glam, ggv); }
+    ver 0;
+}
 işlev g005_lam_ptr_mi(p: &değişken Ayr, lam: tam32) -> mantıksal {
     değişken cb: tam32 = dizi_al(p.a_cb, lam);
     değişken cs: tam32 = dizi_al(p.a_cs, lam);
@@ -4969,6 +5031,12 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             // blokta. Yerel bir bağlama aynı adı gölgeliyorsa küresel ÇÖZÜLMEZ (C:
             // sembol tablosu yereli kazandırır) → E010 yok. C hata verse de akışı
             // KESMEZ (t_hata dönmez) — burada da devam ediyoruz.
+            // [D-505] Sahipliği göreve TAŞINMIŞ bağlamaya erişim = L002.
+            eğer gtas_var_mi(p, nm) {
+                dizi_ekle(p.th_kod, "L002");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+            }
             eğer (p.guv_bag == 0) ve kuresel_ad_mi(p, nm) ve (yerel_var_mi(p, nm) == yanlış) {
                 dizi_ekle(p.th_kod, "E010");
                 dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
@@ -5198,6 +5266,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                     g003_kontrol(p, fad, a - 1, arg);   // D-358: C sırası — lineer tüketimden SONRA
                     a = a + 1;
                 }
+                gtas_gorev_isaretle(p, idx);   // [D-505] gövde gezildi
                 ver 0;
             }
         }
@@ -5207,6 +5276,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         // deseni; görev'in kendi R-YAKALAMA-THREAD sahiplik modeli var). Ada BAĞLI
         // lambda muaf DEĞİL (`değişken f = || s; al(f)` → G005; ölçüldü).
         iken k < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + k)); k = k + 1; }
+        gtas_gorev_isaretle(p, idx);   // [D-505] gövde gezildi
         ver 0;
     }
     // ATAMA: T022 (lvalue) önce → hedef T002 → değer T002 → T001 (tip uyumsuz).
@@ -5511,6 +5581,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
             pa = dizi_al(p.a_ad, pc);
         }
         p.yerel_basla = dizi_boyut(p.yerel);
+        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
         eğer metin_esit(pa, "YAPI") veya metin_esit(pa, "CESIT") { kontrol_yapi_alanlari(p, pc); }
         i = i + 1;
     }
@@ -5523,6 +5594,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
             fa = dizi_al(p.a_ad, fc);
         }
         p.yerel_basla = dizi_boyut(p.yerel);
+        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
         eğer metin_esit(fa, "ISLEV") { kontrol_imza(p, fc); }
         i = i + 1;
     }
@@ -5533,12 +5605,14 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
         değişken ad: metin = dizi_al(p.a_ad, c);
         eğer metin_esit(ad, "ISLEV") {
             p.yerel_basla = dizi_boyut(p.yerel);
+        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
             yerel_topla(p, c);
             kontrol_govde(p, c);
         } değilse {
             // D-253: KURESEL init'i SABIT gibi denetlenir (üst-düzey, yerel yok).
             eğer metin_esit(ad, "SABIT") veya metin_esit(ad, "KURESEL") {
                 p.yerel_basla = dizi_boyut(p.yerel);
+        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
                 kontrol_dugum(p, c);
             } değilse {
                 eğer metin_esit(ad, "MODUL") { kontrol_ust(p, c); }
@@ -5549,6 +5623,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
                             değişken ic: tam32 = dizi_al(p.cocuk, dcb);
                             eğer metin_esit(dizi_al(p.a_ad, ic), "ISLEV") {
                                 p.yerel_basla = dizi_boyut(p.yerel);
+        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
                                 yerel_topla(p, ic); kontrol_govde(p, ic);
                             }
                         }

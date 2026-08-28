@@ -21,6 +21,12 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
+    /* [D-505] ⚠ BU ALANLAR BASLATILMAZSA COP OLUR: TipKontrol tek tek
+     * baslatiliyor (memset/arena_ayir_sifir DEGIL) -> eklenen her alan
+     * ACIKCA sifirlanmali. Atlandiginda `tasinan_sayi` cop okundu ve
+     * --checkdump SEGFAULT verdi (exit 139, olculdu). */
+    tk->gorev_kapanis_derinlik = 0;
+    tk->tasinan_sayi = 0;
     tk->ciplak_baglam = 0;   /* D-257 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
@@ -855,6 +861,22 @@ static int yakalama_isaretci_benzeri(const TipBilgisi *t) {
     }
 }
 
+/* [D-505] R-YAKALAMA-THREAD MUAFIYETI: `kanal<T>` (ve yon uclari) THREADLER
+ * ARASI PAYLASIM ICIN TASARLANMISTIR — gorev kapanisi kanali yakalar, ana
+ * thread ayni kanaldan `kanal_al` yapar; bu AMACLANAN desendir (R-KANAL
+ * aksiyomu transferi KANAL YUKU icin tanimlar, KANALIN KENDISI icin degil).
+ * OLCULDU: muafiyet olmadan UC gercek program yanlis-pozitif aldi
+ * (cg_gorev_kanal · cg_rho_sahip_kacis · drf_gorunurluk).
+ * ⚠ `yakalama_isaretci_benzeri` DEGISTIRILMEDI: onu G005 de okuyor ve orada
+ *   kanal ISARETCIDIR (kacan closure'da hala tehlikeli). Ayni tabloyu iki
+ *   tuketici farkli doğrulukta okuyorsa birini digerine mahkum etme (D-439). */
+static int gorev_tasima_muaf(const TipBilgisi *t) {
+    if (!t) return 0;
+    if (t->kategori == TIP_KANAL) return 1;
+    if (t->kategori == TIP_TEKKEZ) return gorev_tasima_muaf(t->veri.tekkez.ic);
+    return 0;
+}
+
 static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
     if (!d || d->tip != DUGUM_TANIMLAYICI) return;
     if (!tk->lambda_govdesi_icinde) return;
@@ -867,6 +889,26 @@ static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
         /* Sembol/tip cozulemezse isaretci VARSAY (default-deny). */
         if (!sem || yakalama_isaretci_benzeri(sem->tip))
             tk->lambda_yakalama_isaretci = 1;
+        /* [D-505] R-YAKALAMA-THREAD: gorev kapanisina ISARETCI-benzeri
+         * yakalama SAHIPLIGI THREADE TASIR. Simdi TOPLA, lambda BITINCE
+         * isaretle (tarama sirasinda isaretlemek ayni lambda icindeki
+         * ikinci kullanimi sahte L002 yapardi). */
+        if (tk->gorev_kapanis_derinlik > 0
+            && !(sem && gorev_tasima_muaf(sem->tip))
+            && (!sem || yakalama_isaretci_benzeri(sem->tip))
+            && tk->tasinan_sayi < 64) {
+            int zaten = 0;
+            for (int i = 0; i < tk->tasinan_sayi; i++) {
+                if (tk->tasinan_uz[i] == d->veri.tanimlayici.uzunluk
+                    && memcmp(tk->tasinan_ad[i], d->veri.tanimlayici.metin,
+                              (size_t)tk->tasinan_uz[i]) == 0) { zaten = 1; break; }
+            }
+            if (!zaten) {
+                tk->tasinan_ad[tk->tasinan_sayi] = d->veri.tanimlayici.metin;
+                tk->tasinan_uz[tk->tasinan_sayi] = d->veri.tanimlayici.uzunluk;
+                tk->tasinan_sayi++;
+            }
+        }
     }
 }
 
@@ -2506,6 +2548,18 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * baglamalar otomatik 'yakalama' sayilir → consume + closure
              * tipi tekkez<...> olarak isaretlenir (LC-2). */
             lineer_yakalama_kontrol(tk, d);
+            /* [D-505] R-YAKALAMA-THREAD: sahipligi gorev thread'ine TASINMIS
+             * baglamaya erisim = use-after-move. Mevcut L002 (yeni kod YOK).
+             * ⚠ KAPANIS TARANIRKEN BILDIRILMEZ (gorev_kapanis_derinlik > 0):
+             *   o sirada isaretleme HENUZ yapilmadi, ama IKINCI bir gorev
+             *   kapanisi ayni degiskeni yakalarsa BIRINCISI isaretlenmis olur
+             *   -> orada BILDIRILIR (D-504'un olctugu yaris sekli tam budur).
+             * ⚠ SKALER YAKALAMA HIC ISARETLENMEZ -> burasi onlari gormez. */
+            if (s->gorev_tasindi && tk->lineer_sondaj == 0) {
+                tip_hata(tk, d, "L002",
+                    "sahipligi goreve tasinmis baglamaya erisim "
+                    "(R-YAKALAMA-THREAD: kapanis yakalamasi TASIR)");
+            }
             /* G005: genel yakalama (lineer + lineer-olmayan) izle. */
             genel_yakalama_kontrol(tk, d);
             return s->tip ? s->tip : t_hata(tk);
@@ -3778,7 +3832,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         "(closure: islev() -> T)");
                     return t_hata(tk);
                 }
+                /* [D-505] R-YAKALAMA-THREAD — Bellek Modeli sat.144:
+                 *   forall v in YD(c) : sahiplik_transfer(v, rho_yeni)
+                 * Ustteki yorum ("c yakaladigi lineer degerleri t_yeni'ye
+                 * transfer eder") ZATEN bunu soyluyordu ama YALNIZ argumanin
+                 * KENDISI tuketiliyordu; YAKALANANLAR tasinmiyordu -> iki
+                 * gorev ayni Dizi<T>ye yaziyordu (D-504, olculdu). */
+                int tas_eski = tk->tasinan_sayi;
+                tk->gorev_kapanis_derinlik++;
                 TipBilgisi *c_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                tk->gorev_kapanis_derinlik--;
+                for (int i = tas_eski; i < tk->tasinan_sayi; i++) {
+                    Sembol *ts = sembol_bul_yazilabilir(tk->scope,
+                        tk->tasinan_ad[i], tk->tasinan_uz[i]);
+                    if (ts) ts->gorev_tasindi = 1;
+                }
+                tk->tasinan_sayi = tas_eski;
                 if (c_tip->kategori == TIP_HATA) return t_hata(tk);
                 /* c bir islev tipi olmali (tekkez<islev(...)> da olur — LC-2) */
                 const TipBilgisi *cf = c_tip;

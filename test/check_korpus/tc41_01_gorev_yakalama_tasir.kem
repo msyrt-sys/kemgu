@@ -1,0 +1,53 @@
+// [D-505] R-YAKALAMA-THREAD: gorev kapanisi ISARETCI-benzeri yakalarsa
+// SAHIPLIK THREAD'E TASINIR; kaynak erisimi kaybeder.
+//
+// OLCULEN ACIK (D-504): iki gorev AYNI Dizi<tam32>'e yaziyordu, hic `güvensiz`
+// YOKTU ve --check SIFIR tani veriyordu. Calisma zamani: beklenen 100000,
+// gozlenen 62868/58426/71619 -> %30-40 KAYIP, 8/8 kosumda.
+//
+// SPEC ZATEN BOYLE DIYORDU (KEMGU_Bellek_Modeli.md sat.144/323):
+//   forall v in YD(c) : sahiplik_transfer(v, rho_yeni)   [R-YAKALAMA-THREAD]
+// Yani Lean'de ispatlanan DRF teoreminin ONCULU derleyicide zorlanmiyordu.
+//
+// YENI TANI KODU YOK: mevcut L002 ("move sonrasi erisim").
+//
+// ⚠ IKI BILINCLI DARALTMA (ikisi de asagida POZITIF olarak olculuyor):
+//   SKALER yakalama ETKILENMEZ — env HEAP kopyasidir, skaler kopya YARISAMAZ
+//     (G005'in kendi D-323 daraltmasinin AYNISI).
+//   `kanal<T>` MUAF — threadler arasi paylasim icin TASARLANMISTIR; R-KANAL
+//     transferi KANAL YUKU icindir, kanalin KENDISI icin degil.
+
+// (1) IHLAL: dizi yakalandi, SONRA ana thread'den okundu.
+işlev tasinan_diziye_erisim() -> tam32 {
+    değişken xs: Dizi<tam32> = [0];
+    eşleş görev_başlat(|| { dizi_yaz(xs, 0, 1); ver 0; }) {
+        tamam(t) => { değişken _r = görev_birleştir(t); }
+        hata(_e) => { ver 90; }
+    }
+    ver dizi_al(xs, 0);          // L002
+}
+
+// (2) IHLAL: IKI gorev AYNI diziyi yakaliyor (D-504'un olctugu yaris).
+işlev iki_gorev_ayni_dizi() -> tam32 {
+    değişken ys: Dizi<tam32> = [0];
+    eşleş görev_başlat(|| { dizi_yaz(ys, 0, 1); ver 0; }) {
+        tamam(t) => {
+            eşleş görev_başlat(|| { dizi_yaz(ys, 0, 2); ver 0; }) {   // L002
+                tamam(u) => { değişken _s = görev_birleştir(u); değişken _r = görev_birleştir(t); }
+                hata(_f) => { değişken _r2 = görev_birleştir(t); ver 91; }
+            }
+        }
+        hata(_e) => { ver 90; }
+    }
+    ver 0;
+}
+
+// (3) GECERLI: SKALER yakalama — tani OLMAMALI.
+işlev skaler_yakalama() -> tam32 {
+    değişken n: tam32 = 7;
+    eşleş görev_başlat(|| { ver n; }) {
+        tamam(t) => { değişken _r = görev_birleştir(t); }
+        hata(_e) => { ver 90; }
+    }
+    ver n;
+}
