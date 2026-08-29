@@ -5156,10 +5156,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken dokap: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken dor: tam32 = yeni_reg(p);
             değişken dors: metin = reg_str(dor);
+            // [D-506] BÖLGE YÖNLENDİRMESİ — önceden `p.rho_ref` SABİT KODLUYDU.
+            // `bolge_yerel_yonlendir` İKİ POZİTİF koşul arar (skaler eleman +
+            // hapsedilme kanıtı); kanıt yoksa ρ_caller döner = ESKİ davranış.
+            değişken doelem2: metin = doelem;
+            eğer metin_esit(doelem2, "") { doelem2 = "i32"; }
+            değişken dorho: metin = bolge_yerel_yonlendir(p, idx, doelem2);
             yaz_str("  "); yaz_str(dors); yaz_str(" = call ptr @kdl_dizi_olustur(ptr ");
-            yaz_str(p.rho_ref); yaz_str(", i32 "); yaz_str(doeb); yaz_str(")"); yb(10);
+            yaz_str(dorho); yaz_str(", i32 "); yaz_str(doeb); yaz_str(")"); yb(10);
             yaz_str("  call void @kdl_dizi_kapasite_ayarla(ptr ");
-            yaz_str(p.rho_ref); yaz_str(", ptr "); yaz_str(dors);
+            yaz_str(dorho); yaz_str(", ptr "); yaz_str(dors);
             yaz_str(", i32 "); yaz_str(dokap); yaz_str(")"); yb(10);
             p.son_tip = "ptr"; p.son_elem = doelem; p.son_ref = "";
             ver dors;
@@ -7468,6 +7474,24 @@ işlev ky_isaretle(p: &değişken Ayr, node: tam32, govde: tam32, dongu_d: tam32
             değişken annot: tam32 = dizi_al(p.cocuk, cb);
             değişken deger: tam32 = dizi_al(p.cocuk, cb + cs - 1);
             eğer metin_esit(dizi_al(p.a_ad, annot), "TIP_DIZI") {
+                // [D-506] `değişken V: Dizi<T> = dizi_olustur(N)` — YERLEŞİK ÇAĞRI dalı.
+                // C escape.c ile birebir. Önceden YALNIZ DIZI_OLUSTUR (literal)
+                // işaretleniyordu; `dizi_olustur` bir CAGRI düğümüdür ve hiç
+                // işaretlenmiyordu → codegen onu KOŞULSUZ ρ_caller a yayıyordu.
+                // Ölçüldü (C tarafında): 200K çağrıda zirve bellek 19968 KB →
+                // 1152 KB (17x). `dizi_olustur` boyutlu dizi kurmanın DEYİMSEL
+                // yoludur → literal-only kapsam gerçek kodu dışarıda bırakıyordu.
+                eğer metin_esit(dizi_al(p.a_ad, deger), "CAGRI") {
+                    eğer dizi_al(p.a_cs, deger) >= 1 {
+                        değişken dh: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, deger));
+                        eğer metin_esit(dizi_al(p.a_ad, dh), "TANIMLAYICI")
+                          ve metin_esit(dizi_al(p.a_deg, dh), "dizi_olustur")
+                          ve ky_confined(p, govde, dizi_al(p.a_deg, node)) {
+                            dizi_ekle(p.ky_node, deger);
+                            eğer dongu_d >= 1 { dizi_ekle(p.ky_iter_node, deger); }
+                        }
+                    }
+                }
                 eğer metin_esit(dizi_al(p.a_ad, deger), "DIZI_OLUSTUR") {
                     eğer ky_confined(p, govde, dizi_al(p.a_deg, node)) {
                         dizi_ekle(p.ky_node, deger);
