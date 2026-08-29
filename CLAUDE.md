@@ -1103,7 +1103,50 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
-### 🔴 D-513 (AÇIK — MEHMET'İN KARARI): kaydırma ≥ bit genişliği = UB, `-O2`de FARKLI CEVAP
+### ✅ D-513→D-514 KAPANDI: kaydırma miktarı artık **temiz duruyor**
+**Mehmet seçenek (b)'yi seçti** — çalışma zamanı panik. Gerekçe tutarlılık:
+dil zaten **dizi sınırı** (D-069) ve **sıfıra bölme** (D-502) için panik
+seçmişti. (c) maskeleme (`n & 31`) *sessizce yanlış cevap* üretirdi;
+(a) derleme-zamanı red yalnız SABİT miktarı yakalar, değişkeni kaçırırdı.
+```
+ÖNCE:  sol_sabit · sag_degisken · isaretsiz · negatif
+       -> -O0 exit=0, -O2 exit=1   (AYNI PROGRAM, AYNI IR = UB)
+SONRA: dördü de -> PANIK: kaydirma miktari gecersiz, exit 134
+       -O0 ve -O2'de AYNI (UB gitti)
+       21 << 1 -> 42 (etkilenmedi)
+```
+Mekanizma sıfıra bölmeyle **birebir**: inline `icmp` + `br` +
+`kdl_panik(noreturn)` + `unreachable`. **Yeni tanı kodu YOK, tip değişikliği
+YOK.** C + self-host, kod ve mesaj birebir.
+
+**⚠ TEK KARŞILAŞTIRMA YETER — ikinci kontrol GEREKMEZ.** `icmp uge`
+**işaretsizdir**, dolayısıyla negatif miktar (`0-1` → `0xFFFFFFFF`) aynı dala
+düşer. Ayrı bir `icmp slt 0` yazmak gereksiz dal olurdu; `negatif.kem`
+fikstürü bunu **pozitif olarak ölçer**.
+
+**İki bilinçli daraltma:** yalnız **tamsayı** (kesirlide kaydırma yok) ·
+**sabit ve aralıkta** olan miktarda kontrol yayılmaz (yaygın durum, gereksiz
+dal); aralık dışı sabitte yayılır ki `a << 40` da temiz dursun.
+
+**KAPI AYRI AÇILMADI:** `calistir_sifir_bolme` genişletildi (10 → **20 ölçüm**).
+Mekanizma ve değişmez aynı; ayrı kapı envanteri gereksiz bölerdi.
+`normal.kem` (21<<1 → 42) **zorunlu**: yalnız negatif şekiller olsaydı
+*"her kaydırmayı reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+**Sabotaj 2/2:** S91 (C) · S92 (self) → her ikisinde de dört şeklin dördü
+`exit=0` ile yakalandı, `rc=2`.
+
+**⚠ AYRIM ÖNEMLİ — aritmetik taşma BU SINIFTA DEĞİL.** `add i32`'de
+`nsw`/`nuw` bayrağı YOK → iki'nin tümleyeni sarması **TANIMLI** ve
+`-O0`/`-O2`'de **KARARLI** (ölçüldü: `2147483647 + 1` → iki seviyede de aynı).
+Sarma için panik/`sonuç` istenip istenmediği ayrı bir **dil yüzeyi sorusudur**;
+kaydırma ise bir **kusurdu** — kimse *"cevap optimizatöre bağlı olsun"* diye
+tasarlamaz.
+
+**⚠ PROBE'UN KENDİSİ ÖLÇÜLDÜ:** `dtam32` şekli `olarak tam32` istedi (örtük
+dönüşüm yok) ve `-1` için `0 - 1` yazmak gerekti. Ayrıca WSL `/tmp` **üç kez**
+silindiği için ölçüm bir turda tamamen boş döndü (D-508'in kendi dersi).
+
+### (TARİHÎ) 🔴 D-513 ölçümü: kaydırma ≥ bit genişliği = UB, `-O2`de FARKLI CEVAP
 Değişmez avı (D-497→D-505) altı ekseni taramıştı; **tamsayı taşması
 taranmamıştı**. Tarandı ve eksen **ikiye ayrıldı** — ikisi AYNI ŞEY DEĞİL:
 

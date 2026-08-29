@@ -1,0 +1,2 @@
+// [D-513] DEGISKEN miktar, aralik disi — sabit-katlama ile elenemez.
+işlev main() -> tam32 { değişken a: tam32 = 5; değişken n: tam32 = 40; ver a >> n; }

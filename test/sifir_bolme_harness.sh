@@ -33,7 +33,7 @@ RT=build/kdl_runtime.o
 TMP=$(mktemp -d 2>/dev/null || echo /tmp/sifir_bolme); mkdir -p "$TMP"
 hata=0; olculen=0
 
-kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit
+kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
     "$1" --llvm "$3" > "$TMP/a.ll" 2>/dev/null || { echo "  🔴 $2 $(basename $3): IR üretilemedi"; hata=1; return; }
     clang -x ir "$TMP/a.ll" -x none "$RT" -o "$TMP/a.exe" 2>/dev/null \
         || { echo "  🔴 $2 $(basename $3): LINK-RED"; hata=1; return; }
@@ -45,16 +45,32 @@ kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit
         hata=1
         return
     fi
-    if [ "$4" -eq 134 ] && ! echo "$out" | grep -q "PANIK: sifira bolme"; then
-        echo "  🔴 $2 $(basename $3): exit doğru ama PANİK MESAJI yok"
+    msg="${5:-PANIK: sifira bolme}"
+    if [ "$4" -eq 134 ] && ! echo "$out" | grep -q "$msg"; then
+        echo "  🔴 $2 $(basename $3): exit doğru ama PANİK MESAJI yok (beklenen: $msg)"
         hata=1
     fi
 }
 
+# [D-513] KAYDIRMA MİKTARI da AYNI KAPIDA. Mekanizma birebir aynı (inline icmp
+# + br + kdl_panik + unreachable) ve aynı çökmezlik değişmezini korur; ayrı bir
+# kapı açmak envanteri gereksiz bölerdi.
+# ⚠ ÖLÇÜLEN AÇIK: korumasız `shl/ashr/lshr` miktar >= bit genişliğinde LLVM
+#   POISON üretiyordu ve sonuç OPTİMİZASYON SEVİYESİNE BAĞLIYDI — dört şeklin
+#   dördünde de -O0 exit=0, -O2 exit=1 (AYNI PROGRAM, AYNI IR). Bu SARMA DEĞİL
+#   UB'dir: aritmetik taşma (`add`, nsw/nuw YOK) tanımlı sarmadır ve
+#   -O0/-O2'de KARARLIDIR; kaydırma değildi.
+# ⚠ `normal.kem` (21 << 1 -> 42) ZORUNLU: yalnız negatif şekiller olsaydı
+#   "her kaydırmayı reddet" sabotajı kapıdan GEÇERDİ (D-425).
 for c in "$KEMGU:C" "$CODEGEN:SELF"; do
     bin="${c%%:*}"; et="${c##*:}"
     for f in test/bolme/sifir_*.kem; do kos "$bin" "$et" "$f" 134; done
     kos "$bin" "$et" test/bolme/normal.kem 42
+    for f in test/kaydirma/sol_sabit.kem test/kaydirma/sag_degisken.kem \
+             test/kaydirma/isaretsiz.kem test/kaydirma/negatif.kem; do
+        kos "$bin" "$et" "$f" 134 "PANIK: kaydirma miktari gecersiz"
+    done
+    kos "$bin" "$et" test/kaydirma/normal.kem 42
 done
 
 if [ "$olculen" -eq 0 ]; then
@@ -63,4 +79,4 @@ fi
 if [ "$hata" -ne 0 ]; then
     echo "=== sıfıra bölme kapısı: BAŞARISIZ ($olculen ölçüm) ==="; exit 1
 fi
-echo "=== sıfıra bölme: $olculen ölçüm (C + SELF), hepsi temiz durdu ==="
+echo "=== sıfıra bölme + kaydırma miktarı: $olculen ölçüm (C + SELF), hepsi temiz durdu ==="

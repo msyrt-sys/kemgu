@@ -2341,6 +2341,16 @@ işlev icmp_pred(op: metin, isz: tam32) -> metin {
     ver "sge";   // >=
 }
 // D3 Öncelik-1: float/double — operand LLVM tipi float/double mu?
+// [D-513] LLVM tamsayı tipinin BIT GENISLIGI ("i32" -> 32); tamsayı degilse 0.
+// Kaydirma miktari koruyucusu icin gerekli (C tarafi `atoi(sol.tip + 1)`).
+işlev ll_bit_genislik(t: metin) -> tam32 {
+    eğer metin_esit(t, "i8")  { ver 8; }
+    eğer metin_esit(t, "i16") { ver 16; }
+    eğer metin_esit(t, "i32") { ver 32; }
+    eğer metin_esit(t, "i64") { ver 64; }
+    ver 0;
+}
+
 işlev kesirli_ll_mi(t: metin) -> mantıksal {
     eğer metin_esit(t, "float") veya metin_esit(t, "double") { ver doğru; }
     // D-397 (SIMD Spec V1, C llvm.c:2193 aynası): "<N x float>" / "<N x double>"
@@ -3891,6 +3901,10 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     // (olculdu: codegen_diff 0/157). Tirnak yb(34), ters bolu yb(92).
     yaz_str("@.str.sifir_bolme_panik = private constant [13 x i8] c"); yb(34);
     yaz_str("sifira bolme"); yb(92); yaz_str("00"); yb(34); yb(10);
+    // [D-513] Kaydirma miktari panigi — sifira bolme ile AYNI mekanizma.
+    // ⚠ KEMGU dizgi literalinde KACIS YOK: tirnak yb(34), ters bolu yb(92).
+    yaz_str("@.str.kaydirma_panik = private constant [26 x i8] c"); yb(34);
+    yaz_str("kaydirma miktari gecersiz"); yb(92); yaz_str("00"); yb(34); yb(10);
     ver 0;
 }
 // ============================================================================
@@ -5655,6 +5669,38 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 yaz_str("  call void @kdl_panik(ptr @.str.sifir_bolme_panik)"); yb(10);
                 yaz_str("  unreachable"); yb(10);
                 etiket_yaz(p, Lok);
+            }
+        }
+        // [D-513] KAYDIRMA MIKTARI KORUYUCUSU — C llvm.c ile BIREBIR.
+        // Olculdu: korumasiz shl/ashr/lshr miktar >= bit genisliginde LLVM
+        // POISON uretiyordu ve sonuc OPTIMIZASYON SEVIYESINE BAGLIYDI (dort
+        // sekilde de -O0 exit=0, -O2 exit=1 — AYNI PROGRAM, AYNI IR). Bu SARMA
+        // DEGIL UB'dir: aritmetik tasma (`add`, nsw/nuw YOK) tanimli sarmadir.
+        // ⚠ TEK KARSILASTIRMA YETER: `icmp uge` ISARETSIZ oldugu icin NEGATIF
+        //   miktar da (0-1 -> 0xFFFFFFFF) yakalanir.
+        // ⚠ SABIT ve ARALIKTA olan miktarda kontrol YAYILMAZ (gereksiz dal).
+        eğer (metin_esit(op, "<<") veya metin_esit(op, ">>"))
+          ve (kesirli_ll_mi(optip) == yanlış) {
+            değişken gen: tam32 = ll_bit_genislik(optip);
+            değişken kn: tam32 = dizi_al(p.cocuk, cb + 1);
+            değişken sabit_guvenli: mantıksal = yanlış;
+            eğer metin_esit(dizi_al(p.a_ad, kn), "TAM") {
+                değişken kv: tam64 = metin_tam(dizi_al(p.a_deg, kn));
+                eğer (kv >= 0) ve (kv < (gen olarak tam64)) { sabit_guvenli = doğru; }
+            }
+            eğer (gen > 0) ve (sabit_guvenli == yanlış) {
+                değişken kr: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(kr); yaz_str(" = icmp uge ");
+                yaz_str(optip); yaz_str(" "); yaz_str(sag); yaz_str(", ");
+                yaz_str(tam64_str(gen olarak tam64)); yb(10);
+                değişken Lk: metin = yeni_label(p);
+                değişken Lko: metin = yeni_label(p);
+                yaz_str("  br i1 "); yaz_str(kr); yaz_str(", label %"); yaz_str(Lk);
+                yaz_str(", label %"); yaz_str(Lko); yb(10);
+                etiket_yaz(p, Lk);
+                yaz_str("  call void @kdl_panik(ptr @.str.kaydirma_panik)"); yb(10);
+                yaz_str("  unreachable"); yb(10);
+                etiket_yaz(p, Lko);
             }
         }
         değişken r: tam32 = yeni_reg(p);

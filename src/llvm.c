@@ -3689,6 +3689,42 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  unreachable\n");
                 fprintf(g->out, "bb%d:\n", L_ok);
             }
+            /* [D-513] KAYDIRMA MIKTARI KORUYUCUSU — cokmezlik degismezi.
+             * OLCULDU: korumasiz `shl/ashr/lshr` miktar >= bit genisliginde
+             * LLVM POISON uretiyordu ve sonuc OPTIMIZASYON SEVIYESINE BAGLIYDI
+             * (dort sekilde de -O0 exit=0, -O2 exit=1 — AYNI PROGRAM, AYNI IR).
+             * Bu SARMA DEGIL, UB'dir: aritmetik tasma (`add`, nsw/nuw YOK)
+             * tanimli sarmadir ve -O0/-O2'de KARARLIDIR; kaydirma degildir.
+             * MEKANIZMA sifira bolme (D-502) ve dizi siniri (D-069) ile BIREBIR.
+             * Yeni tani kodu YOK, tip degisikligi YOK.
+             * ⚠ TEK KARSILASTIRMA YETER: `icmp uge` ISARETSIZ oldugu icin
+             *   NEGATIF miktar da (0-1 -> 0xFFFFFFFF) yakalanir.
+             * ⚠ SABIT ve ARALIKTA olan miktarda kontrol YAYILMAZ (yaygin durum,
+             *   gereksiz dal). Aralik disi sabitte YAYILIR ki `a << 40` da
+             *   temiz dursun. */
+            if ((d->veri.ikili.op == OP_SOLA_KAYDIR
+                 || d->veri.ikili.op == OP_SAGA_KAYDIR)
+                && sol.tip && sol.tip[0] == 'i') {
+                int genislik = atoi(sol.tip + 1);
+                const Dugum *sd = d->veri.ikili.sag;
+                int sabit_guvenli = (sd && sd->tip == DUGUM_TAM
+                                     && sd->veri.tam.deger >= 0
+                                     && sd->veri.tam.deger < genislik);
+                if (genislik > 0 && !sabit_guvenli) {
+                    int k_r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = icmp uge %s %%%d, %d\n",
+                            k_r, sol.tip, sag_r, genislik);
+                    int L_k = yeni_label(g);
+                    int L_ko = yeni_label(g);
+                    fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                            k_r, L_k, L_ko);
+                    fprintf(g->out, "bb%d:\n", L_k);
+                    fprintf(g->out,
+                        "  call void @kdl_panik(ptr @.str.kaydirma_panik)\n");
+                    fprintf(g->out, "  unreachable\n");
+                    fprintf(g->out, "bb%d:\n", L_ko);
+                }
+            }
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = %s %s %%%d, %%%d\n",
                     r, op, sol.tip, sol.reg, sag_r);
@@ -8043,6 +8079,11 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
      * (kdl_panik noreturn). "Cokmezlik" degismezi: `a / 0` SIGFPE ile sureci
      * OLDURMEK yerine TEMIZ DURUR. Olculdu (D-501): korumasiz `sdiv` alti
      * seklin altisinda da exit 136 / SIGFPE veriyordu, tani YOK. */
+    /* [D-513] Kaydirma miktari panigi — sifira bolme ile AYNI mekanizma.
+     * Olculdu: miktar >= bit genisliginde LLVM POISON ve sonuc OPTIMIZASYON
+     * SEVIYESINE BAGLI (-O0 exit=0, -O2 exit=1 — ayni program, ayni IR). */
+    fputs("@.str.kaydirma_panik = private constant "
+          "[26 x i8] c\"kaydirma miktari gecersiz\\00\"\n", out);
     fputs("@.str.sifir_bolme_panik = private constant "
           "[13 x i8] c\"sifira bolme\\00\"\n", out);
 
