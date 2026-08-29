@@ -1103,6 +1103,49 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 🔴 D-513 (AÇIK — MEHMET'İN KARARI): kaydırma ≥ bit genişliği = UB, `-O2`de FARKLI CEVAP
+Değişmez avı (D-497→D-505) altı ekseni taramıştı; **tamsayı taşması
+taranmamıştı**. Tarandı ve eksen **ikiye ayrıldı** — ikisi AYNI ŞEY DEĞİL:
+
+**(1) Aritmetik taşma — SESSİZ ama TANIMLI, kusur DEĞİL.**
+```
+tam32 2147483647 + 1   ->  -O0 exit=0   -O2 exit=0    (sarma, KARARLI)
+tam8  127 + 1          ->  sarma
+IR: `add i32` — `nsw`/`nuw` bayrağı YOK  ->  iki'nin tümleyeni sarması TANIMLI
+```
+Bayrakların yokluğu bilinçli bir seçimin sonucudur: sarma UB değildir.
+Panik/`sonuç` istenip istenmediği bir **dil yüzeyi sorusudur** (D-502'nin
+sıfıra bölme sorusuyla aynı sınıf), ama **acil bir kusur değildir.**
+
+**(2) 🔴 KAYDIRMA ≥ BİT GENİŞLİĞİ — GERÇEK UB, GÖZLENEBİLİR.**
+```
+                         -O0   -O2
+a << 40  (SABİT)          0     1     ← AYNI PROGRAM, AYNI IR
+a >> n   (değişken 40)    0     1
+dtam32 a << n             0     1
+a << (0-1) (NEGATİF)      0     1
+a << 1   (GEÇERLİ)       42    42     ← onarım BUNU BOZMAMALI
+```
+`shl i32 %6, %7` (miktar ≥ 32) LLVM'de **poison**tur. Bu sarma değil, **cevabın
+optimizasyon seviyesine bağlı olması**dır — deponun en ağır saydığı sınıf.
+**Kimse "cevap optimizatöre bağlı olsun" diye TASARLAMAZ** → bu bir tasarım
+tercihi değil, bir kusurdur.
+
+**MEKANİZMA HAZIR, YENİ ŞEY GEREKMİYOR:** sıfıra bölme (D-502) tam bu kalıbı
+kullanıyor — inline `icmp` + `br` + `kdl_panik(noreturn)` + `unreachable`
+(`src/llvm.c:3688`, dizgi `:8046`). Dizi sınırı (D-069) da aynı.
+
+**⚠ KARAR MEHMET'İN** (D-502'de olduğu gibi): (a) derleme-zamanı red —
+yalnız SABİT miktarda mümkün, değişken miktarı yakalamaz · (b) **çalışma
+zamanı panik** — dizi sınırı ve sıfıra bölme ile TUTARLI, **önerilen** ·
+(c) miktarı maskele (`n & 31`) — C/Java davranışı, ama *sessizce yanlış cevap*
+üretir ve dilin DNA'sına aykırı.
+
+**⚠ PROBE'UN KENDİSİ ÖLÇÜLDÜ:** `dtam32` şekli `olarak tam32` istedi (örtük
+dönüşüm yok) ve `-1` için `0 - 1` yazmak gerekti. Ayrıca ilk turda
+`/tmp`deki IR dosyaları **silinmişti** (D-508'in kendi dersi) → `grep` boş
+döndü ve bir an "IR'da shl yok" sanıldı.
+
 ### 📐 D-511: kalan 2 sızıntının kökü OKUNDU — biri KUSUR DEĞİL
 F4.4'ün "kalan 2 sızıntı" maddesi bugüne dek yalnız DOSYA ADIYLA kayıtlıydı.
 Yığın izleri tek tek okundu (tahmin yok) ve madde **ikiye ayrıldı**:
