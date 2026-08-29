@@ -3531,6 +3531,11 @@ Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklama
 - [ ] **Türkçe kaynakta düz `grep '"[a-z]+"'` hex-escape'li adları KAÇIRIR.**
       *(D-492: 41 anahtar kelimenin 25'ini buldum, eksik listesi yanlış çıktı.)*
 - [ ] **`exit 127` ortamsaldır, `exit 139` DEĞİLDİR.** 139 → bellek hatası, aç.
+- [ ] **WSL `/tmp` ÇAĞRILAR ARASINDA SİLİNİR.** Bir koşumun logunu `/tmp`e
+      yazıp SONRAKİ çağrıda okumaya kalkma — dosya YOK olur ve denetim
+      sessizce boş döner (D-508 sonrası: 12 atlama izi ölçülmeden kaldı,
+      `grep` hiçbir şey bulmadı ve bir an *"atlama yok"* diye okunacaktı).
+      Kalıcı ölçüm logunu iki tarafın da gördüğü bir yola yaz (`/mnt/c/...`).
 - [ ] **`rc=0` bir SONUÇ değil bir İDDİADIR.** Kapı sayısını ve atlama izlerini
       AYRICA ölç. *(D-486: sekiz kapı sessizce atlanıyordu, make yine 0 döndü.)*
 
