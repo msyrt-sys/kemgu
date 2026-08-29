@@ -3723,6 +3723,8 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_global_bolge_al()"); yb(10);   // V2-F4.2a: main/ρ-seed
     yaz_str("declare ptr @kdl_bolge_olustur()"); yb(10);       // V2-F4.2b: ρ_yerel aç
     yaz_str("declare void @kdl_bolge_serbest(ptr)"); yb(10);   // V2-F4.2b: ρ_yerel serbest
+    // [D-508] `bölge_al` + kapanış env ρ_yerel'den tahsis edilince ŞART.
+    yaz_str("declare ptr @kdl_bolge_ayir(ptr, i64)"); yb(10);
     // D-404: Capability Spec V1 — yetki<R> IR temsili + runtime arayüzü.
     // C llvm.c aynası: 16 baytlık struct, OUT-PTR ABI (dönüş register'da DEĞİL;
     // çağıran alloca'yı geçer). Öncesinde self-host `yetki<R>`yi ll_tip'te hiç
@@ -4980,7 +4982,21 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             yaz_str("  "); yaz_str(tot); yaz_str(" = mul i64 "); yaz_str(nreg);
             yaz_str(", "); yaz_str(szi); yb(10);
             değişken br: metin = reg_str(yeni_reg(p));
-            yaz_str("  "); yaz_str(br); yaz_str(" = call ptr @malloc(i64 "); yaz_str(tot);
+            // [D-508] BOLGE YONLENDIRMESI (D-494/D-495 in self-host portu).
+            // Hapsedilme kaniti VARSA ρ_yerel den tahsis -> islev sonunda TOPLU
+            // serbest; kanit YOKSA `@malloc` AYNEN kalir = ESKI davranis
+            // (sizar ama UAF yok). C escape.c/llvm.c ile birebir.
+            değişken byerel: mantıksal = yanlış;
+            eğer metin_esit(p.rho_yerel, "") == yanlış {
+                eğer ky_kesin_yerel(p, idx) { byerel = doğru; }
+            }
+            yaz_str("  "); yaz_str(br);
+            eğer byerel {
+                yaz_str(" = call ptr @kdl_bolge_ayir(ptr "); yaz_str(p.rho_yerel);
+                yaz_str(", i64 "); yaz_str(tot);
+            } değilse {
+                yaz_str(" = call ptr @malloc(i64 "); yaz_str(tot);
+            }
             yaz_str(")"); yb(10);
             p.son_tip = "ptr"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
             ver br;
@@ -7385,6 +7401,27 @@ işlev ky_ad_esit(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
 }
 
 // Diziyi RETAIN ETMEYEN (yalnız oku/yerinde-değiştir) builtin'ler.
+// [D-508] `olarak` (cast) ESCAPE SEMANTIGINI DEGISTIRMEZ: `p olarak metin`
+// hala p nin DEGERIDIR. Ham isaretcilerde bu sekil KACINILMAZDIR
+// (`bellek_kopyala(yeni olarak metin, ...)`). C src/escape.c cast_soy aynasi.
+işlev ky_cast_soy(p: &değişken Ayr, node: tam32) -> tam32 {
+    değişken n: tam32 = node;
+    iken n >= 0 {
+        eğer metin_esit(dizi_al(p.a_ad, n), "TIP_DONUSTUR") == yanlış { ver n; }
+        eğer dizi_al(p.a_cs, n) < 1 { ver n; }
+        n = dizi_al(p.cocuk, dizi_al(p.a_cb, n));
+    }
+    ver n;
+}
+
+// [D-508] Argumanlarini SAKLAMAYAN bellek yerlesikleri — KURATE LISTE.
+// ⚠⚠ `bellek_serbest` BILEREK YOK VE BU KRITIK: o `free`e eslesir. Onu
+// hapsedilmis saymak hem ACIK free hem BOLGE serbesti calisirdi = CIFT SERBEST.
+// Liste "isaretci alan her yerlesik" DEGIL, "argumanini TUTMAYAN yerlesik".
+işlev ky_bellek_builtin_tutmaz(ad: metin) -> mantıksal {
+    ver metin_esit(ad, "bellek_kopyala");
+}
+
 işlev ky_dizi_builtin_confined(ad: metin) -> mantıksal {
     ver metin_esit(ad, "dizi_al") veya metin_esit(ad, "dizi_boyut")
         veya metin_esit(ad, "dizi_yaz") veya metin_esit(ad, "dizi_ekle")
@@ -7464,8 +7501,22 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
         }
         değişken i: tam32 = 1;
         iken i < cs {
-            eğer i == 1 ve safe0 {
-                // dizi_*(var, ...) ilk arg tüketildi — atla
+            değişken atla: mantıksal = yanlış;
+            eğer i == 1 ve safe0 { atla = doğru; }
+            // [D-508] SAKLAMAYAN BELLEK YERLESIGI: `bellek_kopyala` (memcpy)
+            // argumanini TUTMAZ -> hapsedilme KORUNUR. Cast katmani soyulur
+            // cunku ham isaretci bu yerlesiklere DAIMA `olarak metin` ile gecer.
+            eğer atla == yanlış {
+                eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
+                    eğer ky_bellek_builtin_tutmaz(dizi_al(p.a_deg, callee)) {
+                        eğer ky_ad_esit(p, ky_cast_soy(p, dizi_al(p.cocuk, cb + i)), ad) {
+                            atla = doğru;
+                        }
+                    }
+                }
+            }
+            eğer atla {
+                // tuketilmedi / tutulmadi — atla
             } değilse {
                 eğer ky_confined(p, dizi_al(p.cocuk, cb + i), ad) == yanlış { ver yanlış; }
             }
@@ -7494,6 +7545,30 @@ işlev ky_isaretle(p: &değişken Ayr, node: tam32, govde: tam32, dongu_d: tam32
     eğer node < 0 { ver 0; }
     değişken t: metin = dizi_al(p.a_ad, node);
     eğer metin_esit(t, "LAMBDA") { p.ky_lambda = 1; }
+    // [D-508] `değişken V: *T = bölge_al(y, n)` — HAM İŞARETÇİ dalı.
+    // D-494/D-495 YALNIZ C ye uygulanmıştı; self-host a HİÇ portlanmamıştı
+    // (D-507 in genişlettiği `bolge_operand` kapısı bunu İLK KEZ ölçtü:
+    // 4 dosyada sapma). V hapsedilmişse CAGRI düğümü kesin-yerel →
+    // codegen `kdl_bolge_ayir(ρ_yerel, ..)` yayar, işlev sonunda TOPLU serbest.
+    eğer metin_esit(t, "DEGISKEN") {
+        değişken pcs: tam32 = dizi_al(p.a_cs, node);
+        eğer pcs >= 2 {
+            değişken pcb: tam32 = dizi_al(p.a_cb, node);
+            değişken pann: tam32 = dizi_al(p.cocuk, pcb);
+            değişken pdeg: tam32 = dizi_al(p.cocuk, pcb + pcs - 1);
+            eğer metin_esit(dizi_al(p.a_ad, pann), "TIP_POINTER")
+              ve metin_esit(dizi_al(p.a_ad, pdeg), "CAGRI") {
+                eğer dizi_al(p.a_cs, pdeg) >= 1 {
+                    değişken ph: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, pdeg));
+                    eğer metin_esit(dizi_al(p.a_ad, ph), "TANIMLAYICI")
+                      ve metin_esit(dizi_al(p.a_deg, ph), "bölge_al")
+                      ve ky_confined(p, govde, dizi_al(p.a_deg, node)) {
+                        dizi_ekle(p.ky_node, pdeg);
+                    }
+                }
+            }
+        }
+    }
     // [D-507] `değişken F = |..| ..` — KAPANIS dalı. env `@malloc` ile alınıp
     // HİÇ serbest edilmiyordu. F hapsedilmişse LAMBDA düğümü kesin-yerel →
     // `lam_env_uret` env i ρ_yerel den alır, işlev sonunda TOPLU serbest.

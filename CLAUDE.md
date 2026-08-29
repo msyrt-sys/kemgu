@@ -1056,6 +1056,53 @@ bölme — `detect_stack_use_after_return=1` ile bile sessiz. Yani bir güvenlik
 değişmezi için *"program çalıştı + ASan temiz"* **yetersiz kanıttır** (D-417
 ve D-488'in üçüncü tekrarı).
 
+### 🎯 D-507→D-508: kapanış env + `bölge_al` ρ_yerel'e — sızıntı 9 → 2
+**D-507 (C):** kapanış env'i `@malloc` ile alınıp **HİÇ serbest edilmiyordu**.
+Hapsedilme kanıtı varsa artık ρ_yerel'den. Üç eksik dal ölçümle bulundu:
+`imha(e)`/`kullan(e)` (`ky_var_gecer` ve `ky_confined`'de dal YOKTU → lineer
+yakalayan HER kapanış düşüyordu; **bisect: skaler yakalayan aynı şekil
+GEÇİYORDU**) ve **çağırmak tutmak değildir** (`g()` — değişkenin ÇAĞRI HEDEFİ
+olması kaçış sayılıyordu). Sağlamlık G006'ya dayanır: lifted gövde env'e
+işaretçi döndüremez. **ARGÜMAN konumu HÂLÂ DENY yolundan geçer.**
+
+**🎯 D-508 — D-494/D-495/D-507'nin SELF-HOST PORTU.** Üçü de YALNIZ C'ye
+uygulanmıştı; `bolge_operand` kapısı bunu **İLK KEZ görünür kıldı** (4 dosyada
+sapma). Portlanan üç kural:
+- `bölge_al` işaretlemesi (`TIP_POINTER` annotasyon + CAGRI + `ky_confined`)
+- **`bellek_kopyala` (memcpy) argümanını TUTMAZ** → kürate beyaz liste.
+  **⚠⚠ `bellek_serbest` (free) BİLEREK LİSTEDE YOK VE BU KRİTİK:** onu
+  hapsedilmiş saymak hem açık `free` hem bölge serbestını çalıştırırdı =
+  **ÇİFT SERBEST.** Liste *"işaretçi alan her yerleşik"* değil,
+  *"argümanını TUTMAYAN yerleşik"* demektir (D-459 disiplini).
+- `ky_cast_soy` — `olarak` escape semantiğini DEĞİŞTİRMEZ; ham işaretçi bu
+  yerleşiklere DAİMA `olarak metin` ile geçer.
+
+**Muafiyet 4 → 0:** `bolge_operand` **160/160, SIFIR muaf**.
+`cg_bolge_al_hapsedilme`de 1 `@malloc` KALIYOR — kanıtsız dal, kasıtlı
+(*"sızıntı bir hata, UAF bir felaket"*).
+
+**⚠⚠ KAPI BAYAT İKİLİYİ ÖLÇTÜ — port DOĞRUYKEN 6/160 SAPMA gösterdi.**
+Ben `build/cg` kurmuştum, harness `build/codegen` okuyor. Doğrudan
+karşılaştırma eşitken kapı kırmızıydı ve bir an portu yanlış sandım.
+**"Kapı kırmızı ama doğrudan ölçüm yeşil" ilk olarak ARTEFAKT şüphesi
+doğurur** (D-457'nin üçüncü tekrarı): önce HANGİ ikiliyi okuduğunu ölç.
+
+**⚠⚠ YAPISAL KAPI YEŞİLKEN DAVRANIŞSAL KAPI KIRMIZI — `declare` EKSİKTİ.**
+`bolge_operand` **160/160** derken `codegen_diff` **152/158** verdi: altı dosya
+*"KEMGU IR link edilemedi"*. Self-host `@kdl_bolge_ayir`ı **çağırıyor ama
+BİLDİRMİYORDU** (dizi yolu `kdl_dizi_olustur` üzerinden gittiği için o declare
+hiç gerekmemişti). Yapısal kapı IR **metnini** karşılaştırır — iki tarafta da
+aynı çağrı vardı, eksik declare **görünmez**. **D-502'nin dersinin simetriği:**
+o turda `yapi_diff` kördü, `codegen_diff` yakaladı; burada tersi olmadı ama
+gerekçe aynı — **davranışsal ve yapısal kapılar birbirini TAMAMLAR, biri
+diğerinin yerine geçmez.**
+
+**Sabotaj S88** (self-host yönlendirmesini kapat) → `4/160 SAPMA`, rc=1;
+geri alınca 160/160 rc=0.
+
+**KALAN 2 SIZINTI BAŞKA KÖKENDEN** (`kanal_mesaj` kanal tamponu ·
+`gorev_temel` ρ_sahip) — bu eksende DEĞİL. "Hepsi halloldu" DEĞİL.
+
 ### 🎯 D-506: `dizi_olustur(N)` da ρ_yerel'e yönlendiriliyor — bellek 17×
 D-494'ün `bölge_al` dalının **birebir simetriği**. Önceden YALNIZ dizi
 **literali** (`[1,2,3]`) hapsedilme için işaretleniyordu; `dizi_olustur(N)`

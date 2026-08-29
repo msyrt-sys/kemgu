@@ -46,7 +46,7 @@ rho_sinifi() {
 #   OLCULDU. Self-host DAHA KONSERVATIF (malloc = sizinti, UAF DEGIL).
 #   Port yapilinca bu satir BOSALTILMALI; kapi o zaman "MUAF ama artik
 #   ESLESIYOR" demez, sadece yesil kalir -> periyodik olarak DENE.
-ENV_MUAF="cg_bellek_kopyala cg_bolge_al cg_bolge_al_hapsedilme cg_ham_isaretci_indeks"
+ENV_MUAF=""
 env_sinifi() {
     grep -v '^declare' "$1" | grep -oE 'call ptr @(malloc|kdl_bolge_ayir)' \
         | sed 's/.*@malloc/HEAP/; s/.*@kdl_bolge_ayir/BOLGE/'
