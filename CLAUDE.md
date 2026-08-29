@@ -1103,6 +1103,36 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### ⛔ D-515 (NEGATİF SONUÇ): dar kanal-serbestı YAZILMADI — ölçülebilir kazancı YOK
+D-511 kanal ömrünü *"birleştirme-duyarlı → dil kararı"* diye bırakmıştı. Dar bir
+altküme (görevlere **yakalanmayan** kanalı, yaratan işlevin sonunda serbest
+bırak) mekanik ve sağlam görünüyordu. **İki ölçüm bunu çürüttü:**
+
+**(1) Altküme BOŞ DEĞİL — ilk varsayımım yanlıştı.** *"Kanal zaten paylaşım
+içindir, tek thread'de anlamsızdır"* diye düşünmüştüm. Ölçüm: `kanal_oluştur`
+kullanan **13 dosyanın 5'inde `görev_başlat` HİÇ YOK** (`cg_kanal_temel` ·
+`_metin` · `_param` · `_tam64` · `_yon`) — tamponlu kanal tek thread'de
+geçerli bir desen. **Varsaymak yerine ölçtüğüm için yakalandı.**
+
+**(2) AMA O BEŞ DOSYA SIZDIRMIYOR.** ASan+LSan ile koşuldu: beşinde de
+**sıfır sızıntı raporu** (exit kodları kendi sözleşmeleri: 42/5/7/42/42).
+Sebep: kanal işaretçisi `main`'in **canlı yuvasında** duruyor →
+LeakSanitizer *ulaşılabilir* tahsisi sızıntı SAYMAZ. Ölçülen tek kanal
+sızıntısı `kanal_mesaj`'dır ve o **görevlere yakalanan** kanaldır — yani
+tam olarak dar kuralın **kapsamadığı** dosya.
+
+**SONUÇ: kod YAZILMADI.** Serbest bırakma yolu eklemek gerçek bir çift-serbest/
+UAF riski taşır; kazancı ise **hiçbir ölçümle görünmez**. D-430'un disiplini
+(*"ayırt edilemeyen kod doğrulanmamış yüzeydir"*) ve D-490'ın disiplini
+(*"hiçbir şey kanıtlamayan kapı eklenmez"*) burada aynı yönü gösteriyor.
+⚠ D-510'dan farkı: o bir **varsayılanın yönüydü** (güvensiz yönde yanlış
+olamaz); bu ise **bellek serbest bırakan yeni kod** olurdu.
+
+**Kayıt:** `kdl_kanal_serbest` (`kdl_runtime.c:1758`) **bilerek ölü kalıyor.**
+Onu canlandıracak şey birleştirme-duyarlı ömürdür; o gelene kadar silinmemeli
+(D-459'un tersi: burada ölü kodu bırakmak doğru, çünkü sessiz-başarısız bir
+yol açmıyor — hiç çağrılmıyor).
+
 ### ✅ D-513→D-514 KAPANDI: kaydırma miktarı artık **temiz duruyor**
 **Mehmet seçenek (b)'yi seçti** — çalışma zamanı panik. Gerekçe tutarlılık:
 dil zaten **dizi sınırı** (D-069) ve **sıfıra bölme** (D-502) için panik
