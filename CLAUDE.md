@@ -1056,6 +1056,60 @@ bölme — `detect_stack_use_after_return=1` ile bile sessiz. Yani bir güvenlik
 değişmezi için *"program çalıştı + ASan temiz"* **yetersiz kanıttır** (D-417
 ve D-488'in üçüncü tekrarı).
 
+### 🎯 D-506: `dizi_olustur(N)` da ρ_yerel'e yönlendiriliyor — bellek 17×
+D-494'ün `bölge_al` dalının **birebir simetriği**. Önceden YALNIZ dizi
+**literali** (`[1,2,3]`) hapsedilme için işaretleniyordu; `dizi_olustur(N)`
+bir **CAGRI** düğümüdür ve hiç işaretlenmiyordu → codegen onu **koşulsuz**
+ρ_caller'a yayıyordu. `dizi_olustur` boyutlu dizi kurmanın **deyimsel**
+yoludur (`stdlib/dizi.kem` onu kullanır) → literal-only kapsam **gerçek kodu
+dışarıda bırakıyordu.**
+
+**ÖLÇÜLDÜ** (taban `HEAD`den ayrı ağaca çıkarılıp kuruldu — tahmin YOK):
+```
+bench2 (200K dizi_olustur çağrısı)
+  taban  ρ_caller  19968 KB zirve  0.09 s
+  D-506  ρ_yerel    1152 KB zirve  0.06 s     → BELLEK 17×
+```
+
+**⚠⚠ AYNI ÖLÇÜM BİR YAVAŞLAMA DA GÖSTERDİ — KÖKÜ AYRI ÇIKTI.**
+`bench1` (okuma-ağırlıklı, 400M dizi erişimi): taban 1.65 s → D-506 2.06 s
+(%25 yavaş). **AYIRT EDİCİ TEST:** aynı iş dizi **literali** ile — literal
+D-506 ÖNCESİNDE DE ρ_yerel'e gidiyordu:
+```
+literal, taban 2.00 s   ·   literal, D-506 1.99 s   → AYNI
+```
+Yani yavaşlık D-506'nın **soktuğu bir gerileme DEĞİL**: **ρ_yerel dizileri
+ρ_caller'dan ~%25 yavaş** ve bu **önceden var olan** bir özellik. D-506
+yalnızca `dizi_olustur`u zaten yavaş olan yola taşıdı.
+**KÖK ÖLÇÜLMEDİ → AÇIK SORU** (muhtemel: taze bölgenin ayrı `malloc` bloğu →
+sayfa yerleşimi). Bu, gerçek bir optimizasyon hedefidir.
+
+**🎯 YENİ YAPISAL KAPI `calistir_bolge_operand` — VE ZORUNLUYDU.**
+Port yapılmadan önce C `%5` (ρ_yerel), self-host `%rho` (ρ_caller) yayıyordu
+ve **ÜÇ KAPI DA YEŞİLDİ**:
+```
+codegen_diff  → ÇIKIŞ KODU;      yanlış bölge de 42 döndürür
+yapi_diff     → `define` KÜMESİ; bölge operandı define'da YOK
+checker_diff  → TANI dump'ı;     codegen'e hiç bakmaz
+```
+D-417'nin (spekülasyon bariyeri) **birebir tekrarı**: davranışsal kapılar
+bellek-yönetimi özelliğine **KÖRDÜR**.
+Kapı **register NUMARASINI kasten yok sayar** (iki derleyicide farklı
+olabilir); yalnız ρ **SINIFINI** karşılaştırır — `%rho`=CALLER, `%N`=YEREL.
+Dizi tahsisi içeren dosya bulunamazsa **koşmayı reddeder**.
+**Sabotaj S87** (self-host portunu geri al) → `1/159 dosyada SAPMA`, rc=2.
+
+**⚠⚠ İLK ÖLÇÜMLERİM ÜÇ KEZ GEÇERSİZDİ** (D-500 listesinin üç maddesi birden):
+1. **`git stash` HİÇ OLUŞMADI** — worktree'nin `.git` dosyası **Windows yolu**
+   taşıyor, WSL'in git'i çözemiyor (`not a git repository: .../C:/Users/...`)
+   → aynı yapımı iki kez ölçüp *"fark yok"* diyecektim.
+2. **Taban ikilisi HİÇ KURULMADI** — `make ... >/dev/null` link hatasını yuttu;
+   `rc=127` ile olmayan ikiliyi ölçtüm. **Negatif süre (−4.07 s) ele verdi.**
+3. **Windows `/tmp` ile WSL `/tmp` AYRI dizinler** → baseline kopyası sessizce
+   tutmadı. Çözüm: iki tarafın da gördüğü bir yola yaz.
+
+Fikstürler `test/perf/` altında (kalıcı ölçüm tabanı).
+
 ### ✅ D-504→D-505 KAPANDI: `görev` yakalaması artık SAHİPLİK TAŞIYOR
 **Mehmet seçenek (a)'yı seçti.** Spec'in kendi kuralı uygulandı — icat YOK:
 ```
