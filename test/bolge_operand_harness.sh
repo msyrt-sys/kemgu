@@ -34,6 +34,24 @@ rho_sinifi() {
         | sed 's/^%rho.*$/CALLER/; s/^%[0-9][0-9]*$/YEREL/'
 }
 
+# [D-507] KAPANIS ENV i de karsilastir: `@malloc` (HEAP) mi `@kdl_bolge_ayir`
+# (BOLGE) mi? Kapanis bagi hapsedilmisse env bolgeden alinir ve islev sonunda
+# TOPLU serbest edilir; oncesinde HIC serbest edilmiyordu.
+# ⚠ MUAFIYET `43_closure_param` DEGIL — o dosya bu korpusta yok. Muafiyet
+# gerekirse buraya yazilir; su an BOS (muafiyetsiz kapi).
+# ⚠⚠ MUAFIYET = ACIK PARITE BORCU ENVANTERI (gizleme DEGIL, IZLEME):
+#   Bu dort dosya `bölge_al` yolunu kullanir. D-494/D-495 (`bölge_al` ->
+#   ρ_yerel, hapsedilme kanitliysa) YALNIZ C ye uygulanmisti; self-host a
+#   HIC PORTLANMADI. Bu kapi onu ILK KEZ gorunur kildi — borc YARATILMADI,
+#   OLCULDU. Self-host DAHA KONSERVATIF (malloc = sizinti, UAF DEGIL).
+#   Port yapilinca bu satir BOSALTILMALI; kapi o zaman "MUAF ama artik
+#   ESLESIYOR" demez, sadece yesil kalir -> periyodik olarak DENE.
+ENV_MUAF="cg_bellek_kopyala cg_bolge_al cg_bolge_al_hapsedilme cg_ham_isaretci_indeks"
+env_sinifi() {
+    grep -v '^declare' "$1" | grep -oE 'call ptr @(malloc|kdl_bolge_ayir)' \
+        | sed 's/.*@malloc/HEAP/; s/.*@kdl_bolge_ayir/BOLGE/'
+}
+
 topl=0; fark=0; atla=0
 for f in test/cg_korpus/*.kem test/perf/*.kem; do
     [ -f "$f" ] || continue
@@ -41,6 +59,13 @@ for f in test/cg_korpus/*.kem test/perf/*.kem; do
     "$CODEGEN" --llvm "$f" > "$TMP/s.ll" 2>/dev/null || { atla=$((atla+1)); continue; }
     grep -q "kdl_dizi_olustur(ptr" "$TMP/c.ll" || continue   # dizi yok → konu dışı
     topl=$((topl+1))
+    b=$(basename "$f" .kem); em=0
+    for m in $ENV_MUAF; do [ "$m" = "$b" ] && em=1; done
+    if [ "$em" -eq 0 ] && ! diff -q <(env_sinifi "$TMP/c.ll") <(env_sinifi "$TMP/s.ll") >/dev/null; then
+        echo "  🔴 $b — kapanış env operandı SAPMASI:"
+        diff <(env_sinifi "$TMP/c.ll") <(env_sinifi "$TMP/s.ll") | head -4 | sed 's/^/     /'
+        fark=$((fark+1))
+    fi
     if ! diff -q <(rho_sinifi "$TMP/c.ll") <(rho_sinifi "$TMP/s.ll") >/dev/null; then
         echo "  🔴 $(basename "$f") — bölge operandı SAPMASI:"
         diff <(rho_sinifi "$TMP/c.ll") <(rho_sinifi "$TMP/s.ll") | head -4 | sed 's/^/     /'

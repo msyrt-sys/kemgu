@@ -4801,7 +4801,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // Env: capture yoksa null; varsa HEAP struct (C V2-F2 aynası).
             // D-322: emisyon lam_env_uret'e taşındı — genel kapanış kolu AYNI kodu
             // kullanır (iki kopya ayrışırsa görev/kapanış env düzeni sessizce sapardı).
-            değişken envreg: metin = lam_env_uret(p, capbase, capcnt);
+            değişken envreg: metin = lam_env_uret(p, capbase, capcnt, 0 - 1);
             // Runtime çağrısı: fn AYNI ptr iki kez (bare/kapanış), env üçüncü.
             değişken gr: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(gr));
@@ -5951,7 +5951,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken lcapbase: tam32 = dizi_boyut(p.lam_capisim);
         lam_cap_tara(p, lgovde, idx, lcapbase);
         değişken lcapcnt: tam32 = dizi_boyut(p.lam_capisim) - lcapbase;
-        değişken lenv: metin = lam_env_uret(p, lcapbase, lcapcnt);
+        değişken lenv: metin = lam_env_uret(p, lcapbase, lcapcnt, idx);
         // Dönüş IR'ı BİLDİRİLEN tipten gelir (fat value T'yi siler). Bağlam yoksa
         // i32 — bu, annotasyonsuz kapanışın ÖNCEDEN VAR OLAN sınırı (C ile aynı).
         değişken lret: metin = p.lam_bek_ret;
@@ -7324,13 +7324,27 @@ işlev lam_ret_tahmin(p: &değişken Ayr, node: tam32) -> metin {
 // HEAP (malloc) — env, lambda'yı yaratan çerçeveden UZUN yaşayabilir (görev),
 // bu yüzden stack alloca YANLIŞ olurdu. görev_başlat ve genel kapanış AYNI
 // yardımcıyı kullanır → env düzeni tek kaynaktan.
-işlev lam_env_uret(p: &değişken Ayr, base: tam32, cnt: tam32) -> metin {
+// [D-507] `lam` = LAMBDA düğüm indeksi (-1 = bilinmiyor/görev). Hapsedilme
+// kanıtı VARSA env ρ_yerel den alınır → işlev sonunda TOPLU serbest; kanıt
+// YOKSA `@malloc` AYNEN kalır = ESKİ davranış (sızar ama UAF yok).
+// ⚠ `görev_başlat` kapanışı BİLEREK -1 geçer: env çerçeveyi AŞAR (D-309),
+//   ρ_yerel de serbest etmek UAF olurdu.
+işlev lam_env_uret(p: &değişken Ayr, base: tam32, cnt: tam32, lam: tam32) -> metin {
     eğer cnt <= 0 { ver "null"; }
     değişken et: metin = lam_envtip(p, base, cnt);
     değişken er: tam32 = yeni_reg(p);
     değişken envreg: metin = reg_str(er);
+    değişken eyerel: mantıksal = yanlış;
+    eğer (lam >= 0) ve (metin_esit(p.rho_yerel, "") == yanlış) {
+        eğer ky_kesin_yerel(p, lam) { eyerel = doğru; }
+    }
     yaz_str("  "); yaz_str(envreg);
-    yaz_str(" = call ptr @malloc(i64 ptrtoint (ptr getelementptr (");
+    eğer eyerel {
+        yaz_str(" = call ptr @kdl_bolge_ayir(ptr "); yaz_str(p.rho_yerel);
+        yaz_str(", i64 ptrtoint (ptr getelementptr (");
+    } değilse {
+        yaz_str(" = call ptr @malloc(i64 ptrtoint (ptr getelementptr (");
+    }
     yaz_str(et); yaz_str(", ptr null, i32 1) to i64))"); yb(10);
     değişken ci: tam32 = 0;
     iken ci < cnt {
@@ -7398,6 +7412,13 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
     değişken cb: tam32 = dizi_al(p.a_cb, node);
     değişken cs: tam32 = dizi_al(p.a_cs, node);
     // bare var = güvensiz (parent INDEKS/dizi-builtin tüketmediyse buraya düşer)
+    // [D-507] `imha(e)` / `kullan(e)` — dalları YOKTU → varsayılan konservatif
+    // yol lineer yakalayan HER kapanışın hapsedilmesini düşürüyordu (bisect:
+    // skaler yakalayan aynı şekil GEÇİYORDU). D-495 cast kökünün AYNI SINIFI.
+    eğer metin_esit(t, "IMHA_IFADE") veya metin_esit(t, "KULLAN_IFADE") {
+        eğer cs < 1 { ver doğru; }
+        ver ky_confined(p, dizi_al(p.cocuk, cb), ad);
+    }
     eğer metin_esit(t, "TANIMLAYICI") {
         eğer metin_esit(dizi_al(p.a_deg, node), ad) { ver yanlış; }
         ver doğru;
@@ -7434,7 +7455,13 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
                 }
             }
         }
-        eğer ky_confined(p, callee, ad) == yanlış { ver yanlış; }
+        // [D-507] ÇAĞIRMAK TUTMAK DEĞİLDİR: `g()` (değişkenin ÇAĞRI HEDEFİ
+        // olması) önceden KAÇIŞ sayılıyordu ve kapanış env hapsedilmesini
+        // düşürüyordu. Sağlamlık G006 ya dayanır (lifted gövde env e işaretçi
+        // döndüremez). ARGÜMAN konumu HÂLÂ aşağıdaki DENY yolundan geçer.
+        eğer ky_ad_esit(p, callee, ad) == yanlış {
+            eğer ky_confined(p, callee, ad) == yanlış { ver yanlış; }
+        }
         değişken i: tam32 = 1;
         iken i < cs {
             eğer i == 1 ve safe0 {
@@ -7467,6 +7494,22 @@ işlev ky_isaretle(p: &değişken Ayr, node: tam32, govde: tam32, dongu_d: tam32
     eğer node < 0 { ver 0; }
     değişken t: metin = dizi_al(p.a_ad, node);
     eğer metin_esit(t, "LAMBDA") { p.ky_lambda = 1; }
+    // [D-507] `değişken F = |..| ..` — KAPANIS dalı. env `@malloc` ile alınıp
+    // HİÇ serbest edilmiyordu. F hapsedilmişse LAMBDA düğümü kesin-yerel →
+    // `lam_env_uret` env i ρ_yerel den alır, işlev sonunda TOPLU serbest.
+    // ⚠ Tip ANNOTASYONU aranmaz: kapanış bağı genelde annotasyonsuzdur
+    //   (`değişken arttir = |n| ..`) — D-506 nın literal-only kapsam dersi.
+    eğer metin_esit(t, "DEGISKEN") {
+        değişken lcs: tam32 = dizi_al(p.a_cs, node);
+        eğer lcs >= 1 {
+            değişken ldeg: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, node) + lcs - 1);
+            eğer metin_esit(dizi_al(p.a_ad, ldeg), "LAMBDA") {
+                eğer ky_confined(p, govde, dizi_al(p.a_deg, node)) {
+                    dizi_ekle(p.ky_node, ldeg);
+                }
+            }
+        }
+    }
     eğer metin_esit(t, "DEGISKEN") {
         değişken cs: tam32 = dizi_al(p.a_cs, node);
         eğer cs >= 2 {

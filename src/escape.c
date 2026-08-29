@@ -710,6 +710,16 @@ static int ky_var_gecer(const Dugum *d, const char *ad, int uz) {
                 || ky_var_gecer(d->veri.ikili.sag, ad, uz);
         case DUGUM_TEKLI: return ky_var_gecer(d->veri.tekli.operand, ad, uz);
         case DUGUM_ERISIM: return ky_var_gecer(d->veri.erisim.nesne, ad, uz);
+        case DUGUM_IMHA_IFADE:
+            /* [D-507] `imha(e)` / `kullan(e)` — LINEER TUKETIM dugumleri.
+             * Dallari YOKTU -> `default: return 1` (bilinmeyen -> konservatif
+             * "geciyor") lineer yakalayan HER kapanisin hapsedilmesini
+             * DUSURUYORDU. Bisect ile bulundu: skaler yakalayan ayni sekil
+             * GECIYORDU (c1 conf=1, c2 conf=0). D-495'in cast kokuyle AYNI
+             * SINIF: eksik dal = sessiz asiri-muhafazakarlik. */
+            return ky_var_gecer(d->veri.imha_ifade.operand, ad, uz);
+        case DUGUM_KULLAN_IFADE:
+            return ky_var_gecer(d->veri.kullan_ifade.operand, ad, uz);
         case DUGUM_TIP_DONUSTUR:
             /* [D-495] Cast TAM OLARAK kaynagini icerir — `default: return 1`
              * (bilinmeyen -> konservatif "geciyor") burada GEREKSIZ KATIYDI ve
@@ -753,7 +763,18 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                 && ky_dizi_builtin_confined(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk)
                 && d->veri.cagri.sayi >= 1
                 && ky_ad_esit(d->veri.cagri.argumanlar[0], ad, uz));
-            if (!ky_confined(h, ad, uz)) return 0;
+            /* [D-507] CAGIRMAK TUTMAK DEGILDIR. `g()` — yani degiskenin
+             * CAGRI HEDEFI olmasi — onceden KACIS sayiliyordu (`ky_confined(h)`
+             * bare tanimlayiciya 0 doner) ve kapanis env'inin hapsedilmesini
+             * DUSURUYORDU. Cagri, kapanisi bir yere SAKLAMAZ; yalnizca lifted
+             * islevi env ile calistirir.
+             * ⚠ SAGLAMLIK G006'YA DAYANIR: lifted govde env'e isaretci
+             *   DONDUREMEZ (`|| &a` artik derleme zamaninda reddediliyor).
+             *   G006 OLMADAN bu gevsetme UAF acardi.
+             * ⚠ YALNIZ HEDEF konumu: ARGUMAN olarak gecmek (`al(g)`) HALA
+             *   asagidaki DENY yolundan gecer (callee saklayabilir; D-488
+             *   ozeti kanit bulursa oradan gecer). */
+            if (!(h && ky_ad_esit(h, ad, uz)) && !ky_confined(h, ad, uz)) return 0;
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 if (i == 0 && safe0) continue;  /* dizi_*(var, ...) ilk arg tuketildi */
                 /* [D-488] KULLANICI ISLEVI OZETI: arg TAM OLARAK bu degiskense ve
@@ -826,6 +847,11 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                 return 1;
             return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
         case DUGUM_ERISIM: return ky_confined(d->veri.erisim.nesne, ad, uz);
+        /* [D-507] ky_var_gecer ikizi: tuketim operandinin hapsedilmesi sorulur. */
+        case DUGUM_IMHA_IFADE:
+            return ky_confined(d->veri.imha_ifade.operand, ad, uz);
+        case DUGUM_KULLAN_IFADE:
+            return ky_confined(d->veri.kullan_ifade.operand, ad, uz);
         case DUGUM_TIP_DONUSTUR:
             /* [D-495] Cast bir DEGERI donusturur; isaretciyi SIZDIRMAZ.
              * `ky_var_gecer` ikizi burada da sart: `sonuc = v[2] olarak tam32`
@@ -859,6 +885,23 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
     if (!d) return;
     switch (d->tip) {
         case DUGUM_DEGISKEN:
+            /* [D-507] `değişken F = |..| ..` — KAPANIS dali. env `@malloc`
+             * ile aliniyor ve HIC serbest edilmiyordu (llvm.c'nin kendi
+             * yorumu: "SERBEST BIRAKMA YOK (leak ...); F4 sonra").
+             * F confined ise LAMBDA dugumu kesin_yerel -> codegen env'i
+             * ρ_yerel'den tahsis eder, islev sonunda TOPLU serbest.
+             * ⚠ Tip ANNOTASYONU ARANMAZ: kapanis bagi genelde annotasyonsuz
+             *   yazilir (`değişken arttir = |n| ..`) — annotasyon sartı
+             *   gercek kodu disarida birakirdi (D-506'nin literal-only
+             *   kapsam dersi). */
+            if (d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_LAMBDA
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0
+                && ky_confined(fn_govde, d->veri.degisken.ad,
+                               d->veri.degisken.ad_uzunluk)) {
+                kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                ky_set(ea, d->veri.degisken.deger);
+            }
             /* [D-494] `değişken V: *T = bölge_al(...)` — HAM ISARETCI dali.
              * `bölge_al` D-415'ten beri GERCEK bir tahsistir (`malloc`) ve
              * HIC serbest edilmiyordu; kodun kendi yorumu bunu "v1

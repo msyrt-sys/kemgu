@@ -96,7 +96,11 @@ ALLOWLIST="35_binary_search 40_dizi_islemler kem_mmio_ham kem_pointer"
 #     grow/tam64/tam8/struct hepsi cikis=42, sizinti=0, UAF=0.
 #     KALAN 5 sizinti BASKA KOKENDEN: kapanis HEAP env kopyasi (3) + kanal
 #     tamponu + gorev. Onlar `bölge_al` ekseninde DEGIL.
-SIZINTI_MUAF="kanal_mesaj gorev_temel 25_closure_capture 29_linear_closure 43_closure_param"
+#     ⚠ [D-507] UC KAPANIS DOSYASI LISTEDEN CIKTI (5 -> 2). Kapanis env'i artik
+#     hapsedilme kaniti varken ρ_yerel'den aliniyor; olculdu: 25_closure_capture,
+#     29_linear_closure, 43_closure_param hepsi sizinti=0 UAF=0.
+#     KALAN 2: kanal tamponu + gorev rho_sahip — BASKA KOKENDEN.
+SIZINTI_MUAF="kanal_mesaj gorev_temel"
 
 pass=0; fail=0; skip=0; allow=0; sizinti_muaf_sayi=0
 for f in test/ornekler/*.kem test/snapshots/*.kem; do

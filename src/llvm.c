@@ -5847,10 +5847,26 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * SERBEST BIRAKMA YOK (leak — dizi/metin status-quo; F4 sonra).
                  * Boyut = sizeof(envtip): LLVM constexpr GEP-null idiomu (D-087);
                  * padding/alignment LLVM layout'uyla birebir. */
-                fprintf(g->out,
-                    "  %%%d = call ptr @malloc(i64 ptrtoint "
-                    "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-                    env_reg, envtip);
+                /* [D-507] KAPANIS ENV BOLGE YONLENDIRMESI. Onceden KOSULSUZ
+                 * `@malloc` idi ve HIC serbest edilmiyordu (bu blogun kendi
+                 * yorumu: "SERBEST BIRAKMA YOK (leak ...); F4 sonra").
+                 * Kapanis bagi HAPSEDILMISSE (escape.c ky_isaretle LAMBDA
+                 * dali) env ρ_yerel den alinir -> islev sonunda TOPLU serbest.
+                 * Kanit YOKSA `@malloc` AYNEN kalir = ESKI davranis (sizar
+                 * ama UAF yok). D-494/D-506 ile ayni default-DENY deseni.
+                 * ⚠ SAGLAMLIK G006 YA DAYANIR: lifted govde env e isaretci
+                 *   donduremez (`|| &a` reddediliyor). */
+                if (g->rho_yerel && escape_kesin_yerel(g->aktif_escape, d)) {
+                    fprintf(g->out,
+                        "  %%%d = call ptr @kdl_bolge_ayir(ptr %s, i64 ptrtoint "
+                        "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
+                        env_reg, g->rho_yerel, envtip);
+                } else {
+                    fprintf(g->out,
+                        "  %%%d = call ptr @malloc(i64 ptrtoint "
+                        "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
+                        env_reg, envtip);
+                }
                 for (int i = 0; i < cc.sayi; i++) {
                     LlvmIsim *vi = isim_bul(g, cc.adlar[i], cc.uzlar[i]);
                     int lv = yeni_reg(g);

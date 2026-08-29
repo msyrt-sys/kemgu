@@ -1,0 +1,29 @@
+// [D-507] KAPANIS ENV BOLGE YONLENDIRMESI — kapi fiksturu.
+// Kapanis bagi HAPSEDILMIS (yalniz cagriliyor, kacmiyor) -> env `@malloc`
+// yerine `@kdl_bolge_ayir(rho_yerel, ..)` ile alinir ve islev sonunda TOPLU
+// serbest edilir. Oncesinde env HIC serbest edilmiyordu (llvm.c'nin kendi
+// yorumu: "SERBEST BIRAKMA YOK (leak ...); F4 sonra").
+//
+// ⚠ BU FIKSTUR KAPININ ENV KONTROLUNU AYIRT EDICI KILAR: onsuz sabotaj
+// (self-host yonlendirmesini kapat) SESSIZ kaliyordu — korpusta hapsedilmis
+// kapanis YOKTU (olculdu: S88 rc=0, kapi 159/159 yesil).
+//
+// Iki sekil: (a) SKALER yakalama, (b) LINEER yakalama (`imha` dugumu — o dal
+// eksikken lineer yakalayan HER kapanisin hapsedilmesi dusuyordu).
+
+işlev skaler_yakalama() -> tam32 {
+    değişken x: tam32 = 32;
+    değişken arttir = |n: tam32| x + n;
+    ver arttir(10);
+}
+
+işlev lineer_yakalama() -> tam32 {
+    değişken k = tekkez_olustur(42);
+    değişken tuket = || { imha(k); };
+    tuket();
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    ver skaler_yakalama() + lineer_yakalama();
+}
