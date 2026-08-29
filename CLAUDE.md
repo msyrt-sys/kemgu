@@ -1108,6 +1108,34 @@ Dizi tahsisi içeren dosya bulunamazsa **koşmayı reddeder**.
 3. **Windows `/tmp` ile WSL `/tmp` AYRI dizinler** → baseline kopyası sessizce
    tutmadı. Çözüm: iki tarafın da gördüğü bir yola yaz.
 
+
+**🔴 KENDİ BULGUMU DÜZELTTİM — "%25 yavaşlık" BİR ÖLÇÜM ARTEFAKTIYDI.**
+Yukarıdaki *"ρ_yerel dizileri ρ_caller'dan ~%25 yavaş"* saptamasını **açık
+soru** diye kaydetmiştim. Ardından ölçtüm ve **çürüdü**:
+```
+-O0'da FARK YOK        taban 2.78–2.86   D-506 2.74–2.86
+-O2'de fark VAR        taban 1.71–1.83   D-506 2.12–2.26   (10 dönüşümlü tur)
+```
+`-O0`'da farkın olmaması okuma yolunun **birebir aynı** olduğunu gösterdi →
+ceza çalışma zamanı maliyeti değil, **yerleşim** etkisi olmalı. Ayırt edici
+deney: gerçek diziden ÖNCE küçücük bir **kukla tahsis** (adresi kaydırır):
+```
+pad=0  2.02 2.05 2.02 2.01     ← ceza
+pad=1  1.95 1.78 1.74 1.75     ← ceza GİTTİ
+pad=7  1.80 1.80 1.80 1.79     ← taban (1.75) ile AYNI
+```
+Dizinin içeriği ve okuma döngüsü **birebir aynı**; değişen tek şey ADRES.
+→ Ceza **ADRESE BAĞLI** (önbellek-kümesi/sayfa hizalaması), ρ_yerel'in
+doğasında olan bir maliyet **DEĞİL**. D-506'nın hız etkisi **~nötr**;
+bellek kazancı (17×) aynen geçerli.
+
+**⚠ DERS: ÜÇ TUTARLI KOŞUM "GERÇEK" DEMEK DEĞİLDİR.** İlk ölçümüm
+(2.38/2.42/2.40) çok sıkıydı ve bana **sahte güven** verdi; aynı ikili başka
+bir turda 5.26 verdi. Mikro-benchmark'ta sıkı varyans, etkinin gerçek
+olduğunu değil, yalnızca o koşum penceresinde **kararlı** olduğunu gösterir.
+Ayırt edici deney (girdiyi değil YERLEŞİMİ değiştir) olmadan bu bir
+"özellik" diye kaydedilecekti.
+
 Fikstürler `test/perf/` altında (kalıcı ölçüm tabanı).
 
 ### ✅ D-504→D-505 KAPANDI: `görev` yakalaması artık SAHİPLİK TAŞIYOR
