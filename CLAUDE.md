@@ -1056,6 +1056,53 @@ bölme — `detect_stack_use_after_return=1` ile bile sessiz. Yani bir güvenlik
 değişmezi için *"program çalıştı + ASan temiz"* **yetersiz kanıttır** (D-417
 ve D-488'in üçüncü tekrarı).
 
+### 🔴 D-509: interprocedural özet self-host'a + D-506'NIN SOKTUĞU SOUNDNESS DELİĞİ
+**Port (planlanan iş):** D-488'in parametre-tutma özeti (`ea_param_tutmuyor`)
+`selfhost/codegen.kem`'e portlandı. Yeni analiz İCAT EDİLMEDİ — *"f, p'yi
+saklıyor mu?"* sorusu `ky_confined` ile **birebir aynıdır**, kanıt çağrı yerine
+taşındı. Her eksende default-DENY (bilinmeyen callee · gövdesiz imza ·
+**özyineleme** · yığın taşması). Gerçek programlarda self artık C ile birebir:
+`parser 22/22 · checker 23/23 · codegen 24/24 · regex 2/2`.
+
+**🔴 ASIL BULGU — SABOTAJ KAPIYI, KAPI DA BİR SOUNDNESS DELİĞİNİ AÇTI.**
+S89 yönlendirmeyi düşürdü (`%5`→`%4`) ama kapı **YEŞİL** kaldı: `rho_sinifi`
+her `%N`'i YEREL sayıyordu ve `main`'de ρ_global **de** bir `%N`'dir
+(`kdl_global_bolge_al()`). İki bölgenin ömrü BAMBAŞKA (global serbest
+EDİLMEZ, yerel `ret`te edilir). Sınıf artık bölge-açma atamalarından OKUNUYOR;
+register NUMARASI hâlâ yok sayılıyor.
+
+Sertleştirilmiş kapı **temizde 2 sapma** gösterdi — maskelenmiş, önceden var
+olan bir açık: `Dizi<metin>` ve `Dizi<&H>` üzerinde **C=YEREL, self=GLOBAL**.
+**Self DOĞRU, oracle YANLIŞTI** (D-442 sınıfı). Kök **D-506'da benim
+kodumdu**:
+```c
+const char *dz_elem = (eb == 8) ? "i64" : "i32";   // ← ELEMAN IR'ini BAYT'a indirger
+```
+Bayt genişliğine indirgeme **işaretçi-liği SİLİYOR**: `tam64` (gerçek skaler,
+güvenli) ile `metin`/`&Yapi`/`Dizi<T>` (ptr eleman, **GÜVENSİZ**) aynı kovaya
+düşüyor, ikisi de "skaler" sayılıp ρ_yerel'e gidiyordu — oysa
+`bolge_yerel_yonlendir`in **kendi koşulu** ptr elemanı REDDEDER (iç heap-ref
+`dizi_al` ile kaçabilir → **UAF**). Onarım: gerçek `eir` taşınır, bilinmeyen
+eleman → `"ptr"` = DENY.
+
+**⚠ D-506'NIN KAZANCI KORUNDU** (dar onarım, geri alma DEĞİL):
+```
+Dizi<tam32> (bench2)      → YEREL    17x bellek kazanci AYNEN
+Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
+```
+
+**⚠⚠ DERSLER, üçü de bu turda ölçüldü:**
+- **Bir performans optimizasyonu bir güvenlik değişmezini sessizce delebilir.**
+  D-506 tüm kapıları geçmişti (ASan dâhil) — fikstürlerde ptr-elemanlı
+  `dizi_olustur` YOKTU. *"Korpusta o şekil yok"* dersinin (D-356) beşinci
+  tekrarı.
+- **Sabotajın sessizliği önce KAPIYI şüpheli kılar** (D-443): S89 uygulanmıştı,
+  davranış değişmişti, kapı yine yeşildi → zayıf olan kapıydı.
+- **Windows'ta `python3` YOK.** `wsl.exe -e python3` ile bir Windows dosyasına
+  yaptığım İKİ düzenleme **sessizce kayboldu** (`grep -c` ile yakalandı) ve bir
+  an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
+  düzenleme = **Edit aracı**.
+
 ### 🎯 D-507→D-508: kapanış env + `bölge_al` ρ_yerel'e — sızıntı 9 → 2
 **D-507 (C):** kapanış env'i `@malloc` ile alınıp **HİÇ serbest edilmiyordu**.
 Hapsedilme kanıtı varsa artık ρ_yerel'den. Üç eksik dal ölçümle bulundu:

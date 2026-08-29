@@ -5432,6 +5432,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * bilinmiyorsa (struct-alan inşası vb.) 8 = guvenli max (i32'yi
                  * 2x reserve eder ama tasma imkansiz). */
                 int eb = 8;
+                /* [D-509] ELEMAN IR'i AYRICA TASINIR. D-506 yonlendirmeyi
+                 * `(eb == 8) ? "i64" : "i32"` ile besliyordu; bu, BAYT
+                 * GENISLIGINE indirgeme yaptigi icin ISARETCI-LIGI SILIYORDU:
+                 * `tam64` (gercek skaler, guvenli) ile `metin`/`&Yapi`/
+                 * `Dizi<T>` (ptr eleman, GUVENSIZ) ayni kovaya dusuyor ve
+                 * ikisi de "skaler" sayilip rho_yerel'e gidiyordu — oysa
+                 * `bolge_yerel_yonlendir`in kendi kosulu ptr elemani REDDEDER
+                 * (ic heap-ref `dizi_al` ile kacabilir). Self-host DOGRUYDU,
+                 * oracle YANLISTI (D-442 sinifi); sertlestirilen bolge_operand
+                 * kapisi ortaya cikardi. Bilinmeyen eleman -> "ptr" = DENY. */
+                const char *dz_elem = "ptr";
                 {
                     const Dugum *bt = g->beklenen_tip;
                     if (bt && bt->tip == DUGUM_TIP_REFERANS)
@@ -5439,9 +5450,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (bt && bt->tip == DUGUM_TIP_DIZI) {
                         const char *eir = ast_tip_to_ir(g,
                             bt->veri.tip_dizi.eleman_tip);
-                        if (eir && strcmp(eir, "ptr") != 0 &&
-                            strcmp(eir, "i64") != 0) {
-                            eb = 4;  /* i8/i16/i32 -> 4 byte */
+                        if (eir) {
+                            dz_elem = eir;
+                            if (strcmp(eir, "ptr") != 0 &&
+                                strcmp(eir, "i64") != 0) {
+                                eb = 4;  /* i8/i16/i32 -> 4 byte */
+                            }
                         }
                     }
                 }
@@ -5457,7 +5471,6 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * SAGLAMLIK AYNEN: `bolge_yerel_yonlendir` iki POZITIF kosul
                  * arar (skaler eleman + hapsedilme kaniti); kanit yoksa
                  * rho_caller doner = ESKI davranis. */
-                const char *dz_elem = (eb == 8) ? "i64" : "i32";
                 const char *dz_rho = bolge_yerel_yonlendir(g, d, dz_elem);
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 %d)\n",

@@ -28,10 +28,24 @@ TMP=$(mktemp -d 2>/dev/null || echo /tmp/bolge_op); mkdir -p "$TMP"
 # ρ SINIFI: `%rho` (çağıran/parametre) mi, `%N` (yerel, kdl_bolge_olustur) mi?
 # Register NUMARASINI kasten YOK SAYAR — o iki derleyicide farklı olabilir ve
 # bu kapının sorusu "hangi BÖLGE", "hangi numara" değil.
+# [D-509] rho_global ile rho_yerel AYIRT EDILIR. Onceki surum her `%N`i YEREL
+# sayiyordu; `main`de rho_global de bir `%N`dir (`kdl_global_bolge_al()`) ve
+# ikisi BAMBASKA omurlere sahiptir (global SERBEST EDILMEZ, yerel ret'te edilir).
+# Sabotaj S89 bunu ortaya cikardi: yonlendirme DUSTUGU halde (`%5` -> `%4`) kapi
+# YESIL kaldi -> KAPI zayifti, kod degil. Register NUMARASI hala yok sayilir;
+# SINIF o dosyadaki bolge-acma atamalarindan OKUNUR.
 rho_sinifi() {
-    grep -oE 'kdl_dizi_olustur\(ptr %[A-Za-z0-9_]+' "$1" \
-        | sed 's/.*ptr //' \
-        | sed 's/^%rho.*$/CALLER/; s/^%[0-9][0-9]*$/YEREL/'
+    awk '
+      /^define /                            { delete g; delete y }
+      /= call ptr @kdl_global_bolge_al\(\)/ { split($0,a," "); g[a[1]]=1 }
+      /= call ptr @kdl_bolge_olustur\(\)/   { split($0,a," "); y[a[1]]=1 }
+      match($0, /kdl_dizi_olustur\(ptr %[A-Za-z0-9_]+/) {
+          o = substr($0, RSTART, RLENGTH); sub(/.*ptr /, "", o)
+          if (o ~ /^%rho/)  print "CALLER"
+          else if (o in g)  print "GLOBAL"
+          else if (o in y)  print "YEREL"
+          else              print "BILINMEYEN(" o ")"
+      }' "$1"
 }
 
 # [D-507] KAPANIS ENV i de karsilastir: `@malloc` (HEAP) mi `@kdl_bolge_ayir`

@@ -85,6 +85,8 @@ yapı Ayr {
     // `fn_ret` yalnız LLVM tipini ("ptr") tutar ve ELEMANI SİLER; annotasyonsuz
     // `değişken a = yap();` bağlaması bu yüzden eleman tipini kaybediyordu.
     fn_relem: Dizi<metin>;
+    ea_devam: Dizi<tam32>;// [D-509] ea_param_tutmuyor ozyineleme yigini
+    ea_derinlik: tam32;  // [D-509] yigin tepesi (>=32 -> DENY)
     fn_node: Dizi<tam32>;// D-309: ISLEV düğüm idx (ρ_sahip call-graph kapanışı)
     pa_node: Dizi<tam32>;// CG9: hoist-edilen DEGISKEN düğüm idx'i (alloca entry'de)
     pa_reg: Dizi<metin>; // CG9: o DEGISKEN'in entry-alloca reg'i
@@ -7401,6 +7403,49 @@ işlev ky_ad_esit(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
 }
 
 // Diziyi RETAIN ETMEYEN (yalnız oku/yerinde-değiştir) builtin'ler.
+// [D-509] INTERPROCEDURAL PARAMETRE-TUTMA OZETI (C src/escape.c
+// ea_param_tutmuyor aynasi). `f(xs)` cagrisinda xs in hapsedilme kaniti
+// KOSULSUZ dusuyordu; oysa "f, p yi sakliyor mu?" sorusu ky_confined ile
+// BIREBIR AYNIDIR — yeni analiz ICAT EDILMEDI, kanit cagri yerine tasindi.
+// Her eksende default-DENY: bilinmeyen callee · govdesiz imza · OZYINELEME ·
+// yigin tasmasi · kurulmamis tablo -> hepsi eski konservatif yola duser.
+işlev ea_param_tutmuyor(p: &değişken Ayr, fi: tam32, idx: tam32) -> mantıksal {
+    eğer fi < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, fi), "ISLEV") == yanlış { ver yanlış; }
+    değişken gv: tam32 = fn_govde_bul(p, fi);
+    eğer gv < 0 { ver yanlış; }                 // yalniz imza -> DENY
+    değişken cb: tam32 = dizi_al(p.a_cb, fi);
+    değişken cs: tam32 = dizi_al(p.a_cs, fi);
+    değişken say: tam32 = 0;
+    değişken pn: tam32 = 0 - 1;
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer say == idx { pn = c; }
+            say = say + 1;
+        }
+        i = i + 1;
+    }
+    eğer pn < 0 { ver yanlış; }
+    değişken ad: metin = dizi_al(p.a_deg, pn);
+    eğer metin_uzunluk(ad) == 0 { ver yanlış; }
+    // OZYINELEME KORUYUCUSU: f zaten degerlendirilmekteyse DENY. Hem sonlanmayi
+    // garanti eder hem konservatif taraftadir.
+    eğer p.ea_derinlik >= 32 { ver yanlış; }
+    değişken j: tam32 = 0;
+    iken j < p.ea_derinlik {
+        eğer dizi_al(p.ea_devam, j) == fi { ver yanlış; }
+        j = j + 1;
+    }
+    iken dizi_boyut(p.ea_devam) <= p.ea_derinlik { dizi_ekle(p.ea_devam, 0 - 1); }
+    dizi_yaz(p.ea_devam, p.ea_derinlik, fi);
+    p.ea_derinlik = p.ea_derinlik + 1;
+    değişken r: mantıksal = ky_confined(p, gv, ad);
+    p.ea_derinlik = p.ea_derinlik - 1;
+    ver r;
+}
+
 // [D-508] `olarak` (cast) ESCAPE SEMANTIGINI DEGISTIRMEZ: `p olarak metin`
 // hala p nin DEGERIDIR. Ham isaretcilerde bu sekil KACINILMAZDIR
 // (`bellek_kopyala(yeni olarak metin, ...)`). C src/escape.c cast_soy aynasi.
@@ -7506,6 +7551,17 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
             // [D-508] SAKLAMAYAN BELLEK YERLESIGI: `bellek_kopyala` (memcpy)
             // argumanini TUTMAZ -> hapsedilme KORUNUR. Cast katmani soyulur
             // cunku ham isaretci bu yerlesiklere DAIMA `olarak metin` ile gecer.
+            // [D-509] INTERPROCEDURAL: callee o parametreyi SAKLAMIYORSA
+            // hapsedilme KORUNUR. `i` cocuk indeksidir (0 = callee) -> param idx = i-1.
+            eğer atla == yanlış {
+                eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
+                    eğer ky_ad_esit(p, ky_cast_soy(p, dizi_al(p.cocuk, cb + i)), ad) {
+                        eğer ea_param_tutmuyor(p, fn_node_bul(p, dizi_al(p.a_deg, callee)), i - 1) {
+                            atla = doğru;
+                        }
+                    }
+                }
+            }
             eğer atla == yanlış {
                 eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
                     eğer ky_bellek_builtin_tutmaz(dizi_al(p.a_deg, callee)) {
@@ -12698,7 +12754,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         beklenen_elem_ic: "", son_elem2: "", son_ic: "",
         cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], cv_ptn: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
-        fn_ad: [], fn_ret: [], fn_risz: [], fn_relem: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
+        ea_devam: [], ea_derinlik: 0, fn_ad: [], fn_ret: [], fn_risz: [], fn_relem: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
         ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", mod_onek: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",

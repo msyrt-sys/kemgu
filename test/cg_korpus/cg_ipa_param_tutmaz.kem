@@ -1,0 +1,24 @@
+// [D-509] INTERPROCEDURAL PARAMETRE-TUTMA OZETI — C↔self-host paritesi.
+// `topla(xs)` cagrisi xs'in hapsedilme kanitini KOSULSUZ dusuruyordu; oysa
+// `topla` diziyi SAKLAMIYOR (yalniz okuyor) -> xs ρ_yerel'de kalabilir.
+// `gecir` KARSI ORNEK: diziyi DONDURUYOR -> kanit DUSMELI (ρ_caller).
+// Pozitif + negatif birlikte: yalniz pozitif olsaydi "her cagriyi hapsedilmis
+// say" sabotaji kapidan GECERDI (D-425). Cikis: 42
+işlev topla(xs: Dizi<tam32>) -> tam32 {          // TUTMAZ — yalniz okur
+    değişken t: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) { t = t + dizi_al(xs, i); i = i + 1; }
+    ver t;
+}
+
+işlev gecir(ys: Dizi<tam32>) -> Dizi<tam32> {    // TUTAR — kaciriyor (ver ys)
+    ver ys;
+}
+
+işlev main() -> tam32 {
+    değişken a: Dizi<tam32> = [10, 20, 12];
+    değişken b: Dizi<tam32> = [1, 2, 3];
+    değişken s: tam32 = topla(a);
+    değişken c: Dizi<tam32> = gecir(b);
+    ver s + dizi_al(c, 0) - 1;                    // 42 + 1 - 1 = 42
+}
