@@ -5177,8 +5177,13 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // [D-506] BÖLGE YÖNLENDİRMESİ — önceden `p.rho_ref` SABİT KODLUYDU.
             // `bolge_yerel_yonlendir` İKİ POZİTİF koşul arar (skaler eleman +
             // hapsedilme kanıtı); kanıt yoksa ρ_caller döner = ESKİ davranış.
+            // [D-510] BİLİNMEYEN ELEMAN → "ptr" = DENY. Önceden "i32" (SKALER)
+            // varsayılıyordu, yani bilinmeyen `ALLOW` tarafına düşüyordu; D-509'un
+            // ölçtüğü UAF sınıfının aynısı (ptr eleman → iç heap-ref `dizi_al`
+            // ile kaçabilir). Bu değişken YALNIZ yönlendirme içindir; eleman
+            // BAYT genişliği ayrıca `doeb`den gelir, emisyon etkilenmez.
             değişken doelem2: metin = doelem;
-            eğer metin_esit(doelem2, "") { doelem2 = "i32"; }
+            eğer metin_esit(doelem2, "") { doelem2 = "ptr"; }
             değişken dorho: metin = bolge_yerel_yonlendir(p, idx, doelem2);
             yaz_str("  "); yaz_str(dors); yaz_str(" = call ptr @kdl_dizi_olustur(ptr ");
             yaz_str(dorho); yaz_str(", i32 "); yaz_str(doeb); yaz_str(")"); yb(10);
@@ -5856,10 +5861,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // eleman tipinden gelir (fat value T'yi siler). Bağlam tek seferlik.
         değişken elem_ic: metin = p.beklenen_elem_ic;
         p.beklenen_elem_ic = "";
+        // [D-510] YÖNLENDİRME ELEMANI EMİSYON ELEMANINDAN AYRI. Emisyon bilinmeyen
+        // elemanda "i32"ye düşmek ZORUNDA (bayt genişliği/eleman işlemleri), ama
+        // YÖNLENDİRME için bilinmeyen = "ptr" = DENY olmalı — aksi hâlde bilinmeyen
+        // `ALLOW` tarafına düşer ve D-509'un ölçtüğü UAF sınıfı geri gelir.
+        değişken elem_rho: metin = elem;
+        eğer metin_esit(elem_rho, "") { elem_rho = "ptr"; }
         eğer metin_esit(elem, "") { elem = "i32"; }
         // V2-F4.2b (b3): YÖNLENDİRME — confined+skaler dizi → ρ_yerel (ret'te serbest);
         // aksi → rho_ref (ρ_caller). Hem olustur hem ekle AYNI ρ'yu kullanır (tutarlılık).
-        değişken drho: metin = bolge_yerel_yonlendir(p, idx, elem);
+        değişken drho: metin = bolge_yerel_yonlendir(p, idx, elem_rho);
         değişken d: tam32 = yeni_reg(p);
         değişken dr: metin = reg_str(d);
         yaz_str("  "); yaz_str(dr); yaz_str(" = call ptr @kdl_dizi_olustur(ptr ");

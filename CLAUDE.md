@@ -1103,6 +1103,29 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 🟡 D-510 (ÖLÇÜLEMEYEN ama TEK YÖNLÜ): bilinmeyen eleman → DENY
+D-509'un ardından **komşu şekiller tarandı** (D-438 disiplini). Aynı indirgeme
+kalıbı C'de başka yerde YOK, ama self-host'ta **iki** yönlendirme çağrısı
+bilinmeyen elemanı `"i32"`ye — yani **SKALER = İZİN** tarafına — düşürüyordu.
+D-509'un ölçtüğü UAF sınıfının tam varsayılanı. İkisi de `"ptr"` = DENY yapıldı;
+`5859`'da yönlendirme elemanı emisyon elemanından **ayrıldı** (emisyon bilinmeyen
+elemanda `"i32"`ye düşmek ZORUNDA — bayt genişliği/eleman işlemleri).
+
+**⚠⚠ DÜRÜSTÇE: BU DEĞİŞİKLİĞİ AYIRT EDEN BİR ŞEKİL BULAMADIM.** Dört probe
+denendi: annotasyonsuz literal (C heap dizisi bile YAYMIYOR — stack yolu) ·
+annotasyonlu `Dizi<metin>` (zaten GLOBAL) · annotasyonsuz `dizi_olustur`
+(**`--check` REDDEDİYOR**) · yapı alanı literali (zaten GLOBAL).
+
+**D-430 ("ayırt edilemeyen kod doğrulanmamış yüzeydir") GEREĞİ GERİ ALINMADI —
+fark şu:** D-430'da geri alınan şey bir **anlambilim eklemesiydi** ve YANLIŞ
+olabilirdi. Bu ise bir **varsayılanın yönü** ve yalnız **DENY** tarafına:
+güvensiz yönde yanlış OLAMAZ, en kötü ihtimalle ulaşılamaz bir yolda bir
+optimizasyon kaçırır — ve kaçırmadığı ölçüldü (`bench2` HÂLÂ `YEREL`, D-506'nın
+17× kazancı yerinde; üç kapı yeşil). Değeri, o yolu ileride ulaşılabilir kılan
+kişinin **ALLOW varsayılanını miras almaması**.
+**Bu satır bir BORÇ kaydıdır, gizleme değil:** o yol ulaşılabilir hâle gelirse
+ayırt edici bir fikstür EKLENMELİ.
+
 ### 🎯 D-507→D-508: kapanış env + `bölge_al` ρ_yerel'e — sızıntı 9 → 2
 **D-507 (C):** kapanış env'i `@malloc` ile alınıp **HİÇ serbest edilmiyordu**.
 Hapsedilme kanıtı varsa artık ρ_yerel'den. Üç eksik dal ölçümle bulundu:
