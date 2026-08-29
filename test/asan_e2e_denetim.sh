@@ -72,6 +72,29 @@ mkdir -p "$TMP"
 #     YALNIZ hapsedilme kanıtı varken yapıyor; kanıtsız durumda sızdırmak
 #     BİLİNÇLİ seçim.
 #
+#   [D-511] KALAN İKİ SIZINTININ KÖKÜ TEK TEK OKUNDU — biri KUSUR DEĞİL:
+#     `gorev_temel`  65.580 bayt · `kdl_bolge_olustur` <- `kdl_gorev_basla_kapanis`
+#       Bu, ρ_sahip'tir ve D-309'un hapsedilme kanıtı onu BİLEREK reddediyor.
+#       IR'dan ÖLÇÜLDÜ: üç `görev_başlat`ın bayrakları `i32 0, 1, 1` — sıfır
+#       olan, T'si `metin` (İŞARETÇİ) olan görev. P1 (dönüş skaler) kanıtı
+#       tam da tasarlandığı gibi düşüyor: dönüş ρ_sahip'in içine işaret
+#       ediyor OLABİLİR, serbest bırakmak UAF olurdu. Diğer iki görev
+#       (skaler T) bayrağı 1 alıyor ve bölgeleri SERBEST EDİLİYOR.
+#       → Bu satır bir BORÇ DEĞİL, DOĞRU BİR KARARIN maliyetidir. Kapatmak
+#         "dönen işaretçi ρ_sahip'in içine mi bakıyor?" sorusunu ister —
+#         hapsedilme kanıtından FARKLI ve daha zor bir analiz.
+#     `kanal_mesaj`  8 + 168 + 16 bayt · `kdl_kanal_olustur`
+#       ⚠ `kdl_kanal_serbest` runtime'da ZATEN VAR (kdl_runtime.c:1758) ama
+#       HİÇBİR derleyici onu çağırmıyor (`grep -c` C ve self-host'ta 0) —
+#       D-462'nin "kod var, hiçbir ölçüm ateşlemiyor" sınıfı.
+#       ⚠⚠ NAİF ONARIM İŞE YARAMAZ: kanalı yaratan işlevin sonunda serbest
+#       bırakmak yalnız HAPSEDİLMİŞ kanallar için güvenli; oysa kanalın VARLIK
+#       SEBEBİ görevlere yakalanmaktır (D-505 onu taşımadan bilerek muaf
+#       tuttu) ve yakalanan bağlama `ky_confined`'in LAMBDA dalından DENY
+#       alır. Yani kural bu dosyayı ZATEN kapsamaz. Gerçek kapanış "kanalı
+#       tutan tüm görevler birleştirildi mi?" bilgisini ister =
+#       BİRLEŞTİRME-DUYARLI ÖMÜR → dil yüzeyi kararı (Mehmet).
+#
 #     ⚠ MUAFİYET SINIRI KABUL EDİLEBİLİRLİĞİ GENİŞLETMEZ (D-421): bu satır
 #     "sızıntı yok" demiyor, "sızıntının kökü ÖLÇÜLDÜ ve F4.4'ün işi" diyor.
 #     F4.4 yapıldığında bu dosyalar kendiliğinden ASan-temiz olacak ve

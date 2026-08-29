@@ -1103,6 +1103,36 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 📐 D-511: kalan 2 sızıntının kökü OKUNDU — biri KUSUR DEĞİL
+F4.4'ün "kalan 2 sızıntı" maddesi bugüne dek yalnız DOSYA ADIYLA kayıtlıydı.
+Yığın izleri tek tek okundu (tahmin yok) ve madde **ikiye ayrıldı**:
+
+**`gorev_temel` — 65.580 bayt — KUSUR DEĞİL, DOĞRU BİR KARARIN MALİYETİ.**
+ρ_sahip'tir ve D-309'un kanıtı onu **bilerek** reddediyor. IR'dan ölçüldü:
+üç `görev_başlat`ın `rho_serbest` bayrakları **`i32 0, 1, 1`** — sıfır olan,
+T'si **`metin` (İŞARETÇİ)** olan görev. P1 (*dönüş skaler*) tam tasarlandığı
+gibi düşüyor: dönüş ρ_sahip'in İÇİNE işaret ediyor olabilir, serbest bırakmak
+**UAF** olurdu. Diğer iki görev (skaler T) bayrağı **1** alıyor ve bölgeleri
+**gerçekten serbest ediliyor** — yani mekanizma çalışıyor.
+Kapatmak *"dönen işaretçi ρ_sahip'in içine mi bakıyor?"* sorusunu ister —
+hapsedilme kanıtından **farklı ve daha zor** bir analiz.
+
+**`kanal_mesaj` — 8+168+16 bayt — GERÇEK boşluk ama naif onarım İŞE YARAMAZ.**
+`kdl_kanal_serbest` runtime'da **ZATEN VAR** (`kdl_runtime.c:1758`) ama
+**hiçbir derleyici onu çağırmıyor** (`grep -c` C'de 0, self-host'ta 0) —
+D-462'nin *"kod var, hiçbir ölçüm ateşlemiyor"* sınıfı.
+⚠⚠ Kanalı yaratan işlevin sonunda serbest bırakmak yalnız **hapsedilmiş**
+kanallar için güvenlidir; oysa kanalın **varlık sebebi görevlere yakalanmaktır**
+(D-505 onu taşımadan bilerek muaf tuttu) ve yakalanan bağlama `ky_confined`'in
+LAMBDA dalından **DENY** alır → kural bu dosyayı **zaten kapsamaz**. Gerçek
+kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
+**birleştirme-duyarlı ömür → dil yüzeyi kararı (Mehmet).**
+
+**⚠ DERS: "kalan N sızıntı" bir SAYIDIR, bir İŞ LİSTESİ DEĞİL.** İkisini de
+"F4.4 borcu" diye kaydetmiştim; ölçünce biri **doğru davranış** çıktı. Bir
+borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
+*"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
+
 ### 🟡 D-510 (ÖLÇÜLEMEYEN ama TEK YÖNLÜ): bilinmeyen eleman → DENY
 D-509'un ardından **komşu şekiller tarandı** (D-438 disiplini). Aynı indirgeme
 kalıbı C'de başka yerde YOK, ama self-host'ta **iki** yönlendirme çağrısı
