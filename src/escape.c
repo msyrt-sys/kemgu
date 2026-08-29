@@ -880,6 +880,28 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
                     ky_set(ea, d->veri.degisken.deger);
                 }
             }
+            /* [D-506] `değişken V: Dizi<T> = dizi_olustur(N)` — YERLESIK CAGRI dali.
+             * D-494'un `bölge_al` dalinin BIREBIR SIMETRIGI. Onceden YALNIZ dizi
+             * LITERALI (`[1,2,3]`) isaretleniyordu; `dizi_olustur(N)` bir CAGRI
+             * dugumudur ve hic isaretlenmiyordu -> codegen onu KOSULSUZ ρ_caller'a
+             * yayiyordu. OLCULDU: ayni govde literalle ρ_yerel, `dizi_olustur` ile
+             * ρ_global; 200K cagrida zirve bellek 100 MB (sabit olmasi gerekirken).
+             * `dizi_olustur` boyutlu dizi kurmanin DEYIMSEL yoludur (stdlib/dizi.kem
+             * onu kullanir) -> literal-only kapsam gercek kodu disarida birakiyordu. */
+            if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
+                && d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_CAGRI
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0) {
+                const Dugum *dh = d->veri.degisken.deger->veri.cagri.hedef;
+                if (dh && dh->tip == DUGUM_TANIMLAYICI
+                    && dh->veri.tanimlayici.uzunluk == 12
+                    && memcmp(dh->veri.tanimlayici.metin, "dizi_olustur", 12) == 0
+                    && ky_confined(fn_govde, d->veri.degisken.ad,
+                                   d->veri.degisken.ad_uzunluk)) {
+                    kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                    ky_set(ea, d->veri.degisken.deger);
+                }
+            }
             if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
                 && d->veri.degisken.deger
                 && d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR

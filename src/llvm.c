@@ -5448,13 +5448,24 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int rr = yeni_reg(g);
                 int kap = args[0].reg;
                 int kap_i32 = int_donustur(g, kap, args[0].tip, "i32");
+                /* [D-506] BOLGE YONLENDIRMESI. Onceden `g->rho_ref` SABIT
+                 * KODLUYDU: `dizi_olustur(N)` DAIMA cagiran bolgesine gidiyordu,
+                 * oysa dizi LITERALI yonlendiriliyordu. Olculdu: ayni govde
+                 * literalle rho_yerel, `dizi_olustur` ile rho_global; 200K
+                 * cagrida zirve bellek 100 MB (sabit olmasi gerekirken).
+                 * `dizi_olustur` boyutlu dizi kurmanin DEYIMSEL yoludur.
+                 * SAGLAMLIK AYNEN: `bolge_yerel_yonlendir` iki POZITIF kosul
+                 * arar (skaler eleman + hapsedilme kaniti); kanit yoksa
+                 * rho_caller doner = ESKI davranis. */
+                const char *dz_elem = (eb == 8) ? "i64" : "i32";
+                const char *dz_rho = bolge_yerel_yonlendir(g, d, dz_elem);
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 %d)\n",
-                    rr, g->rho_ref, eb);   /* V2-F4.2a: ρ */
+                    rr, dz_rho, eb);   /* [D-506] yonlendirilmis rho */   /* V2-F4.2a: ρ */
                 /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
                 fprintf(g->out,
                     "  call void @kdl_dizi_kapasite_ayarla(ptr %s, ptr %%%d, i32 %%%d)\n",
-                    g->rho_ref, rr, kap_i32);   /* V2-F4.2a: ρ */
+                    dz_rho, rr, kap_i32);   /* [D-506] AYNI rho */   /* V2-F4.2a: ρ */
                 IfadeSonuc s = { rr, "ptr", 0, 0};
                 return s;
             }

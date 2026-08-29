@@ -1,0 +1,17 @@
+// Tahsis-agirlikli: her cagride yeni dizi (hapsedilmis -> ρ_yerel)
+işlev yap_ve_topla(n: tam32) -> tam32 {
+    değişken d: Dizi<tam32> = dizi_olustur(16);
+    değişken i: tam32 = 0;
+    iken i < 16 { dizi_ekle(d, i); i = i + 1; }
+    değişken s: tam32 = 0;
+    değişken j: tam32 = 0;
+    iken j < 16 { s = s + dizi_al(d, j); j = j + 1; }
+    ver s + n;
+}
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    değişken r: tam32 = 0;
+    iken r < 200000 { t = t + yap_ve_topla(0); r = r + 1; }
+    eğer t == 0 { ver 1; }
+    ver 42;
+}
