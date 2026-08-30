@@ -1158,6 +1158,21 @@ kapıdan GEÇERDİ (D-425).
    Kapı yine kırmızı verdi ama **yanlış sebeple**; `if (0) if (...)` ile
    tekrarlandı ve açık gerçekten geri geldi (`h7` → `OK`).
 
+**⚠⚠ ÜÇ-UYGULAMA TUZAĞINA YİNE DÜŞTÜM (D-503'te KAYITLI).** Kuralı C'ye ve
+`selfhost/checker.kem`'e portladım; `checker_diff` **166/166 YEŞİL** verdi. Ama
+`self_driver` **`selfhost/codegen.kem`**'in check yolunu kullanıyor ve oraya
+portlanmamıştı → **tam takım orada kırmızı** (C 2×G001, sürücü 0).
+**Hedefli kapının yeşil olması portun tam olduğunu KANITLAMAZ** — bir kuralı
+portlarken HANGİ kapının HANGİ uygulamayı okuduğunu **önce ölç**.
+Üçüncü uygulamaya da portlandı → sürücü 134/134, FIXPOINT ✓.
+
+**⚠ İKİNCİ KAÇIŞ — ETKİ ALANI ÖLÇÜMÜ GÖMÜLÜ KAYNAKLARI GÖRMEDİ.**
+`--include="*.kem"` ile taramıştım; `test/test_llvm.c` içindeki **C dizgisine
+gömülü** KEMGU kaynağı (`[70] bellek_al + serbest`) taramanın dışındaydı ve
+tam takım orada da kırmızı verdi. Kusur değil — D-517'nin doğru sonucu; sarmal
+eklendi (286/286). **Gömülü kaynaklar AYRI BİR YÜZEYDİR** (ölçüm aracı kontrol
+listesine eklendi).
+
 **Sabotaj 2/2:** S94 (C) · S95 (self) → ikisi de `checker_diff` 166→165, rc=2.
 **Kapılar:** checker_diff **166/166 (0 muaf)** · check_kapisi 266/273 (0 RED) ·
 check_genis 133/133 · codegen_diff 161/161 · sıfır uyarı 38/0.

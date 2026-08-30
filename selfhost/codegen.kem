@@ -11791,6 +11791,22 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken hb: tam32 = dizi_al(p.a_cb, idx);
         değişken hc: tam32 = dizi_al(p.a_cs, idx);
         değişken hedef: tam32 = dizi_al(p.cocuk, hb);
+        // [D-517] HAM BELLEK YERLEŞİKLERİ `güvensiz` İSTER — C tip_kontrol.c
+        // ve selfhost/checker.kem aynası. `bellek_*` `metin` olarak tiplendiği
+        // için G001'in `*T` koşulu onlara HİÇ uygulanmıyordu → `güvensiz`siz
+        // bir program heap taşması yapabiliyordu. Yeni tanı kodu YOK: G001.
+        // ⚠⚠ BU DOSYA AYRI BİR UYGULAMADIR (D-503'ün üç-uygulama tuzağı):
+        //   `checker_diff` `checker.kem`i okur, `self_driver` BU dosyayı.
+        //   Kuralı yalnız checker.kem'e portlayınca hedefli kapı YEŞİL kaldı
+        //   ama TAM TAKIM sürücüde kırmızı verdi.
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") ve (p.guv_bag == 0) {
+            değişken bad: metin = dizi_al(p.a_deg, hedef);
+            eğer metin_esit(bad, "bellek_al") veya metin_esit(bad, "bellek_kopyala")
+              veya metin_esit(bad, "bellek_serbest") {
+                g001_hata(p, idx);
+                ver 0;
+            }
+        }
         // D-357 (B): çeşit yapıcısı `Çeşit::V(...)` — C bunu normal çağrı yolundan
         // ÖNCE dener ve hata varsa erken döner (argüman kontrolü yok).
         eğer m002_yapici_kontrol(p, idx, hedef) { ver 0; }
