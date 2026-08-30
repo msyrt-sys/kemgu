@@ -3319,15 +3319,27 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             char buf[64];
             int n = kesirli_kisa_bicimle(d->veri.kesirli.deger,
                                          buf, sizeof(buf));
-            int decimal_var = 0;
+            /* [D-518] NOKTA MANTISTE OLMALI — `e` ONU SAGLAMAZ.
+             * Onceki kosul `'e'`yi "ondalik var" sayiyordu, oysa LLVM noktayi
+             * MANTISTE ister: `1e+30` GECERSIZDIR ("integer constant must have
+             * integer type") ve `1.5e+300` gecerlidir. Sonuc: `%.15g`in ustel
+             * bicime dustugu HER literal (|x| >= 1e15, kucuk kesirler) programi
+             * LINK-RED yapiyordu — gecerli bir KEMGU programi derlenmiyordu.
+             * ⚠ `.0`i SONA eklemek YANLIS: `1e+30.0` da gecersizdir (self-host
+             *   tam bunu yapiyordu). Ustel varsa nokta `e`den ONCE girer. */
+            int exp_i = -1, nokta_var = 0, ozel = 0;
             for (int i = 0; i < n; i++) {
-                if (buf[i] == '.' || buf[i] == 'e' ||
-                    buf[i] == 'E' || buf[i] == 'n' /* nan/inf */) {
-                    decimal_var = 1; break;
-                }
+                if (buf[i] == '.') nokta_var = 1;
+                else if (buf[i] == 'e' || buf[i] == 'E') { exp_i = i; break; }
+                else if (buf[i] == 'n' || buf[i] == 'i') { ozel = 1; break; }
             }
-            if (!decimal_var && n + 3 < (int)sizeof(buf)) {
-                buf[n] = '.'; buf[n+1] = '0'; buf[n+2] = '\0';
+            if (!ozel && !nokta_var && n + 3 < (int)sizeof(buf)) {
+                if (exp_i < 0) {                 /* 2 -> 2.0 */
+                    buf[n] = '.'; buf[n+1] = '0'; buf[n+2] = '\0';
+                } else {                         /* 1e+30 -> 1.0e+30 */
+                    memmove(buf + exp_i + 2, buf + exp_i, (size_t)(n - exp_i) + 1);
+                    buf[exp_i] = '.'; buf[exp_i + 1] = '0';
+                }
             }
             fprintf(g->out, "  %%%d = fadd %s 0.0, %s\n", r, tip, buf);
             IfadeSonuc s = { r, tip, 0, 0};

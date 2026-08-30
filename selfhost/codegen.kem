@@ -2378,14 +2378,26 @@ işlev fcmp_pred(op: metin) -> metin {
 }
 // LLVM float-sabiti nokta gerektirir (`2` geçersiz; `2.0` geçerli). ondalik_bicimle
 // trailing `.0`'ı düşürebiliyor → KESIRLI emit'inde noktayı garanti et.
+// [D-518] NOKTA MANTİSTE OLMALI ve `.0` SONA EKLENEMEZ.
+// Önceki sürüm `1e+30` için `.0`'ı SONA ekliyordu → `1e+30.0` = GEÇERSİZ IR.
+// C tarafı ise noktayı hiç eklemiyordu → `1e+30` = yine GEÇERSİZ. İkisi de
+// LINK-RED veriyordu, yani `%.15g`in üstel biçime düştüğü HER kesirli literal
+// (|x| >= 1e15, küçük kesirler) geçerli bir programı derlenemez yapıyordu.
+// KURAL: `1.5e+300` GEÇERLİDİR (mantiste nokta var); `1e+30` DEĞİLDİR.
 işlev kesirli_lit(s: metin) -> metin {
     değişken i: tam32 = 0;
     değişken n: tam32 = metin_uzunluk(s);
+    değişken eks: tam32 = 0 - 1;
     iken i < n {
-        eğer bayt(s, i) == 46 { ver s; }   // '.' var → olduğu gibi geçerli
-        i = i + 1;
+        değişken b: tam32 = bayt(s, i);
+        eğer b == 46 { ver s; }                      // '.' mantiste var → geçerli
+        eğer (b == 101) veya (b == 69) { eks = i; i = n; }   // 'e' / 'E'
+        değilse { i = i + 1; }
     }
-    ver metin_birlestir(s, ".0");
+    eğer eks < 0 { ver metin_birlestir(s, ".0"); }   // 2 → 2.0
+    // 1e+30 → 1.0e+30  (nokta `e`den ÖNCE)
+    ver metin_birlestir(metin_birlestir(metin_kes(s, 0, eks), ".0"),
+                        metin_kes(s, eks, n - eks));
 }
 // D3: "{i8, i32, ptr}" → n. alanın LLVM tipi (0="i8" tag, 1/2=payload). virgül-böl.
 işlev agg_alan(s: metin, n: tam32) -> metin {

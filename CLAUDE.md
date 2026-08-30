@@ -1103,6 +1103,51 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 🔴✅ D-518: ÜSTEL KESİRLİ LİTERAL GEÇERSİZ IR ÜRETİYORDU + kapı sertleştirildi
+Değişmez avı **`olarak` yüzeyine** taşındı. Beş şeklin dördü doğru davrandı
+(`tam64→tam8` daraltma **E004**, ilgisiz yapı dönüşümü **E002**, `3.9→3`
+tanımlı, işaretli→işaretsiz tanımlı). Beşincisi bir **codegen kusuru** açtı.
+
+**KUSUR:** `%.15g` |x| ≥ 1e15 ve küçük kesirlerde **üstel biçime** düşer ve
+LLVM noktayı **MANTİSTE** ister:
+```
+C   : 1e+30     (nokta YOK)   -> "integer constant must have integer type"
+SELF: 1e+30.0   (nokta SONDA) -> yine GEÇERSİZ
+1.5e+300  -> GEÇERLİ (mantiste nokta var)
+```
+İkisi de **LINK-RED**: geçerli bir KEMGU programı **derlenmiyordu**. Kural
+*"üstel varsa reddet"* değil, *"nokta mantiste olmalı"*dır.
+**İki farklı kök, aynı sınıf:** C hiç nokta eklemiyordu; self-host `.0`'ı
+**sona** ekliyordu. D-457'nin "nokta garanti" kuralı üstel biçimi kaçırmıştı.
+Onarım ikisinde de: üstel varsa nokta `e`den **ÖNCE** girer. D-457'nin kayıpsız
+gidiş-dönüşü korunur (`3.14159265358979` tam basılır).
+
+**🎯 ASIL BULGU — SABOTAJ KAPININ KÖR NOKTASINI AÇTI.**
+**S96** (C onarımını geri al) → kapı **KIRMIZI OLMADI**, yalnız sayı
+**162 → 161** düştü: C'nin **geçersiz IR üretmesi** bir başarısızlık değil bir
+**ATLAMA** olarak görünüyordu (`⚠ oracle yok, atla`). Yani `codegen_diff`
+**oracle tarafındaki her gerilemeyi sessizce yutuyordu** — D-424'ün *"atlama
+listesi bir KÖR NOKTA ENVANTERİDİR"* dersinin aynısı.
+Atlama **kürate listeye** bağlandı (`cgmodul_mat` · `cgmodul_zincir` —
+çapraz-modül yüklemesi ister, C oracle tek başına derleyemez; **liste ÖLÇÜLDÜ**,
+tahmin edilmedi). Listede olmayan her oracle-link hatası artık **sert hata**.
+Aynı S96 sertleştirmeden sonra: **161/162, rc=2** ✓
+
+**⚠⚠ BU TURDA ÖLÇÜM ARACIM DÖRT KEZ YANILDI:**
+1. İlk `-O0`/`-O2` karşılaştırması **aynı ikili yolunu** (`/tmp/c`) kullanıyordu;
+   `c3` hiç linklenmedi ve **`c2`nin bayat ikilisi** koştu → "exit 3" gördüm ve
+   *"UB yok"* diye kaydedecektim. Ayrı yollar + açık `link rc` ile ortaya çıktı.
+2. `grep -oE "double [0-9.e+-]+"` C'de `fadd double 0.0, X` desenindeki **ilk**
+   sayıyı yakaladı → sabit sütunu hep `0.0` göründü.
+3. **`sed -i`'yi Türkçe içeren `src/llvm.c` üzerinde kullandım** (deponun kendi
+   yasağı). Desen tutmadı, **hasar yok** — ama geri alma da olmadı ve bir tur
+   boşa gitti. Satır sayısı iki tarafta eşit diye doğrulandı.
+4. Harness'a **var olmayan bir değişken** (`hata=1`) yazdım; gerçek sayaç
+   `fail`. Kaynağı okuyunca çıktı.
+
+**Kapılar:** codegen_diff **162/162** · yapi_diff 137/137 · snapshot 50/50 ·
+parser_diff 13/13 (dump paritesi bozulmadı).
+
 ### 🔴✅ D-517: `güvensiz`SİZ HEAP TAŞMASI — ham bellek yerleşikleri artık G001 istiyor
 Değişmez avı **`güvensiz` sınırı** eksenine taşındı ("ham işaretçi yalnız
 `güvensiz` blokta" — manşetteki iddia). **On iki şeklin on biri tuttu:**

@@ -1,0 +1,27 @@
+// [D-518] ÜSTEL BİÇİMLİ KESİRLİ LİTERAL — LLVM noktayı MANTİSTE ister.
+//
+// ÖLÇÜLEN KUSUR: `%.15g` |x| >= 1e15 ve küçük kesirlerde ÜSTEL biçime düşer.
+//   C   : `1e+30`    (nokta YOK)      -> "integer constant must have integer type"
+//   SELF: `1e+30.0`  (nokta SONDA)    -> yine GEÇERSİZ
+// İkisi de LINK-RED veriyordu, yani GEÇERLİ bir KEMGU programı DERLENMİYORDU.
+// `1.5e+300` GEÇERLİDİR (mantiste nokta var) — kural "üstel varsa reddet" DEĞİL,
+// "nokta mantiste olmalı"dır; bu dosya ikisini de ölçer.
+//
+// D-457'nin (kayıpsız kısa gidiş-dönüş) kapsamı korunur: `3.14159265358979`
+// hâlâ TAM basılır, `%g`nin altı basamağına düşmez.
+// Çıkış: 42
+işlev main() -> tam32 {
+    değişken buyuk: kesirli64 = 1.0e30;          // üstel, mantiste nokta YOK
+    değişken cok_buyuk: kesirli64 = 1.5e300;     // üstel, mantiste nokta VAR
+    değişken kucuk: kesirli64 = 0.0000001;       // üstel (negatif üs)
+    değişken tam_basamak: kesirli64 = 3.14159265358979;  // D-457 kapsamı
+    değişken duz: kesirli64 = 2.0;               // üstel DEĞİL
+
+    eğer buyuk < 1.0e29 { ver 1; }
+    eğer cok_buyuk < 1.0e299 { ver 2; }
+    eğer kucuk > 0.001 { ver 3; }
+    eğer kucuk < 0.0 { ver 4; }
+    eğer tam_basamak < 3.14159265 { ver 5; }     // %g'ye düşseydi kırpılırdı
+    eğer duz != 2.0 { ver 6; }
+    ver 42;
+}

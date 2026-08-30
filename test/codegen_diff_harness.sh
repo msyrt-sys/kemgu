@@ -67,7 +67,26 @@ for f in "$KORPUS"/*.kem; do
     # `--tip-atla` ile codegen kapsamı korunur, tip zorlaması kaybolmaz.
     "$KEMGU" --llvm --tip-atla "$f" > "$TMP/$b.c.ll" 2>/dev/null
     if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
-        echo "  ⚠ $(basename "$f") — C-codegen IR link edilemedi (oracle yok, atla)"; continue
+        # [D-518] ATLAMA ARTIK KÜRATE LİSTEYE BAĞLI — eskiden HER oracle-link
+        # hatası sessizce atlanıyordu ve bu, C tarafındaki GERİLEMELERİ YUTUYORDU.
+        # ⚠ SABOTAJLA ÖLÇÜLDÜ (S96, D-518'in kesirli onarımını C'de geri al):
+        #   kapı KIRMIZI olmak yerine YEŞİL kaldı, yalnız sayı 162 -> 161 düştü.
+        #   Yani C'nin GEÇERSİZ IR üretmesi bir BAŞARISIZLIK değil, bir ATLAMA
+        #   olarak görünüyordu (D-424'ün "atlama listesi bir KÖR NOKTA
+        #   ENVANTERİDİR" dersinin aynısı).
+        # Liste ÖLÇÜLDÜ, tahmin edilmedi: yalnız bu iki dosya çapraz-modül
+        # yüklemesi ister ve C oracle onları TEK BAŞINA derleyemez.
+        case "$b" in
+            cgmodul_mat|cgmodul_zincir)
+                echo "  ⚠ $(basename "$f") — C-codegen IR link edilemedi (oracle yok, atla)"
+                continue ;;
+            *)
+                echo "  🔴 $(basename "$f") — C-codegen IR LINK EDİLEMEDİ."
+                echo "     → Bu dosya kürate atlama listesinde DEĞİL. Oracle'ın geçersiz"
+                echo "       IR üretmesi bir GERİLEMEDİR; sessizce atlanamaz. Gerçekten"
+                echo "       meşru bir atlamaysa listeye GEREKÇESİYLE ekle."
+                fail=$((fail+1)); continue ;;
+        esac
     fi
     run_exe "$TMP/$b.c.exe"; coracle=$RC
     # KEMGU codegen → exit (aday)
