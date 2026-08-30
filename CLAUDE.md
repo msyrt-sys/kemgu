@@ -1103,6 +1103,65 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 🔴✅ D-517: `güvensiz`SİZ HEAP TAŞMASI — ham bellek yerleşikleri artık G001 istiyor
+Değişmez avı **`güvensiz` sınırı** eksenine taşındı ("ham işaretçi yalnız
+`güvensiz` blokta" — manşetteki iddia). **On iki şeklin on biri tuttu:**
+```
+*p param . p[i] . yapi alani *T . takma ad . lambda govdesi .
+gorev kapanisi . method govdesi          -> G001 ✓
+*p = ... (guvensiz DISINDA)              -> T022 ✓
+diziyi yakalayan kacan kapanis           -> G005 ✓
+```
+**🔴 AMA BİRİ TUTMADI — ve tam olarak dilin manşet değişmezini deliyordu:**
+```kemgu
+işlev kopyala(hedef: metin, kaynak: metin, n: tam64) -> tam32 {
+    bellek_kopyala(hedef, kaynak, n);      // `güvensiz` YOK
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken kucuk: metin = bellek_al(4);
+    değişken buyuk: metin = bellek_al(256);
+    kopyala(kucuk, buyuk, 256);            // 4 baytlik tahsise 256 bayt
+    ver 42;
+}
+```
+Program **hiç `güvensiz` bloğu içermiyor**, `--check`ten **temiz** geçiyordu ve
+ASan altında **her iki derleyicide** `heap-buffer-overflow` veriyordu.
+
+**KÖK D-443/D-452 İLE AYNI SINIF:** `bellek_al`/`bellek_kopyala`/
+`bellek_serbest` **`metin` olarak tipleniyor** (D-459: *"HAM BELLEK"*, opak) →
+G001'in `*T` koşulu onlara **hiç uygulanmıyordu**. *Opak tutamak `metin` olarak
+tiplendiğinde ona bağlı KURALLAR da düşer.*
+
+**ONARIM — YENİ TANI KODU YOK.** G001 zaten *"yalnız güvensiz blok içinde"*
+demektir ve site başına farklı mesaj basar (deref / indeksleme); üçüncü mesaj
+eklendi. C + `selfhost/checker.kem`, kod ve konum birebir.
+
+**⚠ ETKİ ALANI ÖNCE ÖLÇÜLDÜ** (dil yüzeyi değişikliği — önceden geçerli
+programları reddediyor): depoda bu yerleşikleri çağıran **4 dosya**, **3'ünde
+`güvensiz` ZATEN vardı**; `selfhost/codegen.kem`'deki tek eşleşme **YORUMDU**
+(gerçek çağrı yok). Tek düzeltme `cg_yerlesik_ad_eslemesi.kem`'e bir
+`güvensiz` sarmalı.
+
+**Fikstür `tc42_01`** — negatif (`kotu()` → 2×G001) **ve pozitif** (`iyi()` →
+temiz). Pozitif şart: yoksa *"her `bellek_*` çağrısını reddet"* sabotajı
+kapıdan GEÇERDİ (D-425).
+
+**⚠⚠ PROBE VE SABOTAJ ÜÇ KEZ KENDİ HATAMLA BOZULDU:**
+1. İlk taşma probe'u **`memcpy-param-overlap`** verdi — iki tampon aynı
+   bölgeden geliyordu, ASan asıl taşmayı hiç ölçmedi. Ayrı tahsislere geçince
+   `heap-buffer-overflow` çıktı.
+2. `grep -c "G001"` **4** saydı, gerçek tanı **2**'ydi — her tanı iki satır
+   (mesaj + `-->`). Kodda değil ÖLÇÜMDE hata.
+3. **Sabotaj S94 eksik uygulandı:** `if (0 && A || B || C)` — C'de `&&` daha
+   sıkı bağlar → yalnız `bellek_al` kapandı, diğer ikisi ateşlemeye devam etti.
+   Kapı yine kırmızı verdi ama **yanlış sebeple**; `if (0) if (...)` ile
+   tekrarlandı ve açık gerçekten geri geldi (`h7` → `OK`).
+
+**Sabotaj 2/2:** S94 (C) · S95 (self) → ikisi de `checker_diff` 166→165, rc=2.
+**Kapılar:** checker_diff **166/166 (0 muaf)** · check_kapisi 266/273 (0 RED) ·
+check_genis 133/133 · codegen_diff 161/161 · sıfır uyarı 38/0.
+
 ### ✅ D-516: UAF AVI — ρ_yerel genişlemesine karşı, DELİK YOK (kapıya çevrildi)
 Bu oturumda D-494/D-506/D-507/D-509 ρ_yerel'e giden şeyleri **genişletti** ve
 D-509'da tam bu eksende bir soundness deliği çıktı. F4.2b'nin 18-UAF avı o

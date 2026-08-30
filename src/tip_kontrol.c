@@ -3001,6 +3001,35 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            /* [D-517] HAM BELLEK YERLESIKLERI `güvensiz` ISTER.
+             * OLCULEN ACIK: `bellek_al` / `bellek_kopyala` / `bellek_serbest`
+             * `metin` olarak TIPLENIYOR (D-459: "HAM BELLEK", opak) — bu yuzden
+             * G001'in `*T` kosulu onlara HIC uygulanmiyordu. Sonuc: `güvensiz`
+             * bloku HIC ICERMEYEN ve `--check`ten TEMIZ gecen bir program
+             * heap-buffer-overflow yapiyordu (ASan ile olculdu, HER IKI
+             * derleyicide). Bu, dilin mansetteki "buffer overflow imkansiz"
+             * degismezinin dogrudan ihlaliydi.
+             * KOK D-443/D-452 ile AYNI SINIF: opak tutamak `metin` olarak
+             * tiplendiginde ona bagli KURALLAR da dusuyor.
+             * YENI TANI KODU YOK — G001 zaten "yalniz guvensiz blok icinde"
+             * demektir ve site-basina farkli mesaj basar (deref / indeksleme).
+             * ⚠ ETKI ALANI OLCULDU: depoda bu yerlesikleri cagiran 4 dosya var
+             *   ve 3'unde `güvensiz` ZATEN vardi; self-host'taki tek esleme
+             *   YORUMDU (gercek cagri yok). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                tk->guvensiz_baglam == 0) {
+                const char *bad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int buz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                if ((buz == 9  && memcmp(bad, "bellek_al", 9) == 0)
+                 || (buz == 14 && memcmp(bad, "bellek_kopyala", 14) == 0)
+                 || (buz == 14 && memcmp(bad, "bellek_serbest", 14) == 0)) {
+                    tip_hata(tk, d, "G001",
+                             "ham bellek yerlesigi yalniz guvensiz blok "
+                             "icinde kullanilabilir");
+                    return t_hata(tk);
+                }
+            }
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — modül-fonksiyon
              * çağrısından ÖNCE dene (sol bir çeşit ise yapıcı). Beklenen-yok
              * yolu: generic çeşit T'sini çözemez (construction beklenen ister). */

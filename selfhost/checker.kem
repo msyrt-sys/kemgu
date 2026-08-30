@@ -5188,6 +5188,20 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken hb: tam32 = dizi_al(p.a_cb, idx);
         değişken hc: tam32 = dizi_al(p.a_cs, idx);
         değişken hedef: tam32 = dizi_al(p.cocuk, hb);
+        // [D-517] HAM BELLEK YERLEŞİKLERİ `güvensiz` İSTER — C tip_kontrol.c aynası.
+        // `bellek_*` `metin` olarak tiplendiği için G001'in `*T` koşulu onlara
+        // HİÇ uygulanmıyordu → `güvensiz`siz bir program heap taşması yapabiliyordu
+        // (ASan ile ölçüldü, iki derleyicide de). Yeni tanı kodu YOK: G001.
+        // ⚠ C'de bu denetim CAGRI işlemenin EN BAŞINDA ve erken döner — sıra
+        //   korunmalı, aksi halde tanı listesi ayrışır (checker_diff).
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") ve (p.guv_bag == 0) {
+            değişken bad: metin = dizi_al(p.a_deg, hedef);
+            eğer metin_esit(bad, "bellek_al") veya metin_esit(bad, "bellek_kopyala")
+              veya metin_esit(bad, "bellek_serbest") {
+                g001_hata(p, idx);
+                ver 0;
+            }
+        }
         // D-357 (B): çeşit yapıcısı `Çeşit::V(...)` — C bunu normal çağrı yolundan
         // ÖNCE dener ve hata varsa erken döner (argüman kontrolü yok).
         eğer m002_yapici_kontrol(p, idx, hedef) { ver 0; }

@@ -8,8 +8,13 @@
 // bellek_serbest→free, otp_*→kdl_otp_* (+ `declare` satırları).
 işlev main() -> tam32 {
     yazdir("yerlesik ad eslemesi");
-    değişken tampon: metin = bellek_al(64);
-    bellek_serbest(tampon);
+    // [D-517] Ham bellek yerleşikleri artık `güvensiz` ister (G001). Kök:
+    // `bellek_*` `metin` olarak tiplendiği için G001'in `*T` koşulu onlara
+    // hiç uygulanmıyordu ve `güvensiz`siz bir program heap taşması yapabiliyordu.
+    güvensiz {
+        değişken tampon: metin = bellek_al(64);
+        bellek_serbest(tampon);
+    }
     // DİKKAT: `otp_anahtar_uret` ilk argümanı bir DOSYA ADIDIR ve o dosyayı
     // YAZAR. Korpus dosyası repoya artefakt bırakmamalı → `build/` altına yaz
     // (gitignore'lu). İlk sürümde "anahtar" yazmıştım ve kapı her koşuşunda

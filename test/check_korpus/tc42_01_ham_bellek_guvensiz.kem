@@ -1,0 +1,31 @@
+// [D-517] HAM BELLEK YERLEŞİKLERİ `güvensiz` İSTER (G001).
+//
+// ÖLÇÜLEN AÇIK: `bellek_al`/`bellek_kopyala`/`bellek_serbest` `metin` olarak
+// tipleniyor (D-459: "HAM BELLEK", opak) → G001'in `*T` koşulu onlara HİÇ
+// uygulanmıyordu. Sonuç: `güvensiz` bloğu HİÇ İÇERMEYEN ve `--check`ten TEMİZ
+// geçen bir program heap-buffer-overflow yapıyordu (ASan, iki derleyicide de).
+// Dilin manşetteki "buffer overflow imkânsız" değişmezinin doğrudan ihlaliydi.
+//
+// KÖK D-443/D-452 ile AYNI SINIF: opak tutamak `metin` olarak tiplendiğinde
+// ona bağlı KURALLAR da düşer.
+//
+// Yeni tanı kodu YOK — G001 zaten "yalnız güvensiz blok içinde" demektir.
+//
+// ⚠ POZİTİF ŞEKİL ZORUNLU (D-425): `güvensiz` içindeki aynı çağrılar TEMİZ
+//   geçmeli. Yalnız negatifler olsaydı "her bellek_* çağrısını reddet"
+//   sabotajı kapıdan GEÇERDİ.
+işlev kotu() -> tam32 {
+    değişken t: metin = bellek_al(64);      // G001
+    bellek_serbest(t);                       // G001
+    ver 0;
+}
+
+işlev iyi() -> tam32 {
+    güvensiz {
+        değişken t: metin = bellek_al(64);   // TEMİZ
+        bellek_serbest(t);                   // TEMİZ
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 { ver kotu() + iyi(); }
