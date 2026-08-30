@@ -1125,9 +1125,24 @@ alabileceği bir **kaçış kapısı** var.
 
 **⚠⚠ KAPATILMADI ÇÜNKÜ MALİYET ÖLÇÜLDÜ VE BEDAVA DEĞİL.** Legacy yolu geçici
 olarak kapatıp saydım: **17 dosyanın 14'ü kırılıyor**, 40+ tanı — çoğu
-**T040 (modül bulunamadı)**, üstüne T011/T001/T020/M001 kaskadları. İki yükleyici
-yolu yalnız görünürlükte değil **modül ÇÖZÜMÜNDE de** farklı; kapatmak gerçek
-bir göç işidir. **Karar Mehmet'in.**
+**T040 (modül bulunamadı)**.
+
+**T040'IN KÖKÜ BULUNDU (ve ölçüldü):** parser `yol`u HAM saklıyor
+(`"drivers::virtio::constants"`) ve yeni yükleyici `<dizin>/drivers::virtio::
+constants.kem` diye arıyor → dosya yok. `::` → `/` çevirisi eklendiğinde
+**T040 TAMAMEN KAYBOLUYOR** (deneysel olarak doğrulandı).
+
+**AMA GERÇEK MALİYET ÇEVİRİDEN SONRA GÖRÜLDÜ:** T040 gidince yerine
+**T002 patlıyor** — `virtio_blk` 130, `virtqueue_bind` 105, `virtio_blk_oku`
+164 … toplam **~700 ad referansı**. Sebep: sürücü kodu legacy düzleştirmeye
+güvenip adları **NİTELİKSİZ** kullanıyor; yeni yol nitelik ister.
+Yani göç *"`genel` ekle"* değil, **~700 referansı nitelendirmek** (ya da
+modülleri yeniden dışa vermek). **Karar Mehmet'in.**
+
+**⚠ `::`→`/` ÇEVİRİSİ DE UYGULANMADI (D-430):** bugün **ULAŞILAMAZ** kod
+olurdu — çok-segmentli import legacy yola gider, tek-segmentte `::` yoktur,
+seçili/alias ise P046 ile tek-segmente zorlanır. Doğru ve gerekli bir
+ön koşuldur; göç kararı verilirse **ilk adım odur**.
 
 **⚠ İLK ÖLÇÜMÜM "0 MALİYET" DEDİ VE YANLIŞTI** — yalnız `T041` sayıyordum;
 dosyalar daha ÖNCE T040 ile düşüyordu, ben sıfır görüyordum. *Bir kuralı
