@@ -1103,6 +1103,37 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 🟠 D-520 (AÇIK — ÖLÇÜLDÜ, KAPATILMADI): çok-segmentli `kullan` T041'i ATLIYOR
+Değişmez avı **modül gizliliği** eksenine taşındı. Dört erişim yolu **tuttu**:
+```
+gizlim::gizli_fn()          -> T041 ✓     gizlim::GIZLI_SBT   -> T041 ✓
+kullan gizlim olarak g      -> T041 ✓     kullan gizlim::{..} -> T041 ✓
+kullan gizlim + genel uye   -> OK   ✓ (pozitif)
+```
+**AMA legacy yol açık:**
+```kemgu
+kullan ic::derin;              // ÇOK SEGMENTLİ -> legacy düzleştirme
+işlev main() -> tam32 { ver derin_gizli() + 35; }   // private! -> OK 🔴
+```
+D-427 bunu C'nin davranışı olarak **kaydetmişti** (*"tüm üst düzey adlar
+görünür, `genel` gerekmez, T041 UYGULANMAZ"*) ama **gizlilik güvencesine
+etkisi ölçülmemişti**: private-by-default'un, herkesin bir yol yazarak
+alabileceği bir **kaçış kapısı** var.
+
+**⚠ MARJİNAL DEĞİL — ÖLÇÜLDÜ: 67 içe aktarmanın 37'si (%55) bu yolda**
+(`drivers/virtio` tamamı dâhil). Yani gerçek kodun çoğunda gizlilik KAPALI.
+
+**⚠⚠ KAPATILMADI ÇÜNKÜ MALİYET ÖLÇÜLDÜ VE BEDAVA DEĞİL.** Legacy yolu geçici
+olarak kapatıp saydım: **17 dosyanın 14'ü kırılıyor**, 40+ tanı — çoğu
+**T040 (modül bulunamadı)**, üstüne T011/T001/T020/M001 kaskadları. İki yükleyici
+yolu yalnız görünürlükte değil **modül ÇÖZÜMÜNDE de** farklı; kapatmak gerçek
+bir göç işidir. **Karar Mehmet'in.**
+
+**⚠ İLK ÖLÇÜMÜM "0 MALİYET" DEDİ VE YANLIŞTI** — yalnız `T041` sayıyordum;
+dosyalar daha ÖNCE T040 ile düşüyordu, ben sıfır görüyordum. *Bir kuralı
+kapatmanın maliyetini ölçerken O KURALIN kodunu değil, TÜM tanıları say.*
+(D-500'ün bu turdaki üçüncü tekrarı.)
+
 ### 🔴✅ D-519: `olarak` GİZLİLİĞİ SESSİZCE DÜŞÜRÜYORDU — `ifşa`nın yanında ikinci kanal
 Değişmez avı **`sabitsüre` (sabit-süre / gizli veri) eksenine** taşındı. Altı
 kaçış şeklinin beşi tuttu:
