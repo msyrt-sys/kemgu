@@ -1,0 +1,41 @@
+// [D-523] `Dizi<T>` İÇEREN KULLANICI YAPISI da göreve taşınır (L002).
+//
+// D-505 bunu AÇIK bırakmıştı ("Send/Sync işareti gerekir — dil yüzeyi kararı").
+// ÖLÇÜLDÜ: o kadar geniş bir özellik GEREKMİYOR — sorulan şey "bu yapının
+// herhangi bir alanı yerinde-mutasyona-uğrayan PAYLAŞILAN bir kap mı?" ve
+// yanıt yapının ALAN SCOPE'undan okunabiliyor.
+//
+// ⚠ SKALER ALANLI YAPI MUAF: env HEAP KOPYASIDIR, skaler kopya yarışamaz
+//   (D-505'in kendi daraltması). "Her yapıyı reddet" geçerli programları
+//   kırardı — `skaler_yapi` bunu POZİTİF olarak ölçer (D-425).
+yapı Kutu { xs: Dizi<tam32>; }
+yapı Sayac { n: tam32; }
+
+işlev paylasan() -> tam32 {
+    değişken k: Kutu = Kutu { xs: dizi_olustur(4) };
+    dizi_ekle(k.xs, 0);
+    eşleş görev_başlat(|| { dizi_yaz(k.xs, 0, 1); ver 0; }) {
+        tamam(a) => {
+            eşleş görev_başlat(|| { dizi_yaz(k.xs, 0, 2); ver 0; }) {   // L002
+                tamam(b) => { ver görev_birleştir(a) + görev_birleştir(b); }
+                hata(e) => { değişken y: tam32 = görev_birleştir(a); ver 1; }
+            }
+        }
+        hata(e) => { ver 1; }
+    }
+}
+
+işlev skaler_yapi() -> tam32 {
+    değişken s: Sayac = Sayac { n: 1 };
+    eşleş görev_başlat(|| s.n) {
+        tamam(a) => {
+            eşleş görev_başlat(|| s.n) {                                 // TEMİZ
+                tamam(b) => { ver görev_birleştir(a) + görev_birleştir(b); }
+                hata(e) => { değişken y: tam32 = görev_birleştir(a); ver 1; }
+            }
+        }
+        hata(e) => { ver 1; }
+    }
+}
+
+işlev main() -> tam32 { ver paylasan() + skaler_yapi(); }

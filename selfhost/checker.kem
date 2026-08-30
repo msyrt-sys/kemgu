@@ -4554,6 +4554,35 @@ işlev gtas_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 işlev gtas_muaf_tip_mi(t: metin) -> mantıksal {
     ver metin_baslar(t, "kanal<");
 }
+// [D-523] `Dizi<T>` İÇEREN KULLANICI YAPISI da taşıma ister — C aynası.
+// D-505 bunu AÇIK bırakmıştı ("Send/Sync işareti gerekir"); ölçüldü ki o kadar
+// geniş bir dil özelliği GEREKMİYOR: soru "bu yapının herhangi bir alanı
+// yerinde-mutasyona-uğrayan PAYLAŞILAN bir kap mı?" ve yanıt ALAN TABLOSUNDAN
+// okunabiliyor (`yapi_abase`/`alan_tip`).
+// ⚠ SKALER ALANLI YAPI MUAF KALIR: env HEAP KOPYASIDIR (D-505'in daraltması).
+// ⚠ ÖZYİNELEME KORUYUCUSU: kendine referanslı yapı sonsuz dönmesin.
+işlev gtas_tasima_gerekli(p: &değişken Ayr, t: metin, derinlik: tam32) -> mantıksal {
+    eğer metin_baslar(t, "Dizi<") { ver doğru; }
+    eğer derinlik > 8 { ver yanlış; }
+    değişken yi: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.yapi_ad);
+    iken yi < n {
+        eğer metin_esit(dizi_al(p.yapi_ad, yi), t) {
+            değişken base: tam32 = dizi_al(p.yapi_abase, yi);
+            değişken cnt: tam32 = dizi_al(p.yapi_acount, yi);
+            değişken j: tam32 = 0;
+            iken j < cnt {
+                eğer gtas_tasima_gerekli(p, dizi_al(p.alan_tip, base + j), derinlik + 1) {
+                    ver doğru;
+                }
+                j = j + 1;
+            }
+            ver yanlış;
+        }
+        yi = yi + 1;
+    }
+    ver yanlış;
+}
 // [D-505] `g005_ptr_yakalar_mi`nin İKİZİ: BULMAK yerine TOPLAR.
 işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> tam32 {
     eğer node < 0 { ver 0; }
@@ -4573,7 +4602,8 @@ işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> 
         //     ölçtüğü yarış TAM OLARAK budur
         // ⚠ KALAN AÇIK: `Dizi<T>` İÇEREN kullanıcı yapısı hâlâ yakalanmaz;
         //   kapatmak için dilde "paylaşılabilir" işareti gerekir (dil yüzeyi).
-        eğer metin_baslar(vt, "Dizi<") == yanlış { ver 0; }
+        // [D-523] Artık `Dizi<T>` İÇEREN kullanıcı yapısı da sayılır.
+        eğer gtas_tasima_gerekli(p, vt, 0) == yanlış { ver 0; }
         eğer gtas_muaf_tip_mi(vt) { ver 0; }
         eğer gtas_var_mi(p, ad) == yanlış { dizi_ekle(p.gtas_ad, ad); }
         ver 0;

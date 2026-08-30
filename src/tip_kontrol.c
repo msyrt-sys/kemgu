@@ -883,8 +883,38 @@ static int yakalama_isaretci_benzeri(const TipBilgisi *t) {
    yakalanirsa hala yakalanmaz. Kapatmak icin dilde "bu tip paylasilabilir"
    isareti gerekir (Rust'in Send/Sync'i gibi) — DIL YUZEYI karari, icat
    edilmedi. Bu artim OLCULEN acigi kapatir, hepsini degil. */
-static int gorev_tasima_gerekli(const TipBilgisi *t) {
-    return t && t->kategori == TIP_DIZI;
+/* [D-523] `Dizi<T>` ICEREN KULLANICI YAPISI da tasima ister.
+ * D-505 bunu ACIK birakmisti ("Send/Sync isareti gerekir") — ama o kadar
+ * genis bir dil ozelligi GEREKMIYOR: sorulan sey "bu yapinin herhangi bir
+ * alani yerinde-mutasyona-ugrayan PAYLASILAN bir kap mi?" ve yanit yapinin
+ * ALAN SCOPE'undan OKUNABILIYOR. En muhafazakar yorum secildi: bir alan
+ * `Dizi<T>` ise (ya da kendisi boyle bir yapiysa) tasima GEREKLI.
+ * ⚠ SKALER ALANLI YAPI MUAF KALIR: env HEAP KOPYASIDIR, skaler kopya
+ *   yarisamaz (D-505'in kendi daraltmasi). "Her yapiyi reddet" demek
+ *   gecerli programlari kirardi.
+ * ⚠ OZYINELEME KORUYUCUSU: kendine referansli yapi sonsuz donmesin. */
+static int gorev_tasima_gerekli_dr(TipKontrol *tk, const TipBilgisi *t, int derinlik);
+
+static int yapi_dizi_iceriyor_mu(TipKontrol *tk, const TipBilgisi *t, int derinlik) {
+    if (!tk || !t || t->kategori != TIP_YAPI || derinlik > 8) return 0;
+    const Sembol *ys = sembol_bul(tk->global_scope, t->veri.yapi.ad,
+                                  t->veri.yapi.ad_uzunluk);
+    if (!ys || ys->kategori != SEMBOL_YAPI || !ys->yapi_scope) return 0;
+    /* ⚠ Alanlar `yapi_scope`ta SEMBOL_DEGISKEN olarak durur; ayri bir
+     * SEMBOL_ALAN kategorisi YOK (sembol.h'den okundu). Generic tip
+     * parametreleri de ayni scope'ta -> onlari atla. */
+    for (SembolLink *l = ys->yapi_scope->bas; l; l = l->sonraki) {
+        if (l->sembol.kategori == SEMBOL_GENERIC_PARAM) continue;
+        if (gorev_tasima_gerekli_dr(tk, l->sembol.tip, derinlik + 1)) return 1;
+    }
+    return 0;
+}
+
+static int gorev_tasima_gerekli_dr(TipKontrol *tk, const TipBilgisi *t, int derinlik) {
+    if (!t) return 0;
+    if (t->kategori == TIP_DIZI) return 1;
+    if (t->kategori == TIP_YAPI) return yapi_dizi_iceriyor_mu(tk, t, derinlik);
+    return 0;
 }
 
 static int gorev_tasima_muaf(const TipBilgisi *t) {
@@ -911,7 +941,7 @@ static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
          * isaretle (tarama sirasinda isaretlemek ayni lambda icindeki
          * ikinci kullanimi sahte L002 yapardi). */
         if (tk->gorev_kapanis_derinlik > 0
-            && sem && gorev_tasima_gerekli(sem->tip)
+            && sem && gorev_tasima_gerekli_dr(tk, sem->tip, 0)
             && !gorev_tasima_muaf(sem->tip)
             && tk->tasinan_sayi < 64) {
             int zaten = 0;

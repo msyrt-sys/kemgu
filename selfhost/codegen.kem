@@ -11181,6 +11181,32 @@ işlev g005_ptr_yakalar_mi(p: &değişken Ayr, node: tam32, lam: tam32, govde: t
 // [D-505] R-YAKALAMA-THREAD — C tip_kontrol.c aynası. Ayrıntı: checker.kem.
 // ⚠ KURAL `Dizi<T>` İLE SINIRLI: `metin` değişmez, sync primitifleri
 // (Bariyer/Semafor/Kilit) kullanıcı yapısıdır ve paylaşım KASITLIDIR.
+// [D-523] `Dizi<T>` İÇEREN KULLANICI YAPISI da taşıma ister — C + checker.kem
+// aynası. Soru "bu yapının herhangi bir alanı yerinde-mutasyona-uğrayan
+// PAYLAŞILAN bir kap mı?"; yanıt ALAN TABLOSUNDAN okunur. Skaler alanlı yapı
+// MUAF (env HEAP kopyası). Özyineleme koruyucusu: derinlik > 8 → yanlış.
+işlev gtas_tasima_gerekli(p: &değişken Ayr, t: metin, derinlik: tam32) -> mantıksal {
+    eğer metin_baslar(t, "Dizi<") { ver doğru; }
+    eğer derinlik > 8 { ver yanlış; }
+    değişken yi: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(p.yapi_ad);
+    iken yi < n {
+        eğer metin_esit(dizi_al(p.yapi_ad, yi), t) {
+            değişken base: tam32 = dizi_al(p.yapi_abase, yi);
+            değişken cnt: tam32 = dizi_al(p.yapi_acount, yi);
+            değişken j: tam32 = 0;
+            iken j < cnt {
+                eğer gtas_tasima_gerekli(p, dizi_al(p.alan_tip, base + j), derinlik + 1) {
+                    ver doğru;
+                }
+                j = j + 1;
+            }
+            ver yanlış;
+        }
+        yi = yi + 1;
+    }
+    ver yanlış;
+}
 işlev gtas_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.gtas_ad) {
@@ -11197,7 +11223,7 @@ işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> 
         eğer g005_lam_param_mi(p, lam, ad) { ver 0; }
         eğer g005_govde_bildirimi_mi(p, govde, ad) { ver 0; }
         eğer g005_yerel_mi(p, ad) == yanlış { ver 0; }
-        eğer metin_baslar(var_tip(p, ad), "Dizi<") == yanlış { ver 0; }
+        eğer gtas_tasima_gerekli(p, var_tip(p, ad), 0) == yanlış { ver 0; }   // [D-523]
         eğer gtas_var_mi(p, ad) == yanlış { dizi_ekle(p.gtas_ad, ad); }
         ver 0;
     }
