@@ -1,0 +1,33 @@
+// [D-519] `olarak` İLE GİZLİLİK DÜŞÜRÜLEMEZ (CT003).
+//
+// ÖLÇÜLEN AÇIK: `s olarak tam32` CT003'ü ATLIYORDU. Spec açık
+// (KEMGU_Sabitsure_Spec_V1.md:49): "`sabitsüre<T> -> T` ASLA otomatik değil —
+// `ifşa(s)` çağrısı ZORUNLU". Yani tasarım tercihi değil, SPEC İHLALİ.
+//
+// ⚠ ASIL ZARAR DENETLENEBİLİRLİK: `ifşa` ayrı bir yerleşik olarak TAM DA
+//   declassification noktalarını `grep`lenebilir kılmak için seçildi (spec:94).
+//   İkinci ve GÖRÜNMEZ bir kanal, o güvencenin kendisini yok eder.
+//
+// KÖK D-517 İLE AYNI SINIF: kural VARDI, bu SİTEDE SORULMUYORDU.
+// Yeni tanı kodu YOK — CT003 zaten bu anlamdadır.
+//
+// ⚠ POZİTİF ŞEKİL ZORUNLU (D-425): gizli→gizli dönüşüm ve `ifşa` TEMİZ
+//   geçmeli. Yalnız negatif olsaydı "her sabitsüre cast'ini reddet" sabotajı
+//   kapıdan GEÇERDİ.
+işlev sizdiran() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    ver s olarak tam32;                       // CT003
+}
+
+işlev gizli_gizliye() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    değişken t: sabitsüre<dtam32> = s olarak sabitsüre<dtam32>;   // TEMİZ
+    ver 0;
+}
+
+işlev acik_ifsa() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    ver ifşa(s);                              // TEMİZ — tek meşru kanal
+}
+
+işlev main() -> tam32 { ver sizdiran() + gizli_gizliye() + acik_ifsa(); }

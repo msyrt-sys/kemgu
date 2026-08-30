@@ -2815,6 +2815,18 @@ işlev cast_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken hs: metin = cast_hedef_sinif(p, dizi_al(p.cocuk, cb + 1));
     eğer metin_esit(hs, "tekkez") { ver cast_hata(p, idx, "E001"); }   // hedef tekkez
     eğer metin_esit(ks, "tekkez") { ver cast_hata(p, idx, "E003"); }   // kaynak tekkez
+    // [D-519] CT003: kaynak sabitsüre<T> → normal tip YASAK.
+    // `s olarak tam32` CT003'ü ATLIYORDU. Spec açık (Sabitsure_Spec_V1:49):
+    // "`sabitsüre<T> -> T` ASLA otomatik değil — `ifşa(s)` ZORUNLU" → tasarım
+    // tercihi değil, SPEC İHLALİ. Asıl zarar DENETLENEBİLİRLİK: `ifşa` ayrı bir
+    // yerleşik olarak tam da declassification noktalarını `grep`lenebilir kılmak
+    // için seçildi (spec:94); ikinci ve GÖRÜNMEZ bir kanal o güvenceyi yok eder.
+    // ⚠ gizli → gizli SERBEST kalır; yasak olan yalnız GİZLİLİĞİN DÜŞÜRÜLMESİ.
+    eğer sabitsure_ifade_mi(p, dizi_al(p.cocuk, cb)) {
+        eğer tip_node_sabitsure_mi(p, dizi_al(p.cocuk, cb + 1)) == 0 {
+            ver cast_hata(p, idx, "CT003");
+        }
+    }
     eğer metin_esit(hs, "?") veya metin_esit(ks, "?") { ver 0; }       // emin değil → atla
     eğer metin_esit(ks, "*") ve metin_esit(hs, "metin") { ver 0; }     // tipli ptr → opak
     eğer p.guv_bag > 0 {

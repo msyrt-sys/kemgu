@@ -1103,6 +1103,41 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### 🔴✅ D-519: `olarak` GİZLİLİĞİ SESSİZCE DÜŞÜRÜYORDU — `ifşa`nın yanında ikinci kanal
+Değişmez avı **`sabitsüre` (sabit-süre / gizli veri) eksenine** taşındı. Altı
+kaçış şeklinin beşi tuttu:
+```
+gizli -> yapı alanı        -> T001 ✓      gizli -> dizi elemanı  -> T001 ✓
+gizli -> işlev dönüşü      -> CT003 ✓     gizli -> döngü koşulu  -> T021 ✓
+gizli -> küresel           -> CT003 ✓
+gizli -> `olarak tam32`    -> **OK** 🔴   ← AÇIK
+```
+**SPEC İHLALİ, tasarım tercihi DEĞİL.** `KEMGU_Sabitsure_Spec_V1.md:49`:
+*"`sabitsüre<T> -> T` **ASLA** otomatik değil — `ifşa(s)` çağrısı **zorunlu**"*.
+
+**⚠ ASIL ZARAR DENETLENEBİLİRLİKTİR.** `ifşa` ayrı bir keyword yapılmayıp
+**yerleşik işlev** olarak seçildi — gerekçesi spec:94'te yazılı. Amaç
+declassification noktalarının **`grep`lenebilir** olmasıdır. İkinci ve
+**görünmez** bir kanal, o güvencenin kendisini yok eder: gizli veri sızdıran
+bir satır artık denetimde görünmezdi.
+
+**KÖK D-517 İLE AYNI SINIF:** kural VARDI (CT003 zaten "implicit dönüşüm
+yasak" demek), yalnız **bu sitede sorulmuyordu**. **Yeni tanı kodu YOK.**
+C'de `tekkez` için birebir aynı kalıp (E003) zaten duruyordu — kardeşi eklendi.
+
+**⚠ DAR TUTULDU:** `gizli → gizli` (`s olarak sabitsüre<dtam32>`) **SERBEST**;
+yasak olan yalnız **gizliliğin düşürülmesi**. Fikstür bunu ve `ifşa`yı
+**pozitif** olarak ölçer — yalnız negatif olsaydı *"her sabitsüre cast'ini
+reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**⚠ ETKİ ALANI ÖLÇÜLDÜ:** depodaki tüm ilgili `olarak` kullanımları
+`sabitsüre_olustur((0 olarak dtam8))` biçiminde — yani **sarmalamadan ÖNCE**
+(düz→düz). `stdlib/kripto.kem` ve `stdlib/kripto/anahtar.kem` **etkilenmedi**.
+
+**Sabotaj 2/2:** S97 (C) · S98 (self) → ikisi de `checker_diff` 167→166, rc=2.
+**Kapılar:** checker_diff **167/167 (0 muaf)** · check_kapisi 267/274 (0 RED) ·
+sıfır uyarı 38/0.
+
 ### 🔴✅ D-518: ÜSTEL KESİRLİ LİTERAL GEÇERSİZ IR ÜRETİYORDU + kapı sertleştirildi
 Değişmez avı **`olarak` yüzeyine** taşındı. Beş şeklin dördü doğru davrandı
 (`tam64→tam8` daraltma **E004**, ilgisiz yapı dönüşümü **E002**, `3.9→3`

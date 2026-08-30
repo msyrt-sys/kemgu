@@ -2643,6 +2643,29 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return t_hata(tk);
             }
 
+            /* [D-519] CT003: kaynak sabitsüre<T> -> normal tip YASAK.
+             * OLCULEN ACIK: `s olarak tam32` CT003'u ATLIYORDU. Spec acik
+             * (KEMGU_Sabitsure_Spec_V1.md:49): "`sabitsüre<T> -> T` ASLA
+             * otomatik degil — `ifşa(s)` cagrisi ZORUNLU". Yani bu bir tasarim
+             * tercihi degil, bir SPEC IHLALIYDI.
+             * ⚠ ASIL ZARAR DENETLENEBILIRLIK: `ifşa` ayri bir yerlesik olarak
+             *   TAM DA declassification noktalarini `grep`lenebilir kilmak icin
+             *   secildi (spec:94). Ikinci ve GORUNMEZ bir kanal, o guvencenin
+             *   kendisini yok eder.
+             * KOK D-517 ILE AYNI SINIF: kural VARDI, bu SITEDE SORULMUYORDU.
+             * Yeni tani kodu YOK — CT003 zaten bu anlamdadir.
+             * ⚠ gizli -> gizli (`s olarak sabitsüre<dtam8>`) SERBEST kalir;
+             *   yasak olan yalnizca GIZLILIGIN DUSURULMESIDIR.
+             * ⚠ ETKI ALANI OLCULDU: depodaki tum `olarak` kullanimlari
+             *   `sabitsüre_olustur((0 olarak dtam8))` seklinde, yani SARMALAMADAN
+             *   ONCE (duz -> duz) — bu kural onlari ETKILEMEZ. */
+            if (tip_sabitsure_mi(kt) && !tip_sabitsure_mi(ht)) {
+                tip_hata(tk, d, "CT003",
+                    "sabitsure tipi normal tipe implicit donusturulemez "
+                    "(ifsa(...) zorunlu)");
+                return t_hata(tk);
+            }
+
             /* v1 bölge-container (E002 DAR gevsetme): YALNIZ guvenli yon
              * *T -> metin (typed -> opaque ptr) — bellek_kopyala grow-copy
              * icin. TERS YON KAPALI: metin -> *T ve tamN -> *T yasak;
