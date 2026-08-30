@@ -9424,6 +9424,20 @@ işlev cast_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken hs: metin = cast_hedef_sinif(p, dizi_al(p.cocuk, cb + 1));
     eğer metin_esit(hs, "tekkez") { ver cast_hata(p, idx, "E001"); }   // hedef tekkez
     eğer metin_esit(ks, "tekkez") { ver cast_hata(p, idx, "E003"); }   // kaynak tekkez
+    // [D-519] CT003: kaynak sabitsüre<T> → normal tip YASAK (spec:49 —
+    // `ifşa(s)` ZORUNLU). Asıl zarar DENETLENEBİLİRLİK: `ifşa` tam da
+    // declassification noktalarını `grep`lenebilir kılmak için yerleşik
+    // seçildi (spec:94); ikinci ve GÖRÜNMEZ bir kanal onu yok eder.
+    // ⚠⚠ BU DOSYA ÜÇÜNCÜ UYGULAMADIR (D-503/D-517): `checker_diff`
+    //   `checker.kem`i, `--llvm` yolu (ct_bariyer/self_driver) BU dosyayı
+    //   okur. Yalnız checker.kem'e portlayınca `checker_diff` YEŞİL kaldı ama
+    //   `ct_bariyer` "C REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)" dedi.
+    // ⚠ gizli → gizli SERBEST; yasak olan yalnız GİZLİLİĞİN DÜŞÜRÜLMESİ.
+    eğer sabitsure_ifade_mi(p, dizi_al(p.cocuk, cb)) {
+        eğer tip_node_sabitsure_mi(p, dizi_al(p.cocuk, cb + 1)) == 0 {
+            ver cast_hata(p, idx, "CT003");
+        }
+    }
     eğer metin_esit(hs, "?") veya metin_esit(ks, "?") { ver 0; }       // emin değil → atla
     eğer metin_esit(ks, "*") ve metin_esit(hs, "metin") { ver 0; }     // tipli ptr → opak
     eğer p.guv_bag > 0 {

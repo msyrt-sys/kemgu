@@ -3938,6 +3938,18 @@ Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklama
       sessizce boş döner (D-508 sonrası: 12 atlama izi ölçülmeden kaldı,
       `grep` hiçbir şey bulmadı ve bir an *"atlama yok"* diye okunacaktı).
       Kalıcı ölçüm logunu iki tarafın da gördüğü bir yola yaz (`/mnt/c/...`).
+- [ ] **⚠⚠ BİR CHECKER KURALINI PORTLARKEN ÜÇ UYGULAMAYI DA GÜNCELLE.**
+      Bu oturumda **ÜÇ KEZ** ısırdı (D-503'te zaten kayıtlıyken):
+      ```
+      checker_diff              -> selfhost/checker.kem
+      self_driver --check       -> selfhost/codegen.kem
+      ct_bariyer / --llvm yolu  -> selfhost/codegen.kem
+      ```
+      **Hedefli kapının yeşil olması portun tam olduğunu KANITLAMAZ**:
+      `checker_diff` 166/166 ve 167/167 yeşilken tam takım sürücüde ve
+      `ct_bariyer`de kırmızı verdi (*"C REDDEDİYOR, KEMGU IR ÜRETİYOR
+      (loud→silent)"*). Yeni kuraldan sonra **`grep -c "D-NNN" selfhost/*.kem`
+      ile İKİ dosyada da doğrula.**
 - [ ] **İKİ AĞAÇLI KURULUMDA SABOTAJ GERİ ALMASI SENKRONLANMALI.** Windows
       worktree git'i tutuyor, WSL kopyası derleniyor. Bir sabotajı Windows'ta
       geri alıp WSL'e **kopyalamazsan** kapı kırmızı kalır ve bu **bayat ikili
