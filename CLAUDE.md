@@ -3843,6 +3843,12 @@ Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklama
       sessizce boş döner (D-508 sonrası: 12 atlama izi ölçülmeden kaldı,
       `grep` hiçbir şey bulmadı ve bir an *"atlama yok"* diye okunacaktı).
       Kalıcı ölçüm logunu iki tarafın da gördüğü bir yola yaz (`/mnt/c/...`).
+- [ ] **`--include="*.kem"` GÖMÜLÜ KAYNAKLARI GÖRMEZ.** Etki alanı ölçerken
+      `test/*.c` içindeki C DİZGİSİNE gömülü KEMGU kaynakları ayrı bir
+      yüzeydir. *(D-517: `bellek_*` etki alanını "4 dosya, 3'ü zaten uyumlu"
+      diye ölçtüm; `test_llvm.c`deki gömülü kaynak taramanın dışındaydı ve
+      tam takım orada kırmızı verdi. D-427'nin **"ön koşul ölçümünün KAPSAMI
+      da ayrıca doğrulanmalı"** dersinin ikinci tekrarı.)*
 - [ ] **`rc=0` bir SONUÇ değil bir İDDİADIR.** Kapı sayısını ve atlama izlerini
       AYRICA ölç. *(D-486: sekiz kapı sessizce atlanıyordu, make yine 0 döndü.)*
 

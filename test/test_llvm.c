@@ -1024,11 +1024,20 @@ static void test_generic_coklu_instan(void) {
     test_sonuc("generic kimlik coklu tip instantiation", rc == 42);
 }
 
+/* [D-517] `güvensiz` SARMALI ZORUNLU OLDU. Ham bellek yerlesikleri artik
+ * G001 istiyor: `bellek_*` `metin` olarak tiplendigi icin G001'in `*T` kosulu
+ * onlara HIC uygulanmiyordu ve `guvensiz`siz bir program heap-buffer-overflow
+ * yapabiliyordu (ASan ile olculdu, iki derleyicide de).
+ * ⚠ BU VAKA ETKI-ALANI OLCUMUMDEN KACTI: taramayi `--include="*.kem"` ile
+ *   yapmistim, bu kaynak ise bir C DIZGISINE GOMULU. Gomulu kaynaklar ayri
+ *   bir yuzeydir (D-427: "on kosul olcumunun KAPSAMI da ayrica dogrulanmali"). */
 static void test_bellek_al_serbest(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
+        "g\xc3\xbcvensiz { "
         "de\xc4\x9fi\xc5\x9fken p: metin = bellek_al(100); "
         "bellek_serbest(p); "
+        "} "
         "ver 42; }");
     test_sonuc("bellek_al(100) + bellek_serbest -> exit 42", rc == 42);
 }
