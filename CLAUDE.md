@@ -1103,6 +1103,38 @@ Dizi<metin> · Dizi<&H>    → GLOBAL   ptr eleman DOGRU reddediliyor
   an *"sertleştirme işe yaramıyor"* diye kaydedecektim. Türkçe dosyada
   düzenleme = **Edit aracı**.
 
+### ✅ D-516: UAF AVI — ρ_yerel genişlemesine karşı, DELİK YOK (kapıya çevrildi)
+Bu oturumda D-494/D-506/D-507/D-509 ρ_yerel'e giden şeyleri **genişletti** ve
+D-509'da tam bu eksende bir soundness deliği çıktı. F4.2b'nin 18-UAF avı o
+genişlemelerden ÖNCEYDİ → yeni yüzeye karşı **taze düşmanca av** yapıldı.
+
+**Altı kaçış şekli, altısı da DOĞRU davrandı:**
+```
+(a) diziyi DOGRUDAN dondur                      -> CALLER   ✓
+(b) callee diziyi SAKLIYOR (D-509 ozeti)        -> GLOBAL   ✓
+(c) dizi YAPI alaninda, yapi donduruluyor       -> CALLER   ✓
+(d) ic dizi DIS diziye, dis donduruluyor        -> CALLER   ✓
+(e) bölge_al isaretcisi yapida donduruluyor     -> @malloc  ✓ (kanit DUSTU)
+(f) diziyi yakalayan kapanis donduruluyor       -> G005 RED ✓ (derleme zamani)
+```
+(b) en kritiktir: D-509'un **yeni** interprocedural özetinin RED yönünü ölçer.
+
+**⚠ "ASan TEMİZ" TEK BAŞINA KANIT DEĞİLDİ** (D-488/D-417'nin üçüncü tekrarı):
+altı probe de ASan altında temiz ve exit 42 verdi. Yanlış yönlendirilmiş bir
+tahsis de öyle yapabilirdi. **Asıl ölçüm YÖNLENDİRME KARARIDIR** — ρ sınıfı
+ayrıca okundu ve C↔self **birebir** çıktı.
+
+**AV KAPIYA ÇEVRİLDİ:** `cg_uaf_kacis_matrisi.kem` (a–d tek dosyada, çıkış 42).
+*"Elle taranan ölçüm eskir, kapı eskimez"* (D-462). Ölçüm
+`calistir_bolge_operand`da: bu dosyadaki **hiçbir tahsis YEREL olmamalı**.
+**Sabotaj S93** (`ea_param_tutmuyor` daima 1 = özeti toptan izin ver) →
+fikstür KIRMIZI, 7/163 sapma, rc=1.
+
+**Kapsanmayan (dürüstçe):** (e) ve (f) fikstüre alınmadı — (e) `yetki` +
+`güvensiz` gerektirir ve `bolge_operand` dizi tahsisi arar; (f) zaten
+**derleme zamanında** reddedildiği için codegen'e hiç ulaşmaz (G005 kendi
+korpus fikstürlerinde kapılı).
+
 ### ⛔ D-515 (NEGATİF SONUÇ): dar kanal-serbestı YAZILMADI — ölçülebilir kazancı YOK
 D-511 kanal ömrünü *"birleştirme-duyarlı → dil kararı"* diye bırakmıştı. Dar bir
 altküme (görevlere **yakalanmayan** kanalı, yaratan işlevin sonunda serbest
