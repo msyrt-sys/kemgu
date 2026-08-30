@@ -3858,6 +3858,14 @@ Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklama
       sessizce boş döner (D-508 sonrası: 12 atlama izi ölçülmeden kaldı,
       `grep` hiçbir şey bulmadı ve bir an *"atlama yok"* diye okunacaktı).
       Kalıcı ölçüm logunu iki tarafın da gördüğü bir yola yaz (`/mnt/c/...`).
+- [ ] **İKİ AĞAÇLI KURULUMDA SABOTAJ GERİ ALMASI SENKRONLANMALI.** Windows
+      worktree git'i tutuyor, WSL kopyası derleniyor. Bir sabotajı Windows'ta
+      geri alıp WSL'e **kopyalamazsan** kapı kırmızı kalır ve bu **bayat ikili
+      gibi görünür** — harness kaynaktan yeniden kurduğu için `rm -f` +
+      yeniden kurmak "artefakt değilmiş" dedirtir ve seni yanlış köke
+      yönlendirir. *(D-517: `checker_diff` 165/166 kaldı; ikiliyi zorla
+      kurdum, hâlâ kırmızıydı — WSL'deki KAYNAK hâlâ S95 taşıyordu.)*
+      **Sabotaj döngüsünden sonra kaynağı İKİ TARAFTA da `grep`le doğrula.**
 - [ ] **`--include="*.kem"` GÖMÜLÜ KAYNAKLARI GÖRMEZ.** Etki alanı ölçerken
       `test/*.c` içindeki C DİZGİSİNE gömülü KEMGU kaynakları ayrı bir
       yüzeydir. *(D-517: `bellek_*` etki alanını "4 dosya, 3'ü zaten uyumlu"
