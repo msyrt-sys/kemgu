@@ -1,0 +1,33 @@
+// [D-522] `eşleş` KAPSAYICILIK (M001) — çeşit · seçimlik · sonuç · joker.
+//
+// D-352 self-host'a M001'i portlarken "seçimlik<T> ve sonuç<T,H> dalları YOK
+// (self-host'ta bileşik tip temsili yok)" diye BİLİNÇLİ bir sınır kaydetmişti.
+// ÖLÇÜLDÜ: o sınır ARTIK YOK — C ve self-host dört şekilde de BİREBİR M001
+// veriyor (kod+satır+sütun). Not BAYATTI; düzeltildi.
+//
+// Şekiller korpusta YOKTU, bu yüzden kapı onları hiç ölçmüyordu. Çalışan
+// davranışı kalıcı kapıya çeviriyoruz (D-462: "elle taranan ölçüm eskir,
+// kapı eskimez").
+//
+// ⚠ POZİTİF ŞEKİL ZORUNLU (D-425): joker (`_`) ile kapatılan eşleş TEMİZ
+//   geçmeli. Yalnız negatifler olsaydı "her eşleşi eksik say" sabotajı
+//   kapıdan GEÇERDİ.
+çeşit Renk { Kirmizi, Yesil, Mavi }
+
+işlev cesit_eksik(r: Renk) -> tam32 {
+    eşleş r { Renk::Kirmizi => { ver 1; } Renk::Yesil => { ver 2; } }   // M001: Mavi
+}
+
+işlev cesit_joker(r: Renk) -> tam32 {
+    eşleş r { Renk::Kirmizi => { ver 1; } _ => { ver 2; } }             // TEMİZ
+}
+
+işlev secimlik_eksik(o: seçimlik<tam32>) -> tam32 {
+    eşleş o { değer(v) => { ver v; } }                                  // M001: hiç
+}
+
+işlev sonuc_eksik(s: sonuç<tam32, metin>) -> tam32 {
+    eşleş s { tamam(v) => { ver v; } }                                  // M001: hata
+}
+
+işlev main() -> tam32 { ver cesit_joker(Renk::Kirmizi); }

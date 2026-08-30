@@ -857,8 +857,16 @@ Direktif Ek v1.1'de onaylı spec. Detay: `belgeler/KEMGU_Linear_Types_Spec_V1.md
 - **`eşleş` KAPSAYICILIK (M001) — D-352'de self-host'a portlandı** (çeşit dalı).
   Yan-kanal: `cv_cesit`/`cv_ad` (varyant adları — `parse_cesit` bunları ATIYORDU)
   + `yerel_ham` (süzülmemiş annotasyon tip adı; `yerel_tip` çeşidi "?"e düşürüyor).
-  **Bilinçli sınır:** `seçimlik<T>` ve `sonuç<T,H>` dalları YOK — self-host'ta
-  bileşik tip temsili yok; kapanması tip çıkarsaması işine bağlı.
+  ~~**Bilinçli sınır:** `seçimlik<T>` ve `sonuç<T,H>` dalları YOK — self-host'ta
+  bileşik tip temsili yok; kapanması tip çıkarsaması işine bağlı.~~
+  ⚠ **BU SINIR ARTIK YOK (D-522'de ÖLÇÜLDÜ).** Dört şekilde de C ↔ self-host
+  **birebir** M001 (kod+satır+sütun): çeşit eksik varyant · `seçimlik` eksik
+  `hiç` · `sonuç` eksik `hata` · joker (`_`) TEMİZ. Sınır bir ara kapanmış ama
+  **not güncellenmemişti** — şekiller korpusta olmadığı için kapı da hiç
+  ölçmüyordu. `tc44_01_esles_kapsayicilik.kem` ile kapıya bağlandı.
+  **DERS:** "bilinçli sınır" notu da bir İDDİADIR; başlamadan önce ÖLÇ
+  (D-406'nın *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı; bu
+  oturumda EBNF ve SORRY_TRACKER'da da aynı sınıf çıkmıştı).
 - **GÜVENSİZ-TIER KAPILARI — D-351'de self-host'a portlandı.** `G001` (ham işaretçi
   deref/indeksleme) + `E010` (küresel erişim) artık self-host checker'da da var;
   `çıplak` gövde örtük güvensiz (yan-kanal `cip_node`/`g_ciplak` — düğüme alan
