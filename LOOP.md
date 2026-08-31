@@ -11,7 +11,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] Aritmetik tasma davranisini KILITLE: `add/sub/mul` nsw/nuw yok, sarma tanimli ve -O0/-O2'de kararli. Fikstur + kapi ekle (dil degisikligi YOK, mevcut davranisi sabitle).
 - [ ] D-510'un olculemeyen dali: `bolge_yerel_yonlendir`e bilinmeyen-eleman yolunu ULASILABILIR kilan bir sekil ara. Bulunursa fikstur ekle; bulunmazsa CLAUDE.md'ye "ulasilamaz, borc kapali" yaz.
 - [ ] yapi_diff K1 (`mantiksal` -> C i1 / self i32, 9 dosya): once TEK bir dosyada dene, kapilar yesilse yay; kirilirsa geri al ve olcumu kaydet.
 - [ ] `kanal` bare-metal ABI testi: `runtime/*.kem` yolunda `kanal_olustur/gonder/al` kullanan minimal bir program + `baremetal_diff` kapsamina al.
@@ -23,3 +22,4 @@
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
+- 2026-08-31 D-524: aritmetik tasma sabitlendi — yeni kapi `calistir_tasma` (12 olcum, C+SELF): -O0/-O2 ayni VE IR'da nsw/nuw yok. Sabotaj S99 (nsw enjekte) -> 3 dosya kirmizi, rc=2. Dil degisikligi YOK.

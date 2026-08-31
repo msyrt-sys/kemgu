@@ -1,0 +1,13 @@
+// [D-524] Aritmetik taşma: SARMA TANIMLI ve -O0/-O2'de KARARLI.
+// Kaydırma (D-514) UB'ydi ve panikletildi; taşma DEĞİL — `add/sub/mul` IR'ında
+// `nsw`/`nuw` YOK, yani iki'nin tümleyeni sarması LLVM'de TANIMLIDIR.
+// Bu dosya MEVCUT davranışı SABİTLER (dil değişikliği YOK): sarmanın sessizce
+// UB'ye kaymadığını ve optimizasyon seviyesinden bağımsız olduğunu ölçer.
+işlev main() -> tam32 {
+    değişken a: tam32 = 2147483647;
+    değişken b: tam32 = 1;
+    eğer a + b != (0 - 2147483648) { ver 1; }     // MAX+1 -> MIN
+    değişken c: tam32 = 0 - 2147483648;
+    eğer c - b != 2147483647 { ver 2; }           // MIN-1 -> MAX
+    ver 42;
+}
