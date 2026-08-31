@@ -49,8 +49,11 @@ fi
 # (K1) `mantıksal` dönüş → C `i1`, self `i32`. Self aritmetik bağlamda bilerek
 #      i32 kullanır; `islev_donus_tip`te i1'e çevirmek gövdedeki `ret` ile
 #      tutarsızlık riski taşır → AYRI adım.
-MUAF_K1="cg2_bool_lit cg2_buyuk cg2_degil cg2_esit cg2_farkli cg2_kucuk cg2_ve
-cg2_veya cg7a_esit"
+# (K1) ✓ KAPANDI — D-526. `-> mantıksal` dönüşü artık self-host'ta da `i1`
+#      (eşleme `islev_donus_tip`te; `ll_tip` DEĞİŞMEDİ — aritmetik bağlamda
+#      `mantıksal` hâlâ i32 taşınır, D-430'da ölçülen çekirdek skaler yol
+#      korundu). Liste KÜÇÜLMEK içindir; bu satır boşaldı.
+MUAF_K1=""
 # (K2) ✓ KAPANDI — D-426. `sonuç<bos,X>`/`seçimlik<bos>` payload yuvası artık
 #      `i8` (C ile birebir). Liste KÜÇÜLMEK içindir; bu satır boşaldı.
 #      ⚠ YAPI ALANI kapsam DIŞI: `yapı K { a: boş; }` için C `%K = type

@@ -11,7 +11,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] yapi_diff K1 (`mantiksal` -> C i1 / self i32, 9 dosya): once TEK bir dosyada dene, kapilar yesilse yay; kirilirsa geri al ve olcumu kaydet.
 - [ ] `kanal` bare-metal ABI testi: `runtime/*.kem` yolunda `kanal_olustur/gonder/al` kullanan minimal bir program + `baremetal_diff` kapsamina al.
 - [ ] test/perf tabanini kapiya cevir: bench1/bench2 icin zirve bellek esigi olcup regresyon kapisi ekle (D-506'nin 17x kazanci sessizce kaybolmasin).
 - [ ] `lean_sorry` kapisina "lake build KOSULMADI" uyarisini SERT hale getirmeden once: lean/lake kurulu mu diye olc, kuruluysa `calistir_lean_tam` hedefi ekle (test_tumu'ya BAGLAMA).
@@ -23,3 +22,4 @@
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
 - 2026-08-31 D-524: aritmetik tasma sabitlendi — yeni kapi `calistir_tasma` (12 olcum, C+SELF): -O0/-O2 ayni VE IR'da nsw/nuw yok. Sabotaj S99 (nsw enjekte) -> 3 dosya kirmizi, rc=2. Dil degisikligi YOK.
 - 2026-08-31 D-525: D-510'un dali ULASILABILIR cikti (literal argüman/cesit payload/ic ice literal; korpusta 0 iz). Fikstur cg_bilinmeyen_eleman eklendi, 6/6 GLOBAL. bolge_operand 165/165, codegen_diff 163/163. Ilk enstrumantasyon hic uygulanmamisti — sahte 'ulasilamaz' sonucu yakalandi.
+- 2026-08-31 D-526: K1 kapandi — `-> mantiksal` self-host'ta da i1 (yalniz donus konumu; ll_tip degismedi). Kok: tip_genislik'te i1 YOKTU -> sext i32->i1 = gecersiz IR. yapi_diff muafiyet 27->18, codegen_diff 163/163, llvm_test 286/286. Sabotaj S100 -> 154/163.

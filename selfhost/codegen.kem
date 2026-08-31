@@ -3525,6 +3525,11 @@ işlev dizi_eleman_yapi_mi(et: metin) -> mantıksal {
 }
 // CG6: LLVM int tip bit-genişliği (sext/trunc seçimi için).
 işlev tip_genislik(t: metin) -> tam32 {
+    // [D-526] `i1` EKSİKTİ ve varsayılan 32'ye düşüyordu → `int_uydur`
+    // daraltmayı göremeyip `sext i32 .. to i1` yayıyordu = GEÇERSİZ IR
+    // (sext GENİŞLETİR). `-> mantıksal` dönüşü i1'e eşlenince 9 dosya
+    // LINK-RED verdi ve kök buydu.
+    eğer metin_esit(t, "i1") { ver 1; }
     eğer metin_esit(t, "i8") { ver 8; }
     eğer metin_esit(t, "i16") { ver 16; }
     eğer metin_esit(t, "i64") { ver 64; }
@@ -4259,6 +4264,15 @@ işlev islev_donus_tip(p: &değişken Ayr, idx: tam32) -> metin {
             // için exit/stdout DEĞİŞMİYOR → davranışsal kapı bu sınıfı göremez.
             eğer metin_esit(dizi_al(p.a_ad, c), "TIP_BASIT")
               ve tip_bos_mu(dizi_al(p.a_deg, c)) { ver "void"; }
+            // [D-526] `-> mantıksal` DÖNÜŞÜ C'de `i1`dir, `i32` DEĞİL.
+            // `yapi_diff`in en büyük muafiyet kökü (K1, 9 dosya) buydu. Eşleme
+            // BURADA yapılır, `ll_tip`te DEĞİL: `mantıksal` aritmetik bağlamda
+            // hâlâ `i32` taşınır (D-430'da ölçüldü; `ll_tip`i değiştirmek
+            // çekirdek skaler yolu bozardı ve iki kez bilerek ertelenmişti).
+            // Yalnız SONUÇ konumu daraltılıyor; `ret` uyarlaması `int_uydur`
+            // ile aynı yerde yapılır.
+            eğer metin_esit(dizi_al(p.a_ad, c), "TIP_BASIT")
+              ve metin_esit(dizi_al(p.a_deg, c), "mantıksal") { ver "i1"; }
             ver ll_tip(p, c);
         }
         i = i + 1;

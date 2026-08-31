@@ -1489,6 +1489,29 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### ✅ D-526: K1 KAPANDI — `-> mantıksal` dönüşü self-host'ta da `i1`
+`yapi_diff`in en büyük muafiyet kökü (9 dosya) kapandı: **27 → 18 muafiyet**.
+C `-> mantıksal` için `define i1` yayıyordu, self-host `define i32`.
+
+**DAR TUTULDU — `ll_tip` DEĞİŞTİRİLMEDİ.** Eşleme yalnız `islev_donus_tip`te:
+`mantıksal` aritmetik bağlamda hâlâ `i32` taşınır. D-430 bu işi *"çekirdek
+skaler yola dokunur"* diye **iki kez bilerek ertelemişti**; sonuç konumunu
+ayırmak o riski ortadan kaldırdı.
+
+**🔴 İLK DENEME 9 DOSYAYI LINK-RED YAPTI — kök `tip_genislik`ti.**
+`ret` uyarlaması `int_uydur`dan geçiyor ama `tip_genislik("i1")` tabloda YOKTU
+ve **varsayılan 32**'ye düşüyordu → daraltma görülmedi, `sext i32 .. to i1`
+yayıldı = GEÇERSİZ IR (`sext` GENİŞLETİR). `i1 → 1` eklenince `trunc i32 → i1`
+doğru yayıldı.
+**DERS: bir tip tablosuna yeni bir tip sokmadan önce, o tipi OKUYAN tüm
+yardımcıların onu TANIDIĞINI ölç** — `int_ll_mi` `i1`i tanıyordu,
+`tip_genislik` tanımıyordu; ikisi yan yana duruyor.
+
+**Sabotaj S100** (`i1` girdisini kapat) → `codegen_diff` 163 → **154/163**,
+rc=2 (tam da ilk denemedeki 9 dosya).
+**Kapılar:** codegen_diff **163/163** · yapi_diff **147/147 (18 muaf)** ·
+baremetal_diff 4/4 · ct_bariyer 14/14 · llvm_test 286/286.
+
 ### ✅ D-525: D-510'un dalı ULAŞILABİLİR ÇIKTI — borç kapandı, fikstür eklendi
 D-510 bilinmeyen-eleman varsayılanını `"i32"` (İZİN) → `"ptr"` (DENY) yapmış
 ama **dalı ateşleyen bir şekil bulamamıştım** → *"ölçülemeyen ama tek yönlü"*
