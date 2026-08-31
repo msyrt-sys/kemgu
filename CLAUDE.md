@@ -1489,7 +1489,32 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
-### 🟡 D-510 (ÖLÇÜLEMEYEN ama TEK YÖNLÜ): bilinmeyen eleman → DENY
+### ✅ D-525: D-510'un dalı ULAŞILABİLİR ÇIKTI — borç kapandı, fikstür eklendi
+D-510 bilinmeyen-eleman varsayılanını `"i32"` (İZİN) → `"ptr"` (DENY) yapmış
+ama **dalı ateşleyen bir şekil bulamamıştım** → *"ölçülemeyen ama tek yönlü"*
+diye borç kaydedilmişti. **O kayıt YANLIŞTI.**
+
+**ÖLÇÜM (kaynağa geçici iz koyarak, tahmin YOK):** dal **ULAŞILABİLİR**.
+```
+dizi_al([40,2],0)            -> 2 iz     çeşit payload K::Tek([42])  -> 1 iz
+al([1]) (literal argüman)    -> 1 iz     iç içe [[42],[1]]           -> 2 iz
+generic kimlik([42])         -> 0 iz
+```
+Ortak nokta: **bağlamın eleman tipini vermediği** yerler. D-510'da bulamamamın
+sebebi probe seçimiydi — annotasyonsuz bağlama ve yapı alanı denemiştim,
+ikisi de bağlamı sağlıyor.
+
+**⚠ KORPUS TARAMASI: `cg_korpus` + `test/perf` = 0 İZ.** Dal gerçek şekillerde
+ateşleniyor ama **hiçbir fikstür onu içermiyordu** — *"korpusta o şekil yok"*
+(D-356) sınıfının bir kez daha tekrarı. `cg_bilinmeyen_eleman.kem` eklendi;
+altı tahsisin altısı da **GLOBAL** (DENY doğru tarafta), C↔self birebir.
+
+**⚠ ÖLÇÜM ARACI YİNE YANILDI:** ilk enstrümantasyon (iç içe heredoc'ta python)
+**hiç uygulanmadı** ve beş şekil de `0 iz` verdi — *"ulaşılamaz, borç kapalı"*
+diye kaydedecektim. `grep -c` ile yamanın indiğini doğrulayınca ortaya çıktı.
+**Sessiz sıfır, önce ARACI şüpheli kılar** (D-500).
+
+### 🟡 (TARİHÎ) D-510: bilinmeyen eleman → DENY
 D-509'un ardından **komşu şekiller tarandı** (D-438 disiplini). Aynı indirgeme
 kalıbı C'de başka yerde YOK, ama self-host'ta **iki** yönlendirme çağrısı
 bilinmeyen elemanı `"i32"`ye — yani **SKALER = İZİN** tarafına — düşürüyordu.
