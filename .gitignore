@@ -43,3 +43,7 @@ desktop.ini
 
 .claude/
 build_err.log
+
+# LOOP surucusu (yerel) + kosum ciktisi — depo icerigi degil
+loop.sh
+loop.log
