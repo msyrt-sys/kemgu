@@ -1489,6 +1489,31 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### ✅ D-527: `kanal` ABI'si artık BARE-METAL'de de ölçülüyor
+Roadmap *"`kanal` bare-metal: ABI hazır ama test yok"* diyordu. **Ölçüldü:
+`runtime/*.kem` ve `kem_os.kem` içinde `kanal_oluştur/gönder/al` kullanan TEK
+BİR SATIR YOKTU** — yani "ABI hazır" iddiasını hiçbir kapı zorlamıyordu
+(D-446'nın *"var olan ama çağrılmayan kapı"* sınıfının fikstür karşılığı).
+
+`runtime/kem_kanal_abi.kem` eklendi (`çıplak`, ARM64). `baremetal_diff`
+`runtime/*.kem`i gezdiği için otomatik kapsandı: **4/4 → 5/5 birim**.
+IR iki derleyicide de birebir:
+```
+declare ptr @kdl_kanal_olustur(i32) . void @kdl_kanal_gonder(ptr, i64)
+declare i64 @kdl_kanal_al(ptr)      . define i64 @kem_kanal_abi_yoklama(i32)
+```
+
+**⚠ İDDİA DAR VE DÜRÜST: "ABI iki derleyicide AYNI yayılıyor", "kanal
+bare-metal'de ÇALIŞIYOR" DEĞİL.** D-490 ölçtü ki `kem_os` QEMU'da **`-smp`
+olmadan** koşar (tek çekirdek) → orada koşturmak DRF hakkında hiçbir şey
+kanıtlamaz. Gerçek koşum fiziksel ARM64 donanımının işidir.
+
+**⚠⚠ İLK SABOTAJIM (S101) GEÇERSİZDİ VE SESSİZ KALDI.** Fikstürün KAYNAĞINI
+değiştirmiştim; `baremetal_diff` C↔self karşılaştırır, kaynak değişikliği
+**iki derleyiciyi birden** etkiler → parite bozulmaz. *Parite kapısında sabotaj
+TEK TARAFI bozmalıdır.* S102 (self-host `kdl_kanal_al` declare'ını `i32` yap)
+→ **rc=2** ✓
+
 ### ✅ D-526: K1 KAPANDI — `-> mantıksal` dönüşü self-host'ta da `i1`
 `yapi_diff`in en büyük muafiyet kökü (9 dosya) kapandı: **27 → 18 muafiyet**.
 C `-> mantıksal` için `define i1` yayıyordu, self-host `define i32`.

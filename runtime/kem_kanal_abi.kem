@@ -1,0 +1,24 @@
+// kem_kanal_abi.kem — [D-527] `kanal` ABI'sinin BARE-METAL yüzeyi.
+// ============================================================================
+// NEDEN: `runtime/kdl_kanal.h` çekirdek-düzeyi SPSC kanalı gerçekler ve imzası
+// host sürümüyle BİLEREK AYNIDIR (`kdl_kanal_olustur(i32)` / `_gonder(ptr,i64)`
+// / `_al(ptr)`). Ama depoda `runtime/*.kem` ya da `kem_os.kem` içinde
+// `kanal_oluştur/gönder/al` KULLANAN TEK BİR SATIR YOKTU (ölçüldü) — yani
+// "ABI hazır" iddiasını hiçbir kapı zorlamıyordu.
+//
+// Bu dosya o iddiayı ARM64 hedefinde ölçülebilir kılar: `baremetal_diff`
+// `runtime/*.kem`i gezer ve C ↔ self-host `define` kümesini + hedef üçlüsünü
+// karşılaştırır. Kanal çağrıları bir `define` içinde geçtiği için IR biçimleri
+// (arite, taşıyıcı genişliği) iki derleyicide de aynı olmak ZORUNDA.
+//
+// ⚠ ÇALIŞTIRILMAZ, DERLENİR. Bare-metal koşum QEMU hedeflerinin işidir ve
+//   D-490'da ölçüldü: `kem_os` QEMU'da `-smp` OLMADAN koşar (tek çekirdek),
+//   dolayısıyla orada koşmak DRF hakkında hiçbir şey KANITLAMAZ. Bu kapının
+//   iddiası dar ve dürüst: "ABI iki derleyicide de AYNI şekilde yayılıyor".
+//
+// ⚠ `çıplak`: bölge prologu YOK (C-ABI). Çekirdek bağlamında ρ yoktur.
+çıplak işlev kem_kanal_abi_yoklama(kapasite: tam32) -> tam64 {
+    değişken k: kanal<tam64> = kanal_oluştur(kapasite);
+    kanal_gönder(k, 42);
+    ver kanal_al(k);
+}
