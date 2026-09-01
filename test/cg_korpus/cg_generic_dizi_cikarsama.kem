@@ -1,0 +1,37 @@
+// [D-535] `Dizi<T>` PARAMETRESİNDEN T ÇIKARSAMA — SESSİZ YANLIŞ CEVAP kapandı.
+//
+// ÖLÇÜLEN AÇIK: monomorfizasyon T'yi (a) çıplak `x: T`, (b) `v: *T`,
+// (c) `l: &Kullanıcı<T>` konumlarından çıkarsıyordu ama **`xs: Dizi<T>`**
+// dalı YOKTU → `$i32` fallback'ine düşüyordu. `Dizi<tam64>` üzerinde 2^33
+// okuyunca değer KIRPILIYOR ve program SESSİZCE yanlış cevap veriyordu:
+//   ÖNCE:  call i32 @al_ilk$i32(...)  -> exit 1   (generic'siz aynı iş: 42)
+//   SONRA: doğru eleman tipi          -> exit 42
+// Derleme temiz, link temiz, program KOŞUYOR — deponun en ağır saydığı sınıf.
+//
+// ⚠ `Dizi<T>` stdlib/dizi.kem'in TAMAMININ dayandığı şekildir; (a) ve (b)
+//   zaten vardı, en yaygın olan yoktu. (a)'nın yanındaki yorum bu sınıfı
+//   zaten "SESSİZ HEAP OVERFLOW" diye anıyordu.
+//
+// ⚠ AYIRT EDİCİ TİP ŞART: `tam32` ile ölçülemez — doğru çıkarsama ve `i32`
+//   fallback'i AYNI görünür. Bu yüzden `tam64` + 2^33 kullanılır.
+// Çıkış: 42
+// ⚠⚠ İKİ ŞEKİL DE GEREKLİ, biri diğerinin yerine GEÇMEZ (ölçüldü):
+//  • `ilk_tek` (YALNIZ `Dizi<T>` parametresi) — C tarafını AYIRT EDEN tek şekil.
+//  • `al_ilk`  (ayrıca çıplak `v: T`) — self-host'ta İNDEKS ÖNCELİĞİNİ kilitler.
+// `al_ilk` TEK BAŞINA C'yi ayırt ETMEZ: `değişken g: tam64 = al_ilk(a, 0)`
+// beklenen tipi literal `0`'a yayar, çıplak dal i64 verir ve `Dizi<T>` dalı
+// silinse bile sonuç 42 kalır — fikstür YANLIŞ SEBEPLE yeşil olurdu (D-425).
+işlev ilk_tek<T>(xs: Dizi<T>) -> T { ver dizi_al(xs, 0); }
+işlev al_ilk<T>(xs: Dizi<T>, v: T) -> T { ver dizi_al(xs, 0); }
+işlev boyut_al<T>(xs: Dizi<T>) -> tam32 { ver dizi_boyut(xs); }
+
+işlev main() -> tam32 {
+    değişken a: Dizi<tam64> = dizi_olustur(4);
+    dizi_ekle(a, 8589934592);          // 2^33 — i32'ye sığmaz
+    değişken g: tam64 = al_ilk(a, 0);
+    eğer g != 8589934592 { ver 1; }    // fallback'te KIRPILIRDI
+    eğer boyut_al(a) != 1 { ver 2; }
+    değişken t: tam64 = ilk_tek(a);   // C'yi ayırt eden şekil
+    eğer t != 8589934592 { ver 3; }
+    ver 42;
+}

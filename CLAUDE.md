@@ -1489,6 +1489,65 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🔴 D-535: `Dizi<T>` PARAMETRESİNDEN ÇIKARSAMA YOKTU — SESSİZ YANLIŞ CEVAP
+`yapi_diff` K4 kökünü (*"generic BASE gövdesi"*) ölçerken D-401'in sınırının hâlâ
+geçerli olduğu doğrulandı — **ama yanında belgelenmemiş, daha ağır bir açık çıktı.**
+
+```kemgu
+işlev al_ilk<T>(xs: Dizi<T>, v: T) -> T { ver dizi_al(xs, 0); }
+Dizi<tam64> + 2^33   ÖNCE: call i32 @al_ilk$i32  → exit 1   (generic'siz aynı iş: 42)
+                     SONRA: @al_ilk$i64          → exit 42
+```
+Derleme temiz, link temiz, program **koşuyor** — deponun en ağır saydığı sınıf.
+
+**KÖK:** monomorfizasyon T'yi (a) çıplak `x: T`, (b) `v: *T`, (c) `l: &Kul<T>`
+konumlarından çıkarsıyordu; **`xs: Dizi<T>` dalı YOKTU** → `"i32"` fallback'i.
+`Dizi<T>` **`stdlib/dizi.kem`'in TAMAMININ dayandığı şekildir** — en yaygın olan
+konum eksikti. `argt` yalnız `"ptr"` taşır; eleman tipi paralel bir kanaldan
+(C `eleman_llvm_tip`, self `cg_var_elem_bul`) gelmeli.
+
+**🔴 D-411'İN SAĞLAMLIK İDDİASI ÖLÇÜLDÜ VE ÇÜRÜDÜ.** *"Fallback yanlışsa define
+ve çağrı yine anlaşır ama annotasyonla uyuşmaz → LLVM REDDEDER; hata GÜRÜLTÜLÜ
+kalır, sessiz yanlış cevaba dönüşmez."* `Dizi<T>` konumunda **annotasyon da
+uyuşur** (dizi her genişlikte `ptr` taşır) → LLVM **susar**, değer kırpılır.
+İddia D-415'te bir kez daha yanlış çıkmıştı (`büyü<T>`); bu ikinci kez ve bu kez
+**sessiz**. Yorum ikisinde de gerçeğe göre güncellendi.
+
+**⚠⚠ AYIRT EDİCİ TİP ŞART — `tam32` İLE ÖLÇÜLEMEZ.** Doğru çıkarsama ve `i32`
+fallback'i `tam32`de **birebir aynı IR** üretir; fikstür `tam64` + 2^33 kullanır.
+İlk üç probe'um `tam32` ile yazılmıştı ve **açığı göremiyordu**.
+
+**⚠⚠ ÖNCELİK PARAMETRE İNDEKSİNDEDİR — self-host portu İLK DENEMEDE HİÇBİR ŞEY
+DEĞİŞTİRMEDİ.** C parametreleri **sırayla** gezip ilk çıkarsamayı alır; yukarıdaki
+şekilde çıplak `v: T` **index-1**'de ve argümanı literal `0` (i32). Self-host'un
+`fn_param_idx`i sıra gözetmeden tüm parametreleri tarayıp o çıplak T'yi buluyordu
+→ yeni dal `bulundu == yanlış` koruması yüzünden **hiç ateşlenmedi**
+(`@al_ilk$i32` aynen kaldı). Onarım dalı eklemek değil, **indeks önceliğini
+kurmaktı**. *Bir dalı eklemek onun kazanacağı anlamına gelmez.*
+
+**⚠⚠ FİKSTÜR İLK HÂLİYLE YANLIŞ SEBEPLE YEŞİLDİ.** `al_ilk<T>(xs: Dizi<T>, v: T)`
+şeklinde C'nin (c) dalını kapatınca sonuç **yine 42** çıktı: `değişken g: tam64 =
+al_ilk(a, 0)` beklenen tipi literal `0`'a yayıyor ve çıplak `v: T` dalı i64
+veriyor. Ayırt eden şekil, T'yi taşıyan **tek** parametrenin dizi olmasıdır
+(`ilk_tek<T>(xs: Dizi<T>) -> T`). Fikstürde **ikisi de** var — biri C'yi, diğeri
+self-host'un indeks önceliğini kilitler. *Parite kapısı tek başına yetmez: iki
+taraf birden yanlışsa yeşil kalır → her iki taraf AYRI sabote edilmeli.*
+
+**⚠⚠ DÖRT GEÇERSİZ SABOTAJ ÜST ÜSTE** (D-500 listesinin üç maddesi birden):
+`make build/kemgu` hiçbir şeyi yeniden kurmadı (bayat ikili) · sabotaj desenim
+**tek satırlıydı, kod çok satırlı** → sessizce eşleşmedi ve beni *"C'de başka bir
+yol da çıkarsıyor"* diye **yanlış bir hipoteze** soktu · `/tmp` `wsl.exe`
+çağrıları arasında **siliniyor** → ölçüm dosyası yokken çıkan `exit=1`'i bir an
+gerçek sonuç sandım. Reçete: tek çağrı · `build/` altında çalışma dizini · desen
+sayısını **bastır** · `grep` ile doğrula.
+
+**Kapılar:** codegen_diff **164/164** · yapi_diff **147/147 (19 muaf)** ·
+stdlib_check rc=0 · check_kapisi 269/276 (0 RED).
+**Sabotaj 2/2:** S107 (self indeks önceliği) → 163/164 · S108e/f (C dalı) → 42→1.
+Fikstür `test/cg_korpus/cg_generic_dizi_cikarsama.kem`.
+**Kalan (değişmedi):** dönüş-tipi-güdümlü çıkarsama hâlâ YOK (`@bos_yap$i32`) —
+K4 muafiyetinin asıl kökü odur ve ayrı bir iştir.
+
 ### 🧹 D-534: `check_kapisi`de BAYAT MUAFİYET — kör nokta ölçümle kanıtlandı
 8 muafiyet girdisi **tek tek** ölçüldü (kapı 7 sayıyordu — fark ipucuydu).
 Yedisi hâlâ gerçek; **biri ölü**: `cg_skaler_deref.kem` gerekçesi *"kasıtlı

@@ -2895,6 +2895,34 @@ işlev fn_dugum_bul(p: &değişken Ayr, ad: metin) -> tam32 {
 // `Dizi<T>` gibi iç içe konumlar V1'de kapsam dışı (C de arg tipinden çıkarsar,
 // ama iç içe eşleştirme ayrı iştir; eksik çıkarsama SESSİZ yanlış üretmesin diye
 // aşağıda bulunamayan param mono'yu tümden İPTAL eder).
+// [D-535] `xs: Dizi<T>` parametresinin indeksi — `fn_param_idx` aynasi ama
+// TIP_BASIT yerine TIP_DIZI arar ve ELEMANIN adini `tp` ile karsilastirir.
+// C src/llvm.c'deki (c) dali ile ayni soru.
+işlev fn_param_dizi_idx(p: &değişken Ayr, fn: tam32, tp: metin) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    değişken pi: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer dizi_al(p.a_cs, c) > 0 {
+                değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+                eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_DIZI") {
+                    eğer dizi_al(p.a_cs, tn) > 0 {
+                        değişken en: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn));
+                        eğer metin_esit(dizi_al(p.a_ad, en), "TIP_BASIT") {
+                            eğer metin_esit(dizi_al(p.a_deg, en), tp) { ver pi; }
+                        }
+                    }
+                }
+            }
+            pi = pi + 1;
+        }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 işlev fn_param_idx(p: &değişken Ayr, fn: tam32, tp: metin) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
@@ -2927,7 +2955,7 @@ işlev fs_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 // Çağrı yerinde specialization kaydı. Argüman IR tiplerinden T'leri çıkarsar,
 // mangled adı üretir ve gerekiyorsa kuyruğa alır. "" = mono YAPILAMADI (çağıran
 // eski davranışa düşer; sessiz yanlış ad üretmektense mono'yu iptal etmek yeğdir).
-işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>, argm: Dizi<metin>) -> metin {
+işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>, argm: Dizi<metin>, arge: Dizi<metin>) -> metin {
     değişken fn: tam32 = fn_dugum_bul(p, base);
     eğer fn < 0 { ver ""; }
     değişken sp: metin = "";
@@ -2951,13 +2979,38 @@ işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>, argm
             // Fallback'le E=ptr, T=i32 → `{i8,i32,ptr}`, annotasyonla UYUŞUR.
             // (C bu şekli `hata_yap$i32$ptr` olarak mangle'lıyor — AYNI sonuç.)
             //
-            // SAĞLAMLIK: fallback yanlışsa (T gerçekte tam64 ise) define ve çağrı
-            // YİNE ANLAŞIR ama annotasyonla uyuşmaz → LLVM REDDEDER. Yani hata
-            // GÜRÜLTÜLÜ kalır, sessiz yanlış cevaba dönüşmez.
+            // ⚠ [D-535] D-411'in "hata GÜRÜLTÜLÜ kalır" İDDİASI ÖLÇÜLDÜ VE
+            // YANLIŞ ÇIKTI: `Dizi<T>` konumunda define ve çağrı i32'de ANLAŞIR,
+            // annotasyon da uyuşur (dizi `ptr` taşır) → LLVM SUSAR ve değer
+            // SESSİZCE KIRPILIR. Bu yüzden aşağıya (a2) dalı eklendi.
             değişken ir: metin = "i32";
             değişken mmet: metin = "";   // [D-449]
             değişken bulundu: mantıksal = yanlış;
+            // [D-535] (a2) `xs: Dizi<T>` parametresinden: ARGÜMANIN ELEMAN tipi.
+            // EKSİKTİ ve SESSİZ YANLIŞ CEVAP üretiyordu (C ile aynı kök):
+            //   al_ilk<T>(xs: Dizi<T>, v: T) üzerinde Dizi<tam64> + 2^33
+            //   -> `$i32` fallback -> değer KIRPILIR -> exit 1 (doğrusu 42).
+            // `argt` yalnız "ptr" taşır; eleman tipi paralel `arge` kanalından
+            // gelir (`cg_var_elem_bul`, D-438 yan-kanalı).
+            // ⚠ ÖNCELİK PARAMETRE İNDEKSİNDEDİR: C parametreleri SIRAYLA gezip
+            //   İLK çıkarsamayı alır. Yukarıdaki örnekte çıplak `v: T` index-1'de
+            //   ve argümanı literal `0` (i32) — indeks önceliği olmadan o kazanır
+            //   ve onarım hiçbir şey değiştirmez (ÖLÇÜLDÜ: `@al_ilk$i32` kaldı).
+            // ⚠ `Dizi<T>` stdlib/dizi.kem'in TAMAMININ dayandığı şekildir.
+            değişken dpi: tam32 = fn_param_dizi_idx(p, fn, tp);
+            eğer dpi >= 0 {
+                değişken dkazanir: mantıksal = yanlış;
+                eğer pidx < 0 { dkazanir = doğru; }
+                eğer dpi < pidx { dkazanir = doğru; }
+                eğer dkazanir {
+                    eğer dpi < dizi_boyut(arge) {
+                        değişken ea: metin = dizi_al(arge, dpi);
+                        eğer metin_esit(ea, "") == yanlış { ir = ea; bulundu = doğru; }
+                    }
+                }
+            }
             // (a) ÇIPLAK parametre konumundan çıkarsa (en özgül bilgi).
+            eğer bulundu == yanlış {
             eğer pidx >= 0 {
                 eğer pidx < dizi_boyut(argt) {
                     değişken ia: metin = dizi_al(argt, pidx);
@@ -2965,6 +3018,7 @@ işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>, argm
                     // [D-449] o argumanin metin-ligi ikameye tasinir
                     eğer pidx < dizi_boyut(argm) { mmet = dizi_al(argm, pidx); }
                 }
+            }
             }
             // (b) D-415: AKTİF İKAMEDEN devral. Bir specialization'ın GÖVDESİNDEN
             // başka bir generic çağrılıyorsa (`ekle$i64` içinden `büyü`), T
@@ -5446,7 +5500,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // Argümanları SIRAYLA değerlendir (yan-IR akar), operand+tip biriktir.
         değişken args: Dizi<metin> = [];
         değişken argt: Dizi<metin> = [];
-        değişken argm: Dizi<metin> = [];   // [D-449] argt ile paralel: metin mi
+        değişken argm: Dizi<metin> = [];
+        değişken arge: Dizi<metin> = [];   // [D-535] argumanlarin ELEMAN IR-i   // [D-449] argt ile paralel: metin mi
         // B3: metod dispatch — hed ERISIM ise (x.metod(...)) receiver'ı `kendin`
         // olarak İLK argüman geç. fad zaten a_deg[hed]=metod adı; imza_topla UYGULA
         // dalı metodu fn_ad'a kaydetti → kullanici=1, %rho sonra receiver. C llvm.c
@@ -5511,6 +5566,12 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // [D-449] argümanın metin-liği IR tipinde TAŞINMAZ ("ptr" her şeyi
             // aynı gösterir) → generic ikame için paralel listede toplanır.
             dizi_ekle(argm, isz_str(ifade_metin(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + i))));
+            // [D-535] ELEMAN tipi paralel kanalda: `argt` yalniz "ptr" tasir,
+            // `Dizi<T>` parametresinden T cikarsamak icin eleman IR'i sart.
+            değişken aan: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + i);
+            eğer metin_esit(dizi_al(p.a_ad, aan), "TANIMLAYICI") {
+                dizi_ekle(arge, cg_var_elem_bul(p, dizi_al(p.a_deg, aan)));
+            } değilse { dizi_ekle(arge, ""); }
             i = i + 1;
         }
         // D-401: GENERIC İŞLEV MONOMORFİZASYONU. Burada yapılmalı — T argüman IR
@@ -5519,7 +5580,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // yerine mevcut (kusurlu ama tanıdık) yolu korumak yeğdir.
         eğer kullanici == 1 {
             eğer fn_generic_mi(p, fname) {
-                değişken spec: metin = mono_islev_kayit(p, fname, argt, argm);
+                değişken spec: metin = mono_islev_kayit(p, fname, argt, argm, arge);
                 eğer metin_esit(spec, "") == yanlış {
                     // Dönüş tipi de T'ye bağlı → ikame ALTINDA yeniden hesapla.
                     değişken fnn: tam32 = fn_dugum_bul(p, fname);

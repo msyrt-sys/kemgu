@@ -3116,6 +3116,35 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                 }
                 continue;
             }
+            /* [D-535] (c) `xs: Dizi<T>` param: arg'in ELEMAN tipinden.
+             * EKSIKTI ve SESSIZ YANLIS CEVAP uretiyordu — olculdu:
+             *   islev al_ilk<T>(xs: Dizi<T>, v: T) -> T { ver dizi_al(xs,0); }
+             *   Dizi<tam64> + 2^33  ->  call i32 @al_ilk$i32  ->  exit 1
+             *   ayni is GENERIC'SIZ ->  exit 42
+             * Derleme temiz, link temiz, program KOSUYOR ve YANLIS deger
+             * veriyor. D-411'in "fallback yanlissa hata GURULTULU kalir,
+             * sessiz yanlis cevaba donusmez" iddiasi BU SEKILDE CURUDU.
+             * ⚠ `Dizi<T>` stdlib/dizi.kem'in TAMAMININ dayandigi sekildir —
+             *   (a) `*T` ve (b) `&Kullanici<T>` zaten vardi, en yaygin olan
+             *   yoktu. Yanindaki (a) yorumu bu sinifi zaten "SESSIZ HEAP
+             *   OVERFLOW" diye aniyordu.
+             * Eleman tipi `eleman_llvm_tip` yan-kanalindan gelir (D-442);
+             * yoksa DOKUNMA -> eski i32 fallback (default-DENY). */
+            if (pt->tip == DUGUM_TIP_DIZI &&
+                pt->veri.tip_dizi.eleman_tip &&
+                pt->veri.tip_dizi.eleman_tip->tip == DUGUM_TIP_BASIT) {
+                const Dugum *et = pt->veri.tip_dizi.eleman_tip;
+                if (et->veri.tip_basit.ad_uzunluk == tp_uz &&
+                    memcmp(et->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0 &&
+                    arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *vi = isim_bul(g,
+                        arg_d->veri.tanimlayici.metin,
+                        arg_d->veri.tanimlayici.uzunluk);
+                    if (vi && vi->eleman_llvm_tip) {
+                        inferred = vi->eleman_llvm_tip;
+                    }
+                }
+            }
             /* (b) `l: &Kullanici<T>` param: arg `&x` -> x'in generic_arg_ir
              * yan-kanali (yapi IR'i type-erased, T'yi tasimaz). */
             if (pt->tip == DUGUM_TIP_REFERANS) {
