@@ -1489,6 +1489,33 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🧹 D-534: `check_kapisi`de BAYAT MUAFİYET — kör nokta ölçümle kanıtlandı
+8 muafiyet girdisi **tek tek** ölçüldü (kapı 7 sayıyordu — fark ipucuydu).
+Yedisi hâlâ gerçek; **biri ölü**: `cg_skaler_deref.kem` gerekçesi *"kasıtlı
+skaler deref cast (E002)"* diyordu ama dosya `--check`ten **temiz geçiyor**.
+Listenin kendi kuralı: *"Muafiyet KALICI DEĞİL: gerekçe ortadan kalkarsa satır
+silinmeli."*
+
+**⚠ BAYAT MUAFİYET ZARARSIZ DEĞİLDİR — AYIRT EDİCİ DENEYLE ÖLÇÜLDÜ.** Aynı
+dosyaya kasıtlı bir tip hatası enjekte edildi (S106) ve kapı **iki durumda**
+koşuldu:
+```
+(a) muafiyet SILINMIS   -> 1 RED,  rc=2   kapi YAKALIYOR
+(b) muafiyet GERI KONMUS -> 8 muaf, 0 RED, rc=0   kapi SESSIZCE YUTUYOR
+```
+Yani girdi dururken o dosyanın **gerçek bir kırılması görünmez** olurdu.
+*Silme işlemi "temizlik" değil, bir kör noktanın kapatılmasıdır.*
+
+**⚠ TEK BAŞINA "268/275, 7 muaf" YETERSİZ KANITTI:** girdi ölü olduğu için
+silmek **hiçbir sayıyı değiştirmedi**. Değişikliğin değeri ancak *"yanlışın
+gözlenebilir olduğu şekli"* (D-425) kurunca ölçülebildi.
+
+**Doğrulanan diğer 7:** `kem_os` T002 (parça dosya) · `kem_asm_kernel`
+AS001+T001 · `kem_kullanici` AS001 (**ve iddia edilen `--mimari arm64`
+yeniden denetimi harness'ta GERÇEKTEN var**, satır 83) · `lineer_hata`
+L001/L002/L004/LR002 (belgede yazılı dördü birebir) · `sifrele_dosya` T002 ·
+`cg6_trunc` E004 · `cg_deref_pointer` T001.
+
 ### ✅ D-533: D-531'İN BULGU 2'Sİ YANLIŞTI — eksik PORT, dil kararı DEĞİL
 D-531'de *"self-host legacy düzleştirmeyi HİÇ uygulamıyor"* diye kaydetmiştim
 ve **bunu bir dil yüzeyi kararı sandım**. Ölçüm düzeltti:

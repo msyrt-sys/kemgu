@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] `check_kapisi`in 7 muafiyetini TEK TEK olc: hangileri hala gercek? Bu oturumda hic bakilmadi. Muafiyet listesi bir KOR NOKTA ENVANTERIDIR (D-419) — bayat girdi, kapanmis bir borcu acik gosterir ya da tersi.
 - [ ] `yapi_diff` K4 kokunu olc (10 dosya, generic BASE govdesi): D-401 "cikarsama yalniz CIPLAK T parametresinden; donus-tipi-guudumlu YOK" diyor. Once o SINIRIN HALA GECERLI oldugunu olc (D-441'de baska bir "bilinen sinir" bayat cikmisti), sonra kapatilabilir mi karar ver.
 - [ ] Kanal omru A — ON KOSUL 1 (D-532): "kanali yakalayan tum gorevler ayni islevde birlestiriliyor" seklinin depoda kac kez gectigini AST uzerinden olc (grep DEGIL: yorumlari sayiyor, D-532'de bu hata yapildi). Tavan sifira yakinsa A da olculemez bir degisiklik olur (D-430) — o zaman notu guncelle, kod yazma.
 - [ ] DEGISMEZ AVI — REALTIME/WCET ekseni (RT001-RT005): `gerçekzamanlı`/`sabitsüre` disiplininde sinir asimi, sinirsiz dongu, dolayli cagri gibi sekilleri dusmanca sina. Her probe'u ONCE kendi uzerinde olc (D-500).
@@ -73,3 +72,9 @@
   rc=0 BIR IDDIADIR — AYRICA OLCULDU (D-486): test_tumu 71 hedef cagiriyor . "Basarisiz: [1-9]" ve "FAIL=[1-9]" satiri SIFIR . atlama izlerinin HEPSI adlandirilmis+sayilmis (cgmodul_mat/zincir oracle-yok . codegen_genis 9 . baremetal_diff 6 . surucu_diff 1 . bolge_operand 2 . ASan SKIP=31 . [24] RAM<=1GiB) — SESSIZ atlama YOK.
   YENI KAPILAR GERCEKTEN KOSTU: `aritmetik tasma` ve `perf zirve bellek` ozet satirlari logda VAR (eklendikleri halde cagrilmama sinifi D-446'da kayitli; ayrica dogrulandi).
   LOG kalici yola yazildi (/mnt/c/...): WSL /tmp cagrilar arasinda siliniyor ve onceki bir turda 12 atlama izi olculmeden kaybolmustu.
+- 2026-09-01 D-534: check_kapisi'nin muafiyetleri tek tek olculdu — BIRI BAYAT cikti ve SILINDI.
+  OLCUM: listede 8 girdi var ama kapi 7 muaf sayiyordu; fark ipucuydu. Sekizi tek tek --check'ten gecirildi: yedisi hala gercek, `cg_skaler_deref.kem` ise TEMIZ geciyor (gerekcesi "kasitli skaler deref cast, E002" artik gecerli degil). Listenin kendi kurali: "Muafiyet KALICI DEGIL: gerekce ortadan kalkarsa satir silinmeli."
+  DIGER 7 DOGRULANDI: kem_os T002 (parca dosya) . kem_asm_kernel AS001+T001 . kem_kullanici AS001 + iddia edilen `--mimari arm64` yeniden denetimi harness'ta GERCEKTEN var (satir 83) . lineer_hata L001/L002/L004/LR002 (belgede yazili dordu birebir) . sifrele_dosya T002 . cg6_trunc E004 . cg_deref_pointer T001.
+  KOR NOKTA KANITLANDI (ayirt edici deney): dosyaya kasitli tip hatasi enjekte edilip kapi IKI DURUMDA kosuldu -> (a) muafiyet silinmis: 1 RED, rc=2 (yakaliyor) . (b) muafiyet geri konmus: 8 muaf, 0 RED, rc=0 (sessizce yutuyor). Yani girdi dururken o dosyanin GERCEK bir kirilmasi gorunmez olurdu.
+  NEDEN BU DENEY GEREKLIYDI: girdi olu oldugu icin silmek HICBIR SAYIYI DEGISTIRMEDI (267/274 -> 268/275, muaf 7 -> 7; artis fikstur eklemelerinden). Tek basina "kapi yesil" degisikligin degerini gostermiyordu; deger ancak "yanlisin gozlenebilir oldugu sekli" (D-425) kurulunca olculdu.
+  KAPI: check_kapisi 268/275, 7 muaf, 0 RED, rc=0.

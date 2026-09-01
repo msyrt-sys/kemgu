@@ -42,7 +42,12 @@ muaf() {
     # Codegen korpusu: KASTEN tip-kontrol sınırını zorlayan dönüşüm/deref testleri.
     # Bunlar `--llvm` codegen yolunu ölçer; `--check` reddi TASARIM GEREĞİ.
     *test/cg_korpus/cg6_trunc.kem)        echo "kasıtlı daraltma (E004) — codegen trunc yolu ölçülür" ;;
-    *test/cg_korpus/cg_skaler_deref.kem)  echo "kasıtlı skaler deref cast (E002)" ;;
+    # [D-534] `cg_skaler_deref.kem` SİLİNDİ — gerekçesi ("kasıtlı skaler deref
+    # cast, E002") ARTIK GEÇERLİ DEĞİL: dosya `--check`ten TEMİZ geçiyor
+    # (ölçüldü, 8 girdinin tek tek denetiminde çıktı). Listenin kendi kuralı:
+    # *"Muafiyet KALICI DEĞİL: gerekçe ortadan kalkarsa satır silinmeli."*
+    # ⚠ Bayat muafiyet ZARARSIZ DEĞİLDİR: o dosya bir gün GERÇEKTEN kırılsa
+    #   kapı susardı — muafiyet listesi bir KÖR NOKTA ENVANTERİDİR (D-419).
     *test/cg_korpus/cg_deref_pointer.kem) echo "kasıtlı ham-pointer arg (T001)" ;;
     *) return 1 ;;
   esac
