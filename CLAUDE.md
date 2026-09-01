@@ -1489,6 +1489,42 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🎯 D-529: LEAN İSPATLARI İLK KEZ GERÇEKTEN DERLENİYOR — `require mathlib` ÖLÜYDÜ
+`calistir_lean_sorry` yalnız `sorry`/`admit` **sayıyordu** ve kendi çıktısında
+dürüstçe *"⚠ lake build KOŞULMADI"* diyordu. **`sorry`suz ama DERLENMEYEN bir
+dosya hiçbir şey kanıtlamaz** — sayım, tip denetiminin yerine geçmez.
+
+**KÖK ÖLÇÜLDÜ:** `lake build` mathlib4'ü klonlamaya çalışıp
+`git exited with code 128` ile **11 DAKİKA** sonra düşüyordu. Ama:
+```
+32 .lean dosyasi · `import Mathlib` = 0 · tum importlar ic (`Kemgu.*`)
+```
+`require mathlib` **bildirim artığıydı**. Kaldırılınca proje **çevrimdışı
+45 saniyede, 33/33 iş, sıfır hata** ile derlendi. Yani ispatlar bugüne kadar
+hiç tip-denetlenmemişti ve engel bir ispat sorunu değil, kullanılmayan bir
+bağımlılıktı.
+
+**YENİ KAPI `calistir_lean_tam`** — `test_tumu`ya **BAĞLANMADI** (bilinçli):
+lean/lake bu depoda **Windows**'ta (`~/.elan/bin`), takım **WSL**'de koşuyor.
+Opt-in; `lake` yoksa **bildirerek** atlar (D-453'ün QEMU deseni).
+`lean_sorry`nin bayat uyarısı da güncellendi: ikisi birbirini tamamlar.
+
+**⚠ POZİTİF KANIT EKLENDİ:** artımlı derlemede lake hiçbir şey basmaz → "0 iş"
+tek başına *"önbellekten mi geçti, gerçekten derledi mi"* sorusunu yanıtlamaz.
+Kapı ayrıca **`.olean` sayar** (31); sıfırsa *"boşa koştu"* diye kırmızı olur.
+
+**Sabotaj S104** (`theorem s104_bozuk : 1 = 2 := rfl`) → `error: 1 = 2`,
+`Kemgu.Drf.Drf` başarısız, **rc=2** ✓
+
+**⚠ İKİ PROBE HATASI:** (1) `set -u` altında `$USER` Git Bash'te **tanımsız**
+→ harness kendi hatasıyla düştü (`${USER:-${USERNAME:-}}`). (2) Atlama dalını
+`PATH`i boşaltarak sınadım ama **harness kendisi `~/.elan/bin`'i PATH'e
+ekliyor** → atlama hiç tetiklenmedi; `HOME` de gizlenince doğru ölçüldü.
+
+**⚠ DÜRÜSTÇE:** `lake-manifest.json` hâlâ mathlib girdisini taşıyor;
+`lake update` ağa çıkacağı için **dokunulmadı**. İddia *"derleniyor"*,
+*"manifest tutarlı"* DEĞİL.
+
 ### ✅ D-528: D-506'nın 17× bellek kazancı artık KAPI ALTINDA
 Yeni kapı `calistir_perf_bellek`: `test/perf/bench{1,2}.kem` çalıştırılır ve
 **zirve RSS** okunur, her iki derleyicide (4 ölçüm). Eşik **4096 KB**.

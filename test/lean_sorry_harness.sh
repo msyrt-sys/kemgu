@@ -59,4 +59,9 @@ if [ "$kotu" -ne 0 ]; then
     echo "=== Lean ispat borcu: $kotu/$dosya dosyada AÇIK sorry/admit ==="
     exit 1
 fi
-echo "=== Lean ispat borcu: $dosya dosya, 0 sorry/admit (⚠ lake build KOŞULMADI) ==="
+# [D-529] Uyarı GÜNCELLENDİ: `lake build` artık koşulabiliyor ama BU kapıda
+# değil — ayrı ve OPT-IN hedef `calistir_lean_tam`da (test_tumu'ya bağlı değil;
+# lean/lake bu depoda Windows'ta kurulu, takım WSL'de koşuyor).
+# Bu kapı yalnız SAYAR; tip denetimi ötekinin işidir. İkisi birbirini tamamlar:
+# `sorry`suz ama DERLENMEYEN bir dosya hiçbir şey kanıtlamaz.
+echo "=== Lean ispat borcu: $dosya dosya, 0 sorry/admit (derleme: calistir_lean_tam) ==="

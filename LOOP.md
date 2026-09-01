@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] `lean_sorry` kapisina "lake build KOSULMADI" uyarisini SERT hale getirmeden once: lean/lake kurulu mu diye olc, kuruluysa `calistir_lean_tam` hedefi ekle (test_tumu'ya BAGLAMA).
 - [ ] ARM64 fiziksel donanim kontrol listesi: D-490'in `smp_queue_arm` sabotajini gercek donanimda tekrarlama adimlarini belgeye yaz (QEMU'da anlamsiz oldugu olculdu).
 - [ ] D-520 (cok-segmentli `kullan` T041'i atliyor): en muhafazakar adim = mevcut davranisi FIKSTURLE kilitle + `::`->`/` cevirisinin gocun ilk adimi oldugunu belgeye yaz. Gocu BASLATMA.
 - [ ] Kanal omru: `kdl_kanal_serbest` olu kalmaya devam (D-515 kapali). Bunun yerine "kanal tutan tum gorevler birlestirildi mi?" sorusunu olcen bir ARASTIRMA notu yaz, kod yazma.
@@ -31,3 +30,11 @@
   HANGI KAPI NEYI OLCTU: perf_bellek 4/4 . codegen_diff 163/163 . yapi_diff 147/147 (18 muaf). Sabotaj S103 (D-506 yonlendirmesini rho_ref'e dondur) -> "C bench2: zirve RSS 19968 KB > esik 4096 KB", rc=2.
   YANLIS GIDEN DENEMELER (ikisi de kayitli derslerin tekrari): (1) perf_bellek hedefi $(BUILD)/codegen'e BAGIMLI oldugu icin make onu S103 ETKINKEN yeniden kurdu; sabotaji geri alirken yalniz kemgu'yu kurmustum -> sabote edilen derleyiciyle URETILEN her artefakt da kirlenir. (2) WSL agacindaki selfhost/codegen.kem hala S100 tasiyordu (D-526'nin sabotaji Windows'ta geri alinmis, WSL'e kopyalanmamis); belirti "sext i32 1 to i1" ve K1'in 9 dosyasi LINK-RED idi, bir an D-526'yi bozdum sandim — git'teki kaynak TEMIZDI. Teshis sirasi: git temiz mi -> iki agac senkron mu -> ikili o kaynaktan mi kurulmus. (3) Kendi `rm -f build/*.o` komutum kdl_runtime.o'yu da sildi -> codegen LINK-RED; sessiz `&&` zinciri yerine her adimin rc'sini basinca gorundu.
   ORTAM NOTU: /usr/bin/time yoksa kapi BILDIREREK atlar (D-453'un QEMU deseni); D-486'nin yasakladigi sey SESSIZ atlamadir.
+- 2026-09-01 D-529: Lean ispatlari ILK KEZ gercekten derleniyor. Yeni opt-in hedef `calistir_lean_tam` (test_tumu'ya BAGLANMADI).
+  OLCUM: lean/lake KURULU ama WINDOWS'ta (~/.elan/bin), WSL'de degil. `lake build` mathlib4'u klonlamaya calisip "git exited with code 128" ile 11 DAKIKA sonra dusuyordu.
+  KOK: 32 .lean dosyasinin HICBIRI Mathlib'i import etmiyor (tum importlar ic: Kemgu.*) -> `require mathlib` BILDIRIM ARTIGIYDI. Kaldirilinca proje CEVRIMDISI 45 saniyede, 33/33 is, sifir hata ile derlendi. Yani ispatlar bugune kadar hic tip-denetlenmemis; engel bir ispat sorunu degil kullanilmayan bir bagimlilikti.
+  NEDEN test_tumu'ya BAGLANMADI: takim WSL'de kosuyor, lake Windows'ta. Opt-in hedef; lake yoksa BILDIREREK atlar (D-453 QEMU deseni, D-486'nin yasakladigi SESSIZ atlama degil).
+  POZITIF KANIT: artimli derlemede lake hicbir sey basmaz -> "0 is" onbellekten mi gectigini soylemez. Kapi ayrica .olean SAYAR (31); sifirsa "bosa kostu" diye kirmizi olur.
+  HANGI KAPI NEYI OLCTU: lean_tam OK (1 is, 31 .olean) . lean_sorry 32 dosya 0 sorry (bayat "lake build KOSULMADI" uyarisi guncellendi). Sabotaj S104 (theorem s104_bozuk : 1 = 2 := rfl) -> "error: 1 = 2", Kemgu.Drf.Drf basarisiz, rc=2.
+  YANLIS GIDEN DENEMELER: (1) `set -u` altinda $USER Git Bash'te TANIMSIZ -> harness kendi hatasiyla dustu; ${USER:-${USERNAME:-}} yapildi. (2) Atlama dalini PATH'i bosaltarak sinadim ama harness KENDISI ~/.elan/bin'i PATH'e ekliyor -> atlama hic tetiklenmedi, probe gecersizdi; HOME de gizlenince dogru olculdu. (3) Ilk kosumda `mingw32-make` PATH'te yoktu (CLAUDE.md'de kayitli clang64/ucrt64 oneki eksikti).
+  DURUSTCE: lake-manifest.json hala mathlib girdisini tasiyor; `lake update` aga cikacagi icin DOKUNULMADI. Iddia "derleniyor", "manifest tutarli" DEGIL.
