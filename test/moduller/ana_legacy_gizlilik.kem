@@ -1,0 +1,24 @@
+// [D-533] ÇOK-SEGMENTLİ `kullan` LEGACY DÜZLEŞTİRMEYE gider — T041 UYGULANMAZ.
+//
+// D-520 bunu bir "kaçış kapısı" olarak ölçmüştü. D-531'de fikstür yazılınca
+// C ve self-host AYRIŞTI ve ben bunu "self-host düzleştirmeyi hiç uygulamıyor"
+// diye kaydettim — YANLIŞTI. Gerçek (D-533): `codegen.kem` kuralı D-427'de
+// almıştı, `checker.kem` ALMAMIŞTI. Okuduğum kod bir uygulamadan, test ettiğim
+// ikili başkasındandı (üç-uygulama tuzağı).
+//
+// ⚠ BU FİKSTÜR AÇIĞI ONAYLAMAZ, GÖRÜNÜR KILAR. Kapatmak gerçek bir göç ister
+//   (D-520: ~700 ad referansı nitelendirilmeli) ve bu bir dil yüzeyi kararıdır.
+//   Dosya, davranış SESSİZCE değişirse `checker_diff`in bildirmesini sağlar —
+//   iki yönde birden: kapatılırsa da, yanlışlıkla genişletilirse de.
+//
+// ⚠ YOL KÖK-GÖRELİDİR (D-531 Bulgu 1): legacy çözüm CWD'ye bakar, içe aktaranın
+//   dizinine DEĞİL. Kapılar depo kökünden koştuğu için tam yol yazılmalıdır;
+//   `drivers/virtio` da bu sözleşmeyi kullanıyor.
+//
+// KARŞILAŞTIR: `ana_gizli.kem` TEK SEGMENTLİ yolu ölçer ve orada T041 ÇIKAR.
+kullan test::moduller::ic::derin;
+
+işlev main() -> tam32 {
+    // `derin_gizli` PRIVATE ama legacy düzleştirme onu görünür kılıyor → T041 YOK.
+    ver derin_gizli() + derin_acik();   // 7 + 35 = 42
+}

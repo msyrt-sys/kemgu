@@ -5895,6 +5895,30 @@ işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
     ver yanlış;
 }
 // Bir modülü yükle: dışa-export adlarını p.g_isim'e ekle; kullan'ı transitif izle.
+// [D-533] `kullan a::b;` YENİ BİÇİM Mİ? — `codegen.kem` aynası (D-427).
+// Yeni biçim = TEK SEGMENT ∨ seçili import ∨ alias. Hiçbiri değilse LEGACY
+// düzleştirme yolundadır: tüm üst düzey adlar görünür, T041 UYGULANMAZ.
+// ⚠ `codegen.kem`deki sürümde bir de ALIAS (`al_yol`) döngüsü var; burada YOK
+//   ve GEREKMİYOR: parser P046 ile *"seçili/alias import v1'de TEK modül adı
+//   gerektirir"* diyor → `seg > 1` iken seçili de alias da İMKÂNSIZDIR, yani
+//   o iki döngü bu dalda ULAŞILAMAZ. `si_yol` yine de korundu (checker'da var
+//   ve ileride P046 gevşerse doğru kalsın).
+işlev kullan_yeni_bicim_mi(p: &değişken Ayr, yol: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(yol);
+    değişken seg: tam32 = 1;
+    değişken i: tam32 = 1;
+    iken i < n {
+        eğer bayt(yol, i) == 58 ve bayt(yol, i - 1) == 58 { seg = seg + 1; i = i + 1; }
+        i = i + 1;
+    }
+    eğer seg <= 1 { ver doğru; }
+    değişken k: tam32 = 0;
+    iken k < dizi_boyut(p.si_yol) {
+        eğer metin_esit(dizi_al(p.si_yol, k), yol) { ver doğru; }
+        k = k + 1;
+    }
+    ver yanlış;
+}
 işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) -> tam32 {
     değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
     değişken gi: tam32 = 0;
@@ -5923,9 +5947,30 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
         // üyeleri dışarıdan erişilemez. `dışa` sarmalı ve `genel` işaretlisi
         // muaf; dosya-içi `modül m { }` blokları C'de de denetlenmiyor (burası
         // yalnız dosya-modülü yolu olduğu için doğal olarak muaf).
-        eğer tanim_kind_mi(cad) ve (gen_isaretli_mi(&değişken mp, c) == yanlış) {
-            dizi_ekle(p.priv_mod, son_segment(modul_yol));
-            dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
+        // [D-533] LEGACY ÇOK-SEGMENTLİ `kullan a::b;` DÜZLEŞTİRMESİ — bu dosyada
+        // EKSİKTİ. `codegen.kem` D-427'de bunu almıştı, `checker.kem` ALMAMIŞTI:
+        //   C           -> OK    (düzleştirme; private ad görünür)
+        //   codegen.kem -> OK    (aynı; IR doğru üretiliyor)
+        //   checker.kem -> T002  (adlar TANIMSIZ)
+        // D-531'de bu "self-host legacy düzleştirmeyi hiç uygulamıyor" diye
+        // KAYDEDİLMİŞTİ ve YANLIŞTI — okuduğum kod `codegen.kem`, test ettiğim
+        // ikili `checker.kem`'dendi (üç-uygulama tuzağı, D-503/D-517/D-519).
+        // Bu bir DİL YÜZEYİ kararı DEĞİL, eksik bir PORT: kural zaten yazılmış
+        // ve çalışıyordu, yalnız bu uygulamada yoktu.
+        // ⚠ `checker_diff` bunu hiç görmemişti çünkü taradığı korpusta ÇIPLAK
+        //   çok-segmentli tek bir import bile yoktu (D-356'nın "korpusta o şekil
+        //   yok" sınıfı).
+        değişken legacy: mantıksal = kullan_yeni_bicim_mi(p, modul_yol) == yanlış;
+        eğer tanim_kind_mi(cad) {
+            eğer legacy {
+                // Legacy düzleştirme: ad DOĞRUDAN görünür, özel değil (T041 YOK).
+                g_ekle(p, dizi_al(mp.a_deg, c));
+            } değilse {
+                eğer gen_isaretli_mi(&değişken mp, c) == yanlış {
+                    dizi_ekle(p.priv_mod, son_segment(modul_yol));
+                    dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
+                }
+            }
         }
         eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
         ci = ci + 1;

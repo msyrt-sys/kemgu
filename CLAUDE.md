@@ -1489,6 +1489,38 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### ✅ D-533: D-531'İN BULGU 2'Sİ YANLIŞTI — eksik PORT, dil kararı DEĞİL
+D-531'de *"self-host legacy düzleştirmeyi HİÇ uygulamıyor"* diye kaydetmiştim
+ve **bunu bir dil yüzeyi kararı sandım**. Ölçüm düzeltti:
+```
+C            -> OK    (duzlestirme; private ad gorunur)
+codegen.kem  -> OK    (D-427'de ALMIS; IR de dogru)
+checker.kem  -> T002  (legacy dali ve kullan_yeni_bicim_mi YOK)
+```
+**Okuduğum kod bir uygulamadan (`codegen.kem`), test ettiğim ikili
+başkasındandı (`checker.kem`).** Üç-uygulama tuzağının bu oturumdaki
+**dördüncü** tekrarı — ve bu kez beni *"karar gerekiyor"* diye **yanlış bir
+sınıfa** soktu: aslında kural zaten yazılmış ve çalışıyordu, yalnız bir
+uygulamada yoktu. **Port edildi, karar gerekmedi.**
+
+**⚠ PORTTA BİR SADELEŞTİRME — ÖLÇÜLDÜ, VARSAYILMADI.** `codegen.kem`'in
+yükleminde bir de ALIAS (`al_yol`) döngüsü var; `checker.kem`'de o dizi yok.
+Parser `P046` ile *"seçili/alias import v1'de TEK modül adı gerektirir"* diyor
+→ **`seg > 1` iken seçili de alias da imkânsızdır**, yani o döngüler bu dalda
+**ulaşılamaz**. `si_yol` yine de korundu (checker'da var; P046 ileride gevşerse
+doğru kalsın).
+
+**Fikstür geri kondu** (`ana_legacy_gizlilik.kem` + `ic/derin.kem`) — artık
+kapıyı kırmıyor çünkü altındaki gerçek ayrışma onarıldı.
+**Sabotaj S105** (`legacy` bayrağını `yanlış` sabitle) → `checker_diff`
+170 → **169/170**, rc=2 ✓
+**Kapılar:** checker_diff **170/170 (0 muaf)** · modul_codegen 22/22 ·
+check_genis 133/133.
+
+**⚠ D-520 HÂLÂ AÇIK VE DEĞİŞMEDİ:** çok-segmentli `kullan` T041'i atlıyor;
+kapatmak ~700 referanslık göç ister ve **o** bir dil yüzeyi kararıdır. Bu
+artım yalnız **iki uygulamayı hizaladı** — açığı kapatmadı, ölçülebilir kıldı.
+
 ### 🔍 D-531: D-520'yi kilitleme denemesi İKİ YENİ ŞEY ÖLÇTÜ — fikstür GERİ ÇEKİLDİ
 D-520'nin *"çok-segmentli `kullan` T041'i atlıyor"* açığını **fikstürle
 kilitlemeye** çalıştım. Fikstür yazıldı, iki yeni gerçek ölçüldü, sonra

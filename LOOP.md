@@ -13,7 +13,6 @@
 
 ## Sirada
 
-- [ ] D-531 BULGU 2: self-host legacy duzlestirmeyi HIC uygulamiyor (C: OK, SELF: T002). D-520'nin kacis kapisi C'de VAR, self'te YOK. Once HANGI YONDE hizalanacagini olc (C'yi sikilastir mi, self'i gevset mi) — ikisi de DIL YUZEYI karari; kod yazmadan once secenekleri ve maliyetlerini belgeye yaz.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -56,3 +55,9 @@
   UC SECENEK KARSILASTIRILDI: A (yakalayan gorevlerin hepsi L-tuketilmisse ret oncesi serbest) tek gercekci yol . B (kanali lineer yap) DIL SEMANTIGINI BOZAR — D-505'te kanal paylasim icin taşımadan bilerek muaf tutulmustu . C (biraksin sizsin) bugunku bilincli hal.
   KARAR: C korunuyor. kdl_kanal_serbest BILEREK olu kaliyor, SILINMEMELI — D-459'un "olu kodu birakma" kuralinin TERSI durum: orada olu kod bir tuzakti (sessiz-basarisiz yol acabilirdi), burada bir yer tutucu (hic cagrilmiyor).
   YANLIS GIDEN DENEMELER: (1) Nota D-515'in "13 dosyanin 5'i" sayisini kopyaladim; bugun olcunce 16/8 cikti (korpus buyudu) -> "belgeye gomulu sayi yazildigi gun dogrudur" uyarisiyla duzeltildi. (2) A'nin 1. on kosulunu grep ile olcmeye calistim; grep YORUMLARI da sayiyor (kanal_mesaj 2/1, codegen.kem 28/13 gorunuyor ama basliklar bu adlari boluca aniyor) -> sayilar GUVENILIR DEGIL, gercek olcum AST uzerinden yapilmali. Bu, notun kendi kuralinin ihlaliydi ve nota kaydedildi.
+- 2026-09-01 D-533: D-531'in BULGU 2'si YANLISTI — eksik PORT cikti, dil karari DEGIL.
+  OLCUM: C -> OK . codegen.kem -> OK (D-427'de almis, IR de dogru) . checker.kem -> T002 (legacy dali ve kullan_yeni_bicim_mi YOK). Okudugum kod bir uygulamadan, test ettigim ikili baskasindandi — uc-uygulama tuzaginin bu oturumdaki DORDUNCU tekrari ve bu kez beni "karar gerekiyor" diye YANLIS BIR SINIFA soktu.
+  NE YAPILDI: kullan_yeni_bicim_mi + legacy dali checker.kem'e portlandi. Yeni karar YOK, yeni tani kodu YOK — kural zaten yazilmis ve calisiyordu.
+  PORTTA SADELESTIRME (olculdu, varsayilmadi): codegen.kem'in yukleminde ALIAS (al_yol) dongusu var, checker.kem'de o dizi yok. Parser P046 "secili/alias import v1'de TEK modul adi gerektirir" diyor -> seg > 1 iken ikisi de IMKANSIZ, yani o dongu bu dalda ULASILAMAZ. si_yol yine de korundu (P046 ileride gevserse dogru kalsin).
+  HANGI KAPI NEYI OLCTU: checker_diff 170/170 (0 muaf, fikstur sayildi) . modul_codegen 22/22 . check_genis 133/133. Sabotaj S105 (legacy bayragini yanlis sabitle) -> 169/170, rc=2.
+  D-520 HALA ACIK VE DEGISMEDI: cok-segmentli kullan T041'i atliyor; kapatmak ~700 referansliK goc ister ve O bir dil yuzeyi karari. Bu artim yalniz IKI UYGULAMAYI HIZALADI — acigi kapatmadi, olculebilir kildi.

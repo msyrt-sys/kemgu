@@ -1,0 +1,5 @@
+// [D-533] İç içe modül — çok-segmentli `kullan` (legacy düzleştirme) yolunu besler.
+// `derin_gizli` BİLEREK `genel` DEĞİL: legacy yolda T041 UYGULANMAZ ve ad
+// görünür olur. Kilitlenen davranış budur.
+işlev derin_gizli() -> tam32 { ver 7; }
+genel işlev derin_acik() -> tam32 { ver 35; }
