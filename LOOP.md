@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] TAM TAKIM KOSUMU: D-528'den beri kosulmadi ve o gunden bu yana yeni kapi (`calistir_tasma`, `calistir_perf_bellek`), yeni fikstur ve `checker.kem`/`codegen.kem`'de kural degisiklikleri girdi. `rc=0` bir SONUC degil bir IDDIADIR (D-486): kapi sayisini ve atlama izlerini AYRICA olc, logu kalici yola yaz (WSL /tmp cagrilar arasinda silinir).
 - [ ] `check_kapisi`in 7 muafiyetini TEK TEK olc: hangileri hala gercek? Bu oturumda hic bakilmadi. Muafiyet listesi bir KOR NOKTA ENVANTERIDIR (D-419) — bayat girdi, kapanmis bir borcu acik gosterir ya da tersi.
 - [ ] `yapi_diff` K4 kokunu olc (10 dosya, generic BASE govdesi): D-401 "cikarsama yalniz CIPLAK T parametresinden; donus-tipi-guudumlu YOK" diyor. Once o SINIRIN HALA GECERLI oldugunu olc (D-441'de baska bir "bilinen sinir" bayat cikmisti), sonra kapatilabilir mi karar ver.
 - [ ] Kanal omru A — ON KOSUL 1 (D-532): "kanali yakalayan tum gorevler ayni islevde birlestiriliyor" seklinin depoda kac kez gectigini AST uzerinden olc (grep DEGIL: yorumlari sayiyor, D-532'de bu hata yapildi). Tavan sifira yakinsa A da olculemez bir degisiklik olur (D-430) — o zaman notu guncelle, kod yazma.
@@ -69,3 +68,8 @@
   PORTTA SADELESTIRME (olculdu, varsayilmadi): codegen.kem'in yukleminde ALIAS (al_yol) dongusu var, checker.kem'de o dizi yok. Parser P046 "secili/alias import v1'de TEK modul adi gerektirir" diyor -> seg > 1 iken ikisi de IMKANSIZ, yani o dongu bu dalda ULASILAMAZ. si_yol yine de korundu (P046 ileride gevserse dogru kalsin).
   HANGI KAPI NEYI OLCTU: checker_diff 170/170 (0 muaf, fikstur sayildi) . modul_codegen 22/22 . check_genis 133/133. Sabotaj S105 (legacy bayragini yanlis sabitle) -> 169/170, rc=2.
   D-520 HALA ACIK VE DEGISMEDI: cok-segmentli kullan T041'i atliyor; kapatmak ~700 referansliK goc ister ve O bir dil yuzeyi karari. Bu artim yalniz IKI UYGULAMAYI HIZALADI — acigi kapatmadi, olculebilir kildi.
+- 2026-09-01 TAM TAKIM (D-528 sonrasi ilk tam kosum): rc=0, 0 gercek basarisizlik, FIXPOINT OK (76.989 satir), 20 dk 19 sn, SIFIRDAN kurulum (build temizlendi).
+  NEDEN SIFIRDAN: bu oturumda uc kez bayat artefakt yasandi (D-528'de perf_bellek hedefi codegen'i sabotaj etkinken kurdu; iki agac senkronu kacti). Temiz kurulum o siniftan gelen sahte yesil/kirmiziyi eler.
+  rc=0 BIR IDDIADIR — AYRICA OLCULDU (D-486): test_tumu 71 hedef cagiriyor . "Basarisiz: [1-9]" ve "FAIL=[1-9]" satiri SIFIR . atlama izlerinin HEPSI adlandirilmis+sayilmis (cgmodul_mat/zincir oracle-yok . codegen_genis 9 . baremetal_diff 6 . surucu_diff 1 . bolge_operand 2 . ASan SKIP=31 . [24] RAM<=1GiB) — SESSIZ atlama YOK.
+  YENI KAPILAR GERCEKTEN KOSTU: `aritmetik tasma` ve `perf zirve bellek` ozet satirlari logda VAR (eklendikleri halde cagrilmama sinifi D-446'da kayitli; ayrica dogrulandi).
+  LOG kalici yola yazildi (/mnt/c/...): WSL /tmp cagrilar arasinda siliniyor ve onceki bir turda 12 atlama izi olculmeden kaybolmustu.
