@@ -12,6 +12,14 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
+- [ ] TAM TAKIM KOSUMU: D-528'den beri kosulmadi ve o gunden bu yana yeni kapi (`calistir_tasma`, `calistir_perf_bellek`), yeni fikstur ve `checker.kem`/`codegen.kem`'de kural degisiklikleri girdi. `rc=0` bir SONUC degil bir IDDIADIR (D-486): kapi sayisini ve atlama izlerini AYRICA olc, logu kalici yola yaz (WSL /tmp cagrilar arasinda silinir).
+- [ ] `check_kapisi`in 7 muafiyetini TEK TEK olc: hangileri hala gercek? Bu oturumda hic bakilmadi. Muafiyet listesi bir KOR NOKTA ENVANTERIDIR (D-419) — bayat girdi, kapanmis bir borcu acik gosterir ya da tersi.
+- [ ] `yapi_diff` K4 kokunu olc (10 dosya, generic BASE govdesi): D-401 "cikarsama yalniz CIPLAK T parametresinden; donus-tipi-guudumlu YOK" diyor. Once o SINIRIN HALA GECERLI oldugunu olc (D-441'de baska bir "bilinen sinir" bayat cikmisti), sonra kapatilabilir mi karar ver.
+- [ ] Kanal omru A — ON KOSUL 1 (D-532): "kanali yakalayan tum gorevler ayni islevde birlestiriliyor" seklinin depoda kac kez gectigini AST uzerinden olc (grep DEGIL: yorumlari sayiyor, D-532'de bu hata yapildi). Tavan sifira yakinsa A da olculemez bir degisiklik olur (D-430) — o zaman notu guncelle, kod yazma.
+- [ ] DEGISMEZ AVI — REALTIME/WCET ekseni (RT001-RT005): `gerçekzamanlı`/`sabitsüre` disiplininde sinir asimi, sinirsiz dongu, dolayli cagri gibi sekilleri dusmanca sina. Her probe'u ONCE kendi uzerinde olc (D-500).
+- [ ] DEGISMEZ AVI — SIMD ekseni (`vektör<T,N>`): lane sayisi uyusmazligi, eleman tipi karisimi, `vektor_eleman` sinir disi indeks, kesirli/tamsayi karisimi. D-397'de dort ayri kok cikmisti; yuzey hala dar olabilir.
+- [ ] `codegen_genis`in 9 atlamasini yeniden olc: "mesru bare-metal link hatasi" diye kayitli ama D-518'de `codegen_diff`in atlamasi KURATE LISTEYE baglanmisti. Ayni sertlestirme burada da gerekli mi — once atlananlarin GERCEKTEN bare-metal oldugunu dogrula.
+- [ ] `lean_tam` opt-in kaldi (D-529) ve `test_tumu` onu kosmuyor. Ispatlarin derlenir kalmasini ne garanti ediyor? Secenekleri olc: (a) belgede "elle kosulacak kapilar" listesi, (b) CI varsa oraya bagla, (c) lake WSL'e kurulursa test_tumu'ya bagla. Kod yazmadan once hangisinin GERCEKTEN kosulacagini degerlendir.
 
 
 ## Gunluk
