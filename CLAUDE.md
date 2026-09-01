@@ -1489,6 +1489,44 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🔍 D-531: D-520'yi kilitleme denemesi İKİ YENİ ŞEY ÖLÇTÜ — fikstür GERİ ÇEKİLDİ
+D-520'nin *"çok-segmentli `kullan` T041'i atlıyor"* açığını **fikstürle
+kilitlemeye** çalıştım. Fikstür yazıldı, iki yeni gerçek ölçüldü, sonra
+**bilerek geri çekildi**.
+
+**BULGU 1 — LEGACY MODÜL ÇÖZÜMÜ CWD-GÖRELİDİR**, içe aktarana göre DEĞİL:
+```
+test/moduller dizininden:  kullan ic::derin;   -> OK
+depo kokunden:             ayni dosya          -> T040 (modul bulunamadi)
+```
+Yeni-biçim yükleyici **içe aktaranın dizinini** arar (D-427'de belgeli);
+legacy yol **CWD**'ye bakar. `drivers/virtio` da bu sözleşmeyi kullanıyor
+(`kullan drivers::virtio::constants;` — kök-göreli). **Bu ayrım hiçbir yerde
+yazılı değildi** ve kapılar kökten koştuğu için modül-dizini-göreli yazılmış
+her legacy import sessizce T040 alır.
+
+**🔴 BULGU 2 — SELF-HOST LEGACY DÜZLEŞTİRMEYİ HİÇ UYGULAMIYOR:**
+```
+C   : OK                       (legacy duzlestirme; private ad gorunur)
+SELF: T002 26:9 · T002 26:25   (adlar TANIMSIZ)
+```
+Yani **D-520'nin kaçış kapısı C'de VAR, self-host'ta YOK.** `test/moduller`de
+çıplak çok-segmentli tek bir import bile yoktu (`ana_secili` seçili-biçim
+kullanıyor) — bu yüzden `checker_diff` bu ayrışmayı hiç görmemişti.
+
+**⚠ FİKSTÜR NEDEN GERİ ÇEKİLDİ:** `checker_diff`in muafiyet listesi **bilerek
+BOŞ** ve yorumu *"modül yüzeyi D-361/362/363'te tamamen kapandı"* diyor.
+Fikstür oraya konsa ya kapı kalıcı kırmızı olurdu ya da o listeye **ilk
+muafiyet** girerdi — ikisi de belgelenmiş bir kazanımı bozar. Üstelik madde
+açıkça *"göçü BAŞLATMA"* diyordu; yeni bir parite cephesi açmak o sınırı aşar.
+**Bulgu kaybolmadı: iş olarak `LOOP.md` Sırada'ya girdi.**
+
+**⚠ SONUÇ D-520'Yİ DEĞİŞTİRİYOR.** Orada *"gerçek kodun çoğunda gizlilik
+kapalı"* denmişti; doğrusu **oracle'da kapalı, self-host'ta zaten kapalı
+değil**. Göç kararı verilirse iki uygulamayı da hizalamak gerekir — ama
+hangi yönde hizalanacağı (C'yi sıkılaştır / self'i gevşet) **dil yüzeyi
+kararıdır**.
+
 ### 📋 D-530: ARM64 fiziksel donanım kontrol listesi — D-490'ın borcu prosedüre çevrildi
 D-490 *"gerçek doğrulama yalnız fiziksel ARM64 donanımında yapılabilir"*
 demişti; kaynak dosyanın başlığında bir uyarı vardı ama **çalıştırılabilir adım

@@ -12,8 +12,9 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] D-520 (cok-segmentli `kullan` T041'i atliyor): en muhafazakar adim = mevcut davranisi FIKSTURLE kilitle + `::`->`/` cevirisinin gocun ilk adimi oldugunu belgeye yaz. Gocu BASLATMA.
 - [ ] Kanal omru: `kdl_kanal_serbest` olu kalmaya devam (D-515 kapali). Bunun yerine "kanal tutan tum gorevler birlestirildi mi?" sorusunu olcen bir ARASTIRMA notu yaz, kod yazma.
+
+- [ ] D-531 BULGU 2: self-host legacy duzlestirmeyi HIC uygulamiyor (C: OK, SELF: T002). D-520'nin kacis kapisi C'de VAR, self'te YOK. Once HANGI YONDE hizalanacagini olc (C'yi sikilastir mi, self'i gevset mi) — ikisi de DIL YUZEYI karari; kod yazmadan once secenekleri ve maliyetlerini belgeye yaz.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -43,3 +44,9 @@
   EN ONEMLI MADDE: YESIL SONUC "BARIYER GEREKSIZ" DEMEK DEGILDIR — tam olarak QEMU'da yasanan budur. Yesilse prosedur testi GUCLENDIRMEYI soyler; araliklli bir kirmizi bile kesin kanittir (zayif bellek hatalari belirlenimci degil).
   YANLIS GIDEN DENEMELER: (1) Belgedeki iki iddia depoya karsi dogrulaninca YANLIS cikti: `grep -c "dc civac"` 9 doner (yorumlari da sayar), kodda 2 var; dogrusu grep -cE '"dc (civac|ivac)'. (2) `dsb sy` 4 kez geciyor ve IKISI SPINLOCK yolunda — sabotaj yalniz onbellek bakimindakileri hedeflemeli; bu ayrim ne belgede ne kaynakta yaziliydi. (3) OZ-GONDERGESEL TUZAK: sayim desenini kaynaga yorum olarak ekleyince DESEN KENDINI SAYDI (2->3, 4->5); talimat ogrettigi olcumu bozuyordu. Desenler kaynaktan cikarildi, kaynak kontrol listesine ISARET ediyor.
   DOGRULAMA: kod satiri sayimlari geri dondu (dc 2, dsb 4), dosya aarch64 hedefiyle derleniyor (rc=0).
+- 2026-09-01 D-531: D-520'yi fiksturle kilitleme denemesi. FIKSTUR GERI CEKILDI, iki yeni gercek olculdu. Kod degisikligi YOK.
+  BULGU 1 — LEGACY MODUL COZUMU CWD-GORELIDIR, ice aktarana gore DEGIL: ayni dosya test/moduller dizininden OK, depo kokunden T040. Yeni-bicim yukleyici ice aktaranin dizinini arar (D-427); legacy CWD'ye bakar. drivers/virtio de kok-goreli yaziyor. Bu ayrim hicbir yerde YAZILI DEGILDI.
+  BULGU 2 — SELF-HOST LEGACY DUZLESTIRMEYI HIC UYGULAMIYOR: C "OK" der, self "T002 26:9, T002 26:25". Yani D-520'nin kacis kapisi C'de VAR, self-host'ta YOK. test/moduller'de ciplak cok-segmentli tek bir import bile yoktu, bu yuzden checker_diff bu ayrismayi hic gormemis.
+  NEDEN FIKSTUR GERI CEKILDI: checker_diff'in muafiyet listesi BILEREK BOS ("modul yuzeyi D-361/362/363'te tamamen kapandi"). Fikstur oraya konsa ya kapi kalici kirmizi olurdu ya da o listeye ILK muafiyet girerdi — ikisi de belgelenmis bir kazanimi bozar. Madde ayrica "gocu BASLATMA" diyordu; yeni bir parite cephesi acmak o siniri asar. Bulgu kaybolmadi: Sirada'ya is olarak girdi.
+  SONUC D-520'YI DEGISTIRIYOR: "gercek kodun cogunda gizlilik kapali" demistim; dogrusu ORACLE'DA kapali, self-host'ta zaten kapali degil.
+  DOGRULAMA: fikstur cikarildiktan sonra checker_diff 169/169 (0 muaf), modul_codegen 22/22, calisma agacinda kalinti yok.
