@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] Kanal omru: `kdl_kanal_serbest` olu kalmaya devam (D-515 kapali). Bunun yerine "kanal tutan tum gorevler birlestirildi mi?" sorusunu olcen bir ARASTIRMA notu yaz, kod yazma.
 
 - [ ] D-531 BULGU 2: self-host legacy duzlestirmeyi HIC uygulamiyor (C: OK, SELF: T002). D-520'nin kacis kapisi C'de VAR, self'te YOK. Once HANGI YONDE hizalanacagini olc (C'yi sikilastir mi, self'i gevset mi) — ikisi de DIL YUZEYI karari; kod yazmadan once secenekleri ve maliyetlerini belgeye yaz.
 
@@ -50,3 +49,10 @@
   NEDEN FIKSTUR GERI CEKILDI: checker_diff'in muafiyet listesi BILEREK BOS ("modul yuzeyi D-361/362/363'te tamamen kapandi"). Fikstur oraya konsa ya kapi kalici kirmizi olurdu ya da o listeye ILK muafiyet girerdi — ikisi de belgelenmis bir kazanimi bozar. Madde ayrica "gocu BASLATMA" diyordu; yeni bir parite cephesi acmak o siniri asar. Bulgu kaybolmadi: Sirada'ya is olarak girdi.
   SONUC D-520'YI DEGISTIRIYOR: "gercek kodun cogunda gizlilik kapali" demistim; dogrusu ORACLE'DA kapali, self-host'ta zaten kapali degil.
   DOGRULAMA: fikstur cikarildiktan sonra checker_diff 169/169 (0 muaf), modul_codegen 22/22, calisma agacinda kalinti yok.
+- 2026-09-01 D-532: Kanal omru arastirma notu yazildi (belgeler/Kanal_Omru_Arastirma_Notu.md). KOD DEGISIKLIGI YOK — madde zaten "kod yazma" diyordu.
+  OLCULEN DURUM: kdl_kanal_serbest runtime'da VAR ve DOGRU; cagiran src/llvm.c 0, selfhost/codegen.kem 0. D-462'nin "kod var, hicbir olcum atesliyor degil" sinifi.
+  GERCEK SORU UC PARCAYA AYRILDI: (1) yaratan islev donuyor [trivial], (2) kanali yakalayan HER gorev birlestirilmis mi [EKSIK OLAN], (3) kanal cerceveden kacmamis [ky_confined zaten yapiyor, 18-UAF avindan gecmis].
+  ONEMLI BAGLANTI: (2) akis-duyarli bir sorudur ve depoda BENZERI ZATEN VAR — lineer tuketim takibi (L001/L002/L005, D-311/D-312'de dal-duyarli). `gorev<T>` ZATEN lineerdir. Yani yeni analiz gerekmiyor; eksik olan kanal -> onu yakalayan gorevler ESLEMESI (hicbir yan-kanal tutmuyor).
+  UC SECENEK KARSILASTIRILDI: A (yakalayan gorevlerin hepsi L-tuketilmisse ret oncesi serbest) tek gercekci yol . B (kanali lineer yap) DIL SEMANTIGINI BOZAR — D-505'te kanal paylasim icin taşımadan bilerek muaf tutulmustu . C (biraksin sizsin) bugunku bilincli hal.
+  KARAR: C korunuyor. kdl_kanal_serbest BILEREK olu kaliyor, SILINMEMELI — D-459'un "olu kodu birakma" kuralinin TERSI durum: orada olu kod bir tuzakti (sessiz-basarisiz yol acabilirdi), burada bir yer tutucu (hic cagrilmiyor).
+  YANLIS GIDEN DENEMELER: (1) Nota D-515'in "13 dosyanin 5'i" sayisini kopyaladim; bugun olcunce 16/8 cikti (korpus buyudu) -> "belgeye gomulu sayi yazildigi gun dogrudur" uyarisiyla duzeltildi. (2) A'nin 1. on kosulunu grep ile olcmeye calistim; grep YORUMLARI da sayiyor (kanal_mesaj 2/1, codegen.kem 28/13 gorunuyor ama basliklar bu adlari boluca aniyor) -> sayilar GUVENILIR DEGIL, gercek olcum AST uzerinden yapilmali. Bu, notun kendi kuralinin ihlaliydi ve nota kaydedildi.
