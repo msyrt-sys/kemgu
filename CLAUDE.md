@@ -1489,6 +1489,44 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### ✅ D-528: D-506'nın 17× bellek kazancı artık KAPI ALTINDA
+Yeni kapı `calistir_perf_bellek`: `test/perf/bench{1,2}.kem` çalıştırılır ve
+**zirve RSS** okunur, her iki derleyicide (4 ölçüm). Eşik **4096 KB**.
+
+**NEDEN GEREKLİ — davranışsal kapılar bu sınıfa KÖRDÜR** (D-417/D-488'in
+üçüncü tekrarı): yönlendirme bozulsa program yine `exit 42` verir,
+`codegen_diff` yeşil kalır, ASan susar; yalnız **bellek büyür**.
+`bolge_operand` IR'daki ρ **SINIFINI** ölçer (yapısal), bu kapı **gerçek
+tüketimi** ölçer (davranışsal) — biri diğerinin yerine geçmez.
+
+**Eşik ölçümle seçildi:** bugün her iki derleyicide de **1152 KB**
+(D-506'nın kaydettiği değerle birebir); ρ_caller'a dönüş **19968 KB**.
+4096 KB ≈ 3.5× başlık bırakır ama regresyonu kesin yakalar. Dar eşik ortam
+gürültüsünden aralıklı kırmızı verirdi.
+**Çıkış kodu da denetlenir (42):** yalnız RSS ölçmek yetmez — hiç çalışmayan
+program da düşük RSS verir (D-506'da `rc=127` ile `0.00 sn` ölçülmüştü).
+
+**Sabotaj S103** (D-506'nın `bolge_yerel_yonlendir` çağrısını `rho_ref`e
+döndür) → `🔴 C bench2: zirve RSS 19968 KB > eşik 4096 KB`, rc=2.
+
+**⚠⚠ SABOTAJ ZİNCİRLEME İKİ ARTEFAKT ÜRETTİ — ikisi de kayıtlı derslerin
+tekrarıydı:**
+1. **`perf_bellek` hedefi `$(BUILD)/codegen`e BAĞIMLI** → make onu **S103
+   etkinken yeniden kurdu**. Sabotajı geri alırken yalnız `kemgu`yu
+   kurmuştum. *Bir sabotaj döngüsünde, sabote edilen derleyiciyle ÜRETİLEN
+   her artefakt da kirlenir.*
+2. **WSL ağacındaki `selfhost/codegen.kem` hâlâ S100 taşıyordu** — D-526'nın
+   sabotajını Windows'ta geri alıp WSL'e kopyalamamıştım. Belirti `sext i32 1
+   to i1` (K1'in 9 dosyası LINK-RED) idi ve bir an D-526'yı bozdum sandım;
+   **git'teki kaynak TEMİZDİ**. D-517'de tam bu dersi yazmıştım.
+   → Teşhis sırası: (a) git'teki kaynak temiz mi, (b) İKİ ağaç senkron mu,
+   (c) ikili o kaynaktan mı kurulmuş.
+
+**Kapılar:** perf_bellek 4/4 · codegen_diff **163/163** · yapi_diff
+**147/147 (18 muaf)**. `test_tumu` + `.PHONY`ye bağlandı.
+⚠ `/usr/bin/time` yoksa kapı **bildirerek** atlar (D-453'ün QEMU deseni);
+D-486'nın yasakladığı şey SESSİZ atlamadır.
+
 ### ✅ D-527: `kanal` ABI'si artık BARE-METAL'de de ölçülüyor
 Roadmap *"`kanal` bare-metal: ABI hazır ama test yok"* diyordu. **Ölçüldü:
 `runtime/*.kem` ve `kem_os.kem` içinde `kanal_oluştur/gönder/al` kullanan TEK
