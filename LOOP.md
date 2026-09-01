@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] ARM64 fiziksel donanim kontrol listesi: D-490'in `smp_queue_arm` sabotajini gercek donanimda tekrarlama adimlarini belgeye yaz (QEMU'da anlamsiz oldugu olculdu).
 - [ ] D-520 (cok-segmentli `kullan` T041'i atliyor): en muhafazakar adim = mevcut davranisi FIKSTURLE kilitle + `::`->`/` cevirisinin gocun ilk adimi oldugunu belgeye yaz. Gocu BASLATMA.
 - [ ] Kanal omru: `kdl_kanal_serbest` olu kalmaya devam (D-515 kapali). Bunun yerine "kanal tutan tum gorevler birlestirildi mi?" sorusunu olcen bir ARASTIRMA notu yaz, kod yazma.
 
@@ -38,3 +37,9 @@
   HANGI KAPI NEYI OLCTU: lean_tam OK (1 is, 31 .olean) . lean_sorry 32 dosya 0 sorry (bayat "lake build KOSULMADI" uyarisi guncellendi). Sabotaj S104 (theorem s104_bozuk : 1 = 2 := rfl) -> "error: 1 = 2", Kemgu.Drf.Drf basarisiz, rc=2.
   YANLIS GIDEN DENEMELER: (1) `set -u` altinda $USER Git Bash'te TANIMSIZ -> harness kendi hatasiyla dustu; ${USER:-${USERNAME:-}} yapildi. (2) Atlama dalini PATH'i bosaltarak sinadim ama harness KENDISI ~/.elan/bin'i PATH'e ekliyor -> atlama hic tetiklenmedi, probe gecersizdi; HOME de gizlenince dogru olculdu. (3) Ilk kosumda `mingw32-make` PATH'te yoktu (CLAUDE.md'de kayitli clang64/ucrt64 oneki eksikti).
   DURUSTCE: lake-manifest.json hala mathlib girdisini tasiyor; `lake update` aga cikacagi icin DOKUNULMADI. Iddia "derleniyor", "manifest tutarli" DEGIL.
+- 2026-09-01 D-530: ARM64 fiziksel donanim kontrol listesi yazildi (belgeler/ARM64_Fiziksel_Donanim_Kontrol_Listesi.md). Kod degisikligi YOK (bir yorum guncellemesi disinda).
+  NEDEN: D-490 "gercek dogrulama yalniz fiziksel ARM64'te yapilabilir" demis ama NASIL yapilacagi hicbir yerde yazili degildi; kaynak dosyada uyari vardi, calistirilabilir adim yoktu. Borc ertelenmis degil UNUTULMAYA ACIK haldeydi.
+  ICERIK: on kosullar (>=2 cekirdek, clang aarch64, ld.lld) . taban kosumu (SMP QUEUE OK, toplam=20540) . sabotaj (onbellek bariyerlerini nop yap) . sonucun nasil OKUNACAGI . kaydin nasil guncellenecegi . ayni turda kosulacak diger hedefler (qemu_cekirdek, baremetal_diff, arm64_test).
+  EN ONEMLI MADDE: YESIL SONUC "BARIYER GEREKSIZ" DEMEK DEGILDIR — tam olarak QEMU'da yasanan budur. Yesilse prosedur testi GUCLENDIRMEYI soyler; araliklli bir kirmizi bile kesin kanittir (zayif bellek hatalari belirlenimci degil).
+  YANLIS GIDEN DENEMELER: (1) Belgedeki iki iddia depoya karsi dogrulaninca YANLIS cikti: `grep -c "dc civac"` 9 doner (yorumlari da sayar), kodda 2 var; dogrusu grep -cE '"dc (civac|ivac)'. (2) `dsb sy` 4 kez geciyor ve IKISI SPINLOCK yolunda — sabotaj yalniz onbellek bakimindakileri hedeflemeli; bu ayrim ne belgede ne kaynakta yaziliydi. (3) OZ-GONDERGESEL TUZAK: sayim desenini kaynaga yorum olarak ekleyince DESEN KENDINI SAYDI (2->3, 4->5); talimat ogrettigi olcumu bozuyordu. Desenler kaynaktan cikarildi, kaynak kontrol listesine ISARET ediyor.
+  DOGRULAMA: kod satiri sayimlari geri dondu (dc 2, dsb 4), dosya aarch64 hedefiyle derleniyor (rc=0).

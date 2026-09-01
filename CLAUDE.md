@@ -1489,6 +1489,32 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 📋 D-530: ARM64 fiziksel donanım kontrol listesi — D-490'ın borcu prosedüre çevrildi
+D-490 *"gerçek doğrulama yalnız fiziksel ARM64 donanımında yapılabilir"*
+demişti; kaynak dosyanın başlığında bir uyarı vardı ama **çalıştırılabilir adım
+yoktu** — yani borç ertelenmiş değil, **unutulmaya açık** haldeydi.
+`belgeler/ARM64_Fiziksel_Donanim_Kontrol_Listesi.md` yazıldı: ön koşullar ·
+taban koşumu · sabotaj · sonucun nasıl OKUNACAĞI · kaydın nasıl güncelleneceği.
+
+**⚠ EN ÖNEMLİ MADDE — YEŞİL SONUÇ "BARİYER GEREKSİZ" DEMEK DEĞİLDİR.** Tam
+olarak QEMU'da yaşanan budur ve orada yanıltıcı olduğu ölçülmüştür. Yeşilse
+prosedür testi **güçlendirmeyi** söyler (öğe sayısını büyüt, iş başına hesabı
+küçült, 100 kez tekrarla); *"aralıklı bir kırmızı bile kesin kanıttır"* —
+zayıf bellek hataları belirlenimci değildir.
+
+**⚠ BELGEDEKİ HER İDDİA DEPOYA KARŞI DOĞRULANDI** ve **ikisi yanlış çıktı:**
+- `grep -c "dc civac"` → **9** döner (yorumlar da sayılıyor); kodda **2** var.
+  Doğru desen `grep -cE '"dc (civac|ivac)'`.
+- `dsb sy` **4 kez** geçer: ikisi önbellek bakımına eşlik eder, **ikisi
+  spinlock yolundadır**. Sabotaj yalnız ilk ikisini hedeflemeli — spinlock
+  bariyerini kaldırmak **başka bir şeyi** ölçer ve sonucu yorumlanamaz kılar.
+  Bu ayrım belgede de kaynakta da yazılı değildi.
+
+**🎯 YOL ÜSTÜNDE ÖZ-GÖNDERGESEL BİR TUZAK:** kaynak dosyaya sayım desenini
+yorum olarak eklediğimde **desen kendini saydı** ve sayılar `2→3`, `4→5` oldu.
+Yani *talimatın kendisi öğrettiği ölçümü bozuyordu.* Desenler kaynaktan
+çıkarılıp yalnız kontrol listesinde bırakıldı; kaynak buna **işaret ediyor**.
+
 ### 🎯 D-529: LEAN İSPATLARI İLK KEZ GERÇEKTEN DERLENİYOR — `require mathlib` ÖLÜYDÜ
 `calistir_lean_sorry` yalnız `sorry`/`admit` **sayıyordu** ve kendi çıktısında
 dürüstçe *"⚠ lake build KOŞULMADI"* diyordu. **`sorry`suz ama DERLENMEYEN bir

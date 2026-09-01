@@ -49,6 +49,15 @@
  *     (DGX Spark). Oraya tasindiginda bu dosya ILK kosulacaklardan olmali ve
  *     yukaridaki sabotaj (bariyerleri nop yap) ORADA TEKRARLANMALI: gercek
  *     donanimda KIRMIZI olmasi beklenir. Olmazsa test yeterince zorlamıyordur.
+ *     [D-530] ADIM ADIM PROSEDUR:
+ *       belgeler/ARM64_Fiziksel_Donanim_Kontrol_Listesi.md
+ *     ⚠ Sabotaj sayimi KOD SATIRLARINDA yapilmali: yorumlar da eslesir.
+ *       Sayim desenleri ve beklenen degerler KONTROL LISTESINDEDIR — buraya
+ *       YAZILMADI, cunku desenin kendisi bu yorumda gecerse SAYIMI BOZAR
+ *       (olculdu: eklendiginde 2 -> 3 ve 4 -> 5 oldu).
+ *     ⚠ Onbellek-bakim bariyerleri ile SPINLOCK bariyerleri AYRI seylerdir;
+ *       sabotaj YALNIZ onbellek bakimindakileri hedefler (asagida ~131/~142).
+ *       Spinlock bariyerini kaldirmak BASKA bir seyi olcer.
  * Spinlock LDAXR/STLR (acquire/release) bariyerleri kritik-bölge sıralamasını
  * garanti eder; cacheability uyuşmazlığında görünürlük için `dc` de şart.
  *
