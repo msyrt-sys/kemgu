@@ -64,7 +64,7 @@ MUAF_K2=""
 #      C gövdeden çıkarsar. Bilinçli tasarım farkı.
 MUAF_K3="cg_gorev_baslat cg_gorev_capture cg_gorev_desen_ic_tip
 cg_gorev_i64_daralt cg_gorev_kanal cg_gorev_lambda_blok
-cg_rho_sahip_confined cg_rho_sahip_kacis"
+cg_rho_sahip_confined cg_rho_sahip_kacis cg_kanal_omru"
 # (K4) generic BASE gövdesi → self yayar, C atlar (D-401: self çıkarsaması
 #      kısmî olduğu için base gövde gerekli; atlamayı denemek 11/18→8/18
 #      regresyonu verdi, geri alındı).

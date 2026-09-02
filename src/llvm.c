@@ -527,19 +527,6 @@ static int d543_ad_mi(const Dugum *d, const char *lit, int litu) {
     int uz = 0; const char *a = d543_cagri_ad(d, &uz);
     return a && uz == litu && memcmp(a, lit, (size_t)litu) == 0;
 }
-/* Bu islevde kanaldan PROJEKSIYON turetilmis mi? `gönderen`/`alan` AYNI
- * handle'i geri verir; takma adi ayrica kanitlamadan serbest birakmak
- * SAGLAM DEGILDIR (`ver g` ile kanal cerceveyi asar = UAF). V1: varsa DENY. */
-static int d543_projeksiyon_var(const Dugum *govde) {
-    if (!govde || govde->tip != DUGUM_BLOK) return 0;
-    for (int i = 0; i < govde->veri.blok.sayi; i++) {
-        const Dugum *t = govde->veri.blok.deyimler[i];
-        if (!t || t->tip != DUGUM_DEGISKEN) continue;
-        if (d543_ad_mi(t->veri.degisken.deger, "gönderen", 9)) return 1;
-        if (d543_ad_mi(t->veri.degisken.deger, "alan", 4)) return 1;
-    }
-    return 0;
-}
 /* KANIT KUR: P1 yerel + dogrudan `kanal_oluştur` · P4 hapsedilme ·
  * P2 imha == 0 · P3 join >= spawn (sayimlar AYNI yuruyusten). */
 static void kanal_kanit_kur(LlvmGen *g, const Dugum *islev) {
@@ -547,7 +534,7 @@ static void kanal_kanit_kur(LlvmGen *g, const Dugum *islev) {
     if (!islev || islev->tip != DUGUM_ISLEV) return;
     const Dugum *govde = islev->veri.islev.govde;
     if (!govde || govde->tip != DUGUM_BLOK) return;
-    if (d543_projeksiyon_var(govde)) return;   /* V1 siniri */
+
     int n = govde->veri.blok.sayi;
     if (n <= 0) return;
     const char **adlar = (const char **)arena_ayir_sifir(g->arena,
@@ -565,6 +552,28 @@ static void kanal_kanit_kur(LlvmGen *g, const Dugum *islev) {
         if (!escape_kanal_hapsedilmis(govde, ad, uz, &spawn, &join, &imha)) continue;
         if (imha != 0) continue;
         if (join < spawn) continue;
+        /* [D-544] TAKMA AD KANITI: `gönderen(k)`/`alan(k)` AYNI handle'i verir.
+         * Kanali kanitlayip takma adi kanitlamamak SAGLAM DEGILDIR — `ver g`
+         * ile kanal cerceveyi asar ve serbest birakma UAF uretir.
+         * Her takma ad AYRICA hapsedilmis OLMALI; biri dusarse kanal listeye
+         * GIRMEZ (default-DENY, eski davranis = sizar ama UAF yok). */
+        int takma_ok = 1;
+        for (int j = 0; j < n && takma_ok; j++) {
+            const Dugum *t = govde->veri.blok.deyimler[j];
+            if (!t || t->tip != DUGUM_DEGISKEN) continue;
+            const Dugum *dv = t->veri.degisken.deger;
+            if (!dv || dv->tip != DUGUM_CAGRI || dv->veri.cagri.sayi < 1) continue;
+            if (!d543_ad_mi(dv, "gönderen", 9) && !d543_ad_mi(dv, "alan", 4)) continue;
+            const Dugum *a0 = dv->veri.cagri.argumanlar[0];
+            if (!a0 || a0->tip != DUGUM_TANIMLAYICI) continue;
+            if (a0->veri.tanimlayici.uzunluk != uz
+                || memcmp(a0->veri.tanimlayici.metin, ad, (size_t)uz) != 0) continue;
+            int s2 = 0, j2 = 0, i2 = 1;
+            if (!escape_kanal_hapsedilmis(govde, t->veri.degisken.ad,
+                                          t->veri.degisken.ad_uzunluk, &s2, &j2, &i2))
+                takma_ok = 0;
+        }
+        if (!takma_ok) continue;
         adlar[say] = ad; uzlar[say] = uz; say++;
     }
     if (say > 0) { g->kanal_ad = adlar; g->kanal_uz = uzlar; g->kanal_sayi = say; }

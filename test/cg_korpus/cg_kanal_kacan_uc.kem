@@ -1,0 +1,33 @@
+// [D-544] NEGATİF FİKSTÜR: kanal ucu ÇERÇEVEDEN KAÇIYOR → serbest YASAK.
+//
+// `gönderen(k)` PROJEKSİYONDUR — kanalın KENDİ handle'ını geri verir. Burada o
+// uç `ver` ile dışarı sızıyor, yani kanal `üret_uc` çerçevesini AŞIYOR.
+// Kanal serbest bırakılırsa çağıran ÖLÜ bir uç tutar = UAF.
+//
+// ⚠ BU DOSYA KAPININ TEK NEGATİF ÖLÇÜMÜDÜR: takma ad kanıtı kaldırılırsa
+//   burada serbest yayılır ve kapı KIRMIZI olur. Yalnız pozitif fikstür
+//   olsaydı "takma adı hiç kanıtlama" sabotajı kapıdan GEÇERDİ (D-425).
+// Çıkış: 42
+işlev üret_uc() -> gönderen<tam32> {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    ver gönderen(k);          // uç KAÇIYOR → `k` serbest bırakılamaz
+}
+
+// [D-544] IKINCI SEKIL — TAKMA AD KACIYOR (dogrudan projeksiyon DEGIL).
+// Burada `ver` ifadesinde `k` HIC GECMEZ; escape yuruyusu tek basina `k`yi
+// hapsedilmis sanir. Kacan sey `g` takma adidir → kanit `g` uzerinden kurulur.
+// ⚠ S115'in (llvm.c takma ad kaniti) TEK ayirt edici olcumu BU sekildir;
+//   yalniz dogrudan `ver gönderen(k)` sekli olsaydi S115 kapidan GECERDI.
+işlev üret_uc2() -> gönderen<tam32> {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    değişken g: gönderen<tam32> = gönderen(k);
+    ver g;
+}
+
+işlev main() -> tam32 {
+    değişken g: gönderen<tam32> = üret_uc();
+    kanal_gönder(g, 7);
+    değişken g2: gönderen<tam32> = üret_uc2();
+    kanal_gönder(g2, 9);
+    ver 42;
+}

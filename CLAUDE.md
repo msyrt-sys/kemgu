@@ -1563,6 +1563,55 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-544: PROJEKSİYONLU KANALLAR DA SERBEST ALIYOR — ve bir UAF'ı önledi
+D-543 `gönderen(k)`/`alan(k)` taşıyan kanalları **bilerek DENY** etmişti
+(projeksiyon AYNI handle'ı verir; takma adı ayrıca kanıtlamadan serbest
+bırakmak `ver g` ile UAF üretirdi). O sınır kaldırıldı.
+
+**İKİ PARÇALI KANIT — biri düşerse kanal serbest ALMAZ:**
+- `escape.c` kanal modunda projeksiyon **ŞEFFAF** (argümanı çerçeve dışına
+  kaçırmaz), **ama yalnız `ver` ALT-AĞACININ DIŞINDA** (`g_ver_altinda`).
+- `llvm.c`de **TAKMA AD KANITI**: her `değişken g = gönderen(k)` bağlaması için
+  `escape_kanal_hapsedilmis(g)` AYRICA kanıtlanır.
+
+**Ölçülen kazanç:** `kanal_mesaj` sızıntı **192 → 8 bayt** (D-541 prototipiyle
+birebir) · `cg_kanal_yon` 1 serbest, sızıntı 0.
+
+**🔴 İLK ÇÖZÜMÜM SAĞLAMSIZDI, NEGATİF FİKSTÜR YAKALADI.** Projeksiyonu
+**koşulsuz** şeffaf yapmak `ver gönderen(k)` şeklini de *hapsedilmiş* gösteriyordu
+→ kanal serbest bırakılıyor, çağıran ÖLÜ bir uç tutuyordu (ölçüldü: **exit 139**,
+ASan SEGV). Şeffaflık `ver` içinde kapatıldı.
+
+**⚠⚠ NEGATİF FİKSTÜR İKİ ŞEKİL TAŞIR VE İKİSİ DE GEREKLİ:**
+```kemgu
+ver gönderen(k);                        // (1) doğrudan kaçış  -> escape.c korumasını (S116) gate'ler
+değişken g = gönderen(k); ver g;        // (2) TAKMA AD kaçışı -> llvm.c kanıtını (S115) gate'ler
+```
+Şekil (2)'de **`ver` ifadesinde `k` HİÇ GEÇMEZ** — escape yürüyüşü tek başına
+`k`yı hapsedilmiş sanır. Takma ad kanıtının TEK ayırt edici ölçümü budur.
+
+**🎯 S115 İLK TURDA YEŞİL KALDI — ve az kalsın YANLIŞ SONUCA GÖTÜRÜYORDU.**
+Şekil (2) korpusta YOKTU, yani takma ad kanıtı **ayırt edilemiyordu**. D-430
+gereği *"ayırt edilemeyen kod doğrulanmamış yüzeydir"* diye **silmeye** hazırdım:
+8 kanal dosyasının sekizinde de S115'li ve temiz çıktı **birebir aynı**ydı.
+Silmeden önce *"peki bu kod HANGİ ŞEKLİ koruyor?"* diye sordum → şekil (2)
+çıktı. **Silseydim bir UAF yolu açılacaktı.**
+> **DERS: "hiçbir ölçüm ayırt etmiyor" ÖNCE KORPUSU ŞÜPHELİ KILAR** (D-356),
+> kodu değil. D-430'un silme kuralı ancak *"koruduğu şekil de yok"* kanıtlandıktan
+> sonra uygulanabilir — aksi hâlde bir güvenlik kanıtını "ölü kod" diye silersin.
+
+**⚠ KAPIYA ZAMAN AŞIMI EKLENDİ ve aynı turda karşılığını verdi:** fikstür
+koşumlarında `timeout` YOKTU; sağlamsız hâlde program **asılıyordu**. *Asılan
+kapı, sessiz kapı kadar kötüdür* (D-466/D-468/D-471). Eklendikten sonra S116
+asılma yerine temiz **`exit=124`** verdi.
+
+**Kapılar:** kanal_omru **3/3 → 5/5** · codegen_diff **169/169** · yapi_diff
+**149/149 (22 muaf)** · sıfır uyarı 38/0.
+**Sabotaj 2/2:** S115 (llvm.c takma ad kanıtı) → negatif fikstür 1 serbest +
+**SEGV** · S116 (escape.c `ver` koruması) → 1 serbest + `exit=124`.
+**⚠ V1 SINIRI KORUNDU:** **self-host portu YOK** (C 2+ serbest yayıyor, self 0;
+`codegen_diff` çıkış koduna baktığı için yeşil kalıyor).
+
 ### ✅ D-543: KANAL ÖMRÜ AÇILDI — `kdl_kanal_serbest` artık ÇAĞRILIYOR
 D-511 ölçmüştü: runtime işlevi **vardı** ama iki derleyicide de çağrı sayısı
 **0** — kanal tamponu + kilidi sızıyordu. D-540 tavanı ölçtü (23/23 işlev şekli

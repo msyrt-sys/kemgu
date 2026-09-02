@@ -544,9 +544,24 @@ static int g_kanal_modu = 0;
 static int g_kanal_spawn = 0, g_kanal_join = 0, g_kanal_imha = 0;
 
 /* `kanal_gönder` 14 bayt, `kanal_al` 9 (ö iki baytlık). Handle'ı TUTMAZLAR. */
+/* [D-544] `ver` alt-agacinda miyiz? Projeksiyon seffafligini kapatir. */
+static int g_ver_altinda = 0;
+
 static int ky_kanal_seffaf_mi(const char *ad, int uz) {
-    return (uz == 13 && memcmp(ad, "kanal_gönder", 13) == 0)
-        || (uz == 8  && memcmp(ad, "kanal_al", 8) == 0);
+    /* [D-544] `gönderen`(9)/`alan`(4) PROJEKSIYONDUR: aynı handle'ı geri verir.
+     * Argümanı çerçeve dışına KAÇIRMAZ — sonucu AYRI bir bağlamaya gider ve
+     * o bağlama llvm.c'de AYRICA kanıtlanır. Yalnız burayı gevşetmek YETMEZ.
+     * ⚠ Bayt uzunlukları ÖLÇÜLDÜ, sayılmadı (D-543'te üç tur kaybettiren hata). */
+    if (uz == 13 && memcmp(ad, "kanal_gönder", 13) == 0) return 1;
+    if (uz == 8  && memcmp(ad, "kanal_al", 8) == 0) return 1;
+    /* [D-544 duzeltme] PROJEKSIYON `gönderen`/`alan` AYNI handle'i geri verir.
+     * `ver` alt-agacinda SEFFAF OLAMAZ: `ver gönderen(k)` uc'u cerceve disina
+     * KACIRIR, kanali serbest birakmak CAGIRANDA UAF olur (olculdu: exit 139).
+     * Disarida seffaftir; sonucu bir baglamaya giderse llvm.c onu AYRICA
+     * kanitlar (takma ad kaniti). */
+    if (g_ver_altinda) return 0;
+    return (uz == 9 && memcmp(ad, "gönderen", 9) == 0)
+        || (uz == 4 && memcmp(ad, "alan", 4) == 0);
 }
 
 /* Analiz suresince aktif tablo. ky_confined imzasi DEGISTIRILMEDI (dosya
@@ -842,7 +857,15 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
         }
         case DUGUM_LAMBDA:
             return ky_var_gecer(d->veri.lambda.govde, ad, uz) ? 0 : 1;  /* yakalama = guvensiz */
-        case DUGUM_VER: return ky_confined(d->veri.ver.deger, ad, uz);
+        case DUGUM_VER: {
+            /* [D-544] `ver` alt-agaci boyunca projeksiyon seffafligi KAPALI. */
+            int onceki = g_ver_altinda;
+            int r;
+            g_ver_altinda = 1;
+            r = ky_confined(d->veri.ver.deger, ad, uz);
+            g_ver_altinda = onceki;
+            return r;
+        }
         case DUGUM_DEGISKEN: return ky_confined(d->veri.degisken.deger, ad, uz);
         case DUGUM_SABIT: return ky_confined(d->veri.sabit.deger, ad, uz);
         case DUGUM_BLOK:
