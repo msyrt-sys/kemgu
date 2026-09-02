@@ -5731,7 +5731,9 @@ calistir_sifir_bolme: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_r
 # [D-543] KANAL OMRU kapisi — kanal cikista serbest birakiliyor mu?
 # Davranissal kapilar KORDUR: serbest kaldirilsa program yine 15 doner ve
 # codegen_diff yesil kalir. Bu kapi YAPI + DAVRANIS + ASan SAGLIGINI olcer.
-calistir_kanal_omru: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+# [D-544-b] SELF-HOST de olculur: port yalniz C'de olsaydi codegen_diff
+# cikis koduna baktigi icin ayrisma SESSIZ kalirdi (D-486).
+calistir_kanal_omru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/kanal_omru_harness.sh
 
 calistir_tasma: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o

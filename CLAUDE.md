@@ -1563,6 +1563,56 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-544-b: KANAL ÖMRÜ SELF-HOST'A PORTLANDI — kapı artık İKİ derleyiciyi ölçüyor
+D-543/D-544 yalnız C'deydi; `selfhost/codegen.kem` **sıfır** serbest yayıyordu.
+`codegen_diff` çıkış koduna baktığı için bu ayrışma **sessiz** kalıyordu
+(D-486'nın *"çağrılan ama ölçmeyen kapı"* sınıfı).
+
+**PORT — yeni analiz İCAT EDİLMEDİ.** `ky_confined` aynası self-host'ta zaten
+vardı (18-UAF avından geçmiş makine); eklenen yalnız **kanal kipi**:
+`Ayr`e `k_modu`/`k_spawn`/`k_join`/`k_imha`/`k_ver` + `kanal_ad`;
+`ky_kanal_seffaf_mi` · CAGRI dalında sayaçlar ve iki gevşetme ·
+**yeni `VER` dalı** (`k_ver` bayrağı) · `kanal_kanit_kur` · `kanal_serbest_emit`.
+Sayımlar **aynı yürüyüşten** toplanır — `ky_confined` 1 dönerse ağacın tamamı
+gezilmiştir, ayrı bir üst-düzey tarama gerekmez (C ile aynı gerekçe).
+
+**Ölçülen parite — 8 kanal dosyasının sekizinde de BİREBİR:**
+```
+kanal_mesaj 3/3 · cg_kanal_yon 1/1 · cg_kanal_omru 2/2 · kacan_uc 0/0
+cg_kanal_temel 1/1 · _metin 1/1 · _param 1/1 · _tam64 2/2      (C / SELF)
+```
+
+**⚠ LAMBDA SIFIRLAMASI PORTA DA GEREKLİ:** lifted lambda gövdesindeki `ver` de
+aynı çıkış noktasından geçer; liste sıfırlanmazsa `cg_var_bul` **başka bir
+yuvayı** bulup çöp işaretçi serbest bırakır (C tarafında ölçülmüş SEGV).
+
+**KAPI İKİ DERLEYİCİYİ DE ÖLÇÜYOR** (`calistir_kanal_omru` artık
+`$(BUILD)/codegen$(EXE)`e de bağımlı): **3/3 → 10/10**.
+
+**Kapılar:** kanal_omru **10/10 (C + SELF)** · codegen_diff **169/169** ·
+yapi_diff **149/149 (22 muaf)** · check_genis 133/133 ·
+self_driver **TÜM MODLAR + FIXPOINT ✓**.
+**Sabotaj 2/2:** S117 (self `ver` koruması) · S118 (self takma ad kanıtı) →
+ikisi de negatif fikstürde **1 serbest + SEGV**, rc=2.
+
+**⚠⚠ BU TURDA BİR SABOTAJ WSL AĞACINDA UNUTULDU VE BİR TUR ÖLÇÜMÜ GEÇERSİZ
+KILDI.** Önceki turda öldürülen bir **orphan** koşum `src/escape.c`'yi **S116
+uygulanmış** halde bıraktı. Sonuç iki aşamalı ve sinsiydi:
+- Önce **ikili eskiydi** (S116'dan önce kurulmuş) → parite tablosu ve
+  `kanal_omru` **10/10 yeşil** verdi; iddia doğruydu ama **kanıt geçersizdi**.
+- Sonra bir `make` kaynağı yakaladı ve **sabote edilmiş bir oracle** kuruldu →
+  `codegen_diff` **168/169** ile kırmızıya döndü ve bir an *"portum bozdu"*
+  sandım. Kaynak `git`te **TEMİZDİ**.
+> **DERS: iki ağaçlı kurulumda ölçümden ÖNCE ağaçları `diff`le** — `grep`
+> sabotaj izi aramak YETMEZ, çünkü izin kaynakta olması ile ikilide olması
+> AYRI şeylerdir. Teşhis sırası: (a) git temiz mi · (b) İKİ ağaç `diff`-eşit mi
+> · (c) ikili o kaynaktan mı kurulmuş. (D-457/D-528'in üçüncü tekrarı.)
+
+**🎯 OLUMLU YANI: KAPI TAM DA TASARLANDIĞI GİBİ ÇALIŞTI.** S116'lı oracle
+negatif fikstürde `ver gönderen(k)` için serbest yaydı ve program
+**segfault/asılma** verdi — yani D-544'ün negatif fikstürü, ben onu *başka* bir
+şey için yazmışken, gerçek bir kontaminasyonu yakaladı.
+
 ### ✅ D-544: PROJEKSİYONLU KANALLAR DA SERBEST ALIYOR — ve bir UAF'ı önledi
 D-543 `gönderen(k)`/`alan(k)` taşıyan kanalları **bilerek DENY** etmişti
 (projeksiyon AYNI handle'ı verir; takma adı ayrıca kanıtlamadan serbest

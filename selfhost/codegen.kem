@@ -102,6 +102,14 @@ yapı Ayr {
     ky_iter_node: Dizi<tam32>;  // F4.3: iterasyon-confined DIZI_OLUSTUR idx'leri (ky_confined ∧ bildirim-döngü-gövdesinde)
     ky_iter_base: tam32;        // aktif işlevin ky_iter_node dilim başı
     ky_lambda: tam32;      // aktif işlev gövdesinde LAMBDA var mı (1 → routing GUARD: ρ_yerel kapalı)
+    // [D-543/D-544] KANAL OMRU: ky_confined'in kanal kipi + kanitlanmis kanallar.
+    // k_ver: `ver` alt-agacinda miyiz — projeksiyon seffafligini KAPATIR (D-544).
+    k_modu: tam32;
+    k_spawn: tam32;
+    k_join: tam32;
+    k_imha: tam32;
+    k_ver: tam32;
+    kanal_ad: Dizi<metin>;  // aktif islevde serbest birakilacak kanal degiskenleri
     rho_yerel: metin;      // V2-F4.2b: scope-yerel bölge IR reg (fn girişinde aç, her ret öncesi serbest; ""=yok)
     uygula_hedef: metin;   // B2: aktif uygula bloğunun hedef yapı LLVM tipi ("%Sayac"); kendin param tipi; ""=yok
     mod_onek: metin;       // D-398: aktif modül önek zinciri ("a", "d.i"); ""=üst düzey
@@ -3910,6 +3918,7 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare ptr @kdl_global_bolge_al()"); yb(10);   // V2-F4.2a: main/ρ-seed
     yaz_str("declare ptr @kdl_bolge_olustur()"); yb(10);       // V2-F4.2b: ρ_yerel aç
     yaz_str("declare void @kdl_bolge_serbest(ptr)"); yb(10);   // V2-F4.2b: ρ_yerel serbest
+    yaz_str("declare void @kdl_kanal_serbest(ptr)"); yb(10);   // D-543/D-544: kanal ömrü
     // [D-508] `bölge_al` + kapanış env ρ_yerel'den tahsis edilince ŞART.
     yaz_str("declare ptr @kdl_bolge_ayir(ptr, i64)"); yb(10);
     // D-404: Capability Spec V1 — yetki<R> IR temsili + runtime arayüzü.
@@ -7754,6 +7763,19 @@ işlev ky_var_gecer(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
 }
 
 // `ad`in govdedeki TÜM kullanımları confined mi? Bare var (parent tüketmediyse) = yanlış.
+// [D-543/D-544] Kanal kipinde SEFFAF yerlesikler.
+// `kanal_gönder`/`kanal_al` TUKETIR (handle'i tutmaz) → her yerde seffaf.
+// `gönderen`/`alan` PROJEKSIYONDUR (AYNI handle'i geri verir) → yalniz `ver`
+// alt-agacinin DISINDA seffaf; sonucu bir baglamaya giderse o baglama AYRICA
+// kanitlanir (takma ad kaniti, kanal_kanit_kur).
+işlev ky_kanal_seffaf_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    eğer metin_esit(ad, "kanal_gönder") { ver doğru; }
+    eğer metin_esit(ad, "kanal_al") { ver doğru; }
+    eğer p.k_ver == 1 { ver yanlış; }
+    eğer metin_esit(ad, "gönderen") { ver doğru; }
+    ver metin_esit(ad, "alan");
+}
+
 işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
     eğer node < 0 { ver doğru; }
     değişken t: metin = dizi_al(p.a_ad, node);
@@ -7796,6 +7818,17 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
     eğer metin_esit(t, "CAGRI") {
         değişken callee: tam32 = dizi_al(p.cocuk, cb);
         değişken safe0: mantıksal = yanlış;
+        // [D-543] KANAL KIPI SAYAÇLARI — AYNI yürüyüşten toplanır: ky_confined
+        // 1 dönerse ağacın TAMAMI gezilmiştir, yani sayımlar işlev genelidir.
+        // ⚠ Bayt/ad eşleşmesi ÖLÇÜLDÜ (D-543'te üç tur kaybettiren hata sınıfı).
+        eğer p.k_modu == 1 {
+            eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
+                değişken kn: metin = dizi_al(p.a_deg, callee);
+                eğer metin_esit(kn, "görev_başlat") { p.k_spawn = p.k_spawn + 1; }
+                eğer metin_esit(kn, "görev_birleştir") { p.k_join = p.k_join + 1; }
+                eğer metin_esit(kn, "imha") { p.k_imha = p.k_imha + 1; }
+            }
+        }
         eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
             eğer ky_dizi_builtin_confined(dizi_al(p.a_deg, callee)) {
                 eğer cs >= 2 {
@@ -7828,6 +7861,28 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
                     }
                 }
             }
+            // [D-543/D-544] KANAL KIPI, iki gevşetme:
+            //  (1) `kanal_gönder`/`kanal_al` argümanı — handle'ı TUTMAZ.
+            //      `gönderen`/`alan` PROJEKSİYONDUR (aynı handle'ı geri verir) →
+            //      yalnız `ver` alt-ağacının DIŞINDA şeffaf; içinde şeffaf olsaydı
+            //      `ver gönderen(k)` hapsedilmiş görünür ve serbest = UAF olurdu.
+            //  (2) `görev_başlat`a DOĞRUDAN verilen lambda — sağlamlık çağıran
+            //      taraftaki kanıta dayanır (imha == 0 && join >= spawn).
+            eğer atla == yanlış {
+                eğer p.k_modu == 1 {
+                    eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
+                        değişken kc: metin = dizi_al(p.a_deg, callee);
+                        eğer ky_kanal_seffaf_mi(p, kc) {
+                            eğer ky_ad_esit(p, dizi_al(p.cocuk, cb + i), ad) { atla = doğru; }
+                        }
+                        eğer metin_esit(kc, "görev_başlat") {
+                            eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb + i)), "LAMBDA") {
+                                atla = doğru;
+                            }
+                        }
+                    }
+                }
+            }
             eğer atla == yanlış {
                 eğer metin_esit(dizi_al(p.a_ad, callee), "TANIMLAYICI") {
                     eğer ky_bellek_builtin_tutmaz(dizi_al(p.a_deg, callee)) {
@@ -7845,6 +7900,19 @@ işlev ky_confined(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
             i = i + 1;
         }
         ver doğru;
+    }
+    // [D-544] `ver` alt-ağacı boyunca projeksiyon şeffaflığı KAPALI.
+    eğer metin_esit(t, "VER") {
+        değişken onceki: tam32 = p.k_ver;
+        p.k_ver = 1;
+        değişken jv: tam32 = 0;
+        değişken rv: mantıksal = doğru;
+        iken jv < cs {
+            eğer ky_confined(p, dizi_al(p.cocuk, cb + jv), ad) == yanlış { rv = yanlış; }
+            jv = jv + 1;
+        }
+        p.k_ver = onceki;
+        ver rv;
     }
     // LAMBDA: govdesi var'ı yakalıyorsa güvensiz.
     eğer metin_esit(t, "LAMBDA") {
@@ -8008,7 +8076,105 @@ işlev rho_iter_serbest_emit(p: &değişken Ayr) -> tam32 {
 }
 // V2-F4.2b (b2): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
 // zaten materyalize/ρ_caller'da). Boş ρ_yerel ("") → no-op. C-tarafı rho_yerel_serbest_emit aynası.
+// [D-543/D-544] KANAL OMRU — C src/llvm.c kanal_kanit_kur AYNASI.
+// P1 yerel `değişken` + DOĞRUDAN `kanal_oluştur` · P2 `imha` YOK ·
+// P3 join >= spawn · P4 escape kanal-kipi hapsedilme + TAKMA AD kanıtı.
+// ⚠ BELLEK SERBEST BIRAKAN KOD: kanıtı düşen HER şekil ESKİ davranışta kalır
+//   (sızar ama UAF yok) — "sızıntı bir hata, UAF bir felaket".
+işlev kanal_hapsedilmis(p: &değişken Ayr, govde: tam32, ad: metin) -> mantıksal {
+    p.k_modu = 1; p.k_spawn = 0; p.k_join = 0; p.k_imha = 0; p.k_ver = 0;
+    değişken r: mantıksal = ky_confined(p, govde, ad);
+    p.k_modu = 0;
+    ver r;
+}
+// Düğüm bir `X(...)` çağrısı mı ve X adı `ad` mı?
+işlev kanal_cagri_mi(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "CAGRI") == yanlış { ver yanlış; }
+    eğer dizi_al(p.a_cs, node) < 1 { ver yanlış; }
+    değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, node));
+    eğer metin_esit(dizi_al(p.a_ad, c0), "TANIMLAYICI") == yanlış { ver yanlış; }
+    ver metin_esit(dizi_al(p.a_deg, c0), ad);
+}
+işlev kanal_kanit_kur(p: &değişken Ayr, govde: tam32) -> tam32 {
+    p.kanal_ad = [];
+    eğer govde < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, govde), "BLOK") == yanlış { ver 0; }
+    değişken cb: tam32 = dizi_al(p.a_cb, govde);
+    değişken cs: tam32 = dizi_al(p.a_cs, govde);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken st: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, st), "DEGISKEN") {
+            değişken dv: tam32 = 0 - 1;
+            eğer dizi_al(p.a_cs, st) > 0 {
+                değişken k: tam32 = 0;
+                iken k < dizi_al(p.a_cs, st) {
+                    değişken ck: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, st) + k);
+                    eğer kanal_cagri_mi(p, ck, "kanal_oluştur") { dv = ck; }
+                    k = k + 1;
+                }
+            }
+            eğer dv >= 0 {
+                değişken ad: metin = dizi_al(p.a_deg, st);
+                eğer kanal_hapsedilmis(p, govde, ad) {
+                    eğer (p.k_imha == 0) ve (p.k_join >= p.k_spawn) {
+                        // [D-544] TAKMA AD KANITI: `gönderen(k)`/`alan(k)` AYNI
+                        // handle'ı verir. Kanalı kanıtlayıp takma adı
+                        // kanıtlamamak SAĞLAM DEĞİLDİR — `ver g` ile kanal
+                        // çerçeveyi aşar ve serbest bırakmak UAF üretir.
+                        değişken takma_ok: mantıksal = doğru;
+                        değişken j: tam32 = 0;
+                        iken j < cs {
+                            değişken t2: tam32 = dizi_al(p.cocuk, cb + j);
+                            eğer metin_esit(dizi_al(p.a_ad, t2), "DEGISKEN") {
+                                değişken k2: tam32 = 0;
+                                iken k2 < dizi_al(p.a_cs, t2) {
+                                    değişken c2: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, t2) + k2);
+                                    değişken proj: mantıksal = yanlış;
+                                    eğer kanal_cagri_mi(p, c2, "gönderen") { proj = doğru; }
+                                    eğer kanal_cagri_mi(p, c2, "alan") { proj = doğru; }
+                                    eğer proj {
+                                        değişken a0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c2) + 1);
+                                        eğer metin_esit(dizi_al(p.a_ad, a0), "TANIMLAYICI") {
+                                            eğer metin_esit(dizi_al(p.a_deg, a0), ad) {
+                                                eğer kanal_hapsedilmis(p, govde, dizi_al(p.a_deg, t2)) == yanlış {
+                                                    takma_ok = yanlış;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    k2 = k2 + 1;
+                                }
+                            }
+                            j = j + 1;
+                        }
+                        eğer takma_ok { dizi_ekle(p.kanal_ad, ad); }
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev kanal_serbest_emit(p: &değişken Ayr) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.kanal_ad) {
+        değişken slot: metin = cg_var_bul(p, dizi_al(p.kanal_ad, i));
+        eğer metin_esit(slot, "") == yanlış {
+            değişken r: tam32 = yeni_reg(p);
+            yaz_str("  "); yaz_str(reg_str(r)); yaz_str(" = load ptr, ptr "); yaz_str(slot); yb(10);
+            yaz_str("  call void @kdl_kanal_serbest(ptr "); yaz_str(reg_str(r)); yaz_str(")"); yb(10);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
 işlev rho_yerel_serbest_emit(p: &değişken Ayr) -> tam32 {
+    kanal_serbest_emit(p);   // [D-543] kanal ÖNCE — bölge serbestinden sonra
+                             // slot okumak yanlış olurdu
     eğer metin_esit(p.rho_yerel, "") == yanlış {
         yaz_str("  call void @kdl_bolge_serbest(ptr "); yaz_str(p.rho_yerel); yaz_str(")"); yb(10);
     }
@@ -8067,6 +8233,11 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
     p.rho_iter = "";
     p.dongu_d = 0;
     p.rho_yerel = "";           // lambda ρ_yerel ALMAZ (C paritesi)
+    // [D-543] ⚠ ZORUNLU: lifted lambda gövdesindeki `ver` de AYNI çıkış
+    // noktasından geçer. Liste sıfırlanmazsa dış işlevin kanal adları lambda
+    // kapsamında aranır ve `cg_var_bul` BAŞKA bir yuvayı bulup ÇÖP işaretçi
+    // serbest bırakır (C tarafında ölçüldü: SEGV in __asan free).
+    p.kanal_ad = [];
     p.rho_ref = "%rho";         // ρ dispatch tarafından geçilir
     p.cg_base = dizi_boyut(p.cg_ad);
     p.pa_base = dizi_boyut(p.pa_node);
@@ -8321,6 +8492,14 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     iken i < cs {
         değişken kc: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, kc), "BLOK") { ky_isaretle(p, kc, kc, 0); }
+        i = i + 1;
+    }
+    // [D-543/D-544] Kanal ömrü kanıtı — gövde BLOK'u üzerinde kurulur.
+    p.kanal_ad = [];
+    i = 0;
+    iken i < cs {
+        değişken kk: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, kk), "BLOK") { kanal_kanit_kur(p, kk); }
         i = i + 1;
     }
     // 4) Gövde (BLOK çocuğu)
@@ -13078,7 +13257,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], cv_ptn: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         ea_devam: [], ea_derinlik: 0, fn_ad: [], fn_ret: [], fn_risz: [], fn_relem: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, rho_yerel: "", uygula_hedef: "", mod_onek: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
+        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, k_modu: 0, k_spawn: 0, k_join: 0, k_imha: 0, k_ver: 0, kanal_ad: [], rho_yerel: "", uygula_hedef: "", mod_onek: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",
         str_deg: [],
