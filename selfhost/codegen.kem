@@ -3298,6 +3298,52 @@ işlev mono_yapi_alan_ir(p: &değişken Ayr, base: metin) -> metin {
     ver metin_birlestir(r, "}");
 }
 // Generic yapı örneğini kaydet + mangled tip adı döndür ("%Kutu$ptr").
+// [D-539 self yarısı] IR listesiyle DOĞRUDAN mono yapı kaydı — `tip_idx`
+// gerektirmez. Ön-kayıt için şart: geç keşfedilen örneğin AST'de bir tip
+// düğümü YOKTUR (`al(olustur(b))`de hiçbir yerde `Kutu<tam64>` yazmaz).
+işlev mono_kayit_yapi_ir(p: &değişken Ayr, base: metin, argir: Dizi<metin>) -> metin {
+    değişken mangled: metin = mono_mangle(base, argir);
+    eğer mono_bul(p, mangled) >= 0 { ver ir_tip_ad(mangled); }
+    değişken bas: tam32 = dizi_boyut(p.mono_sp);
+    subst_it_hepsi(p, base, argir);
+    değişken fields: metin = mono_yapi_alan_ir(p, base);
+    subst_kapat(p, bas);
+    dizi_ekle(p.mono_mangled, mangled);
+    dizi_ekle(p.mono_yad, base);
+    dizi_ekle(p.mono_fields, fields);
+    ver metin_birlestir("%", mangled);
+}
+// [D-539 self yarısı] TEK tip paramlı her generic yapı için skaler genişlik
+// KÜMESİNİ ÖN-KAYITLA.
+// NEDEN GEREKLİ: C geç keşfedilen tipi tampondan HOIST edebiliyor; self
+// `yaz_str` ile doğrudan stdout'a yazar (tampon YOK) → geç keşif ASLA
+// yayılamaz. Ölçüldü: `al(olustur(b))` -> `%Kutu$i64` HİÇ tanımlanmıyor
+// -> `Cannot allocate unsized type` = GEÇERLİ PROGRAM DERLENMİYOR.
+// ⚠ BU BİR ÜST-YAKLAŞIMDIR (over-approximation) ve BİLİNÇLİDİR: kullanılmayan
+//   adlandırılmış tip LLVM'de YASAL ve maliyeti yapı başına 8 satırdır.
+//   Kesin küme, çağrı yerinde T çıkarsamayı ön-geçişte tekrarlamayı ister —
+//   aynı soruyu iki yerde ayrı yanıtlamak D-407'nin ayrışma sınıfıdır.
+// ⚠ TEK PARAMLI yapılarla SINIRLI: `Cift<A,B>` için çapraz çarpım gerekir;
+//   o şekil ölçülmüş bir kusur üretmiyor, kapsanmadı (dar tut).
+işlev mono_on_kayit(p: &değişken Ayr) -> tam32 {
+    değişken irler: Dizi<metin> = ["i1", "i8", "i16", "i32", "i64", "float", "double", "ptr"];
+    değişken k: tam32 = 0;
+    iken k < dizi_boyut(p.yapi_ad) {
+        değişken ad: metin = dizi_al(p.yapi_ad, k);
+        eğer tip_param_say(p, ad) == 1 {
+            eğer mono_gerek_yapi(p, ad) {
+                değişken i: tam32 = 0;
+                iken i < dizi_boyut(irler) {
+                    değişken tek: Dizi<metin> = [dizi_al(irler, i)];
+                    değişken _m: metin = mono_kayit_yapi_ir(p, ad, tek);
+                    i = i + 1;
+                }
+            }
+        }
+        k = k + 1;
+    }
+    ver 0;
+}
 işlev mono_kayit_yapi(p: &değişken Ayr, base: metin, tip_idx: tam32) -> metin {
     değişken argir: Dizi<metin> = mono_arg_irleri(p, tip_idx);
     değişken mangled: metin = mono_mangle(base, argir);
@@ -8528,6 +8574,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
     imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
     mono_kesif(p, kok);   // D-307: generic yapı örneklerini kaydet (emit'ten ÖNCE)
+    mono_on_kayit(p);     // [D-539] geç keşfedilenler hoist EDİLEMEZ → ön-kayıt
     // D-418: hedef üçlüsü artık SABİT DEĞİL — `--mimari` ile seçilir (C
     // `llvm_hedef_ayarla` aynası). Öncesinde `x86_64` sabit kodluydu ve
     // self-host bare-metal/ARM64 kodunu HİÇ derleyemiyordu.

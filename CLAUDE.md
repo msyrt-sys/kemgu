@@ -1489,7 +1489,7 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
-### 🔴 D-539 (C YARISI): mono tip tanımı KULLANIMDAN SONRA yazılıyordu
+### 🔴✅ D-539 KAPANDI: mono tip tanımı KULLANIMDAN SONRA yazılıyordu
 `al(olustur(b))` — iç içe generic-yapı çağrısı — **her iki derleyicide de
 derlenmiyordu** (`Cannot allocate unsized type`). Geçerli bir program
 reddediliyordu; D-464/D-518 sınıfı, sessiz DEĞİL. **İki ayrı kök çıktı.**
@@ -1511,15 +1511,26 @@ bu yüzden `define` satırı geçiyor, kusur yalnız gövdede görünüyordu. Fo
 gövdeleri artık `tmpfile()`a yazılıyor; sonda **önce tipler**, sonra tampon.
 Saf bayt kopyası (register numaralandırma fonksiyon-yerel).
 
-**⚠ SELF-HOST YARISI AÇIK — FARKLI KÖK.** Self'te `%Kutu$i64` **hiç
+**SELF-HOST YARISI — FARKLI KÖK, AYRI ÇÖZÜM (aynı oturumda kapandı).** Self'te `%Kutu$i64` **hiç
 tanımlanmıyor**: `yapi_tip_emit` gövdelerden ÖNCE koşar, geç keşfedilen örnek
 hiçbir zaman yayılmaz. `yaz_str` doğrudan stdout'a yazar (tampon YOK) → C'nin
 hoist çözümü uygulanamaz; ya ön-geçişte kayıt ya sessiz-birinci-geçiş gerekir.
-**Fikstür bu yüzden EKLENMEDİ** — self düzelene kadar `codegen_diff`i kalıcı
-kırmızı yapardı (D-421).
+Self'te `%Kutu$i64` **hiç tanımlanmıyordu**: `yapi_tip_emit` gövdelerden ÖNCE
+koşar, `yaz_str` doğrudan stdout'a yazar (**tampon YOK**) → C'nin hoist çözümü
+uygulanamaz. Çözüm **ön-kayıt**: tek tip paramlı her generic yapı için skaler
+genişlik kümesi (`i1..ptr`) `mono_kesif`ten hemen sonra kaydedilir.
+**⚠ ÜST-YAKLAŞIM VE BİLİNÇLİ:** kullanılmayan adlandırılmış tip LLVM'de
+**yasaldır**, maliyeti yapı başına 8 satırdır. Kesin küme, çağrı yerindeki T
+çıkarsamasını ön-geçişte **tekrarlamayı** ister — aynı soruyu iki yerde ayrı
+yanıtlamak D-407'nin ayrışma sınıfıdır. **Çok paramlı yapı (`Cift<A,B>`)
+kapsanmadı**: çapraz çarpım gerekir ve o şekil ölçülmüş bir kusur üretmiyor.
 
-**Kapılar (gerileme yok):** codegen_diff **166/166** · yapi_diff **148/148** ·
+**Fikstür `cg_ic_ice_generic_yapi.kem`** — `tam64` + 2^33 (ayırt edici;
+`tam32` bu sınıfı gösteremez).
+
+**Kapılar:** codegen_diff **167/167** · yapi_diff **148/148 (21 muaf)** ·
 snapshot 50/50 · modul_codegen 22/22 · llvm_test 286/286 · stdlib rc=0.
+**Sabotaj S112** (self ön-kaydını kapat) → fikstür exit 1.
 
 ### ⛔ D-538 (NEGATİF SONUÇ): dönüş-tipi-güdümlü çıkarsama YAZILMADI
 K4 muafiyetinin "asıl kökü" diye kayıtlı olan bu özellik, **ölçüldükten sonra
