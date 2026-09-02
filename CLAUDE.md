@@ -1489,6 +1489,38 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🔴 D-539 (C YARISI): mono tip tanımı KULLANIMDAN SONRA yazılıyordu
+`al(olustur(b))` — iç içe generic-yapı çağrısı — **her iki derleyicide de
+derlenmiyordu** (`Cannot allocate unsized type`). Geçerli bir program
+reddediliyordu; D-464/D-518 sınıfı, sessiz DEĞİL. **İki ayrı kök çıktı.**
+
+**C KÖKÜ 1 — çıkarsama:** D-536'nın dalı yalnız **tanımlayıcı** argümanı
+kapsıyordu; iç içe çağrıda yan-kanal yok. Argümanın **değerlendirilmiş IR
+tipi** (`%Kutu$i64`) mangle edilmiş adı taşır → sonekten okunuyor.
+
+**C KÖKÜ 2 — SIRALAMA, ve kaynaktaki yorum YANLIŞTI.** `mono_tip_tanimlari_emit`
+yorumu *"LLVM adlı-tipleri modül-genelinde çözer, forward-ref güvenli"* diyordu.
+**Ölçüldü — `alloca` için YANLIŞ:**
+```
+define i64 @al$i64(...) { %0 = alloca %Kutu$i64 ... }   <- satır 186
+%Kutu$i64 = type { i64 }                                <- satır 211
+error: Cannot allocate unsized type
+```
+`alloca` tipin **boyutunu ayrıştırma anında** ister; **imza** konumu istemez —
+bu yüzden `define` satırı geçiyor, kusur yalnız gövdede görünüyordu. Fonksiyon
+gövdeleri artık `tmpfile()`a yazılıyor; sonda **önce tipler**, sonra tampon.
+Saf bayt kopyası (register numaralandırma fonksiyon-yerel).
+
+**⚠ SELF-HOST YARISI AÇIK — FARKLI KÖK.** Self'te `%Kutu$i64` **hiç
+tanımlanmıyor**: `yapi_tip_emit` gövdelerden ÖNCE koşar, geç keşfedilen örnek
+hiçbir zaman yayılmaz. `yaz_str` doğrudan stdout'a yazar (tampon YOK) → C'nin
+hoist çözümü uygulanamaz; ya ön-geçişte kayıt ya sessiz-birinci-geçiş gerekir.
+**Fikstür bu yüzden EKLENMEDİ** — self düzelene kadar `codegen_diff`i kalıcı
+kırmızı yapardı (D-421).
+
+**Kapılar (gerileme yok):** codegen_diff **166/166** · yapi_diff **148/148** ·
+snapshot 50/50 · modul_codegen 22/22 · llvm_test 286/286 · stdlib rc=0.
+
 ### ⛔ D-538 (NEGATİF SONUÇ): dönüş-tipi-güdümlü çıkarsama YAZILMADI
 K4 muafiyetinin "asıl kökü" diye kayıtlı olan bu özellik, **ölçüldükten sonra
 gereksiz çıktı.** Kod değişikliği YOK.

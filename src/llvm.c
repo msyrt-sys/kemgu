@@ -3161,13 +3161,26 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                 pt->veri.tip_kullanici.tip_arg[0]->tip == DUGUM_TIP_BASIT) {
                 const Dugum *ta = pt->veri.tip_kullanici.tip_arg[0];
                 if (ta->veri.tip_basit.ad_uzunluk == tp_uz &&
-                    memcmp(ta->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0 &&
-                    arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
-                    LlvmIsim *vi = isim_bul(g,
-                        arg_d->veri.tanimlayici.metin,
-                        arg_d->veri.tanimlayici.uzunluk);
-                    if (vi && vi->generic_arg_ir) {
-                        inferred = vi->generic_arg_ir;
+                    memcmp(ta->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0) {
+                    if (arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
+                        LlvmIsim *vi = isim_bul(g,
+                            arg_d->veri.tanimlayici.metin,
+                            arg_d->veri.tanimlayici.uzunluk);
+                        if (vi && vi->generic_arg_ir) {
+                            inferred = vi->generic_arg_ir;
+                        }
+                    }
+                    /* [D-539] Arg TANIMLAYICI degilse (ic ice cagri:
+                     * `al(olustur(b))`) yan-kanal YOK — ama argumanin
+                     * DEGERLENDIRILMIS IR tipi zaten `%Kutu$i64`dir ve
+                     * MANGLE EDILMIS AD T'yi tasir. Sonek'ten oku.
+                     * ⚠ BU BIR "GUZELLESTIRME" DEGILDI: fallback `al$i32`
+                     * istiyordu, `%Kutu$i32` HIC ORNEKLENMEDIGI icin tip
+                     * OPAK kaliyor -> `Cannot allocate unsized type` =
+                     * GECERLI PROGRAM DERLENMIYOR (D-464/D-518 sinifi). */
+                    if (!inferred && args[pi].tip) {
+                        const char *d1 = strrchr(args[pi].tip, '$');
+                        if (d1 && d1[1]) inferred = d1 + 1;
                     }
                 }
                 continue;
@@ -8426,6 +8439,21 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         fputc('\n', g.out);
     }
 
+    /* [D-539] FONKSİYON GÖVDELERİNİ TAMPONA YAZ. Geç keşfedilen mono yapı
+     * tipleri (`%Kutu$i64`) codegen SIRASINDA doğar ve eskiden fonksiyonlardan
+     * SONRA yazılıyordu. Oradaki yorum "LLVM adlı-tipleri modül-genelinde
+     * çözer, forward-ref güvenli" diyordu — ÖLÇÜLDÜ, `alloca` İÇİN YANLIŞ:
+     *   define i64 @al$i64(...) { %0 = alloca %Kutu$i64 ... }   <- satır 186
+     *   %Kutu$i64 = type { i64 }                                <- satır 211
+     *   -> error: Cannot allocate unsized type
+     * `alloca` tipin BOYUTUNU ayrıştırma anında ister; İMZA konumu istemez —
+     * bu yüzden `define` satırı geçiyor, kusur yalnız gövdede görünüyordu.
+     * Çözüm: gövdeler tampona; sonda ÖNCE tipler çıktıya, SONRA tampon.
+     * Saf bayt kopyasıdır — register numaralandırma fonksiyon-yereldir. */
+    FILE *gercek_modul_out = g.out;
+    FILE *fn_tmp = tmpfile();
+    if (fn_tmp) g.out = fn_tmp;
+
     /* Islevleri emit et (generic olanlar atlanir; instantiation'lar sonra) */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
@@ -8491,7 +8519,23 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
      * keşfedilir → burada emit; LLVM adlı-tipleri modül-genelinde çözer,
      * forward-ref güvenli). Lambdalardan SONRA — lambda gövdeleri de generic
      * örneklendirme keşfedebilir. */
+    /* [D-539] Tipler GERÇEK çıktıya yazılmalı (tampona DEĞİL) — yoksa
+     * yine fonksiyonlardan sonra kalırlar ve dedup yüzünden ikinci kez
+     * yayılmazlar. */
+    if (fn_tmp) g.out = gercek_modul_out;
     mono_tip_tanimlari_emit(&g);
+
+    /* [D-539] Tipler yazıldı; şimdi tamponlanmış fonksiyon gövdelerini aktar. */
+    if (fn_tmp) {
+        char d539_tampon[4096];
+        size_t d539_n;
+        fflush(fn_tmp);
+        fseek(fn_tmp, 0, SEEK_SET);
+        while ((d539_n = fread(d539_tampon, 1, sizeof(d539_tampon), fn_tmp)) > 0) {
+            fwrite(d539_tampon, 1, d539_n, gercek_modul_out);
+        }
+        fclose(fn_tmp);
+    }
 
     int hatalar = g.hata_sayisi;
     arena_serbest(a);
