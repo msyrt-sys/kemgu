@@ -6214,6 +6214,24 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken kaynak: metin = p.son_tip;
         değişken hedef: metin = ll_tip(p, dizi_al(p.cocuk, cb + 1));
         eğer metin_esit(kaynak, hedef) { p.son_tip = hedef; ver x; }
+        // [D-537] TAMSAYI LİTERALİ + GENİŞLETME → literali HEDEF genişlikte
+        // doğur, `sext` YAYMA. Öncesinde literal i32'de materyalize oluyordu:
+        //   `8589934592 olarak tam64` → `sext i32 8589934592 to i64`
+        // — immediate'ın KENDİSİ aralık dışı → SESSİZ YANLIŞ DEĞER (exit 1;
+        // C aynı programda `add i64 0, 8589934592` ile 42). D-299 düz literal
+        // yolunu onarmıştı, CAST yolu açık kalmıştı.
+        // ⚠ DAR: yalnız GENİŞLETME. Daraltma (`300 olarak tam8`) `trunc` ile
+        //   kalır — orada anlam kasıtlı kırpmadır ve C de kırpar (D-518'in
+        //   "kural sanılandan dar" dersi).
+        // Literal immediate'dır (komut yaymaz) → `x`i döndürmek ölü komut
+        // bırakmaz.
+        eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb)), "TAM") {
+            eğer kesirli_ll_mi(kaynak) == yanlış ve kesirli_ll_mi(hedef) == yanlış {
+                eğer tip_genislik(hedef) > tip_genislik(kaynak) {
+                    p.son_tip = hedef; ver x;
+                }
+            }
+        }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
         // D-249 (GAP-1 parite, C llvm.c D-248 aynası): int↔ptr cast. güvensiz-scoped

@@ -1489,6 +1489,27 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🔴 D-537: cast yolunda LİTERAL GENİŞLİĞİ — self-host sessizce yanlış değer
+D-536 ölçülürken yol üstünde çıktı ve **ayrı bir kusurdur**:
+```
+`8589934592 olarak tam64`
+  C   : add i64 0, 8589934592      ← literal HEDEF genişlikte
+  SELF: sext i32 8589934592 to i64 ← immediate'ın KENDİSİ aralık dışı
+```
+Program koşuyor, link temiz, değer yanlış (exit 1 / doğrusu 42). **D-299 düz
+literal yolunu onarmıştı; CAST yolu açık kalmıştı** — cast operandı bağlamsız
+değerlendiriliyor, literal i32'de doğuyor.
+
+**ONARIM DAR — yalnız GENİŞLETME.** Daraltma (`300 olarak tam8`) `trunc` ile
+kalır: orada kırpma **kasıtlıdır** ve C de kırpar. Fikstür bunu **pozitif**
+ölçer (`b != 44 → ver 2`); olmasaydı *"her cast'i hedef genişlikte doğur"*
+sabotajı kapıdan GEÇERDİ (D-425). Literal immediate'dır (komut yaymaz) →
+doğrudan döndürmek ölü komut bırakmaz.
+
+**Kapılar:** codegen_diff **166/166** · yapi_diff **148/148 (20 muaf)** ·
+snapshot 50/50 · stdlib_check rc=0. **Sabotaj S111** → exit 1.
+Fikstür `test/cg_korpus/cg_cast_literal_genislik.kem`.
+
 ### 🔴 D-536: DEĞER konumundaki generic yapı parametresi de T'yi kaybediyordu
 D-535'in tavanı ölçülürken çıktı (655 dosya, 14 fallback olayı, 5 bölge). Üçü
 ölçülerek zararsız çıktı; dördüncüsü **aynı sessiz-yanlış-cevap sınıfıydı**:
