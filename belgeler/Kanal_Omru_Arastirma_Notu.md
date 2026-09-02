@@ -195,3 +195,45 @@ gevşetmeyle** genişletmek — `görev_başlat` lambda yakalaması, P2+P3 kanı
 varsa kaçış SAYILMAZ. Bugün o dal koşulsuz DENY veriyor (D-511'de kayıtlı) ve
 `kanal_mesaj`ı tam bu yüzden kapsamıyor.
 
+---
+
+## [D-542] UYGULAMA DENENDİ — kanal kanıtı GEÇTİ, takma ad kanıtı GEÇMEDİ
+
+**Kod GERİ ALINDI** (ölü kod bırakmamak için — D-459). Ama iş boşa gitmedi:
+kalan engel **tek bir noktaya** indirildi.
+
+### Yazılan ve ÇALIŞAN parçalar (sıfır uyarıyla derlendi)
+- `escape.c` **kanal modu** — `ky_confined` ile **AYNI yürüyüş**, ikinci gezgin
+  yazılmadı (D-407). Üç gevşetme: `görev_başlat`a doğrudan verilen lambda
+  yakalaması · `kanal_gönder`/`kanal_al`/`gönderen`/`alan` argümanı ·
+  sayaçlar **yürüyüşün içinde** toplanır.
+- **Sayaçları yürüyüşe taşımak asıl kazançtı:** `ky_confined` 1 dönerse ağacın
+  TAMAMI gezilmiştir → `spawn`/`join`/`imha` sayımları **işlev genelidir**.
+  Böylece tasarımdaki *"üst düzey deyim"* kısıtı (P3) tamamen KALKTI ve
+  ayrı bir üst-düzey taraması gerekmedi.
+- `llvm.c` — kanıt kurulumu + emisyon; emisyon noktası `rho_yerel_serbest_emit`
+  (kanal **önce**, bölge serbestinden sonra slot okumak yanlış olurdu).
+
+### 🎯 ÖLÇÜLEN SONUÇ — kanalın kendisi KANITI GEÇİYOR
+```
+D541 kanal=k  conf=1  spawn=1  join=1  imha=0     <- P1..P4 HEPSİ TAMAM
+D541 takma=g
+D541 takma=a
+serbest çağrısı: 0                                 <- takma ad kanıtı düştü
+```
+`kanal_mesaj.main` üzerinde **P1–P4'ün dördü de sağlanıyor.** Emisyonu
+engelleyen tek şey **takma ad** (`gönderen(k)` → `g`, `alan(k)` → `a`) için
+yapılan ikinci `escape_kanal_hapsedilmis` çağrısının 0 dönmesi.
+
+### Takma ad kanıtı NEDEN GEREKLİ (kaldırılamaz)
+`gönderen`/`alan` **projeksiyondur — aynı handle'ı geri verir.** Yalnız kanalı
+kanıtlayıp takma adı kanıtlamamak sağlam DEĞİLDİR: `ver g` ile kanal çerçeveyi
+aşar ve serbest bırakma **UAF** üretir.
+
+### SIRADAKİ TURUN İLK ADIMI
+Takma ad çağrısının **dönüş değerini de izle** (bu turda yalnız çağrı öncesi
+iz basıldı, sonuç basılmadı — ölçüm eksikti). `g` yalnız `görev_başlat`
+lambda'sının içinde, `a` yalnız `kanal_al`da geçiyor; ikisi de gevşetilmiş
+dallardan geçmeliydi. Hangisinin ve neden 0 döndüğü **tek bir iz satırıyla**
+görülür.
+
