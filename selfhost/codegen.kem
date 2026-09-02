@@ -2898,6 +2898,49 @@ işlev fn_dugum_bul(p: &değişken Ayr, ad: metin) -> tam32 {
 // [D-535] `xs: Dizi<T>` parametresinin indeksi — `fn_param_idx` aynasi ama
 // TIP_BASIT yerine TIP_DIZI arar ve ELEMANIN adini `tp` ile karsilastirir.
 // C src/llvm.c'deki (c) dali ile ayni soru.
+// [D-536] `k: Kutu<T>` (DEĞER konumunda generic yapı) parametresinin indeksi.
+// AST şekli ÖLÇÜLDÜ (--ast): TIP_KULLANICI -> çocuk[0]=TANIMLAYICI (yapı adı),
+// çocuk[1]=TIP_BASIT (tip argümanı). C'nin (d) dalıyla aynı soru.
+işlev fn_param_yapi_idx(p: &değişken Ayr, fn: tam32, tp: metin) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken cs: tam32 = dizi_al(p.a_cs, fn);
+    değişken i: tam32 = 0;
+    değişken pi: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") {
+            eğer dizi_al(p.a_cs, c) > 0 {
+                değişken tn: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+                eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_KULLANICI") {
+                    // TAM İKİ çocuk: ad + TEK tip argümanı (C'nin tip_arg_sayi==1 koşulu)
+                    eğer dizi_al(p.a_cs, tn) == 2 {
+                        değişken ta: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, tn) + 1);
+                        eğer metin_esit(dizi_al(p.a_ad, ta), "TIP_BASIT") {
+                            eğer metin_esit(dizi_al(p.a_deg, ta), tp) { ver pi; }
+                        }
+                    }
+                }
+            }
+            pi = pi + 1;
+        }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+
+// [D-536] `%Kutu$i64` -> `i64`. Yapı IR'i type-erased'dir ama MANGLE edilmiş
+// adı T'yi taşır; C'nin `generic_arg_ir` yan-kanalının self-host karşılığı.
+// `$` YOKSA "" döner (mangle edilmemiş taban tip) -> çağıran DOKUNMAZ.
+işlev mono_ir_sonek(t: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(t);
+    değişken i: tam32 = n - 1;
+    iken i >= 0 {
+        eğer metin_esit(metin_kes(t, i, 1), "$") { ver metin_kes(t, i + 1, n - i - 1); }
+        i = i - 1;
+    }
+    ver "";
+}
+
 işlev fn_param_dizi_idx(p: &değişken Ayr, fn: tam32, tp: metin) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
@@ -3006,6 +3049,21 @@ işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>, argm
                     eğer dpi < dizi_boyut(arge) {
                         değişken ea: metin = dizi_al(arge, dpi);
                         eğer metin_esit(ea, "") == yanlış { ir = ea; bulundu = doğru; }
+                    }
+                }
+            }
+            // [D-536] (d) DEĞER konumundaki generic yapı parametresi.
+            // `argt` bu konumda `%Kutu$i64` taşır — mangle edilmiş ad T'yi
+            // KORUR, yapı IR'i korumaz. İNDEKS ÖNCELİĞİ (a2) ile aynı gerekçe.
+            değişken ypi: tam32 = fn_param_yapi_idx(p, fn, tp);
+            eğer ypi >= 0 {
+                değişken ykaz: mantıksal = yanlış;
+                eğer pidx < 0 { ykaz = doğru; }
+                eğer ypi < pidx { ykaz = doğru; }
+                eğer ykaz {
+                    eğer ypi < dizi_boyut(argt) {
+                        değişken sk: metin = mono_ir_sonek(dizi_al(argt, ypi));
+                        eğer metin_esit(sk, "") == yanlış { ir = sk; bulundu = doğru; }
                     }
                 }
             }

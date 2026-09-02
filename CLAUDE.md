@@ -1489,6 +1489,39 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### 🔴 D-536: DEĞER konumundaki generic yapı parametresi de T'yi kaybediyordu
+D-535'in tavanı ölçülürken çıktı (655 dosya, 14 fallback olayı, 5 bölge). Üçü
+ölçülerek zararsız çıktı; dördüncüsü **aynı sessiz-yanlış-cevap sınıfıydı**:
+```kemgu
+yapı Kutu<T> { icerik: T; }
+işlev al<T>(k: Kutu<T>) -> T { ver k.icerik; }
+Kutu<tam64> + 2^33   ÖNCE: @al$i32 → exit 1   (oysa @olustur$i64 DOĞRUydu)
+                     SONRA: @al$i64 → exit 42
+```
+**HER İKİ derleyicide.** Mevcut dal yalnız **`&Kullanıcı<T>`** (referans) konumunu
+tanıyordu; **değer** konumu açıktı. C'de kaynak `generic_arg_ir` yan-kanalı;
+self-host'ta `argt` o konumda **`%Kutu$i64`** taşır — yapı IR'i type-erased ama
+**mangle edilmiş AD T'yi korur** (`mono_ir_sonek`). Kanal yoksa dokunulmaz
+(default-DENY). İndeks önceliği D-535 ile aynı gerekçeyle kurulur.
+
+**⚠⚠ ÖNCEKİ TURDA "SELF SPECIALIZE ETMİYOR" DİYE KAYDETMİŞTİM — YANLIŞTI.**
+`grep ... | head -12` çıktıyı **kırpmıştı**; self `@olustur$i64`'ü zaten yayıyor,
+ben yalnız taban gövdeyi (`define %Kutu$i32 @olustur`, K4) görmüştüm. O yanlış
+okuma yüzünden onarımı bir tur "dönüş-tipi-güdümlü çıkarsama gerekiyor" diye
+**erteledim**. *Kırpılmış çıktı, yanlış bir mimari sonuca götürür.*
+
+**🔴 YOL ÜSTÜNDE AYRI BİR KUSUR ÖLÇÜLDÜ — D-537 (AÇIK):** self-host'ta
+`8589934592 olarak tam64` → **`sext i32 8589934592 to i64`** (literal i32'de
+materyalize ediliyor, aralık dışı) → sessiz yanlış değer. C temiz (`add i64 0,
+8589934592`). D-299 düz literal yolunu onarmıştı; **cast yolu açık kalmış.**
+Fikstür bu şekli bilerek KULLANMAZ — yoksa D-536 kapısı **yanlış sebeple**
+kırmızı olurdu (D-421).
+
+**Kapılar:** codegen_diff **165/165** · yapi_diff **147/147 (20 muaf)** ·
+snapshot 50/50 · stdlib_check rc=0.
+**Sabotaj 2/2:** S109 (C dalı) → exit 1 · S110 (self dalı) → exit 1.
+Fikstür `test/cg_korpus/cg_generic_yapi_deger.kem`.
+
 ### 🔴 D-535: `Dizi<T>` PARAMETRESİNDEN ÇIKARSAMA YOKTU — SESSİZ YANLIŞ CEVAP
 `yapi_diff` K4 kökünü (*"generic BASE gövdesi"*) ölçerken D-401'in sınırının hâlâ
 geçerli olduğu doğrulandı — **ama yanında belgelenmemiş, daha ağır bir açık çıktı.**

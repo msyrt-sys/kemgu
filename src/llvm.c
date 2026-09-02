@@ -3145,6 +3145,33 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                     }
                 }
             }
+            /* [D-536] (d) `k: Kutu<T>` param — DEGER olarak generic yapi.
+             * (b) YALNIZ `&Kullanici<T>`yi kapsiyordu; deger konumu ACIKTI ve
+             * D-535'in AYNI sinifini uretiyordu (olculdu, HER IKI derleyicide):
+             *   yapi Kutu<T> { icerik: T; }
+             *   islev al<T>(k: Kutu<T>) -> T { ver k.icerik; }
+             *   Kutu<tam64> + 2^33 -> @al$i32 (oysa @olustur$i64 DOGRU)
+             *   -> exit 1. Derleme temiz, link temiz, program KOSUYOR.
+             * Yapi IR'i type-erased oldugu icin T `generic_arg_ir` yan-
+             * kanalindan gelir — (b) ile AYNI kaynak, referans soyma adimi yok.
+             * Kanal yoksa DOKUNMA -> i32 fallback (default-DENY). */
+            if (pt->tip == DUGUM_TIP_KULLANICI &&
+                pt->veri.tip_kullanici.tip_arg_sayi == 1 &&
+                pt->veri.tip_kullanici.tip_arg[0] &&
+                pt->veri.tip_kullanici.tip_arg[0]->tip == DUGUM_TIP_BASIT) {
+                const Dugum *ta = pt->veri.tip_kullanici.tip_arg[0];
+                if (ta->veri.tip_basit.ad_uzunluk == tp_uz &&
+                    memcmp(ta->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0 &&
+                    arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *vi = isim_bul(g,
+                        arg_d->veri.tanimlayici.metin,
+                        arg_d->veri.tanimlayici.uzunluk);
+                    if (vi && vi->generic_arg_ir) {
+                        inferred = vi->generic_arg_ir;
+                    }
+                }
+                continue;
+            }
             /* (b) `l: &Kullanici<T>` param: arg `&x` -> x'in generic_arg_ir
              * yan-kanali (yapi IR'i type-erased, T'yi tasimaz). */
             if (pt->tip == DUGUM_TIP_REFERANS) {
