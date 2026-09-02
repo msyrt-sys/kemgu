@@ -143,3 +143,55 @@ bulgusuyla çelişince araç şüpheli kılındı (D-500) ve takma ad izleme ekl
 kendisi bellek serbest bırakan yeni kod demektir (D-515'in çift-serbest/UAF
 uyarısı geçerli) ve ayrı bir iştir.
 
+---
+
+## [D-541] A'nın KAZANCI PROTOTİPLE ÖLÇÜLDÜ + uygulama tasarımı
+
+**Kod değişikliği YOK.** Bellek serbest bırakan koda başlamadan önce, kazancın
+gerçek olduğu ve UAF üretmediği elle prototiple ölçüldü (D-515'in uyarısı
+gereği: *"serbest bırakma yolu eklemek gerçek bir çift-serbest/UAF riski
+taşır"*).
+
+### Prototip (IR'a elle enjeksiyon, `kanal_mesaj`)
+```
+TABAN     : 192 bayt sızıntı / 3 tahsis   (8 + 168 + 16)   exit 15
+PROTOTİP  :   8 bayt sızıntı / 1 tahsis                    exit 15
+ASan hatası: YOK (UAF/çift-serbest yok) · stdout BİREBİR
+```
+Kalan 8 bayt **kanal değildir** — `main` içinde doğrudan `malloc`, kapanış env
+sınıfı (D-483/D-507). Kanalın kendisi (168 tampon + 16 kilit) **tamamen geri
+alındı**.
+
+**⚠ LSan çıkış kodunu maskeler** (sızıntı varsa 1). Davranış doğruluğu ayrıca
+ASan'sız ölçüldü: taban ve prototip **ikisi de exit 15**.
+
+### Tek emisyon noktası — ÖLÇÜLDÜ, VAR
+`rho_yerel_serbest_emit()` (`src/llvm.c`) **her `ret`ten önce** çağrılıyor
+(ölçüm: `kanal_mesaj.main`'de 3 çıkış noktası, üçünde de). Kanal serbestı için
+ayrı bir mekanizma gerekmez; aynı noktaya takılır.
+
+### Kanıt (P1–P4) — hepsi gerekli, biri düşerse ESKİ davranış
+| # | koşul | gerekçe |
+|---|---|---|
+| P1 | yerel `değişken`, doğrudan `kanal_oluştur`dan | parametre/küresel kanalın ömrü çerçevede değil |
+| P2 | işlevde `imha` YOK | görev birleştirilmeden ATILABİLİR → thread canlı kalır → UAF |
+| P3 | tüm `görev_başlat`/`görev_birleştir` gövdenin ÜST DÜZEY deyimleri ve `#join ≥ #spawn` | koşullu spawn/join sayımı sağlam DEĞİLDİR |
+| P4 | kanal ve projeksiyonları dönüş/küresel/yapı/dizi/kullanıcı-işlevine SIZMAZ | çerçeveyi aşan kanal serbest edilemez |
+
+P3'ün gerekçesi ölçüldü: `görev<T>` **lineerdir**, yani L001/L002/L005 her
+tutamağın her yolda tam bir kez tüketildiğini zaten garanti eder — eksik olan
+tek şey *"tüketen `görev_birleştir` mi, `imha` mı"* ayrımıdır. P2 bunu
+kabaca ama sağlam biçimde kapatır.
+
+### ⚠ UYGULAMANIN ASIL KISITI — İKİNCİ GEZGİN YAZILMAMALI
+P4 bir kaçış yürüyüşüdür ve `escape.c`'deki **`ky_confined` ile aynı sorudur**.
+Ölçüldü: `src/ast.h`'de **genel bir çocuk yineleyici YOK**; her gezgin elle
+yazılmış `switch`tir (`escape.c`'de ~30 özyineleme noktası). `llvm.c`'ye
+ikinci bir gezgin yazmak **D-407'nin ayrışma sınıfıdır** (aynı soruyu iki
+yerde ayrı yanıtlayan kod er ya da geç ayrışır).
+
+**Doğru yol:** `ky_confined`'ı `escape.c` içinde **birleştirme-duyarlı bir
+gevşetmeyle** genişletmek — `görev_başlat` lambda yakalaması, P2+P3 kanıtı
+varsa kaçış SAYILMAZ. Bugün o dal koşulsuz DENY veriyor (D-511'de kayıtlı) ve
+`kanal_mesaj`ı tam bu yüzden kapsamıyor.
+
