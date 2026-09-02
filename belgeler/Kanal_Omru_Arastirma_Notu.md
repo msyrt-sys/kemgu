@@ -108,3 +108,38 @@ burada bir yer tutucu.
 **A'ya girişmek dil yüzeyi kararı değildir** (yeni sözdizimi/tanı kodu
 gerektirmez, mevcut L001/L002 makinesini kullanır) — ama **ölçüm önce**
 maddesi (yukarıda 1) yerine getirilmeden başlanmamalıdır.
+
+---
+
+## [D-540] ÖN KOŞUL 1 ÖLÇÜLDÜ — tavan SIFIR DEĞİL
+
+Ölçüm `kemgu --ast` üzerinden yapıldı (`test/kanal_omru_olcum.py`), **grep ile
+değil** — bu notun kendi uyarısı gereği.
+
+```
+kanal yaratan islev: 23   |  sekil TUTUYOR: 23  |  TUTMUYOR: 0
+bunlardan yakalayan >= 1 (asil zor vaka): 4
+  cg_gorev_kanal.main      yakalayan=1 join=1
+  cg_rho_sahip_kacis.main  yakalayan=1 join=1
+  drf_gorunurluk.main      yakalayan=1 join=1
+  kanal_mesaj.main         yakalayan=1 join=1   <- D-515'te SIZDIGI olculen dosya
+```
+
+**SONUÇ: A ölçülebilir bir değişikliktir.** 23 işlevin tamamı şekli sağlıyor;
+dördü birleştirme akıl yürütmesi gerektiren gerçek vaka. Daha önemlisi,
+**D-515'te LeakSanitizer ile sızdığı ölçülen tek dosya (`kanal_mesaj`) bu
+kümenin İÇİNDE** — yani A'nın kapatacağı gerçek bir sızıntı var.
+
+Bu, D-515'in dar kuralından farklıdır: o kural görevlere **yakalanan** kanalı
+bilerek dışarıda bırakıyordu ve tam da bu yüzden `kanal_mesaj`ı kapsamıyordu.
+A birleştirme-duyarlı olduğu için kapsıyor.
+
+**⚠ ÖLÇÜM ARACI ÖNCE YANLIŞTI:** ilk sürüm `gönderen(k)`/`alan(k)`
+projeksiyonlarını izlemiyordu → `kanal_mesaj` için `yakalayan=0`. D-511'in
+bulgusuyla çelişince araç şüpheli kılındı (D-500) ve takma ad izleme eklendi.
+İki bağımsız ölçüm ancak ondan sonra uyuştu.
+
+**BU ADIM KOD YAZMADI.** Madde yalnız ön koşulu ölçmeyi istiyordu; A'nın
+kendisi bellek serbest bırakan yeni kod demektir (D-515'in çift-serbest/UAF
+uyarısı geçerli) ve ayrı bir iştir.
+
