@@ -1563,6 +1563,51 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-543: KANAL ÖMRÜ AÇILDI — `kdl_kanal_serbest` artık ÇAĞRILIYOR
+D-511 ölçmüştü: runtime işlevi **vardı** ama iki derleyicide de çağrı sayısı
+**0** — kanal tamponu + kilidi sızıyordu. D-540 tavanı ölçtü (23/23 işlev şekli
+sağlıyor), D-541 elle prototiple kazancı doğruladı, **D-543 uyguladı.**
+
+**KANIT (P1–P4, hepsi gerekli; biri düşerse ESKİ davranış = sızar ama UAF yok):**
+P1 yerel `değişken` + doğrudan `kanal_oluştur` · P2 işlevde `imha` YOK ·
+P3 `join >= spawn` · P4 `escape_kanal_hapsedilmis`.
+
+**🎯 ASIL TASARIM KARARI — İKİNCİ GEZGİN YAZILMADI (D-407).** P4 bir kaçış
+yürüyüşüdür ve `ky_confined` ile aynı sorudur; `ast.h`'de genel çocuk
+yineleyici YOK (escape.c'de ~30 elle yazılmış özyineleme). Yeni gezgin yerine
+`ky_confined`e **kanal modu** eklendi. **Sayaçlar da aynı yürüyüşte toplanır:**
+`ky_confined` 1 dönerse ağacın TAMAMI gezilmiştir → `spawn`/`join`/`imha`
+sayımları **işlev genelidir** ve ayrı bir üst-düzey taraması gerekmez.
+
+**🔴 ASan AVI GERÇEK BİR UAF YAKALADI — kapının var oluş gerekçesi.**
+`drf_gorunurluk` → `SEGV in __asan free`, adres `0x000100000004`. Kök: **lifted
+lambda gövdesindeki `ver` de aynı çıkış noktasından geçiyor** ve kanal listesi
+`main`'den **sıfırlanmamış** kalıyordu → `isim_bul` lambda kapsamında başka bir
+yuvayı bulup **çöp işaretçi** serbest bırakıyordu. Fikstür yine `exit 15`
+veriyordu; **yalnız davranışa bakan bir kapı bunu GÖREMEZDİ.**
+
+**⚠ ÜÇ BAYT SAYIMI YANLIŞTI ve kanıt bu yüzden hiç ateşlenmedi** (üç tur):
+`kanal_al` **8** bayt (9 yazmıştım), `kanal_gönder` **13** (14). `görev_başlat`
+14 doğruydu — o yüzden `spawn` sayacı çalışıyor, gevşetme çalışmıyordu. Tanıyı
+kapatan şey argümanın **gerçek düğüm tipini** basmak oldu.
+
+**YENİ KAPI `calistir_kanal_omru` — üç ölçüm:** yapı (≥1 `kdl_kanal_serbest`) ·
+davranış (exit 15) · **sağlık (ASan 0 hata)**. Üçüncüsü zorunlu: yukarıdaki UAF
+yalnız onunla görünür.
+
+**⚠ V1 SINIRI (bilinçli):** `gönderen(k)`/`alan(k)` **projeksiyonu** olan
+kanallar KAPSAM DIŞI — projeksiyon AYNI handle'ı verir, takma adı ayrıca
+kanıtlamadan serbest bırakmak `ver g` ile UAF üretirdi. `cg_kanal_yon` ve
+`kanal_mesaj` bilerek serbest ALMAZ. **Self-host portu da açık** (C 2 serbest,
+self 0; `codegen_diff` çıkış koduna baktığı için yeşil).
+
+**Ölçülen kazanç:** `cg_kanal_metin`/`_param`/`_tam64`/`_temel` → sızıntı
+**0 bayt** (öncesinde kanal sızıyordu).
+**Kapılar:** kanal_omru 3/3 · codegen_diff **167/167** · yapi_diff **148/148**.
+**Sabotaj 2/2:** S113b (kanal modunu kapat) · S114 (emisyonu kapat) → ikisi rc=2.
+⚠ İlk sabotaj (S113) GEÇERSİZDİ: `#define` derlemeyi kırdı, yani kapıyı değil
+yapımı ölçtü.
+
 ### 🔴 D-537: cast yolunda LİTERAL GENİŞLİĞİ — self-host sessizce yanlış değer
 D-536 ölçülürken yol üstünde çıktı ve **ayrı bir kusurdur**:
 ```

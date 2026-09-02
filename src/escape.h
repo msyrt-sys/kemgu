@@ -172,4 +172,8 @@ int escape_dongu_derinligi(const EscapeAnaliz *ea, const Dugum *d);
 /* Yazdirma — debug */
 const char *escape_kategori_adi(EscapeKategorisi k);
 
+/* [D-543] Kanal ömrü kanıtı — bkz. escape.c ve src/llvm.c kanal_kanit_kur. */
+int escape_kanal_hapsedilmis(const Dugum *govde, const char *ad, int uz,
+                             int *spawn, int *join, int *imha);
+
 #endif /* KEMGU_ESCAPE_H */

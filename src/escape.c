@@ -533,6 +533,22 @@ typedef struct EaFnKayit {
 /* ky_confined ile karsilikli ozyineli — ileri bildirim. */
 static int ky_confined(const Dugum *d, const char *ad, int uz);
 
+/* [D-543] KANAL MODU — kanal ömrü kanıtı için `ky_confined`in gevşetilmiş hâli.
+ * İKİNCİ GEZGİN YAZILMADI (D-407): ast.h'de genel çocuk yineleyici yok, bu
+ * dosyada ~30 elle yazılmış özyineleme var; ikizini yazmak ayrışma sınıfıdır.
+ * ⚠ İMZA DEĞİŞMEDİ — dosyanın kendi deseni: ek durum dosya-kapsamlı.
+ * ⚠ VARSAYILAN 0 → bayrak kapalıyken bu dosyanın anlamı BİT AYNI.
+ * SAYAÇLAR AYNI YÜRÜYÜŞTEN: `ky_confined` 1 dönerse ağacın TAMAMI gezilmiştir,
+ * yani sayımlar İŞLEV GENELİDİR — ayrı üst-düzey taraması GEREKMEZ. */
+static int g_kanal_modu = 0;
+static int g_kanal_spawn = 0, g_kanal_join = 0, g_kanal_imha = 0;
+
+/* `kanal_gönder` 14 bayt, `kanal_al` 9 (ö iki baytlık). Handle'ı TUTMAZLAR. */
+static int ky_kanal_seffaf_mi(const char *ad, int uz) {
+    return (uz == 13 && memcmp(ad, "kanal_gönder", 13) == 0)
+        || (uz == 8  && memcmp(ad, "kanal_al", 8) == 0);
+}
+
 /* Analiz suresince aktif tablo. ky_confined imzasi DEGISTIRILMEDI (dosya
  * icinde ~30 ozyineli cagri yeri var; imza degisikligi degisim yuzeyini
  * gereksiz genisletirdi). Tek is parcacikli derleyici. */
@@ -759,6 +775,13 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                 && ky_confined(d->veri.atama.deger, ad, uz);
         case DUGUM_CAGRI: {
             const Dugum *h = d->veri.cagri.hedef;
+            if (g_kanal_modu && h && h->tip == DUGUM_TANIMLAYICI) {
+                const char *hn = h->veri.tanimlayici.metin;
+                int hu = h->veri.tanimlayici.uzunluk;
+                if (hu == 14 && memcmp(hn, "görev_başlat", 14) == 0) g_kanal_spawn++;
+                else if (hu == 17 && memcmp(hn, "görev_birleştir", 17) == 0) g_kanal_join++;
+                else if (hu == 4 && memcmp(hn, "imha", 4) == 0) g_kanal_imha++;
+            }
             int safe0 = (h && h->tip == DUGUM_TANIMLAYICI
                 && ky_dizi_builtin_confined(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk)
                 && d->veri.cagri.sayi >= 1
@@ -794,6 +817,24 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                     && ky_bellek_builtin_tutmaz(h->veri.tanimlayici.metin,
                                                 h->veri.tanimlayici.uzunluk)
                     && ky_ad_esit(cast_soy(d->veri.cagri.argumanlar[i]), ad, uz))
+                    continue;
+                /* [D-543] Kanal modu, iki gevşetme:
+                 *  (1) `kanal_gönder`/`kanal_al` argümanı — handle'ı TUTMAZ.
+                 *  (2) `görev_başlat`a DOĞRUDAN verilen lambda — normalde LAMBDA
+                 *      dalı yakalamayı KAÇIŞ sayar (`kanal_mesaj` tam bu yüzden
+                 *      hiç kapsanmıyordu, D-511). Sağlamlık ÇAĞIRAN taraftaki
+                 *      kanıta dayanır: imha == 0 && join >= spawn → görev `ret`ten
+                 *      ÖNCE birleştirilmiştir, kanalı tutan thread YAŞAMIYOR. */
+                if (g_kanal_modu && h && h->tip == DUGUM_TANIMLAYICI
+                    && ky_kanal_seffaf_mi(h->veri.tanimlayici.metin,
+                                          h->veri.tanimlayici.uzunluk)
+                    && ky_ad_esit(d->veri.cagri.argumanlar[i], ad, uz))
+                    continue;
+                if (g_kanal_modu && h && h->tip == DUGUM_TANIMLAYICI
+                    && h->veri.tanimlayici.uzunluk == 14
+                    && memcmp(h->veri.tanimlayici.metin, "görev_başlat", 14) == 0
+                    && d->veri.cagri.argumanlar[i]
+                    && d->veri.cagri.argumanlar[i]->tip == DUGUM_LAMBDA)
                     continue;
                 if (!ky_confined(d->veri.cagri.argumanlar[i], ad, uz)) return 0;
             }
@@ -1088,4 +1129,23 @@ const char *escape_kategori_adi(EscapeKategorisi k) {
         case ESC_CAGIRAN:   return "CAGIRAN";
     }
     return "BILINMEYEN";
+}
+
+/* [D-543] KANAL ÖMRÜ: kanal bağlaması çerçeveyi aşıyor mu? `ky_confined` ile
+ * AYNI yürüyüş; sayaçlar out-param (çağıran P2/P3'ü orada kurar).
+ * ⚠ Ölçüm yapılamazsa `*imha = 1` — DENY tarafı. */
+int escape_kanal_hapsedilmis(const Dugum *govde, const char *ad, int uz,
+                             int *spawn, int *join, int *imha) {
+    if (spawn) *spawn = 0;
+    if (join) *join = 0;
+    if (imha) *imha = 1;
+    if (!govde || !ad || uz <= 0) return 0;
+    g_kanal_modu = 1;
+    g_kanal_spawn = 0; g_kanal_join = 0; g_kanal_imha = 0;
+    int r = ky_confined(govde, ad, uz);
+    g_kanal_modu = 0;
+    if (spawn) *spawn = g_kanal_spawn;
+    if (join) *join = g_kanal_join;
+    if (imha) *imha = g_kanal_imha;
+    return r;
 }

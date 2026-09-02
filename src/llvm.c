@@ -278,6 +278,9 @@ typedef struct LlvmGen {
      * kdl_bolge_olustur ile açılır, TÜM ret'lerden önce kdl_bolge_serbest. Kaçmayan
      * (BOLGE_YEREL) tahsisler buraya; kaçanlar rho_ref'e (ρ_caller). NULL → yok. */
     const char *rho_yerel;
+    /* [D-543] Bu islevde CIKISTA serbest birakilacak kanal baglama adlari.
+     * Liste BOS ise emisyon YOK (default-DENY). */
+    const char **kanal_ad; int *kanal_uz; int kanal_sayi;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -506,9 +509,80 @@ static void scope_cik(LlvmGen *g, ScopeMarker m) {
 static int yeni_reg(LlvmGen *g) { return g->reg++; }
 static int yeni_label(LlvmGen *g) { return g->label++; }
 
+/* === [D-543] KANAL OMRU: cikista serbest — POZITIF KANIT ===
+ * OLCULDU (D-540/541/542): sekil 23/23 islevde tutuyor; elle prototip
+ * sizintiyi 192 -> 8 bayta indirdi, davranis BIREBIR, ASan hatasi YOK.
+ * ⚠ BELLEK SERBEST BIRAKAN KOD. Kanit dusen her sekil ESKI davranista kalir
+ *   (sizar ama UAF yok) — "sizinti bir hata, UAF bir felaket".
+ * ⚠ V1 SINIRI: `gönderen(k)`/`alan(k)` PROJEKSIYON takma adi olan kanallar
+ *   KAPSAM DISI (asagida). */
+static const char *d543_cagri_ad(const Dugum *d, int *uz) {
+    if (!d || d->tip != DUGUM_CAGRI) return NULL;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (!h || h->tip != DUGUM_TANIMLAYICI) return NULL;
+    *uz = h->veri.tanimlayici.uzunluk;
+    return h->veri.tanimlayici.metin;
+}
+static int d543_ad_mi(const Dugum *d, const char *lit, int litu) {
+    int uz = 0; const char *a = d543_cagri_ad(d, &uz);
+    return a && uz == litu && memcmp(a, lit, (size_t)litu) == 0;
+}
+/* Bu islevde kanaldan PROJEKSIYON turetilmis mi? `gönderen`/`alan` AYNI
+ * handle'i geri verir; takma adi ayrica kanitlamadan serbest birakmak
+ * SAGLAM DEGILDIR (`ver g` ile kanal cerceveyi asar = UAF). V1: varsa DENY. */
+static int d543_projeksiyon_var(const Dugum *govde) {
+    if (!govde || govde->tip != DUGUM_BLOK) return 0;
+    for (int i = 0; i < govde->veri.blok.sayi; i++) {
+        const Dugum *t = govde->veri.blok.deyimler[i];
+        if (!t || t->tip != DUGUM_DEGISKEN) continue;
+        if (d543_ad_mi(t->veri.degisken.deger, "gönderen", 9)) return 1;
+        if (d543_ad_mi(t->veri.degisken.deger, "alan", 4)) return 1;
+    }
+    return 0;
+}
+/* KANIT KUR: P1 yerel + dogrudan `kanal_oluştur` · P4 hapsedilme ·
+ * P2 imha == 0 · P3 join >= spawn (sayimlar AYNI yuruyusten). */
+static void kanal_kanit_kur(LlvmGen *g, const Dugum *islev) {
+    g->kanal_ad = NULL; g->kanal_uz = NULL; g->kanal_sayi = 0;
+    if (!islev || islev->tip != DUGUM_ISLEV) return;
+    const Dugum *govde = islev->veri.islev.govde;
+    if (!govde || govde->tip != DUGUM_BLOK) return;
+    if (d543_projeksiyon_var(govde)) return;   /* V1 siniri */
+    int n = govde->veri.blok.sayi;
+    if (n <= 0) return;
+    const char **adlar = (const char **)arena_ayir_sifir(g->arena,
+                            sizeof(const char *) * (size_t)n);
+    int *uzlar = (int *)arena_ayir_sifir(g->arena, sizeof(int) * (size_t)n);
+    if (!adlar || !uzlar) return;
+    int say = 0;
+    for (int i = 0; i < n; i++) {
+        const Dugum *st = govde->veri.blok.deyimler[i];
+        if (!st || st->tip != DUGUM_DEGISKEN) continue;
+        if (!d543_ad_mi(st->veri.degisken.deger, "kanal_oluştur", 14)) continue;
+        const char *ad = st->veri.degisken.ad;
+        int uz = st->veri.degisken.ad_uzunluk;
+        int spawn = 0, join = 0, imha = 1;
+        if (!escape_kanal_hapsedilmis(govde, ad, uz, &spawn, &join, &imha)) continue;
+        if (imha != 0) continue;
+        if (join < spawn) continue;
+        adlar[say] = ad; uzlar[say] = uz; say++;
+    }
+    if (say > 0) { g->kanal_ad = adlar; g->kanal_uz = uzlar; g->kanal_sayi = say; }
+}
+static void kanal_serbest_emit(LlvmGen *g) {
+    for (int i = 0; i < g->kanal_sayi; i++) {
+        LlvmIsim *v = isim_bul(g, g->kanal_ad[i], g->kanal_uz[i]);
+        if (!v) continue;
+        int r = yeni_reg(g);
+        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", r, v->reg_no);
+        fprintf(g->out, "  call void @kdl_kanal_serbest(ptr %%%d)\n", r);
+    }
+}
 /* F4.2b (d): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
  * zaten materyalize/ρ_caller'da). NULL ρ_yerel → no-op. */
 static void rho_yerel_serbest_emit(LlvmGen *g) {
+    kanal_serbest_emit(g);   /* [D-543] kanal ONCE — bolge serbestinden sonra
+                              * slot okumak yanlis olurdu */
     if (g->rho_yerel) {
         fprintf(g->out, "  call void @kdl_bolge_serbest(ptr %s)\n", g->rho_yerel);
     }
@@ -7650,6 +7724,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         snprintf(ys, 16, "%%%d", yr);
         g->rho_yerel = ys;
     }
+    kanal_kanit_kur(g, islev);   /* [D-543] */
+    {
+    }
 
     /* D-254: çıplak gövde örtük güvensiz-bağlam — ham pointer deref-write + küresel
      * yazımı explicit `güvensiz {}` gerektirmez (çıplak = güvensiz-tier primitive). */
@@ -7806,6 +7883,13 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
  * load → lokal. DEFERRED çağrılır (çevre fn gövdesi emit edildikten sonra).
  * v1: ifade-form gövde, dönüş i32 (4 örnek). */
 static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
+    /* [D-543] KANAL LISTESINI SIFIRLA — ÖLÇÜLDÜ VE ZORUNLU.
+     * Lifted lambda gövdesindeki `ver` de `rho_yerel_serbest_emit`ten geçer;
+     * liste ÇAĞIRAN işlevden (main) devralınırsa `isim_bul` lambda kapsamında
+     * BAŞKA bir yuvayı bulur ve ÇÖP İŞARETÇİ serbest bırakılır.
+     * Belirti: `drf_gorunurluk` -> SEGV in __asan free, adres 0x000100000004.
+     * D-515'in uyardığı sınıfın ta kendisi; ASan avı olmadan SESSİZ kalırdı. */
+    g->kanal_ad = NULL; g->kanal_uz = NULL; g->kanal_sayi = 0;
     const Dugum *d = bl->dugum;
     /* F4.2b: lambda bu fazda ρ_yerel ALMAZ (yönlendirme yok) → VER ret'leri
      * serbest emit etmesin (NULL). Kuşatan fn'in ρ_yerel'ini serbest etme. */
@@ -8108,6 +8192,7 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_global_bolge_al()\n", out);
     fputs("declare ptr @kdl_bolge_olustur()\n", out);       /* F4.2b: ρ_yerel aç */
     fputs("declare void @kdl_bolge_serbest(ptr)\n", out);   /* F4.2b: ρ_yerel serbest */
+    fputs("declare void @kdl_kanal_serbest(ptr)\n", out);   /* [D-543] */
     /* [D-494] F4.4: `bölge_al` artık kanıtlıysa bölgeden tahsis eder.
      * Bildirim ŞART — yoksa LINK-RED (D-475: üretilen IR KENDİ KENDİNE
      * YETMELİ; orada da eksik declare'ler aynı biçimde yakalanmıştı). */

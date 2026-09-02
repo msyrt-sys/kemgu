@@ -12,7 +12,7 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] KANAL OMRU A — UYGULAMA (D-542'de TAKMA AD kanitina indirgendi): kanalin kendisi P1-P4'un HEPSINI geciyor (olculdu: conf=1 spawn=1 join=1 imha=0); emisyonu engelleyen tek sey `gönderen(k)`/`alan(k)` takma adlari icin yapilan ikinci hapsedilme cagrisinin 0 donmesi. ILK ADIM: o cagrinin DONUS DEGERINI izle (D-542'de yalniz cagri oncesi iz basildi, sonuc basilmadi — olcum eksikti). Tasarim + escape.c kanal modu Kanal_Omru_Arastirma_Notu.md'de yazili.
+- [ ] KANAL OMRU V2: (a) `gönderen`/`alan` PROJEKSIYONLU kanallar (takma adi da kanitla — bugun kapsam disi, `cg_kanal_yon` ve `kanal_mesaj` serbest ALMIYOR) (b) SELF-HOST PORTU (C 2 serbest yayiyor, self 0; codegen_diff cikis koduna baktigi icin yesil kaliyor).
 - [ ] DEGISMEZ AVI — REALTIME/WCET ekseni (RT001-RT005): `gerçekzamanlı`/`sabitsüre` disiplininde sinir asimi, sinirsiz dongu, dolayli cagri gibi sekilleri dusmanca sina. Her probe'u ONCE kendi uzerinde olc (D-500).
 - [ ] DEGISMEZ AVI — SIMD ekseni (`vektör<T,N>`): lane sayisi uyusmazligi, eleman tipi karisimi, `vektor_eleman` sinir disi indeks, kesirli/tamsayi karisimi. D-397'de dort ayri kok cikmisti; yuzey hala dar olabilir.
 - [ ] `codegen_genis`in 9 atlamasini yeniden olc: "mesru bare-metal link hatasi" diye kayitli ama D-518'de `codegen_diff`in atlamasi KURATE LISTEYE baglanmisti. Ayni sertlestirme burada da gerekli mi — once atlananlarin GERCEKTEN bare-metal oldugunu dogrula.
@@ -151,3 +151,11 @@
   ⚠ BU TURDA IKI KEZ `
 ` KACISI GERCEK SATIR SONUNA DONUSTU (python -> C dizgisi, iki katman kacis) ve C dizgilerini bozdu ("missing terminating \" character"). Cozum: ters bolu'yu kaynakta duz yazmak yerine `chr(92)` ile kurmak. CRLF dosyada cok satirli capa da yine tutmadi (D-539'da kayitli).
   ⚠ Uc kez ust uste "serbest cagrisi: 0" gorup kodu commit etmemek DOGRU KARARDI: derlenen ama HIC ATESLENMEYEN kod, D-459'un tam olarak uyardigi tuzaktir (sonraki okuyucu onu "hazir mekanizma" sanir).
+- 2026-09-02 D-543: KANAL OMRU ACILDI — `kdl_kanal_serbest` artik cagriliyor (D-511'den beri sifirdi).
+  KANIT P1-P4 uygulandi. ASIL TASARIM KARARI: ikinci gezgin YAZILMADI (D-407) — `ky_confined`e "kanal modu" eklendi ve SAYACLAR DA AYNI YURUYUSTE toplandi. `ky_confined` 1 donerse agacin tamami gezilmistir, yani spawn/join/imha sayimlari ISLEV GENELIDIR; bu, D-541 tasarimindaki "ust duzey deyim" kisitini tamamen kaldirdi.
+  🔴 ASan AVI GERCEK BIR UAF YAKALADI: `drf_gorunurluk` -> SEGV in __asan free (0x000100000004). Kok: LIFTED LAMBDA govdesindeki `ver` de ayni cikis noktasindan geciyor ve kanal listesi main'den SIFIRLANMAMIS kaliyordu -> lambda kapsaminda baska bir yuva bulunup COP ISARETCI serbest birakiliyordu. Fikstur yine exit 15 veriyordu; yalniz davranisa bakan kapi bunu GOREMEZDI. Bu, yeni kapinin ucuncu olcumunun (ASan sagligi) var olus gerekcesidir.
+  ⚠⚠ UC TUR BOYUNCA KANIT HIC ATESLENMEDI VE SEBEP BAYT SAYIMIYDI: `kanal_al` 8 bayt (9 yazmistim), `kanal_gönder` 13 (14 yazmistim). `görev_başlat` 14 DOGRUYDU — bu yuzden spawn sayaci calisiyor, gevsetme calismiyordu ve "conf=0 spawn=1 join=0" gibi kafa karistirici bir tablo cikiyordu. Tanıyı kapatan sey argumanin GERCEK DUGUM TIPINI basmakti; tahminle ucuncu tura kadar yanlis yerlere baktim.
+  YENI KAPI `calistir_kanal_omru` (test_tumu + .PHONY): yapi (>=1 serbest) + davranis (exit 15) + saglik (ASan 0 hata).
+  OLCULEN KAZANC: cg_kanal_metin/_param/_tam64/_temel -> sizinti 0 bayt (oncesinde kanal siziyordu). kanal_mesaj ve cg_kanal_yon projeksiyon kullandigi icin BILEREK kapsam disi.
+  V1 SINIRLARI (ikisi de Sirada'ya girdi): projeksiyonlu kanallar · self-host portu (C 2 serbest, self 0).
+  KAPILAR: kanal_omru 3/3 . codegen_diff 167/167 . yapi_diff 148/148. Sabotaj 2/2 (S113b kanal modu, S114 emisyon) -> ikisi rc=2. ⚠ Ilk sabotaj S113 GECERSIZDI: `#define` derlemeyi kirdi, yani kapiyi degil YAPIMI olctu.
