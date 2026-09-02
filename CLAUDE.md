@@ -1489,6 +1489,37 @@ kapanış *"kanalı tutan tüm görevler birleştirildi mi?"* bilgisini ister =
 borcu kapatmaya girişmeden önce **borç olduğunu ölç** (D-406'nın
 *"muafiyet gerekçesi de bir iddiadır"* dersinin tekrarı).
 
+### ⛔ D-538 (NEGATİF SONUÇ): dönüş-tipi-güdümlü çıkarsama YAZILMADI
+K4 muafiyetinin "asıl kökü" diye kayıtlı olan bu özellik, **ölçüldükten sonra
+gereksiz çıktı.** Kod değişikliği YOK.
+
+**FALLBACK'İN HER SINIFI TEK TEK ÖLÇÜLDÜ** (probe'lar `tam64` + 2^33 ile
+ayırt edici; `tam32` bu sınıfı GÖSTEREMEZ — D-535):
+
+| şekil | sonuç |
+|---|---|
+| `bos_yap<T>() -> Dizi<T>` | `@bos_yap$i32` ama **exit 42** — `Dizi<T>` her genişlikte `ptr`, eleman tipi annotasyonlu bağlamadan gelir |
+| `dizi.oluştur<T>(böl) -> Liste<T>` | 0 baytlık tahsis + T-bağımsız yerleşim → **görünmez** |
+| `hata_yap`/`k_hata`/`k_tamam` | D-411'in kendi sınıfı: fallback annotasyonla **uyuşur** |
+| `bos_kutu<T>() -> Kutu<T>` | **LINK-RED**: `'%4' defined with type '%"Kutu$i32"' but expected '%"Kutu$i64"'` |
+| iç içe çağrı argümanı `al(olustur(b))` | **LINK-RED, her iki derleyicide** |
+
+**SONUÇ: kalan her fallback ya GÖRÜNMEZ ya LOUD.** Sessiz-yanlış-cevap veren
+iki sınıf **parametre konumundaydı** (D-535 `Dizi<T>`, D-536 değer `Kutu<T>`)
+ve ikisi de kapandı. Dönüş-tipi-güdümlü çıkarsamanın **ölçülebilir tek kazancı
+yapısaldır** (yapi_diff'in K4 muafiyeti, 12 dosya) — D-430 tam bu gerekçeyle
+bir değişikliği geri almıştı: *ayırt edilemeyen kod doğrulanmamış yüzeydir.*
+
+**⚠ BU, D-411'İN İDDİASININ GEÇERLİ OLDUĞU YERİ DE KESİNLEŞTİRİR.** O iddia
+(*"fallback yanlışsa LLVM REDDEDER"*) **dönüş konumunda DOĞRU**, parametre
+konumunda YANLIŞTI. Sınır artık ölçülmüş: yanlış tip **taşıyıcıya** (dizi
+`ptr`, skaler register) sığıyorsa sessiz; **adlandırılmış tipe** (`%Kutu$i64`)
+yansıyorsa LLVM yakalar.
+
+**AÇIK KALAN (yeni, ayrı iş):** `al(olustur(b))` — iç içe generic-yapı çağrısı
+**her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
+bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
+
 ### 🔴 D-537: cast yolunda LİTERAL GENİŞLİĞİ — self-host sessizce yanlış değer
 D-536 ölçülürken yol üstünde çıktı ve **ayrı bir kusurdur**:
 ```
