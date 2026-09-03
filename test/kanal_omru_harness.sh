@@ -27,6 +27,15 @@ CODEGEN="${CODEGEN:-build/codegen${EXE=}}"
 [ -x "$CODEGEN" ] || CODEGEN="build/codegen"
 F=test/cg_korpus/cg_kanal_omru.kem
 N=test/cg_korpus/cg_kanal_kacan_uc.kem
+# [D-551] SESSIZ ATLAMA KUSURU (bu harness'ta ÖLÇÜLDÜ): `setarch` KORUMASIZ
+# çağrılıyordu ve satır `|| true` ile bitiyordu → setarch yoksa/başarısızsa
+# program HİÇ KOŞMUYOR, hata dosyası BOŞ kalıyor, `grep -c ERROR` 0 dönüyor ve
+# SAĞLIK ölçümü SESSİZCE GEÇİYORDU. Oysa o ölçüm bu kapının var oluş
+# gerekçesiydi (D-543'te gerçek bir UAF'ı yalnız o yakaladı).
+# ⚠ `command -v setarch` YETMEZ: bazı çekirdeklerde setarch VAR ama -R
+#   BAŞARISIZ olur → gerçekten ÇALIŞTIĞINI ölç (asan_matris_calistir.sh aynası).
+ASAN_RUN=""
+if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
 W=build/kanal_kapi; mkdir -p "$W"
 hata=0
 
@@ -56,7 +65,15 @@ olc() {   # $1 = etiket, $2 = derleyici
     fi
 
     if clang -fsanitize=address -x ir "$W/$et.ll" -x none build/kdl_runtime.o -o "$W/${et}a" 2>/dev/null; then
-        timeout 60 setarch -R "$W/${et}a" >/dev/null 2>"$W/$et.err" || true
+        timeout 60 $ASAN_RUN "$W/${et}a" >/dev/null 2>"$W/$et.err"; local arc=$?
+        # ⚠ POZİTİF KANIT: ikili GERÇEKTEN koştu mu? Boş hata dosyası hem
+        #   "ASan temiz" hem "program hiç çalışmadı" demektir — ikisi
+        #   ayrılmadan "0 hata" bir KANIT DEĞİLDİR. 127 = komut bulunamadı
+        #   (ör. setarch yok), 124 = zaman aşımı: ikisi de SESSİZ GEÇMEMELİ.
+        if [ "$arc" -eq 127 ] || [ "$arc" -eq 124 ]; then
+            echo "🔴 $et SAGLIK: ASan ikilisi KOSMADI (rc=$arc) — olcum YAPILMADI"
+            hata=1; return
+        fi
         local ah; ah=$(grep -cE "ERROR: AddressSanitizer" "$W/$et.err")
         if [ "$ah" -ne 0 ]; then
             echo "🔴 $et SAGLIK: ASan $ah hata — cift-serbest/UAF:"

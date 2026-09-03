@@ -1563,6 +1563,60 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-551: CI ORTAM DENETİMİ — ve `kanal_omru`da SESSİZ GEÇEN bir ölçüm bulundu
+D-548'in bıraktığı maddenin **karar** kısmı Mehmet'in (push dışa dönük bir
+işlemdir); **ölçüm** kısmı yapıldı: *"`test_tumu` WSL'e özgü şeyler kullanıyor →
+CI'da geçip geçmeyeceği ölçülmedi"*.
+
+**ARAÇ ENVANTERİ (72 kapı tarandı, kelime-sınırlı):**
+```
+setarch            -> asan_e2e_denetim . asan_matris_calistir . kanal_omru
+/usr/bin/time      -> perf_bellek                 (KORUMALI)
+lake               -> lean_sorry/tam/aksiyom      (KORUMALI)
+qemu-system-*      -> Makefile                    (D-453: bildirerek atlar)
+ld.lld · objcopy   -> Makefile (bare-metal)
+```
+CI `ubuntu-latest`te yalnız **clang gcc make file** kuruyor: `setarch`
+(util-linux) ve `objcopy` (binutils) taban imajda gelir; **`ld.lld` ve `qemu`
+GELMEZ** → bare-metal/QEMU kapıları CI'da atlanır.
+**⚠ Bu son cümle ÇIKARIMDIR, ölçüm DEĞİL** — CI koşulmadığı için doğrulanamaz;
+gerçek liste ilk yeşil CI koşumunda ölçülmeli.
+
+**🔴 ASIL BULGU — KENDİ YAZDIĞIM KAPIDA SESSİZ GEÇEN ÖLÇÜM.**
+`kanal_omru`ın ASan sağlık satırı `setarch`i **korumasız** çağırıyor ve
+`|| true` ile bitiyordu:
+```sh
+timeout 60 setarch -R "$W/${et}a" >/dev/null 2>"$W/$et.err" || true
+ah=$(grep -cE "ERROR: AddressSanitizer" "$W/$et.err")
+```
+`setarch` başarısızsa program **hiç koşmuyor**, hata dosyası **boş** kalıyor,
+`grep -c` **0** dönüyor → **SAĞLIK ölçümü SESSİZCE GEÇİYOR.** Oysa o ölçüm bu
+kapının **var oluş gerekçesiydi**: D-543'te gerçek bir UAF'ı (SEGV in
+`__asan free`) yalnızca o yakalamıştı.
+
+**AYIRT EDİCİ DENEY (D-534 deseni)** — `setarch -R true` BAŞARAN ama gerçek
+koşumda 127 dönen bir sahte ikili ile:
+```
+fix VAR  -> 🔴 ASan ikilisi KOSMADI (rc=127) — olcum YAPILMADI ; rc=2
+fix YOK  -> 10/10 olcum gecti                                  ; rc=0
+```
+Yani düzeltme olmadan kapı **yeşil kalıyor ve hiçbir şey ölçmüyordu**.
+
+**ONARIM İKİ PARÇALI:**
+- `ASAN_RUN` **yeteneği ölçülerek** kuruluyor — `command -v setarch` YETMEZ:
+  bazı çekirdeklerde `setarch` var ama `-R` başarısız olur, o yüzden
+  `setarch -R true` koşturulur (`asan_matris_calistir.sh`ın zaten kullandığı
+  desen; kardeş harness'lar korumalıydı, **yalnız benimki değildi**).
+- ASan koşumunun **çıkış kodu** okunuyor: `127` (komut yok) ve `124` (zaman
+  aşımı) artık **sert hata**. *Boş hata dosyası hem "temiz" hem "hiç
+  çalışmadı" demektir; ikisi ayrılmadan "0 hata" bir KANIT DEĞİLDİR.*
+
+**Kapılar:** kanal_omru **10/10** · asan_matris 12/12.
+**Sabotaj:** S131 yukarıdaki ayırt edici deneydir (fix var → rc=2, fix yok →
+rc=0). ⚠ İlk denemem **S130 geçersizdi**: `setarch`i tümüyle 127 yapınca
+yetenek probe'u doğru şekilde `ASAN_RUN=""`e düşüyor ve ikili setarch'siz
+GERÇEKTEN koşuyor — yani o, kusuru değil **zarif düşüşü** ölçmüştü.
+
 ### 🔴✅ D-550: SELF-HOST'a RT DENETİMİ EKLENDİ — kör nokta ölçülüp kapatıldı
 D-545'te ölçülmüştü: `grep -c RT00` → checker **0**, codegen **0**. Yani
 `gerçekzamanlı` bir gövdedeki döngü self-host'ta **sessizce geçiyordu** ve
