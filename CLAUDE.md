@@ -1563,6 +1563,40 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-553: RT007 self-host'a portlandı — RT alt-sistemi TAMAMLANDI (7/7)
+D-550'de *"parser `çevrim:` alanını atıyor → portlanamaz"* diye kaydedilen son
+kod. Engel gerçek ama **aşılabilirdi**: alan tüketiliyordu, kaydedilmiyordu.
+
+**ÇÖZÜM D-351'in DESENİ:** `asm_node` ile **paralel** bir bayrak (`asm_cev`).
+**Düğüme alan EKLENMEDİ** — bu şart, çünkü `--ast`/`--parse` dump'ı düğüm
+alanlarını basar ve bir alan eklemek `parser_diff` + `snapshot` paritesini
+sessizce bozardı. (Ölçüldü: parser_diff **13/13**, snapshot **50/50** bozulmadı.)
+
+**⚠ BİLİNMEYEN DÜĞÜM → "ÇEVRİM YOK" SAYILIR** (default-DENY): yan-kanalda kaydı
+olmayan bir asm düğümü RT007 alır. C'nin kendi gerekçesi budur — *opak asm
+maliyeti sessizce 0 sayılamaz*; gürültülü taraf doğru taraftır.
+
+**Fikstür `tc46_03_realtime_asm.kem` ÜÇ şekil taşır:**
+```
+kotu()   gerceklzamanli + asm, `cevrim:` YOK   -> RT007
+iyi()    gerceklzamanli + asm, `cevrim: 24`    -> TEMIZ   (POZITIF)
+normal() gerceklzamanli DEGIL + anotasyonsuz   -> TEMIZ   (kural yalnizca
+                                                  gerceklzamanli govdelerde)
+```
+Pozitif şekiller olmasa *"her asm'i reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**🎯 RT ALT-SİSTEMİ ARTIK TAM:** RT001 · RT002 · RT003 (doğrudan **ve** zincir) ·
+RT004 · RT005 (bilinmeyen callee **ve** dolaylı çağrı) · RT007 — **yedisi de**
+C ↔ `checker.kem` ↔ `codegen.kem` üçlüsünde birebir.
+**Repo taraması: 729 dosya, 0 RT sapması.**
+
+**Kapılar:** checker_diff **173/173 (0 muaf)** · self_driver **140/140 +
+FIXPOINT ✓** · parser_diff 13/13 · snapshot 50/50 · check_genis 133/133.
+**Sabotaj 3/3:** S136 (checker RT007 dalı) → 172/173 rc=2 · **S137 (`çevrim`
+bayrağını hep 0 yap)** → 172/173 rc=2 — *pozitif yolu ölçen sabotaj bu;
+`iyi()` yanlışlıkla RT007 alınca kapı kırmızı oluyor* · S138 (codegen dalı) →
+139/140 rc=2.
+
 ### 🔴✅ D-552: RT004 / RT005 / RT003-ZİNCİR self-host'a portlandı — ve sabotaj YANLIŞ BİR KURAL buldu
 D-550'nin bıraktığı iş. **Madde "önce ULAŞILABİLİRLİĞİ ölç" diyordu** (D-360),
 ölçüldü — beşinin beşi de ulaşılabilir:

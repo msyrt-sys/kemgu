@@ -248,6 +248,7 @@ yapı Ayr {
     asm_cv: Dizi<metin>;     // D-416: çıktı DEĞİŞKEN adları, "," ile birleşik ("s,b")
     asm_gk: Dizi<metin>;     // D-416: girdi kısıtları, "," ile birleşik ("r")
     asm_bz: Dizi<metin>;     // D-416: bozulanlar, "," ile birleşik ("~{cc}")
+    asm_cev: Dizi<tam32>;   // D-553: asm_node ile PARALEL — `çevrim:` VAR mı (1/0)
     asm_mim: Dizi<metin>;    // D-373: asm_node ile paralel — etiketteki mimari adı
     gp_ad: Dizi<metin>;      // D-370: generic tip parametresi ADLARI (T011 muafiyeti)
     gp_sahip: Dizi<metin>;   // D-369: generic bound tablosu — sahip tip adı
@@ -1740,6 +1741,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];   // girdi ifadeleri
     değişken mim: metin = "";          // D-373: `mimari:` etiketi (AS001 yan-kanalı)
+    değişken cev_var: tam32 = 0;       // D-553: `çevrim:` anotasyonu görüldü mü
     değişken sab: metin = "";          // D-416: şablon
     değişken ck: metin = "";           // D-416: çıktı kısıtları
     değişken cv: metin = "";           // D-416: çıktı değişken adları
@@ -1760,7 +1762,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ilerle(p); bekle(p, "IKI_NOKTA"); sab = asm_kisit_al(p);   // D-416
             } değilse {
             eğer metin_esit(lx, "çevrim") {
-                ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p);
+                ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p); cev_var = 1;
             } değilse {
             eğer metin_esit(lx, "çıktı") {
                 ilerle(p); bekle(p, "SOL_PAREN");
@@ -1786,6 +1788,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     bekle(p, "SAG_SUSLU");
     değişken nd: tam32 = dugum_n(p, "SATIRICI_ASM", "", s, u, kids);
     dizi_ekle(p.asm_node, nd); dizi_ekle(p.asm_mim, mim);   // D-373
+    dizi_ekle(p.asm_cev, cev_var);                          // D-553
     dizi_ekle(p.asm_sab, sab); dizi_ekle(p.asm_ck, ck);     // D-416
     dizi_ekle(p.asm_cv, cv); dizi_ekle(p.asm_gk, gk); dizi_ekle(p.asm_bz, bz);
     ver nd;
@@ -13342,12 +13345,31 @@ işlev rt_yigin_it(p: &değişken Ayr, ad: metin) -> tam32 {
     p.rt_yigin_n = p.rt_yigin_n + 1;
     ver 0;
 }
+// [D-553] `satıriçi_asm` düğümünde `çevrim:` anotasyonu VAR mı?
+// Bilinmeyen düğüm (yan-kanal kaydı yok) → YOK say: RT007 gürültülü tarafta
+// kalır, sessizce 0-maliyet varsaymaktan iyidir (C'nin kendi gerekçesi).
+işlev rt_asm_cevrim_var(p: &değişken Ayr, node: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.asm_node) {
+        eğer dizi_al(p.asm_node, i) == node { ver dizi_al(p.asm_cev, i) == 1; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
 işlev rt_yuru(p: &değişken Ayr, node: tam32, fn_ad: metin) -> mantıksal {
     eğer node < 0 { ver yanlış; }
     değişken t: metin = dizi_al(p.a_ad, node);
     // RT001 — dinamik tahsis
     eğer metin_esit(t, "DIZI_OLUSTUR") veya metin_esit(t, "LAMBDA") {
         rt_tani(p, "RT001", node); ver doğru;
+    }
+    // [D-553] RT007 — `gerçekzamanlı` gövdede `satıriçi_asm`, `çevrim:` YOK.
+    // C wcet.c: opak asm maliyeti 0 SAYILAMAZ; açık anotasyon ZORUNLUDUR.
+    // ⚠ Parser `çevrim:` alanını TÜKETİP ATIYORDU (D-550'de "portlanamaz" diye
+    //   kayıtlıydı) → `asm_node` ile PARALEL bir bayrak eklendi (`asm_cev`),
+    //   düğüme alan eklenmedi: `--ast`/`--parse` dump paritesi korunur (D-351 deseni).
+    eğer metin_esit(t, "SATIRICI_ASM") {
+        eğer rt_asm_cevrim_var(p, node) == yanlış { rt_tani(p, "RT007", node); ver doğru; }
     }
     // RT002 — döngü (V1: tümü yasak)
     eğer metin_esit(t, "IKEN") veya metin_esit(t, "ICIN") {
@@ -13482,7 +13504,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_sm: [], fs_emit: [], fs_onek: [], bek_pointee: "", fn_ad_zorla: "", hedef_mim: "x86_64",
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], rt_node: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], rt_node: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,

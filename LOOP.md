@@ -15,7 +15,6 @@
 - [ ] CI KARARI MEHMET'IN (D-548/D-551). Olculdu: ci.yml VAR ve claude/** push'unda test_tumu kosuyor, ama origin/main D-349'da iken HEAD D-551 — ~200 artim PUSH EDILMEMIS. Arac envanteri D-551'de cikarildi (setarch/objcopy taban imajda gelir; ld.lld ve qemu GELMEZ -> o kapilar atlanir) ama bu CIKARIMDIR: gercek liste ilk yesil CI kosumunda OLCULMELI. Push edilmedikce baska is yok.
 
 
-- [ ] RT007 self-host'a portlanmadi (D-552'de olculdu: ULASILABILIR ve gate'lenebilir, gecerli probe'lar yazildi). Engel: parser `cevrim:` alanini tuketip ATIYOR -> iki uygulamada da yan-kanal gerekiyor (asm_node ile paralel bir bayrak). Pozitif sekil de hazir: `cevrim: 24` varsa TEMIZ gecmeli.
 
 
 ## Gunluk
@@ -243,3 +242,11 @@
   HANGI KAPI NEYI OLCTU: checker_diff 172/172 (0 muaf) . self_driver 139/139 + FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . codegen_diff 169/169 . wcet_test 37/37 . repo taramasi 728 dosya 0 RT sapmasi.
   SABOTAJ 3/3 gecerli: S132 (checker zincir dali) -> 171/172 rc=2; S134 (codegen RT004/RT005) -> 138/139 rc=2; S135 (yanlis yerlesik ayrimini geri getir) -> 171/172 rc=2. S133 GECERSIZ DEGIL, TESHISTI: yesil kalmasi kapinin zayifligini degil KURALIN YANLISLIGINI gosterdi.
   YANLIS GIDEN DENEME: codegen.kem'e yardimci blok kopyalarken aralik tasti ve `yerel_tip_filtrele` iki kez tanimlandi (T024). Blok cikarimini "iki capa arasi tek aralik" + `assert` ile saglamlastirdim; ilk assert de yanlisti (yorumdaki "işlev" kelimesini sayiyordu, satir basi aranmali).
+- 2026-09-03 D-553: RT007 self-host'a portlandi — RT alt-sistemi TAMAMLANDI (7/7).
+  D-550'de "parser `cevrim:` alanini atiyor -> portlanamaz" diye kaydedilen son koddu. Engel gercekti ama ASILABILIRDI: alan TUKETILIYOR, KAYDEDILMIYORDU.
+  COZUM D-351'in DESENI: asm_node ile PARALEL bir bayrak (asm_cev). Dugume ALAN EKLENMEDI — bu SART, cunku --ast/--parse dump'i dugum alanlarini basar ve bir alan eklemek parser_diff + snapshot paritesini SESSIZCE bozardi. Olculdu: parser_diff 13/13, snapshot 50/50 bozulmadi.
+  BILINMEYEN DUGUM -> "cevrim YOK" sayilir (default-DENY): yan-kanalda kaydi olmayan asm dugumu RT007 alir. C'nin kendi gerekcesi budur — opak asm maliyeti sessizce 0 sayilamaz.
+  RT ALT-SISTEMI ARTIK TAM: RT001, RT002, RT003 (dogrudan VE zincir), RT004, RT005 (bilinmeyen callee VE dolayli cagri), RT007 — yedisi de C <-> checker.kem <-> codegen.kem uclusunde birebir. Repo taramasi 729 dosya, 0 RT sapmasi.
+  HANGI KAPI NEYI OLCTU: checker_diff 173/173 (0 muaf) . self_driver 140/140 + FIXPOINT . parser_diff 13/13 . snapshot 50/50 . check_genis 133/133.
+  SABOTAJ 3/3: S136 (checker RT007 dali) -> 172/173 rc=2; S137 (cevrim bayragini hep 0 yap) -> 172/173 rc=2 — POZITIF yolu olcen sabotaj budur, `iyi()` yanlislikla RT007 alinca kapi kirmizi oluyor; S138 (codegen dali) -> 139/140 rc=2.
+  FIKSTUR tc46_03_realtime_asm.kem uc sekil tasir: kotu() (cevrim YOK -> RT007), iyi() (cevrim: 24 -> TEMIZ, POZITIF), normal() (gerceklzamanli DEGIL, anotasyonsuz -> TEMIZ). Pozitifler olmasa "her asm'i reddet" sabotaji GECERDI (D-425).
