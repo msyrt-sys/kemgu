@@ -1,0 +1,7 @@
+// [D-546] NEGATIF lane indeksi. `icmp uge` ISARETSIZ oldugu icin AYNI dala
+// duser — ayri bir `icmp slt 0` kontrolu GEREKMEZ; bu dosya onu POZITIF olarak
+// olcer.
+işlev main() -> tam32 {
+    değişken a: vektör<tam32, 4> = vektor_doldur(7);
+    ver vektor_eleman(a, 0 - 1);
+}

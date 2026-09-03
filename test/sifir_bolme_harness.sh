@@ -71,6 +71,21 @@ for c in "$KEMGU:C" "$CODEGEN:SELF"; do
         kos "$bin" "$et" "$f" 134 "PANIK: kaydirma miktari gecersiz"
     done
     kos "$bin" "$et" test/kaydirma/normal.kem 42
+    # [D-546] VEKTOR LANE INDEKSI de AYNI KAPIDA — mekanizma birebir aynı
+    # (inline icmp uge + br + kdl_panik + unreachable) ve aynı çökmezlik
+    # değişmezini korur; üçüncü bir kapı envanteri gereksiz bölerdi.
+    # ⚠ ÖLÇÜLEN AÇIK: korumasız `extractelement` aralık dışı indekste LLVM
+    #   POISON üretiyordu ve sonuç OPTİMİZASYON SEVİYESİNE BAĞLIYDI
+    #   (-O0 exit=224, -O2 exit=1 — AYNI PROGRAM, AYNI IR).
+    # ⚠ `negatif.kem` bir POZİTİF ölçümdür: `icmp uge` İŞARETSİZ olduğu için
+    #   negatif indeks aynı dala düşer, ayrı bir `icmp slt 0` GEREKMEZ.
+    # ⚠ `degisken_disi.kem` derleme-zamanı reddin KAÇIRACAĞI şekli ölçer.
+    # ⚠ `normal.kem` (21+21 -> 42) ZORUNLU: yalnız negatif şekiller olsaydı
+    #   "her vektor_eleman'i panikletir" sabotajı kapıdan GEÇERDİ (D-425).
+    for f in test/vektor/sabit_disi.kem test/vektor/negatif.kem              test/vektor/degisken_disi.kem; do
+        kos "$bin" "$et" "$f" 134 "PANIK: vektor lane indeksi gecersiz"
+    done
+    kos "$bin" "$et" test/vektor/normal.kem 42
 done
 
 if [ "$olculen" -eq 0 ]; then
@@ -79,4 +94,4 @@ fi
 if [ "$hata" -ne 0 ]; then
     echo "=== sıfıra bölme kapısı: BAŞARISIZ ($olculen ölçüm) ==="; exit 1
 fi
-echo "=== sıfıra bölme + kaydırma miktarı: $olculen ölçüm (C + SELF), hepsi temiz durdu ==="
+echo "=== sıfıra bölme + kaydırma + vektör lane: $olculen ölçüm (C + SELF), hepsi temiz durdu ==="

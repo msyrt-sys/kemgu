@@ -4686,6 +4686,34 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             eleman_buf[len] = '\0';
                         }
                     }
+                    /* [D-546] LANE INDEKSI KORUYUCUSU — cokmezlik degismezi.
+                     * TEK KARSILASTIRMA YETER: `icmp uge` ISARETSIZDIR, yani negatif
+                     * indeks (0-1 -> 0xFFFFFFFF) ayni dala duser.
+                     * SABIT ve ARALIKTA olan indekste kontrol YAYILMAZ (yaygin durum,
+                     * gereksiz dal); aralik disi SABITTE yayilir ki vektor_eleman(v, 99)
+                     * da temiz dursun. */
+                    int lane = 0;
+                    if (vs.tip && vs.tip[0] == '<') lane = atoi(vs.tip + 1);
+                    {
+                        const Dugum *ix = d->veri.cagri.argumanlar[1];
+                        int sabit_guvenli = (ix && ix->tip == DUGUM_TAM
+                                             && ix->veri.tam.deger >= 0
+                                             && ix->veri.tam.deger < lane);
+                        if (lane > 0 && !sabit_guvenli) {
+                            int k_r = yeni_reg(g);
+                            fprintf(g->out, "  %%%d = icmp uge i32 %%%d, %d\n",
+                                    k_r, is.reg, lane);
+                            int L_k = yeni_label(g);
+                            int L_ko = yeni_label(g);
+                            fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                                    k_r, L_k, L_ko);
+                            fprintf(g->out, "bb%d:\n", L_k);
+                            fprintf(g->out,
+                                "  call void @kdl_panik(ptr @.str.vektor_panik)\n");
+                            fprintf(g->out, "  unreachable\n");
+                            fprintf(g->out, "bb%d:\n", L_ko);
+                        }
+                    }
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = extractelement %s %%%d, i32 %%%d\n",
@@ -8257,6 +8285,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* [D-513] Kaydirma miktari panigi — sifira bolme ile AYNI mekanizma.
      * Olculdu: miktar >= bit genisliginde LLVM POISON ve sonuc OPTIMIZASYON
      * SEVIYESINE BAGLI (-O0 exit=0, -O2 exit=1 — ayni program, ayni IR). */
+    /* [D-546] Vektor lane indeksi panigi — kaydirma (D-513) ve dizi siniri
+     * (D-069) ile AYNI mekanizma. Olculdu: `vektor_eleman(v, 99)` --check'ten
+     * TEMIZ geciyor ve `extractelement` aralik disi indekste POISON uretiyor
+     * -> sonuc OPTIMIZASYON SEVIYESINE BAGLI (-O0 exit=224, -O2 exit=1;
+     * AYNI PROGRAM, AYNI IR). Yeni tani kodu YOK, tip degisikligi YOK. */
+    fputs("@.str.vektor_panik = private constant "
+          "[29 x i8] c\"vektor lane indeksi gecersiz\\00\"\n", out);
     fputs("@.str.kaydirma_panik = private constant "
           "[26 x i8] c\"kaydirma miktari gecersiz\\00\"\n", out);
     fputs("@.str.sifir_bolme_panik = private constant "

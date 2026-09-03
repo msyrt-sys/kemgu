@@ -4085,6 +4085,12 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     // (olculdu: codegen_diff 0/157). Tirnak yb(34), ters bolu yb(92).
     yaz_str("@.str.sifir_bolme_panik = private constant [13 x i8] c"); yb(34);
     yaz_str("sifira bolme"); yb(92); yaz_str("00"); yb(34); yb(10);
+    // [D-546] Vektor lane indeksi panigi — kaydirma (D-513) ve dizi siniri
+    // (D-069) ile AYNI mekanizma. ⚠ BAYT SAYISI OLCULDU, sayilmadi:
+    // "vektor lane indeksi gecersiz" 28 karakter + NUL = 29 (D-543'te uc tur
+    // kaybettiren hata sinifi).
+    yaz_str("@.str.vektor_panik = private constant [29 x i8] c"); yb(34);
+    yaz_str("vektor lane indeksi gecersiz"); yb(92); yaz_str("00"); yb(34); yb(10);
     // [D-513] Kaydirma miktari panigi — sifira bolme ile AYNI mekanizma.
     // ⚠ KEMGU dizgi literalinde KACIS YOK: tirnak yb(34), ters bolu yb(92).
     yaz_str("@.str.kaydirma_panik = private constant [26 x i8] c"); yb(34);
@@ -5110,6 +5116,32 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.beklenen_ll = eskib;
             değişken el2: metin = "i32";
             eğer vek_ir_mi(vt2) { el2 = vek_elem(vt2); }
+            // [D-546] LANE INDEKSI KORUYUCUSU — cokmezlik degismezi.
+            // TEK KARSILASTIRMA YETER: `icmp uge` ISARETSIZDIR, negatif indeks
+            // (0-1 -> 0xFFFFFFFF) ayni dala duser. SABIT ve ARALIKTA olan
+            // indekste kontrol YAYILMAZ; aralik disi SABITTE yayilir.
+            eğer vek_ir_mi(vt2) {
+                değişken lane: tam64 = metin_tam(vek_lane(vt2));
+                değişken ixn: tam32 = dizi_al(p.cocuk, cb + 2);
+                değişken sg: mantıksal = yanlış;
+                eğer metin_esit(dizi_al(p.a_ad, ixn), "TAM") {
+                    değişken ixv: tam64 = metin_tam(dizi_al(p.a_deg, ixn));
+                    eğer (ixv >= 0) ve (ixv < lane) { sg = doğru; }
+                }
+                eğer (lane > 0) ve (sg == yanlış) {
+                    değişken vkr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(vkr); yaz_str(" = icmp uge i32 ");
+                    yaz_str(iv); yaz_str(", "); yaz_str(tam64_str(lane)); yb(10);
+                    değişken VLk: metin = yeni_label(p);
+                    değişken VLko: metin = yeni_label(p);
+                    yaz_str("  br i1 "); yaz_str(vkr); yaz_str(", label %");
+                    yaz_str(VLk); yaz_str(", label %"); yaz_str(VLko); yb(10);
+                    etiket_yaz(p, VLk);
+                    yaz_str("  call void @kdl_panik(ptr @.str.vektor_panik)"); yb(10);
+                    yaz_str("  unreachable"); yb(10);
+                    etiket_yaz(p, VLko);
+                }
+            }
             değişken r3: metin = reg_str(yeni_reg(p));
             yaz_str("  "); yaz_str(r3); yaz_str(" = extractelement "); yaz_str(vt2);
             yaz_str(" "); yaz_str(vv); yaz_str(", i32 "); yaz_str(iv); yb(10);

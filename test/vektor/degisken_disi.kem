@@ -1,0 +1,7 @@
+// [D-546] DEGISKEN indeks — sabit-katlama ile yakalanamaz. Derleme-zamani red
+// bu sekli KACIRIRDI (D-514'un kendi gerekcesi); calisma zamani panigi yakalar.
+işlev main() -> tam32 {
+    değişken a: vektör<tam32, 4> = vektor_doldur(7);
+    değişken i: tam32 = 4;
+    ver vektor_eleman(a, i);
+}

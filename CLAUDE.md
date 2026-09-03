@@ -1563,6 +1563,61 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-546: `vektor_eleman` ARALIK DIŞI İNDEKSTE UB — cevap `-O2`de DEĞİŞİYORDU
+Değişmez avı **SIMD eksenine** taşındı. Altı şeklin dördü tuttu:
+```
+<4> * <8>            -> V003 ✓      <tam32,4> * <kesirli32,4> -> V003 ✓
+vektör<T,0>          -> V002 ✓      annot <8> = deger <4>     -> T001 ✓
+vektor_eleman(v, 99) -> **OK** 🔴   vektor_eleman(v, -1)      -> **OK** 🔴
+```
+
+**🔴 GERÇEK UB, GÖZLENEBİLİR — deponun en ağır saydığı sınıf:**
+```
+                        -O0    -O2
+vektor_eleman(a, 99)    224     1      ← AYNI PROGRAM, AYNI IR
+vektor_eleman(a, 0-1)   224     1
+vektor_eleman(a, 3)      42     42     ← onarim BUNU BOZMAMALI
+```
+`extractelement` LLVM'de aralık dışı indekste **poison**tur. Bu sarma değil,
+**cevabın optimizasyon seviyesine bağlı olması**dır.
+
+**MEKANİZMA HAZIRDI, KARAR DA VERİLMİŞTİ — yeni politika icat edilmedi.** Dil
+bu sınıf için **panik** seçmişti: dizi sınırı (D-069) · sıfıra bölme (D-502) ·
+kaydırma miktarı (D-514). Aynı kalıp: inline `icmp uge` + `br` +
+`kdl_panik(noreturn)` + `unreachable`. **Yeni tanı kodu YOK, tip değişikliği
+YOK.** C + `selfhost/codegen.kem`, davranış birebir (`-O0` ve `-O2`'de 134).
+
+**İki bilinçli daraltma, ikisi de fikstürde POZİTİF ölçülüyor:**
+- **TEK KARŞILAŞTIRMA YETER:** `icmp uge` **işaretsizdir** → negatif indeks
+  (`0-1` → `0xFFFFFFFF`) aynı dala düşer; ayrı bir `icmp slt 0` gereksiz daldır.
+  `negatif.kem` bunu ölçer.
+- **Sabit ve aralıkta** olan indekste kontrol yayılmaz (yaygın durum); aralık
+  dışı **sabitte** yayılır ki `vektor_eleman(v, 99)` da temiz dursun.
+  `degisken_disi.kem` ise derleme-zamanı reddin **kaçıracağı** şekli ölçer —
+  D-514'ün kendi gerekçesi.
+
+**KAPI AYRI AÇILMADI:** `calistir_sifir_bolme` genişletildi (20 → **28 ölçüm**).
+Mekanizma ve değişmez aynı; üçüncü bir kapı envanteri gereksiz bölerdi.
+`normal.kem` (21+21 → 42) **zorunlu**: yalnız negatif şekiller olsaydı
+*"her `vektor_eleman`'ı panikletir"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**Kapılar:** sifir_bolme **28/28 (C + SELF)** · simd_test 30/30 ·
+simd_llvm_test 5/5 · llvm_test 286/286 · codegen_diff 169/169 ·
+yapi_diff 149/149 (22 muaf) · sıfır uyarı 38/0.
+**Sabotaj 2/2:** S120 (C) → `sabit_disi`/`negatif` **exit=0**, `degisken_disi`
+exit=7 · S121 (self) → **exit=100/100/7**; ikisi de rc=2.
+
+**⚠⚠ ARAÇ HATALARI — üçü de KAYITLI derslerin tekrarıydı:**
+1. **Heredoc `\n`'i `\n`'e indirgiyor** → ürettiğim C kaynağına **gerçek satır
+   sonu** girdi ve dizgi literali koptu (*"missing terminating"*). D-518'de
+   aynısı yaşanmıştı; çare `chr(92)` ile kurmak.
+2. **`src/llvm.c` SATIR SONLARI KARIŞIK** — dosyanın çoğu CRLF ama
+   `vektor_eleman` bölgesi **LF**. `\r\n` ile kurulan çok satırlı çapa sessizce
+   eşleşmedi. Çözüm: satır sonunu **kaynaktan oku**, çapayı **indeksle** bul.
+3. **BAYT SAYISINI SAYDIM, ÖLÇMEDİM:** `"vektor lane indeksi gecersiz"` 28+NUL
+   = **29**, ben `[27 x i8]` yazdım → tüm IR **LINK-RED**. D-543'te üç tur
+   kaybettiren hatanın aynısı; bu kez `len(msg)+1` ile hesaplatıldı.
+
 ### 🔴✅ D-545: `gerçekzamanlı` KARŞILIKLI ÖZYİNELEMEYE AÇIKTI — sınırlı WCET vaadi geçersizdi
 Değişmez avı **REALTIME/WCET eksenine** taşındı. Altı şeklin dördü tuttu:
 ```

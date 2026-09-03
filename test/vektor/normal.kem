@@ -1,0 +1,9 @@
+// [D-546] GECERLI indeks — ZORUNLU POZITIF OLCUM. Yalniz negatif sekiller
+// olsaydi "her vektor_eleman'i panikletir" sabotaji kapidan GECERDI (D-425).
+işlev main() -> tam32 {
+    değişken a: vektör<tam32, 4> = vektor_doldur(21);
+    değişken e: tam32 = vektor_eleman(a, 3);
+    değişken j: tam32 = 1;
+    değişken f: tam32 = vektor_eleman(a, j);
+    ver e + f;
+}
