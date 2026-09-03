@@ -12,10 +12,10 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] DEGISMEZ AVI — REALTIME/WCET ekseni (RT001-RT005): `gerçekzamanlı`/`sabitsüre` disiplininde sinir asimi, sinirsiz dongu, dolayli cagri gibi sekilleri dusmanca sina. Her probe'u ONCE kendi uzerinde olc (D-500).
 - [ ] DEGISMEZ AVI — SIMD ekseni (`vektör<T,N>`): lane sayisi uyusmazligi, eleman tipi karisimi, `vektor_eleman` sinir disi indeks, kesirli/tamsayi karisimi. D-397'de dort ayri kok cikmisti; yuzey hala dar olabilir.
 - [ ] `codegen_genis`in 9 atlamasini yeniden olc: "mesru bare-metal link hatasi" diye kayitli ama D-518'de `codegen_diff`in atlamasi KURATE LISTEYE baglanmisti. Ayni sertlestirme burada da gerekli mi — once atlananlarin GERCEKTEN bare-metal oldugunu dogrula.
 - [ ] `lean_tam` opt-in kaldi (D-529) ve `test_tumu` onu kosmuyor. Ispatlarin derlenir kalmasini ne garanti ediyor? Secenekleri olc: (a) belgede "elle kosulacak kapilar" listesi, (b) CI varsa oraya bagla, (c) lake WSL'e kurulursa test_tumu'ya bagla. Kod yazmadan once hangisinin GERCEKTEN kosulacagini degerlendir.
+- [ ] SELF-HOST'ta RT DENETIMI HIC YOK (D-545'te olculdu: grep -c RT00 -> checker 0, codegen 0). Parite kapilari kirmizi olmuyor cunku korpusta RT tanisi veren dosya YOK — yani bu bir KOR NOKTA (D-356). Once RT tanisi veren bir dosyanin hangi kapiya girecegini olc, sonra portu tasarla.
 
 
 ## Gunluk
@@ -174,3 +174,14 @@
   SABOTAJ 2/2: S117 (self `ver` korumasi) ve S118 (self takma ad kaniti) -> ikisi de negatif fiksturde 1 serbest + SEGV, rc=2.
   YANLIS GIDEN DENEMELER — BIR TUR OLCUM GECERSIZ CIKTI: onceki turda oldurulen bir ORPHAN kosum WSL agacindaki src/escape.c'yi S116 UYGULANMIS halde birakti. Once IKILI eskiydi (S116'dan once kurulmus) -> parite tablosu ve kanal_omru 10/10 yesil verdi, yani iddia dogruydu ama KANIT gecersizdi. Sonra bir `make` kaynagi yakaladi ve SABOTE EDILMIS bir oracle kuruldu -> codegen_diff 168/169 kirmiziya dondu ve bir an "portum bozdu" sandim; git'teki kaynak TEMIZDI. Cozum: iki agaci `diff`leyen bir resync adimi. DERS: sabotaj izini `grep`lemek YETMEZ — izin KAYNAKTA olmasi ile IKILIDE olmasi ayri seylerdir; olcumden once agaclari diff'le.
   OLUMLU YAN: kapi tam da tasarlandigi gibi calisti — S116'li oracle negatif fiksturde serbest yayip SEGV verdi. D-544'un negatif fiksturu, baska bir sey icin yazilmisken gercek bir kontaminasyonu yakaladi.
+- 2026-09-03 D-545: DEGISMEZ AVI — REALTIME/WCET ekseni. `gerçekzamanlı` KARSILIKLI OZYINELEMEYE ACIKTI; RT003 zincir-farkindali yapildi.
+  AV SONUCU (6 sekil): `eşleş` kolunda dongu RT002 ✓ . `güvensiz` blokta dongu RT002 ✓ . `dizi_olustur(N)` RT005 ✓ . duz govde TEMIZ ✓ . karsilikli a->b->a **OK** 🔴 . dolayli a->ara->a **OK** 🔴
+  KESIN OLCUM: `a(n){ver b(n);}` + `b(n){ver a(n);}` --check rc=0 TEMIZ, kosumda exit 124 (asildi). `gerçekzamanlı`nin TEK vaadi sinirli WCET'tir; bu sekilde vaat tamamen geciersizdi.
+  KOK: RT003 yalniz DOGRUDAN self-call'i soruyordu. wcet.h'nin kendi notu sinirin ADINI koymus ama garantinin DELINDIGI hic olculmemis. D-503/D-517 sinifi: kural var, sorulmadigi yer var.
+  ONARIM (yeni tani kodu YOK): cagri zinciri `cagri_yigin`da tutulur; cagrilan islev zaten acik zincirdeyse RT003. Kesif `walk`'un KENDISIYLE yapilir — ikinci gezgin YAZILMADI (D-407): ic yuruyus `sessiz`, tani yalniz dis cagri yerinde bir kez basilir, hata_sayisi ic yuruyuste artmaz. Sembol->ast_dugumu zaten vardi, yeni tesisat/ana.c/imza degisikligi GEREKMEDI.
+  DERINLIK ASIMI SESSIZ ATLAMA DEGIL: zincir 32'yi asarsa RT005 (WCET hesaplanamaz) = default-DENY. Sessizce gecmek kapatilan kusurun ta kendisi olurdu.
+  WCET SAYISI DEGISMEDI: ic yuruyusun maliyeti ATILIR, V1 sozlesmesi geregi cagri basina sabit 50 korunur -> ekleme sayi-notr.
+  YANLIS-POZITIF: 600+ .kem tarandi, tek RT tanisi ve o da ONCEDEN VAR OLAN (RT005 callee bilinmiyor, p3_bildirimler) -> sifir yeni yanlis-pozitif.
+  POZITIF OLCUM ZATEN VARDI: W18 (a->b, dongu yok -> 0 hata). Yalniz negatif sekiller olsaydi "her cagriyi RT003 yap" sabotaji GECERDI (D-425).
+  HANGI KAPI NEYI OLCTU: wcet_test 35 -> 37/37 . sifir uyari 38/0 . check_kapisi 274/281 (0 RED) . checker_diff 170/170 (0 muaf) . check_genis 133/133 . codegen_diff 169/169. Sabotaj S119 (zincir kesfini kapat) -> [19] ve [20] kirmizi, 35/37, rc=2.
+  YANLIS GIDEN DENEMELER: (1) ilk karsilikli-ozyineleme probe'um ileri bildirim (`işlev b(..) -> tam32;`) kullaniyordu — KEMGU'da YOK, P017; probe dili degil sozdizimini olcuyordu (iki islevi sirayla tanimlamak yeterli, pre_populate ileri referansi cozuyor). (2) `dizi_oluştur` degil `dizi_olustur`. (3) `rc=$?`'yi BORUDAN SONRA okudum -> head'in kodu; ilk turda alti probe de sahte "rc=0" gosterdi (D-444 tekrari). (4) src/wcet.{c,h} CRLF; cok satirli \n capalari tutmadi. (5) test_wcet.c'ye yamada python `\x` ve `\n` kaciislarini YORUMLADI -> mojibake + gercek satir sonu; chr(92) ile yeniden kuruldu.

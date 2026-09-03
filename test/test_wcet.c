@@ -300,6 +300,40 @@ static void W18_rt003_yok_self_yok_recursion(void) {
     test_sonuc("W5: a->b cagri (recursion yok) -> 0 hata", h == 0 && rt == 0);
 }
 
+/* [D-545] W5b: KARSILIKLI / DOLAYLI OZYINELEME.
+ * RT003 yalniz DOGRUDAN self-call'i yakaliyordu; a->b->a zinciri --check'ten
+ * TEMIZ geciyordu ve program HIC DURMUYORDU (olculdu: exit 124) — yani
+ * `gercekzamanli`nin SINIRLI WCET vaadi geciersizdi.
+ * W18 (a->b, dongu YOK) POZITIF olcumdur ve KALMALIDIR: yalniz negatif
+ * sekiller olsaydi "her cagriyi RT003 yap" sabotaji kapidan GECERDI (D-425).
+ */
+static void W18b_rt003_karsilikli(void) {
+    int rt;
+    derle(
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev a(n: tam32) -> tam32 {\n"
+        "  e\xc4\x9f" "er n > 0 { ver b(n - 1); }\n"
+        "  ver 0;\n"
+        "}\n"
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev b(n: tam32) -> tam32 {\n"
+        "  e\xc4\x9f" "er n > 0 { ver a(n - 1); }\n"
+        "  ver 1;\n"
+        "}\n",
+        NULL, NULL, &rt, NULL);
+    test_sonuc("W5: karsilikli ozyineleme a->b->a -> RT003", rt >= 1);
+}
+
+static void W18c_rt003_dolayli_self(void) {
+    int rt;
+    derle(
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev a(n: tam32) -> tam32 {\n"
+        "  e\xc4\x9f" "er n > 0 { ver ara(n - 1); }\n"
+        "  ver 0;\n"
+        "}\n"
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev ara(n: tam32) -> tam32 { ver a(n); }\n",
+        NULL, NULL, &rt, NULL);
+    test_sonuc("W5: dolayli self a->ara->a -> RT003", rt >= 1);
+}
+
 /* ========================================================================
  * GROUP W6 (19-22): RT004 non-realtime cagri
  * ======================================================================== */
@@ -568,6 +602,8 @@ int main(void) {
     W16_rt003_self_call();
     W17_rt003_kuyruk_recursive();
     W18_rt003_yok_self_yok_recursion();
+    W18b_rt003_karsilikli();
+    W18c_rt003_dolayli_self();
 
     puts("\n--- W6: RT004 non-realtime cagri (4) ---");
     W19_rt004_normal_cagri();

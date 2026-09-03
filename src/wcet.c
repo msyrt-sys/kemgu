@@ -10,6 +10,9 @@
 static void rt_hata(WcetKontrol *wk, const Dugum *d,
                     const char *kod, const char *mesaj) {
     if (!d) return;
+    /* [D-545] Ic kesif yuruyusu: tani BASILMAZ (cagri yerinde bir kez
+     * raporlanir). Sayac da artmaz — aksi halde ayni kusur iki kez sayilir. */
+    if (wk->sessiz) return;
     wk->hata_sayisi++;
     hata_raporla(wk->dosya_adi, wk->kaynak,
                  d->satir, d->sutun, kod, mesaj, NULL);
@@ -103,6 +106,22 @@ static int64_t walk(WcetKontrol *wk, const Dugum *d) {
                     "gercekzamanli islev govdesinde ozyineleme (V1 yasak)");
                 return -1;
             }
+            /* [D-545] ZINCIRDE ozyineleme: cagrilan islev SU AN acik olan
+             * cagri zincirindeyse (a->b->a) bu da ozyinelemedir. Yukaridaki
+             * dal yalniz DOGRUDAN self-call'i gorur. */
+            if (has) {
+                for (int zi = 0; zi < wk->cagri_yigin_n; zi++) {
+                    const Dugum *f = wk->cagri_yigin[zi];
+                    if (f && identifier_es(ad, ad_uz, f->veri.islev.ad,
+                                           f->veri.islev.ad_uzunluk)) {
+                        wk->dongu_bulundu = 1;
+                        rt_hata(wk, d, "RT003",
+                            "gercekzamanli cagri zincirinde ozyineleme "
+                            "(karsilikli/dolayli — V1 yasak)");
+                        return -1;
+                    }
+                }
+            }
 
             /* RT004 / RT005 — callee sembol */
             const Sembol *callee = NULL;
@@ -129,6 +148,42 @@ static int64_t walk(WcetKontrol *wk, const Dugum *d) {
                 rt_hata(wk, d, "RT005",
                     "gercekzamanli govdede dolayli cagri (V1 yasak)");
                 return -1;
+            }
+
+            /* [D-545] ZINCIR KESFI: callee gercekzamanli ve govdesi varsa
+             * ONUN govdesine de in. Boylece a->b->a yukaridaki zincir daliyla
+             * yakalanir. Ic yuruyus SESSIZDIR (tani yalnizca bu cagri yerinde
+             * bir kez basilir); donen maliyet KULLANILMAZ — WCET degeri V1
+             * sozlesmesi geregi sabit 50 kalir, yani bu ekleme IR-NOTR ve
+             * sayi-notrdur.
+             * ⚠ Derinlik asilirsa RT005: SESSIZ ATLAMA DEGIL, bilinmeyen sinir
+             *   bildirilir (default-DENY). */
+            if (callee && callee->ast_dugumu &&
+                callee->ast_dugumu->tip == DUGUM_ISLEV &&
+                callee->ast_dugumu->veri.islev.govde) {
+                if (wk->cagri_yigin_n >= WCET_ZINCIR_AZAMI) {
+                    rt_hata(wk, d, "RT005",
+                        "gercekzamanli cagri zinciri cok derin (WCET hesaplanamaz)");
+                    return -1;
+                }
+                const Dugum *disardaki = wk->aktif_islev;
+                wk->cagri_yigin[wk->cagri_yigin_n++] = disardaki;
+                wk->aktif_islev = callee->ast_dugumu;
+                wk->sessiz++;
+                int64_t ic = walk(wk, callee->ast_dugumu->veri.islev.govde);
+                wk->sessiz--;
+                wk->aktif_islev = disardaki;
+                wk->cagri_yigin_n--;
+                if (ic < 0 && wk->dongu_bulundu) {
+                    wk->dongu_bulundu = 0;
+                    rt_hata(wk, d, "RT003",
+                        "gercekzamanli cagri zincirinde ozyineleme "
+                        "(karsilikli/dolayli — V1 yasak)");
+                    return -1;
+                }
+                /* ic < 0 ama dongu DEGILSE: callee'nin KENDI kusuru (RT001/2/...)
+                 * ve o, callee kendi sirasinda denetlenirken raporlanir —
+                 * burada tekrar sayilmaz. */
             }
 
             /* Cost: argumanlar + callee tahmini + call/ret overhead */
@@ -319,6 +374,9 @@ void wcet_kontrol_baslat(WcetKontrol *wk, Arena *a, Scope *global,
     wk->dosya_adi = dosya_adi;
     wk->kaynak = kaynak;
     wk->aktif_islev = NULL;
+    wk->cagri_yigin_n = 0;
+    wk->sessiz = 0;
+    wk->dongu_bulundu = 0;
 }
 
 int64_t wcet_islev_hesapla(WcetKontrol *wk, const Dugum *islev) {

@@ -1563,6 +1563,68 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-545: `gerçekzamanlı` KARŞILIKLI ÖZYİNELEMEYE AÇIKTI — sınırlı WCET vaadi geçersizdi
+Değişmez avı **REALTIME/WCET eksenine** taşındı. Altı şeklin dördü tuttu:
+```
+`eşleş` kolunda dongu   -> RT002 ✓      `güvensiz` blokta dongu -> RT002 ✓
+`dizi_olustur(N)`       -> RT005 ✓      duz govde (taban)       -> TEMIZ ✓
+karsilikli a->b->a      -> **OK** 🔴    dolayli  a->ara->a      -> **OK** 🔴
+```
+
+**🔴 KESİN ÖLÇÜM — GEÇERLİ SAYILAN BİR PROGRAM HİÇ DURMUYOR:**
+```kemgu
+gerçekzamanlı işlev a(n: tam32) -> tam32 { ver b(n); }
+gerçekzamanlı işlev b(n: tam32) -> tam32 { ver a(n); }
+```
+`--check` **rc=0 (TEMİZ)** · çalıştırınca **exit 124 (asıldı)**. `gerçekzamanlı`
+işaretinin tek vaadi **sınırlı WCET**tir; bu şekilde o vaat tamamen geçersizdi.
+
+**KÖK — RT003 YALNIZ DOĞRUDAN self-call'i soruyordu.** `wcet.h`'nin kendi notu
+*"Direct self-recursion yasak (RT003)"* diyerek sınırı **adlandırmış** ama
+sınırın **garantiyi deldiği** hiç ölçülmemişti. D-503/D-517 ile aynı sınıf:
+kural vardı, **sorulmadığı yer** vardı.
+
+**ONARIM — YENİ TANI KODU YOK.** RT003'ün mesajı zaten *"özyineleme (V1 yasak)"*.
+Çağrı zinciri bir yığında tutulur (`cagri_yigin`); çağrılan işlev **zaten açık
+zincirdeyse** RT003. Keşif `walk`'un KENDİSİYLE yapılır — ikinci bir gezgin
+YAZILMADI (D-407): iç yürüyüş `sessiz`dir, tanı yalnız dış çağrı yerinde bir kez
+basılır ve `hata_sayisi` iç yürüyüşte artmaz.
+**Sembol → `ast_dugumu` zaten vardı** → yeni tesisat, `ana.c` değişikliği ve
+imza değişikliği GEREKMEDİ.
+
+**⚠ DERİNLİK AŞIMI SESSİZ ATLAMA DEĞİL:** zincir 32'yi aşarsa **RT005**
+(*"WCET hesaplanamaz"*) — default-DENY. Sessizce geçmek, tam da kapatılan
+kusurun sınıfı olurdu.
+
+**⚠ WCET SAYISI DEĞİŞMEDİ:** iç yürüyüşün döndürdüğü maliyet **atılır**; V1
+sözleşmesi gereği çağrı başına sabit 50 cycle korunur → ekleme **sayı-nötr**.
+
+**YANLIŞ-POZİTİF TARAMASI TÜM DEPODA:** 600+ `.kem`, **tek** RT tanısı ve o da
+**önceden var olan** `RT005 callee bilinmiyor` (`p3_bildirimler.kem`) →
+**sıfır yeni yanlış-pozitif**.
+
+**POZİTİF ÖLÇÜM ZATEN VARDI VE KALDI:** `W18` (a→b, döngü YOK → 0 hata). Yalnız
+negatif şekiller olsaydı *"her çağrıyı RT003 yap"* sabotajı kapıdan GEÇERDİ
+(D-425).
+
+**⚠ SELF-HOST'TA RT DENETİMİ HİÇ YOK** (`grep -c RT00` → checker 0, codegen 0).
+Bu **önceden var olan** bir boşluktur ve bu artımın kapsamı DIŞINDADIR; parite
+kapıları kırmızı olmuyor çünkü korpusta RT tanısı veren dosya yok. İş olarak
+kaydedildi.
+
+**Kapılar:** wcet_test **35 → 37/37** · sıfır uyarı 38/0 · check_kapisi 274/281
+(0 RED) · checker_diff **170/170 (0 muaf)** · check_genis 133/133 ·
+codegen_diff 169/169.
+**Sabotaj S119** (zincir keşfini kapat) → `[19]` ve `[20]` ✗, 35/37, rc=2.
+
+**⚠⚠ PROBE'LARIN İKİSİ KENDİ HATAMDI ve ölçümü geçersiz kılıyordu** (D-500):
+ileri bildirim (`işlev b(...) -> tam32;`) KEMGU'da YOK → **P017**, yani ilk
+karşılıklı-özyineleme probe'um dili değil sözdizimini ölçüyordu (iki işlevi
+sırayla tanımlamak yeterli — `pre_populate` ileri referansı zaten çözüyor); ve
+`dizi_oluştur` yerleşiğinin adı `dizi_olustur`. Ayrıca `rc=$?`'yi **borudan
+sonra** okuyup `head`'in kodunu ölçtüm (D-444'ün tekrarı) — ilk turda altı
+probe de "rc=0" göründü.
+
 ### ✅ D-544-b: KANAL ÖMRÜ SELF-HOST'A PORTLANDI — kapı artık İKİ derleyiciyi ölçüyor
 D-543/D-544 yalnız C'deydi; `selfhost/codegen.kem` **sıfır** serbest yayıyordu.
 `codegen_diff` çıkış koduna baktığı için bu ayrışma **sessiz** kalıyordu
