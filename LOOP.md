@@ -15,7 +15,7 @@
 - [ ] CI KARARI MEHMET'IN (D-548/D-551). Olculdu: ci.yml VAR ve claude/** push'unda test_tumu kosuyor, ama origin/main D-349'da iken HEAD D-551 — ~200 artim PUSH EDILMEMIS. Arac envanteri D-551'de cikarildi (setarch/objcopy taban imajda gelir; ld.lld ve qemu GELMEZ -> o kapilar atlanir) ama bu CIKARIMDIR: gercek liste ilk yesil CI kosumunda OLCULMELI. Push edilmedikce baska is yok.
 
 
-- [ ] RT004/RT005 + RT003-ZINCIR + RT007 self-host'a portlanmadi (D-550'de olculdu ve bilincli birakildi). RT004/RT005 cagrilanin gerceklzamanli olup olmadigini VE yerlesik kumesini bilmek ister; RT003-zincir cagri grafigi (D-545); RT007 parser'in attigi `cevrim:` alanini ister. Once hangisinin korpusta ULASILABILIR oldugunu olc (D-360 dersi).
+- [ ] RT007 self-host'a portlanmadi (D-552'de olculdu: ULASILABILIR ve gate'lenebilir, gecerli probe'lar yazildi). Engel: parser `cevrim:` alanini tuketip ATIYOR -> iki uygulamada da yan-kanal gerekiyor (asm_node ile paralel bir bayrak). Pozitif sekil de hazir: `cevrim: 24` varsa TEMIZ gecmeli.
 
 
 ## Gunluk
@@ -234,3 +234,12 @@
   ONARIM IKI PARCALI: (a) ASAN_RUN YETENEGI OLCULEREK kuruluyor — `command -v setarch` YETMEZ, bazi cekirdeklerde setarch var ama -R basarisiz olur, o yuzden `setarch -R true` kosturulur (asan_matris_calistir.sh'in zaten kullandigi desen; kardes harness'lar korumaliydi, YALNIZ BENIMKI DEGILDI). (b) ASan kosumunun CIKIS KODU okunuyor: 127 (komut yok) ve 124 (zaman asimi) artik SERT HATA — bos hata dosyasi hem "temiz" hem "hic calismadi" demektir.
   HANGI KAPI NEYI OLCTU: kanal_omru 10/10 . asan_matris 12/12.
   YANLIS GIDEN DENEME: ilk sabotajim S130 GECERSIZDI — setarch'i tumuyle 127 yapinca yetenek probe'u DOGRU sekilde ASAN_RUN=""e dusuyor ve ikili setarch'siz GERCEKTEN kosuyor; yani kusuru degil ZARIF DUSUSU olcmustum. Dogru sabotaj probe'u gecirip gercek kosumu bozan sahte ikilidir.
+- 2026-09-03 D-552: RT004 / RT005 / RT003-ZINCIR self-host'a portlandi (checker.kem + codegen.kem). Sabotaj YANLIS BIR KURAL buldu.
+  ONCE ULASILABILIRLIK OLCULDU (maddenin talimati, D-360): besinin besi de ulasilabilir — RT004, RT005 (bilinmeyen callee), RT005 (dolayli cagri), RT003 (zincir), RT007 (asm cevrim yok) + pozitif `cevrim: 24` -> OK.
+  PORTLANAN (dordu): RT004, RT005 x2, RT003-zincir. C D-545'in `sessiz` bayragi birebir aynalandi: ic kesif yuruyusu tani basmaz, yalniz zincir bulgusu bayrakla dis cagri yerine tasinir. Derinlik asimi -> RT005 (sessiz atlama DEGIL). Dil `dizi_cikar` sunmuyor -> yigin icin mantiksal uzunluk sayaci (rt_yigin_n).
+  ASIL BULGU — SABOTAJIN SESSIZLIGI YANLIS BIR KURALI ACIGA CIKARDI: ilk surumum yerlesikleri ayiriyordu ("C'nin sembol tablosu yerlesikleri bulmaz -> RT005"). 727 dosyalik tarama SIFIR sapma dedi ve kural dogru gorunuyordu. Ama S133 (ayrimi kapat) YESIL kaldi -> mekanizma ayirt edilemiyordu. Ayirt edici sekli arayinca kural CURUDU: `metin_uzunluk` (KAYITLI yerlesik) C'de RT004 verir, benim surumum RT005 diyordu. Yani ayrim "yerlesik mi" degil "SEMBOL MU" ayrimidir ve fn_ad uyeligi tam olarak onu verir. fn_kul alani hem GEREKSIZ hem YANLISTI, kaldirildi (D-459).
+  DERS: 727 dosyalik yesil bir tarama kuralin DOGRU oldugunu kanitlamaz — yalniz korpusun o sekli icermedigini gosterir (D-356'nin altinci tekrari). Kurali kanitlayan sey, sabotajin KIRMIZI olabildigi bir seklin VAR OLMASIDIR.
+  PORTLANMADI — RT007: parser `cevrim:` alanini tuketip atiyor, iki uygulamada da yan-kanal gerekiyor. Ulasilabilir ve gate'lenebilir oldugu OLCULDU (gecerli probe'lar yazildi); ayri is olarak Sirada'da.
+  HANGI KAPI NEYI OLCTU: checker_diff 172/172 (0 muaf) . self_driver 139/139 + FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . codegen_diff 169/169 . wcet_test 37/37 . repo taramasi 728 dosya 0 RT sapmasi.
+  SABOTAJ 3/3 gecerli: S132 (checker zincir dali) -> 171/172 rc=2; S134 (codegen RT004/RT005) -> 138/139 rc=2; S135 (yanlis yerlesik ayrimini geri getir) -> 171/172 rc=2. S133 GECERSIZ DEGIL, TESHISTI: yesil kalmasi kapinin zayifligini degil KURALIN YANLISLIGINI gosterdi.
+  YANLIS GIDEN DENEME: codegen.kem'e yardimci blok kopyalarken aralik tasti ve `yerel_tip_filtrele` iki kez tanimlandi (T024). Blok cikarimini "iki capa arasi tek aralik" + `assert` ile saglamlastirdim; ilk assert de yanlisti (yorumdaki "işlev" kelimesini sayiyordu, satir basi aranmali).

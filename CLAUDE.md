@@ -1563,6 +1563,57 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-552: RT004 / RT005 / RT003-ZİNCİR self-host'a portlandı — ve sabotaj YANLIŞ BİR KURAL buldu
+D-550'nin bıraktığı iş. **Madde "önce ULAŞILABİLİRLİĞİ ölç" diyordu** (D-360),
+ölçüldü — beşinin beşi de ulaşılabilir:
+```
+RT004 (non-rt cagri) . RT005 (bilinmeyen callee) . RT005 (dolayli cagri)
+RT003 (zincir)       . RT007 (asm `cevrim:` yok)  + POZITIF `cevrim: 24` -> OK
+```
+
+**PORTLANAN (dördü):** RT004 · RT005×2 · RT003-zincir. C D-545'in **`sessiz`
+bayrağı birebir aynalandı**: iç keşif yürüyüşü tanı basmaz, yalnız zincir
+bulgusu bayrakla dış çağrı yerine taşınır. Derinlik aşımı → **RT005**
+(sessiz atlama DEĞİL).
+**⚠ Dil `dizi_cikar` sunmuyor** → yığın için mantıksal uzunluk sayacı
+(`rt_yigin_n`); dizi küçülmez, sayaç küçülür.
+
+**🎯 ASIL BULGU — SABOTAJIN SESSİZLİĞİ YANLIŞ BİR KURALI AÇIĞA ÇIKARDI.**
+İlk sürümüm yerleşikleri ayırıyordu (*"C'nin sembol tablosu yerleşikleri
+bulmaz → RT005"*). **727 dosyalık tarama SIFIR sapma dedi** ve kural doğru
+görünüyordu. Ama **S133 (ayrımı kapat) YEŞİL kaldı** → mekanizma ayırt
+edilemiyordu. Ayırt edici şekli arayınca kural **çürüdü**:
+```
+metin_uzunluk (KAYITLI yerlesik)  C: RT004   ilk surumum: RT005  ← YANLIS
+dizi_boyut    (hic sembol degil)  C: RT005   ilk surumum: RT005  ← dogru
+```
+Yani ayrım *"yerleşik mi"* değil, **"SEMBOL MÜ"** ayrımıdır — ve `fn_ad`
+üyeliği tam olarak onu verir. `fn_kul` alanı hem **gereksiz** hem **yanlıştı**;
+kaldırıldı (D-459: ölü kod bırakma).
+> **DERS: 727 dosyalık yeşil bir tarama, kuralın DOĞRU olduğunu kanıtlamaz —
+> yalnız korpusun o şekli içermediğini gösterir** (D-356'nın altıncı tekrarı).
+> Kuralı kanıtlayan şey, sabotajın KIRMIZI olabildiği bir şeklin var olmasıdır.
+
+**PORTLANMADI — RT007** (`satıriçi_asm` + `çevrim:`): parser o alanı
+**tüketip atıyor**, iki uygulamada da yan-kanal gerekiyor. Ulaşılabilir ve
+gate'lenebilir olduğu ÖLÇÜLDÜ (geçerli probe'lar yazıldı); ayrı iş olarak
+kaydedildi.
+
+**Fikstür `tc46_02_realtime_cagri.kem`** — RT004 · RT005 (yerleşik-olmayan) ·
+RT005 (dolaylı) · RT003×2 (zincir) · **RT004 (kayıtlı yerleşik)** + **pozitif**
+`rt_kok → rt_yaprak` (gerçekzamanlı, gerçekzamanlıyı çağırabilir; zincir YOK).
+Son iki şekil BİRLİKTE "sembol mü" ayrımını gate'ler.
+
+**Kapılar:** checker_diff **172/172 (0 muaf)** · self_driver **139/139 +
+FIXPOINT ✓** · check_kapisi 274/281 (0 RED) · check_genis 133/133 ·
+codegen_diff 169/169 · wcet_test 37/37 · **repo taraması 728 dosya, 0 RT
+sapması**.
+**Sabotaj 3/3 (geçerli):** S132 (checker zincir dalı) → 171/172 rc=2 ·
+S134 (codegen RT004/RT005) → 138/139 rc=2 · S135 (yanlış yerleşik ayrımını
+geri getir) → 171/172 rc=2.
+**⚠ S133 GEÇERSİZ DEĞİL, TEŞHİSTİ:** yeşil kalması kapının zayıflığını değil
+**kuralın yanlışlığını** gösterdi.
+
 ### 🔴✅ D-551: CI ORTAM DENETİMİ — ve `kanal_omru`da SESSİZ GEÇEN bir ölçüm bulundu
 D-548'in bıraktığı maddenin **karar** kısmı Mehmet'in (push dışa dönük bir
 işlemdir); **ölçüm** kısmı yapıldı: *"`test_tumu` WSL'e özgü şeyler kullanıyor →

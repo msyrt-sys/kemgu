@@ -1,0 +1,32 @@
+// [D-552] REALTIME ÇAĞRI KURALLARI — RT004 / RT005 / RT003-ZİNCİR.
+// ⚠ C işlev başına EN FAZLA BİR tanı verir → her şekil AYRI işlevde.
+
+işlev yardim(x: tam32) -> tam32 { ver x + 1; }
+
+// RT004 — çağrılan KULLANICI işlevi ama gerçekzamanlı DEĞİL.
+gerçekzamanlı işlev rt_nonrt(x: tam32) -> tam32 { ver yardim(x); }
+
+// RT005 — çağrılan YERLEŞİK. C'nin sembol tablosu yerleşikleri BULMAZ, bu
+// yüzden orada da "callee bilinmiyor"dur; `fn_ad`a bakıp "biliniyor" demek
+// RT004'e kayardı (ayrım `fn_kul`dadır).
+gerçekzamanlı işlev rt_yerlesik() -> tam32 { ver dizi_boyut([1, 2]); }
+
+// RT005 — DOLAYLI çağrı (callee düz tanımlayıcı değil).
+gerçekzamanlı işlev rt_dolayli(g: işlev(tam32) -> tam32) -> tam32 { ver g(1); }
+
+// RT003 ZİNCİR — karşılıklı özyineleme; RT003'ün DOĞRUDAN dalı bunu görmez.
+gerçekzamanlı işlev zin_a(n: tam32) -> tam32 { eğer n > 0 { ver zin_b(n - 1); } ver 0; }
+gerçekzamanlı işlev zin_b(n: tam32) -> tam32 { eğer n > 0 { ver zin_a(n - 1); } ver 1; }
+
+// POZİTİF — gerçekzamanlı işlev gerçekzamanlı işlevi ÇAĞIRABİLİR (zincir YOK).
+gerçekzamanlı işlev rt_yaprak(x: tam32) -> tam32 { ver x + 1; }
+gerçekzamanlı işlev rt_kok(x: tam32) -> tam32 { ver rt_yaprak(x); }
+
+işlev main() -> tam32 { ver rt_kok(41); }
+
+// [D-552 düzeltme] KAYITLI YERLEŞİK — C'nin sembol tablosunda VARDIR ve
+// gerçekzamanlı olmadığı için RT004 verir (RT005 DEĞİL). `rt_yerlesik`teki
+// `dizi_boyut` ise hiç sembol olmadığı için RT005 verir. İKİ ŞEKİL BİRLİKTE
+// "sembol mü" ayrımını gate'ler; yalnız biri olsaydı yanlış eşleme (yerleşik →
+// RT005) SESSİZ kalırdı — nitekim 727 dosyalık tarama onu GÖREMEDİ.
+gerçekzamanlı işlev rt_kayitli_yerlesik(s: metin) -> tam32 { ver metin_uzunluk(s); }

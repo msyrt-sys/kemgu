@@ -60,6 +60,10 @@ yapı Ayr {
     cv_pt: Dizi<metin>;     // D-368: düz payload tip dizgileri ("?" = bilinmiyor)
     kur_ad: Dizi<metin>;    // D-351: küresel değişken adları (E010)
     cip_node: Dizi<tam32>;  // D-351: `çıplak` işlev düğümleri — gövdesi örtük güvensiz
+    rt_yigin: Dizi<metin>;  // D-552: aktif çağrı zinciri (RT003 zincir dalı)
+    rt_yigin_n: tam32;      // mantıksal uzunluk — dizi KÜÇÜLMEZ, sayaç küçülür
+    rt_sessiz: tam32;       // >0 → iç (keşif) yürüyüşü; tanı BASILMAZ (C `sessiz`)
+    rt_dongu: tam32;        // iç yürüyüşte zincir kapandı mı (C `dongu_bulundu`)
     rt_node: Dizi<tam32>;   // D-550: `gerçekzamanlı` işlev düğümleri (parser onu
                             // YUTUYORDU; `çıplak` yan-kanalinin birebir aynasi)
     asm_node: Dizi<tam32>;  // D-373: SATIRICI_ASM düğümü — `mimari:` etiketi (AS001)
@@ -1825,7 +1829,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], asm_node: [], asm_mim: [], si_ad: [], si_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_mim: [], si_ad: [], si_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_rlin: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -6095,6 +6099,50 @@ işlev rt_islev_mi(p: &değişken Ayr, fn: tam32) -> mantıksal {
     }
     ver yanlış;
 }
+// [D-552] Ada göre `gerçekzamanlı` işlev düğümü (yoksa -1).
+işlev rt_node_ada_gore(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.rt_node) {
+        değişken n: tam32 = dizi_al(p.rt_node, i);
+        eğer metin_esit(dizi_al(p.a_deg, n), ad) { ver n; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// [D-552] Çağrılan adın SINIFI — C `sembol_bul` aynası.
+//   2 = sembol tablosunda BULUNDU (kullanıcı işlevi VEYA kayıtlı yerleşik)
+//   0 = hiç bulunamadı → RT005
+// ⚠⚠ İLK SÜRÜMÜM YERLEŞİKLERİ AYIRIYORDU ve YANLIŞTI. Ölçüldü:
+//   `metin_uzunluk` (kayıtlı yerleşik) C'de **RT004** verir — yani C'nin
+//   sembol tablosunda VARDIR ve gerçekzamanlı-olmayan bir işlev gibi
+//   davranır. `dizi_boyut` ise RT005 verir çünkü C'de hiç sembol DEĞİLDİR
+//   (tip kontrolünde özel-durum olarak ele alınır). Yani ayrım "yerleşik mi"
+//   değil, "SEMBOL MÜ" ayrımıdır ve `fn_ad` üyeliği tam olarak onu verir.
+//   Bu kusuru 727 dosyalık tarama GÖRMEDİ (korpusta o şekil yoktu, D-356);
+//   ancak sabotaj S133'ün YEŞİL kalması açığa çıkardı.
+işlev rt_ad_sinifi(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fn_ad) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver 2; }
+        i = i + 1;
+    }
+    ver 0;
+}
+// Yığın: dizi KÜÇÜLMEZ (dil `dizi_cikar` sunmuyor) → mantıksal uzunluk sayacı.
+işlev rt_yigin_da_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < p.rt_yigin_n {
+        eğer metin_esit(dizi_al(p.rt_yigin, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev rt_yigin_it(p: &değişken Ayr, ad: metin) -> tam32 {
+    eğer p.rt_yigin_n < dizi_boyut(p.rt_yigin) { dizi_yaz(p.rt_yigin, p.rt_yigin_n, ad); }
+    değilse { dizi_ekle(p.rt_yigin, ad); }
+    p.rt_yigin_n = p.rt_yigin_n + 1;
+    ver 0;
+}
 işlev rt_yuru(p: &değişken Ayr, node: tam32, fn_ad: metin) -> mantıksal {
     eğer node < 0 { ver yanlış; }
     değişken t: metin = dizi_al(p.a_ad, node);
@@ -6111,9 +6159,39 @@ işlev rt_yuru(p: &değişken Ayr, node: tam32, fn_ad: metin) -> mantıksal {
         eğer dizi_al(p.a_cs, node) > 0 {
             değişken c0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, node));
             eğer metin_esit(dizi_al(p.a_ad, c0), "TANIMLAYICI") {
-                eğer metin_esit(dizi_al(p.a_deg, c0), fn_ad) {
-                    rt_tani(p, "RT003", node); ver doğru;
+                değişken cad: metin = dizi_al(p.a_deg, c0);
+                eğer metin_esit(cad, fn_ad) { rt_tani(p, "RT003", node); ver doğru; }
+                // [D-552] ZİNCİRDE özyineleme (C D-545): çağrılan işlev ŞU AN
+                // açık zincirdeyse (a->b->a) bu da özyinelemedir.
+                eğer rt_yigin_da_mi(p, cad) { rt_tani(p, "RT003", node); ver doğru; }
+                değişken sinif: tam32 = rt_ad_sinifi(p, cad);
+                değişken hedef: tam32 = rt_node_ada_gore(p, cad);
+                eğer (sinif == 2) ve (hedef < 0) { rt_tani(p, "RT004", node); ver doğru; }
+                eğer sinif < 2 { rt_tani(p, "RT005", node); ver doğru; }
+                eğer hedef >= 0 {
+                    // ⚠ Derinlik aşılırsa RT005 — SESSİZ ATLAMA DEĞİL (C D-545).
+                    eğer p.rt_yigin_n >= 32 { rt_tani(p, "RT005", node); ver doğru; }
+                    rt_yigin_it(p, fn_ad);
+                    p.rt_sessiz = p.rt_sessiz + 1;
+                    p.rt_dongu = 0;
+                    değişken hb: tam32 = dizi_al(p.a_cb, hedef);
+                    değişken hs: tam32 = dizi_al(p.a_cs, hedef);
+                    değişken k: tam32 = 0;
+                    iken k < hs {
+                        değişken hc: tam32 = dizi_al(p.cocuk, hb + k);
+                        eğer metin_esit(dizi_al(p.a_ad, hc), "BLOK") { rt_yuru(p, hc, cad); }
+                        k = k + 1;
+                    }
+                    p.rt_sessiz = p.rt_sessiz - 1;
+                    p.rt_yigin_n = p.rt_yigin_n - 1;
+                    eğer p.rt_dongu == 1 {
+                        p.rt_dongu = 0;
+                        rt_tani(p, "RT003", node); ver doğru;
+                    }
                 }
+            } değilse {
+                // [D-552] RT005 — DOLAYLI çağrı (callee düz tanımlayıcı değil)
+                rt_tani(p, "RT005", node); ver doğru;
             }
         }
     }
@@ -6130,6 +6208,13 @@ işlev rt_yuru(p: &değişken Ayr, node: tam32, fn_ad: metin) -> mantıksal {
     ver yanlış;
 }
 işlev rt_tani(p: &değişken Ayr, kod: metin, node: tam32) -> tam32 {
+    // [D-552] İç keşif yürüyüşünde tanı BASILMAZ (C D-545 `sessiz` aynası):
+    // callee'nin KENDİ kusuru, o işlev kendi sırasında denetlenirken raporlanır.
+    // Yalnız ZİNCİR bulgusu bayrakla dışarı taşınır.
+    eğer p.rt_sessiz > 0 {
+        eğer metin_esit(kod, "RT003") { p.rt_dongu = 1; }
+        ver 0;
+    }
     dizi_ekle(p.th_kod, kod);
     dizi_ekle(p.th_sat, dizi_al(p.a_sat, node));
     dizi_ekle(p.th_sut, dizi_al(p.a_sut, node));
