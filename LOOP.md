@@ -13,7 +13,9 @@
 
 ## Sirada
 - [ ] CI OLCULDU (D-548): .github/workflows/ci.yml VAR ve claude/** push'unda test_tumu kosuyor, ama origin/main D-349'da iken HEAD D-547 — ~200 artim PUSH EDILMEMIS, yani CI bu islerin hicbirini dogrulamadi. Push etmek DISA DONUK bir islemdir ve Mehmet'in kararidir; ayrica test_tumu bugun WSL'e ozgu seyler (setarch, QEMU, /usr/bin/time) kullaniyor -> CI'da gecip gecmeyecegi OLCULMEDI. Karar verilirse once CI'nin ortam varsayimlarini olc.
-- [ ] SELF-HOST'ta RT DENETIMI HIC YOK (D-545'te olculdu: grep -c RT00 -> checker 0, codegen 0). Parite kapilari kirmizi olmuyor cunku korpusta RT tanisi veren dosya YOK — yani bu bir KOR NOKTA (D-356). Once RT tanisi veren bir dosyanin hangi kapiya girecegini olc, sonra portu tasarla.
+
+
+- [ ] RT004/RT005 + RT003-ZINCIR + RT007 self-host'a portlanmadi (D-550'de olculdu ve bilincli birakildi). RT004/RT005 cagrilanin gerceklzamanli olup olmadigini VE yerlesik kumesini bilmek ister; RT003-zincir cagri grafigi (D-545); RT007 parser'in attigi `cevrim:` alanini ister. Once hangisinin korpusta ULASILABILIR oldugunu olc (D-360 dersi).
 
 
 ## Gunluk
@@ -215,3 +217,12 @@
   YOL USTUNDE D-529'DAN KALAN KUSUR: hata yolundaki echo satirinda backtick KOMUT IKAMESIDIR -> ag hatasi dalinda kapi `require`i calistirmayi deneyecekti. Ayrica S127 ilk turda kirmizi verdi ama ekranda yalnizca bir LINTER IPUCU vardi; artik once gercek `error:` satirlari basiliyor (dosya:satir:sutun ile).
   HANGI KAPI NEYI OLCTU: lean_tam Windows worktree'de rc=0 (31 .olean), WSL fs'te bildirilerek atliyor . lean_sorry 32 dosya, 0 sorry + require artigi yok. Sabotaj S127 (theorem s127_bozuk : 1 = 2 := rfl) -> rc=1, hata satiri ve konumu adiyla basiliyor; geri alinca rc=0.
   YANLIS GIDEN DENEME (BACKTICK TUZAGI UCUNCU KEZ, bu kez ZARARLI): belge yamasini `wsl bash -lc "...python3 - <<PY..."` icinde gecirdim; cift tirnakli kabuk dizgisindeki backtick'ler KOMUT IKAMESI oldu ve `test_tumu` ile `lake` GERCEKTEN CALISTI (elan yeniden indirmeye kalkti, komut 2 dk'da zaman asimina ugradi, CLAUDE.md hic yazilmadi). Care: python'u DOSYAYA yaz, kabuk dizgisine gomme.
+- 2026-09-03 D-550: SELF-HOST'a RT denetimi eklendi (RT001/RT002/RT003) — D-545'te olculen kor nokta kapandi.
+  ONCE HANGI KAPININ GORECEGI OLCULDU (maddenin kendi talimati): gecici fikstur korpusa konup olculdu -> checker_diff 170/171 rc=2 GORUYOR (selfhost/checker.kem); self_driver 137/138 rc=2 GORUYOR (selfhost/codegen.kem); codegen_genis / ct_bariyer GORMUYOR. Sonuncusunun sebebi sasirtici: C `--llvm` RT ihlaline RAGMEN IR uretiyor (rc=0, 193 satir) — WCET yalniz `--check` yolunu durduruyor. Yani bu bir CHECK-ZAMANI isidir.
+  UC-UYGULAMA TUZAGI TAM BEKLENDIGI GIBI ISIRDI: once yalniz checker.kem'e portladim -> checker_diff 171/171 YESIL ama self_driver 137/138 KIRMIZI (o kapi codegen.kem'i okuyor). D-517'de kayitli, madde de uyariyordu, yine de tek uygulamayla baslamak yetmedi.
+  ONARIM: parser GERCEKZAMANLI'yi YUTUYORDU (D-363'un `genel` deseni) -> `çıplak` yan-kanalinin birebir aynasi (rt_node). Tek yuruyus: RT001 (dizi literali/lambda), RT002 (iken/için), RT003 (DOGRUDAN self-call). Yeni tani kodu YOK.
+  IKI INCE PARITE KURALI, ikisi de C'den OKUNDU: (a) C islev basina EN FAZLA BIR tani verir (walk ilk hatada -1 doner) -> self yuruyusu de ilk bulguda durur, yoksa dump ayrisirdi; (b) SIRA — C'de WCET tip kontrolunden SONRA ayri bir gecistir (ana.c), bu yuzden pas kontrol_ust'tan sonra kosar.
+  KAPSAM (bilincli): RT004/RT005 (cagrilanin gerceklzamanli olup olmadigini + yerlesik kumesini bilmek ister), RT003'un ZINCIR dali (D-545), RT007 (parser `çevrim:` alanini atiyor) PORTLANMADI. Kismi port ayrismayi ARTIRMAZ: self bugun hic RT tanisi vermiyordu.
+  YANLIS-POZITIF: 727 .kem tarandi, TEK sapma p3_bildirimler.kem'de C'nin RT005'i (portlanmayan kod). Self'in C'de olmayan RT bastigi tek dosya YOK.
+  HANGI KAPI NEYI OLCTU: checker_diff 171/171 (0 muaf) . self_driver 138/138 + FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . codegen_diff 169/169 . ct_bariyer 14/14 . wcet_test 37/37. Sabotaj 2/2: S128 (checker pasi) -> 170/171 rc=2; S129 (codegen pasi) -> 137/138 rc=2.
+  FIKSTUR tc46_01_realtime.kem: uc negatif sekil AYRI islevlerde (tek-tani kurali yuzunden sart) + IKI pozitif (`temiz` gecerli gerceklzamanli islev, `normal` gerceklzamanli DEGIL -> dongusu serbest). Pozitifler olmasa "her gerceklzamanli islevi reddet" sabotaji GECERDI (D-425).

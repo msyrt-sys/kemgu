@@ -1563,6 +1563,62 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-550: SELF-HOST'a RT DENETİMİ EKLENDİ — kör nokta ölçülüp kapatıldı
+D-545'te ölçülmüştü: `grep -c RT00` → checker **0**, codegen **0**. Yani
+`gerçekzamanlı` bir gövdedeki döngü self-host'ta **sessizce geçiyordu** ve
+hiçbir parite kapısı bunu görmüyordu — çünkü **korpusta RT tanısı veren tek bir
+dosya bile yoktu** (D-356'nın *"korpusta o şekil yok"* sınıfı).
+
+**ÖNCE HANGİ KAPININ GÖRECEĞİ ÖLÇÜLDÜ** (maddenin kendi talimatı). Geçici bir
+fikstür korpusa kondu:
+```
+checker_diff   -> 170/171, rc=2   GORUYOR  (selfhost/checker.kem)
+self_driver    -> 137/138, rc=2   GORUYOR  (selfhost/codegen.kem)
+codegen_genis / ct_bariyer -> GORMUYOR
+```
+Sonuncusunun sebebi ölçüldü ve şaşırtıcıydı: **C `--llvm` RT ihlaline rağmen IR
+üretiyor** (rc=0, 193 satır) — WCET yalnız `--check` yolunu durduruyor. Yani bu
+port bir **check-zamanı** işidir; `--llvm` kapıları burada kör olmak zorunda.
+
+**⚠ ÜÇ-UYGULAMA TUZAĞI TAM OLARAK BEKLENDİĞİ GİBİ ISIRDI.** Önce yalnız
+`checker.kem`e portladım: `checker_diff` **171/171 YEŞİL**, ama `self_driver`
+**137/138 KIRMIZI** — o kapı `codegen.kem`i okuyor. D-517'de kayıtlı; bu kez
+madde de uyarıyordu ve yine de tek uygulamayla başlamak yetmedi.
+
+**ONARIM:** parser `GERCEKZAMANLI`yı **yutuyordu** (D-363'ün `genel` deseni) →
+`çıplak` yan-kanalının birebir aynası (`rt_node`). Ardından tek bir yürüyüş:
+RT001 (dizi literali / lambda) · RT002 (`iken`/`için`) · RT003 (**doğrudan**
+self-call). **Yeni tanı kodu YOK.**
+
+**İki ince parite kuralı, ikisi de C'den OKUNDU:**
+- **C işlev başına EN FAZLA BİR tanı verir** (`walk` ilk hatada `-1` döner) →
+  self-host yürüyüşü de ilk bulguda durur; yoksa dump ayrışırdı.
+- **Sıra:** C'de WCET tip kontrolünden **SONRA** ayrı bir geçiştir (`ana.c`) →
+  pas `kontrol_ust`tan sonra koşar; per-fonksiyon serpiştirilseydi hem tip hem
+  RT tanısı olan dosyada sıra bozulurdu.
+
+**KAPSAM (bilinçli, ölçülmüş):** RT004/RT005 (çağrılanın gerçekzamanlı olup
+olmadığını + yerleşik kümesini bilmek ister) · RT003'ün **zincir** dalı (D-545,
+çağrı grafiği) · RT007 (asm `çevrim:` — parser o alanı atıyor) **PORTLANMADI**.
+*Kısmi port ayrışmayı ARTIRMAZ:* self bugün hiç RT tanısı vermiyordu, portlanan
+her kural farkı yalnızca **azaltır**.
+
+**YANLIŞ-POZİTİF TARAMASI — 727 `.kem`, TEK sapma:** `p3_bildirimler.kem`de
+C'nin **RT005**'i (portlanmayan kod). Self'in C'de olmayan bir RT bastığı
+**tek bir dosya yok**. O dosya `parse_korpus`ta ve `--token`/`parser_diff` ile
+gate'leniyor, `checker_diff`i etkilemiyor.
+
+**Fikstür `tc46_01_realtime.kem`** — üç negatif şekil AYRI işlevlerde (tek-tanı
+kuralı yüzünden şart) + **iki pozitif**: `temiz` (geçerli gerçekzamanlı işlev)
+ve `normal` (gerçekzamanlı DEĞİL; döngüsü serbest kalmalı). Pozitifler olmasa
+*"her gerçekzamanlı işlevi reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**Kapılar:** checker_diff **171/171 (0 muaf)** · self_driver **138/138 +
+FIXPOINT ✓** · check_kapisi 274/281 (0 RED) · check_genis 133/133 ·
+codegen_diff 169/169 · ct_bariyer 14/14 · wcet_test 37/37.
+**Sabotaj 2/2:** S128 (checker pası) → 170/171 rc=2 · S129 (codegen pası) →
+137/138 rc=2.
+
 ### 🔴✅ D-549: `lean_tam` ARTIK GERÇEKTEN DERLİYOR — D-548'in (c) gerekçesi YANLIŞTI
 **D-548'de kendi yazdığım ölçüm yanlıştı ve düzeltiyorum.** Orada
 *"Windows'taki `lake.exe` bayat bir elan kilidiyle bloke ve ağ güncellemesi
