@@ -43,10 +43,11 @@ fi
 # codegen_diff_harness.sh'teki D-339 kuralı BURADA DA geçerli: 127 yalnız
 # ORACLE'da ortamsal sayılır. Oracle sağlam değer verirken aday kalıcı 127
 # diyorsa bu bir ANLAŞMAZLIKTIR, sessizce atlanamaz.
-link_retry() {   # $1=ll  $2=exe
-    clang -x ir "$1" -x none "$RT" -o "$2" 2>/dev/null; [ -x "$2" ] && return 0
-    clang -x ir "$1" -x none "$RT" -o "$2" 2>/dev/null; [ -x "$2" ] && return 0
-    clang -x ir "$1" -x none "$RT" -o "$2" 2>/dev/null; [ -x "$2" ] && return 0
+link_retry() {   # $1=ll  $2=exe   ; LINK_ERR global (kurate denetimi icin)
+    LINK_ERR="$2.linkerr"
+    clang -x ir "$1" -x none "$RT" -o "$2" 2>"$LINK_ERR"; [ -x "$2" ] && return 0
+    clang -x ir "$1" -x none "$RT" -o "$2" 2>"$LINK_ERR"; [ -x "$2" ] && return 0
+    clang -x ir "$1" -x none "$RT" -o "$2" 2>"$LINK_ERR"; [ -x "$2" ] && return 0
     return 1
 }
 run_exe() {   # $1=exe  $2=stdout dosyasi ; RC global
@@ -77,6 +78,31 @@ run_exe() {   # $1=exe  $2=stdout dosyasi ; RC global
 # ÖLÇÜLMÜŞ ve ayrı iş olduğu KANITLANMIŞ durumlar içindir — ve o zaman bile
 # geçici sayılır. (checker_diff'in listesi de bu disiplinle boşa indi.)
 MUAF=""
+muaf_mi_bos_() { :; }
+
+# ---- [D-547] ORACLE LINK BASARISIZLIGI: KURATE LISTE ----
+# ONCESINDE bu dal SESSIZDI (`atla=$((atla+1)); continue`) — yani ORACLE
+# TARAFINDAKI HER GERILEME sessizce yutuluyordu. D-518'de `codegen_diff` icin
+# tam bu kor nokta olculup kurate listeye baglanmisti; ayni sertlestirme.
+#
+# ⚠ LISTE OLCULDU, TAHMIN EDILMEDI (9 dosya, tek tek link hatasi okundu):
+#   BM_MUAF (8) — `kdl_mmio_oku32` / `kdl_mmio_yaz32`: GERCEK bare-metal
+#     semboller, host runtime'da YOK. Bunlar `--mimari arm64` yolunda derlenir;
+#     host'ta link edilememeleri MESRUDUR.
+#   ORACLE_KUSUR (1) — `05_yapi`: bare-metal DEGIL. C oracle'in KENDISI
+#     gecersiz IR uretiyor ("base element of getelementptr must be sized",
+#     D-419'da olculdu). Gercek bir dil kusuru; self-host paritesi isi DEGIL.
+#
+# ⚠ KAYITLI IDDIA YANLISTI: "9 atlama, hepsi mesru bare-metal link hatasi"
+#   deniyordu; dokuzuncusu bare-metal degil, bir ORACLE KUSURUDUR.
+#
+# ⚠ AD-BAZLI DEGIL, SEBEP-BAZLI: BM_MUAF'taki bir dosya BASKA bir sebeple
+#   linklenemezse kapi KIRMIZI olur (asagida `kdl_mmio_` araniyor). Duz bir
+#   ad listesi o gerilemeyi de yutardi.
+BM_MUAF="kem_heap kem_mmio_kernel mmio_smoke virtio_blk_config_selfhost virtio_net_mac_selfhost virtio_net_selfhost virtio_selfhost virtio_selfhost_rw"
+ORACLE_KUSUR="05_yapi"
+listede_() { case " $2 " in *" $1 "*) return 0;; esac; return 1; }
+
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
 pass=0; fail=0; atla=0; muaf_say=0
@@ -104,7 +130,25 @@ for f in test/ornekler/*.kem stdlib/temel/*.kem; do
         fi
         pass=$((pass+1)); continue          # iki taraf da reddediyor → PARİTE
     fi
-    link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe" || { atla=$((atla+1)); continue; }
+    if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
+        if listede_ "$b" "$BM_MUAF"; then
+            if grep -q "kdl_mmio_" "$LINK_ERR" 2>/dev/null; then
+                echo "  ⚠ $b — bare-metal MMIO sembolu (host'ta link edilemez) atlandi"
+                atla=$((atla+1)); continue
+            fi
+            echo "  🔴 $b — BM_MUAF listesinde ama link hatasi MMIO DEGIL:"
+            head -2 "$LINK_ERR" | sed 's/^/      /'
+            fail=$((fail+1)); continue
+        fi
+        if listede_ "$b" "$ORACLE_KUSUR"; then
+            echo "  ⚠ $b — C oracle GECERSIZ IR uretiyor (D-419, bilinen dil kusuru) atlandi"
+            atla=$((atla+1)); continue
+        fi
+        echo "  🔴 $b — oracle link BASARISIZ ve kurate listede YOK:"
+        head -2 "$LINK_ERR" | sed 's/^/      /'
+        echo "      (kok onarilmali; ya da SEBEBI OLCULUP BM_MUAF/ORACLE_KUSUR'a eklenmeli)"
+        fail=$((fail+1)); continue
+    fi
     run_exe "$TMP/$b.c.exe" "$TMP/$b.c.out"; coracle=$RC
     if [ "$coracle" -eq 127 ]; then
         echo "  ⚠ $b — oracle 127 (Defender exec yarışı, ortamsal) atlandı"

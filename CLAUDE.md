@@ -1563,6 +1563,51 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🧹 D-547: `codegen_genis`in 9 ATLAMASI ÖLÇÜLDÜ — kayıtlı gerekçe YANLIŞTI
+`codegen_genis`'in oracle-link dalı **tamamen sessizdi**
+(`atla=$((atla+1)); continue` — mesaj YOK) → **oracle tarafındaki her gerileme
+sessizce yutuluyordu.** D-518'de `codegen_diff` için ölçülen kör noktanın
+birebir aynısı; aynı sertleştirme uygulandı.
+
+**⚠ KAYITLI İDDİA YANLIŞTI.** Roadmap *"9 atlama, hepsi meşru bare-metal link
+hatası"* diyordu. Dokuz link hatası **tek tek okundu**:
+```
+kem_heap · kem_mmio_kernel · mmio_smoke · virtio_blk_config_selfhost
+virtio_net_mac_selfhost · virtio_net_selfhost · virtio_selfhost
+virtio_selfhost_rw          -> kdl_mmio_oku32 / kdl_mmio_yaz32   (8, GERCEKTEN bare-metal)
+05_yapi                     -> "base element of getelementptr must be sized"
+                               (1, bare-metal DEGIL — C ORACLE KUSURU, D-419)
+```
+Dokuzuncusu bare-metal değil, **oracle'ın kendi geçersiz IR'ı**. *"Muafiyet
+gerekçesi de bir iddiadır"* (D-406) dersinin tekrarı.
+
+**⚠ LİSTE AD-BAZLI DEĞİL, SEBEP-BAZLI.** `BM_MUAF`'taki bir dosya **başka** bir
+sebeple linklenemezse kapı KIRMIZI olur (`kdl_mmio_` aranıyor). Düz bir ad
+listesi o gerilemeyi de yutardı — muafiyetin kabul edilebilirliği
+GENİŞLETMEMESİ kuralı (D-421).
+
+**Kapı:** codegen_genis **70/70 (9 atlandı — her biri artık ADIYLA ve
+GEREKÇESİYLE basılıyor)** · codegen_diff 169/169 · sifir_bolme 28/28.
+**Sabotaj 2/2:** S122 (`mmio_smoke`u listeden çıkar) → *"oracle link BAŞARISIZ
+ve kurate listede YOK"*, 70/71, rc=2 · S123 (`05_yapi`yi `BM_MUAF`a taşı) →
+*"listede ama link hatası MMIO DEĞİL"*, 70/71, rc=2. İkisi de yeni mantığın
+**iki dalını da** ölçüyor.
+
+**⚠⚠ ÜÇÜNCÜ SABOTAJ GEÇERSİZDİ VE BİR ŞEY ÖĞRETTİ.** S124 gerçek bir *oracle
+gerilemesi* denemesiydi (D-546'nın panik baytını 29→27 yap → geçersiz IR).
+Kapı rc=2 verdi ama **kendi mesajlarından hiçbirini basmadı**: o gerileme önce
+**`build/codegen`in kurulmasını** kırıyor, kapı hiç koşmuyor (S113 sınıfı —
+sabotaj kapıyı değil YAPIMI ölçtü).
+> **Bunun kendisi bir bulgu:** bu dala ulaşacak kadar ağır bir oracle
+> gerilemesi, çoğunlukla **bootstrap'ı daha önce ve daha gürültülü** kırar.
+> Kurasyonun asıl değeri o sınıf değil, **tek bir dosyayı** etkileyen dar
+> gerilemelerdir — S122/S123 tam olarak o dalları ölçüyor.
+
+**⚠ ÖLÇÜM ARACIM YİNE YANILDI:** ilk taramada `undefined symbol:` (lld sözdizimi)
+aradım; bu ortamda bağlayıcı **GNU ld** ve *"undefined reference to"* yazıyor →
+sekiz dosyanın da sembol listesi **BOŞ** göründü ve bir an *"sebep bilinmiyor"*
+diye kaydedecektim.
+
 ### 🔴✅ D-546: `vektor_eleman` ARALIK DIŞI İNDEKSTE UB — cevap `-O2`de DEĞİŞİYORDU
 Değişmez avı **SIMD eksenine** taşındı. Altı şeklin dördü tuttu:
 ```
