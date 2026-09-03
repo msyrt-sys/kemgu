@@ -59,9 +59,45 @@ if [ "$kotu" -ne 0 ]; then
     echo "=== Lean ispat borcu: $kotu/$dosya dosyada AÇIK sorry/admit ==="
     exit 1
 fi
+# ============================================================================
+# [D-548] KULLANILMAYAN `require` KORUYUCUSU — D-529'un onarımını SABİTLER.
+# ----------------------------------------------------------------------------
+# ÖLÇÜLEN TARİH: `lakefile.lean` bildirim artığı bir `require mathlib` taşıyordu
+# ve HİÇBİR dosya Mathlib'i import etmiyordu. Sonuç: `lake build` mathlib4'ü
+# klonlamaya çalışıp 11 DAKİKA sonra düşüyordu → ispatlar AYLARCA hiç
+# tip-denetlenmedi ve bunu hiçbir kapı görmedi ("0 sorry" bir tip denetimi
+# DEĞİLDİR).
+#
+# ⚠ KURAL "hiç `require` olmasın" DEĞİL — o, meşru bir bağımlılığı da
+#   yasaklardı. Kural D-529'un kendi cümlesidir: bir `require` ancak GERÇEK bir
+#   kullanıma dayanıyorsa meşrudur. Yani `require X` varsa, en az bir `.lean`
+#   dosyası `import X...` etmelidir; etmiyorsa bu bir BİLDİRİM ARTIĞIDIR.
+#
+# ⚠ NEDEN BU KAPIDA: `lean_sorry` `test_tumu`da HER KOŞUMDA çalışır;
+#   `calistir_lean_tam` ise opt-in ve bu ortamda lean/lake YOK (ölçüldü:
+#   WSL'de `command -v lake lean elan` → hiçbiri). Yani gerçek derleme kapısı
+#   burada ATEŞLENEMEZ; ateşlenebilen tek şey, onu KOŞULAMAZ kılan kök
+#   nedenin geri gelmediğini denetlemektir. Ayrı kapı açmak envanteri
+#   gereksiz bölerdi (D-514/D-546 deseni).
+LAKEFILE=$(find "$DIZIN" -name "lakefile.lean" -not -path "*/.lake/*" | head -1)
+if [ -n "$LAKEFILE" ]; then
+    req=$(grep -oE "^[[:space:]]*require[[:space:]]+[A-Za-z0-9_]+" "$LAKEFILE"           | awk '{print $2}' | sort -u)
+    for r in $req; do
+        # Lean import adı büyük harfle başlar: `require mathlib` -> `import Mathlib`
+        buyuk=$(printf '%s' "$r" | cut -c1 | tr 'a-z' 'A-Z')$(printf '%s' "$r" | cut -c2-)
+        if ! grep -rqE "^[[:space:]]*import[[:space:]]+$buyuk"                --include="*.lean" "$DIZIN" 2>/dev/null; then
+            echo "🔴 $LAKEFILE: 'require $r' var ama HİÇBİR dosya 'import $buyuk' etmiyor."
+            echo "   Bu bir BİLDİRİM ARTIĞIDIR ve 'lake build'i koşulamaz kılar (D-529)."
+            echo "   Ya gerçek bir kullanım ekle ya da satırı KALDIR."
+            exit 1
+        fi
+    done
+fi
+
 # [D-529] Uyarı GÜNCELLENDİ: `lake build` artık koşulabiliyor ama BU kapıda
 # değil — ayrı ve OPT-IN hedef `calistir_lean_tam`da (test_tumu'ya bağlı değil;
 # lean/lake bu depoda Windows'ta kurulu, takım WSL'de koşuyor).
 # Bu kapı yalnız SAYAR; tip denetimi ötekinin işidir. İkisi birbirini tamamlar:
 # `sorry`suz ama DERLENMEYEN bir dosya hiçbir şey kanıtlamaz.
-echo "=== Lean ispat borcu: $dosya dosya, 0 sorry/admit (derleme: calistir_lean_tam) ==="
+echo "=== Lean ispat borcu: $dosya dosya, 0 sorry/admit; lakefile 'require' artigi YOK ==="
+echo "    (GERÇEK tip denetimi ELLE: make calistir_lean_tam — lean/lake bu ortamda YOK)"

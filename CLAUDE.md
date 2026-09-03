@@ -1563,6 +1563,51 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ⛔✅ D-548: `lean_tam`ı otomatikleştirmenin ÜÇ YOLU DA ÖLÇÜLDÜ — hiçbiri bugün ateşlenmiyor
+Madde *"kod yazmadan önce hangisinin GERÇEKTEN koşulacağını değerlendir"*
+diyordu. Üçü de ölçüldü ve **üçü de bugün ateşlenemez:**
+
+| seçenek | ölçüm |
+|---|---|
+| (a) belgede "elle koşulacak kapılar" listesi | belge eskir; D-530'un ARM64 listesi meşruydu çünkü o iş **otomatikleştirilemez** — bu iş edilebilir |
+| (b) CI'ya bağla | **CI VAR** (`.github/workflows/ci.yml`, `claude/**` push'unda `test_tumu`) ama `origin/main` **D-349**'da, HEAD **D-547** → **~200 artım push EDİLMEMİŞ**; CI bu işlerin hiçbirini görmedi |
+| (c) WSL'e lake kur, `test_tumu`ya bağla | **WSL'de lean/lake/elan YOK** (ölçüldü: `command -v` → hiçbiri). Windows'taki `lake.exe` ise **bayat bir elan kilidiyle** bloke (*"waiting for previous installation request … held by PID 30356"*) ve ağ güncellemesi istiyor |
+
+**SONUÇ: `lean_tam` OPT-IN KALDI.** Sessizce atlayan (ya da her koşumda
+"atlandı" basan) bir kapı eklemek, D-486/D-490'da kapatılan kapsam
+yanılsamasının ta kendisi olurdu.
+
+**🎯 BUNUN YERİNE ATEŞLENEBİLEN ŞEY KAPILANDI — D-529'un onarımı KORUMASIZDI.**
+`lake build`i aylarca koşulamaz kılan şey bir ispat sorunu değil,
+**kullanılmayan bir `require mathlib`** idi. O satır geri gelirse ispatlar
+yine sessizce derlenmez olur ve **hiçbir şey fark etmez**: `lean_tam` opt-in,
+`lean_sorry` ise lakefile'a bakmıyordu (*"0 sorry" bir tip denetimi DEĞİLDİR*).
+Kural **`lean_sorry`ye** eklendi — o kapı `test_tumu`da **her koşumda** çalışır
+(ayrı kapı envanteri gereksiz bölerdi; D-514/D-546 deseni).
+
+**⚠ KURAL "`require` OLMASIN" DEĞİL** — o, meşru bir bağımlılığı da yasaklardı.
+Kural D-529'un **kendi cümlesidir**: bir `require` ancak **gerçek bir kullanıma**
+dayanıyorsa meşrudur → `require X` varsa en az bir dosya `import X…` etmeli.
+**Pozitif ölçüm (S126) bunu kanıtlar:** gerçekten import edilen bir `require`
+kapıdan **geçer** (rc=0). Yalnız negatif şekil olsaydı *"her `require`i reddet"*
+sabotajı kapıdan geçerdi (D-425).
+
+**🔴 KAPI İLK KOŞUMUNDA GERÇEK BİR ŞEY BULDU:** WSL ağacındaki `lakefile.lean`
+**hâlâ eski sürümdü** — D-529'un onarımı Windows'ta yapılmış, gate'lerin
+koştuğu ağaca **hiç kopyalanmamıştı**. Yani o ortamda `lake build` bugün de
+eski gerekçeyle düşerdi. (İki-ağaç senkron kaybının bu oturumdaki **üçüncü**
+örneği.)
+
+**Kapı:** lean_sorry **32 dosya, 0 sorry/admit + lakefile `require` artığı YOK**.
+**Sabotaj 2/2:** S125 (kullanılmayan `require` geri koy) → rc=2 ·
+**S126 POZİTİF** (gerçekten `import` edilen `require`) → **rc=0**.
+
+**⚠ KENDİ KAPIMDA BİR KUSUR — `bash -n` GÖRMEDİ.** Mesaj dizgilerinde
+backtick kullanmıştım; çift tırnak içinde backtick **komut ikamesidir**, yani
+kapı `require`i çalıştırmayı deneyecekti. Sözdizimi denetimi bunu **geçerli**
+sayar; yalnız satırı okumak yakaladı. (D-456'da `check_genis`in muafiyet
+dizgisinde ölçülen sınıfın aynısı.)
+
 ### 🧹 D-547: `codegen_genis`in 9 ATLAMASI ÖLÇÜLDÜ — kayıtlı gerekçe YANLIŞTI
 `codegen_genis`'in oracle-link dalı **tamamen sessizdi**
 (`atla=$((atla+1)); continue` — mesaj YOK) → **oracle tarafındaki her gerileme
