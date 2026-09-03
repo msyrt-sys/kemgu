@@ -1563,6 +1563,58 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-549: `lean_tam` ARTIK GERÇEKTEN DERLİYOR — D-548'in (c) gerekçesi YANLIŞTI
+**D-548'de kendi yazdığım ölçüm yanlıştı ve düzeltiyorum.** Orada
+*"Windows'taki `lake.exe` bayat bir elan kilidiyle bloke ve ağ güncellemesi
+istiyor"* demiştim. İkisi de yanlış:
+- Kilit **geçiciydi** (eşzamanlı bir çağrının kilidi).
+- Ağ denemesi, `lake.exe`i **proje dizini DIŞINDA** çalıştırdığım içindi: orada
+  elan projenin pinini göremez, **varsayılan** toolchain'i çözüp indirmeye
+  kalkar. Proje `leanprover/lean4:v4.29.0` pinliyor ve o sürüm **KURULU**.
+
+**ÖLÇÜM (doğrusu):** WSL→Windows interop **çalışıyor** ve proje dizininde
+`lake build` **çevrimdışı** tamamlanıyor — **33 iş, 58 sn, rc=0**.
+
+**🎯 ASIL KÖK: KEŞİFTİ, ORTAM DEĞİL.** D-529 bu kapıyı *"lean/lake Windows'ta,
+takım WSL'de"* diye opt-in bırakmıştı. Gerçek sebep: harness `lake`i ararken ne
+`/mnt/c/.../.elan/bin`e ne de **`.exe`** adına bakıyordu → WSL'de **her zaman
+atlıyordu**. Arama düzeltildi; kapı artık Windows worktree'sinden koşulduğunda
+**ispatları gerçekten derliyor**.
+
+**⚠ AMA BİR ORTAM SINIRI GERÇEK — ve incedir:** Windows `lake`, projesi **WSL
+dosya sisteminde** olan bir ağacı **derleyemez**. Interop'ta cwd Windows'a
+**UNC** görünür (`\wsl.localhost\...`); `lake --version` çalışır (dosya
+sistemi işi yok) ama `lake build` yalnız *"error: 1"* deyip düşer.
+```
+/mnt/c worktree   -> 33 is, 58 sn, rc=0      (DERLIYOR)
+~/kemgu (WSL fs)  -> rc=1, "error: 1"        (UNC cwd)
+```
+Kapı bu durumu artık **ADIYLA bildirip** atlıyor (sebep + çözüm yazılı), eski
+yanıltıcı *"lake YOK"* mesajıyla değil.
+
+**`test_tumu`ya BAĞLANMADI — D-548'in kararı GEÇERLİ, ama artık DOĞRU gerekçeyle:**
+takım `~/kemgu`da (WSL fs) koşuyor ve orada bu kapı **yapısal olarak**
+koşamaz. Her koşumda "atlandı" basan bir kapı eklemek D-486/D-490'da kapatılan
+kapsam yanılsamasıdır.
+
+**🔴 YOL ÜSTÜNDE D-529'DAN KALAN BİR KUSUR:** hata yolundaki
+`echo "… bir \`require\` dış klon istiyor."` satırında **backtick komut
+ikamesidir** → ağ hatası dalında kapı `require`i çalıştırmayı deneyecekti.
+(Aynı sınıfı D-548'de **kendi** kapımda da yapmıştım; ikisi de düzeltildi.)
+
+**Hata raporlaması da düzeltildi:** S127 ilk turda kırmızı verdi ama ekranda
+yalnız bir **linter ipucu** vardı — kırmızının SEBEBİ görünmüyordu. Artık önce
+gerçek `error:` satırları basılıyor:
+```
+error: Kemgu/Drf/Drf.lean:123:0: Not a definitional equality: the left-hand side
+error: Kemgu/Drf/Drf.lean:123:30: Type mismatch
+```
+
+**Kapılar:** lean_tam **Windows worktree'de rc=0 (31 .olean)**; WSL fs'te
+**bildirilerek atlıyor** · lean_sorry 32 dosya, 0 sorry + `require` artığı yok.
+**Sabotaj S127** (`theorem s127_bozuk : 1 = 2 := rfl`) → gate **rc=1**, hata
+satırı ve konumu adıyla basılıyor; geri alınca rc=0.
+
 ### ⛔✅ D-548: `lean_tam`ı otomatikleştirmenin ÜÇ YOLU DA ÖLÇÜLDÜ — hiçbiri bugün ateşlenmiyor
 Madde *"kod yazmadan önce hangisinin GERÇEKTEN koşulacağını değerlendir"*
 diyordu. Üçü de ölçüldü ve **üçü de bugün ateşlenemez:**
@@ -1571,7 +1623,7 @@ diyordu. Üçü de ölçüldü ve **üçü de bugün ateşlenemez:**
 |---|---|
 | (a) belgede "elle koşulacak kapılar" listesi | belge eskir; D-530'un ARM64 listesi meşruydu çünkü o iş **otomatikleştirilemez** — bu iş edilebilir |
 | (b) CI'ya bağla | **CI VAR** (`.github/workflows/ci.yml`, `claude/**` push'unda `test_tumu`) ama `origin/main` **D-349**'da, HEAD **D-547** → **~200 artım push EDİLMEMİŞ**; CI bu işlerin hiçbirini görmedi |
-| (c) WSL'e lake kur, `test_tumu`ya bağla | **WSL'de lean/lake/elan YOK** (ölçüldü: `command -v` → hiçbiri). Windows'taki `lake.exe` ise **bayat bir elan kilidiyle** bloke (*"waiting for previous installation request … held by PID 30356"*) ve ağ güncellemesi istiyor |
+| (c) WSL'e lake kur, `test_tumu`ya bağla | **⚠ BU SATIR D-549'DA DÜZELTİLDİ.** WSL'de lean/lake YOK doğru; ama *"Windows lake ağ istiyor"* YANLIŞTI — ölçümü proje dizini DIŞINDA yapmıştım, orada elan projenin pinini görmez. Gerçek engel **UNC cwd**: Windows lake, WSL dosya sistemindeki bir projeyi derleyemez. Karar (opt-in) değişmedi, GEREKÇE değişti. |
 
 **SONUÇ: `lean_tam` OPT-IN KALDI.** Sessizce atlayan (ya da her koşumda
 "atlandı" basan) bir kapı eklemek, D-486/D-490'da kapatılan kapsam

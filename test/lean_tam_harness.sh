@@ -28,19 +28,65 @@ for d in "$HOME/.elan/bin" "/c/Users/${USER:-${USERNAME:-}}/.elan/bin"; do
 done
 export PATH
 
-if ! command -v lake >/dev/null 2>&1; then
+# [D-549] WSL → WINDOWS INTEROP. D-529 bu kapıyı "lean/lake Windows'ta, takım
+# WSL'de" diye opt-in bırakmıştı; ÖLÇÜLDÜ ve o gerekçe YANLIŞTI — engel ortam
+# değil KEŞİFTİ: arama ne `/mnt/c/.../.elan/bin`e ne de `.exe` adına bakıyordu.
+# WSL'den `lake.exe` çalışır ve proje dizinindeki `lean-toolchain` (v4.29.0,
+# KURULU) çözülür → ÇEVRİMDIŞI derler (ölçüldü: 33 iş, 58 sn).
+# ⚠ Dizin DIŞINDA çalıştırmak YANILTIR: orada elan projenin pinini görmez,
+#   VARSAYILAN toolchain'i çözüp indirmeye kalkar (ilk ölçümüm tam bu yüzden
+#   "ağ gerekiyor" dedi ve YANLIŞTI).
+LAKE=""
+command -v lake >/dev/null 2>&1 && LAKE=lake
+if [ -z "$LAKE" ]; then
+    for c in /mnt/c/Users/*/.elan/bin/lake.exe "$HOME/.elan/bin/lake.exe"; do
+        [ -x "$c" ] && { LAKE="$c"; break; }
+    done
+fi
+
+# [D-549] ⚠ WINDOWS lake + WSL DOSYA SİSTEMİ = ÇALIŞMAZ, ve sebebi INCEDIR.
+# Interop'ta cwd Windows'a UNC olarak görünür (`\wsl.localhost\...`); `lake
+# --version` çalışır (dosya sistemi işi yok) ama `lake build` yalnız
+# "error: 1" deyip düşer. Yani proje /mnt/c altında (gerçek bir Windows yolu)
+# DEĞİLSE bu kapı koşamaz. ÖLÇÜLDÜ: /mnt/c worktree'sinde 33 iş / 58 sn / rc=0;
+# ~/kemgu (WSL fs) kopyasında rc=1.
+# Bu, D-529'un "lean/lake Windows'ta, takım WSL'de" gerekçesinin DÜZELTİLMİŞ
+# hâlidir: engel lake'in NEREDE KURULU olduğu değil, PROJENİN NEREDE DURDUĞUDUR.
+case "$LAKE" in
+  *.exe)
+    case "$PWD" in
+      /mnt/*|[A-Za-z]:*) : ;;   # gerçek Windows yolu — interop çalışır
+      *)
+        echo "⚠ Windows lake + WSL dosya sistemi — kapı ATLANDI (ortam sınırı)"
+        echo "  Sebep: cwd Windows'a UNC görünüyor (\wsl.localhost\...);"
+        echo "         lake build UNC cwd'de çalışmaz. --version çalışır, build çalışmaz."
+        echo "  Çözüm: bu hedefi /mnt/c altındaki worktree'den koştur."
+        exit 0 ;;
+    esac ;;
+esac
+
+if [ -z "$LAKE" ]; then
     echo "⚠ lake YOK — Lean ispatları derlenemedi, kapı ATLANDI (ortam yeteneği)"
     echo "  Kurulum: elan (https://github.com/leanprover/elan) + lean-toolchain'deki sürüm"
     exit 0
 fi
 
 cd "$PROJE" || exit 1
-cikti=$(lake build 2>&1); rc=$?
+cikti=$("$LAKE" build 2>&1); rc=$?
 if [ "$rc" -ne 0 ]; then
     echo "🔴 lake build BAŞARISIZ (rc=$rc):"
-    printf '%s\n' "$cikti" | tail -20 | sed 's/^/     /'
+    # [D-549] ONCE gercek `error:` satirlari — sabotaj S127'de `tail -20`
+    # yalnizca bir LINTER IPUCU gosteriyordu ve kirmizinin SEBEBI gorunmuyordu.
+    hata_satir=$(printf %s "$cikti" | grep -E "error:" | head -6)
+    if [ -n "$hata_satir" ]; then
+        printf %s "$hata_satir" | sed "s/^/     /"
+        echo "     ---- (baglam: son 8 satir) ----"
+        printf %s "$cikti" | tail -8 | sed "s/^/     /"
+    else
+        printf '%s\n' "$cikti" | tail -20 | sed 's/^/     /'
+    fi
     if printf '%s\n' "$cikti" | grep -q "cloning\|exited with code 128"; then
-        echo "     → AĞ/BAĞIMLILIK hatası: bir `require` dış klon istiyor."
+        echo "     → AĞ/BAĞIMLILIK hatası: bir 'require' dış klon istiyor."
         echo "       D-529: mathlib bildirim artığıydı ve kaldırıldı; yeni bir"
         echo "       bağımlılık eklendiyse GERÇEK bir import'a dayanmalı."
     fi
