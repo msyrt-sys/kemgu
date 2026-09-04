@@ -10,6 +10,14 @@ jobs:
   build-windows:
     name: Windows (MSYS2 UCRT64 + Clang64)
     runs-on: windows-latest
+    # [D-558] PATH: is `msystem: UCRT64` kabugunda kosuyor ama `clang`
+    # Clang64 alt-sisteminden geliyor (mingw-w64-clang-x86_64-clang) ve
+    # /clang64/bin UCRT64 PATH'inde DEGIL. OLCULDU (CI logu):
+    #   gcc.exe ... 16.2.0        <- OK
+    #   clang: command not found  <- exit 127
+    # CLAUDE.md zaten bunu sart kosuyor: clang64/bin ONCE gelmeli.
+    env:
+      MSYS2_PATH_TYPE: inherit
     defaults:
       run:
         shell: msys2 {0}
@@ -30,6 +38,7 @@ jobs:
 
       - name: Derleyici kontrolu
         run: |
+          export PATH=/clang64/bin:$PATH
           gcc --version | head -1
           clang --version | head -1
           mingw32-make --version | head -1

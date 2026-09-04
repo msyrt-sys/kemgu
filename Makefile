@@ -653,7 +653,14 @@ calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codege
 calistir_qemu_cekirdek: calistir_qemu_smoke calistir_sha256_selfhost_arm \
                         calistir_virtio_selfhost_arm calistir_bignum_selfhost_arm \
                         calistir_kem_os_arm
-	@echo "=== QEMU cekirdek kapisi: 5/5 temsilci gecti ==="
+	@# [D-557] OZET, ATLAMAYI GIZLEMEMELI. CI'da olculdu: QEMU yokken bes
+	@# temsilcinin BESI de "atlandi" dedi ama ozet yine "5/5 gecti" basiyordu
+	@# (D-486 kapsam yanilsamasi). Artik QEMU varligi ayrica bildirilir.
+	@if command -v qemu-system-aarch64 >/dev/null 2>&1; then \
+	  echo "=== QEMU cekirdek kapisi: 5/5 temsilci gecti ==="; \
+	else \
+	  echo "=== QEMU cekirdek kapisi: QEMU YOK - 5 temsilcinin BESI DE ATLANDI (hicbir sey olculmedi) ==="; \
+	fi
 
 # [D-462] "kod var ama hicbir olcum atesliyor mu" kapisi. Kaynak/derleyici
 # GEREKTIRMEZ: kollari json.kem'den, olcumleri test_json.kem'den okur.
