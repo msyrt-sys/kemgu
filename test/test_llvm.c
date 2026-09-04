@@ -222,13 +222,31 @@ static int derle_dosya_ve_calistir(const char *kem_yol) {
 /* `kemgu --llvm <kem_yol>` ciktisini LLVM 'opt -passes=verify'dan gecir.
  * 1 = IR gecerli (her BB terminator'lu, dominance vs.), 0 = reddedildi.
  * C1/C2 kabul kriteri: emit edilen modul opt verifier'dan gecmeli. */
+/* [D-555] `opt` VAR MI? Olculdu (CI): arac YOKSA `system()` sifir disi doner ve
+ * test "IR reddedildi" der — yani EKSIK ARAC, DERLEYICI KUSURU gibi raporlanir.
+ * `2>/dev/null` de "command not found"u yutar. Bu yanlis atif, CI'da 18 testi
+ * derleyici hatasi gibi gosterdi. Yetenek BIR KEZ olculur ve sonda AYRICA
+ * bildirilir (D-486: eksik ikili sessiz/yanlis-atifli gecilemez). */
+static int g_opt_yok = 0;
+static int opt_var_mi(void) {
+    static int durum = -1;   /* -1 = henuz olculmedi */
+    if (durum < 0) {
+        char k[256];
+        snprintf(k, sizeof(k), "opt --version > %s 2>%s", DEV_NULL, DEV_NULL);
+        durum = (system(k) == 0);
+        if (!durum) g_opt_yok = 1;
+    }
+    return durum;
+}
 static int kemgu_llvm_opt_verify(const char *kem_yol) {
+
     char komut[1024];
     snprintf(komut, sizeof(komut),
              "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
     if (system(komut) != 0) return 0;
     snprintf(komut, sizeof(komut),
              "opt -passes=verify -disable-output %s 2>%s", LL_PATH, DEV_NULL);
+    if (!opt_var_mi()) return 0;   /* [D-555] arac yok — sonda bildirilir */
     return system(komut) == 0;
 }
 
@@ -3771,6 +3789,13 @@ int main(void) {
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
            toplam_test, basarili, basarisiz);
+    if (g_opt_yok) {
+        printf("\nORTAM HATASI: `opt` BULUNAMADI (LLVM araclari kurulu degil).\n");
+        printf("  Yukaridaki `opt -passes=verify` testleri IR KUSURU DEGIL,\n");
+        printf("  EKSIK ARAC yuzunden dustu. Kurulum: apt-get install llvm\n");
+        printf("  (D-555: bu ayrim yapilmazsa eksik arac derleyici hatasi gibi gorunur.)\n");
+    }
     gecici_yollari_temizle();   /* D-297: PID'li artiklari birak */
+
     return basarisiz > 0 ? 1 : 0;
 }

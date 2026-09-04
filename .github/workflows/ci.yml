@@ -74,7 +74,10 @@ jobs:
       - name: "apt: clang + gcc + make"
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang gcc make file
+          # [D-555] `llvm` ZORUNLU: test_llvm.c `opt -passes=verify` calistiriyor.
+          # Yoksa 18 test 'IR reddedildi' diye DUSER — oysa eksik olan ARACTIR.
+          sudo apt-get install -y clang gcc make file llvm
+          opt --version | head -2
           gcc --version | head -1
           clang --version | head -1
 
