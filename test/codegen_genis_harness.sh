@@ -25,7 +25,15 @@ set -u
 KEMGU=${KEMGU:-build/kemgu${EXE}}
 CODEGEN=${CODEGEN:-build/codegen${EXE}}
 RT=${RT:-build/kdl_runtime.o}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/cggenis); mkdir -p "$TMP"
+# [D-561] GECICI DIZIN DEPO-GORELI OLMALI, /tmp DEGIL.
+# OLCULDU (Windows CI): `[ -f ]` dosyayi VAR derken `/usr/bin/diff` ayni
+# yol icin "No such file or directory" diyordu. Sebep KARISIK ARAC ZINCIRI:
+# recipe kabugu ile MSYS2 `diff` FARKLI `/tmp` baglamalarini cozuyor
+# (Git-for-Windows sh vs MSYS2), yani ayni dizgi iki AYRI gercek dizine
+# isaret ediyor. Depo-goreli yol bu belirsizligi tumden kaldirir ve
+# D-297in "build/ altinda PID-benzersiz yol" disiplinine de uyar.
+TMP=$(mktemp -d "build/cggenis.XXXXXX" 2>/dev/null || echo "build/cggenis.$$")
+mkdir -p "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
 # [D-486] EKSIK IKILI = HATA, ATLAMA DEGIL. Bu kapinin make hedefi
