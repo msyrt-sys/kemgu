@@ -1563,6 +1563,43 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🎉 D-560→D-566: CI TAM YEŞİL — Linux **ve** Windows
+D-554 CI'yı ilk kez çalıştırdı; bu seri Windows'u da yeşile çekti. Her adım
+aynı döngüyle ilerledi: **logu oku → hipotez → ölç → onar**.
+
+| # | logdaki kanıt | kök | onarım |
+|---|---|---|---|
+| D-560 | 67 program *"STDOUT farklı"* ama `diff` **tek satır bile** basmıyor | `diff -q` eksik dosyada da sıfır-dışı döner; ayrıntılı `diff`in hatası `2>/dev/null` ile yutulmuş | eksik dosya / boş diff / gerçek fark **üç ayrı mesaj** |
+| D-561 | `[ -f ]=VAR` ama `/usr/bin/diff`: *No such file* | recipe kabuğu (Git-for-Windows `sh`) ile MSYS2 araçları **ayrı `/tmp` bağlamaları** çözüyor | geçici dizin **depo-göreli** |
+| D-562 | bir sonraki kapı **aynı imzayla** düştü | kök tek harness'ta değil **paylaşılan kalıpta** | **27 harness**'ın hepsi çevrildi |
+| D-563 | `/usr/bin/diff: /dev/fd/63: No such file` | **süreç ikamesi** `<(...)` MSYS2 araçlarıyla çalışmaz | gerçek dosyaya yaz |
+| D-565 | `exit=127` ama ham koşum *"PANIK: sifira bolme"* basıyor | **134 = 128+SIGABRT POSIX'e özgü**; Windows'ta `abort()` → 127 (trivial programla ölçüldü) | `ABORT_RC` platforma göre |
+| D-566 | `zirve RSS 5544 KB > eşik 4096` | eşik **Linux** ölçümünden türetilmişti | eşik platforma göre (Win 12288) |
+
+**⚠ ORTAK SINIF: POSIX VARSAYIMLARI.** Altısının hiçbiri derleyici kusuru
+değildi — hepsi **kapıların** taşınabilirlik varsayımıydı (`/tmp` bağlaması,
+`/dev/fd`, sinyal-tabanlı çıkış kodu, RSS muhasebesi). D-477/D-481'in
+(POSIX `system()`/çıkış kodu) aynı ailesi.
+
+**⚠⚠ D-564 GEÇERSİZ BİR HİPOTEZDİ — ve bunu sabotaj değil ÖLÇÜM çürüttü.**
+Israrlı `127`yi D-413'ün Defender yarışına yorup 12 kez yeniden deneme
+ekledim; **çözmedi**. Tanı çıktısı gerçek kökü gösterdi (program çalışıyor,
+doğru paniklıyor, yalnız kod POSIX değil). *Bir hipotezi "makul" olduğu için
+uygulamak, ölçmenin yerine geçmiyor.*
+
+**⚠ İKİ KEZ BAYAT ARTEFAKTA DÜŞMEDİM:** Windows yerelde `codegen_diff`
+166/169 ve `bolge_operand` 14 sapma gördüm; ikisinde de `build/codegen.exe`
+**7 gün eskiydi**. Taze kurunca ikisi de temiz — "Windows ayrışması" diye
+kaydetmedim.
+
+**⚠ YEREL YEŞİL, CI KIRMIZI OLABİLİR:** yerel Windows takımı
+*"Tum testler gecti!"* dedi ama `perf_bellek` orada **atlanmıştı**
+(`/usr/bin/time` yok). Yani yerel yeşil, o kapı hakkında **hiçbir şey**
+söylemiyordu.
+
+**SONUÇ:** `main` üzerinde **Linux success + Windows success**. Dört aydır
+hiç koşmamış olan CI artık iki platformda da tam takımı ölçüyor.
+
 ### 🎯 D-555→D-559: CI KAMPANYASI — "hiç koşmuyor"dan "Linux tam yeşil"e
 D-554 CI'yı ayağa kaldırdı; sonrası **log okuyup ölçerek** ilerledi. Her adımda
 bir hipotez kuruldu, **logla doğrulandı**, sonra onarıldı.

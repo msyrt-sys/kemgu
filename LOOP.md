@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] WINDOWS CI: codegen_genis 3/70 (D-559 acigi). 67 programda cikis kodu AYNI ama "STDOUT farkli"; logda TEK BIR diff satiri YOK -> kanit "icerik farkli" degil "cikti dosyasi hic olusmamis". ONCE harness'i duzelt: eksik dosya ile icerik farki AYRI mesaj vermeli (bugun ikisi ayni). Sonra Windows'ta .out'un neden yazilmadigini olc. CRLF hipotezine ATLAMA — logla curudu (D-421).
 
 
 
@@ -267,3 +266,15 @@
   D-551'IN CIKARIMI KISMEN YANLISTI: "ld.lld ve qemu yok -> o kapilar atlanir" demistim; ld.lld ATLANMADI, SERT HATA verdi (D-486 atlamalari sert hataya cevirmisti) ve ilk engel hic tahmin etmedigim `opt`tu. Cikarim olcumun yerine gecmez.
   ACIK: Windows codegen_genis 3/70 — 67 programda cikis kodu AYNI, "STDOUT farkli". ILK HIPOTEZIM (CRLF) YANLIS OLURDU: harness farki basiyor (diff ... | head -6) ama logda TEK BIR FARK SATIRI YOK. diff -q eksik dosyada da sifir-disi doner, ayrintili diff'in "No such file" hatasi 2>/dev/null ile yutulur. Yani kanit "icerik farkli" degil "cikti dosyalarindan biri hic olusmamis". Satir sonlarini onarsaydim hicbir sey degismezdi (D-421).
   SIRADAKI: harness eksik dosyayi icerik farkindan AYIRMALI (bugun ikisi ayni mesaji veriyor), sonra Windows'ta .out'un neden yazilmadigi olculmeli.
+- 2026-09-04 D-560->D-566: CI TAM YESIL — Linux VE Windows. D-554 CI'yi ilk kez calistirmisti; bu seri Windows'u da yesile cekti.
+  D-560: 67 program "STDOUT farkli" diyordu ama diff TEK SATIR basmiyordu. Kok: diff -q EKSIK DOSYADA da sifir-disi doner, ayrintili diff'in hatasi 2>/dev/null ile yutulur. Uc durum ayri mesaja bolundu.
+  D-561: `[ -f ]`=VAR ama /usr/bin/diff "No such file". Kok: recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari AYRI /tmp baglamalari cozuyor. Gecici dizin depo-goreli yapildi.
+  D-562: bir sonraki kapi AYNI IMZAYLA dustu -> kok tek harness'ta degil PAYLASILAN KALIPTA. 27 harness'in hepsi cevrildi.
+  D-563: /usr/bin/diff: /dev/fd/63 — SUREC IKAMESI `<(...)` MSYS2 araclariyla calismaz. Gercek dosyaya yazildi. Kapsam olculdu: `done < <(find ...)` bicimi SORUN DEGIL (okuyucu bash'in kendisi).
+  D-565: exit=127 ama ham kosum "PANIK: sifira bolme" basiyor -> program CALISIYOR. Kok: 134 = 128+SIGABRT POSIX'e ozgu; Windows'ta abort() 127 doner (trivial `int main(){abort();}` ile gcc ve clang'da olculdu). ABORT_RC platforma bagli yapildi; ASIL IDDIA olan MESAJ her yerde denetleniyor.
+  D-566: zirve RSS 5544 KB > esik 4096 -> esik LINUX olcumunden turetilmisti. Platforma bagli (Win 12288); ayirt edicilik korunur (gerileme ~19968 KB). Ayrica ayni dosyada BACKTICK komut ikamesi kusuru (dorduncu kez, D-456 sinifi).
+  ORTAK SINIF: POSIX VARSAYIMLARI. Altisinin hicbiri derleyici kusuru degildi — hepsi KAPILARIN tasinabilirlik varsayimiydi (/tmp baglamasi, /dev/fd, sinyal-tabanli cikis kodu, RSS muhasebesi). D-477/D-481 ailesi.
+  YANLIS GIDEN: D-564 GECERSIZ BIR HIPOTEZDI. Israrli 127'yi D-413'un Defender yarisina yorup 12 yeniden-deneme ekledim; COZMEDI. Gercek koku tani ciktisi gosterdi. Bir hipotezi "makul" diye uygulamak olcmenin yerine gecmiyor.
+  IKI KEZ BAYAT ARTEFAKT: Windows yerelde codegen_diff 166/169 ve bolge_operand 14 sapma gorundu; ikisinde de build/codegen.exe 7 gun eskiydi. Taze kurulunca temiz — "Windows ayrismasi" diye kaydedilmedi.
+  YEREL YESIL != CI YESIL: yerel Windows takimi "Tum testler gecti!" dedi ama perf_bellek orada ATLANMISTI (/usr/bin/time yok). Yerel yesil o kapi hakkinda hicbir sey soylemiyordu.
+  SONUC: main uzerinde Linux success + Windows success (run 33866729367).
