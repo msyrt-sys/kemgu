@@ -35,7 +35,14 @@ RT=build/kdl_runtime.o
 F=test/drf_gorunurluk.kem
 [ -f "$F" ] || { echo "🔴 HATA: fikstür YOK ($F)"; exit 1; }
 
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/drf_gor); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/drf_gor.XXXXXX" 2>/dev/null || echo "build/drf_gor.$$")
+mkdir -p "$TMP"
 TUR=${TUR:-100}
 
 # -O2 BILEREK: optimizasyon yeniden siralama firsatlarini artirir. -O0'da

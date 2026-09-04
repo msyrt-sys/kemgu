@@ -21,7 +21,14 @@ KEMGU=${KEMGU:-build/kemgu${EXE}}
 CODEGEN=${CODEGEN:-build/codegen${EXE}}
 CC_HOST=${CC_HOST:-gcc}
 PORT=58421
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/agkosum); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/agkosum.XXXXXX" 2>/dev/null || echo "build/agkosum.$$")
+mkdir -p "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
 # [D-486] EKSIK IKILI = HATA, ATLAMA DEGIL. Bu kapinin make hedefi

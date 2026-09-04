@@ -17,7 +17,14 @@ set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/checkdiff); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/checkdiff.XXXXXX" 2>/dev/null || echo "build/checkdiff.$$")
+mkdir -p "$TMP"
 
 if ! "$KEMGU" --llvm selfhost/checker.kem > "$TMP/c.ll" 2>/dev/null; then
     echo "🔴 KEMGU-checker --llvm üretemedi"; exit 1

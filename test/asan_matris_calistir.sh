@@ -41,7 +41,14 @@ DIR="test/asan_matris"
 # BASARISIZ olur -> gercekten CALISTIGINI olc.
 ASAN_RUN=""
 if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/asan_matris); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/asan_matris.XXXXXX" 2>/dev/null || echo "build/asan_matris.$$")
+mkdir -p "$TMP"
 pass=0; fail=0
 
 for f in "$DIR"/m*.kem; do

@@ -17,7 +17,9 @@ KEMGU=build/kemgu${EXE}
 SELF=build/codegen${EXE}
 KEM=test/ornekler/kem_malloc.kem
 HARNESS=test/kem_malloc_kompozisyon.c
-TMP=$(mktemp -d 2>/dev/null || echo /c/tmp/kemmalloc_$$)
+# [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
+# recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
+TMP=$(mktemp -d "build/kemmalloc.XXXXXX" 2>/dev/null || echo "build/kemmalloc.$$")
 mkdir -p "$TMP"
 gecti=0; kaldi=0
 

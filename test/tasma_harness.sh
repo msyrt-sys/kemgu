@@ -37,7 +37,14 @@ CODEGEN="${CODEGEN:-build/codegen${EXE}}"
 RT=build/kdl_runtime.o
 [ -f "$RT" ] || { echo "🔴 HATA: $RT yok — kapı KOŞMADI"; exit 1; }
 
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/tasma); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/tasma.XXXXXX" 2>/dev/null || echo "build/tasma.$$")
+mkdir -p "$TMP"
 hata=0; olculen=0
 
 for c in "$KEMGU:C" "$CODEGEN:SELF"; do

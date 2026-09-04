@@ -31,7 +31,14 @@ command -v "$CC_UYARI" >/dev/null 2>&1 || { echo "🔴 HATA: $CC_UYARI yok — k
 # kullanir (satir 859); kapi ayni tanimi verir.
 EK_TANIM="-DKEMGU_UART_MOCK -Iruntime"
 
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/sifir_uyari); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/sifir_uyari.XXXXXX" 2>/dev/null || echo "build/sifir_uyari.$$")
+mkdir -p "$TMP"
 LOG="$TMP/uyari.log"; : > "$LOG"
 
 dosya=0

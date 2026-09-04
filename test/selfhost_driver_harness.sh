@@ -28,7 +28,14 @@ RT=${RT:-build/kdl_runtime.o}
 SELF=${SELF:-build/kemgu_self${EXE}}
 SELF2=${SELF2:-build/kemgu_self2.exe}
 SRC=${SRC:-selfhost/codegen.kem}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/selfdrv); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/selfdrv.XXXXXX" 2>/dev/null || echo "build/selfdrv.$$")
+mkdir -p "$TMP"
 genel_fail=0
 
 link() {  # $1=ll $2=exe ; Win11 Defender exec yarışı → 3 deneme

@@ -37,7 +37,9 @@ RT="runtime/kdl_runtime.c runtime/kdl_runtime_mmio.c"
 # BASARISIZ olur -> gercekten CALISTIGINI olc.
 ASAN_RUN=""
 if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/asan_denetim)
+# [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
+# recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
+TMP=$(mktemp -d "build/asan_denetim.XXXXXX" 2>/dev/null || echo "build/asan_denetim.$$")
 mkdir -p "$TMP"
 
 # Bilinen başarısızlıklar (kök-neden + takip). Bunlar ASan-temiz DEĞİL ama

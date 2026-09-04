@@ -8,7 +8,14 @@ set -u
 # varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 KEMGU=${KEMGU:-build/kemgu${EXE}}; RT=${RT:-build/kdl_runtime.o}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/lambdav2); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/lambdav2.XXXXXX" 2>/dev/null || echo "build/lambdav2.$$")
+mkdir -p "$TMP"
 pass=0; fail=0
 calistir() {  # ad dosya beklenen_rc
     local ad="$1" dosya="$2" brc="$3"

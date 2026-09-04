@@ -18,7 +18,9 @@ cd "$(dirname "$0")/.."
 
 KEMGU=build/kemgu${EXE}
 SELF=build/codegen${EXE}
-TMP=$(mktemp -d 2>/dev/null || echo /c/tmp/ciplak_rf_$$)
+# [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
+# recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
+TMP=$(mktemp -d "build/ciplak_rf.XXXXXX" 2>/dev/null || echo "build/ciplak_rf.$$")
 mkdir -p "$TMP"
 gecti=0; kaldi=0
 

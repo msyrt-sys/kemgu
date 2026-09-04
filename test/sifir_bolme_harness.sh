@@ -30,7 +30,14 @@ CODEGEN="${CODEGEN:-build/codegen${EXE}}"
 RT=build/kdl_runtime.o
 [ -f "$RT" ] || { echo "🔴 HATA: $RT yok — kapı KOŞMADI"; exit 1; }
 
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/sifir_bolme); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/sifir_bolme.XXXXXX" 2>/dev/null || echo "build/sifir_bolme.$$")
+mkdir -p "$TMP"
 hata=0; olculen=0
 
 kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]

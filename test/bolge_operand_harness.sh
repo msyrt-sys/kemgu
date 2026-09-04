@@ -23,7 +23,14 @@ CODEGEN="${CODEGEN:-build/codegen${EXE}}"
 [ -x "$CODEGEN" ] || CODEGEN="build/codegen"
 [ -x "$CODEGEN" ] || { echo "🔴 HATA: codegen ikilisi YOK ($CODEGEN) — kapı KOŞMADI"; exit 1; }
 
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/bolge_op); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/bolge_op.XXXXXX" 2>/dev/null || echo "build/bolge_op.$$")
+mkdir -p "$TMP"
 
 # ρ SINIFI: `%rho` (çağıran/parametre) mi, `%N` (yerel, kdl_bolge_olustur) mi?
 # Register NUMARASINI kasten YOK SAYAR — o iki derleyicide farklı olabilir ve

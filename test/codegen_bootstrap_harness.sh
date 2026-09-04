@@ -19,7 +19,14 @@ set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/cgboot); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/cgboot.XXXXXX" 2>/dev/null || echo "build/cgboot.$$")
+mkdir -p "$TMP"
 hata=0
 
 link() {  # $1=ll $2=exe ; Win11 .exe yeniden-yazım yarışına 3 deneme

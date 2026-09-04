@@ -19,7 +19,14 @@ KEMGU=${KEMGU:-build/kemgu${EXE}}
 CODEGEN=${CODEGEN:-build/codegen${EXE}}
 RT=${RT:-build/kdl_runtime.o}
 KORPUS=${KORPUS:-test/cg_korpus}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/cgdiff); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/cgdiff.XXXXXX" 2>/dev/null || echo "build/cgdiff.$$")
+mkdir -p "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
     # [D-486] Bu mesaj BAYATTI (D-072/CG1 donemi); kapi artik 155/155.
