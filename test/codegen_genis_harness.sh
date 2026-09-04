@@ -173,9 +173,28 @@ for f in test/ornekler/*.kem stdlib/temel/*.kem; do
         pass=$((pass+1))
     elif [ "$coracle" -ne "$kaday" ]; then
         echo "  🔴 $b — exit farkı: C=$coracle ≠ KEMGU=$kaday"; fail=$((fail+1))
+    elif [ ! -f "$TMP/$b.c.out" ] || [ ! -f "$TMP/$b.s.out" ]; then
+        # [D-560] EKSIK DOSYA, ICERIK FARKI DEGILDIR — ayri mesaj SART.
+        # OLCULDU (Windows CI): 67 program "STDOUT farkli" dedi ama ayrintili
+        # `diff` TEK BIR SATIR bile basmadi. Sebep: `diff -q` eksik dosyada da
+        # sifir-disi doner ve ayrintili `diff`in "No such file" hatasi
+        # 2>/dev/null ile YUTULUR. Iki farkli kok ayni mesaji veriyordu ->
+        # CRLF gibi YANLIS bir koke goturuyordu (D-421).
+        echo "  🔴 $b — CIKTI DOSYASI YOK (icerik farki DEGIL):"
+        [ -f "$TMP/$b.c.out" ] || echo "      C-oracle stdout dosyasi olusmadi: $TMP/$b.c.out"
+        [ -f "$TMP/$b.s.out" ] || echo "      KEMGU stdout dosyasi olusmadi:    $TMP/$b.s.out"
+        echo "      (exit kodlari esit: $coracle — yani ikili KOSTU ama stdout yakalanamadi)"
+        fail=$((fail+1))
     else
         echo "  🔴 $b — exit aynı ($coracle) ama STDOUT farklı:"
-        diff "$TMP/$b.c.out" "$TMP/$b.s.out" 2>/dev/null | head -6 | sed 's/^/      /'
+        d=$(diff "$TMP/$b.c.out" "$TMP/$b.s.out" 2>&1 | head -6)
+        if [ -z "$d" ]; then
+            echo "      ⚠ diff BOS dondu — dosyalar var ama fark gosterilemiyor;"
+            echo "        boyutlar: C=$(wc -c < "$TMP/$b.c.out") KEMGU=$(wc -c < "$TMP/$b.s.out")"
+        else
+            printf '%s
+' "$d" | sed 's/^/      /'
+        fi
         fail=$((fail+1))
     fi
 done
