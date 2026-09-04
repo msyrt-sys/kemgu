@@ -12,7 +12,8 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] DEGISMEZ AVI — taranmamis eksenler: `ceşit` payload guvenligi (D-437/438/439 kismen), `eşleş` desen baglama omru, `yetki` disindaki opak handle'lar (Dosya/Kilit/Semafor/Baglanti) ve `görev`/`kanal` disindaki eszamanlilik yuzeyleri. Her eksende ONCE dilin ILAN ETTIGI iddiayi bul, sonra sina (D-567 deseni: iddia yoksa av da yok).
+- [ ] D-568 KARARI MEHMET'IN: `Kilit`/`Semafor`/`Bariyer` ham yerlesikleri acikta; deadlock ve olu-handle sekilleri --check'ten tani almadan geciyor (olculdu). Secenekler (a) yerlesikleri gizle (b) checker'a kilit disiplini (makine var: L005 + dal-duyarli tuketim) (c) iddiayi gercege uydur.
+- [ ] DEGISMEZ AVI — kalan eksenler: `cesit` payload guvenligi, `esles` desen baglama omru, `Dosya`/`Baglanti` (bunlar `tekkez`, yani D-568'den FARKLI — once o farkin gercekten koruma sagladigini olc), `gorev`/`kanal` disindaki eszamanlilik yuzeyleri.
 
 
 
@@ -287,3 +288,11 @@
   DUZELTILEN IDDIA: D-458 ham-bayt primitifini "gecersiz dizgi kurmaya izin verirdi" diye reddetmisti; gerekce eksikti cunku gecersiz dizgi metin_kes ile ZATEN kurulabiliyor. kod_metin'in 0'i reddetmesi UTF-8 icin degil NUL-SONLANDIRMA icindir — o kisim dogru.
   KOD DEGISIKLIGI YAPILMADI: bayt indeksleme kaldirilamaz (mevcut kullanimlar ona dayaniyor) ve dogrulama eklemek D-515 sinifina girerdi (olculebilir kusuru olmayan yere yeni kod). Degisen tek sey kaydin gercege uydurulmasi (D-406).
   YANLIS GIDEN: iki probe kendi hatamdi — `yazdir_satir("")` arguman almiyor (T010); ve metin_uzunluk'u karakter sanip "çığ" icin 3 beklemistim, olcum 6 dedi. Beklentiyi olcumden ONCE yazmak yaniltiyor (D-500).
+- 2026-09-04 D-568 (ACIK — OLCULDU): `Kilit`in "yapisal olarak imkansiz" iddiasi TUTMUYOR. KOD DEGISIKLIGI YOK (secim dil yuzeyi karari).
+  YONTEM: D-567'nin dersi uygulandi — once dilin ILAN ETTIGI iddia arandi. stdlib/kilit.kem:4 "KAPSAMLI (scoped) API — ham al/birak cifti BILEREK disa verilmez"; D-455 bunu "unutulmus-birak = deadlock, cift-birak = UB" sekillerini YAPISAL OLARAK IMKANSIZ kilmakla gerekcelendiriyor.
+  OLCUM: kilit_al ve kilit_birak YERLESIKTIR (yerlesik_ekle listesinde), yani stdlib/kilit.kem hic kullanilmadan cagrilabilir. Koruma KUTUPHANE duzeyinde, DIL duzeyinde DEGIL.
+  DORT SEKIL, DORDU DE --check'ten TEK TANI ALMADAN gecti: (k1) al var birak yok -> exit 42; (k2) cift birak -> exit 42; (k3) kilit_yok SONRASI al -> exit 42; (k4) ayni kilidi iki kez al -> exit 124 ASILDI = DEADLOCK. k4 tam olarak onlendigi soylenen sey.
+  k3 AYRICA TUTARSIZLIK: iptal edilmis YETKI ile kullanim D-503'te CP005 aliyor; iptal edilmis KILIT ile kullanim hicbir sey almiyor. Ayni "olu handle" sinifi, iki farkli muamele. Kilit'in lineer OLMAMASI D-455'te bilincliydi ama kilit_yok sonrasini korumasiz birakiyor.
+  AYNI YUZEY Semafor ve Bariyer icin de acik (semafor_al, semafor_birak, bariyer_bekle de yerlesik).
+  UC SECENEK, secim MEHMET'IN: (a) yerlesikleri gizle — stdlib'in kendisi onlara dayaniyor, ayrica onceden gecerli programlari reddeder; (b) checker'a kilit disiplini ekle — MAKINE ZATEN VAR (dal-duyarli lineer tuketim, D-311/D-312; L005 tam bu sekli taniyor) ama bu bir LIVENESS kuralidir ve depo D-296'da "safety korunuyor liveness kayboluyor"u kabul edilemez saymisti; (c) iddiayi gercege uydur. En ucuzu (c), en degerlisi (b).
+  YANLIS GIDEN: ilk turda k1/k2 exit=1 gosterdi, bir an gercek kusur sandim; ASan'siz kosunca 42 cikti. Sebep LeakSanitizer'di — fiksturlerimde kilit_yok yoktu, 48 baytlik kilit siziyordu. Kusuru fiksturun kendi eksiginden ayir.

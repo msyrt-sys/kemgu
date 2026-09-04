@@ -1563,6 +1563,56 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴 D-568 (AÇIK — ÖLÇÜLDÜ): `Kilit`in "yapısal olarak imkânsız" iddiası TUTMUYOR
+Değişmez avı opak handle'lara taşındı. Önce **dilin ilan ettiği iddia** arandı
+(D-567'nin dersi: iddia yoksa av da yok). `stdlib/kilit.kem:4`:
+
+> *"KAPSAMLI (scoped) API — ham `al`/`bırak` çifti BİLEREK dışa verilmez"*
+
+ve D-455 bunu *"unutulmuş-bırak = deadlock, çift-bırak = UB"* şekillerini
+**yapısal olarak imkânsız** kılmakla gerekçelendiriyor.
+
+**🔴 ÖLÇÜLDÜ: `kilit_al` ve `kilit_birak` YERLEŞİKTİR** (`yerlesik_ekle`
+listesinde), yani `stdlib/kilit.kem`i hiç kullanmadan her programdan
+çağrılabilir. Koruma **kütüphane düzeyindedir, dil düzeyinde DEĞİL.**
+
+```
+k0 dogru kullanim (al+birak+yok)   --check TEMIZ . exit 42          ✓
+k1 `al` var `birak` YOK           --check TEMIZ . exit 42          🔴
+k2 CIFT `birak`                   --check TEMIZ . exit 42          🔴
+k3 `kilit_yok` SONRASI `al`       --check TEMIZ . exit 42          🔴
+k4 AYNI kilidi iki kez `al`       --check TEMIZ . exit 124 ASILDI  🔴🔴
+```
+**k4 tam olarak önlendiği söylenen şeydir: DEADLOCK.** Dört şeklin dördü de
+tip kontrolünden **tek tanı almadan** geçiyor.
+
+**⚠ k3 AYRICA BİR TUTARSIZLIK GÖSTERİYOR:** iptal edilmiş **yetki** ile
+kullanım D-503'te **CP005** alıyor; iptal edilmiş **kilit** ile kullanım
+hiçbir şey almıyor. Aynı "ölü handle" sınıfı, iki farklı muamele.
+`Kilit`in lineer OLMAMASI D-455'te bilinçliydi (kilit defalarca kullanılır) —
+ama o karar `kilit_yok` sonrasını da korumasız bırakıyor.
+
+**⚠ AYNI YÜZEY `Semafor` ve `Bariyer` İÇİN DE AÇIK:** `semafor_al`,
+`semafor_birak`, `bariyer_bekle` de yerleşik listesinde.
+
+**KOD DEĞİŞİKLİĞİ YAPILMADI — bilinçli.** Üç seçenek var ve seçim bir **dil
+yüzeyi kararıdır** (Mehmet):
+- **(a)** yerleşikleri gizle → `stdlib/kilit.kem`in kendisi onlara dayanıyor;
+  ayrıca önceden geçerli programları reddeder.
+- **(b)** checker'a kilit disiplini ekle (`al` ↔ `bırak` eşleşmesi). Makine
+  ZATEN VAR: lineer tüketim takibi dal-duyarlıdır (D-311/D-312) ve `L005`
+  tam bu şekli tanır. Ama bu bir **liveness** kuralıdır, safety değil — ve
+  bu depo D-296'da *"safety korunuyor, liveness kayboluyor"*u kabul edilemez
+  saymıştı, yani konu ciddiye alınmayı hak ediyor.
+- **(c)** iddiayı gerçeğe uydur: *"kütüphane kullanılırsa güvenli"* de,
+  *"yapısal olarak imkânsız"* deme.
+**En ucuzu (c), en değerlisi (b).**
+
+**⚠ ÖLÇÜM ARACIM YANILTTI:** ilk turda k1/k2 `exit=1` gösterdi ve bir an
+gerçek bir kusur sandım; ASan'sız koşunca **42** çıktı. Sebep
+**LeakSanitizer**'dı — fikstürlerimde `kilit_yok` yoktu, 48 baytlık kilit
+sızıyordu. *Kusuru fikstürün kendi eksiğinden ayır.*
+
 ### ⛔✅ D-567 (NEGATİF SONUÇ): `metin` UTF-8 ekseni — BELLEK GÜVENLİĞİ TUTUYOR, ama D-458'in İDDİASI FAZLAYDI
 Değişmez avı `metin`e taşındı: dilin her yerinde olan tip, ve D-458 onun için
 *"geçerli-UTF-8 olma değişmezi"* ilan etmişti. Sekiz şekil ölçüldü.
