@@ -56,6 +56,16 @@ kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
     olculen=$((olculen+1))
     if [ "$rc" -ne "$4" ]; then
         echo "  🔴 $2 $(basename $3): exit=$rc (beklenen $4)"
+        if [ "$rc" -eq 127 ]; then
+            # [D-565] 127 ISRARLI (12 yeniden-deneme cozmedi) -> Defender
+            # yarisi DEGIL. Tahmin yerine OLC: exe var mi, boyutu ne,
+            # ham kosumda stderr ne diyor, TMP nerede.
+            echo "     TESHIS: TMP=$TMP  derleyici=$1"
+            echo "     a.exe: $([ -f "$TMP/a.exe" ] && echo "VAR $(wc -c < "$TMP/a.exe") bayt" || echo YOK)"
+            echo "     a.ll : $([ -f "$TMP/a.ll" ] && echo "VAR $(wc -c < "$TMP/a.ll") bayt" || echo YOK)"
+            echo "     ham kosum: $("$TMP/a.exe" 2>&1 | head -2)"
+            echo "     ham rc=$?"
+        fi
         [ "$rc" -eq 136 ] && echo "     → SIGFPE: sıfır-bölme koruyucusu DÜŞMÜŞ (D-502 gerilemesi)"
         hata=1
         return
