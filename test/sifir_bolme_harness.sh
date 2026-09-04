@@ -36,6 +36,19 @@ RT=build/kdl_runtime.o
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+# [D-565] ABORT CIKIS KODU PLATFORMA BAGLIDIR — 134 POSIX'e OZGUDUR.
+# 134 = 128 + SIGABRT(6). Windows'ta sinyal yok; `abort()` BASKA bir kod
+# dondurur. OLCULDU (MINGW64_NT-10.0, TRIVIAL program `int main(){abort();}`):
+#   gcc   -> 127
+#   clang -> 127
+# Yani kapinin 134'u sabit beklemesi bir TASINABILIRLIK kusuruydu; Windows'ta
+# panik MESAJI dogru basiliyor ve program temiz duruyordu, yalniz kod farkli.
+# (D-477/D-481 ile ayni aile: POSIX cikis-kodu varsayimi.)
+# ⚠ ASIL IDDIA MESAJDIR: kod platforma gore secilir, mesaj her yerde denetlenir.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) ABORT_RC=127 ;;
+    *)                    ABORT_RC=134 ;;
+esac
 TMP=$(mktemp -d "build/sifir_bolme.XXXXXX" 2>/dev/null || echo "build/sifir_bolme.$$")
 mkdir -p "$TMP"
 hata=0; olculen=0
@@ -71,7 +84,7 @@ kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
         return
     fi
     msg="${5:-PANIK: sifira bolme}"
-    if [ "$4" -eq 134 ] && ! echo "$out" | grep -q "$msg"; then
+    if [ "$4" -eq "$ABORT_RC" ] && ! echo "$out" | grep -q "$msg"; then
         echo "  🔴 $2 $(basename $3): exit doğru ama PANİK MESAJI yok (beklenen: $msg)"
         hata=1
     fi
@@ -89,11 +102,11 @@ kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
 #   "her kaydırmayı reddet" sabotajı kapıdan GEÇERDİ (D-425).
 for c in "$KEMGU:C" "$CODEGEN:SELF"; do
     bin="${c%%:*}"; et="${c##*:}"
-    for f in test/bolme/sifir_*.kem; do kos "$bin" "$et" "$f" 134; done
+    for f in test/bolme/sifir_*.kem; do kos "$bin" "$et" "$f" "$ABORT_RC"; done
     kos "$bin" "$et" test/bolme/normal.kem 42
     for f in test/kaydirma/sol_sabit.kem test/kaydirma/sag_degisken.kem \
              test/kaydirma/isaretsiz.kem test/kaydirma/negatif.kem; do
-        kos "$bin" "$et" "$f" 134 "PANIK: kaydirma miktari gecersiz"
+        kos "$bin" "$et" "$f" "$ABORT_RC" "PANIK: kaydirma miktari gecersiz"
     done
     kos "$bin" "$et" test/kaydirma/normal.kem 42
     # [D-546] VEKTOR LANE INDEKSI de AYNI KAPIDA — mekanizma birebir aynı
@@ -108,7 +121,7 @@ for c in "$KEMGU:C" "$CODEGEN:SELF"; do
     # ⚠ `normal.kem` (21+21 -> 42) ZORUNLU: yalnız negatif şekiller olsaydı
     #   "her vektor_eleman'i panikletir" sabotajı kapıdan GEÇERDİ (D-425).
     for f in test/vektor/sabit_disi.kem test/vektor/negatif.kem              test/vektor/degisken_disi.kem; do
-        kos "$bin" "$et" "$f" 134 "PANIK: vektor lane indeksi gecersiz"
+        kos "$bin" "$et" "$f" "$ABORT_RC" "PANIK: vektor lane indeksi gecersiz"
     done
     kos "$bin" "$et" test/vektor/normal.kem 42
 done
