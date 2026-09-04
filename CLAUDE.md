@@ -1563,6 +1563,48 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-554: CI 4 AYDIR HİÇ ÇALIŞMAMIŞ — tek bir tırnaksız `:` yüzünden
+`main` push edildikten sonra CI sonuçlarına bakıldı. Bulgu beklenenden ağırdı.
+
+**ÖLÇÜM (public API, kimlik doğrulamasız):**
+```
+13 Mayis 2026'dan bu yana ornekleme: 399 kosum, 399 basarisiz, 0 basarili
+100/100 kosum created_at == updated_at, 0 is  ->  STARTUP FAILURE
+```
+Yani işler hiç başlamıyordu; "CI kırmızı" değil, **CI hiç koşmamış**.
+
+**KÖK TEK SATIR:**
+```yaml
+- name: apt: clang + gcc + make      # ← tirnaksiz
+```
+Tırnaksız YAML skalerinde `": "` iç içe eşleme başlatır → dosya
+ayrıştırılamaz → GitHub workflow'u **hiç çalıştırmaz**. Yerel doğrulama:
+`yaml.safe_load` → *"mapping values are not allowed here, line 74, column 18"*.
+Ad tırnaklandı; YAML artık parse ediliyor (2 iş, 10 + 9 adım).
+
+**⚠ BU, D-548'İN ÖLÇÜMÜNÜ DÜZELTİR.** Orada *"CI VAR ve `claude/**`
+push'unda `test_tumu` koşuyor"* demiştim — **koşmuyordu**. `ci.yml`in var
+olması, çalıştığı anlamına gelmiyordu. *Bir kapının dosyada durması,
+koştuğunun kanıtı değildir* (D-446'nın CI karşılığı).
+
+**İLK GERÇEK KOŞUM (a0e431e) — adım düzeyinde sonuç:**
+```
+Linux : checkout ok . apt ok . `make` (DERLEME) ok . `make test_tumu` BASARISIZ
+Windows: MSYS2 ok . "Derleyici kontrolu" BASARISIZ (derleme hic denenmedi)
+```
+**Linux'ta derleyici CI'da KURULUYOR** — bu yeni ve olumlu bir bilgi.
+
+**HİPOTEZLER (loglar 403, kimlik doğrulaması olmadan okunamıyor):**
+- **Windows:** adım `clang --version` çalıştırıyor ama iş `msystem: UCRT64`
+  kabuğunda koşuyor; `clang` **Clang64** paketinden geliyor ve o dizin
+  PATH'te değil. CLAUDE.md tam bunu şart koşuyor
+  (`export PATH=/c/msys64/clang64/bin:...`) — workflow o adımı atlamış.
+- **Linux `test_tumu`:** `ld.lld` ve `qemu` `ubuntu-latest` taban imajında
+  YOK (D-551'de ölçüldü) → bare-metal hedefleri düşer. Ayrıca D-486 birçok
+  "atla"yı **sert hataya** çevirdi; CI'da eksik ikili artık sessizce
+  geçilmez.
+**⚠ İkisi de HİPOTEZ — log okunmadan doğrulanmadı.**
+
 ### ✅ D-553: RT007 self-host'a portlandı — RT alt-sistemi TAMAMLANDI (7/7)
 D-550'de *"parser `çevrim:` alanını atıyor → portlanamaz"* diye kaydedilen son
 kod. Engel gerçek ama **aşılabilirdi**: alan tüketiliyordu, kaydedilmiyordu.

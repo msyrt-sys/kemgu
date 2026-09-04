@@ -12,7 +12,7 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] CI KARARI MEHMET'IN (D-548/D-551). Olculdu: ci.yml VAR ve claude/** push'unda test_tumu kosuyor, ama origin/main D-349'da iken HEAD D-551 — ~200 artim PUSH EDILMEMIS. Arac envanteri D-551'de cikarildi (setarch/objcopy taban imajda gelir; ld.lld ve qemu GELMEZ -> o kapilar atlanir) ama bu CIKARIMDIR: gercek liste ilk yesil CI kosumunda OLCULMELI. Push edilmedikce baska is yok.
+- [ ] CI ONARIMI (D-554 devami): CI artik GERCEKTEN kosuyor ama iki is de dusuyor. Linux: `make` gecti, `make test_tumu` dustu. Windows: "Derleyici kontrolu" dustu (clang PATH'te degil? is UCRT64 kabugunda, clang Clang64 paketinde). Is loglari 403 — `gh auth login` ya da GH_TOKEN gerekiyor. ONCE LOGU OKU, hipotezle onarma (D-554'te iki hipotez var ve ikisi de dogrulanmadi).
 
 
 
@@ -250,3 +250,10 @@
   HANGI KAPI NEYI OLCTU: checker_diff 173/173 (0 muaf) . self_driver 140/140 + FIXPOINT . parser_diff 13/13 . snapshot 50/50 . check_genis 133/133.
   SABOTAJ 3/3: S136 (checker RT007 dali) -> 172/173 rc=2; S137 (cevrim bayragini hep 0 yap) -> 172/173 rc=2 — POZITIF yolu olcen sabotaj budur, `iyi()` yanlislikla RT007 alinca kapi kirmizi oluyor; S138 (codegen dali) -> 139/140 rc=2.
   FIKSTUR tc46_03_realtime_asm.kem uc sekil tasir: kotu() (cevrim YOK -> RT007), iyi() (cevrim: 24 -> TEMIZ, POZITIF), normal() (gerceklzamanli DEGIL, anotasyonsuz -> TEMIZ). Pozitifler olmasa "her asm'i reddet" sabotaji GECERDI (D-425).
+- 2026-09-04 D-554: CI 4 AYDIR HIC CALISMAMIS — tek tirnaksiz ':' yuzunden. Yama yapildi, CI ILK KEZ gercekten kostu.
+  OLCUM (public API, kimlik dogrulamasiz): 13 Mayis 2026'dan bu yana ornekleme 399 kosum, 399 basarisiz, 0 basarili. 100/100 kosum created_at == updated_at ve 0 is -> STARTUP FAILURE, yani isler HIC BASLAMIYOR. "CI kirmizi" degil, "CI hic kosmamis".
+  KOK: `- name: apt: clang + gcc + make` — tirnaksiz YAML skalerinde ": " ic ice esleme baslatir, dosya ayristirilamaz, GitHub workflow'u hic calistirmaz. Yerel dogrulama: yaml.safe_load -> "mapping values are not allowed here, line 74, column 18".
+  BU D-548'IN OLCUMUNU DUZELTIR: orada "CI VAR ve claude/** push'unda test_tumu kosuyor" demistim; KOSMUYORDU. ci.yml'in var olmasi calistigi anlamina gelmiyordu (D-446'nin CI karsiligi: dosyada duran kapi, kosan kapi degildir).
+  ILK GERCEK KOSUM (a0e431e): Linux -> checkout ok, apt ok, `make` DERLEME OK, `make test_tumu` BASARISIZ. Windows -> MSYS2 ok, "Derleyici kontrolu" BASARISIZ (derleme hic denenmedi). Linux'ta derleyicinin CI'da KURULMASI yeni ve olumlu bir bilgi.
+  HIPOTEZLER (loglar 403, kimlik dogrulamasi gerekiyor): Windows'ta is `msystem: UCRT64` kabugunda kosuyor ama `clang` Clang64 paketinden geliyor ve o dizin PATH'te degil (CLAUDE.md tam bunu sart kosuyor); Linux'ta ld.lld ve qemu ubuntu taban imajinda yok (D-551) + D-486 bircok "atla"yi sert hataya cevirdi. IKISI DE HIPOTEZ, log okunmadan dogrulanmadi.
+  SIRADAKI: `gh auth login` (ya da GH_TOKEN) olmadan is loglari okunamiyor. Loglar okununca iki hipotez dogrulanip onarilmali.
