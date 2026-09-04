@@ -1563,6 +1563,51 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-570: DOSYA HANDLE DİSİPLİNİ — `tekkez` koruması ham yerleşiklerle baypas ediliyordu
+Av `Dosya`/`Baglanti`ya taşındı. Maddenin sorusu şuydu: **`tekkez` olmak
+gerçekten koruma sağlıyor mu?**
+
+**ÖNCE POZİTİF TARAF ÖLÇÜLDÜ — EVET, SAĞLIYOR:** `tc24_*` fikstürleri hâlâ
+tutuyor (`L001` sızıntı · `L002` çift kapat · temiz pozitif). Yani D-452/D-466'nın
+`yapı tekkez` mekanizması gerçek.
+
+**🔴 AMA D-568'İN AYNISI: HAM YERLEŞİKLER SARMALAYICIYI ATLIYOR.** `dosya_ac`,
+`dosya_kapat`, `dosya_oku`, `dosya_yaz` **yerleşiktir** ve ham `metin` handle
+döndürür/alır; `Dosya` sarmalayıcısı kullanılmazsa lineer koruma **hiç
+uygulanmaz**:
+```
+ham `dosya_ac`, hic kapatma      -> OK 🔴
+ham handle'i IKI KEZ kapat       -> OK 🔴
+kapattiktan SONRA `dosya_yaz`    -> OK 🔴
+```
+D-569'un makinesi **aynen** kullanıldı (aile alanı eklendi), **yeni tanı kodu
+YOK**: çıkışta AÇIK → `L001` · kapalıyı tekrar kapat → `L002` · kapalı handle
+kullanımı → `CP005`.
+
+**⚠⚠ İLK SÜRÜM SAHTE `L001` ÜRETTİ — ve onu kapı değil, DEPO TARAMASI yakaladı.**
+`stdlib/dosya.kem` kendi sarmalayıcısında `ver tamam(Dosya { h: h })` yapıyor;
+C'nin `kd_kacti`'sı **yalnız TANIMLAYICI ve CAGRI'ya iniyordu**, `YAPI_OLUSTUR`
+düğümünü hiç görmüyordu → bağlama "hâlâ açık" sanılıp **sahte L001** verildi.
+Self-host sürümüm genel çocuk döngüsü kullandığı için **ikisi ayrışıyordu.**
+
+**ONARIM İKİNCİ BİR GEZGİN YAZMAK DEĞİL, KURALI DARALTMAK OLDU** (D-407):
+C'de genel bir çocuk yineleyici **yok** ve yazmak aynı soruyu iki yerde
+yanıtlamak olurdu. Bunun yerine `kd_yuru` yalnız **modellediği** düğümleri
+işler (BLOK · DEGISKEN · IFADE_DEYIMI · CAGRI · VER · zararsız yapraklar ·
+çıplak TANIMLAYICI) ve **modellenmeyen her düğümde TÜM izlemeyi bırakır**.
+Sonuç: `stdlib/dosya.kem` **TEMİZ**, üç tehlike hâlâ yakalanıyor.
+
+**YANLIŞ-POZİTİF TARAMASI:** `dosya_ac` içeren 8 dosya; `stdlib/dosya.kem` ·
+`selfhost/*` · `test/stdlib/test_dosya.kem` · `07_linear` · `dosya_io` **TEMİZ**.
+Kalan tanılar yalnız `tc22_01`/`tc22_02`'de ve onlar **kasıtlı** D-452
+fikstürleri — üstelik verdikleri tanılar **özgün** olanlar (`L001 0 0`,
+`L002 14 39`); benim eklediklerim (`L001 7 1`, `L001 5 1`) daraltmadan sonra
+**kayboldu**.
+
+**Kapılar:** checker_diff **175/175 (0 muaf)** · self_driver **FIXPOINT ✓** ·
+check_kapisi 274/281 (0 RED) · check_genis 133/133 · stdlib_check · sıfır uyarı
+38/0. **Sabotaj:** S141 (C dosya ailesini kapat) → 174/175, rc=2.
+
 ### ✅ D-569: KİLİT DİSİPLİNİ CHECKER'A EKLENDİ — D-568'in dört açığı kapandı
 **Mehmet seçenek (b)'yi seçti.** D-568'in ölçtüğü dördü de artık derleme
 zamanında yakalanıyor; **yeni tanı kodu YOK** — mevcut kodların anlamları

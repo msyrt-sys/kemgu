@@ -65,7 +65,8 @@ yapı Ayr {
     rt_sessiz: tam32;       // >0 → iç (keşif) yürüyüşü; tanı BASILMAZ (C `sessiz`)
     rt_dongu: tam32;        // iç yürüyüşte zincir kapandı mı (C `dongu_bulundu`)
     kd_ad: Dizi<metin>;      // D-569: izlenen kilit baglamalari
-    kd_durum: Dizi<tam32>;   // 0=serbest 1=tutulu 2=olu 3=izlenmiyor
+    kd_durum: Dizi<tam32>;   // 0=serbest/acik 1=tutulu 2=olu/kapali 3=izlenmiyor
+    kd_aile: Dizi<tam32>;    // D-570: 0=kilit 1=dosya
     rt_node: Dizi<tam32>;   // D-550: `gerçekzamanlı` işlev düğümleri (parser onu
                             // YUTUYORDU; `çıplak` yan-kanalinin birebir aynasi)
     asm_node: Dizi<tam32>;  // D-373: SATIRICI_ASM düğümü — `mimari:` etiketi (AS001)
@@ -1834,7 +1835,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], kd_ad: [], kd_durum: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_mim: [], si_ad: [], si_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_mim: [], si_ad: [], si_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_rlin: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -6155,6 +6156,17 @@ işlev kd_kacti(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
     }
     ver yanlış;
 }
+işlev kd_dosya_yerlesigi(ad: metin) -> mantıksal {
+    eğer metin_esit(ad, "dosya_ac") { ver doğru; }
+    eğer metin_esit(ad, "dosya_kapat") { ver doğru; }
+    eğer metin_esit(ad, "dosya_oku") { ver doğru; }
+    eğer metin_esit(ad, "dosya_yaz") { ver doğru; }
+    ver metin_esit(ad, "dosya_boyut");
+}
+işlev kd_izlenen_yerlesik(ad: metin) -> mantıksal {
+    eğer kd_kilit_yerlesigi(ad) { ver doğru; }
+    ver kd_dosya_yerlesigi(ad);
+}
 işlev kd_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.kd_ad) {
@@ -6163,75 +6175,94 @@ işlev kd_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     }
     ver 0 - 1;
 }
-işlev kd_iptal_hepsi(p: &değişken Ayr, node: tam32) -> tam32 {
+işlev kd_hepsini_birak(p: &değişken Ayr) -> tam32 {
     değişken i: tam32 = 0;
-    iken i < dizi_boyut(p.kd_ad) {
-        eğer dizi_al(p.kd_durum, i) != 3 {
-            eğer kd_kacti(p, node, dizi_al(p.kd_ad, i)) { dizi_yaz(p.kd_durum, i, 3); }
-        }
-        i = i + 1;
-    }
+    iken i < dizi_boyut(p.kd_durum) { dizi_yaz(p.kd_durum, i, 3); i = i + 1; }
     ver 0;
+}
+işlev kd_yaprak_mi(t: metin) -> mantıksal {
+    eğer metin_esit(t, "TAM") { ver doğru; }
+    eğer metin_esit(t, "KESIRLI") { ver doğru; }
+    eğer metin_esit(t, "METIN") { ver doğru; }
+    eğer metin_esit(t, "KARAKTER") { ver doğru; }
+    eğer metin_esit(t, "MANTIKSAL") { ver doğru; }
+    ver metin_esit(t, "BOS");
 }
 işlev kd_yuru(p: &değişken Ayr, node: tam32) -> tam32 {
     eğer node < 0 { ver 0; }
     değişken t: metin = dizi_al(p.a_ad, node);
     değişken cb: tam32 = dizi_al(p.a_cb, node);
     değişken cs: tam32 = dizi_al(p.a_cs, node);
-    eğer metin_esit(t, "BLOK") {
+    eğer metin_esit(t, "BLOK") veya metin_esit(t, "IFADE_DEYIMI") veya metin_esit(t, "VER") {
         değişken i: tam32 = 0;
         iken i < cs { kd_yuru(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
         ver 0;
     }
-    eğer metin_esit(t, "DEGISKEN") {
-        değişken k: tam32 = 0;
-        değişken kuruldu: mantıksal = yanlış;
-        iken k < cs {
-            eğer metin_esit(kd_cagri_adi(p, dizi_al(p.cocuk, cb + k)), "kilit_olustur") { kuruldu = doğru; }
-            k = k + 1;
-        }
-        eğer kuruldu {
-            dizi_ekle(p.kd_ad, dizi_al(p.a_deg, node));
-            dizi_ekle(p.kd_durum, 0);
-            ver 0;
-        }
-        kd_iptal_hepsi(p, node);
+    eğer kd_yaprak_mi(t) { ver 0; }
+    eğer metin_esit(t, "TANIMLAYICI") {
+        değişken ti: tam32 = kd_bul(p, dizi_al(p.a_deg, node));
+        eğer ti >= 0 { dizi_yaz(p.kd_durum, ti, 3); }
         ver 0;
     }
-    eğer metin_esit(t, "IFADE_DEYIMI") {
-        değişken j: tam32 = 0;
-        iken j < cs { kd_yuru(p, dizi_al(p.cocuk, cb + j)); j = j + 1; }
+    eğer metin_esit(t, "DEGISKEN") {
+        değişken k: tam32 = 0;
+        değişken aile: tam32 = 0 - 1;
+        iken k < cs {
+            değişken cad0: metin = kd_cagri_adi(p, dizi_al(p.cocuk, cb + k));
+            eğer metin_esit(cad0, "kilit_olustur") { aile = 0; }
+            eğer metin_esit(cad0, "dosya_ac") { aile = 1; }
+            k = k + 1;
+        }
+        eğer aile >= 0 {
+            dizi_ekle(p.kd_ad, dizi_al(p.a_deg, node));
+            dizi_ekle(p.kd_durum, 0);
+            dizi_ekle(p.kd_aile, aile);
+            ver 0;
+        }
+        kd_hepsini_birak(p);
         ver 0;
     }
     eğer metin_esit(t, "CAGRI") {
         değişken cad: metin = kd_cagri_adi(p, node);
-        eğer kd_kilit_yerlesigi(cad) ve (cs >= 2) {
+        eğer kd_izlenen_yerlesik(cad) ve (cs >= 2) {
             değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
             eğer metin_esit(dizi_al(p.a_ad, a0), "TANIMLAYICI") {
                 değişken ix: tam32 = kd_bul(p, dizi_al(p.a_deg, a0));
                 eğer ix >= 0 {
                     değişken d: tam32 = dizi_al(p.kd_durum, ix);
-                    eğer d == 2 { th_ekle(p, "CP005", node); dizi_yaz(p.kd_durum, ix, 3); }
-                    değilse {
                     eğer d != 3 {
-                        eğer metin_esit(cad, "kilit_al") {
-                            eğer d == 1 { th_ekle(p, "L002", node); dizi_yaz(p.kd_durum, ix, 3); }
-                            değilse { dizi_yaz(p.kd_durum, ix, 1); }
+                        eğer dizi_al(p.kd_aile, ix) == 1 {
+                            eğer metin_esit(cad, "dosya_kapat") {
+                                eğer d == 2 { th_ekle(p, "L002", node); dizi_yaz(p.kd_durum, ix, 3); }
+                                değilse { dizi_yaz(p.kd_durum, ix, 2); }
+                            }
+                            değilse {
+                                eğer d == 2 { th_ekle(p, "CP005", node); dizi_yaz(p.kd_durum, ix, 3); }
+                            }
                         }
-                        eğer metin_esit(cad, "kilit_birak") {
-                            eğer d == 0 { th_ekle(p, "L002", node); dizi_yaz(p.kd_durum, ix, 3); }
-                            değilse { dizi_yaz(p.kd_durum, ix, 0); }
+                        değilse {
+                            eğer d == 2 { th_ekle(p, "CP005", node); dizi_yaz(p.kd_durum, ix, 3); }
+                            değilse {
+                                eğer metin_esit(cad, "kilit_al") {
+                                    eğer d == 1 { th_ekle(p, "L002", node); dizi_yaz(p.kd_durum, ix, 3); }
+                                    değilse { dizi_yaz(p.kd_durum, ix, 1); }
+                                }
+                                eğer metin_esit(cad, "kilit_birak") {
+                                    eğer d == 0 { th_ekle(p, "L002", node); dizi_yaz(p.kd_durum, ix, 3); }
+                                    değilse { dizi_yaz(p.kd_durum, ix, 0); }
+                                }
+                                eğer metin_esit(cad, "kilit_yok") { dizi_yaz(p.kd_durum, ix, 2); }
+                            }
                         }
-                        eğer metin_esit(cad, "kilit_yok") { dizi_yaz(p.kd_durum, ix, 2); }
-                    } }
+                    }
                 }
             }
             ver 0;
         }
-        kd_iptal_hepsi(p, node);
+        kd_hepsini_birak(p);
         ver 0;
     }
-    kd_iptal_hepsi(p, node);
+    kd_hepsini_birak(p);
     ver 0;
 }
 işlev kd_pas(p: &değişken Ayr, node: tam32) -> tam32 {
@@ -6239,6 +6270,7 @@ işlev kd_pas(p: &değişken Ayr, node: tam32) -> tam32 {
     eğer metin_esit(dizi_al(p.a_ad, node), "ISLEV") {
         p.kd_ad = [];
         p.kd_durum = [];
+        p.kd_aile = [];
         değişken cb2: tam32 = dizi_al(p.a_cb, node);
         değişken cs2: tam32 = dizi_al(p.a_cs, node);
         değişken j: tam32 = 0;
@@ -6249,7 +6281,13 @@ işlev kd_pas(p: &değişken Ayr, node: tam32) -> tam32 {
         }
         değişken i: tam32 = 0;
         iken i < dizi_boyut(p.kd_ad) {
-            eğer dizi_al(p.kd_durum, i) == 1 { th_ekle(p, "L001", node); }
+            değişken dd: tam32 = dizi_al(p.kd_durum, i);
+            eğer dizi_al(p.kd_aile, i) == 0 {
+                eğer dd == 1 { th_ekle(p, "L001", node); }
+            }
+            değilse {
+                eğer dd == 0 { th_ekle(p, "L001", node); }
+            }
             i = i + 1;
         }
     }

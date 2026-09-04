@@ -6844,7 +6844,11 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
  *   uretmektense kacirmak yeglenir.
  * ========================================================================== */
 #define KD_AZAMI 32
-typedef struct { const char *ad; int uz; int durum; } KdKilit;   /* 0=serbest 1=tutulu 2=olu 3=izlenmiyor */
+/* [D-570] AILE: 0=kilit, 1=dosya. Ayni makine, FARKLI durum anlamlari:
+ *   kilit: 0=serbest 1=tutulu 2=olu 3=izlenmiyor  (cikista 1 -> L001)
+ *   dosya: 0=acik              2=kapali 3=izlenmiyor  (cikista 0 -> L001)
+ * Iki ayri gezgin YAZILMADI (D-407): tek yuruyus, baglama basina aile. */
+typedef struct { const char *ad; int uz; int durum; int aile; } KdKilit;
 
 static int kd_cagri_adi(const Dugum *d, const char **ad, int *uz) {
     if (!d || d->tip != DUGUM_CAGRI) return 0;
@@ -6860,6 +6864,18 @@ static int kd_kilit_yerlesigi(const char *ad, int uz) {
     return kd_ad_esit(ad, uz, "kilit_al", 8) || kd_ad_esit(ad, uz, "kilit_birak", 11)
         || kd_ad_esit(ad, uz, "kilit_yok", 9) || kd_ad_esit(ad, uz, "kilit_olustur", 13);
 }
+/* [D-570] Dosya ailesi. `Dosya` stdlib'de `yapi tekkez`tir ve L001/L002 ORADA
+ * calisir (tc24_* ile kapili) — ama `dosya_ac`/`dosya_kapat` YERLESIKTIR, yani
+ * sarmalayici atlanarak ayni tehlikeler geri geliyor (D-570'te olculdu:
+ * hic kapatmama / cift kapatma / kapali handle'a yazma UCU DE `OK` idi). */
+static int kd_dosya_yerlesigi(const char *ad, int uz) {
+    return kd_ad_esit(ad, uz, "dosya_ac", 8) || kd_ad_esit(ad, uz, "dosya_kapat", 11)
+        || kd_ad_esit(ad, uz, "dosya_oku", 9) || kd_ad_esit(ad, uz, "dosya_yaz", 9)
+        || kd_ad_esit(ad, uz, "dosya_boyut", 11);
+}
+static int kd_izlenen_yerlesik(const char *ad, int uz) {
+    return kd_kilit_yerlesigi(ad, uz) || kd_dosya_yerlesigi(ad, uz);
+}
 static int kd_bul(KdKilit *t, int n, const char *ad, int uz) {
     for (int i = 0; i < n; i++) if (kd_ad_esit(t[i].ad, t[i].uz, ad, uz)) return i;
     return -1;
@@ -6871,7 +6887,7 @@ static int kd_kacti(const Dugum *d, const char *ad, int uz) {
         return kd_ad_esit(d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk, ad, uz);
     if (d->tip == DUGUM_CAGRI) {
         const char *cad; int cuz;
-        int biliniyor = kd_cagri_adi(d, &cad, &cuz) && kd_kilit_yerlesigi(cad, cuz);
+        int biliniyor = kd_cagri_adi(d, &cad, &cuz) && kd_izlenen_yerlesik(cad, cuz);
         for (int i = 0; i < d->veri.cagri.sayi; i++) {
             const Dugum *a = d->veri.cagri.argumanlar[i];
             /* kilit_* nin DOGRUDAN tanimlayici argumani kacis DEGILDIR */
@@ -6889,7 +6905,7 @@ static void kd_kosullu_iptal(const Dugum *d, KdKilit *t, int n) {
         if (t[i].durum != 3 && kd_kacti(d, t[i].ad, t[i].uz)) t[i].durum = 3;
     if (d->tip == DUGUM_CAGRI) {
         const char *cad; int cuz;
-        if (kd_cagri_adi(d, &cad, &cuz) && kd_kilit_yerlesigi(cad, cuz)
+        if (kd_cagri_adi(d, &cad, &cuz) && kd_izlenen_yerlesik(cad, cuz)
             && d->veri.cagri.sayi >= 1) {
             const Dugum *a0 = d->veri.cagri.argumanlar[0];
             if (a0 && a0->tip == DUGUM_TANIMLAYICI) {
@@ -6912,11 +6928,17 @@ static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
     case DUGUM_DEGISKEN: {
         const Dugum *v = d->veri.degisken.deger;
         const char *cad; int cuz;
-        if (v && kd_cagri_adi(v, &cad, &cuz) && kd_ad_esit(cad, cuz, "kilit_olustur", 13)) {
+        int aile = -1;
+        if (v && kd_cagri_adi(v, &cad, &cuz)) {
+            if (kd_ad_esit(cad, cuz, "kilit_olustur", 13)) aile = 0;
+            else if (kd_ad_esit(cad, cuz, "dosya_ac", 8)) aile = 1;
+        }
+        if (aile >= 0) {
             if (*n < KD_AZAMI) {
                 t[*n].ad = d->veri.degisken.ad;
                 t[*n].uz = d->veri.degisken.ad_uzunluk;
-                t[*n].durum = 0;
+                t[*n].durum = 0;      /* kilit: serbest . dosya: acik */
+                t[*n].aile = aile;
                 (*n)++;
             }
             return;
@@ -6931,12 +6953,26 @@ static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
     case DUGUM_CAGRI: {
         const char *cad; int cuz;
         if (!kd_cagri_adi(d, &cad, &cuz)) return;
-        if (kd_kilit_yerlesigi(cad, cuz) && d->veri.cagri.sayi >= 1) {
+        if (kd_izlenen_yerlesik(cad, cuz) && d->veri.cagri.sayi >= 1) {
             const Dugum *a0 = d->veri.cagri.argumanlar[0];
             if (!a0 || a0->tip != DUGUM_TANIMLAYICI) return;
             int k = kd_bul(t, *n, a0->veri.tanimlayici.metin,
                            a0->veri.tanimlayici.uzunluk);
             if (k < 0 || t[k].durum == 3) return;
+            if (t[k].aile == 1) {   /* [D-570] dosya ailesi */
+                if (kd_ad_esit(cad, cuz, "dosya_kapat", 11)) {
+                    if (t[k].durum == 2) {
+                        tip_hata(tk, d, "L002",
+                            "kapali dosya tekrar kapatildi (cift kapat)");
+                        t[k].durum = 3;
+                    } else t[k].durum = 2;
+                } else if (t[k].durum == 2) {
+                    tip_hata(tk, d, "CP005",
+                        "dosya_kapat sonrasi kullanim (olu handle)");
+                    t[k].durum = 3;
+                }
+                return;
+            }
             if (t[k].durum == 2) {
                 tip_hata(tk, d, "CP005",
                     "kilit_yok sonrasi kullanim (olu handle)");
@@ -6963,9 +6999,31 @@ static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
             if (t[i].durum != 3 && kd_kacti(d, t[i].ad, t[i].uz)) t[i].durum = 3;
         return;
     }
+    case DUGUM_VER:
+        kd_yuru(tk, d->veri.ver.deger, t, n);
+        return;
+    case DUGUM_TANIMLAYICI: {
+        /* Ciplak tanimlayici = izlenmeyen konum -> o baglamayi birak. */
+        int k = kd_bul(t, *n, d->veri.tanimlayici.metin,
+                       d->veri.tanimlayici.uzunluk);
+        if (k >= 0) t[k].durum = 3;
+        return;
+    }
+    /* Zararsiz yapraklar: hicbir baglamaya dokunmaz. */
+    case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_METIN:
+    case DUGUM_KARAKTER: case DUGUM_MANTIKSAL: case DUGUM_BOS:
+        return;
     default:
-        /* Kosullu / dongu / esles / guvensiz / ver / atama vb.: izleme birak. */
-        kd_kosullu_iptal(d, t, *n);
+        /* [D-570] MODELLENMEYEN HER DUGUM -> TUM izlemeyi birak.
+         * ⚠ Bu, olculmus bir yanlis-pozitif yuzunden boyle: onceki surum
+         * yalnizca `kd_kacti` ile "kacti mi" diye soruyordu, ama C'de GENEL
+         * bir cocuk gezgini YOK ve `kd_kacti` TANIMLAYICI/CAGRI disina
+         * INMIYORDU. Sonuc: `ver tamam(Dosya { h: h })` gorulmuyor, baglama
+         * acik sayiliyor ve `stdlib/dosya.kem` SAHTE L001 aliyordu.
+         * Ikinci bir gezgin yazmak yerine (D-407) kural DARALTILDI:
+         * modellenmeyen sekilde HICBIR tani uretilmez. */
+        (void)kd_kosullu_iptal;
+        for (int i = 0; i < *n; i++) t[i].durum = 3;
         return;
     }
 }
@@ -6976,10 +7034,14 @@ static void kd_islev_pas(TipKontrol *tk, const Dugum *islev) {
     if (!g || g->tip != DUGUM_BLOK) return;
     KdKilit t[KD_AZAMI]; int n = 0;
     kd_yuru(tk, g, t, &n);
-    for (int i = 0; i < n; i++)
-        if (t[i].durum == 1)
+    for (int i = 0; i < n; i++) {
+        if (t[i].aile == 0 && t[i].durum == 1)
             tip_hata(tk, islev, "L001",
                 "kilit islev cikisinda TUTULU (birakilmadi)");
+        if (t[i].aile == 1 && t[i].durum == 0)
+            tip_hata(tk, islev, "L001",
+                "dosya islev cikisinda ACIK (kapatilmadi)");
+    }
 }
 static void kd_pas(TipKontrol *tk, const Dugum *d) {
     if (!d) return;

@@ -12,7 +12,8 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] DEGISMEZ AVI — kalan eksenler: `cesit` payload guvenligi, `esles` desen baglama omru, `Dosya`/`Baglanti` (bunlar `tekkez`, yani D-568'den FARKLI — once o farkin gercekten koruma sagladigini olc), `gorev`/`kanal` disindaki eszamanlilik yuzeyleri.
+- [ ] `soket_*` ailesi D-570'in disinda kaldi: probe'um T010 verdi (soket_al arite farkli) ve dogru sekli olcmeden kural yazmak D-421 sinifidir. Once `stdlib/ag.kem`den GERCEK cagri seklini oku, sonra D-569/D-570 makinesine ucuncu aile olarak ekle.
+- [ ] DEGISMEZ AVI — kalan eksenler: `cesit` payload guvenligi (D-437/438/439 kismen), `esles` desen baglama omru, `gorev`/`kanal` disindaki eszamanlilik yuzeyleri.
 
 
 
@@ -303,3 +304,12 @@
   UC UYGULAMAYA DA PORTLANDI (D-517 dersi): C + checker.kem + codegen.kem, tani kodu ve konum birebir.
   HANGI KAPI NEYI OLCTU: checker_diff 174/174 (0 muaf) . self_driver FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . stdlib_check tum testler . sifir uyari 38/0. Sabotaj 2/2: S139 (C pasi) -> C "OK" dondu, 173/174 rc=2; S140 (self pasi) -> 173/174 rc=2.
   YANLIS GIDEN: pasi tek bir dev heredoc ile yazmaya calistim, kabuk "unexpected EOF" verdi ve dosya HIC OLUSMADI. KEMGU pasi iki metin dosyasina bolunup kucuk bir enjektorle yerlestirildi. Uzun heredoc bu oturumda besinci kez arac hatasi uretti.
+- 2026-09-04 D-570: DOSYA HANDLE DISIPLINI — `tekkez` korumasi ham yerlesiklerle baypas ediliyordu. D-569'un makinesi genisletildi; YENI TANI KODU YOK.
+  MADDENIN SORUSU: `tekkez` olmak gercekten koruma sagliyor mu? ONCE POZITIF TARAF OLCULDU — EVET: tc24_* fiksturleri hala tutuyor (L001 sizinti, L002 cift kapat, temiz pozitif). D-452/D-466'nin mekanizmasi gercek.
+  AMA D-568'IN AYNISI: dosya_ac / dosya_kapat / dosya_oku / dosya_yaz YERLESIKTIR ve ham `metin` handle dondurur; `Dosya` sarmalayicisi kullanilmazsa lineer koruma HIC uygulanmaz. Olculdu: hic kapatmama, iki kez kapatma, kapattiktan sonra yazma -> UCU DE `OK`.
+  ONARIM: D-569'un durum makinesine `aile` alani eklendi (0=kilit 1=dosya). Cikista ACIK -> L001; kapaliyi tekrar kapat -> L002; kapali handle kullanimi -> CP005.
+  ILK SURUM SAHTE L001 URETTI ve onu KAPI DEGIL DEPO TARAMASI yakaladi: stdlib/dosya.kem kendi sarmalayicisinda `ver tamam(Dosya { h: h })` yapiyor; C'nin kd_kacti'si YALNIZ TANIMLAYICI ve CAGRI'ya iniyordu, YAPI_OLUSTUR'u hic gormuyordu -> baglama "hala acik" sanildi. Self-host surumum genel cocuk dongusu kullandigi icin IKISI AYRISIYORDU.
+  ONARIM IKINCI GEZGIN YAZMAK DEGIL KURALI DARALTMAK OLDU (D-407): C'de genel cocuk yineleyici YOK ve yazmak ayni soruyu iki yerde yanitlamak olurdu. kd_yuru artik yalniz MODELLEDIGI dugumleri isler (BLOK, DEGISKEN, IFADE_DEYIMI, CAGRI, VER, zararsiz yapraklar, ciplak TANIMLAYICI) ve MODELLENMEYEN her dugumde TUM izlemeyi birakir. Sonuc: stdlib/dosya.kem TEMIZ, uc tehlike hala yakalaniyor.
+  YANLIS-POZITIF: dosya_ac iceren 8 dosya; stdlib/dosya.kem, selfhost/*, test_dosya, 07_linear, dosya_io TEMIZ. Kalan tanilar yalniz tc22_01/tc22_02'de ve OZGUN olanlar (L001 0 0, L002 14 39); benim ekledigim sahteler (L001 7 1, L001 5 1) daraltmadan sonra kayboldu.
+  HANGI KAPI NEYI OLCTU: checker_diff 175/175 (0 muaf) . self_driver FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . stdlib_check . sifir uyari 38/0. Sabotaj S141 (C dosya ailesini kapat) -> 174/175, rc=2.
+  KAPSAM DISI (durustce): soket_* ailesi portlanmadi — probe'um T010 verdi (soket_al arite farkli) ve dogru sekli olcmeden kural yazmak D-421 sinifidir. Ayri is olarak Sirada'da.
