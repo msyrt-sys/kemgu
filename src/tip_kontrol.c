@@ -6819,6 +6819,178 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
 /* === Ana fonksiyon === */
 
+/* ==========================================================================
+ * [D-569] KILIT DISIPLINI — al/birak eslesmesi. Mehmet karari (b).
+ * --------------------------------------------------------------------------
+ * D-568 OLCTU: `kilit_al`/`kilit_birak` YERLESIKTIR, yani stdlib sarmali
+ * kullanilmadan cagrilabilir ve dort tehlike sekli --check ten TEK TANI
+ * ALMADAN geciyordu; biri (ayni kilidi iki kez `al`) GERCEKTEN ASILIYORDU.
+ *
+ * DURUM MAKINESI (baglama basina): SERBEST --al--> TUTULU --birak--> SERBEST
+ *                                  herhangi --yok--> OLU
+ *   islev cikisinda TUTULU        -> L001  (kaynak serbest birakilmadi)
+ *   SERBEST iken `birak`          -> L002  (eslesmeyen / cift birak)
+ *   TUTULU iken `al`              -> L002  (self-deadlock)
+ *   OLU iken herhangi bir kullanim-> CP005 (olu handle; D-503 ile AYNI sinif)
+ * YENI TANI KODU YOK — mevcut kodlarin anlamlari birebir ortusuyor.
+ *
+ * ⚠ KAPSAM YALNIZ `kilit_*`. `semafor_*` KAPSAM DISI ve bu OLCULDU:
+ *   kdl_semafor_al SAYAC azaltiyor (counting semaphore) -> coklu `al` MESRU,
+ *   1:1 eslesme kurali orada YANLIS olurdu. `bariyer_bekle`nin esi yok.
+ *
+ * ⚠ RAPORLAMADA DEFAULT-DENY: baglama izlenemez hale gelirse (kilit_* disi
+ *   bir cagriya argüman, lambda icinde gecis, yeniden atama, `ver`) izleme
+ *   BIRAKILIR ve o baglama icin HICBIR tani uretilmez. Yanlis-pozitif
+ *   uretmektense kacirmak yeglenir.
+ * ========================================================================== */
+#define KD_AZAMI 32
+typedef struct { const char *ad; int uz; int durum; } KdKilit;   /* 0=serbest 1=tutulu 2=olu 3=izlenmiyor */
+
+static int kd_cagri_adi(const Dugum *d, const char **ad, int *uz) {
+    if (!d || d->tip != DUGUM_CAGRI) return 0;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (!h || h->tip != DUGUM_TANIMLAYICI) return 0;
+    *ad = h->veri.tanimlayici.metin; *uz = h->veri.tanimlayici.uzunluk;
+    return 1;
+}
+static int kd_ad_esit(const char *a, int au, const char *b, int bu) {
+    return au == bu && memcmp(a, b, (size_t)au) == 0;
+}
+static int kd_kilit_yerlesigi(const char *ad, int uz) {
+    return kd_ad_esit(ad, uz, "kilit_al", 8) || kd_ad_esit(ad, uz, "kilit_birak", 11)
+        || kd_ad_esit(ad, uz, "kilit_yok", 9) || kd_ad_esit(ad, uz, "kilit_olustur", 13);
+}
+static int kd_bul(KdKilit *t, int n, const char *ad, int uz) {
+    for (int i = 0; i < n; i++) if (kd_ad_esit(t[i].ad, t[i].uz, ad, uz)) return i;
+    return -1;
+}
+/* Bir dugum altinda `ad` ISLENMEYEN bir konumda geciyor mu? (izleme birakma) */
+static int kd_kacti(const Dugum *d, const char *ad, int uz) {
+    if (!d) return 0;
+    if (d->tip == DUGUM_TANIMLAYICI)
+        return kd_ad_esit(d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk, ad, uz);
+    if (d->tip == DUGUM_CAGRI) {
+        const char *cad; int cuz;
+        int biliniyor = kd_cagri_adi(d, &cad, &cuz) && kd_kilit_yerlesigi(cad, cuz);
+        for (int i = 0; i < d->veri.cagri.sayi; i++) {
+            const Dugum *a = d->veri.cagri.argumanlar[i];
+            /* kilit_* nin DOGRUDAN tanimlayici argumani kacis DEGILDIR */
+            if (biliniyor && a && a->tip == DUGUM_TANIMLAYICI) continue;
+            if (kd_kacti(a, ad, uz)) return 1;
+        }
+        return kd_kacti(d->veri.cagri.hedef, ad, uz);
+    }
+    return 0;
+}
+/* Kosullu/dongu govdesinde tracked bir baglamaya DOKUNULUYORSA izlemeyi birak. */
+static void kd_kosullu_iptal(const Dugum *d, KdKilit *t, int n) {
+    if (!d) return;
+    for (int i = 0; i < n; i++)
+        if (t[i].durum != 3 && kd_kacti(d, t[i].ad, t[i].uz)) t[i].durum = 3;
+    if (d->tip == DUGUM_CAGRI) {
+        const char *cad; int cuz;
+        if (kd_cagri_adi(d, &cad, &cuz) && kd_kilit_yerlesigi(cad, cuz)
+            && d->veri.cagri.sayi >= 1) {
+            const Dugum *a0 = d->veri.cagri.argumanlar[0];
+            if (a0 && a0->tip == DUGUM_TANIMLAYICI) {
+                int k = kd_bul(t, n, a0->veri.tanimlayici.metin,
+                               a0->veri.tanimlayici.uzunluk);
+                if (k >= 0) t[k].durum = 3;
+            }
+        }
+    }
+}
+
+/* Duz-akis yuruyus. Kosullu yapilarda izleme BIRAKILIR (yanlis-pozitif yok). */
+static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
+    if (!d) return;
+    switch (d->tip) {
+    case DUGUM_BLOK:
+        for (int i = 0; i < d->veri.blok.sayi; i++)
+            kd_yuru(tk, d->veri.blok.deyimler[i], t, n);
+        return;
+    case DUGUM_DEGISKEN: {
+        const Dugum *v = d->veri.degisken.deger;
+        const char *cad; int cuz;
+        if (v && kd_cagri_adi(v, &cad, &cuz) && kd_ad_esit(cad, cuz, "kilit_olustur", 13)) {
+            if (*n < KD_AZAMI) {
+                t[*n].ad = d->veri.degisken.ad;
+                t[*n].uz = d->veri.degisken.ad_uzunluk;
+                t[*n].durum = 0;
+                (*n)++;
+            }
+            return;
+        }
+        for (int i = 0; i < *n; i++)
+            if (t[i].durum != 3 && kd_kacti(v, t[i].ad, t[i].uz)) t[i].durum = 3;
+        return;
+    }
+    case DUGUM_IFADE_DEYIMI:
+        kd_yuru(tk, d->veri.ifade_deyimi.ifade, t, n);
+        return;
+    case DUGUM_CAGRI: {
+        const char *cad; int cuz;
+        if (!kd_cagri_adi(d, &cad, &cuz)) return;
+        if (kd_kilit_yerlesigi(cad, cuz) && d->veri.cagri.sayi >= 1) {
+            const Dugum *a0 = d->veri.cagri.argumanlar[0];
+            if (!a0 || a0->tip != DUGUM_TANIMLAYICI) return;
+            int k = kd_bul(t, *n, a0->veri.tanimlayici.metin,
+                           a0->veri.tanimlayici.uzunluk);
+            if (k < 0 || t[k].durum == 3) return;
+            if (t[k].durum == 2) {
+                tip_hata(tk, d, "CP005",
+                    "kilit_yok sonrasi kullanim (olu handle)");
+                t[k].durum = 3; return;
+            }
+            if (kd_ad_esit(cad, cuz, "kilit_al", 8)) {
+                if (t[k].durum == 1) {
+                    tip_hata(tk, d, "L002",
+                        "ayni kilit iki kez alindi (self-deadlock)");
+                    t[k].durum = 3;
+                } else t[k].durum = 1;
+            } else if (kd_ad_esit(cad, cuz, "kilit_birak", 11)) {
+                if (t[k].durum == 0) {
+                    tip_hata(tk, d, "L002",
+                        "alinmamis kilit birakildi (eslesmeyen/cift birak)");
+                    t[k].durum = 3;
+                } else t[k].durum = 0;
+            } else if (kd_ad_esit(cad, cuz, "kilit_yok", 9)) {
+                t[k].durum = 2;
+            }
+            return;
+        }
+        for (int i = 0; i < *n; i++)
+            if (t[i].durum != 3 && kd_kacti(d, t[i].ad, t[i].uz)) t[i].durum = 3;
+        return;
+    }
+    default:
+        /* Kosullu / dongu / esles / guvensiz / ver / atama vb.: izleme birak. */
+        kd_kosullu_iptal(d, t, *n);
+        return;
+    }
+}
+
+static void kd_islev_pas(TipKontrol *tk, const Dugum *islev) {
+    if (!islev || islev->tip != DUGUM_ISLEV) return;
+    const Dugum *g = islev->veri.islev.govde;
+    if (!g || g->tip != DUGUM_BLOK) return;
+    KdKilit t[KD_AZAMI]; int n = 0;
+    kd_yuru(tk, g, t, &n);
+    for (int i = 0; i < n; i++)
+        if (t[i].durum == 1)
+            tip_hata(tk, islev, "L001",
+                "kilit islev cikisinda TUTULU (birakilmadi)");
+}
+static void kd_pas(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+    if (d->tip == DUGUM_ISLEV) { kd_islev_pas(tk, d); return; }
+    if (d->tip == DUGUM_PROGRAM)
+        for (int i = 0; i < d->veri.program.sayi; i++) kd_pas(tk, d->veri.program.uyeler[i]);
+    else if (d->tip == DUGUM_MODUL)
+        for (int i = 0; i < d->veri.modul.sayi; i++) kd_pas(tk, d->veri.modul.uyeler[i]);
+    else if (d->tip == DUGUM_DISA)
+        kd_pas(tk, d->veri.disa.tanim);
+}
 void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     /* [D-488] Cagrilan-ozeti tablosunu ISLEV DONGUSUNDEN ONCE kur: escape
@@ -6832,4 +7004,5 @@ void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     for (int i = 0; i < program->veri.program.sayi; i++) {
         tip_kontrol_tanim(tk, program->veri.program.uyeler[i]);
     }
+    kd_pas(tk, program);   /* [D-569] kilit disiplini — tip kontrolunden SONRA */
 }

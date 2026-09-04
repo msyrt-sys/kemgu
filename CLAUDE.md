@@ -1563,7 +1563,52 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
-### 🔴 D-568 (AÇIK — ÖLÇÜLDÜ): `Kilit`in "yapısal olarak imkânsız" iddiası TUTMUYOR
+### ✅ D-569: KİLİT DİSİPLİNİ CHECKER'A EKLENDİ — D-568'in dört açığı kapandı
+**Mehmet seçenek (b)'yi seçti.** D-568'in ölçtüğü dördü de artık derleme
+zamanında yakalanıyor; **yeni tanı kodu YOK** — mevcut kodların anlamları
+birebir örtüşüyor (D-503/D-505'in yeniden-kullanım deseni).
+
+**DURUM MAKİNESİ (bağlama başına):**
+```
+SERBEST --al--> TUTULU --birak--> SERBEST      herhangi --yok--> OLU
+  cikista TUTULU        -> L001   (kaynak serbest birakilmadi)
+  SERBEST iken `birak`  -> L002   (eslesmeyen / cift birak)
+  TUTULU iken `al`      -> L002   (self-deadlock)
+  OLU iken kullanim     -> CP005  (olu handle — D-503 ile AYNI sinif)
+```
+
+**⚠ KAPSAM YALNIZ `kilit_*` — VE BU ÖLÇÜLDÜ.** `semafor_*` **kapsam dışıdır**:
+`kdl_semafor_al` bir **sayaç** azaltır (counting semaphore), yani çoklu `al`
+**meşrudur** ve 1:1 eşleşme kuralı orada **yanlış** olurdu. `bariyer_bekle`nin
+eşi yok. Kuralı üç aileye birden uygulamak kolay ve **yanlış** olurdu.
+
+**⚠ RAPORLAMADA DEFAULT-DENY:** bağlama izlenemez hale gelirse — `kilit_*`
+dışı bir çağrıya argüman, koşullu/döngü/`eşleş` gövdesinde kullanım, yeniden
+atama — izleme **bırakılır** ve o bağlama için **hiçbir** tanı üretilmez.
+*Yanlış-pozitif üretmektense kaçırmak yeğlenir.* Fikstürdeki `koşullu`
+şekli bunu **pozitif olarak** ölçer.
+
+**YANLIŞ-POZİTİF TARAMASI:** 700+ `.kem`; L001/L002/CP005 veren **29** dosyanın
+**hiçbiri `kilit_` içermiyor** (hepsi önceden var olan lineer/yetki tanıları).
+Gerçek kilit kullanıcıları — `stdlib/kilit.kem`, `selfhost/checker.kem`,
+`selfhost/codegen.kem` — **TEMİZ**. Yani doğru (kapsamlı) kullanım
+cezalandırılmıyor.
+
+**ÜÇ UYGULAMAYA DA PORTLANDI** (D-517 dersi): C + `checker.kem` +
+`codegen.kem`, tanı kodu ve konum **birebir**.
+
+**Kapılar:** checker_diff **174/174 (0 muaf)** · self_driver **FIXPOINT ✓** ·
+check_kapisi 274/281 (0 RED) · check_genis 133/133 · stdlib_check tüm testler ·
+sıfır uyarı 38/0.
+**Sabotaj 2/2:** S139 (C pası) → C `OK` döndü, 173/174 rc=2 · S140 (self pası)
+→ 173/174 rc=2.
+
+**⚠ SÜREÇ NOTU:** pası tek bir dev heredoc ile yazmaya çalıştım ve kabuk
+`unexpected EOF` verdi — dosya **hiç oluşmadı**. KEMGU pası iki ayrı metin
+dosyasına bölünüp küçük bir enjektörle yerleştirildi. *Uzun heredoc bu
+oturumda beşinci kez araç hatası üretti.*
+
+### 🔴✅ D-568 (ÖLÇÜLDÜ → D-569'DA KAPANDI): `Kilit`in "yapısal olarak imkânsız" iddiası TUTMUYOR
 Değişmez avı opak handle'lara taşındı. Önce **dilin ilan ettiği iddia** arandı
 (D-567'nin dersi: iddia yoksa av da yok). `stdlib/kilit.kem:4`:
 

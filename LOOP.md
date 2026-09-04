@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] D-568 KARARI MEHMET'IN: `Kilit`/`Semafor`/`Bariyer` ham yerlesikleri acikta; deadlock ve olu-handle sekilleri --check'ten tani almadan geciyor (olculdu). Secenekler (a) yerlesikleri gizle (b) checker'a kilit disiplini (makine var: L005 + dal-duyarli tuketim) (c) iddiayi gercege uydur.
 - [ ] DEGISMEZ AVI — kalan eksenler: `cesit` payload guvenligi, `esles` desen baglama omru, `Dosya`/`Baglanti` (bunlar `tekkez`, yani D-568'den FARKLI — once o farkin gercekten koruma sagladigini olc), `gorev`/`kanal` disindaki eszamanlilik yuzeyleri.
 
 
@@ -296,3 +295,11 @@
   AYNI YUZEY Semafor ve Bariyer icin de acik (semafor_al, semafor_birak, bariyer_bekle de yerlesik).
   UC SECENEK, secim MEHMET'IN: (a) yerlesikleri gizle — stdlib'in kendisi onlara dayaniyor, ayrica onceden gecerli programlari reddeder; (b) checker'a kilit disiplini ekle — MAKINE ZATEN VAR (dal-duyarli lineer tuketim, D-311/D-312; L005 tam bu sekli taniyor) ama bu bir LIVENESS kuralidir ve depo D-296'da "safety korunuyor liveness kayboluyor"u kabul edilemez saymisti; (c) iddiayi gercege uydur. En ucuzu (c), en degerlisi (b).
   YANLIS GIDEN: ilk turda k1/k2 exit=1 gosterdi, bir an gercek kusur sandim; ASan'siz kosunca 42 cikti. Sebep LeakSanitizer'di — fiksturlerimde kilit_yok yoktu, 48 baytlik kilit siziyordu. Kusuru fiksturun kendi eksiginden ayir.
+- 2026-09-04 D-569: KILIT DISIPLINI checker'a eklendi (Mehmet karari (b)). D-568'in olctugu dort acik da derleme zamaninda yakalaniyor. YENI TANI KODU YOK.
+  DURUM MAKINESI (baglama basina): SERBEST --al--> TUTULU --birak--> SERBEST; herhangi --yok--> OLU. Cikista TUTULU -> L001; SERBEST iken birak -> L002; TUTULU iken al -> L002 (self-deadlock); OLU iken kullanim -> CP005 (D-503 ile ayni sinif). Kodlarin anlamlari birebir ortustugu icin yeniden kullanildi (D-503/D-505 deseni).
+  KAPSAM YALNIZ kilit_* VE BU OLCULDU: kdl_semafor_al bir SAYAC azaltir (counting semaphore), coklu `al` MESRUDUR, 1:1 eslesme kurali orada YANLIS olurdu. bariyer_bekle'nin esi yok. Uc aileye birden uygulamak kolay ve yanlis olurdu.
+  RAPORLAMADA DEFAULT-DENY: baglama izlenemez hale gelirse (kilit_* disi cagriya arguman, kosullu/dongu/esles govdesi, yeniden atama) izleme BIRAKILIR ve o baglama icin HICBIR tani uretilmez. Fiksturdeki `kosullu` sekli bunu POZITIF olarak olcer.
+  YANLIS-POZITIF TARAMASI: 700+ .kem; L001/L002/CP005 veren 29 dosyanin HICBIRI kilit_ icermiyor (hepsi onceden var olan lineer/yetki tanilari). Gercek kilit kullanicilari (stdlib/kilit.kem, selfhost/checker.kem, selfhost/codegen.kem) TEMIZ — dogru kullanim cezalandirilmiyor.
+  UC UYGULAMAYA DA PORTLANDI (D-517 dersi): C + checker.kem + codegen.kem, tani kodu ve konum birebir.
+  HANGI KAPI NEYI OLCTU: checker_diff 174/174 (0 muaf) . self_driver FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . stdlib_check tum testler . sifir uyari 38/0. Sabotaj 2/2: S139 (C pasi) -> C "OK" dondu, 173/174 rc=2; S140 (self pasi) -> 173/174 rc=2.
+  YANLIS GIDEN: pasi tek bir dev heredoc ile yazmaya calistim, kabuk "unexpected EOF" verdi ve dosya HIC OLUSMADI. KEMGU pasi iki metin dosyasina bolunup kucuk bir enjektorle yerlestirildi. Uzun heredoc bu oturumda besinci kez arac hatasi uretti.
