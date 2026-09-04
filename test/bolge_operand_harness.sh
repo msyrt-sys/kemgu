@@ -82,14 +82,19 @@ for f in test/cg_korpus/*.kem test/perf/*.kem; do
     topl=$((topl+1))
     b=$(basename "$f" .kem); em=0
     for m in $ENV_MUAF; do [ "$m" = "$b" ] && em=1; done
-    if [ "$em" -eq 0 ] && ! diff -q <(env_sinifi "$TMP/c.ll") <(env_sinifi "$TMP/s.ll") >/dev/null; then
+    # [D-563] SUREC IKAMESI `<(...)` WINDOWS`TA CALISMAZ: MSYS2 `diff`
+    # `/dev/fd/63` acamaz ("No such file or directory") ve kapi TUM
+    # dosyalarda SAPMA raporlar (olculdu: 342/171). Gercek dosyaya yaz.
+    env_sinifi "$TMP/c.ll" > "$TMP/c.env"; env_sinifi "$TMP/s.ll" > "$TMP/s.env"
+    rho_sinifi "$TMP/c.ll" > "$TMP/c.rho"; rho_sinifi "$TMP/s.ll" > "$TMP/s.rho"
+    if [ "$em" -eq 0 ] && ! diff -q "$TMP/c.env" "$TMP/s.env" >/dev/null; then
         echo "  🔴 $b — kapanış env operandı SAPMASI:"
-        diff <(env_sinifi "$TMP/c.ll") <(env_sinifi "$TMP/s.ll") | head -4 | sed 's/^/     /'
+        diff "$TMP/c.env" "$TMP/s.env" | head -4 | sed 's/^/     /'
         fark=$((fark+1))
     fi
-    if ! diff -q <(rho_sinifi "$TMP/c.ll") <(rho_sinifi "$TMP/s.ll") >/dev/null; then
+    if ! diff -q "$TMP/c.rho" "$TMP/s.rho" >/dev/null; then
         echo "  🔴 $(basename "$f") — bölge operandı SAPMASI:"
-        diff <(rho_sinifi "$TMP/c.ll") <(rho_sinifi "$TMP/s.ll") | head -4 | sed 's/^/     /'
+        diff "$TMP/c.rho" "$TMP/s.rho" | head -4 | sed 's/^/     /'
         fark=$((fark+1))
     fi
 done
