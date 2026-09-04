@@ -40,7 +40,19 @@ if [ ! -x /usr/bin/time ]; then
     exit 0
 fi
 
-ESIK_KB=4096
+# [D-566] ESIK PLATFORMA BAGLIDIR. 4096 KB, LINUX olcumunden turetilmisti
+# (bugunku deger 1152 KB). Windows'ta zirve calisma kumesi (peak working set)
+# BASKA sayilir: CI'da SELF bench2 = 5544 KB olculdu ve kapi YANLIS yere
+# kirmizi verdi — yonlendirme SAGLAMDI, olcut tasinabilir degildi.
+# ⚠ AYIRT EDICILIK KORUNUR: gerileme (rho_caller'a donus) ~19968 KB'dir;
+#   12288 KB esigi gozlenen 5544'un ~2.2 kati ama gerilemenin ~yarisi.
+# ⚠ DURUSTCE: Windows tarafi TEK bir CI gozlemine dayaniyor (5544 KB).
+#   Aralikli kirmizi gorulurse once BU sayiyi yeniden olc, esigi kor korune
+#   buyutme.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) ESIK_KB=12288 ;;
+    *)                    ESIK_KB=4096  ;;
+esac
 # [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
 # recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
 # AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
@@ -76,7 +88,7 @@ for c in "$KEMGU:C" "$CODEGEN:SELF"; do
         if [ "$kb" -gt "$ESIK_KB" ]; then
             echo "  🔴 $et $b: zirve RSS ${kb} KB > eşik ${ESIK_KB} KB"
             echo "     → D-506'nın ρ_yerel yönlendirmesi düşmüş olabilir (ρ_caller'da"
-            echo "       bench2 19968 KB ölçülmüştü). `bolge_operand` kapısını da koştur:"
+            echo "       bench2 19968 KB ölçülmüştü). 'bolge_operand' kapısını da koştur:"
             echo "       o IR'daki ρ SINIFINI ölçer, bu kapı GERÇEK belleği."
             hata=1
         fi
