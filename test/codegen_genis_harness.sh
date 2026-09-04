@@ -187,6 +187,12 @@ for f in test/ornekler/*.kem stdlib/temel/*.kem; do
         fail=$((fail+1))
     else
         echo "  🔴 $b — exit aynı ($coracle) ama STDOUT farklı:"
+        # [D-561] TESHIS: `[ -f ]` "var" derken `diff` "No such file" diyor.
+        # Bu CELISKI olculmeden onarilamaz — dizinin GERCEK halini bas.
+        echo "      TESHIS: TMP=$TMP"
+        echo "      [ -f c.out ]=$([ -f "$TMP/$b.c.out" ] && echo VAR || echo YOK)  [ -f s.out ]=$([ -f "$TMP/$b.s.out" ] && echo VAR || echo YOK)"
+        echo "      dizin girdi sayisi: $(ls -1 "$TMP" 2>&1 | wc -l)"
+        ls -la "$TMP" 2>&1 | head -4 | sed 's/^/        /'
         d=$(diff "$TMP/$b.c.out" "$TMP/$b.s.out" 2>&1 | head -6)
         if [ -z "$d" ]; then
             echo "      ⚠ diff BOS dondu — dosyalar var ama fark gosterilemiyor;"
