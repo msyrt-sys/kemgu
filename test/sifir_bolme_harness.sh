@@ -44,7 +44,15 @@ kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
     "$1" --llvm "$3" > "$TMP/a.ll" 2>/dev/null || { echo "  🔴 $2 $(basename $3): IR üretilemedi"; hata=1; return; }
     clang -x ir "$TMP/a.ll" -x none "$RT" -o "$TMP/a.exe" 2>/dev/null \
         || { echo "  🔴 $2 $(basename $3): LINK-RED"; hata=1; return; }
+# [D-564] 127 = Windows'ta TAZE .exe'nin ilk kosumu (Defender/exec yarisi,
+# D-413). `codegen_genis`/`codegen_diff` bu yeniden-denemeye ZATEN sahipti;
+# bu harness'ta YOKTU ve Windows CI'da SELF tarafinin 11 olcumu birden
+# exit=127 verdi (beklenen 134) — kusur derleyicide degil ORTAMDAYDI.
     out=$(timeout 30 "$TMP/a.exe" 2>&1); rc=$?
+    d127=0
+    while [ "$rc" -eq 127 ] && [ "$d127" -lt 12 ]; do
+        sleep 0.3; out=$(timeout 30 "$TMP/a.exe" 2>&1); rc=$?; d127=$((d127+1))
+    done
     olculen=$((olculen+1))
     if [ "$rc" -ne "$4" ]; then
         echo "  🔴 $2 $(basename $3): exit=$rc (beklenen $4)"

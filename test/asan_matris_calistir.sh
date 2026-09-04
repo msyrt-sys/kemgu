@@ -61,7 +61,15 @@ for f in "$DIR"/m*.kem; do
     fi
     # 1) Sanitizer'sız: değer doğruluğu (exit 42)
     clang -x ir "$TMP/m.ll" -x none $RT_OBJ -o "$TMP/n.exe" 2>/dev/null
+# [D-564] 127 = Windows'ta TAZE .exe'nin ilk kosumu (Defender/exec yarisi,
+# D-413). `codegen_genis`/`codegen_diff` bu yeniden-denemeye ZATEN sahipti;
+# bu harness'ta YOKTU ve Windows CI'da SELF tarafinin 11 olcumu birden
+# exit=127 verdi (beklenen 134) — kusur derleyicide degil ORTAMDAYDI.
     timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
+    d127=0
+    while [ "$nrc" -eq 127 ] && [ "$d127" -lt 12 ]; do
+        sleep 0.3; timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?; d127=$((d127+1))
+    done
     # 2) ASan/UBSan: bellek güvenliği (exit 42 + 0 ihlal)
     clang -fsanitize=address,undefined -x ir "$TMP/m.ll" -x none $RT_SRC -o "$TMP/a.exe" 2>/dev/null
     aout=$($ASAN_RUN timeout 60 "$TMP/a.exe" 2>&1); arc=$?
