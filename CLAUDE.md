@@ -1563,6 +1563,45 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🎯 D-555→D-559: CI KAMPANYASI — "hiç koşmuyor"dan "Linux tam yeşil"e
+D-554 CI'yı ayağa kaldırdı; sonrası **log okuyup ölçerek** ilerledi. Her adımda
+bir hipotez kuruldu, **logla doğrulandı**, sonra onarıldı.
+
+| # | ölçülen | onarım |
+|---|---|---|
+| D-555 | 18 test `opt -passes=verify`de düştü; `opt` CI'da YOK. Test `2>/dev/null` ile *"command not found"*u yutup **"IR reddedildi"** diyordu | `llvm` kuruldu **+** eksik araç artık ayrı bir **ORTAM HATASI** banner'ıyla bildiriliyor |
+| D-556 | `ld.lld: No such file or directory` → `calistir_uart_merhaba_bare_metal` Error 127 | `lld` kuruldu |
+| D-557 | QEMU yokken beş temsilcinin **beşi de atlandı** ama özet yine *"5/5 geçti"* diyordu | özet artık atlamayı söylüyor |
+| D-558 | Windows: `clang: command not found` (iş UCRT64 kabuğunda, clang Clang64'te) | `MSYS2_PATH_TYPE: inherit` + PATH ön-eki |
+| D-559 | Windows: `Error -1073741515` = **0xC0000135 STATUS_DLL_NOT_FOUND** (ASan runtime DLL'i) | PATH ön-eki **her** Windows adımına |
+
+**SONUÇ:** Linux işi **`Tum testler gecti!`** — tam takım CI'da yeşil.
+`llvm_test` 286/286 · `checker_diff` 173/173 · bare-metal hedefleri koşuyor.
+
+**⚠ D-551'İN ÇIKARIMI KISMEN YANLIŞTI.** Orada *"`ld.lld` ve `qemu` yok →
+bare-metal/QEMU kapıları atlanır"* demiştim. `ld.lld` **atlanmadı, SERT HATA
+verdi** (D-486 birçok atlamayı sert hataya çevirmişti) ve asıl ilk engel hiç
+tahmin etmediğim **`opt`**tu. *Çıkarım, ölçümün yerine geçmez.*
+
+### 🔴 AÇIK: Windows `codegen_genis` 3/70
+Windows artık takımın neredeyse tamamını koşuyor, `codegen_genis`te duruyor:
+67 programda **çıkış kodu AYNI, "STDOUT farklı"**.
+
+**⚠ İLK HİPOTEZİM (CRLF) YANLIŞ OLURDU — logu okuyunca çürüdü.** Harness
+farkı basıyor:
+```sh
+diff "$TMP/$b.c.out" "$TMP/$b.s.out" 2>/dev/null | head -6
+```
+ve log'da **tek bir fark satırı bile YOK**. `diff -q` eksik dosyada da
+sıfır-dışı döner; ayrıntılı `diff`in "No such file" hatası ise `2>/dev/null`
+ile yutulur. Yani kanıt *"içerik farklı"* değil, **"çıktı dosyalarından biri
+hiç oluşmamış"** diyor. Satır sonlarını "onarsaydım" hiçbir şey değişmezdi
+(D-421: yanlış kökü onarmak).
+
+**SIRADAKİ:** harness'ın eksik dosyayı içerik farkından **ayırması** (bugün
+ikisi aynı mesajı veriyor), sonra Windows'ta `.out`un neden yazılmadığının
+ölçülmesi.
+
 ### 🔴✅ D-554: CI 4 AYDIR HİÇ ÇALIŞMAMIŞ — tek bir tırnaksız `:` yüzünden
 `main` push edildikten sonra CI sonuçlarına bakıldı. Bulgu beklenenden ağırdı.
 

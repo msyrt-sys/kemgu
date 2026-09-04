@@ -12,7 +12,7 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] CI ONARIMI (D-554 devami): CI artik GERCEKTEN kosuyor ama iki is de dusuyor. Linux: `make` gecti, `make test_tumu` dustu. Windows: "Derleyici kontrolu" dustu (clang PATH'te degil? is UCRT64 kabugunda, clang Clang64 paketinde). Is loglari 403 — `gh auth login` ya da GH_TOKEN gerekiyor. ONCE LOGU OKU, hipotezle onarma (D-554'te iki hipotez var ve ikisi de dogrulanmadi).
+- [ ] WINDOWS CI: codegen_genis 3/70 (D-559 acigi). 67 programda cikis kodu AYNI ama "STDOUT farkli"; logda TEK BIR diff satiri YOK -> kanit "icerik farkli" degil "cikti dosyasi hic olusmamis". ONCE harness'i duzelt: eksik dosya ile icerik farki AYRI mesaj vermeli (bugun ikisi ayni). Sonra Windows'ta .out'un neden yazilmadigini olc. CRLF hipotezine ATLAMA — logla curudu (D-421).
 
 
 
@@ -257,3 +257,13 @@
   ILK GERCEK KOSUM (a0e431e): Linux -> checkout ok, apt ok, `make` DERLEME OK, `make test_tumu` BASARISIZ. Windows -> MSYS2 ok, "Derleyici kontrolu" BASARISIZ (derleme hic denenmedi). Linux'ta derleyicinin CI'da KURULMASI yeni ve olumlu bir bilgi.
   HIPOTEZLER (loglar 403, kimlik dogrulamasi gerekiyor): Windows'ta is `msystem: UCRT64` kabugunda kosuyor ama `clang` Clang64 paketinden geliyor ve o dizin PATH'te degil (CLAUDE.md tam bunu sart kosuyor); Linux'ta ld.lld ve qemu ubuntu taban imajinda yok (D-551) + D-486 bircok "atla"yi sert hataya cevirdi. IKISI DE HIPOTEZ, log okunmadan dogrulanmadi.
   SIRADAKI: `gh auth login` (ya da GH_TOKEN) olmadan is loglari okunamiyor. Loglar okununca iki hipotez dogrulanip onarilmali.
+- 2026-09-04 D-555->D-559: CI kampanyasi — "hic kosmuyor"dan "Linux tam yesil"e. Her adimda hipotez kuruldu, LOGLA dogrulandi, sonra onarildi.
+  D-555: 18 test `opt -passes=verify`de dustu; opt CI'da YOK. Test 2>/dev/null ile "command not found"u yutup "IR reddedildi" diyordu — EKSIK ARAC, DERLEYICI KUSURU gibi raporlaniyordu. llvm kuruldu + eksik arac artik ayri ORTAM HATASI banneriyle bildiriliyor.
+  D-556: ld.lld yok -> calistir_uart_merhaba_bare_metal Error 127. lld kuruldu.
+  D-557: QEMU yokken bes temsilcinin BESI de atlandi ama ozet "5/5 gecti" diyordu (D-486 kapsam yanilsamasi). Ozet artik atlamayi soyluyor; QEMU VARKEN ciktinin degismedigi yerel olarak olculdu.
+  D-558: Windows `clang: command not found` — is UCRT64 kabugunda, clang Clang64'te. MSYS2_PATH_TYPE=inherit + PATH on-eki.
+  D-559: Windows Error -1073741515 = 0xC0000135 STATUS_DLL_NOT_FOUND (ASan runtime DLL). PATH on-eki HER Windows adimina (kabuk her adimda taze).
+  SONUC: Linux isi "Tum testler gecti!" — tam takim CI'da yesil (llvm_test 286/286, checker_diff 173/173, bare-metal hedefleri kosuyor).
+  D-551'IN CIKARIMI KISMEN YANLISTI: "ld.lld ve qemu yok -> o kapilar atlanir" demistim; ld.lld ATLANMADI, SERT HATA verdi (D-486 atlamalari sert hataya cevirmisti) ve ilk engel hic tahmin etmedigim `opt`tu. Cikarim olcumun yerine gecmez.
+  ACIK: Windows codegen_genis 3/70 — 67 programda cikis kodu AYNI, "STDOUT farkli". ILK HIPOTEZIM (CRLF) YANLIS OLURDU: harness farki basiyor (diff ... | head -6) ama logda TEK BIR FARK SATIRI YOK. diff -q eksik dosyada da sifir-disi doner, ayrintili diff'in "No such file" hatasi 2>/dev/null ile yutulur. Yani kanit "icerik farkli" degil "cikti dosyalarindan biri hic olusmamis". Satir sonlarini onarsaydim hicbir sey degismezdi (D-421).
+  SIRADAKI: harness eksik dosyayi icerik farkindan AYIRMALI (bugun ikisi ayni mesaji veriyor), sonra Windows'ta .out'un neden yazilmadigi olculmeli.
