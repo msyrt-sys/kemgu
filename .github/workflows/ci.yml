@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: apt: clang + gcc + make
+      - name: "apt: clang + gcc + make"
         run: |
           sudo apt-get update
           sudo apt-get install -y clang gcc make file
