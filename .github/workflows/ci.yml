@@ -44,26 +44,39 @@ jobs:
           mingw32-make --version | head -1
 
       - name: Derle (mingw32-make)
-        run: mingw32-make
+        run: |
+          export PATH=/clang64/bin:$PATH
+          mingw32-make
 
       - name: Tum testler (mingw32-make test_tumu)
-        run: mingw32-make test_tumu
+        run: |
+          export PATH=/clang64/bin:$PATH
+          mingw32-make test_tumu
 
       - name: Stdlib --check
-        run: mingw32-make calistir_stdlib_check
+        run: |
+          export PATH=/clang64/bin:$PATH
+          mingw32-make calistir_stdlib_check
 
       - name: Snapshot test
-        run: mingw32-make calistir_snapshot_test
+        run: |
+          export PATH=/clang64/bin:$PATH
+          mingw32-make calistir_snapshot_test
 
       - name: Fuzzer (10000 iter ASan)
-        run: mingw32-make calistir_fuzz_test
+        run: |
+          export PATH=/clang64/bin:$PATH
+          mingw32-make calistir_fuzz_test
 
       - name: Runtime link test
-        run: mingw32-make calistir_runtime_link_test
+        run: |
+          export PATH=/clang64/bin:$PATH
+          mingw32-make calistir_runtime_link_test
 
       - name: Test sayisi ozeti
         if: always()
         run: |
+          export PATH=/clang64/bin:$PATH
           echo "## KEMGU Windows Test Sonuclari" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Suite | Durum |" >> $GITHUB_STEP_SUMMARY
