@@ -12,6 +12,7 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
+- [ ] DEGISMEZ AVI — taranmamis eksenler: `ceşit` payload guvenligi (D-437/438/439 kismen), `eşleş` desen baglama omru, `yetki` disindaki opak handle'lar (Dosya/Kilit/Semafor/Baglanti) ve `görev`/`kanal` disindaki eszamanlilik yuzeyleri. Her eksende ONCE dilin ILAN ETTIGI iddiayi bul, sonra sina (D-567 deseni: iddia yoksa av da yok).
 
 
 
@@ -278,3 +279,11 @@
   IKI KEZ BAYAT ARTEFAKT: Windows yerelde codegen_diff 166/169 ve bolge_operand 14 sapma gorundu; ikisinde de build/codegen.exe 7 gun eskiydi. Taze kurulunca temiz — "Windows ayrismasi" diye kaydedilmedi.
   YEREL YESIL != CI YESIL: yerel Windows takimi "Tum testler gecti!" dedi ama perf_bellek orada ATLANMISTI (/usr/bin/time yok). Yerel yesil o kapi hakkinda hicbir sey soylemiyordu.
   SONUC: main uzerinde Linux success + Windows success (run 33866729367).
+- 2026-09-04 D-567 (NEGATIF SONUC): `metin` UTF-8 ekseni tarandi. BELLEK GUVENLIGI TUTUYOR; D-458'in "gecerli-UTF-8 degismezi" iddiasi FAZLAYDI. KOD DEGISIKLIGI YOK.
+  NEDEN BU EKSEN: Sirada bosalmisti; LOOP kurali geregi en muhafazakar ve olculebilir isi kendim sectim. `metin` dilin her yerinde ve D-458 onun icin acikca bir degismez ILAN etmisti — yani sinanabilir bir iddia vardi.
+  BELLEK GUVENLIGI, 8/8 TUTTU (ASan her kosumda temiz): kes(s,100,5)->"" (baslangic kirpiliyor), kes(s,-5,2)->"ab" (negatif 0'a), kes(s,1,999)->"bc" (uzunluk kirpiliyor), metin_bayt(s,100)->0 (GERCEK koruma, kaynak okundu: `i<0` ve `i>=n`), kod_gecerli 0 ve 0x110000'i reddediyor, 'A'yi kabul. Tasma yok, sinir ihlali yok, cokme yok.
+  AMA UTF-8 GECERLILIGI DEGISMEZ DEGIL: metin_uzunluk("çığ")=6 (BAYT), metin_kes("çığ",0,1)=1 bayt (0xC3 = ç'nin YARISI), yazdir_metin o yarimi HAM basiyor (exit 42, sikayet yok), metin_kucuk_tr yarimi cokmeden isliyor, iki yarim birlestirilince "ç" geri geliyor. Yani `metin` NUL-sonlandirmali BAYT dizisidir; UTF-8 bir SOZLESMEDIR, korunan bir degismez degil.
+  BAYT INDEKSLEME BILINCLIDIR: D-458'in KENDISI metin_kes("\n",1,1) ile bayt diliminden yararlaniyor; D-461'in regex'i kod-noktasi duzeyini KENDI kuruyor.
+  DUZELTILEN IDDIA: D-458 ham-bayt primitifini "gecersiz dizgi kurmaya izin verirdi" diye reddetmisti; gerekce eksikti cunku gecersiz dizgi metin_kes ile ZATEN kurulabiliyor. kod_metin'in 0'i reddetmesi UTF-8 icin degil NUL-SONLANDIRMA icindir — o kisim dogru.
+  KOD DEGISIKLIGI YAPILMADI: bayt indeksleme kaldirilamaz (mevcut kullanimlar ona dayaniyor) ve dogrulama eklemek D-515 sinifina girerdi (olculebilir kusuru olmayan yere yeni kod). Degisen tek sey kaydin gercege uydurulmasi (D-406).
+  YANLIS GIDEN: iki probe kendi hatamdi — `yazdir_satir("")` arguman almiyor (T010); ve metin_uzunluk'u karakter sanip "çığ" icin 3 beklemistim, olcum 6 dedi. Beklentiyi olcumden ONCE yazmak yaniltiyor (D-500).

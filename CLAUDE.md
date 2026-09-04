@@ -1563,6 +1563,49 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ⛔✅ D-567 (NEGATİF SONUÇ): `metin` UTF-8 ekseni — BELLEK GÜVENLİĞİ TUTUYOR, ama D-458'in İDDİASI FAZLAYDI
+Değişmez avı `metin`e taşındı: dilin her yerinde olan tip, ve D-458 onun için
+*"geçerli-UTF-8 olma değişmezi"* ilan etmişti. Sekiz şekil ölçüldü.
+
+**BELLEK GÜVENLİĞİ — sekizde sekiz TUTTU (ASan her koşumda temiz):**
+```
+kes(s, 100, 5)   -> ""     baslangic KIRPILIYOR
+kes(s, -5, 2)    -> "ab"   negatif 0'a KIRPILIYOR
+kes(s, 1, 999)   -> "bc"   uzunluk KIRPILIYOR
+metin_bayt(s,100)-> 0      GERCEK koruma (kaynak okundu: `i<0` ve `i>=n`)
+kod_gecerli(0)   -> yanlis . kod_gecerli(0x110000) -> yanlis . 'A' -> dogru
+```
+Taşma yok, sınır ihlali yok, çökme yok.
+
+**🔴 AMA UTF-8 GEÇERLİLİĞİ BİR DEĞİŞMEZ DEĞİL — ve iddia bunu söylüyordu:**
+```
+metin_uzunluk("çığ")        -> 6      (BAYT, karakter degil)
+metin_kes("çığ", 0, 1)      -> 1 bayt (0xC3 = `ç`nin YARISI)
+yazdir_metin(o yarim)       -> stdout'a HAM 0xC3, sikayet YOK, exit 42
+metin_kucuk_tr(yarim)       -> 1 bayt, cokme YOK
+yarim_a + yarim_b           -> "ç" geri geliyor (bayt-duzeyi birlestirme)
+```
+Yani `metin` **NUL-sonlandırmalı BAYT dizisidir**; UTF-8 bir **sözleşmedir**,
+korunan bir değişmez değil. `metin_uzunluk` ve `metin_kes` **bayt indekslidir**
+ve bu **bilinçlidir** — D-458'in kendisi `metin_kes("\n",1,1)` ile bayt
+diliminden yararlanıyor, D-461'in regex'i kod-noktası düzeyini **kendi**
+kuruyor.
+
+**DÜZELTİLEN İDDİA:** D-458 *"ham bayt→metin primitifi geçersiz dizgi kurmaya
+izin verirdi"* diyerek onu **reddetmişti**. Gerekçe eksikti: geçersiz dizgi
+`metin_kes` ile **zaten kurulabiliyor**. `kod_metin`'in kod 0'ı reddetmesi
+UTF-8 için değil, **NUL-sonlandırma** içindir (gömülü NUL temsil edilemez) —
+o kısım doğru ve yerinde.
+
+**KOD DEĞİŞİKLİĞİ YOK.** Bayt indeksleme kaldırılamaz (`metin_kes`in mevcut
+kullanımları ona dayanıyor) ve doğrulama eklemek D-515'in sınıfına girerdi:
+ölçülebilir bir kusuru olmayan yere yeni kod. Değişen tek şey **kaydın
+gerçeğe uydurulması** — *"gerekçe metni de bir iddiadır, ölç"* (D-406).
+
+**⚠ İKİ PROBE'UM KENDİ HATAMDI** (D-500): `yazdir_satir("")` **argüman
+almıyor** → T010; ve ilk turda `metin_uzunluk`u karakter sanıp `çığ` için 3
+beklemiştim, ölçüm **6** dedi. Beklentiyi ölçümden ÖNCE yazmak yanıltıyor.
+
 ### 🎉 D-560→D-566: CI TAM YEŞİL — Linux **ve** Windows
 D-554 CI'yı ilk kez çalıştırdı; bu seri Windows'u da yeşile çekti. Her adım
 aynı döngüyle ilerledi: **logu oku → hipotez → ölç → onar**.
@@ -3560,7 +3603,10 @@ sessiz veri bozulmasıydı.**
   ama stdout'a yazıyordu — D-450'nin deseni: yeni algoritma yok, çıkışı tampona
   al. `json.kem`'in "saf KEMGU ile AŞILAMAZ, denemeden önce oku" notu bu yüzden
   ESKİMİŞTİ.
-- **HAM BAYT→METİN BİLEREK YOK:** `metin`in geçerli-UTF-8 olma değişmezi
+- **HAM BAYT→METİN BİLEREK YOK.** ⚠ **GEREKÇE D-567'DE DÜZELTİLDİ:**
+  aşağıdaki *"geçerli-UTF-8 değişmezi"* iddiası FAZLAYDI — geçersiz dizgi
+  `metin_kes` ile ZATEN kurulabiliyor (ölçüldü). Gerçek gerekçe
+  **NUL-sonlandırma**dır. Eski metin:  `metin`in geçerli-UTF-8 olma değişmezi
   korunmalı; ham bayt primitifi geçersiz dizgi kurmaya izin verirdi. UTF-16
   **vekil çiftleri** çağıranda (`json.kem`) saf KEMGU aritmetiğiyle birleşir.
 - **⚠ KOD 0 GEÇERSİZDİR — ölçülmüş karar, keyfi değil:** KEMGU `metin`i
