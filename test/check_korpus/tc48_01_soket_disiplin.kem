@@ -1,0 +1,58 @@
+// [D-571] SOKET HANDLE DİSİPLİNİ — D-568/D-570 ile aynı sınıf.
+// `Baglanti` stdlib'de `yapı tekkez`tir, ama `soket_baglan`/`soket_kapat`
+// YERLEŞİKTİR: sarmalayıcı atlanırsa lineer koruma hiç uygulanmaz.
+// Ölçüldü (D-571): üç tehlike de tanısız `OK` geçiyordu.
+// YENİ TANI KODU YOK — L001 / L002 / CP005 yeniden kullanıldı.
+
+// (1) Hiç kapatmama -> L001
+işlev sizinti() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    ver 0;
+}
+
+// (2) Çift kapatma -> L002
+işlev cift_kapat() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    soket_kapat(h);
+    soket_kapat(h);
+    ver 0;
+}
+
+// (3) Kapalı handle ile gönderme -> CP005 (D-503 ile AYNI "ölü handle" sınıfı)
+işlev olu_handle() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    soket_kapat(h);
+    soket_gonder(h, "x");
+    ver 0;
+}
+
+// (4) POZİTİF — doğru kullanım tanı ÜRETMEMELİ.
+// ⚠ ŞART: yalnız negatif şekiller olsaydı "her soket çağrısını reddet"
+// sabotajı kapıdan GEÇERDİ (D-425).
+işlev temiz() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    soket_zaman_asimi(h, 1000);
+    soket_gonder(h, "merhaba");
+    soket_kapat(h);
+    ver 0;
+}
+
+// (5) POZİTİF — izlenemez şekilde izleme BIRAKILIR (default-DENY raporlama).
+// Koşullu gövdede kullanılan bağlama için hiçbir tanı üretilmemeli.
+işlev kosullu(p: mantıksal) -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    eğer p { soket_kapat(h); }
+    ver 0;
+}
+
+işlev main() -> tam32 { ver 42; }

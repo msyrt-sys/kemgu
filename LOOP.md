@@ -12,7 +12,6 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] `soket_*` ailesi D-570'in disinda kaldi: probe'um T010 verdi (soket_al arite farkli) ve dogru sekli olcmeden kural yazmak D-421 sinifidir. Once `stdlib/ag.kem`den GERCEK cagri seklini oku, sonra D-569/D-570 makinesine ucuncu aile olarak ekle.
 - [ ] DEGISMEZ AVI — kalan eksenler: `cesit` payload guvenligi (D-437/438/439 kismen), `esles` desen baglama omru, `gorev`/`kanal` disindaki eszamanlilik yuzeyleri.
 
 
@@ -313,3 +312,4 @@
   YANLIS-POZITIF: dosya_ac iceren 8 dosya; stdlib/dosya.kem, selfhost/*, test_dosya, 07_linear, dosya_io TEMIZ. Kalan tanilar yalniz tc22_01/tc22_02'de ve OZGUN olanlar (L001 0 0, L002 14 39); benim ekledigim sahteler (L001 7 1, L001 5 1) daraltmadan sonra kayboldu.
   HANGI KAPI NEYI OLCTU: checker_diff 175/175 (0 muaf) . self_driver FIXPOINT . check_kapisi 274/281 (0 RED) . check_genis 133/133 . stdlib_check . sifir uyari 38/0. Sabotaj S141 (C dosya ailesini kapat) -> 174/175, rc=2.
   KAPSAM DISI (durustce): soket_* ailesi portlanmadi — probe'um T010 verdi (soket_al arite farkli) ve dogru sekli olcmeden kural yazmak D-421 sinifidir. Ayri is olarak Sirada'da.
+- 2026-09-06 D-571: soket handle disiplini (ucuncu aile) — ham `soket_baglan`/`soket_kapat` yerlesikleri `yapi tekkez Baglanti` korumasini baypas ediyordu; uc tehlike de tanisiz `OK` idi. Yeni tani kodu YOK (L001/L002/CP005). Uc uygulamaya da portlandi. IKI kusur cikti: (1) `kd_kacti` `YAPI_OLUSTUR`a inmiyor -> POZITIF fikstur tc24_03 sahte L001 aldi (kural daraltildi: modellenmeyen sekil = kacti); (2) self-host yedek dali `kd_hepsini_birak` ile TUMUNU birakiyordu, C ise yalniz adi geceni -> araya giren `geri_al(y)` soket izlemesini dusuruyordu ve self-host SESSIZ kaliyordu (`kd_kacti_birak` eklendi). Kapilar: checker_diff 176/176 (0 muaf), self_driver FIXPOINT, check_kapisi 274/281 (0 RED), check_genis 133/133, stdlib_check, sifir uyari 38/0. Sabotaj 3/3: S142 (C) 175/176 rc=2, S143 (checker.kem) 175/176 rc=2, S144 (codegen.kem) self_driver 142/143 rc=2. SUREC: python evrensel satir-sonu okumasi CRLF olan src/tip_kontrol.c'yi LF'e cevirip 14.180 satirlik sahte diff uretti; ikili modda yeniden uygulandi.

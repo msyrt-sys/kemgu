@@ -1563,6 +1563,56 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-571: SOKET HANDLE DİSİPLİNİ — üçüncü aile, ve C'nin yedek dalı ayrışıyormuş
+Av `Baglanti`ya taşındı. Soru D-570'inkiyle aynıydı ve **cevap da aynı çıktı:**
+`soket_baglan`/`soket_kapat` **YERLEŞİKTİR**, `stdlib/ag.kem`in `yapı tekkez
+Baglanti` sarmalayıcısı atlanınca lineer koruma **hiç uygulanmıyor**:
+```
+ham `soket_baglan`, hic kapatma          -> OK 🔴
+ham handle'i IKI KEZ kapat               -> OK 🔴
+kapattiktan SONRA `soket_gonder`         -> OK 🔴
+```
+D-569/D-570'in makinesi **aynen** kullanıldı (üçüncü `aile`), **yeni tanı kodu
+YOK**: çıkışta AÇIK → `L001` · kapalıyı tekrar kapat → `L002` · kapalı handle
+kullanımı → `CP005`.
+
+**⚠⚠ İLK SÜRÜM İKİ YANLIŞ-POZİTİF ÜRETTİ — biri POZİTİF FİKSTÜRDE.**
+`tc24_03_ag_temiz.kem` (D-466'nın *"tanı ÜRETMEMELİ"* fikstürü) sahte `L001`
+aldı. Kök D-570'te C'de kapatılan boşluğun **DEGISKEN yolunda kalan yarısı**ydı:
+`kd_kacti` `YAPI_OLUSTUR`a inmiyor → `Baglanti { h: h }` görülmüyor → bağlama
+"hâlâ açık" sanılıyor. Onarım yine **ikinci bir gezgin yazmak değil, kuralı
+daraltmak** (D-407): `kd_kacti` artık **modellenmeyen her şekli KAÇTI sayar**
+(yaprak literaller hariç). Yanlış-pozitif üretmektense kaçırmak yeğlenir.
+
+**🎯 ASIL BULGU — SELF-HOST'UN YEDEK DALI C'DEN DAHA KABAydı VE SESSİZDİ.**
+Port bitince C 3 tanı veriyor, self-host **`OK`** diyordu. Sebep kural değil,
+**yedek dal**: C bir CAGRI/DEGISKEN'de yalnız **adı geçen** bağlamayı bırakır;
+self-host `kd_hepsini_birak` ile **TÜMÜNÜ** bırakıyordu → araya giren ilgisiz
+bir `geri_al(y)` çağrısı soket izlemesini **düşürüyordu**. `tc47_*` bunu hiç
+göstermemişti çünkü o fikstürlerde araya giren çağrı YOK.
+> **DERS: iki uygulama aynı kuralı taşıyıp FARKLI kabalıkta yedek dala sahipse,
+> ayrışma yalnız o yedeği tetikleyen şekilde görünür.** `kd_kacti_birak`
+> eklendi; iki self-host uygulamasında da C ile birebir.
+
+**YANLIŞ-POZİTİF TARAMASI:** tüm depo tarandı — `soket islev cikisinda` /
+`kapali soket` / `soket_kapat sonrasi` mesajlarını veren **tek bir dosya yok**
+(`stdlib/ag.kem` · `test/ag/istemci.kem` · `selfhost/*` **TEMİZ**); `tc24_*`
+fikstürleri **özgün** tanılarına geri döndü.
+
+**⚠ SÜREÇ NOTU:** `src/tip_kontrol.c` **CRLF**tir ve python'un evrensel
+satır-sonu okuması onu sessizce LF'e çevirdi → `git diff` **14.180 satır**
+gösterdi. Kaynak doğruydu, **diff artefaktıydı**; dosya HEAD'den geri alınıp
+düzenlemeler **ikili modda** (`
+` → `
+`) yeniden uygulandı. *Türkçe
+kaynakta düzenleme yaparken satır sonunu da ölç.*
+
+**Kapılar:** checker_diff **176/176 (0 muaf)** · self_driver **TÜM MODLAR +
+FIXPOINT ✓** · check_kapisi 274/281 (0 RED) · check_genis 133/133 ·
+stdlib_check tüm testler · sıfır uyarı 38/0.
+**Sabotaj 3/3:** S142 (C ailesi) → 175/176 rc=2 · S143 (checker.kem) →
+175/176 rc=2 · S144 (codegen.kem) → self_driver 142/143 rc=2.
+
 ### ✅ D-570: DOSYA HANDLE DİSİPLİNİ — `tekkez` koruması ham yerleşiklerle baypas ediliyordu
 Av `Dosya`/`Baglanti`ya taşındı. Maddenin sorusu şuydu: **`tekkez` olmak
 gerçekten koruma sağlıyor mu?**

@@ -13348,12 +13348,9 @@ işlev kd_kacti(p: &değişken Ayr, node: tam32, ad: metin) -> mantıksal {
         }
         ver yanlış;
     }
-    değişken j: tam32 = 0;
-    iken j < cs {
-        eğer kd_kacti(p, dizi_al(p.cocuk, cb + j), ad) { ver doğru; }
-        j = j + 1;
-    }
-    ver yanlış;
+    // [D-571] MODELLENMEYEN HER ŞEKİL -> KAÇTI SAY (C ile birebir).
+    eğer kd_yaprak_mi(t) { ver yanlış; }
+    ver doğru;
 }
 işlev kd_dosya_yerlesigi(ad: metin) -> mantıksal {
     eğer metin_esit(ad, "dosya_ac") { ver doğru; }
@@ -13362,9 +13359,19 @@ işlev kd_dosya_yerlesigi(ad: metin) -> mantıksal {
     eğer metin_esit(ad, "dosya_yaz") { ver doğru; }
     ver metin_esit(ad, "dosya_boyut");
 }
+// [D-571] Soket ailesi — `dosya` ile AYNI durum anlamları (0=açık, 2=kapalı).
+işlev kd_soket_yerlesigi(ad: metin) -> mantıksal {
+    eğer metin_esit(ad, "soket_baglan") { ver doğru; }
+    eğer metin_esit(ad, "soket_kapat") { ver doğru; }
+    eğer metin_esit(ad, "soket_gonder") { ver doğru; }
+    eğer metin_esit(ad, "soket_al") { ver doğru; }
+    eğer metin_esit(ad, "soket_zaman_asimi") { ver doğru; }
+    ver metin_esit(ad, "soket_gecerli");
+}
 işlev kd_izlenen_yerlesik(ad: metin) -> mantıksal {
     eğer kd_kilit_yerlesigi(ad) { ver doğru; }
-    ver kd_dosya_yerlesigi(ad);
+    eğer kd_dosya_yerlesigi(ad) { ver doğru; }
+    ver kd_soket_yerlesigi(ad);
 }
 işlev kd_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     değişken i: tam32 = 0;
@@ -13386,6 +13393,19 @@ işlev kd_yaprak_mi(t: metin) -> mantıksal {
     eğer metin_esit(t, "KARAKTER") { ver doğru; }
     eğer metin_esit(t, "MANTIKSAL") { ver doğru; }
     ver metin_esit(t, "BOS");
+}
+işlev kd_kacti_birak(p: &değişken Ayr, node: tam32) -> tam32 {
+    // [D-571] C ile birebir: TOPTAN bırakma DEĞİL — yalnız adı geçen bağlama
+    // bırakılır. Toptan bırakma `geri_al(y)` gibi ilgisiz bir çağrıda soket
+    // izlemesini düşürüyordu (ölçüldü: tc48_01 self-host'ta SESSİZ kalıyordu).
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.kd_ad) {
+        eğer dizi_al(p.kd_durum, i) != 3 {
+            eğer kd_kacti(p, node, dizi_al(p.kd_ad, i)) { dizi_yaz(p.kd_durum, i, 3); }
+        }
+        i = i + 1;
+    }
+    ver 0;
 }
 işlev kd_yuru(p: &değişken Ayr, node: tam32) -> tam32 {
     eğer node < 0 { ver 0; }
@@ -13410,6 +13430,7 @@ işlev kd_yuru(p: &değişken Ayr, node: tam32) -> tam32 {
             değişken cad0: metin = kd_cagri_adi(p, dizi_al(p.cocuk, cb + k));
             eğer metin_esit(cad0, "kilit_olustur") { aile = 0; }
             eğer metin_esit(cad0, "dosya_ac") { aile = 1; }
+            eğer metin_esit(cad0, "soket_baglan") { aile = 2; }
             k = k + 1;
         }
         eğer aile >= 0 {
@@ -13418,7 +13439,8 @@ işlev kd_yuru(p: &değişken Ayr, node: tam32) -> tam32 {
             dizi_ekle(p.kd_aile, aile);
             ver 0;
         }
-        kd_hepsini_birak(p);
+        değişken q: tam32 = 0;
+        iken q < cs { kd_kacti_birak(p, dizi_al(p.cocuk, cb + q)); q = q + 1; }
         ver 0;
     }
     eğer metin_esit(t, "CAGRI") {
@@ -13430,8 +13452,9 @@ işlev kd_yuru(p: &değişken Ayr, node: tam32) -> tam32 {
                 eğer ix >= 0 {
                     değişken d: tam32 = dizi_al(p.kd_durum, ix);
                     eğer d != 3 {
-                        eğer dizi_al(p.kd_aile, ix) == 1 {
-                            eğer metin_esit(cad, "dosya_kapat") {
+                        eğer dizi_al(p.kd_aile, ix) >= 1 {
+                            // [D-571] dosya (1) ve soket (2) AYNI durum makinesi.
+                            eğer metin_esit(cad, "dosya_kapat") veya metin_esit(cad, "soket_kapat") {
                                 eğer d == 2 { th_ekle(p, "L002", node); dizi_yaz(p.kd_durum, ix, 3); }
                                 değilse { dizi_yaz(p.kd_durum, ix, 2); }
                             }
@@ -13458,7 +13481,7 @@ işlev kd_yuru(p: &değişken Ayr, node: tam32) -> tam32 {
             }
             ver 0;
         }
-        kd_hepsini_birak(p);
+        kd_kacti_birak(p, node);
         ver 0;
     }
     kd_hepsini_birak(p);

@@ -6873,8 +6873,19 @@ static int kd_dosya_yerlesigi(const char *ad, int uz) {
         || kd_ad_esit(ad, uz, "dosya_oku", 9) || kd_ad_esit(ad, uz, "dosya_yaz", 9)
         || kd_ad_esit(ad, uz, "dosya_boyut", 11);
 }
+/* [D-571] Soket ailesi. `Baglanti` stdlib'de `yapi tekkez`tir ama
+ * `soket_baglan`/`soket_kapat` YERLESIKTIR -> sarmalayici atlanirsa koruma
+ * DUSER (olculdu: hic kapatmama / cift kapatma / kapali handle'a gonderme
+ * UCU DE `OK` idi). Ayni makine, ucuncu aile. YENI TANI KODU YOK. */
+static int kd_soket_yerlesigi(const char *ad, int uz) {
+    return kd_ad_esit(ad, uz, "soket_baglan", 12) || kd_ad_esit(ad, uz, "soket_kapat", 11)
+        || kd_ad_esit(ad, uz, "soket_gonder", 12) || kd_ad_esit(ad, uz, "soket_al", 8)
+        || kd_ad_esit(ad, uz, "soket_zaman_asimi", 17)
+        || kd_ad_esit(ad, uz, "soket_gecerli", 13);
+}
 static int kd_izlenen_yerlesik(const char *ad, int uz) {
-    return kd_kilit_yerlesigi(ad, uz) || kd_dosya_yerlesigi(ad, uz);
+    return kd_kilit_yerlesigi(ad, uz) || kd_dosya_yerlesigi(ad, uz)
+        || kd_soket_yerlesigi(ad, uz);
 }
 static int kd_bul(KdKilit *t, int n, const char *ad, int uz) {
     for (int i = 0; i < n; i++) if (kd_ad_esit(t[i].ad, t[i].uz, ad, uz)) return i;
@@ -6896,7 +6907,18 @@ static int kd_kacti(const Dugum *d, const char *ad, int uz) {
         }
         return kd_kacti(d->veri.cagri.hedef, ad, uz);
     }
-    return 0;
+    /* Zararsiz yapraklar hicbir baglamaya dokunmaz. */
+    if (d->tip == DUGUM_TAM || d->tip == DUGUM_KESIRLI || d->tip == DUGUM_METIN
+        || d->tip == DUGUM_KARAKTER || d->tip == DUGUM_MANTIKSAL
+        || d->tip == DUGUM_BOS)
+        return 0;
+    /* [D-571] MODELLENMEYEN HER SEKIL -> KACTI SAY. C'de genel bir cocuk
+     * gezgini YOK; `YAPI_OLUSTUR` gibi sekillere inilmiyordu ve baglama
+     * "hala acik" sanilip SAHTE L001 uretiliyordu (tc24_03 POZITIF fikstürü
+     * bunu olctu). Ikinci bir gezgin yazmak yerine (D-407) kural daraltildi:
+     * bilinmeyen sekilde izleme BIRAKILIR — yanlis-pozitif uretmektense
+     * kacirmak yeglenir. */
+    return 1;
 }
 /* Kosullu/dongu govdesinde tracked bir baglamaya DOKUNULUYORSA izlemeyi birak. */
 static void kd_kosullu_iptal(const Dugum *d, KdKilit *t, int n) {
@@ -6932,6 +6954,7 @@ static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
         if (v && kd_cagri_adi(v, &cad, &cuz)) {
             if (kd_ad_esit(cad, cuz, "kilit_olustur", 13)) aile = 0;
             else if (kd_ad_esit(cad, cuz, "dosya_ac", 8)) aile = 1;
+            else if (kd_ad_esit(cad, cuz, "soket_baglan", 12)) aile = 2;
         }
         if (aile >= 0) {
             if (*n < KD_AZAMI) {
@@ -6959,6 +6982,20 @@ static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
             int k = kd_bul(t, *n, a0->veri.tanimlayici.metin,
                            a0->veri.tanimlayici.uzunluk);
             if (k < 0 || t[k].durum == 3) return;
+            if (t[k].aile == 2) {   /* [D-571] soket ailesi */
+                if (kd_ad_esit(cad, cuz, "soket_kapat", 11)) {
+                    if (t[k].durum == 2) {
+                        tip_hata(tk, d, "L002",
+                            "kapali soket tekrar kapatildi (cift kapat)");
+                        t[k].durum = 3;
+                    } else t[k].durum = 2;
+                } else if (t[k].durum == 2) {
+                    tip_hata(tk, d, "CP005",
+                        "soket_kapat sonrasi kullanim (olu handle)");
+                    t[k].durum = 3;
+                }
+                return;
+            }
             if (t[k].aile == 1) {   /* [D-570] dosya ailesi */
                 if (kd_ad_esit(cad, cuz, "dosya_kapat", 11)) {
                     if (t[k].durum == 2) {
@@ -7041,6 +7078,9 @@ static void kd_islev_pas(TipKontrol *tk, const Dugum *islev) {
         if (t[i].aile == 1 && t[i].durum == 0)
             tip_hata(tk, islev, "L001",
                 "dosya islev cikisinda ACIK (kapatilmadi)");
+        if (t[i].aile == 2 && t[i].durum == 0)
+            tip_hata(tk, islev, "L001",
+                "soket islev cikisinda ACIK (kapatilmadi)");
     }
 }
 static void kd_pas(TipKontrol *tk, const Dugum *d) {
