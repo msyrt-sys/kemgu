@@ -1563,6 +1563,60 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-572: ÇEŞİT PAYLOAD'INDA DİZİ — C YIĞIN DİZİSİNİ HEAP ERİŞİMCİSİYLE OKUYORDU
+Değişmez avı `eşleş` desen-bağlama ömrü / `çeşit` payload eksenine taşındı ve
+**oracle'da bellek-güvenliği ihlali** buldu. Program hiç `güvensiz` blok
+içermiyor, `--check`ten temiz geçiyor:
+```
+cesit K { Bos, Veri(Dizi<tam32>) } . esles k { K::Veri(d) => ... }
+  dizi_boyut(d)   C=1   (Dizi<metin> icin 39)   SELF=2   <- dogrusu 2
+  dizi_al(d,0)    C=SEGV                        SELF=42
+```
+**KÖK IR'DAN OKUNDU, tahmin edilmedi:** C dizi literalini **yığın**
+`alloca [2 x i32]` olarak çeşit payload yuvasına koyuyor, `eşleş` tarafı ise
+payload'ı **opak `ptr`** alıp **HEAP** erişimcisiyle (`@kdl_dizi_al_tam`)
+okuyor → yığın verisi `KdlDizi` **başlığı** sanılıyor: çöp boyut, çöp eleman
+işaretçisi. Yani *"buffer overflow dil tasarımı seviyesinde imkânsız"*
+manşetinin doğrudan ihlali.
+
+**SELF-HOST ZATEN DOĞRUYDU — parite TERS yönde** (D-442 sınıfı). Sebep
+CLAUDE.md'de yazılı: self-host **heap-uniform**tur, yığın dizi yolu YOKTUR.
+Karışım yalnız C'de mümkündü.
+
+**ONARIM DAR:** `cesit_yapici_uret` payload'ın **bildirilen tipini** beklenen
+tip olarak geçirmiyordu (yalnız mono-yapı payload'ında geçiyordu) → çıplak
+`[..]` literali `DUGUM_DIZI_OLUSTUR`'un yığın yoluna düşüyordu. Artık payload
+tipi `Dizi<T>` ise beklenen tip geçirilir; **D-044'ün heap yolu zaten vardı**,
+eksik olan yalnız bağlamdı. Diğer payload konumları DEĞİŞMEDİ (skaler payload
+şekli fikstürde **pozitif** olarak ölçülüyor).
+
+**⚠ AYIRT EDİCİ ŞEKİL: payload OKUNMALI.** D-437'nin tablosu
+`(Dizi<tam32>,tam32)` için ✅ diyordu; o ölçüm payload'ı **bağlayıp
+kullanmıyordu** (yalnız skaleri okuyordu). Bağlayıp kullanmayan bir probe bu
+sınıfı **gösteremez** — `cg_cesit_dizi_agregat` fikstürü de bu yüzden yeşildi.
+
+**🔴🔴 SABOTAJ KAPININ İKİNCİ KÖR NOKTASINI AÇTI — ve ilk ölçümüm 1/3 idi.**
+S145 (onarımı geri al) üç koşumun **yalnız birinde** kırmızı verdi; diğer
+ikisinde `⚠ oracle 127 (Defender exec yarışı, ortamsal) atlandı` ile
+**sessizce yeşil** geçti. Kök: harness'ın *"korpusta hiçbir program 127
+dönmez → 127 DAİMA ortamsal"* premisi. **D-339 bu premisi ADAY tarafında
+çürütmüştü; ORACLE tarafı eski hâliyle kalmıştı** — aynı sınıfın diğer yarısı.
+Üstelik D-565 Windows'ta `abort()`un **127** verdiğini ölçmüştü.
+Kural simetrik hâle getirildi: 12 tekrar (~3.6 sn) **ve taze bir kopyadan**
+sonra hâlâ 127 ise bu ilk-exec yarışı DEĞİLDİR → **sert hata**.
+```
+onarim once (kapi eski) : sabotaj 1/3 yakalandi
+onarim once (kapi yeni) : sabotaj 3/3 yakalandi, rc=2
+onarim sonra (temiz)    : 2/2 kosum 170/170, rc=0   (kapi kirilgan degil)
+```
+
+**Kapılar:** codegen_diff **170/170** · yapi_diff 150/150 (22 muaf) ·
+codegen_genis 70/70 · modul_codegen 22/22 · ct_bariyer 14/14 ·
+bolge_operand 172/172 · llvm_test 286/286 · snapshot 50/50 ·
+self_driver **FIXPOINT ✓ (170/170 iki aşamada)** · sıfır uyarı 38/0.
+Fikstür `cg_cesit_dizi_payload.kem` (üç dizi şekli + skaler pozitif),
+ASan temiz, C=SELF=42.
+
 ### ✅ D-571: SOKET HANDLE DİSİPLİNİ — üçüncü aile, ve C'nin yedek dalı ayrışıyormuş
 Av `Baglanti`ya taşındı. Soru D-570'inkiyle aynıydı ve **cevap da aynı çıktı:**
 `soket_baglan`/`soket_kapat` **YERLEŞİKTİR**, `stdlib/ag.kem`in `yapı tekkez

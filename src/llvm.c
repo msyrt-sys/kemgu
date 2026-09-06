@@ -1175,6 +1175,18 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
             g->beklenen_tip = cd->veri.cesit.varyant_payload_tipleri[vi][j];
             if (pl_subst) g->substler = pl_subst;
         }
+        /* [D-572] Payload tipi `Dizi<T>` ise beklenen tip GECIRILMELI: yoksa
+         * ciplak `[..]` literali DUGUM_DIZI_OLUSTUR'un stack `[N x T]` yoluna
+         * duser, ama `esles` tarafi payload'i OPAK `ptr` olarak alip HEAP
+         * erisimcisiyle (`kdl_dizi_al_tam`) okur -> yigin verisi KdlDizi
+         * basligi sanilir. Olculdu: `dizi_boyut` 1/39 (dogrusu 2), `dizi_al`
+         * SEGV — hicbir `guvensiz` blok yokken. Self-host heap-uniform oldugu
+         * icin ZATEN dogruydu (parite ters yonde, D-442 sinifi).
+         * DAR: yalniz dizi payload'i; diger payload konumlari degismedi. */
+        else {
+            const Dugum *pt = cd->veri.cesit.varyant_payload_tipleri[vi][j];
+            if (pt && pt->tip == DUGUM_TIP_DIZI) g->beklenen_tip = pt;
+        }
         IfadeSonuc pv = ifade_uret(g, cagri->veri.cagri.argumanlar[j], pir);
         g->beklenen_tip = pl_eski_bt;
         g->substler = pl_eski_subst;

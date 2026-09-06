@@ -57,6 +57,18 @@ run_exe() {   # $1=exe
         "$1" >/dev/null 2>&1; RC=$?
         deneme=$((deneme+1))
     done
+    # [D-572] AYIRT EDICI: Defender yarisi ILK EXEC'e ozgudur (dosya taranmamis).
+    # Yeni bir yola KOPYALAYIP tekrar denemek yarisi cozer; PROGRAM COKUYORSA
+    # kopya da ayni kodu verir. Bu sart, cunku Windows'ta cokme 127 gorunebilir
+    # (D-565: abort -> 127) ve "127 = daima ortamsal" premisi o yuzden YANLIS.
+    # Olculdu: D-572 sabotaji 3 kosumun 2'sinde 127 ile SESSIZCE atlaniyordu.
+    KALICI127=0
+    if [ "$RC" -eq 127 ]; then
+        cp "$1" "$1.r2.exe" 2>/dev/null || { KALICI127=1; return 0; }
+        sleep 0.3
+        "$1.r2.exe" >/dev/null 2>&1; RC=$?
+        [ "$RC" -eq 127 ] && KALICI127=1
+    fi
     return 0
 }
 
@@ -95,7 +107,7 @@ for f in "$KORPUS"/*.kem; do
                 fail=$((fail+1)); continue ;;
         esac
     fi
-    run_exe "$TMP/$b.c.exe"; coracle=$RC
+    run_exe "$TMP/$b.c.exe"; coracle=$RC; ORACLE_KALICI127=$KALICI127
     # KEMGU codegen → exit (aday)
     # D-424: self-host `--llvm` ARTIK tip hatasında durur (C aynası). Oracle'a
     # yukarıda `--tip-atla` geçiliyor; SİMETRİK olmazsa korpustaki KASITLI
@@ -114,6 +126,15 @@ for f in "$KORPUS"/*.kem; do
     # Yeni kural: 127 yalnız ORACLE'da ortamsal sayılır (oracle yoksa karşılaştırma
     # anlamsız). Oracle sağlam bir değer verirken aday kalıcı 127 diyorsa bu bir
     # ANLAŞMAZLIKTIR — sessizce atlanamaz.
+    # [D-572] D-339'un ADAY tarafinda uyguladigi kural ORACLE tarafina da
+    # simetrik uygulaniyor: 12 tekrar (~3.6s) VE taze bir kopyadan sonra hala
+    # 127 ise bu artik "ilk-exec Defender yarisi" DEGILDIR — Windows'ta cokme
+    # 127 gorunebilir (D-565). Olculdu: D-572 sabotaji 3 kosumun 2'sinde bu
+    # atlama yuzunden SESSIZCE yesil geciyordu.
+    if [ "$coracle" -eq 127 ] && [ "${ORACLE_KALICI127:-0}" -eq 1 ]; then
+        echo "  🔴 $(basename "$f") — oracle KALICI 127 (12 tekrar + taze kopya sonrasi): ortamsal DEGIL"
+        fail=$((fail+1)); continue
+    fi
     if [ "$coracle" -eq 127 ]; then
         echo "  ⚠ $(basename "$f") — oracle 127 (Defender exec yarışı, ortamsal) atlandı"; continue
     fi
