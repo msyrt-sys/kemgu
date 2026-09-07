@@ -1,0 +1,48 @@
+// [D-574] LİNEER YAYILIM — `çeşit` için.
+// D-573'te ölçülmüştü: lineer payload taşıyan bir `çeşit` eşleşmeden düşünce
+// hiçbir tanı almıyordu (sızıntı). D-467 aynı çözümü `sonuç`/`seçimlik` için
+// seçmişti; `çeşit` onların GENELLEMESİDİR (tek-değerli toplam tip).
+//
+// ⚠ NEDEN YASAK (LR002) DEĞİL — üçü de ölçüldü:
+//   (1) `eşleş` lineer çeşidi TÜKETİYOR → yayılım yanlış-pozitif üretmiyor,
+//   (2) yasak lineer ADT yazmayı tümden imkânsız kılardı,
+//   (3) `sonuç<Dosya,metin>` yayılıyorken kullanıcının kendi çeşidinin
+//       yasak olması tutarsız olurdu.
+// ⚠ `Dizi<tekkez<T>>` (D-573) BUNUN TERSİDİR ve orada yasak doğruydu:
+//   dizi ÇOK-ELEMANLIDIR, sahiplik tek tüketimle temsil edilemez.
+// YENİ TANI KODU YOK — mekanizma D-313'ün `lineer_mi` bayrağı.
+
+çeşit K { Bos, Veri(tekkez<tam32>) }
+çeşit Y { Yok, Yet(yetki<Bellek>) }
+çeşit D { Bir, Iki(tam32) }        // lineer DEĞİL
+
+// (1) eşleşmeden düşüyor -> L001
+işlev kacak() -> tam32 {
+    değişken k: K = K::Veri(tekkez_olustur(42));
+    ver 0;
+}
+
+// (2) lineer olmayan varyant seçilse bile yükümlülük TİPTEDİR -> L001
+işlev kacak_bos() -> tam32 {
+    değişken y: Y = Y::Yok;
+    ver 0;
+}
+
+// (3) POZİTİF — eşleş + tüket: tanı ÜRETMEMELİ.
+// ⚠ ŞART: yalnız negatifler olsaydı "lineer payload'lı çeşidi toptan reddet"
+// sabotajı kapıdan GEÇERDİ (D-425).
+işlev dogru() -> tam32 {
+    değişken k: K = K::Veri(tekkez_olustur(42));
+    eşleş k {
+        K::Veri(t) => { ver kullan(t); }
+        K::Bos => { ver 0; }
+    }
+}
+
+// (4) POZİTİF — lineer olmayan çeşit etkilenmemeli.
+işlev normal() -> tam32 {
+    değişken d: D = D::Iki(42);
+    ver 0;
+}
+
+işlev main() -> tam32 { ver 42; }

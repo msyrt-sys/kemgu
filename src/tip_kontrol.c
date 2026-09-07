@@ -770,6 +770,30 @@ static TipBilgisi *yapi_tipi_sembolden(TipKontrol *tk, const Sembol *s,
     if (t && s->ast_dugumu && s->ast_dugumu->tip == DUGUM_YAPI) {
         t->veri.yapi.lineer_mi = s->ast_dugumu->veri.yapi.lineer_mi;
     }
+    /* [D-574] LINEER YAYILIM — `cesit` icin. D-467 ayni cozumu
+     * `sonuc`/`secimlik` icin secmisti; `cesit` onlarin GENELLEMESIDIR
+     * (tek-degerli toplam tip), dolayisiyla ayni cevap.
+     * ⚠ YASAK (LR002) DEGIL, cunku: (1) `esles` lineer cesidi TUKETIYOR
+     * (olculdu: dogru kullanim TEMIZ gecer), yani yayilim yanlis-pozitif
+     * uretmiyor; (2) yasaklamak lineer ADT yazmayi tumden imkansiz kilardi;
+     * (3) `sonuc<Dosya,metin>` yayiliyorken kullanicinin kendi cesidinin
+     * yasak olmasi tutarsiz olurdu.
+     * ⚠ `Dizi<tekkez<T>>` (D-573) BUNUN TERSIDIR ve orada YASAK dogruydu:
+     * dizi COK-ELEMANLIDIR, sahiplik tek tuketimle temsil edilemez.
+     * Mekanizma D-313'un `lineer_mi` bayragi — YENI MAKINE YOK. */
+    if (t && s->ast_dugumu && s->ast_dugumu->tip == DUGUM_CESIT) {
+        const Dugum *cd = s->ast_dugumu;
+        for (int v = 0; v < cd->veri.cesit.varyant_sayi; v++) {
+            for (int j = 0; j < cd->veri.cesit.varyant_payload_sayilari[v]; j++) {
+                const Dugum *pt = cd->veri.cesit.varyant_payload_tipleri[v][j];
+                if (pt && (pt->tip == DUGUM_TIP_TEKKEZ
+                           || pt->tip == DUGUM_TIP_YETKI
+                           || pt->tip == DUGUM_TIP_GOREV)) {
+                    t->veri.yapi.lineer_mi = 1;
+                }
+            }
+        }
+    }
     return t;
 }
 

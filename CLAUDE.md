@@ -1563,6 +1563,53 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-574: LİNEER PAYLOAD'LI `çeşit` — YASAK DEĞİL, YAYILIM (ölçümle seçildi)
+D-573'te ölçülüp **bilinçli olarak açık bırakılan** madde. İki meşru seçenek
+vardı; **hangisinin doğru olduğu tahmin edilmedi, ÖLÇÜLDÜ.**
+
+**(a) LR002 ile yasakla** — reddedilme gerekçesi: `sonuç<Dosya,metin>`
+yayılıyorken (D-467) kullanıcının **kendi** çeşidinin yasak olması tutarsız
+olurdu ve lineer ADT yazmayı tümden imkânsız kılardı.
+
+**(b) YAYILIM — SEÇİLDİ.** `çeşit` `sonuç`/`seçimlik`in **genellemesidir**
+(tek-değerli toplam tip), yani D-467'nin cevabı burada da geçerlidir.
+**Mekanizma D-313'ün `TIP_YAPI.lineer_mi` bayrağı — YENİ MAKİNE YOK, yeni
+tanı kodu YOK.** Tek site: `yapi_tipi_sembolden`.
+
+**ÜÇ ÖLÇÜM SEÇİMİ BELİRLEDİ:**
+```
+kacak (eslesmeden dusuyor)       -> L001   ✓ sizinti kapandi
+POZITIF: esles + kullan(t)       -> TEMIZ  ✓ `esles` lineer cesidi TUKETIYOR
+depo geneli (700+ .kem)          -> FARK YOK, etki alani SIFIR
+```
+İkinci satır belirleyicidir: `eşleş` tüketmeseydi yayılım **her doğru
+programı** L001'e boğardı ve (a) tek seçenek kalırdı.
+
+**⚠⚠ D-573 İLE TERS YÖNDE VE BU TUTARSIZLIK DEĞİL.** `Dizi<tekkez<T>>` orada
+**yasaklandı**; buradaysa yayılım seçildi. Ayrım tek cümlede: **dizi
+ÇOK-ELEMANLIDIR** — sahiplik tek bir tüketimle temsil edilemez, `dizi_al(d,0)`
+iki kez çağrılabilir; `çeşit` ise **tek değer** taşır ve `eşleş` onu tam bir
+kez tüketir.
+
+**⚠ ETKİ ALANI ÖLÇÜMÜ ÖNCE/SONRA KARŞILAŞTIRMASIYLA YAPILDI** (tahminle
+değil): deney bayrakla açılıp kapatılarak tüm depoda `L001/L002/L005/CP005/
+LR002` sayıldı → **35 dosya, birebir aynı liste**.
+
+**Kapılar:** checker_diff **178/178 (0 muaf)** · self_driver **TÜM MODLAR +
+FIXPOINT ✓ (145/145 check, 170/170 codegen)** · check_kapisi 275/282 (0 RED) ·
+check_genis 133/133 · linear_test 89/89 · capability_test 40/40 ·
+stdlib_check · sıfır uyarı 38/0.
+Fikstür `tc49_02_cesit_lineer_yayilim.kem` — iki negatif (`tekkez` payload
+kaçağı · `yetki` payload, **lineer olmayan varyant seçilse bile** yükümlülük
+TİPTEDİR) + **iki pozitif** (`eşleş`+tüket · lineer olmayan çeşit).
+**Sabotaj 3/3:** S149 (C) → 177/178 rc=2 · S150 (checker.kem) → 177/178 rc=2 ·
+S151 (codegen.kem) → self_driver 144/145 rc=2.
+
+**⚠ SÜREÇ NOTU:** aynı yaması iki self-host dosyasına kopyaladım ama
+`codegen.kem`de payload taban değişkeninin adı farklı (`pc0` yok, `dizi_boyut
+(kids) - pc`) → **T002**. Derleyici yakaladı; *"aynı kod iki dosyada"*
+varsayımı yine yanlış çıktı.
+
 ### 🔴✅ D-573: LR002'NİN DİZİ YARISI HİÇ ATEŞLENMİYORDU — lineer değer diziden iki kez tüketiliyordu
 Av `eşleş` bağlama ömrüne taşındı. **Üç şekil tuttu** (skrutini kol içinde
 yeniden atanıyor · bağlama işlevden kaçıyor · skrutini geçici değer) — üçü de

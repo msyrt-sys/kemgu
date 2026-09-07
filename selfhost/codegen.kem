@@ -1964,6 +1964,17 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
                 dizi_ekle(p.cv_ptn, dizi_al(kids, pk));   // D-439: ham tip düğümü
                 pk = pk + 1;
             }
+            // [D-574] LİNEER YAYILIM: bu varyantın payload'ı lineerse
+            // ÇEŞİDİN KENDİSİ lineerdir → mevcut `ly_ad` kaydına ekle
+            // (D-314'ün makinesi; yeni makine YOK). C'de karşılığı
+            // `yapi_tipi_sembolden`daki `lineer_mi` bayrağıdır.
+            değişken pl: tam32 = dizi_boyut(kids) - pc;
+            iken pl < dizi_boyut(kids) {
+                eğer tip_node_lineer_mi(dizi_al(p.a_ad, dizi_al(kids, pl))) {
+                    eğer lineer_yapi_mi(p, ad) == yanlış { dizi_ekle(p.ly_ad, ad); }
+                }
+                pl = pl + 1;
+            }
             eğer sim_mi(p, "VIRGUL") { ilerle(p); }   // virgül opsiyonel
             }
         }
