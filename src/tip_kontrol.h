@@ -124,6 +124,8 @@ typedef struct TipKontrol {
      * `lambda_yakalama_isaretci` ile ayni kaydet/geri-yukle disiplini. */
     int lambda_yakalama_tasima;
     int lambda_tasima_sonuc;   /* [D-575] son bitmis lambdanin sonucu */
+    int l002_son_satir;        /* [D-576] ayni konumda tekrar bildirme */
+    int l002_son_sutun;
     const char *tasinan_ad[64];
     int tasinan_uz[64];
     int tasinan_sayi;

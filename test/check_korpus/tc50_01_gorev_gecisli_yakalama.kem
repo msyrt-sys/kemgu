@@ -44,4 +44,46 @@ işlev skaler() -> tam32 {
     ver 42;
 }
 
+// [D-576] (4) İHLAL: kapanış bir YAPI ALANINDA saklanıyor.
+// D-575'in kuralı "değer bir LAMBDA'dır" diyordu; kapanış yapı alanına
+// konunca hiç sorulmuyordu. ÖLÇÜLDÜ: 5 koşum 29/242/138/160/70 (beklenen
+// 160) — `--check` TEMİZ ve hiç `güvensiz` YOK iken.
+yapı Kap { f: işlev() -> tam32; }
+işlev yapi_alaninda() -> tam32 {
+    değişken d: Dizi<tam32> = [0];
+    değişken k: Kap = Kap { f: || { dizi_yaz(d, 0, 1); ver 0; } };
+    eşleş görev_başlat(|| { ver k.f(); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver k.f(); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver dizi_al(d, 0);
+}
+
+// [D-576] (5) POZİTİF: yapı alanındaki kapanış SKALER yakalıyor -> TEMİZ.
+işlev yapi_alani_skaler() -> tam32 {
+    değişken n: tam32 = 5;
+    değişken k: Kap = Kap { f: || { ver n; } };
+    eşleş görev_başlat(|| { ver k.f(); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver k.f(); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver 42;
+}
+
+// [D-576] (6) İKİ VE ÜÇ SEVİYE zincir — D-575'e "tek seviye" diye yazdığım
+// not YANLIŞTI, ölçüm düzeltti: bayrak her ardışık bağlamada kalıcılaşıyor.
+işlev iki_seviye() -> tam32 {
+    değişken d: Dizi<tam32> = [0];
+    değişken f: işlev() -> tam32 = || { dizi_yaz(d, 0, 1); ver 0; };
+    değişken g: işlev() -> tam32 = || { ver f(); };
+    eşleş görev_başlat(|| { ver g(); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver g(); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver dizi_al(d, 0);
+}
+
 işlev main() -> tam32 { ver 42; }

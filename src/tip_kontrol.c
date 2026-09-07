@@ -29,6 +29,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->tasinan_sayi = 0;
     tk->lambda_yakalama_tasima = 0;   /* [D-575] */
     tk->lambda_tasima_sonuc = 0;      /* [D-575] */
+    tk->l002_son_satir = -1; tk->l002_son_sutun = -1;   /* [D-576] */
     tk->ciplak_baglam = 0;   /* D-257 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
@@ -2657,9 +2658,20 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              *   -> orada BILDIRILIR (D-504'un olctugu yaris sekli tam budur).
              * ⚠ SKALER YAKALAMA HIC ISARETLENMEZ -> burasi onlari gormez. */
             if (s->gorev_tasindi && tk->lineer_sondaj == 0) {
-                tip_hata(tk, d, "L002",
-                    "sahipligi goreve tasinmis baglamaya erisim "
-                    "(R-YAKALAMA-THREAD: kapanis yakalamasi TASIR)");
+                /* [D-576] AYNI KAYNAK KONUMUNU IKI KEZ BILDIRME. `k.f()`
+                 * yolunda `k` ERISIM ve CAGRI icin IKI KEZ ziyaret ediliyor
+                 * -> ayni satir/sutunda iki L002. Bu BILGI DEGIL; ayrica
+                 * self-host tek ziyaret yaptigi icin sahte bir parite
+                 * ayrismasi uretiyordu. FARKLI konumdaki iki anma (ayni
+                 * lambda icinde bile) AYNEN iki tani verir — olculdu. */
+                if (!(tk->l002_son_satir == d->satir
+                      && tk->l002_son_sutun == d->sutun)) {
+                    tk->l002_son_satir = d->satir;
+                    tk->l002_son_sutun = d->sutun;
+                    tip_hata(tk, d, "L002",
+                        "sahipligi goreve tasinmis baglamaya erisim "
+                        "(R-YAKALAMA-THREAD: kapanis yakalamasi TASIR)");
+                }
             }
             /* G005: genel yakalama (lineer + lineer-olmayan) izle. */
             genel_yakalama_kontrol(tk, d);
@@ -4746,7 +4758,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int yakaladi = tk->lambda_lineer_yakalama;
             int yakaladi_genel = tk->lambda_yakalama;   /* G005 */
             int yakaladi_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
-            tk->lambda_tasima_sonuc = tk->lambda_yakalama_tasima;   /* D-575 */
+            /* [D-576] ATAMA DEGIL BIRIKIM: bir ifadede birden cok lambda
+             * olabilir (`K { f: || .., g: || .. }`); "sonuncusu" degil
+             * "herhangi biri" sorulmali. */
+            tk->lambda_tasima_sonuc |= tk->lambda_yakalama_tasima;   /* D-575 */
 
             /* Lambda parametreleri lineer ise govde icinde tuketilmeli (L001) */
             scope_lineer_kapanis_check(tk, lambda_scope);
@@ -5882,6 +5897,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         case DUGUM_DEGISKEN: {
             TipBilgisi *annot = NULL;
             TipBilgisi *deger_tip;
+            /* [D-576] Deger ifadesi boyunca lambda-tasima birikimini IZOLE et. */
+            int eski_tas_sonuc = tk->lambda_tasima_sonuc;
+            tk->lambda_tasima_sonuc = 0;
             if (d->veri.degisken.tip) {
                 annot = ast_tip_to_bilgi(tk, d->veri.degisken.tip);
                 /* Bidirectional: literal'lar annot context'inde cikarsanir */
@@ -5917,12 +5935,14 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             s.satir = d->satir;
             s.sutun = d->sutun;
             s.lineer_scope_seviyesi = tk->scope_seviyesi;
-            /* [D-575] Deger bir LAMBDA ise, o lambdanin kendi yakalamasi
-             * tasima gerektiriyor mu — baglamada kalicilastir. */
-            if (d->veri.degisken.deger
-                && d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
-                s.kapanis_tasima = tk->lambda_tasima_sonuc;
-            }
+            /* [D-575/D-576] Deger ifadesi tasima-gerektiren bir KAPANIS
+             * ICERIYORSA baglamada kalicilastir. D-575 yalniz "deger LAMBDA'nin
+             * KENDISI" halini goruyordu; kapanis bir YAPI ALANINDA saklaninca
+             * (`K { f: || { dizi_yaz(d,..) } }`) kural hic sorulmuyordu ->
+             * iki gorev ayni KdlDizi'ye yaziyor, `--check` TEMIZ, `guvensiz`
+             * YOK. Olculdu: 5 kosum 29/242/138/160/70 (beklenen 160). */
+            s.kapanis_tasima = tk->lambda_tasima_sonuc;
+            tk->lambda_tasima_sonuc = eski_tas_sonuc;
             if (sembol_ekle(tk->scope, tk->arena, &s) != 0) {
                 tip_hata(tk, d, "T024", "degisken zaten tanimli");
             }

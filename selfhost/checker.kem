@@ -4672,22 +4672,40 @@ işlev kt_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 // `değişken f = <LAMBDA>` görüldüğünde: o lambdanın KENDİ yakalaması taşıma
 // gerektiriyorsa `f`i işaretle. `gtas_topla` yeniden kullanılır (ikinci gezgin
 // YAZILMAZ — D-407); yan etkisi anlık görüntü ile geri alınır.
+// [D-576] "Değer bir LAMBDA'dır" YETMEZ: kapanış bir YAPI ALANINDA
+// saklanınca (`K { f: || { dizi_yaz(d,..) } }`) kural hiç sorulmuyordu ve
+// iki görev aynı KdlDizi'ye yazıyordu (ölçüldü: 29/242/138/160/70,
+// beklenen 160). Kural "değer taşıma-gerektiren bir kapanış İÇERİR"e
+// genelleştirildi.
+işlev kt_lambda_tasima_ariyor(p: &değişken Ayr, node: tam32) -> mantıksal {
+    eğer node < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, node), "LAMBDA") {
+        değişken gv2: tam32 = son_cocuk(p, node);
+        eğer gv2 < 0 { ver yanlış; }
+        // ⚠ `dizi_cikar` DİLDE YOK (D-552) -> anlık görüntü KOPYAYLA geri yüklenir.
+        değişken once2: tam32 = dizi_boyut(p.gtas_ad);
+        değişken yedek2: Dizi<metin> = [];
+        değişken yj: tam32 = 0;
+        iken yj < once2 { dizi_ekle(yedek2, dizi_al(p.gtas_ad, yj)); yj = yj + 1; }
+        gtas_topla(p, gv2, node, gv2);
+        değişken sonra2: tam32 = dizi_boyut(p.gtas_ad);
+        p.gtas_ad = yedek2;
+        ver sonra2 > once2;
+    }
+    değişken kb: tam32 = dizi_al(p.a_cb, node);
+    değişken kc: tam32 = dizi_al(p.a_cs, node);
+    değişken ki: tam32 = 0;
+    iken ki < kc {
+        eğer kt_lambda_tasima_ariyor(p, dizi_al(p.cocuk, kb + ki)) { ver doğru; }
+        ki = ki + 1;
+    }
+    ver yanlış;
+}
 işlev kt_degisken_isaretle(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(dizi_al(p.a_ad, idx), "DEGISKEN") == yanlış { ver 0; }
     değişken dg: tam32 = son_cocuk(p, idx);
     eğer dg < 0 { ver 0; }
-    eğer metin_esit(dizi_al(p.a_ad, dg), "LAMBDA") == yanlış { ver 0; }
-    değişken gv: tam32 = son_cocuk(p, dg);
-    eğer gv < 0 { ver 0; }
-    // ⚠ `dizi_cikar` DİLDE YOK (D-552) -> anlık görüntü KOPYAYLA geri yüklenir.
-    değişken once: tam32 = dizi_boyut(p.gtas_ad);
-    değişken yedek: Dizi<metin> = [];
-    değişken yi: tam32 = 0;
-    iken yi < once { dizi_ekle(yedek, dizi_al(p.gtas_ad, yi)); yi = yi + 1; }
-    gtas_topla(p, gv, dg, gv);
-    değişken sonra: tam32 = dizi_boyut(p.gtas_ad);
-    p.gtas_ad = yedek;
-    eğer sonra > once {
+    eğer kt_lambda_tasima_ariyor(p, dg) {
         eğer kt_var_mi(p, dizi_al(p.a_deg, idx)) == yanlış {
             dizi_ekle(p.kt_ad, dizi_al(p.a_deg, idx));
         }

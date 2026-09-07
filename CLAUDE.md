@@ -1563,6 +1563,51 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-576: KAPANIŞ YAPI ALANINDA SAKLANINCA GEÇİŞLİLİK DÜŞÜYORDU
+D-575'in bıraktığı maddeyi ölçmekle başladı ve **kaydım yanlış çıktı**: çok
+seviyeli zincir (`d ← f ← g ← h ← görev`) **zaten** yakalanıyordu (bayrak her
+ardışık bağlamada kalıcılaşıyor). Ama sınırı ararken **gerçek bir açık** çıktı.
+
+**ÜÇ ŞEKİL ÖLÇÜLDÜ, BİRİ TUTMADI:**
+```
+iki/uc seviye zincir            -> L002 ✓  (D-575'e yazdigim not YANLISTI)
+kapanis ISLEVDEN donuyor        -> G005 ✓  (derleme zamaninda zaten reddediliyor)
+kapanis YAPI ALANINDA           -> **OK** 🔴
+```
+```kemgu
+yapı Kap { f: işlev() -> tam32; }
+değişken k: Kap = Kap { f: || { ... dizi_yaz(d, ...) ... } };
+görev_başlat(|| { ver k.f(); });   görev_başlat(|| { ver k.f(); });
+```
+5 koşum: **29 / 242 / 138 / 160 / 70** (beklenen 160) — `--check` TEMİZ, hiç
+`güvensiz` YOK. D-575'in kuralı *"değer bir LAMBDA'dır"* diyordu; kapanış bir
+yapı alanına konunca hiç sorulmuyordu.
+
+**ONARIM — kural genelleştirildi:** *"değer taşıma-gerektiren bir kapanış
+İÇERİR"*. C'de lambda sonucu artık **birikiyor** (`|=`, tek ifadede birden çok
+lambda olabilir) ve DEĞİŞKEN değeri boyunca izole ediliyor; self-host'ta
+`kt_lambda_tasima_ariyor` alt-ağacı geziyor. **Yeni tanı kodu YOK** (L002).
+
+**⚠ YOL ÜSTÜNDE BİR PARİTE AYRIŞMASI: `k.f()` C'de İKİ L002 veriyordu.**
+Kök: `k` ERİŞİM ve ÇAĞRI için **iki kez** ziyaret ediliyor; self-host bir kez.
+**Ölçüm ayrımı yaptı:** aynı lambda içinde **FARKLI konumdaki** iki anma C'de
+zaten iki tanı verir (`r3` probe'u: 5:44 ve 5:60) ve bu doğrudur. Sorun
+yalnız **AYNI satır/sütunun** iki kez bildirilmesiydi — bu bilgi değildir.
+Konum-hassas bastırma eklendi: `k.f()` → 1 tanı (self ile eşit), iki ayrı
+anma → **hâlâ 2**.
+
+**Kapılar:** checker_diff **179/179 (0 muaf)** · self_driver **TÜM MODLAR +
+FIXPOINT ✓ (146/146 check, 170/170 codegen)** · check_kapisi 275/282 (0 RED) ·
+check_genis 133/133 · drf_test 54/54 · linear_test 89/89 ·
+capability_test 40/40 · sıfır uyarı 38/0.
+Depo taraması: **sıfır yeni yanlış-pozitif**.
+Fikstür `tc50_01` genişletildi — **üç ihlal** (dolaylı · yapı alanı · iki
+seviye) + **üç pozitif** (saf kapanış · skaler yakalayan kapanış · yapı
+alanındaki SKALER yakalayan kapanış).
+**Sabotaj 4/4:** S155 (C genelleştirmesi geri) → 178/179 rc=2 ·
+S156 (konum bastırması kapalı) → 178/179 rc=2 · S157 (checker.kem özyinelemesi)
+→ 178/179 rc=2 · S158 (codegen.kem) → self_driver 145/146 rc=2.
+
 ### 🔴✅ D-575: GEÇİŞLİ `görev` YAKALAMASI — yarış bir kapanışın ARDINA saklanıyordu
 Değişmez avının son ekseni (`görev`/`kanal` dışındaki eşzamanlılık yüzeyleri).
 **Üç kenar tuttu, biri tutmadı:**
@@ -1612,9 +1657,10 @@ drf_gorunurluk 100/100 · stdlib_check · sıfır uyarı 38/0.
 **Sabotaj 3/3:** S152 (C) → 178/179 rc=2 · S153 (checker.kem) → 178/179 rc=2 ·
 S154 (codegen.kem) → self_driver 145/146 rc=2.
 
-**⚠ KALAN (dürüstçe):** kapanış zinciri **tek seviye** izlenir (`f` bir
-kapanışı yakalayan başka bir kapanışı yakalarsa geçişlilik ikinci seviyede
-durur). Ölçülmüş bir kusur değil; kaydediliyor.
+**⚠ BU MADDEYE YAZDIĞIM "KALAN: TEK SEVİYE" NOTU YANLIŞTI — D-576'da
+ÖLÇÜLDÜ.** İki ve üç seviyeli zincir (`d ← f ← g ← h ← görev`) **zaten**
+yakalanıyor: bayrak her ardışık bağlamada kalıcılaşıyor. *Bir sınırı
+kaydetmeden önce ölç* (D-406'nın tekrarı, bu kez kendi yazdığım notta).
 
 ### ✅ D-574: LİNEER PAYLOAD'LI `çeşit` — YASAK DEĞİL, YAYILIM (ölçümle seçildi)
 D-573'te ölçülüp **bilinçli olarak açık bırakılan** madde. İki meşru seçenek
