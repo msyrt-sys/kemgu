@@ -5042,6 +5042,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         ct006_tip_kontrol(p, idx);   // D-367
         t030_kontrol(p, idx);        // D-369 T030/T031
         t011_kontrol(p, idx);        // D-370 T011
+        lr002_dizi(p, idx);          // D-573
         değişken tb: tam32 = dizi_al(p.a_cb, idx);
         değişken tc2: tam32 = dizi_al(p.a_cs, idx);
         değişken ti: tam32 = 0;
@@ -5799,6 +5800,21 @@ işlev dup_kontrol(p: &değişken Ayr, kok: tam32) -> tam32 {
 işlev tip_node_lineer_mi(ad: metin) -> mantıksal {
     ver metin_esit(ad, "TIP_TEKKEZ") veya metin_esit(ad, "TIP_YETKI")
       veya metin_esit(ad, "TIP_GOREV");
+}
+// [D-573] LR002'nin DIZI yarisi. `yapi` yarisi (lr002_yapi) calisiyordu;
+// dizi yarisi HICBIR konumda ateslenmiyordu -> ayni lineer deger diziden
+// gecirilerek IKI KEZ tuketilebiliyordu. Yayilim (D-467) burada YANLIS olurdu:
+// cok-elemanli kapsayicida sahiplik tek tuketimle temsil edilemez -> YASAK.
+işlev lr002_dizi(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_DIZI") == yanlış { ver 0; }
+    eğer dizi_al(p.a_cs, idx) < 1 { ver 0; }
+    değişken el: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+    eğer tip_node_lineer_mi(dizi_al(p.a_ad, el)) {
+        dizi_ekle(p.th_kod, "LR002");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    }
+    ver 0;
 }
 işlev lr002_yapi(p: &değişken Ayr, yapi: tam32) -> tam32 {
     // D-314 MUAFİYET: lineer yapı lineer alan taşıyabilir (sahiplik zinciri

@@ -1563,6 +1563,58 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-573: LR002'NİN DİZİ YARISI HİÇ ATEŞLENMİYORDU — lineer değer diziden iki kez tüketiliyordu
+Av `eşleş` bağlama ömrüne taşındı. **Üç şekil tuttu** (skrutini kol içinde
+yeniden atanıyor · bağlama işlevden kaçıyor · skrutini geçici değer) — üçü de
+C=SELF=42, ASan temiz. Lineer disiplin desen bağlaması boyunca da çalışıyor
+(bağlanan tüketilmezse **L001**, iki kez tüketilirse **L002**).
+
+**🔴 AMA KAPSAYICI TARAFI AÇIKTI.** CLAUDE.md'nin kendi kuralı
+*"yapı/dizi tekkez içeremez"* diyor; `yapı` yarısı çalışıyordu, **`dizi`
+yarısı HİÇBİR konumda ateşlenmiyordu** (bağlama · parametre · dönüş ·
+**yapı alanı** — sonuncusu `yapı` yarısını da baypas ediyordu):
+```kemgu
+değişken d: Dizi<tekkez<tam32>> = [tekkez_olustur(21)];
+değişken a: tekkez<tam32> = dizi_al(d, 0);
+değişken b: tekkez<tam32> = dizi_al(d, 0);
+ver kullan(a) + kullan(b);      // AYNI kaynak IKI KEZ  ->  --check TEMIZ, exit 42
+```
+L002 tam bunu engellemek için var; dizi onu yıkıyordu. **Yeni tanı kodu YOK.**
+
+**⚠⚠ YAYILIM (D-467'nin `sonuç` çözümü) BURADA YANLIŞ OLURDU.** Diziyi
+"lineer" saymak `dizi_al(d,0)`ı iki kez çağırmayı **engellemez** — çok-elemanlı
+kapsayıcıda sahiplik tek bir tüketimle temsil edilemez. Doğru cevap **YASAK**.
+Tek site: `ast_tip_to_bilgi`nin `DUGUM_TIP_DIZI` dalı → dört konumu birden
+kapsar. Üç uygulamada da (C + `checker.kem` + `codegen.kem`) kod+satır+sütun
+birebir.
+
+**🟠 AYNI SINIFTAN AÇIK KALAN (ölçüldü, KAPATILMADI):** `çeşit` varyant
+payload'ı lineer olabiliyor ve **eşleşmeden düşen çeşit hiçbir tanı almıyor**:
+```
+cesit K { Bos, Veri(tekkez<tam32>) }
+degisken k: K = K::Veri(tekkez_olustur(42));  ver 0;   -> OK 🔴 (bekl L001)
+```
+**Bilinçli olarak bu artıma alınmadı** çünkü iki meşru seçenek var ve seçim
+bir **dil yüzeyi kararıdır**: (a) LR002 ile yasakla · (b) **yayılım** —
+`çeşit` tek-değerli bir toplam tiptir, yani `sonuç`/`seçimlik`in ta kendisi;
+D-467 orada yayılımı seçmişti ve desen-bağlama tüketimi **zaten çalışıyor**
+(yukarıda ölçüldü), dolayısıyla (b) açığı kapatır **ve** lineer ADT yazmayı
+mümkün kılar. (b) her `çeşit` değerinin L001 davranışını değiştirir → ayrı
+artım.
+
+**YANLIŞ-POZİTİF TARAMASI:** tüm depo; LR002 veren **2 dosya** ve ikisi de
+kasıtlı fikstür, **sayıları değişmedi** (yalnız `yapı` yarısı). Depoda
+`Dizi<tekkez<..>>` şekli YOK → etki alanı sıfır.
+
+**Kapılar:** checker_diff **177/177 (0 muaf)** · self_driver **TÜM MODLAR +
+FIXPOINT ✓ (170/170)** · check_kapisi 275/282 (0 RED) · check_genis 133/133 ·
+linear_test 89/89 · capability_test 40/40 · stdlib_check · sıfır uyarı 38/0.
+Fikstür `tc49_01_lr002_dizi.kem` — dört negatif konum + **pozitif** blok
+(normal `Dizi<tam32>` / `Dizi<metin>` / `Dizi<Dizi<tam32>>`); pozitif olmasa
+*"her `Dizi<T>`yi reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+**Sabotaj 3/3:** S146 (C) → 176/177 rc=2 · S147 (checker.kem) → 176/177 rc=2 ·
+S148 (codegen.kem) → self_driver 143/144 rc=2.
+
 ### 🔴✅ D-572: ÇEŞİT PAYLOAD'INDA DİZİ — C YIĞIN DİZİSİNİ HEAP ERİŞİMCİSİYLE OKUYORDU
 Değişmez avı `eşleş` desen-bağlama ömrü / `çeşit` payload eksenine taşındı ve
 **oracle'da bellek-güvenliği ihlali** buldu. Program hiç `güvensiz` blok

@@ -1954,6 +1954,22 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
         case DUGUM_TIP_DIZI: {
             TipBilgisi *eleman = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_dizi.eleman_tip);
+            /* [D-573] LR002'nin BELGELENMIS AMA HIC ATESLENMEYEN DIZI YARISI.
+             * Kural CLAUDE.md'de yazili ("yapi/dizi tekkez iceremez") ve
+             * `yapi` yarisi calisiyordu; dizi yarisi HICBIR konumda (bagalama,
+             * parametre, donus, yapi alani) ateslenmiyordu. Olculdu: AYNI
+             * lineer deger diziden gecirilerek IKI KEZ tuketiliyor --
+             * `--check` temiz, program calisiyor. L002 tam bunu engellemek
+             * icin var; dizi onu yikiyordu.
+             * ⚠ YAYILIM (D-467'nin `sonuc` cozumu) BURADA YANLIS OLURDU:
+             * diziyi "lineer" saymak `dizi_al(d,0)`i iki kez cagirmayi
+             * engellemez -- cok-elemanli kapsayicida sahiplik zinciri tek
+             * bir tuketimle temsil edilemez. Dogru cevap YASAK. */
+            if (eleman && tip_lineer_mi(eleman)) {
+                tip_hata(tk, tip_d, "LR002",
+                    "dizi elemani lineer tipte olamaz "
+                    "(lineer deger dizi uzerinden iki kez tuketilebilirdi)");
+            }
             return tip_olustur_dizi(tk->arena, eleman);
         }
 
