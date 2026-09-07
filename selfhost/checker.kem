@@ -140,6 +140,7 @@ yapı Ayr {
     // ADLARI. `yerel`e PARALEL DİZİ DEĞİL — 3 kayıt noktası ve 16 paralel dizi
     // var, 12'ncisini eklemek kırılgan olurdu. İşlev girişinde sıfırlanır.
     gtas_ad: Dizi<metin>;
+    kt_ad: Dizi<metin>;      // [D-575] kapanış-taşıma bağlamaları
     lin_tek: Dizi<tam32>;    // D-355: 1 = bağlamanın KESİN `yapı tekkez` olduğu biliniyor.
                              // 0 = tekkez<T> VEYA bilinmiyor (annotasyonsuz `değişken k =
                              // tekkez_olustur(..)` de 0) → L007 YALNIZ 1'de verilir.
@@ -1850,7 +1851,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_rlin: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: []
     };
 }
@@ -4617,6 +4618,12 @@ işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> 
         eğer g005_lam_param_mi(p, lam, ad) { ver 0; }
         eğer g005_govde_bildirimi_mi(p, govde, ad) { ver 0; }
         eğer g005_yerel_mi(p, ad) == yanlış { ver 0; }
+        // [D-575] Bu bağlama, taşıma gerektiren bir şey yakalayan bir
+        // KAPANIŞ ise, onu yakalamak da taşıma gerektirir (geçişli).
+        eğer kt_var_mi(p, ad) {
+            eğer gtas_var_mi(p, ad) == yanlış { dizi_ekle(p.gtas_ad, ad); }
+            ver 0;
+        }
         değişken vt: metin = var_tip(p, ad);
         // [D-505 daraltma] TAŞIMA YALNIZ `Dizi<T>` İÇİN — ölçüldü:
         //   `metin` DEĞİŞMEZ (yerinde yazma API'si yok) → paylaşımı güvenli
@@ -4649,6 +4656,44 @@ işlev gtas_topla(p: &değişken Ayr, node: tam32, lam: tam32, govde: tam32) -> 
 // fazladan L002 23:42 ve 33:42 — lambdaların İÇİ).
 // ⚠ ÇAĞRILAN ADINI KENDİSİ TÜRETİR: iki çağrı yerinden biri `fad`in kapsamı
 // DIŞINDA (o `eğer` bloğunda tanımlı) — T002 ile ölçüldü.
+// [D-575] GEÇİŞLİ R-YAKALAMA-THREAD. D-505 yalnız DOĞRUDAN yakalamayı
+// görüyordu; dizi ADLANDIRILMIŞ bir kapanışın ardına saklanınca (`değişken
+// f = || { dizi_yaz(d,..) }` + `görev_başlat(|| { ver f(); })`) iki görev
+// aynı KdlDizi'ye yazıyordu — `--check` TEMİZ, `güvensiz` YOK.
+// Ölçüldü: 5 koşum 120/12/81/205/41 (beklenen 160).
+işlev kt_var_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.kt_ad) {
+        eğer metin_esit(dizi_al(p.kt_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// `değişken f = <LAMBDA>` görüldüğünde: o lambdanın KENDİ yakalaması taşıma
+// gerektiriyorsa `f`i işaretle. `gtas_topla` yeniden kullanılır (ikinci gezgin
+// YAZILMAZ — D-407); yan etkisi anlık görüntü ile geri alınır.
+işlev kt_degisken_isaretle(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer metin_esit(dizi_al(p.a_ad, idx), "DEGISKEN") == yanlış { ver 0; }
+    değişken dg: tam32 = son_cocuk(p, idx);
+    eğer dg < 0 { ver 0; }
+    eğer metin_esit(dizi_al(p.a_ad, dg), "LAMBDA") == yanlış { ver 0; }
+    değişken gv: tam32 = son_cocuk(p, dg);
+    eğer gv < 0 { ver 0; }
+    // ⚠ `dizi_cikar` DİLDE YOK (D-552) -> anlık görüntü KOPYAYLA geri yüklenir.
+    değişken once: tam32 = dizi_boyut(p.gtas_ad);
+    değişken yedek: Dizi<metin> = [];
+    değişken yi: tam32 = 0;
+    iken yi < once { dizi_ekle(yedek, dizi_al(p.gtas_ad, yi)); yi = yi + 1; }
+    gtas_topla(p, gv, dg, gv);
+    değişken sonra: tam32 = dizi_boyut(p.gtas_ad);
+    p.gtas_ad = yedek;
+    eğer sonra > once {
+        eğer kt_var_mi(p, dizi_al(p.a_deg, idx)) == yanlış {
+            dizi_ekle(p.kt_ad, dizi_al(p.a_deg, idx));
+        }
+    }
+    ver 0;
+}
 işlev gtas_gorev_isaretle(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
     değişken h0: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
@@ -5497,6 +5542,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // D-366: `görev<kesirli*>` / `kanal<kesirli*>` annotasyonu → yapıcı çağrısı
     // yolunda DRF001/DRF006 (C aynı kısıtı iki yolda ayrı ayrı uygular).
     değişken eski_drf: metin = p.drf_bek;
+    kt_degisken_isaretle(p, idx);   // [D-575] kapanış-taşıma bağlaması
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
         değişken dan: tam32 = annot_node(p, idx);
         p.drf_bek = "";
@@ -5672,7 +5718,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
             pa = dizi_al(p.a_ad, pc);
         }
         p.yerel_basla = dizi_boyut(p.yerel);
-        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
+        p.gtas_ad = []; p.kt_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
         eğer metin_esit(pa, "YAPI") veya metin_esit(pa, "CESIT") { kontrol_yapi_alanlari(p, pc); }
         i = i + 1;
     }
@@ -5685,7 +5731,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
             fa = dizi_al(p.a_ad, fc);
         }
         p.yerel_basla = dizi_boyut(p.yerel);
-        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
+        p.gtas_ad = []; p.kt_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
         eğer metin_esit(fa, "ISLEV") { kontrol_imza(p, fc); }
         i = i + 1;
     }
@@ -5696,14 +5742,14 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
         değişken ad: metin = dizi_al(p.a_ad, c);
         eğer metin_esit(ad, "ISLEV") {
             p.yerel_basla = dizi_boyut(p.yerel);
-        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
+        p.gtas_ad = []; p.kt_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
             yerel_topla(p, c);
             kontrol_govde(p, c);
         } değilse {
             // D-253: KURESEL init'i SABIT gibi denetlenir (üst-düzey, yerel yok).
             eğer metin_esit(ad, "SABIT") veya metin_esit(ad, "KURESEL") {
                 p.yerel_basla = dizi_boyut(p.yerel);
-        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
+        p.gtas_ad = []; p.kt_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
                 kontrol_dugum(p, c);
             } değilse {
                 eğer metin_esit(ad, "MODUL") { kontrol_ust(p, c); }
@@ -5714,7 +5760,7 @@ işlev kontrol_ust(p: &değişken Ayr, kok: tam32) -> tam32 {
                             değişken ic: tam32 = dizi_al(p.cocuk, dcb);
                             eğer metin_esit(dizi_al(p.a_ad, ic), "ISLEV") {
                                 p.yerel_basla = dizi_boyut(p.yerel);
-        p.gtas_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
+        p.gtas_ad = []; p.kt_ad = [];   // [D-505] taşınan adlar işlev-kapsamlı
                                 yerel_topla(p, ic); kontrol_govde(p, ic);
                             }
                         }

@@ -1,0 +1,47 @@
+// [D-575] GEÇİŞLİ R-YAKALAMA-THREAD.
+// D-505 yalnız `görev_başlat`ın DOĞRUDAN lambda argümanının yakaladıklarını
+// görüyordu. Dizi ADLANDIRILMIŞ bir kapanışın ARDINA saklanınca kural
+// atlanıyordu: iki görev aynı KdlDizi'ye yazıyor, `--check` TEMİZ, hiç
+// `güvensiz` YOK. ÖLÇÜLDÜ (5 koşum): 120/12/81/205/41 — beklenen 160.
+// D-504'ün yarışının ta kendisi, bir dolaylılık ardında.
+// YENİ TANI KODU YOK — mevcut L002.
+
+// (1) İHLAL: dizi kapanışın ardında, iki görev onu yakalıyor.
+işlev dolayli() -> tam32 {
+    değişken d: Dizi<tam32> = [0];
+    değişken f: işlev() -> tam32 = || { dizi_yaz(d, 0, 1); ver 0; };
+    eşleş görev_başlat(|| { ver f(); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver f(); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver dizi_al(d, 0);
+}
+
+// (2) POZİTİF: SAF kapanış (hiçbir şey yakalamıyor) — tanı ÜRETMEMELİ.
+işlev saf() -> tam32 {
+    değişken f: işlev() -> tam32 = || { ver 7; };
+    eşleş görev_başlat(|| { ver f(); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver f(); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver 42;
+}
+
+// (3) POZİTİF: SKALER yakalayan kapanış — env HEAP KOPYASIDIR, skaler kopya
+// YARIŞAMAZ (D-505'in kendi daraltması; D-323'ün G005 daraltmasıyla aynı).
+// ⚠ (2) ve (3) ŞART: yalnız (1) olsaydı "kapanış yakalayan her görevi reddet"
+// sabotajı kapıdan GEÇERDİ (D-425).
+işlev skaler() -> tam32 {
+    değişken n: tam32 = 5;
+    değişken f: işlev() -> tam32 = || { ver n; };
+    eşleş görev_başlat(|| { ver f(); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver f(); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver 42;
+}
+
+işlev main() -> tam32 { ver 42; }

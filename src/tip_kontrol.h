@@ -120,6 +120,10 @@ typedef struct TipKontrol {
      *   (tarama sirasinda isaretlemek ayni lambda icindeki 2. kullanimi
      *    sahte L002 yapardi). */
     int gorev_kapanis_derinlik;
+    /* [D-575] Icinde bulunulan lambda tasima-gerektiren bir sey yakaladi mi.
+     * `lambda_yakalama_isaretci` ile ayni kaydet/geri-yukle disiplini. */
+    int lambda_yakalama_tasima;
+    int lambda_tasima_sonuc;   /* [D-575] son bitmis lambdanin sonucu */
     const char *tasinan_ad[64];
     int tasinan_uz[64];
     int tasinan_sayi;

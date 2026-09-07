@@ -1563,6 +1563,59 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-575: GEÇİŞLİ `görev` YAKALAMASI — yarış bir kapanışın ARDINA saklanıyordu
+Değişmez avının son ekseni (`görev`/`kanal` dışındaki eşzamanlılık yüzeyleri).
+**Üç kenar tuttu, biri tutmadı:**
+```
+ic ice yapi icinde Dizi        -> L002 ✓ (D-523)
+Dizi<Dizi<tam32>>              -> L002 ✓
+kuresel dizi                   -> P034 ✓ (kuresel YALNIZ skaler/ham-isaretci,
+                                  sabit-literal init — D-356; yapisal olarak imkansiz)
+kapanis uzerinden DOLAYLI      -> **OK** 🔴
+```
+
+**🔴 ÖLÇÜLEN YARIŞ — `--check` TEMİZ, hiç `güvensiz` YOK:**
+```kemgu
+değişken d: Dizi<tam32> = [0];
+değişken f: işlev() -> tam32 = || { ... dizi_yaz(d, 0, dizi_al(d,0)+1) ... };
+görev_başlat(|| { ver f(); });   görev_başlat(|| { ver f(); });
+```
+5 koşum: **120 / 12 / 81 / 205 / 41** — beklenen 160. D-504'ün yarışının ta
+kendisi, **bir dolaylılık ardında**. D-505 yalnız `görev_başlat`ın DOĞRUDAN
+lambda argümanının yakaladıklarını görüyordu; dizi bir **adlandırılmış
+kapanışın** env'inde saklanınca kural hiç sorulmuyordu.
+
+**ONARIM — YENİ TANI KODU YOK (L002), YENİ ANALİZ YOK.** Soru zaten
+yanıtlanıyordu: *"bu lambda taşıma gerektiren bir şey yakalıyor mu?"*
+Yanıt **bağlamada kalıcılaştırıldı** (`Sembol.kapanis_tasima`) ve yakalama
+kaydı geçişli hale getirildi: taşıma gerektiren bir şey yakalayan bir kapanışı
+yakalamak da taşıma gerektirir. Self-host'ta `gtas_topla` **yeniden kullanıldı**
+(ikinci gezgin YAZILMADI — D-407); yan etkisi anlık görüntüyle geri alınır.
+
+**⚠ `dizi_cikar` DİLDE YOK** (D-552'de ölçülmüştü) → anlık görüntü **kopyayla**
+geri yüklenir. Pop'a güvenen ilk sürüm derlenmedi.
+
+**⚠ İKİ POZİTİF ŞEKİL ZORUNLU VE İKİSİ DE FİKSTÜRDE:** *saf* kapanış (hiçbir
+şey yakalamıyor) ve *skaler* yakalayan kapanış — ikisi de TEMİZ geçmeli.
+Env HEAP kopyasıdır, skaler kopya yarışamaz (D-505'in kendi daraltması,
+D-323'ün G005 daraltmasıyla aynı). Yalnız negatif olsaydı *"kapanış yakalayan
+her görevi reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**YANLIŞ-POZİTİF TARAMASI:** tüm depo (700+ `.kem`), L001/L002/L005/CP005/
+LR002 listesi taban ile karşılaştırıldı → tek fark **kendi D-574 fikstürüm**
+(taban ondan önce alınmıştı) → **sıfır yeni yanlış-pozitif**.
+
+**Kapılar:** checker_diff **179/179 (0 muaf)** · self_driver **TÜM MODLAR +
+FIXPOINT ✓ (146/146 check, 170/170 codegen)** · check_kapisi 275/282 (0 RED) ·
+check_genis 133/133 · drf_test 54/54 · linear_test 89/89 ·
+drf_gorunurluk 100/100 · stdlib_check · sıfır uyarı 38/0.
+**Sabotaj 3/3:** S152 (C) → 178/179 rc=2 · S153 (checker.kem) → 178/179 rc=2 ·
+S154 (codegen.kem) → self_driver 145/146 rc=2.
+
+**⚠ KALAN (dürüstçe):** kapanış zinciri **tek seviye** izlenir (`f` bir
+kapanışı yakalayan başka bir kapanışı yakalarsa geçişlilik ikinci seviyede
+durur). Ölçülmüş bir kusur değil; kaydediliyor.
+
 ### ✅ D-574: LİNEER PAYLOAD'LI `çeşit` — YASAK DEĞİL, YAYILIM (ölçümle seçildi)
 D-573'te ölçülüp **bilinçli olarak açık bırakılan** madde. İki meşru seçenek
 vardı; **hangisinin doğru olduğu tahmin edilmedi, ÖLÇÜLDÜ.**

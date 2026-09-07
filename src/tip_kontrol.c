@@ -27,6 +27,8 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
      * --checkdump SEGFAULT verdi (exit 139, olculdu). */
     tk->gorev_kapanis_derinlik = 0;
     tk->tasinan_sayi = 0;
+    tk->lambda_yakalama_tasima = 0;   /* [D-575] */
+    tk->lambda_tasima_sonuc = 0;      /* [D-575] */
     tk->ciplak_baglam = 0;   /* D-257 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
@@ -964,9 +966,21 @@ static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
          * yakalama SAHIPLIGI THREADE TASIR. Simdi TOPLA, lambda BITINCE
          * isaretle (tarama sirasinda isaretlemek ayni lambda icindeki
          * ikinci kullanimi sahte L002 yapardi). */
+        /* [D-575] GECISLI R-YAKALAMA-THREAD. D-505 yalniz DOGRUDAN
+         * yakalamayi goruyordu; `deger f = || { dizi_yaz(d,..) }` sonra
+         * `gorev_baslat(|| { ver f(); })` seklinde dizi ADLANDIRILMIS bir
+         * kapanisin ARDINA saklaniyordu -> iki gorev ayni KdlDizi'ye yaziyor,
+         * `--check` TEMIZ, `guvensiz` YOK. Olculdu: 5 kosum 120/12/81/205/41
+         * (beklenen 160) -- D-504'un yarisinin ta kendisi.
+         * Cozum: kapanisin KENDI yakalamasi tasima gerektiriyorsa, o kapanisi
+         * yakalamak da tasima gerektirir (`kapanis_tasima`). */
+        int tasima_gerek = sem
+            && ((gorev_tasima_gerekli_dr(tk, sem->tip, 0)
+                 && !gorev_tasima_muaf(sem->tip))
+                || sem->kapanis_tasima);
+        if (tasima_gerek) tk->lambda_yakalama_tasima = 1;
         if (tk->gorev_kapanis_derinlik > 0
-            && sem && gorev_tasima_gerekli_dr(tk, sem->tip, 0)
-            && !gorev_tasima_muaf(sem->tip)
+            && tasima_gerek
             && tk->tasinan_sayi < 64) {
             int zaten = 0;
             for (int i = 0; i < tk->tasinan_sayi; i++) {
@@ -4675,11 +4689,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int eski_yakalama = tk->lambda_lineer_yakalama;
             int eski_genel = tk->lambda_yakalama;   /* G005: ic-ice lambda korumasi */
             int eski_genel_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
+            int eski_genel_tas = tk->lambda_yakalama_tasima;   /* D-575 */
             Scope *eski_baslangic = tk->lambda_baslangic_scope;
             tk->lambda_govdesi_icinde = 1;
             tk->lambda_lineer_yakalama = 0;
             tk->lambda_yakalama = 0;
             tk->lambda_yakalama_isaretci = 0;
+            tk->lambda_yakalama_tasima = 0;   /* D-575 */
             tk->lambda_baslangic_scope = eski_scope;
 
             /* Govde icin lambda_scope uzerinde yeni gövde scope (ADIM 29:
@@ -4730,6 +4746,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int yakaladi = tk->lambda_lineer_yakalama;
             int yakaladi_genel = tk->lambda_yakalama;   /* G005 */
             int yakaladi_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
+            tk->lambda_tasima_sonuc = tk->lambda_yakalama_tasima;   /* D-575 */
 
             /* Lambda parametreleri lineer ise govde icinde tuketilmeli (L001) */
             scope_lineer_kapanis_check(tk, lambda_scope);
@@ -4738,6 +4755,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             tk->lambda_lineer_yakalama = eski_yakalama;
             tk->lambda_yakalama = eski_genel;
             tk->lambda_yakalama_isaretci = eski_genel_ptr;   /* D-323 */
+            tk->lambda_yakalama_tasima = eski_genel_tas;   /* D-575 */
             tk->lambda_baslangic_scope = eski_baslangic;
             tk->scope = eski_scope;
 
@@ -5899,6 +5917,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             s.satir = d->satir;
             s.sutun = d->sutun;
             s.lineer_scope_seviyesi = tk->scope_seviyesi;
+            /* [D-575] Deger bir LAMBDA ise, o lambdanin kendi yakalamasi
+             * tasima gerektiriyor mu — baglamada kalicilastir. */
+            if (d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
+                s.kapanis_tasima = tk->lambda_tasima_sonuc;
+            }
             if (sembol_ekle(tk->scope, tk->arena, &s) != 0) {
                 tip_hata(tk, d, "T024", "degisken zaten tanimli");
             }

@@ -61,6 +61,10 @@ typedef struct Sembol {
      * olarak yakalandi -> SAHIPLIK THREAD E TASINDI, kaynak erisimi kaybetti.
      * Bellek Modeli sat.144: forall v in YD(c): sahiplik_transfer(v, rho_yeni). */
     int gorev_tasindi;
+    /* [D-575] Bu baglama bir KAPANIS ve kendisi tasima-gerektiren bir sey
+     * (Dizi<T> / Dizi iceren yapi) yakaliyor. Gorev kapanisindan DOLAYLI
+     * yakalamayi gecisli kilar. */
+    int kapanis_tasima;
     /* D-315 (Linear V2.1) — KISMI TASIMA: `yapı tekkez` baglamasinin hangi
      * LINEER alanlari disari tasindi (bit i = i. alan). 32 alandan fazlasi
      * icin kismi tasima muhafazakar reddedilir (maske tasar). 0 = el degmemis. */
