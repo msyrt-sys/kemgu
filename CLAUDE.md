@@ -1563,6 +1563,43 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ⛔ D-577 (NEGATİF SONUÇ): `dondur` (R-PAYLAŞ) ATIL — kod YAZILMADI, bağlaşım kapıya bağlandı
+Av `görev`/`kanal` dışındaki son eşzamanlılık yüzeyine taşındı. `dondur`
+kayıtta *"V1'de identity"* diye duruyordu; spec ise onu bir **aksiyom** olarak
+ilan ediyor (`KEMGU_Bellek_Modeli.md:218`):
+> `dondur(v)` → değiştirilebilir(ρ)=yanlış · **hiçbir thread ρ'ya yazamaz** ·
+> birden fazla thread ρ'yu okuyabilir [S1 istisnası]
+
+**AKSİYOMUN İKİ YARISI DA UYGULANMIYOR — ölçüldü:**
+```
+dondurulmus diziyi IKI gorev okuyor  -> L002   (paylasim hakki VERILMIYOR)
+dondur sonrasi orijinale yazma       -> OK     (yasak UYGULANMIYOR)
+   ... ve calisma zamaninda: exit 99 = "donmus" dizi GERCEKTEN degisti
+```
+
+**🎯 ASIL BULGU BİR BAĞLAŞIM.** İkisi birlikte hareket etmeli: `dondur`a
+**paylaşım hakkı vermek, yazma yasağı YOKKEN doğrudan bir VERİ YARIŞI
+açar** (ana thread yazarken iki görev okur). Bugünkü hâl güvensiz DEĞİL —
+`dondur` hiçbir hak vermediği için hiçbir programın güvenliği ona dayanamaz.
+
+**KOD YAZILMADI (D-515/D-490 disiplini).** Yasağı tek başına uygulamak
+ölçülebilir bir kazanç vermez (verilen hak yok) ve önceden geçerli
+programları reddeder; hakkı vermek yasağı **gerektirir** ve ikisi birlikte
+bir **dil yüzeyi kararıdır** (Mehmet). Bağımlılık taraması: `dondur`u
+kullanan yalnız **2 fikstür** (identity codegen + arite hatası) — hiçbir
+gerçek kod ona dayanmıyor.
+
+**BUNUN YERİNE BAĞLAŞIM KAPIYA BAĞLANDI** (D-462: *elle taranan ölçüm eskir,
+kapı eskimez*). `tc51_01_dondur_paylasim_baglasimi.kem` her iki yarıyı da
+sabitler + **pozitif** şekil (geçerli tek-thread `dondur` temiz kalmalı).
+Birisi ileride paylaşım hakkını yazma yasağı olmadan açarsa fikstür
+**kırmızıya döner** ve dosyanın kendi yorumu ne yapılması gerektiğini söyler.
+**Sabotaj S159** (dizi taşımasını kapat = "paylaşım hakkı ver") → fikstür
+`L002` → `OK`, checker_diff **176/180, rc=2**.
+
+**Kapılar:** checker_diff **180/180 (0 muaf)** · check_kapisi 275/282 (0 RED) ·
+drf_test 54/54.
+
 ### 🔴✅ D-576: KAPANIŞ YAPI ALANINDA SAKLANINCA GEÇİŞLİLİK DÜŞÜYORDU
 D-575'in bıraktığı maddeyi ölçmekle başladı ve **kaydım yanlış çıktı**: çok
 seviyeli zincir (`d ← f ← g ← h ← görev`) **zaten** yakalanıyordu (bayrak her
