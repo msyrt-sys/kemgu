@@ -1,0 +1,205 @@
+// KEMGU Stdlib Testi — Kesir (Rasyonel Aritmetik)
+// =================================
+//
+// Bu dosya `stdlib/kesir.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+//
+// Fonksiyon-dönüşü kesirler çağıran scope'ta indekslenmez; sonuçlar
+// kesir_pay / kesir_payda / kesir_esit_mi / kesir_gecerli_mi
+// parametresine geçirilerek skalere indirgenir (F4-güvenli desen).
+
+// --- kesir_olustur (normalizasyon) ---
+işlev test_olustur_indirgeme_pay() -> tam32 {
+    ver kesir_pay(kesir_olustur(2, 4));           // 1 (2/4 -> 1/2)
+}
+
+işlev test_olustur_indirgeme_payda() -> tam32 {
+    ver kesir_payda(kesir_olustur(2, 4));         // 2
+}
+
+işlev test_olustur_isaret_tasima() -> tam32 {
+    ver kesir_pay(kesir_olustur(1, 0 - 2));       // -1 (1/-2 -> -1/2)
+}
+
+işlev test_olustur_isaret_payda() -> tam32 {
+    ver kesir_payda(kesir_olustur(1, 0 - 2));     // 2 (payda daima pozitif)
+}
+
+işlev test_olustur_sifir() -> tam32 {
+    ver kesir_payda(kesir_olustur(0, 5));         // 1 (0 daima 0/1)
+}
+
+işlev test_olustur_cift_negatif() -> tam32 {
+    ver kesir_pay(kesir_olustur(0 - 2, 0 - 4));   // 1 (-2/-4 -> 1/2)
+}
+
+işlev test_olustur_payda_sifir() -> mantıksal {
+    ver kesir_gecerli_mi(kesir_olustur(3, 0));    // yanlış (geçersiz)
+}
+
+işlev test_gecerli_normal() -> mantıksal {
+    ver kesir_gecerli_mi(kesir_olustur(1, 2));    // doğru
+}
+
+// --- kesir_topla / kesir_cikar ---
+işlev test_topla() -> mantıksal {
+    // 1/2 + 1/3 = 5/6
+    ver kesir_esit_mi(kesir_topla(kesir_olustur(1, 2), kesir_olustur(1, 3)),
+                      kesir_olustur(5, 6));
+}
+
+işlev test_topla_bir() -> mantıksal {
+    // 1/2 + 1/2 = 1/1
+    ver kesir_esit_mi(kesir_topla(kesir_olustur(1, 2), kesir_olustur(1, 2)),
+                      kesir_olustur(1, 1));
+}
+
+işlev test_cikar() -> mantıksal {
+    // 1/2 - 1/3 = 1/6
+    ver kesir_esit_mi(kesir_cikar(kesir_olustur(1, 2), kesir_olustur(1, 3)),
+                      kesir_olustur(1, 6));
+}
+
+işlev test_cikar_negatif_sonuc() -> tam32 {
+    // 1/3 - 1/2 = -1/6
+    ver kesir_pay(kesir_cikar(kesir_olustur(1, 3), kesir_olustur(1, 2)));   // -1
+}
+
+// --- kesir_carp / kesir_bol ---
+işlev test_carp() -> mantıksal {
+    // 2/3 * 3/4 = 1/2
+    ver kesir_esit_mi(kesir_carp(kesir_olustur(2, 3), kesir_olustur(3, 4)),
+                      kesir_olustur(1, 2));
+}
+
+işlev test_bol() -> mantıksal {
+    // (1/2) / (1/4) = 2/1
+    ver kesir_esit_mi(kesir_bol(kesir_olustur(1, 2), kesir_olustur(1, 4)),
+                      kesir_olustur(2, 1));
+}
+
+işlev test_bol_sifira() -> mantıksal {
+    // (1/2) / 0 -> geçersiz
+    ver kesir_gecerli_mi(kesir_bol(kesir_olustur(1, 2), kesir_olustur(0, 1)));
+}
+
+// --- kesir_neg / kesir_ters ---
+işlev test_neg() -> tam32 {
+    ver kesir_pay(kesir_neg(kesir_olustur(1, 2)));    // -1
+}
+
+işlev test_cift_neg_kimlik() -> mantıksal {
+    ver kesir_esit_mi(kesir_neg(kesir_neg(kesir_olustur(3, 7))),
+                      kesir_olustur(3, 7));
+}
+
+işlev test_ters() -> mantıksal {
+    ver kesir_esit_mi(kesir_ters(kesir_olustur(2, 3)), kesir_olustur(3, 2));
+}
+
+işlev test_ters_sifir() -> mantıksal {
+    ver kesir_gecerli_mi(kesir_ters(kesir_olustur(0, 1)));   // yanlış
+}
+
+işlev test_ters_carpim_bir() -> mantıksal {
+    // k * (1/k) = 1
+    ver kesir_esit_mi(kesir_carp(kesir_olustur(5, 7), kesir_ters(kesir_olustur(5, 7))),
+                      kesir_olustur(1, 1));
+}
+
+// --- kesir_esit_mi / kesir_kucuk_mu ---
+işlev test_esit_farkli_bicim() -> mantıksal {
+    ver kesir_esit_mi(kesir_olustur(1, 2), kesir_olustur(2, 4));   // doğru
+}
+
+işlev test_esit_degil() -> mantıksal {
+    ver kesir_esit_mi(kesir_olustur(1, 2), kesir_olustur(1, 3));   // yanlış
+}
+
+işlev test_zehir_esit_degil() -> mantıksal {
+    // geçersiz kendine bile eşit değil (NaN semantiği)
+    ver kesir_esit_mi(kesir_olustur(1, 0), kesir_olustur(1, 0));   // yanlış
+}
+
+işlev test_kucuk_evet() -> mantıksal {
+    ver kesir_kucuk_mu(kesir_olustur(1, 3), kesir_olustur(1, 2));  // doğru
+}
+
+işlev test_kucuk_hayir() -> mantıksal {
+    ver kesir_kucuk_mu(kesir_olustur(1, 2), kesir_olustur(1, 3));  // yanlış
+}
+
+işlev test_kucuk_negatif() -> mantıksal {
+    ver kesir_kucuk_mu(kesir_olustur(0 - 1, 2), kesir_olustur(1, 3));  // doğru
+}
+
+// --- zehir yayılımı ---
+işlev test_zehir_yayilir_topla() -> mantıksal {
+    ver kesir_gecerli_mi(kesir_topla(kesir_olustur(1, 2), kesir_olustur(1, 0)));
+}
+
+işlev test_zehir_yayilir_zincir() -> mantıksal {
+    // geçersiz * geçerli + geçerli -> hâlâ geçersiz
+    ver kesir_gecerli_mi(
+        kesir_topla(kesir_carp(kesir_olustur(1, 0), kesir_olustur(1, 2)),
+                    kesir_olustur(1, 3)));
+}
+
+// --- kesir_tam_kisim ---
+işlev test_tam_kisim() -> tam32 {
+    ver kesir_tam_kisim(kesir_olustur(7, 2));     // 3
+}
+
+işlev test_tam_kisim_negatif() -> tam32 {
+    ver kesir_tam_kisim(kesir_olustur(0 - 7, 2)); // -3 (sıfıra doğru)
+}
+
+işlev test_tam_kisim_zehir() -> tam32 {
+    ver kesir_tam_kisim(kesir_olustur(1, 0));     // 0
+}
+
+// --- bileşik: 1/2 + 1/3 + 1/6 = 1 ---
+işlev test_bilesik_toplam_bir() -> mantıksal {
+    ver kesir_esit_mi(
+        kesir_topla(kesir_topla(kesir_olustur(1, 2), kesir_olustur(1, 3)),
+                    kesir_olustur(1, 6)),
+        kesir_olustur(1, 1));
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_olustur_indirgeme_pay() != 1 { ver 1; }
+    eğer test_olustur_indirgeme_payda() != 2 { ver 2; }
+    eğer test_olustur_isaret_tasima() != 0 - 1 { ver 3; }
+    eğer test_olustur_isaret_payda() != 2 { ver 4; }
+    eğer test_olustur_sifir() != 1 { ver 5; }
+    eğer test_olustur_cift_negatif() != 1 { ver 6; }
+    eğer test_olustur_payda_sifir() { ver 7; }
+    eğer değil test_gecerli_normal() { ver 8; }
+    eğer değil test_topla() { ver 9; }
+    eğer değil test_topla_bir() { ver 10; }
+    eğer değil test_cikar() { ver 11; }
+    eğer test_cikar_negatif_sonuc() != 0 - 1 { ver 12; }
+    eğer değil test_carp() { ver 13; }
+    eğer değil test_bol() { ver 14; }
+    eğer test_bol_sifira() { ver 15; }
+    eğer test_neg() != 0 - 1 { ver 16; }
+    eğer değil test_cift_neg_kimlik() { ver 17; }
+    eğer değil test_ters() { ver 18; }
+    eğer test_ters_sifir() { ver 19; }
+    eğer değil test_ters_carpim_bir() { ver 20; }
+    eğer değil test_esit_farkli_bicim() { ver 21; }
+    eğer test_esit_degil() { ver 22; }
+    eğer test_zehir_esit_degil() { ver 23; }
+    eğer değil test_kucuk_evet() { ver 24; }
+    eğer test_kucuk_hayir() { ver 25; }
+    eğer değil test_kucuk_negatif() { ver 26; }
+    eğer test_zehir_yayilir_topla() { ver 27; }
+    eğer test_zehir_yayilir_zincir() { ver 28; }
+    eğer test_tam_kisim() != 3 { ver 29; }
+    eğer test_tam_kisim_negatif() != 0 - 3 { ver 30; }
+    eğer test_tam_kisim_zehir() != 0 { ver 31; }
+    eğer değil test_bilesik_toplam_bir() { ver 32; }
+    ver 42;
+}

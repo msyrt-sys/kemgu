@@ -1,0 +1,164 @@
+// KEMGU Stdlib — Kesir (Rasyonel Sayı Aritmetiği)
+// ================================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Tam sayı çiftiyle KESİN rasyonel aritmetik — kayan nokta yuvarlama
+// hatası yok (0.1+0.2 != 0.3 sınıfı sürprizlere kapalı).
+//
+// TEMSİL: kesir = 2 elemanlı Dizi<tam32> -> [pay, payda].
+//   - Çok-değerli dönüş olmadığı için çift, dizi olarak taşınır
+//     (yapı-dönüş codegen'i her yolda doğrulanınca V2'de yapıya geçer).
+//   - Her kurucu NORMALİZE eder: payda daima > 0 (işaret payda'dan
+//     paya taşınır), pay/payda OBEB ile indirgenmiş, 0 daima [0, 1].
+//     Bu sayede eşitlik bileşen karşılaştırmasıyla O(1).
+//   - GEÇERSİZ kesir = [0, 0] (payda 0): NaN eşleniği ZEHİR değeri.
+//     Kaynak: payda 0 ile kurma, 0'a bölme, 0'ın tersi. Zehir tüm
+//     işlemlerden zehir olarak YAYILIR, karşılaştırmalardan yanlış
+//     döner — çökme YOK (çökmezlik ilkesi), sessiz yanlış sayı da YOK
+//     (kesir_gecerli_mi ile her an denetlenebilir).
+//
+// SINIR: ara çarpımlar (pay1*payda2 vb.) tam32'de taşabilir —
+// güvenli alan kabaca |pay|,|payda| < 46341. tam64 sürümü, tam64
+// codegen yolu stdlib'de doğrulanınca.
+
+// --- Yardımcılar ---
+
+// (İç yardımcı) OBEB — Öklid, negatif olmayan girdiler. obeb(0,x)=x.
+işlev kesir_obeb(a: tam32, b: tam32) -> tam32 {
+    değişken x: tam32 = a;
+    değişken y: tam32 = b;
+    iken y != 0 {
+        değişken t: tam32 = x % y;
+        x = y;
+        y = t;
+    }
+    ver x;
+}
+
+// (İç yardımcı) Geçersiz kesir (zehir) üret: [0, 0].
+işlev kesir_gecersiz() -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    dizi_ekle(sonuc, 0);
+    dizi_ekle(sonuc, 0);
+    ver sonuc;
+}
+
+// --- Kurucu / erişim ---
+
+// Kesir kur — normalize eder (payda > 0, indirgenmiş, 0 -> [0,1]).
+// payda 0 -> geçersiz kesir [0,0].
+işlev kesir_olustur(pay: tam32, payda: tam32) -> Dizi<tam32> {
+    eğer payda == 0 { ver kesir_gecersiz(); }
+    değişken p: tam32 = pay;
+    değişken q: tam32 = payda;
+    eğer q < 0 {
+        p = 0 - p;
+        q = 0 - q;
+    }
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    eğer p == 0 {
+        dizi_ekle(sonuc, 0);
+        dizi_ekle(sonuc, 1);
+        ver sonuc;
+    }
+    değişken m: tam32 = p;
+    eğer m < 0 { m = 0 - m; }
+    değişken g: tam32 = kesir_obeb(m, q);
+    dizi_ekle(sonuc, p / g);
+    dizi_ekle(sonuc, q / g);
+    ver sonuc;
+}
+
+// Pay (geçersizde 0).
+işlev kesir_pay(k: Dizi<tam32>) -> tam32 {
+    ver k[0];
+}
+
+// Payda (geçersizde 0 — geçerli kesirde daima > 0).
+işlev kesir_payda(k: Dizi<tam32>) -> tam32 {
+    ver k[1];
+}
+
+// Geçerli mi — 2 elemanlı ve payda > 0 mu?
+işlev kesir_gecerli_mi(k: Dizi<tam32>) -> mantıksal {
+    değişken n: tam32 = 0;
+    için x: k {
+        n = n + 1;
+    }
+    eğer n != 2 { ver yanlış; }
+    ver k[1] > 0;
+}
+
+// --- Aritmetik (zehir yayılır) ---
+
+// Toplama: a/b + c/d = (ad + cb) / bd.
+işlev kesir_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+    eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
+    eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
+    ver kesir_olustur(a[0] * b[1] + b[0] * a[1], a[1] * b[1]);
+}
+
+// Çıkarma: a/b - c/d = (ad - cb) / bd.
+işlev kesir_cikar(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+    eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
+    eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
+    ver kesir_olustur(a[0] * b[1] - b[0] * a[1], a[1] * b[1]);
+}
+
+// Çarpma: (a/b) * (c/d) = ac / bd.
+işlev kesir_carp(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+    eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
+    eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
+    ver kesir_olustur(a[0] * b[0], a[1] * b[1]);
+}
+
+// Bölme: (a/b) / (c/d) = ad / bc. Sıfıra bölme -> geçersiz.
+işlev kesir_bol(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+    eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
+    eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
+    eğer b[0] == 0 { ver kesir_gecersiz(); }
+    ver kesir_olustur(a[0] * b[1], a[1] * b[0]);
+}
+
+// Olumsuzlama: -(a/b).
+işlev kesir_neg(a: Dizi<tam32>) -> Dizi<tam32> {
+    eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
+    ver kesir_olustur(0 - a[0], a[1]);
+}
+
+// Ters (çarpmaya göre): b/a. 0'ın tersi -> geçersiz.
+işlev kesir_ters(a: Dizi<tam32>) -> Dizi<tam32> {
+    eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
+    eğer a[0] == 0 { ver kesir_gecersiz(); }
+    ver kesir_olustur(a[1], a[0]);
+}
+
+// --- Karşılaştırma (zehirde yanlış — NaN semantiği) ---
+
+// Eşit mi — normalize temsil sayesinde bileşen eşitliği. Geçersiz
+// hiçbir şeye eşit değildir (kendine bile — NaN gibi).
+işlev kesir_esit_mi(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
+    eğer değil kesir_gecerli_mi(a) { ver yanlış; }
+    eğer değil kesir_gecerli_mi(b) { ver yanlış; }
+    ver a[0] == b[0] ve a[1] == b[1];
+}
+
+// Küçük mü: a/b < c/d <=> ad < cb (paydalar > 0). Geçersizde yanlış.
+işlev kesir_kucuk_mu(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
+    eğer değil kesir_gecerli_mi(a) { ver yanlış; }
+    eğer değil kesir_gecerli_mi(b) { ver yanlış; }
+    ver a[0] * b[1] < b[0] * a[1];
+}
+
+// --- Dönüşüm ---
+
+// Tam kısım — pay/payda, sıfıra doğru kırpılır (C `/` gibi).
+// Geçersizde 0.
+işlev kesir_tam_kisim(a: Dizi<tam32>) -> tam32 {
+    eğer değil kesir_gecerli_mi(a) { ver 0; }
+    ver a[0] / a[1];
+}
+
+// AÇIK SORU: yapı-dönüş codegen'i her yolda doğrulanınca temsil
+// `yapı Kesir { pay, payda }`ya taşınmalı (dizi-uzunluk hatası sınıfı
+// tümden kalkar); tam64 iç aritmetikle taşma alanı da genişletilmeli.

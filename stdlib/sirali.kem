@@ -1,0 +1,152 @@
+// KEMGU Stdlib — Sıralı Dizi Araçları
+// ====================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Artan sıralı Dizi<T> ile çalışan araçlar: hızlı sıralama, sırayı
+// koruyarak ekleme, sıralı birleştirme (merge), ekleme-konumu sorgusu.
+//
+// Tasarım kuralı:
+//   - `hizli_sirala` dizi.kem `sirala`nın YERİNE GEÇMEZ, tamamlar:
+//     sirala kabarcık (O(n²), basit), bu Lomuto bölümlemeli hızlı
+//     sıralama (ortalama O(n log n)). Pivot SON eleman — zaten sıralı
+//     girdide en kötü duruma (O(n²), özyineleme derinliği n) düşer;
+//     küçük/orta diziler için yeterli, medyan-üçlü pivot V2.
+//   - `sirali_ekle` ve `birlestir_sirali` YENİ dizi döner (araya
+//     ekleme primitifi yok; dizi.kem dilimle ile aynı desen).
+//     `hizli_sirala` ise YERİNDE çalışır (sirala ile aynı sözleşme).
+//   - `birlestir_sirali` KARARLI (stable): eşitlikte a'nın elemanı
+//     önce gelir — birleştirme sıralamasının yapı taşı.
+//   - Sıralılık ÖNKOŞULU denetlenmez (arama.kem ile aynı gerekçe:
+//     O(n) denetim O(log n)/O(n) işin amacını bozar). Denetim
+//     gerekiyorsa karsilastir.kem `sirali_mi` kullanılır; buradaki
+//     `sirali_dogrula` aynı işin modül-bağımsız YEREL kopyasıdır
+//     (import sistemi öncesi her modül tek dosya --check edilir).
+//   - `sirali_konum` arama.kem `alt_sinir` ile aynı algoritma —
+//     yine bağımsız-derleme zorunluluğu; import gelince tek kaynağa
+//     indirilmeli.
+
+// --- Yardımcılar ---
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev sirali_boyut<T>(xs: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// (İç yardımcı) Artan sıralı mı — karsilastir.kem sirali_mi'nin
+// yereli; test değişmezi olarak da kullanışlı.
+işlev sirali_dogrula<T>(xs: Dizi<T>) -> mantıksal {
+    değişken n: tam32 = sirali_boyut(xs);
+    değişken i: tam32 = 0;
+    iken i < n - 1 {
+        eğer xs[i] > xs[i + 1] { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// --- Konum sorgusu ---
+
+// Sıralı konum — hedefin sırayı bozmadan eklenebileceği en sol konum
+// (hedeften küçük olmayan ilk elemanın indeksi; hepsi küçükse n).
+// İkili arama, O(log n). Orta nokta taşma-güvenli.
+işlev sirali_konum<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+    değişken alt: tam32 = 0;
+    değişken ust: tam32 = sirali_boyut(xs);
+    iken alt < ust {
+        değişken orta: tam32 = alt + (ust - alt) / 2;
+        eğer xs[orta] < hedef {
+            alt = orta + 1;
+        } değilse {
+            ust = orta;
+        }
+    }
+    ver alt;
+}
+
+// --- Sırayı koruyan işlemler ---
+
+// Sıralı ekle — x'i doğru konuma yerleştirilmiş YENİ dizi döner.
+// Konum ikili aramayla (O(log n)), kopya O(n).
+işlev sirali_ekle<T>(xs: Dizi<T>, x: T) -> Dizi<T> {
+    değişken konum: tam32 = sirali_konum(xs, x);
+    değişken n: tam32 = sirali_boyut(xs);
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    iken i < konum {
+        dizi_ekle(sonuc, xs[i]);
+        i = i + 1;
+    }
+    dizi_ekle(sonuc, x);
+    iken i < n {
+        dizi_ekle(sonuc, xs[i]);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Sıralı birleştir (merge) — iki artan sıralı diziyi tek artan sıralı
+// YENİ dizide birleştir. O(n+m), KARARLI (eşitlikte a önce).
+işlev birlestir_sirali<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+    değişken na: tam32 = sirali_boyut(a);
+    değişken nb: tam32 = sirali_boyut(b);
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    değişken j: tam32 = 0;
+    iken i < na ve j < nb {
+        eğer a[i] <= b[j] {
+            dizi_ekle(sonuc, a[i]);
+            i = i + 1;
+        } değilse {
+            dizi_ekle(sonuc, b[j]);
+            j = j + 1;
+        }
+    }
+    iken i < na {
+        dizi_ekle(sonuc, a[i]);
+        i = i + 1;
+    }
+    iken j < nb {
+        dizi_ekle(sonuc, b[j]);
+        j = j + 1;
+    }
+    ver sonuc;
+}
+
+// --- Hızlı sıralama ---
+
+// (İç yardımcı) [dus, yuk] aralığını Lomuto bölümlemesiyle sırala.
+// Pivot son eleman; özyinelemeli.
+işlev hizli_sirala_aralik<T>(xs: Dizi<T>, dus: tam32, yuk: tam32) -> Dizi<T> {
+    eğer dus >= yuk { ver xs; }
+    değişken pivot: T = xs[yuk];
+    değişken i: tam32 = dus;
+    değişken j: tam32 = dus;
+    iken j < yuk {
+        eğer xs[j] < pivot {
+            değişken t: T = xs[i];
+            xs[i] = xs[j];
+            xs[j] = t;
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+    değişken t2: T = xs[i];
+    xs[i] = xs[yuk];
+    xs[yuk] = t2;
+    değişken ara: Dizi<T> = hizli_sirala_aralik(xs, dus, i - 1);
+    ver hizli_sirala_aralik(ara, i + 1, yuk);
+}
+
+// Hızlı sırala — diziyi YERİNDE artan sırala, aynı diziyi döner
+// (zincirleme). Ortalama O(n log n); sıralı girdide O(n²) — bkz. başlık.
+işlev hizli_sirala<T>(xs: Dizi<T>) -> Dizi<T> {
+    ver hizli_sirala_aralik(xs, 0, sirali_boyut(xs) - 1);
+}
+
+// AÇIK SORU: import/isim-alanı sistemi gelince sirali_dogrula ve
+// sirali_konum, karsilastir.kem sirali_mi ile arama.kem alt_sinir'a
+// devredilip buradan silinmeli (tek-kaynak).

@@ -1,0 +1,146 @@
+// KEMGU Stdlib Testi — Rastgele (MINSTD PRNG)
+// =================================
+//
+// Bu dosya `stdlib/rastgele.kem` ile birleştirilerek --check edilir.
+// Doğruluk çapaları MINSTD'nin YAYIMLANMIŞ dizisine kilitli (Park-Miller
+// 1988; C++ minstd_rand0 ile aynı): durum 1'den itibaren
+// 16807 -> 282475249 -> 1622650073. Determinizm = aynı tohum aynı dizi.
+
+// Test yardımcıları — dönen dizileri parametre üzerinden indirger
+// (F4-güvenli desen).
+işlev yardimci_eleman(xs: Dizi<tam32>, i: tam32) -> tam32 { ver xs[i]; }
+işlev yardimci_boyut(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs { n = n + 1; }
+    ver n;
+}
+işlev yardimci_toplam(xs: Dizi<tam32>) -> tam32 {
+    değişken s: tam32 = 0;
+    için x: xs { s = s + x; }
+    ver s;
+}
+işlev yardimci_esit(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
+    değişken na: tam32 = yardimci_boyut(a);
+    eğer na != yardimci_boyut(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < na {
+        eğer a[i] != b[i] { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// --- rastgele_tohumla ---
+işlev test_tohumla_sifir() -> tam32 { ver rastgele_tohumla(0); }        // 1
+işlev test_tohumla_pozitif() -> tam32 { ver rastgele_tohumla(41); }     // 42
+işlev test_tohumla_negatif_gecerli() -> mantıksal {
+    değişken s: tam32 = rastgele_tohumla(0 - 7);
+    ver s > 0 ve s < 2147483647;                  // her girdide geçerli durum
+}
+
+// --- rastgele_sonraki (yayımlanmış MINSTD dizisi) ---
+işlev test_minstd_1() -> tam32 { ver rastgele_sonraki(1); }             // 16807
+işlev test_minstd_2() -> tam32 { ver rastgele_sonraki(16807); }         // 282475249
+işlev test_minstd_3() -> tam32 { ver rastgele_sonraki(282475249); }     // 1622650073
+işlev test_minstd_zincir() -> tam32 {
+    ver rastgele_sonraki(rastgele_sonraki(1));    // 282475249 (determinizm)
+}
+işlev test_sonraki_gecersiz_durum() -> tam32 {
+    ver rastgele_sonraki(0);                      // savunma: 1'den adım -> 16807
+}
+
+// --- rastgele_aralikta ---
+işlev test_aralikta() -> tam32 {
+    ver rastgele_aralikta(16807, 0, 10);          // 16807 % 10 = 7
+}
+işlev test_aralikta_kaydirma() -> tam32 {
+    ver rastgele_aralikta(16807, 100, 110);       // 107
+}
+işlev test_aralikta_bos() -> tam32 {
+    ver rastgele_aralikta(16807, 5, 5);           // 5 (boş aralık -> alt)
+}
+işlev test_aralikta_tek() -> tam32 {
+    ver rastgele_aralikta(16807, 3, 4);           // 3 (tek değerli aralık)
+}
+
+// --- rastgele_dizi ---
+işlev test_dizi_boyut() -> tam32 {
+    ver yardimci_boyut(rastgele_dizi(5, 0));      // 5
+}
+işlev test_dizi_ilk() -> tam32 {
+    // tohum 0 -> durum 1 -> ilk değer 16807
+    ver yardimci_eleman(rastgele_dizi(3, 0), 0);  // 16807
+}
+işlev test_dizi_ucuncu() -> tam32 {
+    ver yardimci_eleman(rastgele_dizi(3, 0), 2);  // 1622650073
+}
+işlev test_dizi_deterministik() -> mantıksal {
+    ver yardimci_esit(rastgele_dizi(4, 7), rastgele_dizi(4, 7));
+}
+işlev test_dizi_farkli_tohum() -> mantıksal {
+    // farklı tohum -> ilk değer farklı (durum 1 vs 8)
+    ver yardimci_eleman(rastgele_dizi(1, 0), 0) != yardimci_eleman(rastgele_dizi(1, 7), 0);
+}
+işlev test_dizi_bos() -> tam32 {
+    ver yardimci_boyut(rastgele_dizi(0, 1));      // 0
+}
+
+// --- rastgele_karistir ---
+işlev test_karistir_boyut_korunur() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4, 5];
+    ver yardimci_boyut(rastgele_karistir(d, 42)); // 5
+}
+işlev test_karistir_toplam_korunur() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 12];
+    ver yardimci_toplam(rastgele_karistir(d, 42));    // 42 (multiset korunur)
+}
+işlev test_karistir_deterministik() -> mantıksal {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6, 7, 8];
+    değişken b: Dizi<tam32> = [1, 2, 3, 4, 5, 6, 7, 8];
+    ver yardimci_esit(rastgele_karistir(a, 9), rastgele_karistir(b, 9));
+}
+işlev test_karistir_tek_eleman() -> tam32 {
+    değişken d: Dizi<tam32> = [42];
+    ver yardimci_eleman(rastgele_karistir(d, 3), 0);  // 42
+}
+işlev test_karistir_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver yardimci_boyut(rastgele_karistir(d, 3));      // 0
+}
+
+// --- bileşik: zar benzetimi — ilerlet + indirge, değer 1..6 içinde ---
+işlev test_zar_araliginda() -> mantıksal {
+    değişken durum: tam32 = rastgele_sonraki(rastgele_tohumla(123));
+    değişken zar: tam32 = rastgele_aralikta(durum, 1, 7);
+    ver zar >= 1 ve zar <= 6;
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_tohumla_sifir() != 1 { ver 1; }
+    eğer test_tohumla_pozitif() != 42 { ver 2; }
+    eğer değil test_tohumla_negatif_gecerli() { ver 3; }
+    eğer test_minstd_1() != 16807 { ver 4; }
+    eğer test_minstd_2() != 282475249 { ver 5; }
+    eğer test_minstd_3() != 1622650073 { ver 6; }
+    eğer test_minstd_zincir() != 282475249 { ver 7; }
+    eğer test_sonraki_gecersiz_durum() != 16807 { ver 8; }
+    eğer test_aralikta() != 7 { ver 9; }
+    eğer test_aralikta_kaydirma() != 107 { ver 10; }
+    eğer test_aralikta_bos() != 5 { ver 11; }
+    eğer test_aralikta_tek() != 3 { ver 12; }
+    eğer test_dizi_boyut() != 5 { ver 13; }
+    eğer test_dizi_ilk() != 16807 { ver 14; }
+    eğer test_dizi_ucuncu() != 1622650073 { ver 15; }
+    eğer değil test_dizi_deterministik() { ver 16; }
+    eğer değil test_dizi_farkli_tohum() { ver 17; }
+    eğer test_dizi_bos() != 0 { ver 18; }
+    eğer test_karistir_boyut_korunur() != 5 { ver 19; }
+    eğer test_karistir_toplam_korunur() != 42 { ver 20; }
+    eğer değil test_karistir_deterministik() { ver 21; }
+    eğer test_karistir_tek_eleman() != 42 { ver 22; }
+    eğer test_karistir_bos() != 0 { ver 23; }
+    eğer değil test_zar_araliginda() { ver 24; }
+    ver 42;
+}

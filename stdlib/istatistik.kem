@@ -1,0 +1,166 @@
+// KEMGU Stdlib — İstatistik
+// ==========================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Dizi<tam32> üzerinde temel betimleyici istatistik: ortalama, medyan,
+// aralık, varyans, standart sapma, en sık eleman.
+//
+// Tasarım kuralı:
+//   - TAMSAYI aritmetiği: bölme kırpılır (kesirli codegen sınırları
+//     nedeniyle v1 tam32 odaklı — dizi.kem'in _tam ailesiyle aynı
+//     yaklaşım). Kırpılma noktaları her işlevin yorumunda açık.
+//   - Boş dizide tanımsız olan her ölçü seçimlik<tam32> döner
+//     (C'nin NaN/çökme yolu yerine açık yokluk).
+//   - `ist_medyan` girdiyi BOZMAZ: kopya üzerinde sıralar (dizi.kem
+//     `sirala` yerinde çalışır; istatistik sorgusunun veriyi
+//     değiştirmesi sürpriz olurdu).
+//   - Tüm adlar `ist_` önekli: dizi.kem `aralik`/`toplam_tam`,
+//     matematik.kem `kok_tam` adlarını zaten kullanıyor; import
+//     sistemi öncesi tek isim alanı varsayımıyla önek şart.
+//   - Varyans POPÜLASYON varyansı (n'e bölüm, n-1 değil) ve ortalama
+//     kırpılmış tamsayı olduğu için küçük bir sapma taşır; tam
+//     değerli örneklerde (ör. [2,4,4,4,5,5,7,9] -> 4) kesindir.
+
+// --- Yardımcılar ---
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev ist_boyut(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// (İç yardımcı) Kopyala + artan sırala (bubble, O(n²)) — medyan için.
+// Girdi değişmez.
+işlev ist_sirala_kopya(xs: Dizi<tam32>) -> Dizi<tam32> {
+    değişken s: Dizi<tam32> = dizi_olustur(0);
+    için x: xs {
+        dizi_ekle(s, x);
+    }
+    değişken n: tam32 = ist_boyut(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            eğer s[j] > s[j + 1] {
+                değişken t: tam32 = s[j];
+                s[j] = s[j + 1];
+                s[j + 1] = t;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver s;
+}
+
+// (İç yardımcı) Kırpılmış tam karekök (floor(sqrt(x))) — std sapma için.
+// Negatifte 0 (varyans negatif olamaz, savunma amaçlı).
+işlev ist_kok_tam(x: tam32) -> tam32 {
+    eğer x <= 0 { ver 0; }
+    değişken k: tam32 = 0;
+    iken (k + 1) * (k + 1) <= x {
+        k = k + 1;
+    }
+    ver k;
+}
+
+// --- Merkezî eğilim ---
+
+// Toplam.
+işlev ist_toplam(xs: Dizi<tam32>) -> tam32 {
+    değişken s: tam32 = 0;
+    için x: xs {
+        s = s + x;
+    }
+    ver s;
+}
+
+// Ortalama (aritmetik, kırpılmış). Boş dizide hiç.
+işlev ist_ortalama(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = ist_boyut(xs);
+    eğer n == 0 { ver hiç; }
+    ver değer(ist_toplam(xs) / n);
+}
+
+// Medyan — sıralı kopyanın ortası. Çift boyutta iki ortancanın
+// kırpılmış ortalaması (taşma-güvenli a + (b-a)/2). Boş dizide hiç.
+// Girdi DEĞİŞMEZ (kopya üzerinde sıralanır).
+işlev ist_medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = ist_boyut(xs);
+    eğer n == 0 { ver hiç; }
+    değişken s: Dizi<tam32> = ist_sirala_kopya(xs);
+    değişken orta: tam32 = n / 2;
+    eğer n % 2 == 1 { ver değer(s[orta]); }
+    değişken a: tam32 = s[orta - 1];
+    değişken b: tam32 = s[orta];
+    ver değer(a + (b - a) / 2);
+}
+
+// En sık eleman (mod) — beraberlikte İLK görülen kazanır. Boş dizide
+// hiç. O(n²) — küçük diziler için (dizi.kem benzersiz ile aynı sınıf).
+işlev ist_en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = ist_boyut(xs);
+    eğer n == 0 { ver hiç; }
+    değişken kazanan: tam32 = xs[0];
+    değişken en_cok: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken sayi: tam32 = 0;
+        değişken j: tam32 = 0;
+        iken j < n {
+            eğer xs[j] == xs[i] { sayi = sayi + 1; }
+            j = j + 1;
+        }
+        eğer sayi > en_cok {
+            en_cok = sayi;
+            kazanan = xs[i];
+        }
+        i = i + 1;
+    }
+    ver değer(kazanan);
+}
+
+// --- Yayılım ---
+
+// Aralık — en büyük ile en küçük fark. Boş dizide hiç; tek elemanda 0.
+işlev ist_aralik(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = ist_boyut(xs);
+    eğer n == 0 { ver hiç; }
+    değişken kucuk: tam32 = xs[0];
+    değişken buyuk: tam32 = xs[0];
+    için x: xs {
+        eğer x < kucuk { kucuk = x; }
+        eğer x > buyuk { buyuk = x; }
+    }
+    ver değer(buyuk - kucuk);
+}
+
+// Varyans (popülasyon: kare sapmaların ortalaması, n'e bölüm).
+// Ortalama ve bölüm kırpılmış tamsayı — tam bölünen örneklerde kesin.
+// Boş dizide hiç.
+işlev ist_varyans(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    değişken n: tam32 = ist_boyut(xs);
+    eğer n == 0 { ver hiç; }
+    değişken ort: tam32 = ist_toplam(xs) / n;
+    değişken kareler: tam32 = 0;
+    için x: xs {
+        kareler = kareler + (x - ort) * (x - ort);
+    }
+    ver değer(kareler / n);
+}
+
+// Standart sapma — varyansın kırpılmış tam karekökü. Boş dizide hiç.
+işlev ist_std_sapma(xs: Dizi<tam32>) -> seçimlik<tam32> {
+    eşleş ist_varyans(xs) {
+        değer(v) => { ver değer(ist_kok_tam(v)); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// AÇIK SORU: kesirli32/64 sürümleri (ist_ortalama_kesirli vb.) kesirli
+// codegen sınırları (görev/kanal DRF006 notlarındaki katmanlı kısıtlar)
+// netleşince eklenmeli; tamsayı kırpılması o zaman ortadan kalkar.

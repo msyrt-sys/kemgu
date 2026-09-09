@@ -1,0 +1,154 @@
+// KEMGU Stdlib — Geometri (Kesin Tamsayı 2B)
+// ===========================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Tamsayı koordinatlarla KESİN 2B geometri: yönelim, alan, mesafe,
+// doğru parçası kesişimi. Kayan nokta YOK — dolayısıyla epsilon
+// karşılaştırması, yuvarlama sürprizi, "neredeyse doğrusal" muğlaklığı
+// da YOK: her predikat kesin evet/hayır verir (hesaplamalı geometrinin
+// robustness probleminin tamsayı çözümü).
+//
+// Tasarım kuralı:
+//   - Nokta = (x, y) SKALER PARAMETRE ÇİFTİ. Yapı/dizi kodlaması yok:
+//     çok-değerli dönüş gerektiren işlev de yok (tüm sonuçlar skaler
+//     ya da mantıksal). Çokgen ise paralel xs/ys dizileri (eslem
+//     deseni).
+//   - Öklid MESAFESİ değil KARESİ verilir (karekök kesirli ister);
+//     karşılaştırma için kare yeterli — sıralama korunur.
+//   - Alan İKİ KATIYLA verilir (shoelace ×2): yamuk kesirli alanlar
+//     tamsayıda kalır. İşaretli sürüm yönelim de söyler (ccw pozitif).
+//   - TAŞMA SINIRI: çapraz çarpım koordinat FARKLARININ çarpımlarını
+//     toplar; |koordinat| <= 16000 iken kesin güvenli (fark < 32000,
+//     çarpım < 2^30, toplam < 2^31). Alan toplamı için köşe sayısıyla
+//     çarpılmış sınır geçerli — büyük çokgenlerde tam64 V2.
+//
+// Kesişim algoritması: CLRS yönelim testi — iki uç karşı taraflardaysa
+// kesişir; doğrusal durumlar uç-nokta-parça-üzerinde testiyle.
+
+// --- Yardımcılar ---
+
+// (İç yardımcı) Mutlak değer.
+işlev geo_mutlak(x: tam32) -> tam32 {
+    eğer x < 0 { ver 0 - x; }
+    ver x;
+}
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev geo_boyut(xs: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// --- Vektör işlemleri ---
+
+// Çapraz çarpım (o merkezli): (a-o) x (b-o). Pozitif = b, o->a
+// yönünün SOLUNDA (saat tersi dönüş).
+işlev geo_capraz(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
+                 bx: tam32, by: tam32) -> tam32 {
+    ver (ax - ox) * (by - oy) - (ay - oy) * (bx - ox);
+}
+
+// Nokta çarpım: a . b. Sıfır = dik.
+işlev geo_nokta_carpim(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
+    ver ax * bx + ay * by;
+}
+
+// Yönelim predikatı: o->a->b dönüşü. 1 = saat tersi (ccw),
+// -1 = saat yönü (cw), 0 = doğrusal. KESİN (epsilon yok).
+işlev geo_yon(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
+              bx: tam32, by: tam32) -> tam32 {
+    değişken c: tam32 = geo_capraz(ox, oy, ax, ay, bx, by);
+    eğer c > 0 { ver 1; }
+    eğer c < 0 { ver 0 - 1; }
+    ver 0;
+}
+
+// --- Mesafe ---
+
+// Manhattan mesafesi: |dx| + |dy|.
+işlev geo_manhattan(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
+    ver geo_mutlak(bx - ax) + geo_mutlak(by - ay);
+}
+
+// Öklid mesafesinin KARESİ: dx² + dy² (karekök yok — karşılaştırma
+// için kare yeterli, sıralama korunur).
+işlev geo_uzaklik_kare(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
+    ver (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+}
+
+// --- İçerme testleri ---
+
+// Nokta eksene-hizalı dikdörtgende mi (sınır DAHİL)? Köşeler
+// herhangi iki karşıt köşe olabilir (normalize edilir).
+işlev geo_dikdortgen_icinde_mi(px: tam32, py: tam32,
+                                x1: tam32, y1: tam32,
+                                x2: tam32, y2: tam32) -> mantıksal {
+    değişken kx: tam32 = x1;
+    değişken bx: tam32 = x2;
+    eğer kx > bx { kx = x2; bx = x1; }
+    değişken ky: tam32 = y1;
+    değişken by: tam32 = y2;
+    eğer ky > by { ky = y2; by = y1; }
+    eğer px < kx { ver yanlış; }
+    eğer px > bx { ver yanlış; }
+    eğer py < ky { ver yanlış; }
+    eğer py > by { ver yanlış; }
+    ver doğru;
+}
+
+// Nokta doğru PARÇASININ üzerinde mi (uçlar dahil)? Doğrusallık +
+// sınırlayıcı kutu — ikisi de kesin.
+işlev geo_parca_uzerinde_mi(px: tam32, py: tam32,
+                             ax: tam32, ay: tam32,
+                             bx: tam32, by: tam32) -> mantıksal {
+    eğer geo_yon(ax, ay, bx, by, px, py) != 0 { ver yanlış; }
+    ver geo_dikdortgen_icinde_mi(px, py, ax, ay, bx, by);
+}
+
+// --- Doğru parçası kesişimi (CLRS yönelim testi) ---
+
+// p1p2 ile p3p4 parçaları kesişiyor mu (uç değme ve doğrusal örtüşme
+// DAHİL)? Kesin — kayan nokta/epsilon yok.
+işlev geo_parcalar_kesisir_mi(p1x: tam32, p1y: tam32, p2x: tam32, p2y: tam32,
+                               p3x: tam32, p3y: tam32, p4x: tam32, p4y: tam32) -> mantıksal {
+    değişken d1: tam32 = geo_yon(p3x, p3y, p4x, p4y, p1x, p1y);
+    değişken d2: tam32 = geo_yon(p3x, p3y, p4x, p4y, p2x, p2y);
+    değişken d3: tam32 = geo_yon(p1x, p1y, p2x, p2y, p3x, p3y);
+    değişken d4: tam32 = geo_yon(p1x, p1y, p2x, p2y, p4x, p4y);
+    eğer d1 * d2 < 0 ve d3 * d4 < 0 { ver doğru; }
+    eğer geo_parca_uzerinde_mi(p1x, p1y, p3x, p3y, p4x, p4y) { ver doğru; }
+    eğer geo_parca_uzerinde_mi(p2x, p2y, p3x, p3y, p4x, p4y) { ver doğru; }
+    eğer geo_parca_uzerinde_mi(p3x, p3y, p1x, p1y, p2x, p2y) { ver doğru; }
+    eğer geo_parca_uzerinde_mi(p4x, p4y, p1x, p1y, p2x, p2y) { ver doğru; }
+    ver yanlış;
+}
+
+// --- Çokgen alanı (shoelace) ---
+
+// Basit çokgenin alanının İKİ KATI, İŞARETLİ: köşeler saat tersi
+// (ccw) sıralıysa pozitif, saat yönünde negatif. Köşeler paralel
+// xs/ys dizileri; n < 3 -> 0.
+işlev geo_alan_iki_kat_isaretli(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = geo_boyut(xs);
+    eğer n < 3 { ver 0; }
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = (i + 1) % n;
+        toplam = toplam + xs[i] * ys[j] - xs[j] * ys[i];
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// Basit çokgenin alanının İKİ KATI (mutlak — yönelimden bağımsız).
+işlev geo_alan_iki_kat(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
+    ver geo_mutlak(geo_alan_iki_kat_isaretli(xs, ys));
+}
+
+// AÇIK SORU: büyük koordinat alanı (|k| > 16000) için tam64 iç
+// aritmetik; dışbükey örtü (convex hull) ve nokta-çokgen-içinde
+// (ray casting) bu predikatlar üzerine V2'de kurulabilir.

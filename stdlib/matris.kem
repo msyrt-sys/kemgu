@@ -1,0 +1,165 @@
+// KEMGU Stdlib — Matris (Düz Bellek, Satır-Öncelikli)
+// ====================================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// tam32 matris aritmetiği. Temsil: TEK düz Dizi<tam32>, satır-öncelikli
+// (row-major) — (i, j) elemanı `i * sutun + j` indeksinde.
+//
+// Tasarım kuralı:
+//   - İç içe Dizi<Dizi<tam32>> DEĞİL, düz dizi + açık boyut
+//     parametreleri: tek tahsis, öngörülebilir yerleşim (önbellek
+//     dostu), iç içe heap dizi codegen yüzeyinden uzak. Boyutları
+//     taşıyan Matris yapısı, generic alanlı yapı olgunlaşınca V2.
+//   - Boyutlar her çağrıya AÇIKÇA verilir (yalnız gereken olanlar:
+//     mat_al satır sayısını istemez — indeks hesabı sutun'la yeter).
+//     Uyum sözleşmesi çağıranda; `mat_gecerli_mi` denetçi.
+//   - Sınır aşımı güvenlik ağı: heap dizi erişimi runtime'da zaten
+//     sınır-kontrollü (kdl_runtime, i<0 ve i>=boyut) — yanlış boyut
+//     sözleşmesi sessiz çöp değil gürültülü hata üretir.
+//   - mat_topla/skaler_carp BİÇİMDEN BAĞIMSIZ eleman-bazlı çalışır
+//     (aynı uzunluk yeter); mat_carp/transpoze/birim/iz biçim ister.
+//   - Üretenler YENİ dizi döner (girdi değişmez); tek yerinde işlem
+//     mat_yaz (dizi_yaz sarmalayıcısı).
+
+// --- Yardımcılar / doğrulama ---
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev mat_eleman_sayisi(m: Dizi<tam32>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: m {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Matris geçerli mi — eleman sayısı satir*sutun'a eşit ve boyutlar
+// negatif değil mi?
+işlev mat_gecerli_mi(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> mantıksal {
+    eğer satir < 0 { ver yanlış; }
+    eğer sutun < 0 { ver yanlış; }
+    ver mat_eleman_sayisi(m) == satir * sutun;
+}
+
+// --- Erişim ---
+
+// Eleman oku — (i, j), satır-öncelikli. Sözleşme: 0<=i<satir,
+// 0<=j<sutun (aşımda runtime sınır kontrolü devreye girer).
+işlev mat_al(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32) -> tam32 {
+    ver m[i * sutun + j];
+}
+
+// Eleman yaz — YERİNDE (dizi_yaz).
+işlev mat_yaz(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32, deger: tam32) -> Dizi<tam32> {
+    dizi_yaz(m, i * sutun + j, deger);
+    ver m;
+}
+
+// --- Kurucular ---
+
+// Sabit değerle doldurulmuş satir x sutun matris.
+işlev mat_olustur(satir: tam32, sutun: tam32, deger: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken n: tam32 = satir * sutun;
+    değişken i: tam32 = 0;
+    iken i < n {
+        dizi_ekle(sonuc, deger);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// n x n birim matris (köşegen 1, kalan 0).
+işlev mat_birim(n: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n {
+            eğer i == j {
+                dizi_ekle(sonuc, 1);
+            } değilse {
+                dizi_ekle(sonuc, 0);
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// --- Eleman-bazlı işlemler (biçimden bağımsız — aynı uzunluk yeter) ---
+
+// Toplam — a + b, eleman bazlı. Sözleşme: aynı boyut (aynı biçim).
+işlev mat_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken n: tam32 = mat_eleman_sayisi(a);
+    değişken i: tam32 = 0;
+    iken i < n {
+        dizi_ekle(sonuc, a[i] + b[i]);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Skaler çarpım — k * m, eleman bazlı.
+işlev mat_skaler_carp(m: Dizi<tam32>, k: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    için x: m {
+        dizi_ekle(sonuc, k * x);
+    }
+    ver sonuc;
+}
+
+// --- Biçimli işlemler ---
+
+// Matris çarpımı — a (m x n) çarpı b (n x p) = sonuç (m x p). O(mnp).
+işlev mat_carp(a: Dizi<tam32>, b: Dizi<tam32>,
+               m: tam32, n: tam32, p: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    iken i < m {
+        değişken j: tam32 = 0;
+        iken j < p {
+            değişken t: tam32 = 0;
+            değişken k: tam32 = 0;
+            iken k < n {
+                t = t + a[i * n + k] * b[k * p + j];
+                k = k + 1;
+            }
+            dizi_ekle(sonuc, t);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Devrik (transpoze) — satir x sutun -> sutun x satir yeni matris.
+işlev mat_transpoze(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = dizi_olustur(0);
+    değişken j: tam32 = 0;
+    iken j < sutun {
+        değişken i: tam32 = 0;
+        iken i < satir {
+            dizi_ekle(sonuc, m[i * sutun + j]);
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+    ver sonuc;
+}
+
+// İz (trace) — n x n matrisin köşegen toplamı.
+işlev mat_iz(m: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        toplam = toplam + m[i * n + i];
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+// AÇIK SORU: boyutları taşıyan `yapı Matris { veri, satir, sutun }`
+// sarmalayıcısı, yapı-alanı-dizi codegen'i her yolda doğrulanınca V2;
+// kesirli eleman tipi de kesirli codegen kısıtlarıyla birlikte açılır.

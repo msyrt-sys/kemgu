@@ -1,0 +1,220 @@
+// KEMGU Stdlib Testi — Tablo (Açık Adresli Karma Tablo)
+// =================================
+//
+// Bu dosya `stdlib/tablo.kem` ile birleştirilerek --check edilir.
+// Kritik senaryolar: mezartaşı üzerinden zincir erişimi (klasik açık
+// adresleme tuzağı), mezartaşı yeniden kullanımı, çakışma zinciri
+// (kapasite 4'te 1/5/-3 aynı kovaya düşer), dolu tablo yolları.
+
+// --- kurucu / sorgular ---
+işlev test_olustur_kapasite() -> tam32 {
+    ver tablo_kapasite(tablo_olustur(4));         // 4
+}
+
+işlev test_olustur_sifir_kapasite() -> tam32 {
+    ver tablo_kapasite(tablo_olustur(0));         // 1'e yükseltilir
+}
+
+işlev test_olustur_bos() -> mantıksal {
+    ver tablo_bos_mu(tablo_olustur(4));
+}
+
+işlev test_olustur_boyut() -> tam32 {
+    ver tablo_boyut(tablo_olustur(4));            // 0
+}
+
+// --- koy / bul ---
+işlev test_koy_yeni() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    ver tablo_koy(t, 10, 100);                    // 1 (yeni)
+}
+
+işlev test_koy_bul() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken r: tam32 = tablo_koy(t, 10, 100);
+    eşleş tablo_bul(t, 10) {
+        değer(v) => { ver v; }                    // 100
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_bul_yok() -> mantıksal {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    eşleş tablo_bul(t, 99) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_koy_guncelle() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    ver tablo_koy(t, 10, 200);                    // 0 (güncellendi)
+}
+
+işlev test_koy_guncelle_deger() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    değişken b: tam32 = tablo_koy(t, 10, 200);
+    eşleş tablo_bul(t, 10) {
+        değer(v) => { ver v; }                    // 200
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_koy_guncelle_boyut() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    değişken b: tam32 = tablo_koy(t, 10, 200);
+    ver tablo_boyut(t);                           // 1 (güncelleme eklemez)
+}
+
+// --- çakışma zinciri (kapasite 4: 1, 5 ve -3 hepsi kova 1) ---
+işlev test_cakisma_iki_anahtar() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 1, 11);
+    değişken b: tam32 = tablo_koy(t, 5, 55);
+    eşleş tablo_bul(t, 5) {
+        değer(v) => { ver v; }                    // 55 (yoklamayla bulunur)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_cakisma_negatif() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 1, 11);
+    değişken b: tam32 = tablo_koy(t, 5, 55);
+    değişken c: tam32 = tablo_koy(t, 0 - 3, 33);  // -3 mod 4 -> kova 1
+    eşleş tablo_bul(t, 0 - 3) {
+        değer(v) => { ver v; }                    // 33
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_cakisma_boyut() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 1, 11);
+    değişken b: tam32 = tablo_koy(t, 5, 55);
+    değişken c: tam32 = tablo_koy(t, 0 - 3, 33);
+    ver tablo_boyut(t);                           // 3
+}
+
+// --- dolu tablo ---
+işlev test_dolu_koy_reddi() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(2);
+    değişken a: tam32 = tablo_koy(t, 1, 10);
+    değişken b: tam32 = tablo_koy(t, 2, 20);
+    ver tablo_koy(t, 3, 30);                      // -1 (yer yok)
+}
+
+işlev test_dolu_guncelleme_calisir() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(2);
+    değişken a: tam32 = tablo_koy(t, 1, 10);
+    değişken b: tam32 = tablo_koy(t, 2, 20);
+    ver tablo_koy(t, 1, 99);                      // 0 (dolu ama mevcut anahtar)
+}
+
+// --- sil / mezartaşı ---
+işlev test_sil_var() -> mantıksal {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    ver tablo_sil(t, 10);                         // doğru
+}
+
+işlev test_sil_sonrasi_bul() -> mantıksal {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    değişken s: mantıksal = tablo_sil(t, 10);
+    eşleş tablo_bul(t, 10) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }                     // artık yok
+    }
+    ver yanlış;
+}
+
+işlev test_sil_sonrasi_boyut() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    değişken s: mantıksal = tablo_sil(t, 10);
+    ver tablo_boyut(t);                           // 0
+}
+
+işlev test_sil_yok() -> mantıksal {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    ver tablo_sil(t, 99);                         // yanlış
+}
+
+işlev test_cift_sil() -> mantıksal {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 10, 100);
+    değişken s1: mantıksal = tablo_sil(t, 10);
+    ver tablo_sil(t, 10);                         // ikinci sil yanlış
+}
+
+// KRİTİK: mezartaşı üzerinden zincir erişimi — 1 ve 5 aynı kovada,
+// 1 silinince 5 HÂLÂ bulunmalı (yuva boş'a çevrilseydi kaybolurdu).
+işlev test_mezartasi_uzerinden_erisim() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 1, 11);
+    değişken b: tam32 = tablo_koy(t, 5, 55);
+    değişken s: mantıksal = tablo_sil(t, 1);
+    eşleş tablo_bul(t, 5) {
+        değer(v) => { ver v; }                    // 55
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// Mezartaşı yuvası koymada yeniden kullanılır.
+işlev test_mezartasi_yeniden_kullanim() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 1, 11);
+    değişken s: mantıksal = tablo_sil(t, 1);
+    değişken b: tam32 = tablo_koy(t, 9, 99);      // kova 1, mezartaşına oturur
+    eşleş tablo_bul(t, 9) {
+        değer(v) => { ver v; }                    // 99
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_sil_koy_ayni_anahtar() -> tam32 {
+    değişken t: Dizi<tam32> = tablo_olustur(4);
+    değişken a: tam32 = tablo_koy(t, 7, 70);
+    değişken s: mantıksal = tablo_sil(t, 7);
+    ver tablo_koy(t, 7, 77);                      // 1 (yeniden ekleme = yeni)
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_olustur_kapasite() != 4 { ver 1; }
+    eğer test_olustur_sifir_kapasite() != 1 { ver 2; }
+    eğer değil test_olustur_bos() { ver 3; }
+    eğer test_olustur_boyut() != 0 { ver 4; }
+    eğer test_koy_yeni() != 1 { ver 5; }
+    eğer test_koy_bul() != 100 { ver 6; }
+    eğer değil test_bul_yok() { ver 7; }
+    eğer test_koy_guncelle() != 0 { ver 8; }
+    eğer test_koy_guncelle_deger() != 200 { ver 9; }
+    eğer test_koy_guncelle_boyut() != 1 { ver 10; }
+    eğer test_cakisma_iki_anahtar() != 55 { ver 11; }
+    eğer test_cakisma_negatif() != 33 { ver 12; }
+    eğer test_cakisma_boyut() != 3 { ver 13; }
+    eğer test_dolu_koy_reddi() != 0 - 1 { ver 14; }
+    eğer test_dolu_guncelleme_calisir() != 0 { ver 15; }
+    eğer değil test_sil_var() { ver 16; }
+    eğer değil test_sil_sonrasi_bul() { ver 17; }
+    eğer test_sil_sonrasi_boyut() != 0 { ver 18; }
+    eğer test_sil_yok() { ver 19; }
+    eğer test_cift_sil() { ver 20; }
+    eğer test_mezartasi_uzerinden_erisim() != 55 { ver 21; }
+    eğer test_mezartasi_yeniden_kullanim() != 99 { ver 22; }
+    eğer test_sil_koy_ayni_anahtar() != 1 { ver 23; }
+    ver 42;
+}

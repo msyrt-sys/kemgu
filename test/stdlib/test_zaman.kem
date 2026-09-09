@@ -1,0 +1,112 @@
+// KEMGU Stdlib Testi — Zaman (Takvim Aritmetiği)
+// =================================
+//
+// Bu dosya `stdlib/zaman.kem` ile birleştirilerek --check edilir.
+// Doğruluk çapaları bilinen takvim gerçeklerine kilitli: 1970-01-01
+// Perşembe (gün 0), 2000-03-01 = 11017 (Hinnant), 2000-01-01 Cumartesi,
+// 2024-01-01 Pazartesi. Hepsi skaler döner.
+
+// --- artik_yil_mi ---
+işlev test_artik_400() -> mantıksal { ver artik_yil_mi(2000); }   // doğru
+işlev test_artik_100() -> mantıksal { ver artik_yil_mi(1900); }   // yanlış
+işlev test_artik_4() -> mantıksal { ver artik_yil_mi(2024); }     // doğru
+işlev test_artik_degil() -> mantıksal { ver artik_yil_mi(2023); } // yanlış
+
+// --- yil_gun_sayisi ---
+işlev test_yil_366() -> tam32 { ver yil_gun_sayisi(2024); }       // 366
+işlev test_yil_365() -> tam32 { ver yil_gun_sayisi(2023); }       // 365
+
+// --- ay_gun_sayisi ---
+işlev test_subat_artik() -> tam32 { ver ay_gun_sayisi(2024, 2); }   // 29
+işlev test_subat_normal() -> tam32 { ver ay_gun_sayisi(2023, 2); }  // 28
+işlev test_ocak() -> tam32 { ver ay_gun_sayisi(2024, 1); }          // 31
+işlev test_nisan() -> tam32 { ver ay_gun_sayisi(2024, 4); }         // 30
+işlev test_ay_gecersiz() -> tam32 { ver ay_gun_sayisi(2024, 13); }  // 0
+
+// --- tarih_gecerli_mi ---
+işlev test_gecerli_artik_subat() -> mantıksal { ver tarih_gecerli_mi(2024, 2, 29); }  // doğru
+işlev test_gecersiz_subat() -> mantıksal { ver tarih_gecerli_mi(2023, 2, 29); }       // yanlış
+işlev test_gecersiz_ay() -> mantıksal { ver tarih_gecerli_mi(2024, 0, 1); }           // yanlış
+işlev test_gecerli_yilbasi() -> mantıksal { ver tarih_gecerli_mi(2024, 12, 31); }     // doğru
+işlev test_gecersiz_nisan31() -> mantıksal { ver tarih_gecerli_mi(2024, 4, 31); }     // yanlış
+işlev test_gecersiz_gun0() -> mantıksal { ver tarih_gecerli_mi(2024, 1, 0); }         // yanlış
+işlev test_gecersiz_yil0() -> mantıksal { ver tarih_gecerli_mi(0, 1, 1); }            // yanlış
+
+// --- gun_numarasi (epoch çapaları) ---
+işlev test_epoch() -> tam32 { ver gun_numarasi(1970, 1, 1); }       // 0
+işlev test_epoch_ertesi() -> tam32 { ver gun_numarasi(1970, 1, 2); }  // 1
+işlev test_hinnant_capa() -> tam32 { ver gun_numarasi(2000, 3, 1); }  // 11017
+işlev test_epoch_oncesi() -> tam32 { ver gun_numarasi(1969, 12, 31); }  // -1
+
+// --- gun_farki ---
+işlev test_fark_artik_yil() -> tam32 {
+    ver gun_farki(2024, 1, 1, 2024, 12, 31);     // 365 (366 günlük yıl)
+}
+işlev test_fark_normal_yil() -> tam32 {
+    ver gun_farki(1970, 1, 1, 1971, 1, 1);       // 365
+}
+işlev test_fark_geri() -> tam32 {
+    ver gun_farki(2024, 1, 2, 2024, 1, 1);       // -1
+}
+işlev test_fark_ayni() -> tam32 {
+    ver gun_farki(2024, 5, 7, 2024, 5, 7);       // 0
+}
+
+// --- haftanin_gunu (0=Pazartesi .. 6=Pazar) ---
+işlev test_hafta_epoch() -> tam32 { ver haftanin_gunu(1970, 1, 1); }   // Perşembe = 3
+işlev test_hafta_y2k() -> tam32 { ver haftanin_gunu(2000, 1, 1); }     // Cumartesi = 5
+işlev test_hafta_2024() -> tam32 { ver haftanin_gunu(2024, 1, 1); }    // Pazartesi = 0
+işlev test_hafta_epoch_oncesi() -> tam32 { ver haftanin_gunu(1969, 12, 31); }  // Çarşamba = 2
+
+// --- yilin_gunu ---
+işlev test_yilin_gunu_ocak1() -> tam32 { ver yilin_gunu(2023, 1, 1); }    // 1
+işlev test_yilin_gunu_mart1_artik() -> tam32 { ver yilin_gunu(2024, 3, 1); }   // 31+29+1 = 61
+işlev test_yilin_gunu_son() -> tam32 { ver yilin_gunu(2023, 12, 31); }    // 365
+işlev test_yilin_gunu_son_artik() -> tam32 { ver yilin_gunu(2024, 12, 31); }   // 366
+
+// --- bileşik: yilin_gunu ile gun_farki tutarlı ---
+işlev test_tutarlilik() -> tam32 {
+    // 1 Ocak'tan g'ye fark = yilin_gunu - 1
+    ver gun_farki(2024, 1, 1, 2024, 3, 1) - (yilin_gunu(2024, 3, 1) - 1);   // 0
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer değil test_artik_400() { ver 1; }
+    eğer test_artik_100() { ver 2; }
+    eğer değil test_artik_4() { ver 3; }
+    eğer test_artik_degil() { ver 4; }
+    eğer test_yil_366() != 366 { ver 5; }
+    eğer test_yil_365() != 365 { ver 6; }
+    eğer test_subat_artik() != 29 { ver 7; }
+    eğer test_subat_normal() != 28 { ver 8; }
+    eğer test_ocak() != 31 { ver 9; }
+    eğer test_nisan() != 30 { ver 10; }
+    eğer test_ay_gecersiz() != 0 { ver 11; }
+    eğer değil test_gecerli_artik_subat() { ver 12; }
+    eğer test_gecersiz_subat() { ver 13; }
+    eğer test_gecersiz_ay() { ver 14; }
+    eğer değil test_gecerli_yilbasi() { ver 15; }
+    eğer test_gecersiz_nisan31() { ver 16; }
+    eğer test_gecersiz_gun0() { ver 17; }
+    eğer test_gecersiz_yil0() { ver 18; }
+    eğer test_epoch() != 0 { ver 19; }
+    eğer test_epoch_ertesi() != 1 { ver 20; }
+    eğer test_hinnant_capa() != 11017 { ver 21; }
+    eğer test_epoch_oncesi() != 0 - 1 { ver 22; }
+    eğer test_fark_artik_yil() != 365 { ver 23; }
+    eğer test_fark_normal_yil() != 365 { ver 24; }
+    eğer test_fark_geri() != 0 - 1 { ver 25; }
+    eğer test_fark_ayni() != 0 { ver 26; }
+    eğer test_hafta_epoch() != 3 { ver 27; }
+    eğer test_hafta_y2k() != 5 { ver 28; }
+    eğer test_hafta_2024() != 0 { ver 29; }
+    eğer test_hafta_epoch_oncesi() != 2 { ver 30; }
+    eğer test_yilin_gunu_ocak1() != 1 { ver 31; }
+    eğer test_yilin_gunu_mart1_artik() != 61 { ver 32; }
+    eğer test_yilin_gunu_son() != 365 { ver 33; }
+    eğer test_yilin_gunu_son_artik() != 366 { ver 34; }
+    eğer test_tutarlilik() != 0 { ver 35; }
+    ver 42;
+}
