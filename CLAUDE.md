@@ -1563,6 +1563,54 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-579: DİZİ BÜYÜTMEDE int32 TAŞMASI + TAHSİS BAŞARISIZLIĞI → SEGV
+D-578 kod okumasıyla bulup *"ulaşılabilirlik ÖLÇÜLMEDİ"* diye kaydetmişti.
+**Ölçüldü ve ulaşılabilir çıktı — üstelik ~1 GB veri GEREKMEDEN.**
+`KdlDizi`yi doğrudan kurup (`boyut == kapasite == 2^30`) `kdl_dizi_ekle_tam`
+çağırmak yolu **anında ve belirlenimci** ateşliyor:
+```
+korumasiz : SEGV (rc=139)          <- olculdu
+korumali  : PANIK: dizi kapasitesi tasti ...   (temiz durma)
+```
+
+**İKİ KUSUR BİR ARADA:**
+1. **TAŞMA:** çağrı yerleri `yk = kapasite * 2` yazıyor; bu int32'de 2^30'da
+   **taşıyor** → negatif → `(uint64_t)negatif` ≈ 1.8e19.
+2. **TAHSİS BAŞARISIZLIĞI:** eski kod `d->veri = NULL` yazıp kapasiteyi
+   **yine de** güncelliyordu; çağıran hemen `d->veri[boyut++]` ile NULL'a
+   yazıyor ve üstelik **eski veri kayboluyordu**.
+
+**⚠ SESSİZ DÜŞÜŞ (dokunmadan dön) DOĞRU DEĞİLDİ** — kardeş işlev
+`kdl_dizi_kapasite_ayarla` öyle yapar ve orada **doğrudur** (çağıran yazmaz);
+`buyut`ta çağıran hemen sonra yazar, yani sessiz dönüş **eski tamponun sonuna
+yazma** = heap taşması olurdu. Tek tutarlı cevap **temiz panik** — dizi sınırı
+(D-069), sıfıra bölme (D-502), kaydırma (D-514), vektör lane (D-546) ile
+**aynı politika**. Yeni tanı kodu YOK, dil yüzeyi değişikliği YOK.
+
+**⚠⚠ İKİ KORUMA BİRBİRİNİ YEDEKLİYOR — VE BU SABOTAJLA ÖLÇÜLDÜ.**
+S164 (yalnız taşma koruması kaldırıldı) ve S165 (yalnız tahsis koruması
+kaldırıldı) **ikisi de SESSİZ kaldı**: her biri tek başına bu şekli yakalıyor.
+Ayrı ayrı ayırt edilebilir DEĞİLLER çünkü negatif bir int32, uint64'e
+genişletilip 4/8 ile çarpılınca **daima** tahsis edilemeyecek kadar büyük
+kalıyor. **S166 (İKİSİ BİRDEN kaldırıldı) → SEGFAULT yakalandı, rc=2** —
+yani fikstür **çifti** ölçüyor. Taşma koruması D-510'un disiplini gereği
+KORUNDU (DENY yönünde, güvensiz yönde yanlış olamaz + mesajı kesin).
+
+**KAPI `calistir_dizi_sinir_test`e EKLENDİ** (ayrı kapı açılmadı — değişmez
+birebir D-069'un kendisi): `vaka11` runtime-düzeyi probe (panik, **asla**
+rc=139, **asla** rc=0) + **`vaka12` POZİTİF** (1000 ekleme, normal büyüme
+panik ÜRETMEMELİ). Pozitif olmasa *"her büyümede panikle"* sabotajı kapıdan
+GEÇERDİ (D-425). **34 → 39 ölçüm.**
+
+**⚠ Süreç:** heredoc `
+`'i **gerçek satır sonuna** çevirip probe'un C
+dizgisini kırdı (*"probe derlenemedi"*); D-518/D-546'da kayıtlı tuzağın
+üçüncü tekrarı — kaçış tümüyle kaldırılarak (`puts`) çözüldü.
+
+**Kapılar:** dizi_sinir **39/39** · panik_test 6/6 · runtime_link 33/33 ·
+kdl_bolge 6/6 · dizi_perf 6/6 · gorev_rt 16/16 · llvm_test 286/286 ·
+codegen_diff 171/171 · sıfır uyarı 38/0.
+
 ### 🔴✅ D-578: `dizi_kapasite` / `_ayarla` SELF-HOST'TA HİÇ EŞLENMEMİŞ — LINK-RED
 Yeni eksen: **tahsis boyutu aritmetiği**. Beş şekil ölçüldü, **dördü tuttu**:
 ```
