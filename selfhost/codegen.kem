@@ -5458,6 +5458,29 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.son_tip = "ptr"; p.son_elem = doelem; p.son_ref = "";
             ver dors;
         }
+        // [D-578] `dizi_kapasite_ayarla` de ayni sinif: dizi_olustur ICINDE
+        // yayiliyordu ama KULLANICI cagrisi olarak dispatch kolu YOKTU.
+        eğer metin_esit(fad, "dizi_kapasite_ayarla") {
+            değişken da: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken na: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+            yaz_str("  call void @kdl_dizi_kapasite_ayarla(ptr ");
+            yaz_str(p.rho_ref); yaz_str(", ptr "); yaz_str(da);
+            yaz_str(", i32 "); yaz_str(na); yaz_str(")"); yb(10);
+            p.son_tip = "void"; p.son_elem = ""; p.son_ref = "";
+            ver "0";
+        }
+        // [D-578] `dizi_kapasite` DISPATCH KOLU YOKTU -> genel yola dusup
+        // `@dizi_kapasite` (TANIMSIZ) yayiliyordu = LINK-RED. Yerlesik hem
+        // biliniyordu (g_ekle) hem `declare @kdl_dizi_kapasite` yaziliyordu;
+        // eksik olan YALNIZ cagri yeri esdegeriydi. `dizi_boyut`un aynasi.
+        eğer metin_esit(fad, "dizi_kapasite") {
+            değişken dk: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            değişken rk: tam32 = yeni_reg(p);
+            değişken rks: metin = reg_str(rk);
+            yaz_str("  "); yaz_str(rks); yaz_str(" = call i32 @kdl_dizi_kapasite(ptr "); yaz_str(dk); yaz_str(")"); yb(10);
+            p.son_tip = "i32"; p.son_elem = ""; p.son_ref = "";
+            ver rks;
+        }
         eğer metin_esit(fad, "dizi_boyut") {
             değişken d: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
             değişken r: tam32 = yeni_reg(p);

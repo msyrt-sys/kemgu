@@ -1563,6 +1563,50 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-578: `dizi_kapasite` / `_ayarla` SELF-HOST'TA HİÇ EŞLENMEMİŞ — LINK-RED
+Yeni eksen: **tahsis boyutu aritmetiği**. Beş şekil ölçüldü, **dördü tuttu**:
+```
+dizi_olustur(-1) / (0)         -> bos dizi, cokme YOK
+dizi_olustur(5) + dizi_yaz[0]  -> "PANIK: dizi sinir ihlali (i=0, boyut=0)" (LOUD)
+argumanin YAN ETKISI           -> iki derleyicide de KORUNUYOR
+metin_kes(uz=-1)               -> kirpiliyor (D-567 ile tutarli)
+```
+
+**🔴 BEŞİNCİSİ: `dizi_kapasite` ve `dizi_kapasite_ayarla` self-host'ta
+KULLANICI ÇAĞRISI olarak dispatch koluna sahip DEĞİLDİ** → genel yola düşüp
+`@dizi_kapasite` / `@dizi_kapasite_ayarla` (TANIMSIZ) yayıyordu = **LINK-RED**.
+Yerleşikler biliniyordu (`g_ekle`) ve `declare @kdl_dizi_kapasite` yazılıyordu;
+eksik olan **yalnız çağrı yeri eşdeğeri**ydi. Sessiz DEĞİL, ama geçerli bir
+KEMGU programı self-host derleyiciyle **derlenemiyordu**. Onarım `dizi_boyut`
+kolunun aynası; C'nin yaydığı IR'dan okundu.
+
+**⚠⚠ BU TURDA ÖLÇÜM ARACIM İKİ KEZ YANILDI VE İKİSİ DE KAYDA GEÇTİ:**
+1. **Kırpılmış grep → yanlış sonuç.** IR'ı yalnız `dizi_olustur` deseniyle
+   arayıp *"argüman yok sayılıyor"* diye kaydedecektim; **ikinci çağrı
+   (`kapasite_ayarla`) kırpılmıştı.** Gerçek sözleşme: **N bir KAPASİTE
+   REZERVASYONUDUR** (gerçekten yer ayrılır), boyut 0 kalır.
+2. **Premis yanlıştı.** *"2e9 elemanlık rezervasyon başarısız olur"* diye bir
+   sabotaj kapısı kurmuştum; ölçüm gösterdi ki bu platformda **~8 GB
+   rezervasyon LAZY olarak BAŞARIYOR** (`dizi_kapasite` gerçekten 2e9 döner).
+   Sabotaj **sessiz kaldı** ve bu önce KAPIYI değil **PREMİSİ** şüpheli kıldı
+   (D-402). O madde fikstürden ÇIKARILDI.
+
+**🟠 KOD OKUMASIYLA BULUNAN, KAPIYA BAĞLANAMAYAN AÇIK (Sırada'ya yazıldı):**
+`kdl_dizi_kapasite_ayarla` tahsis başarısızlığını **denetliyor**
+(`if (!yeni) return;` → diziye hiç dokunmaz), **kardeşi `kdl_dizi_buyut`
+DENETLEMİYOR**: `d->veri = NULL` yazıp `d->kapasite`yi yine de günceller,
+ardından çağıran **doğrudan NULL'a yazar** ve eski veri kaybolur. Ulaşmak
+~1 GB veri gerektirdiği için **kapıya bağlanamadı**; ⚠ *reachability ÖLÇÜLMEDİ,
+yalnız kod okundu* (D-406). Doğru onarım sessiz düşüş DEĞİL, D-069'un
+politikasıyla tutarlı **temiz panik** olurdu.
+
+**Kapılar:** codegen_diff **171/171** · yapi_diff 151/151 (22 muaf) ·
+self_driver **TÜM MODLAR + FIXPOINT ✓ (147/147 check, 171/171 codegen)** ·
+sıfır uyarı 38/0. Fikstür `cg_dizi_olustur_sozlesmesi.kem` (kapasite+boyut
+sözleşmesi · yan etki · negatif/sıfır N · kullanıcı çağrısı), ASan temiz.
+**Sabotaj 2/2:** S162 (`dizi_kapasite` kolu) → 170/171 rc=2 ·
+S163 (`_ayarla` kolu) → 170/171 rc=2.
+
 ### ⛔ D-577 (NEGATİF SONUÇ): `dondur` (R-PAYLAŞ) ATIL — kod YAZILMADI, bağlaşım kapıya bağlandı
 Av `görev`/`kanal` dışındaki son eşzamanlılık yüzeyine taşındı. `dondur`
 kayıtta *"V1'de identity"* diye duruyordu; spec ise onu bir **aksiyom** olarak

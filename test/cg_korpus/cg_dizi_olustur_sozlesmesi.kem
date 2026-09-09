@@ -1,0 +1,58 @@
+// [D-578] `dizi_olustur(N)` SÖZLEŞMESİ — ölçülüp sabitlendi.
+//
+// N BİR KAPASİTE REZERVASYONUDUR, BOYUT DEĞİL:
+//   `kdl_dizi_kapasite_ayarla(ρ, d, N)` ile GERÇEKTEN yer ayrılır,
+//   ama dönen dizinin BOYUTU 0'dır. Ad ("oluştur(N)") "N elemanlı dizi"
+//   gibi okunabiliyor; yanlış okuma SESSİZ DEĞİL: `dizi_olustur(5)`
+//   sonrası `dizi_yaz(d,0,..)` -> "PANIK: dizi sinir ihlali (i=0, boyut=0)".
+//
+// ⚠⚠ ÖLÇÜM ARACI NOTLARI (ikisi de bu maddede yaşandı):
+//   1. IR'ı yalnız `dizi_olustur` deseniyle grepleyip "argüman yok
+//      sayılıyor" sonucuna varmıştım — İKİNCİ çağrı (`kapasite_ayarla`)
+//      kırpılmıştı. Kırpılmış çıktı yanlış sonuca götürür.
+//   2. "2e9 elemanlık rezervasyon başarısız olur" premisi de YANLIŞTI:
+//      bu platformda ~8 GB rezervasyon LAZY olarak BAŞARIYOR (kapasite
+//      gerçekten 2e9 dönüyor). Bu yüzden tahsis-başarısızlığı yolu bu
+//      şekille KAPIYA BAĞLANAMADI (Sırada'ya yazıldı).
+//
+// BU FİKSTÜR ÜÇ GÖZLEMLENEBİLİR ŞEYİ KİLİTLER:
+//   (1) kapasite GERÇEKTEN ayrılır, boyut 0 kalır
+//   (2) argümanın YAN ETKİSİ korunur (atılsaydı sessiz yanlış cevap)
+//   (3) negatif/sıfır N zararsız + sonrasında `dizi_ekle` normal çalışır
+
+küresel değişken sayac: tam32 = 0;
+
+işlev yan_etki() -> tam32 { güvensiz { sayac = sayac + 1; ver 1000; } }
+
+işlev main() -> tam32 {
+    // (1) kapasite ayrılır, boyut 0
+    değişken a: Dizi<tam32> = dizi_olustur(1000);
+    eğer dizi_kapasite(a) != 1000 { ver 1; }
+    eğer dizi_boyut(a) != 0 { ver 2; }
+
+    // (2) argüman DEĞERLENDİRİLİR (yan etki korunur) ve değeri KULLANILIR
+    değişken d: Dizi<tam32> = dizi_olustur(yan_etki());
+    güvensiz { eğer sayac != 1 { ver 3; } }
+    eğer dizi_kapasite(d) != 1000 { ver 4; }
+
+    // (3) negatif ve sıfır N zararsız — kapasite büyütülmez, çökme yok
+    değişken b: Dizi<tam32> = dizi_olustur(0 - 1);
+    değişken c: Dizi<tam32> = dizi_olustur(0);
+    eğer dizi_kapasite(b) != 0 { ver 5; }
+    eğer dizi_kapasite(c) != 0 { ver 6; }
+
+    // (4) [D-578] `dizi_kapasite` ve `dizi_kapasite_ayarla` KULLANICI
+    // ÇAĞRISI olarak da çalışmalı. Self-host'ta İKİSİNİN DE dispatch kolu
+    // YOKTU -> `@dizi_kapasite` / `@dizi_kapasite_ayarla` (TANIMSIZ) yayılıp
+    // LINK-RED veriyordu; yerleşikler biliniyor ve `declare` ediliyordu,
+    // eksik olan yalnız çağrı yeri eşdeğeriydi.
+    dizi_kapasite_ayarla(c, 16);
+    eğer dizi_kapasite(c) != 16 { ver 9; }
+
+    // sonrasında ekleme normal (hem rezerveli hem rezervsiz dizide)
+    dizi_ekle(d, 40);
+    dizi_ekle(b, 2);
+    eğer dizi_boyut(d) != 1 { ver 7; }
+    eğer dizi_boyut(b) != 1 { ver 8; }
+    ver dizi_al(d, 0) + dizi_al(b, 0);
+}
