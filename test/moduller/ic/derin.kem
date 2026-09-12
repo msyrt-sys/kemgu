@@ -3,3 +3,9 @@
 // görünür olur. Kilitlenen davranış budur.
 işlev derin_gizli() -> tam32 { ver 7; }
 genel işlev derin_acik() -> tam32 { ver 35; }
+
+// [D-580] Aşağıdakiler YENİ BİÇİM (alias/seçili) ithalatı içindir; yukarıdaki
+// D-533 legacy şekli AYNEN korunur — iki yol yan yana yaşar ve göç bu yüzden
+// dosya dosya yapılabilir.
+genel işlev ic_kirk() -> tam32 { ver 40; }
+genel işlev ic_iki() -> tam32 { ver 2; }

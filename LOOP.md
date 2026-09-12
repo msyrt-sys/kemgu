@@ -12,6 +12,18 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
+- [ ] D-580 ADIM 2 (GOCTEN ONCE): self-host alias/secili yolunda T041 HIC
+      uygulanmiyor — cok-segmentli olmakla ILGILI DEGIL, tek segmentte de ayni
+      (olculdu). Kok: T041 `m002_yol_kontrol`da `ozel_uye_mi` ile yalniz
+      nitelikli `mod::uye` yolunda soruluyor; alias gercek modul adina
+      cozulmuyor, secili import hic YOL dugumu uretmiyor. Kapanmazsa goc eden
+      her dosya self-host derleyicide gizlilik denetimini KAYBEDER.
+- [ ] D-580 yan bulgu: alias/secili + `sabit` codegen'de desteklenmiyor
+      (`yol ifadesi desteklenmiyor` / `tanimsiz tanimlayici`); islev calisiyor.
+      TEK segmentte de ayni -> onceden var olan, ayri is.
+- [ ] D-580 ADIM 3-4: 17 dosyayi teker teker yeni-bicime gecir (her commit
+      yesil), sonra legacy duzlestirmeyi SIL + kapi ekle (depoda ciplak
+      cok-segment `kullan` kalmamali).
 
 
 
@@ -321,3 +333,4 @@
 - 2026-09-09 D-578: yeni eksen = tahsis boyutu aritmetigi. Bes sekil olculdu, dordu tuttu (negatif/sifir N zararsiz, yanlis kullanim LOUD panik, argumanin yan etkisi iki derleyicide de korunuyor, metin_kes kirpiyor). Besincisi gercek bulgu: `dizi_kapasite` ve `dizi_kapasite_ayarla` self-host'ta KULLANICI CAGRISI olarak dispatch koluna sahip degildi -> tanimsiz sembol, LINK-RED; yerlesikler biliniyor ve declare ediliyordu, eksik olan yalniz cagri yeri esdegeriydi. OLCUM ARACI IKI KEZ YANILDI: (1) kirpilmis grep yuzunden 'argüman yok sayiliyor' diyecektim — gercek sozlesme N=KAPASITE REZERVASYONU, boyut 0; (2) '2e9 rezervasyon basarisiz olur' premisi yanlisti, bu platformda ~8 GB LAZY olarak BASARIYOR, sabotaj sessiz kaldi ve premis curudu (o madde fiksturden cikarildi). Kod okumasiyla ayri bir acik bulundu ve Siradaya yazildi (kdl_dizi_buyut tahsis-basarisizligini denetlemiyor; ulasilabilirlik OLCULMEDI). Kapilar: codegen_diff 171/171, yapi_diff 151/151, self_driver FIXPOINT (147/147 + 171/171), sifir uyari 38/0. Sabotaj 2/2: S162/S163 -> 170/171 rc=2.
 - 2026-09-09 D-579: D-578'in Siradaki maddesi — `kdl_dizi_buyut` tahsis basarisizligi. ULASILABILIRLIK OLCULDU ve ~1 GB veri GEREKMEDEN ulasilabilir cikti: KdlDizi'yi dogrudan kurup (boyut==kapasite==2^30) kdl_dizi_ekle_tam cagirmak ANINDA SEGV veriyor. Iki kusur bir arada: `yk = kapasite*2` int32'de tasiyor, ve tahsis basarisizliginda `d->veri=NULL` yazilip kapasite yine de guncelleniyor -> cagiran NULL'a yaziyor, eski veri kayboluyor. SESSIZ DUSUS dogru degildi (cagiran hemen yazar -> eski tamponun sonuna yazma = heap tasmasi); tek tutarli cevap TEMIZ PANIK, D-069/D-502/D-514/D-546 ile ayni politika. IKI KORUMA BIRBIRINI YEDEKLIYOR: S164 ve S165 tek tek SESSIZ kaldi, S166 (ikisi birden) SEGFAULT'u yakaladi rc=2 -> fikstur cifti olcuyor; tasma korumasi D-510 disiplini geregi korundu. Kapi calistir_dizi_sinir_test'e eklendi (34->39 olcum): vaka11 negatif + vaka12 POZITIF (1000 ekleme panik uretmemeli). Kapilar: dizi_sinir 39/39, panik_test 6/6, runtime_link 33/33, kdl_bolge 6/6, dizi_perf 6/6, gorev_rt 16/16, llvm_test 286/286, codegen_diff 171/171, sifir uyari 38/0. SUREC: heredoc 
 'i gercek satir sonuna cevirip probe'u kirdi (ucuncu tekrar).
+- 2026-09-12 D-580 (MEHMET KARARI): P046 kaldirildi + yukleyicide `::`->`/` -> D-520 ASAMALI GOCE ACILDI. Karar oncesi maliyet yeniden olculdu ve kayittakinden FARKLI cikti: legacy altinda NITELIKLI ad T016 aliyor, cok-segment alias/secili P046 aliyor -> 'once nitelendir sonra cevir' MUMKUN DEGILDI, D-520 bir flag-day olurdu. Gercek kilit P046'ydi. Olculen sonuc: cok-segment alias/secili + genel uye OK, + private uye T041 (kacak kapaniyor), legacy ciplak OK (bozulmadi). Self-host portu GEREKMEDI (modul_path zaten `::`->`/` yapiyor, P046 self-host'ta hic yoktu). Iki ONCEDEN VAR OLAN bosluk olculdu ve Siradaya yazildi: (1) self-host alias/secili yolunda T041 hic uygulanmiyor — tek segmentte de ayni, GOCTEN ONCE kapanmali; (2) alias/secili + sabit codegen'de yok. SUREC: var olan bir fiksturu (D-533) ezdim ve parite kapilari GORMEDI — iki tarafi birden bozan degisiklik sifir-diff kalir; git status'ta `??` yerine `M` gormek ele verdi. Kapilar: checker_diff 181/181 (0 muaf), modul_codegen 23/23 (0 atlandi 0 muaf), self_driver FIXPOINT (147/147 + 171/171), parser_diff 13/13, surucu_diff 13/13, check_kapisi 276/283 (0 RED), check_genis 133/133, codegen_diff 171/171, sifir uyari 38/0. Sabotaj 2/2: S167 (yol cevirisi) fikstur T040 rc=2, S168 (P046 geri) fikstur P046 rc=2.

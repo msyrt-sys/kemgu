@@ -1563,6 +1563,80 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🎯 D-580 (MEHMET KARARI): P046 KALDIRILDI — D-520 AŞAMALI GÖÇE AÇILDI
+D-520 dört aydır *"~700 referans"* maliyetiyle açık duruyordu. **Karar
+verilmeden önce maliyet yeniden ölçüldü ve kayıttakinden FARKLI çıktı:**
+```
+legacy acik, ciplak ad                 -> OK
+legacy acik, NITELIKLI ad              -> T016    (reddediliyor)
+cok-segment + ALIAS / SECILI import    -> P046    (parser reddediyor)
+```
+Yani *"once ~700 referansi nitelendir, sonra anahtari cevir"* **MÜMKÜN
+DEĞİLDİ** — nitelikli ad legacy altında zaten derlenmiyor. D-520 bir
+**flag-day** olurdu: yükleyiciyi çevir + ~700 referansı nitelendir + `genel`
+ekle, hepsi tek commit'te, arada hiçbir şey yeşil değil.
+
+**🎯 GERÇEK KİLİT `::`→`/` ÇEVİRİSİ DEĞİL, P046'YDI.** Kaldırılınca iç içe bir
+modül yeni-biçimde (alias/seçili) ithal edilebiliyor ve **dosyalar teker teker
+göç edebiliyor, her adımda yeşil kalarak.** Bu artım o kapıyı **AÇAR**;
+**D-520'yi KAPATMAZ.**
+
+**İKİ DEĞİŞİKLİK, ikisi de C'de:**
+1. **P046 kaldırıldı** — parser zaten her şeyi ayrıştırıyordu (yol + seçili +
+   alias); P046 saf bir **son-denetimdi**. AST hiç değişmedi.
+2. **`::` → `/`** — modül ADI mantıksaldır (`a::b::c`), DOSYA yolu fizikseldir
+   (`a/b/c.kem`). Çevirisiz iç içe modül yeni-biçim yükleyiciyle **BULUNAMAZ**
+   (T040) ve tek erişim yolu legacy düzleştirme olarak kalırdı.
+
+**ÖLÇÜLEN SONUÇ — gizlilik artık iç içe modülde de uygulanıyor:**
+```
+cok-segment alias/secili + `genel` uye   -> OK
+cok-segment alias/secili + private uye   -> T041     (kacak KAPANIYOR)
+cok-segment CIPLAK (legacy)              -> OK       (BOZULMADI)
+```
+
+**⚠ SELF-HOST PORTU GEREKMEDİ — ve sebebi ölçüldü:** `modul_path` self-host'ta
+`::`→`/` çevirisini **zaten** yapıyor ve self-host'ta **P046 hiç yoktu**.
+
+**🟠 YOL ÜSTÜNDE İKİ ÖNCEDEN VAR OLAN BOŞLUK ÖLÇÜLDÜ (kapatılmadı, Sırada'da):**
+- **Self-host alias/seçili yolunda T041 HİÇ uygulanmıyor** — ve bu
+  **çok-segmentli olmakla İLGİLİ DEĞİL**, tek segmentte de aynı (ölçüldü).
+  Kök: T041 `m002_yol_kontrol` içinde `ozel_uye_mi` ile **yalnız nitelikli
+  `mod::üye`** yolunda sorulur; alias (`d::üye`) gerçek modül adına
+  çözülmediği için eşleşmez, seçili import ise hiç YOL düğümü üretmez.
+  **⚠ GÖÇ BİTMEDEN BU KAPANMALI:** aksi hâlde göç eden her dosya, self-host
+  derleyicide gizlilik denetimini KAYBEDER.
+- **Alias/seçili + `sabit` codegen'de desteklenmiyor** (`yol ifadesi
+  desteklenmiyor` / `tanimsiz tanimlayici`). İşlev çalışıyor. **Tek segmentte
+  de aynı** → bu artımın soktuğu bir gerileme DEĞİL.
+
+**⚠⚠ VAR OLAN BİR FİKSTÜRÜ EZDİM VE PARİTE KAPILARI GÖRMEDİ.**
+`test/moduller/ic/derin.kem` D-533'ün fikstürüydü; üzerine yazdım ve
+`checker_diff` **181/181 YEŞİL kaldı**. Sebep yapısal: o kapı **iki uygulamayı
+karşılaştırır**, ikisini birden bozan bir değişiklik **sıfır-diff** kalır.
+`git status`taki `M` (yeni dosya bekliyordum) ele verdi.
+> **DERS: parite kapısı, her iki tarafı EŞİT bozan değişikliğe KÖRDÜR.**
+> Yeni fikstür yazmadan önce dosyanın VAR OLUP OLMADIĞINI ölç; `git status`ta
+> beklediğin `??` yerine `M` görürsen dur.
+Özgün içerik geri alındı, yeni semboller **yanına** eklendi — iki yol yan yana
+yaşıyor ve fikstür tam da bunu gösteriyor.
+
+**Kapılar:** checker_diff **181/181 (0 muaf)** · modul_codegen **23/23
+(0 atlandı, 0 muaf)** · self_driver **TÜM MODLAR + FIXPOINT ✓ (147/147 check,
+171/171 codegen)** · parser_diff 13/13 · surucu_diff 13/13 · check_kapisi
+276/283 (0 RED) · check_genis 133/133 · codegen_diff 171/171 · sıfır uyarı 38/0.
+Fikstür `test/moduller/ana_ic_ice.kem` (alias + seçili, C=SELF=42).
+**Sabotaj 2/2:** S167 (`::`→`/` çevirisini boz) → fikstür **T040**,
+modul_codegen 22/23 rc=2 · S168 (P046'yı geri koy) → fikstür **P046**,
+22/23 rc=2.
+
+**GÖÇ PLANI (karar verilmiş, sırayla):**
+1. ~~P046 + `::`→`/`~~ ✓ bu artım
+2. Self-host T041 boşluğunu kapat (alias + seçili) — **göçten ÖNCE**
+3. 17 dosyayı teker teker göç ettir, her commit yeşil
+4. Son legacy `kullan` gidince düzleştirmeyi **sil** → T041 evrensel; kapı:
+   depoda çıplak çok-segment `kullan` kalmadığını ölç
+
 ### 🔴✅ D-579: DİZİ BÜYÜTMEDE int32 TAŞMASI + TAHSİS BAŞARISIZLIĞI → SEGV
 D-578 kod okumasıyla bulup *"ulaşılabilirlik ÖLÇÜLMEDİ"* diye kaydetmişti.
 **Ölçüldü ve ulaşılabilir çıktı — üstelik ~1 GB veri GEREKMEDEN.**

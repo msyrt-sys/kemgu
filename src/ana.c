@@ -281,7 +281,24 @@ static int modulleri_yukle(Arena *a, Dugum *prog,
         if (zaten) continue;
 
         /* Arama yolu: ithalatci dizini -> proje koku -> kütüphane/ */
-        char aday[1024];
+        /* [D-580] `::` -> `/` : modul ADI mantiksaldir (`a::b::c`), DOSYA
+         * yolu fizikseldir (`a/b/c.kem`). Ceviri olmadan ic ice bir modul
+         * yeni-bicim yukleyiciyle BULUNAMAZ (T040) ve tek erisim yolu
+         * legacy duzlestirme olarak kalirdi. */
+        char yol_fiz[512];
+        {
+            int fi = 0;
+            for (int mi = 0; mi < muz && fi < (int)sizeof(yol_fiz) - 1; mi++) {
+                if (mad[mi] == ':' && mi + 1 < muz && mad[mi + 1] == ':') {
+                    yol_fiz[fi++] = '/';
+                    mi++;
+                } else {
+                    yol_fiz[fi++] = mad[mi];
+                }
+            }
+            yol_fiz[fi] = 0;
+        }
+        char aday[2048];   /* [D-580] dizin+yol_fiz+".kem" sigmali */
         char dizin[512];
         dizin_al(isler[wi].ithalatci_yol, dizin, sizeof(dizin));
         char *icerik = NULL;
@@ -289,12 +306,12 @@ static int modulleri_yukle(Arena *a, Dugum *prog,
         char *yol_kalici = NULL;
         for (int deneme = 0; deneme < 3 && !icerik; deneme++) {
             if (deneme == 0) {
-                snprintf(aday, sizeof(aday), "%s/%.*s.kem", dizin, muz, mad);
+                snprintf(aday, sizeof(aday), "%s/%s.kem", dizin, yol_fiz);
             } else if (deneme == 1) {
-                snprintf(aday, sizeof(aday), "%.*s.kem", muz, mad);
+                snprintf(aday, sizeof(aday), "%s.kem", yol_fiz);
             } else {
                 snprintf(aday, sizeof(aday),
-                         "k\xc3\xbct\xc3\xbcphane/%.*s.kem", muz, mad);
+                         "k\xc3\xbct\xc3\xbcphane/%s.kem", yol_fiz);
             }
             /* Giris dosyasinin kendisi modul olarak yuklenemez */
             if (strcmp(aday, giris_yolu) == 0) continue;
