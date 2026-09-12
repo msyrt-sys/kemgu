@@ -1,0 +1,13 @@
+// [D-583] Secili import ile gelen `sabit` codegen'de cozulmeli.
+// Once yalniz `islev` yolu calisiyordu; sabit referansi C'de
+// "tanimsiz tanimlayici" veriyordu (C-only oracle boslugu; self-host
+// ikisini de cozuyordu -> parite TERS yonde, D-442 sinifi).
+// POZITIF: yerel sabit de bozulmamali — yoksa "her sabiti modul
+// onekiyle mangle et" sabotaji kapidan GECERDI (D-425).
+kullan sbt_mod::{SBT_YIRMI, SBT_ON, sbt_topla};
+
+sabit YEREL_ON_IKI: tam32 = 12;
+
+işlev main() -> tam32 {
+    ver sbt_topla(SBT_YIRMI, SBT_ON) + YEREL_ON_IKI;
+}

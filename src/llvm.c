@@ -2112,6 +2112,22 @@ static void modul_uyeleri_kayit(LlvmGen *g, const Dugum *m,
             kopya->veri.islev.ad = mangled;
             kopya->veri.islev.ad_uzunluk = muz;
             islev_kayit(g, kopya);
+        } else if (uye->tip == DUGUM_SABIT) {
+            /* [D-583] Modul sabitleri de kaydedilmeli — yoksa secili/alias
+             * import ile gelen bir `sabit` referansi codegen'de "tanimsiz
+             * tanimlayici" verir (islev yolu calisiyordu, sabit yolu YOK).
+             * Ad islev ile AYNI semada mangle edilir; referans yeri
+             * cozum_modul_onek ile once mangled adi arar. */
+            int muz = 0;
+            const char *mangled = modul_mangle(g, onek, onek_uz,
+                uye->veri.sabit.ad, uye->veri.sabit.ad_uzunluk, &muz);
+            if (!mangled) continue;
+            Dugum *kopya = (Dugum *)arena_ayir(g->arena, sizeof(Dugum));
+            if (!kopya) continue;
+            *kopya = *uye;
+            kopya->veri.sabit.ad = mangled;
+            kopya->veri.sabit.ad_uzunluk = muz;
+            sabit_kayit(g, kopya);
         } else if (uye->tip == DUGUM_MODUL) {
             int yeni_uz = 0;
             const char *yeni_onek = modul_mangle(g, onek, onek_uz,
@@ -2398,8 +2414,19 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
         /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
          * dosyadaki ve `kullan` ile yuklenen sabitler codegen'de cozulur
          * (cross-file "; HATA: tanimsiz tanimlayici" sorununun kok cozumu). */
-        SabitKayit *sk = sabit_bul(g, d->veri.tanimlayici.metin,
-                                   d->veri.tanimlayici.uzunluk);
+        /* [D-583] Resolver bu adi bir MODUL uyesine bagladiysa once
+         * mangled adi ara (cagri yolunun aynasi, ~4886). Duz ad fallback'i
+         * korunur: legacy duzlestirme ve ayni dosya sabitleri oradan gelir. */
+        SabitKayit *sk = NULL;
+        if (d->cozum_kategori == COZUM_MODUL_UYESI && d->cozum_modul_onek) {
+            int muz = 0;
+            const char *mangled = modul_mangle(g, d->cozum_modul_onek,
+                d->cozum_modul_onek_uz, d->veri.tanimlayici.metin,
+                d->veri.tanimlayici.uzunluk, &muz);
+            if (mangled) sk = sabit_bul(g, mangled, muz);
+        }
+        if (!sk) sk = sabit_bul(g, d->veri.tanimlayici.metin,
+                                d->veri.tanimlayici.uzunluk);
         if (sk && sk->deger) {
             const char *sb = beklenen;
             if (!sb && sk->tip) sb = ast_tip_to_ir(g, sk->tip);
