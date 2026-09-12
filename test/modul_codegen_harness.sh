@@ -119,6 +119,28 @@ for f in test/moduller/*.kem; do
     fi
     run_exe "$TMP/$b.s.exe" "$TMP/$b.s.out"; kaday=$RC
 
+    # [D-584] YAPISAL ÖLÇÜM — davranışsal kıyas MANGLE ADINA KÖRDÜR.
+    # Ölçüldü: C `@"a::b.f"`, self `@b.f` yayarken İKİ TARAF DA kendi içinde
+    # tutarlıydı → aynı exit, aynı stdout, kapı YEŞİL. Sabotaj (S176) bu yüzden
+    # sessiz kaldı; ayırt eden şey davranış değil AD KÜMESİDİR (D-422/D-506'nın
+    # sınıfı). Register numaraları ve sıra yok sayılır; yalnız `define` ADLARI.
+    # ⚠ TAM AD KÜMESİ KULLANILAMAZ — ölçüldü: 9 dosyada temizde ayrışıyor ve
+    # sebep mangle DEĞİL, D-401'in bilinen K4 sınırı (self generic BASE gövdeyi
+    # de yayar: `dizi.al` + `dizi.al$i64`, C yalnız specialization). Onu buraya
+    # muafiyet listesi olarak kopyalamak `yapi_diff`in envanterini İKİ YERE
+    # bölerdi. Ölçülen şey MODÜL ÖNEKİ kümesidir (ilk `.`ya kadar) — mangle
+    # sapmasına duyarlı, base-vs-specialization ayrımına KÖR.
+    cd_ad=$(grep -o 'define [^@]*@[^(]*' "$TMP/$b.c.ll" | sed 's/.*@//' | tr -d '"' \
+            | grep '\.' | sed 's/\..*//' | sort -u)
+    sd_ad=$(grep -o 'define [^@]*@[^(]*' "$TMP/$b.s.ll" | sed 's/.*@//' | tr -d '"' \
+            | grep '\.' | sed 's/\..*//' | sort -u)
+    if [ "$cd_ad" != "$sd_ad" ]; then
+        echo "  🔴 $b — modül ÖNEK kümesi farklı (mangle sapması):"
+        printf '%s\n' "$cd_ad" > "$TMP/$b.c.ad"; printf '%s\n' "$sd_ad" > "$TMP/$b.s.ad"
+        diff "$TMP/$b.c.ad" "$TMP/$b.s.ad" 2>/dev/null | head -4 | sed 's/^/      /'
+        fail=$((fail+1)); continue
+    fi
+
     if [ "$coracle" -eq "$kaday" ] && diff -q "$TMP/$b.c.out" "$TMP/$b.s.out" >/dev/null 2>&1; then
         pass=$((pass+1))
     elif [ "$coracle" -ne "$kaday" ]; then
