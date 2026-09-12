@@ -1563,6 +1563,62 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ⛔ D-582 (NEGATİF SONUÇ): GÖÇ DOSYA DOSYA YAPILAMAZ — karışık biçim İKİ YÖNDE DE kırılıyor
+D-580'in göç planındaki 3. adıma (*"17 dosyayı teker teker göç ettir, her
+commit yeşil"*) başlandı. **İlk dosya göç etti ve TÜKETİCİSİNİ KIRDI** →
+plandaki bu cümle **ölçümle çürüdü**. Kod değişikliği YOK; kısmi göç geri alındı.
+
+**GÖÇ PROSEDÜRÜ ÖNCE ÖLÇÜLDÜ VE UCUZ ÇIKTI** (D-520'nin *"~700 referansı
+nitelendir"* maliyeti **geçersiz**): seçili import adları **NİTELİKSİZ**
+getirir, yani referanslara HİÇ dokunulmaz. `drivers/virtio/status.kem`:
+```
+kullan drivers::virtio::constants;
+  ->  kullan drivers::virtio::constants::{ VIRTIO_STATUS_RESET, ... };
++ constants.kem'de o 6 sabite `genel`     ->  0 REFERANS DÜZENLEMESİ
+```
+Dosya tek başına **OK** verdi. Ama tüketicisi `virtio_blk.kem` **T040** aldı.
+
+**🔴 2×2 MATRİS ÖLÇÜLDÜ — mekanizma izole edildi (minimal tekrar üretim):**
+```
+legacy tuketici -> legacy modul : OK
+yeni   tuketici -> yeni   modul : OK
+legacy tuketici -> YENI   modul : T040 🔴   (modul bulunamadi)
+yeni   tuketici -> LEGACY modul : T002 🔴   (ad gorunmuyor)
+```
+**İKİ KARIŞIK HÜCRE DE KIRIK.** Yani bir modülü göç ettirmek, onu ithal eden
+HER dosyayı da aynı anda göç ettirmeyi gerektirir → **göç birimi DOSYA DEĞİL,
+BAĞLANTILI BAĞIMLILIK KÜMESİDİR.**
+
+**Kümeler ölçüldü (14 dosya, 38 legacy ithalat):**
+`drivers/virtio` + `tests/drivers/virtio` = **10 dosya, tek küme** ·
+`test/crossfile` = 3 dosya · `test/moduller/ana_legacy_gizlilik.kem` =
+D-533'ün **kasıtlı** legacy fikstürü (4. adıma kadar kalmalı).
+
+**⚠ "HER ADIMDA YEŞİL" SÖZÜ GEÇERSİZ DEĞİL — GRANÜLERLİĞİ DEĞİŞTİ.** Ara
+durum yalnız çalışma ağacında var; küme tek commit'te geçerse her COMMIT
+yeşil kalır. Değişen şey commit başına düşen iş miktarıdır.
+
+**🟠 YOL ÜSTÜNDE İKİNCİ BULGU — SELF-HOST İKİ KIRIK HÜCREDE DE AYRIŞIYOR:**
+```
+legacy -> yeni  : C=T040+T002   CHK=OK
+yeni   -> legacy: C=T002        CHK=OK
+```
+Self-host **daha müsamahakâr**: yarı göç etmiş bir ağaç self-host'ta temiz
+görünür, C'de kırıktır. Bu yüzden **matris bugün kapıya bağlanamadı** —
+fikstür `checker_diff`i kırardı. Hizalama, küme göçünün ÖN KOŞULUDUR:
+aksi hâlde göç sırasında hatanın hangi tarafta olduğu ölçülemez.
+
+**KOD YAZILMADI (D-515/D-538 disiplini).** Elde edilen şey bir **ölçüm ve
+düzeltilmiş plan**: yanlış granülerlikte başlanan bir göç, ilk commit'te
+tüketicileri kıracak ve "neden kırıldı" sorusu küme boyunca aranacaktı.
+
+**DÜZELTİLMİŞ GÖÇ PLANI:**
+1. ~~P046 + `::`→`/`~~ ✓ D-580
+2. ~~Self-host T041 (alias + seçili)~~ ✓ D-581
+3. **YENİ:** karışık-biçim reddinde self-host'u C'ye hizala + matrisi kapıya bağla
+4. Kümeleri **tek commit'te** göç ettir (virtio 10 dosya · crossfile 3)
+5. Son legacy `kullan` gidince düzleştirmeyi sil → T041 evrensel
+
 ### 🔴✅ D-581 (D-580 ADIM 2): SELF-HOST YENİ-BİÇİM İTHALATTA T041'i HİÇ UYGULAMIYORDU
 D-580'in göç planındaki 2. adım ve **göçün ÖN KOŞULU**. Kapanmadan göç
 edilseydi, göç eden **her dosya self-host derleyicide gizlilik denetimini
@@ -1697,7 +1753,7 @@ modul_codegen 22/23 rc=2 · S168 (P046'yı geri koy) → fikstür **P046**,
 **GÖÇ PLANI (karar verilmiş, sırayla):**
 1. ~~P046 + `::`→`/`~~ ✓ bu artım
 2. ~~Self-host T041 boşluğunu kapat (alias + seçili)~~ ✓ **D-581**
-3. 17 dosyayı teker teker göç ettir, her commit yeşil
+3. ~~17 dosyayı teker teker göç ettir~~ ⛔ **D-582: DOSYA DOSYA YAPILAMAZ** — küme
 4. Son legacy `kullan` gidince düzleştirmeyi **sil** → T041 evrensel; kapı:
    depoda çıplak çok-segment `kullan` kalmadığını ölç
 

@@ -15,9 +15,19 @@
 - [ ] D-580 yan bulgu: alias/secili + `sabit` codegen'de desteklenmiyor
       (`yol ifadesi desteklenmiyor` / `tanimsiz tanimlayici`); islev calisiyor.
       TEK segmentte de ayni -> onceden var olan, ayri is.
-- [ ] D-580 ADIM 3-4: 17 dosyayi teker teker yeni-bicime gecir (her commit
-      yesil), sonra legacy duzlestirmeyi SIL + kapi ekle (depoda ciplak
-      cok-segment `kullan` kalmamali).
+- [ ] D-582 ADIM 3 (KUME GOCUNUN ON KOSULU): karisik-bicim reddinde self-host
+      C'den AYRISIYOR (legacy->yeni: C=T040+T002 CHK=OK; yeni->legacy: C=T002
+      CHK=OK). Self daha musamahakar -> yari goc etmis agac self-host'ta temiz
+      gorunur, C'de kiriktir. Hizalanmadan goc edilirse hatanin hangi tarafta
+      oldugu olculemez. Hizala + 2x2 matrisi fiksturle kapiya bagla.
+- [ ] D-582 ADIM 4: kumeleri TEK COMMIT'te goc ettir — `drivers/virtio` +
+      `tests/drivers/virtio` (10 dosya, tek baglantili kume) ve `test/crossfile`
+      (3 dosya). Prosedur olculdu ve UCUZ: secili import adlari NITELIKSIZ
+      getirir -> SIFIR referans duzenlemesi; yalniz kullanilan adlara `genel` +
+      ithalat listesi. D-520'nin "~700 referansi nitelendir" maliyeti GECERSIZ.
+- [ ] D-582 ADIM 5: son legacy `kullan` gidince duzlestirmeyi SIL + kapi ekle
+      (depoda ciplak cok-segment `kullan` kalmamali). `ana_legacy_gizlilik.kem`
+      D-533'un KASITLI fiksturudur — o adima kadar kalmali.
 
 
 
@@ -329,3 +339,4 @@
 'i gercek satir sonuna cevirip probe'u kirdi (ucuncu tekrar).
 - 2026-09-12 D-580 (MEHMET KARARI): P046 kaldirildi + yukleyicide `::`->`/` -> D-520 ASAMALI GOCE ACILDI. Karar oncesi maliyet yeniden olculdu ve kayittakinden FARKLI cikti: legacy altinda NITELIKLI ad T016 aliyor, cok-segment alias/secili P046 aliyor -> 'once nitelendir sonra cevir' MUMKUN DEGILDI, D-520 bir flag-day olurdu. Gercek kilit P046'ydi. Olculen sonuc: cok-segment alias/secili + genel uye OK, + private uye T041 (kacak kapaniyor), legacy ciplak OK (bozulmadi). Self-host portu GEREKMEDI (modul_path zaten `::`->`/` yapiyor, P046 self-host'ta hic yoktu). Iki ONCEDEN VAR OLAN bosluk olculdu ve Siradaya yazildi: (1) self-host alias/secili yolunda T041 hic uygulanmiyor — tek segmentte de ayni, GOCTEN ONCE kapanmali; (2) alias/secili + sabit codegen'de yok. SUREC: var olan bir fiksturu (D-533) ezdim ve parite kapilari GORMEDI — iki tarafi birden bozan degisiklik sifir-diff kalir; git status'ta `??` yerine `M` gormek ele verdi. Kapilar: checker_diff 181/181 (0 muaf), modul_codegen 23/23 (0 atlandi 0 muaf), self_driver FIXPOINT (147/147 + 171/171), parser_diff 13/13, surucu_diff 13/13, check_kapisi 276/283 (0 RED), check_genis 133/133, codegen_diff 171/171, sifir uyari 38/0. Sabotaj 2/2: S167 (yol cevirisi) fikstur T040 rc=2, S168 (P046 geri) fikstur P046 rc=2.
 - 2026-09-12 D-581 (D-580 ADIM 2): self-host alias/secili ithalatta T041 HIC uygulanmiyordu — gocun ON KOSULU, kapanmadan goc edilseydi goc eden her dosya self-host'ta gizlilik denetimini KAYBEDERDI. UC kok: (1) alias yeni-bicim sayilmiyor (kullan_yeni_bicim_mi'de alias dali yok; D-533 onu 'P046 yuzunden ulasilamaz' diye yazmamisti, D-580 ulasilabilir kildi); (2) alias gercek modul adina cozulmuyor (priv_mod son segmenti tutar, erisimde alias var) -> alias_modul_coz + al_ad/al_yol kanali; (3) secili import hic YOL dugumu uretmez -> denetim ITHALAT YERINDE, ayrica ozel ad artik global'e EKLENMEZ (C de eklemiyor; kullanimi T002 aliyor). Secim kendi `kullan`ina si_sat/si_sut ile baglandi — yol esitligi yetmiyordu (ayni modulu hem alias hem secili ithal eden dosyada alias satirinda da atesliyordu). IKI SABOTAJ SESSIZ KALDI ve ikisi de korpusu/kapiyi duzelttirdi: S169 (fikstur tek dosyada alias+secili tasidigi icin alias dali ayirt edilemiyordu -> fikstur IKIYE bolundu) ve S173 (modul_codegen yalniz `islev main()` iceren dosyalari olcuyor -> fiksturler sessizce atlaniyordu, main() eklendi; self_driver'in korpusu test/moduller'i kapsamiyor, codegen.kem'in bu kancasini goren TEK kapi modul_codegen). Depo taramasi: T041 ekseninde sifir sapma. Kapilar: checker_diff 183/183 (0 muaf), modul_codegen 25/25 (0 atlandi 0 muaf), self_driver FIXPOINT (147/147 + 171/171), check_kapisi 276/283 (0 RED), check_genis 133/133, surucu_diff 13/13, codegen_diff 171/171, parser_diff 13/13, sifir uyari 38/0. Sabotaj 5/5: S169/S170/S171/S172 checker_diff 182/183 rc=2, S173 modul_codegen 24/25 rc=2.
+- 2026-09-12 D-582 (NEGATIF SONUC): D-580'in goc planindaki 3. adima baslandi, ilk dosya goc etti ve TUKETICISINI KIRDI -> plandaki 'teker teker, her commit yesil' cumlesi olcumle curudu. Kod YOK, kismi goc geri alindi. Once PROSEDUR olculdu ve UCUZ cikti: secili import adlari NITELIKSIZ getirir -> SIFIR referans duzenlemesi (status.kem: 6 sabite `genel` + isim listesi, referans dokunulmadi) => D-520'nin '~700 referansi nitelendir' maliyeti GECERSIZ. Ama 2x2 matris olculdu (minimal tekrar uretimle izole edildi): legacy->legacy OK, yeni->yeni OK, legacy->YENI T040, yeni->LEGACY T002 — IKI karisik hucre de KIRIK. Yani goc birimi DOSYA DEGIL BAGLANTILI KUME: drivers/virtio + tests/drivers/virtio = 10 dosya tek kume, test/crossfile = 3. 'Her adimda yesil' gecersiz degil, GRANULERLIGI degisti (ara durum yalniz calisma agacinda). Yol ustunde ikinci bulgu: self-host IKI kirik hucrede de ayrisiyor ve DAHA MUSAMAHAKAR (CHK=OK) -> yari goc etmis agac self-host'ta temiz gorunur; bu yuzden matris bugun kapiya BAGLANAMADI (fikstur checker_diff'i kirardi) ve hizalama kume gocunun ON KOSULU olarak Siradaya yazildi. Agac temiz birakildi (virtio_blk onceden var olan T011 ile).
