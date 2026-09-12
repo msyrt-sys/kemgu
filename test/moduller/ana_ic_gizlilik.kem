@@ -1,0 +1,19 @@
+// [D-581] YENİ BİÇİM İTHALATTA GİZLİLİK — D-520 göçünün ÖN KOŞULU.
+// D-580 iç içe modülü yeni biçimde ithal edilebilir kıldı; ama self-host
+// alias/seçili yolunda T041'i HİÇ uygulamıyordu (tek segmentte de aynı).
+// Kapanmadan göç edilseydi, göç eden HER dosya self-host derleyicide
+// gizlilik denetimini KAYBEDERDİ — göç, koruma kazandırmak yerine sessizce
+// kaldırırdı.
+//
+// ⚠ BU DOSYA YALNIZ ALIAS KULLANIR. İlk sürümde alias ve seçili import AYNI
+// dosyadaydı ve alias dalı AYIRT EDİLEMİYORDU: seçili import aynı modülü
+// zaten "yeni biçim" olarak kaydediyor, yani alias'ın kendi dalı hiç
+// sorulmuyordu (sabotaj S169 sessiz kaldı). Ayırt edici şekil ŞART (D-544).
+kullan ic::derin olarak d;
+
+işlev alias_ile() -> tam32 { ver d::derin_gizli(); }   // T041 — `genel` değil
+
+// ⚠ `main()` ŞART: `modul_codegen` yalnız `işlev main()` içeren dosyaları
+// ölçer — onsuz bu fikstür SESSİZCE ATLANIYORDU ve `codegen.kem`in T041
+// kancası hiçbir kapı tarafından ayırt edilemiyordu (sabotaj S173 sessiz).
+işlev main() -> tam32 { ver alias_ile(); }

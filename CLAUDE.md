@@ -1563,6 +1563,70 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-581 (D-580 ADIM 2): SELF-HOST YENİ-BİÇİM İTHALATTA T041'i HİÇ UYGULAMIYORDU
+D-580'in göç planındaki 2. adım ve **göçün ÖN KOŞULU**. Kapanmadan göç
+edilseydi, göç eden **her dosya self-host derleyicide gizlilik denetimini
+KAYBEDERDİ** — yani göç, korumayı kazandırmak yerine sessizce kaldırırdı.
+
+**ÖLÇÜM (D-580'de bulunmuştu, burada kapatıldı):**
+```
+alias + private uye    C=T041 2:31   CHK=OK   CG=OK   🔴
+secili + private uye   C=T041 1:1    CHK=OK   CG=OK   🔴
+alias + genel uye      C=OK          CHK=OK   CG=OK   ✓ (pozitif)
+```
+**⚠ Çok-segmentli olmakla İLGİLİ DEĞİL — tek segmentte de aynıydı.**
+
+**ÜÇ AYRI KÖK, üçü de ölçülerek bulundu:**
+1. **Alias yeni-biçim sayılmıyordu.** `kullan_yeni_bicim_mi` yalnız
+   `seg<=1 ∨ seçili` diyordu → alias import **legacy düzleştirmeye** düşüyor,
+   `priv_mod` hiç dolmuyordu. D-533 o dalı *"P046 yüzünden ULAŞILAMAZ"* diye
+   bilerek yazmamıştı; **D-580 P046'yı kaldırınca ulaşılabilir oldu.**
+2. **Alias gerçek modüle çözülmüyordu.** `priv_mod` gerçek modülün SON
+   segmentini tutar (`derin`), erişimin sol tarafı ise alias (`d`) →
+   `ozel_uye_mi` hiç eşleşmiyordu. Yeni `alias_modul_coz` (+ `al_ad`/`al_yol`
+   kanalı; `codegen.kem`de D-400'den beri VARDI, `checker.kem`de yoktu).
+3. **Seçili import hiç YOL düğümü üretmez** (ad NİTELİKSİZ görünür) →
+   nitelikli-erişim denetimi o şekli **hiç görmez**. Denetim **ithalat
+   yerinde** yapılıyor; C de tanıyı `kullan` deyiminde raporluyor (ölçüldü).
+   **Ayrıca özel ad artık global ada EKLENMEZ** — C onu ithal etmez ve
+   kullanımı ayrıca **T002** alır; eklemek tanıyı yarım bırakırdı
+   (*ithalat reddedildi ama ad çalışıyor*).
+
+**⚠ SEÇİM, SEÇİMİ BİLDİREN `kullan`a BAĞLANMALI — yol eşitliği YETMEZ.**
+İlk sürüm `si_yol == <bu kullan'ın yolu>` diye eşliyordu; aynı modülü hem
+alias hem seçili ithal eden dosyada **alias satırında da** ateşledi (fazladan
+`T041 9 1`). `si_sat`/`si_sut` eklendi → konum eşitliği.
+
+**⚠⚠ İKİ SABOTAJ SESSİZ KALDI VE İKİSİ DE KORPUSU/KAPIYI DÜZELTTİRDİ:**
+- **S169** (alias dalı) sessizdi çünkü fikstür **aynı dosyada** hem alias hem
+  seçili import taşıyordu: seçili import modülü zaten *yeni biçim* olarak
+  kaydediyor, alias'ın kendi dalı hiç sorulmuyordu. Fikstür **İKİYE BÖLÜNDÜ**
+  (`ana_ic_gizlilik` = yalnız alias · `ana_ic_gizlilik_secili` = yalnız seçili)
+  → S169 kırmızı. *"Hiçbir ölçüm ayırt etmiyor" önce KORPUSU şüpheli kılar*
+  (D-544'ün dersi).
+- **S173** (`codegen.kem` alias çözümü) sessizdi çünkü `modul_codegen`
+  **yalnız `işlev main()` içeren dosyaları** ölçüyor — fikstürlerimde yoktu ve
+  **sessizce atlanıyorlardı**. `main()` eklenince S173 kırmızı
+  (*"C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)"*).
+  ⚠ `self_driver`ın korpusu `test/moduller`i **kapsamıyor** — bu yüzden
+  `codegen.kem`in bu kancasını gören TEK kapı `modul_codegen`dir.
+
+**YANLIŞ-POZİTİF TARAMASI:** tüm depo, T041 ekseninde **sıfır sapma**.
+T002 de eklenerek tarandığında çıkan 16 sapmanın hiçbiri alias/seçili
+KULLANMIYOR (ölçüldü) → kancalarım orada yapısal olarak atıl; o sapmalar
+önceden var ve ilgili kapıların muafiyetlerinde (surucu_diff 5 · check_genis
+13) zaten hesaplı.
+
+**Kapılar:** checker_diff **183/183 (0 muaf)** · modul_codegen **25/25
+(0 atlandı, 0 muaf)** · self_driver **TÜM MODLAR + FIXPOINT ✓ (147/147 check,
+171/171 codegen)** · check_kapisi 276/283 (0 RED) · check_genis 133/133 ·
+surucu_diff 13/13 · codegen_diff 171/171 · parser_diff 13/13 · sıfır uyarı 38/0.
+**Sabotaj 5/5:** S169 (alias dalı) · S170 (alias çözümü) · S171 (seçili
+denetimi) · S172 (özel adın global'e eklenmesi) → dördü de checker_diff
+182/183 rc=2 · **S173** (codegen.kem alias çözümü) → modul_codegen 24/25 rc=2.
+
+**GÖÇ PLANI — 2. adım ✓ BİTTİ. Sıradaki: 3 (dosya dosya göç) ve 4 (legacy sil).**
+
 ### 🎯 D-580 (MEHMET KARARI): P046 KALDIRILDI — D-520 AŞAMALI GÖÇE AÇILDI
 D-520 dört aydır *"~700 referans"* maliyetiyle açık duruyordu. **Karar
 verilmeden önce maliyet yeniden ölçüldü ve kayıttakinden FARKLI çıktı:**
@@ -1632,7 +1696,7 @@ modul_codegen 22/23 rc=2 · S168 (P046'yı geri koy) → fikstür **P046**,
 
 **GÖÇ PLANI (karar verilmiş, sırayla):**
 1. ~~P046 + `::`→`/`~~ ✓ bu artım
-2. Self-host T041 boşluğunu kapat (alias + seçili) — **göçten ÖNCE**
+2. ~~Self-host T041 boşluğunu kapat (alias + seçili)~~ ✓ **D-581**
 3. 17 dosyayı teker teker göç ettir, her commit yeşil
 4. Son legacy `kullan` gidince düzleştirmeyi **sil** → T041 evrensel; kapı:
    depoda çıplak çok-segment `kullan` kalmadığını ölç

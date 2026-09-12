@@ -1,0 +1,11 @@
+// [D-581] SEÇİLİ import gizliliği — ALIAS'tan AYRI dosyada (ayırt edicilik).
+// `kullan m::{gizli};` hiç YOL düğümü üretmez (ad NİTELİKSİZ görünür) →
+// nitelikli-erişim denetimi bu şekli HİÇ görmez; tanı İTHALAT YERİNDE verilir.
+kullan ic::derin::{derin_gizli};
+
+işlev secili_ile() -> tam32 { ver derin_gizli(); }
+
+// ⚠ `main()` ŞART: `modul_codegen` yalnız `işlev main()` içeren dosyaları
+// ölçer — onsuz bu fikstür SESSİZCE ATLANIYORDU ve `codegen.kem`in T041
+// kancası hiçbir kapı tarafından ayırt edilemiyordu (sabotaj S173 sessiz).
+işlev main() -> tam32 { ver secili_ile(); }
