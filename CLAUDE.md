@@ -1563,6 +1563,71 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-583: SEÇİLİ IMPORT `sabit` CODEGEN'DE ÇÖZÜLMÜYORDU — C-only oracle boşluğu
+D-582'nin küme göçüne (ADIM 4) başlandı. `drivers/virtio` +
+`tests/drivers/virtio` kümesi (9 dosya göç, 1 ölü ithalat düştü) uygulandı,
+**tümü `--checkdump` OK** ve önce/sonra tabanı **sıfır gerileme** gösterdi
+(`virtio_blk_init_test` 11→6 tanıya **iyileşti**). Ama `surucu_diff` kırmızıya
+döndü ve **İKİ ayrı engel** ölçüldü. Birincisi bu artımda kapandı; ikincisi
+göçü bugün engellediği için göç **geri alındı**.
+
+**🔴 ENGEL 1 (KAPANDI) — C codegen seçili importlu `sabit`i hiç görmüyordu:**
+```
+u_islev   kullan m::{fn};   check=OK  llvm=[]                       ✓
+u_sabit   kullan m::{SBT};  check=OK  llvm=[tanimsiz tanimlayici]   🔴
+```
+`--check` kabul ediyor, **codegen reddediyor**. Tek segmentte de çok segmentte
+de aynı. **Self-host İKİSİNİ DE çözüyordu → parite TERS yönde (D-442 sınıfı).**
+
+**KÖK:** yeni-biçim ithalat `ana.c`'de sentetik `DUGUM_MODUL` olarak splice
+edilir; `modul_uyeleri_kayit` yalnız **ISLEV ve MODUL** üyelerini kaydediyordu,
+`DUGUM_SABIT`i **hiç**. Legacy düzleştirme her şeyi program üyesi yaptığı için
+orada sabitler çalışıyordu — kusur **yalnız yeni biçimde**, yani tam da göçün
+hedef yolunda.
+
+**ONARIM ÇAĞRI YOLUNUN AYNASI, yeni mekanizma YOK:** `modul_uyeleri_kayit`
+sabiti `<onek>.<ad>` şemasıyla kaydeder; referans yerinde resolver'ın zaten
+yazdığı `cozum_modul_onek` ile **önce mangled ad** aranır. **Düz ad fallback'i
+KORUNDU** — legacy düzleştirme ve aynı dosya sabitleri oradan gelir; kaldırmak
+onları kırardı. Yeni tanı kodu YOK, self-host portu GEREKMEDİ (zaten doğruydu).
+
+**🟠 ENGEL 2 (ÖLÇÜLDÜ, AÇIK) — self-host çok-segmentli yeni-biçimde SON
+SEGMENTLE mangle ediyor, C TAM YOLLA.** Minimal probe ile izole edildi:
+```
+kullan d583x::sbt::{fn};
+  C    : define i32 @"d583x::sbt.fn"
+  SELF : define i32 @sbt.fn
+```
+**Önceden var** (bu artım mangling'e dokunmaz) ve **görünmezdi**: kapılı hiçbir
+korpus dosyası çok-segmentli yeni-biçim ithalat kullanmıyordu. Göç onu korpusa
+sokunca `surucu_diff` **yapısal** olarak kırmızıya döndü (8/16; `--check`
+paritede, ayrışan şey `define` ad kümesi). **Küme göçünün YENİ ön koşuludur.**
+
+**⚠ GÖÇ GERİ ALINDI — ve bu bir kayıp değil.** Prosedürün ucuzluğu (sıfır
+referans düzenlemesi) ve gerilemesizliği ölçüldü; engel 2 kapanınca mekanik
+olarak tekrarlanabilir. Yarım göç etmiş bir ağacı commit'lemek D-582'nin kendi
+dersine aykırı olurdu.
+
+**🟠 YOL ÜSTÜNDE ÜÇÜNCÜ ÖLÇÜM (açık):** alias ile **nitelikli** sabit
+erişimi (`sm::SBT`) — C **gürültülü reddediyor** (*"yol ifadesi desteklenmiyor
+(çeşit dışı)"*), self-host ise **SESSİZCE YANLIŞ CEVAP** veriyor (sabit 0
+okunuyor: 20+22 → **22**). Bu artımın fikstürü bu şekli **BİLEREK kullanmaz** —
+yoksa kapı **yanlış sebeple** kırmızı olurdu (D-421).
+
+**Fikstür** `test/moduller/ana_secili_sabit.kem` (+ `sbt_mod.kem`): seçili
+importla iki sabit + bir işlev **ve POZİTİF olarak yerel bir `sabit`** —
+yerel sabit olmasa *"her sabiti modül önekiyle mangle et"* sabotajı kapıdan
+GEÇERDİ (D-425). `işlev main()` şart (D-581: `modul_codegen` yalnız onu içeren
+dosyaları ölçer) ve bu kancayı gören TEK kapı odur.
+
+**Kapılar:** modul_codegen **26/26 (0 atlandı, 0 muaf)** · checker_diff
+**185/185 (0 muaf)** · codegen_diff **171/171** · surucu_diff 13/13 ·
+sıfır uyarı 38/0.
+**Sabotaj 2/2:** S174 (kayıt dalı) · S175 (referans yerindeki mangled arama) →
+ikisi de modul_codegen **25/26 rc=2** (*"C tip hatasıyla REDDEDİYOR, KEMGU IR
+ÜRETİYOR (loud→silent)"*). İki yarı birbirini YEDEKLEMİYOR — biri düşerse
+çözüm tamamen kayboluyor.
+
 ### ⛔ D-582 (NEGATİF SONUÇ): GÖÇ DOSYA DOSYA YAPILAMAZ — karışık biçim İKİ YÖNDE DE kırılıyor
 D-580'in göç planındaki 3. adıma (*"17 dosyayı teker teker göç ettir, her
 commit yeşil"*) başlandı. **İlk dosya göç etti ve TÜKETİCİSİNİ KIRDI** →
