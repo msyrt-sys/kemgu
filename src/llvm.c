@@ -1974,6 +1974,22 @@ static IslevKayit *islev_bul(LlvmGen *g, const char *ad, int ad_uz) {
  * IR ad uzayini duzlestirir. */
 static const char *modul_mangle(LlvmGen *g, const char *onek, int onek_uz,
                                 const char *ad, int ad_uz, int *out_uz) {
+    /* [D-584] Dosya-modulun ADI TAM YOLDUR (`a::b::c`) — `kullan` cozumu onu
+     * oyle arar (tip_kontrol.c `kullan_isle`), yani orada degistirilemez.
+     * IR ONEKI ise SON SEGMENTTIR: self-host kaynak-duzeyi sarmal
+     * (`modül <ad> { .. }`) kullaniyor ve `::` bir TANIMLAYICIYA giremez ->
+     * orada yapisal olarak yalniz son segment mumkun. Tam yolu IR'a tasimak
+     * C'ye `@"a::b.f"`, self'e `@b.f` yaydiriyordu (olculdu).
+     * Kirpma BURADA yapilir: hem kayit hem ARAMA ayni yardimciyi cagirir,
+     * yani ikisi tanim geregi hizali kalir (D-407). Ic ice (satir ici) modul
+     * onekleri `.` ile kurulur ve `::` ICERMEZ -> onlara dokunulmaz. */
+    for (int i = 0; i + 1 < onek_uz; i++) {
+        if (onek[i] == ':' && onek[i + 1] == ':') {
+            onek += i + 2;
+            onek_uz -= i + 2;
+            i = -1;   /* dongu basindan: birden cok `::` olabilir */
+        }
+    }
     char *m = (char *)arena_ayir(g->arena,
                                  (size_t)onek_uz + 1 + (size_t)ad_uz + 1);
     if (!m) return NULL;

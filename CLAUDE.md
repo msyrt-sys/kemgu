@@ -1563,6 +1563,61 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-584: ÇOK-SEGMENTLİ YENİ-BİÇİMDE MANGLE SAPMASI — C tam yol, self son segment
+D-583'ün ölçtüğü **ENGEL 2** kapandı; küme göçünün (D-582 ADIM 4) ön koşulu
+artık yok. Minimal probe ile izole edilmişti:
+```
+kullan a::b::{fn};
+  C    : define i32 @"a::b.fn"
+  SELF : define i32 @b.fn
+```
+
+**KÖK — AYNI ALANI İKİ TÜKETİCİ FARKLI AMAÇLA OKUYOR (D-439 sınıfı):**
+`ana.c` sentetik dosya-modülünün **adını TAM YOL** yapar (`a::b`), ve bu
+**değiştirilemez**: `tip_kontrol.c`'nin `kullan_isle`'si modül sembolünü tam
+yolla arar. Self-host ise **kaynak-düzeyi sarmal** kullanıyor
+(`modül <ad> { … }`) ve `::` bir TANIMLAYICIYA giremez → orada yapısal olarak
+**yalnız son segment** mümkün.
+
+**⚠ İLK ONARIMIM YANLIŞ KATMANDAYDI VE ÖLÇÜM ANINDA ÇÖKTÜ.** Modül düğümünün
+adını `ana.c`'de son segmente indirdim → **T040** (`kullan: modül yüklenemedi`).
+Sebep yukarıdaki ikinci tüketici. **Onarım codegen katmanında olmalı**, isim
+çözümünde değil.
+
+**ONARIM TEK NOKTADA — `modul_mangle`'ın İÇİNDE.** Önek `::` içeriyorsa son
+segmente kırpılır. Hem **kayıt** hem **her arama** aynı yardımcıyı çağırdığı
+için ikisi tanım gereği hizalı kalır (D-407). İç içe (satır içi) modül önekleri
+`.` ile kurulur ve `::` içermez → onlara dokunulmaz. Yeni tanı kodu YOK.
+
+**🔴🔴 ASIL BULGU — KAPI BU SINIFA KÖRDÜ, SABOTAJ SESSİZ KALDI.**
+**S176** (kırpmayı kapat) → `modul_codegen` **26/26 YEŞİL**. Sebep yapısal:
+iki derleyici de **kendi içinde tutarlı** kalıyor (her biri kendi IR'ını
+yayıp linkliyor) → aynı exit, aynı stdout. *Davranışsal kıyas MANGLE ADINA
+KÖRDÜR* (D-422/D-506'nın sınıfı, bu kez modül yüzeyinde).
+Kapıya **yapısal ölçüm** eklendi; IR'lar zaten üretiliyordu, maliyet sıfır.
+
+**⚠ TAM AD KÜMESİ KULLANILAMADI — ölçümle elendi.** İlk sürüm `define` ad
+kümesini karşılaştırıyordu ve **temiz ağaçta 9 dosyada kırmızı** verdi. Sebep
+mangle DEĞİL, D-401'in bilinen **K4** sınırı: self generic BASE gövdeyi de
+yayar (`dizi.al` + `dizi.al$i64`), C yalnız specialization. Onu buraya muafiyet
+listesi olarak kopyalamak `yapi_diff`in envanterini **iki yere bölerdi**.
+Ölçülen şey **MODÜL ÖNEKİ kümesi** (ilk `.`ya kadar) — mangle sapmasına
+duyarlı, base-vs-specialization ayrımına kör.
+
+**Fikstür EKLENMEDİ — gerekmedi:** `ana_ic_ice.kem` (D-580) zaten çok-segmentli
+alias+seçili ithalat taşıyor; kapı sertleşince **tam da o dosya** kırmızıya
+döndü. *Eksik olan fikstür değil, ÖLÇÜMDÜ.*
+
+**Kapılar:** modul_codegen **26/26 (0 atlandı, 0 muaf)** · checker_diff
+**185/185 (0 muaf)** · codegen_diff **171/171** · yapi_diff 151/151 (22 muaf) ·
+surucu_diff 13/13 · sıfır uyarı 38/0.
+**Sabotaj S176** (kırpmayı kapat) → sertleştirmeden ÖNCE **26/26 rc=0**
+(sessiz), sertleştirmeden SONRA **25/26 rc=2** — kırmızıya dönen tek dosya
+`ana_ic_ice`. Sertleştirmenin değeri tam olarak bu ikilikte ölçülüdür.
+
+**GÖÇ PLANI — ADIM 4'ün ön koşulu ✓ BİTTİ.** Sıradaki: virtio kümesini
+(10 dosya) tek commit'te göç ettir; prosedür D-583'te ölçüldü ve ucuzdu.
+
 ### 🔴✅ D-583: SEÇİLİ IMPORT `sabit` CODEGEN'DE ÇÖZÜLMÜYORDU — C-only oracle boşluğu
 D-582'nin küme göçüne (ADIM 4) başlandı. `drivers/virtio` +
 `tests/drivers/virtio` kümesi (9 dosya göç, 1 ölü ithalat düştü) uygulandı,
