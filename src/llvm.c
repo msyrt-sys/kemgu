@@ -3578,6 +3578,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * (bare varyant: yalnız disc, payload alanları undef). */
                 return cesit_yapici_uret(g, yk->ast, idx, NULL, 0);
             }
+            /* [D-586] Nitelikli / alias'li MODUL SABITI: `m::K`, `sm::K`.
+             * D-583 modul sabitlerini `<onek>.<ad>` ile kaydetti; resolver
+             * YOL dugumune de cozum_modul_onek yaziyor (cagri yolu ~4186 ayni
+             * bilgiyi kullanir). Binding yoksa noktali ada dus. Oncesinde bu
+             * sekil gurultulu reddediliyordu; self-host ise SESSIZCE 0 okuyordu. */
+            {
+                SabitKayit *sk = NULL;
+                if (d->cozum_kategori == COZUM_MODUL_UYESI && d->cozum_modul_onek) {
+                    int muz = 0;
+                    const char *mangled = modul_mangle(g, d->cozum_modul_onek,
+                        d->cozum_modul_onek_uz, d->veri.yol.sag_ad,
+                        d->veri.yol.sag_ad_uzunluk, &muz);
+                    if (mangled) sk = sabit_bul(g, mangled, muz);
+                }
+                if (!sk) {
+                    char tam_ad[256];
+                    int tuz = yol_noktali_ad(d, tam_ad, (int)sizeof(tam_ad));
+                    if (tuz > 0) sk = sabit_bul(g, tam_ad, tuz);
+                }
+                if (sk && sk->deger) {
+                    const char *sb = beklenen;
+                    if (!sb && sk->tip) sb = ast_tip_to_ir(g, sk->tip);
+                    return ifade_uret(g, sk->deger, sb);
+                }
+            }
             return hata(g, "yol ifadesi desteklenmiyor (cesit disi)");
         }
 

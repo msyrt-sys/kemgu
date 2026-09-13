@@ -6436,6 +6436,22 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 ver lr;
             }
         }
+        // [D-586] Nitelikli / alias'lı MODÜL SABİTİ: `m::K`, `sm::K`.
+        // Öncesinde bu şekil aşağıdaki çöp dalına düşüp SESSİZCE `0` yayıyordu
+        // (ölçüldü: 20+22 → 22). `yol_noktali` alias'ı çözer; ad `sabit_topla`nın
+        // nitelikli kaydıyla eşleşir. Göreli yol (modül içinden) önce denenir.
+        değişken yad: metin = yol_noktali(p, idx);
+        değişken ysi: tam32 = 0 - 1;
+        eğer metin_uzunluk(p.mod_onek) > 0 { ysi = sabit_ara(p, mangle(p.mod_onek, yad)); }
+        eğer ysi < 0 { ysi = sabit_ara(p, yad); }
+        eğer ysi >= 0 {
+            değişken ysbek: metin = p.beklenen_ll;
+            değişken ystip: metin = dizi_al(p.g_sabit_tip, ysi);
+            değişken ysr: metin = ifade_uret(p, dizi_al(p.g_sabit_deger, ysi));
+            eğer metin_esit(ystip, "") == yanlış { p.son_tip = ystip; }
+            p.beklenen_ll = ysbek;
+            ver ysr;
+        }
         p.son_tip = "i32"; ver "0";   // diğer YOL → sonraki iş
     }
     p.son_tip = "i32";
@@ -8787,7 +8803,7 @@ işlev sabit_ara(p: &değişken Ayr, ad: metin) -> tam32 {
     ver 0 - 1;
 }
 // Üst-düzey SABIT düğümlerini tara (MODUL/DISA içine de in). Emit YOK — yalnız kayıt.
-işlev sabit_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+işlev sabit_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
@@ -8795,8 +8811,9 @@ işlev sabit_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         değişken u: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ua: metin = dizi_al(p.a_ad, u);
         // `dışa sabit K` / `modül m { sabit K }` — iç tanıma in.
-        eğer metin_esit(ua, "DISA") veya metin_esit(ua, "MODUL") {
-            sabit_topla(p, u);
+        eğer metin_esit(ua, "DISA") { sabit_topla(p, u, onek); }
+        eğer metin_esit(ua, "MODUL") {
+            sabit_topla(p, u, mangle(onek, dizi_al(p.a_deg, u)));
         }
         eğer metin_esit(ua, "SABIT") {
             değişken ucb: tam32 = dizi_al(p.a_cb, u);
@@ -8806,6 +8823,15 @@ işlev sabit_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
                 dizi_ekle(p.g_sabit_ad, dizi_al(p.a_deg, u));
                 dizi_ekle(p.g_sabit_deger, dizi_al(p.cocuk, ucb + 1));
                 dizi_ekle(p.g_sabit_tip, ll_tip(p, dizi_al(p.cocuk, ucb)));
+                // [D-586] Modül içindeyse NİTELİKLİ adla da kaydet (`m.K`).
+                // Çıplak kayıt KORUNUR (seçili import + legacy oradan çözülür);
+                // nitelikli kayıt `m::K` / alias `sm::K` erişimi içindir —
+                // öncesinde YOL dalı bunu bulamayıp SESSİZCE 0 yayıyordu.
+                eğer metin_uzunluk(onek) > 0 {
+                    dizi_ekle(p.g_sabit_ad, mangle(onek, dizi_al(p.a_deg, u)));
+                    dizi_ekle(p.g_sabit_deger, dizi_al(p.cocuk, ucb + 1));
+                    dizi_ekle(p.g_sabit_tip, ll_tip(p, dizi_al(p.cocuk, ucb)));
+                }
             }
         }
         i = i + 1;
@@ -8851,7 +8877,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
     param_ir_topla(p, kok);  // D-393: codegen-yolu param IR tipi tablosu (arg genişletme)
-    sabit_topla(p, kok);     // D-391: üst-düzey sabit tablosu (emit YOK, inline)
+    sabit_topla(p, kok, ""); // D-391: üst-düzey sabit tablosu (emit YOK, inline)
     kuresel_topla(p, kok);   // D-253: küresel değişken module-globalleri
     yb(10);
     emit_tanimlar(p, kok);   // D3: DISA-aç + MODUL-recurse + ISLEV emit

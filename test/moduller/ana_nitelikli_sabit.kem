@@ -1,0 +1,16 @@
+// [D-586] NITELIKLI ve ALIAS'li modul sabiti codegen'de cozulmeli.
+// Oncesinde: C "yol ifadesi desteklenmiyor" ile GURULTULU reddediyordu,
+// self-host ise YOL dalinin cop kolundan SESSIZCE `0` okuyordu
+// (olculdu: 20+22 -> 22). D-583 secili import yarisini kapatmisti.
+// AYIRT EDICI: iki erisim yolu FARKLI degerler tasir (20 / 10); biri 0
+// okursa toplam 42'den sapar ve hangisinin dustugu cikis kodundan okunur.
+// POZITIF: yerel sabit (12) — "her sabiti modul onekiyle ara" sabotaji
+// kapidan GECMESIN diye (D-425).
+kullan sbt_mod;
+kullan sbt_mod olarak sm;
+
+sabit YEREL_ON_IKI: tam32 = 12;
+
+işlev main() -> tam32 {
+    ver sm::SBT_YIRMI + sbt_mod::SBT_ON + YEREL_ON_IKI;
+}

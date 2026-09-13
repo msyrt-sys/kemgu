@@ -1563,6 +1563,51 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-586: NİTELİKLİ / ALIAS'LI MODÜL SABİTİ — self-host SESSİZCE 0 okuyordu
+D-583'ün yol üstünde ölçtüğü üçüncü açık. **Kayıttakinden GENİŞ çıktı** — yalnız
+alias değil, **düz nitelikli erişim de** aynı kusuru taşıyordu:
+```
+kullan m olarak sm;  ver sm::K + 22   ->  C: "yol ifadesi desteklenmiyor"   SELF: 22 🔴
+kullan m;            ver m::K  + 22   ->  C: "yol ifadesi desteklenmiyor"   SELF: 22 🔴
+                                          (beklenen 42 — sabit 0 okunuyor)
+```
+**Self tarafı deponun en ağır saydığı sınıftı:** derleme temiz, link temiz,
+program koşuyor, **cevap yanlış**. C tarafı gürültülüydü (geçerli program
+reddediliyordu).
+
+**SELF-HOST KÖKÜ — bir ÇÖP KOLU.** `ifade_uret`in `YOL` dalı yalnız çeşit
+varyantlarını tanıyordu; geri kalan her şey `p.son_tip = "i32"; ver "0";
+// diğer YOL → sonraki iş` satırına düşüyordu. Yani *"henüz desteklenmiyor"*
+bir **hata** değil **sıfır değeri** olarak kodlanmıştı. Ayrıca `sabit_topla`
+modül sabitlerini yalnız **çıplak** adla kaydediyordu → nitelikli ad hiçbir
+tabloda yoktu.
+
+**C KÖKÜ:** `DUGUM_YOL` yalnız çeşit yapıcısına bakıp doğrudan hata dönüyordu;
+D-583'ün kaydettiği `<önek>.<ad>` sabit tablosu bu yoldan hiç sorulmuyordu.
+
+**ONARIM — iki tarafta da ÇAĞRI YOLUNUN AYNASI, yeni mekanizma YOK:**
+- **C:** resolver'ın YOL düğümüne zaten yazdığı `cozum_modul_onek` ile mangled
+  ad aranır (nitelikli çağrı ~4186 ile birebir aynı); binding yoksa
+  `yol_noktali_ad` fallback'i.
+- **SELF:** `sabit_topla` modül içindeyken **nitelikli adı da** kaydeder (çıplak
+  kayıt KORUNDU — seçili import ve legacy oradan çözülür); YOL dalı
+  `yol_noktali` (alias'ı zaten çözer) ile arar, göreli yol (D-412) önce denenir.
+Yeni tanı kodu YOK.
+
+**Fikstür** `test/moduller/ana_nitelikli_sabit.kem` — **ayırt edici:** iki
+erişim yolu FARKLI değer taşır (alias `sm::SBT_YIRMI`=20, nitelikli
+`sbt_mod::SBT_ON`=10); biri 0 okursa toplam 42'den sapar ve **hangisinin
+düştüğü çıkış kodundan okunur**. **POZİTİF:** yerel `sabit` (12) — yoksa
+*"her sabiti modül önekiyle ara"* sabotajı kapıdan geçerdi (D-425).
+
+⚠ **KALAN (bilinçli, ayrı iş):** `YOL` dalının `ver "0"` çöp kolu **hâlâ
+duruyor**. Bu artım bir şekli ondan kurtardı; kolun kendisini gürültülü hataya
+çevirmek, ona düşen **başka** bir şekil olup olmadığının ölçülmesini ister
+(D-515: ölçülmemiş bir yüzeye yeni davranış koyma).
+
+**Kapılar:** modul_codegen **27/27 (0 atlandı, 0 muaf)** · checker_diff **187/187 (0 muaf)** · codegen_diff **171/171** · surucu_diff 16/16 (2 muaf) · yapi_diff 151/151 (22 muaf) · check_genis 133/133 · self_driver **TÜM MODLAR + FIXPOINT ✓** · sıfır uyarı 38/0.
+**Sabotaj 2/2:** S178 (C sabit araması) → modul_codegen **26/27 rc=2** (*loud→silent*) · S179 (self YOL sabit dalı) → **exit 12** (C=42): iki modül sabiti de 0 okundu, yani sessiz sıfır geri geldi. ⚠ İlk sabotaj koşumu GEÇERSİZDİ: MSYS yol çevirisi betiği bulamadı, desen sayımı 0'dı ve kapı 27/27 yeşil kaldı — sessizlik önce SABOTAJI şüpheli kılar (D-402).
+
 ### 🎯 D-585 (D-582 ADIM 4): VIRTIO KÜMESİ GÖÇ ETTİ — gizlilik gerçekten uygulanıyor
 Üç ön koşul (D-581 self T041 · D-583 seçili `sabit` · D-584 mangle hizalaması)
 kapandıktan sonra küme **tek commit'te** göç etti: `drivers/virtio` +
