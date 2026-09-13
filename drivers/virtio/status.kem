@@ -1,6 +1,13 @@
 // VirtIO status state machine: saf KEMGU model, MMIO veya QEMU baglantisi yok.
 
-kullan drivers::virtio::constants;
+kullan drivers::virtio::constants::{
+    VIRTIO_STATUS_ACKNOWLEDGE,
+    VIRTIO_STATUS_DRIVER,
+    VIRTIO_STATUS_DRIVER_OK,
+    VIRTIO_STATUS_FAILED,
+    VIRTIO_STATUS_FEATURES_OK,
+    VIRTIO_STATUS_RESET
+};
 
 sabit VIRTIO_DURUM_BILINMEYEN: tam32 = 90;
 sabit VIRTIO_DURUM_SIFIRLA: tam32 = 91;
@@ -10,7 +17,7 @@ sabit VIRTIO_DURUM_OZELLIK_TAMAM: tam32 = 94;
 sabit VIRTIO_DURUM_SURUCU_TAMAM: tam32 = 95;
 sabit VIRTIO_DURUM_BASARISIZ: tam32 = 96;
 
-işlev virtio_status_ekle(mevcut: tam32, bit: tam32) -> tam32 {
+genel işlev virtio_status_ekle(mevcut: tam32, bit: tam32) -> tam32 {
     ver mevcut | bit;
 }
 
@@ -22,15 +29,15 @@ işlev virtio_status_onayla_degeri() -> tam32 {
     ver virtio_status_ekle(VIRTIO_STATUS_RESET, VIRTIO_STATUS_ACKNOWLEDGE);
 }
 
-işlev virtio_status_surucu_degeri() -> tam32 {
+genel işlev virtio_status_surucu_degeri() -> tam32 {
     ver virtio_status_ekle(virtio_status_onayla_degeri(), VIRTIO_STATUS_DRIVER);
 }
 
-işlev virtio_status_ozellik_tamam_degeri() -> tam32 {
+genel işlev virtio_status_ozellik_tamam_degeri() -> tam32 {
     ver virtio_status_ekle(virtio_status_surucu_degeri(), VIRTIO_STATUS_FEATURES_OK);
 }
 
-işlev virtio_status_surucu_tamam_degeri() -> tam32 {
+genel işlev virtio_status_surucu_tamam_degeri() -> tam32 {
     ver virtio_status_ekle(virtio_status_ozellik_tamam_degeri(), VIRTIO_STATUS_DRIVER_OK);
 }
 
@@ -64,7 +71,7 @@ işlev virtio_status_durum_kodu(status: tam32) -> tam32 {
     ver VIRTIO_DURUM_BILINMEYEN;
 }
 
-işlev virtio_status_gecis_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
+genel işlev virtio_status_gecis_gecerli_mi(mevcut: tam32, bit: tam32) -> mantıksal {
     eğer bit == VIRTIO_STATUS_FAILED {
         ver doğru;
     }

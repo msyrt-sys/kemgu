@@ -1,17 +1,32 @@
 // VirtIO split virtqueue register binding: QueueSel..QueueReady, DMA allocation yok.
 
-kullan drivers::virtio::constants;
-kullan drivers::virtio::virtio_mmio;
-kullan drivers::virtio::virtqueue_layout;
+kullan drivers::virtio::constants::{
+    VIRTIO_MMIO_QUEUE_DESC_HIGH,
+    VIRTIO_MMIO_QUEUE_DESC_LOW,
+    VIRTIO_MMIO_QUEUE_DEVICE_HIGH,
+    VIRTIO_MMIO_QUEUE_DEVICE_LOW,
+    VIRTIO_MMIO_QUEUE_DRIVER_HIGH,
+    VIRTIO_MMIO_QUEUE_DRIVER_LOW,
+    VIRTIO_MMIO_QUEUE_NUM,
+    VIRTIO_MMIO_QUEUE_NUM_MAX,
+    VIRTIO_MMIO_QUEUE_READY,
+    VIRTIO_MMIO_QUEUE_SEL
+};
+kullan drivers::virtio::virtio_mmio::{
+    virtio_mmio_adres
+};
+kullan drivers::virtio::virtqueue_layout::{
+    virtqueue_layout_gecerli_mi
+};
 
 sabit VIRTQUEUE_U32_MASK: tam64 = 4294967295;
 
-çeşit BagHatasi {
+genel çeşit BagHatasi {
     QueueKullanilamaz,
     GecersizBoyut
 }
 
-yapı Virtqueue {
+genel yapı Virtqueue {
     boyut: tam32;
     desc_adres: tam64;
     avail_adres: tam64;
@@ -48,7 +63,7 @@ işlev virtqueue_bagla_layout_gecerli_mi(
 // TODO(codex-next-pr): descriptor/avail/used DMA allocation ve tekkez sahipligi eklenecek.
 
 // MMIO yetkisi queue register baglama boyunca sahiplenilir ve fonksiyon sonunda tek noktada iade edilir.
-işlev virtqueue_bagla(
+genel işlev virtqueue_bagla(
     // MMIO yetkisi QueueSel..QueueReady register erisimleri icin gereklidir.
     y: yetki<MMIO>,
     taban: tam64,

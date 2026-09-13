@@ -1,0 +1,18 @@
+// [D-585] KUME GOCUNUN KAZANCINI KILITLER.
+// Goc ONCESI `drivers/virtio` LEGACY duzlestirme yolundaydi: tum ust duzey
+// adlar gorunur, `genel` gereksiz, T041 HIC uygulanmiyordu (D-520'nin olctugu
+// kacis kapisi — 67 ithalatin 37'si bu yoldaydi). Goc sonrasi gorunur ad
+// kumesi ITHALAT LISTESIYLE KESINDIR ve gizlilik GERCEKTEN uygulaniyor.
+//
+// NEGATIF: `virtqueue_desc_elem_bytes` `genel` DEGIL -> T041.
+// POZITIF: `virtqueue_layout_gecerli_mi` `genel` -> temiz gelmeli.
+//          Pozitif olmasa "her secili ithalati reddet" sabotaji kapidan
+//          GECERDI (D-425).
+kullan drivers::virtio::virtqueue_layout::{
+    virtqueue_layout_gecerli_mi,
+    virtqueue_desc_elem_bytes
+};
+
+işlev main() -> tam32 {
+    ver 42;
+}

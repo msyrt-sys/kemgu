@@ -1,10 +1,39 @@
 // VirtIO MMIO host-mock testi: gercek mmio_oku32/mmio_yaz32 primitive'lerini kullanir.
 
-kullan drivers::virtio::constants;
-kullan drivers::virtio::status;
-kullan drivers::virtio::features;
-kullan drivers::virtio::virtqueue_layout;
-kullan drivers::virtio::virtio_mmio;
+kullan drivers::virtio::constants::{
+    VIRTIO_MMIO_DEVICE_FEATURES,
+    VIRTIO_MMIO_DEVICE_ID,
+    VIRTIO_MMIO_MAGIC_VALUE,
+    VIRTIO_MMIO_QUEUE_NUM_MAX,
+    VIRTIO_MMIO_VERSION,
+    VIRTIO_STATUS_FAILED
+};
+kullan drivers::virtio::status::{
+    virtio_status_ozellik_tamam_degeri,
+    virtio_status_surucu_degeri,
+    virtio_status_surucu_tamam_degeri
+};
+kullan drivers::virtio::features::{
+    VIRTIO_BLK_F_BLK_SIZE
+};
+kullan drivers::virtio::virtio_mmio::{
+    VIRTIO_MMIO_DEVICE_ID_BLOCK,
+    VIRTIO_MMIO_HATA_DEVICE,
+    VIRTIO_MMIO_HATA_FEATURE,
+    VIRTIO_MMIO_HATA_MAGIC,
+    VIRTIO_MMIO_HATA_QUEUE,
+    VIRTIO_MMIO_HATA_VERSION,
+    VIRTIO_MMIO_MAGIC_BEKLENEN,
+    VIRTIO_MMIO_TABAN,
+    VIRTIO_MMIO_VERSION_MODERN,
+    VirtioMmioInitDurum,
+    VirtioMmioProbeSonuc,
+    virtio_mmio_adres,
+    virtio_mmio_features_ok_set_mi,
+    virtio_mmio_probe,
+    virtio_mmio_status_oku,
+    virtio_mmio_transport_init_durum
+};
 
 sabit TEST_MMIO_OKU: tam32 = 1;
 sabit TEST_MMIO_YAZ: tam32 = 2;

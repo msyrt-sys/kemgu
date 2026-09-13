@@ -1,10 +1,53 @@
 // VirtIO-blk init host-mock testi: gercek MMIO primitive'leri ve D1/D3/D4-D5 parcalari kullanilir.
 
-kullan drivers::virtio::constants;
-kullan drivers::virtio::features;
-kullan drivers::virtio::status;
-kullan drivers::virtio::virtio_mmio;
-kullan drivers::virtio::virtio_blk;
+kullan drivers::virtio::constants::{
+    VIRTIO_BLK_CFG_BLK_SIZE,
+    VIRTIO_BLK_CFG_CAPACITY,
+    VIRTIO_BLK_CFG_CAPACITY_HIGH,
+    VIRTIO_BLK_CFG_SEG_MAX,
+    VIRTIO_BLK_CFG_SIZE_MAX,
+    VIRTIO_MMIO_CONFIG_GENERATION,
+    VIRTIO_MMIO_DEVICE_FEATURES,
+    VIRTIO_MMIO_DEVICE_FEATURES_SEL,
+    VIRTIO_MMIO_DEVICE_ID,
+    VIRTIO_MMIO_DRIVER_FEATURES,
+    VIRTIO_MMIO_DRIVER_FEATURES_SEL,
+    VIRTIO_MMIO_MAGIC_VALUE,
+    VIRTIO_MMIO_QUEUE_DESC_HIGH,
+    VIRTIO_MMIO_QUEUE_DESC_LOW,
+    VIRTIO_MMIO_QUEUE_DEVICE_HIGH,
+    VIRTIO_MMIO_QUEUE_DEVICE_LOW,
+    VIRTIO_MMIO_QUEUE_DRIVER_HIGH,
+    VIRTIO_MMIO_QUEUE_DRIVER_LOW,
+    VIRTIO_MMIO_QUEUE_NUM,
+    VIRTIO_MMIO_QUEUE_NUM_MAX,
+    VIRTIO_MMIO_QUEUE_READY,
+    VIRTIO_MMIO_QUEUE_SEL,
+    VIRTIO_MMIO_STATUS,
+    VIRTIO_MMIO_VENDOR_ID,
+    VIRTIO_MMIO_VERSION,
+    VIRTIO_STATUS_FAILED
+};
+kullan drivers::virtio::features::{
+    VIRTIO_BLK_F_BLK_SIZE
+};
+kullan drivers::virtio::status::{
+    virtio_status_surucu_tamam_degeri
+};
+kullan drivers::virtio::virtio_mmio::{
+    VIRTIO_MMIO_DEVICE_ID_BLOCK,
+    VIRTIO_MMIO_MAGIC_BEKLENEN,
+    VIRTIO_MMIO_TABAN,
+    VIRTIO_MMIO_VERSION_MODERN,
+    virtio_mmio_adres,
+    virtio_mmio_status_oku
+};
+kullan drivers::virtio::virtio_blk::{
+    BaslatHatasi,
+    BlkAygit,
+    blk_baslat,
+    blk_baslat_cekirdek
+};
 
 sabit TEST_MMIO_OKU: tam32 = 1;
 sabit TEST_MMIO_YAZ: tam32 = 2;

@@ -1563,6 +1563,64 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🎯 D-585 (D-582 ADIM 4): VIRTIO KÜMESİ GÖÇ ETTİ — gizlilik gerçekten uygulanıyor
+Üç ön koşul (D-581 self T041 · D-583 seçili `sabit` · D-584 mangle hizalaması)
+kapandıktan sonra küme **tek commit'te** göç etti: `drivers/virtio` +
+`tests/drivers/virtio` = **10 dosya, 34 ithalat**, 1 ölü ithalat düştü.
+
+**PROSEDÜR D-583'TE ÖLÇÜLMÜŞTÜ VE UCUZ ÇIKTI — sıfır referans düzenlemesi:**
+seçili import adları **NİTELİKSİZ** getirir, yani gövdeye hiç dokunulmaz.
+Yapılan tek şey: kullanılan adlara `genel` + ithalat listesi.
+**D-520'nin kayıtlı *"~700 referansı nitelendir"* maliyeti böylece nihai
+olarak geçersizdir.**
+
+**🎯 ÖLÇÜLEN KAZANÇ — D-520'nin kaçış kapısı bu kümede KAPANDI:**
+```
+goc ONCESI (legacy duzlestirme) : private uye ithal edilebiliyordu  -> OK 🔴
+goc SONRASI                     : C=T041 . SELF=T041               ->    ✓
+POZITIF: `genel` uye             : ikisinde de TEMIZ
+```
+Görünür ad kümesi artık **ithalat listesiyle kesindir**.
+
+**🔴 YOL ÜSTÜNDE BİR SELF-HOST KUSURU AÇILDI — GEÇİŞLİ İTHALATTA BİÇİM KARARI
+YANLIŞ AYRIŞTIRICIYA SORULUYORDU.** `surucu_diff` göçten sonra **9/16** verdi;
+sayılar eşitti (C=77, KEMGU=77) ama **ad kümeleri** ayrışıyordu: self bazı
+modül üyelerini **mangle etmeden** yayıyordu (`virtqueue_bind`: self 36
+nitelikli ad, C 63).
+**Kök:** `kullan_yeni_bicim_mi(p, yol)` `p`'nin (GİRİŞ dosyasının)
+`si_yol`/`al_yol` kayıtlarına bakıyor; geçişli ithalatta o `kullan` düğümü
+**modülün KENDİ `mp`sindedir** ve giriş dosyası o yolu hiç görmemiştir →
+yüklem yanlış *"legacy"* diyor → modül **sarmalanmıyor**, üyeler global ad
+alanına düz giriyordu. Onarım: biçim kararını **çağıran** verir (`modul_src_bir`
+artık `yeni_bicim` parametresi alır); her çağrı yeri **düğümü OKUYAN**
+ayrıştırıcıyla hesaplar.
+**Bu kusur önceden vardı ve GÖRÜNMEZDİ** — kapılı hiçbir dosyada geçişli
+çok-segmentli yeni-biçim ithalat yoktu (D-356'nın *"korpusta o şekil yok"*
+sınıfının bir kez daha tekrarı). Göç onu korpusa sokunca ortaya çıktı.
+
+**🧹 MUAFİYET 5 → 2 VE BUNU KAPI KENDİSİ BİLDİRDİ** (*"MUAF ama `--check`
+artık EŞLEŞİYOR"*): `virtio_blk` · `virtio_blk_oku` · `virtio_blk_oku_test`.
+Sebep ölçüldü: legacy düzleştirme tüm üst düzey adları görünür kılıyordu ve
+iki uygulama **farklı kabalıkta** muhafazakârdı; yeni biçimde görünürlük
+ithalat listesiyle kesin → ayrışma kalmadı. *Bayat muafiyet zararsız değildir*
+(D-534) — o dosyanın gerçek bir kırılmasını sessizce yutardı.
+
+**Fikstür `tc52_01_virtio_gizlilik.kem`** — negatif (private üyeyi ithal et →
+**T041**) **ve pozitif** (`genel` üye → temiz). Pozitif olmasa *"her seçili
+ithalatı reddet"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**DEPODA KALAN ÇIPLAK ÇOK-SEGMENT `kullan`: 4 ve DÖRDÜ DE KASITLI FİKSTÜR** —
+`test/moduller/ana_legacy_gizlilik.kem` (D-533) + `test/crossfile` ×3 (legacy
+geçişli yükleyiciyi ölçüyorlar). Yani ADIM 5 (düzleştirmeyi SİL) artık yalnız
+*"bu dört fikstürün geleceği"* kararına bağlı — gerçek kod tamamen göç etti.
+
+**Sabotaj S177** (geçişli çağrıda biçimi yine `p`ye sor) → surucu_diff **9/16 rc=2**.
+**Kapılar:** surucu_diff **16/16 (2 muaf, 1 atlandı)** · checker_diff
+**186/186 (0 muaf)** · modul_codegen 26/26 (0 atlandı, 0 muaf) ·
+codegen_diff 171/171 · check_kapisi 276/283 (0 RED) · check_genis 133/133 ·
+yapi_diff 151/151 (22 muaf) · self_driver **TÜM MODLAR + FIXPOINT ✓** ·
+sıfır uyarı 38/0.
+
 ### 🔴✅ D-584: ÇOK-SEGMENTLİ YENİ-BİÇİMDE MANGLE SAPMASI — C tam yol, self son segment
 D-583'ün ölçtüğü **ENGEL 2** kapandı; küme göçünün (D-582 ADIM 4) ön koşulu
 artık yok. Minimal probe ile izole edilmişti:

@@ -72,8 +72,15 @@ fi
 #     T001/T020 → bileşik tip temsilinin çapraz-dosya sınırları.
 # ⚠ `alan_tn`/`fn_ptn` düğüm indeksleri taşınamaz (`-1`) — muhafazakâr tarafa
 #   düşerler, yani tanı KAÇIRIRLAR, sahte tanı ÜRETMEZLER.
-MUAF="virtio_blk virtio_blk_oku virtio_blk_init_test
-virtio_blk_oku_test virtqueue_bind_test"
+# ✓ D-585 (KUME GOCU): virtio kumesi yeni-bicim (secili) ithalata gecti.
+#   Uc muafiyet BAYATLADI ve kapinin kendisi bildirdi ("MUAF ama --check
+#   artik ESLESIYOR"): virtio_blk . virtio_blk_oku . virtio_blk_oku_test.
+#   Sebep olculdu: legacy duzlestirme TUM ust duzey adlari gorunur
+#   kiliyordu ve iki uygulama farkli sekilde muhafazakardi; yeni bicimde
+#   gorunur ad kumesi ITHALAT LISTESIYLE KESINDIR -> ayrisma kalmadi.
+#   5 -> 2. Bayat muafiyet zararsiz DEGILDIR (D-534): o dosyanin gercek
+#   bir kirilmasini sessizce yutar.
+MUAF="virtio_blk_init_test virtqueue_bind_test"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1

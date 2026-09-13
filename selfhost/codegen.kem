@@ -13230,7 +13230,7 @@ işlev kullan_yeni_bicim_mi(p: &değişken Ayr, yol: metin) -> mantıksal {
     }
     ver yanlış;
 }
-işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
+işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin, yeni_bicim: mantıksal) -> metin {
     // Modül ADI EN BAŞTA sabitlenir — `p` üzerinde HİÇBİR mutasyon olmadan önce.
     // Çağıran `modul_src_bir(p, dizi_al(p.a_deg, c), ...)` biçiminde çağırıyor:
     // `yol` `p`'nin KENDİ dizisinden okunuyor ve callee aynı `p`yi büyütüyor
@@ -13284,7 +13284,13 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     // ad alanına girer (C'nin legacy yükleyicisinin davranışı). Sarmal koymak
     // `@lib_islem.uc_kat` üretip çıplak `@iki_kat` çağrısını tanımsız bırakıyordu.
     değişken govde: metin = ic;
-    eğer kullan_yeni_bicim_mi(p, yol) {
+    // [D-585] Bicim kararini CAGIRAN verir — `kullan` dugumunu OKUYAN
+    // ayristiricinin si_yol/al_yol'u belirleyicidir. Gecisli ithalatta o dugum
+    // MODULUN KENDI `mp`sindedir; `p` (giris dosyasi) o yolu hic gormedigi icin
+    // yuklem YANLIS "legacy" diyordu -> modul SARMALANMIYOR, uyeler MANGLE
+    // EDILMEDEN yayiliyordu (olculdu: virtqueue_bind self 36 nitelikli ad,
+    // C 63).
+    eğer yeni_bicim {
         değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " { ");
         govde = metin_birlestir(metin_birlestir(bas, ic), "}");
     }
@@ -13299,7 +13305,8 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     iken ci < cs {
         değişken c: tam32 = dizi_al(mp.cocuk, cb + ci);
         eğer metin_esit(dizi_al(mp.a_ad, c), "KULLAN") {
-            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz));
+            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz,
+                kullan_yeni_bicim_mi(&değişken mp, dizi_al(mp.a_deg, c))));
         }
         ci = ci + 1;
     }
@@ -13319,7 +13326,8 @@ işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin) -> metin {
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "KULLAN") {
-            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin));
+            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin,
+                kullan_yeni_bicim_mi(p, dizi_al(p.a_deg, c))));
         }
         i = i + 1;
     }
