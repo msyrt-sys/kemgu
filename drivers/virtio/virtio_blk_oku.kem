@@ -10,8 +10,14 @@
 // Tampon512={adres} adres-indireksiyonu ile yazılır (zero-copy DMA). Codegen
 // bug'ı C-track'te düzeltilince `&`-imzasına mekanik geri dönülebilir.
 
-kullan drivers::virtio::virtqueue_bind;   // Virtqueue
-kullan drivers::virtio::virtio_blk;       // BlkAygit
+kullan drivers::virtio::virtqueue_bind::{
+    Virtqueue,
+    virtqueue_bagla
+};   // Virtqueue
+kullan drivers::virtio::virtio_blk::{
+    BlkAygit,
+    blk_baslat
+};       // BlkAygit
 
 // VirtIO 1.2 §2.7.5 — split virtqueue descriptor flag'leri
 sabit VIRTQ_DESC_F_NEXT: tam16 = 1;       // zincir devam ediyor (next geçerli)
@@ -51,7 +57,7 @@ sabit BLK_REQ_STATUS_ADRES: tam64 = 1280; // 1 byte status (+pad)
 // host_mock_status sentineli: cihaz tamamlamasını simüle ETME (gerçek HW yolu).
 sabit BLK_HOST_MOCK_TAMAMLAMA_YOK: tam16 = 255;
 
-çeşit IOHatasi {
+genel çeşit IOHatasi {
     AygitHatasi,         // VIRTIO_BLK_S_IOERR — cihaz G/Ç hatası
     Desteklenmiyor,      // VIRTIO_BLK_S_UNSUPP — istek tipi desteklenmiyor
     GecersizSektor,      // sürücü: sektor >= aygit.kapasite_sektor
@@ -60,14 +66,14 @@ sabit BLK_HOST_MOCK_TAMAMLAMA_YOK: tam16 = 255;
 }
 
 // Caller'ın 512B okuma tamponunun mock-fiziksel adresi (zero-copy DMA hedefi).
-yapı Tampon512 {
+genel yapı Tampon512 {
     adres: tam64;
 }
 
 // MMIO yetkisi sektör okuma boyunca sahiplenilir ve fonksiyon sonunda tek
 // noktada iade edilir. host_mock_status: host-mock cihazın yazacağı status
 // baytı (Faz 1 simülasyonu); BLK_HOST_MOCK_TAMAMLAMA_YOK ile tamamlama atlanır.
-işlev blk_oku_cekirdek(
+genel işlev blk_oku_cekirdek(
     // MMIO yetkisi descriptor/avail/used ring ve scratch tampon erişimlerini yetkilendirir.
     y: yetki<MMIO>,
     vq: Virtqueue,
@@ -180,7 +186,7 @@ işlev blk_oku_cekirdek(
 // NOT (Faz 1): host-mock'ta cihaz tamamlamasını başarı (OK) olarak simüle eder.
 // Hata yolları (IOERR/UNSUPP) blk_oku_cekirdek'e host_mock_status verilerek test
 // edilir. Gerçek HW tamamlaması D10 (IRQ) ile gelir.
-işlev blk_oku(
+genel işlev blk_oku(
     // MMIO yetkisi sektör okuma dizisi için caller'dan devralınır ve iade edilir.
     y: yetki<MMIO>,
     vq: Virtqueue,

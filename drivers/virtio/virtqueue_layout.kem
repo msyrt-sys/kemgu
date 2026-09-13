@@ -100,7 +100,7 @@ işlev virtqueue_toplam_bytes_hesapla(queue_size: tam32) -> tam32 {
     ver used_offset + used_bytes;
 }
 
-işlev virtqueue_layout_gecerli_mi(
+genel işlev virtqueue_layout_gecerli_mi(
     queue_num_max: tam32,
     queue_size: tam32,
     desc_adres: tam32,

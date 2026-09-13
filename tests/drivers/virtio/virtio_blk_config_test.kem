@@ -1,8 +1,25 @@
 // VirtIO-blk config-space host-mock testi: capacity/blk_size/generation retry.
 
-kullan drivers::virtio::constants;
-kullan drivers::virtio::virtio_mmio;
-kullan drivers::virtio::virtio_blk_config;
+kullan drivers::virtio::constants::{
+    VIRTIO_BLK_CFG_BLK_SIZE,
+    VIRTIO_BLK_CFG_CAPACITY,
+    VIRTIO_BLK_CFG_CAPACITY_HIGH,
+    VIRTIO_BLK_CFG_SEG_MAX,
+    VIRTIO_BLK_CFG_SIZE_MAX,
+    VIRTIO_MMIO_CONFIG_GENERATION
+};
+kullan drivers::virtio::virtio_mmio::{
+    VIRTIO_MMIO_TABAN,
+    virtio_mmio_adres
+};
+kullan drivers::virtio::virtio_blk_config::{
+    BlkYapilandirma,
+    YapilandirmaHatasi,
+    blk_cfg_adres,
+    blk_cfg_u64_birlestir,
+    blk_yapilandirma_oku,
+    blk_yapilandirma_oku_cekirdek
+};
 
 sabit TEST_MMIO_OKU: tam32 = 1;
 sabit TEST_MMIO_YAZ: tam32 = 2;
