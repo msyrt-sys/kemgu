@@ -1064,11 +1064,12 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 # (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
 # [D-591] bm_a64_yazdir.o (C konsol yazicisi) CIKARILDI: kem_os konsolu SAF-.kem
 # (uart_satir); tek C kullanicisi kdl_zaman.c tanilamasi bu cesitte derlenmez.
-KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o \
-              $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o \
-              $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_zaman_kem.o \
-              $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \
-              $(BUILD)/bm_a64_virtio_net.o
+# [D-592] KALAN DOKUZ C NESNESI DE CIKARILDI — OLCULDU: --gc-sections sonrasi
+# uart/bolge/heap/panik/zaman/mmu/gorev/virtio/virtio_net/mmio'nun HICBIR bolumu
+# imajda kalmiyordu; yalniz start.o ile baglanan cekirdek HAM IKILISI BIREBIR
+# AYNIYDI (33.563.184 bayt, cmp). kem_os = boot .S + SAF-.kem. Bir .kem kodu
+# ileride C sembolune dayanirsa link TANIMSIZ SEMBOL ile kirilir (sessiz degil).
+KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o
 # ZERO-C B3 (D-285): bm_a64_kesme.o (kdl_kesme.c) TAMAMEN ÇIKARILDI — kem_os artık kesme.c'yi
 # hiç linklemez (B1/B2 kdl_istisna_isle/kdl_el0_izolasyon_isle .kem'e taşındı; fault-scratch
 # global'leri boot/start_aarch64.S'te .data-strong, .kem inline-asm ile isim üzerinden erişir).
@@ -1327,7 +1328,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		cp $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
 	fi
 	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -o $(BUILD)/kem_os.elf \
-		$(BUILD)/kem_os_routed.o $(BUILD)/bm_a64_mmio_kem.o $(KEM_OS_A64_OBJS)
+		$(BUILD)/kem_os_routed.o $(KEM_OS_A64_OBJS)
 	@# AH-1: HAM İKİLİ üret ve QEMU'yu bununla boot et (ELF ile DEĞİL).
 	@# İki sebep, ikisi de ölçülmüş:
 	@#  1. Raspberry Pi firmware'i ELF DEĞİL ham `kernel8.img` ister → gerçek
