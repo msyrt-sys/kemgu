@@ -1,0 +1,166 @@
+// KEMGU Stdlib Testi — Geometri (Kesin Tamsayı 2B)
+// =================================
+//
+// Bu dosya `stdlib/geometri.kem` ile birleştirilerek --check edilir.
+// Tüm beklenen değerler elle hesaplanabilir kesin tamsayılar —
+// epsilon/yuvarlama yok. Hepsi skaler/mantıksal döner.
+
+// --- geo_capraz / geo_yon ---
+işlev test_capraz_ccw() -> tam32 {
+    ver geo_capraz(0, 0, 1, 0, 0, 1);             // 1*1 - 0*0 = 1
+}
+işlev test_yon_saat_tersi() -> tam32 {
+    ver geo_yon(0, 0, 1, 0, 1, 1);                // sola dönüş -> 1
+}
+işlev test_yon_saat_yonu() -> tam32 {
+    ver geo_yon(0, 0, 1, 0, 1, 0 - 1);            // sağa dönüş -> -1
+}
+işlev test_yon_dogrusal() -> tam32 {
+    ver geo_yon(0, 0, 1, 1, 2, 2);                // aynı doğru -> 0
+}
+
+// --- geo_nokta_carpim ---
+işlev test_nokta_carpim() -> tam32 {
+    ver geo_nokta_carpim(1, 2, 3, 4);             // 3+8 = 11
+}
+işlev test_nokta_carpim_dik() -> tam32 {
+    ver geo_nokta_carpim(1, 0, 0, 5);             // dik -> 0
+}
+
+// --- mesafeler ---
+işlev test_manhattan() -> tam32 {
+    ver geo_manhattan(1, 2, 4, 6);                // 3+4 = 7
+}
+işlev test_manhattan_negatif() -> tam32 {
+    ver geo_manhattan(0 - 2, 0 - 3, 1, 1);        // 3+4 = 7
+}
+işlev test_uzaklik_kare() -> tam32 {
+    ver geo_uzaklik_kare(0, 0, 3, 4);             // 9+16 = 25
+}
+işlev test_uzaklik_kare_ayni() -> tam32 {
+    ver geo_uzaklik_kare(5, 5, 5, 5);             // 0
+}
+
+// --- geo_dikdortgen_icinde_mi ---
+işlev test_dikdortgen_icinde() -> mantıksal {
+    ver geo_dikdortgen_icinde_mi(2, 3, 0, 0, 5, 5);
+}
+işlev test_dikdortgen_sinirda() -> mantıksal {
+    ver geo_dikdortgen_icinde_mi(0, 3, 0, 0, 5, 5);   // sınır dahil
+}
+işlev test_dikdortgen_disinda() -> mantıksal {
+    ver geo_dikdortgen_icinde_mi(6, 3, 0, 0, 5, 5);
+}
+işlev test_dikdortgen_ters_koseler() -> mantıksal {
+    // köşeler ters sırada verilse de normalize edilir
+    ver geo_dikdortgen_icinde_mi(2, 3, 5, 5, 0, 0);
+}
+
+// --- geo_parca_uzerinde_mi ---
+işlev test_parca_uzerinde() -> mantıksal {
+    ver geo_parca_uzerinde_mi(1, 1, 0, 0, 2, 2);
+}
+işlev test_parca_uzerinde_uc() -> mantıksal {
+    ver geo_parca_uzerinde_mi(0, 0, 0, 0, 2, 2);      // uç dahil
+}
+işlev test_parca_disinda_dogru_uzerinde() -> mantıksal {
+    // aynı doğrultuda ama parçanın ötesinde
+    ver geo_parca_uzerinde_mi(3, 3, 0, 0, 2, 2);
+}
+işlev test_parca_dogrusal_degil() -> mantıksal {
+    ver geo_parca_uzerinde_mi(1, 2, 0, 0, 2, 2);
+}
+
+// --- geo_parcalar_kesisir_mi ---
+işlev test_kesisim_capraz() -> mantıksal {
+    // X biçimi: (0,0)-(2,2) ile (0,2)-(2,0)
+    ver geo_parcalar_kesisir_mi(0, 0, 2, 2, 0, 2, 2, 0);
+}
+işlev test_kesisim_paralel_ayri() -> mantıksal {
+    ver geo_parcalar_kesisir_mi(0, 0, 1, 0, 0, 1, 1, 1);   // yanlış
+}
+işlev test_kesisim_t_degme() -> mantıksal {
+    // T: (1,0) ilk parçanın üzerinde
+    ver geo_parcalar_kesisir_mi(0, 0, 2, 0, 1, 0, 1, 2);
+}
+işlev test_kesisim_dogrusal_ortusme() -> mantıksal {
+    ver geo_parcalar_kesisir_mi(0, 0, 2, 0, 1, 0, 3, 0);   // örtüşür
+}
+işlev test_kesisim_dogrusal_ayri() -> mantıksal {
+    ver geo_parcalar_kesisir_mi(0, 0, 1, 0, 2, 0, 3, 0);   // yanlış
+}
+işlev test_kesisim_ortak_uc() -> mantıksal {
+    ver geo_parcalar_kesisir_mi(0, 0, 1, 1, 1, 1, 2, 0);   // uçta değer
+}
+
+// --- shoelace alan ---
+işlev test_alan_kare() -> tam32 {
+    değişken xs: Dizi<tam32> = [0, 4, 4, 0];
+    değişken ys: Dizi<tam32> = [0, 0, 4, 4];
+    ver geo_alan_iki_kat(xs, ys);                 // 2*16 = 32
+}
+işlev test_alan_ucgen() -> tam32 {
+    değişken xs: Dizi<tam32> = [0, 4, 0];
+    değişken ys: Dizi<tam32> = [0, 0, 3];
+    ver geo_alan_iki_kat(xs, ys);                 // 2*6 = 12
+}
+işlev test_alan_isaretli_ccw() -> tam32 {
+    değişken xs: Dizi<tam32> = [0, 4, 4, 0];
+    değişken ys: Dizi<tam32> = [0, 0, 4, 4];
+    ver geo_alan_iki_kat_isaretli(xs, ys);        // ccw -> +32
+}
+işlev test_alan_isaretli_cw() -> tam32 {
+    değişken xs: Dizi<tam32> = [0, 0, 4, 4];
+    değişken ys: Dizi<tam32> = [0, 4, 4, 0];
+    ver geo_alan_iki_kat_isaretli(xs, ys);        // cw -> -32
+}
+işlev test_alan_az_kose() -> tam32 {
+    değişken xs: Dizi<tam32> = [0, 4];
+    değişken ys: Dizi<tam32> = [0, 0];
+    ver geo_alan_iki_kat(xs, ys);                 // n<3 -> 0
+}
+
+// --- bileşik: yönelim ile işaretli alan tutarlı ---
+işlev test_yon_alan_tutarli() -> mantıksal {
+    // ccw üçgende hem yon=1 hem işaretli alan pozitif
+    değişken xs: Dizi<tam32> = [0, 4, 0];
+    değişken ys: Dizi<tam32> = [0, 0, 3];
+    değişken y: tam32 = geo_yon(0, 0, 4, 0, 0, 3);
+    ver y == 1 ve geo_alan_iki_kat_isaretli(xs, ys) > 0;
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_capraz_ccw() != 1 { ver 1; }
+    eğer test_yon_saat_tersi() != 1 { ver 2; }
+    eğer test_yon_saat_yonu() != 0 - 1 { ver 3; }
+    eğer test_yon_dogrusal() != 0 { ver 4; }
+    eğer test_nokta_carpim() != 11 { ver 5; }
+    eğer test_nokta_carpim_dik() != 0 { ver 6; }
+    eğer test_manhattan() != 7 { ver 7; }
+    eğer test_manhattan_negatif() != 7 { ver 8; }
+    eğer test_uzaklik_kare() != 25 { ver 9; }
+    eğer test_uzaklik_kare_ayni() != 0 { ver 10; }
+    eğer değil test_dikdortgen_icinde() { ver 11; }
+    eğer değil test_dikdortgen_sinirda() { ver 12; }
+    eğer test_dikdortgen_disinda() { ver 13; }
+    eğer değil test_dikdortgen_ters_koseler() { ver 14; }
+    eğer değil test_parca_uzerinde() { ver 15; }
+    eğer değil test_parca_uzerinde_uc() { ver 16; }
+    eğer test_parca_disinda_dogru_uzerinde() { ver 17; }
+    eğer test_parca_dogrusal_degil() { ver 18; }
+    eğer değil test_kesisim_capraz() { ver 19; }
+    eğer test_kesisim_paralel_ayri() { ver 20; }
+    eğer değil test_kesisim_t_degme() { ver 21; }
+    eğer değil test_kesisim_dogrusal_ortusme() { ver 22; }
+    eğer test_kesisim_dogrusal_ayri() { ver 23; }
+    eğer değil test_kesisim_ortak_uc() { ver 24; }
+    eğer test_alan_kare() != 32 { ver 25; }
+    eğer test_alan_ucgen() != 12 { ver 26; }
+    eğer test_alan_isaretli_ccw() != 32 { ver 27; }
+    eğer test_alan_isaretli_cw() != 0 - 32 { ver 28; }
+    eğer test_alan_az_kose() != 0 { ver 29; }
+    eğer değil test_yon_alan_tutarli() { ver 30; }
+    ver 42;
+}

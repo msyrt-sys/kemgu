@@ -1,0 +1,147 @@
+// KEMGU Stdlib Testi — Karma (Polinom Hash)
+// =================================
+//
+// Bu dosya `stdlib/karma.kem` ile birleştirilerek --check edilir.
+// Beklenen değerler ELLE hesaplanabilir: küçük girdilerde modcarp
+// gerçek çarpımla çakışır (sonuç < M) — ör. karma_tam(5) = 6*48271.
+// Hepsi skaler döner.
+
+// --- karma_normalize ---
+işlev test_normalize_pozitif() -> tam32 { ver karma_normalize(42); }        // 42
+işlev test_normalize_sifir() -> tam32 { ver karma_normalize(0); }           // 0
+işlev test_normalize_negatif() -> tam32 {
+    ver karma_normalize(0 - 7);                    // M-7 = 1000000000
+}
+işlev test_normalize_gecerli_aralik() -> mantıksal {
+    değişken h: tam32 = karma_normalize(0 - 123456789);
+    ver h >= 0 ve h < 1000000007;
+}
+
+// --- karma_modcarp ---
+işlev test_modcarp_kucuk() -> tam32 { ver karma_modcarp(3, 5); }            // 15
+işlev test_modcarp_sifir() -> tam32 { ver karma_modcarp(0, 48271); }        // 0
+işlev test_modcarp_bir() -> tam32 { ver karma_modcarp(1, 48271); }          // 48271
+işlev test_modcarp_buyuk() -> tam32 {
+    // (M-1)*2 mod M = M-2 = 1000000005
+    ver karma_modcarp(1000000006, 2);
+}
+işlev test_modcarp_degismeli() -> mantıksal {
+    // a*b = b*a (mod M)
+    ver karma_modcarp(12345, 6789) == karma_modcarp(6789, 12345);
+}
+
+// --- karma_tam ---
+işlev test_tam_sifir() -> tam32 { ver karma_tam(0); }                       // 1*48271 = 48271
+işlev test_tam_bes() -> tam32 { ver karma_tam(5); }                         // 6*48271 = 289626
+işlev test_tam_deterministik() -> mantıksal {
+    ver karma_tam(123456) == karma_tam(123456);
+}
+işlev test_tam_farkli() -> mantıksal {
+    ver karma_tam(5) != karma_tam(6);
+}
+işlev test_tam_negatif_gecerli() -> mantıksal {
+    değişken h: tam32 = karma_tam(0 - 42);
+    ver h >= 0 ve h < 1000000007;
+}
+
+// --- karma_dizi_tam ---
+işlev test_dizi_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver karma_dizi_tam(d);                         // tohum 17
+}
+işlev test_dizi_tek() -> tam32 {
+    değişken d: Dizi<tam32> = [1];
+    ver karma_dizi_tam(d);                         // 17*131+1 = 2228
+}
+işlev test_dizi_iki() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2];
+    ver karma_dizi_tam(d);                         // 2228*131+2 = 291870
+}
+işlev test_dizi_sira_duyarli() -> mantıksal {
+    değişken a: Dizi<tam32> = [1, 2];
+    değişken b: Dizi<tam32> = [2, 1];
+    ver karma_dizi_tam(a) != karma_dizi_tam(b);
+}
+işlev test_dizi_bos_ile_sifir_farkli() -> mantıksal {
+    değişken bos: Dizi<tam32> = [];
+    değişken sifirli: Dizi<tam32> = [0];
+    ver karma_dizi_tam(bos) != karma_dizi_tam(sifirli);   // 17 vs 2227
+}
+işlev test_dizi_deterministik() -> mantıksal {
+    değişken a: Dizi<tam32> = [3, 1, 4, 1, 5];
+    değişken b: Dizi<tam32> = [3, 1, 4, 1, 5];
+    ver karma_dizi_tam(a) == karma_dizi_tam(b);
+}
+işlev test_dizi_negatif_elemanli_gecerli() -> mantıksal {
+    değişken d: Dizi<tam32> = [0 - 5, 7, 0 - 9];
+    değişken h: tam32 = karma_dizi_tam(d);
+    ver h >= 0 ve h < 1000000007;
+}
+
+// --- karma_birlestir ---
+işlev test_birlestir_sifirlar() -> tam32 { ver karma_birlestir(0, 0); }     // 0*131+0+1 = 1
+işlev test_birlestir_kucuk() -> tam32 { ver karma_birlestir(1, 2); }        // 131+2+1 = 134
+işlev test_birlestir_sira_duyarli() -> mantıksal {
+    ver karma_birlestir(1, 2) != karma_birlestir(2, 1);
+}
+işlev test_birlestir_deterministik() -> mantıksal {
+    ver karma_birlestir(999, 888) == karma_birlestir(999, 888);
+}
+
+// --- karma_kova ---
+işlev test_kova() -> tam32 { ver karma_kova(2228, 10); }                    // 8
+işlev test_kova_sinir() -> tam32 { ver karma_kova(42, 1); }                 // 0
+işlev test_kova_gecersiz() -> tam32 { ver karma_kova(5, 0); }               // 0 (koruma)
+işlev test_kova_negatif_karma() -> tam32 {
+    // normalize(-7) = 1000000000 -> % 10 = 0
+    ver karma_kova(0 - 7, 10);
+}
+işlev test_kova_araliginda() -> mantıksal {
+    değişken k: tam32 = karma_kova(karma_tam(987654), 16);
+    ver k >= 0 ve k < 16;
+}
+
+// --- bileşik: dizi karması + birleştirme köprüsü ---
+işlev test_bilesik_tablo_yolu() -> mantıksal {
+    // eslem karma-tablo V2 yolu: anahtar karması -> kova
+    değişken ks: Dizi<tam32> = [10, 20, 30];
+    değişken kova: tam32 = karma_kova(karma_dizi_tam(ks), 8);
+    ver kova >= 0 ve kova < 8;
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_normalize_pozitif() != 42 { ver 1; }
+    eğer test_normalize_sifir() != 0 { ver 2; }
+    eğer test_normalize_negatif() != 1000000000 { ver 3; }
+    eğer değil test_normalize_gecerli_aralik() { ver 4; }
+    eğer test_modcarp_kucuk() != 15 { ver 5; }
+    eğer test_modcarp_sifir() != 0 { ver 6; }
+    eğer test_modcarp_bir() != 48271 { ver 7; }
+    eğer test_modcarp_buyuk() != 1000000005 { ver 8; }
+    eğer değil test_modcarp_degismeli() { ver 9; }
+    eğer test_tam_sifir() != 48271 { ver 10; }
+    eğer test_tam_bes() != 289626 { ver 11; }
+    eğer değil test_tam_deterministik() { ver 12; }
+    eğer değil test_tam_farkli() { ver 13; }
+    eğer değil test_tam_negatif_gecerli() { ver 14; }
+    eğer test_dizi_bos() != 17 { ver 15; }
+    eğer test_dizi_tek() != 2228 { ver 16; }
+    eğer test_dizi_iki() != 291870 { ver 17; }
+    eğer değil test_dizi_sira_duyarli() { ver 18; }
+    eğer değil test_dizi_bos_ile_sifir_farkli() { ver 19; }
+    eğer değil test_dizi_deterministik() { ver 20; }
+    eğer değil test_dizi_negatif_elemanli_gecerli() { ver 21; }
+    eğer test_birlestir_sifirlar() != 1 { ver 22; }
+    eğer test_birlestir_kucuk() != 134 { ver 23; }
+    eğer değil test_birlestir_sira_duyarli() { ver 24; }
+    eğer değil test_birlestir_deterministik() { ver 25; }
+    eğer test_kova() != 8 { ver 26; }
+    eğer test_kova_sinir() != 0 { ver 27; }
+    eğer test_kova_gecersiz() != 0 { ver 28; }
+    eğer test_kova_negatif_karma() != 0 { ver 29; }
+    eğer değil test_kova_araliginda() { ver 30; }
+    eğer değil test_bilesik_tablo_yolu() { ver 31; }
+    ver 42;
+}

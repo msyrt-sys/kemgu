@@ -1,0 +1,140 @@
+// KEMGU Stdlib — Öbek (İkili Min-Öbek / Priority Queue)
+// =======================================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Dizi<T> üzerinde ikili min-öbek: en küçük eleman her zaman kökte
+// (indeks 0). Dizi temsili klasik: i'nin çocukları 2i+1 ve 2i+2,
+// ebeveyni (i-1)/2.
+//
+// Tasarım kuralı:
+//   - Ayrı bir Obek<T> sarmalayıcı tipi YOK: öbek = Dizi<T> + öbek
+//     düzeni değişmezi (yigin/kuyruk ile aynı gerekçe). Değişmez
+//     `obek_gecerli_mi` ile her an denetlenebilir.
+//   - MIN-öbek seçildi (maks değil): "sıradaki en küçük işi ver"
+//     kuyruğu en yaygın kullanım; maks gerekiyorsa değerleri
+//     olumsuzlayarak (0 - x) aynı API kullanılır.
+//   - `obek_cek` ÇEKİLEN DEĞERİ DEĞİL küçültülmüş öbeği döner —
+//     yigin_cek/kuyruk_cikar ile aynı iki-adım sözleşmesi: önce
+//     `obek_tepe` ile oku, sonra `obek_cek` ile küçült. (Çok-değerli
+//     dönüş ve dizi'den eleman silme primitifi yok.)
+//   - `obek_ekle` ve `obek_kur` YERİNDE çalışır ve aynı diziyi döner
+//     (zincirleme); `obek_cek` yeni dizi kurar.
+//   - Ele (sift) işlevleri ÖZYİNELEMELİ — derinlik log(n) ile sınırlı,
+//     yığın taşması riski pratik boyutlarda yok.
+//   - T, `<` destekli olmalı (sayısal tipler). Karşılaştırma işlevi
+//     parametresi (özel öncelik) constraint sistemi oturunca V2.
+//
+// Karmaşıklık: ekle/cek O(log n), kur O(n), tepe O(1) (boyut O(n) —
+// uzunluk primitifi olmadığı için sayım; bkz. yigin.kem).
+
+// --- Sorgular ---
+
+// Eleman sayısı.
+işlev obek_boyut<T>(o: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: o {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Boş mu?
+işlev obek_bos_mu<T>(o: Dizi<T>) -> mantıksal {
+    ver obek_boyut(o) == 0;
+}
+
+// Öbek düzeni geçerli mi — her eleman ebeveyninden küçük değil mi?
+// (Hata ayıklama + test değişmezi; normal akışta çağırmak gerekmez.)
+işlev obek_gecerli_mi<T>(o: Dizi<T>) -> mantıksal {
+    değişken n: tam32 = obek_boyut(o);
+    değişken i: tam32 = 1;
+    iken i < n {
+        değişken ebeveyn: tam32 = (i - 1) / 2;
+        eğer o[i] < o[ebeveyn] { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// --- Erişim ---
+
+// En küçük eleman (çıkarmadan oku). Boş öbekte hiç.
+işlev obek_tepe<T>(o: Dizi<T>) -> seçimlik<T> {
+    eğer obek_bos_mu(o) { ver hiç; }
+    ver değer(o[0]);
+}
+
+// --- Ele (sift) yardımcıları ---
+
+// (İç yardımcı) Yukarı ele — i'deki elemanı ebeveyninden küçük
+// olduğu sürece yukarı taşı. Özyinelemeli, O(log n).
+işlev obek_yukari_ele<T>(o: Dizi<T>, i: tam32) -> Dizi<T> {
+    eğer i <= 0 { ver o; }
+    değişken ebeveyn: tam32 = (i - 1) / 2;
+    eğer o[ebeveyn] <= o[i] { ver o; }
+    değişken t: T = o[i];
+    o[i] = o[ebeveyn];
+    o[ebeveyn] = t;
+    ver obek_yukari_ele(o, ebeveyn);
+}
+
+// (İç yardımcı) Aşağı ele — i'deki elemanı çocuklarının en küçüğünden
+// büyük olduğu sürece aşağı taşı. Özyinelemeli, O(log n).
+işlev obek_asagi_ele<T>(o: Dizi<T>, i: tam32) -> Dizi<T> {
+    değişken n: tam32 = obek_boyut(o);
+    değişken sol: tam32 = 2 * i + 1;
+    değişken sag: tam32 = 2 * i + 2;
+    değişken kucuk: tam32 = i;
+    eğer sol < n {
+        eğer o[sol] < o[kucuk] { kucuk = sol; }
+    }
+    eğer sag < n {
+        eğer o[sag] < o[kucuk] { kucuk = sag; }
+    }
+    eğer kucuk == i { ver o; }
+    değişken t: T = o[i];
+    o[i] = o[kucuk];
+    o[kucuk] = t;
+    ver obek_asagi_ele(o, kucuk);
+}
+
+// --- Dönüşümler ---
+
+// Ekle — elemanı öbeğe kat, düzeni koru. Yerinde, aynı diziyi döner.
+işlev obek_ekle<T>(o: Dizi<T>, x: T) -> Dizi<T> {
+    dizi_ekle(o, x);
+    ver obek_yukari_ele(o, obek_boyut(o) - 1);
+}
+
+// Kur (heapify) — rastgele sıralı diziyi yerinde min-öbeğe çevir.
+// Alttan üste aşağı-ele: O(n) (tek tek ekle O(n log n) olurdu).
+işlev obek_kur<T>(xs: Dizi<T>) -> Dizi<T> {
+    değişken n: tam32 = obek_boyut(xs);
+    değişken o: Dizi<T> = xs;
+    değişken i: tam32 = n / 2 - 1;
+    iken i >= 0 {
+        o = obek_asagi_ele(o, i);
+        i = i - 1;
+    }
+    ver o;
+}
+
+// Çek — en küçük eleman ATILMIŞ yeni öbeği döner. Çekilen değer
+// gerekiyorsa önce obek_tepe ile oku. Boş/tek elemanlıda boş döner.
+// Klasik yol: son eleman köke taşınır, aşağı elenir.
+işlev obek_cek<T>(o: Dizi<T>) -> Dizi<T> {
+    değişken n: tam32 = obek_boyut(o);
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    eğer n <= 1 { ver sonuc; }
+    dizi_ekle(sonuc, o[n - 1]);
+    değişken i: tam32 = 1;
+    iken i < n - 1 {
+        dizi_ekle(sonuc, o[i]);
+        i = i + 1;
+    }
+    ver obek_asagi_ele(sonuc, 0);
+}
+
+// AÇIK SORU: özel öncelik için karşılaştırma işlevi parametreli
+// (islev(T, T) -> mantıksal) sürüm, generic callback + `<` gerektiren
+// tiplerin ayrışması netleşince eklenebilir.

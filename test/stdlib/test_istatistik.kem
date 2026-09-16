@@ -1,0 +1,219 @@
+// KEMGU Stdlib Testi — İstatistik
+// =================================
+//
+// Bu dosya `stdlib/istatistik.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+// seçimlik<tam32> dönüşler eşleş ile skalere ayrıştırılır.
+
+// --- ist_toplam / ist_ortalama ---
+işlev test_toplam() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 12];
+    ver ist_toplam(d);                            // 42
+}
+
+işlev test_ortalama() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    eşleş ist_ortalama(d) {
+        değer(v) => { ver v; }                    // 20
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ortalama_kirpilma() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2];
+    eşleş ist_ortalama(d) {
+        değer(v) => { ver v; }                    // 3/2 -> 1 (kırpılır)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_ortalama_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş ist_ortalama(d) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- ist_medyan ---
+işlev test_medyan_tek_boyut() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 1, 3];
+    eşleş ist_medyan(d) {
+        değer(v) => { ver v; }                    // sıralı [1,3,5] -> 3
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_medyan_cift_boyut() -> tam32 {
+    değişken d: Dizi<tam32> = [4, 1, 3, 2];
+    eşleş ist_medyan(d) {
+        değer(v) => { ver v; }                    // [1,2,3,4] -> 2+(3-2)/2 = 2
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_medyan_cift_tam() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20];
+    eşleş ist_medyan(d) {
+        değer(v) => { ver v; }                    // 15
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_medyan_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş ist_medyan(d) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// Medyan girdiyi BOZMAZ (kopya-sıralama sözleşmesi).
+işlev test_medyan_girdi_korunur() -> tam32 {
+    değişken d: Dizi<tam32> = [5, 1, 3];
+    değişken m: seçimlik<tam32> = ist_medyan(d);
+    ver d[0];                                     // hâlâ 5
+}
+
+// --- ist_aralik ---
+işlev test_aralik() -> tam32 {
+    değişken d: Dizi<tam32> = [3, 9, 5];
+    eşleş ist_aralik(d) {
+        değer(v) => { ver v; }                    // 9-3 = 6
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_aralik_tek_eleman() -> tam32 {
+    değişken d: Dizi<tam32> = [7];
+    eşleş ist_aralik(d) {
+        değer(v) => { ver v; }                    // 0
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_aralik_negatifli() -> tam32 {
+    değişken d: Dizi<tam32> = [0 - 4, 2, 5];
+    eşleş ist_aralik(d) {
+        değer(v) => { ver v; }                    // 5-(-4) = 9
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- ist_varyans / ist_std_sapma ---
+işlev test_varyans_kesin() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 4, 4, 4, 5, 5, 7, 9];
+    eşleş ist_varyans(d) {
+        değer(v) => { ver v; }                    // klasik örnek: 4
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_std_sapma_kesin() -> tam32 {
+    değişken d: Dizi<tam32> = [2, 4, 4, 4, 5, 5, 7, 9];
+    eşleş ist_std_sapma(d) {
+        değer(v) => { ver v; }                    // 2
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_varyans_tek_eleman() -> tam32 {
+    değişken d: Dizi<tam32> = [7];
+    eşleş ist_varyans(d) {
+        değer(v) => { ver v; }                    // 0
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_varyans_kirpilmis() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    eşleş ist_varyans(d) {
+        değer(v) => { ver v; }                    // ort 10/4->2; 1+0+1+4=6; 6/4 -> 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_std_sapma_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş ist_std_sapma(d) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- ist_en_sik ---
+işlev test_en_sik() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 2, 3];
+    eşleş ist_en_sik(d) {
+        değer(v) => { ver v; }                    // 2
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_en_sik_beraberlik() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 1, 2];
+    eşleş ist_en_sik(d) {
+        değer(v) => { ver v; }                    // ilk görülen: 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_en_sik_bos() -> mantıksal {
+    değişken d: Dizi<tam32> = [];
+    eşleş ist_en_sik(d) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+// --- ist_kok_tam (yardımcı ama sözleşmesi belgeli) ---
+işlev test_kok_144() -> tam32 { ver ist_kok_tam(144); }   // 12
+işlev test_kok_2() -> tam32 { ver ist_kok_tam(2); }       // 1 (kırpılır)
+işlev test_kok_0() -> tam32 { ver ist_kok_tam(0); }       // 0
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_toplam() != 42 { ver 1; }
+    eğer test_ortalama() != 20 { ver 2; }
+    eğer test_ortalama_kirpilma() != 1 { ver 3; }
+    eğer değil test_ortalama_bos() { ver 4; }
+    eğer test_medyan_tek_boyut() != 3 { ver 5; }
+    eğer test_medyan_cift_boyut() != 2 { ver 6; }
+    eğer test_medyan_cift_tam() != 15 { ver 7; }
+    eğer değil test_medyan_bos() { ver 8; }
+    eğer test_medyan_girdi_korunur() != 5 { ver 9; }
+    eğer test_aralik() != 6 { ver 10; }
+    eğer test_aralik_tek_eleman() != 0 { ver 11; }
+    eğer test_aralik_negatifli() != 9 { ver 12; }
+    eğer test_varyans_kesin() != 4 { ver 13; }
+    eğer test_std_sapma_kesin() != 2 { ver 14; }
+    eğer test_varyans_tek_eleman() != 0 { ver 15; }
+    eğer test_varyans_kirpilmis() != 1 { ver 16; }
+    eğer değil test_std_sapma_bos() { ver 17; }
+    eğer test_en_sik() != 2 { ver 18; }
+    eğer test_en_sik_beraberlik() != 1 { ver 19; }
+    eğer değil test_en_sik_bos() { ver 20; }
+    eğer test_kok_144() != 12 { ver 21; }
+    eğer test_kok_2() != 1 { ver 22; }
+    eğer test_kok_0() != 0 { ver 23; }
+    ver 42;
+}

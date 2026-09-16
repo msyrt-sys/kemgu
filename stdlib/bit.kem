@@ -1,0 +1,152 @@
+// KEMGU Stdlib — Bit İşlemleri
+// =============================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// tam32 üzerinde bit sorgulama/kurma/sayma ve döndürme (rotate).
+//
+// Tasarım kuralı:
+//   - TAMAMEN ARİTMETİK: bölme (/2), kalan (%2) ve çarpma (*2) ile.
+//     Genel tamsayılar için bit kaydırma/maske operatörleri mevcut
+//     stdlib korpusunda kullanılmıyor (yalnız kripto modülünün
+//     sabitsüre tipleri); bu modül dile bağımlılığı en aza indirir.
+//   - ALAN: x >= 0 ve bit indeksi 0..30. İşaret bitine (bit 31)
+//     aritmetikle güvenli erişilemez (2^31 tam32'de taşar); alan dışı
+//     çağrılar çökmek yerine NÖTR sonuç döner (dilin çökmezlik
+//     ilkesi): sorgular yanlış, dönüştürücüler girdiyi aynen verir.
+//   - Döndürme işlevleri AÇIK genişlik parametresi alır: C'de
+//     `x << 32` tanımsız davranıştır ve sözcük genişliği örtüktür;
+//     burada genişlik çağıranın elinde ve denetimlidir (1..30).
+
+// --- Yardımcı ---
+
+// (İç yardımcı) 2^n — n 0..30 aralığında; aralık dışında 0 döner.
+işlev bit_ikinin_ussu(n: tam32) -> tam32 {
+    eğer n < 0 { ver 0; }
+    eğer n > 30 { ver 0; }
+    değişken p: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < n {
+        p = p * 2;
+        i = i + 1;
+    }
+    ver p;
+}
+
+// --- Tek bit sorgulama / değiştirme ---
+
+// Bit al — i. bit 1 mi? Alan dışında (x < 0 veya i 0..30 dışı) yanlış.
+işlev bit_al(x: tam32, i: tam32) -> mantıksal {
+    eğer x < 0 { ver yanlış; }
+    eğer i < 0 { ver yanlış; }
+    eğer i > 30 { ver yanlış; }
+    ver (x / bit_ikinin_ussu(i)) % 2 == 1;
+}
+
+// Bit kur — i. biti 1 yap. Zaten 1 ise değişmez (idempotent).
+işlev bit_kur(x: tam32, i: tam32) -> tam32 {
+    eğer x < 0 { ver x; }
+    eğer i < 0 { ver x; }
+    eğer i > 30 { ver x; }
+    eğer bit_al(x, i) { ver x; }
+    ver x + bit_ikinin_ussu(i);
+}
+
+// Bit temizle — i. biti 0 yap. Zaten 0 ise değişmez (idempotent).
+işlev bit_temizle(x: tam32, i: tam32) -> tam32 {
+    eğer x < 0 { ver x; }
+    eğer i < 0 { ver x; }
+    eğer i > 30 { ver x; }
+    eğer bit_al(x, i) { ver x - bit_ikinin_ussu(i); }
+    ver x;
+}
+
+// Bit çevir — i. biti tersle (0 -> 1, 1 -> 0).
+işlev bit_cevir(x: tam32, i: tam32) -> tam32 {
+    eğer x < 0 { ver x; }
+    eğer i < 0 { ver x; }
+    eğer i > 30 { ver x; }
+    eğer bit_al(x, i) { ver x - bit_ikinin_ussu(i); }
+    ver x + bit_ikinin_ussu(i);
+}
+
+// --- Sayma ---
+
+// Bit say — 1 olan bitlerin sayısı (popcount). Alan dışında (x < 0)
+// -1 döner (nötr 0, "hiç bit yok" ile karışırdı — açık işaret).
+işlev bit_say(x: tam32) -> tam32 {
+    eğer x < 0 { ver 0 - 1; }
+    değişken kalan: tam32 = x;
+    değişken sayi: tam32 = 0;
+    iken kalan > 0 {
+        sayi = sayi + kalan % 2;
+        kalan = kalan / 2;
+    }
+    ver sayi;
+}
+
+// Önde sıfır — 32-bit sözcükte baştaki (en anlamlı uçtaki) sıfır
+// sayısı. 0 için 32; negatifte işaret biti 1 olduğundan 0.
+işlev onde_sifir(x: tam32) -> tam32 {
+    eğer x < 0 { ver 0; }
+    eğer x == 0 { ver 32; }
+    değişken kalan: tam32 = x;
+    değişken genislik: tam32 = 0;
+    iken kalan > 0 {
+        kalan = kalan / 2;
+        genislik = genislik + 1;
+    }
+    ver 32 - genislik;
+}
+
+// --- Sorgular ---
+
+// Güç iki mi — x, 2'nin tam kuvveti mi (1, 2, 4, 8, ...)? 0 ve
+// negatifler için yanlış.
+işlev guc_iki_mi(x: tam32) -> mantıksal {
+    eğer x <= 0 { ver yanlış; }
+    değişken kalan: tam32 = x;
+    iken kalan % 2 == 0 {
+        kalan = kalan / 2;
+    }
+    ver kalan == 1;
+}
+
+// --- Döndürme (rotate) ---
+
+// Sola döndür — genislik-bitlik sözcükte kac konum sola çevrimli
+// kaydır (taşan üst bitler alttan girer). Sözleşme: 1 <= genislik <= 30,
+// 0 <= x < 2^genislik, kac >= 0 (genişliğe göre mod alınır). Sözleşme
+// dışı çağrı x'i aynen döner.
+işlev sola_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
+    eğer genislik < 1 { ver x; }
+    eğer genislik > 30 { ver x; }
+    eğer kac < 0 { ver x; }
+    eğer x < 0 { ver x; }
+    eğer x >= bit_ikinin_ussu(genislik) { ver x; }
+    değişken k: tam32 = kac % genislik;
+    eğer k == 0 { ver x; }
+    değişken bolen: tam32 = bit_ikinin_ussu(genislik - k);
+    değişken ust: tam32 = x / bolen;
+    değişken alt: tam32 = x % bolen;
+    ver alt * bit_ikinin_ussu(k) + ust;
+}
+
+// Sağa döndür — genislik-bitlik sözcükte kac konum sağa çevrimli
+// kaydır (taşan alt bitler üstten girer). Sözleşme sola_dondur ile aynı.
+işlev saga_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
+    eğer genislik < 1 { ver x; }
+    eğer genislik > 30 { ver x; }
+    eğer kac < 0 { ver x; }
+    eğer x < 0 { ver x; }
+    eğer x >= bit_ikinin_ussu(genislik) { ver x; }
+    değişken k: tam32 = kac % genislik;
+    eğer k == 0 { ver x; }
+    değişken bolen: tam32 = bit_ikinin_ussu(k);
+    değişken alt: tam32 = x / bolen;
+    değişken ust: tam32 = x % bolen;
+    ver ust * bit_ikinin_ussu(genislik - k) + alt;
+}
+
+// AÇIK SORU: genel tamsayılar için `<<`/`>>` kaydırma ve `&`/`|`/`^`
+// maske operatörleri dile açılırsa bu modül aritmetik yerine onları
+// kullanmalı (davranış aynı kalır, alan 0..30 kısıtı genişleyebilir).

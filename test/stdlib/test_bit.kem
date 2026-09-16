@@ -1,0 +1,129 @@
+// KEMGU Stdlib Testi — Bit İşlemleri
+// =================================
+//
+// Bu dosya `stdlib/bit.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+// Beklenen değerler yorumlarda; hepsi skaler döner.
+
+// --- bit_al ---
+işlev test_bit_al_0() -> mantıksal { ver bit_al(5, 0); }        // 101 -> doğru
+işlev test_bit_al_1() -> mantıksal { ver bit_al(5, 1); }        // 101 -> yanlış
+işlev test_bit_al_2() -> mantıksal { ver bit_al(5, 2); }        // 101 -> doğru
+işlev test_bit_al_negatif() -> mantıksal { ver bit_al(0 - 5, 2); }   // alan dışı -> yanlış
+işlev test_bit_al_indeks_disi() -> mantıksal { ver bit_al(5, 31); }  // alan dışı -> yanlış
+
+// --- bit_kur ---
+işlev test_bit_kur() -> tam32 { ver bit_kur(4, 0); }            // 100 -> 101 = 5
+işlev test_bit_kur_idempotent() -> tam32 { ver bit_kur(5, 0); } // zaten 1 -> 5
+işlev test_bit_kur_sifirdan() -> tam32 { ver bit_kur(0, 4); }   // 2^4 = 16
+işlev test_bit_kur_ust_sinir() -> tam32 { ver bit_kur(0, 30); } // 2^30 = 1073741824
+
+// --- bit_temizle ---
+işlev test_bit_temizle() -> tam32 { ver bit_temizle(5, 0); }    // 101 -> 100 = 4
+işlev test_bit_temizle_idempotent() -> tam32 { ver bit_temizle(4, 0); }  // zaten 0 -> 4
+işlev test_bit_temizle_hepsi() -> tam32 { ver bit_temizle(16, 4); }      // 0
+
+// --- bit_cevir ---
+işlev test_bit_cevir_bir() -> tam32 { ver bit_cevir(5, 0); }    // 101 -> 100 = 4
+işlev test_bit_cevir_sifir() -> tam32 { ver bit_cevir(4, 0); }  // 100 -> 101 = 5
+işlev test_bit_cevir_cift() -> tam32 {
+    ver bit_cevir(bit_cevir(5, 1), 1);                          // iki çevirme = kimlik: 5
+}
+
+// --- bit_say ---
+işlev test_bit_say_sifir() -> tam32 { ver bit_say(0); }         // 0
+işlev test_bit_say_7() -> tam32 { ver bit_say(7); }             // 111 -> 3
+işlev test_bit_say_255() -> tam32 { ver bit_say(255); }         // 8
+işlev test_bit_say_1024() -> tam32 { ver bit_say(1024); }       // 1
+işlev test_bit_say_negatif() -> tam32 { ver bit_say(0 - 5); }   // alan dışı -> -1
+
+// --- onde_sifir ---
+işlev test_onde_sifir_0() -> tam32 { ver onde_sifir(0); }       // 32
+işlev test_onde_sifir_1() -> tam32 { ver onde_sifir(1); }       // 31
+işlev test_onde_sifir_1024() -> tam32 { ver onde_sifir(1024); } // 2^10, 11 bit -> 21
+işlev test_onde_sifir_negatif() -> tam32 { ver onde_sifir(0 - 1); }  // işaret biti 1 -> 0
+
+// --- guc_iki_mi ---
+işlev test_guc_iki_1() -> mantıksal { ver guc_iki_mi(1); }      // 2^0 -> doğru
+işlev test_guc_iki_2() -> mantıksal { ver guc_iki_mi(2); }      // doğru
+işlev test_guc_iki_3() -> mantıksal { ver guc_iki_mi(3); }      // yanlış
+işlev test_guc_iki_0() -> mantıksal { ver guc_iki_mi(0); }      // yanlış
+işlev test_guc_iki_1024() -> mantıksal { ver guc_iki_mi(1024); }     // doğru
+işlev test_guc_iki_negatif() -> mantıksal { ver guc_iki_mi(0 - 4); } // yanlış
+
+// --- sola_dondur (8-bit sözcük) ---
+işlev test_sola_dondur_basit() -> tam32 { ver sola_dondur(1, 1, 8); }    // 2
+işlev test_sola_dondur_tasma() -> tam32 { ver sola_dondur(128, 1, 8); }  // üst bit alta: 1
+işlev test_sola_dondur_karma() -> tam32 { ver sola_dondur(129, 1, 8); }  // 10000001 -> 00000011 = 3
+işlev test_sola_dondur_sifir_kac() -> tam32 { ver sola_dondur(5, 0, 8); }    // 5
+işlev test_sola_dondur_tam_tur() -> tam32 { ver sola_dondur(1, 8, 8); }      // 1
+işlev test_sola_dondur_mod() -> tam32 { ver sola_dondur(1, 9, 8); }          // 9 % 8 = 1 -> 2
+
+// --- saga_dondur (8-bit sözcük) ---
+işlev test_saga_dondur_basit() -> tam32 { ver saga_dondur(2, 1, 8); }    // 1
+işlev test_saga_dondur_tasma() -> tam32 { ver saga_dondur(1, 1, 8); }    // alt bit üste: 128
+işlev test_saga_dondur_karma() -> tam32 { ver saga_dondur(3, 1, 8); }    // 00000011 -> 10000001 = 129
+işlev test_saga_dondur_tam_tur() -> tam32 { ver saga_dondur(1, 8, 8); }  // 1
+
+// --- döndürme ters yönler birbirini götürür ---
+işlev test_dondur_kimlik() -> tam32 {
+    ver saga_dondur(sola_dondur(37, 3, 8), 3, 8);               // 37
+}
+
+// --- bileşik kullanım ---
+işlev test_bilesik_guc() -> mantıksal {
+    ver guc_iki_mi(bit_kur(0, 10));                             // 2^10 -> doğru
+}
+
+işlev test_bilesik_say() -> tam32 {
+    ver bit_say(bit_cevir(bit_cevir(0, 3), 5));                 // iki bit kuruldu -> 2
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer değil test_bit_al_0() { ver 1; }
+    eğer test_bit_al_1() { ver 2; }
+    eğer değil test_bit_al_2() { ver 3; }
+    eğer test_bit_al_negatif() { ver 4; }
+    eğer test_bit_al_indeks_disi() { ver 5; }
+    eğer test_bit_kur() != 5 { ver 6; }
+    eğer test_bit_kur_idempotent() != 5 { ver 7; }
+    eğer test_bit_kur_sifirdan() != 16 { ver 8; }
+    eğer test_bit_kur_ust_sinir() != 1073741824 { ver 9; }
+    eğer test_bit_temizle() != 4 { ver 10; }
+    eğer test_bit_temizle_idempotent() != 4 { ver 11; }
+    eğer test_bit_temizle_hepsi() != 0 { ver 12; }
+    eğer test_bit_cevir_bir() != 4 { ver 13; }
+    eğer test_bit_cevir_sifir() != 5 { ver 14; }
+    eğer test_bit_cevir_cift() != 5 { ver 15; }
+    eğer test_bit_say_sifir() != 0 { ver 16; }
+    eğer test_bit_say_7() != 3 { ver 17; }
+    eğer test_bit_say_255() != 8 { ver 18; }
+    eğer test_bit_say_1024() != 1 { ver 19; }
+    eğer test_bit_say_negatif() != 0 - 1 { ver 20; }
+    eğer test_onde_sifir_0() != 32 { ver 21; }
+    eğer test_onde_sifir_1() != 31 { ver 22; }
+    eğer test_onde_sifir_1024() != 21 { ver 23; }
+    eğer test_onde_sifir_negatif() != 0 { ver 24; }
+    eğer değil test_guc_iki_1() { ver 25; }
+    eğer değil test_guc_iki_2() { ver 26; }
+    eğer test_guc_iki_3() { ver 27; }
+    eğer test_guc_iki_0() { ver 28; }
+    eğer değil test_guc_iki_1024() { ver 29; }
+    eğer test_guc_iki_negatif() { ver 30; }
+    eğer test_sola_dondur_basit() != 2 { ver 31; }
+    eğer test_sola_dondur_tasma() != 1 { ver 32; }
+    eğer test_sola_dondur_karma() != 3 { ver 33; }
+    eğer test_sola_dondur_sifir_kac() != 5 { ver 34; }
+    eğer test_sola_dondur_tam_tur() != 1 { ver 35; }
+    eğer test_sola_dondur_mod() != 2 { ver 36; }
+    eğer test_saga_dondur_basit() != 1 { ver 37; }
+    eğer test_saga_dondur_tasma() != 128 { ver 38; }
+    eğer test_saga_dondur_karma() != 129 { ver 39; }
+    eğer test_saga_dondur_tam_tur() != 1 { ver 40; }
+    eğer test_dondur_kimlik() != 37 { ver 41; }
+    eğer değil test_bilesik_guc() { ver 43; }
+    eğer test_bilesik_say() != 2 { ver 44; }
+    ver 42;
+}

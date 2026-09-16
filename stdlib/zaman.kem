@@ -1,0 +1,113 @@
+// KEMGU Stdlib — Zaman (Takvim Aritmetiği)
+// =========================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok — SAAT OKUMAZ,
+// yalnız takvim HESABI yapar (şimdiki zaman runtime işi, ileride
+// dosya.kem ailesine).
+//
+// Tasarım kuralı:
+//   - Gün numarası Hinnant `days_from_civil` algoritması: tablosuz,
+//     döngüsüz, O(1) tamsayı aritmetiği. Epoch 1970-01-01 = 0
+//     (Unix uyumu; negatif değerler epoch öncesi).
+//   - ALAN: yil >= 1 (proleptik Gregoryen, MÖ yok). Sebep: KEMGU `/`
+//     ve `%` sıfıra-doğru kırpar (C gibi), algoritmanın negatif yıl
+//     dalı taban-bölme (floor) ister — alan kısıtı bu tuzağı tümden
+//     kaldırır (yil>=1 iken tüm ara değerler negatif olmaz).
+//   - Haftanın günü 0=Pazartesi .. 6=Pazar (ISO-8601 gibi hafta
+//     Pazartesi başlar — Türkçe takvim geleneğiyle uyumlu).
+//   - Geçersiz girdide çökme yok: doğrulama `tarih_gecerli_mi`nin
+//     işi; hesap işlevleri geçerli tarih SÖZLEŞMESİYLE çalışır
+//     (geçersizde toplam-tanımlı ama anlamsız değer dönebilir).
+//
+// Doğruluk çapaları (testte kilitli): 1970-01-01=0/Perşembe,
+// 2000-03-01=11017 (Hinnant makalesindeki değer), 2000-01-01
+// Cumartesi, 2024-01-01 Pazartesi.
+
+// --- Yıl / ay sorguları ---
+
+// Artık yıl mı (Gregoryen: 4'e bölünen, ama 100'e bölünüp 400'e
+// bölünmeyenler hariç).
+işlev artik_yil_mi(yil: tam32) -> mantıksal {
+    eğer yil % 400 == 0 { ver doğru; }
+    eğer yil % 100 == 0 { ver yanlış; }
+    ver yil % 4 == 0;
+}
+
+// Yılın gün sayısı — 366 / 365.
+işlev yil_gun_sayisi(yil: tam32) -> tam32 {
+    eğer artik_yil_mi(yil) { ver 366; }
+    ver 365;
+}
+
+// Ayın gün sayısı (ay 1..12; şubat artık yıla bakar). Geçersiz ayda 0.
+işlev ay_gun_sayisi(yil: tam32, ay: tam32) -> tam32 {
+    eğer ay < 1 { ver 0; }
+    eğer ay > 12 { ver 0; }
+    eğer ay == 2 {
+        eğer artik_yil_mi(yil) { ver 29; }
+        ver 28;
+    }
+    eğer ay == 4 veya ay == 6 veya ay == 9 veya ay == 11 { ver 30; }
+    ver 31;
+}
+
+// --- Doğrulama ---
+
+// Tarih geçerli mi — yil >= 1, ay 1..12, gun 1..ay_gun_sayisi.
+işlev tarih_gecerli_mi(yil: tam32, ay: tam32, gun: tam32) -> mantıksal {
+    eğer yil < 1 { ver yanlış; }
+    eğer ay < 1 veya ay > 12 { ver yanlış; }
+    eğer gun < 1 { ver yanlış; }
+    ver gun <= ay_gun_sayisi(yil, ay);
+}
+
+// --- Gün numarası (epoch: 1970-01-01 = 0) ---
+
+// Gün numarası — 1970-01-01'den bu yana geçen gün (öncesi negatif).
+// Hinnant days_from_civil; alan yil >= 1 (bkz. başlık).
+işlev gun_numarasi(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
+    değişken y: tam32 = yil;
+    eğer ay <= 2 { y = y - 1; }
+    değişken era: tam32 = y / 400;
+    değişken yoe: tam32 = y - era * 400;
+    değişken ay_kaydirilmis: tam32 = 0;
+    eğer ay > 2 {
+        ay_kaydirilmis = ay - 3;
+    } değilse {
+        ay_kaydirilmis = ay + 9;
+    }
+    değişken yilin_gunu_mart: tam32 = (153 * ay_kaydirilmis + 2) / 5 + gun - 1;
+    değişken eranin_gunu: tam32 = yoe * 365 + yoe / 4 - yoe / 100 + yilin_gunu_mart;
+    ver era * 146097 + eranin_gunu - 719468;
+}
+
+// İki tarih arasındaki gün farkı (ikinci - birinci; ileri pozitif).
+işlev gun_farki(yil1: tam32, ay1: tam32, gun1: tam32,
+                yil2: tam32, ay2: tam32, gun2: tam32) -> tam32 {
+    ver gun_numarasi(yil2, ay2, gun2) - gun_numarasi(yil1, ay1, gun1);
+}
+
+// --- Türetilmiş sorgular ---
+
+// Haftanın günü — 0=Pazartesi .. 6=Pazar. Epoch (1970-01-01) Perşembe
+// olduğu için +3; iç içe % epoch-öncesi (negatif gün numarası) için.
+işlev haftanin_gunu(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
+    değişken gn: tam32 = gun_numarasi(yil, ay, gun);
+    ver ((gn + 3) % 7 + 7) % 7;
+}
+
+// Yılın günü — 1 Ocak = 1 .. 365/366.
+işlev yilin_gunu(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
+    değişken toplam: tam32 = gun;
+    değişken a: tam32 = 1;
+    iken a < ay {
+        toplam = toplam + ay_gun_sayisi(yil, a);
+        a = a + 1;
+    }
+    ver toplam;
+}
+
+// AÇIK SORU: ters dönüşüm (gün numarası -> yıl/ay/gün üçlüsü) çok-değerli
+// dönüş ister; yapı-dönüş codegen'i bu yol için doğrulanınca
+// civil_from_days eklenmeli. Şimdiki zaman (saat okuma) runtime işi —
+// bu modüle DEĞİL, dosya.kem ailesine.
