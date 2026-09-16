@@ -1062,7 +1062,9 @@ BM_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yaz
 # K1 (D-260): kem_os obj listesi — bm_a64_heap.o (C malloc) YERİNE heap_kemmalloc.o
 # (C malloc çıkarılmış) + kem_heap.o (saf-.kem malloc/free). Diğer kernel'ler BM_A64_OBJS'i
 # (C malloc) kullanmaya DEVAM (regresyon yok). Sadece kem_os saf-.kem allocator ile linkler.
-KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o $(BUILD)/bm_a64_yazdir.o \
+# [D-591] bm_a64_yazdir.o (C konsol yazicisi) CIKARILDI: kem_os konsolu SAF-.kem
+# (uart_satir); tek C kullanicisi kdl_zaman.c tanilamasi bu cesitte derlenmez.
+KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o $(BUILD)/bm_a64_uart.o \
               $(BUILD)/bm_a64_bolge_kemregion.o $(BUILD)/bm_a64_heap_kemmalloc.o \
               $(BUILD)/bm_a64_panik.o $(BUILD)/bm_a64_zaman_kem.o \
               $(BUILD)/bm_a64_mmu_kem.o $(BUILD)/bm_a64_gorev.o $(BUILD)/bm_a64_virtio.o \

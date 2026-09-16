@@ -1563,6 +1563,32 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-591: KEMGU-OS C KONSOL YAZICISINI ARTIK LİNKLEMİYOR + KAYITLI KARARLAR
+`bm_a64_yazdir.o` (`kdl_runtime_yazdir_bare.c`) `KEM_OS_A64_OBJS`ten çıkarıldı.
+**Ölçüldü:** kem_os link girdileri içinde `kdl_yazdir_*` çağıran TEK kaynak
+`kdl_zaman.c`ydi ve o yol kem_os'ta **ulaşılamaz** — IRQ SAF-.kem
+(`kem_zaman.kem` `kdl_irq_isle`), `.kem` karşılığı `[5] TIMER TIK OK` zaten
+var. `kem_yazdir.kem` prototipi (da1b152) **entegre EDİLMEDİ** (Mehmet kararı).
+
+**Kapılar:** `kem_os_arm` **24 faz** rc=0 (link satırında `bm_a64_yazdir` 0) ·
+`qemu_cekirdek` **5/5** · `timer_test_arm` (C yazıcıyı HÂLÂ kullanan bağımsız
+test) `TIMER OK tik=5`.
+**⚠ SABOTAJ DÜRÜSTÇE:** S185 rc=2 ama **derleme** hatasıyla (link iddiasını
+ölçmedi). S186 (iki koruma birden) **SESSİZ** — `kdl_kesme_isle`/`kdl_tik`
+çağrılmadığı için `--gc-sections` onları atıyor. `#ifndef` koruması bir KAPI
+değil hijyendir; asıl kanıt 24 fazlı boot'un C yazıcısız linklenmesidir.
+**⚠ SÜREÇ:** S185'i `git checkout` ile geri aldım ve commit'lenmemiş
+değişikliğimi de sildim — sabotajı dosya yedeğiyle geri al, `checkout` ile değil.
+
+**KALAN C (kem_os):** uart · bolge_kemregion · heap_kemmalloc · panik ·
+zaman_kem · mmu_kem · gorev · virtio · virtio_net — LAW 1, seri.
+
+**KAYITLI KARARLAR (Mehmet, kod değişikliği YOK):**
+- **Aritmetik taşma:** SARMA kalır (tanımlı, kararlı; D-524 kapısı sabitler).
+- **`dondur` (R-PAYLAŞ):** olduğu gibi kalır; D-577 bağlaşım kapısı korur.
+- **Send/Sync paylaşılabilirlik işareti:** ERTELENDİ; D-505 sınırı kayıtlı.
+- **ρ_sahip birleştirme-duyarlı ömür:** YAPILMAYACAK; D-511 sızıntısı kabul.
+
 ### ✅ D-590 (MEHMET KARARI): LEGACY DÜZLEŞTİRME SİLİNDİ — T041 EVRENSEL
 D-582 ADIM 5, seçenek (a). Üç uygulamada da (`src/` · `checker.kem` ·
 `codegen.kem`) legacy yükleyici ve `kullan_yeni_bicim` yüklemi kaldırıldı:
