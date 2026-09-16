@@ -1563,6 +1563,23 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🎯 D-592: KEMGU-OS ÇEKİRDEĞİ C NESNESİ BAĞLAMIYOR — dokuzu da ÖLÜ girdiydi
+Madde *"kalan 9 C parçasını seri taşı"* diyordu. **Link haritası bunu çürüttü:**
+`--gc-sections` sonrası uart · bolge · heap · panik · zaman · mmu · gorev ·
+virtio · virtio_net · mmio nesnelerinin **hiçbir bölümü** imajda kalmıyordu.
+```
+kem_os_routed.o + 11 C nesnesi  ->  33.563.184 bayt
+kem_os_routed.o + start.o       ->  33.563.184 bayt   cmp: BİREBİR AYNI
+```
+Taşınacak C YOKTU. `KEM_OS_A64_OBJS = start.o`; kem_os = boot `.S` + SAF-.kem.
+**Kapılar:** `kem_os_arm` 24 faz · `qemu_cekirdek` 5/5.
+**S187:** aynı link yapılandırmasında tanımsız sembol **gürültülü** (`ld.lld:
+undefined symbol`, rc=1) → ileride bir `.kem` kodu C'ye dayanırsa sessiz geçmez.
+**⚠ ÖLÇÜM:** ilk `cmp` süreç ikamesine yazamayan `objcopy`nin **iki boş**
+çıktısını karşılaştırıp "AYNI" dedi (D-563) — gerçek dosyalarla tekrarlandı.
+Önceki maddelerde (D-591) C yazıcıyı tek tek çıkarmak bu yüzden **gereksiz
+dikkatti**: önce link haritası çıkarılmalıydı.
+
 ### ✅ D-591: KEMGU-OS C KONSOL YAZICISINI ARTIK LİNKLEMİYOR + KAYITLI KARARLAR
 `bm_a64_yazdir.o` (`kdl_runtime_yazdir_bare.c`) `KEM_OS_A64_OBJS`ten çıkarıldı.
 **Ölçüldü:** kem_os link girdileri içinde `kdl_yazdir_*` çağıran TEK kaynak
