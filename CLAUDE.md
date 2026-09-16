@@ -1563,6 +1563,68 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-587: NİTELİKLİ ÇEŞİT VARYANTI DEĞER KONUMUNDA — self-host SESSİZCE indeks 0 yayıyordu
+D-586'nın bıraktığı madde: self-host `ifade_uret`in **çöp kolu**
+(`ver "0"`) ölçülecek, sonra kapatılacaktı. **Önce ÖLÇÜLDÜ** — iki çöp koluna
+(`YOL` dalı sonu + genel son) geçici iz kondu ve **tüm depo** (`build/` hariç
+her `.kem`) işaretli self-host ile derlendi:
+```
+toplam isabet: 6
+  5  GENEL BOS            (`tamam(boş)` — birim değer)
+  1  YOL   g.Renk.Kirmizi (modul-nitelikli çeşit varyantı, DEĞER konumunda)
+```
+
+**🔴 İSABETLERDEN BİRİ SESSİZ YANLIŞ CEVAPTI — ve mevcut fikstür onu TESADÜFEN geçiriyordu.**
+`test/snapshots/modul_cesit.kem` `g::Renk::Kirmizi` kullanıyor; çöp kolu `0`
+yayıyor ve **Kirmizi'nin indeksi zaten 0** → doğru cevap tesadüf. İlk olmayan
+varyantla ölçüldü:
+```
+ver g::kod(g::Renk::Yesil)   ->  C=42   SELF=1   (Kirmizi dalı)
+```
+**KÖK D-407'NİN AYNASI:** D-407 üç segmentli çeşidi **ÇAĞRI (yapıcı)** yolunda
+onarmıştı (sol taraf `TANIMLAYICI` **veya** `YOL`); **DEĞER** yolu açık
+kalmıştı ve yalnız `TANIMLAYICI` kabul ediyordu. Onarım tek koşul genişletmesi;
+çeşit adı her iki biçimde o düğümün `a_deg`indedir.
+
+**`boş` (5 isabet) KUSUR DEĞİLDİ** — birim değer bilgi taşımaz, payload yuvası
+yok sayılır, `0` doğru temsildir. Ama çöp koluna **tesadüfen** düşüyordu →
+**açık dal** eklendi; çöp kolu artık yalnız gerçekten desteklenmeyen şekilleri
+alır. Onarım sonrası depo genelinde çöp koluna düşen şekil: **0**.
+
+**⚠ ÇÖP KOLU GÜRÜLTÜLÜ HATAYA ÇEVRİLMEDİ — bilinçli.** Self-host codegen'de
+**hata bildirme mekanizması YOK** (C `hata()` kullanır; `codegen.kem`de karşılığı
+ölçüldü, bulunamadı). Kolu gürültülü yapmak yeni bir hata kanalı tasarlamayı
+ister — ölçülmüş bir kusur olmadan yeni mekanizma (D-515). Bugün depoda o kola
+düşen şekil **sıfır**, yani yapılabilecek ölçülebilir iş bitti.
+
+**Fikstür `cg_nitelikli_cesit_deger.kem`** — **üç varyant**, iki **ilk olmayan**
+varyant, her dal **farklı** değer (1/30/12 → 30+12=42). İki varyantla *"hep
+ilk"* hatası %50 olasılıkla doğru cevabı verirdi (D-410); ilk varyantla hiç
+göremezdi (modul_cesit'in durumu).
+
+**Kapılar:** codegen_diff **172/172** · yapi_diff 152/152 (22 muaf, 0 atlandı) ·
+modul_codegen **27/27 (0 atlandı, 0 muaf)** · checker_diff **187/187 (0 muaf)** ·
+surucu_diff 16/16 (2 muaf, 1 atlandı) · check_genis 133/133 (13 muaf) ·
+bolge_operand 174/174 (2 atlandı) · self_driver **TÜM MODLAR + SELF-HOST +
+FIXPOINT ✓ (148/148 check, 172/172 codegen, stage1 == stage2)** · sıfır uyarı 38/0.
+**Sabotaj S180** (YOL sol-taraf kabulünü geri al — değer yolu yine yalnız
+TANIMLAYICI kabul etsin) → fikstür *"C-codegen exit=42 ≠ KEMGU-codegen exit=2"*,
+codegen_diff **171/172, rc=2**. Yani fikstür sessiz kusuru gerçekten ayırt ediyor.
+
+**⚠⚠ ÖLÇÜM DİSİPLİNİ — İKİ EŞ ZAMANLI ARKA PLAN KOŞUMU ÇELİŞKİLİ SONUÇ VERDİ.**
+Sabotaj zinciri koşarken AYRI bir kapı koşumu da arka plandaydı ve ikisi `build/`
+dizinini PAYLAŞIYORDU. Sonuç: AYNI ağaç için biri `self_driver rc=2 BAŞARISIZ`,
+diğeri `FIXPOINT ✓` raporladı. Çelişki bir kusurdan değil, D-297/D-544-b
+sınıfı kontaminasyondan geliyordu — bir koşum ötekinin sabote edilmiş ARA
+yapımını ölçtü.
+**Kirlenmiş koşumun YEŞİL satırları da kırmızı satırı kadar geçersizdir:**
+paylaşılan `build/` hem sahte kırmızı hem sahte yeşil üretir, yani "8 yeşil
+1 kırmızı" görüp kırmızıyı elemek YANLIŞ okumadır. Yukarıdaki dokuz kapı
+ancak SERİ ve TEK BAŞINA koşulan temiz turdan sonra kabul edildi.
+**KURAL: bir sabotaj zinciri koşarken İKİNCİ bir kapı koşumu başlatma** —
+D-414-te "zaman aşımına uğrayan make ORPHAN olarak koşmaya devam eder"
+dersinin eş zamanlı-başlatma biçimi.
+
 ### 🔴✅ D-586: NİTELİKLİ / ALIAS'LI MODÜL SABİTİ — self-host SESSİZCE 0 okuyordu
 D-583'ün yol üstünde ölçtüğü üçüncü açık. **Kayıttakinden GENİŞ çıktı** — yalnız
 alias değil, **düz nitelikli erişim de** aynı kusuru taşıyordu:

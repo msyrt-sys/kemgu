@@ -6416,7 +6416,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken sol: tam32 = dizi_al(p.cocuk, cb);
         değişken vary: metin = dizi_al(p.a_deg, idx);   // sağ segment = varyant adı
-        eğer metin_esit(dizi_al(p.a_ad, sol), "TANIMLAYICI") {
+        // [D-587] Sol taraf TANIMLAYICI **ya da YOL** olabilir: `g::Renk::Yesil`
+        // DEĞER konumunda dış YOL a_deg="Yesil", çocuğu YOL("Renk") → çocuğu
+        // TANIMLAYICI("g"). Çeşit adı her iki biçimde o düğümün a_deg'indedir.
+        // D-407 bunu ÇAĞRI (yapıcı) yolunda onarmıştı; DEĞER yolu açık kalmıştı
+        // ve şekil aşağıdaki çöp koluna düşüp SESSİZCE `0` yayıyordu = varyant
+        // İNDEKS 0. Ölçüldü: `g::Renk::Yesil` C=42, SELF=1 (Kirmizi dalı).
+        // Mevcut fikstür (modul_cesit) TESADÜFEN geçiyordu: İLK varyantı kullanıyor.
+        eğer metin_esit(dizi_al(p.a_ad, sol), "TANIMLAYICI")
+             veya metin_esit(dizi_al(p.a_ad, sol), "YOL") {
             değişken cad: metin = dizi_al(p.a_deg, sol);
             eğer cesit_enum_mi(p, cad) {
                 p.son_tip = "i8";
@@ -6454,6 +6462,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         p.son_tip = "i32"; ver "0";   // diğer YOL → sonraki iş
     }
+    // [D-587] `boş` birim değeri (`tamam(boş)`). Bilgi taşımaz; payload yuvası
+    // yok sayılır → `0` DOĞRU temsildir. Öncesinde bu şekil aşağıdaki çöp
+    // koluna TESADÜFEN düşüyordu (depo taramasında kolun 6 isabetinin 5'i).
+    // Açık dal: çöp kolu artık yalnız GERÇEKTEN desteklenmeyen şekilleri alır.
+    eğer metin_esit(ad, "BOS") { p.son_tip = "i32"; ver "0"; }
     p.son_tip = "i32";
     ver "0";   // CG6 dışı düğüm → CG7+
 }
