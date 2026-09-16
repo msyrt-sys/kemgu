@@ -1563,6 +1563,35 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-590 (MEHMET KARARI): LEGACY DÜZLEŞTİRME SİLİNDİ — T041 EVRENSEL
+D-582 ADIM 5, seçenek (a). Üç uygulamada da (`src/` · `checker.kem` ·
+`codegen.kem`) legacy yükleyici ve `kullan_yeni_bicim` yüklemi kaldırıldı:
+çıplak çok-segment `kullan a::b::c;` artık yeni-biçim ithalattır, üyeler
+nitelikli (`c::uye`) erişilir ve private-by-default (T041) HER yolda uygulanır.
+Yeni tanı kodu YOK.
+
+**YOL ÜSTÜNDE ÖLÇÜLDÜ:** C bu biçimde modülü **TAM YOLLA** bağlıyordu
+(`derin::f` → T016, tam yol da T016), self-host ise `OK` diyordu. Self-host
+(sarmal `modül c { }`, `priv_mod`, D-584 mangle) zaten **SON SEGMENTİ**
+kullandığı için C ona hizalandı (`kullan_isle`).
+
+`ana_legacy_gizlilik.kem` artık `derin::derin_gizli()` → **T041** (C = checker
+= codegen, 16:14) + POZİTİF `derin::derin_acik()` kilitler. Legacy crossfile ×5
+ve `test_llvm.c`deki 4 ölçüm silindi — karşılıkları D-589'da kapılı.
+
+**Kapılar (SERİ):** checker_diff **187/187 (0 muaf)** · modul_codegen **27/27** ·
+surucu_diff 16/16 · check_genis 133/133 (−5 silinen) · check_kapisi 278/285
+(0 RED) · parser_diff 13/13 · codegen_diff 173/173 · yapi_diff 153/153 ·
+bolge_operand 175/175 · stdlib_check · llvm_test **286/286** (−4 silinen) ·
+sıfır uyarı 38/0 · self_driver **FIXPOINT ✓**.
+**Sabotaj 3/3:** S182 (C son-segment bağlaması) → checker_diff 186/187 rc=2 ·
+S183 (`checker.kem` T041 kaydı) → 182/187 rc=2 · S184 (`codegen.kem` T041
+kaydı) → modul_codegen 23/27 rc=2 (*loud→silent*).
+
+**⚠ ARAÇ:** `src/tip_kontrol.c`nin HEAD blobu `-text` (CRLF saklanmış);
+`core.autocrlf=true` tüm dosyayı değişmiş gösterdi (7124/7194). Gerçek fark
+20/90 — commit `-c core.autocrlf=false` ile atıldı.
+
 ### ✅ D-589 (D-582 ADIM 5'in ÖN KOŞULU): LEGACY FİKSTÜRLERİN YENİ-BİÇİM KARŞILIĞI
 D-582 ADIM 5 *"legacy düzleştirmeyi SİL"* diyor ve **KARAR GEREKTİRİR** diye
 işaretli. Silmenin kendisi bir dil yüzeyi kararıdır (Mehmet); ama maddenin

@@ -191,11 +191,6 @@ typedef struct MonoTip {
 } MonoTip;
 
 /* Yüklenmiş modül (cycle önleme) */
-typedef struct YuklenmisDosya {
-    const char *yol;
-    int yol_uz;
-    struct YuklenmisDosya *sonraki;
-} YuklenmisDosya;
 
 /* Bekleyen specialization (cagri sirasinda olustu, sonradan emit edilecek) */
 typedef struct BekleyenSpec {
@@ -239,7 +234,6 @@ typedef struct LlvmGen {
     MonoKayit *monolar;     /* emit edilmis instantiation'lar */
     MonoTip *mono_tipler;   /* D-307: per-instantiation generic yapı/çeşit örnekleri */
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
-    YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
     SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
     SabitKayit *kureseller; /* D-252: küresel değişken (mutable global @ad, load/store) */
     /* C2.5: sonuç/seçimlik value codegen — yapısal beklenen tip kanalı.
@@ -8479,71 +8473,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
         for (int wi = 0; wi < is_sayi; wi++) {
             Dugum *uye = is_l[wi];
-            /* A: yeni-bicim kullan (tek-segment / secili / alias) —
-             * loader (ana.c) sentetik DUGUM_MODUL olarak ekledi;
-             * burada duzlestirme YAPILMAZ (meta dugum, atla). */
-            if (uye->tip == DUGUM_KULLAN &&
-                (uye->veri.kullan.segment_sayi <= 1 ||
-                 uye->veri.kullan.secili_sayi > 0 ||
-                 uye->veri.kullan.alias_ad != NULL)) {
-                continue;
-            }
-            if (uye->tip == DUGUM_KULLAN) {
-                /* Dosya yolu uret */
-                const char *y = uye->veri.kullan.yol;
-                int yu = uye->veri.kullan.yol_uzunluk;
-                char dy[512];
-                int o = 0;
-                for (int k = 0; k < yu && o + 6 < (int)sizeof(dy); k++) {
-                    if (k + 1 < yu && y[k] == ':' && y[k + 1] == ':') {
-                        dy[o++] = '/'; k++;
-                    } else { dy[o++] = y[k]; }
-                }
-                const char *ext = ".kem";
-                for (int k = 0; k < 4 && o + 1 < (int)sizeof(dy); k++) {
-                    dy[o++] = ext[k];
-                }
-                dy[o] = '\0';
-                /* Duplicate? */
-                int yuklu = 0;
-                for (YuklenmisDosya *yd = g.yuklenmis_dosyalar; yd; yd = yd->sonraki) {
-                    if (yd->yol_uz == o && memcmp(yd->yol, dy, (size_t)o) == 0) {
-                        yuklu = 1; break;
-                    }
-                }
-                if (yuklu) continue;
-                FILE *fp = fopen(dy, "rb");
-                if (!fp) continue;
-                fseek(fp, 0, SEEK_END);
-                long sz = ftell(fp);
-                fseek(fp, 0, SEEK_SET);
-                char *src = (char *)arena_ayir(a, (size_t)sz + 1);
-                if (!src) { fclose(fp); continue; }
-                fread(src, 1, (size_t)sz, fp);
-                src[sz] = '\0';
-                fclose(fp);
-                /* Yuklenmis listesine ekle */
-                YuklenmisDosya *yd = (YuklenmisDosya *)arena_ayir_sifir(a, sizeof(YuklenmisDosya));
-                if (yd) {
-                    char *yk = (char *)arena_ayir(a, (size_t)o + 1);
-                    memcpy(yk, dy, (size_t)o + 1);
-                    yd->yol = yk;
-                    yd->yol_uz = o;
-                    yd->sonraki = g.yuklenmis_dosyalar;
-                    g.yuklenmis_dosyalar = yd;
-                }
-                /* Parse + worklist'e ekle (transitif kullan'lar da islensin) */
-                Lexer ml; lexer_baslat(&ml, src, dy);
-                Parser mp; parser_baslat(&mp, &ml, a, dy, src);
-                Dugum *mprog = parser_calistir(&mp);
-                if (mprog && mp.hata_sayisi == 0) {
-                    for (int k = 0; k < mprog->veri.program.sayi; k++) {
-                        IS_EKLE(mprog->veri.program.uyeler[k]);
-                    }
-                }
-            } else {
-                EKLE_UYE(uye);
-            }
+            /* [D-590] Tum `kullan`lar yeni bicimdir: loader (ana.c) modulu
+             * sentetik DUGUM_MODUL olarak ekledi; burada duzlestirme YOK. */
+            if (uye->tip == DUGUM_KULLAN) continue;
+            EKLE_UYE(uye);
         }
         #undef IS_EKLE
         #undef EKLE_UYE

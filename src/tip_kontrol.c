@@ -18,7 +18,6 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->global_scope = global;
     tk->aktif_donus_tipi = NULL;
     uygula_tablosu_baslat(&tk->uygulamalar);
-    tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
     /* [D-505] ⚠ BU ALANLAR BASLATILMAZSA COP OLUR: TipKontrol tek tek
@@ -5593,14 +5592,7 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
  * import v1'de hata degil). Cok-segment ciplak yol (kullan a::b::c;)
  * legacy duzlestirme olarak tanim fazinda islenir. */
 
-static int kullan_yeni_bicim_mi(const Dugum *k) {
-    return k->veri.kullan.segment_sayi <= 1 ||
-           k->veri.kullan.secili_sayi > 0 ||
-           k->veri.kullan.alias_ad != NULL;
-}
-
 static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
-    if (!kullan_yeni_bicim_mi(k)) return;  /* legacy — tanim fazinda */
     const char *mad = k->veri.kullan.yol;
     int muz = k->veri.kullan.yol_uzunluk;
     const Sembol *kanonik = sembol_bul_yerel(tk->builtin_scope, mad, muz);
@@ -5620,6 +5612,18 @@ static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
                                         : kanonik->ad;
         mb.ad_uzunluk = k->veri.kullan.alias_ad ? k->veri.kullan.alias_ad_uz
                                                 : kanonik->ad_uzunluk;
+        /* [D-590] Ciplak cok-segment ithalat (`kullan a::b::c;`) modulu SON
+         * segmentle baglar (`c::uye`) — self-host sarmali (`modul c { }`),
+         * priv_mod (son_segment) ve D-584 mangle ile ayni ad. */
+        if (!k->veri.kullan.alias_ad) {
+            for (int si = mb.ad_uzunluk - 1; si > 0; si--) {
+                if (mb.ad[si] == ':' && mb.ad[si - 1] == ':') {
+                    mb.ad = mb.ad + si + 1;
+                    mb.ad_uzunluk = mb.ad_uzunluk - si - 1;
+                    break;
+                }
+            }
+        }
         mb.kategori = SEMBOL_MODUL;
         mb.modul_scope = kanonik->modul_scope;
         mb.ast_dugumu = kanonik->ast_dugumu;
@@ -6791,85 +6795,11 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_KULLAN: {
-            /* A: yeni bicim (tek-segment / secili / alias) faz-2'de
-             * (kullan_baglari_kur) islendi — burada is yok. Asagisi
-             * LEGACY cok-segment duzlestirme yoludur (drivers/ +
-             * test/crossfile tuketicileri icin korunur). */
-            if (kullan_yeni_bicim_mi(d)) break;
-
-            /* Yol formati: "x::y::z" -> "x/y/z.kem"
-             * Arama sirasi: cari dizin, "stdlib/" prefix'i. */
-            const char *y = d->veri.kullan.yol;
-            int yu = d->veri.kullan.yol_uzunluk;
-            if (!y || yu <= 0) break;
-
-            /* "::" -> "/" donusumu, sonuna ".kem" ekle */
-            char dosya_yolu[512];
-            int o = 0;
-            for (int i = 0; i < yu && o + 6 < (int)sizeof(dosya_yolu); i++) {
-                if (i + 1 < yu && y[i] == ':' && y[i + 1] == ':') {
-                    dosya_yolu[o++] = '/';
-                    i++;
-                } else {
-                    dosya_yolu[o++] = y[i];
-                }
-            }
-            /* .kem uzantisi */
-            const char *uzanti = ".kem";
-            for (int k = 0; k < 4 && o + 1 < (int)sizeof(dosya_yolu); k++) {
-                dosya_yolu[o++] = uzanti[k];
-            }
-            dosya_yolu[o] = '\0';
-
-            /* Duplicate kontrol */
-            for (YuklenmisModul *m = tk->yuklenmisler; m; m = m->sonraki) {
-                if (m->yol_uz == o && memcmp(m->yol, dosya_yolu, (size_t)o) == 0) {
-                    return;  /* zaten yuklu */
-                }
-            }
-
-            /* Dosyayi yukle */
-            FILE *fp = fopen(dosya_yolu, "rb");
-            if (!fp) {
-                tip_hata(tk, d, "T040",
-                    "kullan: modül dosyası bulunamadı");
-                break;
-            }
-            fseek(fp, 0, SEEK_END);
-            long boyut = ftell(fp);
-            fseek(fp, 0, SEEK_SET);
-            if (boyut <= 0) { fclose(fp); break; }
-            char *kaynak = (char *)arena_ayir(tk->arena, (size_t)boyut + 1);
-            if (!kaynak) { fclose(fp); break; }
-            fread(kaynak, 1, (size_t)boyut, fp);
-            kaynak[boyut] = '\0';
-            fclose(fp);
-
-            /* Yüklenmis listesine ekle (duplicate engelleme) */
-            YuklenmisModul *ym = (YuklenmisModul *)arena_ayir_sifir(
-                tk->arena, sizeof(YuklenmisModul));
-            if (ym) {
-                char *yol_kopya = (char *)arena_ayir(tk->arena, (size_t)o + 1);
-                memcpy(yol_kopya, dosya_yolu, (size_t)o + 1);
-                ym->yol = yol_kopya;
-                ym->yol_uz = o;
-                ym->sonraki = tk->yuklenmisler;
-                tk->yuklenmisler = ym;
-            }
-
-            /* Parse + tip-kontrol modulu */
-            Lexer l;
-            lexer_baslat(&l, kaynak, dosya_yolu);
-            Parser p;
-            parser_baslat(&p, &l, tk->arena, dosya_yolu, kaynak);
-            Dugum *mprog = parser_calistir(&p);
-            if (mprog && p.hata_sayisi == 0) {
-                /* Üst düzey üyeleri pre-populate + tanim-kontrol */
-                tip_kontrol_program(tk, mprog);
-            }
+        case DUGUM_KULLAN:
+            /* [D-590] Tum `kullan`lar YENI bicimdir (kullan_baglari_kur faz-2).
+             * Legacy cok-segment duzlestirme SILINDI: private-by-default (T041)
+             * artik her ithalat yolunda uygulanir. */
             break;
-        }
 
         case DUGUM_MODUL: {
             /* T016 fix: uyeleri MODUL SCOPE baglaminda kontrol et —
@@ -6928,10 +6858,10 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
  *   uretmektense kacirmak yeglenir.
  * ========================================================================== */
 #define KD_AZAMI 32
-/* [D-570] AILE: 0=kilit, 1=dosya. Ayni makine, FARKLI durum anlamlari:
- *   kilit: 0=serbest 1=tutulu 2=olu 3=izlenmiyor  (cikista 1 -> L001)
- *   dosya: 0=acik              2=kapali 3=izlenmiyor  (cikista 0 -> L001)
- * Iki ayri gezgin YAZILMADI (D-407): tek yuruyus, baglama basina aile. */
+/* [D-570] AILE: 0=kilit, 1=dosya. Ayni makine, FARKLI durum anlamlari:
+ *   kilit: 0=serbest 1=tutulu 2=olu 3=izlenmiyor  (cikista 1 -> L001)
+ *   dosya: 0=acik              2=kapali 3=izlenmiyor  (cikista 0 -> L001)
+ * Iki ayri gezgin YAZILMADI (D-407): tek yuruyus, baglama basina aile. */
 typedef struct { const char *ad; int uz; int durum; int aile; } KdKilit;
 
 static int kd_cagri_adi(const Dugum *d, const char **ad, int *uz) {
