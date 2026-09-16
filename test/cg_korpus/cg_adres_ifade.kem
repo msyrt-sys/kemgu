@@ -1,0 +1,35 @@
+// [D-588] TANIMLAYICI OLMAYAN bir ifadenin adresi: `&n.x`, `&xs[0]`, `&f()`.
+// Öncesinde self-host bu üç şekli de `ifade_uret`in çöp koluna düşürüp
+// `store ptr 0` yayıyordu = GEÇERSİZ IR; C üçünü de 42 ile çalıştırıyordu.
+// Yani parite TERS yöndeydi (oracle DOĞRU, self-host kırık — D-442 sınıfı).
+//
+// AYIRT EDİCİ: her şekil FARKLI değer taşır (10 / 20 / 8 / 4) — biri yanlış
+// yuvadan okunursa toplam 42'den sapar ve hangisinin düştüğü çıkış kodundan
+// okunur. Hepsi aynı değeri taşısaydı üç kolun biri bozuk olsa bile toplam
+// tesadüfen tutabilirdi (D-410'un "en az üç varyant" dersi).
+//
+// POZİTİF: `&yerel` (TANIMLAYICI) yolu DEĞİŞMEDİ ve hâlâ çalışmalı — yoksa
+// "her `&` için geçici yuva aç" sabotajı kapıdan GEÇERDİ (D-425).
+
+yapı N { x: tam32; y: tam32; }
+
+işlev sekiz() -> tam32 { ver 8; }
+
+işlev main() -> tam32 {
+    // (a) &ERISIM — yapı alanının adresi
+    değişken n: N = N { x: 10, y: 99 };
+    değişken ra: &tam32 = &n.x;
+
+    // (b) &INDEKS — dizi elemanının adresi
+    değişken xs: Dizi<tam32> = [20, 99];
+    değişken rb: &tam32 = &xs[0];
+
+    // (c) &CAGRI — çağrı sonucunun adresi
+    değişken rc: &tam32 = &sekiz();
+
+    // (d) POZİTİF: &TANIMLAYICI — eski yol, bozulmamalı
+    değişken d: tam32 = 4;
+    değişken rd: &tam32 = &d;
+
+    ver *ra + *rb + *rc + *rd;
+}

@@ -1563,6 +1563,69 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### 🔴✅ D-588: `&<TANIMLAYICI OLMAYAN>` SELF-HOST'TA GEÇERSİZ IR — parite TERS yönde
+LOOP.md'nin sıradaki maddesi bir **TASARIM** işi olarak kayıtlıydı: *"self-host
+codegen'de hata bildirme mekanizması YOK → `ifade_uret` çöp kolları gürültülü
+yapılamıyor; ölçülmüş kusur yok."* **Maddenin HER İKİ İDDİASI DA ÖLÇÜMLE
+ÇÜRÜDÜ** (D-406'nın *"kayıtlı gerekçe de bir iddiadır"* dersinin tekrarı).
+
+**İDDİA 1 YANLIŞ — mekanizma ZATEN VAR.** `yazdir_hata` D-450'de yerleşik
+olarak eklenmiş, `codegen.kem` onu **kendi sürücüsünde zaten çağırıyor**
+(satır 14070) ve checker yarısı tanıları `th_kod`da biriktiriyor. Yani kolu
+gürültülü yapmak "yeni hata kanalı tasarımı" değil, birkaç satırdı.
+
+**İDDİA 2 YANLIŞ — ÖLÇÜLMÜŞ BİR KUSUR VAR.** Çöp kolunun *"ulaşılamaz"*
+sanılmasının sebebi korpustu, dilin kendisi değil. `TANIMLAYICI olmayan` bir
+ifadenin adresini alan üç şekil de o kola düşüyordu:
+```
+                C --check   C exe   SELF --check   SELF sonuc
+&n.x    (ERISIM)   OK        42        OK          GECERSIZ IR
+&xs[0]  (INDEKS)   OK        42        OK          GECERSIZ IR
+&f()    (CAGRI)    OK        42        OK          GECERSIZ IR
+   SELF: "store ptr 0"  ->  error: integer constant must have integer type
+```
+**Parite TERS yönde** (D-442 sınıfı): oracle DOĞRU, self-host kırık. Kusur
+**SESSİZ DEĞİL** (LINK-RED) — bu yüzden bir sessiz-yanlış-cevap değil, ama
+geçerli bir KEMGU programı self-host derleyiciyle **derlenemiyordu**.
+
+**KÖK — ÇÖP KOLU DEĞİL, ONDAN ÖNCEKİ DAL.** `&`/`&degisken` zaten kendi
+dalında ele alınıyor (`TANIMLAYICI` ise `alloca` adresi doğrudan döner);
+o dalın **düşüş satırı** `p.son_tip = "ptr"; ver "0";` idi. Yani suçladığım
+satır (`ifade_uret` sonundaki genel çöp kolu) **hiç çalışmıyordu**.
+
+**ONARIM — YENİ MEKANİZMA YOK, KALIP C'DEN OKUNDU.** C değeri geçici bir
+yuvaya materyalize edip yuvanın adresini verir ve üç şekilde de birebir aynı:
+```
+%t = alloca <T>   ·   store <T> <deger>, ptr %t   ·   adres olarak %t
+```
+Yeni tanı kodu YOK, dil yüzeyi değişikliği YOK.
+**⚠ Operand bu dalda YENİDEN değerlendirilir:** `x`/`xt` bu bloktan SONRA
+hesaplanıyor, onları kullanmak sırayı bozardı.
+
+**Fikstür `cg_adres_ifade.kem`** — üç şekil **FARKLI** değer taşır (10/20/8)
++ **POZİTİF** `&yerel` (TANIMLAYICI, eski yol) 4 → 42. Hepsi aynı değeri
+taşısaydı bir kol bozukken toplam tesadüfen tutabilirdi (D-410); pozitif
+olmasaydı *"her `&` için geçici yuva aç"* sabotajı kapıdan GEÇERDİ (D-425).
+
+**Kapılar (SERİ, tek başına koşulan temiz tur):** codegen_diff **173/173** ·
+yapi_diff 153/153 (22 muaf, 0 atlandı) · modul_codegen **27/27 (0 atlandı,
+0 muaf)** · checker_diff **187/187 (0 muaf)** · surucu_diff 16/16 (2 muaf,
+1 atlandı) · check_genis 133/133 (13 muaf) · bolge_operand 175/175 (2 atlandı) ·
+sıfır uyarı 38/0 · self_driver **TÜM MODLAR + SELF-HOST + FIXPOINT ✓**.
+Korpus fikstürle birlikte büyüdü: codegen_diff 172 → 173, yapi_diff 152 → 153,
+bolge_operand 174 → 175.
+**Sabotaj S181** (materyalizasyonu geri al → eski `ver "0"` düşüşü) → fikstür
+`clang rc=1 :: integer constant must have integer type`; geri alınınca
+**exe=42**. Yani fikstür kusuru gerçekten ayırt ediyor.
+
+**⚠ SABOTAJ ZİNCİRİNE KOYDUĞUM DOĞRULAMA PROBE'U YANLIŞTI — ve bu kayda değer.**
+Zincirde `grep -c "D-588"` ile **0** bekliyordum, **1** döndü. Sebep: S181
+KODU siliyor ama üstündeki **YORUM bloğunu** bırakıyor ve `D-588` etiketi orada
+geçiyor. O satır sabotajın uygulandığını ya da uygulanmadığını **kanıtlamaz**;
+sabotajın gerçek kanıtı fikstürün kırmızıya dönmesidir (`clang rc=1`).
+*Doğrulama probe'unun kendisi de ölçülmelidir* — D-500 listesinin bu turdaki
+altıncı tekrarı.
+
 ### 🔴✅ D-587: NİTELİKLİ ÇEŞİT VARYANTI DEĞER KONUMUNDA — self-host SESSİZCE indeks 0 yayıyordu
 D-586'nın bıraktığı madde: self-host `ifade_uret`in **çöp kolu**
 (`ver "0"`) ölçülecek, sonra kapatılacaktı. **Önce ÖLÇÜLDÜ** — iki çöp koluna

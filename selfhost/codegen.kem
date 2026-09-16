@@ -6010,7 +6010,27 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 değilse { p.son_ref = cg_var_ref_bul(p, on); }
                 ver cg_var_bul(p, on);
             }
-            p.son_tip = "ptr"; p.son_ref = ""; ver "0";
+            // [D-588] TANIMLAYICI OLMAYAN operand (`&n.x` · `&xs[0]` · `&f()`):
+            // C, değeri GEÇİCİ BİR YUVAYA materyalize edip yuvanın adresini
+            // verir. Kalıp C'den OKUNDU ve üç şekilde de birebir aynı:
+            // `alloca <T>` + `store <T> <deger>, ptr %t` + adres olarak %t.
+            // Öncesinde burada `ver "0"` vardı → `store ptr 0` = GEÇERSİZ IR
+            // ("integer constant must have integer type"), oysa C aynı üç
+            // programı 42 ile çalıştırıyordu → parite TERS yönde (D-442 sınıfı).
+            // LOUD (LINK-RED) olduğu için SESSİZ değildi; yine de hiçbir kapı
+            // görmedi çünkü korpusta TANIMLAYICI olmayan bir adres-alma YOKTU
+            // (D-356'nın "korpusta o şekil yok" sınıfının bir kez daha tekrarı).
+            // ⚠ Operand BURADA değerlendirilir: `x`/`xt` aşağıda, bu bloktan
+            // SONRA hesaplanıyor — onları kullanmak sırayı bozardı.
+            değişken av: metin = ifade_uret(p, opnode);
+            değişken at: metin = p.son_tip;
+            değişken ats: tam32 = yeni_reg(p);
+            değişken atss: metin = reg_str(ats);
+            yaz_str("  "); yaz_str(atss); yaz_str(" = alloca "); yaz_str(at); yb(10);
+            yaz_str("  store "); yaz_str(at); yaz_str(" "); yaz_str(av);
+            yaz_str(", ptr "); yaz_str(atss); yb(10);
+            p.son_tip = "ptr"; p.son_ref = "";
+            ver atss;
         }
         değişken x: metin = ifade_uret(p, opnode);
         değişken xt: metin = p.son_tip;
