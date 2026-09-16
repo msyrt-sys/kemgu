@@ -357,36 +357,11 @@ static void test_sonuc_struct_payload_calistir(void) {
     test_sonuc("sonuc struct payload + param ABI -> exit 42", rc == 42);
 }
 
-/* --- C2.6: cross-file fonksiyon cagrisi (transitif kullan) --- */
-
-static void test_crossfile_transitif_verify(void) {
-    /* transitif -> lib_islem -> lib_sayi; iki_kat transitif yuklenmeli. */
-    int ok = kemgu_llvm_opt_verify("test/crossfile/transitif.kem");
-    test_sonuc("crossfile transitif: opt -passes=verify PASS", ok);
-}
-
-static void test_crossfile_transitif_calistir(void) {
-    int rc = derle_dosya_ve_calistir("test/crossfile/transitif.kem");
-    test_sonuc("crossfile transitif (uc_kat(14)) -> exit 42", rc == 42);
-}
-
-static void test_crossfile_sonuc_verify(void) {
-    /* cross-file sonuç dönüşlü çağrı — C2.5 tagged-union ABI uyumu. */
-    int ok = kemgu_llvm_opt_verify("test/crossfile/sonuc_cagri.kem");
-    test_sonuc("crossfile sonuc ABI: opt -passes=verify PASS", ok);
-}
-
-static void test_crossfile_sonuc_calistir(void) {
-    int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri.kem");
-    test_sonuc("crossfile sonuc donuslu cagri -> exit 42", rc == 42);
-}
-
 /* --- [D-589] YENİ-BİÇİM karşılıklar (seçili import + `genel`) ---
  *
- * Yukarıdaki dört ölçüm LEGACY düzleştirme yolunu kapılıyor. D-582 ADIM 5
- * o yolu SİLMEYİ öneriyor; silinirse bu dört ölçüm de gider. Aşağıdaki dört
- * ölçüm aynı iki değişmezi (transitif yükleme · `sonuç<T,H>` ABI) YENİ
- * biçimde kapılar, yani silme kararı verildiğinde kapsam KAYBOLMAZ.
+ * D-590 legacy düzleştirmeyi SİLDİ; eski dört ölçüm (transitif · sonuc_cagri)
+ * onunla gitti. Aşağıdaki dört ölçüm aynı iki değişmezi (transitif yükleme ·
+ * `sonuç<T,H>` ABI) YENİ biçimde kapılar — kapsam KAYBOLMADI.
  *
  * ⚠ Yalnız `check_genis` YETMEZDİ: o kapı `--check` paritesi ölçer, program
  *   ÇALIŞTIRMAZ. Transitif yüklemenin gerçekten çalıştığı ancak burada
@@ -3596,10 +3571,6 @@ int main(void) {
     test_sonuc_struct_payload_calistir();
 
     printf("\n--- C2.6: cross-file fonksiyon cagrisi ---\n");
-    test_crossfile_transitif_verify();
-    test_crossfile_transitif_calistir();
-    test_crossfile_sonuc_verify();
-    test_crossfile_sonuc_calistir();
     /* [D-589] yeni-biçim karşılıklar — legacy yol silinirse kapsam kalsın. */
     test_crossfile_transitif_yeni_verify();
     test_crossfile_transitif_yeni_calistir();

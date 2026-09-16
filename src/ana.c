@@ -201,12 +201,6 @@ static void dizin_al(const char *yol, char *out, size_t n) {
     out[son] = '\0';
 }
 
-static int kullan_yeni_bicim(const Dugum *k) {
-    return k->veri.kullan.segment_sayi <= 1 ||
-           k->veri.kullan.secili_sayi > 0 ||
-           k->veri.kullan.alias_ad != NULL;
-}
-
 typedef struct KullanIsi {
     const Dugum *k;               /* yeni-bicim DUGUM_KULLAN */
     const char *ithalatci_yol;    /* iceren dosyanin yolu (arama + hata) */
@@ -226,7 +220,6 @@ static int kullan_isleri_topla(Arena *a, Dugum *const *uyeler, int sayi,
     for (int i = 0; i < sayi; i++) {
         const Dugum *u = uyeler[i];
         if (!u || u->tip != DUGUM_KULLAN) continue;
-        if (!kullan_yeni_bicim(u)) continue;  /* legacy yol */
         if (*is_sayi == *kap) {
             int yeni_kap = *kap == 0 ? 16 : *kap * 2;
             KullanIsi *yeni = (KullanIsi *)arena_ayir(a,

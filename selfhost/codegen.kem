@@ -13196,16 +13196,6 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
     lex_et(&değişken mp);
     değişken mkok: tam32 = parse_program(&değişken mp);
     değişken mdiz: metin = dizin_al(rel);   // transitif importer dizini
-    // D-427: LEGACY ÇOK-SEGMENTLİ `kullan a::b::c;` DÜZLEŞTİRME yolundadır.
-    // C `ana.c`:153 + `kullan_yeni_bicim`: yeni biçim = TEK SEGMENT ∨ seçili
-    // import ∨ alias. Bunların HİÇBİRİ değilse modül eski (düzleştiren) yoldan
-    // yüklenir ve TÜM üst düzey adlar görünür olur — `dışa`/`genel` istemez,
-    // private-by-default (T041) UYGULANMAZ.
-    // Self-host bu ayrımı yapmıyordu → `drivers/virtio/*` gibi legacy import
-    // kullanan dosyalarda düz `sabit`ler ÖZEL sayılıp sahte T002 üretiliyordu
-    // (`status.kem`de 19 tanı). D-424'ün tip kapısıyla birlikte bu ÖLÜMCÜL
-    // hâle geldi: self sürücüleri DERLEYEMEZ oldu (C 11/63/68 define, self 0).
-    değişken legacy: mantıksal = kullan_yeni_bicim_mi(p, modul_yol) == yanlış;
     // D-429: modülün İMZA + YAPI tablolarını KENDİ Ayr'inde kur, sonra taşı.
     genel_topla(&değişken mp, mkok);
     capraz_imza_tasi(p, &değişken mp);
@@ -13224,15 +13214,12 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
         // D-363 T041 (private-by-default): DOSYA-modülünün `genel` İŞARETSİZ
         // üyeleri dışarıdan erişilemez. `dışa` sarmalı ve `genel` işaretlisi muaf;
         // dosya-içi `modül m { }` blokları bu yola girmediği için doğal olarak muaf.
+        // [D-590] Legacy düzleştirme SİLİNDİ: her `kullan` yeni biçimdir,
+        // `genel` işaretsiz üye DAİMA özel (T041).
         eğer tanim_kind_mi(cad) {
-            eğer legacy {
-                // Legacy düzleştirme: ad DOĞRUDAN görünür, özel değil.
-                g_ekle(p, dizi_al(mp.a_deg, c));
-            } değilse {
-                eğer gen_isaretli_mi(&değişken mp, c) == yanlış {
-                    dizi_ekle(p.priv_mod, son_segment(modul_yol));
-                    dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
-                }
+            eğer gen_isaretli_mi(&değişken mp, c) == yanlış {
+                dizi_ekle(p.priv_mod, son_segment(modul_yol));
+                dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
             }
         }
         eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
@@ -13257,39 +13244,7 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
 //
 // Modülün KENDİ `kullan`'ları için modül geçici bir `Ayr`e parse edilir — ama
 // yalnız KULLAN düğümlerinin `a_deg` METİNLERİ okunur, AST kopyalanmaz.
-// D-414: `kullan` YENİ biçim mi? C `src/ana.c:204 kullan_yeni_bicim` AYNASI:
-//   segment_sayi <= 1  ||  seçili_import var  ||  alias var
-// Değilse LEGACY: çok-segmentli düz yol (`kullan test::crossfile::lib_islem`).
-// AYRIM ÖNEMLİ çünkü İKİ YÜKLEYİCİ FARKLI AD ALANI kuruyor:
-//   yeni   → modül önekli   (`@mat.topla`)
-//   legacy → DÜZ, öneksiz   (`@uc_kat`, `@iki_kat`)
-// Ölçüldü: `test/crossfile/transitif` C'de `@uc_kat`/`@iki_kat` yayıyor,
-// self-host `modül` sarmalı yüzünden `@lib_islem.uc_kat` yayıp `@iki_kat`ı
-// tanımsız bırakıyordu.
-işlev kullan_yeni_bicim_mi(p: &değişken Ayr, yol: metin) -> mantıksal {
-    // Segment sayısı: "::" ayırıcılarını say.
-    değişken n: tam32 = metin_uzunluk(yol);
-    değişken seg: tam32 = 1;
-    değişken i: tam32 = 1;
-    iken i < n {
-        eğer bayt(yol, i) == 58 ve bayt(yol, i - 1) == 58 { seg = seg + 1; i = i + 1; }
-        i = i + 1;
-    }
-    eğer seg <= 1 { ver doğru; }
-    // Seçili import ya da alias varsa YİNE yeni biçim.
-    değişken k: tam32 = 0;
-    iken k < dizi_boyut(p.si_yol) {
-        eğer metin_esit(dizi_al(p.si_yol, k), yol) { ver doğru; }
-        k = k + 1;
-    }
-    değişken m: tam32 = 0;
-    iken m < dizi_boyut(p.al_yol) {
-        eğer metin_esit(dizi_al(p.al_yol, m), yol) { ver doğru; }
-        m = m + 1;
-    }
-    ver yanlış;
-}
-işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin, yeni_bicim: mantıksal) -> metin {
+işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     // Modül ADI EN BAŞTA sabitlenir — `p` üzerinde HİÇBİR mutasyon olmadan önce.
     // Çağıran `modul_src_bir(p, dizi_al(p.a_deg, c), ...)` biçiminde çağırıyor:
     // `yol` `p`'nin KENDİ dizisinden okunuyor ve callee aynı `p`yi büyütüyor
@@ -13349,10 +13304,8 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin, yeni_bicim: m
     // yuklem YANLIS "legacy" diyordu -> modul SARMALANMIYOR, uyeler MANGLE
     // EDILMEDEN yayiliyordu (olculdu: virtqueue_bind self 36 nitelikli ad,
     // C 63).
-    eğer yeni_bicim {
-        değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " { ");
-        govde = metin_birlestir(metin_birlestir(bas, ic), "}");
-    }
+    değişken bas: metin = metin_birlestir(metin_birlestir("modül ", mad), " { ");
+    govde = metin_birlestir(metin_birlestir(bas, ic), "}");
     değişken mp: Ayr = ayr_olustur(ic);
     lex_et(&değişken mp);
     değişken mkok: tam32 = parse_program(&değişken mp);
@@ -13364,8 +13317,7 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin, yeni_bicim: m
     iken ci < cs {
         değişken c: tam32 = dizi_al(mp.cocuk, cb + ci);
         eğer metin_esit(dizi_al(mp.a_ad, c), "KULLAN") {
-            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz,
-                kullan_yeni_bicim_mi(&değişken mp, dizi_al(mp.a_deg, c))));
+            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz));
         }
         ci = ci + 1;
     }
@@ -13385,8 +13337,7 @@ işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin) -> metin {
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "KULLAN") {
-            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin,
-                kullan_yeni_bicim_mi(p, dizi_al(p.a_deg, c))));
+            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin));
         }
         i = i + 1;
     }
