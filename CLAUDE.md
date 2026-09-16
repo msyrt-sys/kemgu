@@ -1563,6 +1563,81 @@ yansıyorsa LLVM yakalar.
 **her iki derleyicide de derlenmiyor** (`Cannot allocate unsized type`). Geçerli
 bir program reddediliyor; D-464/D-518 sınıfı, sessiz değil.
 
+### ✅ D-589 (D-582 ADIM 5'in ÖN KOŞULU): LEGACY FİKSTÜRLERİN YENİ-BİÇİM KARŞILIĞI
+D-582 ADIM 5 *"legacy düzleştirmeyi SİL"* diyor ve **KARAR GEREKTİRİR** diye
+işaretli. Silmenin kendisi bir dil yüzeyi kararıdır (Mehmet); ama maddenin
+kendi metni bir **ön koşul** tanımlıyor: *"önce onların yeni-biçim karşılığı
+yazılmalı"*. Bu artım yalnız o ön koşuldur — **silme YAPILMADI.**
+
+**ÖNCE ÖLÇÜLDÜ — ÖN KOŞULUN YARISI ZATEN YAPILMIŞTI** (madde bayatlamış):
+```
+gizlilik yarisi : ana_ic_gizlilik.kem (alias) + ana_ic_gizlilik_secili.kem
+                  -> D-581'de yazilmis; ayni modulu (ic::derin) ve ayni
+                     private uyeyi (derin_gizli) YENI bicimde olcuyor  ✓ VARDI
+crossfile yarisi: transitif / sonuc_cagri  -> yeni-bicim karsiligi YOKTU  🔴
+```
+
+**⚠⚠ "HANGİ KAPI KAPSIYOR" ÖLÇÜMÜM ÖNCE YANLIŞTI — ve bu bir kapsam hatasıydı.**
+İlk taramam yalnız `test/*.sh` + `Makefile`e baktı ve *"`test/crossfile` yalnız
+`check_genis` tarafından, yani SADECE `--check` düzeyinde kapılıyor"* dedim.
+**`.c` dosyaları taranmamıştı:** `test/test_llvm.c` legacy ikilisini
+**DAVRANIŞSAL** olarak kapılıyor (`exit 42` + `opt -passes=verify`).
+Yani legacy fikstürlerin kapsamı benim ölçtüğümden GENİŞTİ ve yalnız
+`check_genis`e fikstür eklemek **denk bir karşılık OLMAZDI** — silme
+gerçekleşseydi davranışsal kapsam sessizce kaybolurdu.
+*(D-427'nin "ön koşul ölçümünün KAPSAMI da ayrıca doğrulanmalı" dersi;
+D-517'de gömülü kaynaklar için yaşanan sınıfın aynısı.)*
+
+**YAPILAN — beş fikstür + dört davranışsal ölçüm:**
+```
+lib_sayi_yeni · lib_islem_yeni · transitif_yeni      (gecisli yukleme)
+lib_sonuc_yeni · sonuc_cagri_yeni                    (sonuç<T,H> ABI)
+test_llvm.c   : +4 olcum (verify + calistir, ikisi de exit 42)
+```
+
+**⚠ `genel` ZORUNLU, `dışa` YETMEZ — ölçüldü, varsayılmadı:** seçili import
+`dışa` üyeyi **T041** ile reddediyor (*"secili import: uye 'genel' degil"*).
+Legacy düzleştirme her üst düzey adı görünür kıldığı için eski fikstürlerde
+`dışa` yetiyordu. Bu aynı zamanda fikstürlerin **gerçekten yeni-biçim yolundan
+geçtiğinin pozitif kanıtıdır** — legacy'ye sessizce düşselerdi `dışa` da
+çalışırdı.
+
+**⚠ İKİ YOL YAZIMI DA ÇALIŞIYOR (ölçüldü):** `test::crossfile::lib_x::{f}`
+(tam yol) ve `lib_x::{f}` (tek segment, aynı dizin) — ikisi de C ve self-host'ta
+`OK`. Legacy fikstürlerle yapısal karşılaştırılabilirlik korunsun diye TAM YOL
+biçimi seçildi.
+
+**SİLME YAPILMADI VE YAPILMAMALI** — geriye kalan tek şey karardır: bu dört
+kasıtlı fikstür (D-533 + crossfile ×3) ne olacak? Artık silmenin bedeli
+"kapsam kaybı" DEĞİL; çünkü her iki değişmezin de yeni-biçim karşılığı
+kapılı durumda.
+
+**Kapılar:** check_genis **133/133 → 138/138 (13 muaf)** · llvm_test
+**286 → 290 (Toplam 290 | Basarili 290 | Basarisiz 0)**. İki artış da tam
+olarak eklenen ölçüm sayısı kadar: beş yeni fikstür + dört davranışsal ölçüm.
+Davranış ayrıca doğrudan da ölçüldü (kapıya güvenmeden): `transitif_yeni` ve
+`sonuc_cagri_yeni` → **C=42, SELF=42**, `--llvm` ve link iki tarafta da rc=0.
+
+⚠ Toplam sayıyı iki kez YANLIŞ desenle aradım (`X/Y test`); bu takımın özeti
+`Toplam: N | Basarili: N | Basarisiz: N` biçiminde. *Okumadığın bir çıktı
+biçimini varsayma* — sayı ancak logun kuyruğu gerçekten okunduktan sonra
+yazıldı.
+**SABOTAJ YOK — ve bunun gerekçesi ölçülmüştür.** Bu artım yeni bir KURAL
+eklemiyor; var olan bir yolu (yeni-biçim seçili import + geçişli yükleme)
+KAPSAYAN fikstürler ekliyor. Sabote edilecek kendi kodu yoktur; koruduğu
+mekanizmaların sabotajları zaten kayıtlı (D-585 S177 geçişli biçim kararı ·
+D-581 S169-S173 T041 yolu). Fikstürlerin ayırt ediciliği bunun yerine
+**pozitif olarak** ölçüldü: `genel` yerine `dışa` yazıldığında seçili import
+**T041 ile reddediliyor** (ölçüldü), yani dosyalar gerçekten yeni-biçim
+yolundan geçiyor — legacy düzleştirmeye sessizce düşmüyorlar.
+
+**⚠ ÖLÇÜM ARACI HATASI (bu turda dokuzuncu):** parite kontrolümde C'yi
+`--checkdump`, self'i **bayraksız** çağırdım → beş dosyanın BEŞİNDE de
+"dump FARKLI" çıktı ve bir an gerileme sandım. Harness self'i `--check` ile
+çağırıyor (`check_genis_harness.sh:110`). *Harness'ın çağrımını OKU, taklit
+etme* (D-499). Beş-üzerinden-beş sapmanın kendisi ipucuydu: gerçek bir
+gerileme iki satırlık bir kütüphaneyi de kapsamazdı.
+
 ### 🔴✅ D-588: `&<TANIMLAYICI OLMAYAN>` SELF-HOST'TA GEÇERSİZ IR — parite TERS yönde
 LOOP.md'nin sıradaki maddesi bir **TASARIM** işi olarak kayıtlıydı: *"self-host
 codegen'de hata bildirme mekanizması YOK → `ifade_uret` çöp kolları gürültülü

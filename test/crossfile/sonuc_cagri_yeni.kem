@@ -1,0 +1,14 @@
+// [D-589] YENİ-BİÇİM karşılık — başka dosyadaki `sonuç`-dönüşlü işlevi çağır
+// ve `eşleş` ile destructure et. Legacy eşi: `sonuc_cagri.kem`.
+//
+// Çapraz-dosya çağrı tagged-union ABI'sini ({i8, T, H} by-value) bozmamalı.
+//   bol_y(84,2) = tamam(42) -> v = 42
+kullan test::crossfile::lib_sonuc_yeni::{bol_y};
+
+işlev main() -> tam32 {
+    eşleş bol_y(84, 2) {
+        tamam(v) => { ver v; }
+        hata(e) => { ver 0; }
+    }
+    ver 0;
+}

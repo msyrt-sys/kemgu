@@ -1,0 +1,9 @@
+// [D-589] YENİ-BİÇİM karşılık — `sonuç<T,H>` dönüşlü kütüphane.
+// Legacy eşi: `lib_sonuc.kem`.
+//
+// Çapraz-dosya çağrı C2.5 tagged-union ABI'sini ({i8, T, H} by-value)
+// bozmamalı; bu dosya o yüzeyin yeni-biçim ithalatta da durduğunu ölçer.
+genel işlev bol_y(a: tam32, b: tam32) -> sonuç<tam32, metin> {
+    eğer b == 0 { ver hata("sifira bolme"); }
+    ver tamam(a / b);
+}
