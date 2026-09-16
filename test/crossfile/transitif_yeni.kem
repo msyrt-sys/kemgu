@@ -1,0 +1,17 @@
+// [D-589] YENİ-BİÇİM karşılık — giriş noktası (transitif yükleme).
+// Legacy eşi: `transitif.kem`.
+//
+// Yalnız `lib_islem_yeni` ithal edilir; `lib_sayi_yeni` TRANSİTİF olarak
+// (lib_islem_yeni üzerinden) yüklenmeli. Sabit-nokta `kullan` ön-geçişi
+// çalışmazsa `uc_kat_y` çözülür ama onun gövdesindeki `iki_kat_y` TANIMSIZ
+// sembol olurdu.
+//   uc_kat_y(14) = iki_kat_y(14) + 14 = 28 + 14 = 42
+//
+// ⚠ SEÇİLİ IMPORT ADI NİTELİKSİZ GETİRİR (D-582/D-585): gövdede `uc_kat_y`
+//   düz yazılır, nitelendirme GEREKMEZ. Göçün ucuz olmasının sebebi budur —
+//   D-520'nin "~700 referansı nitelendir" maliyeti bu yüzden geçersizdi.
+kullan test::crossfile::lib_islem_yeni::{uc_kat_y};
+
+işlev main() -> tam32 {
+    ver uc_kat_y(14);
+}

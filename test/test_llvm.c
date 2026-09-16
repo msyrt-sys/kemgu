@@ -381,6 +381,38 @@ static void test_crossfile_sonuc_calistir(void) {
     test_sonuc("crossfile sonuc donuslu cagri -> exit 42", rc == 42);
 }
 
+/* --- [D-589] YENİ-BİÇİM karşılıklar (seçili import + `genel`) ---
+ *
+ * Yukarıdaki dört ölçüm LEGACY düzleştirme yolunu kapılıyor. D-582 ADIM 5
+ * o yolu SİLMEYİ öneriyor; silinirse bu dört ölçüm de gider. Aşağıdaki dört
+ * ölçüm aynı iki değişmezi (transitif yükleme · `sonuç<T,H>` ABI) YENİ
+ * biçimde kapılar, yani silme kararı verildiğinde kapsam KAYBOLMAZ.
+ *
+ * ⚠ Yalnız `check_genis` YETMEZDİ: o kapı `--check` paritesi ölçer, program
+ *   ÇALIŞTIRMAZ. Transitif yüklemenin gerçekten çalıştığı ancak burada
+ *   (exit 42 + opt -passes=verify) görünür. */
+
+static void test_crossfile_transitif_yeni_verify(void) {
+    /* transitif_yeni -> lib_islem_yeni -> lib_sayi_yeni (seçili import). */
+    int ok = kemgu_llvm_opt_verify("test/crossfile/transitif_yeni.kem");
+    test_sonuc("crossfile yeni-bicim transitif: opt -passes=verify PASS", ok);
+}
+
+static void test_crossfile_transitif_yeni_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/transitif_yeni.kem");
+    test_sonuc("crossfile yeni-bicim transitif (uc_kat_y(14)) -> exit 42", rc == 42);
+}
+
+static void test_crossfile_sonuc_yeni_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/crossfile/sonuc_cagri_yeni.kem");
+    test_sonuc("crossfile yeni-bicim sonuc ABI: opt -passes=verify PASS", ok);
+}
+
+static void test_crossfile_sonuc_yeni_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri_yeni.kem");
+    test_sonuc("crossfile yeni-bicim sonuc donuslu cagri -> exit 42", rc == 42);
+}
+
 /* --- C2.7: çeşit (custom sum type) + exhaustiveness --- */
 
 /* `kemgu --check <kem_yol>` başarılı mı? 1 = OK (exit 0), 0 = hata. */
@@ -3568,6 +3600,11 @@ int main(void) {
     test_crossfile_transitif_calistir();
     test_crossfile_sonuc_verify();
     test_crossfile_sonuc_calistir();
+    /* [D-589] yeni-biçim karşılıklar — legacy yol silinirse kapsam kalsın. */
+    test_crossfile_transitif_yeni_verify();
+    test_crossfile_transitif_yeni_calistir();
+    test_crossfile_sonuc_yeni_verify();
+    test_crossfile_sonuc_yeni_calistir();
 
     printf("\n--- C2.7: cesit (custom sum type) + exhaustiveness ---\n");
     test_cesit_temel_verify();
