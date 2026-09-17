@@ -71,11 +71,19 @@ if [ "$os_var" -eq 1 ]; then
         # satıriçi asm SAYISI da denetlenir: asm bloğu sessizce düşerse (D-416'nın
         # kusuru) define kümesi DEĞİŞMEZ — yalnız ad karşılaştırmak onu KAÇIRIR.
         ca=$(grep -c "asm sideeffect" "$TMP/os_c.ll"); sa=$(grep -c "asm sideeffect" "$TMP/os_s.ll")
-        if [ "$oc" = "$os" ] && diff -q "$TMP/os_c.d" "$TMP/os_s.d" >/dev/null 2>&1 && [ "$ca" -eq "$sa" ]; then
-            echo "  ✅ BİRLEŞİK OS — $(wc -l <"$TMP/os_c.d") işlev, $ca satıriçi asm, üçlü eşleşti"
+        # [D-604] HAM İŞARETÇİ + VOLATILE paritesi (eski kem_pointer_self_arm'ın ölçtüğü
+        # değişmez, tek fikstür yerine TÜM OS biriminde). Volatile düşerse MMIO erişimi
+        # optimizatörce birleştirilip SESSİZCE bozulur; define kümesi bunu GÖRMEZ.
+        # Eşitlik tek başına YETMEZ: iki derleyici birlikte volatile'ı bıraksa 0=0 geçerdi
+        # → C tarafında sıfırdan büyük olması da şart.
+        cv=$(grep -cE "load volatile|store volatile" "$TMP/os_c.ll"); sv=$(grep -cE "load volatile|store volatile" "$TMP/os_s.ll")
+        ci=$(grep -c "inttoptr" "$TMP/os_c.ll"); si=$(grep -c "inttoptr" "$TMP/os_s.ll")
+        if [ "$oc" = "$os" ] && diff -q "$TMP/os_c.d" "$TMP/os_s.d" >/dev/null 2>&1 && [ "$ca" -eq "$sa" ] \
+           && [ "$cv" -gt 0 ] && [ "$cv" -eq "$sv" ] && [ "$ci" -gt 0 ] && [ "$ci" -eq "$si" ]; then
+            echo "  ✅ BİRLEŞİK OS — $(wc -l <"$TMP/os_c.d") işlev, $ca satıriçi asm, $cv volatile, $ci inttoptr, üçlü eşleşti"
             pass=$((pass+1))
         else
-            echo "  🔴 BİRLEŞİK OS — işlev C=$(wc -l <"$TMP/os_c.d") KEMGU=$(wc -l <"$TMP/os_s.d") · asm C=$ca KEMGU=$sa"
+            echo "  🔴 BİRLEŞİK OS — işlev C=$(wc -l <"$TMP/os_c.d") KEMGU=$(wc -l <"$TMP/os_s.d") · asm C=$ca KEMGU=$sa · volatile C=$cv KEMGU=$sv · inttoptr C=$ci KEMGU=$si"
             [ "$oc" = "$os" ] || echo "      üçlü: C=[$oc] KEMGU=[$os]"
             diff "$TMP/os_c.d" "$TMP/os_s.d" 2>/dev/null | head -5 | sed 's/^/      /'
             fail=$((fail+1))

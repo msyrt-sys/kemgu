@@ -55,7 +55,9 @@ mkdir -p "$TMP"
 #     okur; ASan haklı olarak access-violation basar. D-395'te ölçülmüştü:
 #     "C DE segfault ediyor, self-host BİREBİR aynı → parite doğru, kusur
 #     değil". Bu iki dosya bare-metal keşif dosyasıdır ve host'ta ÇALIŞAMAZ;
-#     doğru koşum yeri QEMU hedefleridir (`calistir_kem_pointer_arm` vb.).
+#     doğru koşum yeri QEMU'dur: ham işaretçi + volatile MMIO artık
+#     `calistir_kem_os_arm` (faz [3]) ve `calistir_baremetal_diff` (D-604
+#     volatile/inttoptr paritesi) ile ölçülür; eski `calistir_kem_pointer_*` silindi.
 #   [D-483] LEAKSANITIZER — LINUX'TA YENİ ÖLÇÜM, WINDOWS'TA HİÇ YOKTU.
 #     Windows ASan runtime'ında LeakSanitizer BULUNMAZ; WSL'de ilk koşumda
 #     7 sızıntı raporlandı. Yani bunlar HEP ORADAYDI, proje HİÇ GÖRMEMİŞTİ.
