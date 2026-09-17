@@ -1309,8 +1309,12 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
-	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem \
-	  | awk -f test/strip_defined_declares.awk > $(BUILD)/kem_os.ll
+	@# [D-609] BORU HATTI BOLUNDU: `kemgu | awk` cikis kodu awk'in idi; kemgu'nun
+	@# tip hatasi (rc=1, bos IR — olculdu) MASKELENIYOR, hata gec 'undefined symbol
+	@# main' bag hatasi olarak goruluyordu (D-606 yan bulgusu). Ayri satirda kemgu
+	@# rc!=0 make'i DOGRUDAN durdurur; awk yalnizca kemgu basariliysa kosar.
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari arm64 $(BUILD)/kem_os_comb.kem > $(BUILD)/kem_os_ham.ll
+	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_ham.ll > $(BUILD)/kem_os.ll
 	$(BM_A64) -O2 -Wno-override-module -ffunction-sections -fdata-sections -x ir $(BUILD)/kem_os.ll -c -o $(BUILD)/kem_os.o
 	@# LINCHPIN (USERLAND_ROADMAP ADIM 1, D-286): 'kul_' önekli .kem sembolleri EL0-userland
 	@# routing sözleşmesi. -ffunction-sections/-fdata-sections her sembolü kendi .text.<isim>/
