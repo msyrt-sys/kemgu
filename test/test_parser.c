@@ -245,9 +245,17 @@ static void test_kullan_alias(void) {
 static void test_kullan_secili_cok_segment_hata(void) {
     Arena *a = arena_olustur(0);
     int hata = -1;
-    /* v1 siniri: cok-segment + secili -> P046 */
-    parse_kaynak("kullan a::b::{f};", a, &hata);
-    test_sonuc("kullan a::b::{f}; -> P046 (v1 siniri)", hata >= 1);
+    /* [D-580] P046 KALDIRILDI: cok-segment + secili GECERLI. Bu test P046'yi
+     * beklemeye devam ediyordu ve test_tumu'yu calistir_parser_test'te
+     * durduruyordu (D-593'te olculdu). Artik kabulu + AST'yi olcer. */
+    Dugum *prog = parse_kaynak("kullan a::b::{f};", a, &hata);
+    int ok = prog && hata == 0 && prog->veri.program.sayi == 1;
+    if (ok) {
+        Dugum *k = prog->veri.program.uyeler[0];
+        ok = k->tip == DUGUM_KULLAN && k->veri.kullan.segment_sayi == 2 &&
+             k->veri.kullan.secili_sayi == 1;
+    }
+    test_sonuc("kullan a::b::{f}; -> kabul (D-580, P046 yok)", ok);
     arena_serbest(a);
 }
 
