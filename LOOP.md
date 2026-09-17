@@ -17,15 +17,12 @@
       ithalattir, modulu SON segmentle baglar, T041 EVRENSEL.
 - [x] KEMGU-OS kalan C parcalari -> D-592: dokuzu da OLU cikti ve link
       listesinden dusuruldu; kem_os = boot .S (start_aarch64.S) + SAF-.kem.
-- [ ] (KARAR BEKLIYOR — Mehmet) runtime/kdl_runtime.c .kem gocu. D-595: PILOT
-      GECERSIZ — kdl_min/maks/mutlak(64) OLU KOD (hicbir derleyici eslemiyor,
-      IR'da cagri 0, depoda referans 0; mutlak zaten stdlib/temel/matematik.kem).
-      Olu aday 13 (alt sinir): bellek_hizali_al/serbest . hata_yazdir .
-      kanal_bos_mu . min/maks/mutlak(64) . oku_tam . prng_next64/seed.
-      Canli saf cekirdek (metin_* 19, yetki_* 9, kod_* 2) tasinirsa HER host
-      programinin baglama sozlesmesi degisir (~59 baglama noktasi) -> karar:
-      (a) olu 13'u sil, (b) canli saf cekirdegi runtime .kem birimine tasi,
-      (c) host runtime C kalsin.
+- [x] runtime olu kod -> D-596 (Mehmet: secenek a). 9 olu islev silindi.
+- [ ] Eski bare-metal C demo hedefleri: ONCE qemu_cekirdek'in dolayli
+      kullandigi 3 temsilcinin (sha256/virtio/bignum_selfhost_arm) hangi C
+      sembollerine gercekten ihtiyac duydugunu link haritasiyla OLC (D-592
+      yontemi); sonra kem_os-tabanli esdegerle degistir; silme listesi
+      Mehmet'in ONAYINA sunulur (kendiliginden silinmez).
 - [ ] Eski bare-metal C demo hedefleri (131 hedef, D-594): silme KARARI
       Mehmet'te. qemu_cekirdek 3 tanesini (sha256/virtio/bignum_selfhost_arm)
       dolayli cagiriyor -> toptan silinemez; once o 3 temsilci kem_os-tabanli
@@ -356,3 +353,4 @@
 - 2026-09-17 D-593: TAM TAKIM (make -k test_tumu, 105 dk) YESIL, MAKE_RC=0. ONCE KIRMIZIYDI: test_parser.c [24] D-580'de kaldirilan P046'yi hala bekliyordu ve test_tumu ILK HATADA durdugu icin D-580'DEN BERI takimin calistir_parser_test SONRASI HIC KOSMAMISTI (hedefli kapilar yesildi, tam takim hic tamamlanmamisti). Test yeni davranisi (kabul + segment_sayi=2 + secili_sayi=1) olcecek bicimde duzeltildi; -k ile ayni kosumda BASKA kirmizi CIKMADI. Atlamalar hepsi bilinen/mesru (perf_bellek /usr/bin/time yok, bare-metal MMIO, ASan kurate SKIP). ARAC: arka plan bildirimi 'exit 0' dedi ama o tail'in koduydu; gercek MAKE_RC=2 logdan okundu (D-444). Gunluk satirini ilk yazarken cift tirnak icinde backtick kullandim -> kabuk tail'i calistirip stdin'de ASILDI (D-548 tuzagi), commit ve push hic olmadi. D-590 son-segment baglama anlami Mehmet tarafindan TEYIT edildi.
 - 2026-09-17 D-594 (OLCUM, kod yok): (1) push: claude/jovial-euclid-a22e29 952e1d6..4edca0e (D-590..D-593). (2) Eski bare-metal C nesnelerini 131 calistir_* hedefi kullaniyor, hicbiri dogrudan test_tumu'da DEGIL ama qemu_cekirdek sha256/virtio/bignum_selfhost_arm uzerinden 3'unu DOLAYLI cagiriyor -> toptan silme o kapiyi kirar. (3) kdl_runtime.c cagri-zinciriyle dogrulanmis harita: 115 disa-verilen islev = OS 62 . ALLOC 2 . SAF 51. SAF listesinde BILINEN YANLIS-POZITIF: kdl_soket_* (5) Winsock'u fonksiyon isaretcisiyle cagirir (D-466) ve kdl_dosya_yeniden_adlandir regex disi rename kullanir. Gercek saf cekirdek: metin_* 19 . yetki_* 9 . kod_* 2 . min/maks/mutlak(64) 6 . prng 2. ILK tarama (zincirsiz) 61 SAF demisti; zincir 10'unu OS'a tasidi. ARAC: heredoc icindeki regex kacislari bozuldu (unterminated character set) -> betik dosyaya yazildi.
 - 2026-09-17 D-595 (OLCUM, kod yok): runtime pilotu (kdl_min/maks/mutlak(64)) ONCE OLCULDU ve GECERSIZ cikti: alti da OLU KOD — src/selfhost'ta esleme yok, uretilen IR'da @kdl_min/maks/mutlak cagrisi 0 (codegen.kem ve cg_yetki), depoda baska referans 0. Olu kodu .kem'e tasimak anlamsiz. Genisletilmis tarama: 115 disa-verilen islevin 13'u olu aday (onek eslemesi canli sayildigi icin ALT SINIR). Kalan iki Sirada maddesi de dil/yapi karari istedigi icin loop DURDURULDU.
+- 2026-09-17 D-596: runtime/kdl_runtime.c'den 9 OLU islev silindi (Mehmet: secenek a): kdl_mutlak/min/maks (+64), kdl_hata_yazdir, kdl_oku_tam, kdl_kanal_bos_mu. Tum depoda kelime-sinirli arama: referans 0 (yalniz tarihi log/CLAUDE.md anmalari). BILINCLI KORUNAN 4: kdl_bellek_hizali_al/serbest (KEMGU_SIMD_Spec_V1'de planli API) + kdl_prng_next64/seed (Capability Spec) -> spesifikasyonla celismemek icin silinmedi. Yan bulgu: kdl_mutlak(INT_MIN) tanimsiz davranisti. Kapilar: sifir_uyari 38/0 . runtime_link_test OK . gorev_rt 16/16 . kanal_omru 10/10 . dizi_sinir 39/39 . panik 6/6 . kdl_bolge 33/33 . llvm_test 286/286 . codegen_diff 173/173 . stdlib_check . self_driver FIXPOINT. ARAC: ilk kosumda iki hedef adini YANLIS yazdim (calistir_runtime_link, calistir_gorev_rt -> 'No rule') ve rc=2 aldim; gerileme degildi, dogru adlarla (_test) yeniden kosuldu. Sabotaj YOK: silme bir kural degil; olculecek davranis 'hic referans yok' ve o, linkin gecmesiyle olculdu.

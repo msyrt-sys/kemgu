@@ -299,21 +299,6 @@ void kdl_yaz_karakter(int32_t cp) {
     fputs((const char *)buf, stdout);
 }
 
-void kdl_hata_yazdir(const char *s) {
-    if (s) {
-        fputs(s, stderr);
-        fputc('\n', stderr);
-    } else {
-        fputs("(bos)\n", stderr);
-    }
-}
-
-int32_t kdl_oku_tam(void) {
-    int32_t n = 0;
-    if (scanf("%d", &n) != 1) return 0;
-    return n;
-}
-
 /* === D.3 Metin === */
 
 int32_t kdl_metin_uzunluk(const char *s) {
@@ -337,31 +322,10 @@ _Bool kdl_metin_esit(const char *a, const char *b) {
     return strcmp(a, b) == 0;
 }
 
-/* === D.4 Sayisal === */
-
-int32_t kdl_mutlak(int32_t x) {
-    return x < 0 ? -x : x;
-}
-
-int32_t kdl_min(int32_t a, int32_t b) {
-    return a < b ? a : b;
-}
-
-int32_t kdl_maks(int32_t a, int32_t b) {
-    return a > b ? a : b;
-}
-
-int64_t kdl_mutlak64(int64_t x) {
-    return x < 0 ? -x : x;
-}
-
-int64_t kdl_min64(int64_t a, int64_t b) {
-    return a < b ? a : b;
-}
-
-int64_t kdl_maks64(int64_t a, int64_t b) {
-    return a > b ? a : b;
-}
+/* [D-596] D.4 Sayisal (kdl_mutlak/min/maks + 64) ve kdl_hata_yazdir/
+ * kdl_oku_tam/kdl_kanal_bos_mu SILINDI: hicbir derleyici eslemiyordu, depoda
+ * referans 0 (olculdu, D-595). kdl_mutlak(INT_MIN) ayrica tanimsiz
+ * davranisti. Saf karsiliklar stdlib/temel/matematik.kem'de. */
 
 /* === J: Metin islemleri (heap alloc) === */
 
@@ -1749,10 +1713,6 @@ int64_t kdl_kanal_al(KdlKanal *k) {
     kdl_kosul_uyandir_dolu_degil(k);  /* bekleyen gonderici varsa uyandir */
     kdl_kilit_cik(k);
     return v;
-}
-
-int32_t kdl_kanal_bos_mu(KdlKanal *k) {
-    return k ? (k->boyut == 0) : 1;
 }
 
 void kdl_kanal_serbest(KdlKanal *k) {
