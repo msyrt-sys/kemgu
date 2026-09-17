@@ -290,6 +290,23 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     ver *elem;
 }
 
+// [D-600] kdl_dizi_yaz_tam(d, i, deger) : sınır-kontrollü yerinde yaz
+// (i<0 || i>=boyut → oob). C `kdl_dizi.inc` karşılığıyla BİREBİR; kem_os
+// SHA-256 fazı `w[t] = yeni` yazdığı için gerekti (önceden kem_os'ta hiçbir
+// yazma yolu yoktu → link `undefined symbol` ile GÜRÜLTÜLÜ düştü, S187).
+çıplak işlev kdl_dizi_yaz_tam(d: *tam8, i: tam32, deger: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer i < 0 { kdl_dizi_oob(i, boyut); }
+    eğer i >= boyut { kdl_dizi_oob(i, boyut); }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;
+    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
+    *elem = deger;
+}
+
 // kdl_dizi_boyut(d) -> i32.
 çıplak işlev kdl_dizi_boyut(d: *tam8) -> tam32 {
     eğer (d olarak tam64) == 0 { ver 0; }

@@ -527,6 +527,176 @@ işlev kbn_testi() -> tam32 {
     ver 0;
 }
 
+// [D-600] [26] SHA-256 — eski `sha256_selfhost_arm` (C iskeletli ayri ELF) testinin
+// kem_os'a tasinmis hali. SHA-256("abc") tek blok; sabitler ve tur fonksiyonlari
+// kaynak testle BIREBIR (ksha_ onekli). Dayandigi codegen invaryanti: dtam32 `>>`
+// MANTIKSAL (lshr) ve mod-2^32 toplama.
+sabit KSHA_H0_ILK: dtam32 = 1779033703;  // 0x6a09e667
+sabit KSHA_H1_ILK: dtam32 = 3144134277;  // 0xbb67ae85
+sabit KSHA_H2_ILK: dtam32 = 1013904242;  // 0x3c6ef372
+sabit KSHA_H3_ILK: dtam32 = 2773480762;  // 0xa54ff53a
+sabit KSHA_H4_ILK: dtam32 = 1359893119;  // 0x510e527f
+sabit KSHA_H5_ILK: dtam32 = 2600822924;  // 0x9b05688c
+sabit KSHA_H6_ILK: dtam32 = 528734635;   // 0x1f83d9ab
+sabit KSHA_H7_ILK: dtam32 = 1541459225;  // 0x5be0cd19
+
+// --- SHA-256("abc") beklenen digest word'leri (ondalık) ---
+sabit KSHA_D0_BEKLENEN: dtam32 = 3128432319;  // 0xba7816bf
+sabit KSHA_D1_BEKLENEN: dtam32 = 2399260650;  // 0x8f01cfea
+sabit KSHA_D2_BEKLENEN: dtam32 = 1094795486;  // 0x414140de
+sabit KSHA_D3_BEKLENEN: dtam32 = 1571693091;  // 0x5dae2223
+sabit KSHA_D4_BEKLENEN: dtam32 = 2953011619;  // 0xb00361a3
+sabit KSHA_D5_BEKLENEN: dtam32 = 2518121116;  // 0x96177a9c
+sabit KSHA_D6_BEKLENEN: dtam32 = 3021012833;  // 0xb410ff61
+sabit KSHA_D7_BEKLENEN: dtam32 = 4060091821;  // 0xf20015ad
+
+// =========================================================================
+// Bit-karıştırma yardımcıları — HEPSİ SKALER dtam32 PARAMETRELİ.
+// Dizi elemanları bunlara ARGÜMAN geçilir → kaydırmalar skaler üstünde →
+// `lshr` (mantıksal). Codegen'in dizi-eleman-ashr kısıtı böyle aşılır.
+// =========================================================================
+
+// Rotate-right: (x >> n) | (x << (32 - n)). x/n skaler dtam32.
+işlev ksha_rotr(x: dtam32, n: dtam32) -> dtam32 {
+    ver (x >> n) | (x << (32 - n));
+}
+
+// Mesaj çizelgesi küçük-sigma0: ksha_rotr(x,7) ^ ksha_rotr(x,18) ^ (x >> 3)
+işlev ksha_kucuk_sigma0(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 7) ^ ksha_rotr(x, 18) ^ (x >> 3);
+}
+
+// Mesaj çizelgesi küçük-sigma1: ksha_rotr(x,17) ^ ksha_rotr(x,19) ^ (x >> 10)
+işlev ksha_kucuk_sigma1(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 17) ^ ksha_rotr(x, 19) ^ (x >> 10);
+}
+
+// Sıkıştırma büyük-sigma0: ksha_rotr(x,2) ^ ksha_rotr(x,13) ^ ksha_rotr(x,22)
+işlev ksha_buyuk_sigma0(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 2) ^ ksha_rotr(x, 13) ^ ksha_rotr(x, 22);
+}
+
+// Sıkıştırma büyük-sigma1: ksha_rotr(x,6) ^ ksha_rotr(x,11) ^ ksha_rotr(x,25)
+işlev ksha_buyuk_sigma1(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 6) ^ ksha_rotr(x, 11) ^ ksha_rotr(x, 25);
+}
+
+// Ch (choose): (x & y) ^ ((^x) & z). KEMGU'da bit-NOT = x ^ 0xFFFFFFFF.
+işlev ksha_ch(x: dtam32, y: dtam32, z: dtam32) -> dtam32 {
+    değişken x_ters: dtam32 = x ^ 4294967295;   // ~x  (0xFFFFFFFF)
+    ver (x & y) ^ (x_ters & z);
+}
+
+// Maj (majority): (x & y) ^ (x & z) ^ (y & z).
+işlev ksha_maj(x: dtam32, y: dtam32, z: dtam32) -> dtam32 {
+    ver (x & y) ^ (x & z) ^ (y & z);
+}
+
+// =========================================================================
+// K[t]: SHA-256 tur sabitleri (ilk 64 asalın küpkökü kesirleri).
+// 64-elemanlı sabit dizi olarak döndürülür (indeks okuma → skaler'a kopyala).
+// =========================================================================
+işlev ksha_k_dizisi() -> Dizi<dtam32> {
+    ver [
+        1116352408, 1899447441, 3049323471, 3921009573,  961987163,
+        1508970993, 2453635748, 2870763221, 3624381080,  310598401,
+         607225278, 1426881987, 1925078388, 2162078206, 2614888103,
+        3248222580, 3835390401, 4022224774,  264347078,  604807628,
+         770255983, 1249150122, 1555081692, 1996064986, 2554220882,
+        2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
+         113926993,  338241895,  666307205,  773529912, 1294757372,
+        1396182291, 1695183700, 1986661051, 2177026350, 2456956037,
+        2730485921, 2820302411, 3259730800, 3345764771, 3516065817,
+        3600352804, 4094571909,  275423344,  430227734,  506948616,
+         659060556,  883997877,  958139571, 1322822218, 1537002063,
+        1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
+        2428436474, 2756734187, 3204031479, 3329325298
+    ];
+}
+
+// =========================================================================
+// Mesaj çizelgesi W[64]'ü "abc" tek-bloğu için doldurur.
+// W[0] = 0x61626380  ('a'<<24 | 'b'<<16 | 'c'<<8 | 0x80 padding biti)
+// W[1..14] = 0 ;  W[15] = 24 (bit-uzunluk 3*8, big-endian son word)
+// Sonra t=16..63 için genişletme: W[t] = sigma1(W[t-2]) + W[t-7]
+//                                        + sigma0(W[t-15]) + W[t-16].
+// =========================================================================
+işlev ksha_mesaj_cizelgesi() -> Dizi<dtam32> {
+    // 64 elemanlı sıfır dizisi + ilk blok.
+    değişken w: Dizi<dtam32> = [
+        1633837952, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 24,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ];
+    // w[0] = 1633837952 = 0x61626380 (yukarıda literal olarak verildi).
+
+    değişken t: tam32 = 16;
+    iken t < 64 {
+        // Dizi elemanlarını SKALER dtam32'ye kopyala → sigma işlevlerine
+        // argüman geçince kaydırmalar lshr (mantıksal) olur.
+        değişken w2: dtam32  = w[t - 2];
+        değişken w7: dtam32  = w[t - 7];
+        değişken w15: dtam32 = w[t - 15];
+        değişken w16: dtam32 = w[t - 16];
+        değişken yeni: dtam32 = ksha_kucuk_sigma1(w2) + w7 + ksha_kucuk_sigma0(w15) + w16;
+        w[t] = yeni;   // dizi in-place yazma (kdl_dizi_yaz — sınır-kontrollü)
+        t = t + 1;
+    }
+    ver w;
+}
+
+// =========================================================================
+// 64 turluk SHA-256 sıkıştırma fonksiyonu. Başlangıç durumu H[0..7]'den
+// başlar, W[64] ve K[64] üzerinden çalışır, 8 durum word'ünü indeks-parametre
+// ile döndürür (KEMGU'da çoklu dönüş yok → hangi word istendiğini `hangi`
+// belirler: 0..7).
+// =========================================================================
+// [D-600] Sikistirma BIR KEZ hesaplanir, 8 digest word'u beklenenle karsilastirilir
+// (eski test 8 word icin 8 kez hesapliyordu). Eslesen word sayisini dondurur.
+işlev ksha_testi() -> tam32 {
+    değişken w: Dizi<dtam32> = ksha_mesaj_cizelgesi();
+    değişken k: Dizi<dtam32> = ksha_k_dizisi();
+    değişken a: dtam32 = KSHA_H0_ILK;
+    değişken b: dtam32 = KSHA_H1_ILK;
+    değişken c: dtam32 = KSHA_H2_ILK;
+    değişken d: dtam32 = KSHA_H3_ILK;
+    değişken e: dtam32 = KSHA_H4_ILK;
+    değişken f: dtam32 = KSHA_H5_ILK;
+    değişken g: dtam32 = KSHA_H6_ILK;
+    değişken h: dtam32 = KSHA_H7_ILK;
+    değişken t: tam32 = 0;
+    iken t < 64 {
+        değişken wt: dtam32 = w[t];
+        değişken kt: dtam32 = k[t];
+        değişken t1: dtam32 = h + ksha_buyuk_sigma1(e) + ksha_ch(e, f, g) + kt + wt;
+        değişken t2: dtam32 = ksha_buyuk_sigma0(a) + ksha_maj(a, b, c);
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
+        t = t + 1;
+    }
+    değişken n: tam32 = 0;
+    eğer KSHA_H0_ILK + a == KSHA_D0_BEKLENEN { n = n + 1; }
+    eğer KSHA_H1_ILK + b == KSHA_D1_BEKLENEN { n = n + 1; }
+    eğer KSHA_H2_ILK + c == KSHA_D2_BEKLENEN { n = n + 1; }
+    eğer KSHA_H3_ILK + d == KSHA_D3_BEKLENEN { n = n + 1; }
+    eğer KSHA_H4_ILK + e == KSHA_D4_BEKLENEN { n = n + 1; }
+    eğer KSHA_H5_ILK + f == KSHA_D5_BEKLENEN { n = n + 1; }
+    eğer KSHA_H6_ILK + g == KSHA_D6_BEKLENEN { n = n + 1; }
+    eğer KSHA_H7_ILK + h == KSHA_D7_BEKLENEN { n = n + 1; }
+    ver n;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -867,6 +1037,15 @@ işlev main() -> tam32 {
         uart_satir("[25] BIGNUM OK (128-bit elde, 3 vektor)");
     } değilse {
         uart_satir("[25] BIGNUM HATA");
+    }
+
+    // [26] SHA-256 (D-600): eski sha256_selfhost_arm'in kem_os karsiligi.
+    değişken sha_n: tam32 = ksha_testi();
+    eğer sha_n == 8 {
+        uart_satir("[26] SHA256 OK (abc, 8/8 word)");
+    } değilse {
+        uart_metin("[26] SHA256 HATA eslesen=");
+        uart_tam_satir(sha_n);
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
