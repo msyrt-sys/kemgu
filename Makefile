@@ -646,20 +646,20 @@ calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codege
 #     (sabitsure soymasini bozdum, kapi YESIL kaldi). Kapsadigi sey
 #     `ast_tip_isaretsiz_mi`nin dtamN yolu — S42 ile dogrulandi.
 #   virtio_selfhost_arm   surucu: yapi + isaretci agirlikli
-#   bignum_selfhost_arm   tamsayi genislikleri / carry yayilimi (D-451 alani)
+#   (bignum)              [D-598] kem_os_arm faz [25]'e TASINDI; ayri ELF
+#                         (C iskeletli bignum_selfhost_arm) bu kapidan cikti.
 #
 # QEMU yoksa alt hedefler kendileri zarifce atlar (command -v guard) — kapi
 # QEMU'suz makinede KIRMIZI OLMAZ.
 calistir_qemu_cekirdek: calistir_qemu_smoke calistir_sha256_selfhost_arm \
-                        calistir_virtio_selfhost_arm calistir_bignum_selfhost_arm \
-                        calistir_kem_os_arm
+                        calistir_virtio_selfhost_arm calistir_kem_os_arm
 	@# [D-557] OZET, ATLAMAYI GIZLEMEMELI. CI'da olculdu: QEMU yokken bes
 	@# temsilcinin BESI de "atlandi" dedi ama ozet yine "5/5 gecti" basiyordu
 	@# (D-486 kapsam yanilsamasi). Artik QEMU varligi ayrica bildirilir.
 	@if command -v qemu-system-aarch64 >/dev/null 2>&1; then \
-	  echo "=== QEMU cekirdek kapisi: 5/5 temsilci gecti ==="; \
+	  echo "=== QEMU cekirdek kapisi: 4/4 temsilci gecti ==="; \
 	else \
-	  echo "=== QEMU cekirdek kapisi: QEMU YOK - 5 temsilcinin BESI DE ATLANDI (hicbir sey olculmedi) ==="; \
+	  echo "=== QEMU cekirdek kapisi: QEMU YOK - 4 temsilcinin DORDU DE ATLANDI (hicbir sey olculmedi) ==="; \
 	fi
 
 # [D-462] "kod var ama hicbir olcum atesliyor mu" kapisi. Kaynak/derleyici
@@ -1660,7 +1660,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "FS RW OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET DEV OK" $(BUILD)/kem_os.out \
 		   && grep -q "NET ARP OK" $(BUILD)/kem_os.out \
-		   && grep -q "PING CANLI" $(BUILD)/kem_os.out; then \
+		   && grep -q "PING CANLI" $(BUILD)/kem_os.out \
+		   && grep -q "\[25\] BIGNUM OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \

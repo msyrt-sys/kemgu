@@ -495,6 +495,38 @@ işlev net_icmp_testi() -> tam32 {
     ver 0;
 }
 
+// [D-598] [25] BIGNUM — eski `bignum_selfhost_arm` (C iskeletli ayri ELF)
+// testinin kem_os'a tasinmis hali. 128-bit toplama (2 x dtam64 word, elde
+// yayilimi). Dayandigi codegen invaryantlari: dtam64 `add i64` WRAP ve dtam64
+// karsilastirma `icmp ult` (ISARETSIZ). 0xFFFFFFFFFFFFFFFF literal olarak
+// yazilamaz (strtoll satürasyonu) -> INT64_MAX + INT64_MAX + 1 ile kurulur.
+işlev kbn_tum_bir() -> dtam64 {
+    değişken yari: dtam64 = 9223372036854775807;
+    ver yari + yari + 1;
+}
+işlev kbn_vektor(a_y: dtam64, a_d: dtam64, b_y: dtam64, b_d: dtam64,
+                 bek_y: dtam64, bek_d: dtam64) -> tam32 {
+    değişken s_d: dtam64 = a_d + b_d;
+    değişken elde: dtam64 = 0;
+    eğer s_d < a_d { elde = 1; }
+    değişken s_y: dtam64 = a_y + b_y + elde;
+    eğer s_y == bek_y {
+        eğer s_d == bek_d { ver 1; }
+    }
+    ver 0;
+}
+// 3 vektorun UCU de dogruysa 1. Vektorler eski testle BIREBIR:
+//   V1 (0,MAX)+(0,1)=(1,0) · V2 (MAX,MAX)+(0,1)=(0,0) · V3 (1,MAX)+(0,2)=(2,1)
+işlev kbn_testi() -> tam32 {
+    değişken m: dtam64 = kbn_tum_bir();
+    değişken n: tam32 = 0;
+    n = n + kbn_vektor(0, m, 0, 1, 1, 0);
+    n = n + kbn_vektor(m, m, 0, 1, 0, 0);
+    n = n + kbn_vektor(1, m, 0, 2, 2, 1);
+    eğer n == 3 { ver 1; }
+    ver 0;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -828,6 +860,13 @@ işlev main() -> tam32 {
         } değilse {
             uart_satir("[24] UST BELLEK HATA");
         }
+    }
+
+    // [25] BIGNUM (D-598): eski bignum_selfhost_arm'in kem_os karsiligi.
+    eğer kbn_testi() == 1 {
+        uart_satir("[25] BIGNUM OK (128-bit elde, 3 vektor)");
+    } değilse {
+        uart_satir("[25] BIGNUM HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
