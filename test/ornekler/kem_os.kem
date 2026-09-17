@@ -697,6 +697,30 @@ işlev ksha_testi() -> tam32 {
     ver n;
 }
 
+// [D-606] [27] GOREV KAPASITE — kem_gorev_olustur tablo tasmasini REDDEDIYOR mu?
+// Zamanlayici ETKINLESTIRILMEDEN 20 olusturma denenir (yalniz trap-frame yazilir,
+// gorev kosmaz). main dahil 16 slot: 15 basari + 5 kez -1 beklenir; KG_AKTIF 0
+// kalmali (olu[] tasmasi ilk once KG_G1/KG_AKTIF'i ezerdi). Sonda tablo sifirlanir.
+çıplak işlev kgk_testi() -> tam32 {
+    kem_preempt_baslat();
+    değişken basari: tam32 = 0;
+    değişken ret: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < 20 {
+        değişken t: tam64 = kem_gorev_olustur(kg_gorev1_adr(), KG_STK1);
+        eğer t < 0 { ret = ret + 1; } değilse { basari = basari + 1; }
+        i = i + 1;
+    }
+    değişken aktif: tam64 = kg_oku64(KG_AKTIF);
+    değişken sayi: tam64 = kem_psayi;
+    kem_preempt_baslat();
+    eğer basari != 15 { ver 0; }
+    eğer ret != 5 { ver 0; }
+    eğer sayi != KG_GOREV_AZAMI { ver 0; }
+    eğer aktif != 0 { ver 0; }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1046,6 +1070,13 @@ işlev main() -> tam32 {
     } değilse {
         uart_metin("[26] SHA256 HATA eslesen=");
         uart_tam_satir(sha_n);
+    }
+
+    // [27] GOREV KAPASITE (D-606): gorev tablosu tasmasi reddediliyor mu?
+    eğer kgk_testi() == 1 {
+        uart_satir("[27] GOREV KAPASITE OK (16 slot, tasma -1)");
+    } değilse {
+        uart_satir("[27] GOREV KAPASITE HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

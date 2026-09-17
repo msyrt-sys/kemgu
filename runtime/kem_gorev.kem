@@ -55,7 +55,15 @@ sabit KG_TTBR: tam64 = 1157640448;        // 0x45003100: ttbr[i] tablosu (KG_SYS
 
 // Sentetik trap-frame kur (kdl_preempt_gorev_olustur birebir): 34 slot × 8 = 272 bayt,
 // tf@248=ELR=giriş, tf@256=SPSR=0x5 (EL1h IRQ-açık), gerisi 0. SP 16-hizalı. id döner.
+// [D-606] GÖREV TABLOSU KAPASİTESİ. olu[]/psp[]/ttbr[] tabloları 16 girdiliktir (sys(14)
+// durum zaten `arg >= 16` reddeder) ve olu[]'nun ARKASINDA KG_G1/KG_AKTIF durur. Önceden
+// kem_psayi'nın ÜST SINIRI YOKTU: EL0'dan döngüyle sys(12) spawn çağıran bir program
+// sayacı büyütüp zamanlayıcının olu[n]/psp[n] yazımlarını çekirdek durum değişkenlerine
+// taşırabilirdi. Kapasite doluysa görev KURULMAZ, -1 döner (trap-frame yazılmadan ÖNCE).
+sabit KG_GOREV_AZAMI: tam64 = 16;
+
 çıplak işlev kem_gorev_olustur(giris: tam64, yigin_tepe: tam64) -> tam64 {
+    eğer kem_psayi >= KG_GOREV_AZAMI { ver 0 - 1; }
     değişken sp: tam64 = yigin_tepe - 272;
     sp = (sp / 16) * 16;                          // 16-hizala
     değişken k: tam64 = 0;
@@ -276,6 +284,7 @@ isb"#
 // EL0 preemptive görev: sentetik trap-frame SPSR=0x0 (EL0t) + SP_EL0@264=user_stk.
 // (kem_gorev_olustur EL1 sürümü gibi ama EL0t + banked user-SP.)
 çıplak işlev kem_gorev_olustur_el0(giris: tam64, kernel_tepe: tam64, user_tepe: tam64) -> tam64 {
+    eğer kem_psayi >= KG_GOREV_AZAMI { ver 0 - 1; }   // [D-606] kapasite
     değişken sp: tam64 = kernel_tepe - 272;
     sp = (sp / 16) * 16;
     değişken k: tam64 = 0;
