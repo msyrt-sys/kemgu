@@ -18,11 +18,15 @@
 - [x] KEMGU-OS kalan C parcalari -> D-592: dokuzu da OLU cikti ve link
       listesinden dusuruldu; kem_os = boot .S (start_aarch64.S) + SAF-.kem.
 - [x] runtime olu kod -> D-596 (Mehmet: secenek a). 9 olu islev silindi.
-- [ ] Eski bare-metal C demo hedefleri: ONCE qemu_cekirdek'in dolayli
-      kullandigi 3 temsilcinin (sha256/virtio/bignum_selfhost_arm) hangi C
-      sembollerine gercekten ihtiyac duydugunu link haritasiyla OLC (D-592
-      yontemi); sonra kem_os-tabanli esdegerle degistir; silme listesi
-      Mehmet'in ONAYINA sunulur (kendiliginden silinmez).
+- [ ] qemu_cekirdek temsilcilerini kem_os'a tasi (D-597 olcumu: uc hedef C'ye
+      GERCEKTEN bagli — start.o vektorleri kesme/mmu/gorev'i, programlar
+      yazdir/bolge/heap'i ceker). Seri, her biri ayri artim:
+      (1) bignum_selfhost -> kem_os fazi (saf hesap, carry yayilimi)
+      (2) sha256_selfhost -> kem_os fazi (imzasiz kaydirma)
+      (3) virtio_selfhost -> kem_os'ta ZATEN virtio disk/net var; esdegerligi olc
+      Her biri sonrasi: kem_os_arm faz sayisi artar + qemu_cekirdek yesil.
+      Ucu bitince qemu_cekirdek eski uc hedefi birakir; ANCAK O ZAMAN 131 eski
+      hedefin silme listesi Mehmet'in onayina sunulur.
 - [ ] Eski bare-metal C demo hedefleri (131 hedef, D-594): silme KARARI
       Mehmet'te. qemu_cekirdek 3 tanesini (sha256/virtio/bignum_selfhost_arm)
       dolayli cagiriyor -> toptan silinemez; once o 3 temsilci kem_os-tabanli
@@ -354,3 +358,4 @@
 - 2026-09-17 D-594 (OLCUM, kod yok): (1) push: claude/jovial-euclid-a22e29 952e1d6..4edca0e (D-590..D-593). (2) Eski bare-metal C nesnelerini 131 calistir_* hedefi kullaniyor, hicbiri dogrudan test_tumu'da DEGIL ama qemu_cekirdek sha256/virtio/bignum_selfhost_arm uzerinden 3'unu DOLAYLI cagiriyor -> toptan silme o kapiyi kirar. (3) kdl_runtime.c cagri-zinciriyle dogrulanmis harita: 115 disa-verilen islev = OS 62 . ALLOC 2 . SAF 51. SAF listesinde BILINEN YANLIS-POZITIF: kdl_soket_* (5) Winsock'u fonksiyon isaretcisiyle cagirir (D-466) ve kdl_dosya_yeniden_adlandir regex disi rename kullanir. Gercek saf cekirdek: metin_* 19 . yetki_* 9 . kod_* 2 . min/maks/mutlak(64) 6 . prng 2. ILK tarama (zincirsiz) 61 SAF demisti; zincir 10'unu OS'a tasidi. ARAC: heredoc icindeki regex kacislari bozuldu (unterminated character set) -> betik dosyaya yazildi.
 - 2026-09-17 D-595 (OLCUM, kod yok): runtime pilotu (kdl_min/maks/mutlak(64)) ONCE OLCULDU ve GECERSIZ cikti: alti da OLU KOD — src/selfhost'ta esleme yok, uretilen IR'da @kdl_min/maks/mutlak cagrisi 0 (codegen.kem ve cg_yetki), depoda baska referans 0. Olu kodu .kem'e tasimak anlamsiz. Genisletilmis tarama: 115 disa-verilen islevin 13'u olu aday (onek eslemesi canli sayildigi icin ALT SINIR). Kalan iki Sirada maddesi de dil/yapi karari istedigi icin loop DURDURULDU.
 - 2026-09-17 D-596: runtime/kdl_runtime.c'den 9 OLU islev silindi (Mehmet: secenek a): kdl_mutlak/min/maks (+64), kdl_hata_yazdir, kdl_oku_tam, kdl_kanal_bos_mu. Tum depoda kelime-sinirli arama: referans 0 (yalniz tarihi log/CLAUDE.md anmalari). BILINCLI KORUNAN 4: kdl_bellek_hizali_al/serbest (KEMGU_SIMD_Spec_V1'de planli API) + kdl_prng_next64/seed (Capability Spec) -> spesifikasyonla celismemek icin silinmedi. Yan bulgu: kdl_mutlak(INT_MIN) tanimsiz davranisti. Kapilar: sifir_uyari 38/0 . runtime_link_test OK . gorev_rt 16/16 . kanal_omru 10/10 . dizi_sinir 39/39 . panik 6/6 . kdl_bolge 33/33 . llvm_test 286/286 . codegen_diff 173/173 . stdlib_check . self_driver FIXPOINT. ARAC: ilk kosumda iki hedef adini YANLIS yazdim (calistir_runtime_link, calistir_gorev_rt -> 'No rule') ve rc=2 aldim; gerileme degildi, dogru adlarla (_test) yeniden kosuldu. Sabotaj YOK: silme bir kural degil; olculecek davranis 'hic referans yok' ve o, linkin gecmesiyle olculdu.
+- 2026-09-17 D-597 (OLCUM, kod yok): qemu_cekirdek'in dolayli kullandigi 3 temsilcinin link haritasi (--gc-sections + Map). D-592'den FARKLI SONUC: burada C GERCEKTEN kullaniliyor. Ortak tutulan bolumler: start.o vektorlerinin cektigi kdl_istisna_isle/kdl_syscall_isle/kdl_el0_izolasyon_isle (kesme), kdl_mmu_kur/kdl_ttbr_degis (mmu), kdl_preempt/kdl_surec_spawn (gorev), kdl_irq_isle (zaman), virtio_net_*; programlarin kendisi kdl_yazdir_* + kdl_bolge_* + malloc/free (heap) + sha256'da kdl_dizi_*; virtio'da ek olarak kdl_mmio_oku32 + kdl_yetki_*. Yani 131 eski hedefi silmek once bu uc temsilcinin kem_os'a tasinmasini gerektirir; Sirada 3 seri adima bolundu. Uc hedef bugun yesil (KEM SHA OK / KEM VIRTIO OK / KEM BIGNUM OK). ARAC: bu hedefler normalde --gc-sections KULLANMIYOR; olcum icin ayri gc'li link yapildi, imajlari degismedi.
