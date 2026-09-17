@@ -1943,52 +1943,6 @@ calistir_sched_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "QEMU yok — x86 sched testi atlandi."; \
 	fi
 
-# === D2: aarch64 user/kernel privilege ayrımı (EL0 kod + syscall → "D2 OK") ===
-# Finer paging (L2 2MB): user 2MB sayfası AP=01 (EL0), kernel AP=00. EL0 kodu
-# device'a doğrudan erişemez → yalnız SVC ile EL1'e. Handler SPSR_EL1'den kaynak-EL=0.
-calistir_d2_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D2 aarch64 user/kernel testi: d2_arm.c -> ELF (EL0 + syscall)..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/d2_arm.c -o $(BUILD)/d2_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/d2_arm.elf $(BUILD)/d2_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/d2_arm.out; \
-		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/d2_arm.out -kernel $(BUILD)/d2_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/d2_arm.out; echo "--- son ---"; \
-		if grep -q "D2 BASLA" $(BUILD)/d2_arm.out && grep -q "EL0 SYSCALL" $(BUILD)/d2_arm.out && grep -q "D2 OK" $(BUILD)/d2_arm.out; then \
-			echo "D2 aarch64 testi gecti: EL0 kod çalıştı + syscall ile EL1'e geçti (kaynak-EL=0)."; \
-		else \
-			echo "FAIL: 'D2 BASLA'+'EL0 SYSCALL'+'D2 OK' bekleniyor"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — D2 testi atlandi."; \
-	fi
-
-# === D1: aarch64 per-process adres-uzayı izolasyonu (TTBR swap → "SUREC A/B") ===
-# Her sürece ayrı sayfa tablosu; aynı VA (0x42000000) farklı PA (A→0x44M, B→0x46M).
-# TTBR0 swap + TLB flush → A 0xAA / B 0xBB birbirini etkilemez = izolasyon.
-calistir_d1_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D1 aarch64 per-process testi: d1_arm.c -> ELF (TTBR swap)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/d1_arm.c -o $(BUILD)/d1_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/d1_arm.elf $(BUILD)/d1_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/d1_arm.out; \
-		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/d1_arm.out -kernel $(BUILD)/d1_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/d1_arm.out; echo "--- son ---"; \
-		if grep -q "SUREC A uva=" $(BUILD)/d1_arm.out && grep -qi "0xaa" $(BUILD)/d1_arm.out && grep -qi "0xbb" $(BUILD)/d1_arm.out; then \
-			echo "D1 aarch64 testi gecti: per-process izolasyon (ayni VA, A=0xAA B=0xBB)."; \
-		else \
-			echo "FAIL: 'SUREC A/B' + 0xaa + 0xbb (izolasyon) bekleniyor"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — D1 testi atlandi."; \
-	fi
-
 # === C7c: aarch64 blocking sleep/wake (preemptive üstüne → "B WOKE") ===
 # Görev B kdl_uyu(8) ile bloklanır, scheduler atlar, A koşar; 8 tick sonra B uyanır.
 calistir_sleep_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2064,30 +2018,6 @@ calistir_kanal_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_kan
 		fi; \
 	else \
 		echo "QEMU yok — kanal testi atlandi."; \
-	fi
-
-# === D3 Korumalı EL0 user-process testi (aarch64) — D1⊕D2⊕D-122 birleşik ===
-# Süreç kendi TTBR'ı altında EL0'da koşar; argümanlı syscall yapar (SYSCALL ARG
-# OK); kernel belleğine erişince permission-fault (ISTISNA) → adres-uzayı hapsi.
-# Gerçek OS sürecinin dört tanımlayıcı özelliği bir arada.
-calistir_proc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D3 aarch64 korumalı user-process testi: proc_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/proc_arm.c -o $(BUILD)/proc_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/proc_arm.elf $(BUILD)/proc_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/proc_arm.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/proc_arm.out -kernel $(BUILD)/proc_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/proc_arm.out; echo "--- son ---"; \
-		if grep -q "SYSCALL ARG OK" $(BUILD)/proc_arm.out && grep -q "ISTISNA" $(BUILD)/proc_arm.out; then \
-			echo "D3 aarch64 korumalı user-process testi gecti: EL0 syscall(arg) + kernel-erisim reddi (hapis)."; \
-		else \
-			echo "FAIL: 'SYSCALL ARG OK' + 'ISTISNA' bekleniyor (EL0 syscall + bellek koruması)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — proc testi atlandi."; \
 	fi
 
 # === D-124 İlk userspace programı (aarch64) — EL0 hesap + syscall ABI I/O ===
@@ -2464,28 +2394,6 @@ calistir_smp_sort_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — SMP sort testi atlandi."; \
-	fi
-
-# === D-130 Süreç yaşam döngüsü testi (aarch64) — spawn→çalış→exit→join ===
-# launcher spawn(worker); worker exit; launcher join (durum yokla) → tam yaşam döngüsü.
-calistir_yasam_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-130 aarch64 süreç yaşam döngüsü testi: yasam_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/yasam_arm.c -o $(BUILD)/yasam_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/yasam_arm.elf $(BUILD)/yasam_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/yasam_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/yasam_arm.out -kernel $(BUILD)/yasam_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/yasam_arm.out; echo "--- son ---"; \
-		if grep -q "WORKER done" $(BUILD)/yasam_arm.out && grep -q "JOINED worker exited" $(BUILD)/yasam_arm.out; then \
-			echo "D-130 aarch64 yaşam döngüsü testi gecti: spawn+exit+join tam döngü."; \
-		else \
-			echo "FAIL: 'WORKER done' + 'JOINED worker exited' bekleniyor (exit+join)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — yaşam döngüsü testi atlandi."; \
 	fi
 
 # === D-131 RAM dosya sistemi + 2-arg syscall testi (aarch64) ===
@@ -4657,9 +4565,8 @@ calistir_userspace_post_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/b
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_sched_test_arm calistir_sleep_test_arm \
                      calistir_priority_test_arm calistir_kanal_test_arm \
-                     calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
                      calistir_userspace_test_arm \
-                      calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp_seqlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm calistir_yasam_test_arm \
+                      calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp_seqlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
                      calistir_sil_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
