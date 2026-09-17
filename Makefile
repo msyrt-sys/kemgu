@@ -1327,7 +1327,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	else \
 		cp $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
 	fi
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -o $(BUILD)/kem_os.elf \
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -Map=$(BUILD)/kem_os.map -o $(BUILD)/kem_os.elf \
 		$(BUILD)/kem_os_routed.o $(KEM_OS_A64_OBJS)
 	@# AH-1: HAM İKİLİ üret ve QEMU'yu bununla boot et (ELF ile DEĞİL).
 	@# İki sebep, ikisi de ölçülmüş:
@@ -1345,46 +1345,38 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	fi
 	@echo "  (yok — temiz)"
 	@echo "FALSIFIYE-KANIT (K1/D-260): C bump-allocator (kdl_bare_heap) malloc/free SIFIR, saf-.kem sağlıyor:"
-	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T (malloc|free)$$'; then \
-		echo "FAIL: C kdl_bare_heap hala malloc/free TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
-		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (malloc|free)$$'; exit 1; \
-	fi
 	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T malloc$$'; then \
 		echo "FAIL: saf-.kem kem_heap malloc TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (bm_a64_heap_kemmalloc.o: 0 malloc/free C-tanımı; kem_os.o: T malloc — kem_os malloc'u SAF-.kem çıplak allocator'dan)"
 	@echo "FALSIFIYE-KANIT (K3/D-261): C region (kdl_bolge) olustur/ayir/serbest SIFIR, saf-.kem sağlıyor:"
-	@if llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -qE ' T kdl_bolge_(olustur|ayir|serbest)$$'; then \
-		echo "FAIL: C kdl_bolge hala region primitifi TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
-		llvm-nm $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T kdl_bolge_(olustur|ayir|serbest)$$'; exit 1; \
-	fi
 	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_bolge_olustur$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_bolge_olustur TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (bm_a64_bolge_kemregion.o: 0 region C-tanımı; kem_os.o: T kdl_bolge_olustur — kem_os region'u SAF-.kem çıplak arena'dan)"
 	@echo "FALSIFIYE-KANIT (K2/D-262): C dizi (kdl_dizi.inc) + memcpy/memset SIFIR, saf-.kem sağlıyor:"
-	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T (kdl_dizi_olustur|memcpy|memset)$$'; then \
-		echo "FAIL: C kdl_bare_heap hala dizi/memcpy/memset TANIMLIYOR (KEMGU_KEM_MALLOC guard etkisiz)"; \
-		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -E ' T (kdl_dizi_olustur|memcpy|memset)$$'; exit 1; \
-	fi
 	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_dizi_olustur$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_dizi_olustur TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (bm_a64_heap_kemmalloc.o: 0 dizi/memcpy/memset C-tanımı; kem_os.o: T kdl_dizi_olustur+memcpy — kem_os dizi/kopya SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (K4b/D-263): C kdl_global_bolge_al SIFIR, saf-.kem sağlıyor:"
-	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o | grep -qE ' T kdl_global_bolge_al$$'; then \
-		echo "FAIL: C kdl_bare_heap hala kdl_global_bolge_al TANIMLIYOR"; exit 1; \
-	fi
 	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_global_bolge_al$$'; then \
 		echo "FAIL: saf-.kem kem_heap kdl_global_bolge_al TANIMLAMIYOR"; exit 1; \
 	fi
 	@echo "  (kem_os global-bölge de SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (K5/D-263): kem_os ALLOCATOR-YIĞINI (malloc→region→dizi→helpers) TAMAMEN SAF-.kem:"
-	@if llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o \
-		| grep -qE ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; then \
-		echo "FAIL: C allocator objeleri hala allocator-yığını sembolü TANIMLIYOR (K1-K4b guard eksik)"; \
-		llvm-nm $(BUILD)/bm_a64_heap_kemmalloc.o $(BUILD)/bm_a64_bolge_kemregion.o | grep -E ' T (malloc|free|memcpy|memset|kdl_bolge_(olustur|ayir|serbest)|kdl_dizi_[a-z_]+|kdl_global_bolge_al)$$'; exit 1; \
+	@# [D-599] Eski negatif denetimler (llvm-nm bm_a64_heap_kemmalloc.o | grep T malloc -> FAIL)
+	@# D-592'den sonra BOS KALDI: o nesneler linke hic girmiyor, dosya yoksa grep eslesmez ve
+	@# denetim SESSIZCE GECER. Yerine olcen tek denetim: link HARITASINDA start.o disinda
+	@# hicbir bm_a64_*.o bolumu olmamali. Harita yoksa ya da kem_os_routed.o icermiyorsa FAIL
+	@# (bos haritanin sessizce gecmesini engeller).
+	@if ! grep -q 'kem_os_routed.o' $(BUILD)/kem_os.map 2>/dev/null; then \
+		echo "FAIL: kem_os.map yok ya da kem_os_routed.o icermiyor (denetim olcum yapamaz)"; exit 1; \
 	fi
+	@if grep -oE 'bm_a64_[a-z0-9_]+\.o' $(BUILD)/kem_os.map | grep -v '^bm_a64_start\.o$$' | grep -q .; then \
+		echo "FAIL: kem_os imajina C nesnesi girdi:"; grep -oE 'bm_a64_[a-z0-9_]+\.o' $(BUILD)/kem_os.map | sort -u; exit 1; \
+	fi
+	@echo "  (harita: start.o disinda C nesnesi YOK)"
 	@echo "  (bm_a64_heap_kemmalloc.o + bm_a64_bolge_kemregion.o: 0 allocator-yığını C-tanımı → kem_os malloc/region/dizi/memcpy/global-bölge HEPSİ kem_os.o SAF-.kem'den. K1→K4b TAMAM.)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/metin, D-264): C kdl_metin_bare.o (bm_a64_metin.o) kem_os LİNKİNDE YOK, saf-.kem sağlıyor:"
 	@if ! llvm-nm $(BUILD)/kem_os.o | grep -qE ' T kdl_metin_uzunluk$$'; then \
