@@ -1779,75 +1779,6 @@ calistir_diag_heap_yaz_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — heap indeks-yazma diag atlandi."; \
 	fi
 
-# === C3a: aarch64 exception vektör testi (deliberate fault → "ISTISNA") ===
-# Vektör mekanizmasını kanıtlar: eşlenmemiş erişim → sync exception → VBAR →
-# kdl_exc_ortak → kdl_istisna_isle. "ISTISNA" basılır, "GORUNMEMELI" basılmaz.
-calistir_istisna_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "C3a aarch64 istisna testi: istisna_arm.c -> ELF (deliberate fault)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/istisna_arm.c -o $(BUILD)/istisna_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/istisna_arm.elf $(BUILD)/istisna_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/istisna_arm.out; \
-		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/istisna_arm.out -kernel $(BUILD)/istisna_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/istisna_arm.out; echo "--- son ---"; \
-		if grep -q "FAULT TETIKLE" $(BUILD)/istisna_arm.out && \
-		   grep -q "ISTISNA" $(BUILD)/istisna_arm.out && \
-		   ! grep -q "GORUNMEMELI" $(BUILD)/istisna_arm.out; then \
-			echo "C3a aarch64 istisna testi gecti: fault yakalandi (ISTISNA), ileri gidilmedi."; \
-		else \
-			echo "FAIL: 'FAULT TETIKLE'+'ISTISNA' bekleniyor, 'GORUNMEMELI' olmamali"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — istisna testi atlandi."; \
-	fi
-
-# === C3b/C4: aarch64 timer/IRQ testi (GICv2 + sanal timer → "TIMER OK") ===
-# IRQ teslimini kanıtlar: GIC+timer kur → sanal timer ~10ms kesme → kdl_irq_ortak
-# → kdl_kesme_isle (tik++ + re-arm) → 5. tikte "TIMER OK".
-calistir_timer_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "C3b aarch64 timer testi: timer_test.c -> ELF (GICv2 + CNTV)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/timer_test.c -o $(BUILD)/timer_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/timer_arm.elf $(BUILD)/timer_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/timer_arm.out; \
-		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/timer_arm.out -kernel $(BUILD)/timer_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/timer_arm.out; echo "--- son ---"; \
-		if grep -q "TIMER OK" $(BUILD)/timer_arm.out; then \
-			echo "C3b aarch64 timer testi gecti: IRQ teslimi + timer calisiyor (TIMER OK)."; \
-		else \
-			echo "FAIL: 'TIMER OK' yok (timer IRQ teslim edilmedi)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — timer testi atlandi."; \
-	fi
-
-# === C6: aarch64 sistem çağrısı testi (SVC → dispatch → eret → "AFTER SYSCALL") ===
-calistir_syscall_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "C6 aarch64 syscall testi: syscall_test.c -> ELF (SVC)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/syscall_test.c -o $(BUILD)/syscall_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/syscall_arm.elf $(BUILD)/syscall_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/syscall_arm.out; \
-		timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/syscall_arm.out -kernel $(BUILD)/syscall_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/syscall_arm.out; echo "--- son ---"; \
-		if grep -q "SYSCALL OK" $(BUILD)/syscall_arm.out && grep -q "AFTER SYSCALL" $(BUILD)/syscall_arm.out; then \
-			echo "C6 aarch64 syscall testi gecti: cagri islendi + dondu (AFTER SYSCALL)."; \
-		else \
-			echo "FAIL: 'SYSCALL OK' + 'AFTER SYSCALL' bekleniyor"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — syscall testi atlandi."; \
-	fi
-
 # === Capstone: aarch64 — tam OS yığını tek boot'ta (dizi+timer+IRQ+syscall) ===
 calistir_capstone_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 	@echo "Capstone aarch64: capstone.c -> ELF (dizi+timer+syscall birlikte)..."
@@ -2134,29 +2065,6 @@ calistir_d1_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — D1 testi atlandi."; \
 	fi
 
-# === C7b: aarch64 preemptive scheduling (timer-IRQ zorunlu switch → "PREEMPT OK") ===
-# İki görev yield ETMEZ; B'nin koşması SADECE timer-IRQ preemption ile mümkün
-# (kdl_irq_ortak full trap-frame → kdl_preempt → SP swap).
-calistir_preempt_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "C7b aarch64 preemptive testi: preempt_arm.c -> ELF (timer-IRQ switch)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/preempt_arm.c -o $(BUILD)/preempt_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/preempt_arm.elf $(BUILD)/preempt_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/preempt_arm.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/preempt_arm.out -kernel $(BUILD)/preempt_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/preempt_arm.out; echo "--- son ---"; \
-		if grep -q "PREEMPT OK" $(BUILD)/preempt_arm.out; then \
-			echo "C7b aarch64 preemptive testi gecti: timer-IRQ zorunlu switch (B yield'siz koştu)."; \
-		else \
-			echo "FAIL: 'PREEMPT OK' yok (preemption olmadı)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — preemptive testi atlandi."; \
-	fi
-
 # === C7c: aarch64 blocking sleep/wake (preemptive üstüne → "B WOKE") ===
 # Görev B kdl_uyu(8) ile bloklanır, scheduler atlar, A koşar; 8 tick sonra B uyanır.
 calistir_sleep_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2177,29 +2085,6 @@ calistir_sleep_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — sleep testi atlandi."; \
-	fi
-
-# === D-122 Syscall argüman geçişi testi (aarch64) — SVC arg0 (x0) korunuyor mu ===
-# SVC num=4 arg=42 → kernel arg==42 görmeli → "SYSCALL ARG OK". Vektör-stub
-# x0-koruma onarımının (D-121) regresyon-bekçisi; userspace syscall ön-koşulu.
-calistir_syscall_arg_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-122 aarch64 syscall argüman testi: syscall_arg_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/syscall_arg_arm.c -o $(BUILD)/syscall_arg_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/syscall_arg_arm.elf $(BUILD)/syscall_arg_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/syscall_arg_arm.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/syscall_arg_arm.out -kernel $(BUILD)/syscall_arg_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/syscall_arg_arm.out; echo "--- son ---"; \
-		if grep -q "SYSCALL ARG OK" $(BUILD)/syscall_arg_arm.out; then \
-			echo "D-122 aarch64 syscall argüman testi gecti: arg0=42 kernel'e dogru ulasti."; \
-		else \
-			echo "FAIL: 'SYSCALL ARG OK' bekleniyor (SVC arg0 korunmali)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — syscall arg testi atlandi."; \
 	fi
 
 # === C7e Öncelikli (priority) scheduling testi (aarch64) ===
@@ -2304,76 +2189,6 @@ calistir_userspace_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — userspace testi atlandi."; \
 	fi
 
-# === D-125 Preemptive EL0 (userspace) görev testi (aarch64) ===
-# main (EL1) + EL0 userspace görev preemptive scheduler'da; timer-IRQ ile EL0
-# görev zorunlu preempt edilir (SP_EL0 trap-frame'de korunur). Tam OS'un son
-# parçası: userspace görevler preemptively multitask.
-calistir_preempt_el0_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-125 aarch64 preemptive EL0 testi: preempt_el0_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/preempt_el0_arm.c -o $(BUILD)/preempt_el0_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/preempt_el0_arm.elf $(BUILD)/preempt_el0_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/preempt_el0_arm.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/preempt_el0_arm.out -kernel $(BUILD)/preempt_el0_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/preempt_el0_arm.out; echo "--- son ---"; \
-		if grep -q "PREEMPT EL0 OK" $(BUILD)/preempt_el0_arm.out; then \
-			echo "D-125 aarch64 preemptive EL0 testi gecti: EL0 userspace görev timer-IRQ ile preempt edildi."; \
-		else \
-			echo "FAIL: 'PREEMPT EL0 OK' bekleniyor (EL0 görev preempt + SP_EL0 korunmalı)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — preempt EL0 testi atlandi."; \
-	fi
-
-# === D-126 Syscall dönüş değeri ABI testi (aarch64) ===
-# EL0 sys(9,41) → kernel 'artir' arg+1=42 döndürür → "SYSCALL RET OK". Syscall'ın
-# kernel→EL0 değer döndürme yolu (read/getpid/gettick ailesinin mekanizması).
-calistir_syscall_ret_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-126 aarch64 syscall dönüş değeri testi: syscall_ret_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/syscall_ret_arm.c -o $(BUILD)/syscall_ret_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/syscall_ret_arm.elf $(BUILD)/syscall_ret_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/syscall_ret_arm.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/syscall_ret_arm.out -kernel $(BUILD)/syscall_ret_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/syscall_ret_arm.out; echo "--- son ---"; \
-		if grep -q "SYSCALL RET OK" $(BUILD)/syscall_ret_arm.out; then \
-			echo "D-126 aarch64 syscall dönüş testi gecti: kernel 41->42 hesabı EL0'a döndü."; \
-		else \
-			echo "FAIL: 'SYSCALL RET OK' bekleniyor (syscall dönüş değeri x0'da)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — syscall dönüş testi atlandi."; \
-	fi
-
-# === D-127 Çoklu EL0 süreç testi (aarch64) — izole userspace multitasking (DORUK) ===
-# İki userspace süreç, paylaşılan kod + özel veri (aynı VA→farklı PA), scheduler
-# TTBR-swap ile preemptively izole. Çapraz-bozulma yok → "A OK" + "B OK".
-calistir_multiproc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-127 aarch64 çoklu EL0 süreç testi: multiproc_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/multiproc_arm.c -o $(BUILD)/multiproc_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/multiproc_arm.elf $(BUILD)/multiproc_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/multiproc_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/multiproc_arm.out -kernel $(BUILD)/multiproc_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/multiproc_arm.out; echo "--- son ---"; \
-		if grep -q "A OK" $(BUILD)/multiproc_arm.out && grep -q "B OK" $(BUILD)/multiproc_arm.out; then \
-			echo "D-127 aarch64 çoklu süreç testi gecti: 2 izole userspace süreç preemptively kostu."; \
-		else \
-			echo "FAIL: 'A OK' + 'B OK' bekleniyor (izole çok-süreç + TTBR swap)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — çoklu süreç testi atlandi."; \
-	fi
-
 # === MİLESTONE B: Userspace paylaşımlı-bellek IPC testi (aarch64) ===
 # İki EL0 süreç AYNI fiziksel veri sayfasını PAYLAŞIR (D-127 izolasyonunun tersi):
 # üretici 1..10 + bayrak yazar, tüketici bayrağı bekleyip toplar → 55 → "USERSHM OK".
@@ -2395,29 +2210,6 @@ calistir_userspace_shm_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — paylaşımlı-bellek IPC testi atlandi."; \
-	fi
-
-# === D-128 Userspace introspection syscall testi (aarch64) — gettick + getpid ===
-# Preemptive EL0 görev gettick/getpid ile çekirdek durumunu (zaman/kimlik) okur.
-# Syscall dönüş-değeri ABI (D-126) üstünde. t2>t1 + pid → "TICK OK pid=1".
-calistir_tick_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-128 aarch64 userspace introspection testi: tick_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/tick_arm.c -o $(BUILD)/tick_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/tick_arm.elf $(BUILD)/tick_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/tick_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/tick_arm.out -kernel $(BUILD)/tick_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/tick_arm.out; echo "--- son ---"; \
-		if grep -q "TICK OK pid=1" $(BUILD)/tick_arm.out; then \
-			echo "D-128 aarch64 introspection testi gecti: userspace gettick(zaman ilerledi)+getpid."; \
-		else \
-			echo "FAIL: 'TICK OK pid=1' bekleniyor (gettick + getpid)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — introspection testi atlandi."; \
 	fi
 
 # === SMP çok-çekirdek testi (aarch64) — PSCI CPU_ON ile 2. çekirdek bring-up ===
@@ -2750,29 +2542,6 @@ calistir_smp_sort_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — SMP sort testi atlandi."; \
 	fi
 
-# === D-129 Dinamik süreç oluşturma testi (aarch64) — spawn syscall'ı ===
-# launcher (EL0) runtime'da spawn(worker) çağırır → kernel yeni izole süreç kurar.
-# Gerçek OS'un fork/spawn yeteneği. worker dinamik koşar → "WORKER OK".
-calistir_spawn_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-129 aarch64 dinamik süreç (spawn) testi: spawn_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/spawn_arm.c -o $(BUILD)/spawn_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/spawn_arm.elf $(BUILD)/spawn_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/spawn_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/spawn_arm.out -kernel $(BUILD)/spawn_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/spawn_arm.out; echo "--- son ---"; \
-		if grep -q "WORKER OK" $(BUILD)/spawn_arm.out && grep -q "LAUNCHER spawned pid=" $(BUILD)/spawn_arm.out; then \
-			echo "D-129 aarch64 spawn testi gecti: launcher runtime'da izole süreç yaratti, worker kostu."; \
-		else \
-			echo "FAIL: 'WORKER OK' + 'LAUNCHER spawned pid=' bekleniyor (dinamik spawn)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — spawn testi atlandi."; \
-	fi
-
 # === D-130 Süreç yaşam döngüsü testi (aarch64) — spawn→çalış→exit→join ===
 # launcher spawn(worker); worker exit; launcher join (durum yokla) → tam yaşam döngüsü.
 calistir_yasam_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2885,51 +2654,6 @@ calistir_sil_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — sil testi atlandi."; \
 	fi
 
-# === D-135 Basit userspace kabuk (shell) testi (aarch64) — DORUK ===
-# Userspace program komut script'ini ayrıştırır (tokenize) + FS syscall'larına dağıtır.
-# yaz/oku/ls komutları → gerçek kabuk. Tüm yığın (süreç+EL0+syscall+FS) bir arada.
-calistir_kabuk_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-135 aarch64 kabuk (shell) testi: kabuk_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/kabuk_arm.c -o $(BUILD)/kabuk_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/kabuk_arm.elf $(BUILD)/kabuk_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/kabuk_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/kabuk_arm.out -kernel $(BUILD)/kabuk_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/kabuk_arm.out; echo "--- son ---"; \
-		if grep -q "SHELL> oku gunluk" $(BUILD)/kabuk_arm.out && grep -q "KEMGU-OS" $(BUILD)/kabuk_arm.out && grep -q "COUNT=1" $(BUILD)/kabuk_arm.out && grep -q "COUNT=0" $(BUILD)/kabuk_arm.out && grep -q "= 42" $(BUILD)/kabuk_arm.out; then \
-			echo "D-135/136/139 aarch64 kabuk testi gecti: shell yaz/oku/ls/say/sil/topla (CRUD+aritmetik)."; \
-		else \
-			echo "FAIL: kabuk CRUD + topla(= 42) bekleniyor"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — kabuk testi atlandi."; \
-	fi
-
-# === D-137 Program çalıştırma iş akışı testi (aarch64) — spawn→hesap→dosya→join→oku ===
-# launcher worker'ı çalıştırır; worker hesap yapıp dosyaya yazar; launcher sonucu okur.
-calistir_calis_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "D-137 aarch64 program çalıştırma iş akışı testi: calis_arm.c -> ELF..."
-	$(BM_A64_EL0) $(BM_A64_CF) -c test/bare_metal/calis_arm.c -o $(BUILD)/calis_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/calis_arm.elf $(BUILD)/calis_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/calis_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/calis_arm.out -kernel $(BUILD)/calis_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/calis_arm.out; echo "--- son ---"; \
-		if grep -q "RESULT=55" $(BUILD)/calis_arm.out; then \
-			echo "D-137 aarch64 program çalıştırma testi gecti: worker hesabı dosya üzerinden ulaşti."; \
-		else \
-			echo "FAIL: 'RESULT=55' bekleniyor (spawn+hesap+dosya+join+oku)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — çalıştırma testi atlandi."; \
-	fi
-
 # === D-138 Kaynak geri-alma (slot reuse) testi (aarch64) — sınırsız spawn ===
 # launcher 6 kez spawn+join (havuz=4'ten fazla); slotlar geri-alınırsa hepsi başarılı.
 calistir_geri_al_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
@@ -2972,61 +2696,6 @@ calistir_kanal_ipc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — mesaj kanalı testi atlandi."; \
-	fi
-
-# === D-141 VirtIO-Blk gerçek disk okuma testi (aarch64) — C5 depolama (Faz E) ===
-# QEMU'ya virtio-blk disk (build/disk.img, blok 0'da "KEMGU...") bağlanır; kernel
-# virtio-mmio sürücüsüyle blok 0'ı okur + doğrular → "DISK OK KEMGU".
-calistir_virtio_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
-	@echo "D-141 aarch64 virtio-blk disk testi: virtio_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/virtio_arm.c -o $(BUILD)/virtio_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_arm.elf $(BUILD)/virtio_arm.o $(BM_A64_OBJS)
-	@# Disk imajı oluştur: 32KB sıfır + blok 0'a "KEMGU-DISK-BLOK0" yaz.
-	@dd if=/dev/zero of=$(BUILD)/disk.img bs=512 count=64 2>/dev/null
-	@printf 'KEMGU-DISK-BLOK0' | dd of=$(BUILD)/disk.img bs=1 conv=notrunc 2>/dev/null
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/disk.img,format=raw,if=none,id=d0 \
-			-device virtio-blk-device,drive=d0 \
-			-serial file:$(BUILD)/virtio_arm.out -kernel $(BUILD)/virtio_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_arm.out; echo "--- son ---"; \
-		if grep -q "DISK OK KEMGU" $(BUILD)/virtio_arm.out; then \
-			echo "D-141 aarch64 virtio-blk testi gecti: gerçek diskten blok 0 okundu."; \
-		else \
-			echo "FAIL: 'DISK OK KEMGU' bekleniyor (virtio-blk disk okuma)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — virtio testi atlandi."; \
-	fi
-
-# === D-142 VirtIO-Blk yaz+oku round-trip testi (aarch64) — kalıcı depolama ===
-# Diske blok yaz → geri oku → eşleşme. Disk gerçekten veri saklıyor (kalıcılık).
-calistir_virtio_rw_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio.o
-	@echo "D-142 aarch64 virtio-blk yaz+oku testi: virtio_rw_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/virtio_rw_arm.c -o $(BUILD)/virtio_rw_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_rw_arm.elf $(BUILD)/virtio_rw_arm.o $(BM_A64_OBJS)
-	@dd if=/dev/zero of=$(BUILD)/disk_rw.img bs=512 count=64 2>/dev/null
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_rw_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/disk_rw.img,format=raw,if=none,id=d0 \
-			-device virtio-blk-device,drive=d0 \
-			-serial file:$(BUILD)/virtio_rw_arm.out -kernel $(BUILD)/virtio_rw_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_rw_arm.out; echo "--- son ---"; \
-		if grep -q "DISK RW OK" $(BUILD)/virtio_rw_arm.out; then \
-			echo "D-142 aarch64 virtio-blk yaz+oku testi gecti: disk kalıcı (yazılan geri okundu)."; \
-		else \
-			echo "FAIL: 'DISK RW OK' bekleniyor (virtio-blk yaz+oku round-trip)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — virtio rw testi atlandi."; \
 	fi
 
 # === D-143 Kalıcı dosya sistemi testi (aarch64) — disk-backed persistence ===
@@ -3172,56 +2841,6 @@ calistir_crashfs_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		fi; \
 	else \
 		echo "QEMU yok — crash-guvenli FS testi atlandi."; \
-	fi
-
-# === D-144 VirtIO-Net paket gönderme testi (aarch64) — Faz G ağ başlangıcı ===
-# Kernel Ethernet çerçevesi gönderir; QEMU filter-dump ile pcap'e yakalar; gate
-# payload'u ("KEMGUNET-PAKET") pcap'te + seri "NET GONDERILDI" arar.
-calistir_net_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
-	@echo "D-144 aarch64 virtio-net paket testi: net_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/net_arm.c -o $(BUILD)/net_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/net_arm.elf $(BUILD)/net_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/net_arm.out $(BUILD)/net.pcap; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/net.pcap \
-			-serial file:$(BUILD)/net_arm.out -kernel $(BUILD)/net_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/net_arm.out; echo "--- son ---"; \
-		if grep -q "NET GONDERILDI" $(BUILD)/net_arm.out && grep -a -q "KEMGUNET-PAKET" $(BUILD)/net.pcap; then \
-			echo "D-144 aarch64 virtio-net testi gecti: paket gönderildi + pcap'te yakalandi."; \
-		else \
-			echo "FAIL: seri 'NET GONDERILDI' + pcap'te 'KEMGUNET-PAKET' bekleniyor"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — net testi atlandi."; \
-	fi
-
-# === D-145 ARP round-trip testi (aarch64) — 2-yönlü ağ (TX+RX) ===
-# Kernel gateway'e (SLIRP 10.0.2.2) ARP isteği yollar, ARP yanıtını RX ile alır.
-calistir_arp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
-	@echo "D-145 aarch64 ARP round-trip testi: arp_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/arp_arm.c -o $(BUILD)/arp_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/arp_arm.elf $(BUILD)/arp_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/arp_arm.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-			-serial file:$(BUILD)/arp_arm.out -kernel $(BUILD)/arp_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/arp_arm.out; echo "--- son ---"; \
-		if grep -q "ARP REPLY OK" $(BUILD)/arp_arm.out; then \
-			echo "D-145 aarch64 ARP testi gecti: gateway'den ARP yanıtı alındı (2-yönlü ağ)."; \
-		else \
-			echo "FAIL: 'ARP REPLY OK' bekleniyor (ARP round-trip TX+RX)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — ARP testi atlandi."; \
 	fi
 
 # === D-146 IP/UDP paket gönderme testi (aarch64) — internet katmanı (Faz G) ===
@@ -3514,36 +3133,6 @@ calistir_tcp_close_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64
 		echo "QEMU yok — TCP zarif kapanış testi atlandi."; \
 	fi
 
-# === Faz G ICMP echo (ping) round-trip testi (aarch64) — ağ katmanı ===
-# ARP ile gateway (SLIRP 10.0.2.2) MAC çöz → IPv4+ICMP Echo Request gönder →
-# echo reply'i RX ile al + doğrula. pcap filter-dump da yakalanır: SLIRP echo
-# yanıt vermezse "ICMP ECHO SENT OK" (pcap'te type=8 + "KEMGU" işaretçisi) fallback.
-calistir_icmp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_virtio_net.o
-	@echo "Faz G aarch64 ICMP echo (ping) testi: icmp_arm.c -> ELF..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/icmp_arm.c -o $(BUILD)/icmp_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/icmp_arm.elf $(BUILD)/icmp_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/icmp_arm.out $(BUILD)/icmp_arm.pcap; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-			-object filter-dump,id=f0,netdev=n0,file=$(BUILD)/icmp_arm.pcap \
-			-serial file:$(BUILD)/icmp_arm.out -kernel $(BUILD)/icmp_arm.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/icmp_arm.out; echo "--- son ---"; \
-		if grep -q "PING OK" $(BUILD)/icmp_arm.out; then \
-			echo "Faz G aarch64 ICMP testi gecti: gateway'den ICMP echo reply alındı (ping round-trip)."; \
-		elif grep -a -q "KEMGU" $(BUILD)/icmp_arm.pcap; then \
-			echo "Faz G aarch64 ICMP testi gecti (TX-pcap fallback): ICMP echo request gönderildi (pcap 'KEMGU')."; \
-			echo "ICMP ECHO SENT OK"; \
-		else \
-			echo "FAIL: 'PING OK' (RX round-trip) veya pcap'te 'KEMGU' işaretçisi (TX) bekleniyor"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — ICMP testi atlandi."; \
-	fi
-
 # === MİLESTONE C: PING-SWEEP testi (aarch64) — nmap-tarzı L3 HOST KEŞFİ ===
 # D-156 tek-ping (icmp_arm.c) + D-158 subnet-iterasyon (arp_scan_arm.c) BİRLEŞİMİ.
 # 10.0.2.1..5 aralığındaki her IP'ye ICMP Echo Request yolla → echo reply gelen =
@@ -3685,89 +3274,6 @@ calistir_rtc_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — RTC testi atlandi."; \
-	fi
-
-# === PL011 UART RX (giriş okuma) testi (aarch64) — DONANIM giriş yolu ===
-# Şimdiye kadar bare-metal konsol yalnız TX (yazma) kullandı. Bu test ilk
-# kez RX (okuma) yolunu kurar+doğrular: PL011 FR (0x09000000+0x18) → RXFE
-# (bit 4) ile RX FIFO durumu, DR (offset 0x00) → giriş byte'ı.
-#
-# GİRİŞ ENJEKSİYONU (birincil, GERÇEK): `-serial stdio` ile guest'in seri
-# hattı host stdin/stdout'a bağlanır. Bir byte ('K') stdin'e pipe edilir →
-# guest RXFE=0 görür → DR'den okur (0x4b) → echo → "UART RX OK". Bu Windows/
-# MSYS'te ÇALIŞIR (QEMU `-chardev file,input-path=` ise "not supported on
-# Windows" der — bu yüzden stdio-pipe kullanılır).
-# FALLBACK: byte gelmezse bounded spin sınırında düşer (DEADLOCK YOK),
-# RXFE=1 (boş) doğru algılanır → "UART RX PATH OK". Her iki marker da geçer.
-# Ağ/drive YOK → deterministik. Marker grep: "UART RX" (OK veya PATH OK).
-calistir_uart_rx_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 PL011 UART RX testi: uart_rx_arm.c -> ELF (donanım giriş okuma)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/uart_rx_arm.c -o $(BUILD)/uart_rx_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/uart_rx_arm.elf $(BUILD)/uart_rx_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/uart_rx_arm.out; \
-		printf 'K' | timeout 8 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial stdio -kernel $(BUILD)/uart_rx_arm.elf > $(BUILD)/uart_rx_arm.out 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/uart_rx_arm.out; echo "--- son ---"; \
-		if grep -q "UART RX OK" $(BUILD)/uart_rx_arm.out; then \
-			echo "aarch64 UART RX testi gecti: GERCEK giris enjekte edildi (stdio pipe) — DR'den byte okundu + echo (UART RX OK)."; \
-		elif grep -q "UART RX PATH OK" $(BUILD)/uart_rx_arm.out; then \
-			echo "aarch64 UART RX testi gecti: RX-path fallback — RXFE=1 (bos FIFO) dogru algilandi, deadlock yok (UART RX PATH OK)."; \
-		else \
-			echo "FAIL: 'UART RX' marker'i yok (RX register semantigi okunamadi veya deadlock)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — UART RX testi atlandi."; \
-	fi
-
-# === İNTERAKTİF KABUK (shell) testi (aarch64) — DONANIM + OS DORUĞU ===
-# D-181 (UART RX) + D-135 (komut kabuk) BİRLEŞİMİ: kabuk komut satırlarını PL011
-# UART RX'ten CANLI okur (sabit script DEĞİL) → gerçek interaktiflik. Kabuk EL1'de
-# koşar; UART RX MMIO doğrudan EL1'den okunur, FS komutları `svc #0` ile çağrılır.
-#
-# GİRİŞ (D-181 dersi): `-serial stdio` ile guest seri hattı host stdin/stdout'a
-# bağlanır; komut dizisi stdin'e PIPE edilir (Windows/MSYS'te ÇALIŞAN yol; QEMU
-# `-chardev input-path=` Windows'ta desteklenmez). Kabuk her satırı RXFE-poll +
-# DR ile byte-byte CANLI okur, '\n'de tokenize + çalıştırır (sabit script DEĞİL).
-#
-# PER-KARAKTER PACE (KRİTİK deterministiklik): QEMU virt PL011 reset'te RX = 1-byte
-# holding register. Tüm akışı burst pipe'lamak → guest TX'te (echo/oku çıktısı/
-# prompt) meşgulken gelen bytelar 1-byte reg'i OVERRUN eder → RUN'lar arası KARARSIZ
-# (yaşandı: "yl MHABA", "MERHABoku" birleşme, satır-pace bile ara sıra flake). ÇÖZÜM:
-# girişi KARAKTER-KARAKTER, her byte arası ~30ms gecikme ile besle. 1-byte reg
-# hiçbir zaman taşmaz (guest bir sonraki byte'tan çok önce okur), guest TX-latency'si
-# önemsiz → HER byte iner. LİDER sleep 1 boot yarışını absorbe eder. Bu yol tam
-# deterministik (4× RUN byte-identik doğrulandı). Kabuk-içi pl011_fifo_ac (FEN)
-# ikinci savunma. /bin/sh = bash 5.x (MSYS) → ${s:i:1} substring desteklenir.
-# Komutlar: `yaz gunluk MERHABA` (num 17) → `oku gunluk` (num 18, "MERHABA" basar)
-# → `ls` (num 19/20, "gunluk" basar). Sonra EOF → "SHELL OK".
-# DEADLOCK YOK: RXFE poll bounded → giriş bitince kabuk EOF sayar, durur.
-# Ağ/drive YOK → deterministik. Marker grep: "SHELL OK" + "MERHABA" + "gunluk".
-calistir_shell_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 interaktif kabuk testi: shell_arm.c -> ELF (canlı UART RX komut)..."
-	$(BM_A64) $(BM_A64_CF) -c test/bare_metal/shell_arm.c -o $(BUILD)/shell_arm.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/shell_arm.elf $(BUILD)/shell_arm.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/shell_arm.out; \
-		s='yaz gunluk MERHABA\noku gunluk\nls\n'; \
-		{ sleep 1; printf "$$s" | while IFS= read -r -n1 ch; do \
-			printf '%s' "$$ch"; [ -z "$$ch" ] && printf '\n'; sleep 0.03; \
-		done; sleep 1; } \
-			| timeout 40 qemu-system-aarch64 \
-			-M virt -cpu cortex-a72 -display none \
-			-serial stdio -kernel $(BUILD)/shell_arm.elf > $(BUILD)/shell_arm.out 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/shell_arm.out; echo "--- son ---"; \
-		if grep -q "SHELL OK" $(BUILD)/shell_arm.out && grep -q "MERHABA" $(BUILD)/shell_arm.out && grep -q "gunluk" $(BUILD)/shell_arm.out; then \
-			echo "aarch64 interaktif kabuk testi gecti: CANLI UART RX komut okundu (stdio pipe) — yaz/oku/ls calisti, oku=MERHABA + ls=gunluk (SHELL OK)."; \
-		else \
-			echo "FAIL: 'SHELL OK' + 'MERHABA' + 'gunluk' bekleniyor (interaktif kabuk)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — interaktif kabuk testi atlandi."; \
 	fi
 
 # === KABUK SCRIPT RUNNER (aarch64) — CANLI UART betik → degisken + echo/yaz/oku ===
@@ -4245,173 +3751,6 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
 	fi
 
-# === D-148 SELF-HOST virtio sürücüsü (aarch64) — KEMGU dilinde OS sürücüsü ===
-# virtio_selfhost.kem (KEMGU!) → LLVM IR → aarch64 → bare-metal boot. mmio_oku32
-# (yetki<MMIO>) ile virtio-mmio magic register'ını okur. KEMGU kendi OS'unu yazıyor.
-calistir_virtio_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
-	@echo "D-148 aarch64 SELF-HOST virtio sürücüsü: virtio_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_selfhost.kem > $(BUILD)/virtio_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_selfhost.ll -c -o $(BUILD)/virtio_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_selfhost.elf $(BUILD)/virtio_selfhost.o \
-		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/virtio_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_selfhost.out; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/virtio_selfhost.out -kernel $(BUILD)/virtio_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM VIRTIO OK" $(BUILD)/virtio_selfhost.out; then \
-			echo "D-148 aarch64 self-host virtio testi gecti: KEMGU sürücüsü virtio-mmio okudu."; \
-		else \
-			echo "FAIL: 'KEM VIRTIO OK' bekleniyor (KEMGU self-host MMIO sürücüsü)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host virtio testi atlandi."; \
-	fi
-
-# === D-149 SELF-HOST virtio init (aarch64) — KEMGU'da tarama + MMIO yazma ===
-# virtio_selfhost_rw.kem: KEMGU cihazı tarar + status handshake yazar (yetki THREAD).
-calistir_virtio_selfhost_rw_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
-	@echo "D-149 aarch64 SELF-HOST virtio init: virtio_selfhost_rw.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_selfhost_rw.kem > $(BUILD)/virtio_selfhost_rw.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_selfhost_rw.ll -c -o $(BUILD)/virtio_selfhost_rw.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_selfhost_rw.elf $(BUILD)/virtio_selfhost_rw.o \
-		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_selfhost_rw.out $(BUILD)/dsh.img; \
-		dd if=/dev/zero of=$(BUILD)/dsh.img bs=512 count=4 2>/dev/null; \
-		timeout 10 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/dsh.img,format=raw,if=none,id=d0 -device virtio-blk-device,drive=d0 \
-			-serial file:$(BUILD)/virtio_selfhost_rw.out -kernel $(BUILD)/virtio_selfhost_rw.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_selfhost_rw.out; echo "--- son ---"; \
-		if grep -q "KEM VIRTIO RW OK" $(BUILD)/virtio_selfhost_rw.out; then \
-			echo "D-149 aarch64 self-host virtio init testi gecti: KEMGU sürücüsü tarama+handshake yaptı."; \
-		else \
-			echo "FAIL: 'KEM VIRTIO RW OK' bekleniyor (KEMGU self-host tara+yaz)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host virtio init testi atlandi."; \
-	fi
-
-# === D-158 SELF-HOST virtio-NET cihaz tanıma (aarch64) — KEMGU'da ağ-cihaz sürücüsü ===
-# virtio_net_selfhost.kem: KEMGU virtio-mmio slotlarını tarar, MAGIC doğrular, DeviceID
-# okur ve DeviceID==1 (virtio-net) cihazını tanır. QEMU'ya virtio-net-device eklenir
-# (blk -drive yerine -netdev + virtio-net-device) → slot'ta DeviceID=1 sunar.
-calistir_virtio_net_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
-	@echo "D-158 aarch64 SELF-HOST virtio-net tanıma: virtio_net_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_net_selfhost.kem > $(BUILD)/virtio_net_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_net_selfhost.ll -c -o $(BUILD)/virtio_net_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_net_selfhost.elf $(BUILD)/virtio_net_selfhost.o \
-		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/virtio_net_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_net_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_net_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-			-serial file:$(BUILD)/virtio_net_selfhost.out -kernel $(BUILD)/virtio_net_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_net_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM NET OK" $(BUILD)/virtio_net_selfhost.out; then \
-			echo "D-160 aarch64 self-host virtio-net testi gecti: KEMGU sürücüsü virtio-net cihazını (DeviceID=1) tanıdı."; \
-		else \
-			echo "FAIL: 'KEM NET OK' bekleniyor (KEMGU self-host virtio-net tanıma)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host virtio-net testi atlandi."; \
-	fi
-
-# === SELF-HOST virtio-NET MAC okuma (aarch64) — KEMGU'da config-space erişimi ===
-# virtio_net_mac_selfhost.kem: D-160'ın ötesinde — virtio-net slotunu bulur ve
-# cihaza-özel config space'ten (offset 0x100) MAC adresini (mac[6]) okur.
-# QEMU varsayılan MAC'i (52:54:00:12:34:56) config-space'te sunar → 6 byte basılır.
-# Marker: "KEM MAC OK" (MAC-config yolu) veya fallback "KEM NET REG OK".
-calistir_virtio_net_mac_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
-	@echo "aarch64 SELF-HOST virtio-net MAC okuma: virtio_net_mac_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_net_mac_selfhost.kem > $(BUILD)/virtio_net_mac_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_net_mac_selfhost.ll -c -o $(BUILD)/virtio_net_mac_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_net_mac_selfhost.elf $(BUILD)/virtio_net_mac_selfhost.o \
-		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/virtio_net_mac_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_net_mac_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_net_mac_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-			-serial file:$(BUILD)/virtio_net_mac_selfhost.out -kernel $(BUILD)/virtio_net_mac_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_net_mac_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM MAC OK" $(BUILD)/virtio_net_mac_selfhost.out; then \
-			echo "aarch64 self-host virtio-net MAC testi gecti: KEMGU sürücüsü config-space'ten MAC okudu."; \
-		elif grep -q "KEM NET REG OK" $(BUILD)/virtio_net_mac_selfhost.out; then \
-			echo "aarch64 self-host virtio-net register testi gecti (fallback): KEMGU sürücüsü config-öncesi register okudu."; \
-		else \
-			echo "FAIL: 'KEM MAC OK' (veya fallback 'KEM NET REG OK') bekleniyor (KEMGU self-host virtio-net config okuma)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host virtio-net MAC testi atlandi."; \
-	fi
-
-# === SELF-HOST virtio-BLK kapasite okuma (aarch64) — KEMGU'da disk config-space ===
-# virtio_blk_config_selfhost.kem: virtio-blk (DeviceID=2) slotunu bulur ve
-# cihaza-özel config space'ten (offset 0x100) kapasiteyi (u64, sektör sayısı)
-# okur. QEMU'ya 64-sektör (32 KiB) raw disk verilir → capacity == 64.
-# Marker: "KEM BLK OK" (capacity yolu) veya fallback "KEM BLK REG OK".
-calistir_virtio_blk_config_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o
-	@echo "aarch64 SELF-HOST virtio-blk kapasite okuma: virtio_blk_config_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/virtio_blk_config_selfhost.kem > $(BUILD)/virtio_blk_config_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/virtio_blk_config_selfhost.ll -c -o $(BUILD)/virtio_blk_config_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/virtio_blk_config_selfhost.elf $(BUILD)/virtio_blk_config_selfhost.o \
-		$(BUILD)/bm_a64_mmio.o $(BUILD)/bm_a64_yetki.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/virtio_blk_config_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/virtio_blk_config_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@dd if=/dev/zero of=$(BUILD)/disk_blk_selfhost.img bs=512 count=64 2>/dev/null
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/virtio_blk_config_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/disk_blk_selfhost.img,format=raw,if=none,id=d0 -device virtio-blk-device,drive=d0 \
-			-serial file:$(BUILD)/virtio_blk_config_selfhost.out -kernel $(BUILD)/virtio_blk_config_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/virtio_blk_config_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM BLK OK" $(BUILD)/virtio_blk_config_selfhost.out; then \
-			echo "aarch64 self-host virtio-blk testi gecti: KEMGU sürücüsü config-space'ten kapasite okudu."; \
-		elif grep -q "KEM BLK REG OK" $(BUILD)/virtio_blk_config_selfhost.out; then \
-			echo "aarch64 self-host virtio-blk register testi gecti (fallback): KEMGU sürücüsü DEVICE_FEATURES register okudu."; \
-		else \
-			echo "FAIL: 'KEM BLK OK' (veya fallback 'KEM BLK REG OK') bekleniyor (KEMGU self-host virtio-blk config okuma)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host virtio-blk kapasite testi atlandi."; \
-	fi
-
 # === SELF-HOST CRC32 saf-hesaplama (aarch64) — KEMGU'da cihazsız algoritma ===
 # crc32_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde standart
 # IEEE 802.3 / zlib CRC-32 (polinom 0xEDB88320, tablosuz bit-bit) hesaplar.
@@ -4517,43 +3856,6 @@ calistir_hashmap_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — self-host HASH-MAP testi atlandi."; \
-	fi
-
-# === SELF-HOST SHA-256 kripto hash (aarch64) — KEMGU'da kriptografik algoritma ===
-# sha256_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde NIST FIPS
-# 180-4 SHA-256 hesaplar. Test vektörü SHA-256("abc") = ba7816bf 8f01cfea ...
-# f20015ad. KEMGU'nun CRC/checksum'ın ÖTESİNDE gerçek KRİPTO hash kaldırdığını
-# kanıtlar: dtam32 mod-2^32 toplama (add i32 wrap) + rotate-right (lshr | shl) +
-# XOR/AND/NOT(^0xFFFFFFFF)/shift + 64 tur. CİHAZSIZ: QEMU'da -netdev/-drive YOK,
-# BM_A64_OBJS (heap dâhil — Dizi<dtam32> W/K tahsisi için). Marker: "KEM SHA OK".
-# NOT (codegen deseni): dizi-eleman doğrudan `>>` operandı ashr (işaretli) üretir;
-# bu yüzden tüm bit-karıştırma skaler dtam32 parametreli yardımcı işlevlere taşındı
-# (dizi elemanı argüman geçince kaydırma lshr olur). runtime/codegen DEĞİŞMEDİ.
-calistir_sha256_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST SHA-256 kripto hash: sha256_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/sha256_selfhost.kem > $(BUILD)/sha256_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/sha256_selfhost.ll -c -o $(BUILD)/sha256_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/sha256_selfhost.elf $(BUILD)/sha256_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/sha256_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/sha256_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/sha256_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/sha256_selfhost.out -kernel $(BUILD)/sha256_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/sha256_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM SHA OK" $(BUILD)/sha256_selfhost.out; then \
-			echo "aarch64 self-host SHA-256 testi gecti: KEMGU cihazsiz kripto hash SHA-256('abc')=ba7816bf...f20015ad dogruladi."; \
-		else \
-			echo "FAIL: 'KEM SHA OK' bekleniyor (KEMGU self-host SHA-256 kripto hash)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host SHA-256 testi atlandi."; \
 	fi
 
 # === SELF-HOST SHA-256 PAROLA KIRICI (aarch64) — Pentest-OS dictionary attack ===
@@ -4676,45 +3978,6 @@ calistir_rc4_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		fi; \
 	else \
 		echo "QEMU yok — self-host RC4 testi atlandi."; \
-	fi
-
-# === SELF-HOST 128-BIT BIGNUM TOPLAMA (aarch64) — KEMGU çok-word aritmetiği ===
-# bignum_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde 128-bit
-# tamsayı toplaması (2×dtam64 word: yuksek+dusuk) carry (elde) yayılımıyla hesaplar.
-# KEMGU'nun tek 64-bit makine-word'ünün ÖTESİNDE gerçek çok-word aritmetiği
-# kaldırdığını kanıtlar: dtam64 mod-2^64 toplama (add i64 wrap) + İŞARETSİZ taşma
-# tespiti (icmp ult i64 — toplam operanddan küçükse elde 1) + word'ler arası elde
-# yayılımı. Test vektörleri: V1 (0,2^64-1)+(0,1)=(1,0); V2 (2^64-1,2^64-1)+(0,1)=
-# (0,0); V3 (1,2^64-1)+(0,2)=(2,1) — hepsi bilinen doğru sonuçlarla. CİHAZSIZ:
-# QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS. Marker: "KEM BIGNUM OK".
-# NOT (literal kısıtı): 0xFFFFFFFFFFFFFFFF doğrudan yazılamaz (lexer strtoll →
-# INT64_MAX'a satüre); maksimum word aritmetikle kurulur (INT64_MAX+INT64_MAX+1).
-# runtime/codegen DEĞİŞMEDİ; bu bir dil-seviyesi kullanım desenidir.
-calistir_bignum_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST 128-bit BIGNUM toplama: bignum_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/bignum_selfhost.kem > $(BUILD)/bignum_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/bignum_selfhost.ll -c -o $(BUILD)/bignum_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/bignum_selfhost.elf $(BUILD)/bignum_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/bignum_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/bignum_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/bignum_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/bignum_selfhost.out -kernel $(BUILD)/bignum_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/bignum_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM BIGNUM OK" $(BUILD)/bignum_selfhost.out; then \
-			echo "aarch64 self-host BIGNUM testi gecti: KEMGU cihazsiz 128-bit toplama (carry yayilimi, 3 vektor) dogruladi."; \
-		else \
-			echo "FAIL: 'KEM BIGNUM OK' bekleniyor (KEMGU self-host 128-bit bignum carry propagation)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host BIGNUM testi atlandi."; \
 	fi
 
 # === SELF-HOST YIĞIN-VM bytecode yorumlayıcı (aarch64) — KEMGU DİL KAPSTONU ===
@@ -5468,28 +4731,26 @@ calistir_userspace_post_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/b
 # OS'te otomatik host-gate YOK: gate = QEMU-boot-kanıtı. Bu hedef tüm OS
 # yeteneklerini iki mimaride boot edip doğrular (QEMU yoksa graceful skip).
 calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
-                     calistir_istisna_test_arm calistir_timer_test_arm calistir_syscall_test_arm \
-                     calistir_sched_test_arm calistir_preempt_test_arm calistir_sleep_test_arm \
-                     calistir_priority_test_arm calistir_kanal_test_arm calistir_syscall_arg_test_arm \
+                     calistir_sched_test_arm calistir_sleep_test_arm \
+                     calistir_priority_test_arm calistir_kanal_test_arm \
                      calistir_d2_test_arm calistir_d1_test_arm calistir_proc_test_arm \
-                     calistir_userspace_test_arm calistir_preempt_el0_test_arm \
-                     calistir_syscall_ret_test_arm calistir_multiproc_test_arm \
-                     calistir_tick_test_arm calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp_seqlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm calistir_spawn_test_arm calistir_yasam_test_arm \
+                     calistir_userspace_test_arm \
+                      calistir_smp_test_arm calistir_smp_compute_test_arm calistir_smp_queue_test_arm calistir_smp_barrier_test_arm calistir_smp_atomic_test_arm calistir_smp_ticket_test_arm calistir_smp_mcs_test_arm calistir_smp_prodcons_test_arm calistir_smp_rwlock_test_arm calistir_smp_seqlock_test_arm calistir_smp4_test_arm calistir_smp_sort_test_arm calistir_yasam_test_arm \
                      calistir_dosya_test_arm calistir_metin_test_arm calistir_ls_test_arm \
-                     calistir_sil_test_arm calistir_kabuk_test_arm calistir_calis_test_arm \
+                     calistir_sil_test_arm \
                      calistir_geri_al_test_arm calistir_kanal_ipc_test_arm \
-                     calistir_virtio_test_arm calistir_virtio_rw_test_arm calistir_kalici_test_arm \
+                       calistir_kalici_test_arm \
                      calistir_fs_journal_test_arm calistir_minifs_test_arm \
                      calistir_minifs_crud_test_arm \
                      calistir_crashfs_test_arm \
-                     calistir_net_test_arm calistir_arp_test_arm calistir_arp_scan_test_arm \
+                       calistir_arp_scan_test_arm \
                      calistir_udp_test_arm calistir_dhcp_test_arm calistir_dhcp_lease_test_arm \
-                     calistir_dns_test_arm calistir_tcp_test_arm calistir_icmp_test_arm \
+                     calistir_dns_test_arm calistir_tcp_test_arm \
                      calistir_ping_sweep_test_arm \
                      calistir_traceroute_test_arm \
                      calistir_dns_resolver_test_arm calistir_dns_ptr_test_arm \
-                     calistir_ntp_test_arm calistir_rtc_test_arm calistir_uart_rx_test_arm \
-                     calistir_shell_test_arm calistir_shell_script_test_arm \
+                     calistir_ntp_test_arm calistir_rtc_test_arm \
+                      calistir_shell_script_test_arm \
                      calistir_recon_shell_test_arm \
                      calistir_recon_shell2_test_arm \
                      calistir_kemgu_os_arm \
@@ -5498,20 +4759,15 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_virtio_selfhost_arm \
-                     calistir_virtio_selfhost_rw_arm calistir_virtio_net_selfhost_arm \
-                     calistir_virtio_net_mac_selfhost_arm \
-                     calistir_virtio_blk_config_selfhost_arm \
                      calistir_crc32_selfhost_arm \
                      calistir_sort_selfhost_arm \
                      calistir_hashmap_selfhost_arm \
-                     calistir_sha256_selfhost_arm calistir_rc4_selfhost_arm \
+                      calistir_rc4_selfhost_arm \
                      calistir_hashcrack_selfhost_arm \
                      calistir_utf8_selfhost_arm \
                      calistir_base64_selfhost_arm \
                      calistir_turkce_case_selfhost_arm \
                      calistir_turkce_sort_selfhost_arm \
-                     calistir_bignum_selfhost_arm \
                      calistir_vm_selfhost_arm \
                      calistir_json_selfhost_arm \
                      calistir_asm_selfhost_arm \

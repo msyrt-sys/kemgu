@@ -21,23 +21,14 @@
 - [x] kem_os_arm bayat llvm-nm denetimleri -> D-599 (harita tabanli denetim).
 - [x] qemu_cekirdek temsilcileri kem_os'a tasindi: bignum D-598 [25] . sha256 D-600 [26] .
       virtio D-601 (kem_os ZATEN kapsiyordu). qemu_cekirdek = qemu_smoke + kem_os_arm.
-- [ ] (KARAR BEKLIYOR — Mehmet) Eski bare-metal C hedefleri, D-602 envanteri.
-      Hicbiri test_tumu/qemu_cekirdek'te degil. Uc sinif:
-      (A) kem_os AYNI davranisi dogruluyor -> silinebilir (~20): timer_test,
-          tick_test, preempt_test, preempt_el0, syscall_test/arg/ret, istisna_test,
-          uart_rx, shell_test, kabuk_test, spawn_test, multiproc, arp_test, net_test,
-          icmp_test, virtio_test, virtio_rw, bignum/sha256/virtio_selfhost(+rw),
-          virtio_blk_config/net/net_mac_selfhost, uart_merhaba, kernel_dizi, calis_test
-      (B) Isim eslesiyor ama eski test DAHA GUCLU (~15): kalici, crashfs,
-          fs_journal, minifs_crud, sil/ls, dosya, guvenlik_kalici/oku/spawn,
-          recon_shell(2), shell_script, proc_test, d1/d2, geri_al, yasam, metin,
-          kem_pointer(_self) -> once kem_os'a faz olarak tasi, sonra sil
-      (C) kem_os'ta KARSILIGI YOK (~96): smp x12, ag x14 (tcp/udp/dhcp/dns/http/
-          ntp/traceroute/port_scan...), userspace x12, selfhost x11 (json/rc4/crc32/
-          base64/hashmap/sort/utf8/turkce_*/vm/asm/hashcrack), x86 x17, cekirdek
-          x10 (sched, priority, sleep, rtc, kanal/kanal_ipc, guvenlik(_bombardiman),
-          capstone, diag_heap_yaz, kemgu_os_arm[C ikiz]) -> SILINIRSE KAPSAM KAYBOLUR
-      Tam tablo: build/envanter.json (scratchpad betigiyle yeniden uretilebilir).
+- [x] Sinif A (Mehmet onayi) -> D-603: 26 hedef + 17 C kaynak silindi.
+- [ ] Sinif B (~15) seri kem_os fazina tasi, tasindikca sil: kalici, crashfs,
+      fs_journal, minifs_crud, sil/ls, dosya, guvenlik_kalici/oku/spawn,
+      recon_shell(2), shell_script, proc_test, d1/d2, geri_al, yasam, metin,
+      kem_pointer(_self). Her biri ayri artim; eski testin DAHA GUCLU oldugu
+      davranis (orn. iki boot arasi kalicilik) kem_os fazinda da olculmeli.
+- [ ] Sinif C (~96) KALIYOR (karsiligi yok; tasimak OS'a yeni ozellik ekleme
+      isi — smp/tcp-ip/x86/userspace — her biri ayri Mehmet karari).
 
 
 
@@ -371,3 +362,4 @@
 - 2026-09-17 D-600: sha256_selfhost_arm testi kem_os'a faz [26] olarak TASINDI (ksha_ onekli; sabitler ve tur fonksiyonlari kaynak testle BIREBIR; sikistirma 8 kez yerine BIR KEZ hesaplanip 8 digest word karsilastirilir). YOL USTUNDE: ilk link `undefined symbol: kdl_dizi_yaz_tam` ile GURULTULU dustu (S187'nin ongordugu davranis) — kem_os'un saf-.kem heap'inde dizi YAZMA primitifi hic yoktu (yalniz olustur/ekle/al/boyut). runtime/kem_heap.kem'e C kdl_dizi.inc karsiligiyla birebir sinir-kontrollu `kdl_dizi_yaz_tam` eklendi. qemu_cekirdek eski sha256_selfhost_arm'i birakti (4 -> 3 temsilci; dry-run'da 0 referans). Kapilar: kem_os_arm rc=0 ('[26] SHA256 OK (abc, 8/8 word)', harita: start.o disinda C nesnesi YOK) . qemu_cekirdek 3/3 . baremetal_diff 5/5 . check_kapisi 278/285 0 RED. Sabotaj S191 (ksha_rotr'da 32-n -> 31-n) -> '[26] SHA256 HATA eslesen=0', rc=2. GECERSIZ ILK DENEMELER: (a) S191'in ilk surumu desenin IKI eslesmesi (biri YORUM satiri) yuzunden assert'e takildi ve UYGULANMADI, rc=0 anlamsizdi; (b) Makefile duzenlemesi tek satirlik `py -c` icinde ters-bolu kacisi bozuldugu icin uygulanmadi, kapilar eski Makefile ile kostu. Ikisi de betik dosyasiyla tekrarlandi.
 - 2026-09-17 D-601: virtio_selfhost_arm'in kem_os'ta ZATEN karsiligi oldugu OLCULDU, kod yazilmadi. Eski test yalniz iki register okuyordu (yetki<MMIO> ile 0x0A000000 magic + version). kem_os: magic faz [3] mmio_magic_oku (ayni adres, ayni yetki mekanizmasi); version==2 runtime/kem_virtio_blk.kem:88 ve kem_virtio_net.kem:54 baslatma yolunda denetleniyor ve basarisizsa init -1 doner -> kapinin ZORUNLU tuttugu '[6] DISK RW OK' duser. qemu_cekirdek virtio_selfhost_arm'i birakti (3 -> 2: qemu_smoke + kem_os_arm). Sabotaj GEREKMEDI: yeni kural yok, kapsama iddiasi kaynak satirlarina dayandirildi.
 - 2026-09-17 D-602 (OLCUM, kod yok): 131 eski BM_A64/BM_X86 hedefinin kem_os karsiligi envanteri. Once kem_os'un GERCEKTEN dogruladigi faz dizgileri Makefile kapisindan ve kem_os.kem'den cikarildi (33 dizgi), sonra her eski hedefin kendi basari dizgisi (grep -q) okundu. 131'in HICBIRI test_tumu ya da qemu_cekirdek icinde degil. Sinif (A) ~20 kem_os ayni davranisi dogruluyor; (B) ~15 isim eslesiyor ama eski test daha guclu (ornegin kalici_test iki boot arasi kalicilik, fs_journal gunluk, crashfs cokme sonrasi) — anahtar-kelime eslemesi bunlari 'karsiligi var' saymisti, ELLE DUZELTILDI; (C) ~96 karsiligi yok (smp/ag/userspace/selfhost algoritmalari/x86 ve sched/priority/rtc/kanal gibi cekirdek ozellikleri). SINIR: A/B ayrimi dogrulama dizgisi + hedef adi okunarak yapildi, her testin kaynagi satir satir karsilastirilmadi.
+- 2026-09-17 D-603: Sinif A silindi (Mehmet onayi). Envanterdeki 28 adaydan IKISI olcumle CIKARILDI: uart_merhaba_bare_metal (CI ci.yml + $(BUILD)/kernel.elf kurali kullaniyor) ve kernel_dizi_bare_metal (calistir_os_kernels'te + D-250 diag sablonu). Silinen 26 hedef: timer/tick/preempt(+el0)/syscall(+arg,+ret)/istisna/uart_rx/shell/kabuk/spawn/multiproc/arp/net/icmp/virtio(+rw)_test_arm, bignum/sha256/virtio(+rw)/virtio_blk_config/virtio_net(+mac)_selfhost_arm, calis_test_arm. Makefile -755 satir (tarifler + yalniz o hedefe ait yorum bloklari; baska KALAN hedefi anan yorumlar korundu) ve calistir_os_kernels/.PHONY listelerinden cikarildi. Silinen C kaynak 17 (test/bare_metal/*_arm.c). KORUNANLAR: timer_test.c + syscall_test.c (x86 hedefleriyle paylasimli) ve .kem kaynaklari (sha256/bignum/virtio_*_selfhost.kem — codegen_genis/check_kapisi korpusunun parcasi). Referans taramasi: silinen dosyalarin adi yalniz YORUMLARDA geciyor (derleme girdisi 0). Dogrulama: make -n calistir_os_kernels/test_tumu/qemu_cekirdek rc=0 . calistir_sched_test_arm (kalan eski hedef, ayni BM_A64_OBJS) rc=0 . qemu_cekirdek 2/2. SUREC: ilk betik re.sub yerine-koyma dizgisindeki ters bolu yuzunden Makefile'a YAZMADAN dustu; ardindan gelen 'os_kernels dry rc=1' kopan && zincirinin kodu olup OLCUM DEGILDI — git diff bos oldugu dogrulanip betik duzeltildi.
