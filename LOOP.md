@@ -21,10 +21,23 @@
 - [x] kem_os_arm bayat llvm-nm denetimleri -> D-599 (harita tabanli denetim).
 - [x] qemu_cekirdek temsilcileri kem_os'a tasindi: bignum D-598 [25] . sha256 D-600 [26] .
       virtio D-601 (kem_os ZATEN kapsiyordu). qemu_cekirdek = qemu_smoke + kem_os_arm.
-- [ ] Eski bare-metal C demo hedefleri (131 hedef, D-594): silme KARARI
-      Mehmet'te. qemu_cekirdek 3 tanesini (sha256/virtio/bignum_selfhost_arm)
-      dolayli cagiriyor -> toptan silinemez; once o 3 temsilci kem_os-tabanli
-      esdegerle degistirilmeli.
+- [ ] (KARAR BEKLIYOR — Mehmet) Eski bare-metal C hedefleri, D-602 envanteri.
+      Hicbiri test_tumu/qemu_cekirdek'te degil. Uc sinif:
+      (A) kem_os AYNI davranisi dogruluyor -> silinebilir (~20): timer_test,
+          tick_test, preempt_test, preempt_el0, syscall_test/arg/ret, istisna_test,
+          uart_rx, shell_test, kabuk_test, spawn_test, multiproc, arp_test, net_test,
+          icmp_test, virtio_test, virtio_rw, bignum/sha256/virtio_selfhost(+rw),
+          virtio_blk_config/net/net_mac_selfhost, uart_merhaba, kernel_dizi, calis_test
+      (B) Isim eslesiyor ama eski test DAHA GUCLU (~15): kalici, crashfs,
+          fs_journal, minifs_crud, sil/ls, dosya, guvenlik_kalici/oku/spawn,
+          recon_shell(2), shell_script, proc_test, d1/d2, geri_al, yasam, metin,
+          kem_pointer(_self) -> once kem_os'a faz olarak tasi, sonra sil
+      (C) kem_os'ta KARSILIGI YOK (~96): smp x12, ag x14 (tcp/udp/dhcp/dns/http/
+          ntp/traceroute/port_scan...), userspace x12, selfhost x11 (json/rc4/crc32/
+          base64/hashmap/sort/utf8/turkce_*/vm/asm/hashcrack), x86 x17, cekirdek
+          x10 (sched, priority, sleep, rtc, kanal/kanal_ipc, guvenlik(_bombardiman),
+          capstone, diag_heap_yaz, kemgu_os_arm[C ikiz]) -> SILINIRSE KAPSAM KAYBOLUR
+      Tam tablo: build/envanter.json (scratchpad betigiyle yeniden uretilebilir).
 
 
 
@@ -357,3 +370,4 @@
 - 2026-09-17 D-599: kem_os_arm tarifindeki 5 BOS denetim kaldirildi ve yerine olcen tek denetim kondu. Eskileri `llvm-nm bm_a64_heap_kemmalloc.o | grep T malloc -> FAIL` bicimindeydi; D-592'den sonra o nesneler linke hic girmedigi icin dosya yoksa grep eslesmez ve denetim SESSIZCE gecerdi. Yeni: link `-Map=build/kem_os.map` uretir; (a) harita yoksa ya da kem_os_routed.o icermiyorsa FAIL (bos haritanin gecmesini engeller), (b) haritada start.o disinda bm_a64_*.o bolumu varsa FAIL. Pozitif 'kem_os.o T malloc/kdl_bolge_olustur/...' denetimleri KORUNDU (onlar gercekten olcuyor). Kapi: kem_os_arm rc=0, '(harita: start.o disinda C nesnesi YOK)'. Sabotaj S189 (-Map bayragini kaldir) -> 'FAIL: kem_os.map yok', rc=2. S190 (KEM_OS_A64_OBJS'e bm_a64_uart.o ekle) -> rc=0 ve bu DOGRU: nesne link listesinde ama hicbir bolumu imaja girmedi (--gc-sections atti); denetimin sorusu 'imaja C kodu girdi mi', 'listede C dosyasi var mi' degil. Imaja C kodu sokan bir sabotaj ancak .kem tarafinda bir C sembolune gercek referans ekleyerek kurulabilir; o durumda ld.lld once tanimsiz sembolde duser (S187) ya da nesne haritaya girer. SUREC: yedek adi bu kez silme deseninden ayrildi (build/yedek599_*); geri alma dogrulandi (git diff 13/21, KEM_OS_A64_OBJS = start.o).
 - 2026-09-17 D-600: sha256_selfhost_arm testi kem_os'a faz [26] olarak TASINDI (ksha_ onekli; sabitler ve tur fonksiyonlari kaynak testle BIREBIR; sikistirma 8 kez yerine BIR KEZ hesaplanip 8 digest word karsilastirilir). YOL USTUNDE: ilk link `undefined symbol: kdl_dizi_yaz_tam` ile GURULTULU dustu (S187'nin ongordugu davranis) — kem_os'un saf-.kem heap'inde dizi YAZMA primitifi hic yoktu (yalniz olustur/ekle/al/boyut). runtime/kem_heap.kem'e C kdl_dizi.inc karsiligiyla birebir sinir-kontrollu `kdl_dizi_yaz_tam` eklendi. qemu_cekirdek eski sha256_selfhost_arm'i birakti (4 -> 3 temsilci; dry-run'da 0 referans). Kapilar: kem_os_arm rc=0 ('[26] SHA256 OK (abc, 8/8 word)', harita: start.o disinda C nesnesi YOK) . qemu_cekirdek 3/3 . baremetal_diff 5/5 . check_kapisi 278/285 0 RED. Sabotaj S191 (ksha_rotr'da 32-n -> 31-n) -> '[26] SHA256 HATA eslesen=0', rc=2. GECERSIZ ILK DENEMELER: (a) S191'in ilk surumu desenin IKI eslesmesi (biri YORUM satiri) yuzunden assert'e takildi ve UYGULANMADI, rc=0 anlamsizdi; (b) Makefile duzenlemesi tek satirlik `py -c` icinde ters-bolu kacisi bozuldugu icin uygulanmadi, kapilar eski Makefile ile kostu. Ikisi de betik dosyasiyla tekrarlandi.
 - 2026-09-17 D-601: virtio_selfhost_arm'in kem_os'ta ZATEN karsiligi oldugu OLCULDU, kod yazilmadi. Eski test yalniz iki register okuyordu (yetki<MMIO> ile 0x0A000000 magic + version). kem_os: magic faz [3] mmio_magic_oku (ayni adres, ayni yetki mekanizmasi); version==2 runtime/kem_virtio_blk.kem:88 ve kem_virtio_net.kem:54 baslatma yolunda denetleniyor ve basarisizsa init -1 doner -> kapinin ZORUNLU tuttugu '[6] DISK RW OK' duser. qemu_cekirdek virtio_selfhost_arm'i birakti (3 -> 2: qemu_smoke + kem_os_arm). Sabotaj GEREKMEDI: yeni kural yok, kapsama iddiasi kaynak satirlarina dayandirildi.
+- 2026-09-17 D-602 (OLCUM, kod yok): 131 eski BM_A64/BM_X86 hedefinin kem_os karsiligi envanteri. Once kem_os'un GERCEKTEN dogruladigi faz dizgileri Makefile kapisindan ve kem_os.kem'den cikarildi (33 dizgi), sonra her eski hedefin kendi basari dizgisi (grep -q) okundu. 131'in HICBIRI test_tumu ya da qemu_cekirdek icinde degil. Sinif (A) ~20 kem_os ayni davranisi dogruluyor; (B) ~15 isim eslesiyor ama eski test daha guclu (ornegin kalici_test iki boot arasi kalicilik, fs_journal gunluk, crashfs cokme sonrasi) — anahtar-kelime eslemesi bunlari 'karsiligi var' saymisti, ELLE DUZELTILDI; (C) ~96 karsiligi yok (smp/ag/userspace/selfhost algoritmalari/x86 ve sched/priority/rtc/kanal gibi cekirdek ozellikleri). SINIR: A/B ayrimi dogrulama dizgisi + hedef adi okunarak yapildi, her testin kaynagi satir satir karsilastirilmadi.
