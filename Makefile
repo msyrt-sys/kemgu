@@ -646,21 +646,22 @@ calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codege
 #     Ilk yazimda "D-446 alani" diye isaretlemistim; SABOTAJ bunu curuttu
 #     (sabitsure soymasini bozdum, kapi YESIL kaldi). Kapsadigi sey
 #     `ast_tip_isaretsiz_mi`nin dtamN yolu — S42 ile dogrulandi.
-#   virtio_selfhost_arm   surucu: yapi + isaretci agirlikli
+#   (virtio)              [D-601] kem_os_arm KAPSIYOR: magic faz [3] (ayni adres, ayni
+#                         yetki<MMIO>), version==2 vblk/vnet baslatma yolunda ve
+#                         kapinin zorunlu tuttugu [6] DISK RW OK'a bagli. Ayri ELF cikti.
 #   (bignum)              [D-598] kem_os_arm faz [25]'e TASINDI; ayri ELF
 #                         (C iskeletli bignum_selfhost_arm) bu kapidan cikti.
 #
 # QEMU yoksa alt hedefler kendileri zarifce atlar (command -v guard) — kapi
 # QEMU'suz makinede KIRMIZI OLMAZ.
-calistir_qemu_cekirdek: calistir_qemu_smoke calistir_virtio_selfhost_arm \
-                        calistir_kem_os_arm
+calistir_qemu_cekirdek: calistir_qemu_smoke calistir_kem_os_arm
 	@# [D-557] OZET, ATLAMAYI GIZLEMEMELI. CI'da olculdu: QEMU yokken bes
 	@# temsilcinin BESI de "atlandi" dedi ama ozet yine "5/5 gecti" basiyordu
 	@# (D-486 kapsam yanilsamasi). Artik QEMU varligi ayrica bildirilir.
 	@if command -v qemu-system-aarch64 >/dev/null 2>&1; then \
-	  echo "=== QEMU cekirdek kapisi: 3/3 temsilci gecti ==="; \
+	  echo "=== QEMU cekirdek kapisi: 2/2 temsilci gecti ==="; \
 	else \
-	  echo "=== QEMU cekirdek kapisi: QEMU YOK - 3 temsilcinin UCU DE ATLANDI (hicbir sey olculmedi) ==="; \
+	  echo "=== QEMU cekirdek kapisi: QEMU YOK - 2 temsilcinin IKISI DE ATLANDI (hicbir sey olculmedi) ==="; \
 	fi
 
 # [D-462] "kod var ama hicbir olcum atesliyor mu" kapisi. Kaynak/derleyici
