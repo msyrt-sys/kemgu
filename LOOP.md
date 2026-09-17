@@ -17,12 +17,15 @@
       ithalattir, modulu SON segmentle baglar, T041 EVRENSEL.
 - [x] KEMGU-OS kalan C parcalari -> D-592: dokuzu da OLU cikti ve link
       listesinden dusuruldu; kem_os = boot .S (start_aarch64.S) + SAF-.kem.
-- [ ] runtime/kdl_runtime.c .kem gocu — PILOT (D-594 haritasi): en kucuk saf
-      kume kdl_min/maks/mutlak(64) (6 islev). ONCE OLC: (a) bu adlari hangi
-      derleyici yolu cagiriyor (C llvm.c + codegen.kem declare), (b) host
-      programlarinin BAGLAMA sozlesmesi nasil degisecek — D-466: ~59 baglama
-      noktasi var ve yeni yetenek onu KULLANMAYAN programin baglamasini
-      degistirmemeli. Baglama sozlesmesi degisecekse DUR ve Mehmet'e sor.
+- [ ] (KARAR BEKLIYOR — Mehmet) runtime/kdl_runtime.c .kem gocu. D-595: PILOT
+      GECERSIZ — kdl_min/maks/mutlak(64) OLU KOD (hicbir derleyici eslemiyor,
+      IR'da cagri 0, depoda referans 0; mutlak zaten stdlib/temel/matematik.kem).
+      Olu aday 13 (alt sinir): bellek_hizali_al/serbest . hata_yazdir .
+      kanal_bos_mu . min/maks/mutlak(64) . oku_tam . prng_next64/seed.
+      Canli saf cekirdek (metin_* 19, yetki_* 9, kod_* 2) tasinirsa HER host
+      programinin baglama sozlesmesi degisir (~59 baglama noktasi) -> karar:
+      (a) olu 13'u sil, (b) canli saf cekirdegi runtime .kem birimine tasi,
+      (c) host runtime C kalsin.
 - [ ] Eski bare-metal C demo hedefleri (131 hedef, D-594): silme KARARI
       Mehmet'te. qemu_cekirdek 3 tanesini (sha256/virtio/bignum_selfhost_arm)
       dolayli cagiriyor -> toptan silinemez; once o 3 temsilci kem_os-tabanli
@@ -352,3 +355,4 @@
 - 2026-09-17 D-592: KEMGU-OS link haritasi cikarildi ve SONUC maddenin varsayimini CURUTTU. Madde 'kalan 9 C parcasini seri tasi' diyordu; olcum: --gc-sections sonrasi uart/bolge_kemregion/heap_kemmalloc/panik/zaman_kem/mmu_kem/gorev/virtio/virtio_net ve bm_a64_mmio_kem.o'nun HICBIR bolumu imajda kalmiyordu (map: yalniz start.o .text/.data/_start). Yalniz kem_os_routed.o + start.o ile baglanan cekirdek HAM IKILISI cmp ile BIREBIR AYNI (33.563.184 bayt). Yani tasinacak C YOKTU; nesneler olu link girdisiydi. KEM_OS_A64_OBJS = start.o. Kapilar: kem_os_arm 24 faz rc=0, qemu_cekirdek 5/5. S187: ayni link yapilandirmasinda tanimsiz sembol GURULTULU (ld.lld 'undefined symbol', rc=1) -> bir .kem kodu ileride C'ye dayanirsa sessiz gecmez. bm_a64_mmio_kem.o calistir_kem_os_arm on kosulu olarak KALDI (1394'teki 'C-tanimi yok' denetimi onu okuyor). YANLIS GIDEN OLCUMLER: (a) llvm-nm -u kesisimi 10/10 bos verdi ve dogru ama yetersizdi (C nesneleri birbirini cagirir) -> map ile dogrulandi; (b) ilk cmp `<(objcopy ... /dev/stdout)` ile IKI BOS cikti karsilastirdi ve 'AYNI' dedi (D-563 tuzagi) -> gercek dosyalarla tekrarlandi; (c) nesneler bir onceki temizlikte silindigi icin once imaj yeniden kuruldu. KALAN C: yalniz boot/start_aarch64.S (asm, C degil).
 - 2026-09-17 D-593: TAM TAKIM (make -k test_tumu, 105 dk) YESIL, MAKE_RC=0. ONCE KIRMIZIYDI: test_parser.c [24] D-580'de kaldirilan P046'yi hala bekliyordu ve test_tumu ILK HATADA durdugu icin D-580'DEN BERI takimin calistir_parser_test SONRASI HIC KOSMAMISTI (hedefli kapilar yesildi, tam takim hic tamamlanmamisti). Test yeni davranisi (kabul + segment_sayi=2 + secili_sayi=1) olcecek bicimde duzeltildi; -k ile ayni kosumda BASKA kirmizi CIKMADI. Atlamalar hepsi bilinen/mesru (perf_bellek /usr/bin/time yok, bare-metal MMIO, ASan kurate SKIP). ARAC: arka plan bildirimi 'exit 0' dedi ama o tail'in koduydu; gercek MAKE_RC=2 logdan okundu (D-444). Gunluk satirini ilk yazarken cift tirnak icinde backtick kullandim -> kabuk tail'i calistirip stdin'de ASILDI (D-548 tuzagi), commit ve push hic olmadi. D-590 son-segment baglama anlami Mehmet tarafindan TEYIT edildi.
 - 2026-09-17 D-594 (OLCUM, kod yok): (1) push: claude/jovial-euclid-a22e29 952e1d6..4edca0e (D-590..D-593). (2) Eski bare-metal C nesnelerini 131 calistir_* hedefi kullaniyor, hicbiri dogrudan test_tumu'da DEGIL ama qemu_cekirdek sha256/virtio/bignum_selfhost_arm uzerinden 3'unu DOLAYLI cagiriyor -> toptan silme o kapiyi kirar. (3) kdl_runtime.c cagri-zinciriyle dogrulanmis harita: 115 disa-verilen islev = OS 62 . ALLOC 2 . SAF 51. SAF listesinde BILINEN YANLIS-POZITIF: kdl_soket_* (5) Winsock'u fonksiyon isaretcisiyle cagirir (D-466) ve kdl_dosya_yeniden_adlandir regex disi rename kullanir. Gercek saf cekirdek: metin_* 19 . yetki_* 9 . kod_* 2 . min/maks/mutlak(64) 6 . prng 2. ILK tarama (zincirsiz) 61 SAF demisti; zincir 10'unu OS'a tasidi. ARAC: heredoc icindeki regex kacislari bozuldu (unterminated character set) -> betik dosyaya yazildi.
+- 2026-09-17 D-595 (OLCUM, kod yok): runtime pilotu (kdl_min/maks/mutlak(64)) ONCE OLCULDU ve GECERSIZ cikti: alti da OLU KOD — src/selfhost'ta esleme yok, uretilen IR'da @kdl_min/maks/mutlak cagrisi 0 (codegen.kem ve cg_yetki), depoda baska referans 0. Olu kodu .kem'e tasimak anlamsiz. Genisletilmis tarama: 115 disa-verilen islevin 13'u olu aday (onek eslemesi canli sayildigi icin ALT SINIR). Kalan iki Sirada maddesi de dil/yapi karari istedigi icin loop DURDURULDU.
