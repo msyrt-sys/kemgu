@@ -30,8 +30,16 @@
       yaz_ptr_gecerli (D-150/151 .kem aynasi) sys 5/17/18/26'ya eklendi; faz [28] gate +
       S1/S2 sabotaj. kem_os_arm 28 faz, baremetal_diff 5/5, qemu_cekirdek 2/2.
 - [x] kem_os_arm boru hatti maskesi -> D-609 (kemgu | awk bolundu).
-- [ ] Sinif C (~96) KALIYOR (karsiligi yok; tasimak OS'a yeni ozellik ekleme
-      isi — smp/tcp-ip/x86/userspace — her biri ayri Mehmet karari).
+- [~] Sinif C KARARI VERILDI (D-611, Mehmet delege etti): TOPLU SILME YOK, kategoriye gore ayrik.
+      GOCUR (kem_os fazina tasi, eski izole demoyu sil — ANAYASA-uyumlu, kapsam-pozitif):
+        self-host algoritmalari (12) + benzersiz userspace yetenekleri.
+      DONDUR (belgelenmis referans, silme, QEMU'ya kapilama):
+        SMP (~14, D-490: yalniz fiziksel ARM64) · TCP/IP (~9, sonraki NET fazi referansi) ·
+        x86 (~17, x86_64 ikincil port referansi).
+      SIRADAKI GOC ADIMLARI (her biri ayri iterasyon, biri bitince digeri):
+      - [x] base64_selfhost -> kem_os faz [29] (D-611)
+      - [ ] crc32 · sort · hashmap · rc4 · hashcrack · utf8 · turkce_case ·
+            turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
 
@@ -395,3 +403,18 @@
   inttoptr uclu eslesti) · qemu_cekirdek 2/2. NOT: probe EL0-svc yerine EL1'den dogrudan
   cagri kullanir cunku SVC handler zaten EL1'de kosar -> ayni denetimsiz deref yolu; EL0
   crossing aciga sebep DEGIL, eksik aralik-denetimi acidir.
+- 2026-09-18 D-611 (Mehmet delege etti): Sinif C KARARI + ilk goc (base64). KARAR: toplu
+  silme YOK, kategoriye gore ayrik — GOCUR (self-host algoritmalari + benzersiz userspace →
+  kem_os fazina tasi, eski izole demo sil; ANAYASA-uyumlu) · DONDUR (SMP D-490 fiziksel-ARM64,
+  TCP/IP sonraki NET fazi, x86 ikincil port → belgelenmis referans, QEMU'ya kapilama, silme).
+  ILK GOC: base64_selfhost_arm → kem_os faz [29]. Saf algoritma (OS bagimliligi yok):
+  kb64_alfabe/index/encode/decode + kb64_testi kem_os.kem'e tasindi (normal islev + Dizi<karakter>/
+  Dizi<tam32> literalleri — kem_os zaten ksha_*/heap_dizi ile bu yapilari kullaniyor). Faz [29]
+  encode ("KEMGU"→"S0VNR1U=", bilinen vektore karsi pozitif dogrulama) + decode round-trip;
+  ikisi de dogruysa 1. Eski test/ornekler/base64_selfhost.kem + calistir_base64_selfhost_arm
+  hedefi + calistir_os_kernels satiri SILINDI (kapsam kem_os fazinda yasar → net etki
+  non-destructive). Sabotaj S3 (encode `b0>>2`→`b0>>1`) → faz [29] HATA, rc=2 (gate ayirt
+  ediyor; bilinen-vektor karsilastirmasi "her seyi kabul et" sabotajini da eler). Kapilar:
+  kem_os_arm 29 faz rc=0 · baremetal_diff 5/5 (BIRLESIK OS 263 islev, uclu eslesti) ·
+  qemu_cekirdek dolayli. KALAN GOC: crc32/sort/hashmap/rc4/hashcrack/utf8/turkce_case/
+  turkce_sort/vm/json/asm-selfhost (11) — her biri ayri iterasyon.

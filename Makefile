@@ -1662,7 +1662,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[25\] BIGNUM OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[26\] SHA256 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[27\] GOREV KAPASITE OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[28\] SYSCALL PTR DOGRULAMA OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[28\] SYSCALL PTR DOGRULAMA OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[29\] BASE64 OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3944,41 +3945,6 @@ calistir_asm_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host MINI-ASSEMBLER testi atlandi."; \
 	fi
 
-# === SELF-HOST BASE64 kodlama/çözme (aarch64) — KEMGU payload codec ===
-# base64_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde standart
-# RFC 4648 Base64 encode + decode (round-trip). "KEMGU" (5 byte) -> "S0VNR1U="
-# (bilinen doğru vektör) -> tekrar "KEMGU". Karakter-tablosu (Dizi<karakter>)
-# 6-bit index ile erişim + bit işlemleri (>> << & |) + ham karakter çıktısı
-# (yaz_karakter — newline'sız, tek satır). Pentest OS payload-kodlama yardımcısı.
-# CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil — dizi
-# tahsisi için). Marker: "KEM B64 OK" (encode) + "KEM B64 DECODE OK" (round-trip).
-calistir_base64_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST BASE64 payload codec: base64_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/base64_selfhost.kem > $(BUILD)/base64_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/base64_selfhost.ll -c -o $(BUILD)/base64_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/base64_selfhost.elf $(BUILD)/base64_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/base64_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/base64_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/base64_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/base64_selfhost.out -kernel $(BUILD)/base64_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/base64_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM B64 OK" $(BUILD)/base64_selfhost.out; then \
-			echo "aarch64 self-host BASE64 testi gecti: KEMGU cihazsiz payload codec ('KEMGU' -> 'S0VNR1U=' + decode round-trip) dogruladi."; \
-		else \
-			echo "FAIL: 'KEM B64 OK' bekleniyor (KEMGU self-host Base64 kodlama)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host BASE64 testi atlandi."; \
-	fi
-
 # === SELF-HOST TÜRKÇE büyük/küçük harf dönüşümü (aarch64) — TÜRKÇE-I problemi ===
 # turkce_case_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde ünlü
 # "Türkçe-I problemini" DOĞRU çözer. Kod-noktası (Unicode ondalık) üstünde harf
@@ -4602,7 +4568,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                       calistir_rc4_selfhost_arm \
                      calistir_hashcrack_selfhost_arm \
                      calistir_utf8_selfhost_arm \
-                     calistir_base64_selfhost_arm \
                      calistir_turkce_case_selfhost_arm \
                      calistir_turkce_sort_selfhost_arm \
                      calistir_vm_selfhost_arm \
