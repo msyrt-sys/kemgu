@@ -1663,7 +1663,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[26\] SHA256 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[27\] GOREV KAPASITE OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[28\] SYSCALL PTR DOGRULAMA OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[29\] BASE64 OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[29\] BASE64 OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[30\] CRC32 OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3590,40 +3591,6 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
 	fi
 
-# === SELF-HOST CRC32 saf-hesaplama (aarch64) — KEMGU'da cihazsız algoritma ===
-# crc32_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde standart
-# IEEE 802.3 / zlib CRC-32 (polinom 0xEDB88320, tablosuz bit-bit) hesaplar.
-# Test verisi "123456789" -> beklenen CRC-32 = 0xCBF43926 (3421780262).
-# KEMGU dilinin MMIO ÖTESİNDE gerçek algoritma kaldırdığını kanıtlar (XOR/AND/
-# işaretsiz-sağa-kaydırma bit işlemleri). CİHAZSIZ: QEMU'da -netdev/-drive YOK,
-# link'te mmio/yetki obj GEREKMEZ (sade BM_A64_OBJS). Marker: "KEM CRC OK".
-calistir_crc32_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST CRC32 saf-hesaplama: crc32_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/crc32_selfhost.kem > $(BUILD)/crc32_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/crc32_selfhost.ll -c -o $(BUILD)/crc32_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/crc32_selfhost.elf $(BUILD)/crc32_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/crc32_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/crc32_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/crc32_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/crc32_selfhost.out -kernel $(BUILD)/crc32_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/crc32_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM CRC OK" $(BUILD)/crc32_selfhost.out; then \
-			echo "aarch64 self-host CRC32 testi gecti: KEMGU cihazsiz algoritma CRC-32('123456789')=0xCBF43926 dogruladi."; \
-		else \
-			echo "FAIL: 'KEM CRC OK' bekleniyor (KEMGU self-host CRC32 saf-hesaplama)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host CRC32 testi atlandi."; \
-	fi
-
 # === SELF-HOST SIRALAMA (aarch64) — KEMGU'da dizi in-place mutasyon algoritması ===
 # sort_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde bubble sort ile
 # 10 elemanlı sırasız diziyi YERİNDE (in-place) sıralar. İç içe döngü + eleman
@@ -4562,7 +4529,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_crc32_selfhost_arm \
                      calistir_sort_selfhost_arm \
                      calistir_hashmap_selfhost_arm \
                       calistir_rc4_selfhost_arm \
