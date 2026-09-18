@@ -40,7 +40,8 @@
       - [x] base64_selfhost -> kem_os faz [29] (D-611)
       - [x] crc32 -> faz [30] (D-612)
       - [x] sort -> faz [31] (D-613)
-      - [ ] hashmap · rc4 · hashcrack · utf8 · turkce_case ·
+      - [x] hashmap -> faz [32] (D-614)
+      - [ ] rc4 · hashcrack · utf8 · turkce_case ·
             turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
@@ -435,3 +436,11 @@
   eski sort_selfhost.kem + hedef + os_kernels satiri silindi. Sabotaj S5 (`>`->`<` = azalan)
   -> faz [31] HATA, rc=2. Kapilar: kem_os_arm 31 faz rc=0 · baremetal_diff 5/5. KALAN GOC
   (9): hashmap/rc4/hashcrack/utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-614 (Sinif C goc, iterasyon 4): hashmap_selfhost_arm -> kem_os faz [32].
+  Knuth carpimsal hash (dtam32 mod-2^32 wrap, & 15) + linear probing, 3 paralel Dizi<tam32>
+  (anahtar/deger/dolu, fn-param mutasyon). Cakisma senaryosu 5/21/37 -> ayni slot -> probing
+  zinciri; khm_testi 50/210/370 + miss(99)=-1 dogrular (cakisma + miss birlikte). khm_hash/
+  ekle/bul/testi kem_os.kem'e; eski hashmap_selfhost.kem + hedef + os_kernels satiri silindi.
+  Sabotaj S6 (bul probing kapat, `adim<KHM_KAP`->`adim<1`) -> faz [32] HATA rc=2 (probing
+  yolunu dogrudan olcer). Kapilar: kem_os_arm 32 faz · baremetal_diff 5/5. KALAN GOC (8):
+  rc4/hashcrack/utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.

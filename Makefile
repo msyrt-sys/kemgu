@@ -1665,7 +1665,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[28\] SYSCALL PTR DOGRULAMA OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[29\] BASE64 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[30\] CRC32 OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[31\] SORT OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[31\] SORT OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[32\] HASHMAP OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3592,44 +3593,6 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
 	fi
 
-# === SELF-HOST HASH-MAP sözlük (aarch64) — KEMGU'da dictionary veri yapısı ===
-# hashmap_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde open
-# addressing (açık adresleme) + linear probing (doğrusal sondalama) hash-map.
-# Üç paralel dizi (anahtarlar/degerler/dolu: Dizi<tam32>) → KdlDizi*; slot
-# yazma d[s]=x → kdl_dizi_yaz_tam (runtime sınır-kontrollü). Knuth çarpımsal
-# hash (dtam32 mod-2^32 wrap) + `& (KAP-1)` maske + `olarak` explicit cast
-# ile tam32 slot köprüsü. ÇAKIŞMA senaryosu: anahtar 5/21/37 hepsi slot 5'e
-# hash'lenir → probing slot 5/6/7'ye yerleştirir; bul(99) boş-slot'ta koparak
-# -1 döner. KEMGU'nun gerçek HASH-MAP + çakışma çözümü + arama kaldırdığını
-# kanıtlar. CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil —
-# dizi tahsisi için). Marker: "KEM HASHMAP OK".
-calistir_hashmap_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST HASH-MAP linear probing: hashmap_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/hashmap_selfhost.kem > $(BUILD)/hashmap_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/hashmap_selfhost.ll -c -o $(BUILD)/hashmap_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/hashmap_selfhost.elf $(BUILD)/hashmap_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/hashmap_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/hashmap_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/hashmap_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/hashmap_selfhost.out -kernel $(BUILD)/hashmap_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/hashmap_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM HASHMAP OK" $(BUILD)/hashmap_selfhost.out; then \
-			echo "aarch64 self-host HASH-MAP testi gecti: KEMGU cihazsiz open-addressing + linear probing sozluk (anahtar 5/21/37 ayni slota hash -> probe; bul 50/210/370, bul(99)=-1) dogruladi."; \
-		else \
-			echo "FAIL: 'KEM HASHMAP OK' bekleniyor (KEMGU self-host hash-map linear probing)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host HASH-MAP testi atlandi."; \
-	fi
-
 # === SELF-HOST SHA-256 PAROLA KIRICI (aarch64) — Pentest-OS dictionary attack ===
 # hashcrack_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde Kali/
 # hashcat-tarzı SÖZLÜK SALDIRISI (dictionary attack) ile SHA-256 parola kırıcı.
@@ -4495,7 +4458,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_hashmap_selfhost_arm \
                       calistir_rc4_selfhost_arm \
                      calistir_hashcrack_selfhost_arm \
                      calistir_utf8_selfhost_arm \

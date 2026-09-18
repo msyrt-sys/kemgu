@@ -899,6 +899,68 @@ işlev ksort_testi() -> tam32 {
     ver 1;
 }
 
+// [D-614] [32] HASHMAP — eski izole `hashmap_selfhost_arm` gocu. Knuth carpimsal hash
+// + linear probing, 3 paralel Dizi<tam32> (anahtar/deger/dolu). Cakisma senaryosu:
+// 5, 21, 37 hepsi slot 5'e hash'lenir -> probing zincirini test eder. dtam32 hash
+// (carpim mod-2^32 wrap), sonuc & 15 = 0..15, tam32 slot'a kopru.
+sabit KHM_KAP: tam32    = 16;
+sabit KHM_MASKE: dtam32 = 15;
+sabit KHM_KNUTH: dtam32 = 2654435761;
+sabit KHM_YOK: tam32    = 0 - 1;
+işlev khm_hash(anahtar: tam32) -> tam32 {
+    değişken a: dtam32 = anahtar olarak dtam32;
+    değişken karisim: dtam32 = a * KHM_KNUTH;
+    değişken slot: dtam32 = karisim & KHM_MASKE;
+    ver slot olarak tam32;
+}
+işlev khm_ekle(anahtarlar: Dizi<tam32>, degerler: Dizi<tam32>, dolu: Dizi<tam32>,
+               anahtar: tam32, deger: tam32) -> tam32 {
+    değişken temel: tam32 = khm_hash(anahtar);
+    değişken adim: tam32 = 0;
+    iken adim < KHM_KAP {
+        değişken s: dtam32 = (temel + adim) olarak dtam32;
+        değişken slot: tam32 = (s & KHM_MASKE) olarak tam32;
+        eğer dolu[slot] == 0 {
+            dolu[slot] = 1;
+            anahtarlar[slot] = anahtar;
+            degerler[slot] = deger;
+            ver 1;
+        }
+        eğer anahtarlar[slot] == anahtar {
+            degerler[slot] = deger;
+            ver 1;
+        }
+        adim = adim + 1;
+    }
+    ver 0;
+}
+işlev khm_bul(anahtarlar: Dizi<tam32>, degerler: Dizi<tam32>, dolu: Dizi<tam32>,
+              anahtar: tam32) -> tam32 {
+    değişken temel: tam32 = khm_hash(anahtar);
+    değişken adim: tam32 = 0;
+    iken adim < KHM_KAP {
+        değişken s: dtam32 = (temel + adim) olarak dtam32;
+        değişken slot: tam32 = (s & KHM_MASKE) olarak tam32;
+        eğer dolu[slot] == 0 { ver KHM_YOK; }
+        eğer anahtarlar[slot] == anahtar { ver degerler[slot]; }
+        adim = adim + 1;
+    }
+    ver KHM_YOK;
+}
+işlev khm_testi() -> tam32 {
+    değişken anahtarlar: Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    değişken degerler:   Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    değişken dolu:       Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    khm_ekle(anahtarlar, degerler, dolu, 5, 50);      // cakisma: 5,21,37 -> slot 5
+    khm_ekle(anahtarlar, degerler, dolu, 21, 210);
+    khm_ekle(anahtarlar, degerler, dolu, 37, 370);
+    eğer khm_bul(anahtarlar, degerler, dolu, 5) != 50 { ver 0; }
+    eğer khm_bul(anahtarlar, degerler, dolu, 21) != 210 { ver 0; }
+    eğer khm_bul(anahtarlar, degerler, dolu, 37) != 370 { ver 0; }
+    eğer khm_bul(anahtarlar, degerler, dolu, 99) != KHM_YOK { ver 0; }   // yok -> -1
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1283,6 +1345,13 @@ işlev main() -> tam32 {
         uart_satir("[31] SORT OK (bubble in-place -> [0..9])");
     } değilse {
         uart_satir("[31] SORT HATA");
+    }
+
+    // [32] HASHMAP (D-614): eski hashmap_selfhost_arm gocu — Knuth hash + probing, cakisma.
+    eğer khm_testi() == 1 {
+        uart_satir("[32] HASHMAP OK (5/21/37 cakisma + probing + miss)");
+    } değilse {
+        uart_satir("[32] HASHMAP HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
