@@ -298,6 +298,43 @@ isb"#
     ver i;
 }
 
+// === D-610 GÜVENLİK: EL0-pointer doğrulama (proven-C kdl_kesme.c D-150/151 .kem aynası) ===
+// EL0 syscall'ları kernel'e (EL1) pointer geçirir. Kernel o adresi denetimsiz DEREF
+// ederse, kötü/hatalı bir EL0 süreç KERNEL BELLEĞİNİ okutabilir (info-leak: sys(5) o
+// belleği UART'a basar) ya da kernel'e YAZDIRABİLİR (bellek bozulması / privilege
+// escalation). kem_os user penceresi TEK 2 MiB sayfadır: [0x42000000, 0x42200000)
+// (kem_mmu.kem L2[16], AP=01). Bu aralık dışındaki her pointer REDDEDİLİR.
+sabit KG_USER_MIN: tam64  = 1107296256;    // 0x42000000: EL0 user penceresi tabanı (AP=01)
+sabit KG_USER_MAX: tam64  = 1109393408;    // 0x42200000: EL0 user penceresi tavanı (dışı RED)
+sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, yaz-len sınırı)
+
+// Kernel'in YAZDIĞI user-tampon: adres user penceresinde + len sınırlı + taşma yok.
+çıplak işlev kg_user_yaz_ptr_gecerli(p: tam64, len: tam64) -> tam32 {
+    eğer p < KG_USER_MIN { ver 0; }            // kernel/aşağı bölge → RED
+    eğer len > KG_USER_BOY { ver 0; }          // aşırı boy → RED
+    eğer (p + len) < p { ver 0; }              // taşma → RED
+    eğer (p + len) > KG_USER_MAX { ver 0; }    // pencere dışı → RED
+    ver 1;
+}
+
+// Kernel'in OKUDUĞU EL0-kontrollü null-sonlu string: pointer user penceresinde OLMALI
+// ve null-sonlandırıcı pencere içinde (4 KiB tarama tavanı) BULUNMALI — aksi hâlde
+// straddle-over-read riski → RED. Tarama YALNIZ mapped-izinli byte'lara dokunur →
+// tarama fault üretemez (info-leak/DoS ikisi de kesilir).
+çıplak işlev kg_user_oku_str_gecerli(p: tam64) -> tam32 {
+    eğer p < KG_USER_MIN { ver 0; }            // pencere dışı → RED (kernel-sızıntı engeli)
+    eğer p >= KG_USER_MAX { ver 0; }
+    değişken son: tam64 = KG_USER_MAX;
+    değişken tavan: tam64 = p + 4096;          // tarama maliyeti sınırı
+    eğer (tavan > p) ve (tavan < son) { son = tavan; }   // taşma-korumalı min
+    değişken a: tam64 = p;
+    iken a < son {
+        eğer kis_buf_oku8(a, 0) == 0 { ver 1; }   // bölge-içi null → string güvenli
+        a = a + 1;
+    }
+    ver 0;                                      // null yok → straddle riski → RED
+}
+
 // SVC handler — .S kdl_exc_ortak (EC=0x15) `bl kdl_syscall_isle(num,arg,arg2)` çağırır.
 // num=5 → yaz (USERLAND ADIM 4, D-289): arg=EL0 string ptr. kis_metin'in pointer-tabanlı
 // eşdeğeri (kis_bayt döngüsü). num=7 → satir (proven-C birebir, D-289: kis_satir EKLENDİ) +
@@ -305,10 +342,12 @@ isb"#
 // EK olarak konsola newline basar).
 // num=13 → exit (kdl_gorev_bitir birebir, D-130) — o an koşan görevi ölü işaretle.
 // num=26 → read_satir (USERLAND ADIM 2, D-287): arg=buf (EL0 VA), arg2=umax. GERÇEK PL011
-// RX bounded-poll (kis_satir_oku). NOT: kdl_user_yaz_ptr_gecerli (D-150 user-ptr doğrulama)
-// henüz .kem'e taşınmadı — bu syscall ŞİMDİLİK kernel-güvenilir arg alır (ADIM 3 kapsamı).
+// RX bounded-poll (kis_satir_oku).
+// D-610: pointer alan HER syscall (5/17/18/26) artık kg_user_*_gecerli ile denetlenir;
+// pencere dışı pointer → 0-1 döner, kernel belleği ne okunur ne yazılır.
 çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
     eğer num == 5 {
+        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }   // D-610: EL0 str ptr
         değişken n5: tam32 = kdl_metin_uzunluk(arg olarak *tam8);
         değişken i5: tam32 = 0;
         iken i5 < n5 { kis_bayt((kdl_metin_bayt(arg olarak *tam8, i5)) olarak tam32); i5 = i5 + 1; }
@@ -343,6 +382,7 @@ isb"#
         ver kg_oku64(KG_OLU + arg * 8);
     }
     eğer num == 26 {
+        eğer kg_user_yaz_ptr_gecerli(arg, arg2) == 0 { ver 0 - 1; }  // D-610: buf yazma
         değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
         ver r olarak tam64;
     }
@@ -355,6 +395,8 @@ isb"#
     // DEĞİL) — 15/16 (int dosya) ve 19/20/21 (sayisi/ad/sil, çok-dosya-listeleme) minifs'in
     // ÇOK-DOSYA desteği GEREKTİRİR (ayrı özellik-genişletme, bu batch'in kapsamı DIŞI).
     eğer num == 17 {
+        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }    // D-610: ad okuma
+        eğer kg_user_oku_str_gecerli(arg2) == 0 { ver 0 - 1; }   // D-610: içerik okuma
         değişken base: tam64 = vblk_bul();
         eğer base == 0 { ver 0 - 1; }
         eğer vblk_kur(base) != 0 { ver 0 - 1; }
@@ -373,6 +415,8 @@ isb"#
         ver n olarak tam64;
     }
     eğer num == 18 {
+        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }        // D-610: ad okuma
+        eğer kg_user_yaz_ptr_gecerli(arg2, 512) == 0 { ver 0 - 1; }  // D-610: buf yazma (≤512)
         değişken base2: tam64 = vblk_bul();
         eğer base2 == 0 { ver 0 - 1; }
         eğer vblk_kur(base2) != 0 { ver 0 - 1; }
