@@ -24,11 +24,11 @@
 - [x] Sinif A (Mehmet onayi) -> D-603: 26 hedef + 17 C kaynak silindi.
 - [x] Sinif B kapandi: pointer D-604, d1/d2/proc/yasam D-605 (silindi); geri_al +
       metin D-606 ve kalan 13 kalem D-607 SINIF C'ye tasindi (kem_os'ta o ozellik yok).
-- [ ] (KARAR BEKLIYOR — Mehmet) kem_os syscall EL0-pointer dogrulamasi. D-608'de
-      ulasilabilirlik olculmeye calisildi ama PROBE BELIRSIZDI: sys(5) yurudu,
-      cekirdek sizintisi de EL1 iptali de UREMEDI -> once GECERLI bir probe (KG_LEAK'i
-      kernel eslemesinde okunabilir bir adrese seed'le, EL1'den geri okuyarak dogrula),
-      sonra D-150/151 esdegeri kullanici-aralik dogrulamasi. Yeni guvenlik yetenegi = karar.
+- [x] kem_os syscall EL0-pointer dogrulamasi -> D-610 (Mehmet onayi). D-608'in belirsiz
+      probe'u cozuldu: gecerli probe (ham kernel RAM'ine sir seed + kdl_syscall_isle'yi
+      dogrudan cagir) sizinti'yi ISPATLADI (S1: "GIZLIVERI" UART'a sizdi). kg_user_oku/
+      yaz_ptr_gecerli (D-150/151 .kem aynasi) sys 5/17/18/26'ya eklendi; faz [28] gate +
+      S1/S2 sabotaj. kem_os_arm 28 faz, baremetal_diff 5/5, qemu_cekirdek 2/2.
 - [x] kem_os_arm boru hatti maskesi -> D-609 (kemgu | awk bolundu).
 - [ ] Sinif C (~96) KALIYOR (karsiligi yok; tasimak OS'a yeni ozellik ekleme
       isi — smp/tcp-ip/x86/userspace — her biri ayri Mehmet karari).
@@ -372,3 +372,26 @@
 - 2026-09-17 D-607 (OLCUM, kod yok): Sinif B'nin kalan 13 kalemi kem_os'ta OLMAYAN yetenekleri olcuyor -> hepsi SINIF C'ye tasindi, hicbiri silinmedi. kem_minifs.kem yalniz mfs_format/mfs_dosya_yaz/mfs_dosya_oku (TEK dosya, 4 bayt ad) sunuyor: kalici (iki boot arasi), crashfs + fs_journal (WAL), minifs_crud, sil, ls, dosya (cok dosya) karsiliksiz; recon_shell(2) ag-komutlu kabuk ve shell_script yorumlayici ozellik; guvenlik_kalici disk deserialize (kalicilik yok). GUVENLIK BULGUSU: guvenlik_oku/guvenlik_spawn'in olctugu kullanici-pointer ve spawn-giris dogrulamasi kem_os'ta YOK — kem_gorev.kem'in kendi yorumu syscall'larin 'kernel-guvenilir arg' aldigini yaziyor; sys(5) arg pointer'ini dogrudan okuyor. Ulasilabilirlik OLCULMEDI (yalniz kaynak okundu) -> Sirada'ya 'once olc' maddesi olarak yazildi.
 - 2026-09-17 D-608 (OLCUM, BELIRSIZ): sys(5) EL0-pointer dogrulama yoklugunun ulasilabilirligi olculmeye calisildi. Kaynak KESIN: sys(5) `arg olarak *tam8`i dogrudan kdl_metin_uzunluk + kdl_metin_bayt ile okuyor, kullanici-aralik denetimi YOK; kem_gorev.kem kendi yorumu 'kdl_user_yaz_ptr_gecerli henuz .kem'e tasinmadi, kernel-guvenilir arg alir' diyor. GECICI PROBE: cekirdek-only KG_LEAK=0x45004000'e 'SIZINTI' seed + EL0 gorevi sys(5,KG_LEAK) + sys(13). SONUC BELIRSIZ: EL0 gorevi kostu ve exit etti ('[608] ... bitti' -> sys(5) sonra sys(13) yurudu) AMA UART'ta 'SIZINTI' yok, cokme/iptal de yok. Yani sys(5) bir sey basmadi -> muhtemelen seed yolum (kg_seed_kopyala -> kis_buf_yaz8) o ham cekirdek adresini KAPSAMIYOR (kis_buf .user pencerene yaziyor), yani probe KENDI TESISATINI olctu, vuln'u DEGIL (D-402: sessiz probe once PROBE'u supheli kilar). Ne 'sizinti var' ne 'yok' kanitlandi. Probe TAMAMEN geri alindi (git temiz). Gecerli olcum + fix ayri C-sinifi is (Mehmet). KALAN SIRADA'nin tamami C-sinifi -> loop DURDURULDU.
 - 2026-09-17 D-609: kem_os_arm tarifindeki `kemgu --llvm | awk > kem_os.ll` boru hatti kemgu'nun tip-hatasi cikisini MASKELIYORDU (boru kodu awk'in). Once olculdu: tip hatali .kem'de kemgu rc=1 + bos IR uretiyor, ama boru rc=0 donuyor -> clang bos .ll'yi derleyip bag asamasinda 'undefined symbol main' veriyordu (D-606'nin gec/yaniltici belirtisi). Boru iki satira bolundu: `kemgu ... > kem_os_ham.ll` (rc!=0 make'i DOGRUDAN durdurur) sonra `awk ... kem_os_ham.ll > kem_os.ll`. set -o pipefail SECILMEDI: recipe kabugu Windows'ta sh; bolme tasinabilir ve acik. Temiz kem_os_arm rc=0 (faz [27] dahil). Sabotaj S194 (kem_os.kem'e tip hatali degisken enjekte) -> make rc=2 ve 'hata[T001]' ile durdu (ARTIK 'undefined symbol main' DEGIL); geri yukleme dogrulandi. NOT: bm_a64_kem_heap.o tarifinde (satir 1021) AYNI maske + 2>/dev/null var ama kem_heap.kem kararli/kanitli tek dosya; ayni sinif, ayrica bolunebilir — kayda gecti, bu artimin kapsami disi.
+- 2026-09-18 D-610 (Mehmet onayi): kem_os syscall EL0-pointer aralik dogrulamasi. D-608
+  probe'u belirsiz kalmisti; bu artim GECERLI bir probe kurdu ve acigi ISPATLADI. Kok
+  KESIN: sys(5) `arg olarak *tam8`i kdl_metin_uzunluk+kdl_metin_bayt ile denetimsiz DEREF
+  ediyor; sys 17/18/26 de user-ptr'yi denetimsiz okuyor/yaziyordu. PROVEN-C KARSILIGI VAR
+  (kdl_kesme.c D-150 kdl_user_yaz_ptr_gecerli + D-151 kdl_user_oku_str_gecerli); .kem'e
+  taspera: kem_os user penceresi TEK 2 MiB sayfa [0x42000000,0x42200000) (kem_mmu.kem L2[16],
+  AP=01). Iki yardimci (kem_gorev.kem): kg_user_yaz_ptr_gecerli (pencere+len sinir+tasma) ·
+  kg_user_oku_str_gecerli (pencere + 4 KiB tarama tavaninda null bulma; kis_buf_oku8 ile
+  yalniz mapped-izinli byte'a dokunur). Guard'lar: sys(5) arg (oku) · sys(17) arg+arg2 (oku)
+  · sys(18) arg (oku) + arg2/512 (yaz) · sys(26) arg/arg2 (yaz). Pencere disi -> 0-1, kernel
+  bellegi ne okunur ne yazilir. GECERLI PROBE (faz [28] kptr_testi): kg_seed_kopyala ham
+  kernel RAM 0x45004000'e "GIZLIVERI" seed'ler (kis_buf_yaz8 -> *(adr+i)=b, RAW yazar ->
+  D-608'in "seed .user'a gitti" teshisi EKSIKTI, seed dogrudan kernel adresine iniyor) +
+  kdl_syscall_isle(5, KG_LEAK, 0) EL1'de cagirir (gercek SVC ile ayni yol, deterministik,
+  timing yok). GATE iki yonlu (D-425): kernel-ptr RED (r_kotu==0-1) VE user-ptr KABUL
+  (r_iyi==0, "MERHABA" gorunur yankilanir). Yeni tani kodu YOK, dil yuzeyi degisikligi YOK.
+  Sabotaj 2/2: S1 (sys(5) guard'i kaldir) -> "GIZLIVERI" UART'a SIZDI, faz [28] HATA, rc=2
+  (acigin gercek+ulasilabilir oldugunu ve seed'in indigini AYNI ANDA kanitlar) · S2 (oku-guard
+  daima 0) -> user-ptr reddedildi, faz [28] HATA, rc=2 (pozitif sekil yuk tasiyor). Kapilar:
+  kem_os_arm 28 faz rc=0 · baremetal_diff 5/5 (BIRLESIK OS 258 islev/44 asm/86 volatile/101
+  inttoptr uclu eslesti) · qemu_cekirdek 2/2. NOT: probe EL0-svc yerine EL1'den dogrudan
+  cagri kullanir cunku SVC handler zaten EL1'de kosar -> ayni denetimsiz deref yolu; EL0
+  crossing aciga sebep DEGIL, eksik aralik-denetimi acidir.

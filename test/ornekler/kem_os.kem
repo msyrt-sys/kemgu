@@ -721,6 +721,24 @@ işlev ksha_testi() -> tam32 {
     ver 1;
 }
 
+// [D-610] [28] SYSCALL PTR DOGRULAMA — EL0-pointer aralık denetimi çalışıyor mu?
+// Tehdit: kötü bir EL0 süreç sys(5)'e KERNEL adresi geçirir → kernel o belleği UART'a
+// basar (info-leak). GEÇERLİ PROBE (D-608 belirsizdi): ham kernel RAM'ine (user penceresi
+// DIŞI) bir sır tohumla; sys(5)'i O adresle çağır (kdl_syscall_isle EL1'de koşar, gerçek
+// SVC ile aynı yol) → REDDEDİLMELİ (0-1). Sonra user VA'ya geçerli bir string tohumla,
+// sys(5)'i onunla çağır → KABUL EDİLMELİ (0). İki yön birlikte D-425'i sağlar: yalnız
+// negatif olsaydı "her şeyi reddet" sabotajı kapıdan geçerdi.
+sabit KG_LEAK: tam64 = 1157644288;    // 0x45004000: kernel-only sır (user penceresi 0x42xxxxxx DIŞI)
+çıplak işlev kptr_testi() -> tam32 {
+    kg_seed_kopyala(KG_LEAK, "GIZLIVERI");                     // kernel sırrı (ham kernel RAM)
+    değişken r_kotu: tam64 = kdl_syscall_isle(5, KG_LEAK, 0);  // kernel adresi → RED beklenir
+    kg_seed_kopyala(KUL_FS_AD, "MERHABA");                     // geçerli user VA string
+    değişken r_iyi: tam64 = kdl_syscall_isle(5, KUL_FS_AD, 0); // user VA → KABUL beklenir
+    eğer r_kotu != (0 - 1) { ver 0; }                          // sızıntı engellenmedi → HATA
+    eğer r_iyi != 0 { ver 0; }                                 // geçerli ptr reddedildi → HATA
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1077,6 +1095,13 @@ işlev main() -> tam32 {
         uart_satir("[27] GOREV KAPASITE OK (16 slot, tasma -1)");
     } değilse {
         uart_satir("[27] GOREV KAPASITE HATA");
+    }
+
+    // [28] SYSCALL PTR DOGRULAMA (D-610): EL0-pointer aralik denetimi info-leak'i kesiyor mu?
+    eğer kptr_testi() == 1 {
+        uart_satir("[28] SYSCALL PTR DOGRULAMA OK (kernel-ptr RED, user-ptr KABUL)");
+    } değilse {
+        uart_satir("[28] SYSCALL PTR DOGRULAMA HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
