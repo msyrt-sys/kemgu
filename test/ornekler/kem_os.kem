@@ -838,6 +838,35 @@ işlev kb64_testi() -> tam32 {
     ver 1;
 }
 
+// [D-612] [30] CRC32 — eski izole `crc32_selfhost_arm` gocu. Saf algoritma (dizi yok,
+// yalniz dtam32 bit-ops). CRC-32 (yansitilmis, poli 0xEDB88320) "123456789" test vektoru
+// → 0xCBF43926. KRITIK: crc ZORUNLU dtam32 (isaretsiz) — tam32 olsa `>>` ashr olur ve
+// isaret-uzatma algoritmayi bozar.
+sabit KCRC_POLINOM: dtam32   = 3988292384;  // 0xEDB88320
+sabit KCRC_BASLANGIC: dtam32 = 4294967295;  // 0xFFFFFFFF
+sabit KCRC_BEKLENEN: dtam32  = 3421780262;  // 0xCBF43926
+işlev kcrc32_byte(crc_giris: dtam32, byte: dtam32) -> dtam32 {
+    değişken crc: dtam32 = crc_giris ^ byte;
+    değişken j: tam32 = 0;
+    iken j < 8 {
+        değişken maske: dtam32 = 0 - (crc & 1);
+        crc = (crc >> 1) ^ (KCRC_POLINOM & maske);
+        j = j + 1;
+    }
+    ver crc;
+}
+işlev kcrc_testi() -> tam32 {
+    değişken crc: dtam32 = KCRC_BASLANGIC;
+    değişken i: dtam32 = 0;
+    iken i < 9 {
+        crc = kcrc32_byte(crc, 49 + i);   // '1'..'9' = 49..57
+        i = i + 1;
+    }
+    crc = crc ^ 4294967295;               // sonda bit-tersleme
+    eğer crc == KCRC_BEKLENEN { ver 1; }
+    ver 0;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1208,6 +1237,13 @@ işlev main() -> tam32 {
         uart_satir("[29] BASE64 OK (KEMGU -> S0VNR1U= + decode round-trip)");
     } değilse {
         uart_satir("[29] BASE64 HATA");
+    }
+
+    // [30] CRC32 (D-612): eski crc32_selfhost_arm gocu — "123456789" -> 0xCBF43926.
+    eğer kcrc_testi() == 1 {
+        uart_satir("[30] CRC32 OK (123456789 -> 0xCBF43926)");
+    } değilse {
+        uart_satir("[30] CRC32 HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

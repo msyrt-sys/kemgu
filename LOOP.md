@@ -38,7 +38,8 @@
         x86 (~17, x86_64 ikincil port referansi).
       SIRADAKI GOC ADIMLARI (her biri ayri iterasyon, biri bitince digeri):
       - [x] base64_selfhost -> kem_os faz [29] (D-611)
-      - [ ] crc32 · sort · hashmap · rc4 · hashcrack · utf8 · turkce_case ·
+      - [x] crc32 -> faz [30] (D-612)
+      - [ ] sort · hashmap · rc4 · hashcrack · utf8 · turkce_case ·
             turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
@@ -418,3 +419,11 @@
   kem_os_arm 29 faz rc=0 · baremetal_diff 5/5 (BIRLESIK OS 263 islev, uclu eslesti) ·
   qemu_cekirdek dolayli. KALAN GOC: crc32/sort/hashmap/rc4/hashcrack/utf8/turkce_case/
   turkce_sort/vm/json/asm-selfhost (11) — her biri ayri iterasyon.
+- 2026-09-18 D-612 (Sinif C goc, iterasyon 2): crc32_selfhost_arm -> kem_os faz [30]. Saf
+  algoritma (dizi yok, dtam32 bit-ops). CRC-32 yansitilmis (poli 0xEDB88320) "123456789" ->
+  0xCBF43926. KRITIK dtam32: isaretsiz `>>` = lshr; tam32 olsa ashr isaret-uzatir, algoritma
+  bozulur (kaynak yorumu korundu). kcrc32_byte + kcrc_testi kem_os.kem'e; eski
+  crc32_selfhost.kem + hedef + os_kernels satiri silindi. Sabotaj S4 (`crc>>1`->`crc>>2`) ->
+  faz [30] HATA, rc=2 (bilinen-vektor karsilastirmasi ayirt ediyor). Kapilar: kem_os_arm
+  30 faz rc=0 · baremetal_diff 5/5. KALAN GOC (10): sort/hashmap/rc4/hashcrack/utf8/
+  turkce_case/turkce_sort/vm/json/asm-selfhost.
