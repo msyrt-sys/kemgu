@@ -39,7 +39,8 @@
       SIRADAKI GOC ADIMLARI (her biri ayri iterasyon, biri bitince digeri):
       - [x] base64_selfhost -> kem_os faz [29] (D-611)
       - [x] crc32 -> faz [30] (D-612)
-      - [ ] sort · hashmap · rc4 · hashcrack · utf8 · turkce_case ·
+      - [x] sort -> faz [31] (D-613)
+      - [ ] hashmap · rc4 · hashcrack · utf8 · turkce_case ·
             turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
@@ -427,3 +428,10 @@
   faz [30] HATA, rc=2 (bilinen-vektor karsilastirmasi ayirt ediyor). Kapilar: kem_os_arm
   30 faz rc=0 · baremetal_diff 5/5. KALAN GOC (10): sort/hashmap/rc4/hashcrack/utf8/
   turkce_case/turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-613 (Sinif C goc, iterasyon 3): sort_selfhost_arm -> kem_os faz [31]. Bubble
+  sort in-place (Dizi<tam32> heap mutasyon: d[j]=x -> kdl_dizi_yaz_tam, sinir-kontrollu).
+  [5,2,8,1,9,3,7,4,6,0] -> [0..9]. ksort_testi KESIN esitlik (d[i]==i) dogrular — no-op ve
+  yanlis-permutasyon sabotajlarini birlikte eler. ksort_bubble + ksort_testi kem_os.kem'e;
+  eski sort_selfhost.kem + hedef + os_kernels satiri silindi. Sabotaj S5 (`>`->`<` = azalan)
+  -> faz [31] HATA, rc=2. Kapilar: kem_os_arm 31 faz rc=0 · baremetal_diff 5/5. KALAN GOC
+  (9): hashmap/rc4/hashcrack/utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.

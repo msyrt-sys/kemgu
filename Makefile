@@ -1664,7 +1664,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[27\] GOREV KAPASITE OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[28\] SYSCALL PTR DOGRULAMA OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[29\] BASE64 OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[30\] CRC32 OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[30\] CRC32 OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[31\] SORT OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3591,41 +3592,6 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
 	fi
 
-# === SELF-HOST SIRALAMA (aarch64) — KEMGU'da dizi in-place mutasyon algoritması ===
-# sort_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde bubble sort ile
-# 10 elemanlı sırasız diziyi YERİNDE (in-place) sıralar. İç içe döngü + eleman
-# karşılaştırma (>) + geçici değişkenle swap (t=d[j]; d[j]=d[j+1]; d[j+1]=t).
-# KEMGU dizileri heap-uniform (KdlDizi*): d[i]=x -> kdl_dizi_yaz_tam (runtime
-# sınır-kontrollü). KEMGU'nun gerçek dizi-mutasyon algoritması kaldırdığını
-# kanıtlar. CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil —
-# dizi tahsisi için). Marker: "KEM SORT OK".
-calistir_sort_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST SIRALAMA dizi in-place: sort_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/sort_selfhost.kem > $(BUILD)/sort_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/sort_selfhost.ll -c -o $(BUILD)/sort_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/sort_selfhost.elf $(BUILD)/sort_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/sort_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/sort_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/sort_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/sort_selfhost.out -kernel $(BUILD)/sort_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/sort_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM SORT OK" $(BUILD)/sort_selfhost.out; then \
-			echo "aarch64 self-host SIRALAMA testi gecti: KEMGU cihazsiz dizi in-place bubble sort ([5,2,8,1,9,3,7,4,6,0] -> [0..9]) dogruladi."; \
-		else \
-			echo "FAIL: 'KEM SORT OK' bekleniyor (KEMGU self-host siralama dizi in-place mutasyon)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host SIRALAMA testi atlandi."; \
-	fi
-
 # === SELF-HOST HASH-MAP sözlük (aarch64) — KEMGU'da dictionary veri yapısı ===
 # hashmap_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde open
 # addressing (açık adresleme) + linear probing (doğrusal sondalama) hash-map.
@@ -4529,7 +4495,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_sort_selfhost_arm \
                      calistir_hashmap_selfhost_arm \
                       calistir_rc4_selfhost_arm \
                      calistir_hashcrack_selfhost_arm \
