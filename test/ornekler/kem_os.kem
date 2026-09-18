@@ -739,6 +739,105 @@ sabit KG_LEAK: tam64 = 1157644288;    // 0x45004000: kernel-only sır (user penc
     ver 1;
 }
 
+// [D-611] [29] BASE64 — eski izole `base64_selfhost_arm` (ayri ELF) testinin kem_os
+// karsiligi. Sinif C GOC karari: saf algoritma (OS bagimliligi yok) kem_os fazina tasindi,
+// eski demo silindi (ANAYASA: izole-demo biriktirme yasak → entegre faz). RFC 4648 encode
+// + decode round-trip: "KEMGU" (5 bayt) → "S0VNR1U=" (bilinen vektor) → tekrar "KEMGU".
+işlev kb64_alfabe(i: tam32) -> karakter {
+    değişken tablo: Dizi<karakter> = [
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
+        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
+        'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
+        'w','x','y','z','0','1','2','3','4','5','6','7','8','9','+','/'
+    ];
+    ver tablo[i];
+}
+işlev kb64_index(c: karakter) -> tam32 {
+    değişken tablo: Dizi<karakter> = [
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
+        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
+        'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
+        'w','x','y','z','0','1','2','3','4','5','6','7','8','9','+','/'
+    ];
+    değişken k: tam32 = 0;
+    iken k < 64 {
+        eğer tablo[k] == c { ver k; }
+        k = k + 1;
+    }
+    ver 0 - 1;
+}
+işlev kb64_encode(veri: Dizi<tam32>, n: tam32, cikti: Dizi<karakter>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken o: tam32 = 0;
+    iken i < n {
+        değişken kalan: tam32 = n - i;
+        değişken b0: tam32 = veri[i];
+        değişken b1: tam32 = 0;
+        değişken b2: tam32 = 0;
+        eğer kalan > 1 { b1 = veri[i + 1]; }
+        eğer kalan > 2 { b2 = veri[i + 2]; }
+        cikti[o]     = kb64_alfabe(b0 >> 2);
+        cikti[o + 1] = kb64_alfabe(((b0 & 3) << 4) | (b1 >> 4));
+        eğer kalan > 1 {
+            cikti[o + 2] = kb64_alfabe(((b1 & 15) << 2) | (b2 >> 6));
+        } değilse {
+            cikti[o + 2] = '=';
+        }
+        eğer kalan > 2 {
+            cikti[o + 3] = kb64_alfabe(b2 & 63);
+        } değilse {
+            cikti[o + 3] = '=';
+        }
+        i = i + 3;
+        o = o + 4;
+    }
+    ver o;
+}
+işlev kb64_decode(giris: Dizi<karakter>, len: tam32, cikti: Dizi<tam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken o: tam32 = 0;
+    iken i < len {
+        değişken i0: tam32 = kb64_index(giris[i]);
+        değişken i1: tam32 = kb64_index(giris[i + 1]);
+        değişken i2: tam32 = kb64_index(giris[i + 2]);
+        değişken i3: tam32 = kb64_index(giris[i + 3]);
+        cikti[o] = (i0 << 2) | (i1 >> 4);
+        o = o + 1;
+        eğer i2 > 0 - 1 {
+            cikti[o] = ((i1 & 15) << 4) | (i2 >> 2);
+            o = o + 1;
+        }
+        eğer i3 > 0 - 1 {
+            cikti[o] = ((i2 & 3) << 6) | i3;
+            o = o + 1;
+        }
+        i = i + 4;
+    }
+    ver o;
+}
+// Encode + decode round-trip: iki yon de dogru mu? 1=OK, 0=HATA.
+işlev kb64_testi() -> tam32 {
+    değişken veri: Dizi<tam32> = [75, 69, 77, 71, 85];             // "KEMGU"
+    değişken beklenen: Dizi<karakter> = ['S','0','V','N','R','1','U','='];
+    değişken cikti: Dizi<karakter> = ['A','A','A','A','A','A','A','A'];
+    değişken uz: tam32 = kb64_encode(veri, 5, cikti);
+    eğer uz != 8 { ver 0; }
+    değişken q: tam32 = 0;
+    iken q < 8 {
+        eğer cikti[q] != beklenen[q] { ver 0; }
+        q = q + 1;
+    }
+    değişken cozulen: Dizi<tam32> = [0, 0, 0, 0, 0];
+    değişken bs: tam32 = kb64_decode(cikti, uz, cozulen);
+    eğer bs != 5 { ver 0; }
+    değişken r: tam32 = 0;
+    iken r < 5 {
+        eğer cozulen[r] != veri[r] { ver 0; }
+        r = r + 1;
+    }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1102,6 +1201,13 @@ işlev main() -> tam32 {
         uart_satir("[28] SYSCALL PTR DOGRULAMA OK (kernel-ptr RED, user-ptr KABUL)");
     } değilse {
         uart_satir("[28] SYSCALL PTR DOGRULAMA HATA");
+    }
+
+    // [29] BASE64 (D-611): eski base64_selfhost_arm gocu — encode + decode round-trip.
+    eğer kb64_testi() == 1 {
+        uart_satir("[29] BASE64 OK (KEMGU -> S0VNR1U= + decode round-trip)");
+    } değilse {
+        uart_satir("[29] BASE64 HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
