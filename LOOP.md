@@ -44,8 +44,8 @@
       - [x] rc4 -> faz [33] (D-615)
       - [x] hashcrack -> faz [34] (D-616)
       - [x] utf8 -> faz [35] (D-617)
-      - [ ] turkce_case ·
-            turkce_sort · vm · json · asm — self-host (11 kalan)
+      - [x] turkce_case -> faz [36] (D-618)
+      - [ ] turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
 
@@ -476,3 +476,11 @@
   (savunmaci, sonsuz dongu yok). Sabotaj S9 (2-byte birlestirmede `<<6`->`<<5`) -> faz [35]
   HATA rc=2. Kapilar: kem_os_arm 35 faz · baremetal_diff 5/5. KALAN GOC (5): turkce_case/
   turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-618 (Sinif C goc, iterasyon 8): turkce_case_selfhost_arm -> kem_os faz [36]
+  (TURKCE DNA). Turkce-I problemi: i(105)->I(304, nokta-ustu buyuk, ASCII 'I'=73 DEGIL) ve
+  i-noktasiz(305)->I-noktasiz(73). ktc_buyut/kucult/dizi_buyut/dizi_kucult/testi kem_os.kem'e.
+  Dogrulama: "istanbul"->"ISTANBUL" (ist[0]==304 ASCII 73 DEGIL), "IRMAK"->"irmak"
+  (irm[0]==305 ASCII 105 DEGIL) + 5 Turkce ozel harf round-trip. Eski turkce_case_selfhost.kem
+  + hedef + os_kernels satiri silindi. Sabotaj S10 (i->I'da KTC_BI yerine KTC_BIc=ASCII 73)
+  -> faz [36] HATA rc=2 (tam Turkce-I hatasini ayirt eder). Kapilar: kem_os_arm 36 faz ·
+  baremetal_diff 5/5. KALAN GOC (4): turkce_sort/vm/json/asm-selfhost.

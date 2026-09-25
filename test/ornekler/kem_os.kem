@@ -1239,6 +1239,78 @@ işlev kutf8_testi() -> tam32 {
     ver 1;
 }
 
+// [D-618] [36] TURKCE CASE — eski izole `turkce_case_selfhost_arm` gocu (TURKCE DNA).
+// Turkce-I problemi: i(105)->I(304, nokta-ustu buyuk I, ASCII 'I'=73 DEGIL) ve
+// i-noktasiz(305)->I-noktasiz(73). ASCII yanlis cevap verir; kod-noktasi ustunde dogru.
+sabit KTC_i: dtam32 = 105;    sabit KTC_ic: dtam32 = 305;
+sabit KTC_c: dtam32 = 231;    sabit KTC_g: dtam32 = 287;    sabit KTC_o: dtam32 = 246;
+sabit KTC_s: dtam32 = 351;    sabit KTC_u: dtam32 = 252;
+sabit KTC_BI: dtam32 = 304;   sabit KTC_BIc: dtam32 = 73;
+sabit KTC_BC: dtam32 = 199;   sabit KTC_BG: dtam32 = 286;   sabit KTC_BO: dtam32 = 214;
+sabit KTC_BS: dtam32 = 350;   sabit KTC_BU: dtam32 = 220;
+sabit KTC_a: dtam32 = 97;     sabit KTC_z: dtam32 = 122;
+sabit KTC_A: dtam32 = 65;     sabit KTC_Z: dtam32 = 90;     sabit KTC_OFS: dtam32 = 32;
+işlev ktc_buyut(cp: dtam32) -> dtam32 {
+    eğer cp == KTC_i { ver KTC_BI; }        // Turkce: i -> I (nokta korunur)
+    eğer cp == KTC_ic { ver KTC_BIc; }      // Turkce: i-noktasiz -> I-noktasiz
+    eğer cp == KTC_c { ver KTC_BC; }
+    eğer cp == KTC_g { ver KTC_BG; }
+    eğer cp == KTC_o { ver KTC_BO; }
+    eğer cp == KTC_s { ver KTC_BS; }
+    eğer cp == KTC_u { ver KTC_BU; }
+    eğer cp < KTC_a { ver cp; }
+    eğer cp > KTC_z { ver cp; }
+    ver cp - KTC_OFS;                        // ASCII a-z (i haric)
+}
+işlev ktc_kucult(cp: dtam32) -> dtam32 {
+    eğer cp == KTC_BI { ver KTC_i; }        // Turkce: I -> i
+    eğer cp == KTC_BIc { ver KTC_ic; }      // Turkce: I-noktasiz -> i-noktasiz
+    eğer cp == KTC_BC { ver KTC_c; }
+    eğer cp == KTC_BG { ver KTC_g; }
+    eğer cp == KTC_BO { ver KTC_o; }
+    eğer cp == KTC_BS { ver KTC_s; }
+    eğer cp == KTC_BU { ver KTC_u; }
+    eğer cp < KTC_A { ver cp; }
+    eğer cp > KTC_Z { ver cp; }
+    ver cp + KTC_OFS;                        // ASCII A-Z (I haric)
+}
+işlev ktc_dizi_buyut(cp: Dizi<dtam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n { değişken e: dtam32 = cp[i]; cp[i] = ktc_buyut(e); i = i + 1; }
+    ver 0;
+}
+işlev ktc_dizi_kucult(cp: Dizi<dtam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n { değişken e: dtam32 = cp[i]; cp[i] = ktc_kucult(e); i = i + 1; }
+    ver 0;
+}
+işlev ktc_testi() -> tam32 {
+    // "istanbul" -> "ISTANBUL" (Turkce: bas harf I=304, ASCII 73 DEGIL)
+    değişken ist: Dizi<dtam32> = [105, 115, 116, 97, 110, 98, 117, 108];
+    değişken bek_ist: Dizi<dtam32> = [304, 83, 84, 65, 78, 66, 85, 76];
+    ktc_dizi_buyut(ist, 8);
+    değişken q: tam32 = 0;
+    iken q < 8 { eğer ist[q] != bek_ist[q] { ver 0; } q = q + 1; }
+    eğer ist[0] != KTC_BI { ver 0; }        // Turkce-I: 304 olmali, 73 (ASCII) DEGIL
+    // "IRMAK" -> "irmak" (Turkce: bas harf i-noktasiz=305, ASCII 105 DEGIL)
+    değişken irm: Dizi<dtam32> = [73, 82, 77, 65, 75];
+    değişken bek_irm: Dizi<dtam32> = [305, 114, 109, 97, 107];
+    ktc_dizi_kucult(irm, 5);
+    değişken q2: tam32 = 0;
+    iken q2 < 5 { eğer irm[q2] != bek_irm[q2] { ver 0; } q2 = q2 + 1; }
+    eğer irm[0] != KTC_ic { ver 0; }        // Turkce-I: 305 olmali, 105 (ASCII) DEGIL
+    // Turkce ozel harfler round-trip: kucuk -> buyuk -> kucuk
+    değişken kucukler: Dizi<dtam32> = [231, 287, 246, 351, 252];  // c g o s u
+    değişken buyukler: Dizi<dtam32> = [199, 286, 214, 350, 220];  // C G O S U
+    değişken r: tam32 = 0;
+    iken r < 5 {
+        eğer ktc_buyut(kucukler[r]) != buyukler[r] { ver 0; }
+        eğer ktc_kucult(buyukler[r]) != kucukler[r] { ver 0; }
+        r = r + 1;
+    }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1651,6 +1723,13 @@ işlev main() -> tam32 {
         uart_satir("[35] UTF8 OK (cgisou 12 byte -> 6 kod-noktasi + bozuk tespit)");
     } değilse {
         uart_satir("[35] UTF8 HATA");
+    }
+
+    // [36] TURKCE CASE (D-618): eski turkce_case_selfhost_arm gocu — Turkce-I problemi.
+    eğer ktc_testi() == 1 {
+        uart_satir("[36] TURKCE CASE OK (istanbul->I=304, IRMAK->i=305, ASCII tuzagi yok)");
+    } değilse {
+        uart_satir("[36] TURKCE CASE HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
