@@ -42,7 +42,8 @@
       - [x] sort -> faz [31] (D-613)
       - [x] hashmap -> faz [32] (D-614)
       - [x] rc4 -> faz [33] (D-615)
-      - [ ] hashcrack · utf8 · turkce_case ·
+      - [x] hashcrack -> faz [34] (D-616)
+      - [ ] utf8 · turkce_case ·
             turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
@@ -454,3 +455,15 @@
   round-trip TEK BASINA yetmez (simetrik oldugu icin yanlis keystream'de de gecer) — bilinen
   vektor karsilastirmasi kritik ayirt edicidir. Kapilar: kem_os_arm 33 faz · baremetal_diff
   5/5. KALAN GOC (7): hashcrack/utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-616 (Sinif C goc, iterasyon 6): hashcrack_selfhost_arm -> kem_os faz [34].
+  SHA-256 sozluk saldirisi (dictionary attack): "kemgu" (idx 2) SHA-256'si hedef, 8 aday
+  taranir, eslesen = kirilan. KRITIK: SHA-256 primitifleri (rotr/sigma/ch/maj/K) faz [26]'nin
+  ksha_* fonksiyonlariyla BIREBIR AYNI -> YENIDEN KULLANILDI (D-407: ayni soruyu iki yerde
+  yanitlama). Yalniz PARAMETRELI schedule (kcrack_mesaj_cizelgesi bayt+uzunluk) + compress
+  (kcrack_sikistir) + sozluk (kcrack_aday_*) + crack dongusu eklendi — faz [26]'nin ksha'si
+  "abc" icin sabit-mesajdir, keyfi parola hash'leyemez. Bu goc ksha primitiflerinin keyfi
+  mesaj icin de dogru oldugunu KANITLAR. Dogrulama: kirilan==2 VE atlanan==7 (hem hedefi
+  dogru bulma hem digerlerini reddetme). Eski hashcrack_selfhost.kem + hedef + os_kernels
+  satiri silindi. Sabotaj S8 (crack dongusu `idx<8`->`idx<2`, hedef taranmadan durur) ->
+  faz [34] HATA rc=2. Kapilar: kem_os_arm 34 faz · baremetal_diff 5/5. KALAN GOC (6):
+  utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.
