@@ -1671,7 +1671,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[34\] HASHCRACK OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[35\] UTF8 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[36\] TURKCE CASE OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[37\] TURKCE SORT OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[37\] TURKCE SORT OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[38\] VM OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3598,47 +3599,6 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
 	fi
 
-# === SELF-HOST YIĞIN-VM bytecode yorumlayıcı (aarch64) — KEMGU DİL KAPSTONU ===
-# vm_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde yığın-tabanlı
-# bir BYTECODE YORUMLAYICI (stack VM) yazar ve çalıştırır. KEMGU'nun bir
-# YORUMLAYICI (fetch-decode-execute döngüsü + veri yığını + opcode dispatch)
-# kaldırdığını kanıtlar — bir dilin olgunluk kanıtı. Program bir tam32 dizisi
-# (bytecode); yığın Dizi<tam32> (in-place push/pop mutasyonu); PC/SP tam32.
-# Opcode'lar: PUSH n, ADD, SUB, MUL, DUP, PRINT, HALT — `iken pc<uzun` döngüsünde
-# `değilse eğer` dispatch ile ayrılır (switch yok → değilse-eğer zinciri deseni,
-# D-168 crc32 ile kanıtlı). Örnek program 6*7=42 ve 100+58=158 hesaplar; VM'in her
-# PRINT'te bastığı değer ayrı bir beklenen-dizisiyle ([42,158]) karşılaştırılır
-# (DETERMİNİSTİK). CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap
-# dâhil — Dizi<tam32> program+yığın tahsisi için). Marker: "KEM VM OK".
-# Dayanılan invaryant: dizi in-place mutasyon + Dizi<tam32> fn-param (D-171 sort ile
-# kanıtlı). runtime/codegen DEĞİŞMEDİ.
-calistir_vm_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST YIGIN-VM bytecode yorumlayici: vm_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/vm_selfhost.kem > $(BUILD)/vm_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/vm_selfhost.ll -c -o $(BUILD)/vm_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/vm_selfhost.elf $(BUILD)/vm_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/vm_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/vm_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/vm_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/vm_selfhost.out -kernel $(BUILD)/vm_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/vm_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM VM OK" $(BUILD)/vm_selfhost.out; then \
-			echo "aarch64 self-host YIGIN-VM testi gecti: KEMGU cihazsiz bytecode yorumlayici (PUSH/ADD/MUL/PRINT/HALT dispatch; 6*7=42, 100+58=158) dogruladi."; \
-		else \
-			echo "FAIL: 'KEM VM OK' bekleniyor (KEMGU self-host yigin-VM bytecode yorumlayici)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host YIGIN-VM testi atlandi."; \
-	fi
-
 # === SELF-HOST JSON AYRIŞTIRICI (aarch64) — KEMGU veri-format işleme ===
 # json_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde bir JSON
 # AYRIŞTIRICI (veri-format token'layıcı + durum-makinesi) yazar ve çalıştırır.
@@ -4254,7 +4214,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_vm_selfhost_arm \
                      calistir_json_selfhost_arm \
                      calistir_asm_selfhost_arm \
                      calistir_guvenlik_test_arm \
