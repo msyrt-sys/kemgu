@@ -1666,7 +1666,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[29\] BASE64 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[30\] CRC32 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[31\] SORT OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[32\] HASHMAP OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[32\] HASHMAP OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[33\] RC4 OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3674,47 +3675,6 @@ calistir_utf8_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "QEMU yok — self-host UTF-8 testi atlandi."; \
 	fi
 
-# === SELF-HOST RC4 akış şifresi (aarch64) — KEMGU'da simetrik kripto ===
-# rc4_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde RC4 (Rivest
-# Cipher 4) SİMETRİK AKIŞ ŞİFRESİ hesaplar. SHA-256'nın (tek-yönlü hash)
-# ÖTESİNDE gerçek şifreleme/çözme kaldırdığını kanıtlar: KSA (256-byte S-box
-# permütasyon) + PRGA (keystream) + düz XOR keystream. Test vektörü (Wikipedia):
-# anahtar "Key", düz "Plaintext" -> BB F3 16 E8 D9 40 AF 0A D3.
-# KEMGU dizileri heap-uniform (KdlDizi*): S[i]=x -> kdl_dizi_yaz (runtime
-# sınır-kontrollü); S-box takası in-place (D-171 swap deseni). Byte'lar dtam32,
-# `& 255` maskesi (SAĞA-KAYDIRMA YOK → D-173 dizi-eleman-ashr tuzağı oluşmaz);
-# XOR skaler dtam32 üstünde (dizi elemanı önce skalere alınır — D-173 dersi);
-# tam32<->dtam32 köprüsü `olarak` cast (D-200). RC4 simetrik olduğundan decrypt
-# round-trip (şifreli -> aynı keystream -> düz geri) bağımsız doğruluk kanıtı.
-# CİHAZSIZ: QEMU'da -netdev/-drive YOK, sade BM_A64_OBJS (heap dâhil — Dizi<dtam32>
-# S-box tahsisi için). Marker: "KEM RC4 OK". runtime/codegen DEĞİŞMEDİ.
-calistir_rc4_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST RC4 akis sifresi: rc4_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/rc4_selfhost.kem > $(BUILD)/rc4_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/rc4_selfhost.ll -c -o $(BUILD)/rc4_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/rc4_selfhost.elf $(BUILD)/rc4_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/rc4_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/rc4_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/rc4_selfhost.out; \
-		timeout 12 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/rc4_selfhost.out -kernel $(BUILD)/rc4_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/rc4_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM RC4 OK" $(BUILD)/rc4_selfhost.out; then \
-			echo "aarch64 self-host RC4 testi gecti: KEMGU cihazsiz simetrik akis sifresi RC4('Key','Plaintext')=BBF316E8D940AF0AD3 + decrypt round-trip dogruladi."; \
-		else \
-			echo "FAIL: 'KEM RC4 OK' bekleniyor (KEMGU self-host RC4 akis sifresi)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host RC4 testi atlandi."; \
-	fi
-
 # === SELF-HOST YIĞIN-VM bytecode yorumlayıcı (aarch64) — KEMGU DİL KAPSTONU ===
 # vm_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde yığın-tabanlı
 # bir BYTECODE YORUMLAYICI (stack VM) yazar ve çalıştırır. KEMGU'nun bir
@@ -4458,7 +4418,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                      calistir_rc4_selfhost_arm \
                      calistir_hashcrack_selfhost_arm \
                      calistir_utf8_selfhost_arm \
                      calistir_turkce_case_selfhost_arm \

@@ -41,7 +41,8 @@
       - [x] crc32 -> faz [30] (D-612)
       - [x] sort -> faz [31] (D-613)
       - [x] hashmap -> faz [32] (D-614)
-      - [ ] rc4 · hashcrack · utf8 · turkce_case ·
+      - [x] rc4 -> faz [33] (D-615)
+      - [ ] hashcrack · utf8 · turkce_case ·
             turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
@@ -444,3 +445,12 @@
   Sabotaj S6 (bul probing kapat, `adim<KHM_KAP`->`adim<1`) -> faz [32] HATA rc=2 (probing
   yolunu dogrudan olcer). Kapilar: kem_os_arm 32 faz · baremetal_diff 5/5. KALAN GOC (8):
   rc4/hashcrack/utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-615 (Sinif C goc, iterasyon 5): rc4_selfhost_arm -> kem_os faz [33]. Stream
+  cipher KSA+PRGA, 256-byte S-box in-place permutasyon (Dizi<dtam32>, dizi_olustur(256)+ekle
+  ile boyut=256). dtam32 & 255 (kaydirma YOK). anahtar "Key" + "Plaintext" -> bilinen sifreli
+  vektor [187,243,22,232,217,64,175,10,211] + simetrik round-trip (taze S ile sifreli->duz).
+  krc4_s_olustur/ksa/prga/testi kem_os.kem'e; eski rc4_selfhost.kem + hedef + os_kernels
+  satiri silindi. Sabotaj S7 (KSA `j=(j+si+ak)`->`j=(j+si)`) -> faz [33] HATA rc=2. NOT:
+  round-trip TEK BASINA yetmez (simetrik oldugu icin yanlis keystream'de de gecer) — bilinen
+  vektor karsilastirmasi kritik ayirt edicidir. Kapilar: kem_os_arm 33 faz · baremetal_diff
+  5/5. KALAN GOC (7): hashcrack/utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.
