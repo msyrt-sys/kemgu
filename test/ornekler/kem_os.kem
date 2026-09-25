@@ -1311,6 +1311,87 @@ işlev ktc_testi() -> tam32 {
     ver 1;
 }
 
+// [D-619] [37] TURKCE SORT — eski izole `turkce_sort_selfhost_arm` gocu (TURKCE DNA).
+// Turkce collation (alfabetik siralama): kod-nokta sirasi Turkce alfabeyle ORTUSMEZ
+// (c<ç<d ama Unicode ç=231 c'den cok sonra; ı<i ama Unicode ı=305 i'den sonra). Harf ->
+// Turkce sira-indeksi (0..28) eslemesiyle DOGRU siralama. Havuz-tabanli: kelimeler duz
+// dizide, yalniz baslar/uzunluklar takas edilir.
+işlev ktr_sira_indeksi(cp: dtam32) -> tam32 {
+    eğer cp == 97 { ver 0; }    eğer cp == 98 { ver 1; }    eğer cp == 99 { ver 2; }
+    eğer cp == 231 { ver 3; }   // ç (c'den hemen sonra)
+    eğer cp == 100 { ver 4; }   eğer cp == 101 { ver 5; }   eğer cp == 102 { ver 6; }
+    eğer cp == 103 { ver 7; }   eğer cp == 287 { ver 8; }   // ğ
+    eğer cp == 104 { ver 9; }
+    eğer cp == 305 { ver 10; }  // ı (i'den ONCE)
+    eğer cp == 105 { ver 11; }  // i (ı'dan sonra)
+    eğer cp == 106 { ver 12; }  eğer cp == 107 { ver 13; }  eğer cp == 108 { ver 14; }
+    eğer cp == 109 { ver 15; }  eğer cp == 110 { ver 16; }  eğer cp == 111 { ver 17; }
+    eğer cp == 246 { ver 18; }  // ö
+    eğer cp == 112 { ver 19; }  eğer cp == 114 { ver 20; }  eğer cp == 115 { ver 21; }
+    eğer cp == 351 { ver 22; }  // ş
+    eğer cp == 116 { ver 23; }  eğer cp == 117 { ver 24; }
+    eğer cp == 252 { ver 25; }  // ü
+    eğer cp == 118 { ver 26; }  eğer cp == 121 { ver 27; }  eğer cp == 122 { ver 28; }
+    ver 29;                      // Turkce alfabe disi -> en sona
+}
+// -1 => a<b, 0 => esit, 1 => a>b (Turkce collation). SIRA_SON=-1 (kelime bitti -> once).
+işlev ktr_karsilastir(havuz: Dizi<dtam32>, a_bas: tam32, a_uz: tam32, b_bas: tam32, b_uz: tam32) -> tam32 {
+    değişken k: tam32 = 0;
+    iken 1 == 1 {
+        değişken sa: tam32 = 0 - 1;
+        değişken sb: tam32 = 0 - 1;
+        eğer k < a_uz { sa = ktr_sira_indeksi(havuz[a_bas + k]); }
+        eğer k < b_uz { sb = ktr_sira_indeksi(havuz[b_bas + k]); }
+        eğer (sa == (0 - 1)) ve (sb == (0 - 1)) { ver 0; }       // ikisi de bitti -> esit
+        eğer sa == (0 - 1) { ver 0 - 1; }                         // a kisa -> a<b
+        eğer sb == (0 - 1) { ver 1; }                             // b kisa -> a>b
+        eğer sa < sb { ver 0 - 1; }
+        eğer sa > sb { ver 1; }
+        k = k + 1;                                                // esit harf -> devam
+    }
+    ver 0;
+}
+işlev ktr_sirala(havuz: Dizi<dtam32>, baslar: Dizi<tam32>, uzunluklar: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            değişken ba: tam32 = baslar[j];      değişken ua: tam32 = uzunluklar[j];
+            değişken bb: tam32 = baslar[j + 1];  değişken ub: tam32 = uzunluklar[j + 1];
+            eğer ktr_karsilastir(havuz, ba, ua, bb, ub) > 0 {
+                baslar[j] = bb;      baslar[j + 1] = ba;
+                uzunluklar[j] = ub;  uzunluklar[j + 1] = ua;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev ktr_testi() -> tam32 {
+    // Havuz: cam,can,ada,ihlamur,irmak (kod-nokta).
+    değişken havuz: Dizi<dtam32> = [
+        231, 97, 109,                      // çam     (0,3)
+        99, 97, 110,                       // can     (3,3)
+        97, 100, 97,                       // ada     (6,3)
+        305, 104, 108, 97, 109, 117, 114,  // ıhlamur (9,7)
+        105, 114, 109, 97, 107             // irmak   (16,5)
+    ];
+    değişken baslar: Dizi<tam32> = [0, 3, 6, 9, 16];
+    değişken uzunluklar: Dizi<tam32> = [3, 3, 3, 7, 5];
+    // Turkce-kritik karsilastirmalar: çam>can (ç>c), ıhlamur<irmak (ı<i)
+    eğer ktr_karsilastir(havuz, 0, 3, 3, 3) != 1 { ver 0; }        // çam > can
+    eğer ktr_karsilastir(havuz, 9, 7, 16, 5) != (0 - 1) { ver 0; } // ıhlamur < irmak
+    ktr_sirala(havuz, baslar, uzunluklar, 5);
+    // Beklenen sira: ada(6),can(3),çam(0),ıhlamur(9),irmak(16)
+    değişken bek: Dizi<tam32> = [6, 3, 0, 9, 16];
+    değişken v: tam32 = 0;
+    iken v < 5 { eğer baslar[v] != bek[v] { ver 0; } v = v + 1; }
+    eğer baslar[2] != 0 { ver 0; }    // çam ortada (Unicode tuzagi olsa en sonda olurdu)
+    eğer baslar[3] != 9 { ver 0; }    // ıhlamur irmak'tan ONCE (Unicode tuzagi olsa sonra)
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1730,6 +1811,13 @@ işlev main() -> tam32 {
         uart_satir("[36] TURKCE CASE OK (istanbul->I=304, IRMAK->i=305, ASCII tuzagi yok)");
     } değilse {
         uart_satir("[36] TURKCE CASE HATA");
+    }
+
+    // [37] TURKCE SORT (D-619): eski turkce_sort_selfhost_arm gocu — Turkce collation.
+    eğer ktr_testi() == 1 {
+        uart_satir("[37] TURKCE SORT OK (c<c<d, i<i collation; Unicode tuzagi yok)");
+    } değilse {
+        uart_satir("[37] TURKCE SORT HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

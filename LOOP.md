@@ -45,7 +45,8 @@
       - [x] hashcrack -> faz [34] (D-616)
       - [x] utf8 -> faz [35] (D-617)
       - [x] turkce_case -> faz [36] (D-618)
-      - [ ] turkce_sort · vm · json · asm — self-host (11 kalan)
+      - [x] turkce_sort -> faz [37] (D-619)
+      - [ ] vm · json · asm — self-host (11 kalan)
 
 
 
@@ -484,3 +485,14 @@
   + hedef + os_kernels satiri silindi. Sabotaj S10 (i->I'da KTC_BI yerine KTC_BIc=ASCII 73)
   -> faz [36] HATA rc=2 (tam Turkce-I hatasini ayirt eder). Kapilar: kem_os_arm 36 faz ·
   baremetal_diff 5/5. KALAN GOC (4): turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-619 (Sinif C goc, iterasyon 9): turkce_sort_selfhost_arm -> kem_os faz [37]
+  (TURKCE DNA). Turkce collation: kod-nokta sirasi Turkce alfabeyle ORTUSMEZ (c<ç<d ama
+  Unicode ç=231; ı<i ama Unicode ı=305). ktr_sira_indeksi (harf->0..28 Turkce sira) +
+  ktr_karsilastir (havuz-tabanli substring cmp) + ktr_sirala (bubble, yalniz baslar/uzunluklar
+  swap) + ktr_testi. Dogrulama: çam>can (ç>c), ıhlamur<irmak (ı<i); siralama [çam,can,ada,
+  ıhlamur,irmak]->[ada,can,çam,ıhlamur,irmak] (baslar[2]==0 çam ortada + baslar[3]==9 ıhlamur
+  once — Unicode tuzagi olsa ikisi de yanlis yerde). Eski turkce_sort_selfhost.kem + os_kernels
+  satiri silindi. NOT: bu hedefin RECIPE'i YOKTU (yalniz os_kernels'te referansli, onceden var
+  olan tutarsizlik) -> silme yalniz os_kernels satiri + kaynak. Sabotaj S11 (ç sira 3->29 =
+  Unicode sonu) -> faz [37] HATA rc=2. Kapilar: kem_os_arm 37 faz · baremetal_diff 5/5.
+  KALAN GOC (3): vm/json/asm-selfhost.

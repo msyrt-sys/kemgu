@@ -1670,7 +1670,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[33\] RC4 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[34\] HASHCRACK OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[35\] UTF8 OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[36\] TURKCE CASE OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[36\] TURKCE CASE OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[37\] TURKCE SORT OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -4253,7 +4254,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_turkce_sort_selfhost_arm \
                      calistir_vm_selfhost_arm \
                      calistir_json_selfhost_arm \
                      calistir_asm_selfhost_arm \
