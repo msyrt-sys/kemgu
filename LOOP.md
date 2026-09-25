@@ -46,7 +46,8 @@
       - [x] utf8 -> faz [35] (D-617)
       - [x] turkce_case -> faz [36] (D-618)
       - [x] turkce_sort -> faz [37] (D-619)
-      - [ ] vm · json · asm — self-host (11 kalan)
+      - [x] vm -> faz [38] (D-620)
+      - [ ] json · asm — self-host (11 kalan)
 
 
 
@@ -496,3 +497,12 @@
   olan tutarsizlik) -> silme yalniz os_kernels satiri + kaynak. Sabotaj S11 (ç sira 3->29 =
   Unicode sonu) -> faz [37] HATA rc=2. Kapilar: kem_os_arm 37 faz · baremetal_diff 5/5.
   KALAN GOC (3): vm/json/asm-selfhost.
+- 2026-09-18 D-620 (Sinif C goc, iterasyon 10): vm_selfhost_arm -> kem_os faz [38]. Stack-based
+  bytecode yorumlayici (YIGIN + PC + opcode dispatch + kontrol akisi). Dizi<tam32> in-place
+  PUSH/POP (kdl_dizi_yaz/al_tam, sinir-kontrollu). Opcode 0=HALT 1=PUSH 2=ADD 3=SUB 4=MUL
+  5=DUP 6=PRINT. Program [PUSH 6,PUSH 7,MUL,PRINT,PUSH 100,PUSH 58,ADD,PRINT,HALT] -> 42,158.
+  kvm_it/tepe/calistir/testi kem_os.kem'e (yazdir_tam kaldirildi, dogrulama bd karsilastirmasi
+  ile ic). Eski vm_selfhost.kem + hedef + os_kernels satiri silindi. Sabotaj S12 (MUL `a*b`->
+  `a+b`, 42->13) -> faz [38] HATA rc=2. Kapilar: kem_os_arm 38 faz · baremetal_diff 5/5.
+  KALAN GOC (2): json/asm-selfhost. NOT: asm_selfhost (mini-assembler mnemonic->bytecode->VM)
+  bu VM opcode'larina dayaniyor -> son iterasyonda kvm_* yeniden kullanilabilir.

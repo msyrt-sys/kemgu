@@ -1392,6 +1392,70 @@ işlev ktr_testi() -> tam32 {
     ver 1;
 }
 
+// [D-620] [38] VM — eski izole `vm_selfhost_arm` gocu. Stack-based bytecode yorumlayici:
+// YIGIN + PC + opcode dispatch + kontrol akisi. Dizi<tam32> in-place mutasyon (PUSH/POP =
+// kdl_dizi_yaz/al_tam, sinir-kontrollu). Opcode: 0=HALT 1=PUSH 2=ADD 3=SUB 4=MUL 5=DUP
+// 6=PRINT. Program [PUSH 6, PUSH 7, MUL, PRINT, PUSH 100, PUSH 58, ADD, PRINT, HALT] -> 42,158.
+işlev kvm_it(yigin: Dizi<tam32>, sp: tam32, deger: tam32) -> tam32 {
+    yigin[sp] = deger;   // in-place mutasyon (cagirana yansir)
+    ver sp + 1;
+}
+işlev kvm_tepe(yigin: Dizi<tam32>, sp: tam32) -> tam32 {
+    ver yigin[sp - 1];
+}
+işlev kvm_calistir(prog: Dizi<tam32>, prog_uzun: tam32, yigin: Dizi<tam32>, bd: Dizi<tam32>, bek_sayi: tam32) -> tam32 {
+    değişken sp: tam32 = 0;
+    değişken pc: tam32 = 0;
+    değişken print_sayi: tam32 = 0;
+    değişken tumu_dogru: tam32 = 1;
+    iken pc < prog_uzun {
+        değişken opcode: tam32 = prog[pc];
+        pc = pc + 1;
+        eğer opcode == 1 {                             // PUSH
+            değişken deger: tam32 = prog[pc];
+            pc = pc + 1;
+            sp = kvm_it(yigin, sp, deger);
+        } değilse eğer opcode == 2 {                   // ADD
+            değişken b: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            değişken a: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            sp = kvm_it(yigin, sp, a + b);
+        } değilse eğer opcode == 3 {                   // SUB
+            değişken b: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            değişken a: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            sp = kvm_it(yigin, sp, a - b);
+        } değilse eğer opcode == 4 {                   // MUL
+            değişken b: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            değişken a: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            sp = kvm_it(yigin, sp, a * b);
+        } değilse eğer opcode == 5 {                   // DUP
+            değişken a: tam32 = kvm_tepe(yigin, sp);
+            sp = kvm_it(yigin, sp, a);
+        } değilse eğer opcode == 6 {                   // PRINT (POP'suz dogrula)
+            değişken v: tam32 = kvm_tepe(yigin, sp);
+            eğer print_sayi < bek_sayi {
+                eğer v != bd[print_sayi] { tumu_dogru = 0; }
+            } değilse {
+                tumu_dogru = 0;                        // beklenenden FAZLA print
+            }
+            print_sayi = print_sayi + 1;
+        } değilse eğer opcode == 0 {                   // HALT
+            pc = prog_uzun;
+        } değilse {
+            tumu_dogru = 0;                            // tanimsiz opcode
+        }
+    }
+    eğer tumu_dogru == 1 {
+        eğer print_sayi == bek_sayi { ver 1; }
+    }
+    ver 0;
+}
+işlev kvm_testi() -> tam32 {
+    değişken prog: Dizi<tam32> = [1, 6, 1, 7, 4, 6, 1, 100, 1, 58, 2, 6, 0];  // 6*7=42, 100+58=158
+    değişken yigin: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken beklenen: Dizi<tam32> = [42, 158];
+    ver kvm_calistir(prog, 13, yigin, beklenen, 2);
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1818,6 +1882,13 @@ işlev main() -> tam32 {
         uart_satir("[37] TURKCE SORT OK (c<c<d, i<i collation; Unicode tuzagi yok)");
     } değilse {
         uart_satir("[37] TURKCE SORT HATA");
+    }
+
+    // [38] VM (D-620): eski vm_selfhost_arm gocu — stack bytecode yorumlayici.
+    eğer kvm_testi() == 1 {
+        uart_satir("[38] VM OK (6*7=42, 100+58=158; stack + opcode dispatch)");
+    } değilse {
+        uart_satir("[38] VM HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
