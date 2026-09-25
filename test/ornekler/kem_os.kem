@@ -1171,6 +1171,74 @@ işlev kcrack_testi() -> tam32 {
     ver 1;
 }
 
+// [D-617] [35] UTF8 — eski izole `utf8_selfhost_arm` gocu (TURKCE DNA). UTF-8 kod-cozucu:
+// "çğışöü" (12 byte, hepsi 2-byte) -> 6 Unicode kod-noktasi. dtam32 mask/shift skaler
+// uzerinde (D-173). Savunmaci: bozuk devam-byte -> dur (sonsuz dongu YOK).
+işlev kutf8_cozumle_iki_byte(b0: dtam32, b1: dtam32) -> dtam32 {
+    değişken yuksek: dtam32 = (b0 & 31) << 6;
+    değişken dusuk: dtam32 = b1 & 63;
+    ver yuksek | dusuk;
+}
+işlev kutf8_byte_turu(b: dtam32) -> tam32 {
+    eğer b < 128 { ver 0; }      // 1-byte ASCII
+    eğer b < 192 { ver 1; }      // devam byte
+    eğer b < 224 { ver 2; }      // 2-byte oncul
+    ver 0 - 1;                    // 3/4-byte (kapsam disi)
+}
+işlev kutf8_devam_byte_mu(b: dtam32) -> tam32 {
+    eğer b < 128 { ver 0; }
+    eğer b < 192 { ver 1; }
+    ver 0;
+}
+işlev kutf8_coz(bytelar: Dizi<dtam32>, n: tam32, cikti: Dizi<dtam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken o: tam32 = 0;
+    iken i < n {
+        değişken b0: dtam32 = bytelar[i];
+        değişken tur: tam32 = kutf8_byte_turu(b0);
+        eğer tur == 0 {
+            cikti[o] = b0;
+            o = o + 1;
+            i = i + 1;
+        } değilse {
+            eğer tur == 2 {
+                eğer i + 1 < n {
+                    değişken b1: dtam32 = bytelar[i + 1];
+                    eğer kutf8_devam_byte_mu(b1) == 1 {
+                        cikti[o] = kutf8_cozumle_iki_byte(b0, b1);
+                        o = o + 1;
+                        i = i + 2;
+                    } değilse {
+                        ver o;
+                    }
+                } değilse {
+                    ver o;
+                }
+            } değilse {
+                ver o;
+            }
+        }
+    }
+    ver o;
+}
+işlev kutf8_testi() -> tam32 {
+    değişken bytelar: Dizi<dtam32> = [195, 167, 196, 159, 196, 177, 197, 159, 195, 182, 195, 188];  // çğışöü
+    değişken kp: Dizi<dtam32> = [0, 0, 0, 0, 0, 0];
+    değişken sayi: tam32 = kutf8_coz(bytelar, 12, kp);
+    eğer sayi != 6 { ver 0; }               // kod-nokta sayisi 6 (byte 12 DEGIL)
+    eğer kp[0] != 231 { ver 0; }            // ç
+    eğer kp[1] != 287 { ver 0; }            // ğ
+    eğer kp[2] != 305 { ver 0; }            // ı
+    eğer kp[3] != 351 { ver 0; }            // ş
+    eğer kp[4] != 246 { ver 0; }            // ö
+    eğer kp[5] != 252 { ver 0; }            // ü
+    // Savunmaci: bozuk devam-byte (195,65) -> 0 kod-nokta (sonsuz dongu yok).
+    değişken bozuk: Dizi<dtam32> = [195, 65];
+    değişken bc: Dizi<dtam32> = [0, 0];
+    eğer kutf8_coz(bozuk, 2, bc) != 0 { ver 0; }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1576,6 +1644,13 @@ işlev main() -> tam32 {
         uart_satir("[34] HASHCRACK OK (kemgu kirildi idx=2, 7 atlandi)");
     } değilse {
         uart_satir("[34] HASHCRACK HATA");
+    }
+
+    // [35] UTF8 (D-617): eski utf8_selfhost_arm gocu — cgisou 12 byte -> 6 kod-noktasi.
+    eğer kutf8_testi() == 1 {
+        uart_satir("[35] UTF8 OK (cgisou 12 byte -> 6 kod-noktasi + bozuk tespit)");
+    } değilse {
+        uart_satir("[35] UTF8 HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
