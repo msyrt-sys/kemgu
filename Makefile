@@ -1667,7 +1667,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[30\] CRC32 OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[31\] SORT OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[32\] HASHMAP OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[33\] RC4 OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[33\] RC4 OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[34\] HASHCRACK OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
@@ -3594,45 +3595,6 @@ calistir_dns_ptr_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS) $(BUILD)/bm_a64_v
 		echo "QEMU yok — reverse DNS PTR testi atlandi."; \
 	fi
 
-# === SELF-HOST SHA-256 PAROLA KIRICI (aarch64) — Pentest-OS dictionary attack ===
-# hashcrack_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde Kali/
-# hashcat-tarzı SÖZLÜK SALDIRISI (dictionary attack) ile SHA-256 parola kırıcı.
-# KEMGU'nun kriptografik hash'in ÖTESİNDE gerçek bir OFANSİF-GÜVENLİK aracı
-# kaldırdığını kanıtlar: 8 aday gömülü sözlük, her adayın SHA-256'sını hesaplar
-# (D-173 SHA-256 çekirdeği: dtam32 mod-2^32 add wrap + rotr lshr|shl + skaler-
-# param bit-karıştırma → dizi-eleman ashr tuzağı yok), hedef hash ile karşılaştırır.
-# LAB-KAPSAM (etik): hedef = sözlükteki BİLİNEN "kemgu" parolasının KENDİ üretilen
-# SHA-256'sı — dış gerçek hedef YOK. Kırıcı hedefi doğru indekste (2) bulur +
-# eşleşmeyen 7 aday atlanır → "KEM CRACK OK". CİHAZSIZ: QEMU'da -netdev/-drive
-# YOK, BM_A64_OBJS (heap dâhil — Dizi<dtam32>/Dizi<tam32> W/K/sözlük tahsisi).
-# Marker: "KEM CRACK OK".
-calistir_hashcrack_selfhost_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
-	@echo "aarch64 SELF-HOST SHA-256 parola kirici (dictionary attack): hashcrack_selfhost.kem -> IR -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/hashcrack_selfhost.kem > $(BUILD)/hashcrack_selfhost.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/hashcrack_selfhost.ll -c -o $(BUILD)/hashcrack_selfhost.o
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld \
-		-o $(BUILD)/hashcrack_selfhost.elf $(BUILD)/hashcrack_selfhost.o $(BM_A64_OBJS)
-	@echo "Libc sembol kontrol (olmamali):"
-	@if llvm-nm --undefined-only $(BUILD)/hashcrack_selfhost.elf | \
-		grep -E 'malloc|free|printf|fopen|puts|__chkstk' > /dev/null; then \
-		echo "FAIL: libc referansi"; llvm-nm --undefined-only $(BUILD)/hashcrack_selfhost.elf; exit 1; \
-	fi
-	@echo "  (yok — temiz)"
-	@if command -v qemu-system-aarch64 > /dev/null 2>&1; then \
-		rm -f $(BUILD)/hashcrack_selfhost.out; \
-		timeout 15 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none \
-			-serial file:$(BUILD)/hashcrack_selfhost.out -kernel $(BUILD)/hashcrack_selfhost.elf 2>/dev/null || true; \
-		echo "--- QEMU seri cikti ---"; cat $(BUILD)/hashcrack_selfhost.out; echo "--- son ---"; \
-		if grep -q "KEM CRACK OK" $(BUILD)/hashcrack_selfhost.out; then \
-			echo "aarch64 self-host SHA-256 parola kirici testi gecti: KEMGU cihazsiz sozluk-saldirisi hedefi ('kemgu') dogru indekste kirdi."; \
-		else \
-			echo "FAIL: 'KEM CRACK OK' bekleniyor (KEMGU self-host SHA-256 dictionary attack)"; \
-			exit 1; \
-		fi; \
-	else \
-		echo "QEMU yok — self-host parola kirici testi atlandi."; \
-	fi
-
 # === SELF-HOST UTF-8 kod-çözücü (aarch64) — KEMGU TÜRKÇE DNA milestone ===
 # utf8_selfhost.kem: MMIO/cihaz erişimi OLMADAN, saf KEMGU dilinde UTF-8 (RFC
 # 3629) kod-çözücü. KEMGU'nun KENDİ kaynak-kodlaması olan UTF-8'i çözebildiğini
@@ -4418,7 +4380,6 @@ calistir_os_kernels: calistir_qemu_smoke calistir_kernel_dizi_bare_metal \
                      calistir_tcp_connect_test_arm calistir_port_scan_test_arm \
                      calistir_http_get_test_arm \
                      calistir_tcp_close_test_arm \
-                     calistir_hashcrack_selfhost_arm \
                      calistir_utf8_selfhost_arm \
                      calistir_turkce_case_selfhost_arm \
                      calistir_turkce_sort_selfhost_arm \
