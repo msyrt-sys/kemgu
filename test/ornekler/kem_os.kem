@@ -961,6 +961,83 @@ işlev khm_testi() -> tam32 {
     ver 1;
 }
 
+// [D-615] [33] RC4 — eski izole `rc4_selfhost_arm` gocu. Stream cipher (KSA + PRGA),
+// 256-byte S-box in-place permutasyon. dtam32 & 255 (kaydirma YOK). anahtar "Key" +
+// "Plaintext" -> bilinen sifreli vektor [187,243,22,232,217,64,175,10,211]. RC4 simetrik:
+// ayni keystream ile tekrar XOR = duz metin (round-trip pozitif dogrulama).
+işlev krc4_s_olustur() -> Dizi<dtam32> {
+    değişken s: Dizi<dtam32> = dizi_olustur(256);
+    değişken i: tam32 = 0;
+    iken i < 256 { dizi_ekle(s, 0); i = i + 1; }   // boyut=256 (ksa S[i]=i ile doldurur)
+    ver s;
+}
+işlev krc4_ksa(s: Dizi<dtam32>, anahtar: Dizi<dtam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 256 { s[i] = i olarak dtam32; i = i + 1; }
+    değişken j: dtam32 = 0;
+    i = 0;
+    iken i < 256 {
+        değişken si: dtam32 = s[i];
+        değişken ak: dtam32 = anahtar[i % 3];
+        j = (j + si + ak) & 255;
+        değişken jj: tam32 = j olarak tam32;
+        değişken gecici: dtam32 = s[i];
+        s[i] = s[jj];
+        s[jj] = gecici;
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev krc4_prga(s: Dizi<dtam32>, girdi: Dizi<dtam32>, cikti: Dizi<dtam32>, uzunluk: tam32) -> tam32 {
+    değişken i: dtam32 = 0;
+    değişken j: dtam32 = 0;
+    değişken n: tam32 = 0;
+    iken n < uzunluk {
+        i = (i + 1) & 255;
+        değişken ii: tam32 = i olarak tam32;
+        değişken si: dtam32 = s[ii];
+        j = (j + si) & 255;
+        değişken jj: tam32 = j olarak tam32;
+        değişken gecici: dtam32 = s[ii];
+        s[ii] = s[jj];
+        s[jj] = gecici;
+        değişken si2: dtam32 = s[ii];
+        değişken sj2: dtam32 = s[jj];
+        değişken kidx: dtam32 = (si2 + sj2) & 255;
+        değişken kidxi: tam32 = kidx olarak tam32;
+        değişken keystream: dtam32 = s[kidxi];
+        değişken g: dtam32 = girdi[n];
+        cikti[n] = g ^ keystream;
+        n = n + 1;
+    }
+    ver 0;
+}
+işlev krc4_testi() -> tam32 {
+    değişken anahtar: Dizi<dtam32> = [75, 101, 121];               // "Key"
+    değişken duz: Dizi<dtam32> = [80, 108, 97, 105, 110, 116, 101, 120, 116];  // "Plaintext"
+    değişken beklenen: Dizi<dtam32> = [187, 243, 22, 232, 217, 64, 175, 10, 211];
+    değişken s: Dizi<dtam32> = krc4_s_olustur();
+    değişken sifreli: Dizi<dtam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    krc4_ksa(s, anahtar);
+    krc4_prga(s, duz, sifreli, 9);
+    değişken k: tam32 = 0;
+    iken k < 9 {
+        eğer sifreli[k] != beklenen[k] { ver 0; }   // bilinen vektore karsi
+        k = k + 1;
+    }
+    // Round-trip (simetri): taze S ile sifreli metni tekrar XOR -> duz metin.
+    değişken s2: Dizi<dtam32> = krc4_s_olustur();
+    değişken geri: Dizi<dtam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    krc4_ksa(s2, anahtar);
+    krc4_prga(s2, sifreli, geri, 9);
+    değişken m: tam32 = 0;
+    iken m < 9 {
+        eğer geri[m] != duz[m] { ver 0; }
+        m = m + 1;
+    }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1352,6 +1429,13 @@ işlev main() -> tam32 {
         uart_satir("[32] HASHMAP OK (5/21/37 cakisma + probing + miss)");
     } değilse {
         uart_satir("[32] HASHMAP HATA");
+    }
+
+    // [33] RC4 (D-615): eski rc4_selfhost_arm gocu — KSA+PRGA, bilinen vektor + round-trip.
+    eğer krc4_testi() == 1 {
+        uart_satir("[33] RC4 OK (Key/Plaintext -> vektor + simetrik round-trip)");
+    } değilse {
+        uart_satir("[33] RC4 HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
