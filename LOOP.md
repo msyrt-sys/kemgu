@@ -43,7 +43,8 @@
       - [x] hashmap -> faz [32] (D-614)
       - [x] rc4 -> faz [33] (D-615)
       - [x] hashcrack -> faz [34] (D-616)
-      - [ ] utf8 · turkce_case ·
+      - [x] utf8 -> faz [35] (D-617)
+      - [ ] turkce_case ·
             turkce_sort · vm · json · asm — self-host (11 kalan)
 
 
@@ -467,3 +468,11 @@
   satiri silindi. Sabotaj S8 (crack dongusu `idx<8`->`idx<2`, hedef taranmadan durur) ->
   faz [34] HATA rc=2. Kapilar: kem_os_arm 34 faz · baremetal_diff 5/5. KALAN GOC (6):
   utf8/turkce_case/turkce_sort/vm/json/asm-selfhost.
+- 2026-09-18 D-617 (Sinif C goc, iterasyon 7): utf8_selfhost_arm -> kem_os faz [35] (TURKCE
+  DNA). UTF-8 kod-cozucu: "cgisou" (12 byte, hepsi 2-byte) -> 6 Unicode kod-noktasi. dtam32
+  mask/shift skaler uzerinde (D-173). kutf8_cozumle_iki_byte/byte_turu/devam_byte_mu/coz/testi
+  kem_os.kem'e; eski utf8_selfhost.kem + hedef + os_kernels satiri silindi. Dogrulama: sayi==6
+  (byte 12 DEGIL) + her kod-nokta beklenen Turkce deger + bozuk devam-byte (195,65) -> 0
+  (savunmaci, sonsuz dongu yok). Sabotaj S9 (2-byte birlestirmede `<<6`->`<<5`) -> faz [35]
+  HATA rc=2. Kapilar: kem_os_arm 35 faz · baremetal_diff 5/5. KALAN GOC (5): turkce_case/
+  turkce_sort/vm/json/asm-selfhost.
