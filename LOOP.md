@@ -47,7 +47,8 @@
       - [x] turkce_case -> faz [36] (D-618)
       - [x] turkce_sort -> faz [37] (D-619)
       - [x] vm -> faz [38] (D-620)
-      - [ ] json · asm — self-host (11 kalan)
+      - [x] json -> faz [39] (D-621)
+      - [ ] asm — self-host (11 kalan)
 
 
 
@@ -506,3 +507,11 @@
   `a+b`, 42->13) -> faz [38] HATA rc=2. Kapilar: kem_os_arm 38 faz · baremetal_diff 5/5.
   KALAN GOC (2): json/asm-selfhost. NOT: asm_selfhost (mini-assembler mnemonic->bytecode->VM)
   bu VM opcode'larina dayaniyor -> son iterasyonda kvm_* yeniden kullanilabilir.
+- 2026-09-18 D-621 (Sinif C goc, iterasyon 11): json_selfhost_arm -> kem_os faz [39]. Byte-
+  dizisi JSON ayristirici (durum makinesi): {"x": 42, "y": 100} -> [42, 100]. Dizi<tam32>
+  okuma sinir-kontrollu, deger-dizisi in-place YAZMA. kjson_rakam_mi/string_atla/sayi_oku/
+  ayristir/testi kem_os.kem'e (yazdir_tam kaldirildi, dogrulama ic). NOT: kem_os'ta zaten
+  stdlib/json.kem (cesit ADT, host) var; bu bare-metal byte-tarayici AYRI yaklasim (cihazsiz).
+  Dogrulama: cift_sayi==2 + degerler[0]==42 + degerler[1]==100. Eski json_selfhost.kem + hedef
+  + os_kernels satiri silindi. Sabotaj S13 (sayi_oku `n*10`->`n*8`) -> faz [39] HATA rc=2.
+  Kapilar: kem_os_arm 39 faz · baremetal_diff 5/5. KALAN GOC (1): asm-selfhost (son).
