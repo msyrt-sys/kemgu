@@ -56,13 +56,9 @@
       - [x] kanal SAF-.kem (kem_heap.kem) + faz [41], tek gorevli (D-623)
       - [x] gorev_başlat/birleştir SAF-.kem + faz [42] BLOKLAYAN kanal (D-624)
 - [x] C kapanis tip kaybi (donus + arguman) -> D-625. Kalan self-host tarafi asagida.
-- [ ] 🔴 SELF-HOST AYNI SESSIZ SINIF (D-625'te olculdu): annotasyonsuz kapanis cagrisi
-      `değişken f = |a: tam64| a + 42; f(8589934592)` -> self IR
-      `call i32 %8(ptr %1, i32 8589934592)` (arguman VE donus i32; lambda `i64 %a` bekler)
-      -> exit 1 (dogrusu 42). IFADE-form oldugu icin self checker KABUL ediyor (blok-form
-      T020 ile reddediliyor, o yuzden gorunmuyordu). C'nin D-625 onarimi (imza kaynagi
-      baglamaya + cagri yerinde argumani param tipiyle uret) portlanmali. Onarim sonrasi
-      D-625'in llvm_test sekilleri cg_korpus'a tasinabilir (bugun self yanlis -> konamaz).
+- [x] Self-host kapanis tip kaybi (donus + arguman) -> D-626. Sekiller cg_korpus'ta
+      (cg_kapanis_tip_kaybi); blok-form `ver <tam64|metin>` sekilleri self checker T020
+      kusuru yuzunden HALA fikstur disinda (asagidaki madde).
 - [ ] 🔴 SESSIZ: `dtam64` icin gecerli 2^63 (9223372036854775808) literali INT64_MAX'a
       DOYURULUYOR (`add i64 0, 9223372036854775807`); `değişken r: dtam64 = 2^63` bile.
       Esitlik testi iki tarafi da doyurdugu icin GECER (gizli). Kok muhtemelen lexer'da
@@ -650,3 +646,27 @@
   10/10 . drf_gorunurluk 100/100 . stdlib_check . sifir uyari 38/0 . kem_os_arm 42 faz .
   baremetal_diff 5/5.
   YOL USTUNDE: dtam64 2^63 literal doyurmasi (ilgisiz, sessiz) + self-host ayni sinif -> Sirada.
+- 2026-09-27 D-626 (self-host kapanis tip kaybi — D-625'in aynasi). Olcum: self-host AYNI
+  iki sessiz kusuru tasiyordu (a4 `|a: tam64| a + 42; f(2^33)` -> `call i32 %8(ptr, i32
+  8589934592)`, exit 1). Onarim C ile birebir: (1) `lam_ret_tahmin_b` — ad cozumu golgeleme
+  sirasinda (bloktaki onceki `değişken`ler -> lambda parametreleri -> dis kapsam);
+  `lam_ret_tahmin_l` lambda dugumunden, genel kapanis ve gorev_başlat yollari onu kullanir.
+  (2) `cg_aimza` paralel dizisi (TIP_ISLEV ya da LAMBDA dugumu; degisken + parametre
+  kaydinda yazilir) + `kapanis_param_tip`; cagri yeri argumani param tipine uydurur:
+  immediate (literal metni zaten tam deger) -> yalniz tip, register -> int_uydur (dtamN
+  zext). Olcum (self, -O2, eski/yeni): a4 1/42 . u3 1/42 . c2 1/42 . c5 1/42 . m2
+  LINK-RED/42 . s2/c4/u2 degismedi (42/42). Checker'in T020 verdigi 7 sekil (a3 c3 c1 v1
+  m1 a5 s1) bu adimin disinda — ayri, gurultulu kusur.
+  🎯 D-625'in BEKLEYEN ISI KAPANDI: iki derleyici artik ayni sekillerde anlastigi icin
+  kapanis tip kaybi cg_korpus'a girdi -> `cg_kapanis_tip_kaybi.kem` (her olcum AYRI cikis
+  kodu; 2^32 ustu degerler — tam32 bu sinifi gosteremez; POZITIF tam32 sekli). Eski C ve
+  eski self ikisi de exit 1 veriyordu. ⚠ Ilk surumde (e) isaretci-donen blok yereli vardi;
+  self checker onu T020 ile REDDETTI (ayri kusur) -> kapi yanlis sebeple kirmizi olmasin
+  diye cikarildi.
+  SABOTAJ: S22 (self arguman uydurmasi kapali) -> codegen_diff 173/174, "C 42 ≠ KEMGU 2" .
+  S23 (self blok-yereli aramasi kapali) -> 173/174, "C 42 ≠ KEMGU 1". Kodlar hangi yolun
+  dustugunu soyluyor.
+  Kapilar: codegen_diff 174/174 . yapi_diff 155/155 (fikstur MUAFIYETSIZ — lambda donus
+  tipleri C ile birebir) . codegen_genis 58/58 . modul_codegen 27/27 . surucu_diff 16/16 .
+  bolge_operand 176/176 . ct_bariyer 14/14 . kanal_omru 10/10 . checker_diff 187/187 .
+  self_driver TUM MODLAR + SELF-HOST + FIXPOINT ✓.

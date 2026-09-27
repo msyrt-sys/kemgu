@@ -1,0 +1,39 @@
+// [D-625 / D-626] KAPANIŞ TİP KAYBI — iki yönlü SESSİZ KIRPMA, C + self-host.
+// Fat value `{ fnptr, envptr }` kapanışın parametre ve dönüş tiplerini SİLER.
+// Kusur iki yerdeydi (ikisi de ölçüldü, ikisi de exit 1 veriyordu):
+//   (1) DÖNÜŞ: annotasyonsuz kapanışta tahmin adı yalnız DIŞ kapsamda arıyordu →
+//       gövde yereli / lambda parametresi bulunamıyor → i32; GÖLGELEMEDE dıştaki
+//       aynı adlı değişkenin YANLIŞ tipini alıyordu (a, c).
+//   (2) ARGÜMAN: çağrı yeri argümanı param tipine UYDURMUYORDU → `f(2^33)`
+//       literali i32 olarak i64 parametreye geçiyordu (b, d).
+// Her ölçüm AYRI çıkış kodu verir → hangisinin düştüğü koddan okunur.
+// ⚠ Değerler 2^32'yi AŞAR: tam32 ile bu sınıf GÖZLENEMEZ (D-535).
+// ⚠ Blok-form + `ver <tam64>` şekli BİLEREK YOK: self-host checker onu T020 ile
+//   reddediyor (ayrı, gürültülü kusur — LOOP.md Sırada); fikstür yanlış sebeple
+//   kırmızı olmasın diye yalnız iki derleyicinin de KABUL ettiği şekiller.
+işlev main() -> tam32 {
+    // (a) gölgeleme: dışta tam32 x, gövdede tam64 x → dönüş i64 olmalı
+    değişken x: tam32 = 5;
+    değişken f = || { değişken x: tam64 = 8589934592; ver x + 42; };
+    değişken ra: tam64 = f();
+    eğer ra != 8589934634 { ver 1; }
+    // (b) annotasyonsuz ifade-form, tam64 parametre + literal argüman
+    değişken g = |a: tam64| a + 42;
+    değişken rb: tam64 = g(8589934592);
+    eğer rb != 8589934634 { ver 2; }
+    // (c) annotasyonsuz yerel zinciri: z → x' → dış y (tam64)
+    değişken y: tam64 = 8589934592;
+    değişken h = || { değişken q = y; değişken z = q + 42; ver z; };
+    değişken rc: tam64 = h();
+    eğer rc != 8589934634 { ver 3; }
+    // (d) işaretsiz parametre (zext yolu) + 2^32 üstü literal
+    değişken u = |a: dtam64| a + 1;
+    değişken rd: dtam64 = u(4294967296);
+    eğer rd != 4294967297 { ver 4; }
+    // (e) işaretçi dönen blok yereli BİLEREK YOK: self-host checker blok-form
+    //     `ver <metin>`i çevreleyen main'in tam32 dönüşüne karşı denetleyip T020
+    //     veriyor (ölçüldü) — ayrı kusur, LOOP.md Sırada.
+    // POZİTİF: tam32 şekli DEĞİŞMEMELİ (toptan "hep i64" sabotajını ayırt eder)
+    değişken k = || { değişken w: tam32 = 40; ver w + 2; };
+    ver k() + (x - 5);
+}
