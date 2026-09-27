@@ -473,7 +473,7 @@ struct Dugum {
 
         /* === Literaller === */
 
-        struct { int64_t deger; } tam;
+        struct { int64_t deger; int tasti; } tam;   /* [D-632] tasti: literal >= 2^64 (2^64-1'e DOYDU) */
         struct { double deger; } kesirli;
         struct { const char *metin; int uzunluk; } metin_lit;
         struct { uint32_t kod_noktasi; } karakter;

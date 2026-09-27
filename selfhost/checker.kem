@@ -163,6 +163,7 @@ yapı Ayr {
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;  // tip-hata kodları (traversal sırası)
     t043_node: Dizi<tam32>;  // D-630: T043 raporlanmış literal düğümleri (tekilleştirme)
+    tasma_node: Dizi<tam32>;  // [D-632] 2^64+ (doymuş) TAM düğümleri — a_deg doymuş değeri taşır
     neg_lit: tam32;          // D-630: literal tekli eksinin operandı mı (alt sınır +1)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
@@ -673,6 +674,39 @@ işlev tamsayi_deger(lex: metin) -> tam64 {
     }
     ver sonuc olarak tam64;
 }
+// [D-632] literal 2^64 ve üstü mü? tamsayi_deger ile AYNI biriktirme ve AYNI
+// taşma koşulu (C ifade.c `tasti` aynası) — ikisi birlikte değişmeli.
+işlev tamsayi_tasar_mi(lex: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(lex);
+    değişken taban: dtam64 = 10;
+    değişken i: tam32 = 0;
+    eğer n >= 2 ve bayt(lex, 0) == 48 {
+        değişken c1: tam32 = bayt(lex, 1);
+        eğer (c1 == 120) veya (c1 == 88) { taban = 16; i = 2; }
+        eğer (c1 == 98) veya (c1 == 66) { taban = 2; i = 2; }
+        eğer (c1 == 111) veya (c1 == 79) { taban = 8; i = 2; }
+    }
+    değişken sonuc: dtam64 = 0;
+    değişken tavan: dtam64 = 18446744073709551615;
+    iken i < n {
+        değişken c: tam32 = bayt(lex, i);
+        eğer c != 95 {
+            değişken h: dtam64 = hane_deger(c) olarak dtam64;
+            eğer sonuc > (tavan - h) / taban { ver doğru; }
+            sonuc = sonuc * taban + h;
+        }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+işlev tasma_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tasma_node) {
+        eğer dizi_al(p.tasma_node, i) == idx { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
 işlev hane_str(d: tam32) -> metin {
     eğer d == 0 { ver "0"; }   eğer d == 1 { ver "1"; }
     eğer d == 2 { ver "2"; }   eğer d == 3 { ver "3"; }
@@ -1069,9 +1103,13 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
     değişken t: metin = simdiki(p);
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     eğer metin_esit(t, "TAMSAYI") {
-        değişken v: tam64 = tamsayi_deger(sim_lex(p));
+        değişken tlex: metin = sim_lex(p);
+        değişken v: tam64 = tamsayi_deger(tlex);
         ilerle(p);
-        ver dugum0(p, "TAM", tam64_str(v), s, u);
+        değişken tn: tam32 = dugum0(p, "TAM", tam64_str(v), s, u);
+        // [D-632] doyma bilgisi `a_deg`de kaybolur (2^64-1 yazılır) → yan-kanal.
+        eğer tamsayi_tasar_mi(tlex) { dizi_ekle(p.tasma_node, tn); }
+        ver tn;
     }
     eğer metin_esit(t, "ONDALIK") {
         değişken lx: metin = sim_lex(p);
@@ -1879,7 +1917,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
-        th_kod: [], th_sat: [], th_sut: [], t043_node: [], neg_lit: 0
+        th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0
     };
 }
 
@@ -2541,6 +2579,8 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         // bağlamına uyarlanır. `sayisal_mi` demek `değişken x: kesirli64 = 1`i
         // sessizce kabul ettiriyordu (C: T001) ve dizi elemanında konum kaydırıyordu.
         değişken lv: tam64 = lit_deger(dizi_al(p.a_deg, idx));
+        // [D-632] 2^64+ hiçbir tamsayı tipine sığmaz → bağlamdan BAĞIMSIZ T043.
+        eğer tasma_mi(p, idx) { t043_raporla(p, idx); }
         eğer tamsayi_mi(beklenen) {   // bidirectional sayı literal
             // D-630: bağlam somut tamsayı tipiyse literal ona SIĞMALI (T043).
             eğer lit_sigar(lv, beklenen, p.neg_lit) == 0 { t043_raporla(p, idx); }
@@ -5155,6 +5195,12 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
+    // [D-632] 2^64+ literal: C her literali tipler; self yalnız bir tüketici
+    // `ifade_tip` isterse tipler (annotasyonsuz `değişken c = <lit>` hiç sormaz).
+    // Gezinti düğüme vardığında da rapor et — t043_raporla tekilleştirir.
+    eğer metin_esit(ad, "TAM") {
+        eğer tasma_mi(p, idx) { t043_raporla(p, idx); }
+    }
     // D-376 T014 muafiyetleri — çocuk gezintisinden ÖNCE işaretlenmeli.
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT")
       veya metin_esit(ad, "KURESEL") {

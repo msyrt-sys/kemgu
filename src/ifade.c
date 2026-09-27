@@ -249,8 +249,9 @@ static Dugum *parse_birincil(Parser *p) {
              *   (2) `sayi_tokeni_temizle` girdiyi `_`'ları atmadan ÖNCE 63 karaktere
              *       kırpıyordu → 64 basamaklı ikilik literal 2^63 yerine 2^60 oldu
              *       (ölçüldü; fikstür p_buyuk_literal yakaladı, self-host doğruydu).
-             * [0, 2^64) tam temsil; 2^64 ve üstü 2^64-1'e DOYAR (self ile aynı —
-             * literal-aralık tanısı AYRI iş). Değer iki'nin tümleyeni BİT DESENİYLE
+             * [0, 2^64) tam temsil; 2^64 ve üstü 2^64-1'e DOYAR (self ile aynı) —
+             * [D-632] doyma `tasti` bayrağıyla düğüme TAŞINIR, checker T043 verir.
+             * Değer iki'nin tümleyeni BİT DESENİYLE
              * saklanır (memcpy: uygulama-tanımlı dönüşüm YOK); LLVM `i64 -1` ile
              * `i64 18446744073709551615`i aynı bitlere çevirir (ölçüldü). */
             const char *lk = t.baslangic;
@@ -276,6 +277,7 @@ static Dugum *parse_birincil(Parser *p) {
             int64_t deger;
             memcpy(&deger, &udeger, sizeof deger);   /* bit-bit */
             d = dugum_tam(p->arena, deger, t.satir, t.sutun);
+            if (d) d->veri.tam.tasti = tasti;
             parser_ilerle(p);
             return d;
         }
