@@ -8,9 +8,8 @@
 //       literali i32 olarak i64 parametreye geçiyordu (b, d).
 // Her ölçüm AYRI çıkış kodu verir → hangisinin düştüğü koddan okunur.
 // ⚠ Değerler 2^32'yi AŞAR: tam32 ile bu sınıf GÖZLENEMEZ (D-535).
-// ⚠ Blok-form + `ver <tam64>` şekli BİLEREK YOK: self-host checker onu T020 ile
-//   reddediyor (ayrı, gürültülü kusur — LOOP.md Sırada); fikstür yanlış sebeple
-//   kırmızı olmasın diye yalnız iki derleyicinin de KABUL ettiği şekiller.
+// [D-627] Blok-form + `ver <tam64|metin>` şekilleri self-host checker'ın T020
+//   kusuru onarılınca eklendi (e, f, g).
 işlev main() -> tam32 {
     // (a) gölgeleme: dışta tam32 x, gövdede tam64 x → dönüş i64 olmalı
     değişken x: tam32 = 5;
@@ -30,9 +29,18 @@ işlev main() -> tam32 {
     değişken u = |a: dtam64| a + 1;
     değişken rd: dtam64 = u(4294967296);
     eğer rd != 4294967297 { ver 4; }
-    // (e) işaretçi dönen blok yereli BİLEREK YOK: self-host checker blok-form
-    //     `ver <metin>`i çevreleyen main'in tam32 dönüşüne karşı denetleyip T020
-    //     veriyor (ölçüldü) — ayrı kusur, LOOP.md Sırada.
+    // (e) işaretçi dönen blok yereli (önceden iki derleyicide LINK-RED). [D-627]
+    //     Self-host checker bunu T020 ile reddediyordu; onarımla geri eklendi.
+    değişken m = || { değişken s: metin = "abcd"; ver s; };
+    eğer metin_uzunluk(m()) != 4 { ver 5; }
+    // (f) [D-627] blok-form, gölgelemesiz tam64 yereli (checker'da önceden T020).
+    değişken n = || { değişken t: tam64 = 8589934592; ver t + 42; };
+    değişken rf: tam64 = n();
+    eğer rf != 8589934634 { ver 6; }
+    // (g) [D-627] annotasyonlu `işlev(tam64) -> tam64` + blok-form + literal arg.
+    değişken o: işlev(tam64) -> tam64 = |a: tam64| { ver a + 42; };
+    değişken rg: tam64 = o(8589934592);
+    eğer rg != 8589934634 { ver 7; }
     // POZİTİF: tam32 şekli DEĞİŞMEMELİ (toptan "hep i64" sabotajını ayırt eder)
     değişken k = || { değişken w: tam32 = 40; ver w + 2; };
     ver k() + (x - 5);
