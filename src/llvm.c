@@ -86,6 +86,13 @@ typedef struct LlvmIsim {
      * bilgidir → burada saklanır ve çağrı yerinde beklenen'e TERCİH edilir.
      * NULL = closure değil / tip bilinmiyor (arena_ayir_sifir varsayılanı). */
     const char *kapanis_donus_ir;
+    /* D-625: closure İMZA KAYNAĞI — bildirilen `işlev(T1,..) -> R` tip düğümü
+     * (DUGUM_TIP_ISLEV) ya da annotasyonsuz bağlamada lambda'nın kendisi
+     * (DUGUM_LAMBDA). Fat value parametre tiplerini de SİLER; çağrı yeri
+     * argümanları buradan okunan tiple üretmezse `f(8589934592)` literali i32
+     * doğar ve `i64 %a` parametresine SESSİZCE KIRPILMIŞ geçer (ölçüldü:
+     * annotasyonlu `işlev(tam64) -> tam64` bile). NULL = bilinmiyor. */
+    const Dugum *kapanis_imza;
     /* D-294: `görev<T>` tipli değişken/parametrenin T IR tipi. görev<T> IR'de
      * opak `ptr` (handle) — T'yi SİLER. Runtime birleştir'i i64 taşır; sonucu
      * T'ye daraltmak (trunc / inttoptr) için T gerekir. NULL = görev değil /
@@ -845,6 +852,25 @@ static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
     return ast_tip_to_ir(g, dt);
 }
 
+/* D-625: closure imzasının i. parametre tip DÜĞÜMÜ (bkz. LlvmIsim.kapanis_imza).
+ * Bilinmiyorsa NULL → çağrı yeri eski davranışa (beklenensiz üretim) düşer. */
+static const Dugum *kapanis_param_tip(const Dugum *imza, int i) {
+    if (!imza || i < 0) return NULL;
+    if (imza->tip == DUGUM_TIP_ISLEV) {
+        if (i >= imza->veri.tip_islev.param_sayi) return NULL;
+        return imza->veri.tip_islev.parametreler[i];
+    }
+    if (imza->tip == DUGUM_LAMBDA) {
+        if (i >= imza->veri.lambda.param_sayi) return NULL;
+        const Dugum *pr = imza->veri.lambda.parametreler[i];
+        return pr ? pr->veri.parametre.tip : NULL;
+    }
+    return NULL;
+}
+static const Dugum *kapanis_imza_al(const Dugum *tip_d) {
+    return (tip_d && tip_d->tip == DUGUM_TIP_ISLEV) ? tip_d : NULL;
+}
+
 /* D-334: fat value ({ ptr fn, ptr env }) uzerinden DOLAYLI CAGRI — ORTAK yol.
  *
  * Bu yardimci, closure'in NEREDE durdugundan bagimsizdir: degisken, YAPI ALANI
@@ -920,7 +946,23 @@ static const Dugum *yapi_alan_tip_dugumu(YapiKayit *yk,
  * COZUM: ayni tahmin HEM define'a (bl->beklenen_donus_ir) HEM cagri yerine
  * (kapanis_donus_ir) verilir → ikisi DAIMA ayni. Tahmin edilemeyen sekil NULL
  * doner → bugunku i32 davranisi (yeni sessizlik EKLENMEZ). */
-static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
+/* D-625: tahmin BAĞLAMI. Blok-form gövdede `ver x` çoğu zaman gövdenin KENDİ
+ * yereline ya da lambda parametresine bakar; eski tahmin adı yalnız DIŞ kapsamda
+ * (isim_bul) arıyordu → yerel bulunamıyor → NULL → i32 → `tam64` dönüş SESSİZCE
+ * KIRPILIYORDU (ölçüldü: `değişken f = || { değişken x: tam64 = y + 42; ver x; }`
+ * host -O2 exit 1; -O0 x86'da rax üst yarısı TESADÜFEN korunduğu için doğru
+ * görünüyordu). Çözüm sırası = gölgeleme sırası: (1) bloktaki ÖNCEKİ `değişken`ler
+ * (sondan başa; annotasyon varsa onun IR'ı, yoksa değerinin tahmini — yalnız DAHA
+ * ÖNCEKİ bildirimlere bakarak, `değişken x = x + 1` sonlanır), (2) lambda
+ * parametreleri, (3) dış kapsam. */
+typedef struct {
+    const Dugum *blok;      /* NULL = blok bağlamı yok */
+    int sinir;              /* yalnız [0, sinir) aralığındaki deyimler görünür */
+    const Dugum *lambda;    /* NULL = parametre bağlamı yok */
+} TahminBaglam;
+
+static const char *lambda_donus_tahmin_b(LlvmGen *g, const Dugum *govde,
+                                         TahminBaglam bg) {
     if (!govde) return NULL;
     switch (govde->tip) {
         case DUGUM_METIN:     return "ptr";
@@ -928,8 +970,32 @@ static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
         case DUGUM_TAM:       return "i32";
         case DUGUM_MANTIKSAL: return "i32";
         case DUGUM_TANIMLAYICI: {
-            LlvmIsim *vi = isim_bul(g, govde->veri.tanimlayici.metin,
-                                    govde->veri.tanimlayici.uzunluk);
+            const char *ad = govde->veri.tanimlayici.metin;
+            int uz = govde->veri.tanimlayici.uzunluk;
+            if (bg.blok) {
+                for (int i = bg.sinir - 1; i >= 0; i--) {
+                    const Dugum *st = bg.blok->veri.blok.deyimler[i];
+                    if (!st || st->tip != DUGUM_DEGISKEN) continue;
+                    if (st->veri.degisken.ad_uzunluk != uz ||
+                        memcmp(st->veri.degisken.ad, ad, (size_t)uz) != 0)
+                        continue;
+                    if (st->veri.degisken.tip)
+                        return ast_tip_to_ir(g, st->veri.degisken.tip);
+                    TahminBaglam ic = bg;
+                    ic.sinir = i;                  /* yalnız DAHA ÖNCEKİLER */
+                    return lambda_donus_tahmin_b(g, st->veri.degisken.deger, ic);
+                }
+            }
+            if (bg.lambda) {
+                for (int i = 0; i < bg.lambda->veri.lambda.param_sayi; i++) {
+                    const Dugum *pr = bg.lambda->veri.lambda.parametreler[i];
+                    if (pr && pr->veri.parametre.ad_uzunluk == uz &&
+                        memcmp(pr->veri.parametre.ad, ad, (size_t)uz) == 0)
+                        return pr->veri.parametre.tip
+                             ? ast_tip_to_ir(g, pr->veri.parametre.tip) : NULL;
+                }
+            }
+            LlvmIsim *vi = isim_bul(g, ad, uz);
             return (vi && vi->llvm_tip) ? vi->llvm_tip : NULL;
         }
         case DUGUM_CAGRI: {
@@ -944,17 +1010,27 @@ static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
             return NULL;
         }
         case DUGUM_IKILI:     /* aritmetik: sol operandin tipi */
-            return lambda_donus_tahmin(g, govde->veri.ikili.sol);
+            return lambda_donus_tahmin_b(g, govde->veri.ikili.sol, bg);
         case DUGUM_BLOK: {    /* blok-form: ILK `ver` deyiminin degeri */
             for (int i = 0; i < govde->veri.blok.sayi; i++) {
                 const Dugum *st = govde->veri.blok.deyimler[i];
-                if (st && st->tip == DUGUM_VER)
-                    return lambda_donus_tahmin(g, st->veri.ver.deger);
+                if (st && st->tip == DUGUM_VER) {
+                    TahminBaglam ic = bg;
+                    ic.blok = govde;
+                    ic.sinir = i;
+                    return lambda_donus_tahmin_b(g, st->veri.ver.deger, ic);
+                }
             }
             return NULL;
         }
         default: return NULL;   /* bilinmeyen → tahmin YOK (eski davranis) */
     }
+}
+
+/* Lambda düğümünden tahmin (parametreler de bağlamda). */
+static const char *lambda_donus_tahmin_l(LlvmGen *g, const Dugum *lam) {
+    TahminBaglam bg = { NULL, 0, lam };
+    return lambda_donus_tahmin_b(g, lam->veri.lambda.govde, bg);
 }
 
 /* D-294: tip düğümü `görev<T>` ise T'nin IR tipini döner, değilse NULL.
@@ -4994,8 +5070,23 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         for (int i = 0; i < n; i++) {
                             const char *ab = NULL;
                             if (i == dizi_deger_arg && dizi_eleman_beklenen) ab = dizi_eleman_beklenen;
+                            /* D-625: closure parametre tipi biliniyorsa argüman
+                             * O tiple doğar (literal genişliği) ve tamsayıda o
+                             * genişliğe uyarlanır — yoksa i64 parametreye kırpılmış
+                             * i32 geçer (LLVM dolaylı çağrıda imza denetlemez). */
+                            const Dugum *ptd = kapanis_param_tip(
+                                vi ? vi->kapanis_imza : NULL, i);
+                            const char *pir = ptd ? ast_tip_to_ir(g, ptd) : NULL;
+                            if (!ab && pir) ab = pir;
                             iargs[i] = ifade_uret(g,
                                 d->veri.cagri.argumanlar[i], ab);
+                            if (pir) {
+                                iargs[i].reg = int_donustur_im(g, iargs[i].reg,
+                                    iargs[i].tip, pir, ast_tip_isaretsiz_mi(ptd));
+                                if (tip_genisligi(iargs[i].tip) &&
+                                    tip_genisligi(pir))
+                                    iargs[i].tip = pir;
+                            }
                         }
                     }
                     /* D-293: dönüş tipini önce BİLDİRİLEN closure tipinden al
@@ -5129,7 +5220,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (g_arg && g_arg->tip == DUGUM_LAMBDA &&
                     g_arg->veri.lambda.govde &&
                     g_arg->veri.lambda.govde->tip == DUGUM_BLOK) {
-                    const char *tah = lambda_donus_tahmin(g, g_arg->veri.lambda.govde);
+                    const char *tah = lambda_donus_tahmin_l(g, g_arg);
                     g->lambda_beklenen_donus =
                         (tah && (strcmp(tah, "ptr") == 0 ||
                                  strcmp(tah, "double") == 0 ||
@@ -6450,6 +6541,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                      * dönüş tipini BURADAN alır (bkz. kapanis_donus_ir). */
                     g->isimler->kapanis_donus_ir =
                         kapanis_donus_ir_al(g, d->veri.degisken.tip);
+                    g->isimler->kapanis_imza =
+                        kapanis_imza_al(d->veri.degisken.tip);     /* D-625 */
                     /* D-294: `değişken g: görev<T> = ...` → T'nin IR'i
                      * (görev<T> IR'de opak ptr; birleştir i64→T daraltması). */
                     g->isimler->gorev_ic_ir =
@@ -6490,8 +6583,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     const char *lam_tahmin = NULL;
                     const char *eski_lbd2 = g->lambda_beklenen_donus;
                     if (d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
-                        lam_tahmin = lambda_donus_tahmin(
-                            g, d->veri.degisken.deger->veri.lambda.govde);
+                        lam_tahmin = lambda_donus_tahmin_l(
+                            g, d->veri.degisken.deger);
                         if (lam_tahmin) g->lambda_beklenen_donus = lam_tahmin;
                     }
                     dv = ifade_uret(g, d->veri.degisken.deger, NULL);
@@ -6516,6 +6609,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     g->isimler->metin_mi = dv.metin_mi;
                     /* D-325: tahmin varsa cagri yeri de AYNI donusu gorsun. */
                     if (lam_tahmin) g->isimler->kapanis_donus_ir = lam_tahmin;
+                    /* D-625: annotasyonsuz lambda → parametre tipleri lambdadan. */
+                    if (d->veri.degisken.deger->tip == DUGUM_LAMBDA)
+                        g->isimler->kapanis_imza = d->veri.degisken.deger;
                     /* D-293 NOT: kapanis_donus_ir burada AYARLANMAZ (tahmin yoksa) — bu dal
                      * "annot yok" yolu (d->veri.degisken.tip == NULL), yani
                      * bildirilen closure dönüş tipi zaten YOK. Annotasyonsuz
@@ -6575,6 +6671,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 g->isimler->tip_ast = d->veri.degisken.tip;         /* [D-465] */
                 g->isimler->kapanis_donus_ir =
                     kapanis_donus_ir_al(g, d->veri.degisken.tip);   /* D-293 */
+                g->isimler->kapanis_imza =
+                    kapanis_imza_al(d->veri.degisken.tip);          /* D-625 */
                 g->isimler->gorev_ic_ir =
                     gorev_ic_ir_al(g, d->veri.degisken.tip);        /* D-294 */
                 g->isimler->kanal_ic_ir =
@@ -7899,6 +7997,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* D-293: `işlev(...) -> T` tipli parametre (closure argüman) → T'nin IR'i */
         g->isimler->kapanis_donus_ir =
             kapanis_donus_ir_al(g, p->veri.parametre.tip);
+        g->isimler->kapanis_imza =
+            kapanis_imza_al(p->veri.parametre.tip);                 /* D-625 */
         /* D-294: `görev<T>` tipli parametre → T'nin IR'i (birleştir daraltması) */
         g->isimler->gorev_ic_ir =
             gorev_ic_ir_al(g, p->veri.parametre.tip);
