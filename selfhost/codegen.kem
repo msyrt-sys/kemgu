@@ -5992,7 +5992,20 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         değişken st: metin = p.son_tip;
         değişken sag: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
         değişken gt: metin = p.son_tip;
-        değişken optip: metin = tip_birlestir(st, gt);
+        // D-630: çıplak tamsayı literali KARŞI operandın tipini alır (C D-021
+        // aynası). Literal artık değere göre i64 doğabildiği için (2^31+) aksi
+        // hâlde `d[i] != 3049323471` (d: Dizi<dtam32>) i32 elemanı i64'e
+        // İŞARETLİ genişletip yanlış karşılaştırıyordu. Literal immediate'dır:
+        // tipini değiştirmek komut yaymaz, değer LLVM'de hedef genişlikte okunur.
+        değişken lsol: mantıksal = metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb)), "TAM");
+        değişken lsag: mantıksal = metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb + 1)), "TAM");
+        // ⚠ `gt = st; st = gt` biçimi C escape analizinde bağ döngüsü kurup
+        // SONSUZ ÖZYİNELEME veriyor (ayrı, önceden var kusur) → ayrı adlar.
+        değişken st2: metin = st;
+        değişken gt2: metin = gt;
+        eğer lsag ve (lsol == yanlış) ve int_ll_mi(st) ve int_ll_mi(gt) { gt2 = st; }
+        eğer lsol ve (lsag == yanlış) ve int_ll_mi(st) ve int_ll_mi(gt) { st2 = gt; }
+        değişken optip: metin = tip_birlestir(st2, gt2);
         // D-337: operandlardan biri işaretsizse (dtamN) TÜM işlem işaretsiz
         // semantikle yapılır (C llvm.c: `int isz = sol.isaretsiz || sag.isaretsiz`).
         değişken bisz: tam32 = ifade_isz(p, dizi_al(p.cocuk, cb));
@@ -6360,6 +6373,17 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 i = i + 1;
             }
             değilse {
+                // D-630: tamsayı eleman DİZİNİN eleman tipine uydurulur. Eleman
+                // başına kendi tipiyle eklemek `Dizi<dtam32>`e 2^31+ literali
+                // `_tam64` (8 bayt) ile yazıyordu = 4 baytlık gözeye HEAP TAŞMASI
+                // (sha256_selfhost K sabitleri, SESSİZ YANLIŞ CEVAP).
+                eğer int_ll_mi(et) ve int_ll_mi(elem) {
+                    eğer metin_esit(et, elem) == yanlış {
+                        p.son_tip = et;
+                        e = int_uydur(p, e, elem, ifade_isz(p, dizi_al(p.cocuk, cb + i)));
+                        et = elem;
+                    }
+                }
                 // [D-451] kesirli eleman -> tasiyici tamsayiya bitcast (bitler korunur).
                 eğer metin_uzunluk(kes_tasiyici(et)) > 0 {
                     e = bitcast_uret(p, e, et, kes_tasiyici(et));
