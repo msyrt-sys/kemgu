@@ -899,3 +899,124 @@ add $0, $0, :lo12:kul_spawner"# çıktı("=r", &x) } }
     eğer kg_oku64(KUL_PROG_FLAG) != 42 { ver 0; }     // program GERÇEKTEN koştu mu
     ver 1;
 }
+
+// ============================================================================
+// DİL GÖREVİ (D-624): `görev_başlat` / `görev_birleştir` ÇEKİRDEK karşılığı, SAF-.kem.
+// ----------------------------------------------------------------------------
+// D-592'den beri kem_os C kdl_gorev.c'yi bağlamıyor → dilin görev ilkeli çekirdekte
+// YOKTU. ABI host (kdl_runtime.c) ile BİREBİR:
+//   @kdl_gorev_basla_kapanis(ptr fn_bare, ptr fn_kapanis, ptr env, i32 rho_serbest) -> ptr
+//   @kdl_gorev_birlestir(ptr) -> i64
+// Codegen fn'i HER İKİ parametreye aynı değer olarak geçer; lifted lambda imzası
+// env'li ise (ptr rho, ptr env), env'siz ise (ptr rho) — AArch64'te fazladan x1
+// argümanı zararsız olduğu için DAİMA x0=rho, x1=env ile çağrılır.
+//
+// Mekanizma: yukarıdaki PREEMPTIVE zamanlayıcı (kem_gorev_olustur + timer-IRQ SP-swap).
+// Yeni görev sentetik trap-frame ile `kem_dil_trampolin`e eret eder; frame'in x0
+// yuvasına (@0) görev KAYDI yazılır → trampolin onu ilk argüman olarak alır.
+//
+// Kayıt (8-bayt hücreler): [0]=fn [1]=env [2]=ρ_sahip [3]=rho_serbest [4]=sonuç
+// [5]=bitti (volatile) [6]=yığın tabanı. ρ_sahip her görevin KENDİ bölgesi (R-GÖREV,
+// S1/S2 — host ile aynı); join'de yalnız codegen kanıtı (D-309) varsa serbest.
+sabit KG_DIL_YIGIN: tam64 = 65536;          // görev başına yığın (malloc)
+küresel değişken kem_dil_canli: tam64 = 0;  // birleştirilmemiş dil görevi sayısı
+
+çıplak işlev kg_irq_kapat() {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr daifset, #2"# bozulan("~{memory}") } }
+}
+çıplak işlev kg_irq_ac2() {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr daifclr, #2"# bozulan("~{memory}") } }
+}
+
+// Görev gövdesi. eret ile girilir (x30=0) → ASLA dönmez.
+çıplak işlev kem_dil_trampolin(g: *tam8) {
+    değişken kayit: tam64 = g olarak tam64;
+    değişken fn: tam64 = kg_oku64(kayit);
+    değişken env: tam64 = kg_oku64(kayit + 8);
+    değişken rho: tam64 = kg_oku64(kayit + 16);
+    değişken sonuc: tam64 = 0;
+    // x0..x18 + lr BOZULAN: LLVM girdi/çıktıyı çağrıyla ezilmeyen (x19+) yazmaçlara
+    // koymak ZORUNDA kalır → `mov x0/x1` girdileri ezemez.
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $1
+mov x1, $2
+blr $3
+mov $0, x0"#
+            çıktı("=r", &sonuc)
+            girdi("r", rho) girdi("r", env) girdi("r", fn)
+            bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x2}") bozulan("~{x3}")
+            bozulan("~{x4}") bozulan("~{x5}") bozulan("~{x6}") bozulan("~{x7}")
+            bozulan("~{x8}") bozulan("~{x9}") bozulan("~{x10}") bozulan("~{x11}")
+            bozulan("~{x12}") bozulan("~{x13}") bozulan("~{x14}") bozulan("~{x15}")
+            bozulan("~{x16}") bozulan("~{x17}") bozulan("~{x18}") bozulan("~{x30}")
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    kg_yaz64(kayit + 32, sonuc);
+    // SIRA ŞART ve IRQ MASKELİ: önce olu=1 (zamanlayıcı bir daha seçmez), sonra
+    // bitti=1. Ters sıra: main bitti'yi görüp yığını serbest bırakırken ölü görev
+    // yeniden seçilip O yığına trap-frame yazabilirdi (UAF). Maskesiz: olu=1 ile
+    // bitti=1 arasına düşen bir IRQ görevi bitti yazılmadan KALICI atlatırdı →
+    // birleştir sonsuza dek beklerdi. main bitti'yi ancak KOŞARKEN görür; o anda
+    // bu görev koşmuyor ve olu=1 olduğu için bir daha asla koşmayacaktır.
+    kg_irq_kapat();
+    kem_gorev_bitir();
+    kg_yaz64(kayit + 40, 1);
+    kg_irq_ac2();
+    iken doğru { }
+}
+
+çıplak işlev kg_dil_trampolin_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_dil_trampolin
+add $0, $0, :lo12:kem_dil_trampolin"# çıktı("=r", &x) } }
+    ver x;
+}
+
+çıplak işlev kdl_gorev_basla_kapanis(fn_bare: *tam8, fn_kapanis: *tam8, env: *tam8, rho_serbest: tam32) -> *tam8 {
+    değişken rec: *tam8 = malloc(56);
+    değişken kayit: tam64 = rec olarak tam64;
+    eğer kayit == 0 { ver rec; }                          // OOM → null → sonuç::hata
+    değişken rho: *tam8 = kdl_bolge_olustur();
+    eğer (rho olarak tam64) == 0 { free(rec); ver 0 olarak *tam8; }
+    değişken yigin: *tam8 = malloc(KG_DIL_YIGIN);
+    değişken yb: tam64 = yigin olarak tam64;
+    eğer yb == 0 { kdl_bolge_serbest(rho); free(rec); ver 0 olarak *tam8; }
+    kg_yaz64(kayit, fn_kapanis olarak tam64);
+    kg_yaz64(kayit + 8, env olarak tam64);
+    kg_yaz64(kayit + 16, rho olarak tam64);
+    kg_yaz64(kayit + 24, rho_serbest olarak tam64);
+    kg_yaz64(kayit + 32, 0);
+    kg_yaz64(kayit + 40, 0);
+    kg_yaz64(kayit + 48, yb);
+    // İlk canlı dil görevi: zamanlayıcıyı temiz kur (önceki fazların sonsuz test
+    // görevleri düşer; main = görev 0). Canlı görev varken ASLA sıfırlanmaz.
+    eğer kem_dil_canli == 0 { kem_preempt_baslat(); }
+    kg_irq_kapat();                                        // frame kurulurken seçilmesin
+    değişken id: tam64 = kem_gorev_olustur(kg_dil_trampolin_adr(), yb + KG_DIL_YIGIN);
+    eğer id < 0 {
+        kg_irq_ac2();
+        free(yigin); kdl_bolge_serbest(rho); free(rec);
+        ver 0 olarak *tam8;                                // tablo dolu → sonuç::hata
+    }
+    kg_yaz64(kg_psp_oku(id), kayit);                       // frame x0 @0 = kayıt
+    kem_dil_canli = kem_dil_canli + 1;
+    kem_preempt_ac();
+    kg_irq_ac2();
+    ver rec;
+}
+
+çıplak işlev kdl_gorev_birlestir(g: *tam8) -> tam64 {
+    değişken kayit: tam64 = g olarak tam64;
+    eğer kayit == 0 { kem_panik("PANIK: gorev_birlestir: gecersiz (NULL) gorev"); }
+    iken kg_oku64(kayit + 40) == 0 { }                     // join: preemption karşıyı koşturur
+    değişken r: tam64 = kg_oku64(kayit + 32);
+    eğer kg_oku64(kayit + 24) != 0 { kdl_bolge_serbest(kg_oku64(kayit + 16) olarak *tam8); }
+    free(kg_oku64(kayit + 48) olarak *tam8);              // ölü görevin yığını (bkz. trampolin)
+    free(g);
+    kem_dil_canli = kem_dil_canli - 1;
+    eğer kem_dil_canli == 0 { kg_yaz64(KG_AKTIF, 0); }     // main tek başına: eski durum
+    ver r;
+}

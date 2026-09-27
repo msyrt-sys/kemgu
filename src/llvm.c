@@ -5115,8 +5115,30 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * her iki tipli parametreye de geçilir — böylece C tarafında
                  * fn-ptr cast'i (dolayısıyla -Wcast-function-type / -Wpedantic
                  * uyarısı) gerekmez. Bkz. kdl_runtime.c KdlGorevBare notu. */
+                /* D-624: BLOK-form kapanış doğrudan buraya verilirse lifted
+                 * lambda'nın dönüşü bağlamdan gelmeli — gelmezse emit i32'ye
+                 * düşer ve `görev<tam64>` sonucu SESSİZCE KIRPILIR (ölçüldü:
+                 * host -O2 exit 1, ARM64 `mov w0,#42`; -O0 x86'da rax'ın üst
+                 * yarısı TESADÜFEN korunduğu için doğru GÖRÜNÜYORDU). Runtime
+                 * ABI'si i64 taşır (KdlGorevBare) → tamsayı/bilinmeyen gövde
+                 * i64 döner (self-host D-300 ile aynı); ptr/double tahmini
+                 * korunur (metin T; kesirli T zaten DRF001 ile reddedilir).
+                 * İfade-form DOKUNULMAZ: o yol doğal tipi kullanır ve doğrudur. */
+                const char *eski_lbd_g = g->lambda_beklenen_donus;
+                const Dugum *g_arg = d->veri.cagri.argumanlar[0];
+                if (g_arg && g_arg->tip == DUGUM_LAMBDA &&
+                    g_arg->veri.lambda.govde &&
+                    g_arg->veri.lambda.govde->tip == DUGUM_BLOK) {
+                    const char *tah = lambda_donus_tahmin(g, g_arg->veri.lambda.govde);
+                    g->lambda_beklenen_donus =
+                        (tah && (strcmp(tah, "ptr") == 0 ||
+                                 strcmp(tah, "double") == 0 ||
+                                 strcmp(tah, "float") == 0 ||
+                                 strcmp(tah, "void") == 0)) ? tah : "i64";
+                }
                 IfadeSonuc c = ifade_uret(g, d->veri.cagri.argumanlar[0],
                                           "{ ptr, ptr }");
+                g->lambda_beklenen_donus = eski_lbd_g;
                 int fnr = yeni_reg(g);
                 fprintf(g->out,
                     "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fnr, c.reg);

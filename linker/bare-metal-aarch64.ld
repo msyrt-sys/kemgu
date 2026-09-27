@@ -22,7 +22,15 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 0x40000000;          /* QEMU virt RAM */
+    /* [D-624] YÜKLEME TABANI hedefe göre seçilebilir. Varsayılan 0x40000000 (ELF ile
+     * boot edilen hedefler — QEMU ELF'i bağlandığı adrese yükler). HAM İMAJ (.img,
+     * RPi kernel8.img biçimi) ise QEMU virt'te RAM+0x80000 = 0x40080000'a yüklenir;
+     * o hedef bu adrese bağlanmazsa kod PC-göreli (adrp) olduğu için ÇALIŞIR ama
+     * veride saklanan her MUTLAK adres (ör. yakalamasız kapanışın sabit-katlanmış
+     * `{ptr @lambda, null}` değeri) 0x80000 KAYMIŞ olur → sıfır belleğe atlama
+     * (ölçüldü: ESR EC=0 tanımsız komut, ELR = bağlama-zamanı adresi). Ham imajla
+     * boot eden hedef `--defsym=__kem_yukleme_tabani=0x40080000` geçer. */
+    . = DEFINED(__kem_yukleme_tabani) ? __kem_yukleme_tabani : 0x40000000;
 
     /* MB-4 (çekirdek W^X): bölüm sınırları 4KB'a HİZALI olmalı. Sayfa izinleri
      * 4KB granülde verilir; .text ile .rodata aynı sayfayı paylaşırsa o sayfa

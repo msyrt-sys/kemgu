@@ -430,15 +430,15 @@ küresel değişken kem_yetki_sayac: tam64 = 1;   // id sayacı (0 değil yeter 
 // FIFO sırasını bozmadığı ve malloc her kanala ayrı 64 KB blok verdiği için HİÇBİR
 // davranışsal ölçümde görünmez → sessiz kalmasın diye burada gürültülü durdurulur.
 çıplak işlev kem_kanal_hucre(taban: tam64, i: tam64, n: tam64) -> *tam64 {
-    eğer i < 0 { kem_kanal_panik(); }
-    eğer i >= n { kem_kanal_panik(); }
+    eğer i < 0 { kem_panik("PANIK: kanal indeks sinir ihlali"); }
+    eğer i >= n { kem_panik("PANIK: kanal indeks sinir ihlali"); }
     ver (taban + 24 + i * 8) olarak *tam64;
 }
 
 // Çekirdek paniği: PL011'e (0x09000000) mesaj bas ve DUR. kdl_panik kem_os'ta YOK
 // (D-592); çıplak bağlamda yalnız çıplak çağrılabilir (E013) → doğrudan MMIO.
-çıplak işlev kem_kanal_panik() {
-    değişken m: metin = "PANIK: kanal indeks sinir ihlali";
+// Kanal (D-623) ve görev (D-624) ortak kullanır.
+çıplak işlev kem_panik(m: metin) {
     değişken n: tam32 = metin_uzunluk(m);
     değişken i: tam32 = 0;
     iken i < n {

@@ -1333,7 +1333,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	else \
 		cp $(BUILD)/kem_os.o $(BUILD)/kem_os_routed.o; \
 	fi
-	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --gc-sections -Map=$(BUILD)/kem_os.map -o $(BUILD)/kem_os.elf \
+	ld.lld -m aarch64linux -T linker/bare-metal-aarch64.ld --defsym=__kem_yukleme_tabani=0x40080000 --gc-sections -Map=$(BUILD)/kem_os.map -o $(BUILD)/kem_os.elf \
 		$(BUILD)/kem_os_routed.o $(KEM_OS_A64_OBJS)
 	@# AH-1: HAM İKİLİ üret ve QEMU'yu bununla boot et (ELF ile DEĞİL).
 	@# İki sebep, ikisi de ölçülmüş:
@@ -1675,7 +1675,8 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		   && grep -q "\[38\] VM OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[39\] JSON OK" $(BUILD)/kem_os.out \
 		   && grep -q "\[40\] ASM OK" $(BUILD)/kem_os.out \
-		   && grep -q "\[41\] KANAL OK" $(BUILD)/kem_os.out; then \
+		   && grep -q "\[41\] KANAL OK" $(BUILD)/kem_os.out \
+		   && grep -q "\[42\] GOREV OK" $(BUILD)/kem_os.out; then \
 			echo "Faz-A TAM .kem-native OS gecti: [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + ADRES ALANI + SUREC IZOLASYON + ELF YUKLE + W^X + CEKIRDEK W^X + DTB + DISK/FS RW + NET DEV/ARP + PING CANLI (SAF-.kem)."; \
 		else \
 			echo "FAIL: 'KEMGU KEM-OS OK' + [1..5] + MMU FAULT/CEVIRI + TRAP KARAR + TIMER TIK + PREEMPT + EL0 SYSCALL + IZOLASYON + LINCHPIN + UART RX + FS SYSCALL + SHELL + SPAWN + DISK/FS/NET/PING bekleniyor"; \
