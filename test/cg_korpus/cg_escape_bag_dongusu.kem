@@ -1,0 +1,32 @@
+// [D-631] BAĞ DÖNGÜSÜ: `a = b` ve `b = a` (ayrı dallarda) escape analizinde
+// a->b, b->a bağ döngüsü kurar. Zinciri izleyen terfi SONSUZ ÖZYİNELEMEYE
+// giriyordu → C derleyici SEGFAULT (--check dahil; geçerli program). Self-host
+// etkilenmiyordu. Döngüden çıkan dizi ÇAĞIRANA kaçar: bölgesi ρ_caller
+// olmalı (ρ_yerel = UAF). Her çağrı AYRI değer ve AYRI çıkış kodu.
+işlev f(k: tam32) -> Dizi<tam32> {
+    değişken a: Dizi<tam32> = [40, 1];
+    değişken b: Dizi<tam32> = [2, 3];
+    eğer k == 1 { a = b; }
+    eğer k == 2 { b = a; }
+    ver a;
+}
+
+işlev g(k: tam32) -> metin {
+    değişken a: metin = "kirk";
+    değişken b: metin = "iki";
+    eğer k == 1 { a = b; }
+    eğer k == 2 { b = a; }
+    ver b;
+}
+
+işlev main() -> tam32 {
+    değişken d0: Dizi<tam32> = f(0);
+    değişken d1: Dizi<tam32> = f(1);
+    değişken d2: Dizi<tam32> = f(2);
+    eğer d0[0] != 40 { ver 1; }
+    eğer d1[0] != 2 { ver 2; }
+    eğer d2[1] != 1 { ver 3; }
+    eğer metin_uzunluk(g(2)) != 4 { ver 4; }
+    eğer metin_uzunluk(g(0)) != 3 { ver 5; }
+    ver d0[0] + d1[0];
+}

@@ -111,17 +111,18 @@ static void bag_ekle(EscapeAnaliz *ea, const char *ad, int ad_uz, const Dugum *d
     b->ad_uz = ad_uz;
     b->deger = deger;
     b->scope_seviye = ea->scope_seviye;
+    b->zincirde = 0;
 }
 
-static const Dugum *bag_cozumle(EscapeAnaliz *ea, const char *ad, int ad_uz) {
+static int bag_indeks_bul(EscapeAnaliz *ea, const char *ad, int ad_uz) {
     /* Sondan basa: en yakin scope'taki bag */
     for (int i = ea->bag_sayi - 1; i >= 0; i--) {
         if (ea->baglamalar[i].ad_uz == ad_uz
             && memcmp(ea->baglamalar[i].ad, ad, (size_t)ad_uz) == 0) {
-            return ea->baglamalar[i].deger;
+            return i;
         }
     }
-    return NULL;
+    return -1;
 }
 
 /* Atama: var = e ise mevcut bagin degerini guncelle (sadece en yakin esleme). */
@@ -193,10 +194,21 @@ static void ifadeyi_yukselt(EscapeAnaliz *ea, const Dugum *ifade, EscapeKategori
             escape_yukselt(ea, ifade, yeni);
             return;
         case DUGUM_TANIMLAYICI: {
-            const Dugum *bag = bag_cozumle(ea,
+            /* [D-631] BAG DONGUSU KORUMASI. `a = b` ve `b = a` (ayri dallarda)
+             * bag_guncelle ile a->b, b->a DONGUSU kurar; zinciri izlemek SONSUZ
+             * OZYINELEME = derleyici SEGFAULT idi (--check dahil, gecerli program).
+             * Bu gezinti zaten bu bagdan geciyorsa dur: terfi MONOTONdur (ayni
+             * `yeni` ile ikinci ziyaret hicbir kayit degistirmez) -> sound. Bayrak
+             * gezinti bitince SIFIRLANIR (kalici "ziyaret edildi" DEGIL — baska bir
+             * `ver`/atama ayni bagi yeniden terfi ettirebilmeli). ifadeyi_yukselt
+             * bag EKLEMEZ -> baglamalar realloc olmaz, indeks gecerli kalir. */
+            int bi = bag_indeks_bul(ea,
                 ifade->veri.tanimlayici.metin,
                 ifade->veri.tanimlayici.uzunluk);
-            if (bag) ifadeyi_yukselt(ea, bag, yeni);
+            if (bi < 0 || ea->baglamalar[bi].zincirde) return;
+            ea->baglamalar[bi].zincirde = 1;
+            ifadeyi_yukselt(ea, ea->baglamalar[bi].deger, yeni);
+            ea->baglamalar[bi].zincirde = 0;
             return;
         }
         case DUGUM_EGER:
@@ -1069,7 +1081,7 @@ void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
             Dugum *p = islev->veri.islev.parametreler[i];
             if (p && p->tip == DUGUM_PARAMETRE && p->veri.parametre.ad) {
                 /* Parametre tahsisini ESC_CAGIRAN olarak ele alma ihtiyaci yok — cagiran
-                 * verir; sadece kayitsiz birakiyoruz, bag_cozumle NULL doner ve dolayisi
+                 * verir; sadece kayitsiz birakiyoruz, bag_indeks_bul -1 doner ve dolayisi
                  * ile parametre uzerinden escape akmaz (interproc yok). */
                 (void)p;  /* simdilik: parametreyi tahsis olarak gormuyoruz */
             }

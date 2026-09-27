@@ -83,6 +83,7 @@ typedef struct EscapeBag {
     int ad_uz;
     const Dugum *deger;        /* baglandigi ifade (allocation site veya baska ifade) */
     int scope_seviye;          /* hangi scope'ta tanimlandi (pop icin) */
+    int zincirde;              /* [D-631] ifadeyi_yukselt bu bagi su an geziyor mu (dongu korumasi) */
 } EscapeBag;
 
 typedef struct EscapeAnaliz {
