@@ -2679,6 +2679,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * yolda T043 RAPORLANMAZ: D-021 literali önce burada, sonra karşı
              * operandın tipiyle YENİDEN tipler — burada raporlamak geçerli
              * `x + 8589934592` (x: tam64) için sahte tanı üretirdi. */
+            /* [D-632] 2^64 ve üstü HİÇBİR tamsayı tipine sığmaz → bağlamdan
+             * BAĞIMSIZ T043 (D-021 yeniden tiplemesi sonucu değiştiremez; rapor
+             * düğüm başına tekildir). Eskiden 2^64-1'e SESSİZCE doyuyordu. */
+            if (d->veri.tam.tasti) t043_raporla(tk, d);
             uint64_t v = literal_buyukluk(d);
             if (v <= 2147483647ULL) return t_basit(tk, TIP_TAM32);
             if (v <= 9223372036854775807ULL) return t_basit(tk, TIP_TAM64);
@@ -5040,8 +5044,9 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                  * eskiden sığmayan değer sessizce kırpılıyordu (`tam8 = 300` →
                  * 44, `tam64 = 2^63` → INT64_MIN). Generic/sarmalayıcı kategoride
                  * literal_sigar_mi -1 döner → denetim YOK (eski davranış). */
-                if (literal_sigar_mi(literal_buyukluk(d), beklenen->kategori,
-                                     tk->neg_literal) == 0) {
+                if (d->veri.tam.tasti                  /* [D-632] 2^64+ */
+                    || literal_sigar_mi(literal_buyukluk(d), beklenen->kategori,
+                                        tk->neg_literal) == 0) {
                     t043_raporla(tk, d);
                 }
                 return t_basit(tk, beklenen->kategori);
