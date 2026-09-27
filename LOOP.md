@@ -48,7 +48,7 @@
       - [x] turkce_sort -> faz [37] (D-619)
       - [x] vm -> faz [38] (D-620)
       - [x] json -> faz [39] (D-621)
-      - [ ] asm — self-host (11 kalan)
+      - [x] asm -> faz [40] (D-622) — Sinif C self-host gocu TAMAM
 
 
 
@@ -515,3 +515,12 @@
   Dogrulama: cift_sayi==2 + degerler[0]==42 + degerler[1]==100. Eski json_selfhost.kem + hedef
   + os_kernels satiri silindi. Sabotaj S13 (sayi_oku `n*10`->`n*8`) -> faz [39] HATA rc=2.
   Kapilar: kem_os_arm 39 faz · baremetal_diff 5/5. KALAN GOC (1): asm-selfhost (son).
+- 2026-09-27 D-622 (Sinif C goc, iterasyon 12 — SON): asm_selfhost_arm -> kem_os faz [40].
+  Mini-assembler: (mnemonic, operand) ciftleri -> [38] VM bytecode'u (CEVIRI, kimlik degil:
+  PRINT mnemonic 5 -> opcode 6, HALT 6 -> 0). kasm_assemble/testi kem_os.kem'e; VM icin ayri
+  kopya YAZILMADI, [38]'in kvm_calistir'i yeniden kullanildi. Dogrulama GUCLU: (a) uretilen
+  13 hucre [38]'in elle yazilmis programiyla HUCRE HUCRE ayni + VM 42,158; (b) SUB + tanimsiz
+  mnemonic 99 (hucre URETMEZ, n2==7) -> 42. Eski asm_selfhost.kem + hedef + os_kernels
+  satiri silindi. Sabotaj S14 (PRINT -> 5/DUP) -> faz [40] HATA rc=2. Kapilar: kem_os_arm
+  40 faz (Linux, QEMU 8.2) · baremetal_diff 5/5. SINIF C GOCU TAMAMLANDI; SMP/TCP-IP/x86
+  gruplari D-611 geregi DONDURULMUS (belgeli referans, kapisiz, silinmedi).
