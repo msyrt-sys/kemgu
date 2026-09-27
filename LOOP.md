@@ -30,7 +30,7 @@
       yaz_ptr_gecerli (D-150/151 .kem aynasi) sys 5/17/18/26'ya eklendi; faz [28] gate +
       S1/S2 sabotaj. kem_os_arm 28 faz, baremetal_diff 5/5, qemu_cekirdek 2/2.
 - [x] kem_os_arm boru hatti maskesi -> D-609 (kemgu | awk bolundu).
-- [~] Sinif C KARARI VERILDI (D-611, Mehmet delege etti): TOPLU SILME YOK, kategoriye gore ayrik.
+- [x] Sinif C KARARI VERILDI (D-611, Mehmet delege etti): TOPLU SILME YOK, kategoriye gore ayrik.
       GOCUR (kem_os fazina tasi, eski izole demoyu sil — ANAYASA-uyumlu, kapsam-pozitif):
         self-host algoritmalari (12) + benzersiz userspace yetenekleri.
       DONDUR (belgelenmis referans, silme, QEMU'ya kapilama):
@@ -524,3 +524,11 @@
   satiri silindi. Sabotaj S14 (PRINT -> 5/DUP) -> faz [40] HATA rc=2. Kapilar: kem_os_arm
   40 faz (Linux, QEMU 8.2) · baremetal_diff 5/5. SINIF C GOCU TAMAMLANDI; SMP/TCP-IP/x86
   gruplari D-611 geregi DONDURULMUS (belgeli referans, kapisiz, silinmedi).
+- 2026-09-27 (iterasyon 13, "sirada" tarama): Sinif C karar maddesi [x]'e cevrildi (12/12
+  goc adimi + karar tamam; DONDUR gruplari NIHAI durum, iş degil). Sirada listesi bastan
+  sona tarandi: BASKA acik/checkbox'siz madde YOK. Bu LOOP.md'nin kapsadigi Sinif A/B/C
+  self-host goc calismasi (bu oturumun /loop gorevi) TAMAMLANDI. Yeni buyuk ozellik
+  (concurrency/LSP/stdlib genisletme vb.) bu LOOP.md'nin kapsami DISINDA — CLAUDE.md'nin
+  "Sıradaki büyük seçenekler" bölümü kullanıcı onayı ister (muhafazakar secim: kendi
+  basima buyuk yeni is baslatmadim). Sirada BOS oldugu icin bu iterasyonda dosya disi
+  degisiklik yapilmadi; dongu durduruldu.
