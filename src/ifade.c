@@ -283,9 +283,14 @@ static Dugum *parse_birincil(Parser *p) {
         }
 
         case TOK_ONDALIK: {
-            char tampon[64];
-            sayi_tokeni_temizle(t.baslangic, t.uzunluk,
-                                tampon, sizeof(tampon));
+            /* [D-633] Tampon LEXEME boyunda: eskiden sabit 64 bayttı ve
+             * `sayi_tokeni_temizle` girdiyi 63 karaktere KIRPIYORDU → uzun
+             * literalin ÜSSÜ düşüyordu (`1.000…0e10` → 1.0, ölçüldü; iki
+             * derleyicide SESSİZ YANLIŞ DEĞER). Arena: parser zaten ona bağlı. */
+            int tb = t.uzunluk + 1;
+            char *tampon = (char *)arena_ayir(p->arena, (size_t)tb);
+            if (!tampon) return NULL;
+            sayi_tokeni_temizle(t.baslangic, t.uzunluk, tampon, tb);
             double deger = strtod(tampon, NULL);
             d = dugum_kesirli(p->arena, deger, t.satir, t.sutun);
             parser_ilerle(p);
