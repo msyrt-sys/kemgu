@@ -3182,9 +3182,12 @@ static void test_kanal_tam8_negatif_turu(void) {
         "i\xc5\x9flev oku(k: kanal<tam8>) -> tam8 { ver kanal_al(k); } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam8> = kanal_olu\xc5\x9ftur(2); "
-        "kanal_g\xc3\xb6nder(k, 0 - 128); "
+        "kanal_g\xc3\xb6nder(k, -128); "
         "de\xc4\x9fi\xc5\x9fken v: tam8 = oku(k); "
-        "e\xc4\x9f" "er v == 0 - 128 { ver 42; } ver 1; }");
+        "e\xc4\x9f" "er v == -128 { ver 42; } ver 1; }");
+    /* D-630: `0 - 128` tam8 baglaminda 128 literalini tam8'e SIGDIRMAYA
+     * calisir -> T043 (128 tam8 degil). Eskiden sessizce -128'e sariyordu ve
+     * sonuc TESADUFEN dogru cikiyordu. Alt sinir tekli eksiyle yazilir. */
     test_sonuc("kanal<tam8> -128 turu (parametre yolu + sext/trunc) -> exit 42",
                rc == 42);
 }

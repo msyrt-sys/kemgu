@@ -3542,10 +3542,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
 
     switch (d->tip) {
         case DUGUM_TAM: {
-            const char *tip = beklenen ? beklenen : "i32";
+            /* D-630: bağlamsız literal checker ile AYNI kuralla genişletilir
+             * (≤2^31-1 → i32, ≤2^63-1 → i64, üstü → i64 İŞARETSİZ). Eskiden
+             * daima i32 → `değişken x = 8589934592` SESSİZCE kırpılıyordu. */
+            uint64_t lv;
+            memcpy(&lv, &d->veri.tam.deger, sizeof lv);
+            const char *bagsiz = lv <= 2147483647ULL ? "i32" : "i64";
+            int lit_isz = (!beklenen && lv > 9223372036854775807ULL);
+            const char *tip = beklenen ? beklenen : bagsiz;
             int w = tip_genisligi(tip);
             int kf = tip_kesirli_mi(tip);
-            if (w == 0 && !kf) tip = "i32";
+            if (w == 0 && !kf) tip = bagsiz;
             int r = yeni_reg(g);
             if (kf) {
                 fprintf(g->out, "  %%%d = fadd %s 0.0, %" PRId64 ".0\n",
@@ -3554,7 +3561,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = add %s 0, %" PRId64 "\n",
                         r, tip, d->veri.tam.deger);
             }
-            IfadeSonuc s = { r, tip, 0, 0};
+            IfadeSonuc s = { r, tip, lit_isz, 0};
             return s;
         }
 

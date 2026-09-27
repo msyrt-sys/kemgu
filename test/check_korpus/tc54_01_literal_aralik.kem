@@ -1,0 +1,35 @@
+// [D-630] T043: sayı literali hedef tipe SIĞMIYOR. Eskiden sessizce kırpılıyordu
+// (`tam8 = 300` → 44, `tam64 = 2^63` → INT64_MIN, `tam32 = 3000000000` → negatif).
+// POZİTİF şekiller ZORUNLU: sınırın kendisi, eksi bağlamı (`-128`, INT64_MIN),
+// bağlamsız yükseltme ve D-021'in iki-literal şekli tanı ÜRETMEMELİ — yoksa
+// "her büyük literali reddet" sabotajı kapıdan GEÇERDİ (D-425).
+işlev f8(a: tam8) -> tam32 { ver 0; }
+
+// POZİTİF — tanı YOK.
+işlev pozitif() -> tam32 {
+    değişken a: tam8 = 127;
+    değişken b: tam8 = -128;
+    değişken c: dtam8 = 255;
+    değişken d: tam32 = -2147483648;
+    değişken e: tam64 = -9223372036854775808;
+    değişken f: dtam64 = 18446744073709551615;
+    değişken g: tam64 = e + 8589934592;              // D-021: literal karşı tarafa uyar
+    değişken h: tam64 = 0 - 9223372036854775807 - 1; // iki-literal: dar olan GENİŞLER
+    değişken i = f8(100);
+    ver 0;
+}
+
+// NEGATİF — her satırda BİR T043.
+işlev negatif() -> tam32 {
+    değişken a: tam8 = 128;
+    değişken b: tam8 = -129;
+    değişken c: dtam8 = 256;
+    değişken d: tam32 = 3000000000;
+    değişken e: tam64 = 9223372036854775808;
+    değişken f: tam32 = 5;
+    değişken g: tam32 = f + 3000000000;
+    değişken h = f8(300);
+    ver 0;
+}
+
+işlev main() -> tam32 { ver 0; }

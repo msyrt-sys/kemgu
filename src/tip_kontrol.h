@@ -90,6 +90,14 @@ typedef struct TipKontrol {
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */
     int lambda_blok_cikarsama;
     TipBilgisi *lambda_blok_donus;
+    /* D-630: T043 (literal hedef tipe sığmıyor). `neg_literal` > 0 iken literal
+     * tekli eksinin operandıdır (`-128`, `-9223372036854775808` geçerli). Literal
+     * aynı düğüm için BİRDEN ÇOK KEZ tiplenebilir (D-021) → rapor düğüm başına
+     * BİR KEZ (t043_dugum listesi). */
+    int neg_literal;
+    const Dugum **t043_dugum;
+    int t043_sayi;
+    int t043_kap;
     int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
                                       (closure-itself-linear icin) */
     int lambda_yakalama;           /* G005: >0 = lambda HERHANGI bir cevre
