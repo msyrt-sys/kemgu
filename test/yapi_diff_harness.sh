@@ -69,8 +69,13 @@ MUAF_K1=""
 MUAF_K2=""
 # (K3) lifted lambda dönüşü → self DAİMA i64 (runtime KdlGorevBare ABI, D-300),
 #      C gövdeden çıkarsar. Bilinçli tasarım farkı.
+#      ⚠ [D-624] BU MUAFİYET BİR KUSURU MASKELİYORDU: BLOK-form görev lambda'sında
+#      C "gövdeden çıkarsamıyor", i32'ye DÜŞÜYORDU → `görev<tam64>` sonucu SESSİZCE
+#      kırpılıyordu (host -O2 + ARM64'te ölçüldü). i32↔i64 farkı "bilinçli K3" sayıldığı
+#      için kapı onu hiç göremedi. Onarımla `cg_gorev_lambda_blok` EŞLEŞTİ ve listeden
+#      çıkarıldı; kalan girdiler İFADE-form (C doğal tip, trunc birleştir'de — D-294).
 MUAF_K3="cg_gorev_baslat cg_gorev_capture cg_gorev_desen_ic_tip
-cg_gorev_i64_daralt cg_gorev_kanal cg_gorev_lambda_blok
+cg_gorev_i64_daralt cg_gorev_kanal
 cg_rho_sahip_confined cg_rho_sahip_kacis cg_kanal_omru"
 # (K4) generic BASE gövdesi → self yayar, C atlar (D-401: self çıkarsaması
 #      kısmî olduğu için base gövde gerekli; atlamayı denemek 11/18→8/18

@@ -54,9 +54,25 @@
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
       cekirdekte HIC CALISMIYORDU (D-527 ABI'yi yalniz DERLIYORDU).
       - [x] kanal SAF-.kem (kem_heap.kem) + faz [41], tek gorevli (D-623)
-      - [ ] gorev_başlat/birleştir SAF-.kem (kdl_gorev_basla_kapanis ABI) kem_gorev.kem
-            zamanlayicisi ustunde; faz [42] = IKI gorev arasinda BLOKLAYAN kanal (dolu/bos
-            bekleme liveness'i karsi gorevle cozulmeli — D-296 dersi)
+      - [x] gorev_başlat/birleştir SAF-.kem + faz [42] BLOKLAYAN kanal (D-624)
+- [ ] 🔴 SESSIZ YANLIS CEVAP (C, D-624'te olculdu): annotasyonsuz BLOK-form kapanis
+      DEGISKENE baglanip sonra cagrilir/gorev_başlat'a verilirse lifted lambda `i32`
+      doner -> tam64 sonuc KIRPILIR. Olcum (host, clang -O2):
+        değişken f = || { değişken x: tam64 = y + 42; ver x; }; görev_başlat(f)
+        -> C `define i32 @lambda_0`, exit 1 (dogrusu 42); -O0 x86'da rax ust yarisi
+        TESADUFEN korundugu icin DOGRU gorunur (llvm_test -O0 bu sinifi GOREMEZ).
+      Kok: D-325 `lambda_donus_tahmin` blok-form'da ilk `ver`in degerini DIS kapsamda
+      arar; `x` lambda govdesinin YERELI -> NULL -> i32. D-624 yalniz gorev_başlat'a
+      DOGRUDAN verilen blok-form'u onardi (i64 = runtime ABI). Onarim: tahmin blok
+      yerellerini (annotasyonlu `değişken`, ya da degerinin tahmini) gorsun.
+      Ayni kok, isaretci T'de GURULTULU: `|| { değişken m: metin = ..; ver m; }` LINK-RED.
+- [ ] SELF-HOST CHECKER: blok-form kapanis icindeki `ver`, kapanisin DEGIL cevreleyen
+      ISLEVIN donus tipine karsi denetleniyor -> gecerli programlar T020 ile REDDEDILIYOR
+      (gurultulu). Olcum: `işlev main() -> tam32 { değişken f: işlev() -> tam64 =
+      || { değişken x: tam64 = 5; ver x; }; ver 0; }` -> C OK, SELF T020; ayni kapanis
+      `-> tam64` donen islevde SELF OK; `işlev() -> metin` + `ver "a"` -> SELF T020.
+      D-304'un "blok-form parite" iddiasi bu sekli KAPSAMIYOR. Yukaridaki C onarimi
+      bunu beklemeli: yoksa fikstur codegen_diff'e konamaz (self IR uretmez).
 - [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
       (Makefile ~1453/~1485) D-592'den beri KURULMAYAN nesnelere bakiyor -> llvm-nm
       "No such file" + `grep -q` bos -> denetim SESSIZCE "geciyor". D-599'un kacirdigi iki
@@ -565,3 +581,41 @@
   runtime icinden gecici MMIO yazimiyla yapildi, geri alindi.
   Kapilar: kem_os_arm 41 faz · baremetal_diff 5/5 (BIRLESIK OS 314 islev) · check_kapisi
   266/273 (0 RED). Yol ustunde: iki vakum llvm-nm denetimi bulundu -> Sirada.
+- 2026-09-27 D-624 (Eszamanlilik katmani, adim 2): GOREV KEMGU-OS'ta SAF-.kem + faz [42].
+  kem_gorev.kem'e DIL GOREVI: kdl_gorev_basla_kapanis/birlestir (host ile ayni ABI). Mevcut
+  preemptive zamanlayicinin (sentetik trap-frame + timer-IRQ SP-swap) USTUNE kuruldu: yeni
+  gorev `kem_dil_trampolin`e eret eder, frame x0 yuvasina (@0) gorev kaydi yazilir; trampolin
+  kapanisi `blr` ile cagirir (x0..x18+lr BOZULAN -> girdiler x19+'da, mov x0/x1 ezemez).
+  Kayit: fn/env/rho_sahip/rho_serbest/sonuc/bitti/yigin. rho_sahip her gorevin KENDI bolgesi
+  (R-GOREV S1/S2); join'de yalniz D-309 kaniti varsa serbest. SIRA + IRQ MASKESI: once olu=1
+  sonra bitti=1 (ters sira = main yigini serbest birakirken olu gorevin frame yazmasi UAF;
+  maskesiz = arada IRQ gorevi bitti yazilmadan kalici atlatir -> birlestir sonsuza bekler).
+  Faz [42]: uretici gorev -> kap=2 kanal -> main 20 mesaj (IKI YONDE gercek bloklama),
+  iki paralel gorev (5050 + 2^33+42), L005 geregi her eşleş kolunda birlestir.
+  🎯 YOL USTUNDE UC KUSUR:
+  (1) KEM_OS YANLIS ADRESE BAGLIYDI: ham imaj (.img, RPi kernel8 bicimi) QEMU'da 0x40080000'a
+      yukleniyor, ELF 0x40000000'a bagli, yeniden-konumlama YOK. Kod PC-goreli (adrp) oldugu
+      icin 41 faz bunu HIC gormedi; ilk kez VERIDE saklanan mutlak islev adresi (yakalamasiz
+      kapanisin sabit-katlanmis {ptr @lambda, null}) kullanilinca olculdu: ESR EC=0 (tanimsiz
+      komut), ELR = baglama-zamani adresi = sifir bellek. QEMU -d int + monitor `xp` ile
+      KANITLANDI (0x40029f58 -> 0x00000000, gercek kod 0x400a9f58). Onarim: linker script'e
+      istege bagli taban (`DEFINED(__kem_yukleme_tabani)`), yalniz kem_os `--defsym ...=0x40080000`
+      gecer; diger ELF hedefleri degismedi. 42 fazin HEPSI (EL0/izolasyon/W^X/ag/disk) sagam.
+  (2) C SESSIZ KIRPMA: gorev_başlat'a DOGRUDAN verilen annotasyonsuz BLOK-form kapanis `i32`
+      yayiliyordu -> gorev<tam64> sonucu kirpiliyordu (host -O2 exit 1, ARM64 `mov w0,#42`;
+      -O0 x86'da rax ust yarisi tesadufen korundugu icin DOGRU GORUNUYORDU). Onarim: bu
+      baglamda donus = i64 (runtime ABI; self-host D-300 ile ayni), ptr/double tahmini korunur.
+      BONUS: `|| { ver "abc"; }` gorevi ONCEDEN LINK-RED idi, artik calisiyor.
+      ⚠ yapi_diff'in K3 muafiyeti ("lifted lambda i32 vs i64 = bilincli fark") BU KUSURU
+      MASKELIYORDU; onarimla cg_gorev_lambda_blok eslesti -> listeden CIKARILDI (D-534).
+      baremetal_diff'e K3 benzeri normallestirme EKLEMEK ayni kusuru orada da gizlerdi —
+      bilerek yapilmadi; C'nin i64 yaymasi pariteyi normallestirmesiz sagladi.
+  (3) SELF-HOST T020 + C'nin baglanmis-kapanis yolu -> Sirada'ya (ikisi de olculdu).
+  SABOTAJ: S17 (birlestir beklemesin) -> [42] HATA rc=2 . S18 (kanal dolu-bekleme kaldir)
+  -> [41] OK ama [42] HATA rc=2: [42] GERCEK bloklamayi olcuyor . S19 (C onarimini kapat)
+  -> yapi_diff 153/154 rc=2. ⚠ llvm_test (-O0) S19'u GOREMEZ — olculdu, o yuzden kapi yapi_diff.
+  Kapilar: kem_os_arm 42 faz . baremetal_diff 5/5 (BIRLESIK OS 324 islev) . codegen_diff
+  173/173 . yapi_diff 154/154 (21 muaf) . llvm_test 286/286 . drf_test 54/54 . gorev_rt 16/16
+  . drf_gorunurluk 100/100 . kanal_omru 10/10 . check_kapisi 266/273 . sifir uyari 38/0.
+  Ortam: drf_test ilk kosumda ASan runtime eksikligiyle (libclang-rt-18-dev) bag hatasi verdi
+  — kod degil; paket kuruldu, 54/54.
