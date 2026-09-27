@@ -71,8 +71,7 @@
 - [x] C escape analizi BAG DONGUSU (`a = b` / `b = a` -> SONSUZ OZYINELEME, segfault;
       `--check` dahil) -> D-631.
 - [x] 2^64 VE USTU LITERAL sessiz doymasi -> D-632 (T043, baglamdan bagimsiz).
-- [ ] KESIRLI LITERAL 63 KARAKTER KIRPMASI (D-629'da olculdu): C `sayi_tokeni_temizle`
-      70+ karakterlik kucuk ondalik literali kirpiyor -> iki derleyicide de 0.0.
+- [x] KESIRLI LITERAL 63 KARAKTER KIRPMASI -> D-633.
 - [ ] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592; değişken y: tam32 = x;`
       C T001, self OK (onceden var: `değişken x = "a"; y: tam32 = x` de self'te OK).
       Self checker annotasyonsuz baglamanin tipini izlemiyor.
@@ -802,3 +801,19 @@
   (self_driver --check check_korpus'u ayni sekilde karsilastirir).
   Kapilar: test_tumu TAM rc=0 (Tum testler gecti, FIXPOINT ✓) . checker_diff 190/190 . parser_diff
   14/14 . check_kapisi 271/278.
+- 2026-09-27 D-633 (kesirli literal 63 karakter kirpmasi). C `sayi_tokeni_temizle` (sabit 64
+  bayt, `_`'lari atmadan ONCE kirpiyor) ve self-host runtime `kdl_ondalik_bicimle` (`j < 63`)
+  kesirli literali 63 karakterde kesiyordu -> uzun literalin USSU dusuyordu: `1.000…0e10` (67
+  karakter) -> 1.0. Iki derleyicide de SESSIZ YANLIS DEGER (olculdu: ikisi de exit 1). Tampon artik
+  lexeme boyunda (C: parser arena'si; runtime: malloc/free). --ast dump'i C=self birebir.
+  ⚠ SUREC: runtime dosyasi gecerli UTF-8 DEGIL; python'u `latin-1` ile acip Turkce karakter
+  yazmaya calisinca `open('w')` dosyayi ONCE kesti, sonra encode hatasi verdi -> kdl_runtime.c
+  2328 satir kaybetti (git'ten geri alindi, baska degisiklik yoktu). Bu dosyada DUZENLEME IKILI
+  MODDA (bytes) ve ASCII yorumla yapilir.
+  Fikstur: cg_korpus/cg_uzun_kesirli_literal (67/76/85 karakter + `_` + kisa literal; C=SELF=42,
+  eski 1) . llvm_test [293] MUTLAK (C ayristiricisi ile runtime ayni kusuru tasiyordu -> iki taraf
+  esit bozulursa parite kapilari kor, D-629 dersi).
+  SABOTAJ: S139 (C tamponu 64'e sinirla) -> codegen_diff 178/179 (C exit 1) + llvm_test [293] ✗ .
+  S140 (runtime `j > 63` kirp) -> codegen_diff 178/179 (KEMGU exit 1).
+  Kapilar: test_tumu TAM rc=0 (Tum testler gecti, FIXPOINT ✓) . llvm_test 293 . checker_diff 190 .
+  parser_diff 14/14 . codegen_diff 179.
