@@ -397,3 +397,102 @@ küresel değişken kem_yetki_sayac: tam64 = 1;   // id sayacı (0 değil yeter 
         *pip = 1 olarak dtam8;
     }
 }
+
+// ============================================================================
+// SUBSYSTEM/kanal (D-623): SAF-.kem SPSC kanal — dilin `kanal_oluştur/gönder/al`
+// ilkellerinin ÇEKİRDEK karşılığı. D-592'den beri kem_os yalnız boot .S + SAF-.kem
+// bağlar; C `runtime/kdl_kanal.c` LİNKLENMİYORDU → `kanal_*` çağıran her kem_os kodu
+// tanımsız sembolle düşerdi (ABI yalnız D-527'de DERLENİYORDU, hiç ÇALIŞMIYORDU).
+// İmza host + C bare sürümüyle BİREBİR: @kdl_kanal_olustur(i32)->ptr,
+// @kdl_kanal_gonder(ptr,i64), @kdl_kanal_al(ptr)->i64 (D-295: taşıyıcı i64).
+//
+// Yerleşim (hep 8-bayt hücre): [0]=bas (okuma) [1]=son (yazma) [2]=N (halka boyu)
+// [3..3+N) = tampon. Klasik halka: bir slot rezerve → en çok N-1 öğe; dolu/boş
+// ayrımı indeks eşitliğiyle. C sürümünden FARK (bilinçli): halka SABİT KAP=4 değil,
+// istenen kapasite+1 — C sürümü büyük kapasiteyi REDDEDİYORDU, burada heap var.
+// kapasite <= 0 → C ile aynı varsayılan (3 öğe).
+//
+// Bloklama = busy-wait (C sürümüyle aynı). Çıplak deref VOLATILE (D-248) → indeks
+// okumaları döngüde elenmez. ⚠ Tek görevli bağlamda dolu kanala gönder / boş
+// kanaldan al KALICI BEKLER (karşı taraf yok) — liveness, karşı görevin varlığına
+// bağlıdır (D-296'nın dersi); çok-görevli kanal ayrı adım.
+// ============================================================================
+// Halka indeksini bir ilerlet. `%` BİLEREK YOK: değişken bölenli `%` sıfıra-bölme
+// kontrolü (D-502) → @kdl_panik ister ve kem_os'ta o sembol YOK (D-592). n >= 2 daima.
+çıplak işlev kem_kanal_ileri(i: tam64, n: tam64) -> tam64 {
+    eğer i + 1 >= n { ver 0; }
+    ver i + 1;
+}
+
+// Tampon hücresinin adresi — SINIR KONTROLLÜ (D-069 dizi sınırıyla aynı politika).
+// Doğru halkada i < n daima; bozuk bir sarma (ya da bozuk tampon) indeksi n'e
+// taşırsa yazma/okuma tamponun DIŞINA düşerdi = heap taşması. ÖLÇÜLDÜ: bu taşma
+// FIFO sırasını bozmadığı ve malloc her kanala ayrı 64 KB blok verdiği için HİÇBİR
+// davranışsal ölçümde görünmez → sessiz kalmasın diye burada gürültülü durdurulur.
+çıplak işlev kem_kanal_hucre(taban: tam64, i: tam64, n: tam64) -> *tam64 {
+    eğer i < 0 { kem_kanal_panik(); }
+    eğer i >= n { kem_kanal_panik(); }
+    ver (taban + 24 + i * 8) olarak *tam64;
+}
+
+// Çekirdek paniği: PL011'e (0x09000000) mesaj bas ve DUR. kdl_panik kem_os'ta YOK
+// (D-592); çıplak bağlamda yalnız çıplak çağrılabilir (E013) → doğrudan MMIO.
+çıplak işlev kem_kanal_panik() {
+    değişken m: metin = "PANIK: kanal indeks sinir ihlali";
+    değişken n: tam32 = metin_uzunluk(m);
+    değişken i: tam32 = 0;
+    iken i < n {
+        kdl_mmio_yaz32(150994944, metin_bayt(m, i) olarak tam32);
+        i = i + 1;
+    }
+    kdl_mmio_yaz32(150994944, 10);
+    iken doğru { }
+}
+
+çıplak işlev kdl_kanal_olustur(kapasite: tam32) -> *tam8 {
+    değişken n: tam64 = 4;                                   // varsayılan: 3 öğe
+    eğer kapasite > 0 { n = (kapasite olarak tam64) + 1; }
+    değişken p: *tam8 = malloc((n + 3) * 8);
+    değişken taban: tam64 = p olarak tam64;
+    eğer taban == 0 { ver p; }                               // OOM → null (C ile aynı)
+    değişken pbas: *tam64 = taban olarak *tam64;
+    *pbas = 0;
+    değişken pson: *tam64 = (taban + 8) olarak *tam64;
+    *pson = 0;
+    değişken pn: *tam64 = (taban + 16) olarak *tam64;
+    *pn = n;
+    ver p;
+}
+
+çıplak işlev kdl_kanal_gonder(k: *tam8, deger: tam64) {
+    değişken taban: tam64 = k olarak tam64;
+    değişken pbas: *tam64 = taban olarak *tam64;
+    değişken pson: *tam64 = (taban + 8) olarak *tam64;
+    değişken pn: *tam64 = (taban + 16) olarak *tam64;
+    değişken n: tam64 = *pn;
+    iken kem_kanal_ileri(*pson, n) == *pbas { }              // dolu → bekle
+    değişken son: tam64 = *pson;
+    değişken hucre: *tam64 = kem_kanal_hucre(taban, son, n);
+    *hucre = deger;
+    *pson = kem_kanal_ileri(son, n);
+}
+
+çıplak işlev kdl_kanal_al(k: *tam8) -> tam64 {
+    değişken taban: tam64 = k olarak tam64;
+    değişken pbas: *tam64 = taban olarak *tam64;
+    değişken pson: *tam64 = (taban + 8) olarak *tam64;
+    değişken pn: *tam64 = (taban + 16) olarak *tam64;
+    değişken n: tam64 = *pn;
+    iken *pson == *pbas { }                                  // boş → bekle
+    değişken bas: tam64 = *pbas;
+    değişken hucre: *tam64 = kem_kanal_hucre(taban, bas, n);
+    değişken v: tam64 = *hucre;
+    *pbas = kem_kanal_ileri(bas, n);
+    ver v;
+}
+
+// D-543 kanal ömrü: codegen hapsedilme kanıtı olan kanalı işlev çıkışında serbest
+// bırakır. Tampon tek malloc bloğu → tek free. null güvenli (free null'ı yoksayar).
+çıplak işlev kdl_kanal_serbest(k: *tam8) {
+    free(k);
+}
