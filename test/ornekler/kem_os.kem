@@ -1531,6 +1531,62 @@ işlev kjson_testi() -> tam32 {
     ver 1;
 }
 
+// [D-622] [40] ASM — eski izole `asm_selfhost_arm` gocu. Mini-assembler: yuksek-seviye
+// (mnemonic, operand) ciftlerini [38]'in VM bytecode'una CEVIRIR (kimlik DEGIL: mnemonic
+// kodlari opcode'lardan farkli), sonra kvm_calistir ile kosturur. Mnemonic: 1=PUSH 2=ADD
+// 3=SUB 4=MUL 5=PRINT 6=HALT; tanimsiz mnemonic yoksayilir (bytecode'a yazilmaz).
+işlev kasm_assemble(kaynak: Dizi<tam32>, cift_sayi: tam32, bytecode: Dizi<tam32>) -> tam32 {
+    değişken bc_uz: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < cift_sayi {
+        değişken mn: tam32 = kaynak[i * 2];
+        değişken operand: tam32 = kaynak[i * 2 + 1];
+        eğer mn == 1 {                                 // PUSH -> [1, deger]
+            bytecode[bc_uz] = 1; bc_uz = bc_uz + 1;
+            bytecode[bc_uz] = operand; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 2 {                       // ADD -> 2
+            bytecode[bc_uz] = 2; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 3 {                       // SUB -> 3
+            bytecode[bc_uz] = 3; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 4 {                       // MUL -> 4
+            bytecode[bc_uz] = 4; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 5 {                       // PRINT -> 6
+            bytecode[bc_uz] = 6; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 6 {                       // HALT -> 0
+            bytecode[bc_uz] = 0; bc_uz = bc_uz + 1;
+        }
+        i = i + 1;
+    }
+    ver bc_uz;
+}
+işlev kasm_testi() -> tam32 {
+    // (a) Asil program: (PUSH,6)(PUSH,7)(MUL)(PRINT)(PUSH,100)(PUSH,58)(ADD)(PRINT)(HALT).
+    değişken kaynak: Dizi<tam32> = [1, 6, 1, 7, 4, 0, 5, 0, 1, 100, 1, 58, 2, 0, 5, 0, 6, 0];
+    değişken bc: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken n: tam32 = kasm_assemble(kaynak, 9, bc);
+    eğer n != 13 { ver 0; }
+    // Uretilen bytecode [38]'in elle yazilmis programiyla HUCRE HUCRE ayni olmali.
+    değişken bek_bc: Dizi<tam32> = [1, 6, 1, 7, 4, 6, 1, 100, 1, 58, 2, 6, 0];
+    değişken k: tam32 = 0;
+    iken k < 13 {
+        eğer bc[k] != bek_bc[k] { ver 0; }
+        k = k + 1;
+    }
+    değişken yigin: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken beklenen: Dizi<tam32> = [42, 158];
+    eğer kvm_calistir(bc, n, yigin, beklenen, 2) != 1 { ver 0; }
+    // (b) SUB + tanimsiz mnemonic (99 yoksayilir): (PUSH,50)(99)(PUSH,8)(SUB)(PRINT)(HALT) -> 42.
+    değişken kaynak2: Dizi<tam32> = [1, 50, 99, 7, 1, 8, 3, 0, 5, 0, 6, 0];
+    değişken bc2: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken n2: tam32 = kasm_assemble(kaynak2, 6, bc2);
+    eğer n2 != 7 { ver 0; }                            // 2+2+1+1+1; 99 hucre URETMEZ
+    eğer bc2[4] != 3 { ver 0; }                        // SUB opcode
+    değişken yigin2: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0];
+    değişken beklenen2: Dizi<tam32> = [42];
+    eğer kvm_calistir(bc2, n2, yigin2, beklenen2, 1) != 1 { ver 0; }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -1971,6 +2027,13 @@ işlev main() -> tam32 {
         uart_satir("[39] JSON OK ({x:42, y:100} -> [42, 100])");
     } değilse {
         uart_satir("[39] JSON HATA");
+    }
+
+    // [40] ASM (D-622): eski asm_selfhost_arm gocu — mnemonic -> bytecode -> [38] VM.
+    eğer kasm_testi() == 1 {
+        uart_satir("[40] ASM OK (mnemonic -> bytecode == [38] prog; 42,158 + SUB 42)");
+    } değilse {
+        uart_satir("[40] ASM HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
