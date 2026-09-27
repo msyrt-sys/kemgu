@@ -49,6 +49,18 @@
       - [x] vm -> faz [38] (D-620)
       - [x] json -> faz [39] (D-621)
       - [x] asm -> faz [40] (D-622) — Sinif C self-host gocu TAMAM
+- [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
+      HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
+      bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
+      cekirdekte HIC CALISMIYORDU (D-527 ABI'yi yalniz DERLIYORDU).
+      - [x] kanal SAF-.kem (kem_heap.kem) + faz [41], tek gorevli (D-623)
+      - [ ] gorev_başlat/birleştir SAF-.kem (kdl_gorev_basla_kapanis ABI) kem_gorev.kem
+            zamanlayicisi ustunde; faz [42] = IKI gorev arasinda BLOKLAYAN kanal (dolu/bos
+            bekleme liveness'i karsi gorevle cozulmeli — D-296 dersi)
+- [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
+      (Makefile ~1453/~1485) D-592'den beri KURULMAYAN nesnelere bakiyor -> llvm-nm
+      "No such file" + `grep -q` bos -> denetim SESSIZCE "geciyor". D-599'un kacirdigi iki
+      artik; harita tabanli denetime cevir ya da sil.
 
 
 
@@ -532,3 +544,24 @@
   "Sıradaki büyük seçenekler" bölümü kullanıcı onayı ister (muhafazakar secim: kendi
   basima buyuk yeni is baslatmadim). Sirada BOS oldugu icin bu iterasyonda dosya disi
   degisiklik yapilmadi; dongu durduruldu.
+- 2026-09-27 D-623 (Eszamanlilik katmani, adim 1): KANAL KEMGU-OS'ta SAF-.kem. Olcum: kem_os
+  D-592'den beri C kdl_kanal.c'yi baglamiyor -> `kanal_*` cagiran her kem_os kodu tanimsiz
+  sembolle duserdi. kem_heap.kem'e SUBSYSTEM/kanal: kdl_kanal_olustur/gonder/al (host ile
+  AYNI ABI, i64 tasiyici) + kdl_kanal_serbest (D-543 kanal omru codegen'i bunu ISTEDI —
+  ilk link hatasi) . Halka N=kapasite+1 (C surumu >3'u REDDEDIYORDU; heap var). `%` BILEREK
+  yok: degisken bolenli `%` D-502 sifir-bolme kontrolu -> @kdl_panik ister, kem_os'ta YOK
+  (ikinci link hatasi; onceden de 8 cagri vardi ama --gc-sections olu bolumlerde tanimsiz
+  sembolu RAPORLAMIYOR). Faz [41]: FIFO + 2^33+12 (i64) + 10 tur halka sarmasi + kapasite
+  0/3/16.
+  🎯 SABOTAJ S16 (sarmayi kaldir) ILK TURDA SESSIZDI: indeksler sinirsiz buyur, yazimlar
+  tamponun DISINA tasar (heap tasmasi) ama FIFO tutarli kalir. "Bitisik nobetci kanal"
+  denendi, O DA SESSIZDI; adres OLCULDU: ardisik kanallar 64 KB aralikli — malloc serbest
+  listede ilk-uyum + BOLMESIZ, her 80 baytlik kanal onceki fazlarin serbest biraktigi
+  64 KB'lik rho blogunu butun aliyor (bellek israfi, ayri konu). Sonuc: tasma HICBIR
+  davranissal olcumde gorunmez -> test hilesi yerine GERCEKLEMEDE sinir kontrolu
+  (kem_kanal_hucre: 0<=i<N, degilse PL011'e "PANIK: kanal indeks sinir ihlali" + dur;
+  D-069 dizi siniriyla ayni politika). S16 artik PANIK, rc=2. S15 (degeri i32'ye kirp)
+  -> [41] HATA, rc=2. Kanal `olarak *tam8`e donusturulemiyor (E002) — iyi; adres olcumu
+  runtime icinden gecici MMIO yazimiyla yapildi, geri alindi.
+  Kapilar: kem_os_arm 41 faz · baremetal_diff 5/5 (BIRLESIK OS 314 islev) · check_kapisi
+  266/273 (0 RED). Yol ustunde: iki vakum llvm-nm denetimi bulundu -> Sirada.

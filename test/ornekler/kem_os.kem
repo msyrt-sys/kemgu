@@ -1587,6 +1587,55 @@ işlev kasm_testi() -> tam32 {
     ver 1;
 }
 
+// [D-623] [41] KANAL — dilin `kanal_oluştur/gönder/al` ilkelleri CEKIRDEKTE, SAF-.kem
+// (kem_heap.kem SUBSYSTEM/kanal). Tek gorevli olcum: hicbir cagri bloklamaz (gonderim
+// sayisi hep kapasite icinde). Olculen: FIFO sirasi, i64 genisligi (2^33+12 — i32
+// tasiyicida KIRPILIRDI), halka sarmasi, varsayilan kapasite, BUYUK kapasite (C
+// surumu >3'u REDDEDIYORDU), iki kanalin birbirinden bagimsizligi.
+işlev kkanal_testi() -> tam32 {
+    değişken k: kanal<tam64> = kanal_oluştur(3);
+    // NOT (olculdu): halka sarmasi bozuk olsa bile FIFO sirasi tutarli kalir ve yalniz
+    // k'ye bakan olcum bunu GOREMEZ; bitisik "nobetci kanal" da ISE YARAMAZ — malloc
+    // serbest listede ilk-uyum + bolmesiz calisir, her kanal ayri bir 64 KB blok alir.
+    // Sarma bu yuzden GERCEKLEMEDE sinir kontrolüyle korunur (kem_heap.kem
+    // kem_kanal_hucre): bozulursa cekirdek panikler, bu faz OK basamaz.
+    kanal_gönder(k, 10);
+    kanal_gönder(k, 20);
+    kanal_gönder(k, 8589934604);                       // 2^33 + 12
+    eğer kanal_al(k) != 10 { ver 0; }
+    eğer kanal_al(k) != 20 { ver 0; }
+    eğer kanal_al(k) != 8589934604 { ver 0; }
+    // Halka sarmasi: N=4 halkada 10 tur -> indeksler defalarca basa doner.
+    değişken i: tam64 = 0;
+    iken i < 10 {
+        kanal_gönder(k, i * 7);
+        kanal_gönder(k, i * 7 + 1);
+        eğer kanal_al(k) != i * 7 { ver 0; }
+        eğer kanal_al(k) != i * 7 + 1 { ver 0; }
+        i = i + 1;
+    }
+    // Varsayilan kapasite (0 -> 3 oge) + buyuk kapasite (16) ayni anda, ic ice.
+    değişken v: kanal<tam64> = kanal_oluştur(0);
+    değişken b: kanal<tam64> = kanal_oluştur(16);
+    değişken j: tam64 = 0;
+    iken j < 16 {
+        kanal_gönder(b, 100 + j);
+        j = j + 1;
+    }
+    kanal_gönder(v, 1);
+    kanal_gönder(v, 2);
+    kanal_gönder(v, 3);
+    j = 0;
+    iken j < 16 {
+        eğer kanal_al(b) != 100 + j { ver 0; }
+        j = j + 1;
+    }
+    eğer kanal_al(v) != 1 { ver 0; }
+    eğer kanal_al(v) != 2 { ver 0; }
+    eğer kanal_al(v) != 3 { ver 0; }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -2034,6 +2083,13 @@ işlev main() -> tam32 {
         uart_satir("[40] ASM OK (mnemonic -> bytecode == [38] prog; 42,158 + SUB 42)");
     } değilse {
         uart_satir("[40] ASM HATA");
+    }
+
+    // [41] KANAL (D-623): dilin kanal ilkelleri cekirdekte, SAF-.kem SPSC halka.
+    eğer kkanal_testi() == 1 {
+        uart_satir("[41] KANAL OK (FIFO + i64 2^33 + halka sarmasi + kapasite 0/3/16)");
+    } değilse {
+        uart_satir("[41] KANAL HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
