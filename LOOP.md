@@ -55,17 +55,18 @@
       cekirdekte HIC CALISMIYORDU (D-527 ABI'yi yalniz DERLIYORDU).
       - [x] kanal SAF-.kem (kem_heap.kem) + faz [41], tek gorevli (D-623)
       - [x] gorev_başlat/birleştir SAF-.kem + faz [42] BLOKLAYAN kanal (D-624)
-- [ ] 🔴 SESSIZ YANLIS CEVAP (C, D-624'te olculdu): annotasyonsuz BLOK-form kapanis
-      DEGISKENE baglanip sonra cagrilir/gorev_başlat'a verilirse lifted lambda `i32`
-      doner -> tam64 sonuc KIRPILIR. Olcum (host, clang -O2):
-        değişken f = || { değişken x: tam64 = y + 42; ver x; }; görev_başlat(f)
-        -> C `define i32 @lambda_0`, exit 1 (dogrusu 42); -O0 x86'da rax ust yarisi
-        TESADUFEN korundugu icin DOGRU gorunur (llvm_test -O0 bu sinifi GOREMEZ).
-      Kok: D-325 `lambda_donus_tahmin` blok-form'da ilk `ver`in degerini DIS kapsamda
-      arar; `x` lambda govdesinin YERELI -> NULL -> i32. D-624 yalniz gorev_başlat'a
-      DOGRUDAN verilen blok-form'u onardi (i64 = runtime ABI). Onarim: tahmin blok
-      yerellerini (annotasyonlu `değişken`, ya da degerinin tahmini) gorsun.
-      Ayni kok, isaretci T'de GURULTULU: `|| { değişken m: metin = ..; ver m; }` LINK-RED.
+- [x] C kapanis tip kaybi (donus + arguman) -> D-625. Kalan self-host tarafi asagida.
+- [ ] 🔴 SELF-HOST AYNI SESSIZ SINIF (D-625'te olculdu): annotasyonsuz kapanis cagrisi
+      `değişken f = |a: tam64| a + 42; f(8589934592)` -> self IR
+      `call i32 %8(ptr %1, i32 8589934592)` (arguman VE donus i32; lambda `i64 %a` bekler)
+      -> exit 1 (dogrusu 42). IFADE-form oldugu icin self checker KABUL ediyor (blok-form
+      T020 ile reddediliyor, o yuzden gorunmuyordu). C'nin D-625 onarimi (imza kaynagi
+      baglamaya + cagri yerinde argumani param tipiyle uret) portlanmali. Onarim sonrasi
+      D-625'in llvm_test sekilleri cg_korpus'a tasinabilir (bugun self yanlis -> konamaz).
+- [ ] 🔴 SESSIZ: `dtam64` icin gecerli 2^63 (9223372036854775808) literali INT64_MAX'a
+      DOYURULUYOR (`add i64 0, 9223372036854775807`); `değişken r: dtam64 = 2^63` bile.
+      Esitlik testi iki tarafi da doyurdugu icin GECER (gizli). Kok muhtemelen lexer'da
+      strtoll; dtamN icin ust yari (2^63..2^64-1) temsil edilemiyor. Kapanisla ILGISIZ.
 - [ ] SELF-HOST CHECKER: blok-form kapanis icindeki `ver`, kapanisin DEGIL cevreleyen
       ISLEVIN donus tipine karsi denetleniyor -> gecerli programlar T020 ile REDDEDILIYOR
       (gurultulu). Olcum: `işlev main() -> tam32 { değişken f: işlev() -> tam64 =
@@ -619,3 +620,33 @@
   . drf_gorunurluk 100/100 . kanal_omru 10/10 . check_kapisi 266/273 . sifir uyari 38/0.
   Ortam: drf_test ilk kosumda ASan runtime eksikligiyle (libclang-rt-18-dev) bag hatasi verdi
   — kod degil; paket kuruldu, 54/54.
+- 2026-09-27 D-625 (C kapanis tip kaybi — IKI YONLU sessiz kirpma). D-624'un Sirada'ya
+  yazdigi madde ve yol ustunde bulunan kardesi.
+  (1) DONUS: `lambda_donus_tahmin` blok-form'da ilk `ver`in degerini yalniz DIS kapsamda
+      ariyordu -> govdenin yereli/lambda parametresi bulunamiyor -> NULL -> i32. Daha kotusu
+      GOLGELEMEDE dis kapsamdaki ayni adli degiskeni bulup YANLIS tipi veriyordu. Onarim:
+      TahminBaglam — ad cozumu sirasi = golgeleme sirasi: bloktaki ONCEKI `değişken`ler
+      (sondan basa; annotasyon ya da degerin tahmini, yalniz daha oncekilere bakarak ->
+      `x = x + 1` sonlanir) -> lambda parametreleri -> dis kapsam.
+  (2) ARGUMAN (yol ustunde bulundu): kapanis cagri yeri argumanlari BEKLENEN TIP OLMADAN
+      uretiyordu -> `f(8589934592)` literali i32 dogup `i64 %a` parametresine kirpilmis
+      geciyordu — ANNOTASYONLU `işlev(tam64) -> tam64` kapanista BILE. Onarim: LlvmIsim.
+      kapanis_imza (bildirilen `işlev(..)` tip dugumu ya da annotasyonsuz baglamada lambda
+      dugumu); cagri yeri i. argumani o tiple uretir + tamsayida genisligine uyarlar
+      (isaretsizse zext).
+  Olcum matrisi (host clang -O2, eski/yeni): v1 1/42 . m2 LINK-RED/42 . c1 1/42 . c2 1/42
+  . c3 1/42 . c5 1/42 . a3 1/42 . a4 1/42 . a5 1/42 . u3 1/42 . s1 1/42 . s3 1/42 . m1
+  LINK-RED/42 . degismemesi gereken c4 (tam32) 42/42 . u2 (dtam8->dtam32 zext) 42/42.
+  🎯 KAPI SECIMI OLCULDU: llvm_test -O0 derliyor ve x86'da rax ust yarisi cogu sekilde
+  TESADUFEN korundugu icin kusur GORUNMUYOR. -O0'da da ayirt edici sekiller secildi:
+  c2 (DIS kapsamda ayni adli tam32 — golgeleme), a3, a4, c3, u3 -> llvm_test [287]-[291].
+  ⚠ Ilk yazimda c2'nin dis `x: tam32`ini dusurmustum -> S20 SESSIZ kaldi; golgeleme geri
+  konunca yakalandi. cg_korpus'a KONAMADI: self-host ayni sekillerde yanlis (Sirada).
+  SABOTAJ: S20 (blok-yereli aramasini kapat) -> [287] ✗ rc=2 . S21 (cagri yeri argüman
+  tiplemesini kapat) -> [288]-[291] ✗ rc=2.
+  Kapilar: llvm_test 291/291 . codegen_diff 173/173 . yapi_diff 154/154 . codegen_genis
+  58/58 (70 - Sinif C gocunde silinen 12) . bolge_operand 175/175 . ct_bariyer 14/14 .
+  modul_codegen 27/27 . snapshot 50/50 . drf_test 54/54 . gorev_rt 16/16 . kanal_omru
+  10/10 . drf_gorunurluk 100/100 . stdlib_check . sifir uyari 38/0 . kem_os_arm 42 faz .
+  baremetal_diff 5/5.
+  YOL USTUNDE: dtam64 2^63 literal doyurmasi (ilgisiz, sessiz) + self-host ayni sinif -> Sirada.

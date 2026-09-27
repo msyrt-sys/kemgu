@@ -3387,6 +3387,45 @@ static void test_icin_kapanis_dizisi(void) {
     test_sonuc("icin dongusu kapanis dizisi (fat value) -> exit 42", rc == 42);
 }
 
+/* D-625: annotasyonsuz/annotasyonlu KAPANIS tip kaybi — iki yonde SESSIZ
+ * KIRPMA. Fat value parametre ve donus tiplerini SILER; C tahmini blok
+ * yerellerini goremiyordu (donus i32) ve cagri yeri argumani beklenen tip
+ * OLMADAN uretiyordu (2^33 literali i32 doguyordu). Bu sekiller -O0da da
+ * AYIRT EDICI (olculdu: eski derleyici exit 1); c1/v1 gibi sekiller -O0da
+ * rax ust yarisi tesadufen korundugu icin GORUNMEZ, o yuzden secilmedi. */
+static void test_kapanis_blok_yerel_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken x: tam32 = 5; de\xc4\x9fi\xc5\x9fken f = || { de\xc4\x9fi\xc5\x9fken x: tam64 = 8589934592; ver x + 42; }; de\xc4\x9fi\xc5\x9fken r: tam64 = f(); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    /* DIS kapsamdaki `x: tam32` BILEREK var: eski tahmin gölgelemeyi bilmedigi icin
+     * DISTAKI x'i bulup i32 diyordu. Gölgelemesiz hâlde -O0 sansi kusuru GIZLER
+     * (olculdu: sabotaj S20 o hâlde SESSIZ kaldi). */
+    test_sonuc("D-625 annotsuz blok-form kapanis, yerel tam64 donus (golgeleme) -> exit 42", rc == 42);
+}
+
+static void test_kapanis_arg_annot_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev(tam64) -> tam64 = |a: tam64| { ver a + 42; }; de\xc4\x9fi\xc5\x9fken r: tam64 = f(8589934592); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotasyonlu kapanis tam64 literal arguman -> exit 42", rc == 42);
+}
+
+static void test_kapanis_arg_annotsuz_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f = |a: tam64| a + 42; de\xc4\x9fi\xc5\x9fken r: tam64 = f(8589934592); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotsuz kapanis tam64 literal arguman -> exit 42", rc == 42);
+}
+
+static void test_kapanis_param_blok_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f = |a: tam64| { ver a + 42; }; de\xc4\x9fi\xc5\x9fken r: tam64 = f(8589934592); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotsuz blok-form, lambda parametresinden donus + arguman -> exit 42", rc == 42);
+}
+
+static void test_kapanis_arg_dtam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f = |a: dtam64| a + 1; de\xc4\x9fi\xc5\x9fken r: dtam64 = f(4294967296); e\xc4\x9f" "er r == 4294967297 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotsuz kapanis dtam64 arguman -> exit 42", rc == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -3793,6 +3832,13 @@ int main(void) {
     printf("\n--- D-342: `icin` dongusu by-value eleman uzerinde ---\n");
     test_icin_yapi_dizisi();
     test_icin_kapanis_dizisi();
+
+    printf("\n--- D-625: kapanis tip kaybi (donus + arguman) sessiz kirpma ---\n");
+    test_kapanis_blok_yerel_tam64();
+    test_kapanis_arg_annot_tam64();
+    test_kapanis_arg_annotsuz_tam64();
+    test_kapanis_param_blok_tam64();
+    test_kapanis_arg_dtam64();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
