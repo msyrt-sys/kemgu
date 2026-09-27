@@ -64,14 +64,7 @@
       Esitlik testi iki tarafi da doyurdugu icin GECER (gizli). Kok muhtemelen lexer'da
       strtoll; dtamN icin ust yari (2^63..2^64-1) temsil edilemiyor. Kapanisla ILGISIZ.
 - [x] Self-host checker blok-form kapanis `ver` baglami (T020) -> D-627.
-- [ ] SELF-HOST CODEGEN PANIK (D-627'de ortaya cikti, onceden T020 arkasinda gizliydi):
-      `değişken f = || { ... }; görev_başlat(f)` -> self-host derleyici "PANIK: dizi sinir
-      ihlali (i=-1)" ile COKUYOR (rc=134). Kok: gorev_başlat dali argumanin DAIMA lambda
-      LITERALI oldugunu varsayiyor (`lam = cocuk[cb+1]`, a_cb/a_cs okuyor); TANIMLAYICI
-      verilince cocuk dizisi -1 ile okunuyor. C bu sekli destekliyor (fat value'dan
-      fn/env extractvalue). Gurultulu (sessiz degil). Onarim: arguman LAMBDA degilse fat
-      degeri ifade_uret + extractvalue, rho_serbest=0 (kanit yok = DENY, D-309), T =
-      cg_var_ic_bul.
+- [x] Self-host `görev_başlat(f)` (baglanmis kapanis) derleyici paniği -> D-628.
 - [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
       (Makefile ~1453/~1485) D-592'den beri KURULMAYAN nesnelere bakiyor -> llvm-nm
       "No such file" + `grep -q` bos -> denetim SESSIZCE "geciyor". D-599'un kacirdigi iki
@@ -693,3 +686,23 @@
   Kapilar: checker_diff 188/188 . check_genis 133/133 (bayat muafiyet yok) . codegen_diff
   174/174 . yapi_diff 155/155 . surucu_diff 16/16 . modul_codegen 27/27 . codegen_genis 58/58
   . bolge_operand 176/176 . check_kapisi 267/274 . self_driver FIXPOINT ✓.
+- 2026-09-27 D-628 (self-host `görev_başlat(f)` paniği). Kok: gorev_başlat dali argumani
+  DAIMA lambda LITERALI sayip a_cb/a_cs okuyordu; TANIMLAYICI'da cocuk -1 -> "PANIK: dizi sinir
+  ihlali" (rc=134). D-627 oncesi checker bu sekli T020 ile durdurdugu icin GORUNMUYORDU.
+  Onarim (C llvm.c birebir): arguman literal degilse fat value ifade_uret + extractvalue
+  fn/env; rho_serbest = 0 (kanit YOK = DENY, C gorev_rho_confined "fn degeri -> DENY");
+  kuyruklama YOK (baglanmis lambda tanim yerinde genel kapanis kolunca kuyruklandi);
+  T = bagllamanin kayitli kapanis donusu (cg_aic: annotasyonlu -> bildirilen, annotasyonsuz
+  -> D-325 tahmini). Literal yolu AYNEN.
+  Olcum (C / SELF): v1 (blok tam64) 42/42 . g1 (yakalamali tam32) 42/42 . g2 (metin) 42/42
+  . g3 (annotasyonlu tam64) 42/42 . g4 (ayni kapanis iki gorevde) 42/42.
+  Fikstur: cg_gorev_bagli_kapanis.kem (4 sekil, ayri cikis kodlari; eski self-host bu dosyayi
+  hic derleyemiyordu).
+  SABOTAJ: S26 (eski davranis) -> codegen_diff 174/175 . S27 (baglanmis kapanista T'yi dusur)
+  -> 174/175 (i64 ptr yuvasina: LINK-RED — gurultulu). ⚠ rho_serbest'i baglanmis kapanista
+  yanlislikla 1 yapmak (UAF riski) BU FIKSTURLE AYIRT EDILEMEZ — sonuclar ρ_sahip'e isaret
+  etmiyor; C ile ayni DENY bilincli secildi, kanit analizi (rho_confined) yalniz literal
+  govdede calisir.
+  Kapilar: codegen_diff 175/175 . yapi_diff 156/156 (fikstur muafiyetsiz) . bolge_operand
+  177/177 . kanal_omru 10/10 . codegen_genis 58/58 . ct_bariyer 14/14 . modul_codegen 27/27 .
+  self_driver FIXPOINT ✓.
