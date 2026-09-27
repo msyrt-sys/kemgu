@@ -241,22 +241,40 @@ static Dugum *parse_birincil(Parser *p) {
 
     switch (t.tip) {
         case TOK_TAMSAYI: {
-            char tampon[64];
-            int j = sayi_tokeni_temizle(t.baslangic, t.uzunluk,
-                                         tampon, sizeof(tampon));
-            int64_t deger = 0;
-            if (j >= 2 && tampon[0] == '0' &&
-                (tampon[1] == 'x' || tampon[1] == 'X')) {
-                deger = (int64_t)strtoll(tampon + 2, NULL, 16);
-            } else if (j >= 2 && tampon[0] == '0' &&
-                       (tampon[1] == 'b' || tampon[1] == 'B')) {
-                deger = (int64_t)strtoll(tampon + 2, NULL, 2);
-            } else if (j >= 2 && tampon[0] == '0' &&
-                       (tampon[1] == 'o' || tampon[1] == 'O')) {
-                deger = (int64_t)strtoll(tampon + 2, NULL, 8);
-            } else {
-                deger = (int64_t)strtoll(tampon, NULL, 10);
+            /* D-629: literal DOĞRUDAN kaynaktan okunur — self-host `tamsayi_deger`
+             * ile BİREBİR aynı algoritma (D-407: aynı soruyu iki yerde ayrı yanıtlayan
+             * kod ayrışır). Eski yol iki sessiz kusur taşıyordu:
+             *   (1) `strtoll` 2^63 ve üstünü INT64_MAX'a DOYURUYORDU → `dtam64` üst
+             *       yarısı yazılamıyordu (ölçüldü: `x >> 60` 8 yerine 7);
+             *   (2) `sayi_tokeni_temizle` girdiyi `_`'ları atmadan ÖNCE 63 karaktere
+             *       kırpıyordu → 64 basamaklı ikilik literal 2^63 yerine 2^60 oldu
+             *       (ölçüldü; fikstür p_buyuk_literal yakaladı, self-host doğruydu).
+             * [0, 2^64) tam temsil; 2^64 ve üstü 2^64-1'e DOYAR (self ile aynı —
+             * literal-aralık tanısı AYRI iş). Değer iki'nin tümleyeni BİT DESENİYLE
+             * saklanır (memcpy: uygulama-tanımlı dönüşüm YOK); LLVM `i64 -1` ile
+             * `i64 18446744073709551615`i aynı bitlere çevirir (ölçüldü). */
+            const char *lk = t.baslangic;
+            int ln = t.uzunluk, li = 0;
+            uint64_t taban = 10;
+            if (ln >= 2 && lk[0] == '0') {
+                if (lk[1] == 'x' || lk[1] == 'X') { taban = 16; li = 2; }
+                else if (lk[1] == 'b' || lk[1] == 'B') { taban = 2; li = 2; }
+                else if (lk[1] == 'o' || lk[1] == 'O') { taban = 8; li = 2; }
             }
+            const uint64_t tavan = UINT64_MAX;
+            uint64_t udeger = 0;
+            int tasti = 0;
+            for (; li < ln; li++) {
+                char c = lk[li];
+                if (c == '_') continue;
+                uint64_t h = (c >= '0' && c <= '9') ? (uint64_t)(c - '0')
+                           : (c >= 'a' && c <= 'f') ? (uint64_t)(c - 'a' + 10)
+                           : (c >= 'A' && c <= 'F') ? (uint64_t)(c - 'A' + 10) : 0;
+                if (udeger > (tavan - h) / taban) tasti = 1;
+                udeger = tasti ? tavan : udeger * taban + h;
+            }
+            int64_t deger;
+            memcpy(&deger, &udeger, sizeof deger);   /* bit-bit */
             d = dugum_tam(p->arena, deger, t.satir, t.sutun);
             parser_ilerle(p);
             return d;

@@ -59,10 +59,15 @@
 - [x] Self-host kapanis tip kaybi (donus + arguman) -> D-626. Sekiller cg_korpus'ta
       (cg_kapanis_tip_kaybi); blok-form `ver <tam64|metin>` sekilleri self checker T020
       kusuru yuzunden HALA fikstur disinda (asagidaki madde).
-- [ ] 🔴 SESSIZ: `dtam64` icin gecerli 2^63 (9223372036854775808) literali INT64_MAX'a
-      DOYURULUYOR (`add i64 0, 9223372036854775807`); `değişken r: dtam64 = 2^63` bile.
-      Esitlik testi iki tarafi da doyurdugu icin GECER (gizli). Kok muhtemelen lexer'da
-      strtoll; dtamN icin ust yari (2^63..2^64-1) temsil edilemiyor. Kapanisla ILGISIZ.
+- [x] dtam64 ust yarisi literal doyurmasi -> D-629 (+ kripto sec_u64 ust-bit sizintisi).
+- [ ] LITERAL ARALIK TANISI (D-629'da olculdu, dil yuzeyi): literal hedef tipe SIGMIYORSA
+      sessizce kirpiliyor — `tam8 = 300` (-> 44), `dtam32 = 4294967296`, `tam64 = 2^63`
+      (-> INT64_MIN), 2^64 ve ustu (-> 2^64-1'e doyar), varsayilan tam32 baglaminda
+      `değişken x = 8589934592`. Onerilen: baglam-duyarli yeni tani (T043). ⚠ C checker
+      literali BIRDEN COK KEZ tipliyor (D-021: once baglamsiz, sonra karsi operandla) ->
+      tek-rapor garantisi olmadan sahte tani uretir; self-host ayristiricilarinda hata
+      kanali YOK. Ayrica: KESIRLI literal hala 63 karaktere KIRPILIYOR (C
+      sayi_tokeni_temizle) — 70+ karakterlik kucuk ondalik IKI derleyicide de 0.0 (olculdu).
 - [x] Self-host checker blok-form kapanis `ver` baglami (T020) -> D-627.
 - [x] Self-host `görev_başlat(f)` (baglanmis kapanis) derleyici paniği -> D-628.
 - [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
@@ -706,3 +711,33 @@
   Kapilar: codegen_diff 175/175 . yapi_diff 156/156 (fikstur muafiyetsiz) . bolge_operand
   177/177 . kanal_omru 10/10 . codegen_genis 58/58 . ct_bariyer 14/14 . modul_codegen 27/27 .
   self_driver FIXPOINT ✓.
+- 2026-09-27 D-629 (dtam64 ust yarisi literal). Kok: C `strtoll` 2^63 ve ustunu INT64_MAX'a
+  DOYURUYORDU; uc self-host kopyasi (`parser/checker/codegen.kem tamsayi_deger`) bunu parite icin
+  BILEREK taklit ediyordu -> `dtam64` 2^63..2^64-1 hic yazilamiyordu (`x >> 60` 8 yerine 7).
+  ONARIM: C'de literal dogrudan kaynaktan, self-host `tamsayi_deger` ile BIREBIR ayni algoritmayla
+  okunur (strtoull de degil — D-407); [0, 2^64) tam, deger iki'nin tumleyeni BIT DESENI (memcpy),
+  2^64+ iki tarafta ayni sekilde 2^64-1'e doyar. Self-host dtam64 biriktirir.
+  🎯 YOL USTUNDE UC ONCEDEN VAR OLAN KUSUR:
+  (1) C `sayi_tokeni_temizle` girdiyi `_`'lari atmadan ONCE 63 karaktere KIRPIYORDU -> 64 basamakli
+      ikilik literal 2^63 yerine 2^60 (fikstur p_buyuk_literal'in ilk kosumu yakaladi; self dogruydu).
+  (2) Self-host `tam64_str`: `0 - INT64_MIN` tasar -> SONSUZ OZYINELEME -> SEGFAULT (onceden hicbir
+      literal INT64_MIN uretmedigi icin gizliydi). Son basamak `%` ile ayrilir, uc kopyada.
+  (3) 🔴 KRIPTO: `stdlib/kripto.kem sabit_süre_seç_u64` maskesi `18446744073709551615` literaliyle
+      kuruluyordu -> 0x7FFF..FF -> maske "hepsi 1" iken secilmemesi gereken `f`'nin UST BITI
+      sonuca SIZIYORDU (eski derleyici exit 9; sabit-sureli secimde sessiz yanlis cevap). Literal
+      onarimi bunu da duzeltti; `stdlib/kripto/rastgele.kem`in 0x9E3779B97F4A7C15 sabiti de
+      simdiye dek 0x7FFF.. oluyordu (placeholder PRNG, artik dogru sabit).
+  Fikstur/kapi: parse_korpus/p_buyuk_literal (dump; INT64_MIN basimi) . cg_korpus/cg_dtam64_ust_yari
+  (davranis) . llvm_test [292] (MUTLAK) . kripto_kosum'a 4. vektor (+8, gercek stdlib islevi;
+  BEKLENEN 7 -> 15).
+  🎯 KAPI DERSI: S29 (C'yi eski doyurmaya dondur) codegen_diff VE parser_diff'te SESSIZ kaldi —
+  self-host'un kendi `tavan` literalini de C derledigi icin iki taraf ESIT bozuluyor (bootstrap
+  baglasimi; D-580 "parite kapisi esit bozulmaya kordur" dersi). Mutlak beklenen degerli kapilar
+  eklendi: llvm_test [292] ✗ ve kripto_kosum ❌ ile yakalandi. ⚠ Ilk S29 denemesi ikiliyi hic
+  yeniden kurmamisti (ayni-saniye mtime, D-457) — sabotajin ikilide oldugu `--ast` ile dogrulandi.
+  SABOTAJ: S28 (kripto_kosum eski C ile) -> exit 7 ❌ . S29 -> llvm_test 291/292 + kripto 7/15 .
+  S30 (parser.kem eski tam64_str) -> parser_diff 13/14.
+  Kapilar: parser_test 107 . lexer_test 103 . snapshot 50 . parser_diff 14/14 . checker_diff 188 .
+  codegen_diff 176 . yapi_diff 157 . check_genis 133 . surucu_diff 16 . modul_codegen 27 .
+  codegen_genis 58 . llvm_test 292 . tip_kontrol 202 . stdlib_check . kripto_kosum 4/4 .
+  check_kapisi 269/276 . sifir uyari 38/0 . kem_os_arm 42 faz . baremetal_diff 5/5 . FIXPOINT ✓.
