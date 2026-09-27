@@ -70,9 +70,7 @@
       artik; harita tabanli denetime cevir ya da sil.
 - [x] C escape analizi BAG DONGUSU (`a = b` / `b = a` -> SONSUZ OZYINELEME, segfault;
       `--check` dahil) -> D-631.
-- [ ] 2^64 VE USTU LITERAL (D-630'dan kalan): hala sessizce 2^64-1'e DOYUYOR (C + self ayni).
-      T043 dtam64 baglaminda bile yakalamiyor cunku deger zaten doymus geliyor; lexer/parser
-      "tasti" bilgisini tasimali (ya da parse-zamani tani).
+- [x] 2^64 VE USTU LITERAL sessiz doymasi -> D-632 (T043, baglamdan bagimsiz).
 - [ ] KESIRLI LITERAL 63 KARAKTER KIRPMASI (D-629'da olculdu): C `sayi_tokeni_temizle`
       70+ karakterlik kucuk ondalik literali kirpiyor -> iki derleyicide de 0.0.
 - [ ] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592; değişken y: tam32 = x;`
@@ -787,3 +785,20 @@
   SABOTAJ S131 (koruma kapali) -> test_escape ASan stack-overflow + fikstur --check 139.
   Kapilar (worktree): escape_test 24/24 . bolge_atama 15 . codegen_diff 178 . bolge_operand 180 .
   bolge_yonlendirme DOGRU . check_kapisi 271/278 . llvm_test 292 . yapi_diff 159 . sifir uyari 38/0.
+- 2026-09-27 D-632 (2^64 ve ustu literal). Iki derleyicide de 2^64-1'e SESSIZCE doyuyordu
+  (`dtam64 = 18446744073709551616` -> 2^64-1). Hicbir tamsayi tipine sigmaz -> baglamdan BAGIMSIZ
+  T043 (yeni tani kodu YOK). C: ayristiricinin zaten hesaplayip ATTIGI `tasti` dugume tasinir
+  (`tam.tasti`), checker baglamli + baglamsiz yolda raporlar (D-630 tekillestirmesi). Self-host:
+  ayristirici DOYMUS degeri `a_deg`e yazar -> yan kanal `tasma_node` (checker.kem + codegen.kem;
+  --ast dump'i degismedi, parser_diff 14/14). ⚠ Self checker annotasyonsuz baglamanin baslaticisini
+  `ifade_tip` ile HIC tiplemiyor (bilinen bosluk) -> ilk surumde `değişken c = 999..9;` kaciyordu;
+  gezinti TAM dugume vardiginda da raporlanir.
+  Olcum: 13 sekil (onluk/onaltilik/ikilik/sekizlik/`_`, arguman, donus, tekli eksi, dizi, kesirli
+  baglam + T003/T001 ile sira) uc checker'da kod+satir+sutun BIREBIR; 2^64-1 her baglamda temiz;
+  repo genelinde T043 farki 0; test/*.c gomulu kaynaklarda 2^64+ literal yok.
+  Fikstur: check_korpus/tc54_02_literal_2_64 (7 T043 + sinir-alti pozitif).
+  SABOTAJ: S136 (C bayragi dugume yazilmaz) -> checker_diff 189/190 . S137 (checker.kem yan kanal
+  kapali) -> 189/190 . S138 (codegen.kem gezinti raporu kapali) -> annotasyonsuz 2 T043 kaybolur
+  (self_driver --check check_korpus'u ayni sekilde karsilastirir).
+  Kapilar: test_tumu TAM rc=0 (Tum testler gecti, FIXPOINT ✓) . checker_diff 190/190 . parser_diff
+  14/14 . check_kapisi 271/278.
