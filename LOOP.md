@@ -60,20 +60,27 @@
       (cg_kapanis_tip_kaybi); blok-form `ver <tam64|metin>` sekilleri self checker T020
       kusuru yuzunden HALA fikstur disinda (asagidaki madde).
 - [x] dtam64 ust yarisi literal doyurmasi -> D-629 (+ kripto sec_u64 ust-bit sizintisi).
-- [ ] LITERAL ARALIK TANISI (D-629'da olculdu, dil yuzeyi): literal hedef tipe SIGMIYORSA
-      sessizce kirpiliyor — `tam8 = 300` (-> 44), `dtam32 = 4294967296`, `tam64 = 2^63`
-      (-> INT64_MIN), 2^64 ve ustu (-> 2^64-1'e doyar), varsayilan tam32 baglaminda
-      `değişken x = 8589934592`. Onerilen: baglam-duyarli yeni tani (T043). ⚠ C checker
-      literali BIRDEN COK KEZ tipliyor (D-021: once baglamsiz, sonra karsi operandla) ->
-      tek-rapor garantisi olmadan sahte tani uretir; self-host ayristiricilarinda hata
-      kanali YOK. Ayrica: KESIRLI literal hala 63 karaktere KIRPILIYOR (C
-      sayi_tokeni_temizle) — 70+ karakterlik kucuk ondalik IKI derleyicide de 0.0 (olculdu).
+- [x] LITERAL ARALIK TANISI -> D-630 (T043 + baglamsiz literal degere gore yukseltme).
+      Kalan parcalari asagida ayri maddeler.
 - [x] Self-host checker blok-form kapanis `ver` baglami (T020) -> D-627.
 - [x] Self-host `görev_başlat(f)` (baglanmis kapanis) derleyici paniği -> D-628.
 - [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
       (Makefile ~1453/~1485) D-592'den beri KURULMAYAN nesnelere bakiyor -> llvm-nm
       "No such file" + `grep -q` bos -> denetim SESSIZCE "geciyor". D-599'un kacirdigi iki
       artik; harita tabanli denetime cevir ya da sil.
+- [x] C escape analizi BAG DONGUSU (`a = b` / `b = a` -> SONSUZ OZYINELEME, segfault;
+      `--check` dahil) -> D-631.
+- [ ] 2^64 VE USTU LITERAL (D-630'dan kalan): hala sessizce 2^64-1'e DOYUYOR (C + self ayni).
+      T043 dtam64 baglaminda bile yakalamiyor cunku deger zaten doymus geliyor; lexer/parser
+      "tasti" bilgisini tasimali (ya da parse-zamani tani).
+- [ ] KESIRLI LITERAL 63 KARAKTER KIRPMASI (D-629'da olculdu): C `sayi_tokeni_temizle`
+      70+ karakterlik kucuk ondalik literali kirpiyor -> iki derleyicide de 0.0.
+- [ ] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592; değişken y: tam32 = x;`
+      C T001, self OK (onceden var: `değişken x = "a"; y: tam32 = x` de self'te OK).
+      Self checker annotasyonsuz baglamanin tipini izlemiyor.
+- [ ] SELF-HOST CHECKER T013 SAYISAL KARISIM: baglamsiz `[1, 2.5]` C T013, self OK (onceden
+      var; bagsiz yolda `sayisal_mi` toleransi). D-630 bunu tamsayi karisimina da genisletti:
+      `[1, 8589934592]` C T013 (tam32 vs tam64), self OK.
 
 
 
@@ -741,3 +748,42 @@
   codegen_diff 176 . yapi_diff 157 . check_genis 133 . surucu_diff 16 . modul_codegen 27 .
   codegen_genis 58 . llvm_test 292 . tip_kontrol 202 . stdlib_check . kripto_kosum 4/4 .
   check_kapisi 269/276 . sifir uyari 38/0 . kem_os_arm 42 faz . baremetal_diff 5/5 . FIXPOINT ✓.
+- 2026-09-27 D-630 (literal aralik tanisi T043). Literal baglamdaki somut tamsayi tipine
+  SIGMIYORSA T043 (eskiden sessiz kirpma: `tam8 = 300` -> 44, `tam64 = 2^63` -> INT64_MIN).
+  Tekli eksi baglaminda isaretli alt sinir (-128, INT64_MIN) gecerli. Baglamsiz literal degere
+  gore yukseltilir: <=2^31-1 tam32, <=2^63-1 tam64, ustu dtam64. Rapor dugum basina TEK kez
+  (C checker literali D-021 yuzunden birden cok kez tipler). D-021 iki-literal yeniden tiplemesi
+  artik DAR tarafi GENISE cevirir (self-host kendi kaynaginda `0 - 9223372036854775807 - 1`
+  icin sahte T043 aliyordu). C + checker.kem + codegen.kem check yolu.
+  🔴 ILK PUSH SELF-HOST'TA SESSIZ YANLIS CEVAP URETTI (codegen_genis sha256_selfhost yakaladi):
+  literal i64 dogunca (a) dizi literali elemani kendi tipiyle `_tam64` eklenip `Dizi<dtam32>`in
+  4 baytlik gozelerine 8 bayt yaziyordu (HEAP TASMASI), (b) `d[i] != 3049323471` dtam32 elemani
+  ISARETLI genisletiyordu. Onarim: eleman dizinin eleman tipine uydurulur; ciplak literal karsi
+  operandin tipini alir (C D-021 aynasi). ⚠ Ilk onarimda "baglamsiz diziyi on-taramayla i64 yap"
+  denedim — `ver [..]` donus baglami eleman bilgisi TASIMADIGI icin YANLISTI, geri alindi.
+  ⚠ Gomulu kaynak: test_llvm.c [269] `0 - 128` tam8 -> T043 (DOGRU; 128 tam8 degil) — .kem
+  taramam C dizgisine gomulu kaynagi yine GORMEDI (D-517'nin tekrari); `-128`e cevrildi.
+  Fikstur: check_korpus/tc54_01_literal_aralik (7 T043 + pozitif, uc checker birebir) .
+  cg_korpus/cg_literal_yukseltme (baglamsiz yukseltme + donus-baglamli karisik dizi; C=SELF=42,
+  eski C 134).
+  SABOTAJ: S132 (C rapor kapali) -> checker_diff 188/189 . S133 (checker.kem) -> 188/189 .
+  S134 (codegen.kem check yolu) -> dogrudan olcum T043 7 -> 0 (self_driver --check paritesi) .
+  S135 (C baglamsiz yukseltme kapali) -> codegen_diff 176/177 (C exit 134).
+  Kapilar: test_tumu TAM rc=0 (Tum testler gecti, FIXPOINT ✓) . checker_diff 189 . codegen_diff
+  177 . yapi_diff 158 . llvm_test 292 . check_kapisi 270/277 . kripto_kosum 4/4 . sifir uyari 38/0.
+- 2026-09-27 D-631 (C escape analizi bag dongusu). `a = b` ve `b = a` (ayri dallarda)
+  `bag_guncelle` ile a->b, b->a dongusu kurar; `ifadeyi_yukselt`in TANIMLAYICI dali zinciri
+  izleyip SONSUZ OZYINELEMEYE giriyordu -> C derleyici SEGFAULT (`--check` dahil; gecerli
+  program). D-630 onarimi sirasinda self-host kaynagindaki `gt = st; st = gt` bicimi tetikledi.
+  Onceden vardi (D-629 ikilisi de cokuyor); self-host etkilenmiyor.
+  ONARIM: bag basina `zincirde` bayragi — gezinti bu bagdan zaten geciyorsa dur. Terfi MONOTON
+  (ayni `yeni` ile ikinci ziyaret hicbir kaydi degistirmez) -> sound. Bayrak gezinti sonunda
+  SIFIRLANIR (kalici "ziyaret edildi" DEGIL). `ifadeyi_yukselt` bag EKLEMEZ -> realloc yok,
+  indeks gecerli. Kullanilmayan `bag_cozumle` kaldirildi (sifir uyari).
+  UAF OLCUMU: dongu/uzerine-yazma sekillerinde diziler ρ_caller'da (`%rho`) — `ky_confined`
+  ayri kanit; yani kusur COKME idi, UAF degil (olculdu, varsayilmadi).
+  Fikstur: cg_korpus/cg_escape_bag_dongusu (dizi + metin dongusu, C=SELF=42, eski C 139) .
+  test_escape [17][18] (analiz biter + bayrak sifirlanir).
+  SABOTAJ S131 (koruma kapali) -> test_escape ASan stack-overflow + fikstur --check 139.
+  Kapilar (worktree): escape_test 24/24 . bolge_atama 15 . codegen_diff 178 . bolge_operand 180 .
+  bolge_yonlendirme DOGRU . check_kapisi 271/278 . llvm_test 292 . yapi_diff 159 . sifir uyari 38/0.

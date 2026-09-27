@@ -525,6 +525,33 @@ static void test_lc_hicbiri_iterasyon(void) {
     escape_serbest(&ea); arena_serbest(a);
 }
 
+/* [D-631] BAG DONGUSU: `a = b` / `b = a` a->b->a dongusu kurar. Zinciri
+ * izleyen terfi eskiden SONSUZ OZYINELEMEYE giriyordu (SEGFAULT). Test
+ * (1) analizin BITTIGINI, (2) koruma bayraginin gezinti sonrasi SIFIRLANDIGINI
+ * olcer: dongu `ver`lerinden SONRA baska bir bag hala terfi edebilmeli. */
+static void test_bag_dongusu(void) {
+    Arena *a = arena_olustur(0);
+    Dugum *prog = kaynaktan_ayrist(a,
+        "i\xc5\x9f" "lev f(k: tam32) -> metin { "
+        "de\xc4\x9f" "i\xc5\x9f" "ken x = \"x\"; "
+        "de\xc4\x9f" "i\xc5\x9f" "ken y = \"y\"; "
+        "e\xc4\x9f" "er k == 1 { x = y; } "
+        "e\xc4\x9f" "er k == 2 { y = x; } "
+        "e\xc4\x9f" "er k == 3 { ver x; } "
+        "e\xc4\x9f" "er k == 4 { ver y; } "
+        "de\xc4\x9f" "i\xc5\x9f" "ken z = \"z\"; "
+        "ver z; }");
+    const Dugum *mz = bul(prog, DUGUM_METIN, 2);   /* "z" */
+    EscapeAnaliz ea; escape_baslat(&ea, a);
+    escape_analiz_program(&ea, prog);   /* eskiden burada SEGFAULT */
+    int ok = mz && escape_kategori(&ea, mz) == ESC_CAGIRAN;
+    int temiz = 1;
+    for (int i = 0; i < ea.bag_sayi; i++) if (ea.baglamalar[i].zincirde) temiz = 0;
+    test_sonuc("bag dongusu (x=y; y=x): analiz biter + sonraki ver z CAGIRAN", ok);
+    test_sonuc("bag dongusu: zincirde bayragi gezinti sonrasi sifir", temiz);
+    escape_serbest(&ea); arena_serbest(a);
+}
+
 /* === Main === */
 
 int main(void) {
@@ -555,6 +582,9 @@ int main(void) {
     test_lc_dis_yapi_alan();
     test_lc_dongu_ver();
     test_lc_hicbiri_iterasyon();
+
+    printf("\n--- Bag dongusu (D-631) ---\n");
+    test_bag_dongusu();
 
     printf("\n--- Konservatif (alt-tahsis) ---\n");
     test_indeks_konservatif();
