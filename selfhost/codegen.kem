@@ -5065,29 +5065,56 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // heap-env (capture var); lifted @lambda_N gövde-SONRASI emit (kuyruk).
         eğer metin_esit(fad, "görev_başlat") {
             değişken lam: tam32 = dizi_al(p.cocuk, cb + 1);
-            // Mangled ad
-            değişken mad: metin = metin_birlestir("lambda_", tam64_str(p.lam_sayac olarak tam64));
-            p.lam_sayac = p.lam_sayac + 1;
-            // Capture analizi (çevre scope canlıyken). Lambda gövdesi = SON çocuk.
-            değişken lcb: tam32 = dizi_al(p.a_cb, lam);
-            değişken lcs: tam32 = dizi_al(p.a_cs, lam);
-            değişken govde: tam32 = dizi_al(p.cocuk, lcb + lcs - 1);
-            değişken capbase: tam32 = dizi_boyut(p.lam_capisim);
-            lam_cap_tara(p, govde, lam, capbase);
-            değişken capcnt: tam32 = dizi_boyut(p.lam_capisim) - capbase;
-            // Env: capture yoksa null; varsa HEAP struct (C V2-F2 aynası).
-            // D-322: emisyon lam_env_uret'e taşındı — genel kapanış kolu AYNI kodu
-            // kullanır (iki kopya ayrışırsa görev/kapanış env düzeni sessizce sapardı).
-            değişken envreg: metin = lam_env_uret(p, capbase, capcnt, 0 - 1);
+            // D-628: argüman lambda LİTERALİ olmayabilir — bağlanmış kapanış
+            // (`değişken f = || {..}; görev_başlat(f)`) ya da işlev değeri. Eski kod
+            // DAİMA literal varsayıp `a_cb/a_cs(lam)` okuyordu → TANIMLAYICI düğümünde
+            // çocuk -1 → "PANIK: dizi sınır ihlali (i=-1)" (derleyici ÇÖKÜYORDU; D-627
+            // T020'yi kaldırınca açığa çıktı). C llvm.c ile aynı: literal değilse fat
+            // value'dan fn/env extractvalue, ρ_serbest = 0 (kanıt YOK = DENY, D-309).
+            değişken lam_lit: mantıksal = metin_esit(dizi_al(p.a_ad, lam), "LAMBDA");
+            değişken mad: metin = "";
+            değişken capbase: tam32 = 0;
+            değişken capcnt: tam32 = 0;
+            değişken fnop: metin = "";
+            değişken envreg: metin = "null";
+            değişken rhobay: metin = "0";
+            eğer lam_lit {
+                // Mangled ad
+                mad = metin_birlestir("lambda_", tam64_str(p.lam_sayac olarak tam64));
+                p.lam_sayac = p.lam_sayac + 1;
+                // Capture analizi (çevre scope canlıyken). Lambda gövdesi = SON çocuk.
+                değişken lcb: tam32 = dizi_al(p.a_cb, lam);
+                değişken lcs: tam32 = dizi_al(p.a_cs, lam);
+                değişken govde: tam32 = dizi_al(p.cocuk, lcb + lcs - 1);
+                capbase = dizi_boyut(p.lam_capisim);
+                lam_cap_tara(p, govde, lam, capbase);
+                capcnt = dizi_boyut(p.lam_capisim) - capbase;
+                // Env: capture yoksa null; varsa HEAP struct (C V2-F2 aynası).
+                // D-322: emisyon lam_env_uret'e taşındı — genel kapanış kolu AYNI kodu
+                // kullanır (iki kopya ayrışırsa görev/kapanış env düzeni sessizce sapardı).
+                envreg = lam_env_uret(p, capbase, capcnt, 0 - 1);
+                fnop = metin_birlestir("@", mad);
+                // D-309: ρ_sahip POZİTİF hapsedilme kanıtı (C gorev_rho_confined aynası).
+                // Kanıtlıysa runtime join'de ρ_sahip'i geri verir; değilse sızdırır.
+                eğer rho_confined(p, govde) { rhobay = "1"; }
+            } değilse {
+                // Fat value { fnptr, envptr } → iki alanı ayrı çıkar.
+                değişken fv: metin = ifade_uret(p, lam);
+                değişken fr: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(fr));
+                yaz_str(" = extractvalue { ptr, ptr } "); yaz_str(fv); yaz_str(", 0"); yb(10);
+                değişken er: tam32 = yeni_reg(p);
+                yaz_str("  "); yaz_str(reg_str(er));
+                yaz_str(" = extractvalue { ptr, ptr } "); yaz_str(fv); yaz_str(", 1"); yb(10);
+                fnop = reg_str(fr);
+                envreg = reg_str(er);
+            }
             // Runtime çağrısı: fn AYNI ptr iki kez (bare/kapanış), env üçüncü.
             değişken gr: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(gr));
-            yaz_str(" = call ptr @kdl_gorev_basla_kapanis(ptr @"); yaz_str(mad);
-            yaz_str(", ptr @"); yaz_str(mad); yaz_str(", ptr "); yaz_str(envreg);
-            // D-309: ρ_sahip POZİTİF hapsedilme kanıtı (C gorev_rho_confined aynası).
-            // Kanıtlıysa runtime join'de ρ_sahip'i geri verir; değilse sızdırır.
-            yaz_str(", i32 ");
-            eğer rho_confined(p, govde) { yaz_str("1"); } değilse { yaz_str("0"); }
+            yaz_str(" = call ptr @kdl_gorev_basla_kapanis(ptr "); yaz_str(fnop);
+            yaz_str(", ptr "); yaz_str(fnop); yaz_str(", ptr "); yaz_str(envreg);
+            yaz_str(", i32 "); yaz_str(rhobay);
             yaz_str(")"); yb(10);
             // Karar 1 (D-30x): görev_başlat → sonuç<görev<T>, metin>. görev<T> ve
             // metin ikisi de IR'de ptr → aggregate DAİMA { i8, ptr, ptr } (T'den
@@ -5125,12 +5152,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken ld: tam32 = yeni_reg(p);
             yaz_str("  "); yaz_str(reg_str(ld));
             yaz_str(" = load { i8, ptr, ptr }, ptr "); yaz_str(reg_str(slot)); yb(10);
-            // Lifted lambda'yı kuyruğa al (gövde-sonrası emit).
-            dizi_ekle(p.lam_node, lam);
-            dizi_ekle(p.lam_ad, mad);
-            dizi_ekle(p.lam_capbase, capbase);
-            dizi_ekle(p.lam_capcount, capcnt);
-            dizi_ekle(p.lam_ret, "i64");   // D-322: görev yolu = runtime i64 taşıyıcı
+            // Lifted lambda'yı kuyruğa al (gövde-sonrası emit). D-628: yalnız LİTERAL
+            // — bağlanmış kapanış tanım yerinde (genel kapanış kolu) zaten kuyruklandı.
+            eğer lam_lit {
+                dizi_ekle(p.lam_node, lam);
+                dizi_ekle(p.lam_ad, mad);
+                dizi_ekle(p.lam_capbase, capbase);
+                dizi_ekle(p.lam_capcount, capcnt);
+                dizi_ekle(p.lam_ret, "i64");   // D-322: görev yolu = runtime i64 taşıyıcı
+            }
             p.son_tip = "{ i8, ptr, ptr }"; p.son_elem = ""; p.son_ref = "";
             // D-396: görev<T>'nin T'sini YAYINLA. Aggregate `{ i8, ptr, ptr }` T'yi
             // SİLER (görev<T> ve metin ikisi de ptr) → `eşleş tamam(g)` ile bağlanan
@@ -5138,7 +5168,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // DOĞAL dönüş IR'ı (kuyruğa yazılan "i64" runtime TAŞIYICISIDIR, T değil).
             // Yazılmazsa `görev_birleştir(g)` hedef tipi "" görür, i64_daralt i64'te
             // kalır ve ptr yuvasına yazılır → `i64 but expected ptr` (gorev_temel).
-            p.son_ic = lam_ret_tahmin_l(p, lam);   // D-625: parametre + blok bağlamı
+            eğer lam_lit {
+                p.son_ic = lam_ret_tahmin_l(p, lam);   // D-625: parametre + blok bağlamı
+            } değilse {
+                // D-628: T = bağlamanın kayıtlı kapanış dönüşü (annotasyonlu → bildirilen,
+                // annotasyonsuz → D-325 tahmini; ikisi de cg_aic'te). Yoksa "" (eski yol).
+                p.son_ic = "";
+                eğer metin_esit(dizi_al(p.a_ad, lam), "TANIMLAYICI") {
+                    p.son_ic = cg_var_ic_bul(p, dizi_al(p.a_deg, lam));
+                }
+            }
             ver reg_str(ld);
         }
         // ---- D-397: SIMD yerleşikleri (C llvm.c aynası) ----
