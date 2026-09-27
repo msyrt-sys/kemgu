@@ -72,6 +72,12 @@
       `--check` dahil) -> D-631.
 - [x] 2^64 VE USTU LITERAL sessiz doymasi -> D-632 (T043, baglamdan bagimsiz).
 - [x] KESIRLI LITERAL 63 KARAKTER KIRPMASI -> D-633.
+- [ ] SELF-HOST VARSAYILAN HEDEF UCLUSU SABIT (DGX Spark gecisinde okundu, OLCULMEDI):
+      `selfhost/codegen.kem` `hedef_mim: "x86_64"` + triple `x86_64-pc-windows-gnu` — ana
+      makineden bagimsiz. C varsayilani platformdan (src/llvm.h D-469; Spark'ta aarch64-linux).
+      Spark'ta self-host x86/Windows IR uretir -> bootstrap/codegen_diff/ct_bariyer dusmesi
+      beklenir. Ayrica C `--mimari x86_64` Linux'ta da windows triple secer (src/ana.c).
+      Once Spark'ta OLC, sonra self-host varsayilanini C ile AYNI kuraldan turet.
 - [ ] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592; değişken y: tam32 = x;`
       C T001, self OK (onceden var: `değişken x = "a"; y: tam32 = x` de self'te OK).
       Self checker annotasyonsuz baglamanin tipini izlemiyor.
