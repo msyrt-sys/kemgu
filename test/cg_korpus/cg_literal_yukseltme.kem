@@ -1,0 +1,17 @@
+// [D-630] BAĞLAMSIZ literal değere göre yükseltilir: ≤2^31-1 tam32, ≤2^63-1 tam64,
+// üstü dtam64 (işaretsiz). Eskiden daima tam32 → `değişken x = 8589934592` sessizce
+// kırpılıyor, ardından `x >> 32` geçersiz kaydırma paniğine düşüyordu (ölçüldü:
+// eski C exit 134). Her ölçüm AYRI çıkış kodu.
+işlev main() -> tam32 {
+    değişken x = 8589934592;
+    eğer (x >> 32) != 2 { ver 1; }
+    değişken y = 18446744073709551615;
+    eğer (y >> 60) != 15 { ver 2; }                   // işaretsiz: lshr
+    eğer (y > 5) == yanlış { ver 3; }                 // işaretsiz karşılaştırma
+    değişken z = 2147483647;                         // tam32 kalmalı
+    değişken w: tam32 = z;
+    eğer w != 2147483647 { ver 4; }
+    değişken k: tam8 = -128;
+    eğer (k olarak tam32) != -128 { ver 5; }
+    ver 42;
+}

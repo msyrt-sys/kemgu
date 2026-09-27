@@ -626,6 +626,10 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->lambda_baslangic_scope = NULL;
     tk->lambda_blok_cikarsama = 0;      /* D-304 */
     tk->lambda_blok_donus = NULL;       /* D-304 */
+    tk->neg_literal = 0;                /* D-630 (TipKontrol memset EDILMIYOR) */
+    tk->t043_dugum = NULL;
+    tk->t043_sayi = 0;
+    tk->t043_kap = 0;
     tk->aktif_escape = NULL;
 }
 
@@ -2603,13 +2607,83 @@ static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d,
 }
 
 /* Ana visitor */
+/* D-630: literalin İŞARETSİZ büyüklüğü (değer iki'nin tümleyeni bit deseniyle
+ * saklanır — D-629; literaller daima negatif OLMAYAN yazılır, eksi ayrı düğümdür). */
+static uint64_t literal_buyukluk(const Dugum *d) {
+    uint64_t u;
+    memcpy(&u, &d->veri.tam.deger, sizeof u);
+    return u;
+}
+
+/* D-630: literal `k` tipine sığıyor mu? 1 = evet, 0 = hayır, -1 = kategori
+ * tamsayı değil / bilinmiyor (denetleme). `neg`: literal tekli eksinin operandı —
+ * işaretli tipte alt sınır bir fazladır (tam8: -128 geçerli). İşaretsiz tipte
+ * `-x` bugünkü davranışıyla bırakılır (denetlenmez: ayrı dil kararı). */
+static int literal_sigar_mi(uint64_t v, TipKategorisi k, int neg) {
+    uint64_t ust;
+    switch (k) {
+        case TIP_TAM8:   ust = 127ULL; break;
+        case TIP_TAM16:  ust = 32767ULL; break;
+        case TIP_TAM32:  ust = 2147483647ULL; break;
+        case TIP_TAM64:  ust = 9223372036854775807ULL; break;
+        case TIP_DTAM8:  ust = 255ULL; break;
+        case TIP_DTAM16: ust = 65535ULL; break;
+        case TIP_DTAM32: ust = 4294967295ULL; break;
+        case TIP_DTAM64: return 1;
+        default: return -1;
+    }
+    int isaretli = (k == TIP_TAM8 || k == TIP_TAM16 ||
+                    k == TIP_TAM32 || k == TIP_TAM64);
+    if (neg) {
+        if (!isaretli) return -1;
+        return v <= ust + 1;
+    }
+    return v <= ust;
+}
+
+/* D-630: tamsayı tipinin bit genişliği (tamsayı değilse 0). */
+static int tip_boyut_bit(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+        case TIP_TAM8:  case TIP_DTAM8:  return 8;
+        case TIP_TAM16: case TIP_DTAM16: return 16;
+        case TIP_TAM32: case TIP_DTAM32: return 32;
+        case TIP_TAM64: case TIP_DTAM64: return 64;
+        default: return 0;
+    }
+}
+
+/* D-630: T043'ü düğüm başına BİR KEZ raporla. */
+static void t043_raporla(TipKontrol *tk, const Dugum *d) {
+    for (int i = 0; i < tk->t043_sayi; i++) if (tk->t043_dugum[i] == d) return;
+    if (tk->t043_sayi == tk->t043_kap) {
+        int yk = tk->t043_kap ? tk->t043_kap * 2 : 8;
+        const Dugum **yeni = (const Dugum **)arena_ayir(tk->arena,
+            sizeof(const Dugum *) * (size_t)yk);
+        for (int i = 0; i < tk->t043_sayi; i++) yeni[i] = tk->t043_dugum[i];
+        tk->t043_dugum = yeni;
+        tk->t043_kap = yk;
+    }
+    tk->t043_dugum[tk->t043_sayi++] = d;
+    tip_hata(tk, d, "T043", "sayi literali hedef tipe sigmiyor");
+}
+
 TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
     if (!d) return t_hata(tk);
 
     switch (d->tip) {
         /* === Literaller === */
-        case DUGUM_TAM:
-            return t_basit(tk, TIP_TAM32);  /* default; ADIM 11.5'te context */
+        case DUGUM_TAM: {
+            /* D-630: bağlamsız literal DEĞERE GÖRE yükseltilir (eskiden daima
+             * tam32 → `değişken x = 8589934592` SESSİZCE kırpılıyordu). Bağlamsız
+             * yolda T043 RAPORLANMAZ: D-021 literali önce burada, sonra karşı
+             * operandın tipiyle YENİDEN tipler — burada raporlamak geçerli
+             * `x + 8589934592` (x: tam64) için sahte tanı üretirdi. */
+            uint64_t v = literal_buyukluk(d);
+            if (v <= 2147483647ULL) return t_basit(tk, TIP_TAM32);
+            if (v <= 9223372036854775807ULL) return t_basit(tk, TIP_TAM64);
+            return t_basit(tk, TIP_DTAM64);
+        }
         case DUGUM_KESIRLI:
             return t_basit(tk, TIP_KESIRLI64);
         case DUGUM_METIN:
@@ -2879,7 +2953,18 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * yayılımı kendi kurallarına sahip — S2/V testleri). */
             if (!tip_sabitsure_mi(sol) && !tip_sabitsure_mi(sag) &&
                 !tip_vektor_mu(sol) && !tip_vektor_mu(sag)) {
-                if (tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
+                /* D-630: İKİ taraf da literal ağacıysa DAR olan GENİŞ olanın
+                 * tipine çekilir. Eskiden daima sol yeniden tipleniyordu; bağlamsız
+                 * literal değere göre yükseltilince (`(0 - 9223372036854775807) - 1`)
+                 * sol `tam64` ağacı sağdaki `1`in `tam32`sine DARALTILIP sahte T043
+                 * üretiyordu (ölçüldü: self-host kaynağında). */
+                int iki_lit = tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
+                              tamsayi_literal_ifade_mi(d->veri.ikili.sag);
+                if (iki_lit && tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
+                    !tip_esit(sol, sag) &&
+                    tip_boyut_bit(sol) > tip_boyut_bit(sag)) {
+                    sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
+                } else if (tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
                     tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
                     !tip_esit(sol, sag)) {
                     sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
@@ -4951,6 +5036,14 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         case DUGUM_TAM:
             /* Sayi literali context tamsayi tipine gore */
             if (tip_tamsayi_mi(beklenen)) {
+                /* D-630: bağlam SOMUT tamsayı tipiyse literal ona SIĞMALI —
+                 * eskiden sığmayan değer sessizce kırpılıyordu (`tam8 = 300` →
+                 * 44, `tam64 = 2^63` → INT64_MIN). Generic/sarmalayıcı kategoride
+                 * literal_sigar_mi -1 döner → denetim YOK (eski davranış). */
+                if (literal_sigar_mi(literal_buyukluk(d), beklenen->kategori,
+                                     tk->neg_literal) == 0) {
+                    t043_raporla(tk, d);
+                }
                 return t_basit(tk, beklenen->kategori);
             }
             break;
@@ -5175,8 +5268,13 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 (tip_tamsayi_mi(beklenen) ||
                  beklenen->kategori == TIP_KESIRLI32 ||
                  beklenen->kategori == TIP_KESIRLI64)) {
+                /* D-630: doğrudan literal operand → eksi bağlamı (alt sınır +1). */
+                int eski_neg = tk->neg_literal;
+                tk->neg_literal = (d->veri.tekli.operand &&
+                                   d->veri.tekli.operand->tip == DUGUM_TAM);
                 TipBilgisi *o = tip_belirle_beklenen(
                     tk, d->veri.tekli.operand, beklenen);
+                tk->neg_literal = eski_neg;
                 if (o->kategori != TIP_HATA && tip_esit(o, beklenen)) {
                     return t_basit(tk, beklenen->kategori);
                 }

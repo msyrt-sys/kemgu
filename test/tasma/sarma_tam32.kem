@@ -6,8 +6,11 @@
 işlev main() -> tam32 {
     değişken a: tam32 = 2147483647;
     değişken b: tam32 = 1;
-    eğer a + b != (0 - 2147483648) { ver 1; }     // MAX+1 -> MIN
-    değişken c: tam32 = 0 - 2147483648;
+    // [D-630] INT32_MIN `-2147483648` ile yazılır: `0 - 2147483648`deki
+    // `2147483648` tek başına bir tam32 DEĞİLDİR (T043); eskiden i32 sarmasıyla
+    // tesadüfen doğru çıkıyordu. Anlam ve ölçüm DEĞİŞMEDİ.
+    eğer a + b != -2147483648 { ver 1; }          // MAX+1 -> MIN
+    değişken c: tam32 = -2147483648;
     eğer c - b != 2147483647 { ver 2; }           // MIN-1 -> MAX
     ver 42;
 }

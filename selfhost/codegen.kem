@@ -312,6 +312,8 @@ yapı Ayr {
                              // guv_bag'den AYRI: `güvensiz` blok çıplak yapmaz.
     lin_basla: tam32;        // aktif işlevin lineer bağlama diliminin başı
     th_kod: Dizi<metin>;     // tip-hata kodları (traversal sırası)
+    t043_node: Dizi<tam32>;  // D-630: T043 raporlanmış literal düğümleri (tekilleştirme)
+    neg_lit: tam32;          // D-630: literal tekli eksinin operandı mı (alt sınır +1)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
 }
@@ -4625,6 +4627,11 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     // Yükleme: değişken/parametre kaydından (C isim->isaretsiz)
     eğer metin_esit(ad, "TANIMLAYICI") { ver cg_var_isz_bul(p, dizi_al(p.a_deg, idx)); }
+    // D-630: bağlamsız ≥2^63 literal dtam64'tür (C lit_isz aynası) → işaretsiz.
+    eğer metin_esit(ad, "TAM") {
+        eğer lit_deger(dizi_al(p.a_deg, idx)) < 0 { ver 1; }
+        ver 0;
+    }
     // `x olarak dtamN` → hedef tipin imzasızlığı (C: hedef_isz)
     eğer metin_esit(ad, "TIP_DONUSTUR") {
         ver ll_isz(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
@@ -4844,7 +4851,16 @@ işlev erisim_kapanis_ic(p: &değişken Ayr, hed: tam32) -> metin {
 işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
     p.son_ic = "";   // D-341: kapanış dönüş IR'ı — üreten dal sonunda yazar
     değişken ad: metin = dizi_al(p.a_ad, idx);
-    eğer metin_esit(ad, "TAM") { p.son_tip = "i32"; ver dizi_al(p.a_deg, idx); }
+    eğer metin_esit(ad, "TAM") {
+        // D-630: literal IR genişliği DEĞERE GÖRE (C llvm.c DUGUM_TAM aynası):
+        // ≤2^31-1 → i32, aksi → i64. Metin immediate zaten tam değerdir; bağlamlı
+        // tüketici kendi tipini yazar. Eskiden daima "i32" → bağlamsız
+        // `değişken x = 8589934592` alloca i32'ye SESSİZCE kırpılıyordu.
+        değişken lvc: tam64 = lit_deger(dizi_al(p.a_deg, idx));
+        p.son_tip = "i32";
+        eğer (lvc < 0) veya (lvc > 2147483647) { p.son_tip = "i64"; }
+        ver dizi_al(p.a_deg, idx);
+    }
     // D3 Öncelik-1: kesirli literal — immediate (TAM gibi), son_tip double (kesirli64
     // varsayılan). Değer parse'ta ondalik_bicimle ile noktalı (LLVM float-sabit) format.
     // kesirli32/float bağlamı bidirectional çıkarsama gerektirir (ayrı iş — şimdilik double).
@@ -9736,13 +9752,82 @@ işlev intrinsik_donus(p: &değişken Ayr, idx: tam32, fad: metin) -> metin {
     }
     ver "?";
 }
+// D-630: literal a_deg'i (işaretli onluk; ≥2^63 değerler iki'nin tümleyeni bit
+// deseniyle NEGATİF görünür — D-629) tam64'e çevir.
+işlev lit_deger(s: metin) -> tam64 {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    değişken neg: mantıksal = yanlış;
+    eğer n > 0 ve bayt(s, 0) == 45 { neg = doğru; i = 1; }
+    değişken v: tam64 = 0;
+    iken i < n {
+        değişken c: tam32 = bayt(s, i);
+        eğer c >= 48 ve c <= 57 { v = v * 10 - ((c - 48) olarak tam64); }   // negatif biriktir: INT64_MIN taşmaz
+        i = i + 1;
+    }
+    eğer neg { ver v; }
+    ver 0 - v;
+}
+// D-630 (C literal_sigar_mi aynası): 1 = sığar, 0 = sığmaz, -1 = denetlenmez.
+// `v < 0` = işaretsiz büyüklük ≥ 2^63. `neg`: literal tekli eksinin operandı —
+// işaretli tipte alt sınır bir fazla; işaretsiz tipte denetlenmez (C ile aynı).
+işlev lit_sigar(v: tam64, k: metin, neg: tam32) -> tam32 {
+    değişken ust: tam64 = 0 - 1;
+    değişken isaretli: mantıksal = yanlış;
+    eğer metin_esit(k, "tam8") { ust = 127; isaretli = doğru; }
+    eğer metin_esit(k, "tam16") { ust = 32767; isaretli = doğru; }
+    eğer metin_esit(k, "tam32") { ust = 2147483647; isaretli = doğru; }
+    eğer metin_esit(k, "tam64") { ust = 9223372036854775807; isaretli = doğru; }
+    eğer metin_esit(k, "dtam8") { ust = 255; }
+    eğer metin_esit(k, "dtam16") { ust = 65535; }
+    eğer metin_esit(k, "dtam32") { ust = 4294967295; }
+    eğer metin_esit(k, "dtam64") { ver 1; }
+    eğer ust < 0 { ver 0 - 1; }                      // tamsayı kategorisi değil
+    eğer neg == 1 {
+        eğer isaretli == yanlış { ver 0 - 1; }
+        // alt sınır: |v| <= ust + 1. ≥2^63 yalnız tam64'ün INT64_MIN'i (bit deseni).
+        eğer v < 0 {
+            eğer metin_esit(k, "tam64") ve (v == 0 - 9223372036854775807 - 1) { ver 1; }
+            ver 0;
+        }
+        eğer v <= ust { ver 1; }
+        eğer v == ust + 1 { ver 1; }
+        ver 0;
+    }
+    eğer v < 0 { ver 0; }
+    eğer v <= ust { ver 1; }
+    ver 0;
+}
+// D-630: T043'ü düğüm başına BİR KEZ raporla (ifade_tip aynı düğüm için birden
+// çok kez çağrılabilir; C t043_raporla aynası).
+işlev t043_raporla(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.t043_node) {
+        eğer dizi_al(p.t043_node, i) == idx { ver 0; }
+        i = i + 1;
+    }
+    dizi_ekle(p.t043_node, idx);
+    dizi_ekle(p.th_kod, "T043");
+    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+    ver 0;
+}
 işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") {
         // D-354: C `tip_tamsayi_mi(beklenen)` — tamsayı literali YALNIZ tamsayı
         // bağlamına uyarlanır. `sayisal_mi` demek `değişken x: kesirli64 = 1`i
         // sessizce kabul ettiriyordu (C: T001) ve dizi elemanında konum kaydırıyordu.
-        eğer tamsayi_mi(beklenen) { ver beklenen; }   // bidirectional sayı literal
+        değişken lv: tam64 = lit_deger(dizi_al(p.a_deg, idx));
+        eğer tamsayi_mi(beklenen) {   // bidirectional sayı literal
+            // D-630: bağlam somut tamsayı tipiyse literal ona SIĞMALI (T043).
+            eğer lit_sigar(lv, beklenen, p.neg_lit) == 0 { t043_raporla(p, idx); }
+            ver beklenen;
+        }
+        // D-630: bağlamsız literal DEĞERE GÖRE yükseltilir (C tip_belirle aynası).
+        // Bağlamsız yolda RAPOR YOK (C D-021 gerekçesi: sonra yeniden tiplenebilir).
+        eğer lv < 0 { ver "dtam64"; }
+        eğer lv > 2147483647 { ver "tam64"; }
         ver "tam32";
     }
     eğer metin_esit(ad, "KESIRLI") {
@@ -9817,7 +9902,12 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             ver "mantıksal";
         }
         eğer metin_esit(op, "neg") {   // sayısal değilse "?" (C: TIP_HATA)
+            // D-630: doğrudan literal operand → eksi bağlamı (alt sınır +1).
+            değişken eski_neg: tam32 = p.neg_lit;
+            p.neg_lit = 0;
+            eğer metin_esit(dizi_al(p.a_ad, operand), "TAM") { p.neg_lit = 1; }
             değişken t: metin = ifade_tip(p, operand, beklenen);
+            p.neg_lit = eski_neg;
             eğer bilinen_sayisal_degil(t) { ver "?"; }
             ver t;
         }
@@ -14088,7 +14178,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
-        th_kod: [], th_sat: [], th_sut: []
+        th_kod: [], th_sat: [], th_sut: [], t043_node: [], neg_lit: 0
     };
 }
 
