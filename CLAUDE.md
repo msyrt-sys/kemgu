@@ -20,7 +20,7 @@ Ana hedefler:
 ## Derleme ve Test
 
 ```bash
-# Derleme (mingw32-make Windows'ta, make Linux'ta)
+# Derleme (Linux / DGX Spark: make · Windows: mingw32-make)
 make
 
 # Tüm testleri çalıştır
@@ -42,11 +42,12 @@ make calistir_parser_test
 # Test binary'leri ASan ile derlenir, runtime'da otomatik tarar.
 # Manuel komut yok — `make calistir_*_test` çalıştırınca aktif olur.
 # Sızıntı/hata varsa: "ERROR: AddressSanitizer: ..." mesajı stderr'e çıkar.
-# Valgrind YOK (Windows native ortam) — Dr. Memory ikincil seçenek.
+# Linux'ta LeakSanitizer da aktif (Windows ASan runtime'ında YOK — D-483).
+# ASan ikilileri `setarch -R` ile koşar (ASLR entropisi; D-476/D-478/D-484).
 ```
 
-**Derleyici:** `gcc -Wall -Wextra -Wpedantic -std=c11` (MinGW-w64 GCC, UCRT64)
-**Hedef platformlar:** Windows x86_64 (birincil — geliştirme), x86_64/ARM64 Linux (ikincil — gelecekte port: DGX Spark, Android NDK)
+**Derleyici:** `gcc -Wall -Wextra -Wpedantic -std=c11` (prod) + `clang` (ASan testleri, `CC_ASAN`)
+**Hedef platformlar:** ARM64 Linux — **DGX Spark (birincil geliştirme, 2026-09-27'den itibaren)** · x86_64 Linux + Windows x86_64 (CI) · bare-metal AArch64 (KEMGU-OS, QEMU) · Android NDK (gelecek)
 
 ---
 
@@ -6379,28 +6380,71 @@ Belge dosyaları: Türkçe.
 
 ---
 
-## Geliştirme Ortamı (Windows Native — Dual-Compiler)
+## Geliştirme Ortamı (DGX Spark — yerli ARM64 Linux)
 
-- **Shell:** Git Bash (MSYS / MinTTY)
-- **Prod derleyici:** MinGW-w64 GCC 16.1.0 (UCRT64) — `kemgu.exe`, lexer testi
-- **Test + ASan derleyicisi:** Clang 22.1.4 (Clang64) — arena / AST / parser testleri
-  (Win11'de ASan runtime için zorunlu — UCRT64 GCC `libasan` içermez)
-- **Standart:** C11 (her iki derleyici de)
-- **Build:** mingw32-make 4.4.1 (UCRT64'ten)
-- **PATH (her Bash tool çağrısında set edilmeli — kalıcı PATH'e yazılmadı):**
-  ```bash
-  export PATH=/c/msys64/clang64/bin:/c/msys64/ucrt64/bin:$PATH
-  ```
-  Sebep: `clang` Clang64'ten (ASan testleri), `gcc` UCRT64'ten (prod), `mingw32-make` UCRT64'ten.
-- **Bellek kontrolü:** AddressSanitizer + UndefinedBehaviorSanitizer (Clang64 dynamic runtime).
-  `libclang_rt.asan_dynamic-x86_64.dll` Clang64/bin içinde — PATH'teyse otomatik bulunur.
-- **Test binary'leri:** `.exe` uzantılı (`build/test_lexer.exe`, `build/test_arena.exe`, `build/kemgu.exe`)
+**2026-09-27 (PR #110 merge'ünden sonra) geliştirme DGX Spark'a taşındı.** Önceki
+ortam Windows + WSL idi (aşağıda "Windows (tarihî / CI)" bölümü). Spark'ta yerli
+tam koşum **henüz YAPILMADI** — ilk koşumun sonuçları buraya ölçülerek yazılmalı.
 
-### Win11 26200 — ASan / Dr. Memory Notu
+### Kurulum
+```bash
+sudo apt-get update
+sudo apt-get install -y clang gcc make lld llvm libclang-rt-dev \
+    qemu-system-arm qemu-system-x86 util-linux time git python3
+```
+- `llvm` → `opt` (`llvm_test` IR doğrulaması, D-555), `llvm-nm`, `llvm-objdump`.
+- `libclang-rt-dev` → ASan runtime; **clang sürümüyle eşleşen** paket gerekir
+  (Ubuntu'da örn. `libclang-rt-18-dev`). Eksikse ASan ikilileri link'te düşer.
+- `lld` → bare-metal/KEMGU-OS link (`ld.lld`; D-556).
+- `util-linux` → `setarch -R` (ASan ikilileri ASLR kapalı koşar).
+- `time` → `/usr/bin/time` (`calistir_perf_bellek`; yoksa kapı ATLANIR, D-566).
+- `qemu-system-arm` → KEMGU-OS (`qemu-system-aarch64`); `qemu-system-x86` → x86
+  bare-metal hedefleri.
+- Opsiyonel: `elan` + `make calistir_lean_tam` (Lean ispatları; D-529/D-549).
 
-- **MinGW-w64 UCRT64 GCC**, ASan/UBSan **runtime** kütüphanelerini içermez (sadece compiler header'ları). Bu MinGW-w64'ün bilinen kısıtlaması.
-- **Dr. Memory** Win11 26200'de DynamoRIO uyumsuzluğu nedeniyle çöküyor (GitHub issues [#2456](https://github.com/DynamoRIO/drmemory/issues/2456), [#2489](https://github.com/DynamoRIO/drmemory/issues/2489) — 3+ yıldır açık, fix yok).
-- **Çözüm:** Bellek alan modül testleri için **Clang64 + ASan** kullan. Makefile'da `CC_ASAN = clang` yapısı bunu yapar — prod tarafı GCC kalır, sadece test ASan ile derlenir.
+### Derleme ve koşum
+```bash
+make
+make test_tumu 2>&1 | tee tumu.log; echo "rc=${PIPESTATUS[0]}"
+```
+- İkililer **uzantısız** (`build/kemgu`, `build/codegen`); Makefile `EXE`'yi
+  platformdan seçer ve harness'lara aktarır (D-469). PATH ayarı GEREKMEZ.
+- `rc=0` bir İDDİADIR: kapı sayısını ve "atla/atlandı" satırlarını AYRICA ölç (D-486).
+- Türkçe `.kem`/`.c` dosyasında `sed`/`awk`/`perl -i` KULLANMA → Edit aracı ya da
+  python (`encoding='utf-8'`, `newline=''`). **`runtime/kdl_runtime.c` geçerli UTF-8
+  DEĞİL** → yalnız ikili (bytes) modda düzenle; `open(...,'w')` hata verirse dosya
+  ÖNCE kesilmiş olur (D-633'te 2328 satır kaybedildi, git'ten geri alındı).
+
+### Hedef üçlüsü — ⚠ İLK KOŞUMDA BEKLENEN BULGU
+- **C derleyici** varsayılanı DERLEME PLATFORMUNDAN gelir (`src/llvm.h`, D-469):
+  Spark'ta `KEMGU_HEDEF_MIMARI="arm64"`, triple `aarch64-unknown-linux-gnu` →
+  `sabitsüre` bariyeri `csdb` (D-468). Doğru olmalı — ama yerli koşumla ÖLÇÜLMEDİ.
+- **Self-host derleyici** varsayılanı SABİT: `hedef_mim: "x86_64"` ve triple
+  `x86_64-pc-windows-gnu` (`selfhost/codegen.kem` `program_uret`, Ayr başlatıcısı).
+  Yani Spark'ta self-host **x86/Windows IR üretir** → bootstrap (FIXPOINT stage2),
+  `codegen_diff`, `ct_bariyer` gibi self-host IR'ını derleyip koşan kapıların
+  Spark'ta DÜŞMESİ beklenir. Kod okumasıyla bulundu, ölçülmedi. Ayrıca C'de açık
+  `--mimari x86_64` de Linux'ta bile `x86_64-pc-windows-gnu` seçer (`src/ana.c`).
+  Onarım: self-host varsayılanını da ana makineden türet (C ile AYNI kural — D-407).
+- Bu "platform farkı" diye geçiştirilmemeli (D-469): Spark'ta farklı çıkan her sonuç
+  bir bulgudur.
+
+### Gerçek ARM64 donanım doğrulaması
+QEMU TCG önbelleği ve zayıf bellek sıralamasını MODELLEMEZ (D-490). Spark bu
+depoda zayıf bellek davranışının ölçülebildiği ilk ortamdır:
+`belgeler/ARM64_Fiziksel_Donanim_Kontrol_Listesi.md` → önce `smp_queue_arm`,
+sonra aynı testin bariyer sabotajı (gerçek donanımda KIRMIZI beklenir; yeşilse
+test yeterince zorlamıyordur, bariyer gereksiz DEĞİLDİR).
+
+### Windows (tarihî / CI)
+CI (`.github/workflows/ci.yml`) Linux x86_64 **ve** Windows'ta tam takımı koşar —
+Windows yolu hâlâ kapıdır, bozulmamalı.
+- Shell Git Bash (MSYS); prod `gcc` MinGW-w64 UCRT64, ASan için `clang` Clang64
+  (UCRT64 GCC `libasan` içermez); build `mingw32-make`; ikililer `.exe`.
+- Yerel PATH: `export PATH=/c/msys64/clang64/bin:/c/msys64/ucrt64/bin:$PATH`.
+- Dr. Memory Win11 26200'de DynamoRIO uyumsuzluğuyla çöker → ASan kullanılır.
+- Windows'ta `abort()` çıkış kodu **127** (POSIX'te 134), RSS eşikleri farklı
+  (D-565/D-566); POSIX varsayımı taşıyan kapılar orada kırılır.
 
 ---
 
