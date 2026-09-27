@@ -63,13 +63,15 @@
       DOYURULUYOR (`add i64 0, 9223372036854775807`); `değişken r: dtam64 = 2^63` bile.
       Esitlik testi iki tarafi da doyurdugu icin GECER (gizli). Kok muhtemelen lexer'da
       strtoll; dtamN icin ust yari (2^63..2^64-1) temsil edilemiyor. Kapanisla ILGISIZ.
-- [ ] SELF-HOST CHECKER: blok-form kapanis icindeki `ver`, kapanisin DEGIL cevreleyen
-      ISLEVIN donus tipine karsi denetleniyor -> gecerli programlar T020 ile REDDEDILIYOR
-      (gurultulu). Olcum: `işlev main() -> tam32 { değişken f: işlev() -> tam64 =
-      || { değişken x: tam64 = 5; ver x; }; ver 0; }` -> C OK, SELF T020; ayni kapanis
-      `-> tam64` donen islevde SELF OK; `işlev() -> metin` + `ver "a"` -> SELF T020.
-      D-304'un "blok-form parite" iddiasi bu sekli KAPSAMIYOR. Yukaridaki C onarimi
-      bunu beklemeli: yoksa fikstur codegen_diff'e konamaz (self IR uretmez).
+- [x] Self-host checker blok-form kapanis `ver` baglami (T020) -> D-627.
+- [ ] SELF-HOST CODEGEN PANIK (D-627'de ortaya cikti, onceden T020 arkasinda gizliydi):
+      `değişken f = || { ... }; görev_başlat(f)` -> self-host derleyici "PANIK: dizi sinir
+      ihlali (i=-1)" ile COKUYOR (rc=134). Kok: gorev_başlat dali argumanin DAIMA lambda
+      LITERALI oldugunu varsayiyor (`lam = cocuk[cb+1]`, a_cb/a_cs okuyor); TANIMLAYICI
+      verilince cocuk dizisi -1 ile okunuyor. C bu sekli destekliyor (fat value'dan
+      fn/env extractvalue). Gurultulu (sessiz degil). Onarim: arguman LAMBDA degilse fat
+      degeri ifade_uret + extractvalue, rho_serbest=0 (kanit yok = DENY, D-309), T =
+      cg_var_ic_bul.
 - [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
       (Makefile ~1453/~1485) D-592'den beri KURULMAYAN nesnelere bakiyor -> llvm-nm
       "No such file" + `grep -q` bos -> denetim SESSIZCE "geciyor". D-599'un kacirdigi iki
@@ -670,3 +672,24 @@
   tipleri C ile birebir) . codegen_genis 58/58 . modul_codegen 27/27 . surucu_diff 16/16 .
   bolge_operand 176/176 . ct_bariyer 14/14 . kanal_omru 10/10 . checker_diff 187/187 .
   self_driver TUM MODLAR + SELF-HOST + FIXPOINT ✓.
+- 2026-09-27 D-627 (self-host checker: blok-form kapanis `ver` baglami). Kok: checker gövdeyi
+  cevreleyen islevin `aktif_donus`uyla yuruyordu; blok-form kapanistaki `ver`, KAPANISIN
+  donusudur (C tip_kontrol.c D-304: `lambda_blok_cikarsama` iken aktif_donus_tipi'ye karsi
+  denetlenmez). Sonuc: gecerli programlar sahte T020 aliyordu; GOLGELEMEDE ise distaki ayni
+  adli degiskenin tipi tesadufen eslesip geciyordu. Onarim (checker.kem + codegen.kem check
+  yolu, UC-UYGULAMA kurali — ikisi birden): genel cocuk dongusunde LAMBDA'nin govdesi BLOK
+  ise alt agac `aktif_donus = "?"` ile yurunur, bitince GERI YUKLENIR (ic ice kapanis guvenli).
+  Olcum (C / ref checker / surucu, kod+satir+sutun BIREBIR): 9 gecerli sekil (b1 b3 a3 c3 c1
+  v1 m1 a5 s1) sahte T020 -> temiz; 3 negatif (normal islevde T020, kapanistan SONRAKI dis
+  `ver`, ic ice kapanistan cikistaki dis `ver`) T020'yi AYNEN veriyor.
+  Onarimla self-host codegen bu sekilleri ILK KEZ gordu: 8'i C ile ayni ve dogru cevap;
+  v1 (`görev_başlat(f)`, baglanmis kapanis) self-host DERLEYICIYI COKERTTI -> ayri kusur,
+  Sirada (gurultulu).
+  Fikstur: tc53_01_kapanis_ver_baglami (checker_diff: 1 pozitif islev + 2 negatif) +
+  cg_kapanis_tip_kaybi'ne D-626'da DISARIDA kalan (e) metin, (f) tam64 blok yereli, (g)
+  annotasyonlu blok-form geri eklendi (C=SELF=42).
+  SABOTAJ: S24 (checker.kem geri yukleme yok) -> checker_diff 187/188 (negatifler kayboldu)
+  . S25 (codegen.kem "?" atamasi yok) -> self_driver --check iki modda tc53 kirmizi.
+  Kapilar: checker_diff 188/188 . check_genis 133/133 (bayat muafiyet yok) . codegen_diff
+  174/174 . yapi_diff 155/155 . surucu_diff 16/16 . modul_codegen 27/27 . codegen_genis 58/58
+  . bolge_operand 176/176 . check_kapisi 267/274 . self_driver FIXPOINT ✓.

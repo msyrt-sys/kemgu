@@ -5606,8 +5606,22 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             } değilse { p.dizi_bek = "?"; }
         } değilse { p.dizi_bek = "?"; }
     }
+    // D-627: BLOK-form kapanış gövdesindeki `ver` KAPANIŞIN dönüşüdür, çevreleyen
+    // işlevin DEĞİL (C tip_kontrol.c D-304: `lambda_blok_cikarsama` iken `ver`
+    // aktif_donus_tipi'ye karşı DENETLENMEZ, yalnız kapanış dönüşü olarak kaydedilir).
+    // Eski davranış: gövde alt ağacı çevreleyen işlevin `aktif_donus`uyla yürünüyordu →
+    // `main() -> tam32` içinde `|| { değişken x: tam64 = ..; ver x; }` sahte T020 alıyor,
+    // GÖLGELEMEDE ise dıştaki aynı adlı değişkenin tipi tesadüfen eşleşip geçiyordu.
+    // "?" = t020_kontrol atlar; alt ağaç bitince geri yüklenir (iç içe kapanış güvenli).
+    değişken eski_ad_d627: metin = p.aktif_donus;
+    eğer metin_esit(ad, "LAMBDA") ve (cs > 0) {
+        eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb + cs - 1)), "BLOK") {
+            p.aktif_donus = "?";
+        }
+    }
     değişken i: tam32 = 0;
     iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+    p.aktif_donus = eski_ad_d627;
     p.dizi_bek = eski_bek;
     p.drf_bek = eski_drf;
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
