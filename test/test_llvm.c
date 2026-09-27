@@ -3439,6 +3439,17 @@ static void test_dtam64_ust_yari_literal(void) {
     test_sonuc("D-629 dtam64 2^63 / 0xFFFF.. / 64 basamak ikilik literal -> exit 42", rc == 42);
 }
 
+/* D-633: 63 karakteri asan kesirli literal KIRPILMAMALI. Kirpma USSU dusuruyordu
+ * (1.000...0e10 -> 1.0). MUTLAK beklenen deger: C ayristiricisi ile self-host'un
+ * runtime bicimleyicisi AYNI kusuru tasiyordu -> parite kapilari esit bozulmaya kor. */
+static void test_uzun_kesirli_literal(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken a: kesirli64 = 1.00000000000000000000000000000000000000000000000000000000000000e10; "
+        "de\xc4\x9fi\xc5\x9fken b: kesirli64 = 1.0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0e2; "
+        "e\xc4\x9f" "er a != 10000000000.0 { ver 1; } e\xc4\x9f" "er b != 100.0 { ver 2; } ver 42; }");
+    test_sonuc("D-633 67/85 karakterlik kesirli literal (us korunur) -> exit 42", rc == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -3855,6 +3866,8 @@ int main(void) {
 
     printf("\n--- D-629: 64-bit literal ust yarisi ---\n");
     test_dtam64_ust_yari_literal();
+    printf("\n--- D-633: uzun kesirli literal ---\n");
+    test_uzun_kesirli_literal();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

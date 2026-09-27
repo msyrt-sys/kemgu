@@ -253,13 +253,19 @@ void kdl_yaz_bayt(int32_t b) {
  * ile biçimle (self-host parser KESIRLI dump'ı ast_duz_yaz ile birebir). */
 const char *kdl_ondalik_bicimle(const char *lex) {
     if (!lex) return "0";
-    char buf[64];
-    int j = 0;
-    for (int i = 0; lex[i] && j < 63; i++) {
+    /* [D-633] Tampon LEXEME boyunda: eskiden sabit 64 bayt + `j < 63` kirpmasi
+     * uzun literalin USSUNU dusuruyordu (`1.000...0e10` -> 1.0; C ayristiricisiyla
+     * AYNI kusur, ikisi birlikte onarildi -- SESSIZ YANLIS DEGER). */
+    size_t ln = strlen(lex);
+    char *buf = (char *)malloc(ln + 1);
+    if (!buf) return "0";
+    size_t j = 0;
+    for (size_t i = 0; i < ln; i++) {
         if (lex[i] != '_') buf[j++] = lex[i];
     }
     buf[j] = '\0';
     double d = strtod(buf, NULL);
+    free(buf);
     char *out = (char *)kdl_sizan_al(64);  /* V2-F4.1: sızan → bölge */
     if (!out) return "0";
     /* [D-457] "%g" ALTI anlamli basamak verir -> self-host, kesirli LEXEME'i
