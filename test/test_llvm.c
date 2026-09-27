@@ -3426,6 +3426,16 @@ static void test_kapanis_arg_dtam64(void) {
     test_sonuc("D-625 annotsuz kapanis dtam64 arguman -> exit 42", rc == 42);
 }
 
+/* D-629: dtam64 UST YARISI literal olarak yazilabilmeli. MUTLAK beklenen deger ZORUNLU:
+ * parite kapilari (codegen_diff/parser_diff) bu sinifa KORDUR — self-host'un kendi
+ * `tavan` literalini de C derledigi icin C bozulunca IKI taraf ESIT bozulur (olculdu:
+ * sabotaj S29 iki parite kapisinda da SESSIZ kaldi). */
+static void test_dtam64_ust_yari_literal(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken a: dtam64 = 9223372036854775808; de\xc4\x9fi\xc5\x9fken b: dtam64 = 0xFFFFFFFFFFFFFFFF; de\xc4\x9fi\xc5\x9fken c: dtam64 = 0b1000000000000000000000000000000000000000000000000000000000000000; e\xc4\x9f" "er (a >> 63) != 1 { ver 1; } e\xc4\x9f" "er (b >> 60) != 15 { ver 2; } e\xc4\x9f" "er c != a { ver 3; } ver 42; }");
+    test_sonuc("D-629 dtam64 2^63 / 0xFFFF.. / 64 basamak ikilik literal -> exit 42", rc == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -3839,6 +3849,9 @@ int main(void) {
     test_kapanis_arg_annotsuz_tam64();
     test_kapanis_param_blok_tam64();
     test_kapanis_arg_dtam64();
+
+    printf("\n--- D-629: 64-bit literal ust yarisi ---\n");
+    test_dtam64_ust_yari_literal();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

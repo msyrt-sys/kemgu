@@ -498,8 +498,9 @@ işlev net_icmp_testi() -> tam32 {
 // [D-598] [25] BIGNUM — eski `bignum_selfhost_arm` (C iskeletli ayri ELF)
 // testinin kem_os'a tasinmis hali. 128-bit toplama (2 x dtam64 word, elde
 // yayilimi). Dayandigi codegen invaryantlari: dtam64 `add i64` WRAP ve dtam64
-// karsilastirma `icmp ult` (ISARETSIZ). 0xFFFFFFFFFFFFFFFF literal olarak
-// yazilamaz (strtoll satürasyonu) -> INT64_MAX + INT64_MAX + 1 ile kurulur.
+// karsilastirma `icmp ult` (ISARETSIZ). [D-629 notu] 0xFFFFFFFFFFFFFFFF artik
+// literal olarak YAZILABILIR (eskiden strtoll 2^63 ustunu doyuruyordu); asagidaki
+// INT64_MAX + INT64_MAX + 1 kurulumu dogru ve olculu oldugu icin DEGISTIRILMEDI.
 işlev kbn_tum_bir() -> dtam64 {
     değişken yari: dtam64 = 9223372036854775807;
     ver yari + yari + 1;

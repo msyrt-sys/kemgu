@@ -815,7 +815,7 @@ işlev hane_deger(c: tam32) -> tam32 {
 }
 işlev tamsayi_deger(lex: metin) -> tam64 {
     değişken n: tam32 = metin_uzunluk(lex);
-    değişken taban: tam64 = 10;
+    değişken taban: dtam64 = 10;
     değişken i: tam32 = 0;
     // 0x / 0b / 0o prefix
     eğer n >= 2 ve bayt(lex, 0) == 48 {
@@ -824,20 +824,25 @@ işlev tamsayi_deger(lex: metin) -> tam64 {
         eğer (c1 == 98) veya (c1 == 66) { taban = 2; i = 2; }
         eğer (c1 == 111) veya (c1 == 79) { taban = 8; i = 2; }
     }
-    değişken sonuc: tam64 = 0;
-    değişken maks: tam64 = 9223372036854775807;   // int64 max (strtoll clamp)
+    // D-629: C `strtoull` aynası. Eski sürüm `strtoll`u taklit edip 2^63 ve üstünü
+    // INT64_MAX'a DOYURUYORDU → `dtam64`in üst yarısı yazılamıyordu (sessiz yanlış).
+    // İşaretsiz biriktir, [0, 2^64) tam; 2^64 ve üstü 2^64-1'e doyar (strtoull ile
+    // AYNI). Dönüş iki'nin tümleyeni BİT DESENİ (C `memcpy` ile aynı) → `--ast`
+    // dump'ı C `PRId64` ile birebir (2^63 → -9223372036854775808).
+    değişken sonuc: dtam64 = 0;
+    değişken tavan: dtam64 = 18446744073709551615;   // 2^64-1 (strtoull doyma değeri)
     değişken tasti: mantıksal = yanlış;
     iken i < n {
         değişken c: tam32 = bayt(lex, i);
         eğer c != 95 {                              // '_' atla
-            değişken h: tam64 = hane_deger(c) olarak tam64;
-            eğer sonuc > (maks - h) / taban { tasti = doğru; }  // taşma → LLONG_MAX
-            eğer tasti { sonuc = maks; }
+            değişken h: dtam64 = hane_deger(c) olarak dtam64;
+            eğer sonuc > (tavan - h) / taban { tasti = doğru; }  // taşma → 2^64-1
+            eğer tasti { sonuc = tavan; }
             değilse { sonuc = sonuc * taban + h; }
         }
         i = i + 1;
     }
-    ver sonuc;
+    ver sonuc olarak tam64;
 }
 işlev hane_str(d: tam32) -> metin {
     eğer d == 0 { ver "0"; }   eğer d == 1 { ver "1"; }
@@ -848,7 +853,16 @@ işlev hane_str(d: tam32) -> metin {
 }
 işlev tam64_str(v: tam64) -> metin {
     eğer v == 0 { ver "0"; }
-    eğer v < 0 { ver metin_birlestir("-", tam64_str(0 - v)); }
+    // D-629: `0 - v` INT64_MIN'de TAŞAR (yine INT64_MIN) → sonsuz özyineleme →
+    // yığın taşması (ölçüldü: 2^63 literali self-host'u SEGFAULT'a düşürdü; önceden
+    // hiçbir literal INT64_MIN üretmediği için GİZLİYDİ). Mutlak değeri almadan son
+    // basamağı ayır: v/10 ve v%10 sıfıra doğru keser, hiçbiri taşmaz.
+    eğer v < 0 {
+        değişken q: tam64 = 0 - (v / 10);
+        değişken r: tam32 = (0 - (v % 10)) olarak tam32;
+        eğer q == 0 { ver metin_birlestir("-", hane_str(r)); }
+        ver metin_birlestir("-", metin_birlestir(tam64_str(q), hane_str(r)));
+    }
     eğer v < 10 { ver hane_str(v olarak tam32); }
     ver metin_birlestir(tam64_str(v / 10), hane_str((v % 10) olarak tam32));
 }

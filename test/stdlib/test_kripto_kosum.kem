@@ -10,10 +10,11 @@
 // SHA-256/ChaCha20 rotasyonları yüksek bit set olan girdilerde SESSİZCE yanlış
 // sonuç verir. Tip kontrolü bunu göremez — yalnız koşum görebilir.
 //
-// EXIT KODU = bit maskesi (tam geçiş = 7):
+// EXIT KODU = bit maskesi (tam geçiş = 15):
 //   +1  KONTROL  — sabit tablolar (imzasızlıktan BAĞIMSIZ; her zaman geçmeli)
 //   +2  ChaCha20 quarter-round (RFC 8439 §2.1.1)
 //   +4  SHA-256("abc") sıkıştırma (NIST FIPS 180-4, Appendix B)
+//   +8  sabit_süre_seç_u64 üst bit sızıntısı YOK (D-629)
 //
 // KONTROL biti kapının kendisini doğrular: 0 dönerse kapı bozuktur (derleme/
 // bağlama sorunu), 1 dönerse kapı SAĞLAM ve kripto çekirdeği yanlıştır.
@@ -112,10 +113,36 @@ işlev kt_sha256_abc() -> tam32 {
     ver gecti;
 }
 
+// ---------------------------------------------------------------------------
+// [D-629] sabit_süre_seç_u64 — ÜST BİT. İşlevin `hepsi` maskesi literal
+// `18446744073709551615` (2^64-1) ile kurulur; derleyici 2^63 ve üstünü INT64_MAX'a
+// DOYURDUĞU sürece maske 0x7FFF..FF oluyordu → maske "hepsi 1" iken `not_mask`
+// 0x8000.. kalıyor ve seçilmemesi gereken `f`'nin ÜST BİTİ sonuca SIZIYORDU
+// (ölçüldü: eski derleyiciyle sızıntı). Sabit-süreli seçimde sessiz yanlış cevap.
+// Girdiler LİTERALSİZ kurulur (0-1, 1<<63) — test kusurun kendisine dayanmasın.
+// ---------------------------------------------------------------------------
+işlev kt_sec_u64_ust_bit() -> tam32 {
+    değişken sifir: dtam64 = 0;
+    değişken bir: dtam64 = 1;
+    değişken hep: dtam64 = sifir - bir;          // tüm bitler 1
+    değişken ust: dtam64 = bir << 63;            // yalnız üst bit
+    değişken t5: dtam64 = 5;
+    // maske = hepsi 1 → t seçilmeli; f'den HİÇBİR bit sızmamalı.
+    değişken r1: dtam64 = ifşa(sabit_süre_seç_u64(sabitsüre_olustur(hep),
+        sabitsüre_olustur(t5), sabitsüre_olustur(ust)));
+    eğer r1 != t5 { ver 0; }
+    // maske = 0 → f (üst bit) AYNEN seçilmeli.
+    değişken r2: dtam64 = ifşa(sabit_süre_seç_u64(sabitsüre_olustur(sifir),
+        sabitsüre_olustur(t5), sabitsüre_olustur(ust)));
+    eğer r2 != ust { ver 0; }
+    ver 1;
+}
+
 işlev main() -> tam32 {
     değişken skor: tam32 = 0;
     eğer kt_kontrol() == 1 { skor = skor + 1; }
     eğer kt_chacha_qr() == 1 { skor = skor + 2; }
     eğer kt_sha256_abc() == 1 { skor = skor + 4; }
-    ver skor;   // 7 = tam geçiş
+    eğer kt_sec_u64_ust_bit() == 1 { skor = skor + 8; }   // D-629
+    ver skor;   // 15 = tam geçiş
 }
