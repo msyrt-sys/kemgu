@@ -2,6 +2,15 @@
 // üstü dtam64 (işaretsiz). Eskiden daima tam32 → `değişken x = 8589934592` sessizce
 // kırpılıyor, ardından `x >> 32` geçersiz kaydırma paniğine düşüyordu (ölçüldü:
 // eski C exit 134). Her ölçüm AYRI çıkış kodu.
+//
+// ks(): DÖNÜŞ bağlamındaki dizi literali eleman bağlamı TAŞIMAZ (self-host
+// varsayılanı i32). 2^31+ literal kendi i64 tipiyle `_tam64` eklenirse 4 baytlık
+// gözeye 8 bayt yazılır (self-host D-630 ilk hâli: sha256_selfhost K sabitleri
+// SESSİZCE yanlış). Küçük + büyük elemanın KARIŞIK olması şart.
+işlev ks() -> Dizi<dtam32> {
+    ver [5, 3049323471, 7, 4294967295];
+}
+
 işlev main() -> tam32 {
     değişken x = 8589934592;
     eğer (x >> 32) != 2 { ver 1; }
@@ -13,5 +22,9 @@ işlev main() -> tam32 {
     eğer w != 2147483647 { ver 4; }
     değişken k: tam8 = -128;
     eğer (k olarak tam32) != -128 { ver 5; }
+    değişken d: Dizi<dtam32> = ks();
+    eğer d[1] != 3049323471 { ver 6; }
+    eğer d[2] != 7 { ver 7; }
+    eğer d[3] != 4294967295 { ver 8; }
     ver 42;
 }
