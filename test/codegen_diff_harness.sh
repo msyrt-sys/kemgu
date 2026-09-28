@@ -72,11 +72,42 @@ run_exe() {   # $1=exe
     return 0
 }
 
-pass=0; fail=0
+# [D-469] KONAK MİMARİSİ — TEK KAYNAK MAKEFILE'DAN GELİR (`ARCH`).
+# Burada `uname -m` ÇAĞIRMIYORUZ: aynı soruyu ikinci bir yerde yanıtlamak
+# D-407'nin ayrışma sınıfıdır. Makefile `KONAK_MIM=$(ARCH)` geçirir; değişken
+# boşsa kapı ATLAMAZ, GÜRÜLTÜ ÇIKARIR (D-446: koşmayan kapı, olmayandan kötü).
+if [ -z "${KONAK_MIM:-}" ]; then
+    echo "🔴 HATA: KONAK_MIM geçirilmedi (Makefile ARCH) — kapı KOŞMADI"
+    exit 1
+fi
+
+# Dosyanın TEK arch etiketi (yoksa/karışıksa boş döner) — check_kapisi.sh ile
+# aynı kural.
+dosya_mimari() {
+    et="$(grep -oE 'mimari:[[:space:]]*(x86_64|arm64)' "$1" 2>/dev/null \
+           | grep -oE '(x86_64|arm64)' | sort -u)"
+    [ "$(printf '%s\n' "$et" | grep -c .)" -eq 1 ] || return 1
+    printf '%s' "$et"
+}
+
+pass=0; fail=0; arch_atla=0
 for f in "$KORPUS"/*.kem; do
     [ -f "$f" ] || continue
     # Win11'de .exe yeniden-yazımı dosya-kilidi yarışına girer → dosya-başı benzersiz ad.
     b=$(basename "$f" .kem)
+
+    # [D-469] YABANCI MİMARİ ETİKETLİ PROGRAM BU KONAKTA KOŞAMAZ.
+    # Bu kapı programı ÇALIŞTIRIP exit kodunu karşılaştırır; `satıriçi_asm`
+    # gerçek makine komutu taşır, yani x86 ikizi ARM64'te derlense bile
+    # çalışmaz. Tek dosya iki konağı kapsayamaz → korpusta MİMARİ İKİZLER
+    # tutulur (`cg_satirici_asm.kem` + `cg_satirici_asm_arm64.kem`) ve konak
+    # hangisini koşacağını seçer. Bu bir MUAFİYET DEĞİLDİR: ikiz her konakta
+    # ölçülür, yalnız yabancı olan atlanır ve atlama AÇIKÇA yazdırılır
+    # (D-518: sessiz atlama gerilemeleri yutar).
+    if fm="$(dosya_mimari "$f")" && [ "$fm" != "$KONAK_MIM" ]; then
+        echo "  ⏭  $b — '$fm' etiketli asm, konak '$KONAK_MIM' (mimari ikizi koşuyor)"
+        arch_atla=$((arch_atla+1)); continue
+    fi
     # C codegen → exit (oracle)
     # D-337: bu harness'ın işi CODEGEN eşdeğerliği; tip kapısı AYRI kapıdır
     # (calistir_check_kapisi, D-336) ve cg_korpus'u zaten kapsar. Korpusta
@@ -145,5 +176,5 @@ for f in "$KORPUS"/*.kem; do
         fail=$((fail+1))
     fi
 done
-echo "=== codegen semantik eşdeğerlik: $pass/$((pass+fail)) korpus ==="
+echo "=== codegen semantik eşdeğerlik: $pass/$((pass+fail)) korpus ($arch_atla yabancı-mimari atlandı) ==="
 [ "$fail" -eq 0 ]

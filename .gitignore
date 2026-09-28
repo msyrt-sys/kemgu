@@ -50,3 +50,8 @@ loop.log
 # Windows NUL aygitina yonlendiren testler Linux/WSL`de duz dosya uretir
 /NUL
 /nul
+
+# [D-469] Konak hedefi — Makefile uretir (bkz. `selfhost/konak.kem` kurali).
+# Depoya GIRMEMELI: icerigi kuruldugu makineye baglidir, commit'lenirse baska
+# bir konakta SESSIZCE yanlis hedef tasir.
+/selfhost/konak.kem

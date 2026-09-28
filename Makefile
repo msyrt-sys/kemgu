@@ -54,6 +54,33 @@ else
     endif
 endif
 
+# [D-469 ONARIMI] KONAK UCLUSU — `src/llvm.h` KEMGU_HEDEF_TRIPLE'IN AYNASI.
+# Self-host derleyicinin varsayilan hedefi bundan turetilir (selfhost/konak.kem
+# kurali). Tablo C'deki makro zinciriyle BIREBIR AYNI olmak ZORUNDA (D-407):
+# ikisi ayrisirsa `ct_bariyer`/`check_genis` gibi C-vs-self-host kapilari yine
+# yalan soyler. C tarafi degisirse BURASI DA degismeli.
+ifeq ($(PLATFORM),windows)
+    ifeq ($(ARCH),arm64)
+        HOST_TRIPLE := aarch64-pc-windows-gnu
+    else
+        HOST_TRIPLE := x86_64-pc-windows-gnu
+    endif
+else
+ifeq ($(PLATFORM),macos)
+    ifeq ($(ARCH),arm64)
+        HOST_TRIPLE := arm64-apple-darwin
+    else
+        HOST_TRIPLE := x86_64-apple-darwin
+    endif
+else
+    ifeq ($(ARCH),arm64)
+        HOST_TRIPLE := aarch64-unknown-linux-gnu
+    else
+        HOST_TRIPLE := x86_64-pc-linux-gnu
+    endif
+endif
+endif
+
 # [D-469] EXE'yi harness'lara AKTAR. Oncesinde 27 harness'in 25'i
 # `build/kemgu.exe`yi SABIT yaziyordu ve Makefile onlara hicbir degisken
 # GECIRMIYORDU (24 cagridan yalniz 9'u KEMGU=/CODEGEN= veriyordu, `export` 0).
@@ -556,7 +583,7 @@ calistir_parser_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 
 # SELF-HOST tip denetleyici (selfhost/checker.kem) --checkdump çıktısını C
 # --checkdump oracle'ına karşı diff'ler (Aşama 2 / D-052). Korpus: test/check_korpus/.
-calistir_checker_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+calistir_checker_diff: $(BUILD)/kemgu$(EXE) selfhost/konak.kem $(BUILD)/kdl_runtime.o
 	@bash test/checker_diff_harness.sh
 
 # Dizi sınır-güvenliği (D-069): OOB → panic invaryantı (segfault/sessiz-0 değil).
@@ -587,14 +614,47 @@ calistir_lambda_test: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # YENIDEN KURMAZ, degistiyse KURAR. `.ll` ara dosyasi da hedefe baglidir.
 # ⚠ Bu ayni zamanda `make -j`nin ON KOSULUDUR: paralel kosumda tek yazar olur.
 # ============================================================================
-$(BUILD)/codegen.ll: selfhost/codegen.kem $(BUILD)/kemgu$(EXE) | $(BUILD)
+# ============================================================================
+# [D-469 ONARIMI] selfhost/konak.kem — KONAK HEDEFI, DERLEME ANINDA URETILIR.
+#
+# NEDEN VAR: C derleyici varsayilan hedefini ONISLEMCI MAKROSUNDAN alir
+# (`src/llvm.h`, `__aarch64__`/`_WIN32`). `selfhost/codegen.kem`in elinde ne
+# onislemci, ne `ortam_al`, ne onceden tanimli bir hedef sabiti var (ucu de
+# arandi) -> konak ancak URETILEN BIR MODULLE gorunur olabiliyor. Mekanizma
+# C'ninkinden farkli, KURAL AYNI (D-407): "varsayilan hedef = uzerinde
+# kuruldugum makine". Oncesinde `codegen.kem` `"x86_64"`e SABITTI.
+#
+# OLCULDU (DGX Spark, aarch64): sabit varsayilan yuzunden C `csdb` uretirken
+# self-host `lfence` uretti; `ct_bariyer` 7/14, `check_genis` 130/134,
+# `checker_diff` 186/190, `self_driver` 147/151, `codegen_diff` 177/179.
+#
+# ⚠ `FORCE` + `cmp` KASITLI. Yalnizca `Makefile`a bagli olsaydi, ayni agac
+# once x86_64'te sonra ARM64'te kurulunca dosya ZATEN VAR ve YENI olurdu ->
+# make yenilemez, self-host YANLIS konakla kurulurdu (sessiz yanlislik, bu
+# deponun tam da kovaladigi sinif). Icerik her kosumda uretilir ama dosya
+# yalniz DEGISTIYSE yazilir -> konak degismedikce bootstrap yeniden kurulmaz.
+# ============================================================================
+selfhost/konak.kem: FORCE
+	@printf '%s\n' \
+	  '// ÜRETİLEN DOSYA — ELLE DÜZENLEMEYİN. Üreteni: Makefile `selfhost/konak.kem`.' \
+	  '// [D-469] Self-host derleyicinin VARSAYILAN hedefi konaktan türetilir;' \
+	  '// gerekçe ve ölçüm Makefile içindeki aynı adlı kuralın başlığında.' \
+	  "genel işlev konak_mimari() -> metin { ver \"$(ARCH)\"; }" \
+	  "genel işlev konak_triple() -> metin { ver \"$(HOST_TRIPLE)\"; }" \
+	  > $@.tmp
+	@cmp -s $@.tmp $@ 2>/dev/null || mv -f $@.tmp $@
+	@rm -f $@.tmp
+
+FORCE:
+
+$(BUILD)/codegen.ll: selfhost/codegen.kem selfhost/konak.kem $(BUILD)/kemgu$(EXE) | $(BUILD)
 	@$(BUILD)/kemgu$(EXE) --llvm selfhost/codegen.kem > $@ 2>/dev/null
 
 $(BUILD)/codegen$(EXE): $(BUILD)/codegen.ll $(BUILD)/kdl_runtime.o
 	@clang -x ir $(BUILD)/codegen.ll -x none $(BUILD)/kdl_runtime.o -o $@ 2>/dev/null
 
 calistir_codegen_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
-	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/codegen_diff_harness.sh
+	@CODEGEN=$(BUILD)/codegen$(EXE) KONAK_MIM=$(ARCH) bash test/codegen_diff_harness.sh
 
 # D-395: GENİŞ codegen eşdeğerlik kapısı. calistir_codegen_diff dar korpusta
 # (test/cg_korpus/) koşar; bu kapı GERÇEK programlarda (test/ornekler + stdlib/temel)
@@ -719,15 +779,15 @@ calistir_kem_malloc_kompozisyon: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 
 # AŞAMA 4 (driver) — TEK self-host KEMGU binary (selfhost/codegen.kem → kemgu_self.exe).
 # checker mantığı + --token/--parse/--check/--llvm dispatch birleşik (D-086).
-kemgu_self: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+kemgu_self: $(BUILD)/kemgu$(EXE) selfhost/konak.kem $(BUILD)/kdl_runtime.o
 	@build/kemgu.exe --llvm selfhost/codegen.kem > build/kemgu_self.ll 2>/dev/null
 	@clang -x ir build/kemgu_self.ll -x none build/kdl_runtime.o -o build/kemgu_self.exe 2>/dev/null
 	@echo "build/kemgu_self.exe uretildi (tek self-host kemgu binary)."
 
 # AŞAMA 4/5 driver doğruluk: C-derlenmiş + self-host-derlenmiş driver, 4 mod (--token/
 # --parse/--check/--llvm) C oracle ile eşleşir + FIXPOINT. (Harness driver'ı kendi içinde üretir.)
-calistir_self_driver: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
-	@bash test/selfhost_driver_harness.sh
+calistir_self_driver: $(BUILD)/kemgu$(EXE) selfhost/konak.kem $(BUILD)/kdl_runtime.o
+	@KONAK_MIM=$(ARCH) bash test/selfhost_driver_harness.sh
 
 calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 	@echo "stdlib tip kontrolu (kutuphane + test birlestirilerek)..."

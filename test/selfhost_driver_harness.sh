@@ -84,7 +84,12 @@ byte_modlari "$SELF2" "self-host"
 
 # ---- LLVM exit-kod eşdeğerlik (her iki driver; codegen_diff_harness delege) ----
 for drv in "$SELF" "$SELF2"; do
+    # [D-469] KONAK_MIM de DELEGE EDİLİR: delege edilen harness konak mimarisini
+    # bilmeden yabancı-mimari ikizini ayırt edemez ve eksik geçirilirse KOŞMAZ
+    # (kasten gürültülü — D-446). Makefile `ARCH`ten geçirir; burada da
+    # zorunludur ki harness elle çağrıldığında sessizce yanlış ölçmesin.
     CODEGEN="$drv" KORPUS="test/cg_korpus" KEMGU="$KEMGU" RT="$RT" \
+        KONAK_MIM="$KONAK_MIM" \
         bash test/codegen_diff_harness.sh > "$TMP/llvm.out" 2>&1
     rc=$?
     tail -1 "$TMP/llvm.out" | sed "s|^|  LLVM ($(basename "$drv")): |"

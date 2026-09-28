@@ -45,10 +45,21 @@ for f in $(grep -rl "sabitsüre_olustur\|ifşa(" --include=*.kem test stdlib kü
     # İDDİA: self-host da reddetmeli. Bu kapının 6 atlamasının TAMAMI buydu ve
     # altısında da `--check` C ile BİREBİR paritedeydi — yani checker hazırdı,
     # eksik olan yalnız `--llvm`in onu çağırmasıydı (D-424 onardı).
-    c_ir=$("$KEMGU" --llvm "$f" 2>/dev/null)
+    # [D-469] x86 DALI AÇIKÇA `--mimari x86_64` İLE ÖLÇÜLÜR — BAYRAKSIZ DEĞİL.
+    #
+    # Bu blok `lfence` sayıyor, yani ÖLÇMEK İSTEDİĞİ ŞEY x86 dalıdır. Bayraksız
+    # çağrı bunu KONAĞA BAĞLI kılıyordu: iki derleyicinin de varsayılanı x86_64
+    # olduğu sürece "doğru" görünüyordu ama bu bir tesadüftü. Varsayılan artık
+    # konaktan geliyor (D-469 onarımı) → ARM64'te iki taraf da `csdb` üretir,
+    # `lfence` sayısı 0=0 çıkar ve kapı GEÇER AMA HİÇBİR ŞEY ÖLÇMEZ.
+    # D-425'in tam tanımı: yanlışın gözlenebilir olduğu şekli ölçemeyen kapı,
+    # kapı değildir. Aşağıdaki ARM64 dalı (D-468) zaten `--mimari arm64`
+    # sabitliyor; bu, onun eksik olan x86 ikizidir. Artık HER konakta iki dal
+    # da ölçülür — ARM64 makinede x86 bariyer paritesi ilk kez kapsanıyor.
+    c_ir=$("$KEMGU" --llvm --mimari x86_64 "$f" 2>/dev/null)
     case "$c_ir" in
         ""|hata*)
-            if s_red=$("$CODEGEN" --llvm "$f" 2>/dev/null) && [ -n "$s_red" ]; then
+            if s_red=$("$CODEGEN" --llvm --mimari x86_64 "$f" 2>/dev/null) && [ -n "$s_red" ]; then
                 echo "  🔴 $b — C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)"
                 fail=$((fail+1)); continue
             fi
@@ -56,7 +67,7 @@ for f in $(grep -rl "sabitsüre_olustur\|ifşa(" --include=*.kem test stdlib kü
             ;;
     esac
 
-    s_ir=$("$CODEGEN" --llvm "$f" 2>/dev/null) || {
+    s_ir=$("$CODEGEN" --llvm --mimari x86_64 "$f" 2>/dev/null) || {
         echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }
 
     # [D-475] YALNIZ ÇAĞRILARI SAY, `declare`ı DEĞİL. Bir bildirim BARİYER

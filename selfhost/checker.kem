@@ -12,6 +12,11 @@
 // İLERLEME: P1a (token tablo + re-emit doğrulama) → P1b (Pratt ifade) → ...
 // ============================================================================
 
+// [D-469 ONARIMI] Konak mimarisi — derleme anında üretilen modül
+// (`selfhost/konak.kem`, Makefile üretir). AS001 bunu okur; gerekçe aynı
+// dosyanın ve Makefile kuralının başlığında.
+kullan selfhost::konak::{konak_mimari};
+
 yapı Ayr {
     kaynak: metin;
     // Token tablosu (lex çıktısı)
@@ -3653,9 +3658,15 @@ işlev cp004_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
 }
 // ---- D-358: G002 + G003 + G004 — güvensiz-tier ve temsil kuralları ----
 // ---- D-373: AS001 — satıriçi_asm mimari etiketi hedefle uyuşmalı ----
-// HEDEF MİMARİ self-host'ta SABİT "x86_64": C'nin varsayılanı budur ve self-host
-// sürücüde `--mimari` bayrağı YOKTUR → hedef gerçekten değişmez. Bu bir varsayım
-// değil, ölçülmüş bir olgu; sürücüye `--mimari` eklenirse BURASI da güncellenmeli.
+// [D-469 ONARIMI] HEDEF MİMARİ ARTIK KONAKTAN GELİR — SABİT "x86_64" DEĞİL.
+// Buradaki eski not *"C'nin varsayılanı budur"* diyordu ve kendi koşulunu da
+// yazmıştı: *"sürücüye `--mimari` eklenirse BURASI da güncellenmeli."* Koşul
+// gerçekleşti — D-469 ile C'nin varsayılanı DERLEME PLATFORMUNDAN geliyor,
+// dolayısıyla sabit "x86_64" ARM64 konakta C ile ayrıştı: DGX Spark'ta ÖLÇÜLDÜ,
+// `checker_diff` 186/190'a düştü (C x86_64 etiketini işaretlerken self-host
+// arm64 etiketlerini işaretliyordu — roller tam tersine dönmüştü).
+// Bu dosyanın sürücüsünde `--mimari` bayrağı HÂLÂ YOK, dolayısıyla varsayılan
+// = konak, doğrudan `konak_mimari()`dir (C ile aynı kural, D-407).
 // Etiket parser yan-kanalından gelir (`asm_node`/`asm_mim`) — düğüme alan eklemek
 // `--ast` paritesini bozardı.
 işlev asm_mimari_bul(p: &değişken Ayr, idx: tam32) -> metin {
@@ -3669,7 +3680,7 @@ işlev asm_mimari_bul(p: &değişken Ayr, idx: tam32) -> metin {
 işlev as001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken m: metin = asm_mimari_bul(p, idx);
     eğer metin_esit(m, "") { ver 0; }   // etiket yoksa denetim yok (C: mimari==NULL)
-    eğer metin_esit(m, "x86_64") == yanlış { sekil_hata(p, idx, "AS001"); }
+    eğer metin_esit(m, konak_mimari()) == yanlış { sekil_hata(p, idx, "AS001"); }
     ver 0;
 }
 // G002: `satıriçi_asm` yalnız `güvensiz` blokta (ham makine kodu = tier kapısı).

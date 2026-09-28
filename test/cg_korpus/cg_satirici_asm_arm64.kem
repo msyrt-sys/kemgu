@@ -1,0 +1,31 @@
+// C5: satıriçi_asm ARM64 girdi/çıktı round-trip testi.
+// `cg_satirici_asm.kem`in ARM64 ikizi — İKİSİ DE gerekli.
+//
+// [D-469] Bu korpus programı ÇALIŞTIRILIR (exit kodu C ile self-host arasında
+// karşılaştırılır), dolayısıyla asm'i konak mimarisinde GERÇEKTEN koşmalıdır.
+// x86 ikizi ARM64'te derlense bile çalışamaz; tek dosya iki konağı kapsayamaz.
+// Harness hangisinin koşacağını konaktan seçer — muafiyet değil, karşılık.
+//
+// oku_arti_iki(40): girdi $2'yi çıktıya taşı + 2 ekle → 42.
+// Çoklu çıktı da sergilenir: b sabit 100 alır.
+işlev oku_arti_iki(g: tam32) -> tam32 {
+    değişken s: tam32 = 0;
+    değişken b: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov $0, $2
+add $0, $0, #2
+mov $1, #100"#
+            çıktı("=r", &s)
+            çıktı("=r", &b)
+            girdi("r", g)
+        }
+    }
+    eğer b != 100 { ver 1; }
+    ver s;
+}
+
+işlev main() -> tam32 {
+    ver oku_arti_iki(40);
+}
