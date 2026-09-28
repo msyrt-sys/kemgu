@@ -1,0 +1,6 @@
+// [D-647] P080 — `değişken` adı eksik. Konum ZATEN uyuşuyordu, kod uyuşmuyordu
+// (self "P000" yer tutucusu basıyordu). C referansı: parser.c:1201.
+işlev main() -> tam32 {
+    değişken : tam32 = 0;
+    ver 0;
+}

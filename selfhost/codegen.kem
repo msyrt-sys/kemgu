@@ -1533,7 +1533,7 @@ işlev parse_degisken(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // değişken
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P080");   // [D-647] C parser.c:1201 degisken adi
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "IKI_NOKTA") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
     bekle(p, "ESIT");
@@ -1895,14 +1895,14 @@ işlev parse_deyim(p: &değişken Ayr) -> tam32 {
 }
 işlev parse_blok(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P070");   // [D-647] C parser.c:1154 blok '{'
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
         değilse { dizi_ekle(kids, parse_deyim(p)); }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P071");   // [D-647] C parser.c:1171 blok '}'
     ver dugum_n(p, "BLOK", "", s, u, kids);
 }
 // ---- P3: Bildirimler (işlev/yapı/çeşit/özellik/uygula/sabit) ----
@@ -1976,7 +1976,7 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
     değişken lineer: mantıksal = yanlış;
     eğer sim_mi(p, "TEKKEZ") { lineer = doğru; ilerle(p); }
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P021");   // [D-647] C parser.c:555 yapi adi
     // Lineer yapı adlarını kaydet: hem LR002 muafiyeti hem değişken-lineerliği
     // (deg_lineer_mi) bu listeye bakar. Düğüm/dump DEĞİŞMEZ → --ast parite korunur.
     eğer lineer { dizi_ekle(p.ly_ad, ad); }
