@@ -140,20 +140,25 @@
       self BIR. Cascade paritesi ayri bir artim.
       C0.a kalan `bekle` sitelerini esle, C0.b panik-senkron cascade paritesi,
       C0.c her artimda korpusa fikstur.
-- [ ] C3 [L] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`).
-      ⚠ BOYUT M'DEN L'YE CIKARILDI (D-642 olcumu): AST cikti hedefini AD (string)
-      olarak tutuyor, lvalue/ifade olarak DEGIL -> temsil degisikligi C'de bes yeri
-      (ast.h, parser.c, tip_kontrol.c:6575, llvm.c:7496, ast_yazdir.c) ve self-host
-      codegen.kem'i etkiler; ustelik `--ast` dokumu parser_diff'te BAYT-BIREBIR
-      parite kapisidir.
-      ⚠ AYRICA BU BIR EKSIK OZELLIK DEGIL, KUSUR: olculdu ki C reddederken
-      (P264) self-host `OK` der VE IR URETIR — hem de yanlis IR:
-      `%7 = call %R asm sideeffect "mov $0, #42", "=r"()` (register kisiti
-      YAPININ TAMAMINA baglaniyor). Bu, C0'in bir ornegidir; C0 kapanınca
-      belirti kaybolur ama OZELLIK yine yoktur.
-      C3.1 C0'dan SONRA olc (belirti degisir), C3.2 AST temsil karari (ad -> lvalue),
-      C3.3 C tarafi bes yer, C3.4 self-host parite, C3.5 --ast parite kapisi,
-      C3.6 fikstur + sabotaj.
+- [ ] C3 [M] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`).
+      ⚠ BOYUT L'DEN M'E DUSURULDU (D-644 olcumu) — onceki L gerekcemin IKI
+      dayanagi da YANLIS CIKTI:
+        (1) "`--ast` bayt-paritesi riske girer" demistim. OLCULDU: ast_yazdir.c asm
+            dalinda cikti hedefleri ALT AGAC OLARAK BASILMIYOR, yalniz sayiliyor
+            (`cikti=%d`); cocuk olarak yalniz GIRDI ifadeleri dokuluyor. Dump sekli
+            korunursa parser_diff paritesi HIC etkilenmez.
+        (2) "codegen sifirdan yazilacak" ima etmistim. OLCULDU: `erisim_lvalue()`
+            (llvm.c:3028) alan ADRESINI + alan IR tipini veriyor ve atama yolunda
+            ZATEN kullaniliyor (llvm.c:6881). Cikti hedefi icin aynisi kullanilir.
+      KALAN GERCEK IS (dort yer + self-host): C3.2 ast.h — cikti hedefi AD yerine
+      IFADE dugumu (TANIMLAYICI ya da ERISIM), C3.3 parser.c — `&` sonrasi SINIRLI
+      lvalue (tanimlayici | tanimlayici.alan zinciri; keyfi ifade DEGIL),
+      C3.4 tip_kontrol.c:6575 — AS002 artik `sembol_bul(ad)` degil lvalue tipi
+      uzerinden (primitif olmali), C3.5 llvm.c:7496 — TANIMLAYICI'da `isim_bul`,
+      ERISIM'de `erisim_lvalue`, C3.6 self-host codegen.kem aynasi,
+      C3.7 fikstur (cg_korpus, gercek kosum: alana yaz -> 42) + sabotaj.
+      ⚠ D-643 BELIRTIYI KAPATTI (artik P264 ile reddediliyor, sessiz yanlis IR yok)
+      ama OZELLIK yok. Yani bu madde artik "kusur" degil, duz bir eksik ozellik.
 # --- D. Dil ozellikleri ---
 # [D-639] L maddeler M'lere BOLUNDU. Gerekce: onceki kuyrukta belirsizligin
 # neredeyse tamami L'lerden geliyordu (34-74 iterasyonun 24-64'u). Bolme
@@ -1335,3 +1340,26 @@
                    S146b (codegen.kem, dogru sozdizimi) -> self_driver 153/154, rc=2.
   HANGI KAPI NEYI OLCTU: checker_diff 192 -> 193/193 . self_driver 152 -> 154/154 .
   test_tumu TAM rc=0; ozette TEK fark checker_diff'in +1 fiksturu.
+- 2026-09-28 D-644: C3 yeniden olculdu -> BOYUT L'DEN M'E DUSTU. KOD DEGISIKLIGI YOK.
+  D-642'de C3'u M'den L'ye CIKARMISTIM; o yukseltmenin iki dayanagi vardi ve
+  ikisi de bugun olculup YANLIS bulundu:
+    (1) "`--ast` bayt-paritesi riske girer." YANLIS. ast_yazdir.c'nin
+        DUGUM_SATIRICI_ASM dali cikti hedeflerini alt agac olarak BASMIYOR — yalniz
+        `cikti=%d girdi=%d bozulan=%d` sayilarini yaziyor ve cocuk olarak SADECE
+        girdi ifadelerini dokuyor. Temsil ad->ifade degisse bile dump sekli
+        korunabilir -> parser_diff paritesi etkilenmez.
+        (Olcumu yaparken kendi dumpumda `TANIMLAYICI "x" 7:9` gorup bir an "cikti
+        basiliyor" sandim; konumu kontrol edince o satirin `ver x` oldugu cikti.
+        Konum dogrulamadan dump okumak yanlis sonuc verir.)
+    (2) "codegen sifirdan yazilacak." YANLIS. `erisim_lvalue()` (llvm.c:3028) alan
+        adresini + alan IR tipini donduruyor ve DUGUM_ATAMA yolunda zaten
+        kullaniliyor (llvm.c:6881). Cikti hedefi icin aynisi kullanilabilir.
+  KALAN IS dort yer + self-host aynasi olarak kuyruga yazildi (C3.2-C3.7).
+  ⚠ SIRALAMA KARARI VE GEREKCESI: kuyrugun en ustundeki madde C3 ama bu iterasyonda
+  KOD YAZILMADI. Sebep: C3 dort C dosyasi + self-host aynasi + gercek-kosum
+  fiksturu demek; yarim birakmak agaci kirmizi birakirdi ve "Her iterasyonda SADECE
+  bir madde bitir" kuralini bozardi. Bunun yerine C3'un TASARIM ADIMI (C3.1: "C0'dan
+  sonra olc") tamamlandi ve boyut duzeltildi — bu da maddenin bir parcasi.
+  Sonraki iterasyon D3'e gidiyor (ayni sebeple: kendi icinde tamamlanabilir bir
+  kapi ekleme isi), C3 kod adimlari taze baglamla yapilacak.
+  HANGI KAPI NEYI OLCTU: degisiklik yok; kapilar D-643 yesilinde.
