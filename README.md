@@ -60,8 +60,15 @@ Drone–yer haberleşmesi, askeri/tıbbi/finansal sistemler için saldırı sın
 ### 3. Evrensel İşletim Sistemi (vizyon)
 ARM64 ve x86_64 bare-metal'e kadar tek yığın — *uzun vadeli hedef*:
 - Self-host: derleyici → çekirdek → sürücüler → kullanıcı alanı (KEMGU ile).
-- Mevcut durum: libc-yok UART konsol sürücüleri + VirtIO protokol modelleri +
-  bare-metal kernel ELF bring-up'ı (aşağıda "Sürücüler" bölümü). Tam OS yok.
+- Mevcut durum: **saf-KEMGU bir mikroçekirdek QEMU aarch64'te koşuyor** — MMU
+  (sayfalama + non-identity çeviri + fault), gerçek trap (ESR_EL1), timer IRQ,
+  **preemptive zamanlayıcı + context-switch**, syscall + EL0 izolasyonu, VirtIO
+  blok/ağ, dosya sistemi, ve `kanal`/`görev` ilkelleri. Tamamı `.kem`: link
+  haritasında `start.o` (boot .S) dışında C nesnesi yok. `make calistir_kem_os_arm`
+  bunların her birini falsifiye-kanıtla ölçer.
+- **Tam OS yine de yok** ve sınırlar şunlar: yalnız QEMU `virt` üzerinde koşuyor
+  (imaj o bellek haritasına bağlı), **tek çekirdek** (`-smp` yok → eşzamanlılık
+  orada kanıtlanamaz), görev bölgesi serbest bırakılmıyor, tam kullanıcı alanı yok.
 
 ---
 
@@ -150,8 +157,13 @@ Tümü `--check`'ten geçer; runtime/FFI bağımlılığı yok.
 
 ### Sürücüler / Bare-Metal
 
-Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim sistemi
-*değildir* (zamanlayıcı, MMU/sayfalama, syscall yok).
+Buradaki VirtIO/UART maddeleri **sürücü katmanıdır**; çekirdeğin kendisi ayrıca
+vardır ve aşağıda "KEMGU-OS" başlığı altındadır.
+
+> ⚠ Bu bölüm bir zamanlar *"tam bir işletim sistemi değildir (zamanlayıcı,
+> MMU/sayfalama, syscall yok)"* diyordu. **Bu üçü de artık var** (D-276…D-281) ve
+> `calistir_kem_os_arm` kapısı her birini ölçüyor; iddia D-637'de düzeltildi.
+> Bugün geçerli sınır farklı ve aşağıda "KEMGU-OS" bölümünde yazılı.
 
 - **VirtIO** (`drivers/virtio/`, 10 modül) — blok aygıtı + MMIO transport,
   virtqueue, durum makinesi, özellik anlaşması. Saf-KEMGU **protokol modelleri**
@@ -165,6 +177,33 @@ Bunlar **sürücü prototipleri ve konsol bring-up'ıdır** — tam bir işletim
   aarch64-unknown-none` → `ld.lld` → freestanding **kernel ELF** (UART'a yazan,
   libc'siz). x86_64 yolu da var; opsiyonel QEMU smoke hedefi.
   Bkz. [`BARE_METAL_DESTEK.md`](BARE_METAL_DESTEK.md).
+
+### KEMGU-OS — saf-KEMGU mikroçekirdek
+
+`make calistir_kem_os_arm` → QEMU aarch64'te boot eden, **42 fazın tamamını**
+falsifiye-kanıtla ölçen bir çekirdek. "Falsifiye-kanıt" burada şu demek: her faz,
+ilgili özelliğin `.kem` tarafından *tanımlandığını* ve *çağrıldığını* emit edilen
+IR üzerinde doğrular — özellik sessizce C'ye geri düşerse kapı kırmızı olur.
+
+| Alan | Ne ölçülüyor | Karar |
+|---|---|---|
+| MMU | `kdl_mmu_kur` saf-`.kem`; `msr mair_el1/tcr/ttbr0/sctlr`; non-identity çeviri + fault | D-276/D-277 |
+| Kesme | gerçek trap — `mrs esr_el1` okunur, sentetik değil | D-278 |
+| Zaman | CNTV timer IRQ (`cntv_tval`/`cntfrq`) + `daifclr` | D-279 |
+| Görev | **preemptive** zamanlayıcı + context-switch (`kem_preempt`, IRQ'dan tetiklenir) | D-280 |
+| Syscall | `kdl_syscall_isle` + EL0 kullanıcı alanı + EL0-pointer doğrulaması | D-281/D-610 |
+| Depolama | VirtIO blok + minifs dosya I/O | D-271 |
+| Ağ | VirtIO net bring-up (ARP/ICMP round-trip) | FAZ-C |
+| Eşzamanlılık | `kanal` (faz 41) + `görev_başlat`/`birleştir`, **bloklayan** kanal (faz 42) | D-623/D-624 |
+
+**C yok:** link haritasında `start.o` (boot `.S`) dışında hiçbir C nesnesi yok —
+bu da ayrı bir kapıyla zorlanıyor.
+
+**Bugün geçerli sınırlar** (yol haritası değil, ölçülmüş gerçek): yalnız QEMU
+`virt` üzerinde koşar — imaj o bellek haritasına bağlıdır (yükleme `0x40000000`,
+UART `0x09000000`), fiziksel donanımda **hiç koşmadı**; **tek çekirdek** (`-smp`
+yok) olduğu için eşzamanlılık/zayıf-bellek orada kanıtlanamaz (D-490); görev
+bölgesi serbest bırakılmaz; tam kullanıcı alanı yok.
 
 ### Diğer Doğrulanmış Altsistemler
 
@@ -477,8 +516,10 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 
 - **Semaforlar / bariyerler** — `görev`/`kanal` üstüne daha zengin senkronizasyon.
 
-- **`kanal`'ın bare-metal (`.kem`) tarafında sınanması.** ABI hazır (host ile aynı
-  imza), ama çekirdek tarafında testi yok.
+- ~~**`kanal`'ın bare-metal (`.kem`) tarafında sınanması.**~~ **YAPILDI** (D-623/D-624):
+  `kanal` saf-`.kem` olarak faz [41], `görev_başlat`/`görev_birleştir` + **bloklayan**
+  kanal faz [42] — `calistir_kem_os_arm` ikisini de ölçüyor. Bu madde "çekirdek
+  tarafında testi yok" diyordu; D-637'de düzeltildi.
 
 - **Ayrık / artımlı derleme** — arayüz dosyaları, glob import, opak tipler, re-export.
 
@@ -495,9 +536,13 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 
 ### Uzun vade — açıkça hedef, "yakında" değil
 
-- **Saf-KEMGU işletim sistemi** + sürücüler (zamanlayıcı, MMU, syscall). Bugün
-  elde olan: libc'siz UART konsol, VirtIO protokol modelleri, bare-metal kernel
-  ELF bring-up'ı. **Tam OS yok.**
+- **Saf-KEMGU işletim sistemi.** Bu madde eskiden "zamanlayıcı, MMU, syscall"
+  hedef diye sayıyordu; **üçü de artık var** ve ölçülüyor (yukarıda "KEMGU-OS"
+  bölümü). Bugün hedef olan kısım daraldı: **fiziksel donanımda koşmak** (imaj
+  QEMU `virt`e bağlı), **SMP** (tek çekirdek → eşzamanlılık orada kanıtlanamaz,
+  D-490), görev bölgesinin serbest bırakılması, ve **tam kullanıcı alanı**
+  (bugün linchpin + UART-RX + FS-syscall adımları var). Bu hâliyle hâlâ bir
+  mikroçekirdek; genel amaçlı bir işletim sistemi değil.
 
 - **DRF ispatı V2** — tam-dil kapsamı, per-thread bölgeler, operasyonel/runtime
   tanık, weak-memory (C++11) fence emisyonu, yan-kanal + WCET bileşenlerinin
