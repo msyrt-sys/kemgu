@@ -5112,6 +5112,44 @@ işlev lin_kapanis(p: &değişken Ayr) -> tam32 {
 // Yerel/param tip-string filtresi: yalnız bilinen skaler VEYA bilinen yapı adı
 // saklanır; aksi (generic "T" gibi bilinmeyen ad) → "?" → kontrol atlanır.
 // C: TIP_GENERIC_PARAM için tip_sayisal_mi "deferred true" → generic'te T003 yok.
+// [D-640] ANNOTASYONSUZ BAGLAMANIN TIPI — DAR BASLANGIC (yalniz LITERAL).
+//
+// OLCULDU: `değişken x = 8589934592; değişken y: tam32 = x;` C'de T001, self-host'ta
+// OK idi (`x = "a"` de oyle). Kok: asagidaki `yerel_topla` tipi YALNIZ annotasyondan
+// okuyordu; annotasyon yoksa "?" kaydediliyor ve dosyanin kendi kurali geregi
+// ("?" = bilinmiyor -> T001 atla) o baglamaya dair BUTUN tip denetimleri dusuyordu.
+//
+// NEDEN `ifade_tip` CAGRILMIYOR: `ifade_tip` YAN ETKILIDIR (`t043_raporla` cagirir).
+// `yerel_topla` bir ON-TOPLAMA gecisidir; oradan cagirmak tanilari CIFTLERDI.
+// Bu yuzden literal dallarinin SAF alt kumesi burada tekrarlanir — kural ayni,
+// kaynak `ifade_tip`in literal dallari (D-630 baglamsiz yukseltmesi dahil).
+//
+// ⚠ BILEREK DAR: yalniz duz literaller. Cagri/aritmetik/tanimlayici basaticilar
+// "?" doner = ESKI DAVRANIS. Gerekce olculmus bir risk: `yerel_tip_filtrele`
+// etrafindaki notlar generic'te sahte T003 uretildigini kaydediyor. Kapsam
+// D-377/D-378 gibi ADIM ADIM ve OLCEREK acilmali.
+işlev bag_literal_tip(p: &değişken Ayr, idx: tam32) -> metin {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "METIN") { ver "metin"; }
+    eğer metin_esit(ad, "KARAKTER") { ver "karakter"; }
+    eğer metin_esit(ad, "MANTIKSAL") { ver "mantıksal"; }
+    eğer metin_esit(ad, "KESIRLI") { ver "kesirli64"; }
+    eğer metin_esit(ad, "TAM") {
+        // D-630 baglamsiz yukseltme (C `tip_belirle` aynasi). RAPOR YOK.
+        değişken lv: tam64 = lit_deger(dizi_al(p.a_deg, idx));
+        eğer lv < 0 { ver "dtam64"; }
+        eğer lv > 2147483647 { ver "tam64"; }
+        ver "tam32";
+    }
+    ver "?";
+}
+// Annotasyon varsa ONU kullan (eski davranis); yoksa literal basaticidan cikarsa.
+işlev bag_tip_cikar(p: &değişken Ayr, idx: tam32) -> metin {
+    eğer annot_node(p, idx) >= 0 { ver annot_str(p, idx); }
+    değişken v: tam32 = son_cocuk(p, idx);
+    eğer v < 0 { ver "?"; }
+    ver bag_literal_tip(p, v);
+}
 işlev yerel_tip_filtrele(p: &değişken Ayr, t: metin) -> metin {
     // D-377: `Dizi<bilinen>` artık TAM bilinen sayılır → yerel/dönüş tipi olarak
     // taşınır ve T001/T020 karşılaştırmalarına girer.
@@ -5142,7 +5180,7 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
     } değilse {
         eğer metin_esit(ad, "DEGISKEN") {
             dizi_ekle(p.yerel, dizi_al(p.a_deg, idx));
-            dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, annot_str(p, idx)));
+            dizi_ekle(p.yerel_tip, yerel_tip_filtrele(p, bag_tip_cikar(p, idx)));
             dizi_ekle(p.yerel_ptr, tip_node_ptr_mi(p, annot_node(p, idx)));   // D-351
             dizi_ekle(p.yerel_ham, annot_str(p, idx));    // D-352
             dizi_ekle(p.yerel_dizi, tip_node_dizi_mi(p, annot_node(p, idx)));   // D-353
