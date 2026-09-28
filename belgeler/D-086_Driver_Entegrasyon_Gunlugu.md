@@ -1,3 +1,11 @@
+> **[D-638] TARİHSEL KAYIT — kapanmış bir kampanyanın günlüğü.**
+> Bu dosya kök dizinde `TODO.md` adıyla duruyordu ve adı yüzünden **canlı bir
+> yapılacaklar listesi gibi okunuyordu**; oysa on iki maddesinin tamamı `[DONE]`
+> ve anlattığı iş D-086 döneminde (depo bugün D-638'de) kapandı. Ölçüldü: sıfır
+> açık madde, ve D-086 `DECISIONS_LOG.md`'de zaten kayıtlı. Silinmedi çünkü
+> M1–M12 göç adımlarının ayrıntısı yalnız burada duruyor.
+> **Canlı kuyruk: `LOOP.md` → "Sirada".**
+
 # TODO — Driver'ı origin/main'e entegre + Aşama 5 fixpoint (D-086)
 
 **Bağlam:** İlk Aşama 4 driver (commit 20b5408, [D-082]) **bayat** D-081 codegen.kem üzerine
