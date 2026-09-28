@@ -79,12 +79,94 @@
       testlerin konak mimarisini GOMMESI de onarildi (A koku) ve ct_bariyer'in x86 yarisi
       acikca --mimari x86_64'e sabitlendi — aksi halde B'nin onarimi o yariyi BOSA
       cikaracakti. test_tumu rc=0, S141 sabotaji kapinin disini kanitladi.
-- [ ] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592; değişken y: tam32 = x;`
-      C T001, self OK (onceden var: `değişken x = "a"; y: tam32 = x` de self'te OK).
-      Self checker annotasyonsuz baglamanin tipini izlemiyor.
-- [ ] SELF-HOST CHECKER T013 SAYISAL KARISIM: baglamsiz `[1, 2.5]` C T013, self OK (onceden
-      var; bagsiz yolda `sayisal_mi` toleransi). D-630 bunu tamsayi karisimina da genisletti:
-      `[1, 8589934592]` C T013 (tam32 vs tam64), self OK.
+### [2026-09-28] KONSOLIDE KUYRUK — tek kaynak buradan
+# Oncesinde acik is DORT ayri yere dagilmisti (bu liste, README yol haritasi,
+# PROGRESS.md, TODO.md) ve buyuk kismi BAYATTI. Olculdu, kopyalanmadi:
+#   PROGRESS.md 5 ertelenmis maddenin 4'u KAPANMIS (D-003/D-007/D-008 -> cg_yapi_dizi.kem
+#     ve cg_gorev_* korpusu kanitliyor; yalniz D-009 acik, parse hatasiyla dogrulandi).
+#   TODO.md TAMAMEN bayat (hala D-086'da, biz D-635'teyiz).
+#   README "kanal bare-metal'de test yok" diyor -> D-623/624 faz [41]/[42] olarak EKLEDI.
+#   KIRMIZI_QUEUE.md / NOTES_TRACK_B.md / KEMGU-OS-readiness.md = tarihsel log, kapali.
+# Buyukluk: S ~ yarim iterasyon, M ~ bir iterasyon, L ~ birden cok iterasyon.
+# Sira BILEREK boyle: once engel kaldiran ve yanlis bilgi yayan ucuz isler.
+
+# --- A. Engel kaldirma (once) ---
+- [ ] A1 [S] PUSH + CI DOGRULAMASI. 6 commit push bekliyor; bu makinede GitHub yazma
+      yetkisi yok (gh yok, ssh anahtari yok, credential helper yok) -> Mehmet kurmali.
+      ONEMI YEDEKLEME DEGIL: D-634 Makefile'a, self-host'a ve uc harness'a dokundu;
+      CI Windows + Linux x86_64 kosuyor ve o yol OLCULMEDI (yalniz kod okumasi +
+      -D ile konak simulasyonu). konak.kem uretimi MSYS'de (printf/cmp/mv/uname)
+      denenmedi. Kirilirsa once burasi kirilir.
+- [ ] A2 [S] kemgu_self hedefi `build/kemgu.exe` yolunu SABIT yaziyor -> Linux'ta
+      kosamaz; stderr /dev/null'a gidip rc denetlenmedigi icin yine de "uretildi" der
+      (D-446 sinifi sessiz basarisizlik). test_tumu'da OLMADIGI icin hicbir kapi
+      yakalamiyor. $(EXE) kullan + rc denetle + kosarak dogrula.
+
+# --- B. Belge borcu (ucuz, yanlis bilgi yayiyor) ---
+- [ ] B1 [S] README BAYAT OS IDDIALARI. "Surucüler / Bare-Metal" bolumu "tam bir
+      isletim sistemi degildir (zamanlayici, MMU/sayfalama, syscall YOK)" diyor;
+      UCU DE VAR ve kem_os_arm kapisi falsifiye-kanitla olcuyor (D-276..D-281).
+      "Uc Stratejik Hedef" altindaki "Mevcut durum" cumlesi de ayni sekilde eski.
+      Ayrica "kanal bare-metal'de test yok" -> D-623/624 ile yanlis.
+- [ ] B2 [S] PROGRESS.md 4/5 madde bayat (yukarida olculdu) -> guncelle ya da sil.
+      Silinirse D-009 buraya tasinmali (asagida C3 olarak duruyor).
+- [ ] B3 [S] TODO.md tamamen bayat (D-086 donemi) -> sil. Icerigi tarihsel deger
+      tasiyorsa DECISIONS_LOG'a tasi, kok dizinde "yapilacaklar" diye durmasin.
+
+# --- C. Dil / checker paritesi ---
+- [ ] C1 [M] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592;
+      değişken y: tam32 = x;` C T001, self OK (`x = "a"` vakasi da ayni).
+      KOK BULUNDU (D-636 hazirligi): checker.kem:5145 ve codegen.kem:12433 —
+      `yerel_tip` yalniz ANNOTASYONDAN okunuyor, annotasyon yoksa "?" kaydediliyor
+      ve dosyanin kendi kurali geregi ("?" = bilinmiyor -> T001 atla) o baglamaya
+      dair butun tip denetimleri dusuyor. Onarim: annotasyon yokken tipi
+      BASLATICI IFADEDEN cikarsa. ⚠ Yanlis-pozitif riski OLCULMUS: `yerel_tip_filtrele`
+      etrafindaki yorumlar generic'te sahte T003 uretildigini kaydediyor -> D-377/D-378
+      gibi ARTIMLI git (dar basla, olc, kapsami tek tek ac).
+- [ ] C2 [M] SELF-HOST CHECKER T013 SAYISAL KARISIM: baglamsiz `[1, 2.5]` C T013,
+      self OK (bagsiz yolda `sayisal_mi` toleransi). D-630 bunu tamsayi karisimina da
+      genisletti: `[1, 8589934592]` C T013 (tam32 vs tam64), self OK. C1 ile ayni aile;
+      C1'in cikarsamasi gelince bir kismi kendiliginden kapanabilir -> C1'DEN SONRA OLC.
+- [ ] C3 [M] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`). Parser cikti
+      clause'u duz `&degisken` kabul ediyor; alan erisimi P264 ile REDDEDILIYOR
+      (2026-09-28'de dogrulandi). PROGRESS.md'de D-009 olarak duruyordu.
+
+# --- D. Dil ozellikleri (README yol haritasi; buyukler) ---
+- [ ] D1 [M] Acik tip argumani (turbofish) `f<T>(...)` / `Tip<T>{...}` — su an tip
+      argumanlari yalniz cikarsaniyor, cikarsamanin yetmedigi yerde yazacak sozdizim yok.
+- [ ] D2 [M] Gercek kabiliyet odunc alma (mevcut MOVE/`delege` cozumunun yerine).
+- [ ] D3 [M] Semaforlar / bariyerler (`görev`/`kanal` ustune zengin senkronizasyon).
+- [ ] D4 [M] LSP v3 — artimli senkronizasyon, workspace, semanticTokens, references.
+- [ ] D5 [L] Stdlib genisletme — `Metin`/`Dosya` tamamlama, kripto (BLAKE3/HMAC), OS RNG.
+- [ ] D6 [L] GOREV BOLGESI SERBEST BIRAKMA. Su an her gorev kendi bolgesini aliyor ama
+      bolge HIC serbest birakilmiyor (bilincli sizinti). Serbest birakmak, govdedeki
+      tahsislerin o bolgeye HAPSEDILDIGININ pozitif kanitini ister; kanitsiz birakma
+      use-after-free olur. Ayni disiplin ρ_yerel'de uygulanmisti.
+- [ ] D7 [L] Ayrik / artimli derleme — arayuz dosyalari, glob import, opak tipler, re-export.
+- [ ] D8 [L] Trait / bound sistemi (`özellik`/`uygula`) — tam method dispatch.
+- [ ] D9 [L] Prosedurler-arasi escape analizi (su an cagri sonuclari konservatif kabul
+      ediliyor) + bolge/escape'i surucu hattina baglama + otomatik-serbestleyen arena.
+- [ ] D10 [L] TEK-KAYNAK KONSOLIDASYON: checker mantigi IKI yerde (self-host driver
+      codegen.kem + Asama 2 referans checker.kem). D-407'nin canli ornegi — C1 ve
+      D-635 ikisi de "ayni onarimi iki dosyaya uygula" maliyetini odedi.
+
+# --- E. KEMGU-OS ---
+- [ ] E1 [L,FIZIKSEL ENGEL] ARM64 FIZIKSEL DOGRULAMA (D-490). Yazilim onkosullari HAZIR
+      (yukleme/UART tabani ezilebilir, Spark konsolu 16550 ve o surucu yesil, kexec
+      kurulu). Engeller fiziksel: Spark'in UART taban adresi DT/ACPI'den okunmali,
+      seri ciktiyi okuyacak IKINCI MAKINE gerekli, kexec Linux'u dusurur (power-cycle).
+      ⚠ Linux kullanici alaninda "ayni testi" kosma kisayolu REDDEDILDI — gerekce
+      belgede: bariyerler MMU-off/MMU-on cacheability uyusmazligi icin, Linux'ta o
+      kosul kurulamaz, sabotaj YANLIS-YESIL verir.
+- [ ] E2 [L] SMP: kem_os QEMU'da `-smp` olmadan kosuyor (tek cekirdek) -> orada
+      eszamanlilik hakkinda hicbir sey kanitlanamiyor (D-490). E1'e bagli.
+- [ ] E3 [L,ACIK UCLU] Tam userland. Bugun: linchpin + UART-RX + FS-syscall adimlari
+      var, tam kullanici alani yok.
+
+# --- F. Formel ---
+- [ ] F1 [L,ACIK UCLU] DRF ispati V2 — tam-dil kapsami, per-thread bolgeler,
+      operasyonel/runtime tanik, weak-memory (C++11) fence emisyonu, yan-kanal + WCET
+      bilesenlerinin teoreme dahil edilmesi. Bugunku teorem V1 cekirdek alt-kumesi icin.
 
 
 
