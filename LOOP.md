@@ -102,11 +102,10 @@
       olcum bunu YALANLADI (Error 127 ile duser) ve tarif duzeltildi.
 
 # --- B. Belge borcu (ucuz, yanlis bilgi yayiyor) ---
-- [ ] B1 [S] README BAYAT OS IDDIALARI. "Surucüler / Bare-Metal" bolumu "tam bir
-      isletim sistemi degildir (zamanlayici, MMU/sayfalama, syscall YOK)" diyor;
-      UCU DE VAR ve kem_os_arm kapisi falsifiye-kanitla olcuyor (D-276..D-281).
-      "Uc Stratejik Hedef" altindaki "Mevcut durum" cumlesi de ayni sekilde eski.
-      Ayrica "kanal bare-metal'de test yok" -> D-623/624 ile yanlis.
+- [x] B1 -> D-637. DORT bayat pasaj duzeltildi (uc degil): "Uc Stratejik Hedef"
+      mevcut-durum, "Surucüler / Bare-Metal" girisi, yol haritasi "kanal bare-metal'de
+      test yok", ve UZUN VADE kovasindaki "zamanlayici/MMU/syscall hedef" maddesi.
+      Ayrica yeni "KEMGU-OS" bolumu eklendi (42 faz tablosu + bugun gecerli sinirlar).
 - [ ] B2 [S] PROGRESS.md 4/5 madde bayat (yukarida olculdu) -> guncelle ya da sil.
       Silinirse D-009 buraya tasinmali (asagida C3 olarak duruyor).
 - [ ] B3 [S] TODO.md tamamen bayat (D-086 donemi) -> sil. Icerigi tarihsel deger
@@ -1042,3 +1041,26 @@
   sabotaji, derlenen ama calismayan bir ikili uretecek KAYNAK bozulmasi ister; maliyeti
   yuksek, iddia-duzeyi kanit yeterli goruldu.
   HANGI KAPI NEYI OLCTU: make kemgu_self rc=0 + duman denetimi . test_tumu TAM rc=0.
+- 2026-09-28 D-637: README'nin bayat KEMGU-OS iddialari duzeltildi + eksik bolum eklendi.
+  OLCUM: README dort ayri yerde artik YANLIS olan sey soyluyordu — (1) "Uc Stratejik Hedef"
+  altinda "Mevcut durum: ... Tam OS yok" (yalniz UART+VirtIO+ELF bring-up sayiyordu),
+  (2) "Surucüler / Bare-Metal" girisi "tam bir isletim sistemi degildir (zamanlayici,
+  MMU/sayfalama, syscall YOK)", (3) yol haritasi "kanal'in bare-metal tarafinda testi yok",
+  (4) uzun vade kovasi "Saf-KEMGU isletim sistemi + surucüler (zamanlayici, MMU, syscall)"
+  diye HEDEF sayiyordu. Dorduncusunu ilk taramada KACIRDIM; "bayat iddia" gre'bi tekrar
+  kosunca cikti — tek pasaji duzeltip gecmek yetmiyor, AYNI iddianin butun kopyalari
+  aranmali (D-407'nin belge tarafi).
+  GERCEK: kem_os_arm kapisi 42 fazi falsifiye-kanitla olcuyor — MMU (sayfalama +
+  non-identity ceviri + fault, D-276/277), gercek trap ESR_EL1 (D-278), CNTV timer IRQ
+  (D-279), PREEMPTIVE zamanlayici + context-switch (D-280), syscall + EL0 izolasyonu +
+  EL0-pointer dogrulamasi (D-281/D-610), VirtIO blok + minifs + VirtIO net, ve D-623/624
+  ile kanal (faz 41) + bloklayan gorev (faz 42). Tamami .kem; haritada start.o disinda
+  C nesnesi yok.
+  EKLENDI: "KEMGU-OS — saf-KEMGU mikrocekirdek" bolumu (alan/olcum/karar tablosu).
+  Gerekce: (2)'yi duzeltirken "asagida KEMGU-OS bolumu" diye atif yaptim ve o bolum
+  YOKTU -> asili referans birakmis oldum; onarim yeni kusur uretmemeli.
+  DURUSTLUK: "Tam OS yok" iddiasi SILINMEDI, DARALTILDI. Bugun gecerli sinirlar her
+  pasajda acikca yaziyor: yalniz QEMU `virt` (imaj o bellek haritasina bagli, fiziksel
+  donanimda HIC kosmadi), TEK CEKIRDEK (-smp yok -> eszamanlilik orada kanitlanamaz,
+  D-490), gorev bolgesi serbest birakilmiyor, tam kullanici alani yok.
+  HANGI KAPI NEYI OLCTU: belge_kapisi 9/9 . test_tumu TAM rc=0.
