@@ -129,10 +129,36 @@
       (`dizi_bek` yalniz DEGISKEN/SABIT icin kuruluyordu). Tolerans o eksik cift-yonlu
       akisi MASKELIYORMUS. Onarim ikili: tolerans kalkti + `ver` baglami `aktif_donus`
       tan kuruldu. Fikstur tc47_02 (karisim + TEMIZ nobetciler).
-- [ ] C3 [M] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`). Parser cikti
-      clause'u duz `&degisken` kabul ediyor; alan erisimi P264 ile REDDEDILIYOR
-      (2026-09-28'de dogrulandi). PROGRESS.md'de D-009 olarak duruyordu.
-
+- [ ] C0 [L] ⚠ YENI VE ONCELIKLI — SELF-HOST `--check` PARSER HATALARINI HIC
+      RAPORLAMIYOR. D-642'de olculdu: `ver 1 }` (noktali virgul eksik) -> C `P090 1 32`,
+      self-host `OK`. Tip hatalari (T020) calisiyor; PARSE hatalari GORUNMEZ.
+      Kok: surucunun `--check` dali yalniz `p.th_kod` (tip) tablosuna bakiyor,
+      `p.hata_say` (parser) sayacina HIC bakmiyor.
+      NEDEN HICBIR KAPI YAKALAMIYOR: checker_diff/self_driver `test/check_korpus`u
+      karsilastirir ve o korpustaki dosyalarin HEPSI AYRISTIRILABILIR — parse
+      hatasi iceren tek dosya yok. Yani 192/192 ve 152/152 yesilleri bu yuzeyi
+      hic olcmuyor. D-424'te kayitli "loud -> silent" sinifinin tekrari.
+      BOYUT: self-host parser YALNIZ `hata_say` sayaci tutuyor; kod/konum
+      KAYDETMIYOR (14 hata noktasi). C bicimiyle (`KOD\tsat\tsut`) parite icin
+      parser tani tablosu (ph_kod/ph_sat/ph_sut) eklenmeli -> L.
+      C0.1 parser tani tablosu, C0.2 hata kodlarini C ile esle (P090/P261/P264...),
+      C0.3 `--check` ve `--llvm` dallarinda raporla + sifir-disi don,
+      C0.4 korpusa PARSE-HATALI fikstur (bugun boyle dosya YOK — kapinin kor
+      noktasi tam da bu), C0.5 sabotaj.
+- [ ] C3 [L] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`).
+      ⚠ BOYUT M'DEN L'YE CIKARILDI (D-642 olcumu): AST cikti hedefini AD (string)
+      olarak tutuyor, lvalue/ifade olarak DEGIL -> temsil degisikligi C'de bes yeri
+      (ast.h, parser.c, tip_kontrol.c:6575, llvm.c:7496, ast_yazdir.c) ve self-host
+      codegen.kem'i etkiler; ustelik `--ast` dokumu parser_diff'te BAYT-BIREBIR
+      parite kapisidir.
+      ⚠ AYRICA BU BIR EKSIK OZELLIK DEGIL, KUSUR: olculdu ki C reddederken
+      (P264) self-host `OK` der VE IR URETIR — hem de yanlis IR:
+      `%7 = call %R asm sideeffect "mov $0, #42", "=r"()` (register kisiti
+      YAPININ TAMAMINA baglaniyor). Bu, C0'in bir ornegidir; C0 kapanınca
+      belirti kaybolur ama OZELLIK yine yoktur.
+      C3.1 C0'dan SONRA olc (belirti degisir), C3.2 AST temsil karari (ad -> lvalue),
+      C3.3 C tarafi bes yer, C3.4 self-host parite, C3.5 --ast parite kapisi,
+      C3.6 fikstur + sabotaj.
 # --- D. Dil ozellikleri ---
 # [D-639] L maddeler M'lere BOLUNDU. Gerekce: onceki kuyrukta belirsizligin
 # neredeyse tamami L'lerden geliyordu (34-74 iterasyonun 24-64'u). Bolme
@@ -1246,3 +1272,35 @@
   HANGI KAPI NEYI OLCTU: checker_diff 191 -> 192/192 . codegen_genis 58/58 (geri
   donduruldu) . check_genis 134/134 . check_kapisi 0 RED . test_tumu TAM rc=0;
   ozette TEK fark checker_diff'in +1 fiksturu.
+- 2026-09-28 D-642: C3 olculdu -> KOD DEGISIKLIGI YOK; iki yeni gercek + kuyruk duzeltmesi.
+  (D-531 deseni: olcum bir iterasyonun mesru ciktisidir.)
+  BULGU 1 — C3 YANLIS BOYUTLANDIRILMIS (M -> L). satirici_asm cikti hedefi AST'de
+  AD (string: `cikti_adlar`) olarak tutuluyor, lvalue/ifade olarak DEGIL. `&r.deger`
+  desteklemek TEMSIL degisikligidir: C'de ast.h + parser.c + tip_kontrol.c:6575 +
+  llvm.c:7496 + ast_yazdir.c, self-host'ta codegen.kem; ustelik `--ast` dokumu
+  parser_diff'te BAYT-BIREBIR parite kapisi. Tek iterasyonluk is degil.
+  BULGU 2 — ASIL KUSUR BASKA VE DAHA BUYUK: C3'u olcerken cikti su oldu:
+    C    `çıktı("=r", &r.deger)` -> P264 (reddeder)
+    SELF ayni dosya -> `OK` VE IR URETIR:
+         `%7 = call %R asm sideeffect "mov $0, #42", "=r"()`
+    yani register kisiti YAPININ TAMAMINA baglaniyor — SESSIZ YANLIS IR.
+  Kok C3'te degil: SELF-HOST `--check` PARSER HATALARINI HIC RAPORLAMIYOR.
+  Genel sinandi: `ver 1 }` (noktali virgul eksik) -> C `P090 1 32`, self `OK`.
+  Tip hatalari (T020 1 26) IKI TARAFTA DA cikiyor; yalniz PARSE hatalari gorunmez.
+  Surucunun `--check` dali `p.th_kod` (tip tablosu) bakiyor, `p.hata_say` (parser
+  sayaci) HIC bakmiyor.
+  NEDEN KAPILAR SUSUYOR: checker_diff ve self_driver `test/check_korpus`u
+  karsilastirir; o korpusta PARSE HATALI TEK DOSYA YOK (hepsi checker'i olcmek icin
+  yazilmis, dolayisiyla ayristirilabilir). 192/192 ve 152/152 bu yuzeyi HIC olcmuyor.
+  Bu, D-424'te kayitli "loud -> silent" sinifinin tekrari ve bu oturumda ucuncu kez
+  ayni ders: KAPI YESIL OLMASI YUZEYIN OLCULDUGU ANLAMINA GELMEZ (C1'de check_genis
+  check_korpus'u taramiyordu; C2'de uc parite kapisi codegen_genis'in gordugu
+  gerilemeyi gormemisti).
+  BOYUT OLCULDU: self-host parser YALNIZ `hata_say` sayaci tutuyor, kod/konum
+  KAYDETMIYOR (14 artirma noktasi). C bicimiyle parite icin parser tani tablosu
+  gerekli -> L. Bu yuzden kuyruga C0 olarak ve C3'ten ONCE kondu: C3'un belirtisi
+  C0'in bir ornegi, kok once kapanmali.
+  KOD DEGISIKLIGI BILEREK YAPILMADI: dar bir "hata_say > 0 ise OK deme" yamasi
+  loud'a cevirirdi ama C ile FORMAT paritesi olmadigi icin korpusa fikstur
+  EKLENEMEZDI -> kapi yine kor kalirdi. Yarim onarim, olculmemis onarimdir.
+  HANGI KAPI NEYI OLCTU: degisiklik yok; tum kapilar D-641 yesilinde.
