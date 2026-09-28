@@ -115,15 +115,14 @@
       M1-M12 goc adimlarinin ayrintisi yalniz burada -> silmek bilgi kaybi olurdu.
 
 # --- C. Dil / checker paritesi ---
-- [ ] C1 [M] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592;
-      değişken y: tam32 = x;` C T001, self OK (`x = "a"` vakasi da ayni).
-      KOK BULUNDU: checker.kem:5145 ve codegen.kem:12433 —
-      `yerel_tip` yalniz ANNOTASYONDAN okunuyor, annotasyon yoksa "?" kaydediliyor
-      ve dosyanin kendi kurali geregi ("?" = bilinmiyor -> T001 atla) o baglamaya
-      dair butun tip denetimleri dusuyor. Onarim: annotasyon yokken tipi
-      BASLATICI IFADEDEN cikarsa. ⚠ Yanlis-pozitif riski OLCULMUS: `yerel_tip_filtrele`
-      etrafindaki yorumlar generic'te sahte T003 uretildigini kaydediyor -> D-377/D-378
-      gibi ARTIMLI git (dar basla, olc, kapsami tek tek ac).
+- [~] C1 -> D-640 (DAR KAPSAM KAPANDI, genisletme acik). Annotasyonsuz `değişken`in
+      tipi artik LITERAL basaticidan cikarsaniyor (`bag_literal_tip`/`bag_tip_cikar`,
+      iki dosyada). Olculen 8 vakanin 7'si paritede; fikstur tc47_01. Sabotaj S144b
+      (checker.kem) checker_diff'i, S144c (codegen.kem) self_driver'i KIRMIZI yapti.
+      ⚠ KALAN: cagri/aritmetik/tanimlayici basaticilar hala "?" (eski davranis).
+      Ayrica p7 (`değişken x = 1; değişken y: tam64 = x + 8589934592;`) HALA AYRISIYOR:
+      C T043 3:31, self T001 3:5 — aritmetik yeniden-tipleme (D-021) yolu, bu maddenin
+      disinda. Kapsam acilirken buradan devam edilmeli.
 - [ ] C2 [M] SELF-HOST CHECKER T013 SAYISAL KARISIM: baglamsiz `[1, 2.5]` C T013,
       self OK (bagsiz yolda `sayisal_mi` toleransi). D-630 bunu tamsayi karisimina da
       genisletti: `[1, 8589934592]` C T013 (tam32 vs tam64), self OK. C1 ile ayni aile;
@@ -1181,3 +1180,33 @@
   cunku L'ler bolundu; bandin daralmasi bu yuzden.
   HANGI KAPI NEYI OLCTU: belge_kapisi 9/9 . test_tumu TAM rc=0 (D-638 kosumu, kuyruk
   degisikligi kod degil).
+- 2026-09-28 D-640: annotasyonsuz baglamanin tipi izleniyor (DAR: yalniz literal).
+  OLCUM (once): `değişken x = 8589934592; değişken y: tam32 = x;` C T001, self OK;
+  `x = "a"` de oyle. Kok: `yerel_topla` tipi YALNIZ annotasyondan okuyordu
+  (checker.kem:5145 / codegen.kem:12433); annotasyon yoksa "?" -> dosyanin kendi
+  kurali geregi ("?" = bilinmiyor -> T001 atla) o baglamaya dair BUTUN denetimler
+  dusuyordu.
+  ORACLE ONCE OLCULDU (8 vakalik matris) — ve bir varsayimi yikti: KEMGU'da ORTUK
+  GENISLETME YOK. `x = 1` (tam32) -> `y: tam64 = x` bile C'de T001. Bunu bilmeden
+  yazsaydim "genisletme zararsiz" diye yanlis kural koyardim.
+  `ifade_tip` CAGRILMADI: yan etkili (`t043_raporla`), `yerel_topla` ise ON-TOPLAMA
+  gecisi -> oradan cagirmak tanilari CIFTLERDI. Literal dallarinin SAF alt kumesi
+  yazildi; kural ayni (D-630 baglamsiz yukseltmesi dahil).
+  BILEREK DAR: yalniz duz literaller; cagri/aritmetik/tanimlayici basaticilar "?"
+  = eski davranis. Gerekce olculmus risk: `yerel_tip_filtrele` notlari generic'te
+  sahte T003 uretildigini kaydediyor. D-377/D-378 gibi adim adim acilmali.
+  SONUC: 8 vakanin 7'si paritede (p6 T043 yan etki olarak kapandi). p7
+  (`y: tam64 = x + 8589934592`) HALA ayrisiyor ama artik SESSIZ DEGIL: C T043 3:31,
+  self T001 3:5. Aritmetik yeniden-tipleme yolu, bu maddenin disinda.
+  ⚠ SABOTAJ BIR KUSURUMU YAKALADI: once codegen.kem'i sabote edip checker_diff
+  bekledim — ATESLEMEDI. Cunku checker_diff checker'i `checker.kem`den kurar.
+  Iki uygulama FARKLI kapilarca sinaniyor. Ayri ayri olculdu:
+    checker.kem  -> checker_diff  (S144b: 190/191, rc=2)
+    codegen.kem  -> self_driver   (S144c: 151/152, rc=2, hem C-built hem self-host)
+  Ikisi de korumali, ama ikisini de KANITLAMAK gerekti. Bu, D10'un (tek-kaynak
+  konsolidasyon) maliyetinin somut olcumu: tek onarim iki dosya + iki sabotaj.
+  check_genis bu yuzeyi HIC gormuyor (check_korpus'u taramiyor — snapshots/ornekler/
+  stdlib tariyor); yanlis kapiya guvenmek sessiz bosluk olurdu.
+  HANGI KAPI NEYI OLCTU: checker_diff 190 -> 191/191 . check_genis 134/134 .
+  check_kapisi 274/280 0 RED . self_driver 152/152 . test_tumu TAM rc=0; ozet
+  satirlarinda TEK fark checker_diff'in +1 fiksturu.
