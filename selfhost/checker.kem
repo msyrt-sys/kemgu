@@ -4085,8 +4085,15 @@ işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     iken j < n {
         değişken e2: tam32 = dizi_al(p.cocuk, cb + j);
         değişken t2: metin = ifade_tip(p, e2, "?");
+        // [D-641] `sayisal_mi` TOLERANSI KALDIRILDI — C'de yok.
+        // C kurali (tip_kontrol.c DUGUM_DIZI_OLUSTUR): `!tip_esit(ilk,e) &&
+        // e->kategori != TIP_HATA` -> T013. SAYISAL ISTISNASI YOK. Buradaki
+        // tolerans `[1, 2.5]` (tam32 vs kesirli64) ve `[1, 8589934592]`
+        // (tam32 vs tam64) vakalarini SESSIZCE gecirtiyordu (olculdu: C T013,
+        // self OK). Bagalamli dal (a) zaten toleranssizdi -> iki dal da simdi
+        // ayni kurali uyguluyor. "?" guardi C'nin TIP_HATA guardinin aynasidir.
         eğer (metin_esit(t2, "?") == yanlış) ve (metin_esit(t2, ilk) == yanlış) {
-            eğer (sayisal_mi(ilk) ve sayisal_mi(t2)) == yanlış { sekil_hata(p, e2, "T013"); }
+            sekil_hata(p, e2, "T013");
         }
         j = j + 1;
     }
@@ -5790,6 +5797,21 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 p.dizi_bek = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, an)));
             } değilse { p.dizi_bek = "?"; }
         } değilse { p.dizi_bek = "?"; }
+    }
+    // [D-641] `ver [...]` DE BAGLAMLIDIR — beklenen tip aktif islevin donusudur.
+    //
+    // ⚠ BU EKSIKLIK BIR TOLERANSLA MASKELENMISTI. Bagalamsiz dizi dalinda
+    // `sayisal_mi` istisnasi vardi (tipler farkli olsa da ikisi de sayisalsa
+    // T013 YOK). Istisna kaldirilinca ORTAYA CIKTI: `sha256_selfhost.kem`
+    // `ver [1116352408, ..., 3049323471, ...] -> Dizi<dtam32>` yaziyor;
+    // 3049323471 > 2^31 oldugu icin BAGLAMSIZ yolda "tam64" cikarsaniyor ve
+    // ilk eleman "tam32" ile karisim sanilip T013 yagiyordu. C ayni dosyaya
+    // OK der cunku beklenen tipi (`Dizi<dtam32>`) `ver`e TASIR.
+    // Yani tolerans keyfi degildi: EKSIK CIFT-YONLU TIP AKISINI ortuyordu.
+    // Dogru onarim toleransi geri koymak degil, akisi tamamlamaktir — C ile
+    // ayni kural (D-407). Olculdu: codegen_genis 57/58 -> 58/58.
+    eğer metin_esit(ad, "VER") ve metin_baslar(p.aktif_donus, "Dizi<") {
+        p.dizi_bek = dizi_ic_tip(p.aktif_donus);
     }
     // D-627: BLOK-form kapanış gövdesindeki `ver` KAPANIŞIN dönüşüdür, çevreleyen
     // işlevin DEĞİL (C tip_kontrol.c D-304: `lambda_blok_cikarsama` iken `ver`

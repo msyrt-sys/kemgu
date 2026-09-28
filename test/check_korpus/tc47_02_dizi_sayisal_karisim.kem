@@ -1,0 +1,26 @@
+// [D-641] BAĞLAMSIZ DİZİ LİTERALİNDE SAYISAL KARIŞIM → T013.
+//
+// Öncesinde self-host'un bağlamsız dalında bir `sayisal_mi` TOLERANSI vardı:
+// eleman tipleri farklı olsa bile İKİSİ DE SAYISALSA hata bastırılıyordu.
+// Ölçüldü: `[1, 2.5]` ve `[1, 8589934592]` C'de T013, self-host'ta `OK`.
+//
+// C'nin kuralında böyle bir istisna YOK (tip_kontrol.c DUGUM_DIZI_OLUSTUR:
+// `!tip_esit(ilk,e) && e->kategori != TIP_HATA` → T013). Bağlamlı dal zaten
+// toleranssızdı; tolerans yalnız bağlamsız dalda vardı, yani aynı dil kuralı
+// iki dalda FARKLI uygulanıyordu.
+//
+// ⚠ Bu fikstür TEMİZ vakaları da içerir (aynı tipli diziler) — kural
+// gevşetilirse kırmızı olur, ama aşırı sıkılaştırılırsa da kırmızı olur.
+işlev main() -> tam32 {
+    // KARIŞIM — hepsi T013 olmalı.
+    değişken a = [1, 2.5];              // tam32 vs kesirli64
+    değişken b = [1, 8589934592];       // tam32 vs tam64 (D-630 yükseltmesi)
+    değişken c = [1, "x"];              // sayısal olmayan karışım (zaten hataydı)
+
+    // TEMİZ — hiçbiri hata OLMAMALI (aşırı sıkılaştırma nöbetçisi).
+    değişken d = [1, 2];
+    değişken e = [1.5, 2.5];
+    değişken f = ["a", "b"];
+
+    ver 0;
+}
