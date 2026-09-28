@@ -79,192 +79,163 @@
       testlerin konak mimarisini GOMMESI de onarildi (A koku) ve ct_bariyer'in x86 yarisi
       acikca --mimari x86_64'e sabitlendi — aksi halde B'nin onarimi o yariyi BOSA
       cikaracakti. test_tumu rc=0, S141 sabotaji kapinin disini kanitladi.
-### [2026-09-28] KONSOLIDE KUYRUK — tek kaynak buradan
-# Oncesinde acik is DORT ayri yere dagilmisti (bu liste, README yol haritasi,
-# PROGRESS.md, TODO.md) ve buyuk kismi BAYATTI. Olculdu, kopyalanmadi:
-#   PROGRESS.md 5 ertelenmis maddenin 4'u KAPANMIS (D-003/D-007/D-008 -> cg_yapi_dizi.kem
-#     ve cg_gorev_* korpusu kanitliyor; yalniz D-009 acik, parse hatasiyla dogrulandi).
-#   TODO.md TAMAMEN bayat (hala D-086'da, biz D-635'teyiz).
-#   README "kanal bare-metal'de test yok" diyor -> D-623/624 faz [41]/[42] olarak EKLEDI.
-#   KIRMIZI_QUEUE.md / NOTES_TRACK_B.md / KEMGU-OS-readiness.md = tarihsel log, kapali.
-# Buyukluk: S ~ yarim iterasyon, M ~ bir iterasyon, L ~ birden cok iterasyon.
-# Sira BILEREK boyle: once engel kaldiran ve yanlis bilgi yayan ucuz isler.
+### [2026-09-28] AYRINTILI KUYRUK (D-646) — alt adimlar UST MADDEYE terfi etti
+# NEDEN: onceki kuyrukta is 17 ust madde + 74 gomulu alt adim seklindeydi; alt
+# adimlar gorunmedigi icin ne sayilabiliyor ne siralanabiliyordu. Her satir artik
+# TEK BASINA alinabilir bir is.
+# ⚠ DOLGU YOK. Her madde ya (a) olculmus bir bulguya ya (b) README yol haritasinin
+# kendi maddesine dayanir. Bu oturumda BELGEDEN KOPYALANAN ~10 maddenin bayat
+# ciktigi olculdu (D-638/D-639/D-642/D-644) — o yuzden "yapilacak" yazan hicbir
+# sey OLCULMEDEN buraya girmedi. `[?]` isaretli olanlar HENUZ OLCULMEDI: ilk is
+# olarak dogrulanmali, cunku bir kismi zaten kapanmis olabilir.
+# Boyut: S ~ yarim iterasyon, M ~ bir iterasyon, L ~ birden cok.
 
-# --- A. Engel kaldirma (once) ---
-- [ ] A1 [S] PUSH + CI DOGRULAMASI. 6 commit push bekliyor; bu makinede GitHub yazma
-      yetkisi yok (gh yok, ssh anahtari yok, credential helper yok) -> Mehmet kurmali.
-      ONEMI YEDEKLEME DEGIL: D-634 Makefile'a, self-host'a ve uc harness'a dokundu;
-      CI Windows + Linux x86_64 kosuyor ve o yol OLCULMEDI (yalniz kod okumasi +
-      -D ile konak simulasyonu). konak.kem uretimi MSYS'de (printf/cmp/mv/uname)
-      denenmedi. Kirilirsa once burasi kirilir.
-- [x] A2 -> D-636. $(EXE) kullaniliyor, stderr bastirilmiyor, uretilen ikili
-      KOSTURULARAK dogrulaniyor (duman denetimi). Madde "sessiz basarisizlik" diyordu;
-      olcum bunu YALANLADI (Error 127 ile duser) ve tarif duzeltildi.
+# ===== A. ENGEL (bende bitmez) =====
+- [ ] A1  [S] PUSH + CI. 23 commit bekliyor; bu makinede GitHub yazma yetkisi yok.
+      ONEMI YEDEKLEME DEGIL: D-634 Makefile/self-host/harness'a dokundu ve
+      WINDOWS/x86 CI YOLU HIC OLCULMEDI. Onu dogrulayacak tek sey CI.
 
-# --- B. Belge borcu (ucuz, yanlis bilgi yayiyor) ---
-- [x] B1 -> D-637. DORT bayat pasaj duzeltildi (uc degil): "Uc Stratejik Hedef"
-      mevcut-durum, "Surucüler / Bare-Metal" girisi, yol haritasi "kanal bare-metal'de
-      test yok", ve UZUN VADE kovasindaki "zamanlayici/MMU/syscall hedef" maddesi.
-      Ayrica yeni "KEMGU-OS" bolumu eklendi (42 faz tablosu + bugun gecerli sinirlar).
-- [x] B2 -> D-638. PROGRESS.md SILINMEDI, tarihsel kayit olarak isaretlendi ve dort
-      bayat ertelemesi olculup duzeltildi (D-003/D-004/D-007/D-008 kapanmis; D-009 tek
-      gercek acik, C3'e isaret ediyor).
-- [x] B3 -> D-638. TODO.md SILINMEDI, `belgeler/D-086_Driver_Entegrasyon_Gunlugu.md`
-      olarak tasindi + tarihsel banner. Kok dizinde "TODO" adiyla durmasi tek basina
-      yaniltiyordu; 12 maddenin hepsi [DONE] ve D-086 DECISIONS_LOG'da kayitli, ama
-      M1-M12 goc adimlarinin ayrintisi yalniz burada -> silmek bilgi kaybi olurdu.
+# ===== C. CHECKER / PARSER PARITESI =====
+- [ ] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. D-643'te 104 cagrinin
+      UCU eslendi; gerisi "P000" kaydediyor (iki dosyada 3'er yer).
+- [ ] C0b [M] C'nin PANIK CASCADE paritesi: `&r.deger` icin C DORT tani basar
+      (P264 + uc P261), self BIR. Panik-senkron davranisi eslenmeli.
+- [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
+      bugun "?" = eski davranis (D-640 bilerek dar birakti).
+- [ ] C1b [M] Annotasyonsuz baglamada ARITMETIK/TANIMLAYICI basaticisi.
+- [ ] C1c [M] p7 ayrismasi: `değişken x = 1; değişken y: tam64 = x + 8589934592;`
+      C T043 3:31, self T001 3:5. Aritmetik yeniden-tipleme (D-021) yolu.
+- [ ] C3a [S] C3.2 karar: asm cikti hedefi AST'de AD yerine IFADE dugumu.
+- [ ] C3b [M] parser.c — `&` sonrasi SINIRLI lvalue (tanimlayici | tanimlayici.alan).
+- [ ] C3c [M] tip_kontrol.c:6575 — AS002 lvalue tipi uzerinden (primitif olmali).
+- [ ] C3d [M] llvm.c:7496 — TANIMLAYICI'da `isim_bul`, ERISIM'de `erisim_lvalue`.
+- [ ] C3e [M] self-host codegen.kem aynasi.
+- [ ] C3f [S] cg_korpus fiksturu (gercek kosum: alana yaz -> 42) + sabotaj.
 
-# --- C. Dil / checker paritesi ---
-- [~] C1 -> D-640 (DAR KAPSAM KAPANDI, genisletme acik). Annotasyonsuz `değişken`in
-      tipi artik LITERAL basaticidan cikarsaniyor (`bag_literal_tip`/`bag_tip_cikar`,
-      iki dosyada). Olculen 8 vakanin 7'si paritede; fikstur tc47_01. Sabotaj S144b
-      (checker.kem) checker_diff'i, S144c (codegen.kem) self_driver'i KIRMIZI yapti.
-      ⚠ KALAN: cagri/aritmetik/tanimlayici basaticilar hala "?" (eski davranis).
-      Ayrica p7 (`değişken x = 1; değişken y: tam64 = x + 8589934592;`) HALA AYRISIYOR:
-      C T043 3:31, self T001 3:5 — aritmetik yeniden-tipleme (D-021) yolu, bu maddenin
-      disinda. Kapsam acilirken buradan devam edilmeli.
-- [x] C2 -> D-641. Madde "`sayisal_mi` toleransi" diyordu; GERCEK KOK BASKAYDI.
-      Tolerans kaldirilinca yanlis-pozitif patladi (sha256_selfhost.kem) ve altindaki
-      kusur ortaya cikti: self-host `ver [...]` yolunda BEKLENEN TIPI TASIMIYORDU
-      (`dizi_bek` yalniz DEGISKEN/SABIT icin kuruluyordu). Tolerans o eksik cift-yonlu
-      akisi MASKELIYORMUS. Onarim ikili: tolerans kalkti + `ver` baglami `aktif_donus`
-      tan kuruldu. Fikstur tc47_02 (karisim + TEMIZ nobetciler).
-- [~] C0 -> D-643 (DAR KAPSAM KAPANDI, kod eslemesi acik). Parser tani tablosu
-      (ph_kod/ph_sat/ph_sut) + `bekle_k` (kod cagri yerinde, C aynasi) eklendi;
-      `--check` parse hatasinda tip kontrolu KOSMUYOR ve yalniz parser tanilarini
-      basiyor; `--llvm` BOS stdout + stderr tanisi + cikis 1 veriyor (onceden rc=0
-      ve 156 satir YANLIS IR). Korpusa ILK parse-hatali dosya girdi (tc48_01).
-      ⚠ KALAN: 104 `bekle` cagrisinin yalniz UCU eslendi (P090 `ver` noktali virgulu,
-      P269/P264 asm cikti clause'u); gerisi "P000" kaydediyor. Ayrica C'nin PANIK
-      CASCADE'i eslenmedi: `&r.deger` icin C dort tani basiyor (P264 + uc P261),
-      self BIR. Cascade paritesi ayri bir artim.
-      C0.a kalan `bekle` sitelerini esle, C0.b panik-senkron cascade paritesi,
-      C0.c her artimda korpusa fikstur.
-- [ ] C3 [M] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`).
-      ⚠ BOYUT L'DEN M'E DUSURULDU (D-644 olcumu) — onceki L gerekcemin IKI
-      dayanagi da YANLIS CIKTI:
-        (1) "`--ast` bayt-paritesi riske girer" demistim. OLCULDU: ast_yazdir.c asm
-            dalinda cikti hedefleri ALT AGAC OLARAK BASILMIYOR, yalniz sayiliyor
-            (`cikti=%d`); cocuk olarak yalniz GIRDI ifadeleri dokuluyor. Dump sekli
-            korunursa parser_diff paritesi HIC etkilenmez.
-        (2) "codegen sifirdan yazilacak" ima etmistim. OLCULDU: `erisim_lvalue()`
-            (llvm.c:3028) alan ADRESINI + alan IR tipini veriyor ve atama yolunda
-            ZATEN kullaniliyor (llvm.c:6881). Cikti hedefi icin aynisi kullanilir.
-      KALAN GERCEK IS (dort yer + self-host): C3.2 ast.h — cikti hedefi AD yerine
-      IFADE dugumu (TANIMLAYICI ya da ERISIM), C3.3 parser.c — `&` sonrasi SINIRLI
-      lvalue (tanimlayici | tanimlayici.alan zinciri; keyfi ifade DEGIL),
-      C3.4 tip_kontrol.c:6575 — AS002 artik `sembol_bul(ad)` degil lvalue tipi
-      uzerinden (primitif olmali), C3.5 llvm.c:7496 — TANIMLAYICI'da `isim_bul`,
-      ERISIM'de `erisim_lvalue`, C3.6 self-host codegen.kem aynasi,
-      C3.7 fikstur (cg_korpus, gercek kosum: alana yaz -> 42) + sabotaj.
-      ⚠ D-643 BELIRTIYI KAPATTI (artik P264 ile reddediliyor, sessiz yanlis IR yok)
-      ama OZELLIK yok. Yani bu madde artik "kusur" degil, duz bir eksik ozellik.
-# --- D. Dil ozellikleri ---
-# [D-639] L maddeler M'lere BOLUNDU. Gerekce: onceki kuyrukta belirsizligin
-# neredeyse tamami L'lerden geliyordu (34-74 iterasyonun 24-64'u). Bolme
-# UYDURULMADI; her alt madde depoda olculdu (satir/islev sayilari, kod yeri,
-# mevcut kapi). Olcum sirasinda IKI bayat iddia daha cikti (D3, D5) — asagida.
+# ===== D. DIL OZELLIKLERI =====
+- [ ] D1a [M] turbofish: parser (`::<>` ayrimi + belirsizlik kurali).
+- [ ] D1b [M] turbofish: checker — acik argumanin cikarsamayi EZMESI.
+- [ ] D1c [M] turbofish: codegen mono yolu.
+- [ ] D1d [M] turbofish: self-host parite (iki dosya).
+- [ ] D1e [S] turbofish: korpus fikstur + sabotaj.
+- [ ] D2a [M] Kabiliyet odunc alma: omur kurali (kime, ne kadar).
+- [ ] D2b [M] Kabiliyet odunc: checker zorlamasi (yeni hata kodu).
+- [ ] D2c [M] Kabiliyet odunc: codegen.
+- [ ] D2d [M] Kabiliyet odunc: self-host parite.
+- [ ] D2e [S] Kabiliyet odunc: `yetki<R>` korpus fiksturu.
+- [ ] D3a [M] BARIYER kosum kapisi. D-645 kilit+semafor'u kapiya bagladi, bariyer
+      KAPSANMADI: sayac yarisiyla olculemez, "hepsi bulusmadan kimse gecmiyor"
+      sekli gerekir (drf_gorunurluk'un bayrak deseni uyarlanabilir).
+- [ ] D3b [S] README'nin "Semaforlar/bariyerler yapilacak" maddesini olculen
+      gercekle duzelt (uc modul de VAR; D-639'da olculdu, D-645'te ikisi kanitlandi).
+- [ ] D3c [M] SEMAFOR n>1 semantigi olculmedi: D-645 n=1 ile (kilit gibi) test
+      ediyor. Asil semafor iddiasi "es zamanli en fazla n" ve bu HIC olculmedi.
+- [ ] D4a [M] LSP v3: artimli didChange.
+- [ ] D4b [M] LSP v3: workspace/symbol.
+- [ ] D4c [M] LSP v3: semanticTokens.
+- [ ] D4d [M] LSP v3: references/rename.
+- [ ] D4e [S] LSP v3: her biri icin JSON-RPC kapi testi.
+- [ ] D5a [S] `metin`/`dosya` EKSIK ISLEV ENVANTERI cikar (metin 36, dosya 17 islev
+      VAR — "tamamlama" olculmeden is degil; D-639).
+- [ ] D5b [M] BLAKE3 (`kripto/karma.kem`, bugun 3 islev).
+- [ ] D5c [M] HMAC (`kripto/karma.kem`).
+- [ ] D5d [M] OS RNG (`kripto/rastgele.kem`, bugun 4 islev; OS entropi kaynagi YOK).
+- [ ] D5e [S] Yeni islevleri `calistir_kripto_kosum` kapsamina al.
+- [ ] D6a [M] Gorev govdesi icin escape ozeti (D9a'ya bagli).
+- [ ] D6b [M] Hapsedilme kurali + yeni tani kodu.
+- [ ] D6c [M] Kanit varsa bolgeyi serbest birak.
+- [ ] D6d [M] ASan altinda UAF kapisi.
+- [ ] D6e [S] Sabotaj: hapsedilme denetimini gevset -> ASan kirmizi OLMALI.
+- [ ] D7a [M] Ayrik derleme: arayuz dosyalari (imza-only cikti).
+- [ ] D7b [M] Ayrik derleme: glob import.
+- [ ] D7c [M] Ayrik derleme: opak tipler.
+- [ ] D7d [M] Ayrik derleme: re-export.
+- [ ] D7e [L] Artimli yeniden derleme (degisen birim + bagimlilari).
+- [ ] D7f [S] Her biri icin cross-file korpus fiksturu.
+- [ ] D8a [M] `özellik` bildirimi sozdizimi.
+- [ ] D8b [M] `uygula` blogu + method cozumu.
+- [ ] D8c [M] Generic'te bound (`T: Ozellik`).
+- [ ] D8d [M] STATIK dispatch.
+- [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR, once statik.
+- [ ] D8f [M] Trait: self-host parite.
+- [ ] D8g [S] Trait: korpus + sabotaj.
+- [ ] D9a [M] Islev basina escape ozeti (cagri grafi).
+- [ ] D9b [M] Ozetin cagri yerinde kullanilmasi (`escape.c:308` konservatif dal).
+- [ ] D9c [M] Ozyineleme/dongu icin sabit-nokta.
+- [ ] D9d [M] Bolge/escape'i surucu hattina baglama.
+- [ ] D9e [L] Otomatik-serbestleyen arena.
+- [ ] D10a [S] checker.kem (6801 satir) ile codegen.kem gomulu checker'inin
+      FARKINI olc (diff tabanli envanter).
+- [ ] D10b [S] Yon karari: driver tek kaynak mi, checker.kem mi?
+- [ ] D10c [L] Goc.
+- [ ] D10d [M] `checker_diff` kapisini yeniden tanimla (tek kaynak olunca neyi
+      olcecek? — SILME, anlamini degistir).
+- [ ] D10e [S] Sabotaj.
 
-- [ ] D1 [M] Acik tip argumani (turbofish) `f<T>(...)` / `Tip<T>{...}`. Bugun tip
-      argumanlari YALNIZ cikarsaniyor; cikarsamanin yetmedigi yerde yazacak sozdizim
-      yok. Alt adimlar: D1.1 parser (`::<>` ya da `<>` ayrimi + belirsizlik kurali),
-      D1.2 checker'da acik argumanin cikarsamayi EZMESI, D1.3 codegen mono yolu,
-      D1.4 self-host parite (iki dosya), D1.5 korpus fikstur + sabotaj.
+# ===== E. KEMGU-OS =====
+- [ ] E1a [S] Spark'in UART taban adresini DT/ACPI'den OKU (bugun bilinmiyor).
+- [ ] E1b [M] Imaji o adres + yukleme tabaniyla kur.
+- [ ] E1c [-] Seri yakalama duzenegi — IKINCI MAKINE (Mehmet'in donanim isi).
+- [ ] E1d [M] Fiziksel taban kosum (SMP QUEUE OK, toplam=20540).
+- [ ] E1e [M] Bariyer sabotaji + sonucu D-490'a yaz.
+- [ ] E2a [M] Ikincil cekirdek bring-up (PSCI CPU_ON deseni smp_queue_arm.c'de VAR).
+- [ ] E2b [M] Cekirdek-basi zamanlayici.
+- [ ] E2c [M] Kilit/bariyer cekirdekte.
+- [ ] E2d [M] `-smp 2` ile kem_os kapisi.
+- [ ] E2e [S] SMP sabotaji.
+- [ ] E3a [-] KARAR: "v1 userland neye denir?" (Mehmet) — bitis tanimi YOK.
+- [ ] E3b [L] Surec modeli (birden cok EL0 sureci).
+- [ ] E3c [L] Surec olusturma (fork/exec analogu).
+- [ ] E3d [M] Dosya tanimlayici tablosu.
+- [ ] E3e [L] Basit kabuk.
+- [ ] E3f [M] Surecler arasi izolasyon kapisi.
 
-- [ ] D2 [M] Gercek kabiliyet odunc alma (mevcut MOVE/`delege` cozumunun yerine).
-      D2.1 odunc omru kurali (kime, ne kadar), D2.2 checker zorlamasi (yeni hata kodu),
-      D2.3 codegen, D2.4 self-host parite, D2.5 `yetki<R>` korpusuna fikstur.
+# ===== F. FORMEL =====
+- [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
+      once bu onerilir).
+- [ ] F1b [L] DRF V2: tam-dil kapsami.
+- [ ] F1c [L] DRF V2: operasyonel/runtime tanik.
+- [ ] F1d [L] DRF V2: weak-memory (C++11) fence emisyonu. ⚠ E1'e BAGLI: fiziksel
+      olcum olmadan ispat "modele gore dogru" kalir.
+- [ ] F1e [L] DRF V2: yan-kanal bileseni teoreme.
+- [ ] F1f [L] DRF V2: WCET bileseni teoreme.
 
-- [ ] D3 [M] ESZAMANLILIK ILKELLERI ICIN KOSUM KAPISI — "semafor yazmak" DEGIL.
-      ⚠ README bunu "yapilacak" diye sayiyor; OLCULDU ve BAYAT: `stdlib/semafor.kem`,
-      `stdlib/bariyer.kem`, `stdlib/kilit.kem` VAR (uceri de 3 islev) ve
-      `calistir_stdlib_check` onlari tip-denetliyor. Eksik olan sey KOSUM kaniti:
-      bugun hicbir kapi bu ucunun CALISTIGINI olcmuyor (tip-denetimi calismayi
-      kanitlamaz — D-425). D3.1 host kosum kapisi (semafor: N gorev, sayili izin
-      asilmiyor; bariyer: hepsi bulusmadan kimse gecmiyor; kilit: karsilikli dislama),
-      D3.2 sabotaj (bariyeri kaldir -> kapi kirmizi OLMALI), D3.3 README maddesini
-      olculen gercekle duzelt.
+# ===== G. KAPI HIJYENI (bu oturumda OLCULEN bulgular) =====
+- [ ] G1  [M] KAPI-YUZEY HARITASI. Bu oturumda UC kez ayni ders cikti: kapi yesil
+      olmasi yuzeyin olculdugu anlamina gelmiyor. (C1: check_genis check_korpus'u
+      taramiyor. C2: uc parite kapisi codegen_genis'in gordugu gerilemeyi gormedi.
+      C0: check_korpus'ta parse-hatali dosya olmadigi icin butun bir hata sinifi
+      kapsam disiydi.) Hangi kapinin hangi korpusu/yuzeyi gordugu YAZILI DEGIL.
+- [ ] G2  [S] KAPI KAYIT DENETIMI. D-645'te kapiyi `test_tumu`ya ekledigimi
+      sandim; `.PHONY` satiri ayni hedef dizisini icerdigi icin yama ORAYA gitti
+      ve kapi KOSMADI. `rc=0` idi. Yeni kapi eklendiginde ozet satirinin koşumda
+      GORUNDUGU denetlenmeli (D-446'nin onlemi).
+- [ ] G3  [S] `test_tumu` hedef listesi ile `.PHONY` listesi AYNI diziyi iki yerde
+      tutuyor -> D-407 ayrisma yuzeyi (G2'nin kok nedeni).
+- [ ] G4  [S] `selfhost_driver_harness.sh:29` `kemgu_self2.exe` adini SABIT yaziyor
+      (Linux'ta uzantisiz olmali; bugun calisiyor cunku adi harness kendi koyuyor,
+      ama D-469 sinifinda bir artik).
+- [ ] G5  [?] checker.kem ile codegen.kem PARSER YUZEYI farkli: `çıktı` gecisi
+      4'e 32. checker.kem asm cikti clause'unu ayni sekilde ayristirmiyor olabilir
+      -> sessiz parite bosluğu. ONCE OLC.
+- [ ] G6  [S] `P000` yer tutucu envanteri (iki dosyada 3'er yer) — C0a ilerledikce
+      sifira inmeli; kalanlar listelenmeli.
+- [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
+- [ ] G8  [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
+      bu yuzden testleri `cat` ile birlestiriliyor. Dil yuzeyi karari gerekebilir.
+- [ ] G9  [?] stdlib/kilit,semafor,bariyer'in URETIM tuketicisi YOK (D-645 test
+      ekledi ama depoda kullanan kod yok). Olu API mi, yoksa kullanilmasi gereken
+      mi? Karar gerekiyor.
+- [ ] G11 [S] `aout=` ve `out=1` — IZLENEN 0 BAYTLIK dosyalar, kok dizinde.
+      Kabuk yonlendirme kazasi (`-o aout=` / `out=1` yazim hatasi) commit'lenmis;
+      Makefile/harness'larda REFERANS YOK (olculdu). Silinmeli.
+      (.gitignore D-631'de `NUL`/`nul` icin ayni sinifi zaten kapatmisti.)
+- [ ] G12 [?] `dz.kem` (101 bayt) ve `probe_haz.kem` (184 bayt) kok dizinde izleniyor
+      ama Makefile/harness'larda referansi YOK. Gecici probe artigi mi, yoksa
+      belgelenmemis bir fikstur mu? ONCE OLC, sonra sil ya da yerine tasi.
+- [ ] G10 [S] `runtime/kdl_runtime.c` gecerli UTF-8 DEGIL (CLAUDE.md'de kayitli
+      tuzak; D-633'te 2328 satir kaybina yol acti). Kodlama borcu kapatilmali.
 
-- [ ] D4 [M] LSP v3 — artimli senkronizasyon, workspace sembolleri, semanticTokens,
-      references. D4.1 artimli didChange, D4.2 workspace/symbol, D4.3 semanticTokens,
-      D4.4 references/rename, D4.5 her biri icin JSON-RPC kapi testi.
-
-- [ ] D5 [M] STDLIB TAMAMLAMA — kapsam OLCULDU, "genisletme" belirsizdi.
-      ⚠ README "Metin/Dosya tamamlama" diyor ama ikisi de bos DEGIL: `metin.kem` 36
-      islev, `dosya.kem` 17 islev. Gercekten ince olan kripto: `kripto/karma.kem` 3
-      islev, `kripto/rastgele.kem` 4 islev.
-      D5.1 BLAKE3 (`karma.kem`), D5.2 HMAC (`karma.kem`), D5.3 OS RNG (`rastgele.kem`
-      — bugun OS entropi kaynagi yok), D5.4 `metin`/`dosya` bosluk denetimi (once
-      EKSIK OLANI LISTELE, sonra yaz — "tamamlama" olculmeden is degil),
-      D5.5 kripto kosum kapisi (`calistir_kripto_kosum` zaten var, yeni islevleri kapsa).
-
-- [ ] D6 [M] GOREV BOLGESI SERBEST BIRAKMA. Bugun her gorev kendi bolgesini aliyor,
-      bolge HIC serbest birakilmiyor (bilincli sizinti — README "Bilinen sinirlar").
-      ON KOSUL BIR KANITTIR, kod degil: govde tahsislerinin o bolgeye HAPSEDILDIGI
-      pozitif olarak gosterilmeli; yakalanan bir `&değişken`e bolgeden isaretci
-      yazilirsa serbest birakma USE-AFTER-FREE olur. Ayni disiplin ρ_yerel'de
-      uygulanmisti. D6.1 gorev govdesi icin escape ozeti, D6.2 hapsedilme kurali +
-      yeni tani kodu, D6.3 kanit varsa serbest birak, D6.4 ASan altinda UAF kapisi,
-      D6.5 sabotaj (hapsedilme denetimini gevset -> ASan kirmizi OLMALI). D9'a bagli.
-
-- [ ] D7 [M] AYRIK / ARTIMLI DERLEME. D7.1 arayuz dosyalari (imza-only cikti),
-      D7.2 glob import, D7.3 opak tipler, D7.4 re-export, D7.5 artimli yeniden derleme
-      (degisen birim + bagimlilari), D7.6 her biri icin cross-file korpus fiksturu.
-
-- [ ] D8 [M] TRAIT / BOUND SISTEMI (`özellik`/`uygula`). D8.1 `özellik` bildirimi
-      sozdizimi, D8.2 `uygula` blogu + method cozumu, D8.3 generic'te bound
-      (`T: Ozellik`), D8.4 STATIK dispatch, D8.5 DINAMIK dispatch (vtable) — bu ayri
-      bir karar, once statikle basla, D8.6 self-host parite, D8.7 korpus + sabotaj.
-
-- [ ] D9 [M] PROSEDURLER-ARASI ESCAPE ANALIZI. Bugun cagri sonuclari KONSERVATIF
-      kabul ediliyor (`src/escape.c:308` "Cagri sonucu: konservatif tahsis").
-      D9.1 islev basina escape ozeti (cagri grafi uzerinde), D9.2 ozetin cagri
-      yerinde kullanilmasi, D9.3 ozyineleme/dongu icin sabit-nokta, D9.4 bolge/escape'i
-      surucu hattina baglama, D9.5 otomatik-serbestleyen arena. D6 bunu bekliyor.
-
-- [ ] D10 [M] TEK-KAYNAK KONSOLIDASYON — checker mantigi IKI yerde.
-      OLCULDU: `selfhost/checker.kem` 6801 satir; ayni checker `selfhost/codegen.kem`
-      (14438 satir) icine de gomulu. D-407'nin canli ornegi ve BEDELI BU OTURUMDA
-      IKI KEZ ODENDI: D-634 (konak mimarisi) ve C1 (annotasyonsuz bag tipi) ayni
-      onarimi iki dosyaya uygulamak zorunda. D10.1 iki surumun farkini olc (diff
-      tabanli envanter), D10.2 yon karari (driver tek kaynak mi, checker.kem mi),
-      D10.3 goc, D10.4 `checker_diff` kapisini anlamli tut (tek kaynak olunca o kapi
-      neyi olcecek? — SILME, yeniden tanimla), D10.5 sabotaj.
-
-# --- E. KEMGU-OS ---
-- [ ] E1 [M, FIZIKSEL ON KOSUL] ARM64 FIZIKSEL DOGRULAMA (D-490). Yazilim tarafi HAZIR
-      (yukleme/UART tabani `-D`/`--defsym` ile ezilebilir, Spark konsolu 16550 sinifi
-      ve o surucu yesil, kexec kurulu). E1.1 Spark'in UART taban adresini DT/ACPI'den
-      OKU (bugun bilinmiyor), E1.2 imaji o adres+yukleme tabaniyla kur, E1.3 seri
-      yakalama duzenegi (IKINCI MAKINE — Mehmet'in donanim isi), E1.4 taban kosum
-      (SMP QUEUE OK, toplam=20540), E1.5 bariyer sabotaji + sonucu D-490'a yaz.
-      ⚠ Linux kullanici alaninda "ayni testi" kosma kisayolu REDDEDILDI (gerekce
-      kontrol listesinde: MMU-off/MMU-on cacheability uyusmazligi Linux'ta kurulamaz,
-      sabotaj YANLIS-YESIL verir).
-
-- [ ] E2 [M] SMP. Bugun kem_os QEMU'da `-smp` OLMADAN kosuyor (tek cekirdek) -> orada
-      eszamanlilik hakkinda hicbir sey kanitlanamiyor (D-490). E2.1 ikincil cekirdek
-      bring-up (PSCI CPU_ON deseni `smp_queue_arm.c`'de ZATEN var — kopyalanacak
-      kaynak mevcut), E2.2 cekirdek-basi zamanlayici, E2.3 kilit/bariyer cekirdekte,
-      E2.4 `-smp 2` ile kem_os kapisi, E2.5 sabotaj. E1'den BAGIMSIZ kosulabilir
-      (QEMU'da SMP var; zayif-bellek kaniti icin yine de E1 gerekir).
-
-- [ ] E3 [L, ACIK UCLU] TAM KULLANICI ALANI. Bugun: linchpin + UART-RX + FS-syscall
-      adimlari var. E3.1 surec modeli (birden cok EL0 sureci), E3.2 surec olusturma
-      (fork/exec analogu), E3.3 dosya tanimlayici tablosu, E3.4 basit kabuk,
-      E3.5 surecler arasi izolasyon kapisi. ⚠ Bu kume acik uclu: bitis tanimi YOK,
-      once "v1 userland neye denir" karari gerekir (Mehmet).
-
-# --- F. Formel ---
-- [ ] F1 [L, ACIK UCLU] DRF ISPATI V2. Bugunku teorem V1 CEKIRDEK ALT-KUMESI icin;
-      Lean tarafi 32 dosya, `lake build` temiz, 0 `sorry` (D-529/D-549).
-      README bilesenleri sayiyor: F1.1 tam-dil kapsami, F1.2 per-thread bolgeler,
-      F1.3 operasyonel/runtime tanik, F1.4 weak-memory (C++11) fence emisyonu,
-      F1.5 yan-kanal bileseni teoreme, F1.6 WCET bileseni teoreme.
-      ⚠ Her biri tek basina bir arastirma kalemi; M degil. Once F1.2 (per-thread
-      bolge) onerilir: mevcut L0/L1 lemmalarina en yakin olan o.
-      ⚠ F1.4 ile E1 BAGLI: weak-memory fence emisyonunun DOGRULUGU fiziksel
-      donanimda olculmeden ispat "modele gore dogru" kalir.
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
 - 2026-08-31 D-524: aritmetik tasma sabitlendi — yeni kapi `calistir_tasma` (12 olcum, C+SELF): -O0/-O2 ayni VE IR'da nsw/nuw yok. Sabotaj S99 (nsw enjekte) -> 3 dosya kirmizi, rc=2. Dil degisikligi YOK.
@@ -1363,3 +1334,55 @@
   Sonraki iterasyon D3'e gidiyor (ayni sebeple: kendi icinde tamamlanabilir bir
   kapi ekleme isi), C3 kod adimlari taze baglamla yapilacak.
   HANGI KAPI NEYI OLCTU: degisiklik yok; kapilar D-643 yesilinde.
+- 2026-09-28 D-645: eszamanlilik ilkelleri ilk kez KOSTURULUYOR (kilit + semafor).
+  OLCUM (once): `stdlib/kilit.kem`, `stdlib/semafor.kem`, `stdlib/bariyer.kem`
+  YALNIZ tip-denetleniyordu (calistir_stdlib_check) ve depoda uculeri de kullanan
+  TEK DOSYA YOKTU. Yani "calisiyor" iddiasinin arkasinda hicbir kosum yoktu
+  (D-425: tip denetimi calismayi kanitlamaz). README ikisini hala "yapilacak" diye
+  sayiyordu; D-639'da bayat oldugu olculmustu.
+  Runtime tarafi dogrulandi: kdl_kilit_al/birak, kdl_bariyer_bekle vb. semboller
+  build/kdl_runtime.o icinde VAR; derleyici yerlesikleri de taniyor.
+  YENI KAPI: `calistir_eszamanli_kosum` — 3 kosucu (2 gorev + ana) x 500 artirma
+  = 1500; kilit `kilitle`, semafor `semaforda(n=1)` ile. Birlestirme (`cat
+  stdlib/X.kem test/...`) stdlib_check idiomu: modu(ller `genel` DEGIL, secili
+  import ile tuketilemiyor.
+  ⚠ COK TURLU OLMASI OLCUMLE GELDI, SUS DEGIL: S147 (kilit alinmiyor) ham ikilide
+  20 turun 14'unde kirmizi verdi = tek turluk kapi bozuk kilidi ~%30 YESIL gecirirdi
+  (flaky + yanlis-yesil). 20 turla yakalama olasiligi 1-0.3^20. Ayni gerekce
+  drf_gorunurluk'ta (100 tur) uygulanmisti; desen oradan alindi.
+  SABOTAJ S147b (kapinin kendisine): kilit 20/20 kirmizi, semafor yesil kaldi ->
+  kapi modul bazinda ayristiriyor, toptan degil. make rc=2.
+  ⚠⚠ KENDI HATAM — D-446 SINIFI, BU OTURUMDA SILDIGIM KUSURUN AYNISI: kapiyi
+  `test_tumu`ya ekledigimi SANDIM. `.PHONY` satiri ayni hedef dizisini icerdigi
+  icin `replace(...,1)` yamayi ORAYA koydu; `test_tumu` zinciri DEGISMEDI ve kapi
+  KOSMADI — ustelik `rc=0` idi. Dogrulamam da yanlisti (grep yanlis satiri
+  sayiyordu). YAKALAYAN SEY: ozet satirlarini onceki yesille diff'lemek — yeni
+  kapi eklendigi halde YENI SATIR YOKTU. Bu celiski olmasa "rc=0, tamam" deyip
+  gecerdim. Ders kuyruga G2 olarak girdi: yeni kapi eklendiginde ozet satirinin
+  kosumda GORUNDUGU ayrica denetlenmeli. Kok neden G3: hedef dizisi `.PHONY` ve
+  `test_tumu` diye IKI yerde tutuluyor (D-407 yuzeyi).
+  DUZELTME SONRASI DOGRULAMA: satir 2877'de `=== eszamanlilik ilkelleri kosumu:
+  2/2 modul (20 tur) ===`, ozet diff'inde TAM BIR eklenen satir.
+  KALAN (kuyruga yazildi): D3a bariyer kapisi (sayac yarisiyla olculemez, bulusma
+  sekli gerekir), D3c semafor n>1 semantigi — bu kapi n=1 ile yani KILIT GIBI test
+  ediyor; semaforun asil iddiasi "es zamanli en fazla n" ve o HIC olculmedi.
+  HANGI KAPI NEYI OLCTU: eszamanli_kosum 2/2 (20 tur) . test_tumu TAM rc=0;
+  ozette TEK fark yeni kapinin satiri.
+
+- 2026-09-28 D-646: kuyruk 17 ust maddeden 97 ayrintili maddeye acildi.
+  NEDEN: alt adimlar ust maddelerin ICINE gomuluydu -> ne sayilabiliyor ne
+  siralanabiliyor ne de bagimsiz alinabiliyordu.
+  ⚠ 100 ISTENDI, 97 YAZILDI — DOLGU YAPILMADI. Bu oturumda belgeden KOPYALANAN
+  ~10 maddenin bayat oldugu olculdu (D-638 PROGRESS.md 5'te 4; D-639 README'nin
+  semafor ve stdlib maddeleri; D-642/D-644 kendi boyutlandirmalarim). Uc madde
+  uydurup 100'e tamamlamak, tam da bu oturumda elestirdigim seyi yapmak olurdu.
+  `[?]` isaretli BES madde bilerek oyle: henuz OLCULMEDILER ve bir kismi zaten
+  kapanmis olabilir; ilk isleri dogrulanmak.
+  YENI G KUMESI (12 madde) tamamen bu oturumda OLCULEN bulgular: G1 kapi-yuzey
+  haritasi (ayni ders UC kez cikti), G2 kapi kayit denetimi (D-645'teki kendi
+  hatam), G3 .PHONY/test_tumu ikizligi, G4 harness'ta sabit .exe, G5 checker.kem
+  ile codegen.kem parser yuzeyi farki (`çıktı` 4'e 32), G6 P000 envanteri,
+  G11 izlenen 0 baytlik `aout=`/`out=1` (kabuk yonlendirme kazasi, referanssiz),
+  G12 kokte referanssiz `dz.kem`/`probe_haz.kem`.
+  Dagilim: 24 S, 54 M, 13 L, 5 [?], 2 [-] (bende bitmez: A1 push, E1c donanim,
+  E3a karar).
