@@ -96,8 +96,21 @@
       WINDOWS/x86 CI YOLU HIC OLCULMEDI. Onu dogrulayacak tek sey CI.
 
 # ===== C. CHECKER / PARSER PARITESI =====
-- [ ] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. D-643'te 104 cagrinin
-      UCU eslendi; gerisi "P000" kaydediyor (iki dosyada 3'er yer).
+- [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. D-643'te 3, D-647'de 4
+      site eslendi (P080 degisken adi, P070/P071 blok suslu, P021 yapi adi).
+      ⚠ D-647'DE OLCULDU: token -> kod eslemesi MEKANIK DEGIL. Tek basina
+      `TANIMLAYICI` beklentisi baglama gore P200/P350/P269/P240/P080/P060/P045...
+      oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
+      uretir -> her site FIKSTURLE kanitlanmali. Yontem: once hata SEKLINI yaz,
+      C'ye sor, konum uyusuyorsa site esle.
+- [ ] C0c [M] PARSER DAVRANIS FARKI (kod eslemesi DEGIL) — D-647'de olculdu,
+      uc ayri sekil:
+      (1) `işlev main() -> tam32` GOVDE SUSLUSU EKSIK: C uc tani (P017 2:5,
+          P001 2:5, P001 3:1), self `OK` — yani parser HIC HATA SAYMIYOR, tablo
+          bos kaliyor. D-643 tabloyu ekledi ama bu sekil ona hic ulasmiyor.
+          ⚠ HALA SESSIZ-KABUL vakasi.
+      (2) `işlev main -> tam32` (paren eksik): C uc tani, self DORT (fazladan 1:16).
+      (3) `değişken x tam32 = 0`: son taninin SUTUNU kayiyor (C 2:24, self 2:26).
 - [ ] C0b [M] C'nin PANIK CASCADE paritesi: `&r.deger` icin C DORT tani basar
       (P264 + uc P261), self BIR. Panik-senkron davranisi eslenmeli.
 - [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
@@ -1386,3 +1399,28 @@
   G12 kokte referanssiz `dz.kem`/`probe_haz.kem`.
   Dagilim: 24 S, 54 M, 13 L, 5 [?], 2 [-] (bende bitmez: A1 push, E1c donanim,
   E3a karar).
+- 2026-09-29 D-647: parser tani kodlarindan DORDU eslendi + yontem olculdu.
+  ⚠ ONEMLI OLCUM — C0a NASIL YAPILAMAZ: token -> kod eslemesi MEKANIK DEGIL.
+  C'de 76 farkli P-kodu var ve tek basina `TOK_TANIMLAYICI` beklentisi baglama
+  gore P200/P350/P269/P240/P214/P212/P080/P060/P045/P043/P041/P040/P035/P030/
+  P024/P021/P014 olabiliyor. 104 siteyi toplu cevirmek "makul gorunen ama
+  DOGRULANMAMIS" kodlar uretirdi — bu oturumda o sinifin bedeli defalarca olculdu.
+  YONTEM (olculerek secildi): once hata SEKLINI yaz, C'ye sor, sonra esle.
+  Alti sekil sinandi ve IKI SINIF cikti:
+    (a) KONUM ZATEN UYUSUYOR, yalniz kod farkli -> mekanik site eslemesi yeter.
+        e1 degisken adi (P080), e5 blok suslu (P070+P071), e6 yapi adi (P021).
+        Dordu de eslendi ve fiksturlendi (tc48_02/03/04).
+    (b) KONUM/SAYI DA FARKLI -> parser DAVRANIS farki, kod eslemesi cozmez.
+        Kuyruga C0c olarak girdi; en kotusu `işlev main() -> tam32` govde
+        suslusu eksikken self'in `OK` demesi (C uc tani basar) — D-643 tabloyu
+        ekledi ama bu sekil tabloya HIC ULASMIYOR, yani HALA sessiz-kabul.
+  ⚠⚠ UCUNCU KEZ AYNI GECERSIZ-SABOTAJ HATASI: S148'de `bekle_k(p,"TANIMLAYICI",
+  "P080")` desenini degistirdim ama satir sonundaki `;` ve yorum disarida kaldi ->
+  `;` YORUMUN ICINE dustu, DERLEME KIRILDI ve kapi sabotaj yuzunden degil
+  SOZDIZIMI yuzunden kirmizi oldu ("KEMGU-checker --llvm uretemedi").
+  Ayni sinif S146b'de ve D-645'te de olmustu. KURAL (artik yazili): sabotaj EN
+  KUCUK BELIRTECI degistirmeli (burada yalniz `"P080"` -> `"P999"` dizgesi) ve
+  DERLEMENIN GECTIGI ayrica dogrulanmali; "kirmizi" tek basina kanit degildir.
+  S148b (dogru): checker_diff 195/196, make rc=2, derleme temiz.
+  HANGI KAPI NEYI OLCTU: checker_diff 193 -> 196/196 . self_driver 154 -> 157/157 .
+  test_tumu TAM rc=0; ozette TEK fark checker_diff'in +3 fiksturu.
