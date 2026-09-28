@@ -64,20 +64,21 @@
       Kalan parcalari asagida ayri maddeler.
 - [x] Self-host checker blok-form kapanis `ver` baglami (T020) -> D-627.
 - [x] Self-host `görev_başlat(f)` (baglanmis kapanis) derleyici paniği -> D-628.
-- [ ] kem_os_arm VAKUM DENETIMLERI: `llvm-nm build/bm_a64_mmu_kem.o` ve `..._zaman_kem.o`
-      (Makefile ~1453/~1485) D-592'den beri KURULMAYAN nesnelere bakiyor -> llvm-nm
-      "No such file" + `grep -q` bos -> denetim SESSIZCE "geciyor". D-599'un kacirdigi iki
-      artik; harita tabanli denetime cevir ya da sil.
+- [x] kem_os_arm VAKUM DENETIMLERI -> D-635. SILINDI (cevrilmedi): baktiklari nesneler
+      uretilmiyordu, yani kapsamlari TAM OLARAK SIFIRDI; ayrica yalniz onlari beslemek
+      icin duran iki yetim `.o` kurali da kaldirildi. Gercek kapsam pozitif .ll
+      denetimlerinde + harita denetiminde ve ikisi de kosuyor.
 - [x] C escape analizi BAG DONGUSU (`a = b` / `b = a` -> SONSUZ OZYINELEME, segfault;
       `--check` dahil) -> D-631.
 - [x] 2^64 VE USTU LITERAL sessiz doymasi -> D-632 (T043, baglamdan bagimsiz).
 - [x] KESIRLI LITERAL 63 KARAKTER KIRPMASI -> D-633.
-- [ ] SELF-HOST VARSAYILAN HEDEF UCLUSU SABIT (DGX Spark gecisinde okundu, OLCULMEDI):
-      `selfhost/codegen.kem` `hedef_mim: "x86_64"` + triple `x86_64-pc-windows-gnu` — ana
-      makineden bagimsiz. C varsayilani platformdan (src/llvm.h D-469; Spark'ta aarch64-linux).
-      Spark'ta self-host x86/Windows IR uretir -> bootstrap/codegen_diff/ct_bariyer dusmesi
-      beklenir. Ayrica C `--mimari x86_64` Linux'ta da windows triple secer (src/ana.c).
-      Once Spark'ta OLC, sonra self-host varsayilanini C ile AYNI kuraldan turet.
+- [x] SELF-HOST VARSAYILAN HEDEF UCLUSU SABIT -> D-634. Spark'ta ONCE OLCULDU (madde
+      oyle diyordu): C `csdb` uretirken self-host `lfence` uretti, bes kapi ayristi.
+      Sonra varsayilan C ile AYNI kuraldan turetildi (Makefile `uname` -> uretilen
+      selfhost/konak.kem; codegen.kem + checker.kem `kullan` ile alir). Ayni iterasyonda
+      testlerin konak mimarisini GOMMESI de onarildi (A koku) ve ct_bariyer'in x86 yarisi
+      acikca --mimari x86_64'e sabitlendi — aksi halde B'nin onarimi o yariyi BOSA
+      cikaracakti. test_tumu rc=0, S141 sabotaji kapinin disini kanitladi.
 - [ ] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592; değişken y: tam32 = x;`
       C T001, self OK (onceden var: `değişken x = "a"; y: tam32 = x` de self'te OK).
       Self checker annotasyonsuz baglamanin tipini izlemiyor.
@@ -899,3 +900,35 @@
   ACIK KALDI (b): kemgu_self hedefi build/kemgu.exe yolunu SABIT yaziyor -> Linux'ta kosamaz,
   ustelik stderr /dev/null'a gidip rc denetlenmedigi icin yine de "uretildi" der (D-446 sinifi
   sessiz basarisizlik). test_tumu'da OLMADIGI icin hicbir kapi yakalamiyor.
+- 2026-09-28 D-635: kem_os_arm VAKUM DENETIMLERI silindi (cevrilmedi) + iki yetim .o kurali.
+  OLCUM (once): `build/bm_a64_mmu_kem.o` ve `build/bm_a64_zaman_kem.o` DOSYA OLARAK YOK.
+  `llvm-nm <olmayan dosya>` hata verir, boru hattindaki `grep -q` BOS girdi alir, `if` yanlis
+  olur -> denetim "0 C-tanim" mesajini basip SESSIZCE GECER. Elle tekrarlandi: "GECTI dali".
+  KOK: D-592 kem_os linkini `boot .S + SAF-.kem`e indirdi ve KEM_OS_A64_OBJS'i yalniz
+  `start.o` birakti. O iki nesneye HICBIR hedef bagimli degildi -> hic kurulmadilar. Tek
+  "kullanicilari" bu iki denetimdi; denetimler de tam bu yuzden bos kosuyordu. Dairesel olu
+  kod: kural denetim icin, denetim kuralin urettigi (uretmedigi) nesne icin.
+  NEDEN CEVIRMEK DEGIL SILMEK: madde "harita tabanli denetime cevir YA DA sil" diyordu.
+  Cevirmek yeni kapsam getirmezdi — silinen denetimin kapsami SIFIRDI (hicbir kosulda
+  ateslenemezdi), dolayisiyla silmek sifir kaybettirir. Ayrica ayni soruyu ikinci bir yerde
+  yanitlamak D-407 sinifidir: C-disligi ZATEN iki yerde olculuyor ve ikisi de kosuyor —
+  (1) pozitif .ll denetimi `define @kdl_mmu_kur` kem_os.ll'de OLMAK ZORUNDA (asil koruma:
+  biri MMU'yu C'ye geri alirsa .kem define kaybolur), (2) D-599 harita denetimi.
+  Yetim kurallar da silindi: birakmak "bu nesne kuruluyor + denetleniyor" izlenimi verirdi,
+  olculen gercek bunun tersiydi. Kaynaklar (kdl_mmu.c / kdl_zaman.c) DURUYOR — bm_a64_mmu.o,
+  bm_a64_zaman.o ve bm_x86_zaman.o onlari kullaniyor (once olculdu, sonra silindi).
+  ⚠ GECERSIZ SABOTAJ S142 — VE BU BIR BULGU: harita denetiminin disini kanitlamak icin
+  KEM_OS_A64_OBJS'e `bm_a64_mmio_kem.o` ekledim. Kapi ATESLEMEDI (rc=0, "harita: start.o
+  disinda C nesnesi YOK") ve bir an "demek harita denetimi de bos" sandim. Olculdu: link
+  `--gc-sections` kullaniyor, nesnenin hicbir sembolu referans edilmiyor -> nesne haritaya
+  HIC girmiyor. Yani DENETIM YANILMADI, SABOTAJ GECERSIZDI: nesne imaja girmedigi icin
+  "imajda C nesnesi yok" iddiasi DOGRUYDU. Denetim "ld'ye ne verildigini" degil "imajda ne
+  KALDIGINI" olcer — korunmak istenen sey de budur. (D-527'de kayitli gecersiz-sabotaj
+  sinifinin tekrari; oradaki ders "sabotaj olculen kosulu GERCEKTEN kurmali"ydi.)
+  Bu sinir Makefile yorumuna yazildi: ilk yazdigim gerekce harita denetimini "EVRENSEL"
+  diye niteliyordu, olcum bunu YALANLADI ve gerekce duzeltildi.
+  GECERLI SABOTAJIN NASIL OLACAGI: C nesnesinin imajda TUTULMASI gerekir, yani ayni sembolu
+  .kem'in saglamayi BIRAKMASI sart (tek basina nesne eklemek ya gc'lenir ya da cift-tanimla
+  link'i loud kirar). Iki parcali oldugu icin bu iterasyonda kurulmadi; pozitif .ll
+  denetimleri o senaryoyu zaten D-277/D-279'da kapiyor.
+  HANGI KAPI NEYI OLCTU: kem_os_arm rc=0 . qemu_cekirdek 2/2 . test_tumu TAM rc=0.
