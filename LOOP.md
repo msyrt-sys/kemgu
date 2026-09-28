@@ -106,10 +106,13 @@
       mevcut-durum, "Surucüler / Bare-Metal" girisi, yol haritasi "kanal bare-metal'de
       test yok", ve UZUN VADE kovasindaki "zamanlayici/MMU/syscall hedef" maddesi.
       Ayrica yeni "KEMGU-OS" bolumu eklendi (42 faz tablosu + bugun gecerli sinirlar).
-- [ ] B2 [S] PROGRESS.md 4/5 madde bayat (yukarida olculdu) -> guncelle ya da sil.
-      Silinirse D-009 buraya tasinmali (asagida C3 olarak duruyor).
-- [ ] B3 [S] TODO.md tamamen bayat (D-086 donemi) -> sil. Icerigi tarihsel deger
-      tasiyorsa DECISIONS_LOG'a tasi, kok dizinde "yapilacaklar" diye durmasin.
+- [x] B2 -> D-638. PROGRESS.md SILINMEDI, tarihsel kayit olarak isaretlendi ve dort
+      bayat ertelemesi olculup duzeltildi (D-003/D-004/D-007/D-008 kapanmis; D-009 tek
+      gercek acik, C3'e isaret ediyor).
+- [x] B3 -> D-638. TODO.md SILINMEDI, `belgeler/D-086_Driver_Entegrasyon_Gunlugu.md`
+      olarak tasindi + tarihsel banner. Kok dizinde "TODO" adiyla durmasi tek basina
+      yaniltiyordu; 12 maddenin hepsi [DONE] ve D-086 DECISIONS_LOG'da kayitli, ama
+      M1-M12 goc adimlarinin ayrintisi yalniz burada -> silmek bilgi kaybi olurdu.
 
 # --- C. Dil / checker paritesi ---
 - [ ] C1 [M] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592;
@@ -1063,4 +1066,25 @@
   pasajda acikca yaziyor: yalniz QEMU `virt` (imaj o bellek haritasina bagli, fiziksel
   donanimda HIC kosmadi), TEK CEKIRDEK (-smp yok -> eszamanlilik orada kanitlanamaz,
   D-490), gorev bolgesi serbest birakilmiyor, tam kullanici alani yok.
+  HANGI KAPI NEYI OLCTU: belge_kapisi 9/9 . test_tumu TAM rc=0.
+- 2026-09-28 D-638: PROGRESS.md ve TODO.md — bayat "yapilacaklar" belgeleri temizlendi.
+  NEDEN BIR ISTI: ikisi de kok dizinde CANLI is listesi gibi okunuyordu ama ikisi de
+  kapanmis kampanyalarin gunlugu. Yanlis yon gosteren belge, olmayan belgeden kotudur.
+  OLCUM — PROGRESS.md'nin BES ertelenmis maddesi tek tek sinandi (kopyalanmadi):
+    D-003 heap `d[i]=v`      -> KAPANMIS (cg_yapi_dizi.kem: Dizi<Nokta> indeks YAZMA)
+    D-004 LAMBDA V2          -> KAPANMIS (`|| k + 2` ucdan uca exit 42; korpusta 10
+                                cg_kapanis_*/cg_gorev_lambda dosyasi)
+    D-007 struct-degerli dizi-> KAPANMIS (ayni dosya: ps[0].x + `için` gezinme)
+    D-008 dondur/kanal/gorev -> KAPANMIS (cg_gorev_* korpusu + kem_os faz [41]/[42])
+    D-009 asm ciktisi yapi alanina -> HALA ACIK, dogrulandi (P264 ile reddediliyor)
+  Yani 5'te 4 bayat. Bu oran tek basina belgenin neden guvenilmez oldugunu gosteriyor.
+  KARAR — IKISI DE SILINMEDI (LOOP kurali: belirsizlikte en muhafazakar secenek):
+    PROGRESS.md yerinde kaldi, "TARIHSEL KAYIT" banneri + satir satir duzeltme aldi;
+    D-009 canli kuyruktaki C3'e isaret ediyor.
+    TODO.md `belgeler/D-086_Driver_Entegrasyon_Gunlugu.md`ye TASINDI + banner. Silmek
+    bilgi kaybi olurdu: 12 maddenin hepsi [DONE] ve D-086 DECISIONS_LOG'da kayitli AMA
+    M1-M12 goc adimlarinin ayrintisi yalniz o dosyada. Asil kusur icerik degil ADIYDI —
+    kok dizinde "TODO.md" gorunmesi.
+  Once referans taramasi yapildi: Makefile/harness/CI hicbiri TODO.md'ye bakmiyor
+  (yalniz LOOP.md'nin kendi kuyruk maddesi) -> tasima kapilari kirmiyor.
   HANGI KAPI NEYI OLCTU: belge_kapisi 9/9 . test_tumu TAM rc=0.
