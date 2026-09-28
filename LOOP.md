@@ -132,46 +132,112 @@
       clause'u duz `&degisken` kabul ediyor; alan erisimi P264 ile REDDEDILIYOR
       (2026-09-28'de dogrulandi). PROGRESS.md'de D-009 olarak duruyordu.
 
-# --- D. Dil ozellikleri (README yol haritasi; buyukler) ---
-- [ ] D1 [M] Acik tip argumani (turbofish) `f<T>(...)` / `Tip<T>{...}` — su an tip
-      argumanlari yalniz cikarsaniyor, cikarsamanin yetmedigi yerde yazacak sozdizim yok.
+# --- D. Dil ozellikleri ---
+# [D-639] L maddeler M'lere BOLUNDU. Gerekce: onceki kuyrukta belirsizligin
+# neredeyse tamami L'lerden geliyordu (34-74 iterasyonun 24-64'u). Bolme
+# UYDURULMADI; her alt madde depoda olculdu (satir/islev sayilari, kod yeri,
+# mevcut kapi). Olcum sirasinda IKI bayat iddia daha cikti (D3, D5) — asagida.
+
+- [ ] D1 [M] Acik tip argumani (turbofish) `f<T>(...)` / `Tip<T>{...}`. Bugun tip
+      argumanlari YALNIZ cikarsaniyor; cikarsamanin yetmedigi yerde yazacak sozdizim
+      yok. Alt adimlar: D1.1 parser (`::<>` ya da `<>` ayrimi + belirsizlik kurali),
+      D1.2 checker'da acik argumanin cikarsamayi EZMESI, D1.3 codegen mono yolu,
+      D1.4 self-host parite (iki dosya), D1.5 korpus fikstur + sabotaj.
+
 - [ ] D2 [M] Gercek kabiliyet odunc alma (mevcut MOVE/`delege` cozumunun yerine).
-- [ ] D3 [M] Semaforlar / bariyerler (`görev`/`kanal` ustune zengin senkronizasyon).
-- [ ] D4 [M] LSP v3 — artimli senkronizasyon, workspace, semanticTokens, references.
-- [ ] D5 [L] Stdlib genisletme — `Metin`/`Dosya` tamamlama, kripto (BLAKE3/HMAC), OS RNG.
-- [ ] D6 [L] GOREV BOLGESI SERBEST BIRAKMA. Su an her gorev kendi bolgesini aliyor ama
-      bolge HIC serbest birakilmiyor (bilincli sizinti). Serbest birakmak, govdedeki
-      tahsislerin o bolgeye HAPSEDILDIGININ pozitif kanitini ister; kanitsiz birakma
-      use-after-free olur. Ayni disiplin ρ_yerel'de uygulanmisti.
-- [ ] D7 [L] Ayrik / artimli derleme — arayuz dosyalari, glob import, opak tipler, re-export.
-- [ ] D8 [L] Trait / bound sistemi (`özellik`/`uygula`) — tam method dispatch.
-- [ ] D9 [L] Prosedurler-arasi escape analizi (su an cagri sonuclari konservatif kabul
-      ediliyor) + bolge/escape'i surucu hattina baglama + otomatik-serbestleyen arena.
-- [ ] D10 [L] TEK-KAYNAK KONSOLIDASYON: checker mantigi IKI yerde (self-host driver
-      codegen.kem + Asama 2 referans checker.kem). D-407'nin canli ornegi — C1 ve
-      D-635 ikisi de "ayni onarimi iki dosyaya uygula" maliyetini odedi.
+      D2.1 odunc omru kurali (kime, ne kadar), D2.2 checker zorlamasi (yeni hata kodu),
+      D2.3 codegen, D2.4 self-host parite, D2.5 `yetki<R>` korpusuna fikstur.
+
+- [ ] D3 [M] ESZAMANLILIK ILKELLERI ICIN KOSUM KAPISI — "semafor yazmak" DEGIL.
+      ⚠ README bunu "yapilacak" diye sayiyor; OLCULDU ve BAYAT: `stdlib/semafor.kem`,
+      `stdlib/bariyer.kem`, `stdlib/kilit.kem` VAR (uceri de 3 islev) ve
+      `calistir_stdlib_check` onlari tip-denetliyor. Eksik olan sey KOSUM kaniti:
+      bugun hicbir kapi bu ucunun CALISTIGINI olcmuyor (tip-denetimi calismayi
+      kanitlamaz — D-425). D3.1 host kosum kapisi (semafor: N gorev, sayili izin
+      asilmiyor; bariyer: hepsi bulusmadan kimse gecmiyor; kilit: karsilikli dislama),
+      D3.2 sabotaj (bariyeri kaldir -> kapi kirmizi OLMALI), D3.3 README maddesini
+      olculen gercekle duzelt.
+
+- [ ] D4 [M] LSP v3 — artimli senkronizasyon, workspace sembolleri, semanticTokens,
+      references. D4.1 artimli didChange, D4.2 workspace/symbol, D4.3 semanticTokens,
+      D4.4 references/rename, D4.5 her biri icin JSON-RPC kapi testi.
+
+- [ ] D5 [M] STDLIB TAMAMLAMA — kapsam OLCULDU, "genisletme" belirsizdi.
+      ⚠ README "Metin/Dosya tamamlama" diyor ama ikisi de bos DEGIL: `metin.kem` 36
+      islev, `dosya.kem` 17 islev. Gercekten ince olan kripto: `kripto/karma.kem` 3
+      islev, `kripto/rastgele.kem` 4 islev.
+      D5.1 BLAKE3 (`karma.kem`), D5.2 HMAC (`karma.kem`), D5.3 OS RNG (`rastgele.kem`
+      — bugun OS entropi kaynagi yok), D5.4 `metin`/`dosya` bosluk denetimi (once
+      EKSIK OLANI LISTELE, sonra yaz — "tamamlama" olculmeden is degil),
+      D5.5 kripto kosum kapisi (`calistir_kripto_kosum` zaten var, yeni islevleri kapsa).
+
+- [ ] D6 [M] GOREV BOLGESI SERBEST BIRAKMA. Bugun her gorev kendi bolgesini aliyor,
+      bolge HIC serbest birakilmiyor (bilincli sizinti — README "Bilinen sinirlar").
+      ON KOSUL BIR KANITTIR, kod degil: govde tahsislerinin o bolgeye HAPSEDILDIGI
+      pozitif olarak gosterilmeli; yakalanan bir `&değişken`e bolgeden isaretci
+      yazilirsa serbest birakma USE-AFTER-FREE olur. Ayni disiplin ρ_yerel'de
+      uygulanmisti. D6.1 gorev govdesi icin escape ozeti, D6.2 hapsedilme kurali +
+      yeni tani kodu, D6.3 kanit varsa serbest birak, D6.4 ASan altinda UAF kapisi,
+      D6.5 sabotaj (hapsedilme denetimini gevset -> ASan kirmizi OLMALI). D9'a bagli.
+
+- [ ] D7 [M] AYRIK / ARTIMLI DERLEME. D7.1 arayuz dosyalari (imza-only cikti),
+      D7.2 glob import, D7.3 opak tipler, D7.4 re-export, D7.5 artimli yeniden derleme
+      (degisen birim + bagimlilari), D7.6 her biri icin cross-file korpus fiksturu.
+
+- [ ] D8 [M] TRAIT / BOUND SISTEMI (`özellik`/`uygula`). D8.1 `özellik` bildirimi
+      sozdizimi, D8.2 `uygula` blogu + method cozumu, D8.3 generic'te bound
+      (`T: Ozellik`), D8.4 STATIK dispatch, D8.5 DINAMIK dispatch (vtable) — bu ayri
+      bir karar, once statikle basla, D8.6 self-host parite, D8.7 korpus + sabotaj.
+
+- [ ] D9 [M] PROSEDURLER-ARASI ESCAPE ANALIZI. Bugun cagri sonuclari KONSERVATIF
+      kabul ediliyor (`src/escape.c:308` "Cagri sonucu: konservatif tahsis").
+      D9.1 islev basina escape ozeti (cagri grafi uzerinde), D9.2 ozetin cagri
+      yerinde kullanilmasi, D9.3 ozyineleme/dongu icin sabit-nokta, D9.4 bolge/escape'i
+      surucu hattina baglama, D9.5 otomatik-serbestleyen arena. D6 bunu bekliyor.
+
+- [ ] D10 [M] TEK-KAYNAK KONSOLIDASYON — checker mantigi IKI yerde.
+      OLCULDU: `selfhost/checker.kem` 6801 satir; ayni checker `selfhost/codegen.kem`
+      (14438 satir) icine de gomulu. D-407'nin canli ornegi ve BEDELI BU OTURUMDA
+      IKI KEZ ODENDI: D-634 (konak mimarisi) ve C1 (annotasyonsuz bag tipi) ayni
+      onarimi iki dosyaya uygulamak zorunda. D10.1 iki surumun farkini olc (diff
+      tabanli envanter), D10.2 yon karari (driver tek kaynak mi, checker.kem mi),
+      D10.3 goc, D10.4 `checker_diff` kapisini anlamli tut (tek kaynak olunca o kapi
+      neyi olcecek? — SILME, yeniden tanimla), D10.5 sabotaj.
 
 # --- E. KEMGU-OS ---
-- [ ] E1 [L,FIZIKSEL ENGEL] ARM64 FIZIKSEL DOGRULAMA (D-490). Yazilim onkosullari HAZIR
-      (yukleme/UART tabani ezilebilir, Spark konsolu 16550 ve o surucu yesil, kexec
-      kurulu). Engeller fiziksel: Spark'in UART taban adresi DT/ACPI'den okunmali,
-      seri ciktiyi okuyacak IKINCI MAKINE gerekli, kexec Linux'u dusurur (power-cycle).
-      ⚠ Linux kullanici alaninda "ayni testi" kosma kisayolu REDDEDILDI — gerekce
-      belgede: bariyerler MMU-off/MMU-on cacheability uyusmazligi icin, Linux'ta o
-      kosul kurulamaz, sabotaj YANLIS-YESIL verir.
-- [ ] E2 [L] SMP: kem_os QEMU'da `-smp` olmadan kosuyor (tek cekirdek) -> orada
-      eszamanlilik hakkinda hicbir sey kanitlanamiyor (D-490). E1'e bagli.
-- [ ] E3 [L,ACIK UCLU] Tam userland. Bugun: linchpin + UART-RX + FS-syscall adimlari
-      var, tam kullanici alani yok.
+- [ ] E1 [M, FIZIKSEL ON KOSUL] ARM64 FIZIKSEL DOGRULAMA (D-490). Yazilim tarafi HAZIR
+      (yukleme/UART tabani `-D`/`--defsym` ile ezilebilir, Spark konsolu 16550 sinifi
+      ve o surucu yesil, kexec kurulu). E1.1 Spark'in UART taban adresini DT/ACPI'den
+      OKU (bugun bilinmiyor), E1.2 imaji o adres+yukleme tabaniyla kur, E1.3 seri
+      yakalama duzenegi (IKINCI MAKINE — Mehmet'in donanim isi), E1.4 taban kosum
+      (SMP QUEUE OK, toplam=20540), E1.5 bariyer sabotaji + sonucu D-490'a yaz.
+      ⚠ Linux kullanici alaninda "ayni testi" kosma kisayolu REDDEDILDI (gerekce
+      kontrol listesinde: MMU-off/MMU-on cacheability uyusmazligi Linux'ta kurulamaz,
+      sabotaj YANLIS-YESIL verir).
+
+- [ ] E2 [M] SMP. Bugun kem_os QEMU'da `-smp` OLMADAN kosuyor (tek cekirdek) -> orada
+      eszamanlilik hakkinda hicbir sey kanitlanamiyor (D-490). E2.1 ikincil cekirdek
+      bring-up (PSCI CPU_ON deseni `smp_queue_arm.c`'de ZATEN var — kopyalanacak
+      kaynak mevcut), E2.2 cekirdek-basi zamanlayici, E2.3 kilit/bariyer cekirdekte,
+      E2.4 `-smp 2` ile kem_os kapisi, E2.5 sabotaj. E1'den BAGIMSIZ kosulabilir
+      (QEMU'da SMP var; zayif-bellek kaniti icin yine de E1 gerekir).
+
+- [ ] E3 [L, ACIK UCLU] TAM KULLANICI ALANI. Bugun: linchpin + UART-RX + FS-syscall
+      adimlari var. E3.1 surec modeli (birden cok EL0 sureci), E3.2 surec olusturma
+      (fork/exec analogu), E3.3 dosya tanimlayici tablosu, E3.4 basit kabuk,
+      E3.5 surecler arasi izolasyon kapisi. ⚠ Bu kume acik uclu: bitis tanimi YOK,
+      once "v1 userland neye denir" karari gerekir (Mehmet).
 
 # --- F. Formel ---
-- [ ] F1 [L,ACIK UCLU] DRF ispati V2 — tam-dil kapsami, per-thread bolgeler,
-      operasyonel/runtime tanik, weak-memory (C++11) fence emisyonu, yan-kanal + WCET
-      bilesenlerinin teoreme dahil edilmesi. Bugunku teorem V1 cekirdek alt-kumesi icin.
-
-
-
-
+- [ ] F1 [L, ACIK UCLU] DRF ISPATI V2. Bugunku teorem V1 CEKIRDEK ALT-KUMESI icin;
+      Lean tarafi 32 dosya, `lake build` temiz, 0 `sorry` (D-529/D-549).
+      README bilesenleri sayiyor: F1.1 tam-dil kapsami, F1.2 per-thread bolgeler,
+      F1.3 operasyonel/runtime tanik, F1.4 weak-memory (C++11) fence emisyonu,
+      F1.5 yan-kanal bileseni teoreme, F1.6 WCET bileseni teoreme.
+      ⚠ Her biri tek basina bir arastirma kalemi; M degil. Once F1.2 (per-thread
+      bolge) onerilir: mevcut L0/L1 lemmalarina en yakin olan o.
+      ⚠ F1.4 ile E1 BAGLI: weak-memory fence emisyonunun DOGRULUGU fiziksel
+      donanimda olculmeden ispat "modele gore dogru" kalir.
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
 - 2026-08-31 D-524: aritmetik tasma sabitlendi — yeni kapi `calistir_tasma` (12 olcum, C+SELF): -O0/-O2 ayni VE IR'da nsw/nuw yok. Sabotaj S99 (nsw enjekte) -> 3 dosya kirmizi, rc=2. Dil degisikligi YOK.
@@ -1088,3 +1154,30 @@
   Once referans taramasi yapildi: Makefile/harness/CI hicbiri TODO.md'ye bakmiyor
   (yalniz LOOP.md'nin kendi kuyruk maddesi) -> tasima kapilari kirmiyor.
   HANGI KAPI NEYI OLCTU: belge_kapisi 9/9 . test_tumu TAM rc=0.
+- 2026-09-28 D-639: kuyruk L'den M'e BOLUNDU — 18 ust madde, 74 somut alt adim.
+  NEDEN: onceki konsolide kuyrukta (D-634 sonrasi) belirsizligin neredeyse tamami L
+  maddelerinden geliyordu — 34-74 iterasyonluk bandin 24-64'u. "Ne zaman biter"
+  sorusunu daraltmanin tek yolu L'leri M'e bolmekti; bunu Mehmet de istedi.
+  YONTEM: alt adimlar UYDURULMADI, her biri depoda olculdu (satir/islev sayilari,
+  kod yeri, mevcut kapi). Olcum sirasinda IKI BAYAT IDDIA DAHA cikti:
+    D3 "Semaforlar / bariyerler" — README yapilacak diye sayiyor. OLCULDU:
+       stdlib/semafor.kem + bariyer.kem + kilit.kem VAR (uceri de 3 islev) ve
+       calistir_stdlib_check onlari TIP-denetliyor. Eksik olan KOSUM kaniti; hicbir
+       kapi bu ucunun CALISTIGINI olcmuyor. Madde "semafor yaz"dan "var olanin
+       calistigini kanitla"ya donustu (D-425: tip-denetimi calismayi kanitlamaz).
+    D5 "Metin/Dosya tamamlama" — ikisi de bos DEGIL: metin.kem 36 islev, dosya.kem
+       17 islev. Gercekten ince olan kripto (karma.kem 3, rastgele.kem 4) ve OS RNG
+       kaynagi YOK. Madde "once EKSIGI LISTELE, sonra yaz" diye daraltildi.
+  Bu ikisi, B1/B2'deki desenin ucuncu ve dorduncu tekrari: README/PROGRESS bir isi
+  "yapilacak" sayiyor, olcum "zaten var ya da baska bir sey eksik" diyor. Kuyrugu
+  olcmeden konsolide etseydim bu oturumda toplam 10'a yakin hayalet is tasiyacaktim.
+  BAGIMLILIKLAR ISARETLENDI (once yoktu): D6 -> D9 (bolge serbest birakma, escape
+  ozetini bekler) . E2 E1'den BAGIMSIZ kosulabilir (QEMU'da SMP var) ama zayif-bellek
+  kaniti icin yine E1 gerekir . F1.4 (weak-memory fence) <-> E1: fiziksel olcum
+  olmadan ispat "modele gore dogru" kalir.
+  ACIK UCLU OLANLAR ISARETLENDI: E3 (tam userland — "v1 userland neye denir" karari
+  Mehmet'te) ve F1 (DRF V2 — alti bileseni de tek basina arastirma kalemi).
+  SONUC: 1 S + 15 M + 2 L (acik uclu). Onceki 5S/7M/10L ile kiyaslanabilir degil
+  cunku L'ler bolundu; bandin daralmasi bu yuzden.
+  HANGI KAPI NEYI OLCTU: belge_kapisi 9/9 . test_tumu TAM rc=0 (D-638 kosumu, kuyruk
+  degisikligi kod degil).
