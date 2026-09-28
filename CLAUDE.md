@@ -6383,8 +6383,32 @@ Belge dosyaları: Türkçe.
 ## Geliştirme Ortamı (DGX Spark — yerli ARM64 Linux)
 
 **2026-09-27 (PR #110 merge'ünden sonra) geliştirme DGX Spark'a taşındı.** Önceki
-ortam Windows + WSL idi (aşağıda "Windows (tarihî / CI)" bölümü). Spark'ta yerli
-tam koşum **henüz YAPILMADI** — ilk koşumun sonuçları buraya ölçülerek yazılmalı.
+ortam Windows + WSL idi (aşağıda "Windows (tarihî / CI)" bölümü).
+
+**[2026-09-28] İLK YERLİ TAM KOŞUM YAPILDI — sonuçlar ölçüldü.**
+Son durum: `make test_tumu` → **`rc=0`, 70 kapı, 0 kırmızı**, eksik araçtan
+kaynaklanan atlama yok (`opt`, `/usr/bin/time`, `ld.lld`, qemu hepsi kurulu).
+
+⚠ Bu yeşil, ilk koşumun sonucu DEĞİL. İlk koşum **9 kapıda kırmızıydı** ve
+`rc=2` ile 70 kapının 7.'sinde durdu; tam tablo ancak `make -k` ile çıktı
+(D-486'nın "rc bir İDDİADIR" kuralının canlı örneği). Dokuz kırmızı **iki**
+kökte toplandı ve ikisi de onarıldı:
+
+- **(A) Testler konak mimarisini kaynağa gömüyordu.** `test_tip_kontrol.c`,
+  `test_wcet.c`, `test_llvm.c` ve `check_kapisi.sh` AS001 beklentisini sabit
+  `x86_64`e dayandırıyordu; D-469 ile varsayılan hedef derleme platformundan
+  geldiği için ARM64'te roller TERSİNE döndü. Etiket artık AS001'in okuduğu
+  aynı tek kaynaktan türetiliyor (`llvm_hedef_mimari()` / `KEMGU_HEDEF_MIMARI`).
+  `test_wcet.c` W33 ayrıca **yanlış sebeple yeşildi** (`h >= 1` iddiası AS001'i
+  yutuyordu) — sıkılaştırıldı.
+- **(B) Self-host'un hedefi SABİT `x86_64`/Windows üçlüsündeydi** — aşağıdaki
+  "Hedef üçlüsü" bölümünün öngördüğü kalem. Onarıldı; ayrıntı orada.
+
+Mimari etiketi taşıyan `.kem` dosyaları tanım gereği mimariye özgüdür (gerçek
+makine komutu koşarlar), bu yüzden **ikizler** eklendi:
+`test/snapshots/asm_round_trip_arm64.kem`, `test/cg_korpus/cg_satirici_asm_arm64.kem`.
+Harness'lar konağa göre seçer; yabancı ikiz AÇIKÇA yazdırılarak atlanır
+(muafiyet listesine hiçbir satır EKLENMEDİ).
 
 ### Kurulum
 ```bash
@@ -6415,26 +6439,66 @@ make test_tumu 2>&1 | tee tumu.log; echo "rc=${PIPESTATUS[0]}"
   DEĞİL** → yalnız ikili (bytes) modda düzenle; `open(...,'w')` hata verirse dosya
   ÖNCE kesilmiş olur (D-633'te 2328 satır kaybedildi, git'ten geri alındı).
 
-### Hedef üçlüsü — ⚠ İLK KOŞUMDA BEKLENEN BULGU
-- **C derleyici** varsayılanı DERLEME PLATFORMUNDAN gelir (`src/llvm.h`, D-469):
-  Spark'ta `KEMGU_HEDEF_MIMARI="arm64"`, triple `aarch64-unknown-linux-gnu` →
-  `sabitsüre` bariyeri `csdb` (D-468). Doğru olmalı — ama yerli koşumla ÖLÇÜLMEDİ.
-- **Self-host derleyici** varsayılanı SABİT: `hedef_mim: "x86_64"` ve triple
-  `x86_64-pc-windows-gnu` (`selfhost/codegen.kem` `program_uret`, Ayr başlatıcısı).
-  Yani Spark'ta self-host **x86/Windows IR üretir** → bootstrap (FIXPOINT stage2),
-  `codegen_diff`, `ct_bariyer` gibi self-host IR'ını derleyip koşan kapıların
-  Spark'ta DÜŞMESİ beklenir. Kod okumasıyla bulundu, ölçülmedi. Ayrıca C'de açık
-  `--mimari x86_64` de Linux'ta bile `x86_64-pc-windows-gnu` seçer (`src/ana.c`).
-  Onarım: self-host varsayılanını da ana makineden türet (C ile AYNI kural — D-407).
+### Hedef üçlüsü — ✅ ÖLÇÜLDÜ VE ONARILDI (2026-09-28)
+Bu bölüm önceden bir TAHMİN listesiydi ("beklenir", "ölçülmedi"). Artık ölçüm:
+
+- **C derleyici** varsayılanı DERLEME PLATFORMUNDAN gelir (`src/llvm.h`, D-469).
+  Spark'ta ölçüldü ve doğrulandı: bayraksız `aarch64-unknown-linux-gnu`,
+  `--mimari arm64` → `aarch64-unknown-none-elf`, `--mimari x86_64` →
+  `x86_64-pc-windows-gnu` (evet, Linux'ta bile Windows üçlüsü — `src/ana.c`).
+- **Self-host derleyici** varsayılanı SABİT `x86_64`ti ve tahmin doğru çıktı:
+  Spark'ta C `csdb` üretirken self-host `lfence` üretti. Ölçülen hasar:
+  `ct_bariyer` 7/14, `check_genis` 130/134, `checker_diff` 186/190,
+  `self_driver --check` 147/151, `codegen_diff` 177/179.
+- **ONARIM (D-407: aynı soruyu iki yerde ayrı yanıtlama).** Self-host'un
+  varsayılanı da artık ana makineden gelir. Mekanizma C'ninkinden farklı olmak
+  ZORUNDAYDI: `codegen.kem`in önişlemcisi, `ortam_al`ı ya da önceden tanımlı bir
+  hedef sabiti YOK (üçü de arandı). Çözüm: Makefile `uname`den
+  **`selfhost/konak.kem`** üretir (`konak_mimari()` + `konak_triple()`,
+  `.gitignore`da); `codegen.kem` ve `checker.kem` onu `kullan` ile alır.
+  Kural aynı: *"varsayılan hedef = üzerinde kurulduğum makine."*
+  `checker.kem`de ikinci bir sabit daha vardı (`as001_kontrol`); oradaki yorum
+  koşulunu kendisi yazmıştı (*"sürücüye `--mimari` eklenirse BURASI da
+  güncellenmeli"*) — koşul gerçekleşmişti.
+  Sonuç ölçüldü: iki derleyici üç bayrak durumunda da BİREBİR aynı üçlüyü verir;
+  yukarıdaki beş kapı sırasıyla 14/14, 134/134, 190/190, 151/151, 179/179.
+- ⚠ **`ct_bariyer`'in x86 yarısı da düzeltilmek ZORUNDAYDI.** O blok `lfence`
+  sayar ama iki derleyiciyi de BAYRAKSIZ çağırıyordu, yani "bayraksız = x86_64"
+  varsayıyordu. Varsayılan konağa dönünce iki taraf da `csdb` üretir, sayı 0=0
+  çıkar ve kapı **ölçmeden geçerdi** (D-425 yanlış-yeşili). x86 yarısı artık
+  açıkça `--mimari x86_64` sabitliyor — ARM64 makinede x86 bariyer paritesi ilk
+  kez gerçekten kapsanıyor.
 - Bu "platform farkı" diye geçiştirilmemeli (D-469): Spark'ta farklı çıkan her sonuç
   bir bulgudur.
+- ⚠ **HÂLÂ AÇIK:** `kemgu_self` hedefi `build/kemgu.exe` yolunu sabit yazıyor →
+  Linux'ta koşamaz, üstelik stderr `/dev/null`'a gidip rc denetlenmediği için
+  yine de "üretildi" der (D-446 sınıfı sessiz başarısızlık). `test_tumu`da
+  olmadığı için hiçbir kapı yakalamıyor.
 
-### Gerçek ARM64 donanım doğrulaması
-QEMU TCG önbelleği ve zayıf bellek sıralamasını MODELLEMEZ (D-490). Spark bu
-depoda zayıf bellek davranışının ölçülebildiği ilk ortamdır:
+### Gerçek ARM64 donanım doğrulaması — ⚠ HÂLÂ YAPILAMADI (2026-09-28 ölçüldü)
+QEMU TCG önbelleği ve zayıf bellek sıralamasını MODELLEMEZ (D-490).
 `belgeler/ARM64_Fiziksel_Donanim_Kontrol_Listesi.md` → önce `smp_queue_arm`,
 sonra aynı testin bariyer sabotajı (gerçek donanımda KIRMIZI beklenir; yeşilse
 test yeterince zorlamıyordur, bariyer gereksiz DEĞİLDİR).
+
+⚠ Burada eskiden *"Spark bu depoda zayıf bellek davranışının ölçülebildiği ilk
+ortamdır"* yazıyordu. **Bu, ölçülmemiş bir varsayımdı ve yanlış çıktı.** Adım 1
+Spark'ta koşulamadı: bare-metal imaj QEMU `virt` makinesine çakılıdır — giriş
+adresi `0x40000000` (`linker/bare-metal-aarch64.ld:33`), UART `0x09000000` ve
+kaynaktaki yorumu aynen `/* QEMU virt UART0 */`
+(`runtime/kdl_runtime_uart_pl011.c:39`). Ayrıca imaj `-ffreestanding -nostdlib`
+olduğu için Linux'ta "doğrudan çalıştırılamaz"; **boot edilmesi** gerekir.
+
+Yazılım önkoşulları aslında hazır (ölçüldü): yükleme tabanı ve UART tabanı zaten
+`-D`/`--defsym` ile ezilebilir, Spark'ın konsolu 16550 sınıfı
+(`console=ttyS0,921600`) ve deponun 16550 sürücüsü yeşil. **Kalan engel
+fizikseldir:** Spark'ın UART taban adresi (DT/ACPI'den), seri çıktıyı okuyacak
+ikinci bir makine, ve `kexec`in Linux'u düşürmesi (geri dönüş power-cycle).
+
+**Linux kullanıcı alanında "aynı testi" koşma kısayolu REDDEDİLDİ** — gerekçesi
+kontrol listesinin "Kapsam dışı" bölümünde: bariyerler MMU-off/MMU-on
+cacheability uyuşmazlığı için vardır, Linux'ta o koşul hiç kurulamaz, sabotaj
+yanlış-yeşil verirdi. D-490 kapatılmadı; "tek eksiği fiziksel kurulum" oldu.
 
 ### Windows (tarihî / CI)
 CI (`.github/workflows/ci.yml`) Linux x86_64 **ve** Windows'ta tam takımı koşar —
