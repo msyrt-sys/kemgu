@@ -36,6 +36,13 @@ yapı Ayr {
     a_cs: Dizi<tam32>;    // çocuk sayısı
     cocuk: Dizi<tam32>;   // düz çocuk indeks listesi
     hata_say: tam32;     // parser hata sayısı
+    // [D-643] PARSER TANI TABLOSU — kod + konum. Oncesinde YALNIZ `hata_say`
+    // sayaci vardi, kod/konum YOKTU; surucunun `--check` dali da ona hic bakmiyordu
+    // -> her parse hatasi SESSIZCE "OK" oluyordu (C: P090/P264/...). Tablo C'nin
+    // `--checkdump` bicimiyle (KOD\tsat\tsut) rapor edilebilmesi icin var.
+    ph_kod: Dizi<metin>;
+    ph_sat: Dizi<tam32>;
+    ph_sut: Dizi<tam32>;
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
     sk_pending: tam32;   // >> (SAGA_KAYDIR) yarı-tüketildi (generic kapanış böl)
     // ---- TC1: tip denetleyici durumu ----
@@ -788,11 +795,23 @@ işlev sim_sat(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sat, p.imlec); }
 işlev sim_sut(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sut, p.imlec); }
 işlev ilerle(p: &değişken Ayr) -> tam32 { p.imlec = p.imlec + 1; ver 0; }
 // Beklenen token'ı tüket; değilse hata say + ilerleme yok.
-işlev bekle(p: &değişken Ayr, t: metin) -> tam32 {
+// [D-643] Kodlu bekleme: hata halinde C ile AYNI tani kodunu ve GECERLI TOKEN'in
+// konumunu kaydeder (C `parser_bekle(p, TOK, "Pxxx", msg)` aynasi — kod CAGRI
+// YERINDE verilir cunku ayni token beklemesi farkli baglamlarda farkli kod alir).
+işlev bekle_k(p: &değişken Ayr, t: metin, kod: metin) -> tam32 {
     eğer sim_mi(p, t) { ilerle(p); ver 1; }
     p.hata_say = p.hata_say + 1;
+    dizi_ekle(p.ph_kod, kod);
+    dizi_ekle(p.ph_sat, sim_sat(p));
+    dizi_ekle(p.ph_sut, sim_sut(p));
     ver 0;
 }
+// ⚠ ARTIMLI GOC: kodu HENUZ eslenmemis cagri yerleri "P000" kaydeder. Bu BILEREK
+// boyle: 104 `bekle` cagrisi var (C'de 77 `parser_bekle`) ve hepsini tek seferde
+// eslemek olculmemis bir toplu degisiklik olurdu. Korpusta parse-HATALI dosya
+// bugun YOK (olculdu), dolayisiyla "P000" hicbir kapiyi bozmaz; fikstur hangi
+// siteyi olcerse o site eslenir ve parite ORADA kanitlanir.
+işlev bekle(p: &değişken Ayr, t: metin) -> tam32 { ver bekle_k(p, t, "P000"); }
 
 // ---- Öncelik tabloları (ifade.c ile birebir) ----
 işlev ikili_onc(t: metin) -> tam32 {
@@ -1310,7 +1329,7 @@ işlev parse_ver(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // ver
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "NOKTALI_VIRGUL") == yanlış { dizi_ekle(kids, parse_ifade(p)); }
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P090");   // [D-643] C parser.c:1234 aynasi
     ver dugum_n(p, "VER", "", s, u, kids);
 }
 işlev parse_degisken(p: &değişken Ayr) -> tam32 {
@@ -1914,7 +1933,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         t_ad: [], t_sat: [], t_sut: [], t_off: [], t_uz: [],
         imlec: 0,
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
-        hata_say: 0,
+        hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [],
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_mim: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], al_ad: [], al_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
@@ -6847,6 +6866,21 @@ işlev main() -> tam32 {
     p.giris_dizin = dizin_al(yol);   // TC8a: import arama yolu
     lex_et(&değişken p);
     değişken kok: tam32 = parse_program(&değişken p);
+    // [D-643] PARSE HATASI VARSA TIP KONTROLU KOSULMAZ, YALNIZ PARSER TANILARI
+    // BASILIR — C aynasi. Olculdu: eksik `;` + tip-hatali baglama iceren dosyada
+    // C yalniz P082 basar, tip hatasini BASMAZ. Oncesinde self-host `p.hata_say`a
+    // HIC bakmiyordu -> her parse hatasi sessizce "OK" oluyordu.
+    değişken np: tam32 = dizi_boyut(p.ph_kod);
+    eğer np > 0 {
+        değişken pi: tam32 = 0;
+        iken pi < np {
+            yaz_str(dizi_al(p.ph_kod, pi)); yb(9);
+            yaz_tam(dizi_al(p.ph_sat, pi)); yb(9);
+            yaz_tam(dizi_al(p.ph_sut, pi)); yb(10);
+            pi = pi + 1;
+        }
+        ver 0;
+    }
     kontrol_program(&değişken p, kok);
     değişken nh: tam32 = dizi_boyut(p.th_kod);
     eğer nh == 0 { yaz_str("OK"); yb(10); ver 0; }

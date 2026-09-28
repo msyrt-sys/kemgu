@@ -37,6 +37,13 @@ yapı Ayr {
     a_cs: Dizi<tam32>;    // çocuk sayısı
     cocuk: Dizi<tam32>;   // düz çocuk indeks listesi
     hata_say: tam32;     // parser hata sayısı
+    // [D-643] PARSER TANI TABLOSU — kod + konum. Oncesinde YALNIZ `hata_say`
+    // sayaci vardi, kod/konum YOKTU; surucunun `--check` dali da ona hic bakmiyordu
+    // -> her parse hatasi SESSIZCE "OK" oluyordu (C: P090/P264/...). Tablo C'nin
+    // `--checkdump` bicimiyle (KOD\tsat\tsut) rapor edilebilmesi icin var.
+    ph_kod: Dizi<metin>;
+    ph_sat: Dizi<tam32>;
+    ph_sut: Dizi<tam32>;
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
     sk_pending: tam32;   // >> (SAGA_KAYDIR) yarı-tüketildi (generic kapanış böl)
     reg: tam32;          // CG (D-072): işlev-içi sıralı SSA sayacı (%0, %1, ...)
@@ -981,11 +988,23 @@ işlev sim_sat(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sat, p.imlec); }
 işlev sim_sut(p: &değişken Ayr) -> tam32 { ver dizi_al(p.t_sut, p.imlec); }
 işlev ilerle(p: &değişken Ayr) -> tam32 { p.imlec = p.imlec + 1; ver 0; }
 // Beklenen token'ı tüket; değilse hata say + ilerleme yok.
-işlev bekle(p: &değişken Ayr, t: metin) -> tam32 {
+// [D-643] Kodlu bekleme: hata halinde C ile AYNI tani kodunu ve GECERLI TOKEN'in
+// konumunu kaydeder (C `parser_bekle(p, TOK, "Pxxx", msg)` aynasi — kod CAGRI
+// YERINDE verilir cunku ayni token beklemesi farkli baglamlarda farkli kod alir).
+işlev bekle_k(p: &değişken Ayr, t: metin, kod: metin) -> tam32 {
     eğer sim_mi(p, t) { ilerle(p); ver 1; }
     p.hata_say = p.hata_say + 1;
+    dizi_ekle(p.ph_kod, kod);
+    dizi_ekle(p.ph_sat, sim_sat(p));
+    dizi_ekle(p.ph_sut, sim_sut(p));
     ver 0;
 }
+// ⚠ ARTIMLI GOC: kodu HENUZ eslenmemis cagri yerleri "P000" kaydeder. Bu BILEREK
+// boyle: 104 `bekle` cagrisi var (C'de 77 `parser_bekle`) ve hepsini tek seferde
+// eslemek olculmemis bir toplu degisiklik olurdu. Korpusta parse-HATALI dosya
+// bugun YOK (olculdu), dolayisiyla "P000" hicbir kapiyi bozmaz; fikstur hangi
+// siteyi olcerse o site eslenir ve parite ORADA kanitlanir.
+işlev bekle(p: &değişken Ayr, t: metin) -> tam32 { ver bekle_k(p, t, "P000"); }
 
 // ---- Öncelik tabloları (ifade.c ile birebir) ----
 işlev ikili_onc(t: metin) -> tam32 {
@@ -1507,7 +1526,7 @@ işlev parse_ver(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // ver
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "NOKTALI_VIRGUL") == yanlış { dizi_ekle(kids, parse_ifade(p)); }
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P090");   // [D-643] C parser.c:1234 aynasi
     ver dugum_n(p, "VER", "", s, u, kids);
 }
 işlev parse_degisken(p: &değişken Ayr) -> tam32 {
@@ -1838,7 +1857,8 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
                 cv = vir_ekle(cv, sim_lex(p));   // D-416: çıktı DEĞİŞKEN adı
-                bekle(p, "TANIMLAYICI"); bekle(p, "SAG_PAREN");
+                // [D-643] C aynasi (parser.c asm clause): P269 hedef adi, P264 paren.
+                bekle_k(p, "TANIMLAYICI", "P269"); bekle_k(p, "SAG_PAREN", "P264");
             } değilse {
             eğer metin_esit(lx, "girdi") {
                 ilerle(p); bekle(p, "SOL_PAREN");
@@ -14302,7 +14322,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         t_ad: [], t_sat: [], t_sut: [], t_off: [], t_uz: [],
         imlec: 0,
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
-        hata_say: 0,
+        hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [],
         yapi_izni: 1,
         sk_pending: 0,
         reg: 0,
@@ -14424,6 +14444,21 @@ işlev main() -> tam32 {
     eğer metin_esit(mod, "--parse") { duz_yaz(&değişken p, kok, 0); ver 0; }
     eğer metin_esit(mod, "--check") {
         p.giris_dizin = dizin_al(yol);   // import arama yolu (cross-file)
+    // [D-643] PARSE HATASI VARSA TIP KONTROLU KOSULMAZ, YALNIZ PARSER TANILARI
+    // BASILIR — C aynasi. Olculdu: eksik `;` + tip-hatali baglama iceren dosyada
+    // C yalniz P082 basar, tip hatasini BASMAZ. Oncesinde self-host `p.hata_say`a
+    // HIC bakmiyordu -> her parse hatasi sessizce "OK" oluyordu.
+    değişken np: tam32 = dizi_boyut(p.ph_kod);
+    eğer np > 0 {
+        değişken pi: tam32 = 0;
+        iken pi < np {
+            yaz_str(dizi_al(p.ph_kod, pi)); yb(9);
+            yaz_tam(dizi_al(p.ph_sat, pi)); yb(9);
+            yaz_tam(dizi_al(p.ph_sut, pi)); yb(10);
+            pi = pi + 1;
+        }
+        ver 0;
+    }
         kontrol_program(&değişken p, kok);
         değişken nh: tam32 = dizi_boyut(p.th_kod);
         eğer nh == 0 { yaz_str("OK"); yb(10); ver 0; }
@@ -14459,6 +14494,25 @@ işlev main() -> tam32 {
     // `yazdir_hata` yerleşiği eklendi. Böylece C ile gözlenebilir sözleşme
     // tam eşdeğer: BOŞ stdout + tanı metni stderr'de + çıkış 1.
     // stdout'a yazmak OLMAZ: `--llvm | clang` boru hattı tanıyı IR sanardı.
+    // [D-643] PARSE KAPISI — TIP KAPISINDAN ONCE. C `--llvm` parse hatasinda
+    // BOS stdout + stderr tanisi + cikis 1 verir (olculdu: rc=1, 0 satir stdout).
+    // Self-host ONCESINDE parse hatalarini YUTUYORDU ve IR URETIYORDU (olculdu:
+    // rc=0, 156 satir) — dahasi `çıktı("=r", &r.deger)` icin
+    // `call %R asm sideeffect ..., "=r"()` yani register kisitini YAPININ TAMAMINA
+    // baglayan SESSIZ YANLIS IR. Boru hattinda (`--llvm | clang`) bu, bozuk IR'in
+    // sessizce derlenmeye gitmesi demekti.
+    eğer dizi_boyut(p.ph_kod) > 0 {
+        değişken pj: tam32 = 0;
+        iken pj < dizi_boyut(p.ph_kod) {
+            değişken psat: metin = metin_birlestir(dizi_al(p.ph_kod, pj), " ");
+            psat = metin_birlestir(psat, tam64_str(dizi_al(p.ph_sat, pj) olarak tam64));
+            psat = metin_birlestir(psat, " ");
+            psat = metin_birlestir(psat, tam64_str(dizi_al(p.ph_sut, pj) olarak tam64));
+            yazdir_hata(psat);
+            pj = pj + 1;
+        }
+        ver 1;
+    }
     eğer tip_atla == 0 {
         değişken pk: Ayr = ayr_olustur(kaynak);
         pk.hedef_mim = mim;
