@@ -1086,16 +1086,16 @@ $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
-# FAZ-A3 (D-279): kem_os-özel zaman — kdl_kesme_kur/kdl_timer_baslat/kdl_irq_isle
-# ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC); SAF-.kem kem_zaman.kem sağlar (.S bl kdl_irq_isle çözer).
-$(BUILD)/bm_a64_zaman_kem.o: runtime/kdl_zaman.c | $(BUILD)
-	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
+# [D-635] `bm_a64_zaman_kem.o` ve `bm_a64_mmu_kem.o` KURALLARI SILINDI.
+# D-592'den beri KEM_OS_A64_OBJS yalniz `start.o` icerir; bu iki nesneye hicbir
+# hedef BAGIMLI DEGILDI, yani hic kurulmuyorlardi. Tek "kullanicilari" kem_os_arm
+# icindeki iki negatif llvm-nm denetimiydi ve onlar da tam bu yuzden bos calisip
+# SESSIZCE geciyordu (o denetimler de silindi). Kural birakmak "bu nesne
+# kuruluyor + denetleniyor" izlenimi verirdi; olculen gercek bunun tersi.
+# Kaynaklar (`runtime/kdl_zaman.c`, `runtime/kdl_mmu.c`) DURUYOR — asagidaki
+# `bm_a64_zaman.o` / `bm_a64_mmu.o` ve `bm_x86_zaman.o` onlari kullaniyor.
 $(BUILD)/bm_a64_mmu.o: runtime/kdl_mmu.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
-# FAZ-A1/B (D-277): kem_os-özel mmu — kdl_mmu_kur + tablolar ÇIKARILMIŞ (-DKEMGU_KEM_MALLOC),
-# SAF-.kem kem_mmu.kem sağlar (.S boot çözer). kdl_surec_kur vb. C kalır.
-$(BUILD)/bm_a64_mmu_kem.o: runtime/kdl_mmu.c | $(BUILD)
-	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
 $(BUILD)/bm_a64_gorev.o: runtime/kdl_gorev.c | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kanal.o: runtime/kdl_kanal.c | $(BUILD)
@@ -1135,7 +1135,8 @@ KEM_OS_A64_OBJS = $(BUILD)/bm_a64_start.o
 # ZERO-C B3 (D-285): bm_a64_kesme.o (kdl_kesme.c) TAMAMEN ÇIKARILDI — kem_os artık kesme.c'yi
 # hiç linklemez (B1/B2 kdl_istisna_isle/kdl_el0_izolasyon_isle .kem'e taşındı; fault-scratch
 # global'leri boot/start_aarch64.S'te .data-strong, .kem inline-asm ile isim üzerinden erişir).
-# FAZ-A1/B (D-277): bm_a64_mmu_kem.o = kdl_mmu_kur ÇIKARILMIŞ; SAF-.kem kem_mmu.kem sağlar.
+# FAZ-A1/B (D-277): kem_os MMU kurulumunu SAF-.kem kem_mmu.kem sağlar (C kdl_mmu_kur
+# linke hiç girmez; bunu ölçen şey aşağıdaki HARİTA denetimidir — D-599/D-635).
 #              ^ virtio(blk): kdl_kesme.c kdl_dosya_kaydet/yukle referans eder (D-143).
 #                virtio_net: kdl_kesme.c net_gonder/al syscall'ları referans eder (D-176).
 #                Tüm aarch64 kernel'ler linkler (kullanılmasa dead-code, libc-temiz).
@@ -1510,11 +1511,25 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 		echo "FAIL: MMU-enable asm (msr mair_el1/tcr/ttbr0/sctlr) emit edilmedi — .kem MMU kurulumu yok"; exit 1; \
 	fi
 	@echo "  (kdl_mmu_kur .kem-define + msr mair/tcr/ttbr0/sctlr asm + ceviri-testi wire — SAF-.kem MMU setup+ceviri)"
-	@echo "FALSIFIYE-KANIT (C kdl_mmu_kur DISLANDI): bm_a64_mmu_kem.o'da kdl_mmu_kur C-tanimi 0 olmali:"
-	@if llvm-nm $(BUILD)/bm_a64_mmu_kem.o | grep -qE ' T kdl_mmu_kur$$'; then \
-		echo "FAIL: bm_a64_mmu_kem.o hala C kdl_mmu_kur tanimliyor (guard tutmadi)"; exit 1; \
-	fi
-	@echo "  (bm_a64_mmu_kem.o: 0 C kdl_mmu_kur — kem_os MMU kurulumu TAMAMEN .kem'den)"
+	@# [D-635] "C kdl_mmu_kur DISLANDI" VAKUM DENETIMI SILINDI — CEVRILMEDI.
+	@# D-592'den beri `bm_a64_mmu_kem.o` HIC KURULMUYOR (KEM_OS_A64_OBJS = yalniz
+	@# start.o). `llvm-nm` olmayan dosyada hata verir, `grep -q` bos girdi alir,
+	@# `if` yanlis olur -> denetim "gecti" mesajini basip SESSIZCE gecerdi. Olculdu.
+	@# D-599 bu kusuru heap/region denetimlerinde zaten onarmisti; bu iki artigi
+	@# kacirmis (Sirada maddesinin kendi ifadesi).
+	@# NEDEN CEVIRMEK DEGIL SILMEK: silinen denetim HICBIR KOSULDA ATESLENEMEZDI
+	@# (baktigi nesne uretilmiyor) -> kapsami TAM OLARAK SIFIRDI; silmek sifir
+	@# kaybettirir. Gercek kapsam iki yerde ve ikisi de KOSUYOR:
+	@#   1. Yukaridaki POZITIF .ll denetimi: `define @kdl_mmu_kur` kem_os.ll'de
+	@#      OLMAK ZORUNDA. Biri MMU kurulumunu C'ye geri alirsa .kem define
+	@#      kaybolur ve bu denetim duser. Asil koruma budur.
+	@#   2. Harita denetimi (D-599): imajda TUTULAN C kodu yakalanir.
+	@# ⚠ HARITA DENETIMININ KAPSAMI OLCULDU VE SINIRLI (D-635): link `--gc-sections`
+	@# kullaniyor, bu yuzden REFERANSSIZ bir C nesnesi haritaya HIC girmez. S142
+	@# sabotaji (KEM_OS_A64_OBJS'e bm_a64_mmio_kem.o ekle) bu yuzden ATESLEMEDI —
+	@# sabotaj GECERSIZDI, denetim yanilmadi: nesne imaja hic girmedigi icin
+	@# "imajda C nesnesi yok" iddiasi DOGRUYDU. Denetim "ld'ye ne verildigini"
+	@# degil "imajda ne KALDIGINI" olcer; korunmak istenen sey de zaten budur.
 	@echo "FALSIFIYE-KANIT (KESME/gercek-trap, D-278 FAZ-A2): .kem karar-handler GERCEK trap syndrome'da:"
 	@if ! grep -qE "define[^@]*@trap_gercek_testi\b" $(BUILD)/kem_os.ll || ! grep -qE "call[^@]*@trap_gercek_testi\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: trap_gercek_testi define/wire YOK — gercek trap-yonlendirme yok"; exit 1; \
@@ -1542,10 +1557,11 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@if ! grep -qE "call[^@]*@kem_timer_testi\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: kem_timer_testi wire YOK"; exit 1; \
 	fi
-	@if llvm-nm $(BUILD)/bm_a64_zaman_kem.o | grep -qE ' T (kdl_irq_isle|kdl_kesme_kur|kdl_timer_baslat)$$'; then \
-		echo "FAIL: bm_a64_zaman_kem.o hala C timer/IRQ tanimliyor (guard tutmadi)"; exit 1; \
-	fi
-	@echo "  (kdl_irq_isle/kesme_kur/timer_baslat .kem-define + cntv/daifclr asm + timer_testi wire + 0 C-tanim — GERCEK timer-IRQ SAF-.kem)"
+	@# [D-635] "0 C-tanim" vakum denetimi SILINDI (ayni gerekce: bm_a64_zaman_kem.o
+	@# D-592'den beri kurulmuyor -> denetim sessizce geciyordu). C-disligi yukaridaki
+	@# harita denetimiyle EVRENSEL olarak kapiliyor; asagidaki metinden de "0 C-tanim"
+	@# ibaresi cikarildi cunku bu satir artik onu OLCMUYOR.
+	@echo "  (kdl_irq_isle/kesme_kur/timer_baslat .kem-define + cntv/daifclr asm + timer_testi wire — GERCEK timer-IRQ SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (GOREV/preemptive, D-280 FAZ-A4): .kem kem_preempt scheduler + context-switch:"
 	@if ! grep -qE "define[^@]*@kem_preempt\b" $(BUILD)/kem_os.ll; then \
 		echo "FAIL: .kem kem_preempt scheduler define YOK"; exit 1; \
