@@ -123,10 +123,12 @@
       Ayrica p7 (`değişken x = 1; değişken y: tam64 = x + 8589934592;`) HALA AYRISIYOR:
       C T043 3:31, self T001 3:5 — aritmetik yeniden-tipleme (D-021) yolu, bu maddenin
       disinda. Kapsam acilirken buradan devam edilmeli.
-- [ ] C2 [M] SELF-HOST CHECKER T013 SAYISAL KARISIM: baglamsiz `[1, 2.5]` C T013,
-      self OK (bagsiz yolda `sayisal_mi` toleransi). D-630 bunu tamsayi karisimina da
-      genisletti: `[1, 8589934592]` C T013 (tam32 vs tam64), self OK. C1 ile ayni aile;
-      C1'in cikarsamasi gelince bir kismi kendiliginden kapanabilir -> C1'DEN SONRA OLC.
+- [x] C2 -> D-641. Madde "`sayisal_mi` toleransi" diyordu; GERCEK KOK BASKAYDI.
+      Tolerans kaldirilinca yanlis-pozitif patladi (sha256_selfhost.kem) ve altindaki
+      kusur ortaya cikti: self-host `ver [...]` yolunda BEKLENEN TIPI TASIMIYORDU
+      (`dizi_bek` yalniz DEGISKEN/SABIT icin kuruluyordu). Tolerans o eksik cift-yonlu
+      akisi MASKELIYORMUS. Onarim ikili: tolerans kalkti + `ver` baglami `aktif_donus`
+      tan kuruldu. Fikstur tc47_02 (karisim + TEMIZ nobetciler).
 - [ ] C3 [M] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`). Parser cikti
       clause'u duz `&degisken` kabul ediyor; alan erisimi P264 ile REDDEDILIYOR
       (2026-09-28'de dogrulandi). PROGRESS.md'de D-009 olarak duruyordu.
@@ -1210,3 +1212,37 @@
   HANGI KAPI NEYI OLCTU: checker_diff 190 -> 191/191 . check_genis 134/134 .
   check_kapisi 274/280 0 RED . self_driver 152/152 . test_tumu TAM rc=0; ozet
   satirlarinda TEK fark checker_diff'in +1 fiksturu.
+- 2026-09-28 D-641: bagalamsiz dizi literalinde T013 paritesi — ve tolerans altindaki
+  GERCEK kusur.
+  OLCUM (once): `[1, 2.5]` ve `[1, 8589934592]` C'de T013, self-host'ta OK. Kuyruk
+  maddesi sebebi "bagsiz yolda `sayisal_mi` toleransi" diye kaydetmisti.
+  C1'DEN SONRA OLCULDU (madde oyle diyordu): C1'in literal cikarsamasi bunu
+  KAPATMAMIS. Ama olcum boslugu daraltti — `[1, "x"]` (sayisal olmayan karisim) ve
+  annotasyonlu yol ZATEN paritedeydi; ayrisan yalniz BAGLAMSIZ SAYISAL karisim.
+  ILK ONARIM (eksikti): tolerans kaldirildi. C kurali toleranssiz
+  (tip_kontrol.c DUGUM_DIZI_OLUSTUR: `!tip_esit(ilk,e) && e->kategori != TIP_HATA`),
+  ustelik self-host'un BAGLAMLI dali da toleranssizdi -> ayni dil kurali iki dalda
+  FARKLI uygulaniyordu. 6/6 probe paritede, uc parite kapisi YESIL.
+  ⚠ AMA TAM TAKIM KIRMIZI: codegen_genis 58/58 -> 57/58, `sha256_selfhost.kem`de
+  yanlis-pozitif. UC PARITE KAPISI DA BUNU GORMEDI — yakalayan sey gercek programlari
+  derleyip kosturan baska bir korpustu. "Kapilar yesil" tek basina onay degil;
+  HANGI kapinin HANGI yuzeyi gordugu onemli (C1'de de ayni ders cikmisti).
+  GERCEK KOK: dosya `ver [1116352408, ..., 3049323471, ...]` yaziyor, donus tipi
+  `Dizi<dtam32>`. 3049323471 > 2^31 oldugu icin BAGLAMSIZ yolda "tam64" cikarsaniyor
+  ve ilk elemanin "tam32"siyle karisim saniliyor. C ayni dosyaya OK der cunku
+  beklenen tipi `ver`e TASIR. Self-host `dizi_bek` baglamini yalniz DEGISKEN/SABIT
+  icin kuruyordu, `ver` icin KURMUYORDU.
+  Yani `sayisal_mi` toleransi KEYFI DEGILDI: EKSIK CIFT-YONLU TIP AKISINI ortuyordu.
+  Bu, "bir toleransi kaldirmadan once NEYI ortttugunu sor" dersi.
+  IKINCI ONARIM (dogrusu): toleransi geri koymak yerine AKISI TAMAMLA — `ver`
+  dugumunde `p.dizi_bek` `aktif_donus`tan kurulur (C ile ayni kural, D-407).
+  Yanlis-pozitif kapandi, 6/6 probe paritede kaldi.
+  Fikstur tc47_02: karisim vakalari + TEMIZ nobetciler (`[1,2]`, `[1.5,2.5]`,
+  `["a","b"]`) — kural gevsetilirse de asiri sikilastirilirsa da kirmizi olur.
+  SABOTAJ iki dosyada ayri (C1 dersi): S145 (checker.kem) -> checker_diff 191/192;
+  S145b (codegen.kem) -> self_driver 152/153, make rc=2.
+  ⚠ ONCEKI TURDA `rc` YANLIS RAPORLANDI: "SABOTAJ rc=0" yazmistim ama o grep'in
+  cikis koduydu, make'in degil. Bu turda make rc'si ayrica olculdu.
+  HANGI KAPI NEYI OLCTU: checker_diff 191 -> 192/192 . codegen_genis 58/58 (geri
+  donduruldu) . check_genis 134/134 . check_kapisi 0 RED . test_tumu TAM rc=0;
+  ozette TEK fark checker_diff'in +1 fiksturu.
