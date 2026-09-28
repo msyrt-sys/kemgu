@@ -6470,10 +6470,13 @@ Bu bölüm önceden bir TAHMİN listesiydi ("beklenir", "ölçülmedi"). Artık 
   kez gerçekten kapsanıyor.
 - Bu "platform farkı" diye geçiştirilmemeli (D-469): Spark'ta farklı çıkan her sonuç
   bir bulgudur.
-- ⚠ **HÂLÂ AÇIK:** `kemgu_self` hedefi `build/kemgu.exe` yolunu sabit yazıyor →
-  Linux'ta koşamaz, üstelik stderr `/dev/null`'a gidip rc denetlenmediği için
-  yine de "üretildi" der (D-446 sınıfı sessiz başarısızlık). `test_tumu`da
-  olmadığı için hiçbir kapı yakalamıyor.
+- ✅ **KAPANDI (D-636):** `kemgu_self` hedefi `build/kemgu.exe` yolunu sabit
+  yazıyordu → Linux'ta koşamıyordu. Artık `$(EXE)` kullanıyor, stderr
+  bastırılmıyor ve üretilen ikili **koşturularak** doğrulanıyor (duman denetimi).
+  ⚠ **D-634'te bu kalemi yanlış tarif etmiştim:** *"rc denetlenmediği için yine de
+  'üretildi' der (D-446 sınıfı sessiz başarısızlık)"* demiştim. D-636'da ölçüldü:
+  hedef **sessizce geçmiyor**, `Error 127` ile düşüyordu — `2>/dev/null` yalnız
+  tanıyı yutuyordu, çıkış kodunu değil. Kusur "sessiz" değil "teşhis edilemez"di.
 
 ### Gerçek ARM64 donanım doğrulaması — ⚠ HÂLÂ YAPILAMADI (2026-09-28 ölçüldü)
 QEMU TCG önbelleği ve zayıf bellek sıralamasını MODELLEMEZ (D-490).

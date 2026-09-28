@@ -779,10 +779,29 @@ calistir_kem_malloc_kompozisyon: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 
 # AŞAMA 4 (driver) — TEK self-host KEMGU binary (selfhost/codegen.kem → kemgu_self.exe).
 # checker mantığı + --token/--parse/--check/--llvm dispatch birleşik (D-086).
+# [D-636] LINUX'TA BOZUKTU + TESHIS EDILEMEZDI.
+# Eski recete `build/kemgu.exe` ve `build/kemgu_self.exe` yollarini SABIT yaziyordu;
+# Linux/DGX Spark'ta ikili uzantisiz (`build/kemgu`) -> komut bulunamaz.
+# OLCULDU: hedef SESSIZCE GECMIYOR, `Error 127` ile duser (kabuk 127 doner, make
+# bunu yayar). Yani D-446 "sessiz basarisizlik" DEGIL. Gercek kusur ikiliydi:
+#   1. Yol sabit -> Linux'ta hic calismiyor (D-469'un "derleyici tasinir, kapilar
+#      tasinmaz" sinifi; Makefile EXE'yi ZATEN hesapliyordu, burasi kullanmiyordu).
+#   2. `2>/dev/null` tanilari yutuyordu -> kullanici yalniz "Error 127" goruyor,
+#      NEDEN oldugunu gosteren satir kayboluyor. Kapi duser ama ogretmez.
+# Ayrica basarisiz kosumda geride 0 baytlik `kemgu_self.ll` kaliyordu.
+# stderr artik BASTIRILMIYOR ve komutlar gorunur (`@` yok) — bu hedef elle
+# calistirilan bir kolayliktir, sessiz olmasinin degeri yok.
+#
+# ⚠ `calistir_self_driver` BU HEDEFE BAGLI DEGIL: harness kendi driver'ini kurar
+# (SELF/SELF2 env). O yuzden bu hedef test_tumu'da yok ve bozuklugu hicbir kapi
+# yakalamadi. Asagidaki duman denetimi o bosluGu kapatir: ikili yalniz URETILMIS
+# olmakla kalmaz, KOSUP IR uretebildigi de dogrulanir.
 kemgu_self: $(BUILD)/kemgu$(EXE) selfhost/konak.kem $(BUILD)/kdl_runtime.o
-	@build/kemgu.exe --llvm selfhost/codegen.kem > build/kemgu_self.ll 2>/dev/null
-	@clang -x ir build/kemgu_self.ll -x none build/kdl_runtime.o -o build/kemgu_self.exe 2>/dev/null
-	@echo "build/kemgu_self.exe uretildi (tek self-host kemgu binary)."
+	$(BUILD)/kemgu$(EXE) --llvm selfhost/codegen.kem > $(BUILD)/kemgu_self.ll
+	clang -x ir $(BUILD)/kemgu_self.ll -x none $(BUILD)/kdl_runtime.o -o $(BUILD)/kemgu_self$(EXE)
+	@$(BUILD)/kemgu_self$(EXE) --llvm selfhost/konak.kem > /dev/null || \
+		{ echo "FAIL: $(BUILD)/kemgu_self$(EXE) uretildi ama IR uretemiyor"; exit 1; }
+	@echo "$(BUILD)/kemgu_self$(EXE) uretildi + duman denetimi gecti."
 
 # AŞAMA 4/5 driver doğruluk: C-derlenmiş + self-host-derlenmiş driver, 4 mod (--token/
 # --parse/--check/--llvm) C oracle ile eşleşir + FIXPOINT. (Harness driver'ı kendi içinde üretir.)
