@@ -823,3 +823,79 @@
   S140 (runtime `j > 63` kirp) -> codegen_diff 178/179 (KEMGU exit 1).
   Kapilar: test_tumu TAM rc=0 (Tum testler gecti, FIXPOINT ✓) . llvm_test 293 . checker_diff 190 .
   parser_diff 14/14 . codegen_diff 179.
+- 2026-09-28 D-634: ILK YERLI ARM64 (DGX Spark) TAM KOSUMU — iki kok onarildi, test_tumu rc=0.
+  NEDEN: gelistirme 2026-09-27'de Spark'a tasindi ama yerli tam kosum HIC yapilmamisti; CLAUDE.md
+  "ilk kosumun sonuclari buraya olculerek yazilmali" diyordu. Ilk kosum rc=2 ile 70 kapinin
+  7.'sinde DURDU; tam tablo ancak `make -k` ile cikti (D-486'nin "rc bir IDDIADIR" kuralinin
+  canli ornegi — tek basina rc'ye bakan biri 63 kapiyi hic gormezdi).
+  OLCUM: 9 kapi kirmizi, iki kokte toplandilar.
+  KOK A — TESTLER KONAK MIMARISINI GOMUYORDU: test_tip_kontrol.c / test_wcet.c / test_llvm.c /
+  check_kapisi.sh AS001 beklentisini sabit "x86_64"e dayandiriyordu. D-469 ile varsayilan hedef
+  DERLEME PLATFORMUNDAN geldigi icin ARM64'te roller TERSINE dondu: gomulu x86_64 etiketi AS001
+  yedi, "yabanci" sanilan arm64 etiketi temiz gecti. Derleyici DOGRUYDU, test yanlis olcuyordu
+  (ayrica olculdu: mimari arm64 -> check rc=0, x86_64 -> AS001 rc=1).
+  Onarim: etiket artik AS001'in okudugu AYNI tek kaynaktan gelir (llvm_hedef_mimari() ya da
+  linklenmeyen test_llvm.c'de KEMGU_HEDEF_MIMARI makrosu; olculen ikili de ayni makroyla kurulur).
+  KOK B — SELF-HOST'UN HEDEFI SABIT x86_64/WINDOWS UCLUSUNDEYDI. CLAUDE.md'de TAHMIN olarak
+  kayitliydi ("dusmesi beklenir, kod okumasiyla bulundu, olculmedi"); artik olculdu: C `csdb`
+  uretirken self-host `lfence` uretti.
+  Onarim D-407 geregi AYNI KURAL: Makefile `uname`den selfhost/konak.kem URETIR (konak_mimari +
+  konak_triple, .gitignore'da); codegen.kem ve checker.kem `kullan` ile alir. Mekanizma C'ninkinden
+  FARKLI olmak ZORUNDAYDI: codegen.kem'in onislemcisi, `ortam_al`i ya da onceden tanimli bir hedef
+  sabiti YOK (ucu de arandi) -> konak ancak URETILEN BIR MODULLE gorunur. Kural ayni: "varsayilan
+  hedef = uzerinde kuruldugum makine". Uc bayrak durumunda da iki derleyici artik BIREBIR ayni
+  ucluyu verir (bayraksiz aarch64-unknown-linux-gnu / arm64 none-elf / x86_64 windows-gnu).
+  checker.kem'de IKINCI bir sabit daha vardi (as001_kontrol); oradaki yorum kendi kosulunu
+  YAZMISTI ("surucuye --mimari eklenirse BURASI da guncellenmeli") — kosul gerceklesmisti.
+  ⚠ B'YI TEK BASINA ONARMAK ct_bariyer'i YESILE DEGIL BOSA CIKARIRDI: o blok lfence sayar ama iki
+  derleyiciyi de BAYRAKSIZ cagiriyordu ("bayraksiz = x86_64" varsayimi). Varsayilan konaga
+  donunce iki taraf da csdb uretir, sayi 0=0 cikar, kapi OLCMEDEN gecerdi (D-425). x86 yarisi
+  artik acikca --mimari x86_64 sabitliyor (asagidaki ARM64 yarisinin, D-468, eksik ikizi);
+  ARM64 makinede x86 bariyer paritesi ILK KEZ gercekten kapsaniyor.
+  MIMARI IKIZLER: etiket tasiyan .kem TANIM GEREGI mimariye ozgudur (gercek makine komutu kosar),
+  tek dosya iki konagi kapsayamaz -> snapshots/asm_round_trip_arm64.kem + cg_korpus/
+  cg_satirici_asm_arm64.kem eklendi. Harness konaga gore secer (KONAK_MIM=$(ARCH), `uname` IKINCI
+  KEZ cagrilmaz — D-407), yabanci ikiz ACIKCA yazdirilarak atlanir. Muafiyet listelerine HICBIR
+  satir eklenmedi.
+  HANGI KAPI NEYI OLCTU (once -> sonra): tip_kontrol 197/202 -> 202/202 . llvm 289/293 -> 293/293 .
+  wcet 35/37 -> 37/37 . check_kapisi 1 RED -> 0 RED . ct_bariyer 7/14 -> 14/14 . checker_diff
+  186/190 -> 190/190 . check_genis 130/133 -> 134/134 . codegen_diff 177/179 -> 179/179 .
+  self_driver --check 147/151 -> 151/151, FIXPOINT ✓ (stage1 IR == stage2 IR, 84212 satir).
+  test_tumu TAM rc=0, 0 kirmizi, eksik aractan atlama YOK.
+  Ozet satirlari ilk kosumla DIFFLENDI: degisen her satir ya onarim ya ikizlerin diger kapilarca
+  kapsanmasi; muaf sayilari (6/13/21), ASan SKIP=31 ve "atlanan 3" AYNI -> hicbir kapi sessizce
+  atlamaya DONUSMEDI.
+  SABOTAJ S141 (self-host'un x86 lfence emisyonunu dusur) -> ct_bariyer 7/14, "x86 bariyer sayisi:
+  C=35 != KEMGU=0", rc=2. Bu kanit onemli: yeni sabitlenen x86 yarisinin ARM64 konakta GERCEKTEN
+  disi oldugunu gosterir — onarim oncesi o yari bos olacakti, yani iddia olculdu, varsayilmadi.
+  Geri alma SAYILDI: lfence 2 (call + declare), kaynakta "SABOTAJ" izi yok, kapi yine 14/14.
+  W33 YANLIS SEBEPLE YESILDI: iddiasi `h >= 1 && rt >= 1` idi ve AS001'in ekledigi fazladan hatayi
+  YUTUYORDU; olctugu sey RT007. `h == 1 && rt == 1` diye SIKILASTIRILDI — bu onarim bir kapiyi
+  yesilden yesile degil, GEVSEKTEN SIKIYA tasidi.
+  YANLIS GIDEN DENEMELER: (1) codegen_diff'e ekledigim KONAK_MIM zorunlulugunu selfhost_driver
+  delegasyonuna gecirmeyi UNUTTUM -> self_driver "kapi KOSMADI" ile dustu. Kontrolun gurultulu
+  olmasi kendi eksigimi yakaladi (D-446 lehine dogrudan kanit). (2) Sabotaj sayim beklentisini
+  "1 -> 0" yazdim; dogrusu "2 -> 1" cunku dizge `declare` satirinda da geciyor — D-530'un ayni
+  sinifta kayitli sayim dersi. (3) UART tabanini parametrelestirmeyi IS olarak onerdim; ZATEN
+  parametreydi (-DKDL_PL011_BASE / -DKDL_16550_BASE, PL011'de basliginda belgeli) -> oneri dustu.
+  (4) Ilk probe'da python str.format kaynaktaki suslu parantezlerde patladi ve dosyayi ONCE
+  kesti -> BOS .kem dosyasi `--check`ten "basarili" doner; olcum bir an yanlis okundu.
+  ACIK KALDI (a): ARM64 FIZIKSEL dogrulama YAPILAMADI. Bare-metal imaj QEMU `virt`e CAKILI —
+  giris 0x40000000 (bare-metal-aarch64.ld:33), UART 0x09000000 + kaynaktaki yorumu
+  "/* QEMU virt UART0 */" (kdl_runtime_uart_pl011.c:39); imaj -ffreestanding -nostdlib oldugu icin
+  Linux'ta "dogrudan calistirilamaz", BOOT edilmesi gerekir. Yani D-490'in gerekcesi QEMU'yu
+  dislarken imajin kendisi QEMU'ya bagliymis — belgenin (D-530) fark etmedigi bagimlilik.
+  Yazilim onkosullari HAZIR (yukleme tabani ve UART tabani ezilebilir, Spark konsolu 16550 sinifi
+  ve o surucu yesil, kexec kurulu); engel FIZIKSEL: Spark'in UART tabani DT/ACPI'den okunmali,
+  seri ciktiyi okumak icin ikinci makine gerekli, kexec Linux'u dusurur (geri donus power-cycle).
+  Linux KULLANICI ALANINDA "ayni testi" kosma kisayolu REDDEDILDI ve gerekcesi kontrol listesine
+  yazildi: bariyerler MMU-off/MMU-on CACHEABILITY UYUSMAZLIGI icindir (smp_queue_arm.c:28-33 —
+  cekirdek 1 MMU kapali non-cacheable, cekirdek 0 MMU acik Normal-WB). Linux'ta iki is parcacigi
+  da MMU acik ve ayni inner-shareable alanda -> donanim coherency'si devreye girer, `dc` komutlari
+  GERCEKTEN gereksiz olur, sabotaj YANLIS-YESIL verir. Adim 3'un uyardigi tuzagin ta kendisi,
+  ustelik bu sefer test zayif oldugu icin degil OLCULEN KOSUL HIC KURULAMADIGI icin.
+  D-490 kapatilmadi ve daraltilmadi; "ertelenmis borc" olmaktan cikip "tek eksigi fiziksel
+  kurulum" haline geldi.
+  ACIK KALDI (b): kemgu_self hedefi build/kemgu.exe yolunu SABIT yaziyor -> Linux'ta kosamaz,
+  ustelik stderr /dev/null'a gidip rc denetlenmedigi icin yine de "uretildi" der (D-446 sinifi
+  sessiz basarisizlik). test_tumu'da OLMADIGI icin hicbir kapi yakalamiyor.
