@@ -129,22 +129,17 @@
       (`dizi_bek` yalniz DEGISKEN/SABIT icin kuruluyordu). Tolerans o eksik cift-yonlu
       akisi MASKELIYORMUS. Onarim ikili: tolerans kalkti + `ver` baglami `aktif_donus`
       tan kuruldu. Fikstur tc47_02 (karisim + TEMIZ nobetciler).
-- [ ] C0 [L] ⚠ YENI VE ONCELIKLI — SELF-HOST `--check` PARSER HATALARINI HIC
-      RAPORLAMIYOR. D-642'de olculdu: `ver 1 }` (noktali virgul eksik) -> C `P090 1 32`,
-      self-host `OK`. Tip hatalari (T020) calisiyor; PARSE hatalari GORUNMEZ.
-      Kok: surucunun `--check` dali yalniz `p.th_kod` (tip) tablosuna bakiyor,
-      `p.hata_say` (parser) sayacina HIC bakmiyor.
-      NEDEN HICBIR KAPI YAKALAMIYOR: checker_diff/self_driver `test/check_korpus`u
-      karsilastirir ve o korpustaki dosyalarin HEPSI AYRISTIRILABILIR — parse
-      hatasi iceren tek dosya yok. Yani 192/192 ve 152/152 yesilleri bu yuzeyi
-      hic olcmuyor. D-424'te kayitli "loud -> silent" sinifinin tekrari.
-      BOYUT: self-host parser YALNIZ `hata_say` sayaci tutuyor; kod/konum
-      KAYDETMIYOR (14 hata noktasi). C bicimiyle (`KOD\tsat\tsut`) parite icin
-      parser tani tablosu (ph_kod/ph_sat/ph_sut) eklenmeli -> L.
-      C0.1 parser tani tablosu, C0.2 hata kodlarini C ile esle (P090/P261/P264...),
-      C0.3 `--check` ve `--llvm` dallarinda raporla + sifir-disi don,
-      C0.4 korpusa PARSE-HATALI fikstur (bugun boyle dosya YOK — kapinin kor
-      noktasi tam da bu), C0.5 sabotaj.
+- [~] C0 -> D-643 (DAR KAPSAM KAPANDI, kod eslemesi acik). Parser tani tablosu
+      (ph_kod/ph_sat/ph_sut) + `bekle_k` (kod cagri yerinde, C aynasi) eklendi;
+      `--check` parse hatasinda tip kontrolu KOSMUYOR ve yalniz parser tanilarini
+      basiyor; `--llvm` BOS stdout + stderr tanisi + cikis 1 veriyor (onceden rc=0
+      ve 156 satir YANLIS IR). Korpusa ILK parse-hatali dosya girdi (tc48_01).
+      ⚠ KALAN: 104 `bekle` cagrisinin yalniz UCU eslendi (P090 `ver` noktali virgulu,
+      P269/P264 asm cikti clause'u); gerisi "P000" kaydediyor. Ayrica C'nin PANIK
+      CASCADE'i eslenmedi: `&r.deger` icin C dort tani basiyor (P264 + uc P261),
+      self BIR. Cascade paritesi ayri bir artim.
+      C0.a kalan `bekle` sitelerini esle, C0.b panik-senkron cascade paritesi,
+      C0.c her artimda korpusa fikstur.
 - [ ] C3 [L] satirici_asm CIKTISI YAPI ALANINA (`çıktı("=r", &r.deger)`).
       ⚠ BOYUT M'DEN L'YE CIKARILDI (D-642 olcumu): AST cikti hedefini AD (string)
       olarak tutuyor, lvalue/ifade olarak DEGIL -> temsil degisikligi C'de bes yeri
@@ -1304,3 +1299,39 @@
   loud'a cevirirdi ama C ile FORMAT paritesi olmadigi icin korpusa fikstur
   EKLENEMEZDI -> kapi yine kor kalirdi. Yarim onarim, olculmemis onarimdir.
   HANGI KAPI NEYI OLCTU: degisiklik yok; tum kapilar D-641 yesilinde.
+- 2026-09-28 D-643: self-host parse hatalari artik GORUNUR — ve `--llvm` yanlis IR
+  uretmiyor.
+  OLCUM (once, D-642'den): `ver 1 }` -> C `P090 1 32`, self `OK`. Daha kotusu:
+  `çıktı("=r", &r.deger)` -> C reddeder (rc=1, bos stdout), self rc=0 + 156 satir IR,
+  icinde `call %R asm sideeffect ..., "=r"()` — register kisiti YAPININ TAMAMINA
+  bagli, sessiz YANLIS IR. `--llvm | clang` boru hattinda bu bozuk IR'in sessizce
+  derlemeye gitmesi demekti.
+  KOK: parser YALNIZ `hata_say` sayaci tutuyordu (kod/konum YOK) ve surucu ona HIC
+  bakmiyordu. Iki ayri eksik: tablo yok + kapi yok.
+  ONARIM: (1) `ph_kod/ph_sat/ph_sut` tani tablosu, (2) `bekle_k(p,t,kod)` — kod
+  CAGRI YERINDE verilir (C `parser_bekle` aynasi; ayni token beklemesi farkli
+  baglamda farkli kod alir), (3) `--check` dalinda parse hatasi varsa tip kontrolu
+  KOSMAZ ve yalniz parser tanilari basilir — C davranisi ONCE OLCULDU (eksik `;` +
+  tip-hatali baglama iceren dosyada C yalniz P082 basar), (4) `--llvm` dalinda
+  parse kapisi: bos stdout + stderr + cikis 1.
+  ARTIMLI (C1 deseni): 104 `bekle` cagrisindan UCU eslendi; gerisi "P000". Bu
+  BILEREK — hepsini tek seferde eslemek olculmemis toplu degisiklik olurdu.
+  Korpusta parse-hatali dosya YOKTU (olculdu) -> "P000" hicbir kapiyi bozmuyor.
+  KORPUSUN SEKLI KAPININ KOR NOKTASIYDI: check_korpus'un 153 dosyasinin hepsi
+  checker'i sinamak icin yazilmis, dolayisiyla AYRISTIRILABILIR. Bu yuzden
+  checker_diff 192/192 ve self_driver 152/152 yesil oldugu halde butun bir hata
+  sinifi olculmuyordu. tc48_01 korpustaki ILK parse-hatali dosya.
+  SONUC: eksik `;` -> iki tarafta da `P090 18 1` (BIREBIR). asm alan vakasi:
+  `--check` self `P264 7 26` (onceden OK), `--llvm` rc=1 + 0 satir (onceden 156).
+  ⚠ IKI GECERSIZ SABOTAJ (ikisi de kendi kusurumdu, kaydediliyor):
+    (1) S146b ilk deneme: duzenlemem `{`i yorumun ICINE soktu -> DERLEME KIRILDI
+        (rc=2) ve kapi sabotaj yuzunden degil SOZDIZIMI yuzunden kirmizi oldu.
+        Kirmizi'yi kanit saymak yanlis olurdu.
+    (2) Ikinci deneme: girinti varsayimim (8 bosluk) tutmadi, yama HIC UYGULANMADI
+        ve kapi YESIL kaldi — bu da "sabotaj gecti" diye okunabilirdi.
+    Ders: sabotajin INDIGINI ve DERLEMENIN GECTIGINI ayrica dogrula (D-402/D-490'in
+    sayim dersinin ikizi: yalniz "uygulandi mi" degil, "gecerli mi" de sorulmali).
+  GECERLI SABOTAJ: S146 (checker.kem) -> checker_diff 192/193, make rc=2.
+                   S146b (codegen.kem, dogru sozdizimi) -> self_driver 153/154, rc=2.
+  HANGI KAPI NEYI OLCTU: checker_diff 192 -> 193/193 . self_driver 152 -> 154/154 .
+  test_tumu TAM rc=0; ozette TEK fark checker_diff'in +1 fiksturu.
