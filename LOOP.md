@@ -97,10 +97,9 @@
       CI Windows + Linux x86_64 kosuyor ve o yol OLCULMEDI (yalniz kod okumasi +
       -D ile konak simulasyonu). konak.kem uretimi MSYS'de (printf/cmp/mv/uname)
       denenmedi. Kirilirsa once burasi kirilir.
-- [ ] A2 [S] kemgu_self hedefi `build/kemgu.exe` yolunu SABIT yaziyor -> Linux'ta
-      kosamaz; stderr /dev/null'a gidip rc denetlenmedigi icin yine de "uretildi" der
-      (D-446 sinifi sessiz basarisizlik). test_tumu'da OLMADIGI icin hicbir kapi
-      yakalamiyor. $(EXE) kullan + rc denetle + kosarak dogrula.
+- [x] A2 -> D-636. $(EXE) kullaniliyor, stderr bastirilmiyor, uretilen ikili
+      KOSTURULARAK dogrulaniyor (duman denetimi). Madde "sessiz basarisizlik" diyordu;
+      olcum bunu YALANLADI (Error 127 ile duser) ve tarif duzeltildi.
 
 # --- B. Belge borcu (ucuz, yanlis bilgi yayiyor) ---
 - [ ] B1 [S] README BAYAT OS IDDIALARI. "Surucüler / Bare-Metal" bolumu "tam bir
@@ -116,7 +115,7 @@
 # --- C. Dil / checker paritesi ---
 - [ ] C1 [M] SELF-HOST CHECKER ANNOTASYONSUZ BAG TIPI: `değişken x = 8589934592;
       değişken y: tam32 = x;` C T001, self OK (`x = "a"` vakasi da ayni).
-      KOK BULUNDU (D-636 hazirligi): checker.kem:5145 ve codegen.kem:12433 —
+      KOK BULUNDU: checker.kem:5145 ve codegen.kem:12433 —
       `yerel_tip` yalniz ANNOTASYONDAN okunuyor, annotasyon yoksa "?" kaydediliyor
       ve dosyanin kendi kurali geregi ("?" = bilinmiyor -> T001 atla) o baglamaya
       dair butun tip denetimleri dusuyor. Onarim: annotasyon yokken tipi
@@ -979,9 +978,11 @@
   ustelik bu sefer test zayif oldugu icin degil OLCULEN KOSUL HIC KURULAMADIGI icin.
   D-490 kapatilmadi ve daraltilmadi; "ertelenmis borc" olmaktan cikip "tek eksigi fiziksel
   kurulum" haline geldi.
-  ACIK KALDI (b): kemgu_self hedefi build/kemgu.exe yolunu SABIT yaziyor -> Linux'ta kosamaz,
-  ustelik stderr /dev/null'a gidip rc denetlenmedigi icin yine de "uretildi" der (D-446 sinifi
-  sessiz basarisizlik). test_tumu'da OLMADIGI icin hicbir kapi yakalamiyor.
+  ACIK KALDI (b): kemgu_self hedefi build/kemgu.exe yolunu SABIT yaziyor -> Linux'ta kosamaz.
+  ⚠ BU SATIRIN ILK HALI YANLISTI ve D-636'da duzeltildi: "rc denetlenmedigi icin yine de
+  'uretildi' der (D-446 sinifi sessiz basarisizlik)" demistim. Olculdu: hedef SESSIZCE
+  GECMIYOR, Error 127 ile DUSUYOR; `2>/dev/null` yalniz taniyi yutuyor, cikis kodunu degil.
+  Kusur "sessiz" degil "teshis edilemez"di. [D-636'da kapandi]
 - 2026-09-28 D-635: kem_os_arm VAKUM DENETIMLERI silindi (cevrilmedi) + iki yetim .o kurali.
   OLCUM (once): `build/bm_a64_mmu_kem.o` ve `build/bm_a64_zaman_kem.o` DOSYA OLARAK YOK.
   `llvm-nm <olmayan dosya>` hata verir, boru hattindaki `grep -q` BOS girdi alir, `if` yanlis
@@ -1014,3 +1015,30 @@
   link'i loud kirar). Iki parcali oldugu icin bu iterasyonda kurulmadi; pozitif .ll
   denetimleri o senaryoyu zaten D-277/D-279'da kapiyor.
   HANGI KAPI NEYI OLCTU: kem_os_arm rc=0 . qemu_cekirdek 2/2 . test_tumu TAM rc=0.
+- 2026-09-28 D-636: kemgu_self Linux'ta onarildi + D-634'teki YANLIS TARIF duzeltildi.
+  OLCUM (once): `make kemgu_self` -> "make: *** [Makefile:783: kemgu_self] Error 127", rc=2.
+  Recete `build/kemgu.exe` ve `build/kemgu_self.exe` yollarini SABIT yaziyordu; Linux'ta
+  ikili uzantisiz (`build/kemgu`) -> komut bulunamiyor. Geride 0 baytlik kemgu_self.ll kaliyor.
+  ⚠ KENDI IDDIAMI YALANLADIM: D-634'te bu kalemi "rc denetlenmedigi icin yine de 'uretildi'
+  der (D-446 sinifi SESSIZ basarisizlik)" diye kaydetmistim. YANLIS. Kabuk komutu bulamayinca
+  127 doner ve make bunu YAYAR -> hedef GURULTULU duser. `2>/dev/null` yalniz TANIYI yutuyordu,
+  cikis kodunu degil. Kusur "sessiz" degil "TESHIS EDILEMEZ"di: kullanici yalniz "Error 127"
+  goruyor, nedenini gosteren satir kayboluyor. Yanlis tarif CLAUDE.md'ye ve bu dosyaya
+  commit'lenmisti; ikisi de duzeltildi (D-407: yanlis olgu iki yerde yasiyordu).
+  ONARIM: $(EXE) kullaniliyor (Makefile bunu ZATEN hesapliyordu, recete kullanmiyordu —
+  D-469'un "derleyici tasinir, kapilar tasinmaz" sinifi), stderr BASTIRILMIYOR, komutlar
+  gorunur (`@` kaldirildi; bu elle calistirilan bir kolaylik hedefi, sessizligin degeri yok).
+  DUMAN DENETIMI EKLENDI: ikili yalniz URETILMIS olmakla kalmaz, kosturulup IR uretebildigi
+  de dogrulanir. Gerekce: `calistir_self_driver` bu hedefe BAGLI DEGIL (harness kendi
+  driver'ini SELF/SELF2 env ile kurar) -> hedef test_tumu'da yok ve bozuklugu hicbir kapi
+  yakalamadi. Denetim o bosluGu hedefin KENDI icinde kapatir.
+  DOGRULAMA: rc=0, `build/kemgu_self` (uzantisiz) uretildi, kosuyor ve
+  `target triple = "aarch64-unknown-linux-gnu"` emit ediyor — D-634'un konak hedefi
+  self-host IKILISINDE de yerinde demektir (ek kanit).
+  SABOTAJ S143 KISMEN GECERSIZ — ve nedeni yapisal: ikiliyi bozup (exit 3 doner) duman
+  denetimini sinadim; IDDIA TETIKLENDI ("FAIL dali"). Ama `make kemgu_self` phony oldugu
+  icin her cagrida YENIDEN LINK ediyor ve sabote edilen ikiliyi UZERINE YAZIYOR -> make
+  duzeyinde sabotaj tutunamiyor. Bu bir kusur DEGIL, dogru davranis. Gecerli bir make-duzeyi
+  sabotaji, derlenen ama calismayan bir ikili uretecek KAYNAK bozulmasi ister; maliyeti
+  yuksek, iddia-duzeyi kanit yeterli goruldu.
+  HANGI KAPI NEYI OLCTU: make kemgu_self rc=0 + duman denetimi . test_tumu TAM rc=0.
