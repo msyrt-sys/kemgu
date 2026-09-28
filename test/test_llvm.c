@@ -16,6 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* C5 AS001: KEMGU_HEDEF_MIMARI — konak mimarisi tek kaynak (D-469).
+ * Bu test src/*.c ile LINKLENMEZ (Makefile: yalniz test_llvm.c), ama
+ * -Isrc verildigi icin makro gorunur; olculen ikili de (build/kemgu)
+ * AYNI makroyla kurulur, dolayisiyla ikisi tanim geregi uyusur. */
+#include "llvm.h"
+
 static int toplam_test = 0;
 static int basarili = 0;
 static int basarisiz = 0;
@@ -2719,34 +2725,68 @@ static void test_audit_linear_imha(void) {
 
 /* --- C5: satirici_asm (inline assembly) --- */
 
+/* [D-469] SNAPSHOT SECIMI KONAK MIMARISINDEN TURETILIR — GOMULU DEGIL.
+ *
+ * OLCULDU (DGX Spark, aarch64, ilk yerli kosum): bu dort test
+ * `asm_round_trip.kem`i (x86_64 tagli) "konak" ve `asm_arm64_ret.kem`i
+ * (arm64 tagli) "yabanci" KABUL EDIYORDU. D-469 ile varsayilan hedef
+ * derleme platformundan turuyor, dolayisiyla ARM64 konakta roller TAM
+ * TERSINE dondu ve dordu de kirmizi oldu (293'te 4).
+ *
+ * Etiket tasiyan bir .kem dosyasi TANIM GEREGI mimariye ozguedur: AS001
+ * onu konak hedefiyle karsilastirir. Bu yuzden tek dosya iki konakta
+ * kosamaz ve `asm_round_trip_arm64.kem` bir IKIZ olarak eklendi —
+ * muafiyet degil, karsilik. Hangisinin kostugu, hangisinin AS001 yedigi
+ * artik konaktan secilir; kapi her iki konakta da ZORLAR.
+ *
+ * `[169]` ozellikle onemlidir: GERCEK komut kosturur (x86 `mov`/`add`,
+ * arm64 `mov`/`add`), yani salt etiket duzeltmesiyle gecmez — ARM64'te
+ * gercekten ARM64 komutu gerekir. */
+static int konak_arm64_mi(void) {
+    return strcmp(KEMGU_HEDEF_MIMARI, "arm64") == 0;
+}
+
+/* Konak mimarisine UYAN snapshot: derlenir, linklenir ve KOSAR. */
+static const char *asm_konak_snapshot(void) {
+    return konak_arm64_mi() ? "test/snapshots/asm_round_trip_arm64.kem"
+                            : "test/snapshots/asm_round_trip.kem";
+}
+
+/* Konak mimarisine UYMAYAN etiketli snapshot: AS001 ile REDDEDILMELI. */
+static const char *asm_yabanci_snapshot(void) {
+    return konak_arm64_mi() ? "test/snapshots/asm_round_trip.kem"
+                            : "test/snapshots/asm_arm64_ret.kem";
+}
+
 static void test_asm_round_trip_verify(void) {
     /* Coklu cikti + girdi + clobber: emit edilen modul opt'tan gecmeli. */
-    int ok = kemgu_llvm_opt_verify("test/snapshots/asm_round_trip.kem");
-    test_sonuc("satirici_asm round-trip: opt -passes=verify PASS", ok);
+    int ok = kemgu_llvm_opt_verify(asm_konak_snapshot());
+    test_sonuc("satirici_asm round-trip (konak mimari): opt -passes=verify PASS",
+               ok);
 }
 
 static void test_asm_round_trip_calistir(void) {
-    /* x86: girdi(40) -> mov+add ile cikti(42); ikinci cikti sabit 100. */
-    int rc = derle_dosya_ve_calistir("test/snapshots/asm_round_trip.kem");
-    test_sonuc("satirici_asm x86 girdi/cikti round-trip -> exit 42",
+    /* girdi(40) -> mov+add ile cikti(42); ikinci cikti sabit 100. */
+    int rc = derle_dosya_ve_calistir(asm_konak_snapshot());
+    test_sonuc("satirici_asm konak girdi/cikti round-trip -> exit 42",
                rc == 42);
 }
 
-static void test_asm_arm64_llvm_reddi(void) {
-    /* AS001: arm64-tagli asm x86 triple altinda --llvm BASARISIZ olmali
-     * (bozuk IR uretilmez; hedefe-duyarli triple C8'de). */
+static void test_asm_yabanci_llvm_reddi(void) {
+    /* AS001: konaktan FARKLI tagli asm --llvm'de BASARISIZ olmali
+     * (yanlis hedefe sessizce bozuk IR uretmek yerine derleme hatasi). */
     char komut[1024];
     snprintf(komut, sizeof(komut),
-             "%s --llvm test/snapshots/asm_arm64_ret.kem > %s 2>%s",
-             KEMGU_BIN, LL_PATH, DEV_NULL);
+             "%s --llvm %s > %s 2>%s",
+             KEMGU_BIN, asm_yabanci_snapshot(), LL_PATH, DEV_NULL);
     int rc = system(komut);
-    test_sonuc("satirici_asm arm64 tag -> --llvm AS001 reddi", rc != 0);
+    test_sonuc("satirici_asm YABANCI tag -> --llvm AS001 reddi", rc != 0);
 }
 
-static void test_asm_arm64_check_reddi(void) {
+static void test_asm_yabanci_check_reddi(void) {
     /* AS001 ayni zamanda --check yolunda (kaynak konumuyla). */
-    int ok = kemgu_check_basarili("test/snapshots/asm_arm64_ret.kem");
-    test_sonuc("satirici_asm arm64 tag -> --check AS001 reddi", ok == 0);
+    int ok = kemgu_check_basarili(asm_yabanci_snapshot());
+    test_sonuc("satirici_asm YABANCI tag -> --check AS001 reddi", ok == 0);
 }
 
 static void test_asm_guvensiz_disi_reddi(void) {
@@ -3695,8 +3735,8 @@ int main(void) {
     printf("\n--- C5: satirici_asm (inline assembly) ---\n");
     test_asm_round_trip_verify();
     test_asm_round_trip_calistir();
-    test_asm_arm64_llvm_reddi();
-    test_asm_arm64_check_reddi();
+    test_asm_yabanci_llvm_reddi();
+    test_asm_yabanci_check_reddi();
     test_asm_guvensiz_disi_reddi();
 
     printf("\n--- C-track: &Struct ref-param + alan atama + yetki ABI ---\n");

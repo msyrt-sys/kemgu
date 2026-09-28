@@ -5,6 +5,7 @@
 #include "tip.h"
 #include "sembol.h"
 #include "arena.h"
+#include "llvm.h"   /* C5 AS001: llvm_hedef_mimari() — konak mimarisi tek kaynak */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2468,75 +2469,114 @@ static void test_ciplak_call_rule_ciplak_ok(void) {
 
 /* === C5: satirici_asm tip kurallari (G002 / AS001 / AS002) === */
 
+/* [D-469] ASM ARCH-TAG ARTIK KONAKTAN TURETILIR — GOMULU DEGIL.
+ *
+ * OLCULDU (DGX Spark, aarch64, ilk yerli kosum): bu bes test kaynaga
+ * "mimari: x86_64" GOMUYORDU ve AS001'in 0/1 hata beklentisini buna
+ * dayandiriyordu. D-469 ile derleyicinin varsayilan hedefi DERLEME
+ * PLATFORMUNDAN turuyor (llvm.h: __aarch64__ -> "arm64"), dolayisiyla
+ * ARM64 konakta roller TAM TERSINE dondu: gomulu x86_64 etiketi AS001
+ * yedi, "yabanci" sanilan arm64 etiketi temiz gecti. Sonuc: 202'de 5
+ * kirmizi — derleyici DOGRU calisirken test yanlis olculuyordu.
+ *
+ * Etiket artik AS001'in karsilastirdigi ayni tek kaynaktan (src/tip.c:
+ * llvm_hedef_mimari()) gelir. Boylece test x86_64 konakta da ARM64
+ * konakta da AYNI SEYI olcer; "yabanci" etiket konaktan TURETILIR.
+ * Bu bir platform muafiyeti DEGILDIR: kapi her iki konakta da zorlar. */
+static const char *asm_konak_mimari(void) {
+    return llvm_hedef_mimari();
+}
+
+static const char *asm_yabanci_mimari(void) {
+    return strcmp(llvm_hedef_mimari(), "x86_64") == 0 ? "arm64" : "x86_64";
+}
+
+/* Kaynak sablonundaki tek %s'e mimari etiketini yerlestirir. */
+static const char *asm_kaynak(char *tampon, size_t n,
+                              const char *sablon, const char *mimari) {
+    int yazilan = snprintf(tampon, n, sablon, mimari);
+    /* Kirpilma sessizce yanlis program uretir -> testi kirmizi yap. */
+    if (yazilan < 0 || (size_t)yazilan >= n) return "@@KIRPILDI@@";
+    return tampon;
+}
+
 static void test_asm_temiz(void) {
     Arena *a = arena_olustur(0);
-    /* guvensiz icinde, x86_64 tagli, primitif cikti -> 0 hata */
-    int h = program_kontrol(
+    char k[512];
+    /* guvensiz icinde, KONAK mimari tagli, primitif cikti -> 0 hata */
+    int h = program_kontrol(asm_kaynak(k, sizeof(k),
         "i\xc5\x9flev f() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
+        "mimari: %s "
         "\xc5\x9f" "ablon: r#\"nop\"# "
         "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } } "
-        "ver x; }", a);
-    test_sonuc("asm: guvensiz + x86_64 + primitif cikti -> 0 hata", h == 0);
+        "ver x; }", asm_konak_mimari()), a);
+    test_sonuc("asm: guvensiz + KONAK mimari + primitif cikti -> 0 hata",
+               h == 0);
     arena_serbest(a);
 }
 
 static void test_asm_guvensiz_disi_g002(void) {
     Arena *a = arena_olustur(0);
-    int h = program_kontrol(
+    char k[512];
+    /* Etiket KONAK mimarisi -> AS001 tetiklenmez, tek hata G002 kalir. */
+    int h = program_kontrol(asm_kaynak(k, sizeof(k),
         "i\xc5\x9flev f() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
         "sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
+        "mimari: %s "
         "\xc5\x9f" "ablon: r#\"nop\"# "
         "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } "
-        "ver x; }", a);
+        "ver x; }", asm_konak_mimari()), a);
     test_sonuc("asm: guvensiz DISINDA -> G002 (1 hata)", h == 1);
     arena_serbest(a);
 }
 
-static void test_asm_arm64_as001(void) {
+static void test_asm_yabanci_mimari_as001(void) {
     Arena *a = arena_olustur(0);
-    /* arm64 tag, x86_64 hedef -> AS001 */
-    int h = program_kontrol(
+    char k[512];
+    /* Konaktan FARKLI etiket -> AS001. `wfi` arm64, `hlt` x86 komutudur;
+     * ikisi de yalniz metin — AS001 emit'ten ONCE, checker'da tetiklenir. */
+    int h = program_kontrol(asm_kaynak(k, sizeof(k),
         "i\xc5\x9flev f() -> tam32 { "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: arm64 "
-        "\xc5\x9f" "ablon: r#\"wfi\"# } } "
-        "ver 0; }", a);
-    test_sonuc("asm: arm64 tag x86_64 hedefte -> AS001 (1 hata)", h == 1);
+        "mimari: %s "
+        "\xc5\x9f" "ablon: r#\"nop\"# } } "
+        "ver 0; }", asm_yabanci_mimari()), a);
+    test_sonuc("asm: YABANCI mimari etiketi -> AS001 (1 hata)", h == 1);
     arena_serbest(a);
 }
 
 static void test_asm_tekkez_girdi_as002(void) {
     Arena *a = arena_olustur(0);
+    char k[512];
     /* C.1 lineer kara kutu: tekkez girdi DOGRUDAN gecemez */
-    int h = program_kontrol(
+    int h = program_kontrol(asm_kaynak(k, sizeof(k),
         "i\xc5\x9flev f() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken t: tekkez<tam32> = tekkez_olustur(5); "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
+        "mimari: %s "
         "\xc5\x9f" "ablon: r#\"nop\"# "
         "girdi(\"r\", t) } } "
-        "imha(t); ver 0; }", a);
+        "imha(t); ver 0; }", asm_konak_mimari()), a);
     test_sonuc("asm: tekkez girdi -> AS002 (1 hata, lineer-notr)", h == 1);
     arena_serbest(a);
 }
 
 static void test_asm_yapi_girdi_as002(void) {
     Arena *a = arena_olustur(0);
+    char k[512];
     /* C.1: yapi (kompozit) operand olamaz — yalniz primitif */
-    int h = program_kontrol(
+    int h = program_kontrol(asm_kaynak(k, sizeof(k),
         "yap\xc4\xb1 N { x: tam32; } "
         "i\xc5\x9flev f() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken n: N = N { x: 1 }; "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
+        "mimari: %s "
         "\xc5\x9f" "ablon: r#\"nop\"# "
         "girdi(\"r\", n) } } "
-        "ver 0; }", a);
+        "ver 0; }", asm_konak_mimari()), a);
     test_sonuc("asm: yapi girdi -> AS002 (1 hata, primitif degil)", h == 1);
     arena_serbest(a);
 }
@@ -2787,7 +2827,7 @@ int main(void) {
     printf("\n--- C5: satirici_asm (G002 / AS001 / AS002) ---\n");
     test_asm_temiz();
     test_asm_guvensiz_disi_g002();
-    test_asm_arm64_as001();
+    test_asm_yabanci_mimari_as001();
     test_asm_tekkez_girdi_as002();
     test_asm_yapi_girdi_as002();
 

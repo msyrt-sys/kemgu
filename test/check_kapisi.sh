@@ -54,19 +54,46 @@ muaf() {
   return 0
 }
 
+# --- [D-469] ARCH-ETİKETLİ DOSYA KENDİ BAYRAĞIYLA DENETLENİR ---
+# `satıriçi_asm` bloğundaki `mimari:` etiketi AS001'de KONAK hedefiyle
+# karşılaştırılır ve D-469'dan beri varsayılan hedef DERLEME PLATFORMUNDAN
+# gelir. Bayraksız `--check` bu yüzden KONAĞA BAĞLI sonuç verir: aynı dosya
+# x86_64'te geçer, ARM64'te AS001 yer. DGX Spark'ta ÖLÇÜLDÜ —
+# `test/cg_korpus/cg_satirici_asm.kem` (etiketi `x86_64`) kapıyı kırmızı yaptı.
+#
+# Bu kapının ölçtüğü şey TİP DENETİMİDİR, konak mimarisi değil. Dosyanın
+# KENDİ etiketi bayrak olarak verilir — muafiyet DEĞİL, doğru bayrak; yukarıda
+# `kem_kullanici.kem` için zaten uygulanan desenin genelleştirilmişi.
+#
+# ⚠ YALNIZ TEK ETİKETLİ dosyalarda uygulanır. Kasten BİRDEN ÇOK mimari
+# karıştıran dosyalar (ör. `tc24_01_as001.kem`) AS001'in ta kendisini ölçer;
+# onlara bayrak vermek testin anlamını yok ederdi. Birden çok farklı etiket
+# görülürse bayrak verilmez ve dosya bayraksız denetlenir.
+dosya_mimari() {
+  etiketler="$(grep -oE 'mimari:[[:space:]]*(x86_64|arm64)' "$1" 2>/dev/null \
+                | grep -oE '(x86_64|arm64)' | sort -u)"
+  [ "$(printf '%s\n' "$etiketler" | grep -c .)" -eq 1 ] || return 1
+  printf '%s' "$etiketler"
+}
+
 red=0; tot=0; muaf_n=0
 for f in test/cg_korpus/*.kem test/ornekler/*.kem stdlib/*.kem \
          stdlib/temel/*.kem stdlib/kripto/*.kem; do
   [ -f "$f" ] || continue
   tot=$((tot + 1))
-  if "$KEMGU" --check "$f" >/dev/null 2>&1; then continue; fi
+  if mim="$(dosya_mimari "$f")"; then
+    set -- --mimari "$mim"
+  else
+    set --
+  fi
+  if "$KEMGU" --check "$@" "$f" >/dev/null 2>&1; then continue; fi
   if gerekce="$(muaf "$f")"; then
     muaf_n=$((muaf_n + 1))
     continue
   fi
   red=$((red + 1))
-  echo "  🔴 $f"
-  "$KEMGU" --check "$f" 2>&1 | grep -m1 "hata\[" | sed 's/^/       /'
+  echo "  🔴 $f${mim:+  (--mimari $mim)}"
+  "$KEMGU" --check "$@" "$f" 2>&1 | grep -m1 "hata\[" | sed 's/^/       /'
 done
 
 # --- KEM-OS BİRLEŞİK KAYNAK (tek başına parça dosyalar yukarıda muaf) ---
