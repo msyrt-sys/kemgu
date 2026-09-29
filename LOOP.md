@@ -103,7 +103,15 @@
       oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
       uretir -> her site FIKSTURLE kanitlanmali. Yontem: once hata SEKLINI yaz,
       C'ye sor, konum uyusuyorsa site esle.
-- [~] C0c [M] PARSER DAVRANIS FARKI (kod eslemesi DEGIL) — D-647'de olculdu.
+- [~] C0c [M] PARSER DAVRANIS FARKI — D-650'de 6/7 sekil BIREBIR oldu.
+      KALAN TEK SEKIL: `işlev main() -> tam32` govde suslusu eksikken UST-DUZEY
+      P001 cascade'i (C: P017 + iki P001; self: yalniz P017). `parser_panik_sync`
+      sonrasi ust-duzey dagitici sitesi eslenmeli.
+- [ ] G14 [S] KAPI ASILMA HALINDE TIMEOUT'A DUSUYOR, temiz kirmizi vermiyor.
+      D-650'de olculdu: S150b sabotaji `checker_diff`i ASTI ve `make rc=124`
+      (timeout) dondu. Asilan kapi, dusen kapidan kotu teshis edilir (CI'da
+      "neden bekliyor?" sorusu). Harness per-dosya timeout ile sarilmali.
+- [~] C0c-eski [M] (D-647 kaydi, ayrintisi yukarida)
       (1) [x] D-648: govde suslusu eksik -> self artik `P017 2 5` (onceden `OK`).
           KOK D-643'UN BOSLUGUYDU: kapi TABLOYA bagliydi ama `bekle` DISINDAKI
           13 site `hata_say`i dogrudan artirip tabloya HIC yazmiyordu -> sayac>0,
@@ -1494,3 +1502,38 @@
   gozlemi.
   HANGI KAPI NEYI OLCTU: checker_diff 196 -> 198/198 . self_driver 157 -> 159/159 .
   test_tumu TAM rc=0; ozette iki fark: +2 fikstur ve dalgalanan ASan sayisi.
+- 2026-09-29 D-650: kurtarma davranisi paritesi — 6/7 sekil birebir. VE BIR KOR
+  NOKTA KAPANDI (asil bulgu bu).
+  ONCE: yedi hata seklinden UCU uyusuyordu. SONRA: ALTISI. Kalan tek sekil
+  ust-duzey P001 cascade'i.
+  IKI YAPISAL FARK bulundu (kod eslemesi DEGIL):
+  (1) PARAMETRE KURTARMASI: C, parametre adi tanimlayici degilse P012 basip
+      HEMEN hata dugumuyle DONER (parser.c:269). Self-host DEVAM ediyordu
+      (`:` + `parse_tip`) ve C'nin basmadigi FAZLADAN tanilar uretiyordu
+      (olculdu: `işlev main -> tam32` icin C uc tani, self BES; sonraki taninin
+      sutunu da kayiyordu). C aynalandi -> birebir.
+  (2) EKSIK SONSUZ-DONGU KORUMASI — dolayli bir tani kaymasi yaratiyordu:
+      `parse_birincil`in son caresi C'de ILERLEMEZ ama self-host'ta ilerlemek
+      ZORUNDAYDI, cunku C'nin `parse_blok`taki "token ilerlemediyse zorla ilerle"
+      korumasi (parser.c:1164) self-host'ta HIC YOKTU. Sira onemliydi: ONCE
+      koruma eklendi, SONRA ilerleme kaldirildi. Korlemesine yapilmadi — once
+      C'de koruma olup olmadigi olculdu.
+  ⚠⚠ ASIL BULGU — SABOTAJIM GECERSIZ CIKTI VE SEBEBI KAPININ KAPSAMIYDI:
+  S150 (korumayi devre disi birak) kapiyi KIRMIZI YAPMADI (make rc=0, 200/200).
+  "Demek koruma gereksiz" demek COK KOLAY olurdu. Olctum: yedi seklin hicbiri
+  asilmiyor. Sonra DAHA ZORLAYICI girdiler denedim: `{ , }`, `{ : }`, `{ ) }`
+  ucu de 5 sn timeout'a takildi -> KORUMA YUK TASIYOR, iddiam dogruydu.
+  Gecersiz olan sabotaj degil KAPSAMDI: koruma eklendiginde onu SINAYAN hicbir
+  korpus dosyasi yoktu. Yuk tasiyan bir mekanizma tamamen kapsam disiydi.
+  Bu, bu oturumda DORDUNCU kez ayni ders (C1, C2, C0, simdi burasi):
+  KAPI YESIL OLMASI YUZEYIN OLCULDUGU ANLAMINA GELMEZ.
+  KOR NOKTA KAPATILDI: `{ , }` icin bir kod eksigi daha vardi (C P101, self
+  P000); eslendi -> parite tam. `tc48_09` korpusa girdi ve dongu korumasini
+  SINAYAN ILK dosya oldu. S150b (fikstur varken ayni sabotaj) -> `make rc=124`
+  yani kapi ASILDI = gecerli kirmizi.
+  ⚠ YAN BULGU: asilan kapi TEMIZ KIRMIZI vermiyor, timeout'a dusuyor. Kuyruga
+  G14 olarak girdi (asilan kapi, dusen kapidan kotu teshis edilir).
+  ESLENEN KOD SAYISI: D-647'de 4 -> simdi 16 (P080/P070/P071/P021/P261/P269/
+  P264/P017/P015/P016/P012/P013/P081/P082/P010/P101).
+  HANGI KAPI NEYI OLCTU: checker_diff 198 -> 201/201 . self_driver 159/159 .
+  parser_diff 14/14 . test_tumu TAM rc=0; ozette TEK fark +3 fikstur.
