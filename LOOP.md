@@ -103,10 +103,11 @@
       oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
       uretir -> her site FIKSTURLE kanitlanmali. Yontem: once hata SEKLINI yaz,
       C'ye sor, konum uyusuyorsa site esle.
-- [~] C0c [M] PARSER DAVRANIS FARKI — D-650'de 6/7 sekil BIREBIR oldu.
-      KALAN TEK SEKIL: `işlev main() -> tam32` govde suslusu eksikken UST-DUZEY
-      P001 cascade'i (C: P017 + iki P001; self: yalniz P017). `parser_panik_sync`
-      sonrasi ust-duzey dagitici sitesi eslenmeli.
+- [x] C0c -> D-651. YEDI SEKLIN HEPSI + uc asilma girdisi BIREBIR. Son sekil
+      (ust-duzey P001 cascade'i) `panik_senkron` ile kapandi — C parser.c:175
+      aynasi (13 senkron belirtec; `;`/`}` tuketilir, anahtar kelimeler DEGIL).
+      Yan kazanim: `check_genis` muafiyetinden `tip_alias` DUSTU (harness kendi
+      uyarisiyla bildirdi), 134/134 (13 muaf) -> 135/135 (12 muaf).
 - [ ] G14 [S] KAPI ASILMA HALINDE TIMEOUT'A DUSUYOR, temiz kirmizi vermiyor.
       D-650'de olculdu: S150b sabotaji `checker_diff`i ASTI ve `make rc=124`
       (timeout) dondu. Asilan kapi, dusen kapidan kotu teshis edilir (CI'da
@@ -1537,3 +1538,26 @@
   P264/P017/P015/P016/P012/P013/P081/P082/P010/P101).
   HANGI KAPI NEYI OLCTU: checker_diff 198 -> 201/201 . self_driver 159/159 .
   parser_diff 14/14 . test_tumu TAM rc=0; ozette TEK fark +3 fikstur.
+- 2026-09-29 D-651: ust-duzey panik cascade'i — C0c TAMAMLANDI.
+  Eksik IKI seydi, ikincisi YAPISAL:
+  (1) Ust-duzey son care kod KAYDETMIYORDU -> `parse_hata_kaydet(p,"P001")`.
+  (2) KURTARMA STRATEJISI FARKLIYDI: self-host TEK BELIRTEC ilerliyordu, C ise
+      `parser_panik_sync` (parser.c:175) ile SENKRON BELIRTECE KADAR yutuyor ve
+      sonra `;`/`}` ise ONU DA tuketiyor (anahtar kelimeler TUKETILMEZ — yeni
+      tanim baslangicidir). C'nin 13 belirteclik senkron kumesi aynalandi.
+  Sonuc: `işlev main() -> tam32` govdesiz dosyada
+    C / SELF: P017 2:5 . P001 2:5 . P001 3:1  (BIREBIR)
+  D-647'de yedi sekilden UCU uyusuyordu; simdi YEDISI + uc asilma girdisi (h1/h2/h4)
+  de birebir. Eslenen kod: 16 -> 17 (P001).
+  SABOTAJ S151: `panik_senkron` -> tek ilerleme (yani DAVRANISI hedefledi, kod
+  dizgesini degil) -> checker_diff 201/202, make rc=2, derleme temiz.
+  ⚠ ACIKLANMAMIS METRIK DEGISIMI ARASTIRILDI (D-648'deki refleksin tekrari):
+  `check_genis` 134/134 (13 muaf) -> 135/135 (12 muaf). Harness'in KENDI uyarisi
+  sebebi soyledi: "tip_alias — MUAF ama artik ESLESIYOR". Olculdu: dosya
+  `tip Yas = tam32;` (desteklenmeyen tip takma adi) kullaniyor, C iki `P001`
+  basiyor ve self-host artik BIREBIR ayni ciktiyi veriyor. Muafiyet BAYATLADI ve
+  silindi (D-419: "muafiyet listesi bir KOR NOKTA ENVANTERIDIR").
+  Yani bu onarim, kendisiyle ilgisiz gorunen bir muafiyeti de gecersiz kildi —
+  metrik degisimini arastirmasaydim bayat muafiyet listede kalacakti.
+  HANGI KAPI NEYI OLCTU: checker_diff 201 -> 202/202 . check_genis 134 -> 135/135
+  (muaf 13 -> 12) . parser_diff 14/14 . self_driver 14/14 . test_tumu TAM rc=0.
