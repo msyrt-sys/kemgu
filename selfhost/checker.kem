@@ -804,6 +804,26 @@ işlev ilerle(p: &değişken Ayr) -> tam32 { p.imlec = p.imlec + 1; ver 0; }
 // sayac > 0 iken tablo BOS kaliyor ve kapi ATESLEMIYOR -> sessiz-kabul.
 // OLCULDU: `işlev main() -> tam32` govde suslusu eksikken C uc tani basar,
 // self `OK` derdi (satir 1952 sayaci artiriyordu, kayit yoktu).
+// [D-651] PANIK SENKRON — C `parser_panik_sync` (parser.c:175) AYNASI.
+// Senkron belirtece kadar yut, sonra `;` ya da `}` ise ONU DA tuket
+// (deyim/blok sonu). Anahtar kelimeler TUKETILMEZ — yeni tanim baslangicidir.
+// Oncesinde self-host'un ust-duzey son caresi YALNIZ BIR belirtec ilerliyordu ->
+// C'nin bastigi tani sayisi ve konumlari ayrisiyordu (olculdu: govde suslusu
+// eksik dosyada C `P017 2:5 P001 2:5 P001 3:1`, self yalniz `P017 2:5`).
+işlev senkron_belirtec_mi(t: metin) -> mantıksal {
+    ver metin_esit(t, "NOKTALI_VIRGUL") veya metin_esit(t, "SAG_SUSLU")
+     veya metin_esit(t, "ISLEV") veya metin_esit(t, "GERCEKZAMANLI")
+     veya metin_esit(t, "CIPLAK") veya metin_esit(t, "YAPI")
+     veya metin_esit(t, "OZELLIK") veya metin_esit(t, "MODUL")
+     veya metin_esit(t, "KULLAN") veya metin_esit(t, "DISA")
+     veya metin_esit(t, "SABIT") veya metin_esit(t, "UYGULA")
+     veya metin_esit(t, "DOSYA_SONU");
+}
+işlev panik_senkron(p: &değişken Ayr) -> tam32 {
+    iken senkron_belirtec_mi(simdiki(p)) == yanlış { ilerle(p); }
+    eğer sim_mi(p, "NOKTALI_VIRGUL") veya sim_mi(p, "SAG_SUSLU") { ilerle(p); }
+    ver 0;
+}
 işlev parse_hata_kaydet(p: &değişken Ayr, kod: metin) -> tam32 {
     p.hata_say = p.hata_say + 1;
     dizi_ekle(p.ph_kod, kod);
@@ -1935,8 +1955,9 @@ işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "MODUL") { ver parse_modul(p); }
     // P5: satıriçi_asm (üst düzey değil; deyim) — kalan
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
-    p.hata_say = p.hata_say + 1;
-    ilerle(p);
+    // [D-651] C parser.c:1141 aynasi — P001 + PANIK SENKRON (tek ilerleme DEGIL).
+    parse_hata_kaydet(p, "P001");
+    panik_senkron(p);
     ver dugum0(p, "HATA", "", s, u);
 }
 işlev parse_program(p: &değişken Ayr) -> tam32 {

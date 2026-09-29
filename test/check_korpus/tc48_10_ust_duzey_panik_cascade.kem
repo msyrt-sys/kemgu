@@ -1,0 +1,12 @@
+// [D-651] ÜST-DÜZEY PANİK CASCADE — C0c'nin son şekli.
+//
+// `işlev main() -> tam32` gövde süslüsü YOK. C üç tanı basar:
+//   P017 (işlev gövdesi için '{'), sonra panik-senkron; üst düzey `ver`i tanım
+//   başlangıcı sayamaz -> P001; senkron `;`i tüketir; sonra `}` -> yine P001.
+//
+// Öncesinde self YALNIZ P017 basıyordu: üst-düzey son çare kod kaydetmiyor VE
+// tek belirteç ilerliyordu (C senkron belirtece kadar yutup `;`/`}` tüketir).
+// `panik_senkron` C parser.c:175'in aynası olarak eklendi.
+işlev main() -> tam32
+    ver 0;
+}

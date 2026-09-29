@@ -92,8 +92,14 @@ fi
 #      basar (kapanisin donus tipi cozulemiyor), self-host basmaz -> fark tam
 #      2 kaskad satiri (C 10, self 8 tani). Birlestirilmis hali
 #      calistir_stdlib_check'te TEMIZ gecer (C ve self: exit 0).
+# [D-651] `tip_alias` MUAFIYETTEN CIKARILDI — harness'in kendi uyarisi uzerine:
+# "MUAF ama artik ESLESIYOR". Sebep olculdu: dosya `tip Yas = tam32;` (desteklenmeyen
+# tip takma adi) kullaniyor ve C iki `P001` basiyor; self-host `panik_senkron`
+# (C parser.c:175 aynasi) + P001 eslemesi geldikten sonra BIREBIR ayni ciktiyi
+# veriyor. Muafiyet artik bayat: D-419'un "muafiyet listesi bir KOR NOKTA
+# ENVANTERIDIR" kurali geregi silindi.
 MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
-tip_alias test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit
+test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit
 test_semafor test_bariyer test_regex"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
