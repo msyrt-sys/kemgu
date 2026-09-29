@@ -1,0 +1,3 @@
+// [D-653] P022 — `yapı` gövdesi '{' eksik (C parser.c:565).
+yapı N x: tam32; }
+işlev main() -> tam32 { ver 0; }

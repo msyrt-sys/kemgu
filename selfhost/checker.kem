@@ -824,6 +824,16 @@ işlev panik_senkron(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "NOKTALI_VIRGUL") veya sim_mi(p, "SAG_SUSLU") { ilerle(p); }
     ver 0;
 }
+// [D-653] KONUM VERILEN tani kaydi. `parse_hata_kaydet` GECERLI token'in
+// konumunu kullanir; C bazi tanilari BASKA bir token'a baglar (or. zorunlu asm
+// clause eksikligi `satıriçi_asm` ANAHTAR KELIMESINE baglanir, kapanis `}`ya degil).
+işlev parse_hata_konum(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+    p.hata_say = p.hata_say + 1;
+    dizi_ekle(p.ph_kod, kod);
+    dizi_ekle(p.ph_sat, sat);
+    dizi_ekle(p.ph_sut, sut);
+    ver 0;
+}
 işlev parse_hata_kaydet(p: &değişken Ayr, kod: metin) -> tam32 {
     p.hata_say = p.hata_say + 1;
     dizi_ekle(p.ph_kod, kod);
@@ -1538,7 +1548,7 @@ işlev parse_esles_kolu(p: &değişken Ayr) -> tam32 {
     bekle(p, "KALIN_OK");
     değişken govde: tam32 = 0;
     eğer sim_mi(p, "SOL_SUSLU") { govde = parse_blok(p); }
-    değilse { govde = parse_ifade(p); bekle(p, "NOKTALI_VIRGUL"); }
+    değilse { govde = parse_ifade(p); bekle_k(p, "NOKTALI_VIRGUL", "P221"); }   // [D-653] C parser.c:1501
     ver dugum2(p, "ESLES_KOLU", "", s, u, desen, govde);
 }
 işlev parse_esles(p: &değişken Ayr) -> tam32 {
@@ -1568,6 +1578,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     değişken kids: Dizi<tam32> = [];   // girdi ifadeleri
     değişken mim: metin = "";          // D-373: `mimari:` etiketi (AS001 yan-kanalı)
     değişken cev_var: tam32 = 0;       // D-553: `çevrim:` anotasyonu görüldü mü
+    değişken sab_var: tam32 = 0;       // [D-653] `şablon:` görüldü mü (bu dosya şablonu SAKLAMAZ, atlar)
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
@@ -1580,7 +1591,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 bekle(p, "TANIMLAYICI");
             } değilse {
             eğer metin_esit(lx, "şablon") {
-                ilerle(p); bekle(p, "IKI_NOKTA"); asm_kisit_atla(p);
+                ilerle(p); bekle(p, "IKI_NOKTA"); asm_kisit_atla(p); sab_var = 1;   // [D-653]
             } değilse {
             eğer metin_esit(lx, "çevrim") {
                 ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p); cev_var = 1;
@@ -1602,7 +1613,13 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
             } } } } } }
         }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P260");   // [D-653] C parser.c:1758
+    // [D-653] ZORUNLU CLAUSE DENETIMLERI — C parser.c:1761-1769 aynasi.
+    // Self-host'ta BU DENETIMLER HIC YOKTU: `satıriçi_asm { şablon: ... }`
+    // (mimari YOK) sessizce KABUL ediliyordu, C ise P266 ile reddediyor (olculdu).
+    // Konum `satıriçi_asm` anahtar kelimesidir (s,u), kapanis `}` DEGIL.
+    eğer metin_esit(mim, "") { parse_hata_konum(p, "P266", s, u); }
+    eğer sab_var == 0 { parse_hata_konum(p, "P267", s, u); }
     değişken nd: tam32 = dugum_n(p, "SATIRICI_ASM", "", s, u, kids);
     dizi_ekle(p.asm_node, nd); dizi_ekle(p.asm_mim, mim);   // D-373
     dizi_ekle(p.asm_cev, cev_var);                          // D-553
@@ -1710,7 +1727,7 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
     bekle_k(p, "TANIMLAYICI", "P021");   // [D-647] C parser.c:555 yapi adi
     eğer lineer { dizi_ekle(p.ly_ad, ad); }
     atla_tip_paramlar_sahipli(p, ad);   // D-369: bound tablosu (T030/T031)
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P022");   // [D-653] C parser.c:565 yapi '{'
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
@@ -1791,7 +1808,7 @@ işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // özellik
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P200");   // [D-653] C parser.c:719 ozellik adi
     atla_tip_paramlar(p);
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];
@@ -1831,7 +1848,7 @@ işlev parse_sabit(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // sabit
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P030");   // [D-653] C parser.c:848 sabit adi
     bekle(p, "IKI_NOKTA");
     değişken tip: tam32 = parse_tip(p);
     bekle(p, "ESIT");

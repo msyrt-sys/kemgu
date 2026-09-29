@@ -1,0 +1,3 @@
+// [D-653] P030 — `sabit` adı eksik (C parser.c:848).
+sabit : tam32 = 1;
+işlev main() -> tam32 { ver 0; }
