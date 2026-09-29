@@ -1,0 +1,12 @@
+// [D-650] `değişken x tam32 = 0` — annotasyon iki noktası eksik.
+// C: P081 ('=' bekleniyor), P082 (';'), P010 (ifade bekleniyor).
+//
+// Bu fikstür İKİ ayrı onarımı kilitler:
+//   1. P081/P082/P010 kod eşlemesi,
+//   2. `parse_birincil` son-çaresinin ARTIK İLERLEMEMESİ (C gibi) — bu ancak
+//      `parse_blok`a C'nin sonsuz-döngü koruması eklendikten SONRA güvenliydi.
+//      İlerleme kalkmasaydı fazladan bir tanı ve kaymış sütun kalırdı.
+işlev main() -> tam32 {
+    değişken x tam32 = 0;
+    ver 0;
+}

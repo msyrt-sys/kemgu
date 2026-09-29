@@ -1069,8 +1069,17 @@ işlev parse_parametre(p: &değişken Ayr) -> tam32 {
     }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
-    bekle(p, "IKI_NOKTA");
+    // [D-650] C parser.c:269 AYNASI — parametre adi tanimlayici DEGILSE P012
+    // basip HEMEN hata dugumuyle DON. Oncesinde burada devam ediliyordu
+    // (`IKI_NOKTA` + `parse_tip`), bu da C'nin basmadigi FAZLADAN tanilar
+    // ureterek cascade'i ayristiriyordu (olculdu: `işlev main -> tam32` icin
+    // C uc tani, self BES; ayrica sonraki taninin SUTUNU kayiyordu).
+    eğer sim_mi(p, "TANIMLAYICI") == yanlış {
+        parse_hata_kaydet(p, "P012");
+        ver dugum0(p, "HATA", "", s, u);
+    }
+    ilerle(p);   // tanimlayici tuket (C: parser_ilerle)
+    bekle_k(p, "IKI_NOKTA", "P013");   // [D-650] C parser.c:273
     ver dugum1(p, "PARAMETRE", ad, s, u, parse_tip(p));
 }
 // Generic tip parametre listesi `<T, U: B1 + B2, ...>` — PARSE + DISCARD (dump'ta
@@ -1221,9 +1230,15 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
         bekle(p, "SAG_PAREN");
         ver ic;
     }
-    // P1 dışı (KESIRLI float → sonraki adım): hata düğümü
-    p.hata_say = p.hata_say + 1;
-    ilerle(p);
+    // P1 dışı: hata düğümü. [D-650] C `ifade.c:441` aynası — kod P010.
+    // ⚠ `ilerle(p)` KORUNDU: C burada ilerlemez ama C'nin cagrian
+    // dongulerinde ayri sonsuz-dongu korumasi var (parser.c "token ilerlemediyse
+    // zorla ilerle"). Self-host'ta o koruma YOK; ilerlemeyi kaldirmak ASILMA
+    // riski demek. Konum farki (olculdu: C 2:24, self 2:26) bu ilerlemeden
+    // gelebilir -> once KOD eslendi, ilerleme davranisi AYRI bir olcum isi.
+    // [D-650] ILERLEME KALDIRILDI — C `ifade.c:441` ilerlemez. Artik guvenli:
+    // `parse_blok` dongusune C'nin sonsuz-dongu korumasi eklendi.
+    parse_hata_kaydet(p, "P010");
     ver dugum0(p, "HATA", "", s, u);
 }
 
@@ -1352,9 +1367,9 @@ işlev parse_degisken(p: &değişken Ayr) -> tam32 {
     bekle_k(p, "TANIMLAYICI", "P080");   // [D-647] C parser.c:1201 degisken adi
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "IKI_NOKTA") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
-    bekle(p, "ESIT");
+    bekle_k(p, "ESIT", "P081");            // [D-650] C parser.c:1208
     dizi_ekle(kids, parse_ifade(p));
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P082");  // [D-650] C parser.c:1211
     ver dugum_n(p, "DEGISKEN", ad, s, u, kids);
 }
 işlev parse_ifade_veya_atama(p: &değişken Ayr) -> tam32 {
@@ -1366,7 +1381,7 @@ işlev parse_ifade_veya_atama(p: &değişken Ayr) -> tam32 {
         bekle(p, "NOKTALI_VIRGUL");
         ver dugum2(p, "ATAMA", "", s, u, e, dg);
     }
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P101");   // [D-650] C parser.c:1254
     ver dugum1(p, "IFADE_DEYIMI", "", s, u, e);
 }
 işlev parse_eger(p: &değişken Ayr) -> tam32 {
@@ -1592,7 +1607,19 @@ işlev parse_blok(p: &değişken Ayr) -> tam32 {
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
-        değilse { dizi_ekle(kids, parse_deyim(p)); }
+        değilse {
+            // [D-650] SONSUZ DONGU KORUMASI — C parser.c:1164 aynasi.
+            // C'de bu koruma VARDI, self-host'ta YOKTU. Eksikligi dolayli bir
+            // etki yaratiyordu: `parse_birincil`in son-caresi C'de ILERLEMEZ ama
+            // self-host'ta ilerlemek ZORUNDAYDI (yoksa asilirdi) ve o fazladan
+            // ilerleme tani cascade'ini kaydiriyordu (olculdu: C uc tani,
+            // self dort; sutun 2:24 yerine 2:26).
+            değişken onceki: tam32 = p.imlec;
+            dizi_ekle(kids, parse_deyim(p));
+            eğer (p.imlec == onceki) ve (sim_mi(p, "DOSYA_SONU") == yanlış) {
+                ilerle(p);
+            }
+        }
     }
     bekle_k(p, "SAG_SUSLU", "P071");   // [D-647] C parser.c:1171 blok '}'
     ver dugum_n(p, "BLOK", "", s, u, kids);
@@ -1619,7 +1646,7 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
     atla_tip_paramlar(p);
-    bekle(p, "SOL_PAREN");
+    bekle_k(p, "SOL_PAREN", "P015");   // [D-650] C parser.c:343 imza "("
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "SAG_PAREN") == yanlış {
         değişken devam: mantıksal = doğru;
@@ -1629,7 +1656,7 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
             değilse { devam = yanlış; }
         }
     }
-    bekle(p, "SAG_PAREN");
+    bekle_k(p, "SAG_PAREN", "P016");   // [D-650] C parser.c:354 imza ")"
     eğer sim_mi(p, "OK") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
     eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
     değilse {

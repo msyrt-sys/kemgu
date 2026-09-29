@@ -1,0 +1,10 @@
+// [D-650] İMZA PAREN CASCADE — üç tanı, birebir.
+// `işlev main -> tam32`: C önce P015 ('(' bekleniyor), sonra parametre adı
+// tanımlayıcı olmadığı için P012, sonra P016 (')') basar — ÜÇÜ DE AYNI KONUMDA
+// çünkü C hiçbirinde ilerlemez.
+//
+// Öncesinde self BEŞ tanı basıyordu: `parse_parametre` ad başarısız olunca
+// DEVAM ediyordu (`:` + tip), C ise hemen hata düğümüyle DÖNÜYOR.
+işlev main -> tam32 {
+    ver 0;
+}
