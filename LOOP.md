@@ -103,12 +103,11 @@
       oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
       uretir -> her site FIKSTURLE kanitlanmali. Yontem: once hata SEKLINI yaz,
       C'ye sor, konum uyusuyorsa site esle.
-- [ ] C0c [M] PARSER DAVRANIS FARKI (kod eslemesi DEGIL) — D-647'de olculdu,
-      uc ayri sekil:
-      (1) `işlev main() -> tam32` GOVDE SUSLUSU EKSIK: C uc tani (P017 2:5,
-          P001 2:5, P001 3:1), self `OK` — yani parser HIC HATA SAYMIYOR, tablo
-          bos kaliyor. D-643 tabloyu ekledi ama bu sekil ona hic ulasmiyor.
-          ⚠ HALA SESSIZ-KABUL vakasi.
+- [~] C0c [M] PARSER DAVRANIS FARKI (kod eslemesi DEGIL) — D-647'de olculdu.
+      (1) [x] D-648: govde suslusu eksik -> self artik `P017 2 5` (onceden `OK`).
+          KOK D-643'UN BOSLUGUYDU: kapi TABLOYA bagliydi ama `bekle` DISINDAKI
+          13 site `hata_say`i dogrudan artirip tabloya HIC yazmiyordu -> sayac>0,
+          tablo bos, kapi ateslemiyor. `parse_hata_kaydet` + EMNIYET AGI eklendi.
       (2) `işlev main -> tam32` (paren eksik): C uc tani, self DORT (fazladan 1:16).
       (3) `değişken x tam32 = 0`: son taninin SUTUNU kayiyor (C 2:24, self 2:26).
 - [ ] C0b [M] C'nin PANIK CASCADE paritesi: `&r.deger` icin C DORT tani basar
@@ -231,6 +230,13 @@
 - [ ] G5  [?] checker.kem ile codegen.kem PARSER YUZEYI farkli: `çıktı` gecisi
       4'e 32. checker.kem asm cikti clause'unu ayni sekilde ayristirmiyor olabilir
       -> sessiz parite bosluğu. ONCE OLC.
+- [ ] G13 [S] `SIZINTI-MUAF` METRIGI DALGALANIYOR. D-648'de olculdu: dort
+      gozlemin birinde 2 yerine 1 cikti (kanal_mesaj/gorev_temel sizintisi her
+      kosumda MANIFEST OLMUYOR). Bu, bu oturumda kullandigim birincil dogrulama
+      yontemini (ozet satirlarini onceki yesille diff'lemek) yanlis-pozitife acik
+      kiliyor. Metrik ya kararli hale getirilmeli ya da ozette dalgalandigi
+      ISARETLENMELI. (Degisikligimle ilgisi OLMADIGI ayrica kanitlandi: ASan
+      kapisi yalniz `$KEMGU`yu kullaniyor, self-host ikilisine hic dokunmuyor.)
 - [ ] G6  [S] `P000` yer tutucu envanteri (iki dosyada 3'er yer) — C0a ilerledikce
       sifira inmeli; kalanlar listelenmeli.
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
@@ -1424,3 +1430,32 @@
   S148b (dogru): checker_diff 195/196, make rc=2, derleme temiz.
   HANGI KAPI NEYI OLCTU: checker_diff 193 -> 196/196 . self_driver 154 -> 157/157 .
   test_tumu TAM rc=0; ozette TEK fark checker_diff'in +3 fiksturu.
+- 2026-09-29 D-648: govde-suslusu sessiz-kabulu kapandi + EMNIYET AGI.
+  KOK KENDI D-643 ONARIMIMIN BOSLUGUYDU: tani tablosunu ekleyip kapiyi TABLOYA
+  baglamistim, ama `bekle` DISINDAKI 13 site `p.hata_say`i DOGRUDAN artirip
+  tabloya HIC yazmiyordu. Sonuc: sayac > 0 iken tablo BOS kaliyor ve kapi
+  ATESLEMIYOR. Yani D-643 "parse hatalari artik gorunur" derken aslinda YALNIZ
+  `bekle` uzerinden gelenleri gorunur kilmisti.
+  Olculdu: `işlev main() -> tam32` govde suslusu eksikken C uc tani basar
+  (P017 2:5, P001 2:5, P001 3:1), self `OK` derdi. Satir 1952 sayaci artiriyordu,
+  kayit yoktu.
+  ONARIM 1: `parse_hata_kaydet(p, kod)` — sayaci artirir VE tabloya kod+konum
+  yazar. P017 sitesi buna baglandi (C parser.c:367 aynasi). Sonuc: self
+  `P017 2 5` — C'nin KONUMUYLA BIREBIR. (C'nin uc tanili cascade'i C0b'de.)
+  ONARIM 2 — EMNIYET AGI (asil degerli kisim): kapi artik "sayac > 0 AMA tablo
+  BOS" durumunu da yakalayip `P000 0 0` basiyor. Kalan 12 kayitsiz site artik
+  SESSIZCE GECEMEZ. Amac dogru kodu vermek DEGIL, sessiz kalmamak.
+  AGIN DISI OLCULDU: asm blogunda bilinmeyen clause ile kayitsiz site (satir
+  1872) tetiklendi -> self onceden `OK`, simdi `P000 0 0` (C: uc P261).
+  Ag hicbir kapiyi bozmuyor (checker_diff 196/196, self_driver 157/157) -> bedava
+  sigorta. ⚠ Boyle bir dosya KORPUSA KONAMAZ: ag parite degil emniyet.
+  ⚠ ACIKLANMAMIS METRIK DEGISIMI ARASTIRILDI: tam kosumda ASan ozeti
+  `SIZINTI-MUAF=2` -> `1` dondu. Degisiklige YUKLEMEDIM, olctum: uc ardisik
+  ASan kosumu 2 verdi, yani dort gozlemin birinde 1 = NADIR DALGALANMA
+  (kanal_mesaj/gorev_temel sizintisi her kosumda manifest olmuyor).
+  Ayrica ILGISIZ oldugu KANITLANDI: ASan kapisi yalniz `$KEMGU`yu kullaniyor,
+  self-host ikilisine hic dokunmuyor (harness'taki uc "codegen" gecisi YORUM).
+  Bu bulgu kuyruga G13 olarak girdi cunku BENIM DOGRULAMA YONTEMIMI etkiliyor:
+  ozet satirlarini diff'lemek bu metrikte yanlis-pozitif verebilir.
+  HANGI KAPI NEYI OLCTU: checker_diff 196/196 . self_driver 157/157 .
+  test_tumu TAM rc=0; ozette TEK fark dalgalanan ASan sayisi.
