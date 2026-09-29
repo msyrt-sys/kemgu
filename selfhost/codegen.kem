@@ -1882,7 +1882,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ilerle(p); bekle(p, "SOL_PAREN");
                 bz = vir_ekle(bz, asm_kisit_al(p)); bekle(p, "SAG_PAREN"); // D-416
             } değilse {
-                p.hata_say = p.hata_say + 1; ilerle(p);   // bilinmeyen clause
+                parse_hata_kaydet(p, "P261"); ilerle(p);   // [D-649] C parser.c:1751
             } } } } } }
         }
     }

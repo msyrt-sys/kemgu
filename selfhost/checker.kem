@@ -1554,7 +1554,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
-                bekle(p, "TANIMLAYICI"); bekle(p, "SAG_PAREN");
+                bekle_k(p, "TANIMLAYICI", "P269"); bekle_k(p, "SAG_PAREN", "P264");   // [D-649] C asm clause
             } değilse {
             eğer metin_esit(lx, "girdi") {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
@@ -1563,7 +1563,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
             eğer metin_esit(lx, "bozulan") {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p); bekle(p, "SAG_PAREN");
             } değilse {
-                p.hata_say = p.hata_say + 1; ilerle(p);   // bilinmeyen clause
+                parse_hata_kaydet(p, "P261"); ilerle(p);   // [D-649] C parser.c:1751
             } } } } } }
         }
     }
