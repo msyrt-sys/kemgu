@@ -798,6 +798,19 @@ işlev ilerle(p: &değişken Ayr) -> tam32 { p.imlec = p.imlec + 1; ver 0; }
 // [D-643] Kodlu bekleme: hata halinde C ile AYNI tani kodunu ve GECERLI TOKEN'in
 // konumunu kaydeder (C `parser_bekle(p, TOK, "Pxxx", msg)` aynasi — kod CAGRI
 // YERINDE verilir cunku ayni token beklemesi farkli baglamlarda farkli kod alir).
+// [D-648] SAYAC ARTIRAN AMA TABLOYA YAZMAYAN SITELER ICIN.
+// D-643 tanı tablosunu ekledi ve kapiyi TABLOYA bagladi; ama `bekle` DISINDAKI
+// 13 site `hata_say`i dogrudan artiriyordu ve tabloya HIC yazmiyordu. Sonuc:
+// sayac > 0 iken tablo BOS kaliyor ve kapi ATESLEMIYOR -> sessiz-kabul.
+// OLCULDU: `işlev main() -> tam32` govde suslusu eksikken C uc tani basar,
+// self `OK` derdi (satir 1952 sayaci artiriyordu, kayit yoktu).
+işlev parse_hata_kaydet(p: &değişken Ayr, kod: metin) -> tam32 {
+    p.hata_say = p.hata_say + 1;
+    dizi_ekle(p.ph_kod, kod);
+    dizi_ekle(p.ph_sat, sim_sat(p));
+    dizi_ekle(p.ph_sut, sim_sut(p));
+    ver 0;
+}
 işlev bekle_k(p: &değişken Ayr, t: metin, kod: metin) -> tam32 {
     eğer sim_mi(p, t) { ilerle(p); ver 1; }
     p.hata_say = p.hata_say + 1;
@@ -1621,7 +1634,7 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
     eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
     değilse {
         eğer (imza_yeterli == 1) ve sim_mi(p, "NOKTALI_VIRGUL") { ilerle(p); }
-        değilse { p.hata_say = p.hata_say + 1; }
+        değilse { parse_hata_kaydet(p, "P017"); }   // [D-648] C parser.c:367
     }
     değişken fn: tam32 = dugum_n(p, "ISLEV", ad, s, u, kids);
     eğer ciplak_mi { dizi_ekle(p.cip_node, fn); }   // D-351 yan-kanal
@@ -6879,6 +6892,15 @@ işlev main() -> tam32 {
             yaz_tam(dizi_al(p.ph_sut, pi)); yb(10);
             pi = pi + 1;
         }
+        ver 0;
+    }
+    // [D-648] EMNIYET AGI — sayac > 0 ama tablo BOS ise SESSIZ KALMA.
+    // Kalan 12 site hala tabloya yazmiyor (envanter: G6). Bu ag onlarin
+    // sessizce "OK" gecmesini onler. Konum bilinmiyor (imlec dosya sonunda)
+    // -> 0 0 bildirilir; C ile ayrismasi BILEREK kabul edilir, cunku amac
+    // dogru kodu vermek degil SESSIZ KALMAMAK.
+    eğer (np == 0) ve (p.hata_say > 0) {
+        yaz_str("P000"); yb(9); yaz_tam(0); yb(9); yaz_tam(0); yb(10);
         ver 0;
     }
     kontrol_program(&değişken p, kok);
