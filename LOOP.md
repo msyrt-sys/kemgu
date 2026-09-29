@@ -96,8 +96,12 @@
       WINDOWS/x86 CI YOLU HIC OLCULMEDI. Onu dogrulayacak tek sey CI.
 
 # ===== C. CHECKER / PARSER PARITESI =====
-- [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. D-643'te 3, D-647'de 4
-      site eslendi (P080 degisken adi, P070/P071 blok suslu, P021 yapi adi).
+- [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
+      (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
+      P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
+      Eslenmemis `bekle` cagrisi: 91 -> 85.
+      YONTEM (D-647'de kuruldu, her turda ise yariyor): hata SEKLINI yaz, C'ye
+      sor, KONUM uyusuyorsa siteyi esle; uyusmuyorsa davranis farki demektir.
       ⚠ D-647'DE OLCULDU: token -> kod eslemesi MEKANIK DEGIL. Tek basina
       `TANIMLAYICI` beklentisi baglama gore P200/P350/P269/P240/P080/P060/P045...
       oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
@@ -1561,3 +1565,25 @@
   metrik degisimini arastirmasaydim bayat muafiyet listede kalacakti.
   HANGI KAPI NEYI OLCTU: checker_diff 201 -> 202/202 . check_genis 134 -> 135/135
   (muaf 13 -> 12) . parser_diff 14/14 . self_driver 14/14 . test_tumu TAM rc=0.
+- 2026-09-29 D-652: bes kod daha eslendi (P350/P150/P122/P060/P040).
+  YONTEM UYGULANDI (D-647): sekiz yeni hata sekli yazildi, C'ye soruldu.
+  UCU ZATEN PARITEDEYDI (`eşleş`, `için`, `iken` govdesi — `iken` D-650'de eklenen
+  blok kodlarindan geciyor). BESI ayristti ve HEPSINDE KONUM UYUSUYORDU, yani
+  hepsi (a) sinifi mekanik esleme:
+    P350 cesit adi (parser.c:607) . P150 dizi literali ']' (ifade.c:191)
+    P122 cagri ')' (ifade.c:549)  . P060 modul adi (parser.c:1069)
+    P040 kullan yolu (parser.c:884)
+  ⚠ BIR YANLIS ESLEME YAPTIM VE OLCUM YAKALADI: P122'yi `parse_birincil`deki
+  UCUNCU `SAG_PAREN`e bagladim; test hala `P000` verdi. Cagri aslinda
+  `parse_sonek`te ayristiriliyor (CAGRI dugumu orada uretiliyor). Dogru siteye
+  tasindi. Bu, "ayni token beklentisi baglama gore FARKLI kod alir" ilkesinin
+  somut ornegi ve toplu cevirmenin neden yanlis kodlar uretecegi'nin kaniti —
+  desen ESLESMEK ZORUNDA DEGIL, DAVRANIS eslesmeli.
+  ⚠ Ayrica `parse_modul_tanimi` diye aradim, self-host'ta adi `parse_modul`.
+  Isim varsayimi da olculmeli.
+  Bes fikstur eklendi (tc48_11..15), her biri TEK hata sekli — bir dosyanin
+  yalniz ILK cascade'i olculebiliyor.
+  SABOTAJ S152 (P150 -> P996, en kucuk belirtec): checker_diff 206/207, rc=2.
+  HANGI KAPI NEYI OLCTU: checker_diff 202 -> 207/207 . check_genis 135/135 .
+  parser_diff 14/14 . self_driver 14/14 . test_tumu TAM rc=0; ozette TEK fark
+  +5 fikstur.
