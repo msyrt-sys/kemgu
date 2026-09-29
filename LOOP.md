@@ -99,7 +99,7 @@
 - [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
-      Eslenmemis `bekle` cagrisi: 91 -> 85.
+      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79. ESLENEN: 28 kod.
       YONTEM (D-647'de kuruldu, her turda ise yariyor): hata SEKLINI yaz, C'ye
       sor, KONUM uyusuyorsa siteyi esle; uyusmuyorsa davranis farki demektir.
       ⚠ D-647'DE OLCULDU: token -> kod eslemesi MEKANIK DEGIL. Tek basina
@@ -130,6 +130,12 @@
       olculen `işlev main -> tam32` (paren eksik) sekli hala ayrisiyor: C uc tani,
       self DORT (fazladan 1:16). Ayrica `değişken x tam32 = 0`da son taninin
       SUTUNU kayiyor (C 2:24, self 2:26) — C0c(2) ve C0c(3).
+- [ ] C0d [M] PARSER DAVRANIS FARKI — D-653'te olculen IKI yeni sekil:
+      (1) `uygula { }` (tip eksik): C `P011 2:8`, self `P000 2:10` — KONUM kayiyor.
+      (2) `yapı N { x }` (alan tipi eksik): C UC tani (P019/P011/P020, hepsi 1:13),
+          self YIRMI BIR tani (1:13'ten 2:30'a yayilan). Kurtarma tamamen ayrisiyor;
+          en buyuk cascade farki. Once (1), sonra (2) — ikincisi buyuk olasilikla
+          alan dongusunun kurtarma stratejisi.
 - [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
       bugun "?" = eski davranis (D-640 bilerek dar birakti).
 - [ ] C1b [M] Annotasyonsuz baglamada ARITMETIK/TANIMLAYICI basaticisi.
@@ -1587,3 +1593,27 @@
   HANGI KAPI NEYI OLCTU: checker_diff 202 -> 207/207 . check_genis 135/135 .
   parser_diff 14/14 . self_driver 14/14 . test_tumu TAM rc=0; ozette TEK fark
   +5 fikstur.
+- 2026-09-29 D-653: yeni SESSIZ-KABUL kapandi + bes kod eslendi.
+  ⚠ EN DEGERLI BULGU — `satıriçi_asm` ZORUNLU CLAUSE DENETIMI HIC YOKTU:
+  `satıriçi_asm { şablon: ... }` (mimari YOK) self-host'ta `OK` geciyordu; C
+  P266 ile reddediyor. C kapanis `}`dan SONRA iki zorunlu denetim yapiyor
+  (parser.c:1761-1769: P266 mimari, P267 sablon); self-host'ta IKISI DE yoktu.
+  Tani konumu `satıriçi_asm` ANAHTAR KELIMESI (kapanis `}` degil) oldugu icin
+  `parse_hata_konum(p,kod,sat,sut)` yardimcisi eklendi — `parse_hata_kaydet`
+  GECERLI token'in konumunu kullanir ve burada yanlis olurdu.
+  DORT MEKANIK ESLEME: P200 (ozellik adi), P030 (sabit adi), P022 (yapi '{'),
+  P221 (esles kolu ';'). Ayrica P260 (asm kapanis '}').
+  ⚠⚠ IKI DOSYANIN AYNI OLMADIGINI UCUNCU KEZ OGRENDIM: ayni yamayi iki dosyaya
+  uyguladim ve `checker.kem` DERLENMEDI — `sab` degiskeni orada YOK, cunku o
+  dosya sablonu SAKLAMIYOR, ATLIYOR (`asm_kisit_atla`). `sab_var` bayragi
+  eklenip denetim ona baglandi. Kirilmayi kapi yakaladi ("KEMGU-checker --llvm
+  uretemedi") ama fiksturlerim `codegen.kem` ile GECMISTI, yani bir an her sey
+  yolunda gorunmustu. checker_diff olmasa sessizce ilerleyecektim.
+  Bu, D10 (tek-kaynak konsolidasyon) maliyetinin bu oturumdaki UCUNCU olcumu
+  (D-634 konak mimarisi, D-649 asm kod eslemesi, simdi burasi).
+  IKI YENI DAVRANIS FARKI kuyruga C0d olarak yazildi: `uygula { }` konum kaymasi,
+  ve `yapı N { x }` — C UC tani, self YIRMI BIR (en buyuk cascade farki).
+  SABOTAJ S153 (mimari zorunlulugunu devre disi birak): checker_diff 211/212,
+  rc=2, derleme temiz.
+  HANGI KAPI NEYI OLCTU: checker_diff 207 -> 212/212 . check_genis 135/135 .
+  parser_diff 14/14 . test_tumu TAM rc=0; ozette TEK fark +5 fikstur.
