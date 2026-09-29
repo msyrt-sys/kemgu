@@ -1255,7 +1255,7 @@ işlev parse_dizi_olustur(p: &değişken Ayr) -> tam32 {
             değilse { devam = yanlış; }
         }
     }
-    bekle(p, "SAG_KOSELI");
+    bekle_k(p, "SAG_KOSELI", "P150");   // [D-652] C ifade.c:191 dizi literali ']'
     ver dugum_n(p, "DIZI_OLUSTUR", "", s, u, kids);
 }
 // Parametre: ad ":" tip  |  kendin  |  &kendin  |  &değişken kendin.
@@ -1438,7 +1438,7 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
                 değilse { devam = yanlış; }
             }
         }
-        bekle(p, "SAG_PAREN");
+        bekle_k(p, "SAG_PAREN", "P122");   // [D-652] C ifade.c:549 cagri ')'
         ver dugum_n(p, "CAGRI", "", s, u, kids);
     }
     eğer metin_esit(t, "SOL_PAREN") {
@@ -1519,7 +1519,7 @@ işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
                 }
             }
         }
-        bekle(p, "SAG_PAREN");
+        bekle_k(p, "SAG_PAREN", "P122");   // [D-652] C ifade.c:549 cagri ")"
         ver dugum_n(p, "CAGRI", "", s, u, kids);
     }
     eğer metin_esit(t, "CIFT_IKI_NOKTA") {
@@ -2068,7 +2068,7 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // çeşit
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P350");   // [D-652] C parser.c:607 cesit adi
     atla_tip_paramlar(p);   // D-307: generic çeşit paramlarını yakala (tp_pending)
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];   // payload tip düğümleri (varyant-sırası düz)
@@ -2307,7 +2307,7 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // kullan
     değişken yol: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P040");   // [D-652] C parser.c:884 kullan yolu
     değişken devam: mantıksal = doğru;
     iken devam ve sim_mi(p, "CIFT_IKI_NOKTA") {
         ilerle(p);
@@ -2378,7 +2378,7 @@ işlev parse_modul(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // modül
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P060");   // [D-652] C parser.c:1069 modul adi
     bekle(p, "SOL_SUSLU");
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;

@@ -1,0 +1,3 @@
+// [D-652] P060 — modül adı eksik (C parser.c:1069).
+modül { }
+işlev main() -> tam32 { ver 0; }
