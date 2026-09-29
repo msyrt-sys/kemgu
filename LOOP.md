@@ -110,8 +110,13 @@
           tablo bos, kapi ateslemiyor. `parse_hata_kaydet` + EMNIYET AGI eklendi.
       (2) `işlev main -> tam32` (paren eksik): C uc tani, self DORT (fazladan 1:16).
       (3) `değişken x tam32 = 0`: son taninin SUTUNU kayiyor (C 2:24, self 2:26).
-- [ ] C0b [M] C'nin PANIK CASCADE paritesi: `&r.deger` icin C DORT tani basar
-      (P264 + uc P261), self BIR. Panik-senkron davranisi eslenmeli.
+- [~] C0b [M] PANIK CASCADE — asm dali KAPANDI (D-649). `&r.deger` icin dort tani
+      da birebir (P264 + uc P261); bilinmeyen-clause sitesi `parse_hata_kaydet`e
+      baglandi. Fiksturler tc48_05/06.
+      ⚠ KALAN: ust-duzey P001 cascade'i (`parser_panik_sync` sonrasi). D-647'de
+      olculen `işlev main -> tam32` (paren eksik) sekli hala ayrisiyor: C uc tani,
+      self DORT (fazladan 1:16). Ayrica `değişken x tam32 = 0`da son taninin
+      SUTUNU kayiyor (C 2:24, self 2:26) — C0c(2) ve C0c(3).
 - [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
       bugun "?" = eski davranis (D-640 bilerek dar birakti).
 - [ ] C1b [M] Annotasyonsuz baglamada ARITMETIK/TANIMLAYICI basaticisi.
@@ -227,9 +232,11 @@
 - [ ] G4  [S] `selfhost_driver_harness.sh:29` `kemgu_self2.exe` adini SABIT yaziyor
       (Linux'ta uzantisiz olmali; bugun calisiyor cunku adi harness kendi koyuyor,
       ama D-469 sinifinda bir artik).
-- [ ] G5  [?] checker.kem ile codegen.kem PARSER YUZEYI farkli: `çıktı` gecisi
-      4'e 32. checker.kem asm cikti clause'unu ayni sekilde ayristirmiyor olabilir
-      -> sessiz parite bosluğu. ONCE OLC.
+- [x] G5  -> D-649'da OLCULDU ve IDDIA YANLIS CIKTI: yuzeyler AYNI (ikisinde de
+      asm clause dongusu var; "4'e 32" sayimi YORUMLARI da sayiyordu). Gercek
+      sorun benim D-643'teki EKSIK ESLEMEMDI: desen `codegen.kem`e ozgu bir satir
+      iceriyordu, `checker.kem`de tutmamisti ("ATLANDI" diye kaydetmistim) ve
+      checker.kem `P000` basiyordu. tc48_05 fiksturu bunu ORTAYA CIKARDI.
 - [ ] G13 [S] `SIZINTI-MUAF` METRIGI DALGALANIYOR. D-648'de olculdu: dort
       gozlemin birinde 2 yerine 1 cikti (kanal_mesaj/gorev_temel sizintisi her
       kosumda MANIFEST OLMUYOR). Bu, bu oturumda kullandigim birincil dogrulama
@@ -1459,3 +1466,31 @@
   ozet satirlarini diff'lemek bu metrikte yanlis-pozitif verebilir.
   HANGI KAPI NEYI OLCTU: checker_diff 196/196 . self_driver 157/157 .
   test_tumu TAM rc=0; ozette TEK fark dalgalanan ASan sayisi.
+- 2026-09-29 D-649: panik cascade paritesi — asm dali kapandi.
+  OLCUM: C, `&r.deger` sonrasinda kalan `.`, `deger`, `)` belirteclerini BILINMEYEN
+  CLAUSE sayip her biri icin P261 basiyor ve BIR belirtec ilerliyor (parser.c:1751)
+  -> toplam DORT tani. Self-host'ta o site sayaci artiriyor, tabloya YAZMIYORDU.
+  `parse_hata_kaydet(p,"P261")`e baglandi. Sonuc BIREBIR:
+    C / codegen.kem: P264 17:26 . P261 17:26 . P261 17:27 . P261 17:32
+  Bu, C3'un TANI tarafini tamamen kapatiyor (ozellik yok, o C3'te duruyor).
+  ⚠ FIKSTUR GERCEK BIR AYRISMAYI ORTAYA CIKARDI: tc48_05 korpusa girince
+  checker_diff KIRMIZI (197/198) ama self_driver YESIL (159/159). Olculdu:
+    C            P264 17 26 ...
+    checker.kem  P000 17 26 ...   <-- ayrisan
+    codegen.kem  P264 17 26 ...
+  Sebep: D-643'te asm cikti sitesini eslerken desenim `codegen.kem`e ozgu bir
+  satir iceriyordu ve `checker.kem`de TUTMAMISTI — o zaman "ATLANDI (desen yok)"
+  diye kaydetmistim. Kayit dogruydu, TAKIBI eksikti. checker.kem:1557 eslendi
+  (TANIMLAYICI->P269, SAG_PAREN->P264) -> 198/198.
+  BU G5'I DE COZDU VE IDDIAMI YALANLADI: G5'i "checker.kem asm yuzeyi FARKLI
+  olabilir" diye `[?]` yazmistim. Yuzeyler AYNI; "4'e 32" sayimim YORUMLARI da
+  sayiyordu. Gercek sorun eksik eslemeydi. Ders: `[?]` maddeler gercekten
+  olculmeli — benim tahminim de bayat cikabiliyor.
+  SABOTAJ S149b: bu kez BASTAN en kucuk belirtec degistirildi ("P264"->"P997") —
+  D-647'de yazdigim kuralin ilk uygulamasi. Derleme KIRILMADI, kapi 197/198,
+  make rc=2. (Uc gecersiz sabotajdan sonra kural ise yaradi.)
+  ⚠ G13 BAGIMSIZ TEYIT: ASan `SIZINTI-MUAF` bu kosumda 1'den 2'ye DONDU. D-648'de
+  "nadir dalgalanma" demistim; bu, gerilemeden bagimsiz dalgalandiginin ikinci
+  gozlemi.
+  HANGI KAPI NEYI OLCTU: checker_diff 196 -> 198/198 . self_driver 157 -> 159/159 .
+  test_tumu TAM rc=0; ozette iki fark: +2 fikstur ve dalgalanan ASan sayisi.
