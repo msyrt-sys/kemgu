@@ -61,9 +61,23 @@ muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 KAP_SN=${KAP_SN:-60}
 KAP_KB=${KAP_KB:-4000000}
 
+# [D-661] `timeout` YETENEGI OLCULUR, VARSAYILMAZ. Bu depo POSIX varsayimindan
+# ALTI KEZ isirildi (D-560..D-566: /tmp baglamasi, /dev/fd, sinyal-tabanli cikis
+# kodu, RSS muhasebesi). `timeout` YOKSA `kos` 127 doner ve HIC CIKTI YAZMAZ ->
+# asagidaki "oracle cikti uretmedi" denetimi WINDOWS'TA YANLIS KIRMIZI verirdi.
+# Yetenek bir kez olculur; yoksa sinirsiz kosulur ve bu ACIKCA bildirilir
+# (D-486: sessiz atlama yasak — ama burada atlanan sey KAPI degil SINIRDIR).
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    TO="timeout $KAP_SN"
+else
+    TO=""
+    echo "  ⚠ 'timeout' YOK -> per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer;"
+    echo "     yalniz ASILMA koruması dusüyor). Bkz. D-661."
+fi
+
 kos() {   # kos <cikti-dosyasi> <komut...> -> rc
     out="$1"; shift
-    ( ulimit -v "$KAP_KB" 2>/dev/null; timeout "$KAP_SN" "$@" > "$out" 2>/dev/null )
+    ( ulimit -v "$KAP_KB" 2>/dev/null; $TO "$@" > "$out" 2>/dev/null )
 }
 
 pass=0; fail=0; muaf=0

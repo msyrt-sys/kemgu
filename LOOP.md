@@ -18,11 +18,11 @@
       cekirdekte HIC CALISMIYORDU (D-527 ABI'yi yalniz DERLIYORDU).
       - [x] kanal SAF-.kem (kem_heap.kem) + faz [41], tek gorevli (D-623)
       - [x] gorev_başlat/birleştir SAF-.kem + faz [42] BLOKLAYAN kanal (D-624)
-- [~] A1 [M] PUSH + CI. ✓ PUSH YAPILDI. Linux YESIL, Windows KIRMIZI -> KOK
-      BULUNDU (D-658, D-655'in tanisi sayesinde): uretilen `selfhost/konak.kem`
-      Windows'ta MOJIBAKE oluyordu (`işlev` -> `iÅŸlev`) -> lexer anahtar
-      kelimeyi tanimiyor -> P001 x4 -> IR uretilmiyor -> `build/codegen.ll`
-      dusuyor. Onarildi; DOGRULAMA CI'da (yerelde ureyen bir kusur DEGIL).
+- [x] A1 -> KAPANDI. CI IKI PLATFORMDA TAM YESIL (ef3eb7d, 2026-10-03).
+      ADIM DUZEYINDE dogrulandi ("yesil bir iddiadir", D-486): Windows
+      `test_tumu` + onceden ATLANAN tum alt adimlar (Stdlib --check, Snapshot,
+      Fuzzer, Runtime link) `success`. Yol: D-655 (yutulan stderr acildi) ->
+      D-658 (kok: uretilen konak modulu mojibake oluyordu).
 - [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
@@ -1694,3 +1694,22 @@
   `ASILDI/OLDURULDU`, rc=1.
   HANGI KAPI NEYI OLCTU: checker_diff 215/215 (0 muaf) temiz yolda; S160'ta
   kirmizi. Kalan yedi harness G15 olarak kuyruga girdi.
+- 2026-10-03 D-661: `timeout` yetenegi OLCULUR, varsayilmaz.
+  D-660 POSIX sekilli bir sinir ekledi (`timeout`/`ulimit -v`) ve bu depo POSIX
+  varsayimindan ALTI KEZ isirildi (D-560..D-566). `timeout` YOKSA `kos` 127
+  doner ve HIC CIKTI YAZMAZ -> D-660'in "oracle cikti uretmedi" denetimi
+  WINDOWS'TA YANLIS KIRMIZI verirdi. Yetenek bir kez olculur
+  (`command -v` YETMEZ: `timeout 5 true` de kosulur, D-551'in dersi); yoksa
+  sinirsiz kosulur ve bu ACIKCA bildirilir.
+  ⚠ KENDI KURALIMI CIGNEDIM: uyari mesajinda cift tirnak icinde BACKTICK
+  kullandim — o KOMUT IKAMESIDIR (D-548/D-549'da kayitli) ve `bash -n` onu
+  GECERLI sayar. Yalniz satiri okumak yakaladi. Yorum satirlarindaki backtick
+  zararsiz (calistirilmiyor); temizlenen yalniz `echo` satiri.
+  ⚠⚠ SABOTAJ OLCUMUM IKI KEZ GECERSIZDI: (a) PATH'ten `timeout`u cikarmaya
+  calistim ama `/usr/bin` PATH'te kaldi -> hic kaldirilmadi; (b) shim'i PATH'in
+  basina koydum ama DIS sarmalayici `timeout 1800` DE shim'e dustu -> harness
+  hic kosmadi (rc=1) ve bir an "geri-dusus bozuk" sandim. Mutlak yol
+  (`/usr/bin/timeout`) ile dogru olculdu.
+  HANGI KAPI NEYI OLCTU: S161 (probe basarisiz) -> uyari ADIYLA basildi,
+  checker_diff 215/215, rc=0 (kapi OLCMEYE DEVAM ETTI). timeout VARKEN S160
+  zaten kirmiziydi (D-660). Yani her iki yol da gate'li.
