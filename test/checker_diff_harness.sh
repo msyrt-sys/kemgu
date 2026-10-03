@@ -42,12 +42,53 @@ fi
 MUAF=""
 muaf_mi() { case " $MUAF " in *" $1 "*) return 0;; esac; return 1; }
 
+# [D-660] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G14).
+# NEDEN: asilan kapi, dusen kapidan KOTU teshis edilir. Oncesinde bir asilma
+# TUM kapiyi asiyordu ve `make` yalniz `rc=124` donuyordu — hangi DOSYA astigi
+# gorunmuyordu (D-650'de S150b ile olculdu).
+# ⚠⚠ BELLEK TAVANI BIR TESPIT MEKANIZMASI DEGIL, HASAR SINIRLAMASIDIR —
+# ve bu ayrim OLCULDU: tavani asan surec `rc=1` verir (tahsis hatasi), 137
+# DEGIL; yani kapi onu cikis koduyla TANIMAZ. Tespiti saglayan sey asagidaki
+# "oracle cikti uretmeli" denetimi ve adayin ciktisinin AYRISMASIDIR.
+# Tavanin degeri su: bu oturumda bir sabotaj artigi `kemcheck`i SONSUZ
+# DONGUYE soktu, surec 26.6 GiB'e cikti ve CEKIRDEGIN OOM-KILLER'I onu
+# oldurup TUM OTURUMU asagi cekti (cekirdek gunlugunde kayitli). Zaman asimi
+# tek basina yetmezdi: 26 GiB'e cikmak 60 saniyeden AZ suruyor.
+# ⚠ BUGUNKU KORPUS TAVANI ASMIYOR (olculdu: C derleyici 20 MB altinda bile
+# dogru cikti veriyor) -> tavan ATESLENMEYEN bir sigortadir, kapi onu
+# GATE'LEMIYOR. Boyle kaydedilmesi D-510'un disiplini.
+# Degerler cevre degiskeniyle ezilebilir (yavas makine / buyuk korpus).
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+
+kos() {   # kos <cikti-dosyasi> <komut...> -> rc
+    out="$1"; shift
+    ( ulimit -v "$KAP_KB" 2>/dev/null; timeout "$KAP_SN" "$@" > "$out" 2>/dev/null )
+}
+
 pass=0; fail=0; muaf=0
 for f in test/check_korpus/*.kem test/moduller/*.kem; do
     [ -f "$f" ] || continue
     if muaf_mi "$(basename "$f")"; then muaf=$((muaf+1)); continue; fi
-    "$KEMGU" --checkdump "$f" 2>/dev/null > "$TMP/oracle.txt"
-    "$TMP/kemcheck.exe" "$f" > "$TMP/aday.txt" 2>/dev/null
+    kos "$TMP/oracle.txt" "$KEMGU" --checkdump "$f"; orc=$?
+    kos "$TMP/aday.txt" "$TMP/kemcheck.exe" "$f";     adr=$?
+    # 124 = timeout . 137 = SIGKILL (OOM) . 139 = SIGSEGV
+    if [ "$orc" -eq 124 ] || [ "$adr" -eq 124 ] \
+       || [ "$orc" -eq 137 ] || [ "$adr" -eq 137 ]; then
+        echo "  🔴 $(basename "$f") — ASILDI/OLDURULDU (sinir ${KAP_SN}s / ${KAP_KB}KB;" \
+             "oracle rc=$orc, aday rc=$adr)"
+        fail=$((fail+1)); continue
+    fi
+    # [D-660] ORACLE CIKTI URETMELI — yoksa KARSILASTIRMA ANLAMSIZ.
+    # ⚠ BU DENETIM OLMADAN KENDI TAVANIM YANLIS YESIL URETIYORDU (olculdu):
+    # `ulimit` iki tarafi da dusurunce IKISI DE BOS cikti veriyor, `diff` esit
+    # diyor ve kapi GECIYOR. C derleyici her gecerli korpus dosyasi icin ya
+    # `OK` ya tani basar; BOS cikti "oracle kosmadi" demektir (D-547'nin
+    # "oracle tarafindaki gerilemeyi sessizce yutma" disiplini).
+    if [ ! -s "$TMP/oracle.txt" ]; then
+        echo "  🔴 $(basename "$f") — ORACLE CIKTI URETMEDI (rc=$orc) — kapi OLCMEDI"
+        fail=$((fail+1)); continue
+    fi
     if diff -q "$TMP/oracle.txt" "$TMP/aday.txt" >/dev/null 2>&1; then
         echo "  ✅ $(basename "$f")"; pass=$((pass+1))
     else

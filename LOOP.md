@@ -34,10 +34,17 @@
       oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
       uretir -> her site FIKSTURLE kanitlanmali. Yontem: once hata SEKLINI yaz,
       C'ye sor, konum uyusuyorsa site esle.
-- [ ] G14 [S] KAPI ASILMA HALINDE TIMEOUT'A DUSUYOR, temiz kirmizi vermiyor.
-      D-650'de olculdu: S150b sabotaji `checker_diff`i ASTI ve `make rc=124`
-      (timeout) dondu. Asilan kapi, dusen kapidan kotu teshis edilir (CI'da
-      "neden bekliyor?" sorusu). Harness per-dosya timeout ile sarilmali.
+- [x] G14 -> D-660. `checker_diff` artik per-dosya `timeout` + `ulimit -v`
+      tasiyor ve asilan dosyayi ADIYLA kirmizi yapiyor (S160 ile kanitlandi).
+      Yol ustunde KENDI onarimimda yanlis-yesil bulundu ve kapatildi (asagida).
+- [ ] G15 [S] KALAN YEDI HARNESS'TA PER-DOSYA TIMEOUT YOK (D-660'ta olculdu):
+      baremetal_diff . codegen_diff . lexer_diff . parser_diff . surucu_diff .
+      yapi_diff . selfhost_driver. En onemlileri `codegen_diff` ve
+      `selfhost_driver`: ikisi de self-host ikilisini KORPUS UZERINDE kosturuyor,
+      yani D-660'in kapattigi asilma sinifina ACIK. Deseni `checker_diff`ten
+      kopyala (`kos()` + oracle-cikti denetimi) — AMA her harness'in oracle
+      sozlesmesi farkli, korlemesine kopyalama yanlis-yesil uretebilir (D-660'in
+      kendi dersi).
 - [~] C0b [M] PANIK CASCADE — asm dali KAPANDI (D-649). `&r.deger` icin dort tani
       da birebir (P264 + uc P261); bilinmeyen-clause sitesi `parse_hata_kaydet`e
       baglandi. Fiksturler tc48_05/06.
@@ -1664,3 +1671,26 @@
       OLMAYAN bir kusuru onarmaya BASLAMADAN once dogrulandi.
   (c) D-referansi denetimi yalniz ILK satira bakiyordu -> `D-631` devam
       satirinda oldugu icin "kapsanmamis" gorundu.
+- 2026-10-03 D-660 (G14): `checker_diff` per-dosya zaman asimi + bellek tavani.
+  NEDEN SIMDI: bu oturumda bir asilma TUM KAPIYI asti ve `make` yalniz `rc=124`
+  dondu — hangi DOSYA astigi gorunmuyordu. Dahasi surec 26.6 GiB'e cikip
+  OOM-killer tarafindan oldurüldu ve OTURUMU asagi cekti.
+  EKLENEN: `kos()` sarmali (per-cagri `timeout` + `ulimit -v`), 124/137 icin
+  ADIYLA kirmizi, ve ORACLE-CIKTI denetimi.
+  🔴 YOL USTUNDE KENDI ONARIMIM YANLIS-YESIL URETTI VE SABOTAJ YAKALADI:
+  tavan IKI TARAFI da dusurunce ikisi de BOS cikti veriyor, `diff` esit diyor
+  ve kapi GECIYOR (S159: `KAP_KB=20000` -> 215/215 YESIL). Onarim: C derleyici
+  her gecerli korpus dosyasi icin ya `OK` ya tani basar, yani BOS cikti
+  "oracle kosmadi" demektir -> ayri ve gurultulu red (D-547'nin disiplini).
+  ⚠ BELLEK TAVANI BIR TESPIT MEKANIZMASI DEGIL, HASAR SINIRLAMASI — olculdu:
+  tavani asan surec `rc=1` verir (tahsis hatasi), 137 DEGIL. Ayrica bugunku
+  korpus tavani ASMIYOR (C derleyici 20 MB altinda bile dogru cikti veriyor)
+  -> tavan ATESLENMEYEN bir sigortadir ve kapi onu GATE'LEMIYOR. D-510'un
+  disiplini geregi boyle kaydedildi; "gate'lendi" diye yazmak yanlis olurdu.
+  ⚠⚠ IKI GECERSIZ SABOTAJ: S158 `$KEMGU`yu uyuyan bir shim yapti ama harness
+  `kemcheck`i DE `$KEMGU` ile kuruyor (satir 29) -> yapim kirildi, dongu hic
+  kosmadi (kapiyi degil YAPIMI olctu). S159 yukarida anlatildi ve kapinin
+  gercek bir kusurunu acti. GECERLI: S160 (`KAP_SN=0.01`) -> dosyalar ADIYLA
+  `ASILDI/OLDURULDU`, rc=1.
+  HANGI KAPI NEYI OLCTU: checker_diff 215/215 (0 muaf) temiz yolda; S160'ta
+  kirmizi. Kalan yedi harness G15 olarak kuyruga girdi.
