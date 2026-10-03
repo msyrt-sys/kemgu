@@ -22,3 +22,4 @@
 
 # Makefile sekme-duyarlidir; CRLF bazi make surumlerinde sorun cikarir.
 Makefile text eol=lf
+*.kem.in text eol=lf

@@ -91,13 +91,11 @@
 # Boyut: S ~ yarim iterasyon, M ~ bir iterasyon, L ~ birden cok.
 
 # ===== A. ENGEL (bende bitmez) =====
-- [~] A1 [M] PUSH + CI. ✓ PUSH YAPILDI (38 commit, a3382b9..1442ff0).
-      ⚠ CI SONUCU: Linux YESIL, **Windows KIRMIZI** (`mingw32-make test_tumu`, exit 2).
-      OLCULDU: 27 Eylul'deki yesil kosum (a3382b9) Windows'ta `test_tumu`yu
-      GERCEKTEN kosmus ve gecmis -> gerileme bu 38 commit'in icinde.
-      Tek kirilma: `Makefile:651 build/codegen.ll Error 1` (lambda_v2'den sonra,
-      codegen_diff'in on kosulu). SEBEP LOGDA GORUNMUYORDU -> D-655 onardi.
-      SIRADAKI: yeni CI kosumunun tanisini oku.
+- [~] A1 [M] PUSH + CI. ✓ PUSH YAPILDI. Linux YESIL, Windows KIRMIZI -> KOK
+      BULUNDU (D-658, D-655'in tanisi sayesinde): uretilen `selfhost/konak.kem`
+      Windows'ta MOJIBAKE oluyordu (`işlev` -> `iÅŸlev`) -> lexer anahtar
+      kelimeyi tanimiyor -> P001 x4 -> IR uretilmiyor -> `build/codegen.ll`
+      dusuyor. Onarildi; DOGRULAMA CI'da (yerelde ureyen bir kusur DEGIL).
 - [x] A3 -> D-656'da OLCULDU, ONCULU YANLIS CIKTI. Dort kapinin HICBIRI x86'da
       kirmizi olmuyor: yapi_diff/bolge_operand oracle `--llvm` dustugu icin
       `atla`, asan_denetim `--check` dustugu icin `skip`, check_genis ise IKI
@@ -1717,3 +1715,31 @@
   ozette TEK fark +3 fikstur.
   SABOTAJ: S156 (hedef geri yuklemesini kaldir) -> modul_codegen rc=2, ucluyu
   uc dosyada adiyla bildirdi. D-657'nin yuk tasidigi ayrica olculdu (yukarida).
+- 2026-10-03 D-658: Windows CI kirmizisinin KOKU — uretilen modul mojibake.
+  D-655 stderr'i actigi icin tani CI logunda GORUNUR oldu:
+    hata[P001]: ust duzey tanim bekleniyor
+      --> selfhost/konak.kem:5:11
+    5 | genel iÅŸlev konak_triple() -> metin { ver "x86_64-pc-windows-gnu"; }
+  `iÅŸlev` = `işlev`in CIFT KODLANMIS hali (0xC5 0x9F baytlari Latin-1 sanilip
+  yeniden UTF-8'e cevrilmis). Makefile kurali `printf` ile TURKCE KEMGU KAYNAGI
+  uretiyordu ve Windows kabuk/printf katmani baytlari bozuyordu. Lexer anahtar
+  kelimeyi tanimayinca P001 x4, IR uretilmiyor, `build/codegen.ll` dusuyor.
+  ⚠ YEREL OLARAK UREMEYEN BIR KUSUR: ARM64/Linux'ta `printf` dogru bayt uretir,
+  bu yuzden 38 commit boyunca gorunmedi. CI'in tek basina yakalayabildigi sinif.
+  ONARIM — TURKCE BAYTLAR ARTIK MAKEFILE'DAN HIC GECMIYOR: `selfhost/konak.kem.in`
+  sablonu depoya girdi (Turkce git'ten gelir), kural yalniz ASCII yer tutuculari
+  (`@ARCH@`/`@TRIPLE@`) ikame eder. `.gitattributes`'a `*.kem.in text eol=lf`.
+  IKI GURULTULU DENETIM eklendi (ikisi de KOSULSUZ, D-486):
+    (1) yer tutucu ikame edilmemisse -> adiyla hata
+    (2) uretilen modul `--check`ten GECMELI -> kodlama bozulmasi KAYNAGINDA
+        yakalanir, `codegen.ll` dustugunde P001 gurultusu olarak DEGIL.
+  ⚠ `kemgu` kurala ON KOSUL olarak eklendi: (2) onu kullanir ve kosulsuz olmali;
+  dongu yok (kemgu yalniz src/*.c'ye bagli).
+  ⚠ Recipe yorumlari `@` tasimadigi icin her kosumda ekrana basiliyordu; kural
+  disina tasindi (uretim artik SESSIZ).
+  SABOTAJ S157: sablon bilerek cift-kodlandi -> `🔴 konak.kem GECERSIZ KEMGU
+  uretildi (kodlama bozulmasi?)` + `hata[P051]`, make rc=2.
+  HANGI KAPI NEYI OLCTU: uretilen islev satirlari birebir ayni (davranis
+  esdegerligi) . ct_bariyer 14/14 (0 atlandi) . `ana_alias` uclusu
+  `aarch64-unknown-linux-gnu` (D-656 korundu).
+  ⚠ GERCEK DOGRULAMA CI'DA: bu kusur yerelde uremez.

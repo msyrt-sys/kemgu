@@ -1,0 +1,13 @@
+// ŞABLON — `selfhost/konak.kem` bundan üretilir (Makefile `selfhost/konak.kem`).
+// Üretilen dosyayı ELLE DÜZENLEMEYİN; bu şablonu düzenleyin.
+// [D-469] Self-host derleyicinin VARSAYILAN hedefi konaktan türetilir.
+//
+// [D-658] ⚠ TÜRKÇE BAYTLAR BU DOSYADA DURUR, MAKEFILE'DA DURMAZ.
+// Öncesinde kural `printf` ile Türkçe KEMGU kaynağı üretiyordu ve Windows CI'da
+// baytlar ÇİFT KODLANIYORDU: `işlev` → `iÅŸlev` → lexer anahtar kelimeyi
+// tanımıyor → `P001` ×4 → IR üretilmiyor → `build/codegen.ll` düşüyor.
+// (D-655 stderr'i açtığı için tanı CI logunda görünür oldu.)
+// Artık yalnız ASCII yer tutucular (@ARCH@ / @TRIPLE@) ikame edilir; Türkçe
+// baytlar git'ten gelir ve hiçbir kabuk/printf katmanından geçmez.
+genel işlev konak_mimari() -> metin { ver "@ARCH@"; }
+genel işlev konak_triple() -> metin { ver "@TRIPLE@"; }

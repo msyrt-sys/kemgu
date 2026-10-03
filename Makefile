@@ -634,16 +634,19 @@ calistir_lambda_test: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # deponun tam da kovaladigi sinif). Icerik her kosumda uretilir ama dosya
 # yalniz DEGISTIYSE yazilir -> konak degismedikce bootstrap yeniden kurulmaz.
 # ============================================================================
-selfhost/konak.kem: FORCE
-	@printf '%s\n' \
-	  '// ÜRETİLEN DOSYA — ELLE DÜZENLEMEYİN. Üreteni: Makefile `selfhost/konak.kem`.' \
-	  '// [D-469] Self-host derleyicinin VARSAYILAN hedefi konaktan türetilir;' \
-	  '// gerekçe ve ölçüm Makefile içindeki aynı adlı kuralın başlığında.' \
-	  "genel işlev konak_mimari() -> metin { ver \"$(ARCH)\"; }" \
-	  "genel işlev konak_triple() -> metin { ver \"$(HOST_TRIPLE)\"; }" \
-	  > $@.tmp
+# [D-658] URETILEN MODUL GECERLI KEMGU OLMALI (kuralin son satiri). Windows
+# CI'da `printf` Turkce baytlari CIFT KODLUYORDU ve kusur ancak
+# `build/codegen.ll` dustugunde P001 gurultusu olarak goruluyordu; bu denetim
+# bozulmayi KAYNAGINDA ve ADIYLA yakalar.
+# ⚠ `kemgu` ON KOSUL: son satirdaki `--check` denetimi onu kullanir ve
+# KOSULSUZ olmali (D-486: sessiz atlama). Dongu YOK — kemgu yalniz src/*.c'ye bagli.
+selfhost/konak.kem: selfhost/konak.kem.in $(BUILD)/kemgu$(EXE) FORCE
+	@sed -e 's|@ARCH@|$(ARCH)|g' -e 's|@TRIPLE@|$(HOST_TRIPLE)|g' selfhost/konak.kem.in > $@.tmp
+	@grep -q '@ARCH@\|@TRIPLE@' $@.tmp && { echo "🔴 konak.kem: yer tutucu IKAME EDILMEDI (ARCH=$(ARCH))"; rm -f $@.tmp; exit 1; } || true
 	@cmp -s $@.tmp $@ 2>/dev/null || mv -f $@.tmp $@
 	@rm -f $@.tmp
+	@$(BUILD)/kemgu$(EXE) --check $@ >/dev/null 2>&1 || { echo "🔴 konak.kem GECERSIZ KEMGU uretildi (kodlama bozulmasi?) — tani:"; $(BUILD)/kemgu$(EXE) --check $@ 2>&1 | head -4; exit 1; }
+
 
 FORCE:
 
