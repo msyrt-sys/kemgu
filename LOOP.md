@@ -91,6 +91,21 @@
 # Boyut: S ~ yarim iterasyon, M ~ bir iterasyon, L ~ birden cok.
 
 # ===== A. ENGEL (bende bitmez) =====
+- [~] A1 [M] PUSH + CI. ✓ PUSH YAPILDI (38 commit, a3382b9..1442ff0).
+      ⚠ CI SONUCU: Linux YESIL, **Windows KIRMIZI** (`mingw32-make test_tumu`, exit 2).
+      OLCULDU: 27 Eylul'deki yesil kosum (a3382b9) Windows'ta `test_tumu`yu
+      GERCEKTEN kosmus ve gecmis -> gerileme bu 38 commit'in icinde.
+      Tek kirilma: `Makefile:651 build/codegen.ll Error 1` (lambda_v2'den sonra,
+      codegen_diff'in on kosulu). SEBEP LOGDA GORUNMUYORDU -> D-655 onardi.
+      SIRADAKI: yeni CI kosumunun tanisini oku.
+- [ ] A3 [S] MIMARI-ATLAMASI OLMAYAN DORT KAPI (D-655'te olculdu, GIZLI kusur):
+      `yapi_diff` · `bolge_operand` · `asan_denetim` · `check_genis` —
+      dordu de `test/cg_korpus/*.kem` ya da `test/snapshots/*.kem` glob'luyor ve
+      mimari sormuyor; `codegen_diff` ve `check_kapisi`da atlama VAR (D-634'te
+      yazilmisti, bu dordu GOZDEN KACTI). D-634'un arm64 ikizleri x86 hedefte
+      AS001 ile REDDEDILIYOR (olculdu). ARM64'te gorunmez, x86'da kacinilmaz.
+      ⚠ BUGUNKU KIRMIZININ SEBEBI DEGIL: dordu de test_tumu sirasinda
+      codegen_diff'ten SONRA geliyor, Windows kosumu onlara hic ulasmadi.
 - [ ] A1  [S] PUSH + CI. 23 commit bekliyor; bu makinede GitHub yazma yetkisi yok.
       ONEMI YEDEKLEME DEGIL: D-634 Makefile/self-host/harness'a dokundu ve
       WINDOWS/x86 CI YOLU HIC OLCULMEDI. Onu dogrulayacak tek sey CI.
@@ -1617,3 +1632,35 @@
   rc=2, derleme temiz.
   HANGI KAPI NEYI OLCTU: checker_diff 207 -> 212/212 . check_genis 135/135 .
   parser_diff 14/14 . test_tumu TAM rc=0; ozette TEK fark +5 fikstur.
+- 2026-10-03 D-655: Windows CI tanisi — yutulan stderr acildi.
+  CI ILK KEZ D-634 SONRASI HALI OLCTU: Linux YESIL, Windows KIRMIZI.
+  Sucu commit'lere yuklemeden once OLCTUM: 27 Eylul'deki yesil kosum
+  (a3382b9) Windows'ta `test_tumu`yu gercekten kosmus ve gecmis (adim
+  duzeyinde dogrulandi) -> gerileme 38 commit'in icinde. "Yesil bir
+  iddiadir" (D-486) kuralinin CI karsiligi.
+  TEK KIRILMA: `Makefile:651 build/codegen.ll Error 1`, `lambda_v2`den hemen
+  sonra (codegen_diff'in on kosulu). AMA SEBEP LOGDA YOKTU: kural
+  `2>/dev/null` tasiyordu. Ayni sinif D-636'da `kemgu_self` icin kapatilmisti;
+  BU IKI KURAL GOZDEN KACMISTI (codegen.ll + codegen$(EXE)).
+  ⚠ ICERIK SEBEP DEGIL — olculdu: CI'nin konak.kem'i (x86_64 /
+  x86_64-pc-windows-gnu) birebir uretilip yerel kosuldu -> `--llvm` rc=0,
+  stderr BOS. Yani sorun uretilen MODULUN ICERIGI degil, Windows ortami.
+  ONARIM: iki kuralda stderr ARTIK GORUNUR + `selfhost/konak.kem` varligi/
+  bosluğu AYRICA ve GURULTULU denetlenir + basarisizlikta kismi `.ll` SILINIR
+  (bayat artefakt tuzagi). Konak modulu bu kuralin ILK tuketicisidir (ondan
+  once onu okuyan kapi YOK), yani uretim sessizce dusse ilk belirti tam
+  burada cikar.
+  ⚠⚠ ILK HIPOTEZIM YANLISTI VE ONU OLCUMLE CURUTTUM: "arm64 ikiz fiksturleri
+  mimari-atlamasi olmayan kapilarda x86'da reddedilir" demistim. Kusur
+  GERCEK (A3 olarak kuyruga girdi) ama BUGUNKU KIRMIZININ SEBEBI DEGIL:
+  o dort kapi (yapi_diff 46 · check_genis 49 · bolge_operand 56 ·
+  asan_denetim 71) test_tumu sirasinda codegen_diff'ten (42) SONRA geliyor,
+  kosum onlara hic ulasmadi. Siralamayi olcmeden "guclu hipotez" demek
+  yanlis kokdu.
+  ⚠ SABOTAJ S155 GECERSIZDI: `konak.kem`i elle bosalttim, `FORCE` bagimlisi
+  oldugu icin make onu YENIDEN URETTI -> sessiz kaldi. Sessizlik once
+  SABOTAJI supheli kilar (D-402). S155b uretimin KENDISINI bos cikti verecek
+  sekilde sabote etti -> `🔴 selfhost/konak.kem YOK ya da BOS (ARCH=arm64
+  TRIPLE=aarch64-unknown-linux-gnu)`, make rc=2, kismi `.ll` silindi.
+  HANGI KAPI NEYI OLCTU: temiz yol `build/codegen` rc=0 (ll 2.498.532 bayt,
+  konak 5 satir); S155b rc=2 ve tani ADIYLA basiliyor.

@@ -647,11 +647,20 @@ selfhost/konak.kem: FORCE
 
 FORCE:
 
+# [D-655] STDERR ARTIK YUTULMUYOR. Oncesinde her iki kural `2>/dev/null`
+# tasiyordu ve Windows CI tam burada `Error 1` ile dustu; LOG SEBEBI
+# HIC GOSTERMEDI. Ayni sinif D-636'da `kemgu_self` icin kapatilmisti,
+# bu iki kural GOZDEN KACMISTI. Konak modulu bu kuralin ILK tuketicisidir
+# (test_tumu sirasinda codegen_diff'ten once onu okuyan kapi YOK), yani
+# uretim kurali sessizce dusse ilk belirti tam burada cikar -> ayrica
+# ve GURULTULU denetlenir. Kismi `.ll` SILINIR (bayat artefakt tuzagi).
 $(BUILD)/codegen.ll: selfhost/codegen.kem selfhost/konak.kem $(BUILD)/kemgu$(EXE) | $(BUILD)
-	@$(BUILD)/kemgu$(EXE) --llvm selfhost/codegen.kem > $@ 2>/dev/null
+	@test -s selfhost/konak.kem || { echo "🔴 selfhost/konak.kem YOK ya da BOS (ARCH=$(ARCH) TRIPLE=$(HOST_TRIPLE)) — uretim kurali dustu"; exit 1; }
+	@$(BUILD)/kemgu$(EXE) --llvm selfhost/codegen.kem > $@ || { echo "🔴 self-host codegen IR uretilemedi (konak: $(ARCH) / $(HOST_TRIPLE))"; rm -f $@; exit 1; }
+	@test -s $@ || { echo "🔴 $@ BOS uretildi"; rm -f $@; exit 1; }
 
 $(BUILD)/codegen$(EXE): $(BUILD)/codegen.ll $(BUILD)/kdl_runtime.o
-	@clang -x ir $(BUILD)/codegen.ll -x none $(BUILD)/kdl_runtime.o -o $@ 2>/dev/null
+	@clang -x ir $(BUILD)/codegen.ll -x none $(BUILD)/kdl_runtime.o -o $@ || { echo "🔴 self-host codegen link edilemedi"; exit 1; }
 
 calistir_codegen_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
 	@CODEGEN=$(BUILD)/codegen$(EXE) KONAK_MIM=$(ARCH) bash test/codegen_diff_harness.sh
