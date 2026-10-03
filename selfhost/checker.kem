@@ -41,6 +41,7 @@ yapı Ayr {
     // -> her parse hatasi SESSIZCE "OK" oluyordu (C: P090/P264/...). Tablo C'nin
     // `--checkdump` bicimiyle (KOD\tsat\tsut) rapor edilebilmesi icin var.
     ph_kod: Dizi<metin>;
+    sh_sat: tam32;  sh_sut: tam32;  sh_kod: metin;  sh_tek: tam32;  ph_kis: tam32;   // [D-657] tekrar bastirma
     ph_sat: Dizi<tam32>;
     ph_sut: Dizi<tam32>;
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
@@ -827,26 +828,40 @@ işlev panik_senkron(p: &değişken Ayr) -> tam32 {
 // [D-653] KONUM VERILEN tani kaydi. `parse_hata_kaydet` GECERLI token'in
 // konumunu kullanir; C bazi tanilari BASKA bir token'a baglar (or. zorunlu asm
 // clause eksikligi `satıriçi_asm` ANAHTAR KELIMESINE baglanir, kapanis `}`ya degil).
-işlev parse_hata_konum(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+// [D-657] AYNI-KONUM-AYNI-KOD TEKRAR BASTIRMA — C `parser.c:102` aynasi.
+// C'nin kendi yorumu bu senaryoyu ADIYLA tarif ediyor: "panik_sync sync-keyword'e
+// takılıp ilerlemediğinde, üst loop aynı pozisyonda aynı hatayı sonsuz tekrar
+// etmek istiyor". Self-host'ta bu mekanizma HİÇ YOKTU; D-654 `parse_tip`in son
+// çaresinden `ilerle`yi kaldırınca (C aynası, doğru) eksiklik görünür oldu:
+// tanı cascade'i C'nin 3 tanısına karşı 8 tanı üretiyordu.
+// Eşik C'den OKUNDU: PARSER_MAX_AYNI_HATA = 3, PARSER_MAX_HATA = 100.
+// Eşik aşılınca C `hata_sayisi`yi MAX'a çeker ve `parser_hata` sonraki TÜM
+// tanıları düşürür — burada `ph_kis` bayrağı aynı işi yapar.
+işlev ph_ekle(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+    eğer p.ph_kis == 1 { ver 0; }
+    eğer dizi_boyut(p.ph_kod) >= 100 { p.ph_kis = 1; ver 0; }
+    eğer (sat == p.sh_sat) ve (sut == p.sh_sut) ve metin_esit(kod, p.sh_kod) {
+        p.sh_tek = p.sh_tek + 1;
+        eğer p.sh_tek > 3 { p.ph_kis = 1; ver 0; }
+    }
+    değilse {
+        p.sh_sat = sat;  p.sh_sut = sut;  p.sh_kod = kod;  p.sh_tek = 1;
+    }
     p.hata_say = p.hata_say + 1;
     dizi_ekle(p.ph_kod, kod);
     dizi_ekle(p.ph_sat, sat);
     dizi_ekle(p.ph_sut, sut);
     ver 0;
 }
+işlev parse_hata_konum(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+    ver ph_ekle(p, kod, sat, sut);
+}
 işlev parse_hata_kaydet(p: &değişken Ayr, kod: metin) -> tam32 {
-    p.hata_say = p.hata_say + 1;
-    dizi_ekle(p.ph_kod, kod);
-    dizi_ekle(p.ph_sat, sim_sat(p));
-    dizi_ekle(p.ph_sut, sim_sut(p));
-    ver 0;
+    ver ph_ekle(p, kod, sim_sat(p), sim_sut(p));
 }
 işlev bekle_k(p: &değişken Ayr, t: metin, kod: metin) -> tam32 {
     eğer sim_mi(p, t) { ilerle(p); ver 1; }
-    p.hata_say = p.hata_say + 1;
-    dizi_ekle(p.ph_kod, kod);
-    dizi_ekle(p.ph_sat, sim_sat(p));
-    dizi_ekle(p.ph_sut, sim_sut(p));
+    ph_ekle(p, kod, sim_sat(p), sim_sut(p));
     ver 0;
 }
 // ⚠ ARTIMLI GOC: kodu HENUZ eslenmemis cagri yerleri "P000" kaydeder. Bu BILEREK
@@ -1032,8 +1047,12 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
         }
         ver dugum0(p, "TIP_BASIT", ad, s, u);
     }
-    p.hata_say = p.hata_say + 1;
-    ilerle(p);
+    // [D-654] C `ifade.c:955` aynasi — P011 ve ILERLEME YOK.
+    // Oncesinde kod kaydedilmiyor VE bir belirtec ilerleniyordu; ilerleme
+    // sonraki taninin konumunu kaydiriyordu (olculdu: `uygula { }` icin
+    // C `P011 2:8`, self `P000 2:10`). Ilerlemeyi kaldirmak D-650'de
+    // `parse_blok`a eklenen sonsuz-dongu korumasi sayesinde guvenli.
+    parse_hata_kaydet(p, "P011");
     ver dugum0(p, "HATA", "", s, u);
 }
 
@@ -1711,10 +1730,18 @@ işlev parse_alan(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "GENEL") { ilerle(p); }   // genel öneki (dump'ta yok)
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
-    bekle(p, "IKI_NOKTA");
+    // [D-654] C parser.c:516-520 aynasi — alan adi tanimlayici DEGILSE P018 +
+    // PANIK SENKRON + erken donus. Oncesinde burada devam ediliyordu ve
+    // cascade ayrisiyordu.
+    eğer sim_mi(p, "TANIMLAYICI") == yanlış {
+        parse_hata_kaydet(p, "P018");
+        panik_senkron(p);
+        ver dugum0(p, "HATA", "", s, u);
+    }
+    ilerle(p);   // tanimlayici tuket (C: parser_ilerle)
+    bekle_k(p, "IKI_NOKTA", "P019");        // [D-654] C parser.c:522
     değişken tip: tam32 = parse_tip(p);
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P020");   // [D-654] C parser.c:525
     ver dugum1(p, "ALAN", ad, s, u, tip);
 }
 işlev parse_yapi(p: &değişken Ayr) -> tam32 {
@@ -1732,7 +1759,22 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
-        değilse { dizi_ekle(kids, parse_alan(p)); }
+        değilse {
+            // [D-657] SONSUZ DÖNGÜ KORUMASI — C parser.c:573 aynası.
+            // C'nin yapı gövde döngüsünde bu koruma VARDI, self-host'ta YOKTU.
+            // D-650 aynı korumayı `parse_blok`a eklemişti; YAPI gövdesi ayrı bir
+            // döngüdür ve gözden kaçmıştı. D-654 `parse_tip`in son çaresinden
+            // `ilerle`yi kaldırınca (C aynası, doğru) bu boşluk ÖLÜMCÜL oldu:
+            // `yapı N { x }` + ardından bir tanım → `parse_alan` hiçbir şey
+            // tüketmiyor, döngü sonsuza gidiyor ve tanı dizileri şişiyor.
+            // ÖLÇÜLDÜ: `kemcheck` 26.6 GiB'e çıkıp OOM-killer tarafından
+            // öldürüldü ve TAM TAKIMI aşağı çekti (çekirdek günlüğünde kayıtlı).
+            değişken onceki: tam32 = p.imlec;
+            dizi_ekle(kids, parse_alan(p));
+            eğer (p.imlec == onceki) ve (sim_mi(p, "DOSYA_SONU") == yanlış) {
+                ilerle(p);
+            }
+        }
     }
     bekle(p, "SAG_SUSLU");
     ver dugum_n(p, "YAPI", ad, s, u, kids);
@@ -2011,7 +2053,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         t_ad: [], t_sat: [], t_sut: [], t_off: [], t_uz: [],
         imlec: 0,
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
-        hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [],
+        hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [], sh_sat: 0, sh_sut: 0, sh_kod: "", sh_tek: 0, ph_kis: 0,
         yapi_izni: 1,
         sk_pending: 0,
         g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_mim: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], al_ad: [], al_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,

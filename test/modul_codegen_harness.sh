@@ -113,6 +113,21 @@ for f in test/moduller/*.kem; do
     if ! "$CODEGEN" --llvm "$f" > "$TMP/$b.s.ll" 2>/dev/null; then
         echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue
     fi
+
+    # [D-656] YAPISAL ÖLÇÜM: HEDEF ÜÇLÜSÜ. Davranışsal kıyas buna KÖRDÜR.
+    # `clang` modül üçlüsünü KONAĞINKİYLE EZER (`-Woverride-module`) ve bu
+    # harness stderr'i yutar → yanlış üçlü link'i GEÇER, çıkış kodları eşit
+    # çıkar, kapı yeşil kalır. Ölçüldü (ARM64 konak, `ana_alias`): modül
+    # birleştirmesi `p`yi taze `Ayr` ile değiştirip hedefi sıfırlıyordu →
+    # self `x86_64-pc-windows-gnu`, C `aarch64-unknown-linux-gnu`.
+    # `baremetal_diff` üçlüyü zaten ölçer ama YALNIZ `runtime/*.kem` için;
+    # `test/moduller` yüzeyi kapsamı dışındaydı.
+    ct=$(grep -m1 'target triple' "$TMP/$b.c.ll" 2>/dev/null)
+    st=$(grep -m1 'target triple' "$TMP/$b.s.ll" 2>/dev/null)
+    if [ "$ct" != "$st" ]; then
+        echo "  🔴 $b — hedef üçlüsü AYRIŞIYOR: C [$ct] vs KEMGU [$st]"
+        fail=$((fail+1)); continue
+    fi
     if ! link_retry "$TMP/$b.s.ll" "$TMP/$b.s.exe"; then
         echo "  🔴 $b — KEMGU IR link edilemedi: $(grep -m1 'error:' "$TMP/$b.err" 2>/dev/null | sed 's|.*error: ||' | cut -c1-60)"
         fail=$((fail+1)); continue

@@ -42,6 +42,7 @@ yapı Ayr {
     // -> her parse hatasi SESSIZCE "OK" oluyordu (C: P090/P264/...). Tablo C'nin
     // `--checkdump` bicimiyle (KOD\tsat\tsut) rapor edilebilmesi icin var.
     ph_kod: Dizi<metin>;
+    sh_sat: tam32;  sh_sut: tam32;  sh_kod: metin;  sh_tek: tam32;  ph_kis: tam32;   // [D-657] tekrar bastirma
     ph_sat: Dizi<tam32>;
     ph_sut: Dizi<tam32>;
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
@@ -1020,26 +1021,40 @@ işlev panik_senkron(p: &değişken Ayr) -> tam32 {
 // [D-653] KONUM VERILEN tani kaydi. `parse_hata_kaydet` GECERLI token'in
 // konumunu kullanir; C bazi tanilari BASKA bir token'a baglar (or. zorunlu asm
 // clause eksikligi `satıriçi_asm` ANAHTAR KELIMESINE baglanir, kapanis `}`ya degil).
-işlev parse_hata_konum(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+// [D-657] AYNI-KONUM-AYNI-KOD TEKRAR BASTIRMA — C `parser.c:102` aynasi.
+// C'nin kendi yorumu bu senaryoyu ADIYLA tarif ediyor: "panik_sync sync-keyword'e
+// takılıp ilerlemediğinde, üst loop aynı pozisyonda aynı hatayı sonsuz tekrar
+// etmek istiyor". Self-host'ta bu mekanizma HİÇ YOKTU; D-654 `parse_tip`in son
+// çaresinden `ilerle`yi kaldırınca (C aynası, doğru) eksiklik görünür oldu:
+// tanı cascade'i C'nin 3 tanısına karşı 8 tanı üretiyordu.
+// Eşik C'den OKUNDU: PARSER_MAX_AYNI_HATA = 3, PARSER_MAX_HATA = 100.
+// Eşik aşılınca C `hata_sayisi`yi MAX'a çeker ve `parser_hata` sonraki TÜM
+// tanıları düşürür — burada `ph_kis` bayrağı aynı işi yapar.
+işlev ph_ekle(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+    eğer p.ph_kis == 1 { ver 0; }
+    eğer dizi_boyut(p.ph_kod) >= 100 { p.ph_kis = 1; ver 0; }
+    eğer (sat == p.sh_sat) ve (sut == p.sh_sut) ve metin_esit(kod, p.sh_kod) {
+        p.sh_tek = p.sh_tek + 1;
+        eğer p.sh_tek > 3 { p.ph_kis = 1; ver 0; }
+    }
+    değilse {
+        p.sh_sat = sat;  p.sh_sut = sut;  p.sh_kod = kod;  p.sh_tek = 1;
+    }
     p.hata_say = p.hata_say + 1;
     dizi_ekle(p.ph_kod, kod);
     dizi_ekle(p.ph_sat, sat);
     dizi_ekle(p.ph_sut, sut);
     ver 0;
 }
+işlev parse_hata_konum(p: &değişken Ayr, kod: metin, sat: tam32, sut: tam32) -> tam32 {
+    ver ph_ekle(p, kod, sat, sut);
+}
 işlev parse_hata_kaydet(p: &değişken Ayr, kod: metin) -> tam32 {
-    p.hata_say = p.hata_say + 1;
-    dizi_ekle(p.ph_kod, kod);
-    dizi_ekle(p.ph_sat, sim_sat(p));
-    dizi_ekle(p.ph_sut, sim_sut(p));
-    ver 0;
+    ver ph_ekle(p, kod, sim_sat(p), sim_sut(p));
 }
 işlev bekle_k(p: &değişken Ayr, t: metin, kod: metin) -> tam32 {
     eğer sim_mi(p, t) { ilerle(p); ver 1; }
-    p.hata_say = p.hata_say + 1;
-    dizi_ekle(p.ph_kod, kod);
-    dizi_ekle(p.ph_sat, sim_sat(p));
-    dizi_ekle(p.ph_sut, sim_sut(p));
+    ph_ekle(p, kod, sim_sat(p), sim_sut(p));
     ver 0;
 }
 // ⚠ ARTIMLI GOC: kodu HENUZ eslenmemis cagri yerleri "P000" kaydeder. Bu BILEREK
@@ -1225,8 +1240,12 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
         }
         ver dugum0(p, "TIP_BASIT", ad, s, u);
     }
-    p.hata_say = p.hata_say + 1;
-    ilerle(p);
+    // [D-654] C `ifade.c:955` aynasi — P011 ve ILERLEME YOK.
+    // Oncesinde kod kaydedilmiyor VE bir belirtec ilerleniyordu; ilerleme
+    // sonraki taninin konumunu kaydiriyordu (olculdu: `uygula { }` icin
+    // C `P011 2:8`, self `P000 2:10`). Ilerlemeyi kaldirmak D-650'de
+    // `parse_blok`a eklenen sonsuz-dongu korumasi sayesinde guvenli.
+    parse_hata_kaydet(p, "P011");
     ver dugum0(p, "HATA", "", s, u);
 }
 
@@ -2038,10 +2057,18 @@ işlev parse_alan(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "GENEL") { ilerle(p); }   // genel öneki (dump'ta yok)
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
-    bekle(p, "IKI_NOKTA");
+    // [D-654] C parser.c:516-520 aynasi — alan adi tanimlayici DEGILSE P018 +
+    // PANIK SENKRON + erken donus. Oncesinde burada devam ediliyordu ve
+    // cascade ayrisiyordu.
+    eğer sim_mi(p, "TANIMLAYICI") == yanlış {
+        parse_hata_kaydet(p, "P018");
+        panik_senkron(p);
+        ver dugum0(p, "HATA", "", s, u);
+    }
+    ilerle(p);   // tanimlayici tuket (C: parser_ilerle)
+    bekle_k(p, "IKI_NOKTA", "P019");        // [D-654] C parser.c:522
     değişken tip: tam32 = parse_tip(p);
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P020");   // [D-654] C parser.c:525
     ver dugum1(p, "ALAN", ad, s, u, tip);
 }
 işlev parse_yapi(p: &değişken Ayr) -> tam32 {
@@ -2062,7 +2089,22 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
-        değilse { dizi_ekle(kids, parse_alan(p)); }
+        değilse {
+            // [D-657] SONSUZ DÖNGÜ KORUMASI — C parser.c:573 aynası.
+            // C'nin yapı gövde döngüsünde bu koruma VARDI, self-host'ta YOKTU.
+            // D-650 aynı korumayı `parse_blok`a eklemişti; YAPI gövdesi ayrı bir
+            // döngüdür ve gözden kaçmıştı. D-654 `parse_tip`in son çaresinden
+            // `ilerle`yi kaldırınca (C aynası, doğru) bu boşluk ÖLÜMCÜL oldu:
+            // `yapı N { x }` + ardından bir tanım → `parse_alan` hiçbir şey
+            // tüketmiyor, döngü sonsuza gidiyor ve tanı dizileri şişiyor.
+            // ÖLÇÜLDÜ: `kemcheck` 26.6 GiB'e çıkıp OOM-killer tarafından
+            // öldürüldü ve TAM TAKIMI aşağı çekti (çekirdek günlüğünde kayıtlı).
+            değişken onceki: tam32 = p.imlec;
+            dizi_ekle(kids, parse_alan(p));
+            eğer (p.imlec == onceki) ve (sim_mi(p, "DOSYA_SONU") == yanlış) {
+                ilerle(p);
+            }
+        }
     }
     bekle(p, "SAG_SUSLU");
     tip_param_kaydet(p, ad);   // D-307: yakalanan generic paramları ad'a bağla
@@ -11042,6 +11084,34 @@ işlev as001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer uyar == yanlış { sekil_hata(p, idx, "AS001"); }
     ver 0;
 }
+// [D-656] AS001'in CODEGEN KATMANI. `as001_kontrol` checker tablosuna yazar ve
+// `--tip-atla` onu susturur; C'nin codegen dalı ise `--tip-atla`dan BAĞIMSIZ
+// ölümcüldür. Veri parse anında hazır (`asm_node`/`asm_mim`), yani checker'ı
+// yeniden koşturmak GEREKMEZ — aynı soruyu ikinci bir yerde yanıtlamıyoruz
+// (D-407): eşanlamlı kuralı `as001_kontrol` ile BİREBİR aynı tutulur.
+işlev as001_codegen_kapisi(p: &değişken Ayr) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken kotu: tam32 = 0;
+    iken i < dizi_boyut(p.asm_mim) {
+        değişken m: metin = dizi_al(p.asm_mim, i);
+        eğer metin_esit(m, "") == yanlış {
+            değişken uyar: mantıksal = metin_esit(m, p.hedef_mim);
+            eğer metin_esit(p.hedef_mim, "arm64") {
+                eğer metin_esit(m, "aarch64") { uyar = doğru; }
+            }
+            eğer uyar == yanlış {
+                değişken nd: tam32 = dizi_al(p.asm_node, i);
+                değişken sat: metin = metin_birlestir("AS001 ", tam64_str(dizi_al(p.a_sat, nd) olarak tam64));
+                sat = metin_birlestir(sat, " ");
+                sat = metin_birlestir(sat, tam64_str(dizi_al(p.a_sut, nd) olarak tam64));
+                yazdir_hata(sat);
+                kotu = kotu + 1;
+            }
+        }
+        i = i + 1;
+    }
+    ver kotu;
+}
 // G002: `satıriçi_asm` yalnız `güvensiz` blokta (ham makine kodu = tier kapısı).
 // G003: annotasyonsuz `değişken a = [..]` YIĞIN dizi üretir; `Dizi<T>` parametresi
 //       dinamik KdlDizi* bekler → callee yığın diziyi KdlDizi sanar (misaligned
@@ -14399,7 +14469,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         t_ad: [], t_sat: [], t_sut: [], t_off: [], t_uz: [],
         imlec: 0,
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
-        hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [],
+        hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [], sh_sat: 0, sh_sut: 0, sh_kod: "", sh_tek: 0, ph_kis: 0,
         yapi_izni: 1,
         sk_pending: 0,
         reg: 0,
@@ -14630,9 +14700,30 @@ işlev main() -> tam32 {
     eğer metin_uzunluk(mods) > 0 {
         değişken birlesik: metin = metin_birlestir(mods, kaynak);
         p = ayr_olustur(birlesik);
+        // [D-656] HEDEFİ GERİ YÜKLE. `ayr_olustur` varsayılanı `hedef_mim:
+        // "x86_64"` ve `hedef_triple: ""`; birleştirme `p`yi TAZE bir `Ayr` ile
+        // değiştirdiği için hedef SESSİZCE sıfırlanıyordu. Ölçüldü (ARM64 konak,
+        // modül içe aktaran dosya): self `target triple = "x86_64-pc-windows-gnu"`,
+        // C `aarch64-unknown-linux-gnu` → YANLIŞ HEDEF, sessizce.
+        // ⚠ D-634 bunu YARATMADI, GÖRÜNÜR KILDI: öncesinde varsayılan da sabit
+        // x86_64 olduğu için sıfırlama aynı değere dönüyordu.
+        // ⚠ KAPI NEDEN GÖRMEDİ: `clang` modül üçlüsünü KONAĞINKİYLE EZİYOR
+        // (`-Woverride-module` uyarısı) ve harness stderr'i yutuyor → link
+        // başarılı, çıkış kodları eşit, kapı yeşil. Davranışsal kıyas üçlüye
+        // KÖRDÜR (D-422/D-506 sınıfı).
+        p.hedef_mim = mim;
+        p.hedef_triple = trp;
         lex_et(&değişken p);
         kok = parse_program(&değişken p);
     }
+    // [D-656] AS001 CODEGEN KATMANI — `--tip-atla`dan BAĞIMSIZ.
+    // C'de denetim İKİ yerde: tip kontrolünde (`tip_kontrol.c`, `--tip-atla`
+    // susturur) VE codegen'de ÖLÜMCÜL olarak (`llvm.c`, yorumu aynen "C5 AS001:
+    // olumcul codegen hatasi"). Self-host'ta yalnız checker tablosuna (`th_kod`)
+    // yazılıyordu → `--tip-atla` ile YABANCI MİMARİ asm'i hedef modüle basıyordu.
+    // Ölçüldü (x86 hedef, arm64 etiketli fikstür): C rc=1 / 0 define,
+    // self rc=0 / 2 define.
+    eğer as001_codegen_kapisi(&değişken p) > 0 { ver 1; }
     program_uret(&değişken p, kok);
     ver 0;
 }

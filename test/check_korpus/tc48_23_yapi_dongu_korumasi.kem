@@ -1,0 +1,16 @@
+// [D-657] YAPI GÖVDESİ SONSUZ-DÖNGÜ KORUMASINI SINAYAN İLK KORPUS DOSYASI.
+//
+// ⚠ NEDEN ÖZEL: alan adı tanımlayıcı değilse `parse_alan` P018 basıp
+// `panik_senkron` ile erken döner; hiçbir belirteç tüketilmezse yapı gövde
+// döngüsü SONSUZA gider. C'de koruma VAR (`parser.c:573` — "token ilerlemediyse
+// zorla ilerle" + `PARSER_MAX_HATA` kesmesi), self-host'ta YOKTU.
+//
+// ⚠⚠ ÖLÇÜLDÜ: koruma kaldırılınca `yapı N { , }` ve `yapı N { ) }` — ARDINDAN
+// BİR TANIM GELDİĞİNDE — 6 sn timeout'a takılıyor. Tek başına yapı ASILMAZ;
+// asılma için ardından gelen tanım ŞART. D-650'nin `parse_blok` koruması aynı
+// şekil ailesini (`{ , }`, `{ : }`, `{ ) }`) blok düzeyinde kapatmıştı; YAPI
+// gövdesi AYRI bir döngüdür ve gözden kaçmıştı.
+//
+// Beklenen: C ve self-host BİREBİR altı tanı (P018 ×3 + P019 + P011 + P020).
+yapı N { , }
+işlev main() -> tam32 { ver 0; }

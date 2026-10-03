@@ -98,14 +98,12 @@
       Tek kirilma: `Makefile:651 build/codegen.ll Error 1` (lambda_v2'den sonra,
       codegen_diff'in on kosulu). SEBEP LOGDA GORUNMUYORDU -> D-655 onardi.
       SIRADAKI: yeni CI kosumunun tanisini oku.
-- [ ] A3 [S] MIMARI-ATLAMASI OLMAYAN DORT KAPI (D-655'te olculdu, GIZLI kusur):
-      `yapi_diff` · `bolge_operand` · `asan_denetim` · `check_genis` —
-      dordu de `test/cg_korpus/*.kem` ya da `test/snapshots/*.kem` glob'luyor ve
-      mimari sormuyor; `codegen_diff` ve `check_kapisi`da atlama VAR (D-634'te
-      yazilmisti, bu dordu GOZDEN KACTI). D-634'un arm64 ikizleri x86 hedefte
-      AS001 ile REDDEDILIYOR (olculdu). ARM64'te gorunmez, x86'da kacinilmaz.
-      ⚠ BUGUNKU KIRMIZININ SEBEBI DEGIL: dordu de test_tumu sirasinda
-      codegen_diff'ten SONRA geliyor, Windows kosumu onlara hic ulasmadi.
+- [x] A3 -> D-656'da OLCULDU, ONCULU YANLIS CIKTI. Dort kapinin HICBIRI x86'da
+      kirmizi olmuyor: yapi_diff/bolge_operand oracle `--llvm` dustugu icin
+      `atla`, asan_denetim `--check` dustugu icin `skip`, check_genis ise IKI
+      TARAFTA AYNI `AS001 14 9` verdigi icin GECIYOR. Deseni korlemesine
+      uygulamak check_genis'ten GERCEK bir parite olcumunu silerdi (D-534).
+      Yerine IKI gercek kusur cikti (D-656).
 - [ ] A1  [S] PUSH + CI. 23 commit bekliyor; bu makinede GitHub yazma yetkisi yok.
       ONEMI YEDEKLEME DEGIL: D-634 Makefile/self-host/harness'a dokundu ve
       WINDOWS/x86 CI YOLU HIC OLCULMEDI. Onu dogrulayacak tek sey CI.
@@ -1664,3 +1662,58 @@
   TRIPLE=aarch64-unknown-linux-gnu)`, make rc=2, kismi `.ll` silindi.
   HANGI KAPI NEYI OLCTU: temiz yol `build/codegen` rc=0 (ll 2.498.532 bayt,
   konak 5 satir); S155b rc=2 ve tani ADIYLA basiliyor.
+- 2026-10-03 D-654 + D-656 + D-657: parser tanilari, hedef sifirlanmasi, yapi
+  dongu korumasi. ⚠ TEK COMMIT, ve bu BILINCLI: uc is ayni iki dosyada birikti
+  ve TAM TAKIM ucunu BIRLIKTE dogruladi. Ayirmak, hicbiri tek tek olculmemis
+  iki ara durum commit'lemek olurdu — bu depoda olculmus tek commit, kozmetik
+  olarak bolunmus olculmemis commit'lerden iyidir.
+
+  D-654 (C0d): `uygula { }` konum kaymasi + `yapı N { x }` cascade'i kapandi.
+  Kok TEK yerdeydi: `parse_tip`in son caresi kod KAYDETMIYOR ve BIR BELIRTEC
+  ILERLIYORDU (C `ifade.c:955` ilerlemez). Ilerleme kalkinca self'in 21 tanisi
+  3'e indi ve konumlar C ile hizalandi; kalan P018/P019/P020 mekanik esleme +
+  C'nin erken-donus + panik-senkron deseni.
+
+  D-656 (A3'un yerine): IKI gercek kusur.
+  (1) MODUL BIRLESTIRMESI HEDEFI SIFIRLIYORDU. `ayr_olustur` varsayilani
+      `hedef_mim: "x86_64"`; birlestirme `p`yi TAZE bir `Ayr` ile degistirip
+      hedefi geri YUKLEMIYORDU. Olculdu (ARM64, `ana_alias`): self
+      `x86_64-pc-windows-gnu`, C `aarch64-unknown-linux-gnu` = SESSIZCE YANLIS
+      HEDEF. ⚠ D-634 bunu YARATMADI, GORUNUR KILDI (onceden varsayilan da
+      sabit x86_64 oldugu icin sifirlama ayni degere donuyordu).
+      ⚠⚠ KAPI NEDEN GORMEDI: `clang` modul uclusunu KONAGINKIYLE EZIYOR
+      (`-Woverride-module`) ve harness stderr'i yutuyor -> link gecer, cikis
+      kodlari esit, kapi yesil. DAVRANISSAL KIYAS UCLUYE KORDUR.
+      `modul_codegen` artik ucluyu YAPISAL olarak karsilastiriyor.
+  (2) AS001'in CODEGEN KATMANI YOKTU. C'de denetim iki yerde (tip kontrolu +
+      codegen, ikincisi `--tip-atla`dan BAGIMSIZ ve olumcul). Self-host yalniz
+      `th_kod`a yaziyordu -> `--tip-atla` ile YABANCI MIMARI asm'i hedef module
+      basiyordu (olculdu: C rc=1/0 define, self rc=0/2 define). `checker.kem`de
+      ayni sifirlama OLMADIGI ayrica olculdu.
+
+  D-657 (yol ustunde, ayri kusur): YAPI GOVDESI SONSUZ DONGU KORUMASI YOKTU.
+  C'de VAR (`parser.c:573` zorla-ilerle + `PARSER_MAX_HATA`), self-host'ta
+  YOKTU. D-650 ayni korumayi `parse_blok`a eklemisti; YAPI gövdesi AYRI bir
+  dongudur ve gozden kacmisti. Ayrica C'nin AYNI-KONUM-AYNI-KOD tekrar
+  bastirmasi (`PARSER_MAX_AYNI_HATA = 3`, deger C'den OKUNDU) self-host'ta HIC
+  YOKTU — C'nin kendi yorumu bu senaryoyu adiyla tarif ediyor.
+  YUK TASIDIGI OLCULDU: koruma kaldirilinca `yapı N { , }` ve `yapı N { ) }`
+  — ARDINDAN BIR TANIM GELDIGINDE — timeout'a takiliyor; tek basina yapi
+  ASILMAZ. Korumali halde ikisi de C ile BIREBIR alti tani veriyor.
+  Fikstur `tc48_23` eklendi (yapi gövdesi korumasini sinayan ILK korpus dosyasi).
+
+  ⚠⚠⚠ ASIL SURECI DERSI — SABOTAJ ARTIGI BUTUN BIR TESHISI YANLIS KOKE
+  GOTURDU. `selfhost/checker.kem` S154 sabotajini (D-654'u GERI ALAN satir)
+  OTURUMLAR BOYUNCA tasidi: arka plan gorevi geri alma satirina gelmeden
+  kesilmisti. Bir kez tespit edip kaldirdim, GERI GELDI ve fark etmedim.
+  Sonuc: `kemcheck` 26.6 GiB'e cikip OOM-killer tarafindan oldurüldu (cekirdek
+  gunlugunde kayitli, cgroup `app-com.anthropic.Claude-*`), TAM TAKIMI asagi
+  cekti ve bunu "D-654 asilmaya yol aciyor" diye teshis ettim — YANLIS KOK.
+  Temiz agacta D-654 sorunsuz. KURAL: her olcumden ONCE `grep -rn "SABOTAJ S"`
+  ile TUM depoyu tara; "bir kez kaldirdim" yeterli degil.
+
+  HANGI KAPI NEYI OLCTU: checker_diff 212 -> 215/215 (0 muaf) .
+  modul_codegen 27/27 (0 atlandi, 0 muaf) . test_tumu TAM rc=0, 0 hata;
+  ozette TEK fark +3 fikstur.
+  SABOTAJ: S156 (hedef geri yuklemesini kaldir) -> modul_codegen rc=2, ucluyu
+  uc dosyada adiyla bildirdi. D-657'nin yuk tasidigi ayrica olculdu (yukarida).
