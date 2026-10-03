@@ -12,101 +12,17 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [x] D-582 ADIM 5 -> D-590 (Mehmet karari: secenek a). Legacy duzlestirme
-      UC UYGULAMADA DA SILINDI; ciplak cok-segment `kullan` artik yeni-bicim
-      ithalattir, modulu SON segmentle baglar, T041 EVRENSEL.
-- [x] KEMGU-OS kalan C parcalari -> D-592: dokuzu da OLU cikti ve link
-      listesinden dusuruldu; kem_os = boot .S (start_aarch64.S) + SAF-.kem.
-- [x] runtime olu kod -> D-596 (Mehmet: secenek a). 9 olu islev silindi.
-- [x] kem_os_arm bayat llvm-nm denetimleri -> D-599 (harita tabanli denetim).
-- [x] qemu_cekirdek temsilcileri kem_os'a tasindi: bignum D-598 [25] . sha256 D-600 [26] .
-      virtio D-601 (kem_os ZATEN kapsiyordu). qemu_cekirdek = qemu_smoke + kem_os_arm.
-- [x] Sinif A (Mehmet onayi) -> D-603: 26 hedef + 17 C kaynak silindi.
-- [x] Sinif B kapandi: pointer D-604, d1/d2/proc/yasam D-605 (silindi); geri_al +
-      metin D-606 ve kalan 13 kalem D-607 SINIF C'ye tasindi (kem_os'ta o ozellik yok).
-- [x] kem_os syscall EL0-pointer dogrulamasi -> D-610 (Mehmet onayi). D-608'in belirsiz
-      probe'u cozuldu: gecerli probe (ham kernel RAM'ine sir seed + kdl_syscall_isle'yi
-      dogrudan cagir) sizinti'yi ISPATLADI (S1: "GIZLIVERI" UART'a sizdi). kg_user_oku/
-      yaz_ptr_gecerli (D-150/151 .kem aynasi) sys 5/17/18/26'ya eklendi; faz [28] gate +
-      S1/S2 sabotaj. kem_os_arm 28 faz, baremetal_diff 5/5, qemu_cekirdek 2/2.
-- [x] kem_os_arm boru hatti maskesi -> D-609 (kemgu | awk bolundu).
-- [x] Sinif C KARARI VERILDI (D-611, Mehmet delege etti): TOPLU SILME YOK, kategoriye gore ayrik.
-      GOCUR (kem_os fazina tasi, eski izole demoyu sil — ANAYASA-uyumlu, kapsam-pozitif):
-        self-host algoritmalari (12) + benzersiz userspace yetenekleri.
-      DONDUR (belgelenmis referans, silme, QEMU'ya kapilama):
-        SMP (~14, D-490: yalniz fiziksel ARM64) · TCP/IP (~9, sonraki NET fazi referansi) ·
-        x86 (~17, x86_64 ikincil port referansi).
-      SIRADAKI GOC ADIMLARI (her biri ayri iterasyon, biri bitince digeri):
-      - [x] base64_selfhost -> kem_os faz [29] (D-611)
-      - [x] crc32 -> faz [30] (D-612)
-      - [x] sort -> faz [31] (D-613)
-      - [x] hashmap -> faz [32] (D-614)
-      - [x] rc4 -> faz [33] (D-615)
-      - [x] hashcrack -> faz [34] (D-616)
-      - [x] utf8 -> faz [35] (D-617)
-      - [x] turkce_case -> faz [36] (D-618)
-      - [x] turkce_sort -> faz [37] (D-619)
-      - [x] vm -> faz [38] (D-620)
-      - [x] json -> faz [39] (D-621)
-      - [x] asm -> faz [40] (D-622) — Sinif C self-host gocu TAMAM
 - [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
       HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
       cekirdekte HIC CALISMIYORDU (D-527 ABI'yi yalniz DERLIYORDU).
       - [x] kanal SAF-.kem (kem_heap.kem) + faz [41], tek gorevli (D-623)
       - [x] gorev_başlat/birleştir SAF-.kem + faz [42] BLOKLAYAN kanal (D-624)
-- [x] C kapanis tip kaybi (donus + arguman) -> D-625. Kalan self-host tarafi asagida.
-- [x] Self-host kapanis tip kaybi (donus + arguman) -> D-626. Sekiller cg_korpus'ta
-      (cg_kapanis_tip_kaybi); blok-form `ver <tam64|metin>` sekilleri self checker T020
-      kusuru yuzunden HALA fikstur disinda (asagidaki madde).
-- [x] dtam64 ust yarisi literal doyurmasi -> D-629 (+ kripto sec_u64 ust-bit sizintisi).
-- [x] LITERAL ARALIK TANISI -> D-630 (T043 + baglamsiz literal degere gore yukseltme).
-      Kalan parcalari asagida ayri maddeler.
-- [x] Self-host checker blok-form kapanis `ver` baglami (T020) -> D-627.
-- [x] Self-host `görev_başlat(f)` (baglanmis kapanis) derleyici paniği -> D-628.
-- [x] kem_os_arm VAKUM DENETIMLERI -> D-635. SILINDI (cevrilmedi): baktiklari nesneler
-      uretilmiyordu, yani kapsamlari TAM OLARAK SIFIRDI; ayrica yalniz onlari beslemek
-      icin duran iki yetim `.o` kurali da kaldirildi. Gercek kapsam pozitif .ll
-      denetimlerinde + harita denetiminde ve ikisi de kosuyor.
-- [x] C escape analizi BAG DONGUSU (`a = b` / `b = a` -> SONSUZ OZYINELEME, segfault;
-      `--check` dahil) -> D-631.
-- [x] 2^64 VE USTU LITERAL sessiz doymasi -> D-632 (T043, baglamdan bagimsiz).
-- [x] KESIRLI LITERAL 63 KARAKTER KIRPMASI -> D-633.
-- [x] SELF-HOST VARSAYILAN HEDEF UCLUSU SABIT -> D-634. Spark'ta ONCE OLCULDU (madde
-      oyle diyordu): C `csdb` uretirken self-host `lfence` uretti, bes kapi ayristi.
-      Sonra varsayilan C ile AYNI kuraldan turetildi (Makefile `uname` -> uretilen
-      selfhost/konak.kem; codegen.kem + checker.kem `kullan` ile alir). Ayni iterasyonda
-      testlerin konak mimarisini GOMMESI de onarildi (A koku) ve ct_bariyer'in x86 yarisi
-      acikca --mimari x86_64'e sabitlendi — aksi halde B'nin onarimi o yariyi BOSA
-      cikaracakti. test_tumu rc=0, S141 sabotaji kapinin disini kanitladi.
-### [2026-09-28] AYRINTILI KUYRUK (D-646) — alt adimlar UST MADDEYE terfi etti
-# NEDEN: onceki kuyrukta is 17 ust madde + 74 gomulu alt adim seklindeydi; alt
-# adimlar gorunmedigi icin ne sayilabiliyor ne siralanabiliyordu. Her satir artik
-# TEK BASINA alinabilir bir is.
-# ⚠ DOLGU YOK. Her madde ya (a) olculmus bir bulguya ya (b) README yol haritasinin
-# kendi maddesine dayanir. Bu oturumda BELGEDEN KOPYALANAN ~10 maddenin bayat
-# ciktigi olculdu (D-638/D-639/D-642/D-644) — o yuzden "yapilacak" yazan hicbir
-# sey OLCULMEDEN buraya girmedi. `[?]` isaretli olanlar HENUZ OLCULMEDI: ilk is
-# olarak dogrulanmali, cunku bir kismi zaten kapanmis olabilir.
-# Boyut: S ~ yarim iterasyon, M ~ bir iterasyon, L ~ birden cok.
-
-# ===== A. ENGEL (bende bitmez) =====
 - [~] A1 [M] PUSH + CI. ✓ PUSH YAPILDI. Linux YESIL, Windows KIRMIZI -> KOK
       BULUNDU (D-658, D-655'in tanisi sayesinde): uretilen `selfhost/konak.kem`
       Windows'ta MOJIBAKE oluyordu (`işlev` -> `iÅŸlev`) -> lexer anahtar
       kelimeyi tanimiyor -> P001 x4 -> IR uretilmiyor -> `build/codegen.ll`
       dusuyor. Onarildi; DOGRULAMA CI'da (yerelde ureyen bir kusur DEGIL).
-- [x] A3 -> D-656'da OLCULDU, ONCULU YANLIS CIKTI. Dort kapinin HICBIRI x86'da
-      kirmizi olmuyor: yapi_diff/bolge_operand oracle `--llvm` dustugu icin
-      `atla`, asan_denetim `--check` dustugu icin `skip`, check_genis ise IKI
-      TARAFTA AYNI `AS001 14 9` verdigi icin GECIYOR. Deseni korlemesine
-      uygulamak check_genis'ten GERCEK bir parite olcumunu silerdi (D-534).
-      Yerine IKI gercek kusur cikti (D-656).
-- [ ] A1  [S] PUSH + CI. 23 commit bekliyor; bu makinede GitHub yazma yetkisi yok.
-      ONEMI YEDEKLEME DEGIL: D-634 Makefile/self-host/harness'a dokundu ve
-      WINDOWS/x86 CI YOLU HIC OLCULMEDI. Onu dogrulayacak tek sey CI.
-
-# ===== C. CHECKER / PARSER PARITESI =====
 - [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
@@ -118,22 +34,10 @@
       oluyor; C'de 76 farkli kod var. Toplu cevirme "makul ama dogrulanmamis" kod
       uretir -> her site FIKSTURLE kanitlanmali. Yontem: once hata SEKLINI yaz,
       C'ye sor, konum uyusuyorsa site esle.
-- [x] C0c -> D-651. YEDI SEKLIN HEPSI + uc asilma girdisi BIREBIR. Son sekil
-      (ust-duzey P001 cascade'i) `panik_senkron` ile kapandi — C parser.c:175
-      aynasi (13 senkron belirtec; `;`/`}` tuketilir, anahtar kelimeler DEGIL).
-      Yan kazanim: `check_genis` muafiyetinden `tip_alias` DUSTU (harness kendi
-      uyarisiyla bildirdi), 134/134 (13 muaf) -> 135/135 (12 muaf).
 - [ ] G14 [S] KAPI ASILMA HALINDE TIMEOUT'A DUSUYOR, temiz kirmizi vermiyor.
       D-650'de olculdu: S150b sabotaji `checker_diff`i ASTI ve `make rc=124`
       (timeout) dondu. Asilan kapi, dusen kapidan kotu teshis edilir (CI'da
       "neden bekliyor?" sorusu). Harness per-dosya timeout ile sarilmali.
-- [~] C0c-eski [M] (D-647 kaydi, ayrintisi yukarida)
-      (1) [x] D-648: govde suslusu eksik -> self artik `P017 2 5` (onceden `OK`).
-          KOK D-643'UN BOSLUGUYDU: kapi TABLOYA bagliydi ama `bekle` DISINDAKI
-          13 site `hata_say`i dogrudan artirip tabloya HIC yazmiyordu -> sayac>0,
-          tablo bos, kapi ateslemiyor. `parse_hata_kaydet` + EMNIYET AGI eklendi.
-      (2) `işlev main -> tam32` (paren eksik): C uc tani, self DORT (fazladan 1:16).
-      (3) `değişken x tam32 = 0`: son taninin SUTUNU kayiyor (C 2:24, self 2:26).
 - [~] C0b [M] PANIK CASCADE — asm dali KAPANDI (D-649). `&r.deger` icin dort tani
       da birebir (P264 + uc P261); bilinmeyen-clause sitesi `parse_hata_kaydet`e
       baglandi. Fiksturler tc48_05/06.
@@ -141,12 +45,6 @@
       olculen `işlev main -> tam32` (paren eksik) sekli hala ayrisiyor: C uc tani,
       self DORT (fazladan 1:16). Ayrica `değişken x tam32 = 0`da son taninin
       SUTUNU kayiyor (C 2:24, self 2:26) — C0c(2) ve C0c(3).
-- [ ] C0d [M] PARSER DAVRANIS FARKI — D-653'te olculen IKI yeni sekil:
-      (1) `uygula { }` (tip eksik): C `P011 2:8`, self `P000 2:10` — KONUM kayiyor.
-      (2) `yapı N { x }` (alan tipi eksik): C UC tani (P019/P011/P020, hepsi 1:13),
-          self YIRMI BIR tani (1:13'ten 2:30'a yayilan). Kurtarma tamamen ayrisiyor;
-          en buyuk cascade farki. Once (1), sonra (2) — ikincisi buyuk olasilikla
-          alan dongusunun kurtarma stratejisi.
 - [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
       bugun "?" = eski davranis (D-640 bilerek dar birakti).
 - [ ] C1b [M] Annotasyonsuz baglamada ARITMETIK/TANIMLAYICI basaticisi.
@@ -262,11 +160,6 @@
 - [ ] G4  [S] `selfhost_driver_harness.sh:29` `kemgu_self2.exe` adini SABIT yaziyor
       (Linux'ta uzantisiz olmali; bugun calisiyor cunku adi harness kendi koyuyor,
       ama D-469 sinifinda bir artik).
-- [x] G5  -> D-649'da OLCULDU ve IDDIA YANLIS CIKTI: yuzeyler AYNI (ikisinde de
-      asm clause dongusu var; "4'e 32" sayimi YORUMLARI da sayiyordu). Gercek
-      sorun benim D-643'teki EKSIK ESLEMEMDI: desen `codegen.kem`e ozgu bir satir
-      iceriyordu, `checker.kem`de tutmamisti ("ATLANDI" diye kaydetmistim) ve
-      checker.kem `P000` basiyordu. tc48_05 fiksturu bunu ORTAYA CIKARDI.
 - [ ] G13 [S] `SIZINTI-MUAF` METRIGI DALGALANIYOR. D-648'de olculdu: dort
       gozlemin birinde 2 yerine 1 cikti (kanal_mesaj/gorev_temel sizintisi her
       kosumda MANIFEST OLMUYOR). Bu, bu oturumda kullandigim birincil dogrulama
@@ -1743,3 +1636,31 @@
   esdegerligi) . ct_bariyer 14/14 (0 atlandi) . `ana_alias` uclusu
   `aarch64-unknown-linux-gnu` (D-656 korundu).
   ⚠ GERCEK DOGRULAMA CI'DA: bu kusur yerelde uremez.
+- 2026-10-03 D-659: KUYRUK BUTUNLUGU — bayat/cift kayitlar temizlendi.
+  Kuyrugun kendisi bir KAYITTIR, yani bayatlayabilir (D-406). Tarandi ve UC
+  kusur bulundu, hepsi KENDI duzenleme artigim:
+  (1) A1 CIFT KAYITLI: biri "23 commit bekliyor; bu makinede GitHub yazma
+      yetkisi yok" diyordu. OLCULDU: `ahead=0`, `gh auth` OK -> bayat girdi
+      silindi, guncel `[~]` olan kaldi.
+  (2) C0c CIFT KAYITLI (`[x]` + `[~] C0c-eski`) -> ikincisi silindi.
+  (3) C0d hala `[ ]` idi; D-654'te KAPANMISTI. Olculdu ve kapatildi:
+      `uygula { }` -> C/self `P011 2 8` . `yapı N { x }` -> C/self
+      `P019 1 13 P011 1 13 P020 1 13`.
+  AYRICA 25 KAPALI MADDE Sirada'da duruyordu (protokol: kapanan madde Gunluk'e
+  tasinir). Silmeden ONCE guvenlik kosulu olculdu: her blogun D-referansi
+  Gunluk'te VAR MI. 25'inin 25'i kapsanmis -> silindi; Gunluk BIREBIR AYNI
+  kaldigi `diff` ile dogrulandi (132 girdi).
+  SONUC: kuyruk 104 satirdan 99 maddeye indi ve sayilar artik DURUST —
+  95 acik + 4 surmekte. Oncesinde "97 acik" deniyordu ama 25'i kapaliydi.
+  ⚠ SABOTAJ YOK VE GEREKCESI: bu artim CALISTIRILABILIR davranis
+  degistirmiyor, kayit duzeltiyor. Dogrulama buna gore secildi: cift kalmadigi,
+  sayimin dogrulugu, Gunluk'un bayt-esitligi ve her silinen blogun Gunluk'te
+  kapsandigi.
+  ⚠⚠ OLCUM ARACIM BU TURDA UC KEZ YANILDI (D-500 listesinin tekrari):
+  (a) `[ ]` icindeki BOSLUK awk alanlarini kaydirdi -> cift tespiti `]` dondu
+      ve A1 ciftini GORMEDI; regex'e gecildi.
+  (b) `D-654:` (iki nokta ile) arayinca Gunluk'te BULUNAMADI ve "indeks bozuk"
+      sanildi; girdi `D-654 + D-656 + D-657:` biciminde, hepsi greplenebiliyor.
+      OLMAYAN bir kusuru onarmaya BASLAMADAN once dogrulandi.
+  (c) D-referansi denetimi yalniz ILK satira bakiyordu -> `D-631` devam
+      satirinda oldugu icin "kapsanmamis" gorundu.
