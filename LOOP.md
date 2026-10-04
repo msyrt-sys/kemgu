@@ -1768,3 +1768,49 @@
   SABOTAJ YOK: bu bir OLCUM iterasyonu, calistirilabilir davranis
   degismedi; dogrulama parite tablolari + tani konumlarinin kaynaga
   (tip_kontrol.c:2685/2963) baglanmasiyla yapildi.
+- 2026-10-04 D-665/D-666/D-667: DIS INCELEME BULGULARI — birinci asama.
+  Bir dis inceleme (`446ebb7` uzerinde) somut iddialar ortaya koydu; HEPSI kodla
+  karsilastirildi ve kontrol edilebilir olanlarin TAMAMI dogru cikti (bolge sayac
+  yarisi, rho_serbest, CI ozeti, README bayatligi, Lean cross-step HB, semafor/
+  bariyer test boslugu). Cogunu bu oturumda KACIRMISTIM.
+
+  D-665 BOLGE SAYACLARI ATOMIK (yalniz HOSTED). Duz `uint64_t ++` idi; gorevler
+  gercek OS thread'leri oldugu icin artirmalar kayboluyordu. Bu makinede olculdu:
+  duz sayacla olustur 63.841 / 200.000 (incelemenin x86 olcumunden cok daha agir;
+  zayif bellek + cok cekirdek). `kdl_bolge_bakiye` = sizinti TANIGI -> gozlem
+  mekanizmasinin KENDISI yanlis sonuc veriyordu.
+  ⚠ BARE-METAL DUZ BIRAKILDI, bilincli: aarch64'te MMU kapaliyken LDXR/STXR
+  tanimsiz olabilir (D-490); bare-metal tek cekirdek, yaris olusmaz.
+  YENI KAPI `calistir_bolge_sayac_yarisi`: GERCEK runtime'a karsi duz sayim +
+  ThreadSanitizer. DEPODAKI ILK TSan KAPISI. ASan bu sinifi GORMEZ — yarisin
+  bugune dek fark edilmemesinin sebebi tam buydu.
+  SABOTAJ S168 (header'da atomik dali kapat): 3/3 tur kayip + TSan rc=66,
+  yaris `kdl_bolge.c:84` (sayac ++) satirinda. Ayrica S167 (-D__STDC_NO_ATOMICS__,
+  dosya duzenlemeden) ayni sonucu verdi.
+
+  D-666 GOREV OLUSTURUCULARI calloc. Eski `kdl_gorev_basla_i32` D-309'un ekledigi
+  `rho_serbest`i baslatmiyordu; inceleme bunu STATIK buldu, ben MemorySanitizer
+  ile CALISAN KANITA cevirdim: use-of-uninitialized-value @ kdl_runtime.c:1301.
+  Bu API'nin SIFIR cagirani var (olu) ama kok bir SINIFTI: sonradan eklenen alan
+  eski olusturucuda unutuldu. Tek satir yalniz bu ornegi kapatirdi; iki
+  olusturucu da `calloc` -> gelecekteki alanlar da sifirla baslar.
+  YENI KAPI `calistir_gorev_msan`: DEPODAKI ILK MSan KAPISI.
+  SABOTAJ S169 (eski olusturucuyu malloc'a dondur) -> MSan rc=1, kapi rc=2.
+  ⚠ kdl_runtime.c GECERLI UTF-8 DEGIL -> bayt modunda, saf ASCII ile duzenlendi.
+  Ilk denememde bayt literaline Turkce karakter koydum; python AYRISTIRMADA
+  dustu, dosyaya HICBIR SEY yazilmadi (yedekle cmp ile dogrulandi).
+
+  D-667 CI OZETI GERCEK SONUCLARA BAGLANDI. Iki isin ozeti `if: always()` ile
+  SABIT "OK"/"gecti" basiyordu — onceki adim dusse bile. Artik
+  `steps.<id>.outcome`dan kuruluyor; atlanan adim ATLANDI gorunur. "rc=0 bir
+  iddiadir" (D-486) dersinin CI karsiligi; kapilari bu kadar sertlestirirken
+  insanin okudugu ozetin hicbir sey olcmedigini GORMEMISTIM. YAML `safe_load` +
+  her outcome referansinin kendi isinde tanimli oldugu dogrulandi (D-554).
+
+  README: dort bayat iddia duzeltildi — uc gorev-bolgesi pasaji (D-309 kosullu
+  serbest birakma HEM host HEM KEMGU-OS'ta var; `kem_gorev.kem:1016` OLCULDU,
+  varsayilmadi) + semafor/bariyer (D-456'da yapilmis, "gelecek is" yaziyordu).
+
+  HANGI KAPI NEYI OLCTU: test_tumu TAM rc=0; ozette fark TAM OLARAK iki yeni kapi
+  (ikisi de KOSTU ve GECTI — D-645'in "eklendi ama kosmadi" tuzagi bu diff ile
+  dislandi). Kalan: CI ozetinin GitHub'da gercek sonucu gostermesi (push sonrasi).

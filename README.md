@@ -68,7 +68,9 @@ ARM64 ve x86_64 bare-metal'e kadar tek yığın — *uzun vadeli hedef*:
   bunların her birini falsifiye-kanıtla ölçer.
 - **Tam OS yine de yok** ve sınırlar şunlar: yalnız QEMU `virt` üzerinde koşuyor
   (imaj o bellek haritasına bağlı), **tek çekirdek** (`-smp` yok → eşzamanlılık
-  orada kanıtlanamaz), görev bölgesi serbest bırakılmıyor, tam kullanıcı alanı yok.
+  orada kanıtlanamaz), görev bölgesi yalnız codegen'in **hapsedilme kanıtı** ürettiği
+  görevlerde serbest bırakılıyor (diğerlerinde bilinçli sızıntı — bkz. aşağıda),
+  tam kullanıcı alanı yok.
 
 ---
 
@@ -507,14 +509,26 @@ olanlar yukarıdaki "Mevcut Özellikler" tablolarındadır. Her madde *ne olduğ
 
 ### Orta — daha büyük ya da ön-koşullu
 
-- **Görev bölgesinin serbest bırakılması.** Şu an her görev kendi bölgesini alıyor
-  ama bölge **hiç serbest bırakılmıyor** (bilinçli sızıntı).
+- **Görev bölgesinin serbest bırakılması — KISMEN YAPILDI (D-309).** Her görev
+  kendi bölgesini alıyor; codegen gövdenin tahsislerinin o bölgeye **hapsedildiğini
+  pozitif olarak kanıtlayabildiğinde** (`rho_serbest` bayrağı) bölge `görev_birleştir`de
+  serbest bırakılıyor — host runtime'da (`kdl_runtime.c`) **ve** KEMGU-OS'ta
+  (`runtime/kem_gorev.kem`). Kanıt **yoksa** bölge bilinçli olarak sızdırılır:
+  kaçan bir işaretçiyi geçersiz kılmaktansa (UAF) bellek tutmak tercih edildi.
+  *Açık kalan:* kaçış olan yollarda verinin **yeni sahibi ve ömrü** — yani kaçan
+  verinin bölge sahipliğinin açıkça devredilmesi. "Canlı veriyi yanlışlıkla serbest
+  bırakmıyoruz" garantisi var; "her görevde belleği sonunda geri kazanıyoruz" YOK.
+  *Eski not (tarihî):*
   *Neden bekliyor:* serbest bırakmak, görev gövdesindeki tahsislerin o bölgeye
   **hapsedildiğinin pozitif kanıtını** ister — gövde yakalanan bir `&değişken`e
   bölgeden işaretçi yazarsa serbest bırakma **use-after-free** olur. Kanıtsız
   serbest bırakma yapılmayacak; aynı disiplin `ρ_yerel` için de uygulanmıştı.
 
-- **Semaforlar / bariyerler** — `görev`/`kanal` üstüne daha zengin senkronizasyon.
+- **Semaforlar / bariyerler — YAPILDI (D-456).** `stdlib/semafor.kem` (kapsamlı
+  API: `semaforda(s, ||{..})`) ve `stdlib/bariyer.kem` (`bekle(b)`). *Açık kalan
+  ölçüm:* semafor yalnız n=1 (kilit gibi) davranışıyla test edildi; n>1 gerçek
+  eşzamanlı kapasite ve bariyerin "herkes gelmeden kimse geçmiyor" sözleşmesi
+  henüz kapıda değil (`LOOP.md` D3a/D3c).
 
 - ~~**`kanal`'ın bare-metal (`.kem`) tarafında sınanması.**~~ **YAPILDI** (D-623/D-624):
   `kanal` saf-`.kem` olarak faz [41], `görev_başlat`/`görev_birleştir` + **bloklayan**
@@ -571,7 +585,8 @@ Bunlar teknik olarak yapılabilir; bekleyen şey **dilin ne olacağına dair kar
 
 Yol haritası değil, **şu anki gerçek**: `görev<T>`/`kanal<T>` kesirli `T` kabul
 etmez (runtime tamsayı yazmacından okur — sessiz bozulma yerine derleme hatası);
-görev bölgesi sızdırılır;
+görev bölgesi yalnız hapsedilme kanıtı olan görevlerde serbest bırakılır (D-309),
+kanıt yoksa bilinçli olarak sızdırılır;
 generic yapı/çeşit C'de GERÇEK per-instantiation mono (D-307: T=metin/ptr/tam64 +
 çoklu-inst) — self-host henüz T=tam32 (D-306); turbofish yok; `sonuç` içine sarılan
 lineer `görev<T>`

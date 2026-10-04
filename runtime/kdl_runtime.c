@@ -1223,7 +1223,12 @@ static int kdl_gorev_spawn(KdlGorev *g) {
 
 /* islev pointer alir, ya gercek thread spawn ya sequential calistirir */
 KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
-    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    /* [D-666] calloc: TUM alanlar (bugunku ve SONRADAN eklenecek) sifirla
+     * baslar. D-309 `rho_serbest` alanini ekledi ama eski olusturucu
+     * guncellenmedi -> `kdl_gorev_birlestir` baslatilmamis alan okuyordu
+     * (MemorySanitizer ile olculdu: kdl_runtime.c:1301). Tek satir eklemek
+     * yalniz bu ornegi kapatirdi; calloc SINIFI kapatir. */
+    KdlGorev *g = (KdlGorev *)calloc(1, sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = f;
     g->fn_bare = NULL; g->fn_kapanis = NULL; g->env = NULL; g->rho = NULL;
@@ -1245,7 +1250,12 @@ KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
 KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
                                   KdlGorevKapanis fn_kapanis,
                                   void *env, int32_t rho_serbest) {
-    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    /* [D-666] calloc: TUM alanlar (bugunku ve SONRADAN eklenecek) sifirla
+     * baslar. D-309 `rho_serbest` alanini ekledi ama eski olusturucu
+     * guncellenmedi -> `kdl_gorev_birlestir` baslatilmamis alan okuyordu
+     * (MemorySanitizer ile olculdu: kdl_runtime.c:1301). Tek satir eklemek
+     * yalniz bu ornegi kapatirdi; calloc SINIFI kapatir. */
+    KdlGorev *g = (KdlGorev *)calloc(1, sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = NULL;
     g->fn_bare = fn_bare;

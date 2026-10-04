@@ -44,48 +44,69 @@ jobs:
           mingw32-make --version | head -1
 
       - name: Derle (mingw32-make)
+        id: w_derle
         run: |
           export PATH=/clang64/bin:$PATH
           mingw32-make
 
       - name: Tum testler (mingw32-make test_tumu)
+        id: w_tumu
         run: |
           export PATH=/clang64/bin:$PATH
           mingw32-make test_tumu
 
       - name: Stdlib --check
+        id: w_stdlib
         run: |
           export PATH=/clang64/bin:$PATH
           mingw32-make calistir_stdlib_check
 
       - name: Snapshot test
+        id: w_snap
         run: |
           export PATH=/clang64/bin:$PATH
           mingw32-make calistir_snapshot_test
 
       - name: Fuzzer (10000 iter ASan)
+        id: w_fuzz
         run: |
           export PATH=/clang64/bin:$PATH
           mingw32-make calistir_fuzz_test
 
       - name: Runtime link test
+        id: w_rt
         run: |
           export PATH=/clang64/bin:$PATH
           mingw32-make calistir_runtime_link_test
 
       - name: Test sayisi ozeti
         if: always()
+        # [D-667] OZET GERCEK ADIM SONUCLARINDAN KURULUR. Oncesinde sabit "OK"
+        # metni basiliyordu ve `if: always()` ile ONCEKI ADIM DUSSE BILE
+        # "test_tumu | OK" yaziyordu (dis inceleme buldu). Insanin okudugu
+        # ozet adim sonucuna BAGLI DEGILDI — "rc=0 bir iddiadir" (D-486)
+        # dersinin CI karsiligi. Atlanan adim "geçti" degil ATLANDI gorunur.
+        env:
+          S_DERLE: ${{ steps.w_derle.outcome }}
+          S_TUMU: ${{ steps.w_tumu.outcome }}
+          S_STDLIB: ${{ steps.w_stdlib.outcome }}
+          S_SNAP: ${{ steps.w_snap.outcome }}
+          S_FUZZ: ${{ steps.w_fuzz.outcome }}
+          S_RT: ${{ steps.w_rt.outcome }}
         run: |
-          export PATH=/clang64/bin:$PATH
-          echo "## KEMGU Windows Test Sonuclari" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Suite | Durum |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Derleme | OK |" >> $GITHUB_STEP_SUMMARY
-          echo "| test_tumu | OK |" >> $GITHUB_STEP_SUMMARY
-          echo "| stdlib --check | OK |" >> $GITHUB_STEP_SUMMARY
-          echo "| snapshot | 50 |" >> $GITHUB_STEP_SUMMARY
-          echo "| fuzz (ASan) | 10000 iter |" >> $GITHUB_STEP_SUMMARY
+          d() { case "$1" in success) echo "OK";; failure) echo "BASARISIZ";; skipped) echo "ATLANDI";; cancelled) echo "IPTAL";; *) echo "BILINMIYOR ($1)";; esac; }
+          {
+            echo "## KEMGU Windows Test Sonuclari"
+            echo ""
+            echo "| Suite | Durum |"
+            echo "|-------|-------|"
+            echo "| Derleme | $(d "$S_DERLE") |"
+            echo "| test_tumu | $(d "$S_TUMU") |"
+            echo "| stdlib --check | $(d "$S_STDLIB") |"
+            echo "| snapshot | $(d "$S_SNAP") |"
+            echo "| fuzz (ASan) | $(d "$S_FUZZ") |"
+            echo "| runtime link | $(d "$S_RT") |"
+          } >> $GITHUB_STEP_SUMMARY
 
   build-linux:
     name: Linux (Ubuntu / clang + libasan)
@@ -107,26 +128,50 @@ jobs:
           clang --version | head -1
 
       - name: Derle (make)
+        id: l_derle
         run: make
 
       - name: Tum testler (make test_tumu)
+        id: l_tumu
         run: make test_tumu
 
       - name: Stdlib --check
+        id: l_stdlib
         run: make calistir_stdlib_check
 
       - name: Snapshot test
+        id: l_snap
         run: make calistir_snapshot_test
 
       - name: Fuzzer (10000 iter ASan + UBSan)
+        id: l_fuzz
         run: make calistir_fuzz_test
 
       - name: Runtime link test
+        id: l_rt
         run: make calistir_runtime_link_test
 
       - name: Linux test ozeti
         if: always()
+        # [D-667] Windows ozetiyle ayni: sabit "gecti" metni yerine GERCEK sonuc.
+        env:
+          S_DERLE: ${{ steps.l_derle.outcome }}
+          S_TUMU: ${{ steps.l_tumu.outcome }}
+          S_STDLIB: ${{ steps.l_stdlib.outcome }}
+          S_SNAP: ${{ steps.l_snap.outcome }}
+          S_FUZZ: ${{ steps.l_fuzz.outcome }}
+          S_RT: ${{ steps.l_rt.outcome }}
         run: |
-          echo "## KEMGU Linux Test Sonuclari" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Tum testler clang + libasan ile gecti." >> $GITHUB_STEP_SUMMARY
+          d() { case "$1" in success) echo "OK";; failure) echo "BASARISIZ";; skipped) echo "ATLANDI";; cancelled) echo "IPTAL";; *) echo "BILINMIYOR ($1)";; esac; }
+          {
+            echo "## KEMGU Linux Test Sonuclari"
+            echo ""
+            echo "| Suite | Durum |"
+            echo "|-------|-------|"
+            echo "| Derleme | $(d "$S_DERLE") |"
+            echo "| test_tumu | $(d "$S_TUMU") |"
+            echo "| stdlib --check | $(d "$S_STDLIB") |"
+            echo "| snapshot | $(d "$S_SNAP") |"
+            echo "| fuzz (ASan+UBSan) | $(d "$S_FUZZ") |"
+            echo "| runtime link | $(d "$S_RT") |"
+          } >> $GITHUB_STEP_SUMMARY
