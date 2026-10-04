@@ -31,8 +31,14 @@ mkdir -p "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 
 pass=0; fail=0
-for m in kilit semafor; do
-    LIB="stdlib/$m.kem"
+# [D-668] `modul:test` ciftleri. `semafor_n` AYNI modulu (semafor) kullanir ama
+# n>1 semantigini olcer: "en fazla n" (guvenlik) VE "n kadar gercekten" (anlam).
+# Cikis kodlari test icinde ayri: 1=n asildi, 2=kilit gibi, 3=olcum guvenilmez.
+# [D-669] `bariyer` "herkes gelmeden kimse gecmiyor" + YENIDEN KULLANIM (5 tur).
+# Cikis: 1=bariyer erken gecirdi, 3=sayac dengesi bozuk.
+for cift in kilit:kilit semafor:semafor semafor:semafor_n bariyer:bariyer; do
+    lib="${cift%%:*}"; m="${cift#*:}"
+    LIB="stdlib/$lib.kem"
     TST="test/eszamanli/${m}_kosum.kem"
     for f in "$LIB" "$TST"; do
         [ -f "$f" ] || { echo "🔴 HATA: $f YOK — kapı KOŞMADI"; exit 1; }
@@ -50,14 +56,22 @@ for m in kilit semafor; do
 
     kotu=0
     for _ in $(seq 1 "$TUR"); do
-        "$TMP/$m.out" >/dev/null 2>&1
-        [ $? -eq 42 ] || kotu=$((kotu+1))
+        "$TMP/$m.out" >/dev/null 2>&1; son=$?
+        [ "$son" -eq 42 ] || kotu=$((kotu+1))
     done
     if [ "$kotu" -ne 0 ]; then
-        echo "  🔴 $m — $TUR turun $kotu'inde sayaç yanlış (karşılıklı dışlama YOK)"
+        case "$m" in
+            semafor_n) echo "  🔴 $m — $TUR turun $kotu'inde semafor n>1 sozlesmesi BOZUK (son cikis: $son; 1=n asildi 2=kilit gibi 3=olcum guvenilmez)" ;;
+            bariyer)   echo "  🔴 $m — $TUR turun $kotu'inde bariyer sozlesmesi BOZUK (son cikis: $son; 1=erken gecirdi 3=sayac bozuk)" ;;
+            *)         echo "  🔴 $m — $TUR turun $kotu'inde sayaç yanlış (karşılıklı dışlama YOK)" ;;
+        esac
         fail=$((fail+1))
     else
-        echo "  ✅ $m — $TUR/$TUR tur, sayaç tam (3 koşucu × 500 = 1500)"
+        case "$m" in
+            semafor_n) echo "  ✅ $m — $TUR/$TUR tur, en fazla 2 VE gercekten 2 (4 kosucu, n=2)" ;;
+            bariyer)   echo "  ✅ $m — $TUR/$TUR tur, kimse erken gecmedi (4 katilimci x 5 bulusma, yeniden kullanim dahil)" ;;
+            *)         echo "  ✅ $m — $TUR/$TUR tur, sayaç tam (3 koşucu × 500 = 1500)" ;;
+        esac
         pass=$((pass+1))
     fi
 done

@@ -76,13 +76,11 @@
 - [ ] D2c [M] Kabiliyet odunc: codegen.
 - [ ] D2d [M] Kabiliyet odunc: self-host parite.
 - [ ] D2e [S] Kabiliyet odunc: `yetki<R>` korpus fiksturu.
-- [ ] D3a [M] BARIYER kosum kapisi. D-645 kilit+semafor'u kapiya bagladi, bariyer
-      KAPSANMADI: sayac yarisiyla olculemez, "hepsi bulusmadan kimse gecmiyor"
-      sekli gerekir (drf_gorunurluk'un bayrak deseni uyarlanabilir).
-- [ ] D3b [S] README'nin "Semaforlar/bariyerler yapilacak" maddesini olculen
-      gercekle duzelt (uc modul de VAR; D-639'da olculdu, D-645'te ikisi kanitlandi).
-- [ ] D3c [M] SEMAFOR n>1 semantigi olculmedi: D-645 n=1 ile (kilit gibi) test
-      ediyor. Asil semafor iddiasi "es zamanli en fazla n" ve bu HIC olculmedi.
+- [x] D3a -> D-669. Bariyer "herkes gelmeden kimse gecmiyor" + YENIDEN KULLANIM
+      (5 tur) eszamanlilik kapisinda. Cok-tur YUK TASIYOR (olculdu, asagida).
+- [x] D3b -> D-667'de yapildi (README semafor/bariyer maddesi duzeltildi).
+- [x] D3c -> D-668. Semafor n>1: "en fazla n" (guvenlik) VE "n kadar gercekten"
+      (anlam) AYRI AYRI olculuyor; eszamanlilik kapisinda.
 - [ ] D4a [M] LSP v3: artimli didChange.
 - [ ] D4b [M] LSP v3: workspace/symbol.
 - [ ] D4c [M] LSP v3: semanticTokens.
@@ -1814,3 +1812,26 @@
   HANGI KAPI NEYI OLCTU: test_tumu TAM rc=0; ozette fark TAM OLARAK iki yeni kapi
   (ikisi de KOSTU ve GECTI — D-645'in "eklendi ama kosmadi" tuzagi bu diff ile
   dislandi). Kalan: CI ozetinin GitHub'da gercek sonucu gostermesi (push sonrasi).
+- 2026-10-04 D-668 + D-669: dis incelemenin ikinci asamasi — semafor n>1 ve bariyer.
+  D-668 SEMAFOR n>1. D-645 semaforu yalniz n=1 (kilit gibi) olcuyordu; asil iddia
+  "ayni anda en fazla n" HIC olculmemisti. Test IKI iddiayi ayri olcer:
+  tepe<=N (guvenlik, cikis 1) ve tepe>=2 (anlam, cikis 2). Ikincisi olmasa KILIT
+  GIBI davranan bozuk semafor "en fazla 2" testini trivial gecerdi (D-425).
+  ⚠⚠ KENDI TEST TASARIMIMDA KUSUR, SABOTAJ YAKALADI: ilk surum `icerde`/`tepe`
+  sayaclarini IKINCI BIR n=1 SEMAFORLA koruyordu. S170 (semafor beklemesin)
+  ayni kodu paylasan IKI semaforu birden bozdu -> koruma coktu, test "n asildi"
+  (1) yerine "olcum guvenilmez" (3) dedi: KIRMIZIYDI AMA GUVENLIK DALINI
+  KANITLAMADI. Koruma ayri bir runtime ilkeline (ham `kilit_*`, KdlKilit)
+  tasindi. Sonra: S170b -> 5/5 cikis 1 (n asildi), S171b (daima 1 izin) ->
+  5/5 cikis 2 (kilit gibi). DERS: OLCUM ARACI OLCULENDEN BAGIMSIZ OLMALI.
+  D-669 BARIYER. "Herkes gelmeden kimse gecmiyor" + yeniden kullanim. Kademeli
+  gecikme (id ile orantili) erken gecisi GOZLENEBILIR yapar. 5 TUR:
+  S172 (bariyer beklemesin) -> 5/5 cikis 1. S173 (YALNIZ yeniden kullanim
+  bozuk: `vardi` sifirlanmiyor) -> 5/5 cikis 1.
+  ⚠ COK-TUR YUK TASIYOR, OLCULDU: ayni S173 TEK TURLUK varyantta 5/5 YESIL
+  (yanlis yesil) geciyor — D-456'nin kaydettigi nesil-sayaci kusuru tek turla
+  GORUNMEZ. Test yorumundaki iddia boylece olculerek dogrulandi.
+  HANGI KAPI NEYI OLCTU: eszamanli_kosum 2/2 -> 4/4 modul (20 tur);
+  test_tumu TAM rc=0, ozette TEK fark bu satir.
+  CI (faz-1, 0250d07): Linux'ta TSan + MSan GERCEKTEN kostu (atlanmadi); ozet
+  adimi gercek `outcome`lari aldi (S_TUMU: success ...).
