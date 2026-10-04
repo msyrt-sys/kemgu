@@ -98,6 +98,19 @@ MUAF="$MUAF_K1 $MUAF_K2 $MUAF_K3 $MUAF_K4"
 muaf_mi() { case " $(echo $MUAF) " in *" $1 "*) return 0;; esac; return 1; }
 
 pass=0; fail=0; atla=0; muaf=0
+# [D-663] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15). Bu kapi self-host
+# ikilisini ($CODEGEN) KORPUS UZERINDE kosturur -> D-660'in asilma/OOM sinifina
+# ACIK. `timeout` yetenegi OLCULUR (D-661), yoksa sinirsiz + uyari.
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    GTO="timeout $KAP_SN"
+else
+    GTO=""
+    echo "  ⚠ 'timeout' YOK -> per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer). Bkz. D-663."
+fi
+ir_uret() { o="$1"; shift; ( ulimit -v "$KAP_KB" 2>/dev/null; $GTO "$@" > "$o" 2>/dev/null ); }
+
 for f in test/cg_korpus/*.kem; do
     [ -f "$f" ] || continue
     b=$(basename "$f" .kem)
@@ -109,8 +122,12 @@ for f in test/cg_korpus/*.kem; do
     # D-424: oracle'a `--tip-atla` geçiliyor; self-host `--llvm` de artık tip
     # hatasında durduğu için SİMETRİ şart (aksi hâlde kasıtlı tip-geçersiz
     # korpus dosyaları yalnız self tarafında reddedilir → sahte kırmızı).
-    "$CODEGEN" --llvm --tip-atla "$f" > "$TMP/s.ll" 2>/dev/null || {
-        echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }
+    ir_uret "$TMP/s.ll" "$CODEGEN" --llvm --tip-atla "$f"; sir=$?
+    if [ "$sir" -eq 124 ] || [ "$sir" -eq 137 ]; then
+        echo "  🔴 $b — KEMGU IR URETIMI ASILDI/OLDURULDU (rc=$sir, sinir ${KAP_SN}s/${KAP_KB}KB)"
+        fail=$((fail+1)); continue
+    fi
+    [ -s "$TMP/s.ll" ] || { echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }
 
     grep "^define" "$TMP/c.ll" | sed 's/(.*//' | sort > "$TMP/c.d"
     grep "^define" "$TMP/s.ll" | sed 's/(.*//' | sort > "$TMP/s.d"

@@ -94,6 +94,19 @@ if [ "$os_var" -eq 1 ]; then
 fi
 
 # ---- (2) TEK TEK derlenebilen runtime dosyaları ----
+# [D-663] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15). Bu kapi self-host
+# ikilisini ($CODEGEN) KORPUS UZERINDE kosturur -> D-660'in asilma/OOM sinifina
+# ACIK. `timeout` yetenegi OLCULUR (D-661), yoksa sinirsiz + uyari.
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    GTO="timeout $KAP_SN"
+else
+    GTO=""
+    echo "  ⚠ 'timeout' YOK -> per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer). Bkz. D-663."
+fi
+ir_uret() { o="$1"; shift; ( ulimit -v "$KAP_KB" 2>/dev/null; $GTO "$@" > "$o" 2>/dev/null ); }
+
 for f in runtime/*.kem; do
     [ -f "$f" ] || continue
     b=$(basename "$f" .kem)
@@ -103,7 +116,11 @@ for f in runtime/*.kem; do
     head -1 "$TMP/c.ll" 2>/dev/null | grep -q "hata\[" && { atla=$((atla+1)); continue; }
     [ -s "$TMP/c.ll" ] || { atla=$((atla+1)); continue; }
 
-    "$CODEGEN" --llvm --mimari aarch64 "$f" > "$TMP/s.ll" 2>/dev/null || {
+    ir_uret "$TMP/s.ll" "$CODEGEN" --llvm --mimari aarch64 "$f"; sir=$?
+    if [ "$sir" -eq 124 ] || [ "$sir" -eq 137 ]; then
+        echo "  🔴 $(basename "$f") — KEMGU IR URETIMI ASILDI/OLDURULDU (rc=$sir)"; fail=$((fail+1)); continue
+    fi
+    [ -s "$TMP/s.ll" ] || {
         echo "  🔴 $b — KEMGU codegen IR üretemedi"; fail=$((fail+1)); continue; }
 
     # Hedef üçlüsü de karşılaştırılır: --mimari yok sayılırsa burası yakalar.

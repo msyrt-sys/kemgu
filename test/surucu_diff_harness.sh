@@ -87,12 +87,29 @@ muaf_mi() {
 }
 
 pass=0; fail=0; muaf=0; atla=0
+# [D-663] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15). Bu kapi self-host
+# ikilisini ($CODEGEN) KORPUS UZERINDE kosturur -> D-660'in asilma/OOM sinifina
+# ACIK. `timeout` yetenegi OLCULUR (D-661), yoksa sinirsiz + uyari.
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    GTO="timeout $KAP_SN"
+else
+    GTO=""
+    echo "  ⚠ 'timeout' YOK -> per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer). Bkz. D-663."
+fi
+ir_uret() { o="$1"; shift; ( ulimit -v "$KAP_KB" 2>/dev/null; $GTO "$@" > "$o" 2>/dev/null ); }
+
 for f in drivers/virtio/*.kem tests/drivers/virtio/*.kem; do
     [ -f "$f" ] || continue
     b=$(basename "$f" .kem)
 
     "$KEMGU" --checkdump "$f" > "$TMP/c.chk" 2>/dev/null
-    "$CODEGEN" --check "$f" > "$TMP/s.chk" 2>/dev/null
+    ir_uret "$TMP/s.chk" "$CODEGEN" --check "$f"; sir=$?
+    if [ "$sir" -eq 124 ] || [ "$sir" -eq 137 ]; then
+        echo "  🔴 $(basename "$f") — KEMGU --check ASILDI/OLDURULDU (rc=$sir, sinir ${KAP_SN}s/${KAP_KB}KB)"
+        fail=$((fail+1)); continue
+    fi
     if ! diff -q "$TMP/c.chk" "$TMP/s.chk" >/dev/null 2>&1; then
         if muaf_mi "$b"; then muaf=$((muaf+1)); continue; fi
         echo "  🔴 $b — --check farkı:"

@@ -37,19 +37,11 @@
 - [x] G14 -> D-660. `checker_diff` artik per-dosya `timeout` + `ulimit -v`
       tasiyor ve asilan dosyayi ADIYLA kirmizi yapiyor (S160 ile kanitlandi).
       Yol ustunde KENDI onarimimda yanlis-yesil bulundu ve kapatildi (asagida).
-- [~] G15 [S] PER-DOSYA TIMEOUT YAYILIMI. ✓ IKI KRITIK KAPI KAPANDI (D-662):
-      `codegen_diff` ve `selfhost_driver` — ikisi de self-host ikilisini korpus
-      uzerinde kosturur, yani D-660'in asilma/OOM sinifina ACIKTI. KALAN BES
-      (dusuk oncelik, self ikilisini korpusa karsi KOSTURMUYORLAR): baremetal_diff
-      . lexer_diff . parser_diff . surucu_diff . yapi_diff. Desen hazir (`kos`/
-      `ir_uret` + yetenek olcumu); her birinin oracle sozlesmesi ayri olcülmeli.- [~] C0b [M] PANIK CASCADE — asm dali KAPANDI (D-649). `&r.deger` icin dort tani
-      da birebir (P264 + uc P261); bilinmeyen-clause sitesi `parse_hata_kaydet`e
-      baglandi. Fiksturler tc48_05/06.
-      ⚠ KALAN: ust-duzey P001 cascade'i (`parser_panik_sync` sonrasi). D-647'de
-      olculen `işlev main -> tam32` (paren eksik) sekli hala ayrisiyor: C uc tani,
-      self DORT (fazladan 1:16). Ayrica `değişken x tam32 = 0`da son taninin
-      SUTUNU kayiyor (C 2:24, self 2:26) — C0c(2) ve C0c(3).
-- [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
+- [x] G15 -> D-662 + D-663'te TAMAMLANDI. OLCULEREK kapatildi: self-host
+      ikilisini korpus uzerinde kosturan HER kapi sarildi. baremetal_diff .
+      surucu_diff . yapi_diff (D-663) + codegen_diff . selfhost_driver (D-662).
+      `parser_diff`/`lexer_diff` DISARIDA: olculdu, yalniz C oracle'i (`$KEMGU`)
+      kullaniyorlar, self ikilisine hic dokunmuyorlar -> asilma sinifina kapali.- [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
       bugun "?" = eski davranis (D-640 bilerek dar birakti).
 - [ ] C1b [M] Annotasyonsuz baglamada ARITMETIK/TANIMLAYICI basaticisi.
 - [ ] C1c [M] p7 ayrismasi: `değişken x = 1; değişken y: tam64 = x + 8589934592;`
@@ -1734,3 +1726,17 @@
   HANGI KAPI NEYI OLCTU: self_driver TUM MODLAR + FIXPOINT ✓, codegen_diff
   179/179, test_tumu TAM rc=0 (ozet onceki yesille BIREBIR — harness-ici
   degisiklik sayilari degistirmez).
+- 2026-10-04 D-663 (G15 tamam): asilma korumasi kalan uc riskli kapiya yayildi.
+  ⚠ "KALAN BES" OLCULDU VE UCE INDI: onceki tick'te besini de "kalan" diye
+  yazmistim; bu kez her birinin self-host ikilisini KORPUS UZERINDE kosturup
+  kosturmadigini olctum. UC acik (baremetal_diff/surucu_diff/yapi_diff —
+  `$CODEGEN` ile), IKI kapali (parser_diff/lexer_diff — yalniz `$KEMGU` oracle).
+  Korlemesine sarmak yerine olcmek, gereksiz iki sarmayi onledi (D-515).
+  Ucu de `codegen_diff`le ayni `ir_uret` desenini kullaniyor; uyarlandi.
+  SABOTAJ: S165 (yapi_diff self --llvm uyut) -> 149 dosya ADIYLA ASILDI,
+  rc=124. S166 (baremetal) -> 4 birim, rc=1, 0/5. surucu_diff ayrica
+  sabote EDILMEDI: `ir_uret` birebir ayni ve iki kapida kanitlandi.
+  ⚠ ONCEKI IKI SHIM HATASINA DUSMEDIM: her-argumanda uyuyan shim + mutlak
+  `/usr/bin/timeout` dis sarmalayici + backtick yok (D-661/D-662 dersleri).
+  HANGI KAPI NEYI OLCTU: yapi_diff 160/160, surucu_diff 16/16, baremetal_diff
+  5/5 temiz yolda; test_tumu TAM rc=0 (ozet birebir — harness-ici degisiklik).
