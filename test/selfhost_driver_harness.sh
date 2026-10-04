@@ -59,6 +59,20 @@ else
     echo "  🔴 FIXPOINT: kemgu_self2 IR kararsız"; genel_fail=1
 fi
 
+# [D-662] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15). `byte_modlari` self
+# ikilisini (`$drv`) KORPUS UZERINDE `--check`/`--parse`/`--token` ile kosturur;
+# OOM'u yaratan (D-660) tam da `--check` parser dongusuydu. LLVM yolu asagida
+# zaten `codegen_diff_harness`e delege ediyor -> D-662 orada otomatik yayildi;
+# burasi kalan acik yoldu. `timeout` yetenegi OLCULUR (D-661), yoksa sinirsiz.
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    DTO="timeout $KAP_SN"
+else
+    DTO=""
+    echo "  ⚠ 'timeout' YOK -> driver per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer). Bkz. D-662."
+fi
+
 # ---- Yardımcı: bir driver binary'sini 3 byte-diff modunda doğrula ----
 # $1=driver  $2=etiket-öneki
 byte_modlari() {
@@ -69,7 +83,11 @@ byte_modlari() {
         for x in "$korpus"/*.kem; do
             [ -f "$x" ] || continue
             "$KEMGU" "$oracle" "$x" 2>/dev/null > "$TMP/o.txt"
-            "$drv"   "$mod"    "$x" 2>/dev/null > "$TMP/a.txt"
+            ( ulimit -v "$KAP_KB" 2>/dev/null; $DTO "$drv" "$mod" "$x" > "$TMP/a.txt" 2>/dev/null ); dr=$?
+            if [ "$dr" -eq 124 ] || [ "$dr" -eq 137 ]; then
+                echo "    🔴 [$pre $mod] $(basename "$x") — ASILDI/OLDURULDU (rc=$dr, sinir ${KAP_SN}s/${KAP_KB}KB)"
+                fail=$((fail+1)); continue
+            fi
             if diff -q "$TMP/o.txt" "$TMP/a.txt" >/dev/null 2>&1; then pass=$((pass+1));
             else echo "    🔴 [$pre $mod] $(basename "$x"):"; diff "$TMP/o.txt" "$TMP/a.txt" | head -4; fail=$((fail+1)); fi
         done

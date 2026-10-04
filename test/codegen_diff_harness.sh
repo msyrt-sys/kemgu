@@ -90,6 +90,26 @@ dosya_mimari() {
     printf '%s' "$et"
 }
 
+# [D-662] IR URETIMINDE PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15).
+# codegen_diff self-host ikilisini (`$CODEGEN`) KORPUS UZERINDE kosturur; bu,
+# D-660'in `checker_diff`te kapattigi asilma/OOM sinifina ACIKTI. Bir sabotaj
+# artigi ya da gercek bir parser dongusu self `--llvm`i asabilir, surec GiB'lerce
+# bellege cikar ve (D-660'ta olculdu) OOM-killer TUM OTURUMU asagi ceker.
+# ⚠ `timeout` YETENEGI OLCULUR, VARSAYILMAZ (D-661): yoksa `ir_uret` 127 doner,
+# IR dosyasi bos kalir ve asagidaki link/oracle mantigi YANLIS KIRMIZI verirdi.
+# Yetenek yoksa sinirsiz kosulur ve ACIKCA bildirilir (kapi yine olcer).
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    TO="timeout $KAP_SN"
+else
+    TO=""
+    echo "  ⚠ 'timeout' YOK -> per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer;"
+    echo "     yalniz ASILMA koruması dusüyor). Bkz. D-662/D-661."
+fi
+# ir_uret <cikti.ll> <komut...> -> rc. 124=timeout, 137=SIGKILL(OOM).
+ir_uret() { o="$1"; shift; ( ulimit -v "$KAP_KB" 2>/dev/null; $TO "$@" > "$o" 2>/dev/null ); }
+
 pass=0; fail=0; arch_atla=0
 for f in "$KORPUS"/*.kem; do
     [ -f "$f" ] || continue
@@ -115,7 +135,11 @@ for f in "$KORPUS"/*.kem; do
     # cg_deref_pointer — codegen trunc/deref yollarını ölçerler); tip kapısı
     # katı olunca bunlar oracle'sız kalıp SESSİZCE atlanıyordu (105→102).
     # `--tip-atla` ile codegen kapsamı korunur, tip zorlaması kaybolmaz.
-    "$KEMGU" --llvm --tip-atla "$f" > "$TMP/$b.c.ll" 2>/dev/null
+    ir_uret "$TMP/$b.c.ll" "$KEMGU" --llvm --tip-atla "$f"; oir=$?
+    if [ "$oir" -eq 124 ] || [ "$oir" -eq 137 ]; then
+        echo "  🔴 $(basename "$f") — ORACLE IR URETIMI ASILDI/OLDURULDU (rc=$oir, sinir ${KAP_SN}s/${KAP_KB}KB)"
+        fail=$((fail+1)); continue
+    fi
     if ! link_retry "$TMP/$b.c.ll" "$TMP/$b.c.exe"; then
         # [D-518] ATLAMA ARTIK KÜRATE LİSTEYE BAĞLI — eskiden HER oracle-link
         # hatası sessizce atlanıyordu ve bu, C tarafındaki GERİLEMELERİ YUTUYORDU.
@@ -144,7 +168,11 @@ for f in "$KORPUS"/*.kem; do
     # yukarıda `--tip-atla` geçiliyor; SİMETRİK olmazsa korpustaki KASITLI
     # tip-geçersiz dosyalar (cg6_trunc, cg_deref_pointer) yalnız self tarafında
     # reddedilir ve kapı YANLIŞ SEBEPLE kırmızıya döner.
-    "$CODEGEN" --llvm --tip-atla "$f" > "$TMP/$b.k.ll" 2>/dev/null
+    ir_uret "$TMP/$b.k.ll" "$CODEGEN" --llvm --tip-atla "$f"; kir=$?
+    if [ "$kir" -eq 124 ] || [ "$kir" -eq 137 ]; then
+        echo "  🔴 $(basename "$f") — KEMGU IR URETIMI ASILDI/OLDURULDU (rc=$kir, sinir ${KAP_SN}s/${KAP_KB}KB)"
+        fail=$((fail+1)); continue
+    fi
     if ! link_retry "$TMP/$b.k.ll" "$TMP/$b.k.exe"; then
         echo "  🔴 $(basename "$f") — KEMGU IR link edilemedi"; fail=$((fail+1)); continue
     fi

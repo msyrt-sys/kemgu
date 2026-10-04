@@ -37,15 +37,12 @@
 - [x] G14 -> D-660. `checker_diff` artik per-dosya `timeout` + `ulimit -v`
       tasiyor ve asilan dosyayi ADIYLA kirmizi yapiyor (S160 ile kanitlandi).
       Yol ustunde KENDI onarimimda yanlis-yesil bulundu ve kapatildi (asagida).
-- [ ] G15 [S] KALAN YEDI HARNESS'TA PER-DOSYA TIMEOUT YOK (D-660'ta olculdu):
-      baremetal_diff . codegen_diff . lexer_diff . parser_diff . surucu_diff .
-      yapi_diff . selfhost_driver. En onemlileri `codegen_diff` ve
-      `selfhost_driver`: ikisi de self-host ikilisini KORPUS UZERINDE kosturuyor,
-      yani D-660'in kapattigi asilma sinifina ACIK. Deseni `checker_diff`ten
-      kopyala (`kos()` + oracle-cikti denetimi) — AMA her harness'in oracle
-      sozlesmesi farkli, korlemesine kopyalama yanlis-yesil uretebilir (D-660'in
-      kendi dersi).
-- [~] C0b [M] PANIK CASCADE — asm dali KAPANDI (D-649). `&r.deger` icin dort tani
+- [~] G15 [S] PER-DOSYA TIMEOUT YAYILIMI. ✓ IKI KRITIK KAPI KAPANDI (D-662):
+      `codegen_diff` ve `selfhost_driver` — ikisi de self-host ikilisini korpus
+      uzerinde kosturur, yani D-660'in asilma/OOM sinifina ACIKTI. KALAN BES
+      (dusuk oncelik, self ikilisini korpusa karsi KOSTURMUYORLAR): baremetal_diff
+      . lexer_diff . parser_diff . surucu_diff . yapi_diff. Desen hazir (`kos`/
+      `ir_uret` + yetenek olcumu); her birinin oracle sozlesmesi ayri olcülmeli.- [~] C0b [M] PANIK CASCADE — asm dali KAPANDI (D-649). `&r.deger` icin dort tani
       da birebir (P264 + uc P261); bilinmeyen-clause sitesi `parse_hata_kaydet`e
       baglandi. Fiksturler tc48_05/06.
       ⚠ KALAN: ust-duzey P001 cascade'i (`parser_panik_sync` sonrasi). D-647'de
@@ -1713,3 +1710,27 @@
   HANGI KAPI NEYI OLCTU: S161 (probe basarisiz) -> uyari ADIYLA basildi,
   checker_diff 215/215, rc=0 (kapi OLCMEYE DEVAM ETTI). timeout VARKEN S160
   zaten kirmiziydi (D-660). Yani her iki yol da gate'li.
+- 2026-10-04 D-662 (G15 kismi): asilma/OOM korumasi iki kritik kapiya yayildi.
+  D-660 `checker_diff`i kapatmisti; ayni sinif self-host ikilisini korpus
+  uzerinde kosturan HER kapida acikti. Ikisi kapatildi:
+  - codegen_diff: iki `--llvm` cagrisi da (`$KEMGU` oracle + `$CODEGEN` aday)
+    `ir_uret` ile sarildi (timeout + ulimit -v). ASIL risk self tarafinda.
+    SABOTAJ S162 (self --llvm uyut, KAP_SN=2) -> dosyalar ADIYLA `ASILDI/
+    OLDURULDU rc=124`, make rc=124. S163 (timeout probe basarisiz) -> uyari
+    adiyla, 179/179, rc=0 (kapi OLCMEYE DEVAM ETTI).
+  - selfhost_driver: LLVM yolu ZATEN codegen_diff'e delege ediyor -> D-662 orada
+    OTOMATIK yayildi; kalan acik `byte_modlari`nin --check/--parse/--token
+    dongusuydu (OOM'u yaratan tam da --check parser dongusu). Sarildi; asilma
+    tespiti her-argumanda-uyuyan shim ile dogrulandi (fail=1, rc=124).
+  D-661 dersi tasindi: `timeout` yetenegi OLCULUR, yoksa sinirsiz + uyari.
+  Backtick tuzagina DUSMEDIM (iki harness da `echo "..."` icinde 0 backtick).
+  ⚠⚠ IKI OLCUM HATASI, IKISI DE KENDI SHIM'IMDE (harness'ta DEGIL):
+  (a) `KONAK_MIM` gecirmeyi unuttum -> harness erken cikti ("kapi KOSMADI"),
+      sabotaji hic olcmedi; kapiyi degil ON KOSULU olctum.
+  (b) ilk uyku-shim'i YALNIZ argumansiz uyuyordu (`sleep 30`); driver onu
+      `--check "$x"` ile cagirinca hemen cikti -> S164 sessiz. Her-argumanda
+      uyuyan shim ile tekrarlandi.
+  Her iki durumda da sessizlik once SHIM'I/PREMISI supheli kildi (D-402/D-500).
+  HANGI KAPI NEYI OLCTU: self_driver TUM MODLAR + FIXPOINT ✓, codegen_diff
+  179/179, test_tumu TAM rc=0 (ozet onceki yesille BIREBIR — harness-ici
+  degisiklik sayilari degistirmez).
