@@ -41,11 +41,23 @@
       ikilisini korpus uzerinde kosturan HER kapi sarildi. baremetal_diff .
       surucu_diff . yapi_diff (D-663) + codegen_diff . selfhost_driver (D-662).
       `parser_diff`/`lexer_diff` DISARIDA: olculdu, yalniz C oracle'i (`$KEMGU`)
-      kullaniyorlar, self ikilisine hic dokunmuyorlar -> asilma sinifina kapali.- [ ] C1a [M] Annotasyonsuz baglamada CAGRI basaticisi (`değişken x = f();`) —
-      bugun "?" = eski davranis (D-640 bilerek dar birakti).
-- [ ] C1b [M] Annotasyonsuz baglamada ARITMETIK/TANIMLAYICI basaticisi.
-- [ ] C1c [M] p7 ayrismasi: `değişken x = 1; değişken y: tam64 = x + 8589934592;`
-      C T043 3:31, self T001 3:5. Aritmetik yeniden-tipleme (D-021) yolu.
+      kullaniyorlar, self ikilisine hic dokunmuyorlar -> asilma sinifina kapali.
+- [x] C1a -> D-664'te OLCULDU, KAPANMIS. Annotasyonsuz CAGRI basaticisi dort
+      sekilde parite: 2^33 donus (exe 42/42), zincir g(f()), metin, kesirli64.
+      D-640 dar birakmisti; sonraki isler kapatmis, madde bayatmis.
+- [x] C1b -> D-664'te OLCULDU, KAPANMIS. `değişken x = 20+22` ve `değişken b = a`
+      ikisi de chk + exe paritede.
+- [ ] C1c [M] ACIK — D-664'te KOK NETLESTI. `değişken y: tam64 = x + 8589934592`
+      (x: tam32): C IKI tani (T043 literal + T001 deyim), self YALNIZ T001.
+      Eksik olan literal TASMASI DEGIL (2^33 < 2^64, `tasti=0`): C'nin D-021
+      YENIDEN-TIPLEME yolu `x`(tam32) ile toplami tam32 baglamina sokuyor,
+      `8589934592` tam32'ye sigmiyor -> T043. Self'te T043 makinesi VAR ama
+      yalniz 2^64+ doymasi icin (D-632); D-021 yeniden-tipleme dalinda T043
+      kontrolu YOK. Onarim: `tip_belirle_beklenen` aritmetik dalinda, literal
+      hedef tam genisligine sigmiyorsa T043 (C `tip_kontrol.c` ~2963 aynasi).
+      ⚠ DAVRANIS degil TANI farki: exe iki tarafta da 42 (deger dogru), eksik
+      olan yalniz tanilama -> dikkatli, cunku sahte-pozitif riski yuksek
+      (D-632'nin kendi yorumu: baglamsiz yolda raporlamak sahte T043 uretir).
 - [ ] C3a [S] C3.2 karar: asm cikti hedefi AST'de AD yerine IFADE dugumu.
 - [ ] C3b [M] parser.c — `&` sonrasi SINIRLI lvalue (tanimlayici | tanimlayici.alan).
 - [ ] C3c [M] tip_kontrol.c:6575 — AS002 lvalue tipi uzerinden (primitif olmali).
@@ -1740,3 +1752,19 @@
   `/usr/bin/timeout` dis sarmalayici + backtick yok (D-661/D-662 dersleri).
   HANGI KAPI NEYI OLCTU: yapi_diff 160/160, surucu_diff 16/16, baremetal_diff
   5/5 temiz yolda; test_tumu TAM rc=0 (ozet birebir — harness-ici degisiklik).
+- 2026-10-04 D-664 (olcum): C1a/C1b KAPANDI, C1c koku netlesti.
+  Kuyrukta uc "annotasyonsuz basatici" maddesi vardi; ucu de olculdu.
+  C1a (CAGRI basaticisi): dort sekilde parite (2^33 donus exe 42/42, zincir,
+  metin, kesirli64) -> KAPANDI, D-640'tan beri bayatmis.
+  C1b (aritmetik/tanimlayici): iki sekil de chk+exe paritede -> KAPANDI.
+  C1c (p7): HALA ACIK ama kok yanlis tarif edilmisti. `y: tam64 = x+2^33`
+  (x:tam32) icin C IKI tani basar (T043 1:70 literal + T001 1:44 deyim), self
+  yalniz T001. Olculdu: literal TASMASI DEGIL (2^33 < 2^64, tasti=0); C'nin
+  D-021 yeniden-tipleme yolu toplami tam32 baglamina sokunca `8589934592`
+  tam32'ye sigmiyor -> T043. Self'in T043 makinesi VAR (D-632) ama yalniz
+  2^64+ doymasi icin; D-021 dalinda kontrol YOK. DAVRANIS degil TANI farki
+  (exe 42/42). Onarim ayri is olarak C1c'de guncellendi; sahte-pozitif riski
+  yuksek (D-632 yorumu: baglamsiz yolda raporlamak sahte T043 uretir).
+  SABOTAJ YOK: bu bir OLCUM iterasyonu, calistirilabilir davranis
+  degismedi; dogrulama parite tablolari + tani konumlarinin kaynaga
+  (tip_kontrol.c:2685/2963) baglanmasiyla yapildi.
