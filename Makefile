@@ -1406,7 +1406,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1932,12 +1932,16 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # "X86 HEAP DIZI OK toplam=" satırı ve HEMEN ARDINDAN "55" (yazdir_metin satır
 # sonu ekler → değer ayrı satırda; denetim değerin KENDİSİNE bakar, D-264).
 # Kanıt 4: objdump'da mfence (x86_64 DMA bariyeri) satırları; dsb YOK.
+# Kanıt 5: QEMU seri çıktıda "X86 PANIK YOLU OK" tam satırı (kem_panik .kem
+# UART yolundan basar; panik geri dönmez, QEMU zaman aşımı keser).
+# Kanıt 6: objdump --disassemble-symbols=kem_uart_bayt içinde outb VE inb
+# (yalnız .kem işlevi; tüm ikilide aramak C UART nesnesine de uyar).
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
@@ -1974,6 +1978,15 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@# Komut SÜTUNUNDA ara (sekme + dsb): düz 'dsb' `<vblk_dsb>` sembol adıyla eşleşir.
 	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -qP '\tdsb\b'; then \
 		echo "FAIL: dsb x86_64 binary'de bulundu"; exit 1; fi
+	@echo "  Kanit 5: QEMU davranis (X86 PANIK YOLU OK)..."
+	@if ! grep -qxF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 PANIK YOLU OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 6: objdump kem_uart_bayt (outb + inb, .kem UART)..."
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'outb'; then \
+		echo "FAIL: kem_uart_bayt icinde outb yok"; exit 1; fi
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'inb'; then \
+		echo "FAIL: kem_uart_bayt icinde inb yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -E 'outb|inb'
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

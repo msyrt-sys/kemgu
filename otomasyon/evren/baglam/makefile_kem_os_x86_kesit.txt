@@ -7,12 +7,13 @@
 # metin DEĞİL, objdump'ın kendi satırı); (3) QEMU seri çıktıda
 # "X86 HEAP DIZI OK toplam=" satırı ve HEMEN ARDINDAN "55" (yazdir_metin satır
 # sonu ekler → değer ayrı satırda; denetim değerin KENDİSİNE bakar, D-264).
+# Kanıt 4: objdump'da mfence (x86_64 DMA bariyeri) satırları; dsb YOK.
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
@@ -40,4 +41,13 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	if grep -A1 -xF "X86 HEAP DIZI OK toplam=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qxF "55"; then \
 		echo "kem_os x86_64 QEMU testi gecti (toplam=55, deger satiri dogrulandi)."; \
 	else echo "FAIL: 'X86 HEAP DIZI OK toplam=' + '55' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA BARIYER OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA BARIYER OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 4: objdump mfence (x86_64 DMA bariyeri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'mfence'
+	@# Komut SÜTUNUNDA ara (sekme + dsb): düz 'dsb' `<vblk_dsb>` sembol adıyla eşleşir.
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -qP '\tdsb\b'; then \
+		echo "FAIL: dsb x86_64 binary'de bulundu"; exit 1; fi
 

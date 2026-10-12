@@ -14,6 +14,8 @@
 // (yazdir_metin satır sonu ekler).
 // Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
 // satırı basılır (gerçekten çalıştığının kanıtı; #UD olsaydı çekirdek düşerdi).
+// main sonunda kem_panik("X86 PANIK YOLU OK") çağrılır: panik geri dönmez,
+// mesaj .kem COM1 yolundan basılır, çekirdek orada durur; QEMU zaman aşımı keser.
 
 işlev main() -> tam32 {
     kem_dma_bariyeri();
@@ -43,5 +45,7 @@ işlev main() -> tam32 {
     }
     yazdir_tam(toplam);
     yazdir_satir();
+
+    kem_panik("X86 PANIK YOLU OK");
     ver 0;
 }

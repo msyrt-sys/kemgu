@@ -1883,3 +1883,23 @@
   Mudahale: x86 "dsb olmamali" denetimi duz `grep 'dsb'` idi → `<vblk_dsb>`
   sembol adiyla SAHTE eslesirdi; komut sutununa (`\tdsb\b`) daraltildi.
   Uydurma "FAZ B3" etiketi duzeltildi. check_kapisi duzeltmesi bende.
+- 2026-10-12 D-672: x86 parite IS 2 — mimari basina UART + kem_panik x86 yolu.
+  `kem_uart_bayt(b)` arayuzu: arm64 runtime/mimari/arm64/kem_uart.kem (PL011
+  MMIO 0x09000000, bugunku davranis BIREBIR), x86_64 .../x86_64/kem_uart.kem
+  (COM1 port I/O: kem_port_yaz8/oku8 + LSR THRE yoklamasi, SINIRLI 100000 —
+  UART yoksa panik yolu asilmasin). kem_panik artik kem_uart_bayt cagirir.
+  KANIT: x86 QEMU'da `X86 PANIK YOLU OK` (.kem COM1 yolundan; test cekirdegi
+  sonda kem_panik cagirir) + objdump --disassemble-symbols=kem_uart_bayt icinde
+  gercek `inb`/`outb` (tum ikilide aramak YETMEZ: C UART nesnesi de icerir).
+  ⚠⚠ DEEPSEEK URETIMINDE GERCEK HATA, KAPI YAKALADI: THRE set olunca `ver;`
+  → islev YAZMADAN donuyordu (QEMU'da THRE hep set → ilk yoklamada don →
+  panik mesaji SESSIZCE kayip — tam da kapatilan sinif). Kanit 5 KIRMIZI verdi;
+  onarim bende (sayaci sinira cek, yazma her durumda). Hata ayni zamanda
+  dogal sabotaj sayildi. SABOTAJ 2: x86 UART'i PL011 MMIO'ya dondur → Kanit 5
+  KIRMIZI.
+  OLCULEN YAN ETKI: baremetal_diff 4/4 (7 atl.) → 3/3 (8 atl.) — kem_heap.kem
+  artik tek basina derlenmez; birlesik OS 325→326 islev, 48 asm (esit).
+  bm_a64_kem_heap.o hedefi OLU (hic tuketicisi yok) ve kem_heap'i tek basina
+  `2>/dev/null |` boru hattiyla derliyor (D-609 sinifi) → artik T002 verip BOS
+  IR uretir; hedef kullanilmadigi icin kirilma gorunmez. Silinmesi ayri karar.
+  check_kapisi birlesik x86 birimi 4→5 parca.

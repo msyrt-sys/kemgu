@@ -105,7 +105,7 @@ done
 # dilin işletim sistemi, kendi tip denetimini atlıyordu. Borç kapandı; bu blok
 # geri düşmeyi engeller. Dosya sırası Makefile'daki `calistir_kem_os_arm`
 # cat sırasıyla AYNI olmalı (kem_heap ÖNCE — çapraz-birim T002'yi kapatır).
-KEMOS_PARCALAR="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
+KEMOS_PARCALAR="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
                 runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
                 runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
@@ -132,7 +132,7 @@ fi
 
 # [D-671] x86 kanıt çekirdeği birleşik birimi — Makefile `calistir_kem_os_x86`
 # cat sırasıyla AYNI olmalı. Mimari başına dosya (D2b) seçimi burada da x86_64.
-KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/mimari/x86_64/kem_bariyer.kem
+KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
                     runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem"
 kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
@@ -141,7 +141,7 @@ if [ "$kemos_x86_eksik" -eq 0 ]; then
   cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
   tot=$((tot + 1))
   if "$KEMGU" --check --mimari x86_64 build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os_x86 (birleşik kaynak, 4 parça, --mimari x86_64) --check geçti"
+    echo "  ✅ kem_os_x86 (birleşik kaynak, 5 parça, --mimari x86_64) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"
