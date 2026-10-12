@@ -1980,3 +1980,21 @@
   betigi satir satir okudugu icin kapi sozdizimi hatasiyla dustu (GECERSIZ
   sonuc; olcumun kendisi yesildi). Kapi DONMUS KOPYADAN yeniden kosuldu;
   bundan sonra kapi daima kopyadan calisir.
+- 2026-10-12 KAPANIS — x86 parite kuyrugu (D-670…D-676), dal os/x86-parite.
+  Bes is (D-670…D-674) + kapi onarimi (D-675) + temizlik (D-676); her biri
+  taze klonda gate_linux.sh: aarch64 [1..10] · x86 islevsel kanit · test_tumu ·
+  FIXPOINT 85312 satir birebir. Derleyiciye (src/*.c, selfhost/*) DOKUNULMADI.
+  ⚠ SAYIM DUZELTMESI: kalan borc "49 blok/3 dosya" degil, 4 dosyada 47 GERCEK
+  blok (kem_gorev 27, kem_mmu 14, kem_zaman 5, kem_dtb 1). Eski sayim
+  `grep -c` ile YORUMLARI da sayiyordu (envanteri ben yazmistim). Saglama:
+  46+1+1 = 48 = birlesik OS IR `asm sideeffect` = baremetal_diff "48 asm".
+  ACIK KALANLAR (docs/X86_PARITE_ENVANTER.md §7): kem_gorev/mmu/zaman/dtb
+  (47 blok, ayri konusulacak) · PVH %ebx (start_info) saklanmiyor · D1
+  bare-metal x86 uclusu (derleyici karari) · DMA tabani hala sabit ·
+  baremetal_diff'in x86 IKIZI (C↔self) yok · minifs x86'da test edilmedi.
+  DEEPSEEK TOPLAM: 8 tur (tur 1…6 + 1b + 4b), ~272K token. Calisan sinir:
+  tur basina ~5 degisiklik / ~6 capa + gercek dosya yoluyla etiketli kesit.
+  Iki tur butceyi capa tartismasinda bitirdi (1, 4); ikisinin de koku bendeydi
+  (eksik baglam / asiri kapsam). Uretimde 2 gercek hata kapi/denetim yakaladi
+  (UART sessiz kayip, `dsb` sembol adiyla sahte eslesme); 1 hata benim gorev
+  metnimdeydi (0xFEB00000 → yanlis ondalik), Kanit 10 yakaladi.

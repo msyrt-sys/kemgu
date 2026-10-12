@@ -1,6 +1,11 @@
 # x86_64 Parite Envanteri — KEMGU-OS saf-`.kem` runtime
 
-> **Durum:** salt-okunur envanter (2026-10-11). Kod yazılmadı. Her iddia ya
+> **GÜNCEL DURUM (2026-10-12):** §7'deki kuyruğun 1-7. adımlarının x86 tarafı
+> TAMAMLANDI (D-670…D-674, `os/x86-parite`). Kalan parite borcu: **4 dosyada 47
+> gerçek `satıriçi_asm` bloğu** (§6 — sayım DÜZELTİLDİ). Kapı onarımı D-675,
+> temizlik D-676. Ayrıntı ve kanıtlar §0.
+>
+> **İlk durum:** salt-okunur envanter (2026-10-11). Kod yazılmadı. Her iddia ya
 > kaynaktan okundu ya da bu makinede ölçüldü; ölçülenler **(ölçüldü)** diye
 > işaretli. Kapsam: `runtime/kem_heap.kem`, `runtime/kem_virtio_blk.kem`,
 > `runtime/kem_minifs.kem`, `runtime/kem_virtio_net.kem`, `boot/*.S`.
@@ -8,7 +13,28 @@
 
 ---
 
-## ⚠ UYARI 1 — SESSİZ ÇÖKME: x86 boot'u allocator'ı hiç kurmuyor
+## 0. Tamamlanan işler (2026-10-12)
+
+Her biri taze klonda `otomasyon/bringup/gate_linux.sh` ile kapılandı:
+aarch64 QEMU [1..10] regresyonsuz · x86 işlevsel kanıt (`calistir_kem_os_x86`,
+gerçek objdump + QEMU değer denetimi) · `test_tumu` · FIXPOINT stage1 == stage2
+(85312 satır) birebir. Hepsinde sabotaj kırmızı verdi.
+
+| | İş | D | Kanıt (özet) |
+|---|---|---|---|
+| ✅ | UYARI 1 — x86 boot `kem_heap_kur` çağırıyor | D-670 | öncesi QEMU `0` (sessiz), sonrası `55`; objdump `callq <kem_heap_kur>` |
+| ✅ | §4 D2b — taşınabilir DMA bariyeri (`runtime/mimari/<arch>/kem_bariyer.kem`) | D-671 | x86 `mfence` çalıştı (`X86 DMA BARIYER OK`), arm64 objdump `dsb sy` |
+| ✅ | UYARI 2 — mimari başına UART, `kem_panik` x86 COM1 yolu | D-672 | QEMU `X86 PANIK YOLU OK`; `kem_uart_bayt` içinde gerçek `inb`/`outb` |
+| ✅ | §3.2/3.4/3.5 — DMA haritası mimari başına + x86 3-4 GB UC MMIO | D-673 | DMA yaz/oku birebir; LAPIC sürüm `0x50014`; `movl $0xc000009b`; eski taban → #PF @ `0x43000110` |
+| ✅ | §5 — virtio-mmio microvm (`0xFEB00000`, 24 yuva) + `force-legacy=false` | D-674 | sektör 7 yaz→sıfırla→oku 512 B birebir (imaj ana makineden de okundu); `mac_w0 0x12005452` |
+
+Seçilen yol: §4'teki **D2b** (mimari başına dosya + Makefile CAT seçimi) —
+derleyiciye (`src/*.c`, `selfhost/*`) DOKUNULMADI. D1 (bare-metal x86 üçlüsü)
+ve D3 (yerleşik bariyer) hâlâ öneri; gerekmediler.
+
+---
+
+## ⚠ UYARI 1 — SESSİZ ÇÖKME: x86 boot'u allocator'ı hiç kurmuyor — ✅ D-670
 
 `boot/start_aarch64.S:89-98` `main`'den önce `bl kem_heap_kur(__heap_start,
 __heap_end)` çağırır. **`boot/start_x86_64.S` bunu ÇAĞIRMAZ** (`grep
@@ -37,7 +63,7 @@ allocator'a dokunmuyorsa yeşil kalır, dokunuyorsa sıfırlarla devam eder.
 **Ön koşul:** x86 kem_os kapısı ilk günden en az bir tahsis sonucunu DEĞERİYLE
 denetlemeli (ör. `[2] HEAP/55` fazının x86 ikizi, beklenen toplam ile).
 
-## ⚠ UYARI 2 — PANİK SESSİZLİĞİ: ilk hata hem sessiz hem teşhissiz
+## ⚠ UYARI 2 — PANİK SESSİZLİĞİ: ilk hata hem sessiz hem teşhissiz — ✅ D-672
 
 `kem_panik` (`kem_heap.kem:441-450`) mesajı `kdl_mmio_yaz32(150994944, …)` ile
 yazar: `150994944 = 0x09000000` = QEMU aarch64 `virt` PL011 UART0. x86'da o
@@ -181,47 +207,48 @@ projesidir.
 
 ## 6. Kapsam dışı ama zorunlu: parite borcunun gerçek boyutu
 
-kem_os CAT birimi (`Makefile:1409`) bu envanterin dört dosyasından fazlasını
-içerir. `satıriçi_asm` blok sayıları (ölçüldü):
+kem_os CAT birimi bu envanterin dört dosyasından fazlasını içerir.
 
-| Dosya | asm blok | Not |
+⚠ **SAYIM DÜZELTMESİ (2026-10-12):** ilk sürümdeki sayılar `grep -c
+'satıriçi_asm'` ile alınmıştı ve **yorum satırlarını da sayıyordu** (28/14/7/1,
+"51"). Gerçek blok = yorum ve ham dizgi dışındaki `satıriçi_asm {` açılışı.
+Sağlama: aşağıdaki aarch64 blokları (46 + 1 + 1) = **48** = birleşik OS IR'ındaki
+`asm sideeffect` sayısı = `baremetal_diff` "48 satıriçi asm". Üç bağımsız ölçüm
+birebir.
+
+| Dosya | gerçek asm blok | Not |
 |---|---|---|
-| `runtime/kem_gorev.kem` | **28** | Bağlam değiştirme, EL0, zamanlayıcı — x86'da en büyük borç |
+| `runtime/kem_gorev.kem` | **27** | Bağlam değiştirme, EL0, zamanlayıcı — x86'da en büyük borç |
 | `runtime/kem_mmu.kem` | **14** | Sayfa tablosu, TLBI, MSR/MRS, fault — x86 sayfalama modeli bambaşka |
-| `runtime/kem_zaman.kem` | **7** | Genel zamanlayıcı (`CNTPCT_EL0` vb.) → x86'da PIT/APIC/TSC |
-| `runtime/kem_dtb.kem` | 1 | DTB okuma; x86'da PVH `start_info` / E820 |
-| `runtime/kem_elf.kem` | 0 | — |
+| `runtime/kem_zaman.kem` | **5** | Genel zamanlayıcı (`CNTPCT_EL0` vb.) → x86'da PIT/APIC/TSC |
+| `runtime/kem_dtb.kem` | **1** | `adrp x9, kdl_dtb_adres` (aarch64) — x86 karşılığı PVH `start_info` (`%ebx`, saklanmıyor, §3.5) |
+| `runtime/mimari/arm64/kem_bariyer.kem` | 1 | ✅ D-671 — x86 ikizi var (`mfence`) |
+| `runtime/mimari/arm64/kem_uart.kem` | 0 | ✅ D-672 — PL011 MMIO (asm yok); x86 ikizi 2 blok (`inb`/`outb`) |
+| `runtime/kem_heap/virtio_blk/virtio_net/minifs/elf.kem` | 0 | mimariden bağımsız (D-671…D-674 sonrası) |
 | `test/ornekler/kem_os.kem` | 0 | Ama fazları aarch64 davranışını ölçüyor |
-| **Bu envanterin dört dosyası** | **1** | `vblk_dsb` |
 
-Yani bu envanterin kapsamı toplam **51** asm bloğunun **1**'ini kapsıyor. x86
-kem_os paritesinin ağırlığı `kem_gorev` + `kem_mmu` + `kem_zaman`'dadır.
+**KALAN PARİTE BORCU: 4 dosyada 47 gerçek blok** — `kem_gorev` 27 +
+`kem_mmu` 14 + `kem_zaman` 5 + `kem_dtb` 1. (İlk üçü kapsam dışı tutuldu ve
+ayrıca konuşulacak; `kem_dtb` envanterin ilk sürümünde "üç dosya"ya
+sayılmamıştı ama aarch64'e özgüdür.)
 
 ---
 
-## 7. Önerilen iş sırası (bağımlılık sırasına göre)
+## 7. Önerilen iş sırası (bağımlılık sırasına göre) — durum 2026-10-12
 
-1. **Gözlemlenebilirlik önce** — x86 COM1 port-I/O çıplak UART + `kem_panik`'in
-   x86 yolu (UYARI 2). Teşhis kanalı olmadan sonraki her adım kör.
-2. **Boot yükümlülükleri** — `start_x86_64.S`: `kem_heap_kur` çağrısı (UYARI 1),
-   `%ebx` (PVH `start_info`) saklama. Aynı adımda x86 kapısına **değer
-   denetleyen** bir heap fazı (D-264 dersi).
-3. **Derleyici: D1** (bare-metal x86 üçlüsü) — sonraki tüm IR'ın doğru
-   sözleşmeyle üretildiğinden emin olmak için.
-4. **Derleyici: D3** (taşınabilir DMA bariyeri) **ya da D2(b)** (mimari başına
-   bariyer dosyası) — `kem_virtio_blk` x86'da derlenebilir olur. D3 + yapısal
-   kapı tercih edilir (D-468 emsali).
-5. **Platform sabitleri: D4** — UART, virtio tabanı, DMA tabanı tek modülde.
-6. **x86 sayfalama** — 1 GB üstü RAM + MMIO penceresini UC olarak eşle; DMA
-   tabanını linker sembolünden ya da `start_info` bellek haritasından türet
-   (sabit `0x43000000` yerine).
-7. **Makine kararı** (§5, Mehmet): `microvm` + `force-legacy=false` →
-   `kem_virtio_blk` → `kem_minifs` (geçişli) → `kem_virtio_net`.
-8. **Kapsam dışı ağır borç** (§6): `kem_zaman` (7) → `kem_mmu` (14) →
-   `kem_gorev` (28). `kem_gorev`, `kem_mmu`'ya (adres alanı) ve `kem_zaman`'a
-   (preempt tik) bağlıdır.
-9. **Parite kapısı** — `calistir_kem_os_x86`: aynı CAT birimi, aynı faz
-   marker'ları **ve** faz başına değer denetimi; `baremetal_diff`'in x86 ikizi.
+| # | Adım | Durum |
+|---|---|---|
+| 1 | Gözlemlenebilirlik — x86 COM1 çıplak UART + `kem_panik` x86 yolu | ✅ D-672 |
+| 2 | Boot yükümlülükleri — `kem_heap_kur` + değer denetleyen heap fazı | ✅ D-670 |
+| 2b | PVH `%ebx` (`start_info`) saklama | ❌ **AÇIK** — `start_x86_64.S` hâlâ saklamıyor; bellek haritası/keşif yok |
+| 3 | D1 — bare-metal x86 üçlüsü (`x86_64-unknown-none-elf`) | ❌ **YAPILMADI** — `clang -target … -Wno-override-module` geçersiz kılması bugün yetiyor; Win64 sözleşme riski (§4.2) kayıtlı duruyor. Derleyici işi → karar senin |
+| 4 | DMA bariyeri | ✅ D-671 — **D2b** (mimari başına dosya), D3 yerleşiği DEĞİL |
+| 5 | Platform sabitleri | ✅ kısmi D-673/D-674 — `runtime/mimari/<arch>/kem_platform.kem` (DMA + virtio tabanı/yuva) el yazımı; UART ayrı dosya (`kem_uart.kem`). Makefile'ın ürettiği tek modül (D4 biçimi) değil |
+| 6 | x86 sayfalama — UC MMIO penceresi + DMA ilk 1 GB içinde | ✅ D-673 |
+| 6b | DMA tabanını linker sembolü / `start_info` haritasından türet | ❌ **AÇIK** — hâlâ SABİT (`0x02000000`); çakışmasızlık yalnız Kanıt 7 ile ölçülüyor (`__heap_end` < taban) |
+| 7 | microvm + `force-legacy=false` → virtio-blk / virtio-net | ✅ D-674 (minifs x86 biriminde YOK — geçişli, test edilmedi) |
+| 8 | **Kapsam dışı ağır borç**: `kem_zaman` (5) → `kem_mmu` (14) → `kem_gorev` (27); + `kem_dtb` (1) | ❌ **AÇIK — 47 blok** (sayım §6'da düzeltildi). `kem_gorev`, `kem_mmu`'ya (adres alanı) ve `kem_zaman`'a (preempt tik) bağlıdır; `kem_mmu` ↔ `kem_zaman` karşılıklı bağımlı (docs/BAREMETAL_DIFF_KAPSAM.md) |
+| 9 | Parite kapısı | ✅ kısmi — `calistir_kem_os_x86` (Kanıt 1-10, değer denetimli) + `check_kapisi` birleşik x86 birimi. ❌ `baremetal_diff`'in x86 İKİZİ (C oracle ↔ self-host yapısal parite) YOK; x86 birimi `kem_os.kem`'i içermiyor (kanıt çekirdeği `kem_os_x86.kem`) |
 
 ---
 
