@@ -1952,6 +1952,9 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # Kanıt 12: QEMU seri çıktıda "X86 PVH OK ram_mb=" TAM satırı ve HEMEN ardındaki
 #          satır pozitif bir sayı (PVH hvm_start_info RAM toplamı, kem_pvh.kem);
 #          ayrıca pvh_entry disasm'ında %ebx saklama movl'i (PVH start_info ABI).
+# Kanıt 13: QEMU seri çıktıda "X86 DMA TABAN OK kb=" TAM satırı ve HEMEN ardındaki
+#          satır yedek sabitten (32768 KB) BÜYÜK — PVH memmap RAM tepesinden
+#          türetilen DMA tabanı (kem_platform.kem). Değer de yazdırılır.
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
@@ -2048,6 +2051,14 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@if ! grep -A1 -xF "X86 PVH OK ram_mb=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qE '^[1-9][0-9]*$$'; then \
 		echo "FAIL: PVH OK sonrasi pozitif sayi satiri yok"; exit 1; fi
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=pvh_entry $(BUILD)/kem_os_x86.elf | grep '%ebx' || { echo "FAIL: pvh_entry disasm'da %ebx movl'i yok"; exit 1; }
+	@echo "  Kanit 13: x86 DMA tabani PVH memmap'ten turetildi (yedek 32768 KB'den buyuk)..."
+	@if ! grep -qxF "X86 DMA TABAN OK kb=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA TABAN OK kb=' satiri yok"; exit 1; fi
+	@v=`grep -A1 -xF "X86 DMA TABAN OK kb=" $(BUILD)/kem_os_x86.out | tail -1`; \
+	if [ "$$v" -gt 32768 ]; then \
+		echo "  DMA taban KB = $$v"; \
+	else \
+		echo "FAIL: DMA tabani yedek sabitten (32768 KB) buyuk degil: $$v"; exit 1; fi
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

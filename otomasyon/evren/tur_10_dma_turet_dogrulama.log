@@ -1,0 +1,83 @@
+
+### $ make calistir_kem_os_x86
+Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR...
+cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem test/ornekler/kem_os_x86.kem > build/kem_os_x86_comb.kem
+./build/kemgu --llvm --mimari x86_64 build/kem_os_x86_comb.kem > build/kem_os_x86_ham.ll
+awk -f test/strip_defined_declares.awk build/kem_os_x86_ham.ll > build/kem_os_x86.ll
+clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only -O2 -Wno-override-module -x ir build/kem_os_x86.ll -c -o build/kem_os_x86.o
+ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o build/kem_os_x86.elf \
+	build/kem_os_x86.o \
+	build/bm_x86_start.o build/bm_x86_kesme.o build/bm_x86_zaman.o \
+	build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o \
+	build/bm_x86_panik.o
+  Kanit 1: sembol kaynagi (saf-.kem malloc/kem_heap_kur)...
+  Kanit 2: kem_heap_kur call satiri (objdump'un kendi satiri)...
+  102abd:      	callq	0x100020 <kem_heap_kur>
+  Kanit 3: QEMU davranis (toplam=55)...
+--- QEMU COM1 cikti ---
+X86 DMA BARIYER OK
+X86 HEAP DIZI OK toplam=
+55
+
+X86 DMA TABAN OK kb=
+130804
+
+X86 DMA RAM BLK OK
+X86 DMA RAM NET OK
+X86 MMIO UC OK lapic_surum=
+327700
+
+X86 DISK RW OK
+65355
+
+X86 FS RW OK
+5071
+
+X86 NET DEV OK mac_w0=
+302011474
+
+X86 PVH OK ram_mb=
+127
+
+X86 PANIK YOLU OK
+--- son ---
+kem_os x86_64 QEMU testi gecti (toplam=55, deger satiri dogrulandi).
+  Kanit 4: objdump mfence (x86_64 DMA bariyeri)...
+  100cc0:      	mfence
+  100eb0:      	mfence
+  101104:      	mfence
+  101110:      	mfence
+  10112c:      	mfence
+  101206:      	mfence
+  101212:      	mfence
+  10123c:      	mfence
+  101316:      	mfence
+  101322:      	mfence
+  10134c:      	mfence
+  101943:      	mfence
+  101b9c:      	mfence
+  101ba8:      	mfence
+  101bcc:      	mfence
+  101c02:      	mfence
+  101e9e:      	mfence
+  Kanit 5: QEMU davranis (X86 PANIK YOLU OK)...
+  Kanit 6: objdump kem_uart_bayt (outb + inb, .kem UART)...
+  100ca0:      	inb	%dx, %al
+  100cb8:      	outb	%al, %dx
+  Kanit 7: yerlesim (__heap_end < DMA tabani 0x02000000)...
+    __heap_end = 0x0000000001111000 (17895424)
+  Kanit 8: UC MMIO bayragi (objdump'da 0xc000009b)...
+  102a29:      	movl	$0xc000009b, %eax       # imm = 0xC000009B
+  Kanit 9: QEMU davranis (DMA RAM BLK/NET + UC MMIO)...
+  Kanit 10: QEMU davranis (microvm disk RW + net cihaz)...
+  Kanit 11: QEMU davranis (kem_minifs x86 dosya sistemi)...
+  Kanit 12: QEMU davranis (PVH start_info RAM) + pvh_entry %ebx...
+  1029be:      	movl	%ebx, 0x105a28(%rip)    # 0x2083ec <__heap_start+0xf73ec>
+  Kanit 13: x86 DMA tabani PVH memmap'ten turetildi (yedek 32768 KB'den buyuk)...
+  DMA taban KB = 130804
+
+### $ make calistir_check_kapisi
+  ✅ kem_os (birleşik kaynak, 10 parça) --check geçti
+  ✅ kem_os_x86 (birleşik kaynak, 9 parça, --mimari x86_64) --check geçti
+  ✅ kem_kullanici.kem (Model B kullanıcı programı) --check geçti
+=== tip kontrol kapısı: 275/282 geçti, 7 muaf, 0 RED ===

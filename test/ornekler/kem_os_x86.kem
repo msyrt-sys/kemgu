@@ -74,6 +74,16 @@ işlev main() -> tam32 {
     yazdir_tam(toplam);
     yazdir_satir();
 
+    kem_platform_kur();
+    değişken dt: tam64 = kem_platform_dma_tabani();
+    eğer dt > 0 {
+        yazdir_metin("X86 DMA TABAN OK kb=");
+        yazdir_tam((dt / 1024) olarak tam32);
+        yazdir_satir();
+    } değilse {
+        yazdir_metin("X86 DMA TABAN YEDEK");
+    }
+
     // İş 3 (a): Blok DMA RAM yaz-oku (0..511; 251 ile döngüsel desen).
     değişken dma_i: tam32 = 0;
     iken dma_i < 512 {

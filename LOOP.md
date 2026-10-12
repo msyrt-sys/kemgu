@@ -2019,3 +2019,12 @@
   0x105fa8 (objdump 32-bit kodu 64-bit cozdugu icin %rip-goreli GORUNUR).
   DEEPSEEK tur 9 (dongu ile): islev dogru; tek hata cikti bicimi (fazladan
   yazdir_satir → bos satir, Kanit 12 KIRMIZI verdi) — onarim bende, 1 satir.
+- 2026-10-12 D-679: x86 DMA tabani PVH memmap'ten TURETILIYOR (envanter 6b).
+  kem_platform_kur(): 1 GB altinda biten en yuksek RAM bolgesinin tepesi - 256 KB,
+  4 KB hizali; vnet = taban + 64 KB. PVH yoksa sabit yedek (0x02000000).
+  KANIT: QEMU microvm taban 130804 KB; benim 128 MB varsayimimla beklenen
+  130816 KB idi — FARK gercek haritadan okundugunu gosteriyor: taban+256 KB =
+  0x7FFD000, QEMU RAM'in son 12 KB'ini (ACPI/firmware) ayiriyor. Sonraki DMA
+  BLK/NET + DISK RW + FS RW testleri turetilmis tabanla gecti. Kanit 13:
+  deger > 32768 KB (yedek sabitten buyuk = turetme calisti).
+  DEEPSEEK tur 10 (dongu, tek komut): mudahale YOK.
