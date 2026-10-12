@@ -1965,3 +1965,18 @@
   (x86_net_tx_oku) → rc=2, eksik sembol ADIYLA. A ve B onarim oncesi YESILDI.
   Belge: docs/BAREMETAL_DIFF_KAPSAM.md (parca basina T002 sayisi + ilk tanimsiz
   kullanim; mmu ↔ zaman KARSILIKLI bagimli).
+- 2026-10-12 D-676: temizlik — Makefile `export DEBUGINFOD_URLS :=` + olu hedef
+  `bm_a64_kem_heap.o` kaldirildi.
+  DEBUGINFOD: kabukta degisken TANIMLIYKEN `make calistir_kanal_omru` artik
+  10/10 (Makefile export'u ezer). gate_linux.sh'e GATE_HERMETIK=0 anahtari:
+  kapinin kendi bosaltmasini kapatip Makefile duzeltmesinin KENDISINI olcer.
+  OLU HEDEF olculdu: `make build/bm_a64_kem_heap.o` rc=0 AMA kem_heap.ll 0
+  bayt + nesne 0 sembol (kem_heap tek basina T002; `2>/dev/null | awk` yutar,
+  D-609 sinifi) — SESSIZ BOS NESNE. Silindi; artik "No rule".
+  DEEPSEEK: tur 6 tek seferde 2 blok, 25 sn, mudahale YOK. Executor'a
+  `--kesit YOL:BAS-SON` eklendi: kesit GERCEK dosya yoluyla etiketlenir (tur
+  4b'de ayri kesit DOSYASI hedef saniliyordu) — bu turda dogru hedeflendi.
+  ⚠ SUREC HATAM: D-675 kapisi kosarken gate_linux.sh'i duzenledim → bash
+  betigi satir satir okudugu icin kapi sozdizimi hatasiyla dustu (GECERSIZ
+  sonuc; olcumun kendisi yesildi). Kapi DONMUS KOPYADAN yeniden kosuldu;
+  bundan sonra kapi daima kopyadan calisir.

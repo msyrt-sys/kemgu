@@ -145,6 +145,14 @@ def sor(a):
         print(f"DUR: günlük kalan token {kalan} < {KOTA_ALT}")
         sys.exit(3)
     is_baglam = "".join(f"\n## {y}\n```\n{oku(y)}\n```\n" for y in a.baglam)
+    # [tur 4b dersi] Kesit AYRI bir dosya yolu taşırsa model onu düzenleme hedefi
+    # sanar. --kesit GERÇEK dosyanın yolunu ve satır aralığını etiketler.
+    for k in a.kesit:
+        yol, aralik = k.rsplit(":", 1)
+        bas, son = (int(x) for x in aralik.split("-"))
+        satirlar = oku(yol).splitlines()[bas - 1:son]
+        is_baglam += (f"\n## {yol} — KESİT (satır {bas}-{son}; düzenleme hedefi: `{yol}`, "
+                      f"blok yolu `{yol}` olmalı)\n```\n" + "\n".join(satirlar) + "\n```\n")
     gorev = pathlib.Path(a.gorev).read_text(encoding="utf-8")
     kullanici = ortak_baglam() + "\n# İŞE ÖZEL BAĞLAM\n" + is_baglam + "\n# GÖREV\n\n" + gorev
     icerik, dusunme, usage, bitis, sure = akisli_sor(
@@ -202,6 +210,7 @@ def main():
     s.add_argument("--tur", required=True); s.add_argument("--is", dest="is_", required=True)
     s.add_argument("--gorev", required=True); s.add_argument("--baglam", nargs="*", default=[])
     s.add_argument("--effort", default=None, help="reasoning_effort (ör. low)")
+    s.add_argument("--kesit", nargs="*", default=[], help="GERÇEK yol:BAŞ-SON (ör. Makefile:80-95)")
     u = alt.add_parser("uygula")
     u.add_argument("--tur", required=True); u.add_argument("--is", dest="is_", required=True)
     u.add_argument("--kuru", action="store_true")

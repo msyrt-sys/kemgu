@@ -29,7 +29,10 @@ FAIL(){ echo "GATE-FAIL[$ID]: $1"; exit 1; }
 # gider; erişim asılınca ASan ikilisi `timeout 60`ı aşar → kapı SAHTE kırmızı
 # (ölçüldü 2026-10-12: calistir_kanal_omru 3/3 rc=124; değişken boşken anında
 # biter, kod aynı). Kapının sonucu dış bir sunucuya bağlı olamaz.
-export DEBUGINFOD_URLS=
+# [D-676] Makefile artık kendisi `export DEBUGINFOD_URLS :=` yapıyor. GATE_HERMETIK=0
+# bu kapının kendi boşaltmasını KAPATIR → Makefile düzeltmesinin KENDİSİ ölçülür
+# (kabuk değişkeni tanımlıyken test_tumu yine yeşil kalmalı).
+if [ "${GATE_HERMETIK:-1}" != "0" ]; then export DEBUGINFOD_URLS=; fi
 
 KAYNAK="$(git rev-parse --show-toplevel)" || FAIL "git deposu değil"
 SHA="$(git -C "$KAYNAK" rev-parse HEAD)"

@@ -89,6 +89,13 @@ endif
 # tasima bu depoda en tehlikeli sey.
 export EXE
 
+# [D-676] Hermetik test ortami: Ubuntu kabuk ortami DEBUGINFOD_URLS tasiyor.
+# ASan/LSan rapor basarken llvm-symbolizer agdan debuginfod sunucusuna gidiyor;
+# erisim asilinca ASan ikilisi timeout 60'i asiyor -> calistir_kanal_omru 3/3
+# rc=124 (sahte kirmizi). Degisken bosken sembollestirici aninda yanitliyor;
+# kod ayni. Bir test takiminin sonucu dis sunucuya bagli olamaz.
+export DEBUGINFOD_URLS :=
+
 # [D-476] ASan + YUKSEK ASLR ENTROPISI — modern Linux cekirdeklerinde CAKISIYOR.
 #
 # OLCULDU (WSL2, cekirdek 6.6, clang 15): ASan ile derlenen `test_arena`
@@ -1113,13 +1120,8 @@ $(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl
 # memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALIR; malloc/free → kem_heap.o (.kem).
 $(BUILD)/bm_a64_heap_kemmalloc.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
-# K1/K3 (D-260/261): SAF-.kem çıplak runtime → @malloc/@free/@kem_heap_kur (K1) +
-# @kdl_bolge_olustur/ayir/serbest (K3). kemgu --llvm boilerplate `declare`ları define
-# ile çakışır (LLVM redef) → STRIP + bare-metal target. Circularity yok (çıplak).
-$(BUILD)/bm_a64_kem_heap.o: runtime/kem_heap.kem test/strip_defined_declares.awk $(BUILD)/kemgu$(EXE) | $(BUILD)
-	./$(BUILD)/kemgu$(EXE) --llvm runtime/kem_heap.kem 2>/dev/null \
-	  | awk -f test/strip_defined_declares.awk > $(BUILD)/kem_heap.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_heap.ll -c -o $@
+# [D-676] bm_a64_kem_heap.o KALDIRILDI: tuketicisi yoktu ve kem_heap tek basina
+# T002 verdigi icin SESSIZCE bos nesne uretiyordu (D-609).
 $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
