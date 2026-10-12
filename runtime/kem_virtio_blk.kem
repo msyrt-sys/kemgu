@@ -8,7 +8,8 @@
 //   • MMIO + DMA-RAM erişimi = çıplak VOLATILE deref (kdl_mmio deseni; store/load volatile).
 //   • DMA bariyeri            = runtime/mimari/<arch>/kem_bariyer.kem (D2b; arm64: dsb sy,
 //                              x86_64: mfence) — CAT birimi gereği.
-//   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed),
+//   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed;
+//                              arm64 — x86 değeri runtime/mimari/x86_64/kem_platform.kem),
 //                              alt-tamponlar MANUEL 16-hizalı offset (P2 manuel over-align —
 //                              A1'in 4KB-align'ının 16B önkoşul-kanıtı).
 //   • Cross-file YOK          = tamamen kendi-içinde (malloc/memcpy YOK → T002 YOK). Build'de
@@ -37,9 +38,10 @@ sabit VM_Q_DEV_HI: tam64   = 164;
 sabit VBLK_MAGIC_DEG: tam32 = 1953655158;   // 0x74726976 "virt"
 sabit VBLK_DEV_BLK: tam32   = 2;
 
-// DMA taban: SABİT identity-map RAM (0x43000000 = 1124073472). EL0 (0x42000000) üstü,
-// heap (~0x41xxxxxx) üstü, 128MB+ RAM'de backed, kdl_mmu Normal-WB haritalı. 16-hizalı.
-küresel değişken vblk_dma: tam64 = 1124073472;
+// DMA taban (arm64 değeri): SABİT identity-map RAM (0x43000000 = 1124073472). EL0
+// (0x42000000) üstü, heap (~0x41xxxxxx) üstü, 128MB+ RAM'de backed, kdl_mmu Normal-WB.
+// [D-673] `vblk_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (CAT birimi;
+// x86_64 değeri 0x02000000 — x86 boot yalnız ilk 1 GB'ı eşler).
 
 // DMA alt-tampon offsetleri (hepsi 16'nın katı — MANUEL over-align):
 //   desc  @ +0    (8×16 = 128B),  avail @ +128 (22B→16-pad),  used @ +160 (70B→16-pad),

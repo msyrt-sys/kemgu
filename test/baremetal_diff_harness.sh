@@ -55,7 +55,7 @@ pass=0; fail=0; atla=0
 # tüm runtime + kem_os.kem. ~4166 satır, 240 işlev, 44 satıriçi asm bloğu.
 # Bu adım o birimi bir bütün olarak ölçer — yoksa OS'un 2/3'ü kapısız kalır.
 OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem \
-runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
+runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
 runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem \
 test/ornekler/kem_os.kem"
 os_var=1

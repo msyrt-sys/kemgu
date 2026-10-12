@@ -8,7 +8,8 @@
  * atlar. Görevler:
  *   1. (32-bit) BSS sıfırla (sayfa tabloları dahil)
  *   2. (32-bit) Identity sayfa tabloları (0..1GB, 2MB huge page) + PAE + LME +
- *      paging → long mode; 64-bit kod segmentine far jump
+ *      Ayrıca 3..4 GB UC MMIO penceresi (pd_mmio: 0xC0000000..0xFFFFFFFF,
+ *      PWT|PCD ile önbelleksiz) + paging → long mode; 64-bit kod segmentine far jump
  *   3. (64-bit) Segment register'ları + RSP=__stack_top kur, main() çağır
  *   4. main dönerse hlt döngüsü
  *
@@ -66,6 +67,28 @@ pvh_entry:
     orl     $0x3, %eax
     movl    %eax, pml4
     movl    $0, pml4+4
+
+    /* 2c2. 3..4 GB UC MMIO penceresi: pd_mmio 512 × 2MB, taban 0xC0000000,
+     * bayrak 0x9B = P|RW|PWT|PCD|PS → önbelleksiz (UC). NEDEN UC: bu aralık
+     * MMIO'dur — LAPIC (0xFEE00000), IOAPIC (0xFEC00000), microvm virtio-mmio
+     * (0xFEB00000). Yan etkili okuma/yazmalar önbelleğe alınır veya yazma-
+     * birleştirilirse cihaz durumu bayatlar / kaybolur. Bu pencere 0..1GB
+     * PD'sinden AYRI tutulur (farklı bayrak) → PDPT[3]'e bağlanır. */
+    movl    $pd_mmio, %edi
+    movl    $0xC000009B, %eax      /* present|write|PWT|PCD|PS, taban 0xC0000000 */
+    movl    $512, %ecx
+1:
+    movl    %eax, (%edi)           /* düşük 32 bit */
+    movl    $0, 4(%edi)            /* yüksek 32 bit = 0 */
+    addl    $0x200000, %eax        /* sonraki 2MB */
+    addl    $8, %edi
+    loop    1b
+
+    /* PDPT[3] = pd_mmio | present|write (pdpt+24; yüksek dword pdpt+28). */
+    movl    $pd_mmio, %eax
+    orl     $0x3, %eax
+    movl    %eax, pdpt+24
+    movl    $0, pdpt+28
 
     /* 2d. CR3 = PML4 */
     movl    $pml4, %eax
@@ -141,6 +164,7 @@ gdt_desc:
 pml4:   .skip 4096
 pdpt:   .skip 4096
 pd:     .skip 4096
+pd_mmio: .skip 4096
 
 /* === x86 exception ISR stub'ları (C3a) ===
  * Hata-kodlu istisnalar (8,10,11,12,13,14,17,21) CPU error code push eder → yalnız

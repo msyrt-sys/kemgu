@@ -1406,7 +1406,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1936,12 +1936,17 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # UART yolundan basar; panik geri dönmez, QEMU zaman aşımı keser).
 # Kanıt 6: objdump --disassemble-symbols=kem_uart_bayt içinde outb VE inb
 # (yalnız .kem işlevi; tüm ikilide aramak C UART nesnesine de uyar).
+# Kanıt 7: llvm-nm'de __heap_end < 0x02000000 (DMA tabanı heap'le çakışmaz).
+# Kanıt 8: objdump'da 0xc000009b sabiti (UC MMIO PD sayfa bayrağı gerçekten kurulu).
+# Kanıt 9: QEMU seri çıktıda "X86 DMA RAM BLK OK", "X86 DMA RAM NET OK" tam
+#          satırları ve "X86 MMIO UC OK lapic_surum=" (LAPIC sürüm — UC pencere
+#          okunabiliyor).
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
@@ -1987,6 +1992,24 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'inb'; then \
 		echo "FAIL: kem_uart_bayt icinde inb yok"; exit 1; fi
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -E 'outb|inb'
+	@echo "  Kanit 7: yerlesim (__heap_end < DMA tabani 0x02000000)..."
+	@he=$$(llvm-nm $(BUILD)/kem_os_x86.elf | awk '/__heap_end/ {print $$1; exit}'); \
+	if [ -z "$$he" ]; then echo "FAIL: __heap_end sembolu yok"; exit 1; fi; \
+	hedec=$$((0x$$he)); \
+	echo "    __heap_end = 0x$$he ($$hedec)"; \
+	if [ "$$hedec" -ge 33554432 ]; then \
+		echo "FAIL: __heap_end ($$hedec) >= 0x02000000 (DMA tabani)"; exit 1; fi
+	@echo "  Kanit 8: UC MMIO bayragi (objdump'da 0xc000009b)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q '0xc000009b'; then \
+		echo "FAIL: 0xc000009b objdump'da yok (UC MMIO sayfa bayragi)"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep '0xc000009b'
+	@echo "  Kanit 9: QEMU davranis (DMA RAM BLK/NET + UC MMIO)..."
+	@if ! grep -qxF "X86 DMA RAM BLK OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM BLK OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA RAM NET OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM NET OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 MMIO UC OK lapic_surum=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 MMIO UC OK lapic_surum=' satiri yok"; exit 1; fi
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

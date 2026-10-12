@@ -16,6 +16,25 @@
 // satırı basılır (gerçekten çalıştığının kanıtı; #UD olsaydı çekirdek düşerdi).
 // main sonunda kem_panik("X86 PANIK YOLU OK") çağrılır: panik geri dönmez,
 // mesaj .kem COM1 yolundan basılır, çekirdek orada durur; QEMU zaman aşımı keser.
+//
+// İş 3: kem_panik'ten ÖNCE üç DMA/MMIO testi koşar (her biri DEĞER denetler,
+// sabit metin basmaz — D-264 dersi):
+//   (a) Blok DMA RAM — vblk_data_yaz/oku 0..511 yaz-oku karşılaştırma →
+//       "X86 DMA RAM BLK OK" (aksi hâlde "X86 DMA RAM BLK HATA" + ilk indeks).
+//   (b) Ağ DMA RAM — vnet_tx_yaz + çıplak x86_net_tx_oku (aşağıda) 0..63
+//       karşılaştırma → "X86 DMA RAM NET OK".
+//   (c) MMIO UC pencere — kdl_mmio_oku32(0xFEE00030) LAPIC sürüm yazmacı
+//       (0 DEĞİL ve -1 DEĞİLSE) → "X86 MMIO UC OK lapic_surum=" + değer.
+//
+// Bu üç test, DMA tabanlarının (kem_platform.kem x86_64 ikizi) 0..1GB eşleme
+// ve UC MMIO penceresinin (start_x86_64.S 2c2) gerçekten kurulduğunu
+// DAVRANIŞSAL olarak kanıtlar.
+
+// Çıplak yardımcı: küresel vnet_dma'ya NORMAL işlevden doğrudan erişim E010
+// verir; çıplak işlev küresele serbestçe erişir (kem_heap.kem idiomu).
+çıplak işlev x86_net_tx_oku(i: tam32) -> dtam8 {
+    ver vblk_o8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64));
+}
 
 işlev main() -> tam32 {
     kem_dma_bariyeri();
@@ -45,6 +64,70 @@ işlev main() -> tam32 {
     }
     yazdir_tam(toplam);
     yazdir_satir();
+
+    // İş 3 (a): Blok DMA RAM yaz-oku (0..511; 251 ile döngüsel desen).
+    değişken dma_i: tam32 = 0;
+    iken dma_i < 512 {
+        vblk_data_yaz(dma_i, (((dma_i % 251) + 3) olarak dtam8));
+        dma_i = dma_i + 1;
+    }
+    değişken blk_hata: tam32 = 512;   // 512 = "uyuşmazlık yok" (geçerli indeks 0..511)
+    dma_i = 0;
+    iken dma_i < 512 {
+        değişken beklenen_blk: dtam8 = (((dma_i % 251) + 3) olarak dtam8);
+        eğer vblk_data_oku(dma_i) != beklenen_blk {
+            eğer blk_hata == 512 { blk_hata = dma_i; }
+        }
+        dma_i = dma_i + 1;
+    }
+    eğer blk_hata == 512 {
+        yazdir_metin("X86 DMA RAM BLK OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM BLK HATA");
+        yazdir_tam(blk_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (b): Ağ TX tamponu yaz-oku (0..63; 241 ile döngüsel desen).
+    değişken net_i: tam32 = 0;
+    iken net_i < 64 {
+        vnet_tx_yaz(net_i, (((net_i % 241) + 7) olarak dtam8));
+        net_i = net_i + 1;
+    }
+    değişken net_hata: tam32 = 64;
+    net_i = 0;
+    iken net_i < 64 {
+        değişken beklenen_net: dtam8 = (((net_i % 241) + 7) olarak dtam8);
+        eğer x86_net_tx_oku(net_i) != beklenen_net {
+            eğer net_hata == 64 { net_hata = net_i; }
+        }
+        net_i = net_i + 1;
+    }
+    eğer net_hata == 64 {
+        yazdir_metin("X86 DMA RAM NET OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM NET HATA");
+        yazdir_tam(net_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (c): MMIO UC pencere — LAPIC sürüm yazmacı (0xFEE00030 = 4276092976).
+    değişken lapic_surum: tam32 = kdl_mmio_oku32(4276092976);
+    eğer lapic_surum == 0 {
+        yazdir_metin("X86 MMIO UC HATA");
+    }
+    değilse {
+        eğer lapic_surum == (0 - 1) {
+            yazdir_metin("X86 MMIO UC HATA");
+        }
+        değilse {
+            yazdir_metin("X86 MMIO UC OK lapic_surum=");
+            yazdir_tam(lapic_surum);
+            yazdir_satir();
+        }
+    }
 
     kem_panik("X86 PANIK YOLU OK");
     ver 0;

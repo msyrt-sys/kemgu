@@ -1903,3 +1903,25 @@
   `2>/dev/null |` boru hattiyla derliyor (D-609 sinifi) → artik T002 verip BOS
   IR uretir; hedef kullanilmadigi icin kirilma gorunmez. Silinmesi ayri karar.
   check_kapisi birlesik x86 birimi 4→5 parca.
+- 2026-10-12 D-673: x86 parite IS 3 — DMA adres haritasi (mimari basina) + x86
+  3-4 GB UC MMIO penceresi.
+  vblk_dma/vnet_dma runtime/mimari/<arch>/kem_platform.kem'e tasindi: arm64
+  BIREBIR (0x43000000 / 0x46800000 — DISK/FS/NET/PING yesil), x86_64
+  0x02000000 / 0x02100000 (ilk 1 GB esleme + 128 MB RAM icinde, heap ustunde).
+  start_x86_64.S 2c2: pd_mmio 512 x 2 MB, bayrak 0x9B (P|RW|PWT|PCD|PS = UC),
+  PDPT[3] → 0xC0000000..0xFFFFFFFF (LAPIC/IOAPIC/microvm virtio-mmio).
+  KANIT: QEMU x86 blok DMA 512 B + ag TX 64 B yaz/oku BIREBIR; UC pencereden
+  LAPIC surum yazmaci = 327700 = 0x50014 (QEMU LAPIC'in gercek degeri);
+  objdump `movl $0xc000009b`; nm __heap_end=0x1110000 < DMA tabani.
+  ⚠ DURUSTCE: QEMU TCG onbellegi MODELLEMEZ (D-490) → UC'nin ETKISI burada
+  olculemez; kanit "bayrak yazildi + pencere erisilebilir" ile sinirli.
+  SABOTAJ 2/2: PDPT[3] baglantisi yok → LAPIC'te ISTISNA; x86 vblk_dma eski
+  0x43000000 → sayfa hatasi TAM 0x43000110 (= vblk_dma + DO_DATA) — envanterin
+  oncülü dogrudan olculdu.
+  DEEPSEEK: tur 4 (8 degisiklik, 13 capa) butceyi capa tartismasinda bitirdi,
+  0 blok. Duzeltme turu 4b kapsami DARALTTI (yalniz icerik gerektiren 5 madde):
+  9 blok, icerik dogru AMA Makefile bloklarini BAGLAM KESITI dosyasina
+  yonlendirdi (gercek Makefile'a ben tasidim) ve yorumda anlamsiz ifade
+  ("16ri KB"). CAT/liste eklemeleri + kuresel satir silme bende.
+  DERS: tur basina ~5 degisiklik / ~6 capa sinirinda kalinmali; daha buyugu
+  bu butcede (16384, dusunme+yanit ortak) capa dogrulamasinda tukeniyor.

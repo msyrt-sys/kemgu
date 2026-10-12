@@ -22,7 +22,8 @@
 
 sabit VN_DEV_NET: tam32 = 1;
 
-küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000 (DTB bölgesinden UZAK)
+// [D-673] `vnet_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (arm64 0x46800000,
+// x86_64 0x02100000; CAT birimi).
 küresel değişken vnet_rx_gorulen: tam32 = 0;     // işlenen RX used indeksi (kur'da sıfırlanır)
 küresel değişken vnet_rx_id: tam32 = 0;           // son alınan çerçevenin buffer id'si
 
