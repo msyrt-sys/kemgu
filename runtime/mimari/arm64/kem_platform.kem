@@ -15,3 +15,8 @@
 // x86 ikizinin (runtime/mimari/x86_64/kem_platform.kem) davranışını DEĞİŞTİRMEZ.
 küresel değişken vblk_dma: tam64 = 1124073472;   // 0x43000000
 küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000
+
+// VirtIO-MMIO cihaz tarama yuvası tabanı + yuva sayısı. Adım 0x200 (512) iki
+// makinede de aynı; `vblk_bul`/`vnet_bul` döngüsünü besler.
+sabit VM_TARAMA_TABAN: tam64 = 167772160;   // 0x0a000000 (QEMU virt)
+sabit VM_YUVA_SAYISI: tam32 = 32;

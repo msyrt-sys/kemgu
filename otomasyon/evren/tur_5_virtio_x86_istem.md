@@ -1,0 +1,1302 @@
+# Tur 5 — virtio_x86 — istem
+
+## SISTEM
+````
+Sen KEMGU deposunda mekanik kod üreten bir yürütücüsün. KEMGU, Türkçe
+sözdizimli bir sistem programlama dili ve onunla yazılmış bir işletim sistemidir.
+Kararları orkestratör verir; sen yalnız istenen değişikliği üretirsin.
+
+KESİN KURALLAR:
+- Yalnız görevde adı geçen dosyalara dokun. `src/*.c`, `selfhost/*.kem`,
+  `runtime/kem_gorev.kem`, `runtime/kem_mmu.kem`, `runtime/kem_zaman.kem`
+  YASAK.
+- Bağlamdaki desene BİREBİR uy (adlandırma, yorum dili Türkçe, `çıplak işlev`).
+- Emin olmadığın bir şeyi uydurma; varsayımını yanıtın sonunda "VARSAYIMLAR"
+  başlığı altında listele.
+
+ÇIKTI BİÇİMİ (zorunlu, başka biçim kabul edilmez):
+Var olan dosyada değişiklik — ESKI metin dosyada AYNEN ve TEK kez geçmeli:
+```duzenle:<depo-göreli yol>
+<<<<<<< ESKI
+<değişecek metin, boşluklar dahil birebir>
+=======
+<yeni metin>
+>>>>>>> YENI
+```
+Yeni dosya:
+```yeni:<depo-göreli yol>
+<dosyanın tam içeriği>
+```
+Birden çok blok verebilirsin. Bloklardan sonra kısa bir açıklama yaz.
+````
+
+## KULLANICI
+````
+# ORTAK BAĞLAM (her turda aynı)
+
+## KEMGU çekirdek kuralları (derleyiciden ölçülmüş)
+- Normal işlev ilk parametre olarak bölge yetkisi `ptr %rho` alır ve prologunda
+  `call ptr @kdl_bolge_olustur()` yapar. `çıplak işlev` ise C-ABI'dir:
+  `define i64 @f(i64 %n)` — ρ YOK, bölge prologu YOK, ham deref `volatile`.
+  Allocator ve çekirdek ilkelleri bu yüzden çıplaktır (aksi hâlde
+  kdl_bolge_olustur → malloc → ... kendini tetikler).
+- E013: çıplak işlev yalnız çıplak/extern (ve yerleşik) çağırabilir.
+- `satıriçi_asm { mimari: <arm64|x86_64> şablon: r#"..."# girdi("k", e)
+  çıktı("=k", &v) bozulan("~{memory}") }` — `güvensiz { }` içinde yazılır.
+  AS001: etiket hedef mimariyle (`--mimari`) uyuşmazsa derleme DURUR → bir
+  dosyada YALNIZ TEK mimarinin asm'si olabilir; mimariye özgü kod AYRI dosyaya
+  konur ve Makefile CAT listesi mimariye göre seçer (D2b kararı).
+- Şablon AT&T sözdizimi (x86); `$0..` çıktılar→girdiler sırası; `{dx}`,
+  `{al}` belirli yazmaç kısıtları (boyut eşleşmeli: tam16↔dx, tam8↔al).
+- KEMGU dizgi literalinde kaçış YOK (`"\n"` iki karakterdir).
+- Sayılar ondalık yazılır (`1016` = 0x3F8); `olarak` tip dönüşümüdür.
+- Üst düzey ileri bildirim YOK; çapraz dosya çağrısı için dosyalar CAT edilir
+  (tek derleme birimi).
+
+## runtime/kem_heap.kem (desen kaynağı, tamamı)
+```kemgu
+// kem_heap.kem — K1 (D-260): SAF-.kem çıplak `malloc`/`free` — C kdl_bare_heap YERİNE.
+// ============================================================================
+// Bootstrap-circularity F3'te (D-259) kırıldı; K1 bunu kem_os'a ENTEGRE eder:
+// runtime malloc/free artık SAF-.kem. Çıplak (region-prologue'suz, C-ABI) →
+// @malloc(i64)->ptr / @free(ptr) sembollerini kdl_bolge.c'nin beklediği C-ABI
+// ile sağlar. kdl_bare_heap.c'de bu ikisi `#ifndef KEMGU_KEM_MALLOC` ile devre
+// dışı (memcpy/memset/kdl_global_bolge_al/kdl_dizi orada KALIR — K4).
+//
+// Model (C kdl_bare_heap ile birebir): her tahsis 16-hizalı, {boyut, sonraki}
+// 16-baytlık header. free() bloğu LIFO serbest-listeye iter; malloc() önce
+// ilk-uyan serbest bloğu arar (F4.3 per-iter region-free frame'lerini geri
+// kazanır → sınırlı 64KB heap'te döngü OOM'unu önler), yoksa bump'lar.
+// Çıplak = güvensiz-tier → ham-pointer (inttoptr/ptrtoint/deref) + küresel
+// erişimi explicit `güvensiz {}` gerektirmez.
+
+küresel değişken kem_bump: tam64 = 0;   // bir sonraki bump adresi (16-hizalı)
+küresel değişken kem_son: tam64  = 0;   // heap üst sınırı (dışlayıcı)
+küresel değişken kem_bos: tam64  = 0;   // serbest-liste başı (blok adresi; 0=boş)
+küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölge (adres)
+
+// Boot-glue çağırır (main'in ilk malloc'undan ÖNCE): heap penceresini kur.
+çıplak işlev kem_heap_kur(taban: tam64, son: tam64) {
+    kem_bump = ((taban + 15) / 16) * 16;   // 16-hizala
+    kem_son = son;
+    kem_bos = 0;
+}
+
+// C-ABI malloc: void* malloc(size_t) → @malloc(i64)->ptr.
+çıplak işlev malloc(n: tam64) -> *tam8 {
+    değişken istek: tam64 = n;
+    eğer istek == 0 { istek = 1; }               // 0-bayt → benzersiz geçerli ptr
+    değişken toplam: tam64 = ((istek + 31) / 16) * 16;   // header(16)+istek, 16-hizalı
+
+    // 1) Serbest-liste ilk-uyum (header'ı KORU → böl/küçült yok, bloğu bütün ver).
+    değişken onceki: tam64 = 0;
+    değişken cur: tam64 = kem_bos;
+    iken cur != 0 {
+        değişken hsize_p: *tam64 = cur olarak *tam64;             // header.boyut @ +0
+        değişken bsize: tam64 = *hsize_p;
+        değişken hnext_p: *tam64 = (cur + 8) olarak *tam64;       // header.sonraki @ +8
+        değişken bnext: tam64 = *hnext_p;
+        eğer bsize >= toplam {
+            eğer onceki == 0 {
+                kem_bos = bnext;                                  // liste başından çıkar
+            }
+            değilse {
+                değişken op_p: *tam64 = (onceki + 8) olarak *tam64;
+                *op_p = bnext;                                    // önceki.sonraki = bnext
+            }
+            ver (cur + 16) olarak *tam8;                          // blok + header
+        }
+        onceki = cur;
+        cur = bnext;
+    }
+
+    // 2) Bump tahsis (sınır + OOM korumalı; bump zaten 16-hizalı, toplam 16-katı).
+    değişken p: tam64 = kem_bump;
+    eğer p + toplam > kem_son { ver 0 olarak *tam8; }             // OOM → null
+    kem_bump = p + toplam;
+    değişken hs_p: *tam64 = p olarak *tam64;
+    *hs_p = toplam;                                               // header.boyut
+    değişken hn_p: *tam64 = (p + 8) olarak *tam64;
+    *hn_p = 0;                                                    // header.sonraki
+    ver (p + 16) olarak *tam8;
+}
+
+// C-ABI free: void free(void*) → @free(ptr).
+çıplak işlev free(p: *tam8) {
+    değişken pa: tam64 = p olarak tam64;         // ptrtoint
+    eğer pa == 0 { ver; }
+    değişken h: tam64 = pa - 16;                 // header
+    değişken hn_p: *tam64 = (h + 8) olarak *tam64;
+    *hn_p = kem_bos;                             // header.sonraki = eski baş (LIFO it)
+    kem_bos = h;
+}
+
+// ============================================================================
+// K3 (D-261): SAF-.kem çıplak REGION (bölge) runtime — C kdl_bolge.c YERİNE.
+// Bölge = malloc'lu blok tek-yönlü listesi + blok-içi bump. malloc/free AYNI
+// dosyada (yukarıda, çıplak) → çıplak→çıplak call resolve (islev_bul). Region
+// memcpy GEREKMEZ. Sızıntı-sayaçları YOK (kem_os leak-check etmez; C tarafı
+// tests için tutar). Struct düzenleri (C kdl_bolge.c ile birebir):
+//   KdlBolge     { bas@0(ptr), blok_sayisi@8(i32) }        malloc 16
+//   KdlBolgeBlok { sonraki@0, kapasite@8, kullanilan@16, veri@24 }  malloc 24+kap
+// Hizalama ÇALIŞMA-ZAMANI adresine göre (((x+15)/16)*16), bitwise gerekmez.
+
+// Yeni blok: 24-bayt header + kap bayt veri malloc'la (NULL → 0).
+çıplak işlev kem_blok_olustur(kap: tam64) -> *tam8 {
+    değişken blk: *tam8 = malloc(24 + kap);
+    eğer (blk olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken ba: tam64 = blk olarak tam64;
+    değişken sp: *tam64 = ba olarak *tam64;
+    *sp = 0;                                       // sonraki = NULL
+    değişken kp: *tam64 = (ba + 8) olarak *tam64;
+    *kp = kap;                                     // kapasite
+    değişken up: *tam64 = (ba + 16) olarak *tam64;
+    *up = 0;                                       // kullanilan
+    ver blk;
+}
+
+// kdl_bolge_olustur() -> KdlBolge* : yeni bölge (KdlBolge + ilk 64KB blok).
+çıplak işlev kdl_bolge_olustur() -> *tam8 {
+    değişken b: *tam8 = malloc(16);
+    eğer (b olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken blk: *tam8 = kem_blok_olustur(65536);
+    eğer (blk olarak tam64) == 0 { free(b); ver 0 olarak *tam8; }
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    *basp = blk olarak tam64;                      // bas = ilk blok
+    değişken bsp: *tam32 = (ba + 8) olarak *tam32;
+    *bsp = 1;                                      // blok_sayisi = 1
+    ver b;
+}
+
+// kdl_bolge_ayir(b, n) -> void* : aktif bloktan 16-hizalı bump; taşarsa yeni blok.
+çıplak işlev kdl_bolge_ayir(b: *tam8, n: tam64) -> *tam8 {
+    eğer (b olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken nn: tam64 = n;
+    eğer nn == 0 { nn = 1; }
+    değişken hn: tam64 = ((nn + 15) / 16) * 16;    // hiza_yukari
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    değişken blok: tam64 = *basp;                  // b->bas
+    eğer blok != 0 {
+        değişken kp: *tam64 = (blok + 8) olarak *tam64;
+        değişken kapasite: tam64 = *kp;
+        değişken up: *tam64 = (blok + 16) olarak *tam64;
+        değişken kullanilan: tam64 = *up;
+        değişken cur: tam64 = (blok + 24) + kullanilan;   // veri + kullanilan
+        değişken ahiz: tam64 = ((cur + 15) / 16) * 16;
+        değişken pad: tam64 = ahiz - cur;
+        değişken kalan: tam64 = kapasite - kullanilan;
+        eğer pad <= kalan {
+            eğer hn <= (kalan - pad) {
+                *up = kullanilan + pad + hn;
+                ver ahiz olarak *tam8;
+            }
+        }
+    }
+    // yeni blok (hn + en kötü hiza payı; en az 64KB)
+    değişken kap: tam64 = hn + 16;
+    eğer kap < 65536 { kap = 65536; }
+    değişken yeni: *tam8 = kem_blok_olustur(kap);
+    eğer (yeni olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken ya: tam64 = yeni olarak tam64;
+    değişken ysp: *tam64 = ya olarak *tam64;
+    *ysp = blok;                                   // yeni->sonraki = eski bas
+    *basp = ya;                                    // b->bas = yeni
+    değişken bsp: *tam32 = (ba + 8) olarak *tam32;
+    *bsp = *bsp + 1;                               // blok_sayisi++
+    değişken veri: tam64 = ya + 24;
+    değişken ahiz2: tam64 = ((veri + 15) / 16) * 16;
+    değişken pad2: tam64 = ahiz2 - veri;
+    değişken yup: *tam64 = (ya + 16) olarak *tam64;
+    *yup = pad2 + hn;                              // yeni->kullanilan
+    ver ahiz2 olarak *tam8;
+}
+
+// K4b (D-263): kdl_global_bolge_al() -> KdlBolge* : lazy tek global bölge (main +
+// ρ-seed her program çağırır). C kdl_bare_heap.c kopyasının .kem çıplak eşi;
+// kdl_bolge_olustur (.kem, aynı dosya) çağırır. küresel state (WALL-1).
+çıplak işlev kdl_global_bolge_al() -> *tam8 {
+    eğer kem_global_bolge == 0 {
+        değişken b: *tam8 = kdl_bolge_olustur();
+        kem_global_bolge = b olarak tam64;
+    }
+    ver kem_global_bolge olarak *tam8;
+}
+
+// kdl_bolge_serbest(b) : tüm blokları + KdlBolge'yi free et.
+çıplak işlev kdl_bolge_serbest(b: *tam8) {
+    eğer (b olarak tam64) == 0 { ver; }
+    değişken ba: tam64 = b olarak tam64;
+    değişken basp: *tam64 = ba olarak *tam64;
+    değişken blok: tam64 = *basp;
+    iken blok != 0 {
+        değişken sp: *tam64 = blok olarak *tam64;
+        değişken eski: tam64 = *sp;               // blok->sonraki
+        free(blok olarak *tam8);
+        blok = eski;
+    }
+    free(b);
+}
+
+// ============================================================================
+// K4a helpers (D-262): SAF-.kem çıplak memcpy/memset — C kdl_bare_heap YERİNE.
+// inttoptr byte-loop → clang -O2 loop-idiom'a YAKALANMAZ (self-recurse yok,
+// disasm-doğrulandı). clang struct-kopya/zero + K2 dizi bunları çağırır.
+// ============================================================================
+çıplak işlev memcpy(d: *tam8, s: *tam8, n: tam64) -> *tam8 {
+    değişken i: tam64 = 0;
+    iken i < n {
+        değişken sp: *tam8 = ((s olarak tam64) + i) olarak *tam8;
+        değişken dp: *tam8 = ((d olarak tam64) + i) olarak *tam8;
+        *dp = *sp;
+        i = i + 1;
+    }
+    ver d;
+}
+çıplak işlev memset(d: *tam8, c: tam32, n: tam64) -> *tam8 {
+    değişken cb: tam8 = c olarak tam8;             // düşük bayt
+    değişken i: tam64 = 0;
+    iken i < n {
+        değişken dp: *tam8 = ((d olarak tam64) + i) olarak *tam8;
+        *dp = cb;
+        i = i + 1;
+    }
+    ver d;
+}
+
+// ============================================================================
+// K2 (D-262): SAF-.kem çıplak DİZİ runtime — C kdl_dizi.inc YERİNE (kem_os yüzeyi:
+// olustur/ekle_tam/al_tam/boyut/kapasite_ayarla + iç buyut/oob). KdlDizi düzeni:
+//   { veri@0(ptr), boyut@8(i32), kapasite@12(i32), eleman_byte@16(i32) }  ayır 24.
+// Bölge-sahipli (kdl_bolge_ayir[.kem] büyüme; realloc yok, eski bölgede sızar →
+// bölge kapanışında topluca serbest). Sınır-kontrol (D-069) → oob spin-halt.
+// AYNI dosyada kdl_bolge_ayir + memcpy (çıplak→çıplak resolve). tam64/ptr/yapi
+// varyantları kem_os KULLANMADIĞI için atlandı (diğer kernel'ler C dizi'de).
+// ============================================================================
+
+// OOB (bellek-güvenliği ihlali) → temiz halt. kem_os'ta erişilmez (correct kod);
+// cross-file panik/UART yok (leaf) → spin. Güvenlik: OOB asla belleği bozmaz.
+çıplak işlev kdl_dizi_oob(i: tam32, boyut: tam32) {
+    iken doğru { değişken x: tam32 = 0; }
+}
+
+// kdl_dizi_olustur(bolge, eleman_byte) -> KdlDizi* : boş dizi (veri=NULL).
+çıplak işlev kdl_dizi_olustur(bolge: *tam8, eleman_byte: tam32) -> *tam8 {
+    değişken d: *tam8 = kdl_bolge_ayir(bolge, 24);
+    eğer (d olarak tam64) == 0 { ver 0 olarak *tam8; }
+    değişken da: tam64 = d olarak tam64;
+    değişken vp: *tam64 = da olarak *tam64;         *vp = 0;            // veri = NULL
+    değişken bp: *tam32 = (da + 8) olarak *tam32;   *bp = 0;            // boyut
+    değişken kp: *tam32 = (da + 12) olarak *tam32;  *kp = 0;            // kapasite
+    değişken ep: *tam32 = (da + 16) olarak *tam32;  *ep = eleman_byte;  // eleman_byte
+    ver d;
+}
+
+// İç: yeni_kap*eb kapasiteli tampon (bölgeden), canlı kopyala, d->veri/kapasite güncelle.
+çıplak işlev kem_dizi_buyut(bolge: *tam8, d: *tam8, yeni_kap: tam32, eb: tam64) {
+    değişken yeni: *tam8 = kdl_bolge_ayir(bolge, (yeni_kap olarak tam64) * eb);
+    değişken da: tam64 = d olarak tam64;
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken eski_veri: tam64 = *vp;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer (yeni olarak tam64) != 0 {
+        eğer eski_veri != 0 {
+            eğer boyut > 0 {
+                memcpy(yeni, eski_veri olarak *tam8, (boyut olarak tam64) * eb);
+            }
+        }
+    }
+    *vp = yeni olarak tam64;                         // d->veri = yeni
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    *kp = yeni_kap;                                  // d->kapasite = yeni_kap
+}
+
+// kdl_dizi_ekle_tam(bolge, d, deger) : dolu ise büyüt, sonra ((i32*)veri)[boyut++]=deger.
+çıplak işlev kdl_dizi_ekle_tam(bolge: *tam8, d: *tam8, deger: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    değişken kapasite: tam32 = *kp;
+    eğer boyut == kapasite {
+        değişken yk: tam32 = 4;
+        eğer kapasite != 0 { yk = kapasite * 2; }
+        kem_dizi_buyut(bolge, d, yk, 4);
+    }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;                      // büyüme sonrası TAZE oku
+    değişken elem: *tam32 = (veri + (boyut olarak tam64) * 4) olarak *tam32;
+    *elem = deger;
+    *bp = boyut + 1;                                 // boyut++
+}
+
+// kdl_dizi_al_tam(d, i) -> i32 : sınır-kontrollü oku (i<0 || i>=boyut → oob).
+çıplak işlev kdl_dizi_al_tam(d: *tam8, i: tam32) -> tam32 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer i < 0 { kdl_dizi_oob(i, boyut); }
+    eğer i >= boyut { kdl_dizi_oob(i, boyut); }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;
+    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
+    ver *elem;
+}
+
+// [D-600] kdl_dizi_yaz_tam(d, i, deger) : sınır-kontrollü yerinde yaz
+// (i<0 || i>=boyut → oob). C `kdl_dizi.inc` karşılığıyla BİREBİR; kem_os
+// SHA-256 fazı `w[t] = yeni` yazdığı için gerekti (önceden kem_os'ta hiçbir
+// yazma yolu yoktu → link `undefined symbol` ile GÜRÜLTÜLÜ düştü, S187).
+çıplak işlev kdl_dizi_yaz_tam(d: *tam8, i: tam32, deger: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer i < 0 { kdl_dizi_oob(i, boyut); }
+    eğer i >= boyut { kdl_dizi_oob(i, boyut); }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken veri: tam64 = *vp;
+    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
+    *elem = deger;
+}
+
+// kdl_dizi_boyut(d) -> i32.
+çıplak işlev kdl_dizi_boyut(d: *tam8) -> tam32 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    değişken da: tam64 = d olarak tam64;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    ver *bp;
+}
+
+// kdl_dizi_kapasite_ayarla(bolge, d, yeni_kapasite) : kapasiteyi (gerekiyorsa) büyüt.
+çıplak işlev kdl_dizi_kapasite_ayarla(bolge: *tam8, d: *tam8, yeni_kapasite: tam32) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken da: tam64 = d olarak tam64;
+    değişken kp: *tam32 = (da + 12) olarak *tam32;
+    değişken kapasite: tam32 = *kp;
+    eğer yeni_kapasite <= kapasite { ver; }
+    değişken ep: *tam32 = (da + 16) olarak *tam32;
+    değişken eb: tam32 = *ep;
+    eğer eb <= 0 { eb = 4; }
+    kem_dizi_buyut(bolge, d, yeni_kapasite, eb olarak tam64);
+}
+
+// ============================================================================
+// SUBSYSTEM/metin (D-264): SAF-.kem çıplak metin ilkeleri — C kdl_metin_bare.c
+// YERİNE. Freestanding strlen/byte-at (allocation yok, leaf). Sınır-güvenli
+// (NULL/OOB → 0 sentinel). @kdl_metin_uzunluk(ptr)->i32, @kdl_metin_bayt(ptr,i32)->i8.
+// ============================================================================
+çıplak işlev kdl_metin_uzunluk(s: *tam8) -> tam32 {
+    eğer (s olarak tam64) == 0 { ver 0; }
+    değişken n: tam32 = 0;
+    iken doğru {
+        değişken bp: *tam8 = ((s olarak tam64) + (n olarak tam64)) olarak *tam8;
+        // D-265 sonrası: `*bp == 0` doğru i8-yük emit eder (deref-read pointee-tip fix).
+        eğer *bp == 0 { ver n; }
+        n = n + 1;
+    }
+    ver n;   // erişilmez
+}
+çıplak işlev kdl_metin_bayt(s: *tam8, i: tam32) -> tam8 {
+    eğer (s olarak tam64) == 0 { ver 0 olarak tam8; }
+    eğer i < 0 { ver 0 olarak tam8; }
+    değişken n: tam32 = kdl_metin_uzunluk(s);
+    eğer i >= n { ver 0 olarak tam8; }
+    değişken bp: *tam8 = ((s olarak tam64) + (i olarak tam64)) olarak *tam8;
+    ver *bp;
+}
+
+// ============================================================================
+// SUBSYSTEM/mmio (D-266): SAF-.kem çıplak VOLATILE MMIO oku32/yaz32 — kem_os'un
+// kullandığı widthler (donanım register erişimi). Çıplak = güvensiz-tier → deref
+// VOLATILE emit (D-248; clang -O2 MMIO'yu elemez/yeniden-sıralamaz). D-265 pointee-tip:
+// *p (p:*tam32) → i32-yük. Diğer widthler (16/64) virtio-dep, C'de kalır (kem_os.kem
+// yalnız oku32/yaz32 çağırır). @kdl_mmio_oku32(i64)->i32, @kdl_mmio_yaz32(i64,i32).
+çıplak işlev kdl_mmio_oku32(adres: tam64) -> tam32 {
+    değişken p: *tam32 = adres olarak *tam32;
+    ver *p;                       // volatile load i32
+}
+çıplak işlev kdl_mmio_yaz32(adres: tam64, deger: tam32) {
+    değişken p: *tam32 = adres olarak *tam32;
+    *p = deger;                   // volatile store i32
+}
+
+// ============================================================================
+// SUBSYSTEM/yetki (D-268): SAF-.kem çıplak yetki<R> (object-capability) sağlayıcı.
+// kdl_yetki_olustur/geri_al — kem_os'un tek kalan C-yetki bağımlılığını (kdl_yetki_bare.c)
+// kaldırır (Yasa-4: kem_os'ta sıfır C). ABI = D-268 OUT-PTR: dönüş açık out-pointer
+// (düz `ptr`, aarch64 x0 — sret DEĞİL). `%kdl_yetki` layout: {i64 id@0, i16 kaynak_tipi@8,
+// i16 izin@10, i8 iptal@12, [3 x i8] rezerv@13} = 16 bayt. yetki DERLEME-ZAMANI ispatıdır
+// (WCET sıfır runtime yükü); runtime değeri ABI-şeffaf (mmio_oku32/yaz32 yalnız adresi
+// kullanır). Alanları offset-tabanlı yaz (kem_heap.kem tüm-ham-pointer idiomu; yapı yok).
+küresel değişken kem_yetki_sayac: tam64 = 1;   // id sayacı (0 değil yeter — C sürümü aynısı)
+
+çıplak işlev kdl_yetki_olustur(out: *tam8, kt: dtam16, izin: dtam16) {
+    değişken taban: tam64 = out olarak tam64;
+    değişken pid: *tam64 = taban olarak *tam64;              // id @ 0
+    *pid = kem_yetki_sayac;
+    kem_yetki_sayac = kem_yetki_sayac + 1;
+    değişken pkt: *dtam16 = (taban + 8) olarak *dtam16;      // kaynak_tipi @ 8
+    *pkt = kt;
+    değişken piz: *dtam16 = (taban + 10) olarak *dtam16;     // izin @ 10
+    *piz = izin;
+    değişken pip: *dtam8 = (taban + 12) olarak *dtam8;       // iptal @ 12
+    *pip = 0 olarak dtam8;
+}
+
+çıplak işlev kdl_yetki_geri_al(y: *tam8) {
+    eğer (y olarak tam64) != 0 {                             // R-PAYLAŞ: iptal bayrağını kur
+        değişken pip: *dtam8 = ((y olarak tam64) + 12) olarak *dtam8;
+        *pip = 1 olarak dtam8;
+    }
+}
+
+// ============================================================================
+// SUBSYSTEM/kanal (D-623): SAF-.kem SPSC kanal — dilin `kanal_oluştur/gönder/al`
+// ilkellerinin ÇEKİRDEK karşılığı. D-592'den beri kem_os yalnız boot .S + SAF-.kem
+// bağlar; C `runtime/kdl_kanal.c` LİNKLENMİYORDU → `kanal_*` çağıran her kem_os kodu
+// tanımsız sembolle düşerdi (ABI yalnız D-527'de DERLENİYORDU, hiç ÇALIŞMIYORDU).
+// İmza host + C bare sürümüyle BİREBİR: @kdl_kanal_olustur(i32)->ptr,
+// @kdl_kanal_gonder(ptr,i64), @kdl_kanal_al(ptr)->i64 (D-295: taşıyıcı i64).
+//
+// Yerleşim (hep 8-bayt hücre): [0]=bas (okuma) [1]=son (yazma) [2]=N (halka boyu)
+// [3..3+N) = tampon. Klasik halka: bir slot rezerve → en çok N-1 öğe; dolu/boş
+// ayrımı indeks eşitliğiyle. C sürümünden FARK (bilinçli): halka SABİT KAP=4 değil,
+// istenen kapasite+1 — C sürümü büyük kapasiteyi REDDEDİYORDU, burada heap var.
+// kapasite <= 0 → C ile aynı varsayılan (3 öğe).
+//
+// Bloklama = busy-wait (C sürümüyle aynı). Çıplak deref VOLATILE (D-248) → indeks
+// okumaları döngüde elenmez. ⚠ Tek görevli bağlamda dolu kanala gönder / boş
+// kanaldan al KALICI BEKLER (karşı taraf yok) — liveness, karşı görevin varlığına
+// bağlıdır (D-296'nın dersi); çok-görevli kanal ayrı adım.
+// ============================================================================
+// Halka indeksini bir ilerlet. `%` BİLEREK YOK: değişken bölenli `%` sıfıra-bölme
+// kontrolü (D-502) → @kdl_panik ister ve kem_os'ta o sembol YOK (D-592). n >= 2 daima.
+çıplak işlev kem_kanal_ileri(i: tam64, n: tam64) -> tam64 {
+    eğer i + 1 >= n { ver 0; }
+    ver i + 1;
+}
+
+// Tampon hücresinin adresi — SINIR KONTROLLÜ (D-069 dizi sınırıyla aynı politika).
+// Doğru halkada i < n daima; bozuk bir sarma (ya da bozuk tampon) indeksi n'e
+// taşırsa yazma/okuma tamponun DIŞINA düşerdi = heap taşması. ÖLÇÜLDÜ: bu taşma
+// FIFO sırasını bozmadığı ve malloc her kanala ayrı 64 KB blok verdiği için HİÇBİR
+// davranışsal ölçümde görünmez → sessiz kalmasın diye burada gürültülü durdurulur.
+çıplak işlev kem_kanal_hucre(taban: tam64, i: tam64, n: tam64) -> *tam64 {
+    eğer i < 0 { kem_panik("PANIK: kanal indeks sinir ihlali"); }
+    eğer i >= n { kem_panik("PANIK: kanal indeks sinir ihlali"); }
+    ver (taban + 24 + i * 8) olarak *tam64;
+}
+
+// Çekirdek paniği: konsol artık mimari başına kem_uart_bayt
+// (runtime/mimari/<arch>/kem_uart.kem). arm64'te yine PL011 MMIO; x86'da COM1
+// 16550 port I/O. kdl_panik kem_os'ta YOK (D-592); çıplak bağlamda yalnız
+// çıplak çağrılabilir (E013) → kem_uart_bayt da çıplaktır. Kanal (D-623) ve görev (D-624)
+// ortak kullanır.
+çıplak işlev kem_panik(m: metin) {
+    değişken n: tam32 = metin_uzunluk(m);
+    değişken i: tam32 = 0;
+    iken i < n {
+        kem_uart_bayt(metin_bayt(m, i) olarak tam32);
+        i = i + 1;
+    }
+    kem_uart_bayt(10);
+    iken doğru { }
+}
+
+çıplak işlev kdl_kanal_olustur(kapasite: tam32) -> *tam8 {
+    değişken n: tam64 = 4;                                   // varsayılan: 3 öğe
+    eğer kapasite > 0 { n = (kapasite olarak tam64) + 1; }
+    değişken p: *tam8 = malloc((n + 3) * 8);
+    değişken taban: tam64 = p olarak tam64;
+    eğer taban == 0 { ver p; }                               // OOM → null (C ile aynı)
+    değişken pbas: *tam64 = taban olarak *tam64;
+    *pbas = 0;
+    değişken pson: *tam64 = (taban + 8) olarak *tam64;
+    *pson = 0;
+    değişken pn: *tam64 = (taban + 16) olarak *tam64;
+    *pn = n;
+    ver p;
+}
+
+çıplak işlev kdl_kanal_gonder(k: *tam8, deger: tam64) {
+    değişken taban: tam64 = k olarak tam64;
+    değişken pbas: *tam64 = taban olarak *tam64;
+    değişken pson: *tam64 = (taban + 8) olarak *tam64;
+    değişken pn: *tam64 = (taban + 16) olarak *tam64;
+    değişken n: tam64 = *pn;
+    iken kem_kanal_ileri(*pson, n) == *pbas { }              // dolu → bekle
+    değişken son: tam64 = *pson;
+    değişken hucre: *tam64 = kem_kanal_hucre(taban, son, n);
+    *hucre = deger;
+    *pson = kem_kanal_ileri(son, n);
+}
+
+çıplak işlev kdl_kanal_al(k: *tam8) -> tam64 {
+    değişken taban: tam64 = k olarak tam64;
+    değişken pbas: *tam64 = taban olarak *tam64;
+    değişken pson: *tam64 = (taban + 8) olarak *tam64;
+    değişken pn: *tam64 = (taban + 16) olarak *tam64;
+    değişken n: tam64 = *pn;
+    iken *pson == *pbas { }                                  // boş → bekle
+    değişken bas: tam64 = *pbas;
+    değişken hucre: *tam64 = kem_kanal_hucre(taban, bas, n);
+    değişken v: tam64 = *hucre;
+    *pbas = kem_kanal_ileri(bas, n);
+    ver v;
+}
+
+// D-543 kanal ömrü: codegen hapsedilme kanıtı olan kanalı işlev çıkışında serbest
+// bırakır. Tampon tek malloc bloğu → tek free. null güvenli (free null'ı yoksayar).
+çıplak işlev kdl_kanal_serbest(k: *tam8) {
+    free(k);
+}
+
+```
+
+# İŞE ÖZEL BAĞLAM
+
+## runtime/mimari/arm64/kem_platform.kem
+```
+// kem_platform.kem — aarch64 virt DMA adres haritası (D2b: mimari başına platform).
+// ============================================================================
+// DMA taban adresleri MİMARİYE ÖZGÜDÜR. Makefile CAT listesi mimariye göre bu
+// dosyayı seçer: aarch64 → runtime/mimari/arm64/kem_platform.kem,
+// x86_64 → runtime/mimari/x86_64/kem_platform.kem. kem_virtio_blk.kem ve
+// kem_virtio_net.kem içindeki `vblk_dma`/`vnet_dma` tanımları BURAYA taşındı.
+//
+// aarch64 QEMU virt: RAM tabanı 0x40000000.
+//   vblk_dma = 0x43000000 (1124073472) — blok DMA (VRING + veri).
+//   vnet_dma = 0x46800000 (1182793728) — ağ DMA.
+// ⚠ AH-1: vnet_dma ESKİDEN 0x44000000'daydı; orası firmware'in DEVICE-TREE'yi
+// (DTB) koyduğu yerdi → ağ sürücüsü donanım-keşif verisini EZİYORDU. DTB'den
+// uzağa (0x46800000) taşındı; ayrıntılı gerekçe kem_virtio_net.kem 12-21.
+// Kalıcı çözüm (DTB /memreserve okuma) AH-2'nin işi; bu sabit tabanlar
+// x86 ikizinin (runtime/mimari/x86_64/kem_platform.kem) davranışını DEĞİŞTİRMEZ.
+küresel değişken vblk_dma: tam64 = 1124073472;   // 0x43000000
+küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000
+
+```
+
+## runtime/mimari/x86_64/kem_platform.kem
+```
+// kem_platform.kem — x86_64 DMA adres haritası (D2b: mimari başına platform).
+// ============================================================================
+// Makefile CAT listesi x86_64 için bu dosyayı seçer. kem_virtio_blk.kem ve
+// kem_virtio_net.kem içindeki `vblk_dma`/`vnet_dma` tanımları BURAYA taşındı.
+//
+// NEDEN bu adresler: x86 boot (start_x86_64.S) yalnız 0..1 GB'ı 2 MB huge
+// page'lerle eşler (PD girdileri 0x83 = P|RW|PS) ve QEMU x86 varsayılan RAM
+// 128 MB'tır. Dolayısıyla DMA bölgesi __heap_end (~0x110F000) ÜSTÜNDE ve
+// 1 GB eşlemenin ALTINDA kalmalıdır. aarch64 değerlerinden farklı seçildi
+// çünkü aarch64 QEMU virt RAM tabanı 0x40000000; x86 kernel 0x100000'den yüklenir.
+//   vblk_dma = 0x02000000 (33554432) — blok DMA tabanı; ihtiyaç ~800 B.
+//   vnet_dma = 0x02100000 (34603008) — ağ DMA tabanı; ihtiyaç ~19 KB
+//     (NO_TXBUF + 2048 = 18944 B; RX tamponları 8×2048 bu aralığın içinde).
+// Çakışma ölçümü Makefile Kanıt 7 (__heap_end < 0x02000000) ile yapılır.
+küresel değişken vblk_dma: tam64 = 33554432;    // 0x02000000
+küresel değişken vnet_dma: tam64 = 34603008;    // 0x02100000
+
+```
+
+## runtime/kem_virtio_blk.kem
+```
+// kem_virtio_blk.kem — FAZ B1 (D-271): SAF-.kem VirtIO-Blk blok I/O sürücüsü.
+// ============================================================================
+// Kanıtlı-C kdl_virtio.c'nin saf-.kem yeniden gerçekleştirmesi (real-OS bring-up,
+// migration DEĞİL). VirtIO-MMIO v2 (modern), split virtqueue: desc[] + avail + used.
+// 512-baytlık sektör oku/yaz → gerçek disk kalıcılığı (QEMU -drive).
+//
+// SAF-.kem primitifleri (hepsi kanıtlandı, D-269 P1 + çıplak-tier):
+//   • MMIO + DMA-RAM erişimi = çıplak VOLATILE deref (kdl_mmio deseni; store/load volatile).
+//   • DMA bariyeri            = runtime/mimari/<arch>/kem_bariyer.kem (D2b; arm64: dsb sy,
+//                              x86_64: mfence) — CAT birimi gereği.
+//   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed;
+//                              arm64 — x86 değeri runtime/mimari/x86_64/kem_platform.kem),
+//                              alt-tamponlar MANUEL 16-hizalı offset (P2 manuel over-align —
+//                              A1'in 4KB-align'ının 16B önkoşul-kanıtı).
+//   • Cross-file YOK          = tamamen kendi-içinde (malloc/memcpy YOK → T002 YOK). Build'de
+//                              kem_os.kem ile CAT edilir (tek birim → çıplak→çıplak çözülür).
+// Register offsetleri kdl_virtio.c / drivers/virtio/constants.kem ile birebir.
+
+// --- VirtIO-MMIO v2 register offsetleri (ondalık) ---
+sabit VM_MAGIC: tam64      = 0;
+sabit VM_VERSION: tam64    = 4;
+sabit VM_DEVICE_ID: tam64  = 8;
+sabit VM_DRV_FEAT: tam64   = 32;
+sabit VM_DRV_FEAT_SEL: tam64 = 36;
+sabit VM_QUEUE_SEL: tam64  = 48;
+sabit VM_QUEUE_NUM_MAX: tam64 = 52;
+sabit VM_QUEUE_NUM: tam64  = 56;
+sabit VM_QUEUE_READY: tam64 = 68;
+sabit VM_QUEUE_NOTIFY: tam64 = 80;
+sabit VM_STATUS: tam64     = 112;
+sabit VM_Q_DESC_LO: tam64  = 128;
+sabit VM_Q_DESC_HI: tam64  = 132;
+sabit VM_Q_DRV_LO: tam64   = 144;
+sabit VM_Q_DRV_HI: tam64   = 148;
+sabit VM_Q_DEV_LO: tam64   = 160;
+sabit VM_Q_DEV_HI: tam64   = 164;
+
+sabit VBLK_MAGIC_DEG: tam32 = 1953655158;   // 0x74726976 "virt"
+sabit VBLK_DEV_BLK: tam32   = 2;
+
+// DMA taban (arm64 değeri): SABİT identity-map RAM (0x43000000 = 1124073472). EL0
+// (0x42000000) üstü, heap (~0x41xxxxxx) üstü, 128MB+ RAM'de backed, kdl_mmu Normal-WB.
+// [D-673] `vblk_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (CAT birimi;
+// x86_64 değeri 0x02000000 — x86 boot yalnız ilk 1 GB'ı eşler).
+
+// DMA alt-tampon offsetleri (hepsi 16'nın katı — MANUEL over-align):
+//   desc  @ +0    (8×16 = 128B),  avail @ +128 (22B→16-pad),  used @ +160 (70B→16-pad),
+//   req   @ +256  (16B),          data  @ +272 (512B),        status @ +784 (1B).
+sabit DO_DESC: tam64   = 0;
+sabit DO_AVAIL: tam64  = 128;
+sabit DO_USED: tam64   = 160;
+sabit DO_REQ: tam64    = 256;
+sabit DO_DATA: tam64   = 272;
+sabit DO_STATUS: tam64 = 784;
+
+// --- Çıplak VOLATILE erişim yardımcıları (MMIO + DMA-RAM; store/load volatile) ---
+çıplak işlev vblk_y32(adr: tam64, deger: tam32) { değişken p: *tam32 = adr olarak *tam32; *p = deger; }
+çıplak işlev vblk_o32(adr: tam64) -> tam32 { değişken p: *tam32 = adr olarak *tam32; ver *p; }
+çıplak işlev vblk_y64(adr: tam64, deger: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = deger; }
+çıplak işlev vblk_y16(adr: tam64, deger: dtam16) { değişken p: *dtam16 = adr olarak *dtam16; *p = deger; }
+çıplak işlev vblk_o16(adr: tam64) -> dtam16 { değişken p: *dtam16 = adr olarak *dtam16; ver *p; }
+çıplak işlev vblk_y8(adr: tam64, deger: dtam8) { değişken p: *dtam8 = adr olarak *dtam8; *p = deger; }
+çıplak işlev vblk_o8(adr: tam64) -> dtam8 { değişken p: *dtam8 = adr olarak *dtam8; ver *p; }
+
+// DMA descriptor yazımı ↔ MMIO notify sıralaması — mimari başına bariyer
+// (runtime/mimari/<arch>/kem_bariyer.kem; D2b + AS001).
+çıplak işlev vblk_dsb() {
+    kem_dma_bariyeri();
+}
+
+// Caller'ın data tamponunu doldurup okuması için erişimciler (vq_data = vblk_dma+DO_DATA).
+çıplak işlev vblk_data_yaz(i: tam32, deger: dtam8) { vblk_y8(vblk_dma + DO_DATA + (i olarak tam64), deger); }
+çıplak işlev vblk_data_oku(i: tam32) -> dtam8 { ver vblk_o8(vblk_dma + DO_DATA + (i olarak tam64)); }
+
+// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). 32 slot × 0x200 @ 0x0a000000.
+çıplak işlev vblk_bul() -> tam64 {
+    değişken i: tam32 = 0;
+    iken i < 32 {
+        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;
+        eğer vblk_o32(base + VM_MAGIC) == VBLK_MAGIC_DEG {
+            eğer vblk_o32(base + VM_DEVICE_ID) == VBLK_DEV_BLK { ver base; }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// Cihazı başlat: reset → feature(VERSION_1) → virtqueue 0 → DRIVER_OK. 0=ok, negatif=hata.
+çıplak işlev vblk_kur(base: tam64) -> tam32 {
+    eğer vblk_o32(base + VM_VERSION) != 2 { ver 0 - 1; }
+    vblk_y32(base + VM_STATUS, 0);          // reset
+    vblk_y32(base + VM_STATUS, 1);          // ACK
+    vblk_y32(base + VM_STATUS, 3);          // ACK|DRIVER
+    // Feature: yalnız bit32 (VERSION_1). düşük feature yok.
+    vblk_y32(base + VM_DRV_FEAT_SEL, 1);
+    vblk_y32(base + VM_DRV_FEAT, 1);
+    vblk_y32(base + VM_DRV_FEAT_SEL, 0);
+    vblk_y32(base + VM_DRV_FEAT, 0);
+    vblk_y32(base + VM_STATUS, 11);         // ACK|DRIVER|FEAT_OK (1|2|8)
+    eğer (vblk_o32(base + VM_STATUS) & 8) == 0 { ver 0 - 2; }
+    vblk_y32(base + VM_QUEUE_SEL, 0);
+    eğer vblk_o32(base + VM_QUEUE_NUM_MAX) < 8 { ver 0 - 3; }
+    vblk_y32(base + VM_QUEUE_NUM, 8);
+    // Ring fiziksel adresleri (identity-map → VA=PA).
+    değişken da: tam64 = vblk_dma + DO_DESC;
+    değişken av: tam64 = vblk_dma + DO_AVAIL;
+    değişken us: tam64 = vblk_dma + DO_USED;
+    vblk_y32(base + VM_Q_DESC_LO, da olarak tam32);   vblk_y32(base + VM_Q_DESC_HI, (da >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DRV_LO,  av olarak tam32);   vblk_y32(base + VM_Q_DRV_HI,  (av >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DEV_LO,  us olarak tam32);   vblk_y32(base + VM_Q_DEV_HI,  (us >> 32) olarak tam32);
+    // RE-INIT GÜVENLİ (D-271→B2): avail/used idx RAM'de sıfırla → device+driver taze başlar.
+    // C sürücü tek-init'ti (.bss sıfır); kem_os çok-subsystem HER birinde kur çağırır → stale
+    // idx desync olmasın (poll `once=used.idx` eski değeri beklerdi). QUEUE_READY ÖNCESİ.
+    vblk_y16(av + 2, 0 olarak dtam16);                 // avail.idx = 0
+    vblk_y16(us + 2, 0 olarak dtam16);                 // used.idx = 0
+    vblk_y32(base + VM_QUEUE_READY, 1);
+    vblk_y32(base + VM_STATUS, 15);         // ACK|DRIVER|FEAT_OK|DRIVER_OK
+    ver 0;
+}
+
+// 3-descriptor zincirini kur (başlık RO → veri → durum WO). type: 0=oku(IN), 1=yaz(OUT).
+// veri descriptor'ı: oku'da cihaz-YAZAR (WRITE flag), yaz'da cihaz-OKUR (flag yok).
+çıplak işlev vblk_zincir(sektor: tam64, tip: tam32, veri_write: tam32) {
+    değişken req: tam64 = vblk_dma + DO_REQ;
+    değişken data: tam64 = vblk_dma + DO_DATA;
+    değişken st: tam64 = vblk_dma + DO_STATUS;
+    değişken d: tam64 = vblk_dma + DO_DESC;
+    // blk_req: type(u32)@0, reserved(u32)@4, sector(u64)@8
+    vblk_y32(req + 0, tip);
+    vblk_y32(req + 4, 0);
+    vblk_y64(req + 8, sektor);
+    vblk_y8(st, 255 olarak dtam8);          // status = 0xff (VIRTIO_BLK_S_OK=0 bekliyoruz)
+    // desc[0]: req, len16, NEXT(1), next=1
+    vblk_y64(d + 0, req); vblk_y32(d + 8, 16); vblk_y16(d + 12, 1 olarak dtam16); vblk_y16(d + 14, 1 olarak dtam16);
+    // desc[1]: data, len512, NEXT|(veri_write?WRITE), next=2   (flags = 1 | (veri_write?2:0))
+    değişken f1: dtam16 = (1 + veri_write * 2) olarak dtam16;
+    vblk_y64(d + 16, data); vblk_y32(d + 24, 512); vblk_y16(d + 28, f1); vblk_y16(d + 30, 2 olarak dtam16);
+    // desc[2]: status, len1, WRITE(2), next=0
+    vblk_y64(d + 32, st); vblk_y32(d + 40, 1); vblk_y16(d + 44, 2 olarak dtam16); vblk_y16(d + 46, 0 olarak dtam16);
+}
+
+// Zinciri gönder (avail bump + notify) + used ring poll + status kontrol. 0=ok, negatif=hata.
+çıplak işlev vblk_gonder(base: tam64) -> tam32 {
+    değişken av: tam64 = vblk_dma + DO_AVAIL;
+    değişken usaddr: tam64 = vblk_dma + DO_USED + 2;   // used.idx offset
+    değişken idx: dtam16 = vblk_o16(av + 2);           // avail.idx
+    değişken once: dtam16 = vblk_o16(usaddr);          // used.idx (öncesi)
+    değişken slot: tam64 = ((idx olarak tam64) % 8) * 2;
+    vblk_y16(av + 4 + slot, 0 olarak dtam16);          // ring[idx%8] = desc0 (zincir başı)
+    vblk_dsb();
+    vblk_y16(av + 2, (idx + (1 olarak dtam16)) olarak dtam16);          // avail.idx++
+    vblk_dsb();
+    vblk_y32(base + VM_QUEUE_NOTIFY, 0);               // queue 0 bildir
+    // used.idx değişene kadar poll (volatile → hoist yok). timeout ile QEMU-hang koruması.
+    değişken spin: tam32 = 0;
+    iken vblk_o16(usaddr) == once {
+        vblk_dsb();
+        spin = spin + 1;
+        eğer spin > 100000000 { ver 0 - 4; }
+    }
+    eğer vblk_o8(vblk_dma + DO_STATUS) != (0 olarak dtam8) { ver 0 - 5; }
+    ver 0;
+}
+
+// `sektor`ü vq_data'ya OKU (caller vblk_data_oku ile okur). 0=ok.
+çıplak işlev vblk_oku(base: tam64, sektor: tam64) -> tam32 {
+    vblk_zincir(sektor, 0, 1);              // type=IN, veri cihaz-YAZAR
+    ver vblk_gonder(base);
+}
+
+// vq_data'daki (caller vblk_data_yaz ile doldurur) 512 baytı `sektor`e YAZ (kalıcı). 0=ok.
+çıplak işlev vblk_yaz(base: tam64, sektor: tam64) -> tam32 {
+    vblk_zincir(sektor, 1, 0);              // type=OUT, veri cihaz-OKUR
+    ver vblk_gonder(base);
+}
+
+```
+
+## runtime/kem_virtio_net.kem
+```
+// kem_virtio_net.kem — FAZ-C: SAF-.kem virtio-net transport (POLLED, IRQ YOK).
+// ============================================================================
+// Kanıtlı-C kdl_virtio_net.c'nin saf-.kem yeniden gerçekleştirmesi. [8] NET DEV OK:
+// cihaz bul (DeviceID=1) + feature-negotiate + RX(queue0, device-yazar tamponlar) +
+// TX(queue1) + DRIVER_OK. Paket TX/RX sonraki rung (net-arp/[9]).
+//
+// Genel VOLATILE deref + dsb yardımcıları kem_virtio_blk.kem'den (aynı CAT birimi:
+// vblk_y32/o32/y64/y16/o16/y8/o8 + vblk_dsb; VM_* register offsetleri + VBLK_MAGIC_DEG).
+// DMA = SABİT identity-RAM (MANUEL 16-hizalı offset). IRQ YOK (used-ring poll).
+// Allocator YOK (static-adres). T002 yok.
+//
+// ⚠ AH-1'DE TAŞINDI: 0x44000000 → 0x46800000. Eski adres firmware'in DEVICE-TREE'yi
+// koyduğu yerdi (QEMU virt'te ölçüldü; RPi firmware'i de RAM'e DTB yazar). Yani ağ
+// sürücüsü ilk paketi göndermeden önce çekirdeğin donanım-keşif verisini EZİYORDU.
+// Ölçüm: main'in başında 0x44000000'da FDT magic VAR, testlerin sonunda YOK.
+// Bugüne kadar fark edilmemesinin sebebi DTB'nin hiç OKUNMAMASI (her adres
+// sabit-kodluydu) — yani hata değil, hatanın GÖRÜNMEZLİĞİ yerleşikti.
+//
+// SINIF OLARAK KALICI ÇÖZÜM DEĞİL: sabit-adres DMA, firmware'in RAM'e koyduğu
+// HERHANGİ bir yapıyla çakışabilir. Doğrusu DTB'nin /memreserve + /reserved-memory
+// düğümlerini okuyup ayrılmış bölgelerden KAÇINMAK. AH-2'nin işi.
+
+sabit VN_DEV_NET: tam32 = 1;
+
+// [D-673] `vnet_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (arm64 0x46800000,
+// x86_64 0x02100000; CAT birimi).
+küresel değişken vnet_rx_gorulen: tam32 = 0;     // işlenen RX used indeksi (kur'da sıfırlanır)
+küresel değişken vnet_rx_id: tam32 = 0;           // son alınan çerçevenin buffer id'si
+
+// DMA offsetleri (hepsi 16-katı): RX ring + 8×2048 rx_buf + TX ring + tx_buf.
+sabit NO_RXDESC: tam64  = 0;        // 8×16 = 128
+sabit NO_RXAVAIL: tam64 = 128;      // 22 → pad
+sabit NO_RXUSED: tam64  = 160;      // 70 → pad
+sabit NO_RXBUF: tam64   = 256;      // 8×2048 = 16384 (rx_buf[i] @ 256 + i*2048)
+sabit NO_TXDESC: tam64  = 16640;    // 128
+sabit NO_TXAVAIL: tam64 = 16768;    // 22
+sabit NO_TXUSED: tam64  = 16800;    // 70
+sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
+
+// virtio-net cihazı tara (DeviceID=1). Taban döner (0=yok).
+çıplak işlev vnet_bul() -> tam64 {
+    değişken i: tam32 = 0;
+    iken i < 32 {
+        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;
+        eğer vblk_o32(base + VM_MAGIC) == VBLK_MAGIC_DEG {
+            eğer vblk_o32(base + VM_DEVICE_ID) == VN_DEV_NET { ver base; }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// Cihazı başlat: reset → feature(VERSION_1) → RX queue0 → TX queue1 → DRIVER_OK. 0=ok.
+çıplak işlev vnet_kur(base: tam64) -> tam32 {
+    eğer vblk_o32(base + VM_VERSION) != 2 { ver 0 - 1; }
+    vblk_y32(base + VM_STATUS, 0);
+    vblk_y32(base + VM_STATUS, 1);
+    vblk_y32(base + VM_STATUS, 3);
+    vblk_y32(base + VM_DRV_FEAT_SEL, 1);
+    vblk_y32(base + VM_DRV_FEAT, 1);        // bit32 VERSION_1
+    vblk_y32(base + VM_DRV_FEAT_SEL, 0);
+    vblk_y32(base + VM_DRV_FEAT, 0);
+    vblk_y32(base + VM_STATUS, 11);
+    eğer (vblk_o32(base + VM_STATUS) & 8) == 0 { ver 0 - 2; }   // FEAT_OK device onayı
+    // --- RX queue (0): 8 descriptor, her biri rx_buf[i] (2048, device WRITE flag=2) ---
+    vblk_y32(base + VM_QUEUE_SEL, 0);
+    eğer vblk_o32(base + VM_QUEUE_NUM_MAX) < 8 { ver 0 - 3; }
+    vblk_y32(base + VM_QUEUE_NUM, 8);
+    değişken rd: tam64 = vnet_dma + NO_RXDESC;
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        değişken de: tam64 = rd + (i olarak tam64) * 16;
+        değişken buf: tam64 = vnet_dma + NO_RXBUF + (i olarak tam64) * 2048;
+        vblk_y64(de + 0, buf); vblk_y32(de + 8, 2048); vblk_y16(de + 12, 2 olarak dtam16); vblk_y16(de + 14, 0 olarak dtam16);
+        vblk_y16(vnet_dma + NO_RXAVAIL + 4 + (i olarak tam64) * 2, i olarak dtam16);   // rx_avail.ring[i]=i
+        i = i + 1;
+    }
+    vblk_dsb();
+    vblk_y16(vnet_dma + NO_RXAVAIL + 2, 8 olarak dtam16);   // rx_avail.idx=8 (tüm tamponlar hazır)
+    vblk_y16(vnet_dma + NO_RXUSED + 2, 0 olarak dtam16);    // rx_used.idx=0 (re-init güvenli)
+    vnet_rx_gorulen = 0;                                    // RX seen sayacı taze (ring ile senkron)
+    değişken rav: tam64 = vnet_dma + NO_RXAVAIL;
+    değişken rus: tam64 = vnet_dma + NO_RXUSED;
+    vblk_y32(base + VM_Q_DESC_LO, rd olarak tam32);  vblk_y32(base + VM_Q_DESC_HI, (rd >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DRV_LO,  rav olarak tam32); vblk_y32(base + VM_Q_DRV_HI,  (rav >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DEV_LO,  rus olarak tam32); vblk_y32(base + VM_Q_DEV_HI,  (rus >> 32) olarak tam32);
+    vblk_y32(base + VM_QUEUE_READY, 1);
+    // --- TX queue (1) ---
+    vblk_y32(base + VM_QUEUE_SEL, 1);
+    eğer vblk_o32(base + VM_QUEUE_NUM_MAX) < 8 { ver 0 - 3; }
+    vblk_y32(base + VM_QUEUE_NUM, 8);
+    vblk_y16(vnet_dma + NO_TXAVAIL + 2, 0 olarak dtam16);
+    vblk_y16(vnet_dma + NO_TXUSED + 2, 0 olarak dtam16);
+    değişken td: tam64 = vnet_dma + NO_TXDESC;
+    değişken ta: tam64 = vnet_dma + NO_TXAVAIL;
+    değişken tu: tam64 = vnet_dma + NO_TXUSED;
+    vblk_y32(base + VM_Q_DESC_LO, td olarak tam32);  vblk_y32(base + VM_Q_DESC_HI, (td >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DRV_LO,  ta olarak tam32);  vblk_y32(base + VM_Q_DRV_HI,  (ta >> 32) olarak tam32);
+    vblk_y32(base + VM_Q_DEV_LO,  tu olarak tam32);  vblk_y32(base + VM_Q_DEV_HI,  (tu >> 32) olarak tam32);
+    vblk_y32(base + VM_QUEUE_READY, 1);
+    vblk_y32(base + VM_QUEUE_NOTIFY, 0);   // RX tamponları hazır → cihaza bildir
+    vblk_y32(base + VM_STATUS, 15);        // DRIVER_OK
+    ver 0;
+}
+
+// MAC config word0 (@ base+0x100, device-PROVIDED) — [8] gerçek-kanıt: cihaz canlı + config erişilir.
+çıplak işlev vnet_mac_w0(base: tam64) -> tam32 { ver vblk_o32(base + 256); }
+// MAC baytı oku (config @ base+0x100+i) — Ethernet src için.
+çıplak işlev vnet_mac_bayt(base: tam64, i: tam32) -> dtam8 { ver vblk_o8(base + 256 + (i olarak tam64)); }
+
+// ====================== Paket TX/RX (FAZ-C net-arp/[9], net-icmp/[10]) ======================
+// TX çerçeve tamponuna bayt yaz (12-bayt virtio-net başlığı SONRASI, ofs 12+i).
+çıplak işlev vnet_tx_yaz(i: tam32, b: dtam8) { vblk_y8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64), b); }
+
+// Ethernet çerçevesi gönder (TX queue1). uzun = çerçeve baytı (net-başlığı hariç). 0=ok.
+çıplak işlev vnet_gonder(base: tam64, uzun: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 12 { vblk_y8(vnet_dma + NO_TXBUF + (i olarak tam64), 0 olarak dtam8); i = i + 1; }   // net-başlığı sıfır
+    değişken d: tam64 = vnet_dma + NO_TXDESC;                          // tek desc, cihaz OKUR
+    vblk_y64(d + 0, vnet_dma + NO_TXBUF); vblk_y32(d + 8, (12 + uzun) olarak tam32); vblk_y16(d + 12, 0 olarak dtam16); vblk_y16(d + 14, 0 olarak dtam16);
+    değişken ta: tam64 = vnet_dma + NO_TXAVAIL;
+    değişken tu: tam64 = vnet_dma + NO_TXUSED + 2;
+    değişken idx: dtam16 = vblk_o16(ta + 2);
+    değişken once: dtam16 = vblk_o16(tu);
+    değişken slot: tam64 = ((idx olarak tam64) % 8) * 2;
+    vblk_y16(ta + 4 + slot, 0 olarak dtam16);                          // ring[idx%8]=desc0
+    vblk_dsb();
+    vblk_y16(ta + 2, (idx + (1 olarak dtam16)) olarak dtam16);
+    vblk_dsb();
+    vblk_y32(base + VM_QUEUE_NOTIFY, 1);                               // TX queue = 1
+    değişken spin: tam32 = 0;
+    iken vblk_o16(tu) == once {
+        vblk_dsb();
+        spin = spin + 1;
+        eğer spin > 100000000 { ver 0 - 4; }
+    }
+    ver 0;
+}
+
+// Bir paket AL (RX queue0). Gövde baytını döner (net-başlığı 12 hariç), 0=paket yok/zaman aşımı.
+çıplak işlev vnet_al(base: tam64, tikler: tam32) -> tam32 {
+    değişken ru: tam64 = vnet_dma + NO_RXUSED;
+    değişken spin: tam32 = 0;
+    iken vblk_o16(ru + 2) == (vnet_rx_gorulen olarak dtam16) {
+        vblk_dsb();
+        spin = spin + 1;
+        eğer spin > tikler { ver 0; }
+    }
+    değişken slot: tam32 = vnet_rx_gorulen % 8;
+    değişken id: tam32 = vblk_o32(ru + 4 + (slot olarak tam64) * 8);         // used.ring[slot].id
+    değişken len: tam32 = vblk_o32(ru + 4 + (slot olarak tam64) * 8 + 4);    // used.ring[slot].len (net-başlığı dâhil)
+    vnet_rx_gorulen = vnet_rx_gorulen + 1;
+    eğer id >= 8 { ver 0 - 1; }
+    vnet_rx_id = id;
+    değişken govde: tam32 = len - 12;
+    eğer govde < 0 { ver 0; }
+    ver govde;
+}
+
+// Alınan çerçeveden bayt oku (net-başlığı 12 atlanmış).
+çıplak işlev vnet_rx_oku(i: tam32) -> dtam8 { ver vblk_o8(vnet_dma + NO_RXBUF + (vnet_rx_id olarak tam64) * 2048 + 12 + (i olarak tam64)); }
+
+// RFC1071 internet checksum (IPv4 başlığı + ICMP mesajı — net-icmp/[10]). `adr`'den `uzun` bayt
+// (big-endian 16-bit toplam + carry fold + one's complement). ~t & 0xffff = 65535 - t (XOR yok).
+çıplak işlev vnet_checksum(adr: tam64, uzun: tam32) -> tam32 {
+    değişken t: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken (i + 1) < uzun {
+        değişken hi: tam32 = vblk_o8(adr + (i olarak tam64)) olarak tam32;
+        değişken lo: tam32 = vblk_o8(adr + ((i + 1) olarak tam64)) olarak tam32;
+        t = t + hi * 256 + lo;
+        i = i + 2;
+    }
+    eğer (uzun & 1) != 0 {
+        değişken son: tam32 = vblk_o8(adr + ((uzun - 1) olarak tam64)) olarak tam32;
+        t = t + son * 256;
+    }
+    iken (t >> 16) != 0 { t = (t & 65535) + (t >> 16); }
+    ver 65535 - (t & 65535);
+}
+
+// TX çerçevesindeki `frame_ofs`'tan `uzun` bayt üzerinde RFC1071 checksum (çıplak: vnet_dma
+// erişimi güvensiz-tier — normal işlev küresel'e dokunmadan kullanır, E010 kaçınılır).
+çıplak işlev vnet_tx_checksum(frame_ofs: tam32, uzun: tam32) -> tam32 {
+    ver vnet_checksum(vnet_dma + NO_TXBUF + 12 + (frame_ofs olarak tam64), uzun);
+}
+
+```
+
+## test/ornekler/kem_os_x86.kem
+```
+// kem_os_x86.kem — İş 5: x86_64 kanıt çekirdeğinin `main`'i. kem_heap.kem ile
+// CAT edilir (tek derleme birimi). Normal (çıplak OLMAYAN) işlev → prologu
+// bölgeyi kdl_global_bolge_al → kdl_bolge_olustur → @malloc (saf-.kem) zinciriyle
+// kurar; bu test TAM O ZİNCİRİ ölçer: start_x86_64.S kem_heap_kur'u main'den
+// önce çağırmazsa saf-.kem malloc null döner ve toplam=0 olur (panik YOK —
+// bu yüzden marker değil DEĞER yazdırılıp denetlenir, D-264 dersi).
+//
+// Amaç: bölge + dizi + metin yüzeyini x86 QEMU'da DAVRANIŞSAL kanıtla. Yazdırma
+// yerleşikleri (yazdir_metin/yazdir_tam/yazdir_satir) bu çekirdekte C
+// runtime/kdl_runtime_yazdir_bare.c + 16550 UART üzerinden gider (İş 2 sonra
+// .kem UART'a çevirecek — şimdilik dokunulmaz).
+//
+// Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
+// (yazdir_metin satır sonu ekler).
+// Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
+// satırı basılır (gerçekten çalıştığının kanıtı; #UD olsaydı çekirdek düşerdi).
+// main sonunda kem_panik("X86 PANIK YOLU OK") çağrılır: panik geri dönmez,
+// mesaj .kem COM1 yolundan basılır, çekirdek orada durur; QEMU zaman aşımı keser.
+//
+// İş 3: kem_panik'ten ÖNCE üç DMA/MMIO testi koşar (her biri DEĞER denetler,
+// sabit metin basmaz — D-264 dersi):
+//   (a) Blok DMA RAM — vblk_data_yaz/oku 0..511 yaz-oku karşılaştırma →
+//       "X86 DMA RAM BLK OK" (aksi hâlde "X86 DMA RAM BLK HATA" + ilk indeks).
+//   (b) Ağ DMA RAM — vnet_tx_yaz + çıplak x86_net_tx_oku (aşağıda) 0..63
+//       karşılaştırma → "X86 DMA RAM NET OK".
+//   (c) MMIO UC pencere — kdl_mmio_oku32(0xFEE00030) LAPIC sürüm yazmacı
+//       (0 DEĞİL ve -1 DEĞİLSE) → "X86 MMIO UC OK lapic_surum=" + değer.
+//
+// Bu üç test, DMA tabanlarının (kem_platform.kem x86_64 ikizi) 0..1GB eşleme
+// ve UC MMIO penceresinin (start_x86_64.S 2c2) gerçekten kurulduğunu
+// DAVRANIŞSAL olarak kanıtlar.
+
+// Çıplak yardımcı: küresel vnet_dma'ya NORMAL işlevden doğrudan erişim E010
+// verir; çıplak işlev küresele serbestçe erişir (kem_heap.kem idiomu).
+çıplak işlev x86_net_tx_oku(i: tam32) -> dtam8 {
+    ver vblk_o8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64));
+}
+
+işlev main() -> tam32 {
+    kem_dma_bariyeri();
+    yazdir_metin("X86 DMA BARIYER OK");
+
+    değişken d: Dizi<tam32> = [];
+
+    // 1..10 ekle (bölge dizi büyümesi 4→8→16; saf-.kem kem_dizi_buyut).
+    değişken i: tam32 = 1;
+    iken i <= 10 {
+        dizi_ekle(d, i);
+        i = i + 1;
+    }
+
+    // Topla (beklenen: 55). `için` heap dizide sınır-kontrollü okur.
+    değişken toplam: tam32 = 0;
+    için x: d {
+        toplam = toplam + x;
+    }
+
+    // Değeri SABİT yazma: gerçek toplamı bas (marker değil DEĞER denetimi).
+    eğer toplam == 55 {
+        yazdir_metin("X86 HEAP DIZI OK toplam=");
+    }
+    değilse {
+        yazdir_metin("X86 HEAP DIZI HATA toplam=");
+    }
+    yazdir_tam(toplam);
+    yazdir_satir();
+
+    // İş 3 (a): Blok DMA RAM yaz-oku (0..511; 251 ile döngüsel desen).
+    değişken dma_i: tam32 = 0;
+    iken dma_i < 512 {
+        vblk_data_yaz(dma_i, (((dma_i % 251) + 3) olarak dtam8));
+        dma_i = dma_i + 1;
+    }
+    değişken blk_hata: tam32 = 512;   // 512 = "uyuşmazlık yok" (geçerli indeks 0..511)
+    dma_i = 0;
+    iken dma_i < 512 {
+        değişken beklenen_blk: dtam8 = (((dma_i % 251) + 3) olarak dtam8);
+        eğer vblk_data_oku(dma_i) != beklenen_blk {
+            eğer blk_hata == 512 { blk_hata = dma_i; }
+        }
+        dma_i = dma_i + 1;
+    }
+    eğer blk_hata == 512 {
+        yazdir_metin("X86 DMA RAM BLK OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM BLK HATA");
+        yazdir_tam(blk_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (b): Ağ TX tamponu yaz-oku (0..63; 241 ile döngüsel desen).
+    değişken net_i: tam32 = 0;
+    iken net_i < 64 {
+        vnet_tx_yaz(net_i, (((net_i % 241) + 7) olarak dtam8));
+        net_i = net_i + 1;
+    }
+    değişken net_hata: tam32 = 64;
+    net_i = 0;
+    iken net_i < 64 {
+        değişken beklenen_net: dtam8 = (((net_i % 241) + 7) olarak dtam8);
+        eğer x86_net_tx_oku(net_i) != beklenen_net {
+            eğer net_hata == 64 { net_hata = net_i; }
+        }
+        net_i = net_i + 1;
+    }
+    eğer net_hata == 64 {
+        yazdir_metin("X86 DMA RAM NET OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM NET HATA");
+        yazdir_tam(net_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (c): MMIO UC pencere — LAPIC sürüm yazmacı (0xFEE00030 = 4276092976).
+    değişken lapic_surum: tam32 = kdl_mmio_oku32(4276092976);
+    eğer lapic_surum == 0 {
+        yazdir_metin("X86 MMIO UC HATA");
+    }
+    değilse {
+        eğer lapic_surum == (0 - 1) {
+            yazdir_metin("X86 MMIO UC HATA");
+        }
+        değilse {
+            yazdir_metin("X86 MMIO UC OK lapic_surum=");
+            yazdir_tam(lapic_surum);
+            yazdir_satir();
+        }
+    }
+
+    kem_panik("X86 PANIK YOLU OK");
+    ver 0;
+}
+
+```
+
+## otomasyon/evren/baglam/makefile_kem_os_x86_kesit.txt
+```
+# kem_heap.kem + kem_os_x86.kem CAT → malloc/free/memcpy/memset/bolge/dizi/metin
+# TANIMLARI .o'dan gelir; bm_x86_heap.o ve bm_x86_bolge.o BİLEREK YOK (aksi hâlde
+# C sürümleri .kem sembolleriyle çakışır). start_x86_64.S kem_heap_kur'u
+# main'den önce çağırır → kem_son dolu. Üç kanıt: (1) nm'de ` T malloc` ve
+# ` T kem_heap_kur`; (2) objdump'da kem_heap_kur'a giden call satırı (sabit
+# metin DEĞİL, objdump'ın kendi satırı); (3) QEMU seri çıktıda
+# "X86 HEAP DIZI OK toplam=" satırı ve HEMEN ARDINDAN "55" (yazdir_metin satır
+# sonu ekler → değer ayrı satırda; denetim değerin KENDİSİNE bakar, D-264).
+# Kanıt 4: objdump'da mfence (x86_64 DMA bariyeri) satırları; dsb YOK.
+# Kanıt 5: QEMU seri çıktıda "X86 PANIK YOLU OK" tam satırı (kem_panik .kem
+# UART yolundan basar; panik geri dönmez, QEMU zaman aşımı keser).
+# Kanıt 6: objdump --disassemble-symbols=kem_uart_bayt içinde outb VE inb
+# (yalnız .kem işlevi; tüm ikilide aramak C UART nesnesine de uyar).
+# Kanıt 7: llvm-nm'de __heap_end < 0x02000000 (DMA tabanı heap'le çakışmaz).
+# Kanıt 8: objdump'da 0xc000009b sabiti (UC MMIO PD sayfa bayrağı gerçekten kurulu).
+# Kanıt 9: QEMU seri çıktıda "X86 DMA RAM BLK OK", "X86 DMA RAM NET OK" tam
+#          satırları ve "X86 MMIO UC OK lapic_surum=" (LAPIC sürüm — UC pencere
+#          okunabiliyor).
+calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+		$(BUILD)/bm_x86_panik.o
+	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
+	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
+	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o $(BUILD)/kem_os_x86.elf \
+		$(BUILD)/kem_os_x86.o \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+		$(BUILD)/bm_x86_panik.o
+	@echo "  Kanit 1: sembol kaynagi (saf-.kem malloc/kem_heap_kur)..."
+	@if ! llvm-nm $(BUILD)/kem_os_x86.o | grep -q ' T malloc'; then \
+		echo "FAIL: malloc .kem'den gelmedi (T malloc yok)"; exit 1; fi
+	@if ! llvm-nm $(BUILD)/kem_os_x86.o | grep -q ' T kem_heap_kur'; then \
+		echo "FAIL: kem_heap_kur .kem'den gelmedi (T kem_heap_kur yok)"; exit 1; fi
+	@echo "  Kanit 2: kem_heap_kur call satiri (objdump'un kendi satiri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'call.*<kem_heap_kur>'; then \
+		echo "FAIL: kem_heap_kur call satiri yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'call.*<kem_heap_kur>'
+	@echo "  Kanit 3: QEMU davranis (toplam=55)..."
+	@if ! command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		echo "FAIL: qemu-system-x86_64 yok — qemu kurun (sessiz atlama yok, D-486)"; exit 1; fi
+	@rm -f $(BUILD)/kem_os_x86.out; \
+	timeout 8 qemu-system-x86_64 -kernel $(BUILD)/kem_os_x86.elf -display none \
+		-serial file:$(BUILD)/kem_os_x86.out 2>/dev/null || true; \
+	echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/kem_os_x86.out; echo "--- son ---"; \
+	if grep -A1 -xF "X86 HEAP DIZI OK toplam=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qxF "55"; then \
+		echo "kem_os x86_64 QEMU testi gecti (toplam=55, deger satiri dogrulandi)."; \
+	else echo "FAIL: 'X86 HEAP DIZI OK toplam=' + '55' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA BARIYER OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA BARIYER OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 4: objdump mfence (x86_64 DMA bariyeri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'mfence'
+	@# Komut SÜTUNUNDA ara (sekme + dsb): düz 'dsb' `<vblk_dsb>` sembol adıyla eşleşir.
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -qP '\tdsb\b'; then \
+		echo "FAIL: dsb x86_64 binary'de bulundu"; exit 1; fi
+	@echo "  Kanit 5: QEMU davranis (X86 PANIK YOLU OK)..."
+	@if ! grep -qxF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 PANIK YOLU OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 6: objdump kem_uart_bayt (outb + inb, .kem UART)..."
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'outb'; then \
+		echo "FAIL: kem_uart_bayt icinde outb yok"; exit 1; fi
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'inb'; then \
+		echo "FAIL: kem_uart_bayt icinde inb yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -E 'outb|inb'
+	@echo "  Kanit 7: yerlesim (__heap_end < DMA tabani 0x02000000)..."
+	@he=$$(llvm-nm $(BUILD)/kem_os_x86.elf | awk '/__heap_end/ {print $$1; exit}'); \
+	if [ -z "$$he" ]; then echo "FAIL: __heap_end sembolu yok"; exit 1; fi; \
+	hedec=$$((0x$$he)); \
+	echo "    __heap_end = 0x$$he ($$hedec)"; \
+	if [ "$$hedec" -ge 33554432 ]; then \
+		echo "FAIL: __heap_end ($$hedec) >= 0x02000000 (DMA tabani)"; exit 1; fi
+	@echo "  Kanit 8: UC MMIO bayragi (objdump'da 0xc000009b)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q '0xc000009b'; then \
+		echo "FAIL: 0xc000009b objdump'da yok (UC MMIO sayfa bayragi)"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep '0xc000009b'
+	@echo "  Kanit 9: QEMU davranis (DMA RAM BLK/NET + UC MMIO)..."
+	@if ! grep -qxF "X86 DMA RAM BLK OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM BLK OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA RAM NET OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM NET OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 MMIO UC OK lapic_surum=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 MMIO UC OK lapic_surum=' satiri yok"; exit 1; fi
+
+
+```
+
+# GÖREV
+
+## İş 4 — virtio-mmio x86 farkı: microvm tarama tabanı + işlevsel disk/ağ kanıtı
+
+### Sorun (ölçüldü)
+`vblk_bul` / `vnet_bul` cihazı `167772160 + i*512` (0x0a000000), `i < 32`
+yuvada arar — QEMU aarch64 `virt`'e özgü. x86'da virtio-mmio YALNIZ
+`-M microvm`'de var: taban `0xFEB00000` (4273995776), adım 0x200 (512),
+**24 yuva** (ölçüldü). `pc` makinesinde hiç yok. QEMU varsayılanı legacy
+(`force-legacy=true`, ölçüldü) ama sürücü v2 bekliyor → x86 QEMU satırına
+`-global virtio-mmio.force-legacy=false` ŞART. Mevcut x86 kanıt çekirdeği
+`microvm`'de sorunsuz boot ediyor (ölçüldü; tüm işaretler geliyor).
+`0xFEB00000`, D-673'ün UC penceresi içinde (eşli).
+
+### İstenen değişiklikler (yalnız bunlar — 5 madde)
+
+1. **Platform dosyaları** — her birinde `vnet_dma` satırının ALTINA iki sabit:
+   - `runtime/mimari/arm64/kem_platform.kem`:
+     `sabit VM_TARAMA_TABAN: tam64 = 167772160;   // 0x0a000000 (QEMU virt)`
+     `sabit VM_YUVA_SAYISI: tam32 = 32;`
+   - `runtime/mimari/x86_64/kem_platform.kem`:
+     `sabit VM_TARAMA_TABAN: tam64 = 4273995776;  // 0xFEB00000 (QEMU microvm)`
+     `sabit VM_YUVA_SAYISI: tam32 = 24;`
+   - Her dosyada sabitlerin üstüne kısa Türkçe yorum (adım 0x200 her iki
+     makinede aynı; x86'da yalnız microvm; pc'de virtio-mmio yok).
+2. **`runtime/kem_virtio_blk.kem` `vblk_bul`** ve **`runtime/kem_virtio_net.kem`
+   `vnet_bul`**: döngüdeki `i < 32` → `i < VM_YUVA_SAYISI`, `167772160` →
+   `VM_TARAMA_TABAN`. İşlevlerin üstündeki yorumdaki
+   "32 slot × 0x200 @ 0x0a000000" ifadesini (yalnız blk'de var) platform
+   dosyasına atıf yapacak şekilde güncelle.
+3. **`test/ornekler/kem_os_x86.kem`** — `kem_panik("X86 PANIK YOLU OK");`
+   satırından ÖNCE (DMA/MMIO testlerinden SONRA) iki test:
+   - **Disk:** `değişken vb: tam64 = vblk_bul();` — 0 ise `X86 DISK YOK` bas.
+     Değilse `vblk_kur(vb)` 0 değilse `X86 DISK KUR HATA` + kodu
+     (`yazdir_tam`). Değilse: i=0..511 için `vblk_data_yaz(i,
+     (((i % 251) + 5) olarak dtam8))`, `vblk_yaz(vb, 7)`; sonra i=0..511
+     `vblk_data_yaz(i, 0 olarak dtam8)` ile tamponu SIFIRLA (geri okunan
+     verinin tampondan değil DİSKTEN geldiği kanıtlansın); `vblk_oku(vb, 7)`;
+     i=0..511 karşılaştır. Hepsi eşleşirse `X86 DISK RW OK` + ayrı satırda
+     okunan baytların toplamı (`yazdir_tam`; değer denetimi, D-264). Yoksa
+     `X86 DISK RW HATA` + ilk uyuşmayan indeks. `vblk_yaz`/`vblk_oku` dönüş
+     kodu 0 değilse de HATA + kod.
+   - **Ağ:** `değişken nb: tam64 = vnet_bul();` 0 ise `X86 NET YOK`;
+     `vnet_kur(nb)` 0 değilse `X86 NET KUR HATA` + kod; değilse
+     `X86 NET DEV OK mac_w0=` + ayrı satırda `vnet_mac_w0(nb)` değeri.
+   - `vblk_bul`/`vblk_kur`/`vblk_yaz`/`vblk_oku`/`vnet_bul`/`vnet_kur`/
+     `vnet_mac_w0` çıplak işlevler; normal `main`'den çağrılabilir.
+   - Başlık yorumuna iki testi ekle.
+4. **`Makefile` `calistir_kem_os_x86` QEMU satırı** — mevcut üç satırı
+   (çapa aşağıda) şununla değiştir: önce disk imajı
+   `dd if=/dev/zero of=$(BUILD)/kem_os_x86_disk.img bs=512 count=64
+   2>/dev/null;` sonra `timeout 8 qemu-system-x86_64 -M microvm
+   -display none -global virtio-mmio.force-legacy=false -drive
+   file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 -device
+   virtio-blk-device,drive=d0 -netdev user,id=n0 -device
+   virtio-net-device,netdev=n0 -kernel $(BUILD)/kem_os_x86.elf -serial
+   file:$(BUILD)/kem_os_x86.out 2>/dev/null || true;` — satır sonları ve `\`
+   devamları mevcut üslupta (TAB girinti). Üstüne yorum: neden microvm (pc'de
+   virtio-mmio yok), neden force-legacy=false (sürücü v2; QEMU varsayılanı
+   legacy — aarch64 hedefi de aynı bayrağı kullanır).
+5. **`Makefile` Kanıt 10** — Kanıt 9'un son satırından (çapa) SONRA:
+   `X86 DISK RW OK` ve `X86 NET DEV OK mac_w0=` TAM satırları (`grep -qxF`);
+   ayrıca disk OK satırının HEMEN ardındaki satır yalnız rakamlardan oluşan
+   sıfırdan büyük bir sayı olmalı (`grep -A1 -xF ... | tail -1 | grep -qE
+   '^[1-9][0-9]*$'`). Yoksa FAIL. Hedef başlık yorumuna Kanıt 10'u ekle
+   (çapa: `#          okunabiliyor).`).
+
+### Çapalar (ESKI — AYNEN; her biri dosyasında TEK kez geçer)
+- arm platform: `küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000`
+- x86 platform: `küresel değişken vnet_dma: tam64 = 34603008;    // 0x02100000`
+- kem_virtio_blk.kem VE kem_virtio_net.kem (her birinde bir kez, 2 satır):
+  `    iken i < 32 {`
+  `        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;`
+- kem_virtio_blk.kem yorum: `// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). 32 slot × 0x200 @ 0x0a000000.`
+- kem_os_x86.kem: `    kem_panik("X86 PANIK YOLU OK");`
+- Makefile QEMU (3 satır, TAB girintili, sonlarında ` \`):
+  `	@rm -f $(BUILD)/kem_os_x86.out; \`
+  `	timeout 8 qemu-system-x86_64 -kernel $(BUILD)/kem_os_x86.elf -display none \`
+  `		-serial file:$(BUILD)/kem_os_x86.out 2>/dev/null || true; \`
+  (YENI'de `@rm -f ...; \` satırı KORUNSUN, `dd` ondan sonra gelsin; son
+  satır yine ` \` ile bitsin — ardından gelen `echo "--- QEMU COM1 cikti
+  ---"` satırları aynı kabuk komutunun parçası.)
+- Makefile Kanıt 9 son satırı: `		echo "FAIL: 'X86 MMIO UC OK lapic_surum=' satiri yok"; exit 1; fi`
+- Makefile yorum: `#          okunabiliyor).`
+
+Blokları YALNIZ gerçek dosyalara yaz (`Makefile`, `runtime/...`, `test/...`) —
+bağlamdaki `otomasyon/evren/baglam/*.txt` dosyaları YALNIZCA kesittir, hedef
+DEĞİL.
+
+### Yasak
+`src/*.c`, `selfhost/*`, `runtime/kem_gorev.kem`, `runtime/kem_mmu.kem`,
+`runtime/kem_zaman.kem`, `test/ornekler/kem_os.kem`, `boot/*.S`.
+
+````

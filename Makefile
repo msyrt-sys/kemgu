@@ -1941,6 +1941,9 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # Kanıt 9: QEMU seri çıktıda "X86 DMA RAM BLK OK", "X86 DMA RAM NET OK" tam
 #          satırları ve "X86 MMIO UC OK lapic_surum=" (LAPIC sürüm — UC pencere
 #          okunabiliyor).
+# Kanıt 10: QEMU seri çıktıda "X86 DISK RW OK" TAM satırı ve HEMEN ardındaki
+#          satır pozitif bir sayı (disk bayt toplamı); ayrıca "X86 NET DEV OK
+#          mac_w0=" TAM satırı (microvm virtio-mmio disk/ağ davranışı).
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
@@ -1967,8 +1970,17 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@echo "  Kanit 3: QEMU davranis (toplam=55)..."
 	@if ! command -v qemu-system-x86_64 > /dev/null 2>&1; then \
 		echo "FAIL: qemu-system-x86_64 yok — qemu kurun (sessiz atlama yok, D-486)"; exit 1; fi
+# neden microvm: x86'da virtio-mmio YALNIZ -M microvm'de var (pc makinesinde
+# virtio-mmio YOK). neden force-legacy=false: sürücü v2 bekler; QEMU varsayılanı
+# legacy (aarch64 hedefi de aynı bayrağı kullanır).
 	@rm -f $(BUILD)/kem_os_x86.out; \
-	timeout 8 qemu-system-x86_64 -kernel $(BUILD)/kem_os_x86.elf -display none \
+	dd if=/dev/zero of=$(BUILD)/kem_os_x86_disk.img bs=512 count=64 2>/dev/null; \
+	timeout 8 qemu-system-x86_64 -M microvm -display none \
+		-global virtio-mmio.force-legacy=false \
+		-drive file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 \
+		-device virtio-blk-device,drive=d0 \
+		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+		-kernel $(BUILD)/kem_os_x86.elf \
 		-serial file:$(BUILD)/kem_os_x86.out 2>/dev/null || true; \
 	echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/kem_os_x86.out; echo "--- son ---"; \
 	if grep -A1 -xF "X86 HEAP DIZI OK toplam=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qxF "55"; then \
@@ -2010,6 +2022,13 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		echo "FAIL: 'X86 DMA RAM NET OK' satiri yok"; exit 1; fi
 	@if ! grep -qxF "X86 MMIO UC OK lapic_surum=" $(BUILD)/kem_os_x86.out; then \
 		echo "FAIL: 'X86 MMIO UC OK lapic_surum=' satiri yok"; exit 1; fi
+	@echo "  Kanit 10: QEMU davranis (microvm disk RW + net cihaz)..."
+	@if ! grep -qxF "X86 DISK RW OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DISK RW OK' satiri yok"; exit 1; fi
+	@if ! grep -A1 -xF "X86 DISK RW OK" $(BUILD)/kem_os_x86.out | tail -1 | grep -qE '^[1-9][0-9]*$$'; then \
+		echo "FAIL: disk OK sonrasi pozitif sayi satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 NET DEV OK mac_w0=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 NET DEV OK mac_w0=' satiri yok"; exit 1; fi
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

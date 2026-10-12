@@ -29,6 +29,11 @@
 // Bu üç test, DMA tabanlarının (kem_platform.kem x86_64 ikizi) 0..1GB eşleme
 // ve UC MMIO penceresinin (start_x86_64.S 2c2) gerçekten kurulduğunu
 // DAVRANIŞSAL olarak kanıtlar.
+//
+// İş 4: microvm virtio-mmio. Disk (vblk_bul → vblk_kur → sektör 7'ye yaz-oku;
+// okuma ÖNCESİ tampon sıfırlanır) "X86 DISK RW OK" + bayt toplamı ile; ağ
+// (vnet_bul → vnet_kur → vnet_mac_w0) "X86 NET DEV OK mac_w0=" ile DAVRANIŞSAL
+// kanıtlanır.
 
 // Çıplak yardımcı: küresel vnet_dma'ya NORMAL işlevden doğrudan erişim E010
 // verir; çıplak işlev küresele serbestçe erişir (kem_heap.kem idiomu).
@@ -125,6 +130,90 @@ işlev main() -> tam32 {
         değilse {
             yazdir_metin("X86 MMIO UC OK lapic_surum=");
             yazdir_tam(lapic_surum);
+            yazdir_satir();
+        }
+    }
+
+    // İş 4 (disk): VirtIO-MMIO blok cihazı. Sektör 7'ye (i%251)+5 deseni yaz;
+    // tamponu SIFIRLA (geri okunan veri DİSKTEN gelsin); sektör 7'yi oku ve
+    // 0..511 karşılaştır. Başarıda "X86 DISK RW OK" + ayrı satırda bayt toplamı
+    // (değer denetimi, D-264).
+    değişken vb: tam64 = vblk_bul();
+    eğer vb == 0 {
+        yazdir_metin("X86 DISK YOK");
+    }
+    değilse {
+        değişken vbk: tam32 = vblk_kur(vb);
+        eğer vbk != 0 {
+            yazdir_metin("X86 DISK KUR HATA");
+            yazdir_tam(vbk);
+            yazdir_satir();
+        }
+        değilse {
+            değişken di: tam32 = 0;
+            iken di < 512 {
+                vblk_data_yaz(di, (((di % 251) + 5) olarak dtam8));
+                di = di + 1;
+            }
+            değişken wy: tam32 = vblk_yaz(vb, 7);
+            eğer wy != 0 {
+                yazdir_metin("X86 DISK RW HATA");
+                yazdir_tam(wy);
+                yazdir_satir();
+            }
+            değilse {
+                di = 0;
+                iken di < 512 { vblk_data_yaz(di, 0 olarak dtam8); di = di + 1; }
+                değişken ok: tam32 = vblk_oku(vb, 7);
+                eğer ok != 0 {
+                    yazdir_metin("X86 DISK RW HATA");
+                    yazdir_tam(ok);
+                    yazdir_satir();
+                }
+                değilse {
+                    değişken dhata: tam32 = 512;
+                    değişken dsum: tam32 = 0;
+                    di = 0;
+                    iken di < 512 {
+                        değişken dbek: dtam8 = (((di % 251) + 5) olarak dtam8);
+                        değişken dok: dtam8 = vblk_data_oku(di);
+                        eğer dok != dbek {
+                            eğer dhata == 512 { dhata = di; }
+                        }
+                        dsum = dsum + (dok olarak tam32);
+                        di = di + 1;
+                    }
+                    eğer dhata == 512 {
+                        yazdir_metin("X86 DISK RW OK");
+                        yazdir_tam(dsum);
+                        yazdir_satir();
+                    }
+                    değilse {
+                        yazdir_metin("X86 DISK RW HATA");
+                        yazdir_tam(dhata);
+                        yazdir_satir();
+                    }
+                }
+            }
+        }
+    }
+
+    // İş 4 (ağ): VirtIO-MMIO ağ cihazı — bul + kur + MAC config word0 (canlı
+    // cihaz kanıtı). Başarıda "X86 NET DEV OK mac_w0=" + ayrı satırda MAC değeri.
+    değişken nb: tam64 = vnet_bul();
+    eğer nb == 0 {
+        yazdir_metin("X86 NET YOK");
+    }
+    değilse {
+        değişken nk: tam32 = vnet_kur(nb);
+        eğer nk != 0 {
+            yazdir_metin("X86 NET KUR HATA");
+            yazdir_tam(nk);
+            yazdir_satir();
+        }
+        değilse {
+            yazdir_metin("X86 NET DEV OK mac_w0=");
+            yazdir_tam(vnet_mac_w0(nb));
             yazdir_satir();
         }
     }

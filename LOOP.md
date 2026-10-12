@@ -1925,3 +1925,25 @@
   ("16ri KB"). CAT/liste eklemeleri + kuresel satir silme bende.
   DERS: tur basina ~5 degisiklik / ~6 capa sinirinda kalinmali; daha buyugu
   bu butcede (16384, dusunme+yanit ortak) capa dogrulamasinda tukeniyor.
+- 2026-10-12 D-674: x86 parite IS 4 — virtio-mmio x86: microvm tarama tabani +
+  islevsel disk/ag kaniti.
+  VM_TARAMA_TABAN / VM_YUVA_SAYISI platform dosyalarinda: arm64 0x0a000000 / 32
+  (degismez), x86_64 0xFEB00000 / 24 (QEMU microvm; pc'de virtio-mmio YOK).
+  vblk_bul / vnet_bul bu sabitleri kullanir. calistir_kem_os_x86 artik
+  `-M microvm -global virtio-mmio.force-legacy=false` + disk imaji + virtio-net.
+  KANIT: QEMU x86'da sektor 7'ye yaz → tamponu SIFIRLA → diskten oku, 512 bayt
+  birebir; toplam 65355 (elle: 512*5 + 2*31375 + 45). QEMU kapandiktan sonra
+  ANA MAKINEDEN imajin 7. sektoru okundu: `5 6 7 8 ...` (veri gercekten diskte).
+  Ag: vnet_kur 0, mac_w0 = 0x12005452 (QEMU 52:54:00:12:.. LE). microvm
+  cihazlari EN UST yuvalara yerlestirir (blk 23, net 22 — monitorden olculdu).
+  ⚠⚠ KUSUR BENDEYDI, KAPI YAKALADI: gorev metninde 0xFEB00000'i ondaliga YANLIS
+  cevirmistim (4273995776 = 0xFEC00000, IOAPIC). deepseek sayiyi aynen kullandi;
+  kanit 10 KIRMIZI ("X86 DISK YOK"). Teshis: monitor `xp`/`gva2gpa` cihazi
+  dogru yerde gosterdi → ceviri dogru → objdump `movl $0xfec00000, %r14d`.
+  Diger 9 donusum python ile dogrulandi (hepsi dogru). DERS: gorev metnine
+  yazilan her ondalik sabit, gonderilmeden ONCE araçla cevrilmeli — model
+  verilen sayiyi sorgulamaz.
+  SABOTAJ: force-legacy=false kaldir → disk/ag `KUR HATA` → Kanit 10 KIRMIZI
+  (bayrak gercekten gerekli). Dogal sabotaj: yanlis taban → `X86 DISK YOK`.
+  DEEPSEEK: tur 5 tek seferde 10 blok (finish=stop), hepsi gercek dosyalar;
+  kod mudahalesi YOK (tek duzeltme kendi sabitim).

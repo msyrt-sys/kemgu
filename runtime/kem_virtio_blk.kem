@@ -72,11 +72,12 @@ sabit DO_STATUS: tam64 = 784;
 çıplak işlev vblk_data_yaz(i: tam32, deger: dtam8) { vblk_y8(vblk_dma + DO_DATA + (i olarak tam64), deger); }
 çıplak işlev vblk_data_oku(i: tam32) -> dtam8 { ver vblk_o8(vblk_dma + DO_DATA + (i olarak tam64)); }
 
-// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). 32 slot × 0x200 @ 0x0a000000.
+// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). Yuva tabanı/adım/sayı
+// platform dosyasında (VM_TARAMA_TABAN + i*0x200, VM_YUVA_SAYISI).
 çıplak işlev vblk_bul() -> tam64 {
     değişken i: tam32 = 0;
-    iken i < 32 {
-        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;
+    iken i < VM_YUVA_SAYISI {
+        değişken base: tam64 = VM_TARAMA_TABAN + (i olarak tam64) * 512;
         eğer vblk_o32(base + VM_MAGIC) == VBLK_MAGIC_DEG {
             eğer vblk_o32(base + VM_DEVICE_ID) == VBLK_DEV_BLK { ver base; }
         }
