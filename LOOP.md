@@ -1998,3 +1998,11 @@
   (eksik baglam / asiri kapsam). Uretimde 2 gercek hata kapi/denetim yakaladi
   (UART sessiz kayip, `dsb` sembol adiyla sahte eslesme); 1 hata benim gorev
   metnimdeydi (0xFEB00000 → yanlis ondalik), Kanit 10 yakaladi.
+- 2026-10-12 D-677: otomatik dongu + kem_minifs x86 testi (dal os/x86-parite-2).
+  otomasyon/evren/dongu.py (deepseek uretti, tur 7): sor → kuru eslestir →
+  uygula → dogrulama komutlari → isaret denetimi → KISA ozet; commit/kapi YOK.
+  Denetimde: log her kosuda UZERINE yazilir (bayat isaret tasinmaz) — gorevdeki
+  "ekle" talimatimdan iyi; tek uc durum (dogrulama yokken eski log) onarildi.
+  IS 8 (tur 8, dongu ile TEK KOMUT, mudahale YOK): minifs x86 CAT'e girdi;
+  QEMU microvm'de format → "KEMG" 100 B yaz → tampon SIFIRLA → oku; toplam
+  5071 (python ile bagimsiz hesap = 5071). Kanit 11. check_kapisi x86 8 parca.

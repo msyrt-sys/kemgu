@@ -1946,12 +1946,15 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # Kanıt 10: QEMU seri çıktıda "X86 DISK RW OK" TAM satırı ve HEMEN ardındaki
 #          satır pozitif bir sayı (disk bayt toplamı); ayrıca "X86 NET DEV OK
 #          mac_w0=" TAM satırı (microvm virtio-mmio disk/ağ davranışı).
+# Kanıt 11: QEMU seri çıktıda "X86 FS RW OK" TAM satırı ve HEMEN ardındaki
+#          satır pozitif bir sayı (kem_minifs x86: superblock/inode/data
+#          sektör 0/1/2 üstünde format→yaz→oku davranışsal kanıtı).
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
@@ -2031,6 +2034,11 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		echo "FAIL: disk OK sonrasi pozitif sayi satiri yok"; exit 1; fi
 	@if ! grep -qxF "X86 NET DEV OK mac_w0=" $(BUILD)/kem_os_x86.out; then \
 		echo "FAIL: 'X86 NET DEV OK mac_w0=' satiri yok"; exit 1; fi
+	@echo "  Kanit 11: QEMU davranis (kem_minifs x86 dosya sistemi)..."
+	@if ! grep -qxF "X86 FS RW OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 FS RW OK' satiri yok"; exit 1; fi
+	@if ! grep -A1 -xF "X86 FS RW OK" $(BUILD)/kem_os_x86.out | tail -1 | grep -qE '^[1-9][0-9]*$$'; then \
+		echo "FAIL: FS OK sonrasi pozitif sayi satiri yok"; exit 1; fi
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de
