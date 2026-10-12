@@ -1947,3 +1947,21 @@
   (bayrak gercekten gerekli). Dogal sabotaj: yanlis taban → `X86 DISK YOK`.
   DEEPSEEK: tur 5 tek seferde 10 blok (finish=stop), hepsi gercek dosyalar;
   kod mudahalesi YOK (tek duzeltme kendi sabitim).
+- 2026-10-12 D-675: KAPI KUSURU — baremetal_diff "atlandi" sayaci kaldirildi.
+  OLCULDU (onarim ONCESI): birlesik OS biriminden parca dusurulunce (T002) ya
+  da kem_mmu'ya tip hatasi sokulunca kapi `rc=0` + "2/2 birim (9 atlandi)" —
+  CEKIRDEGIN TAMAMI (326 islev) olculmeden YESIL. D-671/D-672 kem_heap ve
+  kem_virtio_blk'i sessizce "atlandi"ya dusurmustu (5/5 → 3/3).
+  YENI: (1) birlesik birim derlenemez/eksik → KIRMIZI; (2) BIRIMLER tablosu —
+  kem_heap (+arm64 uart) ve kem_virtio_blk (+arm64 bariyer+platform) mimari
+  bagimliliklariyla GERI ALINDI; (3) PARCALAR — tek basina derlenemeyen her
+  dosyanin TUM islev+kuresel adlari birlesik birimin C VE KEMGU IR'inda SAYILIR
+  (234 islev + 9 kuresel); tek basina derlenen parca = bayat → KIRMIZI;
+  (4) runtime/*.kem + mimari/arm64/*.kem siniflandirilmamis dosya → KIRMIZI.
+  Kural 3 ilk kosuda GERCEK bir sey buldu: kem_bariyer.kem tek basina
+  derleniyordu → BIRIMLER'e tasindi. Sonuc 15/15, `0 atlandi`.
+  SABOTAJ 4/4 (onarim SONRASI): A parca dusur → rc=2 · B tip hatasi → rc=2 ·
+  C siniflandirilmamis dosya → rc=2 · D birlesik birimde olmayan sembol
+  (x86_net_tx_oku) → rc=2, eksik sembol ADIYLA. A ve B onarim oncesi YESILDI.
+  Belge: docs/BAREMETAL_DIFF_KAPSAM.md (parca basina T002 sayisi + ilk tanimsiz
+  kullanim; mmu ↔ zaman KARSILIKLI bagimli).
