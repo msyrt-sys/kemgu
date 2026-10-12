@@ -2028,3 +2028,12 @@
   BLK/NET + DISK RW + FS RW testleri turetilmis tabanla gecti. Kanit 13:
   deger > 32768 KB (yedek sabitten buyuk = turetme calisti).
   DEEPSEEK tur 10 (dongu, tek komut): mudahale YOK.
+- 2026-10-12 D-680: baremetal_diff x86 IKIZI. Olculdu (once, elle): x86 birlesik
+  birimi C ↔ self-host BIREBIR (72 define, 4 asm sablon+kisit, 79 volatile, 83
+  inttoptr) — derleyici isi GEREKMEDI, eksik olan OLCUMDU. Bolum (5): parca
+  listesi Makefile x86 CAT satirindan okunur (tek kaynak); sinif. denetimi
+  mimari/x86_64'u kapsar. Kapi 16/16 (aarch64 + x86_64), 0 atlandi.
+  SABOTAJ 2/2: x86 parcasi CAT'ten dusuruldu → derlenemedi + SINIFLANDIRILMAMIS;
+  CAT disi x86 dosyasi → SINIFLANDIRILMAMIS. DEEPSEEK tur 11: mudahale YOK
+  (verdigim Makefile kesit araligi yanlis satirdaydi; gorevdeki sed komutu
+  sayesinde etkisiz). Envanter §7: 2b, 6b, 7, 9 kapandi.

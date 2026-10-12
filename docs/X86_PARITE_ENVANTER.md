@@ -240,15 +240,15 @@ sayılmamıştı ama aarch64'e özgüdür.)
 |---|---|---|
 | 1 | Gözlemlenebilirlik — x86 COM1 çıplak UART + `kem_panik` x86 yolu | ✅ D-672 |
 | 2 | Boot yükümlülükleri — `kem_heap_kur` + değer denetleyen heap fazı | ✅ D-670 |
-| 2b | PVH `%ebx` (`start_info`) saklama | ❌ **AÇIK** — `start_x86_64.S` hâlâ saklamıyor; bellek haritası/keşif yok |
+| 2b | PVH `%ebx` (`start_info`) saklama | ✅ D-678 — `kdl_pvh_bilgi` (.data); magic + memmap okunuyor (QEMU: 127 MB RAM) |
 | 3 | D1 — bare-metal x86 üçlüsü (`x86_64-unknown-none-elf`) | ❌ **YAPILMADI** — `clang -target … -Wno-override-module` geçersiz kılması bugün yetiyor; Win64 sözleşme riski (§4.2) kayıtlı duruyor. Derleyici işi → karar senin |
 | 4 | DMA bariyeri | ✅ D-671 — **D2b** (mimari başına dosya), D3 yerleşiği DEĞİL |
 | 5 | Platform sabitleri | ✅ kısmi D-673/D-674 — `runtime/mimari/<arch>/kem_platform.kem` (DMA + virtio tabanı/yuva) el yazımı; UART ayrı dosya (`kem_uart.kem`). Makefile'ın ürettiği tek modül (D4 biçimi) değil |
 | 6 | x86 sayfalama — UC MMIO penceresi + DMA ilk 1 GB içinde | ✅ D-673 |
-| 6b | DMA tabanını linker sembolü / `start_info` haritasından türet | ❌ **AÇIK** — hâlâ SABİT (`0x02000000`); çakışmasızlık yalnız Kanıt 7 ile ölçülüyor (`__heap_end` < taban) |
-| 7 | microvm + `force-legacy=false` → virtio-blk / virtio-net | ✅ D-674 (minifs x86 biriminde YOK — geçişli, test edilmedi) |
+| 6b | DMA tabanını `start_info` haritasından türet | ✅ D-679 — `kem_platform_kur()`: 1 GB altı en yüksek RAM tepesi − 256 KB (QEMU: 130804 KB; RAM `0x7FFD000`'de biter). PVH yoksa sabit yedek |
+| 7 | microvm + `force-legacy=false` → virtio-blk / minifs / virtio-net | ✅ D-674 + D-677 (minifs: format→yaz→oku, toplam 5071) |
 | 8 | **Kapsam dışı ağır borç**: `kem_zaman` (5) → `kem_mmu` (14) → `kem_gorev` (27); + `kem_dtb` (1) | ❌ **AÇIK — 47 blok** (sayım §6'da düzeltildi). `kem_gorev`, `kem_mmu`'ya (adres alanı) ve `kem_zaman`'a (preempt tik) bağlıdır; `kem_mmu` ↔ `kem_zaman` karşılıklı bağımlı (docs/BAREMETAL_DIFF_KAPSAM.md) |
-| 9 | Parite kapısı | ✅ kısmi — `calistir_kem_os_x86` (Kanıt 1-10, değer denetimli) + `check_kapisi` birleşik x86 birimi. ❌ `baremetal_diff`'in x86 İKİZİ (C oracle ↔ self-host yapısal parite) YOK; x86 birimi `kem_os.kem`'i içermiyor (kanıt çekirdeği `kem_os_x86.kem`) |
+| 9 | Parite kapısı | ✅ kısmi — `calistir_kem_os_x86` (Kanıt 1-10, değer denetimli) + `check_kapisi` birleşik x86 birimi. ✅ D-680 `baremetal_diff` x86 ikizi: birleşik x86 birimi C ↔ self-host (72 işlev, 4 asm şablon+kısıt, 79 volatile, 83 inttoptr) birebir; parça listesi Makefile'dan okunur. x86 birimi `kem_os.kem`'i içermiyor (kanıt çekirdeği `kem_os_x86.kem`) |
 
 ---
 

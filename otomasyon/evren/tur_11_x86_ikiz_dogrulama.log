@@ -1,0 +1,21 @@
+
+### $ bash -n test/baremetal_diff_harness.sh
+
+### $ make calistir_baremetal_diff
+  ✅ BİRLEŞİK OS — 326 işlev, 48 satıriçi asm, 101 volatile, 116 inttoptr, üçlü eşleşti
+  ✅ kem_dtb — 41 işlev (1 dosya)
+  ✅ kem_kanal_abi — 1 işlev (1 dosya)
+  ✅ kem_heap — 32 işlev (2 dosya)
+  ✅ kem_bariyer — 1 işlev (1 dosya)
+  ✅ kem_virtio_blk — 17 işlev (3 dosya)
+  ✅ parça kem_elf — 13 işlev + 0 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_gorev — 58 işlev + 3 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_minifs — 4 işlev + 0 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_mmu — 44 işlev + 0 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_virtio_net — 10 işlev + 2 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_zaman — 11 işlev + 2 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_uart — 1 işlev + 0 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_platform — 0 işlev + 2 küresel birleşik birimde (C + KEMGU)
+  ✅ parça kem_os — 93 işlev + 0 küresel birleşik birimde (C + KEMGU)
+  ✅ BİRLEŞİK x86 — 72 işlev, 4 satıriçi asm (şablon+kısıt eşleşti), 79 volatile, 83 inttoptr, üçlü eşleşti
+=== bare-metal (aarch64 + x86_64) yapı paritesi: 16/16 (birleşik OS + birimler + parça kapsamı: 234 işlev, 9 küresel), 0 atlandı ===
