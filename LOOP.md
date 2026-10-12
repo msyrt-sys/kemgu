@@ -1835,3 +1835,29 @@
   test_tumu TAM rc=0, ozette TEK fark bu satir.
   CI (faz-1, 0250d07): Linux'ta TSan + MSan GERCEKTEN kostu (atlanmadi); ozet
   adimi gercek `outcome`lari aldi (S_TUMU: success ...).
+- 2026-10-12 D-670: x86 parite dongusu IS 5 — x86 boot'u `kem_heap_kur` cagiriyor.
+  OLCULEN ONCUL (UYARI 1): saf-.kem allocator x86'ya baglaninca start_x86_64.S
+  kem_heap_kur cagirmadigi icin kem_son=0 → her malloc null → dizi islevleri
+  sessizce 0. Kanit cekirdegi bugun QEMU'da 55 yerine `0` basti, panik YOK.
+  ONARIM: long_entry'de kdl_idt_kur ile main arasina kem_heap_kur(__heap_start,
+  __heap_end) (SysV rdi/rsi). C-malloc'lu x86 kernel'lerinde kdl_bare_heap.c
+  ZAYIF no-op'u devreye girer → mevcut 5 x86 hedefi yesil kaldi (olculdu).
+  YENI HEDEF calistir_kem_os_x86 (minimum kanit cekirdegi): kem_heap.kem +
+  test/ornekler/kem_os_x86.kem CAT, bm_x86_heap.o/bm_x86_bolge.o BILEREK YOK.
+  Uc kanit: nm (T malloc / T kem_heap_kur .kem'den) · objdump'in KENDI satiri
+  (`callq ... <kem_heap_kur>`) · QEMU DEGER denetimi (isaret satiri + hemen
+  ardindan `55`; yazdir_metin satir sonu ekledigi icin deger ayri satirda).
+  SABOTAJ 2/2: (a) cagriyi sil → Kanit 2 KIRMIZI; (b) cagri dursun ama
+  rsi=__heap_start (son=taban) → QEMU `HATA toplam= 0`, Kanit 3 KIRMIZI. Iki
+  katman BIRBIRINDEN BAGIMSIZ ayirt ediyor.
+  DEEPSEEK: tur 1 butceyi (16384) tamamen dusunmeye harcadi, 0 blok — KOK BENDE:
+  Makefile baglami verilmemisti, model capa (ESKI) uyduramadi. Tur 1b (Makefile
+  kesiti + tekil capalar + reasoning_effort low): 4 blok, .S + Makefile dogru;
+  kem_os_x86.kem GECERSIZ KEMGU (C-tarzi `için i = 1; ...`, argumansiz
+  dizi_olustur) → govdeyi ben yazdim; deger denetimini gercek cikti bicimine
+  ben uydurdum.
+  ORTAM BULGUSU: taban (degismemis main) gate'te calistir_kanal_omru 3/3 rc=124.
+  Kok: kabuk DEBUGINFOD_URLS=https://debuginfod.ubuntu.com → llvm-symbolizer
+  LSan raporunu sembollestirirken AGDA asiliyor. Bos degerle aninda biter.
+  gate_linux.sh hermetik yapildi (export DEBUGINFOD_URLS=). Makefile geneline
+  yaymak ayri karar (oneri).

@@ -104,6 +104,18 @@ long_entry:
     movq    $__stack_top, %rsp     /* yığın (16-hizalı linker'da) */
 
     call    kdl_idt_kur            /* C3a: IDT kur (isr0..31 → istisna işleyici) */
+
+    /* 2c (aarch64 eşi): heap penceresini main'den ÖNCE kur. Saf-.kem allocator
+     * (runtime/kem_heap.kem) kem_bump/kem_son'u bu çağrıdan alır; çağrılmazsa
+     * kem_son=0 kalır → her @malloc null döner → dizi işlevleri sessizce 0
+     * basar, panik YOK. kem_heap.kem ile bağlanMAyan C-malloc'lu x86
+     * kernel'lerinde runtime/kdl_bare_heap.c'deki ZAYIF kem_heap_kur no-op'u
+     * devreye girer (strong .kem sürümü override eder) → eski kernel'ler
+     * bozulmaz. */
+    movq    $__heap_start, %rdi    /* 1. argüman: heap tabanı (linker sembolü) */
+    movq    $__heap_end, %rsi      /* 2. argüman: heap üst sınırı (dışlayıcı) */
+    call    kem_heap_kur
+
     call    main                   /* KEMGU kernel main() */
 
 .global _halt

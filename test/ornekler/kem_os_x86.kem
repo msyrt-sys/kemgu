@@ -1,0 +1,42 @@
+// kem_os_x86.kem — İş 5: x86_64 kanıt çekirdeğinin `main`'i. kem_heap.kem ile
+// CAT edilir (tek derleme birimi). Normal (çıplak OLMAYAN) işlev → prologu
+// bölgeyi kdl_global_bolge_al → kdl_bolge_olustur → @malloc (saf-.kem) zinciriyle
+// kurar; bu test TAM O ZİNCİRİ ölçer: start_x86_64.S kem_heap_kur'u main'den
+// önce çağırmazsa saf-.kem malloc null döner ve toplam=0 olur (panik YOK —
+// bu yüzden marker değil DEĞER yazdırılıp denetlenir, D-264 dersi).
+//
+// Amaç: bölge + dizi + metin yüzeyini x86 QEMU'da DAVRANIŞSAL kanıtla. Yazdırma
+// yerleşikleri (yazdir_metin/yazdir_tam/yazdir_satir) bu çekirdekte C
+// runtime/kdl_runtime_yazdir_bare.c + 16550 UART üzerinden gider (İş 2 sonra
+// .kem UART'a çevirecek — şimdilik dokunulmaz).
+//
+// Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
+// (yazdir_metin satır sonu ekler).
+
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+
+    // 1..10 ekle (bölge dizi büyümesi 4→8→16; saf-.kem kem_dizi_buyut).
+    değişken i: tam32 = 1;
+    iken i <= 10 {
+        dizi_ekle(d, i);
+        i = i + 1;
+    }
+
+    // Topla (beklenen: 55). `için` heap dizide sınır-kontrollü okur.
+    değişken toplam: tam32 = 0;
+    için x: d {
+        toplam = toplam + x;
+    }
+
+    // Değeri SABİT yazma: gerçek toplamı bas (marker değil DEĞER denetimi).
+    eğer toplam == 55 {
+        yazdir_metin("X86 HEAP DIZI OK toplam=");
+    }
+    değilse {
+        yazdir_metin("X86 HEAP DIZI HATA toplam=");
+    }
+    yazdir_tam(toplam);
+    yazdir_satir();
+    ver 0;
+}

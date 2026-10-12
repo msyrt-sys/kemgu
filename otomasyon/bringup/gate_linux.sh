@@ -24,6 +24,13 @@ ID="${1:?görev-id gerekli}"; X86_HEDEF="${2:?x86 hedefi gerekli (yoksa -)}"; sh
 X86_ISARET=("$@")
 FAIL(){ echo "GATE-FAIL[$ID]: $1"; exit 1; }
 
+# HERMETİK: Ubuntu kabuk ortamı DEBUGINFOD_URLS=https://debuginfod.ubuntu.com
+# taşıyor. ASan/LSan rapor sembolleştirirken llvm-symbolizer bu sunucuya AĞDAN
+# gider; erişim asılınca ASan ikilisi `timeout 60`ı aşar → kapı SAHTE kırmızı
+# (ölçüldü 2026-10-12: calistir_kanal_omru 3/3 rc=124; değişken boşken anında
+# biter, kod aynı). Kapının sonucu dış bir sunucuya bağlı olamaz.
+export DEBUGINFOD_URLS=
+
 KAYNAK="$(git rev-parse --show-toplevel)" || FAIL "git deposu değil"
 SHA="$(git -C "$KAYNAK" rev-parse HEAD)"
 KOK="${GATE_KOK:-/tmp/claude-1000}"; mkdir -p "$KOK"
