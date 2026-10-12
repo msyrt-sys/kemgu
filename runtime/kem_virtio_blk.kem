@@ -6,7 +6,8 @@
 //
 // SAF-.kem primitifleri (hepsi kanıtlandı, D-269 P1 + çıplak-tier):
 //   • MMIO + DMA-RAM erişimi = çıplak VOLATILE deref (kdl_mmio deseni; store/load volatile).
-//   • dsb sy bariyeri        = satıriçi_asm arm64 (--mimari arm64; DMA↔MMIO sıralama).
+//   • DMA bariyeri            = runtime/mimari/<arch>/kem_bariyer.kem (D2b; arm64: dsb sy,
+//                              x86_64: mfence) — CAT birimi gereği.
 //   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed),
 //                              alt-tamponlar MANUEL 16-hizalı offset (P2 manuel over-align —
 //                              A1'in 4KB-align'ının 16B önkoşul-kanıtı).
@@ -59,11 +60,10 @@ sabit DO_STATUS: tam64 = 784;
 çıplak işlev vblk_y8(adr: tam64, deger: dtam8) { değişken p: *dtam8 = adr olarak *dtam8; *p = deger; }
 çıplak işlev vblk_o8(adr: tam64) -> dtam8 { değişken p: *dtam8 = adr olarak *dtam8; ver *p; }
 
-// dsb sy — DMA descriptor yazımı ↔ MMIO notify sıralaması (P1 arm64 asm).
+// DMA descriptor yazımı ↔ MMIO notify sıralaması — mimari başına bariyer
+// (runtime/mimari/<arch>/kem_bariyer.kem; D2b + AS001).
 çıplak işlev vblk_dsb() {
-    güvensiz {
-        satıriçi_asm { mimari: arm64 şablon: r#"dsb sy"# bozulan("~{memory}") }
-    }
+    kem_dma_bariyeri();
 }
 
 // Caller'ın data tamponunu doldurup okuması için erişimciler (vq_data = vblk_dma+DO_DATA).

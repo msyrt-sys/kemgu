@@ -1861,3 +1861,25 @@
   LSan raporunu sembollestirirken AGDA asiliyor. Bos degerle aninda biter.
   gate_linux.sh hermetik yapildi (export DEBUGINFOD_URLS=). Makefile geneline
   yaymak ayri karar (oneri).
+- 2026-10-12 D-671: x86 parite IS 1 — tasinabilir DMA bariyeri, D2b deseni.
+  Derleyiciye DOKUNULMADI (yerlesik D3 reddedildi: src/*.c + codegen.kem
+  ister). runtime/mimari/{arm64,x86_64}/kem_bariyer.kem → `kem_dma_bariyeri`
+  (arm64 `dsb sy`, x86_64 `mfence`); Makefile CAT mimariye gore secer.
+  vblk_dsb ince sarmalayici oldu → 8 cagri yeri (net'in 5'i dahil) degismedi.
+  Dizin ayrimi BILINCLI: baremetal_diff runtime/*.kem'i TEK TEK --mimari
+  aarch64 ile derler; x86 etiketli dosya kokte dursa AS001 alirdi.
+  OLCULEN YAN ETKI: baremetal_diff 5/5 (6 atl.) → 4/4 (7 atl.) — kem_virtio_blk
+  artik tek basina derlenmez (T002); kapsami BIRLESIK OS biriminde (324→325
+  islev, 48 asm, esit). ⚠ baremetal_diff'te ONCEDEN VAR OLAN bir zayiflik:
+  birlesik birim derlenemezse KIRMIZI degil "atlandi" sayilir → OS_PARCA'ya
+  bariyer eklenmeseydi SESSIZ kapsam kaybi olurdu (gorevde zorunlu tutuldu).
+  check_kapisi: kem_os_x86.kem artik parca (muaf) AMA birlesik x86 birimi
+  (4 parca, --mimari x86_64) ayrica denetleniyor; parca eksikse KIRMIZI
+  (kem_os blogunun sessiz atlamasindan bilincli sapma, D-486).
+  KANIT: x86 QEMU `X86 DMA BARIYER OK` (mfence GERCEKTEN calisti, #UD yok) +
+  objdump'ta 6 `mfence` satiri; arm64 objdump `dsb sy` + PING dahil tum fazlar.
+  SABOTAJ 2/2: mfence→nop → Kanit 4 KIRMIZI; arm bariyeri CAT disi → T002.
+  DEEPSEEK: tur 2 tek seferde 12 blok, hepsi eslesti (onbellek 10624 token).
+  Mudahale: x86 "dsb olmamali" denetimi duz `grep 'dsb'` idi → `<vblk_dsb>`
+  sembol adiyla SAHTE eslesirdi; komut sutununa (`\tdsb\b`) daraltildi.
+  Uydurma "FAZ B3" etiketi duzeltildi. check_kapisi duzeltmesi bende.

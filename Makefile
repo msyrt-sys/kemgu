@@ -1406,7 +1406,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1702,6 +1702,12 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@if ! grep -qE 'asm sideeffect "dsb sy"' $(BUILD)/kem_os.ll; then \
 		echo "FAIL: dsb sy bariyeri (P1 arm64 asm) emit edilmedi — DMA siralama yok"; exit 1; \
 	fi
+	@echo "  Kanit: ARM64 dsb sy objdump..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os.elf | grep -qE 'dsb\s+sy'; then \
+		echo "FAIL: dsb sy objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os.elf | grep -E 'dsb\s+sy' | head -n 3
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence ARM64 binary'de bulundu"; exit 1; fi
 	@echo "  (vblk_bul/kur/oku/yaz .kem-define + disk_rw_testi wire + dsb sy P1-asm — virtio-blk SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/fs, FAZ-B2): kem_os GERCEK dosya I/O saf-.kem minifs'ten:"
 	@if ! grep -qE "define[^@]*@mfs_(format|dosya_yaz|dosya_oku)\b" $(BUILD)/kem_os.ll; then \
@@ -1925,12 +1931,13 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # metin DEĞİL, objdump'ın kendi satırı); (3) QEMU seri çıktıda
 # "X86 HEAP DIZI OK toplam=" satırı ve HEMEN ARDINDAN "55" (yazdir_metin satır
 # sonu ekler → değer ayrı satırda; denetim değerin KENDİSİNE bakar, D-264).
+# Kanıt 4: objdump'da mfence (x86_64 DMA bariyeri) satırları; dsb YOK.
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
@@ -1958,6 +1965,15 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	if grep -A1 -xF "X86 HEAP DIZI OK toplam=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qxF "55"; then \
 		echo "kem_os x86_64 QEMU testi gecti (toplam=55, deger satiri dogrulandi)."; \
 	else echo "FAIL: 'X86 HEAP DIZI OK toplam=' + '55' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA BARIYER OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA BARIYER OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 4: objdump mfence (x86_64 DMA bariyeri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'mfence'
+	@# Komut SÜTUNUNDA ara (sekme + dsb): düz 'dsb' `<vblk_dsb>` sembol adıyla eşleşir.
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -qP '\tdsb\b'; then \
+		echo "FAIL: dsb x86_64 binary'de bulundu"; exit 1; fi
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

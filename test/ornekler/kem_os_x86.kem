@@ -12,8 +12,13 @@
 //
 // Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
 // (yazdir_metin satır sonu ekler).
+// Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
+// satırı basılır (gerçekten çalıştığının kanıtı; #UD olsaydı çekirdek düşerdi).
 
 işlev main() -> tam32 {
+    kem_dma_bariyeri();
+    yazdir_metin("X86 DMA BARIYER OK");
+
     değişken d: Dizi<tam32> = [];
 
     // 1..10 ekle (bölge dizi büyümesi 4→8→16; saf-.kem kem_dizi_buyut).

@@ -31,6 +31,9 @@ muaf() {
     # Tek başına derlenemeyen PARÇA dosyalar: gerçek yapı runtime/*.kem ile
     # BİRLEŞTİRİLİP derler (Makefile kem_os_comb). Tek başına T002 doğaldır.
     *test/ornekler/kem_os.kem)          echo "parça dosya — gerçek yapı birleştirilmiş kaynak" ;;
+    # [D-671] x86 kanıt çekirdeği de parça: kem_dma_bariyeri runtime/mimari/x86_64'ten
+    # gelir. Gerçek denetim AŞAĞIDA birleşik x86 biriminde (--mimari x86_64).
+    *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_asm_kernel.kem)  echo "parça dosya + arch-etiketli asm (AS001 hedefe bağlı)" ;;
     # MODEL B kullanıcı programı: arch-etiketli asm → bayraksız --check AS001 verir.
     # Gerçek denetimi AŞAĞIDA, `--mimari arm64` ile yapılır (muafiyet DEĞİL, doğru bayrak).
@@ -103,7 +106,7 @@ done
 # geri düşmeyi engeller. Dosya sırası Makefile'daki `calistir_kem_os_arm`
 # cat sırasıyla AYNI olmalı (kem_heap ÖNCE — çapraz-birim T002'yi kapatır).
 KEMOS_PARCALAR="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
-                runtime/kem_zaman.kem runtime/kem_virtio_blk.kem
+                runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
                 runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
 kemos_eksik=0
@@ -125,6 +128,30 @@ if [ "$kemos_eksik" -eq 0 ]; then
   rm -f build/kem_os_kapi.kem
 else
   echo "  ⏭  kem_os parçaları eksik — birleşik kontrol atlandı"
+fi
+
+# [D-671] x86 kanıt çekirdeği birleşik birimi — Makefile `calistir_kem_os_x86`
+# cat sırasıyla AYNI olmalı. Mimari başına dosya (D2b) seçimi burada da x86_64.
+KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/mimari/x86_64/kem_bariyer.kem
+                    runtime/kem_virtio_blk.kem test/ornekler/kem_os_x86.kem"
+kemos_x86_eksik=0
+for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
+if [ "$kemos_x86_eksik" -eq 0 ]; then
+  mkdir -p build
+  cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
+  tot=$((tot + 1))
+  if "$KEMGU" --check --mimari x86_64 build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
+    echo "  ✅ kem_os_x86 (birleşik kaynak, 4 parça, --mimari x86_64) --check geçti"
+  else
+    red=$((red + 1))
+    echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"
+    "$KEMGU" --check --mimari x86_64 build/kem_os_x86_kapi.kem 2>&1 \
+      | grep -m5 "hata\[" | sed 's/^/       /'
+  fi
+  rm -f build/kem_os_x86_kapi.kem
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86 parçaları eksik — birleşik x86 kontrolü KOŞAMADI"
 fi
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir

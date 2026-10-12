@@ -1,0 +1,10 @@
+// kem_bariyer.kem — x86 parite İş 1 (D-671, D2b): ARM64 DMA bariyeri. Amaç: VirtIO DMA tanımlayıcı
+// yazımı ↔ MMIO notify sıralamasını garanti etmek (arm64 zayıf bellek modeli).
+// Ayrı dosya: AS001 gereği bir dosyada yalnız TEK mimarinin satıriçi_asm'i olabilir;
+// Makefile CAT listesi mimariye göre seçer (D2b kararı). x86_64 ikizi:
+// runtime/mimari/x86_64/kem_bariyer.kem (mfence).
+çıplak işlev kem_dma_bariyeri() {
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"dsb sy"# bozulan("~{memory}") }
+    }
+}
