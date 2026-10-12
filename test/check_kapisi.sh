@@ -134,7 +134,7 @@ fi
 # cat sırasıyla AYNI olmalı. Mimari başına dosya (D2b) seçimi burada da x86_64.
 KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
                     runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem
-                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem"
+                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem test/ornekler/kem_os_x86.kem"
 kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
 if [ "$kemos_x86_eksik" -eq 0 ]; then
@@ -142,7 +142,7 @@ if [ "$kemos_x86_eksik" -eq 0 ]; then
   cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
   tot=$((tot + 1))
   if "$KEMGU" --check --mimari x86_64 build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os_x86 (birleşik kaynak, 8 parça, --mimari x86_64) --check geçti"
+    echo "  ✅ kem_os_x86 (birleşik kaynak, 9 parça, --mimari x86_64) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"

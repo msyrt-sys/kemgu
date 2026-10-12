@@ -10,6 +10,10 @@
 // runtime/kdl_runtime_yazdir_bare.c + 16550 UART üzerinden gider (İş 2 sonra
 // .kem UART'a çevirecek — şimdilik dokunulmaz).
 //
+// İş 9 (PVH): kem_panik öncesi RAM toplamı kem_pvh.kem'den (start_x86_64.S %ebx'i
+// .data'daki kdl_pvh_bilgi'ye saklar). "X86 PVH OK ram_mb=" + pozitif satır;
+// ram ≤ 0 → "X86 PVH HATA" + kod.
+//
 // Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
 // (yazdir_metin satır sonu ekler).
 // Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
@@ -278,6 +282,16 @@ işlev main() -> tam32 {
         }
     }
 
+    değişken ram: tam64 = kem_pvh_ram_toplam();
+    eğer ram <= 0 {
+        yazdir_metin("X86 PVH HATA");
+        yazdir_tam(ram olarak tam32);
+        yazdir_satir();
+    } değilse {
+        yazdir_metin("X86 PVH OK ram_mb=");   // yazdir_metin satır sonu ekler
+        yazdir_tam((ram / 1048576) olarak tam32);
+        yazdir_satir();
+    }
     kem_panik("X86 PANIK YOLU OK");
     ver 0;
 }
