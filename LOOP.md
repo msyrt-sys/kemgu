@@ -2049,3 +2049,14 @@
   DEEPSEEK tur 12: 13 blok, derleyici farki satir satir okundu, mudahale YOK.
   Dongu ilk kosuda DOGRULAMA_HATA verdi — KUSUR BENDE: sonda dosyasi olarak
   arm64 asm'li kem_dtb'yi secmistim (x86 hedefinde AS001 zaten beklenir).
+- 2026-10-13 D-682: kem_dtb mimariden bagimsiz (ara hedef adim 1). Tek asm blogu
+  (`kdtb_adres`, arm64 adrp kdl_dtb_adres) runtime/mimari/<arch>/kem_kesif.kem'e
+  tasindi — arm64 govdesi silinenle BIREBIR (diff ile dogrulandi); x86 → 0
+  (PVH FDT vermez, kesif kem_pvh'de). kem_dtb artik x86 biriminde de derleniyor:
+  `X86 DTB YOK pvh_kesif`; arm64 [21] DTB OK + [22] DTB KESIF OK degismedi.
+  baremetal_diff: kem_dtb birimi (+arm64 kesif), kem_kesif birimi; x86 birlesik
+  birim 72 → 113 islev, C ↔ self BIREBIR; 17/17. check_kapisi "10 parca" mesaji
+  zaten BAYATTI (liste 14) — duzeltildi.
+  KALAN BORC: 3 dosyada 46 blok (kem_gorev 27, kem_mmu 14, kem_zaman 5).
+  DEEPSEEK tur 13: 6 blok, mudahale yok; CAT/kapi listeleri bende (tek satirlik
+  eklemeler gorev yazmaktan ucuz).

@@ -70,7 +70,7 @@ pass=0; fail=0
 # Makefile `calistir_kem_os_arm` cat sırasıyla AYNI olmalı.
 OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem \
 runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
-runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem \
+runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem \
 test/ornekler/kem_os.kem"
 os_ok=0
 os_eksik=""
@@ -130,7 +130,8 @@ else
 fi
 ir_uret() { o="$1"; shift; ( ulimit -v "$KAP_KB" 2>/dev/null; $GTO "$@" > "$o" 2>/dev/null ); }
 
-BIRIMLER="kem_dtb|runtime/kem_dtb.kem
+BIRIMLER="kem_dtb|runtime/kem_dtb.kem runtime/mimari/arm64/kem_kesif.kem
+kem_kesif|runtime/mimari/arm64/kem_kesif.kem
 kem_kanal_abi|runtime/kem_kanal_abi.kem
 kem_heap|runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem
 kem_bariyer|runtime/mimari/arm64/kem_bariyer.kem

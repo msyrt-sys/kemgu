@@ -108,7 +108,7 @@ done
 KEMOS_PARCALAR="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
                 runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
-                runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
+                runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
 kemos_eksik=0
 for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
 if [ "$kemos_eksik" -eq 0 ]; then
@@ -117,7 +117,7 @@ if [ "$kemos_eksik" -eq 0 ]; then
   tot=$((tot + 1))
   # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
   if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os (birleşik kaynak, 10 parça) --check geçti"
+    echo "  ✅ kem_os (birleşik kaynak, 14 parça) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"
@@ -134,7 +134,8 @@ fi
 # cat sırasıyla AYNI olmalı. Mimari başına dosya (D2b) seçimi burada da x86_64.
 KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
                     runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem
-                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem test/ornekler/kem_os_x86.kem"
+                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem
+                    runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem"
 kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
 if [ "$kemos_x86_eksik" -eq 0 ]; then
@@ -142,7 +143,7 @@ if [ "$kemos_x86_eksik" -eq 0 ]; then
   cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
   tot=$((tot + 1))
   if "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os_x86 (birleşik kaynak, 9 parça, --mimari x86_64-none) --check geçti"
+    echo "  ✅ kem_os_x86 (birleşik kaynak, 11 parça, --mimari x86_64-none) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"

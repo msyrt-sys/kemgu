@@ -1,0 +1,3 @@
+{"tur": "13", "is": "dtb", "gorev": "otomasyon/evren/gorev_13_dtb.md",
+ "kesit": ["runtime/kem_dtb.kem:1-50", "Makefile:1955-1958", "Makefile:2056-2066", "test/ornekler/kem_os_x86.kem:1-30"],
+ "effort": "low", "dogrulama": [], "isaretler": []}
