@@ -1,0 +1,3 @@
+{"tur": "14b", "is": "zaman_x86", "gorev": "otomasyon/evren/gorev_14b_zaman_x86.md",
+ "baglam": ["runtime/mimari/arm64/kem_zaman_hw.kem", "runtime/kem_zaman.kem", "runtime/mimari/x86_64/kem_uart.kem"],
+ "kesit": ["runtime/kdl_zaman.c:121-155"], "effort": "low", "dogrulama": [], "isaretler": []}
