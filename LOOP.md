@@ -2037,3 +2037,15 @@
   CAT disi x86 dosyasi → SINIFLANDIRILMAMIS. DEEPSEEK tur 11: mudahale YOK
   (verdigim Makefile kesit araligi yanlis satirdaydi; gorevdeki sed komutu
   sayesinde etkisiz). Envanter §7: 2b, 6b, 7, 9 kapandi.
+- 2026-10-13 D-681: D1 — `--mimari x86_64-none` → `x86_64-unknown-none-elf`
+  (C src/ana.c + selfhost/codegen.kem BIREBIR; Mehmet onayi). `x86_64`
+  (windows-gnu, Windows CI) DEGISMEDI; etiket "x86_64" kaldigi icin AS001 asm
+  etiketleri aynen eslesir. x86 kapilari (calistir_kem_os_x86 Kanit 0,
+  check_kapisi x86 birimi, baremetal_diff x86 ikizi) yeni bayraga gecti.
+  Win64 cagri sozlesmesi riski (llc/LTO modul uclusune uyarsa) KAPANDI.
+  Olculdu: C ve SELF x86_64-none → unknown-none-elf; x86_64 → windows-gnu;
+  arm64 degismedi; bilinmeyen deger gurultulu hata. SABOTAJ: self x86_64-none
+  windows uclusu yayarsa baremetal_diff x86 KIRMIZI.
+  DEEPSEEK tur 12: 13 blok, derleyici farki satir satir okundu, mudahale YOK.
+  Dongu ilk kosuda DOGRULAMA_HATA verdi — KUSUR BENDE: sonda dosyasi olarak
+  arm64 asm'li kem_dtb'yi secmistim (x86 hedefinde AS001 zaten beklenir).

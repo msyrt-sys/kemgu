@@ -141,12 +141,12 @@ if [ "$kemos_x86_eksik" -eq 0 ]; then
   mkdir -p build
   cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
   tot=$((tot + 1))
-  if "$KEMGU" --check --mimari x86_64 build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os_x86 (birleşik kaynak, 9 parça, --mimari x86_64) --check geçti"
+  if "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
+    echo "  ✅ kem_os_x86 (birleşik kaynak, 9 parça, --mimari x86_64-none) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"
-    "$KEMGU" --check --mimari x86_64 build/kem_os_x86_kapi.kem 2>&1 \
+    "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem 2>&1 \
       | grep -m5 "hata\[" | sed 's/^/       /'
   fi
   rm -f build/kem_os_x86_kapi.kem

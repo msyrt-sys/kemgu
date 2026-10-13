@@ -229,7 +229,7 @@ done
 # kopyalanan liste kaçınılmaz KAYAR (D-534 sınıfı: bayat sınıflandırma). Sed
 # deseni Makefile'a ÇAPALI — CAT satırının biçimi değişirse liste BOŞ döner ve
 # kapı KIRMIZI verir (sessiz atlama YOK, D-675).
-# Üçlü bugün `x86_64-pc-windows-gnu` (D1 açık); burada ÜÇLÜNÜN ADI değil, iki
+# D1 (D-681): x86_64-none → x86_64-unknown-none-elf; burada ÜÇLÜNÜN ADI değil, iki
 # derleyicinin AYNI üçlüyü üretip üretmediği ölçülür (EŞİTLİK).
 # [D-663] per-birim zaman aşımı + bellek tavanı ir_uret ile (bölüm (2) tanımı).
 X86_PARCA=$(sed -n 's/.*cat \(runtime\/kem_heap\.kem.*kem_os_x86\.kem\) > \$(BUILD)\/kem_os_x86_comb\.kem/\1/p' Makefile)
@@ -244,8 +244,8 @@ else
         fail=$((fail+1))
     else
         cat $X86_PARCA > "$TMP/x86.kem"
-        "$KEMGU" --llvm --mimari x86_64 "$TMP/x86.kem" > "$TMP/x86_c.ll" 2> "$TMP/x86_c.err"; xrc=$?
-        ir_uret "$TMP/x86_s.ll" "$CODEGEN" --llvm --mimari x86_64 "$TMP/x86.kem"; xsr=$?
+        "$KEMGU" --llvm --mimari x86_64-none "$TMP/x86.kem" > "$TMP/x86_c.ll" 2> "$TMP/x86_c.err"; xrc=$?
+        ir_uret "$TMP/x86_s.ll" "$CODEGEN" --llvm --mimari x86_64-none "$TMP/x86.kem"; xsr=$?
         if [ "$xrc" -ne 0 ] || head -1 "$TMP/x86_c.ll" 2>/dev/null | grep -q "hata\[" || [ ! -s "$TMP/x86_c.ll" ]; then
             echo "  🔴 BİRLEŞİK x86 — C oracle DERLEYEMEDİ (rc=$xrc) — birim ÖLÇÜLEMEDİ:"
             grep -m3 "hata\[" "$TMP/x86_c.err" "$TMP/x86_c.ll" 2>/dev/null | sed 's/^/      /'
