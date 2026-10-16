@@ -2296,3 +2296,41 @@
   calistir_kem_os_x86 3 kez art arda yesil. KALAN (derleyici karari): src/llvm.c
   bare-metal x86 hedefinde noredzone'u kendisi yaymali; o zaman awk adimi silinir,
   Kanit 27 kalir.
+- 2026-10-16 D-701: x86 ring3 IF=1 YARISI — calistir_ring3_page_test_x86 KIRMIZIYDI.
+  Belirti CS_RPL=0xffffffff (ring3 hic kosmamis gibi) ama -d int izi ring3'e
+  GIRILDIGINI gosterdi. OLCUM: gp_stub'a kayit → #GP ERR=0x42 (=8*8+IDT), CS=0x1b,
+  RIP=ring3_kod'un ILK komutu; iretq oncesi PIC IRR=0x11 IMR=0xb8 → IRQ0 (PIT)
+  boot'ta mandallanip bekliyor, maskesiz. PIC eslenmedigi icin vektor 8, test
+  IDT'sinde bos → #GP → erken kernel_devam. ring3_proc_x86.c (43858fb) ayni yarisi
+  IF=0 ile kapatmisti; ring3_page_x86.c (a962fb0, bir onceki commit) almamisti.
+  ONARIM: ring3e_gec RFLAGS 0x202 → 0x002 (ring3_page + ring3_x86; ikincisinde
+  cli #GP'si IOPL<CPL'den gelir, GP_ERR=0x0 olculdu). Iki testte gp_stub artik
+  hata kodu (+CS) kaydeder; sayfa testinde beklenmeyen #GP gercek sebebiyle
+  raporlanir. KAPI: x86 bare-metal yuzeyinin HICBIR hedefi test_tumu'da degildi →
+  calistir_qemu_cekirdek'e ring3_page_test_x86 (ozet x86 QEMU yoklugunu ayrica
+  bildirir). ⚠ ILK SURUMDE kem_os_x86 DE EKLENMISTI → CI (QEMU kurmuyor) Linux +
+  Windows'ta KIRMIZI: o hedef QEMU yoksa D-486 geregi SERT HATA verir, kapinin
+  "QEMU'suz makinede kirmizi olmaz" sozlesmesini bozar. Yerelde QEMU'suz PATH ile
+  birebir uretildi (eski rc=2, ayni FAIL satiri) ve cikarildi (yeni rc=0, atlamalar
+  bildiriliyor). DERS: bir kapiya alt hedef eklerken "QEMU yoksa atlar" iddiasini
+  HER alt hedef icin olc — D-486 bazilarini bilerek sertlestirdi. SABOTAJ: 0x002 → 0x202 → kapi rc=2, mesaj
+  'beklenmeyen #GP GP_ERR=0x42 GP_CS=0x1b'. 18/18 x86 hedefi rc=0, fallback/atlama
+  izi yok. KORELASYON (kanitlanmadi): BSS ring3_x86 ~62KB / page ~2MB / proc ~4MB;
+  boot BSS'i sifirliyor, emule x86'da (aarch64 konak) PIT periyodu asiliyor olabilir.
+- 2026-10-16 D-702: ring3_x86 "RING3 SETUP OK" FALLBACK'I KALDIRILDI + cli #GP err=0 sarti.
+  Fallback ring3 hic kosmadan basilabiliyordu ve Makefile kabul ediyordu → D-701
+  yarisinin tam goruntusu sessizce yesil kalirdi. OLCUM (sabotaj = IF=1 + 4MB BSS):
+  ESKI kod CS_RPL=0xffffffff GP_ERR=0x42 → 'RING3 SETUP OK' rc=0 (DELIK GERCEK);
+  YENI kod ayni durumda 'RING3 X86 BASARISIZ' rc=2. #GP kaniti artik yalniz
+  GP_ERR==0 (ring3 cli) iken sayilir; IDT kaynakli #GP (vektor*8+2) sayilmaz.
+  D-701 KORELASYONU SINANDI: ayni IF=1, kucuk BSS → OK; +4MB BSS → yaris → BSS
+  boyutu bu konakta BELIRLEYICI (hizli x86 konak hala olculmedi).
+- 2026-10-16 D-703: SMP FALLBACK KABULLERI KALDIRILDI (smp_arm 'PSCI OK', smp_x86
+  'APIC OK', smp4_x86 'KISMI'/'APIC OK'). OLCUM: 4 tur x 3 hedef = 12/12 GERCEK OK
+  (-smp QEMU'da sabit → belirlenimci; fallback'e hic dusulmuyordu). SABOTAJ MATRISI
+  (her biri eski + yeni Makefile): CPU_ON hedef 0x7 → 'PSCI OK'; SIPI vektor 0x09
+  (smp_x86 + smp4) → 'APIC OK'; smp4 dongusu bir AP eksik → 'KISMI 0x2/3'. DORDUNDE
+  de ESKI rc=0 (AP baslatma gerilemesi SESSIZCE YESIL), YENI rc=2. Test C dosyalari
+  degismedi; fallback satirlari teshis olarak basiliyor ama gecis sayilmiyor.
+  KALAN 4 elif userspace_{dns,tcp,http,post}_arm 'SENT' — internete bagli, MESRU
+  (D-466 ag_kosum dinleyicisi gibi), dokunulmadi.
