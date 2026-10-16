@@ -1,0 +1,101 @@
+// KEMGU Stdlib — Yığın (LIFO)
+// ============================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// Dizi<T> üzerinde LIFO yığın: son giren ilk çıkar. Dizinin SONU
+// yığının tepesidir — itme dizi_ekle ile sona ekleme, tepe okuma
+// son indeks.
+//
+// Tasarım kuralı:
+//   - Ayrı bir Yigin<T> sarmalayıcı tipi YOK: yığın = Dizi<T> +
+//     disiplinli API. İmport sistemi öncesi her modül tek dosya
+//     --check edildiği için sade tutuldu.
+//   - Tüm işlevler `yigin_` önekli: dizi.kem `bos_mu` adını zaten
+//     kullanıyor; import/isim-alanı sistemi gelmeden tek isim alanı
+//     varsayımıyla önek güvenli taraf.
+//   - `yigin_cek` ÇEKİLEN DEĞERİ DEĞİL küçültülmüş yığını döner.
+//     KEMGU'da çok-değerli dönüş yok; Rust'ın pop() -> Option<T>
+//     tek çağrısı yerine iki adım: önce `yigin_tepe` ile oku,
+//     sonra `yigin_cek` ile küçült. Dizi'den eleman SİLME primitifi
+//     olmadığı için yigin_cek yeni dizi kurar (dizi.kem `dilimle`
+//     ile aynı desen).
+//   - `yigin_it` dizi_ekle ile YERİNDE ekler ve aynı diziyi döner
+//     (zincirleme kullanım: yigin_it(yigin_it(y, 1), 2)).
+//   - Boş yığında `yigin_tepe` hiç döner (sentinel/çökme yerine
+//     seçimlik<T> — dilin null'suz sözleşmesi).
+
+// --- Kurucular ---
+//
+// Parametresiz generic `yigin_olustur<T>()` YAZILAMAZ: tip argümanları
+// yalnız parametre tiplerinden çıkarsanır (dönüş-tipinden çıkarsama yok).
+// Bu yüzden yaygın eleman tipleri için somut kurucular verildi. Generic
+// bağlamda boş yığın şu desenle kurulur:
+//   değişken y: Dizi<T> = dizi_olustur(0);
+
+// Boş tam32 yığını kur.
+işlev yigin_olustur_tam() -> Dizi<tam32> {
+    değişken y: Dizi<tam32> = dizi_olustur(0);
+    ver y;
+}
+
+// Boş metin yığını kur.
+işlev yigin_olustur_metin() -> Dizi<metin> {
+    değişken y: Dizi<metin> = dizi_olustur(0);
+    ver y;
+}
+
+// --- Sorgular ---
+
+// Eleman sayısı.
+işlev yigin_boyut<T>(y: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: y {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// Boş mu?
+işlev yigin_bos_mu<T>(y: Dizi<T>) -> mantıksal {
+    ver yigin_boyut(y) == 0;
+}
+
+// --- Erişim ---
+
+// Tepe elemanı (çıkarmadan oku). Boş yığında hiç.
+işlev yigin_tepe<T>(y: Dizi<T>) -> seçimlik<T> {
+    değişken n: tam32 = yigin_boyut(y);
+    eğer n == 0 { ver hiç; }
+    ver değer(y[n - 1]);
+}
+
+// --- Dönüşümler ---
+
+// İt (push) — elemanı tepeye ekle. Yerinde ekler, aynı diziyi döner.
+işlev yigin_it<T>(y: Dizi<T>, x: T) -> Dizi<T> {
+    dizi_ekle(y, x);
+    ver y;
+}
+
+// Çek (pop) — tepedeki eleman ATILMIŞ yeni yığını döner. Çekilen
+// değer gerekiyorsa önce yigin_tepe ile oku. Boş yığında boş döner.
+işlev yigin_cek<T>(y: Dizi<T>) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    değişken n: tam32 = yigin_boyut(y);
+    değişken i: tam32 = 0;
+    iken i < n - 1 {
+        dizi_ekle(sonuc, y[i]);
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// Temizle — boş yığın döner. (Eleman silme primitifi olmadığı için
+// yerinde boşaltma yerine yeni boş dizi.)
+işlev yigin_temizle<T>(y: Dizi<T>) -> Dizi<T> {
+    değişken sonuc: Dizi<T> = dizi_olustur(0);
+    ver sonuc;
+}
+
+// AÇIK SORU: dönüş-tipinden generic çıkarsama eklenirse parametresiz
+// `yigin_olustur<T>()` yazılabilir; o zaman somut kurucular kaldırılabilir.

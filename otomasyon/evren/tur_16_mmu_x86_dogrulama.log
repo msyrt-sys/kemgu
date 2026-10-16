@@ -1,0 +1,93 @@
+
+### $ cat runtime/mimari/x86_64/kem_zaman_hw.kem runtime/mimari/x86_64/kem_mmu_hw.kem > /tmp/claude-1000/evren/mmu_sonda.kem && build/kemgu --check --mimari x86_64-none /tmp/claude-1000/evren/mmu_sonda.kem
+HATA: /tmp/claude-1000/evren/mmu_sonda.kem — parser 0, yukleme 0, tip kontrol 15, realtime 0 (toplam 15 hata).
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:40:5
+   |
+40 |     kem_port_yaz8(32 olarak dtam16, 17 olarak dtam8);    // ICW1 PIC1: init + ICW4 bekle
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:41:5
+   |
+41 |     kem_port_yaz8(160 olarak dtam16, 17 olarak dtam8);   // ICW1 PIC2
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:42:5
+   |
+42 |     kem_port_yaz8(33 olarak dtam16, 32 olarak dtam8);    // ICW2 PIC1: vektör offset 32
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:43:5
+   |
+43 |     kem_port_yaz8(161 olarak dtam16, 40 olarak dtam8);   // ICW2 PIC2: vektör offset 40
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:44:5
+   |
+44 |     kem_port_yaz8(33 olarak dtam16, 4 olarak dtam8);     // ICW3 PIC1: cascade (slave@IRQ2)
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:45:5
+   |
+45 |     kem_port_yaz8(161 olarak dtam16, 2 olarak dtam8);    // ICW3 PIC2: cascade kimliği
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:46:5
+   |
+46 |     kem_port_yaz8(33 olarak dtam16, 1 olarak dtam8);     // ICW4 PIC1: 8086 mode
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:47:5
+   |
+47 |     kem_port_yaz8(161 olarak dtam16, 1 olarak dtam8);    // ICW4 PIC2: 8086 mode
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:48:5
+   |
+48 |     kem_port_yaz8(33 olarak dtam16, 254 olarak dtam8);   // maske PIC1: yalnız IRQ0 açık
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:49:5
+   |
+49 |     kem_port_yaz8(161 olarak dtam16, 255 olarak dtam8);  // maske PIC2: hepsi kapalı
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:56:5
+   |
+56 |     kem_port_yaz8(67 olarak dtam16, 54 olarak dtam8);    // PIT komut: ch0, lo/hi, mode 3
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:57:5
+   |
+57 |     kem_port_yaz8(64 olarak dtam16, 156 olarak dtam8);   // bölen düşük bayt
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:58:5
+   |
+58 |     kem_port_yaz8(64 olarak dtam16, 46 olarak dtam8);    // bölen yüksek bayt
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:66:5
+   |
+66 |     kem_tik = kem_tik + 1;
+   |     ^
+
+hata[T002]: tanimsiz sembol
+   --> /tmp/claude-1000/evren/mmu_sonda.kem:66:15
+   |
+66 |     kem_tik = kem_tik + 1;
+   |               ^
+

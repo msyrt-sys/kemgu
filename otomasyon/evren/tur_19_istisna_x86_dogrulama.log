@@ -1,0 +1,5 @@
+
+### $ cat runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_mmu_hw.kem > /tmp/claude-1000/evren/ist_sonda.kem; build/kemgu --check --mimari x86_64-none /tmp/claude-1000/evren/ist_sonda.kem 2>&1 | grep -v 'kdl_mmio_oku32' | tail -3
+   |                                 ^
+
+HATA: /tmp/claude-1000/evren/ist_sonda.kem — parser 0, yukleme 0, tip kontrol 4, realtime 0 (toplam 4 hata).

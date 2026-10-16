@@ -1,4 +1,4 @@
-// kem_ring3_hw.kem — x86_64 KULLANICI MODU (ring3) girişi + dönüşü ([D-695]).
+// kem_ring3_hw.kem — x86_64 KULLANICI MODU (ring3) girişi + dönüşü ([D-699]).
 // ============================================================================
 // arm64 ikizi: runtime/kem_gorev.kem EL0 yolu (kdl_el0_calistir, `eret` + SPSR=EL0t).
 // C referansı: test/bare_metal/ring3_x86.c (kendi GDT/IDT/TSS'i; bu dosya ise AYNI

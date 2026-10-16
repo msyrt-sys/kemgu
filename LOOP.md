@@ -2220,7 +2220,37 @@
   → trampoline cop kayit → #GP, D-690 .kem raporlayicisi 'ISTISNA tip=0xd' basti,
   cekirdek durdu, rc=2. kem_gorev.kem asm 25 → 21. x86 birlesik 256 islev, 31 asm,
   C ↔ self BIREBIR. baremetal_diff 22/22.
-- 2026-10-16 D-695: x86 KULLANICI MODU (ring3) — arm64 EL0 ikizi, Kanit 26.
+- 2026-10-16 D-695: PR #109 (15 saf-KEMGU stdlib modulu, 2026-08-07) main'e hazirlandi.
+  Eski PR'lar olculdu: #109 main ile CAKISMASIZ; 15 modul + 15 birlesik test bugunku
+  derleyicide temiz, stdlib_check yesil. check_genis 7 testte C ≠ self verdi → SATIR
+  SATIR olculdu: farklarin TAMAMI C'nin fazla tanisi ve her biri bir eşleş kolundaki
+  baglamaya duser (E3), self-host'un fazla tanisi 0 → MUAF'a gerekcesiyle eklendi
+  (158/158, 19 muaf). Ayni turda #95/#102/#104/#105 karsiliklari main'de oldugu
+  olculerek kapatildi; #101/#103/#106'nin duzeltmeleri main'de YOK (C ≠ self
+  fiksturlerle olculdu) → yeniden portlanacak.
+- 2026-10-16 D-696: eski PR #101 (D-323, 2026-07-26) yeniden portu — DOLAYLI cagrida
+  lineer arguman self-host'ta TASINIR. Olcum (main, port ONCESI): tc5e_01 C=OK /
+  self=L001 (sahte), tc5e_02 C=L002 / self=OK (kacirma), tc5e_03 C=L002 / self=L001.
+  Yama 3-yollu uygulanamadi (dosyalar cok degismis) → iki capa ile elle; capa ile
+  `degisken k` arasinda yalniz D-371 yorumu oldugu dogrulandi. checker.kem +
+  codegen.kem (D-517 dersi: uc uygulama). checker_diff 219/219 (0 muaf, 4 yeni
+  fikstur). SABOTAJ: dolayli hep yanlis → tc5e_01/02/03 KIRMIZI, rc=2.
+- 2026-10-16 D-697: eski PR #103 (D-325) yeniden portu — `tekkez_olustur(ic)` self-host'ta
+  tekkez baglamasini TUKETIR (lineer yapi haric, C ile ayni ayrim). Olcum (port ONCESI):
+  tc5f_01 C=OK / self=L001 (sahte), tc5f_02 C=L002 / self=L001; cg_lineer_ic_ice self'te
+  sahte L001 yuzunden HIC derlenmiyordu (C=42). Sonra: checker_diff 222/222 (0 muaf),
+  cg_lineer_ic_ice self=42. SABOTAJ: tuketim kapali → tc5f_01/02 KIRMIZI, rc=2.
+- 2026-10-16 D-698: eski PR #106'nin D-331 parcasi yeniden portu — self-host, islev-tipli
+  degisken annotasyonu ile lambda uyusmazligini T001 ile reddeder (C ile ayni). Port oncesi
+  self 7 bicimin HICBIRINI reddetmiyordu (loud→silent). Kod DEEPSEEK yazdi (tur 21,
+  deepseek-v4.1-flash, 4 blok, mudahale YOK): ozgun D-331 kodu + bugunku C'nin OLCULEN
+  davranisi verildi; cikti ozgunle birebir (yalniz etiket), iki dosyada ozdes. Fikstur
+  ONCE C'ye karsi olculdu: dar donus, blok dar, arite (iki yon), param tipi, tip ailesi
+  → T001; uyumlu + `|| 8589934592` (dogal tam64) → OK. tc55_01/02 (tc53 numarasi doluydu).
+  checker_diff 224/224 (0 muaf). SABOTAJ: kanca kapali → tc55_01 KIRMIZI, rc=2.
+  #106'nin D-332…D-335 kismi (kapanis donus tipinin govdeye YAYILMASI, C oracle'i da
+  degistirir) PORTLANMADI — dil davranisi degisikligi, ayri karar.
+- 2026-10-16 D-699: x86 KULLANICI MODU (ring3) — arm64 EL0 ikizi, Kanit 26.
   boot/start_x86_64.S: GDT .rodata → .data (TSS tanimlayicisi calisma aninda
   yazilir; ltr MESGUL bitini, segment yuklemesi erisildi bitini YAZAR — D-691
   sonrasi .rodata RO) + 0x18 kullanici kod (0x0020FA..) / 0x20 kullanici veri
@@ -2250,7 +2280,7 @@
   sayimla degistirildi. x86 birlesik 264 islev, 36 asm, C ↔ self BIREBIR.
   baremetal_diff 22/22, check_kapisi 276/284 (0 RED), kem_os_arm, ring3_test_x86
   yesil.
-- 2026-10-16 D-696: x86 kem_os KIRMIZI BOLGE kapatildi (D-695'in actigi yaris).
+- 2026-10-16 D-700: x86 kem_os KIRMIZI BOLGE kapatildi (D-699'in actigi yaris).
   OLCUM: imaj disasm'inda RSP-ALTI erisim 8 ve HEPSI kxr_ring3_testi'nde — derleyici
   4 yereli -0x8..-0x20(%rsp)'de, kdl_x86_ring3_gir cagrilari BOYUNCA canli tutuyor.
   kxr_gir'in `subq $128` atlamasi call'u korur AMA trampolin popfq ile IF'i geri

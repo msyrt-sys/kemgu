@@ -1962,9 +1962,9 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 #          kdl_kesme_isle/kdl_tik_al C değil .kem'den (bm_x86_zaman.o bağlanmıyor).
 # Kanıt 16: iki preemptive görevin sayaçları >= 2 (IRQ0 koçanı tam kayıt + SP takası,
 #          .kem kdl_irq_isle → kem_preempt); kdl_irq_isle güçlü tanımı .kem'den.
-# Kanıt 27 (D-696/D-697): kırmızı bölge YOK — derleyici her define'a noredzone yayar
+# Kanıt 27 (D-700/D-701): kırmızı bölge YOK — derleyici her define'a noredzone yayar
 #          (IR'da sayılır) ve imajda RSP altına erişim 0.
-# Kanıt 26 (D-695): "X86 RING3 OK" — ring3 (CPL 3) giriş, ring3 int 0x80 (DPL3 kapı),
+# Kanıt 26 (D-699): "X86 RING3 OK" — ring3 (CPL 3) giriş, ring3 int 0x80 (DPL3 kapı),
 #          #GP/#PF ile çekirdeğe kontrollü dönüş; yapısal: iretq + 0xee kapı baytı.
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o \
@@ -2133,7 +2133,7 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@grep -qxF "X86 [41] KANAL OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 [41] KANAL OK' yok"; exit 1; }
 	@echo "  Kanit 25: dil gorevleri ([42] gorev_baslat/birlestir + bloklayan kanal; ortak cekirdek kodu)..."
 	@grep -qxF "X86 [42] GOREV OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 [42] GOREV OK' yok"; exit 1; }
-	@# [D-695] Kanit 26: ring3 — iretq CPL3, ring3 int 0x80 (DPL3 kapi, cagiran CS 0x1B),
+	@# [D-699] Kanit 26: ring3 — iretq CPL3, ring3 int 0x80 (DPL3 kapi, cagiran CS 0x1B),
 	@# hlt #GP + gozetmen sayfa #PF ile cekirdege kontrollu donus (kxr_ring3_testi tek
 	@# bayrakta 14 kosulu ANDler). Yapisal: .kem kaynakli test + .S trampolin iretq +
 	@# kdl_idt_kur'da 0xee (DPL3 kapi) baytinin GERCEKTEN yazildigi.
@@ -2142,9 +2142,9 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kxr_ring3_testi$$' || { echo "FAIL: kxr_ring3_testi .kem'den gelmiyor"; exit 1; }
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kdl_x86_ring3_gir $(BUILD)/kem_os_x86.elf | grep -q 'iretq' || { echo "FAIL: kdl_x86_ring3_gir icinde iretq yok"; exit 1; }
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kdl_idt_kur $(BUILD)/kem_os_x86.elf | grep -q '0xee' || { echo "FAIL: kdl_idt_kur'da DPL3 kapi (0xee) yok"; exit 1; }
-	@# [D-696] Kanit 27: kirmizi bolge YOK — tum imajda (.kem + C nesneleri) RSP ALTINA
+	@# [D-700] Kanit 27: kirmizi bolge YOK — tum imajda (.kem + C nesneleri) RSP ALTINA
 	@# erisim sifir. Kesme cercevesi RSP altina itildigi icin oradaki yerel sessizce bozulur.
-	@# [D-697] noredzone'u artik DERLEYICI yayar (--mimari x86_64-none); IR'daki HER define
+	@# [D-701] noredzone'u artik DERLEYICI yayar (--mimari x86_64-none); IR'daki HER define
 	@# onu tasimali — imaj bugun kirmizi bolgeyi kullanan kod icermese bile derleyici
 	@# gerilemesi gorunur kalsin.
 	@echo "  Kanit 27: kirmizi bolge yok (derleyici noredzone: her define; RSP-alti erisim = 0)..."
