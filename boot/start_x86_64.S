@@ -232,6 +232,26 @@ isr\n:
     ISR_NOERR 31
 
 isr_ortak:
+    /* [D-687] KURTARILABİLİR #PF (aarch64 kdl_fault_bekleniyor ikizi): vektör 14 VE
+     * kdl_x86_pf_bekle != 0 ise fault BEKLENİYORDUR (.kem kmmu_fault_testi). bekle =
+     * fault eden komutun BAYT UZUNLUĞU (x86 değişken uzunluk; .kem sabit-yazmaçlı
+     * `movq (%rdi), %rax` = 3 bayt). CR2 kaydedilir, bayrak SIFIRLANIR (tek atış),
+     * kaydedilmiş RIP += bekle, vektör+hata kodu atılır, iretq. Bayrak 0 ise eski yol
+     * (kdl_istisna_isle → halt) AYNEN: beklenmeyen fault asla sessizce yutulmaz. */
+    cmpq    $14, 0(%rsp)
+    jne     2f
+    cmpq    $0, kdl_x86_pf_bekle(%rip)
+    je      2f
+    pushq   %rax
+    movq    %cr2, %rax
+    movq    %rax, kdl_x86_pf_cr2(%rip)
+    movq    kdl_x86_pf_bekle(%rip), %rax
+    addq    %rax, 24(%rsp)          /* RIP (rax itmesiyle +8 kaydı: 16+8) */
+    movq    $0, kdl_x86_pf_bekle(%rip)
+    popq    %rax
+    addq    $16, %rsp               /* vektör + hata kodu */
+    iretq
+2:
     movq    0(%rsp), %rdi    /* vektör no */
     movq    8(%rsp), %rsi    /* hata kodu */
     movq    16(%rsp), %rdx   /* RIP */
@@ -320,6 +340,13 @@ kdl_syscall_stub:
     popq    %rdx
     popq    %rcx
     iretq
+
+.section .data
+.align 8
+.global kdl_x86_pf_bekle
+.global kdl_x86_pf_cr2
+kdl_x86_pf_bekle: .quad 0     /* [D-687] 0 = fault beklenmiyor; >0 = atlanacak komut uzunluğu */
+kdl_x86_pf_cr2:   .quad 0     /* [D-687] son kurtarılan #PF'in CR2'si (fault VA) */
 
 .section .rodata
 .align 8

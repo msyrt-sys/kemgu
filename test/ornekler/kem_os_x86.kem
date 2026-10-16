@@ -345,6 +345,24 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 PREEMPT HATA");
     }
+    // İş 17 (D-687): x86 MMU — kendi 4KB sayfa tablomuz (PDPT[1] → PD → PT):
+    // VA 0x50000000 ↔ PA 0x3A00000 ALIAS (non-identity çeviri donanımda) + haritasız
+    // VA 0x60000000 okunur → GERÇEK #PF → .S kurtarır (RIP += 3), CR2 == VA.
+    kdl_mmu_kur_x86();
+    eğer kmmu_ceviri_testi() == 1 {
+        yazdir_metin("X86 MMU CEVIRI OK");
+    }
+    değilse {
+        yazdir_metin("X86 MMU CEVIRI HATA");
+    }
+    eğer kmmu_fault_testi() == 1 {
+        yazdir_metin("X86 MMU FAULT OK cr2=");   // yazdir_metin satır sonu ekler
+        yazdir_tam((kxm_cr2_oku() / 1048576) olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 MMU FAULT HATA");
+    }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),

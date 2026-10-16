@@ -1967,7 +1967,7 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
 	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
@@ -2095,6 +2095,12 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	if [ -n "$$v" ] && [ "$$v" -ge 3 ] 2>/dev/null; then echo "    gettick = $$v"; \
 	else echo "FAIL: 'X86 SYSCALL OK tik=' + >=3 satiri yok ($$v)"; exit 1; fi
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_syscall_isle$$' || { echo "FAIL: kdl_syscall_isle (guclu) .kem'den gelmiyor"; exit 1; }
+	@echo "  Kanit 18: x86 MMU (.kem 4KB sayfa tablosu: alias ceviri + kurtarilan #PF, CR2)..."
+	@grep -qxF "X86 MMU CEVIRI OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 MMU CEVIRI OK' yok"; exit 1; }
+	@v=`grep -A1 -xF "X86 MMU FAULT OK cr2=" $(BUILD)/kem_os_x86.out | tail -1`; \
+	if [ "$$v" = "1536" ]; then echo "    cr2 = $$v MB (0x60000000)"; \
+	else echo "FAIL: 'X86 MMU FAULT OK cr2=' + 1536 satiri yok ($$v)"; exit 1; fi
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kmmu_fault_testi$$' || { echo "FAIL: kmmu_fault_testi .kem'den gelmiyor"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de
