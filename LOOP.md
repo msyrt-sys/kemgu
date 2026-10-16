@@ -2155,3 +2155,15 @@
   acilmadi (bit 63 ayrilmis → RSVD) → WX HATA rc=2. x86 birlesik 166 islev,
   21 asm, C ↔ self BIREBIR. REGRESYON: check_kapisi, baremetal_diff 20/20,
   kem_os_arm, syscall/ring3/timer_test_x86 yesil.
+- 2026-10-16 D-690: x86 kurtarilamaz istisna raporlayicisi .kem'de (ZERO-C B1 x86 ikizi).
+  kem_mmu_hw.kem (tur 19, deepseek-v4.1-flash — kapasite geri gelmis, yedege
+  gerek olmadi; 1 blok, mudahale YOK): kis_* COM1 uzerinden, guclu
+  kdl_istisna_isle (CR2 → adr, tek satir, hlt), kem_pvh_cmdline_esit (PVH
+  cmdline_paddr @24). kem_os_x86.kem: cmdline "kem_istisna" ise haritasiz VA
+  kurtarma bayragi KAPALIYKEN okunur. Makefile Kanit 21: IKINCI QEMU kosumu
+  `-append kem_istisna` → 'ISTISNA tip=0xe a=0x0 b=0x.. adr=0x60000000', sonra
+  YAKALANMADI/PANIK satiri YOK (cekirdek durdu), normal kosum bu dala GIRMEDI,
+  llvm-nm T kdl_istisna_isle. SABOTAJ: .kem tanimi yeniden adlandirildi (C zayifi
+  devreye girer) → rapor bicimi tutmaz rc=2; cmdline hep 0 → rc=2. (Ilk S2 denemem
+  UYGULANMADI — capa dosyada 2 kez geciyordu, assert dustu; rc=0 olcum degildi.)
+  x86 birlesik 174 islev, 23 asm, C ↔ self BIREBIR.

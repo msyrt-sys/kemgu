@@ -2107,6 +2107,20 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@v=`grep -A1 -xF "X86 WX OK hata=" $(BUILD)/kem_os_x86.out | tail -1`; \
 	if [ "$$v" = "17" ]; then echo "    #PF hata kodu = $$v (P|I/D)"; \
 	else echo "FAIL: 'X86 WX OK hata=' + 17 satiri yok ($$v)"; exit 1; fi
+	@echo "  Kanit 21: kurtarilamaz istisna (.kem kdl_istisna_isle; ikinci kosum -append kem_istisna)..."
+	@rm -f $(BUILD)/kem_os_x86_ist.out; \
+	timeout 8 qemu-system-x86_64 -M microvm -display none \
+		-global virtio-mmio.force-legacy=false \
+		-drive file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 \
+		-device virtio-blk-device,drive=d0 \
+		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+		-kernel $(BUILD)/kem_os_x86.elf -append kem_istisna \
+		-serial file:$(BUILD)/kem_os_x86_ist.out 2>/dev/null || true
+	@grep -qxF "X86 ISTISNA TESTI" $(BUILD)/kem_os_x86_ist.out || { echo "FAIL: istisna kosumu cmdline dalina girmedi"; exit 1; }
+	@grep -E '^ISTISNA tip=0xe a=0x0 b=0x[0-9a-f]+ adr=0x60000000$$' $(BUILD)/kem_os_x86_ist.out || { echo "FAIL: .kem istisna raporu yok/yanlis"; exit 1; }
+	@if grep -qF "YAKALANMADI" $(BUILD)/kem_os_x86_ist.out || grep -qF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86_ist.out; then echo "FAIL: istisna sonrasi cekirdek DURMADI"; exit 1; fi
+	@if grep -qF "X86 ISTISNA TESTI" $(BUILD)/kem_os_x86.out; then echo "FAIL: normal kosum istisna dalina girdi"; exit 1; fi
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_istisna_isle$$' || { echo "FAIL: kdl_istisna_isle (guclu) .kem'den gelmiyor"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

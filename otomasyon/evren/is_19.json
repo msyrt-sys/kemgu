@@ -1,0 +1,6 @@
+{"tur": "19", "is": "istisna_x86", "gorev": "otomasyon/evren/gorev_19_istisna_x86.md",
+ "baglam": [],
+ "kesit": ["runtime/kem_mmu.kem:647-705", "runtime/mimari/x86_64/kem_mmu_hw.kem:325-348"],
+ "effort": "low",
+ "dogrulama": ["cat runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_mmu_hw.kem > /tmp/claude-1000/evren/ist_sonda.kem; build/kemgu --check --mimari x86_64-none /tmp/claude-1000/evren/ist_sonda.kem 2>&1 | grep -v 'kdl_mmio_oku32' | tail -3"],
+ "isaretler": []}
