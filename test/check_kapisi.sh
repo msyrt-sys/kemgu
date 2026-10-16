@@ -105,7 +105,7 @@ done
 # dilin işletim sistemi, kendi tip denetimini atlıyordu. Borç kapandı; bu blok
 # geri düşmeyi engeller. Dosya sırası Makefile'daki `calistir_kem_os_arm`
 # cat sırasıyla AYNI olmalı (kem_heap ÖNCE — çapraz-birim T002'yi kapatır).
-KEMOS_PARCALAR="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
+KEMOS_PARCALAR="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
                 runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
                 runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
@@ -117,7 +117,7 @@ if [ "$kemos_eksik" -eq 0 ]; then
   tot=$((tot + 1))
   # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
   if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os (birleşik kaynak, 15 parça) --check geçti"
+    echo "  ✅ kem_os (birleşik kaynak, 17 parça) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"

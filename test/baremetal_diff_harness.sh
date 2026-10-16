@@ -68,7 +68,7 @@ pass=0; fail=0
 
 # ---- (1) BİRLEŞİK OS BİRİMİ — asıl kapsam ----
 # Makefile `calistir_kem_os_arm` cat sırasıyla AYNI olmalı.
-OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem \
+OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem \
 runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
 runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem \
 test/ornekler/kem_os.kem"
@@ -183,6 +183,7 @@ PARCALAR="runtime/kem_elf.kem runtime/kem_gorev.kem runtime/kem_minifs.kem
 runtime/kem_mmu.kem runtime/kem_virtio_net.kem runtime/kem_zaman.kem
 runtime/mimari/arm64/kem_uart.kem runtime/mimari/arm64/kem_platform.kem
 runtime/mimari/arm64/kem_zaman_hw.kem
+runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
 test/ornekler/kem_os.kem"
 kapsam_islev=0; kapsam_kuresel=0
 for f in $PARCALAR; do

@@ -2075,3 +2075,15 @@
   dosya (capasiz) → 1 blok, mudahale yok; test + Kanit 15 bende.
   ACIK: x86 kdl_kesme_isle preempt CAGIRMAZ (arm kdl_irq_isle → kem_preempt);
   preempt kem_gorev ile gelecek. KALAN BORC: kem_gorev 27 + kem_mmu 14 = 41.
+- 2026-10-16 D-684: kem_gorev ayristirildi (ara hedef adim 3a, orkestrator, BETIKLE).
+  ONCUL DUZELTMESI: kem_gorev'in modeli isbirlikci DEGIL, IRQ trap-frame SP-takasli
+  PREEMPTIVE (kdl_irq_isle → kem_preempt) — ayri "cooperative" fazi yok.
+  runtime/kem_gorev_cekirdek.kem (mimariden bagimsiz: kem_preempt_baslat/ac,
+  kem_gorev_olustur, kem_preempt, kem_gorev_bitir, gorev1/2, kem_preempt_testi) +
+  runtime/mimari/arm64/kem_gorev_hw.kem (sabit RAM adresleri, TTBR tablosu, adrp
+  yardimcilari + 3 KANCA: kg_cerceve_kur / kg_alan_sifirla / kg_alan_gec).
+  Satir kumesi karsilastirmasi: TEK kod satiri degisti (kg_ttbr_oku(kem_paktif) →
+  kg_ttbr_oku(i)); geri kalan farklar kanca cagri/imzalari. arm64 28 faz isareti
+  (PREEMPT, EL0 SYSCALL, SPAWN, SUREC IZOLASYON dahil) GECTI; birlesik OS 326 → 329
+  islev (+3 kanca), 48 asm DEGISMEDI; parca 42 + 12 + 7 = 61 = 58 + 3.
+  EL0/kul_*/MB-1b/trampolin kem_gorev.kem'de arm64'e ozgu KALDI (x86 ring3 sonraki faz).
