@@ -240,34 +240,61 @@ isr_ortak:
     hlt
     jmp     1b
 
-/* === IRQ0 (timer) stub (C3b) — bağlamı kaydet, dispatch, EOI, iretq ===
- * İstisnadan farkı: KURTARILIR (iretq) → kesilen koda dönülür. SysV caller-saved
- * kaydedilir (callee-saved'i C korur). PIC EOI = port 0x20'ye 0x20. */
+/* === IRQ0 (timer) stub (D-685) — TAM kayıt + SP takası (preemptive görev). ===
+ * İstisnadan farkı: KURTARILIR (iretq) → kesilen koda dönülür. Tüm GP yazmaçları
+ * (callee + caller) itilir: rax,rbx,rcx,rdx,rsi,rdi,rbp,r8..r15 (15×8 = 120 B).
+ * kdl_irq_isle(sp) dönen SP'ye geçilir (başka görevin kesilmiş/sentetik
+ * çerçevesi); yazmaçlar geri alınır, iretq. Çerçeve: [0]=r15 … [14]=rax,
+ * RIP@120, CS@128, RFLAGS@136, RSP@144, SS@152 (toplam 160 B). CPU kesmede RSP'yi
+ * 16'ya hizalar → 5+15 itme = 160 → call öncesi SP 16-hizalı (SysV) ✓.
+ * C kernel'leri uyumluluğu: zayıf kdl_irq_isle SP'yi DEĞİŞTİRMEZ → davranış AYNI.
+ * PIC EOI = port 0x20'ye 0x20. */
 .global kdl_irq0_stub
 kdl_irq0_stub:
     pushq   %rax
+    pushq   %rbx
     pushq   %rcx
     pushq   %rdx
     pushq   %rsi
     pushq   %rdi
+    pushq   %rbp
     pushq   %r8
     pushq   %r9
     pushq   %r10
     pushq   %r11
+    pushq   %r12
+    pushq   %r13
+    pushq   %r14
+    pushq   %r15
     movq    $0, %rdi          /* IRQ no = 0 (timer) */
     call    kdl_kesme_isle
+    movq    %rsp, %rdi        /* kesilen görevin çerçeve SP'si */
+    call    kdl_irq_isle
+    movq    %rax, %rsp        /* seçilen görevin çerçeve SP'si */
     movb    $0x20, %al        /* PIC EOI (master) */
     outb    %al, $0x20
+    popq    %r15
+    popq    %r14
+    popq    %r13
+    popq    %r12
     popq    %r11
     popq    %r10
     popq    %r9
     popq    %r8
+    popq    %rbp
     popq    %rdi
     popq    %rsi
     popq    %rdx
     popq    %rcx
+    popq    %rbx
     popq    %rax
     iretq
+/* Zayıf varsayılan: .kem x86 güçlü tanımı (kem_preempt) ezer; C kernel'lerinde
+ * SP değişmez → davranış AYNI. */
+.weak kdl_irq_isle
+kdl_irq_isle:
+    movq    %rdi, %rax
+    ret
 
 /* === Sistem çağrısı stub (C6) — int 0x80; num=rax, arg=rdi. KURTARILIR (iretq). ===
  * kdl_syscall_isle(rdi=num, rsi=arg). rax = dönüş (void demo → kullanılmaz). */

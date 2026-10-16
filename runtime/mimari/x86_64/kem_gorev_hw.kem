@@ -1,0 +1,51 @@
+// kem_gorev_hw.kem — x86_64 görev/zamanlayıcı DONANIM kancaları (D2b, D-685).
+// ============================================================================
+// arm64 ikizi: runtime/mimari/arm64/kem_gorev_hw.kem. Model: IRQ0 koçanı 15 GP
+// yazmacını iter, kdl_irq_isle(sp) çağırır, dönen SP'ye geçer → çerçeve düzeni:
+//   [0]=r15 … [14]=rax (@0..112), RIP@120, CS@128, RFLAGS@136, RSP@144, SS@152;
+//   toplam 160 B. Yeni görev = SENTETİK çerçeve (kg_cerceve_kur).
+// Bu ara hedefte görev başına adres alanı YOK → kg_alan_* boş (arm64 TTBR0 yok).
+
+sabit KG_PSP: tam64 = 50331648;           // 0x03000000: psp[i] tablosu (@+i*8)
+sabit KG_OLU: tam64 = 50334720;           // 0x03000C00: olu[i] tablosu (1=bitmiş)
+sabit KG_G1: tam64 = 50335744;            // 0x03001000: görev1 sayacı (FİXED RAM, volatile deref)
+sabit KG_G2: tam64 = 50335752;            // 0x03001008: görev2 sayacı
+sabit KG_AKTIF: tam64 = 50335760;         // 0x03001010: preempt-aktif bayrağı (FİXED RAM)
+sabit KG_STK1: tam64 = 51380224;          // 0x03100000: görev1 yığın tepesi
+sabit KG_STK2: tam64 = 52428800;          // 0x03200000: görev2 yığın tepesi
+
+// Görev giriş adreslerini asm ile materyalize et (.kem işlev-adresi → tam64).
+çıplak işlev kg_gorev1_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kem_gorev1(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kg_gorev2_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kem_gorev2(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Sentetik çerçeve kur (arm64 kg_cerceve_kur ikizi): 15 GP slotu sıfırla; ardından
+// CPU'nun ittiği iretq çerçevesi — RIP=giriş, CS=8, RFLAGS=0x202 (IF=1),
+// RSP=ust-8 (call sonrası hizası), SS=16. SP 16-hizalı.
+çıplak işlev kg_cerceve_kur(yigin_tepe: tam64, giris: tam64) -> tam64 {
+    değişken ust: tam64 = (yigin_tepe / 16) * 16;         // 16-hizala
+    değişken sp: tam64 = ust - 160;
+    değişken k: tam64 = 0;
+    iken k < 15 { kg_yaz64(sp + k * 8, 0); k = k + 1; }   // 15 GP slotu sıfırla
+    kg_yaz64(sp + 120, giris);                    // RIP @120 = görev girişi
+    kg_yaz64(sp + 128, 8);                        // CS @128 = 8 (çekirdek kodu)
+    kg_yaz64(sp + 136, 514);                      // RFLAGS @136 = 0x202 (IF=1)
+    kg_yaz64(sp + 144, ust - 8);                  // RSP @144 (call sonrası hizası)
+    kg_yaz64(sp + 152, 16);                       // SS @152 = 16 (çekirdek verisi)
+    ver sp;
+}
+
+// x86 ara hedefinde görev başına adres alanı YOK → kancalar boş (arm64 TTBR0 yok).
+çıplak işlev kg_alan_sifirla() { }
+çıplak işlev kg_alan_gec(i: tam64) { }
+
+// IRQ0 koçanının GÜÇLÜ tanımı (arm64'te karşılığı kem_zaman_hw.kem'deki kdl_irq_isle).
+// .S içindeki zayıf varsayılanı ezer → kem_preempt ile SP takası yapılır.
+çıplak işlev kdl_irq_isle(sp: tam64) -> tam64 { ver kem_preempt(sp); }

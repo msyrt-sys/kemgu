@@ -321,6 +321,21 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 TIMER HATA");
     }
+    // İş 15 (D-685): PREEMPTIVE görev değiştirme — iki sonsuz-döngü görevi, timer IRQ0
+    // koçanı tüm GP yazmaçlarını kaydedip kdl_irq_isle(sp) → kem_preempt ile SP takası
+    // yapar. Her iki sayaç ilerlerse görevler GERÇEKTEN araya girerek koştu.
+    değişken p_ok: tam32 = kem_preempt_testi();
+    eğer p_ok == 1 {
+        yazdir_metin("X86 PREEMPT OK g1=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(kg_oku64(KG_G1) olarak tam32);
+        yazdir_satir();
+        yazdir_metin("g2=");
+        yazdir_tam(kg_oku64(KG_G2) olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 PREEMPT HATA");
+    }
     kem_panik("X86 PANIK YOLU OK");
     ver 0;
 }
