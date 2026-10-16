@@ -1,0 +1,6 @@
+
+### $ make -s selfhost/konak.kem >/dev/null 2>&1; build/kemgu --check selfhost/checker.kem
+OK: selfhost/checker.kem — tip kontrolu basarili.
+
+### $ build/kemgu --check selfhost/codegen.kem
+OK: selfhost/codegen.kem — tip kontrolu basarili.

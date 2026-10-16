@@ -1,0 +1,11 @@
+// D-698 POZİTİF: uyumlu annotasyonlar TEMİZ kalmalı (yoksa "her lambda annotasyonunu
+// reddet" sabotajı kapıdan geçerdi — D-425). `|| 8589934592` doğal olarak tam64'tür
+// (2^33 tam32'ye sığmaz) → `işlev() -> tam64` ile UYUMLU (C ölçüldü: OK).
+işlev m() -> tam32 {
+    değişken a: işlev() -> tam32 = || 42;
+    değişken b: işlev(tam32) -> tam32 = |x: tam32| x + 1;
+    değişken c: işlev() -> tam32 = || { ver 7; };
+    değişken d: işlev() -> boş = || { };
+    değişken e: işlev() -> tam64 = || 8589934592;
+    ver 0;
+}
