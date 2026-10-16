@@ -1,0 +1,182 @@
+// KEMGU Stdlib Testi — Sıralı Dizi Araçları
+// =================================
+//
+// Bu dosya `stdlib/sirali.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+//
+// Fonksiyon-dönüşü diziler çağıran scope'ta indekslenmez; sonuçlar
+// sirali_boyut / sirali_dogrula / sirali_konum parametresine geçirilerek
+// skalere indirgenir (test_dizi.kem'deki F4-güvenli desen).
+// İçerik doğrulaması: sıralanmış sonuçta bir elemanın sirali_konum'u
+// hem sıralılığı hem içeriği birlikte sınar.
+
+// --- sirali_konum ---
+işlev test_konum_tekrarli() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 20, 30];
+    ver sirali_konum(d, 20);                      // 1 (ilk 20)
+}
+
+işlev test_konum_arada() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 20, 30];
+    ver sirali_konum(d, 25);                      // 3
+}
+
+işlev test_konum_bas() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver sirali_konum(d, 5);                       // 0
+}
+
+işlev test_konum_son() -> tam32 {
+    değişken d: Dizi<tam32> = [10, 20, 30];
+    ver sirali_konum(d, 99);                      // 3 (n)
+}
+
+işlev test_konum_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver sirali_konum(d, 1);                       // 0
+}
+
+// --- sirali_ekle ---
+işlev test_ekle_orta_boyut() -> tam32 {
+    ver sirali_boyut(sirali_ekle([10, 30], 20));  // 3
+}
+
+işlev test_ekle_orta_sirali() -> mantıksal {
+    ver sirali_dogrula(sirali_ekle([10, 30], 20));
+}
+
+işlev test_ekle_orta_konum() -> tam32 {
+    ver sirali_konum(sirali_ekle([10, 30], 20), 20);   // 1
+}
+
+işlev test_ekle_basa() -> tam32 {
+    ver sirali_konum(sirali_ekle([10, 20], 5), 5);     // 0
+}
+
+işlev test_ekle_sona() -> tam32 {
+    ver sirali_konum(sirali_ekle([10, 20], 99), 99);   // 2
+}
+
+işlev test_ekle_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver sirali_boyut(sirali_ekle(d, 7));               // 1
+}
+
+işlev test_ekle_tekrarli_sirali() -> mantıksal {
+    ver sirali_dogrula(sirali_ekle([10, 20, 20, 30], 20));
+}
+
+// --- birlestir_sirali ---
+işlev test_birlestir_boyut() -> tam32 {
+    ver sirali_boyut(birlestir_sirali([1, 3, 5], [2, 4]));   // 5
+}
+
+işlev test_birlestir_sirali_mi() -> mantıksal {
+    ver sirali_dogrula(birlestir_sirali([1, 3, 5], [2, 4]));
+}
+
+işlev test_birlestir_konum() -> tam32 {
+    ver sirali_konum(birlestir_sirali([1, 3, 5], [2, 4]), 4);   // 3
+}
+
+işlev test_birlestir_bos_sol() -> tam32 {
+    değişken bos: Dizi<tam32> = [];
+    ver sirali_boyut(birlestir_sirali(bos, [1, 2]));   // 2
+}
+
+işlev test_birlestir_bos_sag() -> tam32 {
+    değişken bos: Dizi<tam32> = [];
+    ver sirali_boyut(birlestir_sirali([1, 2], bos));   // 2
+}
+
+işlev test_birlestir_ic_ice() -> mantıksal {
+    // b tamamen a'nın içine serpiştirilir
+    ver sirali_dogrula(birlestir_sirali([1, 10], [2, 3, 4]));
+}
+
+// --- hizli_sirala ---
+işlev test_hizli_sirali_mi() -> mantıksal {
+    değişken d: Dizi<tam32> = [3, 1, 4, 1, 5];
+    ver sirali_dogrula(hizli_sirala(d));
+}
+
+işlev test_hizli_icerik() -> tam32 {
+    değişken d: Dizi<tam32> = [3, 1, 4, 1, 5];
+    ver sirali_konum(hizli_sirala(d), 4);         // sıralı [1,1,3,4,5] -> 3
+}
+
+işlev test_hizli_ters_girdi() -> mantıksal {
+    değişken d: Dizi<tam32> = [9, 7, 5, 3, 1];
+    ver sirali_dogrula(hizli_sirala(d));
+}
+
+işlev test_hizli_zaten_sirali() -> mantıksal {
+    değişken d: Dizi<tam32> = [1, 2, 3, 4];
+    ver sirali_dogrula(hizli_sirala(d));
+}
+
+işlev test_hizli_bos() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    ver sirali_boyut(hizli_sirala(d));            // 0
+}
+
+işlev test_hizli_tek() -> tam32 {
+    değişken d: Dizi<tam32> = [42];
+    ver sirali_boyut(hizli_sirala(d));            // 1
+}
+
+işlev test_hizli_tekrarli() -> mantıksal {
+    değişken d: Dizi<tam32> = [2, 2, 1, 2];
+    ver sirali_dogrula(hizli_sirala(d));
+}
+
+işlev test_hizli_negatifli() -> tam32 {
+    değişken d: Dizi<tam32> = [3, 0 - 5, 1];
+    ver sirali_konum(hizli_sirala(d), 1);         // sıralı [-5,1,3] -> 1
+}
+
+// --- bileşik: sırala + ekle + birleştir zinciri ---
+işlev test_bilesik_zincir() -> mantıksal {
+    değişken a: Dizi<tam32> = [5, 1, 3];
+    değişken b: Dizi<tam32> = [4, 2];
+    ver sirali_dogrula(birlestir_sirali(hizli_sirala(a), hizli_sirala(b)));
+}
+
+işlev test_bilesik_zincir_boyut() -> tam32 {
+    değişken a: Dizi<tam32> = [5, 1, 3];
+    ver sirali_boyut(sirali_ekle(hizli_sirala(a), 2));   // 4
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_konum_tekrarli() != 1 { ver 1; }
+    eğer test_konum_arada() != 3 { ver 2; }
+    eğer test_konum_bas() != 0 { ver 3; }
+    eğer test_konum_son() != 3 { ver 4; }
+    eğer test_konum_bos() != 0 { ver 5; }
+    eğer test_ekle_orta_boyut() != 3 { ver 6; }
+    eğer değil test_ekle_orta_sirali() { ver 7; }
+    eğer test_ekle_orta_konum() != 1 { ver 8; }
+    eğer test_ekle_basa() != 0 { ver 9; }
+    eğer test_ekle_sona() != 2 { ver 10; }
+    eğer test_ekle_bos() != 1 { ver 11; }
+    eğer değil test_ekle_tekrarli_sirali() { ver 12; }
+    eğer test_birlestir_boyut() != 5 { ver 13; }
+    eğer değil test_birlestir_sirali_mi() { ver 14; }
+    eğer test_birlestir_konum() != 3 { ver 15; }
+    eğer test_birlestir_bos_sol() != 2 { ver 16; }
+    eğer test_birlestir_bos_sag() != 2 { ver 17; }
+    eğer değil test_birlestir_ic_ice() { ver 18; }
+    eğer değil test_hizli_sirali_mi() { ver 19; }
+    eğer test_hizli_icerik() != 3 { ver 20; }
+    eğer değil test_hizli_ters_girdi() { ver 21; }
+    eğer değil test_hizli_zaten_sirali() { ver 22; }
+    eğer test_hizli_bos() != 0 { ver 23; }
+    eğer test_hizli_tek() != 1 { ver 24; }
+    eğer değil test_hizli_tekrarli() { ver 25; }
+    eğer test_hizli_negatifli() != 1 { ver 26; }
+    eğer değil test_bilesik_zincir() { ver 27; }
+    eğer test_bilesik_zincir_boyut() != 4 { ver 28; }
+    ver 42;
+}

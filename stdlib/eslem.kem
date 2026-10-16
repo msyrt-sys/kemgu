@@ -1,0 +1,146 @@
+// KEMGU Stdlib — Eşlem (Anahtar -> Değer, Paralel Dizi)
+// ======================================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// İki paralel dizi üzerinde anahtar->değer eşlemi: ks[i] anahtarına
+// vs[i] değeri karşılık gelir. test/ornekler/16_degiskenli_dil.kem
+// bu deseni elle yazıyor — burada kütüphaneleşti.
+//
+// Sözleşme (çağıranın sorumluluğu, eslem_gecerli_mi ile denetlenebilir):
+//   - ks ve vs AYNI boyutta,
+//   - anahtarlar BENZERSİZ (eslem_koy bunu zaten korur).
+//
+// Tasarım kuralı:
+//   - Ayrı bir Eslem<K,V> yapı tipi YOK: iki paralel Dizi + disiplinli
+//     API (yigin/kuyruk ile aynı gerekçe; generic alanlı yapı codegen'i
+//     olgunlaşınca V2'de sarmalanabilir).
+//   - Arama DOĞRUSAL, O(n) — karma (hash) primitifi yok; küçük/orta
+//     eşlemler için yeterli. Karma tablo V2.
+//   - `eslem_koy` YERİNDE çalışır (dizi_yaz/dizi_ekle): anahtar varsa
+//     değeri günceller (yanlış döner), yoksa çifti ekler (doğru döner)
+//     — dönüş "yeni mi" bilgisi.
+//   - Silme İKİ ADIMLI: çok-değerli dönüş olmadığı için
+//     eslem_sil_anahtar ve eslem_sil_deger ayrı ayrı YENİ dizi döner;
+//     ikisi de saftır (girdiyi bozmaz), sıra fark etmez.
+//   - Yokluk seçimlik<V> ile (null/sentinel yok).
+//
+// Codegen notu (test kapsamı): yalnız Dizi<V> parametresinden çıkarsanan
+// V=metin, bilinen monomorphization sınırına düşer (i32 varsayımı —
+// test_yigin.kem notu). k: K düz parametresinden çıkarsanan K=metin
+// ÇALIŞIR (arama.kem dogrusal_ara$ptr ölçümü) — metin ANAHTAR testte
+// var, metin DEĞER yok.
+
+// --- Yardımcı ---
+
+// (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
+işlev eslem_boyut<T>(xs: Dizi<T>) -> tam32 {
+    değişken n: tam32 = 0;
+    için x: xs {
+        n = n + 1;
+    }
+    ver n;
+}
+
+// --- Sorgular ---
+
+// Eşlem geçerli mi — boyutlar eşit ve anahtarlar benzersiz mi?
+// (Hata ayıklama + test değişmezi; O(n²).)
+işlev eslem_gecerli_mi<K, V>(ks: Dizi<K>, vs: Dizi<V>) -> mantıksal {
+    değişken n: tam32 = eslem_boyut(ks);
+    eğer n != eslem_boyut(vs) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = i + 1;
+        iken j < n {
+            eğer ks[i] == ks[j] { ver yanlış; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// Anahtarın konumu — yoksa hiç. O(n).
+işlev eslem_indeks<K>(ks: Dizi<K>, k: K) -> seçimlik<tam32> {
+    değişken i: tam32 = 0;
+    için x: ks {
+        eğer x == k { ver değer(i); }
+        i = i + 1;
+    }
+    ver hiç;
+}
+
+// Anahtar var mı?
+işlev eslem_var_mi<K>(ks: Dizi<K>, k: K) -> mantıksal {
+    eşleş eslem_indeks(ks, k) {
+        değer(i) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// --- Erişim ---
+
+// Anahtarın değeri — yoksa hiç.
+işlev eslem_bul<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> seçimlik<V> {
+    eşleş eslem_indeks(ks, k) {
+        değer(i) => { ver değer(vs[i]); }
+        hiç => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// Anahtarın değeri — yoksa varsayılan.
+işlev eslem_bul_ya_da<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, varsayilan: V) -> V {
+    eşleş eslem_bul(ks, vs, k) {
+        değer(v) => { ver v; }
+        hiç => { ver varsayilan; }
+    }
+    ver varsayilan;
+}
+
+// --- Dönüşümler ---
+
+// Koy — anahtar varsa değeri YERİNDE günceller (yanlış: yeni değil),
+// yoksa çifti sona ekler (doğru: yeni eklendi). Benzersizliği korur.
+işlev eslem_koy<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, v: V) -> mantıksal {
+    eşleş eslem_indeks(ks, k) {
+        değer(i) => {
+            dizi_yaz(vs, i, v);
+            ver yanlış;
+        }
+        hiç => {
+            dizi_ekle(ks, k);
+            dizi_ekle(vs, v);
+            ver doğru;
+        }
+    }
+    ver yanlış;
+}
+
+// Sil (anahtar tarafı) — k anahtarı ATILMIŞ yeni anahtar dizisi.
+// Girdi değişmez. eslem_sil_deger ile birlikte kullanılır.
+işlev eslem_sil_anahtar<K>(ks: Dizi<K>, k: K) -> Dizi<K> {
+    değişken sonuc: Dizi<K> = dizi_olustur(0);
+    için x: ks {
+        eğer x != k { dizi_ekle(sonuc, x); }
+    }
+    ver sonuc;
+}
+
+// Sil (değer tarafı) — k anahtarına karşılık gelen değer ATILMIŞ yeni
+// değer dizisi. Girdi değişmez. eslem_sil_anahtar ile birlikte
+// kullanılır; ikisi de saf olduğu için çağrı sırası fark etmez.
+işlev eslem_sil_deger<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> Dizi<V> {
+    değişken sonuc: Dizi<V> = dizi_olustur(0);
+    değişken n: tam32 = eslem_boyut(ks);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer ks[i] != k { dizi_ekle(sonuc, vs[i]); }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// AÇIK SORU: karma (hash) primitifi ya da generic alanlı yapı codegen'i
+// olgunlaşınca O(1) amortize karma tablo + tek-değer Eslem<K,V> tipi V2.

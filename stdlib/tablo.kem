@@ -1,0 +1,172 @@
+// KEMGU Stdlib — Tablo (Açık Adresli Karma Tablo)
+// ================================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// tam32 anahtar -> tam32 değer karma tablosu — eslem.kem'in O(n)
+// doğrusal aramasına karşı O(1) amortize erişim (eslem başlığındaki
+// "karma tablo V2" sözünün yerine getirilmesi).
+//
+// TEMSİL: tablo = TEK düz Dizi<tam32>:
+//   [0]                  kapasite (K)
+//   [1 .. K]             anahtar yuvaları
+//   [1+K .. 2K]          değer yuvaları
+//   [1+2K .. 3K]         işaret yuvaları: 0=boş, 1=dolu, 2=silinmiş
+// Tek değer olarak taşınır (çok-değerli dönüş yok — kesir/matris ile
+// aynı kodlama ailesi). Boyut 1+3K.
+//
+// Tasarım kuralı:
+//   - AÇIK ADRESLEME + doğrusal yoklama (linear probing): kova =
+//     anahtar mod K; doluysa bir sonraki yuva (sona gelince başa sar).
+//     Zincirleme (chaining) iç içe dizi isterdi — bilinçli dışarıda.
+//   - SABİT kapasite: dizi yeniden-boyutlandırma + tüm anahtarları
+//     yeniden yerleştirme (rehash) V2; kapasiteyi beklenen eleman
+//     sayısının ~2 katı seçmek yoklama zincirlerini kısa tutar.
+//   - SİLME MEZARTAŞIYLA (işaret 2): yuvayı boş'a çevirmek, üzerinden
+//     yoklanarak geçmiş anahtarları ULAŞILMAZ yapardı (klasik açık
+//     adresleme tuzağı). Mezartaşı aramada durdurmaz, koymada yeniden
+//     kullanılır.
+//   - `tablo_koy` üç sonuçlu (tam32): 1=yeni eklendi, 0=mevcut
+//     güncellendi, -1=tablo dolu (mantıksal iki durumu ayıramazdı;
+//     sonuç<> yerine kod dönmek eslem_koy ile ailevi tutarlılık).
+//   - Karma: anahtar mod K (negatif normalize edilir). Tamsayı
+//     anahtar için yeterli; genel karma karma.kem'de — metin anahtar
+//     oraya karakter erişimi gelince bağlanır.
+
+// --- Kurucu ---
+
+// Kapasitesi verilen boş tablo. kapasite < 1 -> 1'e yükseltilir.
+işlev tablo_olustur(kapasite: tam32) -> Dizi<tam32> {
+    değişken k: tam32 = kapasite;
+    eğer k < 1 { k = 1; }
+    değişken t: Dizi<tam32> = dizi_olustur(0);
+    dizi_ekle(t, k);
+    değişken i: tam32 = 0;
+    iken i < 3 * k {
+        dizi_ekle(t, 0);
+        i = i + 1;
+    }
+    ver t;
+}
+
+// --- Sorgular ---
+
+// Kapasite (yuva sayısı).
+işlev tablo_kapasite(t: Dizi<tam32>) -> tam32 {
+    ver t[0];
+}
+
+// (İç yardımcı) Anahtarı [0, K) kovasına indirge (negatif dahil).
+işlev tablo_kova(anahtar: tam32, kapasite: tam32) -> tam32 {
+    değişken h: tam32 = anahtar % kapasite;
+    eğer h < 0 { h = h + kapasite; }
+    ver h;
+}
+
+// Dolu yuva sayısı (mezartaşları saymaz). O(K).
+işlev tablo_boyut(t: Dizi<tam32>) -> tam32 {
+    değişken k: tam32 = t[0];
+    değişken n: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < k {
+        eğer t[1 + 2 * k + i] == 1 { n = n + 1; }
+        i = i + 1;
+    }
+    ver n;
+}
+
+// Boş mu?
+işlev tablo_bos_mu(t: Dizi<tam32>) -> mantıksal {
+    ver tablo_boyut(t) == 0;
+}
+
+// --- Erişim ---
+
+// Anahtarın değeri — yoksa hiç. Yoklama boş yuvada (işaret 0) durur;
+// mezartaşı (2) üzerinden geçer. En çok K yoklama.
+işlev tablo_bul(t: Dizi<tam32>, anahtar: tam32) -> seçimlik<tam32> {
+    değişken k: tam32 = t[0];
+    değişken kova: tam32 = tablo_kova(anahtar, k);
+    değişken adim: tam32 = 0;
+    iken adim < k {
+        değişken yuva: tam32 = (kova + adim) % k;
+        değişken isaret: tam32 = t[1 + 2 * k + yuva];
+        eğer isaret == 0 { ver hiç; }
+        eğer isaret == 1 {
+            eğer t[1 + yuva] == anahtar {
+                ver değer(t[1 + k + yuva]);
+            }
+        }
+        adim = adim + 1;
+    }
+    ver hiç;
+}
+
+// Anahtar var mı?
+işlev tablo_var_mi(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
+    eşleş tablo_bul(t, anahtar) {
+        değer(v) => { ver doğru; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// --- Dönüşümler (yerinde) ---
+
+// Koy — anahtar varsa değeri günceller (0), yoksa ilk mezartaşı/boş
+// yuvaya ekler (1). Uygun yuva kalmadıysa -1 (tablo dolu). YERİNDE.
+işlev tablo_koy(t: Dizi<tam32>, anahtar: tam32, deger_yeni: tam32) -> tam32 {
+    değişken k: tam32 = t[0];
+    değişken kova: tam32 = tablo_kova(anahtar, k);
+    değişken bos_yuva: tam32 = 0 - 1;
+    değişken adim: tam32 = 0;
+    iken adim < k {
+        değişken yuva: tam32 = (kova + adim) % k;
+        değişken isaret: tam32 = t[1 + 2 * k + yuva];
+        eğer isaret == 1 {
+            eğer t[1 + yuva] == anahtar {
+                dizi_yaz(t, 1 + k + yuva, deger_yeni);
+                ver 0;
+            }
+        }
+        eğer isaret == 2 {
+            eğer bos_yuva < 0 { bos_yuva = yuva; }
+        }
+        eğer isaret == 0 {
+            eğer bos_yuva < 0 { bos_yuva = yuva; }
+            adim = k;
+        } değilse {
+            adim = adim + 1;
+        }
+    }
+    eğer bos_yuva < 0 { ver 0 - 1; }
+    dizi_yaz(t, 1 + bos_yuva, anahtar);
+    dizi_yaz(t, 1 + k + bos_yuva, deger_yeni);
+    dizi_yaz(t, 1 + 2 * k + bos_yuva, 1);
+    ver 1;
+}
+
+// Sil — anahtar varsa yuvasına MEZARTAŞI (2) bırakır, doğru döner;
+// yoksa yanlış. YERİNDE. (Boş'a çevirmek sonraki anahtarları
+// ulaşılmaz yapardı — bkz. başlık.)
+işlev tablo_sil(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
+    değişken k: tam32 = t[0];
+    değişken kova: tam32 = tablo_kova(anahtar, k);
+    değişken adim: tam32 = 0;
+    iken adim < k {
+        değişken yuva: tam32 = (kova + adim) % k;
+        değişken isaret: tam32 = t[1 + 2 * k + yuva];
+        eğer isaret == 0 { ver yanlış; }
+        eğer isaret == 1 {
+            eğer t[1 + yuva] == anahtar {
+                dizi_yaz(t, 1 + 2 * k + yuva, 2);
+                ver doğru;
+            }
+        }
+        adim = adim + 1;
+    }
+    ver yanlış;
+}
+
+// AÇIK SORU: otomatik büyütme (rehash) V2 — doluluk oranı 1/2'yi
+// aşınca 2K kapasiteli yeni tabloya taşıma; metin anahtar karma.kem'e
+// karakter erişimi gelince (karma_kova köprüsüyle) bağlanır.

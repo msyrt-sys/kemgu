@@ -1,0 +1,3 @@
+
+### $ build/kemgu --check --mimari x86_64-none runtime/mimari/x86_64/kem_mmu_hw.kem
+OK: runtime/mimari/x86_64/kem_mmu_hw.kem — tip kontrolu basarili.
