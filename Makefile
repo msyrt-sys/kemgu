@@ -2107,6 +2107,8 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@v=`grep -A1 -xF "X86 WX OK hata=" $(BUILD)/kem_os_x86.out | tail -1`; \
 	if [ "$$v" = "17" ]; then echo "    #PF hata kodu = $$v (P|I/D)"; \
 	else echo "FAIL: 'X86 WX OK hata=' + 17 satiri yok ($$v)"; exit 1; fi
+	@echo "  Kanit 22: cekirdek W^X (.text salt-okunur + CR0.WP; kendi koduna yazma #PF hata=3)..."
+	@grep -qxF "X86 KERNEL WX OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 KERNEL WX OK' yok"; exit 1; }
 	@echo "  Kanit 21: kurtarilamaz istisna (.kem kdl_istisna_isle; ikinci kosum -append kem_istisna)..."
 	@rm -f $(BUILD)/kem_os_x86_ist.out; \
 	timeout 8 qemu-system-x86_64 -M microvm -display none \

@@ -382,6 +382,17 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 WX HATA");
     }
+    // İş 21 (D-691): ÇEKİRDEK W^X — 0..2 MB 4KB sayfalara bölünür: .text+.rodata salt-
+    // okunur (çalıştırılabilir), geri kalan RW+NX; CR0.WP açılır. Çekirdek KENDİ
+    // .text'ine yazar → izin #PF (hata 3), kod baytı DEĞİŞMEZ. Bundan sonra çekirdek
+    // W^X altında koşar (sonraki tüm testler bunun üstünde).
+    kmmu_kernel_wx_kur();
+    eğer kmmu_kernel_wx_testi() == 1 {
+        yazdir_metin("X86 KERNEL WX OK");
+    }
+    değilse {
+        yazdir_metin("X86 KERNEL WX HATA");
+    }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),
