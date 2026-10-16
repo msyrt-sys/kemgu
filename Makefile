@@ -1962,7 +1962,7 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 #          kdl_kesme_isle/kdl_tik_al C değil .kem'den (bm_x86_zaman.o bağlanmıyor).
 # Kanıt 16: iki preemptive görevin sayaçları >= 2 (IRQ0 koçanı tam kayıt + SP takası,
 #          .kem kdl_irq_isle → kem_preempt); kdl_irq_isle güçlü tanımı .kem'den.
-# Kanıt 27 (D-700/D-701): kırmızı bölge YOK — derleyici her define'a noredzone yayar
+# Kanıt 27 (D-700/D-704): kırmızı bölge YOK — derleyici her define'a noredzone yayar
 #          (IR'da sayılır) ve imajda RSP altına erişim 0.
 # Kanıt 26 (D-699): "X86 RING3 OK" — ring3 (CPL 3) giriş, ring3 int 0x80 (DPL3 kapı),
 #          #GP/#PF ile çekirdeğe kontrollü dönüş; yapısal: iretq + 0xee kapı baytı.
@@ -2144,7 +2144,7 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kdl_idt_kur $(BUILD)/kem_os_x86.elf | grep -q '0xee' || { echo "FAIL: kdl_idt_kur'da DPL3 kapi (0xee) yok"; exit 1; }
 	@# [D-700] Kanit 27: kirmizi bolge YOK — tum imajda (.kem + C nesneleri) RSP ALTINA
 	@# erisim sifir. Kesme cercevesi RSP altina itildigi icin oradaki yerel sessizce bozulur.
-	@# [D-701] noredzone'u artik DERLEYICI yayar (--mimari x86_64-none); IR'daki HER define
+	@# [D-704] noredzone'u artik DERLEYICI yayar (--mimari x86_64-none); IR'daki HER define
 	@# onu tasimali — imaj bugun kirmizi bolgeyi kullanan kod icermese bile derleyici
 	@# gerilemesi gorunur kalsin.
 	@echo "  Kanit 27: kirmizi bolge yok (derleyici noredzone: her define; RSP-alti erisim = 0)..."

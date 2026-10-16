@@ -2296,3 +2296,24 @@
   calistir_kem_os_x86 3 kez art arda yesil. KALAN (derleyici karari): src/llvm.c
   bare-metal x86 hedefinde noredzone'u kendisi yaymali; o zaman awk adimi silinir,
   Kanit 27 kalir.
+- 2026-10-16 D-704: noredzone artik DERLEYICIDE (D-700'un build adimi kaldirildi).
+  Kullanici onayiyla derleyiciye dokunuldu. src/llvm.c `fn_oznitelik_eki` + self-host
+  selfhost/codegen.kem ayni ad: hedef ucusu `x86_64-unknown-none-elf` ise UC `define`
+  sitesinin (islev_uret + lambda_emit iki dal) / self-host IKI sitesinin (islev_uret,
+  lam_emit) `) {`'u `) noredzone {` olur. Yalniz bare-metal x86: barindirilan x86
+  (Linux kullanici alani, Win64) kirmizi bolgeyi guvenle kullanir, AArch64 SysV'de
+  kirmizi bolge YOK. OLCUM: kem_os_x86 birlesik birimi C ve self-host 264/264;
+  --mimari x86_64 (Win) 0/264 her ikisinde. test/x86_noredzone.awk SILINDI. Ayrica
+  calistir_uart_merhaba_x86_bare_metal ve calistir_kernel_dizi_x86_bare_metal IR'i
+  `--mimari`SIZ uretiyordu → Spark'ta KONAK ucusu (aarch64-unknown-linux-gnu) IR'a
+  yaziliyor, clang -target sessizce eziyordu; ikisine `--mimari x86_64-none` eklendi
+  (dogru uclu + noredzone), ikisi de yesil. KAPILAR: Kanit 27 artik IR'da HER define'in
+  noredzone tasidigini da sayar (imaj kirmizi bolgeyi kullanan kod icermese bile
+  derleyici gerilemesi gorunsun). baremetal_diff: x86 birlesik biriminde noredzone
+  C ve KEMGU define sayisina ESIT olmali (ad kumesi `sed 's/(.*//'` ozniteligi
+  SILIYORDU → self-host gerilemesi gorunmezdi); aarch64 birlesik biriminde iki
+  derleyicide 0 (asiri yayilim). SABOTAJ: S4 C yaymaz → Kanit 27 'noredzone 0/264'
+  rc=2 + baremetal_diff 'C=0/264 KEMGU=264/264' rc=2; S5 self-host yaymaz →
+  baremetal_diff 'C=264/264 KEMGU=0/264' rc=2; ikisi de yedekten geri alindi.
+  NOT: D-numaralari D-699/D-700 (ring3) ve D-704 (bu), main'deki D-695..D-698 ve
+  #129'un D-701..D-703'u ile cakismasin diye (CLAUDE.md: numara merge aninda).

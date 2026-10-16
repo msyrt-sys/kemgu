@@ -7845,7 +7845,7 @@ static void hoist_renumber(FILE *src, FILE *dst) {
     free(map); free(sira); free(suz); free(satir); free(buf);
 }
 
-/* [D-701] Bare-metal x86_64 hedefinde her `define`a `noredzone` işlev özniteliği.
+/* [D-704] Bare-metal x86_64 hedefinde her `define`a `noredzone` işlev özniteliği.
  * SysV x86-64 yaprak işlevlere RSP'nin ALTINDAKİ 128 B'ı ("kırmızı bölge") yerel
  * için kullandırır. Çekirdekte ring0 kesmesi (IRQ0, int 0x80, istisna) çerçevesini
  * AYNI yığına, tam RSP'nin altına iter → oradaki yereller SESSİZCE bozulur (D-700:
@@ -7935,7 +7935,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         yerel_ad_yaz(g->out, p->veri.parametre.ad,
                      p->veri.parametre.ad_uzunluk);
     }
-    fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-701] */
+    fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-704] */
 
     g->reg = 0;
     g->label = 0;
@@ -8206,7 +8206,7 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
             yerel_ad_yaz(g->out, p->veri.parametre.ad,
                          p->veri.parametre.ad_uzunluk);
         }
-        fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-701] */
+        fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-704] */
     }
 
     g->reg = 0; g->label = 0; g->isimler = NULL;
@@ -8305,7 +8305,7 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
             yerel_ad_yaz(g->out, p->veri.parametre.ad,
                          p->veri.parametre.ad_uzunluk);
         }
-        fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-701] */
+        fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-704] */
         dosya_kopyala(ic_tmp, govde_tmp);
         fclose(ic_tmp);
     }
