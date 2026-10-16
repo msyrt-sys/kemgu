@@ -1,0 +1,215 @@
+// KEMGU Stdlib Testi — Eşlem
+// =================================
+//
+// Bu dosya `stdlib/eslem.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+// seçimlik dönüşler eşleş ile skalere ayrıştırılır; fonksiyon-dönüşü
+// diziler eslem_boyut / eslem_var_mi parametresine geçirilir (F4-güvenli).
+
+// --- eslem_indeks / eslem_var_mi ---
+işlev test_indeks_var() -> tam32 {
+    değişken ks: Dizi<tam32> = [10, 20, 30];
+    eşleş eslem_indeks(ks, 30) {
+        değer(i) => { ver i; }                   // 2
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_indeks_yok() -> mantıksal {
+    değişken ks: Dizi<tam32> = [10, 20, 30];
+    eşleş eslem_indeks(ks, 99) {
+        değer(i) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_var_mi_evet() -> mantıksal {
+    değişken ks: Dizi<tam32> = [10, 20];
+    ver eslem_var_mi(ks, 20);
+}
+
+işlev test_var_mi_hayir() -> mantıksal {
+    değişken ks: Dizi<tam32> = [10, 20];
+    ver eslem_var_mi(ks, 99);
+}
+
+// --- eslem_bul / eslem_bul_ya_da ---
+işlev test_bul_var() -> tam32 {
+    değişken ks: Dizi<tam32> = [10, 20, 30];
+    değişken vs: Dizi<tam32> = [100, 200, 300];
+    eşleş eslem_bul(ks, vs, 20) {
+        değer(v) => { ver v; }                   // 200
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_bul_yok() -> mantıksal {
+    değişken ks: Dizi<tam32> = [10, 20];
+    değişken vs: Dizi<tam32> = [100, 200];
+    eşleş eslem_bul(ks, vs, 99) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_bul_bos() -> mantıksal {
+    değişken ks: Dizi<tam32> = [];
+    değişken vs: Dizi<tam32> = [];
+    eşleş eslem_bul(ks, vs, 1) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_bul_ya_da_var() -> tam32 {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10, 20];
+    ver eslem_bul_ya_da(ks, vs, 2, 0 - 1);       // 20
+}
+
+işlev test_bul_ya_da_yok() -> tam32 {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10, 20];
+    ver eslem_bul_ya_da(ks, vs, 9, 77);          // 77 (varsayılan)
+}
+
+// --- metin anahtar (K düz parametreden çıkarsanır — çalışan yol) ---
+işlev test_metin_anahtar() -> tam32 {
+    değişken ks: Dizi<metin> = ["elma", "armut"];
+    değişken vs: Dizi<tam32> = [5, 7];
+    eşleş eslem_bul(ks, vs, "armut") {
+        değer(v) => { ver v; }                   // 7
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- eslem_koy ---
+işlev test_koy_yeni() -> mantıksal {
+    değişken ks: Dizi<tam32> = [];
+    değişken vs: Dizi<tam32> = [];
+    ver eslem_koy(ks, vs, 5, 50);                // doğru (yeni)
+}
+
+işlev test_koy_yeni_bul() -> tam32 {
+    değişken ks: Dizi<tam32> = [];
+    değişken vs: Dizi<tam32> = [];
+    değişken yeni: mantıksal = eslem_koy(ks, vs, 5, 50);
+    ver eslem_bul_ya_da(ks, vs, 5, 0 - 1);       // 50
+}
+
+işlev test_koy_guncelle() -> mantıksal {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10, 20];
+    ver eslem_koy(ks, vs, 2, 99);                // yanlış (mevcut, güncellendi)
+}
+
+işlev test_koy_guncelle_bul() -> tam32 {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10, 20];
+    değişken yeni: mantıksal = eslem_koy(ks, vs, 2, 99);
+    ver eslem_bul_ya_da(ks, vs, 2, 0 - 1);       // 99
+}
+
+işlev test_koy_boyut_korunur() -> tam32 {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10, 20];
+    değişken yeni: mantıksal = eslem_koy(ks, vs, 2, 99);
+    ver eslem_boyut(ks);                         // 2 (güncelleme eklemez)
+}
+
+işlev test_koy_iki_yeni_boyut() -> tam32 {
+    değişken ks: Dizi<tam32> = [];
+    değişken vs: Dizi<tam32> = [];
+    değişken a: mantıksal = eslem_koy(ks, vs, 1, 10);
+    değişken b: mantıksal = eslem_koy(ks, vs, 2, 20);
+    ver eslem_boyut(vs);                         // 2
+}
+
+// --- eslem_gecerli_mi ---
+işlev test_gecerli_evet() -> mantıksal {
+    değişken ks: Dizi<tam32> = [1, 2, 3];
+    değişken vs: Dizi<tam32> = [10, 20, 30];
+    ver eslem_gecerli_mi(ks, vs);
+}
+
+işlev test_gecerli_boyut_farki() -> mantıksal {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10];
+    ver eslem_gecerli_mi(ks, vs);                // yanlış
+}
+
+işlev test_gecerli_tekrarli_anahtar() -> mantıksal {
+    değişken ks: Dizi<tam32> = [1, 2, 1];
+    değişken vs: Dizi<tam32> = [10, 20, 30];
+    ver eslem_gecerli_mi(ks, vs);                // yanlış
+}
+
+işlev test_koy_sonrasi_gecerli() -> mantıksal {
+    değişken ks: Dizi<tam32> = [1, 2];
+    değişken vs: Dizi<tam32> = [10, 20];
+    değişken a: mantıksal = eslem_koy(ks, vs, 3, 30);
+    değişken b: mantıksal = eslem_koy(ks, vs, 2, 99);
+    ver eslem_gecerli_mi(ks, vs);                // benzersizlik korunur
+}
+
+// --- eslem_sil_anahtar / eslem_sil_deger ---
+işlev test_sil_anahtar_boyut() -> tam32 {
+    ver eslem_boyut(eslem_sil_anahtar([1, 2, 3], 2));    // 2
+}
+
+işlev test_sil_anahtar_kalan() -> mantıksal {
+    ver eslem_var_mi(eslem_sil_anahtar([1, 2, 3], 2), 2);   // yanlış
+}
+
+işlev test_sil_deger_boyut() -> tam32 {
+    değişken ks: Dizi<tam32> = [1, 2, 3];
+    değişken vs: Dizi<tam32> = [10, 20, 30];
+    ver eslem_boyut(eslem_sil_deger(ks, vs, 2));         // 2
+}
+
+işlev test_sil_yok_anahtar() -> tam32 {
+    ver eslem_boyut(eslem_sil_anahtar([1, 2, 3], 9));    // 3 (değişmez)
+}
+
+işlev test_sil_girdi_korunur() -> tam32 {
+    değişken ks: Dizi<tam32> = [1, 2, 3];
+    değişken yeni: Dizi<tam32> = eslem_sil_anahtar(ks, 2);
+    ver eslem_boyut(ks);                         // hâlâ 3 (saf)
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer test_indeks_var() != 2 { ver 1; }
+    eğer değil test_indeks_yok() { ver 2; }
+    eğer değil test_var_mi_evet() { ver 3; }
+    eğer test_var_mi_hayir() { ver 4; }
+    eğer test_bul_var() != 200 { ver 5; }
+    eğer değil test_bul_yok() { ver 6; }
+    eğer değil test_bul_bos() { ver 7; }
+    eğer test_bul_ya_da_var() != 20 { ver 8; }
+    eğer test_bul_ya_da_yok() != 77 { ver 9; }
+    eğer test_metin_anahtar() != 7 { ver 10; }
+    eğer değil test_koy_yeni() { ver 11; }
+    eğer test_koy_yeni_bul() != 50 { ver 12; }
+    eğer test_koy_guncelle() { ver 13; }
+    eğer test_koy_guncelle_bul() != 99 { ver 14; }
+    eğer test_koy_boyut_korunur() != 2 { ver 15; }
+    eğer test_koy_iki_yeni_boyut() != 2 { ver 16; }
+    eğer değil test_gecerli_evet() { ver 17; }
+    eğer test_gecerli_boyut_farki() { ver 18; }
+    eğer test_gecerli_tekrarli_anahtar() { ver 19; }
+    eğer değil test_koy_sonrasi_gecerli() { ver 20; }
+    eğer test_sil_anahtar_boyut() != 2 { ver 21; }
+    eğer test_sil_anahtar_kalan() { ver 22; }
+    eğer test_sil_deger_boyut() != 2 { ver 23; }
+    eğer test_sil_yok_anahtar() != 3 { ver 24; }
+    eğer test_sil_girdi_korunur() != 3 { ver 25; }
+    ver 42;
+}

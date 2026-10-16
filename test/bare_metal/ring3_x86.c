@@ -38,8 +38,8 @@
  *   7. Kanıtlar toplandıysa "RING3 X86 OK".
  *
  * -----------------------------------------------------------------------------
- * FALLBACK YOK (D-696): eskiden ring3-exec kurulamazsa "RING3 SETUP OK" basılır
- * ve Makefile bunu kabul ederdi. O fallback, D-695'teki IF=1 yarışının (IRQ0 →
+ * FALLBACK YOK (D-700): eskiden ring3-exec kurulamazsa "RING3 SETUP OK" basılır
+ * ve Makefile bunu kabul ederdi. O fallback, D-699'teki IF=1 yarışının (IRQ0 →
  * boş IDT girişi → #GP → ring3 hiç koşmadan rapor) TAM görüntüsüydü — kusur
  * olsa test sessizce yeşil kalırdı. Ayrıca #GP kanıtı yalnız hata kodu 0 iken
  * sayılır: ring3 `cli` #GP'sinin hata kodu 0'dır; IDT kaynaklı #GP vektör*8+2.

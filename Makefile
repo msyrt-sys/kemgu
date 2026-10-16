@@ -2460,7 +2460,7 @@ calistir_smp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		if grep -q "SMP OK" $(BUILD)/smp_arm.out; then \
 			echo "SMP testi gecti: 2. çekirdek PSCI CPU_ON ile koştu (çok-çekirdek)."; \
 		else \
-			echo "FAIL: 'SMP OK' bekleniyor (2. cekirdek kosmadi; 'PSCI OK' [D-697] artik GECIS DEGIL)"; \
+			echo "FAIL: 'SMP OK' bekleniyor (2. cekirdek kosmadi; 'PSCI OK' [D-701] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3686,7 +3686,7 @@ calistir_smp_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		if grep -q "SMP X86 OK" $(BUILD)/smp_x86.out; then \
 			echo "x86_64 SMP testi gecti: 2. çekirdek (AP) INIT-SIPI ile long-mode'da koştu (çok-çekirdek)."; \
 		else \
-			echo "FAIL: 'SMP X86 OK' bekleniyor (AP long-mode'da kosmadi; 'APIC OK' [D-697] artik GECIS DEGIL)"; \
+			echo "FAIL: 'SMP X86 OK' bekleniyor (AP long-mode'da kosmadi; 'APIC OK' [D-701] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3716,7 +3716,7 @@ calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		if grep -q "SMP4 X86 OK" $(BUILD)/smp4_x86.out; then \
 			echo "x86_64 SMP4 testi gecti: 4 cekirdek (BSP + 3 AP) INIT-SIPI ile long-mode'da kostu (coklu-AP)."; \
 		else \
-			echo "FAIL: 'SMP4 X86 OK' bekleniyor (3 AP'nin hepsi kosmali; 'KISMI'/'APIC OK' [D-697] artik GECIS DEGIL)"; \
+			echo "FAIL: 'SMP4 X86 OK' bekleniyor (3 AP'nin hepsi kosmali; 'KISMI'/'APIC OK' [D-701] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3728,8 +3728,8 @@ calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # ring0 kernel, ring3 kod çalıştırır: GDT DPL=3 user seg + TSS (RSP0) + IDT
 # int 0x80 gate (DPL=3). iretq ile ring3'e geç → ring3 `int 0x80` (syscall,
 # ring0'da işlenir) + `cli` (ayrıcalıklı → #GP yakalanır). Marker "RING3 X86 OK"
-# (tam ring3-exec). [D-696] "RING3 SETUP OK" fallback'i KALDIRILDI: ring3 hic
-# kosmadan da basilabiliyordu (D-695 IF=1 yarisinin tam goruntusu).
+# (tam ring3-exec). [D-700] "RING3 SETUP OK" fallback'i KALDIRILDI: ring3 hic
+# kosmadan da basilabiliyordu (D-699 IF=1 yarisinin tam goruntusu).
 calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 	@echo "x86_64 ring3 testi: ring3_x86.c -> ELF (GDT DPL=3 + TSS + IDT int 0x80, iretq ring3)..."
 	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/ring3_x86.c -o $(BUILD)/ring3_x86.o

@@ -1,0 +1,8 @@
+işlev f(y: tekkez<metin>) -> tam32 { imha(y); ver 2; }
+işlev test() -> tam32 {
+    değişken m: tekkez<metin> = tekkez_olustur("x");
+    değişken g: işlev(tekkez<metin>) -> tam32 = f;
+    değişken r: tam32 = g(m);
+    imha(m);
+    ver r;
+}

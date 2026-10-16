@@ -1,0 +1,14 @@
+// D-698 (eski PR #106 / D-331 yeniden portu): işlev-tipli değişken annotasyonu ile
+// lambda UYUŞMAZLIĞI → T001 (DEGISKEN konumu). Biçimler bugünkü C'ye karşı ÖLÇÜLDÜ:
+// dar dönüş, blok-form dar dönüş, arite farkı (iki yön), parametre tipi, tip ailesi.
+// Port öncesi self-host bunların HİÇBİRİNİ reddetmiyordu (C reddederken).
+işlev m() -> tam32 {
+    değişken a: işlev() -> tam8 = || 42;
+    değişken b: işlev() -> tam64 = || { ver 5; };
+    değişken c: işlev(tam32) -> tam32 = || 42;
+    değişken d: işlev() -> tam32 = |x: tam32| x;
+    değişken e: işlev(tam64) -> tam32 = |x: tam32| x;
+    değişken f: işlev() -> metin = || 42;
+    değişken g: işlev() -> mantıksal = || { ver 5; };
+    ver 0;
+}

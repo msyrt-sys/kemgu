@@ -2220,7 +2220,37 @@
   → trampoline cop kayit → #GP, D-690 .kem raporlayicisi 'ISTISNA tip=0xd' basti,
   cekirdek durdu, rc=2. kem_gorev.kem asm 25 → 21. x86 birlesik 256 islev, 31 asm,
   C ↔ self BIREBIR. baremetal_diff 22/22.
-- 2026-10-16 D-695: x86 ring3 IF=1 YARISI — calistir_ring3_page_test_x86 KIRMIZIYDI.
+- 2026-10-16 D-695: PR #109 (15 saf-KEMGU stdlib modulu, 2026-08-07) main'e hazirlandi.
+  Eski PR'lar olculdu: #109 main ile CAKISMASIZ; 15 modul + 15 birlesik test bugunku
+  derleyicide temiz, stdlib_check yesil. check_genis 7 testte C ≠ self verdi → SATIR
+  SATIR olculdu: farklarin TAMAMI C'nin fazla tanisi ve her biri bir eşleş kolundaki
+  baglamaya duser (E3), self-host'un fazla tanisi 0 → MUAF'a gerekcesiyle eklendi
+  (158/158, 19 muaf). Ayni turda #95/#102/#104/#105 karsiliklari main'de oldugu
+  olculerek kapatildi; #101/#103/#106'nin duzeltmeleri main'de YOK (C ≠ self
+  fiksturlerle olculdu) → yeniden portlanacak.
+- 2026-10-16 D-696: eski PR #101 (D-323, 2026-07-26) yeniden portu — DOLAYLI cagrida
+  lineer arguman self-host'ta TASINIR. Olcum (main, port ONCESI): tc5e_01 C=OK /
+  self=L001 (sahte), tc5e_02 C=L002 / self=OK (kacirma), tc5e_03 C=L002 / self=L001.
+  Yama 3-yollu uygulanamadi (dosyalar cok degismis) → iki capa ile elle; capa ile
+  `degisken k` arasinda yalniz D-371 yorumu oldugu dogrulandi. checker.kem +
+  codegen.kem (D-517 dersi: uc uygulama). checker_diff 219/219 (0 muaf, 4 yeni
+  fikstur). SABOTAJ: dolayli hep yanlis → tc5e_01/02/03 KIRMIZI, rc=2.
+- 2026-10-16 D-697: eski PR #103 (D-325) yeniden portu — `tekkez_olustur(ic)` self-host'ta
+  tekkez baglamasini TUKETIR (lineer yapi haric, C ile ayni ayrim). Olcum (port ONCESI):
+  tc5f_01 C=OK / self=L001 (sahte), tc5f_02 C=L002 / self=L001; cg_lineer_ic_ice self'te
+  sahte L001 yuzunden HIC derlenmiyordu (C=42). Sonra: checker_diff 222/222 (0 muaf),
+  cg_lineer_ic_ice self=42. SABOTAJ: tuketim kapali → tc5f_01/02 KIRMIZI, rc=2.
+- 2026-10-16 D-698: eski PR #106'nin D-331 parcasi yeniden portu — self-host, islev-tipli
+  degisken annotasyonu ile lambda uyusmazligini T001 ile reddeder (C ile ayni). Port oncesi
+  self 7 bicimin HICBIRINI reddetmiyordu (loud→silent). Kod DEEPSEEK yazdi (tur 21,
+  deepseek-v4.1-flash, 4 blok, mudahale YOK): ozgun D-331 kodu + bugunku C'nin OLCULEN
+  davranisi verildi; cikti ozgunle birebir (yalniz etiket), iki dosyada ozdes. Fikstur
+  ONCE C'ye karsi olculdu: dar donus, blok dar, arite (iki yon), param tipi, tip ailesi
+  → T001; uyumlu + `|| 8589934592` (dogal tam64) → OK. tc55_01/02 (tc53 numarasi doluydu).
+  checker_diff 224/224 (0 muaf). SABOTAJ: kanca kapali → tc55_01 KIRMIZI, rc=2.
+  #106'nin D-332…D-335 kismi (kapanis donus tipinin govdeye YAYILMASI, C oracle'i da
+  degistirir) PORTLANMADI — dil davranisi degisikligi, ayri karar.
+- 2026-10-16 D-699: x86 ring3 IF=1 YARISI — calistir_ring3_page_test_x86 KIRMIZIYDI.
   Belirti CS_RPL=0xffffffff (ring3 hic kosmamis gibi) ama -d int izi ring3'e
   GIRILDIGINI gosterdi. OLCUM: gp_stub'a kayit → #GP ERR=0x42 (=8*8+IDT), CS=0x1b,
   RIP=ring3_kod'un ILK komutu; iretq oncesi PIC IRR=0x11 IMR=0xb8 → IRQ0 (PIT)
@@ -2236,15 +2266,15 @@
   'beklenmeyen #GP GP_ERR=0x42 GP_CS=0x1b'. 18/18 x86 hedefi rc=0, fallback/atlama
   izi yok. KORELASYON (kanitlanmadi): BSS ring3_x86 ~62KB / page ~2MB / proc ~4MB;
   boot BSS'i sifirliyor, emule x86'da (aarch64 konak) PIT periyodu asiliyor olabilir.
-- 2026-10-16 D-696: ring3_x86 "RING3 SETUP OK" FALLBACK'I KALDIRILDI + cli #GP err=0 sarti.
-  Fallback ring3 hic kosmadan basilabiliyordu ve Makefile kabul ediyordu → D-695
+- 2026-10-16 D-700: ring3_x86 "RING3 SETUP OK" FALLBACK'I KALDIRILDI + cli #GP err=0 sarti.
+  Fallback ring3 hic kosmadan basilabiliyordu ve Makefile kabul ediyordu → D-699
   yarisinin tam goruntusu sessizce yesil kalirdi. OLCUM (sabotaj = IF=1 + 4MB BSS):
   ESKI kod CS_RPL=0xffffffff GP_ERR=0x42 → 'RING3 SETUP OK' rc=0 (DELIK GERCEK);
   YENI kod ayni durumda 'RING3 X86 BASARISIZ' rc=2. #GP kaniti artik yalniz
   GP_ERR==0 (ring3 cli) iken sayilir; IDT kaynakli #GP (vektor*8+2) sayilmaz.
-  D-695 KORELASYONU SINANDI: ayni IF=1, kucuk BSS → OK; +4MB BSS → yaris → BSS
+  D-699 KORELASYONU SINANDI: ayni IF=1, kucuk BSS → OK; +4MB BSS → yaris → BSS
   boyutu bu konakta BELIRLEYICI (hizli x86 konak hala olculmedi).
-- 2026-10-16 D-697: SMP FALLBACK KABULLERI KALDIRILDI (smp_arm 'PSCI OK', smp_x86
+- 2026-10-16 D-701: SMP FALLBACK KABULLERI KALDIRILDI (smp_arm 'PSCI OK', smp_x86
   'APIC OK', smp4_x86 'KISMI'/'APIC OK'). OLCUM: 4 tur x 3 hedef = 12/12 GERCEK OK
   (-smp QEMU'da sabit → belirlenimci; fallback'e hic dusulmuyordu). SABOTAJ MATRISI
   (her biri eski + yeni Makefile): CPU_ON hedef 0x7 → 'PSCI OK'; SIPI vektor 0x09

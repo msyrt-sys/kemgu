@@ -1,0 +1,120 @@
+// KEMGU Stdlib Testi — Yığın
+// =================================
+//
+// Bu dosya `stdlib/yigin.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+//
+// Fonksiyon-dönüşü diziler çağıran scope'ta indekslenmez; sonuçlar
+// yigin_boyut / yigin_tepe parametresine geçirilerek skalere indirgenir
+// (test_dizi.kem'deki F4-güvenli desen).
+
+// --- kurucular ---
+işlev test_olustur_tam_bos() -> mantıksal {
+    ver yigin_bos_mu(yigin_olustur_tam());
+}
+
+işlev test_olustur_metin_boyut() -> tam32 {
+    ver yigin_boyut(yigin_olustur_metin());
+}
+
+// --- it / boyut ---
+işlev test_it_boyut() -> tam32 {
+    değişken y: Dizi<tam32> = [];
+    ver yigin_boyut(yigin_it(yigin_it(y, 10), 20));   // 2
+}
+
+işlev test_it_tepe() -> tam32 {
+    değişken y: Dizi<tam32> = [];
+    eşleş yigin_tepe(yigin_it(yigin_it(yigin_it(y, 10), 20), 30)) {
+        değer(v) => { ver v; }                        // 30 (son itilen)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// --- tepe ---
+işlev test_tepe_dolu() -> tam32 {
+    değişken y: Dizi<tam32> = [10, 20, 30];
+    eşleş yigin_tepe(y) {
+        değer(v) => { ver v; }                        // 30
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_tepe_bos() -> mantıksal {
+    değişken y: Dizi<tam32> = [];
+    eşleş yigin_tepe(y) {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }                         // boş -> hiç
+    }
+    ver yanlış;
+}
+
+// --- cek ---
+işlev test_cek_boyut() -> tam32 {
+    ver yigin_boyut(yigin_cek([10, 20, 30]));         // 2
+}
+
+işlev test_cek_tepe() -> tam32 {
+    eşleş yigin_tepe(yigin_cek([10, 20, 30])) {
+        değer(v) => { ver v; }                        // 20 (30 atıldı)
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+işlev test_cek_bos() -> tam32 {
+    değişken y: Dizi<tam32> = [];
+    ver yigin_boyut(yigin_cek(y));                    // 0 (boşu çekmek boş)
+}
+
+// --- temizle ---
+işlev test_temizle() -> tam32 {
+    ver yigin_boyut(yigin_temizle([1, 2, 3]));        // 0
+}
+
+// --- metin elemanlar ---
+// (metin eşitliği `metin_esit` builtin'i ile — metin için `==` --check'ten
+// geçiyor ama codegen'de henüz desteklenmiyor.)
+// NOT: Bu test yalnız --check kapsamında; main sürücüsünde ÇAĞRILMAZ.
+// Codegen sınırı: yalnız Dizi<T> parametresi olan generic işlevde T=metin
+// çıkarsanamayıp i32 varsayılıyor (yigin_tepe$i32) → seçimlik yükünde
+// pointer kırpılması → segfault. test_dizi.kem'in test_dizi_metin'i ile
+// aynı emsal (o da main'de çağrılmıyor).
+işlev test_metin_tepe() -> mantıksal {
+    değişken y: Dizi<metin> = ["alma", "asma"];
+    eşleş yigin_tepe(y) {
+        değer(v) => { ver metin_esit(v, "asma"); }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+// --- LIFO senaryosu: it 1, it 2, çek -> tepe 1 ---
+işlev test_lifo_sirasi() -> tam32 {
+    değişken y: Dizi<tam32> = [];
+    eşleş yigin_tepe(yigin_cek(yigin_it(yigin_it(y, 1), 2))) {
+        değer(v) => { ver v; }                        // 1
+        hiç => { ver 0 - 1; }
+    }
+    ver 0;
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer değil test_olustur_tam_bos() { ver 1; }
+    eğer test_olustur_metin_boyut() != 0 { ver 2; }
+    eğer test_it_boyut() != 2 { ver 3; }
+    eğer test_it_tepe() != 30 { ver 4; }
+    eğer test_tepe_dolu() != 30 { ver 5; }
+    eğer değil test_tepe_bos() { ver 6; }
+    eğer test_cek_boyut() != 2 { ver 7; }
+    eğer test_cek_tepe() != 20 { ver 8; }
+    eğer test_cek_bos() != 0 { ver 9; }
+    eğer test_temizle() != 0 { ver 10; }
+    // test_metin_tepe main'de çağrılmıyor — yukarıdaki codegen sınırı notuna bak.
+    eğer test_lifo_sirasi() != 1 { ver 12; }
+    ver 42;
+}

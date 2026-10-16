@@ -1,0 +1,33 @@
+
+### $ build/kemgu --check --mimari x86_64-none runtime/mimari/x86_64/kem_mmu_hw.kem
+HATA: runtime/mimari/x86_64/kem_mmu_hw.kem — parser 0, yukleme 0, tip kontrol 5, realtime 0 (toplam 5 hata).
+hata[T002]: tanimsiz sembol
+    --> runtime/mimari/x86_64/kem_mmu_hw.kem:358:38
+    |
+358 | çıplak işlev kis_bayt(b: tam32) { kem_uart_bayt(b); }
+    |                                      ^
+
+hata[T002]: tanimsiz sembol
+    --> runtime/mimari/x86_64/kem_mmu_hw.kem:410:28
+    |
+410 |     değişken bi: tam64 = kem_pvh_bilgi();
+    |                            ^
+
+hata[T002]: tanimsiz sembol
+    --> runtime/mimari/x86_64/kem_mmu_hw.kem:412:27
+    |
+412 |     değişken c: tam64 = kem_pvh_oku64(bi + 24);      // cmdline_paddr
+    |                           ^
+
+hata[T002]: tanimsiz sembol
+    --> runtime/mimari/x86_64/kem_mmu_hw.kem:417:34
+    |
+417 |         değişken ham: dtam64 = kem_pvh_oku64(c + (i olarak tam64)) olarak dtam64;
+    |                                  ^
+
+hata[T002]: tanimsiz sembol
+    --> runtime/mimari/x86_64/kem_mmu_hw.kem:421:30
+    |
+421 |     değişken son: dtam64 = kem_pvh_oku64(c + (n olarak tam64)) olarak dtam64;
+    |                              ^
+
