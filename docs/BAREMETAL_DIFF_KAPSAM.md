@@ -96,3 +96,5 @@ parça (platform) tek başına derlense bile "birim" sayılmaz — bilinçli.
   **BIRIMLER**'e eklendi (C ↔ self ayrı birim: 21/21). `kem_os.kem` parça kapsamı 93 → 32
   işlev; aradaki fark yeni birimde ölçülür (kayıp yok). Dosya arm64 ve x86 birleşik
   birimlerinin İKİSİNE de CAT ile girer.
+- **D-693:** `test/ornekler/kem_os_cekirdek_ortak.kem` ([27] + [41], 2 işlev) tek başına
+  derlenmez (zamanlayıcı + kem_heap kanal uygulaması) → **PARCALAR**'a eklendi (22/22).

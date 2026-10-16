@@ -423,6 +423,13 @@ işlev main() -> tam32 {
     değilse { yazdir_metin("X86 [39] JSON HATA"); }
     eğer kasm_testi() == 1 { yazdir_metin("X86 [40] ASM OK"); }
     değilse { yazdir_metin("X86 [40] ASM HATA"); }
+    // İş 23 (D-693): ortak çekirdek fazları — arm64 ile AYNI kod
+    // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor
+    // mu (ortak zamanlayıcı + x86 kancaları), [41] dilin kanal ilkelleri çekirdekte.
+    eğer kgk_testi() == 1 { yazdir_metin("X86 [27] GOREV KAPASITE OK"); }
+    değilse { yazdir_metin("X86 [27] GOREV KAPASITE HATA"); }
+    eğer kkanal_testi() == 1 { yazdir_metin("X86 [41] KANAL OK"); }
+    değilse { yazdir_metin("X86 [41] KANAL HATA"); }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),

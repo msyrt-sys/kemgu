@@ -497,29 +497,7 @@ işlev net_icmp_testi() -> tam32 {
 
 // [D-692] [25] BIGNUM, [26] SHA256 → test/ornekler/kem_os_algoritma.kem (ortak, arm64 + x86).
 
-// [D-606] [27] GOREV KAPASITE — kem_gorev_olustur tablo tasmasini REDDEDIYOR mu?
-// Zamanlayici ETKINLESTIRILMEDEN 20 olusturma denenir (yalniz trap-frame yazilir,
-// gorev kosmaz). main dahil 16 slot: 15 basari + 5 kez -1 beklenir; KG_AKTIF 0
-// kalmali (olu[] tasmasi ilk once KG_G1/KG_AKTIF'i ezerdi). Sonda tablo sifirlanir.
-çıplak işlev kgk_testi() -> tam32 {
-    kem_preempt_baslat();
-    değişken basari: tam32 = 0;
-    değişken ret: tam32 = 0;
-    değişken i: tam32 = 0;
-    iken i < 20 {
-        değişken t: tam64 = kem_gorev_olustur(kg_gorev1_adr(), KG_STK1);
-        eğer t < 0 { ret = ret + 1; } değilse { basari = basari + 1; }
-        i = i + 1;
-    }
-    değişken aktif: tam64 = kg_oku64(KG_AKTIF);
-    değişken sayi: tam64 = kem_psayi;
-    kem_preempt_baslat();
-    eğer basari != 15 { ver 0; }
-    eğer ret != 5 { ver 0; }
-    eğer sayi != KG_GOREV_AZAMI { ver 0; }
-    eğer aktif != 0 { ver 0; }
-    ver 1;
-}
+// [D-693] [27] GOREV KAPASITE → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
 
 // [D-610] [28] SYSCALL PTR DOGRULAMA — EL0-pointer aralık denetimi çalışıyor mu?
 // Tehdit: kötü bir EL0 süreç sys(5)'e KERNEL adresi geçirir → kernel o belleği UART'a
@@ -541,54 +519,7 @@ sabit KG_LEAK: tam64 = 1157644288;    // 0x45004000: kernel-only sır (user penc
 
 // [D-692] [29] BASE64 … [40] ASM → test/ornekler/kem_os_algoritma.kem (ortak, arm64 + x86).
 
-// [D-623] [41] KANAL — dilin `kanal_oluştur/gönder/al` ilkelleri CEKIRDEKTE, SAF-.kem
-// (kem_heap.kem SUBSYSTEM/kanal). Tek gorevli olcum: hicbir cagri bloklamaz (gonderim
-// sayisi hep kapasite icinde). Olculen: FIFO sirasi, i64 genisligi (2^33+12 — i32
-// tasiyicida KIRPILIRDI), halka sarmasi, varsayilan kapasite, BUYUK kapasite (C
-// surumu >3'u REDDEDIYORDU), iki kanalin birbirinden bagimsizligi.
-işlev kkanal_testi() -> tam32 {
-    değişken k: kanal<tam64> = kanal_oluştur(3);
-    // NOT (olculdu): halka sarmasi bozuk olsa bile FIFO sirasi tutarli kalir ve yalniz
-    // k'ye bakan olcum bunu GOREMEZ; bitisik "nobetci kanal" da ISE YARAMAZ — malloc
-    // serbest listede ilk-uyum + bolmesiz calisir, her kanal ayri bir 64 KB blok alir.
-    // Sarma bu yuzden GERCEKLEMEDE sinir kontrolüyle korunur (kem_heap.kem
-    // kem_kanal_hucre): bozulursa cekirdek panikler, bu faz OK basamaz.
-    kanal_gönder(k, 10);
-    kanal_gönder(k, 20);
-    kanal_gönder(k, 8589934604);                       // 2^33 + 12
-    eğer kanal_al(k) != 10 { ver 0; }
-    eğer kanal_al(k) != 20 { ver 0; }
-    eğer kanal_al(k) != 8589934604 { ver 0; }
-    // Halka sarmasi: N=4 halkada 10 tur -> indeksler defalarca basa doner.
-    değişken i: tam64 = 0;
-    iken i < 10 {
-        kanal_gönder(k, i * 7);
-        kanal_gönder(k, i * 7 + 1);
-        eğer kanal_al(k) != i * 7 { ver 0; }
-        eğer kanal_al(k) != i * 7 + 1 { ver 0; }
-        i = i + 1;
-    }
-    // Varsayilan kapasite (0 -> 3 oge) + buyuk kapasite (16) ayni anda, ic ice.
-    değişken v: kanal<tam64> = kanal_oluştur(0);
-    değişken b: kanal<tam64> = kanal_oluştur(16);
-    değişken j: tam64 = 0;
-    iken j < 16 {
-        kanal_gönder(b, 100 + j);
-        j = j + 1;
-    }
-    kanal_gönder(v, 1);
-    kanal_gönder(v, 2);
-    kanal_gönder(v, 3);
-    j = 0;
-    iken j < 16 {
-        eğer kanal_al(b) != 100 + j { ver 0; }
-        j = j + 1;
-    }
-    eğer kanal_al(v) != 1 { ver 0; }
-    eğer kanal_al(v) != 2 { ver 0; }
-    eğer kanal_al(v) != 3 { ver 0; }
-    ver 1;
-}
+// [D-693] [41] KANAL → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
 
 // [D-624] [42] GOREV — dilin `görev_başlat/birleştir` ilkelleri CEKIRDEKTE (SAF-.kem,
 // kem_gorev.kem DIL GOREVI). Tek gorevli [41]'in ACIK BIRAKTIGI sey burada olculur:
