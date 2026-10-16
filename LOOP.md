@@ -2197,3 +2197,12 @@
   baremetal_diff 21/21 (yeni birim kem_os_algoritma 61 islev), arm birlesik 331 islev
   degismedi, x86 birlesik 242 islev. REGRESYON: kem_os_arm, check_kapisi,
   syscall/ring3_test_x86 yesil.
+- 2026-10-16 D-693: [27] GOREV KAPASITE + [41] KANAL ortak parcaya, x86'da da.
+  kem_os.kem → test/ornekler/kem_os_cekirdek_ortak.kem BIREBIR (fark yalniz 2
+  yonlendirme yorumu). Tek basina derlenmez (6 T002: zamanlayici + kanal) →
+  check_kapisi muafiyeti (parca) + baremetal_diff PARCALAR. arm faz cikisi [25..42]
+  degismedi; x86 Kanit 24: 'X86 [27] GOREV KAPASITE OK' + 'X86 [41] KANAL OK'
+  (ortak zamanlayici + x86 kancalari, kem_heap kanal halkasi). SABOTAJ: beklenen
+  basari 15 → 14 → GOREV KAPASITE HATA rc=2. baremetal_diff 22/22, x86 birlesik 244
+  islev. KALAN: [42] dil gorevi (kdl_gorev_basla_kapanis arm trampolinine bagli —
+  x86 trampolini + cerceve arg yazmaci gerekir).

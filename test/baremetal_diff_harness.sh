@@ -71,7 +71,7 @@ pass=0; fail=0
 OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem \
 runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
 runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem \
-test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os.kem"
+test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem"
 os_ok=0
 os_eksik=""
 for parca in $OS_PARCA; do [ -f "$parca" ] || os_eksik="$os_eksik $parca"; done
@@ -185,7 +185,7 @@ runtime/kem_mmu.kem runtime/kem_virtio_net.kem runtime/kem_zaman.kem
 runtime/mimari/arm64/kem_uart.kem runtime/mimari/arm64/kem_platform.kem
 runtime/mimari/arm64/kem_zaman_hw.kem
 runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
-test/ornekler/kem_os.kem"
+test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem"
 kapsam_islev=0; kapsam_kuresel=0
 for f in $PARCALAR; do
     b=$(basename "$f" .kem)

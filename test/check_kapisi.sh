@@ -33,6 +33,8 @@ muaf() {
     *test/ornekler/kem_os.kem)          echo "parça dosya — gerçek yapı birleştirilmiş kaynak" ;;
     # [D-671] x86 kanıt çekirdeği de parça: kem_dma_bariyeri runtime/mimari/x86_64'ten
     # gelir. Gerçek denetim AŞAĞIDA birleşik x86 biriminde (--mimari x86_64).
+    # [D-693] ortak çekirdek fazları parçası (zamanlayıcı + kanal çekirdek uygulamasına bağlı).
+    *test/ornekler/kem_os_cekirdek_ortak.kem) echo "parça dosya — arm64 ve x86 birleşik birimlerinde denetlenir" ;;
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_asm_kernel.kem)  echo "parça dosya + arch-etiketli asm (AS001 hedefe bağlı)" ;;
     # MODEL B kullanıcı programı: arch-etiketli asm → bayraksız --check AS001 verir.
@@ -108,7 +110,7 @@ done
 KEMOS_PARCALAR="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
                 runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
-                runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os.kem"
+                runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem"
 kemos_eksik=0
 for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
 if [ "$kemos_eksik" -eq 0 ]; then
@@ -135,7 +137,7 @@ fi
 KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
                     runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem
                     runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem
-                    runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_x86.kem"
+                    runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem"
 kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
 if [ "$kemos_x86_eksik" -eq 0 ]; then
