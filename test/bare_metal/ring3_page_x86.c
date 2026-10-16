@@ -93,6 +93,14 @@ static volatile uint32_t r3_syscall_num   = 0;            /* syscall numarası (
 static volatile uint32_t r3_pf_yakalandi  = 0;            /* #PF (kernel-sır okuma) yakalandı */
 static volatile uint64_t r3_pf_err        = 0;            /* #PF hata kodu (P|W|U bitleri) */
 static volatile uint64_t r3_pf_cr2        = 0;            /* #PF fault adresi (CR2) */
+/* #GP teşhisi: bu testte #GP BEKLENMEZ. Olursa sessizce yutmak yerine hata kodunu
+ * ve kesilen CS'i kaydederiz. Ayırt edici: IDT kaynaklı #GP'de hata kodu
+ * vektör*8+2 (ör. boş IDT girişine düşen IRQ0 → 0x42); CS=0x1b ise kesilen
+ * bağlam ring3'tür. Bu kayıt olmadan rapor "ring3-exec kanıtı yok" der ve
+ * ring3'e GİRİLDİĞİNİ gizler (IF=1 yarışı tam böyle görünmüştü). */
+static volatile uint32_t r3_gp_yakalandi  = 0;
+static volatile uint64_t r3_gp_err        = 0;            /* #GP hata kodu */
+static volatile uint64_t r3_gp_cs         = 0;            /* kesilen bağlamın CS'i */
 
 /* === Kernel ring0 stack (ring3→ring0 trap'te TSS.RSP0 buraya işaret eder) === */
 static uint8_t kernel_ring0_yigin[16384] __attribute__((aligned(16)));
@@ -242,7 +250,13 @@ __asm__(
     "\n"
     ".global gp_stub_r3\n"
     "gp_stub_r3:\n"
-    /* #GP: beklenmedik. Yine de err kodunu at + kernel_devam (güvenli). */
+    /* #GP: beklenmedik. Teşhis için hata kodu + kesilen CS kaydet, sonra
+       err kodunu at + kernel_devam (güvenli). Yığın: err(0) RIP(8) CS(16). */
+    "    movq (%rsp), %rax\n"
+    "    movq %rax, r3_gp_err(%rip)\n"
+    "    movq 16(%rsp), %rax\n"
+    "    movq %rax, r3_gp_cs(%rip)\n"
+    "    movl $1, r3_gp_yakalandi(%rip)\n"
     "    addq $48, %rsp\n"
     "    jmp kernel_devam\n"
 );
@@ -392,7 +406,15 @@ static _Noreturn void ring3e_gec(void) {
     uint64_t user_rip = (uint64_t)(uintptr_t)&ring3_kod;
     uint64_t user_ss  = SEL_USER_VERI;   /* 0x20 | 3 */
     uint64_t user_cs  = SEL_USER_KOD;    /* 0x18 | 3 */
-    uint64_t rflags   = 0x202ULL;        /* IF=1 (bit9) + rezerve bit1 */
+    /* RFLAGS: rezerve bit1=1, IF=0 (KRİTİK — ring3_proc_x86.c ile aynı).
+     * ÖLÇÜLDÜ: IF=1 (0x202) iken boot sırasında (IF=0) bekleyen PIT IRQ0,
+     * iretq IF'i açtığı anda ring3'ün İLK komutundan önce teslim ediliyordu.
+     * PIC yeniden eşlenmediği için IRQ0 → vektör 8; bu IDT'de o giriş boş →
+     * #GP(err=0x42 = 8*8+IDT) → gp_stub_r3 → erken kernel_devam → ring3 hiç
+     * koşmadan rapor (CS_RPL=0xffffffff). Yavaş konakta (aarch64 üstünde TCG)
+     * her koşumda tetikleniyordu. Ring3 kodu yalnız senkron int 0x80 + kasıtlı
+     * #PF yapar; kesmeye ihtiyacı yok → IF=0 yarışı tümden eler. */
+    uint64_t rflags   = 0x002ULL;        /* IF=0 (kesme kapalı) + rezerve bit1 */
 
     __asm__ volatile(
         "pushq %0\n"     /* SS */
@@ -422,6 +444,12 @@ static _Noreturn void rapor_ve_dur(void) {
     kdl_yaz_onaltilik(r3_pf_err);
     kdl_yaz_metin(" PF_CR2=");
     kdl_yazdir_onaltilik(r3_pf_cr2);
+    kdl_yaz_metin("GP=");
+    kdl_yaz_onaltilik((uint64_t)r3_gp_yakalandi);
+    kdl_yaz_metin(" GP_ERR=");
+    kdl_yaz_onaltilik(r3_gp_err);
+    kdl_yaz_metin(" GP_CS=");
+    kdl_yazdir_onaltilik(r3_gp_cs);
 
     /* Kernel-sır sayfasının HÂLÂ supervisor-only olduğunu ve ring3 kod
      * sayfasının user-erişilebilir olduğunu teyit (izolasyon sınıflandırması). */
@@ -460,6 +488,8 @@ static _Noreturn void rapor_ve_dur(void) {
         }
     } else if (ring3_kostu && pf_oldu) {
         kdl_yazdir_metin("PAGE ISO KISMI (#PF yakalandi ama err/user/syscall kanitlarindan biri eksik)");
+    } else if (r3_gp_yakalandi) {
+        kdl_yazdir_metin("PAGE ISO BASARISIZ (beklenmeyen #GP — GP_ERR/GP_CS'e bak; err=vektor*8+2 ise bos IDT girisine kesme)");
     } else {
         kdl_yazdir_metin("PAGE ISO BASARISIZ (ring3-exec veya #PF kaniti yok)");
     }

@@ -76,6 +76,7 @@ static volatile uint32_t r3_cs_rpl   = 0xFFFFFFFFu;  /* ring3'te okunan CS & 3 *
 static volatile uint32_t r3_syscall_geldi = 0;       /* int 0x80 handler tetiklendi */
 static volatile uint32_t r3_syscall_num   = 0;       /* syscall numarası (rax) */
 static volatile uint32_t r3_gp_yakalandi  = 0;       /* #GP (cli denemesi) yakalandı */
+static volatile uint64_t r3_gp_err        = 0;       /* #GP hata kodu (cli → 0) */
 
 /* === Kernel ring0 stack (ring3→ring0 trap'te TSS.RSP0 buraya işaret eder) === */
 static uint8_t kernel_ring0_yigin[16384] __attribute__((aligned(16)));
@@ -216,6 +217,8 @@ __asm__(
     ".global gp_stub_r3\n"
     "gp_stub_r3:\n"
     /* #GP: yığın tepesinde CPU hata kodu (8 byte) var. r3_gp_yakalandi=1. */
+    "    movq (%rsp), %rax\n"
+    "    movq %rax, r3_gp_err(%rip)\n"    /* teşhis: cli #GP → 0; IDT kaynaklı → vektör*8+2 */
     "    movl $1, r3_gp_yakalandi(%rip)\n"
     /* Hata kodunu at (iretq frame'e ulaşmak için değil — biz iretq YAPMAYACAĞIZ,
        kernel akışına dönüyoruz). Hata kodu + iretq frame (RIP,CS,RFLAGS,RSP,SS
@@ -373,8 +376,8 @@ static void ring3_kod(void) {
 
 /* === Ring3'e geçiş (iretq) ===
  * iretq, yığından RIP,CS,RFLAGS,RSP,SS pop eder. CS'in RPL'si (3) hedef CPL'yi
- * belirler → CPU ring3'e düşer. SS ve RSP ring3 stack'ini kurar. RFLAGS'te IF=1
- * (kesmeler açık) + rezerve bit 1 (her zaman 1) set.
+ * belirler → CPU ring3'e düşer. SS ve RSP ring3 stack'ini kurar. RFLAGS'te IF=0
+ * (kesmeler kapalı — gerekçe aşağıda) + rezerve bit 1 (her zaman 1) set.
  *
  * Yığın (iretq'nin beklediği, yukarıdan aşağı push sırası):
  *   push SS   (user-data | 3)
@@ -391,7 +394,15 @@ static _Noreturn void ring3e_gec(void) {
     uint64_t user_rip = (uint64_t)(uintptr_t)&ring3_kod;
     uint64_t user_ss  = SEL_USER_VERI;   /* 0x20 | 3 */
     uint64_t user_cs  = SEL_USER_KOD;    /* 0x18 | 3 */
-    uint64_t rflags   = 0x202ULL;        /* IF=1 (bit9) + rezerve bit1 */
+    /* RFLAGS: rezerve bit1=1, IF=0 (ring3_proc_x86.c / ring3_page_x86.c ile aynı).
+     * IF=1 iken boot'ta (IF=0) mandallanan PIT IRQ0, iretq IF'i açtığı anda
+     * ring3'ün İLK komutundan önce teslim edilir; PIC eşlenmediği için vektör 8,
+     * bu IDT'de boş → #GP(0x42) → gp_stub_r3 → ring3 hiç koşmadan rapor →
+     * yalnız "RING3 SETUP OK" fallback'i (ölçüldü: ring3_page_x86.c'de her
+     * koşumda). Bu test bugün BSS'i küçük olduğu için yarışı kaçırıyor; büyürse
+     * aynı yere düşer. Ring3'teki `cli` #GP'si IOPL=0 < CPL=3'ten gelir, IF'den
+     * BAĞIMSIZDIR → IF=0 testin kanıtını değiştirmez. */
+    uint64_t rflags   = 0x002ULL;        /* IF=0 (kesme kapalı) + rezerve bit1 */
 
     __asm__ volatile(
         "pushq %0\n"     /* SS */
@@ -417,7 +428,9 @@ static _Noreturn void rapor_ve_dur(void) {
     kdl_yaz_metin(" SYSCALL_NUM=");
     kdl_yaz_onaltilik((uint64_t)r3_syscall_num);
     kdl_yaz_metin(" GP=");
-    kdl_yazdir_onaltilik((uint64_t)r3_gp_yakalandi);
+    kdl_yaz_onaltilik((uint64_t)r3_gp_yakalandi);
+    kdl_yaz_metin(" GP_ERR=");
+    kdl_yazdir_onaltilik(r3_gp_err);
 
     /* Ring3 kanıtları: CS.RPL==3 (userspace'te koştu) + syscall geldi. */
     int ring3_kostu   = (r3_cs_rpl == 3u);
