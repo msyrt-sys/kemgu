@@ -10,6 +10,10 @@
 // runtime/kdl_runtime_yazdir_bare.c + 16550 UART üzerinden gider (İş 2 sonra
 // .kem UART'a çevirecek — şimdilik dokunulmaz).
 //
+// İş 9 (PVH): kem_panik öncesi RAM toplamı kem_pvh.kem'den (start_x86_64.S %ebx'i
+// .data'daki kdl_pvh_bilgi'ye saklar). "X86 PVH OK ram_mb=" + pozitif satır;
+// ram ≤ 0 → "X86 PVH HATA" + kod.
+//
 // Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
 // (yazdir_metin satır sonu ekler).
 // Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
@@ -69,6 +73,16 @@ işlev main() -> tam32 {
     }
     yazdir_tam(toplam);
     yazdir_satir();
+
+    kem_platform_kur();
+    değişken dt: tam64 = kem_platform_dma_tabani();
+    eğer dt > 0 {
+        yazdir_metin("X86 DMA TABAN OK kb=");
+        yazdir_tam((dt / 1024) olarak tam32);
+        yazdir_satir();
+    } değilse {
+        yazdir_metin("X86 DMA TABAN YEDEK");
+    }
 
     // İş 3 (a): Blok DMA RAM yaz-oku (0..511; 251 ile döngüsel desen).
     değişken dma_i: tam32 = 0;
@@ -187,6 +201,66 @@ işlev main() -> tam32 {
                         yazdir_metin("X86 DISK RW OK");
                         yazdir_tam(dsum);
                         yazdir_satir();
+
+                        // İş 8: kem_minifs x86 işlevsel testi (sektör 0/1/2;
+                        // disk testi sektör 7 → çakışma yok). DEĞER denetimi
+                        // (marker değil), D-264 dersi.
+                        değişken mfsf: tam32 = mfs_format(vb);
+                        eğer mfsf != 0 {
+                            yazdir_metin("X86 FS RW HATA");
+                            yazdir_tam(mfsf);
+                            yazdir_satir();
+                        }
+                        değilse {
+                            // İçerik vq_data'ya (100 bayt, (i%89)+11 deseni) → blk2.
+                            değişken fi: tam32 = 0;
+                            iken fi < 100 {
+                                vblk_data_yaz(fi, (((fi % 89) + 11) olarak dtam8));
+                                fi = fi + 1;
+                            }
+                            // ad "KEMG" = 75 69 77 71; inode → blk1, superblock++.
+                            değişken mfsw: tam32 = mfs_dosya_yaz(vb, 75 olarak dtam8, 69 olarak dtam8, 77 olarak dtam8, 71 olarak dtam8, 100);
+                            eğer mfsw != 0 {
+                                yazdir_metin("X86 FS RW HATA");
+                                yazdir_tam(mfsw);
+                                yazdir_satir();
+                            }
+                            değilse {
+                                // vq_data 0..511'i SIFIRLA (okunan içerik DİSKTEN gelsin).
+                                fi = 0;
+                                iken fi < 512 { vblk_data_yaz(fi, 0 olarak dtam8); fi = fi + 1; }
+                                değişken fb: tam32 = mfs_dosya_oku(vb, 75 olarak dtam8, 69 olarak dtam8, 77 olarak dtam8, 71 olarak dtam8);
+                                eğer fb != 100 {
+                                    yazdir_metin("X86 FS RW HATA boyut=");
+                                    yazdir_tam(fb);
+                                    yazdir_satir();
+                                }
+                                değilse {
+                                    değişken fhata: tam32 = 100;   // 100 = "uyuşmazlık yok"
+                                    değişken fsum: tam32 = 0;
+                                    fi = 0;
+                                    iken fi < 100 {
+                                        değişken fbek: dtam8 = (((fi % 89) + 11) olarak dtam8);
+                                        değişken fok: dtam8 = vblk_data_oku(fi);
+                                        eğer fok != fbek {
+                                            eğer fhata == 100 { fhata = fi; }
+                                        }
+                                        fsum = fsum + (fok olarak tam32);
+                                        fi = fi + 1;
+                                    }
+                                    eğer fhata == 100 {
+                                        yazdir_metin("X86 FS RW OK");
+                                        yazdir_tam(fsum);
+                                        yazdir_satir();
+                                    }
+                                    değilse {
+                                        yazdir_metin("X86 FS RW HATA");
+                                        yazdir_tam(fhata);
+                                        yazdir_satir();
+                                    }
+                                }
+                            }
+                        }
                     }
                     değilse {
                         yazdir_metin("X86 DISK RW HATA");
@@ -218,6 +292,16 @@ işlev main() -> tam32 {
         }
     }
 
+    değişken ram: tam64 = kem_pvh_ram_toplam();
+    eğer ram <= 0 {
+        yazdir_metin("X86 PVH HATA");
+        yazdir_tam(ram olarak tam32);
+        yazdir_satir();
+    } değilse {
+        yazdir_metin("X86 PVH OK ram_mb=");   // yazdir_metin satır sonu ekler
+        yazdir_tam((ram / 1048576) olarak tam32);
+        yazdir_satir();
+    }
     kem_panik("X86 PANIK YOLU OK");
     ver 0;
 }

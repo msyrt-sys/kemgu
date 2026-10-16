@@ -86,5 +86,7 @@ parça (platform) tek başına derlense bile "birim" sayılmaz — bilinçli.
 - `runtime/mimari/x86_64/*.kem` — bu kapı aarch64 hedefler; x86 etiketli asm
   AS001 verir. x86 birleşik birimi `check_kapisi` (`--mimari x86_64`, 7 parça)
   ve `calistir_kem_os_x86` (QEMU microvm, Kanıt 1-10) tarafından ölçülür.
-- C oracle ↔ self-host karşılaştırması x86 birleşik birimi için YOK
-  (`baremetal_diff`'in x86 ikizi) — bkz. `docs/X86_PARITE_ENVANTER.md` §7/9.
+- **D-680:** x86 birleşik birimi (parça listesi Makefile `calistir_kem_os_x86` CAT
+  satırından okunur) bölüm (5)'te C ↔ self-host karşılaştırılır: define kümesi,
+  üçlü, asm sayısı + şablon/kısıt dizgileri, volatile, inttoptr. Sınıflandırma
+  `runtime/mimari/x86_64/*.kem`'i de kapsar (CAT'te olmayan → KIRMIZI).

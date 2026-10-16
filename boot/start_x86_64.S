@@ -37,6 +37,10 @@
 pvh_entry:
     cli
     cld
+    /* PVH ABI: QEMU 32-bit pvh_entry'ye atlarken %ebx = struct hvm_start_info
+     * fiziksel adresi (aarch64 _start X0 DTB ikizi). İLK İŞ: BSS temizliğinden
+     * ÖNCE sakla — rep stosb %ebx'i bozar. Yüksek dword 0 kalır (adres < 4 GB). */
+    movl    %ebx, kdl_pvh_bilgi
 
     /* 1. BSS sıfırla (pml4/pdpt/pd .bss'te → temizlenir, sonra kurulur). */
     movl    $__bss_start, %edi
@@ -157,6 +161,15 @@ gdt_end:
 gdt_desc:
     .word   gdt_end - gdt - 1      /* limit */
     .long   gdt                    /* base (32-bit lgdt; gdt < 4GB) */
+
+/* === PVH start_info adresi (.data, boot'ta sıfırlanmaz) ===
+ * .data'da çünkü .bss boot'ta SIFIRLANIR (aarch64 kdl_dtb_adres ile aynı gerekçe);
+ * yüksek dword 0 kalır (adres < 4 GB). kem_pvh.kem bu sembolü %rip-relatif okur. */
+.section .data
+.align 8
+.global kdl_pvh_bilgi
+kdl_pvh_bilgi:
+    .quad 0
 
 /* === Sayfa tabloları (.bss, 4KB-hizalı; boot'ta sıfırlanıp kurulur) === */
 .section .bss

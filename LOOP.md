@@ -1998,3 +1998,42 @@
   (eksik baglam / asiri kapsam). Uretimde 2 gercek hata kapi/denetim yakaladi
   (UART sessiz kayip, `dsb` sembol adiyla sahte eslesme); 1 hata benim gorev
   metnimdeydi (0xFEB00000 → yanlis ondalik), Kanit 10 yakaladi.
+- 2026-10-12 D-677: otomatik dongu + kem_minifs x86 testi (dal os/x86-parite-2).
+  otomasyon/evren/dongu.py (deepseek uretti, tur 7): sor → kuru eslestir →
+  uygula → dogrulama komutlari → isaret denetimi → KISA ozet; commit/kapi YOK.
+  Denetimde: log her kosuda UZERINE yazilir (bayat isaret tasinmaz) — gorevdeki
+  "ekle" talimatimdan iyi; tek uc durum (dogrulama yokken eski log) onarildi.
+  IS 8 (tur 8, dongu ile TEK KOMUT, mudahale YOK): minifs x86 CAT'e girdi;
+  QEMU microvm'de format → "KEMG" 100 B yaz → tampon SIFIRLA → oku; toplam
+  5071 (python ile bagimsiz hesap = 5071). Kanit 11. check_kapisi x86 8 parca.
+- 2026-10-12 D-678: PVH start_info saklaniyor (aarch64 kdl_dtb_adres ikizi).
+  SABIT DOGRULAMASI (gorev metnine yazmadan ONCE): magic 0x336ec578 Linux
+  xen/hvm/start_info.h + QEMU pvh.bin icinde bayt duzeyinde bulundu; alan
+  ofsetleri basliktan okundu (memmap_paddr @40, entries @48, girdi 24 B).
+  (gdb ile pvh_entry'de olcme denendi: QEMU 32/64 kip gecisinde 'g' paketi
+  okunamadi — yontem birakildi.)
+  start_x86_64.S ilk is `movl %ebx, kdl_pvh_bilgi` (.data'da; .bss sifirlanir).
+  runtime/mimari/x86_64/kem_pvh.kem: magic/version dogrulama + memmap RAM toplami.
+  KANIT: QEMU microvm `X86 PVH OK ram_mb=` → 127 (128 MB eksi alt bellek
+  bosluklari). objdump pvh_entry `movl %ebx, 0x105fa8` = nm kdl_pvh_bilgi
+  0x105fa8 (objdump 32-bit kodu 64-bit cozdugu icin %rip-goreli GORUNUR).
+  DEEPSEEK tur 9 (dongu ile): islev dogru; tek hata cikti bicimi (fazladan
+  yazdir_satir → bos satir, Kanit 12 KIRMIZI verdi) — onarim bende, 1 satir.
+- 2026-10-12 D-679: x86 DMA tabani PVH memmap'ten TURETILIYOR (envanter 6b).
+  kem_platform_kur(): 1 GB altinda biten en yuksek RAM bolgesinin tepesi - 256 KB,
+  4 KB hizali; vnet = taban + 64 KB. PVH yoksa sabit yedek (0x02000000).
+  KANIT: QEMU microvm taban 130804 KB; benim 128 MB varsayimimla beklenen
+  130816 KB idi — FARK gercek haritadan okundugunu gosteriyor: taban+256 KB =
+  0x7FFD000, QEMU RAM'in son 12 KB'ini (ACPI/firmware) ayiriyor. Sonraki DMA
+  BLK/NET + DISK RW + FS RW testleri turetilmis tabanla gecti. Kanit 13:
+  deger > 32768 KB (yedek sabitten buyuk = turetme calisti).
+  DEEPSEEK tur 10 (dongu, tek komut): mudahale YOK.
+- 2026-10-12 D-680: baremetal_diff x86 IKIZI. Olculdu (once, elle): x86 birlesik
+  birimi C ↔ self-host BIREBIR (72 define, 4 asm sablon+kisit, 79 volatile, 83
+  inttoptr) — derleyici isi GEREKMEDI, eksik olan OLCUMDU. Bolum (5): parca
+  listesi Makefile x86 CAT satirindan okunur (tek kaynak); sinif. denetimi
+  mimari/x86_64'u kapsar. Kapi 16/16 (aarch64 + x86_64), 0 atlandi.
+  SABOTAJ 2/2: x86 parcasi CAT'ten dusuruldu → derlenemedi + SINIFLANDIRILMAMIS;
+  CAT disi x86 dosyasi → SINIFLANDIRILMAMIS. DEEPSEEK tur 11: mudahale YOK
+  (verdigim Makefile kesit araligi yanlis satirdaydi; gorevdeki sed komutu
+  sayesinde etkisiz). Envanter §7: 2b, 6b, 7, 9 kapandi.
