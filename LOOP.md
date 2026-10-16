@@ -2220,3 +2220,10 @@
   → trampoline cop kayit → #GP, D-690 .kem raporlayicisi 'ISTISNA tip=0xd' basti,
   cekirdek durdu, rc=2. kem_gorev.kem asm 25 → 21. x86 birlesik 256 islev, 31 asm,
   C ↔ self BIREBIR. baremetal_diff 22/22.
+- 2026-10-16 D-696: eski PR #101 (D-323, 2026-07-26) yeniden portu — DOLAYLI cagrida
+  lineer arguman self-host'ta TASINIR. Olcum (main, port ONCESI): tc5e_01 C=OK /
+  self=L001 (sahte), tc5e_02 C=L002 / self=OK (kacirma), tc5e_03 C=L002 / self=L001.
+  Yama 3-yollu uygulanamadi (dosyalar cok degismis) → iki capa ile elle; capa ile
+  `degisken k` arasinda yalniz D-371 yorumu oldugu dogrulandi. checker.kem +
+  codegen.kem (D-517 dersi: uc uygulama). checker_diff 219/219 (0 muaf, 4 yeni
+  fikstur). SABOTAJ: dolayli hep yanlis → tc5e_01/02/03 KIRMIZI, rc=2.
