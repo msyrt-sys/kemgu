@@ -346,3 +346,79 @@ wrmsr"#
     eğer (bekle == 0) ve (cr2 == KMMU_OZEL_VA) ve (hk == KXM_PF_NX_HATA) { ver 1; }
     ver 0;
 }
+
+// [D-690] kurtarılamaz istisna raporu (.kem) + PVH cmdline
+// ============================================================================
+// ZERO-C B1 x86 ikizi: arm64 kdl_istisna_isle (kis_* + CR2/FAR) ile AYNI biçim,
+// AYNI adlar; x86 donanımı (COM1 UART, %cr2). C WEAK tanımını bu GÜÇLÜ .kem
+// tanımı ezer. NaN durumu yok: tek satır rapor + hlt sonsuz.
+// ============================================================================
+
+// COM1'e tek bayt (arm'daki PL011 MMIO yerine kem_uart_bayt).
+çıplak işlev kis_bayt(b: tam32) { kem_uart_bayt(b); }
+
+// Metni COM1'e yaz.
+çıplak işlev kis_metin(s: metin) {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n { kis_bayt(metin_bayt(s, i) olarak tam32); i = i + 1; }
+}
+
+// Satır sonu.
+çıplak işlev kis_satir() { kis_bayt(10); }
+
+// dtam64'ü onaltılık basamaklarla yaz (özyinelemeli, arm ile birebir).
+çıplak işlev kis_hex_basamak(d: dtam64) {
+    eğer d > 0 {
+        kis_hex_basamak(d / 16);
+        değişken r: tam32 = (d - (d / 16) * 16) olarak tam32;
+        eğer r < 10 { kis_bayt(r + 48); } değilse { kis_bayt(r + 87); }
+    }
+}
+
+// 0 → "0", aksi hâlde onaltılık basamaklar.
+çıplak işlev kis_onaltilik(d: dtam64) {
+    eğer d == 0 { kis_bayt(48); } değilse { kis_hex_basamak(d); }
+}
+
+// CR2 (son #PF hatası adresi) oku.
+çıplak işlev kis_cr2_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"movq %cr2, $0"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// .S isr_ortak çağırır (rdi=vektör, rsi=hata kodu, rdx=RIP); arm ikiziyle birebir:
+// CR2 oku + "ISTISNA tip=0x.. a=0x.. b=0x.. adr=0x.." + satır + hlt sonsuz.
+çıplak işlev kdl_istisna_isle(tip: tam64, a: tam64, b: tam64) {
+    değişken adr: tam64 = kis_cr2_oku();
+    // kis_onaltilik ISARETSIZ (dtam64) ister — adres/hata degerleri isaretsiz
+    // yorumlanmali (tam64 negatif goruntusu onaltilik basamakta YANLIS olur).
+    kis_metin("ISTISNA tip=0x"); kis_onaltilik(tip olarak dtam64);
+    kis_metin(" a=0x"); kis_onaltilik(a olarak dtam64);
+    kis_metin(" b=0x"); kis_onaltilik(b olarak dtam64);
+    kis_metin(" adr=0x"); kis_onaltilik(adr olarak dtam64);
+    kis_satir();
+    iken 1 == 1 {
+        güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"hlt"# bozulan("~{memory}") } }
+    }
+}
+
+// PVH çekirdek komut satırı TAM OLARAK s mi? 1=evet, 0=hayır.
+// bi+24 = cmdline_paddr (PVH boot bilgi yapısı); bayt-bayt karşılaştır + NUL sınırı.
+çıplak işlev kem_pvh_cmdline_esit(s: metin) -> tam32 {
+    değişken bi: tam64 = kem_pvh_bilgi();
+    eğer bi == 0 { ver 0; }
+    değişken c: tam64 = kem_pvh_oku64(bi + 24);      // cmdline_paddr
+    eğer c == 0 { ver 0; }
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken ham: dtam64 = kem_pvh_oku64(c + (i olarak tam64)) olarak dtam64;
+        eğer ham % 256 != (metin_bayt(s, i) olarak dtam64) { ver 0; }
+        i = i + 1;
+    }
+    değişken son: dtam64 = kem_pvh_oku64(c + (n olarak tam64)) olarak dtam64;
+    eğer son % 256 != 0 { ver 0; }                   // s'den sonra NUL olmalı
+    ver 1;
+}

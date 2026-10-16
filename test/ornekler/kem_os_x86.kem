@@ -398,6 +398,15 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 SYSCALL HATA");
     }
+    // İş 20 (D-690): KURTARILAMAZ istisna yolu. Yalnız `-append kem_istisna` ile açılan
+    // İKİNCİ QEMU koşumunda: haritasız VA, kurtarma bayrağı KAPALIYKEN okunur → gerçek #PF →
+    // .S isr_ortak → .kem kdl_istisna_isle "ISTISNA tip=0xe ... adr=0x60000000" + hlt.
+    // Normal koşumda bu dal hiç çalışmaz (panik yolu aşağıda aynen sürer).
+    eğer kem_pvh_cmdline_esit("kem_istisna") == 1 {
+        yazdir_metin("X86 ISTISNA TESTI");
+        değişken cop: tam64 = kxm_o64(KMMU_FAULT_VA);
+        yazdir_metin("X86 ISTISNA YAKALANMADI");
+    }
     kem_panik("X86 PANIK YOLU OK");
     ver 0;
 }
