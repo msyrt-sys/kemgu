@@ -2236,3 +2236,11 @@
   'beklenmeyen #GP GP_ERR=0x42 GP_CS=0x1b'. 18/18 x86 hedefi rc=0, fallback/atlama
   izi yok. KORELASYON (kanitlanmadi): BSS ring3_x86 ~62KB / page ~2MB / proc ~4MB;
   boot BSS'i sifirliyor, emule x86'da (aarch64 konak) PIT periyodu asiliyor olabilir.
+- 2026-10-16 D-696: ring3_x86 "RING3 SETUP OK" FALLBACK'I KALDIRILDI + cli #GP err=0 sarti.
+  Fallback ring3 hic kosmadan basilabiliyordu ve Makefile kabul ediyordu → D-695
+  yarisinin tam goruntusu sessizce yesil kalirdi. OLCUM (sabotaj = IF=1 + 4MB BSS):
+  ESKI kod CS_RPL=0xffffffff GP_ERR=0x42 → 'RING3 SETUP OK' rc=0 (DELIK GERCEK);
+  YENI kod ayni durumda 'RING3 X86 BASARISIZ' rc=2. #GP kaniti artik yalniz
+  GP_ERR==0 (ring3 cli) iken sayilir; IDT kaynakli #GP (vektor*8+2) sayilmaz.
+  D-695 KORELASYONU SINANDI: ayni IF=1, kucuk BSS → OK; +4MB BSS → yaris → BSS
+  boyutu bu konakta BELIRLEYICI (hizli x86 konak hala olculmedi).

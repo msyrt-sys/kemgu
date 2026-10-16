@@ -38,11 +38,15 @@
  *   7. Kanıtlar toplandıysa "RING3 X86 OK".
  *
  * -----------------------------------------------------------------------------
- * FALLBACK: Tam ring3-exec kurulamazsa (iretq subtle), en azından GDT ring3
- * descriptor'ları (DPL=3) + TSS (ltr) kuruldu + doğrulandı → "RING3 SETUP OK".
+ * FALLBACK YOK (D-696): eskiden ring3-exec kurulamazsa "RING3 SETUP OK" basılır
+ * ve Makefile bunu kabul ederdi. O fallback, D-695'teki IF=1 yarışının (IRQ0 →
+ * boş IDT girişi → #GP → ring3 hiç koşmadan rapor) TAM görüntüsüydü — kusur
+ * olsa test sessizce yeşil kalırdı. Ayrıca #GP kanıtı yalnız hata kodu 0 iken
+ * sayılır: ring3 `cli` #GP'sinin hata kodu 0'dır; IDT kaynaklı #GP vektör*8+2.
  *
- * Kanıt: "RING3 X86 OK"    → ring3'te gerçekten kod koştu, syscall + #GP çalıştı.
- *        "RING3 SETUP OK"  → GDT ring3 seg + TSS kuruldu (ring3-exec teyidi yok).
+ * Kanıt: "RING3 X86 OK"        → ring3'te kod koştu + syscall + cli #GP (err=0).
+ *        "RING3 X86 KISMI"     → ring3 + syscall var, geçerli #GP kanıtı yok (FAIL).
+ *        "RING3 X86 BASARISIZ" → ring3-exec kanıtı yok (FAIL; GP_ERR'e bak).
  *
  * KISIT: Tüm GDT/TSS/IDT/ring3 mantığı test-içi inline asm/blob (smp_x86.c
  * deseni). runtime/boot/linker'a DOKUNULMAZ — kernel'in kendi IDT'sini
@@ -435,7 +439,9 @@ static _Noreturn void rapor_ve_dur(void) {
     /* Ring3 kanıtları: CS.RPL==3 (userspace'te koştu) + syscall geldi. */
     int ring3_kostu   = (r3_cs_rpl == 3u);
     int syscall_oldu  = (r3_syscall_geldi != 0);
-    int gp_oldu       = (r3_gp_yakalandi != 0);
+    /* Yalnız `cli` kaynaklı #GP (hata kodu 0) ayrıcalık kanıtıdır; IDT kaynaklı
+     * #GP (vektör*8+2, ör. boş girişe düşen IRQ0 → 0x42) SAYILMAZ. */
+    int gp_oldu       = (r3_gp_yakalandi != 0) && (r3_gp_err == 0);
 
     if (ring3_kostu && syscall_oldu && gp_oldu) {
         kdl_yazdir_metin("RING3 SYSCALL (int 0x80 -> ring0 handler)");
@@ -444,10 +450,9 @@ static _Noreturn void rapor_ve_dur(void) {
     } else if (ring3_kostu && syscall_oldu) {
         /* Ring3 koştu + syscall çalıştı ama #GP kanıtı yok (yine de güçlü). */
         kdl_yazdir_metin("RING3 SYSCALL (int 0x80 -> ring0 handler)");
-        kdl_yazdir_metin("RING3 X86 OK (ring3-exec + syscall, CS.RPL=3; #GP teyidi yok)");
+        kdl_yazdir_metin("RING3 X86 KISMI (ring3-exec + syscall var, cli #GP kaniti yok/gecersiz — GP_ERR'e bak)");
     } else {
-        /* Ring3-exec teyidi yok → SETUP kanıtı (GDT ring3 seg + TSS kuruldu). */
-        kdl_yazdir_metin("RING3 SETUP OK (GDT DPL=3 user seg + TSS ltr kuruldu; ring3-exec teyidi yok)");
+        kdl_yazdir_metin("RING3 X86 BASARISIZ (ring3-exec kaniti yok; GP_ERR=vektor*8+2 ise bos IDT girisine kesme)");
     }
 
     halt();

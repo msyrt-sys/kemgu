@@ -3736,7 +3736,8 @@ calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # ring0 kernel, ring3 kod çalıştırır: GDT DPL=3 user seg + TSS (RSP0) + IDT
 # int 0x80 gate (DPL=3). iretq ile ring3'e geç → ring3 `int 0x80` (syscall,
 # ring0'da işlenir) + `cli` (ayrıcalıklı → #GP yakalanır). Marker "RING3 X86 OK"
-# (tam ring3-exec) veya "RING3 SETUP OK" (fallback: sadece GDT/TSS kurulumu).
+# (tam ring3-exec). [D-696] "RING3 SETUP OK" fallback'i KALDIRILDI: ring3 hic
+# kosmadan da basilabiliyordu (D-695 IF=1 yarisinin tam goruntusu).
 calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 	@echo "x86_64 ring3 testi: ring3_x86.c -> ELF (GDT DPL=3 + TSS + IDT int 0x80, iretq ring3)..."
 	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/ring3_x86.c -o $(BUILD)/ring3_x86.o
@@ -3749,10 +3750,8 @@ calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/ring3_x86.out; echo "--- son ---"; \
 		if grep -q "RING3 X86 OK" $(BUILD)/ring3_x86.out; then \
 			echo "x86_64 ring3 testi gecti: ring3 (userspace) kod kostu + int 0x80 syscall + #GP privilege-fault (ayricalik ayrimi)."; \
-		elif grep -q "RING3 SETUP OK" $(BUILD)/ring3_x86.out; then \
-			echo "x86_64 ring3 fallback: GDT DPL=3 user seg + TSS ltr kuruldu (ring3-exec teyidi yok)."; \
 		else \
-			echo "FAIL: 'RING3 X86 OK' (veya fallback 'RING3 SETUP OK') bekleniyor"; \
+			echo "FAIL: 'RING3 X86 OK' bekleniyor (ring3-exec + syscall + cli #GP err=0)"; \
 			exit 1; \
 		fi; \
 	else \
