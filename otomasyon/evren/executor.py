@@ -12,16 +12,21 @@ SONRA gelir (önek eşleşmesi korunur).
 Kota: her turdan önce GET /v1/quota; günlük kalan < 2M → çıkış 3 (DUR).
 Anahtar ~/.config/evren/key'den okunur; hiçbir çıktıya yazılmaz.
 """
+import os
 import argparse
 import json
 import pathlib
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 
 TABAN = "https://evren-llmapi.ssyz.org.tr/v1"
-MODEL = "deepseek-v4.1-flash"
+# EVREN_MODEL ile geçersiz kılınabilir (örn. deepseek-v4.1-flash kapasitesi dolu olduğunda).
+MODEL = os.environ.get("EVREN_MODEL", "deepseek-v4.1-flash")
+# Birincil model 503 (kapasite dolu) dönerse bu model ile AYNI istem yeniden gönderilir.
+YEDEK_MODEL = os.environ.get("EVREN_YEDEK_MODEL", "deepseek-v4-flash")
 MAX_TOKENS = 16384
 KOTA_ALT = 2_000_000
 DEPO = pathlib.Path(__file__).resolve().parents[2]
@@ -95,8 +100,8 @@ def kota(anahtar):
         return json.load(y)
 
 
-def akisli_sor(anahtar, mesajlar, effort=None):
-    istek_govde = {"model": MODEL, "messages": mesajlar, "max_tokens": MAX_TOKENS,
+def akisli_sor(anahtar, mesajlar, effort=None, model=None):
+    istek_govde = {"model": model or MODEL, "messages": mesajlar, "max_tokens": MAX_TOKENS,
                    "stream": True, "stream_options": {"include_usage": True}}
     if effort:
         istek_govde["reasoning_effort"] = effort
@@ -155,16 +160,23 @@ def sor(a):
                       f"blok yolu `{yol}` olmalı)\n```\n" + "\n".join(satirlar) + "\n```\n")
     gorev = pathlib.Path(a.gorev).read_text(encoding="utf-8")
     kullanici = ortak_baglam() + "\n# İŞE ÖZEL BAĞLAM\n" + is_baglam + "\n# GÖREV\n\n" + gorev
-    icerik, dusunme, usage, bitis, sure = akisli_sor(
-        anahtar, [{"role": "system", "content": SISTEM}, {"role": "user", "content": kullanici}],
-        a.effort)
+    mesajlar = [{"role": "system", "content": SISTEM}, {"role": "user", "content": kullanici}]
+    kullanilan = MODEL
+    try:
+        icerik, dusunme, usage, bitis, sure = akisli_sor(anahtar, mesajlar, a.effort, MODEL)
+    except urllib.error.HTTPError as h:
+        if h.code != 503 or not YEDEK_MODEL or YEDEK_MODEL == MODEL:
+            raise
+        print(f"UYARI: {MODEL} HTTP 503 (kapasite) → yedek model {YEDEK_MODEL}")
+        kullanilan = YEDEK_MODEL
+        icerik, dusunme, usage, bitis, sure = akisli_sor(anahtar, mesajlar, a.effort, YEDEK_MODEL)
     taban = CIKTI / f"tur_{a.tur}_{a.is_}"
     (taban.parent / (taban.name + "_istem.md")).write_text(
         f"# Tur {a.tur} — {a.is_} — istem\n\n## SISTEM\n````\n{SISTEM}\n````\n\n"
         f"## KULLANICI\n````\n{kullanici}\n````\n", encoding="utf-8")
     bl = bloklar(icerik)
     (taban.parent / (taban.name + ".md")).write_text("\n".join([
-        f"# Tur {a.tur} — {a.is_} — `{MODEL}`", "",
+        f"# Tur {a.tur} — {a.is_} — `{kullanilan}`", "",
         f"- Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')} · süre {sure:.1f} sn · finish `{bitis}`"
         f" · reasoning_effort `{a.effort or 'varsayılan'}`",
         f"- usage: `{json.dumps(usage)}`",
