@@ -1903,7 +1903,7 @@ BM_X86_OBJS = $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yaz
 # === Bare-Metal Hello World x86_64 (C1-x86) — PVH boot smoke ===
 calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 	@echo "Bare-metal hello (x86_64 PVH): uart_merhaba.kem -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba_x86.ll
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none test/ornekler/uart_merhaba.kem > $(BUILD)/uart_merhaba_x86.ll
 	$(BM_X86) -O2 -Wno-override-module \
 		-x ir $(BUILD)/uart_merhaba_x86.ll -c -o $(BUILD)/uart_merhaba_x86.o
 	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \
@@ -1962,7 +1962,8 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 #          kdl_kesme_isle/kdl_tik_al C değil .kem'den (bm_x86_zaman.o bağlanmıyor).
 # Kanıt 16: iki preemptive görevin sayaçları >= 2 (IRQ0 koçanı tam kayıt + SP takası,
 #          .kem kdl_irq_isle → kem_preempt); kdl_irq_isle güçlü tanımı .kem'den.
-# Kanıt 27 (D-696): kırmızı bölge YOK — imajda RSP altına erişim 0 (noredzone, IR adımı).
+# Kanıt 27 (D-696/D-697): kırmızı bölge YOK — derleyici her define'a noredzone yayar
+#          (IR'da sayılır) ve imajda RSP altına erişim 0.
 # Kanıt 26 (D-695): "X86 RING3 OK" — ring3 (CPL 3) giriş, ring3 int 0x80 (DPL3 kapı),
 #          #GP/#PF ile çekirdeğe kontrollü dönüş; yapısal: iretq + 0xee kapı baytı.
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
@@ -1974,9 +1975,7 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
 	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
-	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86_nrz.ll
-	@# [D-696] noredzone: ring0 kesme cercevesi RSP altina itilir; clang -mno-red-zone IR'da etkisiz.
-	awk -f test/x86_noredzone.awk $(BUILD)/kem_os_x86_nrz.ll > $(BUILD)/kem_os_x86.ll
+	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
 	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o $(BUILD)/kem_os_x86.elf \
 		$(BUILD)/kem_os_x86.o \
@@ -2145,7 +2144,13 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kdl_idt_kur $(BUILD)/kem_os_x86.elf | grep -q '0xee' || { echo "FAIL: kdl_idt_kur'da DPL3 kapi (0xee) yok"; exit 1; }
 	@# [D-696] Kanit 27: kirmizi bolge YOK — tum imajda (.kem + C nesneleri) RSP ALTINA
 	@# erisim sifir. Kesme cercevesi RSP altina itildigi icin oradaki yerel sessizce bozulur.
-	@echo "  Kanit 27: kirmizi bolge yok (RSP-alti erisim = 0; .kem define'lari noredzone)..."
+	@# [D-697] noredzone'u artik DERLEYICI yayar (--mimari x86_64-none); IR'daki HER define
+	@# onu tasimali — imaj bugun kirmizi bolgeyi kullanan kod icermese bile derleyici
+	@# gerilemesi gorunur kalsin.
+	@echo "  Kanit 27: kirmizi bolge yok (derleyici noredzone: her define; RSP-alti erisim = 0)..."
+	@d=`grep -c '^define ' $(BUILD)/kem_os_x86.ll`; z=`grep -c '^define .*) noredzone {$$' $(BUILD)/kem_os_x86.ll`; \
+	if [ "$$d" -gt 0 ] && [ "$$d" -eq "$$z" ]; then echo "    noredzone = $$z / $$d define"; \
+	else echo "FAIL: noredzone $$z / $$d define (derleyici yaymiyor)"; exit 1; fi
 	@n=`llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -cE -- '-0x[0-9a-f]+\(%rsp'`; \
 	if [ "$$n" -eq 0 ]; then echo "    RSP-alti erisim = 0"; \
 	else echo "FAIL: $$n RSP-alti (kirmizi bolge) erisimi var:"; \
@@ -2170,7 +2175,7 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 # boot + toplam=55. Region backing'in arch-bağımsızlığının kanıtı.
 calistir_kernel_dizi_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 	@echo "Bare-metal dizi kernel (x86_64 PVH): kernel_dizi.kem -> ELF..."
-	./$(BUILD)/kemgu$(EXE) --llvm test/ornekler/kernel_dizi.kem > $(BUILD)/kernel_dizi_x86.ll
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none test/ornekler/kernel_dizi.kem > $(BUILD)/kernel_dizi_x86.ll
 	$(BM_X86) -O2 -Wno-override-module \
 		-x ir $(BUILD)/kernel_dizi_x86.ll -c -o $(BUILD)/kernel_dizi_x86.o
 	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld \

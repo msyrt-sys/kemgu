@@ -8735,6 +8735,16 @@ işlev fn_ciplak_ad_mi(p: &değişken Ayr, ad: metin) -> tam32 {
 // isimle erişir. Dönüş = gövdenin doğal tipi (runtime i64 okur, görev_birleştir
 // daraltır). C lambda_emit aynası — ama self-host doğrudan-stdout olduğu için
 // gövde-sonrası (kuyruk) emit edilir, C'nin tmpfile+hoist_renumber'ı yerine.
+// [D-697] Bare-metal x86_64 hedefinde her `define`a `noredzone` (C `fn_oznitelik_eki`
+// aynası, src/llvm.c). SysV x86-64 yaprak işlevlere RSP altındaki 128 B'ı (kırmızı
+// bölge) kullandırır; çekirdekte ring0 kesme çerçevesi tam oraya itilir → yereller
+// sessizce bozulur (D-696). clang -mno-red-zone IR'da etkisiz → derleyici yaymalı.
+// Yalnız bare-metal x86 üçlüsü: barındırılan x86 ve AArch64 etkilenmez.
+işlev fn_oznitelik_eki(p: &değişken Ayr) -> metin {
+    eğer metin_esit(p.hedef_triple, "x86_64-unknown-none-elf") { ver " noredzone"; }
+    ver "";
+}
+
 işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
     değişken lam: tam32 = dizi_al(p.lam_node, qi);
     değişken mad: metin = dizi_al(p.lam_ad, qi);
@@ -8783,7 +8793,7 @@ işlev lam_emit(p: &değişken Ayr, qi: tam32) -> tam32 {
         }
         pi = pi + 1;
     }
-    yaz_str(") {"); yb(10);
+    yaz_str(")"); yaz_str(fn_oznitelik_eki(p)); yaz_str(" {"); yb(10);   // [D-697]
     yaz_str("entry:"); yb(10);
     // Parametreleri alloca'ya indir (gövde isimle erişir; islev_uret aynası).
     pi = 0;
@@ -8904,7 +8914,7 @@ işlev islev_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         i = i + 1;
     }
-    yaz_str(") {"); yb(10);
+    yaz_str(")"); yaz_str(fn_oznitelik_eki(p)); yaz_str(" {"); yb(10);   // [D-697]
     yaz_str("entry:"); yb(10);
     p.bb_term = 0;   // entry taze blok
     // 2) Parametreler: alloca + store %aN + ad→reg kaydı (CG3 yerel deseni; mutable param)
