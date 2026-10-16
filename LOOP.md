@@ -2244,3 +2244,12 @@
   GP_ERR==0 (ring3 cli) iken sayilir; IDT kaynakli #GP (vektor*8+2) sayilmaz.
   D-695 KORELASYONU SINANDI: ayni IF=1, kucuk BSS → OK; +4MB BSS → yaris → BSS
   boyutu bu konakta BELIRLEYICI (hizli x86 konak hala olculmedi).
+- 2026-10-16 D-697: SMP FALLBACK KABULLERI KALDIRILDI (smp_arm 'PSCI OK', smp_x86
+  'APIC OK', smp4_x86 'KISMI'/'APIC OK'). OLCUM: 4 tur x 3 hedef = 12/12 GERCEK OK
+  (-smp QEMU'da sabit → belirlenimci; fallback'e hic dusulmuyordu). SABOTAJ MATRISI
+  (her biri eski + yeni Makefile): CPU_ON hedef 0x7 → 'PSCI OK'; SIPI vektor 0x09
+  (smp_x86 + smp4) → 'APIC OK'; smp4 dongusu bir AP eksik → 'KISMI 0x2/3'. DORDUNDE
+  de ESKI rc=0 (AP baslatma gerilemesi SESSIZCE YESIL), YENI rc=2. Test C dosyalari
+  degismedi; fallback satirlari teshis olarak basiliyor ama gecis sayilmiyor.
+  KALAN 4 elif userspace_{dns,tcp,http,post}_arm 'SENT' — internete bagli, MESRU
+  (D-466 ag_kosum dinleyicisi gibi), dokunulmadi.

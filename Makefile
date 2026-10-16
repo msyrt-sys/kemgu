@@ -2459,10 +2459,8 @@ calistir_smp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_arm.out; echo "--- son ---"; \
 		if grep -q "SMP OK" $(BUILD)/smp_arm.out; then \
 			echo "SMP testi gecti: 2. çekirdek PSCI CPU_ON ile koştu (çok-çekirdek)."; \
-		elif grep -q "PSCI OK" $(BUILD)/smp_arm.out; then \
-			echo "SMP fallback: PSCI erişilebilir (VERSION) ama CPU_ON çekirdek koşmadı."; \
 		else \
-			echo "FAIL: 'SMP OK' (veya fallback 'PSCI OK') bekleniyor"; \
+			echo "FAIL: 'SMP OK' bekleniyor (2. cekirdek kosmadi; 'PSCI OK' [D-697] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3687,10 +3685,8 @@ calistir_smp_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/smp_x86.out; echo "--- son ---"; \
 		if grep -q "SMP X86 OK" $(BUILD)/smp_x86.out; then \
 			echo "x86_64 SMP testi gecti: 2. çekirdek (AP) INIT-SIPI ile long-mode'da koştu (çok-çekirdek)."; \
-		elif grep -q "APIC OK" $(BUILD)/smp_x86.out; then \
-			echo "x86_64 SMP fallback: Local APIC MMIO + INIT-SIPI altyapisi calisiyor (AP long-mode teyidi yok)."; \
 		else \
-			echo "FAIL: 'SMP X86 OK' (veya fallback 'APIC OK') bekleniyor"; \
+			echo "FAIL: 'SMP X86 OK' bekleniyor (AP long-mode'da kosmadi; 'APIC OK' [D-697] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3719,12 +3715,8 @@ calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/smp4_x86.out; echo "--- son ---"; \
 		if grep -q "SMP4 X86 OK" $(BUILD)/smp4_x86.out; then \
 			echo "x86_64 SMP4 testi gecti: 4 cekirdek (BSP + 3 AP) INIT-SIPI ile long-mode'da kostu (coklu-AP)."; \
-		elif grep -q "SMP4 X86 KISMI" $(BUILD)/smp4_x86.out; then \
-			echo "x86_64 SMP4 kismi: bazi AP'ler long-mode'a ulasti (3'un tamami degil) — cikti icinde N/3 raporlandi."; \
-		elif grep -q "APIC OK" $(BUILD)/smp4_x86.out; then \
-			echo "x86_64 SMP4 fallback: Local APIC MMIO + INIT-SIPI altyapisi calisiyor (AP long-mode teyidi yok)."; \
 		else \
-			echo "FAIL: 'SMP4 X86 OK' (veya kismi/fallback) bekleniyor"; \
+			echo "FAIL: 'SMP4 X86 OK' bekleniyor (3 AP'nin hepsi kosmali; 'KISMI'/'APIC OK' [D-697] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
