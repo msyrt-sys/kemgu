@@ -2250,3 +2250,19 @@
   sayimla degistirildi. x86 birlesik 264 islev, 36 asm, C ↔ self BIREBIR.
   baremetal_diff 22/22, check_kapisi 276/284 (0 RED), kem_os_arm, ring3_test_x86
   yesil.
+- 2026-10-16 D-696: x86 kem_os KIRMIZI BOLGE kapatildi (D-695'in actigi yaris).
+  OLCUM: imaj disasm'inda RSP-ALTI erisim 8 ve HEPSI kxr_ring3_testi'nde — derleyici
+  4 yereli -0x8..-0x20(%rsp)'de, kdl_x86_ring3_gir cagrilari BOYUNCA canli tutuyor.
+  kxr_gir'in `subq $128` atlamasi call'u korur AMA trampolin popfq ile IF'i geri
+  acar → ring0 IRQ0 cercevesi tam o yerellerin ustune itilir → test ARALIKLI
+  yanlis sonuc (kesmeye bagli; sessiz). BM_X86'da -mno-red-zone YOK; eklemek de
+  YETMEZ: clang -mno-red-zone IR girdisinde ETKISIZ (olculdu 8 → 8), LLVM yalniz
+  islev basina `noredzone` ozniteligini okur. Cozum yapim hattinda (derleyiciye
+  dokunmadan): test/x86_noredzone.awk her `define ... ) {`'e noredzone ekler; bicim
+  beklenmedikse (oznitelik grubu, zaten noredzone) SESSIZ atlama yok, cikis 1
+  (birim olculdu). 264/264 define. Kanit 27: tum imajda (.kem + C nesneleri)
+  `-0x..(%rsp` erisimi 0. SABOTAJ S3: awk adimi `cp` ile atlandi → Kanit 27 "8
+  RSP-alti erisim" + 4 satir (kxr_ring3_testi yerelleri) rc=2; geri alindi.
+  calistir_kem_os_x86 3 kez art arda yesil. KALAN (derleyici karari): src/llvm.c
+  bare-metal x86 hedefinde noredzone'u kendisi yaymali; o zaman awk adimi silinir,
+  Kanit 27 kalir.
