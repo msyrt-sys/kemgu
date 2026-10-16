@@ -1,0 +1,10 @@
+// D-323: tekkez<tekkez<T>> uçtan uca — D-322'de bu şekil korpustan ÇIKARILMIŞTI,
+// çünkü self-host checker `tekkez_olustur(lineer_bağlama)`yı tüketmiyor, `iç` için
+// sahte L001 veriyordu (C kabul ederken). Artık tüketim C ile birebir → hem --check
+// hem --llvm geçiyor. İç `kullan` zinciri: dış sarmalayıcıyı aç, sonra içi aç.
+// Exit: 42
+işlev main() -> tam32 {
+    değişken ic: tekkez<tam32> = tekkez_olustur(42);
+    değişken dis: tekkez<tekkez<tam32>> = tekkez_olustur(ic);
+    ver kullan(kullan(dis));
+}

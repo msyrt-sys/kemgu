@@ -2227,3 +2227,8 @@
   `degisken k` arasinda yalniz D-371 yorumu oldugu dogrulandi. checker.kem +
   codegen.kem (D-517 dersi: uc uygulama). checker_diff 219/219 (0 muaf, 4 yeni
   fikstur). SABOTAJ: dolayli hep yanlis → tc5e_01/02/03 KIRMIZI, rc=2.
+- 2026-10-16 D-697: eski PR #103 (D-325) yeniden portu — `tekkez_olustur(ic)` self-host'ta
+  tekkez baglamasini TUKETIR (lineer yapi haric, C ile ayni ayrim). Olcum (port ONCESI):
+  tc5f_01 C=OK / self=L001 (sahte), tc5f_02 C=L002 / self=L001; cg_lineer_ic_ice self'te
+  sahte L001 yuzunden HIC derlenmiyordu (C=42). Sonra: checker_diff 222/222 (0 muaf),
+  cg_lineer_ic_ice self=42. SABOTAJ: tuketim kapali → tc5f_01/02 KIRMIZI, rc=2.

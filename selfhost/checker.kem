@@ -5201,6 +5201,17 @@ işlev lin_idx(p: &değişken Ayr, ad: metin) -> tam32 {
     }
     ver 0 - 1;
 }
+// D-697 (eski PR #103 / D-325 yeniden portu): Düğüm, TEKKEZ bir bağlamaya mı
+// çözülüyor? (lineer YAPI HARİÇ.) C `tekkez_olustur` producer intrinsic'i argümanı
+// YALNIZ `ic->kategori == TIP_TEKKEZ` iken tüketir — lineer yapı argümanını TÜKETMEZ
+// (o yüzden C'de `tekkez_olustur(k)` sonrası k sızar → L001). Parite için aynı ayrım.
+işlev tekkez_baglamasi_mi(p: &değişken Ayr, node: tam32) -> mantıksal {
+    eğer metin_esit(dizi_al(p.a_ad, node), "TANIMLAYICI") == yanlış { ver yanlış; }
+    değişken ad: metin = dizi_al(p.a_deg, node);
+    eğer lin_idx(p, ad) < 0 { ver yanlış; }               // lineer bağlama değil
+    eğer lineer_yapi_mi(p, var_tip(p, ad)) { ver yanlış; }  // lineer YAPI → C tüketmez
+    ver doğru;
+}
 // Bir düğüm lineer bağlamaysa tüket; zaten tüketilmişse L002 (düğüm konumu).
 işlev lin_tuket_dugum(p: &değişken Ayr, node: tam32) -> tam32 {
     // D-375: ÖN-GEÇİŞ sırasında tüketim YAPILMAZ. C argüman alt-ağacını İKİ KEZ
@@ -5777,6 +5788,18 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 gtas_gorev_isaretle(p, idx);   // [D-505] gövde gezildi
                 ver 0;
             }
+        }
+        // D-697 (eski PR #103 / D-325): `tekkez_olustur(e)` producer intrinsic'i — e bir
+        // TEKKEZ bağlamasıysa TÜKETİR (dış sarmalayıcıya TAŞIMA: `tekkez<tekkez<T>>`). Bu
+        // kol olmadan yedek döngüye düşüyordu (built-in → arite bilinmez → tüketim yok) ve
+        // `değişken dış = tekkez_olustur(iç);` iç için sahte L001 üretiyordu — C KABUL
+        // ederken. Tüketim semantiği C'de AÇIKÇA yazılıdır (tip_kontrol.c), tahmin değil.
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI")
+          ve metin_esit(dizi_al(p.a_deg, hedef), "tekkez_olustur") ve (hc == 2) {
+            değişken targ: tam32 = dizi_al(p.cocuk, hb + 1);
+            kontrol_dugum(p, targ);
+            eğer tekkez_baglamasi_mi(p, targ) { lin_tuket_dugum(p, targ); }
+            ver 0;
         }
         // D-696 (eski PR #101 / D-323): DOLAYLI çağrı (işlev-tipli değişken üzerinden) —
         // lineer argüman TAŞINIR. Bilinen-arite yolu `fn_plin_bul` ile tüketir; bu yol
