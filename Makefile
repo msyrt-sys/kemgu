@@ -739,17 +739,34 @@ calistir_ct_bariyer: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/codege
 #                         kapinin zorunlu tuttugu [6] DISK RW OK'a bagli. Ayri ELF cikti.
 #   (bignum)              [D-598] kem_os_arm faz [25]'e TASINDI; ayri ELF
 #                         (C iskeletli bignum_selfhost_arm) bu kapidan cikti.
+#   x86_64 (ring3 sayfa)  calistir_ring3_page_test_x86 — ring3 + sayfa-izolasyon #PF.
+#                         Bu hedef aylarca KIRMIZIYDI ve hicbir kapi gormedi: x86
+#                         bare-metal yuzeyinin HICBIR hedefi test_tumu'da degildi.
+#                         Kok: ring3'e IF=1 ile girilince boot'ta mandallanan PIT IRQ0
+#                         (PIC eslenmemis -> vektor 8) bos IDT girisine #GP verdi.
+#   (x86_64 kem_os)       calistir_kem_os_x86 BILEREK YOK: QEMU yoksa D-486 geregi SERT
+#                         HATA verir (sessiz atlama yasak) — bu kapinin "QEMU'suz
+#                         makinede kirmizi olmaz" sozlesmesini bozar. Eklendiginde
+#                         CI (QEMU kurmuyor) Linux + Windows'ta KIRMIZIYA dondu (olculdu).
+#                         CI'a QEMU kurulursa geri eklenebilir.
 #
 # QEMU yoksa alt hedefler kendileri zarifce atlar (command -v guard) — kapi
 # QEMU'suz makinede KIRMIZI OLMAZ.
-calistir_qemu_cekirdek: calistir_qemu_smoke calistir_kem_os_arm
+calistir_qemu_cekirdek: calistir_qemu_smoke calistir_kem_os_arm \
+                        calistir_ring3_page_test_x86
 	@# [D-557] OZET, ATLAMAYI GIZLEMEMELI. CI'da olculdu: QEMU yokken bes
 	@# temsilcinin BESI de "atlandi" dedi ama ozet yine "5/5 gecti" basiyordu
-	@# (D-486 kapsam yanilsamasi). Artik QEMU varligi ayrica bildirilir.
+	@# (D-486 kapsam yanilsamasi). Artik QEMU varligi ayrica bildirilir —
+	@# aarch64 ve x86_64 AYRI ikililer, biri olup digeri olmayabilir.
 	@if command -v qemu-system-aarch64 >/dev/null 2>&1; then \
-	  echo "=== QEMU cekirdek kapisi: 2/2 temsilci gecti ==="; \
+	  echo "=== QEMU cekirdek kapisi (aarch64): 2/2 temsilci gecti ==="; \
 	else \
-	  echo "=== QEMU cekirdek kapisi: QEMU YOK - 2 temsilcinin IKISI DE ATLANDI (hicbir sey olculmedi) ==="; \
+	  echo "=== QEMU cekirdek kapisi (aarch64): QEMU YOK - 2 temsilcinin IKISI DE ATLANDI (hicbir sey olculmedi) ==="; \
+	fi
+	@if command -v qemu-system-x86_64 >/dev/null 2>&1; then \
+	  echo "=== QEMU cekirdek kapisi (x86_64): 1/1 temsilci gecti ==="; \
+	else \
+	  echo "=== QEMU cekirdek kapisi (x86_64): QEMU YOK - 1 temsilci ATLANDI (hicbir sey olculmedi) ==="; \
 	fi
 
 # [D-462] "kod var ama hicbir olcum atesliyor mu" kapisi. Kaynak/derleyici
@@ -2446,10 +2463,8 @@ calistir_smp_test_arm: $(BUILD)/kemgu$(EXE) $(BM_A64_OBJS)
 		echo "--- QEMU seri cikti ---"; cat $(BUILD)/smp_arm.out; echo "--- son ---"; \
 		if grep -q "SMP OK" $(BUILD)/smp_arm.out; then \
 			echo "SMP testi gecti: 2. çekirdek PSCI CPU_ON ile koştu (çok-çekirdek)."; \
-		elif grep -q "PSCI OK" $(BUILD)/smp_arm.out; then \
-			echo "SMP fallback: PSCI erişilebilir (VERSION) ama CPU_ON çekirdek koşmadı."; \
 		else \
-			echo "FAIL: 'SMP OK' (veya fallback 'PSCI OK') bekleniyor"; \
+			echo "FAIL: 'SMP OK' bekleniyor (2. cekirdek kosmadi; 'PSCI OK' [D-703] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3674,10 +3689,8 @@ calistir_smp_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/smp_x86.out; echo "--- son ---"; \
 		if grep -q "SMP X86 OK" $(BUILD)/smp_x86.out; then \
 			echo "x86_64 SMP testi gecti: 2. çekirdek (AP) INIT-SIPI ile long-mode'da koştu (çok-çekirdek)."; \
-		elif grep -q "APIC OK" $(BUILD)/smp_x86.out; then \
-			echo "x86_64 SMP fallback: Local APIC MMIO + INIT-SIPI altyapisi calisiyor (AP long-mode teyidi yok)."; \
 		else \
-			echo "FAIL: 'SMP X86 OK' (veya fallback 'APIC OK') bekleniyor"; \
+			echo "FAIL: 'SMP X86 OK' bekleniyor (AP long-mode'da kosmadi; 'APIC OK' [D-703] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3706,12 +3719,8 @@ calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/smp4_x86.out; echo "--- son ---"; \
 		if grep -q "SMP4 X86 OK" $(BUILD)/smp4_x86.out; then \
 			echo "x86_64 SMP4 testi gecti: 4 cekirdek (BSP + 3 AP) INIT-SIPI ile long-mode'da kostu (coklu-AP)."; \
-		elif grep -q "SMP4 X86 KISMI" $(BUILD)/smp4_x86.out; then \
-			echo "x86_64 SMP4 kismi: bazi AP'ler long-mode'a ulasti (3'un tamami degil) — cikti icinde N/3 raporlandi."; \
-		elif grep -q "APIC OK" $(BUILD)/smp4_x86.out; then \
-			echo "x86_64 SMP4 fallback: Local APIC MMIO + INIT-SIPI altyapisi calisiyor (AP long-mode teyidi yok)."; \
 		else \
-			echo "FAIL: 'SMP4 X86 OK' (veya kismi/fallback) bekleniyor"; \
+			echo "FAIL: 'SMP4 X86 OK' bekleniyor (3 AP'nin hepsi kosmali; 'KISMI'/'APIC OK' [D-703] artik GECIS DEGIL)"; \
 			exit 1; \
 		fi; \
 	else \
@@ -3723,7 +3732,8 @@ calistir_smp4_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # ring0 kernel, ring3 kod çalıştırır: GDT DPL=3 user seg + TSS (RSP0) + IDT
 # int 0x80 gate (DPL=3). iretq ile ring3'e geç → ring3 `int 0x80` (syscall,
 # ring0'da işlenir) + `cli` (ayrıcalıklı → #GP yakalanır). Marker "RING3 X86 OK"
-# (tam ring3-exec) veya "RING3 SETUP OK" (fallback: sadece GDT/TSS kurulumu).
+# (tam ring3-exec). [D-702] "RING3 SETUP OK" fallback'i KALDIRILDI: ring3 hic
+# kosmadan da basilabiliyordu (D-701 IF=1 yarisinin tam goruntusu).
 calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 	@echo "x86_64 ring3 testi: ring3_x86.c -> ELF (GDT DPL=3 + TSS + IDT int 0x80, iretq ring3)..."
 	$(BM_X86) $(BM_X86_CF) -c test/bare_metal/ring3_x86.c -o $(BUILD)/ring3_x86.o
@@ -3736,10 +3746,8 @@ calistir_ring3_test_x86: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 		echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/ring3_x86.out; echo "--- son ---"; \
 		if grep -q "RING3 X86 OK" $(BUILD)/ring3_x86.out; then \
 			echo "x86_64 ring3 testi gecti: ring3 (userspace) kod kostu + int 0x80 syscall + #GP privilege-fault (ayricalik ayrimi)."; \
-		elif grep -q "RING3 SETUP OK" $(BUILD)/ring3_x86.out; then \
-			echo "x86_64 ring3 fallback: GDT DPL=3 user seg + TSS ltr kuruldu (ring3-exec teyidi yok)."; \
 		else \
-			echo "FAIL: 'RING3 X86 OK' (veya fallback 'RING3 SETUP OK') bekleniyor"; \
+			echo "FAIL: 'RING3 X86 OK' bekleniyor (ring3-exec + syscall + cli #GP err=0)"; \
 			exit 1; \
 		fi; \
 	else \
