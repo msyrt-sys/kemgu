@@ -509,3 +509,12 @@ movq %rax, %cr0"#
     }
     ver 0;
 }
+
+// [D-692] kdl_panik — derleyicinin ürettiği çalışma zamanı kontrolleri (dizi sınırı
+// D-069, sıfıra bölme D-502, kaydırma D-514, vektör lane D-546) `@kdl_panik(ptr)`
+// çağırır. arm64 kem_os bunu --gc-sections ile karşılar (çağrılar satır içine açılınca
+// ölü kalır); x86 bağlantısında gc yok → tanım GEREKLİ. Mesaj mimariden bağımsız
+// kem_panik'e (kem_heap.kem, COM1) aktarılır: gerçek bir ihlal temiz durur.
+çıplak işlev kdl_panik(m: metin) {
+    kem_panik(m);
+}

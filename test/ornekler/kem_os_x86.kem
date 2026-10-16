@@ -393,6 +393,36 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 KERNEL WX HATA");
     }
+    // İş 22 (D-692): MİMARİDEN BAĞIMSIZ algoritma fazları — arm64 kem_os ile AYNI kod
+    // (test/ornekler/kem_os_algoritma.kem), x86 donanımında. Faz numaraları arm ile aynı.
+    eğer kbn_testi() == 1 { yazdir_metin("X86 [25] BIGNUM OK"); }
+    değilse { yazdir_metin("X86 [25] BIGNUM HATA"); }
+    eğer ksha_testi() == 8 { yazdir_metin("X86 [26] SHA256 OK"); }
+    değilse { yazdir_metin("X86 [26] SHA256 HATA"); }
+    eğer kb64_testi() == 1 { yazdir_metin("X86 [29] BASE64 OK"); }
+    değilse { yazdir_metin("X86 [29] BASE64 HATA"); }
+    eğer kcrc_testi() == 1 { yazdir_metin("X86 [30] CRC32 OK"); }
+    değilse { yazdir_metin("X86 [30] CRC32 HATA"); }
+    eğer ksort_testi() == 1 { yazdir_metin("X86 [31] SORT OK"); }
+    değilse { yazdir_metin("X86 [31] SORT HATA"); }
+    eğer khm_testi() == 1 { yazdir_metin("X86 [32] HASHMAP OK"); }
+    değilse { yazdir_metin("X86 [32] HASHMAP HATA"); }
+    eğer krc4_testi() == 1 { yazdir_metin("X86 [33] RC4 OK"); }
+    değilse { yazdir_metin("X86 [33] RC4 HATA"); }
+    eğer kcrack_testi() == 1 { yazdir_metin("X86 [34] HASHCRACK OK"); }
+    değilse { yazdir_metin("X86 [34] HASHCRACK HATA"); }
+    eğer kutf8_testi() == 1 { yazdir_metin("X86 [35] UTF8 OK"); }
+    değilse { yazdir_metin("X86 [35] UTF8 HATA"); }
+    eğer ktc_testi() == 1 { yazdir_metin("X86 [36] TURKCE CASE OK"); }
+    değilse { yazdir_metin("X86 [36] TURKCE CASE HATA"); }
+    eğer ktr_testi() == 1 { yazdir_metin("X86 [37] TURKCE SORT OK"); }
+    değilse { yazdir_metin("X86 [37] TURKCE SORT HATA"); }
+    eğer kvm_testi() == 1 { yazdir_metin("X86 [38] VM OK"); }
+    değilse { yazdir_metin("X86 [38] VM HATA"); }
+    eğer kjson_testi() == 1 { yazdir_metin("X86 [39] JSON OK"); }
+    değilse { yazdir_metin("X86 [39] JSON HATA"); }
+    eğer kasm_testi() == 1 { yazdir_metin("X86 [40] ASM OK"); }
+    değilse { yazdir_metin("X86 [40] ASM HATA"); }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),

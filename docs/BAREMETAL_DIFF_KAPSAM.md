@@ -90,3 +90,9 @@ parça (platform) tek başına derlense bile "birim" sayılmaz — bilinçli.
   satırından okunur) bölüm (5)'te C ↔ self-host karşılaştırılır: define kümesi,
   üçlü, asm sayısı + şablon/kısıt dizgileri, volatile, inttoptr. Sınıflandırma
   `runtime/mimari/x86_64/*.kem`'i de kapsar (CAT'te olmayan → KIRMIZI).
+
+- **D-692:** `test/ornekler/kem_os_algoritma.kem` (kem_os.kem'den birebir taşınan
+  mimariden bağımsız fazlar [25][26][29..40], 61 işlev) tek başına derlendiği için
+  **BIRIMLER**'e eklendi (C ↔ self ayrı birim: 21/21). `kem_os.kem` parça kapsamı 93 → 32
+  işlev; aradaki fark yeni birimde ölçülür (kayıp yok). Dosya arm64 ve x86 birleşik
+  birimlerinin İKİSİNE de CAT ile girer.
