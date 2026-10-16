@@ -1,0 +1,96 @@
+// KEMGU Stdlib — Karma (Polinom Hash)
+// ====================================
+//
+// Saf KEMGU. Hiç bir runtime/FFI bağımlılığı yok.
+// tam32 ve Dizi<tam32> için deterministik karma — karma tablosu
+// (eslem.kem V2), hızlı eşitlik ön-elemesi, içerik parmak izi.
+//
+// ⚠ KRİPTO KARMASI DEĞİL: çekişmeli (adversarial) girdiye karşı
+// dirençsizdir; kriptografik bütünlük için stdlib/kripto şeridi.
+//
+// NEDEN FNV-1a / djb2 DEĞİL: ikisi de TAŞAN çarpma + XOR üzerine
+// kuruludur. Genel tamsayıda bit operatörleri mevcut stdlib
+// korpusunda yok (yalnız kripto sabitsüre tipleri) ve işaretli taşma
+// davranışına yaslanmak taşınabilirlik borcudur (bit.kem ile aynı
+// gerekçe ailesi). Polinom karma (Rabin-Karp / Java String.hashCode
+// ailesi) aynı işi MODÜLER aritmetikle taşmasız görür:
+//   h = (h * B + x) mod M
+//
+// Sabitler:
+//   M = 1000000007 (1e9+7, yaygın asal; M < 2^30 olduğu için
+//       double-and-add'de a+a < 2^31 — taşmasız, bkz. karma_modcarp)
+//   B = 131 (dizi tabanı), karıştırıcı çarpan 48271 (MINSTD ailesi)
+//   Boş dizi tohumu 17 (boş ile [0] ayrışsın diye)
+//
+// Tüm karmalar [0, M) aralığında döner; negatif girdiler
+// karma_normalize ile aynı aralığa indirgenir (deterministik).
+
+// --- Modüler çekirdek ---
+
+// Girdiyi [0, M) aralığına indirge (negatif dahil, deterministik).
+işlev karma_normalize(x: tam32) -> tam32 {
+    değişken h: tam32 = x % 1000000007;
+    eğer h < 0 { h = h + 1000000007; }
+    ver h;
+}
+
+// Modüler çarpım (a*b mod M) — double-and-add (Rus köylüsü çarpımı):
+// naif a*b tam32'de taşar; burada tüm ara değerler < 2^31 kalır
+// (M < 2^30 olduğundan x+x güvenli). O(log b). Girdiler [0, M) beklenir
+// (değilse önce karma_normalize).
+işlev karma_modcarp(a: tam32, b: tam32) -> tam32 {
+    değişken sonuc: tam32 = 0;
+    değişken x: tam32 = karma_normalize(a);
+    değişken y: tam32 = karma_normalize(b);
+    iken y > 0 {
+        eğer y % 2 == 1 {
+            sonuc = (sonuc + x) % 1000000007;
+        }
+        x = (x + x) % 1000000007;
+        y = y / 2;
+    }
+    ver sonuc;
+}
+
+// --- Karma işlevleri ---
+
+// Tek tam32 karması — normalize + kaydır (+1: 0 girdisi sabit-0
+// üretmesin) + 48271 ile karıştır. [0, M).
+işlev karma_tam(x: tam32) -> tam32 {
+    değişken h: tam32 = (karma_normalize(x) + 1) % 1000000007;
+    ver karma_modcarp(h, 48271);
+}
+
+// Dizi karması — polinom birikim: h0 = 17; h = (h*131 + eleman) mod M.
+// SIRAYA DUYARLI: [1,2] ile [2,1] farklı karma üretir (küme değil
+// dizi kimliği). Boş dizi -> 17.
+işlev karma_dizi_tam(xs: Dizi<tam32>) -> tam32 {
+    değişken h: tam32 = 17;
+    için x: xs {
+        h = (karma_modcarp(h, 131) + karma_normalize(x)) % 1000000007;
+    }
+    ver h;
+}
+
+// İki karmayı birleştir (boost hash_combine analoğu, modüler):
+// (h1*131 + h2 + 1) mod M. Sıraya duyarlı; +1 birleştirmenin
+// karma_dizi_tam adımından ayrışması için.
+işlev karma_birlestir(h1: tam32, h2: tam32) -> tam32 {
+    değişken h: tam32 = (karma_modcarp(karma_normalize(h1), 131)
+                         + karma_normalize(h2)) % 1000000007;
+    ver (h + 1) % 1000000007;
+}
+
+// --- Karma tablosu köprüsü ---
+
+// Kova indeksi — karmayı [0, kova_sayisi) aralığına indirger.
+// eslem.kem karma-tablo V2'nin yapı taşı. kova_sayisi <= 0 -> 0.
+işlev karma_kova(h: tam32, kova_sayisi: tam32) -> tam32 {
+    eğer kova_sayisi <= 0 { ver 0; }
+    ver karma_normalize(h) % kova_sayisi;
+}
+
+// AÇIK SORU: karma_metin, karakter erişim primitifi (metin[i] veya
+// metin_karakter builtin'i) stdlib'e açılınca eklenmeli; genel
+// tamsayıda XOR/kaydırma gelirse FNV-1a sürümü de yanına konabilir
+// (bu API sabit kalır, iç algoritma değişir).
