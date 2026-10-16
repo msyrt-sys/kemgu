@@ -45,6 +45,15 @@
     ver vblk_o8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64));
 }
 
+// [D-686] int 0x80 (num=rax, arg=rdi) — koçan rax dışındaki yazmaçları korur.
+çıplak işlev x86_sys(num: tam64, arg: tam64) -> tam64 {
+    değişken r: tam64 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"int $$0x80"# çıktı("={ax}", &r) girdi("{ax}", num) girdi("{di}", arg) bozulan("~{memory}") }
+    }
+    ver r;
+}
+
 işlev main() -> tam32 {
     kem_dma_bariyeri();
     yazdir_metin("X86 DMA BARIYER OK");
@@ -335,6 +344,22 @@ işlev main() -> tam32 {
     }
     değilse {
         yazdir_metin("X86 PREEMPT HATA");
+    }
+    // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
+    // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
+    // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),
+    // 14 durum(1) = 0 (görev 1 bitmedi — sonsuz döngüdeydi), 99 bilinmeyen = -1.
+    değişken s_tik: tam64 = x86_sys(10, 0);
+    değişken s_pid: tam64 = x86_sys(11, 0);
+    değişken s_dur: tam64 = x86_sys(14, 1);
+    değişken s_yok: tam64 = x86_sys(99, 0);
+    eğer (s_tik >= 3) ve (s_pid == 0) ve (s_dur == 0) ve (s_yok == 0 - 1) {
+        yazdir_metin("X86 SYSCALL OK tik=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(s_tik olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 SYSCALL HATA");
     }
     kem_panik("X86 PANIK YOLU OK");
     ver 0;

@@ -102,3 +102,23 @@ sabit KG_GOREV_AZAMI: tam64 = 16;
     }
     ver 0;
 }
+
+// [D-686] Mimariden bağımsız sistem çağrısı servisleri — arm64 kdl_syscall_isle'dan
+// BİREBİR taşındı (dallar değişmedi). Kullanıcı işaretçisi gerektirmeyenler; EL0
+// işaretçili servisler (5/17/18/26) ve konsol (7) mimari dağıtıcıda kalır.
+çıplak işlev kem_syscall_temel_mi(num: tam64) -> mantıksal {
+    ver (num == 10) veya (num == 11) veya (num == 13) veya (num == 14);
+}
+çıplak işlev kem_syscall_temel(num: tam64, arg: tam64) -> tam64 {
+    eğer num == 10 { ver kem_tik_oku(); }
+    eğer num == 11 { ver kem_paktif; }
+    eğer num == 13 {
+        kem_gorev_bitir();
+        ver 0;
+    }
+    eğer num == 14 {
+        eğer (arg < 0) veya (arg >= 16) { ver 1; }
+        ver kg_oku64(KG_OLU + arg * 8);
+    }
+    ver 0 - 1;
+}

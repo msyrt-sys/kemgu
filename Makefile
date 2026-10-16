@@ -2090,6 +2090,11 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		echo "    g1 = $$g1, g2 = $$g2"; \
 	else echo "FAIL: preempt sayaclari ilerlemedi (g1=$$g1 g2=$$g2)"; exit 1; fi
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_irq_isle$$' || { echo "FAIL: kdl_irq_isle (guclu) .kem'den gelmiyor"; exit 1; }
+	@echo "  Kanit 17: cekirdek modu syscall (int 0x80 -> .kem kdl_syscall_isle)..."
+	@v=`grep -A1 -xF "X86 SYSCALL OK tik=" $(BUILD)/kem_os_x86.out | tail -1`; \
+	if [ -n "$$v" ] && [ "$$v" -ge 3 ] 2>/dev/null; then echo "    gettick = $$v"; \
+	else echo "FAIL: 'X86 SYSCALL OK tik=' + >=3 satiri yok ($$v)"; exit 1; fi
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_syscall_isle$$' || { echo "FAIL: kdl_syscall_isle (guclu) .kem'den gelmiyor"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

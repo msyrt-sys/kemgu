@@ -2104,3 +2104,15 @@
   isle ilgisiz, test_tumu'da degil → hicbir kapi gormemis. Ayri is.
   KALAN BORC (x86 karsiligi yok): kem_gorev 25 (EL0/kul_*/MB-1b/trampolin — ring3
   fazi) + kem_mmu 14 = 39 blok.
+- 2026-10-16 D-686: x86 CEKIRDEK MODU sistem cagrisi (ara hedef kapanisi).
+  arm64 kdl_syscall_isle'nin mimariden bagimsiz dallari (10 gettick, 11 getpid,
+  13 exit, 14 durum) BIREBIR tasindi → kem_gorev_cekirdek.kem kem_syscall_temel_mi /
+  kem_syscall_temel (Python ile, satir-multiset dogrulandi); arm dagiticisi bunlari
+  cagirir (num 7 kis_satir arm'a ozgu, yerinde). x86: kem_gorev_hw.kem guclu
+  kdl_syscall_isle → kem_syscall_temel, bilinmeyen → -1 (C zayif olani ezer);
+  kem_os_x86.kem x86_sys (int $$0x80, rax=num rdi=arg). Kucuk ve asm-hassas →
+  orkestrator yazdi (deepseek turu acilmadi). KANIT 17: QEMU x86 'X86 SYSCALL OK
+  tik=6' (10≥3, 11=0, 14(1)=0, 99=-1) + llvm-nm T kdl_syscall_isle. SABOTAJ:
+  dagitici hep -1 → SYSCALL HATA, rc=2. REGRESYON: arm kem_os (EL0 SYSCALL/SHELL/
+  SPAWN OK), check_kapisi, baremetal_diff 20/20, syscall_test_x86 yesil.
+  KALAN: ring3 + kem_mmu fazi (39 blok) — kullanici karari.
