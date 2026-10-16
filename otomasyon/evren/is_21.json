@@ -1,0 +1,6 @@
+{"tur": "21", "is": "lambda_t001", "gorev": "otomasyon/evren/gorev_21_lambda_t001.md",
+ "baglam": [],
+ "kesit": ["selfhost/checker.kem:2890-2900", "selfhost/codegen.kem:10201-10211"],
+ "effort": "low",
+ "dogrulama": ["make -s selfhost/konak.kem >/dev/null 2>&1; build/kemgu --check selfhost/checker.kem", "build/kemgu --check selfhost/codegen.kem"],
+ "isaretler": ["checker.kem — tip kontrolu basarili", "codegen.kem — tip kontrolu basarili"]}

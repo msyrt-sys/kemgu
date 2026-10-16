@@ -55,3 +55,9 @@ loop.log
 # Depoya GIRMEMELI: icerigi kuruldugu makineye baglidir, commit'lenirse baska
 # bir konakta SESSIZCE yanlis hedef tasir.
 /selfhost/konak.kem
+
+# Yerel tam-takim kosum kayitlari (make test_tumu | tee tumu*.log) — depo kokunde
+/tumu*.log
+
+# Python onbellegi (otomasyon/evren/*.py)
+__pycache__/

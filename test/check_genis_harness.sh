@@ -82,6 +82,14 @@ fi
 #      "degisken gN: sonuc<gorev<tam32>, metin> =". Birlestirilmis halleri
 #      calistir_stdlib_check'te TEMIZ gecer (C ve self: exit 0).
 #
+#      D-695: PR #109 stdlib modul testleri — test_arama / test_eslem /
+#      test_istatistik / test_kuyruk / test_obek / test_tablo / test_yigin. AYNI E3
+#      sinifi, SATIR SATIR OLCULDU: fark yalniz C'nin FAZLA tanilari ve her biri bir
+#      `deger(x)/hata(x)/tamam(x) =>` kolundaki baglamaya duser (modulsuz derlemede
+#      skrutini tanimsiz → C baglamayi kurmaz); self-host'un C'de OLMAYAN tanisi 0.
+#      (C/self: arama 32/23, eslem 36/33, istatistik 37/23, kuyruk 17/11, obek 25/18,
+#      tablo 81/75, yigin 18/12.) Birlestirilmis halleri calistir_stdlib_check'te TEMIZ.
+#
 # ⚠⚠ MUAF DIZGISININ ICINE ACIKLAMA YAZMA (D-456'da isirdi). Bu bir cift
 # tirnakli dizgidir: icine yazilan her CIPLAK KELIME bir muafiyet adi olur
 # (aciklamama "bariyer" yazmistim -> stdlib/bariyer.kem sessizce muaf oldu) ve
@@ -100,7 +108,8 @@ fi
 # ENVANTERIDIR" kurali geregi silindi.
 MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
 test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit
-test_semafor test_bariyer test_regex"
+test_semafor test_bariyer test_regex
+test_arama test_eslem test_istatistik test_kuyruk test_obek test_tablo test_yigin"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1

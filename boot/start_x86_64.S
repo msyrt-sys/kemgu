@@ -150,7 +150,7 @@ _halt:
     hlt
     jmp     _halt
 
-/* === GDT (long mode: null + çekirdek kod/veri + [D-695] kullanıcı kod/veri + TSS) ===
+/* === GDT (long mode: null + çekirdek kod/veri + [D-699] kullanıcı kod/veri + TSS) ===
  * .data'da (eskiden .rodata): (1) TSS tanımlayıcısı çalışma anında .kem
  * kxr_tss_kur tarafından doldurulur; (2) CPU `ltr`de TSS tanımlayıcısına MEŞGUL
  * bitini, segment yüklerken erişildi bitini YAZAR — D-691 çekirdek W^X'ten sonra
@@ -163,9 +163,9 @@ gdt:
     .quad   0x0000000000000000     /* null */
     .quad   0x00209A0000000000     /* 0x08: 64-bit code (L, present, code, exec/read) */
     .quad   0x0000920000000000     /* 0x10: data (present, data, read/write) */
-    .quad   0x0020FA0000000000     /* 0x18: [D-695] kullanıcı kod (DPL3, L) → CS=0x1B */
-    .quad   0x0000F20000000000     /* 0x20: [D-695] kullanıcı veri (DPL3, r/w) → SS=0x23 */
-    .quad   0, 0                   /* 0x28: [D-695] 64-bit TSS (16 B), kxr_tss_kur doldurur */
+    .quad   0x0020FA0000000000     /* 0x18: [D-699] kullanıcı kod (DPL3, L) → CS=0x1B */
+    .quad   0x0000F20000000000     /* 0x20: [D-699] kullanıcı veri (DPL3, r/w) → SS=0x23 */
+    .quad   0, 0                   /* 0x28: [D-699] 64-bit TSS (16 B), kxr_tss_kur doldurur */
 gdt_end:
 gdt_desc:
     .word   gdt_end - gdt - 1      /* limit */
@@ -188,7 +188,7 @@ pdpt:   .skip 4096
 pd:     .skip 4096
 pd_mmio: .skip 4096
 
-/* [D-695] 64-bit TSS (104 B). Yalnız RSP0 kullanılır: ring3'ten gelen kesme/
+/* [D-699] 64-bit TSS (104 B). Yalnız RSP0 kullanılır: ring3'ten gelen kesme/
  * istisnada CPU ring0 yığınını buradan alır (TSS'siz ring3→ring0 = üçlü hata).
  * RSP0 kdl_x86_ring3_gir'de, IOPB ofseti + tanımlayıcı .kem kxr_tss_kur'da. */
 .align 16
@@ -248,7 +248,7 @@ isr\n:
     ISR_NOERR 31
 
 isr_ortak:
-    /* [D-695] RING3 DÖNÜŞÜ: kdl_x86_r3_blok+0 (bekle) != 0 VE kesilen CS'in RPL'i 3
+    /* [D-699] RING3 DÖNÜŞÜ: kdl_x86_r3_blok+0 (bekle) != 0 VE kesilen CS'in RPL'i 3
      * ise istisna KULLANICI kodundan gelmiştir (yığın: vektör@0 hata@8 RIP@16 CS@24).
      * Kullanıcı rax/rcx + vektör/hata/RIP/CS/CR2 kaydedilir, bayrak SIFIRLANIR (tek
      * atış), çekirdek bağlamına (kdl_x86_ring3_gir'in çağıranına) dönülür. Kesilen
@@ -387,7 +387,7 @@ kdl_syscall_stub:
     pushq   %r9
     pushq   %r10
     pushq   %r11
-    /* [D-695] çağıranın CS'i (8 itme = 64 B; RIP@64, CS@72) → kdl_x86_r3_blok+72.
+    /* [D-699] çağıranın CS'i (8 itme = 64 B; RIP@64, CS@72) → kdl_x86_r3_blok+72.
      * RPL 3 = sistem çağrısı KULLANICI kodundan geldi (ring3 kanıtı). */
     movq    72(%rsp), %r11
     movq    %r11, kdl_x86_r3_blok+72(%rip)
@@ -404,7 +404,7 @@ kdl_syscall_stub:
     popq    %rcx
     iretq
 
-/* === [D-695] RING3 girişi (arm64 kdl_el0_calistir ikizi) ===
+/* === [D-699] RING3 girişi (arm64 kdl_el0_calistir ikizi) ===
  * kdl_x86_ring3_gir(rdi = kullanıcı RIP, rsi = kullanıcı RSP): RFLAGS + callee-
  * saved yazmaçlar kaydedilir, IRQ kapatılır, kaydedilmiş RSP → kdl_x86_r3_blok+8,
  * TSS.RSP0 = bu RSP (16-hizalı; ring3'ten gelen kesme çerçevesi kaydedilen
@@ -459,7 +459,7 @@ kdl_x86_r3_don:
 
 .section .data
 .align 8
-/* [D-695] ring3 durum bloğu (.kem kxr_* tek taban adresle okur):
+/* [D-699] ring3 durum bloğu (.kem kxr_* tek taban adresle okur):
  * +0 bekle  +8 çekirdek RSP  +16 vektör  +24 hata kodu  +32 RIP  +40 CS
  * +48 kullanıcı rax  +56 kullanıcı rcx  +64 CR2  +72 son sistem çağrısının CS'i */
 .global kdl_x86_r3_blok

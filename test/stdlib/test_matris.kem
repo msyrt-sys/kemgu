@@ -1,0 +1,170 @@
+// KEMGU Stdlib Testi — Matris
+// =================================
+//
+// Bu dosya `stdlib/matris.kem` ile birleştirilerek --check edilir.
+// Her test bir kullanım senaryosunu tip düzeyinde doğrular.
+//
+// Fonksiyon-dönüşü matrisler çağıran scope'ta indekslenmez; sonuçlar
+// mat_al / mat_iz / mat_eleman_sayisi parametresine geçirilerek skalere
+// indirgenir (F4-güvenli desen). Matris literalleri düz (row-major):
+// [1,2;3,4] -> [1, 2, 3, 4].
+
+// --- mat_gecerli_mi ---
+işlev test_gecerli_evet() -> mantıksal {
+    değişken m: Dizi<tam32> = [1, 2, 3, 4, 5, 6];
+    ver mat_gecerli_mi(m, 2, 3);
+}
+
+işlev test_gecerli_hayir() -> mantıksal {
+    değişken m: Dizi<tam32> = [1, 2, 3, 4, 5];
+    ver mat_gecerli_mi(m, 2, 3);                  // 5 != 6 -> yanlış
+}
+
+işlev test_gecerli_bos() -> mantıksal {
+    değişken m: Dizi<tam32> = [];
+    ver mat_gecerli_mi(m, 0, 0);
+}
+
+// --- mat_al / mat_yaz ---
+işlev test_al() -> tam32 {
+    değişken m: Dizi<tam32> = [1, 2, 3, 4, 5, 6];   // 2x3
+    ver mat_al(m, 3, 1, 2);                       // satır 1, sütun 2 -> 6
+}
+
+işlev test_al_ilk() -> tam32 {
+    değişken m: Dizi<tam32> = [7, 8, 9, 10];      // 2x2
+    ver mat_al(m, 2, 0, 0);                       // 7
+}
+
+işlev test_yaz_oku() -> tam32 {
+    değişken m: Dizi<tam32> = [0, 0, 0, 0];       // 2x2
+    ver mat_al(mat_yaz(m, 2, 1, 0, 42), 2, 1, 0); // 42
+}
+
+işlev test_yaz_digerleri_korunur() -> tam32 {
+    değişken m: Dizi<tam32> = [1, 2, 3, 4];       // 2x2
+    değişken y: Dizi<tam32> = mat_yaz(m, 2, 0, 1, 99);
+    ver mat_al(m, 2, 1, 1);                       // 4 (dokunulmadı)
+}
+
+// --- mat_olustur / mat_birim ---
+işlev test_olustur_boyut() -> tam32 {
+    ver mat_eleman_sayisi(mat_olustur(2, 3, 7));  // 6
+}
+
+işlev test_olustur_deger() -> tam32 {
+    ver mat_al(mat_olustur(2, 3, 7), 3, 1, 2);    // 7
+}
+
+işlev test_birim_kosegen() -> tam32 {
+    ver mat_al(mat_birim(3), 3, 1, 1);            // 1
+}
+
+işlev test_birim_kosegen_disi() -> tam32 {
+    ver mat_al(mat_birim(3), 3, 0, 1);            // 0
+}
+
+işlev test_birim_iz() -> tam32 {
+    ver mat_iz(mat_birim(3), 3);                  // 3
+}
+
+// --- mat_topla / mat_skaler_carp ---
+işlev test_topla() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [5, 6, 7, 8];
+    ver mat_al(mat_topla(a, b), 2, 1, 1);         // 4+8 = 12
+}
+
+işlev test_topla_girdi_korunur() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [5, 6, 7, 8];
+    değişken t: Dizi<tam32> = mat_topla(a, b);
+    ver mat_al(a, 2, 0, 0);                       // hâlâ 1 (saf)
+}
+
+işlev test_skaler() -> tam32 {
+    değişken m: Dizi<tam32> = [1, 2, 3, 4];
+    ver mat_al(mat_skaler_carp(m, 2), 2, 1, 0);   // 6
+}
+
+// --- mat_carp ---
+işlev test_carp_kare() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];       // 2x2
+    değişken b: Dizi<tam32> = [5, 6, 7, 8];       // 2x2
+    ver mat_al(mat_carp(a, b, 2, 2, 2), 2, 0, 0); // 1*5+2*7 = 19
+}
+
+işlev test_carp_kare_son() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];
+    değişken b: Dizi<tam32> = [5, 6, 7, 8];
+    ver mat_al(mat_carp(a, b, 2, 2, 2), 2, 1, 1); // 3*6+4*8 = 50
+}
+
+işlev test_carp_dikdortgen() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6]; // 2x3
+    değişken b: Dizi<tam32> = [7, 8, 9];          // 3x1
+    ver mat_al(mat_carp(a, b, 2, 3, 1), 1, 1, 0); // 4*7+5*8+6*9 = 122
+}
+
+işlev test_carp_birim_kimlik() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4];       // 2x2
+    ver mat_al(mat_carp(a, mat_birim(2), 2, 2, 2), 2, 1, 0);   // 3 (A*I = A)
+}
+
+işlev test_carp_boyut() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6]; // 2x3
+    değişken b: Dizi<tam32> = [7, 8, 9];          // 3x1
+    ver mat_eleman_sayisi(mat_carp(a, b, 2, 3, 1));   // 2 (2x1)
+}
+
+// --- mat_transpoze ---
+işlev test_transpoze() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6]; // 2x3
+    ver mat_al(mat_transpoze(a, 2, 3), 2, 2, 1);  // T(2,1) = A(1,2) = 6
+}
+
+işlev test_transpoze_boyut() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6];
+    ver mat_eleman_sayisi(mat_transpoze(a, 2, 3));    // 6
+}
+
+işlev test_cift_transpoze_kimlik() -> tam32 {
+    değişken a: Dizi<tam32> = [1, 2, 3, 4, 5, 6]; // 2x3
+    ver mat_al(mat_transpoze(mat_transpoze(a, 2, 3), 3, 2), 3, 1, 2);   // A(1,2) = 6
+}
+
+// --- mat_iz ---
+işlev test_iz() -> tam32 {
+    değişken m: Dizi<tam32> = [1, 2, 3, 4];       // 2x2
+    ver mat_iz(m, 2);                             // 1+4 = 5
+}
+
+// Sentinel sürücü: tüm kontroller geçerse 42, aksi halde ilk başarısız
+// kontrolün indeksi.
+işlev main() -> tam32 {
+    eğer değil test_gecerli_evet() { ver 1; }
+    eğer test_gecerli_hayir() { ver 2; }
+    eğer değil test_gecerli_bos() { ver 3; }
+    eğer test_al() != 6 { ver 4; }
+    eğer test_al_ilk() != 7 { ver 5; }
+    eğer test_yaz_oku() != 42 { ver 6; }
+    eğer test_yaz_digerleri_korunur() != 4 { ver 7; }
+    eğer test_olustur_boyut() != 6 { ver 8; }
+    eğer test_olustur_deger() != 7 { ver 9; }
+    eğer test_birim_kosegen() != 1 { ver 10; }
+    eğer test_birim_kosegen_disi() != 0 { ver 11; }
+    eğer test_birim_iz() != 3 { ver 12; }
+    eğer test_topla() != 12 { ver 13; }
+    eğer test_topla_girdi_korunur() != 1 { ver 14; }
+    eğer test_skaler() != 6 { ver 15; }
+    eğer test_carp_kare() != 19 { ver 16; }
+    eğer test_carp_kare_son() != 50 { ver 17; }
+    eğer test_carp_dikdortgen() != 122 { ver 18; }
+    eğer test_carp_birim_kimlik() != 3 { ver 19; }
+    eğer test_carp_boyut() != 2 { ver 20; }
+    eğer test_transpoze() != 6 { ver 21; }
+    eğer test_transpoze_boyut() != 6 { ver 22; }
+    eğer test_cift_transpoze_kimlik() != 6 { ver 23; }
+    eğer test_iz() != 5 { ver 24; }
+    ver 42;
+}

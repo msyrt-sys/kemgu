@@ -439,7 +439,7 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 SYSCALL HATA");
     }
-    // İş 24 (D-695): KULLANICI MODU (ring3) — arm64 EL0 ikizi. Süreç adres alanı #3,
+    // İş 24 (D-699): KULLANICI MODU (ring3) — arm64 EL0 ikizi. Süreç adres alanı #3,
     // özel VA 0x54000000 U/S ile eşlenir; iretq ile CPL 3'e inilir; ring3 int 0x80
     // getpid (DPL3 kapı → .kem kdl_syscall_isle, çağıran CS 0x1B), sonra `hlt` → #GP →
     // çekirdeğe kontrollü dönüş; ikinci girişte gözetmen sayfa okuması → #PF hata 5.

@@ -1,4 +1,4 @@
-# [D-696] x86_64 bare-metal: her `define`a `noredzone` işlev özniteliği ekle.
+# [D-700] x86_64 bare-metal: her `define`a `noredzone` işlev özniteliği ekle.
 # NEDEN: SysV x86-64 yaprak işlevlere RSP'nin ALTINDAKİ 128 B'ı ("kırmızı bölge")
 # yerel değişken için kullandırır. Çekirdekte ring0 kesmesi (IRQ0, int 0x80,
 # istisna) çerçevesini AYNI yığına, tam RSP'nin altına iter → kırmızı bölgedeki
