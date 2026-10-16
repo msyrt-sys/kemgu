@@ -5,6 +5,4872 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-455 [YÜKSEK] — KARAR 7: `Kilit` (kapsamlı mutex) + İKİ self-host parite boşluğu
+
+Önerilen sıralamanın son maddesi. Öneriyi yazarken *"runtime primitifleri
+hazır"* demiştim — **ÖLÇÜM BUNU DÜZELTTİ.**
+
+### ⚠ Kendi gerekçem yanlıştı
+`kdl_kilit_init` / `_gir` / `_cik` / `_yok_et` gerçekten VAR ama:
+- **`static`** (dışa verilmiyor), ve
+- **`KdlKanal *`** alıyorlar — kanal implementasyonuna gömülüler, genel amaçlı
+  bir kilit API'si DEĞİLLER.
+
+Yani bağımsız `Kilit` YENİ runtime kodu istedi: `KdlKilit` tipi +
+`kdl_kilit_olustur` / `_al` / `_birak` / `_yok` (opak `void*`, thread'siz
+derlemede NO-OP). **Gerekçe metni de bir iddiadır — ölç** (D-453'ün dersi,
+üst üste ikinci kez kendi yazdığım gerekçede çıktı).
+
+### Tasarım: kapsamlı API, ham `al`/`bırak` DIŞA VERİLMEZ
+```
+kilitle(k, || { ... })     // kilidi açma yolu programcının elinden alınır
+```
+Ham çift iki hata sınıfını davet eder: unutulmuş `bırak` (deadlock) ve çift
+`bırak` (UB). Kapanışlar iki derleyicide de çalıştığı için (D-322) sahiplik
+dile devredilebiliyor.
+- **`Kilit` LİNEER DEĞİL** (`yapı tekkez` değil) ve bu bilinçli: dosya
+  handle'ı (D-452) tam bir kez tüketilmelidir, kilit ise DEFALARCA kullanılır.
+  Lineer yapmak ikinci `kilitle` çağrısını imkânsız kılardı. Test bunu açıkça
+  ölçer (b maddesi).
+- Handle opaktır ve `yapı Kilit` içinde taşınır; kullanıcı ona hiç dokunmaz →
+  D-443'ün "opak handle `metin` olarak tipleniyor" tuzağı tekrarlanmaz
+  (handle KAÇMAZ).
+
+### 🔴 İki ÖNCEDEN VAR OLAN self-host parite boşluğu açığa çıktı
+Her ikisi de C'de doğruydu, self-host'ta GEÇERSİZ IR üretiyordu:
+1. **Adlandırılmış işlevi değer olarak geçirmek** (`cagir(kirk)`): C fat value
+   `{ ptr @kirk, ptr null }` yayıyor; self-host adı BİLİNMEYEN DEĞİŞKEN sanıp
+   `load i32, ptr ` (BOŞ operand) üretiyordu. **D-391'in `sabit` dalıyla AYNI
+   SINIF, aynı belirti** — o dalın hemen yanına işlev-değeri dalı eklendi.
+2. **İç içe kapanış** (lifted lambda gövdesinde başka bir lambda):
+   `lam_kuyruk_emit` kuyruk boyutunu **BAŞTA BİR KEZ** alıyordu; emit sırasında
+   kuyruğa giren yeni lambda hiç yayılmıyordu → `use of undefined value
+   '@lambda_N'`. **Kuyruk SABİT NOKTAYA kadar işlenmeli** — C'nin `bekleyenler`
+   worklist'i zaten böyle çalışıyor (D-401). Tek satırlık onarım.
+
+### ⚠ Test beklentim yanlıştı: yakalanan yerel MUTASYONU görünmez
+İlk testte `kilitle(k, || { n = n + 40; ver n; })` yazıp dışarıdan `n`i
+okumaya çalıştım → C'de "yan etki gorunmedi". **Kilit kusuru DEĞİL:** kapanış
+çevreyi KOPYALAYARAK yakalar (heap env kopyası, D-309). Paylaşılan durum için
+doğru yol küresel + `güvensiz`tir; test (d) maddesinde tam bunu yapıyor.
+
+### ⚠ `uygula` bir ANAHTAR KELİMEDİR
+Fikstürde yardımcı işleve `uygula` adını verdim → **P014**. D-323 tam bu
+tuzağı kaydetmişti ("eski testte işlev adı olarak `uygula` kullanılmıştı").
+`cagir` olarak değiştirildi.
+
+### Doğrulama
+- `stdlib/kilit.kem` + `test/stdlib/test_kilit.kem` → **C ve SELF: exit 0**,
+  `kilit: TUM TESTLER GECTI`. Test (d) maddesi **GERÇEK iki-thread'li
+  karşılıklı dışlama** ölçer (iki `görev`, küresel sayaç, sonuç tam 2).
+- Kapı: `calistir_stdlib_check` davranış döngüsüne `kilit:0` eklendi (9 modül).
+- Fikstür `test/cg_korpus/cg_islev_deger_ic_ice.kem` → **C=42, SELF=42**;
+  `define` kümesi BİREBİR (muaf DEĞİL).
+- **Sabotaj 2/2:** S43 (işlev-değeri dalını kaldır) → LINK-RED ·
+  S44 (kuyruğu sabit boyuta döndür) → LINK-RED.
+- Kapılar: `codegen_diff` **148/148** · `yapi_diff` **123/123** ·
+  `stdlib_check` 9 modül.
+
+---
+
+## D-454 [ORTA] — KARAR 6: `bir()` / `sıfır()` birim-değer intrinsic'leri + `kuvvet(x,0)` onarıldı
+
+Önerilen sıralamada 6. madde. D-441'de `kuvvet<T>(x, 0)`in **x** döndürdüğü
+(doğrusu 1) ölçülmüş ve testle SABİTLENMİŞTİ; kök bir kusur değil, **dil
+sınırıydı**: generic `T` içinde `ver 1;` yazmak `T020` verir.
+
+### İddia ÖNCE ölçüldü — hâlâ geçerliydi
+`ver 1;` bir generic gövdede → `T020`. `kuvvet(5,0)` → **5**. D-401'in generic
+monomorfizasyonu bu iddiayı bayatlatmış olabilirdi; olmamış.
+
+### Çözüm: tam constraint sistemi DEĞİL, iki dar intrinsic
+`bir()` ve `sıfır()` dönüş tipini **BEKLENEN TİPTEN** alır (`hiç` gibi
+bağlamsal). Generic gövdede beklenen `T`dir; monomorfizasyonda somutlaşır ve
+codegen doğru genişlik/kind'da **sabit yayar** — çağrı değil (`@bir` diye bir
+sembol yoktur).
+
+`sayisal.kem`in kendi yorumu bu çözümü zaten işaret ediyordu: *"tipik bir
+yaklaşım `sifir<T>()` + `bir<T>()` helper'ı"*. Yorum çözümü biliyordu, kimse
+yazmamıştı.
+
+**Neden `kuvvet_tam` eklenmedi:** geçici bir boşluk için KALICI API borcu
+olurdu; constraint sistemi gelince elde gereksiz ikinci bir ad kalır ve silmek
+yeni bir kırılma olur. **Neden `x / x` değil:** tip kontrolünden geçer ama
+`x = 0`da sıfıra bölme = ÇÖKME; oysa 0⁰ geleneksel olarak 1. Yanlış cevabı
+çökmeyle takas etmek iyileştirme değildir (D-441'de ölçülmüştü).
+
+### Uygulama
+- C: `tip_kontrol.c` → `tip_belirle_beklenen` içinde özel-durum (dönüş =
+  beklenen; `tip_sayisal_mi` generic param için "deferred true").
+  `llvm.c` → beklenen IR tipinde `add`/`fadd` sabiti.
+- Self-host: `codegen.kem` çağrı dalı + `checker.kem`/`codegen.kem` yerleşik ad
+  kaydı.
+- `stdlib/temel/matematik.kem` `kuvvet` ve `stdlib/temel/sayisal.kem` `us`
+  onarıldı.
+
+### ⚠ İki yanlış yerleştirme, ikisini de DERLEYİCİ yakaladı
+1. Özel-durumu önce `tip_belirle`ye koydum — orada `beklenen` YOK
+   (`'beklenen' undeclared`). Doğru yer `tip_belirle_beklenen`.
+2. `"sıfır"` UTF-8 dizgisini `"s\xc4\xb1f\xc4\xb1r"` yazdım → **"hex escape
+   sequence out of range"**: `\xb1`den sonra gelen `f` HEX RAKAMDIR.
+   CLAUDE.md'nin tam olarak uyardığı tuzak; concatenation ile ayrıldı.
+3. Self-host'ta beklenen tipi yalnız `beklenen_ll`den okudum — o kanal YALNIZ
+   tagged-union taşır, skaler taşımaz → `double` instantiation'ında
+   `add i32 0, 1` yayıldı (LLVM-RED). Zincir `beklenen_ll` → `beklenen_elem`
+   → `cur_ret` olarak düzeltildi.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_birim_deger.kem` → **C=42, SELF=42**. Dört
+  instantiation (tam32 · tam64 · kesirli64 · `sıfır()`) + birim elemanın
+  GERÇEK bir indirgemede kullanımı (boş dizide çarpım = 1).
+- **Sabotaj S43** (`bir()`i daima 0 yap) → **exit 33**.
+- D-441'in sabitlediği test gerçeğe göre güncellendi: `test_kuvvet_5_0() != 1`.
+  **Sabitlenmiş bilinen-yanlış test tam da tasarlandığı gibi kırmızıya dönüp
+  bunu bildirdi** (D-449'da `ac("yok.txt")` ile aynı desen — ikinci kez işe
+  yaradı).
+- Kapılar: `codegen_diff` **147/147** · `checker_diff` **153/153 (0 muaf)** ·
+  `yapi_diff` **122/122** · `stdlib_check` 8 modül.
+- `yapi_diff`te fikstür bilinen **K4** sınıfına (generic BASE gövdesi, D-401
+  V1) düşüyor. D-449'da fikstürü bölerek muafiyeti dar tutabilmiştim; burada
+  bölmek çare DEĞİL — `bir()` zaten yalnız generic gövdede anlamlıdır.
+
+---
+
+## D-453 [ORTA] — KARAR 5: `calistir_qemu_cekirdek` — oracle değişikliklerinin bare-metal kanıtı
+
+Önerilen sıralamada 5. madde. D-448 şunu saptamıştı: `src/llvm.c`ye dokunan
+bir değişiklik KEMGU-OS'u kırsa **hiçbir host kapısı görmez**. O gün iki hedefi
+ELLE koşturmuştum — ama **elle koşturulan ölçüm kapı DEĞİLDİR** (D-395).
+
+### Neden tam süpürme değil
+~128 QEMU hedefinin tamamı koşum süresini saatlere çıkarır ve o zaman kimse
+çalıştırmaz — bugünkünden daha kötü olur. Bu kapı **beş temsilci** koşar:
+**ölçüldü, 79 saniye.** O kadar ucuz olduğu için `test_tumu`ya doğrudan
+bağlandı (elle hatırlanması gereken bir kural bırakmak yerine).
+
+| hedef | kapsadığı risk |
+|---|---|
+| `qemu_smoke` | asgari bare-metal boot |
+| `kem_os_arm` | 24 fazlı entegre OS (asm · MMU · syscall · sürücü) |
+| `sha256_selfhost_arm` | imzasız kaydırma (`lshr`) bare-metal'de |
+| `virtio_selfhost_arm` | sürücü: yapı + işaretçi ağırlıklı |
+| `bignum_selfhost_arm` | tamsayı genişlikleri / carry yayılımı |
+
+QEMU yoksa alt hedefler kendileri zarifçe atlar (`command -v` guard) — kapı
+QEMU'suz makinede KIRMIZI OLMAZ.
+
+### ⚠ SABOTAJ BİR GEREKÇEMİ ÇÜRÜTTÜ
+`sha256_selfhost_arm`ı "sabitsüre / D-446 alanı" diye işaretlemiştim.
+**S41** (D-446'nın `sabitsüre` soymasını boz) → kapı **YEŞİL KALDI**. Ölçtüm:
+`sha256_selfhost.kem` **`sabitsüre` KULLANMIYOR** — 86 düz `dtam32`, 0
+`sabitsüre`. Yani o riski kapsamıyor (o risk `calistir_kripto_kosum` ile zaten
+takımda). Yorum gerçeğe göre düzeltildi.
+**Muafiyet/gerekçe metni de bir İDDİADIR — ölç** (D-406'nın dersinin tekrarı;
+bu kez kendi yazdığım gerekçede).
+
+### ⚠ İkinci sabotaj UYGULANMADI ve yeşil sonuç verdi
+**S42**'nin ilk denemesi "DESEN YOK" bastı (CRLF; python `\n` çapası) ama kapı
+yeşil çıktığı için bir an "kapı zayıf" diye kaydedecektim. **Sabotajın
+sessizliği önce SABOTAJI şüpheli kılar** (D-402). `grep` sayısıyla doğrulanıp
+Edit ile uygulandı → kapı **EXIT 2**: `qemu_smoke` geçiyor, sonraki hedef
+düşüyor. Kapı gerçekten ölçüyor.
+
+### Doğrulama
+Temiz ağaçta `calistir_qemu_cekirdek` → **5/5, EXIT 0, 79s**.
+Sabotaj **S42** (`ast_tip_isaretsiz_mi`'yi daima 0 yap) → **EXIT 2**.
+`test_tumu` artık **60 kapı** çağırıyor.
+
+---
+
+## D-452 [YÜKSEK] — KARAR 4: dosya handle'ı `yapı tekkez Dosya` (lineer opak tip)
+
+Önerilen sıralamada 4. madde. D-443'te kök neden *"opak handle `metin` olarak
+tipleniyor"* diye kaydedilmiş, D-449'da bedeli ölçülmüştü (`kapat("")`
+yakalanamıyordu, çünkü boş dizgi geçerli bir işaretçidir).
+
+### Altyapı HAZIRDI — önce ölçüldü
+Tasarlamadan önce dört probe koşuldu: `yapı tekkez` + `imha` çalışıyor,
+sızıntı **L001**, çift tüketim **L002**, ve önemlisi `sonuç<Dosya, metin>`
+desen bağlaması da C'de **L001** veriyor. Yani D-301'in `görev<T>` için
+kaydettiği "`sonuç` içinde lineerlik kaybolur" sınırı `yapı tekkez`e
+UYGULANMIYORDU. Yazılacak yeni makine yoktu — yalnız handle'ı o tipe taşımak.
+
+### Kazanım — üçü de DERLEME ZAMANINDA
+```
+kapat("")            → T001   (rastgele `metin` handle DEĞİLDİR)
+kapat(d); kapat(d)   → L002   (çift kapatma / kullan-sonra-kapat)
+açıp kapatmamak      → L001   (sızıntı)
+```
+**D-449'un açıkça "kapatılabilir borç" diye kaydettiği sınır KAPANDI.**
+
+### Değişimin yüzeyi DAR
+`stdlib/dosya.kem`in 17 işlevinden yalnız **`ac` ve `kapat`** handle'ı dışarı
+veriyor. Diğer beş kullanım (`yaz_metin`/`ekle`/`ekle_satir`/`kopyala`) tek
+işlev içinde aç-kapat yapıyor — handle KAÇMIYOR, hapsedilmiş; ham yerleşikle
+kalmaları güvenli ve `handle_gecerli_mi` onlar için iç yardımcı olarak duruyor.
+
+### 🔴 Yol üstünde ÜÇ ayrı gizli kusur çıktı
+1. **D-450'nin kendi boşluğu.** `dosya_gecersiz` yerleşiğinin CODEGEN dönüş
+   tipini self-host'ta bağlamayı atlamışım → `call void @kdl_dosya_gecersiz()`
+   + `ret ptr 0` (LLVM-RED). **Hiçbir kapı görmedi** çünkü korpusta onu
+   çağıran dosya yoktu; `stdlib/dosya.kem` kullanmaya başlayınca çıktı.
+2. **Self-host lineer izleme `yapı tekkez`i görmüyordu.** `desen_bagla_tip`
+   yalnız ÖNEK arıyordu (`görev<`/`tekkez<`/`yetki<`) ama lineer yapının tip
+   adı düz bir tanımlayıcıdır (`Dosya`) — önek YOK. **Ölçüldü: bu boşluk
+   D-452 ÖNCESİNDE de vardı** (C=L001, SELF=OK), benim yan etkim değil.
+3. **`checker.kem` AYRI bir uygulama.** `checker_diff` `selfhost/codegen.kem`i
+   değil `selfhost/checker.kem`i kullanıyor; D-449/D-450 yerleşikleri oraya
+   hiç eklenmemişti (T002). CLAUDE.md'nin "üç ayrı uygulama var" uyarısı bu
+   turda somutlaştı.
+
+### ⚠ Üç yanlış teşhis, üçünü de ENSTRÜMANTASYON düzeltti
+`sonuç<Dosya,…>` sızıntısını self-host'a taşırken sırayla şunları denedim ve
+her biri YETMEDİ: (a) `lineer_yapi_mi` koşulu — `bt` "?" geliyordu;
+(b) `TIP_KULLANICI` dalı — yine "?"; (c) `fn_rlin` yan kanalı — arama BOŞ
+dönüyordu. Hata ayıklama çıktısı gerçeği gösterdi:
+- `bt = "?"` çünkü checker dizgisi kullanıcı tipini SİLİYOR (D-378
+  muhafazakârlığı) → ham gerçek ayrı kanalda taşınmalı (**D-439'un dersi**).
+- `fn_rlin`i önce **`imza_topla`ya** (CODEGEN ön-geçişi) koymuşum; checker
+  `imza_kaydet` kullanıyor (**D-420'nin dersi: "bu yolda kim dolduruyor?"**).
+- Son olarak `fn_rlin` `fn_ad` ile PARALEL indeksleniyor ama `yerlesik_ekle`
+  yalnız `fn_ad`a ekliyordu → **indeksler kaydı**, `imza_kaydet` doğru değeri
+  yazdığı hâlde arama boş dönüyordu.
+
+### Doğrulama
+- Üç korpus fikstürü **muafiyetsiz** eklendi (negatif İKİ + pozitif BİR —
+  D-425'in dersi: pozitif şekil olmadan toptan sıkılaştırma kapıyı GEÇER):
+  `tc22_01_dosya_lineer` (L001) · `tc22_02_dosya_cift_kapat` (L002) ·
+  `tc22_03_dosya_temiz` (tanı YOK).
+- `checker_diff` **153/153 (0 muaf)** — parite tam, muafiyet listesi hâlâ boş.
+- **Sabotaj S40** (`lineer_yapi_mi` + `fn_rlin` dallarını kapat) → iki fikstür
+  KIRMIZI, Error.
+- `stdlib_check`: `dosya: TUM TESTLER GECTI` (C ve self-host, artefakt yok).
+
+### Kalan (bilinçli)
+`kapat("")` C'de T001 alır; self-host'ta T001 **verilmez** (kullanıcı yapı
+parametresi için argüman tip denetimi self-host'ta yok). Bu, `checker_diff`
+korpusuna eklenemeyecek bir şekildir — soundness sorunu değil (self daha
+müsamahakâr), ama kayda geçti.
+
+---
+
+## D-451 [YÜKSEK] — KARAR 3: `Dizi<kesirli64>` / `Dizi<kesirli32>` onarıldı
+
+Önerilen sıralamada 3. madde. D-417'de "ölçüldü, oracle değişikliği ister"
+diye kaydedilmişti; onay geldi.
+
+### İddia ESKİMİŞTİ — ölçüm önce yapıldı
+CLAUDE.md `C exit 7, self exit 1` diyordu. **Bugün ikisi de LINK-RED.**
+Davranış sessizden gürültülüye kaymış (iyi yönde), ama kayıt eskimişti.
+Ayrıca belgelenenden **daha fazla kusur** vardı:
+```
+%6  = fadd double 0.0, 20.0
+call void @kdl_dizi_ekle_tam(ptr, ptr, i32 %6)   ← double, i32 imzasina
+%12 = fadd double 0.0, 0.0                        ← INDEKS de double olmus!
+%13 = call i32 @kdl_dizi_al_tam(ptr %11, i32 %12) ← i32 donus, double bekleniyor
+```
+
+### Kök 1 — erişimci soneği (belgelenen)
+Runtime dizi API'si tamsayı/işaretçi taşır. Eleman **bayt genişliği zaten
+doğruydu** (`kdl_dizi_olustur` eleman_byte = 8) — yanlış olan yalnızca
+**erişimci soneğiydi**. Bu yüzden bellek güvenliği sorunu YOKTU, değerler
+bozuluyordu.
+**Runtime değişikliği GEREKMEDİ:** `_tam64` 8 baytı `int64` taşır, yani
+BİTLER korunur. Derleyici yazarken `bitcast double->i64`, okurken tersini
+yapar. `kesirli32` için aynısı `_tam` + `i32` ile.
+
+### Kök 2 — İNDEKS tip sızıntısı (belgelenmemişti)
+`dizi_deger_arg = 1` hem `dizi_ekle(d,e)` (arg1 = ELEMAN) hem `dizi_al(d,i)`
+(arg1 = **İNDEKS**) için kullanılıyordu → eleman tipi indekse forward
+ediliyordu. Tamsayı elemanda MASKELİ (`int_donustur` i64→i32 çevirir), ama
+`Dizi<kesirli64>`de indeks literali `fadd double 0.0, 0.0` doğuyor ve
+`int_donustur` float→int çevirmediği için `i32 %<double>` yayılıyordu.
+`dizi_al` için `dizi_deger_arg = -1` (eleman-değeri argümanı YOK).
+
+### DÖRT AYRI KOD NOKTASI — biri diğerini onarmıyor
+Ölçümle bulundu: yalnız yerleşiği onarınca `xs[0]+xs[1]` **44**, `için`
+döngüsü **0** verdi. Hepsi ayrı emisyon yeri:
+`dizi_al` yerleşiği · `xs[i]` indeksleme · `için x: xs` · annotasyonlu
+literal dizi (`dizi_literal_heap_emit`ten AYRI ikinci bir nokta).
+
+### 🔴 SELF-HOST'TA KENDİ ONARIMIM BELLEK-GÜVENLİĞİ SINIFINA TAŞIYORDU
+Self-host eleman tipini **DİZİDEN değil DEĞERDEN** alıyordu (`et = p.son_tip`).
+`Dizi<kesirli32>` + `dizi_ekle(xs, 20.0)`: literal `double` doğar → taşıyıcı
+`i64` seçilir → **4 baytlık gözeye 8 BAYT yazılır = HEAP TAŞMASI**.
+Onarımdan ÖNCE `_tam` ile 4 bayt yazılıp yalnız DEĞER bozuluyordu; taşıyıcı
+mantığını diziden beslemeden eklemek kusuru **daha kötü** hâle getiriyordu.
+Ölçülüp düzeltildi: dizinin eleman tipi OTORİTER, gerekirse `fptrunc`.
+
+### Yan kazanç — ÖNCEDEN VAR OLAN self-host kusuru kapandı
+Aynı "dizi otoriter" kuralı tamsayıya uzatılınca `Dizi<tam64>` de düzeldi:
+`dizi_ekle(xs, 20)` literali i32 doğup `_tam` (4 bayt) ile yazılıyor ama
+`_tam64` (8 bayt) ile okunuyordu. **Ölçüldü: bu değişikliklerden ÖNCE de
+self 20 veriyordu, C 42** — yani benim regresyonum DEĞİL, C↔self parite
+boşluğuydu ve hiçbir korpusta o şekil yoktu.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_kesirli_dizi.kem` → **C=42, SELF=42**. Altı
+  ekseni birden ölçer: dizi_al · indeksleme · `için` · literal dizi ·
+  `dizi_yaz` · `kesirli32` (taşıyıcı i32) + TAMSAYI regresyon koruması.
+- **Sabotaj S38** (C taşıyıcısını kapat) → LINK-RED.
+  **Sabotaj S39** (self-host "dizi otoriter" kuralını kapat) → **exit 41**.
+- Kapılar: `codegen_diff` **146/146** · `yapi_diff` **122/122** ·
+  `checker_diff` **150/150** · `llvm_test` 286/286 · `snapshot_test` 50/50.
+
+### Ders
+**Bir onarım, kusuru daha kötü bir sınıfa taşıyabilir.** Taşıyıcı mantığını
+self-host'a eklemek "değer yanlış"ı "heap taşması"na çeviriyordu; yalnızca
+`kesirli32` şeklini ayrıca ölçtüğüm için yakalandı. Kesirli64 tek başına
+sınansaydı yeşil görünüp gönderilecekti.
+
+---
+
+## D-450 [ORTA] — KARAR 3: `yazdir_hata` (stderr yerleşiği) + D-424'ün borcu kapandı
+
+Mehmet'in onayladığı sıralamada 2. madde. **İş beklenenden küçük çıktı:**
+`kdl_hata_yazdir` runtime'da ZATEN vardı (stderr'e yazıyor) ama **hiçbir
+derleyicide KEMGU yerleşiği olarak açılmamıştı** — yazılacak yeni runtime
+mantığı yoktu, yalnızca bağlantı eksikti.
+
+### Adlandırma: `yazdir_hata`, `hata_yazdir` DEĞİL
+İki gerekçe, ikisi de ölçüldü:
+- Self-host'un yerleşik→`kdl_` eşlemesi **ÖNEK TABANLI** (`yazdir_` →
+  `kdl_yazdir_`). `yazdir_hata` bu aileye katılır ve **yeni eşleme kuralı
+  gerektirmez**; `hata_yazdir` özel bir dal isterdi.
+- `hata` bir ANAHTAR KELİMEDİR (`sonuç` yapıcısı). Ona bitişik bir ad seçmek
+  gereksiz risk.
+Runtime'a `kdl_yazdir_hata` eklendi (`kdl_yazdir_metin`in birebir aynası,
+yalnız akış `stderr`). Mevcut `kdl_hata_yazdir` dokunulmadan bırakıldı.
+
+### Neden stdout'a yazmak OLMAZ
+Derleyici çıktısı (IR) stdout'a, tanı metni stderr'e gitmeli. Aynı akış
+`--llvm | clang` boru hattını bozar: tanı metni IR sanılır. Bu invaryant zaten
+**her codegen kapısı tarafından örtük olarak korunuyor** — self-host tanıyı
+stdout'a yazsaydı üretilen IR bozulur ve `clang` tüm korpusta patlardı.
+
+### D-424'ün borcu KAPANDI
+D-424'ün kodundaki yorum aynen şunu diyordu: *"Tanılar stdout'a YAZILMAZ: C
+onları stderr'e yazar... self-host'ta stderr yazıcısı yok (yeni yerleşik = dil
+yüzeyi değişikliği, **Mehmet'in kararı**)."* Karar verildi. Self-host `--llvm`
+tip kapısı artık tanıları stderr'e basıyor:
+```
+C   : exit=1 · stdout 0 bayt · stderr "hata[T002]: tanimsiz sembol"
+SELF: exit=1 · stdout 0 bayt · stderr "T002 1 30"
+```
+Öncesinde self-host **hiçbir şey basmıyordu**. Biçim farkı kasıtlı: self-host
+`--check` ile AYNI kompakt biçimi (kod/satır/sütun) kullanır; parite kapıları
+zaten o biçimi karşılaştırıyor.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_yazdir_hata.kem` → **C=42, SELF=42**; iki
+  derleyicide de stdout ve stderr AYRI ve doğru içerikte.
+- **Sabotaj S37** (C eşlemesini `kdl_yazdir_metin`e çevir) → stderr BOŞALDI,
+  stdout 2 satıra çıktı (kirlenme) — yönlendirmenin gerçekten ölçüldüğü kanıt.
+- Kapılar: `codegen_diff` **146/146** · `yapi_diff` **122/122** ·
+  `checker_diff` **150/150** · `ct_bariyer` 13/13 · `modul_codegen` 21/21.
+
+### ⚠ Süreç notu — CRLF çapası sessizce ıskalıyor
+`src/tip_kontrol.c` yaması **sessizce uygulanmadı**: dosya CRLF, benim python
+çapam `\n` kullanıyordu. Betik "ok" bastı çünkü `str.replace` eşleşme
+bulamayınca sessizce hiçbir şey yapmaz. `grep` ile doğrulanmasa eksik yerleşikle
+devam edecektim. **Yamadan sonra sayıyı doğrula** — bu oturumda 4. tekrar.
+
+---
+
+## D-449 [YÜKSEK] — KARAR 1+2: `metin` üzerinde `==` İÇERİK karşılaştırır + opak dosya handle'ı
+
+Mehmet iki açık kararı verdi (D-440 ve D-443'te sunulmuştu). Sırayla uygulandı
+ve **ikisinin bağlı olduğu ancak uygulayınca ortaya çıktı.**
+
+### KARAR 1 — `==` içerik karşılaştırsın (reddetme DEĞİL)
+Belirleyici kanıt ölçümdü: `stdlib/dizi.kem`in generic aramaları
+(`icerir<T>`/`bul<T>`/`indeks_bul<T>`/`say<T>`/`benzersiz<T>`) `x == hedef`
+üzerine kurulu → **`Dizi<metin>` araması sessizce BOZUKTU** (ampirik:
+`icerir(d, "ab")` → BULAMADI). Seçenek (b) (`==`i `metin` üzerinde reddet) o
+şekilleri **yazılamaz** hâle getirirdi: constraint sistemi olmadığı için
+kullanıcının `T` özel-dalı yazma kaçışı yok. (a) hem sessiz yanlışı kapatır
+hem beş generic işlevi bedavaya onarır.
+
+**Mekanizma = `isaretsiz`in birebir aynası** — IR'ın sildiği bir KEMGU tip
+özelliği için yan kanal:
+- C: `IfadeSonuc.metin_mi`, `LlvmIsim.metin_mi`, `IslevKayit.donus_metin`,
+  `TipSubst.metin_mi`, `ast_tip_metin_mi`, `tip_metin_mi_subst`.
+- Self-host: `ifade_metin` yüklemi (`ifade_isz` aynası) + `cg_amet` /
+  `cg_aemet` / `fn_rmet` / `mono_smet` / `fs_sm` / `ll_met` / `ll_met_subst`.
+
+**DÖRT yolun hepsi gerekliydi** ve fikstür dördünü birden ölçer:
+yerel değişken · işlev parametresi · **generic çıplak-T ikamesi** ·
+**`için` döngü değişkeni** (`Dizi<T>` eleman metin-liği). İlk üçü çalışırken
+`dizi.kem` HÂLÂ bozuktu — eksik olan döngü değişkeniydi.
+
+**⚠ Yamayı yanlış yere koydum (bu oturumda 2. kez).** İki parametre-kayıt yolu
+var; lifted-lambda olanını yamamıştım. Tahminle değil **enstrümantasyonla**
+bulundu: "DBG param" satırı hiç basılmayınca yerin yanlış olduğu anlaşıldı.
+
+**⚠ Sıfır uyarı hedefi:** yeni alan 81 `IfadeSonuc` başlatıcısını eksik bıraktı
+(`-Wmissing-field-initializers`). Derleyicinin verdiği satır numaralarıyla
+mekanik yamandı; 4'ü dizgi içinde virgül taşıdığı için (`"{ ptr, ptr }"`)
+koruma tarafından ATLANDI ve elle düzeltildi — **koruma bozulmayı önledi.**
+
+### KARAR 2 — dosya handle'ı: `dosya_gecerli` / `dosya_gecersiz`
+**Karar 1, karar 2'yi ZORUNLU kıldı.** `==` içerik karşılaştırınca
+`handle_gecerli_mi` tamamen çöktü: `metin_esit(FILE*, "")` işaretçiyi C dizgisi
+gibi okuyor. Yani opak handle `metin` olarak kaldıkça geçerlilik sınaması
+YAZILAMAZ — D-443'te "tip tasarımı sorunu" diye kaydedilenin kanıtı.
+- İki yeni yerleşik: `dosya_gecersiz() -> metin` (**NULL** sentinel) ve
+  `dosya_gecerli(h) -> mantıksal` (runtime null-sorgusu). Runtime tarafı
+  `kdl_dosya_gecersiz` / `kdl_dosya_gecerli`.
+- **Geçersizliğin İKİ TEMSİLİ vardı** — `gecersiz_handle()`in döndürdüğü `""`
+  ve `dosya_ac`ın NULL'ı — ve her kod yolu yalnız BİRİNİ yakalıyordu. Bu,
+  D-443'teki regresyonun da kökeniydi. Tek temsile (NULL) indirgendi.
+- **D-443'ün bilinen-yanlış davranışı KAPANDI:** `ac("yok.txt")` artık `tamam`
+  değil **`hata`** dönüyor. D-441/D-443 deseniyle sabitlenen test tam da
+  tasarlandığı gibi kırmızıya dönüp bunu bildirdi; sonra gerçeğe göre
+  güncellendi. **Sabitlenmiş bilinen-yanlış testler işe yarıyor.**
+- **Kalan (bilinçli, belgelendi):** `kapat("")` gibi rastgele bir `metin`in
+  handle OLMADIĞI anlaşılamaz (boş dizgi geçerli bir işaretçidir). Bunu ancak
+  `tekkez<Dosya>` (madde 4) kapatır.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_metin_esitlik.kem` → **C=42, SELF=42**.
+- **Sabotaj S35** (C `metin`-== dalı) ve **S36** (self dalı) → ikisi de
+  **exit 106** (42 değil).
+- Kapılar: `codegen_diff` 143/143 · `checker_diff` 150/150 ·
+  `yapi_diff` 120/120 · `stdlib_check` 8 modül · `kripto_kosum` 3/3 ·
+  `llvm_test` 286/286 · `snapshot_test` 50/50.
+
+### Ders
+**İki "bağımsız" karar aslında bağlıydı ve bunu ancak UYGULAYINCA gördüm.**
+Öneri listesinde 1 ve 2'yi ayrı maddeler olarak sunmuştum; 1'i uygulamak 2'yi
+zorunlu kıldı çünkü aynı idiomu (`h != ""`) paylaşıyorlardı. Sıralı uygulama
+bunu ortaya çıkardı — hepsini birden planlamak çıkarmazdı.
+
+---
+
+## D-447 [YÜKSEK] — kapı envanteri denetimi: 5 kapı daha takıma bağlandı
+
+D-446'nın dersini ("kapı envanterini periyodik olarak `test_tumu`nun
+çağırdıklarıyla karşılaştır") HEMEN uyguladım — yazıp bırakmak yerine.
+
+### Ölçüm
+`Makefile`de **204** `calistir_*` hedefi tanımlı, `test_tumu` **54** tanesini
+çağırıyor. Kalan 150'nin ezici çoğunluğu `_arm` / `_x86` / `_bare_metal` /
+QEMU hedefleri — host'ta koşamazlar, dışarıda olmaları MEŞRU. Bu gürültü
+elenince geriye **9 host-koşabilir aday** kaldı; ikisi belgeli biçimde kapı
+değil (`*_bootstrap` oran raporlar), biri zaten geçişli koşuyor
+(`kripto_check`, `stdlib_check`in ön koşulu).
+
+### Bağlanan 5 kapı
+| kapı | sonuç |
+|---|---|
+| `parser_diff` | 13/13 — **CLAUDE.md'nin güncel 11-kapı listesinde YAZILI ama takımda değildi** |
+| `lexer_diff` | 22/22 |
+| `asan_matris` | 12/12 |
+| `arm64_test` | ARM64 cross-compile doğrulaması |
+| `asan_denetim` | 137 PASS (aşağıya bak) |
+
+`parser_diff`in durumu özellikle dikkat çekici: belgede kapı olarak sayılıyor,
+sayısı bile yazılı (13/13), ama hiçbir toplu koşumda ölçülmüyordu. **Belgede
+"kapı" yazması, koştuğu anlamına gelmiyor.**
+
+### `asan_denetim` KIRMIZIYDI — ama kusur değil
+FAIL=2: `kem_mmio_ham` ve `kem_pointer`, host'ta **eşlenmemiş MMIO adresi**
+(`0x0a000000` — QEMU virt) okuyor; ASan haklı olarak access-violation basıyor.
+Bu, D-395'te ZATEN ölçülmüş meşru sınıf: *"C DE segfault ediyor, self-host
+BİREBİR aynı → parite doğru, kusur değil"*. İkisi de bare-metal keşif dosyası
+ve host'ta çalışamaz; doğru koşum yeri QEMU hedefleri. Betiğin mevcut
+ALLOWLIST mekanizmasına gerekçesiyle eklendi → **PASS=137 FAIL=0 ALLOW=4**.
+- Muafiyet **kabul edilebilirliği genişletmiyor** (D-421 kuralı): "bu program
+  geçerli" demiyor, "bu dosya host'ta koşamaz" diyor.
+
+### Doğrulama
+**Sabotaj S34** — `selfhost/parser.kem`de `"TANIMLAYICI"` → `"TANIMLAYICI_S34"`:
+`parser_diff` **13/13 → 0/13**, Error 1. Kapının gerçekten koştuğu ve ölçtüğü
+böyle kanıtlandı.
+`test_tumu` artık **59 kapı** çağırıyor (54'ten).
+
+### Ders
+D-446'da dersi yazdım, D-447'de UYGULADIM ve **beş kapı daha** ortaya çıktı.
+Bu oturumda "dersi yazmak onu uygulamaya yetmiyor" hatasını (D-427'de kendi
+kaydettiğim) tekrarlamamak için denetimi aynı turda yaptım.
+
+---
+
+## D-446 [KRİTİK] — 🔴 `sabitsüre<T>` İMZASIZLIĞI KAYBEDİYORDU: SHA-256/ChaCha20 SESSİZCE YANLIŞTI
+
+`test_tumu`nun çağırdığı kapıları saydım. **`calistir_kripto_kosum` listede
+YOK** — tanımlı, `.PHONY`de kayıtlı, ama hiçbir hedeften çağrılmıyor. Elle
+koşturdum: **KIRMIZI.**
+```
+✅ KONTROL  — sabit tablolar          (kapı sağlam)
+❌ ChaCha20 quarter-round — RFC 8439 §2.1.1
+❌ SHA-256("abc")        — NIST FIPS 180-4 App. B.1
+```
+
+### Önce "ben mi kırdım?" diye ölçtüm
+Oturumda `src/llvm.c`ye dokunmuştum (D-442). D-438 tabanını ayrı bir worktree'ye
+çıkarıp koşturdum: **birebir aynı iki hata** → kusur ÖNCEDEN VARDI.
+
+### Kök — harness'ın kendi hipotezi doğru çıktı
+Harness başlığı yazıyordu: *"İmzasızlık kaybı `>>`yi `ashr`e çevirir ve
+SHA-256/ChaCha20 rotasyonları yüksek bit set olan girdilerde SESSİZCE yanlış
+sonuç verir. Tip kontrolü bunu göremez — yalnız koşum görebilir."*
+Bundle IR'ında **15 `ashr` / 2 `lshr`**. Ayrımcı probe (4 şekil):
+```
+dtam32 param            → lshr ✓      sabitsüre<dtam32> param  → ashr ✗
+dtam32 yerel            → lshr ✓      sabitsüre<dtam32> yerel  → ashr ✗
+```
+Yani kusur **tam olarak `sabitsüre<>` sarmalayıcısında.** `ast_tip_to_ir`
+sarmalayıcıyı ZATEN açıyordu (runtime'da T'dir, zero-overhead);
+`ast_tip_isaretsiz_mi` AÇMIYORDU → `DUGUM_TIP_BASIT` olmadığı için hemen `0`,
+yani **imzalı** sayılıyor. `stdlib/kripto` tamamen `sabitsüre<dtamN>` üzerine
+kurulu olduğundan tüm rotasyonlar bozuluyordu.
+
+### Onarım — iki derleyicide de tek satırlık açma
+- C (`src/llvm.c`): `ast_tip_isaretsiz_mi` `DUGUM_TIP_SABITSURE` sarmalayıcısını
+  soyar.
+- Self-host (`selfhost/codegen.kem`): `ll_isz` aynı soymayı yapar
+  (`TIP_SABITSURE` → çocuk). Self-host'ta da AYNI boşluk ölçüldü ve kapandı;
+  4/4 şekil iki tarafta da `lshr`.
+
+### Doğrulama
+`calistir_kripto_kosum`: **3/3 vektör GEÇTİ** (KONTROL + ChaCha20 QR +
+SHA-256("abc")). Kapı `test_tumu`ya BAĞLANDI — artık her koşumda ölçülüyor.
+**Sabotaj S33** (C'deki soymayı etkisizleştir) → kapı yeniden KIRMIZI, Error 1.
+
+### Ders
+**Var olan ama çağrılmayan kapı, olmayan kapıdan daha tehlikelidir** — varlığı
+"bu alan ölçülüyor" yanılsaması yaratır. D-445'te "yazmak/bağlamak/koşturmak
+üç ayrı iştir" demiştim; bu, aynı dersin **güvenlik** sonucu: kapı yazılmış,
+gerçek kusurlar bulmuş (kurulduğu gün 2 tane), sonra `test_tumu`ya
+bağlanmamış ve kripto sessizce bozulmuş.
+**Kapı envanterini periyodik olarak `test_tumu`nun çağırdıklarıyla karşılaştır.**
+
+---
+
+## D-445 [ORTA] — bağlanan testler KOŞMUYORDU: kapı sabit exit 0 varsayıyordu
+
+D-441'de `dizi`nin `main`ini 62→99, `matematik`inkini 34→47 teste bağladım.
+**Ama hiçbir kapı onları çalıştırmıyordu.** `calistir_stdlib_check`in davranış
+döngüsü çıkışın **0** olmasını bekliyor; bu iki modül BAŞARIDA **42** döner
+(kendi sözleşmeleri). Sabit varsayım yüzünden ikisi de listeye alınamamış,
+yani **146 test bağlanmış ama koşulmuyordu.**
+
+- **Kusur "eksik satır" değil, SABİT VARSAYIMDI.** Döngü girdisi artık
+  `modul:beklenen_cikis` çifti; beklenen çıkış AÇIK yazılır. Örtük 0 varsayımı,
+  farklı sözleşmeli modülleri sessizce dışarıda bırakıyordu — D-441'de kendi
+  eklediğim "sessiz atlama" kusurunun (yol çözümü) kardeşi.
+- Kapı: 6 → **8 modül**. `dizi`/`matematik` başarıda hiçbir şey basmaz, o
+  yüzden çıktıya bakarak koştuklarını ANLAYAMAZSIN — bu da sabotajın neden
+  şart olduğunun bir örneği.
+- **Sabotaj S32** (`dizi:42` → `dizi:41`) →
+  `FAIL(kosum): dizi - beklenen cikis 41, gelen 42`, MAKE EXIT 2. Modülün
+  gerçekten koştuğu ve çıkış denetiminin çalıştığı böyle kanıtlandı.
+- Yan düzeltme: hata mesajındaki em-dash konsol kodlamasında bozuluyordu
+  (`â€”`); Makefile kabuk çıktısı ASCII'ye çevrildi.
+
+### Ders
+**Bir testi yazmak, bağlamak ve KOŞTURMAK üç ayrı iştir.** D-441'de ikisini
+yapıp üçüncüsünü atlamıştım ve arada geçen dört artım boyunca fark etmedim —
+çünkü kapı yeşildi ve o iki modül çıktıya hiçbir şey yazmıyordu.
+
+---
+
+## D-444 [DÜŞÜK] — D-443'ün açtığı E3 muafiyeti + 🔴 ÖLÇÜM ARACIM BAŞARISIZLIĞI MASKELİYORDU
+
+### 🔴 `make ... | tail` ÇIKIŞ KODUNU MASKELER
+Tam takımı `mingw32-make test_tumu 2>&1 | tail -N` ile koşturuyordum. Boru
+hattının çıkış kodu **`tail`in**dir → `make` KIRMIZI olduğu hâlde arka plan
+bildirimi **"exit code 0"** dedi. Bu koşumda takım gerçekten başarısızdı
+(`calistir_check_genis` 127/128) ve yalnızca çıktının son satırlarını okuduğum
+için fark ettim.
+- Önceki koşumlar gerçekten yeşildi (çıktılarında "Tum testler gecti!" vardı),
+  yani geçmiş sonuçlar geçersiz DEĞİL — ama şansa dayanıyordu.
+- **KURAL: `make`i boruya bağlarken `${PIPESTATUS[0]}` yazdır.** "Exit 0"
+  gördüğüm için yeşil saymak, bu depodaki "kapı sessiz düşmesin" ilkesinin
+  ölçüm aracına uygulanmamış hâliydi.
+
+### Sapmanın kendisi — YENİ KUSUR DEĞİL, MEVCUT SINIFA GİRİŞ
+D-443'te `test_dosya.kem`e gerçek I/O gidiş-dönüşü eklenince
+`eşleş oku_metin(...)` kolları oluştu. `check_genis` bu dosyaları **tek
+başına** (modülsüz) denetler; skrutini tanımsız olduğunda **C desen
+bağlamalarını HİÇ KURMAZ** → `v`/`e` kullanımları `T002` alır. Self-host
+bağlayıp susar (C 46, self 36 tanı; fark tam olarak o 10 kaskad satırı).
+Bu, harness'ta **zaten tanımlı E3 sınıfıdır** ve listedeki diğer dosyalar da
+(`test_metin`, `test_sonuc`, `test_json`) aynı gerekçeyle orada: hepsi
+modülle BİRLEŞTİRİLEREK derlenmek üzere yazılmıştır. `test_dosya` eklendi;
+kapı **127/127 (9 muaf)**.
+- **Soundness sorunu YOK:** iki derleyici de dosyayı reddediyor; fark yalnız
+  kaskad derinliği. Birleştirilmiş hâli `stdlib_check`te TEMİZ geçer.
+- **Kapatılabilir borç:** self-host `eşleş`te skrutini çözülemediğinde desen
+  bağlamalarını kaydetmemeli. Ayrı ve riskli bir hata-yolu işi (150 dosyalık
+  `checker_diff` + 128 dosyalık `check_genis` üzerinde yanlış-pozitif riski),
+  bu yüzden bilinçli olarak ertelendi.
+
+---
+
+## D-443 [YÜKSEK] — `dosya` kör noktası + 🔴 D-440'IN SOKTUĞU REGRESYON + zayıf kapı
+
+Kör-nokta envanterinin son modülü. `test_dosya.kem`in `main`i 27 testten
+**birini** çağırıyordu ve başlık yorumu da eskimişti: *"tüm body'ler stub,
+gerçek I/O test edilmez (runtime primitif yok)"* — oysa primitifler Madde G
+ile eklenmişti. Yani **gerçek dosya I/O'sunu hiçbir şey doğrulamıyordu.**
+
+### 🔴 D-440'ta BEN BİR REGRESYON SOKMUŞUM
+`handle_gecerli_mi(h)`ı `h != ""` → `metin_uzunluk(h) > 0` yaptım. **Yanlıştı.**
+`h` bir DİZGİ DEĞİL: `kdl_dosya_ac` **`void*` (`FILE*`)** döner ve KEMGU
+tarafında `metin` olarak tiplenir. `metin_uzunluk` o işaretçiyi C dizgisi gibi
+okur. Ölçüm:
+```
+yaz_metin → "dosya acilamadi"   (dosya YARATILDIĞI hâlde)
+oku_metin → boş
+sil       → "silinemedi"        (dosya duruyor)
+```
+Yani **tüm yazma yolu koptu.** Oradaki `h != ""` içerik karşılaştırması değil,
+`gecersiz_handle()`in sentinel'iyle ADRES karşılaştırmasıydı — **taşıyıcıydı.**
+Geri alındı.
+- **Hiçbir kapı görmedi:** `dosya` davranış döngüsünde yoktu ve `main`in
+  çağırdığı tek test `handle_gecerli_mi("dosya.txt")` — gerçek bir dizgi
+  geçtiği için doğru kalıyordu.
+- **DERS: bir idiom "yanlış görünüyor" diye düzeltilmeden önce, o tipin
+  GERÇEKTEN ne taşıdığı ölçülmeli.** D-440'ta `metin`i dizgi sandım; burada
+  opak bir işaretçiydi. Aynı sözdizimi, iki farklı anlam.
+
+### ⚠ ALTTAKİ ASIL KUSUR (dil yüzeyi — Mehmet'e)
+İkisi de tam doğru değil: `dosya_ac` başarısızlıkta **NULL** döner, `""` değil;
+`NULL != &""` olduğu için yüklem **açılamayan dosyayı GEÇERLİ sayar**
+(`ac("yok.txt")` → `tamam`). Kök bir **tip tasarımı** sorunudur: opak handle
+`metin` olarak tipleniyor. Çözüm ayrı bir handle tipi ya da null-sorgu
+yerleşiği — ikisi de dil yüzeyi. Mevcut davranış testte SABİTLENDİ (D-441'in
+`kuvvet(5,0)` deseni) ki sınır sessiz kalmasın.
+
+### Yapılan
+`main` **1 → 20** test çağırıyor: handle/mod sabitleri · boş-yol korumaları
+(D-440'ın onardığı davranış artık kapıda) · var olmayan dosya hataları ·
+ve **GERÇEK GİDİŞ-DÖNÜŞ** (yaz → oku → UTF-8 doğrula → sil), yarattığı dosyayı
+**kendisi temizler** (kapı depo kökünde koşar; artefakt bırakılmadığı ölçüldü).
+Kapı döngüsü: `+ dosya` (toplam **6 modül**).
+
+### 🔴 ZAYIF KAPI SABOTAJLA BULUNDU
+İlk sürüm yalnız "hata mı?" diye bakıyordu. **Sabotaj S30** (`sil`in boş-yol
+koşulunu boz) **SESSİZ KALDI** — çağrı yine hata döndü, ama BAŞKA bir hata
+("silinemedi"). `grep` sabotajın uygulandığını doğruladı, yani kapı gerçekten
+zayıftı. Yardımcılar **beklenen mesajı** da denetleyecek şekilde güçlendirildi;
+**S31** (aynı sabotaj) → `BASARISIZ sil_bos: beklenen bos yol, gelen silinemedi`
+→ make Error 1. Beklenen mesajlar **kaynaktan** okundu (gözlemden değil —
+`kopyala` için "kaynak okunamadi" tahminim yanlıştı, doğrusu "kaynak yok").
+**Bir kuralın hangi yolla ateşlendiğini ölçmeyen kapı, o kuralı ölçmüyordur.**
+
+### Doğrulama
+`calistir_stdlib_check`: json · metin · opsiyonel · karsilastir · sayisal ·
+**dosya** — hepsi geçiyor, depo kökünde artefakt yok.
+
+---
+
+## D-442 [KRİTİK] — 🔴 annotasyonsuz heap-dizi bağlaması: sessiz yanlış cevap + SINIR KONTROLÜ ATLANMASI
+
+D-441'in kör-nokta taraması `dizi`ye geldi: 37 test `main`den hiç
+çağrılmıyordu. Çağrılınca **altısı çöp (işaretçi görünümlü) değer** döndürdü.
+Hepsinin ortak deseni `değişken r = f();` + `r[0]` idi.
+
+### Bulgu — dört şekil ölçüldü
+```
+(A) değişken a = yap();       a[0]   →  ÇÖP     (yap() -> Dizi<tam32>)
+(B) değişken b: Dizi<tam32> = yap();  b[0]  →  42 ✓
+(C) yap()[0]                          →  42 ✓
+(D) dizi_al(a, 0)                     →  42 ✓  ← TESADÜF, aşağıya bak
+```
+IR: (A) için `getelementptr i32, ptr %7` + `load` — yani **KdlDizi BAŞLIĞI
+veri gibi okunuyor**.
+
+### 🔴 BELLEK GÜVENLİĞİ — yalnız yanlış değer değil
+Heap yolu runtime **sınır-kontrollüdür**; ham GEP yolu değil:
+```
+C   : a[1000]  (1 elemanlı dizide)  →  exit 0, sessizce okudu  ← İHLAL
+SELF: a[1000]                       →  PANIK: dizi sınır ihlali (i=1000, boyut=1)
+```
+Bu, CLAUDE.md'nin "buffer overflow dil tasarımı seviyesinde imkânsız"
+invaryantının doğrudan ihlaliydi. **Self-host DOĞRU, C oracle YANLIŞTI** —
+alışılmış paritenin ters yönü.
+
+### ⚠ ÖLÇÜM BENİ İKİ KEZ YANLIŞ TEŞHİSTEN KURTARDI
+1. "`dizi_al` doğru çözüyor, demek eleman tipi kurtarılabiliyor" dedim.
+   **Yanlış.** `dizi_al` `dizi_eleman_beklenen > beklenen > i32` sırasını
+   kullanır; probe'da sonuç `yazdir_metin`e gidiyordu, yani **bağlam**
+   `beklenen="ptr"` veriyordu. Bağlamsız kullanımda o da çözemiyor.
+2. `heap_dizi_eleman_ast`in TANIMLAYICI dalı `dinamik_dizi_mi` ister; o bayrak
+   da kurulmuyordu → "iki mekanizma var" hipotezi de çürüdü.
+**Tek kök vardı:** annotasyonsuz bağlama ne eleman tipini ne heap-liği kaydeder.
+
+### Onarım — kök, tüketici değil
+Bağlama yerinde kaydedilir; INDEKS · `dizi_al`/`dizi_yaz` · `için` döngüsü
+HEPSİ aynı bilgiyi görür (D-407: aynı soruyu iki yerde ayrı yanıtlama).
+- **C (`src/llvm.c`):** annotasyonsuz dalda `heap_dizi_eleman_ast` ile
+  `eleman_llvm_tip` + `eleman_tip_ast` + `dinamik_dizi_mi` kurulur.
+  Yığın dizi literali bu yola GİRMEZ (o düğüm için yardımcı NULL döner).
+- **Self-host (`selfhost/codegen.kem`):** `fn_ret` yalnız `"ptr"` tutar ve
+  elemanı siler → yeni paralel tablo **`fn_relem`** (`islev_donus_elem`,
+  `ll_eleman_tip` üzerinden) + çağrı sonucunda `son_elem` yayılımı.
+  Self-host'un belirtisi farklıydı (`add ptr` = LLVM-RED, sessiz değil).
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_annotasyonsuz_heap_dizi.kem` → **C=42, SELF=42**
+  (annotasyonsuz / annotasyonlu / doğrudan çağrı / `Dizi<metin>` / `için`).
+- **Sabotaj 2/2:** S28 (C bloğunu etkisizleştir) → fikstür exit 1 **ve OOB
+  yeniden sessiz**; S29 (self `fn_relem` yayılımı) → LLVM-RED.
+- Kapılar: `codegen_diff` **143/143** · `yapi_diff` **120/120** ·
+  `checker_diff` 150/150 · `stdlib_check` 5 modül.
+- `dizi` testleri: `main` **62 → 99**; altı çöp değer artık doğru
+  (`harita_yerinde` 12, `pipeline` 5, `sirala` 1, `ters_cevir` 3,
+  `ters_cevir_tek` 42, `sirala_tersi` 1).
+
+### Ders
+**Koşmayan testler bir bellek-güvenliği açığını saklıyordu.** D-440'ta
+"koşmayan test, olmayan testten daha kötüdür" demiştim; bu, o dersin en
+pahalı örneği — kusur `--check`ten, üç parite kapısından ve tam takımdan
+görünmüyordu, çünkü onu tetikleyen şekil hiçbir korpusta yoktu.
+
+---
+
+## D-441 [ORTA] — koşmayan testlerin ikinci partisi + `kuvvet(x,0)` sınırı görünür kılındı
+
+D-440 `metin`i kurtardı; aynı kör nokta taraması diğer modüllerde sürdürüldü.
+
+### Kurtarılan testler
+| modül | önce | sonra |
+|---|---|---|
+| opsiyonel | 1/29 | **29/29** |
+| karsilastir | 1/20 | **20/20** |
+| sayisal | 1/20 | **20/20** |
+| matematik | 34/81 | **47/81** |
+
+Kapının davranış döngüsü `json metin` → `json metin opsiyonel karsilastir
+sayisal`. Beklentiler **uydurulmadı**: `karsilastir`/`sayisal`da kaynaktaki
+yorumlardan (`// -1`, `// 12`), `opsiyonel`de yardımcı gövdelerinden okundu
+(`guvenli_ters(10)` = `1000/10` = 100, `varsayilan_uretici()` = 42).
+Belirsiz tek nokta `sirali_mi([])` uygulamadan ölçüldü (`n < 2 → doğru`).
+Bu üç modülde **kusur çıkmadı** — ama artık 69 test gerçekten koşuyor.
+
+### 🔴 KAPIDA SESSİZ ATLAMA VARDI
+Döngü `[ -f "$f" ] || continue` kullanıyordu ve modülü yalnız `stdlib/`
+altında arıyordu. `karsilastir`/`sayisal` **`stdlib/temel/`** altında —
+olduğu gibi eklesem kapı onları **sessizce atlar, yeşil kalır ve hiçbir şey
+ölçmezdi**. Yol çözümü eklendi ve eksik dosya artık **sert hata**.
+D-395'in dersi ("kapı sessiz düşen dalı olmayacak biçimde yazılır") bu kez
+kendi eklediğim satırda karşıma çıktı.
+
+### 🔴 `kuvvet(5, 0)` → 5 (doğrusu 1)
+`matematik`in çağrılmayan 47 testi tek tek koşturulup matematiksel gerçeğe
+karşı denetlendi: **46'sı doğru**, biri değil.
+- Kök bir kusur DEĞİL, **ölçülmüş bir dil sınırı**: generic `T` içinde
+  `ver 1;` → **`T020`**. `stdlib/temel/matematik.kem` yorumunda itiraf
+  ediyor ("constraint sistemi yokken `bir<T>()` yazılamaz"); `sayisal.kem`in
+  `us`u aynı ("n=0 yerine 'özür dilerim' sonucu").
+- **İddiayı ÖLÇTÜM — eskimemiş.** D-401 generic monomorfizasyonu eklemişti,
+  bu yüzden yorumun bayat olma ihtimali gerçekti; değilmiş.
+- **`x / x` cazip ama DAHA KÖTÜ:** tip kontrolünden geçiyor, ancak `x = 0`
+  için sıfıra bölme (çökme) — oysa 0⁰ geleneksel olarak 1.
+  **Yanlış cevabı çökmeyle takas etmek iyileştirme değildir.**
+- **Davranış DEĞİŞTİRİLMEDİ.** Test mevcut değeri sabitler ve neden yanlış
+  olduğunu yazar → sınır artık SESSİZ değil; düzeltilirse test kırmızıya
+  döner ve karar bilinçli alınır.
+
+### ⚠ MEHMET'E — küçük karar
+`kuvvet(x, 0)` matematiksel olarak yanlış. Seçenekler: (a) böyle kalsın
+(şu an: belgelenmiş + testle sabit), (b) doğru davranan generic-olmayan
+`kuvvet_tam(x: tam32, n: tam32)` eklensin, (c) `kuvvet` generic olmaktan
+çıkarılsın (kırıcı). Constraint sistemi gelince (a) kendiliğinden çözülür.
+
+### Doğrulama
+`calistir_stdlib_check`: json · metin · opsiyonel · karsilastir · sayisal
+hepsi geçiyor. `matematik` exit 42.
+**Sabotaj S27** (`obe`nin Öklid adımını boz) → kapı KIRMIZI
+(`S: obe`, `S: ekok`, make Error 1). `grep` sayısıyla doğrulandı.
+
+### Kalan (aynı sınıf)
+`dizi` 37 test hâlâ çağrılmıyor; `dosya` 26 test çağrılmıyor **ama ayrı
+muamele istiyor** — testleri çalışma dizininde gerçek dosyalar yaratıyor
+(`a.txt`, `log.txt`, …) ve çoğu `sonuç<T,E>` dönüyor → geçici dizin +
+temizlik gerekir. `dizi`/`matematik` exit-42 sözleşmesi kullandığı için
+kapının exit-0 döngüsüne olduğu gibi eklenemez.
+
+---
+
+## D-440 [YÜKSEK] — 🔴 `metin` üzerinde `==` İŞARETÇİ karşılaştırıyor (sessiz yanlış cevap)
+
+D-439 bitince "hangi yüzey kapısız?" diye ölçtüm. `calistir_stdlib_check`
+13 test dosyasını `--check`ten geçiriyor ama **davranışsal olarak yalnız
+`json`u** koşuyordu — oysa D-435'in dersi tam olarak "`--check` YETMEZ" idi.
+
+### Kör noktanın büyüklüğü (ölçüldü)
+| modül | test işlevi | `main`'den çağrılan |
+|---|---|---|
+| metin | 89 | **1** |
+| dizi | 99 | 62 |
+| matematik | 81 | 34 |
+| opsiyonel | 29 | **1** |
+| dosya | 27 | **1** |
+| karsilastir | 20 | **1** |
+| sayisal | 20 | **1** |
+
+`opsiyonel`in kendi yorumu itiraf ediyor: *"main yalnız bir tanesi çağırıp
+`--check` için entry sağlar"*. ~185 test işlevinin çoğu **hiç koşmuyordu**.
+
+### Kör noktanın sakladığı kusur
+`metin`in koşmayan testleri bağlanınca 9 başarısızlık çıktı; izlenince kök
+**tek**ti ve dil düzeyindeydi:
+```
+a == b               →  icmp eq ptr %10, %11          ← İŞARETÇİ
+metin_esit(a, b)     →  call i1 @kdl_metin_esit(...)  ← İÇERİK (doğru)
+```
+`stdlib/metin.kem`'in `esit_mi`si yalnızca `ver a == b;` idi. **Literaller
+tekilleştirildiği için literal↔literal TESADÜFEN doğru sonuç verir** — bu
+yüzden koşan tek test (`esit_mi("merhaba","merhaba")`) geçiyordu. Hesaplanmış
+metinlerde sessizce yanlış:
+```
+esit_mi(birlestir("", "b"), "b")        →  yanlış   (doğrusu doğru)
+esit_mi(kes("merhaba", 0, 3), "mer")    →  yanlış   (doğrusu doğru)
+```
+**`dosya.kem`de 15 boş-yol koruması** (`eğer yol == ""`) aynı sebeple
+**hiç ateşlenmiyordu** — hesaplanmış boş dizgi geçip gidiyordu. Ampirik
+doğrulandı: onarım öncesi "KORUMA ATESLENMEDI", sonrası "ATESLENDI".
+
+### ⚠ DİL SORUSU — MEHMET'E (KARAR VERİLMEDİ, DEĞİŞTİRİLMEDİ)
+`==`in `metin` üzerindeki anlamı bir **dil yüzeyi** sorusudur; sessizce
+değiştirmedim. İki seçenek:
+- **(a)** `==` içerik karşılaştırsın (`kdl_metin_esit` çağrısına düşür).
+- **(b)** `==`i `metin` üzerinde **REDDET** (tanı) → `metin_esit` zorunlu.
+  Sessiz yanlış cevabı derleme hatasına çevirir (loud > silent).
+Şu anki hâl üçüncü ve en kötü seçenek: **kabul edip sessizce yanlış cevap.**
+
+### Bu artımda YAPILAN (dil değişikliği YOK)
+Kütüphane kusurları — adı/belgesi içerik eşitliği vaat eden yerlerde
+`metin_esit`/`metin_uzunluk` kullanıldı: `esit_mi`, `farkli_mi`, `bos_mu`,
+`dolu_mu`, `handle_gecerli_mi` + `dosya.kem`in 15 koruması.
+`test_metin.kem`in `main`i **1 → 57** test çağıracak şekilde yazıldı ve
+`calistir_stdlib_check`in davranış döngüsüne `metin` eklendi.
+
+### ⚠ BEKLENTİLER MEKANİK TÜRETİLEMEZ — kuralım 9'da 4 YANLIŞ ALARM verdi
+"`_hayir` → yanlış, diğerleri → doğru" kuralını yazıp uyguladım; 4 vaka
+kuralın kendi hatasıydı çünkü **ad beklentiyi değil GİRDİYİ tarif ediyor**
+(`test_harf_karisik` = `sadece_harf_mi("abc123")` → yanlış dönmeli).
+`/tmp`de ölçtüğüm için depoya yanlış beklenti girmedi.
+**Kural yazmak ucuz, kuralı doğrulamak asıl iş.**
+
+Ayrıca `test_kes_aralik_ters` **yanlış bir zihinsel modele** dayanıyordu:
+`kes`in 3. argümanı UZUNLUK'tur, aralık SONU değil → `kes("merhaba",5,2)`
+= `"ba"`, `""` değil. Test hiç koşmadığı için yanlışlığı görünmüyordu.
+İki doğru testle değiştirildi (`_uzunluk_semantigi`, `_uzunluk_tasan`).
+
+`sadece_harf_mi("")` / `sadece_rakam_mi("")` → **yanlış** DOĞRUDUR:
+uygulamada açık `eğer L == 0 { ver yanlış; }` var, yani bilinçli sözleşme.
+Kütüphaneyi değiştirmedim, testi gerçeğe göre yazdım.
+
+### Doğrulama
+- `calistir_stdlib_check`: `json: TUM TESTLER GECTI` + `metin: TUM MANTIKSAL
+  TESTLER GECTI`.
+- **Sabotaj S26** (`esit_mi`yi `a == b`e döndür) → kapı KIRMIZI
+  (`FAIL(kosum): metin`, make Error 1). Uygulandığı `grep` sayısıyla
+  doğrulandı — `perl` çok satırlı deseni yine tutmamıştı (CRLF).
+
+### Ders
+**Koşmayan test, olmayan testten DAHA KÖTÜDÜR** — yeşil bir `--check` ve
+dolu bir test dosyası kapsam YANILSAMASI yaratır. Dosyanın kendi yorumu
+(satır 199-202) kusuru zaten biliyordu ve yerel bir `metin_es` yardımcısıyla
+etrafından dolaşmıştı; bilgi ORADAYDI ama hiçbir kapı zorlamıyordu.
+
+---
+
+## D-439 [YÜKSEK] — 🔴 ÇEŞİT PAYLOAD'INDAN AGREGAT-ELEMANLI DİZİ (self-host LLVM-RED)
+
+D-437/D-438'in erişimcileri açıldıktan sonra `stdlib/json.kem` **C oracle'da
+geçiyor, self-host'ta derlenmiyordu**. Dogfooding üçüncü kez derleyici kusuru
+buldu; bu kez **parite** kusuru (C doğru, self-host yanlış).
+
+### Bulgu
+```
+SELF: '%43' defined with type '{i8, i32, i64, ptr, ptr, ptr, ptr}' but expected 'i32'
+C   : call void @kdl_dizi_ekle_yapi(...)      SELF: kdl_dizi_ekle_tam(i32 <agregat>)
+erişimci dağılımı  C: _yapi 4/5 · SELF: _yapi 1  (6 çağrı yerinde ayrışma)
+```
+
+### ÜÇ AYRI KÖK — her biri bir öncekini onarınca ortaya çıktı
+Tek ölçümle görülemezlerdi; sırayla açıldılar.
+
+**(1) Satır içi agregat by-value sayılmıyordu.** C çeşidi **ADLANDIRIR**
+(`%V = type {i8, i32}`) ve `dizi_eleman_struct_mi` onu `'%'` kuralıyla yakalar.
+Self-host çeşidi **satır içi** yayar (`{i8, i32}`) → aynı eleman C'de by-value,
+self'te SKALER. `dizi_eleman_yapi_mi` + `dizi_eleman_byte` `'{'` önekine
+genişletildi (`{ ptr, ptr }` bunun özel hâli; kolu ÖNCE bırakıldı ki kapanış
+çıktısı bayt-birebir kalsın). Boyut de bozuktu: sabit `"4"` 8 baytlık agregatı
+4 baytlık gözeye sıkıştırıyordu.
+
+**(2) Payload tipi checker dizgisinde SİLİNİYORDU.** `cv_pt`, `tip_str`in
+çıktısını tutar; `tip_str` `bilinen_tip_mi` ile korunur ve o **kullanıcı
+tipini saymaz** → `Dizi<W>` → `"?"` → `cesit_payload_elem` erken `""` döner.
+Bu muhafazakârlık **checker için DOĞRU** (D-378 generic ertelemesi) —
+gevşetmek tanı davranışını geniş biçimde değiştirirdi. Çözüm: codegen
+checker'ın dizgisine değil **tip DÜĞÜMÜNE** baksın → yeni yan-kanal
+`cv_ptn` (payload tip düğüm indeksleri) + `ll_eleman_tip`. Dizgi yolu yedek
+kalır.
+> **DERS: aynı tabloyu iki tüketici farklı doğrulukta okuyorsa, birini
+> diğerinin muhafazakârlığına mahkûm etme — ham gerçeği ayrı kanalda taşı.**
+
+**(3) Payload YUVASI ile REGISTER genişliği ayrışıyordu.** `Sayi(0 - 4207)`:
+yuva `i64`, register `i32`. C beklenen tipi ifadeye YAYAR (`add i64 0, 4207`);
+self i32 hesaplayıp i64 yuvaya yazıyordu. D-426'nın **simetriği** (orada yuva
+DARALIYORDU) → aynı `int_uydur` mekanizması. **Ön koşul ölçüldü: bu sapma
+D-439 ÖNCESİNDE de vardı** (HEAD ikilisiyle LINK-RED) — yeni değil, açığa
+çıkmış.
+
+### 🔴 KENDİ ONARIMIM BİR REGRESYON ÜRETTİ (kapı yakaladı)
+`codegen_diff` **141 → 140**: `cg_mono_yapi_field_cesit`. `'{'` genişletmesi,
+yüklemi paylaşan **iki dizi-DIŞI** çağrı yerine sızdı. Asıl zarar 5083'teydi:
+o dal **kapanış fat value** içindir ve bir önceki satırın kurduğu mono-çeşit
+bağlamını GERİ ALIR (yorumu zaten `"{ ptr, ptr }" tagged-union DEĞİL` diyor).
+`Kap<metin>.o = {i8, ptr}` oraya girince bağlam düşüyor, yapıcı BASE
+`{i8, i32}` ile kuruluyor → `store i32 <ptr>`. Ayrı DAR yüklem
+(`dizi_eleman_yapi_dar_mi`) eklendi ve iki taşıyıcı-sorusu sitesinde kullanıldı.
+- **⚠ İLK SUÇLADIĞIM YER YANLIŞTI.** Akıl yürütmeyle `int_uydur`u ve 4067'yi
+  suçladım; **ampirik bisect üçünü de eledi** ve 5083'ü gösterdi.
+  Yüklem gövdesinde "hangi soru soruluyor" ile çağrı yerinde "hangi soru
+  soruluyor" AYRI ŞEYLERDİR; paylaşılan yüklemi genişletmek çağrı yerlerinin
+  hepsini birden değiştirir.
+
+### Doğrulama
+- Fikstür `test/cg_korpus/cg_cesit_dizi_agregat.kem` (C=42, SELF=42) —
+  agregat elemanlı dizi + **kendine referanslı** çeşit + i64 yuva + skaler dal.
+- **Sabotaj 3/3 yakalandı** (S22 `'{'` kolu · S23 `cv_ptn` · S24 `int_uydur`),
+  üçü de LINK-RED. Her sabotajın uygulandığı `grep` SAYISIYLA doğrulandı.
+- Kapılar: `codegen_diff` **141/141** · `yapi_diff` **118/118** ·
+  `checker_diff` **150/150**.
+- `stdlib/json.kem` + testi artık **iki derleyicide de** `exit 0 |
+  json: TUM TESTLER GECTI`.
+
+### Ders
+**Dogfooding, tip kontrolünün göremediğini görüyor.** `--check` bu programı
+baştan beri temiz geçiriyordu; üç kusurun üçü de yalnız IR üretiminde vardı ve
+ikisi LLVM'in sessizce kabul ettiği sınıftandı. Gerçek bir kütüphane yazmak,
+korpus dosyası yazmaktan farklı şekiller üretiyor.
+
+---
+
+## D-438 [YÜKSEK] — 🔴 İÇ İÇE `dizi_al` eleman tipini KAYBEDİYORDU (SEGFAULT)
+
+D-437'yi onardıktan sonra **"aynı sınıftan başka kaynak var mı?"** diye
+ölçtüm. Dört komşu şekil denendi; üçü temiz, biri değil.
+
+### Bulgu
+```kemgu
+değişken d: Dizi<Dizi<metin>> = [];  dizi_ekle(d, ic);
+metin_esit(dizi_al(dizi_al(d, 0), 0), "a")     → exit 139
+```
+```
+%14 = call ptr @kdl_dizi_al_ptr(...)    ← DIŞ çağrı: doğru
+%16 = call i32 @kdl_dizi_al_tam(...)    ← İÇ çağrı: YANLIŞ
+%18 = call i1  @kdl_metin_esit(i32, ptr) → segfault
+```
+
+### ⚠ ÖNCE "BUNU BEN Mİ SOKTUM?" DİYE ÖLÇTÜM
+Aynı şekli **çeşitsiz** denedim → **o da çöküyor**. Yani D-437 onarımının yan
+etkisi DEĞİL, önceden var olan AYRI bir kusur. (D-437'nin kodu yalnız
+`eşleş` payload dalının içinde; bu şekilde `eşleş` hiç yok.)
+Ara değişkene alınınca ÇALIŞIYOR (`değişken j = dizi_al(d,0)`) — bağlı isim
+tip taşır. Kusur yalnız **İSİMSİZ ARA DEĞERDE**.
+
+### Kök
+`dizi_al` yerleşiğinin arg0 dispatch'i yalnız `DUGUM_TANIMLAYICI` ve
+`DUGUM_ERISIM` tanıyordu; `DUGUM_CAGRI` (iç içe `dizi_al`) ve `DUGUM_INDEKS`
+dalı YOKTU → eleman tipi bilinmiyor → i32 fallback → yanlış erişimci.
+Ayrıca `heap_dizi_eleman_ast`'in `DUGUM_CAGRI` dalı yalnız KULLANICI
+işlevlerini (`islev_bul`) tanıyordu; `dizi_al` bir YERLEŞİK olduğu için
+NULL dönüyordu.
+
+### Onarım — mevcut makine yeniden kullanıldı
+- **C (`src/llvm.c`):** `heap_dizi_eleman_ast`'e `dizi_al` dalı (ÖZYİNELİ:
+  `dizi_al(X,i)`nin elemanı = X'in elemanının elemanı) + yerleşik dispatch'e
+  `else if (arg0)` kolu (ortak makineden çöz).
+- **Self-host (`selfhost/codegen.kem`):** `son_elem` yalnız IR DİZGİSİ tutar
+  (`Dizi<Dizi<metin>>` → "ptr"), iç tip kaybolur → yeni kanal `cg_aelem2`
+  (elemanın elemanı) + `son_elem2`; `dizi_al` sonucunda `son_elem = elem2`.
+
+### Doğrulama
+Fikstür `test/cg_korpus/cg_ic_ice_dizi_metin.kem`: **C=42, SELF=42**.
+**Sabotaj S21** (yerleşik dispatch dalını etkisizleştir) → **exit 139**.
+TAM TAKIM: "Tum testler gecti!"
+
+### Ders
+**Bir kusuru onardıktan sonra KOMŞU ŞEKİLLERİ ölç.** D-437 tek başına
+"kapandı" görünüyordu; aynı sınıftan ikinci kaynak yalnızca dört ek şekil
+denenerek bulundu. Üçü temiz çıktı — yani ölçüm ucuzdu ve bir SEGFAULT daha
+kapattı.
+
+---
+
+## D-437 [YÜKSEK] — 🔴 DERLEYİCİ HATASI: çeşit payload'ından `Dizi<metin>` okumak SEGFAULT
+
+**Dogfooding'in tam da aradığı bulgu.** `stdlib/json.kem`e erişimci
+(`json_alan`) eklerken çıktı; erişimciler GERİ ALINDI (ağaç yeşil kalsın),
+kusur burada kayıtlı.
+
+### MİNİMAL TEKRAR ÜRETİM
+```kemgu
+çeşit V { Bos, Tek(Dizi<metin>) }
+işlev main() -> tam32 {
+    değişken d: Dizi<metin> = []; dizi_ekle(d, "a");
+    eşleş V::Tek(d) {
+        V::Tek(a) => { eğer metin_esit(dizi_al(a,0),"a") { ver 42; } ver 1; }
+        V::Bos => { ver 3; }
+    }
+    ver 2;
+}
+```
+→ **exit 139 (segfault)**. Beklenen 42.
+
+### KÖK — YANLIŞ ERİŞİMCİ SONEKİ (IR'dan okundu)
+```
+ÇEŞİT PAYLOAD'ından (BOZUK):
+  %18 = call i32 @kdl_dizi_al_tam(ptr %16, i32 %17)
+  %20 = call i1  @kdl_metin_esit(i32 %18, ptr %19)      ← i32, işaretçi yerine
+
+PARAMETREDEN (ÇALIŞAN):
+  %4  = call ptr @kdl_dizi_al_ptr(ptr %2, i32 %3)
+  %6  = call i1  @kdl_metin_esit(ptr %4, ptr %5)
+```
+Dizi bir **çeşit payload BAĞLAMASINDAN** geldiğinde derleyici ELEMAN TİPİNİ
+kaybediyor → `_tam` (i32) erişimcisini seçiyor → i32'yi işaretçi olarak
+geçiriyor → segfault.
+
+**⚠ LLVM `declare i1 @kdl_metin_esit(ptr, ptr)` ile çağrıdaki `i32`
+uyuşmazlığını SESSİZCE KABUL ETTİ** — D-295'in aynı dersi. Derleme temiz,
+çökme çalışma anında.
+
+### KAPSAM ÖLÇÜLDÜ (7 şekil) — "iki payload" ya da "dizi payload" DEĞİL
+| şekil | sonuç |
+|---|---|
+| `Cift(tam32, tam32)` | ✅ 42 |
+| `Cift(Dizi<tam32>, tam32)` | ✅ 42 |
+| `Cift(tam32, Dizi<tam32>)` | ✅ 42 |
+| `Cift(Dizi<tam32>, Dizi<tam32>)` | ✅ 42 |
+| **`Tek(Dizi<metin>)` + eleman OKU** | 🔴 **139** |
+| **`Cift(Dizi<metin>, Dizi<tam32>)` + metin OKU** | 🔴 **139** |
+| `Cift(Dizi<metin>, Dizi<tam32>)`, metin OKUMADAN | ✅ 42 |
+
+Yani kusur **İŞARETÇİ-elemanlı diziyi çeşit payload'ından okumakta**.
+`Dizi<metin>` PARAMETRE olarak sorunsuz (`nesne_yaz` bunu kullanıyor ve
+çalışıyor) — bağlamanın payload'dan gelmesi belirleyici.
+
+### Sınıfı: `Dizi<kesirli64>` ile AYNI (CLAUDE.md'de kayıtlı)
+İkisi de "erişimci soneki yanlış" — orada `_tam` 8 baytlık double'a,
+burada `_tam` işaretçiye uygulanıyor. **Fark:** `Dizi<kesirli64>` yalnız
+YANLIŞ DEĞER üretiyordu (bellek güvenliği sorunu yok, eleman boyutu 8'di);
+bu ise **ÇÖKÜYOR**.
+
+### Neden ŞİMDİ onarılmadı
+Kusur `src/llvm.c`te — yani ORACLE'da. Onarım hem C'yi hem self-host'u
+ilgilendirir ve tüm parite kapılarını yeniden koşmayı gerektirir; ayrı ve
+sınırlı bir iş olarak duruyor. **Ama bu bir TASARIM kararı değil, düpedüz
+bir kusur** — `Dizi<kesirli64>`den farkı, orada oracle'ın davranışını
+DEĞİŞTİRMEK gerekiyordu, burada yalnız doğru erişimciyi seçmek gerekiyor.
+
+### Engellediği iş
+`stdlib/json.kem` erişimcileri (`json_alan`/`json_indeks`/`json_sayi_al`/
+`json_metin_al`/`json_mantik_al`/`json_uzunluk`). `json_uzunluk` ve
+`json_indeks` TEK BAŞLARINA çalışıyor (ölçüldü); yalnız anahtar arayan
+`json_alan` çöküyor. Kusur kapanınca hepsi geri eklenebilir.
+
+---
+
+## D-434 — LSP `workspace/symbol`: LSP v3 roadmap maddesi KAPANDI (2026-08-14)
+
+D-433'ten SONRA anlamlı hâle gelen özellik. Tek-belge bir sunucuda "workspace
+symbol" yalnız açık dosyayı arardı ve **ad yanıltıcı olurdu**; artık
+`BelgeTablo`daki TÜM açık belgeler geziliyor.
+
+### ⚠ SymbolKind ≠ CompletionItemKind
+İki AYRI LSP enumu. `completion_yanitla` bilerek CompletionItemKind kullanır
+(`islev`=3); `workspace/symbol` ve `documentSymbol` **SymbolKind** ister
+(`islev`=12, `sabit`=14, `yapı`=23, `çeşit`=10, `özellik`=11).
+`documentSymbol`un değerleri kaynaktan OKUNDU ve yeniden kullanıldı —
+karıştırmak istemciye yanlış ikon/gruplama gösterirdi. Test bunu ayrıca
+denetler (`kind == 12`, 3 DEĞİL).
+
+### Sorgu eşleşmesi
+ASCII-küçültmeli alt-dizi (LSP istemcileri harf duyarsız bekler); boş sorgu =
+hepsi. Konumlar UTF-16'ya çevrilir (`lsp_karakter` + `utf16_say`).
+
+### SINIR (bilinçli, dürüst)
+Yalnız **AÇIK** belgeler taranır. Diski gezip tüm projeyi indekslemek ayrı bir
+iştir (dosya sistemi tarama + izleme); "açık dosyalar" LSP'de geçerli ve
+yaygın bir workspace tanımıdır. Bunu belgede saklamıyorum.
+
+### Test + sabotaj
+`test_workspace_symbol_capraz`: iki dosyada `ortakbir`/`ortakiki`, sorgu
+`"ortak"` → **2 sonuç, FARKLI uri'lerle**. Aynı uri iki kez gelirse çapraz
+arama yok demektir. Bu test aynı zamanda D-433'ün İKİNCİ kanıtıdır — tek-belge
+modelde imkânsızdı.
+**Sabotaj S17** (döngüyü `i < 1`e indir) → **24/24 → 23/24** ✅
+(Bu kez `perl` değil **Edit** kullanıldı — D-433'te öğrenilen ders.)
+
+**LSP v3 roadmap maddesi TAMAMEN KAPANDI:** hover · definition · completion ·
+documentSymbol · references · incremental sync · semanticTokens · çok-belge ·
+workspace/symbol.
+
+---
+
+## D-433 [YÜKSEK] — 🔴 LSP TEK BELGE TUTUYORDU: ikinci dosya birinciyi eziyordu (2026-08-14)
+
+`workspace/*`'a başlarken **altındaki varsayımı ölçtüm** ve gerçek bir kusur
+buldum: sunucu `Belge belge;` (TEK yapı) tutuyordu ve her `didOpen`
+`belge_set` ile ÜZERİNE yazıyordu.
+
+**Gerçek editörde sonucu:** VS Code birden çok dosyayı açık tutar ve her
+isteği KENDİ `uri`siyle gönderir → ikinci dosya açılınca birincinin
+hover / definition / documentSymbol / diagnostic'i BOZULUR.
+
+### `workspace/*` bunun ÜSTÜNE kurulamazdı
+Tek-belge bir sunucuda "workspace symbol" adı **yanıltıcıdır** — yalnız açık
+dosyayı arar. Roadmap maddesini "yapıldı" diye kapatmak, bu oturumun defalarca
+yakaladığı sınıftan bir sahtelik olurdu. **Özellik eklemeden önce altındaki
+modeli ölç.**
+
+### Onarım — değişim yüzeyi DAR tutuldu
+`BelgeTablo` (URI→Belge; dinamik dizi, boşalan yuva geri kullanılır) +
+dispatch'te `textDocument/` önekini yakalayıp `istek_uri` ile çözme.
+`didOpen` yuva AÇAR, diğerleri yalnız ARAR (bilinmeyen uri → handler hiç
+çağrılmaz). **Handler imzaları DEĞİŞMEDİ** (`Belge *`) — hepsi zaten tek
+belge işaretçisi alıyordu, bu yüzden refactor küçük kaldı.
+
+### Test + sabotaj
+`test_cok_belge_izolasyon`: iki dosya aç (`a.kem`/`alfa`, `b.kem`/`beta`),
+sonra **BİRİNCİYE** `documentSymbol` sor → `alfa` gelmeli. Tek-belge modelde
+`beta` gelirdi. **Sabotaj S16** (`tablo_ac` daima ilk yuvayı döndürsün) →
+**23/23 → 22/23** ✅
+
+### ⚠ SABOTAJ İLK DENEMEDE UYGULANMADI — bu oturumda DÖRDÜNCÜ kez
+`perl -0pi` deseni tutmadı (`grep` 0) ve kapı YEŞİL kaldı. Sayıyı
+doğrulamasam "kapı zayıf" diye kaydedecektim.
+> **KURAL: çok satırlı desende `perl -0pi` sessizce eşleşmeyebilir — Edit
+> aracını kullan, ve sabotajın uygulandığını HER ZAMAN `grep` ile doğrula.**
+
+---
+
+## D-432 — LSP `semanticTokens/full` (2026-08-14)
+
+D-431'de LSP v3'ün kısmen yapılmış olduğu ölçülmüştü; kalan iki parçadan biri.
+Dil yüzeyine DOKUNMAZ (yeni yerleşik ad/tip yok) — karar beklemeden
+yapılabilen tek roadmap kalemiydi.
+
+### Kaynak seçimi: AST DEĞİL LEXER
+Token zaten satır/sütun/uzunluk taşıyor; anahtar kelime / literal / operatör
+ayrımı lexer'da YAPILMIŞ. Asıl gerekçe: **hatalı kaynakta AST YOKTUR ama lexer
+yine de token üretir** → sözdizimi renklendirme BOZUK dosyada da çalışır.
+AST'den türetmek bu özelliği kaybettirirdi.
+
+Legend (SIRA KRİTİK — `data` içindeki tokenType İNDEKSTİR, ad değil):
+`0 keyword · 1 string · 2 number · 3 operator · 4 variable`
+
+### İki hata ölçümle yakalandı
+1. **Anahtar kelime aralığı.** `TOK_ISLEV`'den başlatmıştım; `lexer.h`
+   okununca bloğun `TOK_EGER`'den (enumun İLK değeri) başladığı görüldü →
+   ilk 6 anahtar kelime (`eğer`/`değilse`/`için`/`iken`/`eşleş`/`ver`)
+   dışarıda kalırdı. Sınırlar kaynaktan ÖLÇÜLDÜ: `TOK_EGER .. TOK_GENEL`.
+2. **UTF-16 vs BAYT.** `data` içindeki sütun ve uzunluk UTF-16 KOD BİRİMİ'dir.
+   `ölç` = 5 BAYT ama 3 BİRİM. Test bilerek Türkçe kaynak kullanır; kodlama
+   elle çözülerek doğrulandı (`işlev` 0,0,5,0 · `ölç` 0,6,3,4 · `->` 0,7,2,3 ·
+   `42` 0,2,2,2). **Sabotaj S15** (bayt farkı kullan) → test ✗.
+   **ASCII bir test bu hatayı GÖRMEZDİ.**
+
+`data` kodlaması DELTA'lıdır: `[Δsatır, Δbaşlangıç, uzunluk, tip, değiştirici]`;
+Δbaşlangıç aynı satırda önceki token'a göre, satır değişince MUTLAK.
+
+### ⚠ BAYAT ARTEFAKT (bu oturumda 3. artefakt tuzağı)
+Sabotajı geri alınca `make` `build/test_lsp.exe`i YENİDEN KURMADI → kaynak
+TEMİZKEN test 21/22 sahte kırmızı verdi. `rm -f build/test_lsp.exe` → 22/22.
+**Sabotaj döngüsünden sonra ilgili TEST İKİLİSİNİ de sil, yalnız `.o`yu değil.**
+(Diğerleri: `build/codegen.exe` dosya kilidi · `git stash` sonrası bayat obje.)
+
+---
+
+## D-431 — Roadmap üç maddesi ölçüldü: ikisi eskimiş (2026-08-14)
+
+CLAUDE.md'nin KENDİ dersi uygulandı: *"roadmap maddelerini başlamadan ÖLÇ —
+eskimiş olabilir"* (D-085'te LLVM v4 zaten yapılmış çıkmıştı).
+
+| madde | ölçülen durum |
+|---|---|
+| **LSP v3** | **KISMEN YAPILMIŞ** — sürüm 0.2: `textDocumentSync: 2` (incremental ✓), `referencesProvider` ✓, `documentSymbolProvider` ✓ (roadmap'te hiç yoktu). Kalan: `semanticTokens` (→D-432), `workspace/*` |
+| **Linear stdlib** | `OTP_Anahtar` ✓ (11 `tekkez`) · `Dosya` ⚠ VAR ama `sonuç<T,E>` stilinde, `tekkez` **0** · `Kilit` ✗ YOK — **ama runtime primitifleri ZATEN VAR** (`kdl_kilit_init/gir/cik/yok_et`, kanal implementasyonu kullanıyor) |
+| **Inter-procedural escape** | HÂLÂ v1 — ama `escape.c`:292 gösteriyor ki analiz **SOUND**: her çağrı argümanı ESC_CAGIRAN'a yükseltiliyor. v2 bir **KESİNLİK** işi (sızıntı azaltma), güvenlik açığı DEĞİL. Yorumun kendisi: *"sızıntı bir hata, UAF bir felaket"* |
+
+**İkisi Mehmet'in karar sınıfında:** lineer `Dosya` = kullanıcı kodunu kıran API
+tipi değişikliği · `Kilit` = yeni yerleşik ad (dil yüzeyi).
+
+---
+
+## D-430 (NEGATİF SONUÇ) — `cv_*` çapraz taşıma YAZILDI ve GERİ ALINDI (2026-08-14)
+
+D-429'un doğal devamı sanılan iş: `surucu_diff`in kalan 5 muafiyetinin kökü
+"`çeşit` varyantları çapraz-dosya taşınmıyor" diye kaydedilmişti. `cv_*`
+tablolarının kopyalanması yazıldı (27 satır, `cv_pb` yeniden tabanlanarak) —
+**ve HİÇBİR ölçülebilir etkisi olmadı.** Geri alındı.
+
+### Ölçüm — kökü YANLIŞ kaydetmişim
+Kalan 5 muafiyetin eksik tanıları tek tek izlendi:
+- **T011** (`virtio_blk:47`, `-> Virtqueue`): **C** `Virtqueue`yi TANIMIYOR ve
+  T011 veriyor; self D-429'un yapı taşımasıyla TANIYOR → self burada C'den
+  DAHA YETENEKLİ. Eşleşmek YETENEK SİLMEK olurdu; `cv_*` ile ilgisi YOK.
+- **M001** (`eşleş sonuc`): skrutini `sonuç<tam32, BagHatasi>` — `sonuç`
+  dalı, `çeşit` dalı DEĞİL. `cv_*` ile ilgisi YOK.
+
+### AYRIMCI PROBE: C ÇAPRAZ-DOSYA KAPSAYICILIK YAPMIYOR
+```
+dışa çeşit Renk { Kirmizi, Yesil, Mavi }      (renk.kem)
+kullan renk;  eşleş r { Kirmizi => .. Yesil => .. }   ← Mavi EKSİK
+C = OK        ESKİ self = OK        D-430 self = OK
+```
+C eksik varyanta **OK** diyor. Yani parite `cv_*` taşımasını GEREKTİRMİYOR.
+
+### Neden geri alındı
+Kod semantik olarak "doğru" görünüyordu (self çapraz-dosya varyantları
+bilmeli) — ama **hiçbir ölçüm onu ayırt edemedi.** Ayırt edilemeyen kod
+DOĞRULANMAMIŞ yüzeydir: yararı gösterilemez, riski gerçektir. Bu repoda
+kural ölçmektir; "doğru görünüyor" yeterli değildir.
+
+> **KAYDA DEĞER NEGATİF SONUÇ:** gelecekte "çapraz-dosya çeşit kapsayıcılığı"
+> işine girişmeden önce bunu oku — **C'nin kendisi yapmıyor**, dolayısıyla
+> parite hattında yapılacak bir iş DEĞİL.
+
+### Yan bulgu (ÖNCEDEN VAR, D-429/430 sokmadı — ölçüldü)
+Tek-segment `kullan renk;` + private `çeşit` → self fazladan **T011** veriyor,
+C vermiyor. Eski ikiliyle doğrulandı: **D-429 öncesinde de aynı.** Ölümcül
+değil (o şekilde C zaten T002 ile reddediyor, iki taraf da IR üretmiyor) ama
+korpusta olmayan bir yanlış-pozitif olarak duruyor.
+
+---
+
+## D-429 [YÜKSEK] — ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA (2026-08-14)
+
+`surucu_diff`in **7 muafiyetinin TAMAMININ** ortak kökü ve CLAUDE.md'de kayıtlı
+**"check paritesi SIĞ"** kökü. Self-host `modul_yukle` yalnız ADLARI hasat
+ediyordu; İMZALAR (arite, param tipleri, param **LİNEERLİĞİ**) ve YAPI kayıtları
+dosya-yerel kalıyordu:
+- `yetki<MMIO>` parametresinin lineer olduğu bilinmiyor → **sahte CP005**
+- `Virtqueue`/`BlkYapilandirma` `yapi_var_mi`de yok → **sahte T002**
+- C'nin verdiği T010/T001/T011/M001 tanıları KAÇIRILIYOR
+
+### Yaklaşım: mantığı İKİNCİ KEZ YAZMA
+`imza_kaydet`/`yapi_kaydet` `p`'den okuyor; çapraz sürüm yazmak tüm yardımcı
+zincirinin (`donus_str`, `param_say`, `param_tip_str`, `param_lineer_mi`,
+`tip_str`…) ikizini gerektirirdi — **D-407'nin ayrışma tuzağı.**
+Bunun yerine: `genel_topla`yı **modülün KENDİ `Ayr`inde** koştur (indeksler
+orada DOĞRU), sonra düz paralel dizileri kopyala (`capraz_imza_tasi`),
+`fn_pbase`/`yapi_abase` yeniden tabanlanarak. Mantık TEK YERDE kalır.
+
+### ⚠ DÜĞÜM İNDEKSLERİ TAŞINAMAZ — ve bu GÜVENLİ tarafa düşer
+`fn_ptn` ve `alan_tn` bir AST düğümünü gösterir; o düğüm `mp`'ye aittir ve
+`p`'de BAŞKA bir şeye denk gelir. `-1` yazılır. **Tüketiciler önceden ölçüldü:**
+`fn_ptn`in TEK okuyucusu var (`t14_muaf_isaretle`) ve `tn < 0`u zaten
+muhafazakâr karşılar → muafiyet verilmez. Yani `-1` = "bilinmiyor" ve
+**tanı KAÇIRIR, sahte tanı ÜRETMEZ.**
+
+### ÖLÇÜM — bu kez COMMIT'TEN ÖNCE, TÜM REPO
+D-427'de ön koşulu 502 dosyada ölçmüş, `drivers/` listede olmadığı için
+regresyon göndermiştim. Bu kez `find` ile **589 dosyanın tamamı**:
+```
+589 dosya · YANLIŞ-POZİTİF = 0 · fark = 46 (hepsi KAÇIRMA yönünde)
+```
+46'nın 34'ü `lex_korpus`(22)+`parse_korpus`(12) — lexer/parser fikstürleri,
+tip denetimi için tasarlanmamışlar. Gerçek yüzeyde **12**.
+
+**ÖNCESİ/SONRASI (aynı yüzey, iki ikili — bağımsız iki ölçüm uyuştu):**
+```
+ESKİ (D-429 öncesi): yanlış-pozitif=2  kaçırma=12
+YENİ (D-429):        yanlış-pozitif=0  kaçırma=12
+```
+Yani: **iki yanlış-pozitif kapandı, kaçırma ARTMADI.** Saf iyileşme.
+(Değişiklik self'i SIKILAŞTIRDIĞI için kaçırmanın artmaması beklenirdi ama
+"beklenirdi" bir tahmindir — ölçüldü.)
+
+### `surucu_diff` muafiyeti 7 → 5
+Çıkanlar: `virtio_blk_config_test`, `virtio_mmio_mock_test` (CP005 kökü).
+Kalan 5 HEPSİ kaçırma yönünde (T011/M001/T001/T020) — derlemeyi KIRMAZ.
+Kökleri: `çeşit` varyantları ve bileşik tip TEMSİLİ hâlâ dosya-yerel
+(`cv_*` tabloları taşınmıyor) + düğüm indekslerinin `-1` olması.
+
+---
+
+## D-428 — YENİ KAPI `check_genis`: kapısız kalan 6 yüzey (2026-08-13)
+
+D-427'nin dersini genelleştirdim: **elle taranan ölçüm eskir, kapı eskimez.**
+Dizin sayımı yapılınca ALTI yüzeyin daha kapısız olduğu görüldü —
+`test/snapshots` **82 dosya** ile en büyüğü:
+```
+test/snapshots · test/ornekler/eski · test/stdlib · test/asan_matris ·
+test/crossfile · stdlib/ (kök)
+```
+Bu oturumda parite hataları DEFALARCA ölçülmemiş yüzeyde bulundu; en sert
+örnek D-427 (`drivers/virtio` derlemesi kırılmıştı ve hiçbir kapı görmedi).
+
+**Kapı: `--check` paritesi (kod + satır + sütun), 126/126, 7 muaf.**
+Codegen/IR bu kapının işi değil — o yüzeyler `codegen_diff`/`codegen_genis`/
+`yapi_diff`e ait (envanteri bölmemek için; D-427'de aynı gerekçeyle dönüş tipi
+karşılaştırması `yapi_diff`e bırakılmıştı).
+
+### Muafiyet envanteri (ÖLÇÜLDÜ, 3 sınıf)
+| sınıf | dosya | kök |
+|---|---|---|
+| E1 C'nin KENDİ sınırlaması | `21_modul_kullan` T002×2 · `23_generic_constraint` T007 · `49_generic_method` T001×2 | modül-kapsamlı yapı alanı · generic bound'da method · tip-paramsız `uygula` |
+| E2 PARSER katmanı | `tip_alias` | `tip Ad = HedefTip;` KEMGU'da YOK — C parser'ı **P001** ile reddeder, self parse edip T002/T011 verir → farklı KATMAN |
+| E3 `eşleş` desen bağlamı | `test_metin` · `test_sonuc` · `heap_dizi_metin` | C `değer(v)` kolunda T002/T011 veriyor, self vermiyor (self daha müsamahakâr) |
+
+### ⚠ SABOTAJ İLK SEÇİMİM YANLIŞTI — ve sessizlik doğru okundu
+S12 (D-420'nin T014 ERISIM dalını sil) **SESSİZ KALDI**, ama `grep` sabotajın
+UYGULANDIĞINI doğruladı (1 eşleşme). Yani kapı zayıf değil — **sabotaj yanlış
+seçilmişti**: bu yüzey `k.xs = []` şeklini İÇERMİYOR (o kuralın sahibi
+`checker_diff` + `tc20` korpus dosyası).
+
+Doğru sabotajı seçmek için kapının GERÇEKTE ölçtüğü kuralları saydım:
+`T002` 688 · `T011` 48 · `L001` 4 · `T001` 3 · `G003` 3 · `T028` 2 ·
+**`T022` 2** · `P001` 2 · `T020`/`T007`/`M001`/`G002` 1'er.
+→ S13 (D-425'in `güvensiz` koşulunu kaldır) seçildi: **126/126 → 124/126**,
+`deref_atama_disi` ve bir dosya daha kırmızıya döndü.
+
+> **DERS: sabotaj hedefini korpusun GERÇEKTE ölçtüğü kurallardan seç.** Bir
+> kuralın var olması onun HER kapıda görünür olduğu anlamına gelmez; kapının
+> tanı-kodu dağılımını saymak bunu bir tahmin olmaktan çıkarır.
+
+---
+
+## D-427 [YÜKSEK] — 🔴 D-424 SÜRÜCÜ DERLEMESİNİ KIRMIŞ: legacy import + YENİ KAPI (2026-08-13)
+
+### Nasıl bulundu — "ölçülmemiş yüzey var mı?" sorusu
+Kalan 3 kaçırmanın üçü de C'nin KENDİ sınırlaması çıkınca (modül-kapsamlı tip
+çözümü · generic bound'da method · generic yapı literali) onları taklit etmek
+yerine bu oturumun en çok kazandıran sorusunu sordum. `find`+kapı karşılaştırması
+**19 dosyanın hiçbir kapının altında olmadığını** gösterdi:
+`drivers/virtio` (10) + `tests/drivers/virtio` (9).
+
+### 🔴 GÖNDERDİĞİM REGRESYON
+```
+status.kem        C=11def  SELF=0def (exit 1)
+virtio_mmio.kem   C=63def  SELF=0def
+virtqueue_bind    C=68def  SELF=0def
+```
+D-424'ün `--llvm` tip kapısı, self-host'un ÖNCEDEN VAR OLAN sahte T002'lerini
+ÖLÜMCÜL hâle getirdi. Öncesinde `--llvm` checker'ı çağırmadığı için zararsızdı.
+
+> **⚠ D-424'ün ön koşulunu 502 dosyada ölçüp "yanlış-pozitif SIFIR" demiştim;
+> o listede `drivers/` YOKTU.** Kendi dersimi — "parite sayısı yalnız ölçülen
+> yüzey kadar geniştir" (D-420) — KENDİ KAPIMA uygulamayı atladım. Ders iki kez
+> yazılmış olması onu uygulamaya yetmiyor: **ön koşul ölçümünün KAPSAMI da
+> ayrıca doğrulanmalı.**
+
+### Kök: legacy çok-segmentli `kullan`
+C'nin kuralı kaynakta yazılı (`src/ana.c` `kullan_yeni_bicim`):
+```c
+segment_sayi <= 1  ∨  secili_sayi > 0  ∨  alias_ad != NULL   → YENİ biçim
+```
+Hiçbiri değilse (`kullan drivers::virtio::constants;`) modül **LEGACY
+DÜZLEŞTİRME** yolundan yüklenir: TÜM üst düzey adlar görünür, `dışa`/`genel`
+gerekmez, private-by-default (T041) UYGULANMAZ.
+
+Self-host bu ayrımı yapmıyordu → `constants.kem`'deki düz `sabit`ler ÖZEL
+sayılıp sahte T002 üretiyordu (`status.kem`'de 19 tanı).
+**Yardımcı ZATEN VARDI** (`kullan_yeni_bicim_mi`, D-399/400'de codegen yolu
+için yazılmış) — `modul_yukle` onu çağırmıyordu.
+
+**Sonuç:** sürücüler 11/63/68 define ile C'ye birebir; yanlış-pozitif **6 → 2**.
+
+### 🎯 YENİ KAPI `calistir_surucu_diff`
+Kör nokta KAPI OLMADIĞI İÇİN vardı. Kapı iki şey ölçer: `--check` paritesi
+(kod+satır+sütun) **ve** `--llvm` YAPISAL paritesi (`define` kümesi = ad +
+DÖNÜŞ TİPİ; sürücüler host'ta linklenmez → `baremetal_diff` deseni).
+D-424'ün pozitif-iddia dalı da içeride: oracle tip hatasıyla reddediyorsa self
+de reddetmeli.
+
+### Kalan 2 muafiyet — ÖLÇÜLDÜ, ayrı kök
+`CP005` (`virtio_blk_config_test`, `virtio_mmio_mock_test`). **Minimal
+şekillerde kural C ile BİREBİR çalışıyor** (2 probe ölçüldü) — yani CP005
+mantığı doğru. Gerçek dosyadaki fark: tüketen işlev BAŞKA DOSYADA ve self
+çapraz-dosya **İMZALARINI** taşımıyor, yalnız ADLARI → parametrenin lineer
+olduğunu bilmiyor → `yetki<MMIO>` sızıntı sanılıyor. Bu, CLAUDE.md'de kayıtlı
+**"check paritesi SIĞ"** kökü (`mat::topla(20)` yanlış aritesi de aynı sınıf).
+
+---
+
+## D-426 — K2 kapandı: aggregate payload'ında birim tip `i8` (2026-08-13)
+
+`yapi_diff` muafiyet envanterinin K2 kökü. D-422'de ölçülmüştü, onarılmamıştı:
+```
+sonuç<boş, tam32>  C: {i8, i8, i32}   self: {i8, i32, i32}
+seçimlik<boş>      C: {i8, i8}
+```
+Birim tip **BAĞLAMA GÖRE** eşlenir: işlev SONUCUNDA `void` (D-422),
+aggregate ALANINDA `i8`. `ll_tip` fall-through'u `i32` veriyordu.
+
+### Onarım İKİ parçalı — tek başına tip eşlemesi YETMEZDİ
+1. `ll_tip_alan` (yeni): aggregate-alanı bağlamında birim tip → `i8`.
+   `TIP_SECIMLIK` ve `TIP_SONUC` payload yuvalarında kullanılır.
+2. **Payload store'unda değer uyarlaması.** Yuva daralınca (i32 → i8) saklanan
+   REGISTER de daralmalı; C `%8 = add i32 0, 0` + `trunc i32 %8 to i8` yayar.
+   `int_uydur` eklendi — IMMEDIATE'a DOKUNMAZ (`store i8 0` zaten geçerli) ve
+   tipler eşitse no-op'tur, yalnız gerçekten gereken yerde trunc/sext yayar.
+
+> **D-422'nin dersi doğrudan uygulandı:** o gün eşlemeyi tek yere koyup
+> `{i8, void, i8}` üretmiş ve `codegen_diff`i düşürmüştüm. Bu kez üreticiyi
+> (store) ve tüketiciyi birlikte değiştirdim.
+
+### ⚠ YAPI ALANI KAPSAM DIŞI — C'nin KUSURUNU TAKLİT ETME
+Ölçüldü: `yapı K { a: boş; b: tam32; }` → C `%K = type { void, i32 }` =
+**GEÇERSİZ IR** (`05_yapi` / `Dizi<kesirli64>` sınıfı — C'nin kendi kusuru).
+Değişiklik yalnız ÖLÇÜLMÜŞ olan `seçimlik`/`sonuç` payload yuvalarını kapsar.
+Ölçmesem bir C hatasını self-host'a kopyalayacaktım.
+
+`yapi_diff` muafiyeti **26 → 25** (K2 satırı boşaldı). Kalan 3 kök: K1
+`mantıksal`→i1 (9) · K3 lifted lambda i64 (8) · K4 generic base gövdesi (8).
+
+---
+
+## D-425 [YÜKSEK] — T022 `güvensiz` koşulu + BL001/BL002: kaçırma 6 → 3 (2026-08-11)
+
+D-424 sonrası kalan 6 kaçırmanın (self `OK`, C tanı veriyor) ikisi kapatıldı.
+
+### 🔴 ÖNCE KENDİ ÖLÇÜM HATAMI DÜZELTTİM
+D-420'de `deref_atama_disi` için **"C=T022, self=G001 — aynı konum, YANLIŞ KOD"**
+yazmıştım. **YANLIŞTI.** C **İKİ** tanı verir (`T022 5 5` + `G001 5 5`), self
+yalnız `G001` → **eksik tanı**, yanlış kod DEĞİL. Hata benim özet aracımdaydı:
+karşılaştırmayı `head -1` ile yapmıştım.
+
+> **DERS: çok satırlı tanı çıktısını `head -1` ile karşılaştırma.** İlk satır
+> eşleşmese bile fark "yanlış kod" değil "eksik/fazla satır" olabilir; teşhisi
+> tümüyle yanlış yöne çevirir. (Bu, "ölçüm aracı da yanlış olabilir" dersinin
+> bu oturumdaki üçüncü örneği — önceki ikisi `--check` formatı ve
+> `--checkdump`ın temizde "OK" basması.)
+
+### (A) T022 deref-lvalue gevşetmesi KOŞULLUDUR
+Self-host'un D-249 muafiyeti KOŞULSUZDU → C'nin reddettiği deref-write'ı
+sessizce kabul ediyordu. Üç şekil C'den ölçüldü:
+```
+*p = v, p: *tam32,          güvensiz DIŞINDA → T022 + G001
+*p = v, p: *tam32,          güvensiz İÇİNDE  → OK
+*r = v, r: &değişken tam32, güvensiz dışında → T022      (referansta DA!)
+```
+Kural **işaretçi/referans ayrımına DEĞİL, `güvensiz` bağlamına** bağlı — bunu
+varsaymadım, üçüncü şekli ölçerek buldum. Onarım: `hedef_deref` koşuluna
+`ve (p.guv_bag > 0)`. `guv_bag` zaten vardı (G001 onu kullanıyor).
+
+### (B) BL001/BL002 — `bölge_al` beklenen `*T` bağlamı ister
+C (`src/tip_kontrol.c`:3198) `bölge_al`ı beklenen-TIP_POINTER yolundan çözer;
+oraya düşmesi "annotasyon `*T` değil" demektir ve **SESSİZ VARSAYILAN YOKTUR**
+(ham işaretçide yanlış genişlik tehlikeli). Ölçüldü:
+`*tam32` → OK · `tam32` → BL001 · annotasyonsuz → BL001 · arite ≠ 2 → BL002.
+
+**Altyapı D-423'ten BEDAVA geldi:** `m4_*` registry'si çeşit yapıcısına ÖZEL
+değil, HER CAGRI düğümünü beklenen tip düğümüyle işaretliyor. BL001 yalnız onu
+okur. (M004'ün ikame kısmı `tp_yad`/`tp_ad` ister — o `checker.kem`'de YOK ve
+portlanmadı; BL001 istemediği için oraya da girebildi.)
+
+### `checker.kem` portu YAPILDI
+`m4_*` işaretlemesi + `bolge_al_kontrol` iki dosyada BİREBİR, **zincirdeki
+konum dâhil** (`ct_cagri_kontrol`tan SONRA). İlk yerleşimimde `mmio_kontrol`un
+hemen ardına koymuştum — aynı soruyu iki yerde ayrı yanıtlayan kod ayrışır
+(D-407), hizalandı.
+
+### KORPUS: `test/check_korpus/tc21_01_deref_bolge.kem` (3 pozitif + 4 negatif)
+`T022_27_5 G001_27_5 T022_33_5 BL001_45_36 BL002_51_37` — C ile birebir.
+**Pozitif şekiller ŞART:** yalnız negatifler olsaydı kuralı toptan sıkılaştırmak
+(her deref-write'ı reddetmek / her `bölge_al`a BL001 vermek) de kapıyı geçerdi.
+
+### SABOTAJ — 3/3 YAKALANDI (hepsinin uygulandığı `grep` ile doğrulandı)
+| # | sabotaj | sonuç |
+|---|---|---|
+| S7 | `güvensiz` koşulunu kaldır (D-249'un koşulsuz hâli) | **iki T022 de kayboldu** ✅ |
+| S8 | `bolge_al_kontrol`u zincirden çıkar | BL001+BL002 kayboldu ✅ |
+| S9 | BL001'in POZİTİF dalını sil (toptan sıkılaştırma) | **fazladan `BL001_39_37`** — `*T` annotasyonlu geçerli satır suçlandı ✅ |
+
+**S9 pozitif şekillerin neden şart olduğunun kanıtıdır:** yalnız negatifler olsa
+"her `bölge_al`a BL001 ver" de kapıyı GEÇERDİ.
+
+### Kapılar
+`checker_diff` **150/150** (0 muaf) · `codegen_diff` 140/140 · `yapi_diff` 116/116 ·
+`ct_bariyer` 13/13 · `modul_codegen` 21/21 · `codegen_genis` 70/70 ·
+`baremetal_diff` 4/4 · `self_driver` 4 mod × 2 sürücü · **BOOTSTRAP FIXPOINT**
+(stage1 == stage2, 67690 satır).
+
+### Ölçüm
+502 dosyalık yüzeyde: **yanlış-pozitif 0, kaçırma 6 → 3.**
+Kalan 3 (`21_modul_kullan` T002 · `23_generic_constraint` T007 ·
+`49_generic_method` T001) hepsi modül/generic kökü — ayrı ve büyük.
+
+---
+
+## D-424 [YÜKSEK] — `--llvm` TİP KAPISI: 12 atlanan dosya kapandı (2026-08-11)
+
+D-419'da açtığım bulgunun kapanışı. Self-host `--llvm` dalı `kontrol_program`ı
+**HİÇ ÇAĞIRMIYORDU** → tip hatalı programa sessizce IR üretiyordu. C (`ana.c`
+mode_llvm, D-337) hatayı yazar ve **IR ÜRETMEDEN** 1 ile çıkar.
+
+**ÜÇ KAPININ 12 ATLAMASI BU TEK KÖKTENDİ** (`ct_bariyer` 6 + `modul_codegen` 3 +
+`codegen_genis` 3) ve **onikisinde de `--check` C ile BİREBİR paritedeydi** —
+checker hazırdı, eksik olan yalnız `--llvm`in onu çağırmasıydı.
+
+### Ön koşul: D-420'den D-423'e üç adımda kazanıldı
+Kapı, yanlış-pozitif varken EKLENEMEZ — geçerli programları reddederdi.
+```
+D-420 (ölçüm):  5 yanlış-pozitif   → kapı eklenemez (codegen_diff 139→135 olurdu)
+D-422 (T011):   3
+D-423 (M004):   0                  → 474 dosyalık yüzeyde SIFIR
+```
+D-419'da "onarım küçük görünüyor" demiştim; **yanlıştı** — ön koşul üç ayrı
+kök gerektirdi.
+
+### ⚠ TAZE `Ayr` ŞART
+`kontrol_program` `fn_ad`ı doldurur ve codegen AYNI tabloyu okur
+(`fn_coz`/`fn_kayitli_mi`) → aynı `Ayr`de koşturmak **codegen ÇIKTISINI
+DEĞİŞTİRİR**. İki tablo checker ve codegen yollarında FARKLI invaryantlarla
+dolar (D-420: `fn_node` yalnız `imza_topla`da → checker'dan okumak sınır ihlali).
+
+### Bilinçli sınır: tanı metni stdout'a YAZILMAZ
+C tanıları **stderr**'e yazar, stdout'u BOŞ bırakır. Self-host'ta stderr yazıcısı
+yok; eklemek yeni bir yerleşik = **dil yüzeyi değişikliği → Mehmet'in kararı**
+(bkz. `feedback_karar_kurallari`). Bu yüzden C ile **gözlenebilir sözleşme**
+(boş stdout + çıkış 1) korunur, tanı metni atlanır. Tanılar `--check` ile alınır.
+`kdl_hata_yazdir` runtime'da ZATEN VAR; eksik olan yalnız KEMGU-düzeyi adı.
+
+### Harness SİMETRİSİ — sessiz tuzak
+`codegen_diff` ve `yapi_diff` oracle'a `--tip-atla` geçiyordu ama self'e
+GEÇMİYORDU. Kapı eklenince korpustaki KASITLI tip-geçersiz dosyalar
+(`cg6_trunc` E004, `cg_deref_pointer` T001) yalnız self tarafında reddedilir ve
+kapı **YANLIŞ SEBEPLE** kırmızıya dönerdi. İkisi de simetrik hâle getirildi.
+Diğer kapılar (`codegen_genis`/`modul_codegen`/`ct_bariyer`/`baremetal_diff`)
+oracle başarısızsa ZATEN atlıyor → self hiç değerlendirilmiyor, değişiklik yok.
+
+### 🎯 ATLAMALAR POZİTİF ÖLÇÜME DÖNÜŞTÜ — ve kapının TEK GATE'i bu
+Kapıyı eklemek YETMEZ: üç harness "oracle IR üretemedi → ATLA" diyordu, yani
+tip kapısını **kaldırsam hiçbir kapı kırmızı olmazdı**. Üçünde de o dal
+POZİTİF İDDİAYA çevrildi: *oracle tip hatasıyla reddediyorsa self de
+reddetmeli.*
+```
+ct_bariyer     :  7/7  (6 atlandı)  →  13/13 (0 atlandı)
+modul_codegen  : 18/18 (3 atlandı)  →  21/21 (0 atlandı)
+codegen_genis  : 67/67 (12 atlandı) →  70/70 (9 atlandı — kalanlar MEŞRU
+                                        bare-metal link hataları)
+```
+> **D-419'un dersinin uygulaması:** "atlama listesi bir KÖR NOKTA
+> ENVANTERİDİR". Listeyi okumak bu kusuru açtı; listeyi BOŞALTMAK onu kilitledi.
+
+### SABOTAJ (S6: tip kapısını devre dışı bırak) — YAKALANDI
+`ct_bariyer` 13/13 → **7/13**, `modul_codegen` 21/21 → **18/21**, mesaj:
+"C tip hatasıyla REDDEDİYOR, KEMGU IR ÜRETİYOR (loud→silent)".
+Uygulandığı `grep` ile doğrulandı (1 eşleşme).
+
+### Ölçüm
+6 örnek atlanan dosyada C ve self artık birebir: `exit=1`, `0 define`.
+
+---
+
+## D-423 [YÜKSEK] — M004 generic çeşit payload'ı: İKAME (atlama DEĞİL) (2026-08-11)
+
+`çeşit Secim<T> { Var(T) }` için bildirilen payload tipi `"T"`dir; ham hâliyle
+karşılaştırmak `Secim<tam32> = Secim::Var(42)` gibi GEÇERLİ kodu reddediyordu
+(3 dosya, `--llvm` tip kapısının son blokeri).
+
+### 🔴 CAZİP ONARIM YANLIŞTI — ölçümle çürütüldü
+"Payload tipi generic param ise ATLA" diyecektim. C ERTELEMEZ, **İKAME EDER**:
+```
+Secim<metin> + Var(42)  → M004        Secim<tam32> + Var(42)  → OK
+```
+Atlamak birinci satırdaki **GERÇEK M004'ü susturur** — D-421'in aşırı-muafiyet
+tuzağının aynısı. C mekanizması: `substitusyon(tk, raw, csem, beklenen)`
+(`src/tip_kontrol.c`:2101) — beklenen tipin ARGÜMANIYLA ikame.
+
+### Uygulama: BAYRAK DEĞİL DÜĞÜM İŞARETLEME
+Yeni yan-diziler `m4_node`/`m4_tn` (yapıcı CAGRI düğümü ↔ beklenen TİP düğümü).
+Gerekçe `t14_muaf` ile AYNI: bağlam bayrağı alt-ağaca sızar ve iç içe ifadelerde
+yanlış tip uygular. İşaretleme `kontrol_dugum`da T014'ün yanında (DEGISKEN/
+SABIT/KURESEL → annotasyon; VER → dönüş tipi). `cesit_param_idx` +
+`cesit_arg_tipi` (TIP_KULLANICI çocuk[0]=ad, çocuk[1..]=argümanlar).
+Beklenen tipin ADI çeşitle eşleşmiyorsa `"?"` → denetim ATLANIR.
+
+**Hipotezimi kaynaktan çürüttüm:** "`parse_cesit` `tip_param_kaydet` çağırmıyor"
+(D-401 deseni) sandım — satır 1900'de **ÇAĞIRIYOR**; kesik okuma yanıltmıştı.
+Registry (`tp_yad`/`tp_ad`, sıralı) hazırdı; eksik olan yalnız beklenen tipti.
+
+### Bilinen sınırlar (ölçüldü, gizlenmedi)
+- **İç içe şekil ikame EDİLMİYOR:** `Kap<metin>` → alan `o: Opt<T>` →
+  `Opt::Bir("selam")` iki seviyeli ikame ister. `cg_mono_yapi_field_cesit`
+  GEÇİYOR ama **doğru sebeple değil** — muhafazakâr `"?"` fallback'i denetimi
+  atlıyor. "Çözüldü" DEĞİL, "sahte tanı vermiyor".
+- **`selfhost/checker.kem`'e PORTLANMADI.** Ölçüldü: o dosyada `tp_yad`/`tp_ad`
+  registry'si **HİÇ YOK** → port tüm parse-yanı altyapıyı taşımayı gerektirir.
+  `check_korpus`/`moduller`de generic çeşit BULUNMADIĞI için `checker_diff`
+  etkilenmiyor, ama iki uygulama AYRIŞMIŞ durumda (D-407 borcu). Yarım bir
+  çözüm (koşulsuz atlama) ÜÇÜNCÜ bir davranış yaratırdı — bilinçli olarak
+  yapılmadı.
+
+### Gate notu
+M004 kuralı için ayrı korpus dosyası EKLENEMEDİ (check_korpus → `checker_diff`
+→ `checker.kem`, port yok). Ama **D-424'ün `--llvm` tip kapısı bu kuralı
+kendiliğinden gate'ler**: sahte bir M004 artık self'i ABORT ettirir → 3 dosya
+IR üretmez → `codegen_diff` KIRMIZI olur.
+
+---
+
+## D-422 [YÜKSEK] — `bos` alias + AÇIK void dönüş + YENİ KAPI `yapi_diff` (2026-08-11)
+
+### (1) T011 kökü — oracle'ın KASITLI ASCII takma adı
+`src/tip_kontrol.c`:1239 → `{"bos", 3, TIP_BOS}` yorumuyla birlikte:
+*"C2.7: ASCII birim-tip alias 'bos' (Türkçe DNA: ikisi de kabul)"*.
+`src/llvm.c`:1117 de ikisini `void`e eşler. Self-host yalnız `boş`u tanıyordu →
+`sonuç<bos, X>` gibi GEÇERLİ kod sahte T011 alıyordu (2 dosya).
+
+**Alias olduğu ÖLÇÜLEREK doğrulandı, varsayılmadı:** uydurma bir ad (`Yokk`)
+aynı konumda İKİ TARAFTA DA reddediliyor. Tek yerden çözüldü (`tip_bos_mu`) ki
+iki yazım ayrışmasın; `codegen.kem` + `checker.kem` birebir.
+
+### (2) YOL ÜSTÜNDE: D-418 YARIM KALMIŞ — AÇIK `-> boş` de ayrışıyordu
+```
+işlev f() -> boş { }     C: define void @f     SELF: define i32 @f
+```
+D-418 yalnız **ÖRTÜK** dönüşü (annotasyon YOK) onarmıştı. **Hiçbir kapı
+görmedi:** `baremetal_diff` dönüş tipini karşılaştırır ama `runtime/`de açık
+`-> boş` HİÇ YOK; `codegen_genis`teki 5 dosyada VAR ama LLVM uyuşmazlığı
+tolere ettiği (D-295) ve değer okunmadığı için exit/stdout DEĞİŞMİYOR.
+
+### 🔴 (3) İLK ONARIMIM KIRDI — ve kırılma ÜÇÜNCÜ bir sapmayı açtı
+Eşlemeyi `ll_tip`e koydum → `sonuç<bos,X>` için `{i8, void, i8}`:
+`error: void type only allowed for function results`. `codegen_diff` 139→138.
+
+**C birim tipi BAĞLAMA GÖRE eşler:** işlev SONUCUNDA `void`, aggregate
+ALANINDA `i8`. Eşleme `islev_donus_tip`e taşındı → 139/139 geri.
+
+**Kırılma bir bilgi verdi:** değişiklikten ÖNCE de self `sonuç<bos,X>`
+payload'ını `i32` yayıyordu (C `i8`). `codegen_diff` exit koduna baktığı için
+bunu HİÇ görmemiş — dosya yeşildi. Yani onarımım **sessiz bir sapmayı
+gürültülü** hâle getirdi ve öyle bulundu. Ayrı kök, ayrı adım.
+
+### 🎯 YENİ KAPI `calistir_yapi_diff` — 116/116 (26 muaf)
+Tek oturumda AYNI sınıftan ÜÇ sapma çıktı ve davranışsal kapıların HİÇBİRİ
+gördü: (a) açık `-> boş`, (b) `sonuç<bos,X>` payload, (c) `mantıksal` dönüşü
+(`define i1 @esit_mi` vs `i32`, `stdlib/metin.kem` — ÖNCEDEN de vardı,
+`git stash` ile doğrulandı). Üçü de GEÇERLİ IR, AYNI sonuç, AYNI exit/stdout.
+
+> **DAVRANIŞSAL KAPI BU SINIFA YAPISAL OLARAK KÖRDÜR.** `ct_bariyer` (D-417) ve
+> `baremetal_diff` (D-418) neden davranış değil YAPI ölçtüğünün üçüncü kanıtı.
+
+Kapı `cg_korpus`ta `define` kümesini (**ad + DÖNÜŞ TİPİ**) karşılaştırır.
+**MUAFİYET LİSTESİ = BİLİNEN SAPMA ENVANTERİ, 26 dosya / 4 kök** (hepsi ölçüldü):
+| kök | dosya | açıklama |
+|---|---|---|
+| K1 `mantıksal` dönüşü → C `i1`, self `i32` | 9 | self aritmetikte bilerek i32; ayrı adım |
+| K2 `sonuç<bos,X>` payload → C `i8`, self `i32` | 1 | birim tipin AGGREGATE eşlemesi |
+| K3 lifted lambda → self DAİMA i64 | 8 | KdlGorevBare ABI (D-300), bilinçli |
+| K4 generic BASE gövdesi → self yayar, C atlar | 8 | D-401 (atlamak 11/18→8/18 regresyonu verdi) |
+
+Kapı, muaf bir dosya ARTIK EŞLEŞİYORSA uyarır → liste yalnız küçülür.
+
+### SABOTAJ
+**⚠ İLK DENEME UYGULANMADI** (`perl` deseni tutmadı, `grep` 0 dedi) ve kapı
+116/116 YEŞİL kaldı. **Sessizlik önce SABOTAJI şüpheli kılar** (D-402 dersinin
+tekrarı) — sayı doğrulanmasa "kapı zayıf" diye kaydedilecekti. Doğru satırla:
+S5 (void eşlemesini etkisizleştir) → **115/116, `define void`→`define i32`
+farkı yakalandı.** Uyandırıcı örnek: `test/cg_korpus/cg_bos_donus.kem`
+(hem `boş` hem `bos` biçimi).
+
+### Kapılar
+`codegen_diff` 139/139 · `self_driver` 4 mod × 2 sürücü + FIXPOINT ·
+`codegen_genis` 67/67 · `checker_diff` 149/149 · `baremetal_diff` 4/4 ·
+`ct_bariyer` 7/7 · `modul_codegen` 18/18 · **`yapi_diff` 116/116 (YENİ)**
+
+### `--llvm` tip kapısı ön koşulu: yanlış-pozitif 5 → 3
+Kalan üçü TEK kök: **M004 generic çeşit payload'ı**. Mekanizma ÇIKARILDI —
+C `substitusyon(tk, raw, csem, beklenen)` ile **İKAME EDER, ERTELEMEZ**:
+```
+Secim<metin> + Var(42) → M004      Secim<tam32> + Var(42) → OK
+```
+**Cazip onarım ("payload tipi generic param ise atla") YANLIŞ OLURDU** —
+birinci satırdaki gerçek M004'ü susturur (D-421'in aşırı-muafiyet tuzağı).
+Self-host'ta `tp_yad`/`tp_ad` registry'si (sıralı, `parse_cesit` DOLDURUYOR —
+"çağırmıyor" hipotezimi kaynaktan çürüttüm) hazır; eksik olan tek şey inşa
+yerindeki BEKLENEN TİP bağlamı.
+
+---
+
+## D-421 [YÜKSEK] — DENETİM: D-420'nin İKİ SOUNDNESS DELİĞİ + checker.kem portu (2026-08-11)
+
+D-420 tüm kapıları geçmişti (`codegen_diff` 139/139, `self_driver` FIXPOINT
+dâhil). Ön-merge düşmanca denetim **14 bulgu** onayladı; **ikisi D-420'nin kendi
+açtığı loud→silent delikleriydi.** Yeşil kapılar ikisini de göremiyordu.
+
+### 🔴 (1) `tn_soy` HAM İŞARETÇİYİ SOYUYORDU — muafiyet, C'nin REDDETTİĞİ şekle veriliyordu
+```
+işlev f(k: *K) -> tam32 { k.xs = []; ver 0; }
+C    = [T007 2 29, T014 2 35]        SELF = [OK]
+```
+Oracle'ı okudum (`src/tip_kontrol.c` DUGUM_ERISIM): otomatik deref **YALNIZ**
+`TIP_REFERANS` içindir, `TIP_POINTER` YOK — C `*K` üzerinden alan erişimini T007
+ile reddeder. `tn_soy`a `TIP_POINTER`ı koymam, C'nin İKİ tanıyla reddettiği bir
+şekli self-host'ta tamamen sessizleştirdi.
+
+> **KURAL:** Bir MUAFİYET kuralı, kabul edilebilirliği GENİŞLETMEMELİDİR.
+> Muafiyet yalnız "bu tanı burada YANLIŞ" der; "bu program geçerli" demez.
+
+### 🔴 (2) `bag_tn` KAPSAM-KÖRDÜ — gölgeleme gerçek bir T014'ü susturuyordu
+`yerel` append-only bir ön-geçiş listesidir, blok çıkışında KISALMAZ. Sondan başa
+arama "en son bağlama"yı bulur; o bağlama **başka bir kardeş blokta** olabilir:
+`a: A` (skaler alan) için `a.n = []` yazılır, İLERİDEKİ bir blokta `a: B` (Dizi
+alan) gölgesi muafiyeti yanlış tetikler → T014 sessizce kaybolur.
+
+Çözüm, bu repoda ZATEN YERLEŞİK olan `var_tip` disiplini: ad birden fazla FARKLI
+tip düğümüne bağlıysa **BELİRSİZ → -1** (muafiyet yok). Belirsizlikte muhafazakâr
+taraf **tanıyı KORUMAKTIR**.
+
+### Denetimin NEGATİF sonuçları (bunlar da bilgi)
+Paralel dizi kayması YOK (4 ekleme yolunun 4'ünde de `yerel_tn` tam bir kez) ·
+`tn_yapi_adi` / özyineleme / döngü sınırları temiz · **524 gerçek `.kem`
+dosyasında D-420 kaynaklı tek bir fark bile ölçülmedi.**
+
+### `selfhost/checker.kem` PORTU
+Port mekanikti: `yerel_topla` iki dosyada BİREBİRMİŞ (yalnız D-420'nin satırları
+eksik). Yardımcı bloğu `codegen.kem`'den KOPYALANDI — aynı soruyu iki yerde ayrı
+yanıtlayan kod er ya da geç ayrışır (D-407 dersi). `yerel_topla` gövdeleri tekrar
+birebir. `checker_diff` **148 → 149** (0 muaf).
+
+### KORPUS: `test/check_korpus/tc20_01_t014_lvalue.kem` (5 pozitif + 2 negatif)
+**⚠ NEGATİF VAKA SEÇİMİ BİR ÖLÇÜM İŞİYDİ, TAHMİN DEĞİL.** İlk iki deneme başarısız:
+- somut skaler alan (`k.n = []`): C'de T014'ün YANINDA T001 var, self T001'i
+  yaymıyor → kapı YANLIŞ SEBEPLE kırmızı olurdu.
+- `Genel<tam32>`: T somutlaşır, T001 yine çıkar.
+- **Çalışan tek şekil:** generic İŞLEV içinde ÇÖZÜLMEMİŞ `T` → C ertelediği için
+  tek başına T014 verir, iki taraf birebir eşleşir.
+
+Negatif vaka olmadan **toptan muafiyet de kapıyı geçerdi** (S2 bunu kanıtladı).
+
+### SABOTAJ — 4/4 YAKALANDI (hepsinin uygulandığı `grep` ile doğrulandı)
+| # | sabotaj | dosya | sonuç |
+|---|---|---|---|
+| S1 | ERISIM dalını sil | checker.kem | 4 sahte T014 belirdi ✅ |
+| S2 | tip-güdümlü → toptan muafiyet | checker.kem | iki negatif de sustu (`OK`) ✅ |
+| S3 | `bag_tn` naif (kapsam-kör) | checker.kem | satır 73'ün T014'ü kayboldu ✅ |
+| S4 | S2'nin sürücü karşılığı | codegen.kem | `OK` — `self_driver` yolu da yakalar ✅ |
+
+### ⚠ BİLİNEN KÖR NOKTA — kapıya KONAMAYAN şekil
+`işlev f(k: *K) { k.xs = []; }` C'de `[T007, T014]`, self'te yalnız `[T014]`
+(T007 self-host'ta YOK) → iki taraf ayrıştığı için **korpusa konamaz**.
+`tn_soy`un `*T`yi soymaması bu yüzden kapıyla DEĞİL, yalnız probe ile
+doğrulanmıştır. T007 boşluğu kapanınca korpusa eklenmelidir. Bu, dosyanın içine
+de yazıldı — kör nokta BİLİNEREK bırakılıyor.
+
+### Kapılar
+`checker_diff` 149/149 (0 muaf) · `codegen_diff` 139/139 ·
+`self_driver` 4 mod × 2 sürücü + FIXPOINT · `--check` 117/117.
+
+---
+
+## D-420 [YÜKSEK] — CHECKER: T014 alan/indeks lvalue muafiyeti + parite envanteri (2026-08-11)
+
+### Nasıl bulundu — bir kapıyı EKLEMEDEN ÖNCE ön koşulunu ölçerek
+
+D-419'da iki bulgu kaydetmiştim; birincisi "self-host `--llvm` tip hatasında
+DURMUYOR" idi ve notta "onarım küçük görünüyor" yazmıştım. Kapıyı eklemeden
+önce girdileri taradım ve **self-host'un KENDİ kaynağında yanlış-pozitif
+verdiğini** buldum:
+
+```
+selfhost/codegen.kem :: C=[OK]  SELF=[T014 1121 20]
+```
+
+Kapıyı ölçmeden eklesem **self-host kendini derleyemez hâle gelirdi** —
+bootstrap ölürdü. Kusur bugüne kadar görünmezdi çünkü `--llvm` checker'ı hiç
+çağırmıyor; yani **iki kusur birbirini maskeliyordu.**
+
+### Kök: `k.xs = []` — ERISIM/INDEKS lvalue'sunda T014 muafiyeti yoktu
+
+`ATAMA` muafiyeti YALNIZ `TANIMLAYICI` lvalue'yu tanıyordu (satır 9929).
+`p.tp_pending = []` gibi tamamen geçerli kod sahte T014 alıyordu.
+
+**Kural TİP GÜDÜMLÜDÜR — C'den 8 probe ile ölçüldü, varsayılmadı:**
+
+| şekil | C | önce (self) | sonra |
+|---|---|---|---|
+| `k.xs = []` (Dizi alan) | OK | T014 | OK ✓ |
+| `k.n  = []` (skaler alan) | T014+T001 | T014 | T014 (T001 eksik) |
+| `d.ic.xs = []` (iç içe) | OK | T014 | OK ✓ |
+| `xs[0] = []`, `xs: Dizi<Dizi<T>>` | OK | T014 | OK ✓ |
+| `xs[0] = []`, `xs: Dizi<tam32>` | T014+T001 | T014 | T014 (T001 eksik) |
+| `k.xs = []`, `k: &değişken K` | OK | T014 | OK ✓ |
+
+Skaler alan T014 ALDIĞI için **toptan muafiyet (`t14_muaf_hepsi`) YANLIŞ
+olurdu** — gerçek bir tanıyı susturur, yani soundness deliği açardı. Bu yüzden
+tip DÜĞÜMÜYLE `t14_muaf_isaretle` kullanıldı.
+
+### Uygulama
+`yerel_tn: Dizi<tam32>` yan-dizisi (`yerel` ile PARALEL — bağlamanın annotasyon
+TİP DÜĞÜMÜ, -1 = yok). **String değil DÜĞÜM**, çünkü `t14_muaf_isaretle` iç içe
+`[[]]` için alt-ağaca yürür ve INDEKS lvalue'da ELEMAN tip düğümü gerekir;
+`yerel_tip`/`yerel_ham` string'leri ikisini de veremez. Yardımcılar: `bag_tn`,
+`tn_soy` (`&T`/`&değişken T`/`*T` kabuğunu soy), `tn_yapi_adi`, `alan_tn_bul`
+(`alan_tip_bul`ın düğüm karşılığı), `ifade_tn`.
+
+### ⚠ CAGRI DALI BİLİNÇLİ OLARAK YOK — ve sebebi bir TUZAK
+`f().alan = []` (C: OK) hâlâ sahte T014 alır. Denedim ve **"dizi sınır ihlali"
+ile düştü**: dönüş tip düğümü `fn_node` ister, `fn_node` YALNIZ `imza_topla`
+(codegen ön-geçişi) tarafından doldurulur; checker yolunda `fn_ad` ondan
+BAĞIMSIZ doldurulur → **iki dizi PARALEL DEĞİLDİR.** D-392'nin aynı tuzağı.
+
+> **GENEL DERS:** `codegen.kem` tek dosya ama İKİ yol içerir (checker / codegen)
+> ve bazı tablolar yalnız BİR yolda doldurulur. Bir tabloyu yeni bir yerden
+> okumadan önce "bu yolda kim dolduruyor?" sorusunu SOR. Aynı gerekçe,
+> `--llvm` tip kapısının `kontrol_program`ı AYNI `Ayr`de koşturmasını da
+> yasaklar (`fn_ad` kirlenir → codegen çıktısı değişir) — TAZE `Ayr` şart.
+
+### Bilinen sınırlar (ölçüldü, gizlenmedi)
+- Skaler alan/eleman şeklinde eşlik eden **T001 yayılmıyor** (`ifade_tip` dizi
+  literaline tip vermiyor). Eksik-tanı yönünde, önceden de vardı.
+- `f().alan = []` sahte T014 (yukarıdaki tuzak).
+- **`selfhost/checker.kem`'de AYNI boşluk duruyor** (satır 4444). Korpusa
+  uyandırıcı örnek eklemek `checker_diff`i kırar → port AYRI adım.
+
+### Kapılar
+`codegen_diff` 139/139 · `self_driver` 4 mod × 2 sürücü + FIXPOINT ·
+`--check` 116/116 (iki sürücü de).
+
+### 🎯 YAN ÜRÜN: `--llvm` TİP KAPISININ ÖN KOŞULU ÖLÇÜLDÜ — TUTMUYOR
+
+Kapıyı eklemenin ön koşulu, `--llvm` girdilerinde SIFIR yanlış-pozitif olması.
+Tüm yüzeyi (`cg_korpus` + `moduller` + `ornekler` + `stdlib*` + `selfhost` +
+`snapshots` + `crossfile` + `check_korpus` + `asan_matris` + `kütüphane`)
+taradım. **11 sapma var:**
+
+**Yanlış-pozitif (self tanı verir, C OK) — 5, kapıyı BLOKLAR (≈2 kök):**
+`cg_cesit_ic_ayirici` T011 · `snapshots/cesit_sonuc` T011 ·
+`cg_generic_cesit` M004 · `cg_mono_cesit_metin` M004 ·
+`cg_mono_yapi_field_cesit` M004
+
+**Kaçırma (C tanı verir, self OK) — 6:**
+`21_modul_kullan` T002 · `23_generic_constraint` T007 ·
+`26_referans_aktarim` T022 · `49_generic_method` T001 ·
+`bolge_al_bl001` BL001 · `deref_atama_disi` **C=T022 ama self=G001**
+(aynı konum, YANLIŞ KOD)
+
+Kapıyı bugün eklesem `codegen_diff` **139 → 135'e düşerdi.**
+
+> **⚠ "131/131 TAM PARİTE" İDDİASI YÜZEY-SINIRLIYDI.** O ölçüm `stdlib` +
+> `stdlib/temel` + `test/ornekler` + `kütüphane` + `test/moduller` kapsıyordu;
+> **`cg_korpus`, `snapshots` ve `selfhost/` HİÇ dâhil değildi.** Parite sayısı
+> yalnız ölçülen yüzey kadar geniştir — D-419'un "kendi kapının atladıklarını
+> ölç" dersinin aynısı, bu kez kapı değil KORPUS için.
+
+### 12 ATLANAN DOSYA, ÜÇ KAPI, TEK KÖK
+`ct_bariyer` 6 + `modul_codegen` 3 + `codegen_genis` 3 atlaması **hepsi** aynı
+sebepten: C `--llvm` tip hatasında durur, self-host durmaz. **Onikisinde de
+`--check` kod+satır+sütun BİREBİR paritede** — yani checker hazır, eksik olan
+yalnız `--llvm`in onu çağırması. Ön koşul (yukarıdaki 5 yanlış-pozitif)
+kapanınca bu 12 dosya "atlandı"dan "iki taraf da reddediyor"a döner.
+
+---
+
+## D-419 [YÜKSEK] — KAPI: BİRLEŞİK OS birimi — kendi kapımın kör noktası (2026-08-11)
+
+**D-418'in kapısı 6 dosyayı ATLIYORDU ve bunu ölçtüm.** Sebep meşruydu: C
+oracle onları tek başına derleyemiyor (T002 — birbirlerinin sembollerine
+bakıyorlar). Ama sonuç kör noktaydı: **OS runtime'ının 2/3'ü hiçbir kapının
+altında değildi.**
+
+**Gerçek derleme birimi Makefile'da yazılıydı** (`:1134`): tüm `runtime/*.kem`
++ `test/ornekler/kem_os.kem` BİRLEŞTİRİLİP `kem_os_comb.kem` olarak derleniyor.
+Kapı o birimi bir bütün olarak ölçecek şekilde genişletildi.
+
+**Ölçüm — 4166 satır, sıfır fark:**
+```
+define sayısı : C=240  KEMGU=240   (küme diff'i BOŞ)
+satıriçi asm  : C=44   KEMGU=44
+hedef üçlüsü  : aarch64-unknown-none-elf (ikisi de)
+```
+Yani D-416 (`satıriçi_asm`) ve D-418 (`--mimari`, void dönüş) sonrası self-host
+**tam KEMGU-OS'u** C ile yapısal olarak birebir derliyor.
+
+**⚠ ASM SAYISI DENETİMİ ŞART — ölçüldü.** Sabotaj **S162** ile asm emisyonunu
+sildim: **işlev sayısı 240=240 AYNI KALDI**, yalnız `asm C=44 KEMGU=0` yakalandı.
+Yani yalnız `define` adlarını karşılaştıran bir kapı, D-416'nın kusurunu
+(asm bloğunun sessizce düşmesi) **KAÇIRIRDI**. Yapısal kapılarda "hangi yapı"
+sorusu kritik.
+
+> **DERS: kendi kapının ATLADIKLARINI da ölç.** "Oracle kuramadı → atla"
+> politikası doğru ama atlama listesi bir kör nokta envanteridir; içinde ne
+> olduğunu bilmeden kapı sayısına güvenilmez. (D-404'ün aynı dersi, bu kez
+> kapıyı BEN yazmıştım.)
+
+**Kapı:** `baremetal_diff` **4/4 birim** (birleşik OS + 3 tek dosya, 6 atlandı).
+
+---
+
+## D-418 [YÜKSEK] — SÜRÜCÜ: `--mimari` + void dönüş + BARE-METAL KAPISI (2026-08-10)
+
+**Yeni yüzey `runtime/*.kem` (OS/sürücü kodu) ölçüldü: 0/3 → 3/3.**
+
+### 🔴 Self-host bare-metal/ARM64 kodu DERLEYEMİYORDU BİLE
+`--mimari` bayrağı self-host sürücüde **hiç yoktu**. Argüman ayrıştırma SIRALIydı
+(`arg_al(1)`=mod, `arg_al(2)`=yol) → `--llvm --mimari aarch64 dosya.kem`
+çağrısında **`aarch64` DOSYA YOLU sanılıyordu**: boş girdi okunuyor, yalnız
+başlık basılıyor, **hata verilmiyor**. Sessiz yanlış ayrıştırma; 0 define.
+Hedef üçlüsü de `x86_64` sabit koduydu.
+
+**Bunu hiçbir kapı görmüyordu** çünkü `runtime/*.kem` host'ta LİNKLENMEZ
+(aarch64 sysreg/MMIO) → exit-kodu karşılaştıran tüm kapılar bu yüzeyi atlıyordu.
+
+### İkinci kök — örtük `boş` dönüş `i32` yayılıyordu
+`çıplak işlev free(p: *tam8) { ... }` (dönüş annotasyonu YOK) için C
+`define void @free`, self-host `define i32 @free` yayıyordu. **Gözlenebilir
+yanlış cevap ÜRETMİYORDU** — LLVM çağrı yerinde uyuşmazlığı tolere ediyor
+(D-295) ve değer kullanılmıyor. Gizli yapısal sapma; farklı bir ABI'de ya da
+dönüş değeri okunan bir bağlamda ısırırdı.
+`islev_donus_tip` fallback'i `i32` → `void` yapıldı; bu **`ret` emisyonunu da
+zorunlu kıldı** (`ret void 0` GEÇERSİZ) → `ret_bos_yaz`. Biri olmadan diğeri
+IR'ı bozar.
+
+### Yeni kapı: `make calistir_baremetal_diff`
+Linkleyemediğimiz için DAVRANIŞ değil **YAPI** karşılaştırılır: hedef üçlüsü +
+emit edilen `define` kümesi (**ad + DÖNÜŞ TİPİ**) C oracle ile birebir mi.
+Eksik işlevi, yanlış adı ve yanlış dönüş tipini yakalar — D-418'de üçü de çıktı.
+**Dönüş tipi kesilmemeli:** `sed 's/(.*//'` imzayı atar ama
+`define void @f` ↔ `define i32 @f` ayrımını KORUR; kusur tam oradaydı.
+
+**Sabotaj:** S160 (üçlü seçimi) → üç dosyada da üçlü farkı. **S161 (void dönüş)
+İLK DENEMEDE SESSİZ kaldı — ama sabotaj YANLIŞ SATIRA uygulanmıştı**
+(`builtin_ret`in void dalı, `islev_donus_tip` değil). Doğru satırla tekrarlandı
+→ **0/3**. D-402'nin dersi yine geçerli: *sabotajın sessizliği önce SABOTAJI
+şüpheli kılar.*
+
+**Kapılar:** `baremetal_diff` **3/3** · `codegen_diff` 139/139 ·
+`ct_bariyer` 7/7.
+
+---
+
+## D-417 [YÜKSEK] — CODEGEN: `sabitsüre` + spekülasyon bariyeri + YENİ KAPI (2026-08-10)
+
+**`test/check_korpus` 31/32 → 32/32.**
+
+**Kusur:** `sabitsüre_olustur` codegen'i YOKTU (tanımsız sembol). C her iki
+sabit-süre yerleşiğini de **PASS-THROUGH** yapar AMA ardından bir **SPEKÜLASYON
+BARİYERİ** yayar: `call void @llvm.x86.sse2.lfence()` (Spectre v1 azaltması).
+
+### 🔴 D-408'in gizli kusuru — kendi uyarımı kendim ihlal etmişim
+D-408'de `sabitsüre_olustur`u "naif pass-through bariyeri sessizce düşürür,
+yarım yapmıyorum" diye BİLİNÇLİ olarak ertelemiştim — **ama aynı adımda `ifşa`yı
+tam da o şekilde ekledim: pass-through, BARİYERSİZ.** Aynı güvenlik regresyonunu,
+ondan kaçındığımı yazdığım commit'te işledim. D-417 ikisini de onardı.
+
+### 🎯 ASIL ÇIKTI — DAVRANIŞSAL KAPILAR BU KUSURU GÖREMİYOR (ölçüldü)
+Sabotaj **S159** ile bariyeri sildim:
+```
+codegen_diff : 139/139 YEŞİL   ← görmüyor
+lfence sayısı: 10 → 0          ← kusur burada
+```
+Bariyerin yokluğu link hatası vermez, IR geçerli kalır, program **aynı sonucu
+üretir**. Kaybolan tek şey sabit-süre garantisidir.
+> **Güvenlik özelliklerinde "program doğru çalıştı" YETERSİZ KANITTIR.**
+
+**Yeni kapı: `make calistir_ct_bariyer`** — davranışı değil YAPIYI ölçer:
+`sabitsüre`/`ifşa` kullanan HER dosyada `lfence` SAYISINI C oracle ile
+karşılaştırır. Korpus elle seçilmez, `grep` ile taranır ki yeni dosya
+eklendiğinde kapı kendiliğinden kapsasın. Durum **7/7 (6 atlandı)**.
+Sabotaj tekrarı: eski kapı 139/139 yeşil derken yeni kapı **0/7** ve
+`stdlib/kripto/sifre`de **55 eksik bariyer** raporladı.
+
+**⚠ MİMARİ KORUMASI YOK, BİLİNÇLİ:** C `--mimari aarch64`te DE x86 lfence
+yayıyor (ölçüldü). Tartışmalı ama parite hedefi C'nin DAVRANIŞI; burada
+"düzeltmek" oracle'dan sapmak olurdu (D-388/D-408 gerekçesi).
+`declare` GEREKMEZ — LLVM bilinen intrinsic'i otomatik bildirir (D-397 ile aynı).
+
+**Kapılar:** `codegen_diff` **139/139** · `ct_bariyer` **7/7** ·
+`check_korpus` **32/32**.
+
+---
+
+## D-416 [YÜKSEK] — CODEGEN: `satıriçi_asm` — 🎯 `test/snapshots` 62/62 (2026-08-10)
+
+**Son sapma kapandı: `test/snapshots` 61/62 → 62/62, TAM PARİTE.**
+
+**Kusur:** `satıriçi_asm` self-host codegen'de HİÇ YOKTU. Parser düğümü
+üretiyor, checker AS001 ile doğruluyor, **codegen'de dal yoktu** → tüm blok
+sessizce düşüyor, çıktı değişkenleri başlangıç değerinde kalıyordu (C=42,
+KEMGU=1). Link hatası yok, IR geçerli — **SESSİZ YANLIŞ CEVAP**, üstelik
+`güvensiz` blokta çalışan kod için.
+
+**Parser kritik veriyi ATIYORDU** (`asm_kisit_atla` yalnız tüketiyordu): şablon,
+çıktı kısıtları, çıktı DEĞİŞKEN adları, girdi kısıtları, bozulanlar. Düğüme alan
+eklemek `--ast` paritesini bozacağı için **5 yeni yan-kanal** (D-373'ün
+`asm_mim` deseni). `parser_diff` 13/13 pariteyi kanıtlıyor.
+
+**Biçim C'den ÜÇ ÇIKTI-ARİTESİ İÇİN AYRI AYRI ölçüldü** (önceki turda; hiçbiri
+varsayılmadı) — ve 1-çıktı hâlinin **struct DEĞİL düz dönüş** olması tam da
+varsayımla kaçırılacak türden bir ayrıntıydı.
+
+**⚠ İKİ TUZAK, ikisi de ölçümle yakalandı:**
+1. **`sim_lex` HAM SİMGE metnini verir, dizgi DEĞERİNİ değil** → `""=r""` ve
+   `r#\22...\22#` IR'a sızıyordu. Sınırlayıcılar (`"..."` ve `r#"..."#`)
+   soyulmalı.
+2. **KEMGU'da `\\` DE KAÇIŞ DEĞİL** (D-400 `\n`, D-409 `\"` ile aynı sınıf):
+   `"\\0D"` İKİ ters-bölü basar. Tek ters-bölü için bayt 92 doğrudan yazılır.
+   **Bu, aynı dersin ÜÇÜNCÜ tekrarı** — KEMGU dizgi literalinde hiçbir kaçış yok.
+
+**Sonuç IR C ile BİREBİR** (yalnız register numaraları farklı):
+```
+call { i32, i32 } asm sideeffect "mov $2, $0\0D\0Aadd $$2, $0\0D\0Amov $$100, $1", "=r,=r,r,~{cc}"(i32 %5)
+```
+
+**Sabotaj:** S157 (asm emisyonu) → `exit=42 ≠ 1`, yani kapı sessiz-yanlış-cevap
+kipini yakalıyor (137/138). **S158 (satır sonu kaçışı) SESSİZ kaldı** —
+gizlemiyorum: clang şablondaki HAM CR'yi kabul ediyor, yani `\0D` kaçışı C ile
+birebirlik için doğru ama **kapı-gözlenebilir değil**. (D-356: sabotajın
+sessizliği bir SONUÇTUR.)
+
+**Korpus:** `cg_satirici_asm.kem` (snapshot'tan birebir + gerekçe notu).
+**İKİ ÇIKTI ŞART:** tek çıktıyla C struct değil düz dönüş yayar; iki çıktı
+aggregate + `extractvalue` yolunu zorlar.
+
+**Kapılar:** `codegen_diff` **138/138** · `test/snapshots` **62/62**.
+
+---
+
+## D-415 [YÜKSEK] — 🔴 D-405 YANLIŞTI: `bölge_al` GERÇEK TAHSİSTİR (2026-08-10)
+
+**D-414'te açtığım aralıklı segfault kapandı.** `dizi_kullan` self ikilisi
+öncesinde `42 42 139 42 …`, şimdi **12/12 kararlı 42**.
+
+### 🔴 Kendi kararımın düzeltmesi
+**D-405'te `bölge_al(böl, n)`i parametresiz `@kdl_global_bolge_al()` sandım —
+YANLIŞ ÖLÇÜMDÜ.** C çıktısında gördüğüm o çağrı `bölge_al`ın karşılığı DEĞİL,
+**her işlevin girişindeki ρ-EDİNME PROLOGU**ydu. Kesin kanıt: `kdl_global_bolge_al`
+C'nin TÜM çıktısında **yalnız BİR kez** geçiyor — `main`de.
+
+C gerçekte TAHSİS yapıyor:
+```
+%s = getelementptr <T>, ptr null, i64 1   ; sizeof idiom
+%z = ptrtoint ptr %s to i64
+%t = mul i64 <n>, %z
+%p = call ptr @malloc(i64 %t)
+```
+Eski hâl küresel bölge işaretçisini tampon diye döndürüyordu → yazılan her
+eleman **BÖLGEYİ BOZUYORDU**. Belirti aralıklı segfault'tu.
+
+**⚠⚠ D-405'İN KORPUSU BU KUSURU KAÇIRDI ÇÜNKÜ TAHSİS EDİLEN BELLEĞE HİÇ
+YAZMIYORDU.** Dosyanın kendi notu itiraf ediyormuş: *"Bölge işaretçisinin
+kendisini denetlemiyoruz (adres kararsız)"*. Korpus yenilendi: artık **yazıyor
+ve geri okuyor**, iki farklı `n` ile.
+> **DERS: bir TAHSİS yerleşiğini test ederken tahsis edilen belleğe YAZ ve GERİ
+> OKU.** "Çağrı geçerli IR üretti" demek yanlış lowering'i yeşil geçirir —
+> haftalarca geçirdi.
+
+### İkinci kök — D-411'in sağlamlık iddiası da yanlıştı
+`büyü<T>(l: &Liste<T>, ...)`de T İÇ İÇE konumda; argümandan çıkarsanamıyor ve
+D-411'in `i32` fallback'i devreye giriyordu → **`büyü$i32`** yayılıyor, büyüme
+sırasında eleman kopyası 8 yerine 4 bayt genişlikte yapılıyordu. C `büyü$i64`
+yayıyor.
+> **D-411'de "fallback yanlışsa LLVM REDDEDER, hata GÜRÜLTÜLÜ kalır" demiştim —
+> O İDDİA YANLIŞTI.** Define ve çağrı i32'de ANLAŞIYOR, LLVM kabul ediyor, kusur
+> çalışma anına kayıyor. Fallback güvenli DEĞİL.
+
+Onarım: **aktif ikameden devral** (`subst_bul`). Bir specialization'ın gövdesinden
+başka bir generic çağrılıyorsa (`ekle$i64` → `büyü`), T argümanlardan değil
+ÇAĞIRANIN ikamesinden gelir. C'nin TipSubst yayılımının karşılığı.
+Sıra: (a) çıplak parametre → (b) aktif ikame → (c) `i32` fallback.
+
+**Sabotaj S156** (malloc → global bölge) → **ÜÇ dosyayı birden** kırıyor (134/137).
+
+**Kapılar:** `codegen_diff` **137/137** · `modul_codegen` 18/18 (İKİ yeşil koşum) ·
+`codegen_genis` 67/67 (0 muaf) · `dizi_kullan` 12/12 kararlı.
+
+---
+
+## D-414 [YÜKSEK] — CODEGEN: legacy `kullan` düz ad alanı + AÇIK segfault bulgusu (2026-08-10)
+
+**`test/crossfile` 0/2 → 2/2.**
+
+**Kusur:** C'nin İKİ modül yükleyicisi FARKLI AD ALANI kuruyor ve self-host
+hepsini modül-önekli sanıyordu. Ayırt edici C'de tek satır (`src/ana.c:204`):
+```c
+static int kullan_yeni_bicim(const Dugum *k) {
+    return k->veri.kullan.segment_sayi <= 1 ||
+           k->veri.kullan.secili_sayi > 0 ||
+           k->veri.kullan.alias_ad != NULL;
+}
+```
+Çok-segmentli **ve** seçili-import yok **ve** alias yok → **LEGACY**: üyeler
+GLOBAL ad alanına düz girer (`@uc_kat`, `@iki_kat`), modül öneki YOK.
+Self-host D-399'un `modül` sarmalını koşulsuz uyguluyordu → `@lib_islem.uc_kat`
+yayıp çıplak `@iki_kat` çağrısını tanımsız bırakıyordu.
+Onarım: sarmal yalnız YENİ biçimde; legacy'de metin DÜZ eklenir.
+**Kuralı uydurmadım — C kaynağından okudum.** Probe'larım yol çözümünde takıldı
+ve şekli tahmin etmek yerine ayırt ediciyi doğrudan `src/ana.c`'de buldum.
+
+---
+
+### 🔴 AÇIK KUSUR — `dizi_kullan` self-host ikilisinde ARALIKLI SEGFAULT
+`modul_codegen` bir koşumda 17/18 (`dizi_kullan` C=42 ≠ KEMGU=**139**), sonraki
+koşumda 18/18 verdi. Aynı ikili art arda: `42 42 139 42 …`; C oracle aynı
+dosyada **8/8 kararlı 42**.
+**D-414 sebebi DEĞİL:** `git stash` ile değişiklik geri alınıp ölçüldü —
+segfault ÖNCEDEN de var. Kusur oradaydı ve kapıyı **şansla** geçiyordu.
+
+> **⚠ ÖNCEKİ TEŞHİSİMİ DÜZELTİYORUM.** D-413'te aralıklı kırmızıları "art arda
+> `make` hedefleri → Windows dosya kilidi" diye açıklamıştım. O etken gerçek
+> (127'ler Defender exec yarışı) **ama 139'ları açıklamıyor**; en az biri bu
+> segfault'tu. **"Aralıklı = artefakt" en cazip ve en tehlikeli varsayım.**
+> **exit 127 ortamsaldır, exit 139 DEĞİLDİR** — aralıklılık UB'nin normal
+> görüntüsüdür. Kod ayrımı `CLAUDE.md`'ye yazıldı.
+
+Muafiyet EKLEMEDİM: kapının bu kusuru bazen yakalaması, hiç yakalamamasından
+iyidir. Sıradaki iş bu.
+
+**Kapılar:** `codegen_diff` 137/137 · `crossfile` **2/2** · `modul_codegen`
+aralıklı (yukarıdaki açık kusur).
+
+---
+
+## D-413 [YÜKSEK] — CODEGEN: `&Yapi` yerelinde alan erişimi — SESSİZ YANLIŞ CEVAP (2026-08-08)
+
+**Yeni yüzey ölçümü.** Kalan kapısız yüzeyler taranınca `test/asan_matris`
+**11/12** çıktı (`test/ornekler/eski` ve `test/stdlib` oracle kurulamadığı için
+sinyal vermedi, `test/crossfile` 0/2 — ayrı iş). Tek sapma **sessiz yanlış
+cevaptı** ve kapatıldı → **12/12**.
+
+**Kusur:** `değişken r: &H = dizi_al(d, i);` — DEĞER `ptr` döner ve `son_ref`
+BOŞTUR, dolayısıyla `r.v` erişimi çözülemeyip **literal `0`a** düşüyordu:
+```
+C:    %33 = getelementptr %H, ptr %32, i32 0, i32 0   +   %34 = load i32
+SELF: %32 = add i32 %30, 0        ← r.v LİTERAL 0
+```
+Link hatası yok, IR geçerli, program çalışıyor — toplam 50 yerine 0
+(C=42, KEMGU=0).
+
+**Onarım:** ANNOTASYON `&Yapi` ise pointee ONDAN alınır, değerden değil.
+**`param_ref_yapi` bu işi PARAMETRELER için ZATEN yapıyordu**; yerel `değişken`
+yoluna bağlanmamıştı — D-407'nin "aynı soruyu iki yerde ayrı yanıtlama"
+deseninin bir örneği daha. Annotasyon DEĞERDEN üstün: `&H` yazıldıysa pointee
+H'dir.
+
+**Korpus:** `cg_ref_yerel_alan.kem` (asan_matris'ten birebir kopya + not).
+**⚠ ŞEKİL ÖNEMLİ:** pointee'nin DEĞERDEN çıkarsanamadığı bir kaynak şart.
+`değişken r: &H = &h;` YETMEZ — orada `&h` zaten `son_ref`i doldurur ve dosya
+tesadüfen yeşil kalır. `dizi_al` gibi **opak `ptr` dönen** bir kaynak gerekir.
+
+**Sabotaj S155** → `42 ≠ 0`, yani kapı sessiz-yanlış-cevap kipini exit farkı
+olarak yakalıyor (136/137).
+
+**⚠⚠ KAPI SONUÇLARINDA ARALIKLI SAHTE KIRMIZI — bu turda İKİ KEZ.**
+`modul_codegen` bir kez başarısız dedi (yeniden koşumda 18/18 iki kez) ve
+`cg_ham_isaretci_indeks` bir kez **exit 139 (segfault)** dedi (yeniden koşumda
+137/137 iki kez). Tetikleyici: **tek bash çağrısında art arda birden çok `make`
+hedefi** — her biri `build/codegen.exe`i yeniden kuruyor ve Windows'ta bir önceki
+süreç dosyayı hâlâ tutabiliyor. D-411'in "zaman aşımına uğrayan make ölmez"
+dersinin kardeşi. **KURAL: kapı kırmızıysa, teşhise başlamadan ÖNCE temiz
+yeniden koş — ve en az İKİ yeşil koşum gör.** Sahte kırmızıyı gerçek regresyon
+sanmak, bu oturumda geri almaya kalkabileceğim en pahalı hata olurdu.
+
+**Kapılar:** `codegen_diff` **137/137** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf) · `test/asan_matris` **12/12**.
+
+---
+
+## D-412 [YÜKSEK] — CODEGEN: GÖRELİ modül yolu (`ic::g` içinden `m`) (2026-08-07)
+
+**`test/snapshots` 60/62 → 61/62.** Kalan tek sapma `asm_round_trip`
+(satıriçi_asm, planı D-411 notunda).
+
+**Kusur:** `modül m` içinden yazılan `ic::g()` **GÖRELİ** bir yoldur — `m.ic.g`
+demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kuruyordu →
+`@ic.g` tanımsız sembol.
+
+**Onarım, mevcut bir kuralın uzantısı:** `fn_coz`un ÇIPLAK adlar için uyguladığı
+**MODÜL-ÖNCE** bağlama (D-398) nitelikli yollara da genişletildi — modül
+içindeysek önce `<önek>.<yol>` denenir. **Kayıt kontrolüyle:** göreli karşılığı
+YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
+> Yeni bir mekanizma icat etmek yerine var olanın kapsamını genişletmek doğru
+> hamleydi: çıplak ad ve nitelikli yol AYNI kapsam sorusunu soruyor. (D-407'nin
+> "aynı soruyu iki yerde ayrı yanıtlama" dersinin olumlu yüzü.)
+
+**Korpus:** `cg_gorece_yol.kem` (snapshot'tan birebir kopya + gerekçe notu).
+Dosya AYNI ZAMANDA üç gölgeleme şeklini birden ölçüyor: `m::f` global `f`yi,
+`m::ic::g` global `g`yi gölgeler, ayrıca `dışa` olmayan kardeş (`m::h`) çağrısı.
+
+**Sabotaj S154** → KIRMIZI, iki dosyayı birden kırıyor (134/136).
+
+**Kapılar:** `codegen_diff` **136/136** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-411 [YÜKSEK] — CODEGEN: `bellek_kopyala` + mono'da İPTAL yerine geri-düşüş (2026-08-07)
+
+**`test/snapshots` 58/62 → 60/62.** İki AYRI kök.
+
+**1. `bellek_kopyala` → libc `memcpy`.** Eşleme yoktu → tanımsız
+`@bellek_kopyala`. D-388/D-405 ile aynı sınıf (yerleşik ADI kayıtlı, IR eşlemesi
+eksik). C `call i32 @memcpy(...)` yayıyor — kendi `declare ptr @memcpy`
+satırıyla tutarsız, LLVM sessizce kabul ediyor (D-295); C'nin DAVRANIŞI taklit
+edildi.
+
+**2. Mono'da İPTAL yerine GERİ-DÜŞÜŞ — D-401'in V1 kararının düzeltilmesi.**
+D-401 çıkarsanamayan bir tip paramında mono'yu TÜMDEN iptal ediyordu. Bu
+`hata_yap<T, E>(e: E) -> sonuç<T, E>` şeklinde KIRIYORDU: `E` çıplak parametre,
+`T` DEĞİL. İptal edilince çağrı BASE gövdeye gidiyor (hepsi fallback →
+`{i8,i32,i32}`) ama annotasyon `sonuç<tam32, metin>` = `{i8,i32,ptr}` çözülüyor
+→ **store uyuşmazlığı**.
+> **İlginç ayrıntı:** define ve çağrı BİRBİRİYLE anlaşıyordu; uyuşmazlık
+> ANNOTASYONLAYDI. "Define≠call" diye aramak yanlış yere bakmak olurdu —
+> hata satırını okumak şart.
+
+Onarım: çıkarsanamayan param için fallback IR (`i32`) kullan. Sonuç
+`hata_yap$i32$ptr` — **C'nin ürettiği mangled adla BİREBİR AYNI**.
+**SAĞLAMLIK:** fallback yanlışsa (T gerçekte `tam64` ise) define ve çağrı yine
+anlaşır ama annotasyonla uyuşmaz → LLVM REDDEDER. Hata **gürültülü** kalır,
+sessiz yanlış cevaba dönüşmez.
+
+**Korpus:** `cg_bellek_kopyala.kem` + `cg_generic_sonuc_ptr.kem` (ikisi de
+snapshot'tan birebir kopya — uydurmadım). `d1_generic_sonuc_ptr` zaten C'nin
+bir zamanlar yaşadığı aynı bug'ın REGRESYON MUHAFIZI; dosyanın kendi yorumu
+kökü tarif ediyor.
+
+**Sabotaj:** S152 (`memcpy` eşlemesi) · S153 (mono iptaline geri dön) → ikisi de
+KIRMIZI (134/135).
+
+**Kalan 2:** `asm_round_trip` (satıriçi_asm sessizce düşüyor — planı kayıtlı) ·
+`ad_cozum_sapma` (`@ic.g` tanımsız).
+
+**Kapılar:** `codegen_diff` **135/135** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-410 [YÜKSEK] — CODEGEN: `eşleş` iç ayırıcı testi — SESSİZ YANLIŞ CEVAP (2026-08-07)
+
+**En ağır sınıf.** Link hatası YOK, IR geçerli, program çalışıyor — yalnız
+**yanlış dala gidiyor**. `test/snapshots/cesit_sonuc` C=42 iken KEMGU=3
+veriyordu.
+
+**Kusur:** self-host `eşleş`te alt-deseni **DAİMA bir bağlama ADI** sanıyordu.
+`hata(H::B)` gibi bir **DESEN_YOL** alt-deseninde iç ayırıcı **HİÇ
+karşılaştırılmıyordu** → dış tag eşleşince gövdeye giriliyor, dolayısıyla TÜM
+`hata(...)` kolları **İLKİNE** gidiyordu. (`H::B` adında bir değişken bağlanıyordu
+— zararsız ama anlamsız.)
+
+**Ölçümle izole edildi** (dosyanın tamamıyla uğraşmadan): 3 varyantlı minimal
+probe → `hata(H::B)` için C=20, SELF=**10**. Hipotez ("yalnız dış tag'e bakıyor")
+önce yazıldı, sonra ölçüldü — teşhis değil ÖLÇÜM.
+
+**Onarım:** dış tag dalından SONRA, gövdenin başında İKİNCİ bir dal payload'ın
+ayırıcısını sınar; tutmazsa `Lnext`e (sonraki kol) düşer. Payload'lı çeşit
+`{i8,...}` ise ayırıcı 0. alandadır (`extractvalue`), payload'suz enum doğrudan
+`i8`dir.
+
+**Korpus:** `cg_cesit_ic_ayirici.kem` (`cesit_sonuc` snapshot'undan birebir kopya
++ gerekçe notu — uydurmadım).
+**⚠ NEDEN EN AZ ÜÇ VARYANT ŞART:** iki varyantla "hep ilkine git" hatası %50
+olasılıkla doğru cevabı verir ve test **tesadüfen yeşil kalabilir**. Üç varyant +
+hepsinin AYRI dönüş değeri, yanlış dallanmayı kaçınılmaz kılar.
+(D-393'ün "3 parametre yetmez, en az 4 gerekir" dersinin aynısı.)
+
+**Sabotaj S151** → `exit=42 ≠ 3` — yani kapı sessiz-yanlış-cevap kipini
+**exit farkı olarak** yakalıyor, link hatası olarak değil (133 → 132/133).
+
+**`test/snapshots` 57/62 → 58/62.** Kalan 4 AYRI kök: `ad_cozum_sapma` (`@ic.g`) ·
+`asm_round_trip` (**C=42 KEMGU=1**, hâlâ sessiz yanlış cevap) · `bolge_al_grow`
+(`@bellek_kopyala`) · `d1_generic_sonuc_ptr` (`{i8,i32,i32}`).
+
+**Kapılar:** `codegen_diff` **133/133** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-409 [YÜKSEK] — CODEGEN: Türkçe TİP adlarının IR'da tırnaklanması (2026-08-07)
+
+**Yeni yüzey `test/snapshots`** (81 dosya, kapısız) ölçüldü: **56/62**, ALTI
+sapma — ve D-406 dersi uygulanarak "tek kök" SAYILMADI. İkisi sessiz yanlış
+cevap, biri Türkçe tip adı. Bu artım sonuncusunu kapattı → **57/62**.
+
+**Kusur:** C Türkçe (ASCII-dışı) tip adlarını IR'da TIRNAKLIYOR (`%"Köşe"`),
+self-host tırnaksız `%Köşe` yayıyordu → clang REDDEDER ("expected '=' after
+name"). **Tırnaklama mantığı İŞLEV adları için ZATEN VARDI** (`ir_ad_yaz`;
+`@"dizi.oluştur"` doğru çıkıyordu) — tip adlarına uygulanmamıştı.
+**D-407'nin aynı deseni:** aynı soruyu iki yerde ayrı yanıtlayan kod.
+
+**🎯 KEMGU DİZGİ LİTERALİNDE ÇIPLAK `"` ÜRETİLEMEZ.** Yardımcıyı yazarken
+`"%\""` denedim; ÖLÇTÜM: **`\"` KAÇIŞ DEĞİLDİR** — `metin_uzunluk("a\"b") == 4`,
+yani `\` ve `"` İKİ karakter olarak saklanır (lexer `\"`de dizgiyi bitirmiyor
+ama ikisini de tutuyor). Ham dizgi `r#"..."#` bu konumda P010 veriyor.
+`\n` ile aynı sınıf (D-400). **Çözüm ölçümden çıktı:** iki karakterlik dizginin
+İKİNCİSİNİ kes → `metin_kes("\"", 1, 1)` tek `"` verir (doğrulandı: bayt 34).
+`codegen.kem` başka yerlerde `yb(34)` kullanır; o ÇIKTIYA yazar — tırnağın
+DEĞER olarak gerekmesi farkı yaratıyor.
+
+**İLERİ ve GERİ dönüşüm birlikte gerekti.** `ir_tip_ad` (ad → `%"Ad"`) eklenince
+yapı adını IR tipinden GERİ okuyan 13 yer bozuldu: yalnız `%` soyan eski kod
+`"Köşe"` döndürüyordu → alan araması başarısız, `extractvalue ..., -1` (LLVM
+"expected integer"). `ir_tip_soy` eklendi ve **iki fonksiyon yan yana kondu** ki
+ayrışmasınlar — bu kusurun kök nedeni zaten ayrışmaydı.
+
+**Korpus:** `cg_turkce_tip_adi.kem` (snapshot'tan birebir kopya — uydurmadım).
+**Sabotaj S150** → KIRMIZI, üstelik İKİ dosyayı birden kırıyor (130/132).
+
+**Kalan 5 snapshot sapması — AYRI kökler, hiçbiri varsayılmadı:**
+`ad_cozum_sapma` (`@ic.g` tanımsız) · `asm_round_trip` (**C=42 KEMGU=1**) ·
+`bolge_al_grow` (`@bellek_kopyala` tanımsız) · `cesit_sonuc` (**C=42 KEMGU=3**) ·
+`d1_generic_sonuc_ptr` (`{i8,i32,i32}` tip uyumsuzluğu).
+**İkisi SESSİZ YANLIŞ CEVAP** — link hatalarından önce onlar bakılmalı.
+
+**Kapılar:** `codegen_diff` **132/132** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-408 [YÜKSEK] — YENİ YÜZEY `check_korpus` + kesirli dizi + `ifşa` (2026-08-07)
+
+**Yeni ölçüm yüzeyi.** `test/moduller` doyunca sıradaki kapısız yüzey arandı:
+`test/check_korpus` (104 dosya) yalnız `--check` ile ölçülüyordu, codegen'le HİÇ.
+İlk ölçüm **30/32** (72 atlandı — kasıtlı hatalı tanı dosyaları, C oracle
+reddediyor → doğru davranış). İki gerçek kök, **ikisi de kapatıldı → 31/32**:
+
+**1. Kesirli dizi argümanı.** `Dizi<kesirli64> = [1.5, 2.5]` için self-host
+`call ... @kdl_dizi_ekle_tam(ptr, ptr, i32 1.5)` basıyordu — LLVM REDDEDER
+("floating point constant invalid for type"). C ise `_tam` sonekini korur ama
+argümanı DOĞAL tipiyle geçer (`double %3`), kendi `declare ... i32`siyle
+UYUŞMAZ; LLVM sessizce kabul eder (D-295). **C'nin DAVRANIŞI taklit edildi,
+"doğrusu" değil** — parite hedefi bu (D-388'deki `free`→i32 ile aynı gerekçe).
+
+**2. `ifşa(e)` (declassify) PASS-THROUGH.** Codegen'i yoktu → tanımsız `@ifşa`.
+`tekkez_olustur`/`dondur` ile aynı sınıf.
+
+**🛑 BİLİNÇLİ OLARAK YAPILMADI — `sabitsüre_olustur`.** `ifşa` onarılınca
+arkasından çıktı. Naif pass-through link hatasını kapatırdı, AMA C yalnız değeri
+geçirmiyor: yanında **`call void @llvm.x86.sse2.lfence()`** spekülasyon bariyeri
+yayıyor. Bariyeri sessizce düşürmek self-host derleyicide **sessiz bir GÜVENLİK
+regresyonu** olurdu (sabit-süre disiplini). Link hatası gürültülüdür, eksik
+bariyer değildir — **yarım onarım burada kusurun kendisidir.** `tc19_02` açık
+bırakıldı; sabitsüre codegen'i AYRI ve güvenlik-duyarlı bir iştir.
+
+**Korpus:** `cg_kesirli_dizi.kem`. **SINIR:** elemanı GERİ OKUMUYOR —
+`kdl_dizi_al_tam` i32 döndürdüğü için `Dizi<kesirli64>` okuması **C'DE DE**
+bozuk (ölçüldü: geri okuyan sürümüm C oracle'da exit 2 verdi). C'nin
+desteklemediğini test etmek kapıyı değil PROBE'u sınar. Kesirli dizi OKUMA yolu
+ayrı bir kusurdur ve **iki tarafta da AÇIKTIR** — kayda geçti.
+
+**Sabotaj S149** (kesirli arg tipi) → KIRMIZI (130/131).
+
+**Kapılar:** `codegen_diff` **131/131** · `modul_codegen` 18/18 (0 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-407 [YÜKSEK] — CODEGEN: nitelikli çeşit yapıcısı — 🎯 `test/moduller` 18/18 (2026-08-07)
+
+**🎯 MUAFİYET LİSTESİ BOŞALDI.** Kapı 7 muafiyetle kuruldu (11/18); D-404, D-405,
+D-406 ve D-407 hepsini kapattı → **18/18, 0 muaf**.
+
+**Kusur:** codegen'in çeşit-yapıcı kolu solu **yalnız `TANIMLAYICI`** kabul
+ediyordu. Nitelikli (üç segmentli) biçimde sol bir **YOL**'dur:
+```
+ifd::Ifade::Sayi(3)
+  dış YOL a_deg="Sayi" → çocuğu YOL("Ifade") → çocuğu TANIMLAYICI("ifd")
+```
+Kol atlanınca yapıcı GENEL ÇAĞRI yoluna düşüp `i32` üretiyordu; annotasyon ise
+çeşit struct'ını (`{i8, i64, ptr, ptr, ptr, ptr}`) çözüyordu → `store` tip
+uyumsuzluğu.
+
+**Onarım tek koşul genişletmesi.** Çeşit ADI her iki biçimde de o düğümün
+`a_deg`indedir (modül öneki DAHA DERİNDE durur) → ek ayrıştırma gerekmedi.
+**Checker'ın `yol_cesit_adi`si zaten İKİSİNİ DE kabul ediyordu**; codegen ona
+hizalandı — iki tarafın ayrı davranması kusurun kendisiydi.
+> **DERS: aynı soruyu iki yerde ayrı yanıtlayan kod, er ya da geç ayrışır.**
+> Checker doğru kuralı biliyordu; codegen bilmiyordu. Böyle bir kusuru ararken
+> "diğer taraf ne yapıyor?" ilk soru olmalı.
+
+**Korpus:** ayrı dosya YAZMADIM. `ana_ifd` zaten `modul_codegen` kapısında
+(0 muaf) ve sabotaj oradan ölçülüyor. Kendi uydurduğum fikstür (`Sekil::Nokta`
+payload'suz varyant + `eşleş *s`) **C ORACLE'DA da patladı** ("extractvalue
+operand must be aggregate type") — yani şekil geçersizdi. Gerçek modülü kapı
+olarak kullanmak hem doğru hem ucuz. (D-391'in dersi: uydurma, kaynaktan al.)
+
+**Sabotaj S148** (YOL kolu) → `ana_ifd` KIRMIZI (17/18).
+
+**Kapılar:** `modul_codegen` **18/18 (0 muaf)** · `codegen_diff` 130/130 ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-406 [YÜKSEK] — CODEGEN: ham işaretçi indekslemesi (`*T` → GEP) (2026-08-07)
+
+**🎯 `test/moduller` 11/18 → 16/18.** Beş dosya birden açıldı; muafiyet 7 → **2**.
+
+**Kusur:** self-host'un INDEKS dalında **ham-işaretçi kolu HİÇ YOKTU**. Her
+indeksleme `@kdl_dizi_al_*` / `@kdl_dizi_yaz_*` (KdlDizi **başlıklı** heap dizi)
+yoluna gidiyordu. `*T` ise düz bellek — başlığı yok. Sonuç iki katlı:
+1. **YANLIŞ LOWERING** — başlıksız bir bloğu KdlDizi sanmak
+2. **TİP HATASI** — `tam64` indeks, i32 parametreli runtime çağrısına
+
+C llvm.c aynası: `getelementptr <pointee>, ptr <base>, i64 <idx>` + load/store.
+Ayrım **POZİTİF** bilgiyle yapılır (`cg_apointee`, D-267); kayıt yoksa eski heap
+yoluna düşülür — bilgi olmadan yol değiştirmek sessiz miscompile riskidir.
+
+**OKUMA ve YAZMA kolları AYRI yerlerde yaşıyor** (INDEKS ifadesi vs ATAMA
+lvalue) → iki ayrı onarım gerekti. İlk onarımdan sonra hata `%44`→`%42`ye
+kaydı ve sınıf aynı kaldı; simetrik kolu bulana kadar bitmedi.
+
+**🎯 ÜÇ TURLUK ASIL DERS — muafiyet listemin GEREKÇESİ YANLIŞTI.** Bu 7 dosyayı
+"hepsi tek kök: dönüş-tipi-güdümlü çıkarsama" diye kaydetmiştim (D-402). Hata
+satırını tek tek izleyince **ÜÇ AYRI kök** çıktı ve **hiçbiri o değildi**:
+`bölge_al` eşlemesi yok (D-405) · `yetki<R>` IR tipi yok (D-404) · `*T`
+indekslemesi heap yoluna düşüyor (D-406). Doğrudan "dönüş-tipi-güdümlü
+çıkarsama" yazmaya başlasaydım **büyük bir özelliği yanlış yere** yazardım.
+> **Muafiyet listesine yazdığın GEREKÇE de bir İDDİADIR — ölç.** "Kalanların
+> hepsi aynı kök" en cazip ve en test edilmemiş varsayımdır.
+
+**Kalan 2, AYRI köklerde:** `ana_ifd` (çapraz-modül ÇEŞİT payload layout'u) ·
+`dizi_yapi` (C=42, KEMGU=127 — link GEÇİYOR, kusur DAVRANIŞTA).
+
+**Korpus:** `test/cg_korpus/cg_ham_isaretci_indeks.kem`. **i64 indeks ŞART** —
+i32 ile heap yolu tesadüfen tip-uyumlu kalır ve dosya yeşil geçer.
+**Şekli kaynaktan aldım:** ilk probe'umda `bellek_al(64) olarak *tam64` yazdım,
+C E002 ile reddetti (`olarak` yalnız sayısal/karakter). Ham işaretçi
+`bölge_al`dan gelir — `kütüphane/dizi.kem`in yaptığı budur. (D-391'in dersi,
+bu oturumda üçüncü tekrarı.)
+
+**Sabotaj:** S146 (okuma kolu) · S147 (yazma kolu) → ikisi de KIRMIZI (129/130).
+
+**Kapılar:** `codegen_diff` **130/130** · `modul_codegen` **16/16 (2 muaf)** ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-405 [YÜKSEK] — CODEGEN: `bölge_al` yerleşiği + kök-ölçümünün değeri (2026-08-07)
+
+**Kusur:** `bölge_al(yetki, N)` için IR eşlemesi YOKTU → self-host
+`call i32 @"bölge_al"(...)` üretiyordu: hem **tanımsız sembol** hem **yanlış tip**.
+
+**Arite farkı — salt ad eşlemesi YETMEZ.** C `bölge_al`ın **argümanlarını YOK
+SAYAR** ve parametresiz `@kdl_global_bolge_al()` çağırır (ölçüldü). Bu yüzden
+`builtin_kdl_ad`e satır eklemek yanlış olurdu (genel çağrı yolu argümanları
+basardı) — özel dal gerekti. İlk denemem ad eşlemesiydi, arite farkını görünce
+geri aldım.
+
+**🎯 ASIL DERS — bu kök, "dönüş-tipi-güdümlü çıkarsama" sandığım şeyin ALTINDA
+duruyordu.** Kalan 7 modül dosyasının hepsi `kütüphane/dizi.kem`in `oluştur`unda
+takılıyordu ve `oluştur` `bölge_al` çağırıyor. Ben D-404'ten sonra doğrudan
+"dönüş-tipi-güdümlü çıkarsama" yazmaya başlayacaktım — **kökü ölçmeden büyük bir
+özellik yazsaydım YANLIŞ YERİ onarırdım** ve muhtemelen "çalışmıyor" deyip daha
+da büyük bir şey yazardım. Hata satırını (`store ptr %5, ptr %1`) tek tek
+izlemek bu turda iki ayrı kök açtı (`bölge_al`, sonra i64→i32 indeks daraltma).
+
+**Kalan takoz (yeni, ölçüldü):** `%44 = load i64` → `call i32 @kdl_dizi_al_tam(ptr, i32 %44)`
+— heap dizi erişiminde `tam64` indeks i32'ye DARALTILMIYOR. Ayrı ve bounded.
+`test/moduller` **11/18'de sabit** ama hata noktası `%5`ten `%44`e ilerledi.
+
+**Korpus:** `test/cg_korpus/cg_bolge_al.kem` (yetki + bölge_al + geri_al).
+**Sabotaj S145** → KIRMIZI (128/129).
+
+**⚠ ÜÇÜNCÜ KEZ AYNI TUZAK:** sürücü kapısı **128/129 kırmızı** raporladı — ama o
+koşum **S145 sabotajı uygulanmışken** sürüyordu. Kapı sonucu ARTEFAKTTI.
+**Uzun koşum sürerken kaynağa dokunma** kuralı bu oturumda üç kez ısırdı
+(D-402'de `test_tumu`, burada iki kez). Kapı başlatınca kaynağı DONDUR.
+
+**Kapılar:** `codegen_diff` **129/129** · `modul_codegen` 11/11 (7 muaf).
+
+---
+
+## D-404 [YÜKSEK] — CODEGEN: `yetki<R>` (Capability Spec V1) self-host'ta (2026-08-07)
+
+**Kusur:** `ll_tip`te `TIP_YETKI` dalı YOKTU (i32 fallback) ve
+`yetki_olustur`/`geri_al` için emit YOKTU → `use of undefined value
+'@yetki_olustur'`.
+
+**⚠ NEDEN ŞİMDİYE KADAR HİÇBİR KAPI GÖRMEDİ — örtük kapsam deliği.**
+`yetki` kullanan tek .kem dosyası `test/ornekler/kem_heap.kem` ve onun **C
+ORACLE'ı host'ta LİNKLENMİYOR** (`kdl_mmio_oku32` bare-metal sembolü) →
+`codegen_genis` onu "oracle yok, atla" ile geçiyor. Kapı **67/67 yeşilken** bu
+boşluk sessizce duruyordu.
+> **DERS: "oracle kurulamadı → atla" politikası DOĞRU (karşılaştırma anlamsız
+> olurdu) ama KÖR NOKTA yaratır.** Atlanan dosyaların TEK kullanıcısı olduğu bir
+> özellik hiç ölçülmemiş olur. Saf-yetki programı host'ta linkleniyor (ölçüldü:
+> C exit 42) — yani bu özellik gate'lenebilirmiş, kimse denememişti.
+
+**ABI C'den ÖLÇÜLDÜ, varsayılmadı:** `%kdl_yetki = type { i64, i16, i16, i8,
+[3 x i8] }` (16 bayt) ve `yetki_olustur` **OUT-PTR** ile çalışır — dönüş
+register'da DEĞİL:
+```
+%s = alloca %kdl_yetki
+call void @kdl_yetki_olustur(ptr %s, i16 kt, i16 izin)
+%v = load %kdl_yetki, ptr %s
+```
+`geri_al` **SLOT ADRESİ** ister (değer değil) — yetkiyi yerinde geçersizleştirir.
+Argüman TANIMLAYICI ise alloca'sı doğrudan geçilir; değilse geçici slot.
+(Bu, hafızadaki "yetki = OUT-PTR ABI; sret premisi EMPİRİK yanlıştı" notuyla
+tutarlı — naif aggregate-return AAPCS64 register-pack ile uyuşmuyor.)
+
+**Kapsam:** `yetki<R>` PARAMETRE olarak da taşınır — `kütüphane/dizi.kem`in tüm
+imzaları (`oluştur<T>(böl: yetki<Bellek>)`) bunu gerektiriyor, yani bu kalan 7
+modül dosyasının İKİ ön koşulundan biri. Diğeri: dönüş-tipi-güdümlü çıkarsama.
+
+**Sabotaj:** S142 (IR tipi) · S143 (`yetki_olustur` emit) · S144 (`geri_al` emit)
+→ üçü de `cg_yetki` üzerinde KIRMIZI (127/128).
+
+**Kapılar:** `codegen_diff` **128/128** · `modul_codegen` 11/11 (7 muaf) ·
+`codegen_genis` 67/67 (0 muaf).
+
+---
+
+## D-403 [YÜKSEK] — CODEGEN: MODÜL generic'lerinin monomorfizasyonu (2026-08-07)
+
+**D-402'de REDDETTİĞİM D-401b, kökü teşhis edilince kabul edildi.** O deneme
+prensipte doğruydu (çağrı yerindeki mangled addan modül önekini soyup generic
+registry'sini sorgulamak) ama İKİ kusur taşıyordu. İkisi de ölçümle bulundu:
+
+**Kusur 1 — specialization MODÜL BAĞLAMINI kaybediyordu.** `fs_kuyruk_emit`
+`emit_tanimlar`dan SONRA koşar; orada `p.mod_onek` boştur. Bağlam saklanmadan
+specialization gövdesindeki çıplak kardeş çağrıları üst düzeye bağlanıyordu.
+`test/moduller/ana_golge_jenerik.kem` **tam bu senaryonun muhafızıdır** (dosyanın
+kendi yorumu söylüyor: "100 dönerse specialization global-first sapmış") ve
+KEMGU 100 döndürüyordu, doğrusu 1.
+
+**Kusur 2 — İLK ONARIMIM DA YANLIŞTI, ölçüm yakaladı.** Bağlamı saklamayı
+`p.mod_onek`i enqueue anında kaydederek çözdüm sandım; kapı hâlâ kırmızıydı.
+Sebep: `mono_islev_kayit` **ÇAĞRI YERİNDE** koşar ve orada `mod_onek`
+ÇAĞIRANINDIR (`arac::capraz` çağrısı `main`den yapılır → ""). Önek
+**BİLDİRİMİN** modülünden gelmeli — ve o zaten mangled adın içinde kodludur
+(`nokta_onek("arac.capraz")` → `"arac"`).
+> **DERS: doğru mekanizmayı seçmek yetmiyor, DOĞRU KAYNAKTAN beslemek gerekiyor.**
+> "Bağlamı sakla" fikri doğruydu; hangi bağlamı sorusunda yanıldım.
+
+**Sonuç:** modül generic'leri artık specialize ediliyor — `@dizi.al$i64`,
+`@dizi.ekle$i64`, `@cgmodul_mat.esle$double` (C ile aynı adlar).
+`test/moduller` **11/18'de sabit** (regresyon YOK, sayı da artmadı): kalan 7
+dönüş-tipi-güdümlü çıkarsama ister. Ama mangling artık DOĞRU, ki o işin ön koşulu.
+
+**Kapı gözlenebilirliği:** `modul_codegen` D-403 ÖNCESİ de 11/11 yeşildi — modül
+specialization'ını GÖRMÜYORDU. Yeni korpus dosyası (`cg_modul_generic.kem` +
+`cgmodul_mat.kem` fikstür eki) bunu gözlenebilir kılar.
+**Tamsayı yetmez** (D-401 dersi: ABI şansı) → `kesirli64` kapının asıl dişi.
+
+**Sabotaj:** S140 (önek soyma) → link hatası (126/127). **S141 (bildirim öneki)
+→ `exit=4`**, yani `esle_gizli() != 20` muhafızı: modül üyesi yerine üst-düzey
+`gizli` (999) çağrılıyor — **sessiz yanlış cevap**; ayrıca `modul_codegen` 9/11.
+
+**Kapılar:** `codegen_diff` **127/127** · `modul_codegen` 11/11 (7 muaf).
+
+---
+
+## D-402 [YÜKSEK] — KAPI: çapraz-dosya modül codegen'i + REDDEDİLEN D-401b (2026-08-07)
+
+**Neden:** `test/moduller/` **hiçbir kapının altında değildi.** D-399/400/401
+boyunca oranı elle bir kabuk döngüsüyle izledim — bu tam olarak D-395'te
+"elle koşturulan ölçüm döngüsü kapı DEĞİLDİR" diye yazdığım şeydi ve bu kez
+tersinden ısırdı.
+
+**🔴 REDDEDİLEN DEĞİŞİKLİK — D-401b.** D-401'in V1 sınırını aşmak için çağrı
+yerindeki mangled addan (`dizi.al`) modül önekini soyup generic registry'sini
+(`tp_yad`, bildirim adıyla anahtarlı) sorgulamayı denedim. **Prensipte doğru** ve
+kısmen işe yaradı: `@dizi.ekle$i64` + `@dizi.al$i64` yayılmaya başladı, C ile
+aynı adlar. **Ama oran 11/18 → 9/18'e DÜŞTÜ:**
+- `ana_sayi_transitif` → `use of undefined value '@azami'` (link hatası)
+- `ana_golge_jenerik` → **C=1, KEMGU=100 — SESSİZ YANLIŞ CEVAP**, link hatası değil.
+
+**`codegen_diff` (126/126) ve `codegen_genis` (67/67) İKİSİ DE YEŞİLDİ.** Bu
+yüzeyi görmüyorlar. Değişikliği elle ölçtüğüm için geri aldım; **ölçmeseydim
+gönderirdim.** Link hatasını sessiz yanlış cevaba takas eden bir diff kabul
+edilemez → tümüyle geri alındı, kök ileriye bırakıldı.
+
+**Kapı:** `test/modul_codegen_harness.sh` + `make calistir_modul_codegen`.
+Exit kodu + **stdout**. Durum **11/11, 7 muaf**.
+
+**Muafiyet listesi (7, küçülmek zorunda) — kökü ÖLÇÜLDÜ, TEK sınıf:**
+çapraz-modül generic mono'sunun **dönüş-tipi-güdümlü** kısmı. D-401'in V1'i yalnız
+ÇIPLAK `T` parametresinden çıkarsar; `kütüphane/dizi.kem` bunu aşıyor:
+```
+oluştur<T>(böl: yetki<Bellek>) -> Liste<T>   ← T YALNIZ dönüşte
+boy<T>(l: &Liste<T>) -> tam64                ← T İÇ İÇE (&Liste<T>)
+```
+T `değişken l: dizi::Liste<tam64>` annotasyonundan gelmeli. Ayrıca
+`yetki<Bellek>` parametresi `%kdl_yetki` taşınmalı, self-host `i32` sanıyor.
+
+**Sabotaj:** **S138 SESSİZ kaldı ve bu bir bulgu DEĞİLDİ** — `son_segment`
+kullanmıştım, o `::` ile böler, nokta ile değil → sabotaj **uygulanmamıştı**
+(no-op). Bunu "kapı zayıf" diye kaydetmek yanlış olurdu. D-401b birebir yeniden
+kurulunca (**S139**) kapı KIRMIZI: `ana_golge_jenerik` exit farkı (C=1≠100) +
+`ana_sayi_transitif` link — elle gözlediğimin AYNISI.
+> **DERS: sabotajın sessizliği önce SABOTAJIN KENDİSİNİ şüpheli kılar.**
+> D-356 "korpusu düzelt" diyordu; buradaki varyant "sabotajı düzelt".
+
+**Yol üstünde ikinci ölçüm hatası:** `test_tumu` koşarken `selfhost/codegen.kem`i
+DÜZENLEDİM → kapı yarı-bozuk kaynaktan `codegen.exe` kurdu ve `codegen_genis`
+**66/67** raporladı. Temiz kaynakta 67/67. **Uzun koşum sürerken kaynağı
+değiştirme.**
+
+**Kapılar:** `modul_codegen` **11/11 (7 muaf)** · `codegen_diff` 126/126 ·
+`codegen_genis` 67/67 (0 muaf) · `checker_diff` 148/148.
+
+---
+
+## D-401 [YÜKSEK] — CODEGEN: generic İŞLEV monomorfizasyonu (self-host) (2026-08-07)
+
+**Kusur:** `ADIM 23 — LLVM monomorphization` **C derleyiciye** aittir; self-host'ta
+generic İŞLEV mono'su HİÇ YOKTU. Tek gövde yayılıp T daima `i32` sanılıyordu:
+```
+C:    define i32 @kimlik$i32(ptr, i32)  +  define i64 @kimlik$i64(ptr, i64)
+SELF: define i32 @kimlik(ptr, i32)      ← TEK gövde
+      call i32 @kimlik(ptr %2, i64 %5)  ← İMZA UYUŞMAZLIĞI
+```
+
+**KÖK — tek satır:** `parse_islev_genel` `atla_tip_paramlar`ı çağırıyor ama
+`tip_param_kaydet`i ÇAĞIRMIYORDU → param adları `tp_pending`de yakalanıp bir
+sonraki bildirimde ÜZERİNE YAZILIYORDU. Yapı/çeşit yolu kaydediyor, işlev yolu
+kaydetmiyordu. İkame makinesinin GERİ KALANI zaten vardı (`subst_bul` `ll_tip`e
+bağlı, `mono_ir_sanitize`, `mono_sp`/`mono_si` yığını).
+
+**⚠ TAMSAYIYLA ÖLÇMEK YETMEZ — üç kez yanlış yeşil aldım.** LLVM `define`/`call`
+uyuşmazlığını SESSİZCE kabul eder (D-295) ve x86-64'te tamsayı değer register'da
+hayatta kalır: `2^33+42` ile denedim, **kırpılmadı**, eski kod da 42 verdi. Kusur
+ancak **register sınıfı değişince** gözlenebilir olur (D-294'ün aynı dersi:
+tamsayı x0/rax, kesirli v0/xmm0). Korpusun asıl dişi `kesirli64` örneğidir.
+Ayrıca **exit-kodu testi yanıltıcıydı**: kırpma olsa bile alt 32 bit 42 verip
+testi yeşil gösterebiliyordu → karşılaştırmalı teste geçildi.
+
+**Uygulama:** `fs_*` bekleyenler kuyruğu + `mono_islev_kayit` (arg IR
+tiplerinden T çıkarsama, `$i64` mangling) + `fs_kuyruk_emit` **WORKLIST**
+(specialization emisyonu SIRASINDA yeni specialization doğabilir — generic→generic)
++ `fn_ad_zorla` (define adı override).
+
+**⚠ KENDİ TASARIM HATAM, ÖLÇÜMLE YAKALANDI:** ilk sürümde base gövdeyi C gibi
+ATLIYORDUM → **regresyon 11/18 → 8/18** (`@sayi.azami`, `@dizi.al`,
+`@arac.capraz` tanımsız). Sebep: mono çıkarsaması BAŞARISIZ olan çağrı yerleri
+base ada düşüyor, gövde yoksa tanımsız sembol. **C'nin base'i atlayabilmesi
+çıkarsamasının TAM olmasına dayanır; benimki V1'de kısmî** (yalnız ÇIPLAK `T`
+parametresi tanınır; `Dizi<T>` gibi iç içe konumlar ve dönüş-tipi-güdümlü
+çıkarsama yok). Base ile `f$i64` AYRI semboller → ikisini birden yaymak çakışma
+üretmez, yalnız kullanılmayan bir gövde bırakır. Sağlamlık > IR zarafeti.
+
+**Sonuç:** aynı-dosya generic mono ÇALIŞIYOR (`kesirli64` artık 42; önceden
+LLVM-RED). `test/moduller` **11/18'de sabit** — regresyon yok, ilerleme de yok:
+kalan 7 dosya **dönüş-tipi-güdümlü** çıkarsama istiyor (`dizi::oluştur(...)`de
+T argümanlarda YOK, nitelikli annotasyondan gelir). Ayrı adım.
+
+**Sabotaj:** S135 (işlev tip-param kaydı) · S136 (çağrı yeri mono) · S137
+(specialization kuyruğu) → **üçü de** `cg_generic_mono` üzerinde KIRMIZI (125/126).
+
+**Kapılar:** `codegen_diff` **126/126** · `codegen_genis` 67/67 (0 muaf) ·
+`checker_diff` 148/148 · `parser_diff` 13/13 · FIXPOINT ✓ (63783 satır).
+
+---
+
+## D-400 [YÜKSEK] — CODEGEN: `\n` kaçış tuzağı + alias/seçili import (7/18 → 11/18) (2026-08-07)
+
+**🎯 EN ÖNEMLİ BULGU — `\n` KEMGU dizgi literalinde KAÇIŞ DEĞİLDİR.**
+`metin_uzunluk("a\nb") == 4` (hem C hem self-host — dil davranışı, parite kusuru
+değil). `codegen.kem` bu yüzden her yerde `yb(10)` kullanır. D-399'daki sarmalım
+`"{\n"` ile kuruluyordu → üretilen kaynağa **düz `\` + `n` çöpü** giriyordu.
+
+**BU BENİ YANLIŞ BİR KÖKE SÜRÜKLEDİ.** `mat` çalışıyor, `zincir` çalışmıyordu; buradan
+"iç içe `ayr_olustur`+`lex_et` metin belleğini eziyor" sonucuna varmıştım (D-399'a
+öyle yazdım). **YANLIŞTI.** Çürüten deney: özyinelemeyi kapattım ama iç içe
+lex+parse'ı BIRAKTIM → sarmal DÜZELDİ. Yani iç içe parse masumdu. Ardından probe
+ile `bas`ı bastırdım: `bas=modül mat {\n` — çöp gözle görüldü.
+> **DERS: "A çalışıyor, B çalışmıyor" bir MEKANİZMA teşhisi değildir.** İki
+> hipotezi (sıra / aliasing) ölçüp çürüttükten sonra bile üçüncü yanlış hipoteze
+> gittim. Doğru hamle en baştan **ara değeri bastırmaktı** — teşhis değil ölçüm.
+> `mat`in çalışması TESADÜFTÜ: çöpü izleyen `//` yorumu satırı yutuyordu.
+
+**Onarım:** gerçek satır sonlarına yaslan — açılışta `{` sonrası BOŞLUK yeter
+(`ic`in ilk satırı zaten kendi satırı), kapanışta `ic` dosya-sonu satır-sonuyla
+bittiği için `}` yeni satırda başlar. Yeni kaçış makinesi GEREKMEDİ.
+
+**Alias / seçili import — C ÖLÇÜLDÜ, VARSAYILMADI.** İlk içgüdüm sarmalı alias'la
+adlandırmaktı; ölçüm bunu çürüttü: C **her iki biçimde de** define'ı GERÇEK modül
+adıyla yayar (`@mat.topla`), alias YALNIZ çağrı yerinde yaşar.
+- Seçili import: parser eşlemeyi ZATEN `si_ad`/`si_yol`de tutuyordu, codegen
+  bakmıyordu → `fn_coz`a eklendi (kayıt kontrolüyle; aynı adda gerçek bir
+  üst-düzey işlev varsa yanlış yönlendirme olmasın).
+- Alias: eşleme YOKTU (`mod_ad` yalnız "bu ad bir modüldür" der, HANGİ modül
+  olduğunu söylemez) → `al_ad`/`al_yol` çifti eklendi, `alias_coz` YOL'un EN SOL
+  segmentinde uygulanır (`m::topla`da `topla` üye adıdır, modül değil).
+
+**Sonuç: `test/moduller` 7/18 → 11/18** (D-399'un 0→7'si üstüne). **Ad çözümü
+sınıflarının TAMAMI kapandı.** Kalan 7'nin hepsi TEK sınıf: çapraz-modül TİP
+çözümü (`'%N' i32 but expected 'ptr'`) — `ana_ifd`, `ana_kap`, `ana_kap_coklu`,
+`dizi_*`. Ad değil tip; ayrı alt-sistem.
+
+**Sabotaj:** S132 (alias) KIRMIZI · S133 (seçili import) KIRMIZI ·
+**S134 (`\n` çöpü) ÖNCE SESSİZ**. Gizlemedim: korpusta o şekil YOKTU. Tek
+seviyeli modülde çöp tesadüfen çalışıyor; yalnız TRANSİTİF halkada gözlenebilir.
+`cgmodul_zincir.kem` + `cg_modul_transitif.kem` eklendi → S134 KIRMIZI (124/125).
+**Kuralı değil KORPUSU düzelttim** (D-356 disiplininin dördüncü tekrarı).
+
+**Kapılar:** `codegen_diff` **125/125** · `checker_diff` 148/148 ·
+`parser_diff` 13/13 · FIXPOINT ✓ (62893 satır).
+
+---
+
+## D-399 [YÜKSEK] — CODEGEN: çapraz-dosya modül yükleme, KAYNAK düzeyinde (2026-08-07)
+
+**Durum: KISMİ — `test/moduller` 0/18 → 7/18.** Kalan 11'in sınıfları aşağıda,
+her biri ÖLÇÜLMÜŞ kökle. Mevcut kapılarda **sıfır regresyon**.
+
+**Karar — neden AST splice DEĞİL:** C `modulleri_yukle` modülü AYNI arena'da
+parse edip sentetik `DUGUM_MODUL` olarak AST'nin başına splice eder. Self-host'ta
+doğrudan karşılığı PAHALI: AST düz paralel dizilerdir, ayrı bir `Ayr`den
+kopyalamak indeks yeniden-eşlemesi ister ve onlarca YAN-KANAL dizisi (`cv_*`,
+`gp_*`, `yerel_*`, `ly_ad`, `gen_node`, `pi_*` …) sessizce düşerdi — kaybı
+gözlenmeyen, en tehlikeli sınıf.
+
+**Bunun yerine KAYNAK düzeyinde birleştirme:** modül metni `modül <ad> { ... }`
+ile sarılıp giriş kaynağının ÖNÜNE konur, sonra TEK lex+parse koşar. Tek AST
+çıkar, yan-kanallar doğal olarak dolar, kopyalama kodu YOKTUR. D-398'in
+mangling'i bu yolu doğrudan besler (`@mat.topla` sarmaldan kendiliğinden çıkar).
+**Uygulamadan ÖNCE elle ölçüldü** (ana_mat + ana_zincir manuel splice → exit 42).
+
+İki geçiş şart: `kullan` listesini öğrenmek için önce parse etmek gerekir.
+Modül yoksa birleşik == "" → mevcut çıktı BİREBİR korunur.
+
+**Yol üstünde ölçülen kusur — transitif importer dizini.** `dizin_al(rel)` TEK
+BAŞINA yanlıştır (`rel`="zincir.kem" → ""), taban dizin kaybolur. Taban + alt-yol
+birleştirilmeli. **`modul_yukle` (--check yolu) AYNI hesabı yapıyor ve orada
+GÖRÜNMÜYOR** — check yalnız İSİM topluyor, `ana_zincir` `mat`in adlarına hiç
+ihtiyaç duymuyor → kusur MASKELİ. (Check paritesinin sığlığının ikinci kanıtı.)
+
+**⚠ ÇÖZÜLEMEYEN KÖK — iç içe `ayr_olustur`+`lex_et` metin belleğini eziyor.**
+`ana_zincir`de sarmal adı kayboluyor: `@zincir.dortle_topla` yerine
+`@dortle_topla`. İKİ ayrı hipotez ÖLÇÜLDÜ ve İKİSİ DE ÇÜRÜDÜ:
+(a) "ad özyinelemeden sonra hesaplanıyor" → önce hesapladım, DEĞİŞMEDİ;
+(b) "`p` üzerinden aliasing" → adı her mutasyondan önce sabitledim, DEĞİŞMEDİ.
+Geriye kalan açıklama: `metin` değerleri araya giren iç içe lex+parse'tan sağ
+çıkmıyor. **`mat` bozulmuyor çünkü onun özyineleme döngüsü BOŞ** — yalnız İÇİNDE
+özyineleme YAPAN modül bozuluyor. Bu bir self-host bellek semantiği sorusudur ve
+ayrı ölçüm ister; tahminle kapatmadım.
+
+**Kalan 11 — üç sınıf, kökleri ölçüldü:**
+- **Transitif (1):** `ana_zincir` — yukarıdaki kök.
+- **Alias / seçili import (3):** `ana_alias` (`@m.topla`: sarmal adı ALIAS'tan
+  gelmeli, dosya adından değil), `ana_secili` (`@topla`: `::{a,b}` çıplak ad
+  görünürlüğü ister), `ana_nitelikli` (`@cift_b.f`).
+- **Çapraz-modül tip/generic (7):** `ana_ifd`, `ana_kap`, `ana_kap_coklu`,
+  `dizi_*` — hepsi `'%N' i32 but expected 'ptr'`. Ad çözümü DEĞİL, tip çözümü;
+  ayrı alt-sistem.
+
+**Kapı:** `test/cg_korpus/cg_modul_capraz.kem` + fikstür `cgmodul_mat.kem`.
+Fikstürde `main` YOK → harness "oracle yok, atla" der, kapıyı kirletmez (bu
+davranış ölçüldü, varsayılmadı). Test nitelikli çağrıyı VE modül-içi çıplak
+çağrı zincirini birlikte ölçer.
+
+**Sabotaj S131** (`mods = ""`) → `cg_modul_capraz` KIRMIZI (122/123).
+
+**Kapılar:** `codegen_diff` **123/123** · `checker_diff` 148/148 ·
+`parser_diff` 13/13 · FIXPOINT ✓ (62766 satır).
+
+---
+
+## D-398 [YÜKSEK] — CODEGEN: modül ad-mangling (`@mod.ad`) (2026-08-07)
+
+**Nasıl bulundu:** D-395'in kurduğu geniş kapı `test/ornekler` + `stdlib/temel`de
+doyunca ölçüm HİÇ BAKILMAMIŞ bir yüzeye çevrildi: `test/moduller/`. Orada
+self-host `--check` **131/131 tam paritede**, ama `--llvm` **18/18 başarısız**.
+
+**⚠ ÖLÇÜM ARACIM ÖNCE BOZUKTU.** İlk koşumda 18 dosyanın hepsi "IR üretemedi"
+dedi; sebep modül desteği DEĞİL, sabotaj döngüsünde sildiğim `build/codegen.exe`
+idi (`make calistir_codegen_diff` onu kurar, ama ben elle koşuyordum). Yeniden
+kurmadan raporlasaydım kök TAMAMEN yanlış çıkacaktı. (D-391'in aynı dersi.)
+
+**Gerçek kök kümesi** 4 lensli + 24 çürütücülü bir fan-out ile çıkarıldı (22 kök
+onaylandı, 3 iddia çürütüldü/daraltıldı). İki AYRI iş olduğu ortaya çıktı:
+
+**(A) Çapraz-dosya modül yükleme — BU ADIMDA YAPILMADI.** C `src/ana.c`
+`modulleri_yukle` ile modülü AYNI arena'da parse edip sentetik `DUGUM_MODUL`
+olarak program AST'sinin BAŞINA **splice** eder → tek ağaç, tip kontrol ve
+codegen aynı ağaçtan beslenir. Self-host `modul_yukle` modülü AYRI bir `Ayr`e
+parse edip **yalnız ADları hasat ediyor, AST'yi ATIYOR**; üstelik `--llvm`
+dispatch'i yükleyiciyi HİÇ çağırmıyor. AST düz paralel dizilerdir → ayrı `Ayr`den
+indeks yeniden-eşlemesi gerekir ve codegen.kem'de AST kopyalama yardımcısı YOK.
+Yan bulgu: check paritesi **SIĞ** — `mat::topla(20)` (yanlış arite) C'de `T010`,
+self'te `OK`. 131/131 mevcut korpusta doğru ama mekanizma isim düzeyinde.
+
+**(B) Ad-mangling — BU ADIMDA YAPILDI.** (A)'dan BAĞIMSIZ ve satır içi `modül`
+bloklarıyla bugün ölçülebilir:
+```
+C:    define @a.f  +  define @b.f     → exit 42
+SELF: define @f    +  define @f       → invalid redefinition of function 'f'
+```
+Mangling makinesi self-host'ta HİÇ yoktu. **(A)'nın da ön koşuludur** —
+yükleyiciyi bağlamak bunu kendiliğinden çözmez.
+
+**Onarım (üç mekanizma):** `p.mod_onek` önek zinciri +
+1. **define** — `@<önek>.<ad>` (`mangle`, C `modul_mangle` aynası, ayırıcı '.').
+2. **nitelikli çağrı** — `yol_noktali`: YOL zinciri → `a.f` / `d.i.f`. Önceden
+   `a_deg`den YALNIZ son segment alınıyordu (`f`) → `call @f`, tanımsız sembol.
+3. **modül-içi çıplak çağrı** — `fn_coz` MODÜL-ÖNCE bağlar. C modül-içi çıplak
+   çağrıyı da mangle'lıyor (`@a.f` gövdesinden `call @a.gizli`); ayrıca modül
+   üyesi üst-düzey bir adı GÖLGELER, önce modüle bakmak bunu korur.
+
+`imza_topla` da mangled ad tutar — çağrı çözümü ve define emisyonu AYNI adı
+görmezse dönüş tipi kurtarılamaz.
+
+**Yerleştirme kararı:** `fad` YUKARIDA topluca değiştirilmedi; yalnız kullanıcı-
+işlev çözüm noktası dokunuldu. Yerleşikler ve tagged-union yapıcıları `fad`ı
+ÇIPLAK adla karşılaştırıyor — toplu değişiklik o ayrımları sessizce bozardı.
+
+**Sabotaj — üç mekanizma, ÜÇ FARKLI başarısızlık kipi:** S128 (define mangle) →
+link hatası (120/122). S129 (nitelikli ad) → link hatası (120/122). **S130
+(modül-önce bağlama) → `exit=4`**, yani korpusun `c::f() != 100` muhafızı: modül
+üyesi yerine üst-düzey `gizli()` (999) çağrılıyor — **link hatası değil, SESSİZ
+YANLIŞ CEVAP**. Korpus bu kipi ölçmek için özellikle gölgelenen bir üst-düzey ad
+içerir.
+
+**Korpus:** `test/cg_korpus/cg_modul_mangle.kem` (ad çakışması + iç içe modül +
+modül-içi çıplak çağrı + gölgeleme). Satır içi `modül` kullanır — dosya
+yüklemeye BAĞIMLI DEĞİL.
+
+**Kapılar:** `codegen_diff` **122/122** · `codegen_genis` 67/67 (0 muaf) ·
+`checker_diff` 148/148 · `parser_diff` 13/13 · FIXPOINT ✓ (62446 satır).
+
+**Kalan:** (A) çapraz-dosya yükleme — 18 dosya hâlâ düşüyor, ayrı adım.
+
+---
+
+## D-397 [YÜKSEK] — CODEGEN: SIMD `vektör<T,N>` (son muafiyet kapandı) (2026-08-07)
+
+**Kusur:** Self-host codegen'de vektör TİPİ hiç yoktu. Parser `TIP_VEKTOR`
+düğümünü zaten üretiyordu (lane `a_deg`'de), checker yerleşikleri zaten
+tanıyordu — eksik olan YALNIZ codegen'di. `ll_tip`'te dal olmadığı için her
+vektör `i32` fallback'ine düşüyordu:
+```
+%9 = call i32 @vektor_topla(ptr %rho, i32 %8)
+ret float %9                     ; 'i32' but expected 'float'
+```
+
+**DÖRT ayrı kök — her biri bir öncekini onarınca ORTAYA ÇIKTI** (tek ölçümle
+görülemezlerdi; sırayla soyuldular, her adımda LLVM yeni bir hata verdi):
+1. `ll_tip`: `TIP_VEKTOR` → `"<N x T>"` (C `ast_tip_to_ir` aynası). Yoksa `i32`.
+2. Yerleşikler: `vektor_doldur` (insertelement+shufflevector splat),
+   `vektor_eleman` (extractelement), `vektor_topla` (reduce). Yoksa tanımsız
+   `@vektor_*` sembolü.
+3. `kesirli_ll_mi`: `"<N x float>"`/`"<N x double>"` **DE kesirlidir**
+   (C llvm.c:2193 aynası). Yoksa lane-wise çarpım `mul <4 x float>` yayar →
+   LLVM "invalid operand type".
+4. `beklenen_ll`: annotasyon `"<N x T>"` ise bağlam kur. Yoksa `vektor_doldur`
+   lane/eleman bilgisini kurtaramaz, C ile aynı `<4 x i32>` varsayılanına düşer
+   ve `insertelement <4 x i32> undef, i32 2.0` basar → LLVM-red.
+
+**Ölçüm notu:** `<4 x i32>` varsayılanını UYDURMADIM — C oracle'ın davranışı
+(`src/llvm.c:4120`). Aynı şekilde `reduce.fadd`in `0.0` başlangıç operandı ve
+`reduce.add`in operandsızlığı da oracle'dan okundu; **iki intrinsic'in ARİTELERİ
+farklıdır**, karıştırmak LLVM-red verir.
+
+**Yardımcılar (ham IR string üstünde — self-host'ta tip nesnesi yok, IR string'i
+tek gerçektir; `agg_alan` ile aynı disiplin):** `vek_ir_mi`, `vek_lane`,
+`vek_elem`, `vek_abbr` (float→f32, double→f64).
+
+**Sabotaj — dört kök, dört ayrı kapı:** S124 (`ll_tip` dalı), S125
+(`vektor_topla`), S126 (vektör-kesirli tanıma), S127 (`beklenen_ll` bağlamı) →
+**dördü de** `cg_simd_vektor` üzerinde KIRMIZI (120/121). Tek dosya dördünü de
+uyandırıyor; hangi satırın hangi kökü ölçtüğü korpus dosyasında yazılı.
+
+**Korpus:** `test/cg_korpus/cg_simd_vektor.kem`. Hem `vektör<kesirli32,4>` hem
+`vektör<tam32,4>` içerir — **tamsayı lane'ler `reduce.add` yoluna gider**, yalnız
+kesirli test etmek 2 numaralı kökün yarısını ölçmeden bırakırdı.
+
+**🎯 SONUÇ: `codegen_genis` 67/67, MUAFİYET LİSTESİ BOŞ.** Kapı D-395'te 2
+muafiyetle kuruldu, D-396 + D-397 ile boşaldı — tasarlandığı gibi.
+
+**Kapılar:** `codegen_genis` **67/67 (0 muaf)** · `codegen_diff` **121/121** ·
+`checker_diff` 148/148 · `parser_diff` 13/13 · FIXPOINT ✓ (stage1==stage2,
+62168 satır).
+
+---
+
+## D-396 [YÜKSEK] — CODEGEN: `eşleş` desen-bağlamasının iç tipi (görev<T>) (2026-08-07)
+
+**Kusur:** `görev_başlat` dönüşü `sonuç<görev<T>, metin>` ve IR karşılığı
+`{ i8, ptr, ptr }`. **Bu aggregate T'yi SİLER** — `görev<T>` de `metin` de ptr.
+`tamam(g)` deseniyle bağlanan `g` için codegen `cg_aic`i `""` bırakıyordu →
+`görev_birleştir(g)`de hedef tip bilinmiyor → `i64_daralt` runtime'ın **i64
+taşıyıcısında KALIYOR** ve ptr yuvasına yazılıyordu:
+```
+%17 = call i64 @kdl_gorev_birlestir(ptr %16)
+store ptr %17, ptr %18        ; 'i64' but expected 'ptr'
+```
+**`i64_daralt`ın ptr dalı DOĞRUYDU** — ilk teşhisim onu suçlamak olabilirdi;
+ölçüm eksik olanın yalnız TİP BİLGİSİ olduğunu gösterdi. Checker tarafında aynı
+boşluk D-385/386'da kapanmıştı; codegen karşılığı yoktu.
+
+**Onarım (iki nokta):**
+1. `görev_başlat` T'yi **yayınlar**: `p.son_ic = lam_ret_tahmin(p, govde)`.
+   T = lifted lambda'nın DOĞAL dönüş IR'ı. Kuyruğa yazılan `lam_ret = "i64"`
+   runtime TAŞIYICISIDIR, T değildir — ikisini karıştırmak kusurun kendisiydi.
+2. `eşleş` skrutini `son_ic`ini **hemen** yerelde yakalar (`sic`) — aşağıdaki her
+   `ifade_uret` `p.son_ic`i ezer — ve DESEN_YAPICI payload bağlamasına taşır.
+
+**`pf==1` kısıtı:** yalnız başarı alanına (tamam/değer) yazılır; alan 2 `metin`dir
+ve T ile ilgisi yoktur.
+
+**Sabotaj:** S121 (T yayını) → `cg_gorev_desen_ic_tip` KIRMIZI (119/120).
+S122 (payload'a taşıma) → KIRMIZI (119/120). **S123 (`pf==1` kısıtını kaldır) →
+SESSİZ.** Bunu gizlemiyorum: kısıt bu korpusta **gözlenebilir değil**, çünkü
+`cg_aic`i okuyan üç yol da (`cagri_ic_tip`, kapanış dönüş IR'ı) bağlamanın
+görev/kanal/kapanış olarak KULLANILMASINI ister — `e: metin` için bu tip
+hatasıdır. Yani kısıt **savunmacıdır, kapılı değildir**; anlamı doğru kodluyor
+ama ölçülmüş bir regresyon kapısı yok. (D-356: sabotajın sessizliği bir
+SONUÇTUR; kuralı silmek yerine kaydını dürüst tut.)
+
+**Korpus:** `test/cg_korpus/cg_gorev_desen_ic_tip.kem`. **T=metin ÖZELLİKLE
+seçildi** — T `tam32` olsaydı i64→i32 trunc yolu zaten çalışıyordu ve dosya
+yeşil kalıp kusuru kaçırırdı.
+
+**Kapılar:** `codegen_genis` **66/66** (muafiyet 2→**1**) · `codegen_diff`
+**120/120** · `checker_diff` 148/148 · FIXPOINT ✓ (stage1==stage2, 61384 satır) ·
+sürücü 4 mod × 2 sürücü ✓.
+
+**Kalan tek muafiyet:** `matris_carpim` (SIMD `vektör<T,N>` self-host codegen'de
+yok) — ayrı ve daha büyük iş.
+
+---
+
+## D-395 [YÜKSEK] — KAPI: geniş codegen eşdeğerliği + kendi yanlış iddiamın düzeltilmesi (2026-08-06)
+
+**Karar:** `test/codegen_genis_harness.sh` + `make calistir_codegen_genis`.
+`test/ornekler/*.kem` + `stdlib/temel/*.kem` yüzeyindeki her `main()`'li programı
+C oracle ile karşılaştırır — **exit koduna EK OLARAK stdout**.
+
+**Gerekçe 1 — `codegen_diff` bu sınıfı görmüyor.** O kapı `test/cg_korpus/`
+üzerinde koşar ve korpus AMAÇLI dar (her dosya bir özelliği izole eder). Gerçek
+programlardaki 31 sapma (D-388→394) o kapı yemyeşilken birikmişti.
+
+**Gerekçe 2 — yalnız exit'e bakmak yetmez.** `bignum_selfhost` İKİ tarafta da
+exit 0 veriyordu ama stdout'ta `0` yerine yığın adresi basıyordu. Exit-only bir
+kapı bu sessiz yanlış cevabı KAÇIRIR.
+
+**🔴 BU KAPI BENİM KENDİ İDDİAMI ÇÜRÜTTÜ.** D-394'ün commit'inde ve CLAUDE.md'de
+"GERÇEK SAPMA SIFIR (OK=65)" yazmıştım. Elle koşturduğum ölçüm döngüsünde
+`link_retry` başarısızlığı sessizce `fark` sayılıyor ama YAZDIRILMIYORDU; kalan
+iki dosyayı "C'nin de segfault ettiği eşleşen çökme" diye kendi kendime
+açıkladım. Kapı yazılınca ikisi de kırmızı çıktı. **Doğru sayı 65/67.**
+> **DERS: elle koşturulan ölçüm döngüsü kapı DEĞİLDİR.** Kapı, sessiz düşen
+> dalı olmayacak biçimde yazılır ve `[ "$fail" -eq 0 ]` ile biter. Ölçümü kapıya
+> BAĞLAMADAN "sıfır sapma" deme. Bu, D-359'un ("parse kapısı sessiz ayrışmıştı")
+> ve D-356'nın ("sabotajın sessizliği bir SONUÇTUR") aynı sınıftan tekrarı.
+
+**Muafiyet listesi (2 satır, KÜÇÜLMEK ZORUNDA) — kökleri ÖLÇÜLDÜ:**
+- `matris_carpim` — **SIMD yok.** `vektör<kesirli32,4>`; C `<4 x float>` yayar,
+  self-host'ta vektör tipi HİÇ yok → `i32` sanıyor (`'%9' i32 but expected
+  'float'`). D-393'ün arg-genişletmesiyle akraba DEĞİL; eksik özellik.
+- `gorev_temel` — **desen-bağlaması iç tipi yok.** `eşleş görev_başlat(..)
+  { tamam(g) => görev_birleştir(g) }`: `g` desen bağlaması, codegen iç tipini
+  (`görev<metin>`→ptr) bilmiyor → `cagri_ic_tip` `""`, `i64_daralt` i64'te kalır,
+  ptr yuvasına yazılır (`i64 but expected ptr`). **`i64_daralt`ın ptr dalı
+  DOĞRU** — eksik olan yalnız TİP BİLGİSİ. Checker'da aynı boşluk D-385/386'da
+  kapandı; codegen karşılığı ayrı iş.
+- Muafiyet KURALI harness başlığına yazıldı: yeni satır eklemek kapıyı
+  zayıflatmaktır; önce KÖKÜ onar. (`checker_diff`in muafiyet listesi bu
+  disiplinle BOŞA indi — emsal var.)
+
+**Muafiyet GEREKMEYEN durum:** `kem_mmio_ham`/`kem_pointer` host'ta eşlenmemiş
+MMIO okur ve İKİ TARAFTA DA segfault eder → eşleşen çökme zaten GEÇER. Muafiyet
+yalnız ayrışan davranış içindir.
+
+**Sabotaj S120:** D-394'ün KARAKTER dalı `eğer yanlış` yapıldı (uygulandığı
+`sed -n '3429p'` ile GÖRÜLDÜ, `grep -c` = 1) → kapı `base64_selfhost` üzerinde
+**kırmızı** (exit 2). Geri alındı → 65/65 yeşil. Sabotajlı koşumda aday kalıcı
+127 verdi: D-339 kuralı doğru çalıştı (127 yalnız ORACLE'da ortamsaldır;
+adayda ANLAŞMAZLIKTIR, sessizce atlanamaz).
+
+**Kapsam/sınır:** Kapı yalnız `main()`'i olan programları alır; oracle IR'ı
+kuramazsa (tip hatası/modül importu — bu kapının işi değil) ATLAR, başarısız
+saymaz (12 atlandı).
+
+---
+
+## D-394 [YÜKSEK] — CODEGEN: KARAKTER literali (son gerçek sapma kapandı) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur — SESSİZ YANLIŞ CEVAP, en ağır sınıf.** `ifade_uret`te **KARAKTER dalı
+HİÇ YOKTU** → düğüm tanınmıyor, fonksiyon sonunda `"0"` düşüyordu: `'A'` 65
+yerine **0**. IR geçerli, clang kabul ediyor, program çalışıyor — yalnız değer
+yanlış.
+
+**⚠ TUZAK — ilk düzeltmem SESSİZCE başarısız oldu.** `TAM` dalını ayna alıp
+`a_deg`i doğrudan bastım; ama parser kod noktasını `--ast` dump paritesi için
+**`"U+0041"` biçiminde** saklar (`karakter_deger`), SAYI olarak değil. Sonuç
+yine 0'dı. Hex→ondalık çevirici (`karakter_kod_noktasi`) ŞART.
+
+**Etkisi `base64_selfhost`te maskelenmişti.** Bağımsız çok-ajanlı analiz
+(salt-okuma fan-out + adversarial çürütme, 24 ajan) zinciri benden daha eksiksiz
+çıkardı: `b64_alfabe`/`b64_index` tabloları tamamen 0 → `beklenen` de 0 →
+karşılaştırma EŞLEŞİYOR ve "KEM B64 OK" basılıyor (**kusur kendini maskeliyor**)
+→ `b64_index(0)` hep 0 döner, `'='` için `-1` ASLA dönmez → `i3 > -1` guard'ı
+hep doğru → 8 karakter = 2 grup × 3 bayt = **6 yazma**, `cozulen` 5 elemanlı →
+`cozulen[5]` → `PANIK: dizi sınır ihlali (i=5, boyut=5)`. Gözlenen mesajla birebir.
+
+**Bu yüzden indirgeme ÜÇ KEZ başarısız olmuştu (D-392):** encode-only ve
+encode+decode şekillerinde `beklenen` karşılaştırması da sıfırlarla eşleştiği
+için kusur GÖRÜNMÜYORDU. Panik ancak tam zincir kurulunca çıkıyor.
+
+**ÖLÇÜM DÜZELTMESİ:** korpusa `'ş'` için 351 (kod noktası) yazmıştım — C **197**
+veriyor (UTF-8 ilk baytı 0xC5). Bootstrap parser'ın mevcut davranışı bu;
+self-host onu birebir taklit ediyor ve parite DOĞRU. Varsayımı ölçümle
+değiştirdim, korpusa not düştüm.
+
+**Kapılar:** `codegen_diff` **119/119**, `checker_diff` 148/148 (0 muaf).
+**Sabotaj S118** (KARAKTER dalı) + **S119** (hex çevrimi — ilk düzeltmemi sessiz
+kılan tam nokta) — ikisi de kırmızı.
+
+**🎯 GENİŞ ÖLÇÜM:** Dört partide (D-388→394) codegen paritesi **36 → 65**.
+
+> **⚠ D-395 DÜZELTMESİ — bu satırda "GERÇEK SAPMA SIFIR" yazıyordu, YANLIŞTI.**
+> Elle koşturduğum ölçüm döngüsünde link başarısızlıkları sessizce `fark`
+> sayılıyor ama YAZDIRILMIYORDU; kalan iki dosyayı "C'nin de segfault ettiği
+> eşleşen çökme" sandım. Ölçümü D-395'te kapıya bağlayınca gerçek yüz çıktı:
+> `gorev_temel` (i64→ptr) ve `matris_carpim` (SIMD yok) **gerçekten
+> başarısız**. Doğru sayı **65/67**. Ayrıntı D-395'te.
+
+---
+
+## D-393 [YÜKSEK] — CODEGEN: çağrı argümanı param IR tipine genişletiliyor (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1). D-392'de bulunan kök
+KAPATILDI.
+
+**Kusur.** Çağrı yerinde argüman **argümanın DOĞAL tipiyle** basılıyordu,
+**parametrenin BİLDİRİLEN tipiyle** değil: `f(a: dtam64, ..)` için
+`call @f(i32 10, ..)` — oysa `define` i64 bekliyor. LLVM bunu **SESSİZCE
+kabul eder** (D-295'in dersi): ilk 3 argüman register'a sığdığı için doğru
+görünür, **4.'den itibaren ÇÖP okunur**. `bignum_selfhost`'un `0` yerine
+yığın adresi basmasının kökü buydu (`vektor_dogrula` ALTI `dtam64` param).
+
+**D-392'nin başarısız denemesi neden başarısızdı, nasıl çözüldü.** İlk deneme
+checker'ın imza tablosuna (`fn_ptip_bul`) bakıyordu; o tablo **YALNIZ
+`kontrol_program`da — CHECK yolunda — doldurulur** ve `--llvm` yolu onu hiç
+kurmaz → `codegen.exe` çağrı içeren HER dosyada düştü. Çözüm: codegen'in
+**KENDİ ön-geçişi** (`param_ir_topla`), emit'in kullandığı **aynı `param_tip`
+fonksiyonuyla** kaydediyor → değer tutarlılığı yapısal olarak garanti.
+Ön-geçiş şart: bir çağrı sonradan tanımlanan işleve de gidebilir.
+
+**Kapı EN AZ 4 parametre ister.** 3 parametreli bir test **yanlış uygulamada
+da geçerdi** (ilk 3 register'a sığıyor) — D-391'in "sığan sayı sınamaz"
+dersinin kardeşi. Korpus ayrıca i32'ye sığmayan bir değer (2^33) ve wrap
+davranışı içerir.
+
+**DÜRÜST SINIR — sınır korumaları GATE'Lİ DEĞİL.** `param_ir_tip`'teki
+"kayıt bulunamadı" ve "arite dışı" korumaları mevcut korpusla **gözlenemiyor**
+(`param_ir_topla` her üst-düzey işlevi kaydediyor; arite uyuşmazlığını checker
+zaten reddediyor). Sabotaj S117 her iki biçimde de SESSİZ kaldı. Korumaları
+**tutuyorum** — D-392 tam da bir arama başarısızlığının derleyiciyi düşürdüğünü
+gösterdi — ama yapay korpus vakası UYDURMADIM.
+
+**Kapılar:** `codegen_diff` **118/118**. **Sabotaj S116** (genişletme
+kaldırıldı) → kırmızı (42≠1).
+
+**GENİŞ ÖLÇÜM: gerçek sapma 2 → 1.** (`OK=64`; kalan 3 "fark"ın 2'si C'nin de
+segfault ettiği EŞLEŞEN çökmeler.) Tek kalan: `base64_selfhost` (C=0, S=127,
+`dizi sınır ihlali i=5 boyut=5`) — D-392'de indirgeme denendi, sapma
+üretilemedi; ayrı kök.
+
+---
+
+## D-392 — ÖLÇÜM: çağrı argümanı param tipine genişletilmiyor (kök bulundu, DÜZELTİLMEDİ) (2026-08-06)
+
+**ETKİ:** yok — kod DEĞİŞMEDİ (denenen düzeltme geri alındı). Bu bir ÖLÇÜM kaydı.
+
+**Kök neden KESİN olarak bulundu.** Self-host çağrı yerinde argümanı
+**argümanın DOĞAL tipiyle** basıyor, **parametrenin BİLDİRİLEN tipiyle** değil:
+```
+SELF:  call i32 @f(ptr %0, i32 10, i32 20, i32 30, i32 40)   ← define i64 bekliyor
+C   :  call i32 @f(ptr %0, i64 %2, i64 %3, i64 %4, i64 %5)
+```
+LLVM bu uyuşmazlığı **SESSİZCE kabul eder** (D-295'in dersi). İlk 3 argüman
+register'a sığdığı için doğru görünür; **4.'den itibaren ÇÖP okunur.**
+
+**Minimal üretim (ölçüldü):** `işlev f(a..f: dtam64)` çağrısı →
+`10 20 30 <çöp> <çöp> <çöp>`. Sınır tam olarak 4. parametrede. `tam32` param
+ile ÇALIŞIYOR (i32 zaten doğal tip) → yalnız genişletme gereken tiplerde.
+`bignum_selfhost`'un `0` yerine yığın adresi basmasının kökü budur
+(`vektor_dogrula` ALTI `dtam64` parametre alıyor).
+
+**DENENEN DÜZELTME GERİ ALINDI — neden çalışmadı:** arg döngüsünde
+`fn_ptip_bul`/`fn_psay_bul` ile param tipini sorup `i64_genislet` uygulamak
+`codegen.exe`'yi **çağrı içeren HER dosyada** düşürdü (`dizi sınır ihlali
+i=0, boyut=0`). Sebep: **imza tablosu (`fn_ad`/`fn_psay`/`fn_ptip`) yalnız
+`kontrol_program`da — yani CHECK yolunda — doldurulur** (`genel_topla` →
+`imza_kaydet`). `--llvm` codegen yolu tabloyu HİÇ kurmaz. Ayrıca
+`fn_ptip_bul` SINIR KONTROLÜ YAPMAZ (`dizi_al` taşar).
+
+**Yol üstünde ikinci hata:** ilk denemede o kapsamda var olmayan `fad`
+değişkenini kullandım (doğrusu `fname`) — self-host bunu sessizce boş dizgiye
+çözdü. Kapsamda olmayan ad, derleme hatası değil SESSİZ yanlış davranış üretti.
+
+**SIRADAKİ İŞ İÇİN GEREKEN:** düzeltme, imza tablosunun codegen yolunda da
+mevcut olmasını gerektirir. İki seçenek: (a) `--llvm` yolunda `genel_topla`
+çağır (yan etkileri ölçülmeli — `g_ekle` dup riski), (b) emit sırasında
+parametre IR tiplerini ayrı bir tabloya kaydet. Ayrıca `fn_ptip_bul`/
+`fn_psay_bul` sınır-güvenli hale getirilmeli.
+
+**`base64_selfhost` (kalan diğer sapma) AYNI SINIF OLABİLİR** — `b64_encode`
+`(Dizi<tam32>, tam32, Dizi<karakter>)` alıyor, 3 param; ama indirgenmiş
+şekiller sapmayı üretmedi, ortak kök doğrulanmadı.
+
+---
+
+## D-391 [YÜKSEK] — CODEGEN: üst-düzey `sabit` referansı (A sınıfı, 13 dosya) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur (A sınıfı — 14 dosya, `expected instruction opcode`).** Self-host
+codegen'de **üst-düzey `sabit` için emit yolu HİÇ YOKTU**. `sabit K` referansı
+yerel/param olarak aranıyor, bulunamayınca `cg_var_bul` `""` dönüyor ve
+`load i32, ptr ` (**BOŞ operand**) üretiliyordu → geçersiz IR.
+**`ver K;` kadar basit bir şekil bile bozuktu.**
+
+**Teşhis yolu — ilk probe'um GEÇERSİZDİ.** Hata satırının kendisi değil bir
+ÖNCEKİ satır bozuktu; `kem_mmio_ham`'da `load i32, ptr ` görünce "ham işaretçi
+deref bozuk" sandım ve `&x olarak *tam32` ile probe yazdım — ama C onu **T001
+ile reddediyor**, yani ölçüm aracım hatalıydı. Gerçek şekli dosyadan BİREBİR
+alınca (`(UART_TABAN + UART_FR) olarak *tam32`) `inttoptr`ın DOĞRU olduğu,
+kusurun `sabit` operandlarında olduğu ortaya çıktı. **Probe'u kaynaktan al,
+kendin uydurma.**
+
+**Çözüm — C `sabit_kayit`/`sabit_bul` aynası.** Sabit bir DEĞER değil, bir
+**İFADE ŞABLONU**dur: global emit edilmez, kullanıldığı yerde INLINE edilir.
+Üç paralel dizi (`g_sabit_ad`/`g_sabit_deger`/`g_sabit_tip`) + `sabit_topla`
+(DISA/MODUL içine iner) + tanımlayıcı çözümünde yerel-yoksa-sabit dalı.
+Çapraz-dosya sabitler aynı ağaçta olduğundan kendiliğinden çözülür.
+
+**Bildirilen tip literali EZER:** `sabit K: tam64 = 8589934592` → i64. Bu satır
+olmadan değer i32'de hesaplanıp SESSİZCE KIRPILIR.
+
+**⚠ SABOTAJ SESSİZ KALDI, KORPUS DÜZELTİLDİ (D-385'in dersi tekrar).** S115'i
+(bildirilen tip uygulanmıyor) ilk koşumda gate YEŞİL kaldı: korpusta `GENIS`
+150994944 idi ve **i32'ye SIĞIYOR** → yanlış uygulama da doğru sonucu veriyor.
+2^33'e (`8589934592`) çevrilince kırpılma gözlenebilir oldu ve S115 kırmızıya
+döndü (42≠1). **Sığan bir sayı bu yolu SINAMAZ.**
+
+**TEK düzeltme 13 dosyayı açtı:** utf8/crc32/sort/hashmap/json/rc4/vm/
+turkce_case/turkce_sort/asm/hashcrack/sha256/kem_mmio_ham — hepsi birebir.
+
+**Kapılar:** `codegen_diff` **117/117**, `checker_diff` 148/148 (0 muaf),
+sürücü 4 mod × 2 + FIXPOINT. **Sabotaj S114** (sabit tablosu aranmıyor) +
+**S115** (bildirilen tip) — ikisi de kırmızı.
+
+**GENİŞ ÖLÇÜM: 50→63 OK, 17→4 FARK.** Üç partide (D-389/390/391) codegen
+paritesi **36→63**. Kalan 4:
+- `base64_selfhost` — **REGRESYON DEĞİL**: fix öncesi IR bile üretilemiyordu
+  (ölçüldü), şimdi çalışıyor ama çıktı basmadan 127 ile ölüyor → KISMİ ilerleme,
+  ayrı kök.
+- `bignum_selfhost` — ikisi de exit 0, stdout farkı.
+- 2 segfault (C de segfault ediyor — muhtemelen ortak, ayrı iş).
+
+---
+
+## D-390 [YÜKSEK] — CODEGEN: `eşleş &Çeşit` auto-deref (C sınıfı — sessiz yanlış cevap) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur (C sınıfı — EN AĞIR: derleniyor ama exit 42 yerine 0).** `eşleş`
+skrutinisi `&Çeşit` (çeşit REFERANSI) olduğunda self-host tag-eşleştirmeyi
+HİÇ emit etmiyor → tüm eşleşmeyi atlayıp fallthrough `ver 0`. Geçerli IR ama
+YANLIŞ MANTIK. `10_cesit_ast` + `11_yorumlayici` (özyinelemeli AST değerlendirici,
+`&Ifade`/`&Dugum` üzerinde eşleş) bu kökten 0 dönüyordu.
+
+**İzole edildi:** payload çeşit + eşleş binding DEĞER üzerinde ÇALIŞIYOR (probe);
+kök yalnız `&Çeşit` (referans) skrutinisi. C `load %Çeşit, ptr` ile auto-deref
+edip extractvalue yapıyor; self-host ptr'yi ne skaler ne tagged ne yapı sanıp
+atlıyordu.
+
+**İKİ KATMANLI kök (her ikisi de gerekti):**
+1. `param_ref_yapi` — `&Çeşit` parametresinin pointee ADINI kaydetmiyordu:
+   yalnız `yapi_var_mi` sorgulanıyordu, çeşit YAPI değil → `son_ref=""`.
+   `cesit_var_mi` eklendi.
+2. `eşleş` handler — `son_ref` çeşit adı olsa bile auto-deref YOKTU. `sty="ptr"`
+   + `son_ref`=çeşit → `load %Çeşit, ptr` deref + `sty`=inline tip; sonra mevcut
+   tagged yolu (extractvalue) çalışır.
+
+**Kapı boşluğu D-356/388/389'un aynısı:** `cg_korpus`'ta `eşleş` HEP DEĞER
+üzerindeydi, `&Çeşit` referansı üstünde HİÇ yoktu. Yeni korpus
+(`cg_esles_referans_cesit.kem` — özyinelemeli `&Dugum` ağaç toplama, →42) iki
+katmanı da kapılar.
+
+**Kapılar:** `codegen_diff` **116/116**, `checker_diff` 148/148 (0 muaf),
+sürücü 4 mod × 2 + FIXPOINT. **Sabotaj S112** (param_ref_yapi çeşit kaydı) +
+**S113** (eşleş auto-deref) — ikisi de ayrı ayrı kırmızı (42≠0), `grep` ile
+kanıtlandı. (Not: perl çok-satır deseni iki kez tutmadı; `grep -c` ile
+uygulanmayı DOĞRULADIM, sed ile satır-numarasından uyguladım.)
+
+**GENİŞ ÖLÇÜM: 48→50 OK, 19→17 FARK.** C sınıfı (sessiz yanlış cevap) TÜKENDİ.
+Kalan 17 — SIRADAKİ:
+- **A sınıfı (14):** `expected instruction opcode`/`value token` — bozuk IR
+  (metin/kripto/sort ağır); ortak eksik özellik.
+- **Dağınık (3):** `gorev_temel` (i64-but-ptr), `matris_carpim` (i32-but-float),
+  `bignum_selfhost` (ikisi de exit 0, stdout farkı).
+
+---
+
+## D-389 [YÜKSEK] — CODEGEN: `dizi_olustur(N)` çağrı-formu (B sınıfı, 9 dosya) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**Kusur (B sınıfı — "i32 but expected ptr", 9 gerçek dosya).** Self-host
+`dizi_olustur(N)` **fonksiyon-çağrısı** formunu özel-durumsuz bırakıyordu →
+genel builtin yoluna düşüp `call i32 @dizi_olustur(...)` üretiyordu: yanlış ad
+(`@dizi_olustur` ≠ `@kdl_dizi_olustur`), yanlış dönüş (i32 ≠ ptr), ve eksik
+`kdl_dizi_kapasite_ayarla` takip çağrısı. Literal `[..]` yolu ZATEN doğruydu;
+kusur yalnız çağrı-formundaydı ve `dizi_ekle`/`dizi_al`/`dizi_boyut`'un aksine
+özel-durumu yoktu.
+
+**Basit ad eşlemesi DEĞİL — iki-adımlı dönüşüm.** C `dizi_olustur(N)`'yi:
+  `%r = call ptr @kdl_dizi_olustur(ρ, ELEMAN_BYTE)`   [kapasite DEĞİL]
+  `call void @kdl_dizi_kapasite_ayarla(ρ, %r, N)`      [kullanıcının N'i]
+Eleman-byte `p.beklenen_elem` (annotasyon `Dizi<T>` bağlamı) üzerinden.
+
+**⚠ D-030 GÜVENLİK KURALI KORUNDU.** `dizi_eleman_byte("")` "4" döndürür ama
+BİLİNMEYEN eleman için C **8** kullanır (güvenli üst sınır). 4 yazmak ptr/i64
+dizisini yarı-rezerve edip `dizi_ekle_ptr`de HEAP-OVERFLOW ediyordu (D-030).
+Boş durumu ELLE 8'e sabitlendi; bilinen skaler → `dizi_eleman_byte` (4 veya 8).
+`Dizi<tam32>`→4, `Dizi<metin>`→8 ölçüldü.
+
+**TEK düzeltme 9 dosyayı birden açtı:** 13_token_akisi, 14_oncelikli_ayristirici,
+15_agac_insa, 16_degiskenli_dil, 17_kontrol_dili, 18_fonksiyon_dili,
+diag_heap_yaz_linkli, kem_dizi_kernel, kernel_dizi — hepsi C ile birebir exit.
+
+**Kapı boşluğu, D-388/D-356'nın aynısı:** `codegen_diff` yeşildi çünkü
+`cg_korpus`'ta `dizi_olustur(N)` çağrı-formu HİÇ yoktu. Yeni korpus dosyası üç
+katmanı kapılar: doğru ad+dönüş, kapasite_ayarla, eleman-byte seçimi (4 vs 8).
+
+**Kapılar:** `codegen_diff` **115/115**, `checker_diff` 148/148 (0 muaf).
+**Sabotaj S111** (case devre dışı) → yeni korpus kırmızı, `grep` ile kanıtlandı.
+
+**GENİŞ ÖLÇÜM İLERLEMESİ (test/ornekler + stdlib/temel): 38→48 OK, 29→19 FARK.**
+Kalan 19 sapma üç sınıfta — SIRADAKİ İŞ:
+- **C sınıfı (2, EN AĞIR):** `10_cesit_ast` + `11_yorumlayici` derleniyor ama
+  **exit 42 yerine 0** (sessiz yanlış cevap). Payload çeşit + eşleş destructure.
+- **A sınıfı (14):** `expected instruction opcode`/`value token` — bozuk IR,
+  ortak bir eksik özellik (metin/kripto/sort ağır).
+- **Dağınık (3):** `gorev_temel` (i64-but-ptr), `matris_carpim` (i32-but-float),
+  `bignum_selfhost` (ikisi de exit 0 ama stdout farkı).
+
+---
+
+## D-388 [YÜKSEK] — CODEGEN: öneğe uymayan yerleşiklerin IR eşlemesi (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `test/cg_korpus/` (+1).
+
+**YENİ EKSEN — ve ilk ölçüm ağır bir kusur buldu.** Checker paritesi doygunlaşınca
+(D-387) ölçümü CODEGEN'e çevirdim: `codegen_diff` kapısı yalnız `test/cg_korpus`
+(113 dosya) üzerinde koşuyor. `test/ornekler` + `stdlib/temel`e karşı ölçünce
+**31 sapma** çıktı.
+
+**Kök neden (bu partide kapatılan):** `builtin_kdl_ad` ÖNEK-tabanlıydı
+(`metin_`/`dosya_`/`yaz_`/`yazdir_`/`arg_`). Hiçbir öneğe uymayan `yazdir`,
+`bellek_al`, `bellek_serbest` ve `otp_*` için self-host `@yazdir` gibi
+**TANIMSIZ semboller** çağırıyordu → clang IR'ı REDDEDİYORDU.
+**`test/ornekler/hello.kem` BİLE derlenmiyordu** — 4 satırlık program.
+
+**Ad eşlemesi TEK BAŞINA yetmedi — üç ayrı katman gerekti:**
+1. **Ad:** `yazdir`→`puts`, `bellek_al`→`malloc`, `bellek_serbest`→`free`,
+   `otp_*`→`kdl_otp_*` (hepsi C `--llvm` çıktısından ÖLÇÜLDÜ, tahmin değil).
+2. **`declare`:** OTP sembolleri bildirilmiyordu → ad doğru olsa da "undefined value".
+3. **Dönüş tipi:** `builtin_ret` bu adları bilmediği için `void` varsayıyor,
+   `call void @malloc(...)` üretip DEĞERİ kaybediyor, ardından `store ptr 0`
+   gibi çöp IR çıkıyordu.
+
+**Parite için C'nin DAVRANIŞI taklit edildi, "doğrusu" değil:** C `free`yi
+`call i32 @free` olarak emit eder ama `declare void @free` yazar — LLVM bu
+uyuşmazlığı SESSİZCE kabul eder (D-295'in dersi). Self-host aynısını yapar.
+
+**Kapı boşluğu, D-356'nın dersinin aynısı:** `codegen_diff` 113/113 YEŞİLDİ
+çünkü `cg_korpus` bu adları hiç içermiyordu. Yeni korpus dosyası
+`cg_yerlesik_ad_eslemesi.kem` üç katmanı da kapılar.
+
+**Kapılar:** `codegen_diff` **114/114**, `checker_diff` 148/148 (0 muaf),
+`parser_diff` 13/13. **Sabotaj:** S109 (ad eşlemesi), S110 (dönüş tipi) —
+ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**AÇIK KALAN (ölçüldü, bu partide DEĞİL):** geniş codegen ölçümü 36→**38 OK**,
+31→**29 FARK**. Kalan sapmalar üç sınıfta kümeleniyor:
+- `expected instruction opcode` (13 dosya) — bozuk IR, ortak bir eksik özellik
+- `'%N' defined with type 'i32' but expected 'ptr'` (8 dosya) — tip uyuşmazlığı
+- `10_cesit_ast` / `11_yorumlayici`: derleniyor ama **exit 42 yerine 0** —
+  SESSİZ YANLIŞ CEVAP, en ağır sınıf; sıradaki iş bu olmalı.
+
+---
+
+## D-387 [YÜKSEK] — SERİ KAPANIŞI: `parser_diff` regresyonu onarıldı + durum konsolidasyonu (2026-08-06)
+
+**ETKİ:** `selfhost/parser.kem`, `CLAUDE.md`.
+
+**⚠ KENDİ SERİMDEN ÇIKAN REGRESYON — merge öncesi tam koşumda yakalandı.**
+`calistir_parser_diff` **12/13 KIRMIZI**ydı ve seri boyunca HİÇ koşulmamıştı.
+Kök: D-359 parse korpusuna `p7_kuresel_ciplak.kem` eklerken yalnız **sürücüyü**
+(`codegen.kem`) onardı; **`selfhost/parser.kem`** (Aşama-2 REFERANS parser, ÜÇÜNCÜ
+uygulama) `küresel`/`çıplak` anahtar kelimelerini hiç tanımıyordu. Kapı
+12/12'den 12/13'e düştü ve fark edilmedi çünkü ben hep `checker_diff` +
+sürücü koşum takımını koşuyordum.
+
+**Onarım:** `küresel`/`çıplak` parser.kem'e eklendi. C'de ikisi de AYRI düğüm
+tipi DEĞİLDİR (`DUGUM_DEGISKEN`/`DUGUM_ISLEV` + bayrak; `--ast` "DEGISKEN"/"ISLEV"
+basar) → referans parser bayrağı TUTMAZ, anahtar kelimeyi yutup normal yola
+devam eder. **Konum ölçüldü:** düğüm `küresel`in konumunu taşır (sütun 1),
+`değişken`inkini DEĞİL (sütun 10) → `dizi_yaz` ile düzeltildi. **13/13.**
+
+**DERS — KAPI SEÇİMİ:** bu depoda üç ayrı self-host uygulaması var
+(`parser.kem` / `checker.kem` / `codegen.kem`). Korpusa dosya eklemek, o şekli
+görmesi gereken HER uygulamanın kapısını koşmayı gerektirir. "checker_diff yeşil"
+demek "parite tam" demek DEĞİLDİR. (D-378'de sürücü kapısı bir port hatası
+yakalamıştı; bu onun tersi — sürücü yeşilken referans parser kırmızıydı.)
+
+**DERS — BAYAT ARTEFAKT (yine):** `git checkout origin/main` ile karşılaştırma
+yapıp geri dönünce `build/kemgu.exe` ESKİ kaynaktan kalır; `checker_diff`
+148→144 sahte kırmızı verdi. `rm -f build/kemgu.exe build/kdl_runtime.o` + `make`
+şart. CLAUDE.md'ye yazıldı.
+
+**Ölçülen ama regresyon OLMAYAN:** `calistir_lexer_bootstrap` ve
+`calistir_parser_bootstrap` **origin/main'de DE exit 2** verir (oran raporlarlar,
+yeşil/kırmızı kapı değildirler). Bizim dalda oranlar origin/main'e göre daha iyi
+(parser 514/520 vs 444/462).
+
+### SERİ ÖZETİ (D-350 → D-387, 38 commit)
+- **Self-host tanı kodu: 24 → 70.** Kalan `T015`/`T023` ÖLÜ → portlanacak kod yok.
+- **Geniş ölçüm 131/131 TAM PARİTE** (94/99'dan; D-371→375 arasında 5 yanlış-pozitif
+  kapatıldı: G005, CP005, AS001 eksiği, arg çokluğu, T001 takip tanıları).
+- **Korpus:** `check_korpus` 59 → **148**, `parse_korpus` 12 → 13. Muafiyet listesi BOŞ.
+- **Sabotaj kapıları:** S1 → **S108** (bu seride 37 yeni).
+- **Kapatılan alt-sistemler:** modül · MMIO+yetki · DRF · sabitsüre · çeşit ·
+  bileşik tip temsili (10 artım).
+- **En sık tekrarlayan ders:** *bir temsili/tabloyu zenginleştirmek, onun
+  fakirliğine dayanan her sessiz yolu uyandırır* (D-374 E013, D-377 generic
+  sızıntısı, D-382 lineer taşıma, D-384/386 "geçersiz tip = tanı yok").
+
+---
+
+## D-386 [YÜKSEK] — Katman 2 intrinsik dönüş tipleri; `eşleş` görev L001 kapandı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Bu intrinsikler yerleşik imza TABLOSUNA GİRMEZ.** D-374'ün tablosu skaler
+imzalıdır; Katman 2 intrinsiklerinin dönüşü ARGÜMANDAN türer, C'de de bağlam
+duyarlı özel-durumdur. Ölçülen kurallar:
+- `kanal_al(k)` → k'nin `kanal<E>` eleman tipi
+- `görev_birleştir(g)` → g'nin `görev<T>` yükü
+- `görev_başlat(|| e)` → `sonuç<görev<T>, metin>`, T = lambda gövdesinin tipi
+
+**D-385'in bıraktığı boşluk kapandı.** Skrutini tipi artık bilindiği için
+`eşleş görev_başlat(..) { tamam(g) => ... }` bağlaması `görev<T>` tipini alıyor;
+lineer olduğunda dilime giriyor ve **C ile birebir `L001 0:0`** üretiyor
+(konum yok — sembol kaynakta bir konuma karşılık gelmiyor, ölçüldü). İki kez
+`görev_birleştir` → L002 da birebir.
+
+**D-384'ün kuralı ikinci kez uygulandı.** İlk uygulama `tc18_01_drf.kem`'de
+sahte T001 üretti: `görev_başlat(|| 1.0)` DRF001 alır, C tipi HATA'ya düşürür.
+"Geçersiz tip = tanı YOK" kuralının bu kez TİP tarafı; kesirli yükte "?" dönülür.
+Aynı kural iki partide iki farklı yüzeyde çıktı (lineer yükümlülük / tip
+bildirimi) — **hata yolunda hiçbir türetilmiş bilgi yayılmamalı.**
+
+**Kapılar:** `checker_diff` **148/148** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 116/116, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / drf 54, **geniş ölçüm 131/131**.
+Probe 6/6 birebir. **Sabotaj:** S106 (intrinsik dönüş tipi), S107 (lineer desen
+bağlaması kaydı), S108 (kesirli kapısı — yanlış-pozitif dosyasında kırmızı).
+
+**KARAR BEKLEYEN:** `işlev(..)->T` temsili. `tip_str`in üreteceği dizgi biçimi
+bir TİP SİSTEMİ kararıdır (çok argümanlı + dönüşlü) ve korpusa + iki uygulamaya
+girdikten sonra değiştirmek pahalıdır → CLAUDE.md gereği Mehmet'e sorulmadan
+sabitlenmeyecek. Self-host checker'da karar gerektirmeyen iş KALMADI.
+
+---
+
+## D-385 [YÜKSEK] — Desen bağlama tipleri (`eşleş` kollarında) (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** `eşleş s { değer(v) => ... }` içinde `v`nin tipi BİLİNMİYORDU:
+`yerel_topla` düz bir ön-geçiştir ve skrutini bağlamını görmez → desen
+bağlamaları oraya `"?"` ile girer, gövdedeki her karşılaştırma sessiz kalırdı.
+Tip artık kol işlenirken YERİNDE atanıyor (`yerel_tip_ata`).
+
+**Eşleme:** `seçimlik<T>` + `değer(v)` → `v: T`; `sonuç<T,H>` + `tamam(v)` →
+`v: T`; `hata(e)` → `e: H`. Ayrıştırma **DERİNLİK-DUYARLI** — `sonuç<T, H>`
+içindeki her virgül üst düzey değildir.
+
+**⚠ SABOTAJ İKİ KEZ SESSİZ KALDI — kapı tasarımı dersi.** Derinlik-duyarlılığı
+kaldırdığımda gate YEŞİL kaldı:
+1. `sonuç<Dizi<tam32>, metin>` yetmedi — ilk argümanda virgül YOK.
+2. `sonuç<sonuç<tam32, metin>, metin>` da yetmedi! Yanlış ayrıştırma
+   (`"sonuç<tam32"`) da annotasyonla UYUŞMUYOR → **aynı T001** çıkıyor, fark
+   gözlenemiyor.
+
+Kapıyı ancak **doğru ayrıştırmada tanı ÇIKMAYAN** bir şekil kurdu
+(`tamam(v) => { değişken w: sonuç<tam32, metin> = v; }` → TEMİZ; yanlış
+ayrıştırmada sahte T001). **DERS:** hatalı şekiller bir kuralı kapılamaya
+yetmez — yanlış uygulama da hata üretiyorsa tanı AYNI kalır. Kapı, **doğru
+davranışın SESSİZ olduğu** bir şekil ister.
+
+**Bilinen sınır:** `eşleş görev_başlat(..) { tamam(g) => ... }` L001'i hâlâ
+çıkmıyor — `görev_başlat`ın dönüş tipi (`sonuç<görev<T>, metin>`) yerleşik imza
+tablosunda yok, skrutini tipi bilinmiyor. Bu ayrı bir iş (D-374'ün tablosuna
+Katman 2 intrinsiklerini eklemek).
+
+**Kapılar:** `checker_diff` **147/147** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 115/115, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / parser 107, **geniş ölçüm 131/131**.
+Probe 6/6 birebir. **Sabotaj:** S104 (bağlama tipi ataması), S105 (derinlik
+duyarlılığı — ancak üçüncü denemede gözlenebilir hâle geldi).
+
+---
+
+## D-384 [YÜKSEK] — `görev<T>` LİNEER; `kanal<T>` değil (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**D-383'te ölçülüp bırakılan iş yapıldı.** C ölçümü (6 şekil): `görev<T>`
+parametresi tüketilmezse **L001**, iki kez `görev_birleştir` edilirse **L002**;
+başka bir işleve `görev<T>` parametresi olarak geçirmek de TAŞIMADIR;
+`kanal<T>` parametresi hiç kullanılmasa bile **OK** (lineer değil).
+
+**D-372'nin dersi işe yaradı.** "Lineerliği soran HER yüklemi `grep`le" notu
+sayesinde üç ayrı yüklem birlikte güncellendi: `tip_node_tekkez_mi`,
+`param_lineer_mi`, `deg_lineer_mi` — artı tüketim noktası (`görev_birleştir`).
+Bu kez hiçbiri unutulmadı.
+
+**⚠ GEÇERSİZ TİP = LİNEER YÜKÜMLÜLÜK YOK.** İlk uygulama `tc18_01_drf.kem`'de
+sahte L001 üretti: `değişken g: görev<kesirli64> = ...` DRF001 alıyor, C tipi
+HATA'ya düşürüyor ve bağlamayı lineer SAYMIYOR. Kapı hem `param_lineer_mi`ye
+hem `deg_lineer_mi`ye eklendi. **Genel kural:** bir tipi lineer sınıfa sokarken
+"o tip GEÇERSİZ olduğunda ne olur" sorusunu ayrıca ölç — hata yolunda lineer
+yükümlülük DOĞMAZ.
+
+**Bilinen sınır (ölçüldü, uygulanmadı):** `eşleş görev_başlat(..) { tamam(g) =>
+... }` ile bağlanan görev için C **`L001 0:0`** verir (konum yok — sembol
+kaynakta bir konuma karşılık gelmiyor); self-host SUSAR. Bunun için desen-bağlama
+TİPLERİ gerekir (D-378'de not edilen mekanizma). `görev_başlat`a özel sözdizimsel
+kestirme GENELLENMEZ, o yüzden yapılmadı; korpusta o şekil yok.
+
+**Kapılar:** `checker_diff` **146/146** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 114/114, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / drf 54 / capability 40,
+**geniş ölçüm 131/131**. Probe 6/6 birebir. **Sabotaj:** S101 (görev param
+lineerliği), S102 (`görev_birleştir` tüketimi), S103 (kesirli kapısı —
+yanlış-pozitif dosyasında kırmızı) — üçü de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan:** `işlev(..)->T` temsili — çok argümanlı, temsil biçimi bir **TASARIM
+kararı**; CLAUDE.md gereği Mehmet'e sorulmadan sabitlenmemeli. `çeşit` payload
+tipleri ve desen-bağlama tipleri de açık.
+
+---
+
+## D-383 — `görev<T>` + `kanal<T>` temsili (bileşik tip 7. artım) (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Temsil eklendi**, D-382'nin kanıtlanmış deseniyle (tek argümanlı bileşik).
+Açılan: `kanal<T>` vs skaler T001 · iç-tip farkı · çağrı argümanı · `görev<T>`
+dönüşünde T020.
+
+**`gönderen<T>`/`alan<T>` TEMSİL EDİLEMEZ — bilinçli sessizlik.** D-366'da
+ölçülen olgu doğrulandı: yön uçları AST'de `TIP_KULLANICI`dır, yön TİPTEN
+okunamaz (o yüzden DRF007 DEĞERDEN okunuyor). `TIP_KULLANICI` için tip üretmek
+kullanıcı yapılarıyla karışırdı → "?" bırakıldı, self-host susar.
+
+**ÖLÇÜLDÜ AMA UYGULANMADI (sıradaki iş).** C'de **`görev<T>` LİNEERDİR**,
+`kanal<T>` değildir:
+- `işlev al(g: görev<tam32>) -> tam32 { ver 0; }` → **L001** (param tüketilmedi)
+- gövde `görev_birleştir(g)` içeriyorsa → OK
+- `kanal<T>` parametresi hiç kullanılmasa bile → OK
+
+Self-host'un lineer makinesinde `TIP_GOREV` YOK → bu L001'ler çıkmıyor. Bu bir
+TEMSİL işi değil, LİNEER MAKİNE işidir (D-382'de `tekkez`/`yetki` için yapılanın
+`görev` karşılığı) ve `eşleş` deseniyle bağlanan görevlerde C'nin konumu `0:0`
+bastığı ölçüldü — o tuhaflığın da taklidi gerekir. Ayrı adım olarak bırakıldı;
+bu partinin korpusunda lineer şekil YOK.
+
+**Kapılar:** `checker_diff` **145/145** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 113/113, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / drf 54 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S100 (`görev`/`kanal` temsili) → kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `işlev(..)->T` (çok argümanlı — temsil biçimi bir TASARIM
+kararı, Mehmet'e sorulmalı) · `çeşit` payload tipleri · `görev` lineerliği.
+
+---
+
+## D-382 [YÜKSEK] — `tekkez<T>` + `yetki<R>`; LİNEER TAŞIMA kuralı düzeltildi (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Temsil.** `tekkez<T>` ve `yetki<R>` `tip_str`e eklendi. `yetki<R>`'nin iç adı
+bir KAYNAK adıdır (MMIO/Dosya/...), skaler değildir → `bilinen_tip_mi`
+kapısından geçmez; `yetki_kaynak_tipi_mi` ile ayrıca doğrulanır.
+
+**Asıl bulgu — LİNEER TAŞIMA kuralı YANLIŞTI (mevcut kusur).** Self-host
+`değişken` bildiriminde değeri KOŞULSUZ tüketiyordu. C ölçüldü (3 şekil):
+- `b: tekkez<metin> = a` → **TAŞIR** (a tüketilir; b için L001/L002)
+- `n: tam32 = a` → **TAŞIMAZ** (a için L001)
+
+Yani ayırt edici **hedef bağlamanın LİNEERLİĞİ**dir. Bu kusur bugüne kadar
+görünmezdi: tip uyuşmazlığı olan lineer bildirim ancak `tekkez<T>` temsili
+gelince T001 üretebiliyordu; o zamana dek şekil korpusa hiç girmemişti.
+
+**İlk hipotezim YANLIŞTI, ölçüm ayırdı.** "Taşıma T001 çıkmazsa olur" dedim ve
+`t001_cikar_mi` kapısı yazdım — bir şekli düzeltti, diğerini BOZDU
+(`b: tekkez<metin> = a` için sahte L001). İkinci ölçüm turu doğru ayrımı
+(`deg_lineer_mi`) gösterdi. **İki şekil arasında ayrım yapan bir kural
+yazarken İKİSİNİ de ölçmeden yazma.**
+
+**Kapılar:** `checker_diff` **144/144** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 112/112, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / linear 89 / capability 40 / parser 107,
+**geniş ölçüm 131/131**. Probe 8/8 birebir. **Sabotaj:** S98 (`tekkez<T>`
+temsili), S99 (koşulsuz taşımaya dönüş) — ikisi de kırmızı.
+
+**Kalan artımlar:** `işlev(..)->T` · `görev<T>`/`kanal<T>` · `çeşit` payload.
+
+---
+
+## D-381 — `olarak` ifadesinin TİPİ (bileşik tip 5. artım) (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** `TIP_DONUSTUR` `ifade_tip`te HİÇ yoktu → `olarak` içeren her ifade
+`"?"`e düşüyor ve tüm karşılaştırmalar sessiz kalıyordu. `olarak` KEMGU'da
+yaygın (özellikle `güvensiz` ve MMIO kodunda), yani boşluk genişti.
+D-380'in bıraktığı bilinen sınır buydu.
+
+**Kural: hedef tipi ancak dönüşüm GEÇERLİYSE bildirilir.** Dönüşüm E001-E004
+üretiyorsa C tipi HATA'ya düşürür ve T001'e hiç gelmez; bu kapı olmadan tek
+kusur İKİ tanı üretirdi (D-351'de yaşanan kaskadın aynısı).
+
+**Kuralı KOPYALAMADIM — sessiz mod ekledim.** `cast_gecerli_mi`, mevcut
+`cast_kontrol`u `cast_sessiz` sayacıyla RAPORLAMADAN yeniden koşturur.
+E001-E004 mantığını ikinci kez yazmak iki kopyanın zamanla ayrışmasına yol
+açardı; tek kaynak korunur. (`tuk_kapali` — D-375 — ile aynı desen.)
+
+**Ölçüm notu:** `&x olarak *tam32` C'de **T001 verir** — cast KURALI (D-349)
+güvensizde geçerli olsa bile üretilen ifade tipi annotasyonla eşleşmiyor.
+Kuralı yorumlamadım, davranışı ölçüp korpusa not düştüm.
+
+**Kapılar:** `checker_diff` **143/143** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 111/111, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+Probe 7/7 birebir (geçersiz-cast'te SUSMA davranışı dâhil). **Sabotaj:**
+S96 (hedef tipi bildirimi), S97 (geçerlilik kapısı) — ikisi de kırmızı.
+
+**Kalan artımlar:** `işlev(..)->T` · `tekkez<T>` · `çeşit` payload tipleri.
+
+---
+
+## D-380 [YÜKSEK] — Bileşik tip 4. artım: `&T`, `&değişken T`, `*T` (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**DEĞİŞEBİLİRLİK temsile girer.** Ölçüldü: `&T` ↔ `&değişken T` **her iki yönde
+de** T001 verir → `&tam32` ve `&değişken tam32` AYRI temsillerdir. `&T` ↔ `*T`
+de ayrıdır. Ham işaretçi aynı şekilde eklendi (ayrı önek `*`).
+
+**Açtığı tanılar (8/8 probe):** referans vs skaler · hedef-tip farkı ·
+değişebilirlik farkı (iki yön) · `*r` dereferans tipi (D-305'in güvenli deref'i
+buradan tip kazandı) · ham işaretçi iç tip + deref.
+
+**⚠ UTF-8 BAYT TUZAĞI — gerçek yanlış-pozitif üretti.** `*m` (m: `&değişken
+tam32`) için öneki soyarken **sabit 10** yazmıştım; `"&değişken "` UTF-8'de
+**12 BAYTTIR** (`ğ` ve `ş` ikişer bayt) ve `metin_kes`/`metin_uzunluk` BAYT
+tabanlıdır. Sonuç: tip bozuluyor, `*r + *m` sahte T003 alıyordu. Uzunluk artık
+`metin_uzunluk(mo)` ile HESAPLANIYOR. Sabotaj S95 bunu kalıcı kapıya bağladı.
+**DERS:** Türkçe dizgilerde sabit offset YAZMA — CLAUDE.md'nin hex-escape
+uyarısının çalışma-zamanı karşılığı budur.
+
+**Süreç notu:** `awk` ile blok taşıma codegen.kem'i bozdu (22 parser hatası);
+`git checkout` + `Edit` ile temiz portlandı. Çok satırlı blokları betikle
+taşımak kırılgan — dengeli parantez garantisi yok.
+
+**Bilinen sınır:** `&x olarak *tam32` sonucu — `olarak` (TIP_DONUSTUR) ifadesinin
+TİPİ hâlâ modellenmiyor → C T001 verirken self susar (EKSİK tanı, yanlış değil).
+
+**Kapılar:** `checker_diff` **142/142** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 110/110, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S94 (`TIP_REFERANS` temsili), S95 (bayt-uzunluğu yerine sabit 10)
+— ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `işlev(..)->T` · `tekkez<T>` · `çeşit` payload · `olarak`
+ifadesinin tipi.
+
+---
+
+## D-379 — Bileşik tip 3. artım: yapı alanları + ifade skrutinisi (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**İki küçük değişiklik, geniş kazanç.**
+1. `yapi_kaydet` alan tiplerini `bilinen_skaler_mi` ile süzüyordu → `k.xs`,
+   `k.s`, `k.r` tipleri BİLİNMİYORDU ve alan erişimli her zincir sessizdi.
+   `bilinen_tip_mi`ye çevrildi (TEK SATIR) → `k.xs` T001, `k.xs[0]` eleman tipi,
+   `k.s` iç-tip farkı açıldı. ERISIM dalı zaten `alan_tip_bul`a gidiyordu;
+   yeni kod GEREKMEDİ — bariyer yalnız o filtreydi.
+2. `esles_skrutini_tipi` yalnız TANIMLAYICI çözüyordu → `eşleş k.s`, `eşleş f()`,
+   `eşleş xs[0]` M001 vermiyordu. TANIMLAYICI dışında genel `ifade_tip`e düşüldü.
+   (`yerel_ham` yalnız yerel BAĞLAMALAR içindir; ifadelerin karşılığı yok.)
+
+**Yöntem notu:** D-377/378'de kurulan temsil, bu artımda **yeni makine
+yazmadan** meyve verdi — engel her seferinde bir SÜZGEÇTİ, eksik mantık değil.
+Bileşik temsile geçerken `bilinen_skaler_mi` çağrılarını tek tek gözden
+geçirmek (hangisi "skaler mi" hangisi "bilinen mi" soruyor) bu serinin
+tekrarlayan işi oldu.
+
+**Kapılar:** `checker_diff` **141/141** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 109/109, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+Probe 8/8 birebir. **Sabotaj:** S92 (alan tipi süzgeci skalere döndürüldü),
+S93 (skrutini yine yalnız TANIMLAYICI) — ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `&T` · `işlev(..)->T` · `tekkez<T>` · `çeşit` payload tipleri.
+
+---
+
+## D-378 [YÜKSEK] — Bileşik tip 2. artım: `seçimlik<T>` + `sonuç<T,H>`; M001 dalları KAPANDI (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**İki kazanç, tek yatırım.** `tip_str` artık `seçimlik<T>` ve `sonuç<T,H>` de
+üretiyor. Bu (a) tip KARŞILAŞTIRMALARINI (T001/T020) ve (b) **`eşleş`
+KAPSAYICILIĞINI (M001)** aynı anda açtı.
+
+**D-352'nin bilinçli borcu kapandı.** O parti M001'i yalnız `çeşit` dalı için
+portlamış, `seçimlik`/`sonuç` dallarını AÇIK bırakmıştı — gerekçe: "self-host'ta
+bileşik tip temsili yok, skrutininin `seçimlik` olduğu ANLAŞILAMIYOR". D-377/378
+temsili getirince engel ortadan kalktı; dallar birkaç satırda eklendi.
+**Bir borcu kapatmanın doğru zamanı, onu doğuran eksikliğin kapandığı andır.**
+
+**Varyant tarama ölçüldü:** `değer(v)`/`tamam(v)` `DESEN_YAPICI`, çıplak `hiç`
+`DESEN_TANIMLAYICI` olarak gelir → iki düğüm tipi de taranmalı. Joker `_` ve
+bağlama yakalayıcısı mevcut erken-dönüşle zaten kapatıyor.
+
+**D-377'nin generic koruması genelleştirildi.** `Dizi<seçimlik<tam32>>` çalışmıyordu:
+eleman kontrolü elle sayılmış bir listeydi (`skaler ∪ Dizi<`). `bilinen_tip_mi`ye
+çevrildi — o da generic param'ı (`T`) içermediği için **erteleme korunur**.
+Aynı şekilde T001'in D-370 kapısı `Dizi<` özel-durumundan `bilinen_tip_mi`ye alındı.
+
+**Sürücü kapısı bir PORT hatası yakaladı.** `sonuç` dalı codegen.kem'e eksik
+taşınmıştı (blok kesilmişti); `checker_diff` YEŞİLDİ (o dosyayı referans checker
+ile ölçüyor) ama sürücü koşum takımı `M001 36 5` eksiğini gösterdi. **İki
+uygulamalı bir sistemde tek kapı yetmez** — parite kapıları farklı ikilileri ölçer.
+
+**Kapılar:** `checker_diff` **140/140** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 108/108, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+Probe: tip 8/8 + M001 7/7 birebir. **Sabotaj:** S90 (seçimlik M001 dalı),
+S91 (`TIP_SECIMLIK` temsili) — ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**Kalan artımlar:** `&T` · `işlev(..)->T` · `tekkez<T>` · yapı alanlarının
+bileşik hâli (`alan_tip` hâlâ yalnız skaler saklıyor).
+
+---
+
+## D-377 [YÜKSEK] — Bileşik tip temsili, 1. artım: `Dizi<E>` (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Neden.** D-376'nın "bilinçli sınır"ının ve D-352'nin `eşleş` boşluğunun ORTAK
+kökü tekti: `tip_str` HER bileşik tipi `"?"`e düşürüyordu → `Dizi` tipli
+T001/T013/T020 karşılaştırmaları hiç yapılmıyordu.
+
+**Artımlı ve davranış-nötr başlatıldı.** `tip_str` `Dizi<E>` üretir; ama
+`bilinen_skaler_mi` BİLEREK dokunulmadı — mevcut ~15 tüketici "Dizi<..>"yi
+skaler saymaz, hepsi eskisi gibi susar. Yeni temsile opt-in eden yerler ayrı bir
+`bilinen_tip_mi` kullanır. Kapsam tek tek ve ÖLÇÜLEREK açıldı: `yerel_tip_filtrele`,
+`fn_donus`, `fn_ptip`, `ifade_tip` (DIZI_OLUSTUR + INDEKS), T001'in D-370 kapısı.
+
+**Açtığı tanılar (7/7 probe birebir):** `Dizi` vs skaler T001 · eleman-tipi farkı
+(`Dizi<tam32>` ≠ `Dizi<metin>`) · `ver` T020 · `xs[0]` eleman tipi · çağrı
+argümanı · çağrı dönüşü. Hepsi ÖNCE tamamen sessizdi.
+
+**İki gizli etkileşim ölçümle yakalandı — ikisi de YANLIŞ-POZİTİF:**
+1. **İç içe dizide bağlam daralmıyordu.** `Dizi<Dizi<tam32>> = [[1,2],[3]]` →
+   iç literaller "Dizi<tam32>" ile karşılaştırılıp sahte T013 aldı. Eleman tipi
+   önce "?" olduğu için bu yol HİÇ uyanmamıştı. Daraltıcı eklendi.
+2. **Generic param sızıntısı.** `tip_str` TIP_BASIT'te ham adı döndürdüğü için
+   `Dizi<T>` "bilinen" sayıldı → `sirali_mi<T>(xs: Dizi<T>)` gövdesindeki
+   `xs[0] > xs[1]` sahte T003 aldı (`kütüphane/dizi.kem` + `karsilastir.kem`,
+   geniş ölçümde yakalandı). C generic'i ERTELER; eleman "gerçekten bilinen"
+   değilse tüm tip "?" olur.
+
+**DERS:** bir temsili zenginleştirmek, o temsilin FAKİRLİĞİNE dayanan her sessiz
+yolu uyandırır. İkisi de "kural yanlıştı" değil, "bu yol ilk kez çalışıyor"du.
+Bu yüzden artım davranış-nötr başlamalı ve kapsam tek tek açılmalı.
+
+**Kapılar:** `checker_diff` **139/139** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 107/107, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S88 (`Dizi<E>` üretimi), S89 (generic ertelemesi → yanlış-pozitif
+kapısı) — ikisi de kırmızı, `grep` ile kanıtlandı, geri alındı.
+
+**Sıradaki artımlar:** `seçimlik<T>` / `sonuç<T,H>` (D-352'nin `eşleş`
+kapsayıcılık dalları buna bağlı) · `&T` · `yapı` alan tiplerinin bileşik hâli.
+
+---
+
+## D-376 [YÜKSEK] — T014 portlandı: tanı-kodu ekseni KAPANDI (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kural 20 probe ile ölçüldü.** Boş `[]` yalnız **DAR** bir konum listesinde
+geçerli; başka her yerde T014:
+- **MUAF:** `değişken`/`sabit`/`küresel` annotasyonu · `ver` (dönüş tipi Dizi) ·
+  yapı literali alanı (alan tipi Dizi) · dizi elemanı (eleman tipi Dizi) ·
+  atama (lvalue Dizi)
+- **T014:** annotasyonsuz · beklenen skaler · **çağrı argümanı** · `olarak`
+  operandı · **lambda gövdesi (dönüş `Dizi` OLSA BİLE)** · `değer([])` ·
+  indeksleme · ikili operand
+
+**Bağlam SIZMAZ → bayrak DEĞİL, düğüm muafiyeti.** `değişken xs: Dizi<tam32> =
+f([])` → içteki `[]` yine T014. Bayrak alt-ağaca sızardı; bunun yerine muaf
+düğümler listeye işaretlenir (`t14_muaf`). Tip düğümü elde varken **kesin
+yürüyüş** (`[[]]`+`Dizi<Dizi<T>>` → iç `[]` de muaf; `[1,[]]`+`Dizi<tam32>` →
+muaf DEĞİL), elde yokken (atama) **aşırı muafiyet** — aşırı = EKSİK tanı,
+yanlış tanı değil.
+
+**D-375 ile etkileşim ölçüldü.** `g(xs: Dizi<tam32>)` için `g([])` T014'ü **tam
+bir kez** alır: C argümanı iki kez tip-belirler ama beklenen tipi YALNIZ ikinci
+geçişte yayar. Skaler paramda iki kez alır. Parite için param TİP DÜĞÜMLERİ
+tabloya eklendi (`fn_ptn`).
+
+**İki yanlış-pozitifi kapı yakaladı.** `xs = []` ve `K { xs: [] }` sahte T014
+alıyordu: muafiyet işaretlemem `kontrol_dugum`un ORTASINDAYDI, oysa ATAMA ve
+YAPI_OLUSTUR'un **daha erken dönen** işleyicileri var. Blok fonksiyonun EN
+BAŞINA taşındı. **DERS:** erken-dönüşlü bir dispatch zincirine iş eklerken
+konum bir tercih değil, bir DOĞRULUK koşuludur.
+
+**Port sırasında ikinci kusur — bayat alan yeniden kullanımı.** codegen.kem'de
+hazır görünen `alan_tnode` (D-307) **CHECK yolunda BOŞ**; onu okumak sürücüyü
+`PANIK: dizi sınır ihlali (boyut=0)` ile düşürdü (14 dosya kırmızı). Ayrı
+`alan_tn` eklendi. **DERS:** aynı adlı bir tablo her yolda dolu değildir.
+
+**BİLİNÇLİ SINIR (V1).** T014'ün KENDİSİ 20/20 birebir; ancak C'nin T014 ile
+BİRLİKTE ürettiği **takip tanıları** (T020/T001/T013/E002) self-host'ta çıkmaz —
+`ifade_tip` boş dizi için `"?"` döner ve doktrin gereği susulur. Bu, D-352'den
+beri bilinen **bileşik tip temsili yokluğu**; ayrı iş.
+
+**Kapılar:** `checker_diff` **138/138** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 106/106, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim tip_kontrol 202 / parser 107 / linear 89, **geniş ölçüm 131/131**.
+**Sabotaj:** S85 (T014 tanısı), S86 (kesin tip yürüyüşü → 2 dosya), S87 (atama
+aşırı-muafiyeti) — üçü de kırmızı, `grep` ile kanıtlandı, geri alındı.
+
+**🏁 KAMPANYA EKSENİ KAPANDI.** Self-host tanı kodu **70** (D-350'de 24).
+Kalan iki kod `T015`/`T023` **ÖLÜ** (C parser'ı o şekilleri reddeder) →
+portlanacak tanı kodu KALMADI. Bundan sonrası tip evreni (bileşik tip temsili)
+ya da yeni dil özelliği işidir.
+
+---
+
+## D-375 [YÜKSEK] — Argüman alt-ağacı İKİ KEZ denetlenir; geniş ölçüm 131/131 (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur — küme değil ÇOKLUK.** `kem_os.kem`'de C 11 konumda tanıyı **İKİ KEZ**
+basıyordu, self-host bir kez. Aynı küme, farklı çokluk.
+
+**Yanlış hipotez ölçümle düzeltildi (iki kez).** Önce "tanımsız `dtb`, kapsam
+sorunu" sandım — sütun 59 `dtb` değil **`kdtb_toplam_boyut`** çıktı. Sonra
+"`olarak` iki kez denetliyor" sandım — `olarak`sız da ikileniyordu. Gerçek:
+**bilinen bir işlevin ARGÜMAN alt-ağacı iki kez tip-belirlenir.**
+
+**Yapı ölçüldü, tahmin edilmedi.** `iki(yok(), yok2())` → `a,b,a,b` (arg başına
+DEĞİL, iki TAM geçiş). `iki(s, yok())` → `T002; T001; T002` → 1. geçiş yalnız
+gezinti, 2. geçiş gezinti + per-arg T001. İkilenenler traversal kaynaklı her şey
+(T002/T007/T010/G001/E002); **per-arg T001 ikilenmez.**
+
+**Kritik ayrıntı — durum değiştiren yollar ikilenmez.** `al(tuket(t))` C'de `OK`:
+lineer tüketim İKİLENMİYOR. Naif "iki kez gez" sahte `L002` üretirdi (gerçek bir
+yanlış-pozitif). `tuk_kapali` sayacıyla ön-geçişte tüketim bastırıldı; ön-geçiş
+mevcut geçişin ÖNÜNE eklendiği için eski davranışın tamamı korundu.
+
+**DERS:** çokluk farkı "kozmetik" görünür ama kökü yapısaldır — buradaki kök,
+C'nin argümanları iki kez tip-belirlemesiydi. Ve çokluk paritesini kurarken
+**hangi etkilerin idempotent olması gerektiğini ölçmek şart**: tanı raporlama
+ikilenebilir, lineer tüketim ikilenemez.
+
+**Kapılar:** `checker_diff` **137/137** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 105/105, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim linear 89 / capability 40. **Sabotaj:** S83 (ön-geçiş kapatıldı),
+S84 (tüketim bastırması kaldırıldı) — ikisi de kırmızı, `grep` ile kanıtlandı.
+
+**🎯 GENİŞ ÖLÇÜM 131/131 — TAM PARİTE.** `stdlib` + `stdlib/temel` +
+`test/ornekler` + `kütüphane` + `test/moduller` yüzeyinde C oracle ile self-host
+checker arasında **sıfır fark**: ne yanlış-pozitif ne eksik tanı. `kem_os.kem`
+dâhil. Kalan tek resmî tanı kodu: **T014** (boş dizi bağlamı) — korpus dışı
+şekillerde ortaya çıkabilir.
+
+---
+
+## D-374 [YÜKSEK] — Yerleşik imza tablosu: T010 + T001 yerleşik çağrılarda açıldı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** Self-host'ta yerleşiklerin (built-in) yalnız **ADI** vardı, imzası yoktu
+→ `fn_psay_bul` -1 dönüyor, arite ve argüman-tipi denetimi HİÇ çalışmıyordu.
+Ölçüldü: `yazdir_tam("metin")` → C `T001`, self `OK`; `yazdir_tam()` → C `T010`,
+self `OK`. Beş şeklin beşi de sessizdi.
+
+**Çözüm — yeni makine YOK.** Mevcut `fn_ad`/`fn_psay`/`fn_ptip`/`fn_donus` tablosu
+(T010 + per-arg T001 makinesi) 47 yerleşik imzayla **tohumlandı**; tanı yolları
+olduğu gibi çalıştı. İmzalar `src/tip_kontrol.c`'den **programatik çıkarıldı**
+(`awk`), elle kopyalanmadı — 47 girişte elle transkripsiyon sessiz hata kaynağı.
+
+**Kapı bir YANLIŞ-POZİTİF yakaladı (bu partinin en değerli anı).** Yerleşikler
+tabloya girince `E013` (çıplak gövdeden ρ-alan işlev çağırma) onları "normal
+kullanıcı işlevi" saymaya başladı → `çıplak işlev f() { ver metin_uzunluk(s); }`
+sahte E013 aldı. **Ayrım eskiden KENDİLİĞİNDEN oluyordu** ("tabloda yok" =
+"yerleşik"); tabloya girince AÇIKÇA yapılmalıydı. `yer_son` eşiğiyle çözüldü
+(tohumlama en başta → yerleşikler `[0, yer_son)` aralığı; yeni paralel dizi yok).
+**DERS:** bir tabloyu genişletmek, o tablonun YOKLUĞUNU sinyal olarak kullanan
+her yeri bozar — `fn_psay_bul(...) < 0` gibi "bulunamadı" testlerini `grep`le.
+
+**Yol üstünde ölçülen ironi:** tohumlayıcıyı yazarken `yerlesik_ekle(p, "arg_sayi",
+"tam32", [])` **T014** verdi (boş dizi bağlamı) — tam da henüz portlamadığım kod.
+Tipli bir `değişken bos: Dizi<metin> = []` ile çözüldü.
+
+**Kapılar:** `checker_diff` **136/136** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 104/104, **LLVM 113/113 ×2** — codegen regresyonu yok) + FIXPOINT,
+`check_kapisi` 210/217 (0 RED), C birim tip_kontrol 202. **Sabotaj:** S81
+(imza tablosu kurulmadı → tc25_01 kırmızı), S82 (E013 muafiyeti kaldırıldı →
+tc16_01 + tc25_01 kırmızı). İkisi de `grep` ile kanıtlandı, geri alındı.
+
+**Geniş ölçüm 130/131** (alan `test/moduller/` ile büyütüldü). `kem_asm_kernel.kem`
+KAPANDI. **Tek kalan sapma:** `kem_os.kem` `T002` kuyruğu (tanımsız ad `dtb` —
+kapsam çözümü). Yanlış-pozitif YOK.
+
+---
+
+## D-373 — AS001 (satıriçi_asm mimari kapısı) self-host'a portlandı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kural.** `satıriçi_asm { mimari: X ... }` etiketi HEDEF mimariyle uyuşmalı;
+uyuşmazsa `AS001`. Amaç: yanlış hedefe **sessizce bozuk makine kodu üretmek
+yerine** derleme hatası. C sırası ölçüldü: aynı düğümde **önce G002, sonra
+AS001** (`güvensiz` dışındaki uyumsuz asm İKİ tanı alır).
+
+**Hedef mimari self-host'ta SABİT `x86_64`.** Bu bir varsayım değil, ölçülmüş
+olgu: C'nin varsayılanı `x86_64`'tür (`KEMGU_HEDEF_MIMARI`) ve **self-host
+sürücüde `--mimari` bayrağı YOKTUR** → hedef gerçekten değişmez. Sürücüye
+`--mimari` eklenirse `as001_kontrol` da güncellenmeli (koda not düşüldü).
+
+**Ölçüm tuzağı:** ilk probe'da `mimari: aarch64` yazdım ve `--mimari aarch64`
+ile İKİ tanı birden aldım — kural bozuk sandım. Gerçek: C'de mimari adı
+**`arm64`**tür (`aarch64` yalnız bayrak değeri olarak kabul edilip `arm64`e
+çevrilir), yani `aarch64` etiketi hiçbir hedefle eşleşmez. Kural doğruydu,
+probe yanlıştı. **Beklenmedik sonuçta önce probe'u doğrula.**
+
+**Etiket parser yan-kanalında** (`asm_node`/`asm_mim`): parser etiketi
+atıyordu; düğüme alan eklemek `--ast` paritesini bozardı.
+
+**Kapılar:** `checker_diff` **135/135** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 103/103, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED).
+**Sabotaj:** S79 (AS001 tanısı), S80 (G002/AS001 SIRASI ters çevrildi) — ikisi
+de kırmızı, `grep` ile kanıtlandı, geri alındı.
+
+**Geniş ölçüm 97/99** (D-372'de 96). Kalan 2 sapmanın ikisi de **eksik tanı**:
+`kem_asm_kernel.kem` `T001 18:16` — `yazdir_tam` gibi **built-in'lerin PARAMETRE
+TİPİ** self-host'ta yok (built-in imza tablosu işi); `kem_os.kem` `T002` kuyruğu
+(tanımsız ad `dtb` — kapsam çözümü). İkisi de ayrı alt-sistem.
+
+---
+
+## D-372 [YÜKSEK] — CP005 YANLIŞ-POZİTİFİ: `yetki<R>` parametresi lineerdir (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** Self-host `test/ornekler/mmio_smoke.kem` ve `virtio_selfhost_rw.kem`'i
+sahte `CP005` ("yetki tüketilmedi") ile reddediyordu (C: `OK`). D-371'de ölçüm
+alanı `kütüphane/`i de kapsayacak şekilde genişletilince ortaya çıktı.
+
+**Kök neden — TEK SATIR.** `param_lineer_mi` yalnız `TIP_TEKKEZ` ve lineer yapıyı
+sayıyordu; **`TIP_YETKI` yoktu**. Dolayısıyla `işlev f(y: yetki<MMIO>)` çağrısı
+argümanı TAŞIMIYOR (tüketmiyor) sayılıyor, `y` scope sonunda "tüketilmedi"
+görünüyordu. **D-365'in eksik kalan yarısı:** o parti `TIP_YETKI`'yi
+`tip_node_tekkez_mi`ye eklemişti (bağlamanın kendisi lineer) ama **parametre
+lineerliğine** eklememişti (taşıma noktası). İki ayrı yüklem, biri güncellendi.
+
+**DERS:** "yetki artık mevcut lineer makinenin TAMAMINI kullanıyor" (D-365)
+iddiası **yüklem yüklem doğrulanmalıydı**. Bir tip yeni bir lineer sınıfa
+katılırken, lineerliği soran HER yüklemi `grep` ile listele — `tip_node_tekkez_mi`,
+`param_lineer_mi`, `deg_lineer_mi` ayrı ayrı karar veriyor.
+
+**Kapılar:** `checker_diff` **134/134** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 102/102, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED),
+C birim: capability 40, linear 89, mmio 23. **Sabotaj S78** (TIP_YETKI dalı
+kaldırıldı) → `tc23_01` kırmızı; `grep` ile uygulandığı kanıtlandı, geri alındı.
+
+**Geniş ölçüm (99 dosya) sonucu: YANLIŞ-POZİTİF KALMADI** (96/99). Kalan 3
+sapmanın hepsi **EKSİK tanı** (self-host sessiz, C konuşuyor) — daha hafif sınıf:
+`AS001` self-host'ta hiç yok (2 dosya) + `kem_os.kem` T002 kuyruğu.
+
+---
+
+## D-371 [YÜKSEK] — G005 YANLIŞ-POZİTİFİ: doğrudan lambda argümanı kaçış değildir (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+1).
+
+**Kusur.** Self-host `test/ornekler/kanal_mesaj.kem` gibi **GEÇERLİ** programları
+`G005` ile reddediyordu (C: `OK`). D-370'te ölçüm alanı `test/ornekler/`e
+genişletilince ortaya çıktı; D-324'ten kalma, regresyon değil.
+
+**Kök neden.** C `escape.c` çağrı argümanlarını ESC_CAGIRAN'a terfi ettirirken
+**LAMBDA argümanını bilinçli olarak MUAF tutar** (kaynaktaki yorum: lambda hiçbir
+zaman serbest edilmez → terfi gereksiz; üstelik `görev_başlat(|| ...)` desenini
+G005'te yanlış-pozitif yapar, görev'in kendi R-YAKALAMA-THREAD sahiplik modeli
+vardır). D-324 portu C'nin tetikleyicilerini ölçerek taklit etmişti ama bu
+**istisnayı** almamıştı.
+
+**Daraltma ölçüldü, uydurulmadı** (3 şekil): `al(|| s)` doğrudan argüman → **G005
+YOK**; `değişken f = || s; al(f)` ada bağlı → **G005 VAR** (16:39); `ver || s`
+→ **G005 VAR** (21:9). Yani muafiyet YALNIZ doğrudan lambda argümanına ait —
+ada bağlanmış lambda ve `ver` yolu aynen korunur.
+
+**DERS (D-356/S31'in tekrarı, ölçülerek yaşandı):** ilk sabotaj (S75) **SESSİZ
+kaldı** — `al(...)` bilinen-işlev yolundan giderken `görev_başlat(...)` AYRI bir
+built-in çağrı yolundan gidiyor ve korpusta o şekil yoktu. `görev_başlat(|| s)`
+örneği eklenince S75 kırmızıya döndü. **İki kod yolu varsa korpusta İKİSİ de
+olmalı;** sabotajın sessizliği kuralın doğruluğu değil, korpusun eksikliğidir.
+
+**Kapılar:** `checker_diff` **133/133** (0 muaf), sürücü 4 mod × 2 sürücü
+(CHECK 101/101, LLVM 113/113 ×2) + FIXPOINT, `check_kapisi` 210/217 (0 RED).
+**Sabotaj:** S75 (built-in çağrı yolu muafiyeti), S76 (bilinen-işlev yolu
+muafiyeti), S77 (muafiyet aşırı genişlerse ada bağlı lambda kaçar) — üçü de
+kırmızı, `grep` ile uygulandıkları kanıtlandı, geri alındı.
+
+**Ölçüm alanı genişletildi (99 dosya: stdlib + ornekler + kütüphane).** Kalan
+sapmalar — hepsi EKSİK tanı ya da ayrı sınıf, bu partide DEĞİL:
+`AS001` self-host'ta hiç yok (2 dosya); `kem_os.kem` T002 kuyruğu; **`CP005`
+yanlış-pozitifi** `mmio_smoke.kem` + `virtio_selfhost_rw.kem`'de (self-host
+"yetki tüketilmedi" diyor, C `OK`) → sıradaki iş.
+
+---
+
+## D-370 [YÜKSEK] — T011 portlandı; imza/gövde tanı SIRASI iki geçişe ayrıldı (2026-08-06)
+
+**ETKİ:** `selfhost/checker.kem`, `selfhost/codegen.kem`, `test/check_korpus/` (+2).
+
+**T011 (bilinmeyen tip).** Tip-adı EVRENİ ölçümle kuruldu (10 probe): yerleşik
+skalerler + `yapı` + `çeşit` + generic param adları + yetenek kaynak tipleri
+(`MMIO`/`Dosya`/`Soket`/`Bellek`/`Donanim`/`OTP_Anahtar`) + küresel ad tablosu.
+**`özellik` adı EVRENDE DEĞİL** — ölçüldü: `işlev f(x: Say)` C'de T011 verir;
+özellik bir BOUND'dur, tip değil. Generic param adları yeni `gp_ad` yan-kanalına
+yazılır (parser; düğüme alan eklemek `--ast` paritesini bozardı). Yan etki:
+annotasyon bilinmeyen tipse **T001 bastırılır** — C tipi HATA'ya düşürdüğü için
+T001'e hiç gelmez; bastırmasız tek kusur iki tanı üretirdi.
+
+**Asıl bulgu — SIRA, küme değil.** T011 eklenince küme birebir tuttu ama SIRA
+tutmadı. Ölçüm (`T030@8` imza + `T011@5` gövde → **8 önce**): C tipleri
+`pre_populate`de çözer, yani **TÜM imza/alan tanıları TÜM gövde tanılarından
+önce** çıkar; ön-geçiş de kendi içinde ÖNCE tüm `yapı`/`çeşit`, SONRA tüm
+`işlev`. D-369 imza gezintisini `kontrol_govde` içine koymuştu — küme doğru,
+sıra yanlıştı. Korpusta imza-hatası ile gövde-hatası **aynı dosyada olmadığı
+için gizli kalmıştı**; T011 ikisini de üretebilen ilk kod olduğu için ortaya
+çıktı. `kontrol_imza` + `kontrol_yapi_alanlari` ayrıldı, `kontrol_ust` üç
+geçişli oldu (yapılar → imzalar → gövdeler).
+
+**DERS (D-350'nin tekrarı, yeni yüzü):** yeşil `checker_diff` "kural doğru"
+demek değil; **tanı SIRASI da bir sözleşmedir** ve tek-tanılı korpus dosyaları
+onu hiç sınamaz. Yeni kural eklerken korpusa **iki farklı geçişten tanı üreten**
+tek dosya koy.
+
+**Yan bulgu (bu partiden DEĞİL, kayda geçsin):** ölçüm alanını `test/ornekler/`e
+genişletince `kanal_mesaj.kem`'de self-host `G005 49 28` verirken C `OK` diyor —
+**yanlış-pozitif**. Önceki commit'te de var (regresyon değil, D-324'ten kalma).
+Ayrıca `kem_asm_kernel.kem`/`kem_kullanici.kem`'de `AS001` self-host'ta hiç yok.
+
+**Kapılar:** `checker_diff` **132/132** (0 muaf), sürücü koşum takımı 4 mod × 2
+sürücü (TOKEN 22/22, PARSE 13/13, CHECK 100/100, LLVM 113/113 ×2) + FIXPOINT,
+`check_kapisi` 210/217 (0 RED), C birim: tip_kontrol 202, parser 107, linear 89,
+drf 54, capability 40, sabitsüre 39, mmio 23.
+
+**Sabotaj kapıları:** S72 (T011 tanısı → tc21_01 kırmızı), S73 (yetenek kaynak
+evreni → 5 dosya kırmızı), S74 (imza ön-geçişi → tc20_01 + tc21_01 kırmızı).
+Üçü de `grep SABOTAJ-S7n` ile uygulandığı kanıtlandı, sonra geri alındı.
+
+**Kapsam:** self-host tanı kodu **68** (D-369'da 66). Kalan gerçek kod: **T014**
+(boş dizi bağlamı). `T015`/`T023` ÖLÜ (C'de parser şekli reddediyor).
+
+---
+
+## D-369 [YÜKSEK] — T030 + T031 portlandı; İMZA-ÜSTÜ tip denetimi eksikti (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Beklenen engel çıkmadı:** D-368'de "TIP_KULLANICI adı düğümde yok, yan-kanal
+gerekir" demiştim. Ölçüm düzeltti — **ad çocuk[0]'daki TANIMLAYICI düğümünde**
+(`TIP_KULLANICI` → çocuk[0]=ad, çocuk[1..]=tip argümanları). C'nin `--ast`'i de
+a_deg'i boş basıyor, yani self-host zaten sadıktı. Yalnız **bound tablosu** için
+yan-kanal gerekti (`atla_tip_paramlar` bound'ları PARSE+DISCARD ediyordu).
+
+**Kural:** `yapı Vektor<T: Say>` ise `Vektor<Tam>` ancak `uygula Say için Tam`
+varsa geçerli (T030); bound adı hiç `özellik` değilse T031. Özellik/uygula
+kayıtları AST'den türetildi (yan-kanal gerekmedi): `UYGULA` düğümü
+çocuk[0]=hedef tip, çocuk[1]=özellik.
+
+### ASIL BULGU: işlev DÖNÜŞ ve PARAMETRE tipleri hiç denetlenmiyordu
+
+T030/T031 ilk denemede tetiklenmedi. Sebep tekil bir kural eksiği değildi:
+`kontrol_govde` **yalnız BLOK çocuğuna** iniyordu → **imza üstündeki hiçbir tip
+düğümü gezilmiyordu.** Yani `işlev f() -> görev<kesirli64>` (ölçüldü: C DRF001
+verir) ve `işlev f(g: görev<kesirli64>)` self-host'ta **sessizce geçiyordu**.
+
+Bu, D-366'nın (DRF) ve D-367'nin (CT006) de eksik kalan yanıydı — o partilerde
+tanılar yalnız `değişken` annotasyonu yolundan çıkıyordu. Tek satırlık gezinti
+düzeltmesi **dört partinin** kapsamını genişletti.
+
+**Sabotaj (3):** S69 T030 (130→129), S70 T031/T030 ayrımı (129 — yanlış KOD
+üretildi), S71 imza-üstü gezinti (129 — **iki tanı birden düştü**).
+
+**Probe 6/6 birebir** (bound ihlali / karşılanmış / bilinmeyen bound / generic
+işlev / dönüş tipi DRF001 / parametre tipi DRF001).
+
+**Sonuç:** self-host checker kod kapsamı **68 → 70/74**. Kalan **4 kod**:
+T011, T014 + 2 ölü (T015/T023) → **gerçekte 2**, ikisi de tip-evreni işi
+(T011 tam tip-adı evreni, T014 beklenen-tip yayıcısı).
+
+---
+
+## D-368 — M004 portlandı: ÇEŞİT ALT-SİSTEMİ KAPANDI (4/4) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
+
+**Kural:** çeşit varyantı yapıcısında M003 (arite) geçtikten SONRA her argüman
+kendi payload tipiyle karşılaştırılır; konum **argüman düğümü**, birden çok
+uyumsuz argüman **birden çok tanı** verir.
+
+**Gereken altyapı:** D-357'nin `cv_*` yan-kanalına payload **TİP** tablosu
+(`cv_pb` taban + `cv_pt` düz tip dizgileri). `parse_cesit` payload tip düğümlerini
+zaten `kids`e topluyordu; oradan `tip_str` ile dizgiye çevrildi. TIP_BASIT dışı
+("?") karşılaştırmadan muaf — emin olmadığımız yerde susuluyor.
+
+**Beklenen tip BAĞLAM olarak geçirilmeli:** `Dar(tam8)` varyantına `5` literali
+geçerlidir (C literali dar tipe uyarlar). Sabotaj S68 bunu ölçtü: bağlam
+kaldırılınca `Dar::Kucuk(5)` **sahte M004** aldı.
+
+**Sabotaj (2):** S67 M004 (128→127), S68 beklenen-tip bağlamı (127 —
+**yanlış-pozitif yönünde**).
+
+**Probe 6/6 birebir** (tek uyumsuz / ikinci uyumsuz / her ikisi / geçerli /
+dar-literal uyarlaması).
+
+**Sonuç:** self-host checker kod kapsamı **67 → 68/74**. **ÇEŞİT ALT-SİSTEMİ 4/4
+KAPANDI** (M001-M004). Kalan **6 kod**: T011, T014, T030, T031 + 2 ölü
+(T015/T023) → **gerçekte 4**, hepsi tip-evreni/generic-bound işi.
+
+---
+
+## D-367 — CT001-CT008 portlandı: SABİTSÜRE ALT-SİSTEMİ KAPANDI (8/8) (2026-08-06)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Plan "iki parça" idi, ÖLÇÜM TEK PARÇAYA İNDİRDİ.** Taint yayılımının pahalı
+olacağını varsaymıştım; C'nin kuralı ölçülünce **tek özyineli yüklem** olduğu
+görüldü: aritmetik/bit operandlarından biri sabitsüre ise sonuç da sabitsüre.
+Karşılaştırma ve `ifşa(...)` bu yolun DIŞINDA (ilki mantıksal üretir, ikincisi
+declassify eder). Yayılım eklenince kalan tek fark da kapandı.
+
+**Kurallar:** CT001 dallanma · CT002 indeksleme · CT003 implicit akış ·
+CT004 `/`,`%` · CT005 üretici aritesi · CT006 sarılan tip CT-yetenekli değil
+(annotasyon + yapıcı, İKİ tanı) · CT007 `ifşa` aritesi/operandı · CT008 kaydırma
+miktarı.
+
+**Yol üstünde bulunan MEVCUT YANLIŞ-POZİTİF:** `ifşa` (ş ile!) self-host'un
+built-in listesinde YOKTU → her geçerli declassify çağrısı **sahte T002** alıyordu.
+D-361'de ASCII `ifsa` denenmiş ve "C de tanımıyor" diye elenmişti — **yazım
+yanlıştı**, doğrusu ölçülerek bulundu. Bu, D-361'deki eleme gerekçesinin bir
+kısmını geçersiz kılıyor.
+
+**Yan bulgu (T021):** `sabitsüre<T>` koşulu mantıksal olmadığı için C **T021 +
+CT001** verir. Self-host'ta `yerel_tip` sabitsüre'yi "?"e düşürdüğünden T021 hiç
+çıkmıyordu; sabitsüre bilgisiyle o da kapandı.
+
+**Korpus dosyası yazarken ölçüm iki satırı eledi:** `sabitsüre<karakter>` ve
+`sabitsüre<mantıksal>` + `sabitsüre_olustur(...)` C'de **T001** veriyor
+(üreticinin dönüş çıkarsaması tamsayı literaline bağlı) — CT kuralı değil, ayrı
+bir tip-çıkarsama sınırı. "Temiz" dosyaya alınmadı, gerekçesi dosyaya yazıldı.
+
+**Sabotaj (3):** S64 taint yayılımı (127→126), S65 CT008 (126), S66 `ifşa`nın
+declassify etmesi (**yanlış-pozitif yönünde**: geçerli tüm kullanımlar CT003 aldı).
+
+**Probe 12/12 birebir.**
+
+**Sonuç:** self-host checker kod kapsamı **59 → 67/74**. **SABİTSÜRE ALT-SİSTEMİ
+8/8 KAPANDI.** Kalan **7 kod**: M004, T011, T014, T030, T031 + 2 ölü (T015/T023).
+**Yani gerçekte kalan 5.** C tarafı regresyonsuz: sabitsure 39/39.
+
+---
+
+## D-366 — DRF001-DRF007 portlandı: DRF ALT-SİSTEMİ KAPANDI (7/7) (2026-08-05)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Kurallar:** `görev<T>`/`kanal<T>` V1'de **kesirli T taşıyamaz** (DRF001/DRF006) —
+runtime sonucu tamsayı yazmacından okur (x0/rax), kesirli değer v0/xmm0'dadır →
+bitcast **sessiz çöp** verirdi. C bu kısıtı **İKİ yolda ayrı ayrı** uyguluyor
+(annotasyon/tip düğümü + yapıcı çağrısı) ve **iki tanı birden** üretiyor.
+Ayrıca arite kuralları (DRF002 `görev_birleştir`, DRF003 `kanal_gönder`,
+DRF004 `kanal_al`, DRF005 `dondur`) ve yön güvenliği (DRF007: `alan<T>` alıcı
+ucundan gönderim yasak).
+
+**Konumlar C'den ölçülerek alındı; ÜÇÜ FARKLI düğümde:**
+- DRF001 (yapıcı yolu) → **argüman** düğümü
+- DRF006 (yapıcı yolu) → **çağrı** düğümü
+- DRF007 → **argüman** düğümü (ilk denemede çağrı düğümüne koymuştum: 1 sütun
+  kaydı, C kaynağına bakılarak düzeltildi)
+
+**Yön sinyali TİPTEN OKUNAMADI (ölçüm):** `alan<T>` annotasyonu self-host'ta
+`TIP_KULLANICI`ya düşüyor ve **kullanıcı-tipi adı düğümde tutulmuyor**
+(`--parse` dump'ında a_deg boş). Bu yüzden yön **değerden** okunuyor:
+`alan(k)` / `gönderen(k)` projeksiyon çağrısı → `yerel_yon` yan-dizisi.
+
+**Yeni alanlar:** `yerel_yon` (kanal ucu yönü), `drf_bek` (aktif
+`görev<kesirli*>`/`kanal<kesirli*>` annotasyon bağlamı — `dizi_bek` deseni).
+
+**Sabotaj (4):** S60 annotasyon yolu (125→124), S61 yapıcı yolu DRF001 (124),
+S62 DRF007 (124), S63 yön ayrımı (**yanlış-pozitif yönünde**: `gönderen`
+ucundan gönderim reddedildi).
+
+**Probe 8/8 birebir** (7 kod + temiz şekil).
+
+**Sonuç:** self-host checker kod kapsamı **52 → 59/74**. **DRF alt-sistemi 7/7
+KAPANDI.** Kalan 15 kod: sabitsüre (8), M004, T011/T014, T030/T031 + 2 ölü.
+C tarafı regresyonsuz: drf 54/54, gorev_rt 16/16.
+
+---
+
+## D-365 — CP005 portlandı: MMIO + YETKİ ALT-SİSTEMİ KAPANDI (5/5) (2026-08-05)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
+
+**Ölçümle çıkan asıl bulgu — CP005 YENİ BİR KURAL DEĞİL.** C'de üç ayrı yerde,
+mevcut lineer tanıların **yetki karşılığı** olarak üretiliyor:
+
+| lineer tanı | yetki bağlamasında |
+|---|---|
+| L002 (çift tüketim) | **CP005** |
+| L001 (tüketilmedi) | **CP005** |
+| L004 (lineere referans) | **CP005** |
+
+Yani gereken şey yeni bir analiz değil, **mevcut makineye yetki'yi sokmak + kod
+ikamesi**. Bu, D-313'ün `yapı tekkez` için yaptığının aynısı (ayrı kod yolu YOK).
+
+**Uygulama:** `tip_node_tekkez_mi` artık `TIP_YETKI`yi de sayıyor (C
+`tip_lineer_mi` ile hizalı) → yetki bağlamaları lineer dilime giriyor ve
+L001/L002/L004/L-COND/L-LOOP makinesinin **tamamı** onlar için de çalışıyor.
+Yeni bit `lin_yet` yalnız **raporlanan kodu** seçiyor (`lin_kod`).
+
+**Tüketim/ödünç ayrımı ölçüldü:** `geri_al(y)` **tüketir**; `mmio_*(y, ...)` ve
+`bölge_al(y, ...)` **ödünç alır** (tüketmez). Sabotaj S59 bunu kapıladı:
+`geri_al` tüketmeyince `tc17_02`'deki geçerli kod sahte CP005 aldı.
+
+**Sabotaj (3):** S57 kod ikamesi (123→122; CP005 yerine L001/L002/L004 çıktı),
+S58 yetkinin lineer sayılması (122), S59 `geri_al` tüketimi (**yanlış-pozitif
+yönünde**, geçerli dosyalar kırıldı).
+
+**Probe 9/9 birebir** — üç CP005 şekli + tekkez'in L001/L002'sinin BOZULMADIĞI
+(kod ikamesi yalnız yetki bağlamasında).
+
+**Sonuç:** self-host checker kod kapsamı **51 → 52/74**.
+**MMIO + yetki alt-sistemi 5/5 KAPANDI** (MM001-003, CP004, CP005).
+Kalan 22 kod: sabitsüre (8), DRF (7), M004, T011/T014, T030/T031 + 2 ölü.
+C tarafı regresyonsuz: linear 89/89, capability 40/40.
+
+---
+
+## D-364 — MMIO + yetki intrinsikleri portlandı: MM001/MM002/MM003 + CP004 (2026-08-05)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+D-363'ten sonra kalan iş "alt-sistem" sınıfındaydı; ilk alt-sistem olarak
+MMIO+yetki seçildi (kem_os'un canlı kullandığı yüzey, lineer altyapı hazır).
+
+**Kurallar (6 MMIO built-in'i: 16/32/64 × oku/yaz):**
+- `mmio_okuN(y: yetki<MMIO>, adres)` 2 argüman · `mmio_yazN(y, adres, değer)` 3
+- **MM001** arite (ÇAĞRI düğümü, erken dönüş) · **MM002** arg0 `yetki<MMIO>` değil
+  (ARG düğümü) · **MM003** adres/değer tamsayı değil (ARG düğümü)
+- **CP004** `geri_al` tam 1 argüman (ÇAĞRI) / operandı `yetki<R>` (ARG)
+
+**Yeni yan-dizi `yerel_yet`:** bağlamanın `yetki<R>` KAYNAK adı ("" = yetki değil).
+MM002 "kaynak MMIO mu" sorusunu bununla yanıtlıyor. Muhafazakârlık: yalnız
+**kesin** olduğumuzda konuşuyoruz — `kesin_yetki_degil` bilinen skaler ya da
+yetki-olmayan bir bağlama gerektiriyor; emin olunamayan ifade → susuluyor.
+
+**CP005 BU PARTİDE YOK (bilinçli):** `yetki<R>`nin çift tüketimi lineer izleme
+ister. Ölçüldü: `param_lineer_mi` TIP_YETKI'yi zaten sayıyor ama `deg_lineer_mi`
+saymıyor; ayrıca kod L002 değil **CP005** olmalı. Mevcut lineer makineye
+yetki-ayrımlı bir kod yolu eklemek ayrı bir adım — tahminle yazılmadı.
+
+**Sabotaj (5):** S52 MM001 (122→121), S53 MM002 (121), S54 MM003 (121),
+S55 MM002'nin "kaynak MMIO" ayrımı (**yanlış-pozitif yönünde**: geçerli
+`yetki<MMIO>` kullanımları reddedildi), S56 CP004 (121).
+
+**Probe 7/7 birebir** (CP005 içeren 2 şekil hariç — kapsam dışı, bilinçli).
+
+**Sonuç:** self-host checker kod kapsamı **47 → 51/74**; korpus **90 dosya**,
+kapı **122** (0 muaf). Kalan 23 kodun 2'si ölü (T015/T023).
+C tarafı regresyonsuz: capability 40/40, mmio 23/23.
+
+---
+
+## D-363 — T041 (private-by-default) portlandı: MODÜL ALT-SİSTEMİ KAPANDI (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/checker_diff_harness.sh`.
+
+**Kural:** dosya-modülünün `genel` işaretsiz üyeleri **çapraz-modül erişilemez**
+(private-by-default). Modülün kendi içinden kardeşler görünür; dosya-içi
+`modül m { }` blokları C'de de denetlenmiyor.
+
+**Engel:** `genel` düğüme YANSIMIYORDU. `parse_genel` → `parse_disa_govde`
+**çıplak tanımı** döndürüyor (DISA sarmalı yok) → `genel işlev f` ile `işlev f`
+self-host'ta **ayırt edilemiyordu**. Yan-kanal `gen_node` eklendi (D-352/353/358
+deseni); `modul_yukle` her dosya-modülünün kendi ayrıştırıcısından (`mp`) okuyup
+`genel` OLMAYAN üyeleri `priv_mod`/`priv_ad`'e kaydediyor.
+
+**Sıra:** T016 (modül yok) → T041 (modül var, üye özel). T016 tetiklenirse erken
+dönülür — C'nin sırası da böyle (`yol_modul_scope_coz` başarısızsa T041'e gelinmez).
+
+**Sabotaj (2):** S50 T041 (120→119), S51 `genel` muafiyeti (**birçok geçerli dosya
+kırıldı** — muafiyetin yanlış-pozitif koruması olduğu ölçüldü).
+
+### MUAFİYET LİSTESİ BOŞALDI
+
+`checker_diff` **120/120, 0 muaf**. Modül yüzeyi üç adımda tamamen kapandı:
+D-361 (seçili import + T042), D-362 (runtime UTF-8 yolu + T040 + T016),
+D-363 (T041). Yeni bir muafiyet eklenirse gerekçesi DECISIONS_LOG'a yazılmalı.
+
+**Sonuç:** self-host checker kod kapsamı **46 → 47/74**. Kalan 27 kodun **2'si ölü**
+(T015/T023) ve kalan 25'in **23'ü** dört alt-sistemin tip temsiline bağlı
+(CT*/DRF*/MM*+CP*), 2'si tip evreni (T011/T014) — artı M004 ve T030/T031.
+**Modül kümesi tamamlandı; tek tek portlanabilecek genel-amaçlı kod KALMADI.**
+
+---
+
+## D-362 [YÜKSEK] — Runtime UTF-8 yol onarımı (`kütüphane/`) + T040 + T016 (2026-08-04)
+
+**ETKİ:** `runtime/kdl_runtime.c`, `selfhost/codegen.kem`, `selfhost/checker.kem`,
+`test/checker_diff_harness.sh`.
+
+### Kök neden: runtime `fopen` UTF-8 yolu açamıyordu
+
+D-361, T040'ın "modül bulunamadı" öncülünün YANLIŞ olduğunu göstermişti. Kök neden
+ölçüldü ve onarıldı: **Windows'ta `fopen` ANSI codepage kullanır**, dolayısıyla
+UTF-8 yol `kütüphane/dizi.kem` **açılamaz**. `src/ana.c` bunu bildiği için kendi
+`dosya_ac_utf8`'ini taşıyordu; `runtime/kdl_runtime.c` ise **düz `fopen`**
+kullanıyordu → self-host derleyici `kütüphane/` altındaki modülleri **sessizce**
+yükleyemiyordu.
+
+**Onarım:** `kdl_fopen_utf8` (ana.c'nin deseni: `MultiByteToWideChar` + `_wfopen`,
+dönüşüm başarısızsa düz `fopen`'a düşer) ve **8 çağrı yerinin tamamı** ona çevrildi.
+
+**ÖNCE/SONRA ÖLÇÜMÜ (aynı IR, iki farklı runtime objesi):**
+```
+dosya_var_mi("kütüphane/dizi.kem") → ESKİ runtime: exit 7  (açılamadı)
+                                     YENİ runtime: exit 42 (açıldı)
+```
+
+**Bayat-obje tuzağı yaşandı ve atlatıldı:** `git stash pop` sonrası
+`mingw32-make build/kdl_runtime.o` **"up to date"** dedi — obje ESKİ kaynaktan
+kalmıştı. CLAUDE.md'nin uyardığı tuzak; `rm -f` + yeniden derleme ile doğrulandı.
+
+### Açılan tanılar
+
+- **T040** (modül yüklenemedi) — artık **sıfır yanlış-pozitif** (D-361'de 4 tane
+  vardı). C İKİ KEZ raporluyor (ana.c'de iki yükleme geçişi); parite için ikisi de.
+- **T016** (modül bulunamadı) — `X::y`de X ne çeşit ne modülse. Modül adları üç
+  kaynaktan: yüklenen `kullan`lar (tam yol + **son segment**), `modül m` blokları,
+  ve **alias**lar (`kullan m olarak d` — parser onu atıyordu, yan-kanal eklendi).
+  İç içe `a::b::c` yolunda ara düğüm YOL olduğu için self-host **susar** (C modül
+  zinciriyle çözer; emin olunamayan yerde tanı üretilmez).
+
+**Sabotaj (3):** S47 T040 (119→118), S48 T016 (118), S49 modül-adı kaydı
+(**birçok geçerli dosya sahte T016 aldı** — kaydın yanlış-pozitif koruması olduğu
+ölçüldü).
+
+**Muafiyet listesi 2 → 1:** `ana_kutuphane.kem` kapandı. Kalan tek muaf
+`ana_gizli.kem` (T041 — `genel` görünürlüğü portlanmadı).
+
+**Sonuç:** self-host checker kod kapsamı **44 → 46/74**; kapı **119 dosya**
+(1 muaf); modül yüzeyi **31/32**.
+
+---
+
+## D-361 [YÜKSEK] — Modül yüzeyi ölçüldü: 3 YANLIŞ-POZİTİF onarıldı + T042 (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/checker_diff_harness.sh`.
+
+D-360'ın önerdiği modül kümesine (T016/T040/T041/T042) girmeden önce yüzey ölçüldü:
+`test/moduller/` (32 dosya) C oracle'ına karşı koşuldu → **6 sapma, İKİ YÖNDE**.
+Kritik olan yön beklenmedikti: **self-host GEÇERLİ programları reddediyordu.**
+
+### Onarılan yanlış-pozitifler (self-host C'den KATI — daha ciddi sınıf)
+
+1. **Eksik built-in'ler (6).** `bölge_al`, `kanal_oluştur`, `gönderen`, `alan`,
+   `vektor_ve_azalt`, `vektor_veya_azalt` self-host'un `builtin_ekle` listesinde
+   yoktu → geçerli çağrılar **sahte T002** alıyordu (`kap.kem`'de 2 hata ölçüldü).
+   Liste C ile karşılaştırılarak tamamlandı. (`ifsa` ve `bölge_serbest` EKLENMEDİ —
+   probe: C de onları tanımıyor.)
+2. **Seçili import (`kullan m::{a,b}`).** Parser seçilen adları **atıyordu**
+   ("dump'ta yok") → niteliksiz gelen `topla` sahte T002 alıyordu
+   (`ana_secili.kem`). Yan-kanal `si_ad`/`si_yol` eklendi (cv_* deseni).
+
+### Portlanan tanı
+
+3. **T042** — aynı ad birden çok modülden seçili-import edilirse çıplak kullanımı
+   belirsiz. `si_yol` sayesinde "aynı ad, FARKLI modül" ayrımı yapılabiliyor.
+   Öncesinde self-host burada T042 yerine **T002** veriyordu (`ana_belirsiz.kem`):
+   doğru konum, yanlış kod.
+
+### T040 DENENDİ ve GERİ ALINDI — sessiz atlama bir runtime kusurunu maskeliyormuş
+
+`modul_yukle`'nin "bulunamadı → sessizce geç" davranışını T040'a çevirmek
+**4 yanlış-pozitif** üretti (`dizi_*.kem`). Kök neden ölçüldü: C `ana.c`
+**`MultiByteToWideChar`** kullanıyor, çünkü **Windows'ta `fopen` ANSI codepage'e
+düşer ve UTF-8 `kütüphane/` yolunda BAŞARISIZ olur**. Self-host'un
+`dosya_var_mi`/`dosya_oku` runtime'ı bu dönüşümü yapmıyor → `kütüphane/`
+modülleri **sessizce yüklenmiyor**. Yani T040 sağlam değil: doğru kural, yanlış
+öncül. **Sıra: önce runtime UTF-8 yol onarımı, sonra T040.** Bu, "sessiz atlama"nın
+altında yatan gerçek kusuru göstermesi bakımından kayda değer.
+
+### Kapı genişletildi
+
+`checker_diff` artık `test/moduller/`i de kapsıyor: **88 → 118 dosya**
+(2 belgeli muafiyet: `ana_gizli` T041 portlanmadı, `ana_kutuphane` runtime'a bağlı).
+Muafiyet listesi kapanınca boşalmalı.
+
+**Sabotaj (3):** S44 eksik built-in (118→117, `kap.kem` sahte T002'ye döndü),
+S45 seçili-ad kaydı (117 — hem `ana_secili` hem `ana_belirsiz`),
+S46 T042 (117).
+
+**Sonuç:** self-host checker kod kapsamı **43 → 44/74**; kapı **88 → 118 dosya**;
+modül yüzeyi 26/32 → **30/32**.
+
+---
+
+## D-360 — Kalan tanı kodlarının ULAŞILABİLİRLİK taraması + E013 portu (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+1).
+
+### 1) `--token` çapraz ölçümü: temiz
+
+D-359'un yöntemi lexer'a uygulandı — **235 gerçek dosyanın tamamında** `--token`
+paritesi birebir (`lex_korpus` 22 dosyalıkken). Sapma YOK; lexer sağlam.
+
+### 2) Kalan 31 kodun ulaşılabilirlik taraması — "kalan iş"in gerçek boyutu
+
+Yöntem: her kod için C'nin kendi test paketinde bir tanık var mı (`grep` test/*.c),
+sonra tanıksızlar için doğrudan probe.
+
+**ÖLÜ (2) — C'de ulaşılamaz, PORTLANMAYACAK:**
+`T015` (annotasyonsuz lambda parametresi → parser P013+P011),
+`T023` (`ver` işlev dışında → parser P001). D-359'da ölçüldü, burada test-paketi
+kanıtıyla teyit edildi (ikisinin de testi YOK).
+
+**ULAŞILABİLİR (29) — dördü tanıksızdı, probe ile doğrulandı:**
+`M004` (`S::Bir("a")` → payload tip uyumsuz), `T040` (`kullan yokmodul` → modül
+yüklenemedi), ayrıca `T041`/`T042` (test_llvm'de).
+
+**Alt-sistem sınıflandırması (kalan 29 → 4 altyapı + 6 dağınık):**
+
+| küme | kodlar | gereken altyapı |
+|---|---|---|
+| sabitsüre | CT001-CT008 (8) | `sabitsüre<T>` tip temsili + taint yayılımı |
+| DRF | DRF001-DRF007 (7) | `görev<T>`/`kanal<T>` tip temsili |
+| MMIO + yetki | MM001-003, CP004-005 (5) | `yetki<R>` lineer yetenek tipi |
+| modül/import | T016, T040, T041, T042 (4) | modül scope çözümü + `genel` görünürlüğü |
+| generic/bound | T030, T031 (2) | bound tablosu + uygula kaydı |
+| tip evreni | T011, T014 (2) | tam tip-adı evreni / beklenen-tip yayıcısı |
+| tekil | M004 (1) | varyant payload TİP tablosu |
+
+**Sonuç: "31 kod kaldı" yanıltıcıydı.** Gerçek şekil: **2 ölü**, ve kalan 29'un
+**23'ü yalnız 4 alt-sistemin tip temsiline bağlı**. Genel-amaçlı ucuz port sınıfı
+D-358'de bitti; buradan sonrası alt-sistem işidir.
+
+### 3) E013 portlandı (dağınık kümenin en küçüğü)
+
+C D-257 çıplak-call-rule: `çıplak` işlev ρ-suz C-ABI'dir; normal (ρ-alan) bir
+kullanıcı işlevini çağırırsa codegen `ptr null` geçirir → callee null-bölgeye
+tahsis eder → segfault. Çıplak→çıplak ve çıplak→built-in serbest (ikisi de ρ almaz).
+
+**KRİTİK AYRIM — `cip_bag` `guv_bag`'den AYRI:** `güvensiz` blok bir işlevi
+**çıplak yapmaz**. D-351'de çıplak gövde için `guv_bag` artırılıyordu (tier izni);
+E013 ise ρ-ABI'ye bağlı, ayrı bir sayaç ister. Sabotaj S43 (`cip_bag` → `guv_bag`)
+**ilk turda sessiz kaldı** — korpusta "güvensiz bloktan normal işlev çağrısı" şekli
+yoktu. `tc16_01`'e o şekil eklendi, S43 kırmızıya döndü. **D-356'nın S31 dersinin
+birebir tekrarı** ve bu kez ayrımın kendisi ölçüldü.
+
+**Sabotaj (2):** S42 E013 (88→87), S43 `cip_bag`↔`guv_bag` karışımı (87 — yalnız
+korpus genişletildikten sonra).
+
+**Probe 4/4 birebir:** çıplak→normal (E013), çıplak→çıplak, normal→normal,
+çıplak→built-in.
+
+**Sonuç:** self-host checker kod kapsamı **42 → 43/74**; korpus **87 → 88**.
+
+---
+
+## D-359 [YÜKSEK] — `--parse` paritesinde SESSİZ sapma: `küresel` dump'ı + üç ölü tanı (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem` (dump), `test/parse_korpus/` (+1).
+
+**Sıradaki port (T011/T015/T023) ölçülünce İKİSİ ÖLÜ ÇIKTI:**
+- **T015** (`lambda parametre tip annotasyonu gerek`) — C **parser'ı** annotasyonsuz
+  lambda parametresini zaten reddediyor (`|x| x+1` → P013+P011). Checker'daki kola
+  hiçbir kaynak ulaşamıyor.
+- **T023** (`ver işlev gövdesi dışında`) — `ver`i fonksiyon dışına koyan her şekil
+  parser'da P001. `aktif_donus_tipi` yalnız init'te NULL; checker'a ulaşan her `ver`
+  bir işlev ya da lambda gövdesindedir.
+
+İkisi de **C'de ölü kod**. Self-host'a portlanmaları anlamsız olurdu: kapılanamazlar
+(hiçbir korpus dosyası uyandıramaz) ve ulaşılamayan kod ürettirirlerdi. Bu, "kalan 32
+kod" listesinin körü körüne tüketilmemesi gerektiğini gösteriyor — **her kodun önce
+ULAŞILABİLİRLİĞİ ölçülmeli.** (T011 ertelendi: gerçek bir tip-adı evreni ister —
+self-host parser generic tip parametrelerini ATIYOR, dolayısıyla yarım bir port
+`T` üzerinde yanlış-pozitif üretirdi. Ayrı iş.)
+
+**Asıl bulgu — parser kapısı sessizce ayrışıyordu:** `--parse` gate'i 12 dosyada
+yeşilken, elimizdeki **212 gerçek dosya** üzerinde ölçüm **8 SAPMA** gösterdi. Hepsi
+aynı kök: C'de `küresel` ayrı bir düğüm TİPİ **değil** (DUGUM_DEGISKEN + `kuresel_mi`
+bayrağı; `--ast` "DEGISKEN" basar), self-host ise D-253'ten beri ayrı bir `KURESEL`
+düğümü tutuyor. Sapma **önceden vardı** (bu oturumun işi değil) ve `parse_korpus`'ta
+küresel içeren tek dosya olmadığı için hiç görülmedi.
+
+**Onarım:** iç düğüm adı KORUNDU (checker/codegen ona göre dallanıyor — D-356),
+yalnız **dump** eşlendi (`dump_ad`: KURESEL → DEGISKEN). Rename etmek D-356'nın
+E011/E012/T024 dallanmasını ve codegen'in küresel yolunu kırardı.
+
+**Sonuç:** `--parse` paritesi mevcut korpuslar üzerinde **204/212 → 212/212**.
+`parse_korpus` 12 → 13 (`p7_kuresel_ciplak.kem`: küresel + çıplak + gerçekzamanlı
++ güvensiz + `olarak`). Sabotaj S41 (dump eşlemesi kaldırıldı) kapıyı kırmızıya
+döndürüyor.
+
+**DERS (D-350'nin kardeşi):** bir kapının yeşil olması, kapsadığı ŞEKİL kümesinin
+yeterli olduğu anlamına gelmez. `checker_diff` 87 dosyada koşarken `--parse` 12
+dosyada koşuyordu; asimetri sapmayı sakladı. **Kapı büyüklüğünü periyodik olarak
+ölç** — mevcut korpusları çapraz koşturmak (check+cg dosyalarını `--parse`'tan
+geçirmek) bedava bir genişletmedir.
+
+---
+
+## D-358 — G002 + G003 + G004 self-host'a portlandı: tier ve temsil kuralları (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+Üçü de **"kabul et, çalışırken çök" senaryolarını derleme zamanına çeken** kurallar
+(çökmezlik #1) — self-host'ta yoklukları bu güvenceyi o yolda geçersiz kılıyordu.
+
+| kod | kural | neden |
+|---|---|---|
+| G002 | `satıriçi_asm` yalnız `güvensiz` blokta | ham makine kodu = tier kapısı |
+| G003 | annotasyonsuz `değişken a = [..]` → `Dizi<T>` parametresine geçirilemez | yığın `[N×T]` vs dinamik `KdlDizi*` → callee yanlış okur (misaligned UB/segfault) |
+| G004 | `işlev(...)` tipli bağlama yeniden atanamaz | closure temsili (bare fn-ptr ↔ `{fn,env}`) bağlama anında sabitlenir; yeniden atama çağrı yerinde yanlış dispatch |
+
+**G003'ün İKİ daraltması ölçüldü ve ikisi de yük taşıyor:**
+- **Annotasyon şartı:** yalnız annotasyonsuz bağlama yasak. `değişken a: Dizi<tam32>
+  = [..]` **serbest** (heap). Sabotaj S40: şart kaldırılınca `tc15_02`'deki geçerli
+  kod reddedildi.
+- **Literal argüman muaf:** `topla([1,2,3])` serbest — codegen literali heap'e
+  yönlendirir. Yasak olan yalnız **yığın değişkeni** yolu.
+
+**Sıra:** G003 C'de argüman döngüsünde, T001 ve lineer tüketimden **sonra**
+raporlanıyor; self-host aynı sıraya yerleştirildi (konum = argüman düğümü).
+
+**Yeni yan-diziler:** `yerel_yig` (annotasyonsuz dizi-literali bağlaması),
+`yerel_fn` (`işlev(...)` annotasyonlu bağlama), `fn_pdizi` (parametre `Dizi<T>` mü).
+D-351/353/355'in `yerel_ptr`/`yerel_dizi`/`lin_tek` deseniyle aynı; hepsi
+**pozitif bilgi** taşıyor (D-355 dersi).
+
+**Sabotaj (4; `grep SABOTAJ-Sn` ile kanıtlı):** S37 G002 (87→86), S38 G003 (86),
+S39 G004 (86), S40 G003'ün annotasyon daraltması (86 — **yanlış-pozitif yönünde**).
+
+**Probe matrisi 8/8 birebir:** asm güvensiz-içi/dışı, yığın-değişken/annotasyonlu/
+literal argüman, işlev yeniden-atama/çağrı, skaler yeniden-atama.
+
+**Sonuç:** self-host checker kod kapsamı **39 → 42/74**; korpus **85 → 87**;
+korpusun uyandırdığı kod **37 → 40**. Kalan 32 kod — **hepsi özel alt-sistem**
+(`CT*` sabitsüre, `DRF*` eşzamanlılık, `MM*` MMIO, `CP*` yetki) ya da modül/generic
+(`T011/T014/T015/T016/T023/T030/T031/T040-042`, `E013`, `M004`).
+
+---
+
+## D-357 — M002 + M003 self-host'a portlandı: çeşit varyantı ve payload aritesi (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**ÜÇ ayrı bölge, C'de üç ayrı kod** — biri atlanırsa o şekil sessizce geçer:
+
+| bölge | şekil | tanı | konum |
+|---|---|---|---|
+| (A) değer | `Çeşit::V` | M002 | YOL düğümü |
+| (B) yapıcı | `Çeşit::V(a,b)` | M002 → M003 | ÇAĞRI düğümü |
+| (C) desen | `Çeşit::V(a,b) =>` | M002 → M003 | DESEN düğümü |
+
+**(C)'nin ince yeri:** C varyantı **desenin önekinden değil, SKRUTİNİNİN
+tipinden** arar (`cesit_ara(dt->yapi.ad)`). D-352'nin `esles_cesit_adi`
+altyapısı bu yüzden yeniden kullanıldı — desendeki `Başka::V` yazımı çeşidi
+belirlemez.
+
+**(C)'nin ikinci ince yeri:** alt-desen sayısı **0 ise M003 VERİLMEZ** —
+payload'lı bir varyantın çıplak deseni (`Secim::Bir =>`) geçerlidir. Sabotaj
+S36 bunu ölçtü: muafiyet kaldırılınca `tc14_02`'deki geçerli kod reddedildi.
+
+**(B)'de erken dönüş:** C hem M002 hem M003'ten sonra `t_hata` döner →
+argüman tip kontrolü yapılmaz. Self-host aynı erken dönüşü uyguluyor.
+
+**M004 PORTLANMADI:** payload **tipi** uyumu, varyant-başına-alan tip tablosu
+**ve** generic çeşitte substitüsyon (`Secim<T>` → `Secim<tam32>`) ister.
+Yan-kanal genişletmesi + tip yayılımı gerektiği için ayrı iş.
+
+**Yeni yan-kanal:** `cv_pc` (varyant payload alan sayısı) checker.kem'e eklendi;
+codegen.kem'de D3'ten beri vardı.
+
+**Sabotaj (5; `grep SABOTAJ-Sn` ile kanıtlı):** S32 (A) M002 (85→84),
+S33 (B) M003 (84), S34 (C) M002 (84), S35 (C) M003 (84),
+S36 çıplak-desen muafiyeti (84 — **yanlış-pozitif yönünde**).
+
+**Probe matrisi 10/10 birebir:** üç bölge × (varyant yok / arite fazla / arite
+eksik / doğru) + çıplak desen + tam kapsama.
+
+**Sonuç:** self-host checker kod kapsamı **37 → 39/74**; korpus **83 → 85**;
+korpusun uyandırdığı kod **35 → 37**. Kalan 35 kod.
+
+---
+
+## D-356 — E011 + E012 self-host'a portlandı: `küresel` tip/başlangıç kısıtları (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+3).
+
+**Kural (C `pre_populate_kuresel` aynası):** küresel durum bootstrap-circularity
+çözümüdür — **allocator'a bağlanamaz**. Bu yüzden:
+- **E011:** tip yalnız sayısal / `mantıksal` / `karakter` / `*T`. `metin`, `Dizi<T>`,
+  yapı, seçimlik → yasak.
+- **E012:** başlangıç değeri yalnız **sabit-literal** (`TAM`/`KESIRLI`/`MANTIKSAL`/
+  `BOS`/`KARAKTER`). **`METIN` bu listede YOK** — `küresel değişken s: metin = "a"`
+  bu yüzden **hem E011 hem E012** alır (ölçüldü).
+- Sıra: E011 → E012 → T024, hepsi KURESEL düğümünde.
+
+**Yerleştirme kararı:** C bu tanıları `pre_populate`'in **4. geçişinde** (işlev/
+sabit/modül ile birlikte, **kaynak sırasında**) üretiyor. Self-host'un
+`dup_kontrol`'ü zaten aynı geçiş yapısını taşıyordu → küresel kontrolü **aynı
+döngüye** kondu; böylece E011/E012 ile T024'ün serpiştirme sırası korunuyor
+(`tc13_03` bunu ölçüyor).
+
+**Yan kazanım:** `tanim_adi`'ya `KURESEL` eklendi — küresel adı artık global
+sembol olarak çift-tanım denetimine giriyor (C: aynı scope). `küresel sayac` +
+`işlev sayac()` → T024, C ile birebir.
+
+**SÜREÇ NOTU — sabotaj ilk turda SESSİZ KALDI:** S31 (küresel adının global
+sembol sayılması) kaldırıldığında korpus **yeşil kaldı** — çünkü korpusta
+küresel/işlev ad çakışması **yoktu**. Kural ölçümle doğruydu (probe g8) ama
+**kapısızdı**. `tc13_03` eklendikten sonra S31 kırmızıya döndü. D-350'de
+kaydedilen desenin bir kez daha tekrarı: *yeni kural = korpusa uyandırıcı örnek,
+sonra sabotaj.* Sabotajın sessiz kalması bir sonuçtur, gürültü değil.
+
+**Sabotaj (3; `grep SABOTAJ-Sn` ile kanıtlı):** S29 E011 (83→82), S30 `METIN`in
+literal listesine sızması (82), S31 küresel-global-sembol (82 — **yalnız
+korpus genişletildikten sonra gözlemlenebilir oldu**).
+
+**Probe matrisi 9/9 birebir:** metin/Dizi/yapı küresel (E011+E012), ifade-init
+(E012), tam32/işaretçi/mantıksal/karakter/kesirli (temiz), ad çakışması (T024),
+E011+E012+T024 serpiştirmesi.
+
+**Sonuç:** self-host checker kod kapsamı **35 → 37/74**; korpus **80 → 83**;
+korpusun uyandırdığı kod **33 → 35**. Kalan 37 kod.
+
+---
+
+## D-355 — L007 + L008 self-host'a portlandı: lineer intrinsik operand/arite (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Kural (C birebir):**
+- `kullan(e)` operandı **TAM OLARAK** `tekkez<T>` olmalı. `yapı tekkez` KABUL
+  EDİLMEZ — `kullan` sarmalanan değeri ÇIKARIR, lineer yapının sarmalanmış bir
+  değeri yoktur. C bu ayrımı açıkça yapıyor (D-313).
+- `imha(e)` **herhangi** bir lineer değeri kabul eder (tekkez / yetki / görev /
+  `yapı tekkez`) — lineer yapıyı tüketmenin tek yerel yolu odur.
+- Her iki hatada da C `t_hata` döner → operand **TÜKETİLMEZ** → ardından L001
+  gelebilir (ölçüldü: `kullan(lineer_yapı)` → `L007` + `L001`, ikisi de birebir).
+- `tekkez_olustur(...)` **tam 1** argüman → aksi L008 (çağrı düğümünde).
+
+**PORT SIRASINDA ÖLÇÜLEN KUSUR (kendi ilk tasarımım):** biti "1 = tekkez<T>"
+olarak kurmuştum ve `kullan`da `bit == 0` iken L007 veriyordum. Ama **0
+"lineer yapı" demek değil, "bilinmiyor" demek** — `değişken t =
+tekkez_olustur(5)` (annotasyonsuz) da 0. Sonuç: mevcut `tc5b_02_l002` ve
+`lineer_kismi_tasima` korpus dosyalarında **sahte L007**. Bit ters çevrildi:
+**1 = KESİN `yapı tekkez`**, rapor yalnız pozitif bilgide. Sabotaj S28 bu
+kusuru kalıcı olarak kapıladı (geri konduğunda 4 dosya kırmızı).
+
+**Korpus tasarımı:** `tc12_02`'deki `annotasyonsuz()` işlevi tam bu kusuru
+uyandırmak için var — `değişken t = tekkez_olustur(5); kullan(t)`.
+
+**Sabotaj (4; `grep SABOTAJ-Sn` ile kanıtlı):** S25 skaler-operand L007 (80→79),
+S26 lineer-yapı L007 (79; L001 kaskadı da düştü), S27 L008 (79),
+S28 bit yorumu (**76** — yanlış-pozitif yönünde, mevcut dosyalar dâhil).
+
+**Probe matrisi 9/9 birebir:** `kullan`(skaler/metin/lineer-yapı/tekkez),
+`imha`(skaler/lineer-yapı/tekkez), `tekkez_olustur`(2 arg / 0 arg).
+
+**Sonuç:** self-host checker kod kapsamı **33 → 35/74**; korpus **78 → 80**;
+korpusun uyandırdığı kod **31 → 33**. Kalan 39 kod.
+
+---
+
+## D-354 — T013 (dizi eleman tipi) + tamsayı-literal uyarlama onarımı (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**T013'ün İKİ yolu var ve SUÇLANAN ELEMAN farklı** — ölçülmeden görülmezdi:
+
+| bağlam | referans | `[1, "a"]` için hata |
+|---|---|---|
+| `Dizi<metin>` annotasyonu VAR | E = `metin` | **ilk** eleman (`1`) |
+| annotasyon YOK | ilk eleman (`tam32`) | **ikinci** eleman (`"a"`) |
+
+Tek yolu (homojenlik) kullanmak tanıyı **yanlış elemanın üzerinde** gösterirdi.
+Bu yüzden `dizi_bek` alanı eklendi: `değişken xs: Dizi<E> = [...]` bildiriminde
+E, çocuk gezintisi boyunca bağlam olarak taşınır. Sabotaj S23 bunu ölçtü:
+(a) yolu kapatılınca hata `6:35` yerine `6:38`'e kaydı ve `Dizi<tam8> =
+[doğru, doğru]`ın **iki** hatası **tek**e düştü.
+
+**Yol üstünde bulunan ikinci kusur (bağımsız, daha geniş etkili):**
+`ifade_tip`'in TAM dalı `sayisal_mi(beklenen)` kullanıyordu; C
+`tip_tamsayi_mi`. Yani self-host **tamsayı literalini kesirli bağlama
+uyarlıyordu** → `değişken x: kesirli64 = 1;` C'de **T001**, self-host'ta **OK**.
+Tek jeton (`sayisal_mi` → `tamsayi_mi`) düzeltti; T013'ün konum doğruluğunu da
+bu besliyor (`Dizi<kesirli64> = [1, 2.5]` artık ilk elemanı suçluyor, C gibi).
+Sabotaj S24 kapıyı doğruladı.
+
+**BİLİNÇLİ BOŞLUK — kapıyla değil ÖLÇÜMLE gerekçelendirilmiş:** bağlamsız yolda
+her iki eleman da sayısalsa kontrol atlanır. Sebep ölçüldü: `ver [1, 2.5]`
+dönüşü `Dizi<kesirli64>` olan bir işlevde C **ilk** elemanı suçluyor
+(`--checkdump` → `1:38`), bağlamsız yol ise ikinciyi suçlardı — yani koruma
+kaldırılırsa **yanlış konumda** tanı üretilir. Bu boşluk korpusla kapılanamaz
+(C konuşurken self susuyor ⇒ o şekli korpusa koymak kapıyı kalıcı kırmızı
+yapardı). `ver`/argüman bağlamları da "?" kalır; onları kapatmak beklenen-tip
+yayıcısı ister (ayrı iş).
+
+**T014 PORTLANMADI:** boş dizi bağlamı C'de sezgiye aykırı — `ver []`
+(dönüş `Dizi<T>`) **kabul**, ama `g([])` (parametre `Dizi<T>`) **T014**
+(ölçüldü). Kuralı taklit etmek gerçek bir beklenen-tip yayıcısı gerektirir;
+tahminle yazmak yanlış-pozitif üretirdi.
+
+**Sabotaj (2; `grep SABOTAJ-Sn` ile kanıtlı):** S23 bağlamlı yol (78→77, hem
+konum hem sayı bozuldu), S24 literal uyarlaması (77).
+
+**Sonuç:** self-host checker kod kapsamı **32 → 33/74**; korpus **76 → 78**;
+korpusun uyandırdığı kod **30 → 31**.
+
+---
+
+## D-353 — "Yanlış şekil" tanıları self-host'a portlandı: T005/T006/T007/T008/T027 (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Neden birlikte:** Beşi de **tek bir kalıbın** örnekleri — ifadenin tipi bilinen
+bir skaler, ama bağlam yapı / dizi / işlev **şekli** istiyor. Aynı dokuda
+(`ifade_tip` + `bilinen_skaler_mi`) durdukları için tek partide gittiler.
+
+| kod | bağlam | koşul |
+|---|---|---|
+| T007 | `x.alan` | x bilinen skaler → yapı değil |
+| T008 | `x[i]` | x bilinen skaler → Dizi değil |
+| T005 | `x[i]` | x **kesin** Dizi/ham işaretçi, i bilinen non-tamsayı |
+| T006 | `f(...)` | f, bilinen skaler tipte bir **yerel bağlama** |
+| T027 | `için x: k` | k bilinen skaler → Dizi değil |
+
+**INDEKS sırası C ile birebir kuruldu** (D-351'in G001'i de bu sıraya girdi):
+ham işaretçi → (indeks non-tamsayı ? T005 : güvensiz dışında G001); bilinen
+skaler → T008; kesin Dizi → (indeks non-tamsayı ? T005). Şekil bilinmiyorsa
+hiçbir şey söylenmez.
+
+**T006'nın dar kapısı:** yalnız **yerel bağlama** olan hedefler. Kullanıcı
+işlevleri ve builtin'ler yerel bağlama değildir → etkilenmez; kapanış değişkeni
+`işlev(...)->T` annotasyonuyla `yerel_tip`'te "?" olur → atlanır. Bu daraltma
+olmadan her çağrı yanlış-pozitif riski taşırdı.
+
+**Yeni yan-dizi:** `yerel_dizi` (yerel ile paralel bit) — T005 "taban kesin
+Dizi mi" sorusunu `yerel_tip`'e dokunmadan yanıtlar (`yerel_tip` Dizi'yi "?"e
+düşürüyor ve onu değiştirmek T001/T003'ü geniş biçimde etkilerdi). D-351'in
+`yerel_ptr`, D-352'nin `yerel_ham` deseniyle aynı.
+
+**Probe matrisi 19/19 C ile birebir:** 10 pozitif (her kod × 2 skaler tip) +
+**9 negatif** (yapı alanı, Dizi indeksleme, iç içe dizi, kullanıcı işlevi
+çağrısı, kapanış çağrısı, builtin çağrısı, `&Yapı` alanı, `için` üstünde Dizi,
+çeşit `eşleş`) — hiçbiri uyanmadı.
+
+**Sabotaj doğrulaması (6; `grep SABOTAJ-Sn` ile kanıtlı):** S17 T007 (76→75),
+S18 T008 (75), S19 T006 (75), S20 T027 (75), S21 T005 (75), **S22
+`bilinen_skaler_mi` daraltması (73 — yanlış-pozitif yönünde; `lineer_yapi`
+ve `lineer_kismi_tasima` gibi MEVCUT dosyalar da kırmızıya döndü, yani daraltma
+yük taşıyor).**
+
+**Sonuç:** self-host checker kod kapsamı **27 → 32/74** (D-350 başlangıcı: 24).
+Korpus **74 → 76**; korpusun uyandırdığı kod sayısı **22 → 30**.
+
+**Kalan 42 kod** (bu partiden sonra): `T011 T013 T014 T015 T016 T023 T030 T031
+T040-T042` (tip/modül), `L007 L008`, `E011-E013`, `G002-G004`, `M002-M004`,
+`CP004-005`, `CT001-008`, `DRF001-007`, `MM001-003`. Çoğu özel alt-sistem
+(sabitsüre / DRF / MMIO / yetki); tarama yöntemi D-350'de.
+
+---
+
+## D-352 — M001 (`eşleş` kapsayıcılık) self-host'a portlandı: çeşit dalı (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+2).
+
+**Neden:** D-350 taramasının 3. sıradaki maddesi. Eksik varyant = **çalışma
+zamanında düşülecek bir dal**; C bunu derleme zamanında M001 ile reddediyordu,
+self-host sessizce kabul ediyordu. Ölçüldü: `çeşit R { A, B }` + yalnız `R::A`
+kolu → C `M001`, self `OK`.
+
+**Portlanan kural (C `esles_exhaustive_kontrol` aynası):**
+1. Üst düzey joker `_` **veya** bağlama yakalayıcısı varsa → exhaustive, çık.
+   `hiç` bu kuraldan MUAF (o bir seçimlik varyantıdır, yakalayıcı değil).
+2. Skrutini çeşit ise: her varyant bir `Yol::Varyant` deseniyle kapsanmalı;
+   eksik varsa `eşleş` düğümünde M001.
+3. Açık tipler (tamsayı vb.) ve `yapı` denetlenmez — geriye uyum.
+
+C **yalnız varyant kısmını** karşılaştırır (yol öneki yok sayılır); self-host'ta
+desen adı `"Ad::Varyant"` tek dizgi olduğu için **sonek eşleşmesi** (`metin_biter`)
+birebir aynı davranış.
+
+**KAPSAM SINIRI (bilinçli, belgeli):** `seçimlik<T>` (değer/hiç) ve `sonuç<T,H>`
+(tamam/hata + H çeşidi) dalları **portlanmadı** — self-host'ta bileşik tip bilgisi
+yok (`ifade_tip` "?" döner). Bu bir gevşeklik olarak KALIR; yanlış-pozitif üretmez.
+Kapanması, self-host tip çıkarsamasının bileşik tipleri temsil etmesine bağlı —
+ayrı ve daha büyük bir iş.
+
+**İki yan-kanal gerekti** (düğüme alan eklemek `--ast`/`--parse` dump paritesini
+bozardı; D-318 deseni):
+- `cv_cesit`/`cv_ad` — varyant adları. `parse_cesit` bunları **atıyordu**
+  ("dump'ta yok"). codegen.kem'de zaten vardı (D3), checker.kem'e eklendi.
+- `yerel_ham` — yerel/parametre annotasyonunun **süzülmemiş** tip adı.
+  Mevcut `yerel_tip`, çeşit adlarını `yapi_var_mi` süzgecinden geçiremediği için
+  "?"e düşürüyordu; `yerel_tip`'i değiştirmek T001/T003'ü geniş biçimde etkilerdi
+  → ayrı, izole dizi.
+
+**Sabotaj doğrulaması (3 kural; `grep SABOTAJ-Sn` ile kanıtlı):** S14 M001
+raporlaması (74→73), S15 joker muafiyeti (73 — yanlış-pozitif yönünde),
+S16 bağlama-yakalayıcı muafiyeti (73 — kuralın ince yarısı).
+
+**Probe matrisi (7/7 C ile birebir):** parametre skrutini, yerel değişken
+skrutini, payload'lı varyant, 3-varyanttan 1'i, tam kapsama, `yapı` (M001 yok),
+tamsayı (açık tip, M001 yok).
+
+**Sonuç:** self-host checker kod kapsamı **26 → 27/74**; korpus **72 → 74**.
+
+---
+
+## D-351 [YÜKSEK] — G001 + E010 self-host'a portlandı: güvensiz-tier kapıları (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+6).
+
+**Neden bu ikisi önce:** D-350'nin taraması, C checker'ın **74** tanı kodundan
+self-host'ta yalnız **24**'ünün bulunduğunu ölçtü. Kalanların çoğu "yanlış program
+derlenir" sınıfındaydı; **G001 ve E010 farklı bir sınıftadır**: bunlar yokken
+self-host yolu **güvensiz programı işaretsiz geçiriyordu** — dilin merkezî iddiası
+(`güvensiz` dışında ham bellek yok) o yolda geçersizdi. Ampirik:
+
+```
+işlev f(p: *tam32) -> tam32 { ver *p; }        C: G001    self: OK
+küresel değişken s: tam32 = 0; ... ver s;       C: E010    self: OK
+```
+
+**Portlanan kurallar (C birebir, kod+satır+sütun eşit):**
+- **G001** — `*p` dereferansı ve `p[i]` indekslemesi ham işaretçide `güvensiz` ister.
+  Güvenli `&T` deref (D-305) ve `Dizi<T>` indeksleme ETKİLENMEZ: kural **tipe** bakar,
+  yazılışa değil. Bunun için `yerel_ptr` (yerel ile paralel bit) eklendi.
+- **E010** — `küresel` değişkene erişim (okuma **ve** yazma) `güvensiz` ister.
+  `çıplak` gövde örtük güvensizdir (C D-257) — `kem_malloc`'un gerçek deseni.
+  Aynı adlı yerel bağlama küreseli **gölgeler** → E010 yok.
+
+**Yan gereksinim:** `çıplak` işareti self-host parser'ında düğüme yazılmıyordu.
+Düğüme alan eklemek `--parse`/`--ast` dump paritesini bozardı → **yan-kanal**
+(`cip_node`; codegen.kem'de zaten var olan `g_ciplak`). D-318'in deseni.
+
+**Port SESSİZ BİR KUSUR BULDU (kendi kodumda, ölçümle):** `*(4096 olarak *tam32)`
+— güvensiz dışında. C'de bu cast'in **kendisi** E002'dir, tip HATA'ya düşer ve
+dereferans erken döner → **tek** hata. İlk portum ptr'liği cast'in HEDEF tipinden
+okuyup cast'in geçerli olup olmadığını sormuyordu → `E002 + G001` kaskadı: tek
+kusur iki hata olarak raporlanıyordu. `olarak *T` yalnız `güvensiz` içinde geçerli
+olduğundan, ptr sayma da `guv_bag > 0` koşuluna bağlandı. Korpusa uyandırıcı örnek
+eklendi (`tc8_06`).
+
+**Sabotaj doğrulaması (6 kural; her biri `grep SABOTAJ-Sn` ile kanıtlandı):**
+S8 G001-deref (72→71), S9 G001-indeks (71), S10 E010 (71), S11 `çıplak` muafiyeti
+(**70** — yanlış-pozitif yönünde; mevcut `tc6_01_kuresel` de kırmızıya döndü, yani
+muafiyet yük taşıyor), S12 gölgeleme (71), S13 `ptr_ifade_mi` daraltması (**70** —
+güvenli `&T` deref'i ve `Dizi<T>` indekslemesi yanlışlıkla reddedilir).
+
+**Sonuç:** self-host checker kod kapsamı **24 → 26/74**; korpus **66 → 72**.
+Bellek-güvenliği kapılarında C ile parite tam.
+
+**Testler:** `checker_diff` 72/72, `self_driver` 4 mod × 2 driver + FIXPOINT,
+`check_kapisi` 210/217 (0 RED).
+
+---
+
+## D-350 [YÜKSEK] — `olarak` tip kuralları self-host checker'a portlandı: E001-E004 (2026-08-04)
+
+**ETKİ:** `selfhost/codegen.kem`, `selfhost/checker.kem`, `test/check_korpus/` (+7).
+
+**Ölçülen açık (D-349'un yol-üstü bulgusu):** self-host checker `E002`'yi **hiç
+üretmiyordu** (`grep -c E002 selfhost/codegen.kem` → 0). Ampirik:
+
+```
+işlev main() -> tam32 { değişken s: metin = "ab"; değişken n: tam32 = s olarak tam32; ver n; }
+   kemgu.exe      --check → hata[E002]  (satır 1, sütun 78)
+   kemgu_self.exe --check → OK
+```
+
+Yani self-host checker C'nin **reddettiği programları kabul ediyordu** — sessiz
+gevşeklik. `checker_diff` yakalamadı çünkü korpusta `olarak` tip-kural ihlali
+YOKTU; PR #108'in `küresel`/`çıplak` açığıyla **aynı desen**: kural yoksa kapı
+yeşil kalır.
+
+**Kök neden (tek satır):** `kontrol_dugum`'un başındaki `metin_baslar(ad, "TIP_")
+→ ver 0` koruması `TIP_DONUSTUR`'u da yutuyordu. Ama `TIP_DONUSTUR` bir **tip
+düğümü değil, İFADE**'dir (`TIP_` öneki yanıltıcı) — böylece hem Madde E
+kontrolleri hem de **cast kaynağının alt-ağacı** (T002 vb.) hiç gezilmiyordu.
+
+**Portlanan kural kümesi (C `src/tip_kontrol.c` DUGUM_TIP_DONUSTUR sırası birebir):**
+
+| # | kaynak → hedef | sonuç |
+|---|---|---|
+| 1 | `X olarak tekkez<T>` | **E001** |
+| 2 | `tekkez<T> olarak X` | **E003** |
+| 3 | `*T olarak metin` | izinli (tipli tampon → opak) |
+| 4 | `tamsayı olarak *T` / `*T olarak tamsayı` | **yalnız `güvensiz`** (D-248) |
+| 5 | `&T olarak *U` | **yalnız `güvensiz`** (D-349); dışarıda E002 |
+| 6 | kaynak veya hedef sayısal değil (karakter↔tamsayı hariç) | **E002** |
+| 7 | `tam64 → tam8/tam16`, `kesirli64 → kesirli32` | **E004** |
+
+`tam64 → tam32` ve `tam32 → tam8` İZİNLİ (C'nin "yalnız ≥64-bit'ten <32-bit'e"
+kuralı) — daraltmanın tamamı değil, **anlamlı bit kaybı** yasak.
+
+**Muhafazakârlık sınırı (bilinçli):** self-host tip çıkarsaması dizgi-tabanlı;
+kaynak/hedef sınıfı `"?"` (emin değil) ise kontrol **atlanır**. Bu, yanlış-pozitif
+üretmeyi imkânsız kılar; kalan gevşeklik C ile diff'te görünür ve korpusla kapatılır.
+Ayrıca self-host parser `çıplak` işaretini düğümde tutmadığı için `çıplak` gövde
+(C'de örtük `güvensiz`) bu ayrımdan yararlanamaz — bugün korpusta bu şekil yok.
+
+**Sabotaj doğrulaması (7 kural, her biri tek tek):** kural kaldırıldı → kapının
+kırmızıya döndüğü GÖRÜLDÜ → geri konuldu. Sabotajın uygulandığı her seferinde
+`grep SABOTAJ-Sn` ile kanıtlandı (uygulanmamış sabotaj "0 hata" der ve yanıltır):
+S1 E002 (66→63), S2 E004-tamsayı (65), S3 E004-kesirli (65), S4 `güvensiz`
+gevşetmesi (64; **yanlış-pozitif** yönünde), S5 E001 + S6 E003 (64),
+S7 D-349 `&T → *U` (65).
+
+**Testler:** `checker_diff` 66/66 (59 → 66 korpus), `self_driver` 4 mod × 2 driver
++ FIXPOINT, `check_kapisi` 0 RED.
+
+---
+
 ## D-349 [YÜKSEK] — `güvensiz` blokta `(&x) olarak *T`: referanstan ham işaretçi (2026-08-04)
 
 **Karar [Mehmet; ETKİ: `src/tip_kontrol.c`, `test/test_tip_kontrol.c` (+3),

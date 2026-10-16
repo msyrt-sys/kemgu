@@ -1,0 +1,74 @@
+// D-385: DESEN BAĞLAMA TİPLERİ — `eşleş s { değer(v) => ... }` içinde `v`nin
+// tipi SKRUTİNİDEN gelir. `yerel_topla` düz bir ön-geçiştir ve skrutini
+// bağlamını görmez → bağlamalar oraya "?" ile girer; tip kol işlenirken
+// YERİNDE atanır.
+// `sonuç<T, H>` ayrıştırması DERİNLİK-DUYARLI: `sonuç<Dizi<tam32>, metin>`
+// içindeki ilk virgül üst düzey DEĞİLDİR.
+işlev t001_secimlik_binding() -> tam32 {
+    değişken s: seçimlik<tam32> = değer(5);
+    eşleş s {
+        değer(v) => { değişken m: metin = v; ver 0; }    // T001: v tam32
+        hiç => { ver 0; }
+    }
+}
+işlev t001_sonuc_tamam() -> tam32 {
+    değişken r: sonuç<tam32, metin> = tamam(1);
+    eşleş r {
+        tamam(v) => { değişken m: metin = v; ver 0; }    // T001: v tam32
+        hata(e) => { ver 0; }
+    }
+}
+işlev t001_sonuc_hata() -> tam32 {
+    değişken r: sonuç<tam32, metin> = tamam(1);
+    eşleş r {
+        tamam(v) => { ver v; }
+        hata(e) => { değişken n: tam32 = e; ver 0; }     // T001: e metin
+    }
+}
+işlev t001_ic_ice() -> tam32 {
+    değişken r: sonuç<Dizi<tam32>, metin> = hata("x");
+    eşleş r {
+        tamam(v) => { değişken m: metin = v; ver 0; }    // T001: v Dizi<tam32>
+        hata(e) => { ver 0; }
+    }
+}
+// DERİNLİK KAPISI: ilk argümanın KENDİSİ virgül içerir. Derinlik-duyarsız bir
+// ayrıştırıcı burada yanlış parçalar — `sonuç<Dizi<tam32>, metin>` bunu SINAMAZ
+// (iç tipte virgül yok), bu yüzden bu şekil korpusa AYRICA konmuştur.
+işlev t001_derinlik_ilk_arg() -> tam32 {
+    değişken r: sonuç<sonuç<tam32, metin>, metin> = hata("x");
+    eşleş r {
+        tamam(v) => { değişken m: metin = v; ver 0; }    // T001: v sonuç<tam32, metin>
+        hata(e) => { ver 0; }
+    }
+}
+işlev t001_derinlik_hata_arg() -> tam32 {
+    değişken r: sonuç<sonuç<tam32, metin>, metin> = hata("x");
+    eşleş r {
+        tamam(v) => { ver 0; }
+        hata(e) => { değişken n: tam32 = e; ver 0; }     // T001: e metin
+    }
+}
+// GÖZLENEBİLİR derinlik kapısı: burada doğru ayrıştırma tanı ÜRETMEZ.
+// Yanlış (derinlik-duyarsız) ayrıştırma `sonuç<tam32` gibi bozuk bir tip verir
+// ve sahte T001 çıkar. Yalnızca HATALI şekiller koymak yetmez: yanlış ayrıştırma
+// da uyumsuz tip üretip AYNI tanıyı verdiği için sabotaj sessiz kalıyordu.
+işlev temiz_derinlik() -> tam32 {
+    değişken r: sonuç<sonuç<tam32, metin>, metin> = hata("x");
+    eşleş r {
+        tamam(v) => { değişken w: sonuç<tam32, metin> = v; ver 0; }   // TEMİZ
+        hata(e) => { ver 0; }
+    }
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz() -> tam32 {
+    değişken s: seçimlik<tam32> = değer(5);
+    değişken r: sonuç<Dizi<tam32>, metin> = hata("x");
+    eşleş r {
+        tamam(v) => { ver v[0]; }
+        hata(e) => {
+            eşleş s { değer(v2) => { ver v2; } hiç => { ver metin_uzunluk(e); } }
+        }
+    }
+}
+işlev main() -> tam32 { ver 0; }

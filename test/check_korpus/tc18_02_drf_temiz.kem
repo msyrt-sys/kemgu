@@ -1,0 +1,26 @@
+// D-366: geçerli eşzamanlılık kullanımları — yanlış-pozitif kapısı.
+// `gönderen` ucundan göndermek SERBEST; yasak olan yalnız `alan` (alıcı) ucu.
+işlev tamsayi_kanal() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(4);
+    kanal_gönder(k, 5);
+    ver kanal_al(k);
+}
+işlev genis_kanal() -> tam32 {
+    değişken k: kanal<tam64> = kanal_oluştur(2);
+    kanal_gönder(k, 8589934592);
+    ver 0;
+}
+işlev gonderen_ucu() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(4);
+    değişken g: gönderen<tam32> = gönderen(k);
+    kanal_gönder(g, 7);          // gönderen ucu: SERBEST
+    ver 0;
+}
+işlev metin_kanal() -> tam32 {
+    değişken k: kanal<metin> = kanal_oluştur(2);
+    kanal_gönder(k, "selam");
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

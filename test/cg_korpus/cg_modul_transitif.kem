@@ -1,0 +1,15 @@
+// D-400: TRANSİTİF import (ana → cgmodul_zincir → cgmodul_mat).
+//
+// Modül yükleyici, modülün KENDİ `kullan`'larını da çözmelidir. İki ayrı kusur
+// bu şekille ölçüldü:
+//  1. Transitif importer DİZİNİ: `dizin_al(rel)` tek başına yanlıştır
+//     ("zincir.kem" → ""), taban dizin kaybolur. Taban + alt-yol birleştirilmeli.
+//     (Aynı hesap --check yolundaki `modul_yukle`'de de var ama MASKELİ: check
+//      yalnız isim topluyor ve bu zincirde iç modülün adlarına ihtiyaç yok.)
+//  2. Sarmal kurulumunda düz `\n` çöpü — YALNIZ burada gözlenebilir.
+kullan cgmodul_zincir;
+
+işlev main() -> tam32 {
+    eğer cgmodul_zincir::iki_kat(10) != 20 { ver 1; }
+    ver cgmodul_zincir::iki_kat(21);   // 42
+}

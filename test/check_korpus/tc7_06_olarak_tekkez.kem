@@ -1,0 +1,7 @@
+// Madde E / E001 + E003: `olarak` ile tekkez<T> hedeflenemez, tekkez<T> kaynaktan
+// çıkarılamaz (Linear Types — çıkarma yalnız kullan(...) ile).
+işlev main() -> tam32 {
+    değişken a: tam32 = 5;
+    değişken t: tekkez<tam32> = a olarak tekkez<tam32>;
+    ver 0;
+}

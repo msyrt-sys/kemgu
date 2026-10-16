@@ -1,0 +1,23 @@
+// [D-572] ÇEŞİT PAYLOAD'INDA DİZİ — C yığın dizisi koyup HEAP erişimcisiyle
+// okuyordu. Ölçüldü: `dizi_boyut` 1 (Dizi<tam32>) / 39 (Dizi<metin>) —
+// doğrusu 2 — ve `dizi_al` SEGV; hiçbir `güvensiz` blok yokken.
+// Self-host heap-uniform olduğu için ZATEN doğruydu (parite TERS yönde).
+// ⚠ AYIRT EDİCİ: yalnız bağlayıp kullanmamak (D-437 dönemi probe'u) bu sınıfı
+// GÖSTEREMEZ — payload MUTLAKA okunmalı.
+çeşit K { Bos, Sayilar(Dizi<tam32>), Metinler(Dizi<metin>), Karma(Dizi<tam32>, tam32) }
+
+işlev oku_sayi(k: K) -> tam32 {
+    eşleş k {
+        K::Sayilar(d) => { ver dizi_boyut(d) + dizi_al(d, 0) + dizi_al(d, 1); }
+        K::Metinler(m) => { ver dizi_boyut(m) + metin_uzunluk(dizi_al(m, 1)); }
+        K::Karma(d, n) => { ver dizi_al(d, 0) + n; }
+        K::Bos => { ver 0; }
+    }
+}
+
+işlev main() -> tam32 {
+    değişken a: tam32 = oku_sayi(K::Sayilar([10, 20]));   // 2 + 10 + 20 = 32
+    değişken b: tam32 = oku_sayi(K::Metinler(["x", "yz"])); // 2 + 2 = 4
+    değişken c: tam32 = oku_sayi(K::Karma([3, 9], 3));      // 3 + 3 = 6
+    ver a + b + c;   // 42
+}

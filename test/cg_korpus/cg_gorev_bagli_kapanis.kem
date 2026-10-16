@@ -1,0 +1,52 @@
+// [D-628] `görev_başlat(f)` — argüman lambda LİTERALİ değil, BAĞLANMIŞ kapanış.
+// Self-host eskiden argümanı DAİMA literal varsayıp çocuk dizisini -1 ile okuyordu →
+// derleyici "PANIK: dizi sınır ihlali" ile ÇÖKÜYORDU (D-627 T020'yi kaldırınca açığa
+// çıktı; öncesinde checker bu şekli hiç codegen'e bırakmıyordu). C fat value'dan
+// fn/env extractvalue yapar, ρ_serbest = 0 (kanıt yok = DENY). Her ölçüm AYRI kod.
+işlev main() -> tam32 {
+    // (a) annotasyonsuz blok-form, tam64 sonuç (2^32 üstü: kırpma ayırt edilir)
+    değişken f = || { değişken x: tam64 = 8589934592; ver x + 42; };
+    eşleş görev_başlat(f) {
+        tamam(g) => {
+            değişken b: tam64 = görev_birleştir(g);
+            eğer b != 8589934634 { ver 1; }
+        }
+        hata(m) => { ver 11; }
+    }
+    // (b) yakalamalı kapanış (env HEAP), tam32 sonuç
+    değişken k: tam32 = 40;
+    değişken h = || { ver k + 2; };
+    eşleş görev_başlat(h) {
+        tamam(g) => {
+            değişken r: tam32 = görev_birleştir(g);
+            eğer r != 42 { ver 2; }
+        }
+        hata(m) => { ver 12; }
+    }
+    // (c) işaretçi (metin) sonuç
+    değişken s = || { değişken t: metin = "abcdef"; ver t; };
+    eşleş görev_başlat(s) {
+        tamam(g) => {
+            değişken r: metin = görev_birleştir(g);
+            eğer metin_uzunluk(r) != 6 { ver 3; }
+        }
+        hata(m) => { ver 13; }
+    }
+    // (d) AYNI kapanış iki kez, iki görev eş zamanlı canlı
+    değişken z: tam32 = 20;
+    değişken q = || { ver z + 1; };
+    eşleş görev_başlat(q) {
+        tamam(g1) => {
+            eşleş görev_başlat(q) {
+                tamam(g2) => {
+                    değişken a: tam32 = görev_birleştir(g1);
+                    değişken b: tam32 = görev_birleştir(g2);
+                    eğer a + b != 42 { ver 4; }
+                }
+                hata(m) => { değişken a: tam32 = görev_birleştir(g1); ver 14; }
+            }
+        }
+        hata(m) => { ver 15; }
+    }
+    ver 42;
+}

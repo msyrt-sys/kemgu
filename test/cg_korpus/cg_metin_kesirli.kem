@@ -1,0 +1,42 @@
+// [D-460] metin -> kesirli64 + gecerlilik yuklemi.
+//
+// ⚠ BU FIKSTUR NEDEN AYRI: `json.kem`in ondalik yolu bu yuklemi SAVUNMA
+// KATMANI olarak cagirir ama ayristiricinin KENDI denetimi "1." gibi girdileri
+// zaten reddeder -> yuklem o yoldan HIC ATESLENMEZ. Sabotaj S58 tam bu yuzden
+// SESSIZ kaldi (test yesil kaldi). Bir kuralin HANGI YOLLA atesledigini
+// olcmeyen kapi, o kurali olcmuyordur (D-443). Burada yuklem DOGRUDAN cagrilir.
+//
+// `strtod` tek basina "0x10", "inf", "nan", "+1" ve bastaki boslugu KABUL
+// EDERDI; JSON sayi dilbilgisi bunlarin hicbirini kabul etmez.
+// Exit: 42
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    // Gidis-donus: D-457'nin kisa gosterimi korunmali
+    eğer metin_esit(kesirli_metin(metin_kesirli("0.1")), "0.1") == yanlış { h = h + 1; }
+    eğer metin_esit(kesirli_metin(metin_kesirli("-2.5e3")), "-2500") == yanlış { h = h + 1; }
+    eğer metin_esit(kesirli_metin(metin_kesirli("1e-3")), "0.001") == yanlış { h = h + 1; }
+
+    // GECERSIZ olmasi gerekenler (strtod bunlari kabul ederdi)
+    eğer metin_kesirli_gecerli("1.") { h = h + 1; }
+    eğer metin_kesirli_gecerli("1e") { h = h + 1; }
+    eğer metin_kesirli_gecerli("1e+") { h = h + 1; }
+    eğer metin_kesirli_gecerli("0x10") { h = h + 1; }
+    eğer metin_kesirli_gecerli("inf") { h = h + 1; }
+    eğer metin_kesirli_gecerli("nan") { h = h + 1; }
+    eğer metin_kesirli_gecerli(" 1") { h = h + 1; }
+    eğer metin_kesirli_gecerli("+1") { h = h + 1; }   // JSON'da `+` YOK
+    eğer metin_kesirli_gecerli("") { h = h + 1; }
+    eğer metin_kesirli_gecerli("1.5x") { h = h + 1; }
+
+    // GECERLI olmasi gerekenler
+    eğer metin_kesirli_gecerli("1.5") == yanlış { h = h + 1; }
+    eğer metin_kesirli_gecerli("-0.25") == yanlış { h = h + 1; }
+    eğer metin_kesirli_gecerli("2.5e3") == yanlış { h = h + 1; }
+    eğer metin_kesirli_gecerli("1E+2") == yanlış { h = h + 1; }
+    eğer metin_kesirli_gecerli("0") == yanlış { h = h + 1; }
+
+    eğer h == 0 { ver 42; }
+    ver 7;
+}

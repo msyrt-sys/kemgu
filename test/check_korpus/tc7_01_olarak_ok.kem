@@ -1,0 +1,11 @@
+// Madde E: GEÇERLİ `olarak` dönüşümleri → OK (hiçbir E00x tetiklenmemeli).
+işlev main() -> tam32 {
+    değişken a: tam32 = 5;
+    değişken b: tam8 = a olarak tam8;          // daraltma 32 -> 8 izinli
+    değişken c: tam64 = 7;
+    değişken d: tam32 = c olarak tam32;         // 64 -> 32 izinli (native word)
+    değişken e: kesirli32 = 1.5;
+    değişken f: kesirli64 = e olarak kesirli64; // genişletme izinli
+    değişken g: karakter = a olarak karakter;   // tamsayı -> karakter izinli
+    ver (b olarak tam32) + d + (f olarak tam32) + (g olarak tam32);
+}

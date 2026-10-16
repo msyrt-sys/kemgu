@@ -14,19 +14,15 @@ işlev ortalama<T>(a: T, b: T) -> T {
 
 // Üs hesabi: x^n (n negatif olmaz). n=0 -> 1.
 işlev us<T>(x: T, n: tam32) -> T {
+    // [D-454] n=0 -> 1. ESKIDEN "ozur dilerim" olarak x donuyordu; yorumun
+    // kendisi cozumu isaret ediyordu ("tipik bir yaklasim sifir<T>() +
+    // bir<T>() helper'i"). O intrinsic eklendi: donus tipi BEKLENEN'den
+    // gelir, monomorfizasyonda somutlasir. `x / x` alternatifi tip
+    // kontrolunden GECER ama x=0'da sifira bolme = COKME; yanlis cevabi
+    // cokmeyle takas etmek iyilestirme degildir (D-441'de olculmustu).
+    eğer n == 0 { ver bir(); }
     değişken sonuc: T = x;
     değişken i: tam32 = 1;
-    eğer n == 0 {
-        // n=0 icin "1" T tipinde donmemiz lazim — bu kisitlama
-        // generic'lerin gercek constraint sistemine ihtiyac duyar.
-        // Su an: x'i kendine bolmek 1 verir (ama 0 icin tanimsiz).
-        // Pragmatik: x*0 + 1 yerine 1'i T'ye literally cevirmek icin
-        // tipik bir yaklasim "sifir<T>()" + "bir<T>()" helper'i.
-        // Su an: rekursif uretim — n=0 cagrilirsa x'in tipini buyutmek
-        // icin sahte hesap: x - x + 1. Ama bu yine literal yorumu.
-        // En basiti: kullanici n>0 ile cagirsin.
-        ver sonuc;  // n=0 yerine "ozur dilerim" sonucu (1.0/0 yerine x)
-    }
     iken i < n {
         sonuc = sonuc * x;
         i = i + 1;

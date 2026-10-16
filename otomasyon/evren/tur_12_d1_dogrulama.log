@@ -1,0 +1,15 @@
+
+### $ make 2>&1 | tail -3
+gcc           -Wall -Wextra -Wpedantic -std=c11 -g -O0 -MMD -MP -c -o build/ana.o src/ana.c
+gcc           -Wall -Wextra -Wpedantic -std=c11 -g -O0 -MMD -MP -o build/kemgu build/utf8.o build/anahtar_kelime.o build/hata.o build/lexer.o build/arena.o build/ast.o build/ast_yazdir.o build/parser.o build/ifade.o build/tip.o build/sembol.o build/tip_kontrol.o build/bolge.o build/bolge_atama.o build/escape.o build/llvm.o build/llvm_dogrula.o build/json.o build/lsp.o build/wcet.o build/ana.o
+
+### $ ./build/kemgu --llvm --mimari x86_64-none runtime/kem_dtb.kem | grep -m1 'target triple'
+hata[AS001]: satirici_asm mimari etiketi hedef mimariyle uyusmuyor (--mimari ile hedef sec)
+   --> runtime/kem_dtb.kem:37:17
+   |
+37 |     güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp x9, kdl_dtb_adres
+   |                 ^
+
+
+HATA: runtime/kem_dtb.kem — tip kontrol 1 hata (LLVM IR URETILMEDI).
+  Bilerek tip hatali kod derliyorsaniz: --tip-atla

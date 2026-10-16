@@ -1,0 +1,91 @@
+// [D-668] SEMAFOR n>1 KOŞUM KANITI — "aynı anda EN FAZLA n" VE "n kadar GERÇEKTEN".
+//
+// D-645 semaforu yalnız n=1 ile (yani KİLİT gibi) ölçüyordu. Semaforun asıl
+// iddiası "aynı anda en fazla n koşucu" ve bu HİÇ ölçülmemişti (D3c; dış
+// inceleme de aynı boşluğu işaret etti).
+//
+// ⚠⚠ İKİ İDDİA AYRI AYRI ÖLÇÜLÜR VE İKİSİ DE ŞART:
+//   tepe <= N  -> GÜVENLİK: semafor n'yi aşmıyor.          (aşarsa çıkış 1)
+//   tepe >= 2  -> ANLAM: n>1 GERÇEKTEN eşzamanlılık veriyor. (vermezse çıkış 2)
+// Yalnız ilki olsaydı, KİLİT GİBİ davranan bozuk bir semafor (her zaman tek
+// koşucu) testi TRİVİAL olarak geçerdi — "en fazla 2" iddiası 1 için de doğrudur.
+// İkinci iddia o yanlışı GÖZLENEBİLİR yapar (D-425).
+//
+// ŞEKİL: N=2 izinli semafor, 4 koşucu (3 görev + ana) × TUR giriş. Kritik
+// bölgede "içerideki koşucu" sayılır ve görülen en yüksek değer (`tepe`)
+// kaydedilir. `icerde`/`tepe` paylaşılan küresellerdir; onları korumak için
+// HAM `kilit_*` yerleşikleri kullanılır. Bekleme döngüsü pencereyi açar ki
+// koşucular gerçekten üst üste binebilsin.
+//
+// ⚠⚠ ÖLÇÜM ARACI ÖLÇÜLENDEN BAĞIMSIZ OLMALI — sabotajla ÖĞRENİLDİ (D-668):
+// ilk sürüm sayaçları ikinci bir n=1 SEMAFORLA koruyordu. Runtime sabotajı
+// (S170: semafor beklemesin) aynı kodu paylaşan İKİ semaforu birden bozdu;
+// koruma da çöktü, sayaç dengesi bozuldu ve test "n aşıldı" (1) yerine
+// "ölçüm güvenilmez" (3) dedi — kırmızıydı ama GÜVENLİK dalını kanıtlamadı.
+// `kilit_*` AYRI bir runtime ilkelidir (KdlKilit, KdlSemafor değil); semafor
+// bozulunca ölçüm aracı ayakta kalır. (`kilit.kem` modülü `olustur`/`yok_et`
+// adlarıyla `semafor.kem`le çakıştığı için modül değil ham yerleşik.)
+//
+// ⚠ `görev<T>` LİNEERDİR: `hata` kolunda da tüketilmeli, yoksa L005.
+// Bu dosya `stdlib/semafor.kem` ile BİRLEŞTİRİLEREK derlenir (stdlib_check idiomu).
+küresel değişken icerde: tam64 = 0;
+küresel değişken tepe: tam64 = 0;
+küresel değişken bos: tam64 = 0;
+
+işlev kos(s: Semafor, k: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 200 {
+        semaforda(s, || {
+            kilit_al(k);
+            güvensiz {
+                icerde = icerde + 1;
+                eğer icerde > tepe { tepe = icerde; }
+            }
+            kilit_birak(k);
+            // Pencereyi aç: kritik bölgede biraz kal ki diğer izin sahibi
+            // gerçekten AYNI ANDA içeride olabilsin. Küresel `bos` döngünün
+            // elenmesini önler.
+            değişken j: tam32 = 0;
+            iken j < 2000 { güvensiz { bos = bos + 1; } j = j + 1; }
+            kilit_al(k);
+            güvensiz { icerde = icerde - 1; }
+            kilit_birak(k);
+            ver 0;
+        });
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken s: Semafor = olustur(2);    // N = 2
+    değişken k: metin = kilit_olustur();  // icerde/tepe korumasi (BAGIMSIZ ilkel)
+    eşleş görev_başlat(|| kos(s, k)) {
+        tamam(g1) => {
+            eşleş görev_başlat(|| kos(s, k)) {
+                tamam(g2) => {
+                    eşleş görev_başlat(|| kos(s, k)) {
+                        tamam(g3) => {
+                            kos(s, k);
+                            görev_birleştir(g1);
+                            görev_birleştir(g2);
+                            görev_birleştir(g3);
+                        }
+                        hata(e3) => { görev_birleştir(g1); görev_birleştir(g2); ver 1; }
+                    }
+                }
+                hata(e2) => { görev_birleştir(g1); ver 1; }
+            }
+        }
+        hata(e1) => { ver 1; }
+    }
+    yok_et(s);
+    kilit_yok(k);
+    değişken t: tam64 = 0;
+    değişken ic: tam64 = 0;
+    güvensiz { t = tepe; ic = icerde; }
+    eğer ic != 0 { ver 3; }   // sayaç dengesi bozuk -> ölçüm güvenilmez
+    eğer t > 2 { ver 1; }     // GÜVENLİK: n aşıldı
+    eğer t < 2 { ver 2; }     // ANLAM: n>1 eşzamanlılık vermedi (kilit gibi)
+    ver 42;
+}

@@ -1,0 +1,5 @@
+// [D-653] P221 — `eşleş` kolu sonunda ';' eksik (C parser.c:1501).
+işlev main() -> tam32 {
+    eşleş 1 { 1 => 2 }
+    ver 0;
+}

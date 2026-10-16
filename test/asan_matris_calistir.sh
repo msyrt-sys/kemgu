@@ -17,11 +17,38 @@
 # Çıkış: 0 = tüm matris hem değer-doğru (42) hem ASan/UBSan-temiz; 1 = ihlal.
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-./build/kemgu.exe}
+# [D-471] ZAMAN ASIMI SART. Bu kapi GERCEK programlari calistiriyor ve
+# zaman asimi YOKTU: bloklanan tek bir program kapiyi SONSUZA DEK asar.
+# Bu sinifin UCUNCU ornegi (ag_kosum D-466, codegen_genis D-468, burasi).
+# Bu oturumda tam takim IKI KEZ saatlerce asili kaldi (2.5 sa ve 1.5 sa).
+# ASan altinda program yavastir -> sinir cömert (60 sn), ama SONSUZ DEGIL.
+# Asilan kapi, sessiz kapi kadar kotudur: kimse onu kosturmaz.
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-./build/kemgu${EXE}}
 RT_OBJ="build/kdl_runtime.o build/kdl_runtime_mmio.o"
 RT_SRC="runtime/kdl_runtime.c runtime/kdl_runtime_mmio.c"
 DIR="test/asan_matris"
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/asan_matris); mkdir -p "$TMP"
+# [D-484] ASLR ENTROPISI — ASan ikilisi SESSIZCE COKER (exit 139, rapor YOK).
+# OLCULDU (WSL, m04_ref_buyume): setarch'siz 15 kosumda 5 cokme, `setarch -R`
+# ile 15/15 temiz. Cikti tamamen sessiz -- ASan HICBIR SEY basmiyor, yani
+# "ihlal=0" oldugu halde kapi kirmizi olur ve kok gorunmez.
+# D-478 bu duzeltmeyi Makefile'in KOSUM SATIRLARINA uygulamisti; kendi ASan
+# ikilisini KURAN VE KOSTURAN harness'lar o kapsamin DISINDA kalmis.
+# ⚠ `command -v setarch` YETMEZ: bazi cekirdeklerde setarch VAR ama -R
+# BASARISIZ olur -> gercekten CALISTIGINI olc.
+ASAN_RUN=""
+if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/asan_matris.XXXXXX" 2>/dev/null || echo "build/asan_matris.$$")
+mkdir -p "$TMP"
 pass=0; fail=0
 
 for f in "$DIR"/m*.kem; do
@@ -34,10 +61,18 @@ for f in "$DIR"/m*.kem; do
     fi
     # 1) Sanitizer'sız: değer doğruluğu (exit 42)
     clang -x ir "$TMP/m.ll" -x none $RT_OBJ -o "$TMP/n.exe" 2>/dev/null
-    "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
+# [D-564] 127 = Windows'ta TAZE .exe'nin ilk kosumu (Defender/exec yarisi,
+# D-413). `codegen_genis`/`codegen_diff` bu yeniden-denemeye ZATEN sahipti;
+# bu harness'ta YOKTU ve Windows CI'da SELF tarafinin 11 olcumu birden
+# exit=127 verdi (beklenen 134) — kusur derleyicide degil ORTAMDAYDI.
+    timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
+    d127=0
+    while [ "$nrc" -eq 127 ] && [ "$d127" -lt 12 ]; do
+        sleep 0.3; timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?; d127=$((d127+1))
+    done
     # 2) ASan/UBSan: bellek güvenliği (exit 42 + 0 ihlal)
     clang -fsanitize=address,undefined -x ir "$TMP/m.ll" -x none $RT_SRC -o "$TMP/a.exe" 2>/dev/null
-    aout=$("$TMP/a.exe" 2>&1); arc=$?
+    aout=$($ASAN_RUN timeout 60 "$TMP/a.exe" 2>&1); arc=$?
     viol=$(echo "$aout" | grep -ciE "AddressSanitizer|runtime error|SUMMARY:.*[Ss]anitizer")
     if [ "$nrc" = "42" ] && [ "$arc" = "42" ] && [ "$viol" = "0" ]; then
         echo "  ✓ $b"; pass=$((pass+1))

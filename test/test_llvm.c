@@ -16,6 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* C5 AS001: KEMGU_HEDEF_MIMARI — konak mimarisi tek kaynak (D-469).
+ * Bu test src/*.c ile LINKLENMEZ (Makefile: yalniz test_llvm.c), ama
+ * -Isrc verildigi icin makro gorunur; olculen ikili de (build/kemgu)
+ * AYNI makroyla kurulur, dolayisiyla ikisi tanim geregi uyusur. */
+#include "llvm.h"
+
 static int toplam_test = 0;
 static int basarili = 0;
 static int basarisiz = 0;
@@ -40,11 +46,38 @@ static void test_sonuc(const char *ad, int durum) {
 #define SUREC_NO() ((int)_getpid())
 #else
 #include <unistd.h>
+#include <sys/wait.h>
 #define DEV_NULL "/dev/null"
 #define KEMGU_BIN "./build/kemgu"
 #define YOL_ONEK "./build/"
 #define SUREC_NO() ((int)getpid())
 #endif
+
+/* ============================================================================
+ * [D-477] `system()` DONUS DEGERI IKI PLATFORMDA FARKLI ANLAMA GELIR.
+ *
+ * Windows : CIKIS KODUNU dogrudan doner        -> exit 42  => 42
+ * POSIX   : BEKLEME DURUMU doner (wait status) -> exit 42  => 42<<8 = 10752
+ *
+ * OLCULDU: bu ayrim yapilmadan `test_llvm` Linux'ta 286 testin 240'ini
+ * BASARISIZ sayiyordu. Gecen 46 test tam olarak SIFIR bekleyenlerdi
+ * (0<<8 == 0) -- yani basari orani bile kusuru dogruluyor.
+ * Windows'ta GORUNMEZ: orada ham deger zaten cikis kodudur.
+ *
+ * ⚠ Sinyalle olen surec (segfault) `WIFEXITED` degildir; ona 139 (128+SIGSEGV)
+ * verilir -- kabuk gelenegiyle ayni, cunku testlerin bir kismi tam da o degeri
+ * bekliyor (bare-metal MMIO korpusu, D-395).
+ * ========================================================================= */
+static int cikis_kodu(int system_rc) {
+#ifdef _WIN32
+    return system_rc;
+#else
+    if (system_rc == -1) return -1;
+    if (WIFEXITED(system_rc)) return WEXITSTATUS(system_rc);
+    if (WIFSIGNALED(system_rc)) return 128 + WTERMSIG(system_rc);
+    return system_rc;
+#endif
+}
 
 /* === D-297: gecici dosya yollari SUREC-BENZERSIZ ===
  * Eskiden SABITTI (build/test_llvm_temp.{kem,ll,exe}). Ayni testin IKI ES
@@ -165,7 +198,7 @@ static int derle_calistir_ic(const char *kemgu_kaynak, int tip_atla) {
     /* Calistir */
     snprintf(komut, sizeof(komut), "%s", EXE_PATH);
     rc = system(komut);
-    return rc;
+    return cikis_kodu(rc);   /* [D-477] POSIX'te ham deger BEKLEME DURUMUDUR */
 }
 
 /* Mevcut bir .kem dosyasini --llvm | clang ile derle + calistir, exit code
@@ -189,19 +222,37 @@ static int derle_dosya_ve_calistir(const char *kem_yol) {
 #endif
     if (system(komut) != 0) return -1;
     snprintf(komut, sizeof(komut), "%s", EXE_PATH);
-    return system(komut);
+    return cikis_kodu(system(komut));   /* [D-477] */
 }
 
 /* `kemgu --llvm <kem_yol>` ciktisini LLVM 'opt -passes=verify'dan gecir.
  * 1 = IR gecerli (her BB terminator'lu, dominance vs.), 0 = reddedildi.
  * C1/C2 kabul kriteri: emit edilen modul opt verifier'dan gecmeli. */
+/* [D-555] `opt` VAR MI? Olculdu (CI): arac YOKSA `system()` sifir disi doner ve
+ * test "IR reddedildi" der — yani EKSIK ARAC, DERLEYICI KUSURU gibi raporlanir.
+ * `2>/dev/null` de "command not found"u yutar. Bu yanlis atif, CI'da 18 testi
+ * derleyici hatasi gibi gosterdi. Yetenek BIR KEZ olculur ve sonda AYRICA
+ * bildirilir (D-486: eksik ikili sessiz/yanlis-atifli gecilemez). */
+static int g_opt_yok = 0;
+static int opt_var_mi(void) {
+    static int durum = -1;   /* -1 = henuz olculmedi */
+    if (durum < 0) {
+        char k[256];
+        snprintf(k, sizeof(k), "opt --version > %s 2>%s", DEV_NULL, DEV_NULL);
+        durum = (system(k) == 0);
+        if (!durum) g_opt_yok = 1;
+    }
+    return durum;
+}
 static int kemgu_llvm_opt_verify(const char *kem_yol) {
+
     char komut[1024];
     snprintf(komut, sizeof(komut),
              "%s --llvm %s > %s 2>%s", KEMGU_BIN, kem_yol, LL_PATH, DEV_NULL);
     if (system(komut) != 0) return 0;
     snprintf(komut, sizeof(komut),
              "opt -passes=verify -disable-output %s 2>%s", LL_PATH, DEV_NULL);
+    if (!opt_var_mi()) return 0;   /* [D-555] arac yok — sonda bildirilir */
     return system(komut) == 0;
 }
 
@@ -312,28 +363,35 @@ static void test_sonuc_struct_payload_calistir(void) {
     test_sonuc("sonuc struct payload + param ABI -> exit 42", rc == 42);
 }
 
-/* --- C2.6: cross-file fonksiyon cagrisi (transitif kullan) --- */
+/* --- [D-589] YENİ-BİÇİM karşılıklar (seçili import + `genel`) ---
+ *
+ * D-590 legacy düzleştirmeyi SİLDİ; eski dört ölçüm (transitif · sonuc_cagri)
+ * onunla gitti. Aşağıdaki dört ölçüm aynı iki değişmezi (transitif yükleme ·
+ * `sonuç<T,H>` ABI) YENİ biçimde kapılar — kapsam KAYBOLMADI.
+ *
+ * ⚠ Yalnız `check_genis` YETMEZDİ: o kapı `--check` paritesi ölçer, program
+ *   ÇALIŞTIRMAZ. Transitif yüklemenin gerçekten çalıştığı ancak burada
+ *   (exit 42 + opt -passes=verify) görünür. */
 
-static void test_crossfile_transitif_verify(void) {
-    /* transitif -> lib_islem -> lib_sayi; iki_kat transitif yuklenmeli. */
-    int ok = kemgu_llvm_opt_verify("test/crossfile/transitif.kem");
-    test_sonuc("crossfile transitif: opt -passes=verify PASS", ok);
+static void test_crossfile_transitif_yeni_verify(void) {
+    /* transitif_yeni -> lib_islem_yeni -> lib_sayi_yeni (seçili import). */
+    int ok = kemgu_llvm_opt_verify("test/crossfile/transitif_yeni.kem");
+    test_sonuc("crossfile yeni-bicim transitif: opt -passes=verify PASS", ok);
 }
 
-static void test_crossfile_transitif_calistir(void) {
-    int rc = derle_dosya_ve_calistir("test/crossfile/transitif.kem");
-    test_sonuc("crossfile transitif (uc_kat(14)) -> exit 42", rc == 42);
+static void test_crossfile_transitif_yeni_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/transitif_yeni.kem");
+    test_sonuc("crossfile yeni-bicim transitif (uc_kat_y(14)) -> exit 42", rc == 42);
 }
 
-static void test_crossfile_sonuc_verify(void) {
-    /* cross-file sonuç dönüşlü çağrı — C2.5 tagged-union ABI uyumu. */
-    int ok = kemgu_llvm_opt_verify("test/crossfile/sonuc_cagri.kem");
-    test_sonuc("crossfile sonuc ABI: opt -passes=verify PASS", ok);
+static void test_crossfile_sonuc_yeni_verify(void) {
+    int ok = kemgu_llvm_opt_verify("test/crossfile/sonuc_cagri_yeni.kem");
+    test_sonuc("crossfile yeni-bicim sonuc ABI: opt -passes=verify PASS", ok);
 }
 
-static void test_crossfile_sonuc_calistir(void) {
-    int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri.kem");
-    test_sonuc("crossfile sonuc donuslu cagri -> exit 42", rc == 42);
+static void test_crossfile_sonuc_yeni_calistir(void) {
+    int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri_yeni.kem");
+    test_sonuc("crossfile yeni-bicim sonuc donuslu cagri -> exit 42", rc == 42);
 }
 
 /* --- C2.7: çeşit (custom sum type) + exhaustiveness --- */
@@ -997,11 +1055,20 @@ static void test_generic_coklu_instan(void) {
     test_sonuc("generic kimlik coklu tip instantiation", rc == 42);
 }
 
+/* [D-517] `güvensiz` SARMALI ZORUNLU OLDU. Ham bellek yerlesikleri artik
+ * G001 istiyor: `bellek_*` `metin` olarak tiplendigi icin G001'in `*T` kosulu
+ * onlara HIC uygulanmiyordu ve `guvensiz`siz bir program heap-buffer-overflow
+ * yapabiliyordu (ASan ile olculdu, iki derleyicide de).
+ * ⚠ BU VAKA ETKI-ALANI OLCUMUMDEN KACTI: taramayi `--include="*.kem"` ile
+ *   yapmistim, bu kaynak ise bir C DIZGISINE GOMULU. Gomulu kaynaklar ayri
+ *   bir yuzeydir (D-427: "on kosul olcumunun KAPSAMI da ayrica dogrulanmali"). */
 static void test_bellek_al_serbest(void) {
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 { "
+        "g\xc3\xbcvensiz { "
         "de\xc4\x9fi\xc5\x9fken p: metin = bellek_al(100); "
         "bellek_serbest(p); "
+        "} "
         "ver 42; }");
     test_sonuc("bellek_al(100) + bellek_serbest -> exit 42", rc == 42);
 }
@@ -2658,34 +2725,68 @@ static void test_audit_linear_imha(void) {
 
 /* --- C5: satirici_asm (inline assembly) --- */
 
+/* [D-469] SNAPSHOT SECIMI KONAK MIMARISINDEN TURETILIR — GOMULU DEGIL.
+ *
+ * OLCULDU (DGX Spark, aarch64, ilk yerli kosum): bu dort test
+ * `asm_round_trip.kem`i (x86_64 tagli) "konak" ve `asm_arm64_ret.kem`i
+ * (arm64 tagli) "yabanci" KABUL EDIYORDU. D-469 ile varsayilan hedef
+ * derleme platformundan turuyor, dolayisiyla ARM64 konakta roller TAM
+ * TERSINE dondu ve dordu de kirmizi oldu (293'te 4).
+ *
+ * Etiket tasiyan bir .kem dosyasi TANIM GEREGI mimariye ozguedur: AS001
+ * onu konak hedefiyle karsilastirir. Bu yuzden tek dosya iki konakta
+ * kosamaz ve `asm_round_trip_arm64.kem` bir IKIZ olarak eklendi —
+ * muafiyet degil, karsilik. Hangisinin kostugu, hangisinin AS001 yedigi
+ * artik konaktan secilir; kapi her iki konakta da ZORLAR.
+ *
+ * `[169]` ozellikle onemlidir: GERCEK komut kosturur (x86 `mov`/`add`,
+ * arm64 `mov`/`add`), yani salt etiket duzeltmesiyle gecmez — ARM64'te
+ * gercekten ARM64 komutu gerekir. */
+static int konak_arm64_mi(void) {
+    return strcmp(KEMGU_HEDEF_MIMARI, "arm64") == 0;
+}
+
+/* Konak mimarisine UYAN snapshot: derlenir, linklenir ve KOSAR. */
+static const char *asm_konak_snapshot(void) {
+    return konak_arm64_mi() ? "test/snapshots/asm_round_trip_arm64.kem"
+                            : "test/snapshots/asm_round_trip.kem";
+}
+
+/* Konak mimarisine UYMAYAN etiketli snapshot: AS001 ile REDDEDILMELI. */
+static const char *asm_yabanci_snapshot(void) {
+    return konak_arm64_mi() ? "test/snapshots/asm_round_trip.kem"
+                            : "test/snapshots/asm_arm64_ret.kem";
+}
+
 static void test_asm_round_trip_verify(void) {
     /* Coklu cikti + girdi + clobber: emit edilen modul opt'tan gecmeli. */
-    int ok = kemgu_llvm_opt_verify("test/snapshots/asm_round_trip.kem");
-    test_sonuc("satirici_asm round-trip: opt -passes=verify PASS", ok);
+    int ok = kemgu_llvm_opt_verify(asm_konak_snapshot());
+    test_sonuc("satirici_asm round-trip (konak mimari): opt -passes=verify PASS",
+               ok);
 }
 
 static void test_asm_round_trip_calistir(void) {
-    /* x86: girdi(40) -> mov+add ile cikti(42); ikinci cikti sabit 100. */
-    int rc = derle_dosya_ve_calistir("test/snapshots/asm_round_trip.kem");
-    test_sonuc("satirici_asm x86 girdi/cikti round-trip -> exit 42",
+    /* girdi(40) -> mov+add ile cikti(42); ikinci cikti sabit 100. */
+    int rc = derle_dosya_ve_calistir(asm_konak_snapshot());
+    test_sonuc("satirici_asm konak girdi/cikti round-trip -> exit 42",
                rc == 42);
 }
 
-static void test_asm_arm64_llvm_reddi(void) {
-    /* AS001: arm64-tagli asm x86 triple altinda --llvm BASARISIZ olmali
-     * (bozuk IR uretilmez; hedefe-duyarli triple C8'de). */
+static void test_asm_yabanci_llvm_reddi(void) {
+    /* AS001: konaktan FARKLI tagli asm --llvm'de BASARISIZ olmali
+     * (yanlis hedefe sessizce bozuk IR uretmek yerine derleme hatasi). */
     char komut[1024];
     snprintf(komut, sizeof(komut),
-             "%s --llvm test/snapshots/asm_arm64_ret.kem > %s 2>%s",
-             KEMGU_BIN, LL_PATH, DEV_NULL);
+             "%s --llvm %s > %s 2>%s",
+             KEMGU_BIN, asm_yabanci_snapshot(), LL_PATH, DEV_NULL);
     int rc = system(komut);
-    test_sonuc("satirici_asm arm64 tag -> --llvm AS001 reddi", rc != 0);
+    test_sonuc("satirici_asm YABANCI tag -> --llvm AS001 reddi", rc != 0);
 }
 
-static void test_asm_arm64_check_reddi(void) {
+static void test_asm_yabanci_check_reddi(void) {
     /* AS001 ayni zamanda --check yolunda (kaynak konumuyla). */
-    int ok = kemgu_check_basarili("test/snapshots/asm_arm64_ret.kem");
-    test_sonuc("satirici_asm arm64 tag -> --check AS001 reddi", ok == 0);
+    int ok = kemgu_check_basarili(asm_yabanci_snapshot());
+    test_sonuc("satirici_asm YABANCI tag -> --check AS001 reddi", ok == 0);
 }
 
 static void test_asm_guvensiz_disi_reddi(void) {
@@ -3121,9 +3222,12 @@ static void test_kanal_tam8_negatif_turu(void) {
         "i\xc5\x9flev oku(k: kanal<tam8>) -> tam8 { ver kanal_al(k); } "
         "i\xc5\x9flev main() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken k: kanal<tam8> = kanal_olu\xc5\x9ftur(2); "
-        "kanal_g\xc3\xb6nder(k, 0 - 128); "
+        "kanal_g\xc3\xb6nder(k, -128); "
         "de\xc4\x9fi\xc5\x9fken v: tam8 = oku(k); "
-        "e\xc4\x9f" "er v == 0 - 128 { ver 42; } ver 1; }");
+        "e\xc4\x9f" "er v == -128 { ver 42; } ver 1; }");
+    /* D-630: `0 - 128` tam8 baglaminda 128 literalini tam8'e SIGDIRMAYA
+     * calisir -> T043 (128 tam8 degil). Eskiden sessizce -128'e sariyordu ve
+     * sonuc TESADUFEN dogru cikiyordu. Alt sinir tekli eksiyle yazilir. */
     test_sonuc("kanal<tam8> -128 turu (parametre yolu + sext/trunc) -> exit 42",
                rc == 42);
 }
@@ -3326,6 +3430,66 @@ static void test_icin_kapanis_dizisi(void) {
     test_sonuc("icin dongusu kapanis dizisi (fat value) -> exit 42", rc == 42);
 }
 
+/* D-625: annotasyonsuz/annotasyonlu KAPANIS tip kaybi — iki yonde SESSIZ
+ * KIRPMA. Fat value parametre ve donus tiplerini SILER; C tahmini blok
+ * yerellerini goremiyordu (donus i32) ve cagri yeri argumani beklenen tip
+ * OLMADAN uretiyordu (2^33 literali i32 doguyordu). Bu sekiller -O0da da
+ * AYIRT EDICI (olculdu: eski derleyici exit 1); c1/v1 gibi sekiller -O0da
+ * rax ust yarisi tesadufen korundugu icin GORUNMEZ, o yuzden secilmedi. */
+static void test_kapanis_blok_yerel_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken x: tam32 = 5; de\xc4\x9fi\xc5\x9fken f = || { de\xc4\x9fi\xc5\x9fken x: tam64 = 8589934592; ver x + 42; }; de\xc4\x9fi\xc5\x9fken r: tam64 = f(); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    /* DIS kapsamdaki `x: tam32` BILEREK var: eski tahmin gölgelemeyi bilmedigi icin
+     * DISTAKI x'i bulup i32 diyordu. Gölgelemesiz hâlde -O0 sansi kusuru GIZLER
+     * (olculdu: sabotaj S20 o hâlde SESSIZ kaldi). */
+    test_sonuc("D-625 annotsuz blok-form kapanis, yerel tam64 donus (golgeleme) -> exit 42", rc == 42);
+}
+
+static void test_kapanis_arg_annot_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f: i\xc5\x9flev(tam64) -> tam64 = |a: tam64| { ver a + 42; }; de\xc4\x9fi\xc5\x9fken r: tam64 = f(8589934592); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotasyonlu kapanis tam64 literal arguman -> exit 42", rc == 42);
+}
+
+static void test_kapanis_arg_annotsuz_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f = |a: tam64| a + 42; de\xc4\x9fi\xc5\x9fken r: tam64 = f(8589934592); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotsuz kapanis tam64 literal arguman -> exit 42", rc == 42);
+}
+
+static void test_kapanis_param_blok_tam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f = |a: tam64| { ver a + 42; }; de\xc4\x9fi\xc5\x9fken r: tam64 = f(8589934592); e\xc4\x9f" "er r == 8589934634 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotsuz blok-form, lambda parametresinden donus + arguman -> exit 42", rc == 42);
+}
+
+static void test_kapanis_arg_dtam64(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken f = |a: dtam64| a + 1; de\xc4\x9fi\xc5\x9fken r: dtam64 = f(4294967296); e\xc4\x9f" "er r == 4294967297 { ver 42; } ver 1; }");
+    test_sonuc("D-625 annotsuz kapanis dtam64 arguman -> exit 42", rc == 42);
+}
+
+/* D-629: dtam64 UST YARISI literal olarak yazilabilmeli. MUTLAK beklenen deger ZORUNLU:
+ * parite kapilari (codegen_diff/parser_diff) bu sinifa KORDUR — self-host'un kendi
+ * `tavan` literalini de C derledigi icin C bozulunca IKI taraf ESIT bozulur (olculdu:
+ * sabotaj S29 iki parite kapisinda da SESSIZ kaldi). */
+static void test_dtam64_ust_yari_literal(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken a: dtam64 = 9223372036854775808; de\xc4\x9fi\xc5\x9fken b: dtam64 = 0xFFFFFFFFFFFFFFFF; de\xc4\x9fi\xc5\x9fken c: dtam64 = 0b1000000000000000000000000000000000000000000000000000000000000000; e\xc4\x9f" "er (a >> 63) != 1 { ver 1; } e\xc4\x9f" "er (b >> 60) != 15 { ver 2; } e\xc4\x9f" "er c != a { ver 3; } ver 42; }");
+    test_sonuc("D-629 dtam64 2^63 / 0xFFFF.. / 64 basamak ikilik literal -> exit 42", rc == 42);
+}
+
+/* D-633: 63 karakteri asan kesirli literal KIRPILMAMALI. Kirpma USSU dusuruyordu
+ * (1.000...0e10 -> 1.0). MUTLAK beklenen deger: C ayristiricisi ile self-host'un
+ * runtime bicimleyicisi AYNI kusuru tasiyordu -> parite kapilari esit bozulmaya kor. */
+static void test_uzun_kesirli_literal(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken a: kesirli64 = 1.00000000000000000000000000000000000000000000000000000000000000e10; "
+        "de\xc4\x9fi\xc5\x9fken b: kesirli64 = 1.0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0e2; "
+        "e\xc4\x9f" "er a != 10000000000.0 { ver 1; } e\xc4\x9f" "er b != 100.0 { ver 2; } ver 42; }");
+    test_sonuc("D-633 67/85 karakterlik kesirli literal (us korunur) -> exit 42", rc == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
@@ -3510,10 +3674,11 @@ int main(void) {
     test_sonuc_struct_payload_calistir();
 
     printf("\n--- C2.6: cross-file fonksiyon cagrisi ---\n");
-    test_crossfile_transitif_verify();
-    test_crossfile_transitif_calistir();
-    test_crossfile_sonuc_verify();
-    test_crossfile_sonuc_calistir();
+    /* [D-589] yeni-biçim karşılıklar — legacy yol silinirse kapsam kalsın. */
+    test_crossfile_transitif_yeni_verify();
+    test_crossfile_transitif_yeni_calistir();
+    test_crossfile_sonuc_yeni_verify();
+    test_crossfile_sonuc_yeni_calistir();
 
     printf("\n--- C2.7: cesit (custom sum type) + exhaustiveness ---\n");
     test_cesit_temel_verify();
@@ -3570,8 +3735,8 @@ int main(void) {
     printf("\n--- C5: satirici_asm (inline assembly) ---\n");
     test_asm_round_trip_verify();
     test_asm_round_trip_calistir();
-    test_asm_arm64_llvm_reddi();
-    test_asm_arm64_check_reddi();
+    test_asm_yabanci_llvm_reddi();
+    test_asm_yabanci_check_reddi();
     test_asm_guvensiz_disi_reddi();
 
     printf("\n--- C-track: &Struct ref-param + alan atama + yetki ABI ---\n");
@@ -3732,9 +3897,28 @@ int main(void) {
     test_icin_yapi_dizisi();
     test_icin_kapanis_dizisi();
 
+    printf("\n--- D-625: kapanis tip kaybi (donus + arguman) sessiz kirpma ---\n");
+    test_kapanis_blok_yerel_tam64();
+    test_kapanis_arg_annot_tam64();
+    test_kapanis_arg_annotsuz_tam64();
+    test_kapanis_param_blok_tam64();
+    test_kapanis_arg_dtam64();
+
+    printf("\n--- D-629: 64-bit literal ust yarisi ---\n");
+    test_dtam64_ust_yari_literal();
+    printf("\n--- D-633: uzun kesirli literal ---\n");
+    test_uzun_kesirli_literal();
+
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
            toplam_test, basarili, basarisiz);
+    if (g_opt_yok) {
+        printf("\nORTAM HATASI: `opt` BULUNAMADI (LLVM araclari kurulu degil).\n");
+        printf("  Yukaridaki `opt -passes=verify` testleri IR KUSURU DEGIL,\n");
+        printf("  EKSIK ARAC yuzunden dustu. Kurulum: apt-get install llvm\n");
+        printf("  (D-555: bu ayrim yapilmazsa eksik arac derleyici hatasi gibi gorunur.)\n");
+    }
     gecici_yollari_temizle();   /* D-297: PID'li artiklari birak */
+
     return basarisiz > 0 ? 1 : 0;
 }

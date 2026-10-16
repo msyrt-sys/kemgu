@@ -1,0 +1,4 @@
+// [D-513] GECERLI kaydirma — koruyucunun HER kaydirmayi paniklemedigini
+// kanitlar. Yalniz negatif sekiller olsaydi "her kaydirmayi reddet"
+// sabotaji kapidan GECERDI (D-425). Cikis: 42
+işlev main() -> tam32 { değişken a: tam32 = 21; değişken n: tam32 = 1; ver a << n; }

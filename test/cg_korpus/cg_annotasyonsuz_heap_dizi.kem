@@ -1,0 +1,38 @@
+// D-442: ANNOTASYONSUZ heap-dizi bağlaması. `değişken a = yap();` için
+// eleman tipi ve heap-lik bağlama yerinde KAYDEDİLMİYORDU →
+//   · `a[0]` `getelementptr i32, ptr` ile KdlDizi BAŞLIĞINI veri gibi okuyordu
+//     (sessiz yanlış cevap), ve
+//   · heap yolunun RUNTIME SINIR KONTROLÜ atlanıyordu — bu, "buffer overflow
+//     dil tasarımı seviyesinde imkânsız" invaryantının ihlaliydi.
+// Self-host bu şekli DOĞRU derliyordu; onarım C oracle'ı ona hizaladı.
+// Fikstür üç yolu birden ölçer: annotasyonsuz / annotasyonlu / doğrudan.
+// Exit: 42
+işlev yap() -> Dizi<tam32> {
+    değişken d: Dizi<tam32> = [];
+    dizi_ekle(d, 20);
+    dizi_ekle(d, 22);
+    ver d;
+}
+
+işlev yapm() -> Dizi<metin> {
+    değişken d: Dizi<metin> = [];
+    dizi_ekle(d, "ok");
+    ver d;
+}
+
+işlev main() -> tam32 {
+    değişken a = yap();                 // ANNOTASYONSUZ — kusurun kaynağı
+    değişken b: Dizi<tam32> = yap();    // annotasyonlu (zaten çalışıyordu)
+    değişken t: tam32 = a[0] + a[1];    // 42
+    eğer t != 42 { ver 1; }
+    eğer b[0] != 20 { ver 2; }
+    eğer yap()[1] != 22 { ver 3; }      // doğrudan çağrı üzerinde indeksleme
+    // İŞARETÇİ elemanlı dizi: yanlış erişimci burada çöker, yanlış değer vermez
+    değişken m = yapm();
+    eğer değil metin_esit(m[0], "ok") { ver 4; }
+    // `için` döngüsü de aynı bağlama bilgisini kullanır
+    değişken s: tam32 = 0;
+    için x: a { s = s + x; }
+    eğer s != 42 { ver 5; }
+    ver t;
+}

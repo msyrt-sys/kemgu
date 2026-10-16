@@ -1,0 +1,6 @@
+// [D-654] P011 — `uygula` tipi eksik (C ifade.c:955, `parse_tip` son çaresi).
+// Öncesinde self hem kodu kaydetmiyor hem BİR BELİRTEÇ İLERLİYORDU; ilerleme
+// sonraki tanının konumunu kaydırıyordu (C 2:8, self 2:10). C ilerlemez.
+yapı N { x: tam32; }
+uygula { }
+işlev main() -> tam32 { ver 0; }

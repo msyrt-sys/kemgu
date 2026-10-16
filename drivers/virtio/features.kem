@@ -6,7 +6,7 @@ işlev VIRTIO_BLK_F_SIZE_MAX() -> dtam64 { ver 2; }
 
 işlev VIRTIO_BLK_F_SEG_MAX() -> dtam64 { ver 4; }
 
-işlev VIRTIO_BLK_F_BLK_SIZE() -> dtam64 { ver 64; }
+genel işlev VIRTIO_BLK_F_BLK_SIZE() -> dtam64 { ver 64; }
 
 işlev VIRTIO_BLK_F_FLUSH() -> dtam64 { ver 512; }
 
@@ -26,7 +26,7 @@ işlev virtio_feature_var_mi(mask: dtam64, feature: dtam64) -> mantıksal {
     ver (mask & feature) == feature;
 }
 
-işlev virtio_feature_kabul_maskesi(device_features: dtam64, driver_supported: dtam64) -> dtam64 {
+genel işlev virtio_feature_kabul_maskesi(device_features: dtam64, driver_supported: dtam64) -> dtam64 {
     ver device_features & driver_supported;
 }
 
@@ -43,7 +43,7 @@ işlev virtio_feature_zorunlu_karsilaniyor_mu(
     ver (driver_required & accepted) == driver_required;
 }
 
-işlev virtio_feature_negotiation_gecerli_mi(
+genel işlev virtio_feature_negotiation_gecerli_mi(
     device_features: dtam64,
     driver_supported: dtam64,
     driver_required: dtam64

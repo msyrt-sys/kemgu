@@ -1,0 +1,39 @@
+// [D-570] DOSYA HANDLE DİSİPLİNİ — `Dosya` (yapı tekkez) koruması YALNIZ
+// stdlib sarmalıyla geçerliydi; `dosya_ac`/`dosya_kapat` YERLEŞİK olduğu için
+// sarmalayıcı atlanınca üç tehlike de `--check`ten TANI ALMADAN geçiyordu.
+// D-569'un durum makinesi aynen kullanıldı; YENİ TANI KODU YOK.
+// ⚠ `dogru` ve `kosullu` POZİTİF ölçümlerdir (D-425).
+
+işlev dogru() -> tam32 {
+    değişken h: metin = dosya_ac("a.txt", "w");
+    dosya_yaz(h, "veri");
+    dosya_kapat(h);
+    ver 42;
+}
+
+işlev kapatilmadi() -> tam32 {
+    değişken h: metin = dosya_ac("a.txt", "w");
+    ver 1;                       // L001: cikista ACIK
+}
+
+işlev cift_kapat() -> tam32 {
+    değişken h: metin = dosya_ac("a.txt", "w");
+    dosya_kapat(h);
+    dosya_kapat(h);              // L002: kapali dosya tekrar kapatildi
+    ver 2;
+}
+
+işlev kapandiktan_sonra() -> tam32 {
+    değişken h: metin = dosya_ac("a.txt", "w");
+    dosya_kapat(h);
+    dosya_yaz(h, "veri");        // CP005: olu handle
+    ver 3;
+}
+
+işlev kosullu(p: mantıksal) -> tam32 {
+    değişken h: metin = dosya_ac("a.txt", "w");
+    eğer p { dosya_kapat(h); }   // kosullu -> izleme BIRAKILIR, tani YOK
+    ver 4;
+}
+
+işlev main() -> tam32 { ver dogru(); }

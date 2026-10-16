@@ -1,0 +1,17 @@
+// D-356: izinli küresel biçimleri — yanlış-pozitif kapısı. Erişim `çıplak`
+// gövdeden (örtük güvensiz, D-351) yapılıyor, böylece E010 karışmıyor.
+küresel değişken sayac: tam32 = 0;
+küresel değişken bayrak: mantıksal = yanlış;
+küresel değişken harf: karakter = 65;
+küresel değişken oran: kesirli64 = 1.5;
+küresel değişken genis: tam64 = 0;
+küresel değişken imzasiz: dtam8 = 0;
+küresel değişken ptr: *tam32 = boş;
+
+çıplak işlev kur(n: tam32) -> tam32 {
+    sayac = n;
+    ver sayac;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

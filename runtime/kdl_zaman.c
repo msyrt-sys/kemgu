@@ -16,8 +16,15 @@
  */
 #include <stdint.h>
 
+/* [D-591] kem_os (-DKEMGU_KEM_MALLOC) C konsol yazicisini (bm_a64_yazdir.o)
+ * LINKLEMEZ. O cesitte IRQ yolu SAF-.kem'dir (kem_zaman.kem kdl_irq_isle) ve
+ * kdl_kesme_isle/kdl_tik'i HIC cagirmaz; timer kaniti .kem'de basilir
+ * ("[5] TIMER TIK OK", uart_satir). Tanilama yalniz bagimsiz C4 timer
+ * testlerinde derlenir. */
+#ifndef KEMGU_KEM_MALLOC
 void kdl_yazdir_metin(const char *);
 void kdl_yazdir_satir(void);
+#endif
 
 static volatile uint64_t kdl_tik_sayisi = 0;
 
@@ -31,10 +38,12 @@ volatile int kdl_timer_diag_aktif = 1;
 
 static void kdl_tik(void) {
     kdl_tik_sayisi++;
+#ifndef KEMGU_KEM_MALLOC
     if (kdl_tik_sayisi == 5 && kdl_timer_diag_aktif) {
         kdl_yazdir_metin("TIMER OK tik=5");
         kdl_yazdir_satir();
     }
+#endif
 }
 
 /* D-128: mevcut timer tik sayısı (userspace gettick syscall'ı için). */

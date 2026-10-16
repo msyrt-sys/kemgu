@@ -1,0 +1,47 @@
+// [D-553] RT007 — `gerçekzamanlı` gövdede `satıriçi_asm`, `çevrim:` YOK.
+// C wcet.c'nin gerekçesi: opak asm maliyeti SESSİZCE 0 SAYILAMAZ.
+// ⚠ Parser `çevrim:`i tüketip ATIYORDU; D-550'de "portlanamaz" diye kayıtlıydı.
+//   `asm_node` ile PARALEL bayrak (`asm_cev`) eklendi — düğüme alan
+//   EKLENMEDİ, yani `--ast`/`--parse` dump paritesi korunur (D-351 deseni).
+// ⚠ `iyi` POZİTİF ölçümdür: `çevrim: 24` VARSA temiz geçmeli. Yalnız negatif
+//   olsaydı "her asm'i reddet" sabotajı kapıdan GEÇERDİ (D-425).
+// ⚠ `normal` gerçekzamanlı DEĞİL → anotasyonsuz asm SERBEST kalmalı.
+
+gerçekzamanlı işlev kotu() -> tam32 {
+    değişken s: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"mov $$42, $0"#
+            çıktı("=r", &s)
+        }
+    }
+    ver s;
+}
+
+gerçekzamanlı işlev iyi() -> tam32 {
+    değişken s: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"mov $$42, $0"#
+            çıktı("=r", &s)
+            çevrim: 24
+        }
+    }
+    ver s;
+}
+
+işlev normal() -> tam32 {
+    değişken s: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"mov $$7, $0"#
+            çıktı("=r", &s)
+        }
+    }
+    ver s;
+}
+
+işlev main() -> tam32 { ver iyi(); }

@@ -1,0 +1,14 @@
+// [D-467] `sonuç` içindeki lineer değer ATILDI -> L001.
+// Bu, "kapatmayı unutmak derleme zamanında yakalanır" garantisinin
+// KAÇIŞ DELİĞİYDİ: sonuç bir yere bağlanmadığında hiçbir kontrol
+// devreye girmiyordu (ölçüldü: Dosya/görev<T>/Baglanti üçünde de).
+yapı tekkez Tutamac { h: metin; }
+
+işlev ac() -> sonuç<Tutamac, metin> {
+    ver tamam(Tutamac { h: "x" });
+}
+
+işlev main() -> tam32 {
+    ac();     // sonuç ATILDI -> lineer Tutamac sızar
+    ver 0;
+}

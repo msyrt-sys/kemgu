@@ -1,0 +1,6 @@
+{"tur": "14", "is": "zaman_x86", "gorev": "otomasyon/evren/gorev_14_zaman_x86.md",
+ "baglam": ["runtime/mimari/arm64/kem_zaman_hw.kem", "runtime/kem_zaman.kem", "runtime/mimari/x86_64/kem_uart.kem"],
+ "kesit": ["runtime/kdl_zaman.c:121-155", "Makefile:1956-1961", "Makefile:2071-2077", "test/ornekler/kem_os_x86.kem:1-30"],
+ "effort": "low",
+ "dogrulama": ["make calistir_kem_os_x86", "make calistir_check_kapisi", "make calistir_baremetal_diff"],
+ "isaretler": ["X86 TIMER TIK OK tik=", "Kanit 15", "kem_os_x86 (birleşik kaynak, 13 parça", "✅ BİRLEŞİK x86"]}

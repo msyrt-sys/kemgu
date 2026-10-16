@@ -1,0 +1,2 @@
+// [D-513] SABIT miktar, aralik disi. Onceden: -O0 exit=0, -O2 exit=1 (UB).
+işlev main() -> tam32 { değişken a: tam32 = 5; ver a << 40; }

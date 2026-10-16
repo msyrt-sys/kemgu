@@ -94,8 +94,17 @@ işlev test_kes_bos() -> mantıksal {
     ver esit_mi(kes("", 0, 5), "");
 }
 
-işlev test_kes_aralik_ters() -> mantıksal {
-    ver esit_mi(kes("merhaba", 5, 2), "");
+// ⚠ D-440: bu test YANLIŞ bir zihinsel modele dayanıyordu. `kes`in üçüncü
+// argümanı UZUNLUK'tur, aralık SONU değil — yani `kes("merhaba", 5, 2)`
+// "ters aralık" DEĞİL, 5. bayttan 2 baytlık geçerli bir dilimdir → "ba".
+// Test hiç koşmadığı için yanlışlığı görünmüyordu.
+işlev test_kes_uzunluk_semantigi() -> mantıksal {
+    ver esit_mi(kes("merhaba", 5, 2), "ba");
+}
+
+// Sondan taşan uzunluk: mevcut olan kadarını verir, panik ETMEZ.
+işlev test_kes_uzunluk_tasan() -> mantıksal {
+    ver esit_mi(kes("merhaba", 5, 99), "ba");
 }
 
 // --- bol (stub) ---
@@ -444,7 +453,76 @@ işlev test_kes_arasi_bos_icerik() -> mantıksal {
 // doğrulaması `metin_esit` (gerçek primitif) ile bağımsız sürücü üzerinden
 // yapılır (PASS exit=42). Yukarıdaki yeni testler bu yüzden `metin_esit`
 // kullanır.
+// D-440: ÖNCEDEN bu main YALNIZ BİR test çağırıyordu (89 test işlevinden 1).
+// Kalan 88'i derleniyor ama HİÇ KOŞMUYORDU — `--check` yalnız tip denetler.
+// Tam bu kör nokta gerçek bir kusuru saklıyordu: `esit_mi` içerik değil
+// İŞARETÇİ karşılaştırıyordu (bkz. stdlib/metin.kem D-440 notu).
+//
+// Beklentiler MEKANİK TÜRETİLEMEZ — bir kural yazıp uyguladım ve 9
+// "başarısızlığın" 4'ü KURALIN kendi hatasıydı (ad beklentiyi değil GİRDİYİ
+// tarif ediyor: `test_harf_karisik` = `sadece_harf_mi("abc123")` → yanlış
+// dönmeli). Aşağıdaki `yanlış` beklentileri tek tek gövdeden doğrulandı.
 işlev main() -> tam32 {
-    eğer test_esit_evet() { ver 0; }
+    değişken h: tam32 = 0;
+    eğer değil test_esit_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_esit_evet"); h = h + 1; }
+    eğer test_esit_hayir() { yazdir_metin("BASARISIZ (doğru döndü): test_esit_hayir"); h = h + 1; }
+    eğer değil test_farkli_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_farkli_evet"); h = h + 1; }
+    eğer test_farkli_hayir() { yazdir_metin("BASARISIZ (doğru döndü): test_farkli_hayir"); h = h + 1; }
+    eğer değil test_bos_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_bos_evet"); h = h + 1; }
+    eğer test_bos_hayir() { yazdir_metin("BASARISIZ (doğru döndü): test_bos_hayir"); h = h + 1; }
+    eğer değil test_dolu_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_dolu_evet"); h = h + 1; }
+    eğer test_dolu_hayir() { yazdir_metin("BASARISIZ (doğru döndü): test_dolu_hayir"); h = h + 1; }
+    eğer değil test_sarmala_dolu() { yazdir_metin("BASARISIZ (yanlış döndü): test_sarmala_dolu"); h = h + 1; }
+    eğer değil test_sarmala_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_sarmala_bos"); h = h + 1; }
+    eğer değil test_birlestir_bos_solda() { yazdir_metin("BASARISIZ (yanlış döndü): test_birlestir_bos_solda"); h = h + 1; }
+    eğer değil test_birlestir_bos_sagda() { yazdir_metin("BASARISIZ (yanlış döndü): test_birlestir_bos_sagda"); h = h + 1; }
+    eğer değil test_kes_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_bos"); h = h + 1; }
+    eğer değil test_kes_uzunluk_semantigi() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_uzunluk_semantigi"); h = h + 1; }
+    eğer değil test_kes_uzunluk_tasan() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_uzunluk_tasan"); h = h + 1; }
+    eğer değil test_icerir_kendisi() { yazdir_metin("BASARISIZ (yanlış döndü): test_icerir_kendisi"); h = h + 1; }
+    eğer değil test_icerir_bos_alt() { yazdir_metin("BASARISIZ (yanlış döndü): test_icerir_bos_alt"); h = h + 1; }
+    eğer değil test_baslar_ile_kendisi() { yazdir_metin("BASARISIZ (yanlış döndü): test_baslar_ile_kendisi"); h = h + 1; }
+    eğer değil test_baslar_ile_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_baslar_ile_bos"); h = h + 1; }
+    eğer değil test_biter_ile_kendisi() { yazdir_metin("BASARISIZ (yanlış döndü): test_biter_ile_kendisi"); h = h + 1; }
+    eğer değil test_biter_ile_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_biter_ile_bos"); h = h + 1; }
+    eğer değil test_tekrarla_sifir() { yazdir_metin("BASARISIZ (yanlış döndü): test_tekrarla_sifir"); h = h + 1; }
+    eğer değil test_yer_degistir_tam_esit() { yazdir_metin("BASARISIZ (yanlış döndü): test_yer_degistir_tam_esit"); h = h + 1; }
+    eğer değil test_bilesik() { yazdir_metin("BASARISIZ (yanlış döndü): test_bilesik"); h = h + 1; }
+    eğer değil test_yansit_ascii() { yazdir_metin("BASARISIZ (yanlış döndü): test_yansit_ascii"); h = h + 1; }
+    eğer değil test_yansit_utf8() { yazdir_metin("BASARISIZ (yanlış döndü): test_yansit_utf8"); h = h + 1; }
+    eğer değil test_yansit_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_yansit_bos"); h = h + 1; }
+    eğer değil test_bol_join_round_trip() { yazdir_metin("BASARISIZ (yanlış döndü): test_bol_join_round_trip"); h = h + 1; }
+    eğer değil test_birlestir_liste_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_birlestir_liste_bos"); h = h + 1; }
+    eğer değil test_indeks_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_indeks_yok"); h = h + 1; }
+    eğer değil test_on_ek_kaldir() { yazdir_metin("BASARISIZ (yanlış döndü): test_on_ek_kaldir"); h = h + 1; }
+    eğer değil test_on_ek_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_on_ek_yok"); h = h + 1; }
+    eğer değil test_son_ek_kaldir() { yazdir_metin("BASARISIZ (yanlış döndü): test_son_ek_kaldir"); h = h + 1; }
+    eğer değil test_son_ek_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_son_ek_yok"); h = h + 1; }
+    eğer değil test_doldur_sol() { yazdir_metin("BASARISIZ (yanlış döndü): test_doldur_sol"); h = h + 1; }
+    eğer değil test_doldur_sol_kisa() { yazdir_metin("BASARISIZ (yanlış döndü): test_doldur_sol_kisa"); h = h + 1; }
+    eğer değil test_doldur_sag() { yazdir_metin("BASARISIZ (yanlış döndü): test_doldur_sag"); h = h + 1; }
+    eğer değil test_basharf_buyut() { yazdir_metin("BASARISIZ (yanlış döndü): test_basharf_buyut"); h = h + 1; }
+    eğer değil test_basharf_buyut_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_basharf_buyut_bos"); h = h + 1; }
+    eğer değil test_degistir_ilk_var() { yazdir_metin("BASARISIZ (yanlış döndü): test_degistir_ilk_var"); h = h + 1; }
+    eğer değil test_degistir_ilk_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_degistir_ilk_yok"); h = h + 1; }
+    eğer değil test_degistir_ilk_genis() { yazdir_metin("BASARISIZ (yanlış döndü): test_degistir_ilk_genis"); h = h + 1; }
+    eğer değil test_kes_arasi_var() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_arasi_var"); h = h + 1; }
+    eğer değil test_kes_arasi_son_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_arasi_son_yok"); h = h + 1; }
+    eğer değil test_kes_arasi_bas_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_arasi_bas_yok"); h = h + 1; }
+    eğer değil test_rakam_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_rakam_evet"); h = h + 1; }
+    eğer test_rakam_hayir() { yazdir_metin("BASARISIZ (doğru döndü): test_rakam_hayir"); h = h + 1; }
+    eğer test_rakam_bos() { yazdir_metin("BASARISIZ (doğru döndü): test_rakam_bos"); h = h + 1; }
+    eğer değil test_harf_ascii() { yazdir_metin("BASARISIZ (yanlış döndü): test_harf_ascii"); h = h + 1; }
+    eğer değil test_harf_turkce() { yazdir_metin("BASARISIZ (yanlış döndü): test_harf_turkce"); h = h + 1; }
+    eğer test_harf_karisik() { yazdir_metin("BASARISIZ (doğru döndü): test_harf_karisik"); h = h + 1; }
+    eğer test_harf_bos() { yazdir_metin("BASARISIZ (doğru döndü): test_harf_bos"); h = h + 1; }
+    eğer test_harf_bosluk() { yazdir_metin("BASARISIZ (doğru döndü): test_harf_bosluk"); h = h + 1; }
+    eğer değil test_degistir_ilk_bos_hedef() { yazdir_metin("BASARISIZ (yanlış döndü): test_degistir_ilk_bos_hedef"); h = h + 1; }
+    eğer değil test_sadece_rakam_tek() { yazdir_metin("BASARISIZ (yanlış döndü): test_sadece_rakam_tek"); h = h + 1; }
+    eğer değil test_sadece_harf_tek_turkce() { yazdir_metin("BASARISIZ (yanlış döndü): test_sadece_harf_tek_turkce"); h = h + 1; }
+    eğer değil test_kes_arasi_bos_icerik() { yazdir_metin("BASARISIZ (yanlış döndü): test_kes_arasi_bos_icerik"); h = h + 1; }
+    eğer h == 0 { yazdir_metin("metin: TUM MANTIKSAL TESTLER GECTI"); ver 0; }
+    // ⚠ Çıkış kodu 8 bite maskelenir — sayaç DEĞİL, 1 döndürülür (D-435).
+    yazdir_metin("metin: BASARISIZ");
     ver 1;
 }

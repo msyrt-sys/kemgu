@@ -1,0 +1,80 @@
+// kem_platform.kem — x86_64 DMA adres haritası (D2b: mimari başına platform).
+// ============================================================================
+// Makefile CAT listesi x86_64 için bu dosyayı seçer. kem_virtio_blk.kem ve
+// kem_virtio_net.kem içindeki `vblk_dma`/`vnet_dma` tanımları BURAYA taşındı.
+//
+// NEDEN bu adresler: x86 boot (start_x86_64.S) yalnız 0..1 GB'ı 2 MB huge
+// page'lerle eşler (PD girdileri 0x83 = P|RW|PS) ve QEMU x86 varsayılan RAM
+// 128 MB'tır. Dolayısıyla DMA bölgesi __heap_end (~0x110F000) ÜSTÜNDE ve
+// 1 GB eşlemenin ALTINDA kalmalıdır. aarch64 değerlerinden farklı seçildi
+// çünkü aarch64 QEMU virt RAM tabanı 0x40000000; x86 kernel 0x100000'den yüklenir.
+//   vblk_dma = 0x02000000 (33554432) — blok DMA tabanı; ihtiyaç ~800 B.
+//   vnet_dma = 0x02100000 (34603008) — ağ DMA tabanı; ihtiyaç ~19 KB
+//     (NO_TXBUF + 2048 = 18944 B; RX tamponları 8×2048 bu aralığın içinde).
+// Çakışma ölçümü Makefile Kanıt 7 (__heap_end < 0x02000000) ile yapılır.
+küresel değişken vblk_dma: tam64 = 33554432;    // 0x02000000
+küresel değişken vnet_dma: tam64 = 34603008;    // 0x02100000
+
+// VirtIO-MMIO cihaz tarama yuvası tabanı + yuva sayısı. Adım 0x200 (512) iki
+// makinede de aynı. x86'da virtio-mmio YALNIZ -M microvm'de var (24 yuva);
+// pc makinesinde virtio-mmio YOK.
+sabit VM_TARAMA_TABAN: tam64 = 4272947200;  // 0xFEB00000 (QEMU microvm)
+sabit VM_YUVA_SAYISI: tam32 = 24;
+
+// İş 10: x86 DMA tabanını PVH bellek haritasından ÇALIŞMA ZAMANINDA türet.
+// ----------------------------------------------------------------------------
+// NEDEN RAM TEPESİ: kem_os heap'i ~17 MB'ta (__heap_end) biter; kanal/görev
+// tahsisleri de MB mertebesinde kalır → RAM tepesinin 256 KB altı, heap'in ÇOK
+// üstünde ve dolayısıyla çakışma yok. "DMA bölgesi __heap_end ÜSTÜNDE olmalı"
+// kuralı (bu dosya başlığı, Kanıt 7) böylece hâlâ sağlanır.
+// NEDEN 1 GB SINIRI: start_x86_64.S yalnız İLK 1 GB'ı 2 MB huge page PD
+// girdileriyle (P|RW|PS) identity eşler → 1073741824 üstü adres page fault.
+// Bu yüzden her RAM parçasının `son`u 1 GB ile kırpılır.
+// NEDEN 256 KB PAY: DMA tabanı RAM tepesine dayanırsa kernel .bss/heap ile
+// çakışabilir → 262144 bayt emniyet payı bırakıp 4 KB aşağı hizala.
+// PVH YOKSA: ver 0; kem_platform_kur sABİT yedeğe (dosya başındaki küresel
+// başlangıç değerleri) dokunmaz → x86 microvm dışı boot yine çalışır.
+// Seçim: tür==1 (RAM) parçaları arasında kırpılmış `son` EN BÜYÜK olanı.
+// QEMU 128 MB'ta beklenen: 134217728 - 262144 = 133955584 (0x7FC0000, 130816 KB).
+// Aynı yöntem: kem_pvh_bilgi + kdl_mmio_oku32 + kem_pvh_oku64 (aynı mimari
+// dizini → Makefile CAT listesi hepsini tek birimde toplar).
+çıplak işlev kem_platform_dma_tabani() -> tam64 {
+    değişken b: tam64 = kem_pvh_bilgi();
+    eğer b == 0 { ver 0; }                               // PVH yok → yedeğe düş
+    eğer kdl_mmio_oku32(b) != 862897528 { ver 0; }       // magic (u32 @0)
+    eğer kdl_mmio_oku32(b + 4) < 1 { ver 0; }            // version (memmap var)
+    değişken mm: tam64 = kem_pvh_oku64(b + 40);          // memmap_paddr
+    değişken n: tam32 = kdl_mmio_oku32(b + 48);          // memmap_entries
+    değişken sec: tam64 = 0;                             // en büyük kırpılmış `son`
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken e: tam64 = mm + (i olarak tam64) * 24;  // girdi 24 bayt
+        değişken tur: tam32 = kdl_mmio_oku32(e + 16);    // tür @16; RAM=1
+        eğer tur == 1 {
+            değişken adr: tam64 = kem_pvh_oku64(e);      // addr @0
+            değişken boy: tam64 = kem_pvh_oku64(e + 8);  // size @8
+            değişken son: tam64 = adr + boy;
+            eğer son > 1073741824 { son = 1073741824; }  // identity eşleme sınırı
+            eğer son > adr {
+                eğer son - adr >= 262144 {               // en az 256 KB RAM
+                    eğer son > sec { sec = son; }        // en büyük tepesi
+                }
+            }
+        }
+        i = i + 1;
+    }
+    eğer sec == 0 { ver 0; }                             // uygun parça yok → yedek
+    ver ((sec - 262144) / 4096) * 4096;                  // 256 KB aşağı, 4 KB hizalı
+}
+
+// İş 10: platform kurulumu. t > 0 ise vblk_dma/vnet_dma'yı TÜRET; aksi hâlde
+// küresel başlangıç değerleri (sabit yedek: vblk=32 MB, vnet=32 MB+64 KB) KALIR.
+// Blok ihtiyacı ~800 B; ağ ~19 KB (NO_TXBUF+2048 + RX 8×2048 ≈ 19 KB) → arada
+// 64 KB boşluk güvenli.
+çıplak işlev kem_platform_kur() {
+    değişken t: tam64 = kem_platform_dma_tabani();
+    eğer t > 0 {
+        vblk_dma = t;
+        vnet_dma = t + 65536;                            // 64 KB yukarı (net ~19 KB)
+    }
+}

@@ -1,0 +1,28 @@
+// D-353: "yanlış şekil" tanıları — bağlam yapı/dizi/işlev şekli isterken ifadenin
+// tipi bilinen bir SKALER. Her biri ayrı işlevde: C her hatadan sonra erken döner,
+// tek işlevde toplamak tanıları maskelerdi.
+işlev alan_yok() -> tam32 {
+    değişken a: tam32 = 5;
+    ver a.x;              // T007: alan erişimi yapı tipi gerek
+}
+işlev indeks_yok() -> tam32 {
+    değişken s: metin = "q";
+    ver s[0];             // T008: indeksleme dizi tipi gerek
+}
+işlev cagri_yok() -> tam32 {
+    değişken a: tam32 = 5;
+    ver a(1);             // T006: çağrı için işlev tipi gerek
+}
+işlev dongu_yok() -> tam32 {
+    değişken a: tam32 = 5;
+    için x: a { }         // T027: için koleksiyonu Dizi<T> olmalı
+    ver 0;
+}
+işlev indeks_tamsayi() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2];
+    değişken m: mantıksal = doğru;
+    ver xs[m];            // T005: indeks tamsayı olmalı
+}
+işlev main() -> tam32 {
+    ver 0;
+}

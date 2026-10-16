@@ -2,9 +2,18 @@
 // Recipe (repo kökünden): kemgu --llvm <bu dosya> | clang -x ir ... | run (exit 0 = geçti).
 // Otomatik: make -f tests/drivers/Makefile.drivers calistir_blk_oku_test
 
-kullan drivers::virtio::virtqueue_bind;    // Virtqueue
-kullan drivers::virtio::virtio_blk;        // BlkAygit
-kullan drivers::virtio::virtio_blk_oku;    // blk_oku_cekirdek, IOHatasi, Tampon512
+kullan drivers::virtio::virtqueue_bind::{
+    Virtqueue
+};    // Virtqueue
+kullan drivers::virtio::virtio_blk::{
+    BlkAygit
+};        // BlkAygit
+kullan drivers::virtio::virtio_blk_oku::{
+    IOHatasi,
+    Tampon512,
+    blk_oku,
+    blk_oku_cekirdek
+};    // blk_oku_cekirdek, IOHatasi, Tampon512
 
 sabit TEST_MMIO_OKU_YAZ: tam32 = 3;        // OKU|YAZ
 sabit TEST_DATA_ADRES: tam64 = 2048;       // caller 512B tamponu (ring'lerle çakışmaz)

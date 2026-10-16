@@ -31,6 +31,33 @@
  * sonraki_is, ortak_toplam, per-çekirdek sayaçlar) için EL ile senkronizasyon:
  *   - Paylaşılan satıra YAZDIKTAN sonra `dc civac` + `dsb sy` → RAM'e boşalt.
  *   - Paylaşılan satırı OKUMADAN önce `dc ivac` + `dsb sy` → tazesini yükle.
+ *
+ * ⚠⚠ [D-490] BU DOSYADAKI ONBELLEK BAKIMI VE BARIYERLER QEMU'DA OLCULMUYOR.
+ * OLCULDU (tahmin degil): `dc civac` + `dc ivac` + eslik eden `dsb sy`
+ * komutlarinin DORDU DE `nop`a cevrildi (kaynak dogrulandi, dc sayisi 0) ve
+ * test BIREBIR AYNI sonucla GECTI (toplam=20540). Yani QEMU TCG onbellegi ve
+ * zayif bellek modelini MODELLEMIYOR.
+ *
+ * UC SONUC:
+ *  1. Buradaki bariyerler DOGRU ve GEREKLIDIR (gercek ARM64 donaniminda
+ *     onlarsiz bu kod BOZULUR) — ama hicbir kapi bunu zorlamiyor. Sessizce
+ *     silinseler QEMU kapisi YESIL kalir.
+ *  2. QEMU uzerine kurulacak bir "zayif bellek" kapisi HICBIR SEY KANITLAMAZ.
+ *     Bu yuzden boyle bir kapi EKLENMEDI (D-425: yanlisin gozlenebilir
+ *     oldugu sekli olcemeyen kapi, kapi degildir).
+ *  3. Gercek dogrulama YALNIZ FIZIKSEL ARM64 DONANIMINDA yapilabilir
+ *     (DGX Spark). Oraya tasindiginda bu dosya ILK kosulacaklardan olmali ve
+ *     yukaridaki sabotaj (bariyerleri nop yap) ORADA TEKRARLANMALI: gercek
+ *     donanimda KIRMIZI olmasi beklenir. Olmazsa test yeterince zorlamıyordur.
+ *     [D-530] ADIM ADIM PROSEDUR:
+ *       belgeler/ARM64_Fiziksel_Donanim_Kontrol_Listesi.md
+ *     ⚠ Sabotaj sayimi KOD SATIRLARINDA yapilmali: yorumlar da eslesir.
+ *       Sayim desenleri ve beklenen degerler KONTROL LISTESINDEDIR — buraya
+ *       YAZILMADI, cunku desenin kendisi bu yorumda gecerse SAYIMI BOZAR
+ *       (olculdu: eklendiginde 2 -> 3 ve 4 -> 5 oldu).
+ *     ⚠ Onbellek-bakim bariyerleri ile SPINLOCK bariyerleri AYRI seylerdir;
+ *       sabotaj YALNIZ onbellek bakimindakileri hedefler (asagida ~131/~142).
+ *       Spinlock bariyerini kaldirmak BASKA bir seyi olcer.
  * Spinlock LDAXR/STLR (acquire/release) bariyerleri kritik-bölge sıralamasını
  * garanti eder; cacheability uyuşmazlığında görünürlük için `dc` de şart.
  *

@@ -12,9 +12,20 @@
 # Kullanım: bash test/dizi_sinir_harness.sh  (veya make calistir_dizi_sinir_test)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/dizisinir); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/dizisinir.XXXXXX" 2>/dev/null || echo "build/dizisinir.$$")
+mkdir -p "$TMP"
 pass=0; fail=0
 
 # panic_bekle <ad> <kaynak>: OOB → PANIC (rc≠0, rc≠139, stderr PANIK) doğrula.
@@ -309,6 +320,71 @@ işlev main() -> tam32 {
 }
 g003_reddi
 segfault_yok vaka10_d065_koruma test/lex_korpus/m3_04_ayrac_hata.kem
+
+# ---------------------------------------------------------------------------
+# [D-579] KAPASITE TASMASI + TAHSIS BASARISIZLIGI — RUNTIME duzeyinde.
+# KEMGU'dan ulasmak ~1 GB veri gerektirir; KdlDizi'yi DOGRUDAN kurup
+# `kdl_dizi_ekle_tam` cagirmak ayni yolu ANINDA ve DETERMINISTIK ates ler.
+# Korumasiz halde OLCULDU: SEGV (rc=139). Ayni invaryant: panik, asla segfault.
+# ---------------------------------------------------------------------------
+kapasite_tasmasi() {
+    local ad="vaka11_kapasite_tasmasi"
+    cat > "$TMP/$ad.c" <<'CEOF'
+#include <stdio.h>
+#include <stdint.h>
+typedef struct { void *veri; int32_t boyut; int32_t kapasite; int32_t eleman_byte; } D;
+extern void kdl_dizi_ekle_tam(void *rho, void *d, int32_t deger);
+int main(void) {
+    static int32_t kucuk[4];
+    D d; d.veri = kucuk; d.boyut = 0x40000000; d.kapasite = 0x40000000;
+    d.eleman_byte = 4;
+    /* boyut == kapasite -> buyume kapasite*2 = 2^31 -> int32 TASMA -> negatif */
+    kdl_dizi_ekle_tam(NULL, &d, 7);
+    puts("ULASILMAMALI");
+    return 0;
+}
+CEOF
+    if ! clang "$TMP/$ad.c" runtime/kdl_runtime.c -I runtime -o "$TMP/$ad.exe" 2>/dev/null; then
+        echo "  🔴 $ad: probe derlenemedi"; fail=$((fail+1)); return
+    fi
+    "$TMP/$ad.exe" >"$TMP/$ad.out" 2>"$TMP/$ad.err"; local rc=$?
+    if [ "$rc" -eq 139 ]; then
+        echo "  🔴 $ad: SEGFAULT (rc=139) — koruma dustu"; fail=$((fail+1)); return
+    fi
+    if [ "$rc" -eq 0 ]; then
+        echo "  🔴 $ad: sessiz basari (rc=0) — koruma dustu"; fail=$((fail+1)); return
+    fi
+    if grep -q "PANIK" "$TMP/$ad.err"; then
+        echo "  ✅ $ad: temiz panik (rc=$rc)"; pass=$((pass+1))
+    else
+        echo "  🔴 $ad: rc=$rc ama stderr'de PANIK yok"; fail=$((fail+1))
+    fi
+}
+kapasite_tasmasi
+
+# POZITIF: NORMAL buyume bozulmamali (0->4->8->... daima ARTAR, panik YOK).
+# ⚠ SART: yalniz negatif vaka olsaydi "her buyumede panikle" sabotaji
+#   kapidan GECERDI (D-425).
+normal_buyume() {
+    local ad="vaka12_normal_buyume"
+    printf '%s
+' 'işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    iken i < 1000 { dizi_ekle(d, 1); i = i + 1; }
+    eğer dizi_boyut(d) != 1000 { ver 1; }
+    ver 42;
+}' > "$TMP/$ad.kem"
+    if ! "$KEMGU" --llvm "$TMP/$ad.kem" > "$TMP/$ad.ll" 2>/dev/null; then
+        echo "  🔴 $ad: IR uretilemedi"; fail=$((fail+1)); return
+    fi
+    clang -x ir "$TMP/$ad.ll" -x none "$RT" -o "$TMP/$ad.exe" 2>/dev/null
+    "$TMP/$ad.exe" >/dev/null 2>&1; local rc=$?
+    if [ "$rc" -eq 42 ]; then
+        echo "  ✅ $ad: 1000 ekleme, panik yok (rc=42)"; pass=$((pass+1))
+    else echo "  🔴 $ad: rc=$rc (42 bekle)"; fail=$((fail+1)); fi
+}
+normal_buyume
 
 echo "=== dizi sınır-güvenliği: $pass/$((pass+fail)) ==="
 [ "$fail" -eq 0 ]

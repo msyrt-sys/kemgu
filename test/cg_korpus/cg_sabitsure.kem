@@ -1,0 +1,54 @@
+// D-367: geçerli sabitsüre kullanımları — yanlış-pozitif kapısı.
+// `ifşa(...)` declassify eder: ondan SONRA değer artık gizli değildir, yani
+// dallanma/indeksleme/bölme serbesttir. Aritmetik sabitsüre'yi KORUR.
+işlev declassify() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(42);
+    değişken n: tam32 = ifşa(s);
+    ver n;
+}
+işlev aritmetik_korur() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(5);
+    değişken q: sabitsüre<tam32> = s + s;
+    değişken r: sabitsüre<tam32> = q * q;
+    ver ifşa(r);
+}
+işlev declass_sonrasi_dallanma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(1);
+    değişken n: tam32 = ifşa(s);
+    eğer n == 1 { ver 1; }
+    ver 0;
+}
+işlev ct_yetenekli_tipler() -> tam32 {
+    değişken a: sabitsüre<tam8> = sabitsüre_olustur(1);
+    değişken b: sabitsüre<dtam64> = sabitsüre_olustur(2);
+    // NOT: `sabitsüre<karakter>`/`sabitsüre<mantıksal>` + `sabitsüre_olustur(...)`
+    // C'de T001 verir (üreticinin dönüş tipi çıkarsaması tamsayı literaline
+    // bağlı) — bu bir CT kuralı DEĞİL, ayrı bir tip-çıkarsama sınırı. Bu dosya
+    // CT yanlış-pozitif kapısı olduğu için o şekiller buraya alınmadı.
+    ver 0;
+}
+işlev acik_kaydirma() -> tam32 {
+    değişken s: sabitsüre<tam32> = sabitsüre_olustur(2);
+    değişken n: tam32 = 1;
+    ver n << ifşa(s);
+}
+işlev main() -> tam32 {
+    ver 0;
+}
+
+// ── D-417 NOTU ───────────────────────────────────────────────────────────
+// `sabitsüre` codegen'i self-host'ta YOKTU. C her iki yerleşiği de PASS-THROUGH
+// yapar AMA ardından bir SPEKÜLASYON BARİYERİ yayar:
+//     call void @llvm.x86.sse2.lfence()
+// Bariyeri düşürmek link hatası VERMEZ, IR geçerli kalır, program çalışır —
+// sabit-süre disiplininde SESSİZ GÜVENLİK REGRESYONU.
+// D-408'de "sabitsüre_olustur'u yarım yapmıyorum" derken aynı kusuru `ifşa`da
+// işlemiştim (pass-through, bariyersiz) — D-417 onu da onardı.
+//
+// ⚠⚠ BU DOSYA TEK BAŞINA YETMEZ: exit kodu bariyer OLMADAN da aynı çıkar
+// (sabotajla ölçüldü). Bariyer SAYISI ayrı bir kapıyla (calistir_ct_bariyer)
+// C oracle'a karşı denetlenir. Yalnız exit'e bakan bir kapı eksik bariyeri
+// KAÇIRIR — güvenlik özelliklerinde "program doğru çalıştı" yetersiz kanıttır.
+//
+// ⚠ MİMARİ KORUMASI YOK ve bu BİLİNÇLİ: C `--mimari aarch64`te DE x86 lfence
+// yayıyor (ölçüldü). Parite hedefi C'nin DAVRANIŞI, "doğrusu" değil.

@@ -1,0 +1,26 @@
+// [D-525] BİLİNMEYEN ELEMAN YOLU — D-510'un ölçülemeyen dalı ULAŞILABİLİR ÇIKTI.
+//
+// D-510 self-host'ta iki yönlendirme çağrısının bilinmeyen-eleman varsayılanını
+// `"i32"` (SKALER = İZİN) yerine `"ptr"` (DENY) yapmıştı, ama o turda dalı
+// ateşleyen bir şekil BULAMAMIŞTIM → "ölçülemeyen ama tek yönlü" diye BORÇ
+// kaydedilmişti (D-430 disiplini).
+//
+// ÖLÇÜLDÜ (kaynağa geçici iz koyularak): dal ULAŞILABİLİR. Ateşleyen şekiller
+// bağlamın eleman tipini vermediği yerlerdir — dizi literali DOĞRUDAN ARGÜMAN,
+// çeşit payload'ı, iç içe literal. Korpusta bu şekillerden HİÇBİRİ yoktu
+// (`cg_korpus` + `test/perf` taraması: 0 iz), bu yüzden kapı dalı hiç ölçmüyordu.
+//
+// Bu dosya dalı KALICI olarak ateşler. Ölçüm `calistir_bolge_operand`dadır:
+// bilinmeyen eleman DENY tarafına düşmeli, yani bu tahsisler YEREL OLMAMALI.
+// Çıkış: 42
+işlev al(xs: Dizi<tam32>) -> tam32 { ver dizi_al(xs, 0); }
+
+işlev main() -> tam32 {
+    // (a) dizi literali DOĞRUDAN argüman — bağlam eleman tipi vermez
+    değişken x: tam32 = dizi_al([40, 2], 0) + dizi_al([1, 1], 1);
+    // (b) literal, kullanıcı işlevine argüman
+    değişken y: tam32 = al([2]);
+    // (c) iç içe literal — iç dizilerin bağlamı yok
+    değişken m: Dizi<Dizi<tam32>> = [[0], [1]];
+    ver x + y - dizi_al(dizi_al(m, 1), 0);   // 41 + 2 - 1 = 42
+}

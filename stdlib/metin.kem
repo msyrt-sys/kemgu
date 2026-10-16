@@ -20,25 +20,34 @@
 // Gerçekten çalışan ops (runtime gerekmiyor)
 // =============================================================================
 
-// İki metnin eşit olup olmadığı (== operator metin için literal eşitlik;
-// gerçek hash/byte karşılaştırması derleyici dahili).
+// İki metnin İÇERİKÇE eşit olup olmadığı.
+//
+// ⚠ D-440: burada `a == b` KULLANILAMAZ. `metin` üzerinde `==` İÇERİK değil
+// İŞARETÇİ karşılaştırır (IR'dan ölçüldü: `icmp eq ptr`). Literaller
+// tekilleştirildiği için literal↔literal TESADÜFEN doğru sonuç verir —
+// bu yüzden kusur testlerde görünmüyordu. Hesaplanmış (heap) metinlerde
+// SESSİZCE yanlış cevap üretiyordu:
+//     esit_mi(birlestir("", "b"), "b")  →  yanlış   (doğrusu: doğru)
+// Yerleşik `metin_esit` bayt karşılaştırması yapar ve DOĞRUDUR.
 işlev esit_mi(a: metin, b: metin) -> mantıksal {
-    ver a == b;
+    ver metin_esit(a, b);
 }
 
-// Farklı mı.
+// Farklı mı. (Aynı gerekçe — `!=` de işaretçi karşılaştırmasıdır.)
 işlev farkli_mi(a: metin, b: metin) -> mantıksal {
-    ver a != b;
+    ver değil metin_esit(a, b);
 }
 
-// Boş mu (uzunluk 0).
+// Boş mu (uzunluk 0). D-440: `s == ""` İŞARETÇİ karşılaştırmasıdır —
+// hesaplanmış boş dizgide yanlış cevap verirdi. Uzunluk sorgusu hem doğru
+// hem de niyeti doğrudan söylüyor.
 işlev bos_mu(s: metin) -> mantıksal {
-    ver s == "";
+    ver metin_uzunluk(s) == 0;
 }
 
 // Dolu mu.
 işlev dolu_mu(s: metin) -> mantıksal {
-    ver s != "";
+    ver metin_uzunluk(s) > 0;
 }
 
 // Tek elemanlı opsiyonel sarmalama (helper).

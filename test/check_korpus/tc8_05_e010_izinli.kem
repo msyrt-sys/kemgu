@@ -1,0 +1,20 @@
+// D-351 / E010: küresele erişimin İKİ meşru yolu — `güvensiz` blok ve `çıplak`
+// gövde (D-257: çıplak = örtük güvensiz). Ayrıca aynı adlı YEREL bağlama küreseli
+// gölgeler → E010 YOK (erişilen şey küresel değil).
+küresel değişken sayac: tam32 = 0;
+
+işlev guvensiz_yol() -> tam32 {
+    güvensiz { ver sayac; }
+    ver 0;
+}
+çıplak işlev ciplak_yol(n: tam32) -> tam32 {
+    sayac = n;
+    ver sayac;
+}
+işlev golge() -> tam32 {
+    değişken sayac: tam32 = 7;
+    ver sayac;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

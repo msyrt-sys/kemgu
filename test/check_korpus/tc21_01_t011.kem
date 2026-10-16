@@ -1,0 +1,26 @@
+// D-370 / T011: bilinmeyen tip. Tip-adı evreni = yerleşik skalerler + `yapı` +
+// `çeşit` + generic param adları + küresel adlar (çapraz-dosya `dışa`).
+// KRİTİK: `özellik` adı EVRENDE DEĞİL — özellik bir BOUND'dur, tip değil.
+// Bu dosya ayrıca alan/dönüş/parametre tipi gezintisini kapılar.
+özellik Say {}
+
+işlev degisken_annot() -> tam32 {
+    değişken a: Bilinmeyen = 5;      // T011 (T001 DEĞİL: C tipi hataya düşürür)
+    ver 0;
+}
+işlev parametre(x: YokTip) -> tam32 {   // T011
+    ver 0;
+}
+işlev donus() -> BaskaYok {             // T011
+    ver 0;
+}
+yapı AlanTipi { x: HicYok; }            // T011
+işlev dizi_ici(x: Dizi<IcYok>) -> tam32 {   // T011
+    ver 0;
+}
+işlev ozellik_tip_degil(x: Say) -> tam32 {  // T011: özellik tip olarak kullanılamaz
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

@@ -1,0 +1,36 @@
+// [D-550] REALTIME denetimi — self-host'ta HİÇ YOKTU.
+// ⚠ C İŞLEV BAŞINA EN FAZLA BİR TANI verir (walk ilk hatada -1 döner), bu
+//   yüzden her şekil AYRI bir gerçekzamanlı işlevdedir.
+// ⚠ `temiz` POZİTİF ölçümdür ve ZORUNLUDUR: yalnız negatif şekiller olsaydı
+//   "her gerçekzamanlı işlevi reddet" sabotajı kapıdan GEÇERDİ (D-425).
+// ⚠ `normal` gerçekzamanlı DEĞİL — döngüsü de lambdası da SERBEST kalmalı;
+//   kuralın yalnız `gerçekzamanlı` gövdelere uygulandığını ölçer.
+
+gerçekzamanlı işlev rt_dongu(n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n { i = i + 1; }        // RT002
+    ver i;
+}
+
+gerçekzamanlı işlev rt_dizi() -> tam32 {
+    değişken d: Dizi<tam32> = [1, 2, 3];   // RT001
+    ver dizi_boyut(d);
+}
+
+gerçekzamanlı işlev rt_ozyineleme(n: tam32) -> tam32 {
+    eğer n > 0 { ver rt_ozyineleme(n - 1); }   // RT003
+    ver 0;
+}
+
+gerçekzamanlı işlev temiz(x: tam32) -> tam32 {
+    eğer x > 100 { ver 100; }
+    ver x + 1;
+}
+
+işlev normal(n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n { i = i + 1; }
+    ver i;
+}
+
+işlev main() -> tam32 { ver temiz(41) + normal(0); }

@@ -6,6 +6,7 @@
 #include "tip.h"
 #include "sembol.h"
 #include "arena.h"
+#include "llvm.h"   /* C5 AS001: llvm_hedef_mimari() — konak mimarisi tek kaynak */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -300,6 +301,40 @@ static void W18_rt003_yok_self_yok_recursion(void) {
     test_sonuc("W5: a->b cagri (recursion yok) -> 0 hata", h == 0 && rt == 0);
 }
 
+/* [D-545] W5b: KARSILIKLI / DOLAYLI OZYINELEME.
+ * RT003 yalniz DOGRUDAN self-call'i yakaliyordu; a->b->a zinciri --check'ten
+ * TEMIZ geciyordu ve program HIC DURMUYORDU (olculdu: exit 124) — yani
+ * `gercekzamanli`nin SINIRLI WCET vaadi geciersizdi.
+ * W18 (a->b, dongu YOK) POZITIF olcumdur ve KALMALIDIR: yalniz negatif
+ * sekiller olsaydi "her cagriyi RT003 yap" sabotaji kapidan GECERDI (D-425).
+ */
+static void W18b_rt003_karsilikli(void) {
+    int rt;
+    derle(
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev a(n: tam32) -> tam32 {\n"
+        "  e\xc4\x9f" "er n > 0 { ver b(n - 1); }\n"
+        "  ver 0;\n"
+        "}\n"
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev b(n: tam32) -> tam32 {\n"
+        "  e\xc4\x9f" "er n > 0 { ver a(n - 1); }\n"
+        "  ver 1;\n"
+        "}\n",
+        NULL, NULL, &rt, NULL);
+    test_sonuc("W5: karsilikli ozyineleme a->b->a -> RT003", rt >= 1);
+}
+
+static void W18c_rt003_dolayli_self(void) {
+    int rt;
+    derle(
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev a(n: tam32) -> tam32 {\n"
+        "  e\xc4\x9f" "er n > 0 { ver ara(n - 1); }\n"
+        "  ver 0;\n"
+        "}\n"
+        "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev ara(n: tam32) -> tam32 { ver a(n); }\n",
+        NULL, NULL, &rt, NULL);
+    test_sonuc("W5: dolayli self a->ara->a -> RT003", rt >= 1);
+}
+
 /* ========================================================================
  * GROUP W6 (19-22): RT004 non-realtime cagri
  * ======================================================================== */
@@ -484,34 +519,72 @@ static void W32_wcet_cagri_zincir(void) {
  * GROUP W10 (33-35): C5 C.3 — satirici_asm RT007 (cevrim anotasyonu)
  * ======================================================================== */
 
+/* [D-469] ASM ARCH-TAG KONAKTAN TURETILIR — GOMULU DEGIL.
+ *
+ * OLCULDU (DGX Spark, aarch64, ilk yerli kosum): W34 ve W35 kaynaga
+ * "mimari: x86_64" gomuyordu. D-469 ile varsayilan hedef derleme
+ * platformundan turudugu icin ARM64 konakta o etiket AS001 yedi ve
+ * "0 hata" bekleyen iki test kirmizi oldu (37'de 2).
+ *
+ * W33 ise YANLIS SEBEPLE YESIL kaldi: iddiasi `h >= 1 && rt >= 1` idi,
+ * AS001'in ekledigi fazladan hatayi da yutuyordu. Burada olculen sey
+ * RT007'dir; iddia `h == 1 && rt == 1` diye SIKILASTIRILDI ki yabanci
+ * bir etiket kazara gelirse test bunu SAKLAMASIN.
+ *
+ * Sablon da mimariye uydurulur: ikisi de cevrim sayaci okumasidir
+ * (x86 `rdtsc`, arm64 `mrs CNTPCT_EL0`) — `cevrim:` anotasyonunun
+ * anlatmak istedigi sey budur. Checker asm METNINI dogrulamaz
+ * (`derle` codegen kosmaz), ama konak etiketiyle celisen bir komut
+ * birakmak okuru yaniltirdi. */
+static const char *wcet_konak_mimari(void) {
+    return llvm_hedef_mimari();
+}
+
+static const char *wcet_konak_asm(void) {
+    return strcmp(llvm_hedef_mimari(), "x86_64") == 0
+               ? "rdtsc"
+               : "mrs $0, CNTPCT_EL0";
+}
+
+/* Sablondaki iki %s: sirasiyla mimari etiketi ve asm komutu. */
+static const char *wcet_kaynak(char *tampon, size_t n, const char *sablon) {
+    int yazilan = snprintf(tampon, n, sablon,
+                           wcet_konak_mimari(), wcet_konak_asm());
+    if (yazilan < 0 || (size_t)yazilan >= n) return "@@KIRPILDI@@";
+    return tampon;
+}
+
 static void W33_rt007_asm_cevrimsiz(void) {
     /* gerçekzamanlı + asm + cevrim YOK -> RT007 (sessiz 0 ASLA) */
     int rt;
-    int h = derle(
+    char k[512];
+    int h = derle(wcet_kaynak(k, sizeof(k),
         "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev oku() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
-        "\xc5\x9f" "ablon: r#\"rdtsc\"# "
+        "mimari: %s "
+        "\xc5\x9f" "ablon: r#\"%s\"# "
         "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } } "
-        "ver x; }\n",
+        "ver x; }\n"),
         NULL, NULL, &rt, NULL);
-    test_sonuc("W10: rt + asm + cevrim yok -> RT007", h >= 1 && rt >= 1);
+    /* TEK hata RT007 olmali: AS001 gibi baska bir hata eklenirse yakala. */
+    test_sonuc("W10: rt + asm + cevrim yok -> RT007", h == 1 && rt == 1);
 }
 
 static void W34_rt007_asm_cevrimli_ok(void) {
     /* cevrim: 24 -> RT007 yok; WCET toplamina dahil (wc >= 24) */
     int rt;
     int64_t wc;
-    int h = derle(
+    char k[512];
+    int h = derle(wcet_kaynak(k, sizeof(k),
         "ger\xc3\xa7" "ekzamanl\xc4\xb1 i\xc5\x9flev oku() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
-        "\xc5\x9f" "ablon: r#\"rdtsc\"# "
+        "mimari: %s "
+        "\xc5\x9f" "ablon: r#\"%s\"# "
         "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) "
         "\xc3\xa7" "evrim: 24 } } "
-        "ver x; }\n",
+        "ver x; }\n"),
         NULL, NULL, &rt, &wc);
     test_sonuc("W10: rt + asm + cevrim:24 -> 0 hata, WCET >= 24",
                h == 0 && rt == 0 && wc >= 24);
@@ -520,14 +593,15 @@ static void W34_rt007_asm_cevrimli_ok(void) {
 static void W35_rt007_normal_islev_cevrimsiz_ok(void) {
     /* Realtime-disi baglamda cevrim opsiyonel — wcet hic kosulmaz */
     int rt;
-    int h = derle(
+    char k[512];
+    int h = derle(wcet_kaynak(k, sizeof(k),
         "i\xc5\x9flev oku() -> tam32 { "
         "de\xc4\x9fi\xc5\x9fken x: tam32 = 0; "
         "g\xc3\xbcvensiz { sat\xc4\xb1ri\xc3\xa7i_asm { "
-        "mimari: x86_64 "
-        "\xc5\x9f" "ablon: r#\"rdtsc\"# "
+        "mimari: %s "
+        "\xc5\x9f" "ablon: r#\"%s\"# "
         "\xc3\xa7\xc4\xb1kt\xc4\xb1(\"=r\", &x) } } "
-        "ver x; }\n",
+        "ver x; }\n"),
         NULL, NULL, &rt, NULL);
     test_sonuc("W10: normal islev + asm + cevrim yok -> 0 hata (opsiyonel)",
                h == 0 && rt == 0);
@@ -568,6 +642,8 @@ int main(void) {
     W16_rt003_self_call();
     W17_rt003_kuyruk_recursive();
     W18_rt003_yok_self_yok_recursion();
+    W18b_rt003_karsilikli();
+    W18c_rt003_dolayli_self();
 
     puts("\n--- W6: RT004 non-realtime cagri (4) ---");
     W19_rt004_normal_cagri();

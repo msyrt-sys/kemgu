@@ -1,0 +1,28 @@
+// [D-627] BLOK-form kapanış gövdesindeki `ver`, KAPANIŞIN dönüşüdür — çevreleyen
+// işlevin değil. Self-host checker (checker.kem + codegen.kem check yolu) gövdeyi
+// çevreleyen işlevin `aktif_donus`uyla yürüyordu → aşağıdaki GEÇERLİ şekiller sahte
+// T020 alıyordu (C temiz). Negatif şekiller kuralın DARALTILMADIĞINI ölçer:
+// kapanıştan SONRAKİ dış `ver` ve iç içe kapanıştan çıkıştaki dış `ver` hâlâ T020.
+// Pozitifler olmasa "T020'yi toptan kapat" sabotajı kapıdan GEÇERDİ (D-425).
+
+// POZİTİF: çevreleyen tam32, kapanış tam64 / metin döndürür → tanı YOK.
+işlev p1() -> tam32 {
+    değişken f: işlev() -> tam64 = || { değişken x: tam64 = 5; ver x; };
+    değişken g: işlev() -> metin = || { ver "a"; };
+    değişken h = |a: tam64| { ver a + 1; };
+    ver 0;
+}
+
+// NEGATİF: kapanış bitti, dış `ver "y"` main'in tam32'sine karşı → T020.
+işlev n1() -> tam32 {
+    değişken g = || { ver "x"; };
+    ver "y";
+}
+
+// NEGATİF: iç içe kapanış; en dıştaki `ver "dis"` → T020 (geri yükleme doğru mu).
+işlev n2() -> tam32 {
+    değişken g = || { değişken k = || { ver "ic"; }; ver 5; };
+    ver "dis";
+}
+
+işlev main() -> tam32 { ver 0; }

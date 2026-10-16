@@ -1,0 +1,44 @@
+// [D-645] KİLİT KOŞUM KANITI — karşılıklı dışlama GERÇEKTEN çalışıyor mu?
+//
+// `stdlib/kilit.kem` bugüne dek YALNIZ tip-denetleniyordu (`stdlib_check`) ve
+// depoda onu kullanan TEK dosya yoktu (ölçüldü). Tip denetimi çalışmayı
+// KANITLAMAZ (D-425) — bu dosya onu koşturur.
+//
+// ŞEKİL: 3 koşucu (2 görev + ana) × 500 artırma = 1500. Kilit olmadan
+// oku-değiştir-yaz yarışı artırmaları KAYBETTİRİR, yani sabotaj bu sayıyı
+// düşürür. Sayı eşitliği tek başına kanıt değil; sabotajın kırmızı vermesi kanıt.
+//
+// ⚠ `görev<T>` LİNEERDİR: `hata` kolunda da tüketilmeli, yoksa L005.
+// Bu dosya `stdlib/kilit.kem` ile BİRLEŞTİRİLEREK derlenir (stdlib_check idiomu).
+küresel değişken sayac: tam64 = 0;
+
+işlev artir(k: Kilit) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 500 {
+        kilitle(k, || { güvensiz { sayac = sayac + 1; } ver 0; });
+        i = i + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken k: Kilit = olustur();
+    eşleş görev_başlat(|| artir(k)) {
+        tamam(g1) => {
+            eşleş görev_başlat(|| artir(k)) {
+                tamam(g2) => {
+                    artir(k);
+                    görev_birleştir(g1);
+                    görev_birleştir(g2);
+                }
+                hata(e2) => { görev_birleştir(g1); ver 1; }
+            }
+        }
+        hata(e1) => { ver 1; }
+    }
+    yok_et(k);
+    değişken t: tam64 = 0;
+    güvensiz { t = sayac; }
+    eğer t != 1500 { ver 1; }
+    ver 42;
+}

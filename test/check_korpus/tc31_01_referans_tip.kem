@@ -1,0 +1,54 @@
+// D-380: bileşik tip 4. artım — `&T`, `&değişken T`, `*T`.
+// C DEĞİŞEBİLİRLİĞİ ayırır: `&T` ↔ `&değişken T` her İKİ yönde de T001 (ölçüldü)
+// → değişebilirlik temsile girer. `&T` ↔ `*T` de ayrıdır.
+// `*r` dereferansı hedef tipi verir (D-305: güvenli referans deref, güvensiz
+// GEREKMEZ; ham `*T` deref'i G001 ister ama TİP yine bilinir).
+işlev t001_ref_skaler() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken r: &tam32 = &x;
+    değişken n: tam32 = r;                  // T001: &tam32 ≠ tam32
+    ver 0;
+}
+işlev t001_ref_ic_tip() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken a: &tam32 = &x;
+    değişken b: &metin = a;                 // T001: hedef tipi farklı
+    ver 0;
+}
+işlev t001_mut_fark() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken a: &tam32 = &x;
+    değişken b: &değişken tam32 = a;        // T001: değişebilirlik farkı
+    ver 0;
+}
+işlev t001_mut_fark_ters() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken a: &değişken tam32 = &değişken x;
+    değişken b: &tam32 = a;                 // T001: ters yön de hata
+    ver 0;
+}
+işlev t001_deref() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken r: &tam32 = &x;
+    değişken s: metin = *r;                 // T001: *r → tam32
+    ver 0;
+}
+işlev t001_ham_isaretci() -> tam32 {
+    güvensiz {
+        değişken a: *tam32 = 0 olarak *tam32;
+        değişken b: *metin = a;             // T001: *tam32 ≠ *metin
+        değişken m: metin = *a;             // T001: deref → tam32
+    }
+    ver 0;
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+yapı N { a: tam32; }
+işlev ref_param(k: &N) -> tam32 { ver k.a; }
+işlev temiz() -> tam32 {
+    değişken x: tam32 = 1;
+    değişken r: &tam32 = &x;
+    değişken m: &değişken tam32 = &değişken x;
+    değişken n: N = N { a: 1 };
+    ver *r + *m + ref_param(&n);
+}
+işlev main() -> tam32 { ver 0; }

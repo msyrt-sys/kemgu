@@ -1,0 +1,14 @@
+// D-356 / E011 + E012: `küresel` durum bootstrap-circularity çözümüdür —
+// allocator'a BAĞLANAMAZ. Bu yüzden tipi yalnız skaler/ham-işaretçi, başlangıç
+// değeri yalnız sabit-literal olabilir. `metin` İKİSİNİ birden ihlal eder
+// (hem tip yasak hem literal listesinde yok) → aynı satırda E011 + E012.
+yapı Nokta { x: tam32; }
+
+küresel değişken s: metin = "a";          // E011 + E012
+küresel değişken xs: Dizi<tam32> = [1];   // E011 + E012
+küresel değişken n: Nokta = Nokta { x: 1 };  // E011 + E012
+küresel değişken h: tam32 = 1 + 1;        // E012 (tip OK, init sabit değil)
+
+işlev main() -> tam32 {
+    ver 0;
+}

@@ -1,0 +1,6 @@
+{"tur": "10", "is": "dma_turet", "gorev": "otomasyon/evren/gorev_10_dma_turet.md",
+ "baglam": ["runtime/mimari/x86_64/kem_platform.kem", "runtime/mimari/x86_64/kem_pvh.kem"],
+ "kesit": ["Makefile:1950-1956", "Makefile:2044-2051", "test/ornekler/kem_os_x86.kem:1-25"],
+ "effort": "low",
+ "dogrulama": ["make calistir_kem_os_x86", "make calistir_check_kapisi"],
+ "isaretler": ["X86 DMA TABAN OK kb=", "X86 DISK RW OK", "X86 FS RW OK", "X86 DMA RAM NET OK"]}

@@ -1,0 +1,3 @@
+// [D-652] P040 — kullan yolu eksik (C parser.c:884).
+kullan ;
+işlev main() -> tam32 { ver 0; }

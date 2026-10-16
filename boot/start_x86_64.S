@@ -8,7 +8,8 @@
  * atlar. Görevler:
  *   1. (32-bit) BSS sıfırla (sayfa tabloları dahil)
  *   2. (32-bit) Identity sayfa tabloları (0..1GB, 2MB huge page) + PAE + LME +
- *      paging → long mode; 64-bit kod segmentine far jump
+ *      Ayrıca 3..4 GB UC MMIO penceresi (pd_mmio: 0xC0000000..0xFFFFFFFF,
+ *      PWT|PCD ile önbelleksiz) + paging → long mode; 64-bit kod segmentine far jump
  *   3. (64-bit) Segment register'ları + RSP=__stack_top kur, main() çağır
  *   4. main dönerse hlt döngüsü
  *
@@ -36,6 +37,10 @@
 pvh_entry:
     cli
     cld
+    /* PVH ABI: QEMU 32-bit pvh_entry'ye atlarken %ebx = struct hvm_start_info
+     * fiziksel adresi (aarch64 _start X0 DTB ikizi). İLK İŞ: BSS temizliğinden
+     * ÖNCE sakla — rep stosb %ebx'i bozar. Yüksek dword 0 kalır (adres < 4 GB). */
+    movl    %ebx, kdl_pvh_bilgi
 
     /* 1. BSS sıfırla (pml4/pdpt/pd .bss'te → temizlenir, sonra kurulur). */
     movl    $__bss_start, %edi
@@ -66,6 +71,28 @@ pvh_entry:
     orl     $0x3, %eax
     movl    %eax, pml4
     movl    $0, pml4+4
+
+    /* 2c2. 3..4 GB UC MMIO penceresi: pd_mmio 512 × 2MB, taban 0xC0000000,
+     * bayrak 0x9B = P|RW|PWT|PCD|PS → önbelleksiz (UC). NEDEN UC: bu aralık
+     * MMIO'dur — LAPIC (0xFEE00000), IOAPIC (0xFEC00000), microvm virtio-mmio
+     * (0xFEB00000). Yan etkili okuma/yazmalar önbelleğe alınır veya yazma-
+     * birleştirilirse cihaz durumu bayatlar / kaybolur. Bu pencere 0..1GB
+     * PD'sinden AYRI tutulur (farklı bayrak) → PDPT[3]'e bağlanır. */
+    movl    $pd_mmio, %edi
+    movl    $0xC000009B, %eax      /* present|write|PWT|PCD|PS, taban 0xC0000000 */
+    movl    $512, %ecx
+1:
+    movl    %eax, (%edi)           /* düşük 32 bit */
+    movl    $0, 4(%edi)            /* yüksek 32 bit = 0 */
+    addl    $0x200000, %eax        /* sonraki 2MB */
+    addl    $8, %edi
+    loop    1b
+
+    /* PDPT[3] = pd_mmio | present|write (pdpt+24; yüksek dword pdpt+28). */
+    movl    $pd_mmio, %eax
+    orl     $0x3, %eax
+    movl    %eax, pdpt+24
+    movl    $0, pdpt+28
 
     /* 2d. CR3 = PML4 */
     movl    $pml4, %eax
@@ -104,6 +131,18 @@ long_entry:
     movq    $__stack_top, %rsp     /* yığın (16-hizalı linker'da) */
 
     call    kdl_idt_kur            /* C3a: IDT kur (isr0..31 → istisna işleyici) */
+
+    /* 2c (aarch64 eşi): heap penceresini main'den ÖNCE kur. Saf-.kem allocator
+     * (runtime/kem_heap.kem) kem_bump/kem_son'u bu çağrıdan alır; çağrılmazsa
+     * kem_son=0 kalır → her @malloc null döner → dizi işlevleri sessizce 0
+     * basar, panik YOK. kem_heap.kem ile bağlanMAyan C-malloc'lu x86
+     * kernel'lerinde runtime/kdl_bare_heap.c'deki ZAYIF kem_heap_kur no-op'u
+     * devreye girer (strong .kem sürümü override eder) → eski kernel'ler
+     * bozulmaz. */
+    movq    $__heap_start, %rdi    /* 1. argüman: heap tabanı (linker sembolü) */
+    movq    $__heap_end, %rsi      /* 2. argüman: heap üst sınırı (dışlayıcı) */
+    call    kem_heap_kur
+
     call    main                   /* KEMGU kernel main() */
 
 .global _halt
@@ -123,12 +162,22 @@ gdt_desc:
     .word   gdt_end - gdt - 1      /* limit */
     .long   gdt                    /* base (32-bit lgdt; gdt < 4GB) */
 
+/* === PVH start_info adresi (.data, boot'ta sıfırlanmaz) ===
+ * .data'da çünkü .bss boot'ta SIFIRLANIR (aarch64 kdl_dtb_adres ile aynı gerekçe);
+ * yüksek dword 0 kalır (adres < 4 GB). kem_pvh.kem bu sembolü %rip-relatif okur. */
+.section .data
+.align 8
+.global kdl_pvh_bilgi
+kdl_pvh_bilgi:
+    .quad 0
+
 /* === Sayfa tabloları (.bss, 4KB-hizalı; boot'ta sıfırlanıp kurulur) === */
 .section .bss
 .align 4096
 pml4:   .skip 4096
 pdpt:   .skip 4096
 pd:     .skip 4096
+pd_mmio: .skip 4096
 
 /* === x86 exception ISR stub'ları (C3a) ===
  * Hata-kodlu istisnalar (8,10,11,12,13,14,17,21) CPU error code push eder → yalnız
@@ -183,6 +232,44 @@ isr\n:
     ISR_NOERR 31
 
 isr_ortak:
+    /* [D-687] KURTARILABİLİR #PF (aarch64 kdl_fault_bekleniyor ikizi): vektör 14 VE
+     * kdl_x86_pf_bekle != 0 ise fault BEKLENİYORDUR (.kem kmmu_fault_testi). bekle =
+     * fault eden komutun BAYT UZUNLUĞU (x86 değişken uzunluk; .kem sabit-yazmaçlı
+     * `movq (%rdi), %rax` = 3 bayt). CR2 kaydedilir, bayrak SIFIRLANIR (tek atış),
+     * kaydedilmiş RIP += bekle, vektör+hata kodu atılır, iretq. Bayrak 0 ise eski yol
+     * (kdl_istisna_isle → halt) AYNEN: beklenmeyen fault asla sessizce yutulmaz. */
+    cmpq    $14, 0(%rsp)
+    jne     2f
+    cmpq    $0, kdl_x86_pf_bekle(%rip)
+    je      2f
+    pushq   %rax
+    movq    %cr2, %rax
+    movq    %rax, kdl_x86_pf_cr2(%rip)
+    /* [D-689] hata kodunu da kaydet (yığın: rax@0 vektör@8 hata@16 RIP@24 CS@32
+     * RFLAGS@40 RSP@48 SS@56). Bit 4 (I/D) = komut getirme hatası (NX). */
+    movq    16(%rsp), %rax
+    movq    %rax, kdl_x86_pf_hata(%rip)
+    movq    kdl_x86_pf_bekle(%rip), %rax
+    cmpq    $65535, %rax
+    jne     3f
+    /* [D-689] bekle == 65535: RET TAKLİDİ. Komut getirme hatasında RIP fault eden
+     * hedefin KENDİSİDİR (atlanacak komut yok) — `call` ile girilen hedef için
+     * dönüş adresi kesilen yığının tepesindedir: RIP = [RSP], RSP += 8. */
+    pushq   %rbx                    /* bundan sonra ofsetler +8 */
+    movq    56(%rsp), %rax          /* kesilen RSP */
+    movq    (%rax), %rbx            /* dönüş adresi */
+    movq    %rbx, 32(%rsp)          /* RIP */
+    addq    $8, 56(%rsp)            /* RSP += 8 */
+    popq    %rbx
+    jmp     4f
+3:
+    addq    %rax, 24(%rsp)          /* RIP (rax itmesiyle +8 kaydı: 16+8) */
+4:
+    movq    $0, kdl_x86_pf_bekle(%rip)
+    popq    %rax
+    addq    $16, %rsp               /* vektör + hata kodu */
+    iretq
+2:
     movq    0(%rsp), %rdi    /* vektör no */
     movq    8(%rsp), %rsi    /* hata kodu */
     movq    16(%rsp), %rdx   /* RIP */
@@ -191,34 +278,61 @@ isr_ortak:
     hlt
     jmp     1b
 
-/* === IRQ0 (timer) stub (C3b) — bağlamı kaydet, dispatch, EOI, iretq ===
- * İstisnadan farkı: KURTARILIR (iretq) → kesilen koda dönülür. SysV caller-saved
- * kaydedilir (callee-saved'i C korur). PIC EOI = port 0x20'ye 0x20. */
+/* === IRQ0 (timer) stub (D-685) — TAM kayıt + SP takası (preemptive görev). ===
+ * İstisnadan farkı: KURTARILIR (iretq) → kesilen koda dönülür. Tüm GP yazmaçları
+ * (callee + caller) itilir: rax,rbx,rcx,rdx,rsi,rdi,rbp,r8..r15 (15×8 = 120 B).
+ * kdl_irq_isle(sp) dönen SP'ye geçilir (başka görevin kesilmiş/sentetik
+ * çerçevesi); yazmaçlar geri alınır, iretq. Çerçeve: [0]=r15 … [14]=rax,
+ * RIP@120, CS@128, RFLAGS@136, RSP@144, SS@152 (toplam 160 B). CPU kesmede RSP'yi
+ * 16'ya hizalar → 5+15 itme = 160 → call öncesi SP 16-hizalı (SysV) ✓.
+ * C kernel'leri uyumluluğu: zayıf kdl_irq_isle SP'yi DEĞİŞTİRMEZ → davranış AYNI.
+ * PIC EOI = port 0x20'ye 0x20. */
 .global kdl_irq0_stub
 kdl_irq0_stub:
     pushq   %rax
+    pushq   %rbx
     pushq   %rcx
     pushq   %rdx
     pushq   %rsi
     pushq   %rdi
+    pushq   %rbp
     pushq   %r8
     pushq   %r9
     pushq   %r10
     pushq   %r11
+    pushq   %r12
+    pushq   %r13
+    pushq   %r14
+    pushq   %r15
     movq    $0, %rdi          /* IRQ no = 0 (timer) */
     call    kdl_kesme_isle
+    movq    %rsp, %rdi        /* kesilen görevin çerçeve SP'si */
+    call    kdl_irq_isle
+    movq    %rax, %rsp        /* seçilen görevin çerçeve SP'si */
     movb    $0x20, %al        /* PIC EOI (master) */
     outb    %al, $0x20
+    popq    %r15
+    popq    %r14
+    popq    %r13
+    popq    %r12
     popq    %r11
     popq    %r10
     popq    %r9
     popq    %r8
+    popq    %rbp
     popq    %rdi
     popq    %rsi
     popq    %rdx
     popq    %rcx
+    popq    %rbx
     popq    %rax
     iretq
+/* Zayıf varsayılan: .kem x86 güçlü tanımı (kem_preempt) ezer; C kernel'lerinde
+ * SP değişmez → davranış AYNI. */
+.weak kdl_irq_isle
+kdl_irq_isle:
+    movq    %rdi, %rax
+    ret
 
 /* === Sistem çağrısı stub (C6) — int 0x80; num=rax, arg=rdi. KURTARILIR (iretq). ===
  * kdl_syscall_isle(rdi=num, rsi=arg). rax = dönüş (void demo → kullanılmaz). */
@@ -244,6 +358,15 @@ kdl_syscall_stub:
     popq    %rdx
     popq    %rcx
     iretq
+
+.section .data
+.align 8
+.global kdl_x86_pf_bekle
+.global kdl_x86_pf_cr2
+kdl_x86_pf_bekle: .quad 0     /* [D-687] 0 = fault beklenmiyor; >0 = atlanacak komut uzunluğu */
+kdl_x86_pf_cr2:   .quad 0     /* [D-687] son kurtarılan #PF'in CR2'si (fault VA) */
+.global kdl_x86_pf_hata
+kdl_x86_pf_hata:  .quad 0     /* [D-689] son kurtarılan #PF'in hata kodu */
 
 .section .rodata
 .align 8

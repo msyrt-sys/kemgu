@@ -1,0 +1,29 @@
+// D-359 / PARSE PARİTESİ: `küresel` ve `çıplak` — bu bölge parse_korpus'ta YOKTU
+// ve gerçek bir sapma barındırıyordu: C'de `küresel` ayrı bir düğüm TİPİ değildir
+// (DUGUM_DEGISKEN + kuresel_mi bayrağı; `--ast` "DEGISKEN" basar), self-host ise
+// ayrı bir KURESEL düğümü tutar. Dump eşlenmezse `--parse` kapısı sessizce ayrışır.
+küresel değişken sayac: tam32 = 0;
+küresel değişken bayrak: mantıksal = yanlış;
+küresel değişken ptr: *tam32 = boş;
+
+çıplak işlev kur(n: tam32) -> tam32 {
+    sayac = n;
+    ver sayac;
+}
+
+çıplak işlev arttir(n: tam64) -> tam64 {
+    değişken p: tam32 = sayac;
+    sayac = sayac + 1;
+    ver p olarak tam64;
+}
+
+gerçekzamanlı işlev rt(n: tam32) -> tam32 {
+    ver n;
+}
+
+işlev main() -> tam32 {
+    güvensiz {
+        ver sayac;
+    }
+    ver 0;
+}

@@ -1,0 +1,48 @@
+// kem_pvh.kem — İş 9 (D2b): x86_64 PVH `hvm_start_info` adres erişimi.
+// start_x86_64.S 32-bit pvh_entry'de %ebx'i (PVH ABI: start_info fiziksel adresi)
+// .data'daki kdl_pvh_bilgi'ye yazar; bu dosya onu %rip-relatif okur. aarch64
+// ikizi: _start X0 → kdl_dtb_adres (boot/start_aarch64.S). Ayrı dosya: satıriçi_asm
+// taşır (AS001: bir dosyada yalnız TEK mimarinin asm'i; Makefile CAT mimariye göre
+// seçer). kem_pvh_ram_toplam = kem_os'un heap-boyu keşfi için PVH memmap RAM toplamı.
+//
+// DOĞRULANMIŞ SABİTLER (Linux xen/interface/hvm/start_info.h + QEMU pvh.bin):
+//   magic @0 (u32) = 0x336ec578 = 862897528; version @4 (u32)
+//   memmap_paddr @40 (u64); memmap_entries @48 (u32)  (version >= 1)
+//   memmap girdisi 24 bayt: addr @0 (u64), size @8 (u64), type @16 (u32); RAM türü = 1
+
+// kdl_pvh_bilgi (%rip-relatif) → start_info fiziksel adresi (0 = PVH yok).
+çıplak işlev kem_pvh_bilgi() -> tam64 {
+    değişken v: tam64 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"movq kdl_pvh_bilgi(%rip), $0"# çıktı("=r", &v) }
+    }
+    ver v;
+}
+
+// yardımcı: adresten u64 oku (çıplak ham deref; kem_heap.kem idiomu).
+çıplak işlev kem_pvh_oku64(adr: tam64) -> tam64 {
+    değişken p: *tam64 = adr olarak *tam64;
+    ver *p;
+}
+
+// kem_pvh_ram_toplam() -> tam64 : PVH memmap'ten RAM (tür=1) toplam bayt.
+// Uyumsuzluk kodları: bilgi yok → 0; magic yanlış → 0-1; version < 1 → 0-2.
+çıplak işlev kem_pvh_ram_toplam() -> tam64 {
+    değişken b: tam64 = kem_pvh_bilgi();
+    eğer b == 0 { ver 0; }
+    eğer kdl_mmio_oku32(b) != 862897528 { ver 0 - 1; }
+    eğer kdl_mmio_oku32(b + 4) < 1 { ver 0 - 2; }
+    değişken mm: tam64 = kem_pvh_oku64(b + 40);
+    değişken n: tam32 = kdl_mmio_oku32(b + 48);
+    değişken toplam: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken e: tam64 = mm + (i olarak tam64) * 24;
+        değişken tur: tam32 = kdl_mmio_oku32(e + 16);
+        eğer tur == 1 {
+            toplam = toplam + kem_pvh_oku64(e + 8);
+        }
+        i = i + 1;
+    }
+    ver toplam;
+}

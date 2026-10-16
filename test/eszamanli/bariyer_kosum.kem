@@ -1,0 +1,83 @@
+// [D-669] BARİYER KOŞUM KANITI — "herkes gelmeden kimse geçmiyor" + YENİDEN KULLANIM.
+//
+// D-645 kilit ve semaforu kapıya bağlamış, bariyeri KAPSAMAMIŞTI (D3a): bariyer
+// bir sayaç yarışıyla ölçülemez, BULUŞMA şekli gerekir. Dış inceleme de aynı
+// boşluğu işaret etti.
+//
+// ŞEKİL: N=4 katılımcı (3 görev + ana), TUR=5. Her turda katılımcı:
+//   1) id'siyle orantılı KADEMELİ gecikme -> varışlar bilerek dağıtılır,
+//   2) `vardi`yı artırır,
+//   3) bariyerde bekler,
+//   4) geçtikten sonra `vardi >= N*(tur+1)` mi bakar.
+// Doğru bariyerde turun TÜM varışları bekleme bitmeden olmuştur, yani 4) hep
+// tutar. Bariyer birini ERKEN geçirirse (en hızlı katılımcı = id 0) o katılımcı
+// eksik sayı görür -> İHLAL.
+//
+// ⚠ KADEMELİ GECİKME ŞART: hepsi aynı anda varsaydı, bozuk bir bariyer bile
+// tesadüfen herkesi geçirebilirdi. Gecikme farkı erken geçişi GÖZLENEBİLİR yapar.
+// ⚠ TUR > 1 ŞART: D-456 bariyerin yeniden kullanım için NESİL sayacına
+// ihtiyaç duyduğunu kaydetti (`vardi` sıfırlanmazsa ikinci tur hemen açılır).
+// Tek turluk test o kusuru göremezdi.
+// ⚠ ÖLÇÜM ARACI ÖLÇÜLENDEN BAĞIMSIZ: sayaçlar ham `kilit_*` ile korunur (D-668'de
+// öğrenildi — koruma da aynı ilkelden olursa sabotaj ikisini birden bozar).
+//
+// Çıkış: 42 = geçti . 1 = bariyer erken geçirdi . 3 = sayaç dengesi bozuk.
+// Bu dosya `stdlib/bariyer.kem` ile BİRLEŞTİRİLEREK derlenir (stdlib_check idiomu).
+küresel değişken vardi: tam64 = 0;
+küresel değişken ihlal: tam64 = 0;
+küresel değişken bos: tam64 = 0;
+
+işlev kos(b: Bariyer, k: metin, id: tam64) -> tam32 {
+    değişken tur: tam64 = 0;
+    iken tur < 5 {
+        // 1) kademeli gecikme: id 0 en hizli, id 3 en yavas
+        değişken j: tam64 = 0;
+        iken j < (id * 20000) { güvensiz { bos = bos + 1; } j = j + 1; }
+        // 2) varis
+        kilit_al(k);
+        güvensiz { vardi = vardi + 1; }
+        kilit_birak(k);
+        // 3) bulusma
+        bekle(b);
+        // 4) gecis sonrasi: bu turun TUM varislari olmus olmali
+        kilit_al(k);
+        güvensiz {
+            eğer vardi < (4 * (tur + 1)) { ihlal = 1; }
+        }
+        kilit_birak(k);
+        tur = tur + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken b: Bariyer = olustur(4);
+    değişken k: metin = kilit_olustur();
+    eşleş görev_başlat(|| kos(b, k, 1)) {
+        tamam(g1) => {
+            eşleş görev_başlat(|| kos(b, k, 2)) {
+                tamam(g2) => {
+                    eşleş görev_başlat(|| kos(b, k, 3)) {
+                        tamam(g3) => {
+                            kos(b, k, 0);
+                            görev_birleştir(g1);
+                            görev_birleştir(g2);
+                            görev_birleştir(g3);
+                        }
+                        hata(e3) => { görev_birleştir(g1); görev_birleştir(g2); ver 1; }
+                    }
+                }
+                hata(e2) => { görev_birleştir(g1); ver 1; }
+            }
+        }
+        hata(e1) => { ver 1; }
+    }
+    yok_et(b);
+    kilit_yok(k);
+    değişken v: tam64 = 0;
+    değişken ih: tam64 = 0;
+    güvensiz { v = vardi; ih = ihlal; }
+    eğer v != 20 { ver 3; }   // 4 katilimci x 5 tur
+    eğer ih != 0 { ver 1; }   // bariyer birini ERKEN gecirdi
+    ver 42;
+}

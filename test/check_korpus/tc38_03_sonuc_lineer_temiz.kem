@@ -1,0 +1,18 @@
+// [D-467] DOĞRU kullanım — tanı ÜRETMEMELİ.
+// ⚠ POZİTİF ŞEKİL ŞART (D-425): yalnız negatifler olsaydı, `sonuç`u
+// toptan lineer sayan ama `eşleş`i tüketim saymayan bir sabotaj kapıdan
+// GEÇERDİ — oysa o, DOĞRU yazılmış her programı reddederdi.
+yapı tekkez Tutamac { h: metin; }
+
+işlev ac() -> sonuç<Tutamac, metin> {
+    ver tamam(Tutamac { h: "x" });
+}
+
+işlev kapat(t: Tutamac) -> tam32 { imha(t); ver 0; }
+
+işlev main() -> tam32 {
+    eşleş ac() {
+        tamam(t) => { kapat(t); ver 42; }
+        hata(m) => { ver 7; }
+    }
+}

@@ -1,0 +1,58 @@
+// [D-516] UAF AVI — ρ_yerel YÖNLENDİRMESİNİN RED YÖNÜ, kalıcı kapı.
+//
+// D-494/D-506/D-507/D-509 ρ_yerel'e giden şeyleri GENİŞLETTİ ve D-509'da tam
+// bu eksende bir soundness deliği çıktı. Beş düşmanca kaçış şekli ölçüldü;
+// beşi de doğru REDDEDİLDİ. "Elle taranan ölçüm eskir, kapı eskimez" (D-462)
+// → av fikstüre çevrildi. Ölçüm `calistir_bolge_operand`dadır: bu dosyadaki
+// HİÇBİR tahsis YEREL olmamalıdır.
+//
+// ⚠ ASan TEMİZ OLMASI YETMEZ (D-488/D-417): yanlış yönlendirilmiş bir tahsis
+//   de doğru çalışabilir ve ASan sessiz kalabilir. Kapı DAVRANIŞI değil
+//   YÖNLENDİRME KARARINI ölçer.
+//
+// Kapsanan şekiller:
+//   (a) diziyi DOĞRUDAN döndür
+//   (b) callee diziyi SAKLIYOR (D-509 interprocedural özetinin RED yönü)
+//   (c) dizi bir YAPI alanına konup yapı döndürülüyor
+//   (d) iç dizi DIŞ diziye konuyor, dış döndürülüyor
+// Çıkış: 42
+yapı Kutu { xs: Dizi<tam32>; }
+
+// (a)
+işlev a_dondur() -> Dizi<tam32> {
+    değişken a: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(a, 10);
+    ver a;
+}
+
+// (b) — `sakla` argümanını TUTAR; D-509 özeti bunu DENY etmeli.
+işlev sakla(ys: Dizi<tam32>) -> Kutu { ver Kutu { xs: ys }; }
+işlev b_ozet() -> tam32 {
+    değişken a: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(a, 20);
+    değişken k: Kutu = sakla(a);
+    ver dizi_al(k.xs, 0);
+}
+
+// (c)
+işlev c_yapi() -> Kutu {
+    değişken a: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(a, 6);
+    ver Kutu { xs: a };
+}
+
+// (d)
+işlev d_ic_ice() -> Dizi<Dizi<tam32>> {
+    değişken ic: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(ic, 6);
+    değişken d: Dizi<Dizi<tam32>> = dizi_olustur(4);
+    dizi_ekle(d, ic);
+    ver d;
+}
+
+işlev main() -> tam32 {
+    değişken x: Dizi<tam32> = a_dondur();
+    değişken k: Kutu = c_yapi();
+    değişken dd: Dizi<Dizi<tam32>> = d_ic_ice();
+    ver dizi_al(x, 0) + b_ozet() + dizi_al(k.xs, 0) + dizi_al(dizi_al(dd, 0), 0);
+}

@@ -1,0 +1,43 @@
+// C2.7 fikstürü — D6 deseni: sonuç<bos, çeşit> (isimli hata tipi).
+// hata(BaslatHatasi::Variant) inşa + eşleş'te tag==hata AND disc==idx
+// (bir-seviye nesting). tamam(bos) + tüm hata varyantları kapsanır
+// (exhaustive). opt -passes=verify temiz.
+
+çeşit BaslatHatasi { ModernDegil, BlokDegil, FeatureYok }
+
+işlev blk_baslat(ok: tam32) -> sonuç<bos, BaslatHatasi> {
+    eğer ok == 1 { ver tamam(boş); }
+    eğer ok == 2 { ver hata(BaslatHatasi::ModernDegil); }
+    eğer ok == 3 { ver hata(BaslatHatasi::BlokDegil); }
+    ver hata(BaslatHatasi::FeatureYok);
+}
+
+işlev sonucu_yorumla(ok: tam32) -> tam32 {
+    eşleş blk_baslat(ok) {
+        tamam(v)                       => { ver 100; }
+        hata(BaslatHatasi::ModernDegil) => { ver 200; }
+        hata(BaslatHatasi::BlokDegil)   => { ver 210; }
+        hata(BaslatHatasi::FeatureYok)  => { ver 220; }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    eğer sonucu_yorumla(1) != 100 { ver 1; }
+    eğer sonucu_yorumla(2) != 200 { ver 2; }
+    eğer sonucu_yorumla(3) != 210 { ver 3; }
+    eğer sonucu_yorumla(4) != 220 { ver 4; }
+    ver 42;
+}
+
+// ── D-410 NOTU (korpusa alınma gerekçesi) ────────────────────────────────
+// Self-host `eşleş`te alt-deseni DAİMA bir bağlama ADI sanıyordu. `hata(H::B)`
+// gibi bir DESEN_YOL alt-deseninde iç ayırıcı HİÇ karşılaştırılmıyor, dolayısıyla
+// TÜM `hata(...)` kolları İLKİNE gidiyordu.
+//
+// ⚠ SINIF: link hatası YOK, IR geçerli, program çalışıyor — SESSİZ YANLIŞ CEVAP.
+// Ölçüldü: `hata(H::B)` için 20 yerine 10. Bu dosya C=42 iken KEMGU=3 veriyordu.
+//
+// ⚠ NEDEN EN AZ ÜÇ VARYANT ŞART: iki varyantla "hep ilkine git" hatası %50
+// olasılıkla doğru cevabı verir ve test tesadüfen yeşil kalabilir. Üç varyant +
+// hepsinin AYRI dönüş değeri, yanlış dallanmayı kaçınılmaz kılar.

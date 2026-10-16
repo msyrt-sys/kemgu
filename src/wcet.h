@@ -37,6 +37,10 @@
 
 #define WCET_MAX 1000000000LL
 
+/* [D-545] Cagri zinciri kesif derinligi. Asilirsa RT005 (WCET hesaplanamaz)
+ * — SESSIZ ATLAMA DEGIL: bilinmeyen sinir bildirilir (default-DENY). */
+#define WCET_ZINCIR_AZAMI 32
+
 typedef struct WcetKontrol {
     Arena *arena;
     Scope *global_scope;
@@ -45,6 +49,16 @@ typedef struct WcetKontrol {
     const char *kaynak;
     /* Aktif realtime islev — direct self-recursion algilamak icin. */
     const Dugum *aktif_islev;
+    /* [D-545] KARSILIKLI/DOLAYLI OZYINELEME: RT003 yalniz DOGRUDAN
+     * self-call'i yakaliyordu; a->b->a zinciri --check'ten TEMIZ geciyor ve
+     * program HIC DURMUYORDU (olculdu: exit 124). Cagri zinciri bir yiginda
+     * tutulur; zaten yigindaki bir isleve donen cagri RT003'tur.
+     * YENI TANI KODU YOK — RT003'un mesaji zaten "ozyineleme (V1 yasak)"
+     * diyor; kural SORULMADIGI yerde soruluyor (D-503/D-517 deseni). */
+    const Dugum *cagri_yigin[WCET_ZINCIR_AZAMI];
+    int cagri_yigin_n;
+    int sessiz;          /* ic (kesif) yuruyusunde tani BASILMAZ */
+    int dongu_bulundu;   /* ic yuruyuste zincir kapandi mi */
 } WcetKontrol;
 
 void wcet_kontrol_baslat(WcetKontrol *wk, Arena *a, Scope *global,

@@ -1,0 +1,14 @@
+// [D-589] YENİ-BİÇİM karşılık — ara kütüphane: KENDİSİ de `kullan` içerir.
+// Legacy eşi: `lib_islem.kem`.
+//
+// Zincir: transitif_yeni -> lib_islem_yeni -> lib_sayi_yeni
+// Bu dosya GEÇİŞLİ ithalatı kurar ve D-585'in kapattığı kusurun tam da bu
+// şekle bağlı olduğunu hatırlatır: geçişli ithalatta biçim kararı, `kullan`
+// düğümünü OKUYAN ayrıştırıcıya sorulmalıdır — giriş dosyasının kayıtlarına
+// değil. Yanlış ayrıştırıcıya sorulursa modül sarmalanmaz ve üyeler global
+// ad alanına düz girer (ölçüldü: surucu_diff 9/16).
+kullan test::crossfile::lib_sayi_yeni::{iki_kat_y};
+
+genel işlev uc_kat_y(x: tam32) -> tam32 {
+    ver iki_kat_y(x) + x;   // iki_kat_y TRANSİTİF olarak lib_sayi_yeni'den
+}

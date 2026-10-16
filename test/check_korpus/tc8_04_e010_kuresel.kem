@@ -1,0 +1,14 @@
+// D-351 / E010: küresel değişkene erişim (OKUMA ve YAZMA) yalnız güvensiz blokta.
+// Paylaşılan-mutable durum = confinement'ın kaçındığı aliasing → güvensize hapis.
+küresel değişken sayac: tam32 = 0;
+
+işlev oku() -> tam32 {
+    ver sayac;
+}
+işlev yaz(n: tam32) -> tam32 {
+    sayac = n;
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

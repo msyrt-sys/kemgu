@@ -20,7 +20,11 @@
 # Kullanım: bash test/kripto_kosum_harness.sh  (veya make calistir_kripto_kosum)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
 TEST=${TEST:-test/stdlib/test_kripto_kosum.kem}
 # Paralel koşumda birbirini ezmesin (D-297 dersi): PID ile benzersiz yol.
@@ -29,7 +33,7 @@ mkdir -p "$TMP"
 temizle() { rm -rf "$TMP"; }
 trap temizle EXIT
 
-BEKLENEN=7
+BEKLENEN=15
 
 if [ ! -x "$KEMGU" ]; then echo "FAIL: $KEMGU yok"; exit 1; fi
 if [ ! -f "$RT" ]; then echo "FAIL: $RT yok (make build/kdl_runtime.o)"; exit 1; fi
@@ -61,9 +65,10 @@ bit() { if [ $(( RC & $1 )) -ne 0 ]; then echo "✅"; else echo "❌"; fi; }
 echo "  $(bit 1) KONTROL  — sabit tablolar (K[0], K[63], H0[0])"
 echo "  $(bit 2) ChaCha20 quarter-round — RFC 8439 §2.1.1"
 echo "  $(bit 4) SHA-256(\"abc\")        — NIST FIPS 180-4 App. B.1"
+echo "  $(bit 8) sabit_süre_seç_u64      — üst bit sızıntısı yok (D-629)"
 
 if [ "$RC" -eq "$BEKLENEN" ]; then
-    echo "=== kripto koşum kapısı: 3/3 vektör GEÇTİ ✓ ==="
+    echo "=== kripto koşum kapısı: 4/4 vektör GEÇTİ ✓ ==="
     exit 0
 fi
 

@@ -1,0 +1,5 @@
+// [D-583] fikstur modulu: genel sabitler (secili + alias + nitelikli erisim).
+genel sabit SBT_YIRMI: tam32 = 20;
+genel sabit SBT_ON: tam32 = 10;
+
+genel işlev sbt_topla(a: tam32, b: tam32) -> tam32 { ver a + b; }

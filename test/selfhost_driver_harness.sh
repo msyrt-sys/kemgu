@@ -19,12 +19,23 @@
 # Kullanım: bash test/selfhost_driver_harness.sh  (veya make calistir_self_driver)
 # ============================================================================
 set -u
-KEMGU=${KEMGU:-build/kemgu.exe}
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
-SELF=${SELF:-build/kemgu_self.exe}
+SELF=${SELF:-build/kemgu_self${EXE}}
 SELF2=${SELF2:-build/kemgu_self2.exe}
 SRC=${SRC:-selfhost/codegen.kem}
-TMP=$(mktemp -d 2>/dev/null || echo /tmp/selfdrv); mkdir -p "$TMP"
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/selfdrv.XXXXXX" 2>/dev/null || echo "build/selfdrv.$$")
+mkdir -p "$TMP"
 genel_fail=0
 
 link() {  # $1=ll $2=exe ; Win11 Defender exec yarışı → 3 deneme
@@ -48,6 +59,20 @@ else
     echo "  🔴 FIXPOINT: kemgu_self2 IR kararsız"; genel_fail=1
 fi
 
+# [D-662] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15). `byte_modlari` self
+# ikilisini (`$drv`) KORPUS UZERINDE `--check`/`--parse`/`--token` ile kosturur;
+# OOM'u yaratan (D-660) tam da `--check` parser dongusuydu. LLVM yolu asagida
+# zaten `codegen_diff_harness`e delege ediyor -> D-662 orada otomatik yayildi;
+# burasi kalan acik yoldu. `timeout` yetenegi OLCULUR (D-661), yoksa sinirsiz.
+KAP_SN=${KAP_SN:-60}
+KAP_KB=${KAP_KB:-4000000}
+if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
+    DTO="timeout $KAP_SN"
+else
+    DTO=""
+    echo "  ⚠ 'timeout' YOK -> driver per-dosya zaman asimi UYGULANMIYOR (kapi yine olcer). Bkz. D-662."
+fi
+
 # ---- Yardımcı: bir driver binary'sini 3 byte-diff modunda doğrula ----
 # $1=driver  $2=etiket-öneki
 byte_modlari() {
@@ -58,7 +83,11 @@ byte_modlari() {
         for x in "$korpus"/*.kem; do
             [ -f "$x" ] || continue
             "$KEMGU" "$oracle" "$x" 2>/dev/null > "$TMP/o.txt"
-            "$drv"   "$mod"    "$x" 2>/dev/null > "$TMP/a.txt"
+            ( ulimit -v "$KAP_KB" 2>/dev/null; $DTO "$drv" "$mod" "$x" > "$TMP/a.txt" 2>/dev/null ); dr=$?
+            if [ "$dr" -eq 124 ] || [ "$dr" -eq 137 ]; then
+                echo "    🔴 [$pre $mod] $(basename "$x") — ASILDI/OLDURULDU (rc=$dr, sinir ${KAP_SN}s/${KAP_KB}KB)"
+                fail=$((fail+1)); continue
+            fi
             if diff -q "$TMP/o.txt" "$TMP/a.txt" >/dev/null 2>&1; then pass=$((pass+1));
             else echo "    🔴 [$pre $mod] $(basename "$x"):"; diff "$TMP/o.txt" "$TMP/a.txt" | head -4; fail=$((fail+1)); fi
         done
@@ -73,7 +102,12 @@ byte_modlari "$SELF2" "self-host"
 
 # ---- LLVM exit-kod eşdeğerlik (her iki driver; codegen_diff_harness delege) ----
 for drv in "$SELF" "$SELF2"; do
+    # [D-469] KONAK_MIM de DELEGE EDİLİR: delege edilen harness konak mimarisini
+    # bilmeden yabancı-mimari ikizini ayırt edemez ve eksik geçirilirse KOŞMAZ
+    # (kasten gürültülü — D-446). Makefile `ARCH`ten geçirir; burada da
+    # zorunludur ki harness elle çağrıldığında sessizce yanlış ölçmesin.
     CODEGEN="$drv" KORPUS="test/cg_korpus" KEMGU="$KEMGU" RT="$RT" \
+        KONAK_MIM="$KONAK_MIM" \
         bash test/codegen_diff_harness.sh > "$TMP/llvm.out" 2>&1
     rc=$?
     tail -1 "$TMP/llvm.out" | sed "s|^|  LLVM ($(basename "$drv")): |"

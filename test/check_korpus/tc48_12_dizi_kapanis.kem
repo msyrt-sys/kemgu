@@ -1,0 +1,5 @@
+// [D-652] P150 — dizi literali ']' eksik (C ifade.c:191).
+işlev main() -> tam32 {
+    değişken a = [1, 2;
+    ver 0;
+}

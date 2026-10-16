@@ -23,7 +23,9 @@ KOK="proofs/drf-v2-lean"
 command -v lean >/dev/null 2>&1 || {
     echo "⏭  lean PATH'te yok — atlandı (elan kurun: ~/.elan/bin PATH'e)"; exit 0; }
 
-TMP="$(mktemp -d)"
+# [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
+# recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
+TMP="$(mktemp -d "build/tmp.XXXXXX" 2>/dev/null || echo "build/tmp.$$")"
 trap 'rm -rf "$TMP"' EXIT
 cd "$KOK" || exit 1
 

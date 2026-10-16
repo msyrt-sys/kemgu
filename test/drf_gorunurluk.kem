@@ -1,0 +1,50 @@
+// [D-489] DRF OPERASYONEL GORUNURLUK: kanal gonderiminden ONCE yapilan
+// yazmalar, alimdan SONRA gorunur olmali (happens-before kenari).
+//
+// Bu, DRF teoreminin OPERASYONEL icerigidir ve Lean modelinde ispatli olmasina
+// ragmen CALISAN DERLEYICIDE hicbir sey olcmuyordu (test_gorev_rt.c'de
+// gorunurluk testi YOK — olculdu).
+//
+// TASARIM: tek bayrak YETMEZ. Gorev 8 ayri kuresele YAZAR, sonra kanala tek
+// bir jeton gonderir. Ana is parcacigi jetonu ALIR, sonra 8 kureseli okur.
+// Yeniden siralama ya da eksik bariyer varsa en az biri 0 kalir.
+
+küresel değişken v0: tam64 = 0;
+küresel değişken v1: tam64 = 0;
+küresel değişken v2: tam64 = 0;
+küresel değişken v3: tam64 = 0;
+küresel değişken v4: tam64 = 0;
+küresel değişken v5: tam64 = 0;
+küresel değişken v6: tam64 = 0;
+küresel değişken v7: tam64 = 0;
+
+işlev main() -> tam32 {
+    değişken k: kanal<tam64> = kanal_oluştur(1);
+
+    değişken g = görev_başlat(|| {
+        güvensiz {
+            v0 = 11; v1 = 12; v2 = 13; v3 = 14;
+            v4 = 15; v5 = 16; v6 = 17; v7 = 18;
+        }
+        // Jeton: bundan ONCEKI tum yazmalar alicida gorunur OLMALI.
+        kanal_gönder(k, 1);
+        ver 0;
+    });
+
+    değişken jeton: tam64 = kanal_al(k);
+
+    değişken toplam: tam64 = 0;
+    güvensiz {
+        toplam = v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7;
+    }
+
+    eşleş g {
+        tamam(t) => { değişken _r = görev_birleştir(t); }
+        hata(_e) => { ver 90; }
+    }
+
+    // 11+12+...+18 = 116. jeton = 1.
+    eğer toplam != 116 { ver 91; }
+    eğer jeton != 1 { ver 92; }
+    ver 42;
+}

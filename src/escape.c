@@ -18,6 +18,15 @@
  * Test ASan ile dogrulanir.
  */
 
+
+/* [D-488] Cagrilan-ozeti tablosu PROGRAM GENELINDEDIR ve ARENA-destekli:
+ * tuketiciler (llvm.c / tip_kontrol.c) ISLEV BASINA taze EscapeAnaliz kurar,
+ * yani tabloyu orada tutmak her isleve yeniden kurdururdu (O(F^2)). Arena
+ * cagiran tarafindan serbest birakildigi icin ayrica free GEREKMEZ. */
+static struct EaFnKayit *g_fn_tablo = NULL;
+static int g_fn_sayi = 0;
+static const Dugum *g_fn_program = NULL;
+
 #define KAYIT_BASLANGIC_KAP 16
 #define BAG_BASLANGIC_KAP   16
 
@@ -102,17 +111,18 @@ static void bag_ekle(EscapeAnaliz *ea, const char *ad, int ad_uz, const Dugum *d
     b->ad_uz = ad_uz;
     b->deger = deger;
     b->scope_seviye = ea->scope_seviye;
+    b->zincirde = 0;
 }
 
-static const Dugum *bag_cozumle(EscapeAnaliz *ea, const char *ad, int ad_uz) {
+static int bag_indeks_bul(EscapeAnaliz *ea, const char *ad, int ad_uz) {
     /* Sondan basa: en yakin scope'taki bag */
     for (int i = ea->bag_sayi - 1; i >= 0; i--) {
         if (ea->baglamalar[i].ad_uz == ad_uz
             && memcmp(ea->baglamalar[i].ad, ad, (size_t)ad_uz) == 0) {
-            return ea->baglamalar[i].deger;
+            return i;
         }
     }
-    return NULL;
+    return -1;
 }
 
 /* Atama: var = e ise mevcut bagin degerini guncelle (sadece en yakin esleme). */
@@ -184,10 +194,21 @@ static void ifadeyi_yukselt(EscapeAnaliz *ea, const Dugum *ifade, EscapeKategori
             escape_yukselt(ea, ifade, yeni);
             return;
         case DUGUM_TANIMLAYICI: {
-            const Dugum *bag = bag_cozumle(ea,
+            /* [D-631] BAG DONGUSU KORUMASI. `a = b` ve `b = a` (ayri dallarda)
+             * bag_guncelle ile a->b, b->a DONGUSU kurar; zinciri izlemek SONSUZ
+             * OZYINELEME = derleyici SEGFAULT idi (--check dahil, gecerli program).
+             * Bu gezinti zaten bu bagdan geciyorsa dur: terfi MONOTONdur (ayni
+             * `yeni` ile ikinci ziyaret hicbir kayit degistirmez) -> sound. Bayrak
+             * gezinti bitince SIFIRLANIR (kalici "ziyaret edildi" DEGIL — baska bir
+             * `ver`/atama ayni bagi yeniden terfi ettirebilmeli). ifadeyi_yukselt
+             * bag EKLEMEZ -> baglamalar realloc olmaz, indeks gecerli kalir. */
+            int bi = bag_indeks_bul(ea,
                 ifade->veri.tanimlayici.metin,
                 ifade->veri.tanimlayici.uzunluk);
-            if (bag) ifadeyi_yukselt(ea, bag, yeni);
+            if (bi < 0 || ea->baglamalar[bi].zincirde) return;
+            ea->baglamalar[bi].zincirde = 1;
+            ifadeyi_yukselt(ea, ea->baglamalar[bi].deger, yeni);
+            ea->baglamalar[bi].zincirde = 0;
             return;
         }
         case DUGUM_EGER:
@@ -497,10 +518,164 @@ static void visit(EscapeAnaliz *ea, const Dugum *d) {
  * lambda yakalama, &var, var yeniden-atama) → DENY (ρ_caller). Default-deny =
  * inşa-gereği sound (principle 1+3). Skaler-eleman kısıtı llvm tarafında. */
 
+/* ===================================================================
+ * [D-488] INTERPROCEDURAL PARAMETRE-TUTMA OZETI
+ * ===================================================================
+ * SORU: `f(xs)` cagrisinda f, xs'i SAKLIYOR MU (retain)? Saklamiyorsa
+ * xs'in hapsedilme kaniti KORUNUR -> ρ_yerel'de serbest edilebilir.
+ *
+ * ⚠ YENI ANALIZ YAZILMADI. Bu soru `ky_confined(f.govde, param_adi)` ile
+ * BIREBIR AYNIDIR ve o yuklem F4.2b'de 18-UAF avindan gecmis, kanitlanmis
+ * makinedir: `ver p` -> 0, lambda yakalama -> 0, kuresele/agregaya atama
+ * -> 0, `g(p)` -> 0 (ozyineli sorgu), BILINMEYEN DUGUM -> 0.
+ *
+ * SAGLAMLIK (default-DENY her eksende):
+ *   - cagrilan bilinmiyorsa (yerlesik / dolayli / bagli-olmayan ad) -> DENY
+ *   - govde YOKSA (yalniz imza) -> DENY
+ *   - OZYINELEME (f -> f) -> DENY (fn_devam yigini; sonlanma garantisi)
+ *   - yigin dolarsa -> DENY
+ * Yani "kanit bulamadim" DAIMA eski (konservatif) davranisa duser.
+ */
+typedef struct EaFnKayit {
+    const char *ad;
+    int uz;
+    const Dugum *islev;
+} EaFnKayit;
+
+/* ky_confined ile karsilikli ozyineli — ileri bildirim. */
+static int ky_confined(const Dugum *d, const char *ad, int uz);
+
+/* [D-543] KANAL MODU — kanal ömrü kanıtı için `ky_confined`in gevşetilmiş hâli.
+ * İKİNCİ GEZGİN YAZILMADI (D-407): ast.h'de genel çocuk yineleyici yok, bu
+ * dosyada ~30 elle yazılmış özyineleme var; ikizini yazmak ayrışma sınıfıdır.
+ * ⚠ İMZA DEĞİŞMEDİ — dosyanın kendi deseni: ek durum dosya-kapsamlı.
+ * ⚠ VARSAYILAN 0 → bayrak kapalıyken bu dosyanın anlamı BİT AYNI.
+ * SAYAÇLAR AYNI YÜRÜYÜŞTEN: `ky_confined` 1 dönerse ağacın TAMAMI gezilmiştir,
+ * yani sayımlar İŞLEV GENELİDİR — ayrı üst-düzey taraması GEREKMEZ. */
+static int g_kanal_modu = 0;
+static int g_kanal_spawn = 0, g_kanal_join = 0, g_kanal_imha = 0;
+
+/* `kanal_gönder` 14 bayt, `kanal_al` 9 (ö iki baytlık). Handle'ı TUTMAZLAR. */
+/* [D-544] `ver` alt-agacinda miyiz? Projeksiyon seffafligini kapatir. */
+static int g_ver_altinda = 0;
+
+static int ky_kanal_seffaf_mi(const char *ad, int uz) {
+    /* [D-544] `gönderen`(9)/`alan`(4) PROJEKSIYONDUR: aynı handle'ı geri verir.
+     * Argümanı çerçeve dışına KAÇIRMAZ — sonucu AYRI bir bağlamaya gider ve
+     * o bağlama llvm.c'de AYRICA kanıtlanır. Yalnız burayı gevşetmek YETMEZ.
+     * ⚠ Bayt uzunlukları ÖLÇÜLDÜ, sayılmadı (D-543'te üç tur kaybettiren hata). */
+    if (uz == 13 && memcmp(ad, "kanal_gönder", 13) == 0) return 1;
+    if (uz == 8  && memcmp(ad, "kanal_al", 8) == 0) return 1;
+    /* [D-544 duzeltme] PROJEKSIYON `gönderen`/`alan` AYNI handle'i geri verir.
+     * `ver` alt-agacinda SEFFAF OLAMAZ: `ver gönderen(k)` uc'u cerceve disina
+     * KACIRIR, kanali serbest birakmak CAGIRANDA UAF olur (olculdu: exit 139).
+     * Disarida seffaftir; sonucu bir baglamaya giderse llvm.c onu AYRICA
+     * kanitlar (takma ad kaniti). */
+    if (g_ver_altinda) return 0;
+    return (uz == 9 && memcmp(ad, "gönderen", 9) == 0)
+        || (uz == 4 && memcmp(ad, "alan", 4) == 0);
+}
+
+/* Analiz suresince aktif tablo. ky_confined imzasi DEGISTIRILMEDI (dosya
+ * icinde ~30 ozyineli cagri yeri var; imza degisikligi degisim yuzeyini
+ * gereksiz genisletirdi). Tek is parcacikli derleyici. */
+
+static void ea_fn_ekle(Arena *a, const Dugum *fn, int *kap) {
+    if (!fn || fn->tip != DUGUM_ISLEV || !fn->veri.islev.govde) return;
+    if (g_fn_sayi >= *kap) {
+        int yeni = *kap ? *kap * 2 : 64;
+        EaFnKayit *t = (EaFnKayit *)arena_ayir_sifir(a, (size_t)yeni * sizeof(EaFnKayit));
+        if (!t) return;                     /* tahsis yok -> tablo buyumez -> DENY */
+        for (int i = 0; i < g_fn_sayi; i++) t[i] = g_fn_tablo[i];
+        g_fn_tablo = t; *kap = yeni;
+    }
+    g_fn_tablo[g_fn_sayi].ad = fn->veri.islev.ad;
+    g_fn_tablo[g_fn_sayi].uz = fn->veri.islev.ad_uzunluk;
+    g_fn_tablo[g_fn_sayi].islev = fn;
+    g_fn_sayi++;
+}
+
+static void ea_fn_topla(Arena *a, const Dugum *d, int *kap) {
+    if (!d) return;
+    switch (d->tip) {
+        case DUGUM_PROGRAM:
+            for (int i = 0; i < d->veri.program.sayi; i++)
+                ea_fn_topla(a, d->veri.program.uyeler[i], kap);
+            return;
+        case DUGUM_MODUL:
+            for (int i = 0; i < d->veri.modul.sayi; i++)
+                ea_fn_topla(a, d->veri.modul.uyeler[i], kap);
+            return;
+        case DUGUM_DISA: ea_fn_topla(a, d->veri.disa.tanim, kap); return;
+        case DUGUM_ISLEV: ea_fn_ekle(a, d, kap); return;
+        default: return;
+    }
+}
+
+void escape_fn_tablo_kur(Arena *a, const Dugum *program) {
+    if (!a || !program) return;
+    if (g_fn_program == program) return;    /* ayni program -> yeniden kurma */
+    g_fn_tablo = NULL; g_fn_sayi = 0;
+    int kap = 0;
+    ea_fn_topla(a, program, &kap);
+    g_fn_program = program;
+}
+
+static const Dugum *ea_fn_bul(const char *ad, int uz) {
+    if (!ad || !g_fn_tablo) return NULL;
+    for (int i = 0; i < g_fn_sayi; i++) {
+        const EaFnKayit *k = &g_fn_tablo[i];
+        if (k->uz == uz && k->ad && memcmp(k->ad, ad, (size_t)uz) == 0)
+            return k->islev;
+    }
+    return NULL;   /* bilinmeyen -> cagiran DENY'e duser */
+}
+
+/* f'in idx. parametresi govdede HAPSEDILMIS mi (yani f onu SAKLAMIYOR mu)? */
+static const Dugum *g_fn_devam[32];
+static int g_fn_devam_sayi = 0;
+
+static int ea_param_tutmuyor(const Dugum *fn, int idx) {
+    if (!fn || fn->tip != DUGUM_ISLEV) return 0;
+    if (!fn->veri.islev.govde) return 0;                  /* yalniz imza -> DENY */
+    if (idx < 0 || idx >= fn->veri.islev.param_sayi) return 0;
+    const Dugum *p = fn->veri.islev.parametreler[idx];
+    if (!p || p->tip != DUGUM_PARAMETRE || !p->veri.parametre.ad) return 0;
+
+    /* OZYINELEME KORUYUCUSU: f zaten degerlendirilmekteyse DENY. Hem
+     * sonlanmayi garanti eder hem konservatif taraftadir. */
+    for (int i = 0; i < g_fn_devam_sayi; i++)
+        if (g_fn_devam[i] == fn) return 0;
+    if (g_fn_devam_sayi >= 32) return 0;        /* yigin doldu -> DENY */
+
+    g_fn_devam[g_fn_devam_sayi++] = fn;
+    int r = ky_confined(fn->veri.islev.govde,
+                        p->veri.parametre.ad, p->veri.parametre.ad_uzunluk);
+    g_fn_devam_sayi--;
+    return r;
+}
+
 static int ky_ad_esit(const Dugum *d, const char *ad, int uz) {
     return d && d->tip == DUGUM_TANIMLAYICI
         && d->veri.tanimlayici.uzunluk == uz
         && memcmp(d->veri.tanimlayici.metin, ad, (size_t)uz) == 0;
+}
+
+/* [D-495] `olarak` (cast) ESCAPE SEMANTIGINI DEGISTIRMEZ: `p olarak metin`
+ * hala p'nin DEGERIDIR. Kaci s sorusu icin katmani soy. Ham isaretcilerde bu
+ * sekil KACINILMAZDIR (`bellek_kopyala(yeni olarak metin, ...)`). */
+static const Dugum *cast_soy(const Dugum *d) {
+    while (d && d->tip == DUGUM_TIP_DONUSTUR) d = d->veri.tip_donustur.kaynak;
+    return d;
+}
+
+/* [D-495] Argumanlarini SAKLAMAYAN bellek yerlesikleri — KURATE LISTE.
+ * ⚠⚠ `bellek_serbest` BILEREK YOK VE BU KRITIK: o `free`e eslesir. Onu
+ * hapsedilmis saymak, hem ACIK `free` hem BOLGE serbesti calisirdi = CIFT
+ * SERBEST. Liste "isaretci parametresi alan her yerlesik" DEGIL, "argumanini
+ * TUTMAYAN yerlesik" demektir (D-459'un kurate-liste disiplini). */
+static int ky_bellek_builtin_tutmaz(const char *ad, int uz) {
+    return (uz == 14 && memcmp(ad, "bellek_kopyala", 14) == 0);
 }
 
 static int ky_dizi_builtin_confined(const char *ad, int uz) {
@@ -578,6 +753,23 @@ static int ky_var_gecer(const Dugum *d, const char *ad, int uz) {
                 || ky_var_gecer(d->veri.ikili.sag, ad, uz);
         case DUGUM_TEKLI: return ky_var_gecer(d->veri.tekli.operand, ad, uz);
         case DUGUM_ERISIM: return ky_var_gecer(d->veri.erisim.nesne, ad, uz);
+        case DUGUM_IMHA_IFADE:
+            /* [D-507] `imha(e)` / `kullan(e)` — LINEER TUKETIM dugumleri.
+             * Dallari YOKTU -> `default: return 1` (bilinmeyen -> konservatif
+             * "geciyor") lineer yakalayan HER kapanisin hapsedilmesini
+             * DUSURUYORDU. Bisect ile bulundu: skaler yakalayan ayni sekil
+             * GECIYORDU (c1 conf=1, c2 conf=0). D-495'in cast kokuyle AYNI
+             * SINIF: eksik dal = sessiz asiri-muhafazakarlik. */
+            return ky_var_gecer(d->veri.imha_ifade.operand, ad, uz);
+        case DUGUM_KULLAN_IFADE:
+            return ky_var_gecer(d->veri.kullan_ifade.operand, ad, uz);
+        case DUGUM_TIP_DONUSTUR:
+            /* [D-495] Cast TAM OLARAK kaynagini icerir — `default: return 1`
+             * (bilinmeyen -> konservatif "geciyor") burada GEREKSIZ KATIYDI ve
+             * `bellek_kopyala(yeni olarak metin, eski olarak metin, ..)`
+             * seklinde HER IKI isaretcinin de hapsedilmesini dusuruyordu.
+             * Bisect ile bulundu: cast'siz ayni sekil GECIYORDU. */
+            return ky_var_gecer(d->veri.tip_donustur.kaynak, ad, uz);
         default: return 1;  /* bilinmeyen → konservatif "geçiyor" */
     }
 }
@@ -610,20 +802,82 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
                 && ky_confined(d->veri.atama.deger, ad, uz);
         case DUGUM_CAGRI: {
             const Dugum *h = d->veri.cagri.hedef;
+            if (g_kanal_modu && h && h->tip == DUGUM_TANIMLAYICI) {
+                const char *hn = h->veri.tanimlayici.metin;
+                int hu = h->veri.tanimlayici.uzunluk;
+                if (hu == 14 && memcmp(hn, "görev_başlat", 14) == 0) g_kanal_spawn++;
+                else if (hu == 17 && memcmp(hn, "görev_birleştir", 17) == 0) g_kanal_join++;
+                else if (hu == 4 && memcmp(hn, "imha", 4) == 0) g_kanal_imha++;
+            }
             int safe0 = (h && h->tip == DUGUM_TANIMLAYICI
                 && ky_dizi_builtin_confined(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk)
                 && d->veri.cagri.sayi >= 1
                 && ky_ad_esit(d->veri.cagri.argumanlar[0], ad, uz));
-            if (!ky_confined(h, ad, uz)) return 0;
+            /* [D-507] CAGIRMAK TUTMAK DEGILDIR. `g()` — yani degiskenin
+             * CAGRI HEDEFI olmasi — onceden KACIS sayiliyordu (`ky_confined(h)`
+             * bare tanimlayiciya 0 doner) ve kapanis env'inin hapsedilmesini
+             * DUSURUYORDU. Cagri, kapanisi bir yere SAKLAMAZ; yalnizca lifted
+             * islevi env ile calistirir.
+             * ⚠ SAGLAMLIK G006'YA DAYANIR: lifted govde env'e isaretci
+             *   DONDUREMEZ (`|| &a` artik derleme zamaninda reddediliyor).
+             *   G006 OLMADAN bu gevsetme UAF acardi.
+             * ⚠ YALNIZ HEDEF konumu: ARGUMAN olarak gecmek (`al(g)`) HALA
+             *   asagidaki DENY yolundan gecer (callee saklayabilir; D-488
+             *   ozeti kanit bulursa oradan gecer). */
+            if (!(h && ky_ad_esit(h, ad, uz)) && !ky_confined(h, ad, uz)) return 0;
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 if (i == 0 && safe0) continue;  /* dizi_*(var, ...) ilk arg tuketildi */
+                /* [D-488] KULLANICI ISLEVI OZETI: arg TAM OLARAK bu degiskense ve
+                 * cagrilan f onu SAKLAMIYORSA (ky_confined(f.govde, param)) hapsedilme
+                 * KORUNUR. Kanit bulunamazsa asagidaki eski DENY yolu isler. */
+                if (ky_ad_esit(cast_soy(d->veri.cagri.argumanlar[i]), ad, uz)
+                    && h && h->tip == DUGUM_TANIMLAYICI
+                    && ea_param_tutmuyor(ea_fn_bul(h->veri.tanimlayici.metin,
+                                                   h->veri.tanimlayici.uzunluk), i))
+                    continue;
+                /* [D-495] SAKLAMAYAN BELLEK YERLESIGI: `bellek_kopyala` (memcpy)
+                 * argumanini TUTMAZ -> hapsedilme KORUNUR. Cast katmani soyulur
+                 * cunku ham isaretci bu yerlesiklere DAIMA `olarak metin` ile
+                 * gecer. ⚠ `bellek_serbest` (free) listede YOK: onu hapsedilmis
+                 * saymak CIFT SERBEST uretirdi (acik free + bolge serbesti). */
+                if (h && h->tip == DUGUM_TANIMLAYICI
+                    && ky_bellek_builtin_tutmaz(h->veri.tanimlayici.metin,
+                                                h->veri.tanimlayici.uzunluk)
+                    && ky_ad_esit(cast_soy(d->veri.cagri.argumanlar[i]), ad, uz))
+                    continue;
+                /* [D-543] Kanal modu, iki gevşetme:
+                 *  (1) `kanal_gönder`/`kanal_al` argümanı — handle'ı TUTMAZ.
+                 *  (2) `görev_başlat`a DOĞRUDAN verilen lambda — normalde LAMBDA
+                 *      dalı yakalamayı KAÇIŞ sayar (`kanal_mesaj` tam bu yüzden
+                 *      hiç kapsanmıyordu, D-511). Sağlamlık ÇAĞIRAN taraftaki
+                 *      kanıta dayanır: imha == 0 && join >= spawn → görev `ret`ten
+                 *      ÖNCE birleştirilmiştir, kanalı tutan thread YAŞAMIYOR. */
+                if (g_kanal_modu && h && h->tip == DUGUM_TANIMLAYICI
+                    && ky_kanal_seffaf_mi(h->veri.tanimlayici.metin,
+                                          h->veri.tanimlayici.uzunluk)
+                    && ky_ad_esit(d->veri.cagri.argumanlar[i], ad, uz))
+                    continue;
+                if (g_kanal_modu && h && h->tip == DUGUM_TANIMLAYICI
+                    && h->veri.tanimlayici.uzunluk == 14
+                    && memcmp(h->veri.tanimlayici.metin, "görev_başlat", 14) == 0
+                    && d->veri.cagri.argumanlar[i]
+                    && d->veri.cagri.argumanlar[i]->tip == DUGUM_LAMBDA)
+                    continue;
                 if (!ky_confined(d->veri.cagri.argumanlar[i], ad, uz)) return 0;
             }
             return 1;
         }
         case DUGUM_LAMBDA:
             return ky_var_gecer(d->veri.lambda.govde, ad, uz) ? 0 : 1;  /* yakalama = guvensiz */
-        case DUGUM_VER: return ky_confined(d->veri.ver.deger, ad, uz);
+        case DUGUM_VER: {
+            /* [D-544] `ver` alt-agaci boyunca projeksiyon seffafligi KAPALI. */
+            int onceki = g_ver_altinda;
+            int r;
+            g_ver_altinda = 1;
+            r = ky_confined(d->veri.ver.deger, ad, uz);
+            g_ver_altinda = onceki;
+            return r;
+        }
         case DUGUM_DEGISKEN: return ky_confined(d->veri.degisken.deger, ad, uz);
         case DUGUM_SABIT: return ky_confined(d->veri.sabit.deger, ad, uz);
         case DUGUM_BLOK:
@@ -654,8 +908,32 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
         case DUGUM_IKILI:
             return ky_confined(d->veri.ikili.sol, ad, uz)
                 && ky_confined(d->veri.ikili.sag, ad, uz);
-        case DUGUM_TEKLI: return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
+        case DUGUM_TEKLI:
+            /* [D-494] DEREFERANS ISARETCIYI SIZDIRMAZ — `&` SIZDIRIR.
+             * Eskiden ikisi de ayni yoldan gecip `*p`yi de KACIS sayiyordu
+             * (operand cıplak `p` -> 0). Bu, ham isaretcileri (`bölge_al`
+             * sonucu) YAPISAL OLARAK hapsedilemez kiliyordu: ham isaretci
+             * DAIMA deref edilir.
+             * SAGLAMLIK: `*p` p'nin DEGERINI degil, GOSTERDIGI SEYI okur/yazar
+             * -> p disari cikmaz. `&p` ise p'nin ADRESINI verir -> KACIS.
+             * `*p` icindeki daha derin kullanimlar YINE denetlenir (`**p`,
+             * `*(f(p))` gibi sekiller ozyineli olarak dogru sonuclanir). */
+            if (d->veri.tekli.op == OP_DEREFERANS
+                && ky_ad_esit(d->veri.tekli.operand, ad, uz))
+                return 1;
+            return ky_confined(d->veri.tekli.operand, ad, uz);  /* &var → bare → 0 */
         case DUGUM_ERISIM: return ky_confined(d->veri.erisim.nesne, ad, uz);
+        /* [D-507] ky_var_gecer ikizi: tuketim operandinin hapsedilmesi sorulur. */
+        case DUGUM_IMHA_IFADE:
+            return ky_confined(d->veri.imha_ifade.operand, ad, uz);
+        case DUGUM_KULLAN_IFADE:
+            return ky_confined(d->veri.kullan_ifade.operand, ad, uz);
+        case DUGUM_TIP_DONUSTUR:
+            /* [D-495] Cast bir DEGERI donusturur; isaretciyi SIZDIRMAZ.
+             * `ky_var_gecer` ikizi burada da sart: `sonuc = v[2] olarak tam32`
+             * varsayilan yola dusup REDDEDILIYORDU (cast dali yoktu), oysa o
+             * yalnizca bir OKUMADIR. Kaynak neyse hapsedilme onun sorusudur. */
+            return ky_confined(d->veri.tip_donustur.kaynak, ad, uz);
         case DUGUM_DIZI_OLUSTUR:
             for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
                 if (!ky_confined(d->veri.dizi_olustur.elemanlar[i], ad, uz)) return 0;
@@ -683,6 +961,66 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
     if (!d) return;
     switch (d->tip) {
         case DUGUM_DEGISKEN:
+            /* [D-507] `değişken F = |..| ..` — KAPANIS dali. env `@malloc`
+             * ile aliniyor ve HIC serbest edilmiyordu (llvm.c'nin kendi
+             * yorumu: "SERBEST BIRAKMA YOK (leak ...); F4 sonra").
+             * F confined ise LAMBDA dugumu kesin_yerel -> codegen env'i
+             * ρ_yerel'den tahsis eder, islev sonunda TOPLU serbest.
+             * ⚠ Tip ANNOTASYONU ARANMAZ: kapanis bagi genelde annotasyonsuz
+             *   yazilir (`değişken arttir = |n| ..`) — annotasyon sartı
+             *   gercek kodu disarida birakirdi (D-506'nin literal-only
+             *   kapsam dersi). */
+            if (d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_LAMBDA
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0
+                && ky_confined(fn_govde, d->veri.degisken.ad,
+                               d->veri.degisken.ad_uzunluk)) {
+                kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                ky_set(ea, d->veri.degisken.deger);
+            }
+            /* [D-494] `değişken V: *T = bölge_al(...)` — HAM ISARETCI dali.
+             * `bölge_al` D-415'ten beri GERCEK bir tahsistir (`malloc`) ve
+             * HIC serbest edilmiyordu; kodun kendi yorumu bunu "v1
+             * malloc-VEKALETEN (gercek arena V2)" diye isaretlemisti.
+             * V confined ise CAGRI dugumu kesin_yerel -> codegen onu
+             * ρ_yerel'den tahsis eder ve islev sonunda TOPLU serbest edilir. */
+            if (d->veri.degisken.tip
+                && d->veri.degisken.tip->tip == DUGUM_TIP_POINTER
+                && d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_CAGRI
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0) {
+                const Dugum *h = d->veri.degisken.deger->veri.cagri.hedef;
+                if (h && h->tip == DUGUM_TANIMLAYICI
+                    && h->veri.tanimlayici.uzunluk == 9
+                    && memcmp(h->veri.tanimlayici.metin, "b\xc3\xb6lge_al", 9) == 0
+                    && ky_confined(fn_govde, d->veri.degisken.ad,
+                                   d->veri.degisken.ad_uzunluk)) {
+                    kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                    ky_set(ea, d->veri.degisken.deger);
+                }
+            }
+            /* [D-506] `değişken V: Dizi<T> = dizi_olustur(N)` — YERLESIK CAGRI dali.
+             * D-494'un `bölge_al` dalinin BIREBIR SIMETRIGI. Onceden YALNIZ dizi
+             * LITERALI (`[1,2,3]`) isaretleniyordu; `dizi_olustur(N)` bir CAGRI
+             * dugumudur ve hic isaretlenmiyordu -> codegen onu KOSULSUZ ρ_caller'a
+             * yayiyordu. OLCULDU: ayni govde literalle ρ_yerel, `dizi_olustur` ile
+             * ρ_global; 200K cagrida zirve bellek 100 MB (sabit olmasi gerekirken).
+             * `dizi_olustur` boyutlu dizi kurmanin DEYIMSEL yoludur (stdlib/dizi.kem
+             * onu kullanir) -> literal-only kapsam gercek kodu disarida birakiyordu. */
+            if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
+                && d->veri.degisken.deger
+                && d->veri.degisken.deger->tip == DUGUM_CAGRI
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0) {
+                const Dugum *dh = d->veri.degisken.deger->veri.cagri.hedef;
+                if (dh && dh->tip == DUGUM_TANIMLAYICI
+                    && dh->veri.tanimlayici.uzunluk == 12
+                    && memcmp(dh->veri.tanimlayici.metin, "dizi_olustur", 12) == 0
+                    && ky_confined(fn_govde, d->veri.degisken.ad,
+                                   d->veri.degisken.ad_uzunluk)) {
+                    kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                    ky_set(ea, d->veri.degisken.deger);
+                }
+            }
             if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
                 && d->veri.degisken.deger
                 && d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR
@@ -743,7 +1081,7 @@ void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
             Dugum *p = islev->veri.islev.parametreler[i];
             if (p && p->tip == DUGUM_PARAMETRE && p->veri.parametre.ad) {
                 /* Parametre tahsisini ESC_CAGIRAN olarak ele alma ihtiyaci yok — cagiran
-                 * verir; sadece kayitsiz birakiyoruz, bag_cozumle NULL doner ve dolayisi
+                 * verir; sadece kayitsiz birakiyoruz, bag_indeks_bul -1 doner ve dolayisi
                  * ile parametre uzerinden escape akmaz (interproc yok). */
                 (void)p;  /* simdilik: parametreyi tahsis olarak gormuyoruz */
             }
@@ -762,6 +1100,13 @@ void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
 
 void escape_analiz_program(EscapeAnaliz *ea, const Dugum *program) {
     if (!program) return;
+
+    /* [D-488] Bu yol (program-genelinde gezinme) tabloyu KENDISI kurar.
+     * Derleyicinin gercek yolu `escape_analiz_islev`tir (islev basina) —
+     * orada tablo `escape_fn_tablo_kur` ile ONCEDEN kurulmus olmalidir;
+     * kurulmamissa ea_fn_bul NULL doner -> eski konservatif davranis. */
+    escape_fn_tablo_kur(ea->arena, program);
+
 
     /* Recursive: islevleri bul (program -> modul -> disa -> islev) */
     switch (program->tip) {
@@ -819,4 +1164,23 @@ const char *escape_kategori_adi(EscapeKategorisi k) {
         case ESC_CAGIRAN:   return "CAGIRAN";
     }
     return "BILINMEYEN";
+}
+
+/* [D-543] KANAL ÖMRÜ: kanal bağlaması çerçeveyi aşıyor mu? `ky_confined` ile
+ * AYNI yürüyüş; sayaçlar out-param (çağıran P2/P3'ü orada kurar).
+ * ⚠ Ölçüm yapılamazsa `*imha = 1` — DENY tarafı. */
+int escape_kanal_hapsedilmis(const Dugum *govde, const char *ad, int uz,
+                             int *spawn, int *join, int *imha) {
+    if (spawn) *spawn = 0;
+    if (join) *join = 0;
+    if (imha) *imha = 1;
+    if (!govde || !ad || uz <= 0) return 0;
+    g_kanal_modu = 1;
+    g_kanal_spawn = 0; g_kanal_join = 0; g_kanal_imha = 0;
+    int r = ky_confined(govde, ad, uz);
+    g_kanal_modu = 0;
+    if (spawn) *spawn = g_kanal_spawn;
+    if (join) *join = g_kanal_join;
+    if (imha) *imha = g_kanal_imha;
+    return r;
 }

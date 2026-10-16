@@ -1,0 +1,29 @@
+// [D-632] 2^64 VE ÜSTÜ literal HİÇBİR tamsayı tipine sığmaz → bağlamdan
+// BAĞIMSIZ T043. Eskiden iki derleyicide de 2^64-1'e SESSİZCE doyuyordu
+// (`dtam64 = 18446744073709551616` → 18446744073709551615).
+// Self-host ayrıştırıcısı doymuş değeri `a_deg`e yazar → taşma bilgisi YAN
+// KANALDA (tasma_node) taşınır. Annotasyonsuz bağlama ayrıca ölçülür: self
+// checker onun başlatıcısını ifade_tip ile hiç tiplemez.
+
+işlev pozitif() -> tam32 {
+    // Sınırın HEMEN altı — geçerli, tanı YOK (onluk/onaltılık/ikilik).
+    değişken a: dtam64 = 18446744073709551615;
+    değişken b: dtam64 = 0xFFFF_FFFF_FFFF_FFFF;
+    değişken c = 18446744073709551615;
+    değişken d: dtam64 = 0b1111111111111111111111111111111111111111111111111111111111111111;
+    ver 0;
+}
+
+işlev al(x: dtam64) -> tam32 { ver 0; }
+
+işlev negatif() -> dtam64 {
+    değişken a: dtam64 = 18446744073709551616;          // bağlamlı
+    değişken b = 99999999999999999999999;               // annotasyonsuz
+    değişken c: dtam64 = 0x1_0000_0000_0000_0000;       // onaltılık
+    değişken d = 0o2000000000000000000000;              // sekizlik = 2^64
+    al(18446744073709551616);                           // argüman
+    değişken e: tam64 = -18446744073709551616;          // tekli eksi
+    ver 18446744073709551617;                           // dönüş
+}
+
+işlev main() -> tam32 { ver pozitif(); }

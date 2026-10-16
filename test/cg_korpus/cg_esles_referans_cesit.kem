@@ -1,0 +1,30 @@
+// D-390: `eşleş` skrutinisi `&Çeşit` (çeşit REFERANSI) → OTOMATİK DEREFERENCE.
+// Self-host, referans parametresini (sty="ptr") ne skaler ne tagged ne yapı
+// sanıp TÜM eşleşmeyi ATLIYOR → fallthrough `ver 0`. Sonuç: DERLENİYOR ama
+// exit 42 yerine 0 (SESSİZ YANLIŞ CEVAP — C sınıfı, en ağır). Kök İKİ katman:
+//   1. param_ref_yapi: `&Çeşit` pointee ADI kaydedilmiyordu (yalnız yapi_var_mi
+//      sorgulanıyordu) → son_ref="" → auto-deref tetiklenmiyordu.
+//   2. eşleş handler: sty="ptr" + son_ref=çeşit ise `load %Çeşit, ptr` deref.
+// 10_cesit_ast + 11_yorumlayici (özyinelemeli AST değerlendirici) bu kökten
+// düşüyordu; cg_korpus `eşleş`i hep DEĞER üzerinde yapıyordu, referans üstünde
+// hiç yoktu (D-356'nın "korpusta o şekil yok" dersi).
+çeşit Dugum {
+    Yaprak(tam64),
+    Dal(&Dugum, &Dugum)
+}
+
+// eşleş referans üzerinde: her kol payload'u da &Dugum, özyineleme deref zinciri.
+işlev topla(d: &Dugum) -> tam64 {
+    eşleş d {
+        Dugum::Yaprak(n)  => { ver n; }
+        Dugum::Dal(a, b)  => { ver topla(a) + topla(b); }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken y20: Dugum = Dugum::Yaprak(20);
+    değişken y22: Dugum = Dugum::Yaprak(22);
+    değişken kok: Dugum = Dugum::Dal(&y20, &y22);
+    ver topla(&kok) olarak tam32;   // 20 + 22 = 42
+}

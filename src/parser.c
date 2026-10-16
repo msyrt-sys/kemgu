@@ -968,12 +968,15 @@ static Dugum *parse_kullan(Parser *p) {
         alias_ad_uz = a_tok.uzunluk;
     }
 
-    /* v1 siniri: seçili/alias yalniz tek-segment modul adiyla */
-    if (segment_sayi > 1 && (secili_sayi > 0 || alias_ad)) {
-        parser_hata(p, kullan_tok, "P046",
-            "secili/alias import v1'de tek modul adi gerektirir "
-            "(kullan modul::{...} / kullan modul olarak m)", NULL);
-    }
+    /* [D-580] P046 KALDIRILDI. Eski v1 siniri seçili/alias importu TEK
+     * segmentle sinirliyordu; bunun sonucu, ic ice dizindeki bir modulun
+     * YALNIZ legacy duzlestirmeyle (cok-segment + ciplak ad) erisilebilir
+     * olmasiydi ve o yol T041'i (private-by-default) HIC uygulamiyor
+     * (D-520: 67 ithalatin 37'si bu yolda). Yani kisit, gizlilik kacagini
+     * KACINILMAZ kiliyordu.
+     * ⚠ Bu, D-520'yi tek basina KAPATMAZ; onu ASAMALI goce ACAR: artik
+     * ic ice bir modul yeni-bicimde (alias/secili) ithal edilebilir ve
+     * dosyalar teker teker goc edebilir, her adimda yesil kalarak. */
 
     parser_bekle(p, TOK_NOKTALI_VIRGUL, "P042", "';' bekleniyor");
 

@@ -1,0 +1,35 @@
+// [D-573] LR002'nin BELGELENMİŞ AMA HİÇ ATEŞLENMEYEN DİZİ YARISI.
+// CLAUDE.md: "yapı/dizi tekkez içeremez" — `yapı` yarısı çalışıyordu,
+// `dizi` yarısı hiçbir konumda ateşlenmiyordu. ÖLÇÜLDÜ: aynı lineer değer
+// diziden geçirilerek İKİ KEZ tüketilebiliyordu (`--check` temiz, program
+// çalışıyor, exit 42) — L002 tam bunu engellemek için var.
+// ⚠ YAYILIM (D-467'nin `sonuç` çözümü) burada YANLIŞ olurdu: diziyi "lineer"
+// saymak `dizi_al(d,0)`ı iki kez çağırmayı engellemez. Doğru cevap YASAK.
+// YENİ TANI KODU YOK.
+
+// (1) bağlama
+işlev baglama() -> tam32 {
+    değişken d: Dizi<tekkez<tam32>> = [];
+    ver 0;
+}
+
+// (2) parametre
+işlev parametre(d: Dizi<tekkez<tam32>>) -> tam32 { ver 0; }
+
+// (3) dönüş
+işlev donus() -> Dizi<yetki<Bellek>> { ver []; }
+
+// (4) yapı alanı — dizi yarısı `yapı` yarısını da BAYPAS ediyordu
+yapı Q { d: Dizi<tekkez<tam32>>; }
+
+// (5) POZİTİF — normal diziler tanı ÜRETMEMELİ.
+// ⚠ ŞART: yalnız negatifler olsaydı "her Dizi<T>'yi reddet" sabotajı
+// kapıdan GEÇERDİ (D-425).
+işlev temiz() -> tam32 {
+    değişken a: Dizi<tam32> = [40, 2];
+    değişken b: Dizi<metin> = ["x"];
+    değişken c: Dizi<Dizi<tam32>> = [[1, 2]];
+    ver dizi_al(a, 0) + dizi_al(a, 1);
+}
+
+işlev main() -> tam32 { ver 42; }

@@ -1,0 +1,21 @@
+// D-369 / T030 + T031: generic bound denetimi.
+// `yapı Vektor<T: Say>` yazıldıysa `Vektor<Tam>` ancak `uygula Say için Tam`
+// varsa geçerlidir (T030). Bound olarak verilen ad hiç `özellik` değilse T031.
+// AYRICA: bu dosya imza-üstü tip denetimini de kapılar — tanılar işlev DÖNÜŞ
+// tipinde çıkıyor; eskiden dönüş/parametre tipleri hiç gezilmiyordu.
+özellik Say {}
+yapı Tam { x: tam32; }
+yapı Bos { y: tam32; }
+uygula Say için Tam {}
+yapı Vektor<T: Say> { ic: T; }
+yapı Kutu<T: YokBoyleOzellik> { ic: T; }
+
+işlev bound_ihlali() -> Vektor<Bos> {      // T030: Bos için `uygula Say` yok
+    ver Vektor { ic: Bos { y: 0 } };
+}
+işlev bilinmeyen_bound() -> Kutu<Tam> {    // T031: YokBoyleOzellik diye özellik yok
+    ver Kutu { ic: Tam { x: 0 } };
+}
+işlev main() -> tam32 {
+    ver 0;
+}

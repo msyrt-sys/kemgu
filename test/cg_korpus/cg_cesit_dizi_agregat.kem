@@ -1,0 +1,44 @@
+// D-439: çeşit payload'ından AGREGAT-elemanlı dizi. İki ayrı kusuru kapatır:
+//   1. `Dizi<W>` (W = çeşit) elemanı satır içi agregat `{i8, i32}` olarak
+//      yayılır; self-host bunu SKALER sanıp `kdl_dizi_ekle_tam(i32)` imzasına
+//      geçiriyordu (C çeşidi ADLANDIRIR — `%W` — ve '%' kuralıyla yakalar).
+//   2. payload tipi checker dizgisinde "?" olarak siliniyordu (`bilinen_tip_mi`
+//      kullanıcı tipini saymaz) → eleman tipi kayıp → yanlış erişimci.
+// Kendine referanslı çeşit (V içinde Dizi<V>) bilerek var: stdlib/json.kem'in
+// JsonDeger'i tam bu şekildedir ve kusuru ilk oraya düşürmüştü.
+// Exit: 42
+çeşit W { A, B(tam32) }
+çeşit V { Bos, Kap(Dizi<W>), Ic(Dizi<V>), Say(tam64) }
+
+işlev wal(v: V) -> tam32 {
+    eşleş v {
+        V::Kap(xs) => {
+            eşleş dizi_al(xs, 1) { W::B(n) => { ver n; } W::A => { ver 1; } }
+        }
+        V::Ic(ys) => {
+            eşleş dizi_al(ys, 0) { V::Say(m) => { ver m olarak tam32; } V::Bos => { ver 2; }
+                                   V::Kap(z) => { ver 3; } V::Ic(z2) => { ver 4; } }
+        }
+        V::Say(m) => { ver m olarak tam32; }
+        V::Bos => { ver 5; }
+    }
+    ver 6;
+}
+
+işlev main() -> tam32 {
+    // (a) agregat elemanlı dizi, payload'dan okunur
+    değişken ws: Dizi<W> = [];
+    dizi_ekle(ws, W::A);
+    dizi_ekle(ws, W::B(20));
+    değişken a: tam32 = wal(V::Kap(ws));      // 20
+
+    // (b) KENDİNE REFERANSLI payload + i64 yuvaya i32 register (int_uydur)
+    değişken vs: Dizi<V> = [];
+    dizi_ekle(vs, V::Say(0 - 8));
+    değişken b: tam32 = wal(V::Ic(vs));       // -8
+
+    // (c) doğrudan skaler dal (regresyon koruması)
+    değişken c: tam32 = wal(V::Say(30));      // 30
+
+    ver a + b + c;                             // 20 - 8 + 30 = 42
+}

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# ============================================================================
+# bolge_operand_harness.sh — [D-506] YAPISAL kapı: BÖLGE OPERANDI paritesi
+# ----------------------------------------------------------------------------
+# ⚠⚠ NEDEN AYRI KAPI GEREKTİ — ÜÇ MEVCUT KAPI DA BU SAPMAYI GÖREMEZ:
+#   `codegen_diff`  ÇIKIŞ KODU karşılaştırır  → yanlış bölge de 42 döndürür
+#   `yapi_diff`     `define` KÜMESİ            → bölge operandı define'da yok
+#   `checker_diff`  TANI dump'ı                → codegen'e hiç bakmaz
+# ÖLÇÜLDÜ (D-506): C `%5` (ρ_yerel) yayarken self-host `%rho` (ρ_caller)
+# yayıyordu ve ÜÇ KAPI DA YEŞİLDİ. D-417'nin (spekülasyon bariyeri) birebir
+# tekrarı: davranışsal kapılar bellek-yönetimi özelliğine KÖRDÜR.
+#
+# OLÇÜLEN: her korpus dosyasında `kdl_dizi_olustur(ptr X` operandlarının
+# DİZİSİ C ve self-host'ta AYNI mı? (register NUMARASI değil — ρ_caller mı
+# ρ_yerel mi olduğu; ikisi farklı BİÇİMDE yazılır: `%rho` vs `%N`.)
+# ============================================================================
+set -u
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU="${KEMGU:-build/kemgu${EXE}}"
+[ -x "$KEMGU" ] || KEMGU="build/kemgu"
+[ -x "$KEMGU" ] || { echo "🔴 HATA: kemgu ikilisi YOK ($KEMGU) — kapı KOŞMADI"; exit 1; }
+CODEGEN="${CODEGEN:-build/codegen${EXE}}"
+[ -x "$CODEGEN" ] || CODEGEN="build/codegen"
+[ -x "$CODEGEN" ] || { echo "🔴 HATA: codegen ikilisi YOK ($CODEGEN) — kapı KOŞMADI"; exit 1; }
+
+# [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
+# recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
+# AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
+# isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
+# derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
+# YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
+TMP=$(mktemp -d "build/bolge_op.XXXXXX" 2>/dev/null || echo "build/bolge_op.$$")
+mkdir -p "$TMP"
+
+# ρ SINIFI: `%rho` (çağıran/parametre) mi, `%N` (yerel, kdl_bolge_olustur) mi?
+# Register NUMARASINI kasten YOK SAYAR — o iki derleyicide farklı olabilir ve
+# bu kapının sorusu "hangi BÖLGE", "hangi numara" değil.
+# [D-509] rho_global ile rho_yerel AYIRT EDILIR. Onceki surum her `%N`i YEREL
+# sayiyordu; `main`de rho_global de bir `%N`dir (`kdl_global_bolge_al()`) ve
+# ikisi BAMBASKA omurlere sahiptir (global SERBEST EDILMEZ, yerel ret'te edilir).
+# Sabotaj S89 bunu ortaya cikardi: yonlendirme DUSTUGU halde (`%5` -> `%4`) kapi
+# YESIL kaldi -> KAPI zayifti, kod degil. Register NUMARASI hala yok sayilir;
+# SINIF o dosyadaki bolge-acma atamalarindan OKUNUR.
+rho_sinifi() {
+    awk '
+      /^define /                            { delete g; delete y }
+      /= call ptr @kdl_global_bolge_al\(\)/ { split($0,a," "); g[a[1]]=1 }
+      /= call ptr @kdl_bolge_olustur\(\)/   { split($0,a," "); y[a[1]]=1 }
+      match($0, /kdl_dizi_olustur\(ptr %[A-Za-z0-9_]+/) {
+          o = substr($0, RSTART, RLENGTH); sub(/.*ptr /, "", o)
+          if (o ~ /^%rho/)  print "CALLER"
+          else if (o in g)  print "GLOBAL"
+          else if (o in y)  print "YEREL"
+          else              print "BILINMEYEN(" o ")"
+      }' "$1"
+}
+
+# [D-507] KAPANIS ENV i de karsilastir: `@malloc` (HEAP) mi `@kdl_bolge_ayir`
+# (BOLGE) mi? Kapanis bagi hapsedilmisse env bolgeden alinir ve islev sonunda
+# TOPLU serbest edilir; oncesinde HIC serbest edilmiyordu.
+# ⚠ MUAFIYET `43_closure_param` DEGIL — o dosya bu korpusta yok. Muafiyet
+# gerekirse buraya yazilir; su an BOS (muafiyetsiz kapi).
+# ⚠⚠ MUAFIYET = ACIK PARITE BORCU ENVANTERI (gizleme DEGIL, IZLEME):
+#   Bu dort dosya `bölge_al` yolunu kullanir. D-494/D-495 (`bölge_al` ->
+#   ρ_yerel, hapsedilme kanitliysa) YALNIZ C ye uygulanmisti; self-host a
+#   HIC PORTLANMADI. Bu kapi onu ILK KEZ gorunur kildi — borc YARATILMADI,
+#   OLCULDU. Self-host DAHA KONSERVATIF (malloc = sizinti, UAF DEGIL).
+#   Port yapilinca bu satir BOSALTILMALI; kapi o zaman "MUAF ama artik
+#   ESLESIYOR" demez, sadece yesil kalir -> periyodik olarak DENE.
+ENV_MUAF=""
+env_sinifi() {
+    grep -v '^declare' "$1" | grep -oE 'call ptr @(malloc|kdl_bolge_ayir)' \
+        | sed 's/.*@malloc/HEAP/; s/.*@kdl_bolge_ayir/BOLGE/'
+}
+
+topl=0; fark=0; atla=0
+for f in test/cg_korpus/*.kem test/perf/*.kem; do
+    [ -f "$f" ] || continue
+    "$KEMGU"   --llvm "$f" > "$TMP/c.ll"  2>/dev/null || { atla=$((atla+1)); continue; }
+    "$CODEGEN" --llvm "$f" > "$TMP/s.ll" 2>/dev/null || { atla=$((atla+1)); continue; }
+    grep -q "kdl_dizi_olustur(ptr" "$TMP/c.ll" || continue   # dizi yok → konu dışı
+    topl=$((topl+1))
+    b=$(basename "$f" .kem); em=0
+    for m in $ENV_MUAF; do [ "$m" = "$b" ] && em=1; done
+    # [D-563] SUREC IKAMESI `<(...)` WINDOWS`TA CALISMAZ: MSYS2 `diff`
+    # `/dev/fd/63` acamaz ("No such file or directory") ve kapi TUM
+    # dosyalarda SAPMA raporlar (olculdu: 342/171). Gercek dosyaya yaz.
+    env_sinifi "$TMP/c.ll" > "$TMP/c.env"; env_sinifi "$TMP/s.ll" > "$TMP/s.env"
+    rho_sinifi "$TMP/c.ll" > "$TMP/c.rho"; rho_sinifi "$TMP/s.ll" > "$TMP/s.rho"
+    if [ "$em" -eq 0 ] && ! diff -q "$TMP/c.env" "$TMP/s.env" >/dev/null; then
+        echo "  🔴 $b — kapanış env operandı SAPMASI:"
+        diff "$TMP/c.env" "$TMP/s.env" | head -4 | sed 's/^/     /'
+        fark=$((fark+1))
+    fi
+    if ! diff -q "$TMP/c.rho" "$TMP/s.rho" >/dev/null; then
+        echo "  🔴 $(basename "$f") — bölge operandı SAPMASI:"
+        diff "$TMP/c.rho" "$TMP/s.rho" | head -4 | sed 's/^/     /'
+        fark=$((fark+1))
+    fi
+done
+
+if [ "$topl" -eq 0 ]; then
+    echo "🔴 HATA: dizi tahsisi içeren dosya bulunamadı — kapı boşa koştu"; exit 1
+fi
+if [ "$fark" -ne 0 ]; then
+    echo "=== bölge operandı paritesi: $fark/$topl dosyada SAPMA ==="
+    exit 1
+fi
+echo "=== bölge operandı paritesi: $topl/$topl dosya (atlanan $atla) ==="

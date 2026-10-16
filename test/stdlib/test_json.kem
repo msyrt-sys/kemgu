@@ -1,0 +1,322 @@
+// KEMGU Stdlib Testi — JSON yazıcı
+// =============================================================================
+// Bu dosya `stdlib/json.kem` ile BİRLEŞTİRİLEREK derlenir.
+//
+// ⚠ TİP KONTROLÜ YETMEZ — bu modülü yazarken iki kusur YALNIZ ÇALIŞTIRINCA
+// çıktı ve `--check` ikisini de TEMİZ geçmişti:
+//   1. `metin_kes` 0-TABANLI (1-tabanlı sanmıştım) → her dizginin İLK
+//      KARAKTERİ düşüyordu: `"iki"` → `"ki"`, anahtar `ad` → `d`.
+//   2. `metin_bayt` `tam8` döner, `tam32` değil (bunu --check yakaladı).
+// Bu yüzden test exit koduyla DAVRANIŞ ölçer, yalnız derlenmeyi değil.
+//
+// Beklenen çıktı (satır satır):
+//   null / true / -4207 / "a\\\"b" / [1,"iki"] / {"ad":"ölç"}
+// `"a\"b"` KEMGU'da 4 karakterdir (kaçış YOK): a \ " b
+// → JSON kaçışı: a + \\ + \" + b
+
+işlev json_test_esit(beklenen: metin, gercek: metin, kod: tam32) -> tam32 {
+    eğer metin_esit(beklenen, gercek) { ver 0; }
+    yazdir_metin("BEKLENEN:");
+    yazdir_metin(beklenen);
+    yazdir_metin("GERCEK  :");
+    yazdir_metin(gercek);
+    ver kod;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+
+    h = h + json_test_esit("null", yaz(JsonDeger::Bos), 1);
+    h = h + json_test_esit("true", yaz(JsonDeger::Mantik(doğru)), 2);
+    h = h + json_test_esit("false", yaz(JsonDeger::Mantik(yanlış)), 4);
+    h = h + json_test_esit("0", yaz(JsonDeger::Sayi(0)), 8);
+    h = h + json_test_esit("-4207", yaz(JsonDeger::Sayi(0 - 4207)), 16);
+
+    // Kaçış: kaynak `a\"b` (4 karakter) → JSON `"a\\\"b"`
+    değişken bekk: metin = metin_birlestir(tirnak(), "a");
+    bekk = metin_birlestir(bekk, ters_bolu());
+    bekk = metin_birlestir(bekk, ters_bolu());
+    bekk = metin_birlestir(bekk, ters_bolu());
+    bekk = metin_birlestir(bekk, tirnak());
+    bekk = metin_birlestir(bekk, "b");
+    bekk = metin_birlestir(bekk, tirnak());
+    h = h + json_test_esit(bekk, yaz(JsonDeger::Metin("a\"b")), 32);
+
+    // Dizi — ilk karakter düşme kusurunun ASIL yakalandığı yer
+    değişken d: Dizi<JsonDeger> = [];
+    dizi_ekle(d, JsonDeger::Sayi(1));
+    dizi_ekle(d, JsonDeger::Metin("iki"));
+    değişken bekd: metin = metin_birlestir("[1,", tirnak());
+    bekd = metin_birlestir(bekd, "iki");
+    bekd = metin_birlestir(bekd, tirnak());
+    bekd = metin_birlestir(bekd, "]");
+    h = h + json_test_esit(bekd, yaz(JsonDeger::Dizi(d)), 64);
+
+    // Nesne + TÜRKÇE UTF-8 (çok baytlı karakter aynen geçmeli)
+    değişken ks: Dizi<metin> = [];
+    dizi_ekle(ks, "ad");
+    değişken vs: Dizi<JsonDeger> = [];
+    dizi_ekle(vs, JsonDeger::Metin("ölç"));
+    değişken bekn: metin = metin_birlestir("{", tirnak());
+    bekn = metin_birlestir(bekn, "ad");
+    bekn = metin_birlestir(bekn, tirnak());
+    bekn = metin_birlestir(bekn, ":");
+    bekn = metin_birlestir(bekn, tirnak());
+    bekn = metin_birlestir(bekn, "ölç");
+    bekn = metin_birlestir(bekn, tirnak());
+    bekn = metin_birlestir(bekn, "}");
+    h = h + json_test_esit(bekn, yaz(JsonDeger::Nesne(ks, vs)), 128);
+
+    // Boş dizi / boş nesne
+    değişken bd: Dizi<JsonDeger> = [];
+    h = h + json_test_esit("[]", yaz(JsonDeger::Dizi(bd)), 256);
+
+    // ---------------------------------------------------------------------
+    // AYRIŞTIRICI (D-436)
+    // ⚠ Test GİRDİLERİ `tirnak()` ile kurulur: KEMGU dizgi literalinde kaçış
+    // YOKTUR, yani `"{\"a\":1}"` kaynakta GERÇEK ters-bölü içerir ve ayrıştırıcı
+    // haklı olarak reddeder. İlk denememde tam bu yüzden sahte bir başarısızlık
+    // aldım — kusur testteydi, ayrıştırıcıda değil.
+    // ---------------------------------------------------------------------
+    h = h + json_ayristir_esit("null", 512);
+    h = h + json_ayristir_esit("true", 1024);
+    h = h + json_ayristir_esit("-4207", 2048);
+    h = h + json_ayristir_esit("[1,2,[3]]", 4096);
+    h = h + json_ayristir_esit("[]", 8192);
+    h = h + json_ayristir_esit("{}", 16384);
+
+    // Boşluk toleransı: girdi boşluklu, ÇIKTI sıkışık olmalı
+    değişken t2: metin = tirnak();
+    değişken bosluklu: metin = metin_birlestir("[ 1 , ", metin_birlestir(t2, "x"));
+    bosluklu = metin_birlestir(bosluklu, t2);
+    bosluklu = metin_birlestir(bosluklu, " ]");
+    h = h + json_ayristir_beklenen(bosluklu,
+            metin_birlestir("[1,", metin_birlestir(t2, metin_birlestir("x", metin_birlestir(t2, "]")))),
+            32768);
+
+    // Nesne + TÜRKÇE UTF-8 round-trip
+    değişken nes: metin = metin_birlestir("{", t2);
+    nes = metin_birlestir(nes, "ad"); nes = metin_birlestir(nes, t2);
+    nes = metin_birlestir(nes, ":"); nes = metin_birlestir(nes, t2);
+    nes = metin_birlestir(nes, "ölç"); nes = metin_birlestir(nes, t2);
+    nes = metin_birlestir(nes, "}");
+    h = h + json_ayristir_esit(nes, 65536);
+
+    // HATA yollari — panik YOK, sonuç<> ile
+    h = h + json_ayristir_hata_mi("[1,2", 131072);
+    h = h + json_ayristir_hata_mi("1 2", 262144);
+    h = h + json_ayristir_hata_mi("{1:2}", 524288);
+    h = h + json_ayristir_hata_mi("", 1048576);
+
+    // ---------------------------------------------------------------------
+    // ERİŞİMCİLER (D-437) — bu blok bir DERLEYİCİ KUSURU açığa çıkarmıştı:
+    // çeşit payload'ından gelen `Dizi<metin>`den eleman okumak SEGFAULT
+    // veriyordu (yanlış erişimci soneki: `_tam` yerine `_ptr` olmalıydı).
+    // Kusur hem `src/llvm.c` hem `selfhost/codegen.kem`de onarıldı.
+    // ---------------------------------------------------------------------
+    değişken t3: metin = tirnak();
+    değişken og: metin = metin_birlestir("{", t3);
+    og = metin_birlestir(og, "ad"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, ":"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, "ölç"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, ","); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, "xs"); og = metin_birlestir(og, t3);
+    og = metin_birlestir(og, ":[10,20]}");
+    eşleş json_ayristir(og) {
+        hata(m) => { yazdir_metin("erisimci: ayristirma HATASI"); h = h + 1; }
+        tamam(v) => {
+            // anahtar → metin (SEGFAULT veren yol)
+            eşleş json_alan(v, "ad") {
+                değer(a) => {
+                    eşleş json_metin_al(a) {
+                        değer(s) => { h = h + json_test_esit("ölç", s, 1); }
+                        hiç => { yazdir_metin("ad: tip yanlis"); h = h + 1; }
+                    }
+                }
+                hiç => { yazdir_metin("ad: alan YOK"); h = h + 1; }
+            }
+            // olmayan anahtar → hiç
+            eşleş json_alan(v, "yokboyle") {
+                değer(a) => { yazdir_metin("olmayan anahtar KABUL EDILDI"); h = h + 1; }
+                hiç => { }
+            }
+            // dizi uzunluğu + ARALIK DIŞI indeks (panik ETMEMELİ)
+            eşleş json_alan(v, "xs") {
+                değer(xs) => {
+                    eğer json_uzunluk(xs) != 2 { yazdir_metin("uzunluk yanlis"); h = h + 1; }
+                    eşleş json_indeks(xs, 9) {
+                        değer(e) => { yazdir_metin("aralik disi KABUL EDILDI"); h = h + 1; }
+                        hiç => { }
+                    }
+                    eşleş json_indeks(xs, 1) {
+                        değer(e) => {
+                            eşleş json_sayi_al(e) {
+                                değer(n) => { eğer n != 20 { yazdir_metin("idx1 yanlis"); h = h + 1; } }
+                                hiç => { yazdir_metin("idx1 sayi degil"); h = h + 1; }
+                            }
+                        }
+                        hiç => { yazdir_metin("idx1 YOK"); h = h + 1; }
+                    }
+                }
+                hiç => { yazdir_metin("xs YOK"); h = h + 1; }
+            }
+        }
+    }
+
+    // ---- [D-458] Kaçış çözümü: kontrol karakterleri, \b \f ve \uXXXX ----
+    // 🔴 Bunlar ÖNCEDEN BOZUKTU ve hiçbir test ölçmüyordu: `satir_sonu()` vb.
+    // `metin_kes("\n",1,1)` ile kuruluyordu; KEMGU'da kaçış OLMADIĞI için bu
+    // SATIR SONU değil `n` HARFİDİR (bayt 110, ölçüldü) → `"a\nb"` sessizce
+    // `anb` çözülüyordu. Ayrıca `\b`/`\f` kolları hiç yoktu (belge "desteklenir"
+    // dediği hâlde). Test artık BAYT DEĞERİNİ denetler, yalnız "hata döndü mü"yü
+    // değil — D-443'ün dersi: hangi yolla ateşlendiğini ölçmeyen kapı ölçmüyordur.
+    h = h + json_kacis_bayt("a\nb", 10, 2097152);      // \n → 10 (ÖNCE harf 'n' idi)
+    h = h + json_kacis_bayt("a\tb", 9, 4194304);       // \t → 9  (ÖNCE harf 't')
+    h = h + json_kacis_bayt("a\rb", 13, 8388608);      // \r → 13 (ÖNCE harf 'r')
+    h = h + json_kacis_bayt("a\bb", 8, 16777216);      // \b → 8  (KOL YOKTU)
+    h = h + json_kacis_bayt("a\fb", 12, 33554432);     // \f → 12 (KOL YOKTU)
+    // ⚠ [D-462] AŞAĞIDAKİ SATIR BİR KAÇIŞ ÖLÇMÜYOR: `"aAb"` içinde ters bölü
+    // YOK, yani `\u` kolu HİÇ ateşlenmiyor — "A → 'A'" yorumu doğru ama
+    // önemsiz. `\u`nun BAŞARI yolu (ve vekil çiftleri) yalnız REDDETME
+    // senaryolarıyla sınanıyordu; D-458 bunu "destekleniyor" diye kaydetmişti.
+    // Bu boşluğu `calistir_belge_kapisi` KENDİ İLK KOŞUMUNDA buldu.
+    h = h + json_kacis_bayt("aAb", 65, 67108864); // (kaçışsız kontrol — kalsın)
+    // ⚠ Kaçış dizisi KAYNAKTA birleştirmeyle kurulur: bu dosyayı düzenleyen
+    // araçlar `A`i "A"ya ÇÖZÜYOR (bu artımda iki kez yaşandı) ve ölçüm
+    // sessizce anlamsızlaşıyor. Aşağıdaki `u0000` testi de aynı sebeple böyle.
+    h = h + json_kacis_bayt(
+        metin_birlestir("a", metin_birlestir(ters_bolu(), "u0041b")), 65, 13);
+    // VEKİL ÇİFTİ: yüksek+alçak vekil → U+1F600 = F0 9F 98 80; 0xF0 = -16
+    h = h + json_kacis_bayt(
+        metin_birlestir("a", metin_birlestir(ters_bolu(),
+            metin_birlestir("uD83D", metin_birlestir(ters_bolu(), "uDE00b")))),
+        0 - 16, 15);
+    // ğ → ğ = C4 9F; ilk bayt 0xC4. `metin_bayt` tam8 döner (işaretli) →
+    // 0xC4 = -60. Beklentiyi UYDURMUYORUZ: işaretli tam8 değeri yazılır.
+    h = h + json_kacis_bayt("ağb", 0 - 60, 134217728);
+    // VEKİL ÇİFTİ: 😀 → U+1F600 (😀) = F0 9F 98 80; 0xF0 = -16
+    h = h + json_kacis_bayt("a😀b", 0 - 16, 268435456);
+
+    // [D-462] AYRIŞTIRICI tarafında `\" \\ \/` — KAPSAM BOŞLUĞUYDU.
+    // Kollar (34/92/47) `ja_metin`de VARDI ve doğru çalışıyordu (ölçüldü), ama
+    // bayt düzeyinde HİÇBİR ÖLÇÜM ateşlemiyordu: `\"` ve `\\` yalnız YAZICI
+    // tarafında (`yaz`) sınanıyordu, `\/` hiç sınanmıyordu. Kusur değil kapsam
+    // boşluğu — ama D-461'in 1. kör noktasıyla AYNI SINIF (kod var, --check
+    // geçiyor, hiçbir kapı zorlamıyor).
+    // ⚠ KEMGU'da kaçış YOKTUR → `"a\\b"` kaynakta 4 karakterdir (a,\,\,b), yani
+    // JSON kaçış dizisinin ta kendisi. `\"` ise KEMGU literalini kapatacağı için
+    // `tirnak()` ile kurulur.
+    h = h + json_kacis_bayt("a\\b", 92, 7);   // \\ → ters bölü (92)
+    h = h + json_kacis_bayt("a\/b", 47, 9);   // \/ → eğik çizgi (47)
+    h = h + json_kacis_bayt(
+        metin_birlestir("a", metin_birlestir(ters_bolu(),
+            metin_birlestir(tirnak(), "b"))), 34, 11);   // \" → tırnak (34)
+
+    // Geçersiz kaçışlar HATA vermeli (sessiz kabul DEĞİL).
+    // ⚠ U+0000 kaçışını BİRLEŞTİRMEYLE kuruyoruz: kaynağa altı-haneli hâlini
+    // yazmak bu dosyaya GERÇEK bir NUL baytı sokup lexer'ı kırdı (bu artımda
+    // iki kez yaşandı — CLAUDE.md'nin "kaçış yok" dersinin yeni bir biçimi).
+    h = h + json_ayristir_hata_mi(
+        json_dizgi(metin_birlestir("a", metin_birlestir(ters_bolu(), "u0000b"))), 536870912);
+    h = h + json_ayristir_hata_mi(json_dizgi("a\uD800b"), 1073741824);  // yalnız yüksek vekil
+    h = h + json_ayristir_hata_mi(json_dizgi("a\u00ZZb"), 3);           // geçersiz hex
+    h = h + json_ayristir_hata_mi(json_dizgi("a\u12"), 5);              // yarım kalmış
+
+    // ---- [D-460] ONDALIK / ÜSTEL sayılar ----
+    // Ayrıştırıcı artık `Ondalik(kesirli64)` üretir; yazıcı `kesirli_metin`
+    // (D-457, kayıpsız kısa gidiş-dönüş) ile geri yazar. Bu yüzden test
+    // GİDİŞ-DÖNÜŞ ölçer: `0.1` yuvarlanarak `0.10000000000000001` olmamalı.
+    // ⚠ TAMSAYI ile ONDALIK AYRI varyantlardır: `[1,1.5]` ilkini `Sayi`,
+    // ikincisini `Ondalik` yapar. Sessizce birbirine dönüştürmek `Sayi`nın
+    // tam64 kesinliğini bozardı (2^53 üstü tamsayılar kesirli64'te kayıpsız
+    // DEĞİLDİR) — o yüzden `json_sayi_al` ondalığa `hiç` döner ve tersi de.
+    h = h + json_ayristir_esit("1.5", 3);
+    h = h + json_ayristir_esit("-0.25", 6);
+    h = h + json_ayristir_esit("0.1", 12);
+    h = h + json_ayristir_beklenen("2.5e3", "2500", 24);
+    h = h + json_ayristir_beklenen("1e-3", "0.001", 48);
+    h = h + json_ayristir_esit("[1,1.5]", 96);
+    h = h + json_ayristir_esit("42", 192);        // tamsayı YOLU BOZULMAMALI
+    // Eksik/yarım ondalık: SESSİZ KABUL ETME
+    h = h + json_ayristir_hata_mi("1.", 384);
+    h = h + json_ayristir_hata_mi("1e", 768);
+    h = h + json_ayristir_hata_mi("1e+", 1536);
+
+    eğer h == 0 { yazdir_metin("json: TUM TESTLER GECTI"); ver 0; }
+    // ⚠ ÇIKIŞ KODU 8 BİTE MASKELENİR. `h`'yi doğrudan döndürmek ölümcül bir
+    // kapı zayıflığıydı: 262144 = 0x40000 → düşük bayt 0 → BAŞARISIZLIK
+    // "geçti" gibi görünüyordu (sabotaj S19 bunu ortaya çıkardı: mesaj
+    // basıldı ama kapı yeşil kaldı). Bayrak toplamı yalnız TEŞHİS içindir;
+    // kapıya giden değer 1'e sıkıştırılır.
+    yazdir_metin("json: BASARISIZ");
+    ver 1;
+}
+
+// ROUND-TRIP: yaz(ayristir(x)) == x  (kanonik girdi icin)
+işlev json_ayristir_esit(g: metin, kod: tam32) -> tam32 {
+    ver json_ayristir_beklenen(g, g, kod);
+}
+
+işlev json_ayristir_beklenen(g: metin, beklenen: metin, kod: tam32) -> tam32 {
+    eşleş json_ayristir(g) {
+        tamam(v) => { ver json_test_esit(beklenen, yaz(v), kod); }
+        hata(m) => {
+            yazdir_metin(metin_birlestir("AYRISTIRMA HATASI: ", m));
+            yazdir_metin(g);
+            ver kod;
+        }
+    }
+    ver kod;
+}
+
+// Gecersiz girdi HATA dondurmeli (panik DEGIL, sessiz kabul DEGIL).
+işlev json_ayristir_hata_mi(g: metin, kod: tam32) -> tam32 {
+    eşleş json_ayristir(g) {
+        tamam(v) => {
+            yazdir_metin("HATA BEKLENIYORDU ama kabul edildi:");
+            yazdir_metin(g);
+            ver kod;
+        }
+        hata(m) => { ver 0; }
+    }
+    ver kod;
+}
+
+// [D-458] JSON dizgi belgesi kur: `"` + icerik + `"`.
+işlev json_dizgi(ic: metin) -> metin {
+    değişken t: metin = tirnak();
+    ver metin_birlestir(t, metin_birlestir(ic, t));
+}
+
+// [D-458] Kacis COZUMUNU BAYT DUZEYINDE olcer.
+// Girdi `ic` KEMGU kaynaginda ters-bolu ICERIR (kacis yok, D-400) — yani
+// ayristiriciya gercek bir JSON kacisi gider. Cozulen dizginin 1. baytinin
+// beklenen deger olup olmadigina bakariz: "hata donmedi" YETMEZ, D-443.
+işlev json_kacis_bayt(ic: metin, beklenen_bayt: tam32, kod: tam32) -> tam32 {
+    eşleş json_ayristir(json_dizgi(ic)) {
+        hata(m) => {
+            yazdir_metin("kacis REDDEDILDI ama kabul edilmeliydi:");
+            yazdir_metin(ic);
+            ver kod;
+        }
+        tamam(v) => {
+            eşleş v {
+                JsonDeger::Metin(s) => {
+                    eğer metin_bayt(s, 1) olarak tam32 != beklenen_bayt {
+                        yazdir_metin("kacis YANLIS bayt cozdu:");
+                        yazdir_metin(ic);
+                        ver kod;
+                    }
+                    ver 0;
+                }
+                JsonDeger::Bos => { ver kod; }
+                JsonDeger::Ondalik(x) => { ver kod; }   // [D-460]
+                JsonDeger::Mantik(x) => { ver kod; }
+                JsonDeger::Sayi(x) => { ver kod; }
+                JsonDeger::Dizi(x) => { ver kod; }
+                JsonDeger::Nesne(x, y) => { ver kod; }
+            }
+        }
+    }
+    ver kod;
+}

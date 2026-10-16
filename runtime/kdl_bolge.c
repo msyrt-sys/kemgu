@@ -48,8 +48,8 @@ struct KdlBolge {
 };
 
 /* === Sızıntı-tanığı sayaçları === */
-uint64_t kdl_bolge_olustur_sayisi = 0;
-uint64_t kdl_bolge_serbest_sayisi = 0;
+KDL_SAYAC_T kdl_bolge_olustur_sayisi = 0;   /* [D-665] hosted'da atomik — bkz. .h */
+KDL_SAYAC_T kdl_bolge_serbest_sayisi = 0;
 
 /* K3 (D-261): KEMGU_KEM_MALLOC (kem_os pure-.kem runtime) tanımlıysa region
  * primitifleri (olustur/ayir/serbest + helpers) SAF-.kem'den gelir (kem_heap.kem

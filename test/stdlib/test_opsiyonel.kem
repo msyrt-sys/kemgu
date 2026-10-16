@@ -194,7 +194,40 @@ işlev test_say_hic() -> mantıksal {
 }
 
 işlev main() -> tam32 {
-    // 30+ test fonksiyonu yukarıda; main yalnız bir tanesi çağırıp
-    // --check için entry sağlar.
-    ver test_ya_da_var();
+    değişken h: tam32 = 0;
+    // --- mantıksal: beklenti ANLAMDAN türetildi, addan değil ---
+    eğer değil test_var_deger()          { yazdir_metin("B: var_deger"); h = h + 1; }
+    eğer      test_var_hic()             { yazdir_metin("B: var_hic"); h = h + 1; }
+    eğer      test_yok_deger()           { yazdir_metin("B: yok_deger"); h = h + 1; }
+    eğer değil test_yok_hic()            { yazdir_metin("B: yok_hic"); h = h + 1; }
+    eğer değil test_bos_hic()            { yazdir_metin("B: bos_hic"); h = h + 1; }
+    eğer değil test_her_iki_var()        { yazdir_metin("B: her_iki_var"); h = h + 1; }
+    eğer değil test_esit_iki_deger()     { yazdir_metin("B: esit_iki_deger"); h = h + 1; }
+    eğer değil test_esit_iki_hic()       { yazdir_metin("B: esit_iki_hic"); h = h + 1; }
+    eğer      test_esit_farkli()         { yazdir_metin("B: esit_farkli"); h = h + 1; }
+    eğer değil test_sarmala()            { yazdir_metin("B: sarmala"); h = h + 1; }
+    eğer değil test_harita_metin()       { yazdir_metin("B: harita_metin"); h = h + 1; }
+    eğer değil test_filtre_metin()       { yazdir_metin("B: filtre_metin"); h = h + 1; }
+    eğer değil test_harita_ya_da_deger() { yazdir_metin("B: harita_ya_da_deger"); h = h + 1; }
+    eğer değil test_harita_ya_da_hic()   { yazdir_metin("B: harita_ya_da_hic"); h = h + 1; }
+    eğer değil test_say_deger()          { yazdir_metin("B: say_deger"); h = h + 1; }
+    eğer değil test_say_hic()            { yazdir_metin("B: say_hic"); h = h + 1; }
+    // --- tam32: değerler yardımcı işlevlerden OKUNDU (guvenli_ters(10)=1000/10) ---
+    eğer test_ya_da_var()       != 7   { yazdir_metin("S: ya_da_var"); h = h + 1; }
+    eğer test_ya_da_yok()       != 99  { yazdir_metin("S: ya_da_yok"); h = h + 1; }
+    eğer test_ilk_var_a()       != 10  { yazdir_metin("S: ilk_var_a"); h = h + 1; }
+    eğer test_ilk_var_b()       != 20  { yazdir_metin("S: ilk_var_b"); h = h + 1; }
+    eğer test_harita_deger()    != 42  { yazdir_metin("S: harita_deger"); h = h + 1; }
+    eğer test_harita_hic()      != 999 { yazdir_metin("S: harita_hic"); h = h + 1; }
+    eğer test_filtre_gec()      != 5   { yazdir_metin("S: filtre_gec"); h = h + 1; }
+    eğer test_filtre_kalmaz()   != 999 { yazdir_metin("S: filtre_kalmaz"); h = h + 1; }
+    eğer test_bagla_var()       != 100 { yazdir_metin("S: bagla_var"); h = h + 1; }
+    eğer test_bagla_yok()       != 999 { yazdir_metin("S: bagla_yok"); h = h + 1; }
+    eğer test_ya_da_cagir_var() != 7   { yazdir_metin("S: ya_da_cagir_var"); h = h + 1; }
+    eğer test_ya_da_cagir_yok() != 42  { yazdir_metin("S: ya_da_cagir_yok"); h = h + 1; }
+    // --- metin ---
+    eğer değil metin_esit(test_ya_da_metin(), "varsayilan") { yazdir_metin("M: ya_da_metin"); h = h + 1; }
+    eğer h == 0 { yazdir_metin("opsiyonel: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("opsiyonel: BASARISIZ");
+    ver 1;
 }

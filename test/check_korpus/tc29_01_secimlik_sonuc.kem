@@ -1,0 +1,52 @@
+// D-378: bileşik tip 2. artım — `seçimlik<T>` + `sonuç<T,H>`.
+// İki kazanç: (a) tip KARŞILAŞTIRMALARI (T001/T020), (b) `eşleş` KAPSAYICILIK
+// (M001) — D-352'de bilinçli açık bırakılan dallar. O zaman skrutininin
+// `seçimlik` mi olduğu anlaşılamıyordu; artık tip temsili var.
+işlev t001_secimlik_skaler() -> tam32 {
+    değişken s: seçimlik<tam32> = hiç;
+    değişken n: tam32 = s;                          // T001
+    ver 0;
+}
+işlev t001_secimlik_ic() -> tam32 {
+    değişken a: seçimlik<tam32> = hiç;
+    değişken b: seçimlik<metin> = a;                // T001: iç tip farkı
+    ver 0;
+}
+işlev t001_sonuc_ic() -> tam32 {
+    değişken a: sonuç<tam32, metin> = tamam(1);
+    değişken b: sonuç<metin, metin> = a;            // T001
+    ver 0;
+}
+işlev t001_dizi_secimlik() -> tam32 {
+    değişken xs: Dizi<seçimlik<tam32>> = [hiç];
+    değişken n: tam32 = xs;                         // T001: iç içe bileşik
+    ver 0;
+}
+// ---- M001: kapsayıcılık ----
+işlev m001_secimlik_eksik() -> tam32 {
+    değişken s: seçimlik<tam32> = hiç;
+    eşleş s { değer(v) => { ver v; } }              // M001: `hiç` eksik
+}
+işlev m001_secimlik_ters() -> tam32 {
+    değişken s: seçimlik<tam32> = hiç;
+    eşleş s { hiç => { ver 0; } }                   // M001: `değer` eksik
+}
+işlev m001_sonuc_eksik() -> tam32 {
+    değişken r: sonuç<tam32, metin> = tamam(1);
+    eşleş r { tamam(v) => { ver v; } }              // M001: `hata` eksik
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz_secimlik() -> tam32 {
+    değişken s: seçimlik<tam32> = değer(5);
+    değişken t: seçimlik<tam32> = s;
+    eşleş s { değer(v) => { ver v; } hiç => { ver 0; } }
+}
+işlev temiz_sonuc() -> tam32 {
+    değişken r: sonuç<tam32, metin> = tamam(1);
+    eşleş r { tamam(v) => { ver v; } hata(e) => { ver 0; } }
+}
+işlev temiz_joker() -> tam32 {
+    değişken s: seçimlik<tam32> = hiç;
+    eşleş s { değer(v) => { ver v; } _ => { ver 0; } }
+}
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,13 @@
+// [D-580] İÇ İÇE MODÜL, YENİ BİÇİM — P046 bu iki satırı da yasaklıyordu.
+// Bu dosyanın derlenmesi D-520'nin AŞAMALI GÖÇÜNÜN AÇIK olduğunun kanıtıdır:
+// bir dosya artık legacy düzleştirmeden çıkıp TEK BAŞINA göç edebilir; ~700
+// referansı tek bir flag-day commit'inde nitelendirmek zorunda değiliz.
+//
+// ⚠ AYNI modül dosyası (`ic/derin.kem`) `ana_legacy_gizlilik.kem` tarafından
+// LEGACY yolla da ithal ediliyor ve orada `derin_gizli` (private) GÖRÜNÜR —
+// D-520'nin ölçtüğü kaçak. İki yol yan yana yaşıyor; göç bittiğinde legacy
+// düzleştirme silinince kaçak da kapanır.
+kullan ic::derin olarak d;        // alias  — eskiden P046
+kullan ic::derin::{ic_iki};       // seçili — eskiden P046
+
+işlev main() -> tam32 { ver d::ic_kirk() + ic_iki(); }

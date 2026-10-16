@@ -1,0 +1,27 @@
+// [D-536] DEĞER konumundaki generic yapı parametresinden T ÇIKARSAMA.
+//
+// ÖLÇÜLEN AÇIK: çıkarsama `&Kullanıcı<T>` (ref) konumunu tanıyordu ama
+// `k: Kutu<T>` (DEĞER) konumunu tanımıyordu → `@al$i32`, oysa aynı programda
+// `@olustur$i64` DOĞRUydu. `Kutu<tam64>` + 2^33 okununca değer KIRPILIYOR:
+//   ÖNCE:  call i32 @al$i32  -> exit 1   (HER İKİ derleyicide)
+//   SONRA: call i64 @al$i64  -> exit 42
+// Derleme temiz, link temiz, program KOŞUYOR — D-535 ile aynı sınıf.
+//
+// ⚠ AYIRT EDİCİ TİP ŞART: `tam32` ile ölçülemez (doğru çıkarsama ve `i32`
+//   fallback'i birebir aynı IR üretir). `tam64` + 2^33 kullanılır.
+// ⚠ `olarak tam64` KULLANILMAZ: self-host'ta büyük literalin cast yolu ayrı
+//   bir kusur taşıyor (D-537) ve fikstürü YANLIŞ SEBEPLE kırmızı yapardı
+//   (D-421). Annotasyonlu bağlama beklenen tipi literale zaten yayar.
+// Çıkış: 42
+yapı Kutu<T> { icerik: T; }
+
+işlev olustur<T>(x: T) -> Kutu<T> { ver Kutu { icerik: x }; }
+işlev al<T>(k: Kutu<T>) -> T { ver k.icerik; }
+
+işlev main() -> tam32 {
+    değişken buyuk: tam64 = 8589934592;   // 2^33 — i32'ye sığmaz
+    değişken k: Kutu<tam64> = olustur(buyuk);
+    değişken g: tam64 = al(k);
+    eğer g != 8589934592 { ver 1; }       // fallback'te KIRPILIRDI
+    ver 42;
+}

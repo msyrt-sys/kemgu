@@ -1,0 +1,15 @@
+// [D-629] 64-bit literal aralığının TAMAMI: 2^63 (INT64_MIN bit deseni), 2^64-1
+// (onluk, onaltılık, ikilik), INT64_MAX sınırı. `--ast` dump'ı C `PRId64` ile
+// self-host `tam64_str` BİREBİR olmalı. Eski self-host `tam64_str` INT64_MIN'de
+// sonsuz özyinelemeye girip SEGFAULT veriyordu; eski iki ayrıştırıcı 2^63 üstünü
+// INT64_MAX'a doyuruyordu.
+işlev main() -> tam32 {
+    değişken a: dtam64 = 9223372036854775807;
+    değişken b: dtam64 = 9223372036854775808;
+    değişken c: dtam64 = 18446744073709551615;
+    değişken d: dtam64 = 0xFFFFFFFFFFFFFFFF;
+    değişken e: dtam64 = 0x8000000000000000;
+    değişken f: dtam64 = 0b1000000000000000000000000000000000000000000000000000000000000000;
+    değişken g: dtam64 = 18_446_744_073_709_551_615;
+    ver 0;
+}

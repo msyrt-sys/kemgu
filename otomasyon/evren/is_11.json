@@ -1,0 +1,6 @@
+{"tur": "11", "is": "x86_ikiz", "gorev": "otomasyon/evren/gorev_11_x86_ikiz.md",
+ "baglam": ["test/baremetal_diff_harness.sh"],
+ "kesit": ["Makefile:1956-1960"],
+ "effort": "low",
+ "dogrulama": ["bash -n test/baremetal_diff_harness.sh", "make calistir_baremetal_diff"],
+ "isaretler": ["✅ BİRLEŞİK x86", "şablon+kısıt eşleşti", "(aarch64 + x86_64)", "0 atlandı"]}

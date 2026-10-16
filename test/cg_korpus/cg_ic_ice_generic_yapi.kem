@@ -1,0 +1,33 @@
+// [D-539] İÇ İÇE generic-yapı çağrısı HER İKİ derleyicide de DERLENMİYORDU.
+//   al(olustur(b))  ->  error: Cannot allocate unsized type
+// Geçerli bir program reddediliyordu (D-464/D-518 sınıfı, sessiz DEĞİL).
+//
+// İKİ AYRI KÖK, aynı belirti:
+//  • C  — (1) çıkarsama: D-536'nın dalı yalnız TANIMLAYICI argümanı kapsıyordu;
+//         iç içe çağrıda argümanın DEĞERLENDİRİLMİŞ IR tipi (`%Kutu$i64`)
+//         mangle edilmiş adı taşır, sonekten okunur.
+//         (2) SIRALAMA: geç keşfedilen `%Kutu$i64 = type` fonksiyonlardan
+//         SONRA yazılıyordu. Kaynaktaki "forward-ref güvenli" yorumu ÖLÇÜLDÜ
+//         ve `alloca` için YANLIŞ çıktı — `alloca` tipin BOYUTUNU ayrıştırma
+//         anında ister, İMZA konumu istemez (bu yüzden `define` satırı geçiyor,
+//         kusur yalnız gövdede görünüyordu). Gövdeler artık tampona yazılıyor.
+//  • SELF — `%Kutu$i64` HİÇ tanımlanmıyordu: `yapi_tip_emit` gövdelerden ÖNCE
+//         koşar ve `yaz_str` doğrudan stdout'a yazar (TAMPON YOK) → geç keşif
+//         hoist EDİLEMEZ. Çözüm: tek tip paramlı generic yapılar için skaler
+//         genişlik kümesini ÖN-KAYITLA (üst-yaklaşım; kullanılmayan adlandırılmış
+//         tip LLVM'de yasaldır).
+//
+// ⚠ AYIRT EDİCİ TİP ŞART: `tam32` ile ölçülemez — hem doğru çıkarsama hem
+//   `i32` fallback'i aynı IR'ı üretir. `tam64` + 2^33 kullanılır.
+// Çıkış: 42
+yapı Kutu<T> { icerik: T; }
+
+işlev olustur<T>(x: T) -> Kutu<T> { ver Kutu { icerik: x }; }
+işlev al<T>(k: Kutu<T>) -> T { ver k.icerik; }
+
+işlev main() -> tam32 {
+    değişken b: tam64 = 8589934592;      // 2^33 — i32'ye sığmaz
+    değişken g: tam64 = al(olustur(b));  // iç içe: hiçbir yerde `Kutu<tam64>` YAZMAZ
+    eğer g != 8589934592 { ver 1; }
+    ver 42;
+}

@@ -1,0 +1,19 @@
+// [D-649] PANIK CASCADE PARITESI — asm çıktı hedefinde yapı alanı.
+//
+// `çıktı("=r", &r.deger)` DESTEKLENMİYOR (özellik C3'te duruyor) ama tanı
+// DAVRANIŞI artık C ile birebir: C `&r`den sonra `)` bekler (P264), sonra kalan
+// `.`, `deger`, `)` belirteçlerini BİLİNMEYEN CLAUSE sayıp her biri için P261
+// basar ve bir belirteç ilerler. Toplam DÖRT tanı.
+//
+// Öncesinde self-host bu dosyaya `OK` diyordu ve `--llvm`de register kısıtını
+// yapının tamamına bağlayan YANLIŞ IR üretiyordu (D-643 kapattı); sonra tek
+// tanı basıyordu (D-643/D-647); cascade D-649'da eşlendi.
+yapı R { deger: tam32; }
+işlev main() -> tam32 {
+    değişken r: R = R{deger:0};
+    güvensiz { satıriçi_asm {
+        mimari: arm64
+        şablon: r#"mov $0, #42"#
+        çıktı("=r", &r.deger) } }
+    ver r.deger;
+}

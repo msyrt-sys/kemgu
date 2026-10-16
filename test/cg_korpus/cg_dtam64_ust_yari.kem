@@ -1,0 +1,21 @@
+// [D-629] `dtam64`in ÜST YARISI (2^63 .. 2^64-1) — literal olarak yazılabilmeli.
+// Eski C ve self-host 2^63 ve üstünü INT64_MAX'a DOYURUYORDU (sessiz yanlış değer);
+// eski C ayrıca 64 basamaklı ikilik literali 63 karaktere kırpıp 2^60 okuyordu.
+// Her ölçüm AYRI çıkış kodu. İşaretsiz işlemler (`>>` lshr, karşılaştırma ult)
+// üst bitin gerçekten orada olduğunu ölçer — doyurulmuş değer (INT64_MAX) üst
+// biti 0 olduğu için `>> 63` ile AYIRT EDİLİR.
+işlev main() -> tam32 {
+    değişken a: dtam64 = 9223372036854775808;        // 2^63
+    eğer (a >> 63) != 1 { ver 1; }
+    değişken b: dtam64 = 18446744073709551615;       // 2^64-1 onluk
+    değişken c: dtam64 = 0xFFFFFFFFFFFFFFFF;         // 2^64-1 onaltılık
+    eğer b != c { ver 2; }
+    eğer (b >> 60) != 15 { ver 3; }
+    değişken d: dtam64 = 0b1000000000000000000000000000000000000000000000000000000000000000;
+    eğer d != a { ver 4; }                           // 64 basamak ikilik = 2^63
+    eğer b - a != 9223372036854775807 { ver 5; }
+    eğer (a > 9223372036854775807) == yanlış { ver 6; }   // işaretsiz karşılaştırma
+    değişken e: dtam64 = 18_446_744_073_709_551_615; // ayraçlı
+    eğer e != b { ver 7; }
+    ver 42;
+}

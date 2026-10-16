@@ -1,0 +1,18 @@
+// [D-466] Bağlantı İKİ KEZ kapatıldı -> L002 (çift kapatma = UB, engellendi).
+yapı tekkez Baglanti { h: metin; }
+
+işlev kapat(b: Baglanti) -> tam32 {
+    değişken hh: metin = b.h;
+    imha(b);
+    ver soket_kapat(hh);
+}
+
+işlev main() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    değişken b: Baglanti = Baglanti { h: h };
+    kapat(b);
+    kapat(b);      // ikinci tüketim -> L002
+    ver 0;
+}

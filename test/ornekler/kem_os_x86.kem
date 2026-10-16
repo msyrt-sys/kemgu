@@ -1,0 +1,465 @@
+// kem_os_x86.kem — İş 5: x86_64 kanıt çekirdeğinin `main`'i. kem_heap.kem ile
+// CAT edilir (tek derleme birimi). Normal (çıplak OLMAYAN) işlev → prologu
+// bölgeyi kdl_global_bolge_al → kdl_bolge_olustur → @malloc (saf-.kem) zinciriyle
+// kurar; bu test TAM O ZİNCİRİ ölçer: start_x86_64.S kem_heap_kur'u main'den
+// önce çağırmazsa saf-.kem malloc null döner ve toplam=0 olur (panik YOK —
+// bu yüzden marker değil DEĞER yazdırılıp denetlenir, D-264 dersi).
+//
+// Amaç: bölge + dizi + metin yüzeyini x86 QEMU'da DAVRANIŞSAL kanıtla. Yazdırma
+// yerleşikleri (yazdir_metin/yazdir_tam/yazdir_satir) bu çekirdekte C
+// runtime/kdl_runtime_yazdir_bare.c + 16550 UART üzerinden gider (İş 2 sonra
+// .kem UART'a çevirecek — şimdilik dokunulmaz).
+//
+// İş 9 (PVH): kem_panik öncesi RAM toplamı kem_pvh.kem'den (start_x86_64.S %ebx'i
+// .data'daki kdl_pvh_bilgi'ye saklar). "X86 PVH OK ram_mb=" + pozitif satır;
+// ram ≤ 0 → "X86 PVH HATA" + kod.
+//
+// Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
+// (yazdir_metin satır sonu ekler).
+// Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
+// satırı basılır (gerçekten çalıştığının kanıtı; #UD olsaydı çekirdek düşerdi).
+// main sonunda kem_panik("X86 PANIK YOLU OK") çağrılır: panik geri dönmez,
+// mesaj .kem COM1 yolundan basılır, çekirdek orada durur; QEMU zaman aşımı keser.
+//
+// İş 3: kem_panik'ten ÖNCE üç DMA/MMIO testi koşar (her biri DEĞER denetler,
+// sabit metin basmaz — D-264 dersi):
+//   (a) Blok DMA RAM — vblk_data_yaz/oku 0..511 yaz-oku karşılaştırma →
+//       "X86 DMA RAM BLK OK" (aksi hâlde "X86 DMA RAM BLK HATA" + ilk indeks).
+//   (b) Ağ DMA RAM — vnet_tx_yaz + çıplak x86_net_tx_oku (aşağıda) 0..63
+//       karşılaştırma → "X86 DMA RAM NET OK".
+//   (c) MMIO UC pencere — kdl_mmio_oku32(0xFEE00030) LAPIC sürüm yazmacı
+//       (0 DEĞİL ve -1 DEĞİLSE) → "X86 MMIO UC OK lapic_surum=" + değer.
+//
+// Bu üç test, DMA tabanlarının (kem_platform.kem x86_64 ikizi) 0..1GB eşleme
+// ve UC MMIO penceresinin (start_x86_64.S 2c2) gerçekten kurulduğunu
+// DAVRANIŞSAL olarak kanıtlar.
+//
+// İş 4: microvm virtio-mmio. Disk (vblk_bul → vblk_kur → sektör 7'ye yaz-oku;
+// okuma ÖNCESİ tampon sıfırlanır) "X86 DISK RW OK" + bayt toplamı ile; ağ
+// (vnet_bul → vnet_kur → vnet_mac_w0) "X86 NET DEV OK mac_w0=" ile DAVRANIŞSAL
+// kanıtlanır.
+
+// Çıplak yardımcı: küresel vnet_dma'ya NORMAL işlevden doğrudan erişim E010
+// verir; çıplak işlev küresele serbestçe erişir (kem_heap.kem idiomu).
+çıplak işlev x86_net_tx_oku(i: tam32) -> dtam8 {
+    ver vblk_o8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64));
+}
+
+// [D-686] int 0x80 (num=rax, arg=rdi) — koçan rax dışındaki yazmaçları korur.
+çıplak işlev x86_sys(num: tam64, arg: tam64) -> tam64 {
+    değişken r: tam64 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"int $$0x80"# çıktı("={ax}", &r) girdi("{ax}", num) girdi("{di}", arg) bozulan("~{memory}") }
+    }
+    ver r;
+}
+
+işlev main() -> tam32 {
+    kem_dma_bariyeri();
+    yazdir_metin("X86 DMA BARIYER OK");
+
+    değişken d: Dizi<tam32> = [];
+
+    // 1..10 ekle (bölge dizi büyümesi 4→8→16; saf-.kem kem_dizi_buyut).
+    değişken i: tam32 = 1;
+    iken i <= 10 {
+        dizi_ekle(d, i);
+        i = i + 1;
+    }
+
+    // Topla (beklenen: 55). `için` heap dizide sınır-kontrollü okur.
+    değişken toplam: tam32 = 0;
+    için x: d {
+        toplam = toplam + x;
+    }
+
+    // Değeri SABİT yazma: gerçek toplamı bas (marker değil DEĞER denetimi).
+    eğer toplam == 55 {
+        yazdir_metin("X86 HEAP DIZI OK toplam=");
+    }
+    değilse {
+        yazdir_metin("X86 HEAP DIZI HATA toplam=");
+    }
+    yazdir_tam(toplam);
+    yazdir_satir();
+
+    kem_platform_kur();
+    değişken dt: tam64 = kem_platform_dma_tabani();
+    eğer dt > 0 {
+        yazdir_metin("X86 DMA TABAN OK kb=");
+        yazdir_tam((dt / 1024) olarak tam32);
+        yazdir_satir();
+    } değilse {
+        yazdir_metin("X86 DMA TABAN YEDEK");
+    }
+
+    // İş 3 (a): Blok DMA RAM yaz-oku (0..511; 251 ile döngüsel desen).
+    değişken dma_i: tam32 = 0;
+    iken dma_i < 512 {
+        vblk_data_yaz(dma_i, (((dma_i % 251) + 3) olarak dtam8));
+        dma_i = dma_i + 1;
+    }
+    değişken blk_hata: tam32 = 512;   // 512 = "uyuşmazlık yok" (geçerli indeks 0..511)
+    dma_i = 0;
+    iken dma_i < 512 {
+        değişken beklenen_blk: dtam8 = (((dma_i % 251) + 3) olarak dtam8);
+        eğer vblk_data_oku(dma_i) != beklenen_blk {
+            eğer blk_hata == 512 { blk_hata = dma_i; }
+        }
+        dma_i = dma_i + 1;
+    }
+    eğer blk_hata == 512 {
+        yazdir_metin("X86 DMA RAM BLK OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM BLK HATA");
+        yazdir_tam(blk_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (b): Ağ TX tamponu yaz-oku (0..63; 241 ile döngüsel desen).
+    değişken net_i: tam32 = 0;
+    iken net_i < 64 {
+        vnet_tx_yaz(net_i, (((net_i % 241) + 7) olarak dtam8));
+        net_i = net_i + 1;
+    }
+    değişken net_hata: tam32 = 64;
+    net_i = 0;
+    iken net_i < 64 {
+        değişken beklenen_net: dtam8 = (((net_i % 241) + 7) olarak dtam8);
+        eğer x86_net_tx_oku(net_i) != beklenen_net {
+            eğer net_hata == 64 { net_hata = net_i; }
+        }
+        net_i = net_i + 1;
+    }
+    eğer net_hata == 64 {
+        yazdir_metin("X86 DMA RAM NET OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM NET HATA");
+        yazdir_tam(net_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (c): MMIO UC pencere — LAPIC sürüm yazmacı (0xFEE00030 = 4276092976).
+    değişken lapic_surum: tam32 = kdl_mmio_oku32(4276092976);
+    eğer lapic_surum == 0 {
+        yazdir_metin("X86 MMIO UC HATA");
+    }
+    değilse {
+        eğer lapic_surum == (0 - 1) {
+            yazdir_metin("X86 MMIO UC HATA");
+        }
+        değilse {
+            yazdir_metin("X86 MMIO UC OK lapic_surum=");
+            yazdir_tam(lapic_surum);
+            yazdir_satir();
+        }
+    }
+
+    // İş 4 (disk): VirtIO-MMIO blok cihazı. Sektör 7'ye (i%251)+5 deseni yaz;
+    // tamponu SIFIRLA (geri okunan veri DİSKTEN gelsin); sektör 7'yi oku ve
+    // 0..511 karşılaştır. Başarıda "X86 DISK RW OK" + ayrı satırda bayt toplamı
+    // (değer denetimi, D-264).
+    değişken vb: tam64 = vblk_bul();
+    eğer vb == 0 {
+        yazdir_metin("X86 DISK YOK");
+    }
+    değilse {
+        değişken vbk: tam32 = vblk_kur(vb);
+        eğer vbk != 0 {
+            yazdir_metin("X86 DISK KUR HATA");
+            yazdir_tam(vbk);
+            yazdir_satir();
+        }
+        değilse {
+            değişken di: tam32 = 0;
+            iken di < 512 {
+                vblk_data_yaz(di, (((di % 251) + 5) olarak dtam8));
+                di = di + 1;
+            }
+            değişken wy: tam32 = vblk_yaz(vb, 7);
+            eğer wy != 0 {
+                yazdir_metin("X86 DISK RW HATA");
+                yazdir_tam(wy);
+                yazdir_satir();
+            }
+            değilse {
+                di = 0;
+                iken di < 512 { vblk_data_yaz(di, 0 olarak dtam8); di = di + 1; }
+                değişken ok: tam32 = vblk_oku(vb, 7);
+                eğer ok != 0 {
+                    yazdir_metin("X86 DISK RW HATA");
+                    yazdir_tam(ok);
+                    yazdir_satir();
+                }
+                değilse {
+                    değişken dhata: tam32 = 512;
+                    değişken dsum: tam32 = 0;
+                    di = 0;
+                    iken di < 512 {
+                        değişken dbek: dtam8 = (((di % 251) + 5) olarak dtam8);
+                        değişken dok: dtam8 = vblk_data_oku(di);
+                        eğer dok != dbek {
+                            eğer dhata == 512 { dhata = di; }
+                        }
+                        dsum = dsum + (dok olarak tam32);
+                        di = di + 1;
+                    }
+                    eğer dhata == 512 {
+                        yazdir_metin("X86 DISK RW OK");
+                        yazdir_tam(dsum);
+                        yazdir_satir();
+
+                        // İş 8: kem_minifs x86 işlevsel testi (sektör 0/1/2;
+                        // disk testi sektör 7 → çakışma yok). DEĞER denetimi
+                        // (marker değil), D-264 dersi.
+                        değişken mfsf: tam32 = mfs_format(vb);
+                        eğer mfsf != 0 {
+                            yazdir_metin("X86 FS RW HATA");
+                            yazdir_tam(mfsf);
+                            yazdir_satir();
+                        }
+                        değilse {
+                            // İçerik vq_data'ya (100 bayt, (i%89)+11 deseni) → blk2.
+                            değişken fi: tam32 = 0;
+                            iken fi < 100 {
+                                vblk_data_yaz(fi, (((fi % 89) + 11) olarak dtam8));
+                                fi = fi + 1;
+                            }
+                            // ad "KEMG" = 75 69 77 71; inode → blk1, superblock++.
+                            değişken mfsw: tam32 = mfs_dosya_yaz(vb, 75 olarak dtam8, 69 olarak dtam8, 77 olarak dtam8, 71 olarak dtam8, 100);
+                            eğer mfsw != 0 {
+                                yazdir_metin("X86 FS RW HATA");
+                                yazdir_tam(mfsw);
+                                yazdir_satir();
+                            }
+                            değilse {
+                                // vq_data 0..511'i SIFIRLA (okunan içerik DİSKTEN gelsin).
+                                fi = 0;
+                                iken fi < 512 { vblk_data_yaz(fi, 0 olarak dtam8); fi = fi + 1; }
+                                değişken fb: tam32 = mfs_dosya_oku(vb, 75 olarak dtam8, 69 olarak dtam8, 77 olarak dtam8, 71 olarak dtam8);
+                                eğer fb != 100 {
+                                    yazdir_metin("X86 FS RW HATA boyut=");
+                                    yazdir_tam(fb);
+                                    yazdir_satir();
+                                }
+                                değilse {
+                                    değişken fhata: tam32 = 100;   // 100 = "uyuşmazlık yok"
+                                    değişken fsum: tam32 = 0;
+                                    fi = 0;
+                                    iken fi < 100 {
+                                        değişken fbek: dtam8 = (((fi % 89) + 11) olarak dtam8);
+                                        değişken fok: dtam8 = vblk_data_oku(fi);
+                                        eğer fok != fbek {
+                                            eğer fhata == 100 { fhata = fi; }
+                                        }
+                                        fsum = fsum + (fok olarak tam32);
+                                        fi = fi + 1;
+                                    }
+                                    eğer fhata == 100 {
+                                        yazdir_metin("X86 FS RW OK");
+                                        yazdir_tam(fsum);
+                                        yazdir_satir();
+                                    }
+                                    değilse {
+                                        yazdir_metin("X86 FS RW HATA");
+                                        yazdir_tam(fhata);
+                                        yazdir_satir();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    değilse {
+                        yazdir_metin("X86 DISK RW HATA");
+                        yazdir_tam(dhata);
+                        yazdir_satir();
+                    }
+                }
+            }
+        }
+    }
+
+    // İş 4 (ağ): VirtIO-MMIO ağ cihazı — bul + kur + MAC config word0 (canlı
+    // cihaz kanıtı). Başarıda "X86 NET DEV OK mac_w0=" + ayrı satırda MAC değeri.
+    değişken nb: tam64 = vnet_bul();
+    eğer nb == 0 {
+        yazdir_metin("X86 NET YOK");
+    }
+    değilse {
+        değişken nk: tam32 = vnet_kur(nb);
+        eğer nk != 0 {
+            yazdir_metin("X86 NET KUR HATA");
+            yazdir_tam(nk);
+            yazdir_satir();
+        }
+        değilse {
+            yazdir_metin("X86 NET DEV OK mac_w0=");
+            yazdir_tam(vnet_mac_w0(nb));
+            yazdir_satir();
+        }
+    }
+
+    değişken ram: tam64 = kem_pvh_ram_toplam();
+    eğer ram <= 0 {
+        yazdir_metin("X86 PVH HATA");
+        yazdir_tam(ram olarak tam32);
+        yazdir_satir();
+    } değilse {
+        yazdir_metin("X86 PVH OK ram_mb=");   // yazdir_metin satır sonu ekler
+        yazdir_tam((ram / 1048576) olarak tam32);
+        yazdir_satir();
+    }
+    // İş 13 (D2b): kem_dtb x86 biriminde derlenir (mimariden bağımsız
+    // ayrıştırıcı); kdtb_adres mimari dosyadan gelir (x86 → 0 = "DTB yok").
+    eğer kdtb_adres() == 0 {
+        yazdir_metin("X86 DTB YOK pvh_kesif");
+    } değilse {
+        yazdir_metin("X86 DTB BEKLENMEDIK");
+        yazdir_tam(kdtb_adres() olarak tam32);
+    }
+    // İş 14 (D-683): gerçek IRQ0 — PIT (~100 Hz) → PIC → IDT vektör 32 → .S koçanı →
+    // .kem kdl_kesme_isle (kem_tik++). kem_timer_testi mimariden bağımsız (kem_zaman.kem).
+    değişken t_ok: tam32 = kem_timer_testi();
+    eğer t_ok == 1 {
+        yazdir_metin("X86 TIMER TIK OK tik=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(kem_tik_oku() olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 TIMER HATA");
+    }
+    // İş 15 (D-685): PREEMPTIVE görev değiştirme — iki sonsuz-döngü görevi, timer IRQ0
+    // koçanı tüm GP yazmaçlarını kaydedip kdl_irq_isle(sp) → kem_preempt ile SP takası
+    // yapar. Her iki sayaç ilerlerse görevler GERÇEKTEN araya girerek koştu.
+    değişken p_ok: tam32 = kem_preempt_testi();
+    eğer p_ok == 1 {
+        yazdir_metin("X86 PREEMPT OK g1=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(kg_oku64(KG_G1) olarak tam32);
+        yazdir_satir();
+        yazdir_metin("g2=");
+        yazdir_tam(kg_oku64(KG_G2) olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 PREEMPT HATA");
+    }
+    // İş 17 (D-687): x86 MMU — kendi 4KB sayfa tablomuz (PDPT[1] → PD → PT):
+    // VA 0x50000000 ↔ PA 0x3A00000 ALIAS (non-identity çeviri donanımda) + haritasız
+    // VA 0x60000000 okunur → GERÇEK #PF → .S kurtarır (RIP += 3), CR2 == VA.
+    kdl_mmu_kur_x86();
+    eğer kmmu_ceviri_testi() == 1 {
+        yazdir_metin("X86 MMU CEVIRI OK");
+    }
+    değilse {
+        yazdir_metin("X86 MMU CEVIRI HATA");
+    }
+    eğer kmmu_fault_testi() == 1 {
+        yazdir_metin("X86 MMU FAULT OK cr2=");   // yazdir_metin satır sonu ekler
+        yazdir_tam((kxm_cr2_oku() / 1048576) olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 MMU FAULT HATA");
+    }
+    // İş 18 (D-688): süreç başına adres alanı — iki PML4, AYNI VA 0x54000000, FARKLI
+    // fiziksel sayfa (60 MB / 62 MB). A yaz → B yaz → A'ya dön: A'nın değeri duruyorsa
+    // izolasyon donanımda gerçek (tek alanda B, A'yı ezerdi).
+    eğer kmmu_izolasyon_testi() == 1 {
+        yazdir_metin("X86 IZOLASYON OK");
+    }
+    değilse {
+        yazdir_metin("X86 IZOLASYON HATA");
+    }
+    // İş 19 (D-689): W^X — NX biti. VERİ sayfasını çalıştırmak komut getirme #PF
+    // verir (hata 17), KOD sayfası çalışır. Hata kodu da yazdırılır.
+    eğer kmmu_wx_testi() == 1 {
+        yazdir_metin("X86 WX OK hata=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(kxm_hata_oku() olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 WX HATA");
+    }
+    // İş 21 (D-691): ÇEKİRDEK W^X — 0..2 MB 4KB sayfalara bölünür: .text+.rodata salt-
+    // okunur (çalıştırılabilir), geri kalan RW+NX; CR0.WP açılır. Çekirdek KENDİ
+    // .text'ine yazar → izin #PF (hata 3), kod baytı DEĞİŞMEZ. Bundan sonra çekirdek
+    // W^X altında koşar (sonraki tüm testler bunun üstünde).
+    kmmu_kernel_wx_kur();
+    eğer kmmu_kernel_wx_testi() == 1 {
+        yazdir_metin("X86 KERNEL WX OK");
+    }
+    değilse {
+        yazdir_metin("X86 KERNEL WX HATA");
+    }
+    // İş 22 (D-692): MİMARİDEN BAĞIMSIZ algoritma fazları — arm64 kem_os ile AYNI kod
+    // (test/ornekler/kem_os_algoritma.kem), x86 donanımında. Faz numaraları arm ile aynı.
+    eğer kbn_testi() == 1 { yazdir_metin("X86 [25] BIGNUM OK"); }
+    değilse { yazdir_metin("X86 [25] BIGNUM HATA"); }
+    eğer ksha_testi() == 8 { yazdir_metin("X86 [26] SHA256 OK"); }
+    değilse { yazdir_metin("X86 [26] SHA256 HATA"); }
+    eğer kb64_testi() == 1 { yazdir_metin("X86 [29] BASE64 OK"); }
+    değilse { yazdir_metin("X86 [29] BASE64 HATA"); }
+    eğer kcrc_testi() == 1 { yazdir_metin("X86 [30] CRC32 OK"); }
+    değilse { yazdir_metin("X86 [30] CRC32 HATA"); }
+    eğer ksort_testi() == 1 { yazdir_metin("X86 [31] SORT OK"); }
+    değilse { yazdir_metin("X86 [31] SORT HATA"); }
+    eğer khm_testi() == 1 { yazdir_metin("X86 [32] HASHMAP OK"); }
+    değilse { yazdir_metin("X86 [32] HASHMAP HATA"); }
+    eğer krc4_testi() == 1 { yazdir_metin("X86 [33] RC4 OK"); }
+    değilse { yazdir_metin("X86 [33] RC4 HATA"); }
+    eğer kcrack_testi() == 1 { yazdir_metin("X86 [34] HASHCRACK OK"); }
+    değilse { yazdir_metin("X86 [34] HASHCRACK HATA"); }
+    eğer kutf8_testi() == 1 { yazdir_metin("X86 [35] UTF8 OK"); }
+    değilse { yazdir_metin("X86 [35] UTF8 HATA"); }
+    eğer ktc_testi() == 1 { yazdir_metin("X86 [36] TURKCE CASE OK"); }
+    değilse { yazdir_metin("X86 [36] TURKCE CASE HATA"); }
+    eğer ktr_testi() == 1 { yazdir_metin("X86 [37] TURKCE SORT OK"); }
+    değilse { yazdir_metin("X86 [37] TURKCE SORT HATA"); }
+    eğer kvm_testi() == 1 { yazdir_metin("X86 [38] VM OK"); }
+    değilse { yazdir_metin("X86 [38] VM HATA"); }
+    eğer kjson_testi() == 1 { yazdir_metin("X86 [39] JSON OK"); }
+    değilse { yazdir_metin("X86 [39] JSON HATA"); }
+    eğer kasm_testi() == 1 { yazdir_metin("X86 [40] ASM OK"); }
+    değilse { yazdir_metin("X86 [40] ASM HATA"); }
+    // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
+    // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
+    // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),
+    // 14 durum(1) = 0 (görev 1 bitmedi — sonsuz döngüdeydi), 99 bilinmeyen = -1.
+    değişken s_tik: tam64 = x86_sys(10, 0);
+    değişken s_pid: tam64 = x86_sys(11, 0);
+    değişken s_dur: tam64 = x86_sys(14, 1);
+    değişken s_yok: tam64 = x86_sys(99, 0);
+    eğer (s_tik >= 3) ve (s_pid == 0) ve (s_dur == 0) ve (s_yok == 0 - 1) {
+        yazdir_metin("X86 SYSCALL OK tik=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(s_tik olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 SYSCALL HATA");
+    }
+    // İş 23 (D-693): ortak çekirdek fazları (D-694: SİSTEM ÇAĞRISI testinden SONRA —
+    // [42] dil görevleri görev 1'i ölü işaretler; D-686 testi durum(1) == 0 bekler) — arm64 ile AYNI kod
+    // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor
+    // mu (ortak zamanlayıcı + x86 kancaları), [41] dilin kanal ilkelleri çekirdekte.
+    eğer kgk_testi() == 1 { yazdir_metin("X86 [27] GOREV KAPASITE OK"); }
+    değilse { yazdir_metin("X86 [27] GOREV KAPASITE HATA"); }
+    eğer kkanal_testi() == 1 { yazdir_metin("X86 [41] KANAL OK"); }
+    değilse { yazdir_metin("X86 [41] KANAL HATA"); }
+    // [D-694] [42] dil görevleri (görev_başlat/birleştir) çekirdek zamanlayıcısında +
+    // BLOKLAYAN kanal; ortak çekirdek kodu + x86 kancaları (cli/sti, SysV çağrı, rdi@72).
+    eğer kgorev_testi() == 1 { yazdir_metin("X86 [42] GOREV OK"); }
+    değilse { yazdir_metin("X86 [42] GOREV HATA"); }
+    // İş 20 (D-690): KURTARILAMAZ istisna yolu. Yalnız `-append kem_istisna` ile açılan
+    // İKİNCİ QEMU koşumunda: haritasız VA, kurtarma bayrağı KAPALIYKEN okunur → gerçek #PF →
+    // .S isr_ortak → .kem kdl_istisna_isle "ISTISNA tip=0xe ... adr=0x60000000" + hlt.
+    // Normal koşumda bu dal hiç çalışmaz (panik yolu aşağıda aynen sürer).
+    eğer kem_pvh_cmdline_esit("kem_istisna") == 1 {
+        yazdir_metin("X86 ISTISNA TESTI");
+        değişken cop: tam64 = kxm_o64(KMMU_FAULT_VA);
+        yazdir_metin("X86 ISTISNA YAKALANMADI");
+    }
+    kem_panik("X86 PANIK YOLU OK");
+    ver 0;
+}

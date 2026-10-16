@@ -181,6 +181,29 @@ int tip_lineer_mi(const TipBilgisi *t) {
      * sayesinde L001/L002/L005 + L-COND/L-LOOP makinesinin TAMAMI lineer
      * yapilar icin de otomatik calisir (ayri kod yolu YOK). */
     if (t->kategori == TIP_YAPI) return t->veri.yapi.lineer_mi;
+    /* [D-467] LINEER YAYILIM: `sonuc<T,H>` / `secimlik<T>` TASIDIGI deger
+     * lineerse KENDISI de lineerdir.
+     *
+     * NEDEN: bu ozyineleme YOKKEN `sonuc` bir KACIS DELIGIYDI -- olculdu, UC
+     * alt-sistemde birden:
+     *   `ac("x","w")`            (Dosya,    D-452) -> sizinti, TANI YOK
+     *   `gorev_baslat(..)`       (gorev<T>, D-301) -> sizinti, TANI YOK
+     *   `baglan(y, h, p)`        (Baglanti, D-466) -> sizinti, TANI YOK
+     * Uc API de "kapatmayi unutmak DERLEME ZAMANINDA yakalanir" diye
+     * belgelenmisti; garanti YALNIZ sonuc `esles` ile acildiginda gecerliydi.
+     * Cagiran sonucu YOK SAYINCA hicbir sey sikayet etmiyordu.
+     *
+     * D-301 bunu "V2: lineer-yayilim" diye kaydetmisti ama yalniz `gorev<T>`
+     * icin gorulmustu; `Dosya` ve `Baglanti` ayni deseni sonradan kullaninca
+     * sinir SESSIZCE yayildi. Tek kok, uc alt-sistem.
+     *
+     * HATA tarafi da sayilir: `sonuc<tam32, Baglanti>` da lineerdir -- hata
+     * yolundaki bir kaynagin sizmasi deger yolundakinden farkli degildir. */
+    if (t->kategori == TIP_SECIMLIK)
+        return tip_lineer_mi(t->veri.secimlik.ic);
+    if (t->kategori == TIP_SONUC)
+        return tip_lineer_mi(t->veri.sonuc.deger)
+            || tip_lineer_mi(t->veri.sonuc.hata);
     return t->kategori == TIP_TEKKEZ
         || t->kategori == TIP_YETKI
         || t->kategori == TIP_GOREV;

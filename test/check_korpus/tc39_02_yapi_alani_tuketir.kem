@@ -1,0 +1,16 @@
+// [D-470] Lineer YAPI alanı da tüketir. Koşul `TIP_TEKKEZ` ile SINIRLIYDI →
+// `yapı tekkez` (D-313) kapsanmıyordu: `S { t: t }` lineer `t`yi tüketmiş
+// saymıyor, sonra scope sonunda L001 patlıyordu — yani lineer bir değeri bir
+// yapıya KOYMAK imkânsızdı. DOĞRU kullanım — tanı ÜRETMEMELİ.
+yapı tekkez T { h: metin; }
+yapı tekkez S { t: T; v: metin; }
+
+işlev sar(t: T) -> S { ver S { t: t, v: "x" }; }
+
+işlev main() -> tam32 {
+    değişken t0: T = T { h: "a" };
+    değişken s: S = sar(t0);
+    eşleş s {
+        S { t, v } => { imha(t); ver 42; }
+    }
+}

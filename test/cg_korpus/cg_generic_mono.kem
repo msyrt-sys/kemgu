@@ -1,0 +1,44 @@
+// D-401: self-host'ta generic İŞLEV monomorfizasyonu YOKTU.
+//
+// `ADIM 23 — LLVM monomorphization` C DERLEYİCİYE aittir. Self-host tek bir
+// gövde yayıp T'yi daima i32 sanıyordu:
+//     C:    define i32 @kimlik$i32(ptr, i32)  +  define i64 @kimlik$i64(ptr, i64)
+//     SELF: define i32 @kimlik(ptr, i32)      ← TEK gövde
+//           call i32 @kimlik(ptr %2, i64 %5)  ← İMZA UYUŞMAZLIĞI
+//
+// KÖK: `parse_islev_genel` `atla_tip_paramlar`ı çağırıyor ama `tip_param_kaydet`
+// ÇAĞIRMIYORDU → param adları `tp_pending`de yakalanıp bir sonraki bildirimde
+// ÜZERİNE YAZILIYORDU. Yapı/çeşit yolu kaydediyor, işlev yolu kaydetmiyordu.
+//
+// ⚠ NEDEN TAMSAYIYLA TEST ETMEK YETMEZ: LLVM `define`/`call` uyuşmazlığını
+// SESSİZCE kabul eder (D-295) ve x86-64 ABI'sinde tamsayı değer register'da
+// hayatta kalır. `2^33+42` ile ölçtüm: KIRPILMIYORDU, eski kod da 42 veriyordu.
+// Kusur ancak REGISTER SINIFI değişince gözlenebilir hâle geliyor (D-294'ün
+// aynı dersi: tamsayı x0/rax, kesirli v0/xmm0). Bu yüzden aşağıdaki `kesirli64`
+// örneği kapının ASIL dişidir — onsuz bu dosya sessiz kalırdı.
+işlev kimlik<T>(x: T) -> T { ver x; }
+
+işlev ikile<T>(x: T) -> T { ver kimlik(x); }   // generic → generic (worklist)
+
+işlev main() -> tam32 {
+    // (1) KESİRLİ T — eski kodda LLVM REDDEDİYORDU:
+    //     "'%4' defined with type 'i32' but expected 'double'"
+    değişken f: kesirli64 = kimlik(42.0);
+    eğer f < 41.5 { ver 1; }
+    eğer f > 42.5 { ver 2; }
+
+    // (2) İKİ AYRI instantiation aynı programda → $i32 ve $i64 ayrışmalı.
+    //     Tek gövdeli bir uygulama burada da ayakta kalır (ABI şansı), ama
+    //     mangling'in gerçekten iki gövde ürettiğini bu satır zorlar.
+    değişken a: tam64 = kimlik(8589934634 olarak tam64);   // 2^33 + 42
+    eğer a < (4294967296 olarak tam64) { ver 3; }          // kırpılmışsa düşer
+    değişken b: tam32 = kimlik(10);
+
+    // (3) Generic'ten generic'e çağrı — specialization emisyonu SIRASINDA yeni
+    //     specialization doğar; kuyruk worklist olarak dönülmezse `@kimlik$i32`
+    //     tanımsız kalır.
+    değişken c: tam32 = ikile(32);
+
+    eğer b != 10 { ver 4; }
+    ver c + b;                                              // 32 + 10 = 42
+}

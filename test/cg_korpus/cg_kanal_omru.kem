@@ -1,0 +1,36 @@
+// [D-543] KANAL ÖMRÜ: çıkışta serbest — POZİTİF KANIT.
+//
+// D-511/D-515: `kdl_kanal_serbest` runtime'da VARDI ama HİÇBİR derleyici onu
+// çağırmıyordu → kanal tamponu + kilidi sızıyordu. D-540 ölçtü: "kanalı
+// yakalayan tüm görevler aynı işlevde birleştiriliyor" şekli 23/23 işlevde
+// tutuyor. D-541 elle prototiple kazancı doğruladı (192 → 8 bayt, ASan temiz).
+//
+// KANIT (hepsi gerekli, biri düşerse ESKİ davranış = sızar ama UAF yok):
+//   P1 yerel `değişken`, doğrudan `kanal_oluştur`
+//   P2 işlevde `imha` YOK      (görev birleştirilmeden ATILABİLİR → thread canlı)
+//   P3 join >= spawn           (sayımlar `ky_confined`in KENDİ yürüyüşünden)
+//   P4 kanal çerçeveyi aşmaz   (`escape_kanal_hapsedilmis`)
+//
+// ⚠ V1 SINIRI: `gönderen(k)`/`alan(k)` PROJEKSİYONU olan kanallar KAPSAM DIŞI.
+//   Projeksiyon AYNI handle'ı verir; takma adı ayrıca kanıtlamadan serbest
+//   bırakmak `ver g` ile UAF üretirdi. `cg_kanal_yon` bilerek serbest ALMAZ.
+// Çıkış: 15
+işlev uret(k: kanal<tam32>) -> tam32 {
+    değişken i: tam32 = 1;
+    iken i <= 5 { kanal_gönder(k, i); i = i + 1; }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    eşleş görev_başlat(|| uret(k)) {
+        tamam(gv) => {
+            değişken t: tam32 = 0;
+            değişken n: tam32 = 0;
+            iken n < 5 { t = t + kanal_al(k); n = n + 1; }
+            görev_birleştir(gv);   // P3: join >= spawn
+            ver t;                 // 1+2+3+4+5 = 15
+        }
+        hata(e) => { ver 1; }
+    }
+}

@@ -1,0 +1,27 @@
+// D-354 / T013: dizi literali eleman tipleri. İKİ yol, İKİ farklı suçlanan eleman:
+//   (a) Dizi<E> annotasyonu VARSA referans E'dir → hata İLK elemanda da çıkabilir
+//   (b) annotasyon YOKSA referans İLK elemandır → hata sonraki elemanda çıkar
+// Bu ayrım konum üretir; tek yolu kullanmak tanıyı yanlış eleman üzerinde gösterirdi.
+işlev bagalamli_ilk() -> tam32 {
+    değişken xs: Dizi<metin> = [1, "a"];      // T013 → İLK eleman (1)
+    ver 0;
+}
+işlev baglamli_son() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, doğru];    // T013 → ikinci eleman
+    ver 0;
+}
+işlev baglamli_ikisi() -> tam32 {
+    değişken xs: Dizi<tam8> = [doğru, doğru]; // T013 → HER İKİ eleman
+    ver 0;
+}
+işlev baglamsiz() -> tam32 {
+    değişken xs = [1, doğru];                 // T013 → ikinci eleman
+    ver 0;
+}
+işlev literal_kesirli() -> tam32 {
+    değişken x: kesirli64 = 1;                // T001: tamsayı literali kesirliye uyarlanmaz
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

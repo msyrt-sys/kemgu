@@ -1,0 +1,29 @@
+// D-355 / L007 + L008: lineer intrinsiklerin operand ve arite kuralları.
+// `kullan` SARMALANAN değeri çıkarır → operandı TAM OLARAK tekkez<T> olmalı.
+// `imha` herhangi bir lineer değeri kabul eder. Ayrım gerçek: `yapı tekkez`in
+// sarmalanmış bir değeri yoktur, dolayısıyla ondan çıkarılacak şey de yoktur.
+yapı tekkez Kap { x: tam32; }
+
+işlev kullan_skaler() -> tam32 {
+    değişken a: tam32 = 5;
+    kullan(a);                 // L007: operand tekkez değil
+    ver 0;
+}
+işlev kullan_lineer_yapi() -> tam32 {
+    değişken k: Kap = Kap { x: 1 };
+    kullan(k);                 // L007 (+ L001: hata sonrası tüketim YOK)
+    ver 0;
+}
+işlev imha_skaler() -> tam32 {
+    değişken a: tam32 = 5;
+    imha(a);                   // L007: operand lineer değil
+    ver 0;
+}
+işlev arite() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(1, 2);   // L008: tam 1 argüman
+    imha(t);
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

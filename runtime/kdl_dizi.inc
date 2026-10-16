@@ -27,10 +27,30 @@ typedef struct {
 } KdlDizi;
 
 /* V2-F4.2a: büyüme çağıranın bölgesinden (ρ). ρ NULL ise global bölge. */
+/* [D-579] IKI KORUMA. Ikisi de OLCULDU: korumasiz halde `boyut == kapasite
+ * == 2^30` iken `kdl_dizi_ekle_tam` ANINDA SEGV veriyordu (dogrudan runtime
+ * probe'u, ~1 GB veri GEREKMEDEN).
+ *   1. TASMA: cagri yerleri `yk = kapasite * 2` yaziyor ve bu int32'de
+ *      2^30'da TASIYOR -> negatif -> `(uint64_t)negatif` ~1.8e19 olur.
+ *      Buyume DAIMA artmalidir; artmiyorsa tasma olmustur.
+ *   2. TAHSIS BASARISIZLIGI: eski kod `d->veri = NULL` yazip kapasiteyi YINE
+ *      DE guncelliyordu; cagiran hemen `d->veri[boyut++]` ile NULL'a yaziyor
+ *      ve ustelik ESKI VERI kayboluyordu.
+ * ⚠ SESSIZ DUSUS (dokunmadan don) DOGRU DEGIL: cagiran buyutmeden HEMEN
+ *   SONRA yaziyor; eski tamponun SONUNA yazardi = HEAP TASMASI. Tek tutarli
+ *   cevap TEMIZ PANIK — dizi sinir ihlali (D-069), sifira bolme (D-502),
+ *   kaydirma (D-514) ve vektor lane (D-546) ile AYNI politika.
+ * ⚠ Kardes islev `kdl_dizi_kapasite_ayarla` tahsis basarisizligini ZATEN
+ *   denetliyor; orada sessiz donus DOGRUdur cunku cagiran yazmaz. */
 static void kdl_dizi_buyut(KdlBolge *rho, KdlDizi *d, int32_t yeni_kap, size_t eb) {
+    if (yeni_kap <= d->kapasite)
+        kdl_panik("dizi kapasitesi tasti (buyume int32 sinirini asti)");
+
     void *yeni = kdl_bolge_ayir(rho ? rho : kdl_global_bolge_al(),
                                (uint64_t)yeni_kap * (uint64_t)eb);
-    if (yeni && d->veri && d->boyut > 0)
+    if (!yeni)
+        kdl_panik("dizi buyutulemedi (tahsis basarisiz)");
+    if (d->veri && d->boyut > 0)
         memcpy(yeni, d->veri, (size_t)d->boyut * eb);
     d->veri = yeni;
     d->kapasite = yeni_kap;

@@ -1,0 +1,30 @@
+// Türkçe (non-ASCII) TİP ADLARI — yapı + çeşit IR'da quote'lanır (%"Düğüm",
+// %"Köşe"). Türkçe kimlik: AST düğümleri doğal Türkçe adlarla temsil edilebilir.
+//   Köşe(8,2)=10 + ağaç Dal(Yaprak(20),Yaprak(12))=32 → 42.
+
+yapı Köşe { x: tam32; y: tam32; }
+
+çeşit Düğüm {
+    Yaprak(tam64),
+    Dal(&Düğüm, &Düğüm)
+}
+
+işlev köşe_topla(k: Köşe) -> tam32 {
+    ver k.x + k.y;
+}
+
+işlev ağaç_topla(a: &Düğüm) -> tam64 {
+    eşleş a {
+        Düğüm::Yaprak(v) => { ver v; }
+        Düğüm::Dal(s, d) => { ver ağaç_topla(s) + ağaç_topla(d); }
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken k: Köşe = Köşe { x: 8, y: 2 };
+    değişken y1: Düğüm = Düğüm::Yaprak(20);
+    değişken y2: Düğüm = Düğüm::Yaprak(12);
+    değişken kök: Düğüm = Düğüm::Dal(&y1, &y2);
+    ver köşe_topla(k) + (ağaç_topla(&kök) olarak tam32);
+}

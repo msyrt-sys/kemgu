@@ -1,0 +1,9 @@
+// [D-654] ALAN TİPİ EKSİK — ÜÇ tanı: P019 (':'), P011 (tip), P020 (';').
+//
+// ⚠ EN BÜYÜK CASCADE FARKI BURADAYDI: self YİRMİ BİR tanı basıyordu, C üç.
+// Kök tek bir yerdeydi — `parse_tip`in son çaresi ilerliyordu ve her ilerleme
+// yeni bir hata doğuruyordu. O ilerleme kaldırılınca cascade 21'den 3'e indi;
+// kalan iki kod (P019/P020) mekanik eşlemeydi. Yani büyük görünen bir ayrışma
+// tek bir davranış farkından geliyordu.
+yapı N { x }
+işlev main() -> tam32 { ver 0; }

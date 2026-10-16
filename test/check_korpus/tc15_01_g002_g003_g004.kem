@@ -1,0 +1,21 @@
+// D-358 / G002 + G003 + G004: güvensiz-tier ve temsil kuralları.
+// Üçü de "kabul et ama çalışırken çök" senaryolarını derleme zamanına çeker.
+işlev asm_guvensiz_disi() -> tam32 {
+    satıriçi_asm { mimari: x86_64  şablon: r#"nop"# }   // G002
+    ver 0;
+}
+işlev topla(xs: Dizi<tam32>) -> tam32 {
+    ver xs[0];
+}
+işlev yigin_dizi_arg() -> tam32 {
+    değişken a = [1, 2, 3];    // annotasyonsuz → YIĞIN dizi
+    ver topla(a);              // G003: callee KdlDizi* bekler
+}
+işlev islev_yeniden_atama() -> tam32 {
+    değişken f: işlev(tam32) -> tam32 = |x: tam32| x + 1;
+    f = |x: tam32| x + 2;      // G004: closure temsili bağlamada sabitlenir
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

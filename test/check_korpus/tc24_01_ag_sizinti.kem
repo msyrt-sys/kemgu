@@ -1,0 +1,16 @@
+// [D-466] Bağlantı KAPATILMADI -> L001 (soket sızıntısı derleme zamanında).
+// Bu, `yapı tekkez Baglanti` tasarımının tüm gerekçesidir: kapatmayı unutmak
+// çalışma zamanında sessizce fd sızdırmak yerine PROGRAMI DERLETMEZ.
+yapı tekkez Baglanti { h: metin; }
+
+işlev ac(y: yetki<Soket>) -> Baglanti {
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 9);
+    geri_al(y);
+    ver Baglanti { h: h };
+}
+
+işlev main() -> tam32 {
+    değişken y: yetki<Soket> = yetki_olustur(2, 3);
+    değişken b: Baglanti = ac(y);   // b HİÇ tüketilmedi -> L001
+    ver 0;
+}

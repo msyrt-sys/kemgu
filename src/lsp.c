@@ -163,6 +163,68 @@ static void belge_set(Belge *b, const char *uri, int uri_uz,
     b->semboller = NULL;
 }
 
+/* === D-433: ÇOK-BELGE TABLOSU ===
+ * Sunucu tek bir `Belge` tutuyordu: ikinci bir dosya açılınca birincisi
+ * EZİLİYORDU. Gerçek editör kullanımında bu, hover/definition/diagnostic'in
+ * yanlış dosyaya bakması demekti (VS Code birden çok dosyayı açık tutar ve
+ * her isteği KENDİ uri'siyle gönderir).
+ * WARN: `workspace` metotlari bunun USTUNE kurulur — tek-belge bir sunucuda
+ * "workspace symbol" adı yanıltıcı olurdu; önce model düzeltildi. */
+typedef struct BelgeTablo {
+    Belge *belgeler;   /* dinamik dizi; kullanılmayan yuvada uri == NULL */
+    int sayi;
+    int kapasite;
+} BelgeTablo;
+
+static void belge_temizle(Belge *b);
+
+/* URI ile ara. Bulunamazsa NULL. */
+static Belge *tablo_bul(BelgeTablo *t, const char *uri, int uri_uz) {
+    if (!t || !uri) return NULL;
+    for (int i = 0; i < t->sayi; i++) {
+        Belge *b = &t->belgeler[i];
+        if (!b->uri) continue;
+        if ((int)strlen(b->uri) == uri_uz && memcmp(b->uri, uri, (size_t)uri_uz) == 0)
+            return b;
+    }
+    return NULL;
+}
+
+/* URI ile ara; yoksa BOŞ bir yuva ayır (uri henüz atanmaz — belge_set atar). */
+static Belge *tablo_ac(BelgeTablo *t, const char *uri, int uri_uz) {
+    Belge *b = tablo_bul(t, uri, uri_uz);
+    if (b) return b;
+    for (int i = 0; i < t->sayi; i++) {           /* boşalmış yuvayı geri kullan */
+        if (!t->belgeler[i].uri) return &t->belgeler[i];
+    }
+    if (t->sayi >= t->kapasite) {
+        int yeni = t->kapasite ? t->kapasite * 2 : 4;
+        Belge *p = (Belge *)realloc(t->belgeler, (size_t)yeni * sizeof(Belge));
+        if (!p) return NULL;                       /* bellek yok → istek yok sayılır */
+        t->belgeler = p;
+        t->kapasite = yeni;
+    }
+    Belge *nb = &t->belgeler[t->sayi++];
+    memset(nb, 0, sizeof(Belge));
+    return nb;
+}
+
+static void tablo_temizle(BelgeTablo *t) {
+    if (!t) return;
+    for (int i = 0; i < t->sayi; i++) belge_temizle(&t->belgeler[i]);
+    free(t->belgeler);
+    t->belgeler = NULL; t->sayi = 0; t->kapasite = 0;
+}
+
+/* İstekten `params.textDocument.uri` çıkar (yoksa NULL). */
+static const char *istek_uri(JsonDeger *istek, int *uz) {
+    JsonDeger *params = json_alan(istek, "params");
+    if (!params) return NULL;
+    JsonDeger *td = json_alan(params, "textDocument");
+    if (!td) return NULL;
+    return json_metin(json_alan(td, "uri"), uz);
+}
+
 static void belge_temizle(Belge *b) {
     free(b->uri);
     free(b->icerik);
@@ -605,6 +667,13 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
                  "\"completionProvider\":{\"triggerCharacters\":[\".\"]},"
                  "\"documentSymbolProvider\":true,"
                  "\"referencesProvider\":true,"
+                 /* D-432: semanticTokens (full). Legend SIRASI kritik —
+                  * `data` icindeki tokenType INDEKSTIR, ad degil. */
+                 "\"workspaceSymbolProvider\":true,"   /* D-434 */
+                 "\"semanticTokensProvider\":{\"legend\":{"
+                 "\"tokenTypes\":[\"keyword\",\"string\",\"number\","
+                 "\"operator\",\"variable\"],"
+                 "\"tokenModifiers\":[]},\"full\":true},"
                  "\"diagnosticProvider\":{\"interFileDependencies\":false,"
                  "\"workspaceDiagnostics\":false}"
                  "},\"serverInfo\":{\"name\":\"kemgu-lsp\",\"version\":\"0.2\"}}}");
@@ -979,6 +1048,194 @@ static void documentsymbol_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) 
     json_yazici_serbest(&y);
 }
 
+/* === semanticTokens (LSP v3) — D-432 ===
+ * Kaynak LEXER'dir: her token zaten satir/sutun/uzunluk tasiyor, ayrica
+ * anahtar kelime / literal / operator ayrimi lexer'da YAPILMIS durumda.
+ * AST'den turetmek gereksiz olurdu (ve hatali kaynakta AST YOK — lexer ise
+ * yine de token uretir, yani sozdizimi renklendirme HATALI dosyada da calisir).
+ *
+ * ⚠ LSP `data` KODLAMASI: 5'li gruplar ve DELTA'lidir —
+ *   [deltaSatir, deltaBaslangic, uzunluk, tokenTipi, tokenDegistirici]
+ * deltaBaslangic AYNI SATIRDA onceki token'a gore, satir degisince MUTLAK.
+ * Sutun ve uzunluk UTF-16 KOD BIRIMI cinsindendir (bayt DEGIL) — Turkce
+ * kaynakta bayt kullanmak konumlari kaydirir.
+ *
+ * Legend indeksleri (capabilities'teki SIRAYLA ayni olmali):
+ *   0 keyword · 1 string · 2 number · 3 operator · 4 variable
+ * Eslesmeyen token (noktali virgul, parantez vb.) ATLANIR — LSP istemcisi
+ * atlanan araligi renklendirmez, bu gecerlidir. */
+static int semtok_tipi(TokenTipi t) {
+    switch (t) {
+    case TOK_METIN: case TOK_HAM_METIN: case TOK_KARAKTER: return 1;
+    case TOK_TAMSAYI: case TOK_ONDALIK: return 2;
+    case TOK_TANIMLAYICI: return 4;
+    /* Operatorler — atama/aritmetik/karsilastirma/bit. */
+    case TOK_ARTI: case TOK_EKSI: case TOK_YILDIZ: case TOK_BOLU:
+    case TOK_MOD: case TOK_ESIT: case TOK_ESIT_ESIT: case TOK_ESIT_DEGIL:
+    case TOK_KUCUK: case TOK_BUYUK: case TOK_KUCUK_ESIT: case TOK_BUYUK_ESIT:
+    case TOK_ARTI_ESIT: case TOK_EKSI_ESIT: case TOK_YILDIZ_ESIT:
+    case TOK_BOLU_ESIT: case TOK_MOD_ESIT:
+    case TOK_VE_BIT: case TOK_VEYA_BIT: case TOK_OZVEYA_BIT: case TOK_DEGIL_BIT:
+    case TOK_SOLA_KAYDIR: case TOK_SAGA_KAYDIR:
+    case TOK_OK: case TOK_KALIN_OK:
+        return 3;
+    default:
+        /* anahtar_kelime.c tablosundaki her sey keyword; kalan noktalama
+         * (`;` `,` `(` `{` ...) ve TOK_DOSYA_SONU/TOK_HATALI atlanir. */
+        return -2;
+    }
+}
+
+static void semantictokens_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"result\":{\"data\":[");
+
+    int once = 1, onceki_satir = 0, onceki_kar = 0;
+    if (belge && belge->icerik) {
+        Lexer lx;
+        lexer_baslat(&lx, belge->icerik, "lsp");
+        for (;;) {
+            Token tk = lexer_sonraki_token(&lx);
+            if (tk.tip == TOK_DOSYA_SONU) break;
+            int tip = semtok_tipi(tk.tip);
+            if (tip == -2) {
+                /* Anahtar kelime araligi: lexer.h'deki enum blogu
+                 * TOK_EGER (ilk deger) .. TOK_GENEL (son anahtar kelime);
+                 * hemen ardindan "Literaller" blogu gelir.
+                 * ⚠ Ilk yazimda araligi TOK_ISLEV'den baslatmistim — enumun
+                 * ILK 6 anahtar kelimesi (eger/degilse/için/iken/eşleş/ver)
+                 * disarida kalirdi. Sinirlar lexer.h'den OLCULDU.
+                 * Noktalama (`;` `,` `(` ...) ve TOK_HATALI atlanir. */
+                if (tk.tip >= TOK_EGER && tk.tip <= TOK_GENEL) tip = 0;
+                else continue;
+            }
+            int bas_ofset = (int)(tk.baslangic - belge->icerik);
+            if (bas_ofset < 0 || bas_ofset > belge->icerik_uz) continue;
+            int son_ofset = bas_ofset + tk.uzunluk;
+            if (son_ofset > belge->icerik_uz) son_ofset = belge->icerik_uz;
+
+            int satir0 = tk.satir > 0 ? tk.satir - 1 : 0;
+            int kar = lsp_karakter(belge, tk.satir, tk.sutun);
+            int uz16 = utf16_say(belge->icerik, bas_ofset, son_ofset);
+            if (uz16 <= 0) continue;
+
+            int d_satir = satir0 - onceki_satir;
+            int d_kar = (d_satir == 0) ? (kar - onceki_kar) : kar;
+            if (d_satir < 0 || d_kar < 0) continue;   /* geriye giden token: atla */
+
+            if (!once) json_yaz(&y, ",");
+            json_yaz_int(&y, d_satir); json_yaz(&y, ",");
+            json_yaz_int(&y, d_kar);   json_yaz(&y, ",");
+            json_yaz_int(&y, uz16);    json_yaz(&y, ",");
+            json_yaz_int(&y, tip);     json_yaz(&y, ",0");
+            once = 0;
+            onceki_satir = satir0;
+            onceki_kar = kar;
+        }
+    }
+    json_yaz(&y, "]}}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
+/* === workspace/symbol (LSP v3) — D-434 ===
+ * ⚠ SADECE D-433'ten SONRA ANLAMLI: sunucu tek belge tutarken "workspace
+ * symbol" yalnız açık dosyayı arardı ve ad YANILTICI olurdu. Artık
+ * `BelgeTablo`daki TÜM açık belgeler gezilir.
+ *
+ * ⚠ SymbolKind ≠ CompletionItemKind. Bunlar AYRI LSP enumlarıdır ve
+ * `completion_yanitla` bilerek CompletionItemKind (islev=3) kullanır.
+ * Burada `documentSymbol`un SymbolKind'ı yeniden kullanılır (islev=12,
+ * sabit=14, yapı=23, çeşit=10, özellik=11) — ikisini karıştırmak istemciye
+ * yanlış ikon/gruplama gösterir.
+ *
+ * SINIR (bilinçli, dürüst): yalnız AÇIK belgeler taranır. Diske bakıp tüm
+ * projeyi indekslemek ayrı bir iştir (dosya sistemi gezme + izleme);
+ * "açık dosyalar" LSP'de geçerli ve yaygın bir workspace tanımıdır. */
+static int ws_kind(const char *kat) {
+    if (!kat) return 13;                        /* Variable */
+    if (strcmp(kat, "islev") == 0) return 12;   /* Function */
+    if (strcmp(kat, "sabit") == 0) return 14;   /* Constant */
+    if (strcmp(kat, "yapi") == 0) return 23;    /* Struct */
+    if (strcmp(kat, "cesit") == 0) return 10;   /* Enum */
+    if (strcmp(kat, "ozellik") == 0) return 11; /* Interface */
+    return 13;
+}
+
+/* ASCII-küçültmeli alt-dizi araması (LSP istemcileri harf duyarsız bekler). */
+static int ws_eslesir(const char *ad, int ad_uz, const char *q, int q_uz) {
+    if (q_uz <= 0) return 1;                    /* boş sorgu = hepsi */
+    if (q_uz > ad_uz) return 0;
+    for (int i = 0; i + q_uz <= ad_uz; i++) {
+        int j = 0;
+        while (j < q_uz) {
+            char a = ad[i + j], b = q[j];
+            if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+            if (b >= 'A' && b <= 'Z') b = (char)(b - 'A' + 'a');
+            if (a != b) break;
+            j++;
+        }
+        if (j == q_uz) return 1;
+    }
+    return 0;
+}
+
+static void workspacesymbol_yanitla(FILE *cikti, JsonDeger *istek,
+                                    BelgeTablo *tablo) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"result\":[");
+
+    int q_uz = 0;
+    const char *q = NULL;
+    JsonDeger *params = json_alan(istek, "params");
+    if (params) q = json_metin(json_alan(params, "query"), &q_uz);
+
+    int once = 1;
+    for (int i = 0; tablo && i < tablo->sayi; i++) {
+        Belge *b = &tablo->belgeler[i];
+        if (!b->uri) continue;
+        for (BelgeSembol *s = b->semboller; s; s = s->sonraki) {
+            if (!s->ad || s->ad_uz <= 0) continue;
+            if (!ws_eslesir(s->ad, s->ad_uz, q, q_uz)) continue;
+            if (!once) json_yaz(&y, ",");
+            json_yaz(&y, "{\"name\":");
+            json_yaz_metin_lit_n(&y, s->ad, (size_t)s->ad_uz);
+            json_yaz(&y, ",\"kind\":");
+            json_yaz_int(&y, ws_kind(s->kategori));
+            json_yaz(&y, ",\"location\":{\"uri\":");
+            json_yaz_metin_lit(&y, b->uri);
+            json_yaz(&y, ",\"range\":");
+            /* Tanim adinin araligi; sutunlar UTF-16'ya cevrilir. */
+            int sat0 = s->satir > 0 ? s->satir - 1 : 0;
+            int kar0 = lsp_karakter(b, s->satir, s->sutun);
+            int kar1 = kar0 + utf16_say(s->ad, 0, s->ad_uz);
+            json_yaz(&y, "{\"start\":{\"line\":");
+            json_yaz_int(&y, sat0);
+            json_yaz(&y, ",\"character\":");
+            json_yaz_int(&y, kar0);
+            json_yaz(&y, "},\"end\":{\"line\":");
+            json_yaz_int(&y, sat0);
+            json_yaz(&y, ",\"character\":");
+            json_yaz_int(&y, kar1);
+            json_yaz(&y, "}}}}");
+            once = 0;
+        }
+    }
+    json_yaz(&y, "]}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
 /* === Completion === */
 
 static const char *KEYWORDS[] = {
@@ -1115,8 +1372,8 @@ static void close_isle(FILE *cikti, JsonDeger *istek, Belge *belge,
 /* === Server loop === */
 
 int lsp_server_calistir(FILE *girdi, FILE *cikti) {
-    Belge belge;
-    memset(&belge, 0, sizeof(belge));
+    BelgeTablo tablo;                 /* D-433: URI başına bir belge */
+    memset(&tablo, 0, sizeof(tablo));
     DiagCtx dc;
     memset(&dc, 0, sizeof(dc));
     kapanis_isteniyor = 0;
@@ -1158,22 +1415,41 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
             break;
         } else if (strcmp(yontem, "initialized") == 0) {
             /* no-op */
-        } else if (strcmp(yontem, "textDocument/didOpen") == 0) {
-            open_or_change_isle(cikti, istek, &belge, &dc, 0);
-        } else if (strcmp(yontem, "textDocument/didChange") == 0) {
-            open_or_change_isle(cikti, istek, &belge, &dc, 1);
-        } else if (strcmp(yontem, "textDocument/didClose") == 0) {
-            close_isle(cikti, istek, &belge, &dc);
-        } else if (strcmp(yontem, "textDocument/hover") == 0) {
-            hover_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/definition") == 0) {
-            definition_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/completion") == 0) {
-            completion_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/documentSymbol") == 0) {
-            documentsymbol_yanitla(cikti, istek, &belge);
-        } else if (strcmp(yontem, "textDocument/references") == 0) {
-            references_yanitla(cikti, istek, &belge);
+        } else if (strcmp(yontem, "workspace/symbol") == 0) {
+            workspacesymbol_yanitla(cikti, istek, &tablo);   /* D-434 */
+        } else if (strncmp(yontem, "textDocument/", 13) == 0) {
+            /* D-433: her `textDocument` istegi KENDI uri'sine çözülür.
+             * didOpen yoksa yuva açar; diğerleri yalnız ARAR — bilinmeyen
+             * uri'de `belge` NULL kalır ve handler'lar bunu zaten
+             * karşılıyor (hepsi `belge && belge->prog` denetler). */
+            int uri_uz = 0;
+            const char *uri = istek_uri(istek, &uri_uz);
+            if (uri) {
+                int acilis = (strcmp(yontem, "textDocument/didOpen") == 0);
+                Belge *belge = acilis ? tablo_ac(&tablo, uri, uri_uz)
+                                      : tablo_bul(&tablo, uri, uri_uz);
+                if (belge) {
+                    if (acilis) {
+                        open_or_change_isle(cikti, istek, belge, &dc, 0);
+                    } else if (strcmp(yontem, "textDocument/didChange") == 0) {
+                        open_or_change_isle(cikti, istek, belge, &dc, 1);
+                    } else if (strcmp(yontem, "textDocument/didClose") == 0) {
+                        close_isle(cikti, istek, belge, &dc);
+                    } else if (strcmp(yontem, "textDocument/hover") == 0) {
+                        hover_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/definition") == 0) {
+                        definition_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/completion") == 0) {
+                        completion_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/documentSymbol") == 0) {
+                        documentsymbol_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/references") == 0) {
+                        references_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/semanticTokens/full") == 0) {
+                        semantictokens_yanitla(cikti, istek, belge);   /* D-432 */
+                    }
+                }
+            }
         }
         /* Bilinmeyen request id'li ise yanitsiz birakiyoruz (LSP kabul edilebilir) */
 
@@ -1181,7 +1457,7 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
         free(govde);
     }
 
-    belge_temizle(&belge);
+    tablo_temizle(&tablo);
     diag_temizle(&dc);
     return exit_kodu;
 }

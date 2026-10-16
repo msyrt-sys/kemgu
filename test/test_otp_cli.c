@@ -14,6 +14,15 @@
  *      kontrolu ayrica test_linear.c'de.
  */
 
+/* [D-481] `WEXITSTATUS` bir MAKRODUR ve <sys/wait.h>DEN gelir. Eksikken
+ * derleyici onu ORTUK ISLEV sanip devam etti; hata LINK ZAMANINDA cikti:
+ *   undefined reference to `WEXITSTATUS'
+ * Windows'ta gorunmez -- o dal `#ifdef` ile disarida.
+ * ⚠ D-477'de bu dosyalari "zaten dogru" diye ELEMISTIM: `WEXITSTATUS`
+ * GECIYOR diye bakmistim, ama GORUNMEK != DOGRU OLMAK. */
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

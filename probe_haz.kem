@@ -1,0 +1,7 @@
+işlev f() -> tam32 {
+    değişken a: tam32 = 40;
+    değişken g: işlev() -> &tam32 = || &a;
+    değişken p: &tam32 = g();
+    ver *p + 2;
+}
+işlev main() -> tam32 { ver f(); }

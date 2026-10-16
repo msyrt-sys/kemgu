@@ -1,0 +1,59 @@
+// [D-464] Gövdesi KAPSAYICI bir `eşleş` olan ve İŞARETÇİ/KESİRLİ dönen işlev.
+//
+// Düşüş yolu ULAŞILAMAZ (eşleş tüm kolları kapsıyor ve hepsi `ver` ediyor) ama
+// derleyici yine de bir `ret` yayar. Öncesinde ham `ret <tip> 0` yayılıyordu:
+//   ret ptr 0     -> "integer constant must have integer type"  = GEÇERSİZ IR
+//   ret double 0  -> aynı hata
+// Doğru mantık C'de D-304'ten beri LIFTED LAMBDA yolunda VARDI ama sıradan
+// işlev yoluna uygulanmamıştı (D-407: aynı soru iki yerde, ayrışır).
+//
+// ⚠ Bu şekil KEMGU'da ÇOK DOĞALDIR (`sonuç`/`seçimlik` üzerine kurulu her kod)
+// ama hiçbir korpus dosyası içermiyordu — bu yüzden kaçtı. Regex'in yakalama
+// API'sini kullanan ilk test bu duvara ANINDA çarptı.
+//
+// ⚠ FİKSTÜR BİLEREK DAR — yapıcılar YALNIZ annotasyonlu `değişken` başlatıcıda
+// kuruluyor. CLAUDE.md'de kayıtlı sınır: `hiç`/`değer`/`tamam`/`hata` ancak
+// BEKLENEN TİP bilindiğinde çözülür. Ölçüm sırasında bunun ÜÇ görünümü çıktı
+// (üçü de D-464 ÖNCESİNDE vardı, `git stash` ile doğrulandı):
+//   · çıplak `hiç` ARGÜMAN olarak            -> C: "tanimsiz tanimlayici"
+//   · `değer(1)` ARGÜMAN olarak              -> `@değer` tanımsız
+//   · `o = değer(k)` ATAMA olarak            -> `@değer` tanımsız
+// Bunları fikstüre sokmak, ölçmek istediğim DÖNÜŞ YOLU yerine yapıcı çözümünü
+// ölçerdi; kapı YANLIŞ SEBEPLE kırmızı olurdu (D-421'in dersi).
+// Exit: 42
+
+// (a) `metin` dönüş — düşüş yolunda `ret ptr null` olmalı
+işlev metin_ver(k: tam32) -> metin {
+    değişken o: seçimlik<tam32> = değer(k);
+    eşleş o {
+        değer(v) => { eğer v > 0 { ver "var"; } ver "sifir"; }
+        hiç => { ver "yok"; }
+    }
+}
+
+// (b) `kesirli64` dönüş — düşüş yolunda `ret double 0.0` olmalı
+işlev kesirli_ver(k: tam32) -> kesirli64 {
+    değişken o: seçimlik<tam32> = değer(k);
+    eşleş o {
+        değer(v) => { eğer v > 0 { ver 1.5; } ver 0.5; }
+        hiç => { ver 2.5; }
+    }
+}
+
+// (c) `sonuç<>` üzerinden aynı şekil — `hiç` yerine `hata` kolu
+işlev sonuc_metin(k: tam32) -> metin {
+    değişken r: sonuç<tam32, metin> = tamam(k);
+    eşleş r {
+        tamam(v) => { eğer v > 0 { ver "tamam"; } ver "sifir"; }
+        hata(m) => { ver m; }
+    }
+}
+
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    eğer metin_esit(metin_ver(1), "var") { t = t + 10; }
+    eğer metin_esit(metin_ver(0), "sifir") { t = t + 10; }
+    eğer kesirli_ver(1) > 1.0 { t = t + 10; }
+    eğer metin_esit(sonuc_metin(1), "tamam") { t = t + 12; }
+    ver t;   // 42
+}

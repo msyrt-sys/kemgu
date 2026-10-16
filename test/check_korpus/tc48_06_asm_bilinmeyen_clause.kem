@@ -1,0 +1,14 @@
+// [D-649] Bilinmeyen `satıriçi_asm` clause'u -> her biri için P261.
+// C her tanınmayan clause adında P261 basıp BİR belirteç ilerler; `zırva: 1`
+// üç belirteç olduğu için üç tanı çıkar (ad, ':', değer).
+//
+// Bu dosya ayrıca EMNİYET AĞININ sınırını gösterir: bu site önce sayacı
+// artırıp tabloya yazmıyordu, dolayısıyla ağ `P000 0 0` basıyordu (loud ama
+// paritesiz). Artık gerçek kod kaydediliyor.
+işlev main() -> tam32 {
+    güvensiz { satıriçi_asm {
+        mimari: arm64
+        zırva: 1
+        şablon: r#"nop"# } }
+    ver 0;
+}

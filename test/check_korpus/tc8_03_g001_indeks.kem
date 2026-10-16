@@ -1,0 +1,11 @@
+// D-351 / G001: ham işaretçi INDEKSLEME de dereferans sınıfındadır — güvensiz ister.
+// Güvenli Dizi<T> indekslemesi etkilenmez (runtime sınır-kontrollü).
+işlev ham_oku(p: *tam32) -> tam32 {
+    ver p[2];
+}
+işlev dizi_oku(xs: Dizi<tam32>) -> tam32 {
+    ver xs[2];
+}
+işlev main() -> tam32 {
+    ver 0;
+}

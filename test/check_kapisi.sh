@@ -11,9 +11,18 @@
 # geçmek ZORUNDA. Geçmeyecekse MUAF listesine GEREKÇESİYLE yazılmalı — sessiz
 # birikme yerine açık karar.
 set -u
-KEMGU="${KEMGU:-build/kemgu.exe}"
+# [D-469] EXE uzantisi: Makefile `export EXE` ile gelir. Dogrudan cagrimda
+# (make'siz) TANIMSIZ olurdu ve `set -u` altinda harness COKERDI -> ikilinin
+# varligindan TESPIT et. Windows: .exe, Linux/macOS: bos.
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
+KEMGU="${KEMGU:-build/kemgu${EXE}}"
 [ -x "$KEMGU" ] || KEMGU="build/kemgu"
-[ -x "$KEMGU" ] || { echo "⏭  $KEMGU yok — atlandı"; exit 0; }
+# [D-487] EKSIK IKILI = HATA (D-486 dersinin genellemesi). Hedef
+# `$(BUILD)/kemgu$(EXE)`e BAGIMLI -> make yolunda ikili GARANTI, yani bu
+# dal OLU KOD; tek islevi bir YOL HATASINI SESSIZCE YUTMAKTI. Yukaridaki
+# yedek satiri bu kapiyi Linux'ta KURTARDI; D-486'da sekiz kardesi
+# kurtaramadi ve takim SAHTE YESIL verdi.
+[ -x "$KEMGU" ] || { echo "🔴 HATA: kemgu ikilisi YOK ($KEMGU) — kapı KOŞMADI"; exit 1; }
 
 # --- MUAF LİSTESİ (her satır: dosya|gerekçe) ---
 # Muafiyet KALICI DEĞİL: gerekçe ortadan kalkarsa satır silinmeli.
@@ -22,6 +31,11 @@ muaf() {
     # Tek başına derlenemeyen PARÇA dosyalar: gerçek yapı runtime/*.kem ile
     # BİRLEŞTİRİLİP derler (Makefile kem_os_comb). Tek başına T002 doğaldır.
     *test/ornekler/kem_os.kem)          echo "parça dosya — gerçek yapı birleştirilmiş kaynak" ;;
+    # [D-671] x86 kanıt çekirdeği de parça: kem_dma_bariyeri runtime/mimari/x86_64'ten
+    # gelir. Gerçek denetim AŞAĞIDA birleşik x86 biriminde (--mimari x86_64).
+    # [D-693] ortak çekirdek fazları parçası (zamanlayıcı + kanal çekirdek uygulamasına bağlı).
+    *test/ornekler/kem_os_cekirdek_ortak.kem) echo "parça dosya — arm64 ve x86 birleşik birimlerinde denetlenir" ;;
+    *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_asm_kernel.kem)  echo "parça dosya + arch-etiketli asm (AS001 hedefe bağlı)" ;;
     # MODEL B kullanıcı programı: arch-etiketli asm → bayraksız --check AS001 verir.
     # Gerçek denetimi AŞAĞIDA, `--mimari arm64` ile yapılır (muafiyet DEĞİL, doğru bayrak).
@@ -33,11 +47,38 @@ muaf() {
     # Codegen korpusu: KASTEN tip-kontrol sınırını zorlayan dönüşüm/deref testleri.
     # Bunlar `--llvm` codegen yolunu ölçer; `--check` reddi TASARIM GEREĞİ.
     *test/cg_korpus/cg6_trunc.kem)        echo "kasıtlı daraltma (E004) — codegen trunc yolu ölçülür" ;;
-    *test/cg_korpus/cg_skaler_deref.kem)  echo "kasıtlı skaler deref cast (E002)" ;;
+    # [D-534] `cg_skaler_deref.kem` SİLİNDİ — gerekçesi ("kasıtlı skaler deref
+    # cast, E002") ARTIK GEÇERLİ DEĞİL: dosya `--check`ten TEMİZ geçiyor
+    # (ölçüldü, 8 girdinin tek tek denetiminde çıktı). Listenin kendi kuralı:
+    # *"Muafiyet KALICI DEĞİL: gerekçe ortadan kalkarsa satır silinmeli."*
+    # ⚠ Bayat muafiyet ZARARSIZ DEĞİLDİR: o dosya bir gün GERÇEKTEN kırılsa
+    #   kapı susardı — muafiyet listesi bir KÖR NOKTA ENVANTERİDİR (D-419).
     *test/cg_korpus/cg_deref_pointer.kem) echo "kasıtlı ham-pointer arg (T001)" ;;
     *) return 1 ;;
   esac
   return 0
+}
+
+# --- [D-469] ARCH-ETİKETLİ DOSYA KENDİ BAYRAĞIYLA DENETLENİR ---
+# `satıriçi_asm` bloğundaki `mimari:` etiketi AS001'de KONAK hedefiyle
+# karşılaştırılır ve D-469'dan beri varsayılan hedef DERLEME PLATFORMUNDAN
+# gelir. Bayraksız `--check` bu yüzden KONAĞA BAĞLI sonuç verir: aynı dosya
+# x86_64'te geçer, ARM64'te AS001 yer. DGX Spark'ta ÖLÇÜLDÜ —
+# `test/cg_korpus/cg_satirici_asm.kem` (etiketi `x86_64`) kapıyı kırmızı yaptı.
+#
+# Bu kapının ölçtüğü şey TİP DENETİMİDİR, konak mimarisi değil. Dosyanın
+# KENDİ etiketi bayrak olarak verilir — muafiyet DEĞİL, doğru bayrak; yukarıda
+# `kem_kullanici.kem` için zaten uygulanan desenin genelleştirilmişi.
+#
+# ⚠ YALNIZ TEK ETİKETLİ dosyalarda uygulanır. Kasten BİRDEN ÇOK mimari
+# karıştıran dosyalar (ör. `tc24_01_as001.kem`) AS001'in ta kendisini ölçer;
+# onlara bayrak vermek testin anlamını yok ederdi. Birden çok farklı etiket
+# görülürse bayrak verilmez ve dosya bayraksız denetlenir.
+dosya_mimari() {
+  etiketler="$(grep -oE 'mimari:[[:space:]]*(x86_64|arm64)' "$1" 2>/dev/null \
+                | grep -oE '(x86_64|arm64)' | sort -u)"
+  [ "$(printf '%s\n' "$etiketler" | grep -c .)" -eq 1 ] || return 1
+  printf '%s' "$etiketler"
 }
 
 red=0; tot=0; muaf_n=0
@@ -45,14 +86,19 @@ for f in test/cg_korpus/*.kem test/ornekler/*.kem stdlib/*.kem \
          stdlib/temel/*.kem stdlib/kripto/*.kem; do
   [ -f "$f" ] || continue
   tot=$((tot + 1))
-  if "$KEMGU" --check "$f" >/dev/null 2>&1; then continue; fi
+  if mim="$(dosya_mimari "$f")"; then
+    set -- --mimari "$mim"
+  else
+    set --
+  fi
+  if "$KEMGU" --check "$@" "$f" >/dev/null 2>&1; then continue; fi
   if gerekce="$(muaf "$f")"; then
     muaf_n=$((muaf_n + 1))
     continue
   fi
   red=$((red + 1))
-  echo "  🔴 $f"
-  "$KEMGU" --check "$f" 2>&1 | grep -m1 "hata\[" | sed 's/^/       /'
+  echo "  🔴 $f${mim:+  (--mimari $mim)}"
+  "$KEMGU" --check "$@" "$f" 2>&1 | grep -m1 "hata\[" | sed 's/^/       /'
 done
 
 # --- KEM-OS BİRLEŞİK KAYNAK (tek başına parça dosyalar yukarıda muaf) ---
@@ -61,10 +107,10 @@ done
 # dilin işletim sistemi, kendi tip denetimini atlıyordu. Borç kapandı; bu blok
 # geri düşmeyi engeller. Dosya sırası Makefile'daki `calistir_kem_os_arm`
 # cat sırasıyla AYNI olmalı (kem_heap ÖNCE — çapraz-birim T002'yi kapatır).
-KEMOS_PARCALAR="runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem
-                runtime/kem_zaman.kem runtime/kem_virtio_blk.kem
+KEMOS_PARCALAR="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
+                runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem
                 runtime/kem_minifs.kem runtime/kem_virtio_net.kem
-                runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem"
+                runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem"
 kemos_eksik=0
 for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
 if [ "$kemos_eksik" -eq 0 ]; then
@@ -73,7 +119,7 @@ if [ "$kemos_eksik" -eq 0 ]; then
   tot=$((tot + 1))
   # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
   if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
-    echo "  ✅ kem_os (birleşik kaynak, 10 parça) --check geçti"
+    echo "  ✅ kem_os (birleşik kaynak, 17 parça) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"
@@ -84,6 +130,32 @@ if [ "$kemos_eksik" -eq 0 ]; then
   rm -f build/kem_os_kapi.kem
 else
   echo "  ⏭  kem_os parçaları eksik — birleşik kontrol atlandı"
+fi
+
+# [D-671] x86 kanıt çekirdeği birleşik birimi — Makefile `calistir_kem_os_x86`
+# cat sırasıyla AYNI olmalı. Mimari başına dosya (D2b) seçimi burada da x86_64.
+KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
+                    runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem
+                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem
+                    runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem"
+kemos_x86_eksik=0
+for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
+if [ "$kemos_x86_eksik" -eq 0 ]; then
+  mkdir -p build
+  cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
+  tot=$((tot + 1))
+  if "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
+    echo "  ✅ kem_os_x86 (birleşik kaynak, 15 parça, --mimari x86_64-none) --check geçti"
+  else
+    red=$((red + 1))
+    echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"
+    "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem 2>&1 \
+      | grep -m5 "hata\[" | sed 's/^/       /'
+  fi
+  rm -f build/kem_os_x86_kapi.kem
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86 parçaları eksik — birleşik x86 kontrolü KOŞAMADI"
 fi
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir

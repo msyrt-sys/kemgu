@@ -58,11 +58,6 @@
 struct EscapeAnaliz;
 
 /* Yüklenmiş modül izleme (cycle + duplicate detection) */
-typedef struct YuklenmisModul {
-    char *yol;             /* "stdlib/temel/matematik.kem" gibi */
-    int yol_uz;
-    struct YuklenmisModul *sonraki;
-} YuklenmisModul;
 
 typedef struct TipKontrol {
     Arena *arena;
@@ -74,7 +69,6 @@ typedef struct TipKontrol {
                                       giris dosyasinin ozel adlari modullere sizmaz. */
     TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
     UygulaTablosu uygulamalar;     /* (Tip, Ozellik) -> impl registry */
-    YuklenmisModul *yuklenmisler;  /* duplicate-load engelleme */
     int hata_sayisi;
     const char *dosya_adi;
     const char *kaynak;
@@ -96,6 +90,14 @@ typedef struct TipKontrol {
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */
     int lambda_blok_cikarsama;
     TipBilgisi *lambda_blok_donus;
+    /* D-630: T043 (literal hedef tipe sığmıyor). `neg_literal` > 0 iken literal
+     * tekli eksinin operandıdır (`-128`, `-9223372036854775808` geçerli). Literal
+     * aynı düğüm için BİRDEN ÇOK KEZ tiplenebilir (D-021) → rapor düğüm başına
+     * BİR KEZ (t043_dugum listesi). */
+    int neg_literal;
+    const Dugum **t043_dugum;
+    int t043_sayi;
+    int t043_kap;
     int lambda_lineer_yakalama;    /* >0 = lambda lineer baglama yakaladi
                                       (closure-itself-linear icin) */
     int lambda_yakalama;           /* G005: >0 = lambda HERHANGI bir cevre
@@ -107,6 +109,28 @@ typedef struct TipKontrol {
                                       oldugu icin skaler yakalama (deger kopyasi)
                                       cerceve asiminda dangling URETEMEZ; isaretci
                                       kopyasi ise gosterdigi bolgeyi asabilir. */
+    /* [D-505] R-YAKALAMA-THREAD (Bellek Modeli sat.144/323):
+     * gorev_baslat kapanisi ISARETCI-benzeri yakaladiginda SAHIPLIK THREADE
+     * TASINIR -> kaynak erisimi kaybeder. Spec ZATEN boyle diyordu ( DRF
+     * saglamlik ispatinin parcasi) ama UYGULANMAMISTI: iki gorev ayni
+     * Dizi<T>ye yaziyordu ve --check SIFIR tani veriyordu (D-504: 100000
+     * yerine 62868 gozlendi).
+     * ⚠ SKALER YAKALAMA ETKILENMEZ (D-323 daraltmasinin AYNISI): env HEAP
+     *   kopyasidir, skaler kopya YARISAMAZ.
+     * gorev_kapanis_derinlik: gorev_baslat argumani kontrol edilirken >0.
+     * tasinan_*: lambda TARANIRKEN toplanir, lambda BITINCE isaretlenir
+     *   (tarama sirasinda isaretlemek ayni lambda icindeki 2. kullanimi
+     *    sahte L002 yapardi). */
+    int gorev_kapanis_derinlik;
+    /* [D-575] Icinde bulunulan lambda tasima-gerektiren bir sey yakaladi mi.
+     * `lambda_yakalama_isaretci` ile ayni kaydet/geri-yukle disiplini. */
+    int lambda_yakalama_tasima;
+    int lambda_tasima_sonuc;   /* [D-575] son bitmis lambdanin sonucu */
+    int l002_son_satir;        /* [D-576] ayni konumda tekrar bildirme */
+    int l002_son_sutun;
+    const char *tasinan_ad[64];
+    int tasinan_uz[64];
+    int tasinan_sayi;
     Scope *lambda_baslangic_scope; /* lambda govdesi disinda kalan scope sınırı */
     /* G005: aktif islev govdesinin escape analizi (forward DFA, src/escape.c).
      * DUGUM_ISLEV govde kontrolu sirasinda kurulur; lambda case ESC_CAGIRAN

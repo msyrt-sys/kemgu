@@ -1,0 +1,40 @@
+// Tek-geçiş ad çözümü regresyon testi (feature/ad-cozum-tek-gecis):
+// global f + modül-kardeşi f — çıplak ad modül içinde KARDEŞE bağlanmalı
+// (tip kontrolün module-first/lexical kuralı); codegen AYNI sembolü emit
+// etmeli. Önceki durum: codegen global-first → @f çağrılıyordu (sapma).
+işlev f() -> tam32 { ver 1; }
+işlev g() -> tam32 { ver 5; }
+
+modül m {
+    işlev h() -> tam32 { ver 7; }
+    dışa işlev f() -> tam32 { ver 2; }
+    // çıplak kardeş çağrısı: m::f (2) — global f (1) DEĞİL
+    dışa işlev kardes() -> tam32 { ver f(); }
+    // çıplak kardeş çağrısı (dışa olmayan üye): m::h (7)
+    dışa işlev kardes_h() -> tam32 { ver h(); }
+    modül ic {
+        dışa işlev g() -> tam32 { ver 11; }
+        // iç modülde çıplak kardeş: m::ic::g (11) — global g (5) DEĞİL
+        dışa işlev ic_kardes() -> tam32 { ver g(); }
+    }
+    // göreli (relative) YOL: m içinden ic::g — @m.ic.g'ye bağlanmalı
+    dışa işlev gorece_yol() -> tam32 { ver ic::g(); }
+}
+
+işlev main() -> tam32 {
+    // 2 + 7 + 11 + 11 + 11 = 42
+    ver m::kardes() + m::kardes_h() + m::ic::ic_kardes()
+        + m::gorece_yol() + 11;
+}
+
+// ── D-412 NOTU ───────────────────────────────────────────────────────────
+// `gorece_yol()` içindeki `ic::g()` GÖRELİ bir yoldur: `modül m` içinden
+// yazıldığı için `m.ic.g` demektir, mutlak `ic.g` DEĞİL. `yol_noktali` yolu
+// MUTLAK kuruyordu → `@ic.g` tanımsız sembol.
+//
+// Onarım, `fn_coz`un ÇIPLAK adlar için uyguladığı MODÜL-ÖNCE kuralının
+// (D-398) nitelikli yollara uzantısıdır: modül içindeysek önce mevcut önekle
+// dene, kayıtlı DEĞİLSE mutlak ada dokunma (mutlak yollar bozulmaz).
+//
+// Dosya AYNI ZAMANDA çıplak-kardeş bağlamayı da ölçer (m::f global f'yi,
+// m::ic::g global g'yi GÖLGELER) — üç ayrı gölgeleme şekli tek dosyada.

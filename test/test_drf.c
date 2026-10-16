@@ -251,7 +251,22 @@ static void T17_birlestir_non_gorev(void) {
 }
 
 static void T18_gorev_tuketilmedi_v1_limit(void) {
-    /* Karar 1 (D-30x) V1 KNOWN-LIMIT — sonuç sarmasinin bedeli.
+    /* [D-467] BU SINIR KAPANDI — asagidaki tarihi not ARTIK GECERSIZDIR,
+     * belge olarak birakildi.
+     *
+     * Bu test bilerek "bilinen-YANLIS davranisi" sabitliyordu ve tam
+     * tasarlandigi gibi calisti: D-467 sinirini kapatinca KIRMIZIYA DONDU ve
+     * durumu bildirdi (D-441/D-443'te de ayni desen ise yaramisti).
+     *
+     * ⚠ Asagidaki "V2 DOGRU COZUM" notu ONGORULUYDU ve BIREBIR dogru cikti:
+     * ozyinelemeyi TEK BASINA yapmak gercekten tum `esles`-acan pozitif
+     * testleri L001'e dusurdu; `esles` skrutini tuketimi eklenince duzeldi.
+     * Uygulanan onarim uc parcali: (1) tip_lineer_mi ozyinelemesi,
+     * (2) ATILAN lineer deger (ifade-deyimi), (3) `esles` skrutinisini BASTA
+     * BIR KEZ tuket. Ayrica "gecersiz tip = lineer yukumluluk yok" korumasi.
+     *
+     * ---- TARIHI NOT (D-467 oncesi durum) ----
+     * Karar 1 (D-30x) V1 KNOWN-LIMIT — sonuç sarmasinin bedeli.
      *
      * gorev_baslat artik `sonuç<görev<T>, metin>` doner (görev<T> DEGIL).
      * görev<T> lineerdir (tip_lineer_mi), ama onu KAPSAYAN sonuç V1'de lineer
@@ -272,8 +287,10 @@ static void T18_gorev_tuketilmedi_v1_limit(void) {
      * dusururdu. Bkz. DECISIONS_LOG D-30x. */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken g = g\xc3\xb6rev_ba\xc5\x9flat(|| 1);\n");
-    test_sonuc("D18: sonuç<görev> eşleş'siz dusme -> V1'de L001 YOK "
-               "(KNOWN-LIMIT; V2: lineer yayilim)", h == 0);
+    /* [D-467] ARTIK L001 VERIR: `sonuç<görev<T>, metin>` lineer sayilir ve
+     * `esles` ile ACILMADAN dusen baglama kaynak sizintisidir. */
+    test_sonuc("D18: sonuç<görev> eşleş'siz dusme -> L001 (D-467: lineer "
+               "yayilim; ONCE V1'de tanı YOKTU)", h >= 1);
 }
 
 /* ========================================================================
@@ -488,15 +505,22 @@ static void T37_dizi_yakala_pozitif(void) {
                h == 0);
 }
 
-static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
-    /* D38: V1 KNOWN-LIMIT — non-linear capture sonrası çağıran thread'in
-     * yakalanan Dizi'ye erişimi V1 tip kontrolünde yakalanmıyor.
-     * V2 hedefi (Plan §9 risk tablosu: inter-procedural escape analizi):
-     * R-YAKALAMA-THREAD'in compile-time enforcement'i Dizi/yapı için
-     * bölge sahipliği transferi sonrası ihlal hata vermeli.
+static void T38_dizi_yakala_sonrasi_erisim(void) {
+    /* [D-505] KAPANDI — bu test V1 SINIRINI sabitliyordu ve tam tasarlandığı
+     * gibi kırmızıya dönüp kendini bildirdi. Eski yorumu aynen koruyorum:
+     *   "V2 hedefi: R-YAKALAMA-THREAD'in compile-time enforcement'i ...
+     *    V1 davranışı: 0 hata ... V2'de h >= 1 olmalıdır."
+     * Beklenti artık h >= 1.
      *
-     * V1 davranışı: 0 hata (V1 tip kontrol bu pattern'i yakalamıyor).
-     * Bu test V1 sınırını dokümante eder; V2'de h >= 1 olmalıdır. */
+     * ⚠ D-504'te ÖLÇÜLEN AÇIK: iki görev aynı Dizi<tam32>'e yazıyordu, hiç
+     * `güvensiz` yoktu, --check SIFIR tanı veriyordu; çalışma zamanında
+     * 100000 yerine 62868/58426/71619 (8/8 koşumda kayıp).
+     * D-505 spec'in kendi kuralını uyguladı (Bellek Modeli sat.144):
+     *   ∀ v ∈ YD(c) : sahiplik_transfer(v, ρ_yeni)
+     * Raporlanan kod L002 (yeni tanı kodu YOK).
+     *
+     * Sabitlenen-bilinen-yanlış deseninin BEŞİNCİ başarılı kullanımı
+     * (D-441/D-443/D-449/D-454/burası). */
     int h = kontrol_main(
         "    de\xc4\x9fi\xc5\x9fken xs: Dizi<tam32> = [1, 2, 3];\n"
         "    e\xc5\x9fle\xc5\x9f g\xc3\xb6rev_ba\xc5\x9flat(|| xs[0]) {\n"
@@ -504,9 +528,9 @@ static void T38_dizi_yakala_sonrasi_erisim_v1_limit(void) {
         "        hata(e) => {}\n"
         "    }\n"
         "    de\xc4\x9fi\xc5\x9fken s: tam32 = xs[1];\n");
-    test_sonuc("D38: Dizi capture sonrasi erisim V1 KNOWN-LIMIT "
-               "(V1: 0 hata, V2: hata bekleniyor)",
-               h == 0);
+    test_sonuc("D38: Dizi capture sonrasi erisim -> L002 "
+               "(D-505: R-YAKALAMA-THREAD uygulandi)",
+               h >= 1);
 }
 
 static void T39_dondur_idempotent_degil(void) {
@@ -750,7 +774,7 @@ int main(void) {
 
     /* D37-D39: Patch P2 — non-linear capture + dondur idempotency */
     T37_dizi_yakala_pozitif();
-    T38_dizi_yakala_sonrasi_erisim_v1_limit();
+    T38_dizi_yakala_sonrasi_erisim();
     T39_dondur_idempotent_degil();
 
     /* D40-D44: kanal_oluştur (R-KANAL kurucusu — D-292) */

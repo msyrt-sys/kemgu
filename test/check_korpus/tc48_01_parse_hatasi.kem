@@ -1,0 +1,18 @@
+// [D-643] KORPUSTAKİ İLK PARSE-HATALI DOSYA — ve kasıtlı olarak öyle.
+//
+// Bu korpus bugüne dek YALNIZ ayrıştırılabilir dosyalardan oluşuyordu (ölçüldü):
+// hepsi checker'ı sınamak için yazılmış. Sonucu şu oldu — self-host `--check`
+// parser hatalarını HİÇ raporlamıyordu (sürücü `p.hata_say`a bakmıyordu) ve
+// `checker_diff` 192/192 ile `self_driver` 152/152 yeşil olduğu hâlde bu yüzeyi
+// HİÇ ÖLÇMÜYORDU. Kapının kendi kör noktası, korpusun şeklinden geliyordu.
+//
+// Ölçülen kusur yalnız sessizlik değildi: `--llvm` yolu parse hatalı girdiye IR
+// ÜRETİYORDU (`çıktı("=r", &r.deger)` için register kısıtını yapının tamamına
+// bağlayan `call %R asm sideeffect ..., "=r"()`), yani `--llvm | clang` boru
+// hattında bozuk IR sessizce derlemeye gidiyordu.
+//
+// Beklenen: C `--checkdump` ve self-host `--check` BİREBİR `P090 <sat> <süt>`.
+// `ver` deyiminin noktalı virgülü kasıtlı olarak eksik.
+işlev main() -> tam32 {
+    ver 1
+}

@@ -35,8 +35,42 @@
  * uyusmazsa AS001 derleme hatasi (yanlis hedefe sessizce bozuk IR
  * uretmek YASAK). Sonuc: arm64-tagli asm bu triple altinda reddedilir,
  * x86_64 asm calisir — kasitli. */
-#define KEMGU_HEDEF_MIMARI "x86_64"
-#define KEMGU_HEDEF_TRIPLE "x86_64-pc-windows-gnu"
+/* [D-469] VARSAYILAN TRIPLE ARTIK DERLEME PLATFORMUNDAN GELIR.
+ * Oncesinde `x86_64-pc-windows-gnu` SABITTI: Linux'ta (DGX Spark dahil)
+ * uretilen her IR YANLIS triple tasirdi. clang cogu durumda yine derler ama
+ * bu SESSIZ bir yanlislik -- ve ARM64 makinede x86 triple'i ciddi sapmalar
+ * dogurur (veri modeli, cagri sozlesmesi, hedef ozellikleri).
+ * Makefile PLATFORM/ARCH'i ZATEN tespit ediyordu; eksik olan yalniz bu
+ * makronun ondan BESLENMESIYDI. `-D` ile ezilebilir. */
+#ifndef KEMGU_HEDEF_MIMARI
+#  if defined(__aarch64__) || defined(_M_ARM64)
+#    define KEMGU_HEDEF_MIMARI "arm64"
+#  else
+#    define KEMGU_HEDEF_MIMARI "x86_64"
+#  endif
+#endif
+
+#ifndef KEMGU_HEDEF_TRIPLE
+#  if defined(_WIN32)
+#    if defined(_M_ARM64)
+#      define KEMGU_HEDEF_TRIPLE "aarch64-pc-windows-gnu"
+#    else
+#      define KEMGU_HEDEF_TRIPLE "x86_64-pc-windows-gnu"
+#    endif
+#  elif defined(__APPLE__)
+#    if defined(__aarch64__)
+#      define KEMGU_HEDEF_TRIPLE "arm64-apple-darwin"
+#    else
+#      define KEMGU_HEDEF_TRIPLE "x86_64-apple-darwin"
+#    endif
+#  else
+#    if defined(__aarch64__)
+#      define KEMGU_HEDEF_TRIPLE "aarch64-unknown-linux-gnu"
+#    else
+#      define KEMGU_HEDEF_TRIPLE "x86_64-pc-linux-gnu"
+#    endif
+#  endif
+#endif
 
 /* D-269 (P1): satıriçi_asm arch-gate + emit edilen triple ÇALIŞMA-ZAMANI seçilebilir.
  * Varsayılan = yukarıdaki makrolar (x86_64) → bayrak verilmezse davranış BİREBİR eskisi

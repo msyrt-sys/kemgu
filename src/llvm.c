@@ -56,6 +56,10 @@ typedef struct LlvmIsim {
      * KdlDizi* mı olduğunu ve [j] eleman tipini recursive çözmek için
      * (heap_dizi_eleman_ast). arena_ayir_sifir → varsayılan NULL (init-uyarısı yok). */
     const Dugum *eleman_tip_ast;
+    /* [D-465] Bagimanin BILDIRILEN tip AST dugumu (annotasyon). ATAMA yolunda
+     * `o = değer(k)` gibi yapicilarin beklenen_tip'ini kurmak icin gerekli;
+     * `eleman_tip_ast` yalnizca DIZI elemani tasir, genel tip tasimaz. */
+    const Dugum *tip_ast;
     /* Adim 3 (B v2): heap dizi (KdlDizi*) ise 1; stack [N x T] ise 0.
      * dizi literal değişken annot ile heap olarak allocate edildiyse,
      * arr[i] sintaksi kdl_dizi_al ile route edilir. */
@@ -82,6 +86,13 @@ typedef struct LlvmIsim {
      * bilgidir → burada saklanır ve çağrı yerinde beklenen'e TERCİH edilir.
      * NULL = closure değil / tip bilinmiyor (arena_ayir_sifir varsayılanı). */
     const char *kapanis_donus_ir;
+    /* D-625: closure İMZA KAYNAĞI — bildirilen `işlev(T1,..) -> R` tip düğümü
+     * (DUGUM_TIP_ISLEV) ya da annotasyonsuz bağlamada lambda'nın kendisi
+     * (DUGUM_LAMBDA). Fat value parametre tiplerini de SİLER; çağrı yeri
+     * argümanları buradan okunan tiple üretmezse `f(8589934592)` literali i32
+     * doğar ve `i64 %a` parametresine SESSİZCE KIRPILMIŞ geçer (ölçüldü:
+     * annotasyonlu `işlev(tam64) -> tam64` bile). NULL = bilinmiyor. */
+    const Dugum *kapanis_imza;
     /* D-294: `görev<T>` tipli değişken/parametrenin T IR tipi. görev<T> IR'de
      * opak `ptr` (handle) — T'yi SİLER. Runtime birleştir'i i64 taşır; sonucu
      * T'ye daraltmak (trunc / inttoptr) için T gerekir. NULL = görev değil /
@@ -103,6 +114,15 @@ typedef struct LlvmIsim {
      * yapiyi cozmek icin — onceki "ptr ise global alan-adi ara" fallback'i
      * iki yapi ayni alan adini paylasinca YANLIS yapiya cozuyordu. */
     const char *ref_yapi_ir;
+    /* [D-449] degisken/parametre KEMGU `metin` mi? `llvm_tip` bunlar icin
+     * "ptr" — metin/Dizi/görev/ham-isaretci hepsi ayni. `==` icerik mi
+     * isaretci mi karsilastiracagini BURADAN ogrenir. */
+    int metin_mi;
+    /* [D-449] Dizi<E> degiskeninin ELEMANI `metin` mi? `için x: xs` dongu
+     * degiskeni metin-ligini BURADAN alir (eleman_llvm_tip "ptr" der, ayrimi
+     * siler). `dizi.kem`in icerir/bul/indeks_bul gövdeleri tam bu yoldan
+     * geciyor: `için x: xs { eğer x == hedef ... }`. */
+    int eleman_metin_mi;
     /* V2-F1 (fat-value closure ABI): "closure mu?" artık derleme-zamanı tag
      * DEĞİL — fn değeri {ptr fn, ptr env} fat value; çağrı yerinde env==null
      * runtime kontrolü bare/closure'ı ayırır (closure_mu kaldırıldı). */
@@ -128,6 +148,7 @@ typedef struct IslevKayit {
     int ad_uz;
     const char *donus_tip;
     int donus_isaretsiz;   /* D-005: donus tipi dtamN ise 1 */
+    int donus_metin;       /* [D-449] donus tipi `metin` ise 1 */
     /* Generic islev: AST'yi sakla, instantiation icin gerekli */
     const Dugum *ast;
     int generic_mi;  /* tip_param_sayi > 0 */
@@ -150,6 +171,11 @@ typedef struct TipSubst {
     const char *ad;
     int ad_uz;
     const char *ir;
+    /* [D-449] Bu tip argumani KEMGU `metin` mi? `ir` yalnizca "ptr" tasir ve
+     * metin/Dizi/görev/ham-isaretci ayrimi SILINIR. Generic govdede
+     * `x == hedef` icerik mi isaretci mi karsilastiracagini BURADAN ogrenir
+     * (`dizi.kem` icerir/bul/indeks_bul tam bu yoldan geciyor). */
+    int metin_mi;
     struct TipSubst *sonraki;
 } TipSubst;
 
@@ -172,17 +198,13 @@ typedef struct MonoTip {
 } MonoTip;
 
 /* Yüklenmiş modül (cycle önleme) */
-typedef struct YuklenmisDosya {
-    const char *yol;
-    int yol_uz;
-    struct YuklenmisDosya *sonraki;
-} YuklenmisDosya;
 
 /* Bekleyen specialization (cagri sirasinda olustu, sonradan emit edilecek) */
 typedef struct BekleyenSpec {
     const Dugum *ast;        /* generic islev AST */
     const char *mangled;     /* hedef ad */
     const char **tip_args;   /* substitusyon icin */
+    const int *tip_args_metin;  /* [D-449] paralel: arg KEMGU metin mi */
     int tip_arg_sayi;
     struct BekleyenSpec *sonraki;
 } BekleyenSpec;
@@ -219,7 +241,6 @@ typedef struct LlvmGen {
     MonoKayit *monolar;     /* emit edilmis instantiation'lar */
     MonoTip *mono_tipler;   /* D-307: per-instantiation generic yapı/çeşit örnekleri */
     BekleyenSpec *bekleyenler;  /* sonradan emit edilecek */
-    YuklenmisDosya *yuklenmis_dosyalar;  /* kullan tarafindan yuklenenler */
     SabitKayit *sabitler;   /* ust duzey sabit tanimlari (inline icin) */
     SabitKayit *kureseller; /* D-252: küresel değişken (mutable global @ad, load/store) */
     /* C2.5: sonuç/seçimlik value codegen — yapısal beklenen tip kanalı.
@@ -258,6 +279,9 @@ typedef struct LlvmGen {
      * kdl_bolge_olustur ile açılır, TÜM ret'lerden önce kdl_bolge_serbest. Kaçmayan
      * (BOLGE_YEREL) tahsisler buraya; kaçanlar rho_ref'e (ρ_caller). NULL → yok. */
     const char *rho_yerel;
+    /* [D-543] Bu islevde CIKISTA serbest birakilacak kanal baglama adlari.
+     * Liste BOS ise emisyon YOK (default-DENY). */
+    const char **kanal_ad; int *kanal_uz; int kanal_sayi;
 } LlvmGen;
 
 typedef struct IfadeSonuc {
@@ -268,6 +292,13 @@ typedef struct IfadeSonuc {
      * baslaticilarinda C11 kurali geregi 0 (isaretli) kalir — guvenli
      * varsayilan. */
     int isaretsiz;
+    /* [D-449] Deger KEMGU `metin` mi? IR'de `metin` opak `ptr`tir ve
+     * Dizi/görev/kanal/ham-isaretci ile AYIRT EDILEMEZ. `==`/`!=` bu bilgi
+     * olmadan `icmp eq ptr` yayiyordu = ISARETCI karsilastirmasi (D-440).
+     * `isaretsiz` ile AYNI desen: IR'in sildigi bir KEMGU tip ozelligi icin
+     * yan kanal; mevcut `{ reg, tip }` baslaticilarinda C11 geregi 0 kalir —
+     * guvenli varsayilan (metin degil -> eski davranis). */
+    int metin_mi;
 } IfadeSonuc;
 
 /* === Forward === */
@@ -479,9 +510,89 @@ static void scope_cik(LlvmGen *g, ScopeMarker m) {
 static int yeni_reg(LlvmGen *g) { return g->reg++; }
 static int yeni_label(LlvmGen *g) { return g->label++; }
 
+/* === [D-543] KANAL OMRU: cikista serbest — POZITIF KANIT ===
+ * OLCULDU (D-540/541/542): sekil 23/23 islevde tutuyor; elle prototip
+ * sizintiyi 192 -> 8 bayta indirdi, davranis BIREBIR, ASan hatasi YOK.
+ * ⚠ BELLEK SERBEST BIRAKAN KOD. Kanit dusen her sekil ESKI davranista kalir
+ *   (sizar ama UAF yok) — "sizinti bir hata, UAF bir felaket".
+ * ⚠ V1 SINIRI: `gönderen(k)`/`alan(k)` PROJEKSIYON takma adi olan kanallar
+ *   KAPSAM DISI (asagida). */
+static const char *d543_cagri_ad(const Dugum *d, int *uz) {
+    if (!d || d->tip != DUGUM_CAGRI) return NULL;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (!h || h->tip != DUGUM_TANIMLAYICI) return NULL;
+    *uz = h->veri.tanimlayici.uzunluk;
+    return h->veri.tanimlayici.metin;
+}
+static int d543_ad_mi(const Dugum *d, const char *lit, int litu) {
+    int uz = 0; const char *a = d543_cagri_ad(d, &uz);
+    return a && uz == litu && memcmp(a, lit, (size_t)litu) == 0;
+}
+/* KANIT KUR: P1 yerel + dogrudan `kanal_oluştur` · P4 hapsedilme ·
+ * P2 imha == 0 · P3 join >= spawn (sayimlar AYNI yuruyusten). */
+static void kanal_kanit_kur(LlvmGen *g, const Dugum *islev) {
+    g->kanal_ad = NULL; g->kanal_uz = NULL; g->kanal_sayi = 0;
+    if (!islev || islev->tip != DUGUM_ISLEV) return;
+    const Dugum *govde = islev->veri.islev.govde;
+    if (!govde || govde->tip != DUGUM_BLOK) return;
+
+    int n = govde->veri.blok.sayi;
+    if (n <= 0) return;
+    const char **adlar = (const char **)arena_ayir_sifir(g->arena,
+                            sizeof(const char *) * (size_t)n);
+    int *uzlar = (int *)arena_ayir_sifir(g->arena, sizeof(int) * (size_t)n);
+    if (!adlar || !uzlar) return;
+    int say = 0;
+    for (int i = 0; i < n; i++) {
+        const Dugum *st = govde->veri.blok.deyimler[i];
+        if (!st || st->tip != DUGUM_DEGISKEN) continue;
+        if (!d543_ad_mi(st->veri.degisken.deger, "kanal_oluştur", 14)) continue;
+        const char *ad = st->veri.degisken.ad;
+        int uz = st->veri.degisken.ad_uzunluk;
+        int spawn = 0, join = 0, imha = 1;
+        if (!escape_kanal_hapsedilmis(govde, ad, uz, &spawn, &join, &imha)) continue;
+        if (imha != 0) continue;
+        if (join < spawn) continue;
+        /* [D-544] TAKMA AD KANITI: `gönderen(k)`/`alan(k)` AYNI handle'i verir.
+         * Kanali kanitlayip takma adi kanitlamamak SAGLAM DEGILDIR — `ver g`
+         * ile kanal cerceveyi asar ve serbest birakma UAF uretir.
+         * Her takma ad AYRICA hapsedilmis OLMALI; biri dusarse kanal listeye
+         * GIRMEZ (default-DENY, eski davranis = sizar ama UAF yok). */
+        int takma_ok = 1;
+        for (int j = 0; j < n && takma_ok; j++) {
+            const Dugum *t = govde->veri.blok.deyimler[j];
+            if (!t || t->tip != DUGUM_DEGISKEN) continue;
+            const Dugum *dv = t->veri.degisken.deger;
+            if (!dv || dv->tip != DUGUM_CAGRI || dv->veri.cagri.sayi < 1) continue;
+            if (!d543_ad_mi(dv, "gönderen", 9) && !d543_ad_mi(dv, "alan", 4)) continue;
+            const Dugum *a0 = dv->veri.cagri.argumanlar[0];
+            if (!a0 || a0->tip != DUGUM_TANIMLAYICI) continue;
+            if (a0->veri.tanimlayici.uzunluk != uz
+                || memcmp(a0->veri.tanimlayici.metin, ad, (size_t)uz) != 0) continue;
+            int s2 = 0, j2 = 0, i2 = 1;
+            if (!escape_kanal_hapsedilmis(govde, t->veri.degisken.ad,
+                                          t->veri.degisken.ad_uzunluk, &s2, &j2, &i2))
+                takma_ok = 0;
+        }
+        if (!takma_ok) continue;
+        adlar[say] = ad; uzlar[say] = uz; say++;
+    }
+    if (say > 0) { g->kanal_ad = adlar; g->kanal_uz = uzlar; g->kanal_sayi = say; }
+}
+static void kanal_serbest_emit(LlvmGen *g) {
+    for (int i = 0; i < g->kanal_sayi; i++) {
+        LlvmIsim *v = isim_bul(g, g->kanal_ad[i], g->kanal_uz[i]);
+        if (!v) continue;
+        int r = yeni_reg(g);
+        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", r, v->reg_no);
+        fprintf(g->out, "  call void @kdl_kanal_serbest(ptr %%%d)\n", r);
+    }
+}
 /* F4.2b (d): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
  * zaten materyalize/ρ_caller'da). NULL ρ_yerel → no-op. */
 static void rho_yerel_serbest_emit(LlvmGen *g) {
+    kanal_serbest_emit(g);   /* [D-543] kanal ONCE — bolge serbestinden sonra
+                              * slot okumak yanlis olurdu */
     if (g->rho_yerel) {
         fprintf(g->out, "  call void @kdl_bolge_serbest(ptr %s)\n", g->rho_yerel);
     }
@@ -741,6 +852,25 @@ static const char *kapanis_donus_ir_al(LlvmGen *g, const Dugum *tip_d) {
     return ast_tip_to_ir(g, dt);
 }
 
+/* D-625: closure imzasının i. parametre tip DÜĞÜMÜ (bkz. LlvmIsim.kapanis_imza).
+ * Bilinmiyorsa NULL → çağrı yeri eski davranışa (beklenensiz üretim) düşer. */
+static const Dugum *kapanis_param_tip(const Dugum *imza, int i) {
+    if (!imza || i < 0) return NULL;
+    if (imza->tip == DUGUM_TIP_ISLEV) {
+        if (i >= imza->veri.tip_islev.param_sayi) return NULL;
+        return imza->veri.tip_islev.parametreler[i];
+    }
+    if (imza->tip == DUGUM_LAMBDA) {
+        if (i >= imza->veri.lambda.param_sayi) return NULL;
+        const Dugum *pr = imza->veri.lambda.parametreler[i];
+        return pr ? pr->veri.parametre.tip : NULL;
+    }
+    return NULL;
+}
+static const Dugum *kapanis_imza_al(const Dugum *tip_d) {
+    return (tip_d && tip_d->tip == DUGUM_TIP_ISLEV) ? tip_d : NULL;
+}
+
 /* D-334: fat value ({ ptr fn, ptr env }) uzerinden DOLAYLI CAGRI — ORTAK yol.
  *
  * Bu yardimci, closure'in NEREDE durdugundan bagimsizdir: degisken, YAPI ALANI
@@ -785,7 +915,7 @@ static IfadeSonuc fat_cagri_uret(LlvmGen *g, int fv_reg, const char *donus,
     fprintf(g->out, "bb%d:\n", L_join);
     int rr = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", rr, donus, slot);
-    IfadeSonuc s = { rr, donus, 0 };
+    IfadeSonuc s = { rr, donus, 0, 0};
     return s;
 }
 
@@ -816,7 +946,23 @@ static const Dugum *yapi_alan_tip_dugumu(YapiKayit *yk,
  * COZUM: ayni tahmin HEM define'a (bl->beklenen_donus_ir) HEM cagri yerine
  * (kapanis_donus_ir) verilir → ikisi DAIMA ayni. Tahmin edilemeyen sekil NULL
  * doner → bugunku i32 davranisi (yeni sessizlik EKLENMEZ). */
-static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
+/* D-625: tahmin BAĞLAMI. Blok-form gövdede `ver x` çoğu zaman gövdenin KENDİ
+ * yereline ya da lambda parametresine bakar; eski tahmin adı yalnız DIŞ kapsamda
+ * (isim_bul) arıyordu → yerel bulunamıyor → NULL → i32 → `tam64` dönüş SESSİZCE
+ * KIRPILIYORDU (ölçüldü: `değişken f = || { değişken x: tam64 = y + 42; ver x; }`
+ * host -O2 exit 1; -O0 x86'da rax üst yarısı TESADÜFEN korunduğu için doğru
+ * görünüyordu). Çözüm sırası = gölgeleme sırası: (1) bloktaki ÖNCEKİ `değişken`ler
+ * (sondan başa; annotasyon varsa onun IR'ı, yoksa değerinin tahmini — yalnız DAHA
+ * ÖNCEKİ bildirimlere bakarak, `değişken x = x + 1` sonlanır), (2) lambda
+ * parametreleri, (3) dış kapsam. */
+typedef struct {
+    const Dugum *blok;      /* NULL = blok bağlamı yok */
+    int sinir;              /* yalnız [0, sinir) aralığındaki deyimler görünür */
+    const Dugum *lambda;    /* NULL = parametre bağlamı yok */
+} TahminBaglam;
+
+static const char *lambda_donus_tahmin_b(LlvmGen *g, const Dugum *govde,
+                                         TahminBaglam bg) {
     if (!govde) return NULL;
     switch (govde->tip) {
         case DUGUM_METIN:     return "ptr";
@@ -824,8 +970,32 @@ static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
         case DUGUM_TAM:       return "i32";
         case DUGUM_MANTIKSAL: return "i32";
         case DUGUM_TANIMLAYICI: {
-            LlvmIsim *vi = isim_bul(g, govde->veri.tanimlayici.metin,
-                                    govde->veri.tanimlayici.uzunluk);
+            const char *ad = govde->veri.tanimlayici.metin;
+            int uz = govde->veri.tanimlayici.uzunluk;
+            if (bg.blok) {
+                for (int i = bg.sinir - 1; i >= 0; i--) {
+                    const Dugum *st = bg.blok->veri.blok.deyimler[i];
+                    if (!st || st->tip != DUGUM_DEGISKEN) continue;
+                    if (st->veri.degisken.ad_uzunluk != uz ||
+                        memcmp(st->veri.degisken.ad, ad, (size_t)uz) != 0)
+                        continue;
+                    if (st->veri.degisken.tip)
+                        return ast_tip_to_ir(g, st->veri.degisken.tip);
+                    TahminBaglam ic = bg;
+                    ic.sinir = i;                  /* yalnız DAHA ÖNCEKİLER */
+                    return lambda_donus_tahmin_b(g, st->veri.degisken.deger, ic);
+                }
+            }
+            if (bg.lambda) {
+                for (int i = 0; i < bg.lambda->veri.lambda.param_sayi; i++) {
+                    const Dugum *pr = bg.lambda->veri.lambda.parametreler[i];
+                    if (pr && pr->veri.parametre.ad_uzunluk == uz &&
+                        memcmp(pr->veri.parametre.ad, ad, (size_t)uz) == 0)
+                        return pr->veri.parametre.tip
+                             ? ast_tip_to_ir(g, pr->veri.parametre.tip) : NULL;
+                }
+            }
+            LlvmIsim *vi = isim_bul(g, ad, uz);
             return (vi && vi->llvm_tip) ? vi->llvm_tip : NULL;
         }
         case DUGUM_CAGRI: {
@@ -840,17 +1010,27 @@ static const char *lambda_donus_tahmin(LlvmGen *g, const Dugum *govde) {
             return NULL;
         }
         case DUGUM_IKILI:     /* aritmetik: sol operandin tipi */
-            return lambda_donus_tahmin(g, govde->veri.ikili.sol);
+            return lambda_donus_tahmin_b(g, govde->veri.ikili.sol, bg);
         case DUGUM_BLOK: {    /* blok-form: ILK `ver` deyiminin degeri */
             for (int i = 0; i < govde->veri.blok.sayi; i++) {
                 const Dugum *st = govde->veri.blok.deyimler[i];
-                if (st && st->tip == DUGUM_VER)
-                    return lambda_donus_tahmin(g, st->veri.ver.deger);
+                if (st && st->tip == DUGUM_VER) {
+                    TahminBaglam ic = bg;
+                    ic.blok = govde;
+                    ic.sinir = i;
+                    return lambda_donus_tahmin_b(g, st->veri.ver.deger, ic);
+                }
             }
             return NULL;
         }
         default: return NULL;   /* bilinmeyen → tahmin YOK (eski davranis) */
     }
+}
+
+/* Lambda düğümünden tahmin (parametreler de bağlamda). */
+static const char *lambda_donus_tahmin_l(LlvmGen *g, const Dugum *lam) {
+    TahminBaglam bg = { NULL, 0, lam };
+    return lambda_donus_tahmin_b(g, lam->veri.lambda.govde, bg);
 }
 
 /* D-294: tip düğümü `görev<T>` ise T'nin IR tipini döner, değilse NULL.
@@ -1006,7 +1186,7 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
     if (!cesit_payload_var(cd)) {
         int r = yeni_reg(g);
         fprintf(g->out, "  %%%d = add %s 0, %d\n", r, disc, vi);
-        IfadeSonuc s = { r, disc, 0 };
+        IfadeSonuc s = { r, disc, 0, 0};
         return s;
     }
     const char *agg = cesit_struct_ir(g, cd);
@@ -1065,6 +1245,18 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
             g->beklenen_tip = cd->veri.cesit.varyant_payload_tipleri[vi][j];
             if (pl_subst) g->substler = pl_subst;
         }
+        /* [D-572] Payload tipi `Dizi<T>` ise beklenen tip GECIRILMELI: yoksa
+         * ciplak `[..]` literali DUGUM_DIZI_OLUSTUR'un stack `[N x T]` yoluna
+         * duser, ama `esles` tarafi payload'i OPAK `ptr` olarak alip HEAP
+         * erisimcisiyle (`kdl_dizi_al_tam`) okur -> yigin verisi KdlDizi
+         * basligi sanilir. Olculdu: `dizi_boyut` 1/39 (dogrusu 2), `dizi_al`
+         * SEGV — hicbir `guvensiz` blok yokken. Self-host heap-uniform oldugu
+         * icin ZATEN dogruydu (parite ters yonde, D-442 sinifi).
+         * DAR: yalniz dizi payload'i; diger payload konumlari degismedi. */
+        else {
+            const Dugum *pt = cd->veri.cesit.varyant_payload_tipleri[vi][j];
+            if (pt && pt->tip == DUGUM_TIP_DIZI) g->beklenen_tip = pt;
+        }
         IfadeSonuc pv = ifade_uret(g, cagri->veri.cagri.argumanlar[j], pir);
         g->beklenen_tip = pl_eski_bt;
         g->substler = pl_eski_subst;
@@ -1081,7 +1273,7 @@ static IfadeSonuc cesit_yapici_uret(LlvmGen *g, const Dugum *cd, int vi,
     }
     int lr = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lr, agg, ar);
-    IfadeSonuc s = { lr, agg, 0 };
+    IfadeSonuc s = { lr, agg, 0, 0};
     return s;
 }
 
@@ -1343,11 +1535,18 @@ static const Dugum *dizi_tip_sar(LlvmGen *g, const Dugum *eleman_ast) {
  * (i64/ptr ayrı; i8/i16/i32 → tam varyantı, i32 genişlikte taşınır). dizi_al/
  * dizi_yaz built-in'leri ile `[]` lowering'i AYNI seçimi paylaşsın diye ortak. */
 static const char *kdl_al_fn(const char *et) {
+    /* [D-451] kesirli eleman: bit-desen TASIYICI tamsayida saklanir
+     * (double->i64, float->i32). Runtime bayt genisligi zaten dogru
+     * (kdl_dizi_olustur eleman_byte), yalniz ERISIMCI SONEKI yanlisti. */
+    if (et && strcmp(et, "double") == 0) return "kdl_dizi_al_tam64";
+    if (et && strcmp(et, "float") == 0) return "kdl_dizi_al_tam";
     if (et && strcmp(et, "i64") == 0) return "kdl_dizi_al_tam64";
     if (et && strcmp(et, "ptr") == 0) return "kdl_dizi_al_ptr";
     return "kdl_dizi_al_tam";
 }
 static const char *kdl_yaz_fn(const char *et) {
+    if (et && strcmp(et, "double") == 0) return "kdl_dizi_yaz_tam64";   /* [D-451] */
+    if (et && strcmp(et, "float") == 0) return "kdl_dizi_yaz_tam";      /* [D-451] */
     if (et && strcmp(et, "i64") == 0) return "kdl_dizi_yaz_tam64";
     if (et && strcmp(et, "ptr") == 0) return "kdl_dizi_yaz_ptr";
     return "kdl_dizi_yaz_tam";
@@ -1366,6 +1565,32 @@ static const char *kdl_al_donus_ir(const char *et) {
  * memcpy) yolundan gitmelidir. Fat value'yu skaler sanmak, 16 baytlik
  * agregati `kdl_dizi_ekle_tam(i32)` imzasina gecirirdi (olculdu: LLVM bunu
  * SESSIZCE kabul ediyordu → bozuk dizi). */
+/* [D-451] Kesirli dizi elemani icin TASIYICI tamsayi tipi; kesirli degilse NULL.
+ *
+ * Runtime'in dizi API'si tamsayi/isaretci tasir (kdl_dizi_*_tam / _tam64 / _ptr).
+ * `Dizi<kesirli64>` icin eleman BAYT GENISLIGI zaten dogruydu (kdl_dizi_olustur
+ * eleman_byte = 8) — yanlis olan yalnizca ERISIMCI SONEGIYDI: `double` deger
+ * `_tam` (i32) imzasina geciriliyordu. Bellek guvenligi sorunu YOKTU (genislik
+ * dogru), yalnizca degerler bozuluyordu; su anda ise LLVM-RED (olculdu).
+ *
+ * Cozum RUNTIME DEGISIKLIGI GEREKTIRMEZ: `_tam64` 8 bayti int64 olarak
+ * tasir, yani BITLER korunur. Derleyici yaz yolunda `bitcast double -> i64`,
+ * oku yolunda `bitcast i64 -> double` yapar. kesirli32 icin ayni sey i32 ile. */
+static const char *dizi_kesirli_tasiyici(const char *et) {
+    if (!et) return NULL;
+    if (strcmp(et, "double") == 0) return "i64";
+    if (strcmp(et, "float") == 0) return "i32";
+    return NULL;
+}
+
+/* [D-451] `%r = bitcast <src> %<reg> to <dst>` yay; yeni reg dondur. */
+static int dizi_bitcast_emit(LlvmGen *g, int reg,
+                             const char *src, const char *dst) {
+    int r = yeni_reg(g);
+    fprintf(g->out, "  %%%d = bitcast %s %%%d to %s\n", r, src, reg, dst);
+    return r;
+}
+
 static int dizi_eleman_struct_mi(const char *et) {
     if (!et) return 0;
     if (et[0] == '%') return 1;
@@ -1433,7 +1658,7 @@ static IfadeSonuc dizi_struct_al_emit(LlvmGen *g, int desc_reg, int idx_i32,
         desc_reg, idx_i32, dst);
     int rr = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", rr, et, dst);
-    IfadeSonuc s = { rr, et, 0 };
+    IfadeSonuc s = { rr, et, 0, 0};
     return s;
 }
 static void dizi_struct_yaz_emit(LlvmGen *g, int desc_reg, int idx_i32,
@@ -1483,15 +1708,28 @@ static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
             dizi_struct_ekle_emit(g, kdl_reg, v.reg, elem_ir);
             continue;
         }
-        int vr = int_donustur(g, v.reg, v.tip, elem_ir);
-        const char *fn = "kdl_dizi_ekle_tam";
-        if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-        else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        /* [D-451] kesirli eleman → tasiyici tamsayiya bitcast; erisimci
+         * sonegi tasiyiciya gore. `[1.5, 2.5]` literal dizisi de bu yoldan. */
+        const char *kt_lit = dizi_kesirli_tasiyici(elem_ir);
+        const char *ekle_tip = elem_ir;
+        int vr;
+        const char *fn;
+        if (kt_lit) {
+            vr = dizi_bitcast_emit(g, v.reg, elem_ir, kt_lit);
+            ekle_tip = kt_lit;
+            fn = (strcmp(kt_lit, "i64") == 0)
+                 ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+        } else {
+            vr = int_donustur(g, v.reg, v.tip, elem_ir);
+            fn = "kdl_dizi_ekle_tam";
+            if (strcmp(elem_ir, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+            else if (strcmp(elem_ir, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+        }
         fprintf(g->out, "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                fn, dizi_rho, kdl_reg, elem_ir, vr);   /* F4.2b: aynı ρ */
+                fn, dizi_rho, kdl_reg, ekle_tip, vr);   /* F4.2b: aynı ρ */
     }
     g->beklenen_tip = eski_bt;
-    IfadeSonuc s = { kdl_reg, "ptr", 0 };
+    IfadeSonuc s = { kdl_reg, "ptr", 0, 0};
     return s;
 }
 
@@ -1544,7 +1782,84 @@ static int int_donustur(LlvmGen *g, int src_reg, const char *src_tip,
 }
 
 /* D-005: AST tip dugumu isaretsiz tamsayi (dtamN) mi? */
+/* [D-449] AST tip dugumu KEMGU `metin` mi? `sabitsüre<metin>` gibi seffaf
+ * sarmalayicilar acilir (D-446 ile ayni gerekce: sarmalayici runtime'da T'dir).
+ * `&metin` ve `Dizi<metin>` KASITLI olarak metin DEGIL — `==` yalnizca DOGRUDAN
+ * metin degerlerinde icerik karsilastirmasina doner; referans/dizi kimlik
+ * semantigini degistirmek ayri bir karardir. */
+/* [D-459] Yerlesik cagri sonucu GERCEK bir dizgi mi?
+ *
+ * NEDEN KURATE LISTE, "donus tipi metin mi" DEGIL: tip tablosunda `metin`
+ * donen 21 yerlesik var ama hepsi DIZGI DEGIL --
+ *   · `bellek_al` / `bellek_kopyala` -> HAM BELLEK
+ *   · `dosya_ac` / `kilit_olustur` / `semafor_olustur` / `bariyer_olustur`
+ *     -> OPAK HANDLE
+ * Bunlari icerik karsilastirmasina sokmak YANLIS olurdu (`bellek_al(8) ==
+ * bellek_al(8)` isaretci esitligi sormalidir; olculdu: iki derleyici de
+ * dogru davraniyordu, bu liste o dogrulugu KORUR).
+ *
+ * ⚠ Bu listenin AYNISI `selfhost/codegen.kem`deki `ifade_metin`in CAGRI
+ * dalindadir. Ikisi ayrisirsa `codegen_diff` sessizce kayar (D-407: ayni
+ * soruyu iki yerde ayri yanitlayan kod er ya da gec ayrisir) -- birini
+ * degistirirken digerini de degistir. */
+static int builtin_metin_donus_mu(const char *ad, int uz) {
+    static const char *liste[] = {
+        "metin_birlestir", "metin_kes", "metin_kirp", "metin_yer_degistir",
+        "metin_kucuk", "metin_buyuk",
+        "metin_kucuk_tr", "metin_buyuk_tr",
+        "metin_kucuk_ascii", "metin_buyuk_ascii",
+        "dosya_oku", "dosya_gecersiz", "arg_al", "ondalik_bicimle",
+        "kesirli_metin",   /* D-457 */
+        "kod_metin",       /* D-458 */
+        "tam_metin"        /* D-459 */
+    };
+    size_t i;
+    if (!ad || uz <= 0) return 0;
+    for (i = 0; i < sizeof(liste) / sizeof(liste[0]); i++) {
+        if ((int)strlen(liste[i]) == uz && memcmp(liste[i], ad, (size_t)uz) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static int ast_tip_metin_mi(const Dugum *tip_d) {
+    while (tip_d && tip_d->tip == DUGUM_TIP_SABITSURE) {
+        tip_d = tip_d->veri.tip_sabitsure.ic_tip;
+    }
+    if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
+    return tip_d->veri.tip_basit.ad_uzunluk == 5 &&
+           memcmp(tip_d->veri.tip_basit.ad, "metin", 5) == 0;
+}
+
+/* [D-449] Bir tip dugumu `metin` mi — GENERIC PARAM ise aktif substitusyondan.
+ * `Dizi<T>` elemani T=metin instantiation'inda metin sayilmali. */
+static int tip_metin_mi_subst(LlvmGen *g, const Dugum *tip_d) {
+    if (ast_tip_metin_mi(tip_d)) return 1;
+    if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
+    const char *a = tip_d->veri.tip_basit.ad;
+    int u = tip_d->veri.tip_basit.ad_uzunluk;
+    for (TipSubst *ss = g->substler; ss; ss = ss->sonraki) {
+        if (ss->ad_uz == u && memcmp(ss->ad, a, (size_t)u) == 0) {
+            return ss->metin_mi;
+        }
+    }
+    return 0;
+}
+
 static int ast_tip_isaretsiz_mi(const Dugum *tip_d) {
+    /* [D-446] `sabitsüre<T>` runtime'da T'dir (zero-overhead) — IMZASIZLIK da
+     * T'den gelir. `ast_tip_to_ir` bu sarmalayiciyi ZATEN aciyordu (yukarida),
+     * bu yuklem ACMIYORDU: `sabitsüre<dtam32>` DUGUM_TIP_BASIT olmadigi icin
+     * hemen 0 donuyor, yani IMZALI sayiliyordu. Sonuc: `>>` `lshr` yerine
+     * `ashr` yayiliyordu ve stdlib/kripto TAMAMEN `sabitsüre<dtamN>` uzerine
+     * kurulu oldugu icin SHA-256/ChaCha20 rotasyonlari yuksek bit set olan
+     * girdilerde SESSIZCE YANLIS sonuc veriyordu (bilinen-cevap kapisi
+     * olculdu: ChaCha20 QR ve SHA-256("abc") ikisi de KIRMIZI).
+     * Olcum (C oracle): dtam32 param -> lshr, sabitsüre<dtam32> param -> ashr;
+     * yerel degiskende de ayni. Yani kusur TAM OLARAK bu sarmalayicidaydi. */
+    while (tip_d && tip_d->tip == DUGUM_TIP_SABITSURE) {
+        tip_d = tip_d->veri.tip_sabitsure.ic_tip;
+    }
     if (!tip_d || tip_d->tip != DUGUM_TIP_BASIT) return 0;
     return tip_d->veri.tip_basit.ad_uzunluk >= 4 &&
            memcmp(tip_d->veri.tip_basit.ad, "dtam", 4) == 0;
@@ -1706,6 +2021,7 @@ static void islev_kayit(LlvmGen *g, const Dugum *i) {
     r->donus_tip = dt ? dt : "void";
     /* D-005: dtamN donusu cagri sonucuna tasinir */
     r->donus_isaretsiz = ast_tip_isaretsiz_mi(i->veri.islev.donus_tipi);
+    r->donus_metin = ast_tip_metin_mi(i->veri.islev.donus_tipi);   /* [D-449] */
     r->sonraki = g->islevler;
     g->islevler = r;
 }
@@ -1728,6 +2044,22 @@ static IslevKayit *islev_bul(LlvmGen *g, const char *ad, int ad_uz) {
  * IR ad uzayini duzlestirir. */
 static const char *modul_mangle(LlvmGen *g, const char *onek, int onek_uz,
                                 const char *ad, int ad_uz, int *out_uz) {
+    /* [D-584] Dosya-modulun ADI TAM YOLDUR (`a::b::c`) — `kullan` cozumu onu
+     * oyle arar (tip_kontrol.c `kullan_isle`), yani orada degistirilemez.
+     * IR ONEKI ise SON SEGMENTTIR: self-host kaynak-duzeyi sarmal
+     * (`modül <ad> { .. }`) kullaniyor ve `::` bir TANIMLAYICIYA giremez ->
+     * orada yapisal olarak yalniz son segment mumkun. Tam yolu IR'a tasimak
+     * C'ye `@"a::b.f"`, self'e `@b.f` yaydiriyordu (olculdu).
+     * Kirpma BURADA yapilir: hem kayit hem ARAMA ayni yardimciyi cagirir,
+     * yani ikisi tanim geregi hizali kalir (D-407). Ic ice (satir ici) modul
+     * onekleri `.` ile kurulur ve `::` ICERMEZ -> onlara dokunulmaz. */
+    for (int i = 0; i + 1 < onek_uz; i++) {
+        if (onek[i] == ':' && onek[i + 1] == ':') {
+            onek += i + 2;
+            onek_uz -= i + 2;
+            i = -1;   /* dongu basindan: birden cok `::` olabilir */
+        }
+    }
     char *m = (char *)arena_ayir(g->arena,
                                  (size_t)onek_uz + 1 + (size_t)ad_uz + 1);
     if (!m) return NULL;
@@ -1777,6 +2109,27 @@ static const Dugum *heap_dizi_eleman_ast(LlvmGen *g, const Dugum *nesne) {
     case DUGUM_ERISIM:
         return dizi_alan_eleman_ast(g, nesne);
     case DUGUM_CAGRI: {
+        /* [D-438] `dizi_al(X, i)` YERLESIGI: eleman tipi X.eleman.eleman.
+         * Bu dal olmadan ic ice `dizi_al(dizi_al(d,0),0)` eleman tipini
+         * KAYBEDER -> i32 fallback -> `Dizi<Dizi<metin>>`de ic dizi
+         * elemanini ptr yerine i32 okur -> SEGFAULT. D-437 ile AYNI
+         * SINIF (erisimci soneki) ama AYRI kaynak: orada payload
+         * BAGLAMASI, burada ISIMSIZ ARA DEGER. Cesitle ILGISIZ —
+         * cesitsiz de coker (olculdu), D-437 onariminin yan etkisi
+         * DEGIL. Ara degiskene alininca calisiyordu (bagli isim tip
+         * tasir); bu dal ayni bilgiyi ifade zincirinde kurtarir. */
+        if (nesne->veri.cagri.hedef &&
+            nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+            nesne->veri.cagri.hedef->veri.tanimlayici.uzunluk == 7 &&
+            memcmp(nesne->veri.cagri.hedef->veri.tanimlayici.metin,
+                   "dizi_al", 7) == 0 &&
+            nesne->veri.cagri.sayi >= 1) {
+            const Dugum *ic = heap_dizi_eleman_ast(g,
+                nesne->veri.cagri.argumanlar[0]);
+            if (ic && ic->tip == DUGUM_TIP_DIZI)
+                return ic->veri.tip_dizi.eleman_tip;
+            return NULL;
+        }
         if (nesne->veri.cagri.hedef &&
             nesne->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
             const char *ad = nesne->veri.cagri.hedef->veri.tanimlayici.metin;
@@ -1845,6 +2198,22 @@ static void modul_uyeleri_kayit(LlvmGen *g, const Dugum *m,
             kopya->veri.islev.ad = mangled;
             kopya->veri.islev.ad_uzunluk = muz;
             islev_kayit(g, kopya);
+        } else if (uye->tip == DUGUM_SABIT) {
+            /* [D-583] Modul sabitleri de kaydedilmeli — yoksa secili/alias
+             * import ile gelen bir `sabit` referansi codegen'de "tanimsiz
+             * tanimlayici" verir (islev yolu calisiyordu, sabit yolu YOK).
+             * Ad islev ile AYNI semada mangle edilir; referans yeri
+             * cozum_modul_onek ile once mangled adi arar. */
+            int muz = 0;
+            const char *mangled = modul_mangle(g, onek, onek_uz,
+                uye->veri.sabit.ad, uye->veri.sabit.ad_uzunluk, &muz);
+            if (!mangled) continue;
+            Dugum *kopya = (Dugum *)arena_ayir(g->arena, sizeof(Dugum));
+            if (!kopya) continue;
+            *kopya = *uye;
+            kopya->veri.sabit.ad = mangled;
+            kopya->veri.sabit.ad_uzunluk = muz;
+            sabit_kayit(g, kopya);
         } else if (uye->tip == DUGUM_MODUL) {
             int yeni_uz = 0;
             const char *yeni_onek = modul_mangle(g, onek, onek_uz,
@@ -2078,7 +2447,7 @@ static IfadeSonuc hata(LlvmGen *g, const char *mesaj) {
     fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
     fprintf(stderr, "codegen hatasi (desteklenmeyen sekil): %s\n", mesaj);
     g->hata_sayisi++;
-    IfadeSonuc s = { r, "i32", 0 };
+    IfadeSonuc s = { r, "i32", 0, 0};
     return s;
 }
 
@@ -2110,7 +2479,7 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out,
                 "  %%%d = insertvalue { ptr, ptr } %%%d, ptr null, 1\n", r, t0);
-            IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
+            IfadeSonuc s = { r, "{ ptr, ptr }", 0, 0 };
             return s;
         }
         /* D-252: küresel değişken → @ad'den load (mutable global; sabit gibi
@@ -2125,14 +2494,25 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
             yerel_ad_yaz(g->out, d->veri.tanimlayici.metin,
                          d->veri.tanimlayici.uzunluk);
             fputc('\n', g->out);
-            IfadeSonuc s = { r, ir, 0 };
+            IfadeSonuc s = { r, ir, 0, 0};
             return s;
         }
         /* Ust duzey sabit mi? Deger ifadesini inline et. Boylece ayni
          * dosyadaki ve `kullan` ile yuklenen sabitler codegen'de cozulur
          * (cross-file "; HATA: tanimsiz tanimlayici" sorununun kok cozumu). */
-        SabitKayit *sk = sabit_bul(g, d->veri.tanimlayici.metin,
-                                   d->veri.tanimlayici.uzunluk);
+        /* [D-583] Resolver bu adi bir MODUL uyesine bagladiysa once
+         * mangled adi ara (cagri yolunun aynasi, ~4886). Duz ad fallback'i
+         * korunur: legacy duzlestirme ve ayni dosya sabitleri oradan gelir. */
+        SabitKayit *sk = NULL;
+        if (d->cozum_kategori == COZUM_MODUL_UYESI && d->cozum_modul_onek) {
+            int muz = 0;
+            const char *mangled = modul_mangle(g, d->cozum_modul_onek,
+                d->cozum_modul_onek_uz, d->veri.tanimlayici.metin,
+                d->veri.tanimlayici.uzunluk, &muz);
+            if (mangled) sk = sabit_bul(g, mangled, muz);
+        }
+        if (!sk) sk = sabit_bul(g, d->veri.tanimlayici.metin,
+                                d->veri.tanimlayici.uzunluk);
         if (sk && sk->deger) {
             const char *sb = beklenen;
             if (!sb && sk->tip) sb = ast_tip_to_ir(g, sk->tip);
@@ -2143,7 +2523,7 @@ static IfadeSonuc tanimlayici_yukle(LlvmGen *g, const Dugum *d,
     int r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
             r, i->llvm_tip, i->reg_no);
-    IfadeSonuc s = { r, i->llvm_tip, i->isaretsiz };
+    IfadeSonuc s = { r, i->llvm_tip, i->isaretsiz, i->metin_mi };   /* [D-449] */
     return s;
 }
 
@@ -2213,7 +2593,7 @@ static IfadeSonuc metin_lit_uret(LlvmGen *g, const Dugum *d) {
     fprintf(g->out,
         "  %%%d = getelementptr [%d x i8], ptr @.str.%d, i32 0, i32 0\n",
         r, s->byte_uz + 1, s->id);
-    IfadeSonuc res = { r, "ptr", 0 };
+    IfadeSonuc res = { r, "ptr", 0, 1 };   /* [D-449] literal = metin */
     return res;
 }
 
@@ -2274,7 +2654,7 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", load_r, yapi_ir, alloca_r);
     g->substler = mono_eski_subst;   /* D-307: subst geri al */
-    IfadeSonuc s = { load_r, yapi_ir, 0 };
+    IfadeSonuc s = { load_r, yapi_ir, 0, 0};
     return s;
 }
 
@@ -2613,7 +2993,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
         int r = yeni_reg(g);
         fprintf(g->out, "  %%%d = extractvalue %s %%%d, %d\n",
                 r, nesne.tip, nesne.reg, idx);
-        IfadeSonuc s = { r, alan_ir, alan_isz };
+        IfadeSonuc s = { r, alan_ir, alan_isz, 0};
         return s;
     }
     /* Ptr ise: GEP + load */
@@ -2629,7 +3009,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
     int load_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
             load_r, alan_ir, gep_r);
-    IfadeSonuc s = { load_r, alan_ir, alan_isz };
+    IfadeSonuc s = { load_r, alan_ir, alan_isz, 0};
     return s;
 }
 
@@ -2809,7 +3189,7 @@ static IfadeSonuc yapici_uret(LlvmGen *g, const char *yad, int yuz,
     }
     int lr = yeni_reg(g);
     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lr, agg, ar);
-    IfadeSonuc s = { lr, agg, 0 };
+    IfadeSonuc s = { lr, agg, 0, 0};
     return s;
 }
 
@@ -2896,6 +3276,10 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
     int tps = gislev->veri.islev.tip_param_sayi;
     const char **tip_args = (const char **)arena_ayir(g->arena,
         sizeof(const char *) * (size_t)tps);
+    /* [D-449] tip argumanlarinin metin-ligi (IR dizgisi bunu silmez ama
+     * "ptr" her seyi ayni gosterir) — arena_ayir_sifir: varsayilan 0. */
+    int *tip_args_metin = (int *)arena_ayir_sifir(g->arena,
+        sizeof(int) * (size_t)tps);
     /* Her generic param icin: parametrelerde T'yi bulan ilk arg tipinden
      * çıkar */
     for (int ti = 0; ti < tps; ti++) {
@@ -2912,6 +3296,9 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                 int puz = pt->veri.tip_basit.ad_uzunluk;
                 if (puz == tp_uz && memcmp(pad, tp, (size_t)tp_uz) == 0) {
                     inferred = args[pi].tip;
+                    if (tip_args_metin) {       /* [D-449] */
+                        tip_args_metin[ti] = args[pi].metin_mi;
+                    }
                 }
                 continue;
             }
@@ -2933,6 +3320,75 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                         arg_d->veri.tanimlayici.uzunluk);
                     if (vi && vi->pointee_llvm_tip) {
                         inferred = vi->pointee_llvm_tip;
+                    }
+                }
+                continue;
+            }
+            /* [D-535] (c) `xs: Dizi<T>` param: arg'in ELEMAN tipinden.
+             * EKSIKTI ve SESSIZ YANLIS CEVAP uretiyordu — olculdu:
+             *   islev al_ilk<T>(xs: Dizi<T>, v: T) -> T { ver dizi_al(xs,0); }
+             *   Dizi<tam64> + 2^33  ->  call i32 @al_ilk$i32  ->  exit 1
+             *   ayni is GENERIC'SIZ ->  exit 42
+             * Derleme temiz, link temiz, program KOSUYOR ve YANLIS deger
+             * veriyor. D-411'in "fallback yanlissa hata GURULTULU kalir,
+             * sessiz yanlis cevaba donusmez" iddiasi BU SEKILDE CURUDU.
+             * ⚠ `Dizi<T>` stdlib/dizi.kem'in TAMAMININ dayandigi sekildir —
+             *   (a) `*T` ve (b) `&Kullanici<T>` zaten vardi, en yaygin olan
+             *   yoktu. Yanindaki (a) yorumu bu sinifi zaten "SESSIZ HEAP
+             *   OVERFLOW" diye aniyordu.
+             * Eleman tipi `eleman_llvm_tip` yan-kanalindan gelir (D-442);
+             * yoksa DOKUNMA -> eski i32 fallback (default-DENY). */
+            if (pt->tip == DUGUM_TIP_DIZI &&
+                pt->veri.tip_dizi.eleman_tip &&
+                pt->veri.tip_dizi.eleman_tip->tip == DUGUM_TIP_BASIT) {
+                const Dugum *et = pt->veri.tip_dizi.eleman_tip;
+                if (et->veri.tip_basit.ad_uzunluk == tp_uz &&
+                    memcmp(et->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0 &&
+                    arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *vi = isim_bul(g,
+                        arg_d->veri.tanimlayici.metin,
+                        arg_d->veri.tanimlayici.uzunluk);
+                    if (vi && vi->eleman_llvm_tip) {
+                        inferred = vi->eleman_llvm_tip;
+                    }
+                }
+            }
+            /* [D-536] (d) `k: Kutu<T>` param — DEGER olarak generic yapi.
+             * (b) YALNIZ `&Kullanici<T>`yi kapsiyordu; deger konumu ACIKTI ve
+             * D-535'in AYNI sinifini uretiyordu (olculdu, HER IKI derleyicide):
+             *   yapi Kutu<T> { icerik: T; }
+             *   islev al<T>(k: Kutu<T>) -> T { ver k.icerik; }
+             *   Kutu<tam64> + 2^33 -> @al$i32 (oysa @olustur$i64 DOGRU)
+             *   -> exit 1. Derleme temiz, link temiz, program KOSUYOR.
+             * Yapi IR'i type-erased oldugu icin T `generic_arg_ir` yan-
+             * kanalindan gelir — (b) ile AYNI kaynak, referans soyma adimi yok.
+             * Kanal yoksa DOKUNMA -> i32 fallback (default-DENY). */
+            if (pt->tip == DUGUM_TIP_KULLANICI &&
+                pt->veri.tip_kullanici.tip_arg_sayi == 1 &&
+                pt->veri.tip_kullanici.tip_arg[0] &&
+                pt->veri.tip_kullanici.tip_arg[0]->tip == DUGUM_TIP_BASIT) {
+                const Dugum *ta = pt->veri.tip_kullanici.tip_arg[0];
+                if (ta->veri.tip_basit.ad_uzunluk == tp_uz &&
+                    memcmp(ta->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0) {
+                    if (arg_d && arg_d->tip == DUGUM_TANIMLAYICI) {
+                        LlvmIsim *vi = isim_bul(g,
+                            arg_d->veri.tanimlayici.metin,
+                            arg_d->veri.tanimlayici.uzunluk);
+                        if (vi && vi->generic_arg_ir) {
+                            inferred = vi->generic_arg_ir;
+                        }
+                    }
+                    /* [D-539] Arg TANIMLAYICI degilse (ic ice cagri:
+                     * `al(olustur(b))`) yan-kanal YOK — ama argumanin
+                     * DEGERLENDIRILMIS IR tipi zaten `%Kutu$i64`dir ve
+                     * MANGLE EDILMIS AD T'yi tasir. Sonek'ten oku.
+                     * ⚠ BU BIR "GUZELLESTIRME" DEGILDI: fallback `al$i32`
+                     * istiyordu, `%Kutu$i32` HIC ORNEKLENMEDIGI icin tip
+                     * OPAK kaliyor -> `Cannot allocate unsized type` =
+                     * GECERLI PROGRAM DERLENMIYOR (D-464/D-518 sinifi). */
+                    if (!inferred && args[pi].tip) {
+                        const char *d1 = strrchr(args[pi].tip, '$');
+                        if (d1 && d1[1]) inferred = d1 + 1;
                     }
                 }
                 continue;
@@ -3005,6 +3461,14 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                     g->arena, sizeof(const char *) * (size_t)tps);
                 for (int j = 0; j < tps; j++) kopya[j] = tip_args[j];
                 bs->tip_args = kopya;
+                if (tip_args_metin) {           /* [D-449] */
+                    int *mk = (int *)arena_ayir_sifir(
+                        g->arena, sizeof(int) * (size_t)tps);
+                    if (mk) {
+                        for (int j = 0; j < tps; j++) mk[j] = tip_args_metin[j];
+                        bs->tip_args_metin = mk;
+                    }
+                }
                 bs->sonraki = g->bekleyenler;
                 g->bekleyenler = bs;
             }
@@ -3051,7 +3515,7 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
         fputs(")\n", g->out);
         int r0 = yeni_reg(g);
         fprintf(g->out, "  %%%d = add i32 0, 0\n", r0);
-        IfadeSonuc s0 = { r0, "i32", 0 };
+        IfadeSonuc s0 = { r0, "i32", 0, 0};
         return s0;
     }
     int r = yeni_reg(g);
@@ -3064,24 +3528,31 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
         fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
     }
     fputs(")\n", g->out);
-    IfadeSonuc s = { r, donus_t, 0 };
+    IfadeSonuc s = { r, donus_t, 0, 0};
     return s;
 }
 
 static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                               const char *beklenen) {
     if (!d) {
-        IfadeSonuc s = { yeni_reg(g), "i32", 0 };
+        IfadeSonuc s = { yeni_reg(g), "i32", 0, 0};
         fprintf(g->out, "  %%%d = add i32 0, 0\n", s.reg);
         return s;
     }
 
     switch (d->tip) {
         case DUGUM_TAM: {
-            const char *tip = beklenen ? beklenen : "i32";
+            /* D-630: bağlamsız literal checker ile AYNI kuralla genişletilir
+             * (≤2^31-1 → i32, ≤2^63-1 → i64, üstü → i64 İŞARETSİZ). Eskiden
+             * daima i32 → `değişken x = 8589934592` SESSİZCE kırpılıyordu. */
+            uint64_t lv;
+            memcpy(&lv, &d->veri.tam.deger, sizeof lv);
+            const char *bagsiz = lv <= 2147483647ULL ? "i32" : "i64";
+            int lit_isz = (!beklenen && lv > 9223372036854775807ULL);
+            const char *tip = beklenen ? beklenen : bagsiz;
             int w = tip_genisligi(tip);
             int kf = tip_kesirli_mi(tip);
-            if (w == 0 && !kf) tip = "i32";
+            if (w == 0 && !kf) tip = bagsiz;
             int r = yeni_reg(g);
             if (kf) {
                 fprintf(g->out, "  %%%d = fadd %s 0.0, %" PRId64 ".0\n",
@@ -3090,7 +3561,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = add %s 0, %" PRId64 "\n",
                         r, tip, d->veri.tam.deger);
             }
-            IfadeSonuc s = { r, tip, 0 };
+            IfadeSonuc s = { r, tip, lit_isz, 0};
             return s;
         }
 
@@ -3105,7 +3576,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = add %s 0, %d\n",
                         r, tip, d->veri.mantiksal.deger ? 1 : 0);
             }
-            IfadeSonuc s = { r, tip, 0 };
+            IfadeSonuc s = { r, tip, 0, 0};
             return s;
         }
 
@@ -3113,7 +3584,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = add i32 0, %u\n",
                     r, d->veri.karakter.kod_noktasi);
-            IfadeSonuc s = { r, "i32", 0 };
+            IfadeSonuc s = { r, "i32", 0, 0};
             return s;
         }
 
@@ -3124,20 +3595,38 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* LLVM IR ondalik literali her zaman decimal point gerektirir.
              * %g 2.0'i "2" yapabilir — emin olmak icin formatla, sonra
              * gerekirse ".0" ekle. */
+            /* [D-457] "%g" ALTI anlamli basamak verir -> `3.14159265358979`
+             * IR'a `3.14159` olarak yaziliyordu: DERLEME ZAMANINDA SESSIZ VERI
+             * KAYBI. `kesirli_kisa_bicimle` (ast.c) kisa gidis-donus yapar ve
+             * ayni yardimciyi `--ast` dokumu de kullanir (TEK KAYNAK, D-407).
+             * 2.0 hala "2" uretir -> asagidaki ".0" eki KORUNUR. */
             char buf[64];
-            int n = snprintf(buf, sizeof(buf), "%g", d->veri.kesirli.deger);
-            int decimal_var = 0;
+            int n = kesirli_kisa_bicimle(d->veri.kesirli.deger,
+                                         buf, sizeof(buf));
+            /* [D-518] NOKTA MANTISTE OLMALI — `e` ONU SAGLAMAZ.
+             * Onceki kosul `'e'`yi "ondalik var" sayiyordu, oysa LLVM noktayi
+             * MANTISTE ister: `1e+30` GECERSIZDIR ("integer constant must have
+             * integer type") ve `1.5e+300` gecerlidir. Sonuc: `%.15g`in ustel
+             * bicime dustugu HER literal (|x| >= 1e15, kucuk kesirler) programi
+             * LINK-RED yapiyordu — gecerli bir KEMGU programi derlenmiyordu.
+             * ⚠ `.0`i SONA eklemek YANLIS: `1e+30.0` da gecersizdir (self-host
+             *   tam bunu yapiyordu). Ustel varsa nokta `e`den ONCE girer. */
+            int exp_i = -1, nokta_var = 0, ozel = 0;
             for (int i = 0; i < n; i++) {
-                if (buf[i] == '.' || buf[i] == 'e' ||
-                    buf[i] == 'E' || buf[i] == 'n' /* nan/inf */) {
-                    decimal_var = 1; break;
+                if (buf[i] == '.') nokta_var = 1;
+                else if (buf[i] == 'e' || buf[i] == 'E') { exp_i = i; break; }
+                else if (buf[i] == 'n' || buf[i] == 'i') { ozel = 1; break; }
+            }
+            if (!ozel && !nokta_var && n + 3 < (int)sizeof(buf)) {
+                if (exp_i < 0) {                 /* 2 -> 2.0 */
+                    buf[n] = '.'; buf[n+1] = '0'; buf[n+2] = '\0';
+                } else {                         /* 1e+30 -> 1.0e+30 */
+                    memmove(buf + exp_i + 2, buf + exp_i, (size_t)(n - exp_i) + 1);
+                    buf[exp_i] = '.'; buf[exp_i + 1] = '0';
                 }
             }
-            if (!decimal_var && n + 3 < (int)sizeof(buf)) {
-                buf[n] = '.'; buf[n+1] = '0'; buf[n+2] = '\0';
-            }
             fprintf(g->out, "  %%%d = fadd %s 0.0, %s\n", r, tip, buf);
-            IfadeSonuc s = { r, tip, 0 };
+            IfadeSonuc s = { r, tip, 0, 0};
             return s;
         }
 
@@ -3165,6 +3654,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 /* payloadsuz çeşit → disc; payload çeşit → struct
                  * (bare varyant: yalnız disc, payload alanları undef). */
                 return cesit_yapici_uret(g, yk->ast, idx, NULL, 0);
+            }
+            /* [D-586] Nitelikli / alias'li MODUL SABITI: `m::K`, `sm::K`.
+             * D-583 modul sabitlerini `<onek>.<ad>` ile kaydetti; resolver
+             * YOL dugumune de cozum_modul_onek yaziyor (cagri yolu ~4186 ayni
+             * bilgiyi kullanir). Binding yoksa noktali ada dus. Oncesinde bu
+             * sekil gurultulu reddediliyordu; self-host ise SESSIZCE 0 okuyordu. */
+            {
+                SabitKayit *sk = NULL;
+                if (d->cozum_kategori == COZUM_MODUL_UYESI && d->cozum_modul_onek) {
+                    int muz = 0;
+                    const char *mangled = modul_mangle(g, d->cozum_modul_onek,
+                        d->cozum_modul_onek_uz, d->veri.yol.sag_ad,
+                        d->veri.yol.sag_ad_uzunluk, &muz);
+                    if (mangled) sk = sabit_bul(g, mangled, muz);
+                }
+                if (!sk) {
+                    char tam_ad[256];
+                    int tuz = yol_noktali_ad(d, tam_ad, (int)sizeof(tam_ad));
+                    if (tuz > 0) sk = sabit_bul(g, tam_ad, tuz);
+                }
+                if (sk && sk->deger) {
+                    const char *sb = beklenen;
+                    if (!sb && sk->tip) sb = ast_tip_to_ir(g, sk->tip);
+                    return ifade_uret(g, sk->deger, sb);
+                }
             }
             return hata(g, "yol ifadesi desteklenmiyor (cesit disi)");
         }
@@ -3200,7 +3714,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             if (n == 0) {
                 int alloca_r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = alloca [0 x i8]\n", alloca_r);
-                IfadeSonuc s = { alloca_r, "ptr", 0 };
+                IfadeSonuc s = { alloca_r, "ptr", 0, 0};
                 return s;
             }
 
@@ -3226,7 +3740,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                         elem_ir, er, gepi);
             }
-            IfadeSonuc s = { alloca_r, "ptr", 0 };
+            IfadeSonuc s = { alloca_r, "ptr", 0, 0};
             return s;
         }
 
@@ -3255,13 +3769,29 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         return dizi_struct_al_emit(g, v_load, idx_r, et);
                     }
                     const char *fn = "kdl_dizi_al_tam";
+                    /* [D-451] kesirli eleman: tasiyici tamsayi oku + bitcast.
+                     * Bu INDEKSLEME yolu (`xs[i]`), `dizi_al` yerlesiginden
+                     * AYRI bir kod noktasidir — ikisini de onarmak sart
+                     * (olculdu: yalniz yerlesigi onarinca `xs[0]+xs[1]` 44). */
+                    const char *kt_ix = dizi_kesirli_tasiyici(et);
+                    if (kt_ix) {
+                        fn = (strcmp(kt_ix, "i64") == 0)
+                             ? "kdl_dizi_al_tam64" : "kdl_dizi_al_tam";
+                        int raw = yeni_reg(g);
+                        fprintf(g->out,
+                            "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                            raw, kt_ix, fn, v_load, idx_r);
+                        int fr = dizi_bitcast_emit(g, raw, kt_ix, et);
+                        IfadeSonuc sf = { fr, et, 0, 0};
+                        return sf;
+                    }
                     if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                     else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
                     int rr = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                         rr, et, fn, v_load, idx_r);
-                    IfadeSonuc s = { rr, et, 0 };
+                    IfadeSonuc s = { rr, et, 0, 0};
                     return s;
                 }
                 /* v1 bölge-container: *T tabani — eleman tipi POINTEE'den
@@ -3294,7 +3824,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                         rr, rt, kdl_al_fn(et), base.reg, idx_r);
-                    IfadeSonuc s = { rr, rt, 0 };
+                    IfadeSonuc s = { rr, rt, 0, 0};
                     return s;
                 }
             }
@@ -3330,7 +3860,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int load_r = yeni_reg(g);
             fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
                     load_r, elem_ir, gep_r);
-            IfadeSonuc s = { load_r, elem_ir, 0 };
+            IfadeSonuc s = { load_r, elem_ir, 0, 0};
             return s;
         }
 
@@ -3373,7 +3903,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "bb%d:\n", L_son);
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = load i1, ptr %%%d\n", r, slot);
-                IfadeSonuc s = { r, "i1", 0 };
+                IfadeSonuc s = { r, "i1", 0, 0};
                 return s;
             }
             const char *cmp_i = icmp_pred(d->veri.ikili.op);
@@ -3390,6 +3920,31 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                         sag.isaretsiz);
             }
             int kesirli = tip_kesirli_mi(sol.tip);
+            /* [D-449] `metin` uzerinde ==/!= ICERIK karsilastirir.
+             * Oncesinde `icmp eq ptr` yayiliyordu = ISARETCI karsilastirmasi:
+             * literaller tekillestirildigi icin literal<->literal TESADUFEN
+             * dogru, hesaplanmis metinde SESSIZCE YANLIS (D-440). Ayrica
+             * `dizi.kem`in generic aramalari (`icerir<T>`, `bul<T>`,
+             * `indeks_bul<T>`) `x == hedef` uzerine kurulu oldugu icin
+             * `Dizi<metin>` aramasi TAMAMEN BOZUKTU (olculdu).
+             * IKI operand da metin olmali — biri metin digeri ham isaretci ise
+             * eski davranis korunur (tip kontrolu zaten karisimi reddeder). */
+            if ((d->veri.ikili.op == OP_ESIT ||
+                 d->veri.ikili.op == OP_ESIT_DEGIL) &&
+                sol.metin_mi && sag.metin_mi) {
+                int r_eq = yeni_reg(g);
+                fprintf(g->out,
+                    "  %%%d = call i1 @kdl_metin_esit(ptr %%%d, ptr %%%d)\n",
+                    r_eq, sol.reg, sag_r);
+                if (d->veri.ikili.op == OP_ESIT_DEGIL) {
+                    int r_not = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = xor i1 %%%d, true\n",
+                            r_not, r_eq);
+                    r_eq = r_not;
+                }
+                IfadeSonuc s = { r_eq, "i1", 0, 0 };
+                return s;
+            }
             if (cmp_i) {
                 if (isz) cmp_i = icmp_pred_u(d->veri.ikili.op);
                 int r_cmp = yeni_reg(g);
@@ -3402,7 +3957,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = icmp %s %s %%%d, %%%d\n",
                             r_cmp, cmp_i, sol.tip, sol.reg, sag_r);
                 }
-                IfadeSonuc s = { r_cmp, "i1", 0 };
+                IfadeSonuc s = { r_cmp, "i1", 0, 0};
                 return s;
             }
             const char *op = NULL;
@@ -3428,10 +3983,73 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fputs("  ; ikili op desteklenmiyor\n", g->out);
                     return sol;
             }
+            /* [D-502] SIFIRA BOLME KORUYUCUSU — cokmezlik degismezi.
+             * OLCULDU (D-501): korumasiz sdiv/srem alti seklin altisinda da
+             * SIGFPE (exit 136) veriyordu; tani YOK, panik mesaji YOK, ve duz
+             * literal 10/0 bile --check ten temiz geciyordu.
+             * MEKANIZMA dizi sinir ihlaliyle BIREBIR (D-069): inline icmp + br
+             * + kdl_panik(noreturn) + unreachable. Yeni tani kodu YOK, tip
+             * degisikligi YOK — dil zaten dizi icin panik SECMISTI.
+             * ⚠ YALNIZ TAMSAYI: kesirli 0-bolme IEEE-754 te TANIMLI (inf/nan),
+             *   tuzak DEGIL -> korunmaz.
+             * ⚠ SABIT SIFIR-OLMAYAN bolende kontrol YAYILMAZ (yaygin durum;
+             *   gereksiz dal). Sifir literalinde YAYILIR ki 10/0 da temiz dursun. */
+            if (!kesirli && (d->veri.ikili.op == OP_BOLU || d->veri.ikili.op == OP_MOD)
+                && !(d->veri.ikili.sag && d->veri.ikili.sag->tip == DUGUM_TAM
+                     && d->veri.ikili.sag->veri.tam.deger != 0)) {
+                int z_r = yeni_reg(g);
+                fprintf(g->out, "  %%%d = icmp eq %s %%%d, 0\n",
+                        z_r, sol.tip, sag_r);
+                int L_z = yeni_label(g);
+                int L_ok = yeni_label(g);
+                fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                        z_r, L_z, L_ok);
+                fprintf(g->out, "bb%d:\n", L_z);
+                fprintf(g->out,
+                    "  call void @kdl_panik(ptr @.str.sifir_bolme_panik)\n");
+                fprintf(g->out, "  unreachable\n");
+                fprintf(g->out, "bb%d:\n", L_ok);
+            }
+            /* [D-513] KAYDIRMA MIKTARI KORUYUCUSU — cokmezlik degismezi.
+             * OLCULDU: korumasiz `shl/ashr/lshr` miktar >= bit genisliginde
+             * LLVM POISON uretiyordu ve sonuc OPTIMIZASYON SEVIYESINE BAGLIYDI
+             * (dort sekilde de -O0 exit=0, -O2 exit=1 — AYNI PROGRAM, AYNI IR).
+             * Bu SARMA DEGIL, UB'dir: aritmetik tasma (`add`, nsw/nuw YOK)
+             * tanimli sarmadir ve -O0/-O2'de KARARLIDIR; kaydirma degildir.
+             * MEKANIZMA sifira bolme (D-502) ve dizi siniri (D-069) ile BIREBIR.
+             * Yeni tani kodu YOK, tip degisikligi YOK.
+             * ⚠ TEK KARSILASTIRMA YETER: `icmp uge` ISARETSIZ oldugu icin
+             *   NEGATIF miktar da (0-1 -> 0xFFFFFFFF) yakalanir.
+             * ⚠ SABIT ve ARALIKTA olan miktarda kontrol YAYILMAZ (yaygin durum,
+             *   gereksiz dal). Aralik disi sabitte YAYILIR ki `a << 40` da
+             *   temiz dursun. */
+            if ((d->veri.ikili.op == OP_SOLA_KAYDIR
+                 || d->veri.ikili.op == OP_SAGA_KAYDIR)
+                && sol.tip && sol.tip[0] == 'i') {
+                int genislik = atoi(sol.tip + 1);
+                const Dugum *sd = d->veri.ikili.sag;
+                int sabit_guvenli = (sd && sd->tip == DUGUM_TAM
+                                     && sd->veri.tam.deger >= 0
+                                     && sd->veri.tam.deger < genislik);
+                if (genislik > 0 && !sabit_guvenli) {
+                    int k_r = yeni_reg(g);
+                    fprintf(g->out, "  %%%d = icmp uge %s %%%d, %d\n",
+                            k_r, sol.tip, sag_r, genislik);
+                    int L_k = yeni_label(g);
+                    int L_ko = yeni_label(g);
+                    fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                            k_r, L_k, L_ko);
+                    fprintf(g->out, "bb%d:\n", L_k);
+                    fprintf(g->out,
+                        "  call void @kdl_panik(ptr @.str.kaydirma_panik)\n");
+                    fprintf(g->out, "  unreachable\n");
+                    fprintf(g->out, "bb%d:\n", L_ko);
+                }
+            }
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = %s %s %%%d, %%%d\n",
                     r, op, sol.tip, sol.reg, sag_r);
-            IfadeSonuc s = { r, sol.tip, isz };
+            IfadeSonuc s = { r, sol.tip, isz, 0};
             return s;
         }
 
@@ -3454,7 +4072,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         op_d->veri.tanimlayici.metin,
                         op_d->veri.tanimlayici.uzunluk);
                     if (vi) {
-                        IfadeSonuc s = { vi->reg_no, "ptr", 0 };
+                        IfadeSonuc s = { vi->reg_no, "ptr", 0, 0};
                         return s;
                     }
                 }
@@ -3463,7 +4081,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = alloca %s\n", t, v.tip);
                 fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                         v.tip, v.reg, t);
-                IfadeSonuc s = { t, "ptr", 0 };
+                IfadeSonuc s = { t, "ptr", 0, 0};
                 return s;
             }
             /* Audit fix #1: OP_DEREFERANS — *p ham pointer YUKU.
@@ -3521,10 +4139,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     strcmp(beklenen, yuk_tip) != 0 &&
                     yuk_tip[0] == 'i' && beklenen[0] == 'i') {
                     int rc = int_donustur_im(g, r, yuk_tip, beklenen, deref_isz);
-                    IfadeSonuc sc = { rc, beklenen, deref_isz };
+                    IfadeSonuc sc = { rc, beklenen, deref_isz, 0};
                     return sc;
                 }
-                IfadeSonuc s = { r, yuk_tip, deref_isz };
+                IfadeSonuc s = { r, yuk_tip, deref_isz, 0};
                 return s;
             }
             IfadeSonuc op_s = ifade_uret(g, d->veri.tekli.operand, beklenen);
@@ -3537,7 +4155,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = sub %s 0, %%%d\n",
                             r, op_s.tip, op_s.reg);
                 }
-                IfadeSonuc s = { r, op_s.tip, 0 };
+                IfadeSonuc s = { r, op_s.tip, 0, 0};
                 return s;
             }
             if (d->veri.tekli.op == OP_DEGIL) {
@@ -3547,13 +4165,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     r = yeni_reg(g);
                     fprintf(g->out, "  %%%d = xor i1 %%%d, true\n",
                             r, op_s.reg);
-                    IfadeSonuc s = { r, "i1", 0 };
+                    IfadeSonuc s = { r, "i1", 0, 0};
                     return s;
                 }
                 r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = icmp eq %s %%%d, 0\n",
                         r, op_s.tip, op_s.reg);
-                IfadeSonuc s = { r, "i1", 0 };
+                IfadeSonuc s = { r, "i1", 0, 0};
                 return s;
             }
             if (d->veri.tekli.op == OP_BIT_DEGIL) {
@@ -3561,7 +4179,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = xor %s %%%d, -1\n",
                         r, op_s.tip, op_s.reg);
-                IfadeSonuc s = { r, op_s.tip, 0 };
+                IfadeSonuc s = { r, op_s.tip, 0, 0};
                 return s;
             }
             fputs("  ; tekli op desteklenmiyor\n", g->out);
@@ -3635,7 +4253,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
-                IfadeSonuc s = { r, donus, 0 };
+                IfadeSonuc s = { r, donus, 0, 0};
                 return s;
             }
             /* C3: çeşit varyant YAPICISI X::V(args) — modül-fonksiyon YOL
@@ -3746,10 +4364,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (vd) {
                         r = yeni_reg(g);
                         fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                        IfadeSonuc s = { r, "i32", 0 };
+                        IfadeSonuc s = { r, "i32", 0, 0};
                         return s;
                     }
-                    IfadeSonuc s = { r, donus, 0 };
+                    IfadeSonuc s = { r, donus, 0, 0};
                     return s;
                 }
                 /* cozulemedi — mevcut hata yoluna dus (gorunur yorum) */
@@ -3810,9 +4428,39 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if ((_is_olustur || _is_ifsa) && d->veri.cagri.sayi == 1) {
                     IfadeSonuc inner = ifade_uret(g,
                         d->veri.cagri.argumanlar[0], beklenen);
-                    /* x86 lfence speculation barrier — Spectre v1 mitigation.
-                     * Modern LLVM intrinsic; declare gerekmez (built-in). */
-                    fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+                    /* [D-468] SPEKULASYON BARIYERI — MIMARIYE GORE.
+                     *
+                     * ONCEDEN x86 `lfence` KOSULSUZ yayiliyordu; `--mimari
+                     * aarch64`te bile. `llvm.x86.sse2.lfence` ARM64 hedefinde
+                     * GECERSIZDIR -> sabit-sure disiplini kullanan her program
+                     * ARM'da derlenmezdi. Simdi gizli kaliyor cunku ARM
+                     * kapilari `sabitsure` KULLANMIYOR (D-453'te olculdu:
+                     * sha256_selfhost_arm 86 dtam32, 0 sabitsure) -- yani
+                     * kusur LATENT. ARM64'e (DGX Spark) tasinirken host
+                     * testleri de ARM derlenecegi icin YUZEYE CIKARDI.
+                     *
+                     * ARM64 karsiligi `csdb` (Consumption of Speculative Data
+                     * Barrier) -- ARM'in Spectre-v1 icin RESMI onerisi ve
+                     * `lfence`in bu koddaki amaciyla birebir ayni. Adaylar
+                     * OLCULDU (aarch64-unknown-none-elf ile derlenerek):
+                     *   csdb (inline asm)      -> `csdb`      ✅ SECILDI
+                     *   llvm.aarch64.isb(15)   -> `isb`       komut senk., agir
+                     *   llvm.aarch64.dsb(15)   -> `dsb sy`    tam veri bariyeri
+                     *   sb (inline asm)        -> ARMv8.5 GEREKIR, REDDEDILDI
+                     * `csdb` hint uzayindadir -> destegi olmayan eski
+                     * cekirdeklerde NOP'a duser (guvenli bozulma). */
+                    /* ⚠ ETIKET "arm64"dur, "aarch64" DEGIL (ana.c
+                     * `llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf")`
+                     * -- ilki ETIKET, ikincisi TRIPLE). Ilk yazimda "aarch64"
+                     * ile karsilastirmistim: kosul HIC TUTMAZDI ve ARM64'te
+                     * yine x86 lfence yayilirdi. Iki ad da kabul edilir. */
+                    if (strcmp(llvm_hedef_mimari(), "arm64") == 0 ||
+                        strcmp(llvm_hedef_mimari(), "aarch64") == 0) {
+                        fputs("  call void asm sideeffect \"csdb\", \"\"()\n",
+                              g->out);
+                    } else {
+                        fputs("  call void @llvm.x86.sse2.lfence()\n", g->out);
+                    }
                     return inner;
                 }
                 /* Linear Types V1: tekkez_olustur(e) -> tekkez<T>.
@@ -3858,9 +4506,28 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = mul i64 %%%d, %%%d\n",
                             tot, n64, szi);
                     int buf = yeni_reg(g);
-                    fprintf(g->out,
-                        "  %%%d = call ptr @malloc(i64 %%%d)\n", buf, tot);
-                    IfadeSonuc s = { buf, "ptr", 0 };
+                    /* [D-494] F4.4 ILK ADIMI — "gercek arena V2" (kodun kendi
+                     * yorumu). ONCEDEN KOSULSUZ ham `malloc` yayiliyordu ve
+                     * SONUC HIC SERBEST EDILMIYORDU (LeakSanitizer D-483'te
+                     * gorunur kildi; Windows'ta LSan YOKTU, sizinti 3 yildir
+                     * oradaydi).
+                     *
+                     * ⚠ SAGLAMLIK: ρ_yerel YALNIZ POZITIF hapsedilme kaniti
+                     * varken kullanilir (D-309/D-488 deseni). Kanit yoksa ESKI
+                     * yol (malloc) AYNEN korunur -> sizar ama UAF YOK.
+                     * "sizinti bir hata, UAF bir felaket" (escape.c'nin kendi
+                     * takasi). Kanit `ky_confined` ile kurulur ve `&p` KACIS
+                     * sayilir, `*p` sayilmaz (D-494 deref ayrimi). */
+                    if (g->aktif_escape && g->rho_yerel
+                        && escape_kesin_yerel(g->aktif_escape, d)) {
+                        fprintf(g->out,
+                            "  %%%d = call ptr @kdl_bolge_ayir(ptr %s, i64 %%%d)\n",
+                            buf, g->rho_yerel, tot);
+                    } else {
+                        fprintf(g->out,
+                            "  %%%d = call ptr @malloc(i64 %%%d)\n", buf, tot);
+                    }
+                    IfadeSonuc s = { buf, "ptr", 0, 0};
                     return s;
                 }
             }
@@ -3909,7 +4576,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = load %%kdl_yetki, ptr %%%d\n", r, sret);
-                    IfadeSonuc s = { r, "%kdl_yetki", 0 };
+                    IfadeSonuc s = { r, "%kdl_yetki", 0, 0};
                     return s;
                 }
                 /* delege(y, izin) -> %kdl_yetki */
@@ -3947,7 +4614,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = load %%kdl_yetki, ptr %%%d\n", r, sret);
-                    IfadeSonuc s = { r, "%kdl_yetki", 0 };
+                    IfadeSonuc s = { r, "%kdl_yetki", 0, 0};
                     return s;
                 }
                 /* geri_al(y) -> void — y bir tanimlayici ise alloca'ya pointer ver */
@@ -3977,7 +4644,32 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         "  call void @kdl_yetki_geri_al(ptr %%%d)\n",
                         ptr_reg);
                     /* Donus: void/i32 0 (geri_al donus tipi bos) */
-                    IfadeSonuc s = { 0, "void", 0 };
+                    IfadeSonuc s = { 0, "void", 0, 0};
+                    return s;
+                }
+                /* [D-466] soket_baglan(y, host, port) -> ptr (opak handle).
+                 * ⚠ YETKI ARGUMANI IR'A GECMEZ: derleme-zamani ispatidir
+                 * (mmio deseni). Onek-tabanli eslemeye BIRAKILAMAZ -- o,
+                 * ucunu de gecirirdi ve `kdl_soket_baglan(host, port)` ile
+                 * arite uyusmazligi olusurdu; LLVM bunu SESSIZCE kabul eder
+                 * (D-295) ve cagri yanlis registerlardan okurdu. */
+                if (_uz == 12 && memcmp(_ca, "soket_baglan", 12) == 0 &&
+                    d->veri.cagri.sayi == 3) {
+                    IfadeSonuc h = ifade_uret(g,
+                        d->veri.cagri.argumanlar[1], "ptr");
+                    IfadeSonuc pt = ifade_uret(g,
+                        d->veri.cagri.argumanlar[2], "i32");
+                    int p32 = int_donustur(g, pt.reg, pt.tip, "i32");
+                    int r = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call ptr @kdl_soket_baglan(ptr %%%d, i32 %%%d)\n",
+                        r, h.reg, p32);
+                    /* ⚠ metin_mi = 0: handle OPAK ISARETCIDIR, dizgi DEGIL.
+                     * 1 verseydik `==` icerik karsilastirmasina donerdi ve
+                     * `kdl_metin_esit(FILE*-benzeri, ...)` isaretciyi dizgi
+                     * gibi okurdu -- D-459'un kurate listesi handle'lari tam
+                     * bu yuzden disarida birakiyor. */
+                    IfadeSonuc s = { r, "ptr", 0, 0 };
                     return s;
                 }
                 /* MMIO Foundation: mmio_oku32(y, adres) -> i32.
@@ -3993,7 +4685,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call i32 @kdl_mmio_oku32(i64 %%%d)\n",
                         r, adr64);
-                    IfadeSonuc s = { r, "i32", 0 };
+                    IfadeSonuc s = { r, "i32", 0, 0};
                     return s;
                 }
                 /* mmio_yaz32(y, adres, deger) -> void (volatile store) */
@@ -4008,7 +4700,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  call void @kdl_mmio_yaz32(i64 %%%d, i32 %%%d)\n",
                         adr64, val32);
-                    IfadeSonuc s = { 0, "void", 0 };
+                    IfadeSonuc s = { 0, "void", 0, 0};
                     return s;
                 }
                 /* mmio_oku16(y, adres) -> i16 (volatile 16-bit load — le16
@@ -4022,7 +4714,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call i16 @kdl_mmio_oku16(i64 %%%d)\n",
                         r, adr64);
-                    IfadeSonuc s = { r, "i16", 0 };
+                    IfadeSonuc s = { r, "i16", 0, 0};
                     return s;
                 }
                 /* mmio_yaz16(y, adres, deger) -> void (volatile 16-bit store) */
@@ -4037,7 +4729,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  call void @kdl_mmio_yaz16(i64 %%%d, i16 %%%d)\n",
                         adr64, val16);
-                    IfadeSonuc s = { 0, "void", 0 };
+                    IfadeSonuc s = { 0, "void", 0, 0};
                     return s;
                 }
                 /* mmio_oku64(y, adres) -> i64 (volatile 64-bit load — le64
@@ -4051,7 +4743,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = call i64 @kdl_mmio_oku64(i64 %%%d)\n",
                         r, adr64);
-                    IfadeSonuc s = { r, "i64", 0 };
+                    IfadeSonuc s = { r, "i64", 0, 0};
                     return s;
                 }
                 /* mmio_yaz64(y, adres, deger) -> void (volatile 64-bit store) */
@@ -4066,7 +4758,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  call void @kdl_mmio_yaz64(i64 %%%d, i64 %%%d)\n",
                         adr64, val64);
-                    IfadeSonuc s = { 0, "void", 0 };
+                    IfadeSonuc s = { 0, "void", 0, 0};
                     return s;
                 }
             }
@@ -4112,7 +4804,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         fprintf(g->out,
                             "  %%%d = shufflevector %s %%%d, %s undef, <%d x i32> zeroinitializer\n",
                             r2, beklenen, r1, beklenen, N);
-                        IfadeSonuc res = { r2, beklenen, 0 };
+                        IfadeSonuc res = { r2, beklenen, 0, 0};
                         /* beklenen mevcut hafıza yapısından kopyalanmalı çünkü
                          * stable ptr şart — alıcı zaten arena'da tutuyor */
                         return res;
@@ -4128,7 +4820,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out,
                         "  %%%d = shufflevector <4 x i32> %%%d, <4 x i32> undef, <4 x i32> zeroinitializer\n",
                         r2, r1);
-                    IfadeSonuc res = { r2, "<4 x i32>", 0 };
+                    IfadeSonuc res = { r2, "<4 x i32>", 0, 0};
                     return res;
                 }
 
@@ -4151,6 +4843,34 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             eleman_buf[len] = '\0';
                         }
                     }
+                    /* [D-546] LANE INDEKSI KORUYUCUSU — cokmezlik degismezi.
+                     * TEK KARSILASTIRMA YETER: `icmp uge` ISARETSIZDIR, yani negatif
+                     * indeks (0-1 -> 0xFFFFFFFF) ayni dala duser.
+                     * SABIT ve ARALIKTA olan indekste kontrol YAYILMAZ (yaygin durum,
+                     * gereksiz dal); aralik disi SABITTE yayilir ki vektor_eleman(v, 99)
+                     * da temiz dursun. */
+                    int lane = 0;
+                    if (vs.tip && vs.tip[0] == '<') lane = atoi(vs.tip + 1);
+                    {
+                        const Dugum *ix = d->veri.cagri.argumanlar[1];
+                        int sabit_guvenli = (ix && ix->tip == DUGUM_TAM
+                                             && ix->veri.tam.deger >= 0
+                                             && ix->veri.tam.deger < lane);
+                        if (lane > 0 && !sabit_guvenli) {
+                            int k_r = yeni_reg(g);
+                            fprintf(g->out, "  %%%d = icmp uge i32 %%%d, %d\n",
+                                    k_r, is.reg, lane);
+                            int L_k = yeni_label(g);
+                            int L_ko = yeni_label(g);
+                            fprintf(g->out, "  br i1 %%%d, label %%bb%d, label %%bb%d\n",
+                                    k_r, L_k, L_ko);
+                            fprintf(g->out, "bb%d:\n", L_k);
+                            fprintf(g->out,
+                                "  call void @kdl_panik(ptr @.str.vektor_panik)\n");
+                            fprintf(g->out, "  unreachable\n");
+                            fprintf(g->out, "bb%d:\n", L_ko);
+                        }
+                    }
                     int r = yeni_reg(g);
                     fprintf(g->out,
                         "  %%%d = extractelement %s %%%d, i32 %%%d\n",
@@ -4159,7 +4879,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     char *kalici = (char *)arena_ayir(g->arena,
                                                       strlen(eleman_buf) + 1);
                     if (kalici) strcpy(kalici, eleman_buf);
-                    IfadeSonuc res = { r, kalici ? kalici : "i32", 0 };
+                    IfadeSonuc res = { r, kalici ? kalici : "i32", 0, 0};
                     return res;
                 }
 
@@ -4209,7 +4929,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     char *kalici = (char *)arena_ayir(g->arena,
                                                       strlen(eleman_buf) + 1);
                     if (kalici) strcpy(kalici, eleman_buf);
-                    IfadeSonuc res = { r, kalici ? kalici : "i32", 0 };
+                    IfadeSonuc res = { r, kalici ? kalici : "i32", 0, 0};
                     return res;
                 }
             }
@@ -4254,6 +4974,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (adi_uz == 8 && memcmp(adi, "dizi_yaz", 8) == 0) {
                     dizi_deger_arg = 2;  /* dizi_yaz: değer = arg[2] */
                 }
+                /* [D-451] `dizi_al(d, i)`de arg[1] INDEKStir, ELEMAN DEGERI
+                 * DEGIL. Eleman tipini oraya forward etmek indeksi eleman
+                 * tipinde degerlendirir. Tamsayi elemanda MASKELI kalir
+                 * (int_donustur i64->i32 cevirir) ama `Dizi<kesirli64>`de
+                 * indeks literali `fadd double 0.0, 0.0` olarak dogar ve
+                 * `int_donustur` float->int cevirmedigi icin `i32 %<double>`
+                 * yayilir = LLVM-RED. Olculdu. */
+                if (dizi_al_mi) {
+                    dizi_deger_arg = -1;   /* eleman-degeri argumani YOK */
+                }
                 if (dizi_built_in && n >= 1) {
                     const Dugum *arg0 = d->veri.cagri.argumanlar[0];
                     if (arg0 && arg0->tip == DUGUM_TANIMLAYICI) {
@@ -4271,6 +5001,20 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         const char *et = dizi_alan_eleman_ir(g, arg0);
                         if (et) dizi_eleman_beklenen = et;
                         dizi_deger_eleman_ast = dizi_alan_eleman_ast(g, arg0);
+                    } else if (arg0) {
+                        /* [D-438] TANIMLAYICI/ERISIM disi arg0: ic ice
+                         * dizi_al, indeksleme ya da islev donusu. Ortak
+                         * heap_dizi_eleman_ast makinesinden cozulur.
+                         * Bu dal YOKTU -> eleman tipi kaybolup i32'ye
+                         * dusuyordu; Dizi<Dizi<metin>> icin ic elemani
+                         * ptr yerine i32 okuyup SEGFAULT veriyordu.
+                         * D-437 ile AYNI SINIF, AYRI kaynak. */
+                        const Dugum *ea = heap_dizi_eleman_ast(g, arg0);
+                        if (ea) {
+                            const char *et = ast_tip_to_ir(g, ea);
+                            if (et) dizi_eleman_beklenen = et;
+                            dizi_deger_eleman_ast = ea;
+                        }
                     }
                 }
             }
@@ -4333,8 +5077,23 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         for (int i = 0; i < n; i++) {
                             const char *ab = NULL;
                             if (i == dizi_deger_arg && dizi_eleman_beklenen) ab = dizi_eleman_beklenen;
+                            /* D-625: closure parametre tipi biliniyorsa argüman
+                             * O tiple doğar (literal genişliği) ve tamsayıda o
+                             * genişliğe uyarlanır — yoksa i64 parametreye kırpılmış
+                             * i32 geçer (LLVM dolaylı çağrıda imza denetlemez). */
+                            const Dugum *ptd = kapanis_param_tip(
+                                vi ? vi->kapanis_imza : NULL, i);
+                            const char *pir = ptd ? ast_tip_to_ir(g, ptd) : NULL;
+                            if (!ab && pir) ab = pir;
                             iargs[i] = ifade_uret(g,
                                 d->veri.cagri.argumanlar[i], ab);
+                            if (pir) {
+                                iargs[i].reg = int_donustur_im(g, iargs[i].reg,
+                                    iargs[i].tip, pir, ast_tip_isaretsiz_mi(ptd));
+                                if (tip_genisligi(iargs[i].tip) &&
+                                    tip_genisligi(pir))
+                                    iargs[i].tip = pir;
+                            }
                         }
                     }
                     /* D-293: dönüş tipini önce BİLDİRİLEN closure tipinden al
@@ -4417,13 +5176,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int rr = yeni_reg(g);
                     fprintf(g->out, "  %%%d = load %s, ptr %%%d\n",
                             rr, donus_indirect, slot);
-                    IfadeSonuc s = { rr, donus_indirect, 0 };
+                    IfadeSonuc s = { rr, donus_indirect, 0, 0};
                     return s;
                 }
             }
 
             const char *cagri_adi = d->veri.cagri.hedef->veri.tanimlayici.metin;
             int cagri_adi_uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+            /* [D-459] `cagri_adi` asagida `kdl_*`e YENIDEN YAZILIR; yerlesigin
+             * ORIJINAL adini metin-lik sorgusu icin sakla (bkz. 5482). */
+            const char *ozgun_cagri_adi = cagri_adi;
+            int ozgun_cagri_adi_uz = cagri_adi_uz;
             /* D-001: ik onek-fallback ile farkli (mangled) ad altinda
              * bulunduysa cagri adini ona cevir (@modul.ad). */
             if (ik && (ik->ad_uz != cagri_adi_uz ||
@@ -4450,8 +5213,30 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * her iki tipli parametreye de geçilir — böylece C tarafında
                  * fn-ptr cast'i (dolayısıyla -Wcast-function-type / -Wpedantic
                  * uyarısı) gerekmez. Bkz. kdl_runtime.c KdlGorevBare notu. */
+                /* D-624: BLOK-form kapanış doğrudan buraya verilirse lifted
+                 * lambda'nın dönüşü bağlamdan gelmeli — gelmezse emit i32'ye
+                 * düşer ve `görev<tam64>` sonucu SESSİZCE KIRPILIR (ölçüldü:
+                 * host -O2 exit 1, ARM64 `mov w0,#42`; -O0 x86'da rax'ın üst
+                 * yarısı TESADÜFEN korunduğu için doğru GÖRÜNÜYORDU). Runtime
+                 * ABI'si i64 taşır (KdlGorevBare) → tamsayı/bilinmeyen gövde
+                 * i64 döner (self-host D-300 ile aynı); ptr/double tahmini
+                 * korunur (metin T; kesirli T zaten DRF001 ile reddedilir).
+                 * İfade-form DOKUNULMAZ: o yol doğal tipi kullanır ve doğrudur. */
+                const char *eski_lbd_g = g->lambda_beklenen_donus;
+                const Dugum *g_arg = d->veri.cagri.argumanlar[0];
+                if (g_arg && g_arg->tip == DUGUM_LAMBDA &&
+                    g_arg->veri.lambda.govde &&
+                    g_arg->veri.lambda.govde->tip == DUGUM_BLOK) {
+                    const char *tah = lambda_donus_tahmin_l(g, g_arg);
+                    g->lambda_beklenen_donus =
+                        (tah && (strcmp(tah, "ptr") == 0 ||
+                                 strcmp(tah, "double") == 0 ||
+                                 strcmp(tah, "float") == 0 ||
+                                 strcmp(tah, "void") == 0)) ? tah : "i64";
+                }
                 IfadeSonuc c = ifade_uret(g, d->veri.cagri.argumanlar[0],
                                           "{ ptr, ptr }");
+                g->lambda_beklenen_donus = eski_lbd_g;
                 int fnr = yeni_reg(g);
                 fprintf(g->out,
                     "  %%%d = extractvalue { ptr, ptr } %%%d, 0\n", fnr, c.reg);
@@ -4505,7 +5290,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int r_load = yeni_reg(g);
                 fprintf(g->out, "  %%%d = load { i8, ptr, ptr }, ptr %%%d\n",
                     r_load, r_slot);
-                IfadeSonuc s = { r_load, "{ i8, ptr, ptr }", 0 };
+                IfadeSonuc s = { r_load, "{ i8, ptr, ptr }", 0, 0 };
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 17 &&
@@ -4547,7 +5332,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     "  %%%d = call i64 @kdl_gorev_birlestir(ptr %%%d)\n",
                     r64, gv.reg);
                 if (strcmp(t_ir, "i64") == 0) {
-                    IfadeSonuc s = { r64, "i64", 0 };
+                    IfadeSonuc s = { r64, "i64", 0, 0};
                     return s;
                 }
                 int r = yeni_reg(g);
@@ -4558,7 +5343,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     /* görev<boş>: sonuç yok — çağıran yine de bir IfadeSonuc
                      * bekler (built-in void-call desenindeki placeholder). */
                     fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                    IfadeSonuc s = { r, "i32", 0 };
+                    IfadeSonuc s = { r, "i32", 0, 0};
                     return s;
                 } else {
                     /* i1/i8/i16/i32 → trunc (i32 dönen lambda'nın üst 32 biti
@@ -4566,7 +5351,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = trunc i64 %%%d to %s\n",
                             r, r64, t_ir);
                 }
-                IfadeSonuc s = { r, t_ir, 0 };
+                IfadeSonuc s = { r, t_ir, 0, 0};
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 14 &&
@@ -4580,7 +5365,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_kanal_olustur(i32 %%%d)\n",
                     r, kap.reg);
-                IfadeSonuc s = { r, "ptr", 0 };
+                IfadeSonuc s = { r, "ptr", 0, 0};
                 return s;
             }
             if (!ik && n == 2 && cagri_adi_uz == 13 &&
@@ -4626,7 +5411,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * (built-in şeridindeki void-call deseninin aynısı). */
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                IfadeSonuc s = { r, "i32", 0 };
+                IfadeSonuc s = { r, "i32", 0, 0};
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 8 &&
@@ -4652,7 +5437,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call i64 @kdl_kanal_al(ptr %%%d)\n", a64, kv.reg);
                 if (strcmp(kt, "i64") == 0) {
-                    IfadeSonuc s = { a64, "i64", 0 };
+                    IfadeSonuc s = { a64, "i64", 0, 0};
                     return s;
                 }
                 int r = yeni_reg(g);
@@ -4663,7 +5448,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  %%%d = trunc i64 %%%d to %s\n",
                             r, a64, kt);
                 }
-                IfadeSonuc s = { r, kt, 0 };
+                IfadeSonuc s = { r, kt, 0, 0};
                 return s;
             }
             if (!ik && n == 1 && cagri_adi_uz == 6 &&
@@ -4741,12 +5526,27 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                        memcmp(cagri_adi, "yaz_tam64", 9) == 0) {
                 cagri_adi = "kdl_yaz_tam64"; cagri_adi_uz = 13;
                 param_beklenen[0] = "i64"; builtin_donus = "void";
+            /* [D-459] tam_metin `i64` alir -> eslemesi BU (ERKEN) merdivende
+             * OLMALI: `param_beklenen` argumanlar DEGERLENDIRILMEDEN once
+             * okunur (bkz. ~5082). Asagidaki gec merdivene koyunca deger
+             * `i32` olarak gecti ve LLVM bunu SESSIZCE kabul etti (D-295) ->
+             * `tam_metin(0 - 4207)` yanlis dizgi uretti. Iki merdiven var ve
+             * hangisine yazdigin ONEMLI. */
+            } else if (cagri_adi_uz == 9 &&
+                       memcmp(cagri_adi, "tam_metin", 9) == 0) {
+                cagri_adi = "kdl_tam_metin"; cagri_adi_uz = 13;
+                param_beklenen[0] = "i64"; builtin_donus = "ptr";
             } else if (cagri_adi_uz == 12 &&
                        memcmp(cagri_adi, "yazdir_metin", 12) == 0) {
                 /* Bare-metal hedef icin: yazdir_metin -> kdl_yazdir_metin
                  * (UART backend). Host hedefte ayni isim runtime/kdl_runtime.c
                  * fputs yoluna gider. */
                 cagri_adi = "kdl_yazdir_metin"; cagri_adi_uz = 16;
+                param_beklenen[0] = "ptr"; builtin_donus = "void";
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "yazdir_hata", 11) == 0) {
+                /* [D-450] STDERR — tanilar stdout'u kirletmemeli. */
+                cagri_adi = "kdl_yazdir_hata"; cagri_adi_uz = 15;
                 param_beklenen[0] = "ptr"; builtin_donus = "void";
             } else if (cagri_adi_uz == 20 &&
                        memcmp(cagri_adi, "yazdir_isaretsiz_tam", 20) == 0) {
@@ -4839,8 +5639,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (ik && ik->ast && ik->ast->tip == DUGUM_ISLEV &&
                         i < ik->ast->veri.islev.param_sayi) {
                         const Dugum *pp = ik->ast->veri.islev.parametreler[i];
+                        /* [D-465] `seçimlik<T>` / `sonuç<T,H>` parametreleri de
+                         * beklenen_tip kurmali. Oncesinde SADECE Dizi<T> vardi
+                         * (D-070) -> `f(hiç)` ve `f(değer(42))` yapicilari
+                         * cozulemiyordu: C "tanimsiz tanimlayici" ile durur,
+                         * self-host `@değer` tanimsiz IR yayar. Mekanizma
+                         * ZATEN VARDI (yapici_uret + beklenen_tip), yalnizca
+                         * kapisi dardi. */
                         if (pp && pp->veri.parametre.tip &&
-                            pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI) {
+                            (pp->veri.parametre.tip->tip == DUGUM_TIP_DIZI ||
+                             pp->veri.parametre.tip->tip == DUGUM_TIP_SECIMLIK ||
+                             pp->veri.parametre.tip->tip == DUGUM_TIP_SONUC)) {
                             g->beklenen_tip = pp->veri.parametre.tip;
                         }
                     }
@@ -4879,13 +5688,126 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 } else if ((n == 12 && memcmp(kdl_buf + 4, "metin_icerir", 12) == 0) ||
                            (n == 12 && memcmp(kdl_buf + 4, "metin_baslar", 12) == 0) ||
                            (n == 11 && memcmp(kdl_buf + 4, "metin_biter", 11) == 0) ||
-                           (n == 10 && memcmp(kdl_buf + 4, "metin_esit", 10) == 0)) {
+                           (n == 10 && memcmp(kdl_buf + 4, "metin_esit", 10) == 0) ||
+                           /* [D-459] yuklem: gecerli bir tamsayi metni mi */
+                           (n == 17 && memcmp(kdl_buf + 4, "metin_tam_gecerli", 17) == 0) ||
+                           /* [D-460] */
+                           (n == 21 && memcmp(kdl_buf + 4, "metin_kesirli_gecerli", 21) == 0)) {
                     kdl_donus = "i1";
+                } else if (n == 9 && memcmp(kdl_buf + 4, "metin_tam", 9) == 0) {
+                    kdl_donus = "i64";   /* [D-459] tam64 doner */
+                } else if (n == 13 && memcmp(kdl_buf + 4, "metin_kesirli", 13) == 0) {
+                    kdl_donus = "double";   /* [D-460] */
                 } else {
                     kdl_donus = "ptr";
                 }
             }
             /* Madde G: dosya_* built-in -> kdl_dosya_* */
+            /* [D-455] kilit_* -> kdl_kilit_* (dosya_* ile ayni onek deseni). */
+            else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "kilit_", 6) == 0) {
+                static char kdl_kilit_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_kilit_buf, "kdl_", 4);
+                memcpy(kdl_kilit_buf + 4, cagri_adi, (size_t)n);
+                kdl_kilit_buf[4 + n] = '\0';
+                cagri_adi = kdl_kilit_buf; cagri_adi_uz = 4 + n;
+                if (n == 13 && memcmp(kdl_kilit_buf + 4, "kilit_olustur", 13) == 0) {
+                    kdl_donus = "ptr";
+                } else {
+                    /* al / birak / yok: void, tek opak handle argumani */
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "void";
+                }
+            }
+            /* [D-458] kod_metin / kod_gecerli -> kdl_* (i32 alir) */
+            else if (cagri_adi_uz == 9 &&
+                     memcmp(cagri_adi, "kod_metin", 9) == 0) {
+                cagri_adi = "kdl_kod_metin"; cagri_adi_uz = 13;
+                param_beklenen[0] = "i32";
+                kdl_donus = "ptr";
+            }
+            else if (cagri_adi_uz == 11 &&
+                     memcmp(cagri_adi, "kod_gecerli", 11) == 0) {
+                cagri_adi = "kdl_kod_gecerli"; cagri_adi_uz = 15;
+                param_beklenen[0] = "i32";
+                /* `dosya_gecerli` (D-449) ile AYNI desen: runtime `int32_t`
+                 * doner (deger kesin 0/1), IR `i1` bildirir. */
+                kdl_donus = "i1";
+            }
+            /* [D-457] kesirli_metin -> kdl_kesirli_metin (double alir, ptr doner) */
+            else if (cagri_adi_uz == 13 &&
+                     memcmp(cagri_adi, "kesirli_metin", 13) == 0) {
+                cagri_adi = "kdl_kesirli_metin"; cagri_adi_uz = 17;
+                param_beklenen[0] = "double";
+                kdl_donus = "ptr";
+            }
+            /* [D-466] soket_* -> kdl_soket_*. `soket_baglan` YETKI argumani
+             * alir ama IR'da yetki TASINMAZ (checker'da tuketilmis bir
+             * kontroldur) -> runtime imzasi (host, port). */
+            /* ⚠ ONEK DEGIL TAM ESLESME: `memcmp(cagri_adi, "soket_", 6)`
+             * yazmistim ve derleyicinin KENDI yardimcisi `soket_kontrol`u
+             * (selfhost/codegen.kem icinde) de yakaladi -> `@kdl_soket_kontrol`
+             * tanimsiz (olculdu: self-host derlenemedi). Onek eslemesi
+             * ad-YAKALAYICIDIR; kapali bir kume icin tam eslesme sart. */
+            else if ((cagri_adi_uz == 12 &&
+                      memcmp(cagri_adi, "soket_baglan", 12) == 0) ||
+                     (cagri_adi_uz == 12 &&
+                      memcmp(cagri_adi, "soket_gonder", 12) == 0) ||
+                     (cagri_adi_uz == 8 &&
+                      memcmp(cagri_adi, "soket_al", 8) == 0) ||
+                     (cagri_adi_uz == 11 &&
+                      memcmp(cagri_adi, "soket_kapat", 11) == 0) ||
+                     (cagri_adi_uz == 13 &&
+                      memcmp(cagri_adi, "soket_gecerli", 13) == 0) ||
+                     (cagri_adi_uz == 17 &&
+                      memcmp(cagri_adi, "soket_zaman_asimi", 17) == 0) ||
+                     (cagri_adi_uz == 16 &&
+                      memcmp(cagri_adi, "soket_zaman_asti", 16) == 0)) {
+                static char kdl_sok_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_sok_buf, "kdl_", 4);
+                memcpy(kdl_sok_buf + 4, cagri_adi, (size_t)n);
+                kdl_sok_buf[4 + n] = '\0';
+                cagri_adi = kdl_sok_buf; cagri_adi_uz = 4 + n;
+                /* NOT: `soket_baglan` buraya ULASMAZ — yukaridaki intrinsic
+                 * onu daha once yakalar (yetki argumanini dusurmek icin). */
+                if (n == 8 && memcmp(kdl_sok_buf + 4, "soket_al", 8) == 0) {
+                    param_beklenen[0] = "ptr"; param_beklenen[1] = "i32";
+                    kdl_donus = "ptr";
+                } else if (n == 13 && memcmp(kdl_sok_buf + 4, "soket_gecerli", 13) == 0) {
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "i1";
+                } else if (n == 16 &&
+                           memcmp(kdl_sok_buf + 4, "soket_zaman_asti", 16) == 0) {
+                    kdl_donus = "i1";   /* [D-470] argumansiz yuklem */
+                } else if (n == 17 &&
+                           memcmp(kdl_sok_buf + 4, "soket_zaman_asimi", 17) == 0) {
+                    param_beklenen[0] = "ptr"; param_beklenen[1] = "i32";
+                    kdl_donus = "i32";
+                } else {
+                    /* gonder / kapat -> i32 */
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "i32";
+                }
+            }
+            /* [D-456] semafor_* / bariyer_* -> kdl_* (kilit_* ile ayni desen).
+             * `_olustur` tam32 alir + opak ptr doner; digerleri ptr alir, void. */
+            else if ((cagri_adi_uz >= 8 && memcmp(cagri_adi, "semafor_", 8) == 0) ||
+                     (cagri_adi_uz >= 8 && memcmp(cagri_adi, "bariyer_", 8) == 0)) {
+                static char kdl_snk_buf[64];
+                int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
+                memcpy(kdl_snk_buf, "kdl_", 4);
+                memcpy(kdl_snk_buf + 4, cagri_adi, (size_t)n);
+                kdl_snk_buf[4 + n] = '\0';
+                cagri_adi = kdl_snk_buf; cagri_adi_uz = 4 + n;
+                if (n == 15 && memcmp(kdl_snk_buf + 4 + 8, "olustur", 7) == 0) {
+                    param_beklenen[0] = "i32";
+                    kdl_donus = "ptr";
+                } else {
+                    param_beklenen[0] = "ptr";
+                    kdl_donus = "void";
+                }
+            }
             else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "dosya_", 6) == 0) {
                 static char kdl_dosya_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
@@ -4906,6 +5828,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "void";
                 } else if (n == 12 && memcmp(kdl_dosya_buf + 4, "dosya_var_mi", 12) == 0) {
                     kdl_donus = "i1";
+                } else if (n == 13 &&
+                           memcmp(kdl_dosya_buf + 4, "dosya_gecerli", 13) == 0) {
+                    kdl_donus = "i1";   /* [D-449] opak handle null-sorgusu */
+                } else if (n == 14 &&
+                           memcmp(kdl_dosya_buf + 4, "dosya_gecersiz", 14) == 0) {
+                    kdl_donus = "ptr";  /* [D-449] NULL sentinel */
                 } else if (n == 11 && memcmp(kdl_dosya_buf + 4, "dosya_boyut", 11) == 0) {
                     kdl_donus = "i64";
                 } else {
@@ -4926,6 +5854,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * bilinmiyorsa (struct-alan inşası vb.) 8 = guvenli max (i32'yi
                  * 2x reserve eder ama tasma imkansiz). */
                 int eb = 8;
+                /* [D-509] ELEMAN IR'i AYRICA TASINIR. D-506 yonlendirmeyi
+                 * `(eb == 8) ? "i64" : "i32"` ile besliyordu; bu, BAYT
+                 * GENISLIGINE indirgeme yaptigi icin ISARETCI-LIGI SILIYORDU:
+                 * `tam64` (gercek skaler, guvenli) ile `metin`/`&Yapi`/
+                 * `Dizi<T>` (ptr eleman, GUVENSIZ) ayni kovaya dusuyor ve
+                 * ikisi de "skaler" sayilip rho_yerel'e gidiyordu — oysa
+                 * `bolge_yerel_yonlendir`in kendi kosulu ptr elemani REDDEDER
+                 * (ic heap-ref `dizi_al` ile kacabilir). Self-host DOGRUYDU,
+                 * oracle YANLISTI (D-442 sinifi); sertlestirilen bolge_operand
+                 * kapisi ortaya cikardi. Bilinmeyen eleman -> "ptr" = DENY. */
+                const char *dz_elem = "ptr";
                 {
                     const Dugum *bt = g->beklenen_tip;
                     if (bt && bt->tip == DUGUM_TIP_REFERANS)
@@ -4933,23 +5872,36 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     if (bt && bt->tip == DUGUM_TIP_DIZI) {
                         const char *eir = ast_tip_to_ir(g,
                             bt->veri.tip_dizi.eleman_tip);
-                        if (eir && strcmp(eir, "ptr") != 0 &&
-                            strcmp(eir, "i64") != 0) {
-                            eb = 4;  /* i8/i16/i32 -> 4 byte */
+                        if (eir) {
+                            dz_elem = eir;
+                            if (strcmp(eir, "ptr") != 0 &&
+                                strcmp(eir, "i64") != 0) {
+                                eb = 4;  /* i8/i16/i32 -> 4 byte */
+                            }
                         }
                     }
                 }
                 int rr = yeni_reg(g);
                 int kap = args[0].reg;
                 int kap_i32 = int_donustur(g, kap, args[0].tip, "i32");
+                /* [D-506] BOLGE YONLENDIRMESI. Onceden `g->rho_ref` SABIT
+                 * KODLUYDU: `dizi_olustur(N)` DAIMA cagiran bolgesine gidiyordu,
+                 * oysa dizi LITERALI yonlendiriliyordu. Olculdu: ayni govde
+                 * literalle rho_yerel, `dizi_olustur` ile rho_global; 200K
+                 * cagrida zirve bellek 100 MB (sabit olmasi gerekirken).
+                 * `dizi_olustur` boyutlu dizi kurmanin DEYIMSEL yoludur.
+                 * SAGLAMLIK AYNEN: `bolge_yerel_yonlendir` iki POZITIF kosul
+                 * arar (skaler eleman + hapsedilme kaniti); kanit yoksa
+                 * rho_caller doner = ESKI davranis. */
+                const char *dz_rho = bolge_yerel_yonlendir(g, d, dz_elem);
                 fprintf(g->out,
                     "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 %d)\n",
-                    rr, g->rho_ref, eb);   /* V2-F4.2a: ρ */
+                    rr, dz_rho, eb);   /* [D-506] yonlendirilmis rho */   /* V2-F4.2a: ρ */
                 /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
                 fprintf(g->out,
                     "  call void @kdl_dizi_kapasite_ayarla(ptr %s, ptr %%%d, i32 %%%d)\n",
-                    g->rho_ref, rr, kap_i32);   /* V2-F4.2a: ρ */
-                IfadeSonuc s = { rr, "ptr", 0 };
+                    dz_rho, rr, kap_i32);   /* [D-506] AYNI rho */   /* V2-F4.2a: ρ */
+                IfadeSonuc s = { rr, "ptr", 0, 0};
                 return s;
             }
             else if (cagri_adi_uz == 9 &&
@@ -4964,24 +5916,36 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     dizi_struct_ekle_emit(g, args[0].reg, args[1].reg, et);
                     int rr = yeni_reg(g);
                     fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                    IfadeSonuc s = { rr, "i32", 0 };
+                    IfadeSonuc s = { rr, "i32", 0, 0};
                     return s;
                 }
                 const char *fn;
                 const char *cast_tip = et;
+                /* [D-451] kesirli eleman → bit-deseni tasiyici tamsayiya
+                 * bitcast et; erisimci sonegi tasiyiciya gore secilir. */
+                const char *kes_tas = dizi_kesirli_tasiyici(et);
+                int ev;
+                if (kes_tas) {
+                    fn = (strcmp(kes_tas, "i64") == 0)
+                         ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+                    cast_tip = kes_tas;
+                    ev = (n > 1) ? dizi_bitcast_emit(g, args[1].reg,
+                                                     et, kes_tas) : 0;
+                } else {
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                 else { fn = "kdl_dizi_ekle_tam"; cast_tip = "i32"; }
-                int ev = (n > 1) ? int_donustur(g, args[1].reg,
+                ev = (n > 1) ? int_donustur(g, args[1].reg,
                                                  args[1].tip, cast_tip)
                                  : 0;
+                }
                 fprintf(g->out,
                     "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
                     fn, g->rho_ref, args[0].reg, cast_tip, ev);   /* V2-F4.2a: ρ */
                 /* void donus — placeholder i32 0 */
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                IfadeSonuc s = { rr, "i32", 0 };
+                IfadeSonuc s = { rr, "i32", 0, 0};
                 return s;
             }
             else if (cagri_adi_uz == 7 &&
@@ -4997,6 +5961,20 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     return dizi_struct_al_emit(g, args[0].reg, idx_i32, et);
                 }
                 const char *fn;
+                /* [D-451] kesirli eleman → tasiyici tamsayi olarak OKU, sonra
+                 * bitcast ile kesirliye don. Bitler korunur. */
+                const char *kes_tas_al = dizi_kesirli_tasiyici(et);
+                if (kes_tas_al) {
+                    fn = (strcmp(kes_tas_al, "i64") == 0)
+                         ? "kdl_dizi_al_tam64" : "kdl_dizi_al_tam";
+                    int raw = yeni_reg(g);
+                    fprintf(g->out,
+                        "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        raw, kes_tas_al, fn, args[0].reg, idx_i32);
+                    int fr = dizi_bitcast_emit(g, raw, kes_tas_al, et);
+                    IfadeSonuc sf = { fr, et, 0, 0};
+                    return sf;
+                }
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
                 else { fn = "kdl_dizi_al_tam"; et = "i32"; }
@@ -5004,7 +5982,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                     rr, et, fn, args[0].reg, idx_i32);
-                IfadeSonuc s = { rr, et, 0 };
+                IfadeSonuc s = { rr, et, 0, 0};
                 return s;
             }
             else if (cagri_adi_uz == 8 &&
@@ -5022,22 +6000,54 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                                          args[2].reg, et);
                     int rr = yeni_reg(g);
                     fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                    IfadeSonuc s = { rr, "i32", 0 };
+                    IfadeSonuc s = { rr, "i32", 0, 0};
                     return s;
                 }
                 const char *fn;
                 const char *cast_tip = et;
+                const char *kes_tas_y = dizi_kesirli_tasiyici(et);   /* [D-451] */
+                int ev;
+                if (kes_tas_y) {
+                    fn = (strcmp(kes_tas_y, "i64") == 0)
+                         ? "kdl_dizi_yaz_tam64" : "kdl_dizi_yaz_tam";
+                    cast_tip = kes_tas_y;
+                    ev = (n > 2) ? dizi_bitcast_emit(g, args[2].reg,
+                                                     et, kes_tas_y) : 0;
+                } else {
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_yaz_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_yaz_ptr";
                 else { fn = "kdl_dizi_yaz_tam"; cast_tip = "i32"; }
-                int ev = (n > 2) ? int_donustur(g, args[2].reg,
+                ev = (n > 2) ? int_donustur(g, args[2].reg,
                                                  args[2].tip, cast_tip) : 0;
+                }
                 fprintf(g->out,
                     "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
                     fn, args[0].reg, idx_i32, cast_tip, ev);
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                IfadeSonuc s = { rr, "i32", 0 };
+                IfadeSonuc s = { rr, "i32", 0, 0};
+                return s;
+            }
+            /* [D-454] bir() / sıfır() — birim deger intrinsic'leri.
+             * Tip kontrolu donus tipini BEKLENEN'den verir; codegen burada o
+             * IR tipinde SABIT yayar. Generic govdede beklenen `T`dir ve
+             * monomorfizasyonda somutlasir, dolayisiyla dogru genislik/kind
+             * (i32/i64/float/double) kendiliginden gelir.
+             * Cagri DEGIL sabit yayilir: `@bir` diye bir sembol YOKTUR. */
+            else if ((cagri_adi_uz == 3 && memcmp(cagri_adi, "bir", 3) == 0) ||
+                     (cagri_adi_uz == 7 &&
+                      memcmp(cagri_adi, "s\xc4\xb1" "f\xc4\xb1" "r", 7) == 0)) {
+                int bir_mi = (cagri_adi_uz == 3);
+                const char *bt = (beklenen && *beklenen) ? beklenen : "i32";
+                int rr = yeni_reg(g);
+                if (tip_kesirli_mi(bt)) {
+                    fprintf(g->out, "  %%%d = fadd %s 0.0, %s\n",
+                            rr, bt, bir_mi ? "1.0" : "0.0");
+                } else {
+                    fprintf(g->out, "  %%%d = add %s 0, %d\n",
+                            rr, bt, bir_mi ? 1 : 0);
+                }
+                IfadeSonuc s = { rr, bt, 0, 0};
                 return s;
             }
             else if (cagri_adi_uz == 10 &&
@@ -5046,7 +6056,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
                     rr, args[0].reg);
-                IfadeSonuc s = { rr, "i32", 0 };
+                IfadeSonuc s = { rr, "i32", 0, 0};
                 return s;
             }
             /* Adim 6: dizi_kapasite + dizi_kapasite_ayarla */
@@ -5056,7 +6066,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = call i32 @kdl_dizi_kapasite(ptr %%%d)\n",
                     rr, args[0].reg);
-                IfadeSonuc s = { rr, "i32", 0 };
+                IfadeSonuc s = { rr, "i32", 0, 0};
                 return s;
             }
             else if (cagri_adi_uz == 20 &&
@@ -5068,7 +6078,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     g->rho_ref, args[0].reg, yk);   /* V2-F4.2a: ρ */
                 int rr = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", rr);
-                IfadeSonuc s = { rr, "i32", 0 };
+                IfadeSonuc s = { rr, "i32", 0, 0};
                 return s;
             }
             /* Adim 1: CLI args + OTP yardimcilari */
@@ -5121,7 +6131,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 /* Caller bir IfadeSonuc bekliyor — placeholder i32 0 */
                 int r = yeni_reg(g);
                 fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-                IfadeSonuc s = { r, "i32", 0 };
+                IfadeSonuc s = { r, "i32", 0, 0};
                 return s;
             }
             int r = yeni_reg(g);
@@ -5134,7 +6144,17 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
             }
             fputs(")\n", g->out);
-            IfadeSonuc s = { r, donus, ik ? ik->donus_isaretsiz : 0 };
+            /* [D-459] Yerlesikte `ik == NULL` oldugu icin metin-lik BILGISI
+             * KAYBOLUYORDU: `metin_birlestir("","b") == "b"` `icmp eq ptr`
+             * yayip C'de exit 7 veriyordu (self-host DOGRU yapiyordu, parite
+             * ters yonde). Annotasyonlu bir baglama (`degisken a: metin = ...`)
+             * bilgiyi tasidigi icin kusur yalnizca DOGRUDAN cagri ve
+             * ANNOTASYONSUZ baglama seklinde gorunuyordu -- bu yuzden D-449'un
+             * korpusundan kacmisti. */
+            IfadeSonuc s = { r, donus, ik ? ik->donus_isaretsiz : 0,
+                             ik ? ik->donus_metin
+                                : builtin_metin_donus_mu(ozgun_cagri_adi,
+                                                         ozgun_cagri_adi_uz) };
             return s;
         }
 
@@ -5152,7 +6172,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             (void)ifade_uret(g, d->veri.imha_ifade.operand, NULL);
             int r = yeni_reg(g);
             fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-            IfadeSonuc s = { r, "i32", 0 };
+            IfadeSonuc s = { r, "i32", 0, 0};
             return s;
         }
 
@@ -5179,14 +6199,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 int rp = yeni_reg(g);
                 fprintf(g->out, "  %%%d = inttoptr %s %%%d to ptr\n",
                         rp, kaynak.tip, kaynak.reg);
-                IfadeSonuc s = { rp, "ptr", 0 };
+                IfadeSonuc s = { rp, "ptr", 0, 0};
                 return s;
             }
             if (kaynak_ptr && !hedef_ptr) {
                 int rp = yeni_reg(g);
                 fprintf(g->out, "  %%%d = ptrtoint ptr %%%d to %s\n",
                         rp, kaynak.reg, hedef);
-                IfadeSonuc s = { rp, hedef, hedef_isz };
+                IfadeSonuc s = { rp, hedef, hedef_isz, 0};
                 return s;
             }
             int k_kesirli = tip_kesirli_mi(kaynak.tip);
@@ -5196,21 +6216,21 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 /* int -> int: zext/sext/trunc — kaynak isaretsizse zext */
                 int rr = int_donustur_im(g, kaynak.reg, kaynak.tip, hedef,
                                          kaynak.isaretsiz);
-                IfadeSonuc s = { rr, hedef, hedef_isz };
+                IfadeSonuc s = { rr, hedef, hedef_isz, 0};
                 return s;
             }
             if (!k_kesirli && h_kesirli) {
                 /* int -> float/double: sitofp */
                 fprintf(g->out, "  %%%d = sitofp %s %%%d to %s\n",
                         r, kaynak.tip, kaynak.reg, hedef);
-                IfadeSonuc s = { r, hedef, 0 };
+                IfadeSonuc s = { r, hedef, 0, 0};
                 return s;
             }
             if (k_kesirli && !h_kesirli) {
                 /* float/double -> int: fptosi */
                 fprintf(g->out, "  %%%d = fptosi %s %%%d to %s\n",
                         r, kaynak.tip, kaynak.reg, hedef);
-                IfadeSonuc s = { r, hedef, 0 };
+                IfadeSonuc s = { r, hedef, 0, 0};
                 return s;
             }
             /* float <-> double */
@@ -5222,7 +6242,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = fptrunc double %%%d to float\n",
                         r, kaynak.reg);
             }
-            IfadeSonuc s = { r, hedef, 0 };
+            IfadeSonuc s = { r, hedef, 0, 0};
             return s;
         }
 
@@ -5262,10 +6282,26 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * SERBEST BIRAKMA YOK (leak — dizi/metin status-quo; F4 sonra).
                  * Boyut = sizeof(envtip): LLVM constexpr GEP-null idiomu (D-087);
                  * padding/alignment LLVM layout'uyla birebir. */
-                fprintf(g->out,
-                    "  %%%d = call ptr @malloc(i64 ptrtoint "
-                    "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
-                    env_reg, envtip);
+                /* [D-507] KAPANIS ENV BOLGE YONLENDIRMESI. Onceden KOSULSUZ
+                 * `@malloc` idi ve HIC serbest edilmiyordu (bu blogun kendi
+                 * yorumu: "SERBEST BIRAKMA YOK (leak ...); F4 sonra").
+                 * Kapanis bagi HAPSEDILMISSE (escape.c ky_isaretle LAMBDA
+                 * dali) env ρ_yerel den alinir -> islev sonunda TOPLU serbest.
+                 * Kanit YOKSA `@malloc` AYNEN kalir = ESKI davranis (sizar
+                 * ama UAF yok). D-494/D-506 ile ayni default-DENY deseni.
+                 * ⚠ SAGLAMLIK G006 YA DAYANIR: lifted govde env e isaretci
+                 *   donduremez (`|| &a` reddediliyor). */
+                if (g->rho_yerel && escape_kesin_yerel(g->aktif_escape, d)) {
+                    fprintf(g->out,
+                        "  %%%d = call ptr @kdl_bolge_ayir(ptr %s, i64 ptrtoint "
+                        "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
+                        env_reg, g->rho_yerel, envtip);
+                } else {
+                    fprintf(g->out,
+                        "  %%%d = call ptr @malloc(i64 ptrtoint "
+                        "(ptr getelementptr (%s, ptr null, i32 1) to i64))\n",
+                        env_reg, envtip);
+                }
                 for (int i = 0; i < cc.sayi; i++) {
                     LlvmIsim *vi = isim_bul(g, cc.adlar[i], cc.uzlar[i]);
                     int lv = yeni_reg(g);
@@ -5316,7 +6352,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 fprintf(g->out,
                     "  %%%d = insertvalue { ptr, ptr } %%%d, ptr null, 1\n",
                     r, t0);
-                IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
+                IfadeSonuc s = { r, "{ ptr, ptr }", 0, 0 };
                 return s;
             }
             int t0 = yeni_reg(g);
@@ -5326,7 +6362,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             fprintf(g->out,
                 "  %%%d = insertvalue { ptr, ptr } %%%d, ptr %%%d, 1\n",
                 r, t0, env_reg);
-            IfadeSonuc s = { r, "{ ptr, ptr }", 0 };
+            IfadeSonuc s = { r, "{ ptr, ptr }", 0, 0 };
             return s;
         }
 
@@ -5334,7 +6370,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             int r = yeni_reg(g);
             fprintf(g->out, "  ; ifade tipi %d desteklenmiyor\n", d->tip);
             fprintf(g->out, "  %%%d = add i32 0, 0\n", r);
-            IfadeSonuc s = { r, "i32", 0 };
+            IfadeSonuc s = { r, "i32", 0, 0};
             return s;
         }
     }
@@ -5432,13 +6468,30 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         dizi_struct_ekle_emit(g, kdl_reg, v.reg, eleman_tip);
                         continue;
                     }
-                    int vr = int_donustur(g, v.reg, v.tip, eleman_tip);
-                    const char *fn = "kdl_dizi_ekle_tam";
-                    if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
-                    else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                    /* [D-451] kesirli eleman → tasiyici tamsayiya bitcast.
+                     * Bu, ANNOTASYONLU `değişken xs: Dizi<kesirli64> = [..]`
+                     * yolunun KENDI emisyon noktasi — `dizi_literal_heap_emit`
+                     * ile AYRI. Yalniz digerleri onarilinca literal dizi
+                     * `_tam`e `double` geciriyordu ve LLVM bunu SESSIZCE kabul
+                     * edip 0 uretiyordu (olculdu; D-295 sinifi). */
+                    const char *kt_l2 = dizi_kesirli_tasiyici(eleman_tip);
+                    const char *e_tip2 = eleman_tip;
+                    int vr;
+                    const char *fn;
+                    if (kt_l2) {
+                        vr = dizi_bitcast_emit(g, v.reg, eleman_tip, kt_l2);
+                        e_tip2 = kt_l2;
+                        fn = (strcmp(kt_l2, "i64") == 0)
+                             ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+                    } else {
+                        vr = int_donustur(g, v.reg, v.tip, eleman_tip);
+                        fn = "kdl_dizi_ekle_tam";
+                        if (strcmp(eleman_tip, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
+                        else if (strcmp(eleman_tip, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
+                    }
                     fprintf(g->out,
                         "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
-                        fn, dizi_rho, kdl_reg, eleman_tip, vr);   /* F4.2b: aynı ρ */
+                        fn, dizi_rho, kdl_reg, e_tip2, vr);   /* F4.2b: aynı ρ */
                 }
                 g->beklenen_tip = eski_bt;
                 /* alloca ptr + store kdl_reg */
@@ -5487,11 +6540,16 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     /* D-005: dtamN annot -> isaretsiz isim */
                     g->isimler->isaretsiz =
                         ast_tip_isaretsiz_mi(d->veri.degisken.tip);
+                    g->isimler->metin_mi =
+                        ast_tip_metin_mi(d->veri.degisken.tip);   /* [D-449] */
+                    g->isimler->tip_ast = d->veri.degisken.tip;    /* [D-465] */
                     /* D-293: `değişken f: işlev() -> T = || ...` → T'nin IR'i.
                      * Fat value ("{ ptr, ptr }") T'yi siler; closure çağrı yeri
                      * dönüş tipini BURADAN alır (bkz. kapanis_donus_ir). */
                     g->isimler->kapanis_donus_ir =
                         kapanis_donus_ir_al(g, d->veri.degisken.tip);
+                    g->isimler->kapanis_imza =
+                        kapanis_imza_al(d->veri.degisken.tip);     /* D-625 */
                     /* D-294: `değişken g: görev<T> = ...` → T'nin IR'i
                      * (görev<T> IR'de opak ptr; birleştir i64→T daraltması). */
                     g->isimler->gorev_ic_ir =
@@ -5532,8 +6590,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     const char *lam_tahmin = NULL;
                     const char *eski_lbd2 = g->lambda_beklenen_donus;
                     if (d->veri.degisken.deger->tip == DUGUM_LAMBDA) {
-                        lam_tahmin = lambda_donus_tahmin(
-                            g, d->veri.degisken.deger->veri.lambda.govde);
+                        lam_tahmin = lambda_donus_tahmin_l(
+                            g, d->veri.degisken.deger);
                         if (lam_tahmin) g->lambda_beklenen_donus = lam_tahmin;
                     }
                     dv = ifade_uret(g, d->veri.degisken.deger, NULL);
@@ -5547,8 +6605,20 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                               d->veri.degisken.ad_uzunluk,
                               1, alloca_reg, tip);
                     g->isimler->isaretsiz = dv.isaretsiz;  /* D-005 */
+                    /* [D-459] ANNOTASYONSUZ dal: metin-ligi de DEGERDEN devral
+                     * (`isaretsiz` ile birebir ayni gerekce -- IR'in sildigi bir
+                     * KEMGU tip ozelligi yan kanalda tasinir). Eksikligi:
+                     * `degisken a = metin_birlestir("","b"); a == "b"` ->
+                     * `icmp eq ptr` (C exit 7; self-host 42 -- parite TERS
+                     * yonde). Annotasyonlu dal zaten `ast_tip_metin_mi` ile
+                     * dogruydu, bu yuzden kusur yalnizca annotasyonsuz sekilde
+                     * gorunuyordu ve D-449'un korpusundan kacmisti. */
+                    g->isimler->metin_mi = dv.metin_mi;
                     /* D-325: tahmin varsa cagri yeri de AYNI donusu gorsun. */
                     if (lam_tahmin) g->isimler->kapanis_donus_ir = lam_tahmin;
+                    /* D-625: annotasyonsuz lambda → parametre tipleri lambdadan. */
+                    if (d->veri.degisken.deger->tip == DUGUM_LAMBDA)
+                        g->isimler->kapanis_imza = d->veri.degisken.deger;
                     /* D-293 NOT: kapanis_donus_ir burada AYARLANMAZ (tahmin yoksa) — bu dal
                      * "annot yok" yolu (d->veri.degisken.tip == NULL), yani
                      * bildirilen closure dönüş tipi zaten YOK. Annotasyonsuz
@@ -5559,6 +6629,35 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     if (d->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR) {
                         g->isimler->dizi_uzunluk =
                             d->veri.degisken.deger->veri.dizi_olustur.sayi;
+                    }
+                    /* [D-442] ANNOTASYONSUZ heap dizi baglamasi.
+                     * `degisken a = yap();` (yap -> Dizi<T>) icin eleman tipi
+                     * ve heap-lik HIC KAYDEDILMIYORDU. Sonuclari:
+                     *   a[0]  -> `getelementptr i32, ptr` ile KdlDizi BASLIGI
+                     *            veri gibi okunuyordu = SESSIZ YANLIS CEVAP,
+                     *            ve heap yolunun RUNTIME SINIR KONTROLU
+                     *            ATLANIYORDU (a[1000] tek elemanli dizide
+                     *            sessizce okundu, exit 0 — olculdu). Bu,
+                     *            "buffer overflow imkansiz" invaryantinin
+                     *            ihlaliydi. Self-host DOGRU davraniyordu
+                     *            (panik: dizi sinir ihlali) -> parite de
+                     *            bu onarimla saglanir.
+                     *   dizi_al(a,i) -> yalnizca CAGRI BAGLAMI beklenen tipi
+                     *            verdiginde dogru cikiyordu (tesadüf).
+                     * Kok TEK: bagliligi bildirim yerinde kaydet -> INDEKS,
+                     * dizi_al/dizi_yaz ve `icin` dongusu HEPSI ayni bilgiyi
+                     * gorur (D-407: ayni soruyu iki yerde ayri yanitlama).
+                     * Yigin dizi literali (DUGUM_DIZI_OLUSTUR) bu yola GIRMEZ:
+                     * heap_dizi_eleman_ast onun icin NULL doner. */
+                    if (!g->isimler->eleman_llvm_tip) {
+                        const Dugum *hea = heap_dizi_eleman_ast(
+                            g, d->veri.degisken.deger);
+                        if (hea) {
+                            const char *het = ast_tip_to_ir(g, hea);
+                            g->isimler->eleman_llvm_tip = het ? het : "i32";
+                            g->isimler->eleman_tip_ast = hea;
+                            g->isimler->dinamik_dizi_mi = 1;
+                        }
                     }
                     /* V2-F1: lambda değeri artık fat value { ptr, ptr } (dv.tip)
                      * → alloca/store/load yukarıda jenerik. closure_mu set'i KALKTI
@@ -5574,8 +6673,13 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                           1, alloca_reg, tip);
                 g->isimler->isaretsiz =
                     ast_tip_isaretsiz_mi(d->veri.degisken.tip);  /* D-005 */
+                g->isimler->metin_mi =
+                    ast_tip_metin_mi(d->veri.degisken.tip);        /* [D-449] */
+                g->isimler->tip_ast = d->veri.degisken.tip;         /* [D-465] */
                 g->isimler->kapanis_donus_ir =
                     kapanis_donus_ir_al(g, d->veri.degisken.tip);   /* D-293 */
+                g->isimler->kapanis_imza =
+                    kapanis_imza_al(d->veri.degisken.tip);          /* D-625 */
                 g->isimler->gorev_ic_ir =
                     gorev_ic_ir_al(g, d->veri.degisken.tip);        /* D-294 */
                 g->isimler->kanal_ic_ir =
@@ -5617,8 +6721,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
                                 v.reg, i->reg_no);
                     } else {
+                        /* [D-465] `o = değer(k)` / `r = hata(m)`: hedefin
+                         * BILDIRILEN tipi yapicinin beklenen_tip'ini kurmali.
+                         * Oncesinde ATAMA yolu beklenen_tip'i YALNIZ dinamik
+                         * dizi icin kuruyordu (D-092) -> yapici cozulemiyor ve
+                         * `@değer` tanimsiz kaliyordu (LINK-RED). Ayni sinif,
+                         * ayni cozum: mekanizma vardi, kapisi dardi. */
+                        const Dugum *at_eski_bt = g->beklenen_tip;
+                        if (i->tip_ast &&
+                            (i->tip_ast->tip == DUGUM_TIP_SECIMLIK ||
+                             i->tip_ast->tip == DUGUM_TIP_SONUC)) {
+                            g->beklenen_tip = i->tip_ast;
+                        }
                         IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                                    i->llvm_tip);
+                        g->beklenen_tip = at_eski_bt;
                         int rr = int_donustur(g, v.reg, v.tip, i->llvm_tip);
                         fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                                 i->llvm_tip, rr, i->reg_no);
@@ -5928,9 +7045,21 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
              * Diger dizi yollarindaki (INDEKS/dizi_al/ekle/yaz) by-value
              * yonlendirmesi VARDI; yalniz `için` dalinda eksikti. */
             int el_reg;
+            const char *kt_dg = dizi_kesirli_tasiyici(et);   /* [D-451] */
             if (dizi_eleman_struct_mi(et)) {
                 IfadeSonuc es = dizi_struct_al_emit(g, kdl_ptr, i_load, et);
                 el_reg = es.reg;
+            } else if (kt_dg) {
+                /* [D-451] kesirli eleman: tasiyici tamsayi oku + bitcast.
+                 * `için` dali INDEKS/dizi_al'dan AYRI bir kod noktasidir;
+                 * yalniz digerleri onarilinca bu dal `Dizi<kesirli64>`de
+                 * toplami 0 veriyordu (olculdu). */
+                fn_al = (strcmp(kt_dg, "i64") == 0)
+                        ? "kdl_dizi_al_tam64" : "kdl_dizi_al_tam";
+                int raw = yeni_reg(g);
+                fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
+                        raw, kt_dg, fn_al, kdl_ptr, i_load);
+                el_reg = dizi_bitcast_emit(g, raw, kt_dg, et);
             } else {
                 el_reg = yeni_reg(g);
                 fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
@@ -5943,6 +7072,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             isim_ekle(g, d->veri.icin.degisken_adi,
                       d->veri.icin.degisken_adi_uzunluk,
                       1, x_alloca, et);
+            /* [D-449] eleman metin ise dongu degiskeni de metin. */
+            g->isimler->metin_mi = kol_isim->eleman_metin_mi;
             int body_term = blok_uret(g, d->veri.icin.govde);
             scope_cik(g, m);
             if (!body_term) {
@@ -6251,6 +7382,29 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                                 alt->veri.desen_tanimlayici.ad,
                                 alt->veri.desen_tanimlayici.ad_uzunluk,
                                 1, ar, pcopy);
+                            /* [D-437] Payload `Dizi<T>` ise ELEMAN TİPİNİ de
+                             * bağlamaya taşı. Aksi halde `dizi_al(a, i)`
+                             * `vi->eleman_llvm_tip == NULL` görüp i32'ye düşer
+                             * → `kdl_dizi_al_tam` route eder → `Dizi<metin>`de
+                             * ptr'i i32 okuyup `metin_esit`e i32 geçirir →
+                             * SEGFAULT. LLVM `declare` uyuşmazlığını SESSİZCE
+                             * kabul ettiği için (D-295) derleme temiz kalıyor,
+                             * çökme çalışma anında oluyordu.
+                             * D-029'un yapı-alanı (`s.xs`) düzeltmesiyle AYNI
+                             * sınıf; üçüncü kaynak olan payload bağlaması
+                             * atlanmıştı. `Dizi<kesirli64>` de aynı aile ama o
+                             * yalnız yanlış DEĞER veriyor, bu ÇÖKÜYOR. */
+                            const Dugum *pt =
+                                cd->veri.cesit.varyant_payload_tipleri[vi][j];
+                            if (pt && pt->tip == DUGUM_TIP_DIZI) {
+                                const Dugum *ea = pt->veri.tip_dizi.eleman_tip;
+                                const char *eir = ea ? ast_tip_to_ir(g, ea) : NULL;
+                                if (eir) {
+                                    g->isimler->eleman_llvm_tip = eir;
+                                    g->isimler->eleman_tip_ast = ea;
+                                    g->isimler->dinamik_dizi_mi = 1;
+                                }
+                            }
                         }
                     }
                 }
@@ -6527,7 +7681,9 @@ static const char *mangle_et(LlvmGen *g, const char *ad, int ad_uz,
 static void islev_uret(LlvmGen *g, const Dugum *islev);
 
 static void specialize_emit(LlvmGen *g, const Dugum *islev,
-                            const char **tip_args, int tip_arg_sayi,
+                            const char **tip_args,
+                            const int *tip_args_metin,   /* [D-449] */
+                            int tip_arg_sayi,
                             const char *mangled) {
     if (mono_emitlendi(g, mangled)) return;
     mono_ekle(g, mangled);
@@ -6540,6 +7696,7 @@ static void specialize_emit(LlvmGen *g, const Dugum *islev,
         s->ad = islev->veri.islev.tip_paramlar[i];
         s->ad_uz = (int)strlen(s->ad);
         s->ir = tip_args[i];
+        s->metin_mi = tip_args_metin ? tip_args_metin[i] : 0;   /* [D-449] */
         s->sonraki = g->substler;
         g->substler = s;
     }
@@ -6805,6 +7962,9 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         snprintf(ys, 16, "%%%d", yr);
         g->rho_yerel = ys;
     }
+    kanal_kanit_kur(g, islev);   /* [D-543] */
+    {
+    }
 
     /* D-254: çıplak gövde örtük güvensiz-bağlam — ham pointer deref-write + küresel
      * yazımı explicit `güvensiz {}` gerektirmez (çıplak = güvensiz-tier primitive). */
@@ -6844,6 +8004,8 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* D-293: `işlev(...) -> T` tipli parametre (closure argüman) → T'nin IR'i */
         g->isimler->kapanis_donus_ir =
             kapanis_donus_ir_al(g, p->veri.parametre.tip);
+        g->isimler->kapanis_imza =
+            kapanis_imza_al(p->veri.parametre.tip);                 /* D-625 */
         /* D-294: `görev<T>` tipli parametre → T'nin IR'i (birleştir daraltması) */
         g->isimler->gorev_ic_ir =
             gorev_ic_ir_al(g, p->veri.parametre.tip);
@@ -6852,6 +8014,24 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         /* D-005: dtamN parametre -> isaretsiz isim */
         g->isimler->isaretsiz =
             ast_tip_isaretsiz_mi(p->veri.parametre.tip);
+        /* [D-449] parametre KEMGU `metin` mi? Once dogrudan annotasyondan.
+         * Degilse generic param (`hedef: T`) olabilir: tip dugumu "T" adli
+         * TIP_BASIT'tir ve `metin` DEGILDIR — metin-lik AKTIF SUBSTITUSYONDAN
+         * gelir. Instantiation `T=metin` ise generic govdedeki `x == hedef`
+         * ICERIK karsilastirmali olmali; bu olmadan `icerir<metin>` isaretci
+         * karsilastirir (`dizi.kem` aramalari tam bu yoldan geciyor). */
+        g->isimler->metin_mi = ast_tip_metin_mi(p->veri.parametre.tip);
+        if (!g->isimler->metin_mi && p->veri.parametre.tip &&
+            p->veri.parametre.tip->tip == DUGUM_TIP_BASIT) {
+            const char *pa = p->veri.parametre.tip->veri.tip_basit.ad;
+            int pu = p->veri.parametre.tip->veri.tip_basit.ad_uzunluk;
+            for (TipSubst *ss = g->substler; ss; ss = ss->sonraki) {
+                if (ss->ad_uz == pu && memcmp(ss->ad, pa, (size_t)pu) == 0) {
+                    g->isimler->metin_mi = ss->metin_mi;
+                    break;
+                }
+            }
+        }
         /* v1 bölge-container: *T parametre -> pointee kaydi */
         g->isimler->pointee_llvm_tip =
             pointee_ir_al(g, p->veri.parametre.tip);
@@ -6874,6 +8054,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             const char *et = ast_tip_to_ir(g, elem_ast);
             if (et) g->isimler->eleman_llvm_tip = et;
             g->isimler->eleman_tip_ast = elem_ast;  /* D-088: iç-içe m[i][j] */
+            g->isimler->eleman_metin_mi = tip_metin_mi_subst(g, elem_ast); /* [D-449] */
             g->isimler->dinamik_dizi_mi = 1;
         }
         /* D-086: &Dizi<T> param girişte deref edildi → normal heap dizi gibi
@@ -6884,6 +8065,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             const char *et = ast_tip_to_ir(g, elem_ast);
             if (et) g->isimler->eleman_llvm_tip = et;
             g->isimler->eleman_tip_ast = elem_ast;  /* D-088: iç-içe m[i][j] */
+            g->isimler->eleman_metin_mi = tip_metin_mi_subst(g, elem_ast); /* [D-449] */
             g->isimler->dinamik_dizi_mi = 1;
         }
         /* V2-F1: işlev(...)→R parametresi artık fat value { ptr, ptr } (tip
@@ -6901,7 +8083,20 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         if (strcmp(donus, "void") == 0) {
             fputs("  ret void\n", g->out);
         } else {
-            fprintf(g->out, "  ret %s 0\n", donus);
+            /* [D-464] Tipe UYGUN sifir deger. `ret ptr 0` ve `ret double 0`
+             * GECERSIZ IR'dir ("integer constant must have integer type").
+             * Bu mantik D-304'te LIFTED LAMBDA yolunda ZATEN vardi (asagida,
+             * `!term` dali) ama SIRADAN islev yoluna hic uygulanmamisti --
+             * D-407 deseni: ayni soruyu iki yerde ayri yanitlayan kod ayrisir.
+             * Tetikleyen sekil: govdesi KAPSAYICI bir `esles` olan ve `metin`
+             * donen islev (dusus yolu ULASILAMAZ ama yine de yayilir). KEMGU'da
+             * `sonuc`/`secimlik` uzerine kurulu kodda cok dogal bir sekildir;
+             * hicbir korpus dosyasi icermedigi icin kacmisti. */
+            const char *sifir = "0";
+            if (strcmp(donus, "ptr") == 0) sifir = "null";
+            else if (strcmp(donus, "float") == 0 || strcmp(donus, "double") == 0)
+                sifir = "0.0";
+            fprintf(g->out, "  ret %s %s\n", donus, sifir);
         }
     }
     fputs("}\n\n", g->out);
@@ -6928,6 +8123,13 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
  * load → lokal. DEFERRED çağrılır (çevre fn gövdesi emit edildikten sonra).
  * v1: ifade-form gövde, dönüş i32 (4 örnek). */
 static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
+    /* [D-543] KANAL LISTESINI SIFIRLA — ÖLÇÜLDÜ VE ZORUNLU.
+     * Lifted lambda gövdesindeki `ver` de `rho_yerel_serbest_emit`ten geçer;
+     * liste ÇAĞIRAN işlevden (main) devralınırsa `isim_bul` lambda kapsamında
+     * BAŞKA bir yuvayı bulur ve ÇÖP İŞARETÇİ serbest bırakılır.
+     * Belirti: `drf_gorunurluk` -> SEGV in __asan free, adres 0x000100000004.
+     * D-515'in uyardığı sınıfın ta kendisi; ASan avı olmadan SESSİZ kalırdı. */
+    g->kanal_ad = NULL; g->kanal_uz = NULL; g->kanal_sayi = 0;
     const Dugum *d = bl->dugum;
     /* F4.2b: lambda bu fazda ρ_yerel ALMAZ (yönlendirme yok) → VER ret'leri
      * serbest emit etmesin (NULL). Kuşatan fn'in ρ_yerel'ini serbest etme. */
@@ -7010,6 +8212,22 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
         fprintf(g->out, ", ptr %%%d\n", ar);
         isim_ekle(g, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk, 0, ar, t);
         g->isimler->isaretsiz = ast_tip_isaretsiz_mi(p->veri.parametre.tip);
+        g->isimler->metin_mi  = ast_tip_metin_mi(p->veri.parametre.tip);   /* [D-449] */
+        /* [D-449] Generic param (`hedef: T`): tip dugumu "T" adli TIP_BASIT'tir,
+         * `metin` degildir. Metin-lik AKTIF SUBSTITUSYONDAN gelir — instantiation
+         * `T=metin` ise generic govdedeki `x == hedef` icerik karsilastirmali
+         * olmali. Bu olmadan `icerir<metin>` isaretci karsilastirir (olculdu). */
+        if (!g->isimler->metin_mi && p->veri.parametre.tip &&
+            p->veri.parametre.tip->tip == DUGUM_TIP_BASIT) {
+            const char *pa = p->veri.parametre.tip->veri.tip_basit.ad;
+            int pu = p->veri.parametre.tip->veri.tip_basit.ad_uzunluk;
+            for (TipSubst *ss = g->substler; ss; ss = ss->sonraki) {
+                if (ss->ad_uz == pu && memcmp(ss->ad, pa, (size_t)pu) == 0) {
+                    g->isimler->metin_mi = ss->metin_mi;
+                    break;
+                }
+            }
+        }
         /* V2-F1: lifted lambda'nın işlev-tipli paramı da fat value { ptr, ptr }
          * (ast_tip_to_ir jenerik) → çağrıda env==null runtime dispatch. */
     }
@@ -7130,6 +8348,82 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dosya_yaz(ptr, ptr)\n", out);
     fputs("declare void @kdl_dosya_kapat(ptr)\n", out);
     fputs("declare i1 @kdl_dosya_var_mi(ptr)\n", out);
+    fputs("declare i1 @kdl_dosya_gecerli(ptr)\n", out);   /* [D-449] */
+    fputs("declare ptr @kdl_dosya_gecersiz()\n", out);   /* [D-449] */
+    fputs("declare ptr @kdl_kilit_olustur()\n", out);    /* [D-455] */
+    fputs("declare void @kdl_kilit_al(ptr)\n", out);     /* [D-455] */
+    fputs("declare void @kdl_kilit_birak(ptr)\n", out);  /* [D-455] */
+    fputs("declare void @kdl_kilit_yok(ptr)\n", out);    /* [D-455] */
+    fputs("declare ptr @kdl_tam_metin(i64)\n", out);        /* [D-459] */
+    fputs("declare i64 @kdl_metin_tam(ptr)\n", out);        /* [D-459] */
+    fputs("declare i1 @kdl_metin_tam_gecerli(ptr)\n", out); /* [D-459] */
+    fputs("declare double @kdl_metin_kesirli(ptr)\n", out);      /* [D-460] */
+    fputs("declare i1 @kdl_metin_kesirli_gecerli(ptr)\n", out);  /* [D-460] */
+    fputs("declare ptr @kdl_kod_metin(i32)\n", out);        /* [D-458] */
+    fputs("declare i1 @kdl_kod_gecerli(i32)\n", out);       /* [D-458] */
+    fputs("declare ptr @kdl_kesirli_metin(double)\n", out); /* [D-457] */
+    fputs("declare ptr @kdl_semafor_olustur(i32)\n", out);  /* [D-456] */
+    fputs("declare void @kdl_semafor_al(ptr)\n", out);      /* [D-456] */
+    fputs("declare void @kdl_semafor_birak(ptr)\n", out);   /* [D-456] */
+    fputs("declare void @kdl_semafor_yok(ptr)\n", out);     /* [D-456] */
+    fputs("declare ptr @kdl_bariyer_olustur(i32)\n", out);  /* [D-456] */
+    fputs("declare void @kdl_bariyer_bekle(ptr)\n", out);   /* [D-456] */
+    fputs("declare void @kdl_bariyer_yok(ptr)\n", out);     /* [D-456] */
+    fputs("declare ptr @kdl_soket_baglan(ptr, i32)\n", out);  /* [D-466] */
+    fputs("declare i32 @kdl_soket_gonder(ptr, ptr)\n", out);  /* [D-466] */
+    fputs("declare ptr @kdl_soket_al(ptr, i32)\n", out);      /* [D-466] */
+    fputs("declare i32 @kdl_soket_kapat(ptr)\n", out);        /* [D-466] */
+    fputs("declare i1 @kdl_soket_gecerli(ptr)\n", out);       /* [D-466] */
+    fputs("declare i32 @kdl_soket_zaman_asimi(ptr, i32)\n", out); /* [D-470] */
+    fputs("declare i1 @kdl_soket_zaman_asti()\n", out);           /* [D-470] */
+    /* ============================================================
+     * [D-475] LLVM INTRINSIC BILDIRIMLERI — EKSIKTILER.
+     *
+     * ⚠ ONCEKI YORUM YANLISTI: "Modern LLVM intrinsic; declare gerekmez
+     * (built-in)" yaziyordu. OLCUM CURUTTU -- WSL'de Clang 15 ile:
+     *     error: use of undefined value '@llvm.x86.sse2.lfence'
+     *     error: use of undefined value '@llvm.vector.reduce.add.v4i32'
+     * Clang 22 (Windows) bunlari HOSGORUYORDU; Clang 15 gormuyor. Yani
+     * urettigimiz IR KENDI KENDINE YETERLI DEGILDI ve bu yalnizca yeni
+     * araç zincirinin hosgorusuyle gizlenmisti.
+     *
+     * Kullanilmayan `declare` LLVM'de ZARARSIZDIR -> desteklenen matris
+     * bir kerede yayilir. Alternatif (kullanilanlari toplayip sonda yazmak)
+     * akis yapisini degistirirdi; kazanci yok.
+     * ============================================================ */
+    /* ⚠ YALNIZ x86 HEDEFINDE: bunu KOSULSUZ yaydigimda ARM64 ciktisina bir
+     * x86 intrinsic'i SIZDI ve `ct_bariyer` kapisi ANINDA yakaladi (13/13 ->
+     * 6/13, "ARM64 bariyer sayisi x86'dan FARKLI: x86=N+1 arm64=N" -- fazladan
+     * 1 tam bu declare satiriydi). Kapinin D-468'deki var olus gerekcesi
+     * buydu; kendi hatami kendi kapim buldu. */
+    /* ⚠⚠ ETIKET "arm64", "aarch64" DEGIL (`ana.c`:
+     * `llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf")` -- ilki ETIKET,
+     * ikincisi TRIPLE). Ilk yazimda "aarch64" ile karsilastirdim: kosul HIC
+     * TUTMADI ve declare ARM64 ciktisina SIZMAYA DEVAM ETTI.
+     * ⚠ BU TUZAK D-468'DE ZATEN KAYITLIYDI ve ayni oturumda IKINCI KEZ isirdi
+     * -- yazili olmasi uygulamaya yetmiyor. Kapi yine yakaladi. */
+    if (strcmp(llvm_hedef_mimari(), "arm64") != 0) {
+        fputs("declare void @llvm.x86.sse2.lfence()\n", out);
+    }
+    {
+        static const char *ie[] = { "i8", "i16", "i32", "i64" };
+        static const char *fe[] = { "float", "double" };
+        static const char *fm[] = { "f32", "f64" };
+        static const int   nw[] = { 2, 4, 8, 16 };
+        size_t a, b;
+        for (a = 0; a < sizeof(nw) / sizeof(nw[0]); a++) {
+            for (b = 0; b < sizeof(ie) / sizeof(ie[0]); b++) {
+                fprintf(out,
+                    "declare %s @llvm.vector.reduce.add.v%d%s(<%d x %s>)\n",
+                    ie[b], nw[a], ie[b], nw[a], ie[b]);
+            }
+            for (b = 0; b < sizeof(fe) / sizeof(fe[0]); b++) {
+                fprintf(out,
+                    "declare %s @llvm.vector.reduce.fadd.v%d%s(%s, <%d x %s>)\n",
+                    fe[b], nw[a], fm[b], fe[b], nw[a], fe[b]);
+            }
+        }
+    }
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
@@ -7138,6 +8432,11 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_global_bolge_al()\n", out);
     fputs("declare ptr @kdl_bolge_olustur()\n", out);       /* F4.2b: ρ_yerel aç */
     fputs("declare void @kdl_bolge_serbest(ptr)\n", out);   /* F4.2b: ρ_yerel serbest */
+    fputs("declare void @kdl_kanal_serbest(ptr)\n", out);   /* [D-543] */
+    /* [D-494] F4.4: `bölge_al` artık kanıtlıysa bölgeden tahsis eder.
+     * Bildirim ŞART — yoksa LINK-RED (D-475: üretilen IR KENDİ KENDİNE
+     * YETMELİ; orada da eksik declare'ler aynı biçimde yakalanmıştı). */
+    fputs("declare ptr @kdl_bolge_ayir(ptr, i64)\n", out);
     /* Katman 2 (Concurrency / DRF V1): görev_başlat / görev_birleştir hedefleri.
      * basla_kapanis(fn, fn, env): fn BİLEREK iki kez — C tarafında iki farklı
      * tipli fn-ptr parametresi (bare/kapanış), cast-siz dispatch için. */
@@ -7182,6 +8481,24 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_panik(ptr)\n", out);
     fputs("@.str.dizi_sinir_panik = private constant "
           "[26 x i8] c\"dizi sinir ihlali (stack)\\00\"\n", out);
+    /* [D-502] Sifira bolme paniği — dizi sinir ihlali ile AYNI mekanizma
+     * (kdl_panik noreturn). "Cokmezlik" degismezi: `a / 0` SIGFPE ile sureci
+     * OLDURMEK yerine TEMIZ DURUR. Olculdu (D-501): korumasiz `sdiv` alti
+     * seklin altisinda da exit 136 / SIGFPE veriyordu, tani YOK. */
+    /* [D-513] Kaydirma miktari panigi — sifira bolme ile AYNI mekanizma.
+     * Olculdu: miktar >= bit genisliginde LLVM POISON ve sonuc OPTIMIZASYON
+     * SEVIYESINE BAGLI (-O0 exit=0, -O2 exit=1 — ayni program, ayni IR). */
+    /* [D-546] Vektor lane indeksi panigi — kaydirma (D-513) ve dizi siniri
+     * (D-069) ile AYNI mekanizma. Olculdu: `vektor_eleman(v, 99)` --check'ten
+     * TEMIZ geciyor ve `extractelement` aralik disi indekste POISON uretiyor
+     * -> sonuc OPTIMIZASYON SEVIYESINE BAGLI (-O0 exit=224, -O2 exit=1;
+     * AYNI PROGRAM, AYNI IR). Yeni tani kodu YOK, tip degisikligi YOK. */
+    fputs("@.str.vektor_panik = private constant "
+          "[29 x i8] c\"vektor lane indeksi gecersiz\\00\"\n", out);
+    fputs("@.str.kaydirma_panik = private constant "
+          "[26 x i8] c\"kaydirma miktari gecersiz\\00\"\n", out);
+    fputs("@.str.sifir_bolme_panik = private constant "
+          "[13 x i8] c\"sifira bolme\\00\"\n", out);
 
     /* Adim 1: CLI args + OTP */
     fputs("declare i32 @kdl_arg_sayi()\n", out);
@@ -7199,6 +8516,7 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare void @kdl_yaz_tam64(i64)\n", out);
     /* Track B: yazdir_metin -> kdl_yazdir_metin (bare-metal/host ortak) */
     fputs("declare void @kdl_yazdir_metin(ptr)\n", out);
+    fputs("declare void @kdl_yazdir_hata(ptr)\n", out);   /* [D-450] */
     fputs("declare void @kdl_yazdir_isaretsiz_tam(i32)\n", out);
     fputs("declare void @kdl_yazdir_isaretsiz_tam64(i64)\n", out);
     fputs("declare void @kdl_yazdir_onaltilik(i64)\n", out);
@@ -7284,71 +8602,10 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
 
         for (int wi = 0; wi < is_sayi; wi++) {
             Dugum *uye = is_l[wi];
-            /* A: yeni-bicim kullan (tek-segment / secili / alias) —
-             * loader (ana.c) sentetik DUGUM_MODUL olarak ekledi;
-             * burada duzlestirme YAPILMAZ (meta dugum, atla). */
-            if (uye->tip == DUGUM_KULLAN &&
-                (uye->veri.kullan.segment_sayi <= 1 ||
-                 uye->veri.kullan.secili_sayi > 0 ||
-                 uye->veri.kullan.alias_ad != NULL)) {
-                continue;
-            }
-            if (uye->tip == DUGUM_KULLAN) {
-                /* Dosya yolu uret */
-                const char *y = uye->veri.kullan.yol;
-                int yu = uye->veri.kullan.yol_uzunluk;
-                char dy[512];
-                int o = 0;
-                for (int k = 0; k < yu && o + 6 < (int)sizeof(dy); k++) {
-                    if (k + 1 < yu && y[k] == ':' && y[k + 1] == ':') {
-                        dy[o++] = '/'; k++;
-                    } else { dy[o++] = y[k]; }
-                }
-                const char *ext = ".kem";
-                for (int k = 0; k < 4 && o + 1 < (int)sizeof(dy); k++) {
-                    dy[o++] = ext[k];
-                }
-                dy[o] = '\0';
-                /* Duplicate? */
-                int yuklu = 0;
-                for (YuklenmisDosya *yd = g.yuklenmis_dosyalar; yd; yd = yd->sonraki) {
-                    if (yd->yol_uz == o && memcmp(yd->yol, dy, (size_t)o) == 0) {
-                        yuklu = 1; break;
-                    }
-                }
-                if (yuklu) continue;
-                FILE *fp = fopen(dy, "rb");
-                if (!fp) continue;
-                fseek(fp, 0, SEEK_END);
-                long sz = ftell(fp);
-                fseek(fp, 0, SEEK_SET);
-                char *src = (char *)arena_ayir(a, (size_t)sz + 1);
-                if (!src) { fclose(fp); continue; }
-                fread(src, 1, (size_t)sz, fp);
-                src[sz] = '\0';
-                fclose(fp);
-                /* Yuklenmis listesine ekle */
-                YuklenmisDosya *yd = (YuklenmisDosya *)arena_ayir_sifir(a, sizeof(YuklenmisDosya));
-                if (yd) {
-                    char *yk = (char *)arena_ayir(a, (size_t)o + 1);
-                    memcpy(yk, dy, (size_t)o + 1);
-                    yd->yol = yk;
-                    yd->yol_uz = o;
-                    yd->sonraki = g.yuklenmis_dosyalar;
-                    g.yuklenmis_dosyalar = yd;
-                }
-                /* Parse + worklist'e ekle (transitif kullan'lar da islensin) */
-                Lexer ml; lexer_baslat(&ml, src, dy);
-                Parser mp; parser_baslat(&mp, &ml, a, dy, src);
-                Dugum *mprog = parser_calistir(&mp);
-                if (mprog && mp.hata_sayisi == 0) {
-                    for (int k = 0; k < mprog->veri.program.sayi; k++) {
-                        IS_EKLE(mprog->veri.program.uyeler[k]);
-                    }
-                }
-            } else {
-                EKLE_UYE(uye);
-            }
+            /* [D-590] Tum `kullan`lar yeni bicimdir: loader (ana.c) modulu
+             * sentetik DUGUM_MODUL olarak ekledi; burada duzlestirme YOK. */
+            if (uye->tip == DUGUM_KULLAN) continue;
+            EKLE_UYE(uye);
         }
         #undef IS_EKLE
         #undef EKLE_UYE
@@ -7366,6 +8623,12 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
             free(yeni_uyeler);
         }
     }
+
+    /* [D-488] Cagrilan-ozeti tablosunu KULLAN GENISLETMESINDEN SONRA kur:
+     * ice aktarilan islevler de tabloda olmali. Escape analizi asagida ISLEV
+     * BASINA kosar ve `f(xs)` cagrisinda f'in ozetini sorar; tablo yoksa tum
+     * sorgular DENY doner (= eski konservatif davranis). */
+    escape_fn_tablo_kur(a, program);
 
     /* Pre-pass: yapilari kayit et */
     for (int i = 0; i < program->veri.program.sayi; i++) {
@@ -7447,6 +8710,21 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
         fputc('\n', g.out);
     }
 
+    /* [D-539] FONKSİYON GÖVDELERİNİ TAMPONA YAZ. Geç keşfedilen mono yapı
+     * tipleri (`%Kutu$i64`) codegen SIRASINDA doğar ve eskiden fonksiyonlardan
+     * SONRA yazılıyordu. Oradaki yorum "LLVM adlı-tipleri modül-genelinde
+     * çözer, forward-ref güvenli" diyordu — ÖLÇÜLDÜ, `alloca` İÇİN YANLIŞ:
+     *   define i64 @al$i64(...) { %0 = alloca %Kutu$i64 ... }   <- satır 186
+     *   %Kutu$i64 = type { i64 }                                <- satır 211
+     *   -> error: Cannot allocate unsized type
+     * `alloca` tipin BOYUTUNU ayrıştırma anında ister; İMZA konumu istemez —
+     * bu yüzden `define` satırı geçiyor, kusur yalnız gövdede görünüyordu.
+     * Çözüm: gövdeler tampona; sonda ÖNCE tipler çıktıya, SONRA tampon.
+     * Saf bayt kopyasıdır — register numaralandırma fonksiyon-yereldir. */
+    FILE *gercek_modul_out = g.out;
+    FILE *fn_tmp = tmpfile();
+    if (fn_tmp) g.out = fn_tmp;
+
     /* Islevleri emit et (generic olanlar atlanir; instantiation'lar sonra) */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
@@ -7495,8 +8773,8 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     while (g.bekleyenler && max_iter-- > 0) {
         BekleyenSpec *bs = g.bekleyenler;
         g.bekleyenler = bs->sonraki;
-        specialize_emit(&g, bs->ast, bs->tip_args, bs->tip_arg_sayi,
-                        bs->mangled);
+        specialize_emit(&g, bs->ast, bs->tip_args, bs->tip_args_metin,
+                        bs->tip_arg_sayi, bs->mangled);
     }
 
     /* D-071 (Sınıf B lambda V2): bekleyen lifted lambda'ları emit et (deferred —
@@ -7512,7 +8790,23 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
      * keşfedilir → burada emit; LLVM adlı-tipleri modül-genelinde çözer,
      * forward-ref güvenli). Lambdalardan SONRA — lambda gövdeleri de generic
      * örneklendirme keşfedebilir. */
+    /* [D-539] Tipler GERÇEK çıktıya yazılmalı (tampona DEĞİL) — yoksa
+     * yine fonksiyonlardan sonra kalırlar ve dedup yüzünden ikinci kez
+     * yayılmazlar. */
+    if (fn_tmp) g.out = gercek_modul_out;
     mono_tip_tanimlari_emit(&g);
+
+    /* [D-539] Tipler yazıldı; şimdi tamponlanmış fonksiyon gövdelerini aktar. */
+    if (fn_tmp) {
+        char d539_tampon[4096];
+        size_t d539_n;
+        fflush(fn_tmp);
+        fseek(fn_tmp, 0, SEEK_SET);
+        while ((d539_n = fread(d539_tampon, 1, sizeof(d539_tampon), fn_tmp)) > 0) {
+            fwrite(d539_tampon, 1, d539_n, gercek_modul_out);
+        }
+        fclose(fn_tmp);
+    }
 
     int hatalar = g.hata_sayisi;
     arena_serbest(a);

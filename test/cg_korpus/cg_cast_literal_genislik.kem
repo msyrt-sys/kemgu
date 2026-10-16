@@ -1,0 +1,25 @@
+// [D-537] `<büyük literal> olarak tam64` self-host'ta SESSİZ YANLIŞ DEĞER veriyordu.
+//
+// ÖLÇÜLEN: cast operandı BAĞLAMSIZ değerlendiriliyordu → literal i32'de
+// materyalize oluyor, sonra genişletiliyordu:
+//   SELF ÖNCE: sext i32 8589934592 to i64   ← immediate'ın KENDİSİ aralık dışı
+//   C        : add i64 0, 8589934592        ← literal HEDEF genişlikte
+// Program koşuyor, link temiz, değer yanlış (exit 1 / doğrusu 42).
+// D-299 düz literal yolunu onarmıştı; CAST yolu açık kalmıştı.
+//
+// ⚠ ONARIM DAR: yalnız GENİŞLETME. Daraltma `trunc` ile kalır çünkü orada
+//   kırpma KASITLIDIR ve C de kırpar — (b) satırı bunu POZİTİF olarak ölçer;
+//   olmasaydı "her cast'i hedef genişlikte doğur" sabotajı kapıdan GEÇERDİ (D-425).
+// Çıkış: 42
+işlev main() -> tam32 {
+    değişken a: tam64 = 8589934592 olarak tam64;   // (a) genişletme — asıl kusur
+    eğer a != 8589934592 { ver 1; }
+
+    değişken b: tam8 = 300 olarak tam8;            // (b) daraltma KORUNMALI
+    eğer b != 44 { ver 2; }                        // 300 & 0xFF = 44
+
+    değişken c: tam64 = (0 - 1) olarak tam64;      // (c) işaretli genişletme
+    eğer c != (0 - 1) { ver 3; }
+
+    ver 42;
+}

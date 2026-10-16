@@ -1,0 +1,22 @@
+// D-389: `dizi_olustur(N)` FONKSİYON-ÇAĞRISI formu. Literal `[..]` yolu zaten
+// doğruydu; ama çağrı-formu özel-durumsuzdu → genel builtin yoluna düşüp
+// `call i32 @dizi_olustur` (yanlış ad+dönüş+eksik kapasite_ayarla) üretiyordu.
+// clang "i32 but expected ptr" ile REDDEDİYORDU. B sınıfı 9 gerçek dosyayı
+// (13_token_akisi..kernel_dizi) düşüren kök buydu; cg_korpus bu formu hiç
+// içermediği için kapı yeşildi (D-356'nın "korpusta o şekil yok" dersi).
+// Bu dosya üç şeyi kapılar: doğru IR ad (@kdl_dizi_olustur, ptr dönüş),
+// kapasite_ayarla takip çağrısı, ve ELEMAN-BYTE seçimi (tam32→4, metin→8).
+işlev main() -> tam32 {
+    // tam32 dizisi: eleman_byte=4 (i32)
+    değişken sayilar: Dizi<tam32> = dizi_olustur(8);
+    dizi_ekle(sayilar, 40);
+    dizi_ekle(sayilar, 2);
+    değişken toplam: tam32 = dizi_al(sayilar, 0) + dizi_al(sayilar, 1);
+
+    // metin dizisi: eleman_byte=8 (ptr) — D-030 taşma güvenliği yolu
+    değişken kelimeler: Dizi<metin> = dizi_olustur(4);
+    dizi_ekle(kelimeler, "kemgu");
+    değişken uz: tam32 = dizi_boyut(kelimeler);   // 1
+
+    ver toplam + uz - 1;   // 42 + 1 - 1 = 42
+}

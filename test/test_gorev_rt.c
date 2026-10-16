@@ -17,6 +17,13 @@
  * artik bir INVARYANT TANIGIDIR (daima 0 — test [9]).
  */
 
+/* [D-480] POSIX ozellik-test makrosu — HER #include'DAN ONCE (D-474 ile ayni
+ * kural). `-std=c11` kati ISO'dur; onsuz `nanosleep`/`struct timespec` glibc'de
+ * GIZLIDIR. Windows'ta tanimlanmaz -> o dal etkilenmez. */
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200112L
+#endif
+
 #include <stdio.h>
 #include <stdint.h>
 
@@ -24,8 +31,24 @@
   #include <windows.h>
   static void kisa_bekle(int ms) { Sleep((DWORD)ms); }
 #else
-  #include <unistd.h>
-  static void kisa_bekle(int ms) { usleep((useconds_t)ms * 1000); }
+  /* [D-480] `usleep` DEGIL `nanosleep`.
+   *
+   * `-std=c11` KATI ISO'dur ve glibc POSIX bildirimlerini gizler; ustelik
+   * `usleep`/`useconds_t` POSIX.1-2008'de KALDIRILDI (obsolete) ve glibc'de
+   * ancak `_DEFAULT_SOURCE` ile gorunur. Linux'ta olculdu:
+   *   error: 'useconds_t' undeclared
+   * `nanosleep` POSIX.1-2001'dir ve `_POSIX_C_SOURCE 200112L` ile gorunur --
+   * yani kaldirilmis bir API'yi geri acmak yerine GECERLI olani kullanmak
+   * hem dogru hem daha az makro gerektiriyor. Windows dali DEGISMEDI.
+   * ⚠ `_POSIX_C_SOURCE` DOSYANIN BASINDA tanimli (her #include'dan ONCE);
+   * burada tanimlamak GEC KALIRDI -- <stdio.h> zaten islenmis olurdu. */
+  #include <time.h>
+  static void kisa_bekle(int ms) {
+      struct timespec ts;
+      ts.tv_sec  = ms / 1000;
+      ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+      nanosleep(&ts, NULL);
+  }
 #endif
 
 static int toplam_test = 0;

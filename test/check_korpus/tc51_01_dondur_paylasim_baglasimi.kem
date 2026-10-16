@@ -1,0 +1,55 @@
+// [D-577] R-PAYLAŞ (`dondur`) — SPEC'İN İDDİASI vs ÖLÇÜLEN GERÇEK.
+//
+// KEMGU_Bellek_Modeli.md:218 R-PAYLAŞ aksiyomu:
+//     dondur(v) çağrıldı, bölge(v) = ρ
+//     ──────────────────────────────────────────
+//     değiştirilebilir(ρ) = yanlış
+//     birden fazla thread ρ'yu okuyabilir   [S1 istisnası]
+//     hiçbir thread ρ'ya yazamaz
+//
+// ÖLÇÜLDÜ — İKİSİ DE UYGULANMIYOR:
+//   (a) `dondur` PAYLAŞIM HAKKI VERMİYOR: dondurulmuş diziyi iki görev
+//       okumak yine L002 alıyor (R-YAKALAMA-THREAD taşıması ateşleniyor).
+//   (b) YAZMA YASAĞI UYGULANMIYOR: `dondur`dan sonra orijinal bağlamaya
+//       yazmak serbest — çalışma zamanında ölçüldü, "dondurulmuş" dizi
+//       GERÇEKTEN değişti (exit 99).
+//
+// ⚠⚠ BU FİKSTÜRÜN ASIL İŞİ BİR BAĞLAŞIMI KİLİTLEMEK:
+//   (a) ve (b) BİRLİKTE hareket etmeli. Yalnız (a)'yı açmak — yani
+//   `dondur`a paylaşım hakkı vermek — yazma yasağı YOKKEN doğrudan bir
+//   VERİ YARIŞI açar (ana thread yazarken iki görev okur). Bu dosya
+//   kırmızıya dönerse: ikisini de yaptığından emin ol.
+//
+// KOD DEĞİŞİKLİĞİ YAPILMADI (D-515/D-490 disiplini): `dondur` bugün
+// hiçbir hak vermediği için yasağı uygulamanın ölçülebilir kazancı YOK
+// ve önceden geçerli programları reddederdi; hakkı vermek ise yasağı
+// gerektirir ve ikisi birlikte bir DİL YÜZEYİ kararıdır.
+
+// (a) `dondur` PAYLAŞIM HAKKI VERMİYOR -> L002 bekleniyor.
+işlev paylasim_hakki_yok() -> tam32 {
+    değişken d: Dizi<tam32> = [40, 2];
+    değişken r: &Dizi<tam32> = dondur(&değişken d);
+    eşleş görev_başlat(|| { ver dizi_al(d, 0); }) { tamam(t) => {
+      eşleş görev_başlat(|| { ver dizi_al(d, 1); }) { tamam(u) => {
+        değişken _a = görev_birleştir(t); değişken _b = görev_birleştir(u);
+      } hata(_e) => { değişken _c = görev_birleştir(t); } }
+    } hata(_e) => { ver 90; } }
+    ver 42;
+}
+
+// (b) YAZMA YASAĞI UYGULANMIYOR -> tanı ÜRETİLMİYOR.
+işlev yazma_yasagi_yok() -> tam32 {
+    değişken d: Dizi<tam32> = [40, 2];
+    değişken r: &Dizi<tam32> = dondur(&değişken d);
+    dizi_yaz(d, 0, 99);
+    ver dizi_al(d, 0);
+}
+
+// POZİTİF: `dondur`un GEÇERLİ kullanımı (skaler, tek thread) temiz kalmalı.
+işlev temiz() -> tam32 {
+    değişken n: tam32 = 42;
+    değişken r: &tam32 = dondur(&değişken n);
+    ver *r;
+}
+
+işlev main() -> tam32 { ver 42; }

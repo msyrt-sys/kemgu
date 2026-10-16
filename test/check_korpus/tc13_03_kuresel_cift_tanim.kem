@@ -1,0 +1,13 @@
+// D-356: küresel değişken de GLOBAL sembol tablosuna girer — adı bir işlev ya da
+// sabitle çakışırsa T024. Ayrıca E011/E012 ile T024'ün SERPİŞTİRME SIRASI burada
+// ölçülür: C bunları tek geçişte, kaynak sırasında üretir.
+küresel değişken s: metin = "a";   // E011 + E012 (satır 5)
+
+küresel değişken sayac: tam32 = 0;
+
+işlev sayac() -> tam32 {           // T024: küresel `sayac` ile çakışma
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

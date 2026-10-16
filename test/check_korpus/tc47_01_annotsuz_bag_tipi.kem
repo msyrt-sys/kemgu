@@ -1,0 +1,37 @@
+// [D-640] ANNOTASYONSUZ BAĞLAMANIN TİPİ İZLENİYOR MU?
+//
+// Öncesinde self-host checker annotasyonsuz `değişken`i TİPSİZ ("?") kaydediyordu
+// ve dosyanın kendi kuralı gereği ("?" = bilinmiyor → T001 atla) o bağlamaya dair
+// BÜTÜN tip denetimleri düşüyordu. Ölçüldü: aşağıdaki her satır C'de T001 verirken
+// self-host `OK` diyordu — yani parite kapıları bu yüzeyi HİÇ görmüyordu.
+//
+// ⚠ KEMGU'da ÖRTÜK GENİŞLETME YOK (ölçüldü): `x = 1` tam32 çıkarsanır ve
+// `y: tam64 = x` bile T001'dir. Bu fikstürün ilk satırı tam da onu kilitler —
+// birisi "genişletme zararsız" diye gevşetirse kapı kırmızı olur.
+//
+// Fikstür BİLEREK yalnız LİTERAL başlatıcı içerir: onarım dar başladı (çağrı/
+// aritmetik başlatıcılar hâlâ "?" = eski davranış). Kapsam açıldıkça buraya
+// eklenmeli, uydurma vaka konmamalı.
+işlev main() -> tam32 {
+    // Genişletme de hata: x tam32, y tam64.
+    değişken a = 1;
+    değişken a2: tam64 = a;
+
+    // Daraltma: b tam64 (bağlamsız literal yükseltmesi, D-630).
+    değişken b = 8589934592;
+    değişken b2: tam32 = b;
+
+    // Metin → tam32.
+    değişken c = "a";
+    değişken c2: tam32 = c;
+
+    // Kesirli → tam32.
+    değişken d = 1.5;
+    değişken d2: tam32 = d;
+
+    // Mantıksal → tam32.
+    değişken e = doğru;
+    değişken e2: tam32 = e;
+
+    ver 0;
+}

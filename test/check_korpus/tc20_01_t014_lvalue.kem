@@ -1,0 +1,87 @@
+// D-420 UYANDIRICI ÖRNEK — T014 muafiyeti ERISIM/INDEKS lvalue'da.
+//
+// NEDEN BU DOSYA VAR: `k.xs = []` (alan lvalue) SAHTE T014 alıyordu; self-host
+// bu yüzden KENDİ kaynağını (`p.tp_pending = []`) reddediyordu. Kusur görünmezdi
+// çünkü korpusta bu ŞEKİL yoktu — kapı sessizce yeşildi.
+//
+// KURAL TİP GÜDÜMLÜDÜR (C'den ölçüldü, varsayılmadı):
+//   Dizi alan/eleman  → muaf   (T014 YOK)
+//   skaler alan/eleman → T014  (muafiyet VERİLMEMELİ)
+// Bu yüzden dosya HEM pozitif HEM negatif yön içerir. Yalnız pozitif olsaydı
+// toptan muafiyet (`t14_muaf_hepsi`) de kapıyı geçerdi — oysa o, gerçek bir
+// tanıyı susturur.
+//
+// ⚠ NEGATİF VAKA NEDEN ÇÖZÜLMEMİŞ GENERIC: somut skaler alan (`k.n = []`) C'de
+// T014'ün YANINDA T001 de üretir; self-host dizi literaline tip vermediği için o
+// T001'i yaymaz → kapı YANLIŞ SEBEPLE kırmızı olurdu. `Genel<tam32>` de yetmez
+// (ölçüldü: T somutlaşır, T001 yine çıkar). YALNIZ generic İŞLEV içindeki
+// çözülmemiş `T` C'de ertelenir → `g.v = []` tek başına T014 verir, iki taraf
+// birebir eşleşir. Kapıyı gürültüsüz kılan tek şekil budur.
+
+yapı Kutu { xs: Dizi<metin>; ic: Dizi<Dizi<tam32>>; }
+yapı Dis { kutu: Kutu; }
+yapı Genel<T> { v: T; liste: Dizi<T>; }
+
+// (1) POZİTİF — alan lvalue, alan tipi Dizi → MUAF
+işlev alan_atama(k: &değişken Kutu) -> tam32 {
+    k.xs = [];
+    ver 0;
+}
+
+// (2) POZİTİF — iç içe alan zinciri → MUAF
+işlev ic_ice(d: &değişken Dis) -> tam32 {
+    d.kutu.xs = [];
+    ver 0;
+}
+
+// (3) POZİTİF — INDEKS lvalue, ELEMAN tipi Dizi → MUAF
+işlev indeks_atama(k: &değişken Kutu) -> tam32 {
+    k.ic[0] = [];
+    ver 0;
+}
+
+// (4) POZİTİF — yerel yapı bağlaması üzerinden
+işlev yerel_uzerinden() -> tam32 {
+    değişken k: Kutu = Kutu { xs: [], ic: [] };
+    k.xs = [];
+    ver 0;
+}
+
+// (5) POZİTİF — çözülmemiş T ile generic Dizi alanı → MUAF.
+// Ayrıca kanıt: muafiyet "çözemedim → -1" tesadüfünden değil, tip düğümü
+// GERÇEKTEN çözülüp `Dizi` olduğu görüldüğü için veriliyor — (6) aynı yapıda
+// T014 alıyor.
+işlev generic_dizi<T>(g: &değişken Genel<T>) -> tam32 {
+    g.liste = [];
+    ver 0;
+}
+
+// (6) NEGATİF — çözülmemiş T, SKALER alan → T014 (muafiyet VERİLMEMELİ).
+// Toptan muafiyet (`t14_muaf_hepsi`) uygulanırsa bu satır sessizleşir ve kapı
+// kırmızıya döner. Kapının over-exemption'a karşı ASIL dişi budur.
+işlev generic_skaler<T>(g: &değişken Genel<T>) -> tam32 {
+    g.v = [];
+    ver 0;
+}
+
+// (7) NEGATİF — GÖLGELEME. `a` skaler alanlı A<T>'dir; İLERİDEKİ bir blokta
+// Dizi alanlı B<T> gölgesi var. `yerel` listesi append-only olduğu ve kapsam
+// taşımadığı için naif "sondan başa ara" O gölgeyi bulur → muafiyeti YANLIŞ
+// tetikler ve satır 63'ün T014'ü SESSİZCE KAYBOLUR (loud → silent).
+// `bag_tn` belirsizlikte -1 döndüğü sürece bu satır T014 verir.
+işlev golge<T>(a: &değişken A<T>, kaynak: B<T>) -> tam32 {
+    a.n = [];
+    eğer doğru { değişken a: B<T> = kaynak; ver 1; }
+    ver 0;
+}
+
+yapı A<T> { n: T; }
+yapı B<T> { n: Dizi<T>; }
+
+// ⚠ (8) KAPIYA GİRMEYEN BİLİNEN ŞEKİL — ham işaretçi. `işlev f(k: *K) { k.xs = []; }`
+// C'de [T007, T014], self-host'ta yalnız [T014] verir (T007 self'te YOK) → iki
+// taraf ayrıştığı için korpusa KONAMAZ. `tn_soy`un `*T`yi SOYMAMASI bu yüzden
+// kapıyla değil YALNIZ probe ile doğrulanmıştır. T007 boşluğu kapanınca buraya
+// eklenmelidir; o zamana kadar bu bir KÖR NOKTADIR ve öyle bilinmelidir.
+
+işlev main() -> tam32 { ver 42; }

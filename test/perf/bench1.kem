@@ -1,0 +1,17 @@
+// Tipik is: dongu + dizi erisimi + islev cagrisi
+işlev topla(xs: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken s: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n { s = s + dizi_al(xs, i); i = i + 1; }
+    ver s;
+}
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = dizi_olustur(1000);
+    değişken i: tam32 = 0;
+    iken i < 1000 { dizi_ekle(xs, i); i = i + 1; }
+    değişken t: tam32 = 0;
+    değişken r: tam32 = 0;
+    iken r < 20000 { t = t + topla(xs, 1000); r = r + 1; }
+    eğer t == 0 { ver 1; }
+    ver 42;
+}

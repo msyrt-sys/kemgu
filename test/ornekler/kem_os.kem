@@ -495,6 +495,34 @@ işlev net_icmp_testi() -> tam32 {
     ver 0;
 }
 
+// [D-692] [25] BIGNUM, [26] SHA256 → test/ornekler/kem_os_algoritma.kem (ortak, arm64 + x86).
+
+// [D-693] [27] GOREV KAPASITE → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
+
+// [D-610] [28] SYSCALL PTR DOGRULAMA — EL0-pointer aralık denetimi çalışıyor mu?
+// Tehdit: kötü bir EL0 süreç sys(5)'e KERNEL adresi geçirir → kernel o belleği UART'a
+// basar (info-leak). GEÇERLİ PROBE (D-608 belirsizdi): ham kernel RAM'ine (user penceresi
+// DIŞI) bir sır tohumla; sys(5)'i O adresle çağır (kdl_syscall_isle EL1'de koşar, gerçek
+// SVC ile aynı yol) → REDDEDİLMELİ (0-1). Sonra user VA'ya geçerli bir string tohumla,
+// sys(5)'i onunla çağır → KABUL EDİLMELİ (0). İki yön birlikte D-425'i sağlar: yalnız
+// negatif olsaydı "her şeyi reddet" sabotajı kapıdan geçerdi.
+sabit KG_LEAK: tam64 = 1157644288;    // 0x45004000: kernel-only sır (user penceresi 0x42xxxxxx DIŞI)
+çıplak işlev kptr_testi() -> tam32 {
+    kg_seed_kopyala(KG_LEAK, "GIZLIVERI");                     // kernel sırrı (ham kernel RAM)
+    değişken r_kotu: tam64 = kdl_syscall_isle(5, KG_LEAK, 0);  // kernel adresi → RED beklenir
+    kg_seed_kopyala(KUL_FS_AD, "MERHABA");                     // geçerli user VA string
+    değişken r_iyi: tam64 = kdl_syscall_isle(5, KUL_FS_AD, 0); // user VA → KABUL beklenir
+    eğer r_kotu != (0 - 1) { ver 0; }                          // sızıntı engellenmedi → HATA
+    eğer r_iyi != 0 { ver 0; }                                 // geçerli ptr reddedildi → HATA
+    ver 1;
+}
+
+// [D-692] [29] BASE64 … [40] ASM → test/ornekler/kem_os_algoritma.kem (ortak, arm64 + x86).
+
+// [D-693] [41] KANAL → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
+
+// [D-694] [42] GOREV → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
+
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
     // C kdl_yazdir_metin/tam ÇAĞRISI YOK (D-245, Faz-2a: eski yol silindi).
@@ -828,6 +856,134 @@ işlev main() -> tam32 {
         } değilse {
             uart_satir("[24] UST BELLEK HATA");
         }
+    }
+
+    // [25] BIGNUM (D-598): eski bignum_selfhost_arm'in kem_os karsiligi.
+    eğer kbn_testi() == 1 {
+        uart_satir("[25] BIGNUM OK (128-bit elde, 3 vektor)");
+    } değilse {
+        uart_satir("[25] BIGNUM HATA");
+    }
+
+    // [26] SHA-256 (D-600): eski sha256_selfhost_arm'in kem_os karsiligi.
+    değişken sha_n: tam32 = ksha_testi();
+    eğer sha_n == 8 {
+        uart_satir("[26] SHA256 OK (abc, 8/8 word)");
+    } değilse {
+        uart_metin("[26] SHA256 HATA eslesen=");
+        uart_tam_satir(sha_n);
+    }
+
+    // [27] GOREV KAPASITE (D-606): gorev tablosu tasmasi reddediliyor mu?
+    eğer kgk_testi() == 1 {
+        uart_satir("[27] GOREV KAPASITE OK (16 slot, tasma -1)");
+    } değilse {
+        uart_satir("[27] GOREV KAPASITE HATA");
+    }
+
+    // [28] SYSCALL PTR DOGRULAMA (D-610): EL0-pointer aralik denetimi info-leak'i kesiyor mu?
+    eğer kptr_testi() == 1 {
+        uart_satir("[28] SYSCALL PTR DOGRULAMA OK (kernel-ptr RED, user-ptr KABUL)");
+    } değilse {
+        uart_satir("[28] SYSCALL PTR DOGRULAMA HATA");
+    }
+
+    // [29] BASE64 (D-611): eski base64_selfhost_arm gocu — encode + decode round-trip.
+    eğer kb64_testi() == 1 {
+        uart_satir("[29] BASE64 OK (KEMGU -> S0VNR1U= + decode round-trip)");
+    } değilse {
+        uart_satir("[29] BASE64 HATA");
+    }
+
+    // [30] CRC32 (D-612): eski crc32_selfhost_arm gocu — "123456789" -> 0xCBF43926.
+    eğer kcrc_testi() == 1 {
+        uart_satir("[30] CRC32 OK (123456789 -> 0xCBF43926)");
+    } değilse {
+        uart_satir("[30] CRC32 HATA");
+    }
+
+    // [31] SORT (D-613): eski sort_selfhost_arm gocu — bubble sort in-place -> [0..9].
+    eğer ksort_testi() == 1 {
+        uart_satir("[31] SORT OK (bubble in-place -> [0..9])");
+    } değilse {
+        uart_satir("[31] SORT HATA");
+    }
+
+    // [32] HASHMAP (D-614): eski hashmap_selfhost_arm gocu — Knuth hash + probing, cakisma.
+    eğer khm_testi() == 1 {
+        uart_satir("[32] HASHMAP OK (5/21/37 cakisma + probing + miss)");
+    } değilse {
+        uart_satir("[32] HASHMAP HATA");
+    }
+
+    // [33] RC4 (D-615): eski rc4_selfhost_arm gocu — KSA+PRGA, bilinen vektor + round-trip.
+    eğer krc4_testi() == 1 {
+        uart_satir("[33] RC4 OK (Key/Plaintext -> vektor + simetrik round-trip)");
+    } değilse {
+        uart_satir("[33] RC4 HATA");
+    }
+
+    // [34] HASHCRACK (D-616): eski hashcrack_selfhost_arm gocu — SHA-256 sozluk saldirisi.
+    eğer kcrack_testi() == 1 {
+        uart_satir("[34] HASHCRACK OK (kemgu kirildi idx=2, 7 atlandi)");
+    } değilse {
+        uart_satir("[34] HASHCRACK HATA");
+    }
+
+    // [35] UTF8 (D-617): eski utf8_selfhost_arm gocu — cgisou 12 byte -> 6 kod-noktasi.
+    eğer kutf8_testi() == 1 {
+        uart_satir("[35] UTF8 OK (cgisou 12 byte -> 6 kod-noktasi + bozuk tespit)");
+    } değilse {
+        uart_satir("[35] UTF8 HATA");
+    }
+
+    // [36] TURKCE CASE (D-618): eski turkce_case_selfhost_arm gocu — Turkce-I problemi.
+    eğer ktc_testi() == 1 {
+        uart_satir("[36] TURKCE CASE OK (istanbul->I=304, IRMAK->i=305, ASCII tuzagi yok)");
+    } değilse {
+        uart_satir("[36] TURKCE CASE HATA");
+    }
+
+    // [37] TURKCE SORT (D-619): eski turkce_sort_selfhost_arm gocu — Turkce collation.
+    eğer ktr_testi() == 1 {
+        uart_satir("[37] TURKCE SORT OK (c<c<d, i<i collation; Unicode tuzagi yok)");
+    } değilse {
+        uart_satir("[37] TURKCE SORT HATA");
+    }
+
+    // [38] VM (D-620): eski vm_selfhost_arm gocu — stack bytecode yorumlayici.
+    eğer kvm_testi() == 1 {
+        uart_satir("[38] VM OK (6*7=42, 100+58=158; stack + opcode dispatch)");
+    } değilse {
+        uart_satir("[38] VM HATA");
+    }
+
+    // [39] JSON (D-621): eski json_selfhost_arm gocu — byte-dizisi JSON ayristirici.
+    eğer kjson_testi() == 1 {
+        uart_satir("[39] JSON OK ({x:42, y:100} -> [42, 100])");
+    } değilse {
+        uart_satir("[39] JSON HATA");
+    }
+
+    // [40] ASM (D-622): eski asm_selfhost_arm gocu — mnemonic -> bytecode -> [38] VM.
+    eğer kasm_testi() == 1 {
+        uart_satir("[40] ASM OK (mnemonic -> bytecode == [38] prog; 42,158 + SUB 42)");
+    } değilse {
+        uart_satir("[40] ASM HATA");
+    }
+
+    // [41] KANAL (D-623): dilin kanal ilkelleri cekirdekte, SAF-.kem SPSC halka.
+    eğer kkanal_testi() == 1 {
+        uart_satir("[41] KANAL OK (FIFO + i64 2^33 + halka sarmasi + kapasite 0/3/16)");
+    } değilse {
+        uart_satir("[41] KANAL HATA");
+    }
+
+    // [42] GOREV (D-624): dil gorevleri cekirdek zamanlayicisinda + BLOKLAYAN kanal.
+    eğer kgorev_testi() == 1 {
+        uart_satir("[42] GOREV OK (uretici/tuketici 20 msj kap=2 + 2 paralel gorev + i64 sonuc)");
+    } değilse {
+        uart_satir("[42] GOREV HATA");
     }
 
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?

@@ -1,0 +1,50 @@
+// D-377: BİLEŞİK TİP TEMSİLİ — 1. artım `Dizi<E>`.
+// Önce `tip_str` her bileşiği "?"e düşürüyordu → `Dizi` tipli T001/T013/T020
+// karşılaştırmaları HİÇ yapılmıyordu (D-376'nın "bilinçli sınır" notu).
+// Artık `Dizi<bilinen>` tam bilinen sayılır; generic (`Dizi<T>`) ERTELENİR.
+yapı Nokta { x: tam32; }
+işlev g(xs: Dizi<tam32>) -> tam32 { ver 0; }
+işlev f() -> Dizi<tam32> { ver [1]; }
+// GENERIC: eleman tipi ertelenir — gövde içi `>` T003 ALMAMALI (yanlış-pozitif kapısı).
+işlev sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
+    eğer dizi_boyut(xs) < 2 { ver doğru; }
+    eğer xs[0] > xs[1] { ver yanlış; }
+    ver doğru;
+}
+
+işlev t001_dizi_vs_skaler() -> tam32 {
+    değişken xs: Dizi<tam32> = [1];
+    değişken n: tam32 = xs;                 // T001
+    ver 0;
+}
+işlev t001_eleman_farki() -> tam32 {
+    değişken xs: Dizi<tam32> = [1];
+    değişken ys: Dizi<metin> = xs;          // T001
+    ver 0;
+}
+işlev t020_ver() -> Dizi<tam32> {
+    değişken s: metin = "a";
+    ver s;                                  // T020
+}
+işlev t001_indeks() -> tam32 {
+    değişken xs: Dizi<metin> = ["a"];
+    değişken n: tam32 = xs[0];              // T001: eleman metin
+    ver 0;
+}
+işlev t001_cagri_argumani() -> tam32 {
+    değişken ys: Dizi<metin> = ["a"];
+    ver g(ys);                              // T001: Dizi<metin> ≠ Dizi<tam32>
+}
+işlev t001_cagri_donusu() -> tam32 {
+    değişken n: tam32 = f();                // T001: dönüş Dizi<tam32>
+    ver 0;
+}
+// ---- TEMİZ akış (yanlış-pozitif kapısı) ----
+işlev temiz() -> tam32 {
+    değişken xs: Dizi<tam32> = [1, 2];
+    değişken ic: Dizi<Dizi<tam32>> = [[1], [2]];
+    değişken ns: Dizi<Nokta> = [Nokta { x: 1 }];
+    değişken alinan: Dizi<tam32> = f();
+    ver xs[0] + ic[0][0] + g(alinan);
+}
+işlev main() -> tam32 { ver 0; }

@@ -201,12 +201,6 @@ static void dizin_al(const char *yol, char *out, size_t n) {
     out[son] = '\0';
 }
 
-static int kullan_yeni_bicim(const Dugum *k) {
-    return k->veri.kullan.segment_sayi <= 1 ||
-           k->veri.kullan.secili_sayi > 0 ||
-           k->veri.kullan.alias_ad != NULL;
-}
-
 typedef struct KullanIsi {
     const Dugum *k;               /* yeni-bicim DUGUM_KULLAN */
     const char *ithalatci_yol;    /* iceren dosyanin yolu (arama + hata) */
@@ -226,7 +220,6 @@ static int kullan_isleri_topla(Arena *a, Dugum *const *uyeler, int sayi,
     for (int i = 0; i < sayi; i++) {
         const Dugum *u = uyeler[i];
         if (!u || u->tip != DUGUM_KULLAN) continue;
-        if (!kullan_yeni_bicim(u)) continue;  /* legacy yol */
         if (*is_sayi == *kap) {
             int yeni_kap = *kap == 0 ? 16 : *kap * 2;
             KullanIsi *yeni = (KullanIsi *)arena_ayir(a,
@@ -281,7 +274,24 @@ static int modulleri_yukle(Arena *a, Dugum *prog,
         if (zaten) continue;
 
         /* Arama yolu: ithalatci dizini -> proje koku -> kütüphane/ */
-        char aday[1024];
+        /* [D-580] `::` -> `/` : modul ADI mantiksaldir (`a::b::c`), DOSYA
+         * yolu fizikseldir (`a/b/c.kem`). Ceviri olmadan ic ice bir modul
+         * yeni-bicim yukleyiciyle BULUNAMAZ (T040) ve tek erisim yolu
+         * legacy duzlestirme olarak kalirdi. */
+        char yol_fiz[512];
+        {
+            int fi = 0;
+            for (int mi = 0; mi < muz && fi < (int)sizeof(yol_fiz) - 1; mi++) {
+                if (mad[mi] == ':' && mi + 1 < muz && mad[mi + 1] == ':') {
+                    yol_fiz[fi++] = '/';
+                    mi++;
+                } else {
+                    yol_fiz[fi++] = mad[mi];
+                }
+            }
+            yol_fiz[fi] = 0;
+        }
+        char aday[2048];   /* [D-580] dizin+yol_fiz+".kem" sigmali */
         char dizin[512];
         dizin_al(isler[wi].ithalatci_yol, dizin, sizeof(dizin));
         char *icerik = NULL;
@@ -289,12 +299,12 @@ static int modulleri_yukle(Arena *a, Dugum *prog,
         char *yol_kalici = NULL;
         for (int deneme = 0; deneme < 3 && !icerik; deneme++) {
             if (deneme == 0) {
-                snprintf(aday, sizeof(aday), "%s/%.*s.kem", dizin, muz, mad);
+                snprintf(aday, sizeof(aday), "%s/%s.kem", dizin, yol_fiz);
             } else if (deneme == 1) {
-                snprintf(aday, sizeof(aday), "%.*s.kem", muz, mad);
+                snprintf(aday, sizeof(aday), "%s.kem", yol_fiz);
             } else {
                 snprintf(aday, sizeof(aday),
-                         "k\xc3\xbct\xc3\xbcphane/%.*s.kem", muz, mad);
+                         "k\xc3\xbct\xc3\xbcphane/%s.kem", yol_fiz);
             }
             /* Giris dosyasinin kendisi modul olarak yuklenemez */
             if (strcmp(aday, giris_yolu) == 0) continue;
@@ -641,7 +651,7 @@ static void kullanim_yazdir(const char *prog_adi) {
         "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
         "  --lsp     Language Server (stdio JSON-RPC)\n"
         "  --no-verify  LLVM IR dogrulama kapisini kapat (sadece --llvm)\n"
-        "  --mimari M   Hedef mimari: arm64|x86_64 (satirici_asm arch-gate + triple; varsayilan x86_64)\n"
+        "  --mimari M   Hedef mimari: arm64|x86_64|x86_64-none (satirici_asm arch-gate + triple; varsayilan konak)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -684,7 +694,7 @@ int main(int argc, char *argv[]) {
             /* D-269 (P1): hedef mimari sec (satirici_asm arch-gate + emit triple).
              * Varsayilan x86_64; arm64 aarch64 sysreg/bariyer asm'i acar. */
             if (arg_idx + 1 >= argc) {
-                fprintf(stderr, "--mimari: mimari argumani gerekli (arm64|x86_64)\n");
+                fprintf(stderr, "--mimari: mimari argumani gerekli (arm64|x86_64|x86_64-none)\n");
                 return 2;
             }
             const char *m = argv[arg_idx + 1];
@@ -692,8 +702,12 @@ int main(int argc, char *argv[]) {
                 llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf");
             } else if (strcmp(m, "x86_64") == 0) {
                 llvm_hedef_ayarla("x86_64", "x86_64-pc-windows-gnu");
+            } else if (strcmp(m, "x86_64-none") == 0) {
+                /* D1: bare-metal x86, SysV cagri sozlesmesi (start_x86_64.S ile uyumlu).
+                 * Mimari ETIKETI "x86_64" kalir → satirici_asm arch-gate aynen eslesir. */
+                llvm_hedef_ayarla("x86_64", "x86_64-unknown-none-elf");
             } else {
-                fprintf(stderr, "--mimari: bilinmeyen mimari '%s' (arm64|x86_64)\n", m);
+                fprintf(stderr, "--mimari: bilinmeyen mimari '%s' (arm64|x86_64|x86_64-none)\n", m);
                 return 2;
             }
             arg_idx += 2;

@@ -1,0 +1,17 @@
+// [D-590] ÇOK-SEGMENTLİ ÇIPLAK `kullan` ARTIK YENİ BİÇİMDİR — T041 UYGULANIR.
+//
+// D-533 bu dosyada legacy düzleştirmeyi kilitliyordu: `kullan a::b::c;` tüm
+// üst düzey adları NİTELİKSİZ görünür kılıyor ve private-by-default (T041)
+// UYGULANMIYORDU (D-520'nin kaçış kapısı). D-590 (Mehmet kararı, D-582 ADIM 5
+// seçenek a) o yolu SİLDİ: çıplak çok-segment ithalat artık nitelikli
+// (SON segmentle: `derin::ad`) erişim açan yeni-biçim ithalattır.
+//
+// Kilitlenen davranış (iki yönde):
+//   derin::derin_gizli()  -> T041   (private üye — kaçış kapısı KAPALI)
+//   derin::derin_acik()   -> temiz  (POZİTİF: `genel` üye erişilebilir;
+//                                    olmasa "her şeyi reddet" sabotajı geçerdi)
+kullan test::moduller::ic::derin;
+
+işlev main() -> tam32 {
+    ver derin::derin_gizli() + derin::derin_acik();
+}

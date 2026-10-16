@@ -1,0 +1,34 @@
+// D-383: bileşik tip 7. artım — `görev<T>` + `kanal<T>` (Katman 2 tipleri).
+// ÖLÇÜM NOTU (bu partide UYGULANMADI, kayda geçsin): C'de `görev<T>` LİNEERDİR
+// (`işlev al(g: görev<tam32>)` gövdesinde `görev_birleştir(g)` yoksa L001),
+// `kanal<T>` lineer DEĞİLDİR. Self-host'un lineer makinesine `görev` eklemek
+// AYRI bir iştir (temsil işi değil) — o yüzden bu dosyada lineer şekil YOK.
+// `gönderen<T>`/`alan<T>` yön uçları AST'de TIP_KULLANICI'dır (D-366) → temsil
+// edilemez, self-host SUSAR; bu bilinçli bir eksik tanıdır.
+işlev kanal_alan(k: kanal<tam32>) -> tam32 { ver kanal_al(k); }
+
+işlev t001_kanal_skaler() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    değişken n: tam32 = k;                      // T001: kanal<tam32> ≠ tam32
+    ver 0;
+}
+işlev t001_kanal_ic_tip() -> tam32 {
+    değişken a: kanal<tam32> = kanal_oluştur(2);
+    değişken b: kanal<metin> = a;               // T001: iç tip farkı
+    ver 0;
+}
+işlev t001_kanal_argumani() -> tam32 {
+    değişken b: kanal<metin> = kanal_oluştur(1);
+    ver kanal_alan(b);                          // T001: Dizi değil, kanal iç tipi
+}
+işlev t020_gorev_donus() -> görev<tam32> {
+    değişken n: tam32 = 1;
+    ver n;                                      // T020: tam32 ≠ görev<tam32>
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    kanal_gönder(k, 1);
+    ver kanal_al(k);
+}
+işlev main() -> tam32 { ver 0; }

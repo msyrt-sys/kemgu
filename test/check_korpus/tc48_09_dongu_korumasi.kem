@@ -1,0 +1,15 @@
+// [D-650] SONSUZ-DÖNGÜ KORUMASINI SINAYAN İLK KORPUS DOSYASI.
+//
+// ⚠ NEDEN ÖZEL: `parse_birincil`in son çaresi artık İLERLEMİYOR (C `ifade.c:441`
+// aynası). Bu, `parse_blok` döngüsüne C'nin "token ilerlemediyse zorla ilerle"
+// koruması (C parser.c:1164) eklendiği için güvenli. Koruma OLMADAN bu dosya
+// derleyiciyi ASAR — ölçüldü: koruma devre dışı bırakılınca `{ , }`, `{ : }` ve
+// `{ ) }` girdilerinin üçü de 5 sn timeout'a takıldı.
+//
+// ⚠⚠ BU FİKSTÜR BİR KÖR NOKTAYI KAPATIYOR: koruma eklendiğinde onu SINAYAN
+// hiçbir korpus dosyası yoktu. Sabotaj S150 (korumayı devre dışı bırak) o yüzden
+// ATEŞLEMEDİ ve kapı 200/200 YEŞİL kaldı — yani yük taşıyan bir mekanizma
+// tamamen kapsam dışıydı. Doğrudan ölçüm gerekti.
+//
+// Beklenen: C ve self-host BİREBİR `P010` (ifade bekleniyor) + `P101` (';').
+işlev main() -> tam32 { , }

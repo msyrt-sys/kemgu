@@ -1,0 +1,11 @@
+// [D-653] P266 — `satıriçi_asm` `mimari:` clause'u ZORUNLU.
+//
+// ⚠ YENİ BİR SESSİZ-KABUL VAKASIYDI: self-host bu dosyaya `OK` diyordu; C
+// P266 ile reddediyor. Sebep: C kapanış '}'dan SONRA zorunlu clause denetimi
+// yapıyor (parser.c:1761-1769), self-host'ta o denetimler HİÇ YOKTU.
+// Tanı konumu `satıriçi_asm` ANAHTAR KELİMESİ, kapanış '}' değil — bu yüzden
+// konum alan `parse_hata_konum` yardımcısı eklendi.
+işlev main() -> tam32 {
+    güvensiz { satıriçi_asm { şablon: r#"nop"# } }
+    ver 0;
+}

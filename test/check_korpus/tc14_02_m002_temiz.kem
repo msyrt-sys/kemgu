@@ -1,0 +1,33 @@
+// D-357: geçerli çeşit kullanımları — yanlış-pozitif kapısı.
+// Kritik satır `ciplak_desen()`: payload'lı bir varyantın ÇIPLAK deseni
+// (`Secim::Bir =>`, alt-desen yok) M003 VERMEZ — C alt-desen sayısı 0 ise
+// arite kontrolünü atlar. Bu kural olmadan geçerli kod reddedilirdi.
+çeşit Renk { Kirmizi, Mavi }
+çeşit Secim { Bir(tam32), Iki(tam32, tam32), Hic }
+
+işlev deger() -> tam32 {
+    değişken r: Renk = Renk::Mavi;
+    ver 0;
+}
+işlev yapici() -> tam32 {
+    değişken a: Secim = Secim::Bir(1);
+    değişken b: Secim = Secim::Iki(1, 2);
+    değişken c: Secim = Secim::Hic;
+    ver 0;
+}
+işlev desen(s: Secim) -> tam32 {
+    eşleş s {
+        Secim::Bir(x) => { ver x; }
+        Secim::Iki(x, y) => { ver x + y; }
+        Secim::Hic => { ver 0; }
+    }
+}
+işlev ciplak_desen(s: Secim) -> tam32 {
+    eşleş s {
+        Secim::Bir => { ver 1; }      // alt-desen YOK → M003 verilmez
+        _ => { ver 0; }
+    }
+}
+işlev main() -> tam32 {
+    ver 0;
+}

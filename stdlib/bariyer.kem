@@ -1,0 +1,40 @@
+// KEMGU Stdlib — Bariyer (buluşma noktası)
+// ========================================
+//
+// [D-456] `hedef` kadar katılımcı buluşana dek HEPSİ bekler; sonuncusu
+// gelince hepsi birlikte devam eder. Bariyer YENİDEN KULLANILABİLİR.
+//
+// ⚠ BURADA KAPSAMLI (scoped) API BİLEREK YOKTUR — ve bu bir eksiklik değil,
+// ölçülmüş bir ayrımdır. `kilit`/`semafor`da kapsam GERÇEK bir hata sınıfını
+// (unutulmuş/çift `bırak`) yapısal olarak imkânsız kılar. Bariyerin ise
+// eşlenecek bir çifti yoktur: `bekle` TEK bir çağrıdır, dengelenmesi gereken
+// bir "giriş/çıkış" yoktur. `bariyerde(b, ||{..})` yazmak yalnızca `bekle`yi
+// süslerdi — önlediği bir hata olmadan kapsam görüntüsü vermek, okuyucuyu
+// var olmayan bir güvence konusunda yanıltır.
+//
+// Bariyerin kendi tehlikesi başkadır ve kapsamla ÇÖZÜLMEZ: `hedef`ten az
+// katılımcı gelirse hepsi sonsuza dek bekler. Bu, sayının doğru verilmesine
+// bağlıdır; dil bunu göremez.
+//
+// ⚠ Thread'siz derlemede `bekle` NO-OP'tur (tek katılımcı zaten "buluşmuş"tur).
+
+yapı Bariyer {
+    h: metin;   // opak runtime handle'ı (KdlBariyer*)
+}
+
+// `hedef` katılımcılı yeni bir bariyer yarat.
+işlev olustur(hedef: tam32) -> Bariyer {
+    ver Bariyer { h: bariyer_olustur(hedef) };
+}
+
+// Bariyerde bekle. `hedef` katılımcı toplanınca hepsi birlikte devam eder.
+işlev bekle(b: Bariyer) -> tam32 {
+    bariyer_bekle(b.h);
+    ver 0;
+}
+
+// Bariyeri yok et. Bekleyen katılımcı KALMAMIŞ olmalıdır.
+işlev yok_et(b: Bariyer) -> tam32 {
+    bariyer_yok(b.h);
+    ver 0;
+}

@@ -1,0 +1,34 @@
+// D-355: geçerli lineer kullanımlar — yanlış-pozitif kapısı.
+// Kritik satır `annotasyonsuz()`: `değişken t = tekkez_olustur(5)` bağlaması
+// tekkez'dir ama ANNOTASYONU YOKTUR. "Annotasyon yok" ile "lineer yapı" karıştırılırsa
+// bu satır sahte L007 alır (port sırasında tam bu kusur ölçüldü ve düzeltildi).
+yapı tekkez Kap { x: tam32; }
+
+işlev annotasyonsuz() -> tam32 {
+    değişken t = tekkez_olustur(5);
+    ver kullan(t);
+}
+işlev annotasyonlu() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(7);
+    ver kullan(t);
+}
+işlev imha_tekkez() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(1);
+    imha(t);
+    ver 0;
+}
+işlev imha_lineer_yapi() -> tam32 {
+    değişken k: Kap = Kap { x: 1 };
+    imha(k);
+    ver 0;
+}
+işlev param_tekkez(t: tekkez<tam32>) -> tam32 {
+    ver kullan(t);
+}
+işlev param_lineer_yapi(k: Kap) -> tam32 {
+    imha(k);
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

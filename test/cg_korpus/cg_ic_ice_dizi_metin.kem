@@ -1,0 +1,14 @@
+// D-438 REGRESYON — iç içe `dizi_al` eleman tipini KAYBEDİYORDU.
+// `Dizi<Dizi<metin>>` üzerinde `dizi_al(dizi_al(d,0),0)` sonucu ptr yerine
+// i32 okunuyor, `metin_esit`e i32 geçiriliyordu → SEGFAULT.
+// Ara değişkene alınınca çalışıyordu (bağlı isim tip taşır); kusur yalnız
+// İSİMSİZ ARA DEĞERDE. D-437 ile aynı sınıf (erişimci soneki), ayrı kaynak.
+// Çeşitle İLGİSİZ — çeşitsiz de çöküyordu (ölçüldü). Exit: 42
+işlev main() -> tam32 {
+    değişken ic: Dizi<metin> = [];
+    dizi_ekle(ic, "a");
+    değişken d: Dizi<Dizi<metin>> = [];
+    dizi_ekle(d, ic);
+    eğer metin_esit(dizi_al(dizi_al(d, 0), 0), "a") { ver 42; }
+    ver 1;
+}

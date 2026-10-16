@@ -1,0 +1,51 @@
+// [D-569] KİLİT DİSİPLİNİ — D-568'in ölçtüğü dört tehlike.
+// Mehmet kararı (b): ham yerleşikler açıkta kalıyor ama checker artık
+// eşleşmeyi denetliyor. YENİ TANI KODU YOK — mevcut kodlar birebir uyuyor.
+// ⚠ `dogru` POZİTİF ölçümdür: yalnız negatifler olsaydı "her kilit_al'ı
+//   reddet" sabotajı kapıdan GEÇERDİ (D-425).
+// ⚠ `kosullu` da POZİTİFTİR: koşullu yapıda izleme BIRAKILIR (yanlış-pozitif
+//   üretmemek için) — o dal sessiz kalmalı.
+
+işlev dogru() -> tam32 {
+    değişken k: metin = kilit_olustur();
+    kilit_al(k);
+    kilit_birak(k);
+    kilit_yok(k);
+    ver 42;
+}
+
+işlev tutulu_kaldi() -> tam32 {
+    değişken k: metin = kilit_olustur();
+    kilit_al(k);                 // L001: cikista TUTULU
+    ver 1;
+}
+
+işlev cift_birak() -> tam32 {
+    değişken k: metin = kilit_olustur();
+    kilit_al(k);
+    kilit_birak(k);
+    kilit_birak(k);              // L002: alinmamis kilit birakildi
+    ver 2;
+}
+
+işlev iki_kez_al() -> tam32 {
+    değişken k: metin = kilit_olustur();
+    kilit_al(k);
+    kilit_al(k);                 // L002: self-deadlock
+    ver 3;
+}
+
+işlev olu_handle() -> tam32 {
+    değişken k: metin = kilit_olustur();
+    kilit_yok(k);
+    kilit_al(k);                 // CP005: olu handle
+    ver 4;
+}
+
+işlev kosullu(p: mantıksal) -> tam32 {
+    değişken k: metin = kilit_olustur();
+    eğer p { kilit_al(k); }      // kosullu -> izleme BIRAKILIR, tani YOK
+    ver 5;
+}
+
+işlev main() -> tam32 { ver dogru(); }

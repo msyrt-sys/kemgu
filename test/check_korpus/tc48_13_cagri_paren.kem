@@ -1,0 +1,6 @@
+// [D-652] P122 — çağrı ')' eksik (C ifade.c:549). Site `parse_sonek`te;
+// ilk denememde `parse_birincil`deki yanlış SAG_PAREN'i eşlemiştim.
+işlev f() -> tam32 { ver 1; }
+işlev main() -> tam32 {
+    ver f(;
+}

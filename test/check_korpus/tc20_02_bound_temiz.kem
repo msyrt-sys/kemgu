@@ -1,0 +1,21 @@
+// D-369: geçerli generic kullanımları — yanlış-pozitif kapısı.
+// Bound karşılanmışsa, bound hiç yoksa, ve argüman bir GENERIC PARAM ise
+// (kapsayan bağlamdan gelir) denetim geçmelidir.
+özellik Say {}
+yapı Tam { x: tam32; }
+uygula Say için Tam {}
+yapı Vektor<T: Say> { ic: T; }
+yapı Serbest<T> { ic: T; }
+
+işlev bound_karsilandi() -> Vektor<Tam> {
+    ver Vektor { ic: Tam { x: 0 } };
+}
+işlev boundsuz() -> Serbest<Tam> {
+    ver Serbest { ic: Tam { x: 0 } };
+}
+işlev generic_param_muaf<U>(v: Serbest<U>) -> tam32 {
+    ver 0;
+}
+işlev main() -> tam32 {
+    ver 0;
+}

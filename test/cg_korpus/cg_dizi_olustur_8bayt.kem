@@ -1,0 +1,43 @@
+// [D-512] BÖLGE YÖNLENDİRMESİ — 8 BAYTLIK ELEMAN MATRİSİ (`dizi_olustur` yolu).
+//
+// D-509'un soundness deliği tam BURADA yaşıyordu: eleman tipi BAYT GENİŞLİĞİNE
+// indirgeniyordu (`eb == 8 ? "i64" : "i32"`), yani 8 baytlık SKALER (tam64,
+// kesirli64 — güvenli) ile 8 baytlık İŞARETÇİ (metin, &Yapi, Dizi<T> — iç
+// heap-ref `dizi_al` ile kaçabilir = UAF) aynı kovaya düşüyordu.
+//
+// Korpus ölçüldü: `dizi_olustur` sütununda `Dizi<tam64>` ve `Dizi<kesirli64>`
+// HİÇ YOKTU — yani POZİTİF 8-bayt-skaler şekil eksikti. Bu olmadan "her 8
+// baytlığı reddet" biçimindeki toptan-sıkılaştırma gerilemesi kapıdan
+// SESSİZCE GEÇERDİ (D-425). Negatif taraf (ptr eleman) zaten
+// cg_dizi_olustur_cagri + cg_ref_yerel_alan ile kapılıydı.
+//
+// Bu dosyanın kapıladığı ölçüm `calistir_bolge_operand`dadır:
+//   Dizi<tam64>       -> YEREL   (8 bayt ama SKALER — ρ_yerel'de kalmalı)
+//   Dizi<kesirli64>   -> YEREL   (8 bayt ama SKALER)
+//   Dizi<Dizi<tam32>> -> GLOBAL  (8 bayt ve İŞARETÇİ — reddedilmeli)
+// Çıkış: 42
+işlev main() -> tam32 {
+    // (a) tam64 — 8 bayt SKALER
+    değişken a: Dizi<tam64> = dizi_olustur(4);
+    dizi_ekle(a, 8589934592);            // 2^33 — i32'ye sığmaz, kırpma yakalanır
+    dizi_ekle(a, 10);
+    değişken t: tam64 = dizi_al(a, 0) + dizi_al(a, 1);
+    eğer t != 8589934602 { ver 1; }
+
+    // (b) kesirli64 — 8 bayt SKALER
+    değişken k: Dizi<kesirli64> = dizi_olustur(4);
+    dizi_ekle(k, 20.5);
+    dizi_ekle(k, 1.5);
+    değişken f: kesirli64 = dizi_al(k, 0) + dizi_al(k, 1);
+    eğer f != 22.0 { ver 2; }
+
+    // (c) Dizi<Dizi<tam32>> — 8 bayt İŞARETÇİ (ρ_yerel REDDEDİLMELİ)
+    değişken ic: Dizi<tam32> = dizi_olustur(4);
+    dizi_ekle(ic, 20);
+    değişken d: Dizi<Dizi<tam32>> = dizi_olustur(4);
+    dizi_ekle(d, ic);
+    değişken g: tam32 = dizi_al(dizi_al(d, 0), 0);
+    eğer g != 20 { ver 3; }
+
+    ver 42;
+}

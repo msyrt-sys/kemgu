@@ -1,0 +1,31 @@
+// D-372 / CP005: `yetki<R>` PARAMETRESİ lineerdir → argüman TAŞINIR.
+// D-365 TIP_YETKI'yi `tip_node_tekkez_mi`ye eklemişti ama `param_lineer_mi`ye
+// EKLEMEMİŞTİ → kullanıcı işlevine geçirilen yetki tüketilmiş sayılmıyordu →
+// `mmio_smoke.kem`/`virtio_selfhost_rw.kem` gibi GEÇERLİ programlar sahte
+// CP005 alıyordu (yanlış-pozitif, ölçüldü).
+// Bu dosya İKİ yönü birden kapılar: taşıma SAYILIR (thread_et) ve taşıma
+// AŞIRI genişlemez (cift_gecir → L002, sahip_kalir → CP005).
+
+işlev tuket(y: yetki<MMIO>) -> tam32 {
+    geri_al(y);
+    ver 0;
+}
+işlev thread_et(y: yetki<MMIO>) -> yetki<MMIO> {
+    ver y;                                 // taşınır ve geri döner
+}
+
+işlev temiz_zincir() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    değişken y1: yetki<MMIO> = thread_et(y);   // y TÜKETİLİR (CP005 YOK)
+    ver tuket(y1);                             // y1 TÜKETİLİR (CP005 YOK)
+}
+işlev cift_gecir() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    tuket(y);
+    ver tuket(y);                              // ikinci taşıma → hata
+}
+işlev sahip_kalir() -> tam32 {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 4096);
+    ver 0;                                     // hiç tüketilmedi → CP005
+}
+işlev main() -> tam32 { ver 0; }

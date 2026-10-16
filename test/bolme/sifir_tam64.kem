@@ -1,0 +1,6 @@
+işlev main() -> tam32 {
+    değişken a: tam64 = 10;
+    değişken b: tam64 = 0;
+    değişken c: tam64 = a / b;
+    ver 1;
+}

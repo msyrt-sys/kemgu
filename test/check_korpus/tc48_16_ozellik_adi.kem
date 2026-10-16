@@ -1,0 +1,3 @@
+// [D-653] P200 — `özellik` adı eksik (C parser.c:719).
+özellik { işlev f() -> tam32; }
+işlev main() -> tam32 { ver 0; }

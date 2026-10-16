@@ -1,0 +1,23 @@
+// D-373 / AS001: `satıriçi_asm` mimari etiketi HEDEF mimariyle uyuşmalı.
+// Yanlış hedefe sessizce bozuk makine kodu üretmek yerine derleme hatası.
+// Hedef self-host'ta sabit x86_64 (C varsayılanı; self-host sürücüde
+// `--mimari` bayrağı YOK → hedef gerçekten değişmez).
+// Bu dosya üç yönü kapılar: uyan (hata YOK), uymayan (AS001),
+// ve G002 ile SIRA (güvensiz dışında önce G002, sonra AS001).
+işlev uyan() -> tam32 {
+    güvensiz {
+        satıriçi_asm { mimari: x86_64  şablon: r#"nop"#  çevrim: 1 }
+    }
+    ver 0;
+}
+işlev uymayan() -> tam32 {
+    güvensiz {
+        satıriçi_asm { mimari: arm64  şablon: r#"nop"#  çevrim: 1 }   // AS001
+    }
+    ver 0;
+}
+işlev guvensiz_disinda() -> tam32 {
+    satıriçi_asm { mimari: arm64  şablon: r#"nop"#  çevrim: 1 }       // G002 + AS001
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

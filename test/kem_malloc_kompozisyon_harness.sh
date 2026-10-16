@@ -8,13 +8,18 @@
 #   (B) KOMPOZİSYON: C-harness .kem çıplak malloc'u 2× çağırır → 2 FARKLI adres,
 #       yazılabilir (inttoptr+deref), bitişik → exit 42 + "A!=B EVET".
 set -u
+# [D-482] EXE tespiti (D-469 ile ayni desen; bu harness DUZ ATAMA kullandigi
+# icin o turda ATLANMISTI -- "cogu yorumdur" diye elemistim, YANLISTI).
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 cd "$(dirname "$0")/.."
 
-KEMGU=build/kemgu.exe
-SELF=build/codegen.exe
+KEMGU=build/kemgu${EXE}
+SELF=build/codegen${EXE}
 KEM=test/ornekler/kem_malloc.kem
 HARNESS=test/kem_malloc_kompozisyon.c
-TMP=$(mktemp -d 2>/dev/null || echo /c/tmp/kemmalloc_$$)
+# [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
+# recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
+TMP=$(mktemp -d "build/kemmalloc.XXXXXX" 2>/dev/null || echo "build/kemmalloc.$$")
 mkdir -p "$TMP"
 gecti=0; kaldi=0
 

@@ -1,0 +1,11 @@
+// [D-467] `sonuç` değişkene bağlandı ama `eşleş` ile AÇILMADI -> L001.
+yapı tekkez Tutamac { h: metin; }
+
+işlev ac() -> sonuç<Tutamac, metin> {
+    ver tamam(Tutamac { h: "x" });
+}
+
+işlev main() -> tam32 {
+    değişken r: sonuç<Tutamac, metin> = ac();   // hiç açılmadı
+    ver 0;
+}

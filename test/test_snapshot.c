@@ -39,6 +39,16 @@ static int dosya_oku(const char *yol, char *buf, int max) {
     return n;
 }
 
+/* [D-479] Tampondan CR baytlarini SIL, yeni uzunlugu don. Yerinde calisir. */
+static int cr_at(char *s, int n) {
+    int i, j = 0;
+    if (n <= 0) return n;
+    for (i = 0; i < n; i++) {
+        if (s[i] != '\r') s[j++] = s[i];
+    }
+    return j;
+}
+
 static void test_snapshot(const char *isim) {
     char kem_yol[256], ast_yol[256], tmp_yol[256], cmd[1024];
 
@@ -62,6 +72,20 @@ static void test_snapshot(const char *isim) {
 
     int b = dosya_oku(ast_yol, baseline, MAX_DOSYA);
     int a = dosya_oku(tmp_yol, actual, MAX_DOSYA);
+
+    /* [D-479] SATIR SONLARINI NORMALLESTIR — CR'leri at.
+     *
+     * OLCULDU: `.ast` anlik goruntuleri depoda CRLF ile duruyor (Windows/git
+     * autocrlf). Windows'ta uretilen cikti da CRLF -> ham `memcmp` tutuyordu.
+     * Linux'ta uretilen cikti LF -> 50 testin 50'si BASARISIZ.
+     * Belirti tam imzasini veriyordu: "bekl=250 gerc=238" = 12 satir x 1 bayt.
+     *
+     * ⚠ NORMALLESTIRME DOGRU COZUM, dosyalari LF'e cevirmek DEGIL: bu testin
+     * sordugu soru "AST DOKUMU ayni mi", "satir sonlari ayni mi" DEGIL.
+     * Dosyalari LF yapsaydik Windows'ta uretilen CRLF cikti bu kez ORADA
+     * dusecekti -- kusuru bir platformdan digerine tasimis olurduk. */
+    b = cr_at(baseline, b);
+    a = cr_at(actual, a);
 
     int esit = (rc == 0) && (b > 0) && (a > 0) && (b == a) &&
                (memcmp(baseline, actual, (size_t)b) == 0);

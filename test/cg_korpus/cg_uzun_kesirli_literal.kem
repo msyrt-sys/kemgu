@@ -1,0 +1,16 @@
+// [D-633] 63 karakteri aşan KESİRLİ literal kırpılmamalı. İki derleyici de
+// (C `sayi_tokeni_temizle` + self-host runtime `kdl_ondalik_bicimle`) tamponu
+// 63 karakterde kesiyordu → uzun literalin ÜSSÜ düşüyordu: `1.000…0e10` → 1.0,
+// SESSİZ YANLIŞ DEĞER (ölçüldü: iki tarafta da exit 1). `_` ayraçlı biçim de
+// ölçülür (C `_`ları atmadan ÖNCE kırpıyordu). Her ölçüm AYRI çıkış kodu.
+işlev main() -> tam32 {
+    değişken a: kesirli64 = 1.00000000000000000000000000000000000000000000000000000000000000e10;
+    değişken b: kesirli64 = 0.00000000000000000000000000000000000000000000000000000000000000000000001e71;
+    değişken c: kesirli64 = 1.0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0e2;
+    değişken d: kesirli64 = 2.5;                      // kısa literal etkilenmemeli
+    eğer a != 10000000000.0 { ver 1; }
+    eğer b != 1.0 { ver 2; }
+    eğer c != 100.0 { ver 3; }
+    eğer d != 2.5 { ver 4; }
+    ver 42;
+}

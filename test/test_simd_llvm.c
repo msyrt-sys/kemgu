@@ -38,11 +38,27 @@ static void test_sonuc(const char *ad, int durum) {
 #define SUREC_NO() ((int)_getpid())
 #else
 #include <unistd.h>
+#include <sys/wait.h>
 #define DEV_NULL "/dev/null"
 #define KEMGU_BIN "./build/kemgu"
 #define YOL_ONEK "./build/"
 #define SUREC_NO() ((int)getpid())
 #endif
+
+/* [D-477] `system()` POSIX'te BEKLEME DURUMU doner (exit 42 => 42<<8), Windows'ta
+ * CIKIS KODU. `test_llvm.c` ile AYNI tuzak; orada 286 testin 240'ini
+ * basarisiz sayiyordu. Ayni dosyada iki kez yazmak yerine ayni yorumu
+ * tasiyan ayni yardimci -- kopya kod degil, KOPYA TUZAK onlenmis oluyor. */
+static int cikis_kodu(int system_rc) {
+#ifdef _WIN32
+    return system_rc;
+#else
+    if (system_rc == -1) return -1;
+    if (WIFEXITED(system_rc)) return WEXITSTATUS(system_rc);
+    if (WIFSIGNALED(system_rc)) return 128 + WTERMSIG(system_rc);
+    return system_rc;
+#endif
+}
 
 /* D-297: gecici yollar SUREC-BENZERSIZ — bkz. test_llvm.c'deki ayrintili not.
  * Sabit yol, ayni testin iki es zamanli kosumunda SAHTE kirmizi uretiyordu. */
@@ -90,7 +106,7 @@ static int derle_ve_calistir(const char *kemgu_kaynak) {
 
     snprintf(komut, sizeof(komut), "%s", EXE_PATH);
     rc = system(komut);
-    return rc;
+    return cikis_kodu(rc);   /* [D-477] */
 }
 
 /* === Testler === */
@@ -133,13 +149,21 @@ static void test_vektor_cikar(void) {
 }
 
 static void test_vektor_8lane(void) {
-    /* 8 lane * 5 = 40 her lane, sum = 320 */
+    /* [D-477] ⚠ BEKLENTI 8 BITE SIGMALI. Bu test 8 x 40 = 320 bekliyordu ve
+     * Windows'ta GECIYORDU (Win32 32-bit cikis kodu tasir); POSIX cikis kodunu
+     * 8 BITE MASKELER -> 320 & 255 = 64 ve test Linux'ta DUSUYORDU. Hesap
+     * DOGRUYDU, TESTIN BEKLENTISI tasinabilir degildi.
+     * Depo bu dersi ZATEN kaydetmisti (test_json: "262144 -> dusuk bayt 0 ->
+     * BASARISIZLIK 'gecti' gibi gorunuyordu") ama yalniz ORADA duzeltilmisti.
+     * Olculdu: 8 x 25 = 200 <= 255 -> 8-lane indirgemeyi AYNI sekilde olcer,
+     * tasinabilir kalir. */
     int rc = derle_ve_calistir(
         "i\xc5\x9flev main() -> tam32 {\n"
-        "    de\xc4\x9fi\xc5\x9fken v: vekt\xc3\xb6r<tam32, 8> = vektor_doldur(40);\n"
+        "    de\xc4\x9fi\xc5\x9fken v: vekt\xc3\xb6r<tam32, 8> = vektor_doldur(25);\n"
         "    ver vektor_topla(v);\n"
         "}\n");
-    test_sonuc("SIMD-LLVM 4: 8 lane vektor_topla = 320", rc == 320);
+    test_sonuc("SIMD-LLVM 4: 8 lane vektor_topla = 200 (8-bit sinirinda)",
+               rc == 200);
 }
 
 static void test_vektor_eleman(void) {

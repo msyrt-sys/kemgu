@@ -61,6 +61,10 @@ aggregate imzayla emit + çağrılır.
 
 ## Kaynak / test
 
-`src/llvm.c`: `llvm_ir_uret` `kullan` pre-pass (worklist fixed-point).
-Testler: `test/crossfile/transitif.kem` (transitif), `sonuc_cagri.kem`
-(sonuç-dönüşlü cross-file, C2.5 ABI).
+**[D-590] Legacy düzleştirme SİLİNDİ.** Tüm `kullan`lar `src/ana.c`
+`modulleri_yukle` ile sentetik `DUGUM_MODUL` olarak yüklenir; çıplak
+çok-segment ithalat (`kullan a::b::c;`) modülü SON segmentle bağlar
+(`c::uye`) ve private-by-default (T041) her yolda uygulanır. Yukarıdaki
+düzleştirme/CWD notları tarihîdir.
+Testler: `test/crossfile/transitif_yeni.kem` (transitif),
+`sonuc_cagri_yeni.kem` (sonuç-dönüşlü cross-file, C2.5 ABI).

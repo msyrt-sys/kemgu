@@ -1,0 +1,46 @@
+// D-386: Katman 2 intrinsiklerinin DÖNÜŞ tipleri. Bunlar C'de yerleşik imza
+// TABLOSUNDA DEĞİLDİR (D-374'ün tablosu skaler imzalıdır) — tipleri ARGÜMANDAN
+// türer, o yüzden ayrı ele alınır:
+//   kanal_al(k)        → k'nin kanal<E> eleman tipi
+//   görev_birleştir(g) → g'nin görev<T> yükü
+//   görev_başlat(|| e) → sonuç<görev<T>, metin>, T = lambda gövdesinin tipi
+// Bu sayede D-385'in bıraktığı boşluk da kapandı: `eşleş görev_başlat(..)`
+// ile bağlanan görev artık LİNEER izlenir (C konumu 0:0 basar — ölçüldü).
+işlev is() -> tam32 { ver 1; }
+
+işlev t001_kanal_al_donusu() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    değişken m: metin = kanal_al(k);            // T001: eleman tam32
+    ver 0;
+}
+işlev t001_birlestir_donusu(g: görev<tam32>) -> tam32 {
+    değişken m: metin = görev_birleştir(g);     // T001: yük tam32
+    ver 0;
+}
+işlev t001_baslat_donusu() -> tam32 {
+    değişken r: sonuç<görev<metin>, metin> = görev_başlat(|| is());   // T001
+    eşleş r { tamam(g) => { ver görev_birleştir(g); } hata(e) => { ver 1; } }
+}
+işlev l001_esles_baglama() -> tam32 {
+    eşleş görev_başlat(|| is()) {
+        tamam(g) => { ver 0; }                  // L001 (0:0): g birleştirilmedi
+        hata(e) => { ver 1; }
+    }
+}
+işlev l002_esles_iki_kez() -> tam32 {
+    eşleş görev_başlat(|| is()) {
+        tamam(g) => { görev_birleştir(g); ver görev_birleştir(g); }   // L002
+        hata(e) => { ver 1; }
+    }
+}
+// ---- TEMİZ (yanlış-pozitif kapısı) ----
+işlev temiz() -> tam32 {
+    değişken k: kanal<tam32> = kanal_oluştur(2);
+    kanal_gönder(k, 7);
+    değişken n: tam32 = kanal_al(k);
+    eşleş görev_başlat(|| is()) {
+        tamam(g) => { ver n + görev_birleştir(g); }
+        hata(e) => { ver metin_uzunluk(e); }
+    }
+}
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,6 @@
+// [D-546] SABIT aralik disi lane indeksi. lane=4, i=99.
+// Once: --check TEMIZ, -O0 exit=224, -O2 exit=1 (AYNI PROGRAM, FARKLI CEVAP).
+işlev main() -> tam32 {
+    değişken a: vektör<tam32, 4> = vektor_doldur(7);
+    ver vektor_eleman(a, 99);
+}

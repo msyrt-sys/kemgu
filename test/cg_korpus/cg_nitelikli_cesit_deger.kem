@@ -1,0 +1,22 @@
+// [D-587] Modül-nitelikli çeşit varyantı DEĞER konumunda (`g::Renk::Yesil`).
+// Öncesinde self-host bu şekli ifade_uret YOL dalının çöp koluna düşürüp
+// SESSİZCE `0` (= varyant indeksi 0) yayıyordu: C=42, SELF=1.
+// AYIRT EDİCİ: İLK OLMAYAN varyantlar kullanılır ve her dal FARKLI değer
+// döndürür — ilk varyantı kullanan `modul_cesit` fikstürü bu kusuru
+// tesadüfen geçiriyordu (0 = Kirmizi = doğru cevap). Üç varyant şart:
+// iki varyantla "hep ilk" hatası %50 olasılıkla doğru cevabı verir (D-410).
+modül g {
+    çeşit Renk { Kirmizi, Yesil, Mavi }
+    işlev kod(r: Renk) -> tam32 {
+        eşleş r {
+            Renk::Kirmizi => { ver 1; }
+            Renk::Yesil => { ver 30; }
+            Renk::Mavi => { ver 12; }
+        }
+        ver 99;
+    }
+}
+
+işlev main() -> tam32 {
+    ver g::kod(g::Renk::Yesil) + g::kod(g::Renk::Mavi);
+}

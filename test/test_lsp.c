@@ -1038,6 +1038,168 @@ static void test_shutdown_yanit(void) {
     fclose(cikti);
 }
 
+/* === D-432: semanticTokens/full ===
+ * TURKCE KAYNAK BILINCLI: LSP `data` icindeki sutun ve uzunluk UTF-16 KOD
+ * BIRIMI cinsindendir, BAYT degil. `olc` 5 BAYT ama 3 UTF-16 birimidir —
+ * bayt kullanan bir uygulama burada kayar ve ASCII testte GORUNMEZ. */
+static void test_semantictokens_turkce(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* Kaynak: `işlev ölç(x: tam32) -> tam32 { ver x + 42; }` */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///s.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev \\u00f6l\\u00e7(x: tam32) -> tam32 { ver x + 42; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":20,"
+        "\"method\":\"textDocument/semanticTokens/full\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///s.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;   /* initialize, diag, semtok, shutdown */
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *ys = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, ys->govde, ys->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        JsonDeger *data = result ? json_alan(result, "data") : NULL;
+        ok = data && data->tip == JSON_DIZI && data->veri.dizi.sayi >= 15
+          && (data->veri.dizi.sayi % 5) == 0;   /* 5'li gruplar */
+        if (ok) {
+            JsonDeger **e = data->veri.dizi.elemanlar;
+            /* [0] `işlev` : satir 0, sutun 0, uzunluk 5, keyword(0) */
+            ok = e[0]->veri.tamsayi == 0 && e[1]->veri.tamsayi == 0
+              && e[2]->veri.tamsayi == 5 && e[3]->veri.tamsayi == 0;
+            /* [1] `ölç` : ayni satir, +6 sutun, uzunluk 3 (UTF-16!), variable(4)
+             * ⚠ BAYT sayilsaydi uzunluk 5 olurdu — kapinin ASIL disi budur. */
+            if (ok) {
+                ok = e[5]->veri.tamsayi == 0 && e[6]->veri.tamsayi == 6
+                  && e[7]->veri.tamsayi == 3 && e[8]->veri.tamsayi == 4;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("semanticTokens UTF-16 sutun/uzunluk dogru", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* === D-433: COK-BELGE ===
+ * Sunucu tek `Belge` tutuyordu: IKINCI dosya acilinca BIRINCISI eziliyordu.
+ * Bu test iki dosyayi acar, sonra BIRINCISINE documentSymbol sorar — tek-belge
+ * modelde birinci dosyanin sembolleri KAYBOLMUS olurdu (bos dizi donerdi). */
+static void test_cok_belge_izolasyon(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* a.kem: `işlev alfa() -> tam32 { ver 1; }` */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///a.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev alfa() -> tam32 { ver 1; }\"}}}");
+    /* b.kem: `işlev beta() -> tam32 { ver 2; }` — a.kem'i EZMEMELI */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///b.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev beta() -> tam32 { ver 2; }\"}}}");
+    /* BIRINCI dosyanin sembolleri hala erisilebilir mi? */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":30,\"method\":\"textDocument/documentSymbol\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///a.kem\"}}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    /* initialize, diag(a), diag(b), documentSymbol, shutdown */
+    int ok = yanit_sayisi(y) == 5;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yd = yanit_n(y, 3);
+        JsonDeger *j = json_ayrist(a, yd->govde, yd->content_length, NULL);
+        JsonDeger *result = json_alan(j, "result");
+        ok = result && result->tip == JSON_DIZI && result->veri.dizi.sayi == 1;
+        if (ok) {
+            JsonDeger *s0 = result->veri.dizi.elemanlar[0];
+            int nu = 0;
+            const char *nm = json_metin(json_alan(s0, "name"), &nu);
+            /* a.kem'in sembolu `alfa` olmali — `beta` ise belge EZILMIS demektir */
+            ok = nm && nu == 4 && memcmp(nm, "alfa", 4) == 0;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("cok-belge: ikinci didOpen birinciyi EZMEZ", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* === D-434: workspace/symbol ===
+ * ASIL KANIT: sorgu IKI FARKLI dosyadan sonuc dondurmeli. Tek-belge modelde
+ * (D-433 oncesi) bu IMKANSIZDI — o yuzden bu test ayni zamanda cok-belge
+ * modelinin ISE YARADIGININ ikinci kanitidir. */
+static void test_workspace_symbol_capraz(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///a.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev ortakbir() -> tam32 { ver 1; }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///b.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":\"i\\u015flev ortakiki() -> tam32 { ver 2; }\"}}}");
+    /* "ortak" IKI dosyada da gecer -> 2 sonuc, FARKLI uri'lerle */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"workspace/symbol\","
+        "\"params\":{\"query\":\"ortak\"}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 5;   /* init, diag(a), diag(b), ws, shutdown */
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yw = yanit_n(y, 3);
+        JsonDeger *j = json_ayrist(a, yw->govde, yw->content_length, NULL);
+        JsonDeger *r = json_alan(j, "result");
+        ok = r && r->tip == JSON_DIZI && r->veri.dizi.sayi == 2;
+        if (ok) {
+            /* IKI FARKLI uri gelmeli — ayni uri iki kez ise capraz arama YOK */
+            int u0 = 0, u1 = 0;
+            JsonDeger *l0 = json_alan(r->veri.dizi.elemanlar[0], "location");
+            JsonDeger *l1 = json_alan(r->veri.dizi.elemanlar[1], "location");
+            const char *s0 = l0 ? json_metin(json_alan(l0, "uri"), &u0) : NULL;
+            const char *s1 = l1 ? json_metin(json_alan(l1, "uri"), &u1) : NULL;
+            ok = s0 && s1 && !(u0 == u1 && memcmp(s0, s1, (size_t)u0) == 0);
+            /* SymbolKind: islev = 12 (CompletionItemKind 3 DEGIL) */
+            if (ok) {
+                JsonDeger *k = json_alan(r->veri.dizi.elemanlar[0], "kind");
+                ok = k && k->tip == JSON_TAMSAYI && k->veri.tamsayi == 12;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("workspace/symbol: IKI dosyadan sonuc + SymbolKind", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 int main(void) {
     printf("KEMGU LSP Server Test Paketi\n");
     printf("==============================\n");
@@ -1068,6 +1230,15 @@ int main(void) {
     printf("\n--- LSP v3 (incremental sync) ---\n");
     test_incremental_aralik_degisimi();
     test_incremental_ekleme();
+
+    printf("\n--- LSP v3 (semanticTokens) ---\n");
+    test_semantictokens_turkce();
+
+    printf("\n--- LSP v3 (cok-belge) ---\n");
+    test_cok_belge_izolasyon();
+
+    printf("\n--- LSP v3 (workspace/symbol) ---\n");
+    test_workspace_symbol_capraz();
 
     printf("\n--- UTF-16 konum donusumu ---\n");
     test_utf16_hover_turkce();

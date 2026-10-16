@@ -1,0 +1,53 @@
+// KEMGU Stdlib — Kilit (mutex)
+// ============================
+//
+// [D-455] KAPSAMLI (scoped) API — ham `al`/`bırak` çifti BİLEREK dışa
+// verilmez. Ham çift, KEMGU'nun tezine aykırı iki hata sınıfını davet eder:
+//   - unutulmuş `bırak`  → kilitlenme (deadlock)
+//   - çift `bırak`       → tanımsız davranış
+// `kilitle(k, || { ... })` bu iki hatayı YAPISAL olarak imkânsız kılar:
+// kilidi açma yolu programcının elinden alınır, dilin kendi kapanışı
+// (D-322: iki derleyicide de çalışıyor) sahibi olur.
+//
+// Handle OPAKtır ve `Kilit` yapısı içinde taşınır. Kullanıcı ona HİÇ
+// DOKUNMAZ — bu, D-443'te kaydedilen "opak handle `metin` olarak tipleniyor"
+// tuzağını önler: handle KAÇMAZ, üzerinde `==`/`metin_uzunluk` çağrılmaz.
+//
+// ⚠ `Kilit` LİNEER DEĞİLDİR (`yapı tekkez` değil) — ve bu bilinçlidir.
+// Dosya handle'ı (D-452) tam bir kez tüketilmelidir; kilit ise DEFALARCA
+// kullanılır. Lineer yapmak `kilitle`nin ikinci çağrısını imkânsız kılardı.
+//
+// ⚠ Thread'siz derlemede runtime tarafı NO-OP'tur (tek thread'de kilit
+// gereksizdir) — bare-metal/thread'siz yollar kırılmaz.
+
+yapı Kilit {
+    h: metin;   // opak runtime handle'ı (KdlKilit*)
+}
+
+// Yeni bir kilit yarat.
+işlev olustur() -> Kilit {
+    ver Kilit { h: kilit_olustur() };
+}
+
+// Kilidi tutarak `f`i çalıştır ve sonucunu döndür. Kilit HER durumda bırakılır.
+//
+// ⚠ V1 SINIRI: `f` içinden `ver` ile ERKEN ÇIKIŞ yapılırsa `bırak`a
+// ulaşılmaz. KEMGU'da exception yok (çökmezlik) ve `f` bir kapanış olduğu
+// için `ver` yalnız kapanışın KENDİSİNDEN çıkar — çağıran `kilitle`ye geri
+// döner. Yani bu sınır `f`in gövdesindeki `ver` için GEÇERLİ DEĞİLDİR;
+// yalnız runtime panik (dizi sınır ihlali vb.) kilidi tutulu bırakır.
+// Panik zaten süreci sonlandırır, dolayısıyla pratik sonucu yoktur.
+işlev kilitle(k: Kilit, f: işlev() -> tam32) -> tam32 {
+    kilit_al(k.h);
+    değişken r: tam32 = f();
+    kilit_birak(k.h);
+    ver r;
+}
+
+// Kilidi yok et. Bundan sonra kullanılmamalıdır.
+// (Lineer tip olmadığı için bu, derleme zamanında zorlanamaz — bilinçli
+// takas: kilit çok-kullanımlıdır, lineerlik ikinci `kilitle`yi engellerdi.)
+işlev yok_et(k: Kilit) -> tam32 {
+    kilit_yok(k.h);
+    ver 0;
+}

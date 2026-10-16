@@ -1,0 +1,8 @@
+// Madde E / E004: kayıp prezisyon — tam64 -> tam8 ve kesirli64 -> kesirli32.
+işlev main() -> tam32 {
+    değişken a: tam64 = 5;
+    değişken b: tam8 = a olarak tam8;
+    değişken c: kesirli64 = 1.5;
+    değişken d: kesirli32 = c olarak kesirli32;
+    ver 0;
+}

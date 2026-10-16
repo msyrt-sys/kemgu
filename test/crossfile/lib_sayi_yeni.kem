@@ -1,0 +1,17 @@
+// [D-589] YENİ-BİÇİM karşılık — taban kütüphane (transitif zincirin dibi).
+// Legacy eşi: `lib_sayi.kem` (`dışa işlev`, çıplak çok-segmentli `kullan` ile
+// tüketiliyor → legacy düzleştirme).
+//
+// NEDEN AYRI DOSYA: D-582 ADIM 5 legacy düzleştirmeyi silmeyi öneriyor ama
+// `test/crossfile` üçlüsü tam da o yolu ÖLÇÜYOR. Silme bir dil yüzeyi
+// kararıdır (Mehmet); kararın ÖN KOŞULU ise "önce yeni-biçim karşılığı
+// yazılmalı"dır. Bu küme o ön koşuldur: legacy yol kalktığında transitif
+// yükleme ve `sonuç<T,H>` ABI kapsamı KAYBOLMAZ.
+//
+// ⚠ `genel` ZORUNLU, `dışa` YETMEZ — ölçüldü: seçili import `dışa` üyeyi
+//   T041 ile reddediyor ("secili import: uye 'genel' degil"). Legacy
+//   düzleştirme her üst düzey adı görünür kıldığı için `lib_sayi.kem`de
+//   `dışa` yeterliydi; yeni biçimde değil (D-585'in göç prosedürü).
+genel işlev iki_kat_y(x: tam32) -> tam32 {
+    ver x * 2;
+}

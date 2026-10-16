@@ -83,6 +83,7 @@ typedef struct EscapeBag {
     int ad_uz;
     const Dugum *deger;        /* baglandigi ifade (allocation site veya baska ifade) */
     int scope_seviye;          /* hangi scope'ta tanimlandi (pop icin) */
+    int zincirde;              /* [D-631] ifadeyi_yukselt bu bagi su an geziyor mu (dongu korumasi) */
 } EscapeBag;
 
 typedef struct EscapeAnaliz {
@@ -104,14 +105,45 @@ typedef struct EscapeAnaliz {
     int ver_baglaminda;
     int degisti;               /* bu pass'ta kategori degisti mi? */
 
+    /* [D-496] ⚠⚠ BU BAYRAK KURULUYOR AMA HIC OKUNMUYOR — ÖLÇÜLDÜ.
+     * Yorumu bir "sound backstop" VAAT EDIYOR (aşağıda, F4.2b'den) ama
+     * `llvm.c` ve `bolge_atama.c` onu HIC SORGULAMIYOR. Yani tarif edilen
+     * koruma PRATIKTE YOK.
+     *
+     * ⚠ ANCAK BU BIR SOUNDNESS DELIGI DEGIL — iddia edilmedi, ÖLÇÜLDÜ.
+     * Yerini IKI BASKA (ve daha KESKIN) mekanizma tutuyor:
+     *   1. Kaçan kapanış işaretçi yakalarsa **G005** DERLEME ZAMANINDA
+     *      reddeder (ölçüldü: `ver || dizi_al(xs,0)` -> G005). Gürültülü.
+     *   2. Kaçmayan kapanışta `ky_confined`in DUGUM_LAMBDA dalı yakalanan
+     *      HER değişkenin hapsedilmesini DÜŞÜRÜR -> dizi ρ_caller'a gider
+     *      (ölçüldü: `kdl_dizi_olustur(ptr %rho, ...)`).
+     * (2) bu bayraktan DAHA İYİDİR: değişken-başına, işlev-geneli değil.
+     *
+     * ⚠ ÖLÜ KOD OLARAK BIRAKMAK RISKLIDIR (D-459'un dersi: ölü kodu bırakmak
+     * sonraki okuyucuyu ona GÜVENMEYE davet eder). Silinmedi çünkü F4.4'ün
+     * kapanış-env ekseni buraya bağlanabilir; ama o gün gelene kadar bu not
+     * "bu bayrak seni KORUMUYOR" diyor. */
     /* F4.2b: analiz edilen islev govdesinde EN AZ BIR lambda var mi? Varsa
      * free-routing GUARD'i o islevde ρ_yerel yonlendirmeyi KAPATIR (closure
      * capture sound backstop — lexical scope: yalniz bu fn'in lambda'si bu fn'in
      * lokalini yakalar; block-form capture takibi v1'de yok). */
     int islev_lambda_icerir;
+
 } EscapeAnaliz;
 
 void escape_baslat(EscapeAnaliz *ea, Arena *a);
+
+/* [D-488] INTERPROCEDURAL PARAMETRE-TUTMA OZETI — program basinda BIR KEZ kur.
+ * `f(xs)` cagrisinda xs'in hapsedilme kaniti KOSULSUZ dusuyordu (yalniz
+ * beyaz-listeli dizi-yerlesiginin 0. konumu muafti) -> gercek programlarda
+ * rho_yerel yonlendirmesi ~%1'e iniyordu (OLCULDU: parser.kem 0/35,
+ * checker.kem 1/181, codegen.kem 3/267).
+ * YENI ANALIZ ICAT EDILMEDI: "f, p'yi SAKLIYOR MU?" sorusu `ky_confined` ile
+ * BIREBIR AYNIDIR (ver p -> DENY, lambda yakalama -> DENY, kuresele/agregaya
+ * atama -> DENY, bilinmeyen dugum -> DENY). Kanit makinesi cagri yerine tasindi.
+ * Cagrilmazsa tablo bos kalir -> tum sorgular DENY -> ESKI davranis (guvenli).
+ * Tablo ARENA-desteklidir; ayrica serbest birakma GEREKMEZ. */
+void escape_fn_tablo_kur(Arena *a, const Dugum *program);
 
 /* Dahili malloc/realloc edilmis tablolari serbest birak. */
 void escape_serbest(EscapeAnaliz *ea);
@@ -140,5 +172,9 @@ int escape_dongu_derinligi(const EscapeAnaliz *ea, const Dugum *d);
 
 /* Yazdirma — debug */
 const char *escape_kategori_adi(EscapeKategorisi k);
+
+/* [D-543] Kanal ömrü kanıtı — bkz. escape.c ve src/llvm.c kanal_kanit_kur. */
+int escape_kanal_hapsedilmis(const Dugum *govde, const char *ad, int uz,
+                             int *spawn, int *join, int *imha);
 
 #endif /* KEMGU_ESCAPE_H */

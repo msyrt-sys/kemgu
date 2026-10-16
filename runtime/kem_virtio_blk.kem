@@ -6,8 +6,10 @@
 //
 // SAF-.kem primitifleri (hepsi kanıtlandı, D-269 P1 + çıplak-tier):
 //   • MMIO + DMA-RAM erişimi = çıplak VOLATILE deref (kdl_mmio deseni; store/load volatile).
-//   • dsb sy bariyeri        = satıriçi_asm arm64 (--mimari arm64; DMA↔MMIO sıralama).
-//   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed),
+//   • DMA bariyeri            = runtime/mimari/<arch>/kem_bariyer.kem (D2b; arm64: dsb sy,
+//                              x86_64: mfence) — CAT birimi gereği.
+//   • DMA tamponları          = SABİT identity-map RAM adresi (0x43000000, EL0 üstü, backed;
+//                              arm64 — x86 değeri runtime/mimari/x86_64/kem_platform.kem),
 //                              alt-tamponlar MANUEL 16-hizalı offset (P2 manuel over-align —
 //                              A1'in 4KB-align'ının 16B önkoşul-kanıtı).
 //   • Cross-file YOK          = tamamen kendi-içinde (malloc/memcpy YOK → T002 YOK). Build'de
@@ -36,9 +38,10 @@ sabit VM_Q_DEV_HI: tam64   = 164;
 sabit VBLK_MAGIC_DEG: tam32 = 1953655158;   // 0x74726976 "virt"
 sabit VBLK_DEV_BLK: tam32   = 2;
 
-// DMA taban: SABİT identity-map RAM (0x43000000 = 1124073472). EL0 (0x42000000) üstü,
-// heap (~0x41xxxxxx) üstü, 128MB+ RAM'de backed, kdl_mmu Normal-WB haritalı. 16-hizalı.
-küresel değişken vblk_dma: tam64 = 1124073472;
+// DMA taban (arm64 değeri): SABİT identity-map RAM (0x43000000 = 1124073472). EL0
+// (0x42000000) üstü, heap (~0x41xxxxxx) üstü, 128MB+ RAM'de backed, kdl_mmu Normal-WB.
+// [D-673] `vblk_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (CAT birimi;
+// x86_64 değeri 0x02000000 — x86 boot yalnız ilk 1 GB'ı eşler).
 
 // DMA alt-tampon offsetleri (hepsi 16'nın katı — MANUEL over-align):
 //   desc  @ +0    (8×16 = 128B),  avail @ +128 (22B→16-pad),  used @ +160 (70B→16-pad),
@@ -59,22 +62,22 @@ sabit DO_STATUS: tam64 = 784;
 çıplak işlev vblk_y8(adr: tam64, deger: dtam8) { değişken p: *dtam8 = adr olarak *dtam8; *p = deger; }
 çıplak işlev vblk_o8(adr: tam64) -> dtam8 { değişken p: *dtam8 = adr olarak *dtam8; ver *p; }
 
-// dsb sy — DMA descriptor yazımı ↔ MMIO notify sıralaması (P1 arm64 asm).
+// DMA descriptor yazımı ↔ MMIO notify sıralaması — mimari başına bariyer
+// (runtime/mimari/<arch>/kem_bariyer.kem; D2b + AS001).
 çıplak işlev vblk_dsb() {
-    güvensiz {
-        satıriçi_asm { mimari: arm64 şablon: r#"dsb sy"# bozulan("~{memory}") }
-    }
+    kem_dma_bariyeri();
 }
 
 // Caller'ın data tamponunu doldurup okuması için erişimciler (vq_data = vblk_dma+DO_DATA).
 çıplak işlev vblk_data_yaz(i: tam32, deger: dtam8) { vblk_y8(vblk_dma + DO_DATA + (i olarak tam64), deger); }
 çıplak işlev vblk_data_oku(i: tam32) -> dtam8 { ver vblk_o8(vblk_dma + DO_DATA + (i olarak tam64)); }
 
-// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). 32 slot × 0x200 @ 0x0a000000.
+// Cihaz tara (DeviceID=2). Taban adresi döner (0 = yok). Yuva tabanı/adım/sayı
+// platform dosyasında (VM_TARAMA_TABAN + i*0x200, VM_YUVA_SAYISI).
 çıplak işlev vblk_bul() -> tam64 {
     değişken i: tam32 = 0;
-    iken i < 32 {
-        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;
+    iken i < VM_YUVA_SAYISI {
+        değişken base: tam64 = VM_TARAMA_TABAN + (i olarak tam64) * 512;
         eğer vblk_o32(base + VM_MAGIC) == VBLK_MAGIC_DEG {
             eğer vblk_o32(base + VM_DEVICE_ID) == VBLK_DEV_BLK { ver base; }
         }

@@ -1,0 +1,7 @@
+// [D-647] P070/P071 — blok '{' ve '}'. İKİ hata da aynı dosyada ölçülür:
+// `eğer` gövdesi süssüz bırakılınca C önce P070 (açılış), sonra dosya sonunda
+// P071 (kapanış) basar. C referansı: parser.c:1154 ve 1171.
+işlev main() -> tam32 {
+    eğer 1 == 1 ver 0;
+    ver 0;
+}

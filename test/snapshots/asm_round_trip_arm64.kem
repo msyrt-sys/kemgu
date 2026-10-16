@@ -1,0 +1,30 @@
+// C5: satıriçi_asm arm64 girdi/çıktı round-trip testi.
+// `asm_round_trip.kem`in ARM64 karşılığı — İKİSİ DE gerekli: AS001 arch-gate
+// etiketi konak mimarisiyle karşılaştırır (D-469: varsayılan hedef derleme
+// platformundan gelir), dolayısıyla TEK bir dosya iki konakta da koşamaz.
+// x86 sürümü ARM64'te link edilemez (gerçek `mov`/`add` komutları koşar),
+// bu yüzden mimariye özgü ikiz şarttır — muafiyet değil, karşılık.
+//
+// oku_arti_iki(40): girdi $2'yi çıktıya taşı + 2 ekle → 42.
+// Çoklu çıktı da sergilenir: b sabit 100 alır.
+işlev oku_arti_iki(g: tam32) -> tam32 {
+    değişken s: tam32 = 0;
+    değişken b: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov $0, $2
+add $0, $0, #2
+mov $1, #100"#
+            çıktı("=r", &s)
+            çıktı("=r", &b)
+            girdi("r", g)
+        }
+    }
+    eğer b != 100 { ver 1; }
+    ver s;
+}
+
+işlev main() -> tam32 {
+    ver oku_arti_iki(40);
+}

@@ -11,11 +11,16 @@
 # ρ_iter (@kdl_bolge_olustur) emit ediyordu → çıplak+döngü invaryantı ihlali. Fix:
 # codegen.kem ρ_iter create sitelerine ciplak_aktif guard'ı.
 set -u
+# [D-482] EXE tespiti (D-469 ile ayni desen; bu harness DUZ ATAMA kullandigi
+# icin o turda ATLANMISTI -- "cogu yorumdur" diye elemistim, YANLISTI).
+: "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 cd "$(dirname "$0")/.."
 
-KEMGU=build/kemgu.exe
-SELF=build/codegen.exe
-TMP=$(mktemp -d 2>/dev/null || echo /c/tmp/ciplak_rf_$$)
+KEMGU=build/kemgu${EXE}
+SELF=build/codegen${EXE}
+# [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
+# recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
+TMP=$(mktemp -d "build/ciplak_rf.XXXXXX" 2>/dev/null || echo "build/ciplak_rf.$$")
 mkdir -p "$TMP"
 gecti=0; kaldi=0
 

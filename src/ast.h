@@ -473,7 +473,7 @@ struct Dugum {
 
         /* === Literaller === */
 
-        struct { int64_t deger; } tam;
+        struct { int64_t deger; int tasti; } tam;   /* [D-632] tasti: literal >= 2^64 (2^64-1'e DOYDU) */
         struct { double deger; } kesirli;
         struct { const char *metin; int uzunluk; } metin_lit;
         struct { uint32_t kod_noktasi; } karakter;
@@ -644,5 +644,16 @@ Dugum *dugum_eger(Arena *a, Dugum *kosul, Dugum *gozdoldur, Dugum *yan,
 Dugum *dugum_ver(Arena *a, Dugum *deger, int satir, int sutun);
 
 Dugum *dugum_hata(Arena *a, int satir, int sutun);
+
+/* [D-457] Kesirli degeri KAYIPSIZ ve EN KISA bicimde yazar (kisa gidis-donus:
+ * %.15g/%.16g/%.17g sirayla denenir, strtod ile geri okunup bit-esitligi
+ * dogrulanir). Doner: yazilan karakter sayisi.
+ *
+ * ⚠ TEK KAYNAK OLMASI SART: bu deger hem `--ast` dokumune hem LLVM IR'ina
+ * gider. Iki yerde ayri bicimlemek `parser_diff`i sessizce ayristirir (D-407:
+ * ayni soruyu iki yerde ayri yanitlayan kod er ya da gec ayrisir).
+ * Onceki hal "%g" idi -> ALTI anlamli basamak -> 3.14159265358979 degeri hem
+ * dokumde hem IR'da "3.14159" oluyordu: DERLEME ZAMANINDA SESSIZ VERI KAYBI. */
+int kesirli_kisa_bicimle(double deger, char *tampon, size_t boyut);
 
 #endif /* KEMGU_AST_H */

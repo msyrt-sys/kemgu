@@ -18,9 +18,17 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->global_scope = global;
     tk->aktif_donus_tipi = NULL;
     uygula_tablosu_baslat(&tk->uygulamalar);
-    tk->yuklenmisler = NULL;
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
+    /* [D-505] ⚠ BU ALANLAR BASLATILMAZSA COP OLUR: TipKontrol tek tek
+     * baslatiliyor (memset/arena_ayir_sifir DEGIL) -> eklenen her alan
+     * ACIKCA sifirlanmali. Atlandiginda `tasinan_sayi` cop okundu ve
+     * --checkdump SEGFAULT verdi (exit 139, olculdu). */
+    tk->gorev_kapanis_derinlik = 0;
+    tk->tasinan_sayi = 0;
+    tk->lambda_yakalama_tasima = 0;   /* [D-575] */
+    tk->lambda_tasima_sonuc = 0;      /* [D-575] */
+    tk->l002_son_satir = -1; tk->l002_son_sutun = -1;   /* [D-576] */
     tk->ciplak_baglam = 0;   /* D-257 */
 
     /* A: built-in katmani ayristir — built-in'ler (ve dosya-modul kanonik
@@ -250,6 +258,15 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("yazdir_metin", 12, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-450] yazdir_hata(s: metin) -> boş — STDERR. Tanılar/uyarılar stdout'u
+     * KİRLETMEDEN yazılır: derleyici çıktısı (IR) ve tanı metni ayrı akışlara
+     * gitmeli, aksi hâlde `--llvm | clang` boru hattı tanıyı IR sanıp patlar. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("yazdir_hata", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
     /* Track B C1: isaretsiz + onaltilik yazdirma (bare-metal hata ayiklama
      * + adres yazimi icin). Host runtime'da henuz implement edilmedi;
      * link asamasinda eksik sembol uyari verebilir — bare-metal akis icin
@@ -340,6 +357,192 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_kapat", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
     }
 
+    /* [D-449] dosya_gecersiz() -> metin — GECERSIZ handle sabiti (NULL). */
+    {
+        EKLE_BUILTIN("dosya_gecersiz", 14, NULL, 0, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* [D-455] Bagimsiz kilit (mutex). Handle OPAKtir ve kullanici ONA HIC
+     * DOKUNMAZ — yalnizca `stdlib/kilit.kem`in kapsamli `kilitle(k, ||{..})`
+     * API'si uzerinden kullanilir. Ham al/birak cifti kasitli olarak stdlib'de
+     * DISA VERILMEZ: unutulmus-birak ve cift-birak hatalarini davet eder. */
+    {
+        EKLE_BUILTIN("kilit_olustur", 13, NULL, 0, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("kilit_al", 8, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("kilit_birak", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("kilit_yok", 9, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* [D-459] tam64 <-> metin.
+     * GENISLIK tam64'tur, tam32 DEGIL: `JsonDeger::Sayi` tam64 tasir ve
+     * KEMGU'da ORTUK DONUSUM YOKTUR -> tam32 alan bir yerlesik JSON yolundan
+     * cagrilamazdi. tam32 cagiranlar acik `olarak tam64` yazar.
+     * `metin_tam` BASARISIZLIGI SESSIZ OLMASIN diye ayrik yuklemle gelir
+     * (D-449/D-458 deseni): "abc" -> 0 ile gercek "0" ayirt edilemezdi. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM64);
+        EKLE_BUILTIN("tam_metin", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_tam", 9, p, 1, tip_olustur_basit(a, TIP_TAM64));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_tam_gecerli", 17, p, 1,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* [D-460] metin -> kesirli64 (`metin_tam`in simetrigi). JSON sayi
+     * dilbilgisi: [-]rakam+[.rakam+][(e|E)[+|-]rakam+], TAMAMEN tuketilmis.
+     * `strtod` tek basina "0x10"/"inf"/"nan"/bastaki boslugu kabul ederdi. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kesirli", 13, p, 1,
+                     tip_olustur_basit(a, TIP_KESIRLI64));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("metin_kesirli_gecerli", 21, p, 1,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
+    /* [D-458] kod_metin(kod: tam32) -> metin — Unicode kod noktasi -> UTF-8.
+     * HAM BAYT->METIN BILEREK YOK: `metin`in gecerli-UTF-8 degismezi korunur.
+     * Vekil ciftleri cagiranda (json.kem) saf KEMGU ile birlestirilir.
+     * kod_gecerli(kod) -> mantiksal: gecersizde bos dizgi TEK BASINA sessiz
+     * olurdu; cagiran once sorup ACIK hata uretsin (D-449 deseni).
+     * ⚠ kod 0 GECERSIZDIR: `metin` NUL-sonlandirmali, gomulu NUL temsil
+     * edilemez -- gecerli saysaydik sessizce duserdi. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("kod_metin", 9, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("kod_gecerli", 11, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
+    /* [D-457] kesirli_metin(x: kesirli64) -> metin — LOCALE BAGIMSIZ, kayipsiz
+     * (kisa gidis-donus). `ondalik_bicimle` bunun YERINE GECMEZ: o `metin`
+     * alir (derleyicinin kendi float LEXEME'ini bicimler) ve "%g" ile ALTI
+     * anlamli basamaga kirpar.
+     * ⚠ kesirli32 icin acik `olarak kesirli64` gerekir — KEMGU'da ortuk
+     * donusum YOKTUR (dil kurali). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_KESIRLI64);
+        EKLE_BUILTIN("kesirli_metin", 13, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
+    /* [D-466] soket_* — `soket_baglan` YETKI ister ve intrinsic olarak
+     * islenir (yukarida). Kalan dordu yetki ISTEMEZ: baglanti kurulduktan
+     * sonra BAGLANTININ KENDISI yetkidir (nesne-yetki modeli, `Dosya` deseni).
+     * Handle opaktir ve `yapi tekkez Baglanti` icinde tasinir; KACMAZ. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("soket_gecerli", 13, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* [D-470] soket_zaman_asimi(h, ms) -> tam32 (0=ok) : okuma zaman asimi.
+     * soket_zaman_asti() -> mantiksal : son `al` ZAMAN ASIMI yuzunden mi
+     * basarisiz oldu (gercek hatadan AYIRT ETMEK icin -- ayirmadan cagiran
+     * yeniden mi denemeli yoksa baglantiyi mi birakmali bilemez). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("soket_zaman_asimi", 17, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+    {
+        EKLE_BUILTIN("soket_zaman_asti", 16, NULL, 0,
+                     tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("soket_gonder", 12, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, 2 * sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("soket_al", 8, p, 2, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("soket_kapat", 11, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+
+    /* [D-456] semafor_* / bariyer_* — `kilit_*` ile AYNI desen: opak handle
+     * `metin` olarak tasinir, `yapi Semafor` / `yapi Bariyer` icinde saklanir,
+     * KACMAZ. Ham al/birak cifti stdlib'de DISA VERILMEZ; yalnizca kapsamli
+     * `semaforda(s, ||{..})` uzerinden kullanilir (Mehmet'in karari). */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("semafor_olustur", 15, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("semafor_al", 10, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("semafor_birak", 13, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("semafor_yok", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("bariyer_olustur", 15, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("bariyer_bekle", 13, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("bariyer_yok", 11, p, 1, tip_olustur_basit(a, TIP_BOS));
+    }
+
+    /* [D-449] dosya_gecerli(h: metin) -> mantıksal — opak handle null-sorgusu.
+     * `h != ""` ARTIK KULLANILAMAZ: `metin` uzerinde `!=` icerik karsilastirir
+     * (D-449) ve handle bir DIZGI DEGIL, `FILE*`tir. */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_gecerli", 13, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+
     /* dosya_var_mi(yol: metin) -> mantıksal */
     {
         TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
@@ -423,6 +626,10 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->lambda_baslangic_scope = NULL;
     tk->lambda_blok_cikarsama = 0;      /* D-304 */
     tk->lambda_blok_donus = NULL;       /* D-304 */
+    tk->neg_literal = 0;                /* D-630 (TipKontrol memset EDILMIYOR) */
+    tk->t043_dugum = NULL;
+    tk->t043_sayi = 0;
+    tk->t043_kap = 0;
     tk->aktif_escape = NULL;
 }
 
@@ -569,6 +776,30 @@ static TipBilgisi *yapi_tipi_sembolden(TipKontrol *tk, const Sembol *s,
     if (t && s->ast_dugumu && s->ast_dugumu->tip == DUGUM_YAPI) {
         t->veri.yapi.lineer_mi = s->ast_dugumu->veri.yapi.lineer_mi;
     }
+    /* [D-574] LINEER YAYILIM — `cesit` icin. D-467 ayni cozumu
+     * `sonuc`/`secimlik` icin secmisti; `cesit` onlarin GENELLEMESIDIR
+     * (tek-degerli toplam tip), dolayisiyla ayni cevap.
+     * ⚠ YASAK (LR002) DEGIL, cunku: (1) `esles` lineer cesidi TUKETIYOR
+     * (olculdu: dogru kullanim TEMIZ gecer), yani yayilim yanlis-pozitif
+     * uretmiyor; (2) yasaklamak lineer ADT yazmayi tumden imkansiz kilardi;
+     * (3) `sonuc<Dosya,metin>` yayiliyorken kullanicinin kendi cesidinin
+     * yasak olmasi tutarsiz olurdu.
+     * ⚠ `Dizi<tekkez<T>>` (D-573) BUNUN TERSIDIR ve orada YASAK dogruydu:
+     * dizi COK-ELEMANLIDIR, sahiplik tek tuketimle temsil edilemez.
+     * Mekanizma D-313'un `lineer_mi` bayragi — YENI MAKINE YOK. */
+    if (t && s->ast_dugumu && s->ast_dugumu->tip == DUGUM_CESIT) {
+        const Dugum *cd = s->ast_dugumu;
+        for (int v = 0; v < cd->veri.cesit.varyant_sayi; v++) {
+            for (int j = 0; j < cd->veri.cesit.varyant_payload_sayilari[v]; j++) {
+                const Dugum *pt = cd->veri.cesit.varyant_payload_tipleri[v][j];
+                if (pt && (pt->tip == DUGUM_TIP_TEKKEZ
+                           || pt->tip == DUGUM_TIP_YETKI
+                           || pt->tip == DUGUM_TIP_GOREV)) {
+                    t->veri.yapi.lineer_mi = 1;
+                }
+            }
+        }
+    }
     return t;
 }
 
@@ -660,6 +891,69 @@ static int yakalama_isaretci_benzeri(const TipBilgisi *t) {
     }
 }
 
+/* [D-505] R-YAKALAMA-THREAD MUAFIYETI: `kanal<T>` (ve yon uclari) THREADLER
+ * ARASI PAYLASIM ICIN TASARLANMISTIR — gorev kapanisi kanali yakalar, ana
+ * thread ayni kanaldan `kanal_al` yapar; bu AMACLANAN desendir (R-KANAL
+ * aksiyomu transferi KANAL YUKU icin tanimlar, KANALIN KENDISI icin degil).
+ * OLCULDU: muafiyet olmadan UC gercek program yanlis-pozitif aldi
+ * (cg_gorev_kanal · cg_rho_sahip_kacis · drf_gorunurluk).
+ * ⚠ `yakalama_isaretci_benzeri` DEGISTIRILMEDI: onu G005 de okuyor ve orada
+ *   kanal ISARETCIDIR (kacan closure'da hala tehlikeli). Ayni tabloyu iki
+ *   tuketici farkli doğrulukta okuyorsa birini digerine mahkum etme (D-439). */
+/* [D-505 daraltma] TASIMA YALNIZ `Dizi<T>` ICIN. Olculdu:
+   - `metin` DEGISMEZ (yerinde yazma API'si YOK: metin_* hepsi YENI metin
+     dondurur) -> paylasimi guvenli, tasima GEREKSIZ.
+   - `Bariyer`/`Semafor`/`Kilit` KULLANICI YAPISIDIR (opak `metin` handle
+     sarmalar) ve threadler arasi SENKRONIZASYON icin TASARLANMISTIR.
+     Ilk surum bunlari reddetti -> `stdlib_check` KIRMIZI (olculdu).
+   - `Dizi<T>` yerinde MUTASYONA ugrar (`dizi_yaz`) ve heap-destekli
+     paylasilir -> D-504'un olctugu yaris TAM OLARAK budur.
+
+   ⚠ KALAN ACIK (durustce): `Dizi<T>` ICEREN bir KULLANICI YAPISI iki goreve
+   yakalanirsa hala yakalanmaz. Kapatmak icin dilde "bu tip paylasilabilir"
+   isareti gerekir (Rust'in Send/Sync'i gibi) — DIL YUZEYI karari, icat
+   edilmedi. Bu artim OLCULEN acigi kapatir, hepsini degil. */
+/* [D-523] `Dizi<T>` ICEREN KULLANICI YAPISI da tasima ister.
+ * D-505 bunu ACIK birakmisti ("Send/Sync isareti gerekir") — ama o kadar
+ * genis bir dil ozelligi GEREKMIYOR: sorulan sey "bu yapinin herhangi bir
+ * alani yerinde-mutasyona-ugrayan PAYLASILAN bir kap mi?" ve yanit yapinin
+ * ALAN SCOPE'undan OKUNABILIYOR. En muhafazakar yorum secildi: bir alan
+ * `Dizi<T>` ise (ya da kendisi boyle bir yapiysa) tasima GEREKLI.
+ * ⚠ SKALER ALANLI YAPI MUAF KALIR: env HEAP KOPYASIDIR, skaler kopya
+ *   yarisamaz (D-505'in kendi daraltmasi). "Her yapiyi reddet" demek
+ *   gecerli programlari kirardi.
+ * ⚠ OZYINELEME KORUYUCUSU: kendine referansli yapi sonsuz donmesin. */
+static int gorev_tasima_gerekli_dr(TipKontrol *tk, const TipBilgisi *t, int derinlik);
+
+static int yapi_dizi_iceriyor_mu(TipKontrol *tk, const TipBilgisi *t, int derinlik) {
+    if (!tk || !t || t->kategori != TIP_YAPI || derinlik > 8) return 0;
+    const Sembol *ys = sembol_bul(tk->global_scope, t->veri.yapi.ad,
+                                  t->veri.yapi.ad_uzunluk);
+    if (!ys || ys->kategori != SEMBOL_YAPI || !ys->yapi_scope) return 0;
+    /* ⚠ Alanlar `yapi_scope`ta SEMBOL_DEGISKEN olarak durur; ayri bir
+     * SEMBOL_ALAN kategorisi YOK (sembol.h'den okundu). Generic tip
+     * parametreleri de ayni scope'ta -> onlari atla. */
+    for (SembolLink *l = ys->yapi_scope->bas; l; l = l->sonraki) {
+        if (l->sembol.kategori == SEMBOL_GENERIC_PARAM) continue;
+        if (gorev_tasima_gerekli_dr(tk, l->sembol.tip, derinlik + 1)) return 1;
+    }
+    return 0;
+}
+
+static int gorev_tasima_gerekli_dr(TipKontrol *tk, const TipBilgisi *t, int derinlik) {
+    if (!t) return 0;
+    if (t->kategori == TIP_DIZI) return 1;
+    if (t->kategori == TIP_YAPI) return yapi_dizi_iceriyor_mu(tk, t, derinlik);
+    return 0;
+}
+
+static int gorev_tasima_muaf(const TipBilgisi *t) {
+    if (!t) return 0;
+    if (t->kategori == TIP_KANAL) return 1;
+    if (t->kategori == TIP_TEKKEZ) return gorev_tasima_muaf(t->veri.tekkez.ic);
+    return 0;
+}
+
 static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
     if (!d || d->tip != DUGUM_TANIMLAYICI) return;
     if (!tk->lambda_govdesi_icinde) return;
@@ -672,6 +966,38 @@ static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
         /* Sembol/tip cozulemezse isaretci VARSAY (default-deny). */
         if (!sem || yakalama_isaretci_benzeri(sem->tip))
             tk->lambda_yakalama_isaretci = 1;
+        /* [D-505] R-YAKALAMA-THREAD: gorev kapanisina ISARETCI-benzeri
+         * yakalama SAHIPLIGI THREADE TASIR. Simdi TOPLA, lambda BITINCE
+         * isaretle (tarama sirasinda isaretlemek ayni lambda icindeki
+         * ikinci kullanimi sahte L002 yapardi). */
+        /* [D-575] GECISLI R-YAKALAMA-THREAD. D-505 yalniz DOGRUDAN
+         * yakalamayi goruyordu; `deger f = || { dizi_yaz(d,..) }` sonra
+         * `gorev_baslat(|| { ver f(); })` seklinde dizi ADLANDIRILMIS bir
+         * kapanisin ARDINA saklaniyordu -> iki gorev ayni KdlDizi'ye yaziyor,
+         * `--check` TEMIZ, `guvensiz` YOK. Olculdu: 5 kosum 120/12/81/205/41
+         * (beklenen 160) -- D-504'un yarisinin ta kendisi.
+         * Cozum: kapanisin KENDI yakalamasi tasima gerektiriyorsa, o kapanisi
+         * yakalamak da tasima gerektirir (`kapanis_tasima`). */
+        int tasima_gerek = sem
+            && ((gorev_tasima_gerekli_dr(tk, sem->tip, 0)
+                 && !gorev_tasima_muaf(sem->tip))
+                || sem->kapanis_tasima);
+        if (tasima_gerek) tk->lambda_yakalama_tasima = 1;
+        if (tk->gorev_kapanis_derinlik > 0
+            && tasima_gerek
+            && tk->tasinan_sayi < 64) {
+            int zaten = 0;
+            for (int i = 0; i < tk->tasinan_sayi; i++) {
+                if (tk->tasinan_uz[i] == d->veri.tanimlayici.uzunluk
+                    && memcmp(tk->tasinan_ad[i], d->veri.tanimlayici.metin,
+                              (size_t)tk->tasinan_uz[i]) == 0) { zaten = 1; break; }
+            }
+            if (!zaten) {
+                tk->tasinan_ad[tk->tasinan_sayi] = d->veri.tanimlayici.metin;
+                tk->tasinan_uz[tk->tasinan_sayi] = d->veri.tanimlayici.uzunluk;
+                tk->tasinan_sayi++;
+            }
+        }
     }
 }
 
@@ -730,10 +1056,34 @@ static TipBilgisi *dizi_arg_coz(TipBilgisi *t) {
     return NULL;
 }
 
+/* [D-503] ODUNC NOKTASINDA CANLILIK: yetki ODUNC alinabilir (mmio_*, bolge_al,
+ * soket_*) ama IPTAL EDILMIS (geri_al ile tuketilmis) bir yetkiyi odunc almak
+ * YASAK. OLCULDU (D-503): `geri_al(y); mmio_yaz32(y, ..)` --check ten TEMIZ
+ * geciyordu — iptal edilmis yetkiyle DONANIMA YAZMA. Yetki sisteminin varlik
+ * sebebi tam olarak bunu engellemekti.
+ *
+ * ⚠ YENI TANI KODU YOK: mevcut CP005 ("move sonrasi erisim") ayni anlamdir;
+ * eksik olan yalnizca ODUNC yolunda SORULMAMASIYDI. Tuketim yolu
+ * (lineer_tuket_eger_baglamaysa) bunu ZATEN denetliyordu.
+ *
+ * ⚠ TUKETMEZ — yalnizca canliligi sorar (odunc semantigi korunur). */
+static void yetki_canli_kontrol(TipKontrol *tk, const Dugum *arg) {
+    if (!arg || arg->tip != DUGUM_TANIMLAYICI) return;
+    if (tk->lineer_sondaj > 0) return;   /* sondaj ziyaretinde defter tutma */
+    Sembol *s = sembol_bul_yazilabilir(tk->scope,
+        arg->veri.tanimlayici.metin, arg->veri.tanimlayici.uzunluk);
+    if (!s || !s->tip || s->tip->kategori != TIP_YETKI) return;
+    if (s->lineer_tuketildi >= 1) {
+        tip_hata(tk, arg, "CP005",
+            "iptal edilmis yetki<R> odunc alinamaz (geri_al sonrasi erisim)");
+    }
+}
+
 /* MMIO Foundation: arg'in yetki<MMIO> (veya tekkez<yetki<MMIO>>) olup
  * olmadigini dogrular. y ODUNC alinir — TUKETILMEZ (geri_al ile tuketilir).
  * yetki<MMIO> degilse MM002 raporlanir. */
 static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    yetki_canli_kontrol(tk, arg);   /* [D-503] */
     TipBilgisi *y = tip_belirle(tk, arg);
     if (y->kategori == TIP_HATA) return;
     const TipBilgisi *k = tip_yetki_kaynak(y);
@@ -746,10 +1096,31 @@ static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
     }
 }
 
+/* [D-466] Ag islemleri: arg'in yetki<Soket> olup olmadigini dogrular.
+ * y ODUNC alinir — TUKETILMEZ (mmio_yetki_kontrol'un birebir kardesi).
+ *
+ * ⚠ `Soket` kaynak tipi ZATEN AYRILMISTI (yetki_olustur kaynak_tipi = 2);
+ * yeni bir `Ag` adi EKLENMEDI. Ayni kavrama ikinci ad vermek D-407 sinifidir:
+ * iki ad er ya da gec ayrisir. */
+static void ag_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    yetki_canli_kontrol(tk, arg);   /* [D-503] */
+    TipBilgisi *y = tip_belirle(tk, arg);
+    if (y->kategori == TIP_HATA) return;
+    const TipBilgisi *k = tip_yetki_kaynak(y);
+    int soket = (tip_yetki_mi(y) && k && k->kategori == TIP_YAPI &&
+                 k->veri.yapi.ad && k->veri.yapi.ad_uzunluk == 5 &&
+                 memcmp(k->veri.yapi.ad, "Soket", 5) == 0);
+    if (!soket) {
+        tip_hata(tk, arg, "MM002",
+                 "ag islemi ilk argumani yetki<Soket> olmali");
+    }
+}
+
 /* v1 bölge-container: bölge_al ilk argümanı herhangi bir yetki<R>
  * ÖDÜNÇ alır (mmio deseni — TÜKETMEZ). v1'de R kısıtlanmaz; gerçek
  * arena (V2) AYNI imzayla R'yi kullanacak (evrim-koruyan). */
 static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
+    yetki_canli_kontrol(tk, arg);   /* [D-503] */
     TipBilgisi *y = tip_belirle(tk, arg);
     if (y->kategori == TIP_HATA) return;
     if (!tip_yetki_mi(y)) {
@@ -763,7 +1134,96 @@ static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
 static TipBilgisi *substitusyon(TipKontrol *tk, const TipBilgisi *t,
                                  const Sembol *yapi_sem,
                                  const TipBilgisi *yapi_tipi);
-static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);  /* D-304 ileri bildirim */
+/* ===================================================================
+ * [D-499] G006 — YERELIN ADRESI CERCEVEYI ASAMAZ
+ * ===================================================================
+ * D-497'de OLCULEN acik: `ver &yerel` `--check`ten TEMIZ geciyordu ve
+ * KENDI YIGIN CERCEVESINE isaretci donduruyordu
+ * (`%0 = alloca i32 ... ret ptr %0`). Araya yigini ezen bir cagri koyunca
+ * `-O0 -> 1`, `-O2 -> 90` (dogrusu 40): SESSIZ YANLIS CEVAP, iki
+ * optimizasyon seviyesinde FARKLI degerler. ASan BUNU YAKALAMIYOR
+ * (detect_stack_use_after_return=1 ile bile sifir bulgu) -> mevcut 67
+ * kapinin HICBIRI bu sinifi gormuyordu.
+ *
+ * G005 ILE AYNI DEGISMEZ ("isaretci gosterdigi cerceveyi asamaz") ama
+ * AYRI KOD: G005 `DUGUM_LAMBDA`da, kosulu "lambda kaciyor + isaretci
+ * yakaliyor"; bu ise `&` onekinde. Deponun konvansiyonu ayni desenin
+ * farkli site'lari icin AYRI kod (T005/T006/T007/T008/T027 — D-353).
+ * Ayri kod = mesaj her site icin KESIN kalir, `grep G005` tek kurali bulur.
+ *
+ * ⚠ OVER-REJECT YOK (G005'in kendi ilkesi): YALNIZCA kok tanimlayici
+ * ISLEV CERCEVESI ICINDE (SCOPE_ISLEV/SCOPE_BLOK) cozulebiliyorsa
+ * bildirilir. Kuresel (SCOPE_MODUL/GLOBAL) adresi GECERLIDIR — kuresel
+ * cerceveyi asar. Cozulemeyen kok (ör. `&*p`) BILDIRILMEZ. */
+static int g006_yerel_mi(TipKontrol *tk, const char *ad, int uz) {
+    for (Scope *s = tk->scope; s; s = s->parent) {
+        if (sembol_bul_yerel(s, ad, uz))
+            return s->kategori == SCOPE_BLOK || s->kategori == SCOPE_ISLEV;
+        /* Cerceve sinirini gectik: buradan sonrasi kuresel/modul -> GECERLI */
+        if (s->kategori == SCOPE_MODUL || s->kategori == SCOPE_GLOBAL) break;
+    }
+    return 0;
+}
+
+/* `&x`, `&k.alan`, `&d[i]` -> kok tanimlayici. `&*p` -> NULL (isaretci
+ * dereferansi bir YEREL degildir; bildirilmez). */
+static const Dugum *g006_kok(const Dugum *d) {
+    while (d) {
+        if (d->tip == DUGUM_TANIMLAYICI) return d;
+        if (d->tip == DUGUM_ERISIM)      { d = d->veri.erisim.nesne; continue; }
+        if (d->tip == DUGUM_INDEKS)      { d = d->veri.indeks.nesne; continue; }
+        return NULL;
+    }
+    return NULL;
+}
+
+/* Donen ifadede cerceve-disina cikan bir yerel-adres var mi?
+ * ⚠ CAGRI ARGUMANLARINA INILMEZ: `ver f(&a)` &a'yi DONDURMEZ, f'in
+ * sonucunu dondurur -> orada bildirmek YANLIS-POZITIF olurdu. */
+static const Dugum *g006_bul(TipKontrol *tk, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TEKLI
+        && (d->veri.tekli.op == OP_REF || d->veri.tekli.op == OP_REF_DEGISKEN)) {
+        const Dugum *k = g006_kok(d->veri.tekli.operand);
+        if (k && g006_yerel_mi(tk, k->veri.tanimlayici.metin,
+                                   k->veri.tanimlayici.uzunluk))
+            return d;
+        return NULL;
+    }
+    if (d->tip == DUGUM_TIP_DONUSTUR)
+        return g006_bul(tk, d->veri.tip_donustur.kaynak);
+    if (d->tip == DUGUM_YAPI_OLUSTUR) {
+        for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+            Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+            if (aa && aa->tip == DUGUM_ALAN_ATAMA) {
+                const Dugum *r = g006_bul(tk, aa->veri.alan_atama.deger);
+                if (r) return r;
+            }
+        }
+        return NULL;
+    }
+    if (d->tip == DUGUM_DIZI_OLUSTUR) {
+        for (int i = 0; i < d->veri.dizi_olustur.sayi; i++) {
+            const Dugum *r = g006_bul(tk, d->veri.dizi_olustur.elemanlar[i]);
+            if (r) return r;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+static void g006_denetle(TipKontrol *tk, const Dugum *deger) {
+    const Dugum *r = g006_bul(tk, deger);
+    if (r) {
+        tip_hata(tk, r, "G006",
+            "yerelin adresi cerceveyi asamaz (donen isaretci olu yigin gozesini "
+            "gosterir): degeri KOPYALA olarak dondur, cagirandan referans al ya da "
+            "bolgeden tahsis et");
+    }
+}
+
+static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);
+static void g006_denetle(TipKontrol *tk, const Dugum *deger);  /* [D-499] */  /* D-304 ileri bildirim */
 
 /* === Madde D: Generic call inference helpers (paralel session, kullanilmaz) ===
  *
@@ -1536,6 +1996,22 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
         case DUGUM_TIP_DIZI: {
             TipBilgisi *eleman = ast_tip_to_bilgi(tk,
                 tip_d->veri.tip_dizi.eleman_tip);
+            /* [D-573] LR002'nin BELGELENMIS AMA HIC ATESLENMEYEN DIZI YARISI.
+             * Kural CLAUDE.md'de yazili ("yapi/dizi tekkez iceremez") ve
+             * `yapi` yarisi calisiyordu; dizi yarisi HICBIR konumda (bagalama,
+             * parametre, donus, yapi alani) ateslenmiyordu. Olculdu: AYNI
+             * lineer deger diziden gecirilerek IKI KEZ tuketiliyor --
+             * `--check` temiz, program calisiyor. L002 tam bunu engellemek
+             * icin var; dizi onu yikiyordu.
+             * ⚠ YAYILIM (D-467'nin `sonuc` cozumu) BURADA YANLIS OLURDU:
+             * diziyi "lineer" saymak `dizi_al(d,0)`i iki kez cagirmayi
+             * engellemez -- cok-elemanli kapsayicida sahiplik zinciri tek
+             * bir tuketimle temsil edilemez. Dogru cevap YASAK. */
+            if (eleman && tip_lineer_mi(eleman)) {
+                tip_hata(tk, tip_d, "LR002",
+                    "dizi elemani lineer tipte olamaz "
+                    "(lineer deger dizi uzerinden iki kez tuketilebilirdi)");
+            }
             return tip_olustur_dizi(tk->arena, eleman);
         }
 
@@ -2016,8 +2492,15 @@ static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
             hata = 1;
         }
-        /* Linear Types Spec V1: alan tekkez ise deger baglamadan move */
-        if (alan_tipi && alan_tipi->kategori == TIP_TEKKEZ) {
+        /* Linear Types Spec V1: alan tekkez ise deger baglamadan move.
+         * [D-470] KOSUL `TIP_TEKKEZ` ILE SINIRLIYDI -> `yapi tekkez K`
+         * (D-313'te eklenen LINEER YAPI) ve `gorev<T>` / `yetki<R>` alanlari
+         * KAPSANMIYORDU: `S { t: t }` lineer `t`yi TUKETMIS SAYMIYOR, sonra
+         * scope sonunda L001 patliyordu -- yani lineer bir degeri bir yapiya
+         * KOYMAK IMKANSIZDI. `tip_lineer_mi` zaten dogru soruyu soruyor;
+         * kategori karsilastirmasi onun yerine gecirildi.
+         * Olculdu: D-467/D-470 ONCESINDE de vardi. */
+        if (tip_lineer_mi(alan_tipi)) {
             lineer_tuket_eger_baglamaysa(tk, aa->veri.alan_atama.deger);
         }
     }
@@ -2124,13 +2607,87 @@ static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d,
 }
 
 /* Ana visitor */
+/* D-630: literalin İŞARETSİZ büyüklüğü (değer iki'nin tümleyeni bit deseniyle
+ * saklanır — D-629; literaller daima negatif OLMAYAN yazılır, eksi ayrı düğümdür). */
+static uint64_t literal_buyukluk(const Dugum *d) {
+    uint64_t u;
+    memcpy(&u, &d->veri.tam.deger, sizeof u);
+    return u;
+}
+
+/* D-630: literal `k` tipine sığıyor mu? 1 = evet, 0 = hayır, -1 = kategori
+ * tamsayı değil / bilinmiyor (denetleme). `neg`: literal tekli eksinin operandı —
+ * işaretli tipte alt sınır bir fazladır (tam8: -128 geçerli). İşaretsiz tipte
+ * `-x` bugünkü davranışıyla bırakılır (denetlenmez: ayrı dil kararı). */
+static int literal_sigar_mi(uint64_t v, TipKategorisi k, int neg) {
+    uint64_t ust;
+    switch (k) {
+        case TIP_TAM8:   ust = 127ULL; break;
+        case TIP_TAM16:  ust = 32767ULL; break;
+        case TIP_TAM32:  ust = 2147483647ULL; break;
+        case TIP_TAM64:  ust = 9223372036854775807ULL; break;
+        case TIP_DTAM8:  ust = 255ULL; break;
+        case TIP_DTAM16: ust = 65535ULL; break;
+        case TIP_DTAM32: ust = 4294967295ULL; break;
+        case TIP_DTAM64: return 1;
+        default: return -1;
+    }
+    int isaretli = (k == TIP_TAM8 || k == TIP_TAM16 ||
+                    k == TIP_TAM32 || k == TIP_TAM64);
+    if (neg) {
+        if (!isaretli) return -1;
+        return v <= ust + 1;
+    }
+    return v <= ust;
+}
+
+/* D-630: tamsayı tipinin bit genişliği (tamsayı değilse 0). */
+static int tip_boyut_bit(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+        case TIP_TAM8:  case TIP_DTAM8:  return 8;
+        case TIP_TAM16: case TIP_DTAM16: return 16;
+        case TIP_TAM32: case TIP_DTAM32: return 32;
+        case TIP_TAM64: case TIP_DTAM64: return 64;
+        default: return 0;
+    }
+}
+
+/* D-630: T043'ü düğüm başına BİR KEZ raporla. */
+static void t043_raporla(TipKontrol *tk, const Dugum *d) {
+    for (int i = 0; i < tk->t043_sayi; i++) if (tk->t043_dugum[i] == d) return;
+    if (tk->t043_sayi == tk->t043_kap) {
+        int yk = tk->t043_kap ? tk->t043_kap * 2 : 8;
+        const Dugum **yeni = (const Dugum **)arena_ayir(tk->arena,
+            sizeof(const Dugum *) * (size_t)yk);
+        for (int i = 0; i < tk->t043_sayi; i++) yeni[i] = tk->t043_dugum[i];
+        tk->t043_dugum = yeni;
+        tk->t043_kap = yk;
+    }
+    tk->t043_dugum[tk->t043_sayi++] = d;
+    tip_hata(tk, d, "T043", "sayi literali hedef tipe sigmiyor");
+}
+
 TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
     if (!d) return t_hata(tk);
 
     switch (d->tip) {
         /* === Literaller === */
-        case DUGUM_TAM:
-            return t_basit(tk, TIP_TAM32);  /* default; ADIM 11.5'te context */
+        case DUGUM_TAM: {
+            /* D-630: bağlamsız literal DEĞERE GÖRE yükseltilir (eskiden daima
+             * tam32 → `değişken x = 8589934592` SESSİZCE kırpılıyordu). Bağlamsız
+             * yolda T043 RAPORLANMAZ: D-021 literali önce burada, sonra karşı
+             * operandın tipiyle YENİDEN tipler — burada raporlamak geçerli
+             * `x + 8589934592` (x: tam64) için sahte tanı üretirdi. */
+            /* [D-632] 2^64 ve üstü HİÇBİR tamsayı tipine sığmaz → bağlamdan
+             * BAĞIMSIZ T043 (D-021 yeniden tiplemesi sonucu değiştiremez; rapor
+             * düğüm başına tekildir). Eskiden 2^64-1'e SESSİZCE doyuyordu. */
+            if (d->veri.tam.tasti) t043_raporla(tk, d);
+            uint64_t v = literal_buyukluk(d);
+            if (v <= 2147483647ULL) return t_basit(tk, TIP_TAM32);
+            if (v <= 9223372036854775807ULL) return t_basit(tk, TIP_TAM64);
+            return t_basit(tk, TIP_DTAM64);
+        }
         case DUGUM_KESIRLI:
             return t_basit(tk, TIP_KESIRLI64);
         case DUGUM_METIN:
@@ -2170,6 +2727,29 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * baglamalar otomatik 'yakalama' sayilir → consume + closure
              * tipi tekkez<...> olarak isaretlenir (LC-2). */
             lineer_yakalama_kontrol(tk, d);
+            /* [D-505] R-YAKALAMA-THREAD: sahipligi gorev thread'ine TASINMIS
+             * baglamaya erisim = use-after-move. Mevcut L002 (yeni kod YOK).
+             * ⚠ KAPANIS TARANIRKEN BILDIRILMEZ (gorev_kapanis_derinlik > 0):
+             *   o sirada isaretleme HENUZ yapilmadi, ama IKINCI bir gorev
+             *   kapanisi ayni degiskeni yakalarsa BIRINCISI isaretlenmis olur
+             *   -> orada BILDIRILIR (D-504'un olctugu yaris sekli tam budur).
+             * ⚠ SKALER YAKALAMA HIC ISARETLENMEZ -> burasi onlari gormez. */
+            if (s->gorev_tasindi && tk->lineer_sondaj == 0) {
+                /* [D-576] AYNI KAYNAK KONUMUNU IKI KEZ BILDIRME. `k.f()`
+                 * yolunda `k` ERISIM ve CAGRI icin IKI KEZ ziyaret ediliyor
+                 * -> ayni satir/sutunda iki L002. Bu BILGI DEGIL; ayrica
+                 * self-host tek ziyaret yaptigi icin sahte bir parite
+                 * ayrismasi uretiyordu. FARKLI konumdaki iki anma (ayni
+                 * lambda icinde bile) AYNEN iki tani verir — olculdu. */
+                if (!(tk->l002_son_satir == d->satir
+                      && tk->l002_son_sutun == d->sutun)) {
+                    tk->l002_son_satir = d->satir;
+                    tk->l002_son_sutun = d->sutun;
+                    tip_hata(tk, d, "L002",
+                        "sahipligi goreve tasinmis baglamaya erisim "
+                        "(R-YAKALAMA-THREAD: kapanis yakalamasi TASIR)");
+                }
+            }
             /* G005: genel yakalama (lineer + lineer-olmayan) izle. */
             genel_yakalama_kontrol(tk, d);
             return s->tip ? s->tip : t_hata(tk);
@@ -2233,6 +2813,29 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "E003",
                     "olarak ile tekkez<T> kaynaktan extract edilemez "
                     "(kullan(...) gerekir)");
+                return t_hata(tk);
+            }
+
+            /* [D-519] CT003: kaynak sabitsüre<T> -> normal tip YASAK.
+             * OLCULEN ACIK: `s olarak tam32` CT003'u ATLIYORDU. Spec acik
+             * (KEMGU_Sabitsure_Spec_V1.md:49): "`sabitsüre<T> -> T` ASLA
+             * otomatik degil — `ifşa(s)` cagrisi ZORUNLU". Yani bu bir tasarim
+             * tercihi degil, bir SPEC IHLALIYDI.
+             * ⚠ ASIL ZARAR DENETLENEBILIRLIK: `ifşa` ayri bir yerlesik olarak
+             *   TAM DA declassification noktalarini `grep`lenebilir kilmak icin
+             *   secildi (spec:94). Ikinci ve GORUNMEZ bir kanal, o guvencenin
+             *   kendisini yok eder.
+             * KOK D-517 ILE AYNI SINIF: kural VARDI, bu SITEDE SORULMUYORDU.
+             * Yeni tani kodu YOK — CT003 zaten bu anlamdadir.
+             * ⚠ gizli -> gizli (`s olarak sabitsüre<dtam8>`) SERBEST kalir;
+             *   yasak olan yalnizca GIZLILIGIN DUSURULMESIDIR.
+             * ⚠ ETKI ALANI OLCULDU: depodaki tum `olarak` kullanimlari
+             *   `sabitsüre_olustur((0 olarak dtam8))` seklinde, yani SARMALAMADAN
+             *   ONCE (duz -> duz) — bu kural onlari ETKILEMEZ. */
+            if (tip_sabitsure_mi(kt) && !tip_sabitsure_mi(ht)) {
+                tip_hata(tk, d, "CT003",
+                    "sabitsure tipi normal tipe implicit donusturulemez "
+                    "(ifsa(...) zorunlu)");
                 return t_hata(tk);
             }
 
@@ -2354,7 +2957,18 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * yayılımı kendi kurallarına sahip — S2/V testleri). */
             if (!tip_sabitsure_mi(sol) && !tip_sabitsure_mi(sag) &&
                 !tip_vektor_mu(sol) && !tip_vektor_mu(sag)) {
-                if (tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
+                /* D-630: İKİ taraf da literal ağacıysa DAR olan GENİŞ olanın
+                 * tipine çekilir. Eskiden daima sol yeniden tipleniyordu; bağlamsız
+                 * literal değere göre yükseltilince (`(0 - 9223372036854775807) - 1`)
+                 * sol `tam64` ağacı sağdaki `1`in `tam32`sine DARALTILIP sahte T043
+                 * üretiyordu (ölçüldü: self-host kaynağında). */
+                int iki_lit = tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
+                              tamsayi_literal_ifade_mi(d->veri.ikili.sag);
+                if (iki_lit && tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
+                    !tip_esit(sol, sag) &&
+                    tip_boyut_bit(sol) > tip_boyut_bit(sag)) {
+                    sag = tip_belirle_beklenen(tk, d->veri.ikili.sag, sol);
+                } else if (tamsayi_literal_ifade_mi(d->veri.ikili.sol) &&
                     tip_tamsayi_mi(sol) && tip_tamsayi_mi(sag) &&
                     !tip_esit(sol, sag)) {
                     sol = tip_belirle_beklenen(tk, d->veri.ikili.sol, sag);
@@ -2594,6 +3208,35 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            /* [D-517] HAM BELLEK YERLESIKLERI `güvensiz` ISTER.
+             * OLCULEN ACIK: `bellek_al` / `bellek_kopyala` / `bellek_serbest`
+             * `metin` olarak TIPLENIYOR (D-459: "HAM BELLEK", opak) — bu yuzden
+             * G001'in `*T` kosulu onlara HIC uygulanmiyordu. Sonuc: `güvensiz`
+             * bloku HIC ICERMEYEN ve `--check`ten TEMIZ gecen bir program
+             * heap-buffer-overflow yapiyordu (ASan ile olculdu, HER IKI
+             * derleyicide). Bu, dilin mansetteki "buffer overflow imkansiz"
+             * degismezinin dogrudan ihlaliydi.
+             * KOK D-443/D-452 ile AYNI SINIF: opak tutamak `metin` olarak
+             * tiplendiginde ona bagli KURALLAR da dusuyor.
+             * YENI TANI KODU YOK — G001 zaten "yalniz guvensiz blok icinde"
+             * demektir ve site-basina farkli mesaj basar (deref / indeksleme).
+             * ⚠ ETKI ALANI OLCULDU: depoda bu yerlesikleri cagiran 4 dosya var
+             *   ve 3'unde `güvensiz` ZATEN vardi; self-host'taki tek esleme
+             *   YORUMDU (gercek cagri yok). */
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                tk->guvensiz_baglam == 0) {
+                const char *bad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+                int buz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+                if ((buz == 9  && memcmp(bad, "bellek_al", 9) == 0)
+                 || (buz == 14 && memcmp(bad, "bellek_kopyala", 14) == 0)
+                 || (buz == 14 && memcmp(bad, "bellek_serbest", 14) == 0)) {
+                    tip_hata(tk, d, "G001",
+                             "ham bellek yerlesigi yalniz guvensiz blok "
+                             "icinde kullanilabilir");
+                    return t_hata(tk);
+                }
+            }
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — modül-fonksiyon
              * çağrısından ÖNCE dene (sol bir çeşit ise yapıcı). Beklenen-yok
              * yolu: generic çeşit T'sini çözemez (construction beklenen ister). */
@@ -2611,11 +3254,24 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (uz == 6 && memcmp(ad, "de\xc4\x9f" "er", 6) == 0) {
                     TipBilgisi *iç = tip_belirle(tk,
                         d->veri.cagri.argumanlar[0]);
+                    /* [D-470] YAPICI ARGUMANI LINEER DEGERI TUKETIR.
+                     * Onceden tuketmiyordu -> `ver tamam(t)` bile L001
+                     * veriyordu, yani lineer bir deger `sonuc`/`secimlik`
+                     * ICINDE DONDURULEMIYORDU. Bu, dilin kendi "sahiplen ve
+                     * iade et" desenini (drivers/virtio) `sonuc` ile birlikte
+                     * KULLANILAMAZ kiliyordu. Olculdu: D-467/D-470 ONCESINDE
+                     * de vardi -- bu artimin yan etkisi DEGIL.
+                     * D-320'nin "cagri argumaninda tuketim" kuraliyla AYNI
+                     * SINIF: deger baska bir yapiya TASINIYOR. */
+                    lineer_tuket_eger_baglamaysa(tk,
+                        d->veri.cagri.argumanlar[0]);
                     return tip_olustur_secimlik(tk->arena, iç);
                 }
                 /* "tamam" (5 byte) */
                 if (uz == 5 && memcmp(ad, "tamam", 5) == 0) {
                     TipBilgisi *deg = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    lineer_tuket_eger_baglamaysa(tk,   /* [D-470] */
                         d->veri.cagri.argumanlar[0]);
                     TipBilgisi *hata = tip_olustur_basit(tk->arena,
                         TIP_BILINMIYOR);
@@ -2624,6 +3280,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 /* "hata" (4 byte) */
                 if (uz == 4 && memcmp(ad, "hata", 4) == 0) {
                     TipBilgisi *h = tip_belirle(tk,
+                        d->veri.cagri.argumanlar[0]);
+                    lineer_tuket_eger_baglamaysa(tk,   /* [D-470] */
                         d->veri.cagri.argumanlar[0]);
                     TipBilgisi *deg = tip_olustur_basit(tk->arena,
                         TIP_BILINMIYOR);
@@ -3219,6 +3877,47 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * Donus duz tam32 (Karar 4 — sonuc<> degil, WCET icin). */
             if (d->veri.cagri.hedef &&
                 d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
+                d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 12 &&
+                memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
+                       "soket_baglan", 12) == 0) {
+                /* [D-466] soket_baglan(y: yetki<Soket>, host: metin,
+                 *                      port: tam32) -> metin  (opak handle)
+                 *
+                 * YETKI YALNIZ BURADA istenir. Baglanti kurulduktan sonra
+                 * gonder/al/kapat yetki ISTEMEZ: nesne-yetki modelinde
+                 * BAGLANTININ KENDISI yetkidir (`Dosya` ile ayni tasarim).
+                 * Her cagrida yetki istemek guvenlik EKLEMEZ, yalnizca
+                 * kullaniciyi yetkiyi her yere tasimaya zorlardi. */
+                if (d->veri.cagri.sayi != 3) {
+                    tip_hata(tk, d, "MM001",
+                        "soket_baglan tam 3 arguman gerektirir "
+                        "(y: yetki<Soket>, host: metin, port: tam32)");
+                    return t_hata(tk);
+                }
+                ag_yetki_kontrol(tk, d->veri.cagri.argumanlar[0]);
+                {
+                    TipBilgisi *h = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[1],
+                        tip_olustur_basit(tk->arena, TIP_METIN));
+                    if (h->kategori != TIP_HATA && h->kategori != TIP_METIN) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[1], "MM003",
+                                 "soket_baglan host argumani metin olmali");
+                    }
+                }
+                {
+                    TipBilgisi *pr = tip_belirle_beklenen(tk,
+                        d->veri.cagri.argumanlar[2],
+                        tip_olustur_basit(tk->arena, TIP_TAM32));
+                    if (pr->kategori != TIP_HATA && !tip_tamsayi_mi(pr)) {
+                        tip_hata(tk, d->veri.cagri.argumanlar[2], "MM003",
+                                 "soket_baglan port argumani tamsayi olmali");
+                    }
+                }
+                /* y TUKETILMEZ (odunc) — mmio deseni */
+                return tip_olustur_basit(tk->arena, TIP_METIN);
+            }
+            if (d->veri.cagri.hedef &&
+                d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI &&
                 d->veri.cagri.hedef->veri.tanimlayici.uzunluk == 10 &&
                 memcmp(d->veri.cagri.hedef->veri.tanimlayici.metin,
                        "mmio_oku32", 10) == 0) {
@@ -3386,7 +4085,22 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         "(closure: islev() -> T)");
                     return t_hata(tk);
                 }
+                /* [D-505] R-YAKALAMA-THREAD — Bellek Modeli sat.144:
+                 *   forall v in YD(c) : sahiplik_transfer(v, rho_yeni)
+                 * Ustteki yorum ("c yakaladigi lineer degerleri t_yeni'ye
+                 * transfer eder") ZATEN bunu soyluyordu ama YALNIZ argumanin
+                 * KENDISI tuketiliyordu; YAKALANANLAR tasinmiyordu -> iki
+                 * gorev ayni Dizi<T>ye yaziyordu (D-504, olculdu). */
+                int tas_eski = tk->tasinan_sayi;
+                tk->gorev_kapanis_derinlik++;
                 TipBilgisi *c_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                tk->gorev_kapanis_derinlik--;
+                for (int i = tas_eski; i < tk->tasinan_sayi; i++) {
+                    Sembol *ts = sembol_bul_yazilabilir(tk->scope,
+                        tk->tasinan_ad[i], tk->tasinan_uz[i]);
+                    if (ts) ts->gorev_tasindi = 1;
+                }
+                tk->tasinan_sayi = tas_eski;
                 if (c_tip->kategori == TIP_HATA) return t_hata(tk);
                 /* c bir islev tipi olmali (tekkez<islev(...)> da olur — LC-2) */
                 const TipBilgisi *cf = c_tip;
@@ -4075,11 +4789,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int eski_yakalama = tk->lambda_lineer_yakalama;
             int eski_genel = tk->lambda_yakalama;   /* G005: ic-ice lambda korumasi */
             int eski_genel_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
+            int eski_genel_tas = tk->lambda_yakalama_tasima;   /* D-575 */
             Scope *eski_baslangic = tk->lambda_baslangic_scope;
             tk->lambda_govdesi_icinde = 1;
             tk->lambda_lineer_yakalama = 0;
             tk->lambda_yakalama = 0;
             tk->lambda_yakalama_isaretci = 0;
+            tk->lambda_yakalama_tasima = 0;   /* D-575 */
             tk->lambda_baslangic_scope = eski_scope;
 
             /* Govde icin lambda_scope uzerinde yeni gövde scope (ADIM 29:
@@ -4116,6 +4832,13 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tk->lambda_blok_cikarsama = eski_cik;
                 tk->lambda_blok_donus = eski_bd;
             } else {
+                /* [D-499] G006: IFADE-FORMU lambdada `ver` DUGUMU YOKTUR —
+                 * govdenin KENDISI donus degeridir. `|| &a` de ayni sarkan
+                 * isaretciyi uretir (olculdu: lifted lambda kendi alloca'sina
+                 * `ret ptr` veriyor), o yuzden burada AYRICA denetlenir.
+                 * ⚠ G005 BUNU YAKALAMAZ: G005 ISARETCI yakalamasi ister,
+                 * burada yakalanan SKALER (D-323'ten beri serbest). */
+                g006_denetle(tk, d->veri.lambda.govde);
                 donus = tip_belirle(tk, d->veri.lambda.govde);
             }
             tk->scope = gov_eski;
@@ -4123,6 +4846,10 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             int yakaladi = tk->lambda_lineer_yakalama;
             int yakaladi_genel = tk->lambda_yakalama;   /* G005 */
             int yakaladi_ptr = tk->lambda_yakalama_isaretci;   /* D-323 */
+            /* [D-576] ATAMA DEGIL BIRIKIM: bir ifadede birden cok lambda
+             * olabilir (`K { f: || .., g: || .. }`); "sonuncusu" degil
+             * "herhangi biri" sorulmali. */
+            tk->lambda_tasima_sonuc |= tk->lambda_yakalama_tasima;   /* D-575 */
 
             /* Lambda parametreleri lineer ise govde icinde tuketilmeli (L001) */
             scope_lineer_kapanis_check(tk, lambda_scope);
@@ -4131,6 +4858,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             tk->lambda_lineer_yakalama = eski_yakalama;
             tk->lambda_yakalama = eski_genel;
             tk->lambda_yakalama_isaretci = eski_genel_ptr;   /* D-323 */
+            tk->lambda_yakalama_tasima = eski_genel_tas;   /* D-575 */
             tk->lambda_baslangic_scope = eski_baslangic;
             tk->scope = eski_scope;
 
@@ -4266,10 +4994,61 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         return tip_belirle(tk, d);
     }
 
+    /* [D-454] Birim-deger intrinsic'leri: bir() / sıfır().
+     *
+     * Generic bir islevde `ver 1;` yazmak T020 verir — sayisal literali `T`ye
+     * baglayacak constraint sistemi YOK (olculdu; iddia guncel). Bu, D-441'de
+     * kaydedilen `kuvvet<T>(x, 0)` = x kusurunun KOKUYDU.
+     *
+     * Cozum tam constraint sistemi DEGIL, iki DAR intrinsic: donus tipi
+     * BEKLENEN TIPTEN gelir (`hiç` gibi baglamsal) — bu yuzden burada,
+     * `tip_belirle_beklenen` icinde ele alinir; `tip_belirle`de `beklenen`
+     * YOKTUR (ilk denemede oraya koymustum, derleyici yakaladi).
+     * Generic govdede beklenen `T`dir; monomorfizasyonda somutlasir ve codegen
+     * dogru genislikte sabit yayar. Yalniz `kuvvet` degil, HER generic
+     * indirgemenin birim elemani boylece yazilabilir olur. */
+    if (d->tip == DUGUM_CAGRI && d->veri.cagri.hedef &&
+        d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+        const char *bad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+        int buz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+        /* "sıfır" UTF-8 = s \xc4\xb1 f \xc4\xb1 r (7 byte). Escape'ten sonra
+         * 'f' HEX RAKAMDIR → concatenation ZORUNLU (CLAUDE.md UTF-8 kurali;
+         * ilk yazimda "hex escape out of range" uyarisi aldim). */
+        int bir_mi = (buz == 3 && memcmp(bad, "bir", 3) == 0);
+        int sifir_mi = (buz == 7 &&
+                        memcmp(bad, "s\xc4\xb1" "f\xc4\xb1" "r", 7) == 0);
+        if (bir_mi || sifir_mi) {
+            if (d->veri.cagri.sayi != 0) {
+                tip_hata(tk, d, "T010",
+                    bir_mi ? "bir() arguman almaz" : "sifir() arguman almaz");
+                return t_hata(tk);
+            }
+            /* Beklenen SAYISAL olmali. Generic param icin `tip_sayisal_mi`
+             * "deferred true" doner (ADIM 23) → denetim instantiation'a
+             * ertelenir. */
+            if (!tip_sayisal_mi(beklenen)) {
+                tip_hata(tk, d, "T003",
+                    bir_mi ? "bir() yalniz sayisal tipte kullanilabilir"
+                           : "sifir() yalniz sayisal tipte kullanilabilir");
+                return t_hata(tk);
+            }
+            return (TipBilgisi *)beklenen;
+        }
+    }
+
     switch (d->tip) {
         case DUGUM_TAM:
             /* Sayi literali context tamsayi tipine gore */
             if (tip_tamsayi_mi(beklenen)) {
+                /* D-630: bağlam SOMUT tamsayı tipiyse literal ona SIĞMALI —
+                 * eskiden sığmayan değer sessizce kırpılıyordu (`tam8 = 300` →
+                 * 44, `tam64 = 2^63` → INT64_MIN). Generic/sarmalayıcı kategoride
+                 * literal_sigar_mi -1 döner → denetim YOK (eski davranış). */
+                if (d->veri.tam.tasti                  /* [D-632] 2^64+ */
+                    || literal_sigar_mi(literal_buyukluk(d), beklenen->kategori,
+                                        tk->neg_literal) == 0) {
+                    t043_raporla(tk, d);
+                }
                 return t_basit(tk, beklenen->kategori);
             }
             break;
@@ -4494,8 +5273,13 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                 (tip_tamsayi_mi(beklenen) ||
                  beklenen->kategori == TIP_KESIRLI32 ||
                  beklenen->kategori == TIP_KESIRLI64)) {
+                /* D-630: doğrudan literal operand → eksi bağlamı (alt sınır +1). */
+                int eski_neg = tk->neg_literal;
+                tk->neg_literal = (d->veri.tekli.operand &&
+                                   d->veri.tekli.operand->tip == DUGUM_TAM);
                 TipBilgisi *o = tip_belirle_beklenen(
                     tk, d->veri.tekli.operand, beklenen);
+                tk->neg_literal = eski_neg;
                 if (o->kategori != TIP_HATA && tip_esit(o, beklenen)) {
                     return t_basit(tk, beklenen->kategori);
                 }
@@ -4515,6 +5299,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
  * ======================================================================== */
 
 static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d);
+static void g006_denetle(TipKontrol *tk, const Dugum *deger);  /* [D-499] */
 static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d);
 
 /* === 1. Gecis: yapi/islev/sabit sembollerini global'e ekle === */
@@ -4910,14 +5695,7 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
  * import v1'de hata degil). Cok-segment ciplak yol (kullan a::b::c;)
  * legacy duzlestirme olarak tanim fazinda islenir. */
 
-static int kullan_yeni_bicim_mi(const Dugum *k) {
-    return k->veri.kullan.segment_sayi <= 1 ||
-           k->veri.kullan.secili_sayi > 0 ||
-           k->veri.kullan.alias_ad != NULL;
-}
-
 static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
-    if (!kullan_yeni_bicim_mi(k)) return;  /* legacy — tanim fazinda */
     const char *mad = k->veri.kullan.yol;
     int muz = k->veri.kullan.yol_uzunluk;
     const Sembol *kanonik = sembol_bul_yerel(tk->builtin_scope, mad, muz);
@@ -4937,6 +5715,18 @@ static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
                                         : kanonik->ad;
         mb.ad_uzunluk = k->veri.kullan.alias_ad ? k->veri.kullan.alias_ad_uz
                                                 : kanonik->ad_uzunluk;
+        /* [D-590] Ciplak cok-segment ithalat (`kullan a::b::c;`) modulu SON
+         * segmentle baglar (`c::uye`) — self-host sarmali (`modul c { }`),
+         * priv_mod (son_segment) ve D-584 mangle ile ayni ad. */
+        if (!k->veri.kullan.alias_ad) {
+            for (int si = mb.ad_uzunluk - 1; si > 0; si--) {
+                if (mb.ad[si] == ':' && mb.ad[si - 1] == ':') {
+                    mb.ad = mb.ad + si + 1;
+                    mb.ad_uzunluk = mb.ad_uzunluk - si - 1;
+                    break;
+                }
+            }
+        }
         mb.kategori = SEMBOL_MODUL;
         mb.modul_scope = kanonik->modul_scope;
         mb.ast_dugumu = kanonik->ast_dugumu;
@@ -5214,6 +6004,9 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         case DUGUM_DEGISKEN: {
             TipBilgisi *annot = NULL;
             TipBilgisi *deger_tip;
+            /* [D-576] Deger ifadesi boyunca lambda-tasima birikimini IZOLE et. */
+            int eski_tas_sonuc = tk->lambda_tasima_sonuc;
+            tk->lambda_tasima_sonuc = 0;
             if (d->veri.degisken.tip) {
                 annot = ast_tip_to_bilgi(tk, d->veri.degisken.tip);
                 /* Bidirectional: literal'lar annot context'inde cikarsanir */
@@ -5249,6 +6042,14 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             s.satir = d->satir;
             s.sutun = d->sutun;
             s.lineer_scope_seviyesi = tk->scope_seviyesi;
+            /* [D-575/D-576] Deger ifadesi tasima-gerektiren bir KAPANIS
+             * ICERIYORSA baglamada kalicilastir. D-575 yalniz "deger LAMBDA'nin
+             * KENDISI" halini goruyordu; kapanis bir YAPI ALANINDA saklaninca
+             * (`K { f: || { dizi_yaz(d,..) } }`) kural hic sorulmuyordu ->
+             * iki gorev ayni KdlDizi'ye yaziyor, `--check` TEMIZ, `guvensiz`
+             * YOK. Olculdu: 5 kosum 29/242/138/160/70 (beklenen 160). */
+            s.kapanis_tasima = tk->lambda_tasima_sonuc;
+            tk->lambda_tasima_sonuc = eski_tas_sonuc;
             if (sembol_ekle(tk->scope, tk->arena, &s) != 0) {
                 tip_hata(tk, d, "T024", "degisken zaten tanimli");
             }
@@ -5303,6 +6104,11 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
         }
 
         case DUGUM_VER: {
+            /* [D-499] G006: yerelin adresi cerceveyi asamaz. `ver`in TUM
+             * bicimlerinden ONCE denetlenir (lambda blok-cikarsama dali da
+             * dahil) — `|| &a` de ayni sarkan isaretciyi uretir (olculdu:
+             * lifted lambda kendi alloca'sina ret ptr veriyor). */
+            g006_denetle(tk, d->veri.ver.deger);
             /* D-304: blok-form lambda dönüş çıkarsaması — `ver <e>` tipini
              * KAYDET (aktif_donus_tipi'ye karşı kontrol yerine). İlk `ver`
              * kazanır; sonrakiler tutarlı varsayılır (well-typed lambda). */
@@ -5474,6 +6280,19 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             if (dt && dt->kategori == TIP_REFERANS && dt->veri.referans.hedef) {
                 dt = dt->veri.referans.hedef;
             }
+            /* [D-467] LINEER SKRUTINIYI BIR KEZ TUKET.
+             * Onceden yalnizca YAPI DESENI dalinda tuketiliyordu; yapici
+             * desenlerinde (`tamam(b)` / `hata(m)`) tuketilmiyordu. `sonuc`
+             * lineer YAPILINCA (yukaridaki tip_lineer_mi ozyinelemesi) bu
+             * eksiklik ortaya cikti: `esles s { ... }` ile duzgun ACILAN bir
+             * parametre bile L001 aliyordu -- yani onarim yanlis-pozitif
+             * uretiyordu. Skrutini `esles`e girerken TUKETILIR; kollarin
+             * payload'lari ayri baglamalardir ve kendi L001 takiplerine tabidir.
+             * Burasi (kol basi degil) BIR KEZ calisir -- kol basina tuketmek
+             * ikinci kolda sahte L002 verirdi. */
+            if (tip_lineer_mi(dt)) {
+                lineer_tuket_eger_baglamaysa(tk, d->veri.esles.deger);
+            }
             /* Sabitsüre Spec V1 CT001 SABITSURE_MATCH: scrutinee sabitsure
              * olamaz — kol seçimi gizli bilgiyle dallanır. */
             if (tip_sabitsure_mi(dt)) {
@@ -5563,8 +6382,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                                 fs.lineer_scope_seviyesi = tk->scope_seviyesi;
                                 sembol_ekle(tk->scope, tk->arena, &fs);
                             }
-                            /* Yapiyi TUKET (lineer ise); lineer degilse no-op. */
-                            lineer_tuket_eger_baglamaysa(tk, d->veri.esles.deger);
+                            /* [D-467] Skrutini artik ESLES'IN BASINDA bir kez
+                             * tuketiliyor (yapici desenleri de kapsasin diye).
+                             * Burada TEKRAR tuketmek IKINCI tuketim sayilip
+                             * sahte L002 uretiyordu (test L79 bunu yakaladi:
+                             * `esles s { Sahip { x } => { imha(x); } }`).
+                             * Eski tek-noktali tuketim bilerek KALDIRILDI. */
                         }
                     } else if (desen->tip == DUGUM_DESEN_TANIMLAYICI) {
                         /* x => govde — x'in tipi dt */
@@ -5809,9 +6632,26 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_IFADE_DEYIMI:
-            tip_belirle(tk, d->veri.ifade_deyimi.ifade);
+        case DUGUM_IFADE_DEYIMI: {
+            /* [D-467] ATILAN LINEER DEGER. Bir ifade-deyimi degerini HICBIR
+             * YERE baglamaz; uretilen deger lineerse o an SIZAR ve baska
+             * hicbir kontrol bunu yakalayamaz (bagli olmadigi icin scope
+             * sonundaki L001 taramasina da girmez).
+             *
+             * Olculdu -- bu dal olmadan UC API'nin belgelenmis garantisi
+             * cagiran sonucu YOK SAYINCA sessizce kayboluyordu:
+             *   ac("x","w");            (Dosya)
+             *   gorev_baslat(|| ..);    (gorev<T>)
+             *   baglan(y, host, port);  (Baglanti)
+             * Ucu de "OK" veriyordu. */
+            TipBilgisi *it = tip_belirle(tk, d->veri.ifade_deyimi.ifade);
+            if (it && tip_lineer_mi(it)) {
+                tip_hata(tk, d->veri.ifade_deyimi.ifade, "L001",
+                         "lineer deger uretildi ama TUKETILMEDI "
+                         "(sonuc bir degiskene baglanip `esles` ile acilmali)");
+            }
             break;
+        }
 
         case DUGUM_HATA:
             break;
@@ -6058,85 +6898,11 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             break;
         }
 
-        case DUGUM_KULLAN: {
-            /* A: yeni bicim (tek-segment / secili / alias) faz-2'de
-             * (kullan_baglari_kur) islendi — burada is yok. Asagisi
-             * LEGACY cok-segment duzlestirme yoludur (drivers/ +
-             * test/crossfile tuketicileri icin korunur). */
-            if (kullan_yeni_bicim_mi(d)) break;
-
-            /* Yol formati: "x::y::z" -> "x/y/z.kem"
-             * Arama sirasi: cari dizin, "stdlib/" prefix'i. */
-            const char *y = d->veri.kullan.yol;
-            int yu = d->veri.kullan.yol_uzunluk;
-            if (!y || yu <= 0) break;
-
-            /* "::" -> "/" donusumu, sonuna ".kem" ekle */
-            char dosya_yolu[512];
-            int o = 0;
-            for (int i = 0; i < yu && o + 6 < (int)sizeof(dosya_yolu); i++) {
-                if (i + 1 < yu && y[i] == ':' && y[i + 1] == ':') {
-                    dosya_yolu[o++] = '/';
-                    i++;
-                } else {
-                    dosya_yolu[o++] = y[i];
-                }
-            }
-            /* .kem uzantisi */
-            const char *uzanti = ".kem";
-            for (int k = 0; k < 4 && o + 1 < (int)sizeof(dosya_yolu); k++) {
-                dosya_yolu[o++] = uzanti[k];
-            }
-            dosya_yolu[o] = '\0';
-
-            /* Duplicate kontrol */
-            for (YuklenmisModul *m = tk->yuklenmisler; m; m = m->sonraki) {
-                if (m->yol_uz == o && memcmp(m->yol, dosya_yolu, (size_t)o) == 0) {
-                    return;  /* zaten yuklu */
-                }
-            }
-
-            /* Dosyayi yukle */
-            FILE *fp = fopen(dosya_yolu, "rb");
-            if (!fp) {
-                tip_hata(tk, d, "T040",
-                    "kullan: modül dosyası bulunamadı");
-                break;
-            }
-            fseek(fp, 0, SEEK_END);
-            long boyut = ftell(fp);
-            fseek(fp, 0, SEEK_SET);
-            if (boyut <= 0) { fclose(fp); break; }
-            char *kaynak = (char *)arena_ayir(tk->arena, (size_t)boyut + 1);
-            if (!kaynak) { fclose(fp); break; }
-            fread(kaynak, 1, (size_t)boyut, fp);
-            kaynak[boyut] = '\0';
-            fclose(fp);
-
-            /* Yüklenmis listesine ekle (duplicate engelleme) */
-            YuklenmisModul *ym = (YuklenmisModul *)arena_ayir_sifir(
-                tk->arena, sizeof(YuklenmisModul));
-            if (ym) {
-                char *yol_kopya = (char *)arena_ayir(tk->arena, (size_t)o + 1);
-                memcpy(yol_kopya, dosya_yolu, (size_t)o + 1);
-                ym->yol = yol_kopya;
-                ym->yol_uz = o;
-                ym->sonraki = tk->yuklenmisler;
-                tk->yuklenmisler = ym;
-            }
-
-            /* Parse + tip-kontrol modulu */
-            Lexer l;
-            lexer_baslat(&l, kaynak, dosya_yolu);
-            Parser p;
-            parser_baslat(&p, &l, tk->arena, dosya_yolu, kaynak);
-            Dugum *mprog = parser_calistir(&p);
-            if (mprog && p.hata_sayisi == 0) {
-                /* Üst düzey üyeleri pre-populate + tanim-kontrol */
-                tip_kontrol_program(tk, mprog);
-            }
+        case DUGUM_KULLAN:
+            /* [D-590] Tum `kullan`lar YENI bicimdir (kullan_baglari_kur faz-2).
+             * Legacy cok-segment duzlestirme SILINDI: private-by-default (T041)
+             * artik her ithalat yolunda uygulanir. */
             break;
-        }
 
         case DUGUM_MODUL: {
             /* T016 fix: uyeleri MODUL SCOPE baglaminda kontrol et —
@@ -6170,8 +6936,286 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
 /* === Ana fonksiyon === */
 
+/* ==========================================================================
+ * [D-569] KILIT DISIPLINI — al/birak eslesmesi. Mehmet karari (b).
+ * --------------------------------------------------------------------------
+ * D-568 OLCTU: `kilit_al`/`kilit_birak` YERLESIKTIR, yani stdlib sarmali
+ * kullanilmadan cagrilabilir ve dort tehlike sekli --check ten TEK TANI
+ * ALMADAN geciyordu; biri (ayni kilidi iki kez `al`) GERCEKTEN ASILIYORDU.
+ *
+ * DURUM MAKINESI (baglama basina): SERBEST --al--> TUTULU --birak--> SERBEST
+ *                                  herhangi --yok--> OLU
+ *   islev cikisinda TUTULU        -> L001  (kaynak serbest birakilmadi)
+ *   SERBEST iken `birak`          -> L002  (eslesmeyen / cift birak)
+ *   TUTULU iken `al`              -> L002  (self-deadlock)
+ *   OLU iken herhangi bir kullanim-> CP005 (olu handle; D-503 ile AYNI sinif)
+ * YENI TANI KODU YOK — mevcut kodlarin anlamlari birebir ortusuyor.
+ *
+ * ⚠ KAPSAM YALNIZ `kilit_*`. `semafor_*` KAPSAM DISI ve bu OLCULDU:
+ *   kdl_semafor_al SAYAC azaltiyor (counting semaphore) -> coklu `al` MESRU,
+ *   1:1 eslesme kurali orada YANLIS olurdu. `bariyer_bekle`nin esi yok.
+ *
+ * ⚠ RAPORLAMADA DEFAULT-DENY: baglama izlenemez hale gelirse (kilit_* disi
+ *   bir cagriya argüman, lambda icinde gecis, yeniden atama, `ver`) izleme
+ *   BIRAKILIR ve o baglama icin HICBIR tani uretilmez. Yanlis-pozitif
+ *   uretmektense kacirmak yeglenir.
+ * ========================================================================== */
+#define KD_AZAMI 32
+/* [D-570] AILE: 0=kilit, 1=dosya. Ayni makine, FARKLI durum anlamlari:
+ *   kilit: 0=serbest 1=tutulu 2=olu 3=izlenmiyor  (cikista 1 -> L001)
+ *   dosya: 0=acik              2=kapali 3=izlenmiyor  (cikista 0 -> L001)
+ * Iki ayri gezgin YAZILMADI (D-407): tek yuruyus, baglama basina aile. */
+typedef struct { const char *ad; int uz; int durum; int aile; } KdKilit;
+
+static int kd_cagri_adi(const Dugum *d, const char **ad, int *uz) {
+    if (!d || d->tip != DUGUM_CAGRI) return 0;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (!h || h->tip != DUGUM_TANIMLAYICI) return 0;
+    *ad = h->veri.tanimlayici.metin; *uz = h->veri.tanimlayici.uzunluk;
+    return 1;
+}
+static int kd_ad_esit(const char *a, int au, const char *b, int bu) {
+    return au == bu && memcmp(a, b, (size_t)au) == 0;
+}
+static int kd_kilit_yerlesigi(const char *ad, int uz) {
+    return kd_ad_esit(ad, uz, "kilit_al", 8) || kd_ad_esit(ad, uz, "kilit_birak", 11)
+        || kd_ad_esit(ad, uz, "kilit_yok", 9) || kd_ad_esit(ad, uz, "kilit_olustur", 13);
+}
+/* [D-570] Dosya ailesi. `Dosya` stdlib'de `yapi tekkez`tir ve L001/L002 ORADA
+ * calisir (tc24_* ile kapili) — ama `dosya_ac`/`dosya_kapat` YERLESIKTIR, yani
+ * sarmalayici atlanarak ayni tehlikeler geri geliyor (D-570'te olculdu:
+ * hic kapatmama / cift kapatma / kapali handle'a yazma UCU DE `OK` idi). */
+static int kd_dosya_yerlesigi(const char *ad, int uz) {
+    return kd_ad_esit(ad, uz, "dosya_ac", 8) || kd_ad_esit(ad, uz, "dosya_kapat", 11)
+        || kd_ad_esit(ad, uz, "dosya_oku", 9) || kd_ad_esit(ad, uz, "dosya_yaz", 9)
+        || kd_ad_esit(ad, uz, "dosya_boyut", 11);
+}
+/* [D-571] Soket ailesi. `Baglanti` stdlib'de `yapi tekkez`tir ama
+ * `soket_baglan`/`soket_kapat` YERLESIKTIR -> sarmalayici atlanirsa koruma
+ * DUSER (olculdu: hic kapatmama / cift kapatma / kapali handle'a gonderme
+ * UCU DE `OK` idi). Ayni makine, ucuncu aile. YENI TANI KODU YOK. */
+static int kd_soket_yerlesigi(const char *ad, int uz) {
+    return kd_ad_esit(ad, uz, "soket_baglan", 12) || kd_ad_esit(ad, uz, "soket_kapat", 11)
+        || kd_ad_esit(ad, uz, "soket_gonder", 12) || kd_ad_esit(ad, uz, "soket_al", 8)
+        || kd_ad_esit(ad, uz, "soket_zaman_asimi", 17)
+        || kd_ad_esit(ad, uz, "soket_gecerli", 13);
+}
+static int kd_izlenen_yerlesik(const char *ad, int uz) {
+    return kd_kilit_yerlesigi(ad, uz) || kd_dosya_yerlesigi(ad, uz)
+        || kd_soket_yerlesigi(ad, uz);
+}
+static int kd_bul(KdKilit *t, int n, const char *ad, int uz) {
+    for (int i = 0; i < n; i++) if (kd_ad_esit(t[i].ad, t[i].uz, ad, uz)) return i;
+    return -1;
+}
+/* Bir dugum altinda `ad` ISLENMEYEN bir konumda geciyor mu? (izleme birakma) */
+static int kd_kacti(const Dugum *d, const char *ad, int uz) {
+    if (!d) return 0;
+    if (d->tip == DUGUM_TANIMLAYICI)
+        return kd_ad_esit(d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk, ad, uz);
+    if (d->tip == DUGUM_CAGRI) {
+        const char *cad; int cuz;
+        int biliniyor = kd_cagri_adi(d, &cad, &cuz) && kd_izlenen_yerlesik(cad, cuz);
+        for (int i = 0; i < d->veri.cagri.sayi; i++) {
+            const Dugum *a = d->veri.cagri.argumanlar[i];
+            /* kilit_* nin DOGRUDAN tanimlayici argumani kacis DEGILDIR */
+            if (biliniyor && a && a->tip == DUGUM_TANIMLAYICI) continue;
+            if (kd_kacti(a, ad, uz)) return 1;
+        }
+        return kd_kacti(d->veri.cagri.hedef, ad, uz);
+    }
+    /* Zararsiz yapraklar hicbir baglamaya dokunmaz. */
+    if (d->tip == DUGUM_TAM || d->tip == DUGUM_KESIRLI || d->tip == DUGUM_METIN
+        || d->tip == DUGUM_KARAKTER || d->tip == DUGUM_MANTIKSAL
+        || d->tip == DUGUM_BOS)
+        return 0;
+    /* [D-571] MODELLENMEYEN HER SEKIL -> KACTI SAY. C'de genel bir cocuk
+     * gezgini YOK; `YAPI_OLUSTUR` gibi sekillere inilmiyordu ve baglama
+     * "hala acik" sanilip SAHTE L001 uretiliyordu (tc24_03 POZITIF fikstürü
+     * bunu olctu). Ikinci bir gezgin yazmak yerine (D-407) kural daraltildi:
+     * bilinmeyen sekilde izleme BIRAKILIR — yanlis-pozitif uretmektense
+     * kacirmak yeglenir. */
+    return 1;
+}
+/* Kosullu/dongu govdesinde tracked bir baglamaya DOKUNULUYORSA izlemeyi birak. */
+static void kd_kosullu_iptal(const Dugum *d, KdKilit *t, int n) {
+    if (!d) return;
+    for (int i = 0; i < n; i++)
+        if (t[i].durum != 3 && kd_kacti(d, t[i].ad, t[i].uz)) t[i].durum = 3;
+    if (d->tip == DUGUM_CAGRI) {
+        const char *cad; int cuz;
+        if (kd_cagri_adi(d, &cad, &cuz) && kd_izlenen_yerlesik(cad, cuz)
+            && d->veri.cagri.sayi >= 1) {
+            const Dugum *a0 = d->veri.cagri.argumanlar[0];
+            if (a0 && a0->tip == DUGUM_TANIMLAYICI) {
+                int k = kd_bul(t, n, a0->veri.tanimlayici.metin,
+                               a0->veri.tanimlayici.uzunluk);
+                if (k >= 0) t[k].durum = 3;
+            }
+        }
+    }
+}
+
+/* Duz-akis yuruyus. Kosullu yapilarda izleme BIRAKILIR (yanlis-pozitif yok). */
+static void kd_yuru(TipKontrol *tk, const Dugum *d, KdKilit *t, int *n) {
+    if (!d) return;
+    switch (d->tip) {
+    case DUGUM_BLOK:
+        for (int i = 0; i < d->veri.blok.sayi; i++)
+            kd_yuru(tk, d->veri.blok.deyimler[i], t, n);
+        return;
+    case DUGUM_DEGISKEN: {
+        const Dugum *v = d->veri.degisken.deger;
+        const char *cad; int cuz;
+        int aile = -1;
+        if (v && kd_cagri_adi(v, &cad, &cuz)) {
+            if (kd_ad_esit(cad, cuz, "kilit_olustur", 13)) aile = 0;
+            else if (kd_ad_esit(cad, cuz, "dosya_ac", 8)) aile = 1;
+            else if (kd_ad_esit(cad, cuz, "soket_baglan", 12)) aile = 2;
+        }
+        if (aile >= 0) {
+            if (*n < KD_AZAMI) {
+                t[*n].ad = d->veri.degisken.ad;
+                t[*n].uz = d->veri.degisken.ad_uzunluk;
+                t[*n].durum = 0;      /* kilit: serbest . dosya: acik */
+                t[*n].aile = aile;
+                (*n)++;
+            }
+            return;
+        }
+        for (int i = 0; i < *n; i++)
+            if (t[i].durum != 3 && kd_kacti(v, t[i].ad, t[i].uz)) t[i].durum = 3;
+        return;
+    }
+    case DUGUM_IFADE_DEYIMI:
+        kd_yuru(tk, d->veri.ifade_deyimi.ifade, t, n);
+        return;
+    case DUGUM_CAGRI: {
+        const char *cad; int cuz;
+        if (!kd_cagri_adi(d, &cad, &cuz)) return;
+        if (kd_izlenen_yerlesik(cad, cuz) && d->veri.cagri.sayi >= 1) {
+            const Dugum *a0 = d->veri.cagri.argumanlar[0];
+            if (!a0 || a0->tip != DUGUM_TANIMLAYICI) return;
+            int k = kd_bul(t, *n, a0->veri.tanimlayici.metin,
+                           a0->veri.tanimlayici.uzunluk);
+            if (k < 0 || t[k].durum == 3) return;
+            if (t[k].aile == 2) {   /* [D-571] soket ailesi */
+                if (kd_ad_esit(cad, cuz, "soket_kapat", 11)) {
+                    if (t[k].durum == 2) {
+                        tip_hata(tk, d, "L002",
+                            "kapali soket tekrar kapatildi (cift kapat)");
+                        t[k].durum = 3;
+                    } else t[k].durum = 2;
+                } else if (t[k].durum == 2) {
+                    tip_hata(tk, d, "CP005",
+                        "soket_kapat sonrasi kullanim (olu handle)");
+                    t[k].durum = 3;
+                }
+                return;
+            }
+            if (t[k].aile == 1) {   /* [D-570] dosya ailesi */
+                if (kd_ad_esit(cad, cuz, "dosya_kapat", 11)) {
+                    if (t[k].durum == 2) {
+                        tip_hata(tk, d, "L002",
+                            "kapali dosya tekrar kapatildi (cift kapat)");
+                        t[k].durum = 3;
+                    } else t[k].durum = 2;
+                } else if (t[k].durum == 2) {
+                    tip_hata(tk, d, "CP005",
+                        "dosya_kapat sonrasi kullanim (olu handle)");
+                    t[k].durum = 3;
+                }
+                return;
+            }
+            if (t[k].durum == 2) {
+                tip_hata(tk, d, "CP005",
+                    "kilit_yok sonrasi kullanim (olu handle)");
+                t[k].durum = 3; return;
+            }
+            if (kd_ad_esit(cad, cuz, "kilit_al", 8)) {
+                if (t[k].durum == 1) {
+                    tip_hata(tk, d, "L002",
+                        "ayni kilit iki kez alindi (self-deadlock)");
+                    t[k].durum = 3;
+                } else t[k].durum = 1;
+            } else if (kd_ad_esit(cad, cuz, "kilit_birak", 11)) {
+                if (t[k].durum == 0) {
+                    tip_hata(tk, d, "L002",
+                        "alinmamis kilit birakildi (eslesmeyen/cift birak)");
+                    t[k].durum = 3;
+                } else t[k].durum = 0;
+            } else if (kd_ad_esit(cad, cuz, "kilit_yok", 9)) {
+                t[k].durum = 2;
+            }
+            return;
+        }
+        for (int i = 0; i < *n; i++)
+            if (t[i].durum != 3 && kd_kacti(d, t[i].ad, t[i].uz)) t[i].durum = 3;
+        return;
+    }
+    case DUGUM_VER:
+        kd_yuru(tk, d->veri.ver.deger, t, n);
+        return;
+    case DUGUM_TANIMLAYICI: {
+        /* Ciplak tanimlayici = izlenmeyen konum -> o baglamayi birak. */
+        int k = kd_bul(t, *n, d->veri.tanimlayici.metin,
+                       d->veri.tanimlayici.uzunluk);
+        if (k >= 0) t[k].durum = 3;
+        return;
+    }
+    /* Zararsiz yapraklar: hicbir baglamaya dokunmaz. */
+    case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_METIN:
+    case DUGUM_KARAKTER: case DUGUM_MANTIKSAL: case DUGUM_BOS:
+        return;
+    default:
+        /* [D-570] MODELLENMEYEN HER DUGUM -> TUM izlemeyi birak.
+         * ⚠ Bu, olculmus bir yanlis-pozitif yuzunden boyle: onceki surum
+         * yalnizca `kd_kacti` ile "kacti mi" diye soruyordu, ama C'de GENEL
+         * bir cocuk gezgini YOK ve `kd_kacti` TANIMLAYICI/CAGRI disina
+         * INMIYORDU. Sonuc: `ver tamam(Dosya { h: h })` gorulmuyor, baglama
+         * acik sayiliyor ve `stdlib/dosya.kem` SAHTE L001 aliyordu.
+         * Ikinci bir gezgin yazmak yerine (D-407) kural DARALTILDI:
+         * modellenmeyen sekilde HICBIR tani uretilmez. */
+        (void)kd_kosullu_iptal;
+        for (int i = 0; i < *n; i++) t[i].durum = 3;
+        return;
+    }
+}
+
+static void kd_islev_pas(TipKontrol *tk, const Dugum *islev) {
+    if (!islev || islev->tip != DUGUM_ISLEV) return;
+    const Dugum *g = islev->veri.islev.govde;
+    if (!g || g->tip != DUGUM_BLOK) return;
+    KdKilit t[KD_AZAMI]; int n = 0;
+    kd_yuru(tk, g, t, &n);
+    for (int i = 0; i < n; i++) {
+        if (t[i].aile == 0 && t[i].durum == 1)
+            tip_hata(tk, islev, "L001",
+                "kilit islev cikisinda TUTULU (birakilmadi)");
+        if (t[i].aile == 1 && t[i].durum == 0)
+            tip_hata(tk, islev, "L001",
+                "dosya islev cikisinda ACIK (kapatilmadi)");
+        if (t[i].aile == 2 && t[i].durum == 0)
+            tip_hata(tk, islev, "L001",
+                "soket islev cikisinda ACIK (kapatilmadi)");
+    }
+}
+static void kd_pas(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+    if (d->tip == DUGUM_ISLEV) { kd_islev_pas(tk, d); return; }
+    if (d->tip == DUGUM_PROGRAM)
+        for (int i = 0; i < d->veri.program.sayi; i++) kd_pas(tk, d->veri.program.uyeler[i]);
+    else if (d->tip == DUGUM_MODUL)
+        for (int i = 0; i < d->veri.modul.sayi; i++) kd_pas(tk, d->veri.modul.uyeler[i]);
+    else if (d->tip == DUGUM_DISA)
+        kd_pas(tk, d->veri.disa.tanim);
+}
 void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
+    /* [D-488] Cagrilan-ozeti tablosunu ISLEV DONGUSUNDEN ONCE kur: escape
+     * analizi islev basina kosar ve `f(xs)` cagrisinda f'in ozetini sorar.
+     * Kurulmazsa tum sorgular DENY doner (= eski konservatif davranis). */
+    escape_fn_tablo_kur(tk->arena, program);
     pre_populate(tk, program);
     /* A faz-2: tum moduller kayitli — kullan baglarini kur (dongusel
      * import bildirim sirasi onemsiz). */
@@ -6179,4 +7223,5 @@ void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     for (int i = 0; i < program->veri.program.sayi; i++) {
         tip_kontrol_tanim(tk, program->veri.program.uyeler[i]);
     }
+    kd_pas(tk, program);   /* [D-569] kilit disiplini — tip kontrolunden SONRA */
 }

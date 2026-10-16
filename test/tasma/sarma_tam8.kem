@@ -1,0 +1,8 @@
+// [D-524] Dar genişlikte sarma (tam8) — trunc yolu.
+işlev main() -> tam32 {
+    değişken a: tam8 = 127;
+    değişken b: tam8 = 1;
+    değişken c: tam8 = a + b;
+    eğer (c olarak tam32) != (0 - 128) { ver 1; }
+    ver 42;
+}

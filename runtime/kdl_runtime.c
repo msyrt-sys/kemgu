@@ -21,10 +21,35 @@
  * dogru goruntulemek icin chcp 65001 (varsayilan Win11) yeterli.
  */
 
+/* ============================================================================
+ * [D-474] POSIX OZELLIK-TEST MAKROSU — HER #include'DAN ONCE GELMELI.
+ *
+ * `-std=c11` KATI ISO demektir: glibc `__STRICT_ANSI__` gorunce POSIX
+ * bildirimlerini GIZLER. Sonuc, Linux'ta DERLEME HATASI:
+ *   struct addrinfo   -> "storage size ... isn't known"  (netdb.h gizli)
+ *   struct timeval    -> ayni
+ *   posix_memalign    -> "implicit declaration"
+ *
+ * ⚠ WINDOWS'TA GORUNMEZ: MinGW bu gizlemeyi YAPMAZ, o yuzden kusur burada
+ * derlenirken hicbir uyari vermiyordu. "Benim makinemde derleniyor" capraz
+ * platform kodda YETERSIZ KANITTIR -- bu dosya WSL'de ILK derlendiginde
+ * ANINDA patladi.
+ *
+ * ⚠ KUSUR YENI DEGIL: `posix_memalign` SIMD artimindan beri buradaydi (git
+ * ile dogrulandi), yani Linux derlemesi UZUN SUREDIR kirikti ve hicbir olcum
+ * bunu gostermiyordu -- cunku Linux'ta HIC DERLENMEMISTI.
+ *
+ * 200112L = POSIX.1-2001: `posix_memalign`, `getaddrinfo`, `struct addrinfo`
+ * ve `SO_RCVTIMEO` icin yeterli. Windows dallarini ETKILEMEZ. */
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200112L
+#endif
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <locale.h>      /* [D-457] localeconv() — ondalik ayiracini olcmek icin */
 #include "kdl_bolge.h"   /* V2-F4.1: bölge (region) arena allokatörü (F4.0/D-099) */
 
 /* === V2-F4.1 (D-100): sızan tahsisleri global bölgeye yönlendir ===
@@ -46,6 +71,38 @@ static void *kdl_sizan_al(uint64_t n) {
 }
 
 /* B2 (genisletilmis): Gercek thread bind — Windows + POSIX (Linux/macOS/ARM64) */
+/* [D-466] TCP ISTEMCI soketleri. Thread makrolarindan AYRI tutuluyor: bir
+ * platformda thread olup soket olmamasi (ya da tersi) mumkun. Bare-metal'de
+ * ikisi de tanimsizdir ve tum soket cagrilari GUVENLI HATA doner -- sessizce
+ * "basarili" demezler.
+ *
+ * ⚠ SIRA ONEMLI: `winsock2.h` `windows.h`ten ONCE gelmeli. Tersi durumda
+ * windows.h eski `winsock.h` (v1) cekiyor ve derleyici acikca uyariyor
+ * ("Please include winsock2.h before windows.h") -- olculdu. Bu yuzden soket
+ * blogu thread blogunun USTUNDE duruyor; yer degistirirse uyari geri gelir. */
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define KDL_SOKET_WIN 1
+#define KDL_SOKET_VAR 1
+#elif defined(__linux__) || defined(__APPLE__) || defined(__unix__)
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+/* [D-474] `struct timeval` (SO_RCVTIMEO icin) BURADAN gelir. `sys/socket.h`in
+ * onu getirecegini VARSAYMISTIM -- katı POSIX'te GETIRMEZ ve Linux'ta
+ * "storage size of 'tv' isn't known" verir. Varsayim yerine acik include. */
+#include <sys/time.h>
+/* [D-470] `errno` (EAGAIN/EWOULDBLOCK = okuma zaman asimi) POSIX dalinda
+ * kullaniliyor. ⚠ Bu eksiklik Windows'ta GIZLI KALIRDI: o dal `#ifdef` ile
+ * disarida oldugu icin burada derleme HATA VERMEZ, Linux'ta ise VERIRDI.
+ * Capraz-platform kodda "benim makinemde derleniyor" YETERSIZ KANITTIR. */
+#include <errno.h>
+#include <unistd.h>
+#define KDL_SOKET_POSIX 1
+#define KDL_SOKET_VAR 1
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #define KDL_THREAD_VAR 1
@@ -64,6 +121,21 @@ void kdl_yazdir_metin(const char *s) {
         fputc('\n', stdout);
     } else {
         fputs("(bos)\n", stdout);
+    }
+}
+
+/* [D-450] STDERR yazicisi — `kdl_yazdir_metin`in birebir aynasi, yalniz
+ * akis stderr. Tanilar stdout'u KIRLETMEMELI: derleyici ciktisi (IR) ve
+ * tani mesajlari ayri akislara gitmeli, aksi halde `--llvm | clang` boru
+ * hatti tani metnini IR sanip patlar. `kdl_hata_yazdir` zaten vardi ama
+ * HICBIR derleyicide KEMGU yerlesigi olarak acilmamisti; bu ad
+ * `yazdir_` onek ailesine katilir (self-host esleme ONEK tabanli). */
+void kdl_yazdir_hata(const char *s) {
+    if (s) {
+        fputs(s, stderr);
+        fputc('\n', stderr);
+    } else {
+        fputs("(bos)\n", stderr);
     }
 }
 
@@ -181,16 +253,32 @@ void kdl_yaz_bayt(int32_t b) {
  * ile biçimle (self-host parser KESIRLI dump'ı ast_duz_yaz ile birebir). */
 const char *kdl_ondalik_bicimle(const char *lex) {
     if (!lex) return "0";
-    char buf[64];
-    int j = 0;
-    for (int i = 0; lex[i] && j < 63; i++) {
+    /* [D-633] Tampon LEXEME boyunda: eskiden sabit 64 bayt + `j < 63` kirpmasi
+     * uzun literalin USSUNU dusuruyordu (`1.000...0e10` -> 1.0; C ayristiricisiyla
+     * AYNI kusur, ikisi birlikte onarildi -- SESSIZ YANLIS DEGER). */
+    size_t ln = strlen(lex);
+    char *buf = (char *)malloc(ln + 1);
+    if (!buf) return "0";
+    size_t j = 0;
+    for (size_t i = 0; i < ln; i++) {
         if (lex[i] != '_') buf[j++] = lex[i];
     }
     buf[j] = '\0';
     double d = strtod(buf, NULL);
+    free(buf);
     char *out = (char *)kdl_sizan_al(64);  /* V2-F4.1: sızan → bölge */
     if (!out) return "0";
-    snprintf(out, 64, "%g", d);
+    /* [D-457] "%g" ALTI anlamli basamak verir -> self-host, kesirli LEXEME'i
+     * `3.14159265358979` -> `3.14159` yapiyordu; bu deger hem `--ast` dokumune
+     * hem LLVM IR'ina gidiyor, yani DERLEME ZAMANINDA SESSIZ VERI KAYBIYDI.
+     * C oracle'in `kesirli_kisa_bicimle`'siyle AYNI kural (kisa gidis-donus). */
+    {
+        int p;
+        for (p = 15; p <= 17; p++) {
+            snprintf(out, 64, "%.*g", p, d);
+            if (strtod(out, NULL) == d) break;
+        }
+    }
     return out;
 }
 
@@ -217,21 +305,6 @@ void kdl_yaz_karakter(int32_t cp) {
     fputs((const char *)buf, stdout);
 }
 
-void kdl_hata_yazdir(const char *s) {
-    if (s) {
-        fputs(s, stderr);
-        fputc('\n', stderr);
-    } else {
-        fputs("(bos)\n", stderr);
-    }
-}
-
-int32_t kdl_oku_tam(void) {
-    int32_t n = 0;
-    if (scanf("%d", &n) != 1) return 0;
-    return n;
-}
-
 /* === D.3 Metin === */
 
 int32_t kdl_metin_uzunluk(const char *s) {
@@ -255,31 +328,10 @@ _Bool kdl_metin_esit(const char *a, const char *b) {
     return strcmp(a, b) == 0;
 }
 
-/* === D.4 Sayisal === */
-
-int32_t kdl_mutlak(int32_t x) {
-    return x < 0 ? -x : x;
-}
-
-int32_t kdl_min(int32_t a, int32_t b) {
-    return a < b ? a : b;
-}
-
-int32_t kdl_maks(int32_t a, int32_t b) {
-    return a > b ? a : b;
-}
-
-int64_t kdl_mutlak64(int64_t x) {
-    return x < 0 ? -x : x;
-}
-
-int64_t kdl_min64(int64_t a, int64_t b) {
-    return a < b ? a : b;
-}
-
-int64_t kdl_maks64(int64_t a, int64_t b) {
-    return a > b ? a : b;
-}
+/* [D-596] D.4 Sayisal (kdl_mutlak/min/maks + 64) ve kdl_hata_yazdir/
+ * kdl_oku_tam/kdl_kanal_bos_mu SILINDI: hicbir derleyici eslemiyordu, depoda
+ * referans 0 (olculdu, D-595). kdl_mutlak(INT_MIN) ayrica tanimsiz
+ * davranisti. Saf karsiliklar stdlib/temel/matematik.kem'de. */
 
 /* === J: Metin islemleri (heap alloc) === */
 
@@ -307,18 +359,509 @@ const char *kdl_metin_birlestir(const char *a, const char *b) {
     return yeni;
 }
 
-/* Metni tam sayiya cevirir (atoi sarmali) */
-int32_t kdl_metin_to_tam(const char *s) {
-    if (!s) return 0;
-    return (int32_t)atoi(s);
+/* [D-459] `kdl_metin_to_tam` KALDIRILDI: hicbir cagricisi yoktu (olculdu, iki
+ * derleyicide de yerlesik olarak acilmamisti) ve `atoi` sarmali oldugu icin
+ * BASARISIZLIGI SESSIZDI. Yerine `kdl_metin_tam` + `kdl_metin_tam_gecerli`
+ * (asagida). Olu kodu birakmak, sonraki bir okuyucunun onu "hazir primitif"
+ * sanip sessiz-basarisiz yolu yeniden acmasina davetiye olurdu. */
+
+/* ============================================================================
+ * [D-459] tam64 <-> metin.
+ *
+ * ⚠ ESKI `kdl_tam_to_metin` (int32_t, "%d") BUNUNLA DEGISTIRILDI: hicbir
+ * cagricisi yoktu (olculdu) ve `tam32` genisligi JSON icin YETMEZ --
+ * `JsonDeger::Sayi` `tam64` tasir ve KEMGU'da ORTUK DONUSUM YOKTUR, yani
+ * `tam32` alan bir yerlesik o yoldan cagrilamazdi. `tam32` cagiranlar acik
+ * `olarak tam64` yazar.
+ *
+ * `kdl_metin_tam` ESKI `kdl_metin_to_tam`in yerini alir; o `atoi` sarmaliydi
+ * ve BASARISIZLIGI SESSIZDI (`metin_tam("abc")` -> 0, gercek bir "0"dan
+ * AYIRT EDILEMEZ). Burada ayrik bir yuklem (`kdl_metin_tam_gecerli`) disa
+ * verilir ki cagiran ACIK hata uretebilsin (D-449/D-458 deseni).
+ * Gecerlilik kurali: istege bagli isaret + EN AZ BIR rakam + bastan sona
+ * TAMAMEN tuketilmis olmali (bastaki/sondaki bosluk KABUL EDILMEZ; "12ab"
+ * GECERSIZDIR -- strtoll tek basina bunu kabul ederdi).
+ * ========================================================================= */
+const char *kdl_tam_metin(int64_t n) {
+    char *buf = (char *)kdl_sizan_al(24);  /* V2-F4.1: sızan → bölge */
+    if (!buf) return NULL;
+    snprintf(buf, 24, "%lld", (long long)n);
+    return buf;
 }
 
-/* tam32 -> metin (heap, format "%d") */
-const char *kdl_tam_to_metin(int32_t n) {
-    char *buf = (char *)kdl_sizan_al(16);  /* V2-F4.1: sızan → bölge */
+int32_t kdl_metin_tam_gecerli(const char *s) {
+    const char *p = s;
+    int rakam = 0;
+    if (!s) return 0;
+    if (*p == '+' || *p == '-') p++;
+    while (*p >= '0' && *p <= '9') { p++; rakam = 1; }
+    return (rakam && *p == '\0') ? 1 : 0;
+}
+
+int64_t kdl_metin_tam(const char *s) {
+    if (!kdl_metin_tam_gecerli(s)) return 0;
+    return (int64_t)strtoll(s, NULL, 10);
+}
+
+/* [D-460] metin -> kesirli64. `kdl_metin_tam`in SIMETRIGI, ayni gerekce:
+ * basarisizlik SESSIZ OLMASIN diye ayrik yuklem disa verilir.
+ *
+ * NEDEN SAF KEMGU'DA TOPLAMA YAPILMADI: basamaklari `tam + kesir/10^k` diye
+ * biriktirmek uzun ondalıklarda DOGRU-YUVARLANMIS sonucu kacirir ve D-457'nin
+ * kurdugu GIDIS-DONUS garantisini bozar (`kesirli_metin(metin_kesirli(x))`
+ * artik x'e donmezdi). `strtod` dogru yuvarlar.
+ *
+ * Gecerlilik JSON sayi dilbilgisidir: [-]rakam+[.rakam+][(e|E)[+|-]rakam+]
+ * ve bastan sona TAMAMEN tuketilmis olmali. `strtod` tek basina "0x10", "inf",
+ * "nan" ve bastaki boslugu KABUL EDERDI -- JSON bunlari kabul ETMEZ. */
+int32_t kdl_metin_kesirli_gecerli(const char *s) {
+    const char *p = s;
+    if (!s) return 0;
+    if (*p == '-') p++;                       /* JSON: `+` YOK, yalniz `-` */
+    if (!(*p >= '0' && *p <= '9')) return 0;
+    while (*p >= '0' && *p <= '9') p++;
+    if (*p == '.') {
+        p++;
+        if (!(*p >= '0' && *p <= '9')) return 0;   /* "1." GECERSIZ */
+        while (*p >= '0' && *p <= '9') p++;
+    }
+    if (*p == 'e' || *p == 'E') {
+        p++;
+        if (*p == '+' || *p == '-') p++;
+        if (!(*p >= '0' && *p <= '9')) return 0;
+        while (*p >= '0' && *p <= '9') p++;
+    }
+    return (*p == '\0') ? 1 : 0;
+}
+
+double kdl_metin_kesirli(const char *s) {
+    if (!kdl_metin_kesirli_gecerli(s)) return 0.0;
+    return strtod(s, NULL);
+}
+
+/* ============================================================================
+ * [D-466] TCP ISTEMCI soketleri (yalniz istemci; dinleyici ve TLS V1'de YOK).
+ *
+ * SOZLESME -- her cagri ya BASARILI olur ya da HATA doner; sessiz basarisizlik
+ * YOK. Hata yolu KEMGU tarafinda `sonuc<T, metin>` ile temsil edilir; buradaki
+ * donusler o sarmalayicinin okudugu ham degerlerdir:
+ *   kdl_soket_baglan -> handle (void*) ya da NULL
+ *   kdl_soket_gonder -> gonderilen BAYT sayisi ya da -1
+ *   kdl_soket_al     -> okunan metin ya da NULL  (0 bayt = baglanti kapandi,
+ *                       bos dizgi olarak doner -- NULL'dan AYRI)
+ *
+ * ⚠ WINSOCK BASLATMA: Windows'ta soket kullanmadan once WSAStartup SART.
+ * Tembel (ilk kullanimda) yapilir; WSACleanup CAGRILMAZ -- surec omru boyunca
+ * acik kalmasi dogrudur ve erken temizlik baska bir kutuphanenin soketlerini
+ * KIRARDI (runtime baska bir programa gomulebilir, D-457'nin locale dersinin
+ * ayni sinifi).
+ *
+ * ⚠ Handle icin `int` DEGIL ayri bir yapi kullaniliyor: Windows'ta SOCKET
+ * `UINT_PTR`tir (64-bit) ve `int`e sigdirmak 64-bit'te BILGI KAYBIDIR. Ayrica
+ * KEMGU tarafinda handle `yapi tekkez Baglanti` icinde tasindigi icin opak
+ * kalmasi ZATEN gerekiyor.
+ * ========================================================================= */
+#ifdef KDL_SOKET_VAR
+typedef struct {
+#ifdef KDL_SOKET_WIN
+    SOCKET s;
+#else
+    int s;
+#endif
+} KdlSoket;
+
+#ifdef KDL_SOKET_WIN
+/* ⚠⚠ WINSOCK CALISMA-ZAMANINDA YUKLENIR (LoadLibrary/GetProcAddress), BAGLAMA
+ * ZAMANINDA DEGIL. Gerekce OLCULDU: `ws2_32`ye baglanma zamani bagimliligi
+ * eklemek, kdl_runtime.o'yu kullanan HER programin link satirini bozuyordu --
+ * depoda 41 Makefile + 18 harness = ~59 baglama noktasi, ustelik bare-metal
+ * yollari ws2_32 ALMAMALI. Olculdu: `-lws2_32` olmadan EN BASIT program bile
+ * "undefined symbol: WSAStartup" ile dusuyor.
+ *
+ * ILKE: yeni bir yetenek, onu KULLANMAYAN programlarin baglama sozlesmesini
+ * DEGISTIRMEMELI. Dinamik yukleme bunu saglar; link yuzeyi hic degismez.
+ *
+ * DLL bulunamazsa tum soket cagrilari GUVENLI HATA doner (sessiz basari YOK). */
+typedef int (WSAAPI *KdlFnWSAStartup)(WORD, LPWSADATA);
+typedef int (WSAAPI *KdlFnGetaddrinfo)(const char *, const char *,
+                                       const struct addrinfo *,
+                                       struct addrinfo **);
+typedef void (WSAAPI *KdlFnFreeaddrinfo)(struct addrinfo *);
+typedef SOCKET (WSAAPI *KdlFnSocket)(int, int, int);
+typedef int (WSAAPI *KdlFnConnect)(SOCKET, const struct sockaddr *, int);
+typedef int (WSAAPI *KdlFnSend)(SOCKET, const char *, int, int);
+typedef int (WSAAPI *KdlFnRecv)(SOCKET, char *, int, int);
+typedef int (WSAAPI *KdlFnClosesocket)(SOCKET);
+typedef int (WSAAPI *KdlFnSetsockopt)(SOCKET, int, int, const char *, int);
+/* ⚠ [D-470] `WSAGetLastError` de DINAMIK yuklenmeli. Dogrudan cagirmak
+ * ws2_32'ye BAGLAMA ZAMANI bagimliligi getirir ve D-466'da kurulan ilkeyi
+ * ciger: "yeni bir yetenek, onu KULLANMAYAN programlarin baglama sozlesmesini
+ * DEGISTIRMEMELI". Ilk yazimda dogrudan cagirdim ve link ANINDA kirildi
+ * ("undefined symbol: WSAGetLastError") -- ilke kendi ihlalini yakaladi. */
+typedef int (WSAAPI *KdlFnWSAGetLastError)(void);
+
+static int kdl_wsa_durum = 0;   /* 0=denenmedi 1=hazir -1=yok */
+static KdlFnGetaddrinfo   kdl_p_getaddrinfo;
+static KdlFnFreeaddrinfo  kdl_p_freeaddrinfo;
+static KdlFnSocket        kdl_p_socket;
+static KdlFnConnect       kdl_p_connect;
+static KdlFnSend          kdl_p_send;
+static KdlFnRecv          kdl_p_recv;
+static KdlFnClosesocket   kdl_p_closesocket;
+static KdlFnSetsockopt    kdl_p_setsockopt;   /* [D-470] zaman asimi */
+static KdlFnWSAGetLastError kdl_p_wsalasterr;   /* [D-470] */
+
+static int kdl_wsa_baslat(void) {
+    HMODULE m;
+    KdlFnWSAStartup p_start;
+    WSADATA wd;
+    if (kdl_wsa_durum != 0) return kdl_wsa_durum == 1;
+    kdl_wsa_durum = -1;                    /* basarisiz varsay; ancak hepsi
+                                            * cozulurse 1'e cikar */
+    m = LoadLibraryA("ws2_32.dll");
+    if (!m) return 0;
+    /* ⚠ CAST ZINCIRI OLCULEREK SECILDI (sifir-uyari hedefi):
+     *   (Fn)(void*)GetProcAddress(..)      -> -Wpedantic: ISO C islev<->nesne
+     *                                         isaretcisi donusumunu yasaklar
+     *   (Fn)GetProcAddress(..)             -> -Wcast-function-type: FARPROC
+     *                                         ile imza uyusmuyor
+     *   (Fn)(void (*)(void))GetProcAddress -> TEMIZ (GCC'nin belgeledigi yol)
+     * Ilk iki bicim 16 ve 7 uyari uretti; ucuncusu 0. */
+    p_start            = (KdlFnWSAStartup)(void (*)(void))GetProcAddress(m, "WSAStartup");
+    kdl_p_getaddrinfo  = (KdlFnGetaddrinfo)(void (*)(void))GetProcAddress(m, "getaddrinfo");
+    kdl_p_freeaddrinfo = (KdlFnFreeaddrinfo)(void (*)(void))GetProcAddress(m, "freeaddrinfo");
+    kdl_p_socket       = (KdlFnSocket)(void (*)(void))GetProcAddress(m, "socket");
+    kdl_p_connect      = (KdlFnConnect)(void (*)(void))GetProcAddress(m, "connect");
+    kdl_p_send         = (KdlFnSend)(void (*)(void))GetProcAddress(m, "send");
+    kdl_p_recv         = (KdlFnRecv)(void (*)(void))GetProcAddress(m, "recv");
+    kdl_p_closesocket  = (KdlFnClosesocket)(void (*)(void))GetProcAddress(m, "closesocket");
+    kdl_p_setsockopt   = (KdlFnSetsockopt)(void (*)(void))GetProcAddress(m, "setsockopt");
+    kdl_p_wsalasterr   = (KdlFnWSAGetLastError)(void (*)(void))GetProcAddress(m, "WSAGetLastError");
+    if (!p_start || !kdl_p_getaddrinfo || !kdl_p_freeaddrinfo ||
+        !kdl_p_socket || !kdl_p_connect || !kdl_p_send ||
+        !kdl_p_recv || !kdl_p_closesocket || !kdl_p_setsockopt || !kdl_p_wsalasterr) {
+        return 0;   /* eksik sembol -> guvenli hata */
+    }
+    if (p_start(MAKEWORD(2, 2), &wd) != 0) return 0;
+    /* WSACleanup CAGRILMAZ: surec omru boyunca acik kalmasi dogrudur; erken
+     * temizlik ayni surecteki BASKA bir kutuphanenin soketlerini kirardi
+     * (runtime baska bir programa gomulebilir -- D-457'nin locale dersi). */
+    kdl_wsa_durum = 1;
+    return 1;
+}
+#endif
+
+/* Cagri yerleri TEK BICIM kalsin diye makro katmani: Windows'ta calisma-zamani
+ * isaretcisi, POSIX'te dogrudan libc cagrisi. */
+#ifdef KDL_SOKET_WIN
+#define KDL_GETADDRINFO   kdl_p_getaddrinfo
+#define KDL_FREEADDRINFO  kdl_p_freeaddrinfo
+#define KDL_SOCKET        kdl_p_socket
+#define KDL_CONNECT       kdl_p_connect
+#define KDL_SEND          kdl_p_send
+#define KDL_RECV          kdl_p_recv
+#define KDL_KAPAT_SOKET   kdl_p_closesocket
+#define KDL_SETSOCKOPT    kdl_p_setsockopt
+#elif defined(KDL_SOKET_POSIX)
+#define KDL_GETADDRINFO   getaddrinfo
+#define KDL_FREEADDRINFO  freeaddrinfo
+#define KDL_SOCKET        socket
+#define KDL_CONNECT       connect
+#define KDL_SEND          send
+#define KDL_RECV          recv
+#define KDL_KAPAT_SOKET   close
+#define KDL_SETSOCKOPT    setsockopt
+#endif
+
+/* ----------------------------------------------------------------------------
+ * [D-470] OKUMA ZAMAN ASIMI.
+ *
+ * NEDEN: `recv` SINIRSIZ bloklar. Olu bir karsi tarafla konusan program
+ * SONSUZA DEK bekler -- ve bu, D-296'da acikca REDDEDILEN sinifin ta kendisi
+ * ("safety korunuyor, liveness kayboluyor"). Cokmezlik vaat eden bir dilin
+ * stdlib'i asilamaz. `connect`in ISLETIM SISTEMINDE zaten bir ust siniri var
+ * (~20 sn), yani asilma riski YALNIZCA `recv`de -- olculdu, bu yuzden V1
+ * kapsami okuma zaman asimidir.
+ *
+ * ⚠ PLATFORM FARKI OLCULDU: ayni sabit adi (`SO_RCVTIMEO`) iki farkli ARGUMAN
+ * TIPI ister -- Windows DWORD MILISANIYE, POSIX `struct timeval`. Yanlis tipi
+ * gecirmek SESSIZCE cop bir zaman asimi kurar (derleyici sikayet etmez, cunku
+ * ikisi de `const char *`e cast edilir). Iki dal AYRI yazildi.
+ *
+ * ms <= 0  -> zaman asimini KALDIR (sonsuz bekleme). Kullanicinin acikca
+ *             isteyebilecegi mesru bir secim; varsayilan DEGIL.
+ * -------------------------------------------------------------------------- */
+static int kdl_soket_zaman_uygula(void *p, int32_t ms) {
+    KdlSoket *k = (KdlSoket *)p;
+    if (!k) return -1;
+#ifdef KDL_SOKET_WIN
+    {
+        DWORD t = (ms > 0) ? (DWORD)ms : 0;   /* 0 = sonsuz (Winsock) */
+        if (KDL_SETSOCKOPT(k->s, SOL_SOCKET, SO_RCVTIMEO,
+                           (const char *)&t, (int)sizeof(t)) != 0) return -1;
+    }
+#else
+    {
+        struct timeval tv;
+        tv.tv_sec  = (ms > 0) ? (ms / 1000) : 0;
+        tv.tv_usec = (ms > 0) ? ((ms % 1000) * 1000) : 0;   /* 0/0 = sonsuz */
+        if (KDL_SETSOCKOPT(k->s, SOL_SOCKET, SO_RCVTIMEO,
+                           (const char *)&tv, (socklen_t)sizeof(tv)) != 0) return -1;
+    }
+#endif
+    return 0;
+}
+#endif  /* KDL_SOKET_VAR */
+
+/* [D-470] Son `al` cagrisi ZAMAN ASIMI yuzunden mi basarisiz oldu?
+ * Ayri bir yuklem, cunku `sonuc<metin, metin>` sarmalayicisinin DOGRU HATA
+ * MESAJINI uretebilmesi icin sebebi bilmesi gerekiyor. */
+static int kdl_soket_zaman_asti_bayrak = 0;
+
+int32_t kdl_soket_zaman_asti(void) { return kdl_soket_zaman_asti_bayrak; }
+
+int32_t kdl_soket_zaman_asimi(void *p, int32_t ms) {
+#ifdef KDL_SOKET_VAR
+    return kdl_soket_zaman_uygula(p, ms);
+#else
+    (void)p; (void)ms;
+    return -1;
+#endif
+}
+
+void *kdl_soket_baglan(const char *host, int32_t port) {
+#ifdef KDL_SOKET_VAR
+    struct addrinfo ipucu, *sonuc = NULL, *it;
+    char pbuf[16];
+    KdlSoket *k;
+    if (!host || port <= 0 || port > 65535) return NULL;
+#ifdef KDL_SOKET_WIN
+    if (!kdl_wsa_baslat()) return NULL;
+#endif
+    snprintf(pbuf, sizeof(pbuf), "%d", (int)port);
+    memset(&ipucu, 0, sizeof(ipucu));
+    ipucu.ai_family = AF_UNSPEC;      /* IPv4 ve IPv6 ikisi de */
+    ipucu.ai_socktype = SOCK_STREAM;  /* TCP */
+    if (KDL_GETADDRINFO(host, pbuf, &ipucu, &sonuc) != 0) return NULL;
+    /* Adres listesindeki HER adayi dene: getaddrinfo birden fazla dondurur ve
+     * ilkinin basarisiz olmasi hosta ulasilamadigi anlamina GELMEZ (IPv6-only
+     * ilk aday cok yaygin). */
+    for (it = sonuc; it != NULL; it = it->ai_next) {
+#ifdef KDL_SOKET_WIN
+        SOCKET s = KDL_SOCKET(it->ai_family, it->ai_socktype, it->ai_protocol);
+        if (s == INVALID_SOCKET) continue;
+        if (KDL_CONNECT(s, it->ai_addr, (int)it->ai_addrlen) == 0) {
+            KDL_FREEADDRINFO(sonuc);
+            k = (KdlSoket *)calloc(1, sizeof(KdlSoket));
+            if (!k) { KDL_KAPAT_SOKET(s); return NULL; }
+            k->s = s;
+            return (void *)k;
+        }
+        KDL_KAPAT_SOKET(s);
+#else
+        int s = KDL_SOCKET(it->ai_family, it->ai_socktype, it->ai_protocol);
+        if (s < 0) continue;
+        if (KDL_CONNECT(s, it->ai_addr, it->ai_addrlen) == 0) {
+            KDL_FREEADDRINFO(sonuc);
+            k = (KdlSoket *)calloc(1, sizeof(KdlSoket));
+            if (!k) { KDL_KAPAT_SOKET(s); return NULL; }
+            k->s = s;
+            return (void *)k;
+        }
+        KDL_KAPAT_SOKET(s);
+#endif
+    }
+    KDL_FREEADDRINFO(sonuc);
+    return NULL;
+#else
+    (void)host; (void)port;
+    return NULL;   /* soket yok -> GUVENLI HATA (sessiz basari DEGIL) */
+#endif
+}
+
+int32_t kdl_soket_gonder(void *p, const char *veri) {
+#ifdef KDL_SOKET_VAR
+    KdlSoket *k = (KdlSoket *)p;
+    size_t n, yazilan = 0;
+    if (!k || !veri) return -1;
+    n = strlen(veri);
+    /* ⚠ send() KISMI yazabilir. Tek cagriyla yetinmek sessiz veri KAYBIDIR;
+     * tamami yazilana dek donguye girilir. */
+    while (yazilan < n) {
+#ifdef KDL_SOKET_WIN
+        int r = KDL_SEND(k->s, veri + yazilan, (int)(n - yazilan), 0);
+        if (r == SOCKET_ERROR) return -1;
+#else
+        ssize_t r = KDL_SEND(k->s, veri + yazilan, n - yazilan, 0);
+        if (r < 0) return -1;
+#endif
+        if (r == 0) return -1;
+        yazilan += (size_t)r;
+    }
+    return (int32_t)yazilan;
+#else
+    (void)p; (void)veri;
+    return -1;
+#endif
+}
+
+const char *kdl_soket_al(void *p, int32_t azami) {
+#ifdef KDL_SOKET_VAR
+    KdlSoket *k = (KdlSoket *)p;
+    char *buf;
+    if (!k || azami <= 0) return NULL;
+    if (azami > 1048576) azami = 1048576;   /* 1 MiB tavan */
+    buf = (char *)kdl_sizan_al((size_t)azami + 1);
     if (!buf) return NULL;
-    snprintf(buf, 16, "%d", n);
+    kdl_soket_zaman_asti_bayrak = 0;   /* [D-470] her okumada sifirla */
+#ifdef KDL_SOKET_WIN
+    {
+        int r = KDL_RECV(k->s, buf, azami, 0);
+        if (r == SOCKET_ERROR) {
+            /* [D-470] ZAMAN ASIMI ile GERCEK HATA ayrilmali. Ayirmadan
+             * ikisi de "okuma basarisiz" gorunurdu ve cagiran yeniden mi
+             * denemeli yoksa baglantiyi mi birakmali BILEMEZDI. */
+            if (kdl_p_wsalasterr() == WSAETIMEDOUT) kdl_soket_zaman_asti_bayrak = 1;
+            return NULL;
+        }
+        buf[r] = '\0';
+    }
+#else
+    {
+        ssize_t r = KDL_RECV(k->s, buf, (size_t)azami, 0);
+        if (r < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                kdl_soket_zaman_asti_bayrak = 1;
+            return NULL;
+        }
+        buf[r] = '\0';
+    }
+#endif
+    /* r == 0 -> karsi taraf kapatti; BOS DIZGI doner (NULL'dan AYRI).
+     * ⚠ metin NUL-sonlandirmalidir (D-458): gomulu NUL iceren ikili veri
+     * KIRPILIR. V1 bilincli olarak METIN protokolleri icindir. */
     return buf;
+#else
+    (void)p; (void)azami;
+    return NULL;
+#endif
+}
+
+int32_t kdl_soket_kapat(void *p) {
+#ifdef KDL_SOKET_VAR
+    KdlSoket *k = (KdlSoket *)p;
+    if (!k) return -1;
+    KDL_KAPAT_SOKET(k->s);
+    free(k);
+    return 0;
+#else
+    (void)p;
+    return -1;
+#endif
+}
+
+int32_t kdl_soket_gecerli(void *p) { return p != NULL ? 1 : 0; }
+
+/* ============================================================================
+ * [D-458] Unicode KOD NOKTASI -> metin (UTF-8).
+ *
+ * NEDEN HAM BAYT DEGIL KOD NOKTASI: `metin`in GECERLI UTF-8 olma degismezi
+ * korunmalidir. Ham bir bayt->metin primitifi kullaniciya gecersiz dizgi kurma
+ * imkani verirdi (0x80-0xFF tek basina gecerli UTF-8 degildir) -- dilin "yanlis
+ * olan yazilamaz" durusuna aykiri bir foot-gun. UTF-16 VEKIL CIFTLERI cagiranda
+ * (stdlib/json.kem) saf KEMGU aritmetigiyle birlestirilir; bu yerlesik yalnizca
+ * TEK bir kod noktasini kodlar.
+ *
+ * Kodlama mantigi YENI DEGIL: `kdl_yazdir_karakter` ayni 4 arali kodlayiciyi
+ * zaten iceriyordu ama stdout'a YAZIYORDU (D-450'nin deseni: algoritma vardi,
+ * cikisi tampona almak gerekti).
+ *
+ * GECERLILIK AYRI YUKLEMDE (`kdl_kod_gecerli`, D-449 deseni): gecersiz kod icin
+ * bos dizgi donmek TEK BASINA sessiz olurdu; cagiran once soruP acik hata
+ * uretebilsin diye yuklem disa verilir.
+ *
+ * ⚠ KOD 0 (NUL) GECERSIZ SAYILIR -- ve bu OLCULMUS bir karardir, keyfi degil:
+ * KEMGU `metin`i NUL-SONLANDIRMALI C dizgisidir (`kdl_metin_uzunluk` -> strlen,
+ * `kdl_metin_birlestir` -> strlen). Yani GOMULU NUL TEMSIL EDILEMEZ; gecerli
+ * saysaydik ` ` SESSIZCE DUSERDI. Loud > silent: cagiran acik hata versin.
+ * ========================================================================= */
+int32_t kdl_kod_gecerli(int32_t kod) {
+    uint32_t c = (uint32_t)kod;
+    if (kod <= 0) return 0;               /* 0 = temsil edilemez (yukaridaki not) */
+    if (c > 0x10FFFFu) return 0;          /* Unicode ust siniri */
+    if (c >= 0xD800u && c <= 0xDFFFu) return 0;   /* yalniz vekil (lone surrogate) */
+    return 1;
+}
+
+const char *kdl_kod_metin(int32_t kod) {
+    char *out = (char *)kdl_sizan_al(8);
+    unsigned char *b;
+    uint32_t c = (uint32_t)kod;
+    int n = 0;
+    if (!out) return "";
+    b = (unsigned char *)out;
+    if (!kdl_kod_gecerli(kod)) { out[0] = 0; return out; }
+    if (c < 0x80u) {
+        b[n++] = (unsigned char)c;
+    } else if (c < 0x800u) {
+        b[n++] = (unsigned char)(0xC0u | (c >> 6));
+        b[n++] = (unsigned char)(0x80u | (c & 0x3Fu));
+    } else if (c < 0x10000u) {
+        b[n++] = (unsigned char)(0xE0u | (c >> 12));
+        b[n++] = (unsigned char)(0x80u | ((c >> 6) & 0x3Fu));
+        b[n++] = (unsigned char)(0x80u | (c & 0x3Fu));
+    } else {
+        b[n++] = (unsigned char)(0xF0u | (c >> 18));
+        b[n++] = (unsigned char)(0x80u | ((c >> 12) & 0x3Fu));
+        b[n++] = (unsigned char)(0x80u | ((c >> 6) & 0x3Fu));
+        b[n++] = (unsigned char)(0x80u | (c & 0x3Fu));
+    }
+    b[n] = 0;
+    return out;
+}
+
+/* ============================================================================
+ * [D-457] kesirli64 -> metin. LOCALE BAGIMSIZ + GIDIS-DONUS (round-trip) tam.
+ *
+ * NEDEN "%g" YETMEZ (mevcut kdl_ondalik_bicimle onu kullanir): "%g" ALTI
+ * anlamli basamak verir -> 3.14159265358979 "3.14159" olur. Bu bir bicimleme
+ * tercihi degil VERI KAYBIDIR; JSON yazicisi icin kabul edilemez.
+ *
+ * KISA GIDIS-DONUS: %.15g / %.16g / %.17g sirayla denenir, strtod ile GERI
+ * OKUNUP bit-esitligi dogrulanir; ilk tutan kullanilir. Boylece hem en kisa
+ * hem KAYIPSIZ gosterim cikar (0.1 -> "0.1", 1/3 -> tam 17 basamak).
+ *
+ * LOCALE: bu depoda hicbir yerde setlocale CAGRILMIYOR (olculdu) -> C
+ * programlari varsayilan "C" locale'dedir ve "%g" zaten NOKTA uretir. Yine de
+ * localeconv() ile gercek ayirac OKUNUP '.' ile degistirilir: runtime baska
+ * bir programa gomulup o program setlocale(LC_ALL,"tr_TR") cagirirsa VIRGUL
+ * uretilirdi ve JSON ciktisi SESSIZCE bozulurdu. Varsayima degil olcume dayan.
+ *
+ * inf/nan: "inf" / "-inf" / "nan" dizgileri uretilir. JSON'da bu degerler YOK;
+ * cagiran (json yazicisi) bunlari reddetmelidir -- burada sessizce "0" uretmek
+ * yanlis veriyi gecerli gostermek olurdu.
+ * ========================================================================= */
+const char *kdl_kesirli_metin(double d) {
+    char *out = (char *)kdl_sizan_al(40);
+    if (!out) return "0";
+    if (d != d) { memcpy(out, "nan", 4); return out; }
+    if (d > 1.7976931348623157e308) { memcpy(out, "inf", 4); return out; }
+    if (d < -1.7976931348623157e308) { memcpy(out, "-inf", 5); return out; }
+    {
+        int p;
+        for (p = 15; p <= 17; p++) {
+            snprintf(out, 40, "%.*g", p, d);
+            if (strtod(out, NULL) == d) break;
+        }
+    }
+    {   /* Ondalik ayiraci NE OLURSA OLSUN '.' yap (yukaridaki gerekce). */
+        const char *ay = localeconv()->decimal_point;
+        if (ay && ay[0] && ay[0] != '.') {
+            char *q = strchr(out, ay[0]);
+            if (q) *q = '.';
+        }
+    }
+    return out;
 }
 
 /* === J2: Genisletilmis metin primitifleri (Madde A) ===
@@ -680,7 +1223,12 @@ static int kdl_gorev_spawn(KdlGorev *g) {
 
 /* islev pointer alir, ya gercek thread spawn ya sequential calistirir */
 KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
-    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    /* [D-666] calloc: TUM alanlar (bugunku ve SONRADAN eklenecek) sifirla
+     * baslar. D-309 `rho_serbest` alanini ekledi ama eski olusturucu
+     * guncellenmedi -> `kdl_gorev_birlestir` baslatilmamis alan okuyordu
+     * (MemorySanitizer ile olculdu: kdl_runtime.c:1301). Tek satir eklemek
+     * yalniz bu ornegi kapatirdi; calloc SINIFI kapatir. */
+    KdlGorev *g = (KdlGorev *)calloc(1, sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = f;
     g->fn_bare = NULL; g->fn_kapanis = NULL; g->env = NULL; g->rho = NULL;
@@ -702,7 +1250,12 @@ KdlGorev *kdl_gorev_basla_i32(int32_t (*f)(void)) {
 KdlGorev *kdl_gorev_basla_kapanis(KdlGorevBare fn_bare,
                                   KdlGorevKapanis fn_kapanis,
                                   void *env, int32_t rho_serbest) {
-    KdlGorev *g = (KdlGorev *)malloc(sizeof(KdlGorev));
+    /* [D-666] calloc: TUM alanlar (bugunku ve SONRADAN eklenecek) sifirla
+     * baslar. D-309 `rho_serbest` alanini ekledi ama eski olusturucu
+     * guncellenmedi -> `kdl_gorev_birlestir` baslatilmamis alan okuyordu
+     * (MemorySanitizer ile olculdu: kdl_runtime.c:1301). Tek satir eklemek
+     * yalniz bu ornegi kapatirdi; calloc SINIFI kapatir. */
+    KdlGorev *g = (KdlGorev *)calloc(1, sizeof(KdlGorev));
     if (!g) return NULL;
     g->f = NULL;
     g->fn_bare = fn_bare;
@@ -787,6 +1340,265 @@ typedef struct {
     int kilit_aktif;
 #endif
 } KdlKanal;
+
+/* ===================================================================
+ * [D-455] BAGIMSIZ KILIT (mutex) — KEMGU `Kilit` tipinin runtime'i.
+ * -------------------------------------------------------------------
+ * Yukaridaki kdl_kilit_* yardimcilari KANAL'a gomuludur (`static`, KdlKanal*
+ * alir) — genel amacli bir kilit API'si DEGILDIR. Onerirken "runtime
+ * primitifleri hazir" demistim; OLCUM bunu duzeltti: hazir olan yalniz
+ * kanal-ici kilit; bagimsiz kilit YENI runtime kodu ister.
+ *
+ * Handle OPAK bir isaretcidir; KEMGU tarafinda `yapi Kilit { h: metin; }`
+ * icinde tasinir ve kullanici ONA HIC DOKUNMAZ — yalnizca `kilitle(k, ||{..})`
+ * kapsamli API'si uzerinden kullanilir (bkz. stdlib/kilit.kem). Bu, D-443'te
+ * kaydedilen "opak handle `metin` olarak tipleniyor" tuzagini onler: handle
+ * KACMAZ, uzerinde `==`/`metin_uzunluk` cagrilmaz.
+ *
+ * Thread'siz derlemede (KDL_THREAD_* tanimsiz) islemler NO-OP'tur: tek
+ * thread'de kilit gereksizdir ve boylece bare-metal/host-thread'siz yollar
+ * kirilmaz. */
+typedef struct {
+#ifdef KDL_THREAD_WIN
+    CRITICAL_SECTION cs;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t mtx;
+#endif
+    int aktif;
+} KdlKilit;
+
+void *kdl_kilit_olustur(void) {
+    KdlKilit *k = (KdlKilit *)calloc(1, sizeof(KdlKilit));
+    if (!k) return NULL;
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&k->cs);
+    k->aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    if (pthread_mutex_init(&k->mtx, NULL) != 0) { free(k); return NULL; }
+    k->aktif = 1;
+#else
+    k->aktif = 0;   /* thread yok → no-op kilit */
+#endif
+    return (void *)k;
+}
+
+void kdl_kilit_al(void *p) {
+    KdlKilit *k = (KdlKilit *)p;
+    if (!k || !k->aktif) return;
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&k->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&k->mtx);
+#endif
+}
+
+void kdl_kilit_birak(void *p) {
+    KdlKilit *k = (KdlKilit *)p;
+    if (!k || !k->aktif) return;
+#ifdef KDL_THREAD_WIN
+    LeaveCriticalSection(&k->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_unlock(&k->mtx);
+#endif
+}
+
+void kdl_kilit_yok(void *p) {
+    KdlKilit *k = (KdlKilit *)p;
+    if (!k) return;
+    if (k->aktif) {
+#ifdef KDL_THREAD_WIN
+        DeleteCriticalSection(&k->cs);
+#elif defined(KDL_THREAD_POSIX)
+        pthread_mutex_destroy(&k->mtx);
+#endif
+    }
+    free(k);
+}
+
+/* ============================================================================
+ * [D-456] SEMAFOR + BARIYER — genel amacli eszamanlilik primitifleri.
+ *
+ * NEDEN YENI KOD: mevcut `kdl_kosul_*` yardimcilari `static` ve `KdlKanal *`
+ * aliyor — kanal implementasyonuna gomuludurler, disa verilebilir bir API
+ * DEGILLER. D-455'te `kdl_kilit_*` icin ayni durum olculmustu; bu blok o
+ * blogun birebir kardesidir (opak `void *`, thread'siz derlemede NO-OP).
+ *
+ * Bekleme HER ZAMAN `while (kosul)` dongusundedir — sahte uyanma (spurious
+ * wakeup) ve "uyandirdiktan sonra baskasi kapti" yarisi icin (kanal kodunun
+ * ayni disiplini).
+ * ========================================================================= */
+
+typedef struct {
+#ifdef KDL_THREAD_WIN
+    CRITICAL_SECTION cs;
+    CONDITION_VARIABLE musait;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t mtx;
+    pthread_cond_t musait;
+#endif
+    int sayac;     /* mevcut izin sayisi */
+    int aktif;
+} KdlSemafor;
+
+void *kdl_semafor_olustur(int32_t baslangic) {
+    KdlSemafor *s = (KdlSemafor *)calloc(1, sizeof(KdlSemafor));
+    if (!s) return NULL;
+    s->sayac = (baslangic < 0) ? 0 : (int)baslangic;
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&s->cs);
+    InitializeConditionVariable(&s->musait);
+    s->aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    if (pthread_mutex_init(&s->mtx, NULL) != 0) { free(s); return NULL; }
+    if (pthread_cond_init(&s->musait, NULL) != 0) {
+        pthread_mutex_destroy(&s->mtx); free(s); return NULL;
+    }
+    s->aktif = 1;
+#else
+    s->aktif = 0;   /* thread yok -> no-op */
+#endif
+    return (void *)s;
+}
+
+void kdl_semafor_al(void *p) {
+    KdlSemafor *s = (KdlSemafor *)p;
+    if (!s) return;
+    if (!s->aktif) { if (s->sayac > 0) s->sayac--; return; }
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&s->cs);
+    while (s->sayac <= 0) SleepConditionVariableCS(&s->musait, &s->cs, INFINITE);
+    s->sayac--;
+    LeaveCriticalSection(&s->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&s->mtx);
+    while (s->sayac <= 0) pthread_cond_wait(&s->musait, &s->mtx);
+    s->sayac--;
+    pthread_mutex_unlock(&s->mtx);
+#endif
+}
+
+void kdl_semafor_birak(void *p) {
+    KdlSemafor *s = (KdlSemafor *)p;
+    if (!s) return;
+    if (!s->aktif) { s->sayac++; return; }
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&s->cs);
+    s->sayac++;
+    WakeConditionVariable(&s->musait);
+    LeaveCriticalSection(&s->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&s->mtx);
+    s->sayac++;
+    pthread_cond_signal(&s->musait);
+    pthread_mutex_unlock(&s->mtx);
+#endif
+}
+
+void kdl_semafor_yok(void *p) {
+    KdlSemafor *s = (KdlSemafor *)p;
+    if (!s) return;
+    if (s->aktif) {
+#ifdef KDL_THREAD_WIN
+        DeleteCriticalSection(&s->cs);
+        /* CONDITION_VARIABLE'in yok-etme cagrisi yok (Win32). */
+#elif defined(KDL_THREAD_POSIX)
+        pthread_cond_destroy(&s->musait);
+        pthread_mutex_destroy(&s->mtx);
+#endif
+    }
+    free(s);
+}
+
+/* --- Bariyer: `hedef` kadar katilimci bulusana dek HEPSI bekler. ---------
+ * `nesil` sayaci YENIDEN KULLANIM icin sarttir: son gelen sayaci sifirlar ve
+ * nesli artirir; bekleyenler KENDI nesillerinin degismesini bekler. Yalnizca
+ * `vardi == hedef` beklemek, hizli bir thread ikinci tura girip sayaci tekrar
+ * artirdiginda kacirilmis-uyandirma uretirdi. */
+typedef struct {
+#ifdef KDL_THREAD_WIN
+    CRITICAL_SECTION cs;
+    CONDITION_VARIABLE gecti;
+#endif
+#ifdef KDL_THREAD_POSIX
+    pthread_mutex_t mtx;
+    pthread_cond_t gecti;
+#endif
+    int hedef;
+    int vardi;
+    unsigned nesil;
+    int aktif;
+} KdlBariyer;
+
+void *kdl_bariyer_olustur(int32_t hedef) {
+    KdlBariyer *b = (KdlBariyer *)calloc(1, sizeof(KdlBariyer));
+    if (!b) return NULL;
+    b->hedef = (hedef < 1) ? 1 : (int)hedef;
+#ifdef KDL_THREAD_WIN
+    InitializeCriticalSection(&b->cs);
+    InitializeConditionVariable(&b->gecti);
+    b->aktif = 1;
+#elif defined(KDL_THREAD_POSIX)
+    if (pthread_mutex_init(&b->mtx, NULL) != 0) { free(b); return NULL; }
+    if (pthread_cond_init(&b->gecti, NULL) != 0) {
+        pthread_mutex_destroy(&b->mtx); free(b); return NULL;
+    }
+    b->aktif = 1;
+#else
+    b->aktif = 0;   /* thread yok -> tek katilimci, bekleme anlamsiz */
+#endif
+    return (void *)b;
+}
+
+void kdl_bariyer_bekle(void *p) {
+    KdlBariyer *b = (KdlBariyer *)p;
+    if (!b || !b->aktif) return;   /* tek thread: bariyer no-op */
+#ifdef KDL_THREAD_WIN
+    EnterCriticalSection(&b->cs);
+    {
+        unsigned benim = b->nesil;
+        b->vardi++;
+        if (b->vardi >= b->hedef) {
+            b->vardi = 0; b->nesil++;
+            WakeAllConditionVariable(&b->gecti);
+        } else {
+            while (b->nesil == benim)
+                SleepConditionVariableCS(&b->gecti, &b->cs, INFINITE);
+        }
+    }
+    LeaveCriticalSection(&b->cs);
+#elif defined(KDL_THREAD_POSIX)
+    pthread_mutex_lock(&b->mtx);
+    {
+        unsigned benim = b->nesil;
+        b->vardi++;
+        if (b->vardi >= b->hedef) {
+            b->vardi = 0; b->nesil++;
+            pthread_cond_broadcast(&b->gecti);
+        } else {
+            while (b->nesil == benim)
+                pthread_cond_wait(&b->gecti, &b->mtx);
+        }
+    }
+    pthread_mutex_unlock(&b->mtx);
+#endif
+}
+
+void kdl_bariyer_yok(void *p) {
+    KdlBariyer *b = (KdlBariyer *)p;
+    if (!b) return;
+    if (b->aktif) {
+#ifdef KDL_THREAD_WIN
+        DeleteCriticalSection(&b->cs);
+#elif defined(KDL_THREAD_POSIX)
+        pthread_cond_destroy(&b->gecti);
+        pthread_mutex_destroy(&b->mtx);
+#endif
+    }
+    free(b);
+}
+
 
 /* Portable kilit yardimcilari */
 static void kdl_kilit_init(KdlKanal *k) {
@@ -919,10 +1731,6 @@ int64_t kdl_kanal_al(KdlKanal *k) {
     return v;
 }
 
-int32_t kdl_kanal_bos_mu(KdlKanal *k) {
-    return k ? (k->boyut == 0) : 1;
-}
-
 void kdl_kanal_serbest(KdlKanal *k) {
     if (!k) return;
     kdl_kilit_yok_et(k);
@@ -946,6 +1754,29 @@ void kdl_kanal_serbest(KdlKanal *k) {
 
 /* === Dosya I/O (libc fopen/fread/fwrite/fclose wraps) === */
 
+/* D-362: fopen Windows'ta ANSI codepage kullanir — UTF-8 yol (ornek: kütüphane/)
+ * BOZULUR ve dosya acilamaz. src/ana.c bu yuzden dosya_ac_utf8 tasiyordu; runtime
+ * ise duz fopen kullaniyordu, dolayisiyla SELF-HOST derleyici `kütüphane/` altindaki
+ * modulleri SESSIZCE yukleyemiyordu (D-361'de olculdu: modul_icerik "" donuyor,
+ * `kullan dizi;` hicbir sey yuklemeden geciyordu).
+ * Cozum ana.c ile AYNI: UTF-8 -> UTF-16 cevir, _wfopen. Donusum basarisizsa
+ * duz fopen'a dus (ASCII yollar icin davranis degismez). */
+static FILE *kdl_fopen_utf8(const char *yol, const char *kip) {
+#ifdef _WIN32
+    wchar_t wyol[1024];
+    wchar_t wkip[8];
+    if (MultiByteToWideChar(CP_UTF8, 0, yol, -1, wyol, 1024) <= 0) {
+        return fopen(yol, kip);
+    }
+    if (MultiByteToWideChar(CP_UTF8, 0, kip, -1, wkip, 8) <= 0) {
+        return fopen(yol, kip);
+    }
+    return _wfopen(wyol, wkip);
+#else
+    return fopen(yol, kip);
+#endif
+}
+
 /* Dosya ac: mod stringi "okuma"/"yazma"/"ekleme" (UTF-8 KEMGU) -> "rb"/"wb"/"ab" */
 void *kdl_dosya_ac(const char *yol, const char *mod) {
     if (!yol || !mod) return NULL;
@@ -953,7 +1784,7 @@ void *kdl_dosya_ac(const char *yol, const char *mod) {
     /* "okuma" 5 byte, "yazma" 5 byte, "ekleme" 6 byte */
     if (strcmp(mod, "yazma") == 0) c_mod = "wb";
     else if (strcmp(mod, "ekleme") == 0) c_mod = "ab";
-    return (void *)fopen(yol, c_mod);
+    return (void *)kdl_fopen_utf8(yol, c_mod);
 }
 
 /* Dosyadan satir oku — heap'te metin doner (null = EOF) */
@@ -996,7 +1827,7 @@ int32_t kdl_dosya_bitti_mi(void *f) {
 
 /* Tum dosyayi oku (heap) */
 const char *kdl_dosya_tumu_oku(const char *yol) {
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1018,9 +1849,24 @@ const char *kdl_dosya_oku(const char *yol) {
 }
 
 /* dosya_var_mi — fopen kontrolu (stat yerine portable) */
+/* [D-449] Opak dosya handle'i GECERLI mi (NULL degil mi)?
+ * `handle != ""` idiomu ARTIK CALISMAZ: D-449 ile `metin` uzerindeki
+ * `==`/`!=` ICERIK karsilastirmasina dondu ve handle bir DIZGI DEGIL,
+ * `FILE*`tir — icerik olarak okunmasi anlamsizdir. Null sorgusu
+ * runtime'a ait; dilde ifade edilemez. */
+/* [D-449] GECERSIZ handle sabiti = NULL. Onceden `gecersiz_handle()`
+ * bos DIZGI ("") donuyordu ve gecerlilik sinamasi ISARETCI kimligiyle
+ * yapiliyordu (`h != ""`). `==` icerik karsilastirmasina donunce o idiom
+ * coktu; ayrica `dosya_ac` basarisizlikta NULL doner, yani GECERSIZLIGIN
+ * IKI FARKLI TEMSILI vardi ve her kod yolu yalnizca BIRINI yakaliyordu.
+ * Tek temsil: NULL. */
+void *kdl_dosya_gecersiz(void) { return NULL; }
+
+int kdl_dosya_gecerli(void *f) { return f != NULL ? 1 : 0; }
+
 int kdl_dosya_var_mi(const char *yol) {
     if (!yol) return 0;
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) return 0;
     fclose(f);
     return 1;
@@ -1041,7 +1887,7 @@ int32_t kdl_dosya_yeniden_adlandir(const char *eski, const char *yeni) {
 /* dosya_boyut — fseek/ftell ile byte sayisi (yoksa -1) */
 int64_t kdl_dosya_boyut(const char *yol) {
     if (!yol) return -1;
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) return -1;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1142,7 +1988,7 @@ const char *kdl_arg_al(int32_t i) {
  * Mod "wb" — uzeryine yazar. byteler ham KdlDizi* (kdl_dizi_*). */
 int32_t kdl_dosya_yaz_byte(const char *yol, const char *byteler, int32_t boyut) {
     if (!yol || !byteler || boyut < 0) return -1;
-    FILE *f = fopen(yol, "wb");
+    FILE *f = kdl_fopen_utf8(yol, "wb");
     if (!f) return -1;
     size_t yazildi = fwrite(byteler, 1, (size_t)boyut, f);
     fclose(f);
@@ -1153,7 +1999,7 @@ int32_t kdl_dosya_yaz_byte(const char *yol, const char *byteler, int32_t boyut) 
  * boyut_out NULL degilse boyutu yazar. NULL -> dosya yok / hata. */
 const char *kdl_dosya_oku_byte(const char *yol, int32_t *boyut_out) {
     if (!yol) { if (boyut_out) *boyut_out = -1; return NULL; }
-    FILE *f = fopen(yol, "rb");
+    FILE *f = kdl_fopen_utf8(yol, "rb");
     if (!f) { if (boyut_out) *boyut_out = -1; return NULL; }
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
@@ -1196,7 +2042,7 @@ int32_t kdl_otp_anahtar_uret(const char *yol, int32_t boyut) {
     for (int32_t i = 0; i < boyut; i++) {
         buf[i] = (char)(kdl_prng_next64() & 0xff);
     }
-    FILE *f = fopen(yol, "wb");
+    FILE *f = kdl_fopen_utf8(yol, "wb");
     if (!f) { free(buf); return -1; }
     size_t yazildi = fwrite(buf, 1, (size_t)boyut, f);
     fclose(f);
@@ -1352,7 +2198,7 @@ KdlYetki kdl_dosya_ac_yetkili(const char *yol, uint16_t izin) {
     if (izin & KDL_IZIN_YAZ) c_mod = (izin & KDL_IZIN_OKU) ? "wb+" : "wb";
     else if (izin & KDL_IZIN_OKU) c_mod = "rb";
     else return y;  /* izin yok = ac yok */
-    FILE *f = fopen(yol, c_mod);
+    FILE *f = kdl_fopen_utf8(yol, c_mod);
     if (!f) return y;
     /* Basari: yetki uret + handle bir global tabloya ekle (basit v1: id->FILE*)
      * V1'de FILE* dogrudan id yerine kullanilir (id=ptr value, unforgeable yok).

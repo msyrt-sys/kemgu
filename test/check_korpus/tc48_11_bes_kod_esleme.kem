@@ -1,0 +1,12 @@
+// [D-652] BEŞ KOD EŞLEMESİ — hepsi (a) sınıfı: konum zaten uyuşuyordu.
+//
+// Bu dosya TEK hata şekli taşır (`çeşit` adı eksik -> P350) çünkü bir dosyanın
+// yalnız İLK cascade'i ölçülebilir. Diğer dördü ayrı fikstürlerde:
+//   P150 dizi literali ']'   -> tc48_12
+//   P122 çağrı ')'           -> tc48_13
+//   P060 modül adı           -> tc48_14
+//   P040 kullan yolu         -> tc48_15
+// Beşi de D-647'de kurulan yöntemle bulundu: hata şeklini yaz, C'ye sor,
+// konum uyuşuyorsa siteyi eşle.
+çeşit { A, B }
+işlev main() -> tam32 { ver 0; }

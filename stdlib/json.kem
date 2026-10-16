@@ -1,0 +1,650 @@
+// KEMGU Stdlib — JSON YAZICI (serileştirme)
+// =============================================================================
+//
+// SAF KEMGU: yeni yerleşik ad / runtime primitifi GEREKMEZ. Yalnız mevcut
+// `metin_*` yerleşikleri kullanılır. Bu aynı zamanda DOGFOODING'dir —
+// derleyiciyi gerçek bir programla zorlar.
+//
+// ⚠ KAPSAM (bilinçli, dürüst): bu dosya YAZICIDIR, ayrıştırıcı DEĞİL.
+// Ayrıştırıcı ayrı bir artımdır; yarım bir "JSON modülü" bırakmamak için
+// yazıcı kendi başına TAM tutuldu (JsonDeger kurma + metne çevirme).
+//
+// ⚠ KEMGU DİZGİ LİTERALİNDE KAÇIŞ YOKTUR — `\n` de `\"` de `\\` de literaldir
+// (D-400/D-409/D-416'da üç kez ölçüldü). Bu yüzden JSON kaçışları BAYT
+// değerinden üretilir: `yb(34)` yerine burada `bayt_metin(34)` kullanılır,
+// çünkü `yb` stdout'a YAZAR, biz METİN üretiyoruz.
+// =============================================================================
+
+// JSON değer ağacı. Dizi/nesne için KEMGU'nun `Dizi<T>`si kullanılır; nesne
+// anahtar ve değerleri PARALEL iki dizide tutulur (KEMGU'da harita tipi yok).
+çeşit JsonDeger {
+    Bos,
+    Mantik(mantıksal),
+    Sayi(tam64),
+    Ondalik(kesirli64),   // [D-460] JSON ondalik/ustel sayi
+    Metin(metin),
+    Dizi(Dizi<JsonDeger>),
+    Nesne(Dizi<metin>, Dizi<JsonDeger>)
+}
+
+// -----------------------------------------------------------------------------
+// Bayt → tek karakterlik metin. KEMGU'da karakter literalinden metin üretmek
+// için doğrudan yol yok; `metin_kes` ile bir sabitten kesmek de her bayt için
+// ayrı sabit ister. Kaçış gereken 8 baytı açıkça tablo hâlinde veriyoruz.
+// -----------------------------------------------------------------------------
+// ⚠ `metin_kes(s, baslangic, uzunluk)` 0-TABANLIDIR (runtime'dan ölçüldü:
+// `kdl_metin_kes` doğrudan `s + baslangic` yapar). 1-tabanlı varsaymak her
+// dizginin İLK KARAKTERİNİ düşürür — bu modülü çalıştırınca öyle oldu
+// (`"iki"` → `"ki"`, anahtar `ad` → `d`). Tip kontrolü bunu YAKALAMAZ.
+//
+// KEMGU dizgi literalinde kaçış YOKTUR: `"\""` kaynakta İKİ karakterdir
+// (`\` ve `"`), `"\\"` de iki karakterdir (`\` ve `\`). Bu yüzden ikinci
+// karakteri (indeks 1) kesiyoruz.
+işlev tirnak() -> metin { ver metin_kes("\"", 1, 1); }   // tek `"` (bayt 34)
+işlev ters_bolu() -> metin { ver metin_kes("\\", 1, 1); } // tek `\` (bayt 92)
+
+// JSON dizgi kaçışı: `"` ve `\` ters-bölü ile, kontrol karakterleri \u00XX.
+işlev kacisla(s: metin) -> metin {
+    değişken sonuc: metin = "";
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(s);
+    iken i < n {
+        değişken b: tam8 = metin_bayt(s, i);
+        eğer b == 34 {
+            sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), tirnak()));
+        } değilse {
+            eğer b == 92 {
+                sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), ters_bolu()));
+            } değilse {
+                eğer b == 10 { sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), "n")); }
+                değilse {
+                    eğer b == 13 { sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), "r")); }
+                    değilse {
+                        eğer b == 9 { sonuc = metin_birlestir(sonuc, metin_birlestir(ters_bolu(), "t")); }
+                        değilse {
+                            // Diğer her bayt AYNEN geçer (UTF-8 çok baytlıları dâhil —
+                            // JSON UTF-8'i doğrudan kabul eder, \u kaçışı ZORUNLU değil).
+                            sonuc = metin_birlestir(sonuc, metin_kes(s, i, 1));
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
+
+// -----------------------------------------------------------------------------
+// Serileştirme. Özyineli; iç içe dizi/nesne desteklenir.
+// -----------------------------------------------------------------------------
+işlev yaz(d: JsonDeger) -> metin {
+    eşleş d {
+        JsonDeger::Bos => { ver "null"; }
+        JsonDeger::Mantik(b) => {
+            eğer b { ver "true"; }
+            ver "false";
+        }
+        JsonDeger::Sayi(n) => { ver sayi_metin(n); }
+        JsonDeger::Ondalik(x) => { ver kesirli_metin(x); }   // [D-460]
+        JsonDeger::Metin(s) => {
+            değişken t: metin = tirnak();
+            ver metin_birlestir(t, metin_birlestir(kacisla(s), t));
+        }
+        JsonDeger::Dizi(ogeler) => { ver json_dizi_yaz(ogeler); }
+        JsonDeger::Nesne(anahtarlar, degerler) => { ver nesne_yaz(anahtarlar, degerler); }
+    }
+    ver "null";
+}
+
+işlev json_dizi_yaz(ogeler: Dizi<JsonDeger>) -> metin {
+    değişken sonuc: metin = "[";
+    değişken i: tam32 = 0;
+    değişken n: tam32 = dizi_boyut(ogeler);
+    iken i < n {
+        eğer i > 0 { sonuc = metin_birlestir(sonuc, ","); }
+        sonuc = metin_birlestir(sonuc, yaz(dizi_al(ogeler, i)));
+        i = i + 1;
+    }
+    ver metin_birlestir(sonuc, "]");
+}
+
+// ⚠ Anahtar sayısı değer sayısından FAZLAysa fazlalık ATLANIR (kısa olanı esas
+// alırız). Sessiz kırpma yerine patlamak daha iyi olurdu ama bu modülde panik
+// yok — çağıran iki diziyi eşit uzunlukta kurmakla yükümlü.
+işlev nesne_yaz(anahtarlar: Dizi<metin>, degerler: Dizi<JsonDeger>) -> metin {
+    değişken sonuc: metin = "{";
+    değişken n: tam32 = dizi_boyut(anahtarlar);
+    değişken m: tam32 = dizi_boyut(degerler);
+    eğer m < n { n = m; }
+    değişken t: metin = tirnak();
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer i > 0 { sonuc = metin_birlestir(sonuc, ","); }
+        sonuc = metin_birlestir(sonuc, t);
+        sonuc = metin_birlestir(sonuc, kacisla(dizi_al(anahtarlar, i)));
+        sonuc = metin_birlestir(sonuc, t);
+        sonuc = metin_birlestir(sonuc, ":");
+        sonuc = metin_birlestir(sonuc, yaz(dizi_al(degerler, i)));
+        i = i + 1;
+    }
+    ver metin_birlestir(sonuc, "}");
+}
+
+// tam64 → ondalık metin (negatif dâhil). KEMGU'da sayı→metin yerleşiği yok.
+işlev sayi_metin(n: tam64) -> metin {
+    eğer n == 0 { ver "0"; }
+    değişken negatif: mantıksal = n < 0;
+    değişken kalan: tam64 = n;
+    eğer negatif { kalan = 0 - n; }
+    değişken basamaklar: metin = "";
+    iken kalan > 0 {
+        değişken d: tam64 = kalan % 10;
+        basamaklar = metin_birlestir(rakam(d), basamaklar);
+        kalan = kalan / 10;
+    }
+    eğer negatif { ver metin_birlestir("-", basamaklar); }
+    ver basamaklar;
+}
+
+işlev rakam(d: tam64) -> metin {
+    eğer d == 0 { ver "0"; }
+    eğer d == 1 { ver "1"; }
+    eğer d == 2 { ver "2"; }
+    eğer d == 3 { ver "3"; }
+    eğer d == 4 { ver "4"; }
+    eğer d == 5 { ver "5"; }
+    eğer d == 6 { ver "6"; }
+    eğer d == 7 { ver "7"; }
+    eğer d == 8 { ver "8"; }
+    ver "9";
+}
+
+// =============================================================================
+// JSON AYRIŞTIRICI (D-436) — ikinci artım
+// =============================================================================
+// Özyineli-inişli. Durum bir `&değişken` yapıda taşınır (KEMGU'da global
+// mutable durum yok; küresel de bu iş için yanlış olurdu).
+//
+// ⚠ `metin_kes` ve `metin_bayt` 0-TABANLIDIR (D-435'te ölçüldü) — `poz`
+// doğrudan bayt indeksidir.
+//
+// Hata yolu: `sonuç<JsonDeger, metin>`. Panik YOK, çökmezlik korunur.
+// ⚠ İKİ SINIR DA DİL YÜZEYİ KARARI GEREKTİRİR (D-436'da ölçüldü — saf KEMGU
+// ile AŞILAMAZLAR, denemeden önce bunu oku):
+//   · ~~`\uXXXX`: kod noktası → UTF-8 baytları üretmek için BAYT→METİN
+//     gerekir~~ → **D-458'de EKLENDİ**: `kod_metin(kod) -> metin` +
+//     `kod_gecerli(kod)`. Not ESKİMİŞTİ: UTF-8 kodlayıcı runtime'da ZATEN
+//     vardı (`kdl_yazdir_karakter`), yalnız stdout'a yazıyordu. Vekil çiftleri
+//     aşağıda SAF KEMGU aritmetiğiyle birleştirilir; yerleşik yalnız tek kod
+//     noktasını kodlar (ham bayt→metin BİLEREK yok — `metin`in geçerli-UTF-8
+//     değişmezi korunur).
+//     ⚠ U+0000 REDDEDİLİR: `metin` NUL-sonlandırmalıdır, gömülü NUL temsil
+//     edilemez — sessizce düşürmek yerine açık hata.
+//   · ~~ONDALIK sayı: `kesirli64` → `metin` yerleşiği YOK~~ → **D-457'de
+//     EKLENDİ**: `kesirli_metin(x: kesirli64) -> metin`, locale bağımsız ve
+//     KAYIPSIZ (kısa gidiş-dönüş). Yani bu sınırın KÖKÜ kalktı; geriye yalnız
+//     KÜTÜPHANE işi kaldı: `JsonDeger`e `Ondalik(kesirli64)` varyantı eklemek
+//     + ayrıştırıcıda ondalık/üstel sözdizimini kabul etmek + 8 `eşleş` kolunu
+//     genişletmek. Ayrı bir artım olarak yapılacak — dil yüzeyi kararı DEĞİL.
+//     ⚠ D-457 yol üstünde şunu da onardı: kesirli literaller IR'a `%g` ile
+//     yazıldığı için `3.14159265358979` daha DERLEME ANINDA `3.14159` oluyordu.
+//     Kayıpsız dönüştürücü tek başına yetmezdi; veri zaten kaybolmuştu.
+//
+// [D-460] SAYILAR: ondalık/üstel ARTIK DESTEKLENİYOR. `.`/`e`/`E` görülünce
+// ayrıştırıcı `Ondalik(kesirli64)` üretir; yazıcı `kesirli_metin` (D-457,
+// kayıpsız + locale bağımsız) ile geri yazar.
+// ⚠ TAMSAYI ve ONDALIK AYRI VARYANTLARDIR ve sessizce birbirine DÖNÜŞMEZLER:
+// `[1, 1.5]` ilkini `Sayi`, ikincisini `Ondalik` yapar; `json_sayi_al`
+// ondalığa `hiç`, `json_ondalik_al` tamsayıya `hiç` döner. Gerekçe: 2^53 üstü
+// tamsayılar `kesirli64`de KAYIPSIZ DEĞİLDİR — otomatik dönüşüm `Sayi`nın
+// tam64 kesinliğini sessizce bozardı.
+// ⚠ Bu satır D-460'a kadar "ondalık REDDEDİLİR" diyordu — ESKİMİŞTİ. Aynı
+// dosyada `\b`/`\f` için de belge kodu yanlış anlatmıştı (aşağıya bak); bir
+// dosyanın kendi yorumu bir İDDİADIR, ölçülmeden doğru sayılamaz.
+// [D-458] `\uXXXX` ARTIK DESTEKLENİYOR (UTF-16 vekil çiftleri dâhil); yalnız
+// U+0000 reddedilir (`metin` NUL-sonlandırmalı). Kaçış kümesi TAM:
+// `\" \\ \/ \n \r \t \b \f \uXXXX`.
+// ⚠ Bu satır önceden `\b` ve `\f`yi "desteklenir" sayıyordu ama KOLLARI YOKTU
+// (ölçüldü) — belge kodu YANLIŞ anlatıyordu; eksik kollar eklendi.
+
+yapı JsonAyristirici { girdi: metin; poz: tam32; }
+
+işlev ja_bitti(a: &değişken JsonAyristirici) -> mantıksal {
+    ver a.poz >= metin_uzunluk(a.girdi);
+}
+
+// Geçerli bayt; dosya sonunda 0 döner (JSON'da 0 baytı geçerli değil).
+işlev ja_bak(a: &değişken JsonAyristirici) -> tam32 {
+    eğer ja_bitti(a) { ver 0; }
+    ver metin_bayt(a.girdi, a.poz) olarak tam32;
+}
+
+işlev ja_bosluk_atla(a: &değişken JsonAyristirici) -> tam32 {
+    iken ja_bitti(a) == yanlış {
+        değişken b: tam32 = ja_bak(a);
+        eğer (b == 32) veya (b == 9) veya (b == 10) veya (b == 13) {
+            a.poz = a.poz + 1;
+        } değilse { ver 0; }
+    }
+    ver 0;
+}
+
+// Beklenen sabit sözcük (`true`/`false`/`null`) girdide bu konumda mı?
+işlev ja_sozcuk_mu(a: &değişken JsonAyristirici, s: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(s);
+    eğer a.poz + n > metin_uzunluk(a.girdi) { ver yanlış; }
+    ver metin_esit(metin_kes(a.girdi, a.poz, n), s);
+}
+
+işlev ja_deger(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    ja_bosluk_atla(a);
+    eğer ja_bitti(a) { ver hata("beklenmeyen girdi sonu"); }
+    değişken b: tam32 = ja_bak(a);
+
+    eğer b == 110 {                       // 'n' → null
+        eğer ja_sozcuk_mu(a, "null") { a.poz = a.poz + 4; ver tamam(JsonDeger::Bos); }
+        ver hata("gecersiz sozcuk (null bekleniyordu)");
+    }
+    eğer b == 116 {                       // 't' → true
+        eğer ja_sozcuk_mu(a, "true") { a.poz = a.poz + 4; ver tamam(JsonDeger::Mantik(doğru)); }
+        ver hata("gecersiz sozcuk (true bekleniyordu)");
+    }
+    eğer b == 102 {                       // 'f' → false
+        eğer ja_sozcuk_mu(a, "false") { a.poz = a.poz + 5; ver tamam(JsonDeger::Mantik(yanlış)); }
+        ver hata("gecersiz sozcuk (false bekleniyordu)");
+    }
+    eğer b == 34 { ver ja_metin(a); }        // '"'
+    eğer b == 91 { ver ja_dizi(a); }         // '['
+    eğer b == 123 { ver ja_nesne(a); }       // '{'
+    eğer (b == 45) veya ((b >= 48) ve (b <= 57)) { ver ja_sayi(a); }
+    ver hata("beklenmeyen karakter");
+}
+
+// Dizgi: açılış `"` tüketilmiş DEĞİL — burada tüketilir.
+işlev ja_metin(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    a.poz = a.poz + 1;                       // açılış tırnağı
+    değişken sonuc: metin = "";
+    iken doğru {
+        eğer ja_bitti(a) { ver hata("dizgi kapanmadan girdi bitti"); }
+        değişken b: tam32 = ja_bak(a);
+        eğer b == 34 { a.poz = a.poz + 1; ver tamam(JsonDeger::Metin(sonuc)); }
+        eğer b == 92 {                       // ters bölü → kaçış
+            a.poz = a.poz + 1;
+            eğer ja_bitti(a) { ver hata("kacis yarim kaldi"); }
+            değişken k: tam32 = ja_bak(a);
+            a.poz = a.poz + 1;
+            eğer k == 34 { sonuc = metin_birlestir(sonuc, tirnak()); }
+            değilse { eğer k == 92 { sonuc = metin_birlestir(sonuc, ters_bolu()); }
+            değilse { eğer k == 47 { sonuc = metin_birlestir(sonuc, "/"); }
+            değilse { eğer k == 110 { sonuc = metin_birlestir(sonuc, satir_sonu()); }
+            değilse { eğer k == 116 { sonuc = metin_birlestir(sonuc, sekme()); }
+            değilse { eğer k == 114 { sonuc = metin_birlestir(sonuc, satir_basi()); }
+            // [D-458] `\b` ve `\f` KOLLARI EKSİKTİ: başlık yorumu ikisini de
+            // "desteklenir" diye sayıyordu ama hiçbir kol 98/102 değildi →
+            // geçerli JSON reddediliyordu. Belgeyi koda uydurmak yerine EKSİK
+            // KOLLAR eklendi (JSON standardı ikisini de gerektirir).
+            değilse { eğer k == 98 { sonuc = metin_birlestir(sonuc, geri_sil()); }
+            değilse { eğer k == 102 { sonuc = metin_birlestir(sonuc, sayfa_ileri()); }
+            değilse { eğer k == 117 {
+                // [D-458] `\uXXXX`. Vekil çifti aritmetiği SAF KEMGU'dadır;
+                // yerleşik (`kod_metin`) yalnız TEK kod noktasını kodlar.
+                değişken hi: tam32 = ja_hex4(a);
+                eğer hi < 0 { ver hata("gecersiz \\u kacisi"); }
+                değişken kod: tam32 = hi;
+                eğer hi >= 55296 ve hi <= 56319 {        // D800-DBFF: yüksek vekil
+                    // Ardından ZORUNLU olarak `\uDC00-DFFF` gelmeli.
+                    eğer ja_bitti(a) { ver hata("vekil cifti yarim kaldi"); }
+                    eğer ja_bak(a) != 92 { ver hata("vekil cifti yarim kaldi"); }
+                    a.poz = a.poz + 1;
+                    eğer ja_bitti(a) { ver hata("vekil cifti yarim kaldi"); }
+                    eğer ja_bak(a) != 117 { ver hata("vekil cifti yarim kaldi"); }
+                    a.poz = a.poz + 1;
+                    değişken lo: tam32 = ja_hex4(a);
+                    eğer lo < 56320 veya lo > 57343 { ver hata("gecersiz dusuk vekil"); }
+                    kod = 65536 + (hi - 55296) * 1024 + (lo - 56320);
+                }
+                // Yalnız-vekil, aşırı kod ve U+0000 burada YAKALANIR.
+                // ⚠ U+0000 GEÇERSİZDİR: KEMGU `metin`i NUL-sonlandırmalıdır,
+                // gömülü NUL temsil edilemez — sessizce düşürmek yerine açık hata.
+                eğer kod_gecerli(kod) == yanlış { ver hata("temsil edilemeyen kod noktasi"); }
+                sonuc = metin_birlestir(sonuc, kod_metin(kod));
+            }
+            değilse {
+                // Bilinmeyen kaçışlar: SESSİZ KABUL ETME.
+                ver hata("desteklenmeyen kacis");
+            } } } } } } } } }
+        } değilse {
+            sonuc = metin_birlestir(sonuc, metin_kes(a.girdi, a.poz, 1));
+            a.poz = a.poz + 1;
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+// Kaçış hedefleri — KEMGU literalinde kaçış olmadığı için bayt kesimiyle.
+// [D-458] 🔴 BUNLAR BOZUKTU — ÖLÇÜLDÜ, tahmin edilmedi.
+// Eski hâlleri `metin_kes("\n", 1, 1)` idi. KEMGU dizgi literalinde KAÇIŞ YOKTUR
+// (D-400/D-409/D-416 — üç kez kaydedilmiş): `"\n"` iki karakterdir (`\` ve `n`),
+// dolayısıyla indeks 1 SATIR SONU DEĞİL **`n` HARFİDİR** (bayt 110, ölçüldü).
+// Sonuç: JSON `"a\nb"` sessizce `anb` olarak çözülüyordu — SESSİZ VERİ BOZULMASI.
+// `tirnak()`/`ters_bolu()` aynı idiomu kullanır ama onlar DOĞRU (bayt 34 ve 92
+// ölçüldü): orada istenen karakterin kendisi zaten `\`den sonraki bayttır.
+// Artık kod noktasından üretiliyorlar (D-458 `kod_metin`) — hem doğru hem açık.
+// [D-458] Dört onaltılık rakam oku → kod birimi. Hata: -1 (KEMGU'da exception
+// yok; `sonuç` döndürmek çağrı yerini iki kat şişirirdi ve -1 kod birimi
+// aralığında GEÇERSİZDİR, yani sessiz bir değerle karışmaz).
+işlev hex_deger(b: tam32) -> tam32 {
+    eğer b >= 48 ve b <= 57 { ver b - 48; }        // 0-9
+    eğer b >= 97 ve b <= 102 { ver b - 87; }       // a-f
+    eğer b >= 65 ve b <= 70 { ver b - 55; }        // A-F
+    ver -1;
+}
+
+işlev ja_hex4(a: &değişken JsonAyristirici) -> tam32 {
+    değişken toplam: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        eğer ja_bitti(a) { ver -1; }
+        değişken d: tam32 = hex_deger(ja_bak(a));
+        eğer d < 0 { ver -1; }
+        toplam = toplam * 16 + d;
+        a.poz = a.poz + 1;
+        i = i + 1;
+    }
+    ver toplam;
+}
+
+işlev satir_sonu() -> metin { ver kod_metin(10); }
+işlev sekme() -> metin { ver kod_metin(9); }
+işlev satir_basi() -> metin { ver kod_metin(13); }
+işlev geri_sil() -> metin { ver kod_metin(8); }    // \b
+işlev sayfa_ileri() -> metin { ver kod_metin(12); } // \f
+
+işlev ja_sayi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    // [D-460] Sayının BAŞLANGIÇ konumu: ondalık çıkarsa ham metni buradan
+    // keseceğiz (işaret dâhil). Sonradan geriye sayarak hesaplamak kırılgandı.
+    değişken bas: tam32 = a.poz;
+    değişken negatif: mantıksal = yanlış;
+    eğer ja_bak(a) == 45 { negatif = doğru; a.poz = a.poz + 1; }
+    eğer ja_bitti(a) { ver hata("sayi yarim"); }
+    değişken b0: tam32 = ja_bak(a);
+    eğer (b0 < 48) veya (b0 > 57) { ver hata("sayi bekleniyordu"); }
+    // ⚠ KEMGU'da `break` YOK → döngü bayrakla sonlandırılır.
+    değişken deger: tam64 = 0;
+    değişken devam: mantıksal = doğru;
+    iken devam {
+        eğer ja_bitti(a) { devam = yanlış; }
+        değilse {
+            değişken b: tam32 = ja_bak(a);
+            eğer (b < 48) veya (b > 57) { devam = yanlış; }
+            değilse {
+                deger = deger * 10 + ((b - 48) olarak tam64);
+                a.poz = a.poz + 1;
+            }
+        }
+    }
+    // [D-460] ONDALIK / ÜSTEL. Buraya kadar TAMSAYI kısmı okundu; şimdi `.`
+    // ya da `e/E` geliyorsa sayı ondalıktır.
+    //
+    // ⚠ Değeri BURADA aritmetikle kurmuyoruz. `tam + kesir/10^k` biriktirmek
+    // uzun ondalıklarda DOĞRU-YUVARLANMIŞ sonucu kaçırır ve D-457'nin kurduğu
+    // gidiş-dönüş garantisini bozar. Bunun yerine sayının METNİ toplanıp
+    // `metin_kesirli` (strtod) ile çevrilir — tek doğru-yuvarlama noktası.
+    değişken ondalik: mantıksal = yanlış;
+    eğer ja_bitti(a) == yanlış {
+        değişken n1: tam32 = ja_bak(a);
+        eğer n1 == 46 veya n1 == 101 veya n1 == 69 { ondalik = doğru; }
+    }
+    eğer ondalik {
+        // Kesir kısmı
+        eğer ja_bak(a) == 46 {
+            a.poz = a.poz + 1;
+            eğer ja_bitti(a) { ver hata("ondalik kismi eksik"); }
+            eğer (ja_bak(a) < 48) veya (ja_bak(a) > 57) { ver hata("ondalik kismi eksik"); }
+            değişken d2: mantıksal = doğru;
+            iken d2 {
+                eğer ja_bitti(a) { d2 = yanlış; }
+                değilse {
+                    değişken bb: tam32 = ja_bak(a);
+                    eğer (bb < 48) veya (bb > 57) { d2 = yanlış; }
+                    değilse { a.poz = a.poz + 1; }
+                }
+            }
+        }
+        // Üstel kısım
+        eğer ja_bitti(a) == yanlış {
+            değişken e0: tam32 = ja_bak(a);
+            eğer e0 == 101 veya e0 == 69 {
+                a.poz = a.poz + 1;
+                eğer ja_bitti(a) { ver hata("ustel kismi eksik"); }
+                değişken s0: tam32 = ja_bak(a);
+                eğer s0 == 43 veya s0 == 45 { a.poz = a.poz + 1; }
+                eğer ja_bitti(a) { ver hata("ustel kismi eksik"); }
+                eğer (ja_bak(a) < 48) veya (ja_bak(a) > 57) { ver hata("ustel kismi eksik"); }
+                değişken d3: mantıksal = doğru;
+                iken d3 {
+                    eğer ja_bitti(a) { d3 = yanlış; }
+                    değilse {
+                        değişken cc: tam32 = ja_bak(a);
+                        eğer (cc < 48) veya (cc > 57) { d3 = yanlış; }
+                        değilse { a.poz = a.poz + 1; }
+                    }
+                }
+            }
+        }
+        değişken ham: metin = metin_kes(a.girdi, bas, a.poz - bas);
+        // Yüklem ZORUNLU: `metin_kesirli` geçersizde 0 döner ve bu gerçek bir
+        // 0'dan ayırt edilemezdi (D-459'un aynı gerekçesi).
+        eğer metin_kesirli_gecerli(ham) == yanlış { ver hata("gecersiz ondalik sayi"); }
+        ver tamam(JsonDeger::Ondalik(metin_kesirli(ham)));
+    }
+    eğer negatif { deger = 0 - deger; }
+    ver tamam(JsonDeger::Sayi(deger));
+}
+
+işlev ja_dizi(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    a.poz = a.poz + 1;                       // '['
+    değişken ogeler: Dizi<JsonDeger> = [];
+    ja_bosluk_atla(a);
+    eğer ja_bak(a) == 93 { a.poz = a.poz + 1; ver tamam(JsonDeger::Dizi(ogeler)); }
+    iken doğru {
+        eşleş ja_deger(a) {
+            tamam(v) => { dizi_ekle(ogeler, v); }
+            hata(m) => { ver hata(m); }
+        }
+        ja_bosluk_atla(a);
+        değişken b: tam32 = ja_bak(a);
+        eğer b == 44 { a.poz = a.poz + 1; }
+        değilse {
+            eğer b == 93 { a.poz = a.poz + 1; ver tamam(JsonDeger::Dizi(ogeler)); }
+            ver hata("dizide , veya ] bekleniyordu");
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+işlev ja_nesne(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
+    a.poz = a.poz + 1;                       // '{'
+    değişken anahtarlar: Dizi<metin> = [];
+    değişken degerler: Dizi<JsonDeger> = [];
+    ja_bosluk_atla(a);
+    eğer ja_bak(a) == 125 {
+        a.poz = a.poz + 1;
+        ver tamam(JsonDeger::Nesne(anahtarlar, degerler));
+    }
+    iken doğru {
+        ja_bosluk_atla(a);
+        eğer ja_bak(a) != 34 { ver hata("nesne anahtari dizgi olmali"); }
+        eşleş ja_metin(a) {
+            tamam(k) => {
+                eşleş k {
+                    JsonDeger::Metin(ks) => { dizi_ekle(anahtarlar, ks); }
+                    JsonDeger::Bos => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Mantik(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Sayi(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Ondalik(x) => { ver hata("ic hata: anahtar"); }   // [D-460]
+                    JsonDeger::Dizi(x) => { ver hata("ic hata: anahtar"); }
+                    JsonDeger::Nesne(x, y) => { ver hata("ic hata: anahtar"); }
+                }
+            }
+            hata(m) => { ver hata(m); }
+        }
+        ja_bosluk_atla(a);
+        eğer ja_bak(a) != 58 { ver hata("anahtardan sonra : bekleniyordu"); }
+        a.poz = a.poz + 1;
+        eşleş ja_deger(a) {
+            tamam(v) => { dizi_ekle(degerler, v); }
+            hata(m) => { ver hata(m); }
+        }
+        ja_bosluk_atla(a);
+        değişken b: tam32 = ja_bak(a);
+        eğer b == 44 { a.poz = a.poz + 1; }
+        değilse {
+            eğer b == 125 {
+                a.poz = a.poz + 1;
+                ver tamam(JsonDeger::Nesne(anahtarlar, degerler));
+            }
+            ver hata("nesnede , veya } bekleniyordu");
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+// Genel giriş noktası: tüm girdiyi tüketmeli (arta kalan = hata).
+işlev json_ayristir(girdi: metin) -> sonuç<JsonDeger, metin> {
+    değişken a: JsonAyristirici = JsonAyristirici { girdi: girdi, poz: 0 };
+    değişken r: sonuç<JsonDeger, metin> = ja_deger(&değişken a);
+    eşleş r {
+        hata(m) => { ver hata(m); }
+        tamam(v) => {
+            ja_bosluk_atla(&değişken a);
+            eğer ja_bitti(&değişken a) == yanlış { ver hata("girdi sonunda artik var"); }
+            ver tamam(v);
+        }
+    }
+    ver hata("ulasilmaz");
+}
+
+
+// =============================================================================
+// ERİŞİMCİLER (D-437)
+// =============================================================================
+// `seçimlik<T>` döner — `hiç` "yok ya da yanlış tip" demektir. Java'nın
+// `get()` → NullPointerException tuzağına düşmüyoruz; her erişim açık.
+//
+// ⚠ Bu blok bir DERLEYİCİ KUSURU açığa çıkarmıştı: çeşit payload'ından gelen
+// `Dizi<metin>`den eleman okumak SEGFAULT veriyordu (yanlış erişimci soneki).
+// Kusur D-437'de hem `src/llvm.c`te hem `selfhost/codegen.kem`de onarıldı;
+// regresyon fikstürü: `test/snapshots/cesit_payload_dizi_metin.kem`.
+
+işlev json_alan(d: JsonDeger, anahtar: metin) -> seçimlik<JsonDeger> {
+    eşleş d {
+        JsonDeger::Nesne(anahtarlar, degerler) => {
+            değişken n: tam32 = dizi_boyut(anahtarlar);
+            değişken m: tam32 = dizi_boyut(degerler);
+            eğer m < n { n = m; }
+            değişken i: tam32 = 0;
+            iken i < n {
+                eğer metin_esit(dizi_al(anahtarlar, i), anahtar) {
+                    ver değer(dizi_al(degerler, i));
+                }
+                i = i + 1;
+            }
+            ver hiç;
+        }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Ondalik(x) => { ver hiç; }   // [D-460]
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+// ⚠ Sınır kontrolü BURADA: `dizi_al` aralık dışında runtime panik verir —
+// kütüphane çökmemeli, `hiç` dönmeli.
+işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
+    eşleş d {
+        JsonDeger::Dizi(ogeler) => {
+            eğer i < 0 { ver hiç; }
+            eğer i >= dizi_boyut(ogeler) { ver hiç; }
+            ver değer(dizi_al(ogeler, i));
+        }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Ondalik(x) => { ver hiç; }   // [D-460]
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev json_sayi_al(d: JsonDeger) -> seçimlik<tam64> {
+    eşleş d {
+        JsonDeger::Sayi(n) => { ver değer(n); }
+        // [D-460] `json_sayi_al` TAMSAYI erişimcisidir: ondalık bir değeri
+        // sessizce kırpmak yerine `hiç` döner. Ondalık için `json_ondalik_al`.
+        JsonDeger::Ondalik(x) => { ver hiç; }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev json_metin_al(d: JsonDeger) -> seçimlik<metin> {
+    eşleş d {
+        JsonDeger::Metin(s) => { ver değer(s); }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Ondalik(x) => { ver hiç; }   // [D-460]
+        JsonDeger::Dizi(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}
+
+işlev json_uzunluk(d: JsonDeger) -> tam32 {
+    eşleş d {
+        JsonDeger::Dizi(ogeler) => { ver dizi_boyut(ogeler); }
+        JsonDeger::Nesne(anahtarlar, degerler) => {
+            değişken n: tam32 = dizi_boyut(anahtarlar);
+            değişken m: tam32 = dizi_boyut(degerler);
+            eğer m < n { ver m; }
+            ver n;
+        }
+        JsonDeger::Bos => { ver 0; }
+        JsonDeger::Mantik(x) => { ver 0; }
+        JsonDeger::Sayi(x) => { ver 0; }
+        JsonDeger::Ondalik(x) => { ver 0; }   // [D-460]
+        JsonDeger::Metin(x) => { ver 0; }
+    }
+    ver 0;
+}
+
+// [D-460] Ondalık erişimcisi. `json_sayi_al` TAMSAYI içindir ve ondalık bir
+// değere `hiç` döner (sessiz kırpma YOK); bu da onun ikizidir.
+//
+// ⚠ TAMSAYI bir JSON değeri burada da `hiç` döner: `1` ve `1.0` JSON'da FARKLI
+// yazımlardır ve ayrıştırıcı ikisini farklı varyanta koyar. Sessizce
+// birbirine dönüştürmek, `Sayi`nın tam64 kesinliğini ondalığa taşırdı
+// (2^53 üstü tamsayılar `kesirli64`de KAYIPSIZ DEĞİLDİR). Çağıran hangisini
+// beklediğini bilmeli.
+işlev json_ondalik_al(d: JsonDeger) -> seçimlik<kesirli64> {
+    eşleş d {
+        JsonDeger::Ondalik(x) => { ver değer(x); }
+        JsonDeger::Sayi(x) => { ver hiç; }
+        JsonDeger::Bos => { ver hiç; }
+        JsonDeger::Mantik(x) => { ver hiç; }
+        JsonDeger::Metin(x) => { ver hiç; }
+        JsonDeger::Dizi(x) => { ver hiç; }
+        JsonDeger::Nesne(x, y) => { ver hiç; }
+    }
+    ver hiç;
+}

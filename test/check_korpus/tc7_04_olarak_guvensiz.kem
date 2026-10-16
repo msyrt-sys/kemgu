@@ -1,0 +1,14 @@
+// Madde E: `güvensiz` bağlam ayrımı (D-248 + D-349).
+//   tamsayı  -> *T : güvensiz İÇİNDE izinli (inttoptr; MMIO/ham bellek)
+//   referans -> *T : güvensiz İÇİNDE izinli (D-349; IR'da no-op, DIŞINDA E002)
+//   *T -> tamsayı  : güvensiz İÇİNDE izinli (ptrtoint)
+işlev main() -> tam32 {
+    değişken x: tam32 = 5;
+    güvensiz {
+        değişken p: *tam32 = 4096 olarak *tam32;
+        değişken q: *tam32 = (&x) olarak *tam32;
+        değişken r: *dtam8 = (&x) olarak *dtam8;
+        değişken n: tam64 = p olarak tam64;
+    }
+    ver 0;
+}
