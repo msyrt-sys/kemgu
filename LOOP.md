@@ -1835,3 +1835,166 @@
   test_tumu TAM rc=0, ozette TEK fark bu satir.
   CI (faz-1, 0250d07): Linux'ta TSan + MSan GERCEKTEN kostu (atlanmadi); ozet
   adimi gercek `outcome`lari aldi (S_TUMU: success ...).
+- 2026-10-12 D-670: x86 parite dongusu IS 5 — x86 boot'u `kem_heap_kur` cagiriyor.
+  OLCULEN ONCUL (UYARI 1): saf-.kem allocator x86'ya baglaninca start_x86_64.S
+  kem_heap_kur cagirmadigi icin kem_son=0 → her malloc null → dizi islevleri
+  sessizce 0. Kanit cekirdegi bugun QEMU'da 55 yerine `0` basti, panik YOK.
+  ONARIM: long_entry'de kdl_idt_kur ile main arasina kem_heap_kur(__heap_start,
+  __heap_end) (SysV rdi/rsi). C-malloc'lu x86 kernel'lerinde kdl_bare_heap.c
+  ZAYIF no-op'u devreye girer → mevcut 5 x86 hedefi yesil kaldi (olculdu).
+  YENI HEDEF calistir_kem_os_x86 (minimum kanit cekirdegi): kem_heap.kem +
+  test/ornekler/kem_os_x86.kem CAT, bm_x86_heap.o/bm_x86_bolge.o BILEREK YOK.
+  Uc kanit: nm (T malloc / T kem_heap_kur .kem'den) · objdump'in KENDI satiri
+  (`callq ... <kem_heap_kur>`) · QEMU DEGER denetimi (isaret satiri + hemen
+  ardindan `55`; yazdir_metin satir sonu ekledigi icin deger ayri satirda).
+  SABOTAJ 2/2: (a) cagriyi sil → Kanit 2 KIRMIZI; (b) cagri dursun ama
+  rsi=__heap_start (son=taban) → QEMU `HATA toplam= 0`, Kanit 3 KIRMIZI. Iki
+  katman BIRBIRINDEN BAGIMSIZ ayirt ediyor.
+  DEEPSEEK: tur 1 butceyi (16384) tamamen dusunmeye harcadi, 0 blok — KOK BENDE:
+  Makefile baglami verilmemisti, model capa (ESKI) uyduramadi. Tur 1b (Makefile
+  kesiti + tekil capalar + reasoning_effort low): 4 blok, .S + Makefile dogru;
+  kem_os_x86.kem GECERSIZ KEMGU (C-tarzi `için i = 1; ...`, argumansiz
+  dizi_olustur) → govdeyi ben yazdim; deger denetimini gercek cikti bicimine
+  ben uydurdum.
+  ORTAM BULGUSU: taban (degismemis main) gate'te calistir_kanal_omru 3/3 rc=124.
+  Kok: kabuk DEBUGINFOD_URLS=https://debuginfod.ubuntu.com → llvm-symbolizer
+  LSan raporunu sembollestirirken AGDA asiliyor. Bos degerle aninda biter.
+  gate_linux.sh hermetik yapildi (export DEBUGINFOD_URLS=). Makefile geneline
+  yaymak ayri karar (oneri).
+- 2026-10-12 D-671: x86 parite IS 1 — tasinabilir DMA bariyeri, D2b deseni.
+  Derleyiciye DOKUNULMADI (yerlesik D3 reddedildi: src/*.c + codegen.kem
+  ister). runtime/mimari/{arm64,x86_64}/kem_bariyer.kem → `kem_dma_bariyeri`
+  (arm64 `dsb sy`, x86_64 `mfence`); Makefile CAT mimariye gore secer.
+  vblk_dsb ince sarmalayici oldu → 8 cagri yeri (net'in 5'i dahil) degismedi.
+  Dizin ayrimi BILINCLI: baremetal_diff runtime/*.kem'i TEK TEK --mimari
+  aarch64 ile derler; x86 etiketli dosya kokte dursa AS001 alirdi.
+  OLCULEN YAN ETKI: baremetal_diff 5/5 (6 atl.) → 4/4 (7 atl.) — kem_virtio_blk
+  artik tek basina derlenmez (T002); kapsami BIRLESIK OS biriminde (324→325
+  islev, 48 asm, esit). ⚠ baremetal_diff'te ONCEDEN VAR OLAN bir zayiflik:
+  birlesik birim derlenemezse KIRMIZI degil "atlandi" sayilir → OS_PARCA'ya
+  bariyer eklenmeseydi SESSIZ kapsam kaybi olurdu (gorevde zorunlu tutuldu).
+  check_kapisi: kem_os_x86.kem artik parca (muaf) AMA birlesik x86 birimi
+  (4 parca, --mimari x86_64) ayrica denetleniyor; parca eksikse KIRMIZI
+  (kem_os blogunun sessiz atlamasindan bilincli sapma, D-486).
+  KANIT: x86 QEMU `X86 DMA BARIYER OK` (mfence GERCEKTEN calisti, #UD yok) +
+  objdump'ta 6 `mfence` satiri; arm64 objdump `dsb sy` + PING dahil tum fazlar.
+  SABOTAJ 2/2: mfence→nop → Kanit 4 KIRMIZI; arm bariyeri CAT disi → T002.
+  DEEPSEEK: tur 2 tek seferde 12 blok, hepsi eslesti (onbellek 10624 token).
+  Mudahale: x86 "dsb olmamali" denetimi duz `grep 'dsb'` idi → `<vblk_dsb>`
+  sembol adiyla SAHTE eslesirdi; komut sutununa (`\tdsb\b`) daraltildi.
+  Uydurma "FAZ B3" etiketi duzeltildi. check_kapisi duzeltmesi bende.
+- 2026-10-12 D-672: x86 parite IS 2 — mimari basina UART + kem_panik x86 yolu.
+  `kem_uart_bayt(b)` arayuzu: arm64 runtime/mimari/arm64/kem_uart.kem (PL011
+  MMIO 0x09000000, bugunku davranis BIREBIR), x86_64 .../x86_64/kem_uart.kem
+  (COM1 port I/O: kem_port_yaz8/oku8 + LSR THRE yoklamasi, SINIRLI 100000 —
+  UART yoksa panik yolu asilmasin). kem_panik artik kem_uart_bayt cagirir.
+  KANIT: x86 QEMU'da `X86 PANIK YOLU OK` (.kem COM1 yolundan; test cekirdegi
+  sonda kem_panik cagirir) + objdump --disassemble-symbols=kem_uart_bayt icinde
+  gercek `inb`/`outb` (tum ikilide aramak YETMEZ: C UART nesnesi de icerir).
+  ⚠⚠ DEEPSEEK URETIMINDE GERCEK HATA, KAPI YAKALADI: THRE set olunca `ver;`
+  → islev YAZMADAN donuyordu (QEMU'da THRE hep set → ilk yoklamada don →
+  panik mesaji SESSIZCE kayip — tam da kapatilan sinif). Kanit 5 KIRMIZI verdi;
+  onarim bende (sayaci sinira cek, yazma her durumda). Hata ayni zamanda
+  dogal sabotaj sayildi. SABOTAJ 2: x86 UART'i PL011 MMIO'ya dondur → Kanit 5
+  KIRMIZI.
+  OLCULEN YAN ETKI: baremetal_diff 4/4 (7 atl.) → 3/3 (8 atl.) — kem_heap.kem
+  artik tek basina derlenmez; birlesik OS 325→326 islev, 48 asm (esit).
+  bm_a64_kem_heap.o hedefi OLU (hic tuketicisi yok) ve kem_heap'i tek basina
+  `2>/dev/null |` boru hattiyla derliyor (D-609 sinifi) → artik T002 verip BOS
+  IR uretir; hedef kullanilmadigi icin kirilma gorunmez. Silinmesi ayri karar.
+  check_kapisi birlesik x86 birimi 4→5 parca.
+- 2026-10-12 D-673: x86 parite IS 3 — DMA adres haritasi (mimari basina) + x86
+  3-4 GB UC MMIO penceresi.
+  vblk_dma/vnet_dma runtime/mimari/<arch>/kem_platform.kem'e tasindi: arm64
+  BIREBIR (0x43000000 / 0x46800000 — DISK/FS/NET/PING yesil), x86_64
+  0x02000000 / 0x02100000 (ilk 1 GB esleme + 128 MB RAM icinde, heap ustunde).
+  start_x86_64.S 2c2: pd_mmio 512 x 2 MB, bayrak 0x9B (P|RW|PWT|PCD|PS = UC),
+  PDPT[3] → 0xC0000000..0xFFFFFFFF (LAPIC/IOAPIC/microvm virtio-mmio).
+  KANIT: QEMU x86 blok DMA 512 B + ag TX 64 B yaz/oku BIREBIR; UC pencereden
+  LAPIC surum yazmaci = 327700 = 0x50014 (QEMU LAPIC'in gercek degeri);
+  objdump `movl $0xc000009b`; nm __heap_end=0x1110000 < DMA tabani.
+  ⚠ DURUSTCE: QEMU TCG onbellegi MODELLEMEZ (D-490) → UC'nin ETKISI burada
+  olculemez; kanit "bayrak yazildi + pencere erisilebilir" ile sinirli.
+  SABOTAJ 2/2: PDPT[3] baglantisi yok → LAPIC'te ISTISNA; x86 vblk_dma eski
+  0x43000000 → sayfa hatasi TAM 0x43000110 (= vblk_dma + DO_DATA) — envanterin
+  oncülü dogrudan olculdu.
+  DEEPSEEK: tur 4 (8 degisiklik, 13 capa) butceyi capa tartismasinda bitirdi,
+  0 blok. Duzeltme turu 4b kapsami DARALTTI (yalniz icerik gerektiren 5 madde):
+  9 blok, icerik dogru AMA Makefile bloklarini BAGLAM KESITI dosyasina
+  yonlendirdi (gercek Makefile'a ben tasidim) ve yorumda anlamsiz ifade
+  ("16ri KB"). CAT/liste eklemeleri + kuresel satir silme bende.
+  DERS: tur basina ~5 degisiklik / ~6 capa sinirinda kalinmali; daha buyugu
+  bu butcede (16384, dusunme+yanit ortak) capa dogrulamasinda tukeniyor.
+- 2026-10-12 D-674: x86 parite IS 4 — virtio-mmio x86: microvm tarama tabani +
+  islevsel disk/ag kaniti.
+  VM_TARAMA_TABAN / VM_YUVA_SAYISI platform dosyalarinda: arm64 0x0a000000 / 32
+  (degismez), x86_64 0xFEB00000 / 24 (QEMU microvm; pc'de virtio-mmio YOK).
+  vblk_bul / vnet_bul bu sabitleri kullanir. calistir_kem_os_x86 artik
+  `-M microvm -global virtio-mmio.force-legacy=false` + disk imaji + virtio-net.
+  KANIT: QEMU x86'da sektor 7'ye yaz → tamponu SIFIRLA → diskten oku, 512 bayt
+  birebir; toplam 65355 (elle: 512*5 + 2*31375 + 45). QEMU kapandiktan sonra
+  ANA MAKINEDEN imajin 7. sektoru okundu: `5 6 7 8 ...` (veri gercekten diskte).
+  Ag: vnet_kur 0, mac_w0 = 0x12005452 (QEMU 52:54:00:12:.. LE). microvm
+  cihazlari EN UST yuvalara yerlestirir (blk 23, net 22 — monitorden olculdu).
+  ⚠⚠ KUSUR BENDEYDI, KAPI YAKALADI: gorev metninde 0xFEB00000'i ondaliga YANLIS
+  cevirmistim (4273995776 = 0xFEC00000, IOAPIC). deepseek sayiyi aynen kullandi;
+  kanit 10 KIRMIZI ("X86 DISK YOK"). Teshis: monitor `xp`/`gva2gpa` cihazi
+  dogru yerde gosterdi → ceviri dogru → objdump `movl $0xfec00000, %r14d`.
+  Diger 9 donusum python ile dogrulandi (hepsi dogru). DERS: gorev metnine
+  yazilan her ondalik sabit, gonderilmeden ONCE araçla cevrilmeli — model
+  verilen sayiyi sorgulamaz.
+  SABOTAJ: force-legacy=false kaldir → disk/ag `KUR HATA` → Kanit 10 KIRMIZI
+  (bayrak gercekten gerekli). Dogal sabotaj: yanlis taban → `X86 DISK YOK`.
+  DEEPSEEK: tur 5 tek seferde 10 blok (finish=stop), hepsi gercek dosyalar;
+  kod mudahalesi YOK (tek duzeltme kendi sabitim).
+- 2026-10-12 D-675: KAPI KUSURU — baremetal_diff "atlandi" sayaci kaldirildi.
+  OLCULDU (onarim ONCESI): birlesik OS biriminden parca dusurulunce (T002) ya
+  da kem_mmu'ya tip hatasi sokulunca kapi `rc=0` + "2/2 birim (9 atlandi)" —
+  CEKIRDEGIN TAMAMI (326 islev) olculmeden YESIL. D-671/D-672 kem_heap ve
+  kem_virtio_blk'i sessizce "atlandi"ya dusurmustu (5/5 → 3/3).
+  YENI: (1) birlesik birim derlenemez/eksik → KIRMIZI; (2) BIRIMLER tablosu —
+  kem_heap (+arm64 uart) ve kem_virtio_blk (+arm64 bariyer+platform) mimari
+  bagimliliklariyla GERI ALINDI; (3) PARCALAR — tek basina derlenemeyen her
+  dosyanin TUM islev+kuresel adlari birlesik birimin C VE KEMGU IR'inda SAYILIR
+  (234 islev + 9 kuresel); tek basina derlenen parca = bayat → KIRMIZI;
+  (4) runtime/*.kem + mimari/arm64/*.kem siniflandirilmamis dosya → KIRMIZI.
+  Kural 3 ilk kosuda GERCEK bir sey buldu: kem_bariyer.kem tek basina
+  derleniyordu → BIRIMLER'e tasindi. Sonuc 15/15, `0 atlandi`.
+  SABOTAJ 4/4 (onarim SONRASI): A parca dusur → rc=2 · B tip hatasi → rc=2 ·
+  C siniflandirilmamis dosya → rc=2 · D birlesik birimde olmayan sembol
+  (x86_net_tx_oku) → rc=2, eksik sembol ADIYLA. A ve B onarim oncesi YESILDI.
+  Belge: docs/BAREMETAL_DIFF_KAPSAM.md (parca basina T002 sayisi + ilk tanimsiz
+  kullanim; mmu ↔ zaman KARSILIKLI bagimli).
+- 2026-10-12 D-676: temizlik — Makefile `export DEBUGINFOD_URLS :=` + olu hedef
+  `bm_a64_kem_heap.o` kaldirildi.
+  DEBUGINFOD: kabukta degisken TANIMLIYKEN `make calistir_kanal_omru` artik
+  10/10 (Makefile export'u ezer). gate_linux.sh'e GATE_HERMETIK=0 anahtari:
+  kapinin kendi bosaltmasini kapatip Makefile duzeltmesinin KENDISINI olcer.
+  OLU HEDEF olculdu: `make build/bm_a64_kem_heap.o` rc=0 AMA kem_heap.ll 0
+  bayt + nesne 0 sembol (kem_heap tek basina T002; `2>/dev/null | awk` yutar,
+  D-609 sinifi) — SESSIZ BOS NESNE. Silindi; artik "No rule".
+  DEEPSEEK: tur 6 tek seferde 2 blok, 25 sn, mudahale YOK. Executor'a
+  `--kesit YOL:BAS-SON` eklendi: kesit GERCEK dosya yoluyla etiketlenir (tur
+  4b'de ayri kesit DOSYASI hedef saniliyordu) — bu turda dogru hedeflendi.
+  ⚠ SUREC HATAM: D-675 kapisi kosarken gate_linux.sh'i duzenledim → bash
+  betigi satir satir okudugu icin kapi sozdizimi hatasiyla dustu (GECERSIZ
+  sonuc; olcumun kendisi yesildi). Kapi DONMUS KOPYADAN yeniden kosuldu;
+  bundan sonra kapi daima kopyadan calisir.
+- 2026-10-12 KAPANIS — x86 parite kuyrugu (D-670…D-676), dal os/x86-parite.
+  Bes is (D-670…D-674) + kapi onarimi (D-675) + temizlik (D-676); her biri
+  taze klonda gate_linux.sh: aarch64 [1..10] · x86 islevsel kanit · test_tumu ·
+  FIXPOINT 85312 satir birebir. Derleyiciye (src/*.c, selfhost/*) DOKUNULMADI.
+  ⚠ SAYIM DUZELTMESI: kalan borc "49 blok/3 dosya" degil, 4 dosyada 47 GERCEK
+  blok (kem_gorev 27, kem_mmu 14, kem_zaman 5, kem_dtb 1). Eski sayim
+  `grep -c` ile YORUMLARI da sayiyordu (envanteri ben yazmistim). Saglama:
+  46+1+1 = 48 = birlesik OS IR `asm sideeffect` = baremetal_diff "48 asm".
+  ACIK KALANLAR (docs/X86_PARITE_ENVANTER.md §7): kem_gorev/mmu/zaman/dtb
+  (47 blok, ayri konusulacak) · PVH %ebx (start_info) saklanmiyor · D1
+  bare-metal x86 uclusu (derleyici karari) · DMA tabani hala sabit ·
+  baremetal_diff'in x86 IKIZI (C↔self) yok · minifs x86'da test edilmedi.
+  DEEPSEEK TOPLAM: 8 tur (tur 1…6 + 1b + 4b), ~272K token. Calisan sinir:
+  tur basina ~5 degisiklik / ~6 capa + gercek dosya yoluyla etiketli kesit.
+  Iki tur butceyi capa tartismasinda bitirdi (1, 4); ikisinin de koku bendeydi
+  (eksik baglam / asiri kapsam). Uretimde 2 gercek hata kapi/denetim yakaladi
+  (UART sessiz kayip, `dsb` sembol adiyla sahte eslesme); 1 hata benim gorev
+  metnimdeydi (0xFEB00000 → yanlis ondalik), Kanit 10 yakaladi.

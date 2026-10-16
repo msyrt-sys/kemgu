@@ -435,17 +435,19 @@ küresel değişken kem_yetki_sayac: tam64 = 1;   // id sayacı (0 değil yeter 
     ver (taban + 24 + i * 8) olarak *tam64;
 }
 
-// Çekirdek paniği: PL011'e (0x09000000) mesaj bas ve DUR. kdl_panik kem_os'ta YOK
-// (D-592); çıplak bağlamda yalnız çıplak çağrılabilir (E013) → doğrudan MMIO.
-// Kanal (D-623) ve görev (D-624) ortak kullanır.
+// Çekirdek paniği: konsol artık mimari başına kem_uart_bayt
+// (runtime/mimari/<arch>/kem_uart.kem). arm64'te yine PL011 MMIO; x86'da COM1
+// 16550 port I/O. kdl_panik kem_os'ta YOK (D-592); çıplak bağlamda yalnız
+// çıplak çağrılabilir (E013) → kem_uart_bayt da çıplaktır. Kanal (D-623) ve görev (D-624)
+// ortak kullanır.
 çıplak işlev kem_panik(m: metin) {
     değişken n: tam32 = metin_uzunluk(m);
     değişken i: tam32 = 0;
     iken i < n {
-        kdl_mmio_yaz32(150994944, metin_bayt(m, i) olarak tam32);
+        kem_uart_bayt(metin_bayt(m, i) olarak tam32);
         i = i + 1;
     }
-    kdl_mmio_yaz32(150994944, 10);
+    kem_uart_bayt(10);
     iken doğru { }
 }
 

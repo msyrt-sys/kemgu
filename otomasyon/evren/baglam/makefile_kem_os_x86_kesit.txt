@@ -1,0 +1,88 @@
+# kem_heap.kem + kem_os_x86.kem CAT → malloc/free/memcpy/memset/bolge/dizi/metin
+# TANIMLARI .o'dan gelir; bm_x86_heap.o ve bm_x86_bolge.o BİLEREK YOK (aksi hâlde
+# C sürümleri .kem sembolleriyle çakışır). start_x86_64.S kem_heap_kur'u
+# main'den önce çağırır → kem_son dolu. Üç kanıt: (1) nm'de ` T malloc` ve
+# ` T kem_heap_kur`; (2) objdump'da kem_heap_kur'a giden call satırı (sabit
+# metin DEĞİL, objdump'ın kendi satırı); (3) QEMU seri çıktıda
+# "X86 HEAP DIZI OK toplam=" satırı ve HEMEN ARDINDAN "55" (yazdir_metin satır
+# sonu ekler → değer ayrı satırda; denetim değerin KENDİSİNE bakar, D-264).
+# Kanıt 4: objdump'da mfence (x86_64 DMA bariyeri) satırları; dsb YOK.
+# Kanıt 5: QEMU seri çıktıda "X86 PANIK YOLU OK" tam satırı (kem_panik .kem
+# UART yolundan basar; panik geri dönmez, QEMU zaman aşımı keser).
+# Kanıt 6: objdump --disassemble-symbols=kem_uart_bayt içinde outb VE inb
+# (yalnız .kem işlevi; tüm ikilide aramak C UART nesnesine de uyar).
+# Kanıt 7: llvm-nm'de __heap_end < 0x02000000 (DMA tabanı heap'le çakışmaz).
+# Kanıt 8: objdump'da 0xc000009b sabiti (UC MMIO PD sayfa bayrağı gerçekten kurulu).
+# Kanıt 9: QEMU seri çıktıda "X86 DMA RAM BLK OK", "X86 DMA RAM NET OK" tam
+#          satırları ve "X86 MMIO UC OK lapic_surum=" (LAPIC sürüm — UC pencere
+#          okunabiliyor).
+calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+		$(BUILD)/bm_x86_panik.o
+	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
+	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
+	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o $(BUILD)/kem_os_x86.elf \
+		$(BUILD)/kem_os_x86.o \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+		$(BUILD)/bm_x86_panik.o
+	@echo "  Kanit 1: sembol kaynagi (saf-.kem malloc/kem_heap_kur)..."
+	@if ! llvm-nm $(BUILD)/kem_os_x86.o | grep -q ' T malloc'; then \
+		echo "FAIL: malloc .kem'den gelmedi (T malloc yok)"; exit 1; fi
+	@if ! llvm-nm $(BUILD)/kem_os_x86.o | grep -q ' T kem_heap_kur'; then \
+		echo "FAIL: kem_heap_kur .kem'den gelmedi (T kem_heap_kur yok)"; exit 1; fi
+	@echo "  Kanit 2: kem_heap_kur call satiri (objdump'un kendi satiri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'call.*<kem_heap_kur>'; then \
+		echo "FAIL: kem_heap_kur call satiri yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'call.*<kem_heap_kur>'
+	@echo "  Kanit 3: QEMU davranis (toplam=55)..."
+	@if ! command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		echo "FAIL: qemu-system-x86_64 yok — qemu kurun (sessiz atlama yok, D-486)"; exit 1; fi
+	@rm -f $(BUILD)/kem_os_x86.out; \
+	timeout 8 qemu-system-x86_64 -kernel $(BUILD)/kem_os_x86.elf -display none \
+		-serial file:$(BUILD)/kem_os_x86.out 2>/dev/null || true; \
+	echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/kem_os_x86.out; echo "--- son ---"; \
+	if grep -A1 -xF "X86 HEAP DIZI OK toplam=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qxF "55"; then \
+		echo "kem_os x86_64 QEMU testi gecti (toplam=55, deger satiri dogrulandi)."; \
+	else echo "FAIL: 'X86 HEAP DIZI OK toplam=' + '55' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA BARIYER OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA BARIYER OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 4: objdump mfence (x86_64 DMA bariyeri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'mfence'
+	@# Komut SÜTUNUNDA ara (sekme + dsb): düz 'dsb' `<vblk_dsb>` sembol adıyla eşleşir.
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -qP '\tdsb\b'; then \
+		echo "FAIL: dsb x86_64 binary'de bulundu"; exit 1; fi
+	@echo "  Kanit 5: QEMU davranis (X86 PANIK YOLU OK)..."
+	@if ! grep -qxF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 PANIK YOLU OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 6: objdump kem_uart_bayt (outb + inb, .kem UART)..."
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'outb'; then \
+		echo "FAIL: kem_uart_bayt icinde outb yok"; exit 1; fi
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'inb'; then \
+		echo "FAIL: kem_uart_bayt icinde inb yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -E 'outb|inb'
+	@echo "  Kanit 7: yerlesim (__heap_end < DMA tabani 0x02000000)..."
+	@he=$$(llvm-nm $(BUILD)/kem_os_x86.elf | awk '/__heap_end/ {print $$1; exit}'); \
+	if [ -z "$$he" ]; then echo "FAIL: __heap_end sembolu yok"; exit 1; fi; \
+	hedec=$$((0x$$he)); \
+	echo "    __heap_end = 0x$$he ($$hedec)"; \
+	if [ "$$hedec" -ge 33554432 ]; then \
+		echo "FAIL: __heap_end ($$hedec) >= 0x02000000 (DMA tabani)"; exit 1; fi
+	@echo "  Kanit 8: UC MMIO bayragi (objdump'da 0xc000009b)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q '0xc000009b'; then \
+		echo "FAIL: 0xc000009b objdump'da yok (UC MMIO sayfa bayragi)"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep '0xc000009b'
+	@echo "  Kanit 9: QEMU davranis (DMA RAM BLK/NET + UC MMIO)..."
+	@if ! grep -qxF "X86 DMA RAM BLK OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM BLK OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA RAM NET OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM NET OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 MMIO UC OK lapic_surum=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 MMIO UC OK lapic_surum=' satiri yok"; exit 1; fi
+

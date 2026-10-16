@@ -1,0 +1,22 @@
+// kem_platform.kem — aarch64 virt DMA adres haritası (D2b: mimari başına platform).
+// ============================================================================
+// DMA taban adresleri MİMARİYE ÖZGÜDÜR. Makefile CAT listesi mimariye göre bu
+// dosyayı seçer: aarch64 → runtime/mimari/arm64/kem_platform.kem,
+// x86_64 → runtime/mimari/x86_64/kem_platform.kem. kem_virtio_blk.kem ve
+// kem_virtio_net.kem içindeki `vblk_dma`/`vnet_dma` tanımları BURAYA taşındı.
+//
+// aarch64 QEMU virt: RAM tabanı 0x40000000.
+//   vblk_dma = 0x43000000 (1124073472) — blok DMA (VRING + veri).
+//   vnet_dma = 0x46800000 (1182793728) — ağ DMA.
+// ⚠ AH-1: vnet_dma ESKİDEN 0x44000000'daydı; orası firmware'in DEVICE-TREE'yi
+// (DTB) koyduğu yerdi → ağ sürücüsü donanım-keşif verisini EZİYORDU. DTB'den
+// uzağa (0x46800000) taşındı; ayrıntılı gerekçe kem_virtio_net.kem 12-21.
+// Kalıcı çözüm (DTB /memreserve okuma) AH-2'nin işi; bu sabit tabanlar
+// x86 ikizinin (runtime/mimari/x86_64/kem_platform.kem) davranışını DEĞİŞTİRMEZ.
+küresel değişken vblk_dma: tam64 = 1124073472;   // 0x43000000
+küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000
+
+// VirtIO-MMIO cihaz tarama yuvası tabanı + yuva sayısı. Adım 0x200 (512) iki
+// makinede de aynı; `vblk_bul`/`vnet_bul` döngüsünü besler.
+sabit VM_TARAMA_TABAN: tam64 = 167772160;   // 0x0a000000 (QEMU virt)
+sabit VM_YUVA_SAYISI: tam32 = 32;

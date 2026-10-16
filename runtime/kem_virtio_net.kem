@@ -22,7 +22,8 @@
 
 sabit VN_DEV_NET: tam32 = 1;
 
-küresel değişken vnet_dma: tam64 = 1182793728;   // 0x46800000 (DTB bölgesinden UZAK)
+// [D-673] `vnet_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (arm64 0x46800000,
+// x86_64 0x02100000; CAT birimi).
 küresel değişken vnet_rx_gorulen: tam32 = 0;     // işlenen RX used indeksi (kur'da sıfırlanır)
 küresel değişken vnet_rx_id: tam32 = 0;           // son alınan çerçevenin buffer id'si
 
@@ -39,8 +40,8 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
 // virtio-net cihazı tara (DeviceID=1). Taban döner (0=yok).
 çıplak işlev vnet_bul() -> tam64 {
     değişken i: tam32 = 0;
-    iken i < 32 {
-        değişken base: tam64 = 167772160 + (i olarak tam64) * 512;
+    iken i < VM_YUVA_SAYISI {
+        değişken base: tam64 = VM_TARAMA_TABAN + (i olarak tam64) * 512;
         eğer vblk_o32(base + VM_MAGIC) == VBLK_MAGIC_DEG {
             eğer vblk_o32(base + VM_DEVICE_ID) == VN_DEV_NET { ver base; }
         }

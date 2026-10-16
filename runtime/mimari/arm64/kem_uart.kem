@@ -1,0 +1,10 @@
+// kem_uart.kem — İş 2 (D-672, D2b): ARM64 (PL011) UART0 bayt-yaz arayüzü.
+// kem_panik artık mimariden bağımsız kem_uart_bayt çağırır; bu dosya arm64'te
+// PL011 UART0 @ 0x09000000 (QEMU virt) yolunu sağlar. x86 ikizi:
+// runtime/mimari/x86_64/kem_uart.kem (COM1 16550 port I/O). Ayrı dosya: AS001
+// gereği bir dosyada yalnız TEK mimarinin satıriçi_asm'i olabilir; Makefile CAT
+// listesi mimariye göre seçer (D2b kararı). Asm yok — kdl_mmio_yaz32
+// (kem_heap.kem; aynı CAT birimi) zaten çıplak volatile store emit eder.
+çıplak işlev kem_uart_bayt(b: tam32) {
+    kdl_mmio_yaz32(150994944, b);
+}

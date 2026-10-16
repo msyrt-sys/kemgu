@@ -89,6 +89,13 @@ endif
 # tasima bu depoda en tehlikeli sey.
 export EXE
 
+# [D-676] Hermetik test ortami: Ubuntu kabuk ortami DEBUGINFOD_URLS tasiyor.
+# ASan/LSan rapor basarken llvm-symbolizer agdan debuginfod sunucusuna gidiyor;
+# erisim asilinca ASan ikilisi timeout 60'i asiyor -> calistir_kanal_omru 3/3
+# rc=124 (sahte kirmizi). Degisken bosken sembollestirici aninda yanitliyor;
+# kod ayni. Bir test takiminin sonucu dis sunucuya bagli olamaz.
+export DEBUGINFOD_URLS :=
+
 # [D-476] ASan + YUKSEK ASLR ENTROPISI — modern Linux cekirdeklerinde CAKISIYOR.
 #
 # OLCULDU (WSL2, cekirdek 6.6, clang 15): ASan ile derlenen `test_arena`
@@ -127,7 +134,7 @@ SRCS = $(SRCDIR)/utf8.c $(SRCDIR)/anahtar_kelime.c $(SRCDIR)/hata.c \
        $(SRCDIR)/wcet.c
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
-.PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_lean_tam calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_qemu_cekirdek kemgu_self calistir_self_driver bench test_tumu
+.PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal calistir_drf_lean_proof calistir_lean_aksiyom calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_lean_tam calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_qemu_cekirdek calistir_kem_os_x86 kemgu_self calistir_self_driver bench test_tumu
 .PHONY: calistir_kem_os_dtb_arm all clean test calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_simd_test calistir_simd_llvm_test calistir_stdlib_check calistir_kripto_check calistir_kripto_kosum calistir_arm64_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_uart_pl011_test calistir_uart_pl011_bare_metal calistir_yazdir_bare_test calistir_yazdir_bare_bare_metal calistir_uart_merhaba_bare_metal calistir_uart_16550_test calistir_uart_16550_bare_metal calistir_panik_test calistir_panik_bare_metal calistir_uart_vtable_test calistir_qemu_smoke calistir_uart_echo_bare_metal bench test_tumu
 
 # === Ana hedef ===
@@ -1113,13 +1120,8 @@ $(BUILD)/bm_a64_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl
 # memcpy/memset/kdl_global_bolge_al/kdl_panik/kdl_dizi KALIR; malloc/free → kem_heap.o (.kem).
 $(BUILD)/bm_a64_heap_kemmalloc.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl_bolge.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -DKEMGU_KEM_MALLOC -c $< -o $@
-# K1/K3 (D-260/261): SAF-.kem çıplak runtime → @malloc/@free/@kem_heap_kur (K1) +
-# @kdl_bolge_olustur/ayir/serbest (K3). kemgu --llvm boilerplate `declare`ları define
-# ile çakışır (LLVM redef) → STRIP + bare-metal target. Circularity yok (çıplak).
-$(BUILD)/bm_a64_kem_heap.o: runtime/kem_heap.kem test/strip_defined_declares.awk $(BUILD)/kemgu$(EXE) | $(BUILD)
-	./$(BUILD)/kemgu$(EXE) --llvm runtime/kem_heap.kem 2>/dev/null \
-	  | awk -f test/strip_defined_declares.awk > $(BUILD)/kem_heap.ll
-	$(BM_A64) -O2 -Wno-override-module -x ir $(BUILD)/kem_heap.ll -c -o $@
+# [D-676] bm_a64_kem_heap.o KALDIRILDI: tuketicisi yoktu ve kem_heap tek basina
+# T002 verdigi icin SESSIZCE bos nesne uretiyordu (D-609).
 $(BUILD)/bm_a64_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_A64) $(BM_A64_CF) -c $< -o $@
 $(BUILD)/bm_a64_kesme.o: runtime/kdl_kesme.c | $(BUILD)
@@ -1406,7 +1408,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1702,6 +1704,12 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@if ! grep -qE 'asm sideeffect "dsb sy"' $(BUILD)/kem_os.ll; then \
 		echo "FAIL: dsb sy bariyeri (P1 arm64 asm) emit edilmedi — DMA siralama yok"; exit 1; \
 	fi
+	@echo "  Kanit: ARM64 dsb sy objdump..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os.elf | grep -qE 'dsb\s+sy'; then \
+		echo "FAIL: dsb sy objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os.elf | grep -E 'dsb\s+sy' | head -n 3
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence ARM64 binary'de bulundu"; exit 1; fi
 	@echo "  (vblk_bul/kur/oku/yaz .kem-define + disk_rw_testi wire + dsb sy P1-asm — virtio-blk SAF-.kem)"
 	@echo "FALSIFIYE-KANIT (SUBSYSTEM/fs, FAZ-B2): kem_os GERCEK dosya I/O saf-.kem minifs'ten:"
 	@if ! grep -qE "define[^@]*@mfs_(format|dosya_yaz|dosya_oku)\b" $(BUILD)/kem_os.ll; then \
@@ -1915,6 +1923,114 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 			echo "x86_64 hello QEMU testi gecti."; \
 		else echo "FAIL: Merhaba KEMGU + 42 yok"; exit 1; fi; \
 	else echo "QEMU yok — x86 hello atlandi."; fi
+
+# === Bare-Metal KEMGU-OS x86_64 (İş 5) — saf-.kem allocator + bölge ile boot ===
+# kem_heap.kem + kem_os_x86.kem CAT → malloc/free/memcpy/memset/bolge/dizi/metin
+# TANIMLARI .o'dan gelir; bm_x86_heap.o ve bm_x86_bolge.o BİLEREK YOK (aksi hâlde
+# C sürümleri .kem sembolleriyle çakışır). start_x86_64.S kem_heap_kur'u
+# main'den önce çağırır → kem_son dolu. Üç kanıt: (1) nm'de ` T malloc` ve
+# ` T kem_heap_kur`; (2) objdump'da kem_heap_kur'a giden call satırı (sabit
+# metin DEĞİL, objdump'ın kendi satırı); (3) QEMU seri çıktıda
+# "X86 HEAP DIZI OK toplam=" satırı ve HEMEN ARDINDAN "55" (yazdir_metin satır
+# sonu ekler → değer ayrı satırda; denetim değerin KENDİSİNE bakar, D-264).
+# Kanıt 4: objdump'da mfence (x86_64 DMA bariyeri) satırları; dsb YOK.
+# Kanıt 5: QEMU seri çıktıda "X86 PANIK YOLU OK" tam satırı (kem_panik .kem
+# UART yolundan basar; panik geri dönmez, QEMU zaman aşımı keser).
+# Kanıt 6: objdump --disassemble-symbols=kem_uart_bayt içinde outb VE inb
+# (yalnız .kem işlevi; tüm ikilide aramak C UART nesnesine de uyar).
+# Kanıt 7: llvm-nm'de __heap_end < 0x02000000 (DMA tabanı heap'le çakışmaz).
+# Kanıt 8: objdump'da 0xc000009b sabiti (UC MMIO PD sayfa bayrağı gerçekten kurulu).
+# Kanıt 9: QEMU seri çıktıda "X86 DMA RAM BLK OK", "X86 DMA RAM NET OK" tam
+#          satırları ve "X86 MMIO UC OK lapic_surum=" (LAPIC sürüm — UC pencere
+#          okunabiliyor).
+# Kanıt 10: QEMU seri çıktıda "X86 DISK RW OK" TAM satırı ve HEMEN ardındaki
+#          satır pozitif bir sayı (disk bayt toplamı); ayrıca "X86 NET DEV OK
+#          mac_w0=" TAM satırı (microvm virtio-mmio disk/ağ davranışı).
+calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+		$(BUILD)/bm_x86_panik.o
+	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
+	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_virtio_net.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
+	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
+	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
+	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o $(BUILD)/kem_os_x86.elf \
+		$(BUILD)/kem_os_x86.o \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
+		$(BUILD)/bm_x86_panik.o
+	@echo "  Kanit 1: sembol kaynagi (saf-.kem malloc/kem_heap_kur)..."
+	@if ! llvm-nm $(BUILD)/kem_os_x86.o | grep -q ' T malloc'; then \
+		echo "FAIL: malloc .kem'den gelmedi (T malloc yok)"; exit 1; fi
+	@if ! llvm-nm $(BUILD)/kem_os_x86.o | grep -q ' T kem_heap_kur'; then \
+		echo "FAIL: kem_heap_kur .kem'den gelmedi (T kem_heap_kur yok)"; exit 1; fi
+	@echo "  Kanit 2: kem_heap_kur call satiri (objdump'un kendi satiri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'call.*<kem_heap_kur>'; then \
+		echo "FAIL: kem_heap_kur call satiri yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'call.*<kem_heap_kur>'
+	@echo "  Kanit 3: QEMU davranis (toplam=55)..."
+	@if ! command -v qemu-system-x86_64 > /dev/null 2>&1; then \
+		echo "FAIL: qemu-system-x86_64 yok — qemu kurun (sessiz atlama yok, D-486)"; exit 1; fi
+# neden microvm: x86'da virtio-mmio YALNIZ -M microvm'de var (pc makinesinde
+# virtio-mmio YOK). neden force-legacy=false: sürücü v2 bekler; QEMU varsayılanı
+# legacy (aarch64 hedefi de aynı bayrağı kullanır).
+	@rm -f $(BUILD)/kem_os_x86.out; \
+	dd if=/dev/zero of=$(BUILD)/kem_os_x86_disk.img bs=512 count=64 2>/dev/null; \
+	timeout 8 qemu-system-x86_64 -M microvm -display none \
+		-global virtio-mmio.force-legacy=false \
+		-drive file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 \
+		-device virtio-blk-device,drive=d0 \
+		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+		-kernel $(BUILD)/kem_os_x86.elf \
+		-serial file:$(BUILD)/kem_os_x86.out 2>/dev/null || true; \
+	echo "--- QEMU COM1 cikti ---"; cat $(BUILD)/kem_os_x86.out; echo "--- son ---"; \
+	if grep -A1 -xF "X86 HEAP DIZI OK toplam=" $(BUILD)/kem_os_x86.out | tail -1 | grep -qxF "55"; then \
+		echo "kem_os x86_64 QEMU testi gecti (toplam=55, deger satiri dogrulandi)."; \
+	else echo "FAIL: 'X86 HEAP DIZI OK toplam=' + '55' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA BARIYER OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA BARIYER OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 4: objdump mfence (x86_64 DMA bariyeri)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q 'mfence'; then \
+		echo "FAIL: mfence objdump'da yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep 'mfence'
+	@# Komut SÜTUNUNDA ara (sekme + dsb): düz 'dsb' `<vblk_dsb>` sembol adıyla eşleşir.
+	@if llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -qP '\tdsb\b'; then \
+		echo "FAIL: dsb x86_64 binary'de bulundu"; exit 1; fi
+	@echo "  Kanit 5: QEMU davranis (X86 PANIK YOLU OK)..."
+	@if ! grep -qxF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 PANIK YOLU OK' satiri yok"; exit 1; fi
+	@echo "  Kanit 6: objdump kem_uart_bayt (outb + inb, .kem UART)..."
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'outb'; then \
+		echo "FAIL: kem_uart_bayt icinde outb yok"; exit 1; fi
+	@if ! llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -q 'inb'; then \
+		echo "FAIL: kem_uart_bayt icinde inb yok"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kem_uart_bayt $(BUILD)/kem_os_x86.elf | grep -E 'outb|inb'
+	@echo "  Kanit 7: yerlesim (__heap_end < DMA tabani 0x02000000)..."
+	@he=$$(llvm-nm $(BUILD)/kem_os_x86.elf | awk '/__heap_end/ {print $$1; exit}'); \
+	if [ -z "$$he" ]; then echo "FAIL: __heap_end sembolu yok"; exit 1; fi; \
+	hedec=$$((0x$$he)); \
+	echo "    __heap_end = 0x$$he ($$hedec)"; \
+	if [ "$$hedec" -ge 33554432 ]; then \
+		echo "FAIL: __heap_end ($$hedec) >= 0x02000000 (DMA tabani)"; exit 1; fi
+	@echo "  Kanit 8: UC MMIO bayragi (objdump'da 0xc000009b)..."
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q '0xc000009b'; then \
+		echo "FAIL: 0xc000009b objdump'da yok (UC MMIO sayfa bayragi)"; exit 1; fi
+	@llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep '0xc000009b'
+	@echo "  Kanit 9: QEMU davranis (DMA RAM BLK/NET + UC MMIO)..."
+	@if ! grep -qxF "X86 DMA RAM BLK OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM BLK OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 DMA RAM NET OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DMA RAM NET OK' satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 MMIO UC OK lapic_surum=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 MMIO UC OK lapic_surum=' satiri yok"; exit 1; fi
+	@echo "  Kanit 10: QEMU davranis (microvm disk RW + net cihaz)..."
+	@if ! grep -qxF "X86 DISK RW OK" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DISK RW OK' satiri yok"; exit 1; fi
+	@if ! grep -A1 -xF "X86 DISK RW OK" $(BUILD)/kem_os_x86.out | tail -1 | grep -qE '^[1-9][0-9]*$$'; then \
+		echo "FAIL: disk OK sonrasi pozitif sayi satiri yok"; exit 1; fi
+	@if ! grep -qxF "X86 NET DEV OK mac_w0=" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 NET DEV OK mac_w0=' satiri yok"; exit 1; fi
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

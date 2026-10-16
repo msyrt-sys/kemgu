@@ -1,0 +1,223 @@
+// kem_os_x86.kem — İş 5: x86_64 kanıt çekirdeğinin `main`'i. kem_heap.kem ile
+// CAT edilir (tek derleme birimi). Normal (çıplak OLMAYAN) işlev → prologu
+// bölgeyi kdl_global_bolge_al → kdl_bolge_olustur → @malloc (saf-.kem) zinciriyle
+// kurar; bu test TAM O ZİNCİRİ ölçer: start_x86_64.S kem_heap_kur'u main'den
+// önce çağırmazsa saf-.kem malloc null döner ve toplam=0 olur (panik YOK —
+// bu yüzden marker değil DEĞER yazdırılıp denetlenir, D-264 dersi).
+//
+// Amaç: bölge + dizi + metin yüzeyini x86 QEMU'da DAVRANIŞSAL kanıtla. Yazdırma
+// yerleşikleri (yazdir_metin/yazdir_tam/yazdir_satir) bu çekirdekte C
+// runtime/kdl_runtime_yazdir_bare.c + 16550 UART üzerinden gider (İş 2 sonra
+// .kem UART'a çevirecek — şimdilik dokunulmaz).
+//
+// Beklenen başarı çıktısı: "X86 HEAP DIZI OK toplam=" satırı + "55" satırı
+// (yazdir_metin satır sonu ekler).
+// Ayrıca main başında kem_dma_bariyeri() çağrılır ve "X86 DMA BARIYER OK"
+// satırı basılır (gerçekten çalıştığının kanıtı; #UD olsaydı çekirdek düşerdi).
+// main sonunda kem_panik("X86 PANIK YOLU OK") çağrılır: panik geri dönmez,
+// mesaj .kem COM1 yolundan basılır, çekirdek orada durur; QEMU zaman aşımı keser.
+//
+// İş 3: kem_panik'ten ÖNCE üç DMA/MMIO testi koşar (her biri DEĞER denetler,
+// sabit metin basmaz — D-264 dersi):
+//   (a) Blok DMA RAM — vblk_data_yaz/oku 0..511 yaz-oku karşılaştırma →
+//       "X86 DMA RAM BLK OK" (aksi hâlde "X86 DMA RAM BLK HATA" + ilk indeks).
+//   (b) Ağ DMA RAM — vnet_tx_yaz + çıplak x86_net_tx_oku (aşağıda) 0..63
+//       karşılaştırma → "X86 DMA RAM NET OK".
+//   (c) MMIO UC pencere — kdl_mmio_oku32(0xFEE00030) LAPIC sürüm yazmacı
+//       (0 DEĞİL ve -1 DEĞİLSE) → "X86 MMIO UC OK lapic_surum=" + değer.
+//
+// Bu üç test, DMA tabanlarının (kem_platform.kem x86_64 ikizi) 0..1GB eşleme
+// ve UC MMIO penceresinin (start_x86_64.S 2c2) gerçekten kurulduğunu
+// DAVRANIŞSAL olarak kanıtlar.
+//
+// İş 4: microvm virtio-mmio. Disk (vblk_bul → vblk_kur → sektör 7'ye yaz-oku;
+// okuma ÖNCESİ tampon sıfırlanır) "X86 DISK RW OK" + bayt toplamı ile; ağ
+// (vnet_bul → vnet_kur → vnet_mac_w0) "X86 NET DEV OK mac_w0=" ile DAVRANIŞSAL
+// kanıtlanır.
+
+// Çıplak yardımcı: küresel vnet_dma'ya NORMAL işlevden doğrudan erişim E010
+// verir; çıplak işlev küresele serbestçe erişir (kem_heap.kem idiomu).
+çıplak işlev x86_net_tx_oku(i: tam32) -> dtam8 {
+    ver vblk_o8(vnet_dma + NO_TXBUF + 12 + (i olarak tam64));
+}
+
+işlev main() -> tam32 {
+    kem_dma_bariyeri();
+    yazdir_metin("X86 DMA BARIYER OK");
+
+    değişken d: Dizi<tam32> = [];
+
+    // 1..10 ekle (bölge dizi büyümesi 4→8→16; saf-.kem kem_dizi_buyut).
+    değişken i: tam32 = 1;
+    iken i <= 10 {
+        dizi_ekle(d, i);
+        i = i + 1;
+    }
+
+    // Topla (beklenen: 55). `için` heap dizide sınır-kontrollü okur.
+    değişken toplam: tam32 = 0;
+    için x: d {
+        toplam = toplam + x;
+    }
+
+    // Değeri SABİT yazma: gerçek toplamı bas (marker değil DEĞER denetimi).
+    eğer toplam == 55 {
+        yazdir_metin("X86 HEAP DIZI OK toplam=");
+    }
+    değilse {
+        yazdir_metin("X86 HEAP DIZI HATA toplam=");
+    }
+    yazdir_tam(toplam);
+    yazdir_satir();
+
+    // İş 3 (a): Blok DMA RAM yaz-oku (0..511; 251 ile döngüsel desen).
+    değişken dma_i: tam32 = 0;
+    iken dma_i < 512 {
+        vblk_data_yaz(dma_i, (((dma_i % 251) + 3) olarak dtam8));
+        dma_i = dma_i + 1;
+    }
+    değişken blk_hata: tam32 = 512;   // 512 = "uyuşmazlık yok" (geçerli indeks 0..511)
+    dma_i = 0;
+    iken dma_i < 512 {
+        değişken beklenen_blk: dtam8 = (((dma_i % 251) + 3) olarak dtam8);
+        eğer vblk_data_oku(dma_i) != beklenen_blk {
+            eğer blk_hata == 512 { blk_hata = dma_i; }
+        }
+        dma_i = dma_i + 1;
+    }
+    eğer blk_hata == 512 {
+        yazdir_metin("X86 DMA RAM BLK OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM BLK HATA");
+        yazdir_tam(blk_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (b): Ağ TX tamponu yaz-oku (0..63; 241 ile döngüsel desen).
+    değişken net_i: tam32 = 0;
+    iken net_i < 64 {
+        vnet_tx_yaz(net_i, (((net_i % 241) + 7) olarak dtam8));
+        net_i = net_i + 1;
+    }
+    değişken net_hata: tam32 = 64;
+    net_i = 0;
+    iken net_i < 64 {
+        değişken beklenen_net: dtam8 = (((net_i % 241) + 7) olarak dtam8);
+        eğer x86_net_tx_oku(net_i) != beklenen_net {
+            eğer net_hata == 64 { net_hata = net_i; }
+        }
+        net_i = net_i + 1;
+    }
+    eğer net_hata == 64 {
+        yazdir_metin("X86 DMA RAM NET OK");
+    }
+    değilse {
+        yazdir_metin("X86 DMA RAM NET HATA");
+        yazdir_tam(net_hata);
+        yazdir_satir();
+    }
+
+    // İş 3 (c): MMIO UC pencere — LAPIC sürüm yazmacı (0xFEE00030 = 4276092976).
+    değişken lapic_surum: tam32 = kdl_mmio_oku32(4276092976);
+    eğer lapic_surum == 0 {
+        yazdir_metin("X86 MMIO UC HATA");
+    }
+    değilse {
+        eğer lapic_surum == (0 - 1) {
+            yazdir_metin("X86 MMIO UC HATA");
+        }
+        değilse {
+            yazdir_metin("X86 MMIO UC OK lapic_surum=");
+            yazdir_tam(lapic_surum);
+            yazdir_satir();
+        }
+    }
+
+    // İş 4 (disk): VirtIO-MMIO blok cihazı. Sektör 7'ye (i%251)+5 deseni yaz;
+    // tamponu SIFIRLA (geri okunan veri DİSKTEN gelsin); sektör 7'yi oku ve
+    // 0..511 karşılaştır. Başarıda "X86 DISK RW OK" + ayrı satırda bayt toplamı
+    // (değer denetimi, D-264).
+    değişken vb: tam64 = vblk_bul();
+    eğer vb == 0 {
+        yazdir_metin("X86 DISK YOK");
+    }
+    değilse {
+        değişken vbk: tam32 = vblk_kur(vb);
+        eğer vbk != 0 {
+            yazdir_metin("X86 DISK KUR HATA");
+            yazdir_tam(vbk);
+            yazdir_satir();
+        }
+        değilse {
+            değişken di: tam32 = 0;
+            iken di < 512 {
+                vblk_data_yaz(di, (((di % 251) + 5) olarak dtam8));
+                di = di + 1;
+            }
+            değişken wy: tam32 = vblk_yaz(vb, 7);
+            eğer wy != 0 {
+                yazdir_metin("X86 DISK RW HATA");
+                yazdir_tam(wy);
+                yazdir_satir();
+            }
+            değilse {
+                di = 0;
+                iken di < 512 { vblk_data_yaz(di, 0 olarak dtam8); di = di + 1; }
+                değişken ok: tam32 = vblk_oku(vb, 7);
+                eğer ok != 0 {
+                    yazdir_metin("X86 DISK RW HATA");
+                    yazdir_tam(ok);
+                    yazdir_satir();
+                }
+                değilse {
+                    değişken dhata: tam32 = 512;
+                    değişken dsum: tam32 = 0;
+                    di = 0;
+                    iken di < 512 {
+                        değişken dbek: dtam8 = (((di % 251) + 5) olarak dtam8);
+                        değişken dok: dtam8 = vblk_data_oku(di);
+                        eğer dok != dbek {
+                            eğer dhata == 512 { dhata = di; }
+                        }
+                        dsum = dsum + (dok olarak tam32);
+                        di = di + 1;
+                    }
+                    eğer dhata == 512 {
+                        yazdir_metin("X86 DISK RW OK");
+                        yazdir_tam(dsum);
+                        yazdir_satir();
+                    }
+                    değilse {
+                        yazdir_metin("X86 DISK RW HATA");
+                        yazdir_tam(dhata);
+                        yazdir_satir();
+                    }
+                }
+            }
+        }
+    }
+
+    // İş 4 (ağ): VirtIO-MMIO ağ cihazı — bul + kur + MAC config word0 (canlı
+    // cihaz kanıtı). Başarıda "X86 NET DEV OK mac_w0=" + ayrı satırda MAC değeri.
+    değişken nb: tam64 = vnet_bul();
+    eğer nb == 0 {
+        yazdir_metin("X86 NET YOK");
+    }
+    değilse {
+        değişken nk: tam32 = vnet_kur(nb);
+        eğer nk != 0 {
+            yazdir_metin("X86 NET KUR HATA");
+            yazdir_tam(nk);
+            yazdir_satir();
+        }
+        değilse {
+            yazdir_metin("X86 NET DEV OK mac_w0=");
+            yazdir_tam(vnet_mac_w0(nb));
+            yazdir_satir();
+        }
+    }
+
+    kem_panik("X86 PANIK YOLU OK");
+    ver 0;
+}

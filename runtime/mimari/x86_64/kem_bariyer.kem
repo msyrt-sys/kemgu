@@ -1,0 +1,11 @@
+// kem_bariyer.kem — x86 parite İş 1 (D-671, D2b): x86_64 DMA bariyeri. Amaç: VirtIO DMA tanımlayıcı
+// yazımı ↔ MMIO notify sıralamasını garanti etmek. x86-TSO'da mağazalar sırayla
+// görünür; mfence notify öncesi tam sıralama için güvenli tercih (performans önemsiz).
+// Ayrı dosya: AS001 gereği bir dosyada yalnız TEK mimarinin satıriçi_asm'i olabilir;
+// Makefile CAT listesi mimariye göre seçer (D2b kararı). arm64 ikizi:
+// runtime/mimari/arm64/kem_bariyer.kem (dsb sy).
+çıplak işlev kem_dma_bariyeri() {
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"mfence"# bozulan("~{memory}") }
+    }
+}

@@ -1,0 +1,22 @@
+// kem_platform.kem — x86_64 DMA adres haritası (D2b: mimari başına platform).
+// ============================================================================
+// Makefile CAT listesi x86_64 için bu dosyayı seçer. kem_virtio_blk.kem ve
+// kem_virtio_net.kem içindeki `vblk_dma`/`vnet_dma` tanımları BURAYA taşındı.
+//
+// NEDEN bu adresler: x86 boot (start_x86_64.S) yalnız 0..1 GB'ı 2 MB huge
+// page'lerle eşler (PD girdileri 0x83 = P|RW|PS) ve QEMU x86 varsayılan RAM
+// 128 MB'tır. Dolayısıyla DMA bölgesi __heap_end (~0x110F000) ÜSTÜNDE ve
+// 1 GB eşlemenin ALTINDA kalmalıdır. aarch64 değerlerinden farklı seçildi
+// çünkü aarch64 QEMU virt RAM tabanı 0x40000000; x86 kernel 0x100000'den yüklenir.
+//   vblk_dma = 0x02000000 (33554432) — blok DMA tabanı; ihtiyaç ~800 B.
+//   vnet_dma = 0x02100000 (34603008) — ağ DMA tabanı; ihtiyaç ~19 KB
+//     (NO_TXBUF + 2048 = 18944 B; RX tamponları 8×2048 bu aralığın içinde).
+// Çakışma ölçümü Makefile Kanıt 7 (__heap_end < 0x02000000) ile yapılır.
+küresel değişken vblk_dma: tam64 = 33554432;    // 0x02000000
+küresel değişken vnet_dma: tam64 = 34603008;    // 0x02100000
+
+// VirtIO-MMIO cihaz tarama yuvası tabanı + yuva sayısı. Adım 0x200 (512) iki
+// makinede de aynı. x86'da virtio-mmio YALNIZ -M microvm'de var (24 yuva);
+// pc makinesinde virtio-mmio YOK.
+sabit VM_TARAMA_TABAN: tam64 = 4272947200;  // 0xFEB00000 (QEMU microvm)
+sabit VM_YUVA_SAYISI: tam32 = 24;

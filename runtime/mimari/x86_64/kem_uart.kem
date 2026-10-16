@@ -1,0 +1,35 @@
+// kem_uart.kem — İş 2 (D-672, D2b): x86_64 (COM1 16550) UART bayt-yaz arayüzü.
+// kem_panik artık mimariden bağımsız kem_uart_bayt çağırır; bu dosya x86'da
+// COM1 16550 port I/O yolunu sağlar: veri 0x3F8 (=1016), LSR 0x3FD (=1021),
+// LSR bit 5 (32) = THRE (verici tutma yazmacı boş). arm64 ikizi:
+// runtime/mimari/arm64/kem_uart.kem (PL011 MMIO). Ayrı dosya: AS001 gereği bir
+// dosyada yalnız TEK mimarinin satıriçi_asm'i olabilir; Makefile CAT listesi
+// mimariye göre seçer (D2b kararı). LSR yoklaması SINIRLI: UART yoksa (ya da
+// THRE donmuşsa) panik yolu ASILMASIN diye en çok 100000 deneme; sonra veri
+// yine yazılır (mesaj kaybolabilir ama çekirdek ilerler).
+çıplak işlev kem_port_yaz8(port: dtam16, deger: dtam8) {
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"outb $1, $0"# girdi("{dx}", port) girdi("{al}", deger) bozulan("~{memory}") }
+    }
+}
+
+çıplak işlev kem_port_oku8(port: dtam16) -> dtam8 {
+    değişken v: dtam8 = 0 olarak dtam8;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"inb $1, $0"# çıktı("={al}", &v) girdi("{dx}", port) bozulan("~{memory}") }
+    }
+    ver v;
+}
+
+çıplak işlev kem_uart_bayt(b: tam32) {
+    değişken deneme: tam32 = 0;
+    iken deneme < 100000 {
+        değişken lsr: tam32 = kem_port_oku8(1021) olarak tam32;
+        // THRE set → yoklamayı BİTİR (döngüden çık), yazma AŞAĞIDA yapılır.
+        // ⚠ Burada `ver;` YAZMA: işlev yazmadan döner, mesaj SESSİZCE kaybolur
+        // (tur 3 üretiminde öyleydi; calistir_kem_os_x86 Kanıt 5 yakaladı).
+        eğer (lsr & 32) != 0 { deneme = 100000; }
+        değilse { deneme = deneme + 1; }
+    }
+    kem_port_yaz8(1016, b olarak dtam8);
+}
