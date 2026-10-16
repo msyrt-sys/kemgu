@@ -2133,3 +2133,25 @@
   kem_os_arm, syscall/ring3/timer_test_x86 yesil.
   SIRADAKI: adres alani basina CR3 (izolasyon) → ring3 (GDT DPL3 + TSS) →
   kullanici syscall → NX ile W^X.
+- 2026-10-16 D-688: x86 surec basina adres alani (CR3 degisimi).
+  kem_mmu_hw.kem (deepseek tur 17, 1 blok, mudahale YOK): kmmu_as_olustur(i) =
+  kendi PML4 + PDPT (cekirdek PDPT kopyasi) + PD (KXM_PD kopyasi) + PT; tek fark
+  VA 0x54000000 (PD[160]) → PA 60 MB + i*2MB. kmmu_as_gec = CR3 yazimi (PCID yok,
+  tam TLB temizligi). KANIT 19: 'X86 IZOLASYON OK' (A yaz, B yaz, A'ya don → A'nin
+  degeri duruyor + iki fiziksel sayfa cekirdekten ayri dogrulandi). SABOTAJ: iki
+  alan ayni PD'yi paylasinca → IZOLASYON HATA, rc=2.
+- 2026-10-16 D-689: x86 W^X — NX biti (ring3'ten bagimsiz adim).
+  Karar uygulamasi: PR #118 (CI Linux+Windows yesil) main'e birlesti; #119 tabani
+  REST ile main'e cevrildi ve DOGRULANDI (base=main). ring3 ayri oturum gorev
+  kartina alindi (task_174110f7).
+  boot/start_x86_64.S #PF kurtarma: hata kodu kdl_x86_pf_hata'ya; bekle == 65535
+  → "ret taklidi" (komut getirme hatasinda RIP = [RSP], RSP += 8).
+  kem_mmu_hw.kem: kxm_nx_ac (EFER bit 11), kxm_cagir (call *reg), kmmu_wx_testi:
+  ozel bolgede sayfa 0 VERI (bit 63) + sayfa 1 KOD, ikisine `ret`. KOD doner,
+  VERI #PF (CR2 == VA, hata 17 = P|I/D). Bu blok ORKESTRATOR yazdi: EVREN
+  /v1/chat/completions deepseek icin iki kez HTTP 503 (models uc noktasi 200).
+  Kendi spec hatam: `hata` anahtar kelime → degisken adi `hk`.
+  KANIT 20: 'X86 WX OK hata=' 17. SABOTAJ: NX biti yok → WX HATA rc=2; NXE
+  acilmadi (bit 63 ayrilmis → RSVD) → WX HATA rc=2. x86 birlesik 166 islev,
+  21 asm, C ↔ self BIREBIR. REGRESYON: check_kapisi, baremetal_diff 20/20,
+  kem_os_arm, syscall/ring3/timer_test_x86 yesil.

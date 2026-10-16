@@ -245,8 +245,26 @@ isr_ortak:
     pushq   %rax
     movq    %cr2, %rax
     movq    %rax, kdl_x86_pf_cr2(%rip)
+    /* [D-689] hata kodunu da kaydet (yığın: rax@0 vektör@8 hata@16 RIP@24 CS@32
+     * RFLAGS@40 RSP@48 SS@56). Bit 4 (I/D) = komut getirme hatası (NX). */
+    movq    16(%rsp), %rax
+    movq    %rax, kdl_x86_pf_hata(%rip)
     movq    kdl_x86_pf_bekle(%rip), %rax
+    cmpq    $65535, %rax
+    jne     3f
+    /* [D-689] bekle == 65535: RET TAKLİDİ. Komut getirme hatasında RIP fault eden
+     * hedefin KENDİSİDİR (atlanacak komut yok) — `call` ile girilen hedef için
+     * dönüş adresi kesilen yığının tepesindedir: RIP = [RSP], RSP += 8. */
+    pushq   %rbx                    /* bundan sonra ofsetler +8 */
+    movq    56(%rsp), %rax          /* kesilen RSP */
+    movq    (%rax), %rbx            /* dönüş adresi */
+    movq    %rbx, 32(%rsp)          /* RIP */
+    addq    $8, 56(%rsp)            /* RSP += 8 */
+    popq    %rbx
+    jmp     4f
+3:
     addq    %rax, 24(%rsp)          /* RIP (rax itmesiyle +8 kaydı: 16+8) */
+4:
     movq    $0, kdl_x86_pf_bekle(%rip)
     popq    %rax
     addq    $16, %rsp               /* vektör + hata kodu */
@@ -347,6 +365,8 @@ kdl_syscall_stub:
 .global kdl_x86_pf_cr2
 kdl_x86_pf_bekle: .quad 0     /* [D-687] 0 = fault beklenmiyor; >0 = atlanacak komut uzunluğu */
 kdl_x86_pf_cr2:   .quad 0     /* [D-687] son kurtarılan #PF'in CR2'si (fault VA) */
+.global kdl_x86_pf_hata
+kdl_x86_pf_hata:  .quad 0     /* [D-689] son kurtarılan #PF'in hata kodu */
 
 .section .rodata
 .align 8

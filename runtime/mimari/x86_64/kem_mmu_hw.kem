@@ -173,3 +173,176 @@ movq (%r11), $0"#
     }
     ver 0;
 }
+
+// [D-688] x86_64: süreç başına adres alanı (CR3 değişimi) + izolasyon testi.
+// arm64 kem_mmu.kem `kmmu_as_olustur` / `kmmu_izolasyon_testi` ikizidir. Arenada
+// her alan 4×4KB = PML4 + PDPT + PD + PT; CR3 = PML4 fiziksel adresi.
+sabit KMMU_AS_TABAN: tam64 = 59768832;   // 0x3900000 (57 MB) adres-alanı tablo arenası
+sabit KMMU_AS_ADIM: tam64 = 16384;       // her alan = PML4 + PDPT + PD + PT (4×4KB)
+sabit KMMU_AS_AZAMI: tam64 = 6;
+sabit KMMU_OZEL_VA: tam64 = 1409286144;  // 0x54000000 süreç-özel VA (PD indeksi 160)
+sabit KMMU_OZEL_IDX: tam64 = 160;
+sabit KMMU_OZEL_PA: tam64 = 62914560;    // 0x3C00000 (60 MB); alan i → +i*2MB (tavan 72 MB)
+sabit KMMU_2MB: tam64 = 2097152;
+sabit KMMU_SAYFA: tam64 = 4096;
+sabit KMMU_SAYFA_SAYI: tam64 = 512;
+
+// Alan #i'nin PML4 fiziksel adresini (CR3 değeri) kur, döner. Çekirdek eşlemesi
+// KOPYALANMALI: CR3 yazan komutun ARDINDAN gelen komut da haritalı olmalı — bu
+// yüzden çekirdek PDPT ve PD tabloları bire bir kopyalanır; tek fark özel VA'nın
+// kendi PT'sine yönlendirilmesidir. i >= KMMU_AS_AZAMI ise 0 (sessiz taşma yok).
+çıplak işlev kmmu_as_olustur(i: tam64) -> tam64 {
+    eğer (i < 0) veya (i >= KMMU_AS_AZAMI) { ver 0; }
+    değişken pml4: tam64 = KMMU_AS_TABAN + i * KMMU_AS_ADIM;
+    değişken pdpt: tam64 = pml4 + 4096;
+    değişken pd: tam64 = pml4 + 8192;
+    değişken pt: tam64 = pml4 + 12288;
+    değişken k: tam64 = 0;
+    iken k < 512 { kxm_y64(pml4 + k * 8, 0); k = k + 1; }   // PML4 sıfırla
+    kxm_y64(pml4, pdpt + 3);                                // PML4[0] → kendi PDPT'si
+    // Çekirdek PDPT: CR3 → PML4[0] → PDPT (fiziksel adres)
+    değişken kp: tam64 = kxm_cerceve(kxm_o64(kxm_cerceve(kxm_cr3_oku())));
+    değişken n: tam64 = 0;
+    iken n < 512 { kxm_y64(pdpt + n * 8, kxm_o64(kp + n * 8)); n = n + 1; }
+    kxm_y64(pdpt + 8, pd + 3);                              // PDPT[1] → kendi PD'si
+    // PD = çekirdek KXM_PD'nin tam kopyası; sonra özel VA → kendi PT
+    değişken m: tam64 = 0;
+    iken m < 512 { kxm_y64(pd + m * 8, kxm_o64(KXM_PD + m * 8)); m = m + 1; }
+    kxm_y64(pd + KMMU_OZEL_IDX * 8, pt + 3);
+    // PT: 512×4KB sayfa, her alan kendi 2MB fiziksel penceresine (P|RW)
+    değişken pa: tam64 = KMMU_OZEL_PA + i * KMMU_2MB;
+    değişken s: tam64 = 0;
+    iken s < KMMU_SAYFA_SAYI {
+        kxm_y64(pt + s * 8, (pa + s * KMMU_SAYFA) + 3);
+        s = s + 1;
+    }
+    ver pml4;
+}
+
+// Alan #cr3'e geç: CR3 yazımı TLB'yi temizler (PCID yok — tam boşaltma).
+çıplak işlev kmmu_as_gec(cr3: tam64) {
+    kxm_cr3_yaz(cr3);
+}
+
+// İZOLASYON KANITI (falsifiye edilebilir): iki adres alanı, AYNI sanal adres,
+// FARKLI fiziksel sayfa. A'ya yaz → B'ye yaz → A'ya DÖN → A'nın değeri DURUYOR mu?
+// Tek adres alanında taklit edilemez: B'nin yazması A'nınkini ezerdi ve son okuma
+// 0xBBBBBBBB verirdi. Ayrıca çekirdeğin identity görüşünden iki fiziksel sayfa
+// BAĞIMSIZ doğrulanır — "değeri bir yerde sakladık" sahteliği elenir.
+// 1 = süreç izolasyonu donanımda GERÇEK.
+çıplak işlev kmmu_izolasyon_testi() -> tam32 {
+    değişken k: tam64 = kxm_cr3_oku();              // çekirdek CR3 (sonunda geri yüklenir)
+    değişken a: tam64 = kmmu_as_olustur(0);
+    değişken b: tam64 = kmmu_as_olustur(1);
+    eğer (a == 0) veya (b == 0) { ver 0; }
+
+    kmmu_as_gec(a);
+    kxm_y64(KMMU_OZEL_VA, 2863311530);              // 0xAAAAAAAA → A'nın sayfası
+    kmmu_as_gec(b);
+    kxm_y64(KMMU_OZEL_VA, 3149642683);              // 0xBBBBBBBB → B'nin sayfası
+    değişken bv: tam64 = kxm_o64(KMMU_OZEL_VA);     // B kendi değerini görmeli
+    kmmu_as_gec(a);
+    değişken av: tam64 = kxm_o64(KMMU_OZEL_VA);     // ASIL KANIT: A'nınki DURUYOR mu?
+
+    kmmu_as_gec(k);                                 // çekirdek alanına dön
+    // Bağımsız doğrulama: çekirdeğin identity görüşünden iki AYRI fiziksel sayfa.
+    değişken pa: tam64 = kxm_o64(KMMU_OZEL_PA);
+    değişken pb: tam64 = kxm_o64(KMMU_OZEL_PA + KMMU_2MB);
+
+    eğer (av == 2863311530) ve (bv == 3149642683)
+       ve (pa == 2863311530) ve (pb == 3149642683) {
+        ver 1;
+    }
+    ver 0;
+}
+
+// [D-689] W^X: NX — yazılabilir VERİ sayfası çalıştırılamaz (arm64 ikizi
+// kmmu_kernel_wx_testi). EFER.NXE açılır; özel bölgede sayfa 0 VERİ (NX biti),
+// sayfa 1 KOD. İkisine de `ret` yazılır: KOD sayfası çağrılınca döner; VERİ sayfası
+// çağrılınca komut getirme #PF oluşur (hata kodu P|I/D = 17), .S "ret taklidi" ile
+// çağırana döner. Taklit edilemez: NX uygulanmasaydı VERİ sayfası da sessizce dönerdi.
+sabit KXM_NX_BIT: tam64 = 0 - 9223372036854775807 - 1;  // bit 63 (= INT64_MIN), sarma tanımlı
+sabit KXM_RET_TAKLIDI: tam64 = 65535;
+sabit KXM_PF_NX_HATA: tam64 = 17;                       // P(1) | I/D(16): NX komut getirme
+
+// kdl_x86_pf_hata yaz (.S #PF kurtarma yolunun kaydettiği hata kodu).
+çıplak işlev kxm_hata_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_hata(%rip), %r11
+movq $0, (%r11)"#
+            girdi("r", v)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+}
+
+// kdl_x86_pf_hata oku.
+çıplak işlev kxm_hata_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_hata(%rip), %r11
+movq (%r11), $0"#
+            çıktı("=r", &x)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// EFER.NXE (MSR 0xC0000080, bit 11) aç — olmadan bit 63 AYRILMIŞ sayılır (RSVD #PF).
+çıplak işlev kxm_nx_ac() {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movl $$3221225600, %ecx
+rdmsr
+orl $$2048, %eax
+wrmsr"#
+            bozulan("~{eax}") bozulan("~{ecx}") bozulan("~{edx}") bozulan("~{memory}")
+        }
+    }
+}
+
+// va'yı çağır (hedef yalnız `ret` içerir); çağıran-kaydedilen yazmaçlar bozulmuş sayılır.
+çıplak işlev kxm_cagir(va: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"call *$0"#
+            girdi("r", va)
+            bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}")
+            bozulan("~{rdi}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}")
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+}
+
+// W^X KANITI: KOD sayfası çalışır, VERİ sayfası NX #PF verir (CR2 == VA, hata == 17).
+çıplak işlev kmmu_wx_testi() -> tam32 {
+    kxm_nx_ac();
+    değişken c: tam64 = kmmu_as_olustur(2);
+    eğer c == 0 { ver 0; }
+    değişken pt: tam64 = KMMU_AS_TABAN + 2 * KMMU_AS_ADIM + 12288;
+    değişken pa: tam64 = KMMU_OZEL_PA + 2 * KMMU_2MB;
+    kxm_y64(pa, 195);                                  // sayfa 0: `ret`
+    kxm_y64(pa + KMMU_SAYFA, 195);                     // sayfa 1: `ret`
+    kxm_y64(pt, KXM_NX_BIT + pa + 3);                  // sayfa 0 = VERİ (NX)
+    kxm_y64(pt + 8, pa + KMMU_SAYFA + 3);              // sayfa 1 = KOD
+    değişken k: tam64 = kxm_cr3_oku();
+    kmmu_as_gec(c);
+    kxm_cagir(KMMU_OZEL_VA + KMMU_SAYFA);              // KOD sayfası: fault yok, döner
+    kxm_cr2_yaz(0);
+    kxm_hata_yaz(0);
+    kxm_bekle_yaz(KXM_RET_TAKLIDI);
+    kxm_cagir(KMMU_OZEL_VA);                           // VERİ sayfası: komut getirme #PF
+    değişken bekle: tam64 = kxm_bekle_oku();
+    değişken cr2: tam64 = kxm_cr2_oku();
+    değişken hk: tam64 = kxm_hata_oku();
+    kmmu_as_gec(k);
+    eğer (bekle == 0) ve (cr2 == KMMU_OZEL_VA) ve (hk == KXM_PF_NX_HATA) { ver 1; }
+    ver 0;
+}

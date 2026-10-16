@@ -363,6 +363,25 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 MMU FAULT HATA");
     }
+    // İş 18 (D-688): süreç başına adres alanı — iki PML4, AYNI VA 0x54000000, FARKLI
+    // fiziksel sayfa (60 MB / 62 MB). A yaz → B yaz → A'ya dön: A'nın değeri duruyorsa
+    // izolasyon donanımda gerçek (tek alanda B, A'yı ezerdi).
+    eğer kmmu_izolasyon_testi() == 1 {
+        yazdir_metin("X86 IZOLASYON OK");
+    }
+    değilse {
+        yazdir_metin("X86 IZOLASYON HATA");
+    }
+    // İş 19 (D-689): W^X — NX biti. VERİ sayfasını çalıştırmak komut getirme #PF
+    // verir (hata 17), KOD sayfası çalışır. Hata kodu da yazdırılır.
+    eğer kmmu_wx_testi() == 1 {
+        yazdir_metin("X86 WX OK hata=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(kxm_hata_oku() olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 WX HATA");
+    }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),
