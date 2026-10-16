@@ -255,3 +255,94 @@ sabit KMMU_SAYFA_SAYI: tam64 = 512;
     }
     ver 0;
 }
+
+// [D-689] W^X: NX — yazılabilir VERİ sayfası çalıştırılamaz (arm64 ikizi
+// kmmu_kernel_wx_testi). EFER.NXE açılır; özel bölgede sayfa 0 VERİ (NX biti),
+// sayfa 1 KOD. İkisine de `ret` yazılır: KOD sayfası çağrılınca döner; VERİ sayfası
+// çağrılınca komut getirme #PF oluşur (hata kodu P|I/D = 17), .S "ret taklidi" ile
+// çağırana döner. Taklit edilemez: NX uygulanmasaydı VERİ sayfası da sessizce dönerdi.
+sabit KXM_NX_BIT: tam64 = 0 - 9223372036854775807 - 1;  // bit 63 (= INT64_MIN), sarma tanımlı
+sabit KXM_RET_TAKLIDI: tam64 = 65535;
+sabit KXM_PF_NX_HATA: tam64 = 17;                       // P(1) | I/D(16): NX komut getirme
+
+// kdl_x86_pf_hata yaz (.S #PF kurtarma yolunun kaydettiği hata kodu).
+çıplak işlev kxm_hata_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_hata(%rip), %r11
+movq $0, (%r11)"#
+            girdi("r", v)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+}
+
+// kdl_x86_pf_hata oku.
+çıplak işlev kxm_hata_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_hata(%rip), %r11
+movq (%r11), $0"#
+            çıktı("=r", &x)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// EFER.NXE (MSR 0xC0000080, bit 11) aç — olmadan bit 63 AYRILMIŞ sayılır (RSVD #PF).
+çıplak işlev kxm_nx_ac() {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movl $$3221225600, %ecx
+rdmsr
+orl $$2048, %eax
+wrmsr"#
+            bozulan("~{eax}") bozulan("~{ecx}") bozulan("~{edx}") bozulan("~{memory}")
+        }
+    }
+}
+
+// va'yı çağır (hedef yalnız `ret` içerir); çağıran-kaydedilen yazmaçlar bozulmuş sayılır.
+çıplak işlev kxm_cagir(va: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"call *$0"#
+            girdi("r", va)
+            bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}")
+            bozulan("~{rdi}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}")
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+}
+
+// W^X KANITI: KOD sayfası çalışır, VERİ sayfası NX #PF verir (CR2 == VA, hata == 17).
+çıplak işlev kmmu_wx_testi() -> tam32 {
+    kxm_nx_ac();
+    değişken c: tam64 = kmmu_as_olustur(2);
+    eğer c == 0 { ver 0; }
+    değişken pt: tam64 = KMMU_AS_TABAN + 2 * KMMU_AS_ADIM + 12288;
+    değişken pa: tam64 = KMMU_OZEL_PA + 2 * KMMU_2MB;
+    kxm_y64(pa, 195);                                  // sayfa 0: `ret`
+    kxm_y64(pa + KMMU_SAYFA, 195);                     // sayfa 1: `ret`
+    kxm_y64(pt, KXM_NX_BIT + pa + 3);                  // sayfa 0 = VERİ (NX)
+    kxm_y64(pt + 8, pa + KMMU_SAYFA + 3);              // sayfa 1 = KOD
+    değişken k: tam64 = kxm_cr3_oku();
+    kmmu_as_gec(c);
+    kxm_cagir(KMMU_OZEL_VA + KMMU_SAYFA);              // KOD sayfası: fault yok, döner
+    kxm_cr2_yaz(0);
+    kxm_hata_yaz(0);
+    kxm_bekle_yaz(KXM_RET_TAKLIDI);
+    kxm_cagir(KMMU_OZEL_VA);                           // VERİ sayfası: komut getirme #PF
+    değişken bekle: tam64 = kxm_bekle_oku();
+    değişken cr2: tam64 = kxm_cr2_oku();
+    değişken hk: tam64 = kxm_hata_oku();
+    kmmu_as_gec(k);
+    eğer (bekle == 0) ve (cr2 == KMMU_OZEL_VA) ve (hk == KXM_PF_NX_HATA) { ver 1; }
+    ver 0;
+}

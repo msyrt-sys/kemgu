@@ -1,0 +1,6 @@
+{"tur": "18", "is": "wx_x86", "gorev": "otomasyon/evren/gorev_18_wx_x86.md",
+ "baglam": [],
+ "kesit": ["runtime/mimari/x86_64/kem_mmu_hw.kem:119-145", "runtime/mimari/x86_64/kem_mmu_hw.kem:233-257"],
+ "effort": "low",
+ "dogrulama": ["build/kemgu --check --mimari x86_64-none runtime/mimari/x86_64/kem_mmu_hw.kem"],
+ "isaretler": ["tip kontrolu basarili"]}
