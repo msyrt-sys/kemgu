@@ -423,13 +423,6 @@ işlev main() -> tam32 {
     değilse { yazdir_metin("X86 [39] JSON HATA"); }
     eğer kasm_testi() == 1 { yazdir_metin("X86 [40] ASM OK"); }
     değilse { yazdir_metin("X86 [40] ASM HATA"); }
-    // İş 23 (D-693): ortak çekirdek fazları — arm64 ile AYNI kod
-    // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor
-    // mu (ortak zamanlayıcı + x86 kancaları), [41] dilin kanal ilkelleri çekirdekte.
-    eğer kgk_testi() == 1 { yazdir_metin("X86 [27] GOREV KAPASITE OK"); }
-    değilse { yazdir_metin("X86 [27] GOREV KAPASITE HATA"); }
-    eğer kkanal_testi() == 1 { yazdir_metin("X86 [41] KANAL OK"); }
-    değilse { yazdir_metin("X86 [41] KANAL HATA"); }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),
@@ -446,6 +439,18 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 SYSCALL HATA");
     }
+    // İş 23 (D-693): ortak çekirdek fazları (D-694: SİSTEM ÇAĞRISI testinden SONRA —
+    // [42] dil görevleri görev 1'i ölü işaretler; D-686 testi durum(1) == 0 bekler) — arm64 ile AYNI kod
+    // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor
+    // mu (ortak zamanlayıcı + x86 kancaları), [41] dilin kanal ilkelleri çekirdekte.
+    eğer kgk_testi() == 1 { yazdir_metin("X86 [27] GOREV KAPASITE OK"); }
+    değilse { yazdir_metin("X86 [27] GOREV KAPASITE HATA"); }
+    eğer kkanal_testi() == 1 { yazdir_metin("X86 [41] KANAL OK"); }
+    değilse { yazdir_metin("X86 [41] KANAL HATA"); }
+    // [D-694] [42] dil görevleri (görev_başlat/birleştir) çekirdek zamanlayıcısında +
+    // BLOKLAYAN kanal; ortak çekirdek kodu + x86 kancaları (cli/sti, SysV çağrı, rdi@72).
+    eğer kgorev_testi() == 1 { yazdir_metin("X86 [42] GOREV OK"); }
+    değilse { yazdir_metin("X86 [42] GOREV HATA"); }
     // İş 20 (D-690): KURTARILAMAZ istisna yolu. Yalnız `-append kem_istisna` ile açılan
     // İKİNCİ QEMU koşumunda: haritasız VA, kurtarma bayrağı KAPALIYKEN okunur → gerçek #PF →
     // .S isr_ortak → .kem kdl_istisna_isle "ISTISNA tip=0xe ... adr=0x60000000" + hlt.

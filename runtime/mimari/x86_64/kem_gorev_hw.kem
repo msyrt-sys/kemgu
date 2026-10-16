@@ -58,3 +58,44 @@ sabit KG_STK2: tam64 = 52428800;          // 0x03200000: görev2 yığın tepesi
     eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
     ver 0 - 1;
 }
+
+// [D-694] DİL GÖREVİ mimari kancaları (gövde: kem_gorev_cekirdek.kem; arm64 ikizi
+// runtime/mimari/arm64/kem_gorev_hw.kem).
+// IRQ maskele / aç (rflags.IF). arm64 ikizi `msr daifset/daifclr, #2`.
+çıplak işlev kg_irq_kapat() {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"cli"# bozulan("~{memory}") } }
+}
+çıplak işlev kg_irq_ac2() {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti"# bozulan("~{memory}") } }
+}
+
+// fn(rho, env) çağır → rax. SysV: 1. argüman rdi, 2. rsi. Çağıranın kaydetmediği tüm
+// yazmaçlar BOZULAN → LLVM girdileri/çıktıyı çağrıyla ezilmeyen yazmaçlara koyar.
+çıplak işlev kg_dil_cagir(fn: tam64, rho: tam64, env: tam64) -> tam64 {
+    değişken sonuc: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq $1, %rdi
+movq $2, %rsi
+call *$3
+movq %rax, $0"#
+            çıktı("=r", &sonuc)
+            girdi("r", rho) girdi("r", env) girdi("r", fn)
+            bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}")
+            bozulan("~{rdi}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}")
+            bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    ver sonuc;
+}
+
+çıplak işlev kg_dil_trampolin_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kem_dil_trampolin(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Trampolinin ilk argümanı (rdi) 160 B çerçevede @72 (koçan itme sırası rax..r15:
+// r15@0 r14@8 r13@16 r12@24 r11@32 r10@40 r9@48 r8@56 rbp@64 rdi@72).
+çıplak işlev kg_cerceve_arg0() -> tam64 { ver 72; }

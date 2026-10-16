@@ -58,3 +58,46 @@ add $0, $0, :lo12:kem_gorev2"# çıktı("=r", &x) } }
     eğer yeni == 0 { yeni = KMMU_L1; }
     kmmu_ttbr_yaz(yeni);
 }
+
+// [D-694] DİL GÖREVİ mimari kancaları (gövde: kem_gorev_cekirdek.kem).
+çıplak işlev kg_irq_kapat() {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr daifset, #2"# bozulan("~{memory}") } }
+}
+çıplak işlev kg_irq_ac2() {
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"msr daifclr, #2"# bozulan("~{memory}") } }
+}
+
+// [D-694] kem_dil_trampolin'in mimariye özgü çağrısı: fn(rho, env) → sonuç.
+çıplak işlev kg_dil_cagir(fn: tam64, rho: tam64, env: tam64) -> tam64 {
+    değişken sonuc: tam64 = 0;
+    // x0..x18 + lr BOZULAN: LLVM girdi/çıktıyı çağrıyla ezilmeyen (x19+) yazmaçlara
+    // koymak ZORUNDA kalır → `mov x0/x1` girdileri ezemez.
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov x0, $1
+mov x1, $2
+blr $3
+mov $0, x0"#
+            çıktı("=r", &sonuc)
+            girdi("r", rho) girdi("r", env) girdi("r", fn)
+            bozulan("~{x0}") bozulan("~{x1}") bozulan("~{x2}") bozulan("~{x3}")
+            bozulan("~{x4}") bozulan("~{x5}") bozulan("~{x6}") bozulan("~{x7}")
+            bozulan("~{x8}") bozulan("~{x9}") bozulan("~{x10}") bozulan("~{x11}")
+            bozulan("~{x12}") bozulan("~{x13}") bozulan("~{x14}") bozulan("~{x15}")
+            bozulan("~{x16}") bozulan("~{x17}") bozulan("~{x18}") bozulan("~{x30}")
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    ver sonuc;
+}
+
+çıplak işlev kg_dil_trampolin_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_dil_trampolin
+add $0, $0, :lo12:kem_dil_trampolin"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Trampolinin ilk argümanı (x0) trap-frame'de @0.
+çıplak işlev kg_cerceve_arg0() -> tam64 { ver 0; }
