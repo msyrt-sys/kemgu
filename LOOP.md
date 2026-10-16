@@ -2220,3 +2220,33 @@
   → trampoline cop kayit → #GP, D-690 .kem raporlayicisi 'ISTISNA tip=0xd' basti,
   cekirdek durdu, rc=2. kem_gorev.kem asm 25 → 21. x86 birlesik 256 islev, 31 asm,
   C ↔ self BIREBIR. baremetal_diff 22/22.
+- 2026-10-16 D-695: x86 KULLANICI MODU (ring3) — arm64 EL0 ikizi, Kanit 26.
+  boot/start_x86_64.S: GDT .rodata → .data (TSS tanimlayicisi calisma aninda
+  yazilir; ltr MESGUL bitini, segment yuklemesi erisildi bitini YAZAR — D-691
+  sonrasi .rodata RO) + 0x18 kullanici kod (0x0020FA..) / 0x20 kullanici veri
+  (0x0000F2..) / 0x28 64-bit TSS (16 B); kdl_x86_tss (104 B, .bss);
+  kdl_x86_ring3_gir (pushfq+cli+callee-saved, TSS.RSP0 = yigin, iretq CS=0x1B
+  SS=0x23 RFLAGS=0x2); isr_ortak basina RING3 DONUSU (kdl_x86_r3_blok bekle != 0
+  VE kesilen CS RPL 3 → rax/rcx/vektor/hata/RIP/CS/CR2 kaydet → kdl_x86_r3_don:
+  cekirdek RSP + seciciler 0x10 + popfq + ret); kdl_syscall_stub cagiranin CS'ini
+  (72(%rsp)) kaydeder. runtime/kdl_kesme.c: kapi 0x80 tip_oz 0xEE (DPL3; istisna/
+  IRQ kapilari DPL0 KALIR). Mantik .kem: runtime/mimari/x86_64/kem_ring3_hw.kem
+  (kxr_tss_kur: IOPB 104 + parcali taban tanimlayicisi + ltr; kxr_ring3_testi:
+  adres alani #3, PML4[0]/PDPT[1]/PD[160]/PT U/S — kopyalanan cekirdek girdileri
+  gozetmen kalir; sayfa 0 kullanici KOD P|U, sayfa 511 YIGIN P|RW|U+NX; makine
+  kodu baytlari llvm-mc -show-encoding ile dogrulandi). Kanit: giris 1 ring3'te
+  CS oku (RPL 3) → int 0x80 getpid (stub cagiran CS 0x1B gordu, rax = cekirdegin
+  kem_syscall_temel(11) yaniti) → hlt #GP (vektor 13, RIP giris+9, CS 0x1B);
+  giris 2 gozetmen 0x100000 okur → #PF hata 5 (P|U), CR2 0x100000. 14 kosul AND.
+  Kirmizi bolge: kxr_gir `call`dan once 128 B atlar (BM_X86 -mno-red-zone YOK,
+  derleyici asm'deki call'u gormez). Kanit 26 ayrica yapisal: T kxr_ring3_testi,
+  kdl_x86_ring3_gir'de iretq, kdl_idt_kur'da 0xee (derleyici secici+tipi tek
+  `movl $0xee000008` yaziyor). SABOTAJ: S1 kapi 0x80 → 0x8E → 'X86 RING3 HATA'
+  rc=2 (ring3 int 0x80 #GP de ring3 donusuyle yakalandi, cekirdek SURDU); S2 PD[160]
+  U/S'siz → komut getirme #PF → HATA rc=2; ikisi de geri alindi (yedek dosyadan).
+  BULGU: check_kapisi'nin x86 parca listesi EL KOPYASI — yeni dosya ekleyince
+  'tanimsiz sembol' ile KIRMIZI verdi (sessiz degil); liste eklendi, Makefile CAT
+  listesiyle sirasi dahil birebir dogrulandi (19 parca), "15 parca" sabit metni
+  sayimla degistirildi. x86 birlesik 264 islev, 36 asm, C ↔ self BIREBIR.
+  baremetal_diff 22/22, check_kapisi 276/284 (0 RED), kem_os_arm, ring3_test_x86
+  yesil.
