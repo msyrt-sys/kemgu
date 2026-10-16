@@ -2037,3 +2037,41 @@
   CAT disi x86 dosyasi → SINIFLANDIRILMAMIS. DEEPSEEK tur 11: mudahale YOK
   (verdigim Makefile kesit araligi yanlis satirdaydi; gorevdeki sed komutu
   sayesinde etkisiz). Envanter §7: 2b, 6b, 7, 9 kapandi.
+- 2026-10-13 D-681: D1 — `--mimari x86_64-none` → `x86_64-unknown-none-elf`
+  (C src/ana.c + selfhost/codegen.kem BIREBIR; Mehmet onayi). `x86_64`
+  (windows-gnu, Windows CI) DEGISMEDI; etiket "x86_64" kaldigi icin AS001 asm
+  etiketleri aynen eslesir. x86 kapilari (calistir_kem_os_x86 Kanit 0,
+  check_kapisi x86 birimi, baremetal_diff x86 ikizi) yeni bayraga gecti.
+  Win64 cagri sozlesmesi riski (llc/LTO modul uclusune uyarsa) KAPANDI.
+  Olculdu: C ve SELF x86_64-none → unknown-none-elf; x86_64 → windows-gnu;
+  arm64 degismedi; bilinmeyen deger gurultulu hata. SABOTAJ: self x86_64-none
+  windows uclusu yayarsa baremetal_diff x86 KIRMIZI.
+  DEEPSEEK tur 12: 13 blok, derleyici farki satir satir okundu, mudahale YOK.
+  Dongu ilk kosuda DOGRULAMA_HATA verdi — KUSUR BENDE: sonda dosyasi olarak
+  arm64 asm'li kem_dtb'yi secmistim (x86 hedefinde AS001 zaten beklenir).
+- 2026-10-13 D-682: kem_dtb mimariden bagimsiz (ara hedef adim 1). Tek asm blogu
+  (`kdtb_adres`, arm64 adrp kdl_dtb_adres) runtime/mimari/<arch>/kem_kesif.kem'e
+  tasindi — arm64 govdesi silinenle BIREBIR (diff ile dogrulandi); x86 → 0
+  (PVH FDT vermez, kesif kem_pvh'de). kem_dtb artik x86 biriminde de derleniyor:
+  `X86 DTB YOK pvh_kesif`; arm64 [21] DTB OK + [22] DTB KESIF OK degismedi.
+  baremetal_diff: kem_dtb birimi (+arm64 kesif), kem_kesif birimi; x86 birlesik
+  birim 72 → 113 islev, C ↔ self BIREBIR; 17/17. check_kapisi "10 parca" mesaji
+  zaten BAYATTI (liste 14) — duzeltildi.
+  KALAN BORC: 3 dosyada 46 blok (kem_gorev 27, kem_mmu 14, kem_zaman 5).
+  DEEPSEEK tur 13: 6 blok, mudahale yok; CAT/kapi listeleri bende (tek satirlik
+  eklemeler gorev yazmaktan ucuz).
+- 2026-10-13 D-683: kem_zaman ayristirildi + x86 zamanlayici .kem'de (ara hedef adim 2).
+  ADIM A (orkestrator, BETIKLE tasima — uretim yok): GIC/CNTV/DAIF/IRQ dagitimi
+  runtime/mimari/arm64/kem_zaman_hw.kem'e; satir kumesi karsilastirmasiyla
+  BIREBIR (yalniz yorum eklendi). arm64 [5] TIMER TIK OK + PREEMPT OK; birlesik
+  OS 326 islev/48 asm DEGISMEDI; parca 3 + 8 = 11 islev (ozgun sayi).
+  ADIM B (deepseek): kdl_zaman.c x86 portu runtime/mimari/x86_64/kem_zaman_hw.kem
+  (PIC remap + PIT ~100 Hz + sti + kdl_kesme_isle/kdl_tik_al/kem_tik_oku).
+  Sabitler arac ile cevrildi; 13 port yazimi C ile sira+deger BIREBIR.
+  bm_x86_zaman.o x86 kanit cekirdeginden CIKTI (.kem saglar). KANIT: gercek IRQ0
+  (PIT→PIC→IDT 32→.S kocani→.kem) tik=3; nm T kdl_kesme_isle/kdl_tik_al .kem'den.
+  x86 birim 123 islev, 7 asm, C ↔ self BIREBIR. SABOTAJ: sti→nop → TIMER HATA.
+  DEEPSEEK: tur 14 butce tukendi (0 blok; 3 madde + 7 islev); 14b yalniz YENI
+  dosya (capasiz) → 1 blok, mudahale yok; test + Kanit 15 bende.
+  ACIK: x86 kdl_kesme_isle preempt CAGIRMAZ (arm kdl_irq_isle → kem_preempt);
+  preempt kem_gorev ile gelecek. KALAN BORC: kem_gorev 27 + kem_mmu 14 = 41.

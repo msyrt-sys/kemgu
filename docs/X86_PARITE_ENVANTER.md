@@ -220,14 +220,14 @@ birebir.
 |---|---|---|
 | `runtime/kem_gorev.kem` | **27** | Bağlam değiştirme, EL0, zamanlayıcı — x86'da en büyük borç |
 | `runtime/kem_mmu.kem` | **14** | Sayfa tablosu, TLBI, MSR/MRS, fault — x86 sayfalama modeli bambaşka |
-| `runtime/kem_zaman.kem` | **5** | Genel zamanlayıcı (`CNTPCT_EL0` vb.) → x86'da PIT/APIC/TSC |
-| `runtime/kem_dtb.kem` | **1** | `adrp x9, kdl_dtb_adres` (aarch64) — x86 karşılığı PVH `start_info` (`%ebx`, saklanmıyor, §3.5) |
+| `runtime/kem_zaman.kem` | ~~5~~ **0** | ✅ D-683 — donanım `runtime/mimari/<arch>/kem_zaman_hw.kem`'de (arm64 GIC/CNTV 5 blok; x86 PIC+PIT `.kem`, gerçek IRQ0 tik). Açık: x86'da preempt kancası yok (kem_gorev ile) |
+| `runtime/kem_dtb.kem` | ~~1~~ **0** | ✅ D-682 — `kdtb_adres` `runtime/mimari/<arch>/kem_kesif.kem`'e taşındı (arm64 1 blok; x86 → 0, PVH keşfi D-678) |
 | `runtime/mimari/arm64/kem_bariyer.kem` | 1 | ✅ D-671 — x86 ikizi var (`mfence`) |
 | `runtime/mimari/arm64/kem_uart.kem` | 0 | ✅ D-672 — PL011 MMIO (asm yok); x86 ikizi 2 blok (`inb`/`outb`) |
 | `runtime/kem_heap/virtio_blk/virtio_net/minifs/elf.kem` | 0 | mimariden bağımsız (D-671…D-674 sonrası) |
 | `test/ornekler/kem_os.kem` | 0 | Ama fazları aarch64 davranışını ölçüyor |
 
-**KALAN PARİTE BORCU: 4 dosyada 47 gerçek blok** — `kem_gorev` 27 +
+**KALAN PARİTE BORCU: ~~4 dosyada 47~~ → ~~3 dosyada 46~~ → 2 dosyada 41 gerçek blok (D-683 sonrası: `kem_gorev` 27, `kem_mmu` 14)** — `kem_gorev` 27 +
 `kem_mmu` 14 + `kem_zaman` 5 + `kem_dtb` 1. (İlk üçü kapsam dışı tutuldu ve
 ayrıca konuşulacak; `kem_dtb` envanterin ilk sürümünde "üç dosya"ya
 sayılmamıştı ama aarch64'e özgüdür.)

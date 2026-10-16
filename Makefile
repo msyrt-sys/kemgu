@@ -1408,7 +1408,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -1955,18 +1955,25 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 # Kanıt 13: QEMU seri çıktıda "X86 DMA TABAN OK kb=" TAM satırı ve HEMEN ardındaki
 #          satır yedek sabitten (32768 KB) BÜYÜK — PVH memmap RAM tepesinden
 #          türetilen DMA tabanı (kem_platform.kem). Değer de yazdırılır.
+# Kanıt 14: kem_dtb x86 biriminde derlenir (mimariden bağımsız ayrıştırıcı);
+#          kdtb_adres (mimari dosya) 0 döner → "X86 DTB YOK pvh_kesif" satırı
+#          basılır ve objdump'da <kdtb_adres>: etiketi x86 biriminde bulunur.
+# Kanıt 15: gerçek IRQ0 (PIT→PIC→IDT 32→.S koçanı→.kem kdl_kesme_isle) tik >= 3;
+#          kdl_kesme_isle/kdl_tik_al C değil .kem'den (bm_x86_zaman.o bağlanmıyor).
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
-		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
-	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64 $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
+	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
+	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
+	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
 	awk -f test/strip_defined_declares.awk $(BUILD)/kem_os_x86_ham.ll > $(BUILD)/kem_os_x86.ll
 	$(BM_X86) -O2 -Wno-override-module -x ir $(BUILD)/kem_os_x86.ll -c -o $(BUILD)/kem_os_x86.o
 	ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o $(BUILD)/kem_os_x86.elf \
 		$(BUILD)/kem_os_x86.o \
-		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_zaman.o \
+		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "  Kanit 1: sembol kaynagi (saf-.kem malloc/kem_heap_kur)..."
@@ -2059,6 +2066,21 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		echo "  DMA taban KB = $$v"; \
 	else \
 		echo "FAIL: DMA tabani yedek sabitten (32768 KB) buyuk degil: $$v"; exit 1; fi
+
+# Kanıt 14: kem_dtb x86 biriminde derlenir (mimariden bagimsiz ayristirici);
+#          kdtb_adres (mimari dosya) 0 doner → "X86 DTB YOK pvh_kesif" satiri.
+#          Ayrica objdump'da <kdtb_adres>: etiketi x86 biriminde OLMALI.
+	@echo "  Kanit 14: kem_dtb x86 biriminde derleniyor + kdtb_adres etiketi ..."
+	@if ! grep -qxF "X86 DTB YOK pvh_kesif" $(BUILD)/kem_os_x86.out; then \
+		echo "FAIL: 'X86 DTB YOK pvh_kesif' satiri yok"; exit 1; fi
+	@if ! llvm-objdump -d --no-show-raw-insn $(BUILD)/kem_os_x86.elf | grep -q "<kdtb_adres>:"; then \
+		echo "FAIL: <kdtb_adres>: etiketi x86 biriminde yok"; exit 1; fi
+	@echo "  Kanit 15: gercek IRQ0 tik (.kem kdl_kesme_isle) + sembol kaynagi..."
+	@v=`grep -A1 -xF "X86 TIMER TIK OK tik=" $(BUILD)/kem_os_x86.out | tail -1`; \
+	if [ -n "$$v" ] && [ "$$v" -ge 3 ] 2>/dev/null; then echo "    tik = $$v"; \
+	else echo "FAIL: 'X86 TIMER TIK OK tik=' + >=3 satiri yok ($$v)"; exit 1; fi
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_kesme_isle$$' || { echo "FAIL: kdl_kesme_isle .kem'den gelmiyor"; exit 1; }
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_tik_al$$' || { echo "FAIL: kdl_tik_al .kem'den gelmiyor"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

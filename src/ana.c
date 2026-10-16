@@ -651,7 +651,7 @@ static void kullanim_yazdir(const char *prog_adi) {
         "  --llvm    LLVM IR text yazdir (clang -x ir - ile derlenebilir)\n"
         "  --lsp     Language Server (stdio JSON-RPC)\n"
         "  --no-verify  LLVM IR dogrulama kapisini kapat (sadece --llvm)\n"
-        "  --mimari M   Hedef mimari: arm64|x86_64 (satirici_asm arch-gate + triple; varsayilan x86_64)\n"
+        "  --mimari M   Hedef mimari: arm64|x86_64|x86_64-none (satirici_asm arch-gate + triple; varsayilan konak)\n"
         "  dosya     Kaynak dosya yolu (yoksa stdin'den okur)\n",
         prog_adi);
 }
@@ -694,7 +694,7 @@ int main(int argc, char *argv[]) {
             /* D-269 (P1): hedef mimari sec (satirici_asm arch-gate + emit triple).
              * Varsayilan x86_64; arm64 aarch64 sysreg/bariyer asm'i acar. */
             if (arg_idx + 1 >= argc) {
-                fprintf(stderr, "--mimari: mimari argumani gerekli (arm64|x86_64)\n");
+                fprintf(stderr, "--mimari: mimari argumani gerekli (arm64|x86_64|x86_64-none)\n");
                 return 2;
             }
             const char *m = argv[arg_idx + 1];
@@ -702,8 +702,12 @@ int main(int argc, char *argv[]) {
                 llvm_hedef_ayarla("arm64", "aarch64-unknown-none-elf");
             } else if (strcmp(m, "x86_64") == 0) {
                 llvm_hedef_ayarla("x86_64", "x86_64-pc-windows-gnu");
+            } else if (strcmp(m, "x86_64-none") == 0) {
+                /* D1: bare-metal x86, SysV cagri sozlesmesi (start_x86_64.S ile uyumlu).
+                 * Mimari ETIKETI "x86_64" kalir → satirici_asm arch-gate aynen eslesir. */
+                llvm_hedef_ayarla("x86_64", "x86_64-unknown-none-elf");
             } else {
-                fprintf(stderr, "--mimari: bilinmeyen mimari '%s' (arm64|x86_64)\n", m);
+                fprintf(stderr, "--mimari: bilinmeyen mimari '%s' (arm64|x86_64|x86_64-none)\n", m);
                 return 2;
             }
             arg_idx += 2;

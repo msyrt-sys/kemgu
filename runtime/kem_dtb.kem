@@ -30,15 +30,8 @@ sabit KDTB_MAGIC: tam64 = 3490578157;      // 0xd00dfeed
       + kdtb_o8(adr + 2) * 256 + kdtb_o8(adr + 3);
 }
 
-// _start'ın sakladığı DTB adresini oku (.S `.data` globali — D-276 deseni:
-// .kem `küresel` internal-linkage olduğu için .S/C tarafında tanımlı kalır).
-çıplak işlev kdtb_adres() -> tam64 {
-    değişken x: tam64 = 0;
-    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp x9, kdl_dtb_adres
-add x9, x9, :lo12:kdl_dtb_adres
-ldr $0, [x9]"# çıktı("=r", &x) bozulan("~{x9}") bozulan("~{memory}") } }
-    ver x;
-}
+// kdtb_adres() → runtime/mimari/<arch>/kem_kesif.kem (D2b). arm64: `.S`in
+// sakladığı DTB adresi; x86_64: 0 (PVH FDT vermez, keşif kem_pvh.kem'de).
 
 // TEŞHİS/YEDEK: RAM'de FDT magic'ini ara. Firmware'in verdiği adres yanlış ya
 // da yapı taşınmış olabilir; 4KB hizalı tarama ucuzdur (128 MiB → 32768 adım).

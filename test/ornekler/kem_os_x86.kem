@@ -302,6 +302,25 @@ işlev main() -> tam32 {
         yazdir_tam((ram / 1048576) olarak tam32);
         yazdir_satir();
     }
+    // İş 13 (D2b): kem_dtb x86 biriminde derlenir (mimariden bağımsız
+    // ayrıştırıcı); kdtb_adres mimari dosyadan gelir (x86 → 0 = "DTB yok").
+    eğer kdtb_adres() == 0 {
+        yazdir_metin("X86 DTB YOK pvh_kesif");
+    } değilse {
+        yazdir_metin("X86 DTB BEKLENMEDIK");
+        yazdir_tam(kdtb_adres() olarak tam32);
+    }
+    // İş 14 (D-683): gerçek IRQ0 — PIT (~100 Hz) → PIC → IDT vektör 32 → .S koçanı →
+    // .kem kdl_kesme_isle (kem_tik++). kem_timer_testi mimariden bağımsız (kem_zaman.kem).
+    değişken t_ok: tam32 = kem_timer_testi();
+    eğer t_ok == 1 {
+        yazdir_metin("X86 TIMER TIK OK tik=");   // yazdir_metin satır sonu ekler
+        yazdir_tam(kem_tik_oku() olarak tam32);
+        yazdir_satir();
+    }
+    değilse {
+        yazdir_metin("X86 TIMER HATA");
+    }
     kem_panik("X86 PANIK YOLU OK");
     ver 0;
 }
