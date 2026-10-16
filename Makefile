@@ -2127,6 +2127,8 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@echo "  Kanit 24: ortak cekirdek fazlari ([27] gorev kapasitesi, [41] kanal; arm ile ayni kod)..."
 	@grep -qxF "X86 [27] GOREV KAPASITE OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 [27] GOREV KAPASITE OK' yok"; exit 1; }
 	@grep -qxF "X86 [41] KANAL OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 [41] KANAL OK' yok"; exit 1; }
+	@echo "  Kanit 25: dil gorevleri ([42] gorev_baslat/birlestir + bloklayan kanal; ortak cekirdek kodu)..."
+	@grep -qxF "X86 [42] GOREV OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 [42] GOREV OK' yok"; exit 1; }
 	@echo "  Kanit 21: kurtarilamaz istisna (.kem kdl_istisna_isle; ikinci kosum -append kem_istisna)..."
 	@rm -f $(BUILD)/kem_os_x86_ist.out; \
 	timeout 8 qemu-system-x86_64 -M microvm -display none \

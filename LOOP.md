@@ -2206,3 +2206,17 @@
   basari 15 → 14 → GOREV KAPASITE HATA rc=2. baremetal_diff 22/22, x86 birlesik 244
   islev. KALAN: [42] dil gorevi (kdl_gorev_basla_kapanis arm trampolinine bagli —
   x86 trampolini + cerceve arg yazmaci gerekir).
+- 2026-10-16 D-694: DIL GOREVI ortak cekirdekte + [42] x86'da.
+  kem_gorev.kem'den (Python, metin kesimi) KG_DIL_YIGIN, kem_dil_canli,
+  kem_dil_trampolin, kdl_gorev_basla_kapanis, kdl_gorev_birlestir →
+  kem_gorev_cekirdek.kem. Mimariye ozgu 4 parca kancaya: kg_irq_kapat/kg_irq_ac2,
+  kg_dil_cagir(fn, rho, env) (trampolinin asm'i aynen), kg_dil_trampolin_adr,
+  kg_cerceve_arg0 (arm x0 @0; x86 rdi @72 — kocan itme sirasindan dogrulandi).
+  x86 kancalari: cli/sti, SysV `movq rdi/rsi; call *reg`, leaq. [42] testi
+  kem_os_cekirdek_ortak.kem'e tasindi. arm [41][42] yesil (birlesik 333 islev);
+  x86 Kanit 25 'X86 [42] GOREV OK' ILK denemede. BULGU (kusur degil, sira): [42]
+  gorev 1'i olu isaretler → D-686 syscall testi durum(1) == 0 bekledigi icin ortak
+  fazlar syscall testinin ARKASINA alindi. SABOTAJ: x86 arg0 72 → 64 (rbp yuvasi)
+  → trampoline cop kayit → #GP, D-690 .kem raporlayicisi 'ISTISNA tip=0xd' basti,
+  cekirdek durdu, rc=2. kem_gorev.kem asm 25 → 21. x86 birlesik 256 islev, 31 asm,
+  C ↔ self BIREBIR. baremetal_diff 22/22.

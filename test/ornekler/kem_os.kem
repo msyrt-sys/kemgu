@@ -521,63 +521,7 @@ sabit KG_LEAK: tam64 = 1157644288;    // 0x45004000: kernel-only sır (user penc
 
 // [D-693] [41] KANAL → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
 
-// [D-624] [42] GOREV — dilin `görev_başlat/birleştir` ilkelleri CEKIRDEKTE (SAF-.kem,
-// kem_gorev.kem DIL GOREVI). Tek gorevli [41]'in ACIK BIRAKTIGI sey burada olculur:
-// BLOKLAYAN kanal. Kapasite 2, 20 mesaj -> uretici dolu kanalda, tuketici (main) bos
-// kanalda defalarca BEKLER; ilerleme yalniz timer-IRQ karsi gorevi kosturursa mumkun.
-// (a) uretici/tuketici FIFO; (b) iki paralel gorev, birlestir sonuclari; (c) i64 sonuc.
-işlev kgorev_testi() -> tam32 {
-    değişken k: kanal<tam64> = kanal_oluştur(2);
-    değişken toplam: tam64 = 0;
-    eşleş görev_başlat(|| {
-        değişken i: tam64 = 0;
-        iken i < 20 {
-            kanal_gönder(k, i * 3 + 1);
-            i = i + 1;
-        }
-        ver 7;
-    }) {
-        tamam(g) => {
-            değişken j: tam64 = 0;
-            iken j < 20 {
-                eğer kanal_al(k) != j * 3 + 1 { ver 0; }   // FIFO + deger
-                j = j + 1;
-            }
-            değişken r: tam32 = görev_birleştir(g);
-            eğer r != 7 { ver 0; }
-        }
-        hata(m) => { ver 0; }
-    }
-    // (b) iki gorev es zamanli canli; (c) sonuclardan biri 2^33 genisliginde.
-    // ⚠ BICIM SECIMI OLCULDU: annotasyonsuz BLOK-form kapanisin tam64 donusu C'de
-    // i32'ye KIRPILIYOR (sessiz), self-host'ta T020 aliyor — iki ayri derleyici kusuru,
-    // LOOP.md Sirada'da. i64 tasimayi burada IFADE-form (tam64 yakalayan) olcer; o
-    // bicim iki derleyicide de dogru (host'ta olculdu).
-    değişken y: tam64 = 8589934592;
-    eşleş görev_başlat(|| {
-        değişken s: tam32 = 0;
-        değişken i: tam32 = 1;
-        iken i <= 100 { s = s + i; i = i + 1; }
-        ver s;
-    }) {
-        tamam(g1) => {
-            eşleş görev_başlat(|| y + 42) {
-                tamam(g2) => {
-                    değişken a: tam32 = görev_birleştir(g1);
-                    değişken b: tam64 = görev_birleştir(g2);
-                    eğer a != 5050 { ver 0; }
-                    eğer b != 8589934634 { ver 0; }
-                }
-                hata(m) => {
-                    değişken a: tam32 = görev_birleştir(g1);   // L005: g1 her kolda birlestirilmeli
-                    ver 0;
-                }
-            }
-        }
-        hata(m) => { ver 0; }
-    }
-    ver 1;
-}
+// [D-694] [42] GOREV → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
 
 işlev main() -> tam32 {
     // TÜM konsol çıktısı .kem-native UART sürücüsünden (uart_satir/uart_tam_satir) —
