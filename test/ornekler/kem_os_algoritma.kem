@@ -1,0 +1,1060 @@
+// ============================================================================
+// kem_os_algoritma.kem — MİMARİDEN BAĞIMSIZ algoritma fazları [25][26][29..40].
+// [D-692] test/ornekler/kem_os.kem'den BİREBİR taşındı (satır çoklu kümesi doğrulandı):
+// saf KEMGU (asm / MMIO / çekirdek çağrısı YOK) → aynı kod arm64 kem_os VE x86
+// kem_os_x86 birleşik birimlerine CAT ile girer (D2b: mimari seçimi Makefile'da).
+// Her test 1 (geçti) / 0 döner; ksha_testi eşleşen word sayısını (8) döner.
+// Faz numaraları ve işaret metinleri çağıran main'lerde (kem_os.kem, kem_os_x86.kem).
+// ============================================================================
+
+// [D-598] [25] BIGNUM — eski `bignum_selfhost_arm` (C iskeletli ayri ELF)
+// testinin kem_os'a tasinmis hali. 128-bit toplama (2 x dtam64 word, elde
+// yayilimi). Dayandigi codegen invaryantlari: dtam64 `add i64` WRAP ve dtam64
+// karsilastirma `icmp ult` (ISARETSIZ). [D-629 notu] 0xFFFFFFFFFFFFFFFF artik
+// literal olarak YAZILABILIR (eskiden strtoll 2^63 ustunu doyuruyordu); asagidaki
+// INT64_MAX + INT64_MAX + 1 kurulumu dogru ve olculu oldugu icin DEGISTIRILMEDI.
+işlev kbn_tum_bir() -> dtam64 {
+    değişken yari: dtam64 = 9223372036854775807;
+    ver yari + yari + 1;
+}
+işlev kbn_vektor(a_y: dtam64, a_d: dtam64, b_y: dtam64, b_d: dtam64,
+                 bek_y: dtam64, bek_d: dtam64) -> tam32 {
+    değişken s_d: dtam64 = a_d + b_d;
+    değişken elde: dtam64 = 0;
+    eğer s_d < a_d { elde = 1; }
+    değişken s_y: dtam64 = a_y + b_y + elde;
+    eğer s_y == bek_y {
+        eğer s_d == bek_d { ver 1; }
+    }
+    ver 0;
+}
+// 3 vektorun UCU de dogruysa 1. Vektorler eski testle BIREBIR:
+//   V1 (0,MAX)+(0,1)=(1,0) · V2 (MAX,MAX)+(0,1)=(0,0) · V3 (1,MAX)+(0,2)=(2,1)
+işlev kbn_testi() -> tam32 {
+    değişken m: dtam64 = kbn_tum_bir();
+    değişken n: tam32 = 0;
+    n = n + kbn_vektor(0, m, 0, 1, 1, 0);
+    n = n + kbn_vektor(m, m, 0, 1, 0, 0);
+    n = n + kbn_vektor(1, m, 0, 2, 2, 1);
+    eğer n == 3 { ver 1; }
+    ver 0;
+}
+
+// [D-600] [26] SHA-256 — eski `sha256_selfhost_arm` (C iskeletli ayri ELF) testinin
+// kem_os'a tasinmis hali. SHA-256("abc") tek blok; sabitler ve tur fonksiyonlari
+// kaynak testle BIREBIR (ksha_ onekli). Dayandigi codegen invaryanti: dtam32 `>>`
+// MANTIKSAL (lshr) ve mod-2^32 toplama.
+sabit KSHA_H0_ILK: dtam32 = 1779033703;  // 0x6a09e667
+sabit KSHA_H1_ILK: dtam32 = 3144134277;  // 0xbb67ae85
+sabit KSHA_H2_ILK: dtam32 = 1013904242;  // 0x3c6ef372
+sabit KSHA_H3_ILK: dtam32 = 2773480762;  // 0xa54ff53a
+sabit KSHA_H4_ILK: dtam32 = 1359893119;  // 0x510e527f
+sabit KSHA_H5_ILK: dtam32 = 2600822924;  // 0x9b05688c
+sabit KSHA_H6_ILK: dtam32 = 528734635;   // 0x1f83d9ab
+sabit KSHA_H7_ILK: dtam32 = 1541459225;  // 0x5be0cd19
+
+// --- SHA-256("abc") beklenen digest word'leri (ondalık) ---
+sabit KSHA_D0_BEKLENEN: dtam32 = 3128432319;  // 0xba7816bf
+sabit KSHA_D1_BEKLENEN: dtam32 = 2399260650;  // 0x8f01cfea
+sabit KSHA_D2_BEKLENEN: dtam32 = 1094795486;  // 0x414140de
+sabit KSHA_D3_BEKLENEN: dtam32 = 1571693091;  // 0x5dae2223
+sabit KSHA_D4_BEKLENEN: dtam32 = 2953011619;  // 0xb00361a3
+sabit KSHA_D5_BEKLENEN: dtam32 = 2518121116;  // 0x96177a9c
+sabit KSHA_D6_BEKLENEN: dtam32 = 3021012833;  // 0xb410ff61
+sabit KSHA_D7_BEKLENEN: dtam32 = 4060091821;  // 0xf20015ad
+
+// =========================================================================
+// Bit-karıştırma yardımcıları — HEPSİ SKALER dtam32 PARAMETRELİ.
+// Dizi elemanları bunlara ARGÜMAN geçilir → kaydırmalar skaler üstünde →
+// `lshr` (mantıksal). Codegen'in dizi-eleman-ashr kısıtı böyle aşılır.
+// =========================================================================
+
+// Rotate-right: (x >> n) | (x << (32 - n)). x/n skaler dtam32.
+işlev ksha_rotr(x: dtam32, n: dtam32) -> dtam32 {
+    ver (x >> n) | (x << (32 - n));
+}
+
+// Mesaj çizelgesi küçük-sigma0: ksha_rotr(x,7) ^ ksha_rotr(x,18) ^ (x >> 3)
+işlev ksha_kucuk_sigma0(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 7) ^ ksha_rotr(x, 18) ^ (x >> 3);
+}
+
+// Mesaj çizelgesi küçük-sigma1: ksha_rotr(x,17) ^ ksha_rotr(x,19) ^ (x >> 10)
+işlev ksha_kucuk_sigma1(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 17) ^ ksha_rotr(x, 19) ^ (x >> 10);
+}
+
+// Sıkıştırma büyük-sigma0: ksha_rotr(x,2) ^ ksha_rotr(x,13) ^ ksha_rotr(x,22)
+işlev ksha_buyuk_sigma0(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 2) ^ ksha_rotr(x, 13) ^ ksha_rotr(x, 22);
+}
+
+// Sıkıştırma büyük-sigma1: ksha_rotr(x,6) ^ ksha_rotr(x,11) ^ ksha_rotr(x,25)
+işlev ksha_buyuk_sigma1(x: dtam32) -> dtam32 {
+    ver ksha_rotr(x, 6) ^ ksha_rotr(x, 11) ^ ksha_rotr(x, 25);
+}
+
+// Ch (choose): (x & y) ^ ((^x) & z). KEMGU'da bit-NOT = x ^ 0xFFFFFFFF.
+işlev ksha_ch(x: dtam32, y: dtam32, z: dtam32) -> dtam32 {
+    değişken x_ters: dtam32 = x ^ 4294967295;   // ~x  (0xFFFFFFFF)
+    ver (x & y) ^ (x_ters & z);
+}
+
+// Maj (majority): (x & y) ^ (x & z) ^ (y & z).
+işlev ksha_maj(x: dtam32, y: dtam32, z: dtam32) -> dtam32 {
+    ver (x & y) ^ (x & z) ^ (y & z);
+}
+
+// =========================================================================
+// K[t]: SHA-256 tur sabitleri (ilk 64 asalın küpkökü kesirleri).
+// 64-elemanlı sabit dizi olarak döndürülür (indeks okuma → skaler'a kopyala).
+// =========================================================================
+işlev ksha_k_dizisi() -> Dizi<dtam32> {
+    ver [
+        1116352408, 1899447441, 3049323471, 3921009573,  961987163,
+        1508970993, 2453635748, 2870763221, 3624381080,  310598401,
+         607225278, 1426881987, 1925078388, 2162078206, 2614888103,
+        3248222580, 3835390401, 4022224774,  264347078,  604807628,
+         770255983, 1249150122, 1555081692, 1996064986, 2554220882,
+        2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
+         113926993,  338241895,  666307205,  773529912, 1294757372,
+        1396182291, 1695183700, 1986661051, 2177026350, 2456956037,
+        2730485921, 2820302411, 3259730800, 3345764771, 3516065817,
+        3600352804, 4094571909,  275423344,  430227734,  506948616,
+         659060556,  883997877,  958139571, 1322822218, 1537002063,
+        1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
+        2428436474, 2756734187, 3204031479, 3329325298
+    ];
+}
+
+// =========================================================================
+// Mesaj çizelgesi W[64]'ü "abc" tek-bloğu için doldurur.
+// W[0] = 0x61626380  ('a'<<24 | 'b'<<16 | 'c'<<8 | 0x80 padding biti)
+// W[1..14] = 0 ;  W[15] = 24 (bit-uzunluk 3*8, big-endian son word)
+// Sonra t=16..63 için genişletme: W[t] = sigma1(W[t-2]) + W[t-7]
+//                                        + sigma0(W[t-15]) + W[t-16].
+// =========================================================================
+işlev ksha_mesaj_cizelgesi() -> Dizi<dtam32> {
+    // 64 elemanlı sıfır dizisi + ilk blok.
+    değişken w: Dizi<dtam32> = [
+        1633837952, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 24,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ];
+    // w[0] = 1633837952 = 0x61626380 (yukarıda literal olarak verildi).
+
+    değişken t: tam32 = 16;
+    iken t < 64 {
+        // Dizi elemanlarını SKALER dtam32'ye kopyala → sigma işlevlerine
+        // argüman geçince kaydırmalar lshr (mantıksal) olur.
+        değişken w2: dtam32  = w[t - 2];
+        değişken w7: dtam32  = w[t - 7];
+        değişken w15: dtam32 = w[t - 15];
+        değişken w16: dtam32 = w[t - 16];
+        değişken yeni: dtam32 = ksha_kucuk_sigma1(w2) + w7 + ksha_kucuk_sigma0(w15) + w16;
+        w[t] = yeni;   // dizi in-place yazma (kdl_dizi_yaz — sınır-kontrollü)
+        t = t + 1;
+    }
+    ver w;
+}
+
+// =========================================================================
+// 64 turluk SHA-256 sıkıştırma fonksiyonu. Başlangıç durumu H[0..7]'den
+// başlar, W[64] ve K[64] üzerinden çalışır, 8 durum word'ünü indeks-parametre
+// ile döndürür (KEMGU'da çoklu dönüş yok → hangi word istendiğini `hangi`
+// belirler: 0..7).
+// =========================================================================
+// [D-600] Sikistirma BIR KEZ hesaplanir, 8 digest word'u beklenenle karsilastirilir
+// (eski test 8 word icin 8 kez hesapliyordu). Eslesen word sayisini dondurur.
+işlev ksha_testi() -> tam32 {
+    değişken w: Dizi<dtam32> = ksha_mesaj_cizelgesi();
+    değişken k: Dizi<dtam32> = ksha_k_dizisi();
+    değişken a: dtam32 = KSHA_H0_ILK;
+    değişken b: dtam32 = KSHA_H1_ILK;
+    değişken c: dtam32 = KSHA_H2_ILK;
+    değişken d: dtam32 = KSHA_H3_ILK;
+    değişken e: dtam32 = KSHA_H4_ILK;
+    değişken f: dtam32 = KSHA_H5_ILK;
+    değişken g: dtam32 = KSHA_H6_ILK;
+    değişken h: dtam32 = KSHA_H7_ILK;
+    değişken t: tam32 = 0;
+    iken t < 64 {
+        değişken wt: dtam32 = w[t];
+        değişken kt: dtam32 = k[t];
+        değişken t1: dtam32 = h + ksha_buyuk_sigma1(e) + ksha_ch(e, f, g) + kt + wt;
+        değişken t2: dtam32 = ksha_buyuk_sigma0(a) + ksha_maj(a, b, c);
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2;
+        t = t + 1;
+    }
+    değişken n: tam32 = 0;
+    eğer KSHA_H0_ILK + a == KSHA_D0_BEKLENEN { n = n + 1; }
+    eğer KSHA_H1_ILK + b == KSHA_D1_BEKLENEN { n = n + 1; }
+    eğer KSHA_H2_ILK + c == KSHA_D2_BEKLENEN { n = n + 1; }
+    eğer KSHA_H3_ILK + d == KSHA_D3_BEKLENEN { n = n + 1; }
+    eğer KSHA_H4_ILK + e == KSHA_D4_BEKLENEN { n = n + 1; }
+    eğer KSHA_H5_ILK + f == KSHA_D5_BEKLENEN { n = n + 1; }
+    eğer KSHA_H6_ILK + g == KSHA_D6_BEKLENEN { n = n + 1; }
+    eğer KSHA_H7_ILK + h == KSHA_D7_BEKLENEN { n = n + 1; }
+    ver n;
+}
+
+// [D-611] [29] BASE64 — eski izole `base64_selfhost_arm` (ayri ELF) testinin kem_os
+// karsiligi. Sinif C GOC karari: saf algoritma (OS bagimliligi yok) kem_os fazina tasindi,
+// eski demo silindi (ANAYASA: izole-demo biriktirme yasak → entegre faz). RFC 4648 encode
+// + decode round-trip: "KEMGU" (5 bayt) → "S0VNR1U=" (bilinen vektor) → tekrar "KEMGU".
+işlev kb64_alfabe(i: tam32) -> karakter {
+    değişken tablo: Dizi<karakter> = [
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
+        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
+        'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
+        'w','x','y','z','0','1','2','3','4','5','6','7','8','9','+','/'
+    ];
+    ver tablo[i];
+}
+işlev kb64_index(c: karakter) -> tam32 {
+    değişken tablo: Dizi<karakter> = [
+        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
+        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f',
+        'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v',
+        'w','x','y','z','0','1','2','3','4','5','6','7','8','9','+','/'
+    ];
+    değişken k: tam32 = 0;
+    iken k < 64 {
+        eğer tablo[k] == c { ver k; }
+        k = k + 1;
+    }
+    ver 0 - 1;
+}
+işlev kb64_encode(veri: Dizi<tam32>, n: tam32, cikti: Dizi<karakter>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken o: tam32 = 0;
+    iken i < n {
+        değişken kalan: tam32 = n - i;
+        değişken b0: tam32 = veri[i];
+        değişken b1: tam32 = 0;
+        değişken b2: tam32 = 0;
+        eğer kalan > 1 { b1 = veri[i + 1]; }
+        eğer kalan > 2 { b2 = veri[i + 2]; }
+        cikti[o]     = kb64_alfabe(b0 >> 2);
+        cikti[o + 1] = kb64_alfabe(((b0 & 3) << 4) | (b1 >> 4));
+        eğer kalan > 1 {
+            cikti[o + 2] = kb64_alfabe(((b1 & 15) << 2) | (b2 >> 6));
+        } değilse {
+            cikti[o + 2] = '=';
+        }
+        eğer kalan > 2 {
+            cikti[o + 3] = kb64_alfabe(b2 & 63);
+        } değilse {
+            cikti[o + 3] = '=';
+        }
+        i = i + 3;
+        o = o + 4;
+    }
+    ver o;
+}
+işlev kb64_decode(giris: Dizi<karakter>, len: tam32, cikti: Dizi<tam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken o: tam32 = 0;
+    iken i < len {
+        değişken i0: tam32 = kb64_index(giris[i]);
+        değişken i1: tam32 = kb64_index(giris[i + 1]);
+        değişken i2: tam32 = kb64_index(giris[i + 2]);
+        değişken i3: tam32 = kb64_index(giris[i + 3]);
+        cikti[o] = (i0 << 2) | (i1 >> 4);
+        o = o + 1;
+        eğer i2 > 0 - 1 {
+            cikti[o] = ((i1 & 15) << 4) | (i2 >> 2);
+            o = o + 1;
+        }
+        eğer i3 > 0 - 1 {
+            cikti[o] = ((i2 & 3) << 6) | i3;
+            o = o + 1;
+        }
+        i = i + 4;
+    }
+    ver o;
+}
+// Encode + decode round-trip: iki yon de dogru mu? 1=OK, 0=HATA.
+işlev kb64_testi() -> tam32 {
+    değişken veri: Dizi<tam32> = [75, 69, 77, 71, 85];             // "KEMGU"
+    değişken beklenen: Dizi<karakter> = ['S','0','V','N','R','1','U','='];
+    değişken cikti: Dizi<karakter> = ['A','A','A','A','A','A','A','A'];
+    değişken uz: tam32 = kb64_encode(veri, 5, cikti);
+    eğer uz != 8 { ver 0; }
+    değişken q: tam32 = 0;
+    iken q < 8 {
+        eğer cikti[q] != beklenen[q] { ver 0; }
+        q = q + 1;
+    }
+    değişken cozulen: Dizi<tam32> = [0, 0, 0, 0, 0];
+    değişken bs: tam32 = kb64_decode(cikti, uz, cozulen);
+    eğer bs != 5 { ver 0; }
+    değişken r: tam32 = 0;
+    iken r < 5 {
+        eğer cozulen[r] != veri[r] { ver 0; }
+        r = r + 1;
+    }
+    ver 1;
+}
+
+// [D-612] [30] CRC32 — eski izole `crc32_selfhost_arm` gocu. Saf algoritma (dizi yok,
+// yalniz dtam32 bit-ops). CRC-32 (yansitilmis, poli 0xEDB88320) "123456789" test vektoru
+// → 0xCBF43926. KRITIK: crc ZORUNLU dtam32 (isaretsiz) — tam32 olsa `>>` ashr olur ve
+// isaret-uzatma algoritmayi bozar.
+sabit KCRC_POLINOM: dtam32   = 3988292384;  // 0xEDB88320
+sabit KCRC_BASLANGIC: dtam32 = 4294967295;  // 0xFFFFFFFF
+sabit KCRC_BEKLENEN: dtam32  = 3421780262;  // 0xCBF43926
+işlev kcrc32_byte(crc_giris: dtam32, byte: dtam32) -> dtam32 {
+    değişken crc: dtam32 = crc_giris ^ byte;
+    değişken j: tam32 = 0;
+    iken j < 8 {
+        değişken maske: dtam32 = 0 - (crc & 1);
+        crc = (crc >> 1) ^ (KCRC_POLINOM & maske);
+        j = j + 1;
+    }
+    ver crc;
+}
+işlev kcrc_testi() -> tam32 {
+    değişken crc: dtam32 = KCRC_BASLANGIC;
+    değişken i: dtam32 = 0;
+    iken i < 9 {
+        crc = kcrc32_byte(crc, 49 + i);   // '1'..'9' = 49..57
+        i = i + 1;
+    }
+    crc = crc ^ 4294967295;               // sonda bit-tersleme
+    eğer crc == KCRC_BEKLENEN { ver 1; }
+    ver 0;
+}
+
+// [D-613] [31] SORT — eski izole `sort_selfhost_arm` gocu. Bubble sort in-place
+// (Dizi<tam32> heap mutasyon: d[j]=x -> kdl_dizi_yaz_tam, sinir-kontrollu). Sirasiz
+// [5,2,8,1,9,3,7,4,6,0] -> [0..9]. Beklenen KESIN (d[i]==i) — sadece "artan mi" degil,
+// yoksa no-op sabotaj [5,2,..] birakir ama "artan degil" ile yakalanir; kesin esitlik
+// hem no-op'u hem yanlis-permutasyonu eler (D-425).
+işlev ksort_bubble(d: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            eğer d[j] > d[j + 1] {
+                değişken gecici: tam32 = d[j];
+                d[j] = d[j + 1];
+                d[j + 1] = gecici;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev ksort_testi() -> tam32 {
+    değişken dizi: Dizi<tam32> = [5, 2, 8, 1, 9, 3, 7, 4, 6, 0];
+    ksort_bubble(dizi, 10);
+    değişken i: tam32 = 0;
+    iken i < 10 {
+        eğer dizi[i] != i { ver 0; }   // kesin: sirali dizi [0..9]
+        i = i + 1;
+    }
+    ver 1;
+}
+
+// [D-614] [32] HASHMAP — eski izole `hashmap_selfhost_arm` gocu. Knuth carpimsal hash
+// + linear probing, 3 paralel Dizi<tam32> (anahtar/deger/dolu). Cakisma senaryosu:
+// 5, 21, 37 hepsi slot 5'e hash'lenir -> probing zincirini test eder. dtam32 hash
+// (carpim mod-2^32 wrap), sonuc & 15 = 0..15, tam32 slot'a kopru.
+sabit KHM_KAP: tam32    = 16;
+sabit KHM_MASKE: dtam32 = 15;
+sabit KHM_KNUTH: dtam32 = 2654435761;
+sabit KHM_YOK: tam32    = 0 - 1;
+işlev khm_hash(anahtar: tam32) -> tam32 {
+    değişken a: dtam32 = anahtar olarak dtam32;
+    değişken karisim: dtam32 = a * KHM_KNUTH;
+    değişken slot: dtam32 = karisim & KHM_MASKE;
+    ver slot olarak tam32;
+}
+işlev khm_ekle(anahtarlar: Dizi<tam32>, degerler: Dizi<tam32>, dolu: Dizi<tam32>,
+               anahtar: tam32, deger: tam32) -> tam32 {
+    değişken temel: tam32 = khm_hash(anahtar);
+    değişken adim: tam32 = 0;
+    iken adim < KHM_KAP {
+        değişken s: dtam32 = (temel + adim) olarak dtam32;
+        değişken slot: tam32 = (s & KHM_MASKE) olarak tam32;
+        eğer dolu[slot] == 0 {
+            dolu[slot] = 1;
+            anahtarlar[slot] = anahtar;
+            degerler[slot] = deger;
+            ver 1;
+        }
+        eğer anahtarlar[slot] == anahtar {
+            degerler[slot] = deger;
+            ver 1;
+        }
+        adim = adim + 1;
+    }
+    ver 0;
+}
+işlev khm_bul(anahtarlar: Dizi<tam32>, degerler: Dizi<tam32>, dolu: Dizi<tam32>,
+              anahtar: tam32) -> tam32 {
+    değişken temel: tam32 = khm_hash(anahtar);
+    değişken adim: tam32 = 0;
+    iken adim < KHM_KAP {
+        değişken s: dtam32 = (temel + adim) olarak dtam32;
+        değişken slot: tam32 = (s & KHM_MASKE) olarak tam32;
+        eğer dolu[slot] == 0 { ver KHM_YOK; }
+        eğer anahtarlar[slot] == anahtar { ver degerler[slot]; }
+        adim = adim + 1;
+    }
+    ver KHM_YOK;
+}
+işlev khm_testi() -> tam32 {
+    değişken anahtarlar: Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    değişken degerler:   Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    değişken dolu:       Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+    khm_ekle(anahtarlar, degerler, dolu, 5, 50);      // cakisma: 5,21,37 -> slot 5
+    khm_ekle(anahtarlar, degerler, dolu, 21, 210);
+    khm_ekle(anahtarlar, degerler, dolu, 37, 370);
+    eğer khm_bul(anahtarlar, degerler, dolu, 5) != 50 { ver 0; }
+    eğer khm_bul(anahtarlar, degerler, dolu, 21) != 210 { ver 0; }
+    eğer khm_bul(anahtarlar, degerler, dolu, 37) != 370 { ver 0; }
+    eğer khm_bul(anahtarlar, degerler, dolu, 99) != KHM_YOK { ver 0; }   // yok -> -1
+    ver 1;
+}
+
+// [D-615] [33] RC4 — eski izole `rc4_selfhost_arm` gocu. Stream cipher (KSA + PRGA),
+// 256-byte S-box in-place permutasyon. dtam32 & 255 (kaydirma YOK). anahtar "Key" +
+// "Plaintext" -> bilinen sifreli vektor [187,243,22,232,217,64,175,10,211]. RC4 simetrik:
+// ayni keystream ile tekrar XOR = duz metin (round-trip pozitif dogrulama).
+işlev krc4_s_olustur() -> Dizi<dtam32> {
+    değişken s: Dizi<dtam32> = dizi_olustur(256);
+    değişken i: tam32 = 0;
+    iken i < 256 { dizi_ekle(s, 0); i = i + 1; }   // boyut=256 (ksa S[i]=i ile doldurur)
+    ver s;
+}
+işlev krc4_ksa(s: Dizi<dtam32>, anahtar: Dizi<dtam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 256 { s[i] = i olarak dtam32; i = i + 1; }
+    değişken j: dtam32 = 0;
+    i = 0;
+    iken i < 256 {
+        değişken si: dtam32 = s[i];
+        değişken ak: dtam32 = anahtar[i % 3];
+        j = (j + si + ak) & 255;
+        değişken jj: tam32 = j olarak tam32;
+        değişken gecici: dtam32 = s[i];
+        s[i] = s[jj];
+        s[jj] = gecici;
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev krc4_prga(s: Dizi<dtam32>, girdi: Dizi<dtam32>, cikti: Dizi<dtam32>, uzunluk: tam32) -> tam32 {
+    değişken i: dtam32 = 0;
+    değişken j: dtam32 = 0;
+    değişken n: tam32 = 0;
+    iken n < uzunluk {
+        i = (i + 1) & 255;
+        değişken ii: tam32 = i olarak tam32;
+        değişken si: dtam32 = s[ii];
+        j = (j + si) & 255;
+        değişken jj: tam32 = j olarak tam32;
+        değişken gecici: dtam32 = s[ii];
+        s[ii] = s[jj];
+        s[jj] = gecici;
+        değişken si2: dtam32 = s[ii];
+        değişken sj2: dtam32 = s[jj];
+        değişken kidx: dtam32 = (si2 + sj2) & 255;
+        değişken kidxi: tam32 = kidx olarak tam32;
+        değişken keystream: dtam32 = s[kidxi];
+        değişken g: dtam32 = girdi[n];
+        cikti[n] = g ^ keystream;
+        n = n + 1;
+    }
+    ver 0;
+}
+işlev krc4_testi() -> tam32 {
+    değişken anahtar: Dizi<dtam32> = [75, 101, 121];               // "Key"
+    değişken duz: Dizi<dtam32> = [80, 108, 97, 105, 110, 116, 101, 120, 116];  // "Plaintext"
+    değişken beklenen: Dizi<dtam32> = [187, 243, 22, 232, 217, 64, 175, 10, 211];
+    değişken s: Dizi<dtam32> = krc4_s_olustur();
+    değişken sifreli: Dizi<dtam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    krc4_ksa(s, anahtar);
+    krc4_prga(s, duz, sifreli, 9);
+    değişken k: tam32 = 0;
+    iken k < 9 {
+        eğer sifreli[k] != beklenen[k] { ver 0; }   // bilinen vektore karsi
+        k = k + 1;
+    }
+    // Round-trip (simetri): taze S ile sifreli metni tekrar XOR -> duz metin.
+    değişken s2: Dizi<dtam32> = krc4_s_olustur();
+    değişken geri: Dizi<dtam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    krc4_ksa(s2, anahtar);
+    krc4_prga(s2, sifreli, geri, 9);
+    değişken m: tam32 = 0;
+    iken m < 9 {
+        eğer geri[m] != duz[m] { ver 0; }
+        m = m + 1;
+    }
+    ver 1;
+}
+
+// [D-616] [34] HASHCRACK — eski izole `hashcrack_selfhost_arm` gocu. Sozluk saldirisi
+// (dictionary attack): bilinen parola "kemgu"nun SHA-256'sini hedef kabul et, 8 adayi
+// tara, eslesen = kirilan parola. SHA-256 primitifleri ksha_* (faz [26]) YENIDEN KULLANILIR
+// (D-407: ayni soruyu iki yerde yanitlama) — yalniz PARAMETRELI schedule + compress + sozluk
+// eklenir (faz [26]'nin ksha'si "abc" icin sabit-mesajdir). LAB-ETIK: hedef kendi uretilir,
+// disaridan parola-hash hedefi YOK.
+işlev kcrack_mesaj_cizelgesi(bayt: Dizi<tam32>, uzunluk: tam32) -> Dizi<dtam32> {
+    değişken w: Dizi<dtam32> = [
+        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0
+    ];
+    değişken i: tam32 = 0;
+    iken i < 14 {
+        değişken word: dtam32 = 0;
+        değişken kk: tam32 = 0;
+        iken kk < 4 {
+            değişken j: tam32 = i * 4 + kk;
+            değişken bd: dtam32 = 0;
+            eğer j < uzunluk {
+                bd = bayt[j] olarak dtam32;
+            } değilse {
+                eğer j == uzunluk { bd = 128; } değilse { bd = 0; }
+            }
+            word = (word << 8) | bd;
+            kk = kk + 1;
+        }
+        w[i] = word;
+        i = i + 1;
+    }
+    değişken bit_uz: dtam32 = (uzunluk olarak dtam32) * 8;
+    w[15] = bit_uz;
+    değişken t: tam32 = 16;
+    iken t < 64 {
+        değişken w2: dtam32  = w[t - 2];
+        değişken w7: dtam32  = w[t - 7];
+        değişken w15: dtam32 = w[t - 15];
+        değişken w16: dtam32 = w[t - 16];
+        w[t] = ksha_kucuk_sigma1(w2) + w7 + ksha_kucuk_sigma0(w15) + w16;
+        t = t + 1;
+    }
+    ver w;
+}
+işlev kcrack_sikistir(w: Dizi<dtam32>, k: Dizi<dtam32>, hangi: tam32) -> dtam32 {
+    değişken a: dtam32 = KSHA_H0_ILK;
+    değişken b: dtam32 = KSHA_H1_ILK;
+    değişken c: dtam32 = KSHA_H2_ILK;
+    değişken d: dtam32 = KSHA_H3_ILK;
+    değişken e: dtam32 = KSHA_H4_ILK;
+    değişken f: dtam32 = KSHA_H5_ILK;
+    değişken g: dtam32 = KSHA_H6_ILK;
+    değişken h: dtam32 = KSHA_H7_ILK;
+    değişken t: tam32 = 0;
+    iken t < 64 {
+        değişken wt: dtam32 = w[t];
+        değişken kt: dtam32 = k[t];
+        değişken t1: dtam32 = h + ksha_buyuk_sigma1(e) + ksha_ch(e, f, g) + kt + wt;
+        değişken t2: dtam32 = ksha_buyuk_sigma0(a) + ksha_maj(a, b, c);
+        h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+        t = t + 1;
+    }
+    eğer hangi == 0 { ver KSHA_H0_ILK + a; }
+    eğer hangi == 1 { ver KSHA_H1_ILK + b; }
+    eğer hangi == 2 { ver KSHA_H2_ILK + c; }
+    eğer hangi == 3 { ver KSHA_H3_ILK + d; }
+    eğer hangi == 4 { ver KSHA_H4_ILK + e; }
+    eğer hangi == 5 { ver KSHA_H5_ILK + f; }
+    eğer hangi == 6 { ver KSHA_H6_ILK + g; }
+    ver KSHA_H7_ILK + h;
+}
+işlev kcrack_sha256_word(bayt: Dizi<tam32>, uzunluk: tam32, k: Dizi<dtam32>, hangi: tam32) -> dtam32 {
+    değişken w: Dizi<dtam32> = kcrack_mesaj_cizelgesi(bayt, uzunluk);
+    ver kcrack_sikistir(w, k, hangi);
+}
+işlev kcrack_aday_baytlar(idx: tam32) -> Dizi<tam32> {
+    eğer idx == 0 { ver [97, 98, 99, 0, 0, 0, 0, 0]; }          // "abc"
+    eğer idx == 1 { ver [116, 101, 115, 116, 0, 0, 0, 0]; }    // "test"
+    eğer idx == 2 { ver [107, 101, 109, 103, 117, 0, 0, 0]; }  // "kemgu"
+    eğer idx == 3 { ver [112, 97, 114, 111, 108, 97, 0, 0]; }  // "parola"
+    eğer idx == 4 { ver [97, 100, 109, 105, 110, 0, 0, 0]; }   // "admin"
+    eğer idx == 5 { ver [49, 50, 51, 52, 0, 0, 0, 0]; }        // "1234"
+    eğer idx == 6 { ver [114, 111, 111, 116, 0, 0, 0, 0]; }    // "root"
+    ver [115, 105, 102, 114, 101, 0, 0, 0];                    // "sifre"
+}
+işlev kcrack_aday_uzunluk(idx: tam32) -> tam32 {
+    eğer idx == 0 { ver 3; }
+    eğer idx == 1 { ver 4; }
+    eğer idx == 2 { ver 5; }
+    eğer idx == 3 { ver 6; }
+    eğer idx == 4 { ver 5; }
+    eğer idx == 5 { ver 4; }
+    eğer idx == 6 { ver 4; }
+    ver 5;   // "sifre"
+}
+işlev kcrack_testi() -> tam32 {
+    değişken k: Dizi<dtam32> = ksha_k_dizisi();
+    // Hedef: "kemgu" (idx 2) SHA-256 (LAB: kendi uretilir).
+    değişken hb: Dizi<tam32> = kcrack_aday_baytlar(2);
+    değişken hu: tam32 = kcrack_aday_uzunluk(2);
+    değişken h0: dtam32 = kcrack_sha256_word(hb, hu, k, 0);
+    değişken h1: dtam32 = kcrack_sha256_word(hb, hu, k, 1);
+    değişken h2: dtam32 = kcrack_sha256_word(hb, hu, k, 2);
+    değişken h3: dtam32 = kcrack_sha256_word(hb, hu, k, 3);
+    değişken h4: dtam32 = kcrack_sha256_word(hb, hu, k, 4);
+    değişken h5: dtam32 = kcrack_sha256_word(hb, hu, k, 5);
+    değişken h6: dtam32 = kcrack_sha256_word(hb, hu, k, 6);
+    değişken h7: dtam32 = kcrack_sha256_word(hb, hu, k, 7);
+    değişken kirilan: tam32 = 0 - 1;
+    değişken atlanan: tam32 = 0;
+    değişken idx: tam32 = 0;
+    iken idx < 8 {
+        değişken ab: Dizi<tam32> = kcrack_aday_baytlar(idx);
+        değişken au: tam32 = kcrack_aday_uzunluk(idx);
+        değişken eslesti: tam32 = 1;
+        eğer kcrack_sha256_word(ab, au, k, 0) != h0 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 1) != h1 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 2) != h2 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 3) != h3 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 4) != h4 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 5) != h5 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 6) != h6 { eslesti = 0; }
+        eğer kcrack_sha256_word(ab, au, k, 7) != h7 { eslesti = 0; }
+        eğer eslesti == 1 {
+            eğer kirilan == (0 - 1) { kirilan = idx; }
+        } değilse {
+            atlanan = atlanan + 1;
+        }
+        idx = idx + 1;
+    }
+    eğer kirilan != 2 { ver 0; }      // hedef "kemgu" idx 2'de bulunmali
+    eğer atlanan != 7 { ver 0; }      // digerleri (7) hash-eslesmesiz atlanmali
+    ver 1;
+}
+
+// [D-617] [35] UTF8 — eski izole `utf8_selfhost_arm` gocu (TURKCE DNA). UTF-8 kod-cozucu:
+// "çğışöü" (12 byte, hepsi 2-byte) -> 6 Unicode kod-noktasi. dtam32 mask/shift skaler
+// uzerinde (D-173). Savunmaci: bozuk devam-byte -> dur (sonsuz dongu YOK).
+işlev kutf8_cozumle_iki_byte(b0: dtam32, b1: dtam32) -> dtam32 {
+    değişken yuksek: dtam32 = (b0 & 31) << 6;
+    değişken dusuk: dtam32 = b1 & 63;
+    ver yuksek | dusuk;
+}
+işlev kutf8_byte_turu(b: dtam32) -> tam32 {
+    eğer b < 128 { ver 0; }      // 1-byte ASCII
+    eğer b < 192 { ver 1; }      // devam byte
+    eğer b < 224 { ver 2; }      // 2-byte oncul
+    ver 0 - 1;                    // 3/4-byte (kapsam disi)
+}
+işlev kutf8_devam_byte_mu(b: dtam32) -> tam32 {
+    eğer b < 128 { ver 0; }
+    eğer b < 192 { ver 1; }
+    ver 0;
+}
+işlev kutf8_coz(bytelar: Dizi<dtam32>, n: tam32, cikti: Dizi<dtam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken o: tam32 = 0;
+    iken i < n {
+        değişken b0: dtam32 = bytelar[i];
+        değişken tur: tam32 = kutf8_byte_turu(b0);
+        eğer tur == 0 {
+            cikti[o] = b0;
+            o = o + 1;
+            i = i + 1;
+        } değilse {
+            eğer tur == 2 {
+                eğer i + 1 < n {
+                    değişken b1: dtam32 = bytelar[i + 1];
+                    eğer kutf8_devam_byte_mu(b1) == 1 {
+                        cikti[o] = kutf8_cozumle_iki_byte(b0, b1);
+                        o = o + 1;
+                        i = i + 2;
+                    } değilse {
+                        ver o;
+                    }
+                } değilse {
+                    ver o;
+                }
+            } değilse {
+                ver o;
+            }
+        }
+    }
+    ver o;
+}
+işlev kutf8_testi() -> tam32 {
+    değişken bytelar: Dizi<dtam32> = [195, 167, 196, 159, 196, 177, 197, 159, 195, 182, 195, 188];  // çğışöü
+    değişken kp: Dizi<dtam32> = [0, 0, 0, 0, 0, 0];
+    değişken sayi: tam32 = kutf8_coz(bytelar, 12, kp);
+    eğer sayi != 6 { ver 0; }               // kod-nokta sayisi 6 (byte 12 DEGIL)
+    eğer kp[0] != 231 { ver 0; }            // ç
+    eğer kp[1] != 287 { ver 0; }            // ğ
+    eğer kp[2] != 305 { ver 0; }            // ı
+    eğer kp[3] != 351 { ver 0; }            // ş
+    eğer kp[4] != 246 { ver 0; }            // ö
+    eğer kp[5] != 252 { ver 0; }            // ü
+    // Savunmaci: bozuk devam-byte (195,65) -> 0 kod-nokta (sonsuz dongu yok).
+    değişken bozuk: Dizi<dtam32> = [195, 65];
+    değişken bc: Dizi<dtam32> = [0, 0];
+    eğer kutf8_coz(bozuk, 2, bc) != 0 { ver 0; }
+    ver 1;
+}
+
+// [D-618] [36] TURKCE CASE — eski izole `turkce_case_selfhost_arm` gocu (TURKCE DNA).
+// Turkce-I problemi: i(105)->I(304, nokta-ustu buyuk I, ASCII 'I'=73 DEGIL) ve
+// i-noktasiz(305)->I-noktasiz(73). ASCII yanlis cevap verir; kod-noktasi ustunde dogru.
+sabit KTC_i: dtam32 = 105;    sabit KTC_ic: dtam32 = 305;
+sabit KTC_c: dtam32 = 231;    sabit KTC_g: dtam32 = 287;    sabit KTC_o: dtam32 = 246;
+sabit KTC_s: dtam32 = 351;    sabit KTC_u: dtam32 = 252;
+sabit KTC_BI: dtam32 = 304;   sabit KTC_BIc: dtam32 = 73;
+sabit KTC_BC: dtam32 = 199;   sabit KTC_BG: dtam32 = 286;   sabit KTC_BO: dtam32 = 214;
+sabit KTC_BS: dtam32 = 350;   sabit KTC_BU: dtam32 = 220;
+sabit KTC_a: dtam32 = 97;     sabit KTC_z: dtam32 = 122;
+sabit KTC_A: dtam32 = 65;     sabit KTC_Z: dtam32 = 90;     sabit KTC_OFS: dtam32 = 32;
+işlev ktc_buyut(cp: dtam32) -> dtam32 {
+    eğer cp == KTC_i { ver KTC_BI; }        // Turkce: i -> I (nokta korunur)
+    eğer cp == KTC_ic { ver KTC_BIc; }      // Turkce: i-noktasiz -> I-noktasiz
+    eğer cp == KTC_c { ver KTC_BC; }
+    eğer cp == KTC_g { ver KTC_BG; }
+    eğer cp == KTC_o { ver KTC_BO; }
+    eğer cp == KTC_s { ver KTC_BS; }
+    eğer cp == KTC_u { ver KTC_BU; }
+    eğer cp < KTC_a { ver cp; }
+    eğer cp > KTC_z { ver cp; }
+    ver cp - KTC_OFS;                        // ASCII a-z (i haric)
+}
+işlev ktc_kucult(cp: dtam32) -> dtam32 {
+    eğer cp == KTC_BI { ver KTC_i; }        // Turkce: I -> i
+    eğer cp == KTC_BIc { ver KTC_ic; }      // Turkce: I-noktasiz -> i-noktasiz
+    eğer cp == KTC_BC { ver KTC_c; }
+    eğer cp == KTC_BG { ver KTC_g; }
+    eğer cp == KTC_BO { ver KTC_o; }
+    eğer cp == KTC_BS { ver KTC_s; }
+    eğer cp == KTC_BU { ver KTC_u; }
+    eğer cp < KTC_A { ver cp; }
+    eğer cp > KTC_Z { ver cp; }
+    ver cp + KTC_OFS;                        // ASCII A-Z (I haric)
+}
+işlev ktc_dizi_buyut(cp: Dizi<dtam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n { değişken e: dtam32 = cp[i]; cp[i] = ktc_buyut(e); i = i + 1; }
+    ver 0;
+}
+işlev ktc_dizi_kucult(cp: Dizi<dtam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n { değişken e: dtam32 = cp[i]; cp[i] = ktc_kucult(e); i = i + 1; }
+    ver 0;
+}
+işlev ktc_testi() -> tam32 {
+    // "istanbul" -> "ISTANBUL" (Turkce: bas harf I=304, ASCII 73 DEGIL)
+    değişken ist: Dizi<dtam32> = [105, 115, 116, 97, 110, 98, 117, 108];
+    değişken bek_ist: Dizi<dtam32> = [304, 83, 84, 65, 78, 66, 85, 76];
+    ktc_dizi_buyut(ist, 8);
+    değişken q: tam32 = 0;
+    iken q < 8 { eğer ist[q] != bek_ist[q] { ver 0; } q = q + 1; }
+    eğer ist[0] != KTC_BI { ver 0; }        // Turkce-I: 304 olmali, 73 (ASCII) DEGIL
+    // "IRMAK" -> "irmak" (Turkce: bas harf i-noktasiz=305, ASCII 105 DEGIL)
+    değişken irm: Dizi<dtam32> = [73, 82, 77, 65, 75];
+    değişken bek_irm: Dizi<dtam32> = [305, 114, 109, 97, 107];
+    ktc_dizi_kucult(irm, 5);
+    değişken q2: tam32 = 0;
+    iken q2 < 5 { eğer irm[q2] != bek_irm[q2] { ver 0; } q2 = q2 + 1; }
+    eğer irm[0] != KTC_ic { ver 0; }        // Turkce-I: 305 olmali, 105 (ASCII) DEGIL
+    // Turkce ozel harfler round-trip: kucuk -> buyuk -> kucuk
+    değişken kucukler: Dizi<dtam32> = [231, 287, 246, 351, 252];  // c g o s u
+    değişken buyukler: Dizi<dtam32> = [199, 286, 214, 350, 220];  // C G O S U
+    değişken r: tam32 = 0;
+    iken r < 5 {
+        eğer ktc_buyut(kucukler[r]) != buyukler[r] { ver 0; }
+        eğer ktc_kucult(buyukler[r]) != kucukler[r] { ver 0; }
+        r = r + 1;
+    }
+    ver 1;
+}
+
+// [D-619] [37] TURKCE SORT — eski izole `turkce_sort_selfhost_arm` gocu (TURKCE DNA).
+// Turkce collation (alfabetik siralama): kod-nokta sirasi Turkce alfabeyle ORTUSMEZ
+// (c<ç<d ama Unicode ç=231 c'den cok sonra; ı<i ama Unicode ı=305 i'den sonra). Harf ->
+// Turkce sira-indeksi (0..28) eslemesiyle DOGRU siralama. Havuz-tabanli: kelimeler duz
+// dizide, yalniz baslar/uzunluklar takas edilir.
+işlev ktr_sira_indeksi(cp: dtam32) -> tam32 {
+    eğer cp == 97 { ver 0; }    eğer cp == 98 { ver 1; }    eğer cp == 99 { ver 2; }
+    eğer cp == 231 { ver 3; }   // ç (c'den hemen sonra)
+    eğer cp == 100 { ver 4; }   eğer cp == 101 { ver 5; }   eğer cp == 102 { ver 6; }
+    eğer cp == 103 { ver 7; }   eğer cp == 287 { ver 8; }   // ğ
+    eğer cp == 104 { ver 9; }
+    eğer cp == 305 { ver 10; }  // ı (i'den ONCE)
+    eğer cp == 105 { ver 11; }  // i (ı'dan sonra)
+    eğer cp == 106 { ver 12; }  eğer cp == 107 { ver 13; }  eğer cp == 108 { ver 14; }
+    eğer cp == 109 { ver 15; }  eğer cp == 110 { ver 16; }  eğer cp == 111 { ver 17; }
+    eğer cp == 246 { ver 18; }  // ö
+    eğer cp == 112 { ver 19; }  eğer cp == 114 { ver 20; }  eğer cp == 115 { ver 21; }
+    eğer cp == 351 { ver 22; }  // ş
+    eğer cp == 116 { ver 23; }  eğer cp == 117 { ver 24; }
+    eğer cp == 252 { ver 25; }  // ü
+    eğer cp == 118 { ver 26; }  eğer cp == 121 { ver 27; }  eğer cp == 122 { ver 28; }
+    ver 29;                      // Turkce alfabe disi -> en sona
+}
+// -1 => a<b, 0 => esit, 1 => a>b (Turkce collation). SIRA_SON=-1 (kelime bitti -> once).
+işlev ktr_karsilastir(havuz: Dizi<dtam32>, a_bas: tam32, a_uz: tam32, b_bas: tam32, b_uz: tam32) -> tam32 {
+    değişken k: tam32 = 0;
+    iken 1 == 1 {
+        değişken sa: tam32 = 0 - 1;
+        değişken sb: tam32 = 0 - 1;
+        eğer k < a_uz { sa = ktr_sira_indeksi(havuz[a_bas + k]); }
+        eğer k < b_uz { sb = ktr_sira_indeksi(havuz[b_bas + k]); }
+        eğer (sa == (0 - 1)) ve (sb == (0 - 1)) { ver 0; }       // ikisi de bitti -> esit
+        eğer sa == (0 - 1) { ver 0 - 1; }                         // a kisa -> a<b
+        eğer sb == (0 - 1) { ver 1; }                             // b kisa -> a>b
+        eğer sa < sb { ver 0 - 1; }
+        eğer sa > sb { ver 1; }
+        k = k + 1;                                                // esit harf -> devam
+    }
+    ver 0;
+}
+işlev ktr_sirala(havuz: Dizi<dtam32>, baslar: Dizi<tam32>, uzunluklar: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken j: tam32 = 0;
+        iken j < n - i - 1 {
+            değişken ba: tam32 = baslar[j];      değişken ua: tam32 = uzunluklar[j];
+            değişken bb: tam32 = baslar[j + 1];  değişken ub: tam32 = uzunluklar[j + 1];
+            eğer ktr_karsilastir(havuz, ba, ua, bb, ub) > 0 {
+                baslar[j] = bb;      baslar[j + 1] = ba;
+                uzunluklar[j] = ub;  uzunluklar[j + 1] = ua;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev ktr_testi() -> tam32 {
+    // Havuz: cam,can,ada,ihlamur,irmak (kod-nokta).
+    değişken havuz: Dizi<dtam32> = [
+        231, 97, 109,                      // çam     (0,3)
+        99, 97, 110,                       // can     (3,3)
+        97, 100, 97,                       // ada     (6,3)
+        305, 104, 108, 97, 109, 117, 114,  // ıhlamur (9,7)
+        105, 114, 109, 97, 107             // irmak   (16,5)
+    ];
+    değişken baslar: Dizi<tam32> = [0, 3, 6, 9, 16];
+    değişken uzunluklar: Dizi<tam32> = [3, 3, 3, 7, 5];
+    // Turkce-kritik karsilastirmalar: çam>can (ç>c), ıhlamur<irmak (ı<i)
+    eğer ktr_karsilastir(havuz, 0, 3, 3, 3) != 1 { ver 0; }        // çam > can
+    eğer ktr_karsilastir(havuz, 9, 7, 16, 5) != (0 - 1) { ver 0; } // ıhlamur < irmak
+    ktr_sirala(havuz, baslar, uzunluklar, 5);
+    // Beklenen sira: ada(6),can(3),çam(0),ıhlamur(9),irmak(16)
+    değişken bek: Dizi<tam32> = [6, 3, 0, 9, 16];
+    değişken v: tam32 = 0;
+    iken v < 5 { eğer baslar[v] != bek[v] { ver 0; } v = v + 1; }
+    eğer baslar[2] != 0 { ver 0; }    // çam ortada (Unicode tuzagi olsa en sonda olurdu)
+    eğer baslar[3] != 9 { ver 0; }    // ıhlamur irmak'tan ONCE (Unicode tuzagi olsa sonra)
+    ver 1;
+}
+
+// [D-620] [38] VM — eski izole `vm_selfhost_arm` gocu. Stack-based bytecode yorumlayici:
+// YIGIN + PC + opcode dispatch + kontrol akisi. Dizi<tam32> in-place mutasyon (PUSH/POP =
+// kdl_dizi_yaz/al_tam, sinir-kontrollu). Opcode: 0=HALT 1=PUSH 2=ADD 3=SUB 4=MUL 5=DUP
+// 6=PRINT. Program [PUSH 6, PUSH 7, MUL, PRINT, PUSH 100, PUSH 58, ADD, PRINT, HALT] -> 42,158.
+işlev kvm_it(yigin: Dizi<tam32>, sp: tam32, deger: tam32) -> tam32 {
+    yigin[sp] = deger;   // in-place mutasyon (cagirana yansir)
+    ver sp + 1;
+}
+işlev kvm_tepe(yigin: Dizi<tam32>, sp: tam32) -> tam32 {
+    ver yigin[sp - 1];
+}
+işlev kvm_calistir(prog: Dizi<tam32>, prog_uzun: tam32, yigin: Dizi<tam32>, bd: Dizi<tam32>, bek_sayi: tam32) -> tam32 {
+    değişken sp: tam32 = 0;
+    değişken pc: tam32 = 0;
+    değişken print_sayi: tam32 = 0;
+    değişken tumu_dogru: tam32 = 1;
+    iken pc < prog_uzun {
+        değişken opcode: tam32 = prog[pc];
+        pc = pc + 1;
+        eğer opcode == 1 {                             // PUSH
+            değişken deger: tam32 = prog[pc];
+            pc = pc + 1;
+            sp = kvm_it(yigin, sp, deger);
+        } değilse eğer opcode == 2 {                   // ADD
+            değişken b: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            değişken a: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            sp = kvm_it(yigin, sp, a + b);
+        } değilse eğer opcode == 3 {                   // SUB
+            değişken b: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            değişken a: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            sp = kvm_it(yigin, sp, a - b);
+        } değilse eğer opcode == 4 {                   // MUL
+            değişken b: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            değişken a: tam32 = kvm_tepe(yigin, sp); sp = sp - 1;
+            sp = kvm_it(yigin, sp, a * b);
+        } değilse eğer opcode == 5 {                   // DUP
+            değişken a: tam32 = kvm_tepe(yigin, sp);
+            sp = kvm_it(yigin, sp, a);
+        } değilse eğer opcode == 6 {                   // PRINT (POP'suz dogrula)
+            değişken v: tam32 = kvm_tepe(yigin, sp);
+            eğer print_sayi < bek_sayi {
+                eğer v != bd[print_sayi] { tumu_dogru = 0; }
+            } değilse {
+                tumu_dogru = 0;                        // beklenenden FAZLA print
+            }
+            print_sayi = print_sayi + 1;
+        } değilse eğer opcode == 0 {                   // HALT
+            pc = prog_uzun;
+        } değilse {
+            tumu_dogru = 0;                            // tanimsiz opcode
+        }
+    }
+    eğer tumu_dogru == 1 {
+        eğer print_sayi == bek_sayi { ver 1; }
+    }
+    ver 0;
+}
+işlev kvm_testi() -> tam32 {
+    değişken prog: Dizi<tam32> = [1, 6, 1, 7, 4, 6, 1, 100, 1, 58, 2, 6, 0];  // 6*7=42, 100+58=158
+    değişken yigin: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken beklenen: Dizi<tam32> = [42, 158];
+    ver kvm_calistir(prog, 13, yigin, beklenen, 2);
+}
+
+// [D-621] [39] JSON — eski izole `json_selfhost_arm` gocu. Byte-dizisi JSON ayristirici
+// (durum makinesi): {"x": 42, "y": 100} -> [42, 100]. Dizi<tam32> okuma sinir-kontrollu,
+// deger-dizisi in-place YAZMA. NOT: kem_os'ta zaten stdlib/json.kem (cesit ADT tabanli,
+// host) var; bu bare-metal byte-tarayici AYRI bir yaklasim (ASCII sabit-int, cihazsiz).
+işlev kjson_rakam_mi(b: tam32) -> tam32 {
+    eğer b < 48 { ver 0; }      // '0' alti
+    eğer b > 57 { ver 0; }      // '9' ustu
+    ver 1;
+}
+işlev kjson_string_atla(json: Dizi<tam32>, baslangic: tam32, uzun: tam32) -> tam32 {
+    değişken j: tam32 = baslangic;
+    iken j < uzun {
+        eğer json[j] == 34 { ver j + 1; }   // kapanan '"' sonrasi
+        j = j + 1;
+    }
+    ver uzun;
+}
+işlev kjson_sayi_oku(json: Dizi<tam32>, baslangic: tam32, uzun: tam32, sonuc: Dizi<tam32>) -> tam32 {
+    değişken j: tam32 = baslangic;
+    değişken n: tam32 = 0;
+    değişken devam: tam32 = 1;
+    iken devam == 1 {
+        eğer j < uzun {
+            değişken d: tam32 = json[j];
+            eğer kjson_rakam_mi(d) == 1 {
+                n = n * 10 + (d - 48);   // ASCII rakam -> sayisal
+                j = j + 1;
+            } değilse {
+                devam = 0;
+            }
+        } değilse {
+            devam = 0;
+        }
+    }
+    sonuc[0] = n;
+    ver j;
+}
+işlev kjson_ayristir(json: Dizi<tam32>, uzun: tam32, degerler: Dizi<tam32>) -> tam32 {
+    değişken i: tam32 = 0;
+    değişken cift_sayi: tam32 = 0;
+    değişken tek: Dizi<tam32> = [0];
+    iken i < uzun {
+        değişken c: tam32 = json[i];
+        eğer c == 32 { i = i + 1; }                        // bosluk
+        değilse eğer c == 123 { i = i + 1; }               // {
+        değilse eğer c == 125 { i = i + 1; }               // }
+        değilse eğer c == 58 { i = i + 1; }                // :
+        değilse eğer c == 44 { i = i + 1; }                // ,
+        değilse eğer c == 34 {                             // " -> string atla
+            i = kjson_string_atla(json, i + 1, uzun);
+        } değilse {
+            eğer kjson_rakam_mi(c) == 1 {
+                i = kjson_sayi_oku(json, i, uzun, tek);
+                eğer cift_sayi < 8 {
+                    degerler[cift_sayi] = tek[0];
+                    cift_sayi = cift_sayi + 1;
+                }
+            } değilse {
+                i = i + 1;                                 // savunmaci atla
+            }
+        }
+    }
+    ver cift_sayi;
+}
+işlev kjson_testi() -> tam32 {
+    // {"x": 42, "y": 100} byte (ASCII) dizisi.
+    değişken json: Dizi<tam32> = [123, 34, 120, 34, 58, 32, 52, 50, 44, 32, 34, 121, 34, 58, 32, 49, 48, 48, 125];
+    değişken degerler: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0];
+    değişken sayi: tam32 = kjson_ayristir(json, 19, degerler);
+    eğer sayi != 2 { ver 0; }              // 2 anahtar-deger cifti
+    eğer degerler[0] != 42 { ver 0; }      // x
+    eğer degerler[1] != 100 { ver 0; }     // y
+    ver 1;
+}
+
+// [D-622] [40] ASM — eski izole `asm_selfhost_arm` gocu. Mini-assembler: yuksek-seviye
+// (mnemonic, operand) ciftlerini [38]'in VM bytecode'una CEVIRIR (kimlik DEGIL: mnemonic
+// kodlari opcode'lardan farkli), sonra kvm_calistir ile kosturur. Mnemonic: 1=PUSH 2=ADD
+// 3=SUB 4=MUL 5=PRINT 6=HALT; tanimsiz mnemonic yoksayilir (bytecode'a yazilmaz).
+işlev kasm_assemble(kaynak: Dizi<tam32>, cift_sayi: tam32, bytecode: Dizi<tam32>) -> tam32 {
+    değişken bc_uz: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < cift_sayi {
+        değişken mn: tam32 = kaynak[i * 2];
+        değişken operand: tam32 = kaynak[i * 2 + 1];
+        eğer mn == 1 {                                 // PUSH -> [1, deger]
+            bytecode[bc_uz] = 1; bc_uz = bc_uz + 1;
+            bytecode[bc_uz] = operand; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 2 {                       // ADD -> 2
+            bytecode[bc_uz] = 2; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 3 {                       // SUB -> 3
+            bytecode[bc_uz] = 3; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 4 {                       // MUL -> 4
+            bytecode[bc_uz] = 4; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 5 {                       // PRINT -> 6
+            bytecode[bc_uz] = 6; bc_uz = bc_uz + 1;
+        } değilse eğer mn == 6 {                       // HALT -> 0
+            bytecode[bc_uz] = 0; bc_uz = bc_uz + 1;
+        }
+        i = i + 1;
+    }
+    ver bc_uz;
+}
+işlev kasm_testi() -> tam32 {
+    // (a) Asil program: (PUSH,6)(PUSH,7)(MUL)(PRINT)(PUSH,100)(PUSH,58)(ADD)(PRINT)(HALT).
+    değişken kaynak: Dizi<tam32> = [1, 6, 1, 7, 4, 0, 5, 0, 1, 100, 1, 58, 2, 0, 5, 0, 6, 0];
+    değişken bc: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken n: tam32 = kasm_assemble(kaynak, 9, bc);
+    eğer n != 13 { ver 0; }
+    // Uretilen bytecode [38]'in elle yazilmis programiyla HUCRE HUCRE ayni olmali.
+    değişken bek_bc: Dizi<tam32> = [1, 6, 1, 7, 4, 6, 1, 100, 1, 58, 2, 6, 0];
+    değişken k: tam32 = 0;
+    iken k < 13 {
+        eğer bc[k] != bek_bc[k] { ver 0; }
+        k = k + 1;
+    }
+    değişken yigin: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken beklenen: Dizi<tam32> = [42, 158];
+    eğer kvm_calistir(bc, n, yigin, beklenen, 2) != 1 { ver 0; }
+    // (b) SUB + tanimsiz mnemonic (99 yoksayilir): (PUSH,50)(99)(PUSH,8)(SUB)(PRINT)(HALT) -> 42.
+    değişken kaynak2: Dizi<tam32> = [1, 50, 99, 7, 1, 8, 3, 0, 5, 0, 6, 0];
+    değişken bc2: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    değişken n2: tam32 = kasm_assemble(kaynak2, 6, bc2);
+    eğer n2 != 7 { ver 0; }                            // 2+2+1+1+1; 99 hucre URETMEZ
+    eğer bc2[4] != 3 { ver 0; }                        // SUB opcode
+    değişken yigin2: Dizi<tam32> = [0, 0, 0, 0, 0, 0, 0, 0];
+    değişken beklenen2: Dizi<tam32> = [42];
+    eğer kvm_calistir(bc2, n2, yigin2, beklenen2, 1) != 1 { ver 0; }
+    ver 1;
+}
+

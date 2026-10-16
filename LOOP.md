@@ -2182,3 +2182,18 @@
   HATA rc=2; .text RW eslenince → HATA rc=2. x86 birlesik 180 islev, 27 asm,
   C ↔ self BIREBIR. REGRESYON: check_kapisi, baremetal_diff 20/20, kem_os_arm,
   syscall/ring3/timer_test_x86 yesil.
+- 2026-10-16 D-692: mimariden bagimsiz kem_os fazlari x86'da (arm ile AYNI kod).
+  [25] BIGNUM [26] SHA256 [29..40] (base64..mini-asm) test/ornekler/kem_os.kem'den
+  test/ornekler/kem_os_algoritma.kem'e BIREBIR tasindi (Python; satir coklu kumesi:
+  fark yalniz 2 yonlendirme yorumu + bos satir). Bolgeler x86 hedefiyle TEK BASINA
+  tip denetiminden geciyordu (asm/MMIO/cekirdek cagrisi yok). arm kem_os faz cikisi
+  tasimadan ONCE ve SONRA birebir ayni. x86 kem_os_x86.kem 14 faz cagirir; Kanit 23.
+  BULGU: x86 linki `undefined symbol: kdl_panik` — ksha_rotr'un degisken kaydirma
+  kontrolu (D-514). arm bunu --gc-sections ile karsiliyor (satir ici acilinca govde
+  olu); x86'da gc YOK. Cozum: x86 icin .kem `kdl_panik` → kem_panik (gc eklemek
+  .note.Xen gibi referanssiz bolumleri silme riski tasirdi; ayrica gercek bir ihlal
+  link hatasi degil temiz panik vermeli). SABOTAJ: KCRC_BEKLENEN +1 → 'X86 [30] CRC32
+  HATA' rc=2 (ilk deneme UYGULANMADI — regex cift boslugu tutmadi, rc=0 olcum degildi).
+  baremetal_diff 21/21 (yeni birim kem_os_algoritma 61 islev), arm birlesik 331 islev
+  degismedi, x86 birlesik 242 islev. REGRESYON: kem_os_arm, check_kapisi,
+  syscall/ring3_test_x86 yesil.
