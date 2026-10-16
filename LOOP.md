@@ -2220,3 +2220,11 @@
   → trampoline cop kayit → #GP, D-690 .kem raporlayicisi 'ISTISNA tip=0xd' basti,
   cekirdek durdu, rc=2. kem_gorev.kem asm 25 → 21. x86 birlesik 256 islev, 31 asm,
   C ↔ self BIREBIR. baremetal_diff 22/22.
+- 2026-10-16 D-695: PR #109 (15 saf-KEMGU stdlib modulu, 2026-08-07) main'e hazirlandi.
+  Eski PR'lar olculdu: #109 main ile CAKISMASIZ; 15 modul + 15 birlesik test bugunku
+  derleyicide temiz, stdlib_check yesil. check_genis 7 testte C ≠ self verdi → SATIR
+  SATIR olculdu: farklarin TAMAMI C'nin fazla tanisi ve her biri bir eşleş kolundaki
+  baglamaya duser (E3), self-host'un fazla tanisi 0 → MUAF'a gerekcesiyle eklendi
+  (158/158, 19 muaf). Ayni turda #95/#102/#104/#105 karsiliklari main'de oldugu
+  olculerek kapatildi; #101/#103/#106'nin duzeltmeleri main'de YOK (C ≠ self
+  fiksturlerle olculdu) → yeniden portlanacak.
