@@ -134,7 +134,7 @@ fi
 # cat sırasıyla AYNI olmalı. Mimari başına dosya (D2b) seçimi burada da x86_64.
 KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
                     runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem
-                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem
+                    runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem
                     runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem"
 kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done

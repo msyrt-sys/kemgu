@@ -2116,3 +2116,20 @@
   dagitici hep -1 → SYSCALL HATA, rc=2. REGRESYON: arm kem_os (EL0 SYSCALL/SHELL/
   SPAWN OK), check_kapisi, baremetal_diff 20/20, syscall_test_x86 yesil.
   KALAN: ring3 + kem_mmu fazi (39 blok) — kullanici karari.
+- 2026-10-16 D-687: x86 MMU fazi adim 1 — ceviri + kurtarilabilir #PF (.kem).
+  PR #112-#116 birlesimi: yigin tabanlari main'e CEVRILEMEDI (gh pr edit GraphQL
+  hatasi, sessiz) → #113-#116 kendi zincir dallarina birlesti; icerik #117
+  (os/x86-parite-4 → main) ile main'e tasindi, D-686 main'de dogrulandi.
+  runtime/mimari/x86_64/kem_mmu_hw.kem (deepseek tur 16, 1 blok, mudahale YOK):
+  PDPT[1] → yeni PD (56 MB) → PT; VA 0x50000000 ↔ PA 0x3A00000 alias +
+  CR3 yeniden yazimi; haritasiz VA 0x60000000 okumasi SABIT YAZMACLI
+  `movq (%rdi), %rax` (3 bayt). boot/start_x86_64.S isr_ortak: vektor 14 VE
+  kdl_x86_pf_bekle != 0 → CR2 kaydet, bayrak sifirla, RIP += bekle, iretq
+  (aarch64 kdl_fault_bekleniyor ikizi; bayrak 0 ise eski halt yolu AYNEN).
+  KANIT 18: QEMU 'X86 MMU CEVIRI OK' + 'X86 MMU FAULT OK cr2=' 1536 MB.
+  SABOTAJ: PT[0] yanlis cerceve → CEVIRI HATA rc=2; .S kurtarma kapali →
+  beklenen #PF halt, PANIK YOLU satiri yok rc=2. x86 birlesik birim 158 islev,
+  17 asm, C ↔ self BIREBIR. REGRESYON: check_kapisi, baremetal_diff 20/20,
+  kem_os_arm, syscall/ring3/timer_test_x86 yesil.
+  SIRADAKI: adres alani basina CR3 (izolasyon) → ring3 (GDT DPL3 + TSS) →
+  kullanici syscall → NX ile W^X.

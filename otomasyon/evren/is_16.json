@@ -1,0 +1,6 @@
+{"tur": "16", "is": "mmu_x86", "gorev": "otomasyon/evren/gorev_16_mmu_x86.md",
+ "baglam": ["runtime/mimari/x86_64/kem_gorev_hw.kem"],
+ "kesit": ["runtime/kem_mmu.kem:20-86", "runtime/kem_mmu.kem:333-345", "runtime/kem_mmu.kem:623-636"],
+ "effort": "low",
+ "dogrulama": ["cat runtime/mimari/x86_64/kem_zaman_hw.kem runtime/mimari/x86_64/kem_mmu_hw.kem > /tmp/claude-1000/evren/mmu_sonda.kem && build/kemgu --check --mimari x86_64-none /tmp/claude-1000/evren/mmu_sonda.kem"],
+ "isaretler": []}

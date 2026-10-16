@@ -1,0 +1,175 @@
+// kem_mmu_hw.kem — x86_64 MMU çeviri + kurtarılabilir #PF donanım kancaları (D2b, [D-687]).
+// ============================================================================
+// arm64 ikizi: runtime/kem_mmu.kem (adrp/add + mrs ESR_EL1/FAR_EL1). Bu dosya AYNI
+// TEST ADLARINI (kmmu_ceviri_testi, kmmu_fault_testi) ve AYNI test mantığını x86
+// donanımıyla sağlar; arm64 asm YASAK (AS001) → yalnız `mimari: x86_64`.
+//
+// RAM yerleşimi (kem_os): heap ~17 MB; zamanlayıcı/korunmuş 48–50 MB (0x3000000+);
+// MMU tabloları 56–58 MB — KXM_PD (0x3800000) yeni PD, KXM_PT (0x3801000) 4KB-sayfa
+// tablosu, KMMU_CEVIRI_PA (0x3A00000) identity-eşli boş RAM. PML4[0]→PDPT zaten
+// hazır (boot); bu dosya PDPT[1]'i kendi PD'mize bağlar → VA 1–2 GB aralığı
+// (0x40000000–0x7FFFFFFF) bu PD üzerinden çevrilir; PD indeksi = (VA−0x40000000)/2MB.
+// KMMU_CEVIRI_VA=0x50000000 → PD[128]; KMMU_FAULT_VA=0x60000000 → PD[256] (boş → #PF).
+
+sabit KXM_PD: tam64 = 58720256;           // 0x3800000 (56 MB) yeni PD (PDPT[1] için, 1..2 GB)
+sabit KXM_PT: tam64 = 58724352;           // 0x3801000 4KB-sayfa tablosu
+sabit KMMU_CEVIRI_VA: tam64 = 1342177280; // 0x50000000 (PD indeksi 128, PT indeksi 0)
+sabit KMMU_CEVIRI_PA: tam64 = 60817408;   // 0x3A00000 (58 MB) identity-eşli boş RAM
+sabit KMMU_FAULT_VA: tam64 = 1610612736;  // 0x60000000 (PD[256] boş → #PF)
+
+// Ham 64-bit yaz: adr → *tam64 (arm kmmu_y64 ikizi).
+çıplak işlev kxm_y64(adr: tam64, deger: tam64) {
+    değişken p: *tam64 = adr olarak *tam64;
+    *p = deger;
+}
+
+// Ham 64-bit oku (arm kmmu_o64 ikizi).
+çıplak işlev kxm_o64(adr: tam64) -> tam64 {
+    değişken p: *tam64 = adr olarak *tam64;
+    ver *p;
+}
+
+// CR3 oku (PML4 fiziksel tabanı) — `movq %cr3, $0`.
+çıplak işlev kxm_cr3_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq %cr3, $0"#
+            çıktı("=r", &x)
+        }
+    }
+    ver x;
+}
+
+// CR3 yaz — `movq $0, %cr3`. Aynı değeri yeniden yazmak TLB'yi temizler.
+çıplak işlev kxm_cr3_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq $0, %cr3"#
+            girdi("r", v)
+            bozulan("~{memory}")
+        }
+    }
+}
+
+// Tablo girdisinden çerçeve adresi: alt 12 bit (bayraklar) at → g - (g % 4096).
+çıplak işlev kxm_cerceve(g: tam64) -> tam64 {
+    ver g - (g % 4096);
+}
+
+// MMU kur (arm64 boot eşi): PD+PT temizle; PT[0]=PA|P|RW; PD[128]=PT|P|RW;
+// PDPT[1]=PD|P|RW (mevcut PML4→PDPT üzerine); CR3 yeniden yaz (TLB flush).
+çıplak işlev kdl_mmu_kur_x86() {
+    değişken i: tam64 = 0;
+    iken i < 512 { kxm_y64(KXM_PD + i * 8, 0); i = i + 1; }
+    i = 0;
+    iken i < 512 { kxm_y64(KXM_PT + i * 8, 0); i = i + 1; }
+    kxm_y64(KXM_PT, KMMU_CEVIRI_PA + 3);               // PT[0] = PA | P|RW
+    kxm_y64(KXM_PD + 128 * 8, KXM_PT + 3);             // PD[128] = PT | P|RW
+    değişken pml4: tam64 = kxm_cerceve(kxm_cr3_oku());
+    değişken pdpt: tam64 = kxm_cerceve(kxm_o64(pml4)); // PML4[0] → PDPT
+    kxm_y64(pdpt + 8, KXM_PD + 3);                     // PDPT[1] = PD | P|RW
+    kxm_cr3_yaz(kxm_cr3_oku());                        // TLB temizle
+}
+
+// 1 = non-identity çeviri donanımda ÇALIŞIYOR (iki farklı VA aynı PA'yı görüyor).
+// Sentetik DEĞİL: identity olsaydı alias testleri tutmazdı.
+çıplak işlev kmmu_ceviri_testi() -> tam32 {
+    kxm_y64(KMMU_CEVIRI_PA, 3735928559);            // 0xDEADBEEF → identity VA (=PA)
+    değişken a: tam64 = kxm_o64(KMMU_CEVIRI_VA);    // non-identity VA'dan oku → alias mı?
+    kxm_y64(KMMU_CEVIRI_VA, 3405691582);            // 0xCAFEBABE → non-identity VA (ters yön)
+    değişken b: tam64 = kxm_o64(KMMU_CEVIRI_PA);    // identity VA'dan oku → alias mı?
+    eğer a == 3735928559 ve b == 3405691582 {
+        ver 1;
+    }
+    ver 0;
+}
+
+// .S kurtarma-vari: kdl_x86_pf_bekle (atlanacak #PF komut uzunluğu) — RIP-göreli yaz.
+çıplak işlev kxm_bekle_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_bekle(%rip), %r11
+movq $0, (%r11)"#
+            girdi("r", v)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+}
+
+// kdl_x86_pf_bekle oku (kurtarma gerçekleştiyse 0'a düşer; .S temizler).
+çıplak işlev kxm_bekle_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_bekle(%rip), %r11
+movq (%r11), $0"#
+            çıktı("=r", &x)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// kdl_x86_pf_cr2 (yakalanan #PF CR2 değeri) — RIP-göreli yaz.
+çıplak işlev kxm_cr2_yaz(v: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_cr2(%rip), %r11
+movq $0, (%r11)"#
+            girdi("r", v)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+}
+
+// kdl_x86_pf_cr2 oku (kurtarma sonrası yakalanan CR2).
+çıplak işlev kxm_cr2_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"leaq kdl_x86_pf_cr2(%rip), %r11
+movq (%r11), $0"#
+            çıktı("=r", &x)
+            bozulan("~{r11}") bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// Haritasız VA'yı oku → GERÇEK #PF (TEK komut; .S RIP'i 3 bayt ilerletir; .S ELR/CS
+// yerine RIP-göreli kurtarma). Dönen değer ÇÖP — çağıran atar. SABİT YAZMAÇ
+// `movq (%rdi), %rax` = 48 8B 07 (tam 3 bayt; bu yüzden kxm_bekle_yaz(3)).
+çıplak işlev kxm_oku_faulting(adr: tam64) -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq (%rdi), %rax"#
+            girdi("{di}", adr)
+            çıktı("={ax}", &x)
+            bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// GERÇEK #PF-gate: haritasız VA oku → .S recovery → CR2==VA + kurtarıldı mı?
+// 1 = MMU zorluyor + gerçek #PF yakalandı + CR2==VA + OS devam ediyor. Sentetik DEĞİL.
+çıplak işlev kmmu_fault_testi() -> tam32 {
+    kxm_cr2_yaz(0);                                        // CR2 sonucu temizle
+    kxm_bekle_yaz(3);                                      // .S recovery iste (3 = komut uzunluğu)
+    değişken cop: tam64 = kxm_oku_faulting(KMMU_FAULT_VA); // GERÇEK #PF → .S recovery
+    değişken bekle: tam64 = kxm_bekle_oku();               // .S temizledi mi? (0 = kurtarıldı)
+    değişken cr2: tam64 = kxm_cr2_oku();                   // yakalanan CR2
+    eğer bekle == 0 ve cr2 == KMMU_FAULT_VA {
+        ver 1;
+    }
+    ver 0;
+}
