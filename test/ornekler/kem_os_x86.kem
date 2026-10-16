@@ -363,6 +363,15 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 MMU FAULT HATA");
     }
+    // İş 18 (D-688): süreç başına adres alanı — iki PML4, AYNI VA 0x54000000, FARKLI
+    // fiziksel sayfa (60 MB / 62 MB). A yaz → B yaz → A'ya dön: A'nın değeri duruyorsa
+    // izolasyon donanımda gerçek (tek alanda B, A'yı ezerdi).
+    eğer kmmu_izolasyon_testi() == 1 {
+        yazdir_metin("X86 IZOLASYON OK");
+    }
+    değilse {
+        yazdir_metin("X86 IZOLASYON HATA");
+    }
     // İş 16 (D-686): çekirdek modu sistem çağrısı — int 0x80 → .S koçanı →
     // .kem kdl_syscall_isle → kem_syscall_temel (arm64 ile ortak servisler).
     // 10 gettick ≥ 3 (timer koştu), 11 getpid = 0 (preempt testi bitti, görev 0),

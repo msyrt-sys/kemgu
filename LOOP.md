@@ -2133,3 +2133,10 @@
   kem_os_arm, syscall/ring3/timer_test_x86 yesil.
   SIRADAKI: adres alani basina CR3 (izolasyon) → ring3 (GDT DPL3 + TSS) →
   kullanici syscall → NX ile W^X.
+- 2026-10-16 D-688: x86 surec basina adres alani (CR3 degisimi).
+  kem_mmu_hw.kem (deepseek tur 17, 1 blok, mudahale YOK): kmmu_as_olustur(i) =
+  kendi PML4 + PDPT (cekirdek PDPT kopyasi) + PD (KXM_PD kopyasi) + PT; tek fark
+  VA 0x54000000 (PD[160]) → PA 60 MB + i*2MB. kmmu_as_gec = CR3 yazimi (PCID yok,
+  tam TLB temizligi). KANIT 19: 'X86 IZOLASYON OK' (A yaz, B yaz, A'ya don → A'nin
+  degeri duruyor + iki fiziksel sayfa cekirdekten ayri dogrulandi). SABOTAJ: iki
+  alan ayni PD'yi paylasinca → IZOLASYON HATA, rc=2.

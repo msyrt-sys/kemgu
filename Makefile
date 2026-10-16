@@ -2101,6 +2101,8 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	if [ "$$v" = "1536" ]; then echo "    cr2 = $$v MB (0x60000000)"; \
 	else echo "FAIL: 'X86 MMU FAULT OK cr2=' + 1536 satiri yok ($$v)"; exit 1; fi
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kmmu_fault_testi$$' || { echo "FAIL: kmmu_fault_testi .kem'den gelmiyor"; exit 1; }
+	@echo "  Kanit 19: surec basina adres alani (iki CR3, ayni VA, farkli fiziksel sayfa)..."
+	@grep -qxF "X86 IZOLASYON OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 IZOLASYON OK' yok"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de
