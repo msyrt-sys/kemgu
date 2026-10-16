@@ -215,6 +215,9 @@ sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, y
 // D-610: pointer alan HER syscall (5/17/18/26) artık kg_user_*_gecerli ile denetlenir;
 // pencere dışı pointer → 0-1 döner, kernel belleği ne okunur ne yazılır.
 çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
+    // [D-686] mimariden bağımsız servisler (10 gettick, 11 getpid, 13 exit, 14 durum)
+    // kem_gorev_cekirdek.kem'de — arm64 ve x86 dağıtıcıları AYNI yanıtı verir (D-407).
+    eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
     eğer num == 5 {
         eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }   // D-610: EL0 str ptr
         değişken n5: tam32 = kdl_metin_uzunluk(arg olarak *tam8);
@@ -226,10 +229,6 @@ sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, y
         kis_satir();
         kg_yaz64(KG_SYSC, kg_oku64(KG_SYSC) + 1);
         ver arg;
-    }
-    eğer num == 13 {
-        kem_gorev_bitir();
-        ver 0;
     }
     // USERLAND ADIM 5 (D-290): num=12 spawn(entry), num=14 durum(pid) — kdl_surec_spawn/
     // kdl_gorev_durum birebir (D-129/D-130), Model A basitleştirmesi: TEK adres-uzayı
@@ -246,10 +245,6 @@ sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, y
         eğer idx == 1 { kstk = KG_SPAWN_KSTK1; ustk = KG_SPAWN_USTK1; }
         ver kem_gorev_olustur_el0(arg, kstk + 8192, ustk + 4096);
     }
-    eğer num == 14 {
-        eğer (arg < 0) veya (arg >= 16) { ver 1; }
-        ver kg_oku64(KG_OLU + arg * 8);
-    }
     eğer num == 26 {
         eğer kg_user_yaz_ptr_gecerli(arg, arg2) == 0 { ver 0 - 1; }  // D-610: buf yazma
         değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
@@ -257,8 +252,6 @@ sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, y
     }
     // USERLAND ADIM 3 (D-288): num=10 gettick, num=11 getpid (kdl_tik_al/kdl_aktif_gorev
     // birebir — kem_tik_oku/kem_paktif zaten var, trivial sarmalayıcı).
-    eğer num == 10 { ver kem_tik_oku(); }
-    eğer num == 11 { ver kem_paktif; }
     // num=17/18 dosya_yaz_metin/oku_metin — kem_minifs.kem (D-272) üzerine sarmalayıcı.
     // NOT (kapsam-sınırı): minifs TEK-DOSYALI (proven-C'nin çok-dosyalı kdl_dosyalar[]
     // DEĞİL) — 15/16 (int dosya) ve 19/20/21 (sayisi/ad/sil, çok-dosya-listeleme) minifs'in

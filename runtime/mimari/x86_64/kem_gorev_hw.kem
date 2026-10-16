@@ -49,3 +49,12 @@ sabit KG_STK2: tam64 = 52428800;          // 0x03200000: görev2 yığın tepesi
 // IRQ0 koçanının GÜÇLÜ tanımı (arm64'te karşılığı kem_zaman_hw.kem'deki kdl_irq_isle).
 // .S içindeki zayıf varsayılanı ezer → kem_preempt ile SP takası yapılır.
 çıplak işlev kdl_irq_isle(sp: tam64) -> tam64 { ver kem_preempt(sp); }
+
+// [D-686] int 0x80 dağıtıcısı — boot/start_x86_64.S kdl_syscall_stub çağırır
+// (rdi=num, rsi=arg, dönüş rax). Güçlü tanım C bm_x86_kesme.o'daki ZAYIF olanı ezer.
+// Servisler mimariden bağımsız (kem_syscall_temel, kem_gorev_cekirdek.kem) — arm64
+// kdl_syscall_isle ile AYNI yanıt. Bilinmeyen numara → -1.
+çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
+    eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
+    ver 0 - 1;
+}
