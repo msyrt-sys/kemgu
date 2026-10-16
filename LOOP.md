@@ -1998,3 +1998,121 @@
   (eksik baglam / asiri kapsam). Uretimde 2 gercek hata kapi/denetim yakaladi
   (UART sessiz kayip, `dsb` sembol adiyla sahte eslesme); 1 hata benim gorev
   metnimdeydi (0xFEB00000 → yanlis ondalik), Kanit 10 yakaladi.
+- 2026-10-12 D-677: otomatik dongu + kem_minifs x86 testi (dal os/x86-parite-2).
+  otomasyon/evren/dongu.py (deepseek uretti, tur 7): sor → kuru eslestir →
+  uygula → dogrulama komutlari → isaret denetimi → KISA ozet; commit/kapi YOK.
+  Denetimde: log her kosuda UZERINE yazilir (bayat isaret tasinmaz) — gorevdeki
+  "ekle" talimatimdan iyi; tek uc durum (dogrulama yokken eski log) onarildi.
+  IS 8 (tur 8, dongu ile TEK KOMUT, mudahale YOK): minifs x86 CAT'e girdi;
+  QEMU microvm'de format → "KEMG" 100 B yaz → tampon SIFIRLA → oku; toplam
+  5071 (python ile bagimsiz hesap = 5071). Kanit 11. check_kapisi x86 8 parca.
+- 2026-10-12 D-678: PVH start_info saklaniyor (aarch64 kdl_dtb_adres ikizi).
+  SABIT DOGRULAMASI (gorev metnine yazmadan ONCE): magic 0x336ec578 Linux
+  xen/hvm/start_info.h + QEMU pvh.bin icinde bayt duzeyinde bulundu; alan
+  ofsetleri basliktan okundu (memmap_paddr @40, entries @48, girdi 24 B).
+  (gdb ile pvh_entry'de olcme denendi: QEMU 32/64 kip gecisinde 'g' paketi
+  okunamadi — yontem birakildi.)
+  start_x86_64.S ilk is `movl %ebx, kdl_pvh_bilgi` (.data'da; .bss sifirlanir).
+  runtime/mimari/x86_64/kem_pvh.kem: magic/version dogrulama + memmap RAM toplami.
+  KANIT: QEMU microvm `X86 PVH OK ram_mb=` → 127 (128 MB eksi alt bellek
+  bosluklari). objdump pvh_entry `movl %ebx, 0x105fa8` = nm kdl_pvh_bilgi
+  0x105fa8 (objdump 32-bit kodu 64-bit cozdugu icin %rip-goreli GORUNUR).
+  DEEPSEEK tur 9 (dongu ile): islev dogru; tek hata cikti bicimi (fazladan
+  yazdir_satir → bos satir, Kanit 12 KIRMIZI verdi) — onarim bende, 1 satir.
+- 2026-10-12 D-679: x86 DMA tabani PVH memmap'ten TURETILIYOR (envanter 6b).
+  kem_platform_kur(): 1 GB altinda biten en yuksek RAM bolgesinin tepesi - 256 KB,
+  4 KB hizali; vnet = taban + 64 KB. PVH yoksa sabit yedek (0x02000000).
+  KANIT: QEMU microvm taban 130804 KB; benim 128 MB varsayimimla beklenen
+  130816 KB idi — FARK gercek haritadan okundugunu gosteriyor: taban+256 KB =
+  0x7FFD000, QEMU RAM'in son 12 KB'ini (ACPI/firmware) ayiriyor. Sonraki DMA
+  BLK/NET + DISK RW + FS RW testleri turetilmis tabanla gecti. Kanit 13:
+  deger > 32768 KB (yedek sabitten buyuk = turetme calisti).
+  DEEPSEEK tur 10 (dongu, tek komut): mudahale YOK.
+- 2026-10-12 D-680: baremetal_diff x86 IKIZI. Olculdu (once, elle): x86 birlesik
+  birimi C ↔ self-host BIREBIR (72 define, 4 asm sablon+kisit, 79 volatile, 83
+  inttoptr) — derleyici isi GEREKMEDI, eksik olan OLCUMDU. Bolum (5): parca
+  listesi Makefile x86 CAT satirindan okunur (tek kaynak); sinif. denetimi
+  mimari/x86_64'u kapsar. Kapi 16/16 (aarch64 + x86_64), 0 atlandi.
+  SABOTAJ 2/2: x86 parcasi CAT'ten dusuruldu → derlenemedi + SINIFLANDIRILMAMIS;
+  CAT disi x86 dosyasi → SINIFLANDIRILMAMIS. DEEPSEEK tur 11: mudahale YOK
+  (verdigim Makefile kesit araligi yanlis satirdaydi; gorevdeki sed komutu
+  sayesinde etkisiz). Envanter §7: 2b, 6b, 7, 9 kapandi.
+- 2026-10-13 D-681: D1 — `--mimari x86_64-none` → `x86_64-unknown-none-elf`
+  (C src/ana.c + selfhost/codegen.kem BIREBIR; Mehmet onayi). `x86_64`
+  (windows-gnu, Windows CI) DEGISMEDI; etiket "x86_64" kaldigi icin AS001 asm
+  etiketleri aynen eslesir. x86 kapilari (calistir_kem_os_x86 Kanit 0,
+  check_kapisi x86 birimi, baremetal_diff x86 ikizi) yeni bayraga gecti.
+  Win64 cagri sozlesmesi riski (llc/LTO modul uclusune uyarsa) KAPANDI.
+  Olculdu: C ve SELF x86_64-none → unknown-none-elf; x86_64 → windows-gnu;
+  arm64 degismedi; bilinmeyen deger gurultulu hata. SABOTAJ: self x86_64-none
+  windows uclusu yayarsa baremetal_diff x86 KIRMIZI.
+  DEEPSEEK tur 12: 13 blok, derleyici farki satir satir okundu, mudahale YOK.
+  Dongu ilk kosuda DOGRULAMA_HATA verdi — KUSUR BENDE: sonda dosyasi olarak
+  arm64 asm'li kem_dtb'yi secmistim (x86 hedefinde AS001 zaten beklenir).
+- 2026-10-13 D-682: kem_dtb mimariden bagimsiz (ara hedef adim 1). Tek asm blogu
+  (`kdtb_adres`, arm64 adrp kdl_dtb_adres) runtime/mimari/<arch>/kem_kesif.kem'e
+  tasindi — arm64 govdesi silinenle BIREBIR (diff ile dogrulandi); x86 → 0
+  (PVH FDT vermez, kesif kem_pvh'de). kem_dtb artik x86 biriminde de derleniyor:
+  `X86 DTB YOK pvh_kesif`; arm64 [21] DTB OK + [22] DTB KESIF OK degismedi.
+  baremetal_diff: kem_dtb birimi (+arm64 kesif), kem_kesif birimi; x86 birlesik
+  birim 72 → 113 islev, C ↔ self BIREBIR; 17/17. check_kapisi "10 parca" mesaji
+  zaten BAYATTI (liste 14) — duzeltildi.
+  KALAN BORC: 3 dosyada 46 blok (kem_gorev 27, kem_mmu 14, kem_zaman 5).
+  DEEPSEEK tur 13: 6 blok, mudahale yok; CAT/kapi listeleri bende (tek satirlik
+  eklemeler gorev yazmaktan ucuz).
+- 2026-10-13 D-683: kem_zaman ayristirildi + x86 zamanlayici .kem'de (ara hedef adim 2).
+  ADIM A (orkestrator, BETIKLE tasima — uretim yok): GIC/CNTV/DAIF/IRQ dagitimi
+  runtime/mimari/arm64/kem_zaman_hw.kem'e; satir kumesi karsilastirmasiyla
+  BIREBIR (yalniz yorum eklendi). arm64 [5] TIMER TIK OK + PREEMPT OK; birlesik
+  OS 326 islev/48 asm DEGISMEDI; parca 3 + 8 = 11 islev (ozgun sayi).
+  ADIM B (deepseek): kdl_zaman.c x86 portu runtime/mimari/x86_64/kem_zaman_hw.kem
+  (PIC remap + PIT ~100 Hz + sti + kdl_kesme_isle/kdl_tik_al/kem_tik_oku).
+  Sabitler arac ile cevrildi; 13 port yazimi C ile sira+deger BIREBIR.
+  bm_x86_zaman.o x86 kanit cekirdeginden CIKTI (.kem saglar). KANIT: gercek IRQ0
+  (PIT→PIC→IDT 32→.S kocani→.kem) tik=3; nm T kdl_kesme_isle/kdl_tik_al .kem'den.
+  x86 birim 123 islev, 7 asm, C ↔ self BIREBIR. SABOTAJ: sti→nop → TIMER HATA.
+  DEEPSEEK: tur 14 butce tukendi (0 blok; 3 madde + 7 islev); 14b yalniz YENI
+  dosya (capasiz) → 1 blok, mudahale yok; test + Kanit 15 bende.
+  ACIK: x86 kdl_kesme_isle preempt CAGIRMAZ (arm kdl_irq_isle → kem_preempt);
+  preempt kem_gorev ile gelecek. KALAN BORC: kem_gorev 27 + kem_mmu 14 = 41.
+- 2026-10-16 D-684: kem_gorev ayristirildi (ara hedef adim 3a, orkestrator, BETIKLE).
+  ONCUL DUZELTMESI: kem_gorev'in modeli isbirlikci DEGIL, IRQ trap-frame SP-takasli
+  PREEMPTIVE (kdl_irq_isle → kem_preempt) — ayri "cooperative" fazi yok.
+  runtime/kem_gorev_cekirdek.kem (mimariden bagimsiz: kem_preempt_baslat/ac,
+  kem_gorev_olustur, kem_preempt, kem_gorev_bitir, gorev1/2, kem_preempt_testi) +
+  runtime/mimari/arm64/kem_gorev_hw.kem (sabit RAM adresleri, TTBR tablosu, adrp
+  yardimcilari + 3 KANCA: kg_cerceve_kur / kg_alan_sifirla / kg_alan_gec).
+  Satir kumesi karsilastirmasi: TEK kod satiri degisti (kg_ttbr_oku(kem_paktif) →
+  kg_ttbr_oku(i)); geri kalan farklar kanca cagri/imzalari. arm64 28 faz isareti
+  (PREEMPT, EL0 SYSCALL, SPAWN, SUREC IZOLASYON dahil) GECTI; birlesik OS 326 → 329
+  islev (+3 kanca), 48 asm DEGISMEDI; parca 42 + 12 + 7 = 61 = 58 + 3.
+  EL0/kul_*/MB-1b/trampolin kem_gorev.kem'de arm64'e ozgu KALDI (x86 ring3 sonraki faz).
+- 2026-10-16 D-685: x86 PREEMPTIVE gorev degistirme (ara hedef adim 3b).
+  Cerceve duzeni ORKESTRATOR karari: 15 GP itme (rax..r15) + CPU iretq cercevesi
+  = 160 B; `call` oncesi 16-hizali. start_x86_64.S kdl_irq0_stub: tam kayit →
+  kdl_kesme_isle → kdl_irq_isle(sp) → SP takasi → EOI → ters pop → iretq; ZAYIF
+  varsayilan kdl_irq_isle SP'yi degistirmez (C kernel'leri ayni davranir).
+  runtime/mimari/x86_64/kem_gorev_hw.kem (deepseek tur 15, 2 blok, mudahale YOK):
+  RAM sabitleri 48-50 MB (arac ile cevrildi), leaq yardimcilari, kg_cerceve_kur
+  (RIP@120 CS=8 RFLAGS=0x202 RSP SS=16), alan kancalari bos, guclu kdl_irq_isle
+  → kem_preempt. Makine denetimi: itme sirasi tasarimla, pop tam ters, ofsetler birebir.
+  KANIT: QEMU x86 iki gorev sayaci g1=1290364 g2=1307616 (adil round-robin), main
+  geri dondu. x86 birim 141 islev, 9 asm, C ↔ self BIREBIR. SABOTAJ: SP takasi
+  nop → PREEMPT HATA. REGRESYON: 17 C x86 hedefinin 16'si yesil.
+  ⚠ ONCEDEN VAR OLAN KUSUR: calistir_ring3_page_test_x86 KIRMIZI — main (54958ea)
+  ve D-684'te AYNI sekilde dusuyor (CS_RPL=0xffffffff, ring3'e gecilmiyor); bu
+  isle ilgisiz, test_tumu'da degil → hicbir kapi gormemis. Ayri is.
+  KALAN BORC (x86 karsiligi yok): kem_gorev 25 (EL0/kul_*/MB-1b/trampolin — ring3
+  fazi) + kem_mmu 14 = 39 blok.
+- 2026-10-16 D-686: x86 CEKIRDEK MODU sistem cagrisi (ara hedef kapanisi).
+  arm64 kdl_syscall_isle'nin mimariden bagimsiz dallari (10 gettick, 11 getpid,
+  13 exit, 14 durum) BIREBIR tasindi → kem_gorev_cekirdek.kem kem_syscall_temel_mi /
+  kem_syscall_temel (Python ile, satir-multiset dogrulandi); arm dagiticisi bunlari
+  cagirir (num 7 kis_satir arm'a ozgu, yerinde). x86: kem_gorev_hw.kem guclu
+  kdl_syscall_isle → kem_syscall_temel, bilinmeyen → -1 (C zayif olani ezer);
+  kem_os_x86.kem x86_sys (int $$0x80, rax=num rdi=arg). Kucuk ve asm-hassas →
+  orkestrator yazdi (deepseek turu acilmadi). KANIT 17: QEMU x86 'X86 SYSCALL OK
+  tik=6' (10≥3, 11=0, 14(1)=0, 99=-1) + llvm-nm T kdl_syscall_isle. SABOTAJ:
+  dagitici hep -1 → SYSCALL HATA, rc=2. REGRESYON: arm kem_os (EL0 SYSCALL/SHELL/
+  SPAWN OK), check_kapisi, baremetal_diff 20/20, syscall_test_x86 yesil.
+  KALAN: ring3 + kem_mmu fazi (39 blok) — kullanici karari.

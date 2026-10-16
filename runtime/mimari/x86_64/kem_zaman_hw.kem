@@ -1,0 +1,77 @@
+// kem_zaman_hw.kem — x86_64 ZAMANLAYICI/KESME DONANIMI (D2b, İş 14).
+// ============================================================================
+// runtime/kdl_zaman.c x86 bölümünün BİREBİR .kem portu (o C nesnesi x86 kanıt
+// çekirdeğinin bağlantısından ÇIKARILDI): PIC 8259 remap + PIT 8254 kurulumu
+// + IRQ0 dağıtımı + STI/HLT asm'leri. Mimariden bağımsız kısım (tik sayacı,
+// kem_timer_testi, kz_mmio yardımcıları) runtime/kem_zaman.kem'de KALDI.
+// arm64 ikizi: runtime/mimari/arm64/kem_zaman_hw.kem (GIC + CNTV, msr/mrs).
+// Ayrı dosya: AS001 gereği bir dosyada yalnız TEK mimarinin satıriçi_asm'i
+// olabilir; Makefile CAT listesi mimariye göre seçer (D2b kararı).
+//
+// Semboller: `bm_x86_kesme.o` @kdl_tik_al çağırır; start_x86_64.S IRQ0 koçanı
+// `bl kdl_kesme_isle(irq)` çağırır (PIC EOI'yi koçan KENDİSİ yapar). Port I/O
+// yardımcısı kem_port_yaz8, aynı CAT birimindeki x86 kem_uart.kem'dedir.
+
+// IRQ'ları aç (C'deki `__asm__ volatile("sti")`). IRQ-context sayacını da
+// etkilediğinden memory bozulani işaretlenir.
+çıplak işlev kz_irq_ac() {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti"# bozulan("~{memory}") } }
+}
+
+// tik'i TAZE oku (IRQ-context'te yazılıyor → cache'lenmesin): RIP-göreli movq
+// @kem_tik. Küresel tek derleme biriminde internal-linkage olsa da asm'den
+// sembol adıyla erişilir; bozulan("~{memory}") sıralamayı korur.
+çıplak işlev kem_tik_oku() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq kem_tik(%rip), $0"#
+            çıktı("=r", &x)
+            bozulan("~{memory}")
+        }
+    }
+    ver x;
+}
+
+// PIC 8259 remap (kdl_kesme_kur birebir; C port yazma SIRASI korunur):
+// IRQ0-7 → vektör 32-39, IRQ8-15 → 40-47. Maske: yalnız IRQ0 açık (FE/FF).
+çıplak işlev kdl_kesme_kur() {
+    kem_port_yaz8(32 olarak dtam16, 17 olarak dtam8);    // ICW1 PIC1: init + ICW4 bekle
+    kem_port_yaz8(160 olarak dtam16, 17 olarak dtam8);   // ICW1 PIC2
+    kem_port_yaz8(33 olarak dtam16, 32 olarak dtam8);    // ICW2 PIC1: vektör offset 32
+    kem_port_yaz8(161 olarak dtam16, 40 olarak dtam8);   // ICW2 PIC2: vektör offset 40
+    kem_port_yaz8(33 olarak dtam16, 4 olarak dtam8);     // ICW3 PIC1: cascade (slave@IRQ2)
+    kem_port_yaz8(161 olarak dtam16, 2 olarak dtam8);    // ICW3 PIC2: cascade kimliği
+    kem_port_yaz8(33 olarak dtam16, 1 olarak dtam8);     // ICW4 PIC1: 8086 mode
+    kem_port_yaz8(161 olarak dtam16, 1 olarak dtam8);    // ICW4 PIC2: 8086 mode
+    kem_port_yaz8(33 olarak dtam16, 254 olarak dtam8);   // maske PIC1: yalnız IRQ0 açık
+    kem_port_yaz8(161 olarak dtam16, 255 olarak dtam8);  // maske PIC2: hepsi kapalı
+}
+
+// PIT 8254 ch0 (kdl_timer_baslat birebir): mode 3 (kare dalga), lo/hi, binary
+// = 54; bölen 11932 (1193182/11932 ≈ 100 Hz) → düşük 156 / yüksek 46. Sonra
+// IRQ'ları aç (C'deki `sti`).
+çıplak işlev kdl_timer_baslat() {
+    kem_port_yaz8(67 olarak dtam16, 54 olarak dtam8);    // PIT komut: ch0, lo/hi, mode 3
+    kem_port_yaz8(64 olarak dtam16, 156 olarak dtam8);   // bölen düşük bayt
+    kem_port_yaz8(64 olarak dtam16, 46 olarak dtam8);    // bölen yüksek bayt
+    kz_irq_ac();                                        // sti → IRQ aç
+}
+
+// IRQ dispatch — start_x86_64.S IRQ0 koçanı `bl kdl_kesme_isle(irq)`. Yalnız IRQ0
+// açık (irq kullanılmaz); PIT mode 3 auto-reload → yeniden kurulum GEREKMEZ. EOI'yi
+// koçan YAPAR; burada yalnız tik ilerletilir.
+çıplak işlev kdl_kesme_isle(irq: tam64) {
+    kem_tik = kem_tik + 1;
+}
+
+// bm_x86_kesme.o'nun çağırdığı taze tik görünümü (C kdl_tik_al parite).
+çıplak işlev kdl_tik_al() -> tam64 {
+    ver kem_tik_oku();
+}
+
+// Boşta bekle (C kdl_idle birebir: hlt).
+çıplak işlev kdl_idle() {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"hlt"# bozulan("~{memory}") } }
+}

@@ -14542,6 +14542,7 @@ işlev main() -> tam32 {
     // ⚠ BAYRAK VERİLİRSE tablo C ile BİREBİR aynı kalır (`src/ana.c`):
     //   --mimari arm64  → aarch64-unknown-none-elf   (bare-metal)
     //   --mimari x86_64 → x86_64-pc-windows-gnu
+    //   --mimari x86_64-none → x86_64-unknown-none-elf  (D1, bare-metal SysV)
     // Yani "açık bayrak" ile "bayraksız konak" AYRI şeylerdir; C'de de öyle.
     değişken mim: metin = konak_mimari();
     değişken trp: metin = konak_triple();
@@ -14551,7 +14552,7 @@ işlev main() -> tam32 {
         değişken a: metin = arg_al(ai);
         eğer metin_esit(a, "--mimari") {
             eğer ai + 1 >= arg_sayi() {
-                yaz_str("--mimari: mimari argumani gerekli (arm64|x86_64)"); yb(10);
+                yaz_str("--mimari: mimari argumani gerekli (arm64|x86_64|x86_64-none)"); yb(10);
                 ver 2;
             }
             değişken mv: metin = arg_al(ai + 1);
@@ -14563,8 +14564,14 @@ işlev main() -> tam32 {
                     mim = "x86_64"; trp = "x86_64-pc-windows-gnu";
                 }
                 değilse {
-                    yaz_str("--mimari: bilinmeyen mimari (arm64|x86_64)"); yb(10);
-                    ver 2;
+                    // D1: bare-metal x86 — etiket "x86_64" kalır, üçlü SysV.
+                    eğer metin_esit(mv, "x86_64-none") {
+                        mim = "x86_64"; trp = "x86_64-unknown-none-elf";
+                    }
+                    değilse {
+                        yaz_str("--mimari: bilinmeyen mimari (arm64|x86_64|x86_64-none)"); yb(10);
+                        ver 2;
+                    }
                 }
             }
             ai = ai + 2;

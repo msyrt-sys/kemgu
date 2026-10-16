@@ -1,0 +1,60 @@
+// kem_gorev_hw.kem — arm64 görev/zamanlayıcı DONANIM kancaları (D2b, D-684).
+// ============================================================================
+// Sabitler, TTBR tablosu ve adrp yardımcıları runtime/kem_gorev.kem'den BİREBİR
+// taşındı; kancaların gövdeleri özgün kem_gorev_olustur/kem_preempt_baslat/
+// kem_preempt satırlarının AYNISIDIR. x86 ikizi: runtime/mimari/x86_64/kem_gorev_hw.kem.
+
+
+sabit KG_PSP: tam64 = 1157636096;         // 0x45002000: psp[i] tablosu (@+i*8; page-table üstü)
+sabit KG_OLU: tam64 = 1157639168;         // 0x45002c00: olu[i] tablosu (kdl_olu[] birebir; 1=bitmiş)
+sabit KG_G1: tam64 = 1157640192;          // 0x45003000: görev1 sayacı (FİXED RAM, volatile deref)
+sabit KG_G2: tam64 = 1157640200;          // 0x45003008: görev2 sayacı
+sabit KG_AKTIF: tam64 = 1157640208;       // 0x45003010: preempt-aktif bayrağı (FİXED RAM — küresel
+                                          // olsaydı store1→store0 arası IRQ-okuması clang'a görünmez →
+                                          // dead-store-elim ile store1 silinir → asla switch olmaz)
+sabit KG_STK1: tam64 = 1192230912;        // 0x47100000: görev1 yığın tepesi (free RAM)
+sabit KG_STK2: tam64 = 1193279488;        // 0x47200000: görev2 yığın tepesi
+
+// MODEL B / MB-1b: görev başına adres alanı (TTBR0). ttbr[i] = o görevin L1 PA'sı;
+// 0 = "çekirdek alanını miras al" (Model A davranışı — geriye uyumlu).
+sabit KG_TTBR: tam64 = 1157640448;        // 0x45003100: ttbr[i] tablosu (KG_SYSC üstü)
+
+çıplak işlev kg_ttbr_yaz(i: tam64, v: tam64) { değişken p: *tam64 = (KG_TTBR + i * 8) olarak *tam64; *p = v; }
+çıplak işlev kg_ttbr_oku(i: tam64) -> tam64 { değişken p: *tam64 = (KG_TTBR + i * 8) olarak *tam64; ver *p; }
+
+// Görev giriş adreslerini asm ile materyalize et (.kem işlev-adresi → tam64).
+çıplak işlev kg_gorev1_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_gorev1
+add $0, $0, :lo12:kem_gorev1"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kg_gorev2_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"adrp $0, kem_gorev2
+add $0, $0, :lo12:kem_gorev2"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Sentetik trap-frame kur (özgün kem_gorev_olustur gövdesi): 34 slot × 8 = 272 bayt,
+// tf@248=ELR=giriş, tf@256=SPSR=0x5 (EL1h IRQ-açık), gerisi 0. SP 16-hizalı.
+çıplak işlev kg_cerceve_kur(yigin_tepe: tam64, giris: tam64) -> tam64 {
+    değişken sp: tam64 = yigin_tepe - 272;
+    sp = (sp / 16) * 16;                          // 16-hizala
+    değişken k: tam64 = 0;
+    iken k < 34 { kg_yaz64(sp + k * 8, 0); k = k + 1; }   // 34 slot sıfırla
+    kg_yaz64(sp + 248, giris);                    // ELR_EL1 @248 = eret hedefi
+    kg_yaz64(sp + 256, 5);                        // SPSR @256 = 0x5 (EL1h, IRQ açık)
+    ver sp;
+}
+// ttbr[] = 0 (çekirdek alanı) — özgün kem_preempt_baslat döngüsü.
+çıplak işlev kg_alan_sifirla() {
+    değişken j: tam64 = 0;
+    iken j < 16 { kg_ttbr_yaz(j, 0); j = j + 1; }             // ttbr[] = 0 (çekirdek alanı)
+}
+// Seçilen görevin adres alanına geç — özgün kem_preempt satırları.
+çıplak işlev kg_alan_gec(i: tam64) {
+    değişken yeni: tam64 = kg_ttbr_oku(i);
+    eğer yeni == 0 { yeni = KMMU_L1; }
+    kmmu_ttbr_yaz(yeni);
+}

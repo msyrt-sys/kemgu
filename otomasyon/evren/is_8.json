@@ -1,0 +1,6 @@
+{"tur": "8", "is": "minifs_x86", "gorev": "otomasyon/evren/gorev_8_minifs_x86.md",
+ "baglam": ["runtime/kem_minifs.kem", "test/ornekler/kem_os_x86.kem"],
+ "kesit": ["Makefile:1945-1949", "Makefile:1953-1955", "Makefile:2025-2034", "test/check_kapisi.sh:135-157"],
+ "effort": "low",
+ "dogrulama": ["make calistir_kem_os_x86", "make calistir_check_kapisi", "make calistir_baremetal_diff"],
+ "isaretler": ["X86 FS RW OK", "kem_os_x86 (birleşik kaynak, 8 parça", "15/15"]}

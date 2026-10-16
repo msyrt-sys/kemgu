@@ -218,16 +218,16 @@ birebir.
 
 | Dosya | gerçek asm blok | Not |
 |---|---|---|
-| `runtime/kem_gorev.kem` | **27** | Bağlam değiştirme, EL0, zamanlayıcı — x86'da en büyük borç |
+| `runtime/kem_gorev.kem` | ~~27~~ **25** | ✅ D-684/685 — preemptive zamanlayıcı çekirdeği mimariden bağımsız (`kem_gorev_cekirdek.kem`), arm64 kancaları + 2 `adrp` `mimari/arm64/kem_gorev_hw.kem`'de; x86 preempt GERÇEK (iki görev, SP takaslı IRQ0 koçanı). Kalan 25: EL0/`kul_*`/MB-1b/trampolin → ring3 fazı |
 | `runtime/kem_mmu.kem` | **14** | Sayfa tablosu, TLBI, MSR/MRS, fault — x86 sayfalama modeli bambaşka |
-| `runtime/kem_zaman.kem` | **5** | Genel zamanlayıcı (`CNTPCT_EL0` vb.) → x86'da PIT/APIC/TSC |
-| `runtime/kem_dtb.kem` | **1** | `adrp x9, kdl_dtb_adres` (aarch64) — x86 karşılığı PVH `start_info` (`%ebx`, saklanmıyor, §3.5) |
+| `runtime/kem_zaman.kem` | ~~5~~ **0** | ✅ D-683 — donanım `runtime/mimari/<arch>/kem_zaman_hw.kem`'de (arm64 GIC/CNTV 5 blok; x86 PIC+PIT `.kem`, gerçek IRQ0 tik). Açık: x86'da preempt kancası yok (kem_gorev ile) |
+| `runtime/kem_dtb.kem` | ~~1~~ **0** | ✅ D-682 — `kdtb_adres` `runtime/mimari/<arch>/kem_kesif.kem`'e taşındı (arm64 1 blok; x86 → 0, PVH keşfi D-678) |
 | `runtime/mimari/arm64/kem_bariyer.kem` | 1 | ✅ D-671 — x86 ikizi var (`mfence`) |
 | `runtime/mimari/arm64/kem_uart.kem` | 0 | ✅ D-672 — PL011 MMIO (asm yok); x86 ikizi 2 blok (`inb`/`outb`) |
 | `runtime/kem_heap/virtio_blk/virtio_net/minifs/elf.kem` | 0 | mimariden bağımsız (D-671…D-674 sonrası) |
 | `test/ornekler/kem_os.kem` | 0 | Ama fazları aarch64 davranışını ölçüyor |
 
-**KALAN PARİTE BORCU: 4 dosyada 47 gerçek blok** — `kem_gorev` 27 +
+**KALAN PARİTE BORCU: ~~47~~ → ~~46~~ → ~~41~~ → 39 gerçek blok (D-685/D-686 sonrası — D-686 asm eklemedi, servisleri taşıdı: `kem_gorev` 25 ring3/EL0, `kem_mmu` 14)** — `kem_gorev` 27 +
 `kem_mmu` 14 + `kem_zaman` 5 + `kem_dtb` 1. (İlk üçü kapsam dışı tutuldu ve
 ayrıca konuşulacak; `kem_dtb` envanterin ilk sürümünde "üç dosya"ya
 sayılmamıştı ama aarch64'e özgüdür.)
@@ -240,15 +240,15 @@ sayılmamıştı ama aarch64'e özgüdür.)
 |---|---|---|
 | 1 | Gözlemlenebilirlik — x86 COM1 çıplak UART + `kem_panik` x86 yolu | ✅ D-672 |
 | 2 | Boot yükümlülükleri — `kem_heap_kur` + değer denetleyen heap fazı | ✅ D-670 |
-| 2b | PVH `%ebx` (`start_info`) saklama | ❌ **AÇIK** — `start_x86_64.S` hâlâ saklamıyor; bellek haritası/keşif yok |
+| 2b | PVH `%ebx` (`start_info`) saklama | ✅ D-678 — `kdl_pvh_bilgi` (.data); magic + memmap okunuyor (QEMU: 127 MB RAM) |
 | 3 | D1 — bare-metal x86 üçlüsü (`x86_64-unknown-none-elf`) | ❌ **YAPILMADI** — `clang -target … -Wno-override-module` geçersiz kılması bugün yetiyor; Win64 sözleşme riski (§4.2) kayıtlı duruyor. Derleyici işi → karar senin |
 | 4 | DMA bariyeri | ✅ D-671 — **D2b** (mimari başına dosya), D3 yerleşiği DEĞİL |
 | 5 | Platform sabitleri | ✅ kısmi D-673/D-674 — `runtime/mimari/<arch>/kem_platform.kem` (DMA + virtio tabanı/yuva) el yazımı; UART ayrı dosya (`kem_uart.kem`). Makefile'ın ürettiği tek modül (D4 biçimi) değil |
 | 6 | x86 sayfalama — UC MMIO penceresi + DMA ilk 1 GB içinde | ✅ D-673 |
-| 6b | DMA tabanını linker sembolü / `start_info` haritasından türet | ❌ **AÇIK** — hâlâ SABİT (`0x02000000`); çakışmasızlık yalnız Kanıt 7 ile ölçülüyor (`__heap_end` < taban) |
-| 7 | microvm + `force-legacy=false` → virtio-blk / virtio-net | ✅ D-674 (minifs x86 biriminde YOK — geçişli, test edilmedi) |
-| 8 | **Kapsam dışı ağır borç**: `kem_zaman` (5) → `kem_mmu` (14) → `kem_gorev` (27); + `kem_dtb` (1) | ❌ **AÇIK — 47 blok** (sayım §6'da düzeltildi). `kem_gorev`, `kem_mmu`'ya (adres alanı) ve `kem_zaman`'a (preempt tik) bağlıdır; `kem_mmu` ↔ `kem_zaman` karşılıklı bağımlı (docs/BAREMETAL_DIFF_KAPSAM.md) |
-| 9 | Parite kapısı | ✅ kısmi — `calistir_kem_os_x86` (Kanıt 1-10, değer denetimli) + `check_kapisi` birleşik x86 birimi. ❌ `baremetal_diff`'in x86 İKİZİ (C oracle ↔ self-host yapısal parite) YOK; x86 birimi `kem_os.kem`'i içermiyor (kanıt çekirdeği `kem_os_x86.kem`) |
+| 6b | DMA tabanını `start_info` haritasından türet | ✅ D-679 — `kem_platform_kur()`: 1 GB altı en yüksek RAM tepesi − 256 KB (QEMU: 130804 KB; RAM `0x7FFD000`'de biter). PVH yoksa sabit yedek |
+| 7 | microvm + `force-legacy=false` → virtio-blk / minifs / virtio-net | ✅ D-674 + D-677 (minifs: format→yaz→oku, toplam 5071) |
+| 8 | **Kapsam dışı ağır borç**: `kem_zaman` (5) → `kem_mmu` (14) → `kem_gorev` (27); + `kem_dtb` (1) | 🟡 **KISMEN — 39 blok kaldı** (D-683 kem_zaman 0, D-682 kem_dtb 0, D-684/D-685 preempt çekirdeği ortak + x86 SP takası, D-686 çekirdek modu syscall ortak servisler + x86 `int 0x80`; kalan: `kem_gorev` 25 ring3/EL0 + `kem_mmu` 14 — ring3 fazı kullanıcı kararı). `kem_gorev`, `kem_mmu`'ya (adres alanı) ve `kem_zaman`'a (preempt tik) bağlıdır; `kem_mmu` ↔ `kem_zaman` karşılıklı bağımlı (docs/BAREMETAL_DIFF_KAPSAM.md) |
+| 9 | Parite kapısı | ✅ kısmi — `calistir_kem_os_x86` (Kanıt 1-10, değer denetimli) + `check_kapisi` birleşik x86 birimi. ✅ D-680 `baremetal_diff` x86 ikizi: birleşik x86 birimi C ↔ self-host (72 işlev, 4 asm şablon+kısıt, 79 volatile, 83 inttoptr) birebir; parça listesi Makefile'dan okunur. x86 birimi `kem_os.kem`'i içermiyor (kanıt çekirdeği `kem_os_x86.kem`) |
 
 ---
 

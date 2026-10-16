@@ -1,0 +1,14 @@
+// kem_kesif.kem — D2b: x86_64 MİMARİYE ÖZGÜ PLATFORM KEŞİF İLKELİ.
+// ============================================================================
+// AMAÇ: `kdtb_adres()`nin x86_64 ikizi. x86'da PVH boot protokolü FDT
+// (device-tree) VERMEZ; platform haritası `start_info` yapısındadır ve
+// `kem_pvh.kem` tarafından okunur. Bu yüzden burada 0 döner — `kem_dtb.kem`in
+// "adres 0 → keşif yok" sözleşmesi gereği DTB ayrıştırıcısı hiç çalışmaz.
+// arm64 ikizi: `runtime/mimari/arm64/kem_kesif.kem`.
+//
+// ÇAĞIRAN: `kem_dtb.kem` mimariden bağımsız tek ayrıştırıcıyı barındırır ve bu
+// işlevi CAT ile birleşik birimde görür (D2b).
+// ============================================================================
+çıplak işlev kdtb_adres() -> tam64 {
+    ver 0;
+}

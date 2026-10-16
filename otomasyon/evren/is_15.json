@@ -1,0 +1,4 @@
+{"tur": "15", "is": "gorev_x86", "gorev": "otomasyon/evren/gorev_15_gorev_x86.md",
+ "baglam": ["runtime/kem_gorev_cekirdek.kem", "runtime/mimari/arm64/kem_gorev_hw.kem"],
+ "kesit": ["boot/start_x86_64.S:243-272"],
+ "effort": "low", "dogrulama": [], "isaretler": []}

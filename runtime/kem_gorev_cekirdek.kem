@@ -1,0 +1,124 @@
+// kem_gorev_cekirdek.kem — MİMARİDEN BAĞIMSIZ preemptive zamanlayıcı çekirdeği (D-684).
+// ============================================================================
+// runtime/kem_gorev.kem'den taşındı. Mimariye özgü üç nokta KANCA:
+//   kg_cerceve_kur(tepe, giris) -> sp   sentetik trap-frame (arm64 272 B / x86 iretq)
+//   kg_alan_sifirla() / kg_alan_gec(i)  görev başına adres alanı (arm64 TTBR0; x86 yok)
+// + sabit RAM adresleri (KG_PSP, KG_OLU, KG_G1/G2, KG_AKTIF, KG_STK1/2) ve görev
+// giriş adresi yardımcıları (kg_gorev1_adr/2_adr) → runtime/mimari/<arch>/kem_gorev_hw.kem.
+
+// Scheduler durumu — YALNIZ .kem okur/yazar (.S paylaşımı yok) → küresel internal OK.
+// Sayaçlar (kem_g1/g2) FİXED RAM: yalnız asm-ile-kullanılan küresel DGE ile silinir →
+// fixed-adres çıplak deref (volatile) hem stripping'i hem sonsuz-döngü store-sink'i çözer.
+küresel değişken kem_paktif: tam64 = 0;    // o an koşan görev
+küresel değişken kem_psayi: tam64 = 0;     // görev sayısı (0=main dahil kem_preempt_baslat'ta 1)
+
+çıplak işlev kg_psp_yaz(i: tam64, v: tam64) { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; *p = v; }
+çıplak işlev kg_psp_oku(i: tam64) -> tam64 { değişken p: *tam64 = (KG_PSP + i * 8) olarak *tam64; ver *p; }
+çıplak işlev kg_yaz64(adr: tam64, v: tam64) { değişken p: *tam64 = adr olarak *tam64; *p = v; }
+çıplak işlev kg_oku64(adr: tam64) -> tam64 { değişken p: *tam64 = adr olarak *tam64; ver *p; }
+
+// main = görev 0; ilk preempt'te gerçek trap-frame SP'si kaydedilir.
+çıplak işlev kem_preempt_baslat() {
+    kem_paktif = 0;
+    kem_psayi = 1;
+    kg_yaz64(KG_AKTIF, 0);
+    kg_yaz64(KG_G1, 0);          // sayaçları sıfırla (fixed RAM)
+    kg_yaz64(KG_G2, 0);
+    değişken k: tam64 = 0;
+    iken k < 16 { kg_yaz64(KG_OLU + k * 8, 0); k = k + 1; }   // olu[] tablosu temizle
+    kg_alan_sifirla();                       // [D-684] mimari kancası (arm64: ttbr[]=0)
+}
+çıplak işlev kem_preempt_ac() { kg_yaz64(KG_AKTIF, 1); }
+
+// Sentetik trap-frame kur (kdl_preempt_gorev_olustur birebir): 34 slot × 8 = 272 bayt,
+// tf@248=ELR=giriş, tf@256=SPSR=0x5 (EL1h IRQ-açık), gerisi 0. SP 16-hizalı. id döner.
+// [D-606] GÖREV TABLOSU KAPASİTESİ. olu[]/psp[]/ttbr[] tabloları 16 girdiliktir (sys(14)
+// durum zaten `arg >= 16` reddeder) ve olu[]'nun ARKASINDA KG_G1/KG_AKTIF durur. Önceden
+// kem_psayi'nın ÜST SINIRI YOKTU: EL0'dan döngüyle sys(12) spawn çağıran bir program
+// sayacı büyütüp zamanlayıcının olu[n]/psp[n] yazımlarını çekirdek durum değişkenlerine
+// taşırabilirdi. Kapasite doluysa görev KURULMAZ, -1 döner (trap-frame yazılmadan ÖNCE).
+sabit KG_GOREV_AZAMI: tam64 = 16;
+
+çıplak işlev kem_gorev_olustur(giris: tam64, yigin_tepe: tam64) -> tam64 {
+    eğer kem_psayi >= KG_GOREV_AZAMI { ver 0 - 1; }
+    değişken sp: tam64 = kg_cerceve_kur(yigin_tepe, giris);   // [D-684] mimari kancası
+    değişken i: tam64 = kem_psayi;
+    kg_psp_yaz(i, sp);
+    kem_psayi = kem_psayi + 1;
+    ver i;
+}
+
+// Round-robin scheduler — .kem kdl_irq_isle her timer IRQ'da çağırır. sp = kesilen
+// görevin trap-frame SP'si. aktif değilse/tek görevse sp (switch yok → A3 timer nötr).
+// kdl_preempt birebir: bitmiş (kg_olu=1) görevler ATLANIR (round-robin sırada tara).
+çıplak işlev kem_preempt(sp: tam64) -> tam64 {
+    eğer (kg_oku64(KG_AKTIF) == 0) veya (kem_psayi < 2) { ver sp; }
+    kg_psp_yaz(kem_paktif, sp);                   // mevcut görevin SP'sini kaydet
+    değişken n: tam64 = kem_paktif;
+    değişken t: tam64 = 0;
+    değişken bulundu: tam64 = 0;
+    iken (t < kem_psayi) ve (bulundu == 0) {      // en fazla psayi adım tara, ilk canlıda dur
+        n = n + 1;
+        eğer n >= kem_psayi { n = 0; }
+        eğer kg_oku64(KG_OLU + n * 8) == 0 { kem_paktif = n; bulundu = 1; }
+        t = t + 1;
+    }
+    // MODEL B / MB-1b: seçilen görevin adres alanına geç. ttbr[i]==0 ise Model A
+    // davranışı (çekirdek alanı) — geriye uyumlu. Anahtarlama BURADA güvenli:
+    // kem_preempt EL1'de, IRQ içinde koşar ve her adres alanı çekirdek RAM'ini
+    // AYNI identity eşlemeyle içerir (kmmu_as_olustur L2'yi kopyalar) → bu
+    // işlevin kendi kodu/yığını anahtarlamadan SONRA da haritalı kalır.
+    kg_alan_gec(kem_paktif);                      // [D-684] mimari kancası (arm64: TTBR0)
+    ver kg_psp_oku(kem_paktif);                   // sonraki (canlı) görevin SP'si → .S switch
+}
+
+// Aktif görevi BİTİR (izolasyon-ihlali/exit) — kdl_gorev_bitir birebir. Scheduler bir
+// daha seçmez (kem_preempt yukarıdaki tarama sırasında atlar).
+çıplak işlev kem_gorev_bitir() {
+    kg_yaz64(KG_OLU + kem_paktif * 8, 1);
+}
+
+// Görev gövdeleri — sonsuz sayaç (preemption ile kesilir; timer IRQ round-robin döndürür).
+// Fixed-RAM volatile deref (kg_yaz64/kg_oku64) → store sink EDİLMEZ, main taze görür.
+çıplak işlev kem_gorev1() { iken 1 == 1 { kg_yaz64(KG_G1, kg_oku64(KG_G1) + 1); } }
+çıplak işlev kem_gorev2() { iken 1 == 1 { kg_yaz64(KG_G2, kg_oku64(KG_G2) + 1); } }
+
+// A4 gate: 2 preemptive görev kur → preemption aç → main spin ederken timer-IRQ
+// round-robin ile görevlere geçer → her iki sayaç ilerler (INTERLEAVE) → preemption
+// çalışıyor. guard'lı (switch bozuksa hang yok). Sonra preemption'ı KAPAT → main
+// [6..10]'a devam eder (görevler artık seçilmez — sonsuz döngüleri terk edilir).
+çıplak işlev kem_preempt_testi() -> tam32 {
+    kem_preempt_baslat();
+    değişken t1: tam64 = kem_gorev_olustur(kg_gorev1_adr(), KG_STK1);
+    değişken t2: tam64 = kem_gorev_olustur(kg_gorev2_adr(), KG_STK2);
+    kem_preempt_ac();
+    değişken guard: tam64 = 0;
+    iken ((kg_oku64(KG_G1) < 2) veya (kg_oku64(KG_G2) < 2)) ve (guard < 200000000) {
+        guard = guard + 1;
+    }
+    kg_yaz64(KG_AKTIF, 0);                        // preemption DURDUR → main devam
+    eğer (kg_oku64(KG_G1) >= 2) ve (kg_oku64(KG_G2) >= 2) {
+        ver 1;                                     // her iki görev de koştu → interleave
+    }
+    ver 0;
+}
+
+// [D-686] Mimariden bağımsız sistem çağrısı servisleri — arm64 kdl_syscall_isle'dan
+// BİREBİR taşındı (dallar değişmedi). Kullanıcı işaretçisi gerektirmeyenler; EL0
+// işaretçili servisler (5/17/18/26) ve konsol (7) mimari dağıtıcıda kalır.
+çıplak işlev kem_syscall_temel_mi(num: tam64) -> mantıksal {
+    ver (num == 10) veya (num == 11) veya (num == 13) veya (num == 14);
+}
+çıplak işlev kem_syscall_temel(num: tam64, arg: tam64) -> tam64 {
+    eğer num == 10 { ver kem_tik_oku(); }
+    eğer num == 11 { ver kem_paktif; }
+    eğer num == 13 {
+        kem_gorev_bitir();
+        ver 0;
+    }
+    eğer num == 14 {
+        eğer (arg < 0) veya (arg >= 16) { ver 1; }
+        ver kg_oku64(KG_OLU + arg * 8);
+    }
+    ver 0 - 1;
+}

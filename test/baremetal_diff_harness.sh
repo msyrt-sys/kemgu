@@ -68,9 +68,9 @@ pass=0; fail=0
 
 # ---- (1) BİRLEŞİK OS BİRİMİ — asıl kapsam ----
 # Makefile `calistir_kem_os_arm` cat sırasıyla AYNI olmalı.
-OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem \
-runtime/kem_zaman.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
-runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/kem_dtb.kem \
+OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem \
+runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
+runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem \
 test/ornekler/kem_os.kem"
 os_ok=0
 os_eksik=""
@@ -130,7 +130,8 @@ else
 fi
 ir_uret() { o="$1"; shift; ( ulimit -v "$KAP_KB" 2>/dev/null; $GTO "$@" > "$o" 2>/dev/null ); }
 
-BIRIMLER="kem_dtb|runtime/kem_dtb.kem
+BIRIMLER="kem_dtb|runtime/kem_dtb.kem runtime/mimari/arm64/kem_kesif.kem
+kem_kesif|runtime/mimari/arm64/kem_kesif.kem
 kem_kanal_abi|runtime/kem_kanal_abi.kem
 kem_heap|runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem
 kem_bariyer|runtime/mimari/arm64/kem_bariyer.kem
@@ -181,6 +182,8 @@ EOF
 PARCALAR="runtime/kem_elf.kem runtime/kem_gorev.kem runtime/kem_minifs.kem
 runtime/kem_mmu.kem runtime/kem_virtio_net.kem runtime/kem_zaman.kem
 runtime/mimari/arm64/kem_uart.kem runtime/mimari/arm64/kem_platform.kem
+runtime/mimari/arm64/kem_zaman_hw.kem
+runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
 test/ornekler/kem_os.kem"
 kapsam_islev=0; kapsam_kuresel=0
 for f in $PARCALAR; do
@@ -220,9 +223,84 @@ for f in $PARCALAR; do
     fi
 done
 
+# ---- (5) BİRLEŞİK x86 BİRİMİ — aarch64 (1)'in x86_64 ikizi ----
+# NEDEN: D-674 sonrası x86 birleşik birimi (calistir_kem_os_x86 CAT) VAR ama
+# C↔self YAPISAL paritesini ölçen kapı YOKTU — aarch64'ün (1)'i x86'da karşılık-
+# sızdı (elle ölçüldü: 72 define, 4 asm, 79 volatile, 83 inttoptr, üçlü aynı;
+# kapı sessiz). Var olan ama KOŞMAYAN kapı, olmayandan tehlikelidir (D-446/D-486).
+# Parça listesi TEK KAYNAKTAN: Makefile'daki x86 CAT satırından OKUNUR. Elle
+# kopyalanan liste kaçınılmaz KAYAR (D-534 sınıfı: bayat sınıflandırma). Sed
+# deseni Makefile'a ÇAPALI — CAT satırının biçimi değişirse liste BOŞ döner ve
+# kapı KIRMIZI verir (sessiz atlama YOK, D-675).
+# D1 (D-681): x86_64-none → x86_64-unknown-none-elf; burada ÜÇLÜNÜN ADI değil, iki
+# derleyicinin AYNI üçlüyü üretip üretmediği ölçülür (EŞİTLİK).
+# [D-663] per-birim zaman aşımı + bellek tavanı ir_uret ile (bölüm (2) tanımı).
+X86_PARCA=$(sed -n 's/.*cat \(runtime\/kem_heap\.kem.*kem_os_x86\.kem\) > \$(BUILD)\/kem_os_x86_comb\.kem/\1/p' Makefile)
+if [ -z "$X86_PARCA" ]; then
+    echo "  🔴 BİRLEŞİK x86 — Makefile'dan parça listesi okunamadı"
+    fail=$((fail+1))
+else
+    x86_eksik=""
+    for parca in $X86_PARCA; do [ -f "$parca" ] || x86_eksik="$x86_eksik $parca"; done
+    if [ -n "$x86_eksik" ]; then
+        echo "  🔴 BİRLEŞİK x86 — parça dosyası YOK:$x86_eksik"
+        fail=$((fail+1))
+    else
+        cat $X86_PARCA > "$TMP/x86.kem"
+        "$KEMGU" --llvm --mimari x86_64-none "$TMP/x86.kem" > "$TMP/x86_c.ll" 2> "$TMP/x86_c.err"; xrc=$?
+        ir_uret "$TMP/x86_s.ll" "$CODEGEN" --llvm --mimari x86_64-none "$TMP/x86.kem"; xsr=$?
+        if [ "$xrc" -ne 0 ] || head -1 "$TMP/x86_c.ll" 2>/dev/null | grep -q "hata\[" || [ ! -s "$TMP/x86_c.ll" ]; then
+            echo "  🔴 BİRLEŞİK x86 — C oracle DERLEYEMEDİ (rc=$xrc) — birim ÖLÇÜLEMEDİ:"
+            grep -m3 "hata\[" "$TMP/x86_c.err" "$TMP/x86_c.ll" 2>/dev/null | sed 's/^/      /'
+            fail=$((fail+1))
+        elif [ "$xsr" -eq 124 ] || [ "$xsr" -eq 137 ]; then
+            echo "  🔴 BİRLEŞİK x86 — KEMGU IR URETIMI ASILDI/OLDURULDU (rc=$xsr)"
+            fail=$((fail+1))
+        elif [ ! -s "$TMP/x86_s.ll" ]; then
+            echo "  🔴 BİRLEŞİK x86 — KEMGU codegen IR üretemedi"
+            fail=$((fail+1))
+        else
+            grep "^define" "$TMP/x86_c.ll" | sed 's/(.*//' | sort > "$TMP/x86_c.d"
+            grep "^define" "$TMP/x86_s.ll" | sed 's/(.*//' | sort > "$TMP/x86_s.d"
+            xc=$(grep -m1 "target triple" "$TMP/x86_c.ll"); xs=$(grep -m1 "target triple" "$TMP/x86_s.ll")
+            xa=$(grep -c "asm sideeffect" "$TMP/x86_c.ll"); xsa=$(grep -c "asm sideeffect" "$TMP/x86_s.ll")
+            xv=$(grep -cE "load volatile|store volatile" "$TMP/x86_c.ll"); xsv=$(grep -cE "load volatile|store volatile" "$TMP/x86_s.ll")
+            xi=$(grep -c "inttoptr" "$TMP/x86_c.ll"); xsi=$(grep -c "inttoptr" "$TMP/x86_s.ll")
+            # asm ŞABLON + KISIT dizgisi de eşleşmeli: ADET eşit ama İÇERİK farklı
+            # olabilir (D-416 kusuru) — adet tek başına onu KAÇIRIR.
+            grep -o 'asm sideeffect "[^"]*", "[^"]*"' "$TMP/x86_c.ll" | sort > "$TMP/x86_c.a"
+            grep -o 'asm sideeffect "[^"]*", "[^"]*"' "$TMP/x86_s.ll" | sort > "$TMP/x86_s.a"
+            if [ "$xc" = "$xs" ] && diff -q "$TMP/x86_c.d" "$TMP/x86_s.d" >/dev/null 2>&1 \
+               && [ "$xa" -eq "$xsa" ] && diff -q "$TMP/x86_c.a" "$TMP/x86_s.a" >/dev/null 2>&1 \
+               && [ "$xv" -gt 0 ] && [ "$xv" -eq "$xsv" ] \
+               && [ "$xi" -gt 0 ] && [ "$xi" -eq "$xsi" ]; then
+                echo "  ✅ BİRLEŞİK x86 — $(wc -l <"$TMP/x86_c.d") işlev, $xa satıriçi asm (şablon+kısıt eşleşti), $xv volatile, $xi inttoptr, üçlü eşleşti"
+                pass=$((pass+1))
+            else
+                echo "  🔴 BİRLEŞİK x86 — işlev C=$(wc -l <"$TMP/x86_c.d") KEMGU=$(wc -l <"$TMP/x86_s.d") · asm C=$xa KEMGU=$xsa · volatile C=$xv KEMGU=$xsv · inttoptr C=$xi KEMGU=$xsi"
+                [ "$xc" = "$xs" ] || echo "      üçlü: C=[$xc] KEMGU=[$xs]"
+                diff "$TMP/x86_c.d" "$TMP/x86_s.d" 2>/dev/null | head -5 | sed 's/^/      /'
+                diff "$TMP/x86_c.a" "$TMP/x86_s.a" 2>/dev/null | head -5 | sed 's/^/      /'
+                fail=$((fail+1))
+            fi
+        fi
+    fi
+fi
+
+# x86_64 MİMARİ dosyalarının SINIFLANDIRMA denetimi — aarch64 döngüsünün ikizi.
+# Her biri Makefile x86 CAT listesinde GEÇMELİ; geçmeyen dosya kapı dışında
+# kalır (D-675 sınıfı sessiz körlük).
+for f in runtime/mimari/x86_64/*.kem; do
+    [ -f "$f" ] || continue
+    case " $X86_PARCA " in
+        *" $f "*) ;;
+        *) echo "  🔴 $f — SINIFLANDIRILMAMIŞ: Makefile calistir_kem_os_x86 CAT listesine ekle"; fail=$((fail+1)) ;;
+    esac
+done
+
 # ---- (4) SINIFLANDIRMA BÜTÜNLÜĞÜ — sessiz dışarıda kalma YOK ----
-# runtime/mimari/x86_64/*.kem bu kapının dışında (aarch64 hedefi AS001 verir);
-# onlar check_kapisi (birleşik x86, --mimari x86_64) + calistir_kem_os_x86'da.
+# runtime/mimari/x86_64/*.kem ayrı hedef (aarch64 AS001 verir) → sınıflandırması
+# yukarıda bölüm (5)'te Makefile x86 CAT listesine karşı denetlenir.
 for f in runtime/*.kem runtime/mimari/arm64/*.kem; do
     [ -f "$f" ] || continue
     case " $birim_sahipleri $(echo $PARCALAR) " in
@@ -231,5 +309,5 @@ for f in runtime/*.kem runtime/mimari/arm64/*.kem; do
     esac
 done
 
-echo "=== bare-metal (aarch64) yapı paritesi: $pass/$((pass+fail)) (birleşik OS + birimler + parça kapsamı: $kapsam_islev işlev, $kapsam_kuresel küresel), 0 atlandı ==="
+echo "=== bare-metal (aarch64 + x86_64) yapı paritesi: $pass/$((pass+fail)) (birleşik OS + birimler + parça kapsamı: $kapsam_islev işlev, $kapsam_kuresel küresel), 0 atlandı ==="
 [ "$fail" -eq 0 ]
