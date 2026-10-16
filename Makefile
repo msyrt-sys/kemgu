@@ -1960,12 +1960,14 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 #          basılır ve objdump'da <kdtb_adres>: etiketi x86 biriminde bulunur.
 # Kanıt 15: gerçek IRQ0 (PIT→PIC→IDT 32→.S koçanı→.kem kdl_kesme_isle) tik >= 3;
 #          kdl_kesme_isle/kdl_tik_al C değil .kem'den (bm_x86_zaman.o bağlanmıyor).
+# Kanıt 16: iki preemptive görevin sayaçları >= 2 (IRQ0 koçanı tam kayıt + SP takası,
+#          .kem kdl_irq_isle → kem_preempt); kdl_irq_isle güçlü tanımı .kem'den.
 calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
 	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
@@ -2081,6 +2083,13 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	else echo "FAIL: 'X86 TIMER TIK OK tik=' + >=3 satiri yok ($$v)"; exit 1; fi
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_kesme_isle$$' || { echo "FAIL: kdl_kesme_isle .kem'den gelmiyor"; exit 1; }
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_tik_al$$' || { echo "FAIL: kdl_tik_al .kem'den gelmiyor"; exit 1; }
+	@echo "  Kanit 16: preemptive gorev degistirme (iki gorev sayaci ilerledi) + .kem kdl_irq_isle..."
+	@g1=`grep -A1 -xF "X86 PREEMPT OK g1=" $(BUILD)/kem_os_x86.out | tail -1`; \
+	g2=`grep -A1 -xF "g2=" $(BUILD)/kem_os_x86.out | tail -1`; \
+	if [ -n "$$g1" ] && [ -n "$$g2" ] && [ "$$g1" -ge 2 ] 2>/dev/null && [ "$$g2" -ge 2 ] 2>/dev/null; then \
+		echo "    g1 = $$g1, g2 = $$g2"; \
+	else echo "FAIL: preempt sayaclari ilerlemedi (g1=$$g1 g2=$$g2)"; exit 1; fi
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_irq_isle$$' || { echo "FAIL: kdl_irq_isle (guclu) .kem'den gelmiyor"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

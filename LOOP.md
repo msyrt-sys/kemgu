@@ -2087,3 +2087,20 @@
   (PREEMPT, EL0 SYSCALL, SPAWN, SUREC IZOLASYON dahil) GECTI; birlesik OS 326 → 329
   islev (+3 kanca), 48 asm DEGISMEDI; parca 42 + 12 + 7 = 61 = 58 + 3.
   EL0/kul_*/MB-1b/trampolin kem_gorev.kem'de arm64'e ozgu KALDI (x86 ring3 sonraki faz).
+- 2026-10-16 D-685: x86 PREEMPTIVE gorev degistirme (ara hedef adim 3b).
+  Cerceve duzeni ORKESTRATOR karari: 15 GP itme (rax..r15) + CPU iretq cercevesi
+  = 160 B; `call` oncesi 16-hizali. start_x86_64.S kdl_irq0_stub: tam kayit →
+  kdl_kesme_isle → kdl_irq_isle(sp) → SP takasi → EOI → ters pop → iretq; ZAYIF
+  varsayilan kdl_irq_isle SP'yi degistirmez (C kernel'leri ayni davranir).
+  runtime/mimari/x86_64/kem_gorev_hw.kem (deepseek tur 15, 2 blok, mudahale YOK):
+  RAM sabitleri 48-50 MB (arac ile cevrildi), leaq yardimcilari, kg_cerceve_kur
+  (RIP@120 CS=8 RFLAGS=0x202 RSP SS=16), alan kancalari bos, guclu kdl_irq_isle
+  → kem_preempt. Makine denetimi: itme sirasi tasarimla, pop tam ters, ofsetler birebir.
+  KANIT: QEMU x86 iki gorev sayaci g1=1290364 g2=1307616 (adil round-robin), main
+  geri dondu. x86 birim 141 islev, 9 asm, C ↔ self BIREBIR. SABOTAJ: SP takasi
+  nop → PREEMPT HATA. REGRESYON: 17 C x86 hedefinin 16'si yesil.
+  ⚠ ONCEDEN VAR OLAN KUSUR: calistir_ring3_page_test_x86 KIRMIZI — main (54958ea)
+  ve D-684'te AYNI sekilde dusuyor (CS_RPL=0xffffffff, ring3'e gecilmiyor); bu
+  isle ilgisiz, test_tumu'da degil → hicbir kapi gormemis. Ayri is.
+  KALAN BORC (x86 karsiligi yok): kem_gorev 25 (EL0/kul_*/MB-1b/trampolin — ring3
+  fazi) + kem_mmu 14 = 39 blok.
