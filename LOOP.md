@@ -2232,3 +2232,13 @@
   tc5f_01 C=OK / self=L001 (sahte), tc5f_02 C=L002 / self=L001; cg_lineer_ic_ice self'te
   sahte L001 yuzunden HIC derlenmiyordu (C=42). Sonra: checker_diff 222/222 (0 muaf),
   cg_lineer_ic_ice self=42. SABOTAJ: tuketim kapali → tc5f_01/02 KIRMIZI, rc=2.
+- 2026-10-16 D-698: eski PR #106'nin D-331 parcasi yeniden portu — self-host, islev-tipli
+  degisken annotasyonu ile lambda uyusmazligini T001 ile reddeder (C ile ayni). Port oncesi
+  self 7 bicimin HICBIRINI reddetmiyordu (loud→silent). Kod DEEPSEEK yazdi (tur 21,
+  deepseek-v4.1-flash, 4 blok, mudahale YOK): ozgun D-331 kodu + bugunku C'nin OLCULEN
+  davranisi verildi; cikti ozgunle birebir (yalniz etiket), iki dosyada ozdes. Fikstur
+  ONCE C'ye karsi olculdu: dar donus, blok dar, arite (iki yon), param tipi, tip ailesi
+  → T001; uyumlu + `|| 8589934592` (dogal tam64) → OK. tc55_01/02 (tc53 numarasi doluydu).
+  checker_diff 224/224 (0 muaf). SABOTAJ: kanca kapali → tc55_01 KIRMIZI, rc=2.
+  #106'nin D-332…D-335 kismi (kapanis donus tipinin govdeye YAYILMASI, C oracle'i da
+  degistirir) PORTLANMADI — dil davranisi degisikligi, ayri karar.
