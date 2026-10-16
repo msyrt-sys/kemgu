@@ -422,3 +422,90 @@ wrmsr"#
     eğer son % 256 != 0 { ver 0; }                   // s'den sonra NUL olmalı
     ver 1;
 }
+
+// [D-691] çekirdek W^X — .text salt-okunur, geri kalan NX (CR0.WP).
+// Gerekçe: .text yazılabilir olsaydı store SESSİZCE geçer, fault hiç oluşmaz,
+// bayrak temizlenmez. Ayrıca CR0.WP (bit 16) olmadan çekirdek ring0 kendi
+// salt-okunur sayfasına da yazabilir → salt-okunurluk tek başına yetmez.
+// Sabitler araçla doğrulandı; mutlak mmu_hw ABI adlarıyla bit birebir.
+sabit KXM_PT_K: tam64 = 58728448;      // 0x3802000: çekirdeğin 0..2 MB'ı için 4KB PT
+sabit KXM_TEXT_BAS: tam64 = 1048576;   // 0x100000: imaj başı (.note.Xen + .text)
+sabit KXM_CR0_WP: tam64 = 65536;       // CR0 bit 16
+sabit KXM_PF_YAZ_HATA: tam64 = 3;      // P(1) | W(2): salt-okunur sayfaya çekirdek yazması
+
+// __rodata_end sembolünün adresi (aşağı-hizalama tabanı).
+çıplak işlev kxm_rodata_son() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq __rodata_end(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Çalıştırılabilir (.text) bir kod adresi (pvh_entry .text içindedir).
+çıplak işlev kxm_kod_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq pvh_entry(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// CR0.WP (bit 16) aç — çekirdek salt-okunur sayfaya yazamaz. Satırlar ayrı asm.
+çıplak işlev kxm_wp_ac() {
+    // TEK blok: üç ayrı blok olsaydı derleyici aralarda %rax'ı kullanabilirdi (CR0 bozulur).
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq %cr0, %rax
+orq $$65536, %rax
+movq %rax, %cr0"#
+            bozulan("~{rax}") bozulan("~{memory}")
+        }
+    }
+}
+
+// Sabit-yazmaçlı faulting store (kodlama 48 89 07 = 3 bayt; .S RIP'i bekle kadar
+// ilerletir). Salt-okunur sayfaya yazım → izin fault'u.
+çıplak işlev kxm_yaz_faulting(adr: tam64, v: tam64) {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"movq %rax, (%rdi)"# girdi("{di}", adr) girdi("{ax}", v) bozulan("~{memory}") } }
+}
+
+// Çekirdek 0..2 MB'ı tek 2MB sayfadan 4KB PT'ye böl: .text RO|X, geri kalan RW+NX.
+çıplak işlev kmmu_kernel_wx_kur() {
+    kxm_nx_ac();                                              // ÖNCE NXE: NX biti aksi halde ayrılmış → her erişim fault
+    değişken ro_son: tam64 = kxm_cerceve(kxm_rodata_son());   // aşağı hizala: veriyle ortak sayfa YAZILABİLİR kalsın
+    değişken s: tam64 = 0;
+    iken s < 512 {
+        değişken pa: tam64 = s * 4096;
+        eğer (pa >= KXM_TEXT_BAS) ve (pa < ro_son) {
+            kxm_y64(KXM_PT_K + s * 8, pa + 1);               // P, salt-okunur + çalıştırılabilir
+        }
+        değilse {
+            kxm_y64(KXM_PT_K + s * 8, KXM_NX_BIT + pa + 3);  // P|RW + NX
+        }
+        s = s + 1;
+    }
+    değişken pml4: tam64 = kxm_cerceve(kxm_cr3_oku());
+    değişken pdpt: tam64 = kxm_cerceve(kxm_o64(pml4));
+    değişken pd: tam64 = kxm_cerceve(kxm_o64(pdpt));          // PDPT[0] → boot PD
+    kxm_y64(pd, KXM_PT_K + 3);                               // PD[0] → 4KB PT
+    kxm_wp_ac();                                             // CR0.WP: çekirdek RO sayfaya yazamaz
+    kxm_cr3_yaz(kxm_cr3_oku());                              // TLB temizle
+}
+
+// ÇEKİRDEK W^X kapısı (arm64 kmmu_kernel_wx_testi ikizi): çekirdek KENDİ .text'ine
+// yazmayı dener → izin fault'u. Taklit edilemez: .text yazılabilir olsaydı store
+// SESSİZCE geçer, fault oluşmaz. Yazma gerçekten geçmedi diye kod baytı da okunur.
+çıplak işlev kmmu_kernel_wx_testi() -> tam32 {
+    değişken hedef: tam64 = kxm_kod_adr();         // .text içinde bir adres
+    değişken once: tam64 = kxm_o64(hedef);         // okuma SERBEST (RO)
+    kxm_cr2_yaz(0);
+    kxm_hata_yaz(0);
+    kxm_bekle_yaz(3);                              // .S recovery iste
+    kxm_yaz_faulting(hedef, 3735928559);           // 0xDEADBEEF → izin fault'u
+    değişken bekle: tam64 = kxm_bekle_oku();       // 0 = .S kurtardı
+    değişken cr2: tam64 = kxm_cr2_oku();
+    değişken hk: tam64 = kxm_hata_oku();           // `hata` anahtar kelime → `hk`
+    değişken sonra: tam64 = kxm_o64(hedef);        // kod DEĞİŞMEMİŞ olmalı
+    eğer (bekle == 0) ve (cr2 == hedef) ve (hk == KXM_PF_YAZ_HATA) ve (sonra == once) {
+        ver 1;
+    }
+    ver 0;
+}

@@ -2167,3 +2167,18 @@
   devreye girer) → rapor bicimi tutmaz rc=2; cmdline hep 0 → rc=2. (Ilk S2 denemem
   UYGULANMADI — capa dosyada 2 kez geciyordu, assert dustu; rc=0 olcum degildi.)
   x86 birlesik 174 islev, 23 asm, C ↔ self BIREBIR.
+- 2026-10-16 D-691: x86 CEKIRDEK W^X (arm64 kmmu_kernel_wx_testi ikizi).
+  kem_mmu_hw.kem (tur 20, deepseek-v4.1-flash, 1 blok): kmmu_kernel_wx_kur —
+  boot PD[0] (0..2 MB tek 2MB sayfa) → 4KB PT (0x3802000): [0x100000,
+  hizala_asagi(__rodata_end)=0x109000) P (RO+calistirilabilir), geri kalan
+  P|RW+NX; NXE once, sonra CR0.WP. kmmu_kernel_wx_testi: pvh_entry'ye sabit
+  yazmacli `movq %rax, (%rdi)` → #PF (CR2 == hedef, hata 3 = P|W), kod bayti
+  DEGISMEDI. MUDAHALE: model CR0 guncellemesini UC AYRI asm blokuna bolmustu
+  (bloklar arasinda %rax korunmaz) → tek blok yapildi. Sonraki tum testler
+  (syscall, istisna, panik) cekirdek W^X altinda yesil. Dogrulama komutum yine
+  eksikti (dosya D-690'dan beri kem_pvh/kem_uart'a bagli) — gercek birlesik birim
+  calistir_kem_os_x86 ile denetlendi.
+  KANIT 22: 'X86 KERNEL WX OK'. SABOTAJ: CR0.WP kapali → yazma sessizce gecer,
+  HATA rc=2; .text RW eslenince → HATA rc=2. x86 birlesik 180 islev, 27 asm,
+  C ↔ self BIREBIR. REGRESYON: check_kapisi, baremetal_diff 20/20, kem_os_arm,
+  syscall/ring3/timer_test_x86 yesil.
