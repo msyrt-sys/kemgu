@@ -32,6 +32,11 @@ işlev main() -> tam32 {
     // hem specialization'ı (`ilk$i64`) hem literalin eleman genişliğini belirler.
     değişken f: tam64 = ilk::<tam64>([8589934592]);
     eğer f != 8589934592 { ver 7; }
+    // NEGATİF literal: parametre IR'ı açık argümandan gelmezse `0 - 5` i32 doğar ve
+    // i64 parametreden ÜST BİTLER sıfır okunur (4294967291). Pozitif literal bu sınıfı
+    // GÖSTEREMEZ — üst bitler tesadüfen doğru kalır (sabotaj S7 ilk hâliyle SESSİZDİ).
+    değişken n: tam64 = kimlik::<tam64>(0 - 5);
+    eğer n != 0 - 5 { ver 9; }
     değişken k: tam32 = kimlik::<tam32>(20);   // POZİTİF: tam32 yolu bozulmamalı
     ver k + 22;
 }
