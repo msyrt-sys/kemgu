@@ -166,3 +166,147 @@ addq $$128, %rsp"#
     }
     ver 0;
 }
+
+// [D-705] x86_64 ring3 dosya sistemi kanıtı (arm64 kem_os.kem [13] FS SYSCALL ikizi):
+// kullanıcı kipinden gerçek virtio diske dosya_yaz(17) / dosya_oku(18) / yaz(5) —
+// round-trip tamponu 0x541FF000'a yazılır; sonra D-610 çekirdek işaretçisi (0x100000)
+// reddi (rax = -1) ve hlt → #GP kanıtlanır. int 0x80 → kdl_syscall_isle → kem_syscall_kul;
+// kg_kul_min/max penceresi [0x54000000,0x54200000) doğrulanır.
+sabit KXR_FS_AS: tam64 = 4;              // adres alanı #4 (0/1 izolasyon, 2 W^X, 3 ring3)
+sabit KXR_FS_HLT: tam64 = 58;            // kullanıcı programında hlt ofseti
+sabit KXR_FS_AD_OFS: tam64 = 256;        // "test" (0x54000100)
+sabit KXR_FS_ICERIK_OFS: tam64 = 272;    // "KEMGU-X86" (0x54000110)
+sabit KXR_FS_BUF_OFS: tam64 = 2093056;   // yığın sayfası 511 başı (0x541FF000) = okuma tamponu
+çıplak işlev kxr_fs_testi() -> tam32 {
+    değişken as: tam64 = kmmu_as_olustur(KXR_FS_AS);
+    eğer as == 0 { ver 0; }
+    değişken pdpt: tam64 = as + 4096;
+    değişken pd: tam64 = as + 8192;
+    değişken pt: tam64 = as + 12288;
+    değişken pa: tam64 = KMMU_OZEL_PA + KXR_FS_AS * KMMU_2MB;
+    // U/S YALNIZ bu alanın kendi tablolarında; kopyalanan çekirdek girdileri
+    // (PDPT[0] 0..1 GB, PDPT[3] MMIO) gözetmen kalır → kullanıcı onlara erişemez.
+    kxm_y64(as, pdpt + KXR_US_RW);
+    kxm_y64(pdpt + 8, pd + KXR_US_RW);
+    kxm_y64(pd + KMMU_OZEL_IDX * 8, pt + KXR_US_RW);
+    kxm_y64(pt, pa + KXR_US_RX);
+    kxm_y64(pt + 511 * 8, KXM_NX_BIT + pa + 511 * KMMU_SAYFA + KXR_US_RW);
+    // Kullanıcı programı (59 bayt, llvm-mc ile derlendi).
+    kxr_y8(pa + 0, 184);
+    kxr_y8(pa + 1, 17);
+    kxr_y8(pa + 2, 0);
+    kxr_y8(pa + 3, 0);
+    kxr_y8(pa + 4, 0);
+    kxr_y8(pa + 5, 191);
+    kxr_y8(pa + 6, 0);
+    kxr_y8(pa + 7, 1);
+    kxr_y8(pa + 8, 0);
+    kxr_y8(pa + 9, 84);
+    kxr_y8(pa + 10, 186);
+    kxr_y8(pa + 11, 16);
+    kxr_y8(pa + 12, 1);
+    kxr_y8(pa + 13, 0);
+    kxr_y8(pa + 14, 84);
+    kxr_y8(pa + 15, 205);
+    kxr_y8(pa + 16, 128);
+    kxr_y8(pa + 17, 184);
+    kxr_y8(pa + 18, 18);
+    kxr_y8(pa + 19, 0);
+    kxr_y8(pa + 20, 0);
+    kxr_y8(pa + 21, 0);
+    kxr_y8(pa + 22, 191);
+    kxr_y8(pa + 23, 0);
+    kxr_y8(pa + 24, 1);
+    kxr_y8(pa + 25, 0);
+    kxr_y8(pa + 26, 84);
+    kxr_y8(pa + 27, 186);
+    kxr_y8(pa + 28, 0);
+    kxr_y8(pa + 29, 240);
+    kxr_y8(pa + 30, 31);
+    kxr_y8(pa + 31, 84);
+    kxr_y8(pa + 32, 205);
+    kxr_y8(pa + 33, 128);
+    kxr_y8(pa + 34, 184);
+    kxr_y8(pa + 35, 5);
+    kxr_y8(pa + 36, 0);
+    kxr_y8(pa + 37, 0);
+    kxr_y8(pa + 38, 0);
+    kxr_y8(pa + 39, 191);
+    kxr_y8(pa + 40, 0);
+    kxr_y8(pa + 41, 240);
+    kxr_y8(pa + 42, 31);
+    kxr_y8(pa + 43, 84);
+    kxr_y8(pa + 44, 205);
+    kxr_y8(pa + 45, 128);
+    kxr_y8(pa + 46, 184);
+    kxr_y8(pa + 47, 5);
+    kxr_y8(pa + 48, 0);
+    kxr_y8(pa + 49, 0);
+    kxr_y8(pa + 50, 0);
+    kxr_y8(pa + 51, 191);
+    kxr_y8(pa + 52, 0);
+    kxr_y8(pa + 53, 0);
+    kxr_y8(pa + 54, 16);
+    kxr_y8(pa + 55, 0);
+    kxr_y8(pa + 56, 205);
+    kxr_y8(pa + 57, 128);
+    kxr_y8(pa + 58, 244);
+    // "test" @ pa+256
+    kxr_y8(pa + KXR_FS_AD_OFS + 0, 116);
+    kxr_y8(pa + KXR_FS_AD_OFS + 1, 101);
+    kxr_y8(pa + KXR_FS_AD_OFS + 2, 115);
+    kxr_y8(pa + KXR_FS_AD_OFS + 3, 116);
+    kxr_y8(pa + KXR_FS_AD_OFS + 4, 0);
+    // "KEMGU-X86" @ pa+272
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 0, 75);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 1, 69);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 2, 77);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 3, 71);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 4, 85);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 5, 45);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 6, 88);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 7, 56);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 8, 54);
+    kxr_y8(pa + KXR_FS_ICERIK_OFS + 9, 0);
+    // Okuma tamponunun ilk 16 baytını sıfırla.
+    kxr_y8(pa + KXR_FS_BUF_OFS + 0, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 1, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 2, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 3, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 4, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 5, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 6, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 7, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 8, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 9, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 10, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 11, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 12, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 13, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 14, 0);
+    kxr_y8(pa + KXR_FS_BUF_OFS + 15, 0);
+    kxr_tss_kur();
+    değişken b: tam64 = kxr_blok_adr();
+    değişken k: tam64 = kxm_cr3_oku();
+    kmmu_as_gec(as);
+    kxr_gir(KMMU_OZEL_VA, KXR_YIGIN_UST);
+    değişken bk: tam64 = kxm_o64(b);
+    değişken v: tam64 = kxm_o64(b + 16);
+    değişken r: tam64 = kxm_o64(b + 32);
+    değişken ax: tam64 = kxm_o64(b + 48);
+    kmmu_as_gec(k);
+    eğer (bk == 0) ve (v == KXR_GP) ve (r == KMMU_OZEL_VA + KXR_FS_HLT) ve (ax == 0 - 1)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 0, 0) == 75)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 1, 0) == 69)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 2, 0) == 77)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 3, 0) == 71)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 4, 0) == 85)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 5, 0) == 45)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 6, 0) == 88)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 7, 0) == 56)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 8, 0) == 54)
+       ve (kis_buf_oku8(pa + KXR_FS_BUF_OFS + 9, 0) == 0) {
+        ver 1;
+    }
+    ver 0;
+}

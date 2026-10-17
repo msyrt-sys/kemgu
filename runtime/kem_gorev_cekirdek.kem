@@ -199,3 +199,102 @@ küresel değişken kem_dil_canli: tam64 = 0;  // birleştirilmemiş dil görevi
     eğer kem_dil_canli == 0 { kg_yaz64(KG_AKTIF, 0); }     // main tek başına: eski durum
     ver r;
 }
+
+// ============================================================================
+// [D-705] KULLANICI-İŞARETÇİLİ SİSTEM ÇAĞRILARI — kem_gorev.kem'den taşındı (mimariden
+// bağımsız). Kullanıcı penceresi mimari kancasıdır: kg_kul_min/kg_kul_max/kg_kul_boy
+// (arm64 0x42000000 + 2 MiB; x86 0x54000000 + 2 MiB). kis_bayt / kis_buf_oku8 /
+// kis_buf_yaz8 her mimarinin kendi MMU dosyasında (arm64 kem_mmu.kem, x86 kem_mmu_hw.kem).
+// ============================================================================
+// === D-610 GÜVENLİK: EL0-pointer doğrulama (proven-C kdl_kesme.c D-150/151 .kem aynası) ===
+// EL0 syscall'ları kernel'e (EL1) pointer geçirir. Kernel o adresi denetimsiz DEREF
+// ederse, kötü/hatalı bir EL0 süreç KERNEL BELLEĞİNİ okutabilir (info-leak: sys(5) o
+// belleği UART'a basar) ya da kernel'e YAZDIRABİLİR (bellek bozulması / privilege
+// escalation). kem_os user penceresi TEK 2 MiB sayfadır: [0x42000000, 0x42200000)
+// (kem_mmu.kem L2[16], AP=01). Bu aralık dışındaki her pointer REDDEDİLİR.
+
+// Kernel'in YAZDIĞI user-tampon: adres user penceresinde + len sınırlı + taşma yok.
+çıplak işlev kg_user_yaz_ptr_gecerli(p: tam64, len: tam64) -> tam32 {
+    eğer p < kg_kul_min() { ver 0; }            // kernel/aşağı bölge → RED
+    eğer len > kg_kul_boy() { ver 0; }          // aşırı boy → RED
+    eğer (p + len) < p { ver 0; }              // taşma → RED
+    eğer (p + len) > kg_kul_max() { ver 0; }    // pencere dışı → RED
+    ver 1;
+}
+
+// Kernel'in OKUDUĞU EL0-kontrollü null-sonlu string: pointer user penceresinde OLMALI
+// ve null-sonlandırıcı pencere içinde (4 KiB tarama tavanı) BULUNMALI — aksi hâlde
+// straddle-over-read riski → RED. Tarama YALNIZ mapped-izinli byte'lara dokunur →
+// tarama fault üretemez (info-leak/DoS ikisi de kesilir).
+çıplak işlev kg_user_oku_str_gecerli(p: tam64) -> tam32 {
+    eğer p < kg_kul_min() { ver 0; }            // pencere dışı → RED (kernel-sızıntı engeli)
+    eğer p >= kg_kul_max() { ver 0; }
+    değişken son: tam64 = kg_kul_max();
+    değişken tavan: tam64 = p + 4096;          // tarama maliyeti sınırı
+    eğer (tavan > p) ve (tavan < son) { son = tavan; }   // taşma-korumalı min
+    değişken a: tam64 = p;
+    iken a < son {
+        eğer kis_buf_oku8(a, 0) == 0 { ver 1; }   // bölge-içi null → string güvenli
+        a = a + 1;
+    }
+    ver 0;                                      // null yok → straddle riski → RED
+}
+// Ad ilk 4 baytı (i>=uzunluk ise 0-pad — mfs_dosya_yaz/oku 4-bayt ad sözleşmesi).
+çıplak işlev kg_ad_bayt(adr: tam64, i: tam32) -> dtam8 {
+    değişken n: tam32 = kdl_metin_uzunluk(adr olarak *tam8);
+    eğer i < n { ver (kdl_metin_bayt(adr olarak *tam8, i)) olarak dtam8; }
+    ver 0 olarak dtam8;
+}
+çıplak işlev kem_syscall_kul_mi(num: tam64) -> mantıksal {
+    ver (num == 5) veya (num == 17) veya (num == 18);
+}
+çıplak işlev kem_syscall_kul(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
+    eğer num == 5 {
+        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }   // D-610: EL0 str ptr
+        değişken n5: tam32 = kdl_metin_uzunluk(arg olarak *tam8);
+        değişken i5: tam32 = 0;
+        iken i5 < n5 { kis_bayt((kdl_metin_bayt(arg olarak *tam8, i5)) olarak tam32); i5 = i5 + 1; }
+        ver 0;
+    }
+    eğer num == 17 {
+        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }    // D-610: ad okuma
+        eğer kg_user_oku_str_gecerli(arg2) == 0 { ver 0 - 1; }   // D-610: içerik okuma
+        değişken base: tam64 = vblk_bul();
+        eğer base == 0 { ver 0 - 1; }
+        eğer vblk_kur(base) != 0 { ver 0 - 1; }
+        değişken n: tam32 = kdl_metin_uzunluk(arg2 olarak *tam8);
+        değişken i: tam32 = 0;
+        iken i < n {
+            eğer i < 512 { vblk_data_yaz(i, (kdl_metin_bayt(arg2 olarak *tam8, i)) olarak dtam8); }
+            i = i + 1;
+        }
+        değişken a0: dtam8 = kg_ad_bayt(arg, 0);
+        değişken a1: dtam8 = kg_ad_bayt(arg, 1);
+        değişken a2: dtam8 = kg_ad_bayt(arg, 2);
+        değişken a3: dtam8 = kg_ad_bayt(arg, 3);
+        değişken r: tam32 = mfs_dosya_yaz(base, a0, a1, a2, a3, n);
+        eğer r != 0 { ver 0 - 1; }
+        ver n olarak tam64;
+    }
+    eğer num == 18 {
+        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }        // D-610: ad okuma
+        eğer kg_user_yaz_ptr_gecerli(arg2, 512) == 0 { ver 0 - 1; }  // D-610: buf yazma (≤512)
+        değişken base2: tam64 = vblk_bul();
+        eğer base2 == 0 { ver 0 - 1; }
+        eğer vblk_kur(base2) != 0 { ver 0 - 1; }
+        değişken b0: dtam8 = kg_ad_bayt(arg, 0);
+        değişken b1: dtam8 = kg_ad_bayt(arg, 1);
+        değişken b2: dtam8 = kg_ad_bayt(arg, 2);
+        değişken b3: dtam8 = kg_ad_bayt(arg, 3);
+        değişken boyut: tam32 = mfs_dosya_oku(base2, b0, b1, b2, b3);
+        eğer boyut < 0 { ver 0 - 1; }
+        değişken j: tam32 = 0;
+        iken j < boyut {
+            eğer j < 511 { kis_buf_yaz8(arg2, j, (vblk_data_oku(j)) olarak tam32); }
+            j = j + 1;
+        }
+        kis_buf_yaz8(arg2, boyut, 0);
+        ver boyut olarak tam64;
+    }
+    ver 0 - 1;
+}

@@ -1,0 +1,6 @@
+{"tur": "22", "is": "kul_fs_x86", "gorev": "otomasyon/evren/gorev_22_kul_fs_x86.md",
+ "baglam": [],
+ "kesit": ["runtime/mimari/x86_64/kem_gorev_hw.kem:50-60", "runtime/kem_mmu.kem:747-748", "runtime/mimari/x86_64/kem_mmu_hw.kem:355-370", "runtime/mimari/x86_64/kem_ring3_hw.kem:114-168"],
+ "effort": "low",
+ "dogrulama": ["make calistir_kem_os_x86 2>&1 | grep -E 'hata\\[|error|FAIL' | head -5; true"],
+ "isaretler": []}

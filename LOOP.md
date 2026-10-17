@@ -2355,3 +2355,16 @@
   baremetal_diff 'C=264/264 KEMGU=0/264' rc=2; ikisi de yedekten geri alindi.
   NOT: D-numaralari D-699/D-700 (ring3) ve D-704 (bu), main'deki D-695..D-698 ve
   #129'un D-701..D-703'u ile cakismasin diye (CLAUDE.md: numara merge aninda).
+- 2026-10-17 D-705: x86 KULLANICI KIPINDEN DOSYA SISTEMI (arm64 [13] FS SYSCALL ikizi).
+  kem_gorev.kem'den ortak cekirdege (Python, metin kesimi): D-610 isaretci denetleyicileri
+  (kg_user_yaz_ptr_gecerli / kg_user_oku_str_gecerli), kg_ad_bayt, sistem cagrisi 5/17/18
+  govdeleri → kem_syscall_kul_mi / kem_syscall_kul. Pencere sabitleri kancaya:
+  kg_kul_min/max/boy (arm 0x42000000, x86 0x54000000, 2 MiB). arm kem_os: benzersiz OK satir
+  kumesi ONCE = SONRA (toplam sayi zamanlamayla degisiyor: olduruleN surecin IZOLASYON satiri).
+  x86 (deepseek tur 22, 4 blok, mudahale YOK): kancalar + kis_buf_* + dagitici dali +
+  kxr_fs_testi. Kullanici programi llvm-mc ile derlendi (59 bayt), uretilen kxr_y8 dizisi
+  makineyle karsilastirildi: BIREBIR. Ring3: 17 yaz("test","KEMGU-X86") → 18 oku (yigin
+  sayfasina) → 5 yaz → 5(0x100000 cekirdek ptr) = -1 → hlt #GP. KANIT 28: 'X86 [13] FS
+  SYSCALL OK' + konsolda ring3'un bastigi 'KEMGU-X86'. SABOTAJ: x86 dagitici dali kapali →
+  rc=2; pencere alt siniri 0 (cekirdek ptr kabul) → rc=2. x86 birlesik 275 islev, 36 asm,
+  C ↔ self BIREBIR, baremetal_diff 22/22.

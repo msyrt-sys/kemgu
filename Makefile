@@ -2159,6 +2159,10 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kxr_ring3_testi$$' || { echo "FAIL: kxr_ring3_testi .kem'den gelmiyor"; exit 1; }
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kdl_x86_ring3_gir $(BUILD)/kem_os_x86.elf | grep -q 'iretq' || { echo "FAIL: kdl_x86_ring3_gir icinde iretq yok"; exit 1; }
 	@llvm-objdump -d --no-show-raw-insn --disassemble-symbols=kdl_idt_kur $(BUILD)/kem_os_x86.elf | grep -q '0xee' || { echo "FAIL: kdl_idt_kur'da DPL3 kapi (0xee) yok"; exit 1; }
+	@echo "  Kanit 28: kullanici kipinden dosya sistemi (ring3 int 0x80: 17 yaz, 18 oku, 5 yaz; D-610 cekirdek-ptr reddi)..."
+	@grep -qxF "X86 [13] FS SYSCALL OK" $(BUILD)/kem_os_x86.out || { echo "FAIL: 'X86 [13] FS SYSCALL OK' yok"; exit 1; }
+	@grep -qF "KEMGU-X86" $(BUILD)/kem_os_x86.out || { echo "FAIL: ring3 sys(5) okunan dosya icerigini basmadi"; exit 1; }
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kem_syscall_kul$$' || { echo "FAIL: kem_syscall_kul ortak cekirdekten gelmiyor"; exit 1; }
 	@# [D-700] Kanit 27: kirmizi bolge YOK — tum imajda (.kem + C nesneleri) RSP ALTINA
 	@# erisim sifir. Kesme cercevesi RSP altina itildigi icin oradaki yerel sessizce bozulur.
 	@# [D-704] noredzone'u artik DERLEYICI yayar (--mimari x86_64-none); IR'daki HER define
