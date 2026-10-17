@@ -2375,3 +2375,25 @@
   artik x86 dagiticisinda da var ama x86'da GIRDILI kanit YOK (bu adimda yazilmadi).
   SABOTAJ: arm kis_rx_hazir hep 1 → kem_os_arm rc=2. check_kapisi, baremetal_diff 22/22,
   kem_os_x86 yesil.
+- 2026-10-17 D-708: DERLEYICI — dar elemanli dizilerde (Dizi<dtam8/dtam16/tam8>) SESSIZ YANLIS
+  DEGER (C) ve GECERSIZ IR (self-host). HMAC calisirken bulundu: SHA dolgu bayti 0x80 >= 128.
+  Calisma zamani dar elemani 32 bit yuvada tutar; derleyici yazarken eleman ISARETINE gore
+  genisletmeli, okurken daraltmali. OLCUM (once): C `dizi_ekle` dtam8'i sext ediyordu,
+  `dizi_al(d,0) olarak tam64` 200 yerine -56; indeksleme `call i8 @kdl_dizi_al_tam`
+  (declare i32 — ABI tesadufuyle calisiyordu, D-295); self-host dar elemanli HER dizide
+  LINK-RED (i8 ↔ i32). C (deepseek tur 24a/24b): dizi_dar_mi / dizi_dar_yaz / dizi_dar_oku +
+  dizi_ekle, dizi_yaz, dizi_al, indeksleme, iki literal yolu, icin; icin degiskeni
+  isaretsizligi (benim: kesik spec + ileri bildirim + 1 satir). Self (tur 24c): 4 yazma yeri
+  dizi_dar_genislet; icin daraltma + eleman isaretsizligi tablosu cg_aeisz (cg_aemet aynasi,
+  Python ile). Fikstur cg_dizi_dar_eleman (11 bicim, register degerler dahil): C=SELF=42.
+  ⚠ OLCUM ARACI: ilk sabotajlar "sessiz" gorundu — fikstur `ver hatalar` donuyordu ve CIKIS
+  KODU 8 BITE KIRPILDI (1578 % 256 = 42, D-481). Fikstur artik maskeyi basar + 1 doner.
+  SABOTAJ: self genisletme isareti 0 → rc=1 (maske 1578); C dizi_dar_mi hep 0 → rc=1 (554) +
+  kripto kapisi kirmizi. C yazma tarafi isareti gozlenemez (tum okumalar daraltir) — bilinen.
+  Kapilar: codegen_diff 181/181, yapi_diff 162/162, llvm_test 293/293, snapshot 50/50,
+  sifir uyari 38/0, stdlib_check.
+- 2026-10-17 D-709: stdlib/kripto — cok bloklu SHA-256 (sha256_bayt) + HMAC-SHA256 (RFC 2104).
+  deepseek tur 23a (karma.kem) + 23b (testler); tur 23 butceyi bitirdi (blok 0) → ikiye bolundu.
+  Vektorler Python hashlib/hmac ile: SHA-256 56 bayt (2 blok), RFC 4231 TC1/TC2/TC6 (TC6 bloktan
+  uzun anahtar). Model gizli baytlari `ifsa` ile acmisti → sabit-sure ihlali, sabitsure
+  icinde genisletme/daraltmaya cevrildi (ifsa kodda 0). kripto_kosum 6/6 (skor 63).

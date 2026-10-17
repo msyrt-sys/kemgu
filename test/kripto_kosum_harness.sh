@@ -33,7 +33,7 @@ mkdir -p "$TMP"
 temizle() { rm -rf "$TMP"; }
 trap temizle EXIT
 
-BEKLENEN=15
+BEKLENEN=63   # D-709: +16 çok bloklu SHA-256, +32 HMAC-SHA256 (RFC 4231)
 
 if [ ! -x "$KEMGU" ]; then echo "FAIL: $KEMGU yok"; exit 1; fi
 if [ ! -f "$RT" ]; then echo "FAIL: $RT yok (make build/kdl_runtime.o)"; exit 1; fi
@@ -66,9 +66,11 @@ echo "  $(bit 1) KONTROL  — sabit tablolar (K[0], K[63], H0[0])"
 echo "  $(bit 2) ChaCha20 quarter-round — RFC 8439 §2.1.1"
 echo "  $(bit 4) SHA-256(\"abc\")        — NIST FIPS 180-4 App. B.1"
 echo "  $(bit 8) sabit_süre_seç_u64      — üst bit sızıntısı yok (D-629)"
+echo "  $(bit 16) SHA-256 (56 bayt, 2 blok) — NIST FIPS 180-4 (D-709)"
+echo "  $(bit 32) HMAC-SHA256              — RFC 4231 TC1/TC2/TC6 (D-709)"
 
 if [ "$RC" -eq "$BEKLENEN" ]; then
-    echo "=== kripto koşum kapısı: 4/4 vektör GEÇTİ ✓ ==="
+    echo "=== kripto koşum kapısı: 6/6 vektör GEÇTİ ✓ ==="
     exit 0
 fi
 

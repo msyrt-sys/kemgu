@@ -138,11 +138,77 @@ işlev kt_sec_u64_ust_bit() -> tam32 {
     ver 1;
 }
 
+işlev kt_metin_bayt(s: metin) -> Dizi<sabitsüre<dtam8>> {
+    değişken d: Dizi<sabitsüre<dtam8>> = [];
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(s);
+    iken i < n {
+        dizi_ekle(d, sabitsüre_olustur((metin_bayt(s, i) olarak dtam8)));
+        i = i + 1;
+    }
+    ver d;
+}
+
+işlev kt_tekrar(b: dtam8, n: tam32) -> Dizi<sabitsüre<dtam8>> {
+    değişken d: Dizi<sabitsüre<dtam8>> = [];
+    değişken i: tam32 = 0;
+    iken i < n {
+        dizi_ekle(d, sabitsüre_olustur(b));
+        i = i + 1;
+    }
+    ver d;
+}
+
+işlev kt_ozet_kontrol(d: Dizi<sabitsüre<dtam32>>, w0: tam64, w1: tam64, w7: tam64) -> tam32 {
+    değişken s0: dtam32 = ifşa(d[0]);
+    değişken s1: dtam32 = ifşa(d[1]);
+    değişken s7: dtam32 = ifşa(d[7]);
+    değişken gecti: tam32 = 1;
+    eğer (s0 olarak tam64) != w0 { gecti = 0; }
+    eğer (s1 olarak tam64) != w1 { gecti = 0; }
+    eğer (s7 olarak tam64) != w7 { gecti = 0; }
+    ver gecti;
+}
+
+// [D-709] Çok bloklu SHA-256: 56 baytlık mesaj → iki blok (dolgu ikinci bloğa taşar).
+işlev kt_sha256_cok_blok() -> tam32 {
+    değişken m: Dizi<sabitsüre<dtam8>> =
+        kt_metin_bayt("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
+    değişken d: Dizi<sabitsüre<dtam32>> = sha256_bayt(m, 56);
+    ver kt_ozet_kontrol(d, 613247585, 3523623096, 433784513);
+}
+
+// [D-709] HMAC-SHA256 RFC 4231 test vektörleri (TC1, TC2, TC6).
+işlev kt_hmac_rfc4231() -> tam32 {
+    // TC1: anahtar 20×0x0b, mesaj "Hi There".
+    değişken k1: Dizi<sabitsüre<dtam8>> = kt_tekrar(11, 20);
+    değişken m1: Dizi<sabitsüre<dtam8>> = kt_metin_bayt("Hi There");
+    değişken d1: Dizi<sabitsüre<dtam32>> = hmac_sha256(k1, 20, m1, 8);
+    eğer kt_ozet_kontrol(d1, 2956217441, 3638245459, 775081975) != 1 { ver 0; }
+
+    // TC2: anahtar "Jefe", mesaj "what do ya want for nothing?".
+    değişken k2: Dizi<sabitsüre<dtam8>> = kt_metin_bayt("Jefe");
+    değişken m2: Dizi<sabitsüre<dtam8>> = kt_metin_bayt("what do ya want for nothing?");
+    değişken d2: Dizi<sabitsüre<dtam32>> = hmac_sha256(k2, 4, m2, 28);
+    eğer kt_ozet_kontrol(d2, 1541194054, 3210769742, 1693202499) != 1 { ver 0; }
+
+    // TC6: anahtar 131×0xaa (BLOKTAN UZUN → önce hash), uzun mesaj.
+    değişken k6: Dizi<sabitsüre<dtam8>> = kt_tekrar(170, 131);
+    değişken m6: Dizi<sabitsüre<dtam8>> =
+        kt_metin_bayt("Test Using Larger Than Block-Size Key - Hash Key First");
+    değişken d6: Dizi<sabitsüre<dtam32>> = hmac_sha256(k6, 131, m6, 54);
+    eğer kt_ozet_kontrol(d6, 1625567577, 518043263, 249790292) != 1 { ver 0; }
+
+    ver 1;
+}
+
 işlev main() -> tam32 {
     değişken skor: tam32 = 0;
     eğer kt_kontrol() == 1 { skor = skor + 1; }
     eğer kt_chacha_qr() == 1 { skor = skor + 2; }
     eğer kt_sha256_abc() == 1 { skor = skor + 4; }
     eğer kt_sec_u64_ust_bit() == 1 { skor = skor + 8; }   // D-629
-    ver skor;   // 15 = tam geçiş
+    eğer kt_sha256_cok_blok() == 1 { skor = skor + 16; }   // D-709
+    eğer kt_hmac_rfc4231() == 1 { skor = skor + 32; }     // D-709
+    ver skor;   // 63 = tam geçiş
 }
