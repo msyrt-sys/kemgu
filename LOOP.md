@@ -2375,3 +2375,13 @@
   artik x86 dagiticisinda da var ama x86'da GIRDILI kanit YOK (bu adimda yazilmadi).
   SABOTAJ: arm kis_rx_hazir hep 1 → kem_os_arm rc=2. check_kapisi, baremetal_diff 22/22,
   kem_os_x86 yesil.
+- 2026-10-17 D-707: x86 KULLANICI KIPINDEN UART SATIR OKUMA (arm64 [12] UART RX ikizi; D-706'nin
+  acik biraktigi girdili kanit). kxr_rx_testi (kem_ring3_hw.kem, adres alani #5, kxr_fs_testi
+  deseni): ring3 26(0x541FF000, 64) → donen uzunluk 0x541FF100'e → 5 yanki → 26(0x100000)
+  = -1 (D-610) → hlt #GP. Kullanici programi llvm-mc ile uretildi (55 bayt), kaynaktaki
+  kxr_y8 dizisi makineyle karsilastirildi + geri disassemble edildi: BIREBIR. Ayni imaj iki
+  sonuc: normal kosum (-serial file, DEGISMEDI) 'X86 [12] UART RX EOF'; KANIT 29 ucuncu
+  kosum -chardev file,input-path= "KEMGU-RX\n" → 'X86 [12] UART RX OK' + onceki satir ring3
+  yankisi 'KEMGU-RX'. Elle 5/5 kararli; yanlis satir ("KEMGU-RY") → HATA (icerik denetimi
+  gercek). SABOTAJ: x86 kis_rx_hazir hep 0 → girdili kosum EOF, rc=2; geri alindi.
+  kem_os_x86, kem_os_arm, check_kapisi 292/300 (0 RED), baremetal_diff 22/22 (x86 279 islev).
