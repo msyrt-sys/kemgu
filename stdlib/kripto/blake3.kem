@@ -1,0 +1,124 @@
+// blake3.kem — [D-710] BLAKE3 — parça + ağaç; ilkeller karma.kem'de (Python referansı + resmi vektörlerle doğrulandı).
+// ============================================================================
+// BLAKE3 parça (chunk) + ağaç (Merkle) katmanı. İlkeller (sikistir/blok_kelime/
+// init) karma.kem'de; burada yalnız yığın yönetimi ve blake3_bayt akışı.
+// Sabitler: CHUNK_START=1, CHUNK_END=2, PARENT=4, ROOT=8.
+
+// İlk 8 kelimeyi kopyala (CV = çıkış değerinin ön yarısı).
+işlev _b3_ilk8(d: Dizi<sabitsüre<dtam32>>) -> Dizi<sabitsüre<dtam32>> {
+    değişken r: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        dizi_ekle(r, d[i]);
+        i = i + 1;
+    }
+    ver r;
+}
+
+// İki 8-kelimelik bloğu 16-kelimelik girdiye birleştir (PARENT).
+işlev _b3_birlestir(a: Dizi<sabitsüre<dtam32>>, b: Dizi<sabitsüre<dtam32>>) -> Dizi<sabitsüre<dtam32>> {
+    değişken r: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        dizi_ekle(r, a[i]);
+        i = i + 1;
+    }
+    i = 0;
+    iken i < 8 {
+        dizi_ekle(r, b[i]);
+        i = i + 1;
+    }
+    ver r;
+}
+
+// Yığındaki k. grubu (8 kelime) al.
+işlev _b3_yigin_al(y: Dizi<sabitsüre<dtam32>>, k: tam32) -> Dizi<sabitsüre<dtam32>> {
+    değişken r: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        dizi_ekle(r, y[8 * k + i]);
+        i = i + 1;
+    }
+    ver r;
+}
+
+// Yığındaki k. grubu cv ile yaz; taşarsa ekle.
+işlev _b3_yigin_yaz(y: Dizi<sabitsüre<dtam32>>, k: tam32, cv: Dizi<sabitsüre<dtam32>>) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        eğer 8 * k + i < dizi_boyut(y) {
+            y[8 * k + i] = cv[i];
+        } değilse {
+            dizi_ekle(y, cv[i]);
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// BLAKE3 özeti: veri[0..n) → 32-baytlık özet (8 kelime).
+işlev blake3_bayt(veri: Dizi<sabitsüre<dtam8>>, n: tam32) -> Dizi<sabitsüre<dtam32>> {
+    değişken parca_say: tam32 = (n + 1023) / 1024;
+    eğer parca_say == 0 { parca_say = 1; }
+    değişken yigin: Dizi<sabitsüre<dtam32>> = [];
+    değişken yigin_n: tam32 = 0;
+    // son parçanın "çıktısı":
+    değişken o_cv: Dizi<sabitsüre<dtam32>> = blake3_init();
+    değişken o_m: Dizi<sabitsüre<dtam32>> = _b3_blok_kelime(veri, 0, 0);
+    değişken o_sayac: tam64 = 0;
+    değişken o_blen: tam32 = 0;
+    değişken o_bayrak: tam32 = 3;
+    değişken c: tam32 = 0;
+    iken c < parca_say {
+        değişken bas: tam32 = c * 1024;
+        değişken uz: tam32 = n - bas;
+        eğer uz > 1024 { uz = 1024; }
+        değişken blok_say: tam32 = (uz + 63) / 64;
+        eğer blok_say == 0 { blok_say = 1; }
+        değişken cv: Dizi<sabitsüre<dtam32>> = blake3_init();
+        değişken b: tam32 = 0;
+        iken b < blok_say {
+            değişken bb: tam32 = bas + b * 64;
+            değişken blen: tam32 = uz - b * 64;
+            eğer blen > 64 { blen = 64; }
+            değişken bayrak: tam32 = 0;
+            eğer b == 0 { bayrak = bayrak + 1; }
+            eğer b == blok_say - 1 { bayrak = bayrak + 2; }
+            değişken m: Dizi<sabitsüre<dtam32>> = _b3_blok_kelime(veri, bb, blen);
+            eğer b == blok_say - 1 {
+                o_cv = cv;
+                o_m = m;
+                o_sayac = c olarak tam64;
+                o_blen = blen;
+                o_bayrak = bayrak;
+            } değilse {
+                cv = _b3_ilk8(_b3_sikistir(cv, m, c olarak tam64, 64, bayrak));
+            }
+            b = b + 1;
+        }
+        eğer c < parca_say - 1 {
+            // son OLMAYAN parça → CV'yi yığına ekle (birleştirerek)
+            değişken yeni: Dizi<sabitsüre<dtam32>> = _b3_ilk8(_b3_sikistir(o_cv, o_m, o_sayac, o_blen, o_bayrak));
+            değişken toplam: tam32 = c + 1;
+            iken toplam % 2 == 0 {
+                yigin_n = yigin_n - 1;
+                yeni = _b3_ilk8(_b3_sikistir(blake3_init(), _b3_birlestir(_b3_yigin_al(yigin, yigin_n), yeni), 0, 64, 4));
+                toplam = toplam / 2;
+            }
+            _b3_yigin_yaz(yigin, yigin_n, yeni);
+            yigin_n = yigin_n + 1;
+        }
+        c = c + 1;
+    }
+    // bitiş: yığının tepesinden tabanına ebeveyn çıktıları
+    iken yigin_n > 0 {
+        yigin_n = yigin_n - 1;
+        değişken sag: Dizi<sabitsüre<dtam32>> = _b3_ilk8(_b3_sikistir(o_cv, o_m, o_sayac, o_blen, o_bayrak));
+        o_m = _b3_birlestir(_b3_yigin_al(yigin, yigin_n), sag);
+        o_cv = blake3_init();
+        o_sayac = 0;
+        o_blen = 64;
+        o_bayrak = 4;
+    }
+    ver _b3_ilk8(_b3_sikistir(o_cv, o_m, o_sayac, o_blen, o_bayrak + 8));
+}

@@ -202,6 +202,23 @@ işlev kt_hmac_rfc4231() -> tam32 {
     ver 1;
 }
 
+// [D-710] BLAKE3 — resmi test deseni (bayt i = i mod 251); vektörler Python referans
+// gerçeklemesinden (boş/"abc"/1/1024/1025 resmi değerlerle doğrulandı). 2049 ve 4097 bayt
+// çok seviyeli ağacı (ebeveyn birleştirme + kök) kapsar.
+işlev kt_desen(n: tam32) -> Dizi<sabitsüre<dtam8>> {
+    değişken d: Dizi<sabitsüre<dtam8>> = [];
+    değişken i: tam32 = 0;
+    iken i < n { dizi_ekle(d, sabitsüre_olustur(((i % 251) olarak dtam8))); i = i + 1; }
+    ver d;
+}
+işlev kt_blake3() -> tam32 {
+    eğer kt_ozet_kontrol(blake3_bayt(kt_metin_bayt(""), 0), 3108574127, 2795633141, 1647452132) == 0 { ver 0; }
+    eğer kt_ozet_kontrol(blake3_bayt(kt_metin_bayt("abc"), 3), 2897426276, 860964408, 2241707477) == 0 { ver 0; }
+    eğer kt_ozet_kontrol(blake3_bayt(kt_desen(1025), 1025), 2927100624, 3005737799, 1149520769) == 0 { ver 0; }
+    eğer kt_ozet_kontrol(blake3_bayt(kt_desen(2049), 2049), 4101131615, 2187295245, 808474146) == 0 { ver 0; }
+    eğer kt_ozet_kontrol(blake3_bayt(kt_desen(4097), 4097), 3008512155, 3361676431, 2511933354) == 0 { ver 0; }
+    ver 1;
+}
 işlev main() -> tam32 {
     değişken skor: tam32 = 0;
     eğer kt_kontrol() == 1 { skor = skor + 1; }
@@ -210,5 +227,6 @@ işlev main() -> tam32 {
     eğer kt_sec_u64_ust_bit() == 1 { skor = skor + 8; }   // D-629
     eğer kt_sha256_cok_blok() == 1 { skor = skor + 16; }   // D-709
     eğer kt_hmac_rfc4231() == 1 { skor = skor + 32; }     // D-709
-    ver skor;   // 63 = tam geçiş
+    eğer kt_blake3() == 1 { skor = skor + 64; }           // D-710
+    ver skor;   // 127 = tam geçiş
 }

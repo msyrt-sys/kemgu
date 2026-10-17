@@ -2397,3 +2397,13 @@
   Vektorler Python hashlib/hmac ile: SHA-256 56 bayt (2 blok), RFC 4231 TC1/TC2/TC6 (TC6 bloktan
   uzun anahtar). Model gizli baytlari `ifsa` ile acmisti → sabit-sure ihlali, sabitsure
   icinde genisletme/daraltmaya cevrildi (ifsa kodda 0). kripto_kosum 6/6 (skor 63).
+- 2026-10-17 D-710: stdlib/kripto BLAKE3 (tam ağaç modu, 32 bayt çıktı).
+  Vektörler: pip/blake3 YOK → spesifikasyonun referans algoritması Python'da yazıldı ve resmi
+  değerlerle doğrulandı (boş af1349b9…, "abc" 6437b3ac…, 1/1024/1025 desen); 2049/4097 (çok
+  seviyeli ağaç) bundan. deepseek: tur 25a (tek parça) bütçe bitti → 25a1 ilkeller (karma.kem:
+  G/tur/sıkıştırma/blok kelimeleri; "abc" tek sıkıştırmayla birim testi geçti); 25b/25b2 ağaç
+  mantığında akıl yürütmede tükendi (çıpa tartışması + tasarım) → 25b3'te sözde kod satır satır
+  verildi, model YENİ dosyayı yazdı ama blok başlığını yanlış biçimde verdi ("```" + alt satırda
+  "yeni:yol") → içerik yanıttan elle alındı (stdlib/kripto/blake3.kem, 124 satır, ifşa 0).
+  kripto_kosum 7/7 (skor 127). SABOTAJ: ebeveyn PARENT bayrağı 0 → BLAKE3 ❌, rc=2.
+  check_genis 158/158, kripto_check, stdlib_check yeşil.
