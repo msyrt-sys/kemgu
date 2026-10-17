@@ -1,0 +1,4 @@
+
+### $ make -s build/kemgu 2>&1 | grep -E 'error|warning' | head -5; test -x build/kemgu
+src/llvm.c:1565:13: warning: implicit declaration of function ‘int_donustur_im’; did you mean ‘int_donustur’? [-Wimplicit-function-declaration]
+src/llvm.c:1772:12: error: static declaration of ‘int_donustur_im’ follows non-static declaration

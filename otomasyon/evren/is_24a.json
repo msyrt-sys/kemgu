@@ -1,0 +1,1 @@
+{"tur": "24a", "is": "dar_dizi", "gorev": "otomasyon/evren/gorev_24a_dar_dizi.md", "baglam": [], "kesit": ["src/llvm.c:1554-1559", "src/llvm.c:5918-5950", "src/llvm.c:5955-5990", "src/llvm.c:6006-6025"], "effort": "low", "dogrulama": ["make -s build/kemgu 2>&1 | grep -E 'error|warning' | head -5; test -x build/kemgu"], "isaretler": []}
