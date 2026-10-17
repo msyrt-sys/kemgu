@@ -101,3 +101,12 @@ add $0, $0, :lo12:kem_dil_trampolin"# çıktı("=r", &x) } }
 
 // Trampolinin ilk argümanı (x0) trap-frame'de @0.
 çıplak işlev kg_cerceve_arg0() -> tam64 { ver 0; }
+
+// [D-705] kullanıcı penceresi (D-610 işaretçi doğrulaması için) — tek 2 MiB EL0 sayfası
+// [0x42000000, 0x42200000) (kem_mmu.kem L2[16], AP=01).
+sabit KG_USER_MIN: tam64  = 1107296256;    // 0x42000000: EL0 user penceresi tabanı (AP=01)
+sabit KG_USER_MAX: tam64  = 1109393408;    // 0x42200000: EL0 user penceresi tavanı (dışı RED)
+sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, yaz-len sınırı)
+çıplak işlev kg_kul_min() -> tam64 { ver KG_USER_MIN; }
+çıplak işlev kg_kul_max() -> tam64 { ver KG_USER_MAX; }
+çıplak işlev kg_kul_boy() -> tam64 { ver KG_USER_BOY; }

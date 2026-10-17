@@ -450,6 +450,18 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 RING3 HATA");
     }
+    // İş 25 (D-705): KULLANICI KİPİNDEN DOSYA SİSTEMİ — arm64 [13] FS SYSCALL ikizi. Ring3
+    // programı int 0x80 ile 17 dosya_yaz("test","KEMGU-X86") → 18 dosya_oku (kendi yığın
+    // sayfasına) → 5 yaz; sonra 5'i ÇEKİRDEK adresiyle çağırır (D-610 reddi: -1). Servisler
+    // ve işaretçi doğrulaması arm64 ile AYNI kod (kem_gorev_cekirdek.kem); gerçek virtio disk.
+    eğer kxr_fs_testi() == 1 {
+        yazdir_satir();
+        yazdir_metin("X86 [13] FS SYSCALL OK");
+    }
+    değilse {
+        yazdir_satir();
+        yazdir_metin("X86 [13] FS SYSCALL HATA");
+    }
     // İş 23 (D-693): ortak çekirdek fazları (D-694: SİSTEM ÇAĞRISI testinden SONRA —
     // [42] dil görevleri görev 1'i ölü işaretler; D-686 testi durum(1) == 0 bekler) — arm64 ile AYNI kod
     // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor

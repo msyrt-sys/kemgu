@@ -167,42 +167,6 @@ isb"#
     ver i;
 }
 
-// === D-610 GÜVENLİK: EL0-pointer doğrulama (proven-C kdl_kesme.c D-150/151 .kem aynası) ===
-// EL0 syscall'ları kernel'e (EL1) pointer geçirir. Kernel o adresi denetimsiz DEREF
-// ederse, kötü/hatalı bir EL0 süreç KERNEL BELLEĞİNİ okutabilir (info-leak: sys(5) o
-// belleği UART'a basar) ya da kernel'e YAZDIRABİLİR (bellek bozulması / privilege
-// escalation). kem_os user penceresi TEK 2 MiB sayfadır: [0x42000000, 0x42200000)
-// (kem_mmu.kem L2[16], AP=01). Bu aralık dışındaki her pointer REDDEDİLİR.
-sabit KG_USER_MIN: tam64  = 1107296256;    // 0x42000000: EL0 user penceresi tabanı (AP=01)
-sabit KG_USER_MAX: tam64  = 1109393408;    // 0x42200000: EL0 user penceresi tavanı (dışı RED)
-sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, yaz-len sınırı)
-
-// Kernel'in YAZDIĞI user-tampon: adres user penceresinde + len sınırlı + taşma yok.
-çıplak işlev kg_user_yaz_ptr_gecerli(p: tam64, len: tam64) -> tam32 {
-    eğer p < KG_USER_MIN { ver 0; }            // kernel/aşağı bölge → RED
-    eğer len > KG_USER_BOY { ver 0; }          // aşırı boy → RED
-    eğer (p + len) < p { ver 0; }              // taşma → RED
-    eğer (p + len) > KG_USER_MAX { ver 0; }    // pencere dışı → RED
-    ver 1;
-}
-
-// Kernel'in OKUDUĞU EL0-kontrollü null-sonlu string: pointer user penceresinde OLMALI
-// ve null-sonlandırıcı pencere içinde (4 KiB tarama tavanı) BULUNMALI — aksi hâlde
-// straddle-over-read riski → RED. Tarama YALNIZ mapped-izinli byte'lara dokunur →
-// tarama fault üretemez (info-leak/DoS ikisi de kesilir).
-çıplak işlev kg_user_oku_str_gecerli(p: tam64) -> tam32 {
-    eğer p < KG_USER_MIN { ver 0; }            // pencere dışı → RED (kernel-sızıntı engeli)
-    eğer p >= KG_USER_MAX { ver 0; }
-    değişken son: tam64 = KG_USER_MAX;
-    değişken tavan: tam64 = p + 4096;          // tarama maliyeti sınırı
-    eğer (tavan > p) ve (tavan < son) { son = tavan; }   // taşma-korumalı min
-    değişken a: tam64 = p;
-    iken a < son {
-        eğer kis_buf_oku8(a, 0) == 0 { ver 1; }   // bölge-içi null → string güvenli
-        a = a + 1;
-    }
-    ver 0;                                      // null yok → straddle riski → RED
-}
 
 // SVC handler — .S kdl_exc_ortak (EC=0x15) `bl kdl_syscall_isle(num,arg,arg2)` çağırır.
 // num=5 → yaz (USERLAND ADIM 4, D-289): arg=EL0 string ptr. kis_metin'in pointer-tabanlı
@@ -218,13 +182,9 @@ sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, y
     // [D-686] mimariden bağımsız servisler (10 gettick, 11 getpid, 13 exit, 14 durum)
     // kem_gorev_cekirdek.kem'de — arm64 ve x86 dağıtıcıları AYNI yanıtı verir (D-407).
     eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
-    eğer num == 5 {
-        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }   // D-610: EL0 str ptr
-        değişken n5: tam32 = kdl_metin_uzunluk(arg olarak *tam8);
-        değişken i5: tam32 = 0;
-        iken i5 < n5 { kis_bayt((kdl_metin_bayt(arg olarak *tam8, i5)) olarak tam32); i5 = i5 + 1; }
-        ver 0;
-    }
+    // [D-705] kullanıcı-işaretçili servisler (5 yaz, 17 dosya_yaz, 18 dosya_oku) ve D-610
+    // işaretçi doğrulaması kem_gorev_cekirdek.kem'de — x86 dağıtıcısı da AYNI kodu çağırır.
+    eğer kem_syscall_kul_mi(num) { ver kem_syscall_kul(num, arg, arg2); }
     eğer num == 7 {
         kis_satir();
         kg_yaz64(KG_SYSC, kg_oku64(KG_SYSC) + 1);
@@ -256,46 +216,6 @@ sabit KG_USER_BOY: tam64  = 2097152;       // 0x00200000: pencere boyu (2 MiB, y
     // NOT (kapsam-sınırı): minifs TEK-DOSYALI (proven-C'nin çok-dosyalı kdl_dosyalar[]
     // DEĞİL) — 15/16 (int dosya) ve 19/20/21 (sayisi/ad/sil, çok-dosya-listeleme) minifs'in
     // ÇOK-DOSYA desteği GEREKTİRİR (ayrı özellik-genişletme, bu batch'in kapsamı DIŞI).
-    eğer num == 17 {
-        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }    // D-610: ad okuma
-        eğer kg_user_oku_str_gecerli(arg2) == 0 { ver 0 - 1; }   // D-610: içerik okuma
-        değişken base: tam64 = vblk_bul();
-        eğer base == 0 { ver 0 - 1; }
-        eğer vblk_kur(base) != 0 { ver 0 - 1; }
-        değişken n: tam32 = kdl_metin_uzunluk(arg2 olarak *tam8);
-        değişken i: tam32 = 0;
-        iken i < n {
-            eğer i < 512 { vblk_data_yaz(i, (kdl_metin_bayt(arg2 olarak *tam8, i)) olarak dtam8); }
-            i = i + 1;
-        }
-        değişken a0: dtam8 = kg_ad_bayt(arg, 0);
-        değişken a1: dtam8 = kg_ad_bayt(arg, 1);
-        değişken a2: dtam8 = kg_ad_bayt(arg, 2);
-        değişken a3: dtam8 = kg_ad_bayt(arg, 3);
-        değişken r: tam32 = mfs_dosya_yaz(base, a0, a1, a2, a3, n);
-        eğer r != 0 { ver 0 - 1; }
-        ver n olarak tam64;
-    }
-    eğer num == 18 {
-        eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }        // D-610: ad okuma
-        eğer kg_user_yaz_ptr_gecerli(arg2, 512) == 0 { ver 0 - 1; }  // D-610: buf yazma (≤512)
-        değişken base2: tam64 = vblk_bul();
-        eğer base2 == 0 { ver 0 - 1; }
-        eğer vblk_kur(base2) != 0 { ver 0 - 1; }
-        değişken b0: dtam8 = kg_ad_bayt(arg, 0);
-        değişken b1: dtam8 = kg_ad_bayt(arg, 1);
-        değişken b2: dtam8 = kg_ad_bayt(arg, 2);
-        değişken b3: dtam8 = kg_ad_bayt(arg, 3);
-        değişken boyut: tam32 = mfs_dosya_oku(base2, b0, b1, b2, b3);
-        eğer boyut < 0 { ver 0 - 1; }
-        değişken j: tam32 = 0;
-        iken j < boyut {
-            eğer j < 511 { kis_buf_yaz8(arg2, j, (vblk_data_oku(j)) olarak tam32); }
-            j = j + 1;
-        }
-        kis_buf_yaz8(arg2, boyut, 0);
-        ver boyut olarak tam64;
-    }
     ver arg;                                       // echo arg → EL0 x0
 }
 
@@ -461,12 +381,6 @@ add $0, $0, :lo12:kul_rx_test"# çıktı("=r", &x) } }
 
 // ============================================================================
 // USERLAND ADIM 3 (D-288): dosya syscall (17/18) GERÇEK EL0 round-trip testi.
-// Ad ilk 4 baytı (i>=uzunluk ise 0-pad — mfs_dosya_yaz/oku 4-bayt ad sözleşmesi).
-çıplak işlev kg_ad_bayt(adr: tam64, i: tam32) -> dtam8 {
-    değişken n: tam32 = kdl_metin_uzunluk(adr olarak *tam8);
-    eğer i < n { ver (kdl_metin_bayt(adr olarak *tam8, i)) olarak dtam8; }
-    ver 0 olarak dtam8;
-}
 
 sabit KUL_FS_AD: tam64      = 1107431424;   // 0x42021000: dosya adı ("test", .user sayfası)
 sabit KUL_FS_ICERIK: tam64  = 1107431552;   // 0x42021080: yazılacak içerik ("KABUK")

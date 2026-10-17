@@ -366,6 +366,9 @@ wrmsr"#
 
 // Satır sonu.
 çıplak işlev kis_satir() { kis_bayt(10); }
+// [D-705] arm64 ikizi
+çıplak işlev kis_buf_yaz8(adr: tam64, i: tam32, b: tam32) { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; *p = b olarak dtam8; }
+çıplak işlev kis_buf_oku8(adr: tam64, i: tam32) -> tam32 { değişken p: *dtam8 = (adr + (i olarak tam64)) olarak *dtam8; ver (*p) olarak tam32; }
 
 // dtam64'ü onaltılık basamaklarla yaz (özyinelemeli, arm ile birebir).
 çıplak işlev kis_hex_basamak(d: dtam64) {

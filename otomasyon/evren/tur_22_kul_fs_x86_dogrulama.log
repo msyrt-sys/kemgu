@@ -1,0 +1,2 @@
+
+### $ make calistir_kem_os_x86 2>&1 | grep -E 'hata\[|error|FAIL' | head -5; true
