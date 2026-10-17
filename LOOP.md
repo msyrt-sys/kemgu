@@ -2368,3 +2368,10 @@
   SYSCALL OK' + konsolda ring3'un bastigi 'KEMGU-X86'. SABOTAJ: x86 dagitici dali kapali →
   rc=2; pencere alt siniri 0 (cekirdek ptr kabul) → rc=2. x86 birlesik 275 islev, 36 asm,
   C ↔ self BIREBIR, baremetal_diff 22/22.
+- 2026-10-17 D-706: UART satir okuma (sistem cagrisi 26) ortak cekirdekte.
+  kis_satir_oku kem_mmu.kem'den, 26 dali kem_gorev.kem'den kem_gorev_cekirdek.kem'e (metin
+  kesimi); donanim iki kancaya: kis_rx_hazir / kis_rx_oku (arm64 PL011 RXFE + DR; x86 16550
+  LSR bit0 + 0x3F8). arm [12] UART RX EOF / [13] / [14] SHELL yesil; x86 derleniyor ve 26
+  artik x86 dagiticisinda da var ama x86'da GIRDILI kanit YOK (bu adimda yazilmadi).
+  SABOTAJ: arm kis_rx_hazir hep 1 → kem_os_arm rc=2. check_kapisi, baremetal_diff 22/22,
+  kem_os_x86 yesil.

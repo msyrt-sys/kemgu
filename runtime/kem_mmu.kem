@@ -754,27 +754,9 @@ sabit KIS_UART_RXFE: tam32 = 16;    // bit4 (0=veri var, 1=FIFO boş)
 // (mikrosaniyeler) — 8M iterasyon TÜM kem_os boot penceresini (12s) doldurup gate'i
 // TIMEOUT ile öldürüyordu (ampirik bulgu). Küçültüldü — anlam AYNI (bounded-poll→EOF),
 // sabit ortam-hızına göre kalibre edildi (kör-kopyalama DEĞİL).
-çıplak işlev kis_satir_oku(buf_adr: tam64, umax: tam32) -> tam32 {
-    değişken un: tam32 = 0;
-    iken 1 == 1 {
-        değişken geldi: tam32 = 0;
-        değişken i: tam64 = 0;
-        iken i < 20000 {
-            eğer (kis_o32(kmmu_uart_taban() + 24) & KIS_UART_RXFE) == 0 { geldi = 1; i = 20000; } değilse { i = i + 1; }
-        }
-        eğer geldi == 0 {
-            kis_buf_yaz8(buf_adr, un, 0);
-            eğer un > 0 { ver un; } değilse { ver 0 - 1; }
-        }
-        değişken c: tam32 = kis_rx_dr_oku();
-        eğer (c == 10) veya (c == 13) {
-            kis_buf_yaz8(buf_adr, un, 0);
-            ver un;
-        }
-        eğer un < (umax - 1) {
-            kis_buf_yaz8(buf_adr, un, c);
-            un = un + 1;
-        }
-    }
-    ver un;
+// [D-706] kis_satir_oku → kem_gorev_cekirdek.kem (mimariden bağımsız). PL011 kancaları:
+çıplak işlev kis_rx_hazir() -> tam32 {
+    eğer (kis_o32(kmmu_uart_taban() + 24) & KIS_UART_RXFE) == 0 { ver 1; }
+    ver 0;
 }
+çıplak işlev kis_rx_oku() -> tam32 { ver kis_rx_dr_oku(); }
