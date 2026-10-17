@@ -187,6 +187,19 @@ yapı Ayr {
     tf_bas: Dizi<tam32>;
     tf_say: Dizi<tam32>;
     tf_tip: Dizi<tam32>;
+    // [D1 turbofish] İŞLEV BAŞINA generic parametre tablosu (C islev.tip_paramlar
+    // aynası): fg_ad[k] işlev adı, paramları gp_ad[fg_gb[k] .. +fg_gs[k]),
+    // fg_dn[k] dönüş tip düğümü (-1 = yok). gp_ad (D-370) kapsam-duyarsız düz
+    // listedir; SIRAYI yalnız bu tablo tutar.
+    fg_ad: Dizi<metin>;
+    fg_gb: Dizi<tam32>;
+    fg_gs: Dizi<tam32>;
+    fg_dn: Dizi<tam32>;
+    // [D1 turbofish] tip_str İKAMESİ: ts_n > 0 iken TIP_BASIT adı ts_ad[i] ise
+    // ts_tip[i] döner (mantıksal uzunluk ts_n; dizi küçülmez, yeniden yazılır).
+    ts_ad: Dizi<metin>;
+    ts_tip: Dizi<metin>;
+    ts_n: tam32;
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1739,7 +1752,9 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
     bekle(p, "ISLEV");
     değişken ad: metin = sim_lex(p);
     bekle(p, "TANIMLAYICI");
+    değişken fg_gp0: tam32 = dizi_boyut(p.gp_ad);   // [D1 turbofish]
     atla_tip_paramlar(p);
+    değişken fg_gp1: tam32 = dizi_boyut(p.gp_ad);
     bekle_k(p, "SOL_PAREN", "P015");   // [D-650] C parser.c:343 imza "("
     değişken kids: Dizi<tam32> = [];
     eğer sim_mi(p, "SAG_PAREN") == yanlış {
@@ -1751,7 +1766,10 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
         }
     }
     bekle_k(p, "SAG_PAREN", "P016");   // [D-650] C parser.c:354 imza ")"
-    eğer sim_mi(p, "OK") { ilerle(p); dizi_ekle(kids, parse_tip(p)); }
+    değişken fg_dn: tam32 = 0 - 1;   // [D1 turbofish] dönüş tip düğümü
+    eğer sim_mi(p, "OK") { ilerle(p); fg_dn = parse_tip(p); dizi_ekle(kids, fg_dn); }
+    dizi_ekle(p.fg_ad, ad); dizi_ekle(p.fg_gb, fg_gp0);
+    dizi_ekle(p.fg_gs, fg_gp1 - fg_gp0); dizi_ekle(p.fg_dn, fg_dn);
     eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
     değilse {
         eğer (imza_yeterli == 1) ve sim_mi(p, "NOKTALI_VIRGUL") { ilerle(p); }
@@ -2109,7 +2127,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0,
-        tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: []
+        tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: [],
+        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], ts_ad: [], ts_tip: [], ts_n: 0
     };
 }
 
@@ -2239,8 +2258,81 @@ işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 // skaler saymaz → hepsi eskisi gibi SUSAR. Yeni temsile opt-in eden yerler
 // `bilinen_tip_mi` kullanır. Böylece artım davranış-nötr başlar, kapsam
 // tek tek ve ölçülerek açılır.
+// [D1 turbofish] tip_str ikamesi: generic param adı → açık tip dizgisi.
+işlev ts_coz(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < p.ts_n {
+        eğer metin_esit(dizi_al(p.ts_ad, i), ad) { ver dizi_al(p.ts_tip, i); }
+        i = i + 1;
+    }
+    ver ad;
+}
+// İşlev adı → fg kaydı (-1 = yok). İLK eşleşme (fn_* tablolarıyla aynı kural).
+işlev fg_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.fg_ad) {
+        eğer metin_esit(dizi_al(p.fg_ad, i), ad) { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// CAGRI → AÇIKÇA bağlanan generic işlevin fg kaydı. -1: turbofish yok, hedef
+// TANIMLAYICI değil, yerel bağlama gölgeliyor, işlev yok ya da sayı uyuşmuyor.
+işlev tf_fg(p: &değişken Ayr, cagri: tam32) -> tam32 {
+    değişken k: tam32 = tf_bul(p, cagri);
+    eğer k < 0 { ver 0 - 1; }
+    değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, cagri));
+    eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0 - 1; }
+    eğer yerel_baglama_mi(p, dizi_al(p.a_deg, h)) { ver 0 - 1; }
+    değişken g: tam32 = fg_bul(p, dizi_al(p.a_deg, h));
+    eğer g < 0 { ver 0 - 1; }
+    eğer dizi_al(p.fg_gs, g) != dizi_al(p.tf_say, k) { ver 0 - 1; }
+    ver g;
+}
+// node tipini, CAGRI'nın açık argümanlarıyla İKAME ederek dizgiye çevir.
+// Bilinmeyen sonuç (iç içe generic, gövde-içi `T`) → "?" (denetim atlanır).
+işlev tf_tip_coz(p: &değişken Ayr, cagri: tam32, g: tam32, node: tam32) -> metin {
+    eğer node < 0 { ver "?"; }
+    değişken k: tam32 = tf_bul(p, cagri);
+    değişken n: tam32 = dizi_al(p.tf_say, k);
+    // Önce açık tipleri İKAMESİZ çöz (p.ts_n == 0), sonra tabloyu kur.
+    değişken tipler: Dizi<metin> = [];
+    değişken j: tam32 = 0;
+    iken j < n {
+        dizi_ekle(tipler, tip_str(p, dizi_al(p.tf_tip, dizi_al(p.tf_bas, k) + j)));
+        j = j + 1;
+    }
+    j = 0;
+    iken j < n {
+        değişken gad: metin = dizi_al(p.gp_ad, dizi_al(p.fg_gb, g) + j);
+        eğer j < dizi_boyut(p.ts_ad) {
+            dizi_yaz(p.ts_ad, j, gad);
+            dizi_yaz(p.ts_tip, j, dizi_al(tipler, j));
+        } değilse {
+            dizi_ekle(p.ts_ad, gad);
+            dizi_ekle(p.ts_tip, dizi_al(tipler, j));
+        }
+        j = j + 1;
+    }
+    p.ts_n = n;
+    değişken s: metin = tip_str(p, node);
+    p.ts_n = 0;
+    eğer bilinen_tip_mi(s) { ver s; }
+    ver "?";
+}
+// [D1 turbofish] T044 ön-denetimi — C turbofish_on_kontrol aynası. CAGRI
+// işlemenin EN BAŞINDA; doğru → T044 raporlandı, çağıran erken döner.
+// YOL hedefi atlanır (V1: self-host YOL çağrılarını denetlemiyor).
+işlev tf_on_kontrol(p: &değişken Ayr, idx: tam32, hedef: tam32) -> mantıksal {
+    değişken k: tam32 = tf_bul(p, idx);
+    eğer k < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") { ver yanlış; }
+    eğer tf_fg(p, idx) >= 0 { ver yanlış; }
+    sekil_hata(p, idx, "T044");
+    ver doğru;
+}
 işlev tip_str(p: &değişken Ayr, idx: tam32) -> metin {
-    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_BASIT") { ver dizi_al(p.a_deg, idx); }
+    eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_BASIT") { ver ts_coz(p, dizi_al(p.a_deg, idx)); }
     eğer metin_esit(dizi_al(p.a_ad, idx), "TIP_DIZI") {
         eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
         değişken e: metin = tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
@@ -2909,6 +3001,11 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             // duyarlı özel-durumdur → dönüşleri ARGÜMAN tipinden türetilir.
             değişken kt: metin = intrinsik_donus(p, idx, dizi_al(p.a_deg, h));
             eğer metin_esit(kt, "?") == yanlış { ver kt; }
+            // [D1 turbofish] açık bağlamada dönüş tipi İKAME edilir (C gen_substitue).
+            değişken tfg3: tam32 = tf_fg(p, idx);
+            eğer tfg3 >= 0 {
+                eğer dizi_al(p.fg_dn, tfg3) >= 0 { ver tf_tip_coz(p, idx, tfg3, dizi_al(p.fg_dn, tfg3)); }
+            }
             ver fn_donus_bul(p, dizi_al(p.a_deg, h));   // "?" = kullanıcı işlevi değil
         }
         ver "?";   // method/dolaylı çağrı → ileri TC
@@ -5822,6 +5919,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken hb: tam32 = dizi_al(p.a_cb, idx);
         değişken hc: tam32 = dizi_al(p.a_cs, idx);
         değişken hedef: tam32 = dizi_al(p.cocuk, hb);
+        eğer tf_on_kontrol(p, idx, hedef) { ver 0; }   // [D1 turbofish] T044
         // [D-517] HAM BELLEK YERLEŞİKLERİ `güvensiz` İSTER — C tip_kontrol.c aynası.
         // `bellek_*` `metin` olarak tiplendiği için G001'in `*T` koşulu onlara
         // HİÇ uygulanmıyordu → `güvensiz`siz bir program heap taşması yapabiliyordu
@@ -5897,6 +5995,18 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 // kaynaklı TÜM tanılar (T002/T005-T008/T010/G001/E002…) İKİLENİR.
                 // Sıra ölçüldü: ÖNCE tüm argümanlar üzerinden bir geçiş, SONRA
                 // ikinci geçiş + per-arg T001 (`al(s, yok())` → T002;T001;T002).
+                // [D1 turbofish] Açık tip düğümleri de denetlenir (C: bağlamada
+                // ast_tip_to_bilgi → T011/DRF/...). C sırası: E013'ten SONRA, argüman
+                // geçişlerinden ÖNCE.
+                değişken tfg: tam32 = tf_fg(p, idx);
+                eğer tfg >= 0 {
+                    değişken tfk2: tam32 = tf_bul(p, idx);
+                    değişken tj: tam32 = 0;
+                    iken tj < dizi_al(p.tf_say, tfk2) {
+                        kontrol_dugum(p, dizi_al(p.tf_tip, dizi_al(p.tf_bas, tfk2) + tj));
+                        tj = tj + 1;
+                    }
+                }
                 // Ön-geçişte tüketim KAPALI: C lineeri ikilemiyor (`al(tuket(t))` → OK).
                 p.tuk_kapali = p.tuk_kapali + 1;
                 değişken pa2: tam32 = 1;
@@ -5911,6 +6021,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                     t14_muaf_isaretle(p, arg, fn_ptn_bul(p, fad, a - 1));
                     kontrol_dugum(p, arg);
                     değişken pt: metin = fn_ptip_bul(p, fad, a - 1);
+                    // [D1 turbofish] açık bağlama: param tipi İKAME edilmiş tiptir
+                    // (generic `T` param artık "?" değil → T001 denetlenir).
+                    eğer tfg >= 0 { pt = tf_tip_coz(p, idx, tfg, fn_ptn_bul(p, fad, a - 1)); }
                     eğer metin_esit(pt, "?") == yanlış {
                         değişken at: metin = ifade_tip(p, arg, pt);
                         eğer (metin_esit(at, "?") == yanlış) ve (metin_esit(at, pt) == yanlış) {

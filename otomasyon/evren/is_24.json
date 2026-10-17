@@ -1,0 +1,12 @@
+{"tur": "24", "is": "turbofish_checker", "gorev": "otomasyon/evren/gorev_24_turbofish_checker.md",
+ "baglam": [],
+ "kesit": ["src/tip_kontrol.c:2665-2672", "src/tip_kontrol.c:3208-3214", "src/tip_kontrol.c:4390-4422", "src/tip_kontrol.c:5095-5101",
+           "selfhost/checker.kem:185-197", "selfhost/checker.kem:1738-1758", "selfhost/checker.kem:2108-2114", "selfhost/checker.kem:2240-2245",
+           "selfhost/checker.kem:2904-2914", "selfhost/checker.kem:5821-5826", "selfhost/checker.kem:5896-5925",
+           "selfhost/codegen.kem:337-343", "selfhost/codegen.kem:2056-2084", "selfhost/codegen.kem:9556-9561", "selfhost/codegen.kem:10224-10234",
+           "selfhost/codegen.kem:13146-13150", "selfhost/codegen.kem:13220-13250", "selfhost/codegen.kem:14684-14689"],
+ "effort": "low",
+ "dogrulama": ["make -s 2>&1 | grep -E 'warning|error' ; make -s >/dev/null 2>&1 && echo MAKE_OK",
+               "make -s selfhost/konak.kem >/dev/null 2>&1; build/kemgu --check selfhost/checker.kem",
+               "build/kemgu --check selfhost/codegen.kem"],
+ "isaretler": ["MAKE_OK", "checker.kem — tip kontrolu basarili", "codegen.kem — tip kontrolu basarili"]}
