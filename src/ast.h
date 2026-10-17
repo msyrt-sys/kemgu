@@ -428,6 +428,11 @@ struct Dugum {
             Dugum *hedef;          /* cagrilan ifade */
             Dugum **argumanlar;
             int sayi;
+            /* [D1 turbofish] `f::<T1,T2>(..)` ACIK generic argumanlari
+             * (tip dugumleri). Turbofish yoksa NULL / 0 — dugum_olustur
+             * sifirlar, yani tum eski cagri yollari degismez. */
+            Dugum **tip_arg;
+            int tip_arg_sayi;
         } cagri;
 
         struct {

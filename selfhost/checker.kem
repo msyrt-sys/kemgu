@@ -180,6 +180,13 @@ yapı Ayr {
     neg_lit: tam32;          // D-630: literal tekli eksinin operandı mı (alt sınır +1)
     th_sat: Dizi<tam32>;
     th_sut: Dizi<tam32>;
+    // [D1 turbofish] `f::<T1,T2>(..)` yan-kanalı: CAGRI düğümü → AÇIK tip
+    // argüman düğümleri. tf_cagri[k] CAGRI idx; tipler tf_tip[tf_bas[k] ..
+    // tf_bas[k] + tf_say[k]). Düğüme çocuk EKLENMEZ (çocuk[1..] = argüman).
+    tf_cagri: Dizi<tam32>;
+    tf_bas: Dizi<tam32>;
+    tf_say: Dizi<tam32>;
+    tf_tip: Dizi<tam32>;
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1320,6 +1327,24 @@ işlev parse_onek(p: &değişken Ayr) -> tam32 {
     ver parse_birincil(p);
 }
 
+// [D1 turbofish] CAGRI düğümünün AÇIK tip argümanlarını yan-kanala kaydet.
+işlev tf_kaydet(p: &değişken Ayr, cagri: tam32, tipler: Dizi<tam32>) -> tam32 {
+    dizi_ekle(p.tf_cagri, cagri);
+    dizi_ekle(p.tf_bas, dizi_boyut(p.tf_tip));
+    dizi_ekle(p.tf_say, dizi_boyut(tipler));
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(tipler) { dizi_ekle(p.tf_tip, dizi_al(tipler, i)); i = i + 1; }
+    ver 0;
+}
+// CAGRI idx → tf tablosundaki kayıt indeksi (-1 = turbofish yok).
+işlev tf_bul(p: &değişken Ayr, cagri: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tf_cagri) {
+        eğer dizi_al(p.tf_cagri, i) == cagri { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 // Sonek operatör (. [] () :: olarak). Pozisyon = sonek token'ı.
 işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
     değişken t: metin = simdiki(p);
@@ -1356,6 +1381,19 @@ işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
     }
     eğer metin_esit(t, "CIFT_IKI_NOKTA") {
         ilerle(p);
+        // [D1 turbofish] `::<` → AÇIK generic argümanlı çağrı (C ifade.c
+        // aynası; belirsizlik kuralı orada). Liste kapanınca HEMEN `(`
+        // gelmeli (P125). CAGRI `(` konumunda kurulur (özyineli parse_sonek).
+        eğer sim_mi(p, "KUCUK") {
+            değişken targs: Dizi<tam32> = parse_generic_args(p);
+            eğer sim_mi(p, "SOL_PAREN") == yanlış {
+                parse_hata_kaydet(p, "P125");
+                ver sol;
+            }
+            değişken tc: tam32 = parse_sonek(p, sol);
+            tf_kaydet(p, tc, targs);
+            ver tc;
+        }
         değişken sag: metin = sim_lex(p);
         bekle(p, "TANIMLAYICI");
         ver dugum1(p, "YOL", sag, s, u, sol);
@@ -2039,9 +2077,18 @@ işlev duz_yaz(p: &değişken Ayr, idx: tam32, derinlik: tam32) -> tam32 {
     yaz_tam(dizi_al(p.a_sut, idx));  yb(10);
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken tfk: tam32 = tf_bul(p, idx);   // [D1 turbofish] -1 = yok
     değişken i: tam32 = 0;
     iken i < cs {
         duz_yaz(p, dizi_al(p.cocuk, cb + i), derinlik + 1);
+        // C ast_duz_yaz sırası: hedef (çocuk 0), AÇIK tip argümanları, argümanlar.
+        eğer (i == 0) ve (tfk >= 0) {
+            değişken ti: tam32 = 0;
+            iken ti < dizi_al(p.tf_say, tfk) {
+                duz_yaz(p, dizi_al(p.tf_tip, dizi_al(p.tf_bas, tfk) + ti), derinlik + 1);
+                ti = ti + 1;
+            }
+        }
         i = i + 1;
     }
     ver 0;
@@ -2061,7 +2108,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
-        th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0
+        th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0,
+        tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: []
     };
 }
 

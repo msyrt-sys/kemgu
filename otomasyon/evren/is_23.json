@@ -1,0 +1,11 @@
+{"tur": "23", "is": "turbofish_parser", "gorev": "otomasyon/evren/gorev_23_turbofish_parser.md",
+ "baglam": [],
+ "kesit": ["src/ast.h:427-432", "src/ifade.c:500-575", "src/ast_yazdir.c:112-125", "src/ast_yazdir.c:598-605",
+           "selfhost/parser.kem:30-37", "selfhost/parser.kem:1028-1070", "selfhost/parser.kem:1598-1628",
+           "selfhost/checker.kem:176-184", "selfhost/checker.kem:1321-1363", "selfhost/checker.kem:2032-2066",
+           "selfhost/codegen.kem:328-336", "selfhost/codegen.kem:1518-1560", "selfhost/codegen.kem:9375-9392", "selfhost/codegen.kem:14636-14641"],
+ "effort": "low",
+ "dogrulama": ["make -s 2>&1 | grep -E 'warning|error' ; make -s >/dev/null 2>&1 && echo MAKE_OK",
+               "make -s selfhost/konak.kem >/dev/null 2>&1; build/kemgu --check selfhost/parser.kem",
+               "build/kemgu --check selfhost/checker.kem", "build/kemgu --check selfhost/codegen.kem"],
+ "isaretler": ["MAKE_OK", "parser.kem — tip kontrolu basarili", "checker.kem — tip kontrolu basarili", "codegen.kem — tip kontrolu basarili"]}
