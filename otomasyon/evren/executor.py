@@ -137,7 +137,8 @@ def akisli_sor(anahtar, mesajlar, effort=None, model=None):
 def bloklar(metin):
     """(tur, yol, govde) listesi. tur: duzenle | yeni."""
     return [(m.group(1), m.group(2).strip(), m.group(3))
-            for m in re.finditer(r"```(duzenle|yeni):([^\n]+)\n(.*?)\n```(?=\s|$)",
+            # [D-710] model bazen başlığı ayrı satıra koyuyor ("```" + "\nyeni:yol") — onu da kabul et.
+            for m in re.finditer(r"```\n?(duzenle|yeni):([^\n]+)\n(.*?)\n```(?=\s|$)",
                                  metin, re.S)]
 
 

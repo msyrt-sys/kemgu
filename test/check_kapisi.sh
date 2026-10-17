@@ -30,6 +30,8 @@ muaf() {
   case "$1" in
     # Tek başına derlenemeyen PARÇA dosyalar: gerçek yapı runtime/*.kem ile
     # BİRLEŞTİRİLİP derler (Makefile kem_os_comb). Tek başına T002 doğaldır.
+    # [D-710] BLAKE3 parça+ağaç: ilkeller karma.kem'de; kripto paketi (stdlib/kripto/*.kem) birleşik denetlenir (kripto_check/kosum).
+    *stdlib/kripto/blake3.kem)          echo "parça dosya — kripto paketiyle birleşik denetlenir" ;;
     *test/ornekler/kem_os.kem)          echo "parça dosya — gerçek yapı birleştirilmiş kaynak" ;;
     # [D-671] x86 kanıt çekirdeği de parça: kem_dma_bariyeri runtime/mimari/x86_64'ten
     # gelir. Gerçek denetim AŞAĞIDA birleşik x86 biriminde (--mimari x86_64).
