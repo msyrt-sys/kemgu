@@ -3230,7 +3230,7 @@ static int yapici_desen_mi(const Dugum *desen) {
  * dogal tipinden gelir); somut param -> IR tipi. Non-generic islevde tum
  * paramlar somut sayilir. (TANIMLAYICI yolundaki 2439-2478 ile ozdes
  * mantik; tek dogruluk kaynagi.) */
-/* [D1 turbofish] Acik generic argumanlari (`f::<tam64>(..)`) islevin tip
+/* [D-710 turbofish] Acik generic argumanlari (`f::<tam64>(..)`) islevin tip
  * parametrelerine IKAME olarak it; ESKI substler'i doner (cagiran geri
  * yukler). Turbofish yoksa ya da sayi uyusmuyorsa hicbir sey itmez. IR'lar
  * DIS baglamda, itmeden ONCE hesaplanir (callee'nin `T`si cagiranin `T`sini
@@ -3263,7 +3263,7 @@ static const char *generic_param_beklenen(LlvmGen *g, const Dugum *d,
     const Dugum *pp = islevd->veri.islev.parametreler[i];
     const Dugum *ppt = pp ? pp->veri.parametre.tip : NULL;
     if (!ppt) return NULL;
-    /* [D1 turbofish] ACIK generic argumanli cagri (`f::<tam64>(..)`): generic
+    /* [D-710 turbofish] ACIK generic argumanli cagri (`f::<tam64>(..)`): generic
      * parametre de SOMUTTUR -> beklenen IR, parametre tipinin acik argumanlarla
      * IKAME edilmis halidir. Literal `92682` boylece i64 dogar (bugun cikarsama
      * onu i32 sayar ve `kare(92682)` tasar). Acik argumanlarin IR'i DIS ikame
@@ -3474,7 +3474,7 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
             }
         }
         tip_args[ti] = inferred ? inferred : "i32";
-        /* [D1 turbofish] ACIK argumanlar cikarsamayi EZER (checker'daki
+        /* [D-710 turbofish] ACIK argumanlar cikarsamayi EZER (checker'daki
          * gen_bagla "ilk gorulen kazanir" ile ayni karar). IR, DIS ikame
          * baglaminda (g->substler) hesaplanir. Metin-lik de acik tipten gelir
          * (D-449: generic govdede `==` icerik mi isaretci mi). */
@@ -5704,7 +5704,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             g->beklenen_tip = pp->veri.parametre.tip;
                         }
                     }
-                    /* [D1 turbofish] `ilk::<tam64>([8589934592])`: literal dizi
+                    /* [D-710 turbofish] `ilk::<tam64>([8589934592])`: literal dizi
                      * argumani beklenen `Dizi<T>` ile kurulur; T acik argumanla
                      * IKAME edilmeli, yoksa eleman genisligi ikamesiz `T`den
                      * (i32) gelir ve 2^33 SESSIZCE KIRPILIR (olculdu: exit 1).

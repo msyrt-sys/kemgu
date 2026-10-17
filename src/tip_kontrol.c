@@ -2668,7 +2668,7 @@ static void t043_raporla(TipKontrol *tk, const Dugum *d) {
     tip_hata(tk, d, "T043", "sayi literali hedef tipe sigmiyor");
 }
 
-/* [D1 turbofish] `f::<T1,T2>(..)` hedefinin generic islev AST'si.
+/* [D-710 turbofish] `f::<T1,T2>(..)` hedefinin generic islev AST'si.
  * TANIMLAYICI: sozcuksel arama (tip_belirle ile ayni golgeleme kurali —
  * ayni adli yerel degisken islevi golgeler). YOL: resolver baglamasi
  * (tip_belirle(hedef) SONRASI dolar). Generic olmayan / islev olmayan /
@@ -2687,7 +2687,7 @@ static const Dugum *turbofish_islev_bul(TipKontrol *tk, const Dugum *h) {
     return s->ast_dugumu;
 }
 
-/* [D1 turbofish] On-denetim — CAGRI islemenin EN BASINDA (her iki giris
+/* [D-710 turbofish] On-denetim — CAGRI islemenin EN BASINDA (her iki giris
  * noktasinda: tip_belirle ve tip_belirle_beklenen). Acik generic arguman
  * sayisi, hedef islevin generic parametre sayisina esit olmali; aksi T044
  * ve 1 doner (cagiran t_hata ile erken doner, argumanlar gezilmez).
@@ -3252,7 +3252,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
-            if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D1 turbofish] */
+            if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D-710 turbofish] */
             /* [D-517] HAM BELLEK YERLESIKLERI `güvensiz` ISTER.
              * OLCULEN ACIK: `bellek_al` / `bellek_kopyala` / `bellek_serbest`
              * `metin` olarak TIPLENIYOR (D-459: "HAM BELLEK", opak) — bu yuzden
@@ -4439,7 +4439,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * tipini substitue et. */
             GenBaglamalar gb;
             gb.sayi = 0;
-            /* [D1 turbofish] ACIK generic argumanlar cikarsamayi EZER: once
+            /* [D-710 turbofish] ACIK generic argumanlar cikarsamayi EZER: once
              * baglanir; gen_bagla "ilk gorulen kazanir" oldugu icin pas 1'deki
              * gen_unify onlari DEGISTIREMEZ. Pas 2'de parametre tipi bu
              * baglamayla ikame edilip BEKLENEN tip olur (literal o tipte
@@ -4484,7 +4484,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (param_tip->kategori == TIP_GENERIC_PARAM &&
                     (!tf_islev || bek->kategori == TIP_HATA)) {
                     /* Concrete'i gb'de tutuyoruz; bind onceden yapildi.
-                     * [D1 turbofish] ACIK baglamada bek arguman tipinden
+                     * [D-710 turbofish] ACIK baglamada bek arguman tipinden
                      * TURETILMEDI -> asagidaki T001 denetimi GEREKLI. */
                     continue;
                 }
@@ -5167,7 +5167,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         }
 
         case DUGUM_CAGRI: {
-            if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D1 turbofish] */
+            if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D-710 turbofish] */
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — beklenen-bağlam
              * yolunda da modül-fonksiyon çağrısından ÖNCE dene. Generic çeşit
              * T'si beklenen'den (Secim<tam32>) substitue edilir (D-302). */

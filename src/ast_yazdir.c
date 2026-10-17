@@ -117,7 +117,7 @@ void ast_yazdir_indent(const Dugum *d, FILE *c, int derinlik) {
             indent_yaz(c, derinlik + 1);
             fputs("hedef:\n", c);
             ast_yazdir_indent(d->veri.cagri.hedef, c, derinlik + 2);
-            if (d->veri.cagri.tip_arg_sayi > 0) {   /* [D1 turbofish] */
+            if (d->veri.cagri.tip_arg_sayi > 0) {   /* [D-710 turbofish] */
                 indent_yaz(c, derinlik + 1);
                 fprintf(c, "tip_argumanlari (%d):\n", d->veri.cagri.tip_arg_sayi);
                 cocuk_listesi_yaz(c, d->veri.cagri.tip_arg,
@@ -605,7 +605,7 @@ void ast_duz_yaz(const Dugum *d, FILE *c, int derinlik) {
             ast_duz_yaz(d->veri.tekli.operand, c, dd); break;
         case DUGUM_CAGRI:
             ast_duz_yaz(d->veri.cagri.hedef, c, dd);
-            /* [D1 turbofish] sira: hedef, ACIK tip argumanlari, argumanlar.
+            /* [D-710 turbofish] sira: hedef, ACIK tip argumanlari, argumanlar.
              * Tip dugumleri (TIP_*) ifade olamaz -> dump belirsiz degil. */
             for (int i = 0; i < d->veri.cagri.tip_arg_sayi; i++)
                 ast_duz_yaz(d->veri.cagri.tip_arg[i], c, dd);

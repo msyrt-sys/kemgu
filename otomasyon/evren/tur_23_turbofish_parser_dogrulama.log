@@ -1,0 +1,12 @@
+
+### $ make -s 2>&1 | grep -E 'warning|error' ; make -s >/dev/null 2>&1 && echo MAKE_OK
+MAKE_OK
+
+### $ make -s selfhost/konak.kem >/dev/null 2>&1; build/kemgu --check selfhost/parser.kem
+OK: selfhost/parser.kem — tip kontrolu basarili.
+
+### $ build/kemgu --check selfhost/checker.kem
+OK: selfhost/checker.kem — tip kontrolu basarili.
+
+### $ build/kemgu --check selfhost/codegen.kem
+OK: selfhost/codegen.kem — tip kontrolu basarili.
