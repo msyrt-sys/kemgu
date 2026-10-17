@@ -1,0 +1,1 @@
+{"tur": "23b", "is": "hmac", "gorev": "otomasyon/evren/gorev_23b_hmac.md", "baglam": [], "kesit": ["test/stdlib/test_kripto_kosum.kem:80-123", "test/stdlib/test_kripto_kosum.kem:141-148", "test/kripto_kosum_harness.sh:34-37"], "effort": "low", "dogrulama": ["make calistir_kripto_kosum"], "isaretler": []}

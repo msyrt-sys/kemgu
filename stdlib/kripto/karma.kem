@@ -2,7 +2,8 @@
 // =================================================================
 //
 // SHA-256 (FIPS 180-4) sabit-süre referans implementasyonu.
-// BLAKE3 placeholder (V2: tam implementasyon ARM SIMD + tree mode).
+// BLAKE3 ilkelleri (sıkıştırma, G, tur) burada; parça + ağaç + blake3_bayt
+// stdlib/kripto/blake3.kem'de (D-710, resmi vektörlerle doğrulandı). SIMD yok.
 //
 // Tasarım:
 //   - K round constants ve H0 initial values PUBLIC (standardize, RFC 6234)
@@ -272,4 +273,257 @@ işlev hmac_pad_uret(
         i = i + 1;
     }
     ver 0;
+}
+
+// =============================================================================
+// D-XXX (Tur 23a) — Çok-bloklu SHA-256 + HMAC-SHA256 (RFC 2104)
+// =============================================================================
+//
+// sha256_bayt: FIPS 180-4 §5.1 dolgusu (n bayt + 0x80 + sıfırlar + 8-baytlık
+// BÜYÜK-UÇ bit uzunluğu; üst 32 bit 0 yeter; toplam 64'ün katı). Her 64-baytlık
+// blok için 16 kelime BÜYÜK-UÇ kurulur (w = b0<<24 | b1<<16 | b2<<8 | b3) ve
+// sha256_blok_sikistir çağrılır. Durum sha256_H0()'dan başlar; 8 kelimelik
+// durum döner.
+//
+// hmac_sha256: RFC 2104, blok 64 bayt. anahtar > 64 ise önce sha256_bayt ile
+// özetlenir (özetin 32 baytı büyük-uç), sonra 64'e sıfırla doldurulur. İç ped
+// K ⊕ ipad(0x36), dış ped K ⊕ opad(0x5C). ic = ped || mesaj → sha256_bayt(ic,64+mn);
+// dis = ped || iç özet (32 bayt büyük-uç) → sha256_bayt(dis,96).
+
+işlev sha256_bayt(veri: Dizi<sabitsüre<dtam8>>, n: tam32) -> Dizi<sabitsüre<dtam32>> {
+    // Toplam dolgulu uzunluk: n + 1 (0x80) + sıfırlar + 8 (uzunluk) → 64'ün katı
+    değişken toplam: tam32 = ((n + 9 + 63) / 64) * 64;
+    değişken tampon: Dizi<sabitsüre<dtam8>> = [];
+    değişken i: tam32 = 0;
+    iken i < n {
+        dizi_ekle(tampon, veri[i]);
+        i = i + 1;
+    }
+    dizi_ekle(tampon, sabitsüre_olustur(0x80 olarak dtam8));
+    iken dizi_boyut(tampon) < toplam - 8 {
+        dizi_ekle(tampon, sabitsüre_olustur(0 olarak dtam8));
+    }
+    // 8 bayt BÜYÜK-UÇ bit uzunluğu (n*8; üst 32 bit 0 yeter)
+    değişken bit_uz: dtam32 = (n olarak dtam32) * 8;
+    dizi_ekle(tampon, sabitsüre_olustur(0 olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur(0 olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur(0 olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur(0 olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur(((bit_uz >> 24) & 255) olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur(((bit_uz >> 16) & 255) olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur(((bit_uz >> 8) & 255) olarak dtam8));
+    dizi_ekle(tampon, sabitsüre_olustur((bit_uz & 255) olarak dtam8));
+
+    // Başlangıç durumu (FIPS 180-4 H0)
+    değişken H: Dizi<dtam32> = sha256_H0();
+    değişken state: Dizi<sabitsüre<dtam32>> = [
+        sabitsüre_olustur(H[0]), sabitsüre_olustur(H[1]),
+        sabitsüre_olustur(H[2]), sabitsüre_olustur(H[3]),
+        sabitsüre_olustur(H[4]), sabitsüre_olustur(H[5]),
+        sabitsüre_olustur(H[6]), sabitsüre_olustur(H[7])
+    ];
+
+    // Her 64-baytlık bloğu sıkıştır
+    değişken blok_sayisi: tam32 = toplam / 64;
+    değişken b: tam32 = 0;
+    iken b < blok_sayisi {
+        değişken blok: Dizi<sabitsüre<dtam32>> = [];
+        değişken j: tam32 = 0;
+        iken j < 16 {
+            değişken off: tam32 = b * 64 + j * 4;
+            // [D-709] gizli baytlar AÇIĞA ÇIKARILMADAN genişletilir (sabitsüre içinde;
+            // dtam8 → dtam32 zext). ifşa yalnız çağıranın bilinçli kararıdır.
+            değişken b0: sabitsüre<dtam32> = tampon[off] olarak sabitsüre<dtam32>;
+            değişken b1: sabitsüre<dtam32> = tampon[off + 1] olarak sabitsüre<dtam32>;
+            değişken b2: sabitsüre<dtam32> = tampon[off + 2] olarak sabitsüre<dtam32>;
+            değişken b3: sabitsüre<dtam32> = tampon[off + 3] olarak sabitsüre<dtam32>;
+            değişken w: sabitsüre<dtam32> = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+            dizi_ekle(blok, w);
+            j = j + 1;
+        }
+        sha256_blok_sikistir(state, blok);
+        b = b + 1;
+    }
+    ver state;
+}
+
+işlev hmac_sha256(
+    anahtar: Dizi<sabitsüre<dtam8>>, an: tam32,
+    mesaj: Dizi<sabitsüre<dtam8>>, mn: tam32
+) -> Dizi<sabitsüre<dtam32>> {
+    // K'yı 64 bayta normalize et (uzunsa önce hash'le → 32 bayt büyük-uç)
+    değişken K: Dizi<sabitsüre<dtam8>> = [];
+    değişken i: tam32 = 0;
+    eğer an > 64 {
+        değişken ozet: Dizi<sabitsüre<dtam32>> = sha256_bayt(anahtar, an);
+        iken i < 8 {
+            değişken w: sabitsüre<dtam32> = ozet[i];   // [D-709] açığa çıkarmadan bayta böl (daraltma düşük baytı tutar)
+            dizi_ekle(K, (w >> 24) olarak sabitsüre<dtam8>);
+            dizi_ekle(K, (w >> 16) olarak sabitsüre<dtam8>);
+            dizi_ekle(K, (w >> 8) olarak sabitsüre<dtam8>);
+            dizi_ekle(K, w olarak sabitsüre<dtam8>);
+            i = i + 1;
+        }
+    } değilse {
+        iken i < an {
+            dizi_ekle(K, anahtar[i]);
+            i = i + 1;
+        }
+    }
+    iken dizi_boyut(K) < 64 {
+        dizi_ekle(K, sabitsüre_olustur(0 olarak dtam8));
+    }
+
+    // İç: (K ⊕ ipad) || mesaj
+    değişken ip: dtam8 = 0x36;
+    değişken ic: Dizi<sabitsüre<dtam8>> = [];
+    i = 0;
+    iken i < 64 {
+        dizi_ekle(ic, K[i] ^ sabitsüre_olustur(ip));
+        i = i + 1;
+    }
+    i = 0;
+    iken i < mn {
+        dizi_ekle(ic, mesaj[i]);
+        i = i + 1;
+    }
+    değişken ic_ozet: Dizi<sabitsüre<dtam32>> = sha256_bayt(ic, 64 + mn);
+
+    // Dış: (K ⊕ opad) || iç özet (32 bayt büyük-uç)
+    değişken op: dtam8 = 0x5C;
+    değişken dis: Dizi<sabitsüre<dtam8>> = [];
+    i = 0;
+    iken i < 64 {
+        dizi_ekle(dis, K[i] ^ sabitsüre_olustur(op));
+        i = i + 1;
+    }
+    i = 0;
+    iken i < 8 {
+        değişken w2: sabitsüre<dtam32> = ic_ozet[i];   // [D-709] açığa çıkarmadan bayta böl
+        dizi_ekle(dis, (w2 >> 24) olarak sabitsüre<dtam8>);
+        dizi_ekle(dis, (w2 >> 16) olarak sabitsüre<dtam8>);
+        dizi_ekle(dis, (w2 >> 8) olarak sabitsüre<dtam8>);
+        dizi_ekle(dis, w2 olarak sabitsüre<dtam8>);
+        i = i + 1;
+    }
+    ver sha256_bayt(dis, 96);
+}
+
+// [D-710] BLAKE3 ilkelleri
+// ============================================================================
+// BLAKE3 spesifikasyonu (referans gerçekleme ile birebir). Bu turda YALNIZ
+// ilkeller: G karıştırıcı, 7-tur sıkıştırma, mesaj permütasyonu, blok→kelime
+// çözümü (küçük-uç). Parça (chunk) zinciri, ağaç birleştirme ve `blake3_bayt`
+// SONRAKİ turda. Sabitler: CHUNK_START=1, CHUNK_END=2, PARENT=4, ROOT=8.
+// Gizli veri sabitsüre içinde kalır; `ifşa` KULLANILMAZ.
+// ============================================================================
+
+// _b3_g — BLAKE3 G karıştırıcısı (durum s yerinde). x,y mesaj kelimeleridir.
+işlev _b3_g(s: Dizi<sabitsüre<dtam32>>, a: tam32, b: tam32, c: tam32, d: tam32, x: sabitsüre<dtam32>, y: sabitsüre<dtam32>) {
+    s[a] = s[a] + s[b] + x;
+    s[d] = _karma_rotr_u32(s[d] ^ s[a], 16);
+    s[c] = s[c] + s[d];
+    s[b] = _karma_rotr_u32(s[b] ^ s[c], 12);
+    s[a] = s[a] + s[b] + y;
+    s[d] = _karma_rotr_u32(s[d] ^ s[a], 8);
+    s[c] = s[c] + s[d];
+    s[b] = _karma_rotr_u32(s[b] ^ s[c], 7);
+}
+
+// _b3_tur — bir tam tur: 8 G çağrısı (sütun + köşegen). m: 16 mesaj kelimesi.
+işlev _b3_tur(s: Dizi<sabitsüre<dtam32>>, m: Dizi<sabitsüre<dtam32>>) {
+    _b3_g(s, 0, 4, 8, 12, m[0], m[1]);
+    _b3_g(s, 1, 5, 9, 13, m[2], m[3]);
+    _b3_g(s, 2, 6, 10, 14, m[4], m[5]);
+    _b3_g(s, 3, 7, 11, 15, m[6], m[7]);
+    _b3_g(s, 0, 5, 10, 15, m[8], m[9]);
+    _b3_g(s, 1, 6, 11, 12, m[10], m[11]);
+    _b3_g(s, 2, 7, 8, 13, m[12], m[13]);
+    _b3_g(s, 3, 4, 9, 14, m[14], m[15]);
+}
+
+// _b3_permute — mesaj permütasyonu: m'[i] = m[PERM[i]].
+// PERM = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8].
+işlev _b3_permute(m: Dizi<sabitsüre<dtam32>>) -> Dizi<sabitsüre<dtam32>> {
+    değişken perm: Dizi<tam32> = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
+    değişken yeni: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32 = 0;
+    iken i < 16 {
+        dizi_ekle(yeni, m[perm[i]]);
+        i = i + 1;
+    }
+    ver yeni;
+}
+
+// _b3_sikistir — BLAKE3 sıkıştırma: cv[8] + IV[0..3] + [sayac_lo, sayac_hi, blen, bayrak].
+// 7 tur uygular; her turdan SONRA (son tur HARİÇ) mesaj kelimeleri permüte edilir.
+// Sonunda s[i] ^= s[i+8], s[i+8] ^= cv[i]. 16 kelimelik tam durumu döndürür
+// (CV = ilk 8 kelime).
+işlev _b3_sikistir(cv: Dizi<sabitsüre<dtam32>>, m: Dizi<sabitsüre<dtam32>>, sayac: tam64, blen: tam32, bayrak: tam32) -> Dizi<sabitsüre<dtam32>> {
+    değişken s: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        dizi_ekle(s, cv[i]);
+        i = i + 1;
+    }
+    // IV[0..3]
+    dizi_ekle(s, sabitsüre_olustur((0x6A09E667 olarak dtam32)));
+    dizi_ekle(s, sabitsüre_olustur((0xBB67AE85 olarak dtam32)));
+    dizi_ekle(s, sabitsüre_olustur((0x3C6EF372 olarak dtam32)));
+    dizi_ekle(s, sabitsüre_olustur((0xA54FF53A olarak dtam32)));
+    // sayac düşük/yüksek 32 bit, blok uzunluğu, bayrak
+    dizi_ekle(s, sabitsüre_olustur(sayac olarak dtam32));
+    dizi_ekle(s, sabitsüre_olustur((sayac >> 32) olarak dtam32));
+    dizi_ekle(s, sabitsüre_olustur(blen olarak dtam32));
+    dizi_ekle(s, sabitsüre_olustur(bayrak olarak dtam32));
+
+    değişken mm: Dizi<sabitsüre<dtam32>> = [];
+    i = 0;
+    iken i < 16 {
+        dizi_ekle(mm, m[i]);
+        i = i + 1;
+    }
+
+    değişken tur: tam32 = 0;
+    iken tur < 7 {
+        _b3_tur(s, mm);
+        tur = tur + 1;
+        eğer tur < 7 {
+            mm = _b3_permute(mm);
+        }
+    }
+
+    i = 0;
+    iken i < 8 {
+        s[i] = s[i] ^ s[i + 8];
+        s[i + 8] = s[i + 8] ^ cv[i];
+        i = i + 1;
+    }
+    ver s;
+}
+
+// _b3_blok_kelime — tampon[bas..bas+blen) baytlarını KÜÇÜK-UÇ 16 kelimeye çöz.
+// Eksik baytlar (blen < 64) sıfır kabul edilir. Sonuç daima 16 kelimedir.
+işlev _b3_blok_kelime(tampon: Dizi<sabitsüre<dtam8>>, bas: tam32, blen: tam32) -> Dizi<sabitsüre<dtam32>> {
+    değişken w: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32 = 0;
+    iken i < 16 {
+        değişken kelime: sabitsüre<dtam32> = sabitsüre_olustur(0 olarak dtam32);
+        değişken o: tam32 = i * 4;   // blok içi bayt ofseti
+        eğer o < blen {
+            kelime = kelime | (tampon[bas + o] olarak sabitsüre<dtam32>);
+        }
+        eğer o + 1 < blen {
+            kelime = kelime | ((tampon[bas + o + 1] olarak sabitsüre<dtam32>) << 8);
+        }
+        eğer o + 2 < blen {
+            kelime = kelime | ((tampon[bas + o + 2] olarak sabitsüre<dtam32>) << 16);
+        }
+        eğer o + 3 < blen {
+            kelime = kelime | ((tampon[bas + o + 3] olarak sabitsüre<dtam32>) << 24);
+        }
+        dizi_ekle(w, kelime);
+        i = i + 1;
+    }
+    ver w;
 }

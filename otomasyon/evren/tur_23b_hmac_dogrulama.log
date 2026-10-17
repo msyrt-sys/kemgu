@@ -1,0 +1,17 @@
+
+### $ make calistir_kripto_kosum
+FAIL: kripto koşum bundle --check geçmedi
+hata[T002]: tanimsiz sembol
+     --> build/_kripto_kosum_1396908/bundle.kem:1533:9
+     |
+1533 |         ekle(d, sabitsüre_olustur((metin_bayt(s, i) olarak dtam8)));
+     |         ^
+
+hata[T002]: tanimsiz sembol
+     --> build/_kripto_kosum_1396908/bundle.kem:1543:9
+     |
+1543 |         ekle(d, sabitsüre_olustur(b));
+     |         ^
+
+HATA: build/_kripto_kosum_1396908/bundle.kem — parser 0, yukleme 0, tip kontrol 2, realtime 0 (toplam 2 hata).
+make: *** [Makefile:956: calistir_kripto_kosum] Error 1
