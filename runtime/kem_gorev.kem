@@ -205,11 +205,6 @@ isb"#
         eğer idx == 1 { kstk = KG_SPAWN_KSTK1; ustk = KG_SPAWN_USTK1; }
         ver kem_gorev_olustur_el0(arg, kstk + 8192, ustk + 4096);
     }
-    eğer num == 26 {
-        eğer kg_user_yaz_ptr_gecerli(arg, arg2) == 0 { ver 0 - 1; }  // D-610: buf yazma
-        değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
-        ver r olarak tam64;
-    }
     // USERLAND ADIM 3 (D-288): num=10 gettick, num=11 getpid (kdl_tik_al/kdl_aktif_gorev
     // birebir — kem_tik_oku/kem_paktif zaten var, trivial sarmalayıcı).
     // num=17/18 dosya_yaz_metin/oku_metin — kem_minifs.kem (D-272) üzerine sarmalayıcı.

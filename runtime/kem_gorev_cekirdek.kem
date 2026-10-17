@@ -246,9 +246,14 @@ küresel değişken kem_dil_canli: tam64 = 0;  // birleştirilmemiş dil görevi
     ver 0 olarak dtam8;
 }
 çıplak işlev kem_syscall_kul_mi(num: tam64) -> mantıksal {
-    ver (num == 5) veya (num == 17) veya (num == 18);
+    ver (num == 5) veya (num == 17) veya (num == 18) veya (num == 26);   // 26: D-706
 }
 çıplak işlev kem_syscall_kul(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
+    eğer num == 26 {
+        eğer kg_user_yaz_ptr_gecerli(arg, arg2) == 0 { ver 0 - 1; }  // D-610: buf yazma
+        değişken r: tam32 = kis_satir_oku(arg, arg2 olarak tam32);
+        ver r olarak tam64;
+    }
     eğer num == 5 {
         eğer kg_user_oku_str_gecerli(arg) == 0 { ver 0 - 1; }   // D-610: EL0 str ptr
         değişken n5: tam32 = kdl_metin_uzunluk(arg olarak *tam8);
@@ -297,4 +302,32 @@ küresel değişken kem_dil_canli: tam64 = 0;  // birleştirilmemiş dil görevi
         ver boyut olarak tam64;
     }
     ver 0 - 1;
+}
+
+// [D-706] UART satır okuma (kem_mmu.kem'den taşındı; sistem çağrısı 26). Donanım
+// kancaları: kis_rx_hazir() (bayt var mı: arm64 PL011 RXFE, x86 16550 LSR bit0) ve
+// kis_rx_oku() (baytı al). Sınırlı yoklama: girdi yoksa EOF (-1).
+çıplak işlev kis_satir_oku(buf_adr: tam64, umax: tam32) -> tam32 {
+    değişken un: tam32 = 0;
+    iken 1 == 1 {
+        değişken geldi: tam32 = 0;
+        değişken i: tam64 = 0;
+        iken i < 20000 {
+            eğer kis_rx_hazir() == 1 { geldi = 1; i = 20000; } değilse { i = i + 1; }
+        }
+        eğer geldi == 0 {
+            kis_buf_yaz8(buf_adr, un, 0);
+            eğer un > 0 { ver un; } değilse { ver 0 - 1; }
+        }
+        değişken c: tam32 = kis_rx_oku();
+        eğer (c == 10) veya (c == 13) {
+            kis_buf_yaz8(buf_adr, un, 0);
+            ver un;
+        }
+        eğer un < (umax - 1) {
+            kis_buf_yaz8(buf_adr, un, c);
+            un = un + 1;
+        }
+    }
+    ver un;
 }
