@@ -2668,6 +2668,50 @@ static void t043_raporla(TipKontrol *tk, const Dugum *d) {
     tip_hata(tk, d, "T043", "sayi literali hedef tipe sigmiyor");
 }
 
+/* [D-710 turbofish] `f::<T1,T2>(..)` hedefinin generic islev AST'si.
+ * TANIMLAYICI: sozcuksel arama (tip_belirle ile ayni golgeleme kurali —
+ * ayni adli yerel degisken islevi golgeler). YOL: resolver baglamasi
+ * (tip_belirle(hedef) SONRASI dolar). Generic olmayan / islev olmayan /
+ * bulunamayan -> NULL. */
+static const Dugum *turbofish_islev_bul(TipKontrol *tk, const Dugum *h) {
+    const Sembol *s = NULL;
+    if (!h) return NULL;
+    if (h->tip == DUGUM_TANIMLAYICI) {
+        s = sembol_bul(tk->scope, h->veri.tanimlayici.metin,
+                       h->veri.tanimlayici.uzunluk);
+    } else if (h->tip == DUGUM_YOL) {
+        s = h->cozum_sembol;
+    }
+    if (!s || s->kategori != SEMBOL_ISLEV || !s->ast_dugumu ||
+        s->ast_dugumu->tip != DUGUM_ISLEV) return NULL;
+    return s->ast_dugumu;
+}
+
+/* [D-710 turbofish] On-denetim — CAGRI islemenin EN BASINDA (her iki giris
+ * noktasinda: tip_belirle ve tip_belirle_beklenen). Acik generic arguman
+ * sayisi, hedef islevin generic parametre sayisina esit olmali; aksi T044
+ * ve 1 doner (cagiran t_hata ile erken doner, argumanlar gezilmez).
+ * Yan etkisiz basari yolu: iki giris noktasinda ard arda kosmasi tanıyı
+ * IKILEMEZ. YOL hedefi burada atlanir (sembol henuz cozulmedi) ve
+ * baglama asamasinda denetlenir. Yerlesik (dizi_olustur, tekkez_olustur,
+ * kanal_olustur ...) hedef -> T044: yerlesikler acik generic arguman ALMAZ;
+ * sessizce yok saymak "kabul et, anlamini degistir" olurdu. */
+static int turbofish_on_kontrol(TipKontrol *tk, const Dugum *d) {
+    int n = d->veri.cagri.tip_arg_sayi;
+    if (n <= 0) return 0;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (h && h->tip == DUGUM_YOL) return 0;
+    const Dugum *f = turbofish_islev_bul(tk, h);
+    int gsay = f ? f->veri.islev.tip_param_sayi : 0;
+    if (n != gsay) {
+        tip_hata(tk, d, "T044",
+                 "turbofish tip argumani sayisi islevin generic parametre "
+                 "sayisiyla uyumsuz");
+        return 1;
+    }
+    return 0;
+}
+
 TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
     if (!d) return t_hata(tk);
 
@@ -3208,6 +3252,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
 
         /* === Cagri === */
         case DUGUM_CAGRI: {
+            if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D-710 turbofish] */
             /* [D-517] HAM BELLEK YERLESIKLERI `güvensiz` ISTER.
              * OLCULEN ACIK: `bellek_al` / `bellek_kopyala` / `bellek_serbest`
              * `metin` olarak TIPLENIYOR (D-459: "HAM BELLEK", opak) — bu yuzden
@@ -4394,6 +4439,30 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
              * tipini substitue et. */
             GenBaglamalar gb;
             gb.sayi = 0;
+            /* [D-710 turbofish] ACIK generic argumanlar cikarsamayi EZER: once
+             * baglanir; gen_bagla "ilk gorulen kazanir" oldugu icin pas 1'deki
+             * gen_unify onlari DEGISTIREMEZ. Pas 2'de parametre tipi bu
+             * baglamayla ikame edilip BEKLENEN tip olur (literal o tipte
+             * cikarsanir, uyusmayan arguman T001), donus tipi de ikame edilir.
+             * YOL hedefi on-denetimden gecmisti (sembol o an bilinmiyordu):
+             * sayi burada denetlenir. */
+            const Dugum *tf_islev = NULL;
+            if (d->veri.cagri.tip_arg_sayi > 0) {
+                tf_islev = turbofish_islev_bul(tk, d->veri.cagri.hedef);
+                if (!tf_islev || tf_islev->veri.islev.tip_param_sayi !=
+                                 d->veri.cagri.tip_arg_sayi) {
+                    tip_hata(tk, d, "T044",
+                             "turbofish tip argumani sayisi islevin generic "
+                             "parametre sayisiyla uyumsuz");
+                    return t_hata(tk);
+                }
+                for (int ti = 0; ti < d->veri.cagri.tip_arg_sayi; ti++) {
+                    const char *tp = tf_islev->veri.islev.tip_paramlar[ti];
+                    TipBilgisi *acik = ast_tip_to_bilgi(tk,
+                        d->veri.cagri.tip_arg[ti]);
+                    gen_bagla(&gb, tp, (int)strlen(tp), acik);
+                }
+            }
             /* Once unify arg tipleri ile (substitue olmadan) — daha sonra
              * argumanlar substitue edilmis param tipi context'inde tekrar
              * cikarsanir. Iki pas: pas 1 inference, pas 2 type check. */
@@ -4412,8 +4481,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 TipBilgisi *bek = gen_substitue(tk, param_tip, &gb);
                 TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
                     d->veri.cagri.argumanlar[i], bek);
-                if (param_tip->kategori == TIP_GENERIC_PARAM) {
-                    /* Concrete'i gb'de tutuyoruz; bind onceden yapildi */
+                if (param_tip->kategori == TIP_GENERIC_PARAM &&
+                    (!tf_islev || bek->kategori == TIP_HATA)) {
+                    /* Concrete'i gb'de tutuyoruz; bind onceden yapildi.
+                     * [D-710 turbofish] ACIK baglamada bek arguman tipinden
+                     * TURETILMEDI -> asagidaki T001 denetimi GEREKLI. */
                     continue;
                 }
                 /* Sabitsüre Spec V1 CT003: arg sabitsure<T> → param T leak.
@@ -5095,6 +5167,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         }
 
         case DUGUM_CAGRI: {
+            if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D-710 turbofish] */
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — beklenen-bağlam
              * yolunda da modül-fonksiyon çağrısından ÖNCE dene. Generic çeşit
              * T'si beklenen'den (Secim<tam32>) substitue edilir (D-302). */

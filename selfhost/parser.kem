@@ -33,6 +33,13 @@ yapı Ayr {
     hata_say: tam32;     // parser hata sayısı
     yapi_izni: tam32;    // 1=Tip{..} yapı-oluştur izinli; 0=koşul bağlamı (blok başı)
     sk_pending: tam32;   // >> (SAGA_KAYDIR) yarı-tüketildi (generic kapanış böl)
+    // [D-710 turbofish] `f::<T1,T2>(..)` yan-kanalı: CAGRI düğümü → AÇIK tip
+    // argüman düğümleri. tf_cagri[k] CAGRI idx; tipler tf_tip[tf_bas[k] ..
+    // tf_bas[k] + tf_say[k]). Düğüme çocuk EKLENMEZ (çocuk[1..] = argüman).
+    tf_cagri: Dizi<tam32>;
+    tf_bas: Dizi<tam32>;
+    tf_say: Dizi<tam32>;
+    tf_tip: Dizi<tam32>;
 }
 
 // ---- Çıktı yardımcıları ----
@@ -1027,6 +1034,24 @@ işlev parse_onek(p: &değişken Ayr) -> tam32 {
     ver parse_birincil(p);
 }
 
+// [D-710 turbofish] CAGRI düğümünün AÇIK tip argümanlarını yan-kanala kaydet.
+işlev tf_kaydet(p: &değişken Ayr, cagri: tam32, tipler: Dizi<tam32>) -> tam32 {
+    dizi_ekle(p.tf_cagri, cagri);
+    dizi_ekle(p.tf_bas, dizi_boyut(p.tf_tip));
+    dizi_ekle(p.tf_say, dizi_boyut(tipler));
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(tipler) { dizi_ekle(p.tf_tip, dizi_al(tipler, i)); i = i + 1; }
+    ver 0;
+}
+// CAGRI idx → tf tablosundaki kayıt indeksi (-1 = turbofish yok).
+işlev tf_bul(p: &değişken Ayr, cagri: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tf_cagri) {
+        eğer dizi_al(p.tf_cagri, i) == cagri { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
 // Sonek operatör (. [] () :: olarak). Pozisyon = sonek token'ı.
 işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
     değişken t: metin = simdiki(p);
@@ -1063,6 +1088,19 @@ işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
     }
     eğer metin_esit(t, "CIFT_IKI_NOKTA") {
         ilerle(p);
+        // [D-710 turbofish] `::<` → AÇIK generic argümanlı çağrı (C ifade.c
+        // aynası; belirsizlik kuralı orada). Liste kapanınca HEMEN `(`
+        // gelmeli (P125). CAGRI `(` konumunda kurulur (özyineli parse_sonek).
+        eğer sim_mi(p, "KUCUK") {
+            değişken targs: Dizi<tam32> = parse_generic_args(p);
+            eğer sim_mi(p, "SOL_PAREN") == yanlış {
+                p.hata_say = p.hata_say + 1;
+                ver sol;
+            }
+            değişken tc: tam32 = parse_sonek(p, sol);
+            tf_kaydet(p, tc, targs);
+            ver tc;
+        }
         değişken sag: metin = sim_lex(p);
         bekle(p, "TANIMLAYICI");
         ver dugum1(p, "YOL", sag, s, u, sol);
@@ -1605,9 +1643,18 @@ işlev duz_yaz(p: &değişken Ayr, idx: tam32, derinlik: tam32) -> tam32 {
     yaz_tam(dizi_al(p.a_sut, idx));  yb(10);
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken tfk: tam32 = tf_bul(p, idx);   // [D-710 turbofish] -1 = yok
     değişken i: tam32 = 0;
     iken i < cs {
         duz_yaz(p, dizi_al(p.cocuk, cb + i), derinlik + 1);
+        // C ast_duz_yaz sırası: hedef (çocuk 0), AÇIK tip argümanları, argümanlar.
+        eğer (i == 0) ve (tfk >= 0) {
+            değişken ti: tam32 = 0;
+            iken ti < dizi_al(p.tf_say, tfk) {
+                duz_yaz(p, dizi_al(p.tf_tip, dizi_al(p.tf_bas, tfk) + ti), derinlik + 1);
+                ti = ti + 1;
+            }
+        }
         i = i + 1;
     }
     ver 0;
@@ -1621,7 +1668,8 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
         hata_say: 0,
         yapi_izni: 1,
-        sk_pending: 0
+        sk_pending: 0,
+        tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: []
     };
 }
 

@@ -1,0 +1,20 @@
+// [D-710 turbofish] PARSE PARİTESİ: `f::<T1, T2>(..)` — AÇIK generic argümanlı çağrı.
+// C `--ast` CAGRI'yı hedef → TİP ARGÜMANLARI → argümanlar sırasıyla döker; self-host
+// tip argümanlarını yan-kanalda tutar ve dump'ta AYNI sıraya koyar. Bu dosya o
+// sırayı, `>>` kapanış bölmeyi (`Dizi<tam64>>`), modül yolu üzerinde turbofish'i,
+// iç içe çağrıyı ve belirsizlik kuralının "eski" yarısını (`a < b` karşılaştırması
+// hâlâ karşılaştırma) birlikte ölçer.
+modül m {
+    genel işlev kim<T>(x: T) -> T { ver x; }
+}
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev cift<A, B>(a: A, b: B) -> B { ver b; }
+işlev main() -> tam32 {
+    değişken a: tam64 = kimlik::<tam64>(8589934592);
+    değişken b: tam64 = cift::<tam32, tam64>(1, 2);
+    değişken c: Dizi<tam64> = kimlik::<Dizi<tam64>>([1, 2]);
+    değişken d: tam64 = m::kim::<tam64>(kimlik::<tam64>(3));
+    değişken e: mantıksal = a < b;
+    değişken f: seçimlik<tam32> = kimlik::<seçimlik<tam32>>(hiç);
+    ver kimlik::<tam32>(42);
+}
