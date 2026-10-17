@@ -7845,6 +7845,18 @@ static void hoist_renumber(FILE *src, FILE *dst) {
     free(map); free(sira); free(suz); free(satir); free(buf);
 }
 
+/* [D-704] Bare-metal x86_64 hedefinde her `define`a `noredzone` işlev özniteliği.
+ * SysV x86-64 yaprak işlevlere RSP'nin ALTINDAKİ 128 B'ı ("kırmızı bölge") yerel
+ * için kullandırır. Çekirdekte ring0 kesmesi (IRQ0, int 0x80, istisna) çerçevesini
+ * AYNI yığına, tam RSP'nin altına iter → oradaki yereller SESSİZCE bozulur (D-700:
+ * x86 kem_os'ta ölçüldü). clang `-mno-red-zone` IR girdisinde ETKİSİZ; LLVM politikayı
+ * yalnız bu öznitelikten okur → derleyici yaymalı. Yalnız `x86_64-unknown-none-elf`:
+ * barındırılan x86 (Linux kullanıcı alanı / Win64) kırmızı bölgeyi güvenle kullanır,
+ * AArch64 SysV'de kırmızı bölge YOK. selfhost/codegen.kem `fn_oznitelik_eki` aynası. */
+static const char *fn_oznitelik_eki(void) {
+    return strcmp(llvm_hedef_triple(), "x86_64-unknown-none-elf") == 0 ? " noredzone" : "";
+}
+
 static void islev_uret(LlvmGen *g, const Dugum *islev) {
     /* Generic islev: tek basina emit etme — instantiation'lar cagri sirasinda */
     if (islev->veri.islev.tip_param_sayi > 0) return;
@@ -7923,7 +7935,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
         yerel_ad_yaz(g->out, p->veri.parametre.ad,
                      p->veri.parametre.ad_uzunluk);
     }
-    fputs(") {\nentry:\n", g->out);
+    fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-704] */
 
     g->reg = 0;
     g->label = 0;
@@ -8194,7 +8206,7 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
             yerel_ad_yaz(g->out, p->veri.parametre.ad,
                          p->veri.parametre.ad_uzunluk);
         }
-        fputs(") {\nentry:\n", g->out);
+        fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-704] */
     }
 
     g->reg = 0; g->label = 0; g->isimler = NULL;
@@ -8293,7 +8305,7 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
             yerel_ad_yaz(g->out, p->veri.parametre.ad,
                          p->veri.parametre.ad_uzunluk);
         }
-        fputs(") {\nentry:\n", g->out);
+        fprintf(g->out, ")%s {\nentry:\n", fn_oznitelik_eki());   /* [D-704] */
         dosya_kopyala(ic_tmp, govde_tmp);
         fclose(ic_tmp);
     }

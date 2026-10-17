@@ -100,12 +100,15 @@ else
         # iki derleyici birlikte volatile'ı bıraksa 0=0 geçerdi → C > 0 da şart.
         cv=$(grep -cE "load volatile|store volatile" "$TMP/os_c.ll"); sv=$(grep -cE "load volatile|store volatile" "$TMP/os_s.ll")
         ci=$(grep -c "inttoptr" "$TMP/os_c.ll"); si=$(grep -c "inttoptr" "$TMP/os_s.ll")
+        # [D-704] noredzone YALNIZ bare-metal x86'ya: aarch64 biriminde iki derleyicide de 0.
+        cz=$(grep -c ") noredzone {" "$TMP/os_c.ll"); sz=$(grep -c ") noredzone {" "$TMP/os_s.ll")
         if [ "$oc" = "$os" ] && diff -q "$TMP/os_c.d" "$TMP/os_s.d" >/dev/null 2>&1 && [ "$ca" -eq "$sa" ] \
-           && [ "$cv" -gt 0 ] && [ "$cv" -eq "$sv" ] && [ "$ci" -gt 0 ] && [ "$ci" -eq "$si" ]; then
+           && [ "$cv" -gt 0 ] && [ "$cv" -eq "$sv" ] && [ "$ci" -gt 0 ] && [ "$ci" -eq "$si" ] \
+           && [ "$cz" -eq 0 ] && [ "$sz" -eq 0 ]; then
             echo "  ✅ BİRLEŞİK OS — $(wc -l <"$TMP/os_c.d") işlev, $ca satıriçi asm, $cv volatile, $ci inttoptr, üçlü eşleşti"
             pass=$((pass+1)); os_ok=1
         else
-            echo "  🔴 BİRLEŞİK OS — işlev C=$(wc -l <"$TMP/os_c.d") KEMGU=$(wc -l <"$TMP/os_s.d") · asm C=$ca KEMGU=$sa · volatile C=$cv KEMGU=$sv · inttoptr C=$ci KEMGU=$si"
+            echo "  🔴 BİRLEŞİK OS — işlev C=$(wc -l <"$TMP/os_c.d") KEMGU=$(wc -l <"$TMP/os_s.d") · asm C=$ca KEMGU=$sa · volatile C=$cv KEMGU=$sv · inttoptr C=$ci KEMGU=$si · noredzone C=$cz KEMGU=$sz (0 olmalı)"
             [ "$oc" = "$os" ] || echo "      üçlü: C=[$oc] KEMGU=[$os]"
             diff "$TMP/os_c.d" "$TMP/os_s.d" 2>/dev/null | head -5 | sed 's/^/      /'
             fail=$((fail+1))
@@ -267,6 +270,11 @@ else
             xa=$(grep -c "asm sideeffect" "$TMP/x86_c.ll"); xsa=$(grep -c "asm sideeffect" "$TMP/x86_s.ll")
             xv=$(grep -cE "load volatile|store volatile" "$TMP/x86_c.ll"); xsv=$(grep -cE "load volatile|store volatile" "$TMP/x86_s.ll")
             xi=$(grep -c "inttoptr" "$TMP/x86_c.ll"); xsi=$(grep -c "inttoptr" "$TMP/x86_s.ll")
+            # [D-704] bare-metal x86: HER define `noredzone` taşımalı (ring0 kesme çerçevesi
+            # RSP altına itilir). Ad kümesi `sed 's/(.*//'` ile özniteliği SİLER → ayrı sayılır;
+            # yalnız eşitlik yetmez (ikisi birden bıraksa 0=0) → define sayısına eşit olmalı.
+            xn=$(grep -c ") noredzone {" "$TMP/x86_c.ll"); xsn=$(grep -c ") noredzone {" "$TMP/x86_s.ll")
+            xd=$(grep -c "^define" "$TMP/x86_c.ll"); xsd=$(grep -c "^define" "$TMP/x86_s.ll")
             # asm ŞABLON + KISIT dizgisi de eşleşmeli: ADET eşit ama İÇERİK farklı
             # olabilir (D-416 kusuru) — adet tek başına onu KAÇIRIR.
             grep -o 'asm sideeffect "[^"]*", "[^"]*"' "$TMP/x86_c.ll" | sort > "$TMP/x86_c.a"
@@ -274,11 +282,12 @@ else
             if [ "$xc" = "$xs" ] && diff -q "$TMP/x86_c.d" "$TMP/x86_s.d" >/dev/null 2>&1 \
                && [ "$xa" -eq "$xsa" ] && diff -q "$TMP/x86_c.a" "$TMP/x86_s.a" >/dev/null 2>&1 \
                && [ "$xv" -gt 0 ] && [ "$xv" -eq "$xsv" ] \
-               && [ "$xi" -gt 0 ] && [ "$xi" -eq "$xsi" ]; then
-                echo "  ✅ BİRLEŞİK x86 — $(wc -l <"$TMP/x86_c.d") işlev, $xa satıriçi asm (şablon+kısıt eşleşti), $xv volatile, $xi inttoptr, üçlü eşleşti"
+               && [ "$xi" -gt 0 ] && [ "$xi" -eq "$xsi" ] \
+               && [ "$xn" -gt 0 ] && [ "$xn" -eq "$xd" ] && [ "$xsn" -eq "$xsd" ]; then
+                echo "  ✅ BİRLEŞİK x86 — $(wc -l <"$TMP/x86_c.d") işlev, $xa satıriçi asm (şablon+kısıt eşleşti), $xv volatile, $xi inttoptr, noredzone $xn/$xd, üçlü eşleşti"
                 pass=$((pass+1))
             else
-                echo "  🔴 BİRLEŞİK x86 — işlev C=$(wc -l <"$TMP/x86_c.d") KEMGU=$(wc -l <"$TMP/x86_s.d") · asm C=$xa KEMGU=$xsa · volatile C=$xv KEMGU=$xsv · inttoptr C=$xi KEMGU=$xsi"
+                echo "  🔴 BİRLEŞİK x86 — işlev C=$(wc -l <"$TMP/x86_c.d") KEMGU=$(wc -l <"$TMP/x86_s.d") · asm C=$xa KEMGU=$xsa · volatile C=$xv KEMGU=$xsv · inttoptr C=$xi KEMGU=$xsi · noredzone C=$xn/$xd KEMGU=$xsn/$xsd"
                 [ "$xc" = "$xs" ] || echo "      üçlü: C=[$xc] KEMGU=[$xs]"
                 diff "$TMP/x86_c.d" "$TMP/x86_s.d" 2>/dev/null | head -5 | sed 's/^/      /'
                 diff "$TMP/x86_c.a" "$TMP/x86_s.a" 2>/dev/null | head -5 | sed 's/^/      /'
