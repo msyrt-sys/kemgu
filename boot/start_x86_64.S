@@ -150,13 +150,22 @@ _halt:
     hlt
     jmp     _halt
 
-/* === GDT (long mode: null + 64-bit code + data) === */
-.section .rodata
-.align 8
+/* === GDT (long mode: null + çekirdek kod/veri + [D-699] kullanıcı kod/veri + TSS) ===
+ * .data'da (eskiden .rodata): (1) TSS tanımlayıcısı çalışma anında .kem
+ * kxr_tss_kur tarafından doldurulur; (2) CPU `ltr`de TSS tanımlayıcısına MEŞGUL
+ * bitini, segment yüklerken erişildi bitini YAZAR — D-691 çekirdek W^X'ten sonra
+ * .rodata salt-okunurdur ve bu örtük yazmalar #PF verirdi. */
+.section .data
+.align 16
+.global kdl_x86_gdt
+kdl_x86_gdt:
 gdt:
     .quad   0x0000000000000000     /* null */
     .quad   0x00209A0000000000     /* 0x08: 64-bit code (L, present, code, exec/read) */
     .quad   0x0000920000000000     /* 0x10: data (present, data, read/write) */
+    .quad   0x0020FA0000000000     /* 0x18: [D-699] kullanıcı kod (DPL3, L) → CS=0x1B */
+    .quad   0x0000F20000000000     /* 0x20: [D-699] kullanıcı veri (DPL3, r/w) → SS=0x23 */
+    .quad   0, 0                   /* 0x28: [D-699] 64-bit TSS (16 B), kxr_tss_kur doldurur */
 gdt_end:
 gdt_desc:
     .word   gdt_end - gdt - 1      /* limit */
@@ -178,6 +187,13 @@ pml4:   .skip 4096
 pdpt:   .skip 4096
 pd:     .skip 4096
 pd_mmio: .skip 4096
+
+/* [D-699] 64-bit TSS (104 B). Yalnız RSP0 kullanılır: ring3'ten gelen kesme/
+ * istisnada CPU ring0 yığınını buradan alır (TSS'siz ring3→ring0 = üçlü hata).
+ * RSP0 kdl_x86_ring3_gir'de, IOPB ofseti + tanımlayıcı .kem kxr_tss_kur'da. */
+.align 16
+.global kdl_x86_tss
+kdl_x86_tss: .skip 104
 
 /* === x86 exception ISR stub'ları (C3a) ===
  * Hata-kodlu istisnalar (8,10,11,12,13,14,17,21) CPU error code push eder → yalnız
@@ -232,6 +248,31 @@ isr\n:
     ISR_NOERR 31
 
 isr_ortak:
+    /* [D-699] RING3 DÖNÜŞÜ: kdl_x86_r3_blok+0 (bekle) != 0 VE kesilen CS'in RPL'i 3
+     * ise istisna KULLANICI kodundan gelmiştir (yığın: vektör@0 hata@8 RIP@16 CS@24).
+     * Kullanıcı rax/rcx + vektör/hata/RIP/CS/CR2 kaydedilir, bayrak SIFIRLANIR (tek
+     * atış), çekirdek bağlamına (kdl_x86_ring3_gir'in çağıranına) dönülür. Kesilen
+     * çerçeve ATILIR (ring3'e geri dönülmez). Bayrak 0 ya da çekirdek (CS RPL 0)
+     * fault'u → aşağıdaki eski yollar AYNEN: çekirdek fault'u asla yutulmaz. */
+    cmpq    $0, kdl_x86_r3_blok(%rip)
+    je      5f
+    testb   $3, 24(%rsp)
+    jz      5f
+    movq    %rax, kdl_x86_r3_blok+48(%rip)     /* kullanıcı rax */
+    movq    %rcx, kdl_x86_r3_blok+56(%rip)     /* kullanıcı rcx */
+    movq    0(%rsp), %rax
+    movq    %rax, kdl_x86_r3_blok+16(%rip)     /* vektör */
+    movq    8(%rsp), %rax
+    movq    %rax, kdl_x86_r3_blok+24(%rip)     /* hata kodu */
+    movq    16(%rsp), %rax
+    movq    %rax, kdl_x86_r3_blok+32(%rip)     /* RIP */
+    movq    24(%rsp), %rax
+    movq    %rax, kdl_x86_r3_blok+40(%rip)     /* CS */
+    movq    %cr2, %rax
+    movq    %rax, kdl_x86_r3_blok+64(%rip)     /* CR2 */
+    movq    $0, kdl_x86_r3_blok(%rip)
+    jmp     kdl_x86_r3_don
+5:
     /* [D-687] KURTARILABİLİR #PF (aarch64 kdl_fault_bekleniyor ikizi): vektör 14 VE
      * kdl_x86_pf_bekle != 0 ise fault BEKLENİYORDUR (.kem kmmu_fault_testi). bekle =
      * fault eden komutun BAYT UZUNLUĞU (x86 değişken uzunluk; .kem sabit-yazmaçlı
@@ -346,6 +387,10 @@ kdl_syscall_stub:
     pushq   %r9
     pushq   %r10
     pushq   %r11
+    /* [D-699] çağıranın CS'i (8 itme = 64 B; RIP@64, CS@72) → kdl_x86_r3_blok+72.
+     * RPL 3 = sistem çağrısı KULLANICI kodundan geldi (ring3 kanıtı). */
+    movq    72(%rsp), %r11
+    movq    %r11, kdl_x86_r3_blok+72(%rip)
     movq    %rdi, %rsi        /* arg → 2. param */
     movq    %rax, %rdi        /* num → 1. param */
     call    kdl_syscall_isle
@@ -359,8 +404,67 @@ kdl_syscall_stub:
     popq    %rcx
     iretq
 
+/* === [D-699] RING3 girişi (arm64 kdl_el0_calistir ikizi) ===
+ * kdl_x86_ring3_gir(rdi = kullanıcı RIP, rsi = kullanıcı RSP): RFLAGS + callee-
+ * saved yazmaçlar kaydedilir, IRQ kapatılır, kaydedilmiş RSP → kdl_x86_r3_blok+8,
+ * TSS.RSP0 = bu RSP (16-hizalı; ring3'ten gelen kesme çerçevesi kaydedilen
+ * yazmaçların ALTINA itilir), bekle = 1, iretq çerçevesi: SS=0x23, RSP, RFLAGS=0x2
+ * (IF=0, IOPL=0 → ring3'te cli/sti/hlt/in/out #GP), CS=0x1B, RIP. iretq CPL'yi 3'e
+ * düşürür. Dönüş: ring3'te BİR istisna (ör. ayrıcalıklı komut #GP, gözetmen sayfa
+ * #PF) → isr_ortak → kdl_x86_r3_don → buradan normal `ret`. int 0x80 ise ring3'e
+ * iretq ile döner (kdl_syscall_stub). */
+.section .text
+.code64
+.global kdl_x86_ring3_gir
+kdl_x86_ring3_gir:
+    pushfq
+    cli
+    pushq   %rbx
+    pushq   %rbp
+    pushq   %r12
+    pushq   %r13
+    pushq   %r14
+    pushq   %r15
+    movq    %rsp, kdl_x86_r3_blok+8(%rip)
+    movq    %rsp, %rax
+    andq    $-16, %rax
+    movq    %rax, kdl_x86_tss+4(%rip)          /* TSS.RSP0 (ofset 4) */
+    movq    $1, kdl_x86_r3_blok(%rip)
+    pushq   $0x23                              /* SS  = kullanıcı veri | 3 */
+    pushq   %rsi                               /* RSP = kullanıcı yığını */
+    pushq   $0x2                               /* RFLAGS: IF=0, IOPL=0 */
+    pushq   $0x1B                              /* CS  = kullanıcı kod | 3 */
+    pushq   %rdi                               /* RIP = kullanıcı girişi */
+    iretq
+
+/* Ring3 istisnasından çekirdek bağlamına dönüş (isr_ortak'tan jmp). Ring3→ring0
+ * geçişi SS'i NULL, iretq ring3'e inerken DS/ES/FS/GS'i NULL yapmıştı → çekirdek
+ * veri seçicisi (0x10) yeniden yüklenir. */
+kdl_x86_r3_don:
+    movq    kdl_x86_r3_blok+8(%rip), %rsp
+    movw    $0x10, %ax
+    movw    %ax, %ds
+    movw    %ax, %es
+    movw    %ax, %fs
+    movw    %ax, %gs
+    movw    %ax, %ss
+    popq    %r15
+    popq    %r14
+    popq    %r13
+    popq    %r12
+    popq    %rbp
+    popq    %rbx
+    popfq
+    ret
+
 .section .data
 .align 8
+/* [D-699] ring3 durum bloğu (.kem kxr_* tek taban adresle okur):
+ * +0 bekle  +8 çekirdek RSP  +16 vektör  +24 hata kodu  +32 RIP  +40 CS
+ * +48 kullanıcı rax  +56 kullanıcı rcx  +64 CR2  +72 son sistem çağrısının CS'i */
+.global kdl_x86_r3_blok
+kdl_x86_r3_blok: .skip 80
+
 .global kdl_x86_pf_bekle
 .global kdl_x86_pf_cr2
 kdl_x86_pf_bekle: .quad 0     /* [D-687] 0 = fault beklenmiyor; >0 = atlanacak komut uzunluğu */

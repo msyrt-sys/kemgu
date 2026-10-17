@@ -439,6 +439,17 @@ işlev main() -> tam32 {
     değilse {
         yazdir_metin("X86 SYSCALL HATA");
     }
+    // İş 24 (D-699): KULLANICI MODU (ring3) — arm64 EL0 ikizi. Süreç adres alanı #3,
+    // özel VA 0x54000000 U/S ile eşlenir; iretq ile CPL 3'e inilir; ring3 int 0x80
+    // getpid (DPL3 kapı → .kem kdl_syscall_isle, çağıran CS 0x1B), sonra `hlt` → #GP →
+    // çekirdeğe kontrollü dönüş; ikinci girişte gözetmen sayfa okuması → #PF hata 5.
+    // D-686 syscall testinden SONRA (aynı servis; getpid çekirdeğin yanıtıyla eşlenir).
+    eğer kxr_ring3_testi() == 1 {
+        yazdir_metin("X86 RING3 OK");
+    }
+    değilse {
+        yazdir_metin("X86 RING3 HATA");
+    }
     // İş 23 (D-693): ortak çekirdek fazları (D-694: SİSTEM ÇAĞRISI testinden SONRA —
     // [42] dil görevleri görev 1'i ölü işaretler; D-686 testi durum(1) == 0 bekler) — arm64 ile AYNI kod
     // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor

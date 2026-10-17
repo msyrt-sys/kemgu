@@ -1,0 +1,168 @@
+// kem_ring3_hw.kem — x86_64 KULLANICI MODU (ring3) girişi + dönüşü ([D-699]).
+// ============================================================================
+// arm64 ikizi: runtime/kem_gorev.kem EL0 yolu (kdl_el0_calistir, `eret` + SPSR=EL0t).
+// C referansı: test/bare_metal/ring3_x86.c (kendi GDT/IDT/TSS'i; bu dosya ise AYNI
+// kanıtı çekirdeğin KENDİ tablolarıyla, süreç adres alanı içinde verir).
+//
+// Bileşenler (her biri ayrı bir başarısızlık noktası; sabotajla ölçüldü):
+//   * GDT 0x18/0x20 DPL3 kod/veri + 0x28 TSS tanımlayıcısı (boot/start_x86_64.S .data)
+//   * TSS: RSP0 (kdl_x86_ring3_gir) + IOPB ofseti/tanımlayıcı/`ltr` (kxr_tss_kur)
+//   * IDT 0x80 kapısı DPL3 (runtime/kdl_kesme.c, 0xEE) → ring3 `int 0x80` geçer
+//   * kullanıcı sayfası: U/S biti tablo yürüyüşünün HER seviyesinde (PML4/PDPT/PD/PT)
+//   * dönüş: ring3'te istisna → .S isr_ortak (CS RPL 3 + bekle) → kdl_x86_r3_don
+//
+// Kullanıcı programları (baytlar llvm-mc -show-encoding ile doğrulandı):
+//   ofset 0 : 8c c9          movl %cs, %ecx      (CPL kanıtı: RPL 3)
+//             b8 0b 00 00 00 movl $11, %eax      (11 = getpid, kem_syscall_temel)
+//             cd 80          int  $0x80          (DPL3 kapı → .kem kdl_syscall_isle)
+//             f4             hlt                 (ofset 9: ayrıcalıklı → #GP, vektör 13)
+//   ofset 16: b8 00 00 10 00 movl $0x100000, %eax
+//             48 8b 00       movq (%rax), %rax   (ofset 21: gözetmen sayfa → #PF hata 5)
+
+sabit KXR_AS: tam64 = 3;                     // adres alanı #3 (x86 kem_os: 0/1 izolasyon, 2 W^X)
+sabit KXR_KOD_SEL: tam64 = 27;               // 0x18 | 3
+sabit KXR_TSS_SEL: tam64 = 40;               // 0x28 (GDT bayt ofseti)
+sabit KXR_TSS_LIMIT: tam64 = 103;            // 104 B TSS → limit 103
+sabit KXR_TSS_ERISIM: tam64 = 150633093005312;  // 0x89 << 40: P | DPL0 | tip 9 (64-bit TSS, müsait)
+sabit KXR_TSS_IOPB: tam64 = 29273397577908224;  // 104 << 48: +96'dan yazılınca +102 (IOPB) = 104
+sabit KXR_2_24: tam64 = 16777216;
+sabit KXR_2_56: tam64 = 72057594037927936;
+sabit KXR_US_RW: tam64 = 7;                  // P | RW | U/S
+sabit KXR_US_RX: tam64 = 5;                  // P | U/S (salt-okunur, NX yok → çalıştırılabilir)
+sabit KXR_YIGIN_UST: tam64 = 1411383296;     // 0x54200000: özel 2 MB pencerenin tepesi (sayfa 511)
+sabit KXR_GP: tam64 = 13;
+sabit KXR_PF: tam64 = 14;
+sabit KXR_PF_KUL_OKU: tam64 = 5;             // P(1) | U/S(4): kullanıcı, mevcut sayfa, okuma
+sabit KXR_GOZETMEN_VA: tam64 = 1048576;      // 0x100000: çekirdek imajı (gözetmen sayfa)
+sabit KXR_GETPID: tam64 = 11;
+
+// .S durum bloğu kdl_x86_r3_blok (ofsetler start_x86_64.S'teki açıklamayla birebir).
+çıplak işlev kxr_blok_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_x86_r3_blok(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kxr_tss_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_x86_tss(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+çıplak işlev kxr_gdt_adr() -> tam64 {
+    değişken x: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_x86_gdt(%rip), $0"# çıktı("=r", &x) } }
+    ver x;
+}
+
+// Ham bayt yaz (kullanıcı kod sayfasına makine kodu).
+çıplak işlev kxr_y8(adr: tam64, v: dtam8) {
+    değişken p: *dtam8 = adr olarak *dtam8;
+    *p = v;
+}
+
+// TR = 0x28 (`ltr` tanımlayıcıyı MEŞGUL işaretler → yalnız BİR kez çağrılır).
+çıplak işlev kxr_ltr() {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movw $$40, %ax
+ltr %ax"#
+            bozulan("~{rax}") bozulan("~{memory}")
+        }
+    }
+}
+
+// TSS: IOPB ofseti = 104 (bit haritası YOK → ring3 in/out #GP) + 16 B 64-bit TSS
+// tanımlayıcısı (taban parçalı: [15:0] limit, [39:16] taban 0..23, [47:40] erişim,
+// [63:56] taban 24..31; ikinci quad taban 32..63) + `ltr`. RSP0 her girişte .S'te.
+çıplak işlev kxr_tss_kur() {
+    değişken t: tam64 = kxr_tss_adr();
+    kxm_y64(t + 96, KXR_TSS_IOPB);
+    değişken g: tam64 = kxr_gdt_adr() + KXR_TSS_SEL;
+    değişken alt: tam64 = KXR_TSS_LIMIT + (t % KXR_2_24) * 65536 + KXR_TSS_ERISIM
+                        + ((t / KXR_2_24) % 256) * KXR_2_56;
+    kxm_y64(g, alt);
+    kxm_y64(g + 8, t / 4294967296);
+    kxr_ltr();
+}
+
+// .S kdl_x86_ring3_gir(rdi=RIP, rsi=RSP) çağır. Kırmızı bölge (128 B) atlanır:
+// derleyici bu asm'yi çağrı saymaz → yaprak işlevde yerelleri RSP altına koyabilir.
+çıplak işlev kxr_gir(rip: tam64, rsp: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq $0, %rdi
+movq $1, %rsi
+subq $$128, %rsp
+call kdl_x86_ring3_gir
+addq $$128, %rsp"#
+            girdi("r", rip) girdi("r", rsp)
+            bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}")
+            bozulan("~{rdi}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}")
+            bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+}
+
+// RING3 KANITI (falsifiye edilebilir; 1 = hepsi doğru):
+//   giriş 1: ring3'te CS okunur (RPL 3), int 0x80 getpid → çekirdek .kem servisi
+//            çağıranın CS'ini 0x1B görür, dönüş değeri (rax) kullanıcıya ulaşır;
+//            sonra `hlt` → #GP (vektör 13, RIP = giriş+9, CS 0x1B) → çekirdeğe dönüş.
+//   giriş 2: kullanıcı gözetmen sayfayı okur → #PF hata 5 (P|U), CR2 = 0x100000.
+// Taklit edilemez: DPL0 kapıda int 0x80 #GP verir (sc CS 0 kalır); CPL0'da `hlt`
+// hata vermez; U/S'siz kullanıcı sayfası ilk komut getirmede #PF verir (vektör 14).
+çıplak işlev kxr_ring3_testi() -> tam32 {
+    değişken as: tam64 = kmmu_as_olustur(KXR_AS);
+    eğer as == 0 { ver 0; }
+    değişken pdpt: tam64 = as + 4096;
+    değişken pd: tam64 = as + 8192;
+    değişken pt: tam64 = as + 12288;
+    değişken pa: tam64 = KMMU_OZEL_PA + KXR_AS * KMMU_2MB;
+    // U/S YALNIZ bu alanın kendi tablolarında; kopyalanan çekirdek girdileri
+    // (PDPT[0] 0..1 GB, PDPT[3] MMIO) gözetmen kalır → kullanıcı onlara erişemez.
+    kxm_y64(as, pdpt + KXR_US_RW);                          // PML4[0]
+    kxm_y64(pdpt + 8, pd + KXR_US_RW);                      // PDPT[1]
+    kxm_y64(pd + KMMU_OZEL_IDX * 8, pt + KXR_US_RW);        // PD[160]
+    kxm_y64(pt, pa + KXR_US_RX);                            // sayfa 0: kullanıcı KOD
+    kxm_y64(pt + 511 * 8, KXM_NX_BIT + pa + 511 * KMMU_SAYFA + KXR_US_RW);  // sayfa 511: YIĞIN (NX)
+    // Kullanıcı makine kodu (çekirdek identity görüşünden PA'ya).
+    kxr_y8(pa + 0, 140);  kxr_y8(pa + 1, 201);              // movl %cs, %ecx
+    kxr_y8(pa + 2, 184);  kxr_y8(pa + 3, 11);               // movl $11, %eax
+    kxr_y8(pa + 4, 0);    kxr_y8(pa + 5, 0);    kxr_y8(pa + 6, 0);
+    kxr_y8(pa + 7, 205);  kxr_y8(pa + 8, 128);              // int $0x80
+    kxr_y8(pa + 9, 244);                                    // hlt
+    kxr_y8(pa + 16, 184); kxr_y8(pa + 17, 0);  kxr_y8(pa + 18, 0);   // movl $0x100000, %eax
+    kxr_y8(pa + 19, 16);  kxr_y8(pa + 20, 0);
+    kxr_y8(pa + 21, 72);  kxr_y8(pa + 22, 139); kxr_y8(pa + 23, 0);  // movq (%rax), %rax
+    kxr_tss_kur();
+    değişken b: tam64 = kxr_blok_adr();
+    değişken k: tam64 = kxm_cr3_oku();
+    kmmu_as_gec(as);
+    kxm_y64(b + 72, 0);                                     // son syscall CS'i temizle
+    kxr_gir(KMMU_OZEL_VA, KXR_YIGIN_UST);                   // GİRİŞ 1
+    değişken b1: tam64 = kxm_o64(b);
+    değişken v1: tam64 = kxm_o64(b + 16);
+    değişken h1: tam64 = kxm_o64(b + 24);
+    değişken r1: tam64 = kxm_o64(b + 32);
+    değişken c1: tam64 = kxm_o64(b + 40);
+    değişken ax1: tam64 = kxm_o64(b + 48);
+    değişken cx1: tam64 = kxm_o64(b + 56);
+    değişken sc: tam64 = kxm_o64(b + 72);
+    kxr_gir(KMMU_OZEL_VA + 16, KXR_YIGIN_UST);              // GİRİŞ 2
+    değişken b2: tam64 = kxm_o64(b);
+    değişken v2: tam64 = kxm_o64(b + 16);
+    değişken h2: tam64 = kxm_o64(b + 24);
+    değişken r2: tam64 = kxm_o64(b + 32);
+    değişken c2: tam64 = kxm_o64(b + 40);
+    değişken f2: tam64 = kxm_o64(b + 64);
+    kmmu_as_gec(k);                                         // çekirdek alanına dön
+    değişken pid: tam64 = kem_syscall_temel(KXR_GETPID, 0); // çekirdeğin KENDİ yanıtı
+    eğer (b1 == 0) ve (v1 == KXR_GP) ve (h1 == 0) ve (r1 == KMMU_OZEL_VA + 9)
+       ve (c1 == KXR_KOD_SEL) ve ((cx1 % 65536) == KXR_KOD_SEL)
+       ve (sc == KXR_KOD_SEL) ve (ax1 == pid)
+       ve (b2 == 0) ve (v2 == KXR_PF) ve (h2 == KXR_PF_KUL_OKU)
+       ve (r2 == KMMU_OZEL_VA + 21) ve (c2 == KXR_KOD_SEL) ve (f2 == KXR_GOZETMEN_VA) {
+        ver 1;
+    }
+    ver 0;
+}

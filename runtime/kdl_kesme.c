@@ -538,6 +538,11 @@ void kdl_idt_kur(void) {
         kdl_idt_gate(i, (uint64_t)(uintptr_t)kdl_isr_tablo[i]);   /* istisnalar 0-31 */
     kdl_idt_gate(32, (uint64_t)(uintptr_t)&kdl_irq0_stub);        /* IRQ0 → vektör 32 */
     kdl_idt_gate(0x80, (uint64_t)(uintptr_t)&kdl_syscall_stub);   /* int 0x80 → syscall */
+    /* [D-699] Sistem çağrısı kapısı DPL3 (0xEE = present, DPL3, interrupt gate):
+     * ring3 `int 0x80` yalnız kapı DPL >= CPL ise geçer; DPL0 kapı ring3'ten #GP
+     * verir. Çekirdek (ring0) çağrıları etkilenmez. İstisna/IRQ kapıları DPL0
+     * KALIR (ring3 `int 13` gibi yazılımsal istisna taklidini reddeder). */
+    kdl_idt[0x80].tip_oz = 0xEE;
 
     struct {
         uint16_t limit;
