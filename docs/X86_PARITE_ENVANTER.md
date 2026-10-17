@@ -267,3 +267,4 @@ sayılmamıştı ama aarch64'e özgüdür.)
   outb %al,%dx`.
 
 - **D-705 (2026-10-17):** kullanıcı-işaretçili sistem çağrıları (5 yaz, 17 dosya_yaz, 18 dosya_oku) + D-610 işaretçi doğrulaması `kem_gorev.kem`'den ortak çekirdeğe taşındı; kullanıcı penceresi mimari kancası (arm64 0x42000000, x86 0x54000000). x86 ring3'ten gerçek virtio diske yaz/oku = arm64 [13] ikizi (Kanıt 28).
+- **D-707 (2026-10-17):** x86 ring3'ten sistem çağrısı 26 (UART satır okuma, D-706 ortak `kis_satir_oku` + 16550 kancaları) = arm64 [12] UART RX ikizi. Normal koşum EOF yolunu, ikinci koşum (`-chardev file,input-path=`) satır okuma + ring3 yankısını kanıtlar (Kanıt 29).
