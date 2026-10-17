@@ -1,0 +1,38 @@
+// [D1 turbofish] AÇIK GENERIC ARGÜMAN MONOMORFİZASYONU — C ↔ self exit 42.
+// Açık argüman ÇIKARSAMAYI EZER: `kare::<tam64>(92682)` → `@kare$i64`, argüman i64.
+// Turbofish yok sayılsaydı literal 92682 i32 çıkarsanır, `$i32` seçilir, 92682² =
+// 8589953124 KIRPILIR → exit 1 (sabotajın ayırt ettiği şekil). tam64 + 2^33 bilerek:
+// tam32 ile çıkarsama ve açık bağlama AYNI IR'ı üretir, kusur görünmez (D-535).
+modül m {
+    genel işlev kim<T>(x: T) -> T { ver x; }
+}
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev kare<T>(x: T) -> T { ver x * x; }
+işlev cift<A, B>(a: A, b: B) -> B { ver b; }
+işlev sar<T>(x: T) -> T { ver kimlik::<T>(x); }   // iç turbofish: DIŞ ikameden çözülür
+işlev esit<T>(a: T, b: T) -> mantıksal { ver a == b; }
+işlev ilk<T>(xs: Dizi<T>) -> T { ver dizi_al(xs, 0); }
+işlev bos<T>() -> Dizi<T> { değişken d: Dizi<T> = []; ver d; }   // T yalnız dönüşte
+işlev main() -> tam32 {
+    değişken a: tam64 = kare::<tam64>(92682);
+    eğer a != 8589953124 { ver 1; }
+    değişken b: tam64 = kimlik::<tam64>(8589934592);
+    eğer b != 8589934592 { ver 2; }
+    değişken c: tam64 = cift::<tam32, tam64>(1, 8589934592);
+    eğer c != 8589934592 { ver 3; }
+    değişken d: tam64 = m::kim::<tam64>(8589934592);
+    eğer d != 8589934592 { ver 4; }
+    değişken e: tam64 = sar::<tam64>(8589934592);
+    eğer e != 8589934592 { ver 5; }
+    eğer esit::<metin>(metin_birlestir("a", "b"), "ab") == yanlış { ver 6; }
+    // Literal dizi argümanı: T argümandan ÇIKARSANAMAZ (literal TANIMLAYICI değil →
+    // `$i32` fallback) ve dizi ikamesiz `T` ile i32 elemanlı kurulurdu. Açık argüman
+    // hem specialization'ı (`ilk$i64`) hem literalin eleman genişliğini belirler.
+    değişken f: tam64 = ilk::<tam64>([8589934592]);
+    eğer f != 8589934592 { ver 7; }
+    değişken g: Dizi<tam64> = bos::<tam64>();
+    dizi_ekle(g, 8589934592);
+    eğer dizi_al(g, 0) != 8589934592 { ver 8; }
+    değişken k: tam32 = kimlik::<tam32>(20);   // POZİTİF: tam32 yolu bozulmamalı
+    ver k + 22;
+}

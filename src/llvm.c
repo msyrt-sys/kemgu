@@ -3230,12 +3230,52 @@ static int yapici_desen_mi(const Dugum *desen) {
  * dogal tipinden gelir); somut param -> IR tipi. Non-generic islevde tum
  * paramlar somut sayilir. (TANIMLAYICI yolundaki 2439-2478 ile ozdes
  * mantik; tek dogruluk kaynagi.) */
-static const char *generic_param_beklenen(LlvmGen *g, const Dugum *islevd,
-                                          int i) {
+/* [D1 turbofish] Acik generic argumanlari (`f::<tam64>(..)`) islevin tip
+ * parametrelerine IKAME olarak it; ESKI substler'i doner (cagiran geri
+ * yukler). Turbofish yoksa ya da sayi uyusmuyorsa hicbir sey itmez. IR'lar
+ * DIS baglamda, itmeden ONCE hesaplanir (callee'nin `T`si cagiranin `T`sini
+ * golgelemesin). */
+static TipSubst *turbofish_subst_it(LlvmGen *g, const Dugum *d,
+                                    const Dugum *islevd) {
+    TipSubst *eski = g->substler;
+    int tf_n = (d && d->tip == DUGUM_CAGRI) ? d->veri.cagri.tip_arg_sayi : 0;
+    int tps0 = islevd ? islevd->veri.islev.tip_param_sayi : 0;
+    if (tf_n <= 0 || tf_n != tps0) return eski;
+    TipSubst *ts = (TipSubst *)arena_ayir_sifir(g->arena,
+        sizeof(TipSubst) * (size_t)tps0);
+    if (!ts) return eski;
+    for (int ti = 0; ti < tps0; ti++) {
+        ts[ti].ad = islevd->veri.islev.tip_paramlar[ti];
+        ts[ti].ad_uz = (int)strlen(ts[ti].ad);
+        ts[ti].ir = ast_tip_to_ir(g, d->veri.cagri.tip_arg[ti]);
+        ts[ti].metin_mi = tip_metin_mi_subst(g, d->veri.cagri.tip_arg[ti]);
+    }
+    for (int ti = 0; ti < tps0; ti++) {
+        ts[ti].sonraki = g->substler;
+        g->substler = &ts[ti];
+    }
+    return eski;
+}
+
+static const char *generic_param_beklenen(LlvmGen *g, const Dugum *d,
+                                          const Dugum *islevd, int i) {
     if (i >= islevd->veri.islev.param_sayi) return NULL;
     const Dugum *pp = islevd->veri.islev.parametreler[i];
     const Dugum *ppt = pp ? pp->veri.parametre.tip : NULL;
     if (!ppt) return NULL;
+    /* [D1 turbofish] ACIK generic argumanli cagri (`f::<tam64>(..)`): generic
+     * parametre de SOMUTTUR -> beklenen IR, parametre tipinin acik argumanlarla
+     * IKAME edilmis halidir. Literal `92682` boylece i64 dogar (bugun cikarsama
+     * onu i32 sayar ve `kare(92682)` tasar). Acik argumanlarin IR'i DIS ikame
+     * baglaminda (cagiran specialization'in T'si) hesaplanir — hepsi ONCE
+     * hesaplanir, sonra itilir (callee'nin `T`si cagiranin `T`sini golgelemesin). */
+    if (d && d->tip == DUGUM_CAGRI && d->veri.cagri.tip_arg_sayi > 0 &&
+        d->veri.cagri.tip_arg_sayi == islevd->veri.islev.tip_param_sayi) {
+        TipSubst *eski = turbofish_subst_it(g, d, islevd);
+        const char *r = ast_tip_to_ir(g, ppt);
+        g->substler = eski;
+        return r;
+    }
     int generic_param_mi = 0;
     if (islevd->veri.islev.tip_param_sayi > 0) {
         for (int gi = 0; gi < islevd->veri.islev.tip_param_sayi; gi++) {
@@ -3434,6 +3474,17 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
             }
         }
         tip_args[ti] = inferred ? inferred : "i32";
+        /* [D1 turbofish] ACIK argumanlar cikarsamayi EZER (checker'daki
+         * gen_bagla "ilk gorulen kazanir" ile ayni karar). IR, DIS ikame
+         * baglaminda (g->substler) hesaplanir. Metin-lik de acik tipten gelir
+         * (D-449: generic govdede `==` icerik mi isaretci mi). */
+        if (d->veri.cagri.tip_arg_sayi == tps) {
+            tip_args[ti] = ast_tip_to_ir(g, d->veri.cagri.tip_arg[ti]);
+            if (tip_args_metin) {
+                tip_args_metin[ti] = tip_metin_mi_subst(g,
+                    d->veri.cagri.tip_arg[ti]);
+            }
+        }
     }
     /* Mangled name */
     const char *mangled = mangle_et(g,
@@ -4313,7 +4364,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             sizeof(IfadeSonuc) * (size_t)n);
                         for (int i = 0; i < n; i++) {
                             const char *bekle = mik_generic
-                                ? generic_param_beklenen(g, mik->ast, i)
+                                ? generic_param_beklenen(g, d, mik->ast, i)
                                 : NULL;
                             args[i] = ifade_uret(g,
                                 d->veri.cagri.argumanlar[i], bekle);
@@ -5628,7 +5679,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      * tipinden). generic_param_beklenen ile tek-kaynak
                      * (YOL yolu da ayni helper'i kullanir). */
                     if (!bekle && ik && ik->ast) {
-                        bekle = generic_param_beklenen(g, ik->ast, i);
+                        bekle = generic_param_beklenen(g, d, ik->ast, i);
                     }
                     /* D-070 (Sınıf A): arg `Dizi<T>` parametresine gidiyorsa
                      * beklenen_tip=Dizi<T> AST düğümü ver → `[..]` literal HEAP
@@ -5653,7 +5704,20 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             g->beklenen_tip = pp->veri.parametre.tip;
                         }
                     }
+                    /* [D1 turbofish] `ilk::<tam64>([8589934592])`: literal dizi
+                     * argumani beklenen `Dizi<T>` ile kurulur; T acik argumanla
+                     * IKAME edilmeli, yoksa eleman genisligi ikamesiz `T`den
+                     * (i32) gelir ve 2^33 SESSIZCE KIRPILIR (olculdu: exit 1).
+                     * DAR: yalniz literal dizi argumani — baska ifadeler
+                     * cagiranin ikame baglaminda kalmali. */
+                    TipSubst *tf_eski = g->substler;
+                    if (ik && ik->ast && ik->ast->tip == DUGUM_ISLEV &&
+                        d->veri.cagri.argumanlar[i] &&
+                        d->veri.cagri.argumanlar[i]->tip == DUGUM_DIZI_OLUSTUR) {
+                        tf_eski = turbofish_subst_it(g, d, ik->ast);
+                    }
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
+                    g->substler = tf_eski;
                     g->beklenen_tip = cagri_eski_bt;
                     if (bekle && strcmp(args[i].tip, bekle) != 0 &&
                         (strcmp(bekle, "i64") == 0 ||

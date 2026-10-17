@@ -1,0 +1,8 @@
+{"tur": "25", "is": "turbofish_codegen", "gorev": "otomasyon/evren/gorev_25_turbofish_codegen.md",
+ "baglam": [],
+ "kesit": ["src/llvm.c:3226-3270", "src/llvm.c:3272-3300", "src/llvm.c:3430-3440", "src/llvm.c:4310-4320", "src/llvm.c:5625-5633",
+           "selfhost/codegen.kem:3320-3345", "selfhost/codegen.kem:3410-3430", "selfhost/codegen.kem:6070-6100", "selfhost/codegen.kem:6128-6140"],
+ "effort": "low",
+ "dogrulama": ["make -s 2>&1 | grep -E 'warning|error' ; make -s >/dev/null 2>&1 && echo MAKE_OK",
+               "make -s selfhost/konak.kem >/dev/null 2>&1; build/kemgu --check selfhost/codegen.kem"],
+ "isaretler": ["MAKE_OK", "codegen.kem — tip kontrolu basarili"]}

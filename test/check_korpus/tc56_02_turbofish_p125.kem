@@ -1,0 +1,8 @@
+// [D1 turbofish] BELİRSİZLİK KURALI: `::<..>` listesi kapanınca HEMEN `(` gelmeli —
+// turbofish YALNIZ bir çağrıya bağlanır. Değer konumunda çağrısız turbofish → P125
+// (C ↔ self aynı konum: `(` beklenen simge).
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev main() -> tam32 {
+    değişken f: tam32 = kimlik::<tam32>;
+    ver 0;
+}
