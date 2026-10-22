@@ -500,6 +500,10 @@ static Dugum *parse_onek(Parser *p) {
     }
 }
 
+static Dugum *parse_generic_listesi(Parser *p, const char *kod_ac,
+                                     const char *kod_kapa, int min_say,
+                                     Liste *out_args);
+
 /* === Sonek operatorler (cagri, erisim, indeks, yol) === */
 
 static Dugum *parse_sonek_op(Parser *p, Dugum *sol) {
@@ -560,6 +564,30 @@ static Dugum *parse_sonek_op(Parser *p, Dugum *sol) {
 
         case TOK_CIFT_IKI_NOKTA: {
             parser_ilerle(p);
+            /* [D-711 turbofish] `::<` -> ACIK generic argumanli cagri.
+             * Belirsizlik kurali: ifade konumunda `f<T>(x)` KARSILASTIRMADIR
+             * (degismedi); generic argumanlar YALNIZ `::<` ile acilir. `::`
+             * sonrasi yol devami tanimlayici ister, `<` olamaz -> cakisma
+             * yok. Liste kapaninca HEMEN `(` gelmeli; turbofish yalniz bir
+             * cagriya baglanir (`f::<A>::<B>()` -> P125). CAGRI dugumu `(`
+             * konumunda kurulur (turbofish'siz cagriyla ayni). */
+            if (parser_eslesir(p, TOK_KUCUK)) {
+                Liste targs;
+                liste_baslat(&targs);
+                (void)parse_generic_listesi(p, "P318", "P319", 1, &targs);
+                if (!parser_eslesir(p, TOK_SOL_PAREN)) {
+                    parser_hata(p, parser_simdiki(p), "P125",
+                        "turbofish '::<..>' sonrasi '(' bekleniyor "
+                        "(yalniz islev cagrisi)", NULL);
+                    return sol;
+                }
+                Dugum *c = parse_sonek_op(p, sol);   /* '(' -> DUGUM_CAGRI */
+                if (c && c->tip == DUGUM_CAGRI) {
+                    c->veri.cagri.tip_arg = liste_array_yap(&targs, p->arena);
+                    c->veri.cagri.tip_arg_sayi = targs.sayi;
+                }
+                return c;
+            }
             Token sag_tok = parser_bekle(p, TOK_TANIMLAYICI, "P123",
                                           "yol devami bekleniyor");
             Dugum *yeni = yapi_dugum_olustur(p, DUGUM_YOL, t.satir, t.sutun);
