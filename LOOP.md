@@ -69,11 +69,11 @@
 - [x] D1a-D1e -> D-711. Turbofish `f::<T>(..)`: parser (P125 belirsizlik kurali) + checker
       (acik arguman cikarsamayi EZER, yeni T044) + codegen mono + uc self-host uygulamasi +
       korpus (p8/tc56/cg_turbofish) + 12 sabotaj. Ayrinti Gunluk'te.
-- [~] D1f -> D-715 KISMEN: self-host YOL cagrisinda (`m::f(..)`, `m::ic::h(..)`) T010 arite,
-      arguman T001 ve donus T001 artik C ile birebir (modul nitelikli imza anahtari `m.f`;
-      ayni adli islev iki modulde dogru cozuluyor). KALAN: turbofish YOL (`m::f::<T>()`)
-      T044 — `tf_fg` yalniz TANIMLAYICI hedef taniyor; dosya modulu (`kullan a::b`) uyeleri
-      nitelikli kaydedilmiyor (tani yok, sahte tani da yok).
+- [x] D1f -> D-715 + D-716. Self-host YOL cagrisi (`m::f(..)`, `m::ic::h(..)`) ve YOL turbofish
+      (`m::f::<T>(..)`): T010, arguman T001, donus T001, T044 C ile birebir (nitelikli imza +
+      generic kaydi `m.f`; ayni adli islev iki modulde dogru cozuluyor). Fikstur tc57 + tc58.
+      KALAN (ayri, kucuk): dosya modulu (`kullan a::b` -> `b::f`) uyeleri nitelikli
+      kaydedilmiyor -> orada tani yok (sahte tani da yok).
 - [ ] D1g [S] ACIK — D-711'de OLCULDU: turbofish'SIZ `ilk<T>(xs: Dizi<T>)` + `ilk([2^33])`
       T'yi literalden cikaramaz -> `$i32`, IKI derleyicide exit 1 (sessiz yanlis). Ayrica
       self-host'ta GENERIC OLMAYAN `f(xs: Dizi<tam64>)` + literal `[2^33]` -> exit 1 (C 42)

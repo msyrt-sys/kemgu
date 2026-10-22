@@ -1,0 +1,24 @@
+// [D-716] MODÜL-NİTELİKLİ turbofish `m::f::<T>(..)`. Öncesinde self-host YOL
+// hedefinde turbofish denetimini tamamen atlıyordu (T044 / argüman T001 /
+// dönüş ikamesi T001 — C üçünü de veriyordu). Ayırt edici: tam64 + 2^33.
+modül m {
+    genel işlev kim<T>(x: T) -> T { ver x; }
+    genel işlev duz(a: tam32) -> tam32 { ver a; }
+    modül ic { genel işlev ik<T>(x: T) -> T { ver x; } }
+}
+işlev kotu() -> tam32 {
+    değişken k: tam32 = 5;
+    değişken a: tam64 = m::kim::<tam64>(k);            // T001 argüman
+    değişken b: tam32 = m::kim::<tam64>(5);            // T001 dönüş ikamesi
+    değişken c: tam64 = m::kim::<tam64, tam32>(5);     // T044 fazla argüman
+    değişken d: tam32 = m::duz::<tam32>(1);            // T044 generic olmayan
+    değişken e: tam64 = m::ic::ik::<tam64>(k);         // T001 (iç içe)
+    ver 0;
+}
+// POZİTİF: doğru turbofish çağrıları TEMİZ.
+işlev iyi() -> tam64 {
+    değişken g: tam64 = m::kim::<tam64>(8589934592);
+    değişken h: tam64 = m::ic::ik::<tam64>(8589934634);
+    ver h - g;
+}
+işlev main() -> tam32 { ver 0; }

@@ -348,6 +348,7 @@ yapı Ayr {
     fg_gb: Dizi<tam32>;
     fg_gs: Dizi<tam32>;
     fg_dn: Dizi<tam32>;
+    fg_nd: Dizi<tam32>;   // [D-716] fg kaydının ISLEV düğümü (nitelikli kopya için)
     // [D-711 turbofish] tip_str İKAMESİ: ts_n > 0 iken TIP_BASIT adı ts_ad[i] ise
     // ts_tip[i] döner (mantıksal uzunluk ts_n; dizi küçülmez, yeniden yazılır).
     ts_ad: Dizi<metin>;
@@ -2104,6 +2105,7 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
         değilse { parse_hata_kaydet(p, "P017"); }   // [D-648] C parser.c:367
     }
     değişken ni: tam32 = dugum_n(p, "ISLEV", ad, s, u, kids);
+    dizi_ekle(p.fg_nd, ni);   // [D-716] fg_ad ile paralel
     eğer ciplak == 1 { dizi_ekle(p.g_ciplak, ni); }   // D-255: region-prologue SKIP işareti
     eğer rt_mi == 1 { dizi_ekle(p.rt_node, ni); }     // D-550 yan-kanal
     ver ni;
@@ -9859,6 +9861,18 @@ işlev nitelikli_imza_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam3
             imza_kaydet(p, c);
             dizi_yaz(p.fn_ad, dizi_boyut(p.fn_ad) - 1,
                      metin_birlestir(metin_birlestir(onek, "."), dizi_al(p.a_deg, c)));
+            // [D-716] generic kaydı (turbofish) da nitelikli anahtarla kopyalanır.
+            değişken gk: tam32 = 0;
+            değişken gn: tam32 = dizi_boyut(p.fg_nd);
+            iken gk < gn {
+                eğer dizi_al(p.fg_nd, gk) == c {
+                    dizi_ekle(p.fg_ad, metin_birlestir(metin_birlestir(onek, "."), dizi_al(p.a_deg, c)));
+                    dizi_ekle(p.fg_gb, dizi_al(p.fg_gb, gk)); dizi_ekle(p.fg_gs, dizi_al(p.fg_gs, gk));
+                    dizi_ekle(p.fg_dn, dizi_al(p.fg_dn, gk)); dizi_ekle(p.fg_nd, c);
+                    gk = gn;
+                }
+                gk = gk + 1;
+            }
         }
         i = i + 1;
     }
@@ -9935,9 +9949,16 @@ işlev tf_fg(p: &değişken Ayr, cagri: tam32) -> tam32 {
     değişken k: tam32 = tf_bul(p, cagri);
     eğer k < 0 { ver 0 - 1; }
     değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, cagri));
-    eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0 - 1; }
-    eğer yerel_baglama_mi(p, dizi_al(p.a_deg, h)) { ver 0 - 1; }
-    değişken g: tam32 = fg_bul(p, dizi_al(p.a_deg, h));
+    değişken fa: metin = "";
+    // [D-716] YOL hedefi (`m::f::<T>`) → nitelikli generic kaydı (`m.f`).
+    eğer metin_esit(dizi_al(p.a_ad, h), "YOL") { fa = yol_imza_anahtari(p, h); }
+    değilse {
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0 - 1; }
+        eğer yerel_baglama_mi(p, dizi_al(p.a_deg, h)) { ver 0 - 1; }
+        fa = dizi_al(p.a_deg, h);
+    }
+    eğer metin_uzunluk(fa) == 0 { ver 0 - 1; }
+    değişken g: tam32 = fg_bul(p, fa);
     eğer g < 0 { ver 0 - 1; }
     eğer dizi_al(p.fg_gs, g) != dizi_al(p.tf_say, k) { ver 0 - 1; }
     ver g;
@@ -9975,11 +9996,16 @@ işlev tf_tip_coz(p: &değişken Ayr, cagri: tam32, g: tam32, node: tam32) -> me
 }
 // [D-711 turbofish] T044 ön-denetimi — C turbofish_on_kontrol aynası. CAGRI
 // işlemenin EN BAŞINDA; doğru → T044 raporlandı, çağıran erken döner.
-// YOL hedefi atlanır (V1: self-host YOL çağrılarını denetlemiyor).
+// [D-716] YOL hedefi nitelikli imzayla çözülür (D-715 anahtarı).
 işlev tf_on_kontrol(p: &değişken Ayr, idx: tam32, hedef: tam32) -> mantıksal {
     değişken k: tam32 = tf_bul(p, idx);
     eğer k < 0 { ver yanlış; }
-    eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") { ver yanlış; }
+    // [D-716] YOL hedefi: yalnız nitelikli imzası ÇÖZÜLEN yolda T044 (dosya
+    // modülü / bilinmeyen yol → tanı yok; default-DENY, sahte T044 riski yok).
+    eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
+        değişken yk3: metin = yol_imza_anahtari(p, hedef);
+        eğer (metin_uzunluk(yk3) == 0) veya (fn_psay_bul(p, yk3) < 0) { ver yanlış; }
+    }
     eğer tf_fg(p, idx) >= 0 { ver yanlış; }
     sekil_hata(p, idx, "T044");
     ver doğru;
@@ -10669,7 +10695,13 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         // [D-715] `m::f(..)` → nitelikli imzanın dönüş tipi (bulunamazsa "?").
         eğer metin_esit(dizi_al(p.a_ad, h), "YOL") {
             değişken yk2: metin = yol_imza_anahtari(p, h);
-            eğer (metin_uzunluk(yk2) > 0) ve (fn_psay_bul(p, yk2) >= 0) { ver fn_donus_bul(p, yk2); }
+            eğer (metin_uzunluk(yk2) > 0) ve (fn_psay_bul(p, yk2) >= 0) {
+                değişken tfg4: tam32 = tf_fg(p, idx);   // [D-716] turbofish dönüş ikamesi
+                eğer tfg4 >= 0 {
+                    eğer dizi_al(p.fg_dn, tfg4) >= 0 { ver tf_tip_coz(p, idx, tfg4, dizi_al(p.fg_dn, tfg4)); }
+                }
+                ver fn_donus_bul(p, yk2);
+            }
         }
         ver "?";   // method/dolaylı çağrı → ileri TC
     }
@@ -15091,7 +15123,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0,
         tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: [],
-        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], ts_ad: [], ts_tip: [], ts_n: 0
+        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], fg_nd: [], ts_ad: [], ts_tip: [], ts_n: 0
     };
 }
 
