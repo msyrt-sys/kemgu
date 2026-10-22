@@ -5618,6 +5618,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
              * `i32` olarak gecti ve LLVM bunu SESSIZCE kabul etti (D-295) ->
              * `tam_metin(0 - 4207)` yanlis dizgi uretti. Iki merdiven var ve
              * hangisine yazdigin ONEMLI. */
+            } else if (cagri_adi_uz == 11 &&
+                       memcmp(cagri_adi, "os_rastgele", 11) == 0) {
+                cagri_adi = "kdl_os_rastgele"; cagri_adi_uz = 15;   /* [D-713] */
+                builtin_donus = "i64";
             } else if (cagri_adi_uz == 9 &&
                        memcmp(cagri_adi, "tam_metin", 9) == 0) {
                 cagri_adi = "kdl_tam_metin"; cagri_adi_uz = 13;
@@ -8496,6 +8500,7 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare ptr @kdl_tam_metin(i64)\n", out);        /* [D-459] */
     fputs("declare i64 @kdl_metin_tam(ptr)\n", out);        /* [D-459] */
     fputs("declare i1 @kdl_metin_tam_gecerli(ptr)\n", out); /* [D-459] */
+    fputs("declare i64 @kdl_os_rastgele()\n", out);   /* [D-713] */
     fputs("declare double @kdl_metin_kesirli(ptr)\n", out);      /* [D-460] */
     fputs("declare i1 @kdl_metin_kesirli_gecerli(ptr)\n", out);  /* [D-460] */
     fputs("declare ptr @kdl_kod_metin(i32)\n", out);        /* [D-458] */

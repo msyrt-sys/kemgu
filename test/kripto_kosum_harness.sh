@@ -27,13 +27,14 @@ set -u
 KEMGU=${KEMGU:-build/kemgu${EXE}}
 RT=${RT:-build/kdl_runtime.o}
 TEST=${TEST:-test/stdlib/test_kripto_kosum.kem}
+ETIKET=${ETIKET:-C}   # [D-714] hangi derleyici olculuyor
 # Paralel koşumda birbirini ezmesin (D-297 dersi): PID ile benzersiz yol.
 TMP="build/_kripto_kosum_$$"
 mkdir -p "$TMP"
 temizle() { rm -rf "$TMP"; }
 trap temizle EXIT
 
-BEKLENEN=127  # D-710: +64 BLAKE3 · D-709: +16 çok bloklu SHA-256, +32 HMAC-SHA256 (RFC 4231)
+BEKLENEN=255  # D-713: +128 OS rastgele · D-710: +64 BLAKE3 · D-709: +16 çok bloklu SHA-256, +32 HMAC-SHA256 (RFC 4231)
 
 if [ ! -x "$KEMGU" ]; then echo "FAIL: $KEMGU yok"; exit 1; fi
 if [ ! -f "$RT" ]; then echo "FAIL: $RT yok (make build/kdl_runtime.o)"; exit 1; fi
@@ -59,7 +60,7 @@ if [ "$RC" -eq 127 ] && [ -z "$CIKTI" ]; then
     sleep 2; CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
 fi
 
-echo "=== stdlib/kripto bilinen-cevap koşumu ==="
+echo "=== stdlib/kripto bilinen-cevap koşumu [$ETIKET] ==="
 [ -n "$CIKTI" ] && echo "  çalışma-anı çıktısı: $CIKTI"
 bit() { if [ $(( RC & $1 )) -ne 0 ]; then echo "✅"; else echo "❌"; fi; }
 echo "  $(bit 1) KONTROL  — sabit tablolar (K[0], K[63], H0[0])"
@@ -69,16 +70,17 @@ echo "  $(bit 8) sabit_süre_seç_u64      — üst bit sızıntısı yok (D-629
 echo "  $(bit 16) SHA-256 (56 bayt, 2 blok) — NIST FIPS 180-4 (D-709)"
 echo "  $(bit 32) HMAC-SHA256              — RFC 4231 TC1/TC2/TC6 (D-709)"
 echo "  $(bit 64) BLAKE3                   — boş/abc/1025/2049/4097 (ağaç) (D-710)"
+echo "  $(bit 128) OS rastgele             — 32 kelime: OR=tüm bitler, AND=0 (D-713)"
 
 if [ "$RC" -eq "$BEKLENEN" ]; then
-    echo "=== kripto koşum kapısı: 7/7 vektör GEÇTİ ✓ ==="
+    echo "=== kripto koşum kapısı [$ETIKET]: 8/8 vektör GEÇTİ ✓ ==="
     exit 0
 fi
 
 if [ $(( RC & 1 )) -eq 0 ]; then
     echo "=== KAPI BOZUK: KONTROL biti düştü (exit=$RC) — derleme/bağlama sorunu, kripto değil ==="
 else
-    echo "=== KIRMIZI: kripto çekirdeği YANLIŞ (exit=$RC, beklenen=$BEKLENEN) ==="
+    echo "=== KIRMIZI [$ETIKET]: kripto çekirdeği YANLIŞ (exit=$RC, beklenen=$BEKLENEN) ==="
     echo "    KONTROL geçtiği için kapı sağlam; sapma kripto hesabında."
 fi
 exit 1

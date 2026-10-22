@@ -1,0 +1,5 @@
+{"tur": "26", "is": "os_rastgele", "gorev": "otomasyon/evren/gorev_26_os_rastgele.md", "baglam": [],
+ "kesit": ["stdlib/kripto/rastgele.kem:82-115", "test/stdlib/test_kripto_kosum.kem:214-232"],
+ "effort": "low",
+ "dogrulama": ["mkdir -p /tmp/claude-1000/evren && cat stdlib/kripto.kem stdlib/kripto/*.kem test/stdlib/test_kripto_kosum.kem > /tmp/claude-1000/evren/kr.kem && build/kemgu --check /tmp/claude-1000/evren/kr.kem"],
+ "isaretler": ["tip kontrolu basarili"]}
