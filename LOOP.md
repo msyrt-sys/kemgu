@@ -2476,3 +2476,13 @@
   DELEGASYON: uc tur (23 parser 20 blok, 24 checker 25 blok, 25 codegen 10 blok) deepseek ile,
   hepsi ilk denemede TAMAM; diff'ler elle gozden gecirildi. Literal dizi onarimi + K4/bolge
   fikstur duzeltmeleri elle.
+- 2026-10-17 D-712: x86 KULLANICI KIPINDEN UART SATIR OKUMA (arm64 [12] UART RX ikizi; D-706'nin
+  acik biraktigi girdili kanit). kxr_rx_testi (kem_ring3_hw.kem, adres alani #5, kxr_fs_testi
+  deseni): ring3 26(0x541FF000, 64) → donen uzunluk 0x541FF100'e → 5 yanki → 26(0x100000)
+  = -1 (D-610) → hlt #GP. Kullanici programi llvm-mc ile uretildi (55 bayt), kaynaktaki
+  kxr_y8 dizisi makineyle karsilastirildi + geri disassemble edildi: BIREBIR. Ayni imaj iki
+  sonuc: normal kosum (-serial file, DEGISMEDI) 'X86 [12] UART RX EOF'; KANIT 29 ucuncu
+  kosum -chardev file,input-path= "KEMGU-RX\n" → 'X86 [12] UART RX OK' + onceki satir ring3
+  yankisi 'KEMGU-RX'. Elle 5/5 kararli; yanlis satir ("KEMGU-RY") → HATA (icerik denetimi
+  gercek). SABOTAJ: x86 kis_rx_hazir hep 0 → girdili kosum EOF, rc=2; geri alindi.
+  kem_os_x86, kem_os_arm, check_kapisi 292/300 (0 RED), baremetal_diff 22/22 (x86 279 islev).

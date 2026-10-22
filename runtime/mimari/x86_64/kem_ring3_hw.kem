@@ -310,3 +310,133 @@ sabit KXR_FS_BUF_OFS: tam64 = 2093056;   // yığın sayfası 511 başı (0x541F
     }
     ver 0;
 }
+
+// [D-712] x86_64 ring3 UART satır okuma kanıtı (arm64 kem_os.kem [12] UART RX ikizi):
+// kullanıcı kipinden sistem çağrısı 26 (kis_satir_oku, kem_gorev_cekirdek.kem) seri
+// girdiden bir satırı KENDİ yığın sayfasına (0x541FF000) okur, dönen uzunluğu 0x541FF100'e
+// yazar, satırı 5 (yaz) ile geri basar (yankı); sonra 26'yı ÇEKİRDEK adresiyle çağırır
+// (D-610 reddi: rax = -1) ve hlt → #GP ile çekirdeğe döner. Donanım kancaları 16550
+// (kem_uart.kem: LSR 0x3FD bit0, veri 0x3F8). Sonuç: 1 = satır "KEMGU-RX" okundu (uzunluk 8,
+// sonlandırıcı yazıldı); 2 = girdi yok → EOF (-1, tampon[0] = 0); 0 = yapısal hata.
+// İKİ sonuç da AYNI imajdan: normal koşumda seri girdi yok (EOF), Makefile Kanıt 29'un
+// ayrı koşumunda `-chardev file,input-path=` satırı verir (OK + yankı satırı).
+//
+// Kullanıcı programı (55 bayt, llvm-mc -show-encoding ile üretildi):
+//   0  b8 1a 00 00 00          movl $26, %eax
+//   5  bf 00 f0 1f 54          movl $0x541FF000, %edi    (tampon)
+//   10 ba 40 00 00 00          movl $64, %edx            (azami)
+//   15 cd 80                   int  $0x80
+//   17 48 89 04 25 00 f1 1f 54 movq %rax, 0x541FF100     (dönen uzunluk)
+//   25 b8 05 00 00 00          movl $5, %eax
+//   30 bf 00 f0 1f 54          movl $0x541FF000, %edi
+//   35 cd 80                   int  $0x80                (yankı)
+//   37 b8 1a 00 00 00          movl $26, %eax
+//   42 bf 00 00 10 00          movl $0x100000, %edi      (çekirdek adresi → red)
+//   47 ba 40 00 00 00          movl $64, %edx
+//   52 cd 80                   int  $0x80
+//   54 f4                      hlt                       (→ #GP, vektör 13)
+sabit KXR_RX_AS: tam64 = 5;              // adres alanı #5 (son yuva; KMMU_AS_AZAMI = 6)
+sabit KXR_RX_HLT: tam64 = 54;            // kullanıcı programında hlt ofseti
+sabit KXR_RX_BUF_OFS: tam64 = 2093056;   // 0x541FF000 - 0x54000000 (yığın sayfası 511)
+sabit KXR_RX_UZ_OFS: tam64 = 2093312;    // 0x541FF100 - 0x54000000 (dönen uzunluk)
+sabit KXR_RX_NOBET: tam64 = 7777;        // uzunluk yuvası nöbetçisi (yazılmadıysa kalır)
+sabit KXR_RX_DOLGU: tam32 = 170;         // tampon nöbetçisi 0xAA (sonlandırıcı kanıtı)
+çıplak işlev kxr_rx_testi() -> tam32 {
+    değişken as: tam64 = kmmu_as_olustur(KXR_RX_AS);
+    eğer as == 0 { ver 0; }
+    değişken pdpt: tam64 = as + 4096;
+    değişken pd: tam64 = as + 8192;
+    değişken pt: tam64 = as + 12288;
+    değişken pa: tam64 = KMMU_OZEL_PA + KXR_RX_AS * KMMU_2MB;
+    kxm_y64(as, pdpt + KXR_US_RW);
+    kxm_y64(pdpt + 8, pd + KXR_US_RW);
+    kxm_y64(pd + KMMU_OZEL_IDX * 8, pt + KXR_US_RW);
+    kxm_y64(pt, pa + KXR_US_RX);
+    kxm_y64(pt + 511 * 8, KXM_NX_BIT + pa + 511 * KMMU_SAYFA + KXR_US_RW);
+    // Kullanıcı programı (55 bayt, llvm-mc ile derlendi).
+    kxr_y8(pa + 0, 184);
+    kxr_y8(pa + 1, 26);
+    kxr_y8(pa + 2, 0);
+    kxr_y8(pa + 3, 0);
+    kxr_y8(pa + 4, 0);
+    kxr_y8(pa + 5, 191);
+    kxr_y8(pa + 6, 0);
+    kxr_y8(pa + 7, 240);
+    kxr_y8(pa + 8, 31);
+    kxr_y8(pa + 9, 84);
+    kxr_y8(pa + 10, 186);
+    kxr_y8(pa + 11, 64);
+    kxr_y8(pa + 12, 0);
+    kxr_y8(pa + 13, 0);
+    kxr_y8(pa + 14, 0);
+    kxr_y8(pa + 15, 205);
+    kxr_y8(pa + 16, 128);
+    kxr_y8(pa + 17, 72);
+    kxr_y8(pa + 18, 137);
+    kxr_y8(pa + 19, 4);
+    kxr_y8(pa + 20, 37);
+    kxr_y8(pa + 21, 0);
+    kxr_y8(pa + 22, 241);
+    kxr_y8(pa + 23, 31);
+    kxr_y8(pa + 24, 84);
+    kxr_y8(pa + 25, 184);
+    kxr_y8(pa + 26, 5);
+    kxr_y8(pa + 27, 0);
+    kxr_y8(pa + 28, 0);
+    kxr_y8(pa + 29, 0);
+    kxr_y8(pa + 30, 191);
+    kxr_y8(pa + 31, 0);
+    kxr_y8(pa + 32, 240);
+    kxr_y8(pa + 33, 31);
+    kxr_y8(pa + 34, 84);
+    kxr_y8(pa + 35, 205);
+    kxr_y8(pa + 36, 128);
+    kxr_y8(pa + 37, 184);
+    kxr_y8(pa + 38, 26);
+    kxr_y8(pa + 39, 0);
+    kxr_y8(pa + 40, 0);
+    kxr_y8(pa + 41, 0);
+    kxr_y8(pa + 42, 191);
+    kxr_y8(pa + 43, 0);
+    kxr_y8(pa + 44, 0);
+    kxr_y8(pa + 45, 16);
+    kxr_y8(pa + 46, 0);
+    kxr_y8(pa + 47, 186);
+    kxr_y8(pa + 48, 64);
+    kxr_y8(pa + 49, 0);
+    kxr_y8(pa + 50, 0);
+    kxr_y8(pa + 51, 0);
+    kxr_y8(pa + 52, 205);
+    kxr_y8(pa + 53, 128);
+    kxr_y8(pa + 54, 244);
+    // Tampon (16 B) nöbetçiyle dolu, uzunluk yuvası nöbetçili.
+    değişken d: tam32 = 0;
+    iken d < 16 { kis_buf_yaz8(pa + KXR_RX_BUF_OFS, d, KXR_RX_DOLGU); d = d + 1; }
+    kxm_y64(pa + KXR_RX_UZ_OFS, KXR_RX_NOBET);
+    kxr_tss_kur();
+    değişken b: tam64 = kxr_blok_adr();
+    değişken k: tam64 = kxm_cr3_oku();
+    kmmu_as_gec(as);
+    kxr_gir(KMMU_OZEL_VA, KXR_YIGIN_UST);
+    değişken bk: tam64 = kxm_o64(b);
+    değişken v: tam64 = kxm_o64(b + 16);
+    değişken r: tam64 = kxm_o64(b + 32);
+    değişken ax: tam64 = kxm_o64(b + 48);
+    kmmu_as_gec(k);
+    değişken uz: tam64 = kxm_o64(pa + KXR_RX_UZ_OFS);
+    değişken t: tam64 = pa + KXR_RX_BUF_OFS;
+    // Yapısal: hlt'e kadar koştu (#GP, doğru RIP) ve çekirdek-adresli 26 REDDEDİLDİ.
+    eğer (bk != 0) veya (v != KXR_GP) veya (r != KMMU_OZEL_VA + KXR_RX_HLT) veya (ax != 0 - 1) {
+        ver 0;
+    }
+    eğer (uz == 8)
+       ve (kis_buf_oku8(t, 0) == 75) ve (kis_buf_oku8(t, 1) == 69)
+       ve (kis_buf_oku8(t, 2) == 77) ve (kis_buf_oku8(t, 3) == 71)
+       ve (kis_buf_oku8(t, 4) == 85) ve (kis_buf_oku8(t, 5) == 45)
+       ve (kis_buf_oku8(t, 6) == 82) ve (kis_buf_oku8(t, 7) == 88)
+       ve (kis_buf_oku8(t, 8) == 0) {
+        ver 1;                                  // "KEMGU-RX" + sonlandırıcı
+    }
+    eğer (uz == 0 - 1) ve (kis_buf_oku8(t, 0) == 0) { ver 2; }   // EOF
+    ver 0;
+}

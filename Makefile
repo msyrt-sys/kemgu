@@ -2190,6 +2190,30 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@if grep -qF "YAKALANMADI" $(BUILD)/kem_os_x86_ist.out || grep -qF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86_ist.out; then echo "FAIL: istisna sonrasi cekirdek DURMADI"; exit 1; fi
 	@if grep -qF "X86 ISTISNA TESTI" $(BUILD)/kem_os_x86.out; then echo "FAIL: normal kosum istisna dalina girdi"; exit 1; fi
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_istisna_isle$$' || { echo "FAIL: kdl_istisna_isle (guclu) .kem'den gelmiyor"; exit 1; }
+	@# [D-712] Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku, 5 yanki,
+	@# 26 cekirdek-ptr reddi). AYNI imaj iki sonuc: normal kosumda seri girdi YOK → EOF;
+	@# ucuncu kosumda -chardev file,input-path= ile "KEMGU-RX" satiri → OK + ring3 yankisi.
+	@# Ilk kosum (-serial file) DEGISMEDI; girdi dosyasi yalniz bu kosumda.
+	@echo "  Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku + 5 yanki; girdisiz EOF, girdili satir)..."
+	@grep -qxF "X86 [12] UART RX EOF" $(BUILD)/kem_os_x86.out || { echo "FAIL: girdisiz kosumda 'X86 [12] UART RX EOF' yok"; exit 1; }
+	@if grep -qF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86.out; then echo "FAIL: girdisiz kosum satir okudu"; exit 1; fi
+	@rm -f $(BUILD)/kem_os_x86_rx.out; printf 'KEMGU-RX\n' > $(BUILD)/kem_os_x86_rx.in; \
+	timeout 8 qemu-system-x86_64 -M microvm -display none \
+		-global virtio-mmio.force-legacy=false \
+		-drive file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 \
+		-device virtio-blk-device,drive=d0 \
+		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
+		-kernel $(BUILD)/kem_os_x86.elf \
+		-chardev file,id=c0,path=$(BUILD)/kem_os_x86_rx.out,input-path=$(BUILD)/kem_os_x86_rx.in \
+		-serial chardev:c0 2>/dev/null || true
+	@grep -qxF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out || { echo "FAIL: girdili kosumda 'X86 [12] UART RX OK' yok:"; grep -F "UART RX" $(BUILD)/kem_os_x86_rx.out; exit 1; }
+	@v=`grep -B1 -xF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out | head -1`; \
+	if [ "$$v" = "KEMGU-RX" ]; then echo "    ring3 yankisi = $$v"; \
+	else echo "FAIL: ring3 sys(5) okunan satiri yankilamadi ($$v)"; exit 1; fi
+	@grep -qxF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86_rx.out || { echo "FAIL: girdili kosum sonuna ulasmadi"; exit 1; }
+	@echo "--- QEMU COM1 girdili kosum (Kanit 29) ---"; grep -B1 -xF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out; tail -1 $(BUILD)/kem_os_x86_rx.out; echo "--- son ---"
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kxr_rx_testi$$' || { echo "FAIL: kxr_rx_testi .kem'den gelmiyor"; exit 1; }
+	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kis_satir_oku$$' || { echo "FAIL: kis_satir_oku ortak cekirdekten gelmiyor"; exit 1; }
 
 # === Bare-Metal Dizi Kernel x86_64 (C1-x86) — AYNI kernel, PVH boot ===
 # aarch64 ile bit-bit aynı kernel_dizi.kem + AYNI region runtime → x86_64'te de

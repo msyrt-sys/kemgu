@@ -462,6 +462,17 @@ işlev main() -> tam32 {
         yazdir_satir();
         yazdir_metin("X86 [13] FS SYSCALL HATA");
     }
+    // İş 26 (D-712): KULLANICI KİPİNDEN UART SATIR OKUMA — arm64 [12] UART RX ikizi. Ring3
+    // programı int 0x80 ile 26 (seri girdiden satır → kendi yığın sayfası) → 5 (yankı);
+    // sonra 26'yı ÇEKİRDEK adresiyle çağırır (D-610 reddi). Seri girdi yoksa EOF yolu
+    // (normal koşum), varsa satır (Makefile Kanıt 29: ayrı koşum, -chardev input-path).
+    değişken rx: tam32 = kxr_rx_testi();
+    yazdir_satir();
+    eğer rx == 1 { yazdir_metin("X86 [12] UART RX OK"); }
+    değilse {
+        eğer rx == 2 { yazdir_metin("X86 [12] UART RX EOF"); }
+        değilse { yazdir_metin("X86 [12] UART RX HATA"); }
+    }
     // İş 23 (D-693): ortak çekirdek fazları (D-694: SİSTEM ÇAĞRISI testinden SONRA —
     // [42] dil görevleri görev 1'i ölü işaretler; D-686 testi durum(1) == 0 bekler) — arm64 ile AYNI kod
     // (test/ornekler/kem_os_cekirdek_ortak.kem): [27] görev tablosu taşması reddediliyor
