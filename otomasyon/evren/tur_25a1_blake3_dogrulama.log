@@ -1,0 +1,3 @@
+
+### $ cat stdlib/kripto.kem stdlib/kripto/*.kem test/stdlib/test_kripto_kosum.kem > /tmp/claude-1000/evren/kb.kem && build/kemgu --check /tmp/claude-1000/evren/kb.kem
+OK: /tmp/claude-1000/evren/kb.kem — tip kontrolu basarili.

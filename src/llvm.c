@@ -1553,6 +1553,30 @@ static const char *kdl_yaz_fn(const char *et) {
 }
 /* kdl_dizi_al_tam i32 döner; i8/i16 eleman da i32 olarak taşınır (sonra
  * int_donustur daraltır). i64/ptr kendi genişliğinde. */
+static int int_donustur_im(LlvmGen *g, int src_reg, const char *src_tip,
+                           const char *dst_tip, int isaretsiz);   /* [D-708] ileri bildirim */
+/* [D-708] Dar tamsayi eleman (i8/i16) mi? Calisma zamani bunlari i32 yuvada
+ * tasir; yazarken eleman ISARETINE gore genisletilmeli, okurken daraltilmali. */
+static int dizi_dar_mi(const char *et) {
+    return et && (strcmp(et, "i8") == 0 || strcmp(et, "i16") == 0);
+}
+/* [D-708] Degeri once eleman tipine, sonra i32 yuvaya getir: isaretsiz
+ * (dtamN) eleman zext, isaretli eleman sext. Donus: i32 register. */
+static int dizi_dar_yaz(LlvmGen *g, int reg, const char *src_tip,
+                        const char *et, int isaretsiz) {
+    int r = int_donustur_im(g, reg, src_tip, et, isaretsiz);
+    return int_donustur_im(g, r, et, "i32", isaretsiz);
+}
+/* [D-708] i32 yuvadan oku (`call i32`), eleman genisligine daralt (trunc).
+ * Eskiden bazi yollar `call i8 @kdl_dizi_al_tam` yayiyordu: declare i32 ile
+ * uyusmaz, LLVM sessizce kabul eder (D-295) — yalniz ABI tesadufuyle calisir. */
+static int dizi_dar_oku(LlvmGen *g, const char *fn, int dizi_reg,
+                        int idx_reg, const char *et) {
+    int raw = yeni_reg(g);
+    fprintf(g->out, "  %%%d = call i32 @%s(ptr %%%d, i32 %%%d)\n",
+            raw, fn, dizi_reg, idx_reg);
+    return int_donustur(g, raw, "i32", et);
+}
 static const char *kdl_al_donus_ir(const char *et) {
     if (et && (strcmp(et, "i64") == 0 || strcmp(et, "ptr") == 0)) return et;
     return "i32";
@@ -1719,6 +1743,11 @@ static IfadeSonuc dizi_literal_heap_emit(LlvmGen *g, const Dugum *d,
             ekle_tip = kt_lit;
             fn = (strcmp(kt_lit, "i64") == 0)
                  ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+        /* [D-708] dar eleman: tasiyici i32'ye genislet, ekle_tam cagir. */
+        } else if (dizi_dar_mi(elem_ir)) {
+            vr = dizi_dar_yaz(g, v.reg, v.tip, elem_ir, ast_tip_isaretsiz_mi(elem_d));
+            ekle_tip = "i32";
+            fn = "kdl_dizi_ekle_tam";
         } else {
             vr = int_donustur(g, v.reg, v.tip, elem_ir);
             fn = "kdl_dizi_ekle_tam";
@@ -3784,6 +3813,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         int fr = dizi_bitcast_emit(g, raw, kt_ix, et);
                         IfadeSonuc sf = { fr, et, 0, 0};
                         return sf;
+                    }
+                    /* [D-708] dar eleman (i8/i16): tasiyici i32 oku + trunc. */
+                    if (dizi_dar_mi(et)) {
+                        int dr = dizi_dar_oku(g, "kdl_dizi_al_tam", v_load, idx_r, et);
+                        IfadeSonuc sd = { dr, et, ast_tip_isaretsiz_mi(vi->eleman_tip_ast), 0};
+                        return sd;
                     }
                     if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                     else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
@@ -5935,9 +5970,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_ekle_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_ekle_ptr";
                 else { fn = "kdl_dizi_ekle_tam"; cast_tip = "i32"; }
+                if (dizi_dar_mi(et)) {   /* [D-708] eleman isaretine gore genislet */
+                    ev = (n > 1) ? dizi_dar_yaz(g, args[1].reg, args[1].tip, et,
+                             ast_tip_isaretsiz_mi(dizi_deger_eleman_ast)) : 0;
+                } else {
                 ev = (n > 1) ? int_donustur(g, args[1].reg,
                                                  args[1].tip, cast_tip)
                                  : 0;
+                }
                 }
                 fprintf(g->out,
                     "  call void @%s(ptr %s, ptr %%%d, %s %%%d)\n",
@@ -5974,6 +6014,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     int fr = dizi_bitcast_emit(g, raw, kes_tas_al, et);
                     IfadeSonuc sf = { fr, et, 0, 0};
                     return sf;
+                }
+                if (dizi_dar_mi(et)) {   /* [D-708] i32 oku + daralt, isaret eleman tipinden */
+                    int dr = dizi_dar_oku(g, "kdl_dizi_al_tam", args[0].reg,
+                                          idx_i32, et);
+                    IfadeSonuc sd = { dr, et,
+                                      ast_tip_isaretsiz_mi(dizi_deger_eleman_ast), 0};
+                    return sd;
                 }
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_al_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_al_ptr";
@@ -6017,8 +6064,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 if (strcmp(et, "i64") == 0) fn = "kdl_dizi_yaz_tam64";
                 else if (strcmp(et, "ptr") == 0) fn = "kdl_dizi_yaz_ptr";
                 else { fn = "kdl_dizi_yaz_tam"; cast_tip = "i32"; }
+                if (dizi_dar_mi(et)) {   /* [D-708] eleman isaretine gore genislet */
+                    ev = (n > 2) ? dizi_dar_yaz(g, args[2].reg, args[2].tip, et,
+                             ast_tip_isaretsiz_mi(dizi_deger_eleman_ast)) : 0;
+                } else {
                 ev = (n > 2) ? int_donustur(g, args[2].reg,
                                                  args[2].tip, cast_tip) : 0;
+                }
                 }
                 fprintf(g->out,
                     "  call void @%s(ptr %%%d, i32 %%%d, %s %%%d)\n",
@@ -6483,6 +6535,12 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         e_tip2 = kt_l2;
                         fn = (strcmp(kt_l2, "i64") == 0)
                              ? "kdl_dizi_ekle_tam64" : "kdl_dizi_ekle_tam";
+                    /* [D-708] dar eleman: tasiyici i32'ye genislet, ekle_tam cagir. */
+                    } else if (dizi_dar_mi(eleman_tip)) {
+                        vr = dizi_dar_yaz(g, v.reg, v.tip, eleman_tip,
+                                          ast_tip_isaretsiz_mi(eleman_tip_ast_d));
+                        e_tip2 = "i32";
+                        fn = "kdl_dizi_ekle_tam";
                     } else {
                         vr = int_donustur(g, v.reg, v.tip, eleman_tip);
                         fn = "kdl_dizi_ekle_tam";
@@ -7060,6 +7118,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
                         raw, kt_dg, fn_al, kdl_ptr, i_load);
                 el_reg = dizi_bitcast_emit(g, raw, kt_dg, et);
+            /* [D-708] dar eleman: tasiyici i32 oku + trunc. */
+            } else if (dizi_dar_mi(et)) {
+                el_reg = dizi_dar_oku(g, fn_al, kdl_ptr, i_load, et);
             } else {
                 el_reg = yeni_reg(g);
                 fprintf(g->out, "  %%%d = call %s @%s(ptr %%%d, i32 %%%d)\n",
@@ -7074,6 +7135,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                       1, x_alloca, et);
             /* [D-449] eleman metin ise dongu degiskeni de metin. */
             g->isimler->metin_mi = kol_isim->eleman_metin_mi;
+            /* [D-708] eleman dtamN ise dongu degiskeni de isaretsiz (genisletme zext). */
+            g->isimler->isaretsiz = ast_tip_isaretsiz_mi(kol_isim->eleman_tip_ast);
             int body_term = blok_uret(g, d->veri.icin.govde);
             scope_cik(g, m);
             if (!body_term) {
