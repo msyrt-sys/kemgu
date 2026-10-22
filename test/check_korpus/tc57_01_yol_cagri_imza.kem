@@ -1,0 +1,24 @@
+// [D-715] MODÜL-NİTELİKLİ (YOL) çağrıda imza denetimi. Öncesinde self-host
+// `m::f(..)` için T010 / argüman T001 / dönüş T001'in HİÇBİRİNİ vermiyordu
+// (C veriyordu). Aynı adlı işlev iki modülde: çözüm MODÜLE göre olmalı
+// (`m::f` 1, `n::f` 2 parametre) — çıplak adla aramak sahte T010 üretirdi.
+modül m {
+    genel işlev f(a: tam32) -> tam32 { ver a; }
+    genel işlev g(s: metin) -> tam32 { ver 1; }
+    modül ic { genel işlev h(a: tam32) -> tam32 { ver a; } }
+}
+modül n { genel işlev f(a: tam32, b: tam32) -> tam32 { ver a + b; } }
+işlev kotu() -> tam32 {
+    değişken a: tam32 = m::f(1, 2);       // T010
+    değişken b: tam32 = m::g(5);          // T001 (argüman)
+    değişken c: metin = m::f(3);          // T001 (dönüş)
+    değişken d: tam32 = m::ic::h(1, 2);   // T010 (iç içe)
+    değişken e: tam32 = n::f(1);          // T010 (aynı ad, başka modül)
+    ver 0;
+}
+// POZİTİF: doğru çağrılar TEMİZ kalmalı (yoksa "her YOL çağrısını reddet"
+// sabotajı kapıdan geçerdi — D-425).
+işlev iyi() -> tam32 {
+    ver m::f(1) + n::f(1, 2) + m::ic::h(3) + m::g("x");
+}
+işlev main() -> tam32 { ver iyi(); }

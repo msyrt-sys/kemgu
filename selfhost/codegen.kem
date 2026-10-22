@@ -9762,6 +9762,120 @@ işlev ad_tanimli_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
     ver yanlış;
 }
 // Üst-düzey tanım adları (işlev/yapı/çeşit/sabit) → genel; modül recurse.
+// [D-715] BİLİNEN-ARİTE ÇAĞRI DENETİMİ (T010 arite · E013 · arg T001 · lineer
+// taşıma · G003). Önceden CAGRI'nın TANIMLAYICI dalının İÇİNDEYDİ → `m::f(1, 2)`
+// (YOL hedefi) bu denetimlerin HİÇBİRİNİ almıyordu (C T010, self OK — ölçüldü).
+// Tek işlev, iki çağıran: aynı soruyu iki yerde ayrı yanıtlamamak için (D-407).
+// `fad` = imza tablosu anahtarı (YOL'da nitelikli `m.f`), `cad` = çıplak ad
+// (`fn_ciplak_mi` `cip_node`un çıplak adına bakar — nitelikliyle sorulsa sahte E013).
+işlev arite_arg_kontrol(p: &değişken Ayr, idx: tam32, fad: metin, cad: metin) -> tam32 {
+    değişken hb: tam32 = dizi_al(p.a_cb, idx);
+    değişken hc: tam32 = dizi_al(p.a_cs, idx);
+    değişken ps: tam32 = fn_psay_bul(p, fad);
+            // kullanıcı işlevi → arite bilinir
+    eğer (hc - 1) != ps {             // çocuk[0]=hedef → arg sayısı = hc-1
+        dizi_ekle(p.th_kod, "T010");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        ver 0;   // C: arite uyumsuz → erken dönüş (arg tip kontrolü yok)
+    }
+    // D-360 E013: çıplak gövdeden normal (ρ-alan) kullanıcı işlevi
+    // çağrılamaz. C sırası: T010'dan SONRA; hata AKIŞI KESMEZ (arg
+    // kontrolü devam eder). Built-in/extern ρ almaz → muaf.
+    eğer (p.cip_bag > 0) ve (fn_ciplak_mi(p, cad) == yanlış)
+         ve (yerlesik_imza_mi(p, fad) == yanlış) {   // D-374 muafiyeti
+        sekil_hata(p, idx, "E013");
+    }
+    // D-375: C argüman alt-ağacını İKİ KEZ tip-belirler → traversal
+    // kaynaklı TÜM tanılar (T002/T005-T008/T010/G001/E002…) İKİLENİR.
+    // Sıra ölçüldü: ÖNCE tüm argümanlar üzerinden bir geçiş, SONRA
+    // ikinci geçiş + per-arg T001 (`al(s, yok())` → T002;T001;T002).
+    // [D-711 turbofish] Açık tip düğümleri de denetlenir (C: bağlamada
+    // ast_tip_to_bilgi → T011/DRF/...). C sırası: E013'ten SONRA, argüman
+    // geçişlerinden ÖNCE.
+    değişken tfg: tam32 = tf_fg(p, idx);
+    eğer tfg >= 0 {
+        değişken tfk2: tam32 = tf_bul(p, idx);
+        değişken tj: tam32 = 0;
+        iken tj < dizi_al(p.tf_say, tfk2) {
+            kontrol_dugum(p, dizi_al(p.tf_tip, dizi_al(p.tf_bas, tfk2) + tj));
+            tj = tj + 1;
+        }
+    }
+    // Ön-geçişte tüketim KAPALI: C lineeri ikilemiyor (`al(tuket(t))` → OK).
+    p.tuk_kapali = p.tuk_kapali + 1;
+    değişken pa2: tam32 = 1;
+    iken pa2 < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + pa2)); pa2 = pa2 + 1; }
+    p.tuk_kapali = p.tuk_kapali - 1;
+    // arite OK → her arg: traverse (iç T002) + per-arg T001 (param tipi)
+    değişken a: tam32 = 1;
+    iken a < hc {
+        değişken arg: tam32 = dizi_al(p.cocuk, hb + a);
+        // D-376: İKİNCİ geçişte beklenen tip yayılır → param `Dizi<..>`
+        // ise boş `[]` bu geçişte T014 ALMAZ (C ile birebir).
+        t14_muaf_isaretle(p, arg, fn_ptn_bul(p, fad, a - 1));
+        kontrol_dugum(p, arg);
+        değişken pt: metin = fn_ptip_bul(p, fad, a - 1);
+        // [D-711 turbofish] açık bağlama: param tipi İKAME edilmiş tiptir
+        // (generic `T` param artık "?" değil → T001 denetlenir).
+        eğer tfg >= 0 { pt = tf_tip_coz(p, idx, tfg, fn_ptn_bul(p, fad, a - 1)); }
+        eğer metin_esit(pt, "?") == yanlış {
+            değişken at: metin = ifade_tip(p, arg, pt);
+            eğer (metin_esit(at, "?") == yanlış) ve (metin_esit(at, pt) == yanlış) {
+                dizi_ekle(p.th_kod, "T001");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
+            }
+        }
+        eğer fn_plin_bul(p, fad, a - 1) == 1 { lin_tuket_dugum(p, arg); }   // TC5b move
+        g003_kontrol(p, fad, a - 1, arg);   // D-358: C sırası — lineer tüketimden SONRA
+        a = a + 1;
+    }
+    gtas_gorev_isaretle(p, idx);   // [D-505] gövde gezildi
+    ver 0;
+}
+// [D-715] Modül işlevlerini imza tablosuna NİTELİKLİ adla da kaydet (`m.f`,
+// `m.ic.h`). Çıplak kayıt (genel_topla) aynen kalır. Kaynak tanımlayıcısında
+// `.` olamaz → nitelikli anahtar mevcut hiçbir aramayla çakışmaz. Yalnız KÖKTEN
+// çağrılır; iç içe modül önekleri burada kurulur (genel_topla'nın kendi
+// özyinelemesinden çağrılsa `ic.f` gibi YANLIŞ önekli kayıtlar oluşurdu).
+işlev nitelikli_imza_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ad: metin = dizi_al(p.a_ad, c);
+        eğer metin_esit(ad, "DISA") ve (dizi_al(p.a_cs, c) > 0) {
+            c = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
+            ad = dizi_al(p.a_ad, c);
+        }
+        eğer metin_esit(ad, "MODUL") {
+            değişken yo: metin = dizi_al(p.a_deg, c);
+            eğer metin_uzunluk(onek) > 0 { yo = metin_birlestir(metin_birlestir(onek, "."), yo); }
+            nitelikli_imza_topla(p, c, yo);
+        }
+        eğer metin_esit(ad, "ISLEV") ve (metin_uzunluk(onek) > 0) {
+            imza_kaydet(p, c);
+            dizi_yaz(p.fn_ad, dizi_boyut(p.fn_ad) - 1,
+                     metin_birlestir(metin_birlestir(onek, "."), dizi_al(p.a_deg, c)));
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+// [D-715] YOL çağrı hedefini imza anahtarına çevir: `m::ic::h` → "m.ic.h".
+// Sol TANIMLAYICI alias olabilir → gerçek modül adı (D-581). Çözülemeyen → "".
+işlev yol_imza_anahtari(p: &değişken Ayr, node: tam32) -> metin {
+    değişken na: metin = dizi_al(p.a_ad, node);
+    eğer metin_esit(na, "TANIMLAYICI") { ver alias_modul_coz(p, dizi_al(p.a_deg, node)); }
+    eğer metin_esit(na, "YOL") ve (dizi_al(p.a_cs, node) > 0) {
+        değişken sol: metin = yol_imza_anahtari(p, dizi_al(p.cocuk, dizi_al(p.a_cb, node)));
+        eğer metin_uzunluk(sol) == 0 { ver ""; }
+        ver metin_birlestir(metin_birlestir(sol, "."), dizi_al(p.a_deg, node));
+    }
+    ver "";
+}
 işlev genel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
@@ -10551,6 +10665,11 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
                 eğer dizi_al(p.fg_dn, tfg3) >= 0 { ver tf_tip_coz(p, idx, tfg3, dizi_al(p.fg_dn, tfg3)); }
             }
             ver fn_donus_bul(p, dizi_al(p.a_deg, h));   // "?" = kullanıcı işlevi değil
+        }
+        // [D-715] `m::f(..)` → nitelikli imzanın dönüş tipi (bulunamazsa "?").
+        eğer metin_esit(dizi_al(p.a_ad, h), "YOL") {
+            değişken yk2: metin = yol_imza_anahtari(p, h);
+            eğer (metin_uzunluk(yk2) > 0) ve (fn_psay_bul(p, yk2) >= 0) { ver fn_donus_bul(p, yk2); }
         }
         ver "?";   // method/dolaylı çağrı → ileri TC
     }
@@ -13525,68 +13644,17 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                   veya metin_esit(fad, "hata")) ve ((hc - 1) == 1) {
                 lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
             }
-            değişken ps: tam32 = fn_psay_bul(p, fad);
-            eğer ps >= 0 {                        // kullanıcı işlevi → arite bilinir
-                eğer (hc - 1) != ps {             // çocuk[0]=hedef → arg sayısı = hc-1
-                    dizi_ekle(p.th_kod, "T010");
-                    dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
-                    dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
-                    ver 0;   // C: arite uyumsuz → erken dönüş (arg tip kontrolü yok)
-                }
-                // D-360 E013: çıplak gövdeden normal (ρ-alan) kullanıcı işlevi
-                // çağrılamaz. C sırası: T010'dan SONRA; hata AKIŞI KESMEZ (arg
-                // kontrolü devam eder). Built-in/extern ρ almaz → muaf.
-                eğer (p.cip_bag > 0) ve (fn_ciplak_mi(p, fad) == yanlış)
-                     ve (yerlesik_imza_mi(p, fad) == yanlış) {   // D-374 muafiyeti
-                    sekil_hata(p, idx, "E013");
-                }
-                // D-375: C argüman alt-ağacını İKİ KEZ tip-belirler → traversal
-                // kaynaklı TÜM tanılar (T002/T005-T008/T010/G001/E002…) İKİLENİR.
-                // Sıra ölçüldü: ÖNCE tüm argümanlar üzerinden bir geçiş, SONRA
-                // ikinci geçiş + per-arg T001 (`al(s, yok())` → T002;T001;T002).
-                // [D-711 turbofish] Açık tip düğümleri de denetlenir (C: bağlamada
-                // ast_tip_to_bilgi → T011/DRF/...). C sırası: E013'ten SONRA, argüman
-                // geçişlerinden ÖNCE.
-                değişken tfg: tam32 = tf_fg(p, idx);
-                eğer tfg >= 0 {
-                    değişken tfk2: tam32 = tf_bul(p, idx);
-                    değişken tj: tam32 = 0;
-                    iken tj < dizi_al(p.tf_say, tfk2) {
-                        kontrol_dugum(p, dizi_al(p.tf_tip, dizi_al(p.tf_bas, tfk2) + tj));
-                        tj = tj + 1;
-                    }
-                }
-                // Ön-geçişte tüketim KAPALI: C lineeri ikilemiyor (`al(tuket(t))` → OK).
-                p.tuk_kapali = p.tuk_kapali + 1;
-                değişken pa2: tam32 = 1;
-                iken pa2 < hc { kontrol_dugum(p, dizi_al(p.cocuk, hb + pa2)); pa2 = pa2 + 1; }
-                p.tuk_kapali = p.tuk_kapali - 1;
-                // arite OK → her arg: traverse (iç T002) + per-arg T001 (param tipi)
-                değişken a: tam32 = 1;
-                iken a < hc {
-                    değişken arg: tam32 = dizi_al(p.cocuk, hb + a);
-                    // D-376: İKİNCİ geçişte beklenen tip yayılır → param `Dizi<..>`
-                    // ise boş `[]` bu geçişte T014 ALMAZ (C ile birebir).
-                    t14_muaf_isaretle(p, arg, fn_ptn_bul(p, fad, a - 1));
-                    kontrol_dugum(p, arg);
-                    değişken pt: metin = fn_ptip_bul(p, fad, a - 1);
-                    // [D-711 turbofish] açık bağlama: param tipi İKAME edilmiş tiptir
-                    // (generic `T` param artık "?" değil → T001 denetlenir).
-                    eğer tfg >= 0 { pt = tf_tip_coz(p, idx, tfg, fn_ptn_bul(p, fad, a - 1)); }
-                    eğer metin_esit(pt, "?") == yanlış {
-                        değişken at: metin = ifade_tip(p, arg, pt);
-                        eğer (metin_esit(at, "?") == yanlış) ve (metin_esit(at, pt) == yanlış) {
-                            dizi_ekle(p.th_kod, "T001");
-                            dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
-                            dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
-                        }
-                    }
-                    eğer fn_plin_bul(p, fad, a - 1) == 1 { lin_tuket_dugum(p, arg); }   // TC5b move
-                    g003_kontrol(p, fad, a - 1, arg);   // D-358: C sırası — lineer tüketimden SONRA
-                    a = a + 1;
-                }
-                gtas_gorev_isaretle(p, idx);   // [D-505] gövde gezildi
-                ver 0;
+            eğer fn_psay_bul(p, fad) >= 0 {   // kullanıcı işlevi → arite bilinir
+                ver arite_arg_kontrol(p, idx, fad, fad);   // [D-715]
+            }
+        }
+        // [D-715] YOL hedefi (`m::f(..)`, `m::ic::h(..)`): nitelikli imzayla AYNI
+        // bilinen-arite denetimi. Çözülemezse (dosya modülü, bilinmeyen yol) eski
+        // davranış: tanı yok (default-DENY — sahte T010 riski alınmaz).
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
+            değişken yk: metin = yol_imza_anahtari(p, hedef);
+            eğer (metin_uzunluk(yk) > 0) ve (fn_psay_bul(p, yk) >= 0) {
+                ver arite_arg_kontrol(p, idx, yk, dizi_al(p.a_deg, hedef));
             }
         }
         // D-697 (eski PR #103 / D-325): `tekkez_olustur(e)` producer intrinsic'i — e bir
@@ -14984,6 +15052,7 @@ işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
     kullan_yukle_hepsi(p, kok);   // TC8a: cross-file dışa semboller (T002'den ÖNCE)
     modul_bildirim_topla(p, kok); // D-362: dosya içi `modül m` adları (T016)
     genel_topla(p, kok);
+    nitelikli_imza_topla(p, kok, "");   // [D-715] `m.f` imza anahtarları
     dup_kontrol(p, kok);     // T024 (üst-düzey çift tanım) — T002'den ÖNCE
     lr002_kontrol(p, kok);   // TC5a: yapı lineer alan (LR002) — gövdelerden ÖNCE
     kur_ad_topla(p, kok);    // D-351: E010 için küresel adlar — gövdelerden ÖNCE
