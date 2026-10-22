@@ -219,6 +219,24 @@ işlev kt_blake3() -> tam32 {
     eğer kt_ozet_kontrol(blake3_bayt(kt_desen(4097), 4097), 3008512155, 3361676431, 2511933354) == 0 { ver 0; }
     ver 1;
 }
+// [D-713] OS rastgele: 32 kelimenin OR'u TÜM bitleri, AND'i HİÇBİR biti taşımamalı
+// (bir bitin 32 çekilişte sabit kalma olasılığı 2^-32). Sabit dönen kaynak ikisini de düşürür.
+işlev kt_os_rastgele() -> tam32 {
+    değişken veya_t: dtam64 = 0;
+    değişken ve_t: dtam64 = 0;
+    ve_t = ve_t - 1;                 // tüm bitler 1
+    değişken hepsi: dtam64 = ve_t;
+    değişken i: tam32 = 0;
+    iken i < 32 {
+        değişken x: dtam64 = os_rastgele();
+        veya_t = veya_t | x;
+        ve_t = ve_t & x;
+        i = i + 1;
+    }
+    eğer veya_t != hepsi { ver 0; }
+    eğer ve_t != 0 { ver 0; }
+    ver 1;
+}
 işlev main() -> tam32 {
     değişken skor: tam32 = 0;
     eğer kt_kontrol() == 1 { skor = skor + 1; }
@@ -228,5 +246,6 @@ işlev main() -> tam32 {
     eğer kt_sha256_cok_blok() == 1 { skor = skor + 16; }   // D-709
     eğer kt_hmac_rfc4231() == 1 { skor = skor + 32; }     // D-709
     eğer kt_blake3() == 1 { skor = skor + 64; }           // D-710
-    ver skor;   // 127 = tam geçiş
+    eğer kt_os_rastgele() == 1 { skor = skor + 128; }    // D-713
+    ver skor;   // 255 = tam geçiş
 }

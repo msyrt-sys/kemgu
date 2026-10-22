@@ -91,31 +91,28 @@ işlev xoshiro256_adim(s: Dizi<dtam64>) -> dtam64 {
 // Doldur — sonuc dizisini secure random bytes ile doldurur.
 // dönüş: dolan byte sayısı (eşit gereksinim'e veya hata için < gereksinim)
 //
-// Platform implementasyonu (V2):
-//   - Linux: syscall(SYS_getrandom, buf, len, 0)
-//   - Windows: BCryptGenRandom(NULL, buf, len, BCRYPT_USE_SYSTEM_PREFERRED_RNG)
-//   - macOS: getentropy(buf, len)
-//
-// V1: stub — xorshift64 fallback (KRİPTO GÜVENSİZ — sadece test).
+// [D-713] OS entropisi (Linux /dev/urandom, Windows BCryptGenRandom); başarısızlıkta PANİK — sessiz 0 YOK.
 işlev secure_rastgele_doldur(
     sonuc: Dizi<sabitsüre<dtam8>>,
     gereksinim: tam32
 ) -> tam32 {
-    // V1 PLACEHOLDER — gerçek getrandom syscall V2'de.
-    // Bu kod KRİPTO GÜVENSİZ, sadece compile/test için.
-    değişken state: dtam64 = 0x9E3779B97F4A7C15;  // Fibonacci-türevsel sabit
+    değişken k: dtam64 = 0;
     değişken i: tam32 = 0;
     iken i < gereksinim {
-        state = xorshift64_adim(state);
+        eğer i % 8 == 0 { k = os_rastgele(); }
         // dtam64 -> dtam8: önce dtam32'ye daralt (izinli), sonra dtam8'e (izinli).
         // E004 sadece kw_kaynak >= 64 && kw_hedef < 32 vurgular; iki-adım kaçınır.
-        değişken orta: dtam32 = (state olarak dtam32);
+        değişken orta: dtam32 = (k olarak dtam32);
         değişken alt: dtam8 = (orta olarak dtam8);
         sonuc[i] = sabitsüre_olustur(alt);
+        k = k >> 8;
         i = i + 1;
     }
     ver gereksinim;
 }
+
+// [D-713] Gizli 64 bitlik rastgele kelime.
+işlev os_rastgele_kelime() -> sabitsüre<dtam64> { ver sabitsüre_olustur(os_rastgele()); }
 
 // =============================================================================
 // Hardware RNG Placeholder (RDRAND, ARMv8.5 RNG)

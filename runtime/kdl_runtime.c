@@ -1081,6 +1081,51 @@ __attribute__((noreturn)) void kdl_panik(const char *mesaj) {
     abort();
 }
 
+/* =========================================================================
+ * [D-713] os_rastgele() -> dtam64 -- ISLETIM SISTEMI ENTROPI KAYNAGI.
+ * Kriptografik amacli 64 bit. Kaynak: Linux/Unix `/dev/urandom` (cekirdek
+ * CSPRNG'i; tohumlandiktan sonra bloklamaz), Windows `BCryptGenRandom`
+ * (BCRYPT_USE_SYSTEM_PREFERRED_RNG).
+ *
+ * BASARISIZLIK = PANIK, sessiz 0 DEGIL. Kripto rastgeleligi icin "0 don ve
+ * devam et" en tehlikeli yoldur: anahtar/nonce tahmin edilebilir olur ve
+ * hicbir sey bunu gostermez. Dizi siniri (D-069), sifira bolme (D-502) ile
+ * ayni politika. Kismi okuma da basarisizliktir (8 bayttan az = panik).
+ *
+ * bcrypt CALISMA-ZAMANINDA yuklenir (D-466'nin Winsock ilkesi): yeni bir
+ * yetenek, onu KULLANMAYAN programlarin baglama sozlesmesini DEGISTIRMEMELI.
+ * Kaynak olarak getrandom(2) yerine /dev/urandom: kati `-std=c11` +
+ * _POSIX_C_SOURCE altinda getrandom bildirimi GIZLIDIR (D-474 sinifi),
+ * /dev/urandom ise yalniz stdio ister.
+ * ========================================================================= */
+#ifdef _WIN32
+typedef long (__stdcall *KdlFnBCryptGenRandom)(void *, unsigned char *,
+                                               unsigned long, unsigned long);
+#endif
+uint64_t kdl_os_rastgele(void) {
+    unsigned char b[8];
+    uint64_t v = 0;
+    int i;
+#ifdef _WIN32
+    static KdlFnBCryptGenRandom fn = NULL;
+    if (!fn) {
+        HMODULE m = LoadLibraryA("bcrypt.dll");
+        if (m) fn = (KdlFnBCryptGenRandom)(void (*)(void))GetProcAddress(m, "BCryptGenRandom");
+    }
+    if (!fn || fn(NULL, b, 8, 0x00000002UL /* SYSTEM_PREFERRED_RNG */) != 0)
+        kdl_panik("os_rastgele: BCryptGenRandom basarisiz");
+#else
+    FILE *f = fopen("/dev/urandom", "rb");
+    size_t okunan;
+    if (!f) kdl_panik("os_rastgele: /dev/urandom acilamadi");
+    okunan = fread(b, 1, 8, f);
+    fclose(f);
+    if (okunan != 8) kdl_panik("os_rastgele: /dev/urandom kisa okuma");
+#endif
+    for (i = 0; i < 8; i++) v |= (uint64_t)b[i] << (8 * i);
+    return v;
+}
+
 #include "kdl_dizi.inc"
 
 /* === B2: Concurrency minimal API ===

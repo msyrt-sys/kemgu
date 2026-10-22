@@ -361,6 +361,10 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     {
         EKLE_BUILTIN("dosya_gecersiz", 14, NULL, 0, tip_olustur_basit(a, TIP_METIN));
     }
+    /* [D-713] os_rastgele() -> dtam64 — isletim sistemi entropisi (basarisizlikta PANIK). */
+    {
+        EKLE_BUILTIN("os_rastgele", 11, NULL, 0, tip_olustur_basit(a, TIP_DTAM64));
+    }
 
     /* [D-455] Bagimsiz kilit (mutex). Handle OPAKtir ve kullanici ONA HIC
      * DOKUNMAZ — yalnizca `stdlib/kilit.kem`in kapsamli `kilitle(k, ||{..})`
