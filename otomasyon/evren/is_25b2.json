@@ -1,0 +1,1 @@
+{"tur": "25b2", "is": "blake3", "gorev": "otomasyon/evren/gorev_25b2_blake3.md", "baglam": [], "kesit": ["stdlib/kripto/karma.kem:461-491"], "effort": "low", "dogrulama": ["cat stdlib/kripto.kem stdlib/kripto/*.kem test/stdlib/test_kripto_kosum.kem > /tmp/claude-1000/evren/kb.kem && build/kemgu --check /tmp/claude-1000/evren/kb.kem"], "isaretler": ["tip kontrolu basarili"]}

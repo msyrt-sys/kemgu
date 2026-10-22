@@ -1,4 +1,4 @@
-// [D-710 turbofish] AÇIK GENERIC ARGÜMAN MONOMORFİZASYONU — C ↔ self exit 42.
+// [D-711 turbofish] AÇIK GENERIC ARGÜMAN MONOMORFİZASYONU — C ↔ self exit 42.
 // Açık argüman ÇIKARSAMAYI EZER: `kare::<tam64>(92682)` → `@kare$i64`, argüman i64.
 // Turbofish yok sayılsaydı literal 92682 i32 çıkarsanır, `$i32` seçilir, 92682² =
 // 8589953124 KIRPILIR → exit 1 (sabotajın ayırt ettiği şekil). tam64 + 2^33 bilerek:

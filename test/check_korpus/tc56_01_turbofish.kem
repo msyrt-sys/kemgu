@@ -1,4 +1,4 @@
-// [D-710 turbofish] AÇIK GENERIC ARGÜMAN — C ↔ self (checker.kem + codegen.kem) --checkdump.
+// [D-711 turbofish] AÇIK GENERIC ARGÜMAN — C ↔ self (checker.kem + codegen.kem) --checkdump.
 // Kural: açık argüman ÇIKARSAMAYI EZER. Parametre tipi (ikame edilmiş) BEKLENEN tip
 // olur → literal o tipte çıkarsanır, uyuşmayan argüman T001 (argüman konumu), dönüş
 // tipi ikame edilmiş tiptir. Sayı uyuşmazlığı / generic olmayan hedef → T044 (CAGRI).

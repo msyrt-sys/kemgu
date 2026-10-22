@@ -90,7 +90,7 @@ cg_rho_sahip_confined cg_rho_sahip_kacis cg_kanal_omru"
 #      çare DEĞİL — `bir()`/`sıfır()` zaten yalnız generic gövdede anlamlıdır,
 #      yani her yol bir generic işlev gerektirir. Davranışsal eşdeğerlik
 #      (`codegen_diff`) ölçülmeye devam ediyor; muaf olan yalnız `define` kümesi.
-#      [D-710 turbofish] `cg_turbofish` AYNI sınıf: turbofish yalnız generic
+#      [D-711 turbofish] `cg_turbofish` AYNI sınıf: turbofish yalnız generic
 #      işlevde anlamlıdır. Elle ölçüldü: `$`-li SPECIALIZATION kümesi C ↔ self
 #      BİREBİR (`kare$i64`, `cift$i32$i64`, `m.kim$i64`, `sar$i64`, `esit$ptr`,
 #      `kimlik$i32/$i64`); fark yalnız self'in taban gövdeleri.

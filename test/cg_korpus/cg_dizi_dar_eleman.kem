@@ -1,0 +1,58 @@
+// [D-708] DAR ELEMANLI DİZİLER — dtam8 / dtam16 (işaretsiz) ve tam8 (işaretli).
+// Çalışma zamanı dar elemanları 32 bitlik yuvada tutar (kdl_dizi_*_tam). Derleyici
+// değeri yuvaya ELEMAN TİPİNİN İŞARETİNE göre genişletmeli (dtamN → zext, tamN →
+// sext) ve okurken eleman genişliğine daraltmalı. Ölçülen kusur (D-708 öncesi):
+// C `dizi_ekle` işaretsiz baytı sext ediyordu → `dizi_al(d,0) olarak tam64` 200
+// yerine -56; self-host dar elemanlı HER dizide geçersiz IR (i8 ↔ i32) üretiyordu.
+// AYIRT EDİCİ değerler: ≥128 bayt (200), ≥32768 kelime (50000), negatif tam8 (-100).
+// Her şekil AYRI bir bit; hepsi doğruysa 42, değilse maske basılır + 1.
+işlev main() -> tam32 {
+    değişken hatalar: tam32 = 0;
+
+    // --- dtam8: ekle + indeks + dizi_al + literal + dizi_yaz + için ---
+    değişken a: Dizi<dtam8> = [];
+    dizi_ekle(a, 200 olarak dtam8);
+    dizi_ekle(a, 7 olarak dtam8);
+    değişken a0: dtam8 = a[0];
+    eğer (a0 olarak tam64) != 200 { hatalar = hatalar + 1; }
+    eğer (dizi_al(a, 0) olarak tam64) != 200 { hatalar = hatalar + 2; }
+    değişken al: Dizi<dtam8> = [200 olarak dtam8, 250 olarak dtam8];
+    değişken al1: dtam8 = al[1];
+    eğer (al1 olarak tam64) != 250 { hatalar = hatalar + 4; }
+    dizi_yaz(a, 1, 255 olarak dtam8);
+    eğer (dizi_al(a, 1) olarak tam64) != 255 { hatalar = hatalar + 8; }
+    değişken toplam: tam64 = 0;
+    için x: a { toplam = toplam + (x olarak tam64); }
+    eğer toplam != 455 { hatalar = hatalar + 16; }
+
+    // --- değer REGISTER'dan (sabit DEĞİL): sabitler genişletmeye girmeden basılır,
+    // yalnız register değer yazma yolunun işaretini gözlenebilir kılar (D-708 sabotajı). ---
+    değişken v8: dtam8 = 200;
+    değişken r8: Dizi<dtam8> = [];
+    dizi_ekle(r8, v8);
+    eğer (dizi_al(r8, 0) olarak tam64) != 200 { hatalar = hatalar + 512; }
+    değişken v16: dtam16 = 50000;
+    değişken r16: Dizi<dtam16> = [v16];
+    eğer (dizi_al(r16, 0) olarak tam64) != 50000 { hatalar = hatalar + 1024; }
+
+    // --- dtam16 ---
+    değişken b: Dizi<dtam16> = [];
+    dizi_ekle(b, 50000 olarak dtam16);
+    eğer (dizi_al(b, 0) olarak tam64) != 50000 { hatalar = hatalar + 32; }
+    değişken b0: dtam16 = b[0];
+    eğer (b0 olarak tam64) != 50000 { hatalar = hatalar + 64; }
+
+    // --- tam8 (İŞARETLİ — sext DOĞRU olmalı; pozitif şekil, D-425) ---
+    değişken c: Dizi<tam8> = [];
+    dizi_ekle(c, (0 - 100) olarak tam8);
+    eğer (dizi_al(c, 0) olarak tam64) != (0 - 100) { hatalar = hatalar + 128; }
+    değişken c0: tam8 = c[0];
+    eğer (c0 olarak tam64) != (0 - 100) { hatalar = hatalar + 256; }
+
+    eğer hatalar == 0 { ver 42; }
+    // Çıkış kodu 8 bite KIRPILIR (D-481): bit maskesi 256'yı aştığında `ver hatalar`
+    // tesadüfen 42 verebiliyordu (ölçüldü: 1578 % 256 = 42). Maske ekrana basılır,
+    // çıkış kodu 1 — çakışma imkânsız.
+    yazdir_tam64(hatalar olarak tam64);
+    ver 1;
+}

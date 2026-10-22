@@ -564,7 +564,7 @@ static Dugum *parse_sonek_op(Parser *p, Dugum *sol) {
 
         case TOK_CIFT_IKI_NOKTA: {
             parser_ilerle(p);
-            /* [D-710 turbofish] `::<` -> ACIK generic argumanli cagri.
+            /* [D-711 turbofish] `::<` -> ACIK generic argumanli cagri.
              * Belirsizlik kurali: ifade konumunda `f<T>(x)` KARSILASTIRMADIR
              * (degismedi); generic argumanlar YALNIZ `::<` ile acilir. `::`
              * sonrasi yol devami tanimlayici ister, `<` olamaz -> cakisma

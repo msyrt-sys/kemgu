@@ -1,4 +1,4 @@
-// [D-710 turbofish] PARSE PARİTESİ: `f::<T1, T2>(..)` — AÇIK generic argümanlı çağrı.
+// [D-711 turbofish] PARSE PARİTESİ: `f::<T1, T2>(..)` — AÇIK generic argümanlı çağrı.
 // C `--ast` CAGRI'yı hedef → TİP ARGÜMANLARI → argümanlar sırasıyla döker; self-host
 // tip argümanlarını yan-kanalda tutar ve dump'ta AYNI sıraya koyar. Bu dosya o
 // sırayı, `>>` kapanış bölmeyi (`Dizi<tam64>>`), modül yolu üzerinde turbofish'i,

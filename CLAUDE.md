@@ -214,7 +214,7 @@ Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 Basit:    tam8-64, dtam8-64, kesirli32-64, mantıksal, karakter, metin, boş
 Bileşik:  yapı{}, Dizi<T>, seçimlik<T>, sonuç<T,H>, &T, &değişken T, *T
 Null:     YOK — seçimlik<T> ile değer/hiç
-Generic çağrı: çıkarsama VEYA açık argüman `f::<tam64>(x)` (turbofish, D-710;
+Generic çağrı: çıkarsama VEYA açık argüman `f::<tam64>(x)` (turbofish, D-711;
           açık argüman çıkarsamayı EZER, `f<T>(x)` ifade konumunda karşılaştırmadır)
 Exception: YOK — sonuç<T,H> ile tamam/hata
 ```

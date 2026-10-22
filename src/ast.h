@@ -428,7 +428,7 @@ struct Dugum {
             Dugum *hedef;          /* cagrilan ifade */
             Dugum **argumanlar;
             int sayi;
-            /* [D-710 turbofish] `f::<T1,T2>(..)` ACIK generic argumanlari
+            /* [D-711 turbofish] `f::<T1,T2>(..)` ACIK generic argumanlari
              * (tip dugumleri). Turbofish yoksa NULL / 0 — dugum_olustur
              * sifirlar, yani tum eski cagri yollari degismez. */
             Dugum **tip_arg;
