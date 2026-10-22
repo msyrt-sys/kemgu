@@ -69,9 +69,11 @@
 - [x] D1a-D1e -> D-711. Turbofish `f::<T>(..)`: parser (P125 belirsizlik kurali) + checker
       (acik arguman cikarsamayi EZER, yeni T044) + codegen mono + uc self-host uygulamasi +
       korpus (p8/tc56/cg_turbofish) + 12 sabotaj. Ayrinti Gunluk'te.
-- [ ] D1f [S] ACIK — D-711'de OLCULDU: self-host checker `m::f::<T>()` (YOL hedefi) icin
-      T044/T001 vermiyor. Turbofish'e ozgu DEGIL: self YOL cagrilarinda T010/T001'i de hic
-      denetlemiyor (`m::f(1,2)` C T010, self OK). Kok YOL cagrisinda imza cozumu yok.
+- [~] D1f -> D-715 KISMEN: self-host YOL cagrisinda (`m::f(..)`, `m::ic::h(..)`) T010 arite,
+      arguman T001 ve donus T001 artik C ile birebir (modul nitelikli imza anahtari `m.f`;
+      ayni adli islev iki modulde dogru cozuluyor). KALAN: turbofish YOL (`m::f::<T>()`)
+      T044 — `tf_fg` yalniz TANIMLAYICI hedef taniyor; dosya modulu (`kullan a::b`) uyeleri
+      nitelikli kaydedilmiyor (tani yok, sahte tani da yok).
 - [ ] D1g [S] ACIK — D-711'de OLCULDU: turbofish'SIZ `ilk<T>(xs: Dizi<T>)` + `ilk([2^33])`
       T'yi literalden cikaramaz -> `$i32`, IKI derleyicide exit 1 (sessiz yanlis). Ayrica
       self-host'ta GENERIC OLMAYAN `f(xs: Dizi<tam64>)` + literal `[2^33]` -> exit 1 (C 42)
@@ -86,17 +88,19 @@
 - [x] D3b -> D-667'de yapildi (README semafor/bariyer maddesi duzeltildi).
 - [x] D3c -> D-668. Semafor n>1: "en fazla n" (guvenlik) VE "n kadar gercekten"
       (anlam) AYRI AYRI olculuyor; eszamanlilik kapisinda.
-- [ ] D4a [M] LSP v3: artimli didChange.
-- [ ] D4b [M] LSP v3: workspace/symbol.
-- [ ] D4c [M] LSP v3: semanticTokens.
-- [ ] D4d [M] LSP v3: references/rename.
+- [x] D4a -> ZATEN YAPILMIS (textDocumentSync 2; CLAUDE.md D-431 olcumu).
+- [x] D4b -> D-434.
+- [x] D4c -> D-432.
+- [ ] D4d [M] LSP v3: rename (references ZATEN VAR — `references_yanitla`; olculdu D-715).
 - [ ] D4e [S] LSP v3: her biri icin JSON-RPC kapi testi.
 - [ ] D5a [S] `metin`/`dosya` EKSIK ISLEV ENVANTERI cikar (metin 36, dosya 17 islev
       VAR — "tamamlama" olculmeden is degil; D-639).
-- [ ] D5b [M] BLAKE3 (`kripto/karma.kem`, bugun 3 islev).
-- [ ] D5c [M] HMAC (`kripto/karma.kem`).
-- [ ] D5d [M] OS RNG (`kripto/rastgele.kem`, bugun 4 islev; OS entropi kaynagi YOK).
-- [ ] D5e [S] Yeni islevleri `calistir_kripto_kosum` kapsamina al.
+- [x] D5b -> D-710 (BLAKE3 agac modu, `stdlib/kripto/blake3.kem`).
+- [x] D5c -> D-709 (HMAC-SHA256, RFC 4231 + cok bloklu SHA-256).
+- [x] D5d -> D-713 (`os_rastgele()` yerlesigi; Linux /dev/urandom, Windows BCryptGenRandom,
+      basarisizlikta PANIK). Bare-metal (RNDR/RDRAND) KAPSAM DISI, ayri is.
+- [x] D5e -> D-709/710/713; D-714 kapiyi IKI derleyiciye genisletti (self-host 7/255 idi:
+      `sabitsure<dtam64>` ll_tip kirpmasi + dar eleman INDEKS).
 - [ ] D6a [M] Gorev govdesi icin escape ozeti (D9a'ya bagli).
 - [ ] D6b [M] Hapsedilme kurali + yeni tani kodu.
 - [ ] D6c [M] Kanit varsa bolgeyi serbest birak.
