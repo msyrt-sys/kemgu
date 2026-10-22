@@ -2190,7 +2190,7 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@if grep -qF "YAKALANMADI" $(BUILD)/kem_os_x86_ist.out || grep -qF "X86 PANIK YOLU OK" $(BUILD)/kem_os_x86_ist.out; then echo "FAIL: istisna sonrasi cekirdek DURMADI"; exit 1; fi
 	@if grep -qF "X86 ISTISNA TESTI" $(BUILD)/kem_os_x86.out; then echo "FAIL: normal kosum istisna dalina girdi"; exit 1; fi
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_istisna_isle$$' || { echo "FAIL: kdl_istisna_isle (guclu) .kem'den gelmiyor"; exit 1; }
-	@# [D-711] Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku, 5 yanki,
+	@# [D-712] Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku, 5 yanki,
 	@# 26 cekirdek-ptr reddi). AYNI imaj iki sonuc: normal kosumda seri girdi YOK → EOF;
 	@# ucuncu kosumda -chardev file,input-path= ile "KEMGU-RX" satiri → OK + ring3 yankisi.
 	@# Ilk kosum (-serial file) DEGISMEDI; girdi dosyasi yalniz bu kosumda.

@@ -1,0 +1,54 @@
+// [D-711 turbofish] AÇIK GENERIC ARGÜMAN — C ↔ self (checker.kem + codegen.kem) --checkdump.
+// Kural: açık argüman ÇIKARSAMAYI EZER. Parametre tipi (ikame edilmiş) BEKLENEN tip
+// olur → literal o tipte çıkarsanır, uyuşmayan argüman T001 (argüman konumu), dönüş
+// tipi ikame edilmiş tiptir. Sayı uyuşmazlığı / generic olmayan hedef → T044 (CAGRI).
+// Ayırt edici tip tam64 + 2^33: tam32 ile çıkarsama ve açık bağlama AYNI sonucu verir.
+// POZİTİF blok (iyi) TEMİZ olmalı — yoksa "her turbofish'i reddet" sabotajı geçerdi.
+modül m {
+    genel işlev kim<T>(x: T) -> T { ver x; }
+}
+yapı N { a: tam32; }
+uygula N {
+    işlev al(kendin) -> tam32 { ver 1; }
+}
+işlev kimlik<T>(x: T) -> T { ver x; }
+işlev kare<T>(x: T) -> T { ver x * x; }
+işlev cift<A, B>(a: A, b: B) -> B { ver b; }
+işlev ilk<T>(xs: Dizi<T>) -> T { ver dizi_al(xs, 0); }
+işlev sar<T>(x: T) -> T { ver kimlik::<T>(x); }
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev iyi() -> tam64 {
+    değişken a: tam64 = kimlik::<tam64>(8589934592);
+    değişken b: tam64 = kare::<tam64>(92682);   // çıkarsama tam32 derdi (T001)
+    değişken c: tam64 = cift::<tam32, tam64>(1, 8589934592);
+    değişken s: metin = kimlik::<metin>("a");
+    değişken k: tam32 = 7;
+    değişken e: tam32 = kimlik::<tam32>(k);
+    değişken d64: Dizi<tam64> = [8589934592];
+    değişken f: tam64 = ilk::<tam64>(d64);
+    değişken g: tam64 = m::kim::<tam64>(8589934592);
+    değişken h: tam64 = sar::<tam64>(8589934592);
+    ver kimlik::<tam64>(5);
+}
+işlev kotu() -> tam32 {
+    değişken k: tam32 = 5;
+    değişken a: tam64 = kimlik::<tam64>(k);            // T001 argüman (çıkarsama kabul ederdi)
+    değişken b: tam32 = kimlik::<tam64>(5);            // T001 DEGISKEN (dönüş ikamesi)
+    değişken c: tam64 = kimlik::<tam64, tam32>(5);     // T044 fazla argüman
+    değişken d: tam32 = topla::<tam32>(1, 2);          // T044 generic olmayan işlev
+    değişken e: metin = cift::<tam32, metin>(1, 2);    // T001 ikinci argüman
+    değişken f: tam32 = yok_islev::<tam32>(1);         // T044 tanımsız ad
+    değişken g: Dizi<tam32> = dizi_olustur::<tam32>(3);   // T044 yerleşik
+    değişken d32: Dizi<tam32> = [1, 2];
+    değişken h: tam64 = ilk::<tam64>(d32);             // T001 Dizi<T> ikamesi
+    değişken n: N = N { a: 1 };
+    değişken i: tam32 = n.al::<tam32>();               // T044 metod
+    değişken kimlik_g: tam32 = 0;
+    ver kimlik::<tam32>(0) + kimlik_g;
+}
+işlev golge() -> tam32 {
+    değişken kimlik: tam32 = 3;
+    ver kimlik::<tam32>(1);                            // T044 yerel gölgeliyor
+}
+işlev r1() -> tam32 { ver kimlik::<tam64>(5); }        // T020 dönüş ikamesi
+işlev main() -> tam32 { ver kotu() + golge() + r1(); }

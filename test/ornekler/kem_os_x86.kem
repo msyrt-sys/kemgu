@@ -462,7 +462,7 @@ işlev main() -> tam32 {
         yazdir_satir();
         yazdir_metin("X86 [13] FS SYSCALL HATA");
     }
-    // İş 26 (D-711): KULLANICI KİPİNDEN UART SATIR OKUMA — arm64 [12] UART RX ikizi. Ring3
+    // İş 26 (D-712): KULLANICI KİPİNDEN UART SATIR OKUMA — arm64 [12] UART RX ikizi. Ring3
     // programı int 0x80 ile 26 (seri girdiden satır → kendi yığın sayfası) → 5 (yankı);
     // sonra 26'yı ÇEKİRDEK adresiyle çağırır (D-610 reddi). Seri girdi yoksa EOF yolu
     // (normal koşum), varsa satır (Makefile Kanıt 29: ayrı koşum, -chardev input-path).

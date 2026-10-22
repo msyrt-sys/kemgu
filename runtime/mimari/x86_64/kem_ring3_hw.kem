@@ -311,7 +311,7 @@ sabit KXR_FS_BUF_OFS: tam64 = 2093056;   // yığın sayfası 511 başı (0x541F
     ver 0;
 }
 
-// [D-711] x86_64 ring3 UART satır okuma kanıtı (arm64 kem_os.kem [12] UART RX ikizi):
+// [D-712] x86_64 ring3 UART satır okuma kanıtı (arm64 kem_os.kem [12] UART RX ikizi):
 // kullanıcı kipinden sistem çağrısı 26 (kis_satir_oku, kem_gorev_cekirdek.kem) seri
 // girdiden bir satırı KENDİ yığın sayfasına (0x541FF000) okur, dönen uzunluğu 0x541FF100'e
 // yazar, satırı 5 (yaz) ile geri basar (yankı); sonra 26'yı ÇEKİRDEK adresiyle çağırır

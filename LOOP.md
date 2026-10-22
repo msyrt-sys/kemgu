@@ -66,11 +66,16 @@
 - [ ] C3f [S] cg_korpus fiksturu (gercek kosum: alana yaz -> 42) + sabotaj.
 
 # ===== D. DIL OZELLIKLERI =====
-- [ ] D1a [M] turbofish: parser (`::<>` ayrimi + belirsizlik kurali).
-- [ ] D1b [M] turbofish: checker — acik argumanin cikarsamayi EZMESI.
-- [ ] D1c [M] turbofish: codegen mono yolu.
-- [ ] D1d [M] turbofish: self-host parite (iki dosya).
-- [ ] D1e [S] turbofish: korpus fikstur + sabotaj.
+- [x] D1a-D1e -> D-711. Turbofish `f::<T>(..)`: parser (P125 belirsizlik kurali) + checker
+      (acik arguman cikarsamayi EZER, yeni T044) + codegen mono + uc self-host uygulamasi +
+      korpus (p8/tc56/cg_turbofish) + 12 sabotaj. Ayrinti Gunluk'te.
+- [ ] D1f [S] ACIK — D-711'de OLCULDU: self-host checker `m::f::<T>()` (YOL hedefi) icin
+      T044/T001 vermiyor. Turbofish'e ozgu DEGIL: self YOL cagrilarinda T010/T001'i de hic
+      denetlemiyor (`m::f(1,2)` C T010, self OK). Kok YOL cagrisinda imza cozumu yok.
+- [ ] D1g [S] ACIK — D-711'de OLCULDU: turbofish'SIZ `ilk<T>(xs: Dizi<T>)` + `ilk([2^33])`
+      T'yi literalden cikaramaz -> `$i32`, IKI derleyicide exit 1 (sessiz yanlis). Ayrica
+      self-host'ta GENERIC OLMAYAN `f(xs: Dizi<tam64>)` + literal `[2^33]` -> exit 1 (C 42)
+      — ayri gorev cipi acildi (task_825441de).
 - [ ] D2a [M] Kabiliyet odunc alma: omur kurali (kime, ne kadar).
 - [ ] D2b [M] Kabiliyet odunc: checker zorlamasi (yeni hata kodu).
 - [ ] D2c [M] Kabiliyet odunc: codegen.
@@ -2407,7 +2412,71 @@
   "yeni:yol") → içerik yanıttan elle alındı (stdlib/kripto/blake3.kem, 124 satır, ifşa 0).
   kripto_kosum 7/7 (skor 127). SABOTAJ: ebeveyn PARENT bayrağı 0 → BLAKE3 ❌, rc=2.
   check_genis 158/158, kripto_check, stdlib_check yeşil.
-- 2026-10-17 D-711: x86 KULLANICI KIPINDEN UART SATIR OKUMA (arm64 [12] UART RX ikizi; D-706'nin
+- 2026-10-17 D-711: TURBOFISH `f::<T1, T2>(args)` — acik generic arguman (D1a-D1e, tek PR).
+  OLCUM ONCE: bugun HER IKI derleyici reddediyordu (C P123, self P000) -> yeni ozellik.
+  BELIRSIZLIK KURALI: ifade konumunda `f<T>(x)` KARSILASTIRMA kaldi (degismedi); generic
+  arguman YALNIZ `::<` ile acilir (yol devami tanimlayici ister, `<` olamaz -> cakisma yok);
+  liste kapaninca HEMEN `(` gelmeli, aksi P125 (`f::<A>;`, `f::<A>::<B>()`). CAGRI dugumu
+  `(` konumunda (turbofish'siz cagriyla ayni). `>>` kapanis bolme calisiyor (`Dizi<tam64>>`).
+  D1a PARSER: C `cagri.tip_arg/tip_arg_sayi`; self-host UC parser (parser.kem, checker.kem,
+  codegen.kem) tip argumanlarini YAN-KANALDA tutar (tf_cagri/tf_bas/tf_say/tf_tip) — CAGRI
+  cocuk[1..] = arguman invaryantina her yerde dayaniliyor, dugume cocuk EKLENMEDI. Dump
+  sirasi C ile ayni: hedef, TIP argumanlari, argumanlar. parse_korpus/p8_turbofish.
+  D1b CHECKER (UC uygulama, D-517): acik arguman CIKARSAMAYI EZER — gen_bagla "ilk gorulen
+  kazanir" oldugu icin acik baglama pas 1'den ONCE yapilir; pas 2'de ikame edilmis param
+  tipi BEKLENEN tip (literal o tipte, uyusmayan arguman T001), donus tipi ikameli (DEGISKEN
+  T001, ver T020). Onceden generic param pas 2'de `continue` ile HIC denetlenmiyordu; acik
+  baglamada denetlenir. YENI TANI KODU T044: turbofish sayisi != hedefin generic param
+  sayisi (generic olmayan islev, yerlesik `dizi_olustur::<T>`, tanimsiz ad, yerel golge,
+  metod `x.m::<T>()`). Yerlesikleri sessizce kabul etmek "kabul et, anlamini degistir"
+  olurdu. On-denetim CAGRI'nin EN BASINDA ve HER IKI giris noktasinda (tip_belirle +
+  tip_belirle_beklenen; ikincisi yerlesik ozel durumlarini once yakaliyordu). Self-host:
+  islev BASINA generic param tablosu (fg_*; gp_ad kapsam-duyarsiz duz listeydi) + tip_str
+  ikamesi (ts_*). check_korpus tc56_01 (11 tani, uc uygulama BIREBIR, pozitif blok TEMIZ)
+  + tc56_02 (P125).
+  D1c CODEGEN: C generic_param_beklenen acik argumanlarla ikameli param IR'i verir (literal
+  92682 i64 dogar), generic_islev_cagri_uret tip_args'i ezer; self mono_islev_kayit + arg
+  dongusu ayni. cg_korpus/cg_turbofish (C=SELF=42): kare::<tam64>(92682) (cikarsama $i32
+  secip 92682^2'yi KIRPARDI), cift::<tam32,tam64>, m::kim::<tam64>, ic turbofish
+  sar<T>{kimlik::<T>} (DIS ikameden cozulur), esit::<metin> (D-449 metin-lik), literal dizi
+  ilk::<tam64>([2^33]).
+  YOL USTUNDE OLCULEN KUSUR: literal dizi argumani `Dizi<T>` parametresine ikamesiz `T` ile
+  (i32 eleman) kuruluyordu -> ilk::<tam64>([8589934592]) HER IKI derleyicide exit 1 (sessiz
+  yanlis). Turbofish yolunda kapatildi (C turbofish_subst_it + beklenen_tip; self
+  tf_param_elem -> beklenen_elem). TURBOFISH'SIZ hali ONCEDEN VAR ve ACIK: `ilk([2^33])`
+  T'yi literalden cikaramaz ($i32, iki derleyicide exit 1); ayrica self-host'ta GENERIC
+  OLMAYAN `ilk(xs: Dizi<tam64>)` + literal [2^33] -> exit 1 (C 42) — ayri gorev cipi acildi.
+  V1 SINIRI (olculdu, kayitli): self-host checker `m::f::<T>()` (YOL hedefi) icin T044/T001
+  VERMEZ — ama YOL cagrilarinda T010/T001'i ZATEN hic denetlemiyor (olculdu: `m::f(1,2)`
+  C T010, self OK). Onceden var olan bosluk; turbofish onu miras aliyor, genisletmiyor.
+  yapi_diff: cg_turbofish K4'e eklendi (fark yalniz self'in generic TABAN govdeleri;
+  `$`-li specialization kumesi elle olculdu, BIREBIR).
+  YANLIS GIDEN: cg_turbofish ilk halinde donus-yalniz `bos<T>() -> Dizi<T>` vardi; govdedeki
+  tahsis self'in K4 taban govdesinde de yayilip MUAFIYETSIZ bolge_operand'i yanlis sebeple
+  kirmizi yapti (1/183). Kapiyi gevsetmek yerine sekil cikarildi (ayirt edici degildi, D-538).
+  SABOTAJ 12/12 (her biri TEK tarafi bozar, yalniz ilgili kapi kosuldu):
+  S1 C parser tip_arg baglanmaz -> parser_diff 14/15 . S2 parser.kem tf_kaydet yok -> 14/15 .
+  S3 C on-denetim kapali -> checker_diff 225/226 . S4 C pas-2 eski `continue` -> 225/226 .
+  S5 checker.kem per-arg ikame kapali -> 225/226 . S6 codegen.kem checker T044 kapali ->
+  self_driver BASARISIZ ([self-host --check] tc56_01) . S7 C generic_param_beklenen dali ->
+  codegen_diff 180/181 (exit 9) . S8 C tip_args ezmesi -> exit 7 . S9 self mono ezmesi ->
+  exit 7 . S10 self literal eleman -> exit 7 . S11 C literal ikame -> exit 7 . S12 self
+  tf_param_ir -> exit 9.
+  ⚠ S7 ILK HALIYLE SESSIZDI ve bu KORPUSU sertlestirdi (kodu degil): parametre IR'i acik
+  argumandan gelmezse literal i32 dogar ama POZITIF deger i64 parametreden ust bitler
+  tesadufen sifir okunur -> exit 42. NEGATIF literal (`kimlik::<tam64>(0 - 5)`, i32 -5 ->
+  4294967291) eklenince S7 ve self aynasi S12 kirmizi. (D-410/D-535 "ayirt edici sekil" dersi.)
+  ⚠ Bir olcumum BAYAT IKILIDEN geldi: sabotaj temizligi build/codegen'i silmisti, ekrandaki
+  "codegen=42" onceki kosumun $S/x/t'siydi (komut "No such file" basmisti). Yeniden kurulup
+  olculdu.
+  KAPILAR (taze klon, gate_linux d7tf, 621 sn): GATE-OK . test_tumu "Tum testler gecti!" .
+  FIXPOINT stage1 == stage2 (87765 satir) . parser_diff 15/15 . checker_diff 226/226 (0 muaf) .
+  codegen_diff 181/181 . yapi_diff 161/161 (22 muaf) . bolge_operand 183/183 . check_kapisi
+  293/301 (0 RED) . check_genis 158/158 . modul_codegen 27/27 . aarch64 kem_os [1..10].
+  DELEGASYON: uc tur (23 parser 20 blok, 24 checker 25 blok, 25 codegen 10 blok) deepseek ile,
+  hepsi ilk denemede TAMAM; diff'ler elle gozden gecirildi. Literal dizi onarimi + K4/bolge
+  fikstur duzeltmeleri elle.
+- 2026-10-17 D-712: x86 KULLANICI KIPINDEN UART SATIR OKUMA (arm64 [12] UART RX ikizi; D-706'nin
   acik biraktigi girdili kanit). kxr_rx_testi (kem_ring3_hw.kem, adres alani #5, kxr_fs_testi
   deseni): ring3 26(0x541FF000, 64) → donen uzunluk 0x541FF100'e → 5 yanki → 26(0x100000)
   = -1 (D-610) → hlt #GP. Kullanici programi llvm-mc ile uretildi (55 bayt), kaynaktaki
