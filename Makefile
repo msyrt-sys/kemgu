@@ -952,8 +952,12 @@ calistir_kripto_check: $(BUILD)/kemgu$(EXE) | $(BUILD)
 #   Bu yuzden test_tumu'ya HENUZ BAGLANMADI — aksi halde ilgisiz her isi
 #   kirmiziya cevirirdi. Imzasizlik onarimi merge edilince test_tumu'ya
 #   eklenmesi o adimin SON isidir (kapi o onarimin dogrulamasidir).
-calistir_kripto_kosum: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+# [D-714] IKI derleyici: self-host yalniz C kapisiyla olculdugu icin
+# `sabitsure<dtam64>` parametre kirpmasi (ll_tip) ve dar-eleman INDEKS
+# genisletmesi aylarca SESSIZ kaldi (self-host 7/255 veriyordu).
+calistir_kripto_kosum: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/kripto_kosum_harness.sh
+	@KEMGU=$(BUILD)/codegen$(EXE) ETIKET=self-host bash test/kripto_kosum_harness.sh
 
 # ARM64 (aarch64) cross-compile dogrulama — DGX Spark / Android NDK altyapisi
 # Mevcut KEMGU --llvm IR ciktisini clang -target ile ARM64 ELF object'e cevirir.

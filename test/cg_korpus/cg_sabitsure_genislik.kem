@@ -1,0 +1,30 @@
+// [D-714] sabitsüre<T> GENİŞLİĞİ + dar eleman INDEKS işaretsizliği.
+// Ölçülen kusurlar (self-host): (1) `ll_tip`te TIP_SABITSURE dalı yoktu →
+// `sabitsüre<dtam64>` parametre/dönüşü i32'ye düşüp ÜST 32 BİT kırpılıyordu;
+// (2) `xs[i]` dar elemanı daraltmıyordu (yapı alanına yazınca LLVM-RED);
+// (3) `xs[i] olarak dtam32` 0x80'i sext ediyordu. AYIRT EDİCİ değerler:
+// 2^33 (i32'ye sığmaz) ve 0x80/200 (≥128 bayt). Her şekil ayrı bit.
+yapı K { b: sabitsüre<dtam8>; }
+işlev gec(x: sabitsüre<dtam64>) -> sabitsüre<dtam64> { ver x; }
+işlev kur(g: Dizi<sabitsüre<dtam8>>) -> K { ver K { b: g[0] }; }
+işlev main() -> tam32 {
+    değişken hatalar: tam32 = 0;
+    değişken buyuk: dtam64 = 8589934592;
+    değişken r: dtam64 = ifşa(gec(sabitsüre_olustur(buyuk)));
+    eğer r != buyuk { hatalar = hatalar + 1; }
+    değişken d: Dizi<sabitsüre<dtam8>> = [];
+    dizi_ekle(d, sabitsüre_olustur(200 olarak dtam8));
+    değişken k: K = kur(d);
+    değişken kb: dtam8 = ifşa(k.b);
+    eğer (kb olarak tam64) != 200 { hatalar = hatalar + 2; }
+    değişken e: Dizi<dtam8> = [];
+    dizi_ekle(e, 128 olarak dtam8);
+    değişken y: dtam32 = e[0] olarak dtam32;
+    eğer y != 128 { hatalar = hatalar + 4; }
+    değişken w: sabitsüre<dtam32> = d[0] olarak sabitsüre<dtam32>;
+    değişken wx: dtam32 = ifşa(w);
+    eğer wx != 200 { hatalar = hatalar + 8; }
+    eğer hatalar == 0 { ver 42; }
+    yazdir_tam64(hatalar olarak tam64);
+    ver 1;
+}

@@ -3904,6 +3904,14 @@ işlev ll_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(ta, "TIP_TEKKEZ") {
         ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
+    // [D-714] sabitsüre<T> de SIFIR-MALİYET sarmalayıcı — IR'da T (C ast_tip_to_ir
+    // aynası). Bu dal YOKTU; D-446'nın "ll_tip zaten açıyordu" notu YANLIŞTI →
+    // sarmalayıcı aşağıdaki "i32" fallback'ine düşüyordu. dtam32'de tesadüfen
+    // doğru, `sabitsüre<dtam64>` parametre/dönüşünde ÜST 32 BİT SESSİZCE
+    // kırpılıyordu (ölçüldü: self-host kripto koşumu 7/255 — D-629/709/710 hiç).
+    eğer metin_esit(ta, "TIP_SABITSURE") {
+        ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
     // D-397: vektör<T, N> → "<N x T>" (SIMD Spec V1; C ast_tip_to_ir aynası).
     // Bu dal olmadan aşağıdaki "i32" fallback'ine düşüyordu → `<4 x float>`
     // bekleyen her yer `i32` görüyordu ("'%9' i32 but expected 'float'").
@@ -5089,6 +5097,22 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken mi: tam32 = mono_bul(p, yad);
         eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
         ver yapi_alan_isz(p, yad, dizi_al(p.a_deg, idx));
+    }
+    // [D-714] DAR eleman INDEKS'i (`xs[i]`, eleman i8/i16) imzasızlığı TAŞIR —
+    // C D-708'den beri `{dr, et, ast_tip_isaretsiz_mi(eleman)}` üretiyor; aşağıdaki
+    // D-339 notu o tarihten beri yalnız GENİŞ elemanlar için doğru. Olmadan
+    // `xs[0] olarak dtam32` 0x80'i 0xFFFFFF80'e sext ediyordu (ölçüldü) →
+    // `sha256_bayt` self-host'ta yanlış özet.
+    eğer metin_esit(ad, "INDEKS") {
+        değişken ib: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+        eğer metin_esit(dizi_al(p.a_ad, ib), "TANIMLAYICI") {
+            değişken iad: metin = dizi_al(p.a_deg, ib);
+            değişken iel: metin = cg_var_elem_bul(p, iad);
+            eğer metin_esit(iel, "i8") veya metin_esit(iel, "i16") {
+                ver cg_var_eisz_bul(p, iad);
+            }
+        }
+        ver 0;
     }
     // D-339 ÖLÇÜM: INDEKS (xs[i]) BİLEREK yok — C llvm.c'nin ÜÇ INDEKS dalı da
     // (heap kdl_dizi_al 3249, türetilmiş taban 3282, stack GEP+load 3318)
@@ -6873,6 +6897,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken frx: metin = bitcast_uret(p, rs, kes_tasiyici(elem), elem);
             p.son_tip = elem;
             ver frx;
+        }
+        // [D-714] dar eleman: i32 yuvadan okundu → eleman genişliğine daralt (C
+        // `dizi_dar_oku` aynası). D-708 bunu yalnız `için`e koymuştu; `xs[i]`
+        // i32 dönüyordu ve atamadaki `int_uydur` tesadüfen kurtarıyordu — yapı
+        // alanına doğrudan yazınca (`K { b: g[0] }`) `store i8 <i32>` = LLVM-RED.
+        eğer metin_esit(elem, "i8") veya metin_esit(elem, "i16") {
+            değişken drs: metin = int_uydur(p, rs, elem, 0);
+            p.son_tip = elem;
+            ver drs;
         }
         ver rs;
     }
