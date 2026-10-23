@@ -92,7 +92,8 @@
 - [x] D4a -> ZATEN YAPILMIS (textDocumentSync 2; CLAUDE.md D-431 olcumu).
 - [x] D4b -> D-434.
 - [x] D4c -> D-432.
-- [ ] D4d [M] LSP v3: rename (references ZATEN VAR — `references_yanitla`; olculdu D-715).
+- [x] D4d -> D-721. `textDocument/rename` (WorkspaceEdit). V1 guvenlik siniri: yalniz bu belgede
+      ust duzey tanimli ad; yeni ad lexer'la tek tanimlayici; ust duzey cakisma -> -32803 hata.
 - [ ] D4e [S] LSP v3: her biri icin JSON-RPC kapi testi.
 - [ ] D5a [S] `metin`/`dosya` EKSIK ISLEV ENVANTERI cikar (metin 36, dosya 17 islev
       VAR — "tamamlama" olculmeden is degil; D-639).

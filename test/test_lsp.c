@@ -582,6 +582,107 @@ static void test_references_islev(void) {
     fclose(cikti);
 }
 
+/* [D-721] LSP v3: rename — WorkspaceEdit; tanim + iki kullanim = 3 TextEdit. */
+static void test_rename_islev(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///x.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev say() -> tam32 { ver 0; } "
+        "i\\u015flev main() -> tam32 { ver say() + say(); }\"}}}");
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"textDocument/rename\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///x.kem\"},"
+        "\"position\":{\"line\":0,\"character\":62},\"newName\":\"\\u00e7ok\"}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    int ok = yanit_sayisi(y) == 4;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        LspYanit *yr = yanit_n(y, 2);
+        JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+        JsonDeger *ch = json_alan(json_alan(j, "result"), "changes");
+        JsonDeger *ed = ch ? json_alan(ch, "file:///x.kem") : NULL;
+        ok = ed && json_dizi_sayi(ed) == 3;
+        if (ok) {
+            int i;
+            for (i = 0; i < 3 && ok; i++) {
+                int nu = 0;
+                const char *nt = json_metin(json_alan(json_dizi_eleman(ed, i), "newText"), &nu);
+                /* "çok" UTF-8 = c3 a7 6f 6b (4 bayt) */
+                ok = nt && nu == 4 && memcmp(nt, "\xc3\xa7" "ok", 4) == 0 &&
+                     json_alan(json_dizi_eleman(ed, i), "range") != NULL;
+            }
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("rename: tanim + kullanimlar -> 3 TextEdit (Turkce yeni ad)", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
+/* [D-721] rename RED yollari: anahtar kelime / bosluklu ad / cakisma / yerlesik.
+ * Dordu de -32803 `error` donmeli, `result` DEGIL (sessiz yanlis duzenleme yok). */
+static void test_rename_red(void) {
+    FILE *girdi = tmpfile();
+    FILE *cikti = tmpfile();
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    /* "işlev say() -> tam32 { ver 0; } işlev main() -> tam32 { yazdir_tam(say()); ver 0; }" */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{"
+        "\"textDocument\":{\"uri\":\"file:///r.kem\",\"languageId\":\"kemgu\","
+        "\"version\":1,\"text\":"
+        "\"i\\u015flev say() -> tam32 { ver 0; } "
+        "i\\u015flev main() -> tam32 { yazdir_tam(say()); ver 0; }\"}}}");
+    const char *adlar[3] = { "e\\u011fer", "iki kelime", "main" };
+    int i;
+    for (i = 0; i < 3; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf,
+            "{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"textDocument/rename\","
+            "\"params\":{\"textDocument\":{\"uri\":\"file:///r.kem\"},"
+            "\"position\":{\"line\":0,\"character\":67},\"newName\":\"%s\"}}",
+            50 + i, adlar[i]);
+        mesaj_yaz(girdi, buf);
+    }
+    /* yerlesik `yazdir_tam` uzerinde (karakter 56) -> ust duzey tanim yok */
+    mesaj_yaz(girdi,
+        "{\"jsonrpc\":\"2.0\",\"id\":53,\"method\":\"textDocument/rename\","
+        "\"params\":{\"textDocument\":{\"uri\":\"file:///r.kem\"},"
+        "\"position\":{\"line\":0,\"character\":56},\"newName\":\"baska\"}}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}");
+    mesaj_yaz(girdi, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+    rewind(girdi);
+    lsp_server_calistir(girdi, cikti);
+    LspYanit *y = yanitlari_oku(cikti);
+    /* init + publishDiagnostics(didOpen) + 4 rename + shutdown */
+    int ok = yanit_sayisi(y) == 7;
+    if (ok) {
+        Arena *a = arena_olustur(0);
+        for (i = 2; i <= 5 && ok; i++) {
+            LspYanit *yr = yanit_n(y, i);
+            JsonDeger *j = json_ayrist(a, yr->govde, yr->content_length, NULL);
+            JsonDeger *e = json_alan(j, "error");
+            ok = e && json_tamsayi(json_alan(e, "code")) == -32803 &&
+                 json_alan(j, "result") == NULL;
+        }
+        arena_serbest(a);
+    }
+    test_sonuc("rename: anahtar kelime / bosluk / cakisma / yerlesik -> -32803", ok);
+    yanitlari_serbest(y);
+    fclose(girdi);
+    fclose(cikti);
+}
+
 /* LSP v3: references — tanimlayici olmayan konum -> null */
 static void test_references_bos(void) {
     FILE *girdi = tmpfile();
@@ -1226,6 +1327,8 @@ int main(void) {
     printf("\n--- LSP v3 (references) ---\n");
     test_references_islev();
     test_references_bos();
+    test_rename_islev();   /* D-721 */
+    test_rename_red();
 
     printf("\n--- LSP v3 (incremental sync) ---\n");
     test_incremental_aralik_degisimi();
