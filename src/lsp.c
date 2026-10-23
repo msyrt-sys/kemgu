@@ -667,6 +667,7 @@ static void initialize_yanitla(FILE *cikti, JsonDeger *istek) {
                  "\"completionProvider\":{\"triggerCharacters\":[\".\"]},"
                  "\"documentSymbolProvider\":true,"
                  "\"referencesProvider\":true,"
+                 "\"renameProvider\":true,"   /* D-721 */
                  /* D-432: semanticTokens (full). Legend SIRASI kritik —
                   * `data` icindeki tokenType INDEKSTIR, ad degil. */
                  "\"workspaceSymbolProvider\":true,"   /* D-434 */
@@ -885,6 +886,147 @@ static void references_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
     json_yaz(&y, "]}");
     mesaj_yaz(cikti, y.tampon, y.kullanilan);
     json_yazici_serbest(&y);
+}
+
+/* =========================================================================
+ * [D-721] textDocument/rename — WorkspaceEdit { changes: { uri: TextEdit[] } }.
+ * Konumlar `references` ile AYNI yoldan toplanir (tanim + kullanimlar).
+ *
+ * ⚠ GUVENLIK SINIRI (V1): references ad-tabanlidir (golgeleme ayirt edilmez);
+ * okumada zararsiz olan bu, DUZENLEMEDE kod bozar. Bu yuzden:
+ *   (1) yalniz BU belgede UST DUZEYDE tanimli bir ad yeniden adlandirilir
+ *       (yerlesik `yazdir_metin` ya da baska dosyadan gelen ad DEGIL);
+ *   (2) yeni ad TEK bir gecerli tanimlayici olmali (lexer'la olculur:
+ *       anahtar kelime, bosluk, noktalama reddedilir);
+ *   (3) yeni ad mevcut bir ust duzey adla CAKISMAMALI.
+ * Aksi halde RequestFailed (-32803) hata yaniti — sessiz yanlis duzenleme yok.
+ * Yalniz bu belge duzenlenir (references ile ayni kapsam). */
+typedef struct {
+    int *satir;
+    int *sutun;
+    int n;
+    int kap;
+    const char *ad;
+    int ad_uz;
+} RenKonum;
+
+static void ren_ekle(RenKonum *rk, int satir, int sutun) {
+    int i;
+    for (i = 0; i < rk->n; i++)
+        if (rk->satir[i] == satir && rk->sutun[i] == sutun) return;   /* tekillestir */
+    if (rk->n == rk->kap) {
+        int yk = rk->kap ? rk->kap * 2 : 16;
+        int *ys = (int *)realloc(rk->satir, sizeof(int) * (size_t)yk);
+        int *yu;
+        if (!ys) return;
+        rk->satir = ys;
+        yu = (int *)realloc(rk->sutun, sizeof(int) * (size_t)yk);
+        if (!yu) return;
+        rk->sutun = yu;
+        rk->kap = yk;
+    }
+    rk->satir[rk->n] = satir;
+    rk->sutun[rk->n] = sutun;
+    rk->n++;
+}
+
+static void ren_ziyaret(const Dugum *d, void *ctx) {
+    RenKonum *rk = (RenKonum *)ctx;
+    if (d->veri.tanimlayici.uzunluk != rk->ad_uz) return;
+    if (memcmp(d->veri.tanimlayici.metin, rk->ad, (size_t)rk->ad_uz) != 0) return;
+    ren_ekle(rk, d->satir, d->sutun);
+}
+
+/* Yeni ad TEK bir TOK_TANIMLAYICI mi? (lexer kurali — Turkce harfler dahil) */
+static int ren_gecerli_ad(const char *s, int uz) {
+    char *buf;
+    Lexer lx;
+    Token t1, t2;
+    int ok;
+    if (!s || uz <= 0) return 0;
+    buf = (char *)malloc((size_t)uz + 1);
+    if (!buf) return 0;
+    memcpy(buf, s, (size_t)uz);
+    buf[uz] = '\0';
+    lexer_baslat(&lx, buf, "rename");
+    t1 = lexer_sonraki_token(&lx);
+    t2 = lexer_sonraki_token(&lx);
+    ok = (t1.tip == TOK_TANIMLAYICI && t1.uzunluk == uz && t2.tip == TOK_DOSYA_SONU);
+    free(buf);
+    return ok;
+}
+
+static void ren_hata(FILE *cikti, JsonDeger *id, const char *mesaj) {
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"error\":{\"code\":-32803,\"message\":");
+    json_yaz_metin_lit(&y, mesaj);
+    json_yaz(&y, "}}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+}
+
+static void rename_yanitla(FILE *cikti, JsonDeger *istek, Belge *belge) {
+    JsonDeger *id = json_alan(istek, "id");
+    JsonDeger *params = json_alan(istek, "params");
+    JsonDeger *pos = params ? json_alan(params, "position") : NULL;
+    int yeni_uz = 0;
+    const char *yeni = params ? json_metin(json_alan(params, "newName"), &yeni_uz) : NULL;
+    int line_0 = 0, char_0 = 0;
+    if (pos) {
+        line_0 = (int)json_tamsayi(json_alan(pos, "line"));
+        char_0 = (int)json_tamsayi(json_alan(pos, "character"));
+    }
+    const Dugum *hedef = NULL;
+    if (belge && belge->prog) {
+        hedef = bul_tanimlayici_konum(belge->prog, line_0 + 1,
+            kemgu_sutun(belge, line_0, char_0));
+    }
+    if (!hedef || !belge->uri) { ren_hata(cikti, id, "imlecte yeniden adlandirilabilir ad yok"); return; }
+    const char *ad = hedef->veri.tanimlayici.metin;
+    int ad_uz = hedef->veri.tanimlayici.uzunluk;
+    BelgeSembol *sem = belge_sembol_bul(belge, ad, ad_uz);
+    if (!sem) { ren_hata(cikti, id, "yalniz bu belgede ust duzeyde tanimli adlar yeniden adlandirilabilir"); return; }
+    if (!ren_gecerli_ad(yeni, yeni_uz)) { ren_hata(cikti, id, "yeni ad gecerli bir tanimlayici degil"); return; }
+    if (belge_sembol_bul(belge, yeni, yeni_uz)) { ren_hata(cikti, id, "yeni ad mevcut bir ust duzey adla cakisiyor"); return; }
+
+    RenKonum rk;
+    memset(&rk, 0, sizeof rk);
+    rk.ad = ad;
+    rk.ad_uz = ad_uz;
+    ren_ekle(&rk, sem->satir, sem->sutun);
+    id_gez(belge->prog, ren_ziyaret, &rk);
+
+    char *yeni_z = (char *)malloc((size_t)yeni_uz + 1);
+    if (!yeni_z) { free(rk.satir); free(rk.sutun); ren_hata(cikti, id, "bellek"); return; }
+    memcpy(yeni_z, yeni, (size_t)yeni_uz);
+    yeni_z[yeni_uz] = '\0';
+
+    JsonYazici y;
+    json_yazici_baslat(&y);
+    json_yaz(&y, "{\"jsonrpc\":\"2.0\",\"id\":");
+    if (id && id->tip == JSON_TAMSAYI) json_yaz_int(&y, id->veri.tamsayi);
+    else json_yaz(&y, "null");
+    json_yaz(&y, ",\"result\":{\"changes\":{");
+    json_yaz_metin_lit(&y, belge->uri);
+    json_yaz(&y, ":[");
+    for (int i = 0; i < rk.n; i++) {
+        if (i > 0) json_yaz(&y, ",");
+        json_yaz(&y, "{");
+        ds_range_yaz(&y, belge, "range", rk.satir[i], rk.sutun[i], ad, ad_uz);
+        json_yaz(&y, ",\"newText\":");
+        json_yaz_metin_lit(&y, yeni_z);
+        json_yaz(&y, "}");
+    }
+    json_yaz(&y, "]}}}");
+    mesaj_yaz(cikti, y.tampon, y.kullanilan);
+    json_yazici_serbest(&y);
+    free(yeni_z);
+    free(rk.satir);
+    free(rk.sutun);
 }
 
 /* === documentSymbol (LSP v3) ===
@@ -1445,6 +1587,8 @@ int lsp_server_calistir(FILE *girdi, FILE *cikti) {
                         documentsymbol_yanitla(cikti, istek, belge);
                     } else if (strcmp(yontem, "textDocument/references") == 0) {
                         references_yanitla(cikti, istek, belge);
+                    } else if (strcmp(yontem, "textDocument/rename") == 0) {
+                        rename_yanitla(cikti, istek, belge);   /* D-721 */
                     } else if (strcmp(yontem, "textDocument/semanticTokens/full") == 0) {
                         semantictokens_yanitla(cikti, istek, belge);   /* D-432 */
                     }
