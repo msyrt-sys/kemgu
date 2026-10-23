@@ -1,0 +1,23 @@
+// [D-720] yetki_olustur / delege CP004 (C Capability V1 intrinsikleri). Öncesinde
+// self-host yalnız geri_al'ı denetliyordu; aşağıdaki yedi ihlal SESSİZ geçiyordu.
+// Ardından gelen CP005'ler (hatalı bağlamalar tüketilmedi) de C ile birebir.
+// POZİTİF blok (iyi) TEMİZ olmalı.
+işlev f(x: tam32) -> tam32 {
+    değişken a: yetki<Dosya> = yetki_olustur(1);
+    değişken b: yetki<Dosya> = yetki_olustur(x, 0);
+    değişken c: yetki<Dosya> = yetki_olustur(9, 0);
+    değişken d: yetki<Dosya> = yetki_olustur(1, "s");
+    değişken e: yetki<Dosya> = delege(5, 0);
+    değişken g: yetki<Dosya> = yetki_olustur(1, 0);
+    değişken h: yetki<Dosya> = delege(g, "x");
+    değişken i: yetki<Dosya> = delege(g);
+    geri_al(d); geri_al(h); geri_al(g);
+    ver 0;
+}
+işlev iyi() -> tam32 {
+    değişken g: yetki<Dosya> = yetki_olustur(1, 7);
+    değişken h: yetki<Dosya> = delege(g, 3);
+    geri_al(h); geri_al(g);
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

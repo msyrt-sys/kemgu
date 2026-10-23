@@ -11673,6 +11673,33 @@ işlev soket_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer bilinen_tamsayi_degil(ifade_tip(p, a2, "?")) { sekil_hata(p, a2, "MM003"); }
     ver yanlış;
 }
+// [D-720] `yetki_olustur` / `delege` CP004 — C tip_kontrol.c Capability V1
+// intrinsikleri aynası. Self-host yalnız `geri_al`ı denetliyordu; `yetki_olustur(1)`
+// (arite), `yetki_olustur(x, 0)` (kaynak sabit değil), `yetki_olustur(9, 0)`
+// (bilinmeyen kaynak), `delege(5, 0)` (yetki değil) ve tamsayı olmayan izin
+// SESSİZCE geçiyordu. C sırası ve erken dönüşleri birebir: arite/kaynak/yetki
+// hatası argüman gezintisini keser; izin hatası kesmez (izin ÖNCE gezilir).
+işlev yetki_olustur_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    değişken yo: mantıksal = metin_esit(fad, "yetki_olustur");
+    değişken dl: mantıksal = metin_esit(fad, "delege");
+    eğer (yo veya dl) == yanlış { ver yanlış; }
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
+    eğer n != 2 { sekil_hata(p, idx, "CP004"); ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
+    değişken a1: tam32 = dizi_al(p.cocuk, cb + 2);
+    eğer yo {
+        eğer metin_esit(dizi_al(p.a_ad, a0), "TAM") == yanlış { sekil_hata(p, a0, "CP004"); ver doğru; }
+        değişken kt: tam64 = lit_deger(dizi_al(p.a_deg, a0));
+        eğer (kt < 1) veya (kt > 6) { sekil_hata(p, a0, "CP004"); ver doğru; }
+    } değilse {
+        kontrol_dugum(p, a0);
+        eğer kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "CP004"); ver doğru; }
+    }
+    kontrol_dugum(p, a1);
+    eğer bilinen_tamsayi_degil(ifade_tip(p, a1, "?")) { sekil_hata(p, a1, "CP004"); }
+    ver doğru;
+}
 işlev cp004_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer metin_esit(fad, "geri_al") == yanlış { ver yanlış; }
     değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
@@ -13651,6 +13678,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             // ÖNCE özel-case eder; hata varsa erken döner).
             eğer mmio_kontrol(p, idx, fad) { ver 0; }
             eğer soket_kontrol(p, idx, fad) { ver 0; }   // [D-466]
+            eğer yetki_olustur_kontrol(p, idx, fad) { ver 0; }   // [D-720]
             eğer cp004_kontrol(p, idx, fad) { ver 0; }
             eğer drf_cagri_kontrol(p, idx, fad) { ver 0; }   // D-366
             eğer ct_cagri_kontrol(p, idx, fad) { ver 0; }    // D-367 CT005/CT007
