@@ -1,0 +1,12 @@
+// [D-718] DOSYA modülü üyesine nitelikli çağrı (`mat::topla(..)`). Öncesinde
+// self-host bu çağrılarda T010 / T001'in hiçbirini vermiyordu (C veriyordu):
+// checker.kem dosya modülünün imzalarını hiç taşımıyordu (D-429 yalnız
+// codegen.kem'deydi) ve iki uygulamada da nitelikli anahtar (`mat.topla`) yoktu.
+// POZİTİF satır (`c`) temiz kalmalı.
+kullan mat;
+işlev main() -> tam32 {
+    değişken a: tam32 = mat::topla(1);       // T010
+    değişken b: metin = mat::topla(1, 2);    // T001 (dönüş)
+    değişken c: tam32 = mat::topla(20, 22);
+    ver c;
+}

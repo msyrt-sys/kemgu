@@ -72,8 +72,11 @@
 - [x] D1f -> D-715 + D-716. Self-host YOL cagrisi (`m::f(..)`, `m::ic::h(..)`) ve YOL turbofish
       (`m::f::<T>(..)`): T010, arguman T001, donus T001, T044 C ile birebir (nitelikli imza +
       generic kaydi `m.f`; ayni adli islev iki modulde dogru cozuluyor). Fikstur tc57 + tc58.
-      KALAN (ayri, kucuk): dosya modulu (`kullan a::b` -> `b::f`) uyeleri nitelikli
-      kaydedilmiyor -> orada tani yok (sahte tani da yok).
+      Dosya modulu (`kullan mat; mat::topla(..)`) D-718'de kapandi (checker.kem'e D-429 portu
+      dahil). Yol ustunde D-719: atilan DOGRUDAN lineer donus (`yap();`, K lineer yapi /
+      tekkez / yetki) self-host'ta L001 almiyordu.
+- [x] D1h -> D-720 (#144). Self-host `yetki_olustur` / `delege` CP004 denetimleri yoktu (yalniz
+      `geri_al`): arite, kaynak sabit degil / bilinmeyen, yetki degil, izin tamsayi degil. Fikstur tc60.
 - [x] D1g -> D-717. Literal dizi argumani: `ilk<T>(xs: Dizi<T>)` + `ilk([2^33])` IKI derleyicide
       `@ilk$i32` + `i32 8589934592` (sessiz yanlis) idi -> artik baglamsiz literal kurali (D-630):
       `@ilk$i64`. Self-host'ta generic OLMAYAN `f(xs: Dizi<tam64>)` + `[2^33]` da duzeldi (param
