@@ -96,7 +96,8 @@ cg_rho_sahip_confined cg_rho_sahip_kacis cg_kanal_omru"
 #      `kimlik$i32/$i64`); fark yalnız self'in taban gövdeleri.
 MUAF_K4="cg_generic_mono cg_generic_sonuc_ptr cg_modul_alias cg_modul_capraz
 cg_modul_generic cg_modul_transitif cgmodul_mat cgmodul_zincir
-cg_metin_esitlik_generic cg_birim_deger cg_generic_dizi_cikarsama cg_generic_yapi_deger cg_ic_ice_generic_yapi cg_turbofish"
+cg_metin_esitlik_generic cg_birim_deger cg_generic_dizi_cikarsama cg_generic_yapi_deger cg_ic_ice_generic_yapi cg_turbofish
+cg_dizi_literal_cikarsama"   # [D-717] taban `ilk`/`ikinci`; specialization (`ilk$i64`) BİREBİR
 
 MUAF="$MUAF_K1 $MUAF_K2 $MUAF_K3 $MUAF_K4"
 muaf_mi() { case " $(echo $MUAF) " in *" $1 "*) return 0;; esac; return 1; }
