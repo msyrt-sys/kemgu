@@ -4750,6 +4750,19 @@ işlev islev_donus_lin(p: &değişken Ayr, idx: tam32) -> metin {
                 eğer metin_uzunluk(kad) == 0 { ver ""; }
                 eğer lineer_yapi_mi(p, kad) { ver kad; }
             }
+            // [D-719] DOĞRUDAN lineer dönüş (`-> K` lineer yapı, `-> tekkez<T>`,
+            // `-> yetki<R>`). `!` öneki: değer BAĞLANMAZSA sızar (D-467 kuralı
+            // uzunluğa bakar → L001), ama `sonuç`/`seçimlik` başarı kolu DEĞİLDİR
+            // (eşleş okuyucusu `!`yi atlar). Öncesinde yalnız sarılı biçim
+            // tanınıyordu → `yap();` self-host'ta sessizce sızıyordu (C L001).
+            eğer metin_esit(ca, "TIP_TEKKEZ") { ver "!tekkez"; }
+            eğer metin_esit(ca, "TIP_YETKI") { ver "!yetki"; }
+            değişken dad: metin = "";
+            eğer metin_esit(ca, "TIP_BASIT") { dad = dizi_al(p.a_deg, c); }
+            eğer metin_esit(ca, "TIP_KULLANICI") ve (dizi_al(p.a_cs, c) > 0) {
+                dad = dizi_al(p.a_deg, dizi_al(p.cocuk, dizi_al(p.a_cb, c)));
+            }
+            eğer (metin_uzunluk(dad) > 0) ve lineer_yapi_mi(p, dad) { ver metin_birlestir("!", dad); }
             ver "";
         }
         i = i + 1;
@@ -4802,7 +4815,9 @@ işlev desen_bagla_tip(p: &değişken Ayr, des: tam32, st: metin, skr: tam32) ->
             eğer metin_esit(dizi_al(p.a_ad, skr), "CAGRI") {
                 değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, skr));
                 eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") {
-                    eğer metin_uzunluk(fn_rlin_bul(p, dizi_al(p.a_deg, h))) > 0 {
+                    değişken rl: metin = fn_rlin_bul(p, dizi_al(p.a_deg, h));
+                    // [D-719] `!` = doğrudan lineer dönüş, başarı kolu değil → atla.
+                    eğer (metin_uzunluk(rl) > 0) ve (metin_baslar(rl, "!") == yanlış) {
                         lin_ekle(p, bad, 0, 0);
                     }
                 }

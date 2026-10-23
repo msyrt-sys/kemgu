@@ -1,0 +1,25 @@
+// [D-719] ATILAN DOĞRUDAN LİNEER DÖNÜŞ. D-467'nin "atılan lineer değer" kuralı
+// self-host'ta yalnız `sonuç<K,..>`/`seçimlik<K>` SARILI dönüşü tanıyordu;
+// `-> K` (lineer yapı), `-> tekkez<T>`, `-> yetki<R>` dönen bir çağrının sonucu
+// ifade-deyimi olarak atılınca SESSİZCE sızıyordu (C üçünde de L001).
+yapı tekkez K { a: tam32; }
+yapı N { a: tam32; }
+işlev yap() -> K { ver K { a: 1 }; }
+işlev t() -> tekkez<tam32> { ver tekkez_olustur(5); }
+işlev y() -> yetki<Dosya> { ver yetki_olustur(1, 0); }
+işlev n() -> N { ver N { a: 1 }; }
+işlev kotu() -> tam32 {
+    yap();     // L001
+    t();       // L001
+    y();       // L001
+    ver 0;
+}
+// POZİTİF: lineer olmayan dönüşü atmak serbest; bağlanıp tüketilen lineer temiz.
+işlev iyi() -> tam32 {
+    n();
+    değişken k: K = yap();
+    imha(k);
+    değişken v: tekkez<tam32> = t();
+    ver kullan(v);
+}
+işlev main() -> tam32 { ver 0; }
