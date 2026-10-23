@@ -1,0 +1,32 @@
+// [D-717] Literal dizi ARGÜMANINDA eleman tipi. Ölçülen kusurlar:
+// (1) İKİ derleyicide: `ilk<T>(xs: Dizi<T>)` + `ilk([8589934592])` → T i32
+//     çıkarsanıyor, `@ilk$i32` + `i32 8589934592` → SESSİZ YANLIŞ (exit 1).
+//     Doğrusu bağlamsız literal kuralı (D-630): i32'ye sığmayan → tam64.
+// (2) Yalnız self-host: generic OLMAYAN `duz(xs: Dizi<tam64>)` + `[2^33]` →
+//     parametre tipi literal diziye hiç aktarılmıyordu (i32 dizi).
+// Her şekil ayrı bit; hepsi doğruysa 42.
+işlev ilk<T>(xs: Dizi<T>) -> T { ver dizi_al(xs, 0); }
+işlev duz(xs: Dizi<tam64>) -> tam64 { ver dizi_al(xs, 0); }
+işlev ikinci<T>(xs: Dizi<T>) -> T { ver dizi_al(xs, 1); }
+işlev main() -> tam32 {
+    değişken hatalar: tam32 = 0;
+    değişken a: tam64 = ilk([8589934592]);
+    eğer a != 8589934592 { hatalar = hatalar + 1; }
+    değişken b: tam64 = duz([8589934592]);
+    eğer b != 8589934592 { hatalar = hatalar + 2; }
+    // iki büyük eleman, ikincisi okunur
+    değişken c: tam64 = ikinci([8589934592, 8589934593]);
+    eğer c != 8589934593 { hatalar = hatalar + 4; }
+    // POZİTİF: küçük literal → tam32 kalır (eski davranış bozulmadı).
+    değişken d: tam32 = ilk([40]);
+    eğer d != 40 { hatalar = hatalar + 8; }
+    // POZİTİF: kesirli literal dizi.
+    değişken e: kesirli64 = ilk([2.5]);
+    eğer e != 2.5 { hatalar = hatalar + 16; }
+    // POZİTİF: turbofish yolu (D-711) etkilenmedi.
+    değişken f: tam64 = ilk::<tam64>([8589934594]);
+    eğer f != 8589934594 { hatalar = hatalar + 32; }
+    eğer hatalar == 0 { ver 42; }
+    yazdir_tam64(hatalar olarak tam64);
+    ver 1;
+}
