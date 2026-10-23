@@ -3333,6 +3333,65 @@ static const char *generic_param_beklenen(LlvmGen *g, const Dugum *d,
     return ast_tip_to_ir(g, ppt);
 }
 
+/* [D-717] Literal dizi argumaninin DOGAL eleman tipi: elemanlarin HEPSI tamsayi
+ * literali ise baglamsiz literal kuraliyla (D-630) -- herhangi biri i32'ye
+ * sigmiyorsa "i64", degilse "i32"; hepsi kesirli literali ise "double"; aksi
+ * (degisken, karisik, bos) NULL = bilinmiyor (eski davranis, default-DENY).
+ * Iki cagiran: monomorfizasyon cikarsamasi (Dizi<T> param) ve arguman
+ * uretimindeki gecici T ikamesi -- ayni soru iki yerde AYRI yanitlanmasin
+ * (D-407). Olculen kusur: `ilk<T>(xs: Dizi<T>)` + `ilk([8589934592])` IKI
+ * derleyicide `@ilk$i32` + `i32 8589934592` -> exit 1 (sessiz yanlis cevap). */
+static const char *dizi_literal_dogal_eleman(const Dugum *lit) {
+    int i, tam = 0, kes = 0, genis = 0;
+    if (!lit || lit->tip != DUGUM_DIZI_OLUSTUR || lit->veri.dizi_olustur.sayi <= 0)
+        return NULL;
+    for (i = 0; i < lit->veri.dizi_olustur.sayi; i++) {
+        const Dugum *e = lit->veri.dizi_olustur.elemanlar[i];
+        if (!e) return NULL;
+        if (e->tip == DUGUM_TAM) {
+            uint64_t lv;
+            memcpy(&lv, &e->veri.tam.deger, sizeof lv);
+            tam++;
+            if (lv > 2147483647ULL) genis = 1;
+        } else if (e->tip == DUGUM_KESIRLI) {
+            kes++;
+        } else {
+            return NULL;
+        }
+    }
+    if (tam > 0 && kes == 0) return genis ? "i64" : "i32";
+    if (kes > 0 && tam == 0) return "double";
+    return NULL;
+}
+
+/* [D-717] Turbofish'SIZ generic cagrida literal dizi argumani: `xs: Dizi<T>`
+ * parametresinin T'sini literalin DOGAL eleman tipine gecici olarak ikame et
+ * (turbofish_subst_it'in aynasi). Eski substler'i doner. */
+static TipSubst *literal_dizi_subst_it(LlvmGen *g, const Dugum *islevd,
+                                       int pi, const Dugum *lit) {
+    TipSubst *eski = g->substler;
+    const char *dogal = dizi_literal_dogal_eleman(lit);
+    if (!dogal || !islevd || pi >= islevd->veri.islev.param_sayi) return eski;
+    const Dugum *pp = islevd->veri.islev.parametreler[pi];
+    const Dugum *pt = pp ? pp->veri.parametre.tip : NULL;
+    if (!pt || pt->tip != DUGUM_TIP_DIZI || !pt->veri.tip_dizi.eleman_tip ||
+        pt->veri.tip_dizi.eleman_tip->tip != DUGUM_TIP_BASIT) return eski;
+    const Dugum *et = pt->veri.tip_dizi.eleman_tip;
+    for (int ti = 0; ti < islevd->veri.islev.tip_param_sayi; ti++) {
+        const char *tp = islevd->veri.islev.tip_paramlar[ti];
+        if ((int)strlen(tp) == et->veri.tip_basit.ad_uzunluk &&
+            memcmp(tp, et->veri.tip_basit.ad, strlen(tp)) == 0) {
+            TipSubst *ts = (TipSubst *)arena_ayir_sifir(g->arena, sizeof(TipSubst));
+            if (!ts) return eski;
+            ts->ad = tp; ts->ad_uz = (int)strlen(tp); ts->ir = dogal; ts->metin_mi = 0;
+            ts->sonraki = g->substler;
+            g->substler = ts;
+            return eski;
+        }
+    }
+    return eski;
+}
+
 /* Generic islev cagrisini specialize edip emit et. ALREADY-EVALUATED args
  * alir (her iki yol da kendi beklenen-baglamiyla evaluate eder). gislev =
  * generic islev AST (ad modul-nitelikli olabilir); donus = taban donus IR
@@ -3420,6 +3479,12 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
                     if (vi && vi->eleman_llvm_tip) {
                         inferred = vi->eleman_llvm_tip;
                     }
+                }
+                /* [D-717] literal dizi argumani: dogal eleman tipi. */
+                if (!inferred && et->veri.tip_basit.ad_uzunluk == tp_uz &&
+                    memcmp(et->veri.tip_basit.ad, tp, (size_t)tp_uz) == 0 &&
+                    arg_d && arg_d->tip == DUGUM_DIZI_OLUSTUR) {
+                    inferred = dizi_literal_dogal_eleman(arg_d);
                 }
             }
             /* [D-536] (d) `k: Kutu<T>` param — DEGER olarak generic yapi.
@@ -5754,6 +5819,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         d->veri.cagri.argumanlar[i] &&
                         d->veri.cagri.argumanlar[i]->tip == DUGUM_DIZI_OLUSTUR) {
                         tf_eski = turbofish_subst_it(g, d, ik->ast);
+                        /* [D-717] turbofish YOKSA literalin dogal eleman tipi. */
+                        if (g->substler == tf_eski && d->veri.cagri.tip_arg_sayi == 0) {
+                            tf_eski = literal_dizi_subst_it(g, ik->ast, i,
+                                d->veri.cagri.argumanlar[i]);
+                        }
                     }
                     args[i] = ifade_uret(g, d->veri.cagri.argumanlar[i], bekle);
                     g->substler = tf_eski;

@@ -3453,6 +3453,66 @@ işlev tf_subst_it(p: &değişken Ayr, fname: metin, acik: Dizi<metin>) -> tam32
     eğer gi != dizi_boyut(acik) { subst_kapat(p, bas); ver 0 - 1; }
     ver bas;
 }
+// [D-717] Literal dizinin DOĞAL eleman IR'ı — C `dizi_literal_dogal_eleman`
+// aynası: hepsi tamsayı literali → herhangi biri i32'ye sığmıyorsa "i64",
+// değilse "i32"; hepsi kesirli → "double"; aksi "" (bilinmiyor, eski davranış).
+işlev dizi_lit_dogal(p: &değişken Ayr, n: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, n), "DIZI_OLUSTUR") == yanlış { ver ""; }
+    değişken cs: tam32 = dizi_al(p.a_cs, n);
+    eğer cs <= 0 { ver ""; }
+    değişken cb: tam32 = dizi_al(p.a_cb, n);
+    değişken tam: tam32 = 0;
+    değişken kes: tam32 = 0;
+    değişken genis: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < cs {
+        değişken e: tam32 = dizi_al(p.cocuk, cb + i);
+        değişken ea: metin = dizi_al(p.a_ad, e);
+        eğer metin_esit(ea, "TAM") {
+            tam = tam + 1;
+            değişken v: tam64 = lit_deger(dizi_al(p.a_deg, e));
+            eğer (v > 2147483647) veya (v < 0) { genis = 1; }   // <0: ≥2^63 doyması
+        } değilse {
+            eğer metin_esit(ea, "KESIRLI") { kes = kes + 1; } değilse { ver ""; }
+        }
+        i = i + 1;
+    }
+    eğer (tam > 0) ve (kes == 0) {
+        eğer genis == 1 { ver "i64"; }
+        ver "i32";
+    }
+    eğer (kes > 0) ve (tam == 0) { ver "double"; }
+    ver "";
+}
+// [D-717] `ad` fname'in generic tip parametresi mi (tp_yad/tp_ad kaydı)?
+işlev fn_tip_param_mi(p: &değişken Ayr, fname: metin, ad: metin) -> mantıksal {
+    değişken bare: metin = nokta_son(fname);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.tp_yad) {
+        eğer metin_esit(dizi_al(p.tp_yad, i), bare) ve metin_esit(dizi_al(p.tp_ad, i), ad) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// [D-717] Literal dizi ARGÜMANININ eleman bağlamı. Turbofish varsa D-711 yolu.
+// Yoksa: parametre `Dizi<E>` ve E bu işlevin generic paramı → literalin doğal
+// tipi; E somutsa → bildirilen E (`duz(xs: Dizi<tam64>)`). Öncesinde turbofish'siz
+// her çağrıda bağlam YOKTU → `duz([8589934592])` self-host'ta `i32` dizi kuruyordu
+// (C `kdl_dizi_ekle_tam64`), ölçüldü: exit 1.
+işlev dizi_arg_elem_baglam(p: &değişken Ayr, idx: tam32, fname: metin, j: tam32, arg: tam32) -> metin {
+    eğer dizi_boyut(tf_acik_ir(p, idx)) > 0 { ver tf_param_elem(p, idx, fname, j); }
+    değişken fn: tam32 = fn_dugum_bul(p, fname);
+    eğer fn < 0 { ver ""; }
+    değişken ptn: tam32 = fn_param_tip_dugum(p, fn, j);
+    eğer ptn < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, ptn), "TIP_DIZI") == yanlış { ver ""; }
+    eğer dizi_al(p.a_cs, ptn) < 1 { ver ""; }
+    değişken en: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, ptn));
+    eğer metin_esit(dizi_al(p.a_ad, en), "TIP_BASIT") {
+        eğer fn_tip_param_mi(p, fname, dizi_al(p.a_deg, en)) { ver dizi_lit_dogal(p, arg); }
+    }
+    ver ll_tip(p, en);
+}
 // [D-711 turbofish] j'inci parametre `Dizi<E>` ise E'nin IR'ı, açık argümanlar
 // İKAME edilmiş halde ("" = turbofish yok / Dizi değil). Literal dizi argümanı
 // (`ilk::<tam64>([8589934592])`) bu elemanla kurulur; aksi hâlde DIZI_OLUSTUR
@@ -6297,7 +6357,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // [D-711 turbofish] literal dizi argümanı → açık argümanlı `Dizi<E>` elemanı.
             eğer kullanici == 1 {
                 eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb + i)), "DIZI_OLUSTUR") {
-                    değişken tfe: metin = tf_param_elem(p, idx, fname, i - 1);
+                    değişken tfe: metin = dizi_arg_elem_baglam(p, idx, fname, i - 1, dizi_al(p.cocuk, cb + i));   // [D-717]
                     eğer metin_esit(tfe, "") == yanlış { p.beklenen_elem = tfe; }
                 }
             }
@@ -6341,7 +6401,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             değişken aan: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + i);
             eğer metin_esit(dizi_al(p.a_ad, aan), "TANIMLAYICI") {
                 dizi_ekle(arge, cg_var_elem_bul(p, dizi_al(p.a_deg, aan)));
-            } değilse { dizi_ekle(arge, ""); }
+            } değilse { dizi_ekle(arge, dizi_lit_dogal(p, aan)); }   // [D-717] literal dizi
             i = i + 1;
         }
         // D-401: GENERIC İŞLEV MONOMORFİZASYONU. Burada yapılmalı — T argüman IR
@@ -11686,6 +11746,33 @@ işlev soket_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer bilinen_tamsayi_degil(ifade_tip(p, a2, "?")) { sekil_hata(p, a2, "MM003"); }
     ver yanlış;
 }
+// [D-720] `yetki_olustur` / `delege` CP004 — C tip_kontrol.c Capability V1
+// intrinsikleri aynası. Self-host yalnız `geri_al`ı denetliyordu; `yetki_olustur(1)`
+// (arite), `yetki_olustur(x, 0)` (kaynak sabit değil), `yetki_olustur(9, 0)`
+// (bilinmeyen kaynak), `delege(5, 0)` (yetki değil) ve tamsayı olmayan izin
+// SESSİZCE geçiyordu. C sırası ve erken dönüşleri birebir: arite/kaynak/yetki
+// hatası argüman gezintisini keser; izin hatası kesmez (izin ÖNCE gezilir).
+işlev yetki_olustur_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    değişken yo: mantıksal = metin_esit(fad, "yetki_olustur");
+    değişken dl: mantıksal = metin_esit(fad, "delege");
+    eğer (yo veya dl) == yanlış { ver yanlış; }
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
+    eğer n != 2 { sekil_hata(p, idx, "CP004"); ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
+    değişken a1: tam32 = dizi_al(p.cocuk, cb + 2);
+    eğer yo {
+        eğer metin_esit(dizi_al(p.a_ad, a0), "TAM") == yanlış { sekil_hata(p, a0, "CP004"); ver doğru; }
+        değişken kt: tam64 = lit_deger(dizi_al(p.a_deg, a0));
+        eğer (kt < 1) veya (kt > 6) { sekil_hata(p, a0, "CP004"); ver doğru; }
+    } değilse {
+        kontrol_dugum(p, a0);
+        eğer kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "CP004"); ver doğru; }
+    }
+    kontrol_dugum(p, a1);
+    eğer bilinen_tamsayi_degil(ifade_tip(p, a1, "?")) { sekil_hata(p, a1, "CP004"); }
+    ver doğru;
+}
 işlev cp004_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     eğer metin_esit(fad, "geri_al") == yanlış { ver yanlış; }
     değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
@@ -13666,6 +13753,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             // ÖNCE özel-case eder; hata varsa erken döner).
             eğer mmio_kontrol(p, idx, fad) { ver 0; }
             eğer soket_kontrol(p, idx, fad) { ver 0; }   // [D-466]
+            eğer yetki_olustur_kontrol(p, idx, fad) { ver 0; }   // [D-720]
             eğer cp004_kontrol(p, idx, fad) { ver 0; }
             eğer drf_cagri_kontrol(p, idx, fad) { ver 0; }   // D-366
             eğer ct_cagri_kontrol(p, idx, fad) { ver 0; }    // D-367 CT005/CT007

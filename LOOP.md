@@ -75,12 +75,13 @@
       Dosya modulu (`kullan mat; mat::topla(..)`) D-718'de kapandi (checker.kem'e D-429 portu
       dahil). Yol ustunde D-719: atilan DOGRUDAN lineer donus (`yap();`, K lineer yapi /
       tekkez / yetki) self-host'ta L001 almiyordu.
-- [ ] D1h [S] ACIK — D-719 olcumunde goruldu: `ver yetki_olustur(1)` (arite hatasi, islev
-      govdesinde) C CP004, self-host sessiz. Olculmedi: kural yalniz bazi konumlarda mi sorulmuyor.
-- [ ] D1g [S] ACIK — D-711'de OLCULDU: turbofish'SIZ `ilk<T>(xs: Dizi<T>)` + `ilk([2^33])`
-      T'yi literalden cikaramaz -> `$i32`, IKI derleyicide exit 1 (sessiz yanlis). Ayrica
-      self-host'ta GENERIC OLMAYAN `f(xs: Dizi<tam64>)` + literal `[2^33]` -> exit 1 (C 42)
-      — ayri gorev cipi acildi (task_825441de).
+- [x] D1h -> D-720 (#144). Self-host `yetki_olustur` / `delege` CP004 denetimleri yoktu (yalniz
+      `geri_al`): arite, kaynak sabit degil / bilinmeyen, yetki degil, izin tamsayi degil. Fikstur tc60.
+- [x] D1g -> D-717. Literal dizi argumani: `ilk<T>(xs: Dizi<T>)` + `ilk([2^33])` IKI derleyicide
+      `@ilk$i32` + `i32 8589934592` (sessiz yanlis) idi -> artik baglamsiz literal kurali (D-630):
+      `@ilk$i64`. Self-host'ta generic OLMAYAN `f(xs: Dizi<tam64>)` + `[2^33]` da duzeldi (param
+      tipi literal diziye aktariliyor). Yan kazanc: `ilk([2.5])` iki derleyicide LINK-RED idi.
+      Fikstur cg_dizi_literal_cikarsama (6 sekil). task_825441de karti bununla ortusuyor.
 - [ ] D2a [M] Kabiliyet odunc alma: omur kurali (kime, ne kadar).
 - [ ] D2b [M] Kabiliyet odunc: checker zorlamasi (yeni hata kodu).
 - [ ] D2c [M] Kabiliyet odunc: codegen.
