@@ -1,0 +1,31 @@
+// [D-723] satıriçi_asm OPERAND TİP DENETİMİ (C5) — self-host'ta hiç yoktu. Çıktı:
+// tanımsız (T002), değişken değil (T022: işlev, sabit), kopyalanamaz (AS002: metin,
+// kesirli64, Dizi, alan metin), lineer (AS002: tekkez); girdi AS002 (metin, tekkez).
+// Son iki asm POZİTİF (düz değişken ve yapı alanı) — TEMİZ kalmalı. Konak arm64
+// değilse iki tarafta da AS001 eklenir (parite korunur).
+yapı R { a: tam32; m: metin; }
+sabit SB: tam32 = 3;
+işlev f() -> tam32 { ver 0; }
+işlev main() -> tam32 {
+    değişken s: tam32 = 0;
+    değişken me: metin = "x";
+    değişken ke: kesirli64 = 1.5;
+    değişken te: tekkez<tam32> = tekkez_olustur(1);
+    değişken di: Dizi<tam32> = [1];
+    değişken r: R = R { a: 1, m: "y" };
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &yok) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &f) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &SB) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &me) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &ke) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &te) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &di) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &r.m) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# girdi("r", me) }
+        satıriçi_asm { mimari: arm64 şablon: r#"nop"# girdi("r", te) }
+        satıriçi_asm { mimari: arm64 şablon: r#"mov $0, $1"# çıktı("=r", &s) girdi("r", s) }
+        satıriçi_asm { mimari: arm64 şablon: r#"mov $0, $1"# çıktı("=r", &r.a) girdi("r", r.a) }
+    }
+    ver kullan(te) + s;
+}
