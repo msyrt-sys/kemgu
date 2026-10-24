@@ -391,7 +391,10 @@ struct Dugum {
             const char *sablon;  int sablon_uz;   /* asm template (zorunlu) */
             /* çıktı("kısıt", &ad): her çıktı bir &değişken lvalue'ya yazar */
             char **cikti_kisitlar; int *cikti_kisit_uzlar;
-            char **cikti_adlar;    int *cikti_ad_uzlar;
+            char **cikti_adlar;    int *cikti_ad_uzlar;   /* KÖK değişken adı */
+            /* [D-722] çıktı hedefi İFADE düğümü: TANIMLAYICI ya da ERISIM
+             * zinciri (`&r.deger`, `&a.b.c`). cikti_adlar kökün adıdır. */
+            Dugum **cikti_hedefler;
             int cikti_sayi;
             /* girdi("kısıt", ifade) */
             char **girdi_kisitlar; int *girdi_kisit_uzlar;

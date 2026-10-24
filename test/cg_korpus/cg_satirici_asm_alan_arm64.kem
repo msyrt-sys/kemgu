@@ -1,0 +1,27 @@
+// [D-722] satıriçi_asm ÇIKTISI bir YAPI ALANINA (`&r.deger`, iç içe `&r.ic.v`).
+// Öncesinde C P269 ile reddediyordu (çıktı hedefi yalnız ad); self-host ise
+// zinciri hiç ayrıştırmıyordu. Ayırt edici: 2^33 (tam64 alan, i32'ye sığmaz),
+// iç içe alan, komşu alan (`r.a`) BOZULMAMALI, düz değişken çıktısı (pozitif).
+// İkizi: cg_satirici_asm_alan.kem — harness konağa göre seçer.
+yapı Ic { v: tam32; }
+yapı R { a: tam32; deger: tam64; ic: Ic; }
+işlev main() -> tam32 {
+    değişken r: R = R { a: 7, deger: 0, ic: Ic { v: 0 } };
+    değişken s: tam32 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: arm64
+            şablon: r#"mov $0, #8589934592
+mov $1, #35
+mov $2, #3"#
+            çıktı("=r", &r.deger)
+            çıktı("=r", &r.ic.v)
+            çıktı("=r", &s)
+        }
+    }
+    eğer r.deger != 8589934592 { ver 1; }
+    eğer r.a != 7 { ver 2; }
+    // İç içe alan ATAMASI da (self-host'ta düşüyordu, D-722).
+    r.ic.v = r.ic.v + 1;
+    ver r.ic.v + s + 3;
+}

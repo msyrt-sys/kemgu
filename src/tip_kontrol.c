@@ -6663,13 +6663,24 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                              "asm cikti hedefi degisken olmali (lvalue)");
                     continue;
                 }
-                if (s->tip && tip_lineer_mi(s->tip)) {
+                /* [D-722] ERISIM hedefi (`&r.deger`): AS002 ALAN tipinin
+                 * uzerinden (kokun yapi tipi primitif DEGIL — kok uzerinden
+                 * denetlemek her alan hedefini reddederdi). */
+                const TipBilgisi *ht = s->tip;
+                const Dugum *hn = d->veri.satirici_asm.cikti_hedefler
+                    ? d->veri.satirici_asm.cikti_hedefler[i] : NULL;
+                if (hn && hn->tip == DUGUM_ERISIM) {
+                    TipBilgisi *at = tip_belirle(tk, (Dugum *)hn);
+                    if (!at || at->kategori == TIP_HATA) continue;
+                    ht = at;
+                }
+                if (ht && tip_lineer_mi(ht)) {
                     tip_hata(tk, d, "AS002",
                              "asm cikti hedefi lineer (tekkez/yetki) "
                              "olamaz — asm lineer deger uretemez");
                     continue;
                 }
-                if (!asm_operand_tipi_uygun(s->tip)) {
+                if (!asm_operand_tipi_uygun(ht)) {
                     tip_hata(tk, d, "AS002",
                              "asm operandi yalniz kopyalanabilir primitif "
                              "(tamN/dtamN/mantiksal/karakter/*T)");

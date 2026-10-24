@@ -1671,7 +1671,10 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
-                bekle_k(p, "TANIMLAYICI", "P269"); bekle_k(p, "SAG_PAREN", "P264");   // [D-649] C asm clause
+                bekle_k(p, "TANIMLAYICI", "P269");
+                // [D-722] `&ad.alan...` — C parser.c aynası (P269 eksik alan adı).
+                iken sim_mi(p, "NOKTA") { ilerle(p); bekle_k(p, "TANIMLAYICI", "P269"); }
+                bekle_k(p, "SAG_PAREN", "P264");   // [D-649] C asm clause
             } değilse {
             eğer metin_esit(lx, "girdi") {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);

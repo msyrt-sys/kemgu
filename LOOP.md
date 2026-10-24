@@ -58,12 +58,19 @@
       ⚠ DAVRANIS degil TANI farki: exe iki tarafta da 42 (deger dogru), eksik
       olan yalniz tanilama -> dikkatli, cunku sahte-pozitif riski yuksek
       (D-632'nin kendi yorumu: baglamsiz yolda raporlamak sahte T043 uretir).
-- [ ] C3a [S] C3.2 karar: asm cikti hedefi AST'de AD yerine IFADE dugumu.
-- [ ] C3b [M] parser.c — `&` sonrasi SINIRLI lvalue (tanimlayici | tanimlayici.alan).
-- [ ] C3c [M] tip_kontrol.c:6575 — AS002 lvalue tipi uzerinden (primitif olmali).
-- [ ] C3d [M] llvm.c:7496 — TANIMLAYICI'da `isim_bul`, ERISIM'de `erisim_lvalue`.
-- [ ] C3e [M] self-host codegen.kem aynasi.
-- [ ] C3f [S] cg_korpus fiksturu (gercek kosum: alana yaz -> 42) + sabotaj.
+- [x] C3a-C3f -> D-722. satiriçi_asm ciktisi YAPI ALANINA (`&r.deger`, ic ice `&r.ic.v`).
+      Karar (C3a): cikti hedefi AST'de IFADE dugumu (`cikti_hedefler`: TANIMLAYICI | ERISIM
+      zinciri; SINIRLI lvalue — indeks/cagri/deref yok); `cikti_adlar` kok adi olarak kalir.
+      `--ast` paritesi korundu (dokum hedefleri basmiyor; self-host ERISIM dugumleri asm'in
+      COCUGU degil, yan kanal `asm_cn`). C: tip_kontrol AS002 ALAN tipi uzerinden; llvm
+      `erisim_lvalue`. Self-host: `alan_adres_uret` (C erisim_lvalue aynasi) — atama ve asm
+      AYNI isleve gidiyor. Yol ustunde SESSIZ YANLIS: self-host `r.ic.v = 40` (ic ice alan
+      atamasi) DUSURULUYORDU (C 42, self 2) — ayni islevle kapandi. Fikstur
+      cg_satirici_asm_alan(_arm64).kem (x86 ikizi burada calistirilamadi; assembler ile
+      dogrulandi: movabsq 2^33). Sabotaj S213/S214/S215.
+- [ ] C3g [S] ACIK — D-722'de OLCULDU: self-host satiriçi_asm CIKTILARINDA hic tip denetimi
+      yok (C: T002 tanimsiz, T022 lvalue degil, AS002 lineer/primitif-degil). Gecerli
+      programlarda parite tam; yalniz hatali programlar self-host'ta sessiz.
 
 # ===== D. DIL OZELLIKLERI =====
 - [x] D1a-D1e -> D-711. Turbofish `f::<T>(..)`: parser (P125 belirsizlik kurali) + checker
