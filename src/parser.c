@@ -1655,8 +1655,8 @@ static Dugum *parse_satirici_asm(Parser *p) {
 
     /* Toplama listeleri — cesit deseni: string'ler gecici Dugum'lere
      * sarilir (METIN/TANIMLAYICI), sonda paralel dizilere kopyalanir. */
-    Liste cikti_k, cikti_a, girdi_k, girdi_e, bozulan_k;
-    liste_baslat(&cikti_k); liste_baslat(&cikti_a);
+    Liste cikti_k, cikti_a, cikti_h, girdi_k, girdi_e, bozulan_k;
+    liste_baslat(&cikti_k); liste_baslat(&cikti_a); liste_baslat(&cikti_h);
     liste_baslat(&girdi_k); liste_baslat(&girdi_e);
     liste_baslat(&bozulan_k);
 
@@ -1713,8 +1713,29 @@ static Dugum *parse_satirici_asm(Parser *p) {
             parser_tuket(p, TOK_DEGISKEN); /* opsiyonel: &degisken x */
             Token hedef = parser_bekle(p, TOK_TANIMLAYICI, "P269",
                                        "cikti hedef degisken adi bekleniyor");
-            parser_bekle(p, TOK_SAG_PAREN, "P264", "')' bekleniyor");
+            /* [D-722] SINIRLI lvalue: `&ad` ardindan `.alan` zinciri. Indeks,
+             * cagri, deref YOK — asm ciktisi yalniz adreslenebilir bir alan
+             * yuvasina yazar (C3b; genel lvalue ifadesi bilerek kapsam disi). */
+            Dugum *hd = NULL;
             if (hedef.tip == TOK_TANIMLAYICI) {
+                hd = dugum_tanimlayici(p->arena, hedef.baslangic, hedef.uzunluk,
+                                       hedef.satir, hedef.sutun);
+                while (hd && parser_simdiki(p).tip == TOK_NOKTA) {
+                    Token nt = parser_simdiki(p);
+                    parser_ilerle(p);
+                    Token at = parser_bekle(p, TOK_TANIMLAYICI, "P269",
+                                            "cikti hedefinde alan adi bekleniyor");
+                    if (at.tip != TOK_TANIMLAYICI) break;
+                    Dugum *e = dugum_olustur(p->arena, DUGUM_ERISIM, nt.satir, nt.sutun);
+                    if (!e) { hd = NULL; break; }
+                    e->veri.erisim.nesne = hd;
+                    e->veri.erisim.alan = ast_string_kopyala(p->arena, at.baslangic, at.uzunluk);
+                    e->veri.erisim.alan_uzunluk = at.uzunluk;
+                    hd = e;
+                }
+            }
+            parser_bekle(p, TOK_SAG_PAREN, "P264", "')' bekleniyor");
+            if (hedef.tip == TOK_TANIMLAYICI && hd) {
                 Dugum *kd = dugum_metin(p->arena, k, kuz, c.satir, c.sutun);
                 Dugum *ad = dugum_tanimlayici(p->arena, hedef.baslangic,
                                               hedef.uzunluk,
@@ -1722,6 +1743,7 @@ static Dugum *parse_satirici_asm(Parser *p) {
                 if (kd && ad) {
                     liste_ekle(&cikti_k, p->arena, kd);
                     liste_ekle(&cikti_a, p->arena, ad);
+                    liste_ekle(&cikti_h, p->arena, hd);
                 }
             }
         } else if (clause_es(c, "girdi")) {
@@ -1780,6 +1802,7 @@ static Dugum *parse_satirici_asm(Parser *p) {
     /* Gecici Dugum listelerini paralel dizilere ac */
     Dugum **ck = liste_array_yap(&cikti_k, p->arena);
     Dugum **ca = liste_array_yap(&cikti_a, p->arena);
+    Dugum **ch = liste_array_yap(&cikti_h, p->arena);   /* [D-722] */
     int n_out = cikti_k.sayi;
     int kap = n_out > 0 ? n_out : 1;
     char **o_kisit = (char **)arena_ayir(p->arena, sizeof(char *) * (size_t)kap);
@@ -1796,6 +1819,7 @@ static Dugum *parse_satirici_asm(Parser *p) {
     d->veri.satirici_asm.cikti_kisit_uzlar = o_kuz;
     d->veri.satirici_asm.cikti_adlar = o_ad;
     d->veri.satirici_asm.cikti_ad_uzlar = o_auz;
+    d->veri.satirici_asm.cikti_hedefler = ch;   /* [D-722] */
     d->veri.satirici_asm.cikti_sayi = n_out;
 
     Dugum **gk = liste_array_yap(&girdi_k, p->arena);

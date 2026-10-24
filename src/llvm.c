@@ -7686,21 +7686,42 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             int n_in = d->veri.satirici_asm.girdi_sayi;
             int n_clb = d->veri.satirici_asm.bozulan_sayi;
 
-            /* Cikti hedef alloca'lari (isim tablosundan) */
-            LlvmIsim **hedefler = NULL;
+            /* Cikti hedef ADRESLERI + IR tipleri. [D-722] TANIMLAYICI ->
+             * isim tablosundaki alloca; ERISIM (`&r.deger`) -> erisim_lvalue
+             * (DUGUM_ATAMA'nin alan yolu ile AYNI fonksiyon; ikinci bir alan
+             * cozucu YAZILMADI — D-407). */
+            int *h_reg = NULL;
+            const char **h_tip = NULL;
             if (n_out > 0) {
-                hedefler = (LlvmIsim **)arena_ayir_sifir(g->arena,
-                    sizeof(LlvmIsim *) * (size_t)n_out);
-                if (!hedefler) return 0;
+                h_reg = (int *)arena_ayir_sifir(g->arena, sizeof(int) * (size_t)n_out);
+                h_tip = (const char **)arena_ayir_sifir(g->arena,
+                    sizeof(const char *) * (size_t)n_out);
+                if (!h_reg || !h_tip) return 0;
                 for (int i = 0; i < n_out; i++) {
-                    hedefler[i] = isim_bul(g,
+                    const Dugum *hn = d->veri.satirici_asm.cikti_hedefler
+                        ? d->veri.satirici_asm.cikti_hedefler[i] : NULL;
+                    if (hn && hn->tip == DUGUM_ERISIM) {
+                        const char *ai = NULL;
+                        int ar = erisim_lvalue(g, hn, &ai);
+                        if (ar < 0) {
+                            fprintf(g->out,
+                                "  ; satirici_asm: cikti alan hedefi cozulemedi\n");
+                            return 0;
+                        }
+                        h_reg[i] = ar;
+                        h_tip[i] = ai ? ai : "i32";
+                        continue;
+                    }
+                    LlvmIsim *hv = isim_bul(g,
                         d->veri.satirici_asm.cikti_adlar[i],
                         d->veri.satirici_asm.cikti_ad_uzlar[i]);
-                    if (!hedefler[i]) {
+                    if (!hv) {
                         fprintf(g->out,
                             "  ; satirici_asm: cikti hedefi bulunamadi\n");
                         return 0;
                     }
+                    h_reg[i] = hv->reg_no;
+                    h_tip[i] = hv->llvm_tip ? hv->llvm_tip : "i32";
                 }
             }
 
@@ -7721,17 +7742,13 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             if (n_out == 0) {
                 snprintf(rett, sizeof(rett), "void");
             } else if (n_out == 1) {
-                snprintf(rett, sizeof(rett), "%s",
-                         hedefler[0]->llvm_tip ? hedefler[0]->llvm_tip
-                                               : "i32");
+                snprintf(rett, sizeof(rett), "%s", h_tip[0]);
             } else {
                 int off = snprintf(rett, sizeof(rett), "{ ");
                 for (int i = 0; i < n_out && off < (int)sizeof(rett) - 8;
                      i++) {
                     off += snprintf(rett + off, sizeof(rett) - (size_t)off,
-                                    "%s%s", i ? ", " : "",
-                                    hedefler[i]->llvm_tip
-                                        ? hedefler[i]->llvm_tip : "i32");
+                                    "%s%s", i ? ", " : "", h_tip[i]);
                 }
                 snprintf(rett + off, sizeof(rett) - (size_t)off, " }");
             }
@@ -7794,16 +7811,15 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             /* Cikti(lar)i hedef alloca'lara yaz */
             if (n_out == 1) {
                 fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                        rett, r, hedefler[0]->reg_no);
+                        rett, r, h_reg[0]);
             } else if (n_out > 1) {
                 for (int i = 0; i < n_out; i++) {
-                    const char *ti = hedefler[i]->llvm_tip
-                        ? hedefler[i]->llvm_tip : "i32";
+                    const char *ti = h_tip[i];
                     int er = yeni_reg(g);
                     fprintf(g->out, "  %%%d = extractvalue %s %%%d, %d\n",
                             er, rett, r, i);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
-                            ti, er, hedefler[i]->reg_no);
+                            ti, er, h_reg[i]);
                 }
             }
             return 0;

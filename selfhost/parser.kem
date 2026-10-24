@@ -1329,7 +1329,9 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
-                bekle(p, "TANIMLAYICI"); bekle(p, "SAG_PAREN");
+                bekle(p, "TANIMLAYICI");
+                iken sim_mi(p, "NOKTA") { ilerle(p); bekle(p, "TANIMLAYICI"); }   // [D-722]
+                bekle(p, "SAG_PAREN");
             } değilse {
             eğer metin_esit(lx, "girdi") {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);

@@ -268,6 +268,7 @@ yapı Ayr {
     asm_sab: Dizi<metin>;    // D-416: şablon (ham dizgi içeriği)
     asm_ck: Dizi<metin>;     // D-416: çıktı kısıtları, "," ile birleşik ("=r,=r")
     asm_cv: Dizi<metin>;     // D-416: çıktı DEĞİŞKEN adları, "," ile birleşik ("s,b")
+    asm_cn: Dizi<metin>;     // [D-722] çıktı hedefi ERISIM düğüm indeksleri ("-1" = düz ad)
     asm_gk: Dizi<metin>;     // D-416: girdi kısıtları, "," ile birleşik ("r")
     asm_bz: Dizi<metin>;     // D-416: bozulanlar, "," ile birleşik ("~{cc}")
     asm_cev: Dizi<tam32>;   // D-553: asm_node ile PARALEL — `çevrim:` VAR mı (1/0)
@@ -1922,6 +1923,50 @@ işlev liste_oge(s: metin, k: tam32) -> metin {
     }
     ver "";
 }
+// [D-722] ERISIM lvalue'sunun ALAN ADRESİ (C `erisim_lvalue` aynası). Dönüş:
+// adres register'ı (""= çözülemedi); `p.son_tip` = alanın IR tipi. Nesne
+// TANIMLAYICI (yapı-değer alloca'sı ya da `&Yapi` ptr) veya iç ERISIM (özyineli:
+// iç alanın ADRESİ taban, iç alan tipi `%Ic` yapı kaydını verir). Atama
+// (`r.ic.v = 40`) ve satıriçi_asm çıktısı (`&r.deger`) AYNI işlevi kullanır.
+işlev alan_adres_uret(p: &değişken Ayr, lhs: tam32) -> metin {
+    eğer metin_esit(dizi_al(p.a_ad, lhs), "ERISIM") == yanlış { ver ""; }
+    değişken obj: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, lhs));
+    değişken alan: metin = dizi_al(p.a_deg, lhs);
+    değişken base: metin = "";
+    değişken yad: metin = "";
+    değişken oa: metin = dizi_al(p.a_ad, obj);
+    eğer metin_esit(oa, "TANIMLAYICI") {
+        değişken oname: metin = dizi_al(p.a_deg, obj);
+        değişken otip: metin = cg_var_tip_bul(p, oname);
+        eğer metin_uzunluk(otip) == 0 { ver ""; }
+        eğer bayt(otip, 0) == 37 {   // struct-değer değişkeni → alloca = adres
+            base = cg_var_bul(p, oname);
+            yad = ir_tip_soy(otip);
+        } değilse {                   // ptr → param-alloca'dan yükle
+            değişken lr: tam32 = yeni_reg(p);
+            değişken lrs: metin = reg_str(lr);
+            yaz_str("  "); yaz_str(lrs); yaz_str(" = load ptr, ptr "); yaz_str(cg_var_bul(p, oname)); yb(10);
+            base = lrs;
+            yad = cg_var_ref_bul(p, oname);
+        }
+    } değilse {
+        eğer metin_esit(oa, "ERISIM") == yanlış { ver ""; }
+        base = alan_adres_uret(p, obj);
+        eğer metin_uzunluk(base) == 0 { ver ""; }
+        değişken it: metin = p.son_tip;
+        eğer metin_uzunluk(it) == 0 { ver ""; }
+        eğer bayt(it, 0) != 37 { ver ""; }   // iç alan yapı-değer değil (ptr/skaler) → V1 dışı
+        yad = ir_tip_soy(it);
+    }
+    değişken fidx: tam32 = yapi_alan_idx(p, yad, alan);
+    değişken ftip: metin = yapi_alan_tip(p, yad, alan);
+    değişken g: tam32 = yeni_reg(p);
+    değişken gr: metin = reg_str(g);
+    yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr %"); yaz_str(yad); yaz_str(", ptr ");
+    yaz_str(base); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
+    p.son_tip = ftip;
+    ver gr;
+}
 // D-416: SATIRICI_ASM düğümünün yan-kanal indeksi (-1 = yok).
 işlev asm_kanal_idx(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken i: tam32 = 0;
@@ -1962,6 +2007,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     değişken sab: metin = "";          // D-416: şablon
     değişken ck: metin = "";           // D-416: çıktı kısıtları
     değişken cv: metin = "";           // D-416: çıktı değişken adları
+    değişken cn: metin = "";           // [D-722] çıktı hedef düğümleri (ERISIM ya da -1)
     değişken gk: metin = "";           // D-416: girdi kısıtları
     değişken bz: metin = "";           // D-416: bozulanlar
     değişken devam: mantıksal = doğru;
@@ -1986,9 +2032,27 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ck = vir_ekle(ck, asm_kisit_al(p));                        // D-416
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
-                cv = vir_ekle(cv, sim_lex(p));   // D-416: çıktı DEĞİŞKEN adı
+                değişken hn: metin = sim_lex(p);
+                değişken hs: tam32 = sim_sat(p);  değişken hu: tam32 = sim_sut(p);
+                cv = vir_ekle(cv, hn);   // D-416: çıktı KÖK DEĞİŞKEN adı
                 // [D-643] C aynasi (parser.c asm clause): P269 hedef adi, P264 paren.
-                bekle_k(p, "TANIMLAYICI", "P269"); bekle_k(p, "SAG_PAREN", "P264");
+                bekle_k(p, "TANIMLAYICI", "P269");
+                // [D-722] `&ad.alan...` — C parser.c aynası: SINIRLI lvalue zinciri.
+                // ERISIM düğümleri asm'in ÇOCUĞU YAPILMAZ (`--ast` paritesi: C
+                // dökümü çıktı hedeflerini basmaz); indeksleri yan kanalda.
+                değişken hd: tam32 = 0 - 1;
+                eğer sim_mi(p, "NOKTA") {
+                    hd = dugum0(p, "TANIMLAYICI", hn, hs, hu);
+                    iken sim_mi(p, "NOKTA") {
+                        değişken ns: tam32 = sim_sat(p);  değişken nu: tam32 = sim_sut(p);
+                        ilerle(p);
+                        değişken alan: metin = sim_lex(p);
+                        bekle_k(p, "TANIMLAYICI", "P269");
+                        hd = dugum1(p, "ERISIM", alan, ns, nu, hd);
+                    }
+                }
+                cn = vir_ekle(cn, tam64_str(hd olarak tam64));
+                bekle_k(p, "SAG_PAREN", "P264");
             } değilse {
             eğer metin_esit(lx, "girdi") {
                 ilerle(p); bekle(p, "SOL_PAREN");
@@ -2015,6 +2079,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     dizi_ekle(p.asm_cev, cev_var);                          // D-553
     dizi_ekle(p.asm_sab, sab); dizi_ekle(p.asm_ck, ck);     // D-416
     dizi_ekle(p.asm_cv, cv); dizi_ekle(p.asm_gk, gk); dizi_ekle(p.asm_bz, bz);
+    dizi_ekle(p.asm_cn, cn);   // [D-722]
     ver nd;
 }
 işlev parse_deyim(p: &değişken Ayr) -> tam32 {
@@ -7202,12 +7267,27 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         // Çıktı tipleri: değişkenlerin KAYITLI IR tipinden (annotasyon değil —
         // çıktı bir lvalue'dur ve slot tipi tek gerçektir).
+        // [D-722] ERISIM hedefi (`&r.deger`): adres + tip `alan_adres_uret`ten
+        // (atamanın alan yolu ile AYNI işlev). Adres asm çağrısından ÖNCE hesaplanır.
+        değişken cnl: metin = dizi_al(p.asm_cn, ai);
         değişken ot: Dizi<metin> = [];
+        değişken oa: Dizi<metin> = [];
         değişken oi: tam32 = 0;
         iken oi < nc {
-            değişken oty: metin = cg_var_tip_bul(p, liste_oge(cv, oi));
+            değişken hnd: tam64 = 0 - 1;
+            eğer oi < liste_say(cnl) { hnd = lit_deger(liste_oge(cnl, oi)); }
+            değişken oty: metin = "";
+            değişken oad: metin = "";
+            eğer hnd >= 0 {
+                oad = alan_adres_uret(p, hnd olarak tam32);
+                oty = p.son_tip;
+            } değilse {
+                oty = cg_var_tip_bul(p, liste_oge(cv, oi));
+                oad = cg_var_bul(p, liste_oge(cv, oi));
+            }
             eğer metin_esit(oty, "") { oty = "i32"; }
             dizi_ekle(ot, oty);
+            dizi_ekle(oa, oad);
             oi = oi + 1;
         }
         değişken rt: metin = "void";
@@ -7240,7 +7320,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         yaz_str(")"); yb(10);
         eğer nc == 1 {
-            değişken s1: metin = cg_var_bul(p, liste_oge(cv, 0));
+            değişken s1: metin = dizi_al(oa, 0);   // [D-722]
             eğer metin_esit(s1, "") == yanlış {
                 yaz_str("  store "); yaz_str(dizi_al(ot, 0)); yaz_str(" "); yaz_str(rr);
                 yaz_str(", ptr "); yaz_str(s1); yb(10);
@@ -7252,7 +7332,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 değişken ev: metin = reg_str(yeni_reg(p));
                 yaz_str("  "); yaz_str(ev); yaz_str(" = extractvalue "); yaz_str(rt);
                 yaz_str(" "); yaz_str(rr); yaz_str(", "); yaz_str(tam64_str(w olarak tam64)); yb(10);
-                değişken sw: metin = cg_var_bul(p, liste_oge(cv, w));
+                değişken sw: metin = dizi_al(oa, w);   // [D-722]
                 eğer metin_esit(sw, "") == yanlış {
                     yaz_str("  store "); yaz_str(dizi_al(ot, w)); yaz_str(" "); yaz_str(ev);
                     yaz_str(", ptr "); yaz_str(sw); yb(10);
@@ -7844,33 +7924,18 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             yaz_str(cg_var_bul(p, dizi_al(p.a_deg, lhs))); yb(10);
             ver 0;
         }
-        // CG7c: lhs ERISIM (p.alan = v) — tek seviye, nesne TANIMLAYICI.
+        // CG7c: lhs ERISIM (p.alan = v). [D-722] İÇ İÇE zincir (`r.ic.v = 40`)
+        // `alan_adres_uret` ile — öncesinde yalnız tek seviye vardı ve nesne
+        // TANIMLAYICI değilse atama SESSİZCE DÜŞÜYORDU (ölçüldü: C 42, self 2).
         eğer metin_esit(dizi_al(p.a_ad, lhs), "ERISIM") {
             değişken obj: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, lhs));
-            değişken alan: metin = dizi_al(p.a_deg, lhs);
-            eğer metin_esit(dizi_al(p.a_ad, obj), "TANIMLAYICI") {
-                değişken oname: metin = dizi_al(p.a_deg, obj);
-                değişken otip: metin = cg_var_tip_bul(p, oname);
+            değişken oa0: metin = dizi_al(p.a_ad, obj);
+            eğer metin_esit(oa0, "TANIMLAYICI") veya metin_esit(oa0, "ERISIM") {
                 değişken v2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
-                değişken base: metin = "";
-                değişken yad: metin = "";
-                eğer bayt(otip, 0) == 37 {   // struct-değer değişkeni → alloca = adres
-                    base = cg_var_bul(p, oname);
-                    yad = ir_tip_soy(otip);
-                } değilse {                   // ptr → param-alloca'dan yükle
-                    değişken lr: tam32 = yeni_reg(p);
-                    değişken lrs: metin = reg_str(lr);
-                    yaz_str("  "); yaz_str(lrs); yaz_str(" = load ptr, ptr "); yaz_str(cg_var_bul(p, oname)); yb(10);
-                    base = lrs;
-                    yad = cg_var_ref_bul(p, oname);
+                değişken gr: metin = alan_adres_uret(p, lhs);
+                eğer metin_uzunluk(gr) > 0 {
+                    yaz_str("  store "); yaz_str(p.son_tip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
                 }
-                değişken fidx: tam32 = yapi_alan_idx(p, yad, alan);
-                değişken ftip: metin = yapi_alan_tip(p, yad, alan);
-                değişken g: tam32 = yeni_reg(p);
-                değişken gr: metin = reg_str(g);
-                yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr %"); yaz_str(yad); yaz_str(", ptr ");
-                yaz_str(base); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
-                yaz_str("  store "); yaz_str(ftip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
             }
             ver 0;
         }
@@ -15228,7 +15293,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_sm: [], fs_emit: [], fs_onek: [], bek_pointee: "", fn_ad_zorla: "", hedef_mim: "x86_64", hedef_triple: "",
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_cn: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
