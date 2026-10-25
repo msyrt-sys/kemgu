@@ -159,9 +159,24 @@
 - [ ] D9c [M] Ozyineleme/dongu icin sabit-nokta.
 - [ ] D9d [M] Bolge/escape'i surucu hattina baglama.
 - [ ] D9e [L] Otomatik-serbestleyen arena.
-- [ ] D10a [S] checker.kem (6801 satir) ile codegen.kem gomulu checker'inin
-      FARKINI olc (diff tabanli envanter).
+- [x] D10a [S] -> OLCULDU (D-733). Islev duzeyinde, yorum/bosluk ayiklanmis karsilastirma:
+      checker.kem 392 islev; 391'i codegen.kem'de de var, 367'si KOD OLARAK BIREBIR.
+      Kod-farkli 24 islev: yalniz-checker 72 satir, yalniz-codegen 201 satir; farkin
+      cogu `main` (surucu, +99), parser yan-kanallari (asm/cesit/islev) ve adlandirma
+      (`karsilastirma_mi`->`sirali_kars_mi`, `cv_cesit`->`cc_ad`). Yalniz checker.kem'de
+      1 islev (`gtas_muaf_tip_mi` — codegen'de gereksiz: `gtas_tasima_gerekli` kanal'i
+      zaten kabul etmiyor). GERCEK davranis farklari envanterle bulundu ve D-733'te
+      kapandi: (1) checker.kem'de `soket_kontrol` YOKTU (MM001/MM002/MM003); (2) IKI
+      self-host da bilinen-ama-yanlis kaynakli yetkide (`yetki<Dosya>` -> mmio/soket)
+      MM002 vermiyordu. Kalan bilinen fark: m002_yapici_kontrol generic payload ikamesi
+      (D-423, checker.kem'de tp_* registry yok). Ayrica (kapsam disi) self-host
+      `mmio_oku32` donus tipini bilmiyor -> `x: tam64 = mmio_oku32(..)` T001 kaciriyor.
 - [ ] D10b [S] Yon karari: driver tek kaynak mi, checker.kem mi?
+      ONERI (D-733 olcumune dayali): codegen.kem TEK KAYNAK. Gerekce: ust kume
+      (642 islev, FIXPOINT'te kendini derleyen ve uretimde kosan yol), checker.kem'in
+      %94'u zaten kod olarak birebir kopyasi, ve D-503/D-517/D-550/D-733'te dort kez
+      bir kural yalniz birine portlanip digeri sessiz kaldi. checker_diff silinmez:
+      `codegen.kem --check` ciktisini C oracle'a karsi olcer (D10d).
 - [ ] D10c [L] Goc.
 - [ ] D10d [M] `checker_diff` kapisini yeniden tanimla (tek kaynak olunca neyi
       olcecek? — SILME, anlamini degistir).

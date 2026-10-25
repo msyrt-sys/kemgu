@@ -4473,6 +4473,16 @@ işlev mmio_yaz_mi(ad: metin) -> mantıksal {
 }
 // MMIO çağrısı denetimi. C sırası: MM001 (arite, erken dönüş) → MM002 (arg0)
 // → MM003 (adres, sonra değer). Dönüş: 1 = erken dönüldü (arite hatası).
+// [D-733] MM002: argüman beklenen kaynağın yetkisi DEĞİLSE (C `mmio_yetki_kontrol`/
+// `ag_yetki_kontrol` aynası). Eskiden yalnız "kesin yetki değil" durumu bildiriliyordu;
+// BİLİNEN ama YANLIŞ kaynaklı bir yetki (`yetki<Dosya>` → `mmio_oku32`) sessizce
+// geçiyordu. Kaynak BİLİNMİYORSA (boş) ve kesin yetki-değil de değilse susar (muhafazakâr).
+işlev yetki_kaynak_yanlis_mi(p: &değişken Ayr, a0: tam32, bek: metin) -> mantıksal {
+    değişken k: metin = bag_yetki_kaynak_ifade(p, a0);
+    eğer metin_esit(k, bek) { ver yanlış; }
+    eğer metin_esit(k, "") == yanlış { ver doğru; }
+    ver kesin_yetki_degil(p, a0);
+}
 işlev mmio_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     değişken oku: mantıksal = mmio_oku_mu(fad);
     değişken yaz: mantıksal = mmio_yaz_mi(fad);
@@ -4484,8 +4494,7 @@ işlev mmio_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
     yetki_canli_kontrol(p, a0);   // [D-503]
-    eğer metin_esit(bag_yetki_kaynak_ifade(p, a0), "MMIO") == yanlış
-      ve kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "MM002"); }
+    eğer yetki_kaynak_yanlis_mi(p, a0, "MMIO") { sekil_hata(p, a0, "MM002"); }   // [D-733]
     değişken a1: tam32 = dizi_al(p.cocuk, cb + 2);
     eğer bilinen_tamsayi_degil(ifade_tip(p, a1, "?")) { sekil_hata(p, a1, "MM003"); }
     eğer yaz {
@@ -4500,6 +4509,22 @@ işlev bag_yetki_kaynak_ifade(p: &değişken Ayr, idx: tam32) -> metin {
         ver bag_yetki_kaynak(p, dizi_al(p.a_deg, idx));
     }
     ver "";
+}
+// [D-466] soket_baglan(y: yetki<Soket>, host: metin, port: tam32)
+// `mmio_kontrol`ün birebir kardeşi: yetki ÖDÜNÇ alınır, TÜKETİLMEZ.
+// ⚠ `Soket` kaynak tipi ZATEN ayrılmıştı (yetki_olustur kaynak_tipi=2);
+// yeni bir `Ağ` adı EKLENMEDİ — aynı kavrama iki ad D-407 sınıfıdır.
+işlev soket_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
+    eğer metin_esit(fad, "soket_baglan") == yanlış { ver yanlış; }
+    değişken n: tam32 = dizi_al(p.a_cs, idx) - 1;
+    eğer n != 3 { sekil_hata(p, idx, "MM001"); ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
+    yetki_canli_kontrol(p, a0);   // [D-503]
+    eğer yetki_kaynak_yanlis_mi(p, a0, "Soket") { sekil_hata(p, a0, "MM002"); }   // [D-733]
+    değişken a2: tam32 = dizi_al(p.cocuk, cb + 3);
+    eğer bilinen_tamsayi_degil(ifade_tip(p, a2, "?")) { sekil_hata(p, a2, "MM003"); }
+    ver yanlış;
 }
 // CP004: `geri_al` TAM 1 argüman alır ve operandı yetki<R> olmalı.
 // [D-720] `yetki_olustur` / `delege` CP004 — C tip_kontrol.c Capability V1
@@ -6550,6 +6575,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             // D-364: MMIO + yetki intrinsikleri (C bunları normal çağrı yolundan
             // ÖNCE özel-case eder; hata varsa erken döner).
             eğer mmio_kontrol(p, idx, fad) { ver 0; }
+            eğer soket_kontrol(p, idx, fad) { ver 0; }   // [D-466] (checker.kem portu D-733)
             eğer yetki_olustur_kontrol(p, idx, fad) { ver 0; }   // [D-720]
             eğer cp004_kontrol(p, idx, fad) { ver 0; }
             eğer drf_cagri_kontrol(p, idx, fad) { ver 0; }   // D-366
