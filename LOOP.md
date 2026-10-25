@@ -138,8 +138,9 @@
       Fikstur cg_generic_bound_metot + tc62 + tc64.
 - [x] D8h -> D-728. Self-host metot cagrisi denetimi (T010/T001/T020/T009, generic T007) — oncesinde
       somut yapi alicisinda bile HIC yoktu. Fikstur tc63.
-- [ ] D8i [S] ACIK — D-728'de OLCULDU: self-host ALAN erisiminde (`x.yok`, cagri degil) T009
-      vermiyor (C veriyor). Metot cagrisi hedefi icin D-728'de eklendi; genel alan erisimi acik.
+- [x] D8i -> D-730. Self-host alan erisiminde T009 (duz, `&K` referans, ic ice `x.ic.yok`); alici
+      yapisi TIP DUGUMUNDEN (dizgi temsili yapi adlarini '?'e dusuruyordu). Metot hedefi muaf
+      (`cagri_hedef`). D-728 metot denetimi de ayni cozumu kullaniyor (referans alici). Fikstur tc65.
 - [ ] D8c [M] Generic'te bound (`T: Ozellik`).
 - [ ] D8d [M] STATIK dispatch.
 - [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR, once statik.
