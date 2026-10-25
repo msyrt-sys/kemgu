@@ -105,9 +105,16 @@
 - [x] D4c -> D-432.
 - [x] D4d -> D-721. `textDocument/rename` (WorkspaceEdit). V1 guvenlik siniri: yalniz bu belgede
       ust duzey tanimli ad; yeni ad lexer'la tek tanimlayici; ust duzey cakisma -> -32803 hata.
-- [ ] D4e [S] LSP v3: her biri icin JSON-RPC kapi testi.
-- [ ] D5a [S] `metin`/`dosya` EKSIK ISLEV ENVANTERI cikar (metin 36, dosya 17 islev
-      VAR — "tamamlama" olculmeden is degil; D-639).
+- [x] D4e -> ZATEN VARDI: test_lsp.c'de hover/definition/completion/documentSymbol/references/rename/
+      semanticTokens/workspace-symbol/incremental testleri (26/26). Olculdu D-730 sonrasi.
+- [x] D5a -> ENVANTER (D-730 sonrasi olculdu). metin.kem 36, dosya.kem 17 islev. Eksik gorunenler:
+      metin: sondan arama (son_indeks), tek tarafli kirpma (kirp_sol/kirp_sag), sozluk sirasi
+      karsilastirma, bicimleme, kod noktasi (UTF-8 karakter) gezintisi — hepsi SAF KEMGU ile
+      yazilabilir (metin_bayt/metin_kes/kod_metin yeterli).
+      dosya: dizin olustur/listele, ikili oku/yaz, yol birlestir, uzanti — dizin ve ikili G/C
+      RUNTIME YERLESIGI ister (dil yuzeyi karari, Mehmet).
+- [ ] D5f [S] metin: yukaridaki saf-KEMGU eksiklerini yaz + test_metin'e ekle.
+- [ ] D5g [M] dosya: dizin/ikili G/C yerlesikleri — KARAR GEREKTIRIR (yetki<Dosya> ile mi?).
 - [x] D5b -> D-710 (BLAKE3 agac modu, `stdlib/kripto/blake3.kem`).
 - [x] D5c -> D-709 (HMAC-SHA256, RFC 4231 + cok bloklu SHA-256).
 - [x] D5d -> D-713 (`os_rastgele()` yerlesigi; Linux /dev/urandom, Windows BCryptGenRandom,
@@ -125,7 +132,7 @@
 - [ ] D7d [M] Ayrik derleme: re-export.
 - [ ] D7e [L] Artimli yeniden derleme (degisen birim + bagimlilari).
 - [ ] D7f [S] Her biri icin cross-file korpus fiksturu.
-- [ ] D8a [M] `özellik` bildirimi sozdizimi.
+- [x] D8a -> ZATEN VARDI (ADIM 15; iki derleyicide de ayristiriliyor — tc62/tc64 kullaniyor). Olculdu D-730 sonrasi.
 - [x] D8b -> D-725/D-726 (+ D-724). Olculdu, BAYAT DEGILDI: iki tip ayni adli metot tanimlayinca
       IKI derleyicide `@alan` iki kez -> LINK-RED; referans alici (`k: &Kare`) metoda ptr geciriyordu
       -> SESSIZ YANLIS (taban 81, dogrusu 25); C alicinin yan etkisini IKI kez calistiriyordu
@@ -141,11 +148,12 @@
 - [x] D8i -> D-730. Self-host alan erisiminde T009 (duz, `&K` referans, ic ice `x.ic.yok`); alici
       yapisi TIP DUGUMUNDEN (dizgi temsili yapi adlarini '?'e dusuruyordu). Metot hedefi muaf
       (`cagri_hedef`). D-728 metot denetimi de ayni cozumu kullaniyor (referans alici). Fikstur tc65.
-- [ ] D8c [M] Generic'te bound (`T: Ozellik`).
-- [ ] D8d [M] STATIK dispatch.
-- [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR, once statik.
-- [ ] D8f [M] Trait: self-host parite.
-- [ ] D8g [S] Trait: korpus + sabotaj.
+- [x] D8c -> D-369 (T030/T031 bound) + D-727 (bound uzerinden metot).
+- [x] D8d -> D-725 + D-729 (monomorfizasyonda alici tipinden "<Tip>.<metod>").
+- [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR (ozellik nesnesi sozdizimi ve sahiplik
+      kurali Mehmet'te). Statik dispatch bitti (D-729); oneri: once gercek bir kullanim ihtiyaci olcmek.
+- [x] D8f -> D-728 + D-730 (metot cagrisi + alan T009 parite; generic yollar D-727'li C ile birebir).
+- [x] D8g -> cg_uygula_metot_cozum, cg_generic_bound_metot, tc62/63/64/65 + S218-S231.
 - [ ] D9a [M] Islev basina escape ozeti (cagri grafi).
 - [ ] D9b [M] Ozetin cagri yerinde kullanilmasi (`escape.c:308` konservatif dal).
 - [ ] D9c [M] Ozyineleme/dongu icin sabit-nokta.
