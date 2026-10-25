@@ -83,6 +83,9 @@ yapı Ayr {
     rt_node: Dizi<tam32>;   // D-550: `gerçekzamanlı` işlev düğümleri (parser onu
                             // YUTUYORDU; `çıplak` yan-kanalinin birebir aynasi)
     asm_node: Dizi<tam32>;  // D-373: SATIRICI_ASM düğümü — `mimari:` etiketi (AS001)
+    asm_hb: Dizi<tam32>;   // [D-723] asm başına çıktı hedef listesinin tabanı
+    asm_hs: Dizi<tam32>;   // [D-723] çıktı sayısı
+    asm_hn: Dizi<tam32>;   // [D-723] çıktı hedef düğümleri (TANIMLAYICI | ERISIM), düz
     asm_cev: Dizi<tam32>;   // D-553: asm_node ile PARALEL — `çevrim:` VAR mı (1/0)
     asm_mim: Dizi<metin>;   // D-373: asm_node ile paralel — etiketteki mimari adı
     si_ad: Dizi<metin>;     // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
@@ -1650,6 +1653,7 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     değişken mim: metin = "";          // D-373: `mimari:` etiketi (AS001 yan-kanalı)
     değişken cev_var: tam32 = 0;       // D-553: `çevrim:` anotasyonu görüldü mü
     değişken sab_var: tam32 = 0;       // [D-653] `şablon:` görüldü mü (bu dosya şablonu SAKLAMAZ, atlar)
+    değişken hnl: Dizi<tam32> = [];   // [D-723] her çıktının hedef düğümü (codegen.kem aynası)
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
@@ -1671,9 +1675,20 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
                 ilerle(p); bekle(p, "SOL_PAREN"); asm_kisit_atla(p);
                 bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
                 eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+                değişken hn: metin = sim_lex(p);
+                değişken hs: tam32 = sim_sat(p);  değişken hu: tam32 = sim_sut(p);
                 bekle_k(p, "TANIMLAYICI", "P269");
                 // [D-722] `&ad.alan...` — C parser.c aynası (P269 eksik alan adı).
-                iken sim_mi(p, "NOKTA") { ilerle(p); bekle_k(p, "TANIMLAYICI", "P269"); }
+                // [D-723] düğümler asm'in ÇOCUĞU DEĞİL (--ast paritesi) — yan kanal.
+                değişken hd: tam32 = dugum0(p, "TANIMLAYICI", hn, hs, hu);
+                iken sim_mi(p, "NOKTA") {
+                    değişken ns: tam32 = sim_sat(p);  değişken nu: tam32 = sim_sut(p);
+                    ilerle(p);
+                    değişken alan: metin = sim_lex(p);
+                    bekle_k(p, "TANIMLAYICI", "P269");
+                    hd = dugum1(p, "ERISIM", alan, ns, nu, hd);
+                }
+                dizi_ekle(hnl, hd);
                 bekle_k(p, "SAG_PAREN", "P264");   // [D-649] C asm clause
             } değilse {
             eğer metin_esit(lx, "girdi") {
@@ -1697,6 +1712,9 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     değişken nd: tam32 = dugum_n(p, "SATIRICI_ASM", "", s, u, kids);
     dizi_ekle(p.asm_node, nd); dizi_ekle(p.asm_mim, mim);   // D-373
     dizi_ekle(p.asm_cev, cev_var);                          // D-553
+    dizi_ekle(p.asm_hb, dizi_boyut(p.asm_hn)); dizi_ekle(p.asm_hs, dizi_boyut(hnl));   // [D-723]
+    değişken hk: tam32 = 0;
+    iken hk < dizi_boyut(hnl) { dizi_ekle(p.asm_hn, dizi_al(hnl, hk)); hk = hk + 1; }
     ver nd;
 }
 işlev parse_deyim(p: &değişken Ayr) -> tam32 {
@@ -2126,7 +2144,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         hata_say: 0, ph_kod: [], ph_sat: [], ph_sut: [], sh_sat: 0, sh_sut: 0, sh_kod: "", sh_tek: 0, ph_kis: 0,
         yapi_izni: 1,
         sk_pending: 0,
-        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_mim: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], al_ad: [], al_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
+        g_isim: [], yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], kur_ad: [], cip_node: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, asm_node: [], asm_hb: [], asm_hs: [], asm_hn: [], asm_mim: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], al_ad: [], al_yol: [], mod_ad: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_ad: [], fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_rlin: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [],
         giris_dizin: "", kullan_gorulen: [],
@@ -4244,6 +4262,70 @@ işlev asm_mimari_bul(p: &değişken Ayr, idx: tam32) -> metin {
     }
     ver "";
 }
+// [D-723] satıriçi_asm OPERAND TİP DENETİMİ — C tip_kontrol.c (C5) aynası.
+// Self-host'ta HİÇ YOKTU: çıktı hedefi tanımsız (T002), değişken değil (T022),
+// lineer ya da kopyalanamaz tip (AS002) ve girdi AS002 SESSİZ geçiyordu.
+// C sırası: G002 → AS001 → çıktılar → girdiler; konum asm düğümü. Tip "?"
+// (self-host'un bilmediği) ise TANI YOK — sahte tanı yerine kaçırma.
+işlev asm_operand_tip_uygun(t: metin) -> mantıksal {
+    eğer metin_esit(t, "tam8") veya metin_esit(t, "tam16") veya metin_esit(t, "tam32") veya metin_esit(t, "tam64") { ver doğru; }
+    eğer metin_esit(t, "dtam8") veya metin_esit(t, "dtam16") veya metin_esit(t, "dtam32") veya metin_esit(t, "dtam64") { ver doğru; }
+    eğer metin_esit(t, "mantıksal") veya metin_esit(t, "karakter") { ver doğru; }
+    eğer metin_baslar(t, "*") { ver doğru; }
+    ver yanlış;
+}
+işlev asm_tip_lineer_mi(p: &değişken Ayr, t: metin) -> mantıksal {
+    eğer metin_baslar(t, "tekkez<") veya metin_baslar(t, "yetki<") { ver doğru; }
+    ver lineer_yapi_mi(p, t);
+}
+işlev asm_tip_denetle(p: &değişken Ayr, idx: tam32, t: metin) -> tam32 {
+    eğer metin_esit(t, "?") { ver 0; }
+    eğer asm_tip_lineer_mi(p, t) { sekil_hata(p, idx, "AS002"); ver 0; }
+    eğer asm_operand_tip_uygun(t) == yanlış { sekil_hata(p, idx, "AS002"); }
+    ver 0;
+}
+işlev asm_operand_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    değişken ai: tam32 = 0 - 1;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.asm_node) { eğer dizi_al(p.asm_node, i) == idx { ai = i; } i = i + 1; }
+    eğer (ai < 0) veya (ai >= dizi_boyut(p.asm_hb)) { ver 0; }
+    değişken hb: tam32 = dizi_al(p.asm_hb, ai);
+    değişken hs: tam32 = dizi_al(p.asm_hs, ai);
+    değişken k: tam32 = 0;
+    iken k < hs {
+        değişken hn: tam32 = dizi_al(p.asm_hn, hb + k);
+        değişken kok: tam32 = hn;
+        iken metin_esit(dizi_al(p.a_ad, kok), "ERISIM") { kok = dizi_al(p.cocuk, dizi_al(p.a_cb, kok)); }
+        değişken rad: metin = dizi_al(p.a_deg, kok);
+        eğer ad_tanimli_mi(p, rad) == yanlış { sekil_hata(p, idx, "T002"); }
+        değilse {
+            eğer (yerel_var_mi(p, rad) == yanlış) ve (kur_ad_mi(p, rad) == yanlış) { sekil_hata(p, idx, "T022"); }
+            değilse {
+                eğer metin_esit(dizi_al(p.a_ad, hn), "ERISIM") {
+                    kontrol_dugum(p, hn);
+                    asm_tip_denetle(p, idx, ifade_tip(p, hn, "?"));
+                } değilse {
+                    asm_tip_denetle(p, idx, ifade_tip(p, hn, "?"));
+                }
+            }
+        }
+        k = k + 1;
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, idx);
+    değişken cs: tam32 = dizi_al(p.a_cs, idx);
+    değişken g: tam32 = 0;
+    iken g < cs {
+        kontrol_dugum(p, dizi_al(p.cocuk, cb + g));   // C: tip_belirle(girdi)
+        asm_tip_denetle(p, idx, ifade_tip(p, dizi_al(p.cocuk, cb + g), "?"));
+        g = g + 1;
+    }
+    ver 0;
+}
+işlev kur_ad_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.kur_ad) { eğer metin_esit(dizi_al(p.kur_ad, i), ad) { ver doğru; } i = i + 1; }
+    ver yanlış;
+}
 işlev as001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken m: metin = asm_mimari_bul(p, idx);
     eğer metin_esit(m, "") { ver 0; }   // etiket yoksa denetim yok (C: mimari==NULL)
@@ -5844,6 +5926,15 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
+    // [D-723] satıriçi_asm C SIRASIYLA: G002 → AS001 → çıktılar → girdiler
+    // (girdiler tip_belirle ile BU noktada gezilir). Genel çocuk gezintisi
+    // girdileri AS001'den ÖNCE gezdiği için tanı sırası ayrışıyordu.
+    eğer metin_esit(ad, "SATIRICI_ASM") {
+        eğer p.guv_bag == 0 { sekil_hata(p, idx, "G002"); }
+        as001_kontrol(p, idx);
+        asm_operand_kontrol(p, idx);
+        ver 0;
+    }
     // [D-632] 2^64+ literal: C her literali tipler; self yalnız bir tüketici
     // `ifade_tip` isterse tipler (annotasyonsuz `değişken c = <lit>` hiç sormaz).
     // Gezinti düğüme vardığında da rapor et — t043_raporla tekilleştirir.
@@ -6473,11 +6564,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "IKILI") { t003_kontrol(p, idx); t004_kontrol(p, idx); t028_kontrol(p, idx); ct_ikili_kontrol(p, idx); }   // TC3e/f + T028 + D-367
     eğer metin_esit(ad, "TEKLI") { tekli_kontrol(p, idx); }   // TC3f: neg/degil + TC5b L004
     eğer metin_esit(ad, "INDEKS") { indeks_kontrol(p, idx); }   // D-351 G001 + D-353 T005/T008
-    // D-358 G002: satıriçi asm yalnız güvensiz blokta (ham makine kodu tier kapısı).
-    eğer metin_esit(ad, "SATIRICI_ASM") ve (p.guv_bag == 0) { sekil_hata(p, idx, "G002"); }
-    // D-373: AS001 — `mimari:` etiketi HEDEF mimariyle uyuşmalı. C sırası: G002 SONRA.
-    // Yanlış hedefe sessizce bozuk makine kodu üretmek yerine derleme hatası.
-    eğer metin_esit(ad, "SATIRICI_ASM") { as001_kontrol(p, idx); }
+    // D-358 G002 + D-373 AS001: satıriçi_asm — [D-723] kontrol_dugum'un BAŞINDA
+    // (C sırası; girdiler oradan gezilir). G002: yalnız güvensiz blokta; AS001:
+    // `mimari:` etiketi hedef mimariyle uyuşmalı.
     eğer metin_esit(ad, "ERISIM") { t007_kontrol(p, idx); }     // D-353 T007
     eğer metin_esit(ad, "DIZI_OLUSTUR") { dizi_eleman_kontrol(p, idx); }   // D-354 T013
     ver 0;

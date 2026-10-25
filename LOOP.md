@@ -68,11 +68,12 @@
       atamasi) DUSURULUYORDU (C 42, self 2) — ayni islevle kapandi. Fikstur
       cg_satirici_asm_alan(_arm64).kem (x86 ikizi burada calistirilamadi; assembler ile
       dogrulandi: movabsq 2^33). Sabotaj S213/S214/S215.
-- [ ] C3g [S] ACIK — D-722'de OLCULDU: self-host satiriçi_asm CIKTILARINDA hic tip denetimi
-      yok (C: T002 tanimsiz, T022 lvalue degil, AS002 lineer/primitif-degil). Gecerli
-      programlarda parite tam; yalniz hatali programlar self-host'ta sessiz.
-
-# ===== D. DIL OZELLIKLERI =====
+- [x] C3g -> D-723. Self-host satiriçi_asm operand tip denetimi (C5 aynasi): cikti T002 /
+      T022 / AS002 (lineer + kopyalanamaz, ERISIM'de ALAN tipi), girdi AS002. C SIRASI icin
+      asm kontrol_dugum'un BASINDA ele aliniyor (G002 -> AS001 -> ciktilar -> girdiler);
+      onceden girdiler AS001'den ONCE geziliyordu (p6_kesirli_asm'de sira farki — D-723
+      oncesinde de vardi, parse_korpus checker kapisinda olmadigi icin gorunmuyordu).
+      Fikstur tc61. Tip "?" ise tani yok (sahte tani yerine kacirma).
 - [x] D1a-D1e -> D-711. Turbofish `f::<T>(..)`: parser (P125 belirsizlik kurali) + checker
       (acik arguman cikarsamayi EZER, yeni T044) + codegen mono + uc self-host uygulamasi +
       korpus (p8/tc56/cg_turbofish) + 12 sabotaj. Ayrinti Gunluk'te.
