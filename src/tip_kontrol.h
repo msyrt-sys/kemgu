@@ -68,6 +68,7 @@ typedef struct TipKontrol {
                                       dosya-modul scope'lari da buna baglanir —
                                       giris dosyasinin ozel adlari modullere sizmaz. */
     TipBilgisi *aktif_donus_tipi;  /* aktif islev gövdesi içinde 'ver' icin */
+    const Dugum *aktif_islev;      /* [D-727] govdesi denetlenen islev (generic bound metot cozumu) */
     UygulaTablosu uygulamalar;     /* (Tip, Ozellik) -> impl registry */
     int hata_sayisi;
     const char *dosya_adi;

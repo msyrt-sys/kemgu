@@ -1,0 +1,17 @@
+// [D-727] BOUND'LU GENERIC ALICIDA METOT ÇAĞRISI — `topla<T: Alan>(x: T)` içinde
+// `x.alan()`. Öncesinde C bunu T007 ("alan erisimi yapi tipi gerek") ile
+// REDDEDİYORDU (D-428 E1); self-host kabul ediyordu. Metot imzası T'nin bound
+// ÖZELLİKLERİNDEN okunur. Bu fikstür POZİTİF (iki taraf da temiz olmalı); ret
+// yolları (T010/T001/T020) self-host'ta metot denetimi hiç olmadığı için
+// (LOOP D-728) şimdilik korpusa konmadı.
+özellik Alan { işlev alan(kendin) -> tam32; işlev olc(kendin, k: tam32) -> tam32; }
+yapı Kare { k: tam32; }
+uygula Alan için Kare {
+    işlev alan(kendin) -> tam32 { ver kendin.k * kendin.k; }
+    işlev olc(kendin, k: tam32) -> tam32 { ver kendin.k * k; }
+}
+işlev topla<T: Alan>(x: T) -> tam32 { ver x.alan() + x.olc(2); }
+işlev main() -> tam32 {
+    değişken k: Kare = Kare { k: 3 };
+    ver topla(k);
+}
