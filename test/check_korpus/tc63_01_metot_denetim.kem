@@ -1,0 +1,15 @@
+// [D-728] SELF-HOST METOT ÇAĞRISI DENETİMİ (somut yapı alıcısı). Öncesinde self-host
+// metot çağrılarını HİÇ denetlemiyordu: arite (T010), argüman tipi (T001), dönüş (T020)
+// ve olmayan metot (T009) sessizdi. Bound'lu generic ret yolları C'de D-727'ye bağlı —
+// o birleşince ayrı fikstür. iyi() POZİTİF: temiz kalmalı (kendin alıcı sayılmaz).
+yapı Kare { k: tam32; }
+uygula Kare {
+    işlev alan(kendin) -> tam32 { ver kendin.k * kendin.k; }
+    işlev olc(kendin, k: tam32) -> tam32 { ver kendin.k * k; }
+}
+işlev f(x: Kare) -> tam32 { ver x.alan(1); }
+işlev g(x: Kare) -> tam32 { ver x.olc("s"); }
+işlev h(x: Kare) -> metin { ver x.alan(); }
+işlev i(x: Kare) -> tam32 { ver x.yok(); }
+işlev iyi(x: Kare) -> tam32 { ver x.alan() + x.olc(2); }
+işlev main() -> tam32 { ver iyi(Kare { k: 3 }); }

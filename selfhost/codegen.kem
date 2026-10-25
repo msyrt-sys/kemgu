@@ -354,6 +354,8 @@ yapı Ayr {
     fg_gs: Dizi<tam32>;
     fg_dn: Dizi<tam32>;
     fg_nd: Dizi<tam32>;   // [D-716] fg kaydının ISLEV düğümü (nitelikli kopya için)
+    gp_bl: Dizi<metin>;   // [D-728] gp_ad ile paralel: parametrenin bound'ları ("," ile)
+    mk_ad: Dizi<metin>;   // [D-728] ilk parametresi `kendin` olan metot anahtarları
     // [D-711 turbofish] tip_str İKAMESİ: ts_n > 0 iken TIP_BASIT adı ts_ad[i] ise
     // ts_tip[i] döner (mantıksal uzunluk ts_n; dizi küçülmez, yeniden yazılır).
     ts_ad: Dizi<metin>;
@@ -1372,10 +1374,12 @@ işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
         // Kapsam-duyarsız (tüm bildirimlerin paramları tek listede): yalnız
         // EKSİK tanı üretebilir, YANLIŞ tanı üretemez.
         dizi_ekle(p.gp_ad, sim_lex(p));
+        değişken bl: metin = "";          // [D-728] bu parametrenin bound listesi
         bekle(p, "TANIMLAYICI");          // param adı
         eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
             ilerle(p);
             değişken b1: metin = sim_lex(p);
+            bl = b1;
             parse_tip(p);                 // ilk bound (orphan düğüm)
             eğer metin_esit(sahip, "") == yanlış {
                 dizi_ekle(p.gp_sahip, sahip); dizi_ekle(p.gp_idx, pi);
@@ -1384,6 +1388,7 @@ işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
             iken sim_mi(p, "ARTI") {
                 ilerle(p);
                 değişken bn: metin = sim_lex(p);
+                bl = metin_birlestir(metin_birlestir(bl, ","), bn);
                 parse_tip(p);
                 eğer metin_esit(sahip, "") == yanlış {
                     dizi_ekle(p.gp_sahip, sahip); dizi_ekle(p.gp_idx, pi);
@@ -1391,6 +1396,7 @@ işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
                 }
             }
         }
+        dizi_ekle(p.gp_bl, bl);   // [D-728]
         pi = pi + 1;
         eğer sim_mi(p, "VIRGUL") { ilerle(p); }
         değilse { devam = yanlış; }
@@ -10093,6 +10099,155 @@ işlev arite_arg_kontrol(p: &değişken Ayr, idx: tam32, fad: metin, cad: metin)
 // `.` olamaz → nitelikli anahtar mevcut hiçbir aramayla çakışmaz. Yalnız KÖKTEN
 // çağrılır; iç içe modül önekleri burada kurulur (genel_topla'nın kendi
 // özyinelemesinden çağrılsa `ic.f` gibi YANLIŞ önekli kayıtlar oluşurdu).
+// [D-728] METOT ÇAĞRISI DENETİMİ — C tip_kontrol.c metot dağıtımı aynası.
+// Self-host metot çağrılarını HİÇ denetlemiyordu (somut yapı alıcısında bile
+// T010/T001/T020 sessizdi). Metot imzaları "<Tip>.<metod>" (uygula) ve
+// "<Özellik>.<metod>" (özellik bildirimi) anahtarlarıyla kaydedilir (D-715
+// nitelikli imza deseni). C metot argümanlarını TEK KEZ gezer (normal çağrı
+// yolundaki D-375 çift gezinti YOK) → ayrı, dar denetleyici.
+işlev uyg_tip_adi(p: &değişken Ayr, t: tam32) -> metin {
+    değişken n: tam32 = t;
+    iken (n >= 0) ve metin_esit(dizi_al(p.a_ad, n), "TIP_REFERANS") {
+        eğer dizi_al(p.a_cs, n) < 1 { ver ""; }
+        n = dizi_al(p.cocuk, dizi_al(p.a_cb, n));
+    }
+    eğer n < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, n), "TIP_BASIT") { ver dizi_al(p.a_deg, n); }
+    eğer metin_esit(dizi_al(p.a_ad, n), "TIP_KULLANICI") ve (dizi_al(p.a_cs, n) > 0) {
+        değişken k: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, n));
+        eğer metin_esit(dizi_al(p.a_ad, k), "TANIMLAYICI") { ver dizi_al(p.a_deg, k); }
+    }
+    ver "";
+}
+// Metot ISLEV düğümünü "<onek>.<ad>" anahtarıyla imza tablosuna kaydet; ilk
+// parametre `kendin` ise anahtar mk_ad'a (alıcı argüman sayısına girmez).
+işlev metot_imza_kaydet(p: &değişken Ayr, m: tam32, onek: metin) -> tam32 {
+    imza_kaydet(p, m);
+    değişken key: metin = metin_birlestir(metin_birlestir(onek, "."), dizi_al(p.a_deg, m));
+    dizi_yaz(p.fn_ad, dizi_boyut(p.fn_ad) - 1, key);
+    değişken cb: tam32 = dizi_al(p.a_cb, m);
+    eğer dizi_al(p.a_cs, m) > 0 {
+        değişken c0: tam32 = dizi_al(p.cocuk, cb);
+        eğer metin_esit(dizi_al(p.a_ad, c0), "PARAMETRE") ve metin_esit(dizi_al(p.a_deg, c0), "kendin") {
+            dizi_ekle(p.mk_ad, key);
+        }
+    }
+    ver 0;
+}
+işlev metot_kendinli_mi(p: &değişken Ayr, key: metin) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.mk_ad) { eğer metin_esit(dizi_al(p.mk_ad, i), key) { ver doğru; } i = i + 1; }
+    ver yanlış;
+}
+// Alıcı tip adı: ham annotasyon (`&Kare`, `&değişken Kare` soyulur) ya da çıkarım.
+işlev metot_alici_tipi(p: &değişken Ayr, nes: tam32) -> metin {
+    değişken t: metin = esles_skrutini_tipi(p, nes);
+    eğer metin_baslar(t, "&değişken ") { t = metin_kes(t, 11, metin_uzunluk(t) - 11); }
+    eğer metin_baslar(t, "&") { t = metin_kes(t, 1, metin_uzunluk(t) - 1); }
+    ver t;
+}
+// Metot imza anahtarı ("" = bulunamadı): somut yapı → "<Tip>.<m>"; alıcı aktif
+// işlevin generic parametresi ise bound özelliklerinde "<Özellik>.<m>" (D-727).
+işlev metot_anahtari(p: &değişken Ayr, nes: tam32, m: metin) -> metin {
+    değişken t: metin = metot_alici_tipi(p, nes);
+    eğer (metin_uzunluk(t) == 0) veya metin_esit(t, "?") { ver ""; }
+    değişken key: metin = metin_birlestir(metin_birlestir(t, "."), m);
+    eğer fn_psay_bul(p, key) >= 0 { ver key; }
+    // generic parametre: aktif işlevin fg kaydı → gp aralığı → bound listesi
+    değişken fi: tam32 = 0;
+    iken fi < dizi_boyut(p.fg_nd) {
+        eğer dizi_al(p.fg_nd, fi) == p.aktif_fn {
+            değişken gb: tam32 = dizi_al(p.fg_gb, fi);
+            değişken gs: tam32 = dizi_al(p.fg_gs, fi);
+            değişken gi: tam32 = 0;
+            iken gi < gs {
+                eğer (gb + gi < dizi_boyut(p.gp_bl)) ve metin_esit(dizi_al(p.gp_ad, gb + gi), t) {
+                    değişken bl: metin = dizi_al(p.gp_bl, gb + gi);
+                    değişken bi: tam32 = 0;
+                    iken bi < liste_say_k(bl) {
+                        değişken bk: metin = metin_birlestir(metin_birlestir(liste_oge_k(bl, bi), "."), m);
+                        eğer fn_psay_bul(p, bk) >= 0 { ver bk; }
+                        bi = bi + 1;
+                    }
+                }
+                gi = gi + 1;
+            }
+        }
+        fi = fi + 1;
+    }
+    ver "";
+}
+// "," ile birleşik listede öğe sayısı / k. öğe (checker tarafı; codegen'in
+// liste_say/liste_oge'si ile aynı mantık, ad çakışmasın diye _k).
+işlev liste_say_k(s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s);
+    eğer n == 0 { ver 0; }
+    değişken c: tam32 = 1;
+    değişken i: tam32 = 0;
+    iken i < n { eğer bayt(s, i) == 44 { c = c + 1; } i = i + 1; }
+    ver c;
+}
+işlev liste_oge_k(s: metin, k: tam32) -> metin {
+    değişken n: tam32 = metin_uzunluk(s);
+    değişken bas: tam32 = 0;
+    değişken idx: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i <= n {
+        eğer (i == n) veya (bayt(s, i) == 44) {
+            eğer idx == k { ver metin_kes(s, bas, i - bas); }
+            idx = idx + 1;
+            bas = i + 1;
+        }
+        i = i + 1;
+    }
+    ver "";
+}
+// C metot yolu: arite (T010, alıcı hariç) → her argüman TEK gezinti + T001.
+// [D-728] `t` aktif işlevin generic parametre adı mı?
+işlev aktif_gp_mi(p: &değişken Ayr, t: metin) -> mantıksal {
+    değişken fi: tam32 = 0;
+    iken fi < dizi_boyut(p.fg_nd) {
+        eğer dizi_al(p.fg_nd, fi) == p.aktif_fn {
+            değişken gb: tam32 = dizi_al(p.fg_gb, fi);
+            değişken gi: tam32 = 0;
+            iken gi < dizi_al(p.fg_gs, fi) {
+                eğer metin_esit(dizi_al(p.gp_ad, gb + gi), t) { ver doğru; }
+                gi = gi + 1;
+            }
+        }
+        fi = fi + 1;
+    }
+    ver yanlış;
+}
+işlev metot_arg_kontrol(p: &değişken Ayr, idx: tam32, key: metin) -> tam32 {
+    değişken hb: tam32 = dizi_al(p.a_cb, idx);
+    değişken hc: tam32 = dizi_al(p.a_cs, idx);
+    değişken ofs: tam32 = 0;
+    eğer metot_kendinli_mi(p, key) { ofs = 1; }
+    değişken ps: tam32 = fn_psay_bul(p, key) - ofs;
+    eğer (hc - 1) != ps {
+        dizi_ekle(p.th_kod, "T010");
+        dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+        dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+        ver 0;
+    }
+    değişken a: tam32 = 1;
+    iken a < hc {
+        değişken arg: tam32 = dizi_al(p.cocuk, hb + a);
+        kontrol_dugum(p, arg);
+        değişken pt: metin = fn_ptip_bul(p, key, a - 1 + ofs);
+        eğer metin_esit(pt, "?") == yanlış {
+            değişken at: metin = ifade_tip(p, arg, pt);
+            eğer (metin_esit(at, "?") == yanlış) ve (metin_esit(at, pt) == yanlış) {
+                dizi_ekle(p.th_kod, "T001");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
+            }
+        }
+        a = a + 1;
+    }
+    ver 0;
+}
 işlev nitelikli_imza_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
@@ -10103,6 +10258,28 @@ işlev nitelikli_imza_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam3
         eğer metin_esit(ad, "DISA") ve (dizi_al(p.a_cs, c) > 0) {
             c = dizi_al(p.cocuk, dizi_al(p.a_cb, c));
             ad = dizi_al(p.a_ad, c);
+        }
+        // [D-728] uygula / özellik metot imzaları ("<Tip>.<m>" / "<Özellik>.<m>")
+        eğer metin_esit(ad, "UYGULA") ve (dizi_al(p.a_cs, c) > 0) {
+            değişken utad: metin = uyg_tip_adi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, c)));
+            eğer metin_uzunluk(utad) > 0 {
+                değişken ucb: tam32 = dizi_al(p.a_cb, c);
+                değişken ui: tam32 = 0;
+                iken ui < dizi_al(p.a_cs, c) {
+                    değişken um: tam32 = dizi_al(p.cocuk, ucb + ui);
+                    eğer metin_esit(dizi_al(p.a_ad, um), "ISLEV") { metot_imza_kaydet(p, um, utad); }
+                    ui = ui + 1;
+                }
+            }
+        }
+        eğer metin_esit(ad, "OZELLIK") {
+            değişken ocb: tam32 = dizi_al(p.a_cb, c);
+            değişken oi: tam32 = 0;
+            iken oi < dizi_al(p.a_cs, c) {
+                değişken om: tam32 = dizi_al(p.cocuk, ocb + oi);
+                eğer metin_esit(dizi_al(p.a_ad, om), "ISLEV") { metot_imza_kaydet(p, om, dizi_al(p.a_deg, c)); }
+                oi = oi + 1;
+            }
         }
         eğer metin_esit(ad, "MODUL") {
             değişken yo: metin = dizi_al(p.a_deg, c);
@@ -10943,6 +11120,11 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
                 eğer dizi_al(p.fg_dn, tfg3) >= 0 { ver tf_tip_coz(p, idx, tfg3, dizi_al(p.fg_dn, tfg3)); }
             }
             ver fn_donus_bul(p, dizi_al(p.a_deg, h));   // "?" = kullanıcı işlevi değil
+        }
+        // [D-728] `x.m(..)` → metot imzasının dönüş tipi.
+        eğer metin_esit(dizi_al(p.a_ad, h), "ERISIM") ve (dizi_al(p.a_cs, h) > 0) {
+            değişken mk2: metin = metot_anahtari(p, dizi_al(p.cocuk, dizi_al(p.a_cb, h)), dizi_al(p.a_deg, h));
+            eğer metin_uzunluk(mk2) > 0 { ver fn_donus_bul(p, mk2); }
         }
         // [D-715] `m::f(..)` → nitelikli imzanın dönüş tipi (bulunamazsa "?").
         eğer metin_esit(dizi_al(p.a_ad, h), "YOL") {
@@ -14035,6 +14217,22 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 ver arite_arg_kontrol(p, idx, fad, fad);   // [D-715]
             }
         }
+        // [D-728] METOT ÇAĞRISI (`x.m(..)`): C metot dağıtımı aynası.
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "ERISIM") ve (dizi_al(p.a_cs, hedef) > 0) {
+            değişken mnes: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hedef));
+            değişken mad: metin = dizi_al(p.a_deg, hedef);
+            değişken mk: metin = metot_anahtari(p, mnes, mad);
+            eğer metin_uzunluk(mk) > 0 { ver metot_arg_kontrol(p, idx, mk); }
+            // Metot YOK: C alan erişimine düşer — yapıda alan da yoksa T009,
+            // alıcı generic parametreyse (bound'da yok / bound yok) T007; konum ERISIM.
+            // Argümanlar gezilmez (C t_hata ile erken döner).
+            değişken mt: metin = metot_alici_tipi(p, mnes);
+            eğer yapi_var_mi(p, mt) {
+                eğer alan_var_mi(p, mt, mad) == yanlış { sekil_hata(p, hedef, "T009"); ver 0; }
+            } değilse {
+                eğer aktif_gp_mi(p, mt) { sekil_hata(p, hedef, "T007"); ver 0; }
+            }
+        }
         // [D-715] YOL hedefi (`m::f(..)`, `m::ic::h(..)`): nitelikli imzayla AYNI
         // bilinen-arite denetimi. Çözülemezse (dosya modülü, bilinmeyen yol) eski
         // davranış: tanı yok (default-DENY — sahte T010 riski alınmaz).
@@ -15484,7 +15682,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0,
         tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: [],
-        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], fg_nd: [], ts_ad: [], ts_tip: [], ts_n: 0
+        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], fg_nd: [], gp_bl: [], mk_ad: [], ts_ad: [], ts_tip: [], ts_n: 0
     };
 }
 
