@@ -2031,6 +2031,18 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
             ast_taransa_metinleri(g, d->veri.kullan_ifade.operand); break;
         case DUGUM_IMHA_IFADE:
             ast_taransa_metinleri(g, d->veri.imha_ifade.operand); break;
+        /* [D-724] Bu uc dal YOKTU -> `guvensiz { yazdir_metin("x"); }`,
+         * `uygula` metot govdesindeki dizgi ve asm girdisindeki dizgi C'de
+         * "metin literal kayitsiz" ile DERLENMIYORDU (olculdu; self-host
+         * derliyordu). Genel cocuk yineleyici yok (D-543) -> acik dallar. */
+        case DUGUM_GUVENSIZ:
+            ast_taransa_metinleri(g, d->veri.guvensiz.blok); break;
+        case DUGUM_UYGULA:
+            ast_taransa_metinleri_liste(g, d->veri.uygula.islevler,
+                                         d->veri.uygula.islev_sayi); break;
+        case DUGUM_SATIRICI_ASM:
+            ast_taransa_metinleri_liste(g, d->veri.satirici_asm.girdi_ifadeler,
+                                         d->veri.satirici_asm.girdi_sayi); break;
         default: break;
     }
 }
