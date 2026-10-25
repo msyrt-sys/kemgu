@@ -3780,7 +3780,14 @@ işlev mono_islev_kayit(p: &değişken Ayr, base: metin, argt: Dizi<metin>, argm
             değilse { sm = metin_birlestir(sm, "0"); }
             sp = metin_birlestir(sp, tp);
             si = metin_birlestir(si, ir);
-            mang = metin_birlestir(metin_birlestir(mang, "$"), mono_ir_sanitize(ir));
+            // [D-729] YAPI tipi argüman: C mangle_et `%`'yi `_` yapar ve geri kalanı
+            // korur (`topla$_Kare`, `al$_Kutu$i64`); self `%`'yi siliyordu
+            // (`topla$Kare`) → yapısal ad farkı K4 muafiyetleri altında gizliydi.
+            eğer (metin_uzunluk(ir) > 1) ve (bayt(ir, 0) == 37) {
+                mang = metin_birlestir(metin_birlestir(mang, "$_"), metin_kes(ir, 1, metin_uzunluk(ir) - 1));
+            } değilse {
+                mang = metin_birlestir(metin_birlestir(mang, "$"), mono_ir_sanitize(ir));
+            }
         }
         i = i + 1;
     }
@@ -6444,6 +6451,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             mrv = ifade_uret(p, mnes);
             mrt = p.son_tip;
             mad2 = metod_cagri_adi(p, mrt, mnes, fad_orj);
+            // [D-729] Metot VAR ama alıcı tipinden çözülemedi: generic işlevin
+            // TABAN gövdesi (D-401 — T somut değil, `i32` sanılır). Özelleştirilmiş
+            // sürümler (`topla$Kare`) doğru çözülür; taban gövde yalnız mono
+            // çıkarsaması başarısızsa çağrılır. Tanımsız `@.alan` (LINK-RED) yerine
+            // `llvm.trap`: bağlanır, ulaşılırsa GÜRÜLTÜLÜ durur (sessiz 0 değil).
+            eğer metin_baslar(fad, ".") ve (metin_uzunluk(mad2) == 0) {
+                yaz_str("  call void @llvm.trap()"); yb(10);
+                p.son_tip = "i32"; p.son_elem = ""; p.son_ref = "";
+                ver "0";
+            }
         }
         değişken kdl: metin = "";
         eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, fad) == yanlış) { kdl = builtin_kdl_ad(fad); }

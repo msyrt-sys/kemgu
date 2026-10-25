@@ -1,0 +1,16 @@
+// [D-727/D-728] BOUND'LU GENERIC ALICIDA METOT — ret yolları (C ↔ self birebir):
+// bound'da olmayan metot / bound'suz generic → T007; arite T010; argüman T001;
+// dönüş T020. iyi() POZİTİF: temiz kalmalı.
+özellik Alan { işlev alan(kendin) -> tam32; işlev olc(kendin, k: tam32) -> tam32; }
+yapı Kare { k: tam32; }
+uygula Alan için Kare {
+    işlev alan(kendin) -> tam32 { ver kendin.k * kendin.k; }
+    işlev olc(kendin, k: tam32) -> tam32 { ver kendin.k * k; }
+}
+işlev iyi<T: Alan>(x: T) -> tam32 { ver x.alan() + x.olc(2); }
+işlev kotu1<T: Alan>(x: T) -> tam32 { ver x.yok(); }
+işlev kotu2<T: Alan>(x: T) -> tam32 { ver x.alan(1); }
+işlev kotu3<T: Alan>(x: T) -> tam32 { ver x.olc("s"); }
+işlev kotu4<T: Alan>(x: T) -> metin { ver x.alan(); }
+işlev serbest<T>(x: T) -> tam32 { ver x.alan(); }
+işlev main() -> tam32 { ver 0; }

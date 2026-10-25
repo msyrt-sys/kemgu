@@ -97,10 +97,16 @@ cg_rho_sahip_confined cg_rho_sahip_kacis cg_kanal_omru"
 MUAF_K4="cg_generic_mono cg_generic_sonuc_ptr cg_modul_alias cg_modul_capraz
 cg_modul_generic cg_modul_transitif cgmodul_mat cgmodul_zincir
 cg_metin_esitlik_generic cg_birim_deger cg_generic_dizi_cikarsama cg_generic_yapi_deger cg_ic_ice_generic_yapi cg_turbofish
-cg_dizi_literal_cikarsama"   # [D-717] taban `ilk`/`ikinci`; specialization (`ilk$i64`) BİREBİR
+cg_dizi_literal_cikarsama
+cg_generic_bound_metot"   # [D-717] taban `ilk`/`ikinci`; specialization (`ilk$i64`) BİREBİR
 
 MUAF="$MUAF_K1 $MUAF_K2 $MUAF_K3 $MUAF_K4"
 muaf_mi() { case " $(echo $MUAF) " in *" $1 "*) return 0;; esac; return 1; }
+# [D-729] K4 "self taban govdeyi yayar, C atlar" demektir -> C'nin define kumesi
+# self'inkinin ALT KUMESI olmali. Oncesinde K4 dosyalari HIC karsilastirilmiyordu
+# ve ozellestirme ADI farki (`topla$_Kare` / `topla$Kare`) bu muafiyet altinda
+# gorunmuyordu. Artik C'de olup self'te olmayan her define KIRMIZI.
+k4_mi() { case " $(echo $MUAF_K4) " in *" $1 "*) return 0;; esac; return 1; }
 
 pass=0; fail=0; atla=0; muaf=0
 # [D-663] PER-DOSYA ZAMAN ASIMI + BELLEK TAVANI (G15). Bu kapi self-host
@@ -143,6 +149,10 @@ for f in test/cg_korpus/*.kem; do
             echo "  ⚠ $b — MUAF ama artık EŞLEŞİYOR: muafiyet listesinden ÇIKAR."
         fi
         pass=$((pass+1))
+    elif k4_mi "$b" && [ -n "$(comm -23 "$TMP/c.d" "$TMP/s.d")" ]; then
+        echo "  🔴 $b — K4 muaf ama C'nin define'i self'te YOK (yalniz taban govde farki olmali):"
+        comm -23 "$TMP/c.d" "$TMP/s.d" | head -4 | sed 's/^/      /'
+        fail=$((fail+1))
     elif muaf_mi "$b"; then
         muaf=$((muaf+1))
     else
