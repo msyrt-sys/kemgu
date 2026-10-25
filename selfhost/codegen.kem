@@ -127,6 +127,7 @@ yapı Ayr {
     k_ver: tam32;
     kanal_ad: Dizi<metin>;  // aktif islevde serbest birakilacak kanal degiskenleri
     rho_yerel: metin;      // V2-F4.2b: scope-yerel bölge IR reg (fn girişinde aç, her ret öncesi serbest; ""=yok)
+    metod_ad: Dizi<metin>;   // [D-725] "<Tip>.<metod>" adları (uygula)
     uygula_hedef: metin;   // B2: aktif uygula bloğunun hedef yapı LLVM tipi ("%Sayac"); kendin param tipi; ""=yok
     mod_onek: metin;       // D-398: aktif modül önek zinciri ("a", "d.i"); ""=üst düzey
     sc_slot: metin;        // B4: ve/veya kısa-devre i32 slot reg'i — fn girişinde (entry) BİR KEZ alloca, tüm ve/veya tekrar kullanır (döngü-içi alloca yığın taşmasını önler)
@@ -1966,6 +1967,62 @@ işlev alan_adres_uret(p: &değişken Ayr, lhs: tam32) -> metin {
     yaz_str(base); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
     p.son_tip = ftip;
     ver gr;
+}
+// [D-725] `uygula` hedef tip düğümünün kök adı (`&T` soyulur; TIP_KULLANICI
+// generic `Cift<A,B>` → "Cift"). C llvm.c metod_tip_adi aynası.
+işlev metod_tip_adi(p: &değişken Ayr, t: tam32) -> metin {
+    değişken n: tam32 = t;
+    iken (n >= 0) ve metin_esit(dizi_al(p.a_ad, n), "TIP_REFERANS") {
+        eğer dizi_al(p.a_cs, n) < 1 { ver ""; }
+        n = dizi_al(p.cocuk, dizi_al(p.a_cb, n));
+    }
+    eğer n < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, n), "TIP_BASIT") { ver dizi_al(p.a_deg, n); }
+    eğer metin_esit(dizi_al(p.a_ad, n), "TIP_KULLANICI") ve (dizi_al(p.a_cs, n) > 0) {
+        değişken k: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, n));
+        eğer metin_esit(dizi_al(p.a_ad, k), "TANIMLAYICI") { ver dizi_al(p.a_deg, k); }
+    }
+    ver "";
+}
+// [D-725] ".m" ile biten bir uygula metodu var mı?
+işlev metod_var_mi(p: &değişken Ayr, m: metin) -> mantıksal {
+    değişken son: metin = metin_birlestir(".", m);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.metod_ad) {
+        eğer metin_biter(dizi_al(p.metod_ad, i), son) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// [D-725] Metot çağrısının IR adı: alıcı IR tipi `%Kare` / `%Cift$i32` /
+// `%"Cift$i32"` → "Kare.m"; alıcı `ptr` ve TANIMLAYICI ise referans yapı adı;
+// yoksa ".m" ile biten TEK metot. Bulunamazsa "" (eski çıplak ad yolu).
+işlev metod_cagri_adi(p: &değişken Ayr, rt: metin, nes: tam32, m: metin) -> metin {
+    değişken tad: metin = "";
+    eğer (metin_uzunluk(rt) > 1) ve (bayt(rt, 0) == 37) {
+        değişken b: tam32 = 1;
+        eğer bayt(rt, 1) == 34 { b = 2; }
+        değişken e: tam32 = b;
+        iken (e < metin_uzunluk(rt)) ve (bayt(rt, e) != 36) ve (bayt(rt, e) != 34) { e = e + 1; }
+        tad = metin_kes(rt, b, e - b);
+    }
+    eğer (metin_uzunluk(tad) == 0) ve metin_esit(dizi_al(p.a_ad, nes), "TANIMLAYICI") {
+        tad = cg_var_ref_bul(p, dizi_al(p.a_deg, nes));
+    }
+    eğer metin_uzunluk(tad) > 0 {
+        değişken ad: metin = metin_birlestir(metin_birlestir(tad, "."), m);
+        eğer fn_kayitli_mi(p, ad) { ver ad; }
+    }
+    değişken son: metin = metin_birlestir(".", m);
+    değişken bulunan: metin = "";
+    değişken adet: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.metod_ad) {
+        eğer metin_biter(dizi_al(p.metod_ad, i), son) { bulunan = dizi_al(p.metod_ad, i); adet = adet + 1; }
+        i = i + 1;
+    }
+    eğer adet == 1 { ver bulunan; }
+    ver "";
 }
 // D-416: SATIRICI_ASM düğümünün yan-kanal indeksi (-1 = yok).
 işlev asm_kanal_idx(p: &değişken Ayr, idx: tam32) -> tam32 {
@@ -5618,6 +5675,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             }
         }
         değişken fad: metin = dizi_al(p.a_deg, dizi_al(p.cocuk, cb));  // hedef TANIMLAYICI adı
+        // [D-725] METOT çağrısı (`x.alan()`) yerleşik/intrinsic adlarla (`alan`
+        // kanal projeksiyonu, `dondur`, ...) ÇAKIŞMAMALI. Metotlar artık "<Tip>.m"
+        // adıyla kayıtlı → `fn_var_mi("alan")` yanlış → aşağıdaki intrinsic dalları
+        // `x.alan()`ı kanal projeksiyonu sanıyordu (ölçüldü: çağrı hiç yayılmadı).
+        // Tanımlayıcıda olamayacak `.` öneki tüm o karşılaştırmaları ıskalatır;
+        // özgün ad `fad_orj`de (C'de çakışma yok: metot dağıtımı EN BAŞTA).
+        değişken fad_orj: metin = fad;
+        eğer metin_esit(dizi_al(p.a_ad, dizi_al(p.cocuk, cb)), "ERISIM") ve metod_var_mi(p, fad) {
+            fad = metin_birlestir(".", fad);
+        }
         // D3: tagged-union yapıcı (değer/tamam/hata) — beklenen_ll bağlamı varsa
         // {i8,..} inşa et (C llvm.c yapici_uret: alloca+store tag+payload+load).
         eğer tagunion_yapici_mi(fad) {
@@ -6353,8 +6420,19 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         // Built-in mi? Önce KULLANICI işlevi mi bak (yaz_str/yaz_kacis gibi yaz_ önekli user fn'leri
         // built-in sanmamak için); değilse önek-tabanlı @kdl_* eşlemesi dene.
+        // [D-725/D-726] METOT ÇAĞRISI: alıcı ad seçiminden ÖNCE ve TEK KEZ
+        // üretilir; adı alıcının tipinden seçilir ("<Tip>.<metod>").
+        değişken mrv: metin = "";
+        değişken mrt: metin = "";
+        değişken mad2: metin = "";
+        eğer metin_esit(dizi_al(p.a_ad, hed), "ERISIM") {
+            değişken mnes: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, hed));
+            mrv = ifade_uret(p, mnes);
+            mrt = p.son_tip;
+            mad2 = metod_cagri_adi(p, mrt, mnes, fad_orj);
+        }
         değişken kdl: metin = "";
-        eğer fn_var_mi(p, fad) == yanlış { kdl = builtin_kdl_ad(fad); }
+        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, fad) == yanlış) { kdl = builtin_kdl_ad(fad); }
         değişken rt: metin = "";
         değişken fname: metin = "";
         değişken kullanici: tam32 = 0;   // V2-F4.2a: kullanıcı-fn mı (ρ alır)?
@@ -6369,6 +6447,7 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // `fad`ı ÇIPLAK adla karşılaştırıyor).
             değişken hedef: tam32 = dizi_al(p.cocuk, cb);
             değişken rn: metin = fn_coz(p, fad);
+            eğer metin_uzunluk(mad2) > 0 { rn = mad2; }   // [D-725]
             eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
                 rn = yol_noktali(p, hedef);
                 // D-412: GÖRELİ YOL. `modül m` içinden `ic::g()` yazmak `m.ic.g`
@@ -6395,8 +6474,27 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // dalı metodu fn_ad'a kaydetti → kullanici=1, %rho sonra receiver. C llvm.c
         // :2616-2648 (ERISIM-hedef dispatch) aynası.
         eğer metin_esit(dizi_al(p.a_ad, hed), "ERISIM") {
-            dizi_ekle(args, ifade_uret(p, dizi_al(p.cocuk, dizi_al(p.a_cb, hed))));
-            dizi_ekle(argt, p.son_tip);
+            // [D-725] OTOMATİK DEREF (C aynası): `kendin` yapı DEĞERİ, alıcı `&Yapi`
+            // (ptr) ise önce yapıyı yükle. Öncesinde ptr doğrudan geçiyordu →
+            // SESSİZ YANLIŞ (ölçüldü: iki derleyicide 0, doğrusu 42).
+            eğer metin_esit(mrt, "ptr") ve (metin_uzunluk(mad2) > 0) {
+                // `kendin` açıklamasızdır (param_ir_tip boş döner) → yapı tipi
+                // nitelikli metot adının ÖNEKİNDEN: "Kare.alan" → %Kare.
+                değişken kir: metin = "";
+                değişken nk: tam32 = metin_uzunluk(mad2) - 1;
+                iken (nk > 0) ve (bayt(mad2, nk) != 46) { nk = nk - 1; }
+                eğer nk > 0 {
+                    değişken mtad: metin = metin_kes(mad2, 0, nk);
+                    eğer yapi_var_mi(p, mtad) { kir = ir_tip_ad(mtad); }
+                }
+                eğer (metin_uzunluk(kir) > 0) ve (bayt(kir, 0) == 37) {
+                    değişken dr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(dr); yaz_str(" = load "); yaz_str(kir); yaz_str(", ptr "); yaz_str(mrv); yb(10);
+                    mrv = dr; mrt = kir;
+                }
+            }
+            dizi_ekle(args, mrv);   // [D-726] yukarıda bir kez üretildi
+            dizi_ekle(argt, mrt);
             dizi_ekle(argm, "");   // [D-449] receiver: paralelliği koru
         }
         // [D-466] `soket_baglan(y, host, port)`: YETKI ARGUMANI IR'A GEÇMEZ
@@ -9499,9 +9597,17 @@ işlev imza_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "UYGULA") {   // B2: uygula metod imzaları (CAGRI dispatch için)
             değişken ucb: tam32 = dizi_al(p.a_cb, c);
             değişken ucs: tam32 = dizi_al(p.a_cs, c);
+            // [D-725] metot adı "<Tip>.<metod>" (C llvm.c metod_ad_kur aynası).
+            değişken utad: metin = metod_tip_adi(p, dizi_al(p.cocuk, ucb));
             değişken ui: tam32 = 0;
             iken ui < ucs {
                 değişken m: tam32 = dizi_al(p.cocuk, ucb + ui);
+                eğer metin_esit(dizi_al(p.a_ad, m), "ISLEV") ve (metin_uzunluk(utad) > 0)
+                  ve (metin_icerir(dizi_al(p.a_deg, m), ".") == yanlış) {
+                    değişken mad: metin = metin_birlestir(metin_birlestir(utad, "."), dizi_al(p.a_deg, m));
+                    dizi_yaz(p.a_deg, m, mad);
+                    dizi_ekle(p.metod_ad, mad);
+                }
                 eğer metin_esit(dizi_al(p.a_ad, m), "ISLEV") {
                     dizi_ekle(p.fn_ad, dizi_al(p.a_deg, m));
                     dizi_ekle(p.fn_ret, islev_donus_tip(p, m));
@@ -15287,7 +15393,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         cv_cesit: [], cv_ad: [], cv_pc: [], cv_pb: [], cv_pt: [], cv_ptn: [], cc_ad: [], cc_node: [],
         lbl: 0, bb_term: 0,
         ea_devam: [], ea_derinlik: 0, fn_ad: [], fn_ret: [], fn_risz: [], fn_relem: [], fn_node: [], son_tip: "i32", cur_ret: "i32", rho_ref: "%rho",
-        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, k_modu: 0, k_spawn: 0, k_join: 0, k_imha: 0, k_ver: 0, kanal_ad: [], rho_yerel: "", uygula_hedef: "", mod_onek: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
+        ky_node: [], ky_base: 0, ky_iter_node: [], ky_iter_base: 0, ky_lambda: 0, k_modu: 0, k_spawn: 0, k_join: 0, k_imha: 0, k_ver: 0, kanal_ad: [], rho_yerel: "", metod_ad: [], uygula_hedef: "", mod_onek: "", sc_slot: "", rho_iter: "", dongu_d: 0, ciplak_aktif: 0,
         pa_node: [], pa_reg: [], pa_base: 0,
         lam_node: [], lam_ad: [], lam_capbase: [], lam_capcount: [], lam_capisim: [], lam_capir: [], lam_sayac: 0, lam_i64: 0, lam_ret: [], lam_bek_ret: "", son_lam_ret: "",
         str_deg: [],
