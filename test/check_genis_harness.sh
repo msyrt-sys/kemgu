@@ -49,7 +49,8 @@ fi
 # (E1) C'nin KENDİ sınırlamaları — self daha müsamahakâr. Taklit etmek düşük
 #      değerli ve yanlış-pozitif riski taşır:
 #        21_modul_kullan      C=T002×2  modül-kapsamlı yapı alanı çözümü
-#        23_generic_constraint C=T007   generic bound'da method çağrısı
+#        (23_generic_constraint D-727'de CIKARILDI: C artik bound'lu generic
+#         alicida metot cagrisini cozuyor, self-host ile birebir)
 #        49_generic_method    C=T001×2  `uygula Cift` (tip paramsız) + literal
 # (E2) PARSER sapması: `tip Ad = HedefTip;` KEMGU'da YOK. C parser'ı P001 ile
 #      reddeder, self parse edip T002/T011 verir → farklı KATMAN, ayrı iş.
@@ -106,7 +107,7 @@ fi
 # (C parser.c:175 aynasi) + P001 eslemesi geldikten sonra BIREBIR ayni ciktiyi
 # veriyor. Muafiyet artik bayat: D-419'un "muafiyet listesi bir KOR NOKTA
 # ENVANTERIDIR" kurali geregi silindi.
-MUAF="21_modul_kullan 23_generic_constraint 49_generic_method
+MUAF="21_modul_kullan 49_generic_method
 test_metin test_sonuc heap_dizi_metin test_json test_dosya test_kilit
 test_semafor test_bariyer test_regex
 test_arama test_eslem test_istatistik test_kuyruk test_obek test_tablo test_yigin"

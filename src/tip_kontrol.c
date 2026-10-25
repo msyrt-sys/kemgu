@@ -8,6 +8,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+static const Dugum *bound_metod_bul(TipKontrol *tk, const char *gp, int gpuz,
+                                    const char *m, int muz);   /* [D-727] */
 
 /* === Setup === */
 
@@ -17,6 +19,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->scope = global;
     tk->global_scope = global;
     tk->aktif_donus_tipi = NULL;
+    tk->aktif_islev = NULL;   /* [D-727] alanlar TEK TEK baslatiliyor (D-504) */
     uygula_tablosu_baslat(&tk->uygulamalar);
     tk->hata_sayisi = 0;
     tk->guvensiz_baglam = 0;
@@ -4360,13 +4363,27 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 if (nesne_tip->kategori == TIP_REFERANS) {
                     nesne_tip = nesne_tip->veri.referans.hedef;
                 }
+                const Dugum *m = NULL;
                 if (nesne_tip->kategori == TIP_YAPI) {
-                    const Dugum *m = uygula_tablosu_method_bul(
+                    m = uygula_tablosu_method_bul(
                         &tk->uygulamalar,
                         nesne_tip->veri.yapi.ad,
                         nesne_tip->veri.yapi.ad_uzunluk,
                         erisim->veri.erisim.alan,
                         erisim->veri.erisim.alan_uzunluk);
+                } else if (nesne_tip->kategori == TIP_GENERIC_PARAM) {
+                    /* [D-727] BOUND'LU GENERIC ALICI: `topla<T: Alan>(x: T)` icinde
+                     * `x.alan()`. Oncesinde alan erisimine dusup T007 veriyordu
+                     * (D-428 E1 "generic bound'da method"); self-host kabul ediyordu.
+                     * Metot imzasi T'nin bound OZELLIKLERINDEN (statik dispatch:
+                     * monomorfizasyonda alici somut tip olur, codegen D-725 ile
+                     * "<Tip>.<metod>"u cozer). */
+                    m = bound_metod_bul(tk, nesne_tip->veri.generic_param.ad,
+                                        nesne_tip->veri.generic_param.ad_uzunluk,
+                                        erisim->veri.erisim.alan,
+                                        erisim->veri.erisim.alan_uzunluk);
+                }
+                {
                     if (m) {
                         /* Method bulundu — kendin parametresi otomatik (receiver)
                          * Aksi halde normal arg sayisi kontrolu */
@@ -5598,6 +5615,34 @@ static void pre_populate_kuresel(TipKontrol *tk, const Dugum *kd) {
     }
 }
 
+/* [D-727] Aktif islevin generic parametresi `gp`nin bound ozelliklerinde `m`
+ * adli metot imzasini bul (ilk eslesen bound). Bulunamazsa NULL. */
+static const Dugum *bound_metod_bul(TipKontrol *tk, const char *gp, int gpuz,
+                                    const char *m, int muz) {
+    const Dugum *f = tk->aktif_islev;
+    if (!f || f->tip != DUGUM_ISLEV || !f->veri.islev.tip_param_boundlari) return NULL;
+    for (int pi = 0; pi < f->veri.islev.tip_param_sayi; pi++) {
+        const char *tp = f->veri.islev.tip_paramlar[pi];
+        if ((int)strlen(tp) != gpuz || memcmp(tp, gp, (size_t)gpuz) != 0) continue;
+        int bs = f->veri.islev.tip_param_bound_sayilari
+            ? f->veri.islev.tip_param_bound_sayilari[pi] : 0;
+        for (int bi = 0; bi < bs; bi++) {
+            int bd_uz = 0;
+            const char *bd_ad = tip_dugumu_kok_adi(f->veri.islev.tip_param_boundlari[pi][bi], &bd_uz);
+            if (!bd_ad) continue;
+            const Sembol *oz_s = sembol_bul(tk->global_scope, bd_ad, bd_uz);
+            if (!oz_s || oz_s->kategori != SEMBOL_OZELLIK || !oz_s->ast_dugumu) continue;
+            const Dugum *oz = oz_s->ast_dugumu;
+            for (int u = 0; u < oz->veri.ozellik.uye_sayi; u++) {
+                const Dugum *im = oz->veri.ozellik.uyeler[u];
+                if (im && im->tip == DUGUM_ISLEV && im->veri.islev.ad_uzunluk == muz &&
+                    memcmp(im->veri.islev.ad, m, (size_t)muz) == 0) return im;
+            }
+        }
+    }
+    return NULL;
+}
+
 static void pre_populate_ozellik(TipKontrol *tk, const Dugum *oz) {
     /* Ozellik sembolunu global'e ekle (bound olarak referans gerekli) */
     Sembol s;
@@ -6785,6 +6830,8 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
 
             Scope *eski = tk->scope;
             TipBilgisi *eski_donus = tk->aktif_donus_tipi;
+            const Dugum *eski_islev = tk->aktif_islev;   /* [D-727] */
+            tk->aktif_islev = d;
             tk->scope_seviyesi++;
             /* Govde scope'unun parent'i tanimlandigi scope: modul
              * uyesinde ciplak adlar once kardesleri gorur (lexical). */
@@ -6854,6 +6901,7 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             scope_lineer_kapanis_check(tk, tk->scope);
 
             tk->aktif_donus_tipi = eski_donus;
+            tk->aktif_islev = eski_islev;   /* [D-727] */
             tk->scope = eski;
             tk->scope_seviyesi--;
             break;
