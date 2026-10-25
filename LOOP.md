@@ -47,7 +47,7 @@
       D-640 dar birakmisti; sonraki isler kapatmis, madde bayatmis.
 - [x] C1b -> D-664'te OLCULDU, KAPANMIS. `değişken x = 20+22` ve `değişken b = a`
       ikisi de chk + exe paritede.
-- [ ] C1c [M] ACIK — D-664'te KOK NETLESTI. `değişken y: tam64 = x + 8589934592`
+- [x] C1c [M] ✓ D-732: self-host ikili islemde C D-021/D-630 yeniden-tiplemesi (literal karsi operandin tipine; T043; annotasyonsuz baglama dahil). tc66_01. ESKI NOT: D-664'te KOK NETLESTI. `değişken y: tam64 = x + 8589934592`
       (x: tam32): C IKI tani (T043 literal + T001 deyim), self YALNIZ T001.
       Eksik olan literal TASMASI DEGIL (2^33 < 2^64, `tasti=0`): C'nin D-021
       YENIDEN-TIPLEME yolu `x`(tam32) ile toplami tam32 baglamina sokuyor,
@@ -113,7 +113,7 @@
       yazilabilir (metin_bayt/metin_kes/kod_metin yeterli).
       dosya: dizin olustur/listele, ikili oku/yaz, yol birlestir, uzanti — dizin ve ikili G/C
       RUNTIME YERLESIGI ister (dil yuzeyi karari, Mehmet).
-- [ ] D5f [S] metin: yukaridaki saf-KEMGU eksiklerini yaz + test_metin'e ekle.
+- [x] D5f [S] ✓ D-731 metin: yukaridaki saf-KEMGU eksiklerini yaz + test_metin'e ekle.
 - [ ] D5g [M] dosya: dizin/ikili G/C yerlesikleri — KARAR GEREKTIRIR (yetki<Dosya> ile mi?).
 - [x] D5b -> D-710 (BLAKE3 agac modu, `stdlib/kripto/blake3.kem`).
 - [x] D5c -> D-709 (HMAC-SHA256, RFC 4231 + cok bloklu SHA-256).
