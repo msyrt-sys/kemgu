@@ -1,0 +1,15 @@
+// [D-727/D-729] BOUND'LU GENERIC ALICIDA METOT — kod üretimi (statik dispatch).
+// topla<T: Alan>(x: T) { x.alan() } iki somut tiple: özelleştirmeler `topla$Kare`/
+// `topla$Dik` alıcı tipinden `Kare.alan`/`Dik.alan`ı çözer (D-725). Self-host'ta
+// kullanılmayan TABAN gövde (D-401) tanımsız `@.alan` üretip LINK-RED veriyordu.
+özellik Alan { işlev alan(kendin) -> tam32; }
+yapı Kare { k: tam32; }
+yapı Dik { a: tam32; b: tam32; }
+işlev topla<T: Alan>(x: T) -> tam32 { ver x.alan(); }
+işlev main() -> tam32 {
+    değişken k: Kare = Kare { k: 5 };
+    değişken d: Dik = Dik { a: 4, b: 4 };
+    ver topla(k) + topla(d) + 1;
+}
+uygula Alan için Kare { işlev alan(kendin) -> tam32 { ver kendin.k * kendin.k; } }
+uygula Alan için Dik { işlev alan(kendin) -> tam32 { ver kendin.a * kendin.b; } }

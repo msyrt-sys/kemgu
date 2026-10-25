@@ -132,8 +132,14 @@
       (`yap().al()`); self-host'ta `alan` adli metot kanal projeksiyonu yerlesigine dusuyordu;
       C metin literali uygula/guvensiz govdesinde derlenmiyordu (D-724). Metotlar artik
       "<Tip>.<metod>"; alici tipine gore cozum + `&T` otomatik deref. Fikstur cg_uygula_metot_cozum.
-- [ ] D8c-0 [S] ACIK — D-725 olcumunde: bound'lu generic icinde metot cagrisi (`x.alan()`, `T: Alan`)
-      C'de T007 (bilinen C siniri, D-428 E1). Statik dispatch icin monomorfizasyon gerekir.
+- [x] D8c-0 -> D-727 + D-729. C bound'lu generic alicida metot cagrisini T'nin bound ozelliklerinden
+      cozuyor (T007 yerine arite/arg/donus); statik dispatch monomorfizasyonda D-725 ile. Self-host'ta
+      kullanilmayan TABAN govde (D-401) tanimsiz `@.alan` uretiyordu -> `llvm.trap` (D-729).
+      Fikstur cg_generic_bound_metot + tc62 + tc64.
+- [x] D8h -> D-728. Self-host metot cagrisi denetimi (T010/T001/T020/T009, generic T007) — oncesinde
+      somut yapi alicisinda bile HIC yoktu. Fikstur tc63.
+- [ ] D8i [S] ACIK — D-728'de OLCULDU: self-host ALAN erisiminde (`x.yok`, cagri degil) T009
+      vermiyor (C veriyor). Metot cagrisi hedefi icin D-728'de eklendi; genel alan erisimi acik.
 - [ ] D8c [M] Generic'te bound (`T: Ozellik`).
 - [ ] D8d [M] STATIK dispatch.
 - [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR, once statik.
