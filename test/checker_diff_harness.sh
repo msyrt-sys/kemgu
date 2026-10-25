@@ -2,7 +2,7 @@
 # ============================================================================
 # checker_diff_harness.sh — SELF-HOST tip denetleyici doğruluk kanıtı (Aşama 2).
 # ----------------------------------------------------------------------------
-# KEMGU'da yazılmış checker'ın (selfhost/checker.kem) ürettiği DÜZ hata dump'ını,
+# KEMGU'da yazılmış checker'ın (selfhost/codegen.kem --check, D-734) ürettiği DÜZ hata dump'ını,
 # C checker'ın `--checkdump` oracle'ına (D-051) karşı diff'ler.
 #   Format: <KOD>\t<satır>\t<sütün> (traversal sırası) veya "OK"
 # Korpus: test/check_korpus/*.kem (TC milestone'ları büyüdükçe genişler).
@@ -26,11 +26,17 @@ RT=${RT:-build/kdl_runtime.o}
 TMP=$(mktemp -d "build/checkdiff.XXXXXX" 2>/dev/null || echo "build/checkdiff.$$")
 mkdir -p "$TMP"
 
-if ! "$KEMGU" --llvm selfhost/checker.kem > "$TMP/c.ll" 2>/dev/null; then
-    echo "🔴 KEMGU-checker --llvm üretemedi"; exit 1
-fi
-if ! clang -x ir "$TMP/c.ll" -x none "$RT" -o "$TMP/kemcheck.exe" 2>/dev/null; then
-    echo "🔴 KEMGU-checker link edilemedi"; exit 1
+# [D-734] TEK KAYNAK (D10b/D10c): aday artık `selfhost/codegen.kem`in `--check`
+# yoludur. Eskiden ayrı bir kopya olan `selfhost/checker.kem` derlenip ölçülüyordu;
+# D-733 envanteri iki kopyanın 391 ortak işlevinin 367'sinin kod olarak birebir
+# olduğunu, ve bir kuralın dört kez (D-503/D-517/D-550/D-733) yalnız BİRİNE
+# portlanıp diğerinin SESSİZ kaldığını ölçtü. checker.kem DONDURULDU (başlığına bak);
+# kapının anlamı değişmedi: self-host checker'ı C oracle'ına karşı sıfır-diff.
+# ⚠ Ön koşul ölçüldü: `codegen --check` test/moduller'de 40/40 C ile birebirdi
+# (self_driver --check yalnız check_korpus'u kapsıyordu — boşluk BURADA kapanır).
+CODEGEN=${CODEGEN:-build/codegen${EXE}}
+if [ ! -x "$CODEGEN" ]; then
+    echo "🔴 self-host sürücü yok: $CODEGEN (make \$(BUILD)/codegen\$(EXE))"; exit 1
 fi
 
 # D-361: modül fikstürleri de kapıya dâhil (çapraz-dosya import yüzeyi).
@@ -85,7 +91,7 @@ for f in test/check_korpus/*.kem test/moduller/*.kem; do
     [ -f "$f" ] || continue
     if muaf_mi "$(basename "$f")"; then muaf=$((muaf+1)); continue; fi
     kos "$TMP/oracle.txt" "$KEMGU" --checkdump "$f"; orc=$?
-    kos "$TMP/aday.txt" "$TMP/kemcheck.exe" "$f";     adr=$?
+    kos "$TMP/aday.txt" "$CODEGEN" --check "$f";      adr=$?
     # 124 = timeout . 137 = SIGKILL (OOM) . 139 = SIGSEGV
     if [ "$orc" -eq 124 ] || [ "$adr" -eq 124 ] \
        || [ "$orc" -eq 137 ] || [ "$adr" -eq 137 ]; then

@@ -1,4 +1,13 @@
 // ============================================================================
+// ⛔ DONDURULDU — D-734 (D10c). YENİ KURAL BU DOSYAYA PORTLANMAZ.
+// Self-host checker'ın TEK KAYNAĞI artık `selfhost/codegen.kem`dir; `checker_diff`
+// kapısı `codegen.kem --check` çıktısını ölçer. Bu dosya yalnız büyük bir derleme
+// girdisi olarak (`codegen_bootstrap_harness`) yaşar ve DAVRANIŞ kapısı DEĞİLDİR —
+// yani burada kalan bir kusur hiçbir kapıda görünmez.
+// Gerekçe (D-733 ölçümü): iki kopyanın 391 ortak işlevinin 367'si kod olarak
+// birebirdi ve bir kural DÖRT kez (D-503/D-517/D-550/D-733) yalnız birine
+// portlanıp diğeri sessiz kalmıştı.
+// ============================================================================
 // selfhost/parser.kem — KEMGU parser'ı KEMGU'da (SELF-HOST bootstrap, Aşama 1).
 //
 // HEDEF: C parser'ının (src/parser.c + ifade.c) TAM İKAMESİ. Doğruluk: C

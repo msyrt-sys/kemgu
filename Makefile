@@ -597,10 +597,10 @@ calistir_parser_diff: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 calistir_parser_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/parser_bootstrap_harness.sh
 
-# SELF-HOST tip denetleyici (selfhost/checker.kem) --checkdump çıktısını C
-# --checkdump oracle'ına karşı diff'ler (Aşama 2 / D-052). Korpus: test/check_korpus/.
-calistir_checker_diff: $(BUILD)/kemgu$(EXE) selfhost/konak.kem $(BUILD)/kdl_runtime.o
-	@bash test/checker_diff_harness.sh
+# SELF-HOST tip denetleyici (selfhost/codegen.kem --check; D-734 tek kaynak) çıktısını
+# C --checkdump oracle'ına karşı diff'ler (Aşama 2 / D-052). Korpus: test/check_korpus/ + test/moduller/.
+calistir_checker_diff: $(BUILD)/kemgu$(EXE) selfhost/konak.kem $(BUILD)/kdl_runtime.o $(BUILD)/codegen$(EXE)
+	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/checker_diff_harness.sh
 
 # Dizi sınır-güvenliği (D-069): OOB → panic invaryantı (segfault/sessiz-0 değil).
 calistir_dizi_sinir_test: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
