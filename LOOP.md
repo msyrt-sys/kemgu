@@ -201,6 +201,10 @@
 - [ ] E3d [M] Dosya tanimlayici tablosu.
 - [ ] E3e [L] Basit kabuk.
 - [ ] E3f [M] Surecler arasi izolasyon kapisi.
+- [ ] E4 [L] GERCEK DONANIM YOL HARITASI (x86_64 PC: ekran + Turkce klavye + fare + FAT32,
+      seri port ve ikinci makine gerekmez): `belgeler/KEMGU_OS_Donanim_Yol_Haritasi.md`.
+      H0 kararlari (Mehmet) once; kritik yol H1f/H1g -> H2 -> H3 -> H4/H5/H6/H7 -> H8 -> H9
+      -> H10 -> H11. E3b-E3f bu haritanin H9 maddelerine baglanir.
 
 # ===== F. FORMEL =====
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
