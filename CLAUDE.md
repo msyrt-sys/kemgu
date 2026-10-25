@@ -6584,13 +6584,16 @@ Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklama
       sessizce boş döner (D-508 sonrası: 12 atlama izi ölçülmeden kaldı,
       `grep` hiçbir şey bulmadı ve bir an *"atlama yok"* diye okunacaktı).
       Kalıcı ölçüm logunu iki tarafın da gördüğü bir yola yaz (`/mnt/c/...`).
-- [ ] **⚠⚠ BİR CHECKER KURALINI PORTLARKEN ÜÇ UYGULAMAYI DA GÜNCELLE.**
-      Bu oturumda **ÜÇ KEZ** ısırdı (D-503'te zaten kayıtlıyken):
+- [ ] **⚠⚠ [D-734] SELF-HOST CHECKER'IN TEK KAYNAĞI `selfhost/codegen.kem`.**
+      `selfhost/checker.kem` DONDURULDU (başlığına bak) — yeni kural oraya
+      PORTLANMAZ; artık hiçbir davranış kapısı onu ölçmüyor:
       ```
-      checker_diff              -> selfhost/checker.kem
+      checker_diff              -> selfhost/codegen.kem --check  (D-734)
       self_driver --check       -> selfhost/codegen.kem
       ct_bariyer / --llvm yolu  -> selfhost/codegen.kem
       ```
+      (Eski kural "ÜÇ UYGULAMAYI DA GÜNCELLE" idi ve D-503/D-517/D-550/D-733'te
+      dört kez ısırdı — tek kaynak bu sınıfı yapısal olarak kapatır.)
       **Hedefli kapının yeşil olması portun tam olduğunu KANITLAMAZ**:
       `checker_diff` 166/166 ve 167/167 yeşilken tam takım sürücüde ve
       `ct_bariyer`de kırmızı verdi (*"C REDDEDİYOR, KEMGU IR ÜRETİYOR

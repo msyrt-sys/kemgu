@@ -171,16 +171,18 @@
       MM002 vermiyordu. Kalan bilinen fark: m002_yapici_kontrol generic payload ikamesi
       (D-423, checker.kem'de tp_* registry yok). Ayrica (kapsam disi) self-host
       `mmio_oku32` donus tipini bilmiyor -> `x: tam64 = mmio_oku32(..)` T001 kaciriyor.
-- [ ] D10b [S] Yon karari: driver tek kaynak mi, checker.kem mi?
+- [x] D10b [S] ✓ D-734 uygulandi. Yon karari: driver tek kaynak mi, checker.kem mi?
       ONERI (D-733 olcumune dayali): codegen.kem TEK KAYNAK. Gerekce: ust kume
       (642 islev, FIXPOINT'te kendini derleyen ve uretimde kosan yol), checker.kem'in
       %94'u zaten kod olarak birebir kopyasi, ve D-503/D-517/D-550/D-733'te dort kez
       bir kural yalniz birine portlanip digeri sessiz kaldi. checker_diff silinmez:
       `codegen.kem --check` ciktisini C oracle'a karsi olcer (D10d).
-- [ ] D10c [L] Goc.
-- [ ] D10d [M] `checker_diff` kapisini yeniden tanimla (tek kaynak olunca neyi
-      olcecek? — SILME, anlamini degistir).
-- [ ] D10e [S] Sabotaj.
+- [x] D10c [L] ✓ D-734: checker_diff artik `codegen.kem --check` olcer (check_korpus + moduller;
+      on kosul olculdu: moduller 40/40 birebir). checker.kem DONDURULDU (silinmedi: codegen_bootstrap
+      buyuk derleme girdisi olarak kullaniyor).
+- [x] D10d [M] ✓ D-734 (anlam degismedi: self-host checker vs C oracle sifir-diff).
+- [x] D10e [S] ✓ D-734: codegen.kem T041 kirildi -> checker_diff KIRMIZI (moduller fiksturu dahil);
+      checker.kem kirildi -> YESIL (beklenen: donmus kopya kapida degil).
 
 # ===== E. KEMGU-OS =====
 - [ ] E1a [S] Spark'in UART taban adresini DT/ACPI'den OKU (bugun bilinmiyor).
