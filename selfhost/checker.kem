@@ -201,6 +201,7 @@ yapı Ayr {
     fg_nd: Dizi<tam32>;   // [D-716] fg kaydının ISLEV düğümü (nitelikli kopya için)
     gp_bl: Dizi<metin>;   // [D-728] gp_ad ile paralel: parametrenin bound'ları ("," ile)
     mk_ad: Dizi<metin>;   // [D-728] ilk parametresi `kendin` olan metot anahtarları
+    cagri_hedef: tam32;   // [D-730] gezilen CAGRI hedefi (ERISIM metot hedefi T009 almaz)
     // [D-711 turbofish] tip_str İKAMESİ: ts_n > 0 iken TIP_BASIT adı ts_ad[i] ise
     // ts_tip[i] döner (mantıksal uzunluk ts_n; dizi küçülmez, yeniden yazılır).
     ts_ad: Dizi<metin>;
@@ -2157,7 +2158,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0,
         tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: [],
-        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], fg_nd: [], gp_bl: [], mk_ad: [], ts_ad: [], ts_tip: [], ts_n: 0
+        fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], fg_nd: [], gp_bl: [], mk_ad: [], cagri_hedef: 0 - 1, ts_ad: [], ts_tip: [], ts_n: 0
     };
 }
 
@@ -2371,7 +2372,31 @@ işlev metot_kendinli_mi(p: &değişken Ayr, key: metin) -> mantıksal {
     ver yanlış;
 }
 // Alıcı tip adı: ham annotasyon (`&Kare`, `&değişken Kare` soyulur) ya da çıkarım.
+// [D-730] Alıcı ifadesinin YAPI adı, tip düğümlerinden: TANIMLAYICI → yerelin
+// annotasyon düğümü (`bag_tn`; `&K` soyulur, `*K` SOYULMAZ — C ile aynı);
+// ERISIM → iç alıcının yapısındaki alanın tip düğümü (`alan_tn_bul`).
+// Çözülemezse "" (çağıran dizgi temsiline düşer).
+işlev erisim_yapi_adi(p: &değişken Ayr, n: tam32) -> metin {
+    değişken na: metin = dizi_al(p.a_ad, n);
+    eğer metin_esit(na, "TANIMLAYICI") {
+        değişken tn: tam32 = bag_tn(p, dizi_al(p.a_deg, n));
+        eğer tn >= 0 { ver uyg_tip_adi(p, tn); }
+        ver "";
+    }
+    eğer metin_esit(na, "ERISIM") ve (dizi_al(p.a_cs, n) > 0) {
+        değişken ic: metin = erisim_yapi_adi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, n)));
+        eğer (metin_uzunluk(ic) > 0) ve yapi_var_mi(p, ic) {
+            değişken ftn: tam32 = alan_tn_bul(p, ic, dizi_al(p.a_deg, n));
+            eğer ftn >= 0 { ver uyg_tip_adi(p, ftn); }
+        }
+    }
+    ver "";
+}
 işlev metot_alici_tipi(p: &değişken Ayr, nes: tam32) -> metin {
+    // [D-730] önce TİP DÜĞÜMÜNDEN (dizgi temsili yapı adlarını "?"e düşürür:
+    // `r: &K` ve iç içe `x.ic` çözülemiyordu).
+    değişken ey: metin = erisim_yapi_adi(p, nes);
+    eğer metin_uzunluk(ey) > 0 { ver ey; }
     değişken t: metin = esles_skrutini_tipi(p, nes);
     eğer metin_baslar(t, "&değişken ") { t = metin_kes(t, 11, metin_uzunluk(t) - 11); }
     eğer metin_baslar(t, "&") { t = metin_kes(t, 1, metin_uzunluk(t) - 1); }
@@ -4931,6 +4956,17 @@ işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     ver 0;
 }
 // T007: `x.alan` — x bilinen bir SKALER ise yapı değildir.
+// [D-730] T009: bilinen YAPI alıcısında olmayan ALAN (`x.yok`) — C tip_belirle
+// (ERISIM) aynası. Self-host yalnız desende T009 veriyordu; alan erişiminde HİÇ
+// vermiyordu. Metot çağrısı hedefi (`x.m()`) burada değil D-728 yolunda denetlenir
+// (`cagri_hedef` ile ayrılır). Alıcı tipi bilinmiyorsa ("?") tanı YOK.
+işlev t009_alan_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) == 0 { ver 0; }
+    değişken t: metin = metot_alici_tipi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    eğer yapi_var_mi(p, t) == yanlış { ver 0; }
+    eğer alan_var_mi(p, t, dizi_al(p.a_deg, idx)) { ver 0; }
+    ver sekil_hata(p, idx, "T009");
+}
 işlev t007_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer dizi_al(p.a_cs, idx) == 0 { ver 0; }
     değişken nt: metin = ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)), "?");
@@ -6408,7 +6444,10 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         // D-357 (B): çeşit yapıcısı `Çeşit::V(...)` — C bunu normal çağrı yolundan
         // ÖNCE dener ve hata varsa erken döner (argüman kontrolü yok).
         eğer m002_yapici_kontrol(p, idx, hedef) { ver 0; }
+        değişken eski_ch: tam32 = p.cagri_hedef;   // [D-730]
+        p.cagri_hedef = hedef;
         kontrol_dugum(p, hedef);                 // hedef T002 (C: tip_belirle(hedef))
+        p.cagri_hedef = eski_ch;
         eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
             değişken fad: metin = dizi_al(p.a_deg, hedef);
             eğer ad_tanimli_mi(p, fad) == yanlış {
@@ -6766,6 +6805,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // (C sırası; girdiler oradan gezilir). G002: yalnız güvensiz blokta; AS001:
     // `mimari:` etiketi hedef mimariyle uyuşmalı.
     eğer metin_esit(ad, "ERISIM") { t007_kontrol(p, idx); }     // D-353 T007
+    eğer metin_esit(ad, "ERISIM") ve (idx != p.cagri_hedef) { t009_alan_kontrol(p, idx); }   // [D-730]
     eğer metin_esit(ad, "DIZI_OLUSTUR") { dizi_eleman_kontrol(p, idx); }   // D-354 T013
     ver 0;
 }

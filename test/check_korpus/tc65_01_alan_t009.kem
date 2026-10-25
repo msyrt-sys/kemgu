@@ -1,0 +1,15 @@
+// [D-730] SELF-HOST ALAN ERİŞİMİNDE T009 — olmayan alan (`x.yok`), referans alıcı
+// (`r: &K`), iç içe (`x.ic.yok3`). Öncesinde self-host yalnız desende T009 veriyordu.
+// Geçerli erişim/atama/metot çağrısı (`x.a = 3`, `x.m()`, `x.ic.v`) TEMİZ kalmalı —
+// metot hedefi T009 almaz (cagri_hedef).
+yapı Ic { v: tam32; }
+yapı K { a: tam32; ic: Ic; }
+uygula K { işlev m(kendin) -> tam32 { ver kendin.a; } }
+işlev f(x: K, r: &K) -> tam32 {
+    değişken s: tam32 = x.yok;
+    değişken t: tam32 = r.yok2;
+    değişken u: tam32 = x.ic.yok3;
+    x.a = 3;
+    ver x.a + x.m() + r.a + x.ic.v + s + t + u;
+}
+işlev main() -> tam32 { ver 0; }
