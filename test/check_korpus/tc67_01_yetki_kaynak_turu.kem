@@ -1,0 +1,35 @@
+// [D-733] MM002: BİLİNEN ama YANLIŞ kaynaklı yetki (`yetki<Dosya>`) mmio/soket
+// işlemine verilirse C reddeder; self-host eskiden yalnız "kesin yetki değil"
+// durumunu bildiriyordu ve bu şekil sessizce geçiyordu. Ayrıca checker.kem'de
+// `soket_baglan` denetimi (MM001/MM002/MM003) HİÇ yoktu (D-466 yalnız codegen.kem'e
+// portlanmıştı).
+işlev mmio_yanlis(y: yetki<Dosya>) -> tam32 {
+    değişken v: tam32 = mmio_oku32(y, 0);      // MM002
+    geri_al(y);
+    ver v;
+}
+işlev soket_yanlis(y: yetki<Dosya>) -> tam32 {
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 80);   // MM002
+    soket_kapat(h);
+    geri_al(y);
+    ver 0;
+}
+işlev soket_port(y: yetki<Soket>) -> tam32 {
+    değişken h: metin = soket_baglan(y, "127.0.0.1", "x");  // MM003
+    soket_kapat(h);
+    geri_al(y);
+    ver 0;
+}
+// POZİTİF: doğru kaynak tanı ÜRETMEMELİ (yoksa "her yetkiyi reddet" sabotajı geçerdi).
+işlev mmio_dogru(y: yetki<MMIO>) -> tam32 {
+    değişken v: tam32 = mmio_oku32(y, 0);
+    geri_al(y);
+    ver v;
+}
+işlev soket_dogru(y: yetki<Soket>) -> tam32 {
+    değişken h: metin = soket_baglan(y, "127.0.0.1", 80);
+    soket_kapat(h);
+    geri_al(y);
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

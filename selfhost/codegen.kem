@@ -12111,6 +12111,16 @@ işlev mmio_yaz_mi(ad: metin) -> mantıksal {
     ver metin_esit(ad, "mmio_yaz16") veya metin_esit(ad, "mmio_yaz32")
       veya metin_esit(ad, "mmio_yaz64");
 }
+// [D-733] MM002: argüman beklenen kaynağın yetkisi DEĞİLSE (C `mmio_yetki_kontrol`/
+// `ag_yetki_kontrol` aynası). Eskiden yalnız "kesin yetki değil" durumu bildiriliyordu;
+// BİLİNEN ama YANLIŞ kaynaklı bir yetki (`yetki<Dosya>` → `mmio_oku32`) sessizce
+// geçiyordu. Kaynak BİLİNMİYORSA (boş) ve kesin yetki-değil de değilse susar (muhafazakâr).
+işlev yetki_kaynak_yanlis_mi(p: &değişken Ayr, a0: tam32, bek: metin) -> mantıksal {
+    değişken k: metin = bag_yetki_kaynak_ifade(p, a0);
+    eğer metin_esit(k, bek) { ver yanlış; }
+    eğer metin_esit(k, "") == yanlış { ver doğru; }
+    ver kesin_yetki_degil(p, a0);
+}
 işlev mmio_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     değişken oku: mantıksal = mmio_oku_mu(fad);
     değişken yaz: mantıksal = mmio_yaz_mi(fad);
@@ -12122,8 +12132,7 @@ işlev mmio_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
     yetki_canli_kontrol(p, a0);   // [D-503]
-    eğer metin_esit(bag_yetki_kaynak_ifade(p, a0), "MMIO") == yanlış
-      ve kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "MM002"); }
+    eğer yetki_kaynak_yanlis_mi(p, a0, "MMIO") { sekil_hata(p, a0, "MM002"); }   // [D-733]
     değişken a1: tam32 = dizi_al(p.cocuk, cb + 2);
     eğer bilinen_tamsayi_degil(ifade_tip(p, a1, "?")) { sekil_hata(p, a1, "MM003"); }
     eğer yaz {
@@ -12143,8 +12152,7 @@ işlev soket_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksal {
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken a0: tam32 = dizi_al(p.cocuk, cb + 1);
     yetki_canli_kontrol(p, a0);   // [D-503]
-    eğer metin_esit(bag_yetki_kaynak_ifade(p, a0), "Soket") == yanlış
-      ve kesin_yetki_degil(p, a0) { sekil_hata(p, a0, "MM002"); }
+    eğer yetki_kaynak_yanlis_mi(p, a0, "Soket") { sekil_hata(p, a0, "MM002"); }   // [D-733]
     değişken a2: tam32 = dizi_al(p.cocuk, cb + 3);
     eğer bilinen_tamsayi_degil(ifade_tip(p, a2, "?")) { sekil_hata(p, a2, "MM003"); }
     ver yanlış;
