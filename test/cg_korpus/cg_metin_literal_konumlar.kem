@@ -1,0 +1,20 @@
+// [D-724] Metin literali C'nin ön-toplama geçişinin İNMEDİĞİ konumlarda:
+// `güvensiz` bloğu ve `uygula` metot gövdesi. Öncesinde C ikisinde de
+// "metin literal kayitsiz" ile DERLENMIYORDU (self-host derliyordu).
+// ⚠ AYIRT EDİCİ: dizgiler YALNIZ bu konumlarda geçmeli — aynı dizgi başka bir
+// yerde de geçerse toplayıcı onu oradan kaydeder ve kusur görünmez (ölçüldü).
+// Sonuç bu yüzden literal karşılaştırmasıyla değil uzunluk/baytla denetlenir.
+yapı Sayi { v: tam32; }
+uygula Sayi {
+    işlev ad(kendin) -> metin { ver "yalniz-metotta"; }
+}
+işlev main() -> tam32 {
+    değişken hatalar: tam32 = 0;
+    değişken s: Sayi = Sayi { v: 40 };
+    değişken g: metin = "";
+    güvensiz { g = "gv"; }
+    eğer metin_uzunluk(g) != 2 { hatalar = hatalar + 1; }
+    eğer metin_uzunluk(s.ad()) != 14 { hatalar = hatalar + 2; }
+    eğer hatalar == 0 { ver s.v + 2; }
+    ver hatalar;
+}

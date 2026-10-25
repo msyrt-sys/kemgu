@@ -126,7 +126,14 @@
 - [ ] D7e [L] Artimli yeniden derleme (degisen birim + bagimlilari).
 - [ ] D7f [S] Her biri icin cross-file korpus fiksturu.
 - [ ] D8a [M] `özellik` bildirimi sozdizimi.
-- [ ] D8b [M] `uygula` blogu + method cozumu.
+- [x] D8b -> D-725/D-726 (+ D-724). Olculdu, BAYAT DEGILDI: iki tip ayni adli metot tanimlayinca
+      IKI derleyicide `@alan` iki kez -> LINK-RED; referans alici (`k: &Kare`) metoda ptr geciriyordu
+      -> SESSIZ YANLIS (taban 81, dogrusu 25); C alicinin yan etkisini IKI kez calistiriyordu
+      (`yap().al()`); self-host'ta `alan` adli metot kanal projeksiyonu yerlesigine dusuyordu;
+      C metin literali uygula/guvensiz govdesinde derlenmiyordu (D-724). Metotlar artik
+      "<Tip>.<metod>"; alici tipine gore cozum + `&T` otomatik deref. Fikstur cg_uygula_metot_cozum.
+- [ ] D8c-0 [S] ACIK — D-725 olcumunde: bound'lu generic icinde metot cagrisi (`x.alan()`, `T: Alan`)
+      C'de T007 (bilinen C siniri, D-428 E1). Statik dispatch icin monomorfizasyon gerekir.
 - [ ] D8c [M] Generic'te bound (`T: Ozellik`).
 - [ ] D8d [M] STATIK dispatch.
 - [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR, once statik.

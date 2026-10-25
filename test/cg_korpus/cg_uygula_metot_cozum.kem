@@ -1,0 +1,31 @@
+// [D-725/D-726] `uygula` METOT ÇÖZÜMÜ. Ölçülen kusurlar (iki derleyici):
+//  (1) iki tip AYNI adlı metot → ikisi de `@alan` tanımlıyordu: LINK-RED.
+//  (2) referans alıcı (`k: &Kare`) → ptr `%Kare` yerine geçiyordu: SESSİZ
+//      YANLIŞ (taban iki derleyicide 81, doğrusu 25).
+//  (3) C alıcıyı İKİ KEZ üretiyordu → `yap().al()` yan etkisi iki kez (stdout).
+//  (4) self-host'ta `alan` adı kanal projeksiyonu yerleşiğiyle çakışıyordu.
+// `uygula` blokları bilerek `main`'den SONRA (ön kayıt ölçülür).
+yapı Kare { k: tam32; }
+yapı Dik { a: tam32; b: tam32; }
+yapı N { x: tam32; }
+işlev olc(k: &Kare) -> tam32 { ver k.alan(); }
+işlev yap() -> N { yazdir_metin("yap"); ver N { x: 1 }; }
+işlev main() -> tam32 {
+    değişken hatalar: tam32 = 0;
+    değişken k: Kare = Kare { k: 5 };
+    değişken d: Dik = Dik { a: 4, b: 3 };
+    eğer k.alan() != 25 { hatalar = hatalar + 1; }
+    eğer d.alan() != 12 { hatalar = hatalar + 2; }
+    eğer olc(&k) != 25 { hatalar = hatalar + 4; }
+    eğer yap().al() != 1 { hatalar = hatalar + 8; }
+    eğer metin_uzunluk(d.ad()) != 3 { hatalar = hatalar + 16; }
+    eğer hatalar == 0 { ver 42; }
+    yazdir_tam64(hatalar olarak tam64);
+    ver 1;
+}
+uygula Kare { işlev alan(kendin) -> tam32 { ver kendin.k * kendin.k; } }
+uygula Dik {
+    işlev alan(kendin) -> tam32 { ver kendin.a * kendin.b; }
+    işlev ad(kendin) -> metin { ver "dik"; }
+}
+uygula N { işlev al(kendin) -> tam32 { ver kendin.x; } }

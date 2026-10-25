@@ -2031,6 +2031,18 @@ static void ast_taransa_metinleri(LlvmGen *g, const Dugum *d) {
             ast_taransa_metinleri(g, d->veri.kullan_ifade.operand); break;
         case DUGUM_IMHA_IFADE:
             ast_taransa_metinleri(g, d->veri.imha_ifade.operand); break;
+        /* [D-724] Bu uc dal YOKTU -> `guvensiz { yazdir_metin("x"); }`,
+         * `uygula` metot govdesindeki dizgi ve asm girdisindeki dizgi C'de
+         * "metin literal kayitsiz" ile DERLENMIYORDU (olculdu; self-host
+         * derliyordu). Genel cocuk yineleyici yok (D-543) -> acik dallar. */
+        case DUGUM_GUVENSIZ:
+            ast_taransa_metinleri(g, d->veri.guvensiz.blok); break;
+        case DUGUM_UYGULA:
+            ast_taransa_metinleri_liste(g, d->veri.uygula.islevler,
+                                         d->veri.uygula.islev_sayi); break;
+        case DUGUM_SATIRICI_ASM:
+            ast_taransa_metinleri_liste(g, d->veri.satirici_asm.girdi_ifadeler,
+                                         d->veri.satirici_asm.girdi_sayi); break;
         default: break;
     }
 }
@@ -3677,6 +3689,79 @@ static IfadeSonuc generic_islev_cagri_uret(LlvmGen *g, const Dugum *d,
     return s;
 }
 
+/* [D-725] `uygula` METOT ADLANDIRMASI: "<Tip>.<metod>". Oncesinde metotlar
+ * CIPLAK adla (`@alan`) uretiliyordu -> iki tip ayni metodu tanimlayinca
+ * `invalid redefinition of function 'alan'` (olculdu, IKI derleyicide de);
+ * cagri yeri de yalniz adla bulup ILK kaydi seciyordu. Tip kontrolu metodu
+ * zaten tipe gore cozuyor (uygula_tablosu_method_bul); eksik olan codegen'di.
+ * Tip adi: TIP_BASIT ad / TIP_KULLANICI kok TANIMLAYICI (`uygula Cift` ve
+ * generic `Cift<A,B>` ikisi de "Cift"); `&T` soyulur. */
+static const char *metod_tip_adi(const Dugum *t, int *uz) {
+    while (t && t->tip == DUGUM_TIP_REFERANS) t = t->veri.tip_referans.hedef_tip;
+    if (!t) return NULL;
+    if (t->tip == DUGUM_TIP_BASIT) { *uz = t->veri.tip_basit.ad_uzunluk; return t->veri.tip_basit.ad; }
+    if (t->tip == DUGUM_TIP_KULLANICI && t->veri.tip_kullanici.yol &&
+        t->veri.tip_kullanici.yol->tip == DUGUM_TANIMLAYICI) {
+        *uz = t->veri.tip_kullanici.yol->veri.tanimlayici.uzunluk;
+        return t->veri.tip_kullanici.yol->veri.tanimlayici.metin;
+    }
+    return NULL;
+}
+
+static char *metod_ad_kur(LlvmGen *g, const char *tip, int tuz,
+                          const char *m, int muz, int *out_uz) {
+    char *b = (char *)arena_ayir(g->arena, (size_t)(tuz + muz + 2));
+    if (!b) return NULL;
+    memcpy(b, tip, (size_t)tuz);
+    b[tuz] = '.';
+    memcpy(b + tuz + 1, m, (size_t)muz);
+    b[tuz + 1 + muz] = '\0';
+    *out_uz = tuz + 1 + muz;
+    return b;
+}
+
+/* Cagri yerinde: alicinin IR tipinden (`%Kare`, mono `%Cift$i32$i32` ya da
+ * tirnakli `%"Cift$i32"`) tip adini cikar ve "<Tip>.<m>" kaydini bul. Bulunamazsa
+ * (alici `ptr` vb.) ".<m>" ile biten TEK kayit varsa o; yoksa NULL (eski yol). */
+static IslevKayit *metod_kaydi_bul(LlvmGen *g, const char *alici_ir,
+                                   const char *ref_tad, int ref_tuz,
+                                   const char *m, int muz) {
+    /* Alici `ptr` (`k: &Kare`): tip adi degiskenin BILDIRILEN tipinden. */
+    if (ref_tad && ref_tuz > 0) {
+        int nuz = 0;
+        char *ad = metod_ad_kur(g, ref_tad, ref_tuz, m, muz, &nuz);
+        if (ad) {
+            IslevKayit *k = islev_bul(g, ad, nuz);
+            if (k) return k;
+        }
+    }
+    if (alici_ir && alici_ir[0] == '%') {
+        const char *a = alici_ir + 1;
+        if (*a == '"') a++;
+        int tuz = 0;
+        while (a[tuz] && a[tuz] != '$' && a[tuz] != '"') tuz++;
+        if (tuz > 0) {
+            int nuz = 0;
+            char *ad = metod_ad_kur(g, a, tuz, m, muz, &nuz);
+            if (ad) {
+                IslevKayit *k = islev_bul(g, ad, nuz);
+                if (k) return k;
+            }
+        }
+    }
+    IslevKayit *tek = NULL;
+    int adet = 0;
+    for (IslevKayit *i = g->islevler; i; i = i->sonraki) {
+        if (i->ad_uz > muz + 1 && i->ad[i->ad_uz - muz - 1] == '.' &&
+            memcmp(i->ad + i->ad_uz - muz, m, (size_t)muz) == 0 &&
+            i->ast && i->ast->veri.islev.param_sayi > 0 &&
+            i->ast->veri.islev.parametreler[0]->veri.parametre.kendin_mi) {
+            tek = i; adet++;
+        }
+    }
+    return adet == 1 ? tek : NULL;
+}
+
 static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                               const char *beklenen) {
     if (!d) {
@@ -4349,6 +4434,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * DEGIL, fat-value tutan ALANDIR → dolayli cagri.
                  * Onceki davranis: her ERISIM metod sayiliyordu → alan adiyla
                  * `call i32 @fn(...)` uretilip TANIMSIZ SEMBOL veriyordu (olculdu). */
+                IfadeSonuc receiver_on_hazir;
                 {
                     IfadeSonuc alici_on = ifade_uret(g,
                         erisim->veri.erisim.nesne, NULL);
@@ -4376,9 +4462,12 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             return fat_cagri_uret(g, fv, kap_donus, ia, n2);
                         }
                     }
+                    /* [D-726] alici YUKARIDA (alici_on) zaten degerlendirildi;
+                     * IKINCI kez uretmek yan etkisini tekrarliyordu (olculdu:
+                     * `yap().al()` -> `yap` iki kez cagriliyor, "Y" iki kez). */
+                    receiver_on_hazir = alici_on;
                 }
-                IfadeSonuc receiver = ifade_uret(g,
-                    erisim->veri.erisim.nesne, NULL);
+                IfadeSonuc receiver = receiver_on_hazir;
                 int n = d->veri.cagri.sayi;
                 IfadeSonuc *args = (IfadeSonuc *)arena_ayir(g->arena,
                     sizeof(IfadeSonuc) * (size_t)(n + 1));
@@ -4389,7 +4478,37 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                 /* Method adi: erisim.alan */
                 const char *m_ad = erisim->veri.erisim.alan;
                 int m_ad_uz = erisim->veri.erisim.alan_uzunluk;
-                IslevKayit *mik = islev_bul(g, m_ad, m_ad_uz);
+                /* [D-725] alici tipine gore "<Tip>.<metod>" */
+                const char *ref_tad = NULL;
+                int ref_tuz = 0;
+                if (strcmp(receiver.tip, "ptr") == 0 && erisim->veri.erisim.nesne &&
+                    erisim->veri.erisim.nesne->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *rv = isim_bul(g, erisim->veri.erisim.nesne->veri.tanimlayici.metin,
+                        erisim->veri.erisim.nesne->veri.tanimlayici.uzunluk);
+                    if (rv && rv->tip_ast) ref_tad = metod_tip_adi(rv->tip_ast, &ref_tuz);
+                }
+                IslevKayit *mik = metod_kaydi_bul(g, receiver.tip, ref_tad, ref_tuz,
+                                                  m_ad, m_ad_uz);
+                if (mik) { m_ad = mik->ad; m_ad_uz = mik->ad_uz; }
+                else mik = islev_bul(g, m_ad, m_ad_uz);
+                /* [D-725] OTOMATIK DEREF: `kendin` YAPI DEGERI bekliyor ama alici
+                 * `&Yapi` (ptr). Oncesinde ptr DOGRUDAN `%Kare` yerine geciriliyordu
+                 * ve sonuc SESSIZCE YANLISTI (olculdu: IKI derleyicide de 0, dogrusu
+                 * 42 — D-725 oncesinden var). Tip kontrolu `&T` uzerinde alan
+                 * erisimini zaten auto-deref eder; metot alicisi da oyle. */
+                if (mik && mik->ast && mik->ast->veri.islev.param_sayi > 0 &&
+                    strcmp(args[0].tip, "ptr") == 0) {
+                    const Dugum *kp = mik->ast->veri.islev.parametreler[0];
+                    if (kp->veri.parametre.kendin_mi && kp->veri.parametre.tip) {
+                        const char *kir = ast_tip_to_ir(g, kp->veri.parametre.tip);
+                        if (kir && kir[0] == '%') {
+                            int lr = yeni_reg(g);
+                            fprintf(g->out, "  %%%d = load %s, ptr %%%d\n", lr, kir, args[0].reg);
+                            args[0].reg = lr;
+                            args[0].tip = kir;
+                        }
+                    }
+                }
                 const char *donus = mik ? mik->donus_tip : "i32";
                 if (strcmp(donus, "void") == 0) donus = "i32";
                 /* D-257: çıplak method → C-ABI (ρ YOK). */
@@ -8274,6 +8393,10 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
          * aktifken X=T dogru cozulur -> ic generic-cagri zinciri) */
         g->isimler->generic_arg_ir =
             generic_arg_ir_al(g, p->veri.parametre.tip);
+        /* [D-725] parametrenin BILDIRILEN tip dugumu (yerel `degisken` icin
+         * D-465 zaten yaziyordu; parametrelerde YOKTU) -> `k: &Kare` alicisinda
+         * metot "<Kare>.m" olarak cozulebilsin. */
+        g->isimler->tip_ast = p->veri.parametre.tip;
         /* Adim 7: Eger parametre Dizi<T> ise heap dizi olarak isaretle
          * (caller'dan gelen ptr KdlDizi*). Eleman tipi de yakala. */
         if (p->veri.parametre.tip &&
@@ -8886,6 +9009,30 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     /* Pre-pass: islev imzalarini kayit et (cagri donus tipi icin) */
     for (int i = 0; i < program->veri.program.sayi; i++) {
         const Dugum *uye = program->veri.program.uyeler[i];
+        /* [D-725] uygula metotlari "<Tip>.<metod>" adiyla ONCEDEN kaydedilir
+         * (cagri yeri `uygula` blogundan once gelse de donus tipini gorur).
+         * `kendin` parametre tipi burada atanir (eskiden emisyon dongusunde). */
+        if (uye->tip == DUGUM_UYGULA) {
+            int tuz = 0;
+            const char *tad = metod_tip_adi(uye->veri.uygula.tip, &tuz);
+            for (int j = 0; j < uye->veri.uygula.islev_sayi; j++) {
+                Dugum *m = uye->veri.uygula.islevler[j];
+                if (!m || m->tip != DUGUM_ISLEV || !m->veri.islev.govde) continue;
+                for (int k = 0; k < m->veri.islev.param_sayi; k++) {
+                    Dugum *pp = m->veri.islev.parametreler[k];
+                    if (pp->veri.parametre.kendin_mi && pp->veri.parametre.tip == NULL)
+                        pp->veri.parametre.tip = uye->veri.uygula.tip;
+                }
+                if (tad) {
+                    int nuz = 0;
+                    char *nad = metod_ad_kur(&g, tad, tuz, m->veri.islev.ad,
+                                             m->veri.islev.ad_uzunluk, &nuz);
+                    if (nad) { m->veri.islev.ad = nad; m->veri.islev.ad_uzunluk = nuz; }
+                }
+                if (!islev_bul(&g, m->veri.islev.ad, m->veri.islev.ad_uzunluk))
+                    islev_kayit(&g, m);
+            }
+        }
         if (uye->tip == DUGUM_ISLEV) islev_kayit(&g, uye);
         else if (uye->tip == DUGUM_DISA && uye->veri.disa.tanim &&
                  uye->veri.disa.tanim->tip == DUGUM_ISLEV) {
