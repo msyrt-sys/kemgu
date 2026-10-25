@@ -468,3 +468,139 @@ işlev sadece_harf_mi(s: metin) -> mantıksal {
     }
     ver doğru;
 }
+
+// [D-731] son_indeks — `alt`ın SON geçişinin bayt indeksi; boş alt -> uzunluk; yoksa hiç.
+işlev son_indeks(s: metin, alt: metin) -> seçimlik<tam32> {
+    değişken M: tam32 = metin_uzunluk(alt);
+    eğer M == 0 { ver değer(metin_uzunluk(s)); }
+    değişken L: tam32 = metin_uzunluk(s);
+    eğer M > L { ver hiç; }
+    değişken i: tam32 = L - M;
+    iken i >= 0 {
+        eğer metin_esit(metin_kes(s, i, M), alt) { ver değer(i); }
+        i = i - 1;
+    }
+    ver hiç;
+}
+
+// [D-731] bosluk_bayt_mi — bayt boşluk mu (boşluk, sekme, satır sonu, CR).
+işlev bosluk_bayt_mi(u: tam32) -> mantıksal {
+    ver u == 32 veya u == 9 veya u == 10 veya u == 13;
+}
+
+// [D-731] kirp_sol — baştaki boşluk baytlarını at.
+işlev kirp_sol(s: metin) -> metin {
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        eğer değil bosluk_bayt_mi(u) { ver metin_kes(s, i, L - i); }
+        i = i + 1;
+    }
+    ver metin_kes(s, L, 0);
+}
+
+// [D-731] kirp_sag — sondaki boşluk baytlarını at.
+işlev kirp_sag(s: metin) -> metin {
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken son: tam32 = L;
+    iken son > 0 {
+        değişken u: tam32 = metin_bayt(s, son - 1) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        eğer değil bosluk_bayt_mi(u) { ver metin_kes(s, 0, son); }
+        son = son - 1;
+    }
+    ver metin_kes(s, 0, 0);
+}
+
+// [D-731] sozluk_karsilastir — İŞARETSİZ bayt bayt karşılaştırma.
+işlev sozluk_karsilastir(a: metin, b: metin) -> tam32 {
+    değişken La: tam32 = metin_uzunluk(a);
+    değişken Lb: tam32 = metin_uzunluk(b);
+    değişken n: tam32 = La;
+    eğer Lb < n { n = Lb; }
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken ua: tam32 = metin_bayt(a, i) olarak tam32;
+        eğer ua < 0 { ua = ua + 256; }
+        değişken ub: tam32 = metin_bayt(b, i) olarak tam32;
+        eğer ub < 0 { ub = ub + 256; }
+        eğer ua < ub { ver 0 - 1; }
+        eğer ua > ub { ver 1; }
+        i = i + 1;
+    }
+    eğer La < Lb { ver 0 - 1; }
+    eğer La > Lb { ver 1; }
+    ver 0;
+}
+
+// [D-731] kod_noktalari — UTF-8 çöz, kod noktalarını diziye ekle.
+işlev kod_noktalari(s: metin) -> Dizi<tam32> {
+    değişken d: Dizi<tam32> = [];
+    değişken L: tam32 = metin_uzunluk(s);
+    değişken i: tam32 = 0;
+    iken i < L {
+        değişken u: tam32 = metin_bayt(s, i) olarak tam32;
+        eğer u < 0 { u = u + 256; }
+        eğer u < 128 {
+            dizi_ekle(d, u);
+            i = i + 1;
+        } değilse eğer u >= 192 ve u <= 223 {
+            eğer i + 1 < L {
+                değişken b1: tam32 = metin_bayt(s, i + 1) olarak tam32;
+                eğer b1 < 0 { b1 = b1 + 256; }
+                eğer b1 >= 128 ve b1 <= 191 {
+                    dizi_ekle(d, (u - 192) * 64 + (b1 - 128));
+                    i = i + 2;
+                } değilse {
+                    dizi_ekle(d, 65533);
+                    i = i + 1;
+                }
+            } değilse {
+                dizi_ekle(d, 65533);
+                i = i + 1;
+            }
+        } değilse eğer u >= 224 ve u <= 239 {
+            değişken ok: mantıksal = yanlış;
+            eğer i + 2 < L {
+                değişken b1: tam32 = metin_bayt(s, i + 1) olarak tam32;
+                eğer b1 < 0 { b1 = b1 + 256; }
+                değişken b2: tam32 = metin_bayt(s, i + 2) olarak tam32;
+                eğer b2 < 0 { b2 = b2 + 256; }
+                eğer b1 >= 128 ve b1 <= 191 ve b2 >= 128 ve b2 <= 191 {
+                    dizi_ekle(d, (u - 224) * 4096 + (b1 - 128) * 64 + (b2 - 128));
+                    i = i + 3;
+                    ok = doğru;
+                }
+            }
+            eğer değil ok {
+                dizi_ekle(d, 65533);
+                i = i + 1;
+            }
+        } değilse eğer u >= 240 ve u <= 247 {
+            değişken ok: mantıksal = yanlış;
+            eğer i + 3 < L {
+                değişken b1: tam32 = metin_bayt(s, i + 1) olarak tam32;
+                eğer b1 < 0 { b1 = b1 + 256; }
+                değişken b2: tam32 = metin_bayt(s, i + 2) olarak tam32;
+                eğer b2 < 0 { b2 = b2 + 256; }
+                değişken b3: tam32 = metin_bayt(s, i + 3) olarak tam32;
+                eğer b3 < 0 { b3 = b3 + 256; }
+                eğer b1 >= 128 ve b1 <= 191 ve b2 >= 128 ve b2 <= 191 ve b3 >= 128 ve b3 <= 191 {
+                    dizi_ekle(d, (u - 240) * 262144 + (b1 - 128) * 4096 + (b2 - 128) * 64 + (b3 - 128));
+                    i = i + 4;
+                    ok = doğru;
+                }
+            }
+            eğer değil ok {
+                dizi_ekle(d, 65533);
+                i = i + 1;
+            }
+        } değilse {
+            dizi_ekle(d, 65533);
+            i = i + 1;
+        }
+    }
+    ver d;
+}

@@ -1,0 +1,5 @@
+{"tur": "27", "is": "metin_eksikler", "gorev": "otomasyon/evren/gorev_27_metin_eksikler.md", "baglam": [],
+ "kesit": ["stdlib/metin.kem:240-262", "stdlib/metin.kem:462-470", "test/stdlib/test_metin.kem:271-286", "test/stdlib/test_metin.kem:462-467", "test/stdlib/test_metin.kem:521-525"],
+ "effort": "low",
+ "dogrulama": ["mkdir -p /tmp/claude-1000/evren && cat stdlib/metin.kem test/stdlib/test_metin.kem > /tmp/claude-1000/evren/m.kem && build/kemgu --check /tmp/claude-1000/evren/m.kem && build/kemgu --llvm /tmp/claude-1000/evren/m.kem > /tmp/claude-1000/evren/m.ll && clang -x ir /tmp/claude-1000/evren/m.ll -x none build/kdl_runtime.o -o /tmp/claude-1000/evren/m && /tmp/claude-1000/evren/m"],
+ "isaretler": ["metin: TUM MANTIKSAL TESTLER GECTI"]}

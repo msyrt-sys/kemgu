@@ -462,8 +462,68 @@ işlev test_kes_arasi_bos_icerik() -> mantıksal {
 // "başarısızlığın" 4'ü KURALIN kendi hatasıydı (ad beklentiyi değil GİRDİYİ
 // tarif ediyor: `test_harf_karisik` = `sadece_harf_mi("abc123")` → yanlış
 // dönmeli). Aşağıdaki `yanlış` beklentileri tek tek gövdeden doğrulandı.
+işlev test_son_indeks_var() -> mantıksal {
+    eşleş son_indeks("abcabc", "bc") {
+        değer(v) => { ver v == 4; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev test_son_indeks_yok() -> mantıksal {
+    eşleş son_indeks("abc", "x") {
+        değer(v) => { ver yanlış; }
+        hiç => { ver doğru; }
+    }
+    ver yanlış;
+}
+
+işlev test_son_indeks_bos() -> mantıksal {
+    eşleş son_indeks("abc", "") {
+        değer(v) => { ver v == 3; }
+        hiç => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev test_kirp_sol() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir("  ", kod_metin(9)), "ab ");
+    ver metin_esit(kirp_sol(s), "ab ");
+}
+
+işlev test_kirp_sag() -> mantıksal {
+    değişken s: metin = metin_birlestir(" ab ", kod_metin(10));
+    ver metin_esit(kirp_sag(s), " ab");
+}
+
+işlev test_sozluk() -> mantıksal {
+    eğer sozluk_karsilastir("abc", "abd") != 0 - 1 { ver yanlış; }
+    eğer sozluk_karsilastir("b", "a") != 1 { ver yanlış; }
+    eğer sozluk_karsilastir("ab", "ab") != 0 { ver yanlış; }
+    eğer sozluk_karsilastir("ab", "abc") != 0 - 1 { ver yanlış; }
+    eğer sozluk_karsilastir("ç", "z") != 1 { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_kod_noktalari() -> mantıksal {
+    değişken d: Dizi<tam32> = kod_noktalari("aç€😀");
+    eğer dizi_boyut(d) != 4 { ver yanlış; }
+    eğer d[0] != 97 { ver yanlış; }
+    eğer d[1] != 231 { ver yanlış; }
+    eğer d[2] != 8364 { ver yanlış; }
+    eğer d[3] != 128512 { ver yanlış; }
+    ver doğru;
+}
+
 işlev main() -> tam32 {
     değişken h: tam32 = 0;
+    eğer değil test_son_indeks_var() { yazdir_metin("BASARISIZ (yanlış döndü): test_son_indeks_var"); h = h + 1; }
+    eğer değil test_son_indeks_yok() { yazdir_metin("BASARISIZ (yanlış döndü): test_son_indeks_yok"); h = h + 1; }
+    eğer değil test_son_indeks_bos() { yazdir_metin("BASARISIZ (yanlış döndü): test_son_indeks_bos"); h = h + 1; }
+    eğer değil test_kirp_sol() { yazdir_metin("BASARISIZ (yanlış döndü): test_kirp_sol"); h = h + 1; }
+    eğer değil test_kirp_sag() { yazdir_metin("BASARISIZ (yanlış döndü): test_kirp_sag"); h = h + 1; }
+    eğer değil test_sozluk() { yazdir_metin("BASARISIZ (yanlış döndü): test_sozluk"); h = h + 1; }
+    eğer değil test_kod_noktalari() { yazdir_metin("BASARISIZ (yanlış döndü): test_kod_noktalari"); h = h + 1; }
     eğer değil test_esit_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_esit_evet"); h = h + 1; }
     eğer test_esit_hayir() { yazdir_metin("BASARISIZ (doğru döndü): test_esit_hayir"); h = h + 1; }
     eğer değil test_farkli_evet() { yazdir_metin("BASARISIZ (yanlış döndü): test_farkli_evet"); h = h + 1; }
