@@ -3231,6 +3231,79 @@ işlev t043_raporla(p: &değişken Ayr, idx: tam32) -> tam32 {
     dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
     ver 0;
 }
+// [D-732] C D-021/D-630 aynası (`tip_kontrol.c` DUGUM_IKILI): TİPSİZ literal ağacı mı?
+işlev tam_lit_agaci_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "TAM") { ver doğru; }
+    eğer metin_esit(ad, "TEKLI") ve metin_esit(dizi_al(p.a_deg, idx), "neg") {
+        ver tam_lit_agaci_mi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    }
+    eğer metin_esit(ad, "IKILI") ve aritmetik_mi(dizi_al(p.a_deg, idx)) {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        ver tam_lit_agaci_mi(p, dizi_al(p.cocuk, cb)) ve tam_lit_agaci_mi(p, dizi_al(p.cocuk, cb + 1));
+    }
+    ver yanlış;
+}
+işlev kes_lit_agaci_mi(p: &değişken Ayr, idx: tam32) -> mantıksal {
+    değişken ad: metin = dizi_al(p.a_ad, idx);
+    eğer metin_esit(ad, "KESIRLI") { ver doğru; }
+    eğer metin_esit(ad, "TEKLI") ve metin_esit(dizi_al(p.a_deg, idx), "neg") {
+        ver kes_lit_agaci_mi(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)));
+    }
+    eğer metin_esit(ad, "IKILI") ve aritmetik_mi(dizi_al(p.a_deg, idx)) {
+        değişken cb: tam32 = dizi_al(p.a_cb, idx);
+        ver kes_lit_agaci_mi(p, dizi_al(p.cocuk, cb)) ve kes_lit_agaci_mi(p, dizi_al(p.cocuk, cb + 1));
+    }
+    ver yanlış;
+}
+// [D-732] İkili işlemin operand tipleri, C sırası: önce İKİ operand BAĞLAMSIZ,
+// sonra tipsiz literal tarafı karşı tarafın tipine çekilir (sığmazsa T043 —
+// `x: tam32; x + 8589934592`). Sonuç "sol|sag". sabitsüre/vektör HARİÇ (C ile aynı).
+işlev ikili_tipleri(p: &değişken Ayr, sol: tam32, sag: tam32, beklenen: metin) -> metin {
+    değişken st: metin = ifade_tip(p, sol, "?");
+    değişken gt: metin = ifade_tip(p, sag, "?");
+    değişken ozel: mantıksal = metin_baslar(st, "sabitsüre<") veya metin_baslar(gt, "sabitsüre<")
+        veya metin_baslar(st, "vektör<") veya metin_baslar(gt, "vektör<");
+    eğer ozel == yanlış {
+        değişken ls: mantıksal = tam_lit_agaci_mi(p, sol);
+        değişken lg: mantıksal = tam_lit_agaci_mi(p, sag);
+        değişken tt: mantıksal = tamsayi_mi(st) ve tamsayi_mi(gt) ve (metin_esit(st, gt) == yanlış);
+        değişken kk: mantıksal = kesirli_mi(st) ve kesirli_mi(gt) ve (metin_esit(st, gt) == yanlış);
+        eğer ls ve lg ve tt ve (cast_genislik(st) > cast_genislik(gt)) {
+            gt = ifade_tip(p, sag, st);
+        } değilse eğer ls ve tt {
+            st = ifade_tip(p, sol, gt);
+        } değilse eğer lg ve tt {
+            gt = ifade_tip(p, sag, st);
+        } değilse eğer kes_lit_agaci_mi(p, sol) ve kk {
+            st = ifade_tip(p, sol, gt);
+        } değilse eğer kes_lit_agaci_mi(p, sag) ve kk {
+            gt = ifade_tip(p, sag, st);
+        }
+        // Karşı taraf BİLİNMİYORSA (self-host küresel `sabit` tipini izlemez) eski
+        // yol korunur: literal taraf dış bağlamda tiplenir — sahte T001 üretmemek için.
+        değişken sayi_bek: mantıksal = tamsayi_mi(beklenen) veya kesirli_mi(beklenen);
+        eğer sayi_bek ve metin_esit(gt, "?") ve (ls veya kes_lit_agaci_mi(p, sol)) { st = ifade_tip(p, sol, beklenen); }
+        eğer sayi_bek ve metin_esit(st, "?") ve (lg veya kes_lit_agaci_mi(p, sag)) { gt = ifade_tip(p, sag, beklenen); }
+    }
+    ver metin_birlestir(st, metin_birlestir("|", gt));
+}
+işlev ikili_sol(s: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < metin_uzunluk(s) {
+        eğer bayt(s, i) == 124 { ver metin_kes(s, 0, i); }
+        i = i + 1;
+    }
+    ver s;
+}
+işlev ikili_sag(s: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < metin_uzunluk(s) {
+        eğer bayt(s, i) == 124 { ver metin_kes(s, i + 1, metin_uzunluk(s) - i - 1); }
+        i = i + 1;
+    }
+    ver "?";
+}
 işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
     değişken ad: metin = dizi_al(p.a_ad, idx);
     eğer metin_esit(ad, "TAM") {
@@ -3288,14 +3361,23 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         değişken sol: tam32 = dizi_al(p.cocuk, cb);
         değişken sag: tam32 = dizi_al(p.cocuk, cb + 1);
         eğer aritmetik_mi(op) {   // sayısal → operand tipi; sayısal değilse "?" (C: TIP_HATA)
-            değişken st: metin = ifade_tip(p, sol, beklenen);
-            değişken gt: metin = ifade_tip(p, sag, beklenen);
+            // [D-732] tümü literal ağacı + sayısal bağlam → operandlar bağlamda (C bidirectional);
+            // ikisi de bağlama oturursa sonuç bağlam tipidir, yoksa bağlamsız yola düşülür.
+            eğer tam_lit_agaci_mi(p, idx) ve (tamsayi_mi(beklenen) veya kesirli_mi(beklenen)) {
+                değişken bs: metin = ifade_tip(p, sol, beklenen);
+                değişken bg: metin = ifade_tip(p, sag, beklenen);
+                eğer metin_esit(bs, beklenen) ve metin_esit(bg, beklenen) { ver beklenen; }
+            }
+            değişken ik: metin = ikili_tipleri(p, sol, sag, beklenen);
+            değişken st: metin = ikili_sol(ik);
+            değişken gt: metin = ikili_sag(ik);
             eğer bilinen_sayisal_degil(st) veya bilinen_sayisal_degil(gt) { ver "?"; }
             ver st;
         }
         eğer karsilastirma_mi(op) {   // sayısal operand → mantıksal; değilse "?" (C: TIP_HATA)
-            değişken st: metin = ifade_tip(p, sol, "?");
-            değişken gt: metin = ifade_tip(p, sag, "?");
+            değişken ik: metin = ikili_tipleri(p, sol, sag, "?");   // [D-732]
+            değişken st: metin = ikili_sol(ik);
+            değişken gt: metin = ikili_sag(ik);
             eğer bilinen_sayisal_degil(st) veya bilinen_sayisal_degil(gt) { ver "?"; }
             ver "mantıksal";
         }
@@ -3305,10 +3387,14 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             eğer bilinen_mantiksal_degil(st) veya bilinen_mantiksal_degil(gt) { ver "?"; }
             ver "mantıksal";
         }
-        eğer metin_esit(op, "==") veya metin_esit(op, "!=") { ver "mantıksal"; }
+        eğer metin_esit(op, "==") veya metin_esit(op, "!=") {
+            değişken ik: metin = ikili_tipleri(p, sol, sag, "?");   // [D-732] yalnız T043 yan etkisi
+            ver "mantıksal";
+        }
         eğer bit_op_mi(op) {   // tamsayı operand → sol tipi; tamsayı değilse "?" (C: TIP_HATA)
-            değişken st: metin = ifade_tip(p, sol, beklenen);
-            değişken gt: metin = ifade_tip(p, sag, "?");
+            değişken ik: metin = ikili_tipleri(p, sol, sag, beklenen);   // [D-732]
+            değişken st: metin = ikili_sol(ik);
+            değişken gt: metin = ikili_sag(ik);
             eğer bilinen_tamsayi_degil(st) veya bilinen_tamsayi_degil(gt) { ver "?"; }
             ver st;
         }
@@ -3509,7 +3595,13 @@ işlev t001_lambda_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
 işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer t001_lambda_kontrol(p, idx) == 1 { ver 0; }   // D-698
     değişken annot: metin = annot_str(p, idx);
-    eğer metin_esit(annot, "?") { ver 0; }
+    eğer metin_esit(annot, "?") {
+        // [D-732] annotasyonsuz bağlamada da C değeri bağlamsız tipler → literal
+        // yeniden tiplemesinin T043'ü (`değişken u = x + 8589934592`) burada çıkar.
+        değişken uc: tam32 = son_cocuk(p, idx);
+        eğer uc >= 0 { değişken ut: metin = ifade_tip(p, uc, "?"); }
+        ver 0;
+    }
     // D-370: annotasyon BİLİNMEYEN bir tipse C tipi HATA'ya düşürür ve T001'e
     // hiç gelmez (yalnız T011 çıkar). Aksi hâlde tek kusur iki tanı üretirdi.
     // D-377/D-378: kapı yalnız BASİT tip ADLARI içindir. Bileşik temsiller

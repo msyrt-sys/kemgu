@@ -1,0 +1,26 @@
+// [D-732] İkili işlemde TİPSİZ literal karşı operandın tipine çekilir (C D-021/D-630);
+// sığmazsa T043 literalin konumunda. Self-host eskiden dış bağlamı (annotasyonu)
+// literale geçiriyordu → `x: tam32; y: tam64 = x + 2^33` yalnız T001 alıyordu.
+sabit K: tam64 = 2097152;
+
+işlev kotu(x: tam32) -> tam32 {
+    değişken y: tam64 = x + 8589934592;       // T043 (literal) + T001
+    değişken z: tam64 = 8589934592 + x;       // sol literal: T043 + T001
+    değişken w: tam32 = x * 3000000000;       // T043
+    eğer x == 8589934592 { ver 1; }           // karşılaştırmada da T043
+    değişken u = x + 8589934592;              // annotasyonsuz bağlamada da T043
+    ver 0;
+}
+
+// POZİTİF: hiçbiri tanı üretmemeli.
+işlev iyi(x: tam32, b: tam64, c: dtam8, f: kesirli32) -> tam32 {
+    değişken y: tam64 = b + 8589934592;       // karşı taraf tam64 → sığar
+    değişken r: tam64 = 512 * K;              // küresel sabit (self-host tipini izlemez)
+    değişken d: dtam8 = c + 200;              // dtam8'e sığar
+    değişken e: tam64 = (0 - 9223372036854775807) - 1;   // iki literal ağacı (D-630)
+    değişken g: kesirli32 = f + 21.0;         // kesirli ikiz
+    değişken h: tam32 = x << 4;
+    ver 0;
+}
+
+işlev main() -> tam32 { ver kotu(1) + iyi(1, 2, 3, 1.0); }
