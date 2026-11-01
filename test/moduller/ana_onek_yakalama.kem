@@ -1,0 +1,10 @@
+// [D-735] Secili import edilen kullanici islevi yerlesik onekiyle (`yaz_`,
+// `metin_`) baslasa bile KULLANICI islevine gitmeli, `@kdl_*`'a DEGIL.
+// POZITIF: gercek yerlesikler (`metin_uzunluk`, `yaz_tam`) bozulmamali — yoksa
+// "onek eslemesini tumden kapat" sabotaji kapidan GECERDI (D-425).
+kullan onek_mod::{yaz_on, metin_yirmi};
+
+işlev main() -> tam32 {
+    yaz_tam(0);
+    ver yaz_on(2) + metin_yirmi() + (metin_uzunluk("abcdefghij") olarak tam32);
+}

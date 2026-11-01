@@ -1,0 +1,15 @@
+{
+ "tur": "cg",
+ "is": "ps2_klavye",
+ "gorev": "otomasyon/chatgpt/isler/ps2_klavye.md",
+ "baglam": [
+  "drivers/ortak/bayt.kem"
+ ],
+ "ortak": "kart",
+ "dogrulama": [
+  "otomasyon/chatgpt/dogrula.sh tests/drivers/ps2/klavye_tr_test.kem"
+ ],
+ "isaretler": [
+  "CHATGPT_DOGRULA OK tests/drivers/ps2/klavye_tr_test.kem"
+ ]
+}

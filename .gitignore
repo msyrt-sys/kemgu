@@ -61,3 +61,6 @@ loop.log
 
 # Python onbellegi (otomasyon/evren/*.py)
 __pycache__/
+
+# ChatGPT yanitlari (elle yapistirilan, depo icerigi degil)
+otomasyon/chatgpt/gelen/

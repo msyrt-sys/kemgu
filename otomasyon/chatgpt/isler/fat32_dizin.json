@@ -1,0 +1,15 @@
+{
+ "tur": "cg",
+ "is": "fat32_dizin",
+ "gorev": "otomasyon/chatgpt/isler/fat32_dizin.md",
+ "baglam": [
+  "drivers/ortak/bayt.kem"
+ ],
+ "ortak": "kart",
+ "dogrulama": [
+  "otomasyon/chatgpt/dogrula.sh tests/drivers/fs/fat32_dizin_test.kem"
+ ],
+ "isaretler": [
+  "CHATGPT_DOGRULA OK tests/drivers/fs/fat32_dizin_test.kem"
+ ]
+}

@@ -205,6 +205,11 @@
       seri port ve ikinci makine gerekmez): `belgeler/KEMGU_OS_Donanim_Yol_Haritasi.md`.
       H0 kararlari (Mehmet) once; kritik yol H1f/H1g -> H2 -> H3 -> H4/H5/H6/H7 -> H8 -> H9
       -> H10 -> H11. E3b-E3f bu haritanin H9 maddelerine baglanir.
+- [ ] E4a [L] ChatGPT paketleri (otomasyon/chatgpt/, D-735): ps2_klavye · ps2_fare ·
+      crc32_bolum · fat32_bpb · fat32_dizin · acpi_tablo. Mehmet yapistirir, yanit
+      `dongu.py isler/<is>.json --yanit gelen/<is>.md` ile icer alinir; Claude gozden
+      gecirir + sabotaj + PR. Gelen her modul `calistir_chatgpt_kopru` kapisinda.
+      Sonra: surucu_diff globu yeni dizinlere genisletilir; donanim baglama (port/MMIO) Claude'da.
 
 # ===== F. FORMEL =====
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
@@ -2546,3 +2551,19 @@
   yankisi 'KEMGU-RX'. Elle 5/5 kararli; yanlis satir ("KEMGU-RY") → HATA (icerik denetimi
   gercek). SABOTAJ: x86 kis_rx_hazir hep 0 → girdili kosum EOF, rc=2; geri alindi.
   kem_os_x86, kem_os_arm, check_kapisi 292/300 (0 RED), baremetal_diff 22/22 (x86 279 islev).
+- 2026-11-01 D-735: ChatGPT KOPRUSU + self-host onek yakalama onarimi. (1) executor.py `paket`
+  (istem dosyasi, API YOK) + `al` (yapistirilan yaniti tur_*.md'ye sarar, `uygula` degismez);
+  ortak istem `istem_kur`da TEK yerde. dongu.py `--paket`/`--yanit`; JSON `"ortak":"kart"`.
+  (2) otomasyon/chatgpt/KEMGU_dil_karti.md: yalniz OLCULMUS sozdizimi (46 anahtar kelime lexer
+  tablosundan; `&&`/`!`/ortuk genisletme RED; tam64->8/16 dogrudan E004 — karttaki ilk
+  "olarak kirpar" cumlem YANLISTI, olcum duzeltti). Ornek `dogrula.sh --kart` ile iki derleyicide.
+  (3) drivers/ortak/bayt.kem (le16/32/64, imza, toplam8) + test. (4) 6 paket, sabitler aracla
+  (zlib CRC32 '123456789'=3421780262, GPT fikstur CRC'leri, LFN saglama 101/206, Unicode).
+  YOL USTU KUSUR: self-host secili import edilen `yaz_ascii`yi onek eslemesiyle
+  `@kdl_yaz_ascii`ye ceviriyordu (LINK-RED; C dogru) — fn_var_mi cıplak ad, kayit modul onekli.
+  Onarim: once fn_coz (iki cagri yeri). Fikstur test/moduller/ana_onek_yakalama (+POZITIF
+  gercek yerlesikler). Kapi `calistir_chatgpt_kopru` test_tumu'ya bagli. AYRI IS (spawn): self-host
+  `mmio_*`i kdl_mmio_*'a eslemiyor -> virtio host-mock testleri self'te link edilemiyor
+  (surucu_diff yapisal oldugu icin gormuyor). Kapilar: codegen_diff 188/188, checker_diff 240/240,
+  surucu_diff 16/16, yapi_diff 166/166, modul_codegen 29/29, stdlib_check, self_driver FIXPOINT,
+  chatgpt_kopru. Sabotaj 2/2: S1 (fn_coz geri) modul_codegen 28/29 rc=2 · S2 (kart `&&`) rc=2.

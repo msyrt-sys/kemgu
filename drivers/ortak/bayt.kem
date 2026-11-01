@@ -1,0 +1,100 @@
+// Ortak bayt okuma yardımcıları — saf KEMGU, donanım yok.
+// Disk/ACPI/PS2 ayrıştırıcıları ham `Dizi<dtam8>` üzerinde çalışır; little-endian
+// alanları burada TEK yerde okunur (aynı soruyu iki yerde yanıtlayan kod ayrışır).
+// Sınır: okuma aralık dışına taşarsa runtime PANİKLER — çağıran önce
+// `bayt_sinirda(b, ofs, n)` ile denetlemelidir.
+
+genel işlev bayt_sinirda(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> mantıksal {
+    ver ofs >= 0 ve n >= 0 ve ofs + n <= dizi_boyut(b);
+}
+
+genel işlev oku_u8(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
+    ver dizi_al(b, ofs) olarak tam32;
+}
+
+genel işlev oku_le16(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
+    ver oku_u8(b, ofs) | (oku_u8(b, ofs + 1) << 8);
+}
+
+// 32-bit işaretsiz değer tam64'te döner (tam32'ye sığmaz: 0xFFFFFFFF).
+genel işlev oku_le32(b: Dizi<dtam8>, ofs: tam32) -> tam64 {
+    değişken d: tam64 = 0;
+    değişken i: tam32 = 3;
+    iken i >= 0 {
+        d = (d << 8) | (oku_u8(b, ofs + i) olarak tam64);
+        i = i - 1;
+    }
+    ver d;
+}
+
+// 64-bit değer tam64'te döner (2^63 üstü negatif görünür — adres/LBA için yeterli).
+genel işlev oku_le64(b: Dizi<dtam8>, ofs: tam32) -> tam64 {
+    ver oku_le32(b, ofs) | (oku_le32(b, ofs + 4) << 32);
+}
+
+// `b[ofs..ofs+len(imza)]` ASCII imzaya eşit mi (ör. "RSD PTR ", "EFI PART").
+genel işlev imza_esit(b: Dizi<dtam8>, ofs: tam32, imza: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(imza) olarak tam32;
+    eğer değil bayt_sinirda(b, ofs, n) {
+        ver yanlış;
+    }
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer oku_u8(b, ofs + i) != ((metin_bayt(imza, i) olarak tam32) & 255) {
+            ver yanlış;
+        }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// `b[ofs..ofs+n]` baytlarının toplamı mod 256 (ACPI sağlama toplamı: 0 olmalı).
+genel işlev bayt_toplam8(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> tam32 {
+    değişken t: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        t = (t + oku_u8(b, ofs + i)) & 255;
+        i = i + 1;
+    }
+    ver t;
+}
+
+// Test/kurulum yardımcısı: n adet sıfır bayt.
+genel işlev bayt_sifir(n: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = dizi_olustur(0);
+    değişken i: tam32 = 0;
+    iken i < n {
+        dizi_ekle(b, 0 olarak dtam8);
+        i = i + 1;
+    }
+    ver b;
+}
+
+// Test/kurulum yardımcıları: little-endian yaz.
+genel işlev yaz_u8(b: Dizi<dtam8>, ofs: tam32, v: tam64) {
+    // tam64 → dtam8 doğrudan YASAK (E004); tam32 üzerinden iki adım.
+    dizi_yaz(b, ofs, ((v & 255) olarak tam32) olarak dtam8);
+}
+
+genel işlev yaz_le16(b: Dizi<dtam8>, ofs: tam32, v: tam64) {
+    yaz_u8(b, ofs, v);
+    yaz_u8(b, ofs + 1, v >> 8);
+}
+
+genel işlev yaz_le32(b: Dizi<dtam8>, ofs: tam32, v: tam64) {
+    yaz_le16(b, ofs, v);
+    yaz_le16(b, ofs + 2, v >> 16);
+}
+
+genel işlev yaz_le64(b: Dizi<dtam8>, ofs: tam32, v: tam64) {
+    yaz_le32(b, ofs, v);
+    yaz_le32(b, ofs + 4, v >> 32);
+}
+
+genel işlev yaz_ascii(b: Dizi<dtam8>, ofs: tam32, s: metin) {
+    değişken i: tam32 = 0;
+    iken i < (metin_uzunluk(s) olarak tam32) {
+        yaz_u8(b, ofs + i, (metin_bayt(s, i) olarak tam64) & 255);
+        i = i + 1;
+    }
+}

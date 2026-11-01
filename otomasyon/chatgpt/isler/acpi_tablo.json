@@ -1,0 +1,15 @@
+{
+ "tur": "cg",
+ "is": "acpi_tablo",
+ "gorev": "otomasyon/chatgpt/isler/acpi_tablo.md",
+ "baglam": [
+  "drivers/ortak/bayt.kem"
+ ],
+ "ortak": "kart",
+ "dogrulama": [
+  "otomasyon/chatgpt/dogrula.sh tests/drivers/acpi/tablo_test.kem"
+ ],
+ "isaretler": [
+  "CHATGPT_DOGRULA OK tests/drivers/acpi/tablo_test.kem"
+ ]
+}

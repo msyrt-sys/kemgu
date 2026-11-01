@@ -1,0 +1,44 @@
+// drivers/ortak/bayt.kem testleri (exit 0 = hepsi geçti).
+kullan drivers::ortak::bayt::{
+    bayt_sinirda, oku_u8, oku_le16, oku_le32, oku_le64, imza_esit,
+    bayt_toplam8, bayt_sifir, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii
+};
+
+işlev test_le_gidis_donus() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(16);
+    yaz_le16(b, 0, 4660);              // 0x1234
+    yaz_le32(b, 2, 4294967295);        // 0xFFFFFFFF — tam32'ye sığmaz
+    yaz_le64(b, 6, 8589934593);        // 2^33 + 1
+    ver oku_le16(b, 0) == 4660 ve oku_u8(b, 0) == 52
+        ve oku_le32(b, 2) == 4294967295 ve oku_le64(b, 6) == 8589934593;
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(12);
+    yaz_ascii(b, 2, "EFI PART");
+    ver imza_esit(b, 2, "EFI PART") ve değil imza_esit(b, 2, "EFI PARX")
+        ve değil imza_esit(b, 8, "EFI PART");   // sınır dışı → yanlış, panik değil
+}
+
+işlev test_toplam8() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(3);
+    yaz_u8(b, 0, 200);
+    yaz_u8(b, 1, 50);
+    yaz_u8(b, 2, 6);                   // 256 → 0
+    ver bayt_toplam8(b, 0, 3) == 0 ve bayt_toplam8(b, 0, 2) == 250;
+}
+
+işlev test_sinir() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(4);
+    ver bayt_sinirda(b, 0, 4) ve değil bayt_sinirda(b, 1, 4)
+        ve değil bayt_sinirda(b, 0 - 1, 1);
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_le_gidis_donus() { yazdir_metin("BASARISIZ test_le_gidis_donus"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ test_imza"); h = h + 1; }
+    eğer değil test_toplam8() { yazdir_metin("BASARISIZ test_toplam8"); h = h + 1; }
+    eğer değil test_sinir() { yazdir_metin("BASARISIZ test_sinir"); h = h + 1; }
+    ver h;
+}

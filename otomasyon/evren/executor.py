@@ -6,6 +6,12 @@ bloklar ORKESTRATÖR DENETLEMEDEN UYGULANMAZ (`uygula` ayrı alt komut).
 
   executor.py sor    --tur N --is AD --gorev gorev.md [--baglam dosya ...]
   executor.py uygula --tur N --is AD [--kuru]
+  executor.py paket  --tur N --is AD --gorev gorev.md [...]   # ChatGPT için istem dosyası
+  executor.py al     --tur N --is AD --yanit yanit.md          # ChatGPT yanıtını içe al
+
+ChatGPT köprüsü (otomasyon/chatgpt/README.md): `paket` API'yi ÇAĞIRMAZ, aynı
+istemi kopyala-yapıştır için `otomasyon/chatgpt/giden/` altına yazar; `al`
+yapıştırılan yanıtı `tur_<T>_<I>.md` biçimine sarar → `uygula` DEĞİŞMEDEN çalışır.
 
 Önbellek: SISTEM ve ORTAK_BAGLAM turlar arası SABİT; işe özel bağlam onlardan
 SONRA gelir (önek eşleşmesi korunur).
@@ -142,14 +148,17 @@ def bloklar(metin):
                                  metin, re.S)]
 
 
-def sor(a):
-    anahtar = (pathlib.Path.home() / ".config/evren/key").read_text().strip()
-    q = kota(anahtar)
-    kalan = q.get("daily_remaining_tokens", 0)
-    print(f"kota: günlük kalan {kalan} · pencere {q.get('used_tokens')}/{q.get('cap')}")
-    if kalan < KOTA_ALT:
-        print(f"DUR: günlük kalan token {kalan} < {KOTA_ALT}")
-        sys.exit(3)
+KART = DEPO / "otomasyon" / "chatgpt" / "KEMGU_dil_karti.md"
+GIDEN = DEPO / "otomasyon" / "chatgpt" / "giden"
+
+
+def kart_baglam():
+    """Dış model (ChatGPT) için ortak bağlam: ölçülmüş dil kartı."""
+    return "# ORTAK BAĞLAM — KEMGU dil kartı\n\n" + KART.read_text(encoding="utf-8")
+
+
+def istem_kur(a):
+    """Kullanıcı istemini kur (sor ve paket AYNI istemi kullanır)."""
     is_baglam = "".join(f"\n## {y}\n```\n{oku(y)}\n```\n" for y in a.baglam)
     # [tur 4b dersi] Kesit AYRI bir dosya yolu taşırsa model onu düzenleme hedefi
     # sanar. --kesit GERÇEK dosyanın yolunu ve satır aralığını etiketler.
@@ -160,7 +169,19 @@ def sor(a):
         is_baglam += (f"\n## {yol} — KESİT (satır {bas}-{son}; düzenleme hedefi: `{yol}`, "
                       f"blok yolu `{yol}` olmalı)\n```\n" + "\n".join(satirlar) + "\n```\n")
     gorev = pathlib.Path(a.gorev).read_text(encoding="utf-8")
-    kullanici = ortak_baglam() + "\n# İŞE ÖZEL BAĞLAM\n" + is_baglam + "\n# GÖREV\n\n" + gorev
+    ortak = kart_baglam() if getattr(a, "ortak", "evren") == "kart" else ortak_baglam()
+    return ortak + "\n# İŞE ÖZEL BAĞLAM\n" + is_baglam + "\n# GÖREV\n\n" + gorev
+
+
+def sor(a):
+    anahtar = (pathlib.Path.home() / ".config/evren/key").read_text().strip()
+    q = kota(anahtar)
+    kalan = q.get("daily_remaining_tokens", 0)
+    print(f"kota: günlük kalan {kalan} · pencere {q.get('used_tokens')}/{q.get('cap')}")
+    if kalan < KOTA_ALT:
+        print(f"DUR: günlük kalan token {kalan} < {KOTA_ALT}")
+        sys.exit(3)
+    kullanici = istem_kur(a)
     mesajlar = [{"role": "system", "content": SISTEM}, {"role": "user", "content": kullanici}]
     kullanilan = MODEL
     try:
@@ -187,6 +208,29 @@ def sor(a):
         "## Düşünme (reasoning)", "", dusunme or "_(yok)_", ""]), encoding="utf-8")
     print(f"tur {a.tur} {a.is_}: {sure:.1f} sn, finish={bitis}, blok={len(bl)}, "
           f"usage={json.dumps(usage)}")
+
+
+def paket(a):
+    """API çağırmadan, tek parça yapıştırılabilir istem dosyası yaz."""
+    kullanici = istem_kur(a)
+    GIDEN.mkdir(parents=True, exist_ok=True)
+    hedef = GIDEN / f"tur_{a.tur}_{a.is_}.md"
+    hedef.write_text(SISTEM + "\n\n" + "=" * 72 + "\n\n" + kullanici + "\n", encoding="utf-8")
+    print(f"paket: {hedef.relative_to(DEPO)} ({len(kullanici) + len(SISTEM)} karakter)")
+
+
+def al(a):
+    """Yapıştırılan dış-model yanıtını `uygula`nın okuduğu biçime sar."""
+    icerik = pathlib.Path(a.yanit).read_text(encoding="utf-8")
+    bl = bloklar(icerik)
+    taban = CIKTI / f"tur_{a.tur}_{a.is_}"
+    (taban.parent / (taban.name + ".md")).write_text("\n".join([
+        f"# Tur {a.tur} — {a.is_} — `chatgpt (elle)`", "",
+        f"- Tarih: {time.strftime('%Y-%m-%d %H:%M:%S')} · kaynak `{a.yanit}`",
+        f"- Değişiklik blokları: {len(bl)} — " + ", ".join(f"{t}:{y}" for t, y, _ in bl), "",
+        "## Yanıt", "", icerik, "",
+        "## Düşünme (reasoning)", "", "_(yok — elle aktarıldı)_", ""]), encoding="utf-8")
+    print(f"tur {a.tur} {a.is_}: finish=elle, blok={len(bl)}")
 
 
 def uygula(a):
@@ -219,16 +263,22 @@ def uygula(a):
 def main():
     p = argparse.ArgumentParser()
     alt = p.add_subparsers(dest="komut", required=True)
-    s = alt.add_parser("sor")
-    s.add_argument("--tur", required=True); s.add_argument("--is", dest="is_", required=True)
-    s.add_argument("--gorev", required=True); s.add_argument("--baglam", nargs="*", default=[])
-    s.add_argument("--effort", default=None, help="reasoning_effort (ör. low)")
-    s.add_argument("--kesit", nargs="*", default=[], help="GERÇEK yol:BAŞ-SON (ör. Makefile:80-95)")
+    for ad in ("sor", "paket"):
+        s = alt.add_parser(ad)
+        s.add_argument("--tur", required=True); s.add_argument("--is", dest="is_", required=True)
+        s.add_argument("--gorev", required=True); s.add_argument("--baglam", nargs="*", default=[])
+        s.add_argument("--effort", default=None, help="reasoning_effort (ör. low)")
+        s.add_argument("--kesit", nargs="*", default=[], help="GERÇEK yol:BAŞ-SON (ör. Makefile:80-95)")
+        s.add_argument("--ortak", choices=["evren", "kart"], default="evren",
+                       help="ortak bağlam: evren (kem_heap deseni) | kart (dil kartı)")
+    g = alt.add_parser("al")
+    g.add_argument("--tur", required=True); g.add_argument("--is", dest="is_", required=True)
+    g.add_argument("--yanit", required=True, help="ChatGPT yanıtının kaydedildiği dosya")
     u = alt.add_parser("uygula")
     u.add_argument("--tur", required=True); u.add_argument("--is", dest="is_", required=True)
     u.add_argument("--kuru", action="store_true")
     a = p.parse_args()
-    sor(a) if a.komut == "sor" else uygula(a)
+    {"sor": sor, "paket": paket, "al": al, "uygula": uygula}[a.komut](a)
 
 
 if __name__ == "__main__":

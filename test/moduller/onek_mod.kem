@@ -1,0 +1,5 @@
+// [D-735] fikstur modulu: adlari YERLESIK ONEKLERIYLE baslayan kullanici islevleri.
+// Self-host'un onek eslemesi (`yaz_` -> `kdl_yaz_`, `metin_` -> `kdl_metin_`)
+// secili import edilen bu adlari yakaliyordu (LINK-RED; C dogru linkliyordu).
+genel işlev yaz_on(x: tam32) -> tam32 { ver x + 10; }
+genel işlev metin_yirmi() -> tam32 { ver 20; }
