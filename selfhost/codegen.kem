@@ -6464,7 +6464,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             }
         }
         değişken kdl: metin = "";
-        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, fad) == yanlış) { kdl = builtin_kdl_ad(fad); }
+        // [D-735] Önek eşlemesi (`yaz_`/`metin_`/...) AD YAKALAYICIDIR: seçili
+        // import edilen kullanıcı işlevi `yaz_ascii` modül önekiyle kayıtlıdır
+        // (`bayt.yaz_ascii`), çıplak adla `fn_var_mi` onu GÖRMEZ → `@kdl_yaz_ascii`
+        // (tanımsız, LINK-RED; C doğru linkliyordu). Önce kullanıcı çözümünü sor.
+        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, fn_coz(p, fad)) == yanlış) { kdl = builtin_kdl_ad(fad); }
         değişken rt: metin = "";
         değişken fname: metin = "";
         değişken kullanici: tam32 = 0;   // V2-F4.2a: kullanıcı-fn mı (ρ alır)?
@@ -8651,7 +8655,9 @@ işlev lam_ret_tahmin_b(p: &değişken Ayr, node: tam32, blok: tam32, sinir: tam
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, node));
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver ""; }
         değişken fad2: metin = dizi_al(p.a_deg, h);
-        eğer fn_var_mi(p, fad2) { ver fn_ret_bul(p, fad2); }
+        // [D-735] seçili import edilen kullanıcı işlevi önek eşlemesinden ÖNCE.
+        değişken fcz: metin = fn_coz(p, fad2);
+        eğer fn_var_mi(p, fcz) { ver fn_ret_bul(p, fcz); }
         değişken kd: metin = builtin_kdl_ad(fad2);
         eğer metin_esit(kd, "") { ver ""; }
         ver builtin_ret(fad2);

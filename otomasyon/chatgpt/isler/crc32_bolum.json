@@ -1,0 +1,15 @@
+{
+ "tur": "cg",
+ "is": "crc32_bolum",
+ "gorev": "otomasyon/chatgpt/isler/crc32_bolum.md",
+ "baglam": [
+  "drivers/ortak/bayt.kem"
+ ],
+ "ortak": "kart",
+ "dogrulama": [
+  "otomasyon/chatgpt/dogrula.sh tests/drivers/disk/bolum_test.kem"
+ ],
+ "isaretler": [
+  "CHATGPT_DOGRULA OK tests/drivers/disk/bolum_test.kem"
+ ]
+}

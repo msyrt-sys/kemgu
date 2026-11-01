@@ -5,6 +5,12 @@ executor.py'nin `sor`/`uygula` alt komutlarını SUBPROCESS ile çağırır (imp
 ETMEZ — executor'ın argparse'ı modül düzeyindedir).
 
   python3 otomasyon/evren/dongu.py <is_tanimi.json>
+  python3 otomasyon/evren/dongu.py <is_tanimi.json> --paket         # ChatGPT istemi yaz, DUR
+  python3 otomasyon/evren/dongu.py <is_tanimi.json> --yanit y.md    # ChatGPT yanıtıyla devam
+
+`--yanit` adım 1'i (sor) atlar, yanıtı `executor.py al` ile içe alır; kalan
+adımlar (kuru/uygula/dogrulama/isaret) AYNIDIR. JSON'da `"ortak": "kart"` dil
+kartını ortak bağlam yapar (dış model kem_heap desenini bilmez).
 
 Adımlar sırayla; ilk başarısızlıkta DUR:
   1) sor           — çıkış 3 → KOTA; başka ≠0 → SOR_HATA; blok=0 → BLOK_YOK
@@ -18,6 +24,7 @@ Adımlar sırayla; ilk başarısızlıkta DUR:
 Çıkış kodu: TAMAM → 0, KOTA → 3, diğerleri → 1. Commit/push YOK; kapı KOŞMAZ.
 Anahtar dosyasını OKUMAZ (executor okur).
 """
+import argparse
 import json
 import pathlib
 import re
@@ -64,10 +71,13 @@ def ozet_yaz(durum, tur, is_, satirlar, ozet_yolu):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("kullanım: dongu.py <is_tanimi.json>", file=sys.stderr)
-        sys.exit(1)
-    tanim = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("tanim")
+    kip = ap.add_mutually_exclusive_group()
+    kip.add_argument("--paket", action="store_true", help="istemi otomasyon/chatgpt/giden/ altına yaz, DUR")
+    kip.add_argument("--yanit", help="ChatGPT yanıt dosyası (sor adımını atla)")
+    ar = ap.parse_args()
+    tanim = json.loads(pathlib.Path(ar.tanim).read_text(encoding="utf-8"))
     tur = str(tanim["tur"])
     is_ = tanim["is"]
     gorev = tanim["gorev"]
@@ -76,6 +86,7 @@ def main():
     effort = tanim.get("effort")
     dogrulama = tanim.get("dogrulama") or []
     isaretler = tanim.get("isaretler") or []
+    ortak = tanim.get("ortak")
 
     ozet_yolu = EVREN / f"tur_{tur}_{is_}_ozet.md"
     log_yolu = EVREN / f"tur_{tur}_{is_}_dogrulama.log"
@@ -83,15 +94,22 @@ def main():
     satirlar = []
     durum = None
 
-    # 1) sor — LLM/kota; finish/blok ayrıştır.
-    argv = ["sor", "--tur", tur, "--is", is_, "--gorev", gorev]
+    # 1) sor — LLM/kota; finish/blok ayrıştır. (paket: yalnız istem; yanit: elle al)
+    argv = ["paket" if ar.paket else "sor", "--tur", tur, "--is", is_, "--gorev", gorev]
     if baglam:
         argv += ["--baglam"] + list(baglam)
     if kesit:
         argv += ["--kesit"] + list(kesit)
     if effort:
         argv += ["--effort", effort]
+    if ortak:
+        argv += ["--ortak", ortak]
+    if ar.yanit:
+        argv = ["al", "--tur", tur, "--is", is_, "--yanit", ar.yanit]
     kod, out, err = calistir(argv)
+    if ar.paket:
+        print((out + err).strip())
+        sys.exit(kod)
     finish, blok = son_ayristir(out + err)
     satirlar.append(f"- finish: `{finish}` · blok: `{blok}`")
     if kod == 3:
