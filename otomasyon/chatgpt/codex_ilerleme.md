@@ -46,3 +46,5 @@ VARSAYIM D2: PSF Unicode dizileri (FFFE/FE sonrası çok kod noktalı ligatürle
 VARSAYIM D4: sekme sonraki 8 sütun durağına boşluk yazar; geri sil önceki satıra geçebilir. Sarma anlıktır; alt satır taşınca kaydırılır. Konsol satır metni sondaki boşlukları korur. Hücre başına ön/arka renk ayrı tutulur; kirli_satirlar tüketilerek temizlenir.
 - [x] D4 · 14 test · sabotaj: `dizi_yaz(k.kirli, i, 0)` → `dizi_yaz(k.kirli, i, 1)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:59:35.064462+00:00
 VARSAYIM D5: CSI en çok 16 parametre ve 4096 sayısal değer tutar; bilinmeyen CSI/OSC/DCS yutulur. vt_bitir eksik UTF-8 baytlarını U+FFFD ile sonlandırır. Palet VGA 16 renktir.
+- [x] D5 · 10 test · sabotaj: `dizi_boyut(d.utf8) == d.beklenen` → `dizi_boyut(d.utf8) >= 1` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:06:26.163048+00:00
+VARSAYIM D6: boş Enter boş metin döndürür, geçmişe eklenmez; geçmişten aşağı gezinince taslak geri gelir. Kontrol kodları ve geçersiz Unicode yok sayılır. C010 için sentetik olay sarmalayıcıları aynı satir_olay yolunu çağırır.

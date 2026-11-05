@@ -235,3 +235,16 @@ codegen: OK
   %7 = call i32 @kdl_dosya_sil(ptr %5, ptr %6)
 Host bağlamalı ikili çalıştırılmadı.
 Dolanma: orijinal API korunuyor; imaja_dosya_yaz, imajda_dizin_olustur, imajdan_dosya_sil ek adları kullanılıyor. Nitelikli çağrı tek başına codegen host yönlendirmesini önlemiyor.
+
+## C010 — İçe aktarılan çeşit kurucusunda self T016
+
+Yalın yeniden üretim (5 satır):
+```kemgu
+kullan drivers::ps2::klavye_tr::{ TusOlayi };
+işlev main() -> tam32 {
+    değişken o: TusOlayi = TusOlayi::Karakter(65);
+    eşleş o { TusOlayi::Karakter(k) => { ver k - 65; } _ => { ver 1; } }
+}
+```
+`build/kemgu --check tests/drivers/probe/enum_aktar.kem`: OK; C LLVM/link/koşum exit=0. `build/codegen --check ...`: `T016 3 38`.
+Dolanma: satir modülünde kurucuyu çağıran satir_karakter/satir_tus sarmalayıcıları; olay yine aynı satir_olay yolundan geçer. Düzeltilmiş probe ve bütün satır testleri iki derleyicide doğrulanır. C tarafında TusOlayi içe aktarımı satir modülünden önce olmalıdır (ters sırada T011/T001).
