@@ -4629,6 +4629,15 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("%kdl_yetki = type { i64, i16, i16, i8, [3 x i8] }"); yb(10);
     yaz_str("declare void @kdl_yetki_olustur(ptr, i16, i16)"); yb(10);
     yaz_str("declare void @kdl_yetki_geri_al(ptr)"); yb(10);
+    yaz_str("declare void @kdl_yetki_delege(ptr, ptr, i16)"); yb(10);   // [D-736]
+    // [D-736] MMIO (C llvm.c ~8897 aynası, KOŞULSUZ): host mock tampon /
+    // bare-metal volatile. Tanımlı-declare çakışmasını `strip_defined_declares.awk` ayıklar.
+    yaz_str("declare i16 @kdl_mmio_oku16(i64)"); yb(10);
+    yaz_str("declare void @kdl_mmio_yaz16(i64, i16)"); yb(10);
+    yaz_str("declare i32 @kdl_mmio_oku32(i64)"); yb(10);
+    yaz_str("declare void @kdl_mmio_yaz32(i64, i32)"); yb(10);
+    yaz_str("declare i64 @kdl_mmio_oku64(i64)"); yb(10);
+    yaz_str("declare void @kdl_mmio_yaz64(i64, i64)"); yb(10);
     // D-299 (Katman 2 parite): görev/kanal runtime hedefleri. İmzalar C llvm.c ile
     // BİREBİR aynı; kanal declare'i host (kdl_runtime.c) ve bare-metal (kdl_kanal.c)
     // sürümlerinin ikisine de uyar.
@@ -6079,6 +6088,70 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             yaz_str("  call void @kdl_yetki_geri_al(ptr "); yaz_str(adr); yaz_str(")"); yb(10);
             p.son_tip = "void"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
             ver "0";
+        }
+        // [D-736] `delege(y, izin)` -> yetki<R>. AYNI SINIF: checker tanıyordu
+        // (`g_ekle`), codegen eşlemesi YOKTU → `call i32 @delege(ptr %rho, ..)`
+        // (tanımsız + i32 dönüş `store %kdl_yetki` ile uyuşmaz = LINK-RED).
+        // C llvm.c ~4853 aynası (D-268 OUT-PTR ABI): yetki geçici slota yazılıp
+        // ADRESİ geçilir, dönüş out-ptr; izin i16.
+        eğer metin_esit(fad, "delege") ve (cs == 3) {
+            değişken eskid: metin = p.beklenen_ll;
+            p.beklenen_ll = "%kdl_yetki";
+            değişken dy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            p.beklenen_ll = "i16";
+            değişken di: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+            p.beklenen_ll = eskid;
+            di = int_uydur(p, di, "i16", 0);
+            değişken dys: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(dys); yaz_str(" = alloca %kdl_yetki"); yb(10);
+            yaz_str("  store %kdl_yetki "); yaz_str(dy); yaz_str(", ptr "); yaz_str(dys); yb(10);
+            değişken dos: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(dos); yaz_str(" = alloca %kdl_yetki"); yb(10);
+            yaz_str("  call void @kdl_yetki_delege(ptr "); yaz_str(dos); yaz_str(", ptr ");
+            yaz_str(dys); yaz_str(", i16 "); yaz_str(di); yaz_str(")"); yb(10);
+            değişken dv: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(dv); yaz_str(" = load %kdl_yetki, ptr "); yaz_str(dos); yb(10);
+            p.son_tip = "%kdl_yetki"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+            ver dv;
+        }
+        // [D-736] `mmio_okuN(y, adres)` / `mmio_yazN(y, adres, değer)` (N=16/32/64).
+        // Checker yerleşiği tanıyordu (`g_ekle`) ama CODEGEN EŞLEMESİ YOKTU → genel
+        // çağrı yolu `call i32 @mmio_oku32(ptr %rho, %kdl_yetki %y, i64 %a)`
+        // yayıyordu: TANIMSIZ SEMBOL (LINK-RED). C `src/llvm.c` ~4945 aynası
+        // (IR C'den OKUNDU): yetki argümanı IR'a GEÇMEZ ve DEĞERLENDİRİLMEZ
+        // (derleme-zamanı ispatı), ρ geçilmez, adres i64'e, değer N bite uydurulur:
+        //   %r = call iN @kdl_mmio_okuN(i64 %a)
+        //   call void @kdl_mmio_yazN(i64 %a, iN %v)
+        eğer metin_baslar(fad, "mmio_oku") veya metin_baslar(fad, "mmio_yaz") {
+            değişken mn: metin = "";
+            eğer metin_esit(fad, "mmio_oku16") veya metin_esit(fad, "mmio_yaz16") { mn = "i16"; }
+            eğer metin_esit(fad, "mmio_oku32") veya metin_esit(fad, "mmio_yaz32") { mn = "i32"; }
+            eğer metin_esit(fad, "mmio_oku64") veya metin_esit(fad, "mmio_yaz64") { mn = "i64"; }
+            değişken myaz: mantıksal = metin_baslar(fad, "mmio_yaz");
+            değişken mbek: tam32 = 3;   // cs hedefi de sayar: oku 2 arg, yaz 3 arg
+            eğer myaz { mbek = 4; }
+            eğer (metin_esit(mn, "") == yanlış) ve (cs == mbek) {
+                değişken eskim: metin = p.beklenen_ll;
+                p.beklenen_ll = "i64";
+                değişken ma: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+                ma = int_uydur(p, ma, "i64", 0);   // C int_donustur: isaretsiz=0
+                eğer myaz {
+                    p.beklenen_ll = mn;
+                    değişken mv: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 3));
+                    mv = int_uydur(p, mv, mn, 0);
+                    p.beklenen_ll = eskim;
+                    yaz_str("  call void @kdl_"); yaz_str(fad); yaz_str("(i64 "); yaz_str(ma);
+                    yaz_str(", "); yaz_str(mn); yaz_str(" "); yaz_str(mv); yaz_str(")"); yb(10);
+                    p.son_tip = "void"; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+                    ver "0";
+                }
+                p.beklenen_ll = eskim;
+                değişken mr: metin = reg_str(yeni_reg(p));
+                yaz_str("  "); yaz_str(mr); yaz_str(" = call "); yaz_str(mn); yaz_str(" @kdl_");
+                yaz_str(fad); yaz_str("(i64 "); yaz_str(ma); yaz_str(")"); yb(10);
+                p.son_tip = mn; p.son_elem = ""; p.son_ref = ""; p.son_ic = "";
+                ver mr;
+            }
         }
         // D-408: `ifşa(e)` — Sabitsüre Spec declassify. PASS-THROUGH (sıfır
         // talimat); gizlilik muhasebesi tamamen TİP KONTROLDE yaşar, IR'da izi

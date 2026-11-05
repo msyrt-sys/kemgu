@@ -2567,3 +2567,8 @@
   (surucu_diff yapisal oldugu icin gormuyor). Kapilar: codegen_diff 188/188, checker_diff 240/240,
   surucu_diff 16/16, yapi_diff 166/166, modul_codegen 29/29, stdlib_check, self_driver FIXPOINT,
   chatgpt_kopru. Sabotaj 2/2: S1 (fn_coz geri) modul_codegen 28/29 rc=2 · S2 (kart `&&`) rc=2.
+- 2026-11-05 D-736: self-host `mmio_okuN/yazN` + `delege` codegen eslemesi (C llvm.c'den OKUNDU:
+  yetki IR'a gecmez, `@kdl_mmio_okuN(i64)`/`@kdl_mmio_yazN(i64, iN)`; delege OUT-PTR ABI). D-735'in
+  spawn ettigi is. Yeni kapi `calistir_surucu_kosum` (test_tumu): virtio host-mock testleri IKI
+  derleyicide link+calistir+stdout (dogrula.sh) — 3/3, oracle'in reddettigi 6 parca ADIYLA atlanir.
+  Sabotaj 2/2: S1 mmio dali -> `@mmio_oku32` tanimsiz rc=2 · S2 delege dali -> `%34 i32` rc=2.

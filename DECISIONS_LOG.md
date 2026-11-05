@@ -5,6 +5,52 @@ Format: D-NNN | tarih | karar | gerekçe | kapsam/sınırlar. [YÜKSEK] = merge-
 
 ---
 
+## D-736 [YÜKSEK] — self-host `mmio_okuN/yazN` + `delege` codegen eşlemesi + davranışsal sürücü kapısı (2026-11-05)
+
+**ÖLÇÜLEN KUSUR:** self-host checker `mmio_oku16/32/64`, `mmio_yaz16/32/64` ve
+`delege` yerleşiklerini tanıyordu (`g_ekle`) ama CODEGEN eşlemesi YOKTU → genel
+çağrı yolu `call i32 @mmio_oku32(ptr %rho, %kdl_yetki %y, i64 %a)` ve
+`call i32 @delege(ptr %rho, ...)` yayıyordu = TANIMSIZ SEMBOL (LINK-RED).
+C oracle aynı dosyaları linkleyip exit 0 ile koşuyordu.
+Etkilenen host-mock testler: `virtio_mmio_mock_test` · `virtio_blk_config_test`
+(mmio) · `virtio_blk_oku_test` (mmio **ve** delege — mmio onarılınca ikinci
+kök açığa çıktı: `'%34' i32 but expected %kdl_yetki`).
+
+**NEDEN GÖRÜNMEDİ:** `calistir_surucu_diff` yalnız YAPIYI ölçer (`--check`
+dump + `define` AD kümesi); linklemez, çalıştırmaz. Eksik eşleme `define`
+kümesini değiştirmez → kapı yeşildi (D-422/D-584 sınıfı: davranışsal kıyas
+olmadan bu sınıf görünmez).
+
+**ONARIM — IR C'den OKUNDU** (`src/llvm.c` ~4853 delege, ~4945 mmio, ~8897 declare):
+- `mmio_okuN(y, a)` → `%r = call iN @kdl_mmio_okuN(i64 %a)`;
+  `mmio_yazN(y, a, v)` → `call void @kdl_mmio_yazN(i64 %a, iN %v)`.
+  Yetki argümanı IR'a GEÇMEZ ve DEĞERLENDİRİLMEZ (derleme-zamanı ispatı),
+  ρ geçilmez; adres i64'e, değer N bite işaretli uydurulur (C `int_donustur`
+  `isaretsiz=0`).
+- `delege(y, izin)` → D-268 OUT-PTR ABI: yetki geçici slota yazılır,
+  `call void @kdl_yetki_delege(ptr %out, ptr %y_slot, i16 %izin)` + load.
+- Declare'ler C gibi KOŞULSUZ eklendi; bare-metal birimde tanımlı-declare
+  çakışmasını mevcut `test/strip_defined_declares.awk` ayıklar.
+
+**YENİ KAPI `calistir_surucu_kosum`** (`test/surucu_kosum_harness.sh`, `test_tumu`da):
+`tests/drivers/virtio/*_test.kem`den C `--check`in KABUL ettiği her dosya
+`otomasyon/chatgpt/dogrula.sh` ile İKİ derleyicide linklenip koşar (exit 0 +
+stdout C == self). Oracle'ın reddettiği 6 parça dosya ADIYLA basılıp atlanır;
+asgari 3 koşum şartı kapının kendini sessizce boşaltmasını engeller (D-486).
+Bugün **3/3**.
+
+**Sabotaj 2/2:** S1 (mmio dalını kapat) → `use of undefined value '@mmio_oku32'`,
+rc=2 · S2 (delege dalını kapat) → `virtio_blk_oku_test` `'%34' i32 but expected
+%kdl_yetki`, rc=2. Geri alınınca 3/3.
+
+**KAPSAM (ölçüldü):** yetki ailesinin kullanıcıya açık üç yerleşiği
+(`yetki_olustur` D-404, `geri_al` D-404, `delege` bu artım) artık self-host
+codegen'de eşli. C'nin `kdl_yetki_kontrol`/`_id`/`_tipi`/`_izin`/`_iptal_mi`
+declare'leri kullanıcı yerleşiği DEĞİL (ne `g_ekle`de ne C tip kontrolünde
+ad olarak geçiyorlar) → eşlenecek çağrı yeri yok.
+
+---
+
 ## D-455 [YÜKSEK] — KARAR 7: `Kilit` (kapsamlı mutex) + İKİ self-host parite boşluğu
 
 Önerilen sıralamanın son maddesi. Öneriyi yazarken *"runtime primitifleri
