@@ -31,6 +31,8 @@ meta={
 'ekran/yazi':('Glif, Unicode kod ve metin çizimi','Python MSB piksel matrisi, gerçek PSF','U+FFFD sonra ? yedek glif; çizim kırpılır'),
 'ekran/konsol':('Unicode hücre ızgarası ve kaydırma','Bağımsız konsol/sarma örnekleri','1M hücre, boyut en çok 4096; sekme 8 sütun; kirli satırlar tüketilir'),
 'ekran/vt':('ANSI CSI ve parçalı UTF-8 konsol akışı','ANSI durum örnekleri ve E2 mutasyonları','16 parametre, sayılar 4096da doyar; OSC/DCS yutulur; sınırlı SGR'),
+'girdi/klavye_tablo':('Tablo parametreli klavye karakter düzeni','49x4 A1 Türkçe eşdeğerlik ve özel tablo vektörleri','A1 durum/özel tuş çekirdeğini çağırır; en çok 128 eşleme; ilk eşleme kazanır'),
+'girdi/klavye_us':('US ANSI set-1 karakter düzeni','Python ord ile 49 tuş ve dört Shift/Caps durumu','A1 değişmez; ISO ek 86 tuşu ters bölü/boru olarak eşlenir'),
 'girdi/satir':('Unicode satır düzenleme ve geçmiş','Python Unicode kod noktaları ve E1 scancode akışı','256 kod noktası, 16 geçmiş; ardışık tekrar/boş satır geçmişe eklenmez'),
 'girdi/imlec':('Fare hareketi ve düğme kenarları','Python kırpma/bit kenarı vektörleri','Hız 0..1024; ekran y aşağı; tekerlek tam32 sınırlarında doyar'),
 'girdi/halka':('Sabit kapasite FIFO olay tamponu','Python collections.deque 120 işlem modeli','0..1048576 eleman; dolunca en yeni atılır; kayıp sayacı tam64te doyar'),

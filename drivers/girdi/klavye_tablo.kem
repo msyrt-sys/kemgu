@@ -1,0 +1,24 @@
+// A1'in durum/özel tuş çekirdeğini kullanır; karakter düzeni tablo parametresidir.
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_bayt };
+genel yapı TusEsleme { tarama: tam32; alt: tam32; ust: tam32; harf: mantıksal; }
+genel işlev duzen_bayt(d: &değişken KlavyeDurumu, b: tam32, tablo: Dizi<TusEsleme>) -> TusOlayi {
+    değişken uzatilmis: mantıksal = d.e0;
+    değişken olay: TusOlayi = klavye_bayt(d, b);
+    eğer b < 0 veya b >= 128 veya uzatilmis { ver olay; }
+    eğer b == 29 veya b == 56 veya b == 42 veya b == 54 veya b == 58 { ver olay; }
+    eşleş olay { TusOlayi::Ozel(k, bas) => { ver olay; } _ => { } }
+    eğer dizi_boyut(tablo) > 128 { ver TusOlayi::Yok; }
+    değişken shift: mantıksal = d.sol_shift veya d.sag_shift;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(tablo) {
+        değişken t: TusEsleme = dizi_al(tablo, i);
+        eğer t.tarama == b {
+            değişken ust: mantıksal = shift; eğer t.harf { ust = shift != d.caps; }
+            değişken kod: tam32 = t.alt; eğer ust { kod = t.ust; }
+            eğer kod < 32 veya kod == 127 veya kod > 1114111 veya (kod >= 55296 ve kod <= 57343) { ver TusOlayi::Yok; }
+            ver TusOlayi::Karakter(kod);
+        }
+        i = i + 1;
+    }
+    ver TusOlayi::Yok;
+}
