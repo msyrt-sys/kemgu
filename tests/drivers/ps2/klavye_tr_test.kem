@@ -1,0 +1,948 @@
+// Sabitler: python3 tools/codex/a1.py — ord(karakter), enumerate ve make + 128.
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni, klavye_bayt };
+işlev karakter(o: TusOlayi, k: tam32) -> mantıksal {
+    eşleş o { TusOlayi::Karakter(v) => { ver v == k; } _ => { ver yanlış; } }
+}
+işlev yok(o: TusOlayi) -> mantıksal {
+    eşleş o { TusOlayi::Yok => { ver doğru; } _ => { ver yanlış; } }
+}
+işlev ozel(o: TusOlayi, k: tam32, bas: mantıksal) -> mantıksal {
+    eşleş o { TusOlayi::Ozel(v, b) => { ver v == k ve b == bas; } _ => { ver yanlış; } }
+}
+
+işlev test_tablo_41() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 41), 34) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 169)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 41), 233) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 41), 233) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 41), 34) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 41), 34) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_2() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 2), 49) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 130)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 2), 33) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 2), 33) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 2), 49) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 2), 49) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_3() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 3), 50) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 131)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 3), 39) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 3), 39) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 3), 50) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 3), 50) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_4() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 4), 51) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 132)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 4), 94) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 4), 94) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 4), 51) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 4), 51) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_5() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 5), 52) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 133)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 5), 43) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 5), 43) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 5), 52) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 5), 52) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_6() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 6), 53) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 134)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 6), 37) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 6), 37) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 6), 53) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 6), 53) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_7() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 7), 54) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 135)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 7), 38) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 7), 38) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 7), 54) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 7), 54) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_8() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 8), 55) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 136)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 8), 47) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 8), 47) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 8), 55) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 8), 55) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_9() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 9), 56) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 137)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 9), 40) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 9), 40) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 9), 56) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 9), 56) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_10() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 10), 57) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 138)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 10), 41) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 10), 41) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 10), 57) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 10), 57) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_11() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 11), 48) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 139)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 11), 61) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 11), 61) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 11), 48) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 11), 48) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_12() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 12), 42) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 140)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 12), 63) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 12), 63) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 12), 42) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 12), 42) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_13() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 13), 45) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 141)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 13), 95) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 13), 95) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 13), 45) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 13), 45) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_16() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 16), 113) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 144)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 16), 81) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 16), 113) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 16), 81) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 16), 113) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_17() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 17), 119) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 145)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 17), 87) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 17), 119) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 17), 87) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 17), 119) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_18() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 18), 101) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 146)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 18), 69) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 18), 101) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 18), 69) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 18), 101) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_19() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 19), 114) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 147)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 19), 82) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 19), 114) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 19), 82) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 19), 114) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_20() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 20), 116) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 148)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 20), 84) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 20), 116) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 20), 84) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 20), 116) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_21() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 21), 121) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 149)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 21), 89) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 21), 121) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 21), 89) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 21), 121) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_22() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 22), 117) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 150)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 22), 85) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 22), 117) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 22), 85) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 22), 117) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_23() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 23), 305) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 151)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 23), 73) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 23), 305) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 23), 73) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 23), 305) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_24() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 24), 111) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 152)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 24), 79) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 24), 111) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 24), 79) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 24), 111) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_25() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 25), 112) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 153)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 25), 80) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 25), 112) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 25), 80) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 25), 112) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_26() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 26), 287) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 154)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 26), 286) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 26), 287) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 26), 286) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 26), 287) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_27() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 27), 252) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 155)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 27), 220) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 27), 252) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 27), 220) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 27), 252) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_30() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 97) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 158)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 65) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 97) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 65) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 97) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_31() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 31), 115) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 159)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 31), 83) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 31), 115) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 31), 83) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 31), 115) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_32() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 32), 100) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 160)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 32), 68) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 32), 100) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 32), 68) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 32), 100) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_33() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 33), 102) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 161)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 33), 70) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 33), 102) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 33), 70) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 33), 102) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_34() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 34), 103) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 162)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 34), 71) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 34), 103) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 34), 71) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 34), 103) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_35() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 35), 104) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 163)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 35), 72) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 35), 104) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 35), 72) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 35), 104) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_36() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 36), 106) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 164)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 36), 74) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 36), 106) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 36), 74) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 36), 106) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_37() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 37), 107) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 165)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 37), 75) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 37), 107) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 37), 75) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 37), 107) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_38() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 38), 108) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 166)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 38), 76) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 38), 108) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 38), 76) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 38), 108) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_39() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 39), 351) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 167)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 39), 350) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 39), 351) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 39), 350) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 39), 351) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_40() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 40), 105) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 168)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 40), 304) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 40), 105) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 40), 304) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 40), 105) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_43() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 43), 44) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 171)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 43), 59) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 43), 59) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 43), 44) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 43), 44) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_86() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 86), 60) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 214)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 86), 62) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 86), 62) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 86), 60) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 86), 60) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_44() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 44), 122) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 172)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 44), 90) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 44), 122) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 44), 90) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 44), 122) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_45() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 45), 120) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 173)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 45), 88) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 45), 120) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 45), 88) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 45), 120) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_46() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 46), 99) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 174)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 46), 67) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 46), 99) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 46), 67) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 46), 99) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_47() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 47), 118) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 175)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 47), 86) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 47), 118) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 47), 86) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 47), 118) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_48() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 48), 98) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 176)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 48), 66) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 48), 98) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 48), 66) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 48), 98) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_49() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 49), 110) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 177)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 49), 78) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 49), 110) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 49), 78) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 49), 110) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_50() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 50), 109) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 178)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 50), 77) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 50), 109) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 50), 77) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 50), 109) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_51() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 51), 246) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 179)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 51), 214) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 51), 246) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 51), 214) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 51), 246) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_52() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 52), 231) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 180)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 52), 199) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 52), 231) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 52), 199) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 52), 231) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_53() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 53), 46) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 181)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 53), 58) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 53), 58) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 53), 46) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 53), 46) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_tablo_57() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil karakter(klavye_bayt(&değişken d, 57), 32) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 185)) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 57), 32) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = doğru;
+    eğer değil karakter(klavye_bayt(&değişken d, 57), 32) { ver yanlış; }
+    d.caps = doğru; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 57), 32) { ver yanlış; }
+    d.caps = yanlış; d.sol_shift = yanlış;
+    eğer değil karakter(klavye_bayt(&değişken d, 57), 32) { ver yanlış; }
+    ver doğru;
+}
+
+işlev test_shift() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 42)) { ver yanlış; }
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 65) { ver yanlış; }
+    klavye_bayt(&değişken d, 54);
+    klavye_bayt(&değişken d, 170);
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 65) { ver yanlış; }
+    klavye_bayt(&değişken d, 182);
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_caps() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    klavye_bayt(&değişken d, 58); klavye_bayt(&değişken d, 186);
+    eğer değil d.caps { ver yanlış; }
+    eğer değil karakter(klavye_bayt(&değişken d, 40), 304) { ver yanlış; }
+    klavye_bayt(&değişken d, 42);
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 97) { ver yanlış; }
+    klavye_bayt(&değişken d, 58);
+    ver değil d.caps;
+}
+
+işlev test_ozel_1() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil ozel(klavye_bayt(&değişken d, 28), 1, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 156), 1, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_2() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil ozel(klavye_bayt(&değişken d, 14), 2, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 142), 2, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_3() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil ozel(klavye_bayt(&değişken d, 15), 3, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 143), 3, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_4() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil ozel(klavye_bayt(&değişken d, 1), 4, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 129), 4, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_5() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 72), 5, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 200), 5, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_6() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 80), 6, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 208), 6, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_7() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 75), 7, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 203), 7, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_8() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 77), 8, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 205), 8, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_ozel_9() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 83), 9, doğru) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 224)) { ver yanlış; }
+    eğer değil ozel(klavye_bayt(&değişken d, 211), 9, yanlış) { ver yanlış; }
+    eğer d.e0 { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97);
+}
+
+işlev test_degistiriciler() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    klavye_bayt(&değişken d, 29); klavye_bayt(&değişken d, 56);
+    klavye_bayt(&değişken d, 224); klavye_bayt(&değişken d, 56);
+    eğer değil d.ctrl veya değil d.alt veya değil d.altgr { ver yanlış; }
+    eğer değil karakter(klavye_bayt(&değişken d, 30), 97) { ver yanlış; }
+    klavye_bayt(&değişken d, 224); klavye_bayt(&değişken d, 184);
+    klavye_bayt(&değişken d, 224); klavye_bayt(&değişken d, 157);
+    klavye_bayt(&değişken d, 184);
+    ver değil d.ctrl ve değil d.alt ve değil d.altgr ve değil d.e0;
+}
+
+işlev test_bilinmeyen() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil yok(klavye_bayt(&değişken d, 100)) { ver yanlış; }
+    klavye_bayt(&değişken d, 224);
+    eğer değil yok(klavye_bayt(&değişken d, 30)) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, -1)) { ver yanlış; }
+    eğer değil yok(klavye_bayt(&değişken d, 256)) { ver yanlış; }
+    ver karakter(klavye_bayt(&değişken d, 30), 97) ve değil d.e0;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_tablo_41() { yazdir_metin("BASARISIZ tablo_41"); h = h + 1; }
+    eğer değil test_tablo_2() { yazdir_metin("BASARISIZ tablo_2"); h = h + 1; }
+    eğer değil test_tablo_3() { yazdir_metin("BASARISIZ tablo_3"); h = h + 1; }
+    eğer değil test_tablo_4() { yazdir_metin("BASARISIZ tablo_4"); h = h + 1; }
+    eğer değil test_tablo_5() { yazdir_metin("BASARISIZ tablo_5"); h = h + 1; }
+    eğer değil test_tablo_6() { yazdir_metin("BASARISIZ tablo_6"); h = h + 1; }
+    eğer değil test_tablo_7() { yazdir_metin("BASARISIZ tablo_7"); h = h + 1; }
+    eğer değil test_tablo_8() { yazdir_metin("BASARISIZ tablo_8"); h = h + 1; }
+    eğer değil test_tablo_9() { yazdir_metin("BASARISIZ tablo_9"); h = h + 1; }
+    eğer değil test_tablo_10() { yazdir_metin("BASARISIZ tablo_10"); h = h + 1; }
+    eğer değil test_tablo_11() { yazdir_metin("BASARISIZ tablo_11"); h = h + 1; }
+    eğer değil test_tablo_12() { yazdir_metin("BASARISIZ tablo_12"); h = h + 1; }
+    eğer değil test_tablo_13() { yazdir_metin("BASARISIZ tablo_13"); h = h + 1; }
+    eğer değil test_tablo_16() { yazdir_metin("BASARISIZ tablo_16"); h = h + 1; }
+    eğer değil test_tablo_17() { yazdir_metin("BASARISIZ tablo_17"); h = h + 1; }
+    eğer değil test_tablo_18() { yazdir_metin("BASARISIZ tablo_18"); h = h + 1; }
+    eğer değil test_tablo_19() { yazdir_metin("BASARISIZ tablo_19"); h = h + 1; }
+    eğer değil test_tablo_20() { yazdir_metin("BASARISIZ tablo_20"); h = h + 1; }
+    eğer değil test_tablo_21() { yazdir_metin("BASARISIZ tablo_21"); h = h + 1; }
+    eğer değil test_tablo_22() { yazdir_metin("BASARISIZ tablo_22"); h = h + 1; }
+    eğer değil test_tablo_23() { yazdir_metin("BASARISIZ tablo_23"); h = h + 1; }
+    eğer değil test_tablo_24() { yazdir_metin("BASARISIZ tablo_24"); h = h + 1; }
+    eğer değil test_tablo_25() { yazdir_metin("BASARISIZ tablo_25"); h = h + 1; }
+    eğer değil test_tablo_26() { yazdir_metin("BASARISIZ tablo_26"); h = h + 1; }
+    eğer değil test_tablo_27() { yazdir_metin("BASARISIZ tablo_27"); h = h + 1; }
+    eğer değil test_tablo_30() { yazdir_metin("BASARISIZ tablo_30"); h = h + 1; }
+    eğer değil test_tablo_31() { yazdir_metin("BASARISIZ tablo_31"); h = h + 1; }
+    eğer değil test_tablo_32() { yazdir_metin("BASARISIZ tablo_32"); h = h + 1; }
+    eğer değil test_tablo_33() { yazdir_metin("BASARISIZ tablo_33"); h = h + 1; }
+    eğer değil test_tablo_34() { yazdir_metin("BASARISIZ tablo_34"); h = h + 1; }
+    eğer değil test_tablo_35() { yazdir_metin("BASARISIZ tablo_35"); h = h + 1; }
+    eğer değil test_tablo_36() { yazdir_metin("BASARISIZ tablo_36"); h = h + 1; }
+    eğer değil test_tablo_37() { yazdir_metin("BASARISIZ tablo_37"); h = h + 1; }
+    eğer değil test_tablo_38() { yazdir_metin("BASARISIZ tablo_38"); h = h + 1; }
+    eğer değil test_tablo_39() { yazdir_metin("BASARISIZ tablo_39"); h = h + 1; }
+    eğer değil test_tablo_40() { yazdir_metin("BASARISIZ tablo_40"); h = h + 1; }
+    eğer değil test_tablo_43() { yazdir_metin("BASARISIZ tablo_43"); h = h + 1; }
+    eğer değil test_tablo_86() { yazdir_metin("BASARISIZ tablo_86"); h = h + 1; }
+    eğer değil test_tablo_44() { yazdir_metin("BASARISIZ tablo_44"); h = h + 1; }
+    eğer değil test_tablo_45() { yazdir_metin("BASARISIZ tablo_45"); h = h + 1; }
+    eğer değil test_tablo_46() { yazdir_metin("BASARISIZ tablo_46"); h = h + 1; }
+    eğer değil test_tablo_47() { yazdir_metin("BASARISIZ tablo_47"); h = h + 1; }
+    eğer değil test_tablo_48() { yazdir_metin("BASARISIZ tablo_48"); h = h + 1; }
+    eğer değil test_tablo_49() { yazdir_metin("BASARISIZ tablo_49"); h = h + 1; }
+    eğer değil test_tablo_50() { yazdir_metin("BASARISIZ tablo_50"); h = h + 1; }
+    eğer değil test_tablo_51() { yazdir_metin("BASARISIZ tablo_51"); h = h + 1; }
+    eğer değil test_tablo_52() { yazdir_metin("BASARISIZ tablo_52"); h = h + 1; }
+    eğer değil test_tablo_53() { yazdir_metin("BASARISIZ tablo_53"); h = h + 1; }
+    eğer değil test_tablo_57() { yazdir_metin("BASARISIZ tablo_57"); h = h + 1; }
+    eğer değil test_shift() { yazdir_metin("BASARISIZ shift"); h = h + 1; }
+    eğer değil test_caps() { yazdir_metin("BASARISIZ caps"); h = h + 1; }
+    eğer değil test_ozel_1() { yazdir_metin("BASARISIZ ozel_1"); h = h + 1; }
+    eğer değil test_ozel_2() { yazdir_metin("BASARISIZ ozel_2"); h = h + 1; }
+    eğer değil test_ozel_3() { yazdir_metin("BASARISIZ ozel_3"); h = h + 1; }
+    eğer değil test_ozel_4() { yazdir_metin("BASARISIZ ozel_4"); h = h + 1; }
+    eğer değil test_ozel_5() { yazdir_metin("BASARISIZ ozel_5"); h = h + 1; }
+    eğer değil test_ozel_6() { yazdir_metin("BASARISIZ ozel_6"); h = h + 1; }
+    eğer değil test_ozel_7() { yazdir_metin("BASARISIZ ozel_7"); h = h + 1; }
+    eğer değil test_ozel_8() { yazdir_metin("BASARISIZ ozel_8"); h = h + 1; }
+    eğer değil test_ozel_9() { yazdir_metin("BASARISIZ ozel_9"); h = h + 1; }
+    eğer değil test_degistiriciler() { yazdir_metin("BASARISIZ degistiriciler"); h = h + 1; }
+    eğer değil test_bilinmeyen() { yazdir_metin("BASARISIZ bilinmeyen"); h = h + 1; }
+    ver h;
+}
