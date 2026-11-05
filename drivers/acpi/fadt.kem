@@ -1,0 +1,23 @@
+// FADT ve Generic Address Structure; adresler yalnız veri olarak taşınır.
+kullan drivers::acpi::tablo::{ SdtBaslik, AcpiHatasi, sdt_coz };
+kullan drivers::ortak::bayt::{ imza_esit, oku_u8, oku_le16, oku_le32, oku_le64 };
+genel yapı Gas { alan_turu: tam32; bit_genisligi: tam32; bit_ofseti: tam32; erisim_boyu: tam32; adres: tam64; }
+genel yapı Fadt {
+    firmware_ctrl: tam64; dsdt: tam64; sci_int: tam32; smi_cmd: tam64;
+    pm1a_evt_blok: tam64; pm1a_cnt_blok: tam64; reset_reg: Gas; reset_degeri: tam32; x_dsdt: tam64;
+}
+genel işlev fadt_coz(b: Dizi<dtam8>) -> sonuç<Fadt, metin> {
+    değişken boy: tam32 = 0;
+    eşleş sdt_coz(b) { hata(e) => { ver hata("sdt"); } tamam(v) => { değişken h: SdtBaslik = v; boy = h.uzunluk olarak tam32; } }
+    eğer değil imza_esit(b, 0, "FACP") { ver hata("imza"); }
+    eğer boy < 129 { ver hata("kisa fadt"); }
+    değişken gas: Gas = Gas { alan_turu: oku_u8(b, 116), bit_genisligi: oku_u8(b, 117), bit_ofseti: oku_u8(b, 118), erisim_boyu: oku_u8(b, 119), adres: oku_le64(b, 120) };
+    değişken x: tam64 = 0;
+    eğer boy >= 148 { x = oku_le64(b, 140); }
+    ver tamam(Fadt { firmware_ctrl: oku_le32(b, 36), dsdt: oku_le32(b, 40), sci_int: oku_le16(b, 46), smi_cmd: oku_le32(b, 48),
+        pm1a_evt_blok: oku_le32(b, 56), pm1a_cnt_blok: oku_le32(b, 64), reset_reg: gas, reset_degeri: oku_u8(b, 128), x_dsdt: x });
+}
+genel işlev dsdt_adresi(f: Fadt) -> tam64 {
+    eğer f.x_dsdt != 0 { ver f.x_dsdt; }
+    ver f.dsdt;
+}

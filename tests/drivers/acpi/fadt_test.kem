@@ -1,0 +1,100 @@
+// Fikstür: python3 tools/codex/c2.py; struct.pack ve (-sum(b))&255.
+kullan drivers::acpi::tablo::{ SdtBaslik, AcpiHatasi };
+kullan drivers::acpi::fadt::{ Fadt, Gas, fadt_coz, dsdt_adresi };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_le64, bayt_toplam8 };
+işlev fadt_verisi() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(148);
+    yaz_u8(b, 0, 70);
+    yaz_u8(b, 1, 65);
+    yaz_u8(b, 2, 67);
+    yaz_u8(b, 3, 80);
+    yaz_u8(b, 4, 148);
+    yaz_u8(b, 8, 6);
+    yaz_u8(b, 9, 231);
+    yaz_u8(b, 38, 16);
+    yaz_u8(b, 42, 32);
+    yaz_u8(b, 46, 9);
+    yaz_u8(b, 48, 178);
+    yaz_u8(b, 57, 4);
+    yaz_u8(b, 64, 4);
+    yaz_u8(b, 65, 4);
+    yaz_u8(b, 116, 1);
+    yaz_u8(b, 117, 8);
+    yaz_u8(b, 119, 1);
+    yaz_u8(b, 120, 249);
+    yaz_u8(b, 121, 12);
+    yaz_u8(b, 128, 6);
+    yaz_u8(b, 140, 137);
+    yaz_u8(b, 141, 103);
+    yaz_u8(b, 142, 69);
+    yaz_u8(b, 143, 35);
+    yaz_u8(b, 144, 1);
+    ver b;
+}
+işlev saglama_yenile(b: Dizi<dtam8>, n: tam32) {
+    yaz_le32(b, 4, n olarak tam64); yaz_u8(b, 9, 0); yaz_u8(b, 9, ((256-bayt_toplam8(b, 0, n)) & 255) olarak tam64);
+}
+
+işlev test_alanlar() -> mantıksal {
+    eşleş fadt_coz(fadt_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: Fadt = v; değişken g: Gas = f.reset_reg;
+        ver f.firmware_ctrl == 1048576 ve f.dsdt == 2097152 ve f.sci_int == 9 ve f.smi_cmd == 178 ve
+            f.pm1a_evt_blok == 1024 ve f.pm1a_cnt_blok == 1028 ve f.reset_degeri == 6 ve
+            g.alan_turu == 1 ve g.bit_genisligi == 8 ve g.bit_ofseti == 0 ve g.erisim_boyu == 1 ve g.adres == 3321 ve
+            dsdt_adresi(f) == 4886718345;
+    } }
+}
+
+işlev test_uzunluk_129() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); saglama_yenile(b, 129);
+    eşleş fadt_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: Fadt = v; ver dsdt_adresi(f) == 2097152; } }
+}
+
+işlev test_uzunluk_147() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); saglama_yenile(b, 147);
+    eşleş fadt_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: Fadt = v; ver dsdt_adresi(f) == 2097152; } }
+}
+
+işlev test_uzunluk_148() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); saglama_yenile(b, 148);
+    eşleş fadt_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: Fadt = v; ver dsdt_adresi(f) == 4886718345; } }
+}
+
+işlev test_x_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); yaz_le64(b, 140, 0); saglama_yenile(b, 148);
+    eşleş fadt_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: Fadt = v; ver dsdt_adresi(f) == 2097152; } }
+}
+
+işlev test_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); saglama_yenile(b, 128);
+    eşleş fadt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "kisa fadt"); } }
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); yaz_u8(b, 0, 0); saglama_yenile(b, 148);
+    eşleş fadt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "imza"); } }
+}
+
+işlev test_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); yaz_u8(b, 9, 0);
+    eşleş fadt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "sdt"); } }
+}
+
+işlev test_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = fadt_verisi(); yaz_le32(b, 4, 4294967295);
+    eşleş fadt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "sdt"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_alanlar() { yazdir_metin("BASARISIZ alanlar"); h = h + 1; }
+    eğer değil test_uzunluk_129() { yazdir_metin("BASARISIZ uzunluk_129"); h = h + 1; }
+    eğer değil test_uzunluk_147() { yazdir_metin("BASARISIZ uzunluk_147"); h = h + 1; }
+    eğer değil test_uzunluk_148() { yazdir_metin("BASARISIZ uzunluk_148"); h = h + 1; }
+    eğer değil test_x_sifir() { yazdir_metin("BASARISIZ x_sifir"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_saglama() { yazdir_metin("BASARISIZ saglama"); h = h + 1; }
+    eğer değil test_tasma() { yazdir_metin("BASARISIZ tasma"); h = h + 1; }
+    ver h;
+}
