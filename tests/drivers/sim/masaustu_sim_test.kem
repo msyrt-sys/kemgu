@@ -1,0 +1,150 @@
+// Kahin: python3 tools/codex/e1.py; A1 tablo baytları, Python UTF-8 ve gerçek PSF bitleri.
+kullan drivers::ps2::klavye_tr::{ TusOlayi, KlavyeDurumu, klavye_yeni, klavye_bayt };
+kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_olay };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_yaz::{ imajda_dizin_olustur, imaja_dosya_yaz };
+kullan drivers::sim::kabuk::{ kabuk_calistir };
+kullan drivers::ekran::konsol::{ Konsol, konsol_yeni, konsol_metin, konsol_satir };
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_oku };
+kullan drivers::ekran::psf::{ PsfFont, psf_coz };
+kullan drivers::ekran::yazi::{ kod_ciz };
+kullan tests::drivers::ekran::veri::psf_gercek::{ gercek_font };
+işlev imaj_yeni() -> Dizi<dtam8> {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 1, "") { tamam(v) => { ver v; } hata(e) => { değişken b: Dizi<dtam8> = []; ver b; } }
+}
+işlev bitir(s: metin) -> metin { ver metin_birlestir(s, kod_metin(10)); }
+
+işlev test_masaustu() -> mantıksal {
+    değişken disk: Dizi<dtam8> = imaj_yeni();
+    eşleş imajda_dizin_olustur(disk, "/belgeler") { hata(e) => { ver yanlış; } tamam(n) => { } }
+    değişken veri: Dizi<dtam8> = [77 olarak dtam8, 101 olarak dtam8, 114 olarak dtam8, 104 olarak dtam8, 97 olarak dtam8, 98 olarak dtam8, 97 olarak dtam8, 32 olarak dtam8, 68 olarak dtam8, 195 olarak dtam8, 188 olarak dtam8, 110 olarak dtam8, 121 olarak dtam8, 97 olarak dtam8, 32 olarak dtam8, 226 olarak dtam8, 128 olarak dtam8, 148 olarak dtam8, 32 olarak dtam8, 196 olarak dtam8, 159 olarak dtam8, 195 olarak dtam8, 188 olarak dtam8, 197 olarak dtam8, 159 olarak dtam8, 196 olarak dtam8, 177 olarak dtam8, 195 olarak dtam8, 182 olarak dtam8, 195 olarak dtam8, 167 olarak dtam8];
+    eşleş imaja_dosya_yaz(disk, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(n) => { } }
+    eşleş konsol_yeni(40, 6, 11256099, 1056816) { hata(e) => { ver yanlış; } tamam(kv) => { değişken k: Konsol = kv;
+    değişken kl: KlavyeDurumu = klavye_yeni(); değişken sat: SatirDuzenleyici = satir_yeni();
+    değişken baytlar: Dizi<tam32> = [38, 166, 31, 159, 57, 185, 42, 8, 136, 170, 48, 176, 18, 146, 38, 166, 34, 162, 18, 146, 38, 166, 18, 146, 19, 147, 28, 156, 46, 174, 30, 158, 20, 148, 57, 185, 42, 8, 136, 170, 48, 176, 18, 146, 38, 166, 34, 162, 18, 146, 38, 166, 18, 146, 19, 147, 42, 8, 136, 170, 50, 178, 18, 146, 19, 147, 35, 163, 30, 158, 48, 176, 30, 158, 53, 181, 20, 148, 45, 173, 20, 148, 28, 156];
+    değişken komutlar: Dizi<metin> = ["ls /belgeler", "cat /belgeler/merhaba.txt"]; değişken adet: tam32 = 0; değişken i: tam32 = 0;
+    iken i < dizi_boyut(baytlar) {
+        eşleş satir_olay(&değişken sat, klavye_bayt(&değişken kl, dizi_al(baytlar, i))) {
+            hiç => { } değer(s) => {
+                eğer adet >= 2 { ver yanlış; } eğer değil metin_esit(s, dizi_al(komutlar, adet)) { ver yanlış; }
+                konsol_metin(&değişken k, kabuk_calistir(disk, s)); adet = adet + 1;
+            }
+        } i = i + 1;
+    }
+    eğer adet != 2 veya dizi_boyut(sat.kodlar) != 0 { ver yanlış; }
+    eğer değil metin_esit(konsol_satir(k, 0), "merhaba.txt                             ") { ver yanlış; }
+    eğer değil metin_esit(konsol_satir(k, 1), "Merhaba Dünya — ğüşıöç                  ") { ver yanlış; }
+    eğer değil metin_esit(konsol_satir(k, 2), "                                        ") { ver yanlış; }
+    eşleş psf_coz(gercek_font()) { hata(e) => { ver yanlış; } tamam(fv) => { değişken f: PsfFont = fv;
+    eşleş cerceve_yeni(320, 48, 1280) { hata(e) => { ver yanlış; } tamam(cv) => { değişken c: Cerceve = cv;
+    değişken yy: tam32 = 0;
+    iken yy < k.satirlar { değişken xx: tam32 = 0; iken xx < k.sutunlar {
+        değişken yer: tam32 = yy * k.sutunlar + xx;
+        kod_ciz(c, f, xx * f.genislik, yy * f.yukseklik, dizi_al(k.kodlar, yer), dizi_al(k.renkler, yer), dizi_al(k.arkalar, yer)); xx = xx + 1;
+    } yy = yy + 1; }
+    eşleş piksel_oku(c, 0, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 0) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 1) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 2) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 3) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 4) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 5) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 11256099 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 6) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 0, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 1, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 2, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 3, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 4, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 5, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 6, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    eşleş piksel_oku(c, 7, 7) { hiç => { ver yanlış; } değer(v) => { eğer v != 1056816 { ver yanlış; } } }
+    ver doğru;
+    } } } } } }
+}
+
+işlev test_echo() -> mantıksal {
+    değişken b: Dizi<dtam8> = []; ver metin_esit(kabuk_calistir(b, "  echo  ğ😀"), bitir("ğ😀"));
+}
+
+işlev test_bilinmeyen() -> mantıksal {
+    değişken b: Dizi<dtam8> = []; ver metin_esit(kabuk_calistir(b, "sil /x"), bitir("bilinmeyen komut: sil"));
+}
+
+işlev test_cat_arg() -> mantıksal {
+    değişken b: Dizi<dtam8> = []; ver metin_esit(kabuk_calistir(b, "cat"), bitir("kullanim: cat /yol"));
+}
+
+işlev test_bos() -> mantıksal {
+    değişken b: Dizi<dtam8> = []; ver metin_esit(kabuk_calistir(b, "   "), "");
+}
+
+işlev test_eksik() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); ver metin_esit(kabuk_calistir(b, "cat /yok"), bitir("hata: yok"));
+}
+
+işlev test_kok_liste() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); ver metin_esit(kabuk_calistir(b, "ls"), "");
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_masaustu() { yazdir_metin("BASARISIZ masaustu"); h = h + 1; }
+    eğer değil test_echo() { yazdir_metin("BASARISIZ echo"); h = h + 1; }
+    eğer değil test_bilinmeyen() { yazdir_metin("BASARISIZ bilinmeyen"); h = h + 1; }
+    eğer değil test_cat_arg() { yazdir_metin("BASARISIZ cat_arg"); h = h + 1; }
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_eksik() { yazdir_metin("BASARISIZ eksik"); h = h + 1; }
+    eğer değil test_kok_liste() { yazdir_metin("BASARISIZ kok_liste"); h = h + 1; }
+    ver h;
+}

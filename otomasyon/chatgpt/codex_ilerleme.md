@@ -54,3 +54,5 @@ VARSAYIM D7: başlangıç (0,0), hız tam sayı 0..1024; düğmeler sol=1, sağ=
 VARSAYIM D8: sıfır kapasite geçerlidir, tüm yeni girdileri kayıp sayar. Üst sınır 1048576 eleman; kayip tam64 üst sınırda doyurulur. Python deque modeliyle 120 işlem ve 37 kayıp bağımsız doğrulandı.
 - [x] D8 · 10 test · sabotaj: `d.kayip = d.kayip + 1` → `d.kayip = d.kayip` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:12:55.586117+00:00
 VARSAYIM D9: BMP renk maskeleri sıfır olmayan, bitişik ve örtüşmeyen RGB alanlarıdır; bileşenler 255 ölçeğine aşağı yuvarlanır, alfa yok sayılır. 16384 boyut/16MiB piksel sınırı. bmp_ciz ham BMP alır, çizilen görünür piksel sayısını sonuç olarak döndürür.
+- [x] D9 · 23 test · sabotaj: `eğer değil b.yukaridan` → `eğer b.yukaridan` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:14:45.644423+00:00
+VARSAYIM E1: kabuk komut/prompt yankılamaz; ls . ve .. girdilerini gizler, cat çıktı sonuna LF ekler, bulunamadi hatasını kabukta hata: yok olarak normalleştirir. 84 scancode, 31 bayt UTF-8 dosya, 40x6 konsol ve gerçek PSF m glifinin 64 pikseli doğrulandı.
