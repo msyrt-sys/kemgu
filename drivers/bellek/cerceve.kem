@@ -1,0 +1,98 @@
+// Kullanılabilir hizalı sayfaların sıkıştırılmış bit eşlemi; fiziksel boşluklar bit tüketmez.
+kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+genel yapı CerceveAyirici { bolgeler: Dizi<BellekBolgesi>; bitmap: Dizi<dtam8>; sabit_bitmap: Dizi<dtam8>; toplam: tam32; }
+genel işlev cerceve_yeni(harita: Dizi<BellekBolgesi>) -> sonuç<CerceveAyirici, metin> {
+    değişken xs: Dizi<BellekBolgesi> = [];
+    eşleş harita_duzenle(harita) { hata(e) => { ver hata(e); } tamam(v) => { xs = v; } }
+    değişken bolgeler: Dizi<BellekBolgesi> = [];
+    değişken toplam: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) {
+        değişken b: BellekBolgesi = dizi_al(xs, i);
+        eğer b.tur == 1 {
+            değişken ilk: tam64 = b.taban / 4096;
+            eğer b.taban % 4096 != 0 { ilk = ilk + 1; }
+            eğer ilk < 256 { ilk = 256; }
+            değişken son: tam64 = (b.taban + b.uzunluk) / 4096;
+            eğer son > ilk {
+                toplam = toplam + son - ilk;
+                eğer toplam > 1048576 { ver hata("cok sayfa"); }
+                dizi_ekle(bolgeler, BellekBolgesi { taban: ilk * 4096, uzunluk: (son - ilk) * 4096, tur: 1 });
+            }
+        }
+        i = i + 1;
+    }
+    değişken bitmap: Dizi<dtam8> = bayt_sifir(((toplam + 7) / 8) olarak tam32);
+    değişken sabitler: Dizi<dtam8> = bayt_sifir(((toplam + 7) / 8) olarak tam32);
+    ver tamam(CerceveAyirici { bolgeler: bolgeler, bitmap: bitmap, sabit_bitmap: sabitler, toplam: toplam olarak tam32 });
+}
+işlev bit_oku(b: Dizi<dtam8>, n: tam32) -> mantıksal { ver (oku_u8(b, n / 8) & (1 << (n % 8))) != 0; }
+işlev bit_yaz(b: Dizi<dtam8>, n: tam32, v: mantıksal) {
+    değişken eski: tam32 = oku_u8(b, n / 8);
+    değişken maske: tam32 = 1 << (n % 8);
+    eğer v { eski = eski | maske; } değilse { eski = eski & (255 ^ maske); }
+    yaz_u8(b, n / 8, eski olarak tam64);
+}
+genel işlev ayir_ardisik(d: &değişken CerceveAyirici, n: tam32) -> seçimlik<tam64> {
+    eğer n <= 0 veya n > d.toplam { ver hiç; }
+    değişken temel: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(d.bolgeler) {
+        değişken b: BellekBolgesi = dizi_al(d.bolgeler, i);
+        değişken adet: tam32 = (b.uzunluk / 4096) olarak tam32;
+        değişken seri: tam32 = 0;
+        değişken j: tam32 = 0;
+        iken j < adet {
+            eğer bit_oku(d.bitmap, temel + j) { seri = 0; } değilse { seri = seri + 1; }
+            eğer seri == n {
+                değişken bas: tam32 = j - n + 1;
+                değişken k: tam32 = 0;
+                iken k < n { bit_yaz(d.bitmap, temel + bas + k, doğru); k = k + 1; }
+                ver değer(b.taban + (bas olarak tam64) * 4096);
+            }
+            j = j + 1;
+        }
+        temel = temel + adet; i = i + 1;
+    }
+    ver hiç;
+}
+genel işlev ayir(d: &değişken CerceveAyirici) -> seçimlik<tam64> { ver ayir_ardisik(d, 1); }
+genel işlev serbest(d: &değişken CerceveAyirici, adres: tam64) -> sonuç<mantıksal, metin> {
+    eğer adres < 0 veya adres % 4096 != 0 { ver hata("hizasiz"); }
+    değişken temel: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(d.bolgeler) {
+        değişken b: BellekBolgesi = dizi_al(d.bolgeler, i);
+        eğer adres >= b.taban ve adres < b.taban + b.uzunluk {
+            değişken n: tam32 = temel + ((adres - b.taban) / 4096) olarak tam32;
+            eğer bit_oku(d.sabit_bitmap, n) { ver hata("ayrilmis bolge"); }
+            eğer değil bit_oku(d.bitmap, n) { ver hata("cift serbest"); }
+            bit_yaz(d.bitmap, n, yanlış); ver tamam(doğru);
+        }
+        temel = temel + (b.uzunluk / 4096) olarak tam32; i = i + 1;
+    }
+    ver hata("haritada yok");
+}
+genel işlev ayrilmis_isaretle(d: &değişken CerceveAyirici, taban: tam64, uzunluk: tam64) -> sonuç<mantıksal, metin> {
+    eğer taban < 0 veya uzunluk < 0 { ver hata("adres"); }
+    eğer uzunluk > 9223372036854775807 - taban { ver hata("adres"); }
+    eğer uzunluk == 0 { ver tamam(doğru); }
+    değişken son: tam64 = taban + uzunluk;
+    değişken temel: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(d.bolgeler) {
+        değişken b: BellekBolgesi = dizi_al(d.bolgeler, i);
+        değişken adet: tam32 = (b.uzunluk / 4096) olarak tam32;
+        değişken j: tam32 = 0;
+        iken j < adet {
+            değişken adres: tam64 = b.taban + (j olarak tam64) * 4096;
+            eğer adres < son ve adres + 4096 > taban {
+                bit_yaz(d.bitmap, temel + j, doğru); bit_yaz(d.sabit_bitmap, temel + j, doğru);
+            }
+            j = j + 1;
+        }
+        temel = temel + adet; i = i + 1;
+    }
+    ver tamam(doğru);
+}
