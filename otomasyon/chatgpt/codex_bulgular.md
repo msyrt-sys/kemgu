@@ -78,3 +78,18 @@ Komut şablonu (kemgu ve codegen): `build/<derleyici> --llvm tests/drivers/probe
 kemgu: stdout: 203; exit=0
 codegen: stdout: -53; exit=1
 Dolanma: `dizi_ekle(b, oku_u8(a, 0) olarak dtam8);`. Ayrı probe ve A3 testi iki derleyicide doğrulanır; derleyici değiştirilmedi.
+
+## C005 — yapıdan sonraki tam64 sabit argüman genişliği
+
+```kemgu
+yapı Veri { a: tam64; b: tam64; c: tam64; d: tam64; e: tam64; f: tam64; }
+işlev hesap(v: Veri, n: tam64) -> tam64 { ver n * 8 + v.a; }
+işlev main() -> tam32 {
+    değişken v: Veri = Veri { a: 2080, b: 1, c: 2, d: 3, e: 4, f: 5 };
+    eğer hesap(v, 2) == 2096 { ver 0; } ver 1;
+}
+```
+Komut: `build/<kemgu|codegen> --llvm tests/drivers/probe/yapi_arguman.kem > build/codex_arg.ll && clang -Wno-override-module -x ir build/codex_arg.ll -x none build/kdl_runtime.o -o build/codex_arg && build/codex_arg`.
+kemgu: exit=0, IR: ['%19 = call i64 @hesap(ptr %2, %Veri %17, i64 %18)']
+codegen: exit=0, IR: ['%14 = call i64 @hesap(ptr %1, %Veri %12, i64 %13)']
+A4 üzerinde aynı hata tam64 sonuç karşılaştırmasını bozdu (alt 32 bit doğruydu). Dolanma: sabit argümanı `2 olarak tam64` yazmak; test beklentisi aynı kaldı.

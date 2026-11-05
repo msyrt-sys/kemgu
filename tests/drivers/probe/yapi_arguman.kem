@@ -1,0 +1,6 @@
+yapı Veri { a: tam64; b: tam64; c: tam64; d: tam64; e: tam64; f: tam64; }
+işlev hesap(v: Veri, n: tam64) -> tam64 { ver n * 8 + v.a; }
+işlev main() -> tam32 {
+    değişken v: Veri = Veri { a: 2080, b: 1, c: 2, d: 3, e: 4, f: 5 };
+    eğer hesap(v, 2 olarak tam64) == 2096 { ver 0; } ver 1;
+}
