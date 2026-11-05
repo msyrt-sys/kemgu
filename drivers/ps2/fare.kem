@@ -1,0 +1,39 @@
+// PS/2 hareket paketleri; Y ekseninin doğal yukarı-pozitif yönü korunur.
+genel yapı FareDurumu { paket_boyu: tam32; n: tam32; b0: tam32; b1: tam32; b2: tam32; }
+genel yapı FareOlayi {
+    dx: tam32; dy: tam32; dz: tam32;
+    sol: mantıksal; sag: mantıksal; orta: mantıksal;
+}
+genel işlev fare_yeni(dort_bayt: mantıksal) -> FareDurumu {
+    değişken boy: tam32 = 3;
+    eğer dort_bayt { boy = 4; }
+    ver FareDurumu { paket_boyu: boy, n: 0, b0: 0, b1: 0, b2: 0 };
+}
+genel işlev fare_bayt(d: &değişken FareDurumu, b: tam32) -> seçimlik<FareOlayi> {
+    eğer b < 0 veya b > 255 veya (d.paket_boyu != 3 ve d.paket_boyu != 4) {
+        d.n = 0; ver hiç;
+    }
+    eğer d.n < 0 veya d.n >= d.paket_boyu { d.n = 0; }
+    eğer d.n == 0 {
+        eğer (b & 8) == 0 { ver hiç; }
+        d.b0 = b; d.n = 1; ver hiç;
+    }
+    eğer d.n == 1 { d.b1 = b; d.n = 2; ver hiç; }
+    eğer d.n == 2 {
+        d.b2 = b;
+        eğer d.paket_boyu == 4 { d.n = 3; ver hiç; }
+    }
+    d.n = 0;
+    eğer (d.b0 & 192) != 0 { ver hiç; }
+    değişken x: tam32 = d.b1;
+    değişken y: tam32 = d.b2;
+    değişken z: tam32 = 0;
+    eğer (d.b0 & 16) != 0 { x = x - 256; }
+    eğer (d.b0 & 32) != 0 { y = y - 256; }
+    eğer d.paket_boyu == 4 {
+        z = b & 15;
+        eğer z >= 8 { z = z - 16; }
+    }
+    ver değer(FareOlayi { dx: x, dy: y, dz: z,
+        sol: (d.b0 & 1) != 0, sag: (d.b0 & 2) != 0, orta: (d.b0 & 4) != 0 });
+}
