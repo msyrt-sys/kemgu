@@ -115,7 +115,7 @@ işlev main() -> tam32 {
 Komutlar: `build/<kemgu|codegen> --check tests/drivers/probe/bos_alan.kem` ve `build/<kemgu|codegen> --llvm tests/drivers/probe/bos_alan.kem > build/codex_bulgu.ll`, ardından `clang -Wno-override-module -x ir build/codex_bulgu.ll -x none build/kdl_runtime.o -o build/codex_bulgu`.
 kemgu: OK: tests/drivers/probe/bos_alan.kem — tip kontrolu basarili.
 
-link: 0 
+link: 0
 codegen: T014	5	54
 T014	5	68
 T014	5	80
@@ -141,38 +141,38 @@ kemgu: HATA: tests/drivers/probe/tasima_tipi.kem — parser 0, yukleme 0, tip ko
 hata[T011]: bilinmeyen tip
    --> tests/drivers/probe/tasima_tipi.kem:19:52
    |
-19 | 
+19 |
    |                                                    ^
 
 hata[T011]: bilinmeyen tip
    --> tests/drivers/probe/tasima_tipi.kem:34:49
    |
-34 | 
+34 |
    |                                                 ^
 
 hata[T011]: bilinmeyen tip
    --> tests/drivers/probe/tasima_tipi.kem:39:49
    |
-39 | 
+39 |
    |                                                 ^
 
 hata[T011]: bilinmeyen tip
    --> tests/drivers/probe/tasima_tipi.kem:47:32
    |
-47 | 
+47 |
    |                                ^
 
 hata[T011]: bilinmeyen tip
    --> tests/drivers/probe/tasima_tipi.kem:48:28
    |
-48 | 
+48 |
    |                            ^
 
 hata[T011]: bilinmeyen tip
    --> tests/drivers/probe/tasima_tipi.kem:57:48
    |
-57 | 
-   |                   
+57 |
+   |
 link: 1 /usr/bin/ld: /lib/aarch64-linux-gnu/Scrt1.o: in function `_start':
 (.text+0x1c): undefined reference to `main'
 /usr/bin/ld: (.text+0x20): undefined reference to `main'
@@ -180,7 +180,7 @@ clang: error: linker command failed with exit code 1 (use -v to see invocation)
 
 codegen: OK
 
-link: 0 
+link: 0
 Dolanma: dış çağıran, bağımlı yapı tiplerini açıkça içe aktarır.
 
 ## C008 — Eşleş sonrası sonuç dönüşü

@@ -72,3 +72,242 @@ VARSAYIM F4: buyuk_harf/kucuk_harf metin alıp Unicode 15.0.0 kod noktası eşle
 VARSAYIM F5: üst sınır her modülün API kapasitesi veya sabit fikstürün son kullanılabilir alanı olarak seçildi; 39 saf modülün tümünde 0/1/üst/üst+1 tablo satırları var. Toplam 158 yeni sınır testi iki derleyicide geçti. Önceden mevcut VirtIO kapsam dışı. S002 ortak bayt toplama taşması gerçek panik üretti, iki kalıcı regresyon ve çıkarma temelli sınır denetimiyle düzeltildi. Ayrıntı codex_sinirlar.md.
 - [x] F5 · 6 test · sabotaj: `ofs <= dizi_boyut(b) ve n <= dizi_boyut(b) - ofs` → `ofs + n <= dizi_boyut(b)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:43:22.106136+00:00
 Son kapı öncesi: A1–F5 toplam 39 iş bitti; 91 dosyalık köprüde 808 test işlevi geçti (4 başlangıç testi, 804 yeni). Ana dal çalışma sırasında abd9aa9/D-736 seviyesine ilerledi. PR farkının yalnız izinli dosyalardan oluşması için kendi dalım bu tabana rebase edilip yerel derleyiciler yeniden kurulacak ve köprü tekrar çalıştırılacak. Ana çalışma klasörüne yazılmadı.
+
+## Sonuç ve kapsam
+
+- A1–A6, B1–B9, C1–C7, D1–D9, E1–E3, F1–F5: **39/39 iş tamamlandı**; 45 dakika nedeniyle bırakılan iş yok. Liste 10 saat dolmadan bitti.
+- 39 saf mantık modülü (38 yeni modül + ortak bayt yardımcı düzeltmesi), 49 modüllük API/kahin/sınır envanteri. Donanıma bağlama sonraki çalışma hattıdır.
+- Güncel taban: `abd9aa9` (D-736). Ana klasöre yazmadan yalnız `/home/msyrt/Desktop/kemgu-codex` worktree'sinde çalışıldı; bu dal güncel tabana rebase edildi. PR farkında derleyici/runtime/boot/test kapısı değişikliği yok.
+
+## Son test kapıları
+
+- `make -j8 build/kemgu build/codegen build/kdl_runtime.o build/kdl_runtime_mmio.o`: güncel tabanda başarılı.
+- `make calistir_chatgpt_kopru`: **91 dosya, 808 test işlevi** yeşil; 804 yeni test + başlangıçtaki 4 bayt testi. Dil kartı ayrıca geçti. Her dosya C ve self-host ile derlendi/çalıştı, exit=0 ve stdout eşit.
+- `bash otomasyon/chatgpt/dogrula.sh tests/drivers/probe/*.kem`: 11 dolanma örneği güncel tabanda yeşil.
+- E2: 3900 rastgele girdi + 5100 tek-bayt mutasyonu + 26 boş/tek bayt girdisi. F5: 39 modülde 158 sınır testi.
+- E1: 84 scancode → iki komut → FAT32 Türkçe metin → konsol → gerçek font; ilk glifin 64 pikseli doğrulandı.
+- Dış kahinler: fsck.fat, mkfs.fat, Python struct/zlib/uuid/tarfile/Unicode 15, readelf, gerçek PSF fontu. F1: 111 canlı dosya, iki iç içe dizin, ~100+ çakışma; fsck temiz. F2: fsck kurtarma zincirleriyle aynı [100,101,200] sahipsiz kümeler.
+- **40 başarılı sabotaj:** 38 işin derlenen KEMGU bozması + E3 belge envanteri bozması + B8 ek dış fsck sayaç bozması. Her biri kırmızı oldu, geri alındı.
+- `python3 tools/codex/son_kontrol.py`, `python3 tools/codex/envanter_kontrol.py`, `git diff --check origin/main`: yeşil.
+- Host mimarisi: `aarch64`. Bu görev saf bellek mantığıdır; QEMU/donanım kabul kapısı istenmedi.
+
+## Atlanan araç adımları ve bulgular
+
+- `mcopy`/`mdir` kurulu olmadığından B8/F1'in yalnız bu araç adımları atlandı. Loop mount denenmedi. mkfs.fat ters yön boş kök fikstürü ve fsck/Python dış denetimleri çalıştı.
+- C001–C011: 11 derleyici/araç zinciri bulgusu, küçük örnekler ve zararsız dolanmalar kaydedildi; derleyici değiştirilmedi. C009 yüzünden imaj APIlerinde güvenli adlar kullanılmalıdır.
+- S001: FAT etiket metadata tutarlılığı düzeltildi. S002: bayt sınır hesabının tam32 taşması düzeltildi ve panik örnekleri kalıcı teste çevrildi.
+- F4 dönüşümleri kod noktası temellidir; bağlamsal son sigma, Unicode normalizasyonu ve tam casefold kapsam dışıdır. Diğer API sınırları `drivers/README.md` ve `codex_sinirlar.md` içinde.
+- Yeni `tekkez`/`yetki`/ISR kullanımı yok; bu görevde donanım ve ham bellek erişimi yasaktır.
+
+## Dosya değişiklikleri (whitelist kontrolü)
+
+`git diff --name-only origin/main` ile kapanıştaki yeni kontrol aracı birlikte 200 izinli yol. Makefile'ın yalnız `CHATGPT_TESTLER` wildcard listesi değişti; kalan içerik güncel main ile birebir.
+
+```text
+Makefile
+drivers/README.md
+drivers/acpi/fadt.kem
+drivers/acpi/madt.kem
+drivers/acpi/tablo.kem
+drivers/bellek/cerceve.kem
+drivers/bellek/harita.kem
+drivers/disk/bolum.kem
+drivers/disk/crc32.kem
+drivers/disk/guid.kem
+drivers/ekran/bmp.kem
+drivers/ekran/cerceve.kem
+drivers/ekran/konsol.kem
+drivers/ekran/psf.kem
+drivers/ekran/vt.kem
+drivers/ekran/yazi.kem
+drivers/elf/elf64.kem
+drivers/fs/fat32_bicimle.kem
+drivers/fs/fat32_bpb.kem
+drivers/fs/fat32_dizin.kem
+drivers/fs/fat32_imaj.kem
+drivers/fs/fat32_kisa_ad.kem
+drivers/fs/fat32_oku.kem
+drivers/fs/fat32_onar.kem
+drivers/fs/fat32_yaz.kem
+drivers/fs/ustar.kem
+drivers/fs/yol.kem
+drivers/fs/yol_harf.kem
+drivers/girdi/halka.kem
+drivers/girdi/imlec.kem
+drivers/girdi/klavye_tablo.kem
+drivers/girdi/klavye_us.kem
+drivers/girdi/satir.kem
+drivers/ortak/bayt.kem
+drivers/ortak/harf.kem
+drivers/ortak/harf_veri.kem
+drivers/ortak/utf8.kem
+drivers/pci/yapilandirma.kem
+drivers/ps2/fare.kem
+drivers/ps2/klavye_tr.kem
+drivers/sim/kabuk.kem
+otomasyon/chatgpt/codex_bulgular.md
+otomasyon/chatgpt/codex_font_kahini.md
+otomasyon/chatgpt/codex_ilerleme.md
+otomasyon/chatgpt/codex_sinirlar.md
+tests/drivers/acpi/fadt_test.kem
+tests/drivers/acpi/madt_test.kem
+tests/drivers/acpi/tablo_test.kem
+tests/drivers/bellek/cerceve_test.kem
+tests/drivers/bellek/harita_test.kem
+tests/drivers/bulanik/acpi_test.kem
+tests/drivers/bulanik/bmp_test.kem
+tests/drivers/bulanik/bolum_test.kem
+tests/drivers/bulanik/bpb_test.kem
+tests/drivers/bulanik/dizin_test.kem
+tests/drivers/bulanik/elf_test.kem
+tests/drivers/bulanik/fadt_test.kem
+tests/drivers/bulanik/harita_test.kem
+tests/drivers/bulanik/madt_test.kem
+tests/drivers/bulanik/pci_test.kem
+tests/drivers/bulanik/psf_test.kem
+tests/drivers/bulanik/ustar_test.kem
+tests/drivers/bulanik/veri/fikstur.kem
+tests/drivers/bulanik/vt_test.kem
+tests/drivers/disk/bolum_test.kem
+tests/drivers/disk/guid_test.kem
+tests/drivers/ekran/bmp_test.kem
+tests/drivers/ekran/cerceve_test.kem
+tests/drivers/ekran/konsol_test.kem
+tests/drivers/ekran/psf_test.kem
+tests/drivers/ekran/veri/bmp_fikstur.kem
+tests/drivers/ekran/veri/psf_gercek.kem
+tests/drivers/ekran/veri/psf_sentetik.kem
+tests/drivers/ekran/vt_test.kem
+tests/drivers/ekran/yazi_test.kem
+tests/drivers/elf/elf64_test.kem
+tests/drivers/elf/veri/gercek_elf.kem
+tests/drivers/fs/fat32_bicimle_test.kem
+tests/drivers/fs/fat32_bpb_test.kem
+tests/drivers/fs/fat32_coklu_test.kem
+tests/drivers/fs/fat32_dizin_test.kem
+tests/drivers/fs/fat32_kahin_test.kem
+tests/drivers/fs/fat32_kisa_ad_test.kem
+tests/drivers/fs/fat32_linux_test.kem
+tests/drivers/fs/fat32_oku_test.kem
+tests/drivers/fs/fat32_onar_kahin_test.kem
+tests/drivers/fs/fat32_onar_test.kem
+tests/drivers/fs/fat32_yaz_test.kem
+tests/drivers/fs/unicode_ad_test.kem
+tests/drivers/fs/ustar_test.kem
+tests/drivers/fs/veri/linux_fat32.kem
+tests/drivers/fs/veri/ustar_veri.kem
+tests/drivers/fs/yol_test.kem
+tests/drivers/girdi/halka_test.kem
+tests/drivers/girdi/imlec_test.kem
+tests/drivers/girdi/klavye_us_test.kem
+tests/drivers/girdi/satir_test.kem
+tests/drivers/ortak/harf_test.kem
+tests/drivers/ortak/utf8_test.kem
+tests/drivers/pci/yapilandirma_test.kem
+tests/drivers/probe/bayt_kopya.kem
+tests/drivers/probe/bos_alan.kem
+tests/drivers/probe/crc_ad.kem
+tests/drivers/probe/enum_aktar.kem
+tests/drivers/probe/host_ad.kem
+tests/drivers/probe/sonuc_dizi.kem
+tests/drivers/probe/sonuc_donus.kem
+tests/drivers/probe/tam32_alt.kem
+tests/drivers/probe/tasima_tipi.kem
+tests/drivers/probe/yapi_arguman.kem
+tests/drivers/probe/yapi_dizi.kem
+tests/drivers/ps2/fare_test.kem
+tests/drivers/ps2/klavye_tr_test.kem
+tests/drivers/sim/masaustu_sim_test.kem
+tests/drivers/sinir/acpi_fadt_test.kem
+tests/drivers/sinir/acpi_madt_test.kem
+tests/drivers/sinir/acpi_tablo_test.kem
+tests/drivers/sinir/bellek_cerceve_test.kem
+tests/drivers/sinir/bellek_harita_test.kem
+tests/drivers/sinir/disk_bolum_test.kem
+tests/drivers/sinir/disk_crc32_test.kem
+tests/drivers/sinir/disk_guid_test.kem
+tests/drivers/sinir/ekran_bmp_test.kem
+tests/drivers/sinir/ekran_cerceve_test.kem
+tests/drivers/sinir/ekran_konsol_test.kem
+tests/drivers/sinir/ekran_psf_test.kem
+tests/drivers/sinir/ekran_vt_test.kem
+tests/drivers/sinir/ekran_yazi_test.kem
+tests/drivers/sinir/elf_elf64_test.kem
+tests/drivers/sinir/fs_fat32_bicimle_test.kem
+tests/drivers/sinir/fs_fat32_bpb_test.kem
+tests/drivers/sinir/fs_fat32_dizin_test.kem
+tests/drivers/sinir/fs_fat32_imaj_test.kem
+tests/drivers/sinir/fs_fat32_kisa_ad_test.kem
+tests/drivers/sinir/fs_fat32_oku_test.kem
+tests/drivers/sinir/fs_fat32_onar_test.kem
+tests/drivers/sinir/fs_fat32_yaz_test.kem
+tests/drivers/sinir/fs_ustar_test.kem
+tests/drivers/sinir/fs_yol_harf_test.kem
+tests/drivers/sinir/fs_yol_test.kem
+tests/drivers/sinir/girdi_halka_test.kem
+tests/drivers/sinir/girdi_imlec_test.kem
+tests/drivers/sinir/girdi_klavye_tablo_test.kem
+tests/drivers/sinir/girdi_klavye_us_test.kem
+tests/drivers/sinir/girdi_satir_test.kem
+tests/drivers/sinir/ortak_bayt_test.kem
+tests/drivers/sinir/ortak_harf_test.kem
+tests/drivers/sinir/ortak_harf_veri_test.kem
+tests/drivers/sinir/ortak_utf8_test.kem
+tests/drivers/sinir/pci_yapilandirma_test.kem
+tests/drivers/sinir/ps2_fare_test.kem
+tests/drivers/sinir/ps2_klavye_tr_test.kem
+tests/drivers/sinir/sim_kabuk_test.kem
+tools/codex/a1.py
+tools/codex/a2.py
+tools/codex/a3.py
+tools/codex/a4.py
+tools/codex/a5.py
+tools/codex/a6.py
+tools/codex/b1.py
+tools/codex/b2.py
+tools/codex/b3.py
+tools/codex/b4.py
+tools/codex/b5.py
+tools/codex/b6.py
+tools/codex/b7.py
+tools/codex/b8.py
+tools/codex/b9.py
+tools/codex/c1.py
+tools/codex/c2.py
+tools/codex/c3.py
+tools/codex/c4.py
+tools/codex/c5.py
+tools/codex/c6.py
+tools/codex/c7.py
+tools/codex/d1.py
+tools/codex/d2.py
+tools/codex/d3.py
+tools/codex/d4.py
+tools/codex/d5.py
+tools/codex/d6.py
+tools/codex/d7.py
+tools/codex/d8.py
+tools/codex/d9.py
+tools/codex/e1.py
+tools/codex/e2.py
+tools/codex/e3.py
+tools/codex/envanter_kontrol.py
+tools/codex/f1.py
+tools/codex/f2.py
+tools/codex/f2_kahin.py
+tools/codex/f3.py
+tools/codex/f4.py
+tools/codex/f5.py
+tools/codex/fat32_coklu_kahin.sh
+tools/codex/fat32_kahin.sh
+tools/codex/fat32_onar_kahin.sh
+tools/codex/kapat.py
+tools/codex/son_kontrol.py
+tools/codex/yardim.py
+```
+
+## Sonraki adım
+
+Claude tarafından draft PR incelemesi ve saf APIlerin donanım taşıma/ekran/kesme hattına bağlanması. Auto-merge veya main'e push yapılmaz.
+
+Bitiş ölçümü: 2026-11-05T20:46:42.548115+00:00 (`date` UTC). Başlangıç: 2026-11-05 18:54:35 UTC. Toplam çalışma: 1 saat 52 dakika 7 saniye.

@@ -3,7 +3,7 @@ from pathlib import Path
 def yaz(yol, metin):
     p = Path(yol)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(metin, encoding="utf-8")
+    p.write_text("\n".join(satir.rstrip() for satir in metin.splitlines()) + "\n", encoding="utf-8")
 
 def testler(yol, baslik, vakalar):
     s = baslik + "\n"

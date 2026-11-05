@@ -81,7 +81,7 @@ işlev test_rsdp_2() -> mantıksal {
 }
 
 işlev test_kisa() -> mantıksal {
-    değişken b: Dizi<dtam8> = bayt_sifir(19); 
+    değişken b: Dizi<dtam8> = bayt_sifir(19);
     ver rsdp_hata(b) == 1;
 }
 
@@ -160,7 +160,7 @@ işlev test_sdt_baslik() -> mantıksal {
 }
 
 işlev test_sdt_kisa() -> mantıksal {
-    değişken b: Dizi<dtam8> = bayt_sifir(35); 
+    değişken b: Dizi<dtam8> = bayt_sifir(35);
     eşleş sdt_girdileri(b, doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver hata_no(e) == 1; } }
 }
 

@@ -224,13 +224,13 @@ işlev test_lba_negatif() -> mantıksal {
 
 işlev test_sektor_sifir() -> mantıksal {
     değişken b: Dizi<dtam8> = test_diski();
-    
+
     ver hata_kodu(gpt_coz(b, 0)) == 7;
 }
 
 işlev test_sektor_tasma() -> mantıksal {
     değişken b: Dizi<dtam8> = test_diski();
-    
+
     ver hata_kodu(gpt_coz(b, 2147483647)) == 7;
 }
 
