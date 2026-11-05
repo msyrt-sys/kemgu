@@ -1,0 +1,128 @@
+// Sabitler: python3 tools/codex/c3.py; struct, maske tümleyeni+1, 64 bit birleştirme.
+kullan drivers::pci::yapilandirma::{ PciAygit, PciBar, pci_coz, bar_boyu, bar_boyu64, pci_sinif_adi };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32 };
+işlev pci_verisi() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(256);
+    yaz_u8(b, 0, 52);
+    yaz_u8(b, 1, 18);
+    yaz_u8(b, 2, 120);
+    yaz_u8(b, 3, 86);
+    yaz_u8(b, 4, 7);
+    yaz_u8(b, 6, 16);
+    yaz_u8(b, 8, 2);
+    yaz_u8(b, 9, 1);
+    yaz_u8(b, 10, 6);
+    yaz_u8(b, 11, 1);
+    yaz_u8(b, 14, 128);
+    yaz_u8(b, 16, 1);
+    yaz_u8(b, 17, 192);
+    yaz_u8(b, 20, 8);
+    yaz_u8(b, 23, 128);
+    yaz_u8(b, 24, 12);
+    yaz_u8(b, 25, 80);
+    yaz_u8(b, 26, 52);
+    yaz_u8(b, 27, 18);
+    yaz_u8(b, 28, 2);
+    yaz_u8(b, 60, 11);
+    yaz_u8(b, 61, 1);
+    ver b;
+}
+
+işlev test_alanlar() -> mantıksal {
+    eşleş pci_coz(pci_verisi()) { hiç => { ver yanlış; } değer(v) => {
+        değişken p: PciAygit = v; değişken bs: Dizi<PciBar> = p.barlar;
+        eğer dizi_boyut(bs) != 5 { ver yanlış; }
+        değişken io: PciBar = dizi_al(bs, 0); değişken mm: PciBar = dizi_al(bs, 1); değişken ust: PciBar = dizi_al(bs, 2); değişken son: PciBar = dizi_al(bs, 3);
+        ver p.satici == 4660 ve p.aygit == 22136 ve p.komut == 7 ve p.durum == 16 ve p.revizyon == 2 ve
+            p.prog_if == 1 ve p.alt_sinif == 6 ve p.sinif == 1 ve p.cok_islevli ve p.baslik_turu == 0 ve p.kesme_hatti == 11 ve p.kesme_pini == 1 ve
+            io.g_c ve io.adres == 49152 ve değil io.genis64 ve mm.onceden_getirilebilir ve mm.adres == 2147483648 ve
+            ust.genis64 ve ust.onceden_getirilebilir ve ust.adres == 8895352832 ve ust.indeks == 2 ve son.indeks == 4;
+    } }
+}
+
+işlev test_aygit_yok() -> mantıksal {
+    değişken b: Dizi<dtam8> = pci_verisi(); yaz_le16(b, 0, 65535);
+    eşleş pci_coz(b) { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_tip1() -> mantıksal {
+    değişken b: Dizi<dtam8> = pci_verisi(); yaz_u8(b, 14, 1);
+    eşleş pci_coz(b) { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_son_bar64() -> mantıksal {
+    değişken b: Dizi<dtam8> = pci_verisi(); yaz_le32(b, 36, 4);
+    eşleş pci_coz(b) { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_bar_rezerve() -> mantıksal {
+    değişken b: Dizi<dtam8> = pci_verisi(); yaz_le32(b, 16, 6);
+    eşleş pci_coz(b) { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_kisa() -> mantıksal {
+    eşleş pci_coz(bayt_sifir(255)) { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_boylar() -> mantıksal {
+    değişken m: dtam64 = ((4294967295 olarak dtam64) << 32) | (4294963212 olarak dtam64);
+    ver bar_boyu(4294967041) == 256 ve bar_boyu(4294963208) == 4096 ve
+        bar_boyu64(m) == (4096 olarak dtam64) ve bar_boyu(0) == 0 ve bar_boyu64(0 olarak dtam64) == (0 olarak dtam64);
+}
+
+işlev test_sinif_0() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(1, 6, 1), "AHCI");
+}
+
+işlev test_sinif_1() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(12, 3, 48), "xHCI");
+}
+
+işlev test_sinif_2() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(12, 3, 32), "EHCI");
+}
+
+işlev test_sinif_3() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(3, 0, 0), "VGA");
+}
+
+işlev test_sinif_4() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(2, 0, 0), "Ethernet");
+}
+
+işlev test_sinif_5() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(6, 0, 0), "Host koprusu");
+}
+
+işlev test_sinif_6() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(6, 4, 0), "PCI koprusu");
+}
+
+işlev test_sinif_7() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(1, 8, 2), "NVMe");
+}
+
+işlev test_sinif_8() -> mantıksal {
+    ver metin_esit(pci_sinif_adi(255, 255, 255), "Bilinmeyen");
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_alanlar() { yazdir_metin("BASARISIZ alanlar"); h = h + 1; }
+    eğer değil test_aygit_yok() { yazdir_metin("BASARISIZ aygit_yok"); h = h + 1; }
+    eğer değil test_tip1() { yazdir_metin("BASARISIZ tip1"); h = h + 1; }
+    eğer değil test_son_bar64() { yazdir_metin("BASARISIZ son_bar64"); h = h + 1; }
+    eğer değil test_bar_rezerve() { yazdir_metin("BASARISIZ bar_rezerve"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_boylar() { yazdir_metin("BASARISIZ boylar"); h = h + 1; }
+    eğer değil test_sinif_0() { yazdir_metin("BASARISIZ sinif_0"); h = h + 1; }
+    eğer değil test_sinif_1() { yazdir_metin("BASARISIZ sinif_1"); h = h + 1; }
+    eğer değil test_sinif_2() { yazdir_metin("BASARISIZ sinif_2"); h = h + 1; }
+    eğer değil test_sinif_3() { yazdir_metin("BASARISIZ sinif_3"); h = h + 1; }
+    eğer değil test_sinif_4() { yazdir_metin("BASARISIZ sinif_4"); h = h + 1; }
+    eğer değil test_sinif_5() { yazdir_metin("BASARISIZ sinif_5"); h = h + 1; }
+    eğer değil test_sinif_6() { yazdir_metin("BASARISIZ sinif_6"); h = h + 1; }
+    eğer değil test_sinif_7() { yazdir_metin("BASARISIZ sinif_7"); h = h + 1; }
+    eğer değil test_sinif_8() { yazdir_metin("BASARISIZ sinif_8"); h = h + 1; }
+    ver h;
+}

@@ -27,3 +27,5 @@ B8 dış kahin: fsck.fat -n temiz (3 files, 3/68890 clusters). FSInfo boş küme
 - [x] B8 · 1 test · sabotaj: `dizi_ekle(sonuc, bayt olarak dtam8)` → `dizi_ekle(sonuc, (bayt ^ 1) olarak dtam8)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:31:26.247635+00:00
 - [x] B9 · 13 test · sabotaj: `[3, 2, 1, 0, 5, 4, 7, 6` → `[0, 1, 2, 3, 5, 4, 7, 6` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:32:41.087300+00:00
 - [x] C1 · 10 test · sabotaj: `adres = g.adres` → `adres = 0` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:34:33.802721+00:00
+- [x] C2 · 9 test · sabotaj: `f.x_dsdt != 0` → `yanlış` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:35:50.462500+00:00
+VARSAYIM C2: RESET_REG/RESET_VALUE dahil en az 129 bayt FADT kabul edilir; X_DSDT yalnız ≥148 baytta okunur. VARSAYIM C3: pci_coz kısa/bozuk/tip-0 olmayan veya satıcısı FFFF olan başlıkta hiç döner; sıfır BAR yer tutucu olarak korunur. bar_boyu 32 bit ve bar_boyu64 işaretsiz 64 bit maske APIleridir; sıfır maske boyutu 0 kabul edilir.

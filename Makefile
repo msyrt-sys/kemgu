@@ -4685,7 +4685,7 @@ calistir_uart_pl011_bare_metal:
 #     derlenip koşar + stdout eşitliği. Yeni test dosyası kendiliğinden kapsanır.
 #     surucu_diff yalnız YAPIYI ölçer (linklemez); bu kapı DAVRANIŞI ölçer.
 CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
-                     tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem))
+                     tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem tests/drivers/pci/*_test.kem))
 calistir_chatgpt_kopru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@echo "=== ChatGPT köprüsü: dil kartı + saf-mantık sürücü testleri ==="
 	@bash otomasyon/chatgpt/dogrula.sh --kart
