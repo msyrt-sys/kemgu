@@ -1,0 +1,40 @@
+// MADT: APIC tanımları saf veridir; kesme yönlendirmesi yapmaz.
+kullan drivers::acpi::tablo::{ SdtBaslik, AcpiHatasi, sdt_coz };
+kullan drivers::ortak::bayt::{ imza_esit, oku_u8, oku_le16, oku_le32, oku_le64 };
+genel yapı MadtGirdisi {
+    tur: tam32; islemci: tam32; apic: tam32; bayraklar: tam64;
+    adres: tam64; gsi: tam64; veriyolu: tam32; kaynak: tam32; lint: tam32;
+}
+genel yapı Madt { lapic_adresi: tam64; bayraklar: tam64; girdiler: Dizi<MadtGirdisi>; }
+genel işlev madt_coz(b: Dizi<dtam8>) -> sonuç<Madt, metin> {
+    değişken boy: tam32 = 0;
+    eşleş sdt_coz(b) { hata(e) => { ver hata("sdt"); } tamam(v) => { değişken h: SdtBaslik = v; boy = h.uzunluk olarak tam32; } }
+    eğer değil imza_esit(b, 0, "APIC") { ver hata("imza"); }
+    eğer boy < 44 { ver hata("kisa madt"); }
+    değişken adres: tam64 = oku_le32(b, 36);
+    değişken girdiler: Dizi<MadtGirdisi> = [];
+    değişken ofs: tam32 = 44;
+    iken ofs < boy {
+        eğer boy - ofs < 2 { ver hata("girdi boyu"); }
+        değişken tur: tam32 = oku_u8(b, ofs);
+        değişken n: tam32 = oku_u8(b, ofs + 1);
+        eğer n < 2 veya n > boy - ofs { ver hata("girdi boyu"); }
+        değişken enaz: tam32 = 2;
+        eğer tur == 0 { enaz = 8; }
+        eğer tur == 1 veya tur == 5 { enaz = 12; }
+        eğer tur == 2 { enaz = 10; }
+        eğer tur == 4 { enaz = 6; }
+        eğer n < enaz { ver hata("girdi boyu"); }
+        değişken g: MadtGirdisi = MadtGirdisi { tur: tur, islemci: 0, apic: 0, bayraklar: 0, adres: 0, gsi: 0, veriyolu: 0, kaynak: 0, lint: 0 };
+        değişken bilinen: mantıksal = doğru;
+        eğer tur == 0 { g.islemci = oku_u8(b, ofs + 2); g.apic = oku_u8(b, ofs + 3); g.bayraklar = oku_le32(b, ofs + 4); }
+        değilse eğer tur == 1 { g.apic = oku_u8(b, ofs + 2); g.adres = oku_le32(b, ofs + 4); g.gsi = oku_le32(b, ofs + 8); }
+        değilse eğer tur == 2 { g.veriyolu = oku_u8(b, ofs + 2); g.kaynak = oku_u8(b, ofs + 3); g.gsi = oku_le32(b, ofs + 4); g.bayraklar = oku_le16(b, ofs + 8) olarak tam64; }
+        değilse eğer tur == 4 { g.islemci = oku_u8(b, ofs + 2); g.bayraklar = oku_le16(b, ofs + 3) olarak tam64; g.lint = oku_u8(b, ofs + 5); }
+        değilse eğer tur == 5 { g.adres = oku_le64(b, ofs + 4); adres = g.adres; }
+        değilse { bilinen = yanlış; }
+        eğer bilinen { dizi_ekle(girdiler, g); }
+        ofs = ofs + n;
+    }
+    ver tamam(Madt { lapic_adresi: adres, bayraklar: oku_le32(b, 40), girdiler: girdiler });
+}

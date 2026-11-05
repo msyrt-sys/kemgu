@@ -25,3 +25,4 @@ VARSAYIM B7: dizin listeleme ham FAT girdilerinin . ve .. adlarını da içerir;
 - [x] B7 · 15 test · sabotaj: `dizi_ekle(sonuc, bayt olarak dtam8)` → `dizi_ekle(sonuc, (bayt ^ 1) olarak dtam8)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:28:46.875800+00:00
 B8 dış kahin: fsck.fat -n temiz (3 files, 3/68890 clusters). FSInfo boş küme sayısı 123 yapılınca fsck exit=1 ve Free cluster summary wrong; geri alındı. mkfs.fat --invariant ile ters yön boş kök/eksik dosya 3 testi geçti. ATLANDI: mcopy/mdir yok; Linux dosya ekleme, dış dosya içerik karşılaştırması ve mdir listesi. Loop mount denenmedi.
 - [x] B8 · 1 test · sabotaj: `dizi_ekle(sonuc, bayt olarak dtam8)` → `dizi_ekle(sonuc, (bayt ^ 1) olarak dtam8)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:31:26.247635+00:00
+- [x] B9 · 13 test · sabotaj: `[3, 2, 1, 0, 5, 4, 7, 6` → `[0, 1, 2, 3, 5, 4, 7, 6` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:32:41.087300+00:00
