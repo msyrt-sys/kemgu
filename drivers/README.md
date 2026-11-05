@@ -84,4 +84,6 @@ Ayrıntılı yeniden üretimler, C/self çıktıları ve dolanmalar [codex_bulgu
 | C010 | İçe aktarılan enum kurucusunda self T016 | Kurucuyu modül içi sarmalayıcıdan çağırma |
 | C011 | tam32 minimumunun yapı alanına atanması | Açık olarak tam32 |
 
+F5: [sınır matrisi](../otomasyon/chatgpt/codex_sinirlar.md) 39 saf modül için 158 test içerir. S002: ortak bayt aralık denetimindeki tam32 toplama taşması kalan uzunluk karşılaştırmasıyla giderildi; panik üreten iki örnek kalıcı regresyon testidir.
+
 S001: FAT etiketinin BPB ile kök dizin metadata girdisinde eşleşmesi gerektiği fsck.fat ile yakalandı ve düzeltildi. [İlerleme kaydı](../otomasyon/chatgpt/codex_ilerleme.md) her işin sabotajını ve kabul kapısını içerir.

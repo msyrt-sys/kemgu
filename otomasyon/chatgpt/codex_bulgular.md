@@ -263,3 +263,6 @@ işlev main() -> tam32 {
 `bash otomasyon/chatgpt/dogrula.sh tests/drivers/probe/tam32_alt.kem`: C check/LLVM/link/koşum geçti; self check geçti, LLVM link `i64 ... expected i32` hatası. Dolanma: atamada açık `olarak tam32`; düzeltilmiş probe iki derleyicide yeşil.
 
 C009 ek gözlem (F1): yerel `dosya_adi(i: tam32)->metin` yardımcı adı C LLVM tarafında `@kdl_dosya_adi` olarak bağlandı; link `use of undefined value` verdi. Yardımcı `ornek_yolu` olarak adlandırıldı.
+
+## S002 — Ortak bayt sınır denetiminde tam32 taşması
+F5 kalıcı olumsuz test: üç baytlık tamponda `bayt_sinirda(b, 2147483647, 2147483647)` yanlışlıkla doğru dönüyordu; `imza_esit(b, 2147483647, "x")` exit=134 ve `PANIK: dizi sınır ihlali (i=2147483647, boyut=3)` üretti. Toplama yerine önce ofsetin tampon içinde olduğunu, sonra uzunluğun kalan alana sığdığını denetleyerek düzeltildi. `tests/drivers/sinir/ortak_bayt_test.kem` iki kalıcı regresyon içerir.

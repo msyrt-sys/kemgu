@@ -64,7 +64,7 @@ genel işlev satir_olay(d: &değişken SatirDuzenleyici, olay: TusOlayi) -> seç
     }
     ver hiç;
 }
-// Sentetik olay üreticileri, içe aktarılan çeşidin kurucusunu çağırana taşımadan kullanır.
+// C010: sentetik olay üreticileri, içe aktarılan çeşidin kurucusunu çağırana taşımadan kullanır.
 genel işlev satir_karakter(d: &değişken SatirDuzenleyici, k: tam32) -> seçimlik<metin> {
     ver satir_olay(d, TusOlayi::Karakter(k));
 }

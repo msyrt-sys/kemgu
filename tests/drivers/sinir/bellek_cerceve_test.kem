@@ -1,0 +1,32 @@
+// Kahin: python3 tools/codex/f5.py; kullanılabilir sayfa kapasitesi; değerler [0, 1, 1048576, 1048577].
+kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; dizi_ekle(xs, BellekBolgesi { taban: 1048576, uzunluk: 0 olarak tam64, tur: 1 });
+    eşleş cerceve_yeni(xs) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: CerceveAyirici = v; ver d.toplam==0 ve dizi_boyut(d.bitmap)==0; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; dizi_ekle(xs, BellekBolgesi { taban: 1048576, uzunluk: 4096 olarak tam64, tur: 1 });
+    eşleş cerceve_yeni(xs) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: CerceveAyirici = v; ver d.toplam==1 ve dizi_boyut(d.bitmap)==1; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; dizi_ekle(xs, BellekBolgesi { taban: 1048576, uzunluk: 4294967296 olarak tam64, tur: 1 });
+    eşleş cerceve_yeni(xs) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: CerceveAyirici = v; ver d.toplam==1048576 ve dizi_boyut(d.bitmap)==131072; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; dizi_ekle(xs, BellekBolgesi { taban: 1048576, uzunluk: 4294971392 olarak tam64, tur: 1 });
+    eşleş cerceve_yeni(xs) { hata(e) => { ver doğru; } tamam(v) => { değişken d: CerceveAyirici = v; ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

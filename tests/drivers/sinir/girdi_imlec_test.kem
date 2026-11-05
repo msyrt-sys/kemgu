@@ -1,0 +1,40 @@
+// Kahin: python3 tools/codex/f5.py; imleç hız çarpanı; değerler [0, 1, 1024, 1025].
+kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };
+kullan drivers::girdi::imlec::{ Imlec, DugmeOlayi, imlec_yeni, imlec_olay };
+
+işlev test_sinir_0() -> mantıksal {
+    eşleş imlec_yeni(4096, 4096, 0) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: Imlec = v; değişken o: FareOlayi = FareOlayi { dx: 1, dy: -1, dz: 0, sol: yanlış, sag: yanlış, orta: yanlış };
+        imlec_olay(&değişken d, o); ver d.x == 0 ve d.y == 0;
+    } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    eşleş imlec_yeni(4096, 4096, 1) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: Imlec = v; değişken o: FareOlayi = FareOlayi { dx: 1, dy: -1, dz: 0, sol: yanlış, sag: yanlış, orta: yanlış };
+        imlec_olay(&değişken d, o); ver d.x == 1 ve d.y == 1;
+    } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    eşleş imlec_yeni(4096, 4096, 1024) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: Imlec = v; değişken o: FareOlayi = FareOlayi { dx: 1, dy: -1, dz: 0, sol: yanlış, sag: yanlış, orta: yanlış };
+        imlec_olay(&değişken d, o); ver d.x == 1024 ve d.y == 1024;
+    } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    eşleş imlec_yeni(4096, 4096, 1025) { hata(e) => { ver doğru; } tamam(v) => {
+        değişken d: Imlec = v; değişken o: FareOlayi = FareOlayi { dx: 1, dy: -1, dz: 0, sol: yanlış, sag: yanlış, orta: yanlış };
+        imlec_olay(&değişken d, o); ver yanlış;
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

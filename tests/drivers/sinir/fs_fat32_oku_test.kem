@@ -1,0 +1,61 @@
+// Kahin: python3 tools/codex/f5.py; tek kümeli dosyanın ilan edilen uzunluğu; değerler [0, 1, 512, 513].
+// Hesap: python3 tools/codex/f2.py; 68890 küme, kök ve sahipsiz tahsisleri çıkartılır.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ FatKayit, DizinResmi, imaj_bpb, imaj_fat_yaz };
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur };
+kullan drivers::fs::fat32_onar::{ Fat32Sayim, fsinfo_onar, sahipsiz_kumeler };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le32, yaz_u8, yaz_le16, yaz_le32 };
+kullan drivers::disk::crc32;
+işlev imaj_yeni() -> Dizi<dtam8> {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 1, "") { tamam(v) => { ver v; } hata(e) => { değişken b: Dizi<dtam8> = []; ver b; } }
+}
+işlev fat_yaz(b: Dizi<dtam8>, k: tam64, v: tam64) {
+    eşleş imaj_bpb(b) { hata(e) => { } tamam(p) => { değişken bp: Fat32Bpb = p; imaj_fat_yaz(b, bp, k, v); } }
+}
+işlev sahipsiz_mi(b: Dizi<dtam8>, beklenen: Dizi<tam64>) -> mantıksal {
+    eşleş sahipsiz_kumeler(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<tam64> = v;
+        eğer dizi_boyut(xs) != dizi_boyut(beklenen) { ver yanlış; } değişken i: tam32 = 0;
+        iken i < dizi_boyut(xs) { eğer dizi_al(xs,i) != dizi_al(beklenen,i) { ver yanlış; } i = i + 1; } ver doğru;
+    } }
+}
+
+kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(512); yaz_u8(veri,0,77 olarak tam64);
+    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    yaz_le32(b,568348,0 olarak tam64);
+    eşleş imajdan_dosya_oku(b,"/A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<dtam8> = v; ver dizi_boyut(xs)==0; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(512); yaz_u8(veri,0,77 olarak tam64);
+    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    yaz_le32(b,568348,1 olarak tam64);
+    eşleş imajdan_dosya_oku(b,"/A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<dtam8> = v; ver dizi_boyut(xs)==1 ve oku_u8(xs,0)==77; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(512); yaz_u8(veri,0,77 olarak tam64);
+    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    yaz_le32(b,568348,512 olarak tam64);
+    eşleş imajdan_dosya_oku(b,"/A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<dtam8> = v; ver dizi_boyut(xs)==512 ve oku_u8(xs,0)==77; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(512); yaz_u8(veri,0,77 olarak tam64);
+    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    yaz_le32(b,568348,513 olarak tam64);
+    eşleş imajdan_dosya_oku(b,"/A.TXT") { hata(e) => { ver metin_esit(e, "kisa zincir"); } tamam(v) => { değişken xs: Dizi<dtam8> = v; ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}
