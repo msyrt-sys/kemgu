@@ -1,0 +1,91 @@
+// Unicode hücre ızgarası; ön/arka renkler ve kirli satırlar ayrı dizilerdedir.
+kullan drivers::ortak::utf8::{ utf8_coz };
+genel yapı Konsol {
+    sutunlar: tam32; satirlar: tam32; x: tam32; y: tam32;
+    kodlar: Dizi<tam32>; renkler: Dizi<tam32>; arkalar: Dizi<tam32>; kirli: Dizi<tam32>;
+    on: tam32; arka: tam32;
+}
+genel işlev konsol_yeni(sutunlar: tam32, satirlar: tam32, on: tam32, arka: tam32) -> sonuç<Konsol, metin> {
+    eğer sutunlar < 1 veya satirlar < 1 veya sutunlar > 4096 veya satirlar > 4096 { ver hata("boyut"); }
+    eğer sutunlar * satirlar > 1048576 { ver hata("boyut"); }
+    değişken kodlar: Dizi<tam32> = []; değişken renkler: Dizi<tam32> = []; değişken arkalar: Dizi<tam32> = []; değişken kirli: Dizi<tam32> = [];
+    değişken i: tam32 = 0;
+    iken i < sutunlar * satirlar { dizi_ekle(kodlar, 32); dizi_ekle(renkler, on); dizi_ekle(arkalar, arka); i = i + 1; }
+    i = 0; iken i < satirlar { dizi_ekle(kirli, 1); i = i + 1; }
+    ver tamam(Konsol { sutunlar: sutunlar, satirlar: satirlar, x: 0, y: 0, kodlar: kodlar, renkler: renkler, arkalar: arkalar, kirli: kirli, on: on, arka: arka });
+}
+genel işlev konsol_alan_sil(k: &değişken Konsol, bas: tam32, adet: tam32) {
+    eğer adet <= 0 { ver; }
+    değişken ilk: tam64 = bas olarak tam64;
+    değişken son: tam64 = ilk + (adet olarak tam64);
+    eğer ilk < 0 { ilk = 0; }
+    eğer son > (dizi_boyut(k.kodlar) olarak tam64) { son = dizi_boyut(k.kodlar) olarak tam64; }
+    değişken i: tam32 = ilk olarak tam32;
+    iken (i olarak tam64) < son {
+        dizi_yaz(k.kodlar, i, 32); dizi_yaz(k.renkler, i, k.on); dizi_yaz(k.arkalar, i, k.arka);
+        dizi_yaz(k.kirli, i / k.sutunlar, 1); i = i + 1;
+    }
+}
+işlev konsol_kaydir(k: &değişken Konsol) {
+    değişken i: tam32 = 0;
+    değişken son: tam32 = (k.satirlar - 1) * k.sutunlar;
+    iken i < son {
+        değişken kod: tam32 = dizi_al(k.kodlar, i + k.sutunlar);
+        değişken on: tam32 = dizi_al(k.renkler, i + k.sutunlar);
+        değişken arka: tam32 = dizi_al(k.arkalar, i + k.sutunlar);
+        dizi_yaz(k.kodlar, i, kod); dizi_yaz(k.renkler, i, on); dizi_yaz(k.arkalar, i, arka); i = i + 1;
+    }
+    konsol_alan_sil(k, son, k.sutunlar);
+    i = 0; iken i < k.satirlar { dizi_yaz(k.kirli, i, 1); i = i + 1; }
+    k.y = k.satirlar - 1;
+}
+işlev satir_atla(k: &değişken Konsol) {
+    k.x = 0; k.y = k.y + 1;
+    eğer k.y >= k.satirlar { konsol_kaydir(k); }
+}
+işlev hucre_yaz(k: &değişken Konsol, kod: tam32) {
+    değişken i: tam32 = k.y * k.sutunlar + k.x;
+    dizi_yaz(k.kodlar, i, kod); dizi_yaz(k.renkler, i, k.on); dizi_yaz(k.arkalar, i, k.arka);
+    dizi_yaz(k.kirli, k.y, 1); k.x = k.x + 1;
+    eğer k.x >= k.sutunlar { satir_atla(k); }
+}
+genel işlev konsol_kod(k: &değişken Konsol, kod: tam32) {
+    eğer kod == 10 { satir_atla(k); ver; }
+    eğer kod == 13 { k.x = 0; ver; }
+    eğer kod == 9 {
+        değişken adet: tam32 = 8 - (k.x % 8);
+        değişken i: tam32 = 0;
+        iken i < adet { hucre_yaz(k, 32); i = i + 1; } ver;
+    }
+    eğer kod == 8 {
+        eğer k.x > 0 { k.x = k.x - 1; }
+        değilse eğer k.y > 0 { k.y = k.y - 1; k.x = k.sutunlar - 1; }
+        değilse { ver; }
+        konsol_alan_sil(k, k.y * k.sutunlar + k.x, 1); ver;
+    }
+    eğer kod >= 0 ve kod < 32 veya kod == 127 { ver; }
+    değişken gecerli: tam32 = kod;
+    eğer değil kod_gecerli(kod) { gecerli = 65533; }
+    hucre_yaz(k, gecerli);
+}
+genel işlev konsol_metin(k: &değişken Konsol, s: metin) {
+    değişken xs: Dizi<tam32> = utf8_coz(s); değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) { konsol_kod(k, dizi_al(xs, i)); i = i + 1; }
+}
+genel işlev konsol_imlec(k: &değişken Konsol, x: tam32, y: tam32) {
+    değişken px: tam32 = x; değişken py: tam32 = y;
+    eğer px < 0 { px = 0; } eğer py < 0 { py = 0; }
+    eğer px >= k.sutunlar { px = k.sutunlar - 1; } eğer py >= k.satirlar { py = k.satirlar - 1; }
+    dizi_yaz(k.kirli, k.y, 1); dizi_yaz(k.kirli, py, 1); k.x = px; k.y = py;
+}
+genel işlev kirli_satirlar(k: &değişken Konsol) -> Dizi<tam32> {
+    değişken xs: Dizi<tam32> = []; değişken i: tam32 = 0;
+    iken i < k.satirlar { eğer dizi_al(k.kirli, i) != 0 { dizi_ekle(xs, i); dizi_yaz(k.kirli, i, 0); } i = i + 1; }
+    ver xs;
+}
+genel işlev konsol_satir(k: Konsol, satir: tam32) -> metin {
+    eğer satir < 0 veya satir >= k.satirlar { ver ""; }
+    değişken s: metin = ""; değişken i: tam32 = 0;
+    iken i < k.sutunlar { s = metin_birlestir(s, kod_metin(dizi_al(k.kodlar, satir * k.sutunlar + i))); i = i + 1; }
+    ver s;
+}

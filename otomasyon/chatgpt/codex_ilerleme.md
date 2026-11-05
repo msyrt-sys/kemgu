@@ -42,3 +42,5 @@ VARSAYIM D1: renk 0x00RRGGBB, X baytı sıfır. Çerçeve APIleri yapıyı değe
 - [x] D1 · 10 test · sabotaj: `x >= c.genislik` → `x > c.genislik` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:51:27.484676+00:00
 VARSAYIM D2: PSF Unicode dizileri (FFFE/FE sonrası çok kod noktalı ligatürler) doğrulanır fakat glif_indeksi tek kod noktası API olduğundan eşlemeye eklenmez. Unicode tablosu yoksa kod=glif indeksi. PSF1 mod&6 Unicode kabulü; PSF2 sürüm 0. Gerçek kahin Lat38-VGA8.psf.gz: ğ=207 ş=222 ı=214 İ=213 ö=148 ç=135 ü=129.
 - [x] D2 · 15 test · sabotaj: `eğer değil dizi_mi { dizi_ekle(kodlar, k);` → `eğer doğru { dizi_ekle(kodlar, k);` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:54:55.712747+00:00
+- [x] D3 · 7 test · sabotaj: `128 >> (sutun % 8)` → `1 << (sutun % 8)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:56:51.595394+00:00
+VARSAYIM D4: sekme sonraki 8 sütun durağına boşluk yazar; geri sil önceki satıra geçebilir. Sarma anlıktır; alt satır taşınca kaydırılır. Konsol satır metni sondaki boşlukları korur. Hücre başına ön/arka renk ayrı tutulur; kirli_satirlar tüketilerek temizlenir.
