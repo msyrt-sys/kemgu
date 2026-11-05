@@ -9,11 +9,12 @@ meta={
 'disk/crc32':('CRC32/IEEE hesabı','Python zlib.crc32','Geçersiz aralık sıfır döner'),
 'disk/bolum':('MBR ve CRC denetimli GPT bölüm tablosu','Python struct/uuid/zlib','Disk baytları bellekte; genişletilmiş MBR zinciri yok'),
 'disk/guid':('GPT GUID dönüşümü ve tür adları','Python uuid.bytes_le','16 bayt veya 36 karakter kanonik metin'),
+'fs/fat32_onar':('FSInfo sayacı onarma ve sahipsiz küme tespiti','fsck.fat kurtarılan küme listesi; sayaç onarımı sonrası temiz denetim','Yalnız sayaçları yazar; sahipsiz kümeleri silmez; çapraz/bozuk erişilen zincir hatadır'),
 'fs/fat32_bpb':('FAT32 BPB ve küme zinciri','Python struct ve FAT sınır vektörleri','BPB çözümü küçük örnekleri kabul eder; zincir azami uzunlukla sınırlı'),
 'fs/fat32_dizin':('8.3 ve UTF-16 LFN dizin çözümü','Python UTF-16LE ve LFN sağlama','Bozuk LFN kısa ada düşer; kapalı tür tamlığına güvenilmez'),
 'fs/yol':('Mutlak yol normalleştirme','Bağımsız yol örnekleri','Bileşen en çok 255 UTF-8 baytı; kök üstü .. kökte kalır'),
 'fs/fat32_kisa_ad':('Çakışmasız FAT kısa adı üretme','8.3 ve ~N sayaç vektörleri','11 bayt ham ad; ~1..~999999; ASCII dışı karakter _ olur'),
-'fs/fat32_bicimle':('Seyrek bellek FAT32 imajı kurma','fsck.fat -n; mkfs.fat ters örneği','512 bayt sektör, 32 ayrılmış sektör, iki FAT; en az 65525 küme; 16MiB bellek öneki'),
+'fs/fat32_bicimle':('Seyrek bellek FAT32 imajı kurma','fsck.fat -n; mkfs.fat ters örneği; F1 111 dosya','512 bayt sektör, 32 ayrılmış sektör, iki FAT; en az 65525 küme; 16MiB bellek öneki'),
 'fs/fat32_imaj':('Ortak FAT/dizin imaj erişimi','B6-B8 gidiş/dönüş ve fsck.fat','Mantıksal disk sonundaki tutulmayan baytlar sıfırdır; yardımcılar doğrulanmış BPB bekler'),
 'fs/fat32_yaz':('Dosya/dizin oluşturma ve dosya silme','Gidiş/dönüş, dolu disk, FAT aynaları, fsck.fat','Üzerine yazma ve dizin silme yok; C009 nedeniyle imaja_/imajda_/imajdan_ APIlerini kullan'),
 'fs/fat32_oku':('İmajdan dosya ve dizin okuma','Gidiş/dönüş; Linux mkfs.fat örneği','16MiB dosya sınırı; liste . ve .. içerir; C009 için imajdan_/imaj_ APIleri'),
@@ -63,7 +64,7 @@ s+='''
 
 - Dizi taşıyan çerçeve yapıları değer olarak geçirilir; içteki dizi paylaşıldığı için çizim çağrısı tamponu günceller. Ölçüler constructor sonucundan alınmalıdır.
 - FAT32 kurucusu gerçek FAT32 küme eşiğini sağlar. Dönen dizi tam disk boyu değildir: sıfır kuyruğu atılmış bellek önekidir. Dış kahin aracı tam seyrek disk dosyasını yeniden kurar.
-- `bash tools/codex/fat32_kahin.sh` fsck.fat ile imajı denetler, mkfs.fat ile ters yön örneğini oluşturur. Bu oturumda mcopy/mdir bulunmadığından o karşılaştırmalar atlandı; fsck.fat ve mkfs.fat çalıştırıldı.
+- `bash tools/codex/fat32_kahin.sh` fsck.fat ile imajı denetler, mkfs.fat ile ters yön örneğini oluşturur. `bash tools/codex/fat32_coklu_kahin.sh` iki alt dizinde 111 canlı dosyayı ve ~100+ kısa ad çakışmasını denetler. `bash tools/codex/fat32_onar_kahin.sh` KEMGU sahipsiz küme listesini fsck kurtarma dosyalarının küme zincirleriyle karşılaştırır. Bu oturumda mcopy/mdir bulunmadığından o karşılaştırmalar atlandı; fsck.fat ve mkfs.fat çalıştırıldı.
 - E2, 13 ayrıştırıcıda 3900 rastgele örnek ve 5100 tek-bayt mutasyonu ile sıfır/tek-bayt sınırlarını dener. Bu deterministik örnekler kapsamlı ispat değildir; her koşumun 30 saniye sınırı vardır.
 - UTF-8 hataları tek bayt ilerleme ve U+FFFD ile ele alınır. Türkçe dosya adları ve emoji için ortak UTF-16/UTF-8 çekirdeği kullanılır.
 
