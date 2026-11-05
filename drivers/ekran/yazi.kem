@@ -1,0 +1,55 @@
+// Glif satırları MSB önce; satır başına ceil(genişlik/8) bayt.
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_gecerli, piksel_yaz, dikdortgen_doldur };
+kullan drivers::ekran::psf::{ PsfFont, glif_indeksi };
+kullan drivers::ortak::bayt::{ oku_u8 };
+kullan drivers::ortak::utf8::{ utf8_coz };
+genel işlev glif_ciz(c: Cerceve, f: PsfFont, indeks: tam32, x: tam32, y: tam32, on: tam32, arka: tam32) {
+    eğer değil cerceve_gecerli(c) veya indeks < 0 veya indeks >= f.glif_sayisi { ver; }
+    eğer f.genislik < 1 veya f.genislik > 4096 veya f.yukseklik < 1 veya f.yukseklik > 4096 veya f.veri_ofseti < 0 veya f.glif_bayt < 1 { ver; }
+    değişken adim: tam32 = (f.genislik + 7) / 8;
+    eğer adim * f.yukseklik > f.glif_bayt { ver; }
+    değişken bas: tam64 = (f.veri_ofseti olarak tam64) + (indeks olarak tam64) * (f.glif_bayt olarak tam64);
+    eğer bas > (dizi_boyut(f.veri) olarak tam64) veya (f.glif_bayt olarak tam64) > (dizi_boyut(f.veri) olarak tam64) - bas { ver; }
+    değişken satir: tam32 = 0;
+    iken satir < f.yukseklik {
+        değişken py: tam64 = (y olarak tam64) + (satir olarak tam64);
+        eğer py >= 0 ve py < (c.yukseklik olarak tam64) {
+            değişken sutun: tam32 = 0;
+            iken sutun < f.genislik {
+                değişken px: tam64 = (x olarak tam64) + (sutun olarak tam64);
+                eğer px >= 0 ve px < (c.genislik olarak tam64) {
+                    değişken bayt: tam32 = oku_u8(f.veri, (bas olarak tam32) + satir * adim + sutun / 8);
+                    değişken renk: tam32 = arka;
+                    eğer (bayt & (128 >> (sutun % 8))) != 0 { renk = on; }
+                    piksel_yaz(c, px olarak tam32, py olarak tam32, renk);
+                }
+                sutun = sutun + 1;
+            }
+        }
+        satir = satir + 1;
+    }
+}
+genel işlev kod_ciz(c: Cerceve, f: PsfFont, x: tam32, y: tam32, kod: tam32, on: tam32, arka: tam32) {
+    değişken indeks: tam32 = -1;
+    eşleş glif_indeksi(f, kod) { değer(i) => { indeks = i; } hiç => { } }
+    eğer indeks < 0 { eşleş glif_indeksi(f, 65533) { değer(i) => { indeks = i; } hiç => { } } }
+    eğer indeks < 0 { eşleş glif_indeksi(f, 63) { değer(i) => { indeks = i; } hiç => { } } }
+    eğer indeks >= 0 { glif_ciz(c, f, indeks, x, y, on, arka); }
+    değilse { dikdortgen_doldur(c, x, y, f.genislik, f.yukseklik, arka); }
+}
+genel işlev metin_ciz(c: Cerceve, f: PsfFont, x: tam32, y: tam32, s: metin, on: tam32, arka: tam32) {
+    değişken kodlar: Dizi<tam32> = utf8_coz(s);
+    değişken px: tam64 = x olarak tam64; değişken py: tam64 = y olarak tam64;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(kodlar) {
+        değişken k: tam32 = dizi_al(kodlar, i);
+        eğer k == 10 { px = x olarak tam64; py = py + (f.yukseklik olarak tam64); }
+        değilse {
+            eğer px >= -2147483648 ve px <= 2147483647 ve py >= -2147483648 ve py <= 2147483647 {
+                kod_ciz(c, f, px olarak tam32, py olarak tam32, k, on, arka);
+            }
+            px = px + (f.genislik olarak tam64);
+        }
+        i = i + 1;
+    }
+}
