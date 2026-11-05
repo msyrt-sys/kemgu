@@ -1,0 +1,266 @@
+// Hesap: python3 tools/codex/a3.py (struct, uuid.bytes_le, zlib.crc32).
+// Bulgu C001: aynı adlı modül/işlev için probe ile doğrulanmış nitelikli çağrı.
+kullan drivers::disk::crc32;
+kullan drivers::disk::bolum::{ Bolum, BolumHatasi, mbr_coz, gpt_mi, gpt_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_le64, yaz_ascii };
+işlev test_diski() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(1536);
+    yaz_u8(b, 450, 238);
+    yaz_u8(b, 454, 1);
+    yaz_u8(b, 458, 255);
+    yaz_u8(b, 459, 7);
+    yaz_u8(b, 510, 85);
+    yaz_u8(b, 511, 170);
+    yaz_u8(b, 512, 69);
+    yaz_u8(b, 513, 70);
+    yaz_u8(b, 514, 73);
+    yaz_u8(b, 515, 32);
+    yaz_u8(b, 516, 80);
+    yaz_u8(b, 517, 65);
+    yaz_u8(b, 518, 82);
+    yaz_u8(b, 519, 84);
+    yaz_u8(b, 522, 1);
+    yaz_u8(b, 524, 92);
+    yaz_u8(b, 528, 203);
+    yaz_u8(b, 529, 141);
+    yaz_u8(b, 530, 35);
+    yaz_u8(b, 531, 226);
+    yaz_u8(b, 536, 1);
+    yaz_u8(b, 544, 255);
+    yaz_u8(b, 545, 7);
+    yaz_u8(b, 552, 34);
+    yaz_u8(b, 560, 222);
+    yaz_u8(b, 561, 7);
+    yaz_u8(b, 568, 17);
+    yaz_u8(b, 569, 17);
+    yaz_u8(b, 570, 17);
+    yaz_u8(b, 571, 17);
+    yaz_u8(b, 572, 17);
+    yaz_u8(b, 573, 17);
+    yaz_u8(b, 574, 17);
+    yaz_u8(b, 575, 17);
+    yaz_u8(b, 576, 17);
+    yaz_u8(b, 577, 17);
+    yaz_u8(b, 578, 17);
+    yaz_u8(b, 579, 17);
+    yaz_u8(b, 580, 17);
+    yaz_u8(b, 581, 17);
+    yaz_u8(b, 582, 17);
+    yaz_u8(b, 583, 17);
+    yaz_u8(b, 584, 2);
+    yaz_u8(b, 592, 4);
+    yaz_u8(b, 596, 128);
+    yaz_u8(b, 600, 116);
+    yaz_u8(b, 601, 203);
+    yaz_u8(b, 602, 16);
+    yaz_u8(b, 603, 136);
+    yaz_u8(b, 1024, 40);
+    yaz_u8(b, 1025, 115);
+    yaz_u8(b, 1026, 42);
+    yaz_u8(b, 1027, 193);
+    yaz_u8(b, 1028, 31);
+    yaz_u8(b, 1029, 248);
+    yaz_u8(b, 1030, 210);
+    yaz_u8(b, 1031, 17);
+    yaz_u8(b, 1032, 186);
+    yaz_u8(b, 1033, 75);
+    yaz_u8(b, 1035, 160);
+    yaz_u8(b, 1036, 201);
+    yaz_u8(b, 1037, 62);
+    yaz_u8(b, 1038, 201);
+    yaz_u8(b, 1039, 59);
+    yaz_u8(b, 1040, 34);
+    yaz_u8(b, 1041, 34);
+    yaz_u8(b, 1042, 34);
+    yaz_u8(b, 1043, 34);
+    yaz_u8(b, 1044, 34);
+    yaz_u8(b, 1045, 34);
+    yaz_u8(b, 1046, 34);
+    yaz_u8(b, 1047, 34);
+    yaz_u8(b, 1048, 34);
+    yaz_u8(b, 1049, 34);
+    yaz_u8(b, 1050, 34);
+    yaz_u8(b, 1051, 34);
+    yaz_u8(b, 1052, 34);
+    yaz_u8(b, 1053, 34);
+    yaz_u8(b, 1054, 34);
+    yaz_u8(b, 1055, 34);
+    yaz_u8(b, 1056, 34);
+    yaz_u8(b, 1064, 222);
+    yaz_u8(b, 1065, 7);
+    yaz_u8(b, 1080, 69);
+    yaz_u8(b, 1082, 70);
+    yaz_u8(b, 1084, 73);
+    ver b;
+}
+işlev baslik_onar(b: Dizi<dtam8>) {
+    yaz_le32(b, 528, 0); yaz_le32(b, 528, crc32::crc32(b, 512, 92));
+}
+işlev hata_kodu(r: sonuç<Dizi<Bolum>, BolumHatasi>) -> tam32 {
+    eşleş r {
+        tamam(v) => { ver 0; }
+        hata(e) => { eşleş e {
+            BolumHatasi::KisaGirdi => { ver 1; } BolumHatasi::ImzaYok => { ver 2; }
+            BolumHatasi::KorumaciMBRDegil => { ver 3; } BolumHatasi::GptImzaYok => { ver 4; }
+            BolumHatasi::GptBaslikCrc => { ver 5; } BolumHatasi::GptGirdiCrc => { ver 6; }
+            BolumHatasi::GptBoyut => { ver 7; }
+        } }
+    }
+    ver 99;
+}
+
+işlev test_crc_rakam() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(9);
+    yaz_ascii(b, 0, "123456789");
+    ver crc32::crc32(b, 0, 9) == 3421780262 ve crc32::crc32(b, -1, 1) == 0 ve crc32::crc32(b, 0, 2147483647) == 0;
+}
+
+işlev test_crc_bos() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(0);
+    yaz_ascii(b, 0, "");
+    ver crc32::crc32(b, 0, 0) == 0 ve crc32::crc32(b, -1, 1) == 0 ve crc32::crc32(b, 0, 2147483647) == 0;
+}
+
+işlev test_crc_a() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(1);
+    yaz_ascii(b, 0, "a");
+    ver crc32::crc32(b, 0, 1) == 3904355907 ve crc32::crc32(b, -1, 1) == 0 ve crc32::crc32(b, 0, 2147483647) == 0;
+}
+
+işlev test_mbr() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_u8(b, 450, 12); yaz_le32(b, 454, 2048); yaz_le32(b, 458, 100000);
+    eğer gpt_mi(b) { ver yanlış; }
+    eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        eğer dizi_boyut(v) != 1 { ver yanlış; }
+        // Bulgu C003: eşleş bağını açık dizi tipiyle yerel değişkene al.
+        değişken bolumler: Dizi<Bolum> = v;
+        değişken p: Bolum = dizi_al(bolumler, 0);
+        ver p.tur == 12 ve p.baslangic_lba == 2048 ve p.sektor_sayisi == 100000 ve metin_esit(p.ad, "");
+    } }
+}
+
+işlev test_gpt() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    eğer değil gpt_mi(b) { ver yanlış; }
+    eşleş gpt_coz(b, 512) { hata(e) => { ver yanlış; } tamam(v) => {
+        eğer dizi_boyut(v) != 1 { ver yanlış; }
+        // Bulgu C003: eşleş bağını açık dizi tipiyle yerel değişkene al.
+        değişken bolumler: Dizi<Bolum> = v;
+        değişken p: Bolum = dizi_al(bolumler, 0);
+        ver p.tur == 238 ve p.baslangic_lba == 34 ve p.sektor_sayisi == 1981 ve metin_esit(p.ad, "EFI");
+    } }
+}
+
+işlev test_kisa() -> mantıksal {
+    ver hata_kodu(mbr_coz(bayt_sifir(511))) == 1 ve değil gpt_mi(bayt_sifir(0));
+}
+
+işlev test_mbr_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_u8(b, 510, 0);
+    ver hata_kodu(mbr_coz(b)) == 2;
+}
+
+işlev test_korumaci() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_u8(b, 450, 12);
+    ver hata_kodu(gpt_coz(b, 512)) == 3;
+}
+
+işlev test_gpt_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_u8(b, 512, 0);
+    ver hata_kodu(gpt_coz(b, 512)) == 4;
+}
+
+işlev test_baslik_crc() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_u8(b, 528, 0);
+    ver hata_kodu(gpt_coz(b, 512)) == 5;
+}
+
+işlev test_girdi_crc() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_u8(b, 1024, 0);
+    ver hata_kodu(gpt_coz(b, 512)) == 6;
+}
+
+işlev test_baslik_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le32(b, 524, 91);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev test_baslik_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le32(b, 524, 4294967295);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev test_girdi_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le32(b, 596, 127); baslik_onar(b);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev test_girdi_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le32(b, 592, 4294967295); baslik_onar(b);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev test_lba_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le64(b, 584, 9223372036854775807); baslik_onar(b);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev test_lba_negatif() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le64(b, 584, -1); baslik_onar(b);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev test_sektor_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    
+    ver hata_kodu(gpt_coz(b, 0)) == 7;
+}
+
+işlev test_sektor_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    
+    ver hata_kodu(gpt_coz(b, 2147483647)) == 7;
+}
+
+işlev test_ters_lba() -> mantıksal {
+    değişken b: Dizi<dtam8> = test_diski();
+    yaz_le64(b, 1064, 33); yaz_le32(b, 600, crc32::crc32(b, 1024, 512)); baslik_onar(b);
+    ver hata_kodu(gpt_coz(b, 512)) == 7;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_crc_rakam() { yazdir_metin("BASARISIZ crc_rakam"); h = h + 1; }
+    eğer değil test_crc_bos() { yazdir_metin("BASARISIZ crc_bos"); h = h + 1; }
+    eğer değil test_crc_a() { yazdir_metin("BASARISIZ crc_a"); h = h + 1; }
+    eğer değil test_mbr() { yazdir_metin("BASARISIZ mbr"); h = h + 1; }
+    eğer değil test_gpt() { yazdir_metin("BASARISIZ gpt"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_mbr_imza() { yazdir_metin("BASARISIZ mbr_imza"); h = h + 1; }
+    eğer değil test_korumaci() { yazdir_metin("BASARISIZ korumaci"); h = h + 1; }
+    eğer değil test_gpt_imza() { yazdir_metin("BASARISIZ gpt_imza"); h = h + 1; }
+    eğer değil test_baslik_crc() { yazdir_metin("BASARISIZ baslik_crc"); h = h + 1; }
+    eğer değil test_girdi_crc() { yazdir_metin("BASARISIZ girdi_crc"); h = h + 1; }
+    eğer değil test_baslik_kisa() { yazdir_metin("BASARISIZ baslik_kisa"); h = h + 1; }
+    eğer değil test_baslik_tasma() { yazdir_metin("BASARISIZ baslik_tasma"); h = h + 1; }
+    eğer değil test_girdi_kisa() { yazdir_metin("BASARISIZ girdi_kisa"); h = h + 1; }
+    eğer değil test_girdi_tasma() { yazdir_metin("BASARISIZ girdi_tasma"); h = h + 1; }
+    eğer değil test_lba_tasma() { yazdir_metin("BASARISIZ lba_tasma"); h = h + 1; }
+    eğer değil test_lba_negatif() { yazdir_metin("BASARISIZ lba_negatif"); h = h + 1; }
+    eğer değil test_sektor_sifir() { yazdir_metin("BASARISIZ sektor_sifir"); h = h + 1; }
+    eğer değil test_sektor_tasma() { yazdir_metin("BASARISIZ sektor_tasma"); h = h + 1; }
+    eğer değil test_ters_lba() { yazdir_metin("BASARISIZ ters_lba"); h = h + 1; }
+    ver h;
+}
