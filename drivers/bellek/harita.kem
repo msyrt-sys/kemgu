@@ -1,0 +1,100 @@
+// E820 / Multiboot2 bellek haritası; işaretli tam64 adres aralığıyla sınırlıdır.
+kullan drivers::ortak::bayt::{ oku_le32, oku_le64 };
+genel yapı BellekBolgesi { taban: tam64; uzunluk: tam64; tur: tam32; }
+genel işlev harita_duzenle(xs: Dizi<BellekBolgesi>) -> sonuç<Dizi<BellekBolgesi>, metin> {
+    eğer dizi_boyut(xs) > 4096 { ver hata("cok bolge"); }
+    değişken uc: Dizi<tam64> = [];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) {
+        değişken b: BellekBolgesi = dizi_al(xs, i);
+        eğer b.taban < 0 veya b.uzunluk < 0 { ver hata("adres"); }
+        eğer b.uzunluk > 9223372036854775807 - b.taban { ver hata("adres"); }
+        eğer b.uzunluk > 0 { dizi_ekle(uc, b.taban); dizi_ekle(uc, b.taban + b.uzunluk); }
+        i = i + 1;
+    }
+    // Uçları eklemeli sıralama: girdi sırasından bağımsız bölümlendirme.
+    i = 1;
+    iken i < dizi_boyut(uc) {
+        değişken anahtar: tam64 = dizi_al(uc, i);
+        değişken j: tam32 = i;
+        iken j > 0 ve dizi_al(uc, j - 1) > anahtar {
+            değişken onceki: tam64 = dizi_al(uc, j - 1); dizi_yaz(uc, j, onceki); j = j - 1;
+        }
+        dizi_yaz(uc, j, anahtar); i = i + 1;
+    }
+    değişken sonuc: Dizi<BellekBolgesi> = [];
+    i = 0;
+    iken i + 1 < dizi_boyut(uc) {
+        değişken bas: tam64 = dizi_al(uc, i);
+        değişken son: tam64 = dizi_al(uc, i + 1);
+        eğer son > bas {
+            değişken var: mantıksal = yanlış;
+            değişken tur: tam32 = 1;
+            değişken j: tam32 = 0;
+            iken j < dizi_boyut(xs) {
+                değişken b: BellekBolgesi = dizi_al(xs, j);
+                eğer b.taban <= bas ve b.taban + b.uzunluk >= son {
+                    eğer değil var { tur = b.tur; var = doğru; }
+                    değilse eğer b.tur != 1 ve (tur == 1 veya b.tur < tur) { tur = b.tur; }
+                }
+                j = j + 1;
+            }
+            eğer var {
+                değişken birles: mantıksal = yanlış;
+                değişken adet: tam32 = dizi_boyut(sonuc);
+                eğer adet > 0 {
+                    değişken onceki: BellekBolgesi = dizi_al(sonuc, adet - 1);
+                    eğer onceki.tur == tur ve onceki.taban + onceki.uzunluk == bas {
+                        onceki.uzunluk = son - onceki.taban;
+                        dizi_yaz(sonuc, adet - 1, onceki); birles = doğru;
+                    }
+                }
+                eğer değil birles { dizi_ekle(sonuc, BellekBolgesi { taban: bas, uzunluk: son - bas, tur: tur }); }
+            }
+        }
+        i = i + 1;
+    }
+    ver tamam(sonuc);
+}
+işlev ham_coz(b: Dizi<dtam8>, ofs: tam32, boy: tam32, adim: tam32) -> sonuç<Dizi<BellekBolgesi>, metin> {
+    eğer adim < 20 veya boy % adim != 0 { ver hata("girdi boyu"); }
+    eğer boy / adim > 4096 { ver hata("cok bolge"); }
+    değişken xs: Dizi<BellekBolgesi> = [];
+    değişken i: tam32 = 0;
+    iken i < boy {
+        dizi_ekle(xs, BellekBolgesi { taban: oku_le64(b, ofs + i), uzunluk: oku_le64(b, ofs + i + 8), tur: oku_le32(b, ofs + i + 16) olarak tam32 });
+        i = i + adim;
+    }
+    ver harita_duzenle(xs);
+}
+genel işlev e820_coz(b: Dizi<dtam8>) -> sonuç<Dizi<BellekBolgesi>, metin> { ver ham_coz(b, 0, dizi_boyut(b), 20); }
+genel işlev mb2_coz(b: Dizi<dtam8>) -> sonuç<Dizi<BellekBolgesi>, metin> {
+    eğer dizi_boyut(b) < 16 { ver hata("kisa mb2"); }
+    değişken boy: tam64 = oku_le32(b, 4);
+    değişken adim: tam64 = oku_le32(b, 8);
+    eğer oku_le32(b, 0) != 6 veya oku_le32(b, 12) != 0 { ver hata("mb2 baslik"); }
+    eğer boy < 16 veya boy > (dizi_boyut(b) olarak tam64) veya adim < 24 veya adim > 2147483647 { ver hata("girdi boyu"); }
+    ver ham_coz(b, 16, (boy - 16) olarak tam32, adim olarak tam32);
+}
+// Bu iki hesap normalleştirilmiş harita bekler.
+genel işlev kullanilabilir_bayt(xs: Dizi<BellekBolgesi>) -> tam64 {
+    değişken toplam: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) { değişken b: BellekBolgesi = dizi_al(xs, i); eğer b.tur == 1 { toplam = toplam + b.uzunluk; } i = i + 1; }
+    ver toplam;
+}
+genel işlev sayfa_sayisi(xs: Dizi<BellekBolgesi>) -> tam64 {
+    değişken toplam: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) {
+        değişken b: BellekBolgesi = dizi_al(xs, i);
+        eğer b.tur == 1 {
+            değişken bas: tam64 = b.taban / 4096;
+            eğer b.taban % 4096 != 0 { bas = bas + 1; }
+            değişken son: tam64 = (b.taban + b.uzunluk) / 4096;
+            eğer son > bas { toplam = toplam + son - bas; }
+        }
+        i = i + 1;
+    }
+    ver toplam;
+}
