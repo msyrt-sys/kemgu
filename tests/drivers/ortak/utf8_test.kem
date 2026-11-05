@@ -1,0 +1,285 @@
+// Unicode vektörleri: python3 tools/codex/b1.py; Python encode/decode(strict/replace).
+kullan drivers::ortak::utf8::{ utf8_coz, utf8_kodla, utf16le_coz, utf16le_kodla };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8 };
+işlev kod_esit(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
+    eğer dizi_boyut(a) != dizi_boyut(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(a) { eğer dizi_al(a, i) != dizi_al(b, i) { ver yanlış; } i = i + 1; }
+    ver doğru;
+}
+işlev bayt_esit(a: Dizi<dtam8>, b: Dizi<dtam8>) -> mantıksal {
+    eğer dizi_boyut(a) != dizi_boyut(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(a) { eğer oku_u8(a, i) != oku_u8(b, i) { ver yanlış; } i = i + 1; }
+    ver doğru;
+}
+
+işlev test_bos() -> mantıksal {
+    değişken kodlar: Dizi<tam32> = [];
+    değişken b: Dizi<dtam8> = bayt_sifir(0);
+    değişken s: metin = "";
+    ver kod_esit(utf8_coz(s), kodlar) ve metin_esit(utf8_kodla(kodlar), s) ve
+        kod_esit(utf16le_coz(b, 0, 0), kodlar) ve bayt_esit(utf16le_kodla(kodlar), b);
+}
+
+işlev test_turkce() -> mantıksal {
+    değişken kodlar: Dizi<tam32> = [84, 252, 114, 107, 231, 101, 32, 287, 252, 351, 305, 304, 246, 231, 32, 73, 305];
+    değişken b: Dizi<dtam8> = bayt_sifir(34);
+    yaz_u8(b, 0, 84);
+    yaz_u8(b, 1, 0);
+    yaz_u8(b, 2, 252);
+    yaz_u8(b, 3, 0);
+    yaz_u8(b, 4, 114);
+    yaz_u8(b, 5, 0);
+    yaz_u8(b, 6, 107);
+    yaz_u8(b, 7, 0);
+    yaz_u8(b, 8, 231);
+    yaz_u8(b, 9, 0);
+    yaz_u8(b, 10, 101);
+    yaz_u8(b, 11, 0);
+    yaz_u8(b, 12, 32);
+    yaz_u8(b, 13, 0);
+    yaz_u8(b, 14, 31);
+    yaz_u8(b, 15, 1);
+    yaz_u8(b, 16, 252);
+    yaz_u8(b, 17, 0);
+    yaz_u8(b, 18, 95);
+    yaz_u8(b, 19, 1);
+    yaz_u8(b, 20, 49);
+    yaz_u8(b, 21, 1);
+    yaz_u8(b, 22, 48);
+    yaz_u8(b, 23, 1);
+    yaz_u8(b, 24, 246);
+    yaz_u8(b, 25, 0);
+    yaz_u8(b, 26, 231);
+    yaz_u8(b, 27, 0);
+    yaz_u8(b, 28, 32);
+    yaz_u8(b, 29, 0);
+    yaz_u8(b, 30, 73);
+    yaz_u8(b, 31, 0);
+    yaz_u8(b, 32, 49);
+    yaz_u8(b, 33, 1);
+    değişken s: metin = "Türkçe ğüşıİöç Iı";
+    ver kod_esit(utf8_coz(s), kodlar) ve metin_esit(utf8_kodla(kodlar), s) ve
+        kod_esit(utf16le_coz(b, 0, 17), kodlar) ve bayt_esit(utf16le_kodla(kodlar), b);
+}
+
+işlev test_emoji() -> mantıksal {
+    değişken kodlar: Dizi<tam32> = [65, 128512, 90];
+    değişken b: Dizi<dtam8> = bayt_sifir(8);
+    yaz_u8(b, 0, 65);
+    yaz_u8(b, 1, 0);
+    yaz_u8(b, 2, 61);
+    yaz_u8(b, 3, 216);
+    yaz_u8(b, 4, 0);
+    yaz_u8(b, 5, 222);
+    yaz_u8(b, 6, 90);
+    yaz_u8(b, 7, 0);
+    değişken s: metin = "A😀Z";
+    ver kod_esit(utf8_coz(s), kodlar) ve metin_esit(utf8_kodla(kodlar), s) ve
+        kod_esit(utf16le_coz(b, 0, 4), kodlar) ve bayt_esit(utf16le_kodla(kodlar), b);
+}
+
+işlev test_sinir() -> mantıksal {
+    değişken kodlar: Dizi<tam32> = [1, 127, 128, 2047, 2048, 55295, 57344, 65535, 65536, 1114111];
+    değişken b: Dizi<dtam8> = bayt_sifir(24);
+    yaz_u8(b, 0, 1);
+    yaz_u8(b, 1, 0);
+    yaz_u8(b, 2, 127);
+    yaz_u8(b, 3, 0);
+    yaz_u8(b, 4, 128);
+    yaz_u8(b, 5, 0);
+    yaz_u8(b, 6, 255);
+    yaz_u8(b, 7, 7);
+    yaz_u8(b, 8, 0);
+    yaz_u8(b, 9, 8);
+    yaz_u8(b, 10, 255);
+    yaz_u8(b, 11, 215);
+    yaz_u8(b, 12, 0);
+    yaz_u8(b, 13, 224);
+    yaz_u8(b, 14, 255);
+    yaz_u8(b, 15, 255);
+    yaz_u8(b, 16, 0);
+    yaz_u8(b, 17, 216);
+    yaz_u8(b, 18, 0);
+    yaz_u8(b, 19, 220);
+    yaz_u8(b, 20, 255);
+    yaz_u8(b, 21, 219);
+    yaz_u8(b, 22, 255);
+    yaz_u8(b, 23, 223);
+    değişken s: metin = utf8_kodla(kodlar);
+    ver kod_esit(utf8_coz(s), kodlar) ve metin_esit(utf8_kodla(kodlar), s) ve
+        kod_esit(utf16le_coz(b, 0, 12), kodlar) ve bayt_esit(utf16le_kodla(kodlar), b);
+}
+
+işlev test_bozuk_utf8_0() -> mantıksal {
+    değişken s: metin = metin_birlestir("", metin_kes(kod_metin(128512), 3, 1));
+    değişken beklenen: Dizi<tam32> = [65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_1() -> mantıksal {
+    değişken s: metin = metin_birlestir("", metin_kes(kod_metin(233), 0, 1));
+    değişken beklenen: Dizi<tam32> = [65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_2() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir("", metin_kes(kod_metin(8364), 0, 1)), metin_kes(kod_metin(8364), 1, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_3() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(128512), 0, 1)), metin_kes(kod_metin(128512), 1, 1)), metin_kes(kod_metin(128512), 2, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65533, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_4() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(2048), 0, 1)), metin_kes(kod_metin(128512), 3, 1)), metin_kes(kod_metin(128512), 3, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65533, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_5() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(53248), 0, 1)), metin_kes(kod_metin(2048), 1, 1)), metin_kes(kod_metin(128512), 3, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65533, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_6() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(128512), 0, 1)), metin_kes(kod_metin(128512), 3, 1)), metin_kes(kod_metin(128512), 3, 1)), metin_kes(kod_metin(128512), 3, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65533, 65533, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_7() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(1114111), 0, 1)), metin_kes(kod_metin(1114111), 2, 1)), metin_kes(kod_metin(1114111), 2, 1)), metin_kes(kod_metin(1114111), 2, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65533, 65533, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_8() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir("", metin_kes(kod_metin(233), 0, 1)), "A");
+    değişken beklenen: Dizi<tam32> = [65533, 65];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_9() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(8364), 0, 1)), "A"), metin_kes(kod_metin(8364), 2, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65, 65533];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf8_10() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir("", metin_kes(kod_metin(128512), 3, 1)), "A"), metin_kes(kod_metin(128512), 0, 1)), metin_kes(kod_metin(128512), 1, 1)), metin_kes(kod_metin(128512), 2, 1)), metin_kes(kod_metin(128512), 3, 1));
+    değişken beklenen: Dizi<tam32> = [65533, 65, 128512];
+    ver kod_esit(utf8_coz(s), beklenen);
+}
+
+işlev test_bozuk_utf16_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(2);
+    yaz_u8(b, 0, 0);
+    yaz_u8(b, 1, 216);
+    değişken beklenen: Dizi<tam32> = [65533];
+    ver kod_esit(utf16le_coz(b, 0, 8), beklenen);
+}
+
+işlev test_bozuk_utf16_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(2);
+    yaz_u8(b, 0, 0);
+    yaz_u8(b, 1, 220);
+    değişken beklenen: Dizi<tam32> = [65533];
+    ver kod_esit(utf16le_coz(b, 0, 8), beklenen);
+}
+
+işlev test_bozuk_utf16_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(4);
+    yaz_u8(b, 0, 0);
+    yaz_u8(b, 1, 216);
+    yaz_u8(b, 2, 65);
+    yaz_u8(b, 3, 0);
+    değişken beklenen: Dizi<tam32> = [65533, 65];
+    ver kod_esit(utf16le_coz(b, 0, 8), beklenen);
+}
+
+işlev test_bozuk_utf16_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(1);
+    yaz_u8(b, 0, 65);
+    değişken beklenen: Dizi<tam32> = [65533];
+    ver kod_esit(utf16le_coz(b, 0, 8), beklenen);
+}
+
+işlev test_bozuk_utf16_4() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(4);
+    yaz_u8(b, 0, 0);
+    yaz_u8(b, 1, 216);
+    yaz_u8(b, 2, 0);
+    yaz_u8(b, 3, 216);
+    değişken beklenen: Dizi<tam32> = [65533, 65533];
+    ver kod_esit(utf16le_coz(b, 0, 8), beklenen);
+}
+
+işlev test_bozuk_utf16_5() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(4);
+    yaz_u8(b, 0, 0);
+    yaz_u8(b, 1, 216);
+    yaz_u8(b, 2, 0);
+    yaz_u8(b, 3, 220);
+    değişken beklenen: Dizi<tam32> = [65536];
+    ver kod_esit(utf16le_coz(b, 0, 8), beklenen);
+}
+
+işlev test_sinir_ofset() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(10);
+    yaz_u8(b, 0, 120);
+    yaz_u8(b, 1, 0);
+    yaz_u8(b, 2, 61);
+    yaz_u8(b, 3, 216);
+    yaz_u8(b, 4, 0);
+    yaz_u8(b, 5, 222);
+    yaz_u8(b, 6, 0);
+    yaz_u8(b, 7, 0);
+    yaz_u8(b, 8, 65);
+    yaz_u8(b, 9, 0);
+    değişken emoji: Dizi<tam32> = [128512];
+    değişken eksik: Dizi<tam32> = [65533];
+    ver kod_esit(utf16le_coz(b, 2, 4), emoji) ve kod_esit(utf16le_coz(b, 2, 1), eksik) ve
+        dizi_boyut(utf16le_coz(b, -1, 1)) == 0 ve dizi_boyut(utf16le_coz(b, 2147483647, 1)) == 0 ve
+        dizi_boyut(utf16le_coz(b, 0, -1)) == 0;
+}
+
+işlev test_gecersiz_skaler() -> mantıksal {
+    değişken k: Dizi<tam32> = [-1, 55296, 57343, 1114112];
+    değişken beklenen: Dizi<tam32> = [65533, 65533, 65533, 65533];
+    ver kod_esit(utf8_coz(utf8_kodla(k)), beklenen) ve kod_esit(utf16le_coz(utf16le_kodla(k), 0, 4), beklenen);
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_turkce() { yazdir_metin("BASARISIZ turkce"); h = h + 1; }
+    eğer değil test_emoji() { yazdir_metin("BASARISIZ emoji"); h = h + 1; }
+    eğer değil test_sinir() { yazdir_metin("BASARISIZ sinir"); h = h + 1; }
+    eğer değil test_bozuk_utf8_0() { yazdir_metin("BASARISIZ bozuk_utf8_0"); h = h + 1; }
+    eğer değil test_bozuk_utf8_1() { yazdir_metin("BASARISIZ bozuk_utf8_1"); h = h + 1; }
+    eğer değil test_bozuk_utf8_2() { yazdir_metin("BASARISIZ bozuk_utf8_2"); h = h + 1; }
+    eğer değil test_bozuk_utf8_3() { yazdir_metin("BASARISIZ bozuk_utf8_3"); h = h + 1; }
+    eğer değil test_bozuk_utf8_4() { yazdir_metin("BASARISIZ bozuk_utf8_4"); h = h + 1; }
+    eğer değil test_bozuk_utf8_5() { yazdir_metin("BASARISIZ bozuk_utf8_5"); h = h + 1; }
+    eğer değil test_bozuk_utf8_6() { yazdir_metin("BASARISIZ bozuk_utf8_6"); h = h + 1; }
+    eğer değil test_bozuk_utf8_7() { yazdir_metin("BASARISIZ bozuk_utf8_7"); h = h + 1; }
+    eğer değil test_bozuk_utf8_8() { yazdir_metin("BASARISIZ bozuk_utf8_8"); h = h + 1; }
+    eğer değil test_bozuk_utf8_9() { yazdir_metin("BASARISIZ bozuk_utf8_9"); h = h + 1; }
+    eğer değil test_bozuk_utf8_10() { yazdir_metin("BASARISIZ bozuk_utf8_10"); h = h + 1; }
+    eğer değil test_bozuk_utf16_0() { yazdir_metin("BASARISIZ bozuk_utf16_0"); h = h + 1; }
+    eğer değil test_bozuk_utf16_1() { yazdir_metin("BASARISIZ bozuk_utf16_1"); h = h + 1; }
+    eğer değil test_bozuk_utf16_2() { yazdir_metin("BASARISIZ bozuk_utf16_2"); h = h + 1; }
+    eğer değil test_bozuk_utf16_3() { yazdir_metin("BASARISIZ bozuk_utf16_3"); h = h + 1; }
+    eğer değil test_bozuk_utf16_4() { yazdir_metin("BASARISIZ bozuk_utf16_4"); h = h + 1; }
+    eğer değil test_bozuk_utf16_5() { yazdir_metin("BASARISIZ bozuk_utf16_5"); h = h + 1; }
+    eğer değil test_sinir_ofset() { yazdir_metin("BASARISIZ sinir_ofset"); h = h + 1; }
+    eğer değil test_gecersiz_skaler() { yazdir_metin("BASARISIZ gecersiz_skaler"); h = h + 1; }
+    ver h;
+}

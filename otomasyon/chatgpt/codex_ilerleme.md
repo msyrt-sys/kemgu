@@ -10,3 +10,5 @@ VARSAYIM: BPB sıfır FAT/ayrılmış sektör, veri alanı olmayan toplam ve ver
 - [x] A4 · 34 test · sabotaj: `oku_le32(fat, (kume * 4) olarak tam32) & 268435455` → `oku_le32(fat, (kume * 4) olarak tam32)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:04:45.188599+00:00
 A5 sabotaj ilk turu yeşil kaldı: yalnız LFN parçaları arası sağlama farkı test ediliyordu. İki parçada aynı yanlış sağlama bulunan kalıcı olumsuz test eklendi; kısa ad sağlama kontrolü ayrıca korunuyor.
 - [x] A5 · 22 test · sabotaj: `kisa_ad_saglama(b, ofs) == saglama` → `doğru` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:06:45.975437+00:00
+- [x] A6 · 20 test · sabotaj: `bayt_toplam8(b, ofs, n olarak tam32) != 0` → `yanlış` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:08:22.077701+00:00
+VARSAYIM: UTF-16 çözümünde geçersiz ofset/negatif birim boş dizi; kalan tek bayt U+FFFD; ilk NUL birim sonlandırıcıdır. Kodlayıcılar skaler olmayan kodları U+FFFD yapar. UTF-8 testleri karttaki metin API ile geçerli metinlerin bayt parçalarından bozuk diziler kurar.
