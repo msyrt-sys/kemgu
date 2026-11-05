@@ -48,3 +48,5 @@ VARSAYIM D4: sekme sonraki 8 sütun durağına boşluk yazar; geri sil önceki s
 VARSAYIM D5: CSI en çok 16 parametre ve 4096 sayısal değer tutar; bilinmeyen CSI/OSC/DCS yutulur. vt_bitir eksik UTF-8 baytlarını U+FFFD ile sonlandırır. Palet VGA 16 renktir.
 - [x] D5 · 10 test · sabotaj: `dizi_boyut(d.utf8) == d.beklenen` → `dizi_boyut(d.utf8) >= 1` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:06:26.163048+00:00
 VARSAYIM D6: boş Enter boş metin döndürür, geçmişe eklenmez; geçmişten aşağı gezinince taslak geri gelir. Kontrol kodları ve geçersiz Unicode yok sayılır. C010 için sentetik olay sarmalayıcıları aynı satir_olay yolunu çağırır.
+- [x] D6 · 11 test · sabotaj: `dizi_boyut(d.kodlar) < 256` → `dizi_boyut(d.kodlar) < 257` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:09:48.049409+00:00
+VARSAYIM D7: başlangıç (0,0), hız tam sayı 0..1024; düğmeler sol=1, sağ=2, orta=3 sırasıyla raporlanır. Tekerlek tam32 sınırlarında doyurulur. C011 alt-sınır ataması açık dönüşümle dolanıldı.

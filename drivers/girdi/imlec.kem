@@ -1,0 +1,35 @@
+// PS/2 hareketini ekran koordinatlarına ve düğme kenarlarına çevirir.
+kullan drivers::ps2::fare::{ FareOlayi };
+genel çeşit DugmeOlayi { Basildi(tam32), Birakildi(tam32) }
+genel yapı Imlec {
+    x: tam32; y: tam32; genislik: tam32; yukseklik: tam32; hiz: tam32;
+    dugmeler: tam32; tekerlek: tam32;
+}
+genel işlev imlec_yeni(genislik: tam32, yukseklik: tam32, hiz: tam32) -> sonuç<Imlec, metin> {
+    eğer genislik <= 0 veya yukseklik <= 0 veya hiz < 0 veya hiz > 1024 { ver hata("boyut veya hiz"); }
+    ver tamam(Imlec { x: 0, y: 0, genislik: genislik, yukseklik: yukseklik, hiz: hiz, dugmeler: 0, tekerlek: 0 });
+}
+işlev kirp(v: tam64, ust: tam32) -> tam32 {
+    eğer v < 0 { ver 0; } eğer v >= (ust olarak tam64) { ver ust - 1; } ver v olarak tam32;
+}
+genel işlev imlec_olay(d: &değişken Imlec, o: FareOlayi) -> Dizi<DugmeOlayi> {
+    değişken olaylar: Dizi<DugmeOlayi> = [];
+    eğer d.genislik <= 0 veya d.yukseklik <= 0 veya d.hiz < 0 veya d.hiz > 1024 { ver olaylar; }
+    d.x = kirp((d.x olarak tam64) + (o.dx olarak tam64) * (d.hiz olarak tam64), d.genislik);
+    d.y = kirp((d.y olarak tam64) - (o.dy olarak tam64) * (d.hiz olarak tam64), d.yukseklik);
+    değişken t: tam64 = (d.tekerlek olarak tam64) + (o.dz olarak tam64);
+    eğer t > 2147483647 { t = 2147483647; } eğer t < -2147483648 { t = -2147483648; }
+    d.tekerlek = t olarak tam32;
+    değişken yeni: tam32 = 0;
+    eğer o.sol { yeni = yeni | 1; } eğer o.sag { yeni = yeni | 2; } eğer o.orta { yeni = yeni | 4; }
+    değişken i: tam32 = 0;
+    iken i < 3 {
+        değişken maske: tam32 = 1 << i;
+        eğer (yeni & maske) != (d.dugmeler & maske) {
+            eğer (yeni & maske) != 0 { dizi_ekle(olaylar, DugmeOlayi::Basildi(i + 1)); }
+            değilse { dizi_ekle(olaylar, DugmeOlayi::Birakildi(i + 1)); }
+        }
+        i = i + 1;
+    }
+    d.dugmeler = yeni; ver olaylar;
+}

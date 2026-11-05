@@ -248,3 +248,14 @@ işlev main() -> tam32 {
 ```
 `build/kemgu --check tests/drivers/probe/enum_aktar.kem`: OK; C LLVM/link/koşum exit=0. `build/codegen --check ...`: `T016 3 38`.
 Dolanma: satir modülünde kurucuyu çağıran satir_karakter/satir_tus sarmalayıcıları; olay yine aynı satir_olay yolundan geçer. Düzeltilmiş probe ve bütün satır testleri iki derleyicide doğrulanır. C tarafında TusOlayi içe aktarımı satir modülünden önce olmalıdır (ters sırada T011/T001).
+
+## C011 — tam32 alt sınırının yapı alanına atanması
+```kemgu
+yapı Sayac { n: tam32; }
+işlev main() -> tam32 {
+    değişken d: Sayac = Sayac { n: 0 };
+    d.n = -2147483648;
+    eğer d.n == -2147483648 { ver 0; } ver 1;
+}
+```
+`bash otomasyon/chatgpt/dogrula.sh tests/drivers/probe/tam32_alt.kem`: C check/LLVM/link/koşum geçti; self check geçti, LLVM link `i64 ... expected i32` hatası. Dolanma: atamada açık `olarak tam32`; düzeltilmiş probe iki derleyicide yeşil.
