@@ -1,0 +1,29 @@
+// Bağımsız mkfs.fat fikstürü; araç ve sabit komutları tools/codex/b8.py içinde.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit, imaj_bpb };
+kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan tests::drivers::fs::veri::linux_fat32::{ imaj };
+kullan drivers::ortak::bayt::{ oku_u8 };
+
+işlev test_bpb() -> mantıksal {
+    eşleş imaj_bpb(imaj()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken b: Fat32Bpb = v; ver b.sektor_bayt == 512 ve b.kume_sektor == 1 ve b.fat_sektor == 539 ve b.ilk_veri_sektoru == 1110;
+    } }
+}
+
+işlev test_liste() -> mantıksal {
+    eşleş imaj_dizin_listele(imaj(), "/") { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_eksik() -> mantıksal {
+    eşleş imajdan_dosya_oku(imaj(), "/YOK.TXT") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bulunamadi"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_bpb() { yazdir_metin("BASARISIZ bpb"); h = h + 1; }
+    eğer değil test_liste() { yazdir_metin("BASARISIZ liste"); h = h + 1; }
+    eğer değil test_eksik() { yazdir_metin("BASARISIZ eksik"); h = h + 1; }
+    ver h;
+}

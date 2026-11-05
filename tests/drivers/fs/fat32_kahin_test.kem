@@ -1,0 +1,53 @@
+// Sabitler: python3 tools/codex/b8.py; UTF-8 encode ve 70000*512 disk boyu.
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur };
+kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev ondalik(n: tam32) -> metin {
+    eğer n == 0 { ver "0"; }
+    değişken v: tam32 = n; değişken s: metin = "";
+    iken v > 0 { s = metin_birlestir(kod_metin(48+v%10), s); v = v/10; } ver s;
+}
+işlev hex_bayt(b: tam32) -> metin {
+    değişken h: metin = "0123456789abcdef";
+    ver metin_birlestir(metin_kes(h, b/16, 1), metin_kes(h, b%16, 1));
+}
+işlev seyrek_dok(b: Dizi<dtam8>) {
+    değişken s: tam32 = 0;
+    iken s*512 < dizi_boyut(b) {
+        değişken dolu: mantıksal = yanlış; değişken j: tam32 = 0;
+        iken j < 512 { eğer s*512+j < dizi_boyut(b) { eğer oku_u8(b, s*512+j) != 0 { dolu = doğru; } } j = j+1; }
+        eğer dolu {
+            değişken satir: metin = metin_birlestir(ondalik(s), " "); j = 0;
+            iken j < 512 {
+                değişken v: tam32 = 0; eğer s*512+j < dizi_boyut(b) { v = oku_u8(b, s*512+j); }
+                satir = metin_birlestir(satir, hex_bayt(v)); j = j+1;
+            }
+            yazdir_metin(satir);
+        }
+        s = s+1;
+    }
+}
+işlev test_dok(b: Dizi<dtam8>) -> mantıksal {
+    eşleş imajda_dizin_olustur(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    değişken s: metin = "Merhaba Dünya — ğüşıöç";
+    değişken veri: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < (metin_uzunluk(s) olarak tam32) { dizi_ekle(veri, ((metin_bayt(s, i) olarak tam32) & 255) olarak dtam8); i = i+1; }
+    eşleş imaja_dosya_yaz(b, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş imajdan_dosya_oku(b, "/YOK") { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş imajdan_dosya_oku(b, "/belgeler/merhaba.txt") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken okunan: Dizi<dtam8> = v;
+        eğer dizi_boyut(okunan) != dizi_boyut(veri) { ver yanlış; }
+        i = 0; iken i < dizi_boyut(veri) { eğer oku_u8(okunan, i) != oku_u8(veri, i) { ver yanlış; } i = i+1; }
+    } }
+    ver doğru;
+}
+işlev main() -> tam32 {
+    eşleş fat32_bicimle::fat32_bicimle(70000, 1, "KEMGU") {
+        hata(e) => { ver 1; }
+        tamam(v) => { değişken b: Dizi<dtam8> = v; eğer değil test_dok(b) { ver 1; } seyrek_dok(b); ver 0; }
+    }
+}
