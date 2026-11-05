@@ -94,3 +94,6 @@ Komut: `build/<kemgu|codegen> --llvm tests/drivers/probe/yapi_arguman.kem > buil
 kemgu: exit=0; ['%27 = call i64 @fat32_bpb.kume_sektoru(ptr %2, %Fat32Bpb %25, i64 %26)']
 codegen: exit=1; ['%17 = call i64 @fat32_bpb.kume_sektoru(ptr %1, %Fat32Bpb %16, i32 2)']
 İlk yerel yapı probe'unda fark oluşmadı; yukarıdaki içe aktarılan API örneğinde self i32, C i64 argüman üretir. A4 tam64 karşılaştırması self tarafında başarısızdı (alt 32 bit doğruydu). Dolanma: `2 olarak tam64`; beklentiler değişmedi.
+
+## S001 — FAT32 boş kök ve birim etiketi
+Görev B5 etiket parametresi ile boş kök ister. Microsoft FAT Specification (2005), §3.3 BS_VolLab ve §6 ATTR_VOLUME_ID uyarınca BPB etiketi kökteki 11 baytlık birim etiketiyle aynı olmalıdır. Kaynak: https://www.scs.stanford.edu/~zyedidia/docs/_other/fat.pdf (s.12,26). Bu nedenle etiket verildiğinde kökte tek metadata girdisi bulunur; dizin_coz etiketi atlar ve kullanıcı dosyaları bakımından kök boştur. Etiketsiz durumda kökün ilk baytı sıfırdır. B5, §3.5 gereği 65525 altı küme sayısını reddeder; A4 ham BPB ayrıştırıcısı mevcut kabul testlerini korur.
