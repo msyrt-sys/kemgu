@@ -12,3 +12,4 @@ A5 sabotaj ilk turu yeşil kaldı: yalnız LFN parçaları arası sağlama fark�
 - [x] A5 · 22 test · sabotaj: `kisa_ad_saglama(b, ofs) == saglama` → `doğru` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:06:45.975437+00:00
 - [x] A6 · 20 test · sabotaj: `bayt_toplam8(b, ofs, n olarak tam32) != 0` → `yanlış` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:08:22.077701+00:00
 VARSAYIM: UTF-16 çözümünde geçersiz ofset/negatif birim boş dizi; kalan tek bayt U+FFFD; ilk NUL birim sonlandırıcıdır. Kodlayıcılar skaler olmayan kodları U+FFFD yapar. UTF-8 testleri karttaki metin API ile geçerli metinlerin bayt parçalarından bozuk diziler kurar.
+- [x] B1 · 23 test · sabotaj: `kod >= enaz ve skaler_mi(kod)` → `skaler_mi(kod)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:09:58.536859+00:00

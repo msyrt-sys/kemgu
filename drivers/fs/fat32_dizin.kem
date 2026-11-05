@@ -1,5 +1,6 @@
 // FAT32 kısa ad ve sıralı LFN birleştirme; hatalı LFN kısa ada düşer.
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_le16 };
+kullan drivers::ortak::utf8::{ utf16le_coz, utf8_kodla };
 genel yapı DizinGirdisi { ad: metin; ozellik: tam32; ilk_kume: tam64; boyut: tam64; dizin_mi: mantıksal; }
 genel işlev kisa_ad_saglama(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
     eğer ofs < 0 veya ofs > dizi_boyut(b) { ver 0; }
@@ -27,15 +28,13 @@ işlev lfn_ofset(i: tam32) -> tam32 {
     ver 28 + (i - 11) * 2;
 }
 işlev lfn_metin(b: Dizi<dtam8>, birim: tam32) -> metin {
-    değişken ad: metin = "";
-    değişken i: tam32 = 0;
-    iken i < birim {
-        değişken k: tam32 = oku_le16(b, i * 2);
-        eğer k == 0 veya k == 65535 { ver ad; }
-        eğer k >= 55296 ve k <= 57343 { k = 63; }
-        ad = metin_birlestir(ad, kod_metin(k)); i = i + 1;
+    değişken n: tam32 = 0;
+    iken n < birim {
+        değişken kod: tam32 = oku_le16(b, n * 2);
+        eğer kod == 0 veya kod == 65535 { ver utf8_kodla(utf16le_coz(b, 0, n)); }
+        n = n + 1;
     }
-    ver ad;
+    ver utf8_kodla(utf16le_coz(b, 0, n));
 }
 genel işlev dizin_coz(b: Dizi<dtam8>) -> sonuç<Dizi<DizinGirdisi>, metin> {
     eğer dizi_boyut(b) % 32 != 0 { ver hata("kisa dizin"); }

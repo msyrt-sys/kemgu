@@ -2,6 +2,7 @@
 kullan drivers::ortak::bayt::{ bayt_sinirda, oku_u8, oku_le16, oku_le32, oku_le64, imza_esit, yaz_le32 };
 // Bulgu C001: aynı adlı modül/işlev için probe ile doğrulanmış nitelikli çağrı.
 kullan drivers::disk::crc32;
+kullan drivers::ortak::utf8::{ utf16le_coz, utf8_kodla };
 genel yapı Bolum { tur: tam32; baslangic_lba: tam64; sektor_sayisi: tam64; ad: metin; }
 genel çeşit BolumHatasi { KisaGirdi, ImzaYok, KorumaciMBRDegil, GptImzaYok, GptBaslikCrc, GptGirdiCrc, GptBoyut }
 genel işlev mbr_coz(lba0: Dizi<dtam8>) -> sonuç<Dizi<Bolum>, BolumHatasi> {
@@ -62,18 +63,7 @@ genel işlev gpt_coz(disk: Dizi<dtam8>, sektor: tam32) -> sonuç<Dizi<Bolum>, Bo
             değişken ilk: tam64 = oku_le64(disk, ofs + 32);
             değişken son: tam64 = oku_le64(disk, ofs + 40);
             eğer ilk < 0 veya son < ilk veya son == 9223372036854775807 { ver hata(BolumHatasi::GptBoyut); }
-            değişken ad: metin = "";
-            i = 0;
-            değişken bitti: mantıksal = yanlış;
-            iken i < 36 ve değil bitti {
-                değişken kod: tam32 = oku_le16(disk, ofs + 56 + i * 2);
-                eğer kod == 0 { bitti = doğru; }
-                değilse {
-                    eğer kod >= 55296 ve kod <= 57343 { kod = 63; }
-                    ad = metin_birlestir(ad, kod_metin(kod));
-                }
-                i = i + 1;
-            }
+            değişken ad: metin = utf8_kodla(utf16le_coz(disk, ofs + 56, 36));
             dizi_ekle(sonuc, Bolum { tur: 238, baslangic_lba: ilk, sektor_sayisi: son - ilk + 1, ad: ad });
         }
         j = j + 1;
