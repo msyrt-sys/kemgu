@@ -1,6 +1,7 @@
-yapı Veri { a: tam64; b: tam64; c: tam64; d: tam64; e: tam64; f: tam64; }
-işlev hesap(v: Veri, n: tam64) -> tam64 { ver n * 8 + v.a; }
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, kume_sektoru };
 işlev main() -> tam32 {
-    değişken v: Veri = Veri { a: 2080, b: 1, c: 2, d: 3, e: 4, f: 5 };
-    eğer hesap(v, 2 olarak tam64) == 2096 { ver 0; } ver 1;
+    değişken b: Fat32Bpb = Fat32Bpb { sektor_bayt: 512, kume_sektor: 8,
+        ayrilmis: 32, fat_sayisi: 2, toplam_sektor: 1048576, fat_sektor: 1024,
+        kok_kume: 2, fsinfo: 1, ilk_veri_sektoru: 2080, kume_sayisi: 130812 };
+    eğer kume_sektoru(b, 2 olarak tam64) == 2080 { ver 0; } ver 1;
 }

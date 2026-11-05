@@ -7,3 +7,5 @@ VARSAYIM: Bayt API'lerinde 0..255 dışı girişler yok sayılır ve yarım pake
 VARSAYIM: CRC32 API sonuç tipi hata taşımadığından geçersiz ofset/uzunluk için 0 döner. GPT görüntüsü fiziksel diskin yalnız ön bölümü olabilir; bölüm LBA sınırları görüntü boyuyla kıyaslanmaz. C001 için nitelikli çağrı probe ile doğrulandı.
 - [x] A3 · 21 test · sabotaj: `crc32::crc32(disk, bas olarak tam32, toplam olarak tam32) != oku_le32(disk, sektor + 88)` → `yanlış` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:02:19.882068+00:00
 VARSAYIM: BPB sıfır FAT/ayrılmış sektör, veri alanı olmayan toplam ve veri aralığı dışı kök küme için Fat32Degil döndürür. Küme sayısı FAT32 alt eşiği A4 test fikstürleri ve B5 bellek tasarrufu için ayrıca zorlanmaz.
+- [x] A4 · 34 test · sabotaj: `oku_le32(fat, (kume * 4) olarak tam32) & 268435455` → `oku_le32(fat, (kume * 4) olarak tam32)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:04:45.188599+00:00
+A5 sabotaj ilk turu yeşil kaldı: yalnız LFN parçaları arası sağlama farkı test ediliyordu. İki parçada aynı yanlış sağlama bulunan kalıcı olumsuz test eklendi; kısa ad sağlama kontrolü ayrıca korunuyor.

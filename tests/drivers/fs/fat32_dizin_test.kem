@@ -1,0 +1,219 @@
+// Sabit/fikstür: python3 tools/codex/a5.py (UTF-16LE, struct, bağımsız LFN sağlama).
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, kisa_ad_saglama, dizin_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_ascii };
+işlev kisa_veri() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(32);
+    yaz_u8(b, 0, 70);
+    yaz_u8(b, 1, 79);
+    yaz_u8(b, 2, 79);
+    yaz_u8(b, 3, 32);
+    yaz_u8(b, 4, 32);
+    yaz_u8(b, 5, 32);
+    yaz_u8(b, 6, 32);
+    yaz_u8(b, 7, 32);
+    yaz_u8(b, 8, 84);
+    yaz_u8(b, 9, 88);
+    yaz_u8(b, 10, 84);
+    yaz_u8(b, 11, 32);
+    yaz_u8(b, 20, 1);
+    yaz_u8(b, 26, 2);
+    yaz_u8(b, 28, 210);
+    yaz_u8(b, 29, 4);
+    ver b;
+}
+işlev uzun_veri() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(96);
+    yaz_u8(b, 0, 66);
+    yaz_u8(b, 1, 116);
+    yaz_u8(b, 3, 120);
+    yaz_u8(b, 5, 116);
+    yaz_u8(b, 9, 255);
+    yaz_u8(b, 10, 255);
+    yaz_u8(b, 11, 15);
+    yaz_u8(b, 13, 206);
+    yaz_u8(b, 14, 255);
+    yaz_u8(b, 15, 255);
+    yaz_u8(b, 16, 255);
+    yaz_u8(b, 17, 255);
+    yaz_u8(b, 18, 255);
+    yaz_u8(b, 19, 255);
+    yaz_u8(b, 20, 255);
+    yaz_u8(b, 21, 255);
+    yaz_u8(b, 22, 255);
+    yaz_u8(b, 23, 255);
+    yaz_u8(b, 24, 255);
+    yaz_u8(b, 25, 255);
+    yaz_u8(b, 28, 255);
+    yaz_u8(b, 29, 255);
+    yaz_u8(b, 30, 255);
+    yaz_u8(b, 31, 255);
+    yaz_u8(b, 32, 1);
+    yaz_u8(b, 33, 85);
+    yaz_u8(b, 35, 122);
+    yaz_u8(b, 37, 117);
+    yaz_u8(b, 39, 110);
+    yaz_u8(b, 41, 32);
+    yaz_u8(b, 43, 15);
+    yaz_u8(b, 45, 206);
+    yaz_u8(b, 46, 68);
+    yaz_u8(b, 48, 246);
+    yaz_u8(b, 50, 107);
+    yaz_u8(b, 52, 252);
+    yaz_u8(b, 54, 109);
+    yaz_u8(b, 56, 97);
+    yaz_u8(b, 60, 110);
+    yaz_u8(b, 62, 46);
+    yaz_u8(b, 64, 85);
+    yaz_u8(b, 65, 90);
+    yaz_u8(b, 66, 85);
+    yaz_u8(b, 67, 78);
+    yaz_u8(b, 68, 68);
+    yaz_u8(b, 69, 79);
+    yaz_u8(b, 70, 126);
+    yaz_u8(b, 71, 49);
+    yaz_u8(b, 72, 84);
+    yaz_u8(b, 73, 88);
+    yaz_u8(b, 74, 84);
+    yaz_u8(b, 75, 32);
+    yaz_u8(b, 84, 1);
+    yaz_u8(b, 90, 2);
+    yaz_u8(b, 92, 210);
+    yaz_u8(b, 93, 4);
+    ver b;
+}
+işlev ad_esit(b: Dizi<dtam8>, ad: metin) -> mantıksal {
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        // C003: sonuç içindeki yapı dizisini açık tiple bağla.
+        değişken xs: Dizi<DizinGirdisi> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken g: DizinGirdisi = dizi_al(xs, 0);
+        ver metin_esit(g.ad, ad);
+    } }
+}
+
+işlev test_saglama() -> mantıksal {
+    ver kisa_ad_saglama(kisa_veri(), 0) == 101 ve kisa_ad_saglama(uzun_veri(), 64) == 206 ve kisa_ad_saglama(bayt_sifir(10), 0) == 0;
+}
+
+işlev test_kisa() -> mantıksal {
+    eşleş dizin_coz(kisa_veri()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<DizinGirdisi> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken g: DizinGirdisi = dizi_al(xs, 0);
+        ver metin_esit(g.ad, "FOO.TXT") ve g.ilk_kume == 65538 ve g.boyut == 1234 ve değil g.dizin_mi ve g.ozellik == 32;
+    } }
+}
+
+işlev test_uzanti_yok() -> mantıksal {
+    değişken b: Dizi<dtam8> = kisa_veri(); yaz_ascii(b, 0, "README     "); ver ad_esit(b, "README");
+}
+
+işlev test_uzun() -> mantıksal {
+    ver ad_esit(uzun_veri(), "Uzun Döküman.txt");
+}
+
+işlev test_dizin() -> mantıksal {
+    değişken b: Dizi<dtam8> = kisa_veri(); yaz_u8(b, 11, 16);
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<DizinGirdisi> = v; değişken g: DizinGirdisi = dizi_al(xs, 0); ver g.dizin_mi;
+    } }
+}
+
+işlev test_kisa_girdi() -> mantıksal {
+    eşleş dizin_coz(bayt_sifir(31)) { hata(e) => { ver metin_esit(e, "kisa dizin"); } tamam(v) => { ver yanlış; } }
+}
+
+işlev test_bos() -> mantıksal {
+    eşleş dizin_coz(bayt_sifir(0)) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_saglama_bozuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 13, 0); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_ara_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 45, 0); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_sira_tekrar() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 32, 2); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_ilk_sira_yok() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 0, 2); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_sira_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 0, 64); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_sira_buyuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 0, 85); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_lfn_tur() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 12, 1); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_lfn_kume() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 26, 1); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_silinen() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 32, 229); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_etiket_arada() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 43, 8); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev test_silinmis() -> mantıksal {
+    değişken b: Dizi<dtam8> = kisa_veri(); yaz_u8(b, 0, 229);
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_etiket() -> mantıksal {
+    değişken b: Dizi<dtam8> = kisa_veri(); yaz_u8(b, 11, 8);
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_son() -> mantıksal {
+    değişken b: Dizi<dtam8> = kisa_veri(); yaz_u8(b, 0, 0);
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_son_sonrasi() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(64); yaz_ascii(b, 32, "FOO     TXT");
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_kisa_ile_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = uzun_veri(); yaz_u8(b, 13, 0); yaz_u8(b, 45, 0); ver ad_esit(b, "UZUNDO~1.TXT");
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_saglama() { yazdir_metin("BASARISIZ saglama"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_uzanti_yok() { yazdir_metin("BASARISIZ uzanti_yok"); h = h + 1; }
+    eğer değil test_uzun() { yazdir_metin("BASARISIZ uzun"); h = h + 1; }
+    eğer değil test_dizin() { yazdir_metin("BASARISIZ dizin"); h = h + 1; }
+    eğer değil test_kisa_girdi() { yazdir_metin("BASARISIZ kisa_girdi"); h = h + 1; }
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_saglama_bozuk() { yazdir_metin("BASARISIZ saglama_bozuk"); h = h + 1; }
+    eğer değil test_ara_saglama() { yazdir_metin("BASARISIZ ara_saglama"); h = h + 1; }
+    eğer değil test_sira_tekrar() { yazdir_metin("BASARISIZ sira_tekrar"); h = h + 1; }
+    eğer değil test_ilk_sira_yok() { yazdir_metin("BASARISIZ ilk_sira_yok"); h = h + 1; }
+    eğer değil test_sira_sifir() { yazdir_metin("BASARISIZ sira_sifir"); h = h + 1; }
+    eğer değil test_sira_buyuk() { yazdir_metin("BASARISIZ sira_buyuk"); h = h + 1; }
+    eğer değil test_lfn_tur() { yazdir_metin("BASARISIZ lfn_tur"); h = h + 1; }
+    eğer değil test_lfn_kume() { yazdir_metin("BASARISIZ lfn_kume"); h = h + 1; }
+    eğer değil test_silinen() { yazdir_metin("BASARISIZ silinen"); h = h + 1; }
+    eğer değil test_etiket_arada() { yazdir_metin("BASARISIZ etiket_arada"); h = h + 1; }
+    eğer değil test_silinmis() { yazdir_metin("BASARISIZ silinmis"); h = h + 1; }
+    eğer değil test_etiket() { yazdir_metin("BASARISIZ etiket"); h = h + 1; }
+    eğer değil test_son() { yazdir_metin("BASARISIZ son"); h = h + 1; }
+    eğer değil test_son_sonrasi() { yazdir_metin("BASARISIZ son_sonrasi"); h = h + 1; }
+    eğer değil test_kisa_ile_saglama() { yazdir_metin("BASARISIZ kisa_ile_saglama"); h = h + 1; }
+    ver h;
+}

@@ -79,17 +79,18 @@ kemgu: stdout: 203; exit=0
 codegen: stdout: -53; exit=1
 Dolanma: `dizi_ekle(b, oku_u8(a, 0) olarak dtam8);`. Ayrı probe ve A3 testi iki derleyicide doğrulanır; derleyici değiştirilmedi.
 
-## C005 — yapıdan sonraki tam64 sabit argüman genişliği
+## C005 — içe aktarılmış yapıdan sonraki tam64 sabit argüman genişliği
 
 ```kemgu
-yapı Veri { a: tam64; b: tam64; c: tam64; d: tam64; e: tam64; f: tam64; }
-işlev hesap(v: Veri, n: tam64) -> tam64 { ver n * 8 + v.a; }
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, kume_sektoru };
 işlev main() -> tam32 {
-    değişken v: Veri = Veri { a: 2080, b: 1, c: 2, d: 3, e: 4, f: 5 };
-    eğer hesap(v, 2) == 2096 { ver 0; } ver 1;
+    değişken b: Fat32Bpb = Fat32Bpb { sektor_bayt: 512, kume_sektor: 8,
+        ayrilmis: 32, fat_sayisi: 2, toplam_sektor: 1048576, fat_sektor: 1024,
+        kok_kume: 2, fsinfo: 1, ilk_veri_sektoru: 2080, kume_sayisi: 130812 };
+    eğer kume_sektoru(b, 2) == 2080 { ver 0; } ver 1;
 }
 ```
 Komut: `build/<kemgu|codegen> --llvm tests/drivers/probe/yapi_arguman.kem > build/codex_arg.ll && clang -Wno-override-module -x ir build/codex_arg.ll -x none build/kdl_runtime.o -o build/codex_arg && build/codex_arg`.
-kemgu: exit=0, IR: ['%19 = call i64 @hesap(ptr %2, %Veri %17, i64 %18)']
-codegen: exit=0, IR: ['%14 = call i64 @hesap(ptr %1, %Veri %12, i64 %13)']
-A4 üzerinde aynı hata tam64 sonuç karşılaştırmasını bozdu (alt 32 bit doğruydu). Dolanma: sabit argümanı `2 olarak tam64` yazmak; test beklentisi aynı kaldı.
+kemgu: exit=0; ['%27 = call i64 @fat32_bpb.kume_sektoru(ptr %2, %Fat32Bpb %25, i64 %26)']
+codegen: exit=1; ['%17 = call i64 @fat32_bpb.kume_sektoru(ptr %1, %Fat32Bpb %16, i32 2)']
+İlk yerel yapı probe'unda fark oluşmadı; yukarıdaki içe aktarılan API örneğinde self i32, C i64 argüman üretir. A4 tam64 karşılaştırması self tarafında başarısızdı (alt 32 bit doğruydu). Dolanma: `2 olarak tam64`; beklentiler değişmedi.
