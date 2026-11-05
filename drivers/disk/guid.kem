@@ -1,0 +1,55 @@
+// GPT GUID alanları: ilk 4/2/2 bayt LE; son 8 bayt ağ sırasındadır.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+işlev guid_sira() -> Dizi<tam32> {
+    değişken s: Dizi<tam32> = [3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15]; ver s;
+}
+işlev hex_deger(k: tam32) -> tam32 {
+    eğer k >= 48 ve k <= 57 { ver k - 48; }
+    eğer k >= 65 ve k <= 70 { ver k - 65 + 10; }
+    eğer k >= 97 ve k <= 102 { ver k - 97 + 10; }
+    ver -1;
+}
+genel işlev guid_bicimle(b: Dizi<dtam8>) -> sonuç<metin, metin> {
+    eğer dizi_boyut(b) != 16 { ver hata("guid boyu"); }
+    değişken sira: Dizi<tam32> = guid_sira();
+    değişken h: metin = "0123456789ABCDEF";
+    değişken s: metin = "";
+    değişken i: tam32 = 0;
+    iken i < 16 {
+        eğer i == 4 veya i == 6 veya i == 8 veya i == 10 { s = metin_birlestir(s, "-"); }
+        değişken v: tam32 = oku_u8(b, dizi_al(sira, i));
+        s = metin_birlestir(s, metin_birlestir(metin_kes(h, v / 16, 1), metin_kes(h, v % 16, 1)));
+        i = i + 1;
+    }
+    ver tamam(s);
+}
+genel işlev guid_coz(s: metin) -> sonuç<Dizi<dtam8>, metin> {
+    eğer metin_uzunluk(s) != 36 { ver hata("guid boyu"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(16);
+    değişken sira: Dizi<tam32> = guid_sira();
+    değişken i: tam32 = 0;
+    değişken p: tam32 = 0;
+    iken i < 16 {
+        eğer i == 4 veya i == 6 veya i == 8 veya i == 10 {
+            eğer metin_bayt(s, p) != (45 olarak tam8) { ver hata("guid bicimi"); } p = p + 1;
+        }
+        değişken hi: tam32 = hex_deger((metin_bayt(s, p) olarak tam32) & 255);
+        değişken lo: tam32 = hex_deger((metin_bayt(s, p + 1) olarak tam32) & 255);
+        eğer hi < 0 veya lo < 0 { ver hata("guid bicimi"); }
+        yaz_u8(b, dizi_al(sira, i), (hi * 16 + lo) olarak tam64);
+        p = p + 2; i = i + 1;
+    }
+    ver tamam(b);
+}
+genel işlev guid_tur_adi(b: Dizi<dtam8>) -> metin {
+    eşleş guid_bicimle(b) {
+        hata(e) => { ver "Bilinmeyen"; }
+        tamam(s) => {
+            eğer metin_esit(s, "C12A7328-F81F-11D2-BA4B-00A0C93EC93B") { ver "EFI System"; }
+            eğer metin_esit(s, "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7") { ver "Microsoft basic data"; }
+            eğer metin_esit(s, "0FC63DAF-8483-4772-8E79-3D69D8477DE4") { ver "Linux filesystem"; }
+            eğer metin_esit(s, "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F") { ver "Linux swap"; }
+        }
+    }
+    ver "Bilinmeyen";
+}
