@@ -14,3 +14,5 @@ A5 sabotaj ilk turu yeşil kaldı: yalnız LFN parçaları arası sağlama fark�
 VARSAYIM: UTF-16 çözümünde geçersiz ofset/negatif birim boş dizi; kalan tek bayt U+FFFD; ilk NUL birim sonlandırıcıdır. Kodlayıcılar skaler olmayan kodları U+FFFD yapar. UTF-8 testleri karttaki metin API ile geçerli metinlerin bayt parçalarından bozuk diziler kurar.
 - [x] B1 · 23 test · sabotaj: `kod >= enaz ve skaler_mi(kod)` → `skaler_mi(kod)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:09:58.536859+00:00
 - [x] B2 · 4 test · sabotaj: `ver utf8_kodla(utf16le_coz(b, 0, n));` → `ver "bozuk";` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:10:46.565487+00:00
+- [x] B3 · 16 test · sabotaj: `uzunluk > 255` → `uzunluk > 256` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:11:25.895371+00:00
+VARSAYIM B4: kisa_ad_uret(ad, mevcut) sonuç<metin,metin> döndürür; sonuç ve çakışma listesi FAT biçiminde boşluk dolgulu 11 ASCII bayttır. Zaten büyük harfli geçerli 8.3 ad dışında ~N üretilir. İç boşluk/nokta ve kontrol karakterleri de _ olur; yalnız . ve boşluklardan oluşan ad hatadır. Çakışma ASCII harf duyarsızdır; en çok ~999999 denenir.
