@@ -97,3 +97,141 @@ codegen: exit=1; ['%17 = call i64 @fat32_bpb.kume_sektoru(ptr %1, %Fat32Bpb %16,
 
 ## S001 — FAT32 boş kök ve birim etiketi
 Görev B5 etiket parametresi ile boş kök ister. Microsoft FAT Specification (2005), §3.3 BS_VolLab ve §6 ATTR_VOLUME_ID uyarınca BPB etiketi kökteki 11 baytlık birim etiketiyle aynı olmalıdır. Kaynak: https://www.scs.stanford.edu/~zyedidia/docs/_other/fat.pdf (s.12,26). Bu nedenle etiket verildiğinde kökte tek metadata girdisi bulunur; dizin_coz etiketi atlar ve kullanıcı dosyaları bakımından kök boştur. Etiketsiz durumda kökün ilk baytı sıfırdır. B5, §3.5 gereği 65525 altı küme sayısını reddeder; A4 ham BPB ayrıştırıcısı mevcut kabul testlerini korur.
+
+
+## C006 — İçe aktarılan yapı alanında boş dizi tipi
+
+```kemgu
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+işlev main() -> tam32 {
+    değişken r: DizinResmi = DizinResmi { baytlar: [], konumlar: [], zincir: [] };
+    ver dizi_boyut(r.baytlar);
+}
+```
+Komutlar: `build/<kemgu|codegen> --check tests/drivers/probe/bos_alan.kem` ve `build/<kemgu|codegen> --llvm tests/drivers/probe/bos_alan.kem > build/codex_bulgu.ll`, ardından `clang -Wno-override-module -x ir build/codex_bulgu.ll -x none build/kdl_runtime.o -o build/codex_bulgu`.
+kemgu: OK: tests/drivers/probe/bos_alan.kem — tip kontrolu basarili.
+
+link: 0 
+codegen: T014	5	54
+T014	5	68
+T014	5	80
+
+link: 1 /usr/bin/ld: /lib/aarch64-linux-gnu/Scrt1.o: in function `_start':
+(.text+0x1c): undefined reference to `main'
+/usr/bin/ld: (.text+0x20): undefined reference to `main'
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+Dolanma: boş diziyi önce açık tipli yerelde oluştur, yapı alanına bu yereli ata. Yerel tek alanlı yapı probe bu farkı üretmedi; içe aktarılan yapı gerekir.
+
+## C007 — Geçişli içe aktarmada görünmeyen yapı tipleri
+
+```kemgu
+kullan drivers::fs::fat32_imaj::{ imaj_bpb };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = [];
+    eşleş imaj_bpb(b) { tamam(v) => { ver 1; } hata(e) => { ver 0; } }
+}
+```
+Komutlar: `build/<kemgu|codegen> --check tests/drivers/probe/tasima_tipi.kem` ve `build/<kemgu|codegen> --llvm tests/drivers/probe/tasima_tipi.kem > build/codex_bulgu.ll`, ardından `clang -Wno-override-module -x ir build/codex_bulgu.ll -x none build/kdl_runtime.o -o build/codex_bulgu`.
+kemgu: HATA: tests/drivers/probe/tasima_tipi.kem — parser 0, yukleme 0, tip kontrol 10, realtime 0 (toplam 10 hata).
+hata[T011]: bilinmeyen tip
+   --> tests/drivers/probe/tasima_tipi.kem:19:52
+   |
+19 | 
+   |                                                    ^
+
+hata[T011]: bilinmeyen tip
+   --> tests/drivers/probe/tasima_tipi.kem:34:49
+   |
+34 | 
+   |                                                 ^
+
+hata[T011]: bilinmeyen tip
+   --> tests/drivers/probe/tasima_tipi.kem:39:49
+   |
+39 | 
+   |                                                 ^
+
+hata[T011]: bilinmeyen tip
+   --> tests/drivers/probe/tasima_tipi.kem:47:32
+   |
+47 | 
+   |                                ^
+
+hata[T011]: bilinmeyen tip
+   --> tests/drivers/probe/tasima_tipi.kem:48:28
+   |
+48 | 
+   |                            ^
+
+hata[T011]: bilinmeyen tip
+   --> tests/drivers/probe/tasima_tipi.kem:57:48
+   |
+57 | 
+   |                   
+link: 1 /usr/bin/ld: /lib/aarch64-linux-gnu/Scrt1.o: in function `_start':
+(.text+0x1c): undefined reference to `main'
+/usr/bin/ld: (.text+0x20): undefined reference to `main'
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+
+codegen: OK
+
+link: 0 
+Dolanma: dış çağıran, bağımlı yapı tiplerini açıkça içe aktarır.
+
+## C008 — Eşleş sonrası sonuç dönüşü
+
+```kemgu
+yapı N { x: tam32; }
+işlev f(r: sonuç<N, metin>) -> sonuç<N, metin> {
+    eşleş r { tamam(v) => { ver tamam(v); } hata(e) => { ver hata(e); } }
+}
+işlev main() -> tam32 {
+    değişken n: N = N { x: 1 };
+    değişken r: sonuç<N, metin> = tamam(n);
+    eşleş f(r) { tamam(v) => { ver 0; } hata(e) => { ver 1; } }
+}
+```
+Komutlar: `build/<kemgu|codegen> --check tests/drivers/probe/sonuc_donus.kem` ve `build/<kemgu|codegen> --llvm tests/drivers/probe/sonuc_donus.kem > build/codex_bulgu.ll`, ardından `clang -Wno-override-module -x ir build/codex_bulgu.ll -x none build/kdl_runtime.o -o build/codex_bulgu`.
+kemgu: OK: tests/drivers/probe/sonuc_donus.kem — tip kontrolu basarili.
+
+link: 1 build/codex_bulgu.ll:202:21: error: integer constant must have integer type
+  202 |   ret {i8, %N, ptr} 0
+      |                     ^
+1 error generated.
+
+codegen: OK
+
+link: 1 build/codex_bulgu.ll:183:21: error: integer constant must have integer type
+  183 |   ret {i8, %N, ptr} 0
+      |                     ^
+1 error generated.
+
+Dolanma: eşleşten sonra açık hata dönüşü; erişilemeyen default IR yerine geçerli dönüş.
+
+## C009 — Sürücü API adlarının host yerleşikleriyle çakışması
+
+```kemgu
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_yaz;
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = [];
+    eşleş fat32_yaz::dosya_sil(b, "/X") {
+        tamam(v) => { ver 1; } hata(e) => { ver 0; }
+    }
+}
+```
+Komutlar: `build/<kemgu|codegen> --check tests/drivers/probe/host_ad.kem` ve `build/<kemgu|codegen> --llvm tests/drivers/probe/host_ad.kem > build/codex_bulgu.ll`, ardından `clang -Wno-override-module -x ir build/codex_bulgu.ll -x none build/kdl_runtime.o -o build/codex_bulgu`.
+kemgu: OK: tests/drivers/probe/host_ad.kem — tip kontrolu basarili.
+
+  %8 = call {i8, i1, ptr} @fat32_yaz.dosya_sil(ptr %3, ptr %6, ptr %7)
+Host bağlamalı ikili çalıştırılmadı.
+codegen: OK
+
+  %7 = call i32 @kdl_dosya_sil(ptr %5, ptr %6)
+Host bağlamalı ikili çalıştırılmadı.
+Dolanma: orijinal API korunuyor; imaja_dosya_yaz, imajda_dizin_olustur, imajdan_dosya_sil ek adları kullanılıyor. Nitelikli çağrı tek başına codegen host yönlendirmesini önlemiyor.

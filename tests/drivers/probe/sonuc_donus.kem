@@ -1,0 +1,10 @@
+yapı N { x: tam32; }
+işlev f(r: sonuç<N, metin>) -> sonuç<N, metin> {
+    eşleş r { tamam(v) => { ver tamam(v); } hata(e) => { ver hata(e); } }
+    ver hata("ulasilmaz");
+}
+işlev main() -> tam32 {
+    değişken n: N = N { x: 1 };
+    değişken r: sonuç<N, metin> = tamam(n);
+    eşleş f(r) { tamam(v) => { ver 0; } hata(e) => { ver 1; } }
+}

@@ -1,0 +1,260 @@
+// Bellek içi FAT32 yazıcısı: bütün hata denetimleri değişikliklerden önce yapılır.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_ascii };
+kullan drivers::ortak::utf8::{ utf8_coz, utf16le_kodla };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ kisa_ad_saglama };
+kullan drivers::fs::fat32_kisa_ad::{ kisa_ad_uret, lfn_gerekli_mi };
+kullan drivers::fs::yol::{ yol_bol };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, dizin_resmi_bos, FatKayit, imaj_bpb, imaj_fat_oku, imaj_fat_yaz, imaj_kume_bayt,
+    imaj_konum, imaj_buyut, imaj_zincir, imaj_dizin, imaj_kayitlar, imaj_ad_esit, imaj_dizin_yolu, imaj_bul };
+işlev fsinfo_gecerli(imaj: Dizi<dtam8>, b: Fat32Bpb) -> mantıksal {
+    eğer b.fsinfo < 1 veya b.fsinfo >= b.ayrilmis { ver yanlış; }
+    değişken o: tam32 = b.fsinfo * b.sektor_bayt;
+    ver oku_le32(imaj, o) == 1096897106 ve oku_le32(imaj, o + 484) == 1631679090 ve oku_le32(imaj, o + 508) == 2857697280;
+}
+işlev fsinfo_yenile(imaj: Dizi<dtam8>, b: Fat32Bpb) {
+    değişken bos: tam64 = 0;
+    değişken sonraki: tam64 = 4294967295;
+    değişken k: tam64 = 2;
+    iken k < b.kume_sayisi + 2 {
+        eğer imaj_fat_oku(imaj, b, k) == 0 {
+            bos = bos + 1; eğer sonraki == 4294967295 { sonraki = k; }
+        }
+        k = k + 1;
+    }
+    değişken o: tam32 = b.fsinfo * b.sektor_bayt;
+    yaz_le32(imaj, o + 488, bos); yaz_le32(imaj, o + 492, sonraki);
+    değişken yedek: tam32 = oku_le16(imaj, 50);
+    eğer yedek > 0 ve yedek + b.fsinfo < b.ayrilmis {
+        o = (yedek + b.fsinfo) * b.sektor_bayt;
+        yaz_le32(imaj, o + 488, bos); yaz_le32(imaj, o + 492, sonraki);
+    }
+}
+işlev uzun_ad_gecerli(ad: metin) -> mantıksal {
+    değişken k: Dizi<tam32> = utf8_coz(ad);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(k) {
+        değişken v: tam32 = dizi_al(k, i);
+        eğer v < 32 veya v == 34 veya v == 42 veya v == 47 veya v == 58 veya v == 60 veya v == 62 veya v == 63 veya v == 92 veya v == 124 { ver yanlış; }
+        i = i + 1;
+    }
+    ver dizi_boyut(k) > 0;
+}
+işlev lfn_ofset(i: tam32) -> tam32 {
+    eğer i < 5 { ver 1 + i * 2; }
+    eğer i < 11 { ver 14 + (i - 5) * 2; }
+    ver 28 + (i - 11) * 2;
+}
+işlev kayit_verisi(ad: metin, kisa: metin, ilk: tam64, boy: tam64, dizin: mantıksal, lfn: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir((lfn + 1) * 32);
+    değişken o: tam32 = lfn * 32;
+    yaz_ascii(b, o, kisa);
+    eğer dizin { yaz_u8(b, o + 11, 16); } değilse { yaz_u8(b, o + 11, 32); }
+    yaz_le16(b, o + 20, ilk >> 16); yaz_le16(b, o + 26, ilk & 65535); yaz_le32(b, o + 28, boy);
+    // Deterministik FAT tarihi: 1980-01-01, saat 00:00.
+    yaz_le16(b, o + 16, 33); yaz_le16(b, o + 18, 33); yaz_le16(b, o + 24, 33);
+    değişken kodlar: Dizi<tam32> = utf8_coz(ad);
+    değişken u: Dizi<dtam8> = utf16le_kodla(kodlar);
+    değişken adet: tam32 = dizi_boyut(u) / 2;
+    değişken saglama: tam32 = kisa_ad_saglama(b, o);
+    değişken parca: tam32 = 0;
+    iken parca < lfn {
+        değişken sira: tam32 = lfn - parca;
+        değişken bayrak: tam32 = sira;
+        eğer parca == 0 { bayrak = bayrak | 64; }
+        yaz_u8(b, parca * 32, bayrak olarak tam64); yaz_u8(b, parca * 32 + 11, 15); yaz_u8(b, parca * 32 + 13, saglama olarak tam64);
+        değişken j: tam32 = 0;
+        iken j < 13 {
+            değişken n: tam32 = (sira - 1) * 13 + j;
+            değişken kod: tam32 = 65535;
+            eğer n < adet { kod = oku_le16(u, n * 2); }
+            eğer n == adet { kod = 0; }
+            yaz_le16(b, parca * 32 + lfn_ofset(j), kod olarak tam64); j = j + 1;
+        }
+        parca = parca + 1;
+    }
+    ver b;
+}
+işlev kayit_yaz(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin, veri: Dizi<dtam8>, dizin: mantıksal) -> sonuç<tam64, metin> {
+    eğer değil fsinfo_gecerli(imaj, b) { ver hata("fsinfo"); }
+    değişken parcalar: Dizi<metin> = [];
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(v) => { parcalar = v; } }
+    değişken adet: tam32 = dizi_boyut(parcalar);
+    eğer adet == 0 { ver hata("kok"); }
+    değişken ad: metin = dizi_al(parcalar, adet - 1);
+    eğer değil uzun_ad_gecerli(ad) { ver hata("ad"); }
+    değişken birimler: Dizi<dtam8> = utf16le_kodla(utf8_coz(ad));
+    eğer dizi_boyut(birimler) > 510 { ver hata("uzun ad"); }
+    değişken ebeveyn: tam64 = 0;
+    eşleş imaj_dizin_yolu(imaj, b, parcalar, adet - 1) { hata(e) => { ver hata(e); } tamam(v) => { ebeveyn = v; } }
+    değişken r: DizinResmi = dizin_resmi_bos();
+    eşleş imaj_dizin(imaj, b, ebeveyn) { hata(e) => { ver hata(e); } tamam(v) => { r = v; } }
+    değişken kayitlar: Dizi<FatKayit> = [];
+    eşleş imaj_kayitlar(r) { hata(e) => { ver hata(e); } tamam(v) => { kayitlar = v; } }
+    değişken mevcut: Dizi<metin> = [];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(kayitlar) {
+        değişken k: FatKayit = dizi_al(kayitlar, i);
+        eğer imaj_ad_esit(k, ad) { ver hata("var"); }
+        dizi_ekle(mevcut, k.kisa); i = i + 1;
+    }
+    değişken kisa: metin = "";
+    eşleş kisa_ad_uret(ad, mevcut) { hata(e) => { ver hata(e); } tamam(v) => { kisa = v; } }
+    değişken lfn: tam32 = 0;
+    // Çakışma nedeniyle değişen büyük 8.3 adın da uzun adı korunur.
+    değişken tek: Dizi<metin> = [];
+    değişken dogrudan: metin = "";
+    eşleş kisa_ad_uret(ad, tek) { hata(e) => { ver hata(e); } tamam(v) => { dogrudan = v; } }
+    eğer lfn_gerekli_mi(ad) veya değil metin_esit(kisa, dogrudan) { lfn = (dizi_boyut(birimler) / 2 + 12) / 13; }
+    değişken gereken: tam32 = lfn + 1;
+    değişken ardisik: tam32 = 0;
+    değişken bas: tam32 = 0;
+    değişken bulundu: mantıksal = yanlış;
+    değişken son_goruldu: mantıksal = yanlış;
+    i = 0;
+    iken i < dizi_boyut(r.konumlar) ve değil bulundu {
+        değişken ilk: tam32 = oku_u8(r.baytlar, i * 32);
+        eğer ilk == 0 { son_goruldu = doğru; }
+        eğer son_goruldu veya ilk == 229 {
+            eğer ardisik == 0 { bas = i; } ardisik = ardisik + 1;
+            eğer ardisik == gereken { bulundu = doğru; }
+        } değilse { ardisik = 0; }
+        i = i + 1;
+    }
+    değişken kb: tam32 = imaj_kume_bayt(b);
+    değişken genislet: tam32 = 0;
+    eğer değil bulundu {
+        eğer ardisik == 0 { bas = dizi_boyut(r.konumlar); }
+        genislet = (gereken - ardisik + kb / 32 - 1) / (kb / 32);
+    }
+    değişken dosya_kume: tam32 = (dizi_boyut(veri) + kb - 1) / kb;
+    eğer dizin { dosya_kume = 1; }
+    değişken secilen: Dizi<tam64> = [];
+    değişken konumlar: Dizi<tam32> = [];
+    değişken k: tam64 = 2;
+    iken k < b.kume_sayisi + 2 ve dizi_boyut(secilen) < genislet + dosya_kume {
+        eğer imaj_fat_oku(imaj, b, k) == 0 {
+            değişken o: tam32 = 0;
+            eşleş imaj_konum(b, k) { hata(e) => { ver hata(e); } tamam(v) => { o = v; } }
+            dizi_ekle(secilen, k); dizi_ekle(konumlar, o);
+        }
+        k = k + 1;
+    }
+    eğer dizi_boyut(secilen) != genislet + dosya_kume { ver hata("disk dolu"); }
+    değişken ilk_kume: tam64 = 0;
+    eğer dosya_kume > 0 { ilk_kume = dizi_al(secilen, genislet); }
+    değişken boy: tam64 = dizi_boyut(veri) olarak tam64;
+    eğer dizin { boy = 0; }
+    değişken girdi: Dizi<dtam8> = kayit_verisi(ad, kisa, ilk_kume, boy, dizin, lfn);
+    // Buradan sonra bütün konumlar ve gerekli boş kümeler doğrulanmıştır.
+    i = 0;
+    iken i < dizi_boyut(secilen) {
+        değişken o: tam32 = dizi_al(konumlar, i);
+        imaj_buyut(imaj, o + kb);
+        değişken j: tam32 = 0;
+        iken j < kb { yaz_u8(imaj, o + j, 0); j = j + 1; }
+        değişken kk: tam64 = dizi_al(secilen, i);
+        değişken sonraki: tam64 = 268435455;
+        eğer i + 1 < genislet veya (i >= genislet ve i + 1 < dizi_boyut(secilen)) { sonraki = dizi_al(secilen, i + 1); }
+        imaj_fat_yaz(imaj, b, kk, sonraki);
+        eğer i < genislet {
+            j = 0; iken j < kb { dizi_ekle(r.konumlar, o + j); j = j + 32; }
+        }
+        i = i + 1;
+    }
+    eğer genislet > 0 {
+        değişken son_kume: tam64 = dizi_al(r.zincir, dizi_boyut(r.zincir) - 1);
+        değişken ek: tam64 = dizi_al(secilen, 0);
+        imaj_fat_yaz(imaj, b, son_kume, ek);
+    }
+    i = 0;
+    iken i < gereken {
+        değişken o: tam32 = dizi_al(r.konumlar, bas + i);
+        imaj_buyut(imaj, o + 32);
+        değişken j: tam32 = 0;
+        iken j < 32 { yaz_u8(imaj, o + j, oku_u8(girdi, i * 32 + j) olarak tam64); j = j + 1; }
+        i = i + 1;
+    }
+    eğer son_goruldu ve bas + gereken < dizi_boyut(r.konumlar) {
+        değişken o: tam32 = dizi_al(r.konumlar, bas + gereken);
+        imaj_buyut(imaj, o + 1); yaz_u8(imaj, o, 0);
+    }
+    eğer dizin {
+        değişken o: tam32 = dizi_al(konumlar, genislet);
+        yaz_ascii(imaj, o, ".          "); yaz_u8(imaj, o + 11, 16);
+        yaz_le16(imaj, o + 20, ilk_kume >> 16); yaz_le16(imaj, o + 26, ilk_kume & 65535);
+        yaz_ascii(imaj, o + 32, "..         "); yaz_u8(imaj, o + 43, 16);
+        değişken ust: tam64 = ebeveyn;
+        eğer ebeveyn == b.kok_kume { ust = 0; }
+        yaz_le16(imaj, o + 52, ust >> 16); yaz_le16(imaj, o + 58, ust & 65535);
+    } değilse {
+        i = 0;
+        iken i < dizi_boyut(veri) {
+            değişken o: tam32 = dizi_al(konumlar, genislet + i / kb);
+            yaz_u8(imaj, o + i % kb, oku_u8(veri, i) olarak tam64); i = i + 1;
+        }
+    }
+    fsinfo_yenile(imaj, b);
+    ver tamam(boy);
+}
+genel işlev imaja_dosya_yaz(imaj: Dizi<dtam8>, yol: metin, veri: Dizi<dtam8>) -> sonuç<tam64, metin> {
+    eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver kayit_yaz(imaj, b, yol, veri, yanlış); } }
+    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
+    ver hata("ulasilmaz");
+}
+genel işlev imajda_dizin_olustur(imaj: Dizi<dtam8>, yol: metin) -> sonuç<tam64, metin> {
+    değişken bos: Dizi<dtam8> = [];
+    eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver kayit_yaz(imaj, b, yol, bos, doğru); } }
+    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
+    ver hata("ulasilmaz");
+}
+genel işlev imajdan_dosya_sil(imaj: Dizi<dtam8>, yol: metin) -> sonuç<mantıksal, metin> {
+    eşleş imaj_bpb(imaj) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => { değişken b: Fat32Bpb = v; ver sil_ic(imaj, b, yol); }
+    }
+    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
+    ver hata("ulasilmaz");
+}
+işlev sil_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<mantıksal, metin> {
+    eğer değil fsinfo_gecerli(imaj, b) { ver hata("fsinfo"); }
+    değişken parcalar: Dizi<metin> = [];
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(v) => { parcalar = v; } }
+    değişken adet: tam32 = dizi_boyut(parcalar);
+    eğer adet == 0 { ver hata("kok"); }
+    değişken ebeveyn: tam64 = 0;
+    eşleş imaj_dizin_yolu(imaj, b, parcalar, adet - 1) { hata(e) => { ver hata(e); } tamam(v) => { ebeveyn = v; } }
+    değişken ad: metin = dizi_al(parcalar, adet - 1);
+    eşleş imaj_bul(imaj, b, ebeveyn, ad) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken k: FatKayit = v;
+            eğer (k.ozellik & 16) != 0 { ver hata("dizin"); }
+            değişken zinc: Dizi<tam64> = [];
+            eğer k.ilk != 0 {
+                eşleş imaj_zincir(imaj, b, k.ilk) { hata(e) => { ver hata(e); } tamam(z) => { zinc = z; } }
+            } değilse eğer k.boyut != 0 { ver hata("bozuk zincir"); }
+            değişken r: DizinResmi = dizin_resmi_bos();
+            eşleş imaj_dizin(imaj, b, ebeveyn) { hata(e) => { ver hata(e); } tamam(dr) => { r = dr; } }
+            değişken i: tam32 = 0;
+            iken i < dizi_boyut(zinc) { değişken c: tam64 = dizi_al(zinc, i); imaj_fat_yaz(imaj, b, c, 0 olarak tam64); i = i + 1; }
+            i = k.bas;
+            iken i <= k.son { değişken o: tam32 = dizi_al(r.konumlar, i); yaz_u8(imaj, o, 229); i = i + 1; }
+            fsinfo_yenile(imaj, b); ver tamam(doğru);
+        }
+    }
+    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
+    ver hata("ulasilmaz");
+}
+
+// C009: istenen API korunur; self-host çağıranları aşağıdaki adlar yerine
+// imaja_dosya_yaz / imajda_dizin_olustur / imajdan_dosya_sil kullanmalıdır.
+genel işlev dosya_yaz(imaj: Dizi<dtam8>, yol: metin, veri: Dizi<dtam8>) -> sonuç<tam64, metin> {
+    ver imaja_dosya_yaz(imaj, yol, veri);
+}
+genel işlev dizin_olustur(imaj: Dizi<dtam8>, yol: metin) -> sonuç<tam64, metin> {
+    ver imajda_dizin_olustur(imaj, yol);
+}
+genel işlev dosya_sil(imaj: Dizi<dtam8>, yol: metin) -> sonuç<mantıksal, metin> {
+    ver imajdan_dosya_sil(imaj, yol);
+}
