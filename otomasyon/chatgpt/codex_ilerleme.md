@@ -44,3 +44,5 @@ VARSAYIM D2: PSF Unicode dizileri (FFFE/FE sonrası çok kod noktalı ligatürle
 - [x] D2 · 15 test · sabotaj: `eğer değil dizi_mi { dizi_ekle(kodlar, k);` → `eğer doğru { dizi_ekle(kodlar, k);` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:54:55.712747+00:00
 - [x] D3 · 7 test · sabotaj: `128 >> (sutun % 8)` → `1 << (sutun % 8)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:56:51.595394+00:00
 VARSAYIM D4: sekme sonraki 8 sütun durağına boşluk yazar; geri sil önceki satıra geçebilir. Sarma anlıktır; alt satır taşınca kaydırılır. Konsol satır metni sondaki boşlukları korur. Hücre başına ön/arka renk ayrı tutulur; kirli_satirlar tüketilerek temizlenir.
+- [x] D4 · 14 test · sabotaj: `dizi_yaz(k.kirli, i, 0)` → `dizi_yaz(k.kirli, i, 1)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T19:59:35.064462+00:00
+VARSAYIM D5: CSI en çok 16 parametre ve 4096 sayısal değer tutar; bilinmeyen CSI/OSC/DCS yutulur. vt_bitir eksik UTF-8 baytlarını U+FFFD ile sonlandırır. Palet VGA 16 renktir.
