@@ -52,3 +52,5 @@ VARSAYIM D6: boş Enter boş metin döndürür, geçmişe eklenmez; geçmişten 
 VARSAYIM D7: başlangıç (0,0), hız tam sayı 0..1024; düğmeler sol=1, sağ=2, orta=3 sırasıyla raporlanır. Tekerlek tam32 sınırlarında doyurulur. C011 alt-sınır ataması açık dönüşümle dolanıldı.
 - [x] D7 · 10 test · sabotaj: `(d.y olarak tam64) - (o.dy olarak tam64)` → `(d.y olarak tam64) + (o.dy olarak tam64)` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:12:00.426227+00:00
 VARSAYIM D8: sıfır kapasite geçerlidir, tüm yeni girdileri kayıp sayar. Üst sınır 1048576 eleman; kayip tam64 üst sınırda doyurulur. Python deque modeliyle 120 işlem ve 37 kayıp bağımsız doğrulandı.
+- [x] D8 · 10 test · sabotaj: `d.kayip = d.kayip + 1` → `d.kayip = d.kayip` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:12:55.586117+00:00
+VARSAYIM D9: BMP renk maskeleri sıfır olmayan, bitişik ve örtüşmeyen RGB alanlarıdır; bileşenler 255 ölçeğine aşağı yuvarlanır, alfa yok sayılır. 16384 boyut/16MiB piksel sınırı. bmp_ciz ham BMP alır, çizilen görünür piksel sayısını sonuç olarak döndürür.

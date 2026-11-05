@@ -1,0 +1,78 @@
+// Sıkıştırılmamış 24/32 bit BMP ve 32 bit bit-alanı maskeleri.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32 };
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_gecerli, piksel_yaz };
+genel yapı Bmp {
+    genislik: tam32; yukseklik: tam32; yukaridan: mantıksal; adim: tam32;
+    ofset: tam32; bpp: tam32; kirmizi: tam64; yesil: tam64; mavi: tam64; veri: Dizi<dtam8>;
+}
+işlev maske_gecerli(m: tam64) -> mantıksal {
+    eğer m == 0 { ver yanlış; }
+    değişken v: tam64 = m;
+    iken (v & 1) == 0 { v = v >> 1; }
+    iken (v & 1) == 1 { v = v >> 1; }
+    ver v == 0;
+}
+genel işlev bmp_coz(b: Dizi<dtam8>) -> sonuç<Bmp, metin> {
+    değişken n: tam64 = dizi_boyut(b) olarak tam64;
+    eğer n < 54 { ver hata("kisa"); }
+    eğer oku_u8(b, 0) != 66 veya oku_u8(b, 1) != 77 { ver hata("imza"); }
+    değişken dib: tam64 = oku_le32(b, 14); değişken ofset: tam64 = oku_le32(b, 10);
+    eğer dib < 40 veya dib > n - 14 veya ofset < 14 + dib veya ofset > n { ver hata("baslik"); }
+    değişken w: tam64 = (oku_le32(b, 18) olarak tam32) olarak tam64;
+    değişken h: tam64 = (oku_le32(b, 22) olarak tam32) olarak tam64;
+    değişken ust: mantıksal = h < 0; eğer ust { h = 0 - h; }
+    eğer w <= 0 veya h <= 0 veya w > 16384 veya h > 16384 { ver hata("boyut"); }
+    değişken bpp: tam32 = oku_le16(b, 28); değişken sik: tam64 = oku_le32(b, 30);
+    eğer oku_le16(b, 26) != 1 veya (bpp != 24 ve bpp != 32) { ver hata("bicim"); }
+    eğer sik != 0 ve (sik != 3 veya bpp != 32) { ver hata("sikistirma"); }
+    değişken r: tam64 = 16711680; değişken g: tam64 = 65280; değişken m: tam64 = 255;
+    eğer sik == 3 {
+        eğer n < 66 veya ofset < 66 veya (dib != 40 ve dib < 52) { ver hata("maskeler kisa"); }
+        r = oku_le32(b, 54); g = oku_le32(b, 58); m = oku_le32(b, 62);
+        eğer değil maske_gecerli(r) veya değil maske_gecerli(g) veya değil maske_gecerli(m) veya (r & g) != 0 veya (r & m) != 0 veya (g & m) != 0 { ver hata("maskeler"); }
+    }
+    değişken adim: tam64 = ((w * (bpp olarak tam64) + 31) / 32) * 4;
+    değişken boy: tam64 = adim * h;
+    eğer boy > 16777216 veya boy > n - ofset { ver hata("piksel verisi"); }
+    değişken dosya_boyu: tam64 = oku_le32(b, 2);
+    eğer dosya_boyu != 0 ve (dosya_boyu > n veya dosya_boyu < ofset + boy) { ver hata("dosya boyu"); }
+    ver tamam(Bmp { genislik: w olarak tam32, yukseklik: h olarak tam32, yukaridan: ust,
+        adim: adim olarak tam32, ofset: ofset olarak tam32, bpp: bpp, kirmizi: r, yesil: g, mavi: m, veri: b });
+}
+işlev renk_bileseni(v: tam64, m: tam64) -> tam32 {
+    değişken maske: tam64 = m; değişken deger: tam64 = v & m;
+    iken (maske & 1) == 0 { maske = maske >> 1; deger = deger >> 1; }
+    ver ((deger * 255) / maske) olarak tam32;
+}
+genel işlev bmp_ciz(c: Cerceve, veri: Dizi<dtam8>, x: tam32, y: tam32) -> sonuç<tam32, metin> {
+    eğer değil cerceve_gecerli(c) { ver hata("cerceve"); }
+    eşleş bmp_coz(veri) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken b: Bmp = v; değişken adet: tam32 = 0;
+            değişken x0: tam64 = 0; değişken y0: tam64 = 0;
+            eğer x < 0 { x0 = 0 - (x olarak tam64); } eğer y < 0 { y0 = 0 - (y olarak tam64); }
+            değişken x1: tam64 = b.genislik olarak tam64; değişken y1: tam64 = b.yukseklik olarak tam64;
+            değişken sag: tam64 = (c.genislik olarak tam64) - (x olarak tam64);
+            değişken alt: tam64 = (c.yukseklik olarak tam64) - (y olarak tam64);
+            eğer x1 > sag { x1 = sag; } eğer y1 > alt { y1 = alt; }
+            değişken yy: tam64 = y0;
+            iken yy < y1 {
+                değişken satir: tam32 = yy olarak tam32;
+                eğer değil b.yukaridan { satir = b.yukseklik - 1 - satir; }
+                değişken xx: tam64 = x0;
+                iken xx < x1 {
+                    değişken o: tam32 = b.ofset + satir * b.adim + (xx olarak tam32) * (b.bpp / 8);
+                    değişken ham: tam64 = (oku_u8(veri, o) olarak tam64) | ((oku_u8(veri, o + 1) olarak tam64) << 8) | ((oku_u8(veri, o + 2) olarak tam64) << 16);
+                    eğer b.bpp == 32 { ham = ham | ((oku_u8(veri, o + 3) olarak tam64) << 24); }
+                    değişken renk: tam32 = (renk_bileseni(ham, b.kirmizi) << 16) | (renk_bileseni(ham, b.yesil) << 8) | renk_bileseni(ham, b.mavi);
+                    piksel_yaz(c, (xx + (x olarak tam64)) olarak tam32, (yy + (y olarak tam64)) olarak tam32, renk);
+                    adet = adet + 1; xx = xx + 1;
+                }
+                yy = yy + 1;
+            }
+            ver tamam(adet);
+        }
+    }
+    ver hata("ulasilmaz");
+}
