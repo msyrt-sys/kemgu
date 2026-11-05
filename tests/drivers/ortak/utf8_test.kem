@@ -1,5 +1,5 @@
 // Unicode vektörleri: python3 tools/codex/b1.py; Python encode/decode(strict/replace).
-kullan drivers::ortak::utf8::{ utf8_coz, utf8_kodla, utf16le_coz, utf16le_kodla };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_coz, utf8_kodla, utf16le_coz, utf16le_kodla };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8 };
 işlev kod_esit(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
     eğer dizi_boyut(a) != dizi_boyut(b) { ver yanlış; }
@@ -256,6 +256,31 @@ işlev test_gecersiz_skaler() -> mantıksal {
     ver kod_esit(utf8_coz(utf8_kodla(k)), beklenen) ve kod_esit(utf16le_coz(utf16le_kodla(k), 0, 4), beklenen);
 }
 
+işlev test_yasak_utf8_baslangic() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(6);
+    yaz_u8(b, 0, 192);
+    yaz_u8(b, 1, 128);
+    yaz_u8(b, 2, 193);
+    yaz_u8(b, 3, 128);
+    yaz_u8(b, 4, 245);
+    yaz_u8(b, 5, 255);
+    değişken beklenen: Dizi<tam32> = [65533,65533,65533,65533,65533,65533];
+    ver kod_esit(utf8_bayt_coz(b, 0, 6), beklenen);
+}
+
+işlev test_bayt_araligi() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(6);
+    yaz_u8(b, 0, 65);
+    yaz_u8(b, 1, 240);
+    yaz_u8(b, 2, 159);
+    yaz_u8(b, 3, 152);
+    yaz_u8(b, 4, 128);
+    yaz_u8(b, 5, 90);
+    değişken beklenen: Dizi<tam32> = [128512];
+    ver kod_esit(utf8_bayt_coz(b, 1, 4), beklenen) ve dizi_boyut(utf8_bayt_coz(b, -1, 1)) == 0 ve
+        dizi_boyut(utf8_bayt_coz(b, 0, 2147483647)) == 0 ve dizi_boyut(utf8_bayt_coz(b, 7, 0)) == 0;
+}
+
 işlev main() -> tam32 {
     değişken h: tam32 = 0;
     eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
@@ -281,5 +306,7 @@ işlev main() -> tam32 {
     eğer değil test_bozuk_utf16_5() { yazdir_metin("BASARISIZ bozuk_utf16_5"); h = h + 1; }
     eğer değil test_sinir_ofset() { yazdir_metin("BASARISIZ sinir_ofset"); h = h + 1; }
     eğer değil test_gecersiz_skaler() { yazdir_metin("BASARISIZ gecersiz_skaler"); h = h + 1; }
+    eğer değil test_yasak_utf8_baslangic() { yazdir_metin("BASARISIZ yasak_utf8_baslangic"); h = h + 1; }
+    eğer değil test_bayt_araligi() { yazdir_metin("BASARISIZ bayt_araligi"); h = h + 1; }
     ver h;
 }

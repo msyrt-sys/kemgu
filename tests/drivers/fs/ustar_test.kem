@@ -1,0 +1,117 @@
+// Beklentiler: python3 tools/codex/c7.py; tarfile üyeleri ve UTF-8 encode.
+kullan drivers::fs::ustar::{ TarGirdisi, tar_listele, tar_bul };
+kullan tests::drivers::fs::veri::ustar_veri::{ tar_imaj };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_ascii };
+işlev onar(b: Dizi<dtam8>) {
+    değişken toplam: tam32 = 0; değişken i: tam32 = 0;
+    iken i < 512 { eğer i >= 148 ve i < 156 { toplam = toplam + 32; } değilse { toplam = toplam + oku_u8(b, i); } i = i + 1; }
+    i = 5; iken i >= 0 { yaz_u8(b, 148+i, (48+toplam%8) olarak tam64); toplam = toplam/8; i = i-1; }
+    yaz_u8(b, 154, 0); yaz_u8(b, 155, 32);
+}
+
+işlev test_liste() -> mantıksal {
+    eşleş tar_listele(tar_imaj()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<TarGirdisi> = v; eğer dizi_boyut(xs) != 4 { ver yanlış; }
+        değişken d: TarGirdisi = dizi_al(xs, 0); değişken f: TarGirdisi = dizi_al(xs, 1); değişken p: TarGirdisi = dizi_al(xs, 2);
+        ver d.dizin_mi ve metin_esit(d.ad, "boot/") ve metin_esit(f.ad, "boot/ğ.txt") ve f.boyut == 14 ve metin_esit(p.ad, "uzun/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/not.txt");
+    } }
+}
+
+işlev test_icerik() -> mantıksal {
+    eşleş tar_bul(tar_imaj(), "boot/ğ.txt") { hiç => { ver yanlış; } değer(v) => {
+        değişken b: Dizi<dtam8> = v;
+        eğer dizi_boyut(b) != 14 { ver yanlış; }
+        eğer oku_u8(b, 0) != 77 { ver yanlış; }
+        eğer oku_u8(b, 1) != 101 { ver yanlış; }
+        eğer oku_u8(b, 2) != 114 { ver yanlış; }
+        eğer oku_u8(b, 3) != 104 { ver yanlış; }
+        eğer oku_u8(b, 4) != 97 { ver yanlış; }
+        eğer oku_u8(b, 5) != 98 { ver yanlış; }
+        eğer oku_u8(b, 6) != 97 { ver yanlış; }
+        eğer oku_u8(b, 7) != 32 { ver yanlış; }
+        eğer oku_u8(b, 8) != 196 { ver yanlış; }
+        eğer oku_u8(b, 9) != 159 { ver yanlış; }
+        eğer oku_u8(b, 10) != 240 { ver yanlış; }
+        eğer oku_u8(b, 11) != 159 { ver yanlış; }
+        eğer oku_u8(b, 12) != 152 { ver yanlış; }
+        eğer oku_u8(b, 13) != 128 { ver yanlış; }
+        ver doğru;
+    } }
+}
+
+işlev test_eksik() -> mantıksal {
+    eşleş tar_bul(tar_imaj(), "yok") { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_dizin() -> mantıksal {
+    eşleş tar_bul(tar_imaj(), "boot/") { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+
+işlev test_bos_dosya() -> mantıksal {
+    eşleş tar_bul(tar_imaj(), "bos") { hiç => { ver yanlış; } değer(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = tar_imaj(); yaz_u8(b, 0, 65);
+    eşleş tar_listele(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "saglama"); } }
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = tar_imaj(); yaz_u8(b, 257, 0);
+    eşleş tar_listele(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "imza"); } }
+}
+
+işlev test_boy_sekiz() -> mantıksal {
+    değişken b: Dizi<dtam8> = tar_imaj(); yaz_u8(b, 124, 56); onar(b);
+    eşleş tar_listele(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "sekizlik"); } }
+}
+
+işlev test_boy_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = tar_imaj(); yaz_ascii(b, 124, "77777777777"); onar(b);
+    eşleş tar_listele(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "veri siniri"); } }
+}
+
+işlev test_tur() -> mantıksal {
+    değişken b: Dizi<dtam8> = tar_imaj(); yaz_u8(b, 156, 50); onar(b);
+    eşleş tar_listele(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "tur"); } }
+}
+
+işlev test_son_0() -> mantıksal {
+    eşleş tar_listele(bayt_sifir(0)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "son blok"); } }
+}
+
+işlev test_son_511() -> mantıksal {
+    eşleş tar_listele(bayt_sifir(511)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "son blok"); } }
+}
+
+işlev test_son_512() -> mantıksal {
+    eşleş tar_listele(bayt_sifir(512)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "son blok"); } }
+}
+
+işlev test_son_1023() -> mantıksal {
+    eşleş tar_listele(bayt_sifir(1023)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "son blok"); } }
+}
+
+işlev test_bos_arsiv() -> mantıksal {
+    eşleş tar_listele(bayt_sifir(1024)) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_liste() { yazdir_metin("BASARISIZ liste"); h = h + 1; }
+    eğer değil test_icerik() { yazdir_metin("BASARISIZ icerik"); h = h + 1; }
+    eğer değil test_eksik() { yazdir_metin("BASARISIZ eksik"); h = h + 1; }
+    eğer değil test_dizin() { yazdir_metin("BASARISIZ dizin"); h = h + 1; }
+    eğer değil test_bos_dosya() { yazdir_metin("BASARISIZ bos_dosya"); h = h + 1; }
+    eğer değil test_saglama() { yazdir_metin("BASARISIZ saglama"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_boy_sekiz() { yazdir_metin("BASARISIZ boy_sekiz"); h = h + 1; }
+    eğer değil test_boy_tasma() { yazdir_metin("BASARISIZ boy_tasma"); h = h + 1; }
+    eğer değil test_tur() { yazdir_metin("BASARISIZ tur"); h = h + 1; }
+    eğer değil test_son_0() { yazdir_metin("BASARISIZ son_0"); h = h + 1; }
+    eğer değil test_son_511() { yazdir_metin("BASARISIZ son_511"); h = h + 1; }
+    eğer değil test_son_512() { yazdir_metin("BASARISIZ son_512"); h = h + 1; }
+    eğer değil test_son_1023() { yazdir_metin("BASARISIZ son_1023"); h = h + 1; }
+    eğer değil test_bos_arsiv() { yazdir_metin("BASARISIZ bos_arsiv"); h = h + 1; }
+    ver h;
+}

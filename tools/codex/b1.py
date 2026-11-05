@@ -1,6 +1,6 @@
 from yardim import testler
 header='''// Unicode vektörleri: python3 tools/codex/b1.py; Python encode/decode(strict/replace).
-kullan drivers::ortak::utf8::{ utf8_coz, utf8_kodla, utf16le_coz, utf16le_kodla };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_coz, utf8_kodla, utf16le_coz, utf16le_kodla };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8 };
 işlev kod_esit(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
     eğer dizi_boyut(a) != dizi_boyut(b) { ver yanlış; }
@@ -57,5 +57,10 @@ cases['sinir_ofset']=bytes_var('x😀\0A'.encode('utf-16le'))+'''    değişken 
 cases['gecersiz_skaler']='''    değişken k: Dizi<tam32> = [-1, 55296, 57343, 1114112];
     değişken beklenen: Dizi<tam32> = [65533, 65533, 65533, 65533];
     ver kod_esit(utf8_coz(utf8_kodla(k)), beklenen) ve kod_esit(utf16le_coz(utf16le_kodla(k), 0, 4), beklenen);'''
+cases['yasak_utf8_baslangic'] = bytes_var(bytes([192,128,193,128,245,255])) + '''    değişken beklenen: Dizi<tam32> = [65533,65533,65533,65533,65533,65533];
+    ver kod_esit(utf8_bayt_coz(b, 0, 6), beklenen);'''
+cases['bayt_araligi'] = bytes_var('A😀Z'.encode()) + '''    değişken beklenen: Dizi<tam32> = [128512];
+    ver kod_esit(utf8_bayt_coz(b, 1, 4), beklenen) ve dizi_boyut(utf8_bayt_coz(b, -1, 1)) == 0 ve
+        dizi_boyut(utf8_bayt_coz(b, 0, 2147483647)) == 0 ve dizi_boyut(utf8_bayt_coz(b, 7, 0)) == 0;'''
 testler('tests/drivers/ortak/utf8_test.kem',header,cases)
 print(len(cases),'test; emoji',ord('😀'),'UTF16',list('😀'.encode('utf-16le')))
