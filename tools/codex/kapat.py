@@ -1,5 +1,5 @@
 """Tek işin derlenen sabotajını, köprüsünü, commit ve ilerleme kaydını yürütür."""
-import argparse, subprocess
+import argparse, subprocess, re
 from pathlib import Path
 from datetime import datetime, timezone
 p=argparse.ArgumentParser()
@@ -24,6 +24,6 @@ finally:
 zorunlu('make','calistir_chatgpt_kopru')
 zorunlu('git','add','--',*a.dosyalar)
 zorunlu('git','commit','-m',f'SURUCU(codex): {a.is_no} — {a.aciklama}')
-sayi=Path(a.test).read_text(encoding='utf-8').count('işlev test_')
+sayi=len(re.findall(r'işlev test_[^(]+\([^)]*\) -> mantıksal', Path(a.test).read_text(encoding='utf-8')))
 with Path('otomasyon/chatgpt/codex_ilerleme.md').open('a',encoding='utf-8') as f:
     f.write(f'- [x] {a.is_no} · {sayi} test · sabotaj: `{a.once}` → `{a.sonra}` → koşum kırmızı; geri alındı, köprü yeşil · {datetime.now(timezone.utc).isoformat()}\n')

@@ -1,5 +1,7 @@
 # Codex bulguları
 
+Özet (E3): C001–C011 toplam 11 derleyici/araç zinciri uyumsuzluğu için küçük yeniden üretim ve mevcut dille dolanma kaydedildi. Derleyici değiştirilmedi. C009 host dosya API adı çakışması nedeniyle imaj APIlerinin güvenli adları kullanılır. S001 FAT etiket metadata tutarsızlığı dış fsck.fat kahiniyle düzeltilmiştir. E2 toplam 9000 bozuk girdi ve 26 sınır girdisinde yeni panik bulmadı.
+
 ## C001 — modülle aynı adlı işlevi seçili içe aktarma
 
 ```kemgu

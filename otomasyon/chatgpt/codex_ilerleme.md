@@ -58,3 +58,4 @@ VARSAYIM D9: BMP renk maskeleri sıfır olmayan, bitişik ve örtüşmeyen RGB a
 VARSAYIM E1: kabuk komut/prompt yankılamaz; ls . ve .. girdilerini gizler, cat çıktı sonuna LF ekler, bulunamadi hatasını kabukta hata: yok olarak normalleştirir. 84 scancode, 31 bayt UTF-8 dosya, 40x6 konsol ve gerçek PSF m glifinin 64 pikseli doğrulandı.
 - [x] E1 · 7 test · sabotaj: `s = metin_birlestir(s, satir_sonu(g.ad))` → `s = metin_birlestir(s, satir_sonu("yanlis"))` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:17:11.237266+00:00
 E2: 13 ayrıştırıcıda 3900 rastgele girdi, 5100 tek-bayt mutasyonu ve 26 sıfır/tek-bayt sınır girdisi iki derleyicide geçti. Geçerli fikstürler mutasyondan önce kabul edilmek zorunda. ACPI/harita/BMP birden fazla biçim için ayrı 300 mutasyon döngüsü içerir. Panik bulunmadı; her tek koşum 30 saniye sınırında.
+- [x] E2 · 4 test · sabotaj: `eğer n < 54` → `eğer n < 0` → koşum kırmızı; geri alındı, köprü yeşil · 2026-11-05T20:19:02.708738+00:00
