@@ -3,6 +3,9 @@ from pathlib import Path
 import re
 meta={
 'ortak/bayt':('Little-endian bayt erişimi','Python int.to_bytes','Ham oku/yaz çağrısından önce aralık denetimi çağırana ait'),
+'ortak/harf':('Türkçe kurallı Unicode büyük/küçük harf metin dönüşümü','Python Unicode 15.0.0 bütün 2958 eşleme ve Türkçe örnekler','Kod noktası temelli; çok karakterli büyük harf genişlemeleri var; bağlamsal sigma ve normalizasyon yok'),
+'ortak/harf_veri':('Sıralı Unicode harf dönüşüm tabloları','Python Unicode 15.0.0, 1525 üst ve 1433 alt eşleme','Üretilen veri; sürüm sabitlenmiştir; i/İ ve ı/I Türkçe eşlenir'),
+'fs/yol_harf':('İsteğe bağlı Türkçe harf duyarsız yol karşılaştırma','Türkçe I çiftleri ve normalleştirilmiş yol örnekleri','yol_bol kuralları; Unicode normalizasyonu veya tam casefold yapmaz; normal disk eşlemesi değişmez'),
 'ortak/utf8':('UTF-8 ve UTF-16LE dönüşümü','Python encode/decode, Unicode vektörleri','Geçersiz UTF-8 bir bayt ilerleyerek U+FFFD; UTF-16 sıfırda biter'),
 'ps2/klavye_tr':('Set-1 Türkçe Q klavye durumu','A1 bağımsız 49 tuş tablosu','E0 ve Shift/Caps; donanım I/O yok'),
 'ps2/fare':('PS/2 üç/dört bayt fare paketleri','PS/2 bit alanları, işaretli hareket vektörleri','Taşan paket atılır; dy yukarı pozitiftir'),
