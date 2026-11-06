@@ -1,0 +1,137 @@
+// Pikseller: python3 tools/codex/d3.py; (glif[row*ceil(w/8)+x/8] >> (7-x%8))&1.
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_oku };
+kullan drivers::ekran::psf::{ PsfFont, psf_coz };
+kullan drivers::ekran::yazi::{ glif_ciz, kod_ciz, metin_ciz };
+kullan tests::drivers::ekran::veri::psf_sentetik::{ sentetik_font };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev renk_mi(c: Cerceve, x: tam32, y: tam32, k: tam32) -> mantıksal { eşleş piksel_oku(c, x, y) { hiç => { ver yanlış; } değer(v) => { ver v == k; } } }
+
+işlev test_tum_pikseller() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            metin_ciz(c, f, 0, 0, "A😀", 1193046, 11259375);
+            eğer değil renk_mi(c, 0, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 1, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 2, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 3, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 4, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 5, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 6, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 7, 0, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 8, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 0, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 1, 1, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 2, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 3, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 4, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 5, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 6, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 7, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 8, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 9, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 10, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 11, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 12, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 13, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 14, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 15, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 16, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 17, 0, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 9, 1, 1193046) { ver yanlış; }
+            eğer değil renk_mi(c, 10, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 11, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 12, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 13, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 14, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 15, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 16, 1, 11259375) { ver yanlış; }
+            eğer değil renk_mi(c, 17, 1, 11259375) { ver yanlış; }
+            ver oku_u8(c.veri, 72) == 0 ve oku_u8(c.veri, 152) == 0;
+        } }
+    } }
+}
+
+işlev test_yedek() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            kod_ciz(c, f, 0, 0, 9731, 7, 2);
+            ver renk_mi(c, 0, 0, 7) ve renk_mi(c, 1, 0, 2) ve renk_mi(c, 1, 1, 7);
+        } }
+    } }
+}
+
+işlev test_soru_yedegi() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            değişken kodlar: Dizi<tam32> = [65, 63]; değişken indeksler: Dizi<tam32> = [0, 2];
+            f.kodlar = kodlar; f.indeksler = indeksler;
+            kod_ciz(c, f, 0, 0, 9731, 7, 2);
+            ver renk_mi(c, 0, 0, 7) ve renk_mi(c, 1, 0, 7) ve renk_mi(c, 2, 0, 7) ve renk_mi(c, 3, 0, 2);
+        } }
+    } }
+}
+
+işlev test_yedek_yok() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            değişken bos: Dizi<tam32> = []; f.kodlar = bos; f.indeksler = bos;
+            kod_ciz(c, f, 0, 0, 9731, 7, 2); ver renk_mi(c, 0, 0, 2) ve renk_mi(c, 8, 1, 2);
+        } }
+    } }
+}
+
+işlev test_kirpma() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            glif_ciz(c, f, 0, -8, -1, 7, 2);
+            glif_ciz(c, f, 0, 17, 3, 7, 2);
+            glif_ciz(c, f, 0, 2147483647, 2147483647, 7, 2);
+            ver renk_mi(c, 0, 0, 2) ve renk_mi(c, 17, 3, 7) ve renk_mi(c, 1, 0, 0) ve oku_u8(c.veri, 312) == 0;
+        } }
+    } }
+}
+
+işlev test_satir() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            metin_ciz(c, f, 0, 0, metin_birlestir("A", metin_birlestir(kod_metin(10), "ğ")), 7, 2);
+            ver renk_mi(c, 0, 0, 7) ve renk_mi(c, 0, 2, 7) ve renk_mi(c, 9, 0, 0);
+        } }
+    } }
+}
+
+işlev test_gecersiz_glif() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eşleş cerceve_yeni(18, 4, 80) { hata(e) => { ver yanlış; } tamam(w) => {
+            değişken c: Cerceve = w;
+            glif_ciz(c, f, -1, 0, 0, 7, 2); glif_ciz(c, f, 4, 0, 0, 7, 2);
+            f.glif_bayt = 1; glif_ciz(c, f, 0, 0, 0, 7, 2);
+            ver renk_mi(c, 0, 0, 0);
+        } }
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_tum_pikseller() { yazdir_metin("BASARISIZ tum_pikseller"); h = h + 1; }
+    eğer değil test_yedek() { yazdir_metin("BASARISIZ yedek"); h = h + 1; }
+    eğer değil test_soru_yedegi() { yazdir_metin("BASARISIZ soru_yedegi"); h = h + 1; }
+    eğer değil test_yedek_yok() { yazdir_metin("BASARISIZ yedek_yok"); h = h + 1; }
+    eğer değil test_kirpma() { yazdir_metin("BASARISIZ kirpma"); h = h + 1; }
+    eğer değil test_satir() { yazdir_metin("BASARISIZ satir"); h = h + 1; }
+    eğer değil test_gecersiz_glif() { yazdir_metin("BASARISIZ gecersiz_glif"); h = h + 1; }
+    ver h;
+}

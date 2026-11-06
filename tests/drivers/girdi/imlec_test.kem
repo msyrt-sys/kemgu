@@ -1,0 +1,86 @@
+// Beklentiler: python3 tools/codex/d7.py; min/max ile ekran kırpma ve bit kenarları.
+kullan drivers::ps2::fare::{ FareOlayi };
+kullan drivers::girdi::imlec::{ DugmeOlayi, Imlec, imlec_yeni, imlec_olay };
+işlev olay(x: tam32, y: tam32, z: tam32, tus: tam32) -> FareOlayi {
+    ver FareOlayi { dx: x, dy: y, dz: z, sol: (tus & 1) != 0, sag: (tus & 2) != 0, orta: (tus & 4) != 0 };
+}
+işlev kenar(o: DugmeOlayi, k: tam32, bas: mantıksal) -> mantıksal {
+    eşleş o { DugmeOlayi::Basildi(v) => { ver bas ve v == k; } DugmeOlayi::Birakildi(v) => { ver değil bas ve v == k; } }
+}
+
+işlev test_hareket() -> mantıksal {
+    eşleş imlec_yeni(100, 80, 2) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Imlec = v;
+        imlec_olay(&değişken d, olay(7, -9, 1, 0)); imlec_olay(&değişken d, olay(-2, 3, -3, 0));
+        ver d.x == 10 ve d.y == 12 ve d.tekerlek == -2;
+    } }
+}
+
+işlev test_kirp() -> mantıksal {
+    eşleş imlec_yeni(100, 80, 2) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Imlec = v;
+        imlec_olay(&değişken d, olay(2147483647, -2147483648, 0, 0));
+        eğer d.x != 99 veya d.y != 79 { ver yanlış; }
+        imlec_olay(&değişken d, olay(-2147483648, 2147483647, 0, 0)); ver d.x == 0 ve d.y == 0;
+    } }
+}
+
+işlev test_kenarlar() -> mantıksal {
+    eşleş imlec_yeni(100, 80, 2) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Imlec = v;
+        değişken a: Dizi<DugmeOlayi> = imlec_olay(&değişken d, olay(0, 0, 0, 7));
+        eğer dizi_boyut(a) != 3 { ver yanlış; }
+        eğer değil kenar(dizi_al(a, 0), 1, doğru) veya değil kenar(dizi_al(a, 1), 2, doğru) veya değil kenar(dizi_al(a, 2), 3, doğru) { ver yanlış; }
+        eğer dizi_boyut(imlec_olay(&değişken d, olay(0, 0, 0, 7))) != 0 { ver yanlış; }
+        değişken b: Dizi<DugmeOlayi> = imlec_olay(&değişken d, olay(0, 0, 0, 2));
+        ver dizi_boyut(b) == 2 ve kenar(dizi_al(b, 0), 1, yanlış) ve kenar(dizi_al(b, 1), 3, yanlış) ve d.dugmeler == 2;
+    } }
+}
+
+işlev test_sifir_hiz() -> mantıksal {
+    eşleş imlec_yeni(100, 80, 0) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Imlec = v;
+        imlec_olay(&değişken d, olay(3, -4, 1, 1)); ver d.x == 0 ve d.y == 0 ve d.tekerlek == 1 ve d.dugmeler == 1;
+    } }
+}
+
+işlev test_bir_piksel() -> mantıksal {
+    eşleş imlec_yeni(1, 1, 1024) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Imlec = v;
+        imlec_olay(&değişken d, olay(2147483647, -2147483648, 0, 0)); ver d.x == 0 ve d.y == 0;
+    } }
+}
+
+işlev test_tekerlek_tasma() -> mantıksal {
+    eşleş imlec_yeni(100, 80, 2) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Imlec = v;
+        d.tekerlek = 2147483647; imlec_olay(&değişken d, olay(0, 0, 1, 0));
+        eğer d.tekerlek != 2147483647 { ver yanlış; } d.tekerlek = (-2147483648) olarak tam32;
+        imlec_olay(&değişken d, olay(0, 0, -1, 0)); ver d.tekerlek == -2147483648;
+    } }
+}
+
+işlev test_gecersiz_0() -> mantıksal {
+    eşleş imlec_yeni(0, 1, 1) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "boyut veya hiz"); } }
+}
+
+işlev test_gecersiz_1() -> mantıksal {
+    eşleş imlec_yeni(1, 0, 1) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "boyut veya hiz"); } }
+}
+
+işlev test_gecersiz_2() -> mantıksal {
+    eşleş imlec_yeni(1, 1, -1) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "boyut veya hiz"); } }
+}
+
+işlev test_gecersiz_3() -> mantıksal {
+    eşleş imlec_yeni(1, 1, 1025) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "boyut veya hiz"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_hareket() { yazdir_metin("BASARISIZ hareket"); h = h + 1; }
+    eğer değil test_kirp() { yazdir_metin("BASARISIZ kirp"); h = h + 1; }
+    eğer değil test_kenarlar() { yazdir_metin("BASARISIZ kenarlar"); h = h + 1; }
+    eğer değil test_sifir_hiz() { yazdir_metin("BASARISIZ sifir_hiz"); h = h + 1; }
+    eğer değil test_bir_piksel() { yazdir_metin("BASARISIZ bir_piksel"); h = h + 1; }
+    eğer değil test_tekerlek_tasma() { yazdir_metin("BASARISIZ tekerlek_tasma"); h = h + 1; }
+    eğer değil test_gecersiz_0() { yazdir_metin("BASARISIZ gecersiz_0"); h = h + 1; }
+    eğer değil test_gecersiz_1() { yazdir_metin("BASARISIZ gecersiz_1"); h = h + 1; }
+    eğer değil test_gecersiz_2() { yazdir_metin("BASARISIZ gecersiz_2"); h = h + 1; }
+    eğer değil test_gecersiz_3() { yazdir_metin("BASARISIZ gecersiz_3"); h = h + 1; }
+    ver h;
+}

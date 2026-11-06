@@ -1,0 +1,32 @@
+// Kahin: python3 tools/codex/f5.py; PSF2 glif genişliği; değerler [0, 1, 4096, 4097].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan drivers::ekran::psf::{ PsfFont, psf_coz };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(32); yaz_le32(b,0,2253043058 olarak tam64); yaz_le32(b,8,32 olarak tam64); yaz_le32(b,16,1 olarak tam64); yaz_le32(b,20,0 olarak tam64); yaz_le32(b,24,1 olarak tam64); yaz_le32(b,28,0 olarak tam64);
+    eşleş psf_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken f: PsfFont = v; ver yanlış; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(33); yaz_le32(b,0,2253043058 olarak tam64); yaz_le32(b,8,32 olarak tam64); yaz_le32(b,16,1 olarak tam64); yaz_le32(b,20,1 olarak tam64); yaz_le32(b,24,1 olarak tam64); yaz_le32(b,28,1 olarak tam64);
+    eşleş psf_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: PsfFont = v; ver f.genislik == 1 ve f.glif_bayt == 1; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(544); yaz_le32(b,0,2253043058 olarak tam64); yaz_le32(b,8,32 olarak tam64); yaz_le32(b,16,1 olarak tam64); yaz_le32(b,20,512 olarak tam64); yaz_le32(b,24,1 olarak tam64); yaz_le32(b,28,4096 olarak tam64);
+    eşleş psf_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: PsfFont = v; ver f.genislik == 4096 ve f.glif_bayt == 512; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(545); yaz_le32(b,0,2253043058 olarak tam64); yaz_le32(b,8,32 olarak tam64); yaz_le32(b,16,1 olarak tam64); yaz_le32(b,20,513 olarak tam64); yaz_le32(b,24,1 olarak tam64); yaz_le32(b,28,4097 olarak tam64);
+    eşleş psf_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken f: PsfFont = v; ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

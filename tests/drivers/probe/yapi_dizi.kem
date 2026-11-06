@@ -1,0 +1,13 @@
+yapı Nokta { x: tam32; y: tam64; }
+işlev uret() -> Dizi<Nokta> {
+    değişken d: Dizi<Nokta> = [];
+    dizi_ekle(d, Nokta { x: 12, y: 2048 });
+    ver d;
+}
+işlev main() -> tam32 {
+    değişken d: Dizi<Nokta> = uret();
+    değişken n: Nokta = dizi_al(d, 0);
+    yazdir_tam(n.x); yazdir_tam(n.y olarak tam32);
+    eğer n.x == 12 ve n.y == 2048 { ver 0; }
+    ver 1;
+}

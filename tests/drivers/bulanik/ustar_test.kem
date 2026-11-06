@@ -1,0 +1,44 @@
+// Deterministik panik-yok kahini: python3 tools/codex/e2.py; her döngü tam 300 örnek.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+yapı Tohum { x: tam64; }
+işlev rastgele(s: &değişken Tohum) -> tam32 {
+    s.x = (s.x * 1103515245 + 12345) & 2147483647; ver s.x olarak tam32;
+}
+kullan drivers::fs::ustar::{ TarGirdisi, tar_listele, tar_bul };
+kullan tests::drivers::fs::veri::ustar_veri::{ tar_imaj };
+kullan tests::drivers::bulanik::veri::fikstur::{ test_diski, bpb_verisi, uzun_veri, rsdp2, sdt_verisi, madt_verisi, fadt_verisi, pci_verisi, e820_veri, mb2_veri, elf_verisi };
+işlev dene(b: Dizi<dtam8>) -> mantıksal { tar_listele(b); tar_bul(b, "boot/ğ.txt"); ver doğru; }
+
+işlev test_sifir_ve_bir() -> mantıksal {
+    ver dene(bayt_sifir(0)) ve dene(bayt_sifir(1));
+}
+
+işlev test_rastgele() -> mantıksal {
+    değişken s: Tohum = Tohum { x: 123 }; değişken i: tam32 = 0;
+    iken i < 300 {
+        değişken n: tam32 = rastgele(&değişken s) % 601; değişken b: Dizi<dtam8> = []; değişken j: tam32 = 0;
+        iken j < n { dizi_ekle(b, (rastgele(&değişken s) & 255) olarak dtam8); j = j + 1; }
+        eğer değil dene(b) { ver yanlış; } i = i + 1;
+    }
+    ver i == 300;
+}
+
+işlev test_mutasyon_ustar() -> mantıksal {
+    değişken b: Dizi<dtam8> = tar_imaj(); eşleş tar_listele(b) { tamam(v) => { } hata(e) => { ver yanlış; } }
+    değişken s: Tohum = Tohum { x: 456 }; değişken i: tam32 = 0;
+    iken i < 300 {
+        değişken yer: tam32 = rastgele(&değişken s) % dizi_boyut(b);
+        değişken eski: tam32 = oku_u8(b, yer); değişken fark: tam32 = 1 + rastgele(&değişken s) % 255;
+        yaz_u8(b, yer, (eski ^ fark) olarak tam64);
+        eğer değil dene(b) { ver yanlış; }
+        yaz_u8(b, yer, eski olarak tam64); i = i + 1;
+    } ver i == 300;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sifir_ve_bir() { yazdir_metin("BASARISIZ sifir_ve_bir"); h = h + 1; }
+    eğer değil test_rastgele() { yazdir_metin("BASARISIZ rastgele"); h = h + 1; }
+    eğer değil test_mutasyon_ustar() { yazdir_metin("BASARISIZ mutasyon_ustar"); h = h + 1; }
+    ver h;
+}

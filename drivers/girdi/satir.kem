@@ -1,0 +1,73 @@
+// Unicode kod noktalarıyla sınırlı satır ve 16 kayıtlık komut geçmişi.
+kullan drivers::ps2::klavye_tr::{ TusOlayi, OZEL_ENTER, OZEL_GERI, OZEL_SIL, OZEL_SOL, OZEL_SAG, OZEL_YUKARI, OZEL_ASAGI };
+kullan drivers::ortak::utf8::{ utf8_coz, utf8_kodla };
+genel yapı SatirDuzenleyici {
+    kodlar: Dizi<tam32>; imlec: tam32; gecmis: Dizi<metin>; konum: tam32; taslak: metin;
+}
+genel işlev satir_yeni() -> SatirDuzenleyici {
+    değişken k: Dizi<tam32> = []; değişken g: Dizi<metin> = [];
+    ver SatirDuzenleyici { kodlar: k, imlec: 0, gecmis: g, konum: 0, taslak: "" };
+}
+genel işlev satir_metni(d: SatirDuzenleyici) -> metin { ver utf8_kodla(d.kodlar); }
+işlev duzenle(d: &değişken SatirDuzenleyici, yer: tam32, kod: tam32, sil: mantıksal) {
+    değişken yeni: Dizi<tam32> = []; değişken i: tam32 = 0;
+    iken i < dizi_boyut(d.kodlar) {
+        eğer i == yer ve değil sil { dizi_ekle(yeni, kod); }
+        eğer i != yer veya değil sil { dizi_ekle(yeni, dizi_al(d.kodlar, i)); }
+        i = i + 1;
+    }
+    eğer yer == dizi_boyut(d.kodlar) ve değil sil { dizi_ekle(yeni, kod); }
+    d.kodlar = yeni; d.konum = dizi_boyut(d.gecmis);
+}
+işlev gecmise_git(d: &değişken SatirDuzenleyici, yukari: mantıksal) {
+    değişken n: tam32 = dizi_boyut(d.gecmis);
+    eğer yukari {
+        eğer d.konum == 0 { ver; }
+        eğer d.konum == n { d.taslak = utf8_kodla(d.kodlar); }
+        d.konum = d.konum - 1;
+    } değilse { eğer d.konum >= n { ver; } d.konum = d.konum + 1; }
+    değişken s: metin = d.taslak;
+    eğer d.konum < n { s = dizi_al(d.gecmis, d.konum); }
+    d.kodlar = utf8_coz(s); d.imlec = dizi_boyut(d.kodlar);
+}
+genel işlev satir_olay(d: &değişken SatirDuzenleyici, olay: TusOlayi) -> seçimlik<metin> {
+    eşleş olay {
+        TusOlayi::Yok => { }
+        TusOlayi::Karakter(k) => {
+            eğer k >= 32 ve k != 127 ve k <= 1114111 ve değil (k >= 55296 ve k <= 57343) ve dizi_boyut(d.kodlar) < 256 {
+                duzenle(d, d.imlec, k, yanlış); d.imlec = d.imlec + 1;
+            }
+        }
+        TusOlayi::Ozel(k, basildi) => {
+            eğer değil basildi { ver hiç; }
+            eğer k == OZEL_SOL { eğer d.imlec > 0 { d.imlec = d.imlec - 1; } }
+            değilse eğer k == OZEL_SAG { eğer d.imlec < dizi_boyut(d.kodlar) { d.imlec = d.imlec + 1; } }
+            değilse eğer k == OZEL_GERI { eğer d.imlec > 0 { d.imlec = d.imlec - 1; duzenle(d, d.imlec, 0, doğru); } }
+            değilse eğer k == OZEL_SIL { eğer d.imlec < dizi_boyut(d.kodlar) { duzenle(d, d.imlec, 0, doğru); } }
+            değilse eğer k == OZEL_YUKARI { gecmise_git(d, doğru); }
+            değilse eğer k == OZEL_ASAGI { gecmise_git(d, yanlış); }
+            değilse eğer k == OZEL_ENTER {
+                değişken s: metin = utf8_kodla(d.kodlar);
+                değişken n: tam32 = dizi_boyut(d.gecmis);
+                değişken ekle: mantıksal = dizi_boyut(d.kodlar) > 0;
+                eğer n > 0 { eğer metin_esit(dizi_al(d.gecmis, n - 1), s) { ekle = yanlış; } }
+                eğer ekle {
+                    değişken yeni: Dizi<metin> = []; değişken i: tam32 = 0;
+                    eğer n == 16 { i = 1; }
+                    iken i < n { dizi_ekle(yeni, dizi_al(d.gecmis, i)); i = i + 1; }
+                    dizi_ekle(yeni, s); d.gecmis = yeni;
+                }
+                değişken bos: Dizi<tam32> = []; d.kodlar = bos; d.imlec = 0;
+                d.konum = dizi_boyut(d.gecmis); d.taslak = ""; ver değer(s);
+            }
+        }
+    }
+    ver hiç;
+}
+// C010: sentetik olay üreticileri, içe aktarılan çeşidin kurucusunu çağırana taşımadan kullanır.
+genel işlev satir_karakter(d: &değişken SatirDuzenleyici, k: tam32) -> seçimlik<metin> {
+    ver satir_olay(d, TusOlayi::Karakter(k));
+}
+genel işlev satir_tus(d: &değişken SatirDuzenleyici, k: tam32, basildi: mantıksal) -> seçimlik<metin> {
+    ver satir_olay(d, TusOlayi::Ozel(k, basildi));
+}

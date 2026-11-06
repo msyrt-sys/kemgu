@@ -1,0 +1,90 @@
+// PSF1/PSF2 glifleri ve tek kod noktalı Unicode eşlemeleri.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32 };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz };
+genel yapı PsfFont {
+    genislik: tam32; yukseklik: tam32; glif_sayisi: tam32; glif_bayt: tam32; veri_ofseti: tam32;
+    unicode_tablo: mantıksal; veri: Dizi<dtam8>; kodlar: Dizi<tam32>; indeksler: Dizi<tam32>;
+}
+işlev unicode2_ekle(b: Dizi<dtam8>, bas: tam32, son: tam32, glif: tam32, dizi_mi: mantıksal, kodlar: Dizi<tam32>, indeksler: Dizi<tam32>) -> mantıksal {
+    değişken xs: Dizi<tam32> = utf8_bayt_coz(b, bas, son - bas);
+    değişken ofs: tam32 = bas;
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(xs) {
+        değişken k: tam32 = dizi_al(xs, i);
+        // Geçerli U+FFFD ile çözümdeki bozuk bayt yerine koymasını ayır.
+        eğer k == 65533 {
+            eğer son - ofs < 3 { ver yanlış; }
+            eğer oku_u8(b, ofs) != 239 veya oku_u8(b, ofs + 1) != 191 veya oku_u8(b, ofs + 2) != 189 { ver yanlış; }
+        }
+        değişken boy: tam32 = 1;
+        eğer k >= 128 { boy = 2; } eğer k >= 2048 { boy = 3; } eğer k >= 65536 { boy = 4; }
+        ofs = ofs + boy;
+        eğer değil dizi_mi { dizi_ekle(kodlar, k); dizi_ekle(indeksler, glif); }
+        i = i + 1;
+    }
+    ver ofs == son;
+}
+genel işlev psf_coz(b: Dizi<dtam8>) -> sonuç<PsfFont, metin> {
+    değişken n: tam32 = dizi_boyut(b);
+    eğer n < 4 { ver hata("kisa psf"); }
+    değişken bir: mantıksal = oku_u8(b, 0) == 54 ve oku_u8(b, 1) == 4;
+    değişken w: tam64 = 8; değişken h: tam64 = 0;
+    değişken sayi: tam64 = 256; değişken boy: tam64 = 0; değişken bas: tam64 = 4;
+    değişken unicode: mantıksal = yanlış;
+    eğer bir {
+        değişken kip: tam32 = oku_u8(b, 2);
+        eğer (kip & 1) != 0 { sayi = 512; }
+        unicode = (kip & 6) != 0; h = oku_u8(b, 3) olarak tam64; boy = h;
+    } değilse {
+        eğer oku_le32(b, 0) != 2253043058 { ver hata("imza"); }
+        eğer n < 32 { ver hata("kisa psf"); }
+        eğer oku_le32(b, 4) != 0 { ver hata("surum"); }
+        bas = oku_le32(b, 8); unicode = (oku_le32(b, 12) & 1) != 0;
+        sayi = oku_le32(b, 16); boy = oku_le32(b, 20); h = oku_le32(b, 24); w = oku_le32(b, 28);
+        eğer bas < 32 { ver hata("baslik"); }
+    }
+    eğer w < 1 veya h < 1 veya w > 4096 veya h > 4096 veya sayi < 1 veya sayi > 65536 { ver hata("boyut"); }
+    eğer boy < ((w + 7) / 8) * h veya bas > (n olarak tam64) { ver hata("glif boyu"); }
+    eğer sayi > ((n olarak tam64) - bas) / boy { ver hata("glif boyu"); }
+    değişken kodlar: Dizi<tam32> = [];
+    değişken indeksler: Dizi<tam32> = [];
+    değişken ofs: tam32 = (bas + sayi * boy) olarak tam32;
+    eğer unicode {
+        değişken glif: tam32 = 0;
+        iken glif < (sayi olarak tam32) {
+            değişken bitti: mantıksal = yanlış;
+            değişken dizi_mi: mantıksal = yanlış;
+            iken değil bitti {
+                eğer bir {
+                    eğer n - ofs < 2 { ver hata("unicode tablo"); }
+                    değişken kod: tam32 = oku_le16(b, ofs); ofs = ofs + 2;
+                    eğer kod == 65535 { bitti = doğru; }
+                    değilse eğer kod == 65534 { dizi_mi = doğru; }
+                    değilse {
+                        eğer kod >= 55296 ve kod <= 57343 { ver hata("unicode tablo"); }
+                        eğer değil dizi_mi { dizi_ekle(kodlar, kod); dizi_ekle(indeksler, glif); }
+                    }
+                } değilse {
+                    değişken ilk: tam32 = ofs;
+                    iken ofs < n ve oku_u8(b, ofs) != 255 ve oku_u8(b, ofs) != 254 { ofs = ofs + 1; }
+                    eğer ofs >= n { ver hata("unicode tablo"); }
+                    eğer değil unicode2_ekle(b, ilk, ofs, glif, dizi_mi, kodlar, indeksler) { ver hata("unicode tablo"); }
+                    eğer oku_u8(b, ofs) == 255 { bitti = doğru; } değilse { dizi_mi = doğru; }
+                    ofs = ofs + 1;
+                }
+            }
+            glif = glif + 1;
+        }
+    }
+    ver tamam(PsfFont { genislik: w olarak tam32, yukseklik: h olarak tam32, glif_sayisi: sayi olarak tam32,
+        glif_bayt: boy olarak tam32, veri_ofseti: bas olarak tam32, unicode_tablo: unicode, veri: b, kodlar: kodlar, indeksler: indeksler });
+}
+genel işlev glif_indeksi(font: PsfFont, kod: tam32) -> seçimlik<tam32> {
+    eğer kod < 0 veya kod > 1114111 veya (kod >= 55296 ve kod <= 57343) { ver hiç; }
+    eğer değil font.unicode_tablo { eğer kod < font.glif_sayisi { ver değer(kod); } ver hiç; }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(font.kodlar) {
+        eğer dizi_al(font.kodlar, i) == kod { ver değer(dizi_al(font.indeksler, i)); } i = i + 1;
+    }
+    ver hiç;
+}

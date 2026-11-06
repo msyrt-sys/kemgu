@@ -1,0 +1,169 @@
+// Fikstürler: python3 tools/codex/c6.py; struct ve readelf -lhW /bin/true.
+kullan drivers::elf::elf64::{ Elf64, ElfSegment, elf64_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32, yaz_le64 };
+kullan tests::drivers::elf::veri::gercek_elf::{ gercek_imaj };
+işlev elf_verisi() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(b, 0, 127);
+    yaz_u8(b, 1, 69);
+    yaz_u8(b, 2, 76);
+    yaz_u8(b, 3, 70);
+    yaz_u8(b, 4, 2);
+    yaz_u8(b, 5, 1);
+    yaz_u8(b, 6, 1);
+    yaz_u8(b, 16, 2);
+    yaz_u8(b, 18, 62);
+    yaz_u8(b, 20, 1);
+    yaz_u8(b, 24, 1);
+    yaz_u8(b, 26, 64);
+    yaz_u8(b, 32, 64);
+    yaz_u8(b, 52, 64);
+    yaz_u8(b, 54, 56);
+    yaz_u8(b, 56, 2);
+    yaz_u8(b, 64, 1);
+    yaz_u8(b, 68, 5);
+    yaz_u8(b, 72, 128);
+    yaz_u8(b, 73, 1);
+    yaz_u8(b, 82, 64);
+    yaz_u8(b, 96, 16);
+    yaz_u8(b, 104, 32);
+    yaz_u8(b, 112, 1);
+    yaz_u8(b, 120, 1);
+    yaz_u8(b, 124, 6);
+    yaz_u8(b, 128, 144);
+    yaz_u8(b, 129, 1);
+    yaz_u8(b, 138, 80);
+    yaz_u8(b, 152, 16);
+    yaz_u8(b, 160, 32);
+    yaz_u8(b, 168, 1);
+    ver b;
+}
+
+işlev test_yuklemeler() -> mantıksal {
+    eşleş elf64_coz(elf_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken e: Elf64 = v; değişken xs: Dizi<ElfSegment> = e.yuklemeler;
+        eğer e.makine != 62 veya e.tur != 2 veya e.giris != 4194305 veya dizi_boyut(xs) != 2 { ver yanlış; }
+        değişken x: ElfSegment = dizi_al(xs, 0);
+        ver x.dosya_ofseti == 384 ve x.sanal_adres == 4194304 ve x.dosya_boyu == 16 ve x.bellek_boyu == 32 ve x.bayraklar == 5;
+    } }
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_u8(b, 0, 0);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "imza"); } }
+}
+
+işlev test_sinif() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_u8(b, 4, 1);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bicim"); } }
+}
+
+işlev test_endian() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_u8(b, 5, 2);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bicim"); } }
+}
+
+işlev test_makine() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le16(b, 18, 1);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "makine"); } }
+}
+
+işlev test_ph_boyu() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le16(b, 54, 55);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "baslik boyu"); } }
+}
+
+işlev test_ph_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 32, 9223372036854775807);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "program basligi"); } }
+}
+
+işlev test_dosya_buyuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 96, 33);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "dosya siniri"); } }
+}
+
+işlev test_dosya_sinir() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 72, 511);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "dosya siniri"); } }
+}
+
+işlev test_wx() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le32(b, 68, 7);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "wx"); } }
+}
+
+işlev test_ortusme() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 136, 4194320);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "ortusme"); } }
+}
+
+işlev test_giris_rw() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 24, 5242880);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "giris"); } }
+}
+
+işlev test_giris_son() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 24, 4194336);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "giris"); } }
+}
+
+işlev test_adres_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 80, 9223372036854775807);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bellek siniri"); } }
+}
+
+işlev test_hiza() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b, 112, 3);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "hiza"); } }
+}
+
+işlev test_ph_sayi() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le16(b, 56, 65535);
+    eşleş elf64_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "program basligi"); } }
+}
+
+işlev test_kisa() -> mantıksal {
+    eşleş elf64_coz(bayt_sifir(63)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "kisa elf"); } }
+}
+
+işlev test_aarch64() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le16(b, 18, 183);
+    eşleş elf64_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken e: Elf64 = v; ver e.makine == 183; } }
+}
+
+işlev test_gercek() -> mantıksal {
+    eşleş elf64_coz(gercek_imaj()) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => {
+        değişken e: Elf64 = v; değişken xs: Dizi<ElfSegment> = e.yuklemeler;
+        eğer e.giris != 6208 veya e.makine != 183 veya dizi_boyut(xs) != 2 { ver yanlış; }
+        değişken s0: ElfSegment = dizi_al(xs, 0);
+        eğer s0.bayraklar != 5 veya s0.dosya_ofseti != 0 veya s0.sanal_adres != 0 veya s0.dosya_boyu != 17148 veya s0.bellek_boyu != 17148 veya s0.hiza != 65536 { ver yanlış; }
+        değişken s1: ElfSegment = dizi_al(xs, 1);
+        eğer s1.bayraklar != 6 veya s1.dosya_ofseti != 64592 veya s1.sanal_adres != 130128 veya s1.dosya_boyu != 1080 veya s1.bellek_boyu != 1096 veya s1.hiza != 65536 { ver yanlış; }
+        ver doğru;
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_yuklemeler() { yazdir_metin("BASARISIZ yuklemeler"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_sinif() { yazdir_metin("BASARISIZ sinif"); h = h + 1; }
+    eğer değil test_endian() { yazdir_metin("BASARISIZ endian"); h = h + 1; }
+    eğer değil test_makine() { yazdir_metin("BASARISIZ makine"); h = h + 1; }
+    eğer değil test_ph_boyu() { yazdir_metin("BASARISIZ ph_boyu"); h = h + 1; }
+    eğer değil test_ph_tasma() { yazdir_metin("BASARISIZ ph_tasma"); h = h + 1; }
+    eğer değil test_dosya_buyuk() { yazdir_metin("BASARISIZ dosya_buyuk"); h = h + 1; }
+    eğer değil test_dosya_sinir() { yazdir_metin("BASARISIZ dosya_sinir"); h = h + 1; }
+    eğer değil test_wx() { yazdir_metin("BASARISIZ wx"); h = h + 1; }
+    eğer değil test_ortusme() { yazdir_metin("BASARISIZ ortusme"); h = h + 1; }
+    eğer değil test_giris_rw() { yazdir_metin("BASARISIZ giris_rw"); h = h + 1; }
+    eğer değil test_giris_son() { yazdir_metin("BASARISIZ giris_son"); h = h + 1; }
+    eğer değil test_adres_tasma() { yazdir_metin("BASARISIZ adres_tasma"); h = h + 1; }
+    eğer değil test_hiza() { yazdir_metin("BASARISIZ hiza"); h = h + 1; }
+    eğer değil test_ph_sayi() { yazdir_metin("BASARISIZ ph_sayi"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_aarch64() { yazdir_metin("BASARISIZ aarch64"); h = h + 1; }
+    eğer değil test_gercek() { yazdir_metin("BASARISIZ gercek"); h = h + 1; }
+    ver h;
+}

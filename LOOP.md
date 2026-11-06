@@ -209,13 +209,28 @@
       seri port ve ikinci makine gerekmez): `belgeler/KEMGU_OS_Donanim_Yol_Haritasi.md`.
       H0 kararlari (Mehmet) once; kritik yol H1f/H1g -> H2 -> H3 -> H4/H5/H6/H7 -> H8 -> H9
       -> H10 -> H11. E3b-E3f bu haritanin H9 maddelerine baglanir.
-- [ ] E4a [L] ChatGPT paketleri (otomasyon/chatgpt/, D-735): ps2_klavye · ps2_fare ·
+- [x] E4a [L] ✓ D-737 (Codex dalgasi 1, 39 is, 91 test dosyasi). ChatGPT paketleri (otomasyon/chatgpt/, D-735): ps2_klavye · ps2_fare ·
       crc32_bolum · fat32_bpb · fat32_dizin · acpi_tablo. Mehmet yapistirir, yanit
       `dongu.py isler/<is>.json --yanit gelen/<is>.md` ile icer alinir; Claude gozden
       gecirir + sabotaj + PR. Gelen her modul `calistir_chatgpt_kopru` kapisinda.
       Sonra: surucu_diff globu yeni dizinlere genisletilir; donanim baglama (port/MMIO) Claude'da.
 
 # ===== F. FORMEL =====
+- [ ] E4c [M] FAT32 yazma PERFORMANSI: fat32_coklu (110 dosya) self-host 16 sn, fat32_yaz 14 sn
+      (Spark); x86 CI'da 30 sn'yi asti (D-737). Muhtemel kok: her kume ayiriminda FAT'in bastan
+      taranmasi / imaj kopyasi — once PROFILLE, tahmin etme. Gercek OS'te de hissedilir.
+- [ ] E4b [M] Codex derleyici bulgulari (otomasyon/chatgpt/codex_bulgular.md; HEPSI abd9aa9'da
+      yeniden uretildi). SESSIZ YANLIS ONCE:
+      C009 [S] GUVENLIK: self nitelikli `m::dosya_sil(..)` -> `@kdl_dosya_sil` (GERCEK host dosyasi!);
+           C de yerel `dosya_adi` -> `@kdl_dosya_adi`. D-735 onek yakalama sinifinin YOL/C kolu.
+      C002 [M] C: `Dizi<Yapi> = dizi_olustur(0)` eleman 4 bayt -> ikinci alan bozuk (C 1, self 0).
+      C004 [S] self: `dizi_ekle(b, dizi_al(a,0))` dtam8 isaretle genisliyor (203 -> -53).
+      C005 [S] self: ice aktarilan yapi argumanindan sonraki tam64 sabit i32 geciyor.
+      LOUD (LINK-RED): C003 self sonuc<Dizi<Yapi>> eslesme · C008 IKI derleyici `ret {i8,%N,ptr} 0`
+           (D-464 sinifi, yapi payload'li sonuc) · C011 self INT_MIN -> tam32 alan.
+      CHECK PARITESI: C001 C sahte T024 (modulle ayni adli secili import) · C006 self sahte T014
+           (ice aktarilan yapi alani `[]`) · C007 C sahte T011 (gecisli tip) · C010 self sahte T016
+           (ice aktarilan cesit kurucusu).
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
       once bu onerilir).
 - [ ] F1b [L] DRF V2: tam-dil kapsami.
@@ -2576,3 +2591,13 @@
   spawn ettigi is. Yeni kapi `calistir_surucu_kosum` (test_tumu): virtio host-mock testleri IKI
   derleyicide link+calistir+stdout (dogrula.sh) — 3/3, oracle'in reddettigi 6 parca ADIYLA atlanir.
   Sabotaj 2/2: S1 mmio dali -> `@mmio_oku32` tanimsiz rc=2 · S2 delege dali -> `%34 i32` rc=2.
+- 2026-11-06 D-737: CODEX DALGASI 1 (PR #162) — 39/39 is, ~1 sa 52 dk, worktree'de. 38 saf-mantik modul
+  (ps2 klavye TR-Q/US · fare · CRC32/MBR/GPT/GUID · FAT32 bpb/dizin/kisa_ad/bicimle/yaz/oku/onar · yol ·
+  ustar · UTF-8/16 · Turkce harf · ACPI RSDP/MADT/FADT · PCI · E820 · cerceve ayirici · ELF64 W^X ·
+  framebuffer/PSF/yazi/konsol/VT · satir duzenleyici · imlec · halka · BMP · kabuk + masaustu benzetimi).
+  calistir_chatgpt_kopru: 91 test dosyasi, 808 test islevi, IKI derleyicide + stdout esit. Dis kahinler:
+  fsck.fat/mkfs.fat (FAT32), readelf (/bin/true), gercek PSF fontu, Python zlib/uuid/tarfile/Unicode 15.
+  E2 bulaniklastirma 9000+ girdi panik yok. CLAUDE DOGRULAMASI (Codex'e guvenmeden): kapsam beyaz listesi
+  temiz (Makefile yalniz CHATGPT_TESTLER), kopru 91/91 yeniden kosuldu, fat32_kahin.sh kendim kosturdum
+  (fsck temiz), BAGIMSIZ SABOTAJ (klavye 40 Shift: 304->73) -> tablo_40+caps KIRMIZI. 11 derleyici
+  bulgusu (C001-C011) abd9aa9'da TEK TEK yeniden uretildi -> E4b. Derleyici degismedi.

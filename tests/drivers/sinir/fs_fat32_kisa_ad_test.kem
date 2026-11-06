@@ -1,0 +1,27 @@
+// Kahin: python3 tools/codex/f5.py; 8.3 taban adının doğrudan uzunluğu; değerler [0, 1, 8, 9].
+kullan drivers::fs::fat32_kisa_ad::{ kisa_ad_uret };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken xs: Dizi<metin> = []; eşleş kisa_ad_uret("",xs) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken xs: Dizi<metin> = []; eşleş kisa_ad_uret("A",xs) { hata(e) => { ver yanlış; } tamam(v) => { ver metin_esit(v,"A          "); } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken xs: Dizi<metin> = []; eşleş kisa_ad_uret("AAAAAAAA",xs) { hata(e) => { ver yanlış; } tamam(v) => { ver metin_esit(v,"AAAAAAAA   "); } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken xs: Dizi<metin> = []; eşleş kisa_ad_uret("AAAAAAAAA",xs) { hata(e) => { ver yanlış; } tamam(v) => { ver metin_esit(v,"AAAAAA~1   "); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

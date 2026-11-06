@@ -1,0 +1,116 @@
+// Python PSF çözümü: tools/codex/d2.py; Türkçe kodlar ord, indeksler bağımsız tablodan.
+kullan drivers::ekran::psf::{ PsfFont, psf_coz, glif_indeksi };
+kullan tests::drivers::ekran::veri::psf_sentetik::{ sentetik_font };
+kullan tests::drivers::ekran::veri::psf_gercek::{ gercek_font };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32 };
+işlev indeks_mi(f: PsfFont, kod: tam32, i: tam32) -> mantıksal { eşleş glif_indeksi(f, kod) { hiç => { ver yanlış; } değer(v) => { ver v == i; } } }
+
+işlev test_psf2() -> mantıksal {
+    eşleş psf_coz(sentetik_font()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eğer f.genislik != 9 veya f.yukseklik != 2 veya f.glif_sayisi != 4 veya f.glif_bayt != 4 { ver yanlış; }
+        eğer değil indeks_mi(f, 65, 0) veya değil indeks_mi(f, 287, 0) veya değil indeks_mi(f, 128512, 1) veya değil indeks_mi(f, 63, 2) veya değil indeks_mi(f, 65533, 3) { ver yanlış; }
+        eşleş glif_indeksi(f, 102) { değer(i) => { ver yanlış; } hiç => { ver doğru; } }
+    } }
+}
+
+işlev test_gercek() -> mantıksal {
+    eşleş psf_coz(gercek_font()) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => {
+        değişken f: PsfFont = v;
+        eğer f.genislik != 8 veya f.yukseklik != 8 veya f.glif_sayisi != 256 { ver yanlış; }
+        eğer değil indeks_mi(f, 287, 207) { ver yanlış; }
+        eğer değil indeks_mi(f, 351, 222) { ver yanlış; }
+        eğer değil indeks_mi(f, 305, 214) { ver yanlış; }
+        eğer değil indeks_mi(f, 304, 213) { ver yanlış; }
+        eğer değil indeks_mi(f, 246, 148) { ver yanlış; }
+        eğer değil indeks_mi(f, 231, 135) { ver yanlış; }
+        eğer değil indeks_mi(f, 252, 129) { ver yanlış; }
+        ver doğru;
+    } }
+}
+
+işlev test_psf1_256() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(260); yaz_u8(b, 0, 54); yaz_u8(b, 1, 4); yaz_u8(b, 2, 0); yaz_u8(b, 3, 1);
+    eşleş psf_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: PsfFont = v; ver f.glif_sayisi == 256 ve indeks_mi(f, 255, 255); } }
+}
+
+işlev test_psf1_512() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(516); yaz_u8(b, 0, 54); yaz_u8(b, 1, 4); yaz_u8(b, 2, 1); yaz_u8(b, 3, 1);
+    eşleş psf_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: PsfFont = v; ver f.glif_sayisi == 512 ve indeks_mi(f, 511, 511); } }
+}
+
+işlev test_psf1_unicode() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(774); yaz_u8(b, 0, 54); yaz_u8(b, 1, 4); yaz_u8(b, 2, 2); yaz_u8(b, 3, 1);
+    yaz_le16(b, 260, 287); değişken i: tam32 = 262;
+    iken i < 774 { yaz_le16(b, i, 65535); i = i+2; }
+    eşleş psf_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken f: PsfFont = v; ver indeks_mi(f, 287, 0); } }
+}
+
+işlev test_magic() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_u8(b, 0, 0);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "imza"); } }
+}
+
+işlev test_surum() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_le32(b, 4, 1);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "surum"); } }
+}
+
+işlev test_baslik() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_le32(b, 8, 31);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "baslik"); } }
+}
+
+işlev test_sayisifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_le32(b, 16, 0);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "boyut"); } }
+}
+
+işlev test_boy() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_le32(b, 20, 3);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "glif boyu"); } }
+}
+
+işlev test_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_le32(b, 20, 4294967295);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "glif boyu"); } }
+}
+
+işlev test_genislik() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_le32(b, 28, 0);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "boyut"); } }
+}
+
+işlev test_utf8() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_u8(b, 48, 192);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "unicode tablo"); } }
+}
+
+işlev test_son() -> mantıksal {
+    değişken b: Dizi<dtam8> = sentetik_font(); yaz_u8(b, 65, 65);
+    eşleş psf_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "unicode tablo"); } }
+}
+
+işlev test_kisa() -> mantıksal {
+    eşleş psf_coz(bayt_sifir(3)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "kisa psf"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_psf2() { yazdir_metin("BASARISIZ psf2"); h = h + 1; }
+    eğer değil test_gercek() { yazdir_metin("BASARISIZ gercek"); h = h + 1; }
+    eğer değil test_psf1_256() { yazdir_metin("BASARISIZ psf1_256"); h = h + 1; }
+    eğer değil test_psf1_512() { yazdir_metin("BASARISIZ psf1_512"); h = h + 1; }
+    eğer değil test_psf1_unicode() { yazdir_metin("BASARISIZ psf1_unicode"); h = h + 1; }
+    eğer değil test_magic() { yazdir_metin("BASARISIZ magic"); h = h + 1; }
+    eğer değil test_surum() { yazdir_metin("BASARISIZ surum"); h = h + 1; }
+    eğer değil test_baslik() { yazdir_metin("BASARISIZ baslik"); h = h + 1; }
+    eğer değil test_sayisifir() { yazdir_metin("BASARISIZ sayisifir"); h = h + 1; }
+    eğer değil test_boy() { yazdir_metin("BASARISIZ boy"); h = h + 1; }
+    eğer değil test_tasma() { yazdir_metin("BASARISIZ tasma"); h = h + 1; }
+    eğer değil test_genislik() { yazdir_metin("BASARISIZ genislik"); h = h + 1; }
+    eğer değil test_utf8() { yazdir_metin("BASARISIZ utf8"); h = h + 1; }
+    eğer değil test_son() { yazdir_metin("BASARISIZ son"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    ver h;
+}

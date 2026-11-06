@@ -1,0 +1,9 @@
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8 };
+işlev main() -> tam32 {
+    değişken a: Dizi<dtam8> = bayt_sifir(1);
+    değişken b: Dizi<dtam8> = [];
+    yaz_u8(a, 0, 203);
+    dizi_ekle(b, oku_u8(a, 0) olarak dtam8);
+    yazdir_tam(oku_u8(b, 0));
+    eğer oku_u8(b, 0) == 203 { ver 0; } ver 1;
+}

@@ -1,0 +1,20 @@
+// IEEE yansıtılmış CRC32; geçersiz aralık için güvenli nötr sonuç 0.
+kullan drivers::ortak::bayt::{ oku_u8 };
+genel işlev crc32(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> tam64 {
+    eğer ofs < 0 veya n < 0 veya ofs > dizi_boyut(b) { ver 0; }
+    eğer n > dizi_boyut(b) - ofs { ver 0; }
+    değişken c: tam64 = 4294967295;
+    değişken i: tam32 = 0;
+    iken i < n {
+        c = c ^ (oku_u8(b, ofs + i) olarak tam64);
+        değişken j: tam32 = 0;
+        iken j < 8 {
+            eğer (c & 1) != 0 { c = (c >> 1) ^ 3988292384; }
+            değilse { c = c >> 1; }
+            c = c & 4294967295;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver c ^ 4294967295;
+}

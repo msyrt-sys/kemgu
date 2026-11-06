@@ -1,0 +1,210 @@
+// Fikstürler: python3 tools/codex/a6.py; Python struct ve (-sum(b)) & 255.
+kullan drivers::acpi::tablo::{ Rsdp, SdtBaslik, AcpiHatasi, rsdp_coz, rsdp_ara, sdt_coz, sdt_girdileri };
+kullan drivers::ortak::bayt::{ bayt_sifir, bayt_toplam8, oku_u8, yaz_u8, yaz_le32, yaz_le64, yaz_ascii };
+işlev rsdp0() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(20);
+    yaz_u8(b, 0, 82);
+    yaz_u8(b, 1, 83);
+    yaz_u8(b, 2, 68);
+    yaz_u8(b, 3, 32);
+    yaz_u8(b, 4, 80);
+    yaz_u8(b, 5, 84);
+    yaz_u8(b, 6, 82);
+    yaz_u8(b, 7, 32);
+    yaz_u8(b, 9, 75);
+    yaz_u8(b, 10, 69);
+    yaz_u8(b, 11, 77);
+    yaz_u8(b, 12, 71);
+    yaz_u8(b, 13, 85);
+    yaz_u8(b, 14, 32);
+    yaz_u8(b, 18, 16);
+    yaz_u8(b, 8, ((256 - bayt_toplam8(b, 0, 20)) & 255) olarak tam64);
+    ver b;
+}
+işlev rsdp2() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(36);
+    yaz_u8(b, 0, 82);
+    yaz_u8(b, 1, 83);
+    yaz_u8(b, 2, 68);
+    yaz_u8(b, 3, 32);
+    yaz_u8(b, 4, 80);
+    yaz_u8(b, 5, 84);
+    yaz_u8(b, 6, 82);
+    yaz_u8(b, 7, 32);
+    yaz_u8(b, 9, 75);
+    yaz_u8(b, 10, 69);
+    yaz_u8(b, 11, 77);
+    yaz_u8(b, 12, 71);
+    yaz_u8(b, 13, 85);
+    yaz_u8(b, 14, 32);
+    yaz_u8(b, 15, 2);
+    yaz_u8(b, 18, 16);
+    yaz_u8(b, 20, 36);
+    yaz_u8(b, 28, 2);
+    yaz_u8(b, 8, ((256 - bayt_toplam8(b, 0, 20)) & 255) olarak tam64);
+    yaz_u8(b, 32, ((256 - bayt_toplam8(b, 0, 36)) & 255) olarak tam64);
+    ver b;
+}
+işlev sdt_verisi(xsdt: mantıksal) -> Dizi<dtam8> {
+    değişken n: tam32 = 44;
+    eğer xsdt { n = 52; }
+    değişken b: Dizi<dtam8> = bayt_sifir(n);
+    eğer xsdt { yaz_ascii(b, 0, "XSDT"); } değilse { yaz_ascii(b, 0, "RSDT"); }
+    yaz_le32(b, 4, n olarak tam64); yaz_u8(b, 8, 1); yaz_ascii(b, 10, "KEMGU ");
+    eğer xsdt { yaz_le64(b, 36, 4096); yaz_le64(b, 44, 8192); }
+    değilse { yaz_le32(b, 36, 4096); yaz_le32(b, 40, 8192); }
+    yaz_u8(b, 9, ((256 - bayt_toplam8(b, 0, n)) & 255) olarak tam64); ver b;
+}
+işlev hata_no(e: AcpiHatasi) -> tam32 {
+    eşleş e { AcpiHatasi::KisaGirdi => { ver 1; } AcpiHatasi::ImzaYok => { ver 2; }
+        AcpiHatasi::Saglama => { ver 3; } AcpiHatasi::GenisSaglama => { ver 4; }
+        AcpiHatasi::Uzunluk => { ver 5; } }
+}
+işlev rsdp_hata(b: Dizi<dtam8>) -> tam32 {
+    eşleş rsdp_coz(b) { tamam(v) => { ver 0; } hata(e) => { ver hata_no(e); } }
+}
+
+işlev test_rsdp_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp0();
+    eğer bayt_toplam8(b, 0, 20) != 0 veya bayt_toplam8(b, 0, dizi_boyut(b)) != 0 { ver yanlış; }
+    eşleş rsdp_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken r: Rsdp = v; ver r.revizyon == 0 ve r.rsdt == 1048576 ve r.xsdt == 0 ve metin_esit(r.oem, "KEMGU");
+    } }
+}
+
+işlev test_rsdp_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp2();
+    eğer bayt_toplam8(b, 0, 20) != 0 veya bayt_toplam8(b, 0, dizi_boyut(b)) != 0 { ver yanlış; }
+    eşleş rsdp_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken r: Rsdp = v; ver r.revizyon == 2 ve r.rsdt == 1048576 ve r.xsdt == 8589934592 ve metin_esit(r.oem, "KEMGU");
+    } }
+}
+
+işlev test_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(19);
+    ver rsdp_hata(b) == 1;
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp0(); yaz_u8(b, 0, 0);
+    ver rsdp_hata(b) == 2;
+}
+
+işlev test_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp0(); yaz_u8(b, 8, 0);
+    ver rsdp_hata(b) == 3;
+}
+
+işlev test_genis() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp2(); yaz_u8(b, 32, 0);
+    ver rsdp_hata(b) == 4;
+}
+
+işlev test_uzunluk() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp2(); yaz_le32(b, 20, 35);
+    ver rsdp_hata(b) == 5;
+}
+
+işlev test_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp2(); yaz_le32(b, 20, 4294967295);
+    ver rsdp_hata(b) == 5;
+}
+
+işlev test_v2_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = rsdp0(); yaz_u8(b, 15, 2); yaz_u8(b, 8, 0); yaz_u8(b, 8, ((256-bayt_toplam8(b, 0, 20)) & 255) olarak tam64);
+    ver rsdp_hata(b) == 1;
+}
+
+işlev test_ara_32() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(64); değişken r: Dizi<dtam8> = rsdp0();
+    değişken i: tam32 = 0;
+    iken i < 20 { yaz_u8(b, 32 + i, oku_u8(r, i) olarak tam64); i = i + 1; }
+    eşleş rsdp_ara(b) { değer(v) => { ver v == 32; } hiç => { ver yanlış; } }
+}
+
+işlev test_ara_33() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(64); değişken r: Dizi<dtam8> = rsdp0();
+    değişken i: tam32 = 0;
+    iken i < 20 { yaz_u8(b, 33 + i, oku_u8(r, i) olarak tam64); i = i + 1; }
+    eşleş rsdp_ara(b) { değer(v) => { ver yanlış; } hiç => { ver doğru; } }
+}
+
+işlev test_ara_bozuktan_sonra() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(64); değişken r: Dizi<dtam8> = rsdp0();
+    değişken i: tam32 = 0;
+    iken i < 20 { yaz_u8(b, i, oku_u8(r, i) olarak tam64); yaz_u8(b, 32 + i, oku_u8(r, i) olarak tam64); i = i + 1; }
+    yaz_u8(b, 8, 0);
+    eşleş rsdp_ara(b) { değer(v) => { ver v == 32; } hiç => { ver yanlış; } }
+}
+
+işlev test_girdiler_doğru() -> mantıksal {
+    değişken b: Dizi<dtam8> = sdt_verisi(doğru);
+    eğer bayt_toplam8(b, 0, dizi_boyut(b)) != 0 { ver yanlış; }
+    eşleş sdt_girdileri(b, doğru) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<tam64> = v; ver dizi_boyut(xs) == 2 ve dizi_al(xs, 0) == 4096 ve dizi_al(xs, 1) == 8192;
+    } }
+}
+
+işlev test_girdiler_yanlış() -> mantıksal {
+    değişken b: Dizi<dtam8> = sdt_verisi(yanlış);
+    eğer bayt_toplam8(b, 0, dizi_boyut(b)) != 0 { ver yanlış; }
+    eşleş sdt_girdileri(b, yanlış) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<tam64> = v; ver dizi_boyut(xs) == 2 ve dizi_al(xs, 0) == 4096 ve dizi_al(xs, 1) == 8192;
+    } }
+}
+
+işlev test_sdt_baslik() -> mantıksal {
+    eşleş sdt_coz(sdt_verisi(doğru)) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken h: SdtBaslik = v; ver h.uzunluk == 52 ve h.revizyon == 1 ve metin_esit(h.imza, "XSDT") ve metin_esit(h.oem, "KEMGU");
+    } }
+}
+
+işlev test_sdt_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(35);
+    eşleş sdt_girdileri(b, doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver hata_no(e) == 1; } }
+}
+
+işlev test_sdt_kucuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = sdt_verisi(doğru); yaz_le32(b, 4, 35);
+    eşleş sdt_girdileri(b, doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver hata_no(e) == 5; } }
+}
+
+işlev test_sdt_buyuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = sdt_verisi(doğru); yaz_le32(b, 4, 4294967295);
+    eşleş sdt_girdileri(b, doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver hata_no(e) == 5; } }
+}
+
+işlev test_sdt_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = sdt_verisi(doğru); yaz_u8(b, 9, 0);
+    eşleş sdt_girdileri(b, doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver hata_no(e) == 3; } }
+}
+
+işlev test_sdt_artik() -> mantıksal {
+    değişken b: Dizi<dtam8> = sdt_verisi(doğru); yaz_le32(b, 4, 50); yaz_u8(b, 9, 0); yaz_u8(b, 9, ((256-bayt_toplam8(b, 0, 50)) & 255) olarak tam64);
+    eşleş sdt_girdileri(b, doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver hata_no(e) == 5; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_rsdp_0() { yazdir_metin("BASARISIZ rsdp_0"); h = h + 1; }
+    eğer değil test_rsdp_2() { yazdir_metin("BASARISIZ rsdp_2"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_saglama() { yazdir_metin("BASARISIZ saglama"); h = h + 1; }
+    eğer değil test_genis() { yazdir_metin("BASARISIZ genis"); h = h + 1; }
+    eğer değil test_uzunluk() { yazdir_metin("BASARISIZ uzunluk"); h = h + 1; }
+    eğer değil test_tasma() { yazdir_metin("BASARISIZ tasma"); h = h + 1; }
+    eğer değil test_v2_kisa() { yazdir_metin("BASARISIZ v2_kisa"); h = h + 1; }
+    eğer değil test_ara_32() { yazdir_metin("BASARISIZ ara_32"); h = h + 1; }
+    eğer değil test_ara_33() { yazdir_metin("BASARISIZ ara_33"); h = h + 1; }
+    eğer değil test_ara_bozuktan_sonra() { yazdir_metin("BASARISIZ ara_bozuktan_sonra"); h = h + 1; }
+    eğer değil test_girdiler_doğru() { yazdir_metin("BASARISIZ girdiler_doğru"); h = h + 1; }
+    eğer değil test_girdiler_yanlış() { yazdir_metin("BASARISIZ girdiler_yanlış"); h = h + 1; }
+    eğer değil test_sdt_baslik() { yazdir_metin("BASARISIZ sdt_baslik"); h = h + 1; }
+    eğer değil test_sdt_kisa() { yazdir_metin("BASARISIZ sdt_kisa"); h = h + 1; }
+    eğer değil test_sdt_kucuk() { yazdir_metin("BASARISIZ sdt_kucuk"); h = h + 1; }
+    eğer değil test_sdt_buyuk() { yazdir_metin("BASARISIZ sdt_buyuk"); h = h + 1; }
+    eğer değil test_sdt_saglama() { yazdir_metin("BASARISIZ sdt_saglama"); h = h + 1; }
+    eğer değil test_sdt_artik() { yazdir_metin("BASARISIZ sdt_artik"); h = h + 1; }
+    ver h;
+}

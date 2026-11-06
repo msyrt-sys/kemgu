@@ -1,0 +1,33 @@
+// Kahin: python3 tools/codex/f5.py; sıfır dosya boylu LOAD için dosya ofseti; değerler [0, 1, 512, 513].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan tests::drivers::bulanik::veri::fikstur::{ bpb_verisi, pci_verisi, elf_verisi, madt_verisi, fadt_verisi, sdt_verisi };
+kullan drivers::elf::elf64::{ Elf64, ElfSegment, elf64_coz };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b,72,0 olarak tam64); yaz_le64(b,96,0 olarak tam64);
+    eşleş elf64_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver doğru; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b,72,1 olarak tam64); yaz_le64(b,96,0 olarak tam64);
+    eşleş elf64_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver doğru; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b,72,512 olarak tam64); yaz_le64(b,96,0 olarak tam64);
+    eşleş elf64_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { ver doğru; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = elf_verisi(); yaz_le64(b,72,513 olarak tam64); yaz_le64(b,96,0 olarak tam64);
+    eşleş elf64_coz(b) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

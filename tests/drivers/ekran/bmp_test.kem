@@ -1,0 +1,145 @@
+// Kahin: python3 tools/codex/d9.py; BMP struct ve bağımsız RGB ızgarası.
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_oku };
+kullan drivers::ekran::bmp::{ Bmp, bmp_coz, bmp_ciz };
+kullan tests::drivers::ekran::veri::bmp_fikstur::{ alt24, ust24, alt32, maske32 };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32 };
+işlev reddet(b: Dizi<dtam8>) -> mantıksal { eşleş bmp_coz(b) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } } }
+işlev renk(c: Cerceve, x: tam32, y: tam32, beklenen: tam32) -> mantıksal { eşleş piksel_oku(c,x,y) { hiç => { ver yanlış; } değer(v) => { ver v == beklenen; } } }
+
+işlev test_alt24() -> mantıksal {
+    eşleş cerceve_yeni(3, 2, 16) { hata(e) => { ver yanlış; } tamam(v) => { değişken c: Cerceve = v;
+        eşleş bmp_ciz(c, alt24(), 0, 0) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 6 { ver yanlış; } } }
+        ver renk(c, 0, 0, 16711680) ve renk(c, 1, 0, 65280) ve renk(c, 2, 0, 255) ve renk(c, 0, 1, 1193046) ve renk(c, 1, 1, 16777215) ve renk(c, 2, 1, 0);
+    } }
+}
+
+işlev test_ust24() -> mantıksal {
+    eşleş cerceve_yeni(3, 2, 16) { hata(e) => { ver yanlış; } tamam(v) => { değişken c: Cerceve = v;
+        eşleş bmp_ciz(c, ust24(), 0, 0) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 6 { ver yanlış; } } }
+        ver renk(c, 0, 0, 16711680) ve renk(c, 1, 0, 65280) ve renk(c, 2, 0, 255) ve renk(c, 0, 1, 1193046) ve renk(c, 1, 1, 16777215) ve renk(c, 2, 1, 0);
+    } }
+}
+
+işlev test_alt32() -> mantıksal {
+    eşleş cerceve_yeni(3, 2, 16) { hata(e) => { ver yanlış; } tamam(v) => { değişken c: Cerceve = v;
+        eşleş bmp_ciz(c, alt32(), 0, 0) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 6 { ver yanlış; } } }
+        ver renk(c, 0, 0, 16711680) ve renk(c, 1, 0, 65280) ve renk(c, 2, 0, 255) ve renk(c, 0, 1, 1193046) ve renk(c, 1, 1, 16777215) ve renk(c, 2, 1, 0);
+    } }
+}
+
+işlev test_maske32() -> mantıksal {
+    eşleş cerceve_yeni(3, 2, 16) { hata(e) => { ver yanlış; } tamam(v) => { değişken c: Cerceve = v;
+        eşleş bmp_ciz(c, maske32(), 0, 0) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 6 { ver yanlış; } } }
+        ver renk(c, 0, 0, 16711680) ve renk(c, 1, 0, 65280) ve renk(c, 2, 0, 255) ve renk(c, 0, 1, 1127253) ve renk(c, 1, 1, 16777215) ve renk(c, 2, 1, 0);
+    } }
+}
+
+işlev test_kirp() -> mantıksal {
+    eşleş cerceve_yeni(2, 1, 8) { hata(e) => { ver yanlış; } tamam(v) => { değişken c: Cerceve = v;
+        eşleş bmp_ciz(c, alt24(), -1, -1) { hata(e) => { ver yanlış; } tamam(n) => { ver n == 2 ve renk(c, 0, 0, 16777215) ve renk(c, 1, 0, 0); } }
+    } }
+}
+
+işlev test_disari() -> mantıksal {
+    eşleş cerceve_yeni(2, 1, 8) { hata(e) => { ver yanlış; } tamam(v) => { değişken c: Cerceve = v;
+        eşleş bmp_ciz(c, alt24(), -2147483648, 2147483647) { hata(e) => { ver yanlış; } tamam(n) => { ver n == 0 ve renk(c, 0, 0, 0); } }
+    } }
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_u8(b, 0, 0 olarak tam64); ver reddet(b);
+}
+
+işlev test_dib_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 14, 39 olarak tam64); ver reddet(b);
+}
+
+işlev test_dib_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 14, 4294967295 olarak tam64); ver reddet(b);
+}
+
+işlev test_ofset() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 10, 53 olarak tam64); ver reddet(b);
+}
+
+işlev test_genislik_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 18, 0 olarak tam64); ver reddet(b);
+}
+
+işlev test_genislik_negatif() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 18, 4294967295 olarak tam64); ver reddet(b);
+}
+
+işlev test_yukseklik_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 22, 0 olarak tam64); ver reddet(b);
+}
+
+işlev test_yukseklik_min() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 22, 2147483648 olarak tam64); ver reddet(b);
+}
+
+işlev test_duzlem() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le16(b, 26, 2 olarak tam64); ver reddet(b);
+}
+
+işlev test_bpp() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le16(b, 28, 16 olarak tam64); ver reddet(b);
+}
+
+işlev test_sikistirma() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 30, 1 olarak tam64); ver reddet(b);
+}
+
+işlev test_dosya_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 2, 54 olarak tam64); ver reddet(b);
+}
+
+işlev test_dosya_uzun() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); yaz_le32(b, 2, 999 olarak tam64); ver reddet(b);
+}
+
+işlev test_sifir_maske() -> mantıksal {
+    değişken b: Dizi<dtam8> = maske32(); yaz_le32(b, 54, 0 olarak tam64); yaz_le32(b, 58, 65280 olarak tam64); ver reddet(b);
+}
+
+işlev test_ortusen() -> mantıksal {
+    değişken b: Dizi<dtam8> = maske32(); yaz_le32(b, 54, 255 olarak tam64); yaz_le32(b, 58, 255 olarak tam64); ver reddet(b);
+}
+
+işlev test_aralikli() -> mantıksal {
+    değişken b: Dizi<dtam8> = maske32(); yaz_le32(b, 54, 5570560 olarak tam64); yaz_le32(b, 58, 65280 olarak tam64); ver reddet(b);
+}
+
+işlev test_kesik() -> mantıksal {
+    değişken b: Dizi<dtam8> = alt24(); değişken k: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < dizi_boyut(b) - 1 { dizi_ekle(k, (dizi_al(b, i) olarak tam32) olarak dtam8); i = i + 1; }
+    ver reddet(k) ve reddet(bayt_sifir(0)) ve reddet(bayt_sifir(53));
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_alt24() { yazdir_metin("BASARISIZ alt24"); h = h + 1; }
+    eğer değil test_ust24() { yazdir_metin("BASARISIZ ust24"); h = h + 1; }
+    eğer değil test_alt32() { yazdir_metin("BASARISIZ alt32"); h = h + 1; }
+    eğer değil test_maske32() { yazdir_metin("BASARISIZ maske32"); h = h + 1; }
+    eğer değil test_kirp() { yazdir_metin("BASARISIZ kirp"); h = h + 1; }
+    eğer değil test_disari() { yazdir_metin("BASARISIZ disari"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_dib_kisa() { yazdir_metin("BASARISIZ dib_kisa"); h = h + 1; }
+    eğer değil test_dib_tasma() { yazdir_metin("BASARISIZ dib_tasma"); h = h + 1; }
+    eğer değil test_ofset() { yazdir_metin("BASARISIZ ofset"); h = h + 1; }
+    eğer değil test_genislik_sifir() { yazdir_metin("BASARISIZ genislik_sifir"); h = h + 1; }
+    eğer değil test_genislik_negatif() { yazdir_metin("BASARISIZ genislik_negatif"); h = h + 1; }
+    eğer değil test_yukseklik_sifir() { yazdir_metin("BASARISIZ yukseklik_sifir"); h = h + 1; }
+    eğer değil test_yukseklik_min() { yazdir_metin("BASARISIZ yukseklik_min"); h = h + 1; }
+    eğer değil test_duzlem() { yazdir_metin("BASARISIZ duzlem"); h = h + 1; }
+    eğer değil test_bpp() { yazdir_metin("BASARISIZ bpp"); h = h + 1; }
+    eğer değil test_sikistirma() { yazdir_metin("BASARISIZ sikistirma"); h = h + 1; }
+    eğer değil test_dosya_kisa() { yazdir_metin("BASARISIZ dosya_kisa"); h = h + 1; }
+    eğer değil test_dosya_uzun() { yazdir_metin("BASARISIZ dosya_uzun"); h = h + 1; }
+    eğer değil test_sifir_maske() { yazdir_metin("BASARISIZ sifir_maske"); h = h + 1; }
+    eğer değil test_ortusen() { yazdir_metin("BASARISIZ ortusen"); h = h + 1; }
+    eğer değil test_aralikli() { yazdir_metin("BASARISIZ aralikli"); h = h + 1; }
+    eğer değil test_kesik() { yazdir_metin("BASARISIZ kesik"); h = h + 1; }
+    ver h;
+}

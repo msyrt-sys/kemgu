@@ -1,0 +1,32 @@
+// Kahin: python3 tools/codex/f5.py; Unicode skaler kod noktası; değerler [0, 1, 1114111, 1114112].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan drivers::ortak::utf8::{ utf16le_kodla };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken xs: Dizi<tam32> = [0]; değişken b: Dizi<dtam8> = utf16le_kodla(xs);
+    ver dizi_boyut(b) == 2 ve oku_u8(b, 0) == 0 ve oku_u8(b, 1) == 0;
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken xs: Dizi<tam32> = [1]; değişken b: Dizi<dtam8> = utf16le_kodla(xs);
+    ver dizi_boyut(b) == 2 ve oku_u8(b, 0) == 1 ve oku_u8(b, 1) == 0;
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken xs: Dizi<tam32> = [1114111]; değişken b: Dizi<dtam8> = utf16le_kodla(xs);
+    ver dizi_boyut(b) == 4 ve oku_u8(b, 0) == 255 ve oku_u8(b, 1) == 219 ve oku_u8(b, 2) == 255 ve oku_u8(b, 3) == 223;
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken xs: Dizi<tam32> = [1114112]; değişken b: Dizi<dtam8> = utf16le_kodla(xs);
+    ver dizi_boyut(b) == 2 ve oku_u8(b, 0) == 253 ve oku_u8(b, 1) == 255;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

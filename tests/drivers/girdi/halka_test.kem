@@ -1,0 +1,320 @@
+// Beklentiler: python3 tools/codex/d8.py; bağımsız collections.deque FIFO modeli.
+kullan drivers::girdi::halka::{ Halka, halka_yeni, it, al, bos_mu, sayi };
+işlev esit(o: seçimlik<tam64>, n: tam64) -> mantıksal { eşleş o { hiç => { ver yanlış; } değer(v) => { ver v == n; } } }
+işlev bos(o: seçimlik<tam64>) -> mantıksal { eşleş o { hiç => { ver doğru; } değer(v) => { ver yanlış; } } }
+
+işlev test_bos() -> mantıksal {
+    eşleş halka_yeni(3) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        ver bos_mu(d) ve sayi(d) == 0 ve d.kayip == 0 ve bos(al(&değişken d));
+    } }
+}
+
+işlev test_fifo() -> mantıksal {
+    eşleş halka_yeni(3) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        it(&değişken d, 4294967297 olarak tam64); it(&değişken d, -7 olarak tam64); it(&değişken d, 9223372036854775807 olarak tam64);
+        ver esit(al(&değişken d), 4294967297 olarak tam64) ve esit(al(&değişken d), -7 olarak tam64) ve esit(al(&değişken d), 9223372036854775807 olarak tam64) ve bos_mu(d);
+    } }
+}
+
+işlev test_en_yeniyi_at() -> mantıksal {
+    eşleş halka_yeni(3) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        it(&değişken d, 11 olarak tam64); it(&değişken d, 22 olarak tam64); it(&değişken d, 33 olarak tam64);
+        eğer it(&değişken d, 44 olarak tam64) { ver yanlış; }
+        ver d.kayip == 1 ve sayi(d) == 3 ve esit(al(&değişken d), 11 olarak tam64) ve esit(al(&değişken d), 22 olarak tam64) ve esit(al(&değişken d), 33 olarak tam64);
+    } }
+}
+
+işlev test_sifir() -> mantıksal {
+    eşleş halka_yeni(0) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        ver değil it(&değişken d, 1 olarak tam64) ve bos(al(&değişken d)) ve bos_mu(d) ve d.kayip == 1;
+    } }
+}
+
+işlev test_bir() -> mantıksal {
+    eşleş halka_yeni(1) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        değişken i: tam32 = 0;
+        iken i < 100 { eğer değil it(&değişken d, i olarak tam64) { ver yanlış; } eğer değil esit(al(&değişken d), i olarak tam64) { ver yanlış; } i = i + 1; }
+        ver bos_mu(d) ve d.kayip == 0;
+    } }
+}
+
+işlev test_kayip_doygun() -> mantıksal {
+    eşleş halka_yeni(0) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        d.kayip = 9223372036854775807; it(&değişken d, 3 olarak tam64); ver d.kayip == 9223372036854775807;
+    } }
+}
+
+işlev test_gecersiz_1() -> mantıksal {
+    eşleş halka_yeni(-1) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "kapasite"); } }
+}
+
+işlev test_gecersiz_1048577() -> mantıksal {
+    eşleş halka_yeni(1048577) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "kapasite"); } }
+}
+
+işlev test_ust_sinir() -> mantıksal {
+    eşleş halka_yeni(1048576) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        ver dizi_boyut(d.veri) == 1048576 ve sayi(d) == 0;
+    } }
+}
+
+işlev test_model() -> mantıksal {
+    eşleş halka_yeni(5) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: Halka = v;
+        eğer it(&değişken d, 0 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 1 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 4294967297 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 2 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 8589934594 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 12884901891 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 0 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 0 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 0 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 4294967297 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 2 veya d.kayip != 0 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 8589934594 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 1 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 30064771079 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 2 veya d.kayip != 0 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 12884901891 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 1 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 38654705673 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 2 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 42949672970 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 47244640267 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 51539607564 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 0 { ver yanlış; }
+        eğer it(&değişken d, 55834574861 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 1 { ver yanlış; }
+        eğer it(&değişken d, 60129542158 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 2 { ver yanlış; }
+        eğer it(&değişken d, 64424509455 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 3 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 30064771079 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 3 { ver yanlış; }
+        eğer it(&değişken d, 73014444049 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 3 { ver yanlış; }
+        eğer it(&değişken d, 77309411346 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 4 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 38654705673 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 4 { ver yanlış; }
+        eğer it(&değişken d, 85899345940 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 4 { ver yanlış; }
+        eğer it(&değişken d, 90194313237 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 5 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 42949672970 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 5 { ver yanlış; }
+        eğer it(&değişken d, 98784247831 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 5 { ver yanlış; }
+        eğer it(&değişken d, 103079215128 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 47244640267 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 111669149722 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 51539607564 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 120259084316 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 73014444049 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 85899345940 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 133143986207 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 137438953504 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 98784247831 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 146028888098 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 111669149722 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 120259084316 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 158913789989 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 133143986207 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 167503724583 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 171798691880 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 6 { ver yanlış; }
+        eğer it(&değişken d, 176093659177 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 7 { ver yanlış; }
+        eğer it(&değişken d, 180388626474 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 8 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 137438953504 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 8 { ver yanlış; }
+        eğer it(&değişken d, 188978561068 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 8 { ver yanlış; }
+        eğer it(&değişken d, 193273528365 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 9 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 146028888098 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 9 { ver yanlış; }
+        eğer it(&değişken d, 201863462959 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 9 { ver yanlış; }
+        eğer it(&değişken d, 206158430256 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 10 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 158913789989 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 10 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 167503724583 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 10 { ver yanlış; }
+        eğer it(&değişken d, 219043332147 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 10 { ver yanlış; }
+        eğer it(&değişken d, 223338299444 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 10 { ver yanlış; }
+        eğer it(&değişken d, 227633266741 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 11 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 171798691880 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 11 { ver yanlış; }
+        eğer it(&değişken d, 236223201335 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 11 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 188978561068 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 11 { ver yanlış; }
+        eğer it(&değişken d, 244813135929 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 11 { ver yanlış; }
+        eğer it(&değişken d, 249108103226 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 12 { ver yanlış; }
+        eğer it(&değişken d, 253403070523 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 13 { ver yanlış; }
+        eğer it(&değişken d, 257698037820 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 14 { ver yanlış; }
+        eğer it(&değişken d, 261993005117 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 15 { ver yanlış; }
+        eğer it(&değişken d, 266287972414 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 16 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 201863462959 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 16 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 219043332147 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 16 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 223338299444 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 2 veya d.kayip != 16 { ver yanlış; }
+        eğer it(&değişken d, 283467841602 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 16 { ver yanlış; }
+        eğer it(&değişken d, 287762808899 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 16 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 236223201335 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 16 { ver yanlış; }
+        eğer it(&değişken d, 296352743493 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 16 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 244813135929 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 16 { ver yanlış; }
+        eğer it(&değişken d, 304942678087 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 16 { ver yanlış; }
+        eğer it(&değişken d, 309237645384 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 16 { ver yanlış; }
+        eğer it(&değişken d, 313532612681 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 17 { ver yanlış; }
+        eğer it(&değişken d, 317827579978 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 18 { ver yanlış; }
+        eğer it(&değişken d, 322122547275 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 19 { ver yanlış; }
+        eğer it(&değişken d, 326417514572 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 20 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 283467841602 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 20 { ver yanlış; }
+        eğer it(&değişken d, 335007449166 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 20 { ver yanlış; }
+        eğer it(&değişken d, 339302416463 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 21 { ver yanlış; }
+        eğer it(&değişken d, 343597383760 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 22 { ver yanlış; }
+        eğer it(&değişken d, 347892351057 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 23 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 287762808899 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 23 { ver yanlış; }
+        eğer it(&değişken d, 356482285651 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 23 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 296352743493 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 23 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 304942678087 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 23 { ver yanlış; }
+        eğer it(&değişken d, 369367187542 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 23 { ver yanlış; }
+        eğer it(&değişken d, 373662154839 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 23 { ver yanlış; }
+        eğer it(&değişken d, 377957122136 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 24 { ver yanlış; }
+        eğer it(&değişken d, 382252089433 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 25 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 309237645384 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 25 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 335007449166 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 25 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 356482285651 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 2 veya d.kayip != 25 { ver yanlış; }
+        eğer it(&değişken d, 399431958621 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 25 { ver yanlış; }
+        eğer it(&değişken d, 403726925918 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 25 { ver yanlış; }
+        eğer it(&değişken d, 408021893215 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 25 { ver yanlış; }
+        eğer it(&değişken d, 412316860512 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 26 { ver yanlış; }
+        eğer it(&değişken d, 416611827809 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 27 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 369367187542 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 27 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 373662154839 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 3 veya d.kayip != 27 { ver yanlış; }
+        eğer it(&değişken d, 429496729700 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 27 { ver yanlış; }
+        eğer it(&değişken d, 433791696997 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 27 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 399431958621 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 27 { ver yanlış; }
+        eğer it(&değişken d, 442381631591 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 27 { ver yanlış; }
+        eğer it(&değişken d, 446676598888 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 28 { ver yanlış; }
+        eğer it(&değişken d, 450971566185 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 29 { ver yanlış; }
+        eğer it(&değişken d, 455266533482 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 30 { ver yanlış; }
+        eğer it(&değişken d, 459561500779 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 31 { ver yanlış; }
+        eğer it(&değişken d, 463856468076 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 32 { ver yanlış; }
+        eğer it(&değişken d, 468151435373 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 33 { ver yanlış; }
+        eğer it(&değişken d, 472446402670 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 34 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 403726925918 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 34 { ver yanlış; }
+        eğer it(&değişken d, 481036337264 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 34 { ver yanlış; }
+        eğer it(&değişken d, 485331304561 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 35 { ver yanlış; }
+        eğer it(&değişken d, 489626271858 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 36 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 408021893215 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 36 { ver yanlış; }
+        eğer it(&değişken d, 498216206452 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 36 { ver yanlış; }
+        eğer it(&değişken d, 502511173749 olarak tam64) != yanlış { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 37 { ver yanlış; }
+        eğer değil esit(al(&değişken d), 429496729700 olarak tam64) { ver yanlış; }
+        eğer sayi(d) != 4 veya d.kayip != 37 { ver yanlış; }
+        eğer it(&değişken d, 511101108343 olarak tam64) != doğru { ver yanlış; }
+        eğer sayi(d) != 5 veya d.kayip != 37 { ver yanlış; }
+        ver doğru;
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_fifo() { yazdir_metin("BASARISIZ fifo"); h = h + 1; }
+    eğer değil test_en_yeniyi_at() { yazdir_metin("BASARISIZ en_yeniyi_at"); h = h + 1; }
+    eğer değil test_sifir() { yazdir_metin("BASARISIZ sifir"); h = h + 1; }
+    eğer değil test_bir() { yazdir_metin("BASARISIZ bir"); h = h + 1; }
+    eğer değil test_kayip_doygun() { yazdir_metin("BASARISIZ kayip_doygun"); h = h + 1; }
+    eğer değil test_gecersiz_1() { yazdir_metin("BASARISIZ gecersiz_1"); h = h + 1; }
+    eğer değil test_gecersiz_1048577() { yazdir_metin("BASARISIZ gecersiz_1048577"); h = h + 1; }
+    eğer değil test_ust_sinir() { yazdir_metin("BASARISIZ ust_sinir"); h = h + 1; }
+    eğer değil test_model() { yazdir_metin("BASARISIZ model"); h = h + 1; }
+    ver h;
+}

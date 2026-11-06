@@ -1,0 +1,35 @@
+// Kahin: python3 tools/codex/f5.py; girdi bölge sayısı; sıfır uzunluklu bölgeler elenir; değerler [0, 1, 4096, 4097].
+kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; değişken i: tam32 = 0;
+    iken i < 0 { dizi_ekle(xs, BellekBolgesi { taban: 0, uzunluk: 0, tur: 1 }); i=i+1; }
+    eşleş harita_duzenle(xs) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v)==0; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; değişken i: tam32 = 0;
+    iken i < 1 { dizi_ekle(xs, BellekBolgesi { taban: 0, uzunluk: 0, tur: 1 }); i=i+1; }
+    eşleş harita_duzenle(xs) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v)==0; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; değişken i: tam32 = 0;
+    iken i < 4096 { dizi_ekle(xs, BellekBolgesi { taban: 0, uzunluk: 0, tur: 1 }); i=i+1; }
+    eşleş harita_duzenle(xs) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v)==0; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = []; değişken i: tam32 = 0;
+    iken i < 4097 { dizi_ekle(xs, BellekBolgesi { taban: 0, uzunluk: 0, tur: 1 }); i=i+1; }
+    eşleş harita_duzenle(xs) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

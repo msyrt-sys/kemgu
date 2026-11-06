@@ -1,0 +1,62 @@
+// FAT32 BPB ve FAT zinciri; disk erişimi yapmaz.
+kullan drivers::ortak::bayt::{ bayt_sinirda, oku_u8, oku_le16, oku_le32 };
+genel yapı Fat32Bpb {
+    sektor_bayt: tam32; kume_sektor: tam32; ayrilmis: tam32; fat_sayisi: tam32;
+    toplam_sektor: tam64; fat_sektor: tam64; kok_kume: tam64; fsinfo: tam32;
+    ilk_veri_sektoru: tam64; kume_sayisi: tam64;
+}
+genel çeşit BpbHatasi { KisaGirdi, ImzaYok, SektorBoyu, KumeBoyu, Fat32Degil }
+genel işlev bpb_coz(lba0: Dizi<dtam8>) -> sonuç<Fat32Bpb, BpbHatasi> {
+    eğer değil bayt_sinirda(lba0, 0, 512) { ver hata(BpbHatasi::KisaGirdi); }
+    eğer oku_le16(lba0, 510) != 43605 { ver hata(BpbHatasi::ImzaYok); }
+    değişken sb: tam32 = oku_le16(lba0, 11);
+    eğer sb != 512 ve sb != 1024 ve sb != 2048 ve sb != 4096 { ver hata(BpbHatasi::SektorBoyu); }
+    değişken ks: tam32 = oku_u8(lba0, 13);
+    eğer ks == 0 veya ks > 128 veya (ks & (ks - 1)) != 0 { ver hata(BpbHatasi::KumeBoyu); }
+    değişken fs: tam64 = oku_le32(lba0, 36);
+    değişken ayr: tam32 = oku_le16(lba0, 14);
+    değişken fats: tam32 = oku_u8(lba0, 16);
+    eğer oku_le16(lba0, 17) != 0 veya oku_le16(lba0, 22) != 0 veya fs == 0 veya ayr == 0 veya fats == 0 {
+        ver hata(BpbHatasi::Fat32Degil);
+    }
+    değişken toplam: tam64 = oku_le16(lba0, 19) olarak tam64;
+    eğer toplam == 0 { toplam = oku_le32(lba0, 32); }
+    değişken ilk: tam64 = (ayr olarak tam64) + (fats olarak tam64) * fs;
+    eğer toplam <= ilk { ver hata(BpbHatasi::Fat32Degil); }
+    değişken sayi: tam64 = (toplam - ilk) / (ks olarak tam64);
+    değişken kok: tam64 = oku_le32(lba0, 44) & 268435455;
+    eğer kok < 2 veya kok - 2 >= sayi { ver hata(BpbHatasi::Fat32Degil); }
+    ver tamam(Fat32Bpb { sektor_bayt: sb, kume_sektor: ks, ayrilmis: ayr, fat_sayisi: fats,
+        toplam_sektor: toplam, fat_sektor: fs, kok_kume: kok, fsinfo: oku_le16(lba0, 48),
+        ilk_veri_sektoru: ilk, kume_sayisi: sayi });
+}
+genel işlev kume_sektoru(b: Fat32Bpb, kume: tam64) -> tam64 {
+    ver (kume - 2) * (b.kume_sektor olarak tam64) + b.ilk_veri_sektoru;
+}
+genel çeşit FatGirdi { Bos, Sonraki(tam64), ZincirSonu, Bozuk }
+genel işlev fat_girdi(fat: Dizi<dtam8>, kume: tam64) -> FatGirdi {
+    eğer kume < 0 veya kume >= ((dizi_boyut(fat) olarak tam64) / 4) { ver FatGirdi::Bozuk; }
+    değişken v: tam64 = oku_le32(fat, (kume * 4) olarak tam32) & 268435455;
+    eğer v == 0 { ver FatGirdi::Bos; }
+    eğer v >= 268435448 { ver FatGirdi::ZincirSonu; }
+    eğer v == 268435447 { ver FatGirdi::Bozuk; }
+    ver FatGirdi::Sonraki(v);
+}
+genel işlev zincir(fat: Dizi<dtam8>, ilk: tam64, azami: tam32) -> sonuç<Dizi<tam64>, metin> {
+    // C002: eleman genişliğini açık dizi literaliyle koru.
+    değişken sonuc: Dizi<tam64> = [];
+    değişken k: tam64 = ilk;
+    değişken adim: tam32 = 0;
+    iken adim < azami {
+        eğer k < 2 { ver hata("bozuk zincir"); }
+        dizi_ekle(sonuc, k);
+        eşleş fat_girdi(fat, k) {
+            FatGirdi::Bos => { ver hata("bozuk zincir"); }
+            FatGirdi::Bozuk => { ver hata("bozuk zincir"); }
+            FatGirdi::ZincirSonu => { ver tamam(sonuc); }
+            FatGirdi::Sonraki(v) => { k = v; }
+        }
+        adim = adim + 1;
+    }
+    ver hata("dongu");
+}

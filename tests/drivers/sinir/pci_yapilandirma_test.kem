@@ -1,0 +1,37 @@
+// Kahin: python3 tools/codex/f5.py; sabit PCI kayıt boyu; sonda ek bayt yok sayılır; değerler [0, 1, 256, 257].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan tests::drivers::bulanik::veri::fikstur::{ bpb_verisi, pci_verisi, elf_verisi, madt_verisi, fadt_verisi, sdt_verisi };
+kullan drivers::pci::yapilandirma::{ PciAygit, PciBar, pci_coz };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken kaynak: Dizi<dtam8> = pci_verisi(); değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < 0 { değişken v: tam32 = 0; eğer i < 256 { v = oku_u8(kaynak,i); } dizi_ekle(b,v olarak dtam8); i=i+1; }
+    eşleş pci_coz(b) { hiç => { ver doğru; } değer(v) => { değişken p: PciAygit = v; ver yanlış; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken kaynak: Dizi<dtam8> = pci_verisi(); değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < 1 { değişken v: tam32 = 0; eğer i < 256 { v = oku_u8(kaynak,i); } dizi_ekle(b,v olarak dtam8); i=i+1; }
+    eşleş pci_coz(b) { hiç => { ver doğru; } değer(v) => { değişken p: PciAygit = v; ver yanlış; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken kaynak: Dizi<dtam8> = pci_verisi(); değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < 256 { değişken v: tam32 = 0; eğer i < 256 { v = oku_u8(kaynak,i); } dizi_ekle(b,v olarak dtam8); i=i+1; }
+    eşleş pci_coz(b) { hiç => { ver yanlış; } değer(v) => { değişken p: PciAygit = v; ver p.satici == 4660; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken kaynak: Dizi<dtam8> = pci_verisi(); değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < 257 { değişken v: tam32 = 0; eğer i < 256 { v = oku_u8(kaynak,i); } dizi_ekle(b,v olarak dtam8); i=i+1; }
+    eşleş pci_coz(b) { hiç => { ver yanlış; } değer(v) => { değişken p: PciAygit = v; ver p.satici == 4660; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

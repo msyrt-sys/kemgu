@@ -1,0 +1,51 @@
+// ELF64 LE yükleme planı; hiçbir segment belleğe yüklenmez veya çalıştırılmaz.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32, oku_le64 };
+genel yapı ElfSegment { bayraklar: tam32; dosya_ofseti: tam64; sanal_adres: tam64; dosya_boyu: tam64; bellek_boyu: tam64; hiza: tam64; }
+genel yapı Elf64 { tur: tam32; makine: tam32; giris: tam64; yuklemeler: Dizi<ElfSegment>; }
+genel işlev elf64_coz(b: Dizi<dtam8>) -> sonuç<Elf64, metin> {
+    değişken boy: tam64 = dizi_boyut(b) olarak tam64;
+    eğer boy < 64 { ver hata("kisa elf"); }
+    eğer oku_u8(b, 0) != 127 veya oku_u8(b, 1) != 69 veya oku_u8(b, 2) != 76 veya oku_u8(b, 3) != 70 { ver hata("imza"); }
+    eğer oku_u8(b, 4) != 2 veya oku_u8(b, 5) != 1 veya oku_u8(b, 6) != 1 { ver hata("bicim"); }
+    değişken tur: tam32 = oku_le16(b, 16);
+    değişken makine: tam32 = oku_le16(b, 18);
+    eğer tur != 2 ve tur != 3 { ver hata("tur"); }
+    eğer makine != 62 ve makine != 183 { ver hata("makine"); }
+    eğer oku_le32(b, 20) != 1 veya oku_le16(b, 52) != 64 veya oku_le16(b, 54) != 56 { ver hata("baslik boyu"); }
+    değişken giris: tam64 = oku_le64(b, 24);
+    değişken ph: tam64 = oku_le64(b, 32);
+    değişken adet: tam32 = oku_le16(b, 56);
+    eğer ph < 0 veya ph > boy veya (adet olarak tam64) > (boy - ph) / 56 { ver hata("program basligi"); }
+    değişken xs: Dizi<ElfSegment> = [];
+    değişken giris_var: mantıksal = yanlış;
+    değişken i: tam32 = 0;
+    iken i < adet {
+        değişken ofs: tam32 = (ph + (i olarak tam64) * 56) olarak tam32;
+        eğer oku_le32(b, ofs) == 1 {
+            değişken bayrak: tam32 = oku_le32(b, ofs + 4) olarak tam32;
+            değişken dosya: tam64 = oku_le64(b, ofs + 8);
+            değişken adres: tam64 = oku_le64(b, ofs + 16);
+            değişken db: tam64 = oku_le64(b, ofs + 32);
+            değişken mb: tam64 = oku_le64(b, ofs + 40);
+            değişken hiza: tam64 = oku_le64(b, ofs + 48);
+            eğer db < 0 veya mb < db veya dosya < 0 veya dosya > boy veya db > boy - dosya { ver hata("dosya siniri"); }
+            eğer adres < 0 veya mb > 9223372036854775807 - adres { ver hata("bellek siniri"); }
+            eğer (bayrak & 3) == 3 { ver hata("wx"); }
+            eğer hiza < 0 { ver hata("hiza"); }
+            eğer hiza > 1 {
+                eğer (hiza & (hiza - 1)) != 0 veya adres % hiza != dosya % hiza { ver hata("hiza"); }
+            }
+            değişken j: tam32 = 0;
+            iken j < dizi_boyut(xs) {
+                değişken eski: ElfSegment = dizi_al(xs, j);
+                eğer mb > 0 ve eski.bellek_boyu > 0 ve adres < eski.sanal_adres + eski.bellek_boyu ve eski.sanal_adres < adres + mb { ver hata("ortusme"); }
+                j = j + 1;
+            }
+            eğer (bayrak & 1) != 0 ve giris >= adres ve giris - adres < mb { giris_var = doğru; }
+            dizi_ekle(xs, ElfSegment { bayraklar: bayrak, dosya_ofseti: dosya, sanal_adres: adres, dosya_boyu: db, bellek_boyu: mb, hiza: hiza });
+        }
+        i = i + 1;
+    }
+    eğer değil giris_var { ver hata("giris"); }
+    ver tamam(Elf64 { tur: tur, makine: makine, giris: giris, yuklemeler: xs });
+}

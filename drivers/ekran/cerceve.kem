@@ -1,0 +1,84 @@
+// 32bpp BGRX çerçeve; adım bayttır, dolgu baytları çizimden etkilenmez.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+genel yapı Cerceve { genislik: tam32; yukseklik: tam32; adim: tam32; bpp: tam32; veri: Dizi<dtam8>; }
+genel işlev cerceve_gecerli(c: Cerceve) -> mantıksal {
+    eğer c.bpp != 32 veya c.genislik < 0 veya c.yukseklik < 0 veya c.adim < 0 veya c.genislik > 16384 veya c.yukseklik > 16384 { ver yanlış; }
+    eğer c.genislik > c.adim / 4 { ver yanlış; }
+    değişken boy: tam64 = (c.adim olarak tam64) * (c.yukseklik olarak tam64);
+    ver boy <= 16777216 ve boy <= (dizi_boyut(c.veri) olarak tam64);
+}
+genel işlev cerceve_yeni(genislik: tam32, yukseklik: tam32, adim: tam32) -> sonuç<Cerceve, metin> {
+    eğer genislik < 0 veya yukseklik < 0 veya adim < 0 veya genislik > 16384 veya yukseklik > 16384 { ver hata("boyut"); }
+    eğer genislik > adim / 4 { ver hata("adim"); }
+    değişken boy: tam64 = (adim olarak tam64) * (yukseklik olarak tam64);
+    eğer boy > 16777216 { ver hata("cerceve buyuk"); }
+    değişken veri: Dizi<dtam8> = bayt_sifir(boy olarak tam32);
+    ver tamam(Cerceve { genislik: genislik, yukseklik: yukseklik, adim: adim, bpp: 32, veri: veri });
+}
+işlev renk_oku(c: Cerceve, x: tam32, y: tam32) -> tam32 {
+    değişken o: tam32 = y * c.adim + x * 4;
+    ver oku_u8(c.veri, o) | (oku_u8(c.veri, o + 1) << 8) | (oku_u8(c.veri, o + 2) << 16);
+}
+işlev renk_yaz(c: Cerceve, x: tam32, y: tam32, renk: tam32) {
+    değişken o: tam32 = y * c.adim + x * 4;
+    yaz_u8(c.veri, o, (renk & 255) olarak tam64);
+    yaz_u8(c.veri, o + 1, ((renk >> 8) & 255) olarak tam64);
+    yaz_u8(c.veri, o + 2, ((renk >> 16) & 255) olarak tam64);
+    yaz_u8(c.veri, o + 3, 0);
+}
+genel işlev piksel_yaz(c: Cerceve, x: tam32, y: tam32, renk: tam32) {
+    eğer değil cerceve_gecerli(c) veya x < 0 veya y < 0 veya x >= c.genislik veya y >= c.yukseklik { ver; }
+    renk_yaz(c, x, y, renk);
+}
+genel işlev piksel_oku(c: Cerceve, x: tam32, y: tam32) -> seçimlik<tam32> {
+    eğer değil cerceve_gecerli(c) veya x < 0 veya y < 0 veya x >= c.genislik veya y >= c.yukseklik { ver hiç; }
+    ver değer(renk_oku(c, x, y));
+}
+genel işlev dikdortgen_doldur(c: Cerceve, x: tam32, y: tam32, w: tam32, h: tam32, renk: tam32) {
+    eğer değil cerceve_gecerli(c) veya w <= 0 veya h <= 0 { ver; }
+    değişken x0: tam64 = x olarak tam64; değişken y0: tam64 = y olarak tam64;
+    değişken x1: tam64 = x0 + (w olarak tam64); değişken y1: tam64 = y0 + (h olarak tam64);
+    eğer x0 < 0 { x0 = 0; } eğer y0 < 0 { y0 = 0; }
+    eğer x1 > (c.genislik olarak tam64) { x1 = c.genislik olarak tam64; }
+    eğer y1 > (c.yukseklik olarak tam64) { y1 = c.yukseklik olarak tam64; }
+    eğer x0 >= x1 veya y0 >= y1 { ver; }
+    değişken yy: tam32 = y0 olarak tam32;
+    iken yy < (y1 olarak tam32) {
+        değişken xx: tam32 = x0 olarak tam32;
+        iken xx < (x1 olarak tam32) { renk_yaz(c, xx, yy, renk); xx = xx + 1; } yy = yy + 1;
+    }
+}
+genel işlev kaydir_yukari(c: Cerceve, satir_px: tam32, renk: tam32) {
+    eğer değil cerceve_gecerli(c) veya satir_px <= 0 veya c.genislik == 0 { ver; }
+    eğer satir_px >= c.yukseklik { dikdortgen_doldur(c, 0, 0, c.genislik, c.yukseklik, renk); ver; }
+    değişken y: tam32 = 0;
+    iken y < c.yukseklik - satir_px {
+        değişken x: tam32 = 0;
+        iken x < c.genislik { renk_yaz(c, x, y, renk_oku(c, x, y + satir_px)); x = x + 1; } y = y + 1;
+    }
+    dikdortgen_doldur(c, 0, c.yukseklik - satir_px, c.genislik, satir_px, renk);
+}
+genel işlev kopyala(hedef: Cerceve, kaynak: Cerceve, x: tam32, y: tam32) {
+    eğer değil cerceve_gecerli(hedef) veya değil cerceve_gecerli(kaynak) { ver; }
+    değişken x0: tam64 = x olarak tam64; değişken y0: tam64 = y olarak tam64;
+    değişken x1: tam64 = x0 + (kaynak.genislik olarak tam64); değişken y1: tam64 = y0 + (kaynak.yukseklik olarak tam64);
+    eğer x0 < 0 { x0 = 0; } eğer y0 < 0 { y0 = 0; }
+    eğer x1 > (hedef.genislik olarak tam64) { x1 = hedef.genislik olarak tam64; }
+    eğer y1 > (hedef.yukseklik olarak tam64) { y1 = hedef.yukseklik olarak tam64; }
+    eğer x0 >= x1 veya y0 >= y1 { ver; }
+    // Aynı veri dizisindeki örtüşen kopya için görünen bölgeyi önce sakla.
+    değişken renkler: Dizi<tam32> = [];
+    değişken yy: tam32 = y0 olarak tam32;
+    iken yy < (y1 olarak tam32) {
+        değişken xx: tam32 = x0 olarak tam32;
+        iken xx < (x1 olarak tam32) {
+            dizi_ekle(renkler, renk_oku(kaynak, ((xx olarak tam64) - (x olarak tam64)) olarak tam32, ((yy olarak tam64) - (y olarak tam64)) olarak tam32)); xx = xx + 1;
+        }
+        yy = yy + 1;
+    }
+    değişken i: tam32 = 0; yy = y0 olarak tam32;
+    iken yy < (y1 olarak tam32) {
+        değişken xx: tam32 = x0 olarak tam32;
+        iken xx < (x1 olarak tam32) { renk_yaz(hedef, xx, yy, dizi_al(renkler, i)); i = i + 1; xx = xx + 1; } yy = yy + 1;
+    }
+}

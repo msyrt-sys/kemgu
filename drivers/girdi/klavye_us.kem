@@ -1,0 +1,58 @@
+// US ANSI set-1; tablo sabitleri python3 tools/codex/f3.py ile ord üzerinden hesaplanır.
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni };
+kullan drivers::girdi::klavye_tablo::{ TusEsleme, duzen_bayt };
+genel işlev us_tablo() -> Dizi<TusEsleme> {
+    değişken xs: Dizi<TusEsleme> = [];
+    dizi_ekle(xs, TusEsleme { tarama: 2, alt: 49, ust: 33, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 3, alt: 50, ust: 64, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 4, alt: 51, ust: 35, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 5, alt: 52, ust: 36, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 6, alt: 53, ust: 37, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 7, alt: 54, ust: 94, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 8, alt: 55, ust: 38, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 9, alt: 56, ust: 42, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 10, alt: 57, ust: 40, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 11, alt: 48, ust: 41, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 12, alt: 45, ust: 95, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 13, alt: 61, ust: 43, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 16, alt: 113, ust: 81, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 17, alt: 119, ust: 87, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 18, alt: 101, ust: 69, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 19, alt: 114, ust: 82, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 20, alt: 116, ust: 84, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 21, alt: 121, ust: 89, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 22, alt: 117, ust: 85, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 23, alt: 105, ust: 73, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 24, alt: 111, ust: 79, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 25, alt: 112, ust: 80, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 26, alt: 91, ust: 123, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 27, alt: 93, ust: 125, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 30, alt: 97, ust: 65, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 31, alt: 115, ust: 83, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 32, alt: 100, ust: 68, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 33, alt: 102, ust: 70, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 34, alt: 103, ust: 71, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 35, alt: 104, ust: 72, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 36, alt: 106, ust: 74, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 37, alt: 107, ust: 75, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 38, alt: 108, ust: 76, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 39, alt: 59, ust: 58, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 40, alt: 39, ust: 34, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 41, alt: 96, ust: 126, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 44, alt: 122, ust: 90, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 45, alt: 120, ust: 88, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 46, alt: 99, ust: 67, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 47, alt: 118, ust: 86, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 48, alt: 98, ust: 66, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 49, alt: 110, ust: 78, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 50, alt: 109, ust: 77, harf: doğru });
+    dizi_ekle(xs, TusEsleme { tarama: 51, alt: 44, ust: 60, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 52, alt: 46, ust: 62, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 53, alt: 47, ust: 63, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 43, alt: 92, ust: 124, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 57, alt: 32, ust: 32, harf: yanlış });
+    dizi_ekle(xs, TusEsleme { tarama: 86, alt: 92, ust: 124, harf: yanlış });
+    ver xs;
+}
+genel işlev klavye_us_yeni() -> KlavyeDurumu { ver klavye_yeni(); }
+genel işlev klavye_us_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi { ver duzen_bayt(d, b, us_tablo()); }

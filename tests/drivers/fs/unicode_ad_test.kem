@@ -1,0 +1,315 @@
+// Fikstür: python3 tools/codex/b2.py — encode(utf-16le), struct, zlib.
+kullan drivers::disk::bolum::{ Bolum, gpt_coz };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+
+işlev test_gpt_emoji() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(1536);
+    yaz_u8(b, 450, 238);
+    yaz_u8(b, 454, 1);
+    yaz_u8(b, 458, 255);
+    yaz_u8(b, 459, 7);
+    yaz_u8(b, 510, 85);
+    yaz_u8(b, 511, 170);
+    yaz_u8(b, 512, 69);
+    yaz_u8(b, 513, 70);
+    yaz_u8(b, 514, 73);
+    yaz_u8(b, 515, 32);
+    yaz_u8(b, 516, 80);
+    yaz_u8(b, 517, 65);
+    yaz_u8(b, 518, 82);
+    yaz_u8(b, 519, 84);
+    yaz_u8(b, 522, 1);
+    yaz_u8(b, 524, 92);
+    yaz_u8(b, 528, 94);
+    yaz_u8(b, 529, 35);
+    yaz_u8(b, 530, 25);
+    yaz_u8(b, 531, 185);
+    yaz_u8(b, 536, 1);
+    yaz_u8(b, 544, 255);
+    yaz_u8(b, 545, 7);
+    yaz_u8(b, 552, 34);
+    yaz_u8(b, 560, 222);
+    yaz_u8(b, 561, 7);
+    yaz_u8(b, 568, 17);
+    yaz_u8(b, 569, 17);
+    yaz_u8(b, 570, 17);
+    yaz_u8(b, 571, 17);
+    yaz_u8(b, 572, 17);
+    yaz_u8(b, 573, 17);
+    yaz_u8(b, 574, 17);
+    yaz_u8(b, 575, 17);
+    yaz_u8(b, 576, 17);
+    yaz_u8(b, 577, 17);
+    yaz_u8(b, 578, 17);
+    yaz_u8(b, 579, 17);
+    yaz_u8(b, 580, 17);
+    yaz_u8(b, 581, 17);
+    yaz_u8(b, 582, 17);
+    yaz_u8(b, 583, 17);
+    yaz_u8(b, 584, 2);
+    yaz_u8(b, 592, 4);
+    yaz_u8(b, 596, 128);
+    yaz_u8(b, 600, 176);
+    yaz_u8(b, 601, 106);
+    yaz_u8(b, 602, 168);
+    yaz_u8(b, 603, 189);
+    yaz_u8(b, 1024, 40);
+    yaz_u8(b, 1025, 115);
+    yaz_u8(b, 1026, 42);
+    yaz_u8(b, 1027, 193);
+    yaz_u8(b, 1028, 31);
+    yaz_u8(b, 1029, 248);
+    yaz_u8(b, 1030, 210);
+    yaz_u8(b, 1031, 17);
+    yaz_u8(b, 1032, 186);
+    yaz_u8(b, 1033, 75);
+    yaz_u8(b, 1035, 160);
+    yaz_u8(b, 1036, 201);
+    yaz_u8(b, 1037, 62);
+    yaz_u8(b, 1038, 201);
+    yaz_u8(b, 1039, 59);
+    yaz_u8(b, 1040, 34);
+    yaz_u8(b, 1041, 34);
+    yaz_u8(b, 1042, 34);
+    yaz_u8(b, 1043, 34);
+    yaz_u8(b, 1044, 34);
+    yaz_u8(b, 1045, 34);
+    yaz_u8(b, 1046, 34);
+    yaz_u8(b, 1047, 34);
+    yaz_u8(b, 1048, 34);
+    yaz_u8(b, 1049, 34);
+    yaz_u8(b, 1050, 34);
+    yaz_u8(b, 1051, 34);
+    yaz_u8(b, 1052, 34);
+    yaz_u8(b, 1053, 34);
+    yaz_u8(b, 1054, 34);
+    yaz_u8(b, 1055, 34);
+    yaz_u8(b, 1056, 34);
+    yaz_u8(b, 1064, 222);
+    yaz_u8(b, 1065, 7);
+    yaz_u8(b, 1080, 69);
+    yaz_u8(b, 1082, 70);
+    yaz_u8(b, 1084, 73);
+    yaz_u8(b, 1086, 61);
+    yaz_u8(b, 1087, 216);
+    yaz_u8(b, 1089, 222);
+    eşleş gpt_coz(b, 512) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<Bolum> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken g: Bolum = dizi_al(xs, 0);
+        ver metin_esit(g.ad, "EFI😀");
+    } }
+}
+
+işlev test_gpt_eslesmemis() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(1536);
+    yaz_u8(b, 450, 238);
+    yaz_u8(b, 454, 1);
+    yaz_u8(b, 458, 255);
+    yaz_u8(b, 459, 7);
+    yaz_u8(b, 510, 85);
+    yaz_u8(b, 511, 170);
+    yaz_u8(b, 512, 69);
+    yaz_u8(b, 513, 70);
+    yaz_u8(b, 514, 73);
+    yaz_u8(b, 515, 32);
+    yaz_u8(b, 516, 80);
+    yaz_u8(b, 517, 65);
+    yaz_u8(b, 518, 82);
+    yaz_u8(b, 519, 84);
+    yaz_u8(b, 522, 1);
+    yaz_u8(b, 524, 92);
+    yaz_u8(b, 528, 31);
+    yaz_u8(b, 529, 191);
+    yaz_u8(b, 530, 241);
+    yaz_u8(b, 531, 141);
+    yaz_u8(b, 536, 1);
+    yaz_u8(b, 544, 255);
+    yaz_u8(b, 545, 7);
+    yaz_u8(b, 552, 34);
+    yaz_u8(b, 560, 222);
+    yaz_u8(b, 561, 7);
+    yaz_u8(b, 568, 17);
+    yaz_u8(b, 569, 17);
+    yaz_u8(b, 570, 17);
+    yaz_u8(b, 571, 17);
+    yaz_u8(b, 572, 17);
+    yaz_u8(b, 573, 17);
+    yaz_u8(b, 574, 17);
+    yaz_u8(b, 575, 17);
+    yaz_u8(b, 576, 17);
+    yaz_u8(b, 577, 17);
+    yaz_u8(b, 578, 17);
+    yaz_u8(b, 579, 17);
+    yaz_u8(b, 580, 17);
+    yaz_u8(b, 581, 17);
+    yaz_u8(b, 582, 17);
+    yaz_u8(b, 583, 17);
+    yaz_u8(b, 584, 2);
+    yaz_u8(b, 592, 4);
+    yaz_u8(b, 596, 128);
+    yaz_u8(b, 600, 106);
+    yaz_u8(b, 601, 234);
+    yaz_u8(b, 602, 205);
+    yaz_u8(b, 603, 174);
+    yaz_u8(b, 1024, 40);
+    yaz_u8(b, 1025, 115);
+    yaz_u8(b, 1026, 42);
+    yaz_u8(b, 1027, 193);
+    yaz_u8(b, 1028, 31);
+    yaz_u8(b, 1029, 248);
+    yaz_u8(b, 1030, 210);
+    yaz_u8(b, 1031, 17);
+    yaz_u8(b, 1032, 186);
+    yaz_u8(b, 1033, 75);
+    yaz_u8(b, 1035, 160);
+    yaz_u8(b, 1036, 201);
+    yaz_u8(b, 1037, 62);
+    yaz_u8(b, 1038, 201);
+    yaz_u8(b, 1039, 59);
+    yaz_u8(b, 1040, 34);
+    yaz_u8(b, 1041, 34);
+    yaz_u8(b, 1042, 34);
+    yaz_u8(b, 1043, 34);
+    yaz_u8(b, 1044, 34);
+    yaz_u8(b, 1045, 34);
+    yaz_u8(b, 1046, 34);
+    yaz_u8(b, 1047, 34);
+    yaz_u8(b, 1048, 34);
+    yaz_u8(b, 1049, 34);
+    yaz_u8(b, 1050, 34);
+    yaz_u8(b, 1051, 34);
+    yaz_u8(b, 1052, 34);
+    yaz_u8(b, 1053, 34);
+    yaz_u8(b, 1054, 34);
+    yaz_u8(b, 1055, 34);
+    yaz_u8(b, 1056, 34);
+    yaz_u8(b, 1064, 222);
+    yaz_u8(b, 1065, 7);
+    yaz_u8(b, 1080, 65);
+    yaz_u8(b, 1083, 216);
+    yaz_u8(b, 1084, 66);
+    eşleş gpt_coz(b, 512) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<Bolum> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken g: Bolum = dizi_al(xs, 0);
+        ver metin_esit(g.ad, "A�B");
+    } }
+}
+
+işlev test_lfn_emoji() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(96);
+    yaz_u8(b, 0, 66);
+    yaz_u8(b, 2, 222);
+    yaz_u8(b, 3, 46);
+    yaz_u8(b, 5, 116);
+    yaz_u8(b, 7, 120);
+    yaz_u8(b, 9, 116);
+    yaz_u8(b, 11, 15);
+    yaz_u8(b, 13, 39);
+    yaz_u8(b, 16, 255);
+    yaz_u8(b, 17, 255);
+    yaz_u8(b, 18, 255);
+    yaz_u8(b, 19, 255);
+    yaz_u8(b, 20, 255);
+    yaz_u8(b, 21, 255);
+    yaz_u8(b, 22, 255);
+    yaz_u8(b, 23, 255);
+    yaz_u8(b, 24, 255);
+    yaz_u8(b, 25, 255);
+    yaz_u8(b, 28, 255);
+    yaz_u8(b, 29, 255);
+    yaz_u8(b, 30, 255);
+    yaz_u8(b, 31, 255);
+    yaz_u8(b, 32, 1);
+    yaz_u8(b, 33, 65);
+    yaz_u8(b, 35, 66);
+    yaz_u8(b, 37, 67);
+    yaz_u8(b, 39, 68);
+    yaz_u8(b, 41, 69);
+    yaz_u8(b, 43, 15);
+    yaz_u8(b, 45, 39);
+    yaz_u8(b, 46, 70);
+    yaz_u8(b, 48, 71);
+    yaz_u8(b, 50, 72);
+    yaz_u8(b, 52, 73);
+    yaz_u8(b, 54, 74);
+    yaz_u8(b, 56, 75);
+    yaz_u8(b, 60, 76);
+    yaz_u8(b, 62, 61);
+    yaz_u8(b, 63, 216);
+    yaz_u8(b, 64, 65);
+    yaz_u8(b, 65, 66);
+    yaz_u8(b, 66, 67);
+    yaz_u8(b, 67, 68);
+    yaz_u8(b, 68, 69);
+    yaz_u8(b, 69, 70);
+    yaz_u8(b, 70, 126);
+    yaz_u8(b, 71, 49);
+    yaz_u8(b, 72, 84);
+    yaz_u8(b, 73, 88);
+    yaz_u8(b, 74, 84);
+    yaz_u8(b, 75, 32);
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<DizinGirdisi> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken g: DizinGirdisi = dizi_al(xs, 0);
+        ver metin_esit(g.ad, "ABCDEFGHIJKL😀.txt");
+    } }
+}
+
+işlev test_lfn_eslesmemis() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(64);
+    yaz_u8(b, 0, 65);
+    yaz_u8(b, 1, 65);
+    yaz_u8(b, 4, 216);
+    yaz_u8(b, 5, 66);
+    yaz_u8(b, 9, 255);
+    yaz_u8(b, 10, 255);
+    yaz_u8(b, 11, 15);
+    yaz_u8(b, 13, 39);
+    yaz_u8(b, 14, 255);
+    yaz_u8(b, 15, 255);
+    yaz_u8(b, 16, 255);
+    yaz_u8(b, 17, 255);
+    yaz_u8(b, 18, 255);
+    yaz_u8(b, 19, 255);
+    yaz_u8(b, 20, 255);
+    yaz_u8(b, 21, 255);
+    yaz_u8(b, 22, 255);
+    yaz_u8(b, 23, 255);
+    yaz_u8(b, 24, 255);
+    yaz_u8(b, 25, 255);
+    yaz_u8(b, 28, 255);
+    yaz_u8(b, 29, 255);
+    yaz_u8(b, 30, 255);
+    yaz_u8(b, 31, 255);
+    yaz_u8(b, 32, 65);
+    yaz_u8(b, 33, 66);
+    yaz_u8(b, 34, 67);
+    yaz_u8(b, 35, 68);
+    yaz_u8(b, 36, 69);
+    yaz_u8(b, 37, 70);
+    yaz_u8(b, 38, 126);
+    yaz_u8(b, 39, 49);
+    yaz_u8(b, 40, 84);
+    yaz_u8(b, 41, 88);
+    yaz_u8(b, 42, 84);
+    yaz_u8(b, 43, 32);
+    eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<DizinGirdisi> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken g: DizinGirdisi = dizi_al(xs, 0);
+        ver metin_esit(g.ad, "A�B");
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_gpt_emoji() { yazdir_metin("BASARISIZ gpt_emoji"); h = h + 1; }
+    eğer değil test_gpt_eslesmemis() { yazdir_metin("BASARISIZ gpt_eslesmemis"); h = h + 1; }
+    eğer değil test_lfn_emoji() { yazdir_metin("BASARISIZ lfn_emoji"); h = h + 1; }
+    eğer değil test_lfn_eslesmemis() { yazdir_metin("BASARISIZ lfn_eslesmemis"); h = h + 1; }
+    ver h;
+}

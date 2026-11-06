@@ -1,0 +1,119 @@
+// Beklentiler: python3 tools/codex/b4.py; ASCII upper, gövde[:8-len(~N)], ljust.
+kullan drivers::fs::fat32_kisa_ad::{ kisa_ad_uret, lfn_gerekli_mi };
+işlev ad_esit(ad: metin, mevcut: Dizi<metin>, beklenen: metin) -> mantıksal {
+    eşleş kisa_ad_uret(ad, mevcut) { hata(e) => { ver yanlış; } tamam(v) => { ver metin_esit(v, beklenen); } }
+}
+
+işlev test_ad_0() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("FOO.TXT", bos, "FOO     TXT") ve lfn_gerekli_mi("FOO.TXT") == yanlış;
+}
+
+işlev test_ad_1() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("README", bos, "README     ") ve lfn_gerekli_mi("README") == yanlış;
+}
+
+işlev test_ad_2() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("12345678.ABC", bos, "12345678ABC") ve lfn_gerekli_mi("12345678.ABC") == yanlış;
+}
+
+işlev test_ad_3() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("foo.txt", bos, "FOO~1   TXT") ve lfn_gerekli_mi("foo.txt") == doğru;
+}
+
+işlev test_ad_4() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("Uzun Döküman.txt", bos, "UZUN_D~1TXT") ve lfn_gerekli_mi("Uzun Döküman.txt") == doğru;
+}
+
+işlev test_ad_5() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit(" .foo.txt. ", bos, "FOO~1   TXT") ve lfn_gerekli_mi(" .foo.txt. ") == doğru;
+}
+
+işlev test_ad_6() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("a+b?.text", bos, "A_B_~1  TEX") ve lfn_gerekli_mi("a+b?.text") == doğru;
+}
+
+işlev test_ad_7() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("😀.txt", bos, "_~1     TXT") ve lfn_gerekli_mi("😀.txt") == doğru;
+}
+
+işlev test_ad_8() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    ver ad_esit("a.b.c", bos, "A_B~1   C  ") ve lfn_gerekli_mi("a.b.c") == doğru;
+}
+
+işlev test_cakisma_1() -> mantıksal {
+    değişken mevcut: Dizi<metin> = ["UZUNDO~1TXT"];
+    ver ad_esit("Uzundokuman.txt", mevcut, "UZUNDO~2TXT");
+}
+
+işlev test_cakisma_9() -> mantıksal {
+    değişken mevcut: Dizi<metin> = ["UZUNDO~1TXT", "UZUNDO~2TXT", "UZUNDO~3TXT", "UZUNDO~4TXT", "UZUNDO~5TXT", "UZUNDO~6TXT", "UZUNDO~7TXT", "UZUNDO~8TXT", "UZUNDO~9TXT"];
+    ver ad_esit("Uzundokuman.txt", mevcut, "UZUND~10TXT");
+}
+
+işlev test_cakisma_10() -> mantıksal {
+    değişken mevcut: Dizi<metin> = ["UZUNDO~1TXT", "UZUNDO~2TXT", "UZUNDO~3TXT", "UZUNDO~4TXT", "UZUNDO~5TXT", "UZUNDO~6TXT", "UZUNDO~7TXT", "UZUNDO~8TXT", "UZUNDO~9TXT", "UZUND~10TXT"];
+    ver ad_esit("Uzundokuman.txt", mevcut, "UZUND~11TXT");
+}
+
+işlev test_cakisma_99() -> mantıksal {
+    değişken mevcut: Dizi<metin> = ["UZUNDO~1TXT", "UZUNDO~2TXT", "UZUNDO~3TXT", "UZUNDO~4TXT", "UZUNDO~5TXT", "UZUNDO~6TXT", "UZUNDO~7TXT", "UZUNDO~8TXT", "UZUNDO~9TXT", "UZUND~10TXT", "UZUND~11TXT", "UZUND~12TXT", "UZUND~13TXT", "UZUND~14TXT", "UZUND~15TXT", "UZUND~16TXT", "UZUND~17TXT", "UZUND~18TXT", "UZUND~19TXT", "UZUND~20TXT", "UZUND~21TXT", "UZUND~22TXT", "UZUND~23TXT", "UZUND~24TXT", "UZUND~25TXT", "UZUND~26TXT", "UZUND~27TXT", "UZUND~28TXT", "UZUND~29TXT", "UZUND~30TXT", "UZUND~31TXT", "UZUND~32TXT", "UZUND~33TXT", "UZUND~34TXT", "UZUND~35TXT", "UZUND~36TXT", "UZUND~37TXT", "UZUND~38TXT", "UZUND~39TXT", "UZUND~40TXT", "UZUND~41TXT", "UZUND~42TXT", "UZUND~43TXT", "UZUND~44TXT", "UZUND~45TXT", "UZUND~46TXT", "UZUND~47TXT", "UZUND~48TXT", "UZUND~49TXT", "UZUND~50TXT", "UZUND~51TXT", "UZUND~52TXT", "UZUND~53TXT", "UZUND~54TXT", "UZUND~55TXT", "UZUND~56TXT", "UZUND~57TXT", "UZUND~58TXT", "UZUND~59TXT", "UZUND~60TXT", "UZUND~61TXT", "UZUND~62TXT", "UZUND~63TXT", "UZUND~64TXT", "UZUND~65TXT", "UZUND~66TXT", "UZUND~67TXT", "UZUND~68TXT", "UZUND~69TXT", "UZUND~70TXT", "UZUND~71TXT", "UZUND~72TXT", "UZUND~73TXT", "UZUND~74TXT", "UZUND~75TXT", "UZUND~76TXT", "UZUND~77TXT", "UZUND~78TXT", "UZUND~79TXT", "UZUND~80TXT", "UZUND~81TXT", "UZUND~82TXT", "UZUND~83TXT", "UZUND~84TXT", "UZUND~85TXT", "UZUND~86TXT", "UZUND~87TXT", "UZUND~88TXT", "UZUND~89TXT", "UZUND~90TXT", "UZUND~91TXT", "UZUND~92TXT", "UZUND~93TXT", "UZUND~94TXT", "UZUND~95TXT", "UZUND~96TXT", "UZUND~97TXT", "UZUND~98TXT", "UZUND~99TXT"];
+    ver ad_esit("Uzundokuman.txt", mevcut, "UZUN~100TXT");
+}
+
+işlev test_dogrudan_cakisma() -> mantıksal {
+    değişken mevcut: Dizi<metin> = ["FOO     TXT"];
+    ver ad_esit("FOO.TXT", mevcut, "FOO~1   TXT");
+}
+
+işlev test_bos_0() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    eşleş kisa_ad_uret("", bos) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bos ad"); } }
+}
+
+işlev test_bos_1() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    eşleş kisa_ad_uret("...", bos) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bos ad"); } }
+}
+
+işlev test_bos_2() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    eşleş kisa_ad_uret(" . . ", bos) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bos ad"); } }
+}
+
+işlev test_yasaklar() -> mantıksal {
+    değişken bos: Dizi<metin> = [];
+    değişken ad: metin = metin_birlestir(kod_metin(34), metin_birlestir(kod_metin(92), "a"));
+    ver ad_esit(ad, bos, "__A~1      ") ve lfn_gerekli_mi(ad);
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_ad_0() { yazdir_metin("BASARISIZ ad_0"); h = h + 1; }
+    eğer değil test_ad_1() { yazdir_metin("BASARISIZ ad_1"); h = h + 1; }
+    eğer değil test_ad_2() { yazdir_metin("BASARISIZ ad_2"); h = h + 1; }
+    eğer değil test_ad_3() { yazdir_metin("BASARISIZ ad_3"); h = h + 1; }
+    eğer değil test_ad_4() { yazdir_metin("BASARISIZ ad_4"); h = h + 1; }
+    eğer değil test_ad_5() { yazdir_metin("BASARISIZ ad_5"); h = h + 1; }
+    eğer değil test_ad_6() { yazdir_metin("BASARISIZ ad_6"); h = h + 1; }
+    eğer değil test_ad_7() { yazdir_metin("BASARISIZ ad_7"); h = h + 1; }
+    eğer değil test_ad_8() { yazdir_metin("BASARISIZ ad_8"); h = h + 1; }
+    eğer değil test_cakisma_1() { yazdir_metin("BASARISIZ cakisma_1"); h = h + 1; }
+    eğer değil test_cakisma_9() { yazdir_metin("BASARISIZ cakisma_9"); h = h + 1; }
+    eğer değil test_cakisma_10() { yazdir_metin("BASARISIZ cakisma_10"); h = h + 1; }
+    eğer değil test_cakisma_99() { yazdir_metin("BASARISIZ cakisma_99"); h = h + 1; }
+    eğer değil test_dogrudan_cakisma() { yazdir_metin("BASARISIZ dogrudan_cakisma"); h = h + 1; }
+    eğer değil test_bos_0() { yazdir_metin("BASARISIZ bos_0"); h = h + 1; }
+    eğer değil test_bos_1() { yazdir_metin("BASARISIZ bos_1"); h = h + 1; }
+    eğer değil test_bos_2() { yazdir_metin("BASARISIZ bos_2"); h = h + 1; }
+    eğer değil test_yasaklar() { yazdir_metin("BASARISIZ yasaklar"); h = h + 1; }
+    ver h;
+}

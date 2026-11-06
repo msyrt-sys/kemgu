@@ -1,0 +1,136 @@
+// Kahin: python3 tools/codex/c4.py; struct.pack ve bağımsız aralık uç süpürmesi.
+kullan drivers::bellek::harita::{ BellekBolgesi, e820_coz, mb2_coz, harita_duzenle, kullanilabilir_bayt, sayfa_sayisi };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_le64 };
+işlev e820_veri() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(100);
+    yaz_u8(b, 1, 48);
+    yaz_u8(b, 9, 48);
+    yaz_u8(b, 16, 1);
+    yaz_u8(b, 21, 16);
+    yaz_u8(b, 29, 48);
+    yaz_u8(b, 36, 1);
+    yaz_u8(b, 41, 40);
+    yaz_u8(b, 49, 16);
+    yaz_u8(b, 56, 2);
+    yaz_u8(b, 61, 80);
+    yaz_u8(b, 69, 32);
+    yaz_u8(b, 76, 1);
+    yaz_u8(b, 96, 1);
+    ver b;
+}
+işlev mb2_veri() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(136);
+    yaz_u8(b, 0, 6);
+    yaz_u8(b, 4, 136);
+    yaz_u8(b, 8, 24);
+    yaz_u8(b, 17, 48);
+    yaz_u8(b, 25, 48);
+    yaz_u8(b, 32, 1);
+    yaz_u8(b, 41, 16);
+    yaz_u8(b, 49, 48);
+    yaz_u8(b, 56, 1);
+    yaz_u8(b, 65, 40);
+    yaz_u8(b, 73, 16);
+    yaz_u8(b, 80, 2);
+    yaz_u8(b, 89, 80);
+    yaz_u8(b, 97, 32);
+    yaz_u8(b, 104, 1);
+    yaz_u8(b, 128, 1);
+    ver b;
+}
+işlev beklenen(r: sonuç<Dizi<BellekBolgesi>, metin>) -> mantıksal {
+    eşleş r { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<BellekBolgesi> = v;
+        eğer dizi_boyut(xs) != 3 { ver yanlış; }
+        değişken b0: BellekBolgesi = dizi_al(xs, 0); eğer b0.taban != 4096 veya b0.uzunluk != 6144 veya b0.tur != 1 { ver yanlış; }
+        değişken b1: BellekBolgesi = dizi_al(xs, 1); eğer b1.taban != 10240 veya b1.uzunluk != 4096 veya b1.tur != 2 { ver yanlış; }
+        değişken b2: BellekBolgesi = dizi_al(xs, 2); eğer b2.taban != 14336 veya b2.uzunluk != 14336 veya b2.tur != 1 { ver yanlış; }
+        ver kullanilabilir_bayt(xs) == 20480 ve sayfa_sayisi(xs) == 4;
+    } }
+}
+
+işlev test_e820() -> mantıksal {
+    ver beklenen(e820_coz(e820_veri()));
+}
+
+işlev test_mb2() -> mantıksal {
+    ver beklenen(mb2_coz(mb2_veri()));
+}
+
+işlev test_kisa() -> mantıksal {
+    eşleş e820_coz(bayt_sifir(19)) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_bos() -> mantıksal {
+    eşleş e820_coz(bayt_sifir(0)) { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_adim_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = mb2_veri(); yaz_le32(b, 8, 0);
+    eşleş mb2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_adim_kucuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = mb2_veri(); yaz_le32(b, 8, 20);
+    eşleş mb2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_boy_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = mb2_veri(); yaz_le32(b, 4, 4294967295);
+    eşleş mb2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_artik() -> mantıksal {
+    değişken b: Dizi<dtam8> = mb2_veri(); yaz_le32(b, 4, 17);
+    eşleş mb2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_tur() -> mantıksal {
+    değişken b: Dizi<dtam8> = mb2_veri(); yaz_le32(b, 0, 5);
+    eşleş mb2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_surum() -> mantıksal {
+    değişken b: Dizi<dtam8> = mb2_veri(); yaz_le32(b, 12, 1);
+    eşleş mb2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_negatif() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(20); yaz_le64(b, 0, -1 olarak tam64); yaz_le64(b, 8, 1 olarak tam64);
+    eşleş e820_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "adres"); } }
+}
+
+işlev test_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(20); yaz_le64(b, 0, 9223372036854775807 olarak tam64); yaz_le64(b, 8, 1 olarak tam64);
+    eşleş e820_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "adres"); } }
+}
+
+işlev test_uzunluk() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(20); yaz_le64(b, 0, 0 olarak tam64); yaz_le64(b, 8, -1 olarak tam64);
+    eşleş e820_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "adres"); } }
+}
+
+işlev test_hizasiz() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = [];
+    dizi_ekle(xs, BellekBolgesi { taban: 4097, uzunluk: 8191, tur: 1 });
+    ver kullanilabilir_bayt(xs) == 8191 ve sayfa_sayisi(xs) == 1;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_e820() { yazdir_metin("BASARISIZ e820"); h = h + 1; }
+    eğer değil test_mb2() { yazdir_metin("BASARISIZ mb2"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_adim_sifir() { yazdir_metin("BASARISIZ adim_sifir"); h = h + 1; }
+    eğer değil test_adim_kucuk() { yazdir_metin("BASARISIZ adim_kucuk"); h = h + 1; }
+    eğer değil test_boy_tasma() { yazdir_metin("BASARISIZ boy_tasma"); h = h + 1; }
+    eğer değil test_artik() { yazdir_metin("BASARISIZ artik"); h = h + 1; }
+    eğer değil test_tur() { yazdir_metin("BASARISIZ tur"); h = h + 1; }
+    eğer değil test_surum() { yazdir_metin("BASARISIZ surum"); h = h + 1; }
+    eğer değil test_negatif() { yazdir_metin("BASARISIZ negatif"); h = h + 1; }
+    eğer değil test_tasma() { yazdir_metin("BASARISIZ tasma"); h = h + 1; }
+    eğer değil test_uzunluk() { yazdir_metin("BASARISIZ uzunluk"); h = h + 1; }
+    eğer değil test_hizasiz() { yazdir_metin("BASARISIZ hizasiz"); h = h + 1; }
+    ver h;
+}

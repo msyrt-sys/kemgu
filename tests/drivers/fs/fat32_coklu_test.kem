@@ -1,0 +1,74 @@
+// Kahin: python3 tools/codex/f1.py; 110 oluştur, 11 sil, 12 ekle = 111 dosya.
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur, imajdan_dosya_sil };
+kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev ondalik(n: tam32) -> metin {
+    eğer n == 0 { ver "0"; }
+    değişken v: tam32 = n; değişken s: metin = "";
+    iken v > 0 { s = metin_birlestir(kod_metin(48+v%10), s); v = v/10; } ver s;
+}
+işlev hex_bayt(b: tam32) -> metin {
+    değişken h: metin = "0123456789abcdef";
+    ver metin_birlestir(metin_kes(h, b/16, 1), metin_kes(h, b%16, 1));
+}
+işlev seyrek_dok(b: Dizi<dtam8>) {
+    değişken s: tam32 = 0;
+    iken s*512 < dizi_boyut(b) {
+        değişken dolu: mantıksal = yanlış; değişken j: tam32 = 0;
+        iken j < 512 { eğer s*512+j < dizi_boyut(b) { eğer oku_u8(b, s*512+j) != 0 { dolu = doğru; } } j = j+1; }
+        eğer dolu {
+            değişken satir: metin = metin_birlestir(ondalik(s), " "); j = 0;
+            iken j < 512 {
+                değişken v: tam32 = 0; eğer s*512+j < dizi_boyut(b) { v = oku_u8(b, s*512+j); }
+                satir = metin_birlestir(satir, hex_bayt(v)); j = j+1;
+            }
+            yazdir_metin(satir);
+        }
+        s = s+1;
+    }
+}
+işlev ornek_yolu(i: tam32) -> metin {
+    değişken n: metin = ondalik(i); iken metin_uzunluk(n) < 3 { n = metin_birlestir("0", n); }
+    ver metin_birlestir(metin_birlestir("/belgeler/alt/cakisma ", n), ".txt");
+}
+işlev ornek_verisi(i: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = []; dizi_ekle(b, (i & 255) olarak dtam8);
+    dizi_ekle(b, (i / 256) olarak dtam8); dizi_ekle(b, (128 | (i % 128)) olarak dtam8); ver b;
+}
+işlev test_coklu(b: Dizi<dtam8>) -> mantıksal {
+    eşleş imajda_dizin_olustur(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş imajda_dizin_olustur(b, "/belgeler/alt") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    değişken i: tam32 = 0;
+    iken i < 110 {
+        eşleş imaja_dosya_yaz(b, ornek_yolu(i), ornek_verisi(i)) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(n) => { eğer n != 3 { ver yanlış; } } }
+        i = i + 1;
+    }
+    i = 0; iken i < 110 {
+        eşleş imajdan_dosya_sil(b, ornek_yolu(i)) { hata(e) => { ver yanlış; } tamam(v) => { eğer değil v { ver yanlış; } } } i = i + 10;
+    }
+    i = 110; iken i < 122 {
+        eşleş imaja_dosya_yaz(b, ornek_yolu(i), ornek_verisi(i)) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 3 { ver yanlış; } } } i = i + 1;
+    }
+    eşleş imaj_dizin_listele(b, "/belgeler/alt") { hata(e) => { ver yanlış; } tamam(v) => { eğer dizi_boyut(v) != 113 { ver yanlış; } } }
+    i = 0; iken i < 122 {
+        eşleş imajdan_dosya_oku(b, ornek_yolu(i)) {
+            hata(e) => { eğer i >= 110 veya i % 10 != 0 veya değil metin_esit(e, "bulunamadi") { ver yanlış; } }
+            tamam(v) => { değişken veri: Dizi<dtam8> = v;
+                eğer i < 110 ve i % 10 == 0 { ver yanlış; }
+                eğer dizi_boyut(veri) != 3 { ver yanlış; }
+                eğer oku_u8(veri, 0) != (i & 255) veya oku_u8(veri, 1) != i / 256 veya oku_u8(veri, 2) != (128 | (i % 128)) { ver yanlış; }
+            }
+        } i = i + 1;
+    }
+    ver doğru;
+}
+işlev main() -> tam32 {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 1, "KEMGU") {
+        hata(e) => { ver 1; }
+        tamam(v) => { değişken b: Dizi<dtam8> = v; eğer değil test_coklu(b) { ver 1; } seyrek_dok(b); ver 0; }
+    }
+}

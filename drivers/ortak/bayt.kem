@@ -5,7 +5,8 @@
 // `bayt_sinirda(b, ofs, n)` ile denetlemelidir.
 
 genel işlev bayt_sinirda(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> mantıksal {
-    ver ofs >= 0 ve n >= 0 ve ofs + n <= dizi_boyut(b);
+    // Toplama taşmasını önlemek için kalan uzunlukla karşılaştır.
+    ver ofs >= 0 ve n >= 0 ve ofs <= dizi_boyut(b) ve n <= dizi_boyut(b) - ofs;
 }
 
 genel işlev oku_u8(b: Dizi<dtam8>, ofs: tam32) -> tam32 {

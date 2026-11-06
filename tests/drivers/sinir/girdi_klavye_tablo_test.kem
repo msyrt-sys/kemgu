@@ -1,0 +1,37 @@
+// Kahin: python3 tools/codex/f5.py; karakter eşleme tablosu kapasitesi; değerler [0, 1, 128, 129].
+kullan drivers::ps2::klavye_tr::{ TusOlayi, KlavyeDurumu, klavye_yeni, klavye_bayt };
+işlev olay_kodu(o: TusOlayi) -> tam32 { eşleş o { TusOlayi::Yok => { ver 0; } TusOlayi::Karakter(k) => { ver k; } TusOlayi::Ozel(k,b) => { eğer b { ver 0-k; } ver 0-k-100; } } }
+kullan drivers::girdi::klavye_tablo::{ TusEsleme, duzen_bayt };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken xs: Dizi<TusEsleme> = []; değişken i: tam32 = 0;
+    iken i < 0 { dizi_ekle(xs, TusEsleme { tarama: 30, alt: 65, ust: 66, harf: yanlış }); i=i+1; }
+    değişken d: KlavyeDurumu = klavye_yeni(); ver olay_kodu(duzen_bayt(&değişken d, 30, xs)) == 0;
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken xs: Dizi<TusEsleme> = []; değişken i: tam32 = 0;
+    iken i < 1 { dizi_ekle(xs, TusEsleme { tarama: 30, alt: 65, ust: 66, harf: yanlış }); i=i+1; }
+    değişken d: KlavyeDurumu = klavye_yeni(); ver olay_kodu(duzen_bayt(&değişken d, 30, xs)) == 65;
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken xs: Dizi<TusEsleme> = []; değişken i: tam32 = 0;
+    iken i < 128 { dizi_ekle(xs, TusEsleme { tarama: 30, alt: 65, ust: 66, harf: yanlış }); i=i+1; }
+    değişken d: KlavyeDurumu = klavye_yeni(); ver olay_kodu(duzen_bayt(&değişken d, 30, xs)) == 65;
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken xs: Dizi<TusEsleme> = []; değişken i: tam32 = 0;
+    iken i < 129 { dizi_ekle(xs, TusEsleme { tarama: 30, alt: 65, ust: 66, harf: yanlış }); i=i+1; }
+    değişken d: KlavyeDurumu = klavye_yeni(); ver olay_kodu(duzen_bayt(&değişken d, 30, xs)) == 0;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

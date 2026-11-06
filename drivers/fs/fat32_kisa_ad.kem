@@ -1,0 +1,92 @@
+// Kısa adlar FAT girdisine doğrudan yazılabilen 11 ASCII baytı olarak döner.
+kullan drivers::ortak::utf8::{ utf8_coz };
+işlev yasak_mi(k: tam32) -> mantıksal {
+    ver k <= 32 veya k >= 127 veya k == 34 veya k == 42 veya k == 43 veya k == 44 veya k == 46 veya
+        k == 47 veya k == 58 veya k == 59 veya k == 60 veya k == 61 veya k == 62 veya k == 63 veya
+        k == 91 veya k == 92 veya k == 93 veya k == 124;
+}
+işlev buyuk_ascii(s: metin) -> metin {
+    değişken sonuc: metin = "";
+    değişken i: tam32 = 0;
+    iken i < (metin_uzunluk(s) olarak tam32) {
+        değişken k: tam32 = (metin_bayt(s, i) olarak tam32) & 255;
+        eğer k >= 97 ve k <= 122 { k = k - 32; }
+        sonuc = metin_birlestir(sonuc, kod_metin(k)); i = i + 1;
+    }
+    ver sonuc;
+}
+işlev temizle(k: Dizi<tam32>, bas: tam32, son: tam32) -> metin {
+    değişken s: metin = "";
+    değişken i: tam32 = bas;
+    iken i < son {
+        değişken kod: tam32 = dizi_al(k, i);
+        eğer yasak_mi(kod) { kod = 95; }
+        eğer kod >= 97 ve kod <= 122 { kod = kod - 32; }
+        s = metin_birlestir(s, kod_metin(kod)); i = i + 1;
+    }
+    ver s;
+}
+işlev doldur(s: metin, n: tam32) -> metin {
+    değişken sonuc: metin = s;
+    iken (metin_uzunluk(sonuc) olarak tam32) < n { sonuc = metin_birlestir(sonuc, " "); }
+    ver sonuc;
+}
+işlev var_mi(ad: metin, mevcut: Dizi<metin>) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(mevcut) {
+        değişken s: metin = dizi_al(mevcut, i);
+        eğer metin_esit(ad, buyuk_ascii(s)) { ver doğru; } i = i + 1;
+    }
+    ver yanlış;
+}
+işlev ondalik(n: tam32) -> metin {
+    değişken v: tam32 = n;
+    değişken s: metin = "";
+    iken v > 0 { s = metin_birlestir(kod_metin(48 + v % 10), s); v = v / 10; }
+    ver s;
+}
+genel işlev lfn_gerekli_mi(ad: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(ad) olarak tam32;
+    eğer n == 0 veya n > 12 { ver doğru; }
+    değişken nokta: tam32 = -1;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken k: tam32 = (metin_bayt(ad, i) olarak tam32) & 255;
+        eğer k == 46 {
+            eğer nokta >= 0 veya i == 0 veya i == n - 1 { ver doğru; }
+            nokta = i;
+        } değilse eğer yasak_mi(k) veya (k >= 97 ve k <= 122) { ver doğru; }
+        i = i + 1;
+    }
+    eğer nokta < 0 { ver n > 8; }
+    ver nokta > 8 veya n - nokta - 1 > 3;
+}
+genel işlev kisa_ad_uret(ad: metin, mevcut: Dizi<metin>) -> sonuç<metin, metin> {
+    değişken k: Dizi<tam32> = utf8_coz(ad);
+    değişken bas: tam32 = 0;
+    değişken son: tam32 = dizi_boyut(k);
+    iken bas < son ve (dizi_al(k, bas) == 32 veya dizi_al(k, bas) == 46) { bas = bas + 1; }
+    iken son > bas ve (dizi_al(k, son - 1) == 32 veya dizi_al(k, son - 1) == 46) { son = son - 1; }
+    eğer bas == son { ver hata("bos ad"); }
+    değişken nokta: tam32 = son;
+    değişken i: tam32 = bas;
+    iken i < son { eğer dizi_al(k, i) == 46 { nokta = i; } i = i + 1; }
+    değişken govde: metin = temizle(k, bas, nokta);
+    değişken uzanti: metin = "";
+    eğer nokta < son { uzanti = temizle(k, nokta + 1, son); }
+    eğer metin_uzunluk(uzanti) > 3 { uzanti = metin_kes(uzanti, 0, 3); }
+    değişken aday: metin = metin_birlestir(doldur(govde, 8), doldur(uzanti, 3));
+    eğer değil lfn_gerekli_mi(ad) ve değil var_mi(aday, mevcut) { ver tamam(aday); }
+    değişken n: tam32 = 1;
+    değişken azami: tam32 = dizi_boyut(mevcut);
+    eğer azami > 999998 { azami = 999998; }
+    iken n <= azami + 1 {
+        değişken sonek: metin = metin_birlestir("~", ondalik(n));
+        değişken tut: tam32 = 8 - (metin_uzunluk(sonek) olarak tam32);
+        eğer tut > (metin_uzunluk(govde) olarak tam32) { tut = metin_uzunluk(govde) olarak tam32; }
+        aday = metin_birlestir(doldur(metin_birlestir(metin_kes(govde, 0, tut), sonek), 8), doldur(uzanti, 3));
+        eğer değil var_mi(aday, mevcut) { ver tamam(aday); }
+        n = n + 1;
+    }
+    ver hata("kisa ad dolu");
+}

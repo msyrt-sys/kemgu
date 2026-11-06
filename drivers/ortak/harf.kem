@@ -1,0 +1,19 @@
+// Unicode kod noktası dönüşümleri; Türkçe i/İ ve ı/I çiftleri tabloya işlenmiştir.
+kullan drivers::ortak::utf8::{ utf8_coz };
+kullan drivers::ortak::harf_veri::{ HarfEsleme, ust_eslemeler, alt_eslemeler };
+işlev donustur(s: metin, tablo: Dizi<HarfEsleme>) -> metin {
+    değişken kodlar: Dizi<tam32> = utf8_coz(s); değişken sonuc: metin = ""; değişken i: tam32 = 0;
+    iken i < dizi_boyut(kodlar) {
+        değişken kod: tam32 = dizi_al(kodlar, i); değişken sol: tam32 = 0; değişken sag: tam32 = dizi_boyut(tablo);
+        iken sol < sag {
+            değişken orta: tam32 = sol + (sag - sol) / 2; değişken e: HarfEsleme = dizi_al(tablo, orta);
+            eğer e.kod < kod { sol = orta + 1; } değilse { sag = orta; }
+        }
+        değişken parca: metin = kod_metin(kod);
+        eğer sol < dizi_boyut(tablo) { değişken e: HarfEsleme = dizi_al(tablo, sol); eğer e.kod == kod { parca = e.metin; } }
+        sonuc = metin_birlestir(sonuc, parca); i = i + 1;
+    }
+    ver sonuc;
+}
+genel işlev buyuk_harf(s: metin) -> metin { ver donustur(s, ust_eslemeler()); }
+genel işlev kucuk_harf(s: metin) -> metin { ver donustur(s, alt_eslemeler()); }

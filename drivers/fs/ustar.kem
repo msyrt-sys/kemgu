@@ -1,0 +1,86 @@
+// USTAR listeleme; arşiv adları yalnız veridir, host dosya sistemine çıkarılmaz.
+kullan drivers::ortak::bayt::{ oku_u8, imza_esit };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_kodla };
+genel yapı TarGirdisi { ad: metin; boyut: tam64; dizin_mi: mantıksal; veri_ofseti: tam32; }
+işlev sifir_blok(b: Dizi<dtam8>, ofs: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < 512 { eğer oku_u8(b, ofs + i) != 0 { ver yanlış; } i = i + 1; } ver doğru;
+}
+işlev sekizlik(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> sonuç<tam64, metin> {
+    değişken sonuc: tam64 = 0;
+    değişken i: tam32 = 0;
+    değişken basladi: mantıksal = yanlış;
+    değişken bitti: mantıksal = yanlış;
+    iken i < n {
+        değişken k: tam32 = oku_u8(b, ofs + i);
+        eğer k == 0 { bitti = doğru; }
+        değilse eğer k == 32 { eğer basladi { bitti = doğru; } }
+        değilse {
+            eğer bitti veya k < 48 veya k > 55 { ver hata("sekizlik"); }
+            basladi = doğru; sonuc = sonuc * 8 + ((k - 48) olarak tam64);
+        }
+        i = i + 1;
+    }
+    ver tamam(sonuc);
+}
+işlev alan_adi(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> metin {
+    değişken uzun: tam32 = 0;
+    iken uzun < n ve oku_u8(b, ofs + uzun) != 0 { uzun = uzun + 1; }
+    ver utf8_kodla(utf8_bayt_coz(b, ofs, uzun));
+}
+genel işlev tar_listele(b: Dizi<dtam8>) -> sonuç<Dizi<TarGirdisi>, metin> {
+    değişken sonuc: Dizi<TarGirdisi> = [];
+    değişken ofs: tam32 = 0;
+    değişken toplam: tam32 = dizi_boyut(b);
+    iken toplam - ofs >= 512 {
+        eğer sifir_blok(b, ofs) {
+            eğer toplam - ofs < 1024 { ver hata("son blok"); }
+            eğer değil sifir_blok(b, ofs + 512) { ver hata("son blok"); }
+            ver tamam(sonuc);
+        }
+        eğer değil imza_esit(b, ofs + 257, "ustar") { ver hata("imza"); }
+        değişken beklenen: tam64 = 0;
+        eşleş sekizlik(b, ofs + 148, 8) { hata(e) => { ver hata(e); } tamam(v) => { beklenen = v; } }
+        değişken saglama: tam64 = 0;
+        değişken i: tam32 = 0;
+        iken i < 512 {
+            eğer i >= 148 ve i < 156 { saglama = saglama + 32; }
+            değilse { saglama = saglama + (oku_u8(b, ofs + i) olarak tam64); }
+            i = i + 1;
+        }
+        eğer saglama != beklenen { ver hata("saglama"); }
+        değişken boy: tam64 = 0;
+        eşleş sekizlik(b, ofs + 124, 12) { hata(e) => { ver hata(e); } tamam(v) => { boy = v; } }
+        eğer boy > ((toplam - ofs - 512) olarak tam64) { ver hata("veri siniri"); }
+        değişken dolgu: tam64 = ((boy + 511) / 512) * 512;
+        eğer dolgu > ((toplam - ofs - 512) olarak tam64) { ver hata("veri siniri"); }
+        değişken tur: tam32 = oku_u8(b, ofs + 156);
+        eğer tur != 0 ve tur != 48 ve tur != 53 { ver hata("tur"); }
+        değişken ad: metin = alan_adi(b, ofs, 100);
+        değişken onek: metin = alan_adi(b, ofs + 345, 155);
+        eğer metin_uzunluk(onek) > 0 { ad = metin_birlestir(metin_birlestir(onek, "/"), ad); }
+        dizi_ekle(sonuc, TarGirdisi { ad: ad, boyut: boy, dizin_mi: tur == 53, veri_ofseti: ofs + 512 });
+        ofs = ofs + 512 + (dolgu olarak tam32);
+    }
+    ver hata("son blok");
+}
+genel işlev tar_bul(b: Dizi<dtam8>, ad: metin) -> seçimlik<Dizi<dtam8>> {
+    eşleş tar_listele(b) {
+        hata(e) => { ver hiç; }
+        tamam(v) => {
+            değişken xs: Dizi<TarGirdisi> = v;
+            değişken i: tam32 = 0;
+            iken i < dizi_boyut(xs) {
+                değişken g: TarGirdisi = dizi_al(xs, i);
+                eğer değil g.dizin_mi ve metin_esit(g.ad, ad) {
+                    değişken veri: Dizi<dtam8> = [];
+                    değişken j: tam32 = 0;
+                    iken j < (g.boyut olarak tam32) { dizi_ekle(veri, oku_u8(b, g.veri_ofseti + j) olarak dtam8); j = j + 1; }
+                    ver değer(veri);
+                }
+                i = i + 1;
+            }
+        }
+    }
+    ver hiç;
+}

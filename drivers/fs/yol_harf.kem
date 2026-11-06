@@ -1,0 +1,11 @@
+// İsteğe bağlı Türkçe harf duyarsız karşılaştırma; normal dosya erişimini değiştirmez.
+kullan drivers::fs::yol::{ yol_bol, yol_birlestir };
+kullan drivers::ortak::harf_veri::{ HarfEsleme };
+kullan drivers::ortak::harf::{ kucuk_harf };
+genel işlev yol_esit(a: metin, b: metin, harf_duyarsiz: mantıksal) -> sonuç<mantıksal, metin> {
+    değişken x: metin = ""; değişken y: metin = "";
+    eşleş yol_bol(a) { hata(e) => { ver hata(e); } tamam(v) => { değişken p: Dizi<metin> = v; x = yol_birlestir(p); } }
+    eşleş yol_bol(b) { hata(e) => { ver hata(e); } tamam(v) => { değişken p: Dizi<metin> = v; y = yol_birlestir(p); } }
+    eğer harf_duyarsiz { x = kucuk_harf(x); y = kucuk_harf(y); }
+    ver tamam(metin_esit(x, y));
+}

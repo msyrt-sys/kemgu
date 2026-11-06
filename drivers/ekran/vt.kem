@@ -1,0 +1,108 @@
+// Sınırlı ANSI CSI ve UTF-8 akışı; bilinmeyen diziler ekran yazısı olmaz.
+kullan drivers::ekran::konsol::{ Konsol, konsol_kod, konsol_imlec, konsol_alan_sil };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz };
+genel yapı VtDurumu {
+    kip: tam32; parametreler: Dizi<tam32>; sayi: tam32; ozel: mantıksal;
+    utf8: Dizi<dtam8>; beklenen: tam32; varsayilan_on: tam32; varsayilan_arka: tam32;
+    on_indeks: tam32; arka_indeks: tam32; kalin: mantıksal;
+}
+genel işlev vt_yeni(on: tam32, arka: tam32) -> VtDurumu {
+    değişken p: Dizi<tam32> = []; değişken u: Dizi<dtam8> = [];
+    ver VtDurumu { kip: 0, parametreler: p, sayi: 0, ozel: yanlış, utf8: u, beklenen: 0,
+        varsayilan_on: on, varsayilan_arka: arka, on_indeks: -1, arka_indeks: -1, kalin: yanlış };
+}
+işlev palet(i: tam32) -> tam32 {
+    değişken renkler: Dizi<tam32> = [0, 11141120, 43520, 11162880, 170, 11141290, 43690, 11184810,
+        5592405, 16733525, 5635925, 16777045, 5592575, 16733695, 5636095, 16777215];
+    eğer i < 0 veya i >= 16 { ver 0; } ver dizi_al(renkler, i);
+}
+işlev renk_yenile(d: &değişken VtDurumu, k: &değişken Konsol) {
+    k.on = d.varsayilan_on; k.arka = d.varsayilan_arka;
+    değişken on: tam32 = d.on_indeks;
+    eğer d.kalin {
+        eğer on < 0 { on = 7; }
+        eğer on < 8 { on = on + 8; }
+    }
+    eğer on >= 0 { k.on = palet(on); }
+    eğer d.arka_indeks >= 0 { k.arka = palet(d.arka_indeks); }
+}
+işlev parametre(p: Dizi<tam32>, i: tam32, varsayilan: tam32) -> tam32 {
+    eğer i >= dizi_boyut(p) { ver varsayilan; }
+    değişken v: tam32 = dizi_al(p, i); eğer v == 0 { ver varsayilan; } ver v;
+}
+işlev csi_uygula(d: &değişken VtDurumu, k: &değişken Konsol, son: tam32) {
+    eğer d.ozel { ver; }
+    değişken n: tam32 = parametre(d.parametreler, 0, 1);
+    eğer son == 65 { konsol_imlec(k, k.x, k.y - n); }
+    değilse eğer son == 66 { konsol_imlec(k, k.x, k.y + n); }
+    değilse eğer son == 67 { konsol_imlec(k, k.x + n, k.y); }
+    değilse eğer son == 68 { konsol_imlec(k, k.x - n, k.y); }
+    değilse eğer son == 72 { konsol_imlec(k, parametre(d.parametreler, 1, 1) - 1, n - 1); }
+    değilse eğer son == 74 {
+        eğer parametre(d.parametreler, 0, 0) == 2 { konsol_alan_sil(k, 0, k.sutunlar * k.satirlar); }
+    } değilse eğer son == 75 {
+        eğer parametre(d.parametreler, 0, 0) == 0 { konsol_alan_sil(k, k.y * k.sutunlar + k.x, k.sutunlar - k.x); }
+    } değilse eğer son == 109 {
+        değişken i: tam32 = 0;
+        iken i < dizi_boyut(d.parametreler) {
+            değişken p: tam32 = dizi_al(d.parametreler, i);
+            eğer p == 0 { d.on_indeks = -1; d.arka_indeks = -1; d.kalin = yanlış; }
+            değilse eğer p == 1 { d.kalin = doğru; }
+            değilse eğer p >= 30 ve p <= 37 { d.on_indeks = p - 30; }
+            değilse eğer p >= 40 ve p <= 47 { d.arka_indeks = p - 40; }
+            değilse eğer p >= 90 ve p <= 97 { d.on_indeks = p - 90 + 8; }
+            i = i + 1;
+        }
+        renk_yenile(d, k);
+    }
+}
+işlev utf8_bosalt(d: &değişken VtDurumu, k: &değişken Konsol) {
+    değişken kodlar: Dizi<tam32> = utf8_bayt_coz(d.utf8, 0, dizi_boyut(d.utf8));
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(kodlar) { konsol_kod(k, dizi_al(kodlar, i)); i = i + 1; }
+    değişken bos: Dizi<dtam8> = []; d.utf8 = bos; d.beklenen = 0;
+}
+genel işlev vt_bayt(d: &değişken VtDurumu, k: &değişken Konsol, b: tam32) {
+    eğer b < 0 veya b > 255 { utf8_bosalt(d, k); d.kip = 0; ver; }
+    // OSC/DCS benzeri diziler BEL veya ST ile biter.
+    eğer d.kip == 3 { eğer b == 7 { d.kip = 0; } değilse eğer b == 27 { d.kip = 5; } ver; }
+    eğer d.kip == 5 { eğer b == 92 veya b == 7 { d.kip = 0; } değilse eğer b != 27 { d.kip = 3; } ver; }
+    eğer b == 27 { utf8_bosalt(d, k); d.kip = 1; ver; }
+    eğer d.kip == 1 {
+        eğer b == 91 {
+            değişken bos: Dizi<tam32> = []; d.parametreler = bos; d.sayi = 0; d.ozel = yanlış; d.kip = 2;
+        } değilse eğer b == 93 veya b == 80 veya b == 94 veya b == 95 { d.kip = 3; }
+        değilse { d.kip = 0; } ver;
+    }
+    eğer d.kip == 4 { eğer b >= 64 ve b <= 126 { d.kip = 0; } ver; }
+    eğer d.kip == 2 {
+        eğer b >= 48 ve b <= 57 {
+            d.sayi = d.sayi * 10 + b - 48; eğer d.sayi > 4096 { d.sayi = 4096; } ver;
+        }
+        eğer b == 59 {
+            eğer dizi_boyut(d.parametreler) >= 15 { d.kip = 4; ver; }
+            dizi_ekle(d.parametreler, d.sayi); d.sayi = 0; ver;
+        }
+        eğer b >= 64 ve b <= 126 {
+            dizi_ekle(d.parametreler, d.sayi); csi_uygula(d, k, b); d.kip = 0; ver;
+        }
+        d.ozel = doğru; ver;
+    }
+    eğer b < 128 { utf8_bosalt(d, k); konsol_kod(k, b); ver; }
+    eğer b >= 128 ve b <= 191 {
+        eğer d.beklenen == 0 { konsol_kod(k, 65533); ver; }
+        dizi_ekle(d.utf8, b olarak dtam8);
+        eğer dizi_boyut(d.utf8) == d.beklenen { utf8_bosalt(d, k); } ver;
+    }
+    utf8_bosalt(d, k);
+    eğer b >= 194 ve b <= 223 { d.beklenen = 2; }
+    değilse eğer b >= 224 ve b <= 239 { d.beklenen = 3; }
+    değilse eğer b >= 240 ve b <= 244 { d.beklenen = 4; }
+    değilse { konsol_kod(k, 65533); ver; }
+    dizi_ekle(d.utf8, b olarak dtam8);
+}
+genel işlev vt_metin(d: &değişken VtDurumu, k: &değişken Konsol, s: metin) {
+    değişken i: tam32 = 0;
+    iken i < (metin_uzunluk(s) olarak tam32) { vt_bayt(d, k, (metin_bayt(s, i) olarak tam32) & 255); i = i + 1; }
+}
+genel işlev vt_bitir(d: &değişken VtDurumu, k: &değişken Konsol) { utf8_bosalt(d, k); d.kip = 0; }

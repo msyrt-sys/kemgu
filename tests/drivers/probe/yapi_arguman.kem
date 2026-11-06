@@ -1,0 +1,7 @@
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, kume_sektoru };
+işlev main() -> tam32 {
+    değişken b: Fat32Bpb = Fat32Bpb { sektor_bayt: 512, kume_sektor: 8,
+        ayrilmis: 32, fat_sayisi: 2, toplam_sektor: 1048576, fat_sektor: 1024,
+        kok_kume: 2, fsinfo: 1, ilk_veri_sektoru: 2080, kume_sayisi: 130812 };
+    eğer kume_sektoru(b, 2 olarak tam64) == 2080 { ver 0; } ver 1;
+}

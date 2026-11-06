@@ -1,0 +1,98 @@
+// Hesap: python3 tools/codex/b5.py; kapasite eşitsizliği 128*F >= floor((T-32-2F)/K)+2.
+// C001: modülle aynı adlı API nitelikli çağrılır.
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, bpb_coz };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::ortak::bayt::{ oku_u8, oku_le32, imza_esit };
+
+işlev test_yerlesim() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000, 1, "KEMGU") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken b: Dizi<dtam8> = v;
+        eğer dizi_boyut(b) != 568832 { ver yanlış; }
+        eşleş bpb_coz(b) { hata(e) => { ver yanlış; } tamam(p) => {
+            değişken bp: Fat32Bpb = p;
+            eğer bp.fat_sektor != 539 veya bp.ilk_veri_sektoru != 1110 veya bp.kume_sayisi != 68890 { ver yanlış; }
+        } }
+        eğer oku_le32(b, 512) != 1096897106 veya oku_le32(b, 996) != 1631679090 veya
+            oku_le32(b, 1020) != 2857697280 veya oku_le32(b, 1000) != 68889 veya oku_le32(b, 1004) != 3 { ver yanlış; }
+        değişken i: tam32 = 0;
+        iken i < 1536 { eğer oku_u8(b, i) != oku_u8(b, 3072+i) { ver yanlış; } i = i + 1; }
+        i = 0;
+        iken i < 275968 { eğer oku_u8(b, 16384+i) != oku_u8(b, 292352+i) { ver yanlış; } i = i + 1; }
+        ver oku_le32(b, 16384) == 268435448 ve oku_le32(b, 16388) == 268435455 ve
+            oku_le32(b, 16392) == 268435455 ve oku_le32(b, 16396) == 0 ve
+            imza_esit(b, 568320, "KEMGU      ") ve oku_u8(b, 568331) == 8 ve oku_u8(b, 568352) == 0;
+    } }
+}
+
+işlev test_etiketsiz() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000, 1, "") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken b: Dizi<dtam8> = v;
+        ver imza_esit(b, 71, "NO NAME    ") ve oku_u8(b, 568320) == 0;
+    } }
+}
+
+işlev test_hata_0() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(0 olarak tam64, 1, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_1() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(1000 olarak tam64, 1, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_2() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 0, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_3() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 3, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_4() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 256, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_5() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(4294967296 olarak tam64, 1, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_6() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 1, "123456789012") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_7() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 1, "ğ") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_8() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(70000 olarak tam64, 1, "a/b") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_hata_9() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(268000000 olarak tam64, 1, "") { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_iki_sektor() -> mantıksal {
+    eşleş fat32_bicimle::fat32_bicimle(140000, 2, "disk") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken b: Dizi<dtam8> = v;
+        eşleş bpb_coz(b) { hata(e) => { ver yanlış; } tamam(p) => { değişken bp: Fat32Bpb = p; ver bp.kume_sektor == 2 ve imza_esit(b, 71, "DISK       "); } }
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_yerlesim() { yazdir_metin("BASARISIZ yerlesim"); h = h + 1; }
+    eğer değil test_etiketsiz() { yazdir_metin("BASARISIZ etiketsiz"); h = h + 1; }
+    eğer değil test_hata_0() { yazdir_metin("BASARISIZ hata_0"); h = h + 1; }
+    eğer değil test_hata_1() { yazdir_metin("BASARISIZ hata_1"); h = h + 1; }
+    eğer değil test_hata_2() { yazdir_metin("BASARISIZ hata_2"); h = h + 1; }
+    eğer değil test_hata_3() { yazdir_metin("BASARISIZ hata_3"); h = h + 1; }
+    eğer değil test_hata_4() { yazdir_metin("BASARISIZ hata_4"); h = h + 1; }
+    eğer değil test_hata_5() { yazdir_metin("BASARISIZ hata_5"); h = h + 1; }
+    eğer değil test_hata_6() { yazdir_metin("BASARISIZ hata_6"); h = h + 1; }
+    eğer değil test_hata_7() { yazdir_metin("BASARISIZ hata_7"); h = h + 1; }
+    eğer değil test_hata_8() { yazdir_metin("BASARISIZ hata_8"); h = h + 1; }
+    eğer değil test_hata_9() { yazdir_metin("BASARISIZ hata_9"); h = h + 1; }
+    eğer değil test_iki_sektor() { yazdir_metin("BASARISIZ iki_sektor"); h = h + 1; }
+    ver h;
+}

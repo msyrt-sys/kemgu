@@ -1,0 +1,33 @@
+// Kahin: python3 tools/codex/f5.py; BMP genişliği; değerler [0, 1, 16384, 16385].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_yaz, piksel_oku };
+kullan drivers::ekran::bmp::{ Bmp, bmp_coz };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(54); yaz_ascii(b,0,"BM"); yaz_le32(b,2,54 olarak tam64); yaz_le32(b,10,54 olarak tam64); yaz_le32(b,14,40 olarak tam64); yaz_le32(b,18,0 olarak tam64); yaz_le32(b,22,1 olarak tam64); yaz_le16(b,26,1 olarak tam64); yaz_le16(b,28,24 olarak tam64);
+    eşleş bmp_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken b: Bmp = v; ver yanlış; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(58); yaz_ascii(b,0,"BM"); yaz_le32(b,2,58 olarak tam64); yaz_le32(b,10,54 olarak tam64); yaz_le32(b,14,40 olarak tam64); yaz_le32(b,18,1 olarak tam64); yaz_le32(b,22,1 olarak tam64); yaz_le16(b,26,1 olarak tam64); yaz_le16(b,28,24 olarak tam64);
+    eşleş bmp_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken b: Bmp = v; ver b.genislik == 1 ve b.adim == 4; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(49206); yaz_ascii(b,0,"BM"); yaz_le32(b,2,49206 olarak tam64); yaz_le32(b,10,54 olarak tam64); yaz_le32(b,14,40 olarak tam64); yaz_le32(b,18,16384 olarak tam64); yaz_le32(b,22,1 olarak tam64); yaz_le16(b,26,1 olarak tam64); yaz_le16(b,28,24 olarak tam64);
+    eşleş bmp_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken b: Bmp = v; ver b.genislik == 16384 ve b.adim == 49152; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(49210); yaz_ascii(b,0,"BM"); yaz_le32(b,2,49210 olarak tam64); yaz_le32(b,10,54 olarak tam64); yaz_le32(b,14,40 olarak tam64); yaz_le32(b,18,16385 olarak tam64); yaz_le32(b,22,1 olarak tam64); yaz_le16(b,26,1 olarak tam64); yaz_le16(b,28,24 olarak tam64);
+    eşleş bmp_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken b: Bmp = v; ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

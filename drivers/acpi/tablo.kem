@@ -1,0 +1,64 @@
+// ACPI tabloları saf bayt dizileri üzerinde doğrulanır; bellek okuma çağıranındır.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le32, oku_le64, imza_esit, bayt_toplam8 };
+genel yapı Rsdp { revizyon: tam32; rsdt: tam64; xsdt: tam64; oem: metin; }
+genel yapı SdtBaslik { imza: metin; uzunluk: tam64; revizyon: tam32; oem: metin; }
+genel çeşit AcpiHatasi { KisaGirdi, ImzaYok, Saglama, GenisSaglama, Uzunluk }
+işlev ascii_oku(b: Dizi<dtam8>, ofs: tam32, n: tam32, kirp: mantıksal) -> metin {
+    değişken son: tam32 = n;
+    eğer kirp { iken son > 0 ve oku_u8(b, ofs + son - 1) == 32 { son = son - 1; } }
+    değişken s: metin = "";
+    değişken i: tam32 = 0;
+    iken i < son { s = metin_birlestir(s, kod_metin(oku_u8(b, ofs + i))); i = i + 1; }
+    ver s;
+}
+işlev rsdp_ofsette(b: Dizi<dtam8>, ofs: tam32) -> sonuç<Rsdp, AcpiHatasi> {
+    eğer ofs < 0 veya ofs > dizi_boyut(b) { ver hata(AcpiHatasi::KisaGirdi); }
+    eğer dizi_boyut(b) - ofs < 20 { ver hata(AcpiHatasi::KisaGirdi); }
+    eğer değil imza_esit(b, ofs, "RSD PTR ") { ver hata(AcpiHatasi::ImzaYok); }
+    eğer bayt_toplam8(b, ofs, 20) != 0 { ver hata(AcpiHatasi::Saglama); }
+    değişken rev: tam32 = oku_u8(b, ofs + 15);
+    değişken xsdt: tam64 = 0;
+    eğer rev >= 2 {
+        eğer dizi_boyut(b) - ofs < 36 { ver hata(AcpiHatasi::KisaGirdi); }
+        değişken n: tam64 = oku_le32(b, ofs + 20);
+        eğer n < 36 veya n > ((dizi_boyut(b) - ofs) olarak tam64) { ver hata(AcpiHatasi::Uzunluk); }
+        eğer bayt_toplam8(b, ofs, n olarak tam32) != 0 { ver hata(AcpiHatasi::GenisSaglama); }
+        xsdt = oku_le64(b, ofs + 24);
+    }
+    ver tamam(Rsdp { revizyon: rev, rsdt: oku_le32(b, ofs + 16), xsdt: xsdt, oem: ascii_oku(b, ofs + 9, 6, doğru) });
+}
+genel işlev rsdp_coz(b: Dizi<dtam8>) -> sonuç<Rsdp, AcpiHatasi> { ver rsdp_ofsette(b, 0); }
+genel işlev rsdp_ara(b: Dizi<dtam8>) -> seçimlik<tam32> {
+    değişken ofs: tam32 = 0;
+    iken ofs <= dizi_boyut(b) - 20 {
+        eşleş rsdp_ofsette(b, ofs) { tamam(v) => { ver değer(ofs); } hata(e) => { } }
+        ofs = ofs + 16;
+    }
+    ver hiç;
+}
+genel işlev sdt_coz(b: Dizi<dtam8>) -> sonuç<SdtBaslik, AcpiHatasi> {
+    eğer dizi_boyut(b) < 36 { ver hata(AcpiHatasi::KisaGirdi); }
+    değişken n: tam64 = oku_le32(b, 4);
+    eğer n < 36 veya n > (dizi_boyut(b) olarak tam64) { ver hata(AcpiHatasi::Uzunluk); }
+    eğer bayt_toplam8(b, 0, n olarak tam32) != 0 { ver hata(AcpiHatasi::Saglama); }
+    ver tamam(SdtBaslik { imza: ascii_oku(b, 0, 4, yanlış), uzunluk: n, revizyon: oku_u8(b, 8), oem: ascii_oku(b, 10, 6, doğru) });
+}
+genel işlev sdt_girdileri(b: Dizi<dtam8>, xsdt_mi: mantıksal) -> sonuç<Dizi<tam64>, AcpiHatasi> {
+    değişken n: tam64 = 0;
+    eşleş sdt_coz(b) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => { değişken baslik: SdtBaslik = v; n = baslik.uzunluk; }
+    }
+    değişken adim: tam32 = 4;
+    eğer xsdt_mi { adim = 8; }
+    eğer (n - 36) % (adim olarak tam64) != 0 { ver hata(AcpiHatasi::Uzunluk); }
+    // C002: tam64 eleman genişliğini açık literal ile koru.
+    değişken adresler: Dizi<tam64> = [];
+    değişken ofs: tam32 = 36;
+    iken ofs < (n olarak tam32) {
+        değişken adres: tam64 = 0;
+        eğer xsdt_mi { adres = oku_le64(b, ofs); } değilse { adres = oku_le32(b, ofs); }
+        dizi_ekle(adresler, adres); ofs = ofs + adim;
+    }
+    ver tamam(adresler);
+}

@@ -1,0 +1,98 @@
+// Unicode skaler dönüşümleri; bozuk dizide bir bayt ilerlenir.
+kullan drivers::ortak::bayt::{ oku_le16, oku_u8 };
+işlev skaler_mi(k: tam32) -> mantıksal {
+    ver k >= 0 ve k <= 1114111 ve (k < 55296 veya k > 57343);
+}
+genel işlev utf8_bayt_coz(baytlar: Dizi<dtam8>, ofs: tam32, n: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = [];
+    eğer ofs < 0 veya n < 0 veya ofs > dizi_boyut(baytlar) { ver sonuc; }
+    eğer n > dizi_boyut(baytlar) - ofs { ver sonuc; }
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken b: tam32 = oku_u8(baytlar, ofs + i);
+        değişken boy: tam32 = 0;
+        değişken kod: tam32 = 0;
+        değişken enaz: tam32 = 0;
+        eğer b < 128 { boy = 1; kod = b; }
+        değilse eğer b >= 194 ve b <= 223 { boy = 2; kod = b & 31; enaz = 128; }
+        değilse eğer b >= 224 ve b <= 239 { boy = 3; kod = b & 15; enaz = 2048; }
+        değilse eğer b >= 240 ve b <= 244 { boy = 4; kod = b & 7; enaz = 65536; }
+        değişken gecerli: mantıksal = boy > 0 ve boy <= n - i;
+        değişken j: tam32 = 1;
+        iken j < boy ve gecerli {
+            değişken ek: tam32 = oku_u8(baytlar, ofs + i + j);
+            eğer ek < 128 veya ek > 191 { gecerli = yanlış; }
+            değilse { kod = (kod << 6) | (ek & 63); }
+            j = j + 1;
+        }
+        eğer gecerli ve kod >= enaz ve skaler_mi(kod) {
+            dizi_ekle(sonuc, kod); i = i + boy;
+        } değilse { dizi_ekle(sonuc, 65533); i = i + 1; }
+    }
+    ver sonuc;
+}
+genel işlev utf8_coz(s: metin) -> Dizi<tam32> {
+    değişken baytlar: Dizi<dtam8> = [];
+    değişken n: tam32 = metin_uzunluk(s) olarak tam32;
+    değişken i: tam32 = 0;
+    iken i < n {
+        dizi_ekle(baytlar, ((metin_bayt(s, i) olarak tam32) & 255) olarak dtam8); i = i + 1;
+    }
+    ver utf8_bayt_coz(baytlar, 0, n);
+}
+genel işlev utf8_kodla(k: Dizi<tam32>) -> metin {
+    değişken s: metin = "";
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(k) {
+        değişken kod: tam32 = dizi_al(k, i);
+        eğer değil skaler_mi(kod) { kod = 65533; }
+        s = metin_birlestir(s, kod_metin(kod)); i = i + 1;
+    }
+    ver s;
+}
+genel işlev utf16le_coz(b: Dizi<dtam8>, ofs: tam32, birim: tam32) -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = [];
+    eğer ofs < 0 veya ofs > dizi_boyut(b) veya birim <= 0 { ver sonuc; }
+    değişken kalan: tam32 = dizi_boyut(b) - ofs;
+    değişken adet: tam32 = kalan / 2;
+    eğer adet > birim { adet = birim; }
+    değişken i: tam32 = 0;
+    iken i < adet {
+        değişken kod: tam32 = oku_le16(b, ofs + i * 2);
+        eğer kod == 0 { ver sonuc; }
+        eğer kod >= 55296 ve kod <= 56319 {
+            değişken eslesti: mantıksal = yanlış;
+            eğer i + 1 < adet {
+                değişken alt: tam32 = oku_le16(b, ofs + (i + 1) * 2);
+                eğer alt >= 56320 ve alt <= 57343 {
+                    kod = 65536 + ((kod - 55296) << 10) + (alt - 56320);
+                    i = i + 1; eslesti = doğru;
+                }
+            }
+            eğer değil eslesti { kod = 65533; }
+        } değilse eğer kod >= 56320 ve kod <= 57343 { kod = 65533; }
+        dizi_ekle(sonuc, kod); i = i + 1;
+    }
+    eğer adet < birim ve kalan % 2 != 0 { dizi_ekle(sonuc, 65533); }
+    ver sonuc;
+}
+işlev birim_ekle(b: Dizi<dtam8>, k: tam32) {
+    dizi_ekle(b, (k & 255) olarak dtam8);
+    dizi_ekle(b, ((k >> 8) & 255) olarak dtam8);
+}
+genel işlev utf16le_kodla(k: Dizi<tam32>) -> Dizi<dtam8> {
+    değişken sonuc: Dizi<dtam8> = [];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(k) {
+        değişken kod: tam32 = dizi_al(k, i);
+        eğer değil skaler_mi(kod) { kod = 65533; }
+        eğer kod <= 65535 { birim_ekle(sonuc, kod); }
+        değilse {
+            kod = kod - 65536;
+            birim_ekle(sonuc, 55296 + (kod >> 10));
+            birim_ekle(sonuc, 56320 + (kod & 1023));
+        }
+        i = i + 1;
+    }
+    ver sonuc;
+}
