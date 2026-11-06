@@ -5755,10 +5755,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* D2 (bug #3): builtin ad-eslestirme zinciri yalniz KULLANICI islevi
              * COZULMEDIYSE (ik==NULL) calismali. Aksi halde kullanici-tanimli
              * `yazdir`/`yaz_*`/`metin_*`/`dizi_*` islevleri builtin'e kacirilir
-             * (hijack). `!ik` zincirin BASINDAKI `if`e konur — sonraki `else if`
-             * dallari otomatik atlanir, akis alttaki generic/normal kullanici-fn
-             * emisyonuna duser. */
-            if (!ik && cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
+             * (hijack). Kullanıcı kolu zincirin tamamını atlamalı: yalnız ilk
+             * koşula !ik eklemek sonraki else-if dallarını korumaz (C009). */
+            if (ik) {
+                /* Kullanıcı işlevinin adı ve imzası korunur. */
+            } else if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
                 cagri_adi = "puts"; cagri_adi_uz = 4;
             } else if (cagri_adi_uz == 9 && memcmp(cagri_adi, "bellek_al", 9) == 0) {
                 cagri_adi = "malloc"; cagri_adi_uz = 6;
@@ -5964,9 +5965,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             /* Konsolidasyon: args sonrasi mapping ve intrinsicler.
              * `if/else if` chain artik bağimsiz, args alloc'tan sonra. */
-            if (!ik && cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
-                /* Madde A: metin_* built-in -> kdl_metin_* (D2: !ik — kullanici
-                 * islevi cozulmusse builtin'e kacirma; tum else-if ladder atlanir) */
+            if (ik) {
+                /* C009: kullanıcı işlevi tüm yerleşik öneklerinden önce gelir. */
+            } else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
+                /* Madde A: metin_* yerleşiği -> kdl_metin_*. */
                 static char kdl_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
                 memcpy(kdl_buf, "kdl_", 4);

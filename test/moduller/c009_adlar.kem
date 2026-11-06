@@ -1,0 +1,4 @@
+// C009: kullanıcı adları host dosya API’lerini çağırmaz.
+genel işlev dosya_sil(x: metin) -> tam32 { ver metin_uzunluk(x) + 11; }
+genel işlev dosya_adi(x: tam32) -> tam32 { ver x + 17; }
+genel işlev metin_x(x: tam32) -> tam32 { ver x + 23; }
