@@ -1,0 +1,15 @@
+kullan c006_alan::{Kutu};
+işlev main() -> tam32 {
+    değişken k: Kutu = Kutu { sayilar: [], satirlar: [[], [], []], sayac: 17 };
+    dizi_ekle(k.sayilar, 8589934595);
+    dizi_ekle(k.sayilar, 17179869189);
+    dizi_ekle(k.sayilar, 34359738375);
+    eğer dizi_al(k.sayilar, 0) != 8589934595 { ver 1; }
+    eğer dizi_al(k.sayilar, 1) != 17179869189 { ver 2; }
+    eğer dizi_al(k.sayilar, 2) != 34359738375 { ver 3; }
+    eğer dizi_boyut(k.satirlar) != 3 veya k.sayac != 17 { ver 4; }
+    // Pozitif: yerel annotasyonlu boş dizi kuralı değişmemeli.
+    değişken yerel: Dizi<tam32> = [];
+    dizi_ekle(yerel, 42);
+    ver dizi_al(yerel, 0);
+}
