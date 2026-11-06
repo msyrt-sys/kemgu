@@ -5755,10 +5755,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* D2 (bug #3): builtin ad-eslestirme zinciri yalniz KULLANICI islevi
              * COZULMEDIYSE (ik==NULL) calismali. Aksi halde kullanici-tanimli
              * `yazdir`/`yaz_*`/`metin_*`/`dizi_*` islevleri builtin'e kacirilir
-             * (hijack). `!ik` zincirin BASINDAKI `if`e konur — sonraki `else if`
-             * dallari otomatik atlanir, akis alttaki generic/normal kullanici-fn
-             * emisyonuna duser. */
-            if (!ik && cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
+             * (hijack). Kullanıcı kolu zincirin tamamını atlamalı: yalnız ilk
+             * koşula !ik eklemek sonraki else-if dallarını korumaz (C009). */
+            if (ik) {
+                /* Kullanıcı işlevinin adı ve imzası korunur. */
+            } else if (cagri_adi_uz == 6 && memcmp(cagri_adi, "yazdir", 6) == 0) {
                 cagri_adi = "puts"; cagri_adi_uz = 4;
             } else if (cagri_adi_uz == 9 && memcmp(cagri_adi, "bellek_al", 9) == 0) {
                 cagri_adi = "malloc"; cagri_adi_uz = 6;
@@ -5964,9 +5965,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             }
             /* Konsolidasyon: args sonrasi mapping ve intrinsicler.
              * `if/else if` chain artik bağimsiz, args alloc'tan sonra. */
-            if (!ik && cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
-                /* Madde A: metin_* built-in -> kdl_metin_* (D2: !ik — kullanici
-                 * islevi cozulmusse builtin'e kacirma; tum else-if ladder atlanir) */
+            if (ik) {
+                /* C009: kullanıcı işlevi tüm yerleşik öneklerinden önce gelir. */
+            } else if (cagri_adi_uz >= 6 && memcmp(cagri_adi, "metin_", 6) == 0) {
+                /* Madde A: metin_* yerleşiği -> kdl_metin_*. */
                 static char kdl_buf[64];
                 int n = cagri_adi_uz < 56 ? cagri_adi_uz : 56;
                 memcpy(kdl_buf, "kdl_", 4);
@@ -6187,8 +6189,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * rho_caller doner = ESKI davranis. */
                 const char *dz_rho = bolge_yerel_yonlendir(g, d, dz_elem);
                 fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 %d)\n",
-                    rr, dz_rho, eb);   /* [D-506] yonlendirilmis rho */   /* V2-F4.2a: ρ */
+                    "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
+                    rr, dz_rho);
+                /* C002: yapı elemanını skalerin 4 baytına indirme. Literal dizi
+                 * yoluyla aynı LLVM sizeof ifadesi hizalama ve dolguyu korur.
+                 * Self-host zaten bu yolu kullanır; skaler ABI değişmez. */
+                if (dizi_eleman_struct_mi(dz_elem))
+                    kdl_eleman_byte_yaz(g->out, dz_elem);
+                else
+                    fprintf(g->out, "%d", eb);
+                fputs(")\n", g->out);
                 /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
                 fprintf(g->out,
                     "  call void @kdl_dizi_kapasite_ayarla(ptr %s, ptr %%%d, i32 %%%d)\n",
@@ -8448,6 +8458,10 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             if (strcmp(donus, "ptr") == 0) sifir = "null";
             else if (strcmp(donus, "float") == 0 || strcmp(donus, "double") == 0)
                 sifir = "0.0";
+            /* C008: sonuc/yapi gibi aggregate turlerde tamsayi 0 GECERSIZDIR. */
+            else if (donus[0] == '{' || donus[0] == '%' ||
+                     donus[0] == '[' || donus[0] == '<')
+                sifir = "zeroinitializer";
             fprintf(g->out, "  ret %s %s\n", donus, sifir);
         }
     }

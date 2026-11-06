@@ -1,0 +1,6 @@
+// C006: içe aktarılan dizi alanının bildirilen tipi kaybolmamalı.
+genel yapı Kutu {
+    sayilar: Dizi<tam64>;
+    satirlar: Dizi<Dizi<tam32>>;
+    sayac: tam32;
+}

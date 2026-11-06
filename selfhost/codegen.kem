@@ -4245,6 +4245,15 @@ işlev ll_eleman_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     }
     ver "";
 }
+// C003: sonuç<Dizi<T>, E> başarı yükünün silinen eleman tipini koru.
+// Referans ve doğrudan dizi kuralları değişmez; yalnız sonuç taşıyıcısı açılır.
+işlev ll_sonuc_dizi_eleman_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
+    eğer tip_idx < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_SONUC") {
+        ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    ver "";
+}
 // D-299: görev<T> / kanal<T> tip düğümü → T'nin LLVM tipi ("" ikisi de değilse).
 // görev<T>/kanal<T> IR'de opak `ptr` olduğu için T SİLİNİR; runtime i64 taşır ve
 // sonuç T'ye daraltılır (trunc / inttoptr). T'nin tek güvenilir kaynağı BİLDİRİLEN
@@ -5135,7 +5144,9 @@ işlev islev_donus_elem(p: &değişken Ayr, idx: tam32) -> metin {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ca: metin = dizi_al(p.a_ad, c);
         eğer metin_esit(ca, "PARAMETRE") == yanlış ve metin_esit(ca, "BLOK") == yanlış {
-            ver ll_eleman_tip(p, c);
+            değişken elem: metin = ll_eleman_tip(p, c);
+            eğer metin_esit(elem, "") { elem = ll_sonuc_dizi_eleman_tip(p, c); }
+            ver elem;
         }
         i = i + 1;
     }
@@ -5198,7 +5209,13 @@ işlev ret_bos_yaz(p: &değişken Ayr) -> tam32 {
             eğer metin_esit(p.cur_ret, "double") veya metin_esit(p.cur_ret, "float") {
                 yaz_str(" 0.0");
             }
-            değilse { yaz_str(" 0"); }
+            değilse {
+                // C008: C oracle aynası; aggregate sıfırı tamsayı literal olamaz.
+                değişken ilk: tam32 = bayt(p.cur_ret, 0);
+                eğer ilk == 123 veya ilk == 37 veya ilk == 91 veya ilk == 60 {
+                    yaz_str(" zeroinitializer");
+                } değilse { yaz_str(" 0"); }
+            }
         }
     }
     yb(10);
@@ -5315,7 +5332,22 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "CAGRI") {
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
-        ver fn_risz_bul(p, dizi_al(p.a_deg, h));
+        değişken fad: metin = dizi_al(p.a_deg, h);
+        // C004: dizi_al(xs, i), xs[i] ile aynı dar eleman işaretini taşır.
+        // C llvm.c dar okuma sonucunda bu bilgiyi eleman tipinden alır.
+        // Kullanıcı işlevinin dönüş işareti kendi imzasından gelmeye devam eder.
+        eğer metin_esit(fad, "dizi_al") ve (fn_var_mi(p, fn_coz(p, fad)) == yanlış)
+          ve (dizi_al(p.a_cs, idx) >= 3) {
+            değişken kaynak: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+            eğer metin_esit(dizi_al(p.a_ad, kaynak), "TANIMLAYICI") {
+                değişken kad: metin = dizi_al(p.a_deg, kaynak);
+                değişken elem: metin = cg_var_elem_bul(p, kad);
+                eğer metin_esit(elem, "i8") veya metin_esit(elem, "i16") {
+                    ver cg_var_eisz_bul(p, kad);
+                }
+            }
+        }
+        ver fn_risz_bul(p, fad);
     }
     // D-339: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
     // alan_isz; hem extractvalue hem GEP+load dalı aynı değeri IfadeSonuc'a koyar).
@@ -6536,40 +6568,30 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 ver "0";
             }
         }
+        // C009: nitelikli/göreli hedef de yerleşik eşlemesinden ÖNCE çözülür.
+        // Çağrı adı ile kullanıcı-varlığı aynı çözülmüş adı kullanmalı.
+        değişken hedef: tam32 = dizi_al(p.cocuk, cb);
+        değişken rn: metin = fn_coz(p, fad);
+        eğer metin_uzunluk(mad2) > 0 { rn = mad2; }   // [D-725]
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
+            rn = yol_noktali(p, hedef);
+            // D-412: GÖRELİ YOL. `modül m` içinden `ic::g()` yazmak `m.ic.g`
+            // demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kurar;
+            // modül içindeysek ÖNCE mevcut önekle denenmeli — bu, `fn_coz`un
+            // çıplak adlar için uyguladığı MODÜL-ÖNCE kuralının nitelikli
+            // yollara uzantısıdır (D-398). Kayıt kontrolüyle: göreli karşılığı
+            // YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
+            eğer metin_uzunluk(p.mod_onek) > 0 {
+                değişken gy: metin = mangle(p.mod_onek, rn);
+                eğer fn_kayitli_mi(p, gy) { rn = gy; }
+            }
+        }
         değişken kdl: metin = "";
-        // [D-735] Önek eşlemesi (`yaz_`/`metin_`/...) AD YAKALAYICIDIR: seçili
-        // import edilen kullanıcı işlevi `yaz_ascii` modül önekiyle kayıtlıdır
-        // (`bayt.yaz_ascii`), çıplak adla `fn_var_mi` onu GÖRMEZ → `@kdl_yaz_ascii`
-        // (tanımsız, LINK-RED; C doğru linkliyordu). Önce kullanıcı çözümünü sor.
-        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, fn_coz(p, fad)) == yanlış) { kdl = builtin_kdl_ad(fad); }
+        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, rn) == yanlış) { kdl = builtin_kdl_ad(fad); }
         değişken rt: metin = "";
         değişken fname: metin = "";
-        değişken kullanici: tam32 = 0;   // V2-F4.2a: kullanıcı-fn mı (ρ alır)?
+        değişken kullanici: tam32 = 0;
         eğer metin_esit(kdl, "") {
-            // D-398: KULLANICI işlevinin IR adını çöz. İki yol:
-            //  (a) hedef YOL ise (a::f, d::i::f) → noktalı ad "a.f" / "d.i.f".
-            //      Öncesinde a_deg'den YALNIZ son segment alınıyordu ("f") →
-            //      `call @f` yayılıp tanımsız sembol oluyordu.
-            //  (b) çıplak ad ise MODÜL-ÖNCE çöz (modül içindeysek kardeş üye).
-            // Bu nokta BİLİNÇLİ olarak seçildi: `fad`ı yukarıda topluca
-            // değiştirmek yerleşik/çeşit-yapıcı ayrımlarını bozardı (onlar
-            // `fad`ı ÇIPLAK adla karşılaştırıyor).
-            değişken hedef: tam32 = dizi_al(p.cocuk, cb);
-            değişken rn: metin = fn_coz(p, fad);
-            eğer metin_uzunluk(mad2) > 0 { rn = mad2; }   // [D-725]
-            eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
-                rn = yol_noktali(p, hedef);
-                // D-412: GÖRELİ YOL. `modül m` içinden `ic::g()` yazmak `m.ic.g`
-                // demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kurar;
-                // modül içindeysek ÖNCE mevcut önekle denenmeli — bu, `fn_coz`un
-                // çıplak adlar için uyguladığı MODÜL-ÖNCE kuralının nitelikli
-                // yollara uzantısıdır (D-398). Kayıt kontrolüyle: göreli karşılığı
-                // YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
-                eğer metin_uzunluk(p.mod_onek) > 0 {
-                    değişken gy: metin = mangle(p.mod_onek, rn);
-                    eğer fn_kayitli_mi(p, gy) { rn = gy; }
-                }
-            }
             rt = fn_ret_bul(p, rn); fname = rn; kullanici = 1;
         }
         değilse { rt = builtin_ret(fad); fname = kdl; }
@@ -6738,7 +6760,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // işlevlerinde: yerleşiklerin eleman tipi kendi dallarında zaten kurulur.
         eğer kullanici == 1 {
             değişken re: metin = fn_relem_bul(p, fname);
-            eğer metin_esit(re, "") == yanlış { p.son_elem = re; }
+            // C003: son argümanın eleman bilgisi dönüş değerine sızmamalı.
+            p.son_elem = re;
         }
         ver rs;
     }
@@ -7742,6 +7765,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // aşağıdaki her ifade_uret p.son_ic'i ezer. Desen payload'ına bağlanan ada
         // aktarılır ki `görev_birleştir(g)` doğru hedef tipe daraltabilsin.
         değişken sic: metin = p.son_ic;
+        değişken seleman: metin = p.son_elem;   // C003: sonuç başarı dizisinin elemanı
         // D-390: `eşleş` skrutinisi `&Çeşit` ise OTOMATİK DEREFERENCE. Skrutini ptr
         // yüklenmiş bir referans (sty="ptr") ve son_ref bir ÇEŞİT adı ise, tag
         // extractvalue'dan ÖNCE çeşit değerini yükle. Bu kol olmadan `eşleş`
@@ -7862,7 +7886,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                                 yaz_str(", label %"); yaz_str(Lnext); yb(10); p.bb_term = 1;
                                 etiket_yaz(p, Lin);
                             }
-                            cg_var_ekle(p, bad, ba, pt, "", "");
+                            // C003: C oracle gibi başarı yükünün eleman tipini bağa taşı.
+                            değişken peleman: metin = "";
+                            eğer pf == 1 { peleman = seleman; }
+                            cg_var_ekle(p, bad, ba, pt, "", peleman);
                             // D-396: payload İÇ tipini bağlamaya taşı. YALNIZ başarı
                             // alanı (pf==1: tamam/değer) — hata alanı (pf==2) `metin`dir
                             // ve görev<T>'nin T'siyle ilgisi YOKTUR; ona `sic` yazmak
@@ -8056,6 +8083,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             yaz_str("  "); yaz_str(areg); yaz_str(" = alloca "); yaz_str(vtip); yb(10);
         }
         yaz_str("  store "); yaz_str(vtip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
+        // C003: sonuç annotasyonunun yük bilgisi [] başlangıç bağlamı değildir.
+        eğer annot == 1 ve metin_esit(velem, "") {
+            velem = ll_sonuc_dizi_eleman_tip(p, dizi_al(p.cocuk, cb));
+        }
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
         // D-438: elemanin elemanini paralel diziye yaz (son yuva).
         eğer metin_esit(velem2, "") == yanlış {
@@ -8139,9 +8170,15 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken oa0: metin = dizi_al(p.a_ad, obj);
             eğer metin_esit(oa0, "TANIMLAYICI") veya metin_esit(oa0, "ERISIM") {
                 değişken v2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                değişken vtip: metin = p.son_tip;
                 değişken gr: metin = alan_adres_uret(p, lhs);
                 eğer metin_uzunluk(gr) > 0 {
-                    yaz_str("  store "); yaz_str(p.son_tip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
+                    // C011: adres hesabı son_tip'i hedef alanla ezer. Kaynak
+                    // register'ın genişliğini sakla; yerel atama ve C gibi uydur.
+                    değişken hedef_tip: metin = p.son_tip;
+                    p.son_tip = vtip;
+                    v2 = int_uydur(p, v2, hedef_tip, ifade_isz(p, dizi_al(p.cocuk, cb + 1)));
+                    yaz_str("  store "); yaz_str(hedef_tip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
                 }
             }
             ver 0;
@@ -8265,7 +8302,9 @@ işlev param_elem(p: &değişken Ayr, c: tam32) -> metin {
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") {
         ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));
     }
-    ver ll_eleman_tip(p, tn);
+    değişken elem: metin = ll_eleman_tip(p, tn);
+    eğer metin_esit(elem, "") { elem = ll_sonuc_dizi_eleman_tip(p, tn); }
+    ver elem;
 }
 // CG7c: PARAMETRE &Yapi ise işaret edilen yapı adı; değilse "".
 işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
@@ -9821,8 +9860,10 @@ işlev param_ir_tip(p: &değişken Ayr, ad: metin, j: tam32) -> metin {
     eğer j >= dizi_al(p.pi_say, k) { ver ""; }
     ver dizi_al(p.pi_tip, dizi_al(p.pi_base, k) + j);
 }
-işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
-    dizi_ekle(p.pi_ad, dizi_al(p.a_deg, fn));
+işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32, onek: metin) -> tam32 {
+    // C005: tablo anahtarı çağrı yerindeki çözülmüş işlev adıyla aynı olmalı.
+    // Çıplak ad modül çağrısında bulunmaz; tam64 parametre i32 bırakılır.
+    dizi_ekle(p.pi_ad, mangle(onek, dizi_al(p.a_deg, fn)));
     dizi_ekle(p.pi_base, dizi_boyut(p.pi_tip));
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
@@ -9839,15 +9880,18 @@ işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     ver 0;
 }
 // Üst-düzey ISLEV'leri tara (DISA/MODUL içine iner).
-işlev param_ir_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+işlev param_ir_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
     iken i < cs {
         değişken u: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ua: metin = dizi_al(p.a_ad, u);
-        eğer metin_esit(ua, "DISA") veya metin_esit(ua, "MODUL") { param_ir_topla(p, u); }
-        eğer metin_esit(ua, "ISLEV") { param_ir_kaydet(p, u); }
+        eğer metin_esit(ua, "DISA") { param_ir_topla(p, u, onek); }
+        eğer metin_esit(ua, "MODUL") {
+            param_ir_topla(p, u, mangle(onek, dizi_al(p.a_deg, u)));
+        }
+        eğer metin_esit(ua, "ISLEV") { param_ir_kaydet(p, u, onek); }
         i = i + 1;
     }
     ver 0;
@@ -9950,7 +9994,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
-    param_ir_topla(p, kok);  // D-393: codegen-yolu param IR tipi tablosu (arg genişletme)
+    param_ir_topla(p, kok, "");  // D-393: codegen-yolu param IR tipi tablosu (arg genişletme)
     sabit_topla(p, kok, ""); // D-391: üst-düzey sabit tablosu (emit YOK, inline)
     kuresel_topla(p, kok);   // D-253: küresel değişken module-globalleri
     yb(10);
@@ -11210,11 +11254,12 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         ver tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
     }
     // D-377: dizi literalinin tipi. Bağlam varsa ONA uyarlanır (C bidirectional);
-    // yoksa ilk elemandan çıkarsanır. BOŞ dizi bağlamsız → "?" (T014 zaten ayrı
-    // kural; burada tip UYDURMAK sahte T001 üretirdi).
+    // yoksa ilk elemandan çıkarsanır. C006: bağlamsız boş dizi de Dizi'dir;
+    // yalnız elemanı bilinmez (C tip_belirle: TIP_DIZI<TIP_BILINMIYOR>).
+    // Tamamen "?" saymak skaler alan T001 ve iç içe dizi T013 tanısını yutar.
     eğer metin_esit(ad, "DIZI_OLUSTUR") {
         eğer metin_baslar(beklenen, "Dizi<") { ver beklenen; }
-        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "Dizi<?>"; }
         değişken e0: metin = ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)), "?");
         eğer bilinen_tip_mi(e0) == yanlış { ver "?"; }
         ver metin_birlestir("Dizi<", metin_birlestir(e0, ">"));
@@ -11423,6 +11468,11 @@ işlev lam_donus_str(p: &değişken Ayr, lam: tam32) -> metin {
 // İki tip-string'i "ikisi de BİLİNİYOR ve FARKLI" mı? ("?" → emin değiliz, atla.)
 işlev tip_kesin_farkli(a: metin, b: metin) -> mantıksal {
     eğer metin_esit(a, "?") veya metin_esit(b, "?") { ver yanlış; }
+    // C006: C tip_esit gibi Dizi içindeki bilinmeyen eleman da uyumludur.
+    // Dizi<?> ile skaler farklı kalır; yalnız iki dizi elemanına inilir.
+    eğer metin_baslar(a, "Dizi<") ve metin_baslar(b, "Dizi<") {
+        ver tip_kesin_farkli(dizi_ic_tip(a), dizi_ic_tip(b));
+    }
     ver metin_esit(a, b) == yanlış;
 }
 // TIP_ISLEV annotasyonu + LAMBDA değeri: uyuşmazlık → T001 (1 = hata verildi).
@@ -14573,12 +14623,16 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, aa));
             } değilse {
                 değişken val: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, aa));
+                // C006: C kontrol_yapi_olustur_ic gibi alanın dizi bağlamını ver.
+                değişken ft: metin = alan_tip_bul(p, tad, fad);
+                değişken eski_db: metin = p.dizi_bek;
+                p.dizi_bek = dizi_ic_tip(ft);
                 kontrol_dugum(p, val);
+                p.dizi_bek = eski_db;
                 // [D-470] LİNEER YAPI ALANI DEĞERİ TÜKETİR (checker.kem ile
                 // aynı). Öncesinde `S { t: t }` tüketmiyordu → lineer bir
                 // değeri bir yapıya KOYMAK imkânsızdı.
                 lin_tuket_dugum(p, val);
-                değişken ft: metin = alan_tip_bul(p, tad, fad);
                 eğer metin_esit(ft, "?") == yanlış {
                     değişken vt: metin = ifade_tip(p, val, ft);
                     eğer (metin_esit(vt, "?") == yanlış) ve (metin_esit(vt, ft) == yanlış) {
@@ -15116,6 +15170,21 @@ işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
     ver yanlış;
 }
 // Bir modülü yükle: dışa-export adlarını p.g_isim'e ekle; kullan'ı transitif izle.
+// C006: tip alt ağacını yeni düğümlerle taşı; yabancı AST indeksini kullanma.
+// Yalnız tip bilgisi kopyalanır, bildirimin gövdesi veya kapsamı taşınmaz.
+işlev capraz_tip_kopyala(p: &değişken Ayr, mp: &değişken Ayr, tn: tam32) -> tam32 {
+    eğer tn < 0 { ver 0 - 1; }
+    değişken kids: Dizi<tam32> = [];
+    değişken cb: tam32 = dizi_al(mp.a_cb, tn);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(mp.a_cs, tn) {
+        değişken c: tam32 = capraz_tip_kopyala(p, mp, dizi_al(mp.cocuk, cb + i));
+        dizi_ekle(kids, c);
+        i = i + 1;
+    }
+    ver dugum_n(p, dizi_al(mp.a_ad, tn), dizi_al(mp.a_deg, tn),
+                dizi_al(mp.a_sat, tn), dizi_al(mp.a_sut, tn), kids);
+}
 // ---- D-429: ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA ----
 // Self-host `modul_yukle` yalnız ADLARI hasat ediyordu; İMZALAR (arite, param
 // tipleri, param LİNEERLİĞİ) ve YAPI kayıtları dosya-yerel kalıyordu. Sonuç
@@ -15132,10 +15201,10 @@ işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
 //
 // ⚠ DÜĞÜM İNDEKSLERİ TAŞINAMAZ: `fn_ptn` ve `alan_tn` bir AST düğümünü
 // gösterir ve o düğüm `mp`'ye aittir; `p`'de başka bir şeye denk gelir.
-// -1 yazılır. Tüketiciler ölçüldü: `fn_ptn`in TEK okuyucusu var
-// (`t14_muaf_isaretle`, `tn < 0`u zaten muhafazakâr karşılar → muafiyet yok);
-// `alan_tn` benzer şekilde `tip_node_dizi_mi`/`t14_muaf_isaretle` yolundan
-// geçer. Yani -1 = "bilinmiyor" ve muhafazakâr tarafa düşer.
+// `fn_ptn` için -1 yazılır (`t14_muaf_isaretle` bilinmeyeni muaf tutmaz).
+// C006: `alan_tn` ise tip alt ağacı kopyalanarak YENİ yerel indekse bağlanır.
+// Böylece C oracle gibi bildirilen Dizi bağlamı korunur; skaler ve fazla
+// iç içe boş diziler mevcut tip güdümlü denetimden geçmeye devam eder.
 işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
     // (a) İŞLEV İMZALARI
     değişken fn: tam32 = dizi_boyut(mp.fn_ad);
@@ -15176,7 +15245,8 @@ işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
             iken q < an {
                 dizi_ekle(p.alan_ad, dizi_al(mp.alan_ad, ab + q));
                 dizi_ekle(p.alan_tip, dizi_al(mp.alan_tip, ab + q));
-                dizi_ekle(p.alan_tn, 0 - 1);                 // düğüm taşınamaz
+                değişken tn: tam32 = capraz_tip_kopyala(p, mp, dizi_al(mp.alan_tn, ab + q));
+                dizi_ekle(p.alan_tn, tn);
                 q = q + 1;
             }
             dizi_ekle(p.yapi_acount, an);
@@ -15185,7 +15255,112 @@ işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
     }
     ver 0;
 }
-işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) -> tam32 {
+// C010: seçili ve görünür çeşitlerin checker kayıtlarını taşı (C kapsamı aynası).
+// Tüm modül üyelerini düzleştirmek özel/seçilmemiş adları açardı. LLVM yolu
+// kaynakları tek AST'de yeniden ayrıştırır; yabancı düğüm indeksleri taşınmaz.
+işlev capraz_cesit_tasi(p: &değişken Ayr, mp: &değişken Ayr, yol: metin, kok: tam32, mkok: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(mp.cc_ad) {
+        değişken cad: metin = dizi_al(mp.cc_ad, i);
+        // Çeşit yan tablosu da düzdür: yalnız dosya modülünün doğrudan
+        // tanımı seçilebilir; iç modül üyesi aynı adla dışarı çıkarılamaz.
+        değişken tanim_var: mantıksal = yanlış;
+        değişken cesit_tanimi: mantıksal = yanlış;
+        değişken mb: tam32 = dizi_al(mp.a_cb, mkok);
+        değişken mi: tam32 = 0;
+        iken mi < dizi_al(mp.a_cs, mkok) {
+            değişken mn: tam32 = dizi_al(mp.cocuk, mb + mi);
+            eğer metin_esit(dizi_al(mp.a_ad, mn), "DISA") { mn = son_cocuk(mp, mn); }
+            eğer mn >= 0 ve metin_esit(dizi_al(mp.a_deg, mn), cad) {
+                tanim_var = doğru;
+                eğer metin_esit(dizi_al(mp.a_ad, mn), "CESIT") { cesit_tanimi = doğru; }
+            }
+            mi = mi + 1;
+        }
+        // Aynı adlı kapsamlı çeşitlerin düz payload kayıtlarını birleştirme.
+        değişken csay: tam32 = 0;
+        değişken ilk: mantıksal = doğru;
+        mi = 0;
+        iken mi < dizi_boyut(mp.cc_ad) {
+            eğer metin_esit(dizi_al(mp.cc_ad, mi), cad) {
+                csay = csay + 1;
+                eğer mi < i { ilk = yanlış; }
+            }
+            mi = mi + 1;
+        }
+        değişken secili: mantıksal = yanlış;
+        değişken belirsiz: mantıksal = yanlış;
+        // Seçili ad tablosu kapsamlar arasında düzdür: yalnız kökün doğrudan
+        // kullan bildirimlerine ait kayıtlar bu kapsamı açabilir.
+        değişken kb: tam32 = dizi_al(p.a_cb, kok);
+        değişken ki: tam32 = 0;
+        iken ki < dizi_al(p.a_cs, kok) {
+            değişken kn: tam32 = dizi_al(p.cocuk, kb + ki);
+            eğer metin_esit(dizi_al(p.a_ad, kn), "KULLAN") {
+                değişken j: tam32 = 0;
+                iken j < dizi_boyut(p.si_ad) {
+                    eğer metin_esit(dizi_al(p.si_ad, j), cad)
+                      ve (dizi_al(p.si_sat, j) == dizi_al(p.a_sat, kn))
+                      ve (dizi_al(p.si_sut, j) == dizi_al(p.a_sut, kn)) {
+                        eğer metin_esit(dizi_al(p.si_yol, j), yol) {
+                            secili = doğru;
+                            // C kullan_isle: doğrudan modül üyesi yoksa T002.
+                            eğer ilk ve (tanim_var == yanlış) { sekil_hata(p, kn, "T002"); }
+                        } değilse { belirsiz = doğru; }
+                    }
+                    j = j + 1;
+                }
+            }
+            ki = ki + 1;
+        }
+        eğer secili ve cesit_tanimi ve (csay == 1)
+          ve (ozel_uye_mi(p, son_segment(yol), cad) == yanlış)
+          ve (belirsiz == yanlış) ve (cesit_var_mi(p, cad) == yanlış) {
+            dizi_ekle(p.cc_ad, cad);
+            dizi_ekle(p.cc_node, 0 - 1);
+            değişken v: tam32 = 0;
+            iken v < dizi_boyut(mp.cv_cesit) {
+                eğer metin_esit(dizi_al(mp.cv_cesit, v), cad) {
+                    dizi_ekle(p.cv_cesit, cad);
+                    dizi_ekle(p.cv_ad, dizi_al(mp.cv_ad, v));
+                    değişken pc: tam32 = dizi_al(mp.cv_pc, v);
+                    değişken pb: tam32 = dizi_al(mp.cv_pb, v);
+                    dizi_ekle(p.cv_pc, pc);
+                    dizi_ekle(p.cv_pb, dizi_boyut(p.cv_pt));
+                    değişken k: tam32 = 0;
+                    iken k < pc {
+                        dizi_ekle(p.cv_pt, dizi_al(mp.cv_pt, pb + k));
+                        dizi_ekle(p.cv_ptn, 0 - 1);
+                        k = k + 1;
+                    }
+                }
+                v = v + 1;
+            }
+            // Yükteki tip parametresi beklenen çeşitten ikame edilir (M004).
+            değişken t: tam32 = 0;
+            iken t < dizi_boyut(mp.tp_yad) {
+                eğer metin_esit(dizi_al(mp.tp_yad, t), cad) {
+                    dizi_ekle(p.tp_yad, cad);
+                    dizi_ekle(p.tp_ad, dizi_al(mp.tp_ad, t));
+                }
+                t = t + 1;
+            }
+            // Var olan tip parametresi kısıtları da aynı sahiple korunur.
+            t = 0;
+            iken t < dizi_boyut(mp.gp_sahip) {
+                eğer metin_esit(dizi_al(mp.gp_sahip, t), cad) {
+                    dizi_ekle(p.gp_sahip, cad);
+                    dizi_ekle(p.gp_idx, dizi_al(mp.gp_idx, t));
+                    dizi_ekle(p.gp_bound, dizi_al(mp.gp_bound, t));
+                }
+                t = t + 1;
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin, kok: tam32) -> tam32 {
     değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
     değişken gi: tam32 = 0;
     iken gi < gn { eğer metin_esit(dizi_al(p.kullan_gorulen, gi), modul_yol) { ver 0; } gi = gi + 1; }
@@ -15227,9 +15402,11 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
                 dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
             }
         }
-        eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
+        eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz, kok); }
         ci = ci + 1;
     }
+    // C010: görünürlük kayıtları kurulduktan sonra seçili çeşitleri taşı.
+    capraz_cesit_tasi(p, &değişken mp, modul_yol, kok, mkok);
     ver 0;
 }
 // ---- D-399: --llvm için ÇAPRAZ-DOSYA modül yükleme (KAYNAK düzeyinde) ----
@@ -15360,7 +15537,7 @@ işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
             // iki yükleme geçişi var; parite için ikisi de. ÖNKOŞUL: runtime'ın
             // UTF-8 yol desteği (D-362 kdl_fopen_utf8) — yoksa `kütüphane/`
             // modülleri açılamaz ve GEÇERLİ dosyalar sahte T040 alır.
-            eğer modul_yukle(p, dizi_al(p.a_deg, c), p.giris_dizin) < 0 {
+            eğer modul_yukle(p, dizi_al(p.a_deg, c), p.giris_dizin, kok) < 0 {
                 sekil_hata(p, c, "T040");
                 sekil_hata(p, c, "T040");
             } değilse {

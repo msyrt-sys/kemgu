@@ -1,0 +1,10 @@
+// C010: tanınan çeşitte yanlış varyant/yük ile bilinmeyen modül reddedilmeli.
+kullan c010_olay::{TusOlayi, Secim};
+işlev main() -> tam32 {
+    değişken a: TusOlayi = TusOlayi::Yok(65);
+    değişken b: TusOlayi = TusOlayi::Karakter();
+    değişken c: TusOlayi = TusOlayi::Karakter("yanlis");
+    değişken d: Secim<tam64> = Secim::Var("yanlis");
+    bulunmayan_modul::oku();
+    ver 42;
+}

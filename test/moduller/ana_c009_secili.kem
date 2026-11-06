@@ -1,0 +1,9 @@
+// C009: seçili kullanıcı adları ve gerçek yerleşik birlikte çalışır.
+kullan c009_adlar::{dosya_sil, dosya_adi, metin_x};
+işlev main() -> tam32 {
+    eğer dosya_sil("") != 11 { ver 1; }
+    eğer dosya_adi(5) != 22 { ver 2; }
+    eğer metin_x(7) != 30 { ver 3; }
+    eğer metin_uzunluk("abcde") != 5 { ver 4; }
+    ver 42;
+}

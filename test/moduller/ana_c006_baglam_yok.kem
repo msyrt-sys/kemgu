@@ -1,0 +1,7 @@
+// C006: bağlam aktarımı skaler ve fazla iç içe boş diziyi muaf tutmamalı.
+kullan c006_alan::{Kutu};
+işlev main() -> tam32 {
+    değişken k: Kutu = Kutu { sayilar: [[]], satirlar: [], sayac: [] };
+    değişken baglamsiz = [];
+    ver 42;
+}

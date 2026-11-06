@@ -1,0 +1,6 @@
+// C010: özel çeşit ithalatı reddedilmeli.
+kullan c010_olay::{GizliOlay};
+işlev main() -> tam32 {
+    GizliOlay::Karakter(65);
+    ver 42;
+}

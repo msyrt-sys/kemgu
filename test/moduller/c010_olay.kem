@@ -1,0 +1,18 @@
+// C010: çeşidin adı, varyantları ve yük imzaları modülden taşınmalı.
+genel çeşit TusOlayi { Bos, Karakter(tam64), Kod(tam64) }
+genel işlev oku(o: TusOlayi) -> tam64 {
+    eşleş o {
+        TusOlayi::Bos => { ver 0; }
+        TusOlayi::Karakter(n) => { ver n; }
+        TusOlayi::Kod(n) => { ver n + 1; }
+    }
+}
+
+// Gizli çeşit seçili ithalatla görünür olmamalı.
+çeşit GizliOlay { Bos, Karakter(tam64) }
+
+// Tip parametresi yük denetiminde beklenen çeşitten ikame edilmeli.
+genel çeşit Secim<T> { Yok, Var(T) }
+
+// İç modül üyesi dosya modülünün doğrudan üyesi değildir.
+modül ic { genel çeşit IctekiOlay { Bos, Karakter(tam64) } }
