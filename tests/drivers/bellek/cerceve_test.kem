@@ -1,0 +1,140 @@
+// Hesap: python3 tools/codex/c5.py; sayfa=4096, ilk 1MiB=256 sayfa.
+kullan drivers::bellek::harita::{ BellekBolgesi };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, ayir, ayir_ardisik, serbest, ayrilmis_isaretle };
+işlev harita_verisi() -> Dizi<BellekBolgesi> {
+    değişken xs: Dizi<BellekBolgesi> = [];
+    dizi_ekle(xs, BellekBolgesi { taban: 0, uzunluk: 1064960, tur: 1 });
+    dizi_ekle(xs, BellekBolgesi { taban: 1056768, uzunluk: 4096, tur: 2 });
+    dizi_ekle(xs, BellekBolgesi { taban: 2097152, uzunluk: 12288, tur: 1 }); ver xs;
+}
+işlev adres_mi(r: seçimlik<tam64>, a: tam64) -> mantıksal { eşleş r { hiç => { ver yanlış; } değer(v) => { ver v == a; } } }
+işlev yok(r: seçimlik<tam64>) -> mantıksal { eşleş r { hiç => { ver doğru; } değer(v) => { ver yanlış; } } }
+işlev red(r: sonuç<mantıksal, metin>, s: metin) -> mantıksal { eşleş r { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, s); } } }
+
+işlev test_sirali() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        eğer d.toplam != 6 { ver yanlış; }
+        eğer değil adres_mi(ayir(&değişken d), 1048576) { ver yanlış; }
+        eğer değil adres_mi(ayir(&değişken d), 1052672) { ver yanlış; }
+        eğer değil adres_mi(ayir(&değişken d), 1060864) { ver yanlış; }
+        eğer değil adres_mi(ayir(&değişken d), 2097152) { ver yanlış; }
+        eğer değil adres_mi(ayir(&değişken d), 2101248) { ver yanlış; }
+        eğer değil adres_mi(ayir(&değişken d), 2105344) { ver yanlış; }
+        ver yok(ayir(&değişken d));
+    } }
+}
+
+işlev test_ardisik() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        eğer değil yok(ayir_ardisik(&değişken d, 4)) { ver yanlış; }
+        eğer değil adres_mi(ayir_ardisik(&değişken d, 3), 2097152) { ver yanlış; }
+        eğer değil adres_mi(ayir_ardisik(&değişken d, 2), 1048576) { ver yanlış; }
+        ver adres_mi(ayir(&değişken d), 1060864) ve yok(ayir(&değişken d));
+    } }
+}
+
+işlev test_serbest() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        eğer değil adres_mi(ayir(&değişken d), 1048576) { ver yanlış; }
+        eşleş serbest(&değişken d, 1048576 olarak tam64) { hata(e) => { ver yanlış; } tamam(v) => { eğer değil v { ver yanlış; } } }
+        eğer değil red(serbest(&değişken d, 1048576 olarak tam64), "cift serbest") { ver yanlış; }
+        ver adres_mi(ayir(&değişken d), 1048576);
+    } }
+}
+
+işlev test_hizasiz() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver red(serbest(&değişken d, 1048577 olarak tam64), "hizasiz");
+    } }
+}
+
+işlev test_ilk_mib() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver red(serbest(&değişken d, 0 olarak tam64), "haritada yok");
+    } }
+}
+
+işlev test_delik() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver red(serbest(&değişken d, 1056768 olarak tam64), "haritada yok");
+    } }
+}
+
+işlev test_disinda() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver red(serbest(&değişken d, 3145728 olarak tam64), "haritada yok");
+    } }
+}
+
+işlev test_ayrilmamis() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver red(serbest(&değişken d, 1048576 olarak tam64), "cift serbest");
+    } }
+}
+
+işlev test_isaretle() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        eşleş ayrilmis_isaretle(&değişken d, 1048577 olarak tam64, 4096 olarak tam64) { hata(e) => { ver yanlış; } tamam(v) => { } }
+        eğer değil red(serbest(&değişken d, 1048576 olarak tam64), "ayrilmis bolge") { ver yanlış; }
+        ver adres_mi(ayir(&değişken d), 1060864);
+    } }
+}
+
+işlev test_ardisik_gecersiz() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver yok(ayir_ardisik(&değişken d, 0)) ve yok(ayir_ardisik(&değişken d, -1)) ve yok(ayir_ardisik(&değişken d, 7)) ve adres_mi(ayir(&değişken d), 1048576);
+    } }
+}
+
+işlev test_isaret_tasma() -> mantıksal {
+    eşleş cerceve_yeni(harita_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken d: CerceveAyirici = v;
+        ver red(ayrilmis_isaretle(&değişken d, 9223372036854775807 olarak tam64, 1 olarak tam64), "adres") ve adres_mi(ayir(&değişken d), 1048576);
+    } }
+}
+
+işlev test_bos() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = [];
+    eşleş cerceve_yeni(xs) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: CerceveAyirici = v; ver d.toplam == 0 ve yok(ayir(&değişken d)); } }
+}
+
+işlev test_hiza() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = [];
+    dizi_ekle(xs, BellekBolgesi { taban: 1048577, uzunluk: 8191, tur: 1 });
+    eşleş cerceve_yeni(xs) { hata(e) => { ver yanlış; } tamam(v) => { değişken d: CerceveAyirici = v; ver adres_mi(ayir(&değişken d), 1052672) ve yok(ayir(&değişken d)); } }
+}
+
+işlev test_boy_siniri() -> mantıksal {
+    değişken xs: Dizi<BellekBolgesi> = [];
+    dizi_ekle(xs, BellekBolgesi { taban: 1048576, uzunluk: 4294971392, tur: 1 });
+    eşleş cerceve_yeni(xs) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "cok sayfa"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sirali() { yazdir_metin("BASARISIZ sirali"); h = h + 1; }
+    eğer değil test_ardisik() { yazdir_metin("BASARISIZ ardisik"); h = h + 1; }
+    eğer değil test_serbest() { yazdir_metin("BASARISIZ serbest"); h = h + 1; }
+    eğer değil test_hizasiz() { yazdir_metin("BASARISIZ hizasiz"); h = h + 1; }
+    eğer değil test_ilk_mib() { yazdir_metin("BASARISIZ ilk_mib"); h = h + 1; }
+    eğer değil test_delik() { yazdir_metin("BASARISIZ delik"); h = h + 1; }
+    eğer değil test_disinda() { yazdir_metin("BASARISIZ disinda"); h = h + 1; }
+    eğer değil test_ayrilmamis() { yazdir_metin("BASARISIZ ayrilmamis"); h = h + 1; }
+    eğer değil test_isaretle() { yazdir_metin("BASARISIZ isaretle"); h = h + 1; }
+    eğer değil test_ardisik_gecersiz() { yazdir_metin("BASARISIZ ardisik_gecersiz"); h = h + 1; }
+    eğer değil test_isaret_tasma() { yazdir_metin("BASARISIZ isaret_tasma"); h = h + 1; }
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_hiza() { yazdir_metin("BASARISIZ hiza"); h = h + 1; }
+    eğer değil test_boy_siniri() { yazdir_metin("BASARISIZ boy_siniri"); h = h + 1; }
+    ver h;
+}

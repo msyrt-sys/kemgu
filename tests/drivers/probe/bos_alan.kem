@@ -1,0 +1,7 @@
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit, dizin_resmi_bos };
+işlev main() -> tam32 {
+    değişken r: DizinResmi = dizin_resmi_bos();
+    ver dizi_boyut(r.baytlar);
+}

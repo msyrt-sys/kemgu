@@ -1,0 +1,94 @@
+// FSInfo sayımı ve erişilemeyen küme tespiti; dosya zincirlerini değiştirmez.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit, imaj_bpb, imaj_fat_oku, imaj_zincir, imaj_dizin, imaj_kayitlar };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_le32 };
+genel yapı Fat32Sayim { bos: tam64; sonraki: tam64; }
+genel işlev fsinfo_onar(imaj: Dizi<dtam8>) -> sonuç<Fat32Sayim, metin> {
+    eşleş imaj_bpb(imaj) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken b: Fat32Bpb = v;
+            eğer b.fsinfo < 1 veya b.fsinfo >= b.ayrilmis { ver hata("fsinfo"); }
+            değişken o: tam32 = b.fsinfo * b.sektor_bayt;
+            eğer oku_le32(imaj, o) != 1096897106 veya oku_le32(imaj, o + 484) != 1631679090 veya oku_le32(imaj, o + 508) != 2857697280 { ver hata("fsinfo"); }
+            değişken bos: tam64 = 0; değişken sonraki: tam64 = 4294967295; değişken k: tam64 = 2;
+            iken k < b.kume_sayisi + 2 {
+                eğer imaj_fat_oku(imaj, b, k) == 0 {
+                    bos = bos + 1; eğer sonraki == 4294967295 { sonraki = k; }
+                }
+                k = k + 1;
+            }
+            yaz_le32(imaj, o + 488, bos); yaz_le32(imaj, o + 492, sonraki);
+            değişken yedek: tam32 = oku_le16(imaj, 50);
+            eğer yedek > 0 ve yedek + b.fsinfo < b.ayrilmis {
+                o = (yedek + b.fsinfo) * b.sektor_bayt;
+                yaz_le32(imaj, o + 488, bos); yaz_le32(imaj, o + 492, sonraki);
+            }
+            ver tamam(Fat32Sayim { bos: bos, sonraki: sonraki });
+        }
+    }
+    ver hata("ulasilmaz");
+}
+işlev zincir_isaretle(imaj: Dizi<dtam8>, b: Fat32Bpb, ilk: tam64, gorulen: Dizi<dtam8>) -> sonuç<tam32, metin> {
+    eşleş imaj_zincir(imaj, b, ilk) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken zincir: Dizi<tam64> = v; değişken i: tam32 = 0;
+            iken i < dizi_boyut(zincir) {
+                değişken k: tam64 = dizi_al(zincir, i); değişken o: tam32 = (k / 8) olarak tam32;
+                değişken m: tam32 = 1 << ((k % 8) olarak tam32); değişken eski: tam32 = oku_u8(gorulen, o);
+                eğer (eski & m) != 0 { ver hata("capraz zincir"); }
+                dizi_yaz(gorulen, o, (eski | m) olarak dtam8); i = i + 1;
+            }
+            ver tamam(dizi_boyut(zincir));
+        }
+    }
+    ver hata("ulasilmaz");
+}
+işlev sahipsiz_ic(imaj: Dizi<dtam8>, b: Fat32Bpb) -> sonuç<Dizi<tam64>, metin> {
+    değişken gorulen: Dizi<dtam8> = bayt_sifir(((b.kume_sayisi + 9) / 8) olarak tam32);
+    değişken dizinler: Dizi<tam64> = []; dizi_ekle(dizinler, b.kok_kume); değişken d: tam32 = 0;
+    iken d < dizi_boyut(dizinler) {
+        değişken ilk: tam64 = dizi_al(dizinler, d);
+        eşleş zincir_isaretle(imaj, b, ilk, gorulen) { hata(e) => { ver hata(e); } tamam(n) => { } }
+        eşleş imaj_dizin(imaj, b, ilk) {
+            hata(e) => { ver hata(e); }
+            tamam(v) => { değişken resim: DizinResmi = v;
+                eşleş imaj_kayitlar(resim) {
+                    hata(e) => { ver hata(e); }
+                    tamam(xs) => { değişken kayitlar: Dizi<FatKayit> = xs; değişken i: tam32 = 0;
+                        iken i < dizi_boyut(kayitlar) {
+                            değişken k: FatKayit = dizi_al(kayitlar, i);
+                            eğer değil metin_esit(k.ad, ".") ve değil metin_esit(k.ad, "..") {
+                                eğer (k.ozellik & 16) != 0 {
+                                    eğer k.ilk < 2 { ver hata("dizin kumesi"); }
+                                    eğer (dizi_boyut(dizinler) olarak tam64) >= b.kume_sayisi { ver hata("dizin dongusu"); }
+                                    dizi_ekle(dizinler, k.ilk);
+                                } değilse eğer k.ilk != 0 {
+                                    eşleş zincir_isaretle(imaj, b, k.ilk, gorulen) { hata(e) => { ver hata(e); } tamam(n) => { } }
+                                } değilse eğer k.boyut != 0 { ver hata("kisa dosya"); }
+                            }
+                            i = i + 1;
+                        }
+                    }
+                }
+            }
+        }
+        d = d + 1;
+    }
+    değişken sonuc: Dizi<tam64> = []; değişken k: tam64 = 2;
+    iken k < b.kume_sayisi + 2 {
+        değişken v: tam64 = imaj_fat_oku(imaj, b, k);
+        // Boş, bozuk ve ayrılmış FAT işaretleri dosya tahsisi sayılmaz.
+        değişken tahsis: mantıksal = (v >= 2 ve v < b.kume_sayisi + 2) veya v >= 268435448;
+        değişken o: tam32 = (k / 8) olarak tam32; değişken m: tam32 = 1 << ((k % 8) olarak tam32);
+        eğer tahsis ve (oku_u8(gorulen, o) & m) == 0 { dizi_ekle(sonuc, k); }
+        k = k + 1;
+    }
+    ver tamam(sonuc);
+}
+genel işlev sahipsiz_kumeler(imaj: Dizi<dtam8>) -> sonuç<Dizi<tam64>, metin> {
+    eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver sahipsiz_ic(imaj, b); } }
+    ver hata("ulasilmaz");
+}

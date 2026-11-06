@@ -1,0 +1,86 @@
+// Beklentiler: python3 tools/codex/d6.py; Python Unicode dilimleri ve ord.
+kullan drivers::ps2::klavye_tr::{ TusOlayi, KlavyeDurumu, klavye_yeni, klavye_bayt };
+kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_olay, satir_metni, satir_karakter, satir_tus };
+kullan drivers::ortak::utf8::{ utf8_coz };
+işlev metin_ekle(d: &değişken SatirDuzenleyici, s: metin) {
+    değişken ks: Dizi<tam32> = utf8_coz(s); değişken i: tam32 = 0;
+    iken i < dizi_boyut(ks) { satir_karakter(d, dizi_al(ks, i)); i = i + 1; }
+}
+işlev tus(d: &değişken SatirDuzenleyici, k: tam32) { satir_tus(d, k, doğru); }
+
+işlev test_unicode_ekle() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "a😀"); tus(&değişken d, 7); metin_ekle(&değişken d, "ğ");
+    ver metin_esit(satir_metni(d), "ağ😀") ve d.imlec == 2 ve dizi_boyut(d.kodlar) == 3;
+}
+
+işlev test_sil() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "ağ😀z"); tus(&değişken d, 7); tus(&değişken d, 2); tus(&değişken d, 9);
+    ver metin_esit(satir_metni(d), "ağ") ve d.imlec == 2;
+}
+
+işlev test_sinir_tus() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); tus(&değişken d, 7); tus(&değişken d, 8); tus(&değişken d, 2); tus(&değişken d, 9); tus(&değişken d, 5); tus(&değişken d, 6);
+    değişken kd: KlavyeDurumu = klavye_yeni(); satir_olay(&değişken d, klavye_bayt(&değişken kd, 0)); ver d.imlec == 0 ve metin_esit(satir_metni(d), "");
+}
+
+işlev test_birakma() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "a"); satir_tus(&değişken d, 2, yanlış);
+    ver metin_esit(satir_metni(d), "a");
+}
+
+işlev test_enter() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "ğ😀");
+    eşleş satir_tus(&değişken d, 1, doğru) { hiç => { ver yanlış; } değer(s) => {
+        ver metin_esit(s, "ğ😀") ve d.imlec == 0 ve dizi_boyut(d.kodlar) == 0 ve dizi_boyut(d.gecmis) == 1;
+    } }
+}
+
+işlev test_bos_enter() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni();
+    eşleş satir_tus(&değişken d, 1, doğru) { hiç => { ver yanlış; } değer(s) => { ver metin_esit(s, "") ve dizi_boyut(d.gecmis) == 0; } }
+}
+
+işlev test_gecmis() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "bir"); tus(&değişken d, 1); metin_ekle(&değişken d, "iki"); tus(&değişken d, 1); metin_ekle(&değişken d, "taslak");
+    tus(&değişken d, 5); eğer değil metin_esit(satir_metni(d), "iki") { ver yanlış; }
+    tus(&değişken d, 5); tus(&değişken d, 5); eğer değil metin_esit(satir_metni(d), "bir") { ver yanlış; }
+    tus(&değişken d, 6); tus(&değişken d, 6); tus(&değişken d, 6); ver metin_esit(satir_metni(d), "taslak") ve d.imlec == 6;
+}
+
+işlev test_tekrar() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "a"); tus(&değişken d, 1); metin_ekle(&değişken d, "a"); tus(&değişken d, 1); metin_ekle(&değişken d, "b"); tus(&değişken d, 1); metin_ekle(&değişken d, "a"); tus(&değişken d, 1);
+    ver dizi_boyut(d.gecmis) == 3;
+}
+
+işlev test_gecmis_16() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < 17 { satir_karakter(&değişken d, 97 + i); tus(&değişken d, 1); i = i + 1; }
+    ver dizi_boyut(d.gecmis) == 16 ve metin_esit(dizi_al(d.gecmis, 0), "b") ve metin_esit(dizi_al(d.gecmis, 15), "q");
+}
+
+işlev test_kapasite() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < 257 { satir_karakter(&değişken d, 128512); i = i + 1; }
+    ver dizi_boyut(d.kodlar) == 256 ve d.imlec == 256 ve metin_uzunluk(satir_metni(d)) == 1024;
+}
+
+işlev test_gecersiz() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken ks: Dizi<tam32> = [-1, 0, 9, 31, 127, 55296, 1114112]; değişken i: tam32 = 0;
+    iken i < dizi_boyut(ks) { satir_karakter(&değişken d, dizi_al(ks, i)); i = i + 1; } ver dizi_boyut(d.kodlar) == 0;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_unicode_ekle() { yazdir_metin("BASARISIZ unicode_ekle"); h = h + 1; }
+    eğer değil test_sil() { yazdir_metin("BASARISIZ sil"); h = h + 1; }
+    eğer değil test_sinir_tus() { yazdir_metin("BASARISIZ sinir_tus"); h = h + 1; }
+    eğer değil test_birakma() { yazdir_metin("BASARISIZ birakma"); h = h + 1; }
+    eğer değil test_enter() { yazdir_metin("BASARISIZ enter"); h = h + 1; }
+    eğer değil test_bos_enter() { yazdir_metin("BASARISIZ bos_enter"); h = h + 1; }
+    eğer değil test_gecmis() { yazdir_metin("BASARISIZ gecmis"); h = h + 1; }
+    eğer değil test_tekrar() { yazdir_metin("BASARISIZ tekrar"); h = h + 1; }
+    eğer değil test_gecmis_16() { yazdir_metin("BASARISIZ gecmis_16"); h = h + 1; }
+    eğer değil test_kapasite() { yazdir_metin("BASARISIZ kapasite"); h = h + 1; }
+    eğer değil test_gecersiz() { yazdir_metin("BASARISIZ gecersiz"); h = h + 1; }
+    ver h;
+}

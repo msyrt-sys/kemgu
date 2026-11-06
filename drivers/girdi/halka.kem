@@ -1,0 +1,24 @@
+// Dolu tamponda en yeni girdiyi atar; eski girdilerin sırası korunur.
+genel yapı Halka {
+    veri: Dizi<tam64>; kapasite: tam32; bas: tam32; adet: tam32; kayip: tam64;
+}
+genel işlev halka_yeni(kapasite: tam32) -> sonuç<Halka, metin> {
+    eğer kapasite < 0 veya kapasite > 1048576 { ver hata("kapasite"); }
+    değişken veri: Dizi<tam64> = []; değişken i: tam32 = 0;
+    iken i < kapasite { dizi_ekle(veri, 0 olarak tam64); i = i + 1; }
+    ver tamam(Halka { veri: veri, kapasite: kapasite, bas: 0, adet: 0, kayip: 0 });
+}
+genel işlev it(d: &değişken Halka, v: tam64) -> mantıksal {
+    eğer d.adet >= d.kapasite {
+        eğer d.kayip < 9223372036854775807 { d.kayip = d.kayip + 1; } ver yanlış;
+    }
+    değişken yer: tam32 = (d.bas + d.adet) % d.kapasite;
+    dizi_yaz(d.veri, yer, v); d.adet = d.adet + 1; ver doğru;
+}
+genel işlev al(d: &değişken Halka) -> seçimlik<tam64> {
+    eğer d.adet == 0 { ver hiç; }
+    değişken v: tam64 = dizi_al(d.veri, d.bas);
+    d.bas = (d.bas + 1) % d.kapasite; d.adet = d.adet - 1; ver değer(v);
+}
+genel işlev bos_mu(d: Halka) -> mantıksal { ver d.adet == 0; }
+genel işlev sayi(d: Halka) -> tam32 { ver d.adet; }

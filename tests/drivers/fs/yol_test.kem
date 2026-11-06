@@ -1,0 +1,119 @@
+// Vektörler: python3 tools/codex/b3.py; byte sınırı len(s.encode()).
+kullan drivers::fs::yol::{ yol_bol, yol_birlestir };
+
+işlev test_yol_0() -> mantıksal {
+    eşleş yol_bol("/") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 0 ve metin_esit(yol_birlestir(parcalar), "/");
+    } }
+}
+
+işlev test_yol_1() -> mantıksal {
+    eşleş yol_bol("///") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 0 ve metin_esit(yol_birlestir(parcalar), "/");
+    } }
+}
+
+işlev test_yol_2() -> mantıksal {
+    eşleş yol_bol("/a//b/./c/../") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 2 ve metin_esit(yol_birlestir(parcalar), "/a/b");
+    } }
+}
+
+işlev test_yol_3() -> mantıksal {
+    eşleş yol_bol("/../../a") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 1 ve metin_esit(yol_birlestir(parcalar), "/a");
+    } }
+}
+
+işlev test_yol_4() -> mantıksal {
+    eşleş yol_bol("/a/b/../../c") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 1 ve metin_esit(yol_birlestir(parcalar), "/c");
+    } }
+}
+
+işlev test_yol_5() -> mantıksal {
+    eşleş yol_bol("/a/../") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 0 ve metin_esit(yol_birlestir(parcalar), "/");
+    } }
+}
+
+işlev test_yol_6() -> mantıksal {
+    eşleş yol_bol("/ğ/😀") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 2 ve metin_esit(yol_birlestir(parcalar), "/ğ/😀");
+    } }
+}
+
+işlev test_yol_7() -> mantıksal {
+    eşleş yol_bol("/.abc/...") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 2 ve metin_esit(yol_birlestir(parcalar), "/.abc/...");
+    } }
+}
+
+işlev test_yol_8() -> mantıksal {
+    eşleş yol_bol("/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 2 ve metin_esit(yol_birlestir(parcalar), "/a/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+    } }
+}
+
+işlev test_yol_9() -> mantıksal {
+    eşleş yol_bol("/üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüa") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken parcalar: Dizi<metin> = v;
+        ver dizi_boyut(parcalar) == 1 ve metin_esit(yol_birlestir(parcalar), "/üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüa");
+    } }
+}
+
+işlev test_hata_0() -> mantıksal {
+    eşleş yol_bol("") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "goreli"); } }
+}
+
+işlev test_hata_1() -> mantıksal {
+    eşleş yol_bol("a/b") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "goreli"); } }
+}
+
+işlev test_hata_2() -> mantıksal {
+    eşleş yol_bol("./a") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "goreli"); } }
+}
+
+işlev test_hata_3() -> mantıksal {
+    eşleş yol_bol("/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "uzun bilesen"); } }
+}
+
+işlev test_hata_4() -> mantıksal {
+    eşleş yol_bol("/üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "uzun bilesen"); } }
+}
+
+işlev test_birlestir() -> mantıksal {
+    değişken p: Dizi<metin> = ["a", "b"];
+    değişken bos: Dizi<metin> = [];
+    ver metin_esit(yol_birlestir(p), "/a/b") ve metin_esit(yol_birlestir(bos), "/");
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_yol_0() { yazdir_metin("BASARISIZ yol_0"); h = h + 1; }
+    eğer değil test_yol_1() { yazdir_metin("BASARISIZ yol_1"); h = h + 1; }
+    eğer değil test_yol_2() { yazdir_metin("BASARISIZ yol_2"); h = h + 1; }
+    eğer değil test_yol_3() { yazdir_metin("BASARISIZ yol_3"); h = h + 1; }
+    eğer değil test_yol_4() { yazdir_metin("BASARISIZ yol_4"); h = h + 1; }
+    eğer değil test_yol_5() { yazdir_metin("BASARISIZ yol_5"); h = h + 1; }
+    eğer değil test_yol_6() { yazdir_metin("BASARISIZ yol_6"); h = h + 1; }
+    eğer değil test_yol_7() { yazdir_metin("BASARISIZ yol_7"); h = h + 1; }
+    eğer değil test_yol_8() { yazdir_metin("BASARISIZ yol_8"); h = h + 1; }
+    eğer değil test_yol_9() { yazdir_metin("BASARISIZ yol_9"); h = h + 1; }
+    eğer değil test_hata_0() { yazdir_metin("BASARISIZ hata_0"); h = h + 1; }
+    eğer değil test_hata_1() { yazdir_metin("BASARISIZ hata_1"); h = h + 1; }
+    eğer değil test_hata_2() { yazdir_metin("BASARISIZ hata_2"); h = h + 1; }
+    eğer değil test_hata_3() { yazdir_metin("BASARISIZ hata_3"); h = h + 1; }
+    eğer değil test_hata_4() { yazdir_metin("BASARISIZ hata_4"); h = h + 1; }
+    eğer değil test_birlestir() { yazdir_metin("BASARISIZ birlestir"); h = h + 1; }
+    ver h;
+}

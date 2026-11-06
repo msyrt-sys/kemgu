@@ -1,0 +1,28 @@
+// Kahin: python3 tools/codex/f5.py; GUID sabit kayıt boyu 16; değerler [0, 1, 16, 17].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan drivers::disk::guid::{ guid_bicimle };
+
+işlev test_sinir_0() -> mantıksal {
+    eşleş guid_bicimle(bayt_sifir(0)) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    eşleş guid_bicimle(bayt_sifir(1)) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    eşleş guid_bicimle(bayt_sifir(16)) { hata(e) => { ver yanlış; } tamam(v) => { ver metin_esit(v, "00000000-0000-0000-0000-000000000000"); } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    eşleş guid_bicimle(bayt_sifir(17)) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

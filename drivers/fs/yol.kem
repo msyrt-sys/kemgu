@@ -1,0 +1,47 @@
+// Mutlak POSIX benzeri yollar; bileşen sınırı UTF-8 bayt sayısıdır.
+genel işlev yol_bol(y: metin) -> sonuç<Dizi<metin>, metin> {
+    değişken n: tam32 = metin_uzunluk(y) olarak tam32;
+    eğer n == 0 { ver hata("goreli"); }
+    eğer metin_bayt(y, 0) != (47 olarak tam8) { ver hata("goreli"); }
+    değişken parcalar: Dizi<metin> = [];
+    değişken sayi: tam32 = 0;
+    değişken bas: tam32 = 1;
+    değişken i: tam32 = 1;
+    iken i <= n {
+        değişken ayir: mantıksal = i == n;
+        eğer i < n { ayir = metin_bayt(y, i) == (47 olarak tam8); }
+        eğer ayir {
+            değişken uzunluk: tam32 = i - bas;
+            eğer uzunluk > 255 { ver hata("uzun bilesen"); }
+            eğer uzunluk > 0 {
+                değişken p: metin = metin_kes(y, bas, uzunluk);
+                eğer metin_esit(p, "..") { eğer sayi > 0 { sayi = sayi - 1; } }
+                değilse eğer değil metin_esit(p, ".") {
+                    eğer sayi < dizi_boyut(parcalar) { dizi_yaz(parcalar, sayi, p); }
+                    değilse { dizi_ekle(parcalar, p); }
+                    sayi = sayi + 1;
+                }
+            }
+            bas = i + 1;
+        }
+        i = i + 1;
+    }
+    değişken sonuc: Dizi<metin> = [];
+    i = 0;
+    iken i < sayi {
+        // C004 benzeri iç içe tür kaybını önlemek için açık metin bağı.
+        değişken p: metin = dizi_al(parcalar, i);
+        dizi_ekle(sonuc, p); i = i + 1;
+    }
+    ver tamam(sonuc);
+}
+genel işlev yol_birlestir(p: Dizi<metin>) -> metin {
+    değişken s: metin = "";
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p) {
+        değişken parca: metin = dizi_al(p, i);
+        s = metin_birlestir(metin_birlestir(s, "/"), parca); i = i + 1;
+    }
+    eğer metin_uzunluk(s) == 0 { ver "/"; }
+    ver s;
+}

@@ -1,0 +1,28 @@
+// Kahin: python3 tools/codex/f5.py; üretilmiş üst eşleme dizisi indeksi; değerler [0, 1, 1524, 1525].
+kullan drivers::ortak::harf_veri::{ HarfEsleme, ust_eslemeler };
+kullan drivers::ortak::harf::{ buyuk_harf, kucuk_harf };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken xs: Dizi<HarfEsleme> = ust_eslemeler(); değişken e: HarfEsleme = dizi_al(xs, 0); ver e.kod == 97 ve metin_esit(e.metin, "A");
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken xs: Dizi<HarfEsleme> = ust_eslemeler(); değişken e: HarfEsleme = dizi_al(xs, 1); ver e.kod == 98 ve metin_esit(e.metin, "B");
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken xs: Dizi<HarfEsleme> = ust_eslemeler(); değişken e: HarfEsleme = dizi_al(xs, 1524); ver e.kod == 125251 ve metin_esit(e.metin, "𞤡");
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken xs: Dizi<HarfEsleme> = ust_eslemeler(); ver dizi_boyut(xs) == 1525 ve metin_esit(buyuk_harf(kod_metin(1114111)), kod_metin(1114111));
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

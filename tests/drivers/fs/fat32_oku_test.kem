@@ -1,0 +1,165 @@
+// Hesap: python3 tools/codex/b6.py; ceil(1300/512)=3, serbest küme=68889.
+kullan drivers::fs::fat32_bicimle;
+// C007: geçişli API yapı tipleri çağıranda açıkça içe aktarılır.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+// C009: dosya yerleşikleriyle çakışan API nitelikli çağrılır.
+kullan drivers::fs::fat32_yaz;
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le32, imza_esit };
+kullan drivers::disk::crc32;
+işlev imaj_yeni() -> Dizi<dtam8> {
+    eşleş fat32_bicimle::fat32_bicimle(70000, 1, "") { tamam(v) => { ver v; } hata(e) => { değişken bos: Dizi<dtam8> = []; ver bos; } }
+}
+işlev veri_yeni(n: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(n); değişken i: tam32 = 0;
+    iken i < n { yaz_u8(b, i, ((i*17+3)&255) olarak tam64); i = i + 1; } ver b;
+}
+işlev yazildi(r: sonuç<tam64, metin>, n: tam64) -> mantıksal {
+    eşleş r { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { ver v == n; } }
+}
+işlev red(r: sonuç<tam64, metin>, s: metin) -> mantıksal {
+    eşleş r { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, s); } }
+}
+işlev aynalar(b: Dizi<dtam8>) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < 275968 { eğer oku_u8(b, 16384+i) != oku_u8(b, 292352+i) { ver yanlış; } i = i + 1; }
+    ver doğru;
+}
+kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+işlev okundu(r: sonuç<Dizi<dtam8>, metin>, veri: Dizi<dtam8>) -> mantıksal {
+    eşleş r { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => {
+        değişken b: Dizi<dtam8> = v;
+        eğer dizi_boyut(b) != dizi_boyut(veri) { ver yanlış; }
+        değişken i: tam32 = 0;
+        iken i < dizi_boyut(b) { eğer oku_u8(b, i) != oku_u8(veri, i) { ver yanlış; } i = i + 1; }
+        ver doğru;
+    } }
+}
+işlev okunamadi(r: sonuç<Dizi<dtam8>, metin>, s: metin) -> mantıksal {
+    eşleş r { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, s); } }
+}
+
+işlev test_gidis_donus_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(0);
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/TEST.BIN", veri), 0) { ver yanlış; }
+    ver okundu(imajdan_dosya_oku(b, "/test.bin"), veri);
+}
+
+işlev test_gidis_donus_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(1);
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/TEST.BIN", veri), 1) { ver yanlış; }
+    ver okundu(imajdan_dosya_oku(b, "/test.bin"), veri);
+}
+
+işlev test_gidis_donus_511() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(511);
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/TEST.BIN", veri), 511) { ver yanlış; }
+    ver okundu(imajdan_dosya_oku(b, "/test.bin"), veri);
+}
+
+işlev test_gidis_donus_512() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(512);
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/TEST.BIN", veri), 512) { ver yanlış; }
+    ver okundu(imajdan_dosya_oku(b, "/test.bin"), veri);
+}
+
+işlev test_gidis_donus_513() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(513);
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/TEST.BIN", veri), 513) { ver yanlış; }
+    ver okundu(imajdan_dosya_oku(b, "/test.bin"), veri);
+}
+
+işlev test_gidis_donus_1537() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(1537);
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/TEST.BIN", veri), 1537) { ver yanlış; }
+    ver okundu(imajdan_dosya_oku(b, "/test.bin"), veri);
+}
+
+işlev test_alt_dizin() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = veri_yeni(1600);
+    eğer değil yazildi(fat32_yaz::imajda_dizin_olustur(b, "/belgeler"), 0) { ver yanlış; }
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/belgeler/ğ😀.txt", veri), 1600) { ver yanlış; }
+    eğer değil okundu(imajdan_dosya_oku(b, "/belgeler/ğ😀.txt"), veri) { ver yanlış; }
+    eğer değil okunamadi(imajdan_dosya_oku(b, "/BELGELER/ğ😀.txt"), "bulunamadi") { ver yanlış; }
+    eşleş imaj_dizin_listele(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<DizinGirdisi> = v;
+        eğer dizi_boyut(xs) != 3 { ver yanlış; }
+        değişken a: DizinGirdisi = dizi_al(xs, 0); değişken c: DizinGirdisi = dizi_al(xs, 2);
+        ver metin_esit(a.ad, ".") ve metin_esit(c.ad, "ğ😀.txt") ve c.boyut == 1600;
+    } }
+}
+
+işlev test_sil_sonra_oku() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni();
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/merhaba.txt", veri_yeni(3)), 3) { ver yanlış; }
+    eşleş fat32_yaz::imajdan_dosya_sil(b, "/merhaba.txt") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eğer değil okunamadi(imajdan_dosya_oku(b, "/merhaba.txt"), "bulunamadi") { ver yanlış; }
+    eşleş imaj_dizin_listele(b, "/") { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+}
+
+işlev test_dosya_dizin_ayrimi() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni();
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/A", veri_yeni(1)), 1) { ver yanlış; }
+    eğer değil okunamadi(imajdan_dosya_oku(b, "/"), "dizin") { ver yanlış; }
+    eşleş imaj_dizin_listele(b, "/A") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "dizin degil"); } }
+}
+
+işlev test_bozuk_dongu() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni();
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/A", veri_yeni(513)), 513) { ver yanlış; }
+    yaz_le32(b, 16396, 3);
+    ver okunamadi(imajdan_dosya_oku(b, "/A"), "dongu");
+}
+
+işlev test_bozuk_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni();
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/A", veri_yeni(513)), 513) { ver yanlış; }
+    yaz_le32(b, 16396, 268435455);
+    ver okunamadi(imajdan_dosya_oku(b, "/A"), "kisa zincir");
+}
+
+işlev test_bozuk_bos() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni();
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/A", veri_yeni(513)), 513) { ver yanlış; }
+    yaz_le32(b, 16396, 0);
+    ver okunamadi(imajdan_dosya_oku(b, "/A"), "bozuk zincir");
+}
+
+işlev test_bozuk_buyuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni();
+    eğer değil yazildi(fat32_yaz::imaja_dosya_yaz(b, "/A", veri_yeni(513)), 513) { ver yanlış; }
+    yaz_le32(b, 568348, 4294967295);
+    ver okunamadi(imajdan_dosya_oku(b, "/A"), "dosya buyuk");
+}
+
+işlev test_disk_dolu() -> mantıksal {
+    değişken b: Dizi<dtam8> = imaj_yeni(); değişken i: tam32 = 3;
+    iken i < 68892 { yaz_le32(b, 16384+i*4, 268435455); yaz_le32(b, 292352+i*4, 268435455); i = i + 1; }
+    eğer değil red(fat32_yaz::imaja_dosya_yaz(b, "/X", veri_yeni(1)), "disk dolu") { ver yanlış; }
+    ver okunamadi(imajdan_dosya_oku(b, "/X"), "bulunamadi");
+}
+
+işlev test_kisa_imaj() -> mantıksal {
+    ver okunamadi(imajdan_dosya_oku(bayt_sifir(0), "/a"), "bpb");
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_gidis_donus_0() { yazdir_metin("BASARISIZ gidis_donus_0"); h = h + 1; }
+    eğer değil test_gidis_donus_1() { yazdir_metin("BASARISIZ gidis_donus_1"); h = h + 1; }
+    eğer değil test_gidis_donus_511() { yazdir_metin("BASARISIZ gidis_donus_511"); h = h + 1; }
+    eğer değil test_gidis_donus_512() { yazdir_metin("BASARISIZ gidis_donus_512"); h = h + 1; }
+    eğer değil test_gidis_donus_513() { yazdir_metin("BASARISIZ gidis_donus_513"); h = h + 1; }
+    eğer değil test_gidis_donus_1537() { yazdir_metin("BASARISIZ gidis_donus_1537"); h = h + 1; }
+    eğer değil test_alt_dizin() { yazdir_metin("BASARISIZ alt_dizin"); h = h + 1; }
+    eğer değil test_sil_sonra_oku() { yazdir_metin("BASARISIZ sil_sonra_oku"); h = h + 1; }
+    eğer değil test_dosya_dizin_ayrimi() { yazdir_metin("BASARISIZ dosya_dizin_ayrimi"); h = h + 1; }
+    eğer değil test_bozuk_dongu() { yazdir_metin("BASARISIZ bozuk_dongu"); h = h + 1; }
+    eğer değil test_bozuk_kisa() { yazdir_metin("BASARISIZ bozuk_kisa"); h = h + 1; }
+    eğer değil test_bozuk_bos() { yazdir_metin("BASARISIZ bozuk_bos"); h = h + 1; }
+    eğer değil test_bozuk_buyuk() { yazdir_metin("BASARISIZ bozuk_buyuk"); h = h + 1; }
+    eğer değil test_disk_dolu() { yazdir_metin("BASARISIZ disk_dolu"); h = h + 1; }
+    eğer değil test_kisa_imaj() { yazdir_metin("BASARISIZ kisa_imaj"); h = h + 1; }
+    ver h;
+}

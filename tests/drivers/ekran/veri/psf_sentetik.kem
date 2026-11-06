@@ -1,0 +1,44 @@
+// Üretim/kahin: python3 tools/codex/d2.py.
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+genel işlev sentetik_font() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(66);
+    yaz_u8(b, 0, 114);
+    yaz_u8(b, 1, 181);
+    yaz_u8(b, 2, 74);
+    yaz_u8(b, 3, 134);
+    yaz_u8(b, 8, 32);
+    yaz_u8(b, 12, 1);
+    yaz_u8(b, 16, 4);
+    yaz_u8(b, 20, 4);
+    yaz_u8(b, 24, 2);
+    yaz_u8(b, 28, 9);
+    yaz_u8(b, 32, 128);
+    yaz_u8(b, 33, 128);
+    yaz_u8(b, 34, 64);
+    yaz_u8(b, 36, 255);
+    yaz_u8(b, 37, 128);
+    yaz_u8(b, 38, 128);
+    yaz_u8(b, 40, 224);
+    yaz_u8(b, 42, 64);
+    yaz_u8(b, 44, 128);
+    yaz_u8(b, 46, 64);
+    yaz_u8(b, 48, 65);
+    yaz_u8(b, 49, 196);
+    yaz_u8(b, 50, 159);
+    yaz_u8(b, 51, 255);
+    yaz_u8(b, 52, 240);
+    yaz_u8(b, 53, 159);
+    yaz_u8(b, 54, 152);
+    yaz_u8(b, 55, 128);
+    yaz_u8(b, 56, 255);
+    yaz_u8(b, 57, 63);
+    yaz_u8(b, 58, 254);
+    yaz_u8(b, 59, 102);
+    yaz_u8(b, 60, 105);
+    yaz_u8(b, 61, 255);
+    yaz_u8(b, 62, 239);
+    yaz_u8(b, 63, 191);
+    yaz_u8(b, 64, 189);
+    yaz_u8(b, 65, 255);
+    ver b;
+}

@@ -1,0 +1,54 @@
+// Kahin: python3 tools/codex/f5.py; dört MBR bölümü; beşinci kayıt sektör dışında yok sayılır; değerler [0, 1, 4, 5].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan drivers::disk::bolum::{ Bolum, BolumHatasi, mbr_coz };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(528); yaz_u8(b,510,85 olarak tam64); yaz_u8(b,511,170 olarak tam64);
+    eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<Bolum> = v;
+        eğer dizi_boyut(xs) != 0 { ver yanlış; } değişken i: tam32 = 0;
+        iken i < dizi_boyut(xs) { değişken p: Bolum = dizi_al(xs,i); eğer p.baslangic_lba != (2048+i*1024) olarak tam64 veya p.sektor_sayisi != 512 { ver yanlış; } i=i+1; } ver doğru;
+    } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(528); yaz_u8(b,510,85 olarak tam64); yaz_u8(b,511,170 olarak tam64);
+    yaz_u8(b,450,12 olarak tam64); yaz_le32(b,454,2048 olarak tam64); yaz_le32(b,458,512 olarak tam64);
+    eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<Bolum> = v;
+        eğer dizi_boyut(xs) != 1 { ver yanlış; } değişken i: tam32 = 0;
+        iken i < dizi_boyut(xs) { değişken p: Bolum = dizi_al(xs,i); eğer p.baslangic_lba != (2048+i*1024) olarak tam64 veya p.sektor_sayisi != 512 { ver yanlış; } i=i+1; } ver doğru;
+    } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(528); yaz_u8(b,510,85 olarak tam64); yaz_u8(b,511,170 olarak tam64);
+    yaz_u8(b,450,12 olarak tam64); yaz_le32(b,454,2048 olarak tam64); yaz_le32(b,458,512 olarak tam64);
+    yaz_u8(b,466,12 olarak tam64); yaz_le32(b,470,3072 olarak tam64); yaz_le32(b,474,512 olarak tam64);
+    yaz_u8(b,482,12 olarak tam64); yaz_le32(b,486,4096 olarak tam64); yaz_le32(b,490,512 olarak tam64);
+    yaz_u8(b,498,12 olarak tam64); yaz_le32(b,502,5120 olarak tam64); yaz_le32(b,506,512 olarak tam64);
+    eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<Bolum> = v;
+        eğer dizi_boyut(xs) != 4 { ver yanlış; } değişken i: tam32 = 0;
+        iken i < dizi_boyut(xs) { değişken p: Bolum = dizi_al(xs,i); eğer p.baslangic_lba != (2048+i*1024) olarak tam64 veya p.sektor_sayisi != 512 { ver yanlış; } i=i+1; } ver doğru;
+    } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(528); yaz_u8(b,510,85 olarak tam64); yaz_u8(b,511,170 olarak tam64);
+    yaz_u8(b,450,12 olarak tam64); yaz_le32(b,454,2048 olarak tam64); yaz_le32(b,458,512 olarak tam64);
+    yaz_u8(b,466,12 olarak tam64); yaz_le32(b,470,3072 olarak tam64); yaz_le32(b,474,512 olarak tam64);
+    yaz_u8(b,482,12 olarak tam64); yaz_le32(b,486,4096 olarak tam64); yaz_le32(b,490,512 olarak tam64);
+    yaz_u8(b,498,12 olarak tam64); yaz_le32(b,502,5120 olarak tam64); yaz_le32(b,506,512 olarak tam64);
+    yaz_u8(b,516,12 olarak tam64); yaz_le32(b,520,6144 olarak tam64); yaz_le32(b,524,512 olarak tam64);
+    eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<Bolum> = v;
+        eğer dizi_boyut(xs) != 4 { ver yanlış; } değişken i: tam32 = 0;
+        iken i < dizi_boyut(xs) { değişken p: Bolum = dizi_al(xs,i); eğer p.baslangic_lba != (2048+i*1024) olarak tam64 veya p.sektor_sayisi != 512 { ver yanlış; } i=i+1; } ver doğru;
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

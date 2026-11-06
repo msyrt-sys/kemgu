@@ -1,0 +1,122 @@
+// Fikstür: python3 tools/codex/c1.py; struct.pack ve (-sum(b))&255.
+kullan drivers::acpi::tablo::{ SdtBaslik, AcpiHatasi };
+kullan drivers::acpi::madt::{ Madt, MadtGirdisi, madt_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, bayt_toplam8 };
+işlev madt_verisi() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(95);
+    yaz_u8(b, 0, 65);
+    yaz_u8(b, 1, 80);
+    yaz_u8(b, 2, 73);
+    yaz_u8(b, 3, 67);
+    yaz_u8(b, 4, 95);
+    yaz_u8(b, 8, 3);
+    yaz_u8(b, 9, 3);
+    yaz_u8(b, 38, 224);
+    yaz_u8(b, 39, 254);
+    yaz_u8(b, 40, 1);
+    yaz_u8(b, 45, 8);
+    yaz_u8(b, 46, 7);
+    yaz_u8(b, 47, 9);
+    yaz_u8(b, 48, 1);
+    yaz_u8(b, 52, 1);
+    yaz_u8(b, 53, 12);
+    yaz_u8(b, 54, 2);
+    yaz_u8(b, 58, 192);
+    yaz_u8(b, 59, 254);
+    yaz_u8(b, 60, 24);
+    yaz_u8(b, 64, 2);
+    yaz_u8(b, 65, 10);
+    yaz_u8(b, 67, 1);
+    yaz_u8(b, 68, 33);
+    yaz_u8(b, 72, 15);
+    yaz_u8(b, 74, 4);
+    yaz_u8(b, 75, 6);
+    yaz_u8(b, 76, 255);
+    yaz_u8(b, 77, 5);
+    yaz_u8(b, 79, 1);
+    yaz_u8(b, 80, 5);
+    yaz_u8(b, 81, 12);
+    yaz_u8(b, 86, 224);
+    yaz_u8(b, 87, 254);
+    yaz_u8(b, 88, 1);
+    yaz_u8(b, 92, 99);
+    yaz_u8(b, 93, 3);
+    yaz_u8(b, 94, 255);
+    ver b;
+}
+işlev saglama_yenile(b: Dizi<dtam8>, n: tam32) {
+    yaz_u8(b, 9, 0); yaz_u8(b, 9, ((256-bayt_toplam8(b, 0, n)) & 255) olarak tam64);
+}
+
+işlev test_girdiler() -> mantıksal {
+    eşleş madt_coz(madt_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken m: Madt = v; değişken xs: Dizi<MadtGirdisi> = m.girdiler;
+        eğer m.lapic_adresi != 8571060224 veya m.bayraklar != 1 veya dizi_boyut(xs) != 5 { ver yanlış; }
+        değişken a: MadtGirdisi = dizi_al(xs, 0); değişken io: MadtGirdisi = dizi_al(xs, 1);
+        değişken iso: MadtGirdisi = dizi_al(xs, 2); değişken nmi: MadtGirdisi = dizi_al(xs, 3);
+        değişken ust: MadtGirdisi = dizi_al(xs, 4);
+        ver a.tur == 0 ve a.islemci == 7 ve a.apic == 9 ve a.bayraklar == 1 ve
+            io.apic == 2 ve io.adres == 4273995776 ve io.gsi == 24 ve
+            iso.veriyolu == 0 ve iso.kaynak == 1 ve iso.gsi == 33 ve iso.bayraklar == 15 ve
+            nmi.islemci == 255 ve nmi.lint == 1 ve nmi.bayraklar == 5 ve ust.adres == 8571060224;
+    } }
+}
+
+işlev test_bir() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_u8(b, 45, 1); saglama_yenile(b, 95);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "girdi boyu"); } }
+}
+
+işlev test_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_u8(b, 45, 0); saglama_yenile(b, 95);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "girdi boyu"); } }
+}
+
+işlev test_tasma() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_u8(b, 45, 255); saglama_yenile(b, 95);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "girdi boyu"); } }
+}
+
+işlev test_lapic_kisa() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_u8(b, 45, 7); saglama_yenile(b, 95);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "girdi boyu"); } }
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_u8(b, 0, 0); saglama_yenile(b, 95);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "imza"); } }
+}
+
+işlev test_saglama() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_u8(b, 9, 0);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "sdt"); } }
+}
+
+işlev test_kisa() -> mantıksal {
+    eşleş madt_coz(bayt_sifir(35)) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "sdt"); } }
+}
+
+işlev test_bos() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_le32(b, 4, 44); saglama_yenile(b, 44);
+    eşleş madt_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken m: Madt = v; ver dizi_boyut(m.girdiler) == 0 ve m.lapic_adresi == 4276092928; } }
+}
+
+işlev test_yarim_baslik() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_le32(b, 4, 45); saglama_yenile(b, 45);
+    eşleş madt_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "girdi boyu"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_girdiler() { yazdir_metin("BASARISIZ girdiler"); h = h + 1; }
+    eğer değil test_bir() { yazdir_metin("BASARISIZ bir"); h = h + 1; }
+    eğer değil test_sifir() { yazdir_metin("BASARISIZ sifir"); h = h + 1; }
+    eğer değil test_tasma() { yazdir_metin("BASARISIZ tasma"); h = h + 1; }
+    eğer değil test_lapic_kisa() { yazdir_metin("BASARISIZ lapic_kisa"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_saglama() { yazdir_metin("BASARISIZ saglama"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_bos() { yazdir_metin("BASARISIZ bos"); h = h + 1; }
+    eğer değil test_yarim_baslik() { yazdir_metin("BASARISIZ yarim_baslik"); h = h + 1; }
+    ver h;
+}

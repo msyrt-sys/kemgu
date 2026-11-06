@@ -1,0 +1,72 @@
+// Seyrek bellek imajında dosya/dizin okuma. Donanım ve host dosya API'si yoktur.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::fs::fat32_imaj::{ FatKayit, DizinResmi, imaj_bpb, imaj_dizin_yolu, imaj_bul, imaj_zincir, imaj_konum, imaj_kume_bayt, imaj_dizin };
+kullan drivers::fs::fat32_bicimle::{ FAT32_IMAJ_SINIRI };
+kullan drivers::fs::yol::{ yol_bol };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev oku_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<Dizi<dtam8>, metin> {
+    değişken parcalar: Dizi<metin> = [];
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(v) => { parcalar = v; } }
+    değişken adet: tam32 = dizi_boyut(parcalar);
+    eğer adet == 0 { ver hata("dizin"); }
+    değişken ebeveyn: tam64 = 0;
+    eşleş imaj_dizin_yolu(imaj, b, parcalar, adet - 1) { hata(e) => { ver hata(e); } tamam(v) => { ebeveyn = v; } }
+    değişken ad: metin = dizi_al(parcalar, adet - 1);
+    eşleş imaj_bul(imaj, b, ebeveyn, ad) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken k: FatKayit = v;
+            eğer (k.ozellik & 16) != 0 { ver hata("dizin"); }
+            eğer k.boyut > (FAT32_IMAJ_SINIRI olarak tam64) { ver hata("dosya buyuk"); }
+            değişken zinc: Dizi<tam64> = [];
+            eğer k.ilk != 0 {
+                eşleş imaj_zincir(imaj, b, k.ilk) { hata(e) => { ver hata(e); } tamam(z) => { zinc = z; } }
+            }
+            değişken kb: tam32 = imaj_kume_bayt(b);
+            eğer (dizi_boyut(zinc) olarak tam64) * (kb olarak tam64) < k.boyut { ver hata("kisa zincir"); }
+            değişken sonuc: Dizi<dtam8> = [];
+            değişken kalan: tam32 = k.boyut olarak tam32;
+            değişken i: tam32 = 0;
+            iken kalan > 0 {
+                değişken c: tam64 = dizi_al(zinc, i);
+                değişken ofs: tam32 = 0;
+                eşleş imaj_konum(b, c) { hata(e) => { ver hata(e); } tamam(o) => { ofs = o; } }
+                değişken al: tam32 = kb;
+                eğer al > kalan { al = kalan; }
+                değişken j: tam32 = 0;
+                iken j < al {
+                    değişken bayt: tam32 = 0;
+                    eğer ofs + j < dizi_boyut(imaj) { bayt = oku_u8(imaj, ofs + j); }
+                    dizi_ekle(sonuc, bayt olarak dtam8); j = j + 1;
+                }
+                kalan = kalan - al; i = i + 1;
+            }
+            ver tamam(sonuc);
+        }
+    }
+    // C008: erişilemeyen sonuç dönüşünü açık yaz.
+    ver hata("ulasilmaz");
+}
+genel işlev imajdan_dosya_oku(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<dtam8>, metin> {
+    eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver oku_ic(imaj, b, yol); } }
+    ver hata("ulasilmaz");
+}
+işlev listele_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> {
+    değişken parcalar: Dizi<metin> = [];
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(v) => { parcalar = v; } }
+    değişken kume: tam64 = 0;
+    eşleş imaj_dizin_yolu(imaj, b, parcalar, dizi_boyut(parcalar)) { hata(e) => { ver hata(e); } tamam(v) => { kume = v; } }
+    eşleş imaj_dizin(imaj, b, kume) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => { değişken r: DizinResmi = v; ver dizin_coz(r.baytlar); }
+    }
+    ver hata("ulasilmaz");
+}
+genel işlev imaj_dizin_listele(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> {
+    eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver listele_ic(imaj, b, yol); } }
+    ver hata("ulasilmaz");
+}
+// C009: istenen API korunur; self-host için imaj önekli adlar kullanılır.
+genel işlev dosya_oku(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<dtam8>, metin> { ver imajdan_dosya_oku(imaj, yol); }
+genel işlev dizin_listele(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> { ver imaj_dizin_listele(imaj, yol); }

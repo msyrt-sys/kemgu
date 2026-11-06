@@ -1,0 +1,72 @@
+// MBR/GPT ayrıştırma: bütün ofsetler daraltılmadan önce görüntü içinde doğrulanır.
+kullan drivers::ortak::bayt::{ bayt_sinirda, oku_u8, oku_le16, oku_le32, oku_le64, imza_esit, yaz_le32 };
+// Bulgu C001: aynı adlı modül/işlev için probe ile doğrulanmış nitelikli çağrı.
+kullan drivers::disk::crc32;
+kullan drivers::ortak::utf8::{ utf16le_coz, utf8_kodla };
+genel yapı Bolum { tur: tam32; baslangic_lba: tam64; sektor_sayisi: tam64; ad: metin; }
+genel çeşit BolumHatasi { KisaGirdi, ImzaYok, KorumaciMBRDegil, GptImzaYok, GptBaslikCrc, GptGirdiCrc, GptBoyut }
+genel işlev mbr_coz(lba0: Dizi<dtam8>) -> sonuç<Dizi<Bolum>, BolumHatasi> {
+    eğer değil bayt_sinirda(lba0, 0, 512) { ver hata(BolumHatasi::KisaGirdi); }
+    eğer oku_u8(lba0, 510) != 85 veya oku_u8(lba0, 511) != 170 { ver hata(BolumHatasi::ImzaYok); }
+    // Bulgu C002: yapı eleman boyu için tipli boş literal gerekir.
+    değişken sonuc: Dizi<Bolum> = [];
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        değişken ofs: tam32 = 446 + i * 16;
+        değişken tur: tam32 = oku_u8(lba0, ofs + 4);
+        eğer tur != 0 {
+            dizi_ekle(sonuc, Bolum { tur: tur, baslangic_lba: oku_le32(lba0, ofs + 8),
+                sektor_sayisi: oku_le32(lba0, ofs + 12), ad: "" });
+        }
+        i = i + 1;
+    }
+    ver tamam(sonuc);
+}
+genel işlev gpt_mi(lba0: Dizi<dtam8>) -> mantıksal {
+    eğer değil bayt_sinirda(lba0, 0, 512) { ver yanlış; }
+    ver oku_u8(lba0, 510) == 85 ve oku_u8(lba0, 511) == 170 ve oku_u8(lba0, 450) == 238;
+}
+genel işlev gpt_coz(disk: Dizi<dtam8>, sektor: tam32) -> sonuç<Dizi<Bolum>, BolumHatasi> {
+    eğer değil gpt_mi(disk) { ver hata(BolumHatasi::KorumaciMBRDegil); }
+    değişken boy: tam64 = dizi_boyut(disk) olarak tam64;
+    eğer sektor < 512 veya (sektor olarak tam64) > boy - 92 { ver hata(BolumHatasi::GptBoyut); }
+    eğer değil imza_esit(disk, sektor, "EFI PART") { ver hata(BolumHatasi::GptImzaYok); }
+    değişken baslik_boyu: tam64 = oku_le32(disk, sektor + 12);
+    eğer baslik_boyu < 92 veya baslik_boyu > (sektor olarak tam64) veya baslik_boyu > boy - (sektor olarak tam64) {
+        ver hata(BolumHatasi::GptBoyut);
+    }
+    değişken kopya: Dizi<dtam8> = [];
+    değişken i: tam32 = 0;
+    iken i < (baslik_boyu olarak tam32) {
+        // Bulgu C004: iç içe dizi_al yerine açık bayt dönüşümü.
+        dizi_ekle(kopya, oku_u8(disk, sektor + i) olarak dtam8); i = i + 1;
+    }
+    yaz_le32(kopya, 16, 0);
+    eğer crc32::crc32(kopya, 0, baslik_boyu olarak tam32) != oku_le32(disk, sektor + 16) { ver hata(BolumHatasi::GptBaslikCrc); }
+    değişken lba: tam64 = oku_le64(disk, sektor + 72);
+    değişken sayi: tam64 = oku_le32(disk, sektor + 80);
+    değişken girdi_boyu: tam64 = oku_le32(disk, sektor + 84);
+    eğer lba < 0 veya lba > boy / (sektor olarak tam64) veya girdi_boyu < 128 { ver hata(BolumHatasi::GptBoyut); }
+    değişken bas: tam64 = lba * (sektor olarak tam64);
+    eğer sayi > (boy - bas) / girdi_boyu { ver hata(BolumHatasi::GptBoyut); }
+    değişken toplam: tam64 = sayi * girdi_boyu;
+    eğer crc32::crc32(disk, bas olarak tam32, toplam olarak tam32) != oku_le32(disk, sektor + 88) { ver hata(BolumHatasi::GptGirdiCrc); }
+    // Bulgu C002: yapı eleman boyu için tipli boş literal gerekir.
+    değişken sonuc: Dizi<Bolum> = [];
+    değişken j: tam64 = 0;
+    iken j < sayi {
+        değişken ofs: tam32 = (bas + j * girdi_boyu) olarak tam32;
+        değişken dolu: mantıksal = yanlış;
+        i = 0;
+        iken i < 16 { eğer oku_u8(disk, ofs + i) != 0 { dolu = doğru; } i = i + 1; }
+        eğer dolu {
+            değişken ilk: tam64 = oku_le64(disk, ofs + 32);
+            değişken son: tam64 = oku_le64(disk, ofs + 40);
+            eğer ilk < 0 veya son < ilk veya son == 9223372036854775807 { ver hata(BolumHatasi::GptBoyut); }
+            değişken ad: metin = utf8_kodla(utf16le_coz(disk, ofs + 56, 36));
+            dizi_ekle(sonuc, Bolum { tur: 238, baslangic_lba: ilk, sektor_sayisi: son - ilk + 1, ad: ad });
+        }
+        j = j + 1;
+    }
+    ver tamam(sonuc);
+}

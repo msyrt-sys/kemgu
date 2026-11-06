@@ -1,0 +1,30 @@
+// Kahin: python3 tools/codex/f5.py; boş/tek harf ve UTF-8 skaler üst sınırı; değerler [0, 1, 1114111, 1114112].
+kullan drivers::ortak::harf_veri::{ HarfEsleme, ust_eslemeler };
+kullan drivers::ortak::harf::{ buyuk_harf, kucuk_harf };
+
+işlev test_sinir_0() -> mantıksal {
+    ver metin_esit(buyuk_harf(""), "") ve metin_esit(kucuk_harf(""), "");
+}
+
+işlev test_sinir_1() -> mantıksal {
+    ver metin_esit(buyuk_harf("i"), "İ") ve metin_esit(kucuk_harf("I"), "ı");
+}
+
+işlev test_sinir_2() -> mantıksal {
+    ver metin_esit(buyuk_harf(kod_metin(1114111)), kod_metin(1114111)) ve metin_esit(kucuk_harf(kod_metin(1114111)), kod_metin(1114111));
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken s: metin = metin_birlestir(metin_kes(kod_metin(1114111),0,1), metin_kes(kod_metin(65536),1,1));
+    s = metin_birlestir(s, metin_kes(kod_metin(65536),2,2));
+    ver metin_esit(buyuk_harf(s), "����") ve metin_esit(kucuk_harf(s), "����");
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

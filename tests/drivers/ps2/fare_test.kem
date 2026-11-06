@@ -1,0 +1,207 @@
+// Sabitler: python3 tools/codex/a2.py; x=b1-256*(b0>>4&1), z=(b3&15)-16*(b3&8!=0).
+kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };
+işlev yok(o: seçimlik<FareOlayi>) -> mantıksal {
+    eşleş o { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+işlev esit(o: seçimlik<FareOlayi>, x: tam32, y: tam32, z: tam32, tus: tam32) -> mantıksal {
+    eşleş o {
+        hiç => { ver yanlış; }
+        değer(v) => { ver v.dx == x ve v.dy == y ve v.dz == z ve
+            v.sol == ((tus & 1) != 0) ve v.sag == ((tus & 2) != 0) ve v.orta == ((tus & 4) != 0); }
+    }
+}
+
+işlev test_paket_0() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 8)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 5)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 3), 5, 3, 0, 0) ve d.n == 0;
+}
+
+işlev test_paket_1() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 9)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 0), 0, 0, 0, 1) ve d.n == 0;
+}
+
+işlev test_paket_2() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 10)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 0), 0, 0, 0, 2) ve d.n == 0;
+}
+
+işlev test_paket_3() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 12)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 0), 0, 0, 0, 4) ve d.n == 0;
+}
+
+işlev test_paket_4() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 15)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 255)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 255), 255, 255, 0, 7) ve d.n == 0;
+}
+
+işlev test_paket_5() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 56)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 251)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 254), -5, -2, 0, 0) ve d.n == 0;
+}
+
+işlev test_paket_6() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 56)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 0), -256, -256, 0, 0) ve d.n == 0;
+}
+
+işlev test_paket_7() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 8)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 1), 0, 0, 1, 0) ve d.n == 0;
+}
+
+işlev test_paket_8() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 8)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 15), 0, 0, -1, 0) ve d.n == 0;
+}
+
+işlev test_paket_9() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 8)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 8), 0, 0, -8, 0) ve d.n == 0;
+}
+
+işlev test_paket_10() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 8)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    ver esit(fare_bayt(&değişken d, 247), 0, 0, 7, 0) ve d.n == 0;
+}
+
+işlev test_tasma_3_64() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 72)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8);
+    fare_bayt(&değişken d, 5);
+    ver esit(fare_bayt(&değişken d, 3), 5, 3, 0, 0);
+}
+
+işlev test_tasma_3_128() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 136)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8);
+    fare_bayt(&değişken d, 5);
+    ver esit(fare_bayt(&değişken d, 3), 5, 3, 0, 0);
+}
+
+işlev test_tasma_3_192() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 200)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8);
+    fare_bayt(&değişken d, 5);
+    ver esit(fare_bayt(&değişken d, 3), 5, 3, 0, 0);
+}
+
+işlev test_tasma_4_64() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 72)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8);
+    fare_bayt(&değişken d, 5);
+    fare_bayt(&değişken d, 3);
+    ver esit(fare_bayt(&değişken d, 0), 5, 3, 0, 0);
+}
+
+işlev test_tasma_4_128() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 136)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8);
+    fare_bayt(&değişken d, 5);
+    fare_bayt(&değişken d, 3);
+    ver esit(fare_bayt(&değişken d, 0), 5, 3, 0, 0);
+}
+
+işlev test_tasma_4_192() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(doğru);
+    eğer değil yok(fare_bayt(&değişken d, 200)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 1)) { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 0)) { ver yanlış; }
+    eğer d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8);
+    fare_bayt(&değişken d, 5);
+    fare_bayt(&değişken d, 3);
+    ver esit(fare_bayt(&değişken d, 0), 5, 3, 0, 0);
+}
+
+işlev test_senkron() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    eğer değil yok(fare_bayt(&değişken d, 0)) veya d.n != 0 { ver yanlış; }
+    fare_bayt(&değişken d, 8); fare_bayt(&değişken d, 1);
+    eğer değil esit(fare_bayt(&değişken d, 2), 1, 2, 0, 0) { ver yanlış; }
+    fare_bayt(&değişken d, 9); fare_bayt(&değişken d, 0);
+    ver esit(fare_bayt(&değişken d, 0), 0, 0, 0, 1);
+}
+
+işlev test_bozuk_girdi() -> mantıksal {
+    değişken d: FareDurumu = fare_yeni(yanlış);
+    fare_bayt(&değişken d, 8);
+    eğer değil yok(fare_bayt(&değişken d, -1)) veya d.n != 0 { ver yanlış; }
+    eğer değil yok(fare_bayt(&değişken d, 256)) { ver yanlış; }
+    d.paket_boyu = 0;
+    ver yok(fare_bayt(&değişken d, 8)) ve d.n == 0;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_paket_0() { yazdir_metin("BASARISIZ paket_0"); h = h + 1; }
+    eğer değil test_paket_1() { yazdir_metin("BASARISIZ paket_1"); h = h + 1; }
+    eğer değil test_paket_2() { yazdir_metin("BASARISIZ paket_2"); h = h + 1; }
+    eğer değil test_paket_3() { yazdir_metin("BASARISIZ paket_3"); h = h + 1; }
+    eğer değil test_paket_4() { yazdir_metin("BASARISIZ paket_4"); h = h + 1; }
+    eğer değil test_paket_5() { yazdir_metin("BASARISIZ paket_5"); h = h + 1; }
+    eğer değil test_paket_6() { yazdir_metin("BASARISIZ paket_6"); h = h + 1; }
+    eğer değil test_paket_7() { yazdir_metin("BASARISIZ paket_7"); h = h + 1; }
+    eğer değil test_paket_8() { yazdir_metin("BASARISIZ paket_8"); h = h + 1; }
+    eğer değil test_paket_9() { yazdir_metin("BASARISIZ paket_9"); h = h + 1; }
+    eğer değil test_paket_10() { yazdir_metin("BASARISIZ paket_10"); h = h + 1; }
+    eğer değil test_tasma_3_64() { yazdir_metin("BASARISIZ tasma_3_64"); h = h + 1; }
+    eğer değil test_tasma_3_128() { yazdir_metin("BASARISIZ tasma_3_128"); h = h + 1; }
+    eğer değil test_tasma_3_192() { yazdir_metin("BASARISIZ tasma_3_192"); h = h + 1; }
+    eğer değil test_tasma_4_64() { yazdir_metin("BASARISIZ tasma_4_64"); h = h + 1; }
+    eğer değil test_tasma_4_128() { yazdir_metin("BASARISIZ tasma_4_128"); h = h + 1; }
+    eğer değil test_tasma_4_192() { yazdir_metin("BASARISIZ tasma_4_192"); h = h + 1; }
+    eğer değil test_senkron() { yazdir_metin("BASARISIZ senkron"); h = h + 1; }
+    eğer değil test_bozuk_girdi() { yazdir_metin("BASARISIZ bozuk_girdi"); h = h + 1; }
+    ver h;
+}

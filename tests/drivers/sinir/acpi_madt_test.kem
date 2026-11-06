@@ -1,0 +1,34 @@
+// Kahin: python3 tools/codex/f5.py; tek LAPIC girdisine ayrılmış 8 bayt; değerler [0, 1, 8, 9].
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii, bayt_toplam8, bayt_sinirda, imza_esit };
+kullan tests::drivers::bulanik::veri::fikstur::{ bpb_verisi, pci_verisi, elf_verisi, madt_verisi, fadt_verisi, sdt_verisi };
+kullan drivers::acpi::tablo::{ SdtBaslik, AcpiHatasi };
+kullan drivers::acpi::madt::{ Madt, MadtGirdisi, madt_coz };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_le32(b,4,52 olarak tam64); yaz_u8(b,45,0 olarak tam64); yaz_u8(b,9,0 olarak tam64); yaz_u8(b,9,((256-bayt_toplam8(b,0,52)) & 255) olarak tam64);
+    eşleş madt_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken m: Madt = v; ver yanlış; } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_le32(b,4,52 olarak tam64); yaz_u8(b,45,1 olarak tam64); yaz_u8(b,9,0 olarak tam64); yaz_u8(b,9,((256-bayt_toplam8(b,0,52)) & 255) olarak tam64);
+    eşleş madt_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken m: Madt = v; ver yanlış; } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_le32(b,4,52 olarak tam64); yaz_u8(b,45,8 olarak tam64); yaz_u8(b,9,0 olarak tam64); yaz_u8(b,9,((256-bayt_toplam8(b,0,52)) & 255) olarak tam64);
+    eşleş madt_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken m: Madt = v; ver dizi_boyut(m.girdiler) == 1; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken b: Dizi<dtam8> = madt_verisi(); yaz_le32(b,4,52 olarak tam64); yaz_u8(b,45,9 olarak tam64); yaz_u8(b,9,0 olarak tam64); yaz_u8(b,9,((256-bayt_toplam8(b,0,52)) & 255) olarak tam64);
+    eşleş madt_coz(b) { hata(e) => { ver doğru; } tamam(v) => { değişken m: Madt = v; ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

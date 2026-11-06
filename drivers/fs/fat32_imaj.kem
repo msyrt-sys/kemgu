@@ -1,0 +1,165 @@
+// FAT32 imaj erişimi: BPB toplamı fiziksel boyu, dizi ise sıfırla tamamlanan öneki temsil eder.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le32, yaz_u8, yaz_le32 };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, bpb_coz, kume_sektoru };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::fs::fat32_bicimle::{ FAT32_IMAJ_SINIRI };
+kullan drivers::fs::yol::{ yol_bol };
+genel yapı DizinResmi { baytlar: Dizi<dtam8>; konumlar: Dizi<tam32>; zincir: Dizi<tam64>; }
+// C006: yapı alanındaki boş literal yerine açık tipli yereller.
+genel işlev dizin_resmi_bos() -> DizinResmi {
+    değişken baytlar: Dizi<dtam8> = [];
+    değişken konumlar: Dizi<tam32> = [];
+    değişken zinc: Dizi<tam64> = [];
+    ver DizinResmi { baytlar: baytlar, konumlar: konumlar, zincir: zinc };
+}
+genel yapı FatKayit {
+    ad: metin; kisa: metin; ozellik: tam32; ilk: tam64; boyut: tam64;
+    bas: tam32; son: tam32;
+}
+genel işlev imaj_bpb(imaj: Dizi<dtam8>) -> sonuç<Fat32Bpb, metin> {
+    eşleş bpb_coz(imaj) {
+        hata(e) => { ver hata("bpb"); }
+        tamam(v) => {
+            değişken b: Fat32Bpb = v;
+            eğer b.fat_sayisi < 1 veya b.fat_sayisi > 2 veya b.kume_sayisi > 268435444 veya
+                b.fat_sektor * (b.sektor_bayt olarak tam64) / 4 < b.kume_sayisi + 2 { ver hata("fat boyutu"); }
+            değişken veri: tam64 = b.ilk_veri_sektoru * (b.sektor_bayt olarak tam64);
+            eğer veri > (dizi_boyut(imaj) olarak tam64) veya dizi_boyut(imaj) > FAT32_IMAJ_SINIRI { ver hata("imaj boyutu"); }
+            ver tamam(b);
+        }
+    }
+    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
+    ver hata("ulasilmaz");
+}
+genel işlev imaj_fat_oku(imaj: Dizi<dtam8>, b: Fat32Bpb, k: tam64) -> tam64 {
+    eğer k < 0 veya k >= b.kume_sayisi + 2 { ver 268435447; }
+    değişken ofs: tam64 = (b.ayrilmis olarak tam64) * (b.sektor_bayt olarak tam64) + k * 4;
+    ver oku_le32(imaj, ofs olarak tam32) & 268435455;
+}
+genel işlev imaj_fat_yaz(imaj: Dizi<dtam8>, b: Fat32Bpb, k: tam64, v: tam64) {
+    değişken f: tam32 = 0;
+    iken f < b.fat_sayisi {
+        değişken ofs: tam64 = ((b.ayrilmis olarak tam64) + (f olarak tam64) * b.fat_sektor) * (b.sektor_bayt olarak tam64) + k * 4;
+        değişken eski: tam64 = oku_le32(imaj, ofs olarak tam32);
+        yaz_le32(imaj, ofs olarak tam32, (eski & 4026531840) | (v & 268435455)); f = f + 1;
+    }
+}
+genel işlev imaj_kume_bayt(b: Fat32Bpb) -> tam32 { ver b.kume_sektor * b.sektor_bayt; }
+genel işlev imaj_konum(b: Fat32Bpb, k: tam64) -> sonuç<tam32, metin> {
+    eğer k < 2 veya k >= b.kume_sayisi + 2 { ver hata("kume siniri"); }
+    değişken ofs: tam64 = kume_sektoru(b, k) * (b.sektor_bayt olarak tam64);
+    eğer ofs > (FAT32_IMAJ_SINIRI - imaj_kume_bayt(b)) olarak tam64 { ver hata("imaj buyuk"); }
+    ver tamam(ofs olarak tam32);
+}
+genel işlev imaj_buyut(imaj: Dizi<dtam8>, son: tam32) {
+    iken dizi_boyut(imaj) < son { dizi_ekle(imaj, 0 olarak dtam8); }
+}
+genel işlev imaj_zincir(imaj: Dizi<dtam8>, b: Fat32Bpb, ilk: tam64) -> sonuç<Dizi<tam64>, metin> {
+    değişken sonuc: Dizi<tam64> = [];
+    değişken gorulen: Dizi<dtam8> = bayt_sifir(((b.kume_sayisi + 9) / 8) olarak tam32);
+    değişken k: tam64 = ilk;
+    değişken bitis: mantıksal = yanlış;
+    iken değil bitis {
+        eğer k < 2 veya k >= b.kume_sayisi + 2 { ver hata("bozuk zincir"); }
+        eşleş imaj_konum(b, k) { hata(e) => { ver hata(e); } tamam(o) => { } }
+        değişken go: tam32 = (k / 8) olarak tam32;
+        değişken bit: tam32 = 1 << ((k % 8) olarak tam32);
+        değişken eski: tam32 = oku_u8(gorulen, go);
+        eğer (eski & bit) != 0 { ver hata("dongu"); }
+        yaz_u8(gorulen, go, (eski | bit) olarak tam64); dizi_ekle(sonuc, k);
+        değişken sonraki: tam64 = imaj_fat_oku(imaj, b, k);
+        eğer sonraki >= 268435448 { bitis = doğru; }
+        değilse eğer sonraki < 2 veya sonraki >= 268435440 { ver hata("bozuk zincir"); }
+        değilse { k = sonraki; }
+    }
+    ver tamam(sonuc);
+}
+genel işlev imaj_dizin(imaj: Dizi<dtam8>, b: Fat32Bpb, ilk: tam64) -> sonuç<DizinResmi, metin> {
+    değişken zinc: Dizi<tam64> = [];
+    eşleş imaj_zincir(imaj, b, ilk) { hata(e) => { ver hata(e); } tamam(v) => { zinc = v; } }
+    değişken baytlar: Dizi<dtam8> = [];
+    değişken konumlar: Dizi<tam32> = [];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(zinc) {
+        değişken k: tam64 = dizi_al(zinc, i);
+        değişken ofs: tam32 = 0;
+        eşleş imaj_konum(b, k) { hata(e) => { ver hata(e); } tamam(v) => { ofs = v; } }
+        değişken j: tam32 = 0;
+        iken j < imaj_kume_bayt(b) {
+            değişken v: tam32 = 0;
+            eğer ofs + j < dizi_boyut(imaj) { v = oku_u8(imaj, ofs + j); }
+            dizi_ekle(baytlar, v olarak dtam8);
+            eğer j % 32 == 0 { dizi_ekle(konumlar, ofs + j); }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    ver tamam(DizinResmi { baytlar: baytlar, konumlar: konumlar, zincir: zinc });
+}
+genel işlev imaj_kayitlar(r: DizinResmi) -> sonuç<Dizi<FatKayit>, metin> {
+    değişken girdiler: Dizi<DizinGirdisi> = [];
+    eşleş dizin_coz(r.baytlar) { hata(e) => { ver hata(e); } tamam(v) => { girdiler = v; } }
+    değişken sonuc: Dizi<FatKayit> = [];
+    değişken i: tam32 = 0;
+    değişken bas: tam32 = 0;
+    değişken g: tam32 = 0;
+    iken i < dizi_boyut(r.konumlar) {
+        değişken ilk: tam32 = oku_u8(r.baytlar, i * 32);
+        değişken oz: tam32 = oku_u8(r.baytlar, i * 32 + 11);
+        eğer ilk == 0 { ver tamam(sonuc); }
+        eğer ilk == 229 veya ((oz & 8) != 0 ve oz != 15) { bas = i + 1; }
+        değilse eğer oz != 15 {
+            eğer g >= dizi_boyut(girdiler) { ver hata("dizin esleme"); }
+            değişken v: DizinGirdisi = dizi_al(girdiler, g);
+            değişken kisa: metin = "";
+            değişken j: tam32 = 0;
+            iken j < 11 { kisa = metin_birlestir(kisa, kod_metin(oku_u8(r.baytlar, i * 32 + j))); j = j + 1; }
+            dizi_ekle(sonuc, FatKayit { ad: v.ad, kisa: kisa, ozellik: v.ozellik, ilk: v.ilk_kume, boyut: v.boyut, bas: bas, son: i });
+            g = g + 1; bas = i + 1;
+        }
+        i = i + 1;
+    }
+    ver tamam(sonuc);
+}
+işlev ascii_esit(a: metin, b: metin) -> mantıksal {
+    eğer metin_uzunluk(a) != metin_uzunluk(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < (metin_uzunluk(a) olarak tam32) {
+        değişken x: tam32 = (metin_bayt(a, i) olarak tam32) & 255;
+        değişken y: tam32 = (metin_bayt(b, i) olarak tam32) & 255;
+        eğer x >= 97 ve x <= 122 { x = x - 32; }
+        eğer y >= 97 ve y <= 122 { y = y - 32; }
+        eğer x != y { ver yanlış; } i = i + 1;
+    }
+    ver doğru;
+}
+genel işlev imaj_ad_esit(k: FatKayit, ad: metin) -> mantıksal {
+    // LFN varsa tam eşitlik; kısa ad girdisinde ASCII harf duyarsızlığı.
+    eğer k.bas < k.son { ver metin_esit(k.ad, ad); }
+    ver ascii_esit(k.ad, ad);
+}
+genel işlev imaj_bul(imaj: Dizi<dtam8>, b: Fat32Bpb, ilk: tam64, ad: metin) -> sonuç<FatKayit, metin> {
+    değişken r: DizinResmi = dizin_resmi_bos();
+    eşleş imaj_dizin(imaj, b, ilk) { hata(e) => { ver hata(e); } tamam(v) => { r = v; } }
+    değişken ks: Dizi<FatKayit> = [];
+    eşleş imaj_kayitlar(r) { hata(e) => { ver hata(e); } tamam(v) => { ks = v; } }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(ks) {
+        değişken k: FatKayit = dizi_al(ks, i);
+        eğer imaj_ad_esit(k, ad) { ver tamam(k); } i = i + 1;
+    }
+    ver hata("bulunamadi");
+}
+genel işlev imaj_dizin_yolu(imaj: Dizi<dtam8>, b: Fat32Bpb, parcalar: Dizi<metin>, adet: tam32) -> sonuç<tam64, metin> {
+    değişken kume: tam64 = b.kok_kume;
+    değişken i: tam32 = 0;
+    iken i < adet {
+        değişken ad: metin = dizi_al(parcalar, i);
+        eşleş imaj_bul(imaj, b, kume, ad) {
+            hata(e) => { ver hata(e); }
+            tamam(v) => { değişken k: FatKayit = v; eğer (k.ozellik & 16) == 0 { ver hata("dizin degil"); } kume = k.ilk; }
+        }
+        i = i + 1;
+    }
+    ver tamam(kume);
+}

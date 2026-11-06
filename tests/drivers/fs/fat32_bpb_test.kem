@@ -1,0 +1,255 @@
+// C005: yapıdan sonraki sabit argümanlarda açık tam64 dönüşümü.
+// Hesap: python3 tools/codex/a4.py; struct BPB, (toplam-ayrılmış-FAT)/küme.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru, FatGirdi, fat_girdi, zincir };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32 };
+işlev bpb_verisi() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(b, 12, 2);
+    yaz_u8(b, 13, 8);
+    yaz_u8(b, 14, 32);
+    yaz_u8(b, 16, 2);
+    yaz_u8(b, 34, 16);
+    yaz_u8(b, 37, 4);
+    yaz_u8(b, 44, 2);
+    yaz_u8(b, 48, 1);
+    yaz_u8(b, 510, 85);
+    yaz_u8(b, 511, 170);
+    ver b;
+}
+işlev bpb_hatasi(b: Dizi<dtam8>) -> tam32 {
+    eşleş bpb_coz(b) {
+        tamam(v) => { ver 0; }
+        hata(e) => { eşleş e {
+            BpbHatasi::KisaGirdi => { ver 1; } BpbHatasi::ImzaYok => { ver 2; }
+            BpbHatasi::SektorBoyu => { ver 3; } BpbHatasi::KumeBoyu => { ver 4; }
+            BpbHatasi::Fat32Degil => { ver 5; }
+        } }
+    }
+    ver 99;
+}
+
+işlev test_bpb() -> mantıksal {
+    eşleş bpb_coz(bpb_verisi()) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken b: Fat32Bpb = v;
+        ver b.sektor_bayt == 512 ve b.kume_sektor == 8 ve b.ayrilmis == 32 ve b.fat_sayisi == 2 ve
+            b.toplam_sektor == 1048576 ve b.fat_sektor == 1024 ve b.kok_kume == 2 ve b.fsinfo == 1 ve
+            b.ilk_veri_sektoru == 2080 ve b.kume_sayisi == 130812 ve
+            kume_sektoru(b, 2 olarak tam64) == 2080 ve kume_sektoru(b, 3 olarak tam64) == 2088;
+    } }
+}
+
+işlev test_kisa() -> mantıksal {
+    ver bpb_hatasi(bayt_sifir(511)) == 1;
+}
+
+işlev test_imza() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le16(b, 510, 0);
+    ver bpb_hatasi(b) == 2;
+}
+
+işlev test_sektor() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le16(b, 11, 513);
+    ver bpb_hatasi(b) == 3;
+}
+
+işlev test_kume_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_u8(b, 13, 0);
+    ver bpb_hatasi(b) == 4;
+}
+
+işlev test_kume_uc() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_u8(b, 13, 3);
+    ver bpb_hatasi(b) == 4;
+}
+
+işlev test_kume_buyuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_u8(b, 13, 255);
+    ver bpb_hatasi(b) == 4;
+}
+
+işlev test_kok_girdi() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le16(b, 17, 1);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_fat16() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le16(b, 22, 1);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_fat_sifir() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le32(b, 36, 0);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_toplam() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le32(b, 32, 100);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_ayrilmis() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le16(b, 14, 0);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_fat_sayisi() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_u8(b, 16, 0);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_kok_kucuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le32(b, 44, 1);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_kok_buyuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi();
+    yaz_le32(b, 44, 9999999);
+    ver bpb_hatasi(b) == 5;
+}
+
+işlev test_sektor_512() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi(); yaz_le16(b, 11, 512);
+    ver bpb_hatasi(b) == 0;
+}
+
+işlev test_sektor_1024() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi(); yaz_le16(b, 11, 1024);
+    ver bpb_hatasi(b) == 0;
+}
+
+işlev test_sektor_2048() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi(); yaz_le16(b, 11, 2048);
+    ver bpb_hatasi(b) == 0;
+}
+
+işlev test_sektor_4096() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi(); yaz_le16(b, 11, 4096);
+    ver bpb_hatasi(b) == 0;
+}
+
+işlev test_toplam16() -> mantıksal {
+    değişken b: Dizi<dtam8> = bpb_verisi(); yaz_le16(b, 19, 60000);
+    eşleş bpb_coz(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken p: Fat32Bpb = v; ver p.toplam_sektor == 60000; } }
+}
+
+işlev test_fat_0() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 0);
+    eşleş fat_girdi(f, 2) { FatGirdi::Bos => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_fat_268435447() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 268435447);
+    eşleş fat_girdi(f, 2) { FatGirdi::Bozuk => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_fat_268435448() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 268435448);
+    eşleş fat_girdi(f, 2) { FatGirdi::ZincirSonu => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_fat_4294967295() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 4294967295);
+    eşleş fat_girdi(f, 2) { FatGirdi::ZincirSonu => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_maske() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 4026531843);
+    eşleş fat_girdi(f, 2) { FatGirdi::Sonraki(v) => { ver v == 3; } _ => { ver yanlış; } }
+}
+
+işlev test_sinir_eksi1() -> mantıksal {
+    eşleş fat_girdi(bayt_sifir(12), -1) { FatGirdi::Bozuk => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    eşleş fat_girdi(bayt_sifir(12), 3) { FatGirdi::Bozuk => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_sinir_9223372036854775807() -> mantıksal {
+    eşleş fat_girdi(bayt_sifir(12), 9223372036854775807) { FatGirdi::Bozuk => { ver doğru; } _ => { ver yanlış; } }
+}
+
+işlev test_zincir() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(20);
+    yaz_le32(f, 8, 3); yaz_le32(f, 12, 4); yaz_le32(f, 16, 268435448);
+    eşleş zincir(f, 2, 3) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken xs: Dizi<tam64> = v;
+        ver dizi_boyut(xs) == 3 ve dizi_al(xs, 0) == 2 ve dizi_al(xs, 1) == 3 ve dizi_al(xs, 2) == 4;
+    } }
+}
+
+işlev test_dongu() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(16); yaz_le32(f, 8, 3); yaz_le32(f, 12, 2);
+    eşleş zincir(f, 2, 4) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "dongu"); } }
+}
+
+işlev test_bozuk_0() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 0);
+    eşleş zincir(f, 2, 5) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bozuk zincir"); } }
+}
+
+işlev test_bozuk_268435447() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 268435447);
+    eşleş zincir(f, 2, 5) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bozuk zincir"); } }
+}
+
+işlev test_bozuk_100() -> mantıksal {
+    değişken f: Dizi<dtam8> = bayt_sifir(12); yaz_le32(f, 8, 100);
+    eşleş zincir(f, 2, 5) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bozuk zincir"); } }
+}
+
+işlev test_azami() -> mantıksal {
+    eşleş zincir(bayt_sifir(0), 2, 0) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "dongu"); } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_bpb() { yazdir_metin("BASARISIZ bpb"); h = h + 1; }
+    eğer değil test_kisa() { yazdir_metin("BASARISIZ kisa"); h = h + 1; }
+    eğer değil test_imza() { yazdir_metin("BASARISIZ imza"); h = h + 1; }
+    eğer değil test_sektor() { yazdir_metin("BASARISIZ sektor"); h = h + 1; }
+    eğer değil test_kume_sifir() { yazdir_metin("BASARISIZ kume_sifir"); h = h + 1; }
+    eğer değil test_kume_uc() { yazdir_metin("BASARISIZ kume_uc"); h = h + 1; }
+    eğer değil test_kume_buyuk() { yazdir_metin("BASARISIZ kume_buyuk"); h = h + 1; }
+    eğer değil test_kok_girdi() { yazdir_metin("BASARISIZ kok_girdi"); h = h + 1; }
+    eğer değil test_fat16() { yazdir_metin("BASARISIZ fat16"); h = h + 1; }
+    eğer değil test_fat_sifir() { yazdir_metin("BASARISIZ fat_sifir"); h = h + 1; }
+    eğer değil test_toplam() { yazdir_metin("BASARISIZ toplam"); h = h + 1; }
+    eğer değil test_ayrilmis() { yazdir_metin("BASARISIZ ayrilmis"); h = h + 1; }
+    eğer değil test_fat_sayisi() { yazdir_metin("BASARISIZ fat_sayisi"); h = h + 1; }
+    eğer değil test_kok_kucuk() { yazdir_metin("BASARISIZ kok_kucuk"); h = h + 1; }
+    eğer değil test_kok_buyuk() { yazdir_metin("BASARISIZ kok_buyuk"); h = h + 1; }
+    eğer değil test_sektor_512() { yazdir_metin("BASARISIZ sektor_512"); h = h + 1; }
+    eğer değil test_sektor_1024() { yazdir_metin("BASARISIZ sektor_1024"); h = h + 1; }
+    eğer değil test_sektor_2048() { yazdir_metin("BASARISIZ sektor_2048"); h = h + 1; }
+    eğer değil test_sektor_4096() { yazdir_metin("BASARISIZ sektor_4096"); h = h + 1; }
+    eğer değil test_toplam16() { yazdir_metin("BASARISIZ toplam16"); h = h + 1; }
+    eğer değil test_fat_0() { yazdir_metin("BASARISIZ fat_0"); h = h + 1; }
+    eğer değil test_fat_268435447() { yazdir_metin("BASARISIZ fat_268435447"); h = h + 1; }
+    eğer değil test_fat_268435448() { yazdir_metin("BASARISIZ fat_268435448"); h = h + 1; }
+    eğer değil test_fat_4294967295() { yazdir_metin("BASARISIZ fat_4294967295"); h = h + 1; }
+    eğer değil test_maske() { yazdir_metin("BASARISIZ maske"); h = h + 1; }
+    eğer değil test_sinir_eksi1() { yazdir_metin("BASARISIZ sinir_eksi1"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    eğer değil test_sinir_9223372036854775807() { yazdir_metin("BASARISIZ sinir_9223372036854775807"); h = h + 1; }
+    eğer değil test_zincir() { yazdir_metin("BASARISIZ zincir"); h = h + 1; }
+    eğer değil test_dongu() { yazdir_metin("BASARISIZ dongu"); h = h + 1; }
+    eğer değil test_bozuk_0() { yazdir_metin("BASARISIZ bozuk_0"); h = h + 1; }
+    eğer değil test_bozuk_268435447() { yazdir_metin("BASARISIZ bozuk_268435447"); h = h + 1; }
+    eğer değil test_bozuk_100() { yazdir_metin("BASARISIZ bozuk_100"); h = h + 1; }
+    eğer değil test_azami() { yazdir_metin("BASARISIZ azami"); h = h + 1; }
+    ver h;
+}

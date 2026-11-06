@@ -1,0 +1,104 @@
+// Beklentiler: python3 tools/codex/d1.py; renk.to_bytes(4,little), kırpılmış koordinatlar.
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_yaz, piksel_oku, dikdortgen_doldur, kaydir_yukari, kopyala };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+işlev renk_mi(c: Cerceve, x: tam32, y: tam32, k: tam32) -> mantıksal { eşleş piksel_oku(c, x, y) { hiç => { ver yanlış; } değer(v) => { ver v == k; } } }
+
+işlev test_bgrx() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 16) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v;
+        piksel_yaz(c, 1, 1, 1193046);
+        ver renk_mi(c, 1, 1, 1193046) ve oku_u8(c.veri, 20) == 86 ve oku_u8(c.veri, 21) == 52 ve oku_u8(c.veri, 22) == 18 ve oku_u8(c.veri, 23) == 0;
+    } }
+}
+
+işlev test_kirpma() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 16) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v;
+        yaz_u8(c.veri, 12, 99);
+        dikdortgen_doldur(c, -1, -1, 3, 3, 7);
+        değişken y: tam32 = 0;
+        iken y < 3 { değişken x: tam32 = 0; iken x < 3 {
+            değişken beklenen: tam32 = 0; eğer x < 2 ve y < 2 { beklenen = 7; }
+            eğer değil renk_mi(c, x, y, beklenen) { ver yanlış; } x = x + 1;
+        } y = y + 1; }
+        ver oku_u8(c.veri, 12) == 99;
+    } }
+}
+
+işlev test_sinir() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 16) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v;
+        piksel_yaz(c, -1, 0, 7); piksel_yaz(c, 3, 0, 7);
+        dikdortgen_doldur(c, 2147483647, 0, 2147483647, 3, 7);
+        dikdortgen_doldur(c, -2147483648, 0, 2147483647, 3, 7);
+        dikdortgen_doldur(c, 0, 0, -1, 3, 7);
+        eşleş piksel_oku(c, 0, 3) { değer(v) => { ver yanlış; } hiç => { } }
+        ver renk_mi(c, 0, 0, 0) ve oku_u8(c.veri, 12) == 0;
+    } }
+}
+
+işlev test_kaydir() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 16) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v;
+        dikdortgen_doldur(c, 0, 0, 3, 1, 1);
+        dikdortgen_doldur(c, 0, 1, 3, 1, 2);
+        dikdortgen_doldur(c, 0, 2, 3, 1, 3);
+        kaydir_yukari(c, 1, 9);
+        eğer değil renk_mi(c, 0, 0, 2) veya değil renk_mi(c, 0, 1, 3) veya değil renk_mi(c, 0, 2, 9) { ver yanlış; }
+        kaydir_yukari(c, 0, 8);
+        eğer değil renk_mi(c, 0, 0, 2) { ver yanlış; }
+        kaydir_yukari(c, 99, 8); ver renk_mi(c, 0, 0, 8) ve renk_mi(c, 2, 2, 8);
+    } }
+}
+
+işlev test_ortusen_kopya() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 16) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v;
+        piksel_yaz(c, 0, 0, 1); piksel_yaz(c, 1, 0, 2); piksel_yaz(c, 2, 0, 3);
+        kopyala(c, c, 1, 0);
+        ver renk_mi(c, 0, 0, 1) ve renk_mi(c, 1, 0, 1) ve renk_mi(c, 2, 0, 2);
+    } }
+}
+
+işlev test_negatif_kopya() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 16) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v;
+        piksel_yaz(c, 1, 1, 9);
+        kopyala(c, c, -1, -1);
+        ver renk_mi(c, 0, 0, 9) ve renk_mi(c, 2, 2, 0);
+    } }
+}
+
+işlev test_negatif() -> mantıksal {
+    eşleş cerceve_yeni(-1, 1, 4) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_adim() -> mantıksal {
+    eşleş cerceve_yeni(3, 3, 11) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_buyuk() -> mantıksal {
+    eşleş cerceve_yeni(16384, 16384, 65536) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+
+işlev test_kisa_veri() -> mantıksal {
+    değişken veri: Dizi<dtam8> = bayt_sifir(3);
+    değişken c: Cerceve = Cerceve { genislik: 1, yukseklik: 1, adim: 4, bpp: 32, veri: veri };
+    piksel_yaz(c, 0, 0, 7); kaydir_yukari(c, 1, 7); kopyala(c, c, 0, 0);
+    eşleş piksel_oku(c, 0, 0) { hiç => { ver oku_u8(veri, 0) == 0; } değer(v) => { ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_bgrx() { yazdir_metin("BASARISIZ bgrx"); h = h + 1; }
+    eğer değil test_kirpma() { yazdir_metin("BASARISIZ kirpma"); h = h + 1; }
+    eğer değil test_sinir() { yazdir_metin("BASARISIZ sinir"); h = h + 1; }
+    eğer değil test_kaydir() { yazdir_metin("BASARISIZ kaydir"); h = h + 1; }
+    eğer değil test_ortusen_kopya() { yazdir_metin("BASARISIZ ortusen_kopya"); h = h + 1; }
+    eğer değil test_negatif_kopya() { yazdir_metin("BASARISIZ negatif_kopya"); h = h + 1; }
+    eğer değil test_negatif() { yazdir_metin("BASARISIZ negatif"); h = h + 1; }
+    eğer değil test_adim() { yazdir_metin("BASARISIZ adim"); h = h + 1; }
+    eğer değil test_buyuk() { yazdir_metin("BASARISIZ buyuk"); h = h + 1; }
+    eğer değil test_kisa_veri() { yazdir_metin("BASARISIZ kisa_veri"); h = h + 1; }
+    ver h;
+}

@@ -1,0 +1,62 @@
+// PCI tip-0 yapılandırma alanını çöz; BAR boyutu için donanımı yoklamaz.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32 };
+genel yapı PciBar { indeks: tam32; g_c: mantıksal; genis64: mantıksal; onceden_getirilebilir: mantıksal; adres: tam64; }
+genel yapı PciAygit {
+    satici: tam32; aygit: tam32; komut: tam32; durum: tam32; revizyon: tam32;
+    prog_if: tam32; alt_sinif: tam32; sinif: tam32; baslik_turu: tam32; cok_islevli: mantıksal;
+    kesme_hatti: tam32; kesme_pini: tam32; barlar: Dizi<PciBar>;
+}
+genel işlev pci_coz(b: Dizi<dtam8>) -> seçimlik<PciAygit> {
+    eğer dizi_boyut(b) < 256 { ver hiç; }
+    eğer oku_le16(b, 0) == 65535 { ver hiç; }
+    değişken baslik: tam32 = oku_u8(b, 14);
+    eğer (baslik & 127) != 0 { ver hiç; }
+    değişken barlar: Dizi<PciBar> = [];
+    değişken i: tam32 = 0;
+    iken i < 6 {
+        değişken v: tam64 = oku_le32(b, 16 + i * 4);
+        değişken gc: mantıksal = (v & 1) != 0;
+        değişken genis: mantıksal = yanlış;
+        değişken ong: mantıksal = yanlış;
+        değişken adres: tam64 = 0;
+        eğer gc { adres = v & 4294967292; }
+        değilse {
+            değişken tur: tam64 = (v >> 1) & 3;
+            eğer tur == 3 { ver hiç; }
+            genis = tur == 2; ong = (v & 8) != 0; adres = v & 4294967280;
+            eğer genis {
+                eğer i == 5 { ver hiç; }
+                adres = adres | (oku_le32(b, 16 + (i + 1) * 4) << 32);
+            }
+        }
+        dizi_ekle(barlar, PciBar { indeks: i, g_c: gc, genis64: genis, onceden_getirilebilir: ong, adres: adres });
+        eğer genis { i = i + 1; } i = i + 1;
+    }
+    ver değer(PciAygit { satici: oku_le16(b, 0), aygit: oku_le16(b, 2), komut: oku_le16(b, 4), durum: oku_le16(b, 6),
+        revizyon: oku_u8(b, 8), prog_if: oku_u8(b, 9), alt_sinif: oku_u8(b, 10), sinif: oku_u8(b, 11),
+        baslik_turu: baslik & 127, cok_islevli: (baslik & 128) != 0,
+        kesme_hatti: oku_u8(b, 60), kesme_pini: oku_u8(b, 61), barlar: barlar });
+}
+genel işlev bar_boyu(okunan_maske: tam64) -> tam64 {
+    değişken m: tam64 = okunan_maske & 4294967280;
+    eğer (okunan_maske & 1) != 0 { m = okunan_maske & 4294967292; }
+    eğer m == 0 { ver 0; }
+    ver (m ^ 4294967295) + 1;
+}
+genel işlev bar_boyu64(okunan_maske: dtam64) -> dtam64 {
+    değişken tum: dtam64 = ((4294967295 olarak dtam64) << 32) | (4294967295 olarak dtam64);
+    değişken m: dtam64 = okunan_maske & (tum ^ (15 olarak dtam64));
+    eğer m == (0 olarak dtam64) { ver 0 olarak dtam64; }
+    ver (m ^ tum) + (1 olarak dtam64);
+}
+genel işlev pci_sinif_adi(sinif: tam32, alt: tam32, arayuz: tam32) -> metin {
+    eğer sinif == 1 ve alt == 6 ve arayuz == 1 { ver "AHCI"; }
+    eğer sinif == 12 ve alt == 3 ve arayuz == 48 { ver "xHCI"; }
+    eğer sinif == 12 ve alt == 3 ve arayuz == 32 { ver "EHCI"; }
+    eğer sinif == 3 ve alt == 0 { ver "VGA"; }
+    eğer sinif == 2 ve alt == 0 { ver "Ethernet"; }
+    eğer sinif == 6 ve alt == 0 { ver "Host koprusu"; }
+    eğer sinif == 6 ve alt == 4 { ver "PCI koprusu"; }
+    eğer sinif == 1 ve alt == 8 ve arayuz == 2 { ver "NVMe"; }
+    ver "Bilinmeyen";
+}

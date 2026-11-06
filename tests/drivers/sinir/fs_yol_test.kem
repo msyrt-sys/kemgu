@@ -1,0 +1,27 @@
+// Kahin: python3 tools/codex/f5.py; yol bileşeni UTF-8 bayt uzunluğu; değerler [0, 1, 255, 256].
+kullan drivers::fs::yol::{ yol_bol, yol_birlestir };
+
+işlev test_sinir_0() -> mantıksal {
+    eşleş yol_bol("/") { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<metin> = v; ver dizi_boyut(xs) == 0 ve metin_esit(yol_birlestir(xs), "/"); } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    eşleş yol_bol("/a") { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<metin> = v; ver dizi_boyut(xs) == 1 ve metin_esit(yol_birlestir(xs), "/a"); } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    eşleş yol_bol("/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") { hata(e) => { ver yanlış; } tamam(v) => { değişken xs: Dizi<metin> = v; ver dizi_boyut(xs) == 1 ve metin_esit(yol_birlestir(xs), "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    eşleş yol_bol("/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

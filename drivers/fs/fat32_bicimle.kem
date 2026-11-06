@@ -1,0 +1,51 @@
+// Seyrek imajın yoğun başlangıcı: yalnız metadata ve kök küme ayrılır.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_le16, yaz_le32, yaz_ascii };
+genel sabit FAT32_IMAJ_SINIRI: tam32 = 16777216;
+genel işlev fat32_bicimle(toplam_sektor: tam64, kume_sektor: tam32, etiket: metin) -> sonuç<Dizi<dtam8>, metin> {
+    eğer toplam_sektor <= 32 veya toplam_sektor > 4294967295 { ver hata("sektor sayisi"); }
+    eğer kume_sektor < 1 veya kume_sektor > 128 veya (kume_sektor & (kume_sektor - 1)) != 0 { ver hata("kume boyu"); }
+    değişken et: metin = "";
+    değişken uzun: tam32 = metin_uzunluk(etiket) olarak tam32;
+    eğer uzun > 11 { ver hata("etiket"); }
+    değişken i: tam32 = 0;
+    iken i < uzun {
+        değişken k: tam32 = (metin_bayt(etiket, i) olarak tam32) & 255;
+        eğer k < 32 veya k > 126 veya k == 34 veya k == 42 veya k == 43 veya k == 44 veya k == 46 veya k == 47 veya
+            k == 58 veya k == 59 veya k == 60 veya k == 61 veya k == 62 veya k == 63 veya k == 91 veya k == 92 veya k == 93 veya k == 124 {
+            ver hata("etiket");
+        }
+        eğer k >= 97 ve k <= 122 { k = k - 32; }
+        et = metin_birlestir(et, kod_metin(k)); i = i + 1;
+    }
+    eğer uzun == 0 { et = "NO NAME"; }
+    iken metin_uzunluk(et) < 11 { et = metin_birlestir(et, " "); }
+    değişken ks: tam64 = kume_sektor olarak tam64;
+    değişken bolen: tam64 = 128 * ks + 2;
+    değişken fat: tam64 = (toplam_sektor - 32 + 2 * ks + bolen - 1) / bolen;
+    değişken ilk: tam64 = 32 + 2 * fat;
+    değişken sayi: tam64 = (toplam_sektor - ilk) / ks;
+    eğer sayi < 65525 veya sayi > 268435444 { ver hata("fat32 boyutu"); }
+    değişken boy: tam64 = (ilk + ks) * 512;
+    eğer boy > (FAT32_IMAJ_SINIRI olarak tam64) { ver hata("imaj buyuk"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(boy olarak tam32);
+    yaz_u8(b, 0, 235); yaz_u8(b, 1, 88); yaz_u8(b, 2, 144); yaz_ascii(b, 3, "KEMGU   ");
+    yaz_le16(b, 11, 512); yaz_u8(b, 13, ks); yaz_le16(b, 14, 32); yaz_u8(b, 16, 2);
+    yaz_u8(b, 21, 248); yaz_le16(b, 24, 63); yaz_le16(b, 26, 255);
+    yaz_le32(b, 32, toplam_sektor); yaz_le32(b, 36, fat); yaz_le32(b, 44, 2);
+    yaz_le16(b, 48, 1); yaz_le16(b, 50, 6); yaz_u8(b, 64, 128); yaz_u8(b, 66, 41);
+    yaz_le32(b, 67, 1196246347); yaz_ascii(b, 71, et); yaz_ascii(b, 82, "FAT32   "); yaz_le16(b, 510, 43605);
+    yaz_le32(b, 512, 1096897106); yaz_le32(b, 996, 1631679090); yaz_le32(b, 1000, sayi - 1);
+    yaz_le32(b, 1004, 3); yaz_le32(b, 1020, 2857697280);
+    // Yedek önyükleme ve FSInfo; standart 3 sektörlük kayıt alanı sıfırla tamamlanır.
+    i = 0;
+    iken i < 1536 { yaz_u8(b, 3072 + i, oku_u8(b, i) olarak tam64); i = i + 1; }
+    değişken f: tam32 = 0;
+    iken f < 2 {
+        değişken ofs: tam32 = ((32 + (f olarak tam64) * fat) * 512) olarak tam32;
+        yaz_le32(b, ofs, 268435448); yaz_le32(b, ofs + 4, 268435455); yaz_le32(b, ofs + 8, 268435455);
+        f = f + 1;
+    }
+    // Birim etiketi metadata girdisidir; dizin_coz bunu dosya olarak listelemez.
+    eğer uzun > 0 { yaz_ascii(b, (ilk * 512) olarak tam32, et); yaz_u8(b, (ilk * 512) olarak tam32 + 11, 8); }
+    ver tamam(b);
+}

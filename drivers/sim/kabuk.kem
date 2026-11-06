@@ -1,0 +1,48 @@
+// Bellek imajında dört komut; host dosya sistemi ve süreç çalıştırma yoktur.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_kodla };
+işlev satir_sonu(s: metin) -> metin { ver metin_birlestir(s, kod_metin(10)); }
+işlev hata_metni(e: metin) -> metin {
+    eğer metin_esit(e, "bulunamadi") { ver satir_sonu("hata: yok"); }
+    ver satir_sonu(metin_birlestir("hata: ", e));
+}
+genel işlev kabuk_calistir(imaj: Dizi<dtam8>, satir: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(satir) olarak tam32; değişken bas: tam32 = 0;
+    iken bas < n ve metin_bayt(satir, bas) == 32 { bas = bas + 1; }
+    eğer bas == n { ver ""; }
+    değişken son: tam32 = bas;
+    iken son < n ve metin_bayt(satir, son) != 32 { son = son + 1; }
+    değişken komut: metin = metin_kes(satir, bas, son - bas);
+    iken son < n ve metin_bayt(satir, son) == 32 { son = son + 1; }
+    değişken arg: metin = metin_kes(satir, son, n - son);
+    eğer metin_esit(komut, "echo") { ver satir_sonu(arg); }
+    eğer metin_esit(komut, "ls") {
+        eğer metin_uzunluk(arg) == 0 { arg = "/"; }
+        eşleş imaj_dizin_listele(imaj, arg) {
+            hata(e) => { ver hata_metni(e); }
+            tamam(v) => {
+                değişken girdiler: Dizi<DizinGirdisi> = v; değişken s: metin = ""; değişken i: tam32 = 0;
+                iken i < dizi_boyut(girdiler) {
+                    değişken g: DizinGirdisi = dizi_al(girdiler, i);
+                    eğer değil metin_esit(g.ad, ".") ve değil metin_esit(g.ad, "..") { s = metin_birlestir(s, satir_sonu(g.ad)); }
+                    i = i + 1;
+                }
+                ver s;
+            }
+        }
+    }
+    eğer metin_esit(komut, "cat") {
+        eğer metin_uzunluk(arg) == 0 { ver satir_sonu("kullanim: cat /yol"); }
+        eşleş imajdan_dosya_oku(imaj, arg) {
+            hata(e) => { ver hata_metni(e); }
+            tamam(v) => {
+                değişken b: Dizi<dtam8> = v;
+                ver satir_sonu(utf8_kodla(utf8_bayt_coz(b, 0, dizi_boyut(b))));
+            }
+        }
+    }
+    ver satir_sonu(metin_birlestir("bilinmeyen komut: ", komut));
+}

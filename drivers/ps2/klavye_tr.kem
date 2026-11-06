@@ -1,0 +1,109 @@
+// Türkçe Q, set 1: yalnız saf bayt çözümü.
+genel yapı KlavyeDurumu {
+    sol_shift: mantıksal; sag_shift: mantıksal; ctrl: mantıksal; alt: mantıksal;
+    altgr: mantıksal; caps: mantıksal; e0: mantıksal;
+}
+genel çeşit TusOlayi { Yok, Karakter(tam32), Ozel(tam32, mantıksal) }
+genel sabit OZEL_ENTER: tam32 = 1;
+genel sabit OZEL_GERI: tam32 = 2;
+genel sabit OZEL_TAB: tam32 = 3;
+genel sabit OZEL_ESC: tam32 = 4;
+genel sabit OZEL_YUKARI: tam32 = 5;
+genel sabit OZEL_ASAGI: tam32 = 6;
+genel sabit OZEL_SOL: tam32 = 7;
+genel sabit OZEL_SAG: tam32 = 8;
+genel sabit OZEL_SIL: tam32 = 9;
+
+genel işlev klavye_yeni() -> KlavyeDurumu {
+    ver KlavyeDurumu { sol_shift: yanlış, sag_shift: yanlış, ctrl: yanlış,
+        alt: yanlış, altgr: yanlış, caps: yanlış, e0: yanlış };
+}
+
+genel işlev klavye_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi {
+    eğer b < 0 veya b > 255 { d.e0 = yanlış; ver TusOlayi::Yok; }
+    eğer b == 224 { d.e0 = doğru; ver TusOlayi::Yok; }
+    değişken uzatilmis: mantıksal = d.e0;
+    d.e0 = yanlış;
+    değişken basildi: mantıksal = b < 128;
+    değişken k: tam32 = b & 127;
+    eğer k == 29 { d.ctrl = basildi; ver TusOlayi::Yok; }
+    eğer k == 56 {
+        eğer uzatilmis { d.altgr = basildi; } değilse { d.alt = basildi; }
+        ver TusOlayi::Yok;
+    }
+    değişken ozel: tam32 = 0;
+    eğer uzatilmis {
+        eğer k == 72 { ozel = OZEL_YUKARI; }
+        eğer k == 80 { ozel = OZEL_ASAGI; }
+        eğer k == 75 { ozel = OZEL_SOL; }
+        eğer k == 77 { ozel = OZEL_SAG; }
+        eğer k == 83 { ozel = OZEL_SIL; }
+        eğer k == 28 { ozel = OZEL_ENTER; }
+        eğer ozel != 0 { ver TusOlayi::Ozel(ozel, basildi); }
+        ver TusOlayi::Yok;
+    }
+    eğer k == 42 { d.sol_shift = basildi; ver TusOlayi::Yok; }
+    eğer k == 54 { d.sag_shift = basildi; ver TusOlayi::Yok; }
+    eğer k == 58 {
+        eğer basildi { d.caps = değil d.caps; }
+        ver TusOlayi::Yok;
+    }
+    eğer k == 28 { ozel = OZEL_ENTER; }
+    eğer k == 14 { ozel = OZEL_GERI; }
+    eğer k == 15 { ozel = OZEL_TAB; }
+    eğer k == 1 { ozel = OZEL_ESC; }
+    eğer ozel != 0 { ver TusOlayi::Ozel(ozel, basildi); }
+    eğer değil basildi { ver TusOlayi::Yok; }
+    değişken shift: mantıksal = d.sol_shift veya d.sag_shift;
+    değişken buyuk: mantıksal = shift != d.caps;
+    eğer k == 41 { eğer shift { ver TusOlayi::Karakter(233); } ver TusOlayi::Karakter(34); }
+    eğer k == 2 { eğer shift { ver TusOlayi::Karakter(33); } ver TusOlayi::Karakter(49); }
+    eğer k == 3 { eğer shift { ver TusOlayi::Karakter(39); } ver TusOlayi::Karakter(50); }
+    eğer k == 4 { eğer shift { ver TusOlayi::Karakter(94); } ver TusOlayi::Karakter(51); }
+    eğer k == 5 { eğer shift { ver TusOlayi::Karakter(43); } ver TusOlayi::Karakter(52); }
+    eğer k == 6 { eğer shift { ver TusOlayi::Karakter(37); } ver TusOlayi::Karakter(53); }
+    eğer k == 7 { eğer shift { ver TusOlayi::Karakter(38); } ver TusOlayi::Karakter(54); }
+    eğer k == 8 { eğer shift { ver TusOlayi::Karakter(47); } ver TusOlayi::Karakter(55); }
+    eğer k == 9 { eğer shift { ver TusOlayi::Karakter(40); } ver TusOlayi::Karakter(56); }
+    eğer k == 10 { eğer shift { ver TusOlayi::Karakter(41); } ver TusOlayi::Karakter(57); }
+    eğer k == 11 { eğer shift { ver TusOlayi::Karakter(61); } ver TusOlayi::Karakter(48); }
+    eğer k == 12 { eğer shift { ver TusOlayi::Karakter(63); } ver TusOlayi::Karakter(42); }
+    eğer k == 13 { eğer shift { ver TusOlayi::Karakter(95); } ver TusOlayi::Karakter(45); }
+    eğer k == 16 { eğer buyuk { ver TusOlayi::Karakter(81); } ver TusOlayi::Karakter(113); }
+    eğer k == 17 { eğer buyuk { ver TusOlayi::Karakter(87); } ver TusOlayi::Karakter(119); }
+    eğer k == 18 { eğer buyuk { ver TusOlayi::Karakter(69); } ver TusOlayi::Karakter(101); }
+    eğer k == 19 { eğer buyuk { ver TusOlayi::Karakter(82); } ver TusOlayi::Karakter(114); }
+    eğer k == 20 { eğer buyuk { ver TusOlayi::Karakter(84); } ver TusOlayi::Karakter(116); }
+    eğer k == 21 { eğer buyuk { ver TusOlayi::Karakter(89); } ver TusOlayi::Karakter(121); }
+    eğer k == 22 { eğer buyuk { ver TusOlayi::Karakter(85); } ver TusOlayi::Karakter(117); }
+    eğer k == 23 { eğer buyuk { ver TusOlayi::Karakter(73); } ver TusOlayi::Karakter(305); }
+    eğer k == 24 { eğer buyuk { ver TusOlayi::Karakter(79); } ver TusOlayi::Karakter(111); }
+    eğer k == 25 { eğer buyuk { ver TusOlayi::Karakter(80); } ver TusOlayi::Karakter(112); }
+    eğer k == 26 { eğer buyuk { ver TusOlayi::Karakter(286); } ver TusOlayi::Karakter(287); }
+    eğer k == 27 { eğer buyuk { ver TusOlayi::Karakter(220); } ver TusOlayi::Karakter(252); }
+    eğer k == 30 { eğer buyuk { ver TusOlayi::Karakter(65); } ver TusOlayi::Karakter(97); }
+    eğer k == 31 { eğer buyuk { ver TusOlayi::Karakter(83); } ver TusOlayi::Karakter(115); }
+    eğer k == 32 { eğer buyuk { ver TusOlayi::Karakter(68); } ver TusOlayi::Karakter(100); }
+    eğer k == 33 { eğer buyuk { ver TusOlayi::Karakter(70); } ver TusOlayi::Karakter(102); }
+    eğer k == 34 { eğer buyuk { ver TusOlayi::Karakter(71); } ver TusOlayi::Karakter(103); }
+    eğer k == 35 { eğer buyuk { ver TusOlayi::Karakter(72); } ver TusOlayi::Karakter(104); }
+    eğer k == 36 { eğer buyuk { ver TusOlayi::Karakter(74); } ver TusOlayi::Karakter(106); }
+    eğer k == 37 { eğer buyuk { ver TusOlayi::Karakter(75); } ver TusOlayi::Karakter(107); }
+    eğer k == 38 { eğer buyuk { ver TusOlayi::Karakter(76); } ver TusOlayi::Karakter(108); }
+    eğer k == 39 { eğer buyuk { ver TusOlayi::Karakter(350); } ver TusOlayi::Karakter(351); }
+    eğer k == 40 { eğer buyuk { ver TusOlayi::Karakter(304); } ver TusOlayi::Karakter(105); }
+    eğer k == 43 { eğer shift { ver TusOlayi::Karakter(59); } ver TusOlayi::Karakter(44); }
+    eğer k == 86 { eğer shift { ver TusOlayi::Karakter(62); } ver TusOlayi::Karakter(60); }
+    eğer k == 44 { eğer buyuk { ver TusOlayi::Karakter(90); } ver TusOlayi::Karakter(122); }
+    eğer k == 45 { eğer buyuk { ver TusOlayi::Karakter(88); } ver TusOlayi::Karakter(120); }
+    eğer k == 46 { eğer buyuk { ver TusOlayi::Karakter(67); } ver TusOlayi::Karakter(99); }
+    eğer k == 47 { eğer buyuk { ver TusOlayi::Karakter(86); } ver TusOlayi::Karakter(118); }
+    eğer k == 48 { eğer buyuk { ver TusOlayi::Karakter(66); } ver TusOlayi::Karakter(98); }
+    eğer k == 49 { eğer buyuk { ver TusOlayi::Karakter(78); } ver TusOlayi::Karakter(110); }
+    eğer k == 50 { eğer buyuk { ver TusOlayi::Karakter(77); } ver TusOlayi::Karakter(109); }
+    eğer k == 51 { eğer buyuk { ver TusOlayi::Karakter(214); } ver TusOlayi::Karakter(246); }
+    eğer k == 52 { eğer buyuk { ver TusOlayi::Karakter(199); } ver TusOlayi::Karakter(231); }
+    eğer k == 53 { eğer shift { ver TusOlayi::Karakter(58); } ver TusOlayi::Karakter(46); }
+    eğer k == 57 { eğer shift { ver TusOlayi::Karakter(32); } ver TusOlayi::Karakter(32); }
+    ver TusOlayi::Yok;
+}

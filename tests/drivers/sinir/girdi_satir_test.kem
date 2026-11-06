@@ -1,0 +1,37 @@
+// Kahin: python3 tools/codex/f5.py; satırdaki Unicode kod noktası sayısı; değerler [0, 1, 256, 257].
+kullan drivers::ps2::klavye_tr::{ TusOlayi, KlavyeDurumu, klavye_yeni, klavye_bayt };
+işlev olay_kodu(o: TusOlayi) -> tam32 { eşleş o { TusOlayi::Yok => { ver 0; } TusOlayi::Karakter(k) => { ver k; } TusOlayi::Ozel(k,b) => { eğer b { ver 0-k; } ver 0-k-100; } } }
+kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_karakter, satir_metni };
+
+işlev test_sinir_0() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < 0 { satir_karakter(&değişken d, 128512); i=i+1; }
+    ver dizi_boyut(d.kodlar) == 0 ve metin_uzunluk(satir_metni(d)) == 0;
+}
+
+işlev test_sinir_1() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < 1 { satir_karakter(&değişken d, 128512); i=i+1; }
+    ver dizi_boyut(d.kodlar) == 1 ve metin_uzunluk(satir_metni(d)) == 4;
+}
+
+işlev test_sinir_2() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < 256 { satir_karakter(&değişken d, 128512); i=i+1; }
+    ver dizi_boyut(d.kodlar) == 256 ve metin_uzunluk(satir_metni(d)) == 1024;
+}
+
+işlev test_sinir_3() -> mantıksal {
+    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < 257 { satir_karakter(&değişken d, 128512); i=i+1; }
+    ver dizi_boyut(d.kodlar) == 256 ve metin_uzunluk(satir_metni(d)) == 1024;
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

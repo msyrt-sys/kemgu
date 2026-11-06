@@ -1,0 +1,36 @@
+// Kahin: python3 tools/codex/f5.py; 32bpp çerçeve genişliği; değerler [0, 1, 16384, 16385].
+kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_yaz, piksel_oku };
+işlev renk_mi(c: Cerceve, x: tam32, r: tam32) -> mantıksal { eşleş piksel_oku(c,x,0) { hiç => { ver yanlış; } değer(v) => { ver v==r; } } }
+
+işlev test_sinir_0() -> mantıksal {
+    eşleş cerceve_yeni(0, 1, 0) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v; piksel_yaz(c, -1, 0, 7); ver dizi_boyut(c.veri) == 0;
+    } }
+}
+
+işlev test_sinir_1() -> mantıksal {
+    eşleş cerceve_yeni(1, 1, 4) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v; piksel_yaz(c, 0, 0, 7); ver dizi_boyut(c.veri) == 4 ve renk_mi(c, 0, 7);
+    } }
+}
+
+işlev test_sinir_2() -> mantıksal {
+    eşleş cerceve_yeni(16384, 1, 65536) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken c: Cerceve = v; piksel_yaz(c, 16383, 0, 7); ver dizi_boyut(c.veri) == 65536 ve renk_mi(c, 16383, 7);
+    } }
+}
+
+işlev test_sinir_3() -> mantıksal {
+    eşleş cerceve_yeni(16385, 1, 65540) { hata(e) => { ver doğru; } tamam(v) => {
+        değişken c: Cerceve = v; piksel_yaz(c, 16384, 0, 7); ver yanlış;
+    } }
+}
+
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir_0() { yazdir_metin("BASARISIZ sinir_0"); h = h + 1; }
+    eğer değil test_sinir_1() { yazdir_metin("BASARISIZ sinir_1"); h = h + 1; }
+    eğer değil test_sinir_2() { yazdir_metin("BASARISIZ sinir_2"); h = h + 1; }
+    eğer değil test_sinir_3() { yazdir_metin("BASARISIZ sinir_3"); h = h + 1; }
+    ver h;
+}

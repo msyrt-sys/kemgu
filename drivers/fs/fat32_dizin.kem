@@ -1,0 +1,89 @@
+// FAT32 kısa ad ve sıralı LFN birleştirme; hatalı LFN kısa ada düşer.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_le16 };
+kullan drivers::ortak::utf8::{ utf16le_coz, utf8_kodla };
+genel yapı DizinGirdisi { ad: metin; ozellik: tam32; ilk_kume: tam64; boyut: tam64; dizin_mi: mantıksal; }
+genel işlev kisa_ad_saglama(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
+    eğer ofs < 0 veya ofs > dizi_boyut(b) { ver 0; }
+    eğer dizi_boyut(b) - ofs < 11 { ver 0; }
+    değişken s: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < 11 { s = (((s & 1) << 7) + (s >> 1) + oku_u8(b, ofs + i)) & 255; i = i + 1; }
+    ver s;
+}
+işlev ad_parcasi(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> metin {
+    değişken son: tam32 = n;
+    iken son > 0 ve oku_u8(b, ofs + son - 1) == 32 { son = son - 1; }
+    değişken ad: metin = "";
+    değişken i: tam32 = 0;
+    iken i < son {
+        değişken k: tam32 = oku_u8(b, ofs + i);
+        eğer i == 0 ve k == 5 { k = 229; }
+        ad = metin_birlestir(ad, kod_metin(k)); i = i + 1;
+    }
+    ver ad;
+}
+işlev lfn_ofset(i: tam32) -> tam32 {
+    eğer i < 5 { ver 1 + i * 2; }
+    eğer i < 11 { ver 14 + (i - 5) * 2; }
+    ver 28 + (i - 11) * 2;
+}
+işlev lfn_metin(b: Dizi<dtam8>, birim: tam32) -> metin {
+    değişken n: tam32 = 0;
+    iken n < birim {
+        değişken kod: tam32 = oku_le16(b, n * 2);
+        eğer kod == 0 veya kod == 65535 { ver utf8_kodla(utf16le_coz(b, 0, n)); }
+        n = n + 1;
+    }
+    ver utf8_kodla(utf16le_coz(b, 0, n));
+}
+genel işlev dizin_coz(b: Dizi<dtam8>) -> sonuç<Dizi<DizinGirdisi>, metin> {
+    eğer dizi_boyut(b) % 32 != 0 { ver hata("kisa dizin"); }
+    // C002: yapı elemanlarının genişliği boş literalden belirlenir.
+    değişken sonuc: Dizi<DizinGirdisi> = [];
+    değişken lfn: Dizi<dtam8> = bayt_sifir(520);
+    değişken beklenen: tam32 = 0;
+    değişken parca_sayisi: tam32 = 0;
+    değişken saglama: tam32 = 0;
+    değişken gecerli: mantıksal = yanlış;
+    değişken ofs: tam32 = 0;
+    iken ofs < dizi_boyut(b) {
+        değişken ilk: tam32 = oku_u8(b, ofs);
+        eğer ilk == 0 { ver tamam(sonuc); }
+        değişken oz: tam32 = oku_u8(b, ofs + 11);
+        eğer ilk == 229 { gecerli = yanlış; }
+        değilse eğer oz == 15 {
+            değişken sira: tam32 = ilk & 31;
+            eğer (ilk & 64) != 0 {
+                beklenen = sira; parca_sayisi = sira;
+                saglama = oku_u8(b, ofs + 13); gecerli = doğru;
+            }
+            eğer sira < 1 veya sira > 20 veya (ilk & 160) != 0 veya sira != beklenen veya
+                oku_u8(b, ofs + 13) != saglama veya oku_u8(b, ofs + 12) != 0 veya oku_le16(b, ofs + 26) != 0 {
+                gecerli = yanlış;
+            }
+            eğer gecerli {
+                değişken i: tam32 = 0;
+                iken i < 13 {
+                    yaz_le16(lfn, ((sira - 1) * 13 + i) * 2, oku_le16(b, ofs + lfn_ofset(i)) olarak tam64);
+                    i = i + 1;
+                }
+                beklenen = beklenen - 1;
+            }
+        } değilse eğer (oz & 8) != 0 { gecerli = yanlış; }
+        değilse {
+            değişken ad: metin = ad_parcasi(b, ofs, 8);
+            değişken uzanti: metin = ad_parcasi(b, ofs + 8, 3);
+            eğer metin_uzunluk(uzanti) != 0 { ad = metin_birlestir(metin_birlestir(ad, "."), uzanti); }
+            eğer gecerli ve beklenen == 0 ve kisa_ad_saglama(b, ofs) == saglama {
+                değişken uzun: metin = lfn_metin(lfn, parca_sayisi * 13);
+                eğer metin_uzunluk(uzun) != 0 { ad = uzun; }
+            }
+            değişken kume: tam64 = ((oku_le16(b, ofs + 20) olarak tam64) << 16) | (oku_le16(b, ofs + 26) olarak tam64);
+            dizi_ekle(sonuc, DizinGirdisi { ad: ad, ozellik: oz, ilk_kume: kume,
+                boyut: oku_le32(b, ofs + 28), dizin_mi: (oz & 16) != 0 });
+            gecerli = yanlış;
+        }
+        ofs = ofs + 32;
+    }
+    ver tamam(sonuc);
+}
