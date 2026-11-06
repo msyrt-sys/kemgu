@@ -11254,11 +11254,12 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
         ver tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
     }
     // D-377: dizi literalinin tipi. Bağlam varsa ONA uyarlanır (C bidirectional);
-    // yoksa ilk elemandan çıkarsanır. BOŞ dizi bağlamsız → "?" (T014 zaten ayrı
-    // kural; burada tip UYDURMAK sahte T001 üretirdi).
+    // yoksa ilk elemandan çıkarsanır. C006: bağlamsız boş dizi de Dizi'dir;
+    // yalnız elemanı bilinmez (C tip_belirle: TIP_DIZI<TIP_BILINMIYOR>).
+    // Tamamen "?" saymak skaler alan T001 ve iç içe dizi T013 tanısını yutar.
     eğer metin_esit(ad, "DIZI_OLUSTUR") {
         eğer metin_baslar(beklenen, "Dizi<") { ver beklenen; }
-        eğer dizi_al(p.a_cs, idx) < 1 { ver "?"; }
+        eğer dizi_al(p.a_cs, idx) < 1 { ver "Dizi<?>"; }
         değişken e0: metin = ifade_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx)), "?");
         eğer bilinen_tip_mi(e0) == yanlış { ver "?"; }
         ver metin_birlestir("Dizi<", metin_birlestir(e0, ">"));
@@ -11467,6 +11468,11 @@ işlev lam_donus_str(p: &değişken Ayr, lam: tam32) -> metin {
 // İki tip-string'i "ikisi de BİLİNİYOR ve FARKLI" mı? ("?" → emin değiliz, atla.)
 işlev tip_kesin_farkli(a: metin, b: metin) -> mantıksal {
     eğer metin_esit(a, "?") veya metin_esit(b, "?") { ver yanlış; }
+    // C006: C tip_esit gibi Dizi içindeki bilinmeyen eleman da uyumludur.
+    // Dizi<?> ile skaler farklı kalır; yalnız iki dizi elemanına inilir.
+    eğer metin_baslar(a, "Dizi<") ve metin_baslar(b, "Dizi<") {
+        ver tip_kesin_farkli(dizi_ic_tip(a), dizi_ic_tip(b));
+    }
     ver metin_esit(a, b) == yanlış;
 }
 // TIP_ISLEV annotasyonu + LAMBDA değeri: uyuşmazlık → T001 (1 = hata verildi).
@@ -14617,12 +14623,16 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, aa));
             } değilse {
                 değişken val: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, aa));
+                // C006: C kontrol_yapi_olustur_ic gibi alanın dizi bağlamını ver.
+                değişken ft: metin = alan_tip_bul(p, tad, fad);
+                değişken eski_db: metin = p.dizi_bek;
+                p.dizi_bek = dizi_ic_tip(ft);
                 kontrol_dugum(p, val);
+                p.dizi_bek = eski_db;
                 // [D-470] LİNEER YAPI ALANI DEĞERİ TÜKETİR (checker.kem ile
                 // aynı). Öncesinde `S { t: t }` tüketmiyordu → lineer bir
                 // değeri bir yapıya KOYMAK imkânsızdı.
                 lin_tuket_dugum(p, val);
-                değişken ft: metin = alan_tip_bul(p, tad, fad);
                 eğer metin_esit(ft, "?") == yanlış {
                     değişken vt: metin = ifade_tip(p, val, ft);
                     eğer (metin_esit(vt, "?") == yanlış) ve (metin_esit(vt, ft) == yanlış) {
@@ -15160,6 +15170,21 @@ işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
     ver yanlış;
 }
 // Bir modülü yükle: dışa-export adlarını p.g_isim'e ekle; kullan'ı transitif izle.
+// C006: tip alt ağacını yeni düğümlerle taşı; yabancı AST indeksini kullanma.
+// Yalnız tip bilgisi kopyalanır, bildirimin gövdesi veya kapsamı taşınmaz.
+işlev capraz_tip_kopyala(p: &değişken Ayr, mp: &değişken Ayr, tn: tam32) -> tam32 {
+    eğer tn < 0 { ver 0 - 1; }
+    değişken kids: Dizi<tam32> = [];
+    değişken cb: tam32 = dizi_al(mp.a_cb, tn);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(mp.a_cs, tn) {
+        değişken c: tam32 = capraz_tip_kopyala(p, mp, dizi_al(mp.cocuk, cb + i));
+        dizi_ekle(kids, c);
+        i = i + 1;
+    }
+    ver dugum_n(p, dizi_al(mp.a_ad, tn), dizi_al(mp.a_deg, tn),
+                dizi_al(mp.a_sat, tn), dizi_al(mp.a_sut, tn), kids);
+}
 // ---- D-429: ÇAPRAZ-DOSYA İMZA + YAPI KAYDI TAŞIMA ----
 // Self-host `modul_yukle` yalnız ADLARI hasat ediyordu; İMZALAR (arite, param
 // tipleri, param LİNEERLİĞİ) ve YAPI kayıtları dosya-yerel kalıyordu. Sonuç
@@ -15176,10 +15201,10 @@ işlev ozel_uye_mi(p: &değişken Ayr, mad: metin, uad: metin) -> mantıksal {
 //
 // ⚠ DÜĞÜM İNDEKSLERİ TAŞINAMAZ: `fn_ptn` ve `alan_tn` bir AST düğümünü
 // gösterir ve o düğüm `mp`'ye aittir; `p`'de başka bir şeye denk gelir.
-// -1 yazılır. Tüketiciler ölçüldü: `fn_ptn`in TEK okuyucusu var
-// (`t14_muaf_isaretle`, `tn < 0`u zaten muhafazakâr karşılar → muafiyet yok);
-// `alan_tn` benzer şekilde `tip_node_dizi_mi`/`t14_muaf_isaretle` yolundan
-// geçer. Yani -1 = "bilinmiyor" ve muhafazakâr tarafa düşer.
+// `fn_ptn` için -1 yazılır (`t14_muaf_isaretle` bilinmeyeni muaf tutmaz).
+// C006: `alan_tn` ise tip alt ağacı kopyalanarak YENİ yerel indekse bağlanır.
+// Böylece C oracle gibi bildirilen Dizi bağlamı korunur; skaler ve fazla
+// iç içe boş diziler mevcut tip güdümlü denetimden geçmeye devam eder.
 işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
     // (a) İŞLEV İMZALARI
     değişken fn: tam32 = dizi_boyut(mp.fn_ad);
@@ -15220,7 +15245,8 @@ işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
             iken q < an {
                 dizi_ekle(p.alan_ad, dizi_al(mp.alan_ad, ab + q));
                 dizi_ekle(p.alan_tip, dizi_al(mp.alan_tip, ab + q));
-                dizi_ekle(p.alan_tn, 0 - 1);                 // düğüm taşınamaz
+                değişken tn: tam32 = capraz_tip_kopyala(p, mp, dizi_al(mp.alan_tn, ab + q));
+                dizi_ekle(p.alan_tn, tn);
                 q = q + 1;
             }
             dizi_ekle(p.yapi_acount, an);

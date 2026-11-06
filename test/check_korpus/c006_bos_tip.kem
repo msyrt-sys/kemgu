@@ -1,0 +1,6 @@
+yapı K { n: tam32; xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+ değişken n: tam32 = [];
+ değişken k: K = K { n: [], xs: [[]] };
+ ver 42;
+}
