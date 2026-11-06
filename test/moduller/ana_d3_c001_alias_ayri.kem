@@ -1,0 +1,4 @@
+// Önceki bildirimin alias'ı sonraki bildirimin modül bağını değiştirmez.
+kullan c001_ad olarak m;
+kullan c001_ad::{c001_ad};
+işlev main() -> tam32 { ver m::c001_ad(40) olarak tam32; }

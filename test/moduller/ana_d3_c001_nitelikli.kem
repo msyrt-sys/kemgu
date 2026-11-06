@@ -1,0 +1,8 @@
+// Çıplak modül bağı ve nitelikli çağrı geçerlidir.
+kullan c001_ad;
+işlev main() -> tam32 {
+    eğer c001_ad::c001_ad(40) != 42 { ver 1; }
+    eğer c001_ad::c001_ad(0) != 2 { ver 2; }
+    eğer c001_ad::c001_ad(8589934592) != 8589934594 { ver 3; }
+    ver 42;
+}

@@ -15526,6 +15526,24 @@ işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin) -> metin {
     ver out;
 }
 // Üst-düzey tüm `kullan`'ları yükle (giriş dosyasının dizininden).
+// C001: modül bağı seçili üye ile aynı ad alanındadır (C kullan_isle aynası).
+// Alias tablosu yol başına düzdür; bu bildirimin alias'ını kendi tokenlarından al.
+işlev kullan_bag_adi(p: &değişken Ayr, c: tam32) -> metin {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.t_ad) {
+        eğer (dizi_al(p.t_sat, i) == dizi_al(p.a_sat, c))
+          ve (dizi_al(p.t_sut, i) == dizi_al(p.a_sut, c)) {
+            iken i + 1 < dizi_boyut(p.t_ad) {
+                eğer metin_esit(dizi_al(p.t_ad, i), "NOKTALI_VIRGUL") { ver son_segment(dizi_al(p.a_deg, c)); }
+                eğer metin_esit(dizi_al(p.t_ad, i), "OLARAK") { ver lex_i(p, i + 1); }
+                i = i + 1;
+            }
+            ver son_segment(dizi_al(p.a_deg, c));
+        }
+        i = i + 1;
+    }
+    ver son_segment(dizi_al(p.a_deg, c));
+}
 işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
@@ -15554,9 +15572,15 @@ işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
                 iken sk < dizi_boyut(p.si_yol) {
                     eğer (dizi_al(p.si_sat, sk) == dizi_al(p.a_sat, c))
                       ve (dizi_al(p.si_sut, sk) == dizi_al(p.a_sut, c))
-                      ve metin_esit(dizi_al(p.si_yol, sk), sy)
-                      ve ozel_uye_mi(p, sm, dizi_al(p.si_ad, sk)) {
-                        sekil_hata(p, c, "T041");
+                      ve metin_esit(dizi_al(p.si_yol, sk), sy) {
+                        değişken uye: metin = dizi_al(p.si_ad, sk);
+                        eğer ozel_uye_mi(p, sm, uye) {
+                            sekil_hata(p, c, "T041");
+                        } değilse eğer metin_esit(uye, kullan_bag_adi(p, c))
+                          ve fn_var_mi(p, mangle(sm, uye)) {
+                            // C önce modülü bağlar; genel işlev alias'ı T024 olur.
+                            sekil_hata(p, c, "T024");
+                        }
                     }
                     sk = sk + 1;
                 }
