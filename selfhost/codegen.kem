@@ -5315,7 +5315,22 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     eğer metin_esit(ad, "CAGRI") {
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
         eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
-        ver fn_risz_bul(p, dizi_al(p.a_deg, h));
+        değişken fad: metin = dizi_al(p.a_deg, h);
+        // C004: dizi_al(xs, i), xs[i] ile aynı dar eleman işaretini taşır.
+        // C llvm.c dar okuma sonucunda bu bilgiyi eleman tipinden alır.
+        // Kullanıcı işlevinin dönüş işareti kendi imzasından gelmeye devam eder.
+        eğer metin_esit(fad, "dizi_al") ve (fn_var_mi(p, fn_coz(p, fad)) == yanlış)
+          ve (dizi_al(p.a_cs, idx) >= 3) {
+            değişken kaynak: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1);
+            eğer metin_esit(dizi_al(p.a_ad, kaynak), "TANIMLAYICI") {
+                değişken kad: metin = dizi_al(p.a_deg, kaynak);
+                değişken elem: metin = cg_var_elem_bul(p, kad);
+                eğer metin_esit(elem, "i8") veya metin_esit(elem, "i16") {
+                    ver cg_var_eisz_bul(p, kad);
+                }
+            }
+        }
+        ver fn_risz_bul(p, fad);
     }
     // D-339: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
     // alan_isz; hem extractvalue hem GEP+load dalı aynı değeri IfadeSonuc'a koyar).

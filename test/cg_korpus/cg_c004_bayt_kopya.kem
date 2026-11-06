@@ -1,0 +1,21 @@
+// C004: iç içe dizi_al sonucu dar elemanın işaretsizliğini taşımalı.
+işlev main() -> tam32 {
+    değişken a: Dizi<dtam8> = [128 olarak dtam8, 203 olarak dtam8, 255 olarak dtam8];
+    değişken b: Dizi<dtam8> = [];
+    dizi_ekle(b, dizi_al(a, 0));
+    dizi_ekle(b, dizi_al(a, 1));
+    dizi_ekle(b, dizi_al(a, 2));
+    eğer dizi_al(b, 0) != 128 { ver 1; }
+    eğer dizi_al(b, 1) != 203 { ver 2; }
+    eğer dizi_al(b, 2) != 255 { ver 3; }
+    // Pozitif: bütün dar değerleri sıfırla genişletmek işaretli yolu bozar.
+    değişken s: Dizi<tam8> = [-128 olarak tam8, -53 olarak tam8, 127 olarak tam8];
+    değişken t: Dizi<tam8> = [];
+    dizi_ekle(t, dizi_al(s, 0));
+    dizi_ekle(t, dizi_al(s, 1));
+    dizi_ekle(t, dizi_al(s, 2));
+    eğer dizi_al(t, 0) != -128 { ver 4; }
+    eğer dizi_al(t, 1) != -53 { ver 5; }
+    eğer dizi_al(t, 2) != 127 { ver 6; }
+    ver 42;
+}
