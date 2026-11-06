@@ -1,0 +1,2 @@
+genel yapı D3Nokta { x: tam64; }
+genel çeşit D3Secim { Bos, Var(tam64) }

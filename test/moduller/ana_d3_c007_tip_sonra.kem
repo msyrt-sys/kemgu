@@ -1,0 +1,9 @@
+kullan d3_c007_api::{uret, oku, secim_oku, secim_uret};
+kullan d3_c007_tipler;
+işlev main() -> tam32 {
+    eğer oku(uret(-17)) != -17 { ver 1; }
+    eğer oku(uret(203)) != 203 { ver 2; }
+    eğer oku(uret(8589934592)) != 8589934592 { ver 3; }
+    eğer secim_oku(secim_uret(8589934592)) != 8589934592 { ver 4; }
+    ver 42;
+}
