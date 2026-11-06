@@ -9826,8 +9826,10 @@ işlev param_ir_tip(p: &değişken Ayr, ad: metin, j: tam32) -> metin {
     eğer j >= dizi_al(p.pi_say, k) { ver ""; }
     ver dizi_al(p.pi_tip, dizi_al(p.pi_base, k) + j);
 }
-işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
-    dizi_ekle(p.pi_ad, dizi_al(p.a_deg, fn));
+işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32, onek: metin) -> tam32 {
+    // C005: tablo anahtarı çağrı yerindeki çözülmüş işlev adıyla aynı olmalı.
+    // Çıplak ad modül çağrısında bulunmaz; tam64 parametre i32 bırakılır.
+    dizi_ekle(p.pi_ad, mangle(onek, dizi_al(p.a_deg, fn)));
     dizi_ekle(p.pi_base, dizi_boyut(p.pi_tip));
     değişken cb: tam32 = dizi_al(p.a_cb, fn);
     değişken cs: tam32 = dizi_al(p.a_cs, fn);
@@ -9844,15 +9846,18 @@ işlev param_ir_kaydet(p: &değişken Ayr, fn: tam32) -> tam32 {
     ver 0;
 }
 // Üst-düzey ISLEV'leri tara (DISA/MODUL içine iner).
-işlev param_ir_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+işlev param_ir_topla(p: &değişken Ayr, kok: tam32, onek: metin) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
     iken i < cs {
         değişken u: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ua: metin = dizi_al(p.a_ad, u);
-        eğer metin_esit(ua, "DISA") veya metin_esit(ua, "MODUL") { param_ir_topla(p, u); }
-        eğer metin_esit(ua, "ISLEV") { param_ir_kaydet(p, u); }
+        eğer metin_esit(ua, "DISA") { param_ir_topla(p, u, onek); }
+        eğer metin_esit(ua, "MODUL") {
+            param_ir_topla(p, u, mangle(onek, dizi_al(p.a_deg, u)));
+        }
+        eğer metin_esit(ua, "ISLEV") { param_ir_kaydet(p, u, onek); }
         i = i + 1;
     }
     ver 0;
@@ -9955,7 +9960,7 @@ işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
     runtime_header_yaz(p);   // CG7: @kdl_* declare'ları
     str_pre_pass(p);         // CG7: metin literallerini topla
     str_globalleri_emit(p);  // CG7: @.str.N global sabitleri
-    param_ir_topla(p, kok);  // D-393: codegen-yolu param IR tipi tablosu (arg genişletme)
+    param_ir_topla(p, kok, "");  // D-393: codegen-yolu param IR tipi tablosu (arg genişletme)
     sabit_topla(p, kok, ""); // D-391: üst-düzey sabit tablosu (emit YOK, inline)
     kuresel_topla(p, kok);   // D-253: küresel değişken module-globalleri
     yb(10);

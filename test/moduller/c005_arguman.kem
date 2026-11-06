@@ -1,0 +1,3 @@
+// C005: yapıdan sonraki tam64 parametrenin modül imzası korunmalı.
+genel yapı Nokta { x: tam32; y: tam64; }
+genel işlev kaydir(n: Nokta, miktar: tam64) -> tam64 { ver n.y + miktar; }

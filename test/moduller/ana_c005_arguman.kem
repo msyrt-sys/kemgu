@@ -1,0 +1,15 @@
+// C005: i32 negatif literal doğru i64 işaret genişletmesini gerektirir.
+kullan c005_arguman::{Nokta, kaydir};
+işlev yerel(n: Nokta, miktar: tam64) -> tam64 { ver n.y + miktar; }
+işlev main() -> tam32 {
+    değişken n: Nokta = Nokta { x: 42, y: 8589934592 };
+    eğer kaydir(n, -1) != 8589934591 { ver 1; }
+    eğer kaydir(n, -17) != 8589934575 { ver 2; }
+    eğer kaydir(n, -203) != 8589934389 { ver 3; }
+    eğer kaydir(n, 2) != 8589934594 { ver 4; }
+    eğer kaydir(n, 8589934599) != 17179869191 { ver 5; }
+    // Pozitif: yerel imza ve açık tam64 dönüşümü.
+    eğer yerel(n, -17) != 8589934575 { ver 6; }
+    eğer kaydir(n, -203 olarak tam64) != 8589934389 { ver 7; }
+    ver 42;
+}
