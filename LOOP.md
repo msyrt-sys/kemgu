@@ -215,18 +215,13 @@
 - [ ] E4c [M] FAT32 yazma PERFORMANSI: fat32_coklu (110 dosya) self-host 16 sn, fat32_yaz 14 sn
       (Spark); x86 CI'da 30 sn'yi asti (D-737). Muhtemel kok: her kume ayiriminda FAT'in bastan
       taranmasi / imaj kopyasi — once PROFILLE, tahmin etme. Gercek OS'te de hissedilir.
-- [ ] E4b [M] Codex derleyici bulgulari (otomasyon/chatgpt/codex_bulgular.md; HEPSI abd9aa9'da
-      yeniden uretildi). SESSIZ YANLIS ONCE:
-      C009 [S] GUVENLIK: self nitelikli `m::dosya_sil(..)` -> `@kdl_dosya_sil` (GERCEK host dosyasi!);
-           C de yerel `dosya_adi` -> `@kdl_dosya_adi`. D-735 onek yakalama sinifinin YOL/C kolu.
-      C002 [M] C: `Dizi<Yapi> = dizi_olustur(0)` eleman 4 bayt -> ikinci alan bozuk (C 1, self 0).
-      C004 [S] self: `dizi_ekle(b, dizi_al(a,0))` dtam8 isaretle genisliyor (203 -> -53).
-      C005 [S] self: ice aktarilan yapi argumanindan sonraki tam64 sabit i32 geciyor.
-      LOUD (LINK-RED): C003 self sonuc<Dizi<Yapi>> eslesme · C008 IKI derleyici `ret {i8,%N,ptr} 0`
-           (D-464 sinifi, yapi payload'li sonuc) · C011 self INT_MIN -> tam32 alan.
-      CHECK PARITESI: C001 C sahte T024 (modulle ayni adli secili import) · C006 self sahte T014
-           (ice aktarilan yapi alani `[]`) · C007 C sahte T011 (gecisli tip) · C010 self sahte T016
-           (ice aktarilan cesit kurucusu).
+- [x] E4b [M] ✓ D-738: C009 C002 C004 C005 C011 C003 C008 C006 C010 duzeltildi (Codex dalga 2,
+      PR #164-#172, entegrasyonda birlikte olculdu). KALAN -> E4d.
+- [ ] E4d [M] Codex dalga 3: C001 (oneri: C kurali korunur, self de T024; etki 0 dosya) ·
+      C007 (oneri: tum modul tip kayitlari imzalardan ONCE; sira bagimliligi kalkar, virtio_blk_init_test
+      sahte T011 duzelir) · YAN BULGU: self checker secili ithal edilen kullanici `dosya_sil`'ini
+      YERLESIK imzasiyla denetliyor (T001; onek yakalamanin checker kolu) · dalga 1 dolanmalarini
+      (tests/drivers/probe, imaj_* ek adlari) kaldir.
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
       once bu onerilir).
 - [ ] F1b [L] DRF V2: tam-dil kapsami.
@@ -2597,3 +2592,14 @@
   temiz (Makefile yalniz CHATGPT_TESTLER), kopru 91/91 yeniden kosuldu, fat32_kahin.sh kendim kosturdum
   (fsck temiz), BAGIMSIZ SABOTAJ (klavye 40 Shift: 304->73) -> tablo_40+caps KIRMIZI. 11 derleyici
   bulgusu (C001-C011) abd9aa9'da TEK TEK yeniden uretildi -> E4b. Derleyici degismedi.
+- 2026-11-06 D-738: CODEX DALGASI 2 — 9 derleyici kusuru (PR #164-#172, ozet #173), ENTEGRASYON dalinda
+  birlikte olculdu (tek tek yesil = birlikte yesil DEGIL). Onemlileri: C009 GUVENLIK (self nitelikli
+  `m::dosya_sil` -> host `kdl_dosya_sil`; C'de `if(!ik && A) else if(B)` zinciri — eski yorumun
+  "sonraki else-if otomatik atlanir" iddiasi mantiken YANLISTI, `if(ik){} else if` ile kapandi) ·
+  C002 C oracle `Dizi<Yapi>=dizi_olustur(0)` eleman 4 bayt (sessiz bozuk alan) · C004 self dtam8
+  isaret genisletme · C005 self modul param tablosu ciplak adla anahtarlaniyordu (tam64 -> i32).
+  Codex her duzeltmede fikstur-once + kirmizi/yesil + sabotaj + tam test_tumu yapti. CLAUDE: 9 diff
+  okundu; entegrasyon (9 duzeltme + dalga 1 surucu testleri) test_tumu rc=0, FIXPOINT, checker_diff
+  256/256, codegen_diff 194/194, modul_codegen 40/40, kopru 91/91, ASan PASS=128 FAIL=0.
+  Ayrica D-737 CI kirmizisi: dogrula.sh 30 sn sinir x86 CI'da asildi (FAT32 testleri) -> 180 sn
+  (CHATGPT_ZAMAN_ASIMI); performans E4c.
