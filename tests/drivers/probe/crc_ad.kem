@@ -1,6 +1,0 @@
-kullan drivers::disk::crc32;
-işlev main() -> tam32 {
-    değişken b: Dizi<dtam8> = dizi_olustur(0);
-    eğer crc32::crc32(b, 0, 0) == 0 { ver 0; }
-    ver 1;
-}

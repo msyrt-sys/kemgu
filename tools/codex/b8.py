@@ -39,20 +39,20 @@ genel işlev imaj() -> Dizi<dtam8> {
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit, imaj_bpb };
-kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan drivers::fs::fat32_oku;
 kullan tests::drivers::fs::veri::linux_fat32::{ imaj };
 kullan drivers::ortak::bayt::{ oku_u8 };
 '''
  cases={'bpb':f'''    eşleş imaj_bpb(imaj()) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{
         değişken b: Fat32Bpb = v; ver b.sektor_bayt == {sb} ve b.kume_sektor == {ks} ve b.fat_sektor == {fat} ve b.ilk_veri_sektoru == {first};
-    }} }}''','liste':f'''    eşleş imaj_dizin_listele(imaj(), "/") {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ ver dizi_boyut(v) == {1 if mcopy else 0}; }} }}'''}
+    }} }}''','liste':f'''    eşleş fat32_oku::dizin_listele(imaj(), "/") {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ ver dizi_boyut(v) == {1 if mcopy else 0}; }} }}'''}
  if mcopy:
-  body='''    eşleş imajdan_dosya_oku(imaj(), "/kahin.txt") { hata(e) => { ver yanlış; } tamam(v) => {
+  body='''    eşleş fat32_oku::dosya_oku(imaj(), "/kahin.txt") { hata(e) => { ver yanlış; } tamam(v) => {
         değişken b: Dizi<dtam8> = v;
 '''+f'        eğer dizi_boyut(b) != {len(CONTENT)} {{ ver yanlış; }}\n'
   for i,x in enumerate(CONTENT):body+=f'        eğer oku_u8(b, {i}) != {x} {{ ver yanlış; }}\n'
   cases['icerik']=body+'        ver doğru;\n    } }'
- cases['eksik']='    eşleş imajdan_dosya_oku(imaj(), "/YOK.TXT") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bulunamadi"); } }'
+ cases['eksik']='    eşleş fat32_oku::dosya_oku(imaj(), "/YOK.TXT") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bulunamadi"); } }'
  testler('tests/drivers/fs/fat32_linux_test.kem',h,cases)
  print(f'Linux fikstürü: {len(data)} bayt önek, FAT={fat}, ilk={first}; {len(cases)} test')
 

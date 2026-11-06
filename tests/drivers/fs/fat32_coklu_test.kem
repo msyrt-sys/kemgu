@@ -3,8 +3,8 @@ kullan drivers::fs::fat32_bicimle;
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
-kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur, imajdan_dosya_sil };
-kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_oku;
 kullan drivers::ortak::bayt::{ oku_u8 };
 işlev ondalik(n: tam32) -> metin {
     eğer n == 0 { ver "0"; }
@@ -40,22 +40,22 @@ işlev ornek_verisi(i: tam32) -> Dizi<dtam8> {
     dizi_ekle(b, (i / 256) olarak dtam8); dizi_ekle(b, (128 | (i % 128)) olarak dtam8); ver b;
 }
 işlev test_coklu(b: Dizi<dtam8>) -> mantıksal {
-    eşleş imajda_dizin_olustur(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => { } }
-    eşleş imajda_dizin_olustur(b, "/belgeler/alt") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dizin_olustur(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dizin_olustur(b, "/belgeler/alt") { hata(e) => { ver yanlış; } tamam(v) => { } }
     değişken i: tam32 = 0;
     iken i < 110 {
-        eşleş imaja_dosya_yaz(b, ornek_yolu(i), ornek_verisi(i)) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(n) => { eğer n != 3 { ver yanlış; } } }
+        eşleş fat32_yaz::dosya_yaz(b, ornek_yolu(i), ornek_verisi(i)) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(n) => { eğer n != 3 { ver yanlış; } } }
         i = i + 1;
     }
     i = 0; iken i < 110 {
-        eşleş imajdan_dosya_sil(b, ornek_yolu(i)) { hata(e) => { ver yanlış; } tamam(v) => { eğer değil v { ver yanlış; } } } i = i + 10;
+        eşleş fat32_yaz::dosya_sil(b, ornek_yolu(i)) { hata(e) => { ver yanlış; } tamam(v) => { eğer değil v { ver yanlış; } } } i = i + 10;
     }
     i = 110; iken i < 122 {
-        eşleş imaja_dosya_yaz(b, ornek_yolu(i), ornek_verisi(i)) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 3 { ver yanlış; } } } i = i + 1;
+        eşleş fat32_yaz::dosya_yaz(b, ornek_yolu(i), ornek_verisi(i)) { hata(e) => { ver yanlış; } tamam(n) => { eğer n != 3 { ver yanlış; } } } i = i + 1;
     }
-    eşleş imaj_dizin_listele(b, "/belgeler/alt") { hata(e) => { ver yanlış; } tamam(v) => { eğer dizi_boyut(v) != 113 { ver yanlış; } } }
+    eşleş fat32_oku::dizin_listele(b, "/belgeler/alt") { hata(e) => { ver yanlış; } tamam(v) => { eğer dizi_boyut(v) != 113 { ver yanlış; } } }
     i = 0; iken i < 122 {
-        eşleş imajdan_dosya_oku(b, ornek_yolu(i)) {
+        eşleş fat32_oku::dosya_oku(b, ornek_yolu(i)) {
             hata(e) => { eğer i >= 110 veya i % 10 != 0 veya değil metin_esit(e, "bulunamadi") { ver yanlış; } }
             tamam(v) => { değişken veri: Dizi<dtam8> = v;
                 eğer i < 110 ve i % 10 == 0 { ver yanlış; }

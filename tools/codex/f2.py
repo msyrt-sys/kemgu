@@ -5,7 +5,7 @@ kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ FatKayit, DizinResmi, imaj_bpb, imaj_fat_yaz };
 kullan drivers::fs::fat32_bicimle;
-kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur };
+kullan drivers::fs::fat32_yaz;
 kullan drivers::fs::fat32_onar::{ Fat32Sayim, fsinfo_onar, sahipsiz_kumeler };
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le32, yaz_u8, yaz_le16, yaz_le32 };
 kullan drivers::disk::crc32;
@@ -30,16 +30,16 @@ c['sayac_onar']=f'''    değişken b: Dizi<dtam8> = imaj_yeni(); fat_yaz(b, 7 ol
     }} }}'''
 c['bos']='''    değişken b: Dizi<dtam8> = imaj_yeni(); değişken xs: Dizi<tam64> = []; ver sahipsiz_mi(b, xs);'''
 c['tahsis']='''    değişken b: Dizi<dtam8> = imaj_yeni();
-    eşleş imajda_dizin_olustur(b, "/D") { hata(e) => { ver yanlış; } tamam(v) => { } }
-    eşleş imaja_dosya_yaz(b, "/D/A.TXT", bayt_sifir(1300)) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dizin_olustur(b, "/D") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dosya_yaz(b, "/D/A.TXT", bayt_sifir(1300)) { hata(e) => { ver yanlış; } tamam(v) => { } }
     değişken xs: Dizi<tam64> = []; ver sahipsiz_mi(b, xs);'''
 c['sahipsiz']='''    değişken b: Dizi<dtam8> = imaj_yeni(); fat_yaz(b, 100 olarak tam64, 101 olarak tam64); fat_yaz(b, 101 olarak tam64, 268435455 olarak tam64); fat_yaz(b, 200 olarak tam64, 268435455 olarak tam64); fat_yaz(b, 300 olarak tam64, 268435447 olarak tam64);
     değişken xs: Dizi<tam64> = [100 olarak tam64, 101 olarak tam64, 200 olarak tam64]; ver sahipsiz_mi(b, xs);'''
 c['sahipsiz_dongu']='''    değişken b: Dizi<dtam8> = imaj_yeni(); fat_yaz(b, 100 olarak tam64, 101 olarak tam64); fat_yaz(b, 101 olarak tam64, 100 olarak tam64);
     değişken xs: Dizi<tam64> = [100 olarak tam64, 101 olarak tam64]; ver sahipsiz_mi(b, xs);'''
 c['capraz']='''    değişken b: Dizi<dtam8> = imaj_yeni();
-    eşleş imaja_dosya_yaz(b, "/A.TXT", bayt_sifir(1)) { hata(e) => { ver yanlış; } tamam(v) => { } }
-    eşleş imaja_dosya_yaz(b, "/B.TXT", bayt_sifir(1)) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dosya_yaz(b, "/A.TXT", bayt_sifir(1)) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dosya_yaz(b, "/B.TXT", bayt_sifir(1)) { hata(e) => { ver yanlış; } tamam(v) => { } }
     yaz_le16(b, 568378, 3);
     eşleş sahipsiz_kumeler(b) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "capraz zincir"); } }'''
 c['bozuk_kok']='''    değişken b: Dizi<dtam8> = imaj_yeni(); fat_yaz(b, 2 olarak tam64, 0 olarak tam64);

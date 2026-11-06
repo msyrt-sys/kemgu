@@ -30,10 +30,8 @@ for fn,data in [('kisa_veri',short),('uzun_veri',lfn)]:
  header+='    ver b;\n}\n'
 header+='''işlev ad_esit(b: Dizi<dtam8>, ad: metin) -> mantıksal {
     eşleş dizin_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
-        // C003: sonuç içindeki yapı dizisini açık tiple bağla.
-        değişken xs: Dizi<DizinGirdisi> = v;
-        eğer dizi_boyut(xs) != 1 { ver yanlış; }
-        değişken g: DizinGirdisi = dizi_al(xs, 0);
+        eğer dizi_boyut(v) != 1 { ver yanlış; }
+        değişken g: DizinGirdisi = dizi_al(v, 0);
         ver metin_esit(g.ad, ad);
     } }
 }

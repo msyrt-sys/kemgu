@@ -45,12 +45,9 @@ işlev oku_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<Dizi<dtam8>,
             ver tamam(sonuc);
         }
     }
-    // C008: erişilemeyen sonuç dönüşünü açık yaz.
-    ver hata("ulasilmaz");
 }
-genel işlev imajdan_dosya_oku(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<dtam8>, metin> {
+genel işlev dosya_oku(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<dtam8>, metin> {
     eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver oku_ic(imaj, b, yol); } }
-    ver hata("ulasilmaz");
 }
 işlev listele_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> {
     değişken parcalar: Dizi<metin> = [];
@@ -61,12 +58,7 @@ işlev listele_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<Dizi<Diz
         hata(e) => { ver hata(e); }
         tamam(v) => { değişken r: DizinResmi = v; ver dizin_coz(r.baytlar); }
     }
-    ver hata("ulasilmaz");
 }
-genel işlev imaj_dizin_listele(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> {
+genel işlev dizin_listele(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> {
     eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver listele_ic(imaj, b, yol); } }
-    ver hata("ulasilmaz");
 }
-// C009: istenen API korunur; self-host için imaj önekli adlar kullanılır.
-genel işlev dosya_oku(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<dtam8>, metin> { ver imajdan_dosya_oku(imaj, yol); }
-genel işlev dizin_listele(imaj: Dizi<dtam8>, yol: metin) -> sonuç<Dizi<DizinGirdisi>, metin> { ver imaj_dizin_listele(imaj, yol); }

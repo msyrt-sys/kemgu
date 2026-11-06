@@ -1,12 +1,12 @@
 // Beklentiler: python3 tools/codex/d6.py; Python Unicode dilimleri ve ord.
 kullan drivers::ps2::klavye_tr::{ TusOlayi, KlavyeDurumu, klavye_yeni, klavye_bayt };
-kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_olay, satir_metni, satir_karakter, satir_tus };
+kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_olay, satir_metni };
 kullan drivers::ortak::utf8::{ utf8_coz };
 işlev metin_ekle(d: &değişken SatirDuzenleyici, s: metin) {
     değişken ks: Dizi<tam32> = utf8_coz(s); değişken i: tam32 = 0;
-    iken i < dizi_boyut(ks) { satir_karakter(d, dizi_al(ks, i)); i = i + 1; }
+    iken i < dizi_boyut(ks) { satir_olay(d, TusOlayi::Karakter(dizi_al(ks, i))); i = i + 1; }
 }
-işlev tus(d: &değişken SatirDuzenleyici, k: tam32) { satir_tus(d, k, doğru); }
+işlev tus(d: &değişken SatirDuzenleyici, k: tam32) { satir_olay(d, TusOlayi::Ozel(k, doğru)); }
 
 işlev test_unicode_ekle() -> mantıksal {
     değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "a😀"); tus(&değişken d, 7); metin_ekle(&değişken d, "ğ");
@@ -24,20 +24,20 @@ işlev test_sinir_tus() -> mantıksal {
 }
 
 işlev test_birakma() -> mantıksal {
-    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "a"); satir_tus(&değişken d, 2, yanlış);
+    değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "a"); satir_olay(&değişken d, TusOlayi::Ozel(2, yanlış));
     ver metin_esit(satir_metni(d), "a");
 }
 
 işlev test_enter() -> mantıksal {
     değişken d: SatirDuzenleyici = satir_yeni(); metin_ekle(&değişken d, "ğ😀");
-    eşleş satir_tus(&değişken d, 1, doğru) { hiç => { ver yanlış; } değer(s) => {
+    eşleş satir_olay(&değişken d, TusOlayi::Ozel(1, doğru)) { hiç => { ver yanlış; } değer(s) => {
         ver metin_esit(s, "ğ😀") ve d.imlec == 0 ve dizi_boyut(d.kodlar) == 0 ve dizi_boyut(d.gecmis) == 1;
     } }
 }
 
 işlev test_bos_enter() -> mantıksal {
     değişken d: SatirDuzenleyici = satir_yeni();
-    eşleş satir_tus(&değişken d, 1, doğru) { hiç => { ver yanlış; } değer(s) => { ver metin_esit(s, "") ve dizi_boyut(d.gecmis) == 0; } }
+    eşleş satir_olay(&değişken d, TusOlayi::Ozel(1, doğru)) { hiç => { ver yanlış; } değer(s) => { ver metin_esit(s, "") ve dizi_boyut(d.gecmis) == 0; } }
 }
 
 işlev test_gecmis() -> mantıksal {
@@ -54,19 +54,19 @@ işlev test_tekrar() -> mantıksal {
 
 işlev test_gecmis_16() -> mantıksal {
     değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
-    iken i < 17 { satir_karakter(&değişken d, 97 + i); tus(&değişken d, 1); i = i + 1; }
+    iken i < 17 { satir_olay(&değişken d, TusOlayi::Karakter(97 + i)); tus(&değişken d, 1); i = i + 1; }
     ver dizi_boyut(d.gecmis) == 16 ve metin_esit(dizi_al(d.gecmis, 0), "b") ve metin_esit(dizi_al(d.gecmis, 15), "q");
 }
 
 işlev test_kapasite() -> mantıksal {
     değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
-    iken i < 257 { satir_karakter(&değişken d, 128512); i = i + 1; }
+    iken i < 257 { satir_olay(&değişken d, TusOlayi::Karakter(128512)); i = i + 1; }
     ver dizi_boyut(d.kodlar) == 256 ve d.imlec == 256 ve metin_uzunluk(satir_metni(d)) == 1024;
 }
 
 işlev test_gecersiz() -> mantıksal {
     değişken d: SatirDuzenleyici = satir_yeni(); değişken ks: Dizi<tam32> = [-1, 0, 9, 31, 127, 55296, 1114112]; değişken i: tam32 = 0;
-    iken i < dizi_boyut(ks) { satir_karakter(&değişken d, dizi_al(ks, i)); i = i + 1; } ver dizi_boyut(d.kodlar) == 0;
+    iken i < dizi_boyut(ks) { satir_olay(&değişken d, TusOlayi::Karakter(dizi_al(ks, i))); i = i + 1; } ver dizi_boyut(d.kodlar) == 0;
 }
 
 işlev main() -> tam32 {

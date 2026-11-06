@@ -19,8 +19,8 @@ meta={
 'fs/fat32_kisa_ad':('Çakışmasız FAT kısa adı üretme','8.3 ve ~N sayaç vektörleri','11 bayt ham ad; ~1..~999999; ASCII dışı karakter _ olur'),
 'fs/fat32_bicimle':('Seyrek bellek FAT32 imajı kurma','fsck.fat -n; mkfs.fat ters örneği; F1 111 dosya','512 bayt sektör, 32 ayrılmış sektör, iki FAT; en az 65525 küme; 16MiB bellek öneki'),
 'fs/fat32_imaj':('Ortak FAT/dizin imaj erişimi','B6-B8 gidiş/dönüş ve fsck.fat','Mantıksal disk sonundaki tutulmayan baytlar sıfırdır; yardımcılar doğrulanmış BPB bekler'),
-'fs/fat32_yaz':('Dosya/dizin oluşturma ve dosya silme','Gidiş/dönüş, dolu disk, FAT aynaları, fsck.fat','Üzerine yazma ve dizin silme yok; C009 nedeniyle imaja_/imajda_/imajdan_ APIlerini kullan'),
-'fs/fat32_oku':('İmajdan dosya ve dizin okuma','Gidiş/dönüş; Linux mkfs.fat örneği','16MiB dosya sınırı; liste . ve .. içerir; C009 için imajdan_/imaj_ APIleri'),
+'fs/fat32_yaz':('Dosya/dizin oluşturma ve dosya silme','Gidiş/dönüş, dolu disk, FAT aynaları, fsck.fat','Üzerine yazma ve dizin silme yok; asıl API adları kullanılır'),
+'fs/fat32_oku':('İmajdan dosya ve dizin okuma','Gidiş/dönüş; Linux mkfs.fat örneği','16MiB dosya sınırı; liste . ve .. içerir'),
 'fs/ustar':('USTAR arşiv dizini ve dosya bulma','Python tarfile USTAR_FORMAT','Yalnız normal dosya/dizin; iki sıfır son blok gerekir'),
 'acpi/tablo':('RSDP/RSDT/XSDT başlık ve sağlama çözümü','Python struct ve toplam mod 256','Fiziksel bellek eşleme yok; RSDP arama 16 bayt adımlıdır'),
 'acpi/madt':('MADT işlemci ve kesme girdileri','Python struct ACPI fikstürü','Tür 0/1/2/4/5; bilinmeyen türler uzunluk denetimiyle atlanır'),
@@ -75,21 +75,21 @@ s+='''
 
 ## Derleyici bulguları
 
-Ayrıntılı yeniden üretimler, C/self çıktıları ve dolanmalar [codex_bulgular.md](../otomasyon/chatgpt/codex_bulgular.md) içinde; derleyici kodu değiştirilmedi.
+Tarihsel yeniden üretimler [codex_bulgular.md](../otomasyon/chatgpt/codex_bulgular.md) içinde. Dalga 2 düzeltmeleri özgün örneklerle yeniden doğrulandı; dalga 3 ek API adlarını ve geçici probe dosyalarını kaldırdı.
 
-| Kimlik | Bulgu | Kullanılan dolanma |
+| Kimlik | Bulgu | Güncel durum |
 |---|---|---|
-| C001 | Modül ve işlev aynı adlı seçili import çakışması | Modülü alıp nitelikli çağırma |
-| C002 | dizi_olustur yapı elemanı genişliği | Açık tipli boş dizi literali |
-| C003 | Eşleş bağındaki yapı dizisinin eleman tipi | Açık tipli yerel değişken |
-| C004 | İç içe bayt kopyasında işaret genişletme | oku_u8 ile tam32 üzerinden yazma |
-| C005 | Yapıdan sonraki tam64 sabit argümanın genişliği | Açık olarak tam64 |
-| C006 | İçe aktarılan yapıda boş dizi alanı | Önce tipli dizi değişkeni kurma |
-| C007 | Geçişli içe aktarımdaki yapı tipleri | Çağıranda gereken tipleri açık import |
-| C008 | Sonuç döndüren eşleş sonrası geçersiz LLVM varsayılanı | Açık erişilemez hata dönüşü |
-| C009 | dosya_yaz/dosya_sil/dizin_olustur host yerleşiğine bağlanması | imaja_/imajdan_/imajda_ güvenli adları |
-| C010 | İçe aktarılan enum kurucusunda self T016 | Kurucuyu modül içi sarmalayıcıdan çağırma |
-| C011 | tam32 minimumunun yapı alanına atanması | Açık olarak tam32 |
+| C001 | Modül ve işlev aynı adlı seçili import çakışması | T024 kararı gereği nitelikli çağrı korunur |
+| C002 | dizi_olustur yapı elemanı genişliği | Düzeltildi; işaretli üreticiler dizi_olustur kullanır |
+| C003 | Eşleş bağındaki yapı dizisinin eleman tipi | Düzeltildi; işaretli gereksiz yerel bağlar kaldırıldı |
+| C004 | İç içe bayt kopyasında işaret genişletme | Düzeltildi; GPT başlığı doğrudan dizi_al ile kopyalanır |
+| C005 | Yapıdan sonraki tam64 sabit argümanın genişliği | Düzeltildi; sabit argümanın açık dönüşümü kaldırıldı |
+| C006 | İçe aktarılan yapıda boş dizi alanı | Düzeltildi; boş alan literalleri doğrudan kurulur |
+| C007 | Geçişli içe aktarımdaki yapı tipleri | Bu bağımsız tabanda T011 sürüyor; açık tip ithalatı korunur |
+| C008 | Sonuç döndüren eşleş sonrası geçersiz LLVM varsayılanı | Düzeltildi; erişilemez koruma dönüşleri kaldırıldı |
+| C009 | dosya_yaz/dosya_sil/dizin_olustur host yerleşiğine bağlanması | Düzeltildi; yalnız asıl imaj API adları kullanılır |
+| C010 | İçe aktarılan enum kurucusunda self T016 | Düzeltildi; TusOlayi kurucuları doğrudan kullanılır |
+| C011 | tam32 minimumunun yapı alanına atanması | Düzeltildi; özgün örnek iki derleyicide exit=0 |
 
 F5: [sınır matrisi](../otomasyon/chatgpt/codex_sinirlar.md) 39 saf modül için 158 test içerir. S002: ortak bayt aralık denetimindeki tam32 toplama taşması kalan uzunluk karşılaştırmasıyla giderildi; panik üreten iki örnek kalıcı regresyon testidir.
 

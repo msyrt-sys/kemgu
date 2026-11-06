@@ -28,9 +28,9 @@ Tabloda **Çift derleyici** yeni dalga testlerinin geçtiğini; **Önceden mevcu
 | [fs/fat32_dizin](fs/fat32_dizin.kem) | 8.3 ve UTF-16 LFN dizin çözümü | `DizinGirdisi`, `kisa_ad_saglama`, `dizin_coz` | Çift derleyici | Python UTF-16LE ve LFN sağlama | Bozuk LFN kısa ada düşer; kapalı tür tamlığına güvenilmez |
 | [fs/fat32_imaj](fs/fat32_imaj.kem) | Ortak FAT/dizin imaj erişimi | `DizinResmi`, `dizin_resmi_bos`, `FatKayit`, `imaj_bpb`, `imaj_fat_oku`, `imaj_fat_yaz`, `imaj_kume_bayt`, `imaj_konum`, `imaj_buyut`, `imaj_zincir`, `imaj_dizin`, `imaj_kayitlar`, `imaj_ad_esit`, `imaj_bul`, `imaj_dizin_yolu` | Çift derleyici | B6-B8 gidiş/dönüş ve fsck.fat | Mantıksal disk sonundaki tutulmayan baytlar sıfırdır; yardımcılar doğrulanmış BPB bekler |
 | [fs/fat32_kisa_ad](fs/fat32_kisa_ad.kem) | Çakışmasız FAT kısa adı üretme | `lfn_gerekli_mi`, `kisa_ad_uret` | Çift derleyici | 8.3 ve ~N sayaç vektörleri | 11 bayt ham ad; ~1..~999999; ASCII dışı karakter _ olur |
-| [fs/fat32_oku](fs/fat32_oku.kem) | İmajdan dosya ve dizin okuma | `imajdan_dosya_oku`, `imaj_dizin_listele`, `dosya_oku`, `dizin_listele` | Çift derleyici | Gidiş/dönüş; Linux mkfs.fat örneği | 16MiB dosya sınırı; liste . ve .. içerir; C009 için imajdan_/imaj_ APIleri |
+| [fs/fat32_oku](fs/fat32_oku.kem) | İmajdan dosya ve dizin okuma | `dosya_oku`, `dizin_listele` | Çift derleyici | Gidiş/dönüş; Linux mkfs.fat örneği | 16MiB dosya sınırı; liste . ve .. içerir |
 | [fs/fat32_onar](fs/fat32_onar.kem) | FSInfo sayacı onarma ve sahipsiz küme tespiti | `Fat32Sayim`, `fsinfo_onar`, `sahipsiz_kumeler` | Çift derleyici | fsck.fat kurtarılan küme listesi; sayaç onarımı sonrası temiz denetim | Yalnız sayaçları yazar; sahipsiz kümeleri silmez; çapraz/bozuk erişilen zincir hatadır |
-| [fs/fat32_yaz](fs/fat32_yaz.kem) | Dosya/dizin oluşturma ve dosya silme | `imaja_dosya_yaz`, `imajda_dizin_olustur`, `imajdan_dosya_sil`, `dosya_yaz`, `dizin_olustur`, `dosya_sil` | Çift derleyici | Gidiş/dönüş, dolu disk, FAT aynaları, fsck.fat | Üzerine yazma ve dizin silme yok; C009 nedeniyle imaja_/imajda_/imajdan_ APIlerini kullan |
+| [fs/fat32_yaz](fs/fat32_yaz.kem) | Dosya/dizin oluşturma ve dosya silme | `dosya_yaz`, `dizin_olustur`, `dosya_sil` | Çift derleyici | Gidiş/dönüş, dolu disk, FAT aynaları, fsck.fat | Üzerine yazma ve dizin silme yok; asıl API adları kullanılır |
 | [fs/ustar](fs/ustar.kem) | USTAR arşiv dizini ve dosya bulma | `TarGirdisi`, `tar_listele`, `tar_bul` | Çift derleyici | Python tarfile USTAR_FORMAT | Yalnız normal dosya/dizin; iki sıfır son blok gerekir |
 | [fs/yol](fs/yol.kem) | Mutlak yol normalleştirme | `yol_bol`, `yol_birlestir` | Çift derleyici | Bağımsız yol örnekleri | Bileşen en çok 255 UTF-8 baytı; kök üstü .. kökte kalır |
 | [fs/yol_harf](fs/yol_harf.kem) | İsteğe bağlı Türkçe harf duyarsız yol karşılaştırma | `yol_esit` | Çift derleyici | Türkçe I çiftleri ve normalleştirilmiş yol örnekleri | yol_bol kuralları; Unicode normalizasyonu veya tam casefold yapmaz; normal disk eşlemesi değişmez |
@@ -38,7 +38,7 @@ Tabloda **Çift derleyici** yeni dalga testlerinin geçtiğini; **Önceden mevcu
 | [girdi/imlec](girdi/imlec.kem) | Fare hareketi ve düğme kenarları | `DugmeOlayi`, `Imlec`, `imlec_yeni`, `imlec_olay` | Çift derleyici | Python kırpma/bit kenarı vektörleri | Hız 0..1024; ekran y aşağı; tekerlek tam32 sınırlarında doyar |
 | [girdi/klavye_tablo](girdi/klavye_tablo.kem) | Tablo parametreli klavye karakter düzeni | `TusEsleme`, `duzen_bayt` | Çift derleyici | 49x4 A1 Türkçe eşdeğerlik ve özel tablo vektörleri | A1 durum/özel tuş çekirdeğini çağırır; en çok 128 eşleme; ilk eşleme kazanır |
 | [girdi/klavye_us](girdi/klavye_us.kem) | US ANSI set-1 karakter düzeni | `us_tablo`, `klavye_us_yeni`, `klavye_us_bayt` | Çift derleyici | Python ord ile 49 tuş ve dört Shift/Caps durumu | A1 değişmez; ISO ek 86 tuşu ters bölü/boru olarak eşlenir |
-| [girdi/satir](girdi/satir.kem) | Unicode satır düzenleme ve geçmiş | `SatirDuzenleyici`, `satir_yeni`, `satir_metni`, `satir_olay`, `satir_karakter`, `satir_tus` | Çift derleyici | Python Unicode kod noktaları ve E1 scancode akışı | 256 kod noktası, 16 geçmiş; ardışık tekrar/boş satır geçmişe eklenmez |
+| [girdi/satir](girdi/satir.kem) | Unicode satır düzenleme ve geçmiş | `SatirDuzenleyici`, `satir_yeni`, `satir_metni`, `satir_olay` | Çift derleyici | Python Unicode kod noktaları ve E1 scancode akışı | 256 kod noktası, 16 geçmiş; ardışık tekrar/boş satır geçmişe eklenmez |
 | [ortak/bayt](ortak/bayt.kem) | Little-endian bayt erişimi | `bayt_sinirda`, `oku_u8`, `oku_le16`, `oku_le32`, `oku_le64`, `imza_esit`, `bayt_toplam8`, `bayt_sifir`, `yaz_u8`, `yaz_le16`, `yaz_le32`, `yaz_le64`, `yaz_ascii` | Çift derleyici | Python int.to_bytes | Ham oku/yaz çağrısından önce aralık denetimi çağırana ait |
 | [ortak/harf](ortak/harf.kem) | Türkçe kurallı Unicode büyük/küçük harf metin dönüşümü | `buyuk_harf`, `kucuk_harf` | Çift derleyici | Python Unicode 15.0.0 bütün 2958 eşleme ve Türkçe örnekler | Kod noktası temelli; çok karakterli büyük harf genişlemeleri var; bağlamsal sigma ve normalizasyon yok |
 | [ortak/harf_veri](ortak/harf_veri.kem) | Sıralı Unicode harf dönüşüm tabloları | `HarfEsleme`, `ust_eslemeler`, `alt_eslemeler` | Çift derleyici | Python Unicode 15.0.0, 1525 üst ve 1433 alt eşleme | Üretilen veri; sürüm sabitlenmiştir; i/İ ve ı/I Türkçe eşlenir |
@@ -68,21 +68,21 @@ Tabloda **Çift derleyici** yeni dalga testlerinin geçtiğini; **Önceden mevcu
 
 ## Derleyici bulguları
 
-Ayrıntılı yeniden üretimler, C/self çıktıları ve dolanmalar [codex_bulgular.md](../otomasyon/chatgpt/codex_bulgular.md) içinde; derleyici kodu değiştirilmedi.
+Tarihsel yeniden üretimler [codex_bulgular.md](../otomasyon/chatgpt/codex_bulgular.md) içinde. Dalga 2 düzeltmeleri özgün örneklerle yeniden doğrulandı; dalga 3 ek API adlarını ve geçici probe dosyalarını kaldırdı.
 
-| Kimlik | Bulgu | Kullanılan dolanma |
+| Kimlik | Bulgu | Güncel durum |
 |---|---|---|
-| C001 | Modül ve işlev aynı adlı seçili import çakışması | Modülü alıp nitelikli çağırma |
-| C002 | dizi_olustur yapı elemanı genişliği | Açık tipli boş dizi literali |
-| C003 | Eşleş bağındaki yapı dizisinin eleman tipi | Açık tipli yerel değişken |
-| C004 | İç içe bayt kopyasında işaret genişletme | oku_u8 ile tam32 üzerinden yazma |
-| C005 | Yapıdan sonraki tam64 sabit argümanın genişliği | Açık olarak tam64 |
-| C006 | İçe aktarılan yapıda boş dizi alanı | Önce tipli dizi değişkeni kurma |
-| C007 | Geçişli içe aktarımdaki yapı tipleri | Çağıranda gereken tipleri açık import |
-| C008 | Sonuç döndüren eşleş sonrası geçersiz LLVM varsayılanı | Açık erişilemez hata dönüşü |
-| C009 | dosya_yaz/dosya_sil/dizin_olustur host yerleşiğine bağlanması | imaja_/imajdan_/imajda_ güvenli adları |
-| C010 | İçe aktarılan enum kurucusunda self T016 | Kurucuyu modül içi sarmalayıcıdan çağırma |
-| C011 | tam32 minimumunun yapı alanına atanması | Açık olarak tam32 |
+| C001 | Modül ve işlev aynı adlı seçili import çakışması | T024 kararı gereği nitelikli çağrı korunur |
+| C002 | dizi_olustur yapı elemanı genişliği | Düzeltildi; işaretli üreticiler dizi_olustur kullanır |
+| C003 | Eşleş bağındaki yapı dizisinin eleman tipi | Düzeltildi; işaretli gereksiz yerel bağlar kaldırıldı |
+| C004 | İç içe bayt kopyasında işaret genişletme | Düzeltildi; GPT başlığı doğrudan dizi_al ile kopyalanır |
+| C005 | Yapıdan sonraki tam64 sabit argümanın genişliği | Düzeltildi; sabit argümanın açık dönüşümü kaldırıldı |
+| C006 | İçe aktarılan yapıda boş dizi alanı | Düzeltildi; boş alan literalleri doğrudan kurulur |
+| C007 | Geçişli içe aktarımdaki yapı tipleri | Bu bağımsız tabanda T011 sürüyor; açık tip ithalatı korunur |
+| C008 | Sonuç döndüren eşleş sonrası geçersiz LLVM varsayılanı | Düzeltildi; erişilemez koruma dönüşleri kaldırıldı |
+| C009 | dosya_yaz/dosya_sil/dizin_olustur host yerleşiğine bağlanması | Düzeltildi; yalnız asıl imaj API adları kullanılır |
+| C010 | İçe aktarılan enum kurucusunda self T016 | Düzeltildi; TusOlayi kurucuları doğrudan kullanılır |
+| C011 | tam32 minimumunun yapı alanına atanması | Düzeltildi; özgün örnek iki derleyicide exit=0 |
 
 F5: [sınır matrisi](../otomasyon/chatgpt/codex_sinirlar.md) 39 saf modül için 158 test içerir. S002: ortak bayt aralık denetimindeki tam32 toplama taşması kalan uzunluk karşılaştırmasıyla giderildi; panik üreten iki örnek kalıcı regresyon testidir.
 

@@ -55,8 +55,8 @@ def tablecase(n):return f'''    değişken xs: Dizi<TusEsleme> = []; değişken 
     iken i < {n} {{ dizi_ekle(xs, TusEsleme {{ tarama: 30, alt: 65, ust: 66, harf: yanlış }}); i=i+1; }}
     değişken d: KlavyeDurumu = klavye_yeni(); ver olay_kodu(duzen_bayt(&değişken d, 30, xs)) == {65 if 1<=n<=128 else 0};'''
 emit('girdi/klavye_tablo',K+'kullan drivers::girdi::klavye_tablo::{ TusEsleme, duzen_bayt };\n',[0,1,128,129],'karakter eşleme tablosu kapasitesi',tablecase)
-emit('girdi/satir',K+'kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_karakter, satir_metni };\n',[0,1,256,257],'satırdaki Unicode kod noktası sayısı',lambda n:f'''    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
-    iken i < {n} {{ satir_karakter(&değişken d, {ord('😀')}); i=i+1; }}
+emit('girdi/satir',K+'kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_metni, satir_olay };\n',[0,1,256,257],'satırdaki Unicode kod noktası sayısı',lambda n:f'''    değişken d: SatirDuzenleyici = satir_yeni(); değişken i: tam32 = 0;
+    iken i < {n} {{ satir_olay(&değişken d, TusOlayi::Karakter({ord('😀')})); i=i+1; }}
     ver dizi_boyut(d.kodlar) == {min(n,256)} ve metin_uzunluk(satir_metni(d)) == {4*min(n,256)};''')
 M='kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };\n'
 def mousecase(n):return f'''    değişken d: FareDurumu = fare_yeni(yanlış); fare_bayt(&değişken d, 8); fare_bayt(&değişken d, {n});
@@ -183,7 +183,7 @@ def shortcase(n):
  return f'    değişken xs: Dizi<metin> = []; '+rs(f'kisa_ad_uret("{repeat(n,"A")}",xs)',n>0,f'metin_esit(v,"{expected}")')
 emit('fs/fat32_kisa_ad','kullan drivers::fs::fat32_kisa_ad::{ kisa_ad_uret };\n',[0,1,8,9],'8.3 taban adının doğrudan uzunluğu',shortcase)
 def writecase(n):return f'''    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir({n});
-    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ eğer v != {n} {{ ver yanlış; }} }} }}
+    eşleş fat32_yaz::dosya_yaz(b,"/A.TXT",veri) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ eğer v != {n} {{ ver yanlış; }} }} }}
     eşleş imaj_bpb(b) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ değişken bp: Fat32Bpb = v;
     eşleş imaj_bul(b,bp,2 olarak tam64,"A.TXT") {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ değişken k: FatKayit = v;
         eğer k.boyut != {n} {{ ver yanlış; }}
@@ -191,10 +191,10 @@ def writecase(n):return f'''    değişken b: Dizi<dtam8> = imaj_yeni(); değiş
     }} }} }} }}'''
 emit('fs/fat32_yaz',FB+'kullan drivers::fs::fat32_imaj::{ imaj_bul, imaj_zincir };\n',[0,1,512,513],'tek küme veri kapasitesi ve sonraki kümeye geçiş',writecase)
 def readcase(n):return f'''    değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(512); yaz_u8(veri,0,77 olarak tam64);
-    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ }} }}
+    eşleş fat32_yaz::dosya_yaz(b,"/A.TXT",veri) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ }} }}
     yaz_le32(b,{1110*512+28},{n} olarak tam64);
-    eşleş imajdan_dosya_oku(b,"/A.TXT") {{ hata(e) => {{ ver {"metin_esit(e, \"kisa zincir\")" if n>512 else "yanlış"}; }} tamam(v) => {{ değişken xs: Dizi<dtam8> = v; ver {f'dizi_boyut(xs)=={n}'+(' ve oku_u8(xs,0)==77' if n else '') if n<=512 else 'yanlış'}; }} }}'''
-emit('fs/fat32_oku',FB+'kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku };\n',[0,1,512,513],'tek kümeli dosyanın ilan edilen uzunluğu',readcase)
+    eşleş fat32_oku::dosya_oku(b,"/A.TXT") {{ hata(e) => {{ ver {"metin_esit(e, \"kisa zincir\")" if n>512 else "yanlış"}; }} tamam(v) => {{ değişken xs: Dizi<dtam8> = v; ver {f'dizi_boyut(xs)=={n}'+(' ve oku_u8(xs,0)==77' if n else '') if n<=512 else 'yanlış'}; }} }}'''
+emit('fs/fat32_oku',FB+'kullan drivers::fs::fat32_oku;\n',[0,1,512,513],'tek kümeli dosyanın ilan edilen uzunluğu',readcase)
 def repaircase(n):return f'''    değişken b: Dizi<dtam8> = imaj_yeni(); yaz_le32(b,1000,{n} olarak tam64); yaz_le32(b,4072,{n} olarak tam64);
     eşleş fsinfo_onar(b) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{ değişken s: Fat32Sayim = v; ver s.bos=={68890-1} ve s.sonraki==3 ve oku_le32(b,1000)=={68890-1} ve oku_le32(b,4072)=={68890-1}; }} }}'''
 emit('fs/fat32_onar',FB,[0,1,68890,68891],'FSInfo boş küme sayacının fiziksel küme sayısına göre sınırı',repaircase)

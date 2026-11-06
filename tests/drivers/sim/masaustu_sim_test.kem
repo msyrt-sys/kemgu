@@ -5,7 +5,7 @@ kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
 kullan drivers::fs::fat32_bicimle;
-kullan drivers::fs::fat32_yaz::{ imajda_dizin_olustur, imaja_dosya_yaz };
+kullan drivers::fs::fat32_yaz;
 kullan drivers::sim::kabuk::{ kabuk_calistir };
 kullan drivers::ekran::konsol::{ Konsol, konsol_yeni, konsol_metin, konsol_satir };
 kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_oku };
@@ -19,9 +19,9 @@ işlev bitir(s: metin) -> metin { ver metin_birlestir(s, kod_metin(10)); }
 
 işlev test_masaustu() -> mantıksal {
     değişken disk: Dizi<dtam8> = imaj_yeni();
-    eşleş imajda_dizin_olustur(disk, "/belgeler") { hata(e) => { ver yanlış; } tamam(n) => { } }
+    eşleş fat32_yaz::dizin_olustur(disk, "/belgeler") { hata(e) => { ver yanlış; } tamam(n) => { } }
     değişken veri: Dizi<dtam8> = [77 olarak dtam8, 101 olarak dtam8, 114 olarak dtam8, 104 olarak dtam8, 97 olarak dtam8, 98 olarak dtam8, 97 olarak dtam8, 32 olarak dtam8, 68 olarak dtam8, 195 olarak dtam8, 188 olarak dtam8, 110 olarak dtam8, 121 olarak dtam8, 97 olarak dtam8, 32 olarak dtam8, 226 olarak dtam8, 128 olarak dtam8, 148 olarak dtam8, 32 olarak dtam8, 196 olarak dtam8, 159 olarak dtam8, 195 olarak dtam8, 188 olarak dtam8, 197 olarak dtam8, 159 olarak dtam8, 196 olarak dtam8, 177 olarak dtam8, 195 olarak dtam8, 182 olarak dtam8, 195 olarak dtam8, 167 olarak dtam8];
-    eşleş imaja_dosya_yaz(disk, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(n) => { } }
+    eşleş fat32_yaz::dosya_yaz(disk, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(n) => { } }
     eşleş konsol_yeni(40, 6, 11256099, 1056816) { hata(e) => { ver yanlış; } tamam(kv) => { değişken k: Konsol = kv;
     değişken kl: KlavyeDurumu = klavye_yeni(); değişken sat: SatirDuzenleyici = satir_yeni();
     değişken baytlar: Dizi<tam32> = [38, 166, 31, 159, 57, 185, 42, 8, 136, 170, 48, 176, 18, 146, 38, 166, 34, 162, 18, 146, 38, 166, 18, 146, 19, 147, 28, 156, 46, 174, 30, 158, 20, 148, 57, 185, 42, 8, 136, 170, 48, 176, 18, 146, 38, 166, 34, 162, 18, 146, 38, 166, 18, 146, 19, 147, 42, 8, 136, 170, 50, 178, 18, 146, 19, 147, 35, 163, 30, 158, 48, 176, 30, 158, 53, 181, 20, 148, 45, 173, 20, 148, 28, 156];
