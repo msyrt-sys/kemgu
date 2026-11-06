@@ -1,0 +1,10 @@
+// C009: nitelikli hedef önek eşlemesinden önce çözülmeli.
+// Yanlış host çağrısı bağlanamaz: gerçek dosya yolu taşınmaz.
+kullan c009_adlar;
+işlev main() -> tam32 {
+    eğer c009_adlar::dosya_sil("") != 11 { ver 1; }
+    eğer c009_adlar::dosya_adi(5) != 22 { ver 2; }
+    eğer c009_adlar::metin_x(7) != 30 { ver 3; }
+    eğer metin_uzunluk("abcde") != 5 { ver 4; }
+    ver 42;
+}

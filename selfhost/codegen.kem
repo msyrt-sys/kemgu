@@ -6536,40 +6536,30 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 ver "0";
             }
         }
+        // C009: nitelikli/göreli hedef de yerleşik eşlemesinden ÖNCE çözülür.
+        // Çağrı adı ile kullanıcı-varlığı aynı çözülmüş adı kullanmalı.
+        değişken hedef: tam32 = dizi_al(p.cocuk, cb);
+        değişken rn: metin = fn_coz(p, fad);
+        eğer metin_uzunluk(mad2) > 0 { rn = mad2; }   // [D-725]
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
+            rn = yol_noktali(p, hedef);
+            // D-412: GÖRELİ YOL. `modül m` içinden `ic::g()` yazmak `m.ic.g`
+            // demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kurar;
+            // modül içindeysek ÖNCE mevcut önekle denenmeli — bu, `fn_coz`un
+            // çıplak adlar için uyguladığı MODÜL-ÖNCE kuralının nitelikli
+            // yollara uzantısıdır (D-398). Kayıt kontrolüyle: göreli karşılığı
+            // YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
+            eğer metin_uzunluk(p.mod_onek) > 0 {
+                değişken gy: metin = mangle(p.mod_onek, rn);
+                eğer fn_kayitli_mi(p, gy) { rn = gy; }
+            }
+        }
         değişken kdl: metin = "";
-        // [D-735] Önek eşlemesi (`yaz_`/`metin_`/...) AD YAKALAYICIDIR: seçili
-        // import edilen kullanıcı işlevi `yaz_ascii` modül önekiyle kayıtlıdır
-        // (`bayt.yaz_ascii`), çıplak adla `fn_var_mi` onu GÖRMEZ → `@kdl_yaz_ascii`
-        // (tanımsız, LINK-RED; C doğru linkliyordu). Önce kullanıcı çözümünü sor.
-        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, fn_coz(p, fad)) == yanlış) { kdl = builtin_kdl_ad(fad); }
+        eğer (metin_uzunluk(mad2) == 0) ve (fn_var_mi(p, rn) == yanlış) { kdl = builtin_kdl_ad(fad); }
         değişken rt: metin = "";
         değişken fname: metin = "";
-        değişken kullanici: tam32 = 0;   // V2-F4.2a: kullanıcı-fn mı (ρ alır)?
+        değişken kullanici: tam32 = 0;
         eğer metin_esit(kdl, "") {
-            // D-398: KULLANICI işlevinin IR adını çöz. İki yol:
-            //  (a) hedef YOL ise (a::f, d::i::f) → noktalı ad "a.f" / "d.i.f".
-            //      Öncesinde a_deg'den YALNIZ son segment alınıyordu ("f") →
-            //      `call @f` yayılıp tanımsız sembol oluyordu.
-            //  (b) çıplak ad ise MODÜL-ÖNCE çöz (modül içindeysek kardeş üye).
-            // Bu nokta BİLİNÇLİ olarak seçildi: `fad`ı yukarıda topluca
-            // değiştirmek yerleşik/çeşit-yapıcı ayrımlarını bozardı (onlar
-            // `fad`ı ÇIPLAK adla karşılaştırıyor).
-            değişken hedef: tam32 = dizi_al(p.cocuk, cb);
-            değişken rn: metin = fn_coz(p, fad);
-            eğer metin_uzunluk(mad2) > 0 { rn = mad2; }   // [D-725]
-            eğer metin_esit(dizi_al(p.a_ad, hedef), "YOL") {
-                rn = yol_noktali(p, hedef);
-                // D-412: GÖRELİ YOL. `modül m` içinden `ic::g()` yazmak `m.ic.g`
-                // demektir, mutlak `ic.g` değil. `yol_noktali` yolu MUTLAK kurar;
-                // modül içindeysek ÖNCE mevcut önekle denenmeli — bu, `fn_coz`un
-                // çıplak adlar için uyguladığı MODÜL-ÖNCE kuralının nitelikli
-                // yollara uzantısıdır (D-398). Kayıt kontrolüyle: göreli karşılığı
-                // YOKSA mutlak ada dokunulmaz, yani mutlak yollar bozulmaz.
-                eğer metin_uzunluk(p.mod_onek) > 0 {
-                    değişken gy: metin = mangle(p.mod_onek, rn);
-                    eğer fn_kayitli_mi(p, gy) { rn = gy; }
-                }
-            }
             rt = fn_ret_bul(p, rn); fname = rn; kullanici = 1;
         }
         değilse { rt = builtin_ret(fad); fname = kdl; }

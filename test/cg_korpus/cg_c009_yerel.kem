@@ -1,0 +1,11 @@
+// C009: yerel kullanıcı işlevi C oracle tarafında da korunmalı.
+işlev dosya_adi(x: tam32) -> tam32 { ver x + 17; }
+işlev yaz_tam(x: tam32) -> tam32 { ver x + 11; }
+işlev metin_x(x: tam32) -> tam32 { ver x + 23; }
+işlev main() -> tam32 {
+    eğer dosya_adi(5) != 22 { ver 1; }
+    eğer yaz_tam(3) != 14 { ver 2; }
+    eğer metin_x(7) != 30 { ver 3; }
+    eğer metin_uzunluk("abcde") != 5 { ver 4; }
+    ver 42;
+}
