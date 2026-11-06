@@ -4245,6 +4245,15 @@ işlev ll_eleman_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     }
     ver "";
 }
+// C003: sonuç<Dizi<T>, E> başarı yükünün silinen eleman tipini koru.
+// Referans ve doğrudan dizi kuralları değişmez; yalnız sonuç taşıyıcısı açılır.
+işlev ll_sonuc_dizi_eleman_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
+    eğer tip_idx < 0 { ver ""; }
+    eğer metin_esit(dizi_al(p.a_ad, tip_idx), "TIP_SONUC") {
+        ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+    }
+    ver "";
+}
 // D-299: görev<T> / kanal<T> tip düğümü → T'nin LLVM tipi ("" ikisi de değilse).
 // görev<T>/kanal<T> IR'de opak `ptr` olduğu için T SİLİNİR; runtime i64 taşır ve
 // sonuç T'ye daraltılır (trunc / inttoptr). T'nin tek güvenilir kaynağı BİLDİRİLEN
@@ -5135,7 +5144,9 @@ işlev islev_donus_elem(p: &değişken Ayr, idx: tam32) -> metin {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         değişken ca: metin = dizi_al(p.a_ad, c);
         eğer metin_esit(ca, "PARAMETRE") == yanlış ve metin_esit(ca, "BLOK") == yanlış {
-            ver ll_eleman_tip(p, c);
+            değişken elem: metin = ll_eleman_tip(p, c);
+            eğer metin_esit(elem, "") { elem = ll_sonuc_dizi_eleman_tip(p, c); }
+            ver elem;
         }
         i = i + 1;
     }
@@ -6738,7 +6749,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         // işlevlerinde: yerleşiklerin eleman tipi kendi dallarında zaten kurulur.
         eğer kullanici == 1 {
             değişken re: metin = fn_relem_bul(p, fname);
-            eğer metin_esit(re, "") == yanlış { p.son_elem = re; }
+            // C003: son argümanın eleman bilgisi dönüş değerine sızmamalı.
+            p.son_elem = re;
         }
         ver rs;
     }
@@ -7742,6 +7754,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         // aşağıdaki her ifade_uret p.son_ic'i ezer. Desen payload'ına bağlanan ada
         // aktarılır ki `görev_birleştir(g)` doğru hedef tipe daraltabilsin.
         değişken sic: metin = p.son_ic;
+        değişken seleman: metin = p.son_elem;   // C003: sonuç başarı dizisinin elemanı
         // D-390: `eşleş` skrutinisi `&Çeşit` ise OTOMATİK DEREFERENCE. Skrutini ptr
         // yüklenmiş bir referans (sty="ptr") ve son_ref bir ÇEŞİT adı ise, tag
         // extractvalue'dan ÖNCE çeşit değerini yükle. Bu kol olmadan `eşleş`
@@ -7862,7 +7875,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                                 yaz_str(", label %"); yaz_str(Lnext); yb(10); p.bb_term = 1;
                                 etiket_yaz(p, Lin);
                             }
-                            cg_var_ekle(p, bad, ba, pt, "", "");
+                            // C003: C oracle gibi başarı yükünün eleman tipini bağa taşı.
+                            değişken peleman: metin = "";
+                            eğer pf == 1 { peleman = seleman; }
+                            cg_var_ekle(p, bad, ba, pt, "", peleman);
                             // D-396: payload İÇ tipini bağlamaya taşı. YALNIZ başarı
                             // alanı (pf==1: tamam/değer) — hata alanı (pf==2) `metin`dir
                             // ve görev<T>'nin T'siyle ilgisi YOKTUR; ona `sic` yazmak
@@ -8056,6 +8072,10 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             yaz_str("  "); yaz_str(areg); yaz_str(" = alloca "); yaz_str(vtip); yb(10);
         }
         yaz_str("  store "); yaz_str(vtip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(areg); yb(10);
+        // C003: sonuç annotasyonunun yük bilgisi [] başlangıç bağlamı değildir.
+        eğer annot == 1 ve metin_esit(velem, "") {
+            velem = ll_sonuc_dizi_eleman_tip(p, dizi_al(p.cocuk, cb));
+        }
         cg_var_ekle(p, dizi_al(p.a_deg, idx), areg, vtip, vref, velem);
         // D-438: elemanin elemanini paralel diziye yaz (son yuva).
         eğer metin_esit(velem2, "") == yanlış {
@@ -8265,7 +8285,9 @@ işlev param_elem(p: &değişken Ayr, c: tam32) -> metin {
     eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_REFERANS") {
         ver ll_eleman_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tn)));
     }
-    ver ll_eleman_tip(p, tn);
+    değişken elem: metin = ll_eleman_tip(p, tn);
+    eğer metin_esit(elem, "") { elem = ll_sonuc_dizi_eleman_tip(p, tn); }
+    ver elem;
 }
 // CG7c: PARAMETRE &Yapi ise işaret edilen yapı adı; değilse "".
 işlev param_ref_yapi(p: &değişken Ayr, c: tam32) -> metin {
