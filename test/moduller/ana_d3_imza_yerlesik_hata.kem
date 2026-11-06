@@ -1,0 +1,2 @@
+kullan d3_imza;
+işlev main() -> tam32 { ver metin_uzunluk(203); }

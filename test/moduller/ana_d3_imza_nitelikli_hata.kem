@@ -1,0 +1,2 @@
+kullan d3_imza;
+işlev main() -> tam32 { ver d3_imza::dosya_sil("yanlis"); }

@@ -1,0 +1,2 @@
+kullan d3_imza_ozel::{dosya_sil};
+işlev main() -> tam32 { ver dosya_sil(203); }
