@@ -1,0 +1,33 @@
+// C008: kapsayıcı eşleşmenin ulaşılamayan çıkışı geçerli aggregate sıfırı üretmeli.
+yapı Nokta { x: tam32; y: tam64; }
+işlev donustur(r: sonuç<tam32, metin>) -> sonuç<Nokta, metin> {
+    eşleş r {
+        hata(e) => { ver hata(e); }
+        tamam(n) => { ver tamam(Nokta { x: n, y: 8589934592 + (n olarak tam64) }); }
+    }
+}
+işlev kontrol(r: sonuç<Nokta, metin>, x: tam32, y: tam64) -> tam32 {
+    eşleş r {
+        hata(e) => { eğer metin_uzunluk(e) == 4 { ver 17; } ver 1; }
+        tamam(n) => { eğer n.x == x ve n.y == y { ver 42; } ver 2; }
+    }
+}
+// Pozitif: mevcut metin dönüşünün null varsayılanı korunmalı.
+işlev adi(r: sonuç<tam32, metin>) -> metin {
+    eşleş r {
+        hata(e) => { ver e; }
+        tamam(n) => { ver "basari"; }
+    }
+}
+işlev main() -> tam32 {
+    değişken a: sonuç<tam32, metin> = tamam(-17);
+    değişken b: sonuç<tam32, metin> = tamam(0);
+    değişken c: sonuç<tam32, metin> = tamam(203);
+    değişken e: sonuç<tam32, metin> = hata("hata");
+    eğer kontrol(donustur(a), -17, 8589934575) != 42 { ver 1; }
+    eğer kontrol(donustur(b), 0, 8589934592) != 42 { ver 2; }
+    eğer kontrol(donustur(c), 203, 8589934795) != 42 { ver 3; }
+    eğer kontrol(donustur(e), 0, 0) != 17 { ver 4; }
+    eğer metin_uzunluk(adi(a)) != 6 veya metin_uzunluk(adi(e)) != 4 { ver 5; }
+    ver 42;
+}

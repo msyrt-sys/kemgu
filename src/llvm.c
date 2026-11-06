@@ -8448,6 +8448,10 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
             if (strcmp(donus, "ptr") == 0) sifir = "null";
             else if (strcmp(donus, "float") == 0 || strcmp(donus, "double") == 0)
                 sifir = "0.0";
+            /* C008: sonuc/yapi gibi aggregate turlerde tamsayi 0 GECERSIZDIR. */
+            else if (donus[0] == '{' || donus[0] == '%' ||
+                     donus[0] == '[' || donus[0] == '<')
+                sifir = "zeroinitializer";
             fprintf(g->out, "  ret %s %s\n", donus, sifir);
         }
     }
