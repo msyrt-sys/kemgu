@@ -8144,9 +8144,15 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken oa0: metin = dizi_al(p.a_ad, obj);
             eğer metin_esit(oa0, "TANIMLAYICI") veya metin_esit(oa0, "ERISIM") {
                 değişken v2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                değişken vtip: metin = p.son_tip;
                 değişken gr: metin = alan_adres_uret(p, lhs);
                 eğer metin_uzunluk(gr) > 0 {
-                    yaz_str("  store "); yaz_str(p.son_tip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
+                    // C011: adres hesabı son_tip'i hedef alanla ezer. Kaynak
+                    // register'ın genişliğini sakla; yerel atama ve C gibi uydur.
+                    değişken hedef_tip: metin = p.son_tip;
+                    p.son_tip = vtip;
+                    v2 = int_uydur(p, v2, hedef_tip, ifade_isz(p, dizi_al(p.cocuk, cb + 1)));
+                    yaz_str("  store "); yaz_str(hedef_tip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
                 }
             }
             ver 0;
