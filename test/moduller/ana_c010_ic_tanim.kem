@@ -1,0 +1,6 @@
+// C010: iç modülün tanımı doğrudan seçili ithalatla açılamaz.
+kullan c010_olay::{IctekiOlay};
+işlev main() -> tam32 {
+    IctekiOlay::Karakter(65);
+    ver 42;
+}
