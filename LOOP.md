@@ -90,7 +90,7 @@
       `@ilk$i64`. Self-host'ta generic OLMAYAN `f(xs: Dizi<tam64>)` + `[2^33]` da duzeldi (param
       tipi literal diziye aktariliyor). Yan kazanc: `ilk([2.5])` iki derleyicide LINK-RED idi.
       Fikstur cg_dizi_literal_cikarsama (6 sekil). task_825441de karti bununla ortusuyor.
-- [ ] D2a [M] Kabiliyet odunc alma: omur kurali (kime, ne kadar).
+- [x] D2a [M] ✓ KARAR (2026-11-06): CAGRI SURELI odunc — belgeler/KEMGU_Yetki_Odunc_Tasarim.md.
 - [ ] D2b [M] Kabiliyet odunc: checker zorlamasi (yeni hata kodu).
 - [ ] D2c [M] Kabiliyet odunc: codegen.
 - [ ] D2d [M] Kabiliyet odunc: self-host parite.
@@ -114,7 +114,9 @@
       dosya: dizin olustur/listele, ikili oku/yaz, yol birlestir, uzanti — dizin ve ikili G/C
       RUNTIME YERLESIGI ister (dil yuzeyi karari, Mehmet).
 - [x] D5f [S] ✓ D-731 metin: yukaridaki saf-KEMGU eksiklerini yaz + test_metin'e ekle.
-- [ ] D5g [M] dosya: dizin/ikili G/C yerlesikleri — KARAR GEREKTIRIR (yetki<Dosya> ile mi?).
+- [ ] D5g [M] dosya: dizin/ikili G/C yerlesikleri. KARAR (2026-11-06, Opus onerisi): yetki<Dosya>
+      YOK (mevcut `yapı tekkez Dosya` modeli); ikili okuma `Dizi<dtam8>` doner (metin NUL kirpar).
+      Yetki gelecekse TUM dosya API'sine birden, ayri kararla.
 - [x] D5b -> D-710 (BLAKE3 agac modu, `stdlib/kripto/blake3.kem`).
 - [x] D5c -> D-709 (HMAC-SHA256, RFC 4231 + cok bloklu SHA-256).
 - [x] D5d -> D-713 (`os_rastgele()` yerlesigi; Linux /dev/urandom, Windows BCryptGenRandom,
@@ -150,7 +152,8 @@
       (`cagri_hedef`). D-728 metot denetimi de ayni cozumu kullaniyor (referans alici). Fikstur tc65.
 - [x] D8c -> D-369 (T030/T031 bound) + D-727 (bound uzerinden metot).
 - [x] D8d -> D-725 + D-729 (monomorfizasyonda alici tipinden "<Tip>.<metod>").
-- [ ] D8e [L] DINAMIK dispatch (vtable) — ayri bir KARAR (ozellik nesnesi sozdizimi ve sahiplik
+- [ ] D8e [L] ERTELENDI (KARAR 2026-11-06): surucu cokbicimliligi `çeşit`+`eşleş` ile (kapali kume +
+      M001). Gercek ihtiyac olculurse acilir. Eski metin: DINAMIK dispatch (vtable) — ayri bir KARAR (ozellik nesnesi sozdizimi ve sahiplik
       kurali Mehmet'te). Statik dispatch bitti (D-729); oneri: once gercek bir kullanim ihtiyaci olcmek.
 - [x] D8f -> D-728 + D-730 (metot cagrisi + alan T009 parite; generic yollar D-727'li C ile birebir).
 - [x] D8g -> cg_uygula_metot_cozum, cg_generic_bound_metot, tc62/63/64/65 + S218-S231.
@@ -187,7 +190,8 @@
 # ===== E. KEMGU-OS =====
 - [ ] E1a [S] Spark'in UART taban adresini DT/ACPI'den OKU (bugun bilinmiyor).
 - [ ] E1b [M] Imaji o adres + yukleme tabaniyla kur.
-- [ ] E1c [-] Seri yakalama duzenegi — IKINCI MAKINE (Mehmet'in donanim isi).
+- [ ] E1c [-] ERTELENDI (KARAR 2026-11-06): x86 PC yolunda cikti cerceve tamponunda; ikinci makine gereksiz.
+      Eski metin: Seri yakalama duzenegi — IKINCI MAKINE.
 - [ ] E1d [M] Fiziksel taban kosum (SMP QUEUE OK, toplam=20540).
 - [ ] E1e [M] Bariyer sabotaji + sonucu D-490'a yaz.
 - [ ] E2a [M] Ikincil cekirdek bring-up (PSCI CPU_ON deseni smp_queue_arm.c'de VAR).
@@ -195,7 +199,7 @@
 - [ ] E2c [M] Kilit/bariyer cekirdekte.
 - [ ] E2d [M] `-smp 2` ile kem_os kapisi.
 - [ ] E2e [S] SMP sabotaji.
-- [ ] E3a [-] KARAR: "v1 userland neye denir?" (Mehmet) — bitis tanimi YOK.
+- [x] E3a [-] ✓ KARAR (2026-11-06): v1 bitis tanimi yol haritasi H0f'de.
 - [ ] E3b [L] Surec modeli (birden cok EL0 sureci).
 - [ ] E3c [L] Surec olusturma (fork/exec analogu).
 - [ ] E3d [M] Dosya tanimlayici tablosu.

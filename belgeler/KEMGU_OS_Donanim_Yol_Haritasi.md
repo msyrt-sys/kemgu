@@ -44,22 +44,28 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H0. Kararlar (Mehmet) — işe başlamadan
 
-- [ ] **H0a [K] Birincil donanım hedefi.** Öneri: **x86_64 PC** (eski BIOS'lu
+- [x] **H0a [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** Birincil donanım hedefi.** Öneri: **x86_64 PC** (eski BIOS'lu
       masaüstü ilk, sonra modern UEFI). ARM64 (Spark/RPi) ikinci hat; D-490 bariyer
       doğrulaması ayrı kalır (x86-TSO onu kanıtlamaz).
-- [ ] **H0b [K] Açılış yolu sırası.** Öneri: önce **GRUB + multiboot2** (BIOS ve UEFI'de
+- [x] **H0b [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** Açılış yolu sırası.** Öneri: önce **GRUB + multiboot2** (BIOS ve UEFI'de
       aynı başlık), sonra kendi UEFI stub'ı (isteğe bağlı).
-- [ ] **H0c [K] Dosya sistemi.** Öneri: **FAT32** (her işletim sistemi okur/yazar →
+- [x] **H0c [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** Dosya sistemi.** Öneri: **FAT32** (her işletim sistemi okur/yazar →
       dosyaları Linux'tan koyup çıkarabilirsin, test oracle'ı bedava). Kendi
       günlüklü FS'i (KEMFS) sonraki aşama.
-- [ ] **H0d [K] "Fare çalışıyor"un tanımı.** Öneri: ekranda imleç + tıklama olayı +
+- [x] **H0d [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** "Fare çalışıyor"un tanımı.** Öneri: ekranda imleç + tıklama olayı +
       fareyle kullanılabilen EN AZ bir program (dosya listesinde tıkla-aç, basit çizim).
       Tam pencere yöneticisi KAPSAM DIŞI (ayrı yol haritası).
-- [ ] **H0e [K] USB kapsamı.** Öneri: önce PS/2 (QEMU + eski BIOS'un USB→PS/2
+- [x] **H0e [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** USB kapsamı.** Öneri: önce PS/2 (QEMU + eski BIOS'un USB→PS/2
       öykünmesi), sonra xHCI + HID. USB disk (mass storage) isteğe bağlı.
-- [ ] **H0f [K] E3a'yı kapat: "v1 kullanıcı alanı neye denir?"** — bu belgenin
+- [x] **H0f [K] ✓ KARAR (2026-11-06): v1 BİTİŞ TANIMI.** Gerçek bir x86 PC USB bellekten
+      açılır ve: (1) çerçeve tamponunda Türkçe metin konsolu, (2) Türkçe Q klavye,
+      (3) fare imleci + tıklama, (4) aynı USB bellekte FAT32 okuma/yazma, (5) `ls cd cat
+      mkdir rm cp` kabuğu, (6) W^X + süreç yalıtımlı ELF kullanıcı programları, (7) en az
+      iki program: metin düzenleyici + tıklanabilir dosya gezgini. Eski metin: E3a'yı kapat —
+      bu belgenin
       bitiş tanımı önerilir.
-- [ ] **H0g [K] Test makinesi profili.** Elde hangi makineler var (BIOS/UEFI, PS/2
+- [ ] **H0g [K] Test makinesi profili — AÇIK, YALNIZ MEHMET YANITLAYABİLİR.** Öneri: legacy BIOS seçeneği + PS/2
+      portu olan eski bir x86 masaüstü (ikinci el yeter); gelene kadar QEMU q35 + OVMF. Elde hangi makineler var (BIOS/UEFI, PS/2
       portu, SATA/NVMe, seri başlık)? Bu, H4/H6/H9 sırasını değiştirir.
 
 ---
@@ -79,7 +85,8 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       sonra heap kullanımı sabit.
 - [ ] **H1d [M] `yetki<R>` ödünç alma (LOOP D2a–e).** Her sürücü kendi
       `yetki<MMIO>`/port yetkisini taşıyacak; yetkiyi tüketmeden çağrılara vermek şart.
-- [ ] **H1e [S] Ölç: paketlenmiş (packed) yapı + sabit yerleşim.** ACPI tabloları,
+- [x] **H1e [S] ✓ ÖLÇÜLDÜ (D-737): `paketli` GEREKMEZ** — Codex ACPI/FAT32/GPT/ELF/PCI/BMP'nin
+      hepsini `drivers/ortak/bayt.kem` okuyucularıyla yazdı, dış kâhinlerle doğrulandı. Eski madde: ACPI tabloları,
       AHCI komut başlıkları, FAT BPB bayt-hizasızdır. Yoksa: ham bayt okuma
       yardımcıları (`oku16le/oku32le`) yeter mi, yoksa `yapı` için `paketli` gerekir mi?
 - [ ] **H1f [S] Port G/Ç genişletme.** `kem_port_oku16/32`, `yaz16/32` (PCI config,
