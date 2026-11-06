@@ -5209,7 +5209,13 @@ işlev ret_bos_yaz(p: &değişken Ayr) -> tam32 {
             eğer metin_esit(p.cur_ret, "double") veya metin_esit(p.cur_ret, "float") {
                 yaz_str(" 0.0");
             }
-            değilse { yaz_str(" 0"); }
+            değilse {
+                // C008: C oracle aynası; aggregate sıfırı tamsayı literal olamaz.
+                değişken ilk: tam32 = bayt(p.cur_ret, 0);
+                eğer ilk == 123 veya ilk == 37 veya ilk == 91 veya ilk == 60 {
+                    yaz_str(" zeroinitializer");
+                } değilse { yaz_str(" 0"); }
+            }
         }
     }
     yb(10);
