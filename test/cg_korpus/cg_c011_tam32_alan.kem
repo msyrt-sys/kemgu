@@ -1,0 +1,18 @@
+// C011: alan deposu değer register’ını hedef tamsayı genişliğine uydurmalı.
+yapı Sayac { n: tam32; buyuk: tam64; }
+işlev main() -> tam32 {
+    değişken d: Sayac = Sayac { n: 7, buyuk: 0 };
+    d.n = -2147483648;
+    eğer d.n != -2147483648 { ver 1; }
+    d.n = 0;
+    eğer d.n != 0 { ver 2; }
+    d.n = 2147483647;
+    eğer d.n != 2147483647 { ver 3; }
+    // Pozitif: tam64 alan korunur; dar işaretsiz değer sıfırla genişler.
+    d.buyuk = 8589934592;
+    eğer d.buyuk != 8589934592 { ver 4; }
+    değişken bayt: dtam8 = 203 olarak dtam8;
+    d.buyuk = bayt olarak tam64;
+    eğer d.buyuk != 203 { ver 5; }
+    ver 42;
+}
