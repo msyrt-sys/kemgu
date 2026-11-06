@@ -1,0 +1,2 @@
+işlev f(y: &yetki<MMIO>) -> seçimlik<&yetki<MMIO>> { ver değer(y); }
+işlev main() -> tam32 { ver 42; }

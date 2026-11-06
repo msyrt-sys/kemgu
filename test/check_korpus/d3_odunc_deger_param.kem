@@ -1,0 +1,4 @@
+// Çağrı süreli yetki ödüncü: deger_param.
+işlev al(y: yetki<MMIO>) { geri_al(y); }
+işlev f(y: &yetki<MMIO>) { al(y); }
+işlev main() -> tam32 { ver 42; }

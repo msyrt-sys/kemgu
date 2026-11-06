@@ -1,4 +1,5 @@
 #include "tip_kontrol.h"
+#include "hata.h"
 #include "parser.h"
 #include "lexer.h"
 #include "ast.h"
@@ -547,6 +548,71 @@ static void T40_ambient_authority_kaldirildi(void) {
  * Ana
  * ======================================================================== */
 
+/* Çağrı süreli ödünç: eski testlere dokunmadan tanı kodunu da doğrula. */
+struct OduncTani { const char *kod; int sayi; };
+static void odunc_tani(int satir, int sutun, const char *kod,
+                       const char *mesaj, const char *ipucu, void *ctx) {
+    (void)satir; (void)sutun; (void)mesaj; (void)ipucu;
+    struct OduncTani *t = ctx;
+    if (strcmp(kod, t->kod) == 0) t->sayi++;
+}
+static void odunc_ornek(const char *ad, const char *kaynak,
+                         const char *kod, int beklenen, int temiz) {
+    struct OduncTani tani = { kod, 0 };
+    int h = -1;
+    hata_callback_ayarla(odunc_tani, &tani);
+    int rc = derle_kontrol(kaynak, &h);
+    hata_callback_ayarla(NULL, NULL);
+    /* Küresel referans bildirimi mevcut E011'i de alır; diğer örnekler
+     * yalnız istenen tanıyı vermeli. CP006 yanında sahte T001 de başarısızdır. */
+    int toplam = beklenen + (strcmp(ad, "CP006: kuresel") == 0 ? 1 : 0);
+    test_sonuc(ad, rc == 0 && tani.sayi == beklenen && h == toplam
+                    && (!temiz || h == 0));
+}
+static void T41_odunc_kurallari(void) {
+    odunc_ornek("CP006: sonuc",
+        "işlev f(y: &yetki<MMIO>) -> sonuç<&yetki<MMIO>, metin> { ver tamam(y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: secimlik",
+        "işlev f(y: &yetki<MMIO>) -> seçimlik<&yetki<MMIO>> { ver değer(y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: cesit",
+        "çeşit Kutu { Yok, Var(&yetki<MMIO>) }\nişlev f(y: &yetki<MMIO>) -> Kutu { ver Kutu::Var(y); }", "CP006", 1, 0);
+
+    odunc_ornek("CP006: ek referans diziye kacamaz",
+        "işlev f(y: &yetki<MMIO>) { değişken z = &y; değişken xs = [z]; }", "CP006", 1, 0);
+    odunc_ornek("CP006: tuketim",
+        "işlev f(y: &yetki<MMIO>) { geri_al(y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: deger_param",
+        "işlev al(y: yetki<MMIO>) { geri_al(y); }\nişlev f(y: &yetki<MMIO>) { al(y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: donus",
+        "işlev f(y: &yetki<MMIO>) -> &yetki<MMIO> { ver y; }", "CP006", 1, 0);
+    odunc_ornek("CP006: yapi",
+        "yapı Kutu { y: &yetki<MMIO>; }\nişlev f(y: &yetki<MMIO>) { değişken k: Kutu = Kutu { y: y }; }", "CP006", 1, 0);
+    odunc_ornek("CP006: dizi",
+        "işlev f(y: &yetki<MMIO>) { değişken d: Dizi<&yetki<MMIO>> = [y]; }", "CP006", 1, 0);
+    odunc_ornek("CP006: kuresel",
+        "küresel değişken sakli: &yetki<MMIO> = boş;\nişlev f(y: &yetki<MMIO>) { güvensiz { sakli = y; } }", "CP006", 1, 0);
+    odunc_ornek("CP006: kapanis",
+        "işlev f(y: &yetki<MMIO>) { değişken g = || { mmio_yaz32(y, 0, 1); }; }", "CP006", 1, 0);
+    odunc_ornek("CP006: gorev",
+        "işlev f(y: &yetki<MMIO>) { değişken g = görev_başlat(y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: gorev_yakalama",
+        "işlev f(y: &yetki<MMIO>) -> sonuç<görev<tam32>, metin> { ver görev_başlat(|| { mmio_yaz32(y, 0, 1); ver 42; }); }", "CP006", 1, 0);
+    odunc_ornek("CP006: kanal",
+        "işlev f(y: &yetki<MMIO>) { değişken k: kanal<&yetki<MMIO>> = kanal_oluştur(1); kanal_gönder(k, y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: dizi_ekle",
+        "işlev f(y: &yetki<MMIO>) { değişken d: Dizi<&yetki<MMIO>> = []; dizi_ekle(d, y); }", "CP006", 1, 0);
+    odunc_ornek("CP006: yerel_alias_donus",
+        "işlev f(y: &yetki<MMIO>) -> &yetki<MMIO> { değişken z = y; ver z; }", "CP006", 1, 0);
+    odunc_ornek("CP006: deref",
+        "işlev f(y: &yetki<MMIO>) { değişken z = *y; geri_al(z); }", "CP006", 1, 0);
+    odunc_ornek("CP006: cast",
+        "işlev f(y: &yetki<MMIO>) -> *tam32 { güvensiz { ver y olarak *tam32; } }", "CP006", 1, 0);
+    odunc_ornek("odunc: sahiplik korunur ve ic ice gecer",
+        "işlev ic(y: &yetki<MMIO>) { mmio_yaz32(y, 0, 203); }\nişlev dis(y: &yetki<MMIO>) { ic(y); }\nişlev bellek(y: &yetki<Bellek>) {\n    değişken p: *tam64 = bölge_al(y, 1);\n    güvensiz { p[0] = 8589934592; }\n    değişken alt: yetki<Bellek> = delege(y, 1);\n    geri_al(alt);\n}\nişlev eski(y: yetki<MMIO>) -> yetki<MMIO> { ver y; }\nişlev temiz() {\n    değişken y: yetki<MMIO> = yetki_olustur(6, 3);\n    dis(&y); dis(&y);\n    değişken z: yetki<MMIO> = eski(y);\n    geri_al(z);\n    değişken b: yetki<Bellek> = yetki_olustur(3, 3);\n    bellek(&b); geri_al(b);\n}\n", "CP006", 0, 1);
+    odunc_ornek("odunc: iptal sonrasi CP005",
+        "işlev f(y: &yetki<MMIO>) { }\nişlev kotu() {\n    değişken y: yetki<MMIO> = yetki_olustur(6, 3);\n    geri_al(y);\n    f(&y);\n}\n", "CP005", 1, 0);
+}
+
 int main(void) {
     /* stderr'i sustur — hata mesajlari testlerde gurultu yapmasin */
     FILE *eski_stderr = freopen("/dev/null", "w", stderr);
@@ -601,6 +667,7 @@ int main(void) {
     T35_csrf_request_response_ayrik(); T36_sudo_subprocess_ayri();
     T37_heartbleed_memory_bounds(); T38_capability_handoff();
     T39_otp_tekkez_capability(); T40_ambient_authority_kaldirildi();
+    T41_odunc_kurallari();
 
     printf("\n========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",
