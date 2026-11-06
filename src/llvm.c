@@ -6189,8 +6189,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                  * rho_caller doner = ESKI davranis. */
                 const char *dz_rho = bolge_yerel_yonlendir(g, d, dz_elem);
                 fprintf(g->out,
-                    "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 %d)\n",
-                    rr, dz_rho, eb);   /* [D-506] yonlendirilmis rho */   /* V2-F4.2a: ρ */
+                    "  %%%d = call ptr @kdl_dizi_olustur(ptr %s, i32 ",
+                    rr, dz_rho);
+                /* C002: yapı elemanını skalerin 4 baytına indirme. Literal dizi
+                 * yoluyla aynı LLVM sizeof ifadesi hizalama ve dolguyu korur.
+                 * Self-host zaten bu yolu kullanır; skaler ABI değişmez. */
+                if (dizi_eleman_struct_mi(dz_elem))
+                    kdl_eleman_byte_yaz(g->out, dz_elem);
+                else
+                    fprintf(g->out, "%d", eb);
+                fputs(")\n", g->out);
                 /* Adim 6: kapasiteyi pre-reserve et (kullanici N istiyor) */
                 fprintf(g->out,
                     "  call void @kdl_dizi_kapasite_ayarla(ptr %s, ptr %%%d, i32 %%%d)\n",
