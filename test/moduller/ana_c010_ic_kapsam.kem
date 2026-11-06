@@ -1,0 +1,9 @@
+// C010: iç modülün seçili ithalatı dış kapsamı açmamalı.
+kullan c010_olay;
+modül ic {
+    kullan c010_olay::{TusOlayi};
+}
+işlev main() -> tam32 {
+    TusOlayi::Karakter(65);
+    ver 42;
+}

@@ -15185,7 +15185,112 @@ işlev capraz_imza_tasi(p: &değişken Ayr, mp: &değişken Ayr) -> tam32 {
     }
     ver 0;
 }
-işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) -> tam32 {
+// C010: seçili ve görünür çeşitlerin checker kayıtlarını taşı (C kapsamı aynası).
+// Tüm modül üyelerini düzleştirmek özel/seçilmemiş adları açardı. LLVM yolu
+// kaynakları tek AST'de yeniden ayrıştırır; yabancı düğüm indeksleri taşınmaz.
+işlev capraz_cesit_tasi(p: &değişken Ayr, mp: &değişken Ayr, yol: metin, kok: tam32, mkok: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(mp.cc_ad) {
+        değişken cad: metin = dizi_al(mp.cc_ad, i);
+        // Çeşit yan tablosu da düzdür: yalnız dosya modülünün doğrudan
+        // tanımı seçilebilir; iç modül üyesi aynı adla dışarı çıkarılamaz.
+        değişken tanim_var: mantıksal = yanlış;
+        değişken cesit_tanimi: mantıksal = yanlış;
+        değişken mb: tam32 = dizi_al(mp.a_cb, mkok);
+        değişken mi: tam32 = 0;
+        iken mi < dizi_al(mp.a_cs, mkok) {
+            değişken mn: tam32 = dizi_al(mp.cocuk, mb + mi);
+            eğer metin_esit(dizi_al(mp.a_ad, mn), "DISA") { mn = son_cocuk(mp, mn); }
+            eğer mn >= 0 ve metin_esit(dizi_al(mp.a_deg, mn), cad) {
+                tanim_var = doğru;
+                eğer metin_esit(dizi_al(mp.a_ad, mn), "CESIT") { cesit_tanimi = doğru; }
+            }
+            mi = mi + 1;
+        }
+        // Aynı adlı kapsamlı çeşitlerin düz payload kayıtlarını birleştirme.
+        değişken csay: tam32 = 0;
+        değişken ilk: mantıksal = doğru;
+        mi = 0;
+        iken mi < dizi_boyut(mp.cc_ad) {
+            eğer metin_esit(dizi_al(mp.cc_ad, mi), cad) {
+                csay = csay + 1;
+                eğer mi < i { ilk = yanlış; }
+            }
+            mi = mi + 1;
+        }
+        değişken secili: mantıksal = yanlış;
+        değişken belirsiz: mantıksal = yanlış;
+        // Seçili ad tablosu kapsamlar arasında düzdür: yalnız kökün doğrudan
+        // kullan bildirimlerine ait kayıtlar bu kapsamı açabilir.
+        değişken kb: tam32 = dizi_al(p.a_cb, kok);
+        değişken ki: tam32 = 0;
+        iken ki < dizi_al(p.a_cs, kok) {
+            değişken kn: tam32 = dizi_al(p.cocuk, kb + ki);
+            eğer metin_esit(dizi_al(p.a_ad, kn), "KULLAN") {
+                değişken j: tam32 = 0;
+                iken j < dizi_boyut(p.si_ad) {
+                    eğer metin_esit(dizi_al(p.si_ad, j), cad)
+                      ve (dizi_al(p.si_sat, j) == dizi_al(p.a_sat, kn))
+                      ve (dizi_al(p.si_sut, j) == dizi_al(p.a_sut, kn)) {
+                        eğer metin_esit(dizi_al(p.si_yol, j), yol) {
+                            secili = doğru;
+                            // C kullan_isle: doğrudan modül üyesi yoksa T002.
+                            eğer ilk ve (tanim_var == yanlış) { sekil_hata(p, kn, "T002"); }
+                        } değilse { belirsiz = doğru; }
+                    }
+                    j = j + 1;
+                }
+            }
+            ki = ki + 1;
+        }
+        eğer secili ve cesit_tanimi ve (csay == 1)
+          ve (ozel_uye_mi(p, son_segment(yol), cad) == yanlış)
+          ve (belirsiz == yanlış) ve (cesit_var_mi(p, cad) == yanlış) {
+            dizi_ekle(p.cc_ad, cad);
+            dizi_ekle(p.cc_node, 0 - 1);
+            değişken v: tam32 = 0;
+            iken v < dizi_boyut(mp.cv_cesit) {
+                eğer metin_esit(dizi_al(mp.cv_cesit, v), cad) {
+                    dizi_ekle(p.cv_cesit, cad);
+                    dizi_ekle(p.cv_ad, dizi_al(mp.cv_ad, v));
+                    değişken pc: tam32 = dizi_al(mp.cv_pc, v);
+                    değişken pb: tam32 = dizi_al(mp.cv_pb, v);
+                    dizi_ekle(p.cv_pc, pc);
+                    dizi_ekle(p.cv_pb, dizi_boyut(p.cv_pt));
+                    değişken k: tam32 = 0;
+                    iken k < pc {
+                        dizi_ekle(p.cv_pt, dizi_al(mp.cv_pt, pb + k));
+                        dizi_ekle(p.cv_ptn, 0 - 1);
+                        k = k + 1;
+                    }
+                }
+                v = v + 1;
+            }
+            // Yükteki tip parametresi beklenen çeşitten ikame edilir (M004).
+            değişken t: tam32 = 0;
+            iken t < dizi_boyut(mp.tp_yad) {
+                eğer metin_esit(dizi_al(mp.tp_yad, t), cad) {
+                    dizi_ekle(p.tp_yad, cad);
+                    dizi_ekle(p.tp_ad, dizi_al(mp.tp_ad, t));
+                }
+                t = t + 1;
+            }
+            // Var olan tip parametresi kısıtları da aynı sahiple korunur.
+            t = 0;
+            iken t < dizi_boyut(mp.gp_sahip) {
+                eğer metin_esit(dizi_al(mp.gp_sahip, t), cad) {
+                    dizi_ekle(p.gp_sahip, cad);
+                    dizi_ekle(p.gp_idx, dizi_al(mp.gp_idx, t));
+                    dizi_ekle(p.gp_bound, dizi_al(mp.gp_bound, t));
+                }
+                t = t + 1;
+            }
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin, kok: tam32) -> tam32 {
     değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
     değişken gi: tam32 = 0;
     iken gi < gn { eğer metin_esit(dizi_al(p.kullan_gorulen, gi), modul_yol) { ver 0; } gi = gi + 1; }
@@ -15227,9 +15332,11 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin) 
                 dizi_ekle(p.priv_ad, dizi_al(mp.a_deg, c));
             }
         }
-        eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz); }
+        eğer metin_esit(cad, "KULLAN") { modul_yukle(p, dizi_al(mp.a_deg, c), mdiz, kok); }
         ci = ci + 1;
     }
+    // C010: görünürlük kayıtları kurulduktan sonra seçili çeşitleri taşı.
+    capraz_cesit_tasi(p, &değişken mp, modul_yol, kok, mkok);
     ver 0;
 }
 // ---- D-399: --llvm için ÇAPRAZ-DOSYA modül yükleme (KAYNAK düzeyinde) ----
@@ -15360,7 +15467,7 @@ işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
             // iki yükleme geçişi var; parite için ikisi de. ÖNKOŞUL: runtime'ın
             // UTF-8 yol desteği (D-362 kdl_fopen_utf8) — yoksa `kütüphane/`
             // modülleri açılamaz ve GEÇERLİ dosyalar sahte T040 alır.
-            eğer modul_yukle(p, dizi_al(p.a_deg, c), p.giris_dizin) < 0 {
+            eğer modul_yukle(p, dizi_al(p.a_deg, c), p.giris_dizin, kok) < 0 {
                 sekil_hata(p, c, "T040");
                 sekil_hata(p, c, "T040");
             } değilse {
