@@ -212,6 +212,9 @@
       Sonra: surucu_diff globu yeni dizinlere genisletilir; donanim baglama (port/MMIO) Claude'da.
 
 # ===== F. FORMEL =====
+- [ ] E4c [M] FAT32 yazma PERFORMANSI: fat32_coklu (110 dosya) self-host 16 sn, fat32_yaz 14 sn
+      (Spark); x86 CI'da 30 sn'yi asti (D-737). Muhtemel kok: her kume ayiriminda FAT'in bastan
+      taranmasi / imaj kopyasi — once PROFILLE, tahmin etme. Gercek OS'te de hissedilir.
 - [ ] E4b [M] Codex derleyici bulgulari (otomasyon/chatgpt/codex_bulgular.md; HEPSI abd9aa9'da
       yeniden uretildi). SESSIZ YANLIS ONCE:
       C009 [S] GUVENLIK: self nitelikli `m::dosya_sil(..)` -> `@kdl_dosya_sil` (GERCEK host dosyasi!);
