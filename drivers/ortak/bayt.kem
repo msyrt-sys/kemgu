@@ -9,7 +9,8 @@ genel işlev bayt_sinirda(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> mantıksal {
     ver ofs >= 0 ve n >= 0 ve ofs <= dizi_boyut(b) ve n <= dizi_boyut(b) - ofs;
 }
 
-genel işlev oku_u8(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
+// Yalnız mevcut baytları okur; tahsis yapmadığı için bölge açmaz.
+genel çıplak işlev oku_u8(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
     ver dizi_al(b, ofs) olarak tam32;
 }
 
@@ -18,7 +19,8 @@ genel işlev oku_le16(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
 }
 
 // 32-bit işaretsiz değer tam64'te döner (tam32'ye sığmaz: 0xFFFFFFFF).
-genel işlev oku_le32(b: Dizi<dtam8>, ofs: tam32) -> tam64 {
+// Yalnız mevcut baytları okur; tahsis yapmadığı için bölge açmaz.
+genel çıplak işlev oku_le32(b: Dizi<dtam8>, ofs: tam32) -> tam64 {
     değişken d: tam64 = 0;
     değişken i: tam32 = 3;
     iken i >= 0 {
