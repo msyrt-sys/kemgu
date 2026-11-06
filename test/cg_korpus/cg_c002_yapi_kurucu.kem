@@ -1,0 +1,27 @@
+// C002: kurucu yapı elemanının LLVM yerleşimini kullanmalı.
+yapı Nokta { x: tam32; y: tam64; }
+işlev uret() -> Dizi<Nokta> {
+    değişken d: Dizi<Nokta> = dizi_olustur(0);
+    dizi_ekle(d, Nokta { x: 12, y: 8589934595 });
+    dizi_ekle(d, Nokta { x: 25, y: 17179869189 });
+    dizi_ekle(d, Nokta { x: 37, y: -8589934603 });
+    ver d;
+}
+işlev main() -> tam32 {
+    değişken d: Dizi<Nokta> = uret();
+    değişken a: Nokta = dizi_al(d, 0);
+    değişken b: Nokta = dizi_al(d, 1);
+    değişken c: Nokta = dizi_al(d, 2);
+    eğer a.x != 12 veya a.y != 8589934595 { ver 1; }
+    eğer b.x != 25 veya b.y != 17179869189 { ver 2; }
+    eğer c.x != 37 veya c.y != -8589934603 { ver 3; }
+    // Pozitif: mevcut boş literal ve skaler kurucu yolları.
+    değişken e: Dizi<Nokta> = [];
+    dizi_ekle(e, Nokta { x: 42, y: 8589934595 });
+    değişken n: Nokta = dizi_al(e, 0);
+    eğer n.x != 42 veya n.y != 8589934595 { ver 4; }
+    değişken s: Dizi<tam64> = dizi_olustur(3);
+    dizi_ekle(s, 17179869189);
+    eğer dizi_al(s, 0) != 17179869189 { ver 5; }
+    ver 42;
+}
