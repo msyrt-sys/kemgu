@@ -134,9 +134,10 @@ genel işlev blk_baslat_cekirdek(
     }
 
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
-        // MMIO alt-yetkisi D1 status helper'ina reset yazimi icin devredilir.
+        // MMIO alt-yetkisi status yardımcısına reset yazımı için ödünç verilir; çağıran sonra iptal eder.
         değişken y_reset: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        virtio_mmio_status_yaz(y_reset, taban, status);
+        virtio_mmio_status_yaz(&y_reset, taban, status);
+        geri_al(y_reset);
     }
 
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
@@ -146,9 +147,10 @@ genel işlev blk_baslat_cekirdek(
     }
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_ACKNOWLEDGE);
-        // MMIO alt-yetkisi D1 status helper'ina ACKNOWLEDGE yazimi icin devredilir.
+        // MMIO alt-yetkisi status yardımcısına ACKNOWLEDGE yazımı için ödünç verilir; çağıran sonra iptal eder.
         değişken y_ack: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        virtio_mmio_status_yaz(y_ack, taban, status);
+        virtio_mmio_status_yaz(&y_ack, taban, status);
+        geri_al(y_ack);
     }
 
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
@@ -158,9 +160,10 @@ genel işlev blk_baslat_cekirdek(
     }
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER);
-        // MMIO alt-yetkisi D1 status helper'ina DRIVER yazimi icin devredilir.
+        // MMIO alt-yetkisi status yardımcısına DRIVER yazımı için ödünç verilir; çağıran sonra iptal eder.
         değişken y_driver: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        virtio_mmio_status_yaz(y_driver, taban, status);
+        virtio_mmio_status_yaz(&y_driver, taban, status);
+        geri_al(y_driver);
     }
 
     değişken device_features: dtam64 = 0;
@@ -199,9 +202,10 @@ genel işlev blk_baslat_cekirdek(
     }
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_FEATURES_OK);
-        // MMIO alt-yetkisi D1 status helper'ina FEATURES_OK yazimi icin devredilir.
+        // MMIO alt-yetkisi status yardımcısına FEATURES_OK yazımı için ödünç verilir; çağıran sonra iptal eder.
         değişken y_features_ok: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        virtio_mmio_status_yaz(y_features_ok, taban, status);
+        virtio_mmio_status_yaz(&y_features_ok, taban, status);
+        geri_al(y_features_ok);
     }
 
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
@@ -254,9 +258,10 @@ genel işlev blk_baslat_cekirdek(
     }
     eğer hata_kodu == BLK_BASLAT_HATA_YOK {
         status = virtio_status_ekle(status, VIRTIO_STATUS_DRIVER_OK);
-        // MMIO alt-yetkisi D1 status helper'ina DRIVER_OK yazimi icin devredilir.
+        // MMIO alt-yetkisi status yardımcısına DRIVER_OK yazımı için ödünç verilir; çağıran sonra iptal eder.
         değişken y_driver_ok: yetki<MMIO> = delege(y, BLK_MMIO_OKU_YAZ);
-        virtio_mmio_status_yaz(y_driver_ok, taban, status);
+        virtio_mmio_status_yaz(&y_driver_ok, taban, status);
+        geri_al(y_driver_ok);
     }
 
     eğer hata_kodu != BLK_BASLAT_HATA_YOK {

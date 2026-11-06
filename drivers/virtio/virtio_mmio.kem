@@ -146,10 +146,9 @@ genel işlev virtio_mmio_status_oku(y: yetki<MMIO>, taban: tam64) -> tam32 {
     ver status;
 }
 
-// MMIO yetkisi tek status yazmasini yapmak icin sahiplenilir ve sonda iade edilir.
-genel işlev virtio_mmio_status_yaz(y: yetki<MMIO>, taban: tam64, deger: tam32) {
+// MMIO yetkisi yalnız status yazımı süresince ödünç alınır; sahip çağıranda kalır.
+genel işlev virtio_mmio_status_yaz(y: &yetki<MMIO>, taban: tam64, deger: tam32) {
     mmio_yaz32(y, virtio_mmio_adres(taban, VIRTIO_MMIO_STATUS), deger);
-    geri_al(y);
 }
 
 // MMIO yetkisi init handshake boyunca odunc register erisimleri icin sahiplenilir.
