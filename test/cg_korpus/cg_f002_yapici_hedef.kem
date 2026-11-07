@@ -1,0 +1,54 @@
+// F002: alan/iç içe alan/indeks atamasında dört yapıcının hedef tipi korunur.
+yapı Veri { o: seçimlik<tam64>; r: sonuç<tam64, metin>; }
+yapı Dis { v: Veri; }
+işlev sec_oku(o: seçimlik<tam64>) -> tam64 {
+    eşleş o { hiç => { ver -1; } değer(v) => { ver v; } }
+}
+işlev sonuc_oku(r: sonuç<tam64, metin>) -> tam64 {
+    eşleş r { hata(e) => { ver -1; } tamam(v) => { ver v; } }
+}
+işlev hata_esit(r: sonuç<tam64, metin>, beklenen: metin) -> mantıksal {
+    eşleş r { hata(e) => { ver metin_esit(e, beklenen); } tamam(v) => { ver yanlış; } }
+}
+genel işlev f002_sina() -> tam32 {
+    değişken ilk: sonuç<tam64, metin> = hata("ilk");
+    değişken s: Veri = Veri { o: hiç, r: ilk };
+    değişken a: Dis = Dis { v: s };
+    s.o = değer(8589934609 olarak tam64);
+    eğer sec_oku(s.o) != 8589934609 { ver 1; }
+    s.o = hiç;
+    eğer sec_oku(s.o) != -1 { ver 2; }
+    s.r = tamam(17179869213 olarak tam64);
+    eğer sonuc_oku(s.r) != 17179869213 { ver 3; }
+    s.r = hata("alan");
+    eğer hata_esit(s.r, "alan") == yanlış { ver 4; }
+    a.v.o = değer(34359738411 olarak tam64);
+    eğer sec_oku(a.v.o) != 34359738411 { ver 5; }
+    a.v.r = tamam(8589934609 olarak tam64);
+    eğer sonuc_oku(a.v.r) != 8589934609 { ver 6; }
+    a.v.o = hiç;
+    a.v.r = hata("ic");
+    eğer sec_oku(a.v.o) != -1 { ver 7; }
+    eğer hata_esit(a.v.r, "ic") == yanlış { ver 8; }
+    // Pozitif: yerel atama ve argüman yapıcıları mevcut anlamını korur.
+    değişken yerel: seçimlik<tam64> = hiç;
+    yerel = değer(17179869213 olarak tam64);
+    eğer sec_oku(yerel) != 17179869213 { ver 9; }
+    eğer sonuc_oku(tamam(34359738411 olarak tam64)) != 34359738411 { ver 10; }
+    değişken xs: Dizi<seçimlik<tam64>> = [yerel, yerel, yerel];
+    xs[0] = değer(8589934609 olarak tam64);
+    xs[1] = değer(17179869213 olarak tam64);
+    xs[2] = değer(34359738411 olarak tam64);
+    eğer sec_oku(dizi_al(xs, 0)) != 8589934609 { ver 11; }
+    eğer sec_oku(dizi_al(xs, 1)) != 17179869213 { ver 12; }
+    eğer sec_oku(dizi_al(xs, 2)) != 34359738411 { ver 13; }
+    xs[1] = hiç;
+    eğer sec_oku(dizi_al(xs, 1)) != -1 { ver 14; }
+    değişken ys: Dizi<sonuç<tam64, metin>> = [ilk, ilk];
+    ys[0] = tamam(34359738411 olarak tam64);
+    ys[1] = hata("dizi");
+    eğer sonuc_oku(dizi_al(ys, 0)) != 34359738411 { ver 15; }
+    eğer hata_esit(dizi_al(ys, 1), "dizi") == yanlış { ver 16; }
+    ver 42;
+}
+işlev main() -> tam32 { ver f002_sina(); }
