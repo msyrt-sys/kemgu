@@ -117,6 +117,8 @@ genel işlev oku_be32(b: Dizi<dtam8>, ofs: tam32) -> sonuç<tam64,metin> { ver b
 genel işlev oku_be64(b: Dizi<dtam8>, ofs: tam32) -> sonuç<tam64,metin> { ver be_oku(b,ofs,8); }
 işlev be_yaz(b: Dizi<dtam8>, ofs: tam32, v: tam64, n: tam32) -> sonuç<mantıksal,metin> {
     eğer değil bayt_sinirda(b,ofs,n) { ver hata("be yazma araligi"); }
+    eğer n == 2 ve (v < 0 veya v > 65535) { ver hata("be16 deger araligi"); }
+    eğer n == 4 ve (v < 0 veya v > 4294967295) { ver hata("be32 deger araligi"); }
     değişken i: tam32 = 0;
     iken i < n { yaz_u8(b,ofs+i,v >> ((n-1-i)*8)); i=i+1; }
     ver tamam(doğru);
