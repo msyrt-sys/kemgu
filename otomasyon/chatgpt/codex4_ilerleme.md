@@ -21,3 +21,5 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] C3 · 3 test · ATA kelime içi bayt sırası sabotajı → kırmızı · self 0,002 sn · köprü 102/102 · 2026-11-07T06:57:12.209301+00:00
 - [x] C4 · 2 test / SATA tarama, boş yuva, 5 I/O · SATA imza sabotajı → kırmızı · self 0,064 sn · köprü 103/103 · 2026-11-07T07:02:14.004583+00:00
 - VARSAYIM C4: her durum bir seçili SATA portuna aittir; port=-1 ilk uygun portu seçer, tüm uygun portlar listelenir. DMA alanı 73728 bayt; veri 64 KiB; beklemeler 1000×1 ms ile sınırlıdır.
+- [x] C5 · 2 test / GPT→FAT32 dosya + 7 hata · TFES sabotajı → kırmızı · self 0,366 sn · köprü 104/104 · 2026-11-07T07:04:23.609001+00:00
+- [x] D1 · 4 test / 57 kesit / USB-HID başlık kâhini · HID uzunluk sabotajı → kırmızı · self 0,002 sn · köprü 105/105 · 2026-11-07T07:08:20.392031+00:00

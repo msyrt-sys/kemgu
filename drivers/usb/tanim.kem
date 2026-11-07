@@ -1,0 +1,69 @@
+// USB tanımlayıcıları ve SETUP paketleri; kaynak: ch9.h/hid.h, tools/codex/dalga4_usb.py.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, bayt_sifir, yaz_u8, yaz_le16 };
+genel yapı UsbAygit { surum: tam32; sinif: tam32; alt_sinif: tam32; protokol: tam32; ep0_paket: tam32; vid: tam32; pid: tam32; aygit_surum: tam32; uretici_no: tam32; urun_no: tam32; seri_no: tam32; yapi_sayisi: tam32; }
+genel yapı UsbArayuz { no: tam32; alternatif: tam32; uc_sayisi: tam32; sinif: tam32; alt_sinif: tam32; protokol: tam32; }
+genel yapı UsbUc { adres: tam32; tur: tam32; paket_bayt: tam32; islemler: tam32; aralik: tam32; arayuz: tam32; alternatif: tam32; }
+genel yapı UsbHidEk { tur: tam32; boy: tam32; }
+genel yapı UsbHid { arayuz: tam32; alternatif: tam32; surum: tam32; ulke: tam32; ekler: Dizi<UsbHidEk>; }
+genel yapı UsbYapilandirma { deger: tam32; ozellik: tam32; guc_birimi: tam32; arayuzlar: Dizi<UsbArayuz>; uclar: Dizi<UsbUc>; hidler: Dizi<UsbHid>; }
+genel işlev usb_aygit_coz(b: Dizi<dtam8>) -> sonuç<UsbAygit,metin> {
+    eğer dizi_boyut(b) != 18 { ver hata("usb aygit boyu"); }
+    eğer oku_u8(b,0) != 18 veya oku_u8(b,1) != 1 { ver hata("usb aygit basligi"); }
+    değişken ep: tam32 = oku_u8(b,7); değişken surum: tam32 = oku_le16(b,2);
+    eğer surum >= 768 { eğer ep != 9 { ver hata("usb3 ep0 boyu"); } ep=512; }
+    değilse { eğer ep != 8 ve ep != 16 ve ep != 32 ve ep != 64 { ver hata("usb ep0 boyu"); } }
+    eğer oku_u8(b,17) == 0 { ver hata("usb yapilandirma yok"); }
+    ver tamam(UsbAygit { surum: surum, sinif: oku_u8(b,4), alt_sinif: oku_u8(b,5), protokol: oku_u8(b,6), ep0_paket: ep, vid: oku_le16(b,8), pid: oku_le16(b,10), aygit_surum: oku_le16(b,12), uretici_no: oku_u8(b,14), urun_no: oku_u8(b,15), seri_no: oku_u8(b,16), yapi_sayisi: oku_u8(b,17) });
+}
+genel işlev usb_yapilandirma_coz(b: Dizi<dtam8>) -> sonuç<UsbYapilandirma,metin> {
+    eğer dizi_boyut(b) < 9 { ver hata("usb yapi kisa"); }
+    değişken toplam: tam32 = oku_le16(b,2); değişken arayuz_sayisi: tam32 = oku_u8(b,4);
+    eğer oku_u8(b,0) != 9 veya oku_u8(b,1) != 2 veya toplam < 9 veya toplam > dizi_boyut(b) veya oku_u8(b,5) == 0 veya (oku_u8(b,7)&159) != 128 { ver hata("usb yapi basligi"); }
+    değişken arayuzlar: Dizi<UsbArayuz> = []; değişken uclar: Dizi<UsbUc> = []; değişken hidler: Dizi<UsbHid> = [];
+    değişken mevcut: tam32 = 0-1; değişken alternatif: tam32 = 0; değişken beklenen: tam32 = 0; değişken sayilan: tam32 = 0; değişken benzersiz: tam32 = 0;
+    değişken ofs: tam32 = 9;
+    iken ofs < toplam {
+        eğer toplam-ofs < 2 { ver hata("usb tanimlayici kisa"); }
+        değişken n: tam32 = oku_u8(b,ofs); değişken tur: tam32 = oku_u8(b,ofs+1);
+        eğer n < 2 veya n > toplam-ofs { ver hata("usb tanimlayici boyu"); }
+        eğer tur == 4 {
+            eğer n != 9 veya (mevcut >= 0 ve sayilan != beklenen) { ver hata("usb arayuz boyu veya uc sayisi"); }
+            mevcut=oku_u8(b,ofs+2); alternatif=oku_u8(b,ofs+3); beklenen=oku_u8(b,ofs+4); sayilan=0;
+            eğer mevcut >= arayuz_sayisi { ver hata("usb arayuz numarasi"); }
+            değişken var: mantıksal = yanlış; değişken j: tam32 = 0;
+            iken j < dizi_boyut(arayuzlar) { değişken a: UsbArayuz = dizi_al(arayuzlar,j); eğer a.no == mevcut { var=doğru; eğer a.alternatif == alternatif { ver hata("usb yinelenen arayuz"); } } j=j+1; }
+            eğer değil var { benzersiz=benzersiz+1; }
+            dizi_ekle(arayuzlar,UsbArayuz { no: mevcut, alternatif: alternatif, uc_sayisi: beklenen, sinif: oku_u8(b,ofs+5), alt_sinif: oku_u8(b,ofs+6), protokol: oku_u8(b,ofs+7) });
+        }
+        değilse eğer tur == 5 {
+            eğer n < 7 veya mevcut < 0 { ver hata("usb uc baglami"); }
+            değişken adr: tam32 = oku_u8(b,ofs+2); değişken aktarim: tam32 = oku_u8(b,ofs+3)&3;
+            değişken max: tam32 = oku_le16(b,ofs+4); değişken paket: tam32 = max&2047; değişken ek: tam32 = (max>>11)&3;
+            eğer (adr&15) == 0 veya (adr&112) != 0 veya paket < 1 veya paket > 1024 veya (max&57344) != 0 veya ek == 3 veya (aktarim == 2 ve ek != 0) { ver hata("usb uc alanlari"); }
+            eğer aktarim == 3 ve oku_u8(b,ofs+6) == 0 { ver hata("usb kesme araligi"); }
+            değişken j: tam32 = 0;
+            iken j < dizi_boyut(uclar) { değişken e: UsbUc = dizi_al(uclar,j); eğer e.arayuz == mevcut ve e.alternatif == alternatif ve e.adres == adr { ver hata("usb yinelenen uc"); } j=j+1; }
+            dizi_ekle(uclar,UsbUc { adres: adr, tur: aktarim, paket_bayt: paket, islemler: ek+1, aralik: oku_u8(b,ofs+6), arayuz: mevcut, alternatif: alternatif }); sayilan=sayilan+1;
+        }
+        değilse eğer tur == 33 {
+            eğer n < 9 veya mevcut < 0 { ver hata("usb hid baglami"); }
+            değişken adet: tam32 = oku_u8(b,ofs+5); eğer adet < 1 veya n != 6+3*adet { ver hata("usb hid boyu"); }
+            değişken ekler: Dizi<UsbHidEk> = []; değişken j: tam32 = 0;
+            iken j < adet { değişken boy: tam32 = oku_le16(b,ofs+7+3*j); eğer boy == 0 { ver hata("usb hid rapor boyu"); } dizi_ekle(ekler,UsbHidEk { tur: oku_u8(b,ofs+6+3*j), boy: boy }); j=j+1; }
+            dizi_ekle(hidler,UsbHid { arayuz: mevcut, alternatif: alternatif, surum: oku_le16(b,ofs+2), ulke: oku_u8(b,ofs+4), ekler: ekler });
+        }
+        değilse eğer tur == 1 veya tur == 2 { ver hata("usb ic ice baslik"); }
+        ofs=ofs+n;
+    }
+    eğer sayilan != beklenen veya benzersiz != arayuz_sayisi { ver hata("usb sayim uyusmazligi"); }
+    ver tamam(UsbYapilandirma { deger: oku_u8(b,5), ozellik: oku_u8(b,7), guc_birimi: oku_u8(b,8), arayuzlar: arayuzlar, uclar: uclar, hidler: hidler });
+}
+genel işlev usb_setup(tip: tam32, istek: tam32, deger: tam32, indeks: tam32, boy: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eğer tip < 0 veya tip > 255 veya istek < 0 veya istek > 255 veya deger < 0 veya deger > 65535 veya indeks < 0 veya indeks > 65535 veya boy < 0 veya boy > 65535 { ver hata("usb setup araligi"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(8); yaz_u8(b,0,tip olarak tam64); yaz_u8(b,1,istek olarak tam64); yaz_le16(b,2,deger olarak tam64); yaz_le16(b,4,indeks olarak tam64); yaz_le16(b,6,boy olarak tam64); ver tamam(b);
+}
+genel işlev usb_get_descriptor(tur: tam32, no: tam32, dil: tam32, boy: tam32) -> sonuç<Dizi<dtam8>,metin> { eğer tur < 1 veya tur > 255 veya no < 0 veya no > 255 { ver hata("usb tanimlayici istegi"); } ver usb_setup(128,6,(tur<<8)|no,dil,boy); }
+genel işlev usb_set_address(adres: tam32) -> sonuç<Dizi<dtam8>,metin> { eğer adres < 0 veya adres > 127 { ver hata("usb adres"); } ver usb_setup(0,5,adres,0,0); }
+genel işlev usb_set_configuration(deger: tam32) -> sonuç<Dizi<dtam8>,metin> { eğer deger < 0 veya deger > 255 { ver hata("usb yapilandirma"); } ver usb_setup(0,9,deger,0,0); }
+genel işlev usb_hid_set_protocol(arayuz: tam32, boot: mantıksal) -> sonuç<Dizi<dtam8>,metin> { eğer arayuz < 0 veya arayuz > 255 { ver hata("hid arayuz"); } değişken p: tam32 = 1; eğer boot { p=0; } ver usb_setup(33,11,p,arayuz,0); }
+genel işlev usb_hid_set_idle(arayuz: tam32, sure: tam32, rapor: tam32) -> sonuç<Dizi<dtam8>,metin> { eğer arayuz < 0 veya arayuz > 255 veya sure < 0 veya sure > 255 veya rapor < 0 veya rapor > 255 { ver hata("hid idle"); } ver usb_setup(33,10,(sure<<8)|rapor,arayuz,0); }

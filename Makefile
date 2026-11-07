@@ -4684,7 +4684,7 @@ calistir_uart_pl011_bare_metal:
 # (2) Saf-mantık sürücü testleri (ortak/ps2/disk/fs/acpi) İKİ derleyicide
 #     derlenip koşar + stdout eşitliği. Yeni test dosyası kendiliğinden kapsanır.
 #     surucu_diff yalnız YAPIYI ölçer (linklemez); bu kapı DAVRANIŞI ölçer.
-CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
+CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/usb/*_test.kem tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
                      tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem tests/drivers/pci/*_test.kem tests/drivers/bellek/*_test.kem tests/drivers/elf/*_test.kem tests/drivers/ekran/*_test.kem tests/drivers/girdi/*_test.kem tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem tests/drivers/sinir/*_test.kem))
 calistir_chatgpt_kopru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@echo "=== ChatGPT köprüsü: dil kartı + saf-mantık sürücü testleri ==="
