@@ -89,7 +89,7 @@ def qemu_kos(w,exe,eksik=False):
                 r=subprocess.run(['ss','-ltnH',f'sport = :{qp}'],capture_output=True,timeout=kalan())
                 if r.stdout.strip():break
                 time.sleep(.01)
-            r=girdi_kos(exe,qp,mp) if MODE in ['usb_kbd','usb_fare'] else subprocess.run([str(exe),str(qp)],capture_output=True,text=True,timeout=kalan())
+            r=girdi_kos(exe,qp,mp) if MODE in ['usb_kbd','usb_fare'] else subprocess.run([str(exe),str(qp)]+(["iz"] if os.environ.get("USB_QTEST_IZ") and not eksik else []),capture_output=True,text=True,timeout=kalan())
             if MODE not in ['usb_kbd','usb_fare']:print(r.stdout,end='')
             if eksik:
                 if r.returncode!=1 or 'QTEST_XHCI HATA xhci aygit sayisi' not in r.stdout:raise RuntimeError('eksik aygıt olumsuzu yakalanmadı')

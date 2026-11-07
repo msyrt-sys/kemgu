@@ -32,8 +32,6 @@ işlev main() -> tam32 {
 
 - G0: Depolama matrisinin nv/ah alias’ları C001/T024 örtük modül bağı çakışması nedeniyle korunur. F005 yalnız IR adını düzeltir, ad çözümlemeyi değiştirmez.
 
-## Kalan doğrulanmamışlar
-
 ### C6-002 — çeşit dizisi alanına boş dizi ataması
 
 ```kem
@@ -53,7 +51,7 @@ işlev main() -> tam32 {
 ```
 `build/{kemgu,codegen} --llvm build/codex6/enum_kuyruk6.kem` + clang/runtime: iki IR/link rc=0. C çıktı68/rc0; self yanlış payload (ölçümde 272412716344864)/rc1. `s.xs=[]` kaldırılınca ikisi68/rc0. Dolanma: `değişken bos: Dizi<GcIstek> = []; s.kuyruk=bos;`. Derleyici değişmedi.
 
-- Gerçek QEMU aktarım halkasında TD sonundaki Link TRB, ardından hazır TD yokken henüz tüketilmemiş olabilir (`xhci_ring_chain_length` yalnız bakar). Link cycle’ını bir sonraki TD ile erken değiştirmek ikinci kontrol aktarımını durdurdu. Enumerasyon EP0 için mevcut 64 TRB üretici halkası kullanıldı; küçük BOT halkasında aynı davranış G3/G6’da ayrıca ölçülecek.
+- Gerçek QEMU aktarım halkasında TD sonundaki Link TRB, ardından hazır TD yokken henüz tüketilmemiş olabilir (`xhci_ring_chain_length` yalnız bakar). Link cycle’ını bir sonraki TD ile erken değiştirmek ikinci kontrol aktarımını durdurdu. Enumerasyon EP0 için mevcut 64 TRB üretici halkası kullanıldı; küçük BOT halkasında aynı davranış G3’te ayrıca ölçülüp düzeltildi.
 
 ### C6-003 — doğrudan dizi alanı üzerinde için gövdesi atlanıyor
 
@@ -89,3 +87,33 @@ VID1575/PID1, interrupt IN129, paket4, bInterval7; QEMU dev-hid.c desc_iface_mou
 ### SAHTE MODEL DÜZELTİLDİ — fare
 
 Gerçek iki QMP raporu ayrı `fare_qemu_test.kem` fikstürüne alındı; önceki salt işaretli bayt testleri korunur. QEMU’nun boot protokolünde de 4 bayt döndürdüğü ölçüldü; çözücünün mevcut 3/4 bayt desteği doğru.
+
+## Ek derleyici bulgusu
+
+### C6-004 — doğrudan yapı dizisi sabiti dönüşü
+
+```kem
+yapı R { t: tam32; a: tam64; v: tam64; n: tam32; h: tam64; y: tam64; b: Dizi<dtam8>; }
+işlev f() -> Dizi<R> { ver [R { t: 1, a: 0, v: 0, n: 0, h: 0, y: 16777280, b: [] }]; }
+işlev main() -> tam32 {
+    değişken xs: Dizi<R> = f(); değişken r: R = dizi_al(xs,0);
+    yazdir_tam(r.t); yazdir_metin(tam_metin(r.v)); yazdir_tam(r.n); yazdir_metin(tam_metin(r.y));
+    eğer r.t == 1 ve r.v == 0 ve r.n == 0 ve r.y == 16777280 { ver 0; } ver 1;
+}
+```
+`build/{kemgu,codegen} --llvm build/codex6/kayit_dizi_donus.kem`, clang/runtime: IR/link rc=0. C `1,0,0,16777280`/rc0; self `1,0,-1022437784,263721319102200`/rc1 (bozuk alanlar çalıştırmaya göre değişiyor). Gerçek QEMU’nun C/self 187 istek izi birebir aynıyken yeniden oynatma fikstürünün ilk kaydında saptandı. Derleyici değişmedi; dönüşten önce `değişken kayitlar: Dizi<XhciIz> = [...]` kullanılır.
+
+## SAHTE MODEL DÜZELTİLDİ — tam enumerasyon
+
+G1’in kısmi başlangıç modeli artık gerçek QEMU’dan kaydedilen 187 istek/yanıt iziyle tamamlanır. C/self izlerinin kanonik SHA256’sı aynı: `d1f99eba7e7eb7971bf583cf35697e58bb3cb2142e4692ec26f966860f9e59f5`. Model istek türü, adres, değer, boy ve bütün yazılan baytları etkileyen modüler özeti karşılaştırır; gerçek kayıtlı MMIO/DMA yanıtlarını döndürür. Sürücünün TRB veya USB ayrıştırıcısını paylaşmaz. İki derleyicinin izleri ayrı tekrar edilir; hatalı tamamlanma kodu5 ve 15 baytlık kesilmiş olay hata vermelidir. Yenileme komutları fikstür başında; pozitif gerçek qtest geçmeden kayıt üretilmez.
+
+Bu, genel bir xHCI emülatörü değil, ölçülen yürütmenin regresyon modelidir. İstek sırası değişirse önce gerçek QEMU’da tekrar ölçülür. G1 ERST boyu ve G2 endpoint add maskesi sabotajları artık tam sahte enumerasyon testinde de yakalanır. BOT, HID klavye ve fare farkları yukarıdaki ayrı modellerde korunur.
+
+## Kalan doğrulanmamışlar ve kapsam sınırı
+
+- Fiziksel xHCI donanımı, DMA cache/barrier/coherency ve interrupt glue bu sans-IO işin dışında. QEMU 8.2.2/q35 üzerinde ölçüldü.
+- QEMU örneği scratchpad=0 ve 32 bayt bağlam bildiriyor. Sürücünün sıfır dışı scratchpad/64 bayt bağlam yolları gerçek aygıtta ölçülmedi; fiziksel doğrulama gerektirir.
+- Kök port, yapılandırma1/alt ayar0, aygıt başına en çok bir IN/bir OUT ucu; hub/isochronous ve aynı yönde çoklu endpoint desteklenmez, hata döner. İlk16 yuva ve en çok32 scratchpad sayfası sınırı var.
+- BOT’a geçiş, denetleyici olay halkasını özel BOT halkasına devreder. Bu API tek sahipli ve geri dönüşsüzdür: ardından aynı çekirdek durumu üzerinden HID başlatılmaz. Depo ve HID qtest’leri ayrı QEMU örnekleridir; eşzamanlı karma I/O iddiası yok.
+- FAT32 gerçek testi mkfs.fat ile hazırlanmış düz64MiB imaj üzerinde; GPT, gerçek USB sökme/takma, güç kesintisi ve büyük disk bu dalgada ölçülmedi. Dosyanın tamamı ve iki FAT/FSInfo bağımsız doğrulanır.
+- G0’da yalnız F001–F005 ile kapanan dolanmalar temizlendi. C001 ad bağı alias’ları ve burada belgelenen C6-001..004 dolanmaları durur; derleyici/runtime değiştirilmedi.

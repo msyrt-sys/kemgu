@@ -7,13 +7,14 @@ kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
 kullan tests::qemu::qtest::{ Qt, qt_ac, qt_kapat, qt_pci_bul, qt_pci_bar_ata, qt_yurut, qt_bellek_oku };
 
 kullan drivers::ortak::bayt::{ oku_le32 };
+kullan tests::qemu::xhci_iz::{ iz_yaz };
 
 genel sabit XHCI_BAR: tam64 = 4273799168;
 genel işlev xhci_qsur(q: &değişken Qt, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
     değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
     iken i < 100000 {
         değişken istek: GcIstek = xhci_adim(s,y);
-        eşleş istek { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=qt_yurut(q,XHCI_BAR,istek); } }
+        eşleş istek { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=qt_yurut(q,XHCI_BAR,istek); eğer arg_sayi() > 2 { eğer arg_al(2) == "iz" { iz_yaz(istek,y); } } } }
         i=i+1;
     } ver hata("xhci qtest adim siniri");
 }
