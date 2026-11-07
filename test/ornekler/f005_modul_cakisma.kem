@@ -1,0 +1,11 @@
+// F005: geniş kapı, C oracle bağlama hatasını atlamaz.
+// Aynı test modülleri kökten ithal edilir; geçişli göreli yol kusuruna dayanmaz.
+kullan test::moduller::f005::sol::cekirdek::{ sol_deger } olarak sol;
+kullan test::moduller::f005::sag::cekirdek::{ sag_deger } olarak sag;
+kullan test::moduller::f005::sol::ek::{ ek_deger };
+işlev main() -> tam32 {
+    eğer sol::ortak() != 11 { ver 1; }
+    eğer sag::ortak() != 17 { ver 2; }
+    eğer ek_deger() != 14 { ver 3; }
+    ver sol_deger() + sag_deger() + ek_deger();
+}

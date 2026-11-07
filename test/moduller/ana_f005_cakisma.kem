@@ -1,0 +1,15 @@
+// F005: aynı dosya/özel/genel adlar; ortak yol öneki; alias ve seçili ithalat.
+kullan f005::sol::cekirdek::{ sol_deger } olarak sol;
+kullan f005::sag::cekirdek::{ sag_deger } olarak sag;
+kullan f005::sol::ek::{ ek_deger };
+kullan f005_tek;
+genel işlev f005_sina() -> tam32 {
+    eğer sol::ortak() != 11 { ver 1; }
+    eğer sag::ortak() != 17 { ver 2; }
+    eğer sol_deger() != 11 { ver 3; }
+    eğer sag_deger() != 17 { ver 4; }
+    eğer ek_deger() != 14 { ver 5; }
+    eğer f005_tek::deger() != 7 { ver 6; }
+    ver sol_deger() + sag_deger() + ek_deger();
+}
+işlev main() -> tam32 { ver f005_sina(); }

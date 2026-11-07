@@ -1,0 +1,2 @@
+işlev bekle() -> tam32 { ver 14; }
+genel işlev ek_deger() -> tam32 { ver bekle(); }

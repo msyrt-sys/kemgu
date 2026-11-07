@@ -2013,6 +2013,10 @@ TipBilgisi *ast_tip_to_bilgi(TipKontrol *tk, const Dugum *tip_d) {
             {
                 const Sembol *cs = yapi_sembol_capraz_bul(tk, ad, uz);
                 if (cs && cs->kategori == SEMBOL_YAPI) {
+                    /* F001: alan geçişinde ithal lineer tipi çıplak ada
+                     * indirgemek LR002'yi kaybettirir. Aynı sembolün bayrağı. */
+                    if (tk->scope && tk->scope->kategori == SCOPE_YAPI)
+                        return yapi_tipi_sembolden(tk, cs, NULL, 0);
                     return tip_olustur_yapi(tk->arena, cs->ad, cs->ad_uzunluk,
                                             NULL, 0);
                 }
@@ -5501,37 +5505,21 @@ static void pre_populate_yapi(TipKontrol *tk, const Dugum *yapi) {
         sembol_ekle(yapi_s, tk->arena, &gp);
     }
 
-    /* Alanlar -> yapi scope'a ekle (tip bilgisi yapi_scope context'inde) */
-    Scope *eski = tk->scope;
-    tk->scope = yapi_s;
+    /* F001: alan adları şimdi, tipleri bütün modül kayıtlarından sonra. */
     for (int j = 0; j < yapi->veri.yapi.alan_sayi; j++) {
         const Dugum *alan = yapi->veri.yapi.alanlar[j];
-        TipBilgisi *alan_tipi = ast_tip_to_bilgi(tk, alan->veri.alan.tip);
-        /* Linear Types Spec V1 LR-2: yapi tekkez/yetki/gorev alani iceremez.
-         * DRF V1 genişletmesi: tüm linear tipler LR-2 altında.
-         * D-313 (Linear V2) MUAFİYETİ: `yapı tekkez K` KENDİSİ lineer olduğu
-         * için lineer alan taşıyabilir — sahiplik zinciri kopmaz (K tüketilmeden
-         * kaybolamaz, K tüketilince alanları da onunla gider). Sıradan `yapı`
-         * için yasak AYNEN sürer: orada alan sahipsiz kalır ve sızardı. */
-        if (alan_tipi && tip_lineer_mi(alan_tipi)
-            && !yapi->veri.yapi.lineer_mi) {
-            tip_hata(tk, alan, "LR002",
-                "yapi alani lineer tipte olamaz "
-                "(lineer alan icin `yapi tekkez` kullanin)");
-        }
         Sembol s;
         memset(&s, 0, sizeof(s));
         s.ad = alan->veri.alan.ad;
         s.ad_uzunluk = alan->veri.alan.ad_uzunluk;
         s.kategori = SEMBOL_DEGISKEN;
-        s.tip = alan_tipi;
+        s.tip = NULL;  /* F001: alan geçişi doldurur. */
         s.satir = alan->satir;
         s.sutun = alan->sutun;
         if (sembol_ekle(yapi_s, tk->arena, &s) != 0) {
             tip_hata(tk, alan, "T024", "yapi alan adi cakismasi");
         }
     }
-    tk->scope = eski;
 
     /* Yapi sembolu global'e */
     Sembol y;
@@ -5918,10 +5906,68 @@ static void pre_populate_imzalar(TipKontrol *tk, const Dugum *d) {
     }
 }
 
+/* F001: alan tipleri de bütün modüllerin tip kayıtlarını bekler.
+ * Alan tanıları imza tanılarından önce kalır; aynı yapı scope'u ve
+ * mevcut düz-ad fallback kullanılır. Generic parametreler ve LR002 korunur. */
+static void pre_populate_alanlar(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+    if (d->tip == DUGUM_YAPI) {
+        const Sembol *ys = sembol_bul_yerel(tk->global_scope,
+            d->veri.yapi.ad, d->veri.yapi.ad_uzunluk);
+        if (!ys || ys->kategori != SEMBOL_YAPI || !ys->yapi_scope
+            || ys->ast_dugumu != d) return;
+        Scope *eski_scope = tk->scope;
+        tk->scope = ys->yapi_scope;
+        for (int j = 0; j < d->veri.yapi.alan_sayi; j++) {
+            const Dugum *alan = d->veri.yapi.alanlar[j];
+            TipBilgisi *alan_tipi = ast_tip_to_bilgi(tk, alan->veri.alan.tip);
+            /* Linear Types Spec V1 LR-2: yapi tekkez/yetki/gorev alani iceremez.
+             * DRF V1 genişletmesi: tüm linear tipler LR-2 altında.
+             * D-313 (Linear V2) MUAFİYETİ: `yapı tekkez K` KENDİSİ lineer olduğu
+             * için lineer alan taşıyabilir — sahiplik zinciri kopmaz (K tüketilmeden
+             * kaybolamaz, K tüketilince alanları da onunla gider). Sıradan `yapı`
+             * için yasak AYNEN sürer: orada alan sahipsiz kalır ve sızardı. */
+            if (alan_tipi && tip_lineer_mi(alan_tipi)
+                && !d->veri.yapi.lineer_mi) {
+                tip_hata(tk, alan, "LR002",
+                    "yapi alani lineer tipte olamaz "
+                    "(lineer alan icin `yapi tekkez` kullanin)");
+            }
+            Sembol *a = sembol_bul_yazilabilir(ys->yapi_scope,
+                alan->veri.alan.ad, alan->veri.alan.ad_uzunluk);
+            /* T024 ile reddedilen ikinci alan ilk kaydın tipini ezmesin. */
+            if (a && a->kategori == SEMBOL_DEGISKEN &&
+                a->satir == alan->satir && a->sutun == alan->sutun)
+                a->tip = alan_tipi;
+        }
+        tk->scope = eski_scope;
+    } else if (d->tip == DUGUM_DISA) {
+        pre_populate_alanlar(tk, d->veri.disa.tanim);
+    } else if (d->tip == DUGUM_PROGRAM) {
+        for (int i = 0; i < d->veri.program.sayi; i++)
+            pre_populate_alanlar(tk, d->veri.program.uyeler[i]);
+    } else if (d->tip == DUGUM_MODUL) {
+        Scope *arama = d->veri.modul.dosya_modulu
+            ? tk->builtin_scope : tk->global_scope;
+        const Sembol *s = sembol_bul_yerel(arama,
+            d->veri.modul.ad, d->veri.modul.ad_uzunluk);
+        if (!s || s->kategori != SEMBOL_MODUL || !s->modul_scope
+            || s->ast_dugumu != d) return;
+        Scope *eski_global = tk->global_scope;
+        Scope *eski_scope = tk->scope;
+        tk->global_scope = tk->scope = s->modul_scope;
+        for (int i = 0; i < d->veri.modul.sayi; i++)
+            pre_populate_alanlar(tk, d->veri.modul.uyeler[i]);
+        tk->global_scope = eski_global;
+        tk->scope = eski_scope;
+    }
+}
+
 static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate_uyeler(tk, program->veri.program.uyeler,
                         program->veri.program.sayi);
+    pre_populate_alanlar(tk, program);   /* F001: tip kayıtlarından sonra, imzalardan önce. */
     pre_populate_imzalar(tk, program);
 }
 

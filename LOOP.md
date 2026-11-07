@@ -234,7 +234,7 @@
 - [x] E4f [S] ✓ D-740 (ithalat eklendi, surucu_diff muafiyeti 2->1). tests/drivers/virtio/virtio_blk_init_test.kem 98-102: `blk_cfg_adres` secili ithal
       edilmeden cagriliyor -> C T002x5 (GERCEK test hatasi, D-739 olcumu). Ithalati ekle, surucu_diff
       muafiyetini kaldir.
-- [ ] E4g [M] Codex dalga 4 derleyici bulgulari (otomasyon/chatgpt/codex4_bulgular.md):
+- [x] E4g [M] ✓ D-743 (F001-F005 duzeltildi; dolanma temizligi Codex dalga 6 G0). Codex dalga 4 derleyici bulgulari (otomasyon/chatgpt/codex4_bulgular.md):
       F003 [S] SESSIZ YANLIS (self): yapi ALANINDAKI Dizi<dtam8>'den dizi_al -> isaret genisletme
            (128 -> -128). C004'un (D-738) kardesi: C004 yalniz TANIMLAYICI kaynagini duzeltti, ERISIM acik.
       F005 [M] TASARIM: farkli dizinlerdeki ayni adli modul dosyalari (nvme/cekirdek.kem +
@@ -2674,3 +2674,13 @@
   Kapilar: qtest nvme+ahci C+self GECTI (imaj kahini temiz), kopru 117/117. SABOTAJ (duzeltmeyi geri
   al) -> sahte e2e KIRMIZI + qtest KIRMIZI. DERS: sahte aygit modeli surucuyle AYNI yanlis anlamayi
   tasiyabilir; bagimsiz uygulama (QEMU) onu ILK OLCUMDE gosterdi.
+- 2026-11-07 D-743: CODEX DALGASI 5 — F001-F005 (PR #190-#194, ozet #195; 2 sa 44 dk). F003 SESSIZ YANLIS
+  (self: yapi ALANINDAKI Dizi<dtam8> isaret genisletme; C004'un ERISIM kolu) · F005 TASARIM: dosya
+  modulu IR adi artik TAM YOL (`drivers.nvme.cekirdek.bekle`, D-398 ic ice modul kuralinin dosyalara
+  uzatilmasi; C modul_mangle `::`->`.`, self birlesik AST'de sentetik modul dugumlerini tam IR adina
+  cevirir — ad cozumleme ayri pk ile yapildigi icin gizlilik etkilenmez; kararli, cakisinca-uzatma
+  YOK) · F002 yapi alani/dizi elemani lvalue'suna yapici (iki derleyici) · F004 C sonuc payload'inda
+  Dizi<Cesit> eleman tipi · F001 C yapi alani tiplerinde iki gecis (C007 deseni; LR002 ikinci gecise).
+  ENTEGRASYON (Spark): test_tumu rc=0, FIXPOINT, checker_diff 304/304 (0 muaf), codegen_diff 198/198,
+  modul_codegen 59/59, yapi_diff 176/176, surucu_diff 17/17, kopru 117/117, ASan PASS=131 FAIL=0,
+  qtest nvme+ahci GECTI (F005'in yeni adlari gercek QEMU surucu programlarinda da sinandi).
