@@ -1,0 +1,3 @@
+// Kâhin: python3 tools/codex/dalga4_xhci_trb.py
+genel işlev normal_trb_ornek() -> Dizi<dtam8> { değişken b: Dizi<dtam8> = [0 olarak dtam8,0 olarak dtam8,2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,33 olarak dtam8,4 olarak dtam8,0 olarak dtam8,0 olarak dtam8]; ver b; }
+genel işlev olay_trb_ornek() -> Dizi<dtam8> { değişken b: Dizi<dtam8> = [0 olarak dtam8,0 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,1 olarak dtam8,1 olarak dtam8,128 olarak dtam8,3 olarak dtam8,1 olarak dtam8]; ver b; }

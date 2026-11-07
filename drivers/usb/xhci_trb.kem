@@ -1,0 +1,81 @@
+// xHCI TRB/halkalar/bağlamlar. Kaynak: Linux v6.17 xhci.h; dalga4_xhci_trb.py.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, oku_le64, yaz_u8, yaz_le32, yaz_le64 };
+kullan drivers::ortak::gc::{ GcIstek };
+genel yapı XhciTrb { parametre: tam64; durum: tam64; denetim: tam64; tur: tam32; dongu: mantıksal; }
+genel yapı XhciOlay { tur: tam32; adres: tam64; kod: tam32; artik: tam32; yuva: tam32; uc: tam32; port: tam32; dongu: mantıksal; }
+genel yapı XhciYazim { adres: tam64; baytlar: Dizi<dtam8>; }
+genel yapı XhciHalka { taban: tam64; adet: tam32; son: tam32; dongu: mantıksal; dolu: tam32; }
+genel yapı XhciOlayHalkasi { taban: tam64; adet: tam32; bas: tam32; dongu: mantıksal; }
+genel işlev xhci_trb_kur(param: tam64, durum: tam64, tur: tam32, dongu: mantıksal, bayrak: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    eğer durum < 0 veya durum > 4294967295 veya tur < 1 veya tur > 63 veya bayrak < 0 veya bayrak > 4294967295 veya (bayrak&64513) != 0 { ver hata("xhci trb alani"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(16); değişken c: tam64 = ((tur olarak tam64)<<10)|bayrak; eğer dongu { c=c|1; }
+    yaz_le64(b,0,param); yaz_le32(b,8,durum); yaz_le32(b,12,c); ver tamam(b);
+}
+genel işlev xhci_trb_coz(b: Dizi<dtam8>) -> sonuç<XhciTrb,metin> {
+    eğer dizi_boyut(b) != 16 { ver hata("xhci trb boyu"); }
+    değişken c: tam64 = oku_le32(b,12); değişken tur: tam32 = ((c>>10)&63) olarak tam32;
+    eğer tur == 0 { ver hata("xhci trb turu"); }
+    ver tamam(XhciTrb { parametre: oku_le64(b,0), durum: oku_le32(b,8), denetim: c, tur: tur, dongu: (c&1) != 0 });
+}
+işlev dma_gecerli(adres: tam64, boy: tam32) -> mantıksal { ver adres >= 0 ve boy > 0 ve boy <= 65536 ve (boy olarak tam64) <= 9223372036854775807-adres ve adres%65536+(boy olarak tam64) <= 65536; }
+genel işlev xhci_normal(adres: tam64, boy: tam32, dongu: mantıksal, ioc: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    eğer değil dma_gecerli(adres,boy) { ver hata("xhci dma 64k araligi"); }
+    değişken bayrak: tam64 = 0; eğer ioc { bayrak=32; } ver xhci_trb_kur(adres,boy olarak tam64,1,dongu,bayrak);
+}
+genel işlev xhci_setup(paket: Dizi<dtam8>, dongu: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    eğer dizi_boyut(paket) != 8 { ver hata("xhci setup boyu"); }
+    değişken trt: tam64 = 0; eğer oku_le16(paket,6) > 0 { trt=2; eğer (oku_u8(paket,0)&128) != 0 { trt=3; } }
+    ver xhci_trb_kur(oku_le64(paket,0),8,2,dongu,64|(trt<<16));
+}
+genel işlev xhci_data(adres: tam64, boy: tam32, giris: mantıksal, dongu: mantıksal) -> sonuç<Dizi<dtam8>,metin> { eğer değil dma_gecerli(adres,boy) { ver hata("xhci dma 64k araligi"); } değişken b: tam64 = 0; eğer giris { b=65536; } ver xhci_trb_kur(adres,boy olarak tam64,3,dongu,b); }
+genel işlev xhci_status(giris: mantıksal, dongu: mantıksal) -> sonuç<Dizi<dtam8>,metin> { değişken b: tam64 = 32; eğer giris { b=b|65536; } ver xhci_trb_kur(0,0,4,dongu,b); }
+işlev halka_gecerli(taban: tam64, adet: tam32) -> mantıksal { ver taban > 0 ve taban%64 == 0 ve adet >= 2 ve adet <= 4096 ve (adet olarak tam64)*16 <= 9223372036854775807-taban ve taban%65536+(adet olarak tam64)*16 <= 65536; }
+genel işlev xhci_halka_yeni(taban: tam64, adet: tam32) -> sonuç<XhciHalka,metin> { eğer değil halka_gecerli(taban,adet) { ver hata("xhci halka araligi"); } ver tamam(XhciHalka { taban: taban, adet: adet, son: 0, dongu: doğru, dolu: 0 }); }
+genel işlev xhci_uret(h: &değişken XhciHalka, trb: Dizi<dtam8>) -> sonuç<Dizi<XhciYazim>,metin> {
+    eğer değil halka_gecerli(h.taban,h.adet) veya h.son < 0 veya h.son >= h.adet-1 veya h.dolu < 0 veya h.dolu >= h.adet-1 { ver hata("xhci halka dolu veya bozuk"); }
+    eşleş xhci_trb_coz(trb) { hata(e) => { ver hata(e); } tamam(t) => { eğer t.tur == 6 veya t.tur >= 32 { ver hata("xhci uretici trb turu"); } } }
+    değişken b: Dizi<dtam8> = bayt_sifir(16); değişken i: tam32 = 0; iken i < 16 { yaz_u8(b,i,oku_u8(trb,i) olarak tam64); i=i+1; }
+    değişken c: tam64 = oku_le32(b,12)&4294967294; eğer h.dongu { c=c|1; } yaz_le32(b,12,c);
+    değişken xs: Dizi<XhciYazim> = []; dizi_ekle(xs,XhciYazim { adres: h.taban+(h.son olarak tam64)*16, baytlar: b });
+    h.son=h.son+1; h.dolu=h.dolu+1;
+    eğer h.son == h.adet-1 {
+        eşleş xhci_trb_kur(h.taban,0,6,h.dongu,2) { hata(e) => { ver hata(e); } tamam(v) => { dizi_ekle(xs,XhciYazim { adres: h.taban+(h.son olarak tam64)*16, baytlar: v }); } }
+        h.son=0; h.dongu=değil h.dongu;
+    }
+    ver tamam(xs);
+}
+genel işlev xhci_tuket(h: &değişken XhciHalka, adet: tam32) -> sonuç<mantıksal,metin> { eğer adet < 1 veya adet > h.dolu { ver hata("xhci tuketim araligi"); } h.dolu=h.dolu-adet; ver tamam(doğru); }
+genel işlev xhci_yazim_istegi(y: XhciYazim) -> GcIstek { ver GcIstek::BellekYaz(y.adres,y.baytlar); }
+genel işlev xhci_olay_halkasi_yeni(taban: tam64, adet: tam32) -> sonuç<XhciOlayHalkasi,metin> { eğer değil halka_gecerli(taban,adet) { ver hata("xhci olay halkasi araligi"); } ver tamam(XhciOlayHalkasi { taban: taban, adet: adet, bas: 0, dongu: doğru }); }
+genel işlev xhci_olay_coz(b: Dizi<dtam8>) -> sonuç<XhciOlay,metin> {
+    eşleş xhci_trb_coz(b) {
+        hata(e) => { ver hata(e); }
+        tamam(t) => { eğer t.tur != 32 ve t.tur != 33 ve t.tur != 34 { ver hata("xhci olay turu"); } değişken kod: tam32 = ((t.durum>>24)&255) olarak tam32; eğer kod == 0 { ver hata("xhci olay kodu"); } ver tamam(XhciOlay { tur: t.tur, adres: t.parametre, kod: kod, artik: (t.durum&16777215) olarak tam32, yuva: ((t.denetim>>24)&255) olarak tam32, uc: ((t.denetim>>16)&31) olarak tam32, port: ((t.parametre>>24)&255) olarak tam32, dongu: t.dongu }); }
+    }
+}
+genel işlev xhci_olay_al(h: &değişken XhciOlayHalkasi, b: Dizi<dtam8>) -> sonuç<XhciOlay,metin> {
+    eğer değil halka_gecerli(h.taban,h.adet) veya h.bas < 0 veya h.bas >= h.adet { ver hata("xhci olay durumu"); }
+    eğer dizi_boyut(b) != 16 { ver hata("xhci olay boyu"); }
+    // Eski döngüdeki kayıt türü/içeriği yorumlanmadan reddedilir.
+    eğer ((oku_le32(b,12)&1) != 0) != h.dongu { ver hata("xhci eski dongu"); }
+    eşleş xhci_olay_coz(b) {
+        hata(e) => { ver hata(e); }
+        tamam(o) => { h.bas=h.bas+1; eğer h.bas == h.adet { h.bas=0; h.dongu=değil h.dongu; } ver tamam(o); }
+    }
+}
+genel işlev xhci_erdp(h: XhciOlayHalkasi) -> tam64 { ver (h.taban+(h.bas olarak tam64)*16)|8; }
+genel işlev xhci_olay_istegi(h: XhciOlayHalkasi) -> GcIstek { ver GcIstek::BellekOku(h.taban+(h.bas olarak tam64)*16,16); }
+genel işlev xhci_slot_baglam(csz: tam32, route: tam32, hiz: tam32, port: tam32, son_uc: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eğer (csz != 32 ve csz != 64) veya route < 0 veya route > 1048575 veya hiz < 1 veya hiz > 15 veya port < 1 veya port > 127 veya son_uc < 1 veya son_uc > 31 { ver hata("xhci slot baglami"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(csz); yaz_le32(b,0,(route olarak tam64)|((hiz olarak tam64)<<20)|((son_uc olarak tam64)<<27)); yaz_le32(b,4,(port olarak tam64)<<16); ver tamam(b);
+}
+genel işlev xhci_uc_baglam(csz: tam32, tur: tam32, paket: tam32, burst: tam32, aralik: tam32, deq: tam64, dongu: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    eğer (csz != 32 ve csz != 64) veya tur < 1 veya tur > 7 veya paket < 1 veya paket > 1024 veya burst < 0 veya burst > 255 veya aralik < 0 veya aralik > 15 veya deq <= 0 veya deq%16 != 0 { ver hata("xhci uc baglami"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(csz); değişken cerr: tam64 = 3; eğer tur == 1 veya tur == 5 { cerr=0; }
+    değişken esit: tam64 = 0; eğer tur == 1 veya tur == 3 veya tur == 5 veya tur == 7 { esit=(paket olarak tam64)*((burst+1) olarak tam64); }
+    yaz_le32(b,0,((aralik olarak tam64)<<16)|((esit>>16)<<24));
+    yaz_le32(b,4,(cerr<<1)|((tur olarak tam64)<<3)|((burst olarak tam64)<<8)|((paket olarak tam64)<<16));
+    değişken dq: tam64 = deq; eğer dongu { dq=dq|1; } yaz_le64(b,8,dq);
+    değişken avg: tam64 = paket olarak tam64; eğer tur == 4 { avg=8; }
+    yaz_le32(b,16,avg|((esit&65535)<<16)); ver tamam(b);
+}

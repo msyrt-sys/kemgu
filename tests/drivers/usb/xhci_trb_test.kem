@@ -1,0 +1,58 @@
+// Kâhin: python3 tools/codex/dalga4_xhci_trb.py; Linux xhci.h.
+kullan drivers::usb::xhci_trb::{ XhciTrb, XhciOlay, XhciYazim, XhciHalka, XhciOlayHalkasi, xhci_trb_kur, xhci_trb_coz, xhci_normal, xhci_setup, xhci_data, xhci_status, xhci_halka_yeni, xhci_uret, xhci_tuket, xhci_olay_halkasi_yeni, xhci_olay_al, xhci_erdp, xhci_slot_baglam, xhci_uc_baglam };
+kullan tests::drivers::usb::trb_fikstur::{ normal_trb_ornek, olay_trb_ornek };
+kullan drivers::usb::tanim::{ usb_get_descriptor };
+kullan drivers::ortak::bayt::{ oku_u8, oku_le32, oku_le64, yaz_u8, bayt_sifir };
+işlev test_trb() -> mantıksal {
+    eşleş xhci_normal(131072,512,doğru,doğru) { hata(e) => { ver yanlış; } tamam(b) => { değişken bek: Dizi<dtam8> = normal_trb_ornek(); değişken i: tam32 = 0; iken i < 16 { eğer oku_u8(b,i) != oku_u8(bek,i) { ver yanlış; } i=i+1; } } }
+    eşleş xhci_normal(131071,2,doğru,doğru) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    değişken paket: Dizi<dtam8> = [];
+    eşleş usb_get_descriptor(1,0,0,18) { hata(e) => { ver yanlış; } tamam(v) => { paket=v; } }
+    eşleş xhci_setup(paket,doğru) { hata(e) => { ver yanlış; } tamam(b) => { eğer oku_le64(b,0) != oku_le64(paket,0) veya oku_le32(b,8) != 8 veya oku_le32(b,12) != 198721 { ver yanlış; } } }
+    eşleş xhci_data(131072,18,doğru,doğru) { hata(e) => { ver yanlış; } tamam(b) => { eğer oku_le32(b,12) != 68609 { ver yanlış; } } }
+    eşleş xhci_status(yanlış,doğru) { hata(e) => { ver yanlış; } tamam(b) => { eğer oku_le32(b,12) != 4129 { ver yanlış; } } }
+    değişken turler: Dizi<tam32> = [9,11,12]; değişken i: tam32 = 0;
+    iken i < 3 { değişken tur: tam32 = dizi_al(turler,i); eşleş xhci_trb_kur(4096,0,tur,doğru,16777216) { hata(e) => { ver yanlış; } tamam(b) => { eşleş xhci_trb_coz(b) { hata(e) => { ver yanlış; } tamam(t) => { eğer t.tur != tur veya değil t.dongu { ver yanlış; } } } } } i=i+1; }
+    eşleş xhci_trb_coz(bayt_sifir(15)) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev test_halka() -> mantıksal {
+    eşleş xhci_halka_yeni(4096,4) {
+        hata(e) => { ver yanlış; }
+        tamam(d) => {
+            değişken h: XhciHalka = d; değişken i: tam32 = 0;
+            iken i < 3 {
+                eşleş xhci_uret(&değişken h,normal_trb_ornek()) {
+                    hata(e) => { ver yanlış; }
+                    tamam(xs) => { eğer i == 2 { eğer dizi_boyut(xs) != 2 { ver yanlış; } değişken link: XhciYazim = dizi_al(xs,1); eğer link.adres != 4144 veya oku_le64(link.baytlar,0) != 4096 veya oku_le32(link.baytlar,12) != 6147 { ver yanlış; } } }
+                } i=i+1;
+            }
+            eğer h.son != 0 veya h.dongu veya h.dolu != 3 { ver yanlış; }
+            eşleş xhci_uret(&değişken h,normal_trb_ornek()) { tamam(v) => { ver yanlış; } hata(e) => { } }
+            eşleş xhci_tuket(&değişken h,3) { hata(e) => { ver yanlış; } tamam(v) => { } }
+            eşleş xhci_uret(&değişken h,normal_trb_ornek()) { hata(e) => { ver yanlış; } tamam(xs) => { değişken t: XhciYazim = dizi_al(xs,0); ver oku_le32(t.baytlar,12) == 1056; } }
+        }
+    }
+}
+işlev test_olay() -> mantıksal {
+    eşleş xhci_olay_halkasi_yeni(8192,4) {
+        hata(e) => { ver yanlış; }
+        tamam(d) => {
+            değişken h: XhciOlayHalkasi = d; değişken i: tam32 = 0;
+            iken i < 4 { eşleş xhci_olay_al(&değişken h,olay_trb_ornek()) { hata(e) => { ver yanlış; } tamam(o) => { eğer o.tur != 32 veya o.kod != 1 veya o.yuva != 1 veya o.uc != 3 veya o.adres != 65536 { ver yanlış; } } } i=i+1; }
+            eğer h.dongu veya h.bas != 0 veya xhci_erdp(h) != 8200 { ver yanlış; }
+            eşleş xhci_olay_al(&değişken h,olay_trb_ornek()) { tamam(v) => { ver yanlış; } hata(e) => { } }
+            ver h.bas == 0;
+        }
+    }
+}
+işlev test_baglam() -> mantıksal {
+    değişken boy: tam32 = 32;
+    iken boy <= 64 {
+        eşleş xhci_slot_baglam(boy,0,3,2,3) { hata(e) => { ver yanlış; } tamam(b) => { eğer dizi_boyut(b) != boy veya oku_le32(b,0) != 405798912 veya oku_le32(b,4) != 131072 { ver yanlış; } } }
+        eşleş xhci_uc_baglam(boy,6,512,0,0,4096,doğru) { hata(e) => { ver yanlış; } tamam(b) => { eğer dizi_boyut(b) != boy veya oku_le32(b,4) != 33554486 veya oku_le64(b,8) != 4097 veya oku_le32(b,16) != 512 { ver yanlış; } değişken i: tam32 = 20; iken i < boy { eğer oku_u8(b,i) != 0 { ver yanlış; } i=i+1; } } }
+        boy=boy+32;
+    }
+    eşleş xhci_slot_baglam(48,0,3,2,3) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş xhci_uc_baglam(32,6,512,0,0,4097,doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_trb() { yazdir_metin("trb"); h=h+1; } eğer değil test_halka() { yazdir_metin("halka"); h=h+1; } eğer değil test_olay() { h=h+1; } eğer değil test_baglam() { h=h+1; } ver h; }
