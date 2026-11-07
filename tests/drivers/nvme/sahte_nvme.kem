@@ -5,7 +5,7 @@ kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, oku_le64, yaz_u8, yaz_le16, yaz_le32, yaz_le64 };
 kullan tests::drivers::nvme::kimlik_fikstur::{ denetleyici_ornek, ad_alani_ornek };
 genel yapı SahteNvme {
-    taban: tam64; bellek: Dizi<dtam8>; disk: Dizi<dtam8>; kapasite: tam64;
+    taban: tam64; bellek: Dizi<dtam8>; disk: Dizi<dtam8>; ek_disk: Dizi<dtam8>; ek_lba: tam64; kapasite: tam64;
     cc: tam64; aqa: tam64; asq: tam64; acq: tam64; isq: tam64; icq: tam64;
     aqboy: tam32; iqboy: tam32; aqbas: tam32; iqbas: tam32; aqson: tam32; iqson: tam32;
     aqfaz: mantıksal; iqfaz: mantıksal; aqbekleyen: tam32; iqbekleyen: tam32;
@@ -13,7 +13,7 @@ genel yapı SahteNvme {
 }
 genel işlev sahte_nvme_yeni() -> SahteNvme {
     değişken bellek: Dizi<dtam8> = bayt_sifir(86016); değişken disk: Dizi<dtam8> = [];
-    ver SahteNvme { taban: 65536, bellek: bellek, disk: disk, kapasite: 80000, cc: 1, aqa: 0, asq: 0, acq: 0, isq: 0, icq: 0, aqboy: 0, iqboy: 0, aqbas: 0, iqbas: 0, aqson: 0, iqson: 0, aqfaz: doğru, iqfaz: doğru, aqbekleyen: 0, iqbekleyen: 0, ariza: 0, bekleme: 0, yonetim: 0, gc_sayisi: 0, flush_sayisi: 0 };
+    ver SahteNvme { taban: 65536, bellek: bellek, disk: disk, ek_disk: [], ek_lba: 0, kapasite: 80000, cc: 1, aqa: 0, asq: 0, acq: 0, isq: 0, icq: 0, aqboy: 0, iqboy: 0, aqbas: 0, iqbas: 0, aqson: 0, iqson: 0, aqfaz: doğru, iqfaz: doğru, aqbekleyen: 0, iqbekleyen: 0, ariza: 0, bekleme: 0, yonetim: 0, gc_sayisi: 0, flush_sayisi: 0 };
 }
 işlev dma_var(s: &değişken SahteNvme, adres: tam64, boy: tam64) -> mantıksal {
     ver adres >= s.taban ve adres-s.taban <= (dizi_boyut(s.bellek) olarak tam64) ve boy >= 0 ve boy <= (dizi_boyut(s.bellek) olarak tam64)-(adres-s.taban);
@@ -25,10 +25,10 @@ işlev dma_yaz(s: &değişken SahteNvme, adres: tam64, veri: Dizi<dtam8>) -> man
 }
 işlev prp_aktar(s: &değişken SahteNvme, p1: tam64, p2: tam64, lba: tam64, sayi: tam32, yaz: mantıksal) -> mantıksal {
     eğer lba < 0 veya lba >= s.kapasite veya (sayi olarak tam64) > s.kapasite-lba veya sayi < 1 veya sayi > 16 veya p1%4 != 0 { ver yanlış; }
-    değişken boy: tam32 = sayi*512; değişken disk_ofs: tam32 = (lba*512) olarak tam32;
+    değişken boy: tam32 = sayi*512; değişken disk_lba: tam64 = lba; değişken ek: mantıksal = s.ek_lba > 0 ve lba >= s.ek_lba; eğer ek { disk_lba=lba-s.ek_lba; } eğer disk_lba > 4194303 { ver yanlış; } değişken disk_ofs: tam32 = (disk_lba*512) olarak tam32;
     eğer yaz {
         eğer disk_ofs > 16777216-boy { ver yanlış; }
-        iken dizi_boyut(s.disk) < disk_ofs+boy { dizi_ekle(s.disk,0 olarak dtam8); }
+        eğer ek { iken dizi_boyut(s.ek_disk) < disk_ofs+boy { dizi_ekle(s.ek_disk,0 olarak dtam8); } } değilse { iken dizi_boyut(s.disk) < disk_ofs+boy { dizi_ekle(s.disk,0 olarak dtam8); } }
     }
     değişken ilk: tam32 = 4096-((p1%4096) olarak tam32);
     değişken liste: mantıksal = boy > ilk+4096;
@@ -47,8 +47,8 @@ işlev prp_aktar(s: &değişken SahteNvme, p1: tam64, p2: tam64, lba: tam64, say
         eğer değil dma_var(s,adres,al olarak tam64) { ver yanlış; }
         değişken j: tam32 = 0; değişken o: tam32 = (adres-s.taban) olarak tam32;
         iken j < al {
-            eğer yaz { yaz_u8(s.disk,disk_ofs+n+j,oku_u8(s.bellek,o+j) olarak tam64); }
-            değilse { değişken v: dtam8 = 0 olarak dtam8; eğer disk_ofs+n+j < dizi_boyut(s.disk) { v=dizi_al(s.disk,disk_ofs+n+j); } yaz_u8(s.bellek,o+j,(v olarak tam64)&255); }
+            eğer yaz { eğer ek { yaz_u8(s.ek_disk,disk_ofs+n+j,oku_u8(s.bellek,o+j) olarak tam64); } değilse { yaz_u8(s.disk,disk_ofs+n+j,oku_u8(s.bellek,o+j) olarak tam64); } }
+            değilse { değişken v: dtam8 = 0 olarak dtam8; eğer ek { eğer disk_ofs+n+j < dizi_boyut(s.ek_disk) { v=oku_u8(s.ek_disk,disk_ofs+n+j) olarak dtam8; } } değilse { eğer disk_ofs+n+j < dizi_boyut(s.disk) { v=oku_u8(s.disk,disk_ofs+n+j) olarak dtam8; } } yaz_u8(s.bellek,o+j,(v olarak tam64)&255); }
             j=j+1;
         }
         n=n+al;

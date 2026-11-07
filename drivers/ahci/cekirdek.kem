@@ -20,7 +20,7 @@ genel işlev ahci_yeni(taban: tam64, port: tam32) -> sonuç<AhciDurum,metin> {
 }
 işlev hata_ver(s: &değişken AhciDurum, m: metin) -> GcIstek { s.adim=0-1; s.hazir=yanlış; s.mesaj=m; ver GcIstek::Hata(m); }
 işlev p(s: &değişken AhciDurum, o: tam64) -> tam64 { ver 256+(s.port olarak tam64)*128+o; }
-işlev bekle(s: &değişken AhciDurum, adim: tam32) -> GcIstek { eğer s.beklenen >= s.sinir { ver hata_ver(s,"ahci zaman asimi"); } s.beklenen=s.beklenen+1; s.adim=adim; ver GcIstek::Bekle(1000); }
+işlev ahci_bekle(s: &değişken AhciDurum, adim: tam32) -> GcIstek { eğer s.beklenen >= s.sinir { ver hata_ver(s,"ahci zaman asimi"); } s.beklenen=s.beklenen+1; s.adim=adim; ver GcIstek::Bekle(1000); }
 işlev tara(s: &değişken AhciDurum) -> GcIstek {
     iken s.aranan < s.nport {
         eğer (s.pi&((1 olarak tam64)<<s.aranan)) != 0 { s.adim=5; ver GcIstek::Oku32(256+(s.aranan olarak tam64)*128+40); }
@@ -45,7 +45,7 @@ işlev emir_hazirla(s: &değişken AhciDurum) -> GcIstek {
     }
     ver tablo_yaz(s);
 }
-işlev tamamlandi(s: &değişken AhciDurum) -> GcIstek {
+işlev ahci_tamamlandi(s: &değişken AhciDurum) -> GcIstek {
     eğer değil s.hazir { s.hazir=doğru; s.adim=100; ver GcIstek::Bitti; }
     s.kalan=s.kalan-s.parca; s.lba=s.lba+(s.parca olarak tam64); s.tamamlanan=s.tamamlanan+s.parca;
     eğer s.kalan > 0 { ver komut_baslat(s); } s.adim=100; ver GcIstek::Bitti;
@@ -74,9 +74,9 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
     }
     eğer s.adim == 7 { s.cmd=y.deger&4294967294; s.adim=8; ver GcIstek::Yaz32(p(s,24),s.cmd); }
     eğer s.adim == 8 veya s.adim == 10 { s.adim=9; ver GcIstek::Oku32(p(s,24)); }
-    eğer s.adim == 9 { eğer (y.deger&32768) != 0 { ver bekle(s,10); } s.cmd=y.deger&4294967278; s.adim=11; ver GcIstek::Yaz32(p(s,24),s.cmd); }
+    eğer s.adim == 9 { eğer (y.deger&32768) != 0 { ver ahci_bekle(s,10); } s.cmd=y.deger&4294967278; s.adim=11; ver GcIstek::Yaz32(p(s,24),s.cmd); }
     eğer s.adim == 11 veya s.adim == 13 { s.adim=12; ver GcIstek::Oku32(p(s,24)); }
-    eğer s.adim == 12 { eğer (y.deger&16384) != 0 { ver bekle(s,13); } s.cmd=y.deger; s.adim=14; ver GcIstek::BellekYaz(s.taban,bayt_sifir(1024)); }
+    eğer s.adim == 12 { eğer (y.deger&16384) != 0 { ver ahci_bekle(s,13); } s.cmd=y.deger; s.adim=14; ver GcIstek::BellekYaz(s.taban,bayt_sifir(1024)); }
     eğer s.adim == 14 { s.adim=15; ver GcIstek::BellekYaz(s.taban+1024,bayt_sifir(256)); }
     eğer s.adim == 15 { s.adim=16; ver GcIstek::BellekYaz(s.taban+4096,bayt_sifir(4096)); }
     eğer s.adim == 16 { s.adim=17; ver GcIstek::Yaz32(p(s,0),s.taban&4294967295); }
@@ -91,7 +91,7 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
     eğer s.adim == 25 veya s.adim == 29 { ver komut_baslat(s); }
     eğer s.adim == 30 {
         eğer ahci_tfd_hata(y.deger) { ver hata_ver(s,"ahci tfd err"); }
-        eğer ahci_tfd_mesgul(y.deger) { ver bekle(s,31); }
+        eğer ahci_tfd_mesgul(y.deger) { ver ahci_bekle(s,31); }
         s.adim=32; ver GcIstek::Oku32(p(s,56));
     }
     eğer s.adim == 31 veya s.adim == 34 { s.adim=30; ver GcIstek::Oku32(p(s,32)); }
@@ -99,7 +99,7 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
     eğer s.adim == 33 {
         s.aktif=s.aktif|y.deger; değişken j: tam32 = 0;
         iken j < s.nyuva ve (s.aktif&((1 olarak tam64)<<j)) != 0 { j=j+1; }
-        eğer j == s.nyuva { ver bekle(s,34); }
+        eğer j == s.nyuva { ver ahci_bekle(s,34); }
         s.yuva=j; ver emir_hazirla(s);
     }
     eğer s.adim == 35 { ver tablo_yaz(s); }
@@ -110,14 +110,14 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
     eğer s.adim == 40 { eğer ahci_tfes(y.deger) { ver hata_ver(s,"ahci tfes"); } s.adim=41; ver GcIstek::Oku32(p(s,32)); }
     eğer s.adim == 41 { eğer ahci_tfd_hata(y.deger) { ver hata_ver(s,"ahci tfd err"); } s.mesgul=ahci_tfd_mesgul(y.deger); s.adim=42; ver GcIstek::Oku32(p(s,56)); }
     eğer s.adim == 42 {
-        eğer s.mesgul veya (y.deger&((1 olarak tam64)<<s.yuva)) != 0 { ver bekle(s,43); }
+        eğer s.mesgul veya (y.deger&((1 olarak tam64)<<s.yuva)) != 0 { ver ahci_bekle(s,43); }
         s.adim=44; ver GcIstek::BellekOku(s.taban+(s.yuva olarak tam64)*32+4,4);
     }
     eğer s.adim == 44 {
         eğer dizi_boyut(y.baytlar) != 4 { ver hata_ver(s,"ahci prdbc boyu"); }
         eğer oku_le32(y.baytlar,0) != (s.bayt olarak tam64) { ver hata_ver(s,"ahci kisa aktarim"); }
         eğer değil s.hazir veya s.islem == 1 { s.adim=45; ver GcIstek::BellekOku(s.taban+8192,s.bayt); }
-        ver tamamlandi(s);
+        ver ahci_tamamlandi(s);
     }
     eğer s.adim == 45 {
         eğer dizi_boyut(y.baytlar) != s.bayt { ver hata_ver(s,"ahci kisa veri"); }
@@ -125,19 +125,19 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
             eşleş ata_kimlik_coz(y.baytlar) { hata(e) => { ver hata_ver(s,e); } tamam(k) => { eğer k.blok_bayt > 65536 veya (k.blok_bayt&(k.blok_bayt-1)) != 0 { ver hata_ver(s,"ahci sektor destegi"); } s.kapasite=k.blok_sayisi; s.blok_bayt=k.blok_bayt olarak tam32; } }
         }
         değilse { değişken sonuc: Dizi<dtam8> = s.sonuc; değişken j: tam32 = 0; iken j < s.bayt { dizi_ekle(sonuc,oku_u8(y.baytlar,j) olarak dtam8); j=j+1; } }
-        ver tamamlandi(s);
+        ver ahci_tamamlandi(s);
     }
     ver hata_ver(s,"ahci gecersiz adim");
 }
-işlev istek_kur(s: &değişken AhciDurum, lba: tam64, sayi: tam32, islem: tam32, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+işlev ahci_istek_kur(s: &değişken AhciDurum, lba: tam64, sayi: tam32, islem: tam32, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     eğer değil s.hazir veya s.adim != 100 { ver hata("ahci hazir degil"); }
     eğer islem != 3 { eğer lba < 0 veya lba >= s.kapasite veya sayi < 1 veya (sayi olarak tam64) > s.kapasite-lba veya (sayi olarak tam64)*(s.blok_bayt olarak tam64) > 16777216 { ver hata("ahci istek araligi"); } }
     değişken b: Dizi<dtam8> = []; s.veri=veri; s.sonuc=b; s.lba=lba; s.kalan=sayi; s.tamamlanan=0; s.islem=islem; s.adim=29; ver tamam(doğru);
 }
-genel işlev ahci_oku(s: &değişken AhciDurum, lba: tam64, sayi: tam32) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver istek_kur(s,lba,sayi,1,b); }
+genel işlev ahci_oku(s: &değişken AhciDurum, lba: tam64, sayi: tam32) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver ahci_istek_kur(s,lba,sayi,1,b); }
 // veri Bitti/Hata yanıtına kadar değiştirilemez.
 genel işlev ahci_yaz(s: &değişken AhciDurum, lba: tam64, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     eğer değil s.hazir veya s.blok_bayt < 1 veya dizi_boyut(veri)%s.blok_bayt != 0 { ver hata("ahci yazma boyu"); }
-    ver istek_kur(s,lba,dizi_boyut(veri)/s.blok_bayt,2,veri);
+    ver ahci_istek_kur(s,lba,dizi_boyut(veri)/s.blok_bayt,2,veri);
 }
-genel işlev ahci_flush(s: &değişken AhciDurum) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver istek_kur(s,0,0,3,b); }
+genel işlev ahci_flush(s: &değişken AhciDurum) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver ahci_istek_kur(s,0,0,3,b); }

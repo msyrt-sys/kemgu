@@ -94,3 +94,6 @@ F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
 - 128 KiB / 64 KiB hizalı DMA; OUT/IN ikişer TRB, EP0 üç TRB, event dört TRB. Cycle sarımı, Link TC, ERDP EHB, Status IN akışı bağımsız modelde doğrulandı; fiziksel DMA tutarlılığı ve donanım sıralaması QEMU/bare-metal taşıyıcısında doğrulanmalı.
 - CSW faz hatası BOT reset + OUT/IN CLEAR_FEATURE(ENDPOINT_HALT) üretir ve isteği hatayla bitirir. xHCI Stall completion ayrı aktarım hatasıdır; durmuş endpoint için Reset Endpoint/Set TR Dequeue işlemleri üst taşıyıcıya aittir. Otomatik yeniden deneme yapılmaz.
 - LUN 0, doğrudan erişimli SCSI disk, READ CAPACITY(10), 512–65536 B ikinin kuvveti blok, istek başına 16 MiB. READ CAPACITY(16) gerektiren aygıt açık hata verir.
+
+## F005 — aynı dosya adından LLVM özel işlev adı çakışması
+NVMe ve AHCI `cekirdek.kem` birlikte ithal edilince açık alias'lar T024'ü çözer; C LLVM yine iki `@cekirdek.bekle` üretir (`invalid redefinition`). `tamamlandi` ve `istek_kur` da aynı durumda. Matris testinde iki açık alias kullanıldı; AHCI'nin bu üç özel yardımcısına `ahci_` öneki eklendi. Genel API aynı; derleyiciye dokunulmadı. E3 matrisi aynı programda üç çekirdeğin bağlanmasını korur.
