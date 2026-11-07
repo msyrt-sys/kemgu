@@ -28,6 +28,7 @@ kullan drivers::virtio::constants::{
     VIRTIO_MMIO_VERSION,
     VIRTIO_STATUS_FAILED
 };
+kullan drivers::virtio::virtio_blk_config::{ blk_cfg_adres };
 kullan drivers::virtio::features::{
     VIRTIO_BLK_F_BLK_SIZE
 };
