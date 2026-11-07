@@ -38,3 +38,44 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] E3 · USB kök + NVMe GPT ESP/veri + AHCI, gerçek dosya kalıcılığı · ESP sabotajı → kırmızı · self 0,969 sn · köprü 116/116 (F1 dahil) · F005 dolanması · 2026-11-07T07:39:17.638973+00:00
 - VARSAYIM E3: NVMe modelindeki ikinci ayrık disk aralığı büyük sıfır boşluğu ayırmadan geçerli iki FAT32 bölümünü temsil eder; ESP koruması modelde değil bağlama katmanındadır.
 - [x] F1 · 4500 ikili + 300 metin örneği, boş/tek bayt, 14 geçerli fikstür mutasyonu · VID sabotajı → kırmızı · self 0,115 sn · köprü 117/117 (F2 dahil) · 2026-11-07T07:41:38.082978+00:00
+- [x] F2 · 44 tablo satırı + BE/bağlam/slot sınırları · ilk test exit=52 → BE değer denetimiyle yeşil; denetim sabotajı → kırmızı · self 0,008 sn · köprü 117/117 · 2026-11-07T07:43:40.026445+00:00
+- Son kâhin kontrolü: 18 Python üretici/doğrulayıcı rc=0; yeniden üretilen dosyalar bayt bayt aynı.
+
+## Tamamlanma özeti
+
+- A0–A3, B1–B5, C1–C5, D1–D7, E1–E3, F1–F2: **26/26 iş tamamlandı; atlanan iş yok.**
+- **26 yeni test dosyası**, köprü **117/117** + dil kartı; C/self derleme, çalışma ve stdout eşliği. **26/26 derlenebilir sabotaj** çalışma zamanında yakalandı ve geri alındı.
+- Her yeni test 5 saniye sınırıyla doğrulandı. Ölçülen en uzun self çalışma: depolama matrisi **0,968174 saniye**.
+- `make test_tumu 2>&1 | tee build/tumu.log`, hemen ardından `rc=${PIPESTATUS[0]}`: **rc=0**; `Tum testler gecti!`. **FIXPOINT ✓**: 97.358 satır birebir; birleşik self-driver FIXPOINT de geçti.
+- Başarısız kapı: **0**. Mevcut QEMU çekirdek kapıları: ARM64 **2/2**, x86_64 **1/1**. ASan E2E **PASS=128, FAIL=0**; ASan matrisi **12/12**.
+
+### Mevcut atlama/muafiyet dökümü
+
+Sayılar benzersiz dosya değil, kapı çalıştırması başınadır; tekrarlanan self-driver ölçümleri ayrı sayılır. Yeni ChatGPT sürücü köprüsünde atlama yoktur.
+
+| Kapı | Atlama | Açıklama |
+|---|---:|---|
+| Codegen semantik (doğrudan) | 4 | 2 yabancı mimari + 2 C oracle modülü |
+| Birleşik self-driver LLVM (iki çalıştırma) | 8 | her çalıştırmada aynı 2 mimari + 2 C oracle |
+| Geniş codegen | 9 | mevcut oracle/bare-metal atlamaları |
+| Yapısal IR | 2 | oracle IR/define yok |
+| Sürücü yapısal paritesi | 1 | define yok |
+| Eski VirtIO host-mock koşumu | 5 | C oracle --check reddediyor |
+| Bölge operandı | 4 | harness atlamaları |
+| ASan E2E | 32 | harness SKIP sayacı |
+| **Toplam** | **65** | Mevcut harness davranışı; kapılar değiştirilmedi. |
+
+- Ayrı muafiyetler: yapısal IR **24**, sürücü paritesi **1**, geniş check **18**, tip kontrol **9** → **52 muaf ölçüm**. ASan ayrıca **4 ALLOW(bilinen)** ve **2 SIZINTI-MUAF** bildiriyor.
+- Lean: **32 dosyada 0 sorry/admit** taraması geçti; `lean/lake` olmadığı için gerçek Lean tip denetimi **yapılmadı**. Bu, yukarıdaki fikstür atlama toplamından ayrı bir doğrulama eksikliğidir.
+- Self-driver alt logu `build/selfdrv.xcpYyi/llvm.out`, doğrudan codegen özetinde sayılmayan iki C-oracle modül atlamasını da gösteriyor.
+- A0 düzeltmesinden sonra `virtio_blk_init_test` muafiyeti gereksiz kaldı; harness yasağı nedeniyle muafiyet listesi değiştirilmedi.
+
+### Kapsam ve kalan doğrulama
+
+- Kapsam denetimi temiz; Makefile farkı yalnız `CHATGPT_TESTLER`. Derleyici, runtime, kapı betikleri ve diğer worktree dosyaları değiştirilmedi.
+- 18 Python kâhini/üreticisi rc=0; yeniden üretimde bayt farkı yok.
+- Derleyici bulguları **F001–F005**, kullanılan dolanmalar ve **QEMU’da doğrulanacak** alanlar [bulgular dosyasında](https://github.com/msyrt-sys/kemgu/blob/codex/surucu-dalga4/otomasyon/chatgpt/codex4_bulgular.md). Yeni NVMe/AHCI/xHCI donanım doğrulaması sahte aygıt başarısıyla eş tutulmadı.
+- Yerel kanıtlar: `build/codex4/*-{yesil,sabotaj,geri,kopru}.log`, `*-sure.txt`, `build/tumu.log`, `build/codex4/test_tumu.rc`.
+- Tam test günlüğü SHA-256: `e8a0eaf4535c868d5e5fac506ff13bf47be71e8f67b2808ee42dbb3c35919312`.
+- Bitiş: **2026-11-07T07:57:24.893729+00:00**. Worktree çalışma süresi **1 sa 45 dk**; ön koşul bekleme ayrıca **50 dk**.
+- Dal `codex/surucu-dalga4`; tek draft PR. Auto-merge açılmadı, merge yapılmadı.

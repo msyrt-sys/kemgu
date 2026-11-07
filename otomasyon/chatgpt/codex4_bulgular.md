@@ -85,7 +85,7 @@ F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
   okunur, 128–255 açık destek sınırı hatasıyla reddedilir; 7 bite sessiz kırpılmaz.
 
 ## F004 — eşleş doğrudan Dizi<enum> öğesinde C LLVM türü
-`eşleş dizi_al(xs,0)` (`xs: Dizi<TusOlayi>`) C link aşamasında `extractvalue i32` üretir. Açık `değişken o: TusOlayi = dizi_al(xs,0); eşleş o` geçer. Derleyici değiştirilmedi; HID testinde açık tür kullanıldı.
+`xs`, `sonuç<Dizi<TusOlayi>,metin>` sonucunun `tamam(xs)` kolundan çıkarıldığında `eşleş dizi_al(xs,0)` C link aşamasında `extractvalue i32` üretir. Açık `değişken o: TusOlayi = dizi_al(xs,0); eşleş o` geçer. Derleyici değiştirilmedi; HID testinde açık tür kullanıldı.
 
 ## QEMU'da doğrulanacak — USB BOT taşıyıcısı
 - Çağıran xHCI denetleyiciyi, slotu ve bulk OUT/IN ile EP0 bağlamlarını önceden kurar; bu modül enumerasyon yapmaz. Her UsbDepo için özel event halkası/interrupter gerekir. Constructor BAR’a göreli kapı zili ve ERDP ofsetlerini alır.
@@ -98,3 +98,21 @@ NVMe ve AHCI `cekirdek.kem` birlikte ithal edilince açık alias'lar T024'ü ç�
 
 ## F2 sınır testiyle bulunan sürücü düzeltmesi
 Yeni sınır testi ilk koşuda `exit=52` verdi (`build/codex4/F2-once-kirmizi.log`): `yaz_be16(...,65536)` sessizce kırpıyordu. 16/32 bit yazıcılara negatif/taşan değer denetimi eklendi; hata tamponu değiştirmez. 64 bit yazıcı mevcut tam64 bit örüntüsü sözleşmesini korur. Derleyici bulgusu değildir.
+
+## F004/F005 küçük yeniden üretimler
+F004: `build/codex4/f004.kem`:
+```kem
+kullan drivers::ps2::klavye_tr::{ TusOlayi };
+işlev olaylar() -> sonuç<Dizi<TusOlayi>,metin> {
+    değişken xs: Dizi<TusOlayi> = [];
+    dizi_ekle(xs,TusOlayi::Karakter(65)); ver tamam(xs);
+}
+işlev main() -> tam32 {
+    eşleş olaylar() { hata(e) => { ver 1; } tamam(xs) => {
+        eşleş dizi_al(xs,0) { TusOlayi::Karakter(k) => { ver k; } _ => { ver 0; } }
+    } }
+}
+```
+`build/kemgu --llvm build/codex4/f004.kem > build/codex4/F004-min.ll` (rc=0), ardından `clang -Wno-override-module -x ir -c build/codex4/F004-min.ll` (rc=1): `extractvalue operand must be aggregate type`, `extractvalue i32`. Açık türle tanımlanmış sıradan dizi tek başına kusuru üretmez; sonuç kolundaki çıkarım gerekir.
+
+F005: iki farklı dizindeki `cekirdek.kem` dosyalarında özel `ortak()` işlevi; birinde genel `f()` bunu çağırıp 1, diğerinde genel `g()` çağırıp 2 döndürür. `ana.kem` her iki modülü farklı açık alias ile seçili ithal eder ve `f()+g()` döndürür. `build/kemgu --llvm build/codex4/f005/ana.kem` rc=0; üretilen IR için aynı clang komutu rc=1: `invalid redefinition of function 'cekirdek.ortak'`. Örnekler ve hata günlükleri `build/codex4/F00{4,5}-min.*` altında.
