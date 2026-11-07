@@ -1,0 +1,10 @@
+kullan d3_imza::{dosya_sil, metin_yirmi, metin_buyuk};
+işlev main() -> tam32 {
+    eğer dosya_sil(-17) != -15 { ver 1; }
+    eğer dosya_sil(203) != 205 { ver 2; }
+    eğer dosya_sil(40) != 42 { ver 3; }
+    eğer metin_yirmi() != 20 { ver 4; }
+    eğer metin_buyuk() != 8589934592 { ver 5; }
+    eğer metin_uzunluk("abcde") != 5 { ver 6; }
+    ver 42;
+}

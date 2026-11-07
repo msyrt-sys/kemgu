@@ -10169,6 +10169,21 @@ işlev ad_tanimli_mi(p: &değişken Ayr, ad: metin) -> mantıksal {
 // Tek işlev, iki çağıran: aynı soruyu iki yerde ayrı yanıtlamamak için (D-407).
 // `fad` = imza tablosu anahtarı (YOL'da nitelikli `m.f`), `cad` = çıplak ad
 // (`fn_ciplak_mi` `cip_node`un çıplak adına bakar — nitelikliyle sorulsa sahte E013).
+// Seçili kullanıcı işlevinin imzası aynı adlı yerleşikten önce gelir.
+// İmzalar modülün kanonik adıyla zaten kayıtlıdır; özel üyenin reddedilen
+// ithalatı yerleşiği gölgeleyemez. Nitelikli çağrı yolu aynı kaydı kullanır.
+işlev secili_imza_anahtari(p: &değişken Ayr, ad: metin) -> metin {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.si_ad) {
+        eğer metin_esit(dizi_al(p.si_ad, i), ad) {
+            değişken m: metin = son_segment(dizi_al(p.si_yol, i));
+            değişken k: metin = mangle(m, ad);
+            eğer (ozel_uye_mi(p, m, ad) == yanlış) ve fn_kayitli_mi(p, k) { ver k; }
+        }
+        i = i + 1;
+    }
+    ver ad;
+}
 işlev arite_arg_kontrol(p: &değişken Ayr, idx: tam32, fad: metin, cad: metin) -> tam32 {
     değişken hb: tam32 = dizi_al(p.a_cb, idx);
     değişken hc: tam32 = dizi_al(p.a_cs, idx);
@@ -11371,7 +11386,7 @@ işlev ifade_tip(p: &değişken Ayr, idx: tam32, beklenen: metin) -> metin {
             eğer tfg3 >= 0 {
                 eğer dizi_al(p.fg_dn, tfg3) >= 0 { ver tf_tip_coz(p, idx, tfg3, dizi_al(p.fg_dn, tfg3)); }
             }
-            ver fn_donus_bul(p, dizi_al(p.a_deg, h));   // "?" = kullanıcı işlevi değil
+            ver fn_donus_bul(p, secili_imza_anahtari(p, dizi_al(p.a_deg, h)));
         }
         // [D-728] `x.m(..)` → metot imzasının dönüş tipi.
         eğer metin_esit(dizi_al(p.a_ad, h), "ERISIM") ve (dizi_al(p.a_cs, h) > 0) {
@@ -14498,8 +14513,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                   veya metin_esit(fad, "hata")) ve ((hc - 1) == 1) {
                 lin_tuket_dugum(p, dizi_al(p.cocuk, dizi_al(p.a_cb, idx) + 1));
             }
-            eğer fn_psay_bul(p, fad) >= 0 {   // kullanıcı işlevi → arite bilinir
-                ver arite_arg_kontrol(p, idx, fad, fad);   // [D-715]
+            değişken imza: metin = secili_imza_anahtari(p, fad);
+            eğer fn_psay_bul(p, imza) >= 0 {   // kullanıcı işlevi → arite bilinir
+                ver arite_arg_kontrol(p, idx, imza, fad);
             }
         }
         // [D-728] METOT ÇAĞRISI (`x.m(..)`): C metot dağıtımı aynası.
