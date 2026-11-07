@@ -101,7 +101,7 @@ işlev main() -> tam32 {
     eğer r.t == 1 ve r.v == 0 ve r.n == 0 ve r.y == 16777280 { ver 0; } ver 1;
 }
 ```
-`build/{kemgu,codegen} --llvm build/codex6/kayit_dizi_donus.kem`, clang/runtime: IR/link rc=0. C `1,0,0,16777280`/rc0; self `1,0,-1022437784,263721319102200`/rc1 (bozuk alanlar çalıştırmaya göre değişiyor). Gerçek QEMU’nun C/self 187 istek izi birebir aynıyken yeniden oynatma fikstürünün ilk kaydında saptandı. Derleyici değişmedi; dönüşten önce `değişken kayitlar: Dizi<XhciIz> = [...]` kullanılır.
+`build/{kemgu,codegen} --llvm build/codex6/kayit_dizi_donus.kem`, clang/runtime: IR/link rc=0. C `1,0,0,16777280`/rc0; self `1,0,-1022437784,263721319102200`/rc1 (bozuk alanlar çalıştırmaya göre değişiyor). Gerçek QEMU’nun C/self 187 istek izi birebir aynıyken yeniden oynatma fikstürünün ilk kaydında saptandı. Derleyici değişmedi; dönüşten önce `değişken kayitlar: Dizi<XhciIz> = [...]` kullanılır. Küçük örneğin bu dolanmalı biçimi de iki derleyicide `1,0,0,16777280`/rc0 verdi.
 
 ## SAHTE MODEL DÜZELTİLDİ — tam enumerasyon
 
@@ -113,7 +113,44 @@ Bu, genel bir xHCI emülatörü değil, ölçülen yürütmenin regresyon modeli
 
 - Fiziksel xHCI donanımı, DMA cache/barrier/coherency ve interrupt glue bu sans-IO işin dışında. QEMU 8.2.2/q35 üzerinde ölçüldü.
 - QEMU örneği scratchpad=0 ve 32 bayt bağlam bildiriyor. Sürücünün sıfır dışı scratchpad/64 bayt bağlam yolları gerçek aygıtta ölçülmedi; fiziksel doğrulama gerektirir.
-- Kök port, yapılandırma1/alt ayar0, aygıt başına en çok bir IN/bir OUT ucu; hub/isochronous ve aynı yönde çoklu endpoint desteklenmez, hata döner. İlk16 yuva ve en çok32 scratchpad sayfası sınırı var.
+- Kök port, ilk yapılandırma/alt ayar0, aygıt başına en çok bir IN/bir OUT ucu; hub/isochronous ve aynı yönde çoklu endpoint desteklenmez, hata döner. İlk16 yuva ve en çok32 scratchpad sayfası sınırı var.
 - BOT’a geçiş, denetleyici olay halkasını özel BOT halkasına devreder. Bu API tek sahipli ve geri dönüşsüzdür: ardından aynı çekirdek durumu üzerinden HID başlatılmaz. Depo ve HID qtest’leri ayrı QEMU örnekleridir; eşzamanlı karma I/O iddiası yok.
 - FAT32 gerçek testi mkfs.fat ile hazırlanmış düz64MiB imaj üzerinde; GPT, gerçek USB sökme/takma, güç kesintisi ve büyük disk bu dalgada ölçülmedi. Dosyanın tamamı ve iki FAT/FSInfo bağımsız doğrulanır.
 - G0’da yalnız F001–F005 ile kapanan dolanmalar temizlendi. C001 ad bağı alias’ları ve burada belgelenen C6-001..004 dolanmaları durur; derleyici/runtime değiştirilmedi.
+
+## Sabotaj kanıtları
+
+Her mutasyon tek başına uygulandı, derlendi, kapılar koşuldu ve kaynak geri yüklendi. `make calistir_qtest` her satırda rc=2; belirtilen `dogrula.sh` sahte testi rc=1 verdi. Hata, derleme/link başarısızlığı değil çalışan programın denetimidir. Yeşil qtest koşumları C ve self-host için ayrı QEMU süreçlerini tamamladı. Kırmızı yeni USB harness ilk başarısız ikilide durur.
+
+| İş | Geçici mutasyon | Gerçek QEMU sonucu | Sahte test (`tests/drivers/` altında) |
+|---|---|---|---|
+| G0 | NVMe kopyasında yüksek bayt biti silindi | `okuma deseni bozuk, bayt 10` | `nvme/cekirdek_test.kem` |
+| G1, G6 | xHCI olay halkası `adet:64` → `4` | `xhci denetleyici hatasi` | `usb/xhci_cekirdek_test.kem`, sonra `usb/xhci_qemu_model_test.kem` |
+| G2, G6 | endpoint add maskesi `mask` → `1` | `xhci gercek uc baglami` | G6’da `usb/xhci_qemu_model_test.kem` |
+| G3 | küçük Link cycle `değil dongu` → `dongu` | `usb zaman asimi is=99` | `usb/depo_cekirdek_test.kem` |
+| G3 | olay halkası sarımı `16` → `4` | `usb zaman asimi is=99` | `usb/depo_cekirdek_test.kem` |
+| G3 | ilk UA yeniden denemesi `ua_deneme == 0` → `< 0` | `scsi komut hatasi ... sense=6/41` | `usb/depo_qemu_model_test.kem` |
+| G4 | kabul edilen kısa paket kodu13 →12 | `xhci tamamlanma kodu 13` | `usb/xhci_cekirdek_test.kem` |
+| G4 | Türkçe ğ kodu287 →286 | `klavye kod noktasi`, `[65,286]` | `usb/hid_qemu_test.kem` |
+| G5 | HID Y ters çevrilmedi | `fare yon veya dugme`, `[17,9,1]` | `usb/fare_qemu_test.kem` |
+
+Toplam11 gerçek sabotaj koşumu, 10 eşlenmiş sahte kırmızı koşumu; dokuz farklı kuralın tümü son durumda gerçek+sahte ile korunur. Günlükler `build/codex6/G*-sabotaj*.log`; geri yükleme sonrası her işin iki kapısı yeşildir.
+
+## Son tam takım — atlama sayımı
+
+`make test_tumu` rc0; PIPESTATUS ile ölçüldü. Aynı dosyanın farklı kapı/ikili altında atlanması ayrı olay sayılır; özet satırı ve ayrıntı satırı iki kere sayılmaz.
+
+| Kapı | Atlama olayı | Gerekçe |
+|---|---:|---|
+| Codegen semantik, üç koşum |12| Her koşumda202 dosyanın198’i geçti;2 yabancı mimari +2 C oracle link istisnası |
+| Geniş codegen |9| Mevcut C oracle/bare-metal MMIO istisnaları |
+| Yapısal IR |2| Mevcut kapsam atlaması |
+| Sürücü paritesi |1| Mevcut kapsam atlaması |
+| Eski VirtIO host testleri |5| C oracle --check reddi |
+| Bölge operandı |4| Mevcut kapsam atlaması |
+| ASan E2E |32| Harness’ın mevcut SKIP listesi |
+| **Toplam** |**65**| Yeni USB qtest atlaması0 |
+
+QEMU ayrıca RAM≤1GiB nedeniyle üst bellek alt senaryosunu1 kez atladı. Korpus muafiyetleri24 yapısal +1 sürücü +18 geniş check +9 tip kontrol =52. ASan’ın4 bilinen ve2 sızıntı istisnası bu52’den ayrıca raporlanır; ASan sonucu131 PASS/0 FAIL. Geniş codegen günlüğünde dört Segmentation fault satırı vardır: mevcut bare-metal programların host üzerinde eşleşen C/self çıkışlarıdır; kapının62/62 semantik eşitlik sonucu donanımda başarılı yürütme anlamına gelmez. Yeni USB qtest programlarının tümü exit0 verdi.
+
+Lean/lake kurulmadığı için yalnız32 dosyada0 sorry/admit metinsel kapısı çalıştı; gerçek ispat doğrulaması yapılmış sayılmadı. Son kaynak doğrulamasından sonra yalnız bu raporlar düzenlendi.
