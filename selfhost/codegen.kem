@@ -8201,14 +8201,17 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
             değişken obj: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, lhs));
             değişken oa0: metin = dizi_al(p.a_ad, obj);
             eğer metin_esit(oa0, "TANIMLAYICI") veya metin_esit(oa0, "ERISIM") {
-                değişken v2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
-                değişken vtip: metin = p.son_tip;
+                // F002: C gibi hedefi önce çöz; yapıcı beklenen alan tipini görsün.
                 değişken gr: metin = alan_adres_uret(p, lhs);
+                değişken hedef_tip: metin = p.son_tip;
+                değişken eski_beklenen: metin = p.beklenen_ll;
+                eğer metin_uzunluk(hedef_tip) > 0 {
+                    eğer bayt(hedef_tip, 0) == 123 { p.beklenen_ll = hedef_tip; }
+                }
+                değişken v2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+                p.beklenen_ll = eski_beklenen;
                 eğer metin_uzunluk(gr) > 0 {
-                    // C011: adres hesabı son_tip'i hedef alanla ezer. Kaynak
-                    // register'ın genişliğini sakla; yerel atama ve C gibi uydur.
-                    değişken hedef_tip: metin = p.son_tip;
-                    p.son_tip = vtip;
+                    // C011: son_tip artık kaynağa aittir; hedef ayrı saklanır.
                     v2 = int_uydur(p, v2, hedef_tip, ifade_isz(p, dizi_al(p.cocuk, cb + 1)));
                     yaz_str("  store "); yaz_str(hedef_tip); yaz_str(" "); yaz_str(v2); yaz_str(", ptr "); yaz_str(gr); yb(10);
                 }
@@ -8220,6 +8223,7 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, lhs), "INDEKS") {
             değişken lcb: tam32 = dizi_al(p.a_cb, lhs);
             değişken taban: metin = ifade_uret(p, dizi_al(p.cocuk, lcb));       // dizi → ptr
+            değişken hedef_eleman: metin = p.son_elem;   // F002: indeks üretimi ezmeden sakla.
             değişken iy2: metin = ifade_uret(p, dizi_al(p.cocuk, lcb + 1));     // indeks → i32
             değişken ity2: metin = p.son_tip;                                   // indeksin doğal IR tipi
             // D-406: HAM İŞARETÇİ yazma (`d: *T` içinde `d[i] = v`) → GEP + store.
@@ -8243,7 +8247,12 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 yaz_str(", ptr "); yaz_str(g3); yb(10);
                 ver 0;
             }
+            değişken eski_beklenen: metin = p.beklenen_ll;
+            eğer metin_uzunluk(hedef_eleman) > 0 {
+                eğer bayt(hedef_eleman, 0) == 123 { p.beklenen_ll = hedef_eleman; }
+            }
             değişken vy2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));      // değer
+            p.beklenen_ll = eski_beklenen;
             değişken vty2: metin = p.son_tip;                                  // değer LLVM tipi
             eğer dizi_eleman_yapi_mi(vty2) {   // D-342: by-value eleman
                 dizi_yapi_yaz_emit(p, taban, iy2, vty2, vy2);
@@ -9267,7 +9276,9 @@ işlev bolge_yerel_yonlendir(p: &değişken Ayr, idx: tam32, elem: metin) -> met
     // SKALER-eleman (ρ_iter + ρ_yerel ortak ön-koşul): ptr/struct eleman → iç-ptr
     // dizi_al ile kaçabilir → ρ_caller (serbest edilmez).
     eğer metin_esit(elem, "ptr") { ver p.rho_ref; }
-    eğer bayt(elem, 0) == 37 { ver p.rho_ref; }         // '%' = struct-eleman
+    // F002: satır içi seçimlik/sonuç da iç işaretçi taşıyabilir; C'nin
+    // by-value sınıflandırmasıyla aynı çağıran bölgesinde tutulur.
+    eğer dizi_eleman_yapi_mi(elem) { ver p.rho_ref; }
     // F4.3 a3: iterasyon-confined (ky_confined ∧ döngü-gövde-bildirimi) + en-dış ρ_iter
     // mevcut → ρ_iter (HER İTERASYONDA serbest). no-escape ∧ no-loop-carry → SOUND.
     // OS kernel-loop'unu bunun için yaşatır (sonsuz döngüde per-iter free = sınırlı bellek).

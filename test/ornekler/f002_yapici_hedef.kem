@@ -1,0 +1,3 @@
+// C oracle bağlama hatasını kırmızı sayan geniş kapıya aynı fikstürü bağla.
+kullan test::cg_korpus::cg_f002_yapici_hedef::{ f002_sina };
+işlev main() -> tam32 { ver f002_sina(); }

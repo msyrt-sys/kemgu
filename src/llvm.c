@@ -1618,7 +1618,8 @@ static int dizi_bitcast_emit(LlvmGen *g, int reg,
 static int dizi_eleman_struct_mi(const char *et) {
     if (!et) return 0;
     if (et[0] == '%') return 1;
-    return strcmp(et, "{ ptr, ptr }") == 0;
+    /* F002: secimlik/sonuc da satirici agregattir (self-host aynasi). */
+    return et[0] == '{';
 }
 
 /* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
@@ -3065,7 +3066,7 @@ static IfadeSonuc erisim_uret(LlvmGen *g, const Dugum *d) {
  *     -1 donerdi -> a.b.c = v sessizce dusurulurdu.
  * Donus: alan adresi reg (>=0) + alan_ir_out; cozulemezse -1. */
 static int erisim_lvalue(LlvmGen *g, const Dugum *d,
-                         const char **alan_ir_out) {
+                         const char **alan_ir_out, const Dugum **alan_ast_out) {
     if (!d || d->tip != DUGUM_ERISIM) return -1;
     const Dugum *nesne_d = d->veri.erisim.nesne;
     if (!nesne_d) return -1;
@@ -3103,7 +3104,7 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
         /* a.b.c: ic erisimin (a.b) ALAN ADRESINI al; tipi struct
          * ("%Ic") olmali ki alan GEP'i kurulabilsin. */
         const char *ic_ir = NULL;
-        taban_reg = erisim_lvalue(g, nesne_d, &ic_ir);
+        taban_reg = erisim_lvalue(g, nesne_d, &ic_ir, NULL);
         if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
         yk = yapi_bul_ir(g, ic_ir);
     } else {
@@ -3116,6 +3117,7 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
                                  d->veri.erisim.alan_uzunluk, &alan_tip_d);
     if (idx < 0) return -1;
     if (alan_ir_out) *alan_ir_out = ast_tip_to_ir(g, alan_tip_d);
+    if (alan_ast_out) *alan_ast_out = alan_tip_d;
 
     int gep_r = yeni_reg(g);
     fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
@@ -7139,9 +7141,15 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         hedef->veri.indeks.indeks, "i32");
                     int idx_r = int_donustur(g, idx.reg, idx.tip, "i32");
                     if (dizi_eleman_struct_mi(heap_et)) {
+                        /* F002: xs[i] = yapici(...) hedef eleman tipini kullanir. */
+                        const Dugum *eski_bt = g->beklenen_tip;
+                        const Dugum *eleman_ast = heap_dizi_eleman_ast(g,
+                            hedef->veri.indeks.nesne);
+                        if (eleman_ast) g->beklenen_tip = eleman_ast;
                         /* D-087: by-value yapı eleman — kdl_dizi_yaz_yapi. */
                         IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                                   heap_et);
+                        g->beklenen_tip = eski_bt;
                         dizi_struct_yaz_emit(g, base.reg, idx_r, v.reg, heap_et);
                     } else {
                         const char *cast =
@@ -7205,7 +7213,8 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * nedeni). Simdi: alan adresi (GEP) + store — hem lokal
                  * struct hem &Struct referans param hedefi calisir. */
                 const char *alan_ir = NULL;
-                int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir);
+                const Dugum *alan_ast = NULL;
+                int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir, &alan_ast);
                 /* [D-092] k.xs = [..]  (alan Dizi<T> heap) — TANIMLAYICI ile
                  * aynı delik: dizi-literali stack ÜRETME, heap KdlDizi yap ve
                  * alan adresine KdlDizi* store et. dizi_alan_eleman_ast alanın
@@ -7223,8 +7232,14 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "  store ptr %%%d, ptr %%%d\n",
                             v.reg, adr);
                 } else if (adr >= 0 && alan_ir) {
+                    /* F002: alan lvalue da yapicinin bildirilen hedef tipini tasir. */
+                    const Dugum *eski_bt = g->beklenen_tip;
+                    if (alan_ast && (alan_ast->tip == DUGUM_TIP_SECIMLIK ||
+                                     alan_ast->tip == DUGUM_TIP_SONUC))
+                        g->beklenen_tip = alan_ast;
                     IfadeSonuc v = ifade_uret(g, d->veri.atama.deger,
                                                alan_ir);
+                    g->beklenen_tip = eski_bt;
                     int rr = int_donustur(g, v.reg, v.tip, alan_ir);
                     fprintf(g->out, "  store %s %%%d, ptr %%%d\n",
                             alan_ir, rr, adr);
@@ -7833,7 +7848,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                         ? d->veri.satirici_asm.cikti_hedefler[i] : NULL;
                     if (hn && hn->tip == DUGUM_ERISIM) {
                         const char *ai = NULL;
-                        int ar = erisim_lvalue(g, hn, &ai);
+                        int ar = erisim_lvalue(g, hn, &ai, NULL);
                         if (ar < 0) {
                             fprintf(g->out,
                                 "  ; satirici_asm: cikti alan hedefi cozulemedi\n");
