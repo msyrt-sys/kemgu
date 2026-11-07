@@ -1,0 +1,40 @@
+// QEMU 8.2.2 usb-kbd, QMP tuşları: G4-raporlar.log; C/self ham raporları aynı.
+// Üreteç: tools/codex/dalga6_hid_fikstur.py. Python ord('Ağaç İş\n').
+kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni, OZEL_ENTER };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+işlev main() -> tam32 {
+    değişken raporlar: Dizi<Dizi<dtam8>> = [
+        [2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [2 olarak dtam8,0 olarak dtam8,4 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,47 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,4 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,55 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,44 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [2 olarak dtam8,0 olarak dtam8,52 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,51 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8],
+        [0 olarak dtam8,0 olarak dtam8,40 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8]];
+    değişken h: HidKlavye = hid_klavye_yeni(); değişken d: KlavyeDurumu = klavye_yeni();
+    değişken bek: Dizi<tam32> = [65,287,97,231,32,304,351,10]; değişken n: tam32 = 0;
+    için b: raporlar {
+        eşleş hid_klavye_rapor(&değişken h,&değişken d,b) { hata(e) => { ver 1; } tamam(xs) => {
+            için o: xs { değişken k: tam32 = -1;
+                eşleş o { TusOlayi::Karakter(c) => { k=c; } TusOlayi::Ozel(c,bas) => { eğer c == OZEL_ENTER ve bas { k=10; } } _ => { } }
+                eğer k >= 0 { eğer n >= 8 veya k != dizi_al(bek,n) { ver 2; } n=n+1; }
+            }
+        } }
+    }
+    eğer n != 8 veya d.sol_shift veya d.sag_shift { ver 3; }
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,bayt_sifir(7)) { tamam(v) => { ver 4; } hata(e) => { } }
+    ver 0;
+}

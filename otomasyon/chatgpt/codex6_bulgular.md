@@ -73,3 +73,11 @@ işlev main() -> tam32 {
 
 - C ve self ölçümü aynı: port1/slot1 hız4, VID 18164 (0x46f4), PID1, sınıf8/alt6/protokol80; uç129 bulk IN ve uç2 bulk OUT, paket1024. Port6/slot2 hız3, VID1575 (0x0627), PID1, sınıf3/alt1/protokol1; uç129 interrupt IN, paket8, bInterval7. `tests/qemu/xhci_qtest.kem` bunları ve QEMU’nun çıkış bağlamındaki Configured/Running, endpoint type/MPS alanlarını doğrular.
 - Yerel `/usr/share/hwdata/usb.ids` yok. QEMU v8.2.2 `hw/usb/dev-storage.c` ve `hw/usb/dev-hid.c` ile karşılaştırıldı; Python sabit doğrulayıcı SHA256 ve Unicode/qcode/USB istek sabitlerini kaydeder. Kaynaklar: https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-storage.c ve https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-hid.c .
+
+## G4 — gerçek HID ölçümü
+
+QMP qcode sözlüğü QEMU v8.2.2 qapi/ui.json’dan doğrulandı. HLT BIOS ve çalışan VM ile her QMP tuş olayından sonra rapor alındı; 19 adet 8 baytlık rapor C/self birebir eşit. 16 bayt IN isteği her raporda CC13/artık8 verdi. Kodlar Python ord ile `[65,287,97,231,32,304,351,10]`; iki gerçek koşum 1.65 sn. SET_PROTOCOL(boot) + SET_IDLE(0) denetlendi. QMP ilk selamını beklerken qtest wait=on QEMU başlangıcını bekletti; yalnız yeni HID dalında qtest wait=off kullanıldı (VM yine -S olmadan çalışır).
+
+### SAHTE MODEL DÜZELTİLDİ — HID
+
+Önceki elle üretilmiş basış örneklerine ek olarak gerçek QEMU’nun modifier, basma ve bırakma raporları `hid_qemu_test.kem` içine alındı. Özellikle İ için sol Shift raporu ve ayrı bırakma raporları ölçüldü; mevcut eski test beklentileri değiştirilmedi. Kısa IN tamamlanması çekirdek sahte olay testinde de CC13/artık8 ile korunuyor.

@@ -203,6 +203,10 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         ekle(s,GcIstek::Yaz32(s.c.caplength olarak tam64,1)); ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); s.evre=84; ver GcIstek::Bekle(0);
     }
     eğer s.evre == 84 { eğer (y.deger&4096) != 0 { ver hata_ver(s,"xhci depo olay halkasi"); } eğer (y.deger&1) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=100; ver GcIstek::Bitti; }
+    eğer s.evre == 85 {
+        değişken i: tam32 = 0; iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); eğer a.yuva == s.yuva { a.ctrl=s.ctrl; a.ctrl_dongu=s.ctrl.dongu; dizi_yaz(s.aygitlar,i,a); } i=i+1; }
+        s.evre=100; ver GcIstek::Bitti;
+    }
     eğer s.evre == 900 { s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
     eğer s.evre == 901 {
         eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
@@ -233,4 +237,33 @@ genel işlev xhci_depo_hazir(s: &değişken XhciDurum, indeks: tam32) -> sonuç<
     eğer s.evre != 100 veya s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci depo devir durumu"); }
     değişken a: XhciAygit = dizi_al(s.aygitlar,indeks); s.yuva=a.yuva; s.ddma=a.dma;
     ver komut_ozel(s,15,0,s.yuva,65536,81);
+}
+
+// Tek bekleyen aktarım: çağrıdan sonra xhci_adim Bitti verene kadar sürülür.
+işlev aygit_sec(s: &değişken XhciDurum, indeks: tam32) -> sonuç<XhciAygit,metin> {
+    eğer s.evre != 100 veya s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci aktarim durumu"); }
+    değişken a: XhciAygit = dizi_al(s.aygitlar,indeks); s.yuva=a.yuva; s.ddma=a.dma; s.ctrl=a.ctrl; ver tamam(a);
+}
+genel işlev xhci_kontrol(s: &değişken XhciDurum, indeks: tam32, paket: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    eşleş aygit_sec(s,indeks) { hata(e) => { ver hata(e); } tamam(a) => { ver kontrol_kur(s,paket,85); } }
+}
+// QEMU ölçümü: önceki Link cycle korunur; ISP kısa IN paketini CC13 ile bildirir.
+// Python: IOC|ISP = (1<<5)|(1<<2) = 36; Link TC = 1<<1 = 2.
+genel işlev xhci_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32) -> sonuç<mantıksal,metin> {
+    eğer boy < 1 veya boy > 4096 { ver hata("xhci giris boyu"); }
+    eşleş aygit_sec(s,indeks) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken a: XhciAygit = v; değişken dci: tam32 = 0; değişken uclar: Dizi<UsbUc> = a.yapi.uclar;
+            için u: uclar { eğer u.alternatif == 0 ve u.tur == 3 ve (u.adres&128) != 0 { dci=(u.adres&15)*2+1; } }
+            eğer dci == 0 { ver hata("xhci interrupt IN yok"); }
+            değişken b: Dizi<dtam8> = [];
+            eşleş xhci_trb_kur(a.dma+65536,boy olarak tam64,1,a.in_dongu,36) { hata(e) => { ver hata(e); } tamam(t) => { birlestir(b,t); } }
+            eşleş xhci_trb_kur(a.dma+64,0,6,değil a.in_dongu,2) { hata(e) => { ver hata(e); } tamam(t) => { birlestir(b,t); } }
+            a.in_dongu=değil a.in_dongu; dizi_yaz(s.aygitlar,indeks,a);
+            ekle(s,GcIstek::BellekYaz(a.dma+64,b)); ekle(s,GcIstek::Yaz32(s.c.dboff+(a.yuva olarak tam64)*4,dci olarak tam64));
+            s.bek_adres=a.dma+64; s.bek_tur=32; s.bek_uc=dci; s.boy=boy; s.giris=doğru; s.sonra=100; s.evre=900; s.bekleme=0; s.sonuc=[];
+            ver tamam(doğru);
+        }
+    }
 }

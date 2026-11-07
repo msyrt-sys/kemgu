@@ -1,0 +1,48 @@
+// Gerçek USB HID → mevcut Türkçe Q. Python: [ord(c) for c in 'Ağaç İş\n'].
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_kontrol, xhci_giris };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma, usb_hid_set_protocol, usb_hid_set_idle };
+kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni, OZEL_ENTER };
+kullan drivers::ortak::bayt::{ oku_u8 };
+kullan drivers::ortak::gc::{ GcIstek };
+kullan tests::qemu::qtest::{ Qt, qt_ac, qt_kapat };
+kullan tests::qemu::xhci_qtest::{ xhci_qbaslat, xhci_qsur, xhci_qdogrula };
+
+işlev klavye(q: &değişken Qt, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    değişken indeks: tam32 = -1; değişken arayuz: tam32 = 0; değişken i: tam32 = 0;
+    iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0); eğer ar.sinif == 3 ve ar.protokol == 1 { indeks=i; arayuz=ar.no; } i=i+1; }
+    eğer indeks < 0 { ver hata("klavye yok"); }
+    eşleş usb_hid_set_protocol(arayuz,doğru) { hata(e) => { ver hata(e); } tamam(p) => { eşleş xhci_kontrol(s,indeks,p) { hata(e) => { ver hata(e); } tamam(v) => { } } } }
+    eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_hid_set_idle(arayuz,0,0) { hata(e) => { ver hata(e); } tamam(p) => { eşleş xhci_kontrol(s,indeks,p) { hata(e) => { ver hata(e); } tamam(v) => { } } } }
+    eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    değişken h: HidKlavye = hid_klavye_yeni(); değişken d: KlavyeDurumu = klavye_yeni();
+    değişken bek: Dizi<tam32> = [65,287,97,231,32,304,351,10]; değişken n: tam32 = 0; değişken rapor: tam32 = 0;
+    yazdir_metin("KLAVYE_HAZIR");
+    iken rapor < 64 {
+        eşleş xhci_giris(s,indeks,16) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        değişken ham: metin = "HID"; değişken bi: tam32 = 0; iken bi < dizi_boyut(s.sonuc) { ham=metin_birlestir(ham,metin_birlestir(" ",tam_metin(oku_u8(s.sonuc,bi) olarak tam64))); bi=bi+1; } yazdir_metin(ham);
+        eşleş hid_klavye_rapor(&değişken h,&değişken d,s.sonuc) {
+            hata(e) => { ver hata(e); }
+            tamam(xs) => { için o: xs { değişken kod: tam32 = -1;
+                eşleş o { TusOlayi::Karakter(k) => { kod=k; } TusOlayi::Ozel(k,b) => { eğer k == OZEL_ENTER ve b { kod=10; } } _ => { } }
+                eğer kod >= 0 { yazdir_metin(metin_birlestir("KOD ",tam_metin(kod olarak tam64))); eğer n >= 8 veya kod != dizi_al(bek,n) { ver hata("klavye kod noktasi"); } n=n+1; }
+            } }
+        }
+        rapor=rapor+1; yazdir_metin("RAPOR");
+        eğer n == 8 { eğer s.kisa_sayisi < rapor { ver hata("hid kisa paket yok"); } ver tamam(doğru); }
+    } ver hata("klavye rapor siniri");
+}
+işlev main() -> tam32 {
+    eşleş qt_ac(metin_tam(arg_al(1)) olarak tam32) { hata(e) => { yazdir_metin(e); ver 1; } tamam(v) => {
+        değişken q: Qt = v; değişken rc: tam32 = 0;
+        eşleş xhci_qbaslat(&değişken q) { hata(e) => { yazdir_metin(e); rc=1; } tamam(v) => { değişken s: XhciDurum = v;
+            eşleş xhci_qdogrula(&değişken q,s) { hata(e) => { yazdir_metin(e); qt_kapat(&değişken q); ver 1; } tamam(v) => { } }
+            eşleş klavye(&değişken q,&değişken s) { hata(e) => { yazdir_metin(metin_birlestir("QTEST_USB_KBD HATA ",e)); rc=1; } tamam(v) => { yazdir_metin("QTEST_USB_KBD OK"); } }
+        } }
+        qt_kapat(&değişken q); ver rc;
+    } }
+}

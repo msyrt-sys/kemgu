@@ -26,7 +26,7 @@ temizle() { [ -n "$QPID" ] && kill "$QPID" 2>/dev/null; wait 2>/dev/null; rm -rf
 trap temizle EXIT
 
 case "$AYGIT" in
-  xhci|usb_depo) python3 tests/qemu/usb_harness.py "$AYGIT"; exit $? ;;
+  xhci|usb_depo|usb_kbd) python3 tests/qemu/usb_harness.py "$AYGIT"; exit $? ;;
   nvme) PROG=tests/qemu/nvme_qtest.kem
         AYGIT_ARG=(-drive "file=$W/disk.img,if=none,id=d0,format=raw" -device nvme,drive=d0,serial=kemgu01) ;;
   ahci) PROG=tests/qemu/ahci_qtest.kem      # q35 dahili ICH9 AHCI (00:1f.2), port 0
