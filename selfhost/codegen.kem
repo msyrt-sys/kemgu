@@ -4877,6 +4877,22 @@ işlev yapi_alan_isz(p: &değişken Ayr, yad: metin, alan: metin) -> tam32 {
     }
     ver 0;
 }
+// F003: LLVM ptr türü dizi elemanının işaretini siler; bildirilen alan
+// düğümünden oku. C llvm.c aynı bilgiyi elemanın AST tipinden taşır.
+işlev yapi_alan_eleman_isz(p: &değişken Ayr, yad: metin, alan: metin) -> tam32 {
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver 0; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), alan) {
+            ver tip_eleman_isz(p, dizi_al(p.alan_tnode, base + j));
+        }
+        j = j + 1;
+    }
+    ver 0;
+}
 // CG8: Dizi alanının eleman tipi ("" Dizi değilse).
 işlev yapi_alan_elem(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     değişken k: tam32 = yapi_idx(p, yad);
@@ -5349,6 +5365,14 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
                 eğer metin_esit(elem, "i8") veya metin_esit(elem, "i16") {
                     ver cg_var_eisz_bul(p, kad);
                 }
+            }
+            // F003: s.b ve a.b.c kaynakları, değişken kaynağı gibi eleman
+            // işaretini korur; işaretli alanlar yine 0 döndürür.
+            eğer metin_esit(dizi_al(p.a_ad, kaynak), "ERISIM") {
+                değişken yad: metin = erisim_yapi_ad(p, dizi_al(p.cocuk, dizi_al(p.a_cb, kaynak)));
+                değişken mi: tam32 = mono_bul(p, yad);
+                eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
+                ver yapi_alan_eleman_isz(p, yad, dizi_al(p.a_deg, kaynak));
             }
         }
         ver fn_risz_bul(p, fad);
