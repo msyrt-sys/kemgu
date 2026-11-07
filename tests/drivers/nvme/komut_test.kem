@@ -1,0 +1,41 @@
+// Kâhin: python3 tools/codex/dalga4_nvme_komut.py (Linux başlığı + struct.pack).
+kullan drivers::nvme::komut::{ NvmePrp, PrpSayfa, NvmeTamamlanma, nvme_sq_kur, nvme_io_kur, nvme_identify, nvme_kuyruk_olustur, nvme_flush_kur, nvme_cq_coz, nvme_prp_kur };
+kullan drivers::ortak::bayt::{ oku_le32, oku_le64, bayt_sifir, yaz_u8 };
+işlev esit(a: Dizi<dtam8>, b: Dizi<dtam8>) -> mantıksal { eğer dizi_boyut(a) != dizi_boyut(b) { ver yanlış; } değişken i: tam32 = 0; iken i < dizi_boyut(a) { eğer dizi_al(a,i) != dizi_al(b,i) { ver yanlış; } i=i+1; } ver doğru; }
+işlev test_sq() -> mantıksal {
+    değişken beklenen: Dizi<dtam8> = [2 olarak dtam8,0 olarak dtam8,52 olarak dtam8,18 olarak dtam8,4 olarak dtam8,3 olarak dtam8,2 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,32 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,85 olarak dtam8,68 olarak dtam8,51 olarak dtam8,34 olarak dtam8,17 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,6 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8];
+    eşleş nvme_io_kur(yanlış,4660,16909060,73588229205,7,4096,8192) { hata(e) => { ver yanlış; } tamam(b) => { eğer değil esit(b,beklenen) { ver yanlış; } } }
+    eşleş nvme_io_kur(doğru,65536,1,0,1,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_io_kur(doğru,1,0,0,1,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_io_kur(doğru,1,1,0,0,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_io_kur(doğru,1,1,0,65537,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_identify(2,0,1,4096) { hata(e) => { ver yanlış; } tamam(b) => { eğer oku_le32(b,0) != 131078 veya oku_le32(b,40) != 1 { ver yanlış; } } }
+    eşleş nvme_kuyruk_olustur(doğru,3,1,16,4096,1) { hata(e) => { ver yanlış; } tamam(b) => { eğer oku_le32(b,0) != 196613 veya oku_le32(b,40) != 983041 veya oku_le32(b,44) != 1 { ver yanlış; } } }
+    eşleş nvme_kuyruk_olustur(yanlış,4,1,16,8192,1) { hata(e) => { ver yanlış; } tamam(b) => { eğer oku_le32(b,0) != 262145 veya oku_le32(b,44) != 65537 { ver yanlış; } } }
+    eşleş nvme_flush_kur(5,1) { hata(e) => { ver yanlış; } tamam(b) => { ver oku_le32(b,0) == 327680 ve oku_le64(b,24) == 0; } }
+}
+işlev test_cq() -> mantıksal {
+    değişken b: Dizi<dtam8> = [0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,7 olarak dtam8,0 olarak dtam8,1 olarak dtam8,0 olarak dtam8,52 olarak dtam8,18 olarak dtam8,181 olarak dtam8,134 olarak dtam8];
+    eşleş nvme_cq_coz(b) { hata(e) => { ver yanlış; } tamam(c) => { eğer c.sq_bas != 7 veya c.sqid != 1 veya c.cid != 4660 veya değil c.faz veya c.sc != 90 veya c.sct != 3 veya değil c.dnr veya c.durum == 0 { ver yanlış; } } }
+    yaz_u8(b,14,180);
+    eşleş nvme_cq_coz(b) { hata(e) => { ver yanlış; } tamam(c) => { eğer c.faz { ver yanlış; } } }
+    eşleş nvme_cq_coz(bayt_sifir(15)) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev test_prp() -> mantıksal {
+    eşleş nvme_prp_kur(4224,512,4096,0) { hata(e) => { ver yanlış; } tamam(p) => { eğer p.bir != 4224 veya p.iki != 0 veya dizi_boyut(p.listeler) != 0 { ver yanlış; } } }
+    eşleş nvme_prp_kur(4224,4096,4096,0) { hata(e) => { ver yanlış; } tamam(p) => { eğer p.iki != 8192 veya dizi_boyut(p.listeler) != 0 { ver yanlış; } } }
+    eşleş nvme_prp_kur(4096,2105344,4096,33554432) {
+        hata(e) => { ver yanlış; }
+        tamam(p) => {
+            eğer p.iki != 33554432 veya dizi_boyut(p.listeler) != 2 { ver yanlış; }
+            değişken a: PrpSayfa = dizi_al(p.listeler,0); değişken b: PrpSayfa = dizi_al(p.listeler,1);
+            eğer a.adres != 33554432 veya b.adres != 33558528 veya oku_le64(a.baytlar,0) != 8192 veya oku_le64(a.baytlar,4088) != 33558528 veya oku_le64(b.baytlar,0) != 2101248 veya oku_le64(b.baytlar,8) != 2105344 veya oku_le64(b.baytlar,16) != 0 { ver yanlış; }
+        }
+    }
+    eşleş nvme_prp_kur(4097,512,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_prp_kur(4096,0,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_prp_kur(4096,12288,4096,8192) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_prp_kur(4096,512,3000,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_prp_kur(9223372036854775804,512,4096,0) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_sq() { yazdir_metin("sq"); h=h+1; } eğer değil test_cq() { yazdir_metin("cq"); h=h+1; } eğer değil test_prp() { yazdir_metin("prp"); h=h+1; } ver h; }
