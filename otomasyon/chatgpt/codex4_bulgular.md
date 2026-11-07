@@ -85,3 +85,12 @@ F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
   olarak Python ile karşılaştırıldı; gerçek QEMU doğrulaması ayrıca gereklidir.
 - D2: görev MaxPorts alanını 8 bit verir; Linux kök hub sınırı 127'dir. Alan 8 bit
   okunur, 128–255 açık destek sınırı hatasıyla reddedilir; 7 bite sessiz kırpılmaz.
+
+## F004 — eşleş doğrudan Dizi<enum> öğesinde C LLVM türü
+`eşleş dizi_al(xs,0)` (`xs: Dizi<TusOlayi>`) C link aşamasında `extractvalue i32` üretir. Açık `değişken o: TusOlayi = dizi_al(xs,0); eşleş o` geçer. Derleyici değiştirilmedi; HID testinde açık tür kullanıldı.
+
+## QEMU'da doğrulanacak — USB BOT taşıyıcısı
+- Çağıran xHCI denetleyiciyi, slotu ve bulk OUT/IN ile EP0 bağlamlarını önceden kurar; bu modül enumerasyon yapmaz. Her UsbDepo için özel event halkası/interrupter gerekir. Constructor gerçek BAR kapı zili ve ERDP adreslerini alır.
+- 128 KiB / 64 KiB hizalı DMA; OUT/IN ikişer TRB, EP0 üç TRB, event dört TRB. Cycle sarımı, Link TC, ERDP EHB, Status IN akışı bağımsız modelde doğrulandı; fiziksel DMA tutarlılığı ve donanım sıralaması QEMU/bare-metal taşıyıcısında doğrulanmalı.
+- CSW faz hatası BOT reset + OUT/IN CLEAR_FEATURE(ENDPOINT_HALT) üretir ve isteği hatayla bitirir. xHCI Stall completion ayrı aktarım hatasıdır; durmuş endpoint için Reset Endpoint/Set TR Dequeue işlemleri üst taşıyıcıya aittir. Otomatik yeniden deneme yapılmaz.
+- LUN 0, doğrudan erişimli SCSI disk, READ CAPACITY(10), 512–65536 B ikinin kuvveti blok, istek başına 16 MiB. READ CAPACITY(16) gerektiren aygıt açık hata verir.

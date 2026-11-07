@@ -27,3 +27,6 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] D3 · 4 test / TRB, halka sarımı, olay, 32/64 B bağlam · cycle sabotajı → kırmızı · self 0,002 sn · köprü 107/107 · 2026-11-07T07:20:04.666062+00:00
 - [x] D4 · 2 test / Türkçe metin, fark, rollover, Ctrl/Shift/AltGr · sağ Shift sabotajı → kırmızı · self 0,002 sn · köprü 108/108 · 2026-11-07T07:22:13.266539+00:00
 - VARSAYIM D4: GUI değiştiricileri ve tanımsız kullanım kodları olay üretmez. 1–3 hata kullanım kodları son geçerli raporu korur.
+- [x] D5 · int8 sınır tablosu, 3/4 bayt, düğmeler, geçersiz boylar · Y işareti sabotajı → kırmızı · self 0,002 sn · köprü 110/110 (D6 paket testi dahil) · 2026-11-07T07:26:31.364581+00:00
+- [x] D6 · paket kâhini + 2 çekirdek test / 22 aktarım, 6 hata · CSW etiket sabotajı → kırmızı · self 0,114 sn · köprü 111/111 · 2026-11-07T07:29:11.558355+00:00
+- VARSAYIM D6: xHCI slot/uç bağlamlarını çağıran kurar; özel olay halkası ve önceden sıfırlanmış 128 KiB DMA alanı gerekir. Tek etkin komut, LUN 0. Fiziksel taşıyıcı sözleşmesi bulgularda.

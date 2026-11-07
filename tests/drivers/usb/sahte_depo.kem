@@ -1,0 +1,84 @@
+// Bağımsız xHCI ring + BOT/SCSI aygıt modeli; üretim sürücüsünün çözücüleri kullanılmaz.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le32, oku_le64, yaz_u8, yaz_le32, yaz_le64, yaz_be32 };
+genel yapı SahteDepo {
+    bellek: Dizi<dtam8>; disk: Dizi<dtam8>; out_dongu: mantıksal; in_dongu: mantıksal; ctrl_dongu: mantıksal;
+    olay_son: tam32; olay_dongu: mantıksal; faz: tam32; op: tam32; etiket: tam64; boy: tam32; giris: mantıksal; lba: tam64; adet: tam32;
+    ariza: tam32; kurtarma: tam32; io_sayisi: tam32; flush_sayisi: tam32; sense_sayisi: tam32; ack_sayisi: tam32;
+}
+genel işlev sahte_depo_yeni() -> SahteDepo { ver SahteDepo { bellek: bayt_sifir(131072), disk: [], out_dongu: doğru, in_dongu: doğru, ctrl_dongu: doğru, olay_son: 0, olay_dongu: doğru, faz: 0, op: 0, etiket: 0, boy: 0, giris: yanlış, lba: 0, adet: 0, ariza: 0, kurtarma: 0, io_sayisi: 0, flush_sayisi: 0, sense_sayisi: 0, ack_sayisi: 0 }; }
+işlev be32(b: Dizi<dtam8>, i: tam32) -> tam64 { ver ((oku_u8(b,i) olarak tam64)<<24)|((oku_u8(b,i+1) olarak tam64)<<16)|((oku_u8(b,i+2) olarak tam64)<<8)|(oku_u8(b,i+3) olarak tam64); }
+işlev bot(s: &değişken SahteDepo, giris: mantıksal, boy: tam32) -> mantıksal {
+    değişken p: tam32 = 65536;
+    eğer s.faz == 0 {
+        eğer giris veya boy != 31 veya oku_le32(s.bellek,p) != 1128420181 veya oku_u8(s.bellek,p+13) != 0 { ver yanlış; }
+        s.etiket=oku_le32(s.bellek,p+4); değişken n: tam64 = oku_le32(s.bellek,p+8); eğer n > 65536 { ver yanlış; } s.boy=n olarak tam32;
+        s.giris=(oku_u8(s.bellek,p+12)&128) != 0; s.op=oku_u8(s.bellek,p+15);
+        değişken cb: tam32 = oku_u8(s.bellek,p+14); değişken cb_bek: tam32 = 6; eğer s.op == 37 veya s.op == 40 veya s.op == 42 veya s.op == 53 { cb_bek=10; } eğer cb != cb_bek { ver yanlış; }
+        eğer s.op == 40 veya s.op == 42 {
+            s.lba=be32(s.bellek,p+17); s.adet=oku_u8(s.bellek,p+22)*256+oku_u8(s.bellek,p+23);
+            eğer s.adet < 1 veya s.lba+(s.adet olarak tam64) > 80000 veya s.boy != s.adet*512 veya s.giris != (s.op == 40) { ver yanlış; } s.io_sayisi=s.io_sayisi+1;
+        } değilse {
+            değişken bek: tam32 = 0; eğer s.op == 18 { bek=36; } eğer s.op == 37 { bek=8; } eğer s.op == 3 { bek=18; s.sense_sayisi=s.sense_sayisi+1; }
+            eğer s.op != 0 ve s.op != 3 ve s.op != 18 ve s.op != 37 ve s.op != 53 { ver yanlış; } eğer s.boy != bek { ver yanlış; } eğer s.op == 53 { s.flush_sayisi=s.flush_sayisi+1; }
+        }
+        s.faz=1; eğer s.boy == 0 { s.faz=2; } ver doğru;
+    }
+    eğer s.faz == 1 {
+        eğer giris != s.giris veya boy != s.boy { ver yanlış; }
+        değişken i: tam32 = 0;
+        eğer s.op == 42 {
+            değişken bas: tam64 = s.lba*512; eğer bas+(boy olarak tam64) > 16777216 { ver yanlış; }
+            iken dizi_boyut(s.disk) < (bas olarak tam32)+boy { dizi_ekle(s.disk,0 olarak dtam8); }
+            iken i < boy { yaz_u8(s.disk,(bas olarak tam32)+i,oku_u8(s.bellek,p+i) olarak tam64); i=i+1; }
+        } değilse {
+            iken i < boy { yaz_u8(s.bellek,p+i,0); i=i+1; }
+            eğer s.op == 40 { i=0; iken i < boy { değişken a: tam64 = s.lba*512+(i olarak tam64); eğer a < (dizi_boyut(s.disk) olarak tam64) { yaz_u8(s.bellek,p+i,oku_u8(s.disk,a olarak tam32) olarak tam64); } i=i+1; } }
+            eğer s.op == 18 { yaz_u8(s.bellek,p+1,128); yaz_u8(s.bellek,p+2,5); yaz_u8(s.bellek,p+3,2); yaz_u8(s.bellek,p+4,31); }
+            eğer s.op == 37 { yaz_be32(s.bellek,p,79999); yaz_be32(s.bellek,p+4,512); }
+            eğer s.op == 3 { yaz_u8(s.bellek,p,112); yaz_u8(s.bellek,p+2,5); yaz_u8(s.bellek,p+7,10); yaz_u8(s.bellek,p+12,32); }
+        }
+        s.faz=2; ver doğru;
+    }
+    eğer s.faz == 2 {
+        eğer değil giris veya boy != 13 { ver yanlış; }
+        değişken sig: tam64 = 1396855637; değişken tag: tam64 = s.etiket; değişken artik: tam64 = 0; değişken durum: tam64 = 0;
+        eğer s.ariza == 1 { sig=0; } eğer s.ariza == 2 { tag=(tag+1)&4294967295; } eğer s.ariza == 3 { durum=2; } eğer s.ariza == 4 { artik=1; } eğer s.ariza == 5 ve s.op != 3 { durum=1; }
+        yaz_le32(s.bellek,p,sig); yaz_le32(s.bellek,p+4,tag); yaz_le32(s.bellek,p+8,artik); yaz_u8(s.bellek,p+12,durum); s.faz=0; ver doğru;
+    } ver yanlış;
+}
+işlev zil(s: &değişken SahteDepo, hedef: tam64) -> mantıksal {
+    değişken ofs: tam32 = 0; değişken bek: mantıksal = s.out_dongu; değişken link: tam32 = 16; değişken olay: tam64 = 65536;
+    eğer hedef == 5 { ofs=64; bek=s.in_dongu; olay=65600; } değilse { eğer hedef != 4 ve hedef != 1 { ver yanlış; } }
+    eğer hedef == 1 { ofs=128; bek=s.ctrl_dongu; link=32; olay=65680; }
+    değişken c: tam64 = oku_le32(s.bellek,ofs+12); değişken lc: tam64 = oku_le32(s.bellek,ofs+link+12);
+    eğer ((c&1) != 0) != bek veya ((lc&1) != 0) != bek veya ((lc>>10)&63) != 6 veya (lc&2) == 0 veya oku_le64(s.bellek,ofs+link) != 65536+(ofs olarak tam64) { ver yanlış; }
+    eğer hedef == 1 {
+        eğer ((c>>10)&63) != 2 veya (c&64) == 0 veya oku_le32(s.bellek,ofs+8) != 8 veya ((oku_le32(s.bellek,ofs+28)>>10)&63) != 4 { ver yanlış; }
+        değişken tip: tam32 = oku_u8(s.bellek,ofs); değişken req: tam32 = oku_u8(s.bellek,ofs+1); değişken idx: tam32 = oku_u8(s.bellek,ofs+4);
+        eğer s.kurtarma == 0 { eğer tip != 33 veya req != 255 veya idx != 1 { ver yanlış; } }
+        eğer s.kurtarma == 1 { eğer tip != 2 veya req != 1 veya idx != 2 { ver yanlış; } }
+        eğer s.kurtarma == 2 { eğer tip != 2 veya req != 1 veya idx != 130 { ver yanlış; } }
+        s.kurtarma=s.kurtarma+1; s.ctrl_dongu=değil bek; s.faz=0;
+    } değilse {
+        eğer ((c>>10)&63) != 1 veya (c&32) == 0 veya oku_le64(s.bellek,ofs) != 131072 { ver yanlış; }
+        değişken n: tam64 = oku_le32(s.bellek,ofs+8)&131071; eğer n < 1 veya n > 65536 { ver yanlış; }
+        eğer değil bot(s,hedef == 5,n olarak tam32) { ver yanlış; }
+        eğer hedef == 5 { s.in_dongu=değil bek; } değilse { s.out_dongu=değil bek; }
+    }
+    eğer s.ariza == 6 { ver doğru; }
+    değişken e: tam32 = 256+s.olay_son*16; değişken ctrl: tam64 = 16777216|(hedef<<16)|32768; eğer s.olay_dongu { ctrl=ctrl|1; }
+    yaz_le64(s.bellek,e,olay); yaz_le32(s.bellek,e+8,16777216); yaz_le32(s.bellek,e+12,ctrl);
+    s.olay_son=s.olay_son+1; eğer s.olay_son == 4 { s.olay_son=0; s.olay_dongu=değil s.olay_dongu; } ver doğru;
+}
+genel işlev sahte_depo_yanit(s: &değişken SahteDepo, q: GcIstek) -> GcYanit {
+    değişken y: GcYanit = gc_bos();
+    eşleş q {
+        GcIstek::BellekYaz(a,b) => { eğer a < 65536 veya a > 196608 veya (dizi_boyut(b) olarak tam64) > 196608-a { y.basarili=yanlış; } değilse { değişken i: tam32 = 0; iken i < dizi_boyut(b) { yaz_u8(s.bellek,(a-65536) olarak tam32+i,oku_u8(b,i) olarak tam64); i=i+1; } } }
+        GcIstek::BellekOku(a,n) => { eğer a < 65536 veya a > 196608 veya n < 0 veya (n olarak tam64) > 196608-a { y.basarili=yanlış; } değilse { değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0; iken i < n { dizi_ekle(b,oku_u8(s.bellek,(a-65536) olarak tam32+i) olarak dtam8); i=i+1; } y.baytlar=b; } }
+        GcIstek::Yaz32(a,v) => { eğer a != 8196 { y.basarili=yanlış; } değilse { y.basarili=zil(s,v); } }
+        GcIstek::Yaz64(a,v) => { eğer a != 4152 veya v != ((65792+(s.olay_son olarak tam64)*16)|8) { y.basarili=yanlış; } değilse { s.ack_sayisi=s.ack_sayisi+1; } }
+        GcIstek::Bekle(us) => { }
+        _ => { y.basarili=yanlış; }
+    } ver y;
+}

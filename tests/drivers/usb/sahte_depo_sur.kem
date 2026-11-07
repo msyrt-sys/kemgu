@@ -1,0 +1,11 @@
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_adim, usb_depo_oku };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan tests::drivers::usb::sahte_depo::{ SahteDepo, sahte_depo_yanit };
+genel işlev usb_test_sur(s: &değişken UsbDepo, a: &değişken SahteDepo) -> sonuç<mantıksal,metin> {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 100000 { değişken q: GcIstek = usb_depo_adim(s,y); eşleş q { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(m) => { ver hata(m); } _ => { y=sahte_depo_yanit(a,q); } } i=i+1; } ver hata("usb test adim siniri");
+}
+genel işlev usb_test_oku(s: &değişken UsbDepo, a: &değişken SahteDepo, lba: tam64, adet: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eşleş usb_depo_oku(s,lba,adet) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_test_sur(s,a) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(s.sonuc); } }
+}

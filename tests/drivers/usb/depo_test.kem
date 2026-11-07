@@ -1,0 +1,19 @@
+// BOT/SCSI paketleri bağımsız Python kâhinine karşı.
+kullan drivers::usb::depo::{ bot_cbw, bot_csw, scsi_rw10, scsi_kapasite, scsi_duyu };
+kullan tests::drivers::usb::scsi_fikstur::{ cbw_ornek };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_le32, yaz_be32 };
+işlev main() -> tam32 {
+    eşleş scsi_rw10(yanlış,16909060,2) { hata(e) => { ver 1; } tamam(c) => { eşleş bot_cbw(305419896,1024,doğru,0,c) { hata(e) => { ver 2; } tamam(b) => { değişken bek: Dizi<dtam8> = cbw_ornek(); değişken i: tam32 = 0; iken i < 31 { eğer oku_u8(b,i) != oku_u8(bek,i) { ver 3; } i=i+1; } } } } }
+    değişken csw: Dizi<dtam8> = bayt_sifir(13); yaz_le32(csw,0,1396855637); yaz_le32(csw,4,7);
+    eşleş bot_csw(csw,7,512) { hata(e) => { ver 4; } tamam(v) => { eğer v != 0 { ver 5; } } }
+    eşleş bot_csw(csw,8,512) { tamam(v) => { ver 6; } hata(e) => { } }
+    yaz_le32(csw,8,1); eşleş bot_csw(csw,7,512) { tamam(v) => { ver 7; } hata(e) => { } }
+    yaz_le32(csw,8,0); yaz_u8(csw,12,2); eşleş bot_csw(csw,7,512) { hata(e) => { ver 8; } tamam(v) => { eğer v != 2 { ver 9; } } }
+    değişken cap: Dizi<dtam8> = bayt_sifir(8); yaz_be32(cap,0,79999); yaz_be32(cap,4,512);
+    eşleş scsi_kapasite(cap) { hata(e) => { ver 10; } tamam(k) => { eğer k.blok != 512 veya k.adet != 80000 { ver 11; } } }
+    yaz_be32(cap,0,4294967295); eşleş scsi_kapasite(cap) { tamam(v) => { ver 12; } hata(e) => { } }
+    değişken sense: Dizi<dtam8> = bayt_sifir(18); yaz_u8(sense,0,112); yaz_u8(sense,2,5); yaz_u8(sense,7,10); yaz_u8(sense,12,32);
+    eşleş scsi_duyu(sense) { hata(e) => { ver 13; } tamam(v) => { eğer v.anahtar != 5 veya v.asc != 32 veya v.ascq != 0 { ver 14; } } }
+    eşleş scsi_rw10(doğru,4294967295,2) { tamam(v) => { ver 15; } hata(e) => { } }
+    ver 0;
+}
