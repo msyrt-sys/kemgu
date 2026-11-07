@@ -1,0 +1,16 @@
+// Test yürütücüsü: gerçek OS bu döngüde aynı GcIstek'leri MMIO/DMA ile yanıtlar.
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_adim, ahci_oku, ahci_yaz, ahci_flush };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan tests::drivers::ahci::sahte_ahci::{ SahteAhci, sahte_ahci_yanit };
+genel işlev ahci_test_sur(s: &değişken AhciDurum, a: &değişken SahteAhci) -> sonuç<mantıksal,metin> {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 100000 {
+        değişken istek: GcIstek = ahci_adim(s,y);
+        eşleş istek { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(m) => { ver hata(m); } _ => { y=sahte_ahci_yanit(a,istek); } } i=i+1;
+    }
+    ver hata("test adim siniri");
+}
+genel işlev ahci_test_oku(s: &değişken AhciDurum, a: &değişken SahteAhci, lba: tam64, sayi: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eşleş ahci_oku(s,lba,sayi) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş ahci_test_sur(s,a) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(s.sonuc); } }
+}

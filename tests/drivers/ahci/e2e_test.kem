@@ -1,0 +1,75 @@
+// Komut kâhini: python3 -c "import math; print(sum(math.ceil(n/128) for n in [34,1112,1114,1114])+1)"
+// Kâhin: python3 tools/codex/dalga4_depolama.py; GPT CRC ve FAT32 geometri bağımsız hesaplanır.
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni, ahci_yaz, ahci_flush };
+kullan tests::drivers::ahci::sahte_ahci::{ SahteAhci, sahte_ahci_yeni };
+kullan tests::drivers::ahci::sahte_ahci_sur::{ ahci_test_sur, ahci_test_oku };
+kullan tests::drivers::ortak::depolama_fikstur::{ depolama_ornek, depolama_verisi };
+kullan drivers::disk::bolum::{ Bolum, BolumHatasi, gpt_coz };
+kullan drivers::fs::fat32_oku;
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev kabul(r: sonuç<mantıksal,metin>) -> mantıksal { eşleş r { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { ver v; } } }
+işlev dosya_akisi(s: &değişken AhciDurum, a: &değişken SahteAhci) -> mantıksal {
+    değişken lba: tam64 = 0;
+    eşleş ahci_test_oku(s,a,0,34) {
+        hata(e) => { yazdir_metin(e); ver yanlış; }
+        tamam(b) => { eşleş gpt_coz(b,512) { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 1 { ver yanlış; } değişken p: Bolum = dizi_al(xs,0); eğer p.baslangic_lba != 34 veya p.sektor_sayisi != 70000 veya değil metin_esit(p.ad,"VERI") { ver yanlış; } lba=p.baslangic_lba; } } }
+    }
+    değişken fat: Dizi<dtam8> = [];
+    eşleş ahci_test_oku(s,a,lba,1112) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { fat=v; } }
+    eşleş fat32_oku::dosya_oku(fat,"/KAYIT.TXT") { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { eğer dizi_boyut(v) != 4 veya oku_u8(v,0) != 111 veya oku_u8(v,3) != 101 { ver yanlış; } } }
+    // Mevcut FAT32 API yaratır; aynı dosyayı yenilemek için önce silinir.
+    eşleş fat32_yaz::dosya_sil(fat,"/KAYIT.TXT") { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { eğer değil v { ver yanlış; } } }
+    değişken yeni: Dizi<dtam8> = depolama_verisi(1300);
+    eşleş fat32_yaz::dosya_yaz(fat,"/KAYIT.TXT",yeni) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { eğer v != 1300 { ver yanlış; } } }
+    eğer değil kabul(ahci_yaz(s,lba,fat)) veya değil kabul(ahci_test_sur(s,a)) veya değil kabul(ahci_flush(s)) veya değil kabul(ahci_test_sur(s,a)) { ver yanlış; }
+    eşleş ahci_test_oku(s,a,lba,dizi_boyut(fat)/512) { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { fat=v; } }
+    eşleş fat32_oku::dosya_oku(fat,"/KAYIT.TXT") {
+        hata(e) => { yazdir_metin(e); ver yanlış; }
+        tamam(v) => { eğer dizi_boyut(v) != 1300 { ver yanlış; } değişken i: tam32 = 0; iken i < 1300 { eğer oku_u8(v,i) != ((i*29+7)&255) { ver yanlış; } i=i+1; } }
+    }
+    ver a.flush_sayisi == 1 ve a.gc_sayisi == 29;
+}
+işlev test_dosya() -> mantıksal {
+    değişken a: SahteAhci = sahte_ahci_yeni();
+    eşleş depolama_ornek() { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { a.disk=v; } }
+    eşleş ahci_yeni(65536,0-1) { hata(e) => { ver yanlış; } tamam(d) => { değişken s: AhciDurum = d; eğer değil kabul(ahci_test_sur(&değişken s,&değişken a)) { ver yanlış; } ver dosya_akisi(&değişken s,&değişken a); } }
+}
+işlev test_olumsuz() -> mantıksal {
+    değişken tur: tam32 = 1;
+    iken tur <= 7 {
+        değişken a: SahteAhci = sahte_ahci_yeni();
+        eşleş ahci_yeni(65536,0-1) {
+            hata(e) => { ver yanlış; }
+            tamam(d) => {
+                değişken s: AhciDurum = d;
+                eğer tur == 3 veya tur == 4 veya tur == 7 {
+                    a.ariza=tur;
+                    eşleş ahci_test_sur(&değişken s,&değişken a) {
+                        tamam(v) => { ver yanlış; }
+                        hata(e) => { eğer tur == 7 { eğer değil metin_esit(e,"ahci zaman asimi") veya a.bekleme != 1000 { ver yanlış; } } değilse { eğer değil metin_esit(e,"ahci sata aygiti yok") { ver yanlış; } } }
+                    }
+                }
+                değilse {
+                    eğer değil kabul(ahci_test_sur(&değişken s,&değişken a)) { ver yanlış; }
+                    a.ariza=tur;
+                    eşleş ahci_test_oku(&değişken s,&değişken a,0,1) {
+                        tamam(v) => { ver yanlış; }
+                        hata(e) => {
+                            eğer tur == 1 ve değil metin_esit(e,"ahci tfes") { ver yanlış; }
+                            eğer tur == 2 ve (değil metin_esit(e,"ahci zaman asimi") veya a.bekleme != 1000) { ver yanlış; }
+                            eğer tur == 5 ve değil metin_esit(e,"ahci tfd err") { ver yanlış; }
+                            eğer tur == 6 ve değil metin_esit(e,"ahci kisa aktarim") { ver yanlış; }
+                        }
+                    }
+                }
+            }
+        }
+        tur=tur+1;
+    }
+    ver doğru;
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_dosya() { yazdir_metin("ahci gpt fat32"); h=h+1; } eğer değil test_olumsuz() { yazdir_metin("ahci olumsuz"); h=h+1; } ver h; }

@@ -19,3 +19,5 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] C1 · 3 test · IPM denetimi sabotajı → kırmızı · self 0,002 sn · köprü 100/100 · 2026-11-07T06:49:57.095767+00:00
 - [x] C2 · 3 test · DBC bayt−1 sabotajı → kırmızı · self 0,002 sn · köprü 101/101 · 2026-11-07T06:53:44.768116+00:00
 - [x] C3 · 3 test · ATA kelime içi bayt sırası sabotajı → kırmızı · self 0,002 sn · köprü 102/102 · 2026-11-07T06:57:12.209301+00:00
+- [x] C4 · 2 test / SATA tarama, boş yuva, 5 I/O · SATA imza sabotajı → kırmızı · self 0,064 sn · köprü 103/103 · 2026-11-07T07:02:14.004583+00:00
+- VARSAYIM C4: her durum bir seçili SATA portuna aittir; port=-1 ilk uygun portu seçer, tüm uygun portlar listelenir. DMA alanı 73728 bayt; veri 64 KiB; beklemeler 1000×1 ms ile sınırlıdır.
