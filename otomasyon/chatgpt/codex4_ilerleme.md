@@ -12,3 +12,4 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] B1 · 3 test · CQ kapı zili +1 kaldırma sabotajı → kırmızı · self 0,002 sn · köprü 95/95 · 2026-11-07T06:26:38.115001+00:00
 - [x] B2 · 3 test / SQ-CQ bayt kâhini / zincirli PRP · faz biti kaydırma sabotajı → kırmızı · self 0,004 sn · köprü 96/96 · 2026-11-07T06:29:56.905035+00:00
 - VARSAYIM B2: PRP planı bitişik fiziksel DMA alanı içindir; plan başına 16 MiB, sayfa 4–64 KiB. Büyük aktarım çekirdekte bölünür.
+- [x] B3 · 3 test · seçili LBA biçimini yok sayma sabotajı → kırmızı · self 0,004 sn · köprü 97/97 · 2026-11-07T06:33:17.444280+00:00

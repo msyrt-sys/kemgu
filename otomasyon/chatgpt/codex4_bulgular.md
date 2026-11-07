@@ -43,3 +43,24 @@ her iki link rc=1. Dolanma: `değişken x: seçimlik<T> = değer(v); alan=x;`.
 
 - A3 kaynak sınırları: toplam bilgi bloğu ≤1 MiB, etiket sayısı ≤4096, metin ≤4096 bayt;
   daha büyük girdiler açık hata döndürür. Fikstür bunları aşmak için küçültülmedi.
+
+### F003 — yapı alanındaki dtam8 dizisinden kopyalamada işaret genişlemesi
+
+```kem
+kullan drivers::ortak::bayt::{ oku_u8 };
+yapı S { b: Dizi<dtam8>; }
+işlev main() -> tam32 {
+    değişken a: Dizi<dtam8> = [128 olarak dtam8];
+    değişken b: Dizi<dtam8> = [];
+    değişken s: S = S { b: a };
+    dizi_ekle(b,dizi_al(s.b,0));
+    yazdir_tam(oku_u8(b,0));
+    eğer oku_u8(b,0) == 128 { ver 0; } ver 1;
+}
+```
+`build/{kemgu,codegen} --llvm build/codex4/dizi_alan.kem`, ardından
+`clang -x ir çıktı.ll -x none build/kdl_runtime.o -o çıktı` ve çalıştırma:
+C stdout `128`, rc=0; self stdout `-128`, rc=1. İkisi de derlenip bağlanır.
+Dolanma: alan üzerindeki doğrudan `dizi_al` yerine tipi açık `oku_u8(...)
+olarak dtam8`; yazımlarda mevcut `yaz_u8`. NVMe çekirdeği ve sahte modelde
+F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
