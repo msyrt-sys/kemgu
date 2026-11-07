@@ -30,3 +30,4 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] D5 · int8 sınır tablosu, 3/4 bayt, düğmeler, geçersiz boylar · Y işareti sabotajı → kırmızı · self 0,002 sn · köprü 110/110 (D6 paket testi dahil) · 2026-11-07T07:26:31.364581+00:00
 - [x] D6 · paket kâhini + 2 çekirdek test / 22 aktarım, 6 hata · CSW etiket sabotajı → kırmızı · self 0,114 sn · köprü 111/111 · 2026-11-07T07:29:11.558355+00:00
 - VARSAYIM D6: xHCI slot/uç bağlamlarını çağıran kurar; özel olay halkası ve önceden sıfırlanmış 128 KiB DMA alanı gerekir. Tek etkin komut, LUN 0. Fiziksel taşıyıcı sözleşmesi bulgularda.
+- [x] D7 · GPT→FAT32 dosya oku-yaz-flush-yeniden oku + 4 hata · CSW artık sabotajı → kırmızı · self 0,465 sn · köprü 112/112 · 2026-11-07T07:31:17.473390+00:00
