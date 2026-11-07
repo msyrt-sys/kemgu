@@ -59,7 +59,8 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       öykünmesi), sonra xHCI + HID. USB disk (mass storage) isteğe bağlı.
 - [x] **H0f [K] ✓ KARAR (2026-11-06): v1 BİTİŞ TANIMI.** Gerçek bir x86 PC USB bellekten
       açılır ve: (1) çerçeve tamponunda Türkçe metin konsolu, (2) Türkçe Q klavye,
-      (3) fare imleci + tıklama, (4) aynı USB bellekte FAT32 okuma/yazma, (5) `ls cd cat
+      (3) fare imleci + tıklama, (4) açıldığı USB bellekte FAT32 okuma/yazma VE iç diskteki
+      (SATA/NVMe) FAT32 bölümlerini bağlama — varsayılan salt okunur, H8j-H8m (2026-11-07), (5) `ls cd cat
       mkdir rm cp` kabuğu, (6) W^X + süreç yalıtımlı ELF kullanıcı programları, (7) en az
       iki program: metin düzenleyici + tıklanabilir dosya gezgini. Eski metin: E3a'yı kapat —
       bu belgenin
@@ -226,7 +227,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       Kanıt: GPT'li imajda doğru bölüm bulunuyor; bozuk GPT başlığı → yedek başlık.
 - [ ] **H7h [S] Ramdisk (multiboot2 modülü)** — H7e beklemeden dosya sistemi işine
       başlamak için ara yol.
-- [ ] **H7i [L] NVMe sürücüsü** (modern makinelerin çoğu): admin + I/O kuyrukları,
+- [ ] **H7i [L] NVMe sürücüsü — AHCI'DEN ÖNCE (KARAR 2026-11-07: daha basit, modern makinelerin çoğu):** admin + I/O kuyrukları,
       IDENTIFY, okuma/yazma. Kanıt: QEMU `-device nvme`.
 - [ ] **H7j [S] Kapı matrisi:** ahci / nvme / ramdisk × MBR / GPT.
       Sabotaj: PRD bayt sayısını bir eksik yaz → SHA256 tutmaz → kırmızı.
@@ -236,7 +237,8 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 ## H8. Dosya sistemi
 
 - [ ] **H8a [M] VFS katmanı:** düğüm, açık dosya, dosya tanımlayıcı tablosu (LOOP E3d),
-      yol çözümleme (`/`, `.`, `..`), bağlama noktası (`/` = FAT bölümü, `/ram`).
+      yol çözümleme (`/`, `.`, `..`), bağlama noktası (`/` = AÇILIŞ bölümü, `/ram`,
+      `/diskler/*` — H8j).
 - [ ] **H8b [M] FAT32 okuma:** BPB doğrulama, FAT zinciri, kök/alt dizin, 8.3 adlar.
 - [ ] **H8c [M] Uzun dosya adı (LFN):** UTF-16 → UTF-8; **Türkçe ad** (`günlük.txt`).
       Sağlama toplamı denetimi.
@@ -255,6 +257,23 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       sürücü katmanındaki kanıtı.
 - [ ] **H8h [S] Bellek: dosya önbelleği H1c ile geri verilir.** Kanıt: 1 GB dosya
       okununca heap sabit kalıyor.
+- [ ] **H8j [M] Çoklu bağlama (KARAR 2026-11-07: USB + iç disk BİRLİKTE):** açılışta tüm
+      blok aygıtları taranır, her FAT32 bölümü bağlanır: açılış bölümü `/`, diğerleri
+      `/diskler/<aygıt><no>p<bölüm>` (`nvme0p1`, `sata0p2`, `usb1p1`). Sürücü harfi YOK.
+      `bagla` / `ayir` / `bagli` komutları (H9).
+- [ ] **H8k [S] Açılış bölümünü bulma:** GRUB komut satırı `kok=<FAT32 seri no>` (Linux
+      `root=UUID` deseni; multiboot2 komut satırı etiketi BIOS ve UEFI'de AYNI). multiboot2
+      "açılış aygıtı" etiketi yalnız BIOS'ta var → kullanılmaz. Seri eşleşmezse: tek FAT32
+      varsa o, yoksa ramdisk + açık uyarı (sessiz tahmin YOK).
+- [ ] **H8l [M] İç disk GÜVENLİĞİ:** açılış bölümü dışındaki her bölüm varsayılan SALT
+      OKUNUR; GPT türü EFI Sistem Bölümü (ESP, `C12A7328-…`) ASLA yazılmaz (iç diskteki
+      Windows/Linux'un açılışını bozardı); yazılabilir bağlama yalnız `bagla --yazilabilir`
+      ile ve ESP hariç. Kanıt: QEMU'da ESP'li GPT diskine yazma girişimi → açık hata;
+      sabotaj (ESP denetimini kaldır) → kapı kırmızı.
+- [ ] **H8m [M] Depolama matrisi kapısı:** QEMU'ya aynı anda USB bellek imajı + NVMe +
+      AHCI takılı; {SeaBIOS, OVMF} × açılış aygıtı {USB, NVMe, AHCI}; her birinde
+      `/` doğru seçiliyor, `/diskler/*` salt okunur, açılış bölümüne yaz → ana makinede
+      `fsck.fat -n` temiz.
 - [ ] **H8i [L] (İsteğe bağlı, sonraki aşama) KEMFS:** günlüklü kendi FS'imiz
       (eski `fs_journal`/`crashfs` C testleri referans). Çökme sonrası tutarlılık kapısı.
 
@@ -290,7 +309,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H10. Gerçek donanım uyumu
 
-- [ ] **H10a [M] UEFI açılışı (GRUB EFI):** multiboot2 aynı; GOP framebuffer; UEFI
+- [ ] **H10a [M] UEFI açılışı (GRUB EFI) — H2 İLE BİRLİKTE, ilk günden (KARAR 2026-11-07):** multiboot2 aynı; GOP framebuffer; UEFI
       bellek haritası; ExitBootServices sonrası. Kapı: QEMU + OVMF.
 - [ ] **H10b [S] Secure Boot kapalı gereksinimi belgelenir** (imza zinciri kapsam dışı).
 - [ ] **H10c [L] xHCI (USB 3) sürücüsü:** denetleyici sıfırlama, komut/olay/aktarım
@@ -301,7 +320,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       katmanına aynı olay) + fare (göreli rapor → H6 katmanına aynı olay).
       Kapı: QEMU `usb-kbd`, `usb-mouse`.
 - [ ] **H10e [S] USB hub desteği** (çoğu dizüstünde dahili cihazlar hub arkasında).
-- [ ] **H10f [L] (İsteğe bağlı) USB yığın depolama (BOT + SCSI)** — dosya sistemi
+- [ ] **H10f [L] ZORUNLU (KARAR 2026-11-07, v1 USB bellekten açılır) USB yığın depolama (BOT + SCSI)** — dosya sistemi
       açılış USB belleğinde olsun istenirse. Yoksa iç SATA/NVMe bölümü kullanılır.
 - [ ] **H10g [M] Sağlamlık turu:** her donanım bekleyişinde zaman aşımı + net hata
       mesajı (hangi aygıt, hangi yazmaç); eksik aygıtta zarif düşüş (PS/2 yoksa USB'ye,
