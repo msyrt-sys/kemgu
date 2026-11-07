@@ -13,3 +13,5 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] B2 · 3 test / SQ-CQ bayt kâhini / zincirli PRP · faz biti kaydırma sabotajı → kırmızı · self 0,004 sn · köprü 96/96 · 2026-11-07T06:29:56.905035+00:00
 - VARSAYIM B2: PRP planı bitişik fiziksel DMA alanı içindir; plan başına 16 MiB, sayfa 4–64 KiB. Büyük aktarım çekirdekte bölünür.
 - [x] B3 · 3 test · seçili LBA biçimini yok sayma sabotajı → kırmızı · self 0,004 sn · köprü 97/97 · 2026-11-07T06:33:17.444280+00:00
+- [x] B4 · 2 test / başlatma, 7 I/O, sarma, CFS, zaman aşımı · CQ faz sarma sabotajı → kırmızı · self 0,032 sn · köprü 98/98 · F003 dolanması · 2026-11-07T06:42:15.301508+00:00
+- VARSAYIM B4: tek etkin istek, 2–64 yuva; çağıranın ayırdığı 86016 bayt bitişik DMA alanı; sayfa 4 KiB, veri tamponu 64 KiB; CAP.TO=0 için 500 ms. Metadata içeren LBA açık hata verir.
