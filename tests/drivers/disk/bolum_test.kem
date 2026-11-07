@@ -1,5 +1,5 @@
 // Hesap: python3 tools/codex/a3.py (struct, uuid.bytes_le, zlib.crc32).
-// Bulgu C001: aynı adlı modül/işlev için probe ile doğrulanmış nitelikli çağrı.
+// C001: aynı adlı modül/üye seçili ithalatı T024 verir; nitelikli çağrı korunur.
 kullan drivers::disk::crc32;
 kullan drivers::disk::bolum::{ Bolum, BolumHatasi, mbr_coz, gpt_mi, gpt_coz };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_le64, yaz_ascii };
@@ -133,9 +133,7 @@ işlev test_mbr() -> mantıksal {
     eğer gpt_mi(b) { ver yanlış; }
     eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
         eğer dizi_boyut(v) != 1 { ver yanlış; }
-        // Bulgu C003: eşleş bağını açık dizi tipiyle yerel değişkene al.
-        değişken bolumler: Dizi<Bolum> = v;
-        değişken p: Bolum = dizi_al(bolumler, 0);
+        değişken p: Bolum = dizi_al(v, 0);
         ver p.tur == 12 ve p.baslangic_lba == 2048 ve p.sektor_sayisi == 100000 ve metin_esit(p.ad, "");
     } }
 }
@@ -145,9 +143,7 @@ işlev test_gpt() -> mantıksal {
     eğer değil gpt_mi(b) { ver yanlış; }
     eşleş gpt_coz(b, 512) { hata(e) => { ver yanlış; } tamam(v) => {
         eğer dizi_boyut(v) != 1 { ver yanlış; }
-        // Bulgu C003: eşleş bağını açık dizi tipiyle yerel değişkene al.
-        değişken bolumler: Dizi<Bolum> = v;
-        değişken p: Bolum = dizi_al(bolumler, 0);
+        değişken p: Bolum = dizi_al(v, 0);
         ver p.tur == 238 ve p.baslangic_lba == 34 ve p.sektor_sayisi == 1981 ve metin_esit(p.ad, "EFI");
     } }
 }

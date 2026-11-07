@@ -1,0 +1,8 @@
+kullan d3_imza::{metin_buyuk, metin_yirmi};
+işlev main() -> tam32 {
+    değişken buyuk: tam64 = metin_buyuk();
+    değişken yirmi: tam64 = metin_yirmi();
+    eğer buyuk != 8589934592 { ver 1; }
+    eğer yirmi != 20 { ver 2; }
+    ver 42;
+}

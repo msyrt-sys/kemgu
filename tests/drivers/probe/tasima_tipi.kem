@@ -1,8 +1,0 @@
-kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
-kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
-kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
-kullan drivers::fs::fat32_imaj::{ imaj_bpb };
-işlev main() -> tam32 {
-    değişken b: Dizi<dtam8> = [];
-    eşleş imaj_bpb(b) { tamam(v) => { ver 1; } hata(e) => { ver 0; } }
-}

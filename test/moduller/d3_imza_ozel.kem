@@ -1,0 +1,1 @@
+işlev dosya_sil(n: tam32) -> tam32 { ver n + 2; }

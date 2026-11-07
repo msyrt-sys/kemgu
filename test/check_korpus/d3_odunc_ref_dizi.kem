@@ -1,0 +1,3 @@
+// Ödünç referansına ek referans alıp kapsayıcıya saklamak da kaçıştır.
+işlev f(y: &yetki<MMIO>) { değişken z = &y; değişken xs = [z]; }
+işlev main() -> tam32 { ver 42; }

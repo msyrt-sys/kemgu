@@ -1,0 +1,4 @@
+// Çağrı süreli yetki ödüncü: kuresel.
+küresel değişken sakli: &yetki<MMIO> = boş;
+işlev f(y: &yetki<MMIO>) { güvensiz { sakli = y; } }
+işlev main() -> tam32 { ver 42; }

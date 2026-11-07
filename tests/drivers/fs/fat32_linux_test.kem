@@ -2,7 +2,7 @@
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit, imaj_bpb };
-kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan drivers::fs::fat32_oku;
 kullan tests::drivers::fs::veri::linux_fat32::{ imaj };
 kullan drivers::ortak::bayt::{ oku_u8 };
 
@@ -13,11 +13,11 @@ işlev test_bpb() -> mantıksal {
 }
 
 işlev test_liste() -> mantıksal {
-    eşleş imaj_dizin_listele(imaj(), "/") { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
+    eşleş fat32_oku::dizin_listele(imaj(), "/") { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 0; } }
 }
 
 işlev test_eksik() -> mantıksal {
-    eşleş imajdan_dosya_oku(imaj(), "/YOK.TXT") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bulunamadi"); } }
+    eşleş fat32_oku::dosya_oku(imaj(), "/YOK.TXT") { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e, "bulunamadi"); } }
 }
 
 işlev main() -> tam32 {

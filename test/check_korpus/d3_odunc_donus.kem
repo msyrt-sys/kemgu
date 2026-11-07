@@ -1,0 +1,3 @@
+// Çağrı süreli yetki ödüncü: donus.
+işlev f(y: &yetki<MMIO>) -> &yetki<MMIO> { ver y; }
+işlev main() -> tam32 { ver 42; }

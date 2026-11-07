@@ -1,0 +1,19 @@
+// Çağrı süresince aynı yetki adresi kullanılır; sahip çağıranda canlı kalır.
+işlev ic(y: &yetki<Bellek>, n: tam64) -> tam64 {
+    değişken alt: yetki<Bellek> = delege(y, 1);
+    değişken p: *tam64 = bölge_al(y, 1);
+    güvensiz { p[0] = n; }
+    geri_al(alt);
+    güvensiz { ver p[0]; }
+}
+işlev dis(y: &yetki<Bellek>, n: tam64) -> tam64 { ver ic(y, n); }
+işlev eski(y: yetki<Bellek>) -> yetki<Bellek> { ver y; }
+işlev main() -> tam32 {
+    değişken y: yetki<Bellek> = yetki_olustur(3, 3);
+    değişken iyi: mantıksal = dis(&y, -17) == -17
+        ve dis(&y, 203) == 203 ve dis(&y, 8589934592) == 8589934592;
+    değişken son: yetki<Bellek> = eski(y);
+    geri_al(son);
+    eğer iyi { ver 42; }
+    ver 1;
+}

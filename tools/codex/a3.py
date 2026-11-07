@@ -14,7 +14,7 @@ struct.pack_into('<I',b,528,zlib.crc32(b[512:604]))
 print('girdi CRC',zlib.crc32(b[1024:]),'başlık CRC',struct.unpack_from('<I',b,528)[0])
 assert zlib.crc32(b[1024:])==2282802036 and struct.unpack_from('<I',b,528)[0]==3793980875
 header='''// Hesap: python3 tools/codex/a3.py (struct, uuid.bytes_le, zlib.crc32).
-// Bulgu C001: aynı adlı modül/işlev için probe ile doğrulanmış nitelikli çağrı.
+// C001: aynı adlı modül/üye seçili ithalatı T024 verir; nitelikli çağrı korunur.
 kullan drivers::disk::crc32;
 kullan drivers::disk::bolum::{ Bolum, BolumHatasi, mbr_coz, gpt_mi, gpt_coz };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_le64, yaz_ascii };
@@ -51,9 +51,7 @@ cases['mbr']='''    değişken b: Dizi<dtam8> = test_diski();
     eğer gpt_mi(b) { ver yanlış; }
     eşleş mbr_coz(b) { hata(e) => { ver yanlış; } tamam(v) => {
         eğer dizi_boyut(v) != 1 { ver yanlış; }
-        // Bulgu C003: eşleş bağını açık dizi tipiyle yerel değişkene al.
-        değişken bolumler: Dizi<Bolum> = v;
-        değişken p: Bolum = dizi_al(bolumler, 0);
+        değişken p: Bolum = dizi_al(v, 0);
         ver p.tur == 12 ve p.baslangic_lba == 2048 ve p.sektor_sayisi == 100000 ve metin_esit(p.ad, "");
     } }
 }'''.removesuffix('\n}')
@@ -61,9 +59,7 @@ cases['gpt']=f'''    değişken b: Dizi<dtam8> = test_diski();
     eğer değil gpt_mi(b) {{ ver yanlış; }}
     eşleş gpt_coz(b, 512) {{ hata(e) => {{ ver yanlış; }} tamam(v) => {{
         eğer dizi_boyut(v) != 1 {{ ver yanlış; }}
-        // Bulgu C003: eşleş bağını açık dizi tipiyle yerel değişkene al.
-        değişken bolumler: Dizi<Bolum> = v;
-        değişken p: Bolum = dizi_al(bolumler, 0);
+        değişken p: Bolum = dizi_al(v, 0);
         ver p.tur == 238 ve p.baslangic_lba == 34 ve p.sektor_sayisi == {2014-34+1} ve metin_esit(p.ad, "EFI");
     }} }}'''
 cases['kisa']='    ver hata_kodu(mbr_coz(bayt_sifir(511))) == 1 ve değil gpt_mi(bayt_sifir(0));'

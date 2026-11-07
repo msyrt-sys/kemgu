@@ -19,6 +19,7 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->scope = global;
     tk->global_scope = global;
     tk->aktif_donus_tipi = NULL;
+    tk->yetki_odunc_arg = NULL;
     tk->aktif_islev = NULL;   /* [D-727] alanlar TEK TEK baslatiliyor (D-504) */
     uygula_tablosu_baslat(&tk->uygulamalar);
     tk->hata_sayisi = 0;
@@ -640,6 +641,27 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
     tk->aktif_escape = NULL;
 }
 
+/* Ödünç bir sahip değildir: yalnız çağrı boyunca kullanılabilir. */
+static int yetki_odunc_mi(const TipBilgisi *t) {
+    while (t && t->kategori == TIP_REFERANS) {
+        t = t->veri.referans.hedef;
+        if (t && t->kategori == TIP_YETKI) return 1;
+    }
+    return 0;
+}
+static TipBilgisi *yetki_odunc_coz(TipBilgisi *t) {
+    return t && t->kategori == TIP_REFERANS && t->veri.referans.hedef
+        && t->veri.referans.hedef->kategori == TIP_YETKI
+        ? t->veri.referans.hedef : t;
+}
+static int yetki_kacis_kontrol(TipKontrol *tk, const Dugum *d,
+                               const TipBilgisi *t) {
+    if (!yetki_odunc_mi(t)) return 0;
+    if (tk->lineer_sondaj == 0)
+        tip_hata(tk, d, "CP006", "odunc yetki kacabilecek veya tuketebilecek yere verilemez");
+    return 1;
+}
+
 /* === Linear Types Spec V1: yardimci fonksiyonlar === */
 
 /* Eger ifade DUGUM_TANIMLAYICI ise ve sembolu lineer ise -> tuket.
@@ -651,6 +673,8 @@ static void lineer_tuket_eger_baglamaysa(TipKontrol *tk, const Dugum *d) {
     if (tk->lineer_sondaj > 0) return;
     Sembol *s = sembol_bul_yazilabilir(tk->scope,
         d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk);
+    /* CP006: sonuç/seçimlik yapıcısı gibi ortak taşıma noktaları. */
+    if (s && yetki_kacis_kontrol(tk, d, s->tip)) return;
     if (!s || !s->tip || !tip_lineer_mi(s->tip)) return;
     if (s->lineer_tuketildi >= 1) {
         if (s->tip->kategori == TIP_YETKI) {
@@ -970,6 +994,16 @@ static void genel_yakalama_kontrol(TipKontrol *tk, const Dugum *d) {
         tk->lambda_yakalama = 1;
         const Sembol *sem = sembol_bul(tk->scope, d->veri.tanimlayici.metin,
                                        d->veri.tanimlayici.uzunluk);
+        if (sem && yetki_odunc_mi(sem->tip)) {
+            if (tk->gorev_kapanis_derinlik > 0) {
+                /* CP006: görev yakalaması. */
+                yetki_kacis_kontrol(tk, d, sem->tip);
+            } else {
+                /* CP006: kapanış yakalaması. */
+                yetki_kacis_kontrol(tk, d, sem->tip);
+            }
+            return;
+        }
         /* Sembol/tip cozulemezse isaretci VARSAY (default-deny). */
         if (!sem || yakalama_isaretci_benzeri(sem->tip))
             tk->lambda_yakalama_isaretci = 1;
@@ -1091,7 +1125,7 @@ static void yetki_canli_kontrol(TipKontrol *tk, const Dugum *arg) {
  * yetki<MMIO> degilse MM002 raporlanir. */
 static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
     yetki_canli_kontrol(tk, arg);   /* [D-503] */
-    TipBilgisi *y = tip_belirle(tk, arg);
+    TipBilgisi *y = yetki_odunc_coz(tip_belirle(tk, arg));
     if (y->kategori == TIP_HATA) return;
     const TipBilgisi *k = tip_yetki_kaynak(y);
     int mmio = (tip_yetki_mi(y) && k && k->kategori == TIP_YAPI &&
@@ -1111,7 +1145,7 @@ static void mmio_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
  * iki ad er ya da gec ayrisir. */
 static void ag_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
     yetki_canli_kontrol(tk, arg);   /* [D-503] */
-    TipBilgisi *y = tip_belirle(tk, arg);
+    TipBilgisi *y = yetki_odunc_coz(tip_belirle(tk, arg));
     if (y->kategori == TIP_HATA) return;
     const TipBilgisi *k = tip_yetki_kaynak(y);
     int soket = (tip_yetki_mi(y) && k && k->kategori == TIP_YAPI &&
@@ -1128,7 +1162,7 @@ static void ag_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
  * arena (V2) AYNI imzayla R'yi kullanacak (evrim-koruyan). */
 static void bolge_yetki_kontrol(TipKontrol *tk, const Dugum *arg) {
     yetki_canli_kontrol(tk, arg);   /* [D-503] */
-    TipBilgisi *y = tip_belirle(tk, arg);
+    TipBilgisi *y = yetki_odunc_coz(tip_belirle(tk, arg));
     if (y->kategori == TIP_HATA) return;
     if (!tip_yetki_mi(y)) {
         tip_hata(tk, arg, "BL002",
@@ -2494,6 +2528,11 @@ static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
         /* Bidirectional: alan degeri alan tipi context'inde */
         TipBilgisi *deger_tip = tip_belirle_beklenen(tk,
             aa->veri.alan_atama.deger, alan_tipi);
+        /* CP006: yapı alanına saklama. */
+        if (yetki_kacis_kontrol(tk, aa->veri.alan_atama.deger, deger_tip)) {
+            hata = 1;
+            continue;
+        }
         if (!tip_esit(alan_tipi, deger_tip) &&
             deger_tip->kategori != TIP_HATA) {
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
@@ -2595,6 +2634,8 @@ static TipBilgisi *cesit_yapici_tip_kontrol(TipKontrol *tk, const Dugum *d,
         }
         TipBilgisi *at = tip_belirle_beklenen(tk,
             d->veri.cagri.argumanlar[i], bt);
+        /* CP006: çeşit yüküne saklama. */
+        if (yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[i], at)) continue;
         if (at->kategori != TIP_HATA && bt->kategori != TIP_HATA &&
             !tip_esit(at, bt)) {
             tip_hata(tk, d->veri.cagri.argumanlar[i], "M004",
@@ -2858,6 +2899,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return t_hata(tk);
             }
 
+            /* CP006: ham işaretçiye çevirerek kaçırma. */
+            if (!tip_esit(kt, ht) && yetki_kacis_kontrol(tk, d, kt)) return t_hata(tk);
             /* E003: kaynak tekkez<T> yasak (linear escape — tekkez'i extract
              * etmek icin kullan() gerek, olarak ile escape yapilamaz) */
             if (kt->kategori == TIP_TEKKEZ) {
@@ -3199,6 +3242,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return op;
 
                 case OP_REF:
+                    if (op->kategori == TIP_YETKI && tk->yetki_odunc_arg == d
+                        && d->veri.tekli.operand->tip == DUGUM_TANIMLAYICI) {
+                        yetki_canli_kontrol(tk, d->veri.tekli.operand);
+                        return tip_olustur_referans(tk->arena, op, 0);
+                    }
                     /* Linear Types Spec V1 L004 + Capability CP005:
                      * lineer (tekkez veya yetki) tipinde referans alinamaz */
                     if (tip_lineer_mi(op)) {
@@ -3225,6 +3273,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return tip_olustur_referans(tk->arena, op, 1);
 
                 case OP_DEREFERANS:
+                    /* CP006: ödüncü sahip değere kopyalayarak kaçırma. */
+                    if (yetki_odunc_coz(op) != op && yetki_kacis_kontrol(tk, d, op))
+                        return t_hata(tk);
                     /* D-305: GÜVENLİ referans deref — `*v` ile &T'den T oku.
                      * Referans her zaman geçerli (ham pointer değil) → güvensiz
                      * GEREKMEZ. Yapı referansı zaten `.alan` ile auto-deref
@@ -3389,6 +3440,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     TipBilgisi *bek = dz ? dz->veri.dizi.eleman : NULL;
                     TipBilgisi *et = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[1], bek);
+                    /* CP006: diziye sonradan saklama. */
+                    if (yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[1], et))
+                        return t_hata(tk);
                     if (bek && !tip_esit(et, bek) &&
                         et->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[1], "T001",
@@ -3443,6 +3497,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     TipBilgisi *bek = dz ? dz->veri.dizi.eleman : NULL;
                     TipBilgisi *et = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[2], bek);
+                    /* CP006: diziye sonradan saklama. */
+                    if (yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[2], et))
+                        return t_hata(tk);
                     if (bek && !tip_esit(et, bek) &&
                         et->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[2], "T001",
@@ -3864,6 +3921,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
                 if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                y_tip = yetki_odunc_coz(y_tip);
                 if (!tip_yetki_mi(y_tip)) {
                     tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
                         "delege ilk argumani yetki<R> olmali");
@@ -3890,6 +3948,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 TipBilgisi *y_tip = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
                 if (y_tip->kategori == TIP_HATA) return t_hata(tk);
+                /* CP006: tüketim. */
+                if (yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[0], y_tip))
+                    return t_hata(tk);
                 if (!tip_yetki_mi(y_tip)) {
                     tip_hata(tk, d->veri.cagri.argumanlar[0], "CP004",
                         "geri_al argumani yetki<R> olmali");
@@ -4154,6 +4215,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 }
                 tk->tasinan_sayi = tas_eski;
                 if (c_tip->kategori == TIP_HATA) return t_hata(tk);
+                /* CP006: göreve doğrudan verme. */
+                if (yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[0], c_tip))
+                    return t_hata(tk);
                 /* c bir islev tipi olmali (tekkez<islev(...)> da olur — LC-2) */
                 const TipBilgisi *cf = c_tip;
                 if (cf->kategori == TIP_TEKKEZ) cf = cf->veri.tekkez.ic;
@@ -4267,6 +4331,9 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 TipBilgisi *t_tip = k_tip->veri.kanal.ic;
                 TipBilgisi *v_tip = tip_belirle_beklenen(tk,
                     d->veri.cagri.argumanlar[1], t_tip);
+                /* CP006: kanala gönderme. */
+                if (yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[1], v_tip))
+                    return t_hata(tk);
                 if (v_tip->kategori != TIP_HATA && !tip_esit(v_tip, t_tip)) {
                     tip_hata(tk, d->veri.cagri.argumanlar[1], "DRF003",
                         "kanal_gonder v argumani kanal eleman tipinde olmali");
@@ -4490,8 +4557,12 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             tk->lineer_sondaj++;    /* D-320: pas 1 = SONDAJ, tuketim sayilmaz */
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
+                const Dugum *eski_odunc = tk->yetki_odunc_arg;
+                tk->yetki_odunc_arg = yetki_odunc_mi(param_tip)
+                    ? d->veri.cagri.argumanlar[i] : NULL;
                 TipBilgisi *arg_tip = tip_belirle(tk,
                     d->veri.cagri.argumanlar[i]);
+                tk->yetki_odunc_arg = eski_odunc;
                 gen_unify(&gb, param_tip, arg_tip);
             }
             tk->lineer_sondaj--;
@@ -4500,8 +4571,16 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
             for (int i = 0; i < d->veri.cagri.sayi; i++) {
                 TipBilgisi *param_tip = hedef_tip->veri.islev.parametreler[i];
                 TipBilgisi *bek = gen_substitue(tk, param_tip, &gb);
+                const Dugum *eski_odunc = tk->yetki_odunc_arg;
+                tk->yetki_odunc_arg = yetki_odunc_mi(bek)
+                    ? d->veri.cagri.argumanlar[i] : NULL;
                 TipBilgisi *arg_tip = tip_belirle_beklenen(tk,
                     d->veri.cagri.argumanlar[i], bek);
+                tk->yetki_odunc_arg = eski_odunc;
+                /* CP006: değerle parametre, ödüncü taşıyamaz. */
+                if (!yetki_odunc_mi(param_tip) &&
+                    yetki_kacis_kontrol(tk, d->veri.cagri.argumanlar[i], arg_tip))
+                    continue;
                 if (param_tip->kategori == TIP_GENERIC_PARAM &&
                     (!tf_islev || bek->kategori == TIP_HATA)) {
                     /* Concrete'i gb'de tutuyoruz; bind onceden yapildi.
@@ -4826,9 +4905,12 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 return tip_olustur_dizi(tk->arena, t_basit(tk, TIP_BILINMIYOR));
             }
             TipBilgisi *ilk = tip_belirle(tk, d->veri.dizi_olustur.elemanlar[0]);
+            /* CP006: bağlamsız dizi. */
+            yetki_kacis_kontrol(tk, d->veri.dizi_olustur.elemanlar[0], ilk);
             for (int i = 1; i < n; i++) {
                 TipBilgisi *e = tip_belirle(tk,
                     d->veri.dizi_olustur.elemanlar[i]);
+                yetki_kacis_kontrol(tk, d->veri.dizi_olustur.elemanlar[i], e);
                 if (!tip_esit(ilk, e) && e->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.dizi_olustur.elemanlar[i], "T013",
                              "dizi elemanlari farkli tipte");
@@ -5178,6 +5260,8 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
             for (int i = 0; i < n; i++) {
                 TipBilgisi *e = tip_belirle_beklenen(tk,
                     d->veri.dizi_olustur.elemanlar[i], eleman_t);
+                /* CP006: bağlamlı dizi. */
+                yetki_kacis_kontrol(tk, d->veri.dizi_olustur.elemanlar[i], e);
                 if (!tip_esit(e, eleman_t) && e->kategori != TIP_HATA) {
                     tip_hata(tk, d->veri.dizi_olustur.elemanlar[i],
                              "T013", "dizi elemani beklenen tip ile uyumsuz");
@@ -5501,7 +5585,9 @@ static void pre_populate_cesit(TipKontrol *tk, const Dugum *cesit) {
     }
 }
 
-static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
+/* C007: imzalar ancak bütün modüllerin tip kayıtları kurulduktan sonra çözülür.
+ * Düz-ad/kanonik modül fallback kuralları ast_tip_to_bilgi içinde aynen kalır. */
+static TipBilgisi *pre_populate_islev_imzasi(TipKontrol *tk, const Dugum *islev) {
     int n = islev->veri.islev.param_sayi;
     TipBilgisi **ptipler = NULL;
     if (n > 0) {
@@ -5547,12 +5633,17 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
             islev->veri.islev.gercekzamanli_mi;
     }
 
+    return islev_tipi;
+}
+
+static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
+    /* Adları eski sırada kaydet: modül/işlev çakışması ve gölgeleme korunur. */
     Sembol s;
     memset(&s, 0, sizeof(s));
     s.ad = islev->veri.islev.ad;
     s.ad_uzunluk = islev->veri.islev.ad_uzunluk;
     s.kategori = SEMBOL_ISLEV;
-    s.tip = islev_tipi;
+    s.tip = NULL;  /* C007: ikinci geçiş doldurur; henüz gövde denetlenmez. */
     s.ast_dugumu = islev;
     s.satir = islev->satir;
     s.sutun = islev->sutun;
@@ -5796,10 +5887,42 @@ static void pre_populate_modul(TipKontrol *tk, const Dugum *m) {
     }
 }
 
+/* C007: aynı AST ve aynı kapsamlar; yalnız imza çözümleme zamanı değişir. */
+static void pre_populate_imzalar(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+    if (d->tip == DUGUM_DISA) {
+        pre_populate_imzalar(tk, d->veri.disa.tanim);
+    } else if (d->tip == DUGUM_ISLEV) {
+        TipBilgisi *tip = pre_populate_islev_imzasi(tk, d);
+        Sembol *s = sembol_bul_yazilabilir(tk->global_scope,
+            d->veri.islev.ad, d->veri.islev.ad_uzunluk);
+        if (s && s->kategori == SEMBOL_ISLEV && s->ast_dugumu == d)
+            s->tip = tip;
+    } else if (d->tip == DUGUM_PROGRAM) {
+        for (int i = 0; i < d->veri.program.sayi; i++)
+            pre_populate_imzalar(tk, d->veri.program.uyeler[i]);
+    } else if (d->tip == DUGUM_MODUL) {
+        Scope *arama = d->veri.modul.dosya_modulu
+            ? tk->builtin_scope : tk->global_scope;
+        const Sembol *s = sembol_bul_yerel(arama,
+            d->veri.modul.ad, d->veri.modul.ad_uzunluk);
+        if (!s || s->kategori != SEMBOL_MODUL || !s->modul_scope
+            || s->ast_dugumu != d) return;
+        Scope *eski_global = tk->global_scope;
+        Scope *eski_scope = tk->scope;
+        tk->global_scope = tk->scope = s->modul_scope;
+        for (int i = 0; i < d->veri.modul.sayi; i++)
+            pre_populate_imzalar(tk, d->veri.modul.uyeler[i]);
+        tk->global_scope = eski_global;
+        tk->scope = eski_scope;
+    }
+}
+
 static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate_uyeler(tk, program->veri.program.uyeler,
                         program->veri.program.sayi);
+    pre_populate_imzalar(tk, program);
 }
 
 /* === A: kullan baglari (iki-fazli yuklemenin 2. fazi) ===
@@ -6214,6 +6337,12 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
             }
             /* Bidirectional: deger hedef tip context'inde */
             TipBilgisi *dt = tip_belirle_beklenen(tk, d->veri.atama.deger, ht);
+            const Sembol *atama_sem = hedef->tip == DUGUM_TANIMLAYICI
+                ? sembol_bul(tk->scope, hedef->veri.tanimlayici.metin,
+                             hedef->veri.tanimlayici.uzunluk) : NULL;
+            /* CP006: küresel, alan veya dizi gözesine saklama. */
+            if ((hedef->tip != DUGUM_TANIMLAYICI || (atama_sem && atama_sem->kuresel))
+                && yetki_kacis_kontrol(tk, d->veri.atama.deger, dt)) break;
             /* Sabitsüre Spec V1 CT003: sabitsure<T> → T leak */
             if (dt->kategori != TIP_HATA && ht->kategori != TIP_HATA &&
                 ct003_leak_kontrol(tk, d, dt, ht)) {
@@ -6236,6 +6365,8 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
              * kazanır; sonrakiler tutarlı varsayılır (well-typed lambda). */
             if (tk->lambda_blok_cikarsama && d->veri.ver.deger) {
                 TipBilgisi *vt = tip_belirle(tk, d->veri.ver.deger);
+                /* CP006: kapanışın açık dönüşü de ödüncü saklayamaz. */
+                if (yetki_kacis_kontrol(tk, d->veri.ver.deger, vt)) break;
                 if (!tk->lambda_blok_donus && vt->kategori != TIP_HATA) {
                     tk->lambda_blok_donus = vt;
                 }
@@ -6252,6 +6383,8 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 /* Bidirectional: deger donus tipi context'inde */
                 TipBilgisi *deger = tip_belirle_beklenen(tk,
                     d->veri.ver.deger, tk->aktif_donus_tipi);
+                /* CP006: dönüş. */
+                if (yetki_kacis_kontrol(tk, d->veri.ver.deger, deger)) break;
                 /* Sabitsüre Spec V1 CT003: sabitsure<T> dönüş normal T'ye leak */
                 if (deger->kategori != TIP_HATA &&
                     tk->aktif_donus_tipi->kategori != TIP_HATA &&

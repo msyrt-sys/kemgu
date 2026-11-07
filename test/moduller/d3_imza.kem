@@ -1,0 +1,4 @@
+// Kullanıcı imzası, aynı adlı yerleşiği gölgeler.
+genel işlev dosya_sil(n: tam32) -> tam32 { ver n + 2; }
+genel işlev metin_yirmi() -> tam64 { ver 20; }
+genel işlev metin_buyuk() -> tam64 { ver 8589934592; }

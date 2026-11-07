@@ -1,0 +1,1 @@
+genel işlev c001_ad(n: tam64) -> tam64 { ver n + 2; }

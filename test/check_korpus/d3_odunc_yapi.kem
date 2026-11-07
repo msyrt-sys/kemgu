@@ -1,0 +1,4 @@
+// Çağrı süreli yetki ödüncü: yapi.
+yapı Kutu { y: &yetki<MMIO>; }
+işlev f(y: &yetki<MMIO>) { değişken k: Kutu = Kutu { y: y }; }
+işlev main() -> tam32 { ver 42; }

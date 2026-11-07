@@ -3,8 +3,8 @@ kullan drivers::fs::fat32_bicimle;
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
-kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur };
-kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku };
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_oku;
 kullan drivers::ortak::bayt::{ oku_u8 };
 işlev ondalik(n: tam32) -> metin {
     eğer n == 0 { ver "0"; }
@@ -32,13 +32,13 @@ işlev seyrek_dok(b: Dizi<dtam8>) {
     }
 }
 işlev test_dok(b: Dizi<dtam8>) -> mantıksal {
-    eşleş imajda_dizin_olustur(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_yaz::dizin_olustur(b, "/belgeler") { hata(e) => { ver yanlış; } tamam(v) => { } }
     değişken s: metin = "Merhaba Dünya — ğüşıöç";
     değişken veri: Dizi<dtam8> = []; değişken i: tam32 = 0;
     iken i < (metin_uzunluk(s) olarak tam32) { dizi_ekle(veri, ((metin_bayt(s, i) olarak tam32) & 255) olarak dtam8); i = i+1; }
-    eşleş imaja_dosya_yaz(b, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
-    eşleş imajdan_dosya_oku(b, "/YOK") { tamam(v) => { ver yanlış; } hata(e) => { } }
-    eşleş imajdan_dosya_oku(b, "/belgeler/merhaba.txt") { hata(e) => { ver yanlış; } tamam(v) => {
+    eşleş fat32_yaz::dosya_yaz(b, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş fat32_oku::dosya_oku(b, "/YOK") { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş fat32_oku::dosya_oku(b, "/belgeler/merhaba.txt") { hata(e) => { ver yanlış; } tamam(v) => {
         değişken okunan: Dizi<dtam8> = v;
         eğer dizi_boyut(okunan) != dizi_boyut(veri) { ver yanlış; }
         i = 0; iken i < dizi_boyut(veri) { eğer oku_u8(okunan, i) != oku_u8(veri, i) { ver yanlış; } i = i+1; }

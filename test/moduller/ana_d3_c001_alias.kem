@@ -1,0 +1,3 @@
+// Açık modül alias'ı üye adıyla çakışmaz.
+kullan c001_ad::{c001_ad} olarak m;
+işlev main() -> tam32 { ver c001_ad(40) olarak tam32; }

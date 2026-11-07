@@ -1,0 +1,3 @@
+çeşit Kutu { Yok, Var(&yetki<MMIO>) }
+işlev f(y: &yetki<MMIO>) -> Kutu { ver Kutu::Var(y); }
+işlev main() -> tam32 { ver 42; }

@@ -1,0 +1,25 @@
+// Asıl imaj API'leri host dosya API'lerine gitmez; kurucular doğrudan kullanılır.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_oku;
+kullan drivers::ps2::klavye_tr::{ TusOlayi };
+işlev olay(o: TusOlayi) -> tam32 {
+    eşleş o {
+        TusOlayi::Yok => { ver 0; }
+        TusOlayi::Karakter(k) => { ver k; }
+        TusOlayi::Ozel(k, basildi) => { eğer basildi { ver 0 - k; } ver k; }
+    }
+}
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = [];
+    eşleş fat32_yaz::dosya_yaz(b, "/X", b) { tamam(v) => { ver 1; } hata(e) => { eğer değil metin_esit(e, "bpb") { ver 2; } } }
+    eşleş fat32_yaz::dizin_olustur(b, "/X") { tamam(v) => { ver 3; } hata(e) => { eğer değil metin_esit(e, "bpb") { ver 4; } } }
+    eşleş fat32_yaz::dosya_sil(b, "/X") { tamam(v) => { ver 5; } hata(e) => { eğer değil metin_esit(e, "bpb") { ver 6; } } }
+    eşleş fat32_oku::dosya_oku(b, "/X") { tamam(v) => { ver 7; } hata(e) => { eğer değil metin_esit(e, "bpb") { ver 8; } } }
+    eşleş fat32_oku::dizin_listele(b, "/X") { tamam(v) => { ver 9; } hata(e) => { eğer değil metin_esit(e, "bpb") { ver 10; } } }
+    eğer olay(TusOlayi::Yok) != 0 veya olay(TusOlayi::Karakter(203)) != 203
+        veya olay(TusOlayi::Karakter(128512)) != 128512 veya olay(TusOlayi::Ozel(17, doğru)) != -17 { ver 11; }
+    ver 42;
+}

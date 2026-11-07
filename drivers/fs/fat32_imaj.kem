@@ -5,12 +5,8 @@ kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
 kullan drivers::fs::fat32_bicimle::{ FAT32_IMAJ_SINIRI };
 kullan drivers::fs::yol::{ yol_bol };
 genel yapı DizinResmi { baytlar: Dizi<dtam8>; konumlar: Dizi<tam32>; zincir: Dizi<tam64>; }
-// C006: yapı alanındaki boş literal yerine açık tipli yereller.
 genel işlev dizin_resmi_bos() -> DizinResmi {
-    değişken baytlar: Dizi<dtam8> = [];
-    değişken konumlar: Dizi<tam32> = [];
-    değişken zinc: Dizi<tam64> = [];
-    ver DizinResmi { baytlar: baytlar, konumlar: konumlar, zincir: zinc };
+    ver DizinResmi { baytlar: [], konumlar: [], zincir: [] };
 }
 genel yapı FatKayit {
     ad: metin; kisa: metin; ozellik: tam32; ilk: tam64; boyut: tam64;
@@ -28,8 +24,6 @@ genel işlev imaj_bpb(imaj: Dizi<dtam8>) -> sonuç<Fat32Bpb, metin> {
             ver tamam(b);
         }
     }
-    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
-    ver hata("ulasilmaz");
 }
 genel işlev imaj_fat_oku(imaj: Dizi<dtam8>, b: Fat32Bpb, k: tam64) -> tam64 {
     eğer k < 0 veya k >= b.kume_sayisi + 2 { ver 268435447; }

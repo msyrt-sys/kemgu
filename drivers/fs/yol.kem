@@ -29,9 +29,7 @@ genel işlev yol_bol(y: metin) -> sonuç<Dizi<metin>, metin> {
     değişken sonuc: Dizi<metin> = [];
     i = 0;
     iken i < sayi {
-        // C004 benzeri iç içe tür kaybını önlemek için açık metin bağı.
-        değişken p: metin = dizi_al(parcalar, i);
-        dizi_ekle(sonuc, p); i = i + 1;
+        dizi_ekle(sonuc, dizi_al(parcalar, i)); i = i + 1;
     }
     ver tamam(sonuc);
 }

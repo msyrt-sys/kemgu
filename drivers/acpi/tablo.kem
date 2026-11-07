@@ -52,8 +52,7 @@ genel işlev sdt_girdileri(b: Dizi<dtam8>, xsdt_mi: mantıksal) -> sonuç<Dizi<t
     değişken adim: tam32 = 4;
     eğer xsdt_mi { adim = 8; }
     eğer (n - 36) % (adim olarak tam64) != 0 { ver hata(AcpiHatasi::Uzunluk); }
-    // C002: tam64 eleman genişliğini açık literal ile koru.
-    değişken adresler: Dizi<tam64> = [];
+    değişken adresler: Dizi<tam64> = dizi_olustur(0);
     değişken ofs: tam32 = 36;
     iken ofs < (n olarak tam32) {
         değişken adres: tam64 = 0;

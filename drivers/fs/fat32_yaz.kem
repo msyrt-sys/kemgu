@@ -197,24 +197,18 @@ işlev kayit_yaz(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin, veri: Dizi<dtam8>, 
     fsinfo_yenile(imaj, b);
     ver tamam(boy);
 }
-genel işlev imaja_dosya_yaz(imaj: Dizi<dtam8>, yol: metin, veri: Dizi<dtam8>) -> sonuç<tam64, metin> {
+genel işlev dosya_yaz(imaj: Dizi<dtam8>, yol: metin, veri: Dizi<dtam8>) -> sonuç<tam64, metin> {
     eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver kayit_yaz(imaj, b, yol, veri, yanlış); } }
-    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
-    ver hata("ulasilmaz");
 }
-genel işlev imajda_dizin_olustur(imaj: Dizi<dtam8>, yol: metin) -> sonuç<tam64, metin> {
+genel işlev dizin_olustur(imaj: Dizi<dtam8>, yol: metin) -> sonuç<tam64, metin> {
     değişken bos: Dizi<dtam8> = [];
     eşleş imaj_bpb(imaj) { hata(e) => { ver hata(e); } tamam(v) => { değişken b: Fat32Bpb = v; ver kayit_yaz(imaj, b, yol, bos, doğru); } }
-    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
-    ver hata("ulasilmaz");
 }
-genel işlev imajdan_dosya_sil(imaj: Dizi<dtam8>, yol: metin) -> sonuç<mantıksal, metin> {
+genel işlev dosya_sil(imaj: Dizi<dtam8>, yol: metin) -> sonuç<mantıksal, metin> {
     eşleş imaj_bpb(imaj) {
         hata(e) => { ver hata(e); }
         tamam(v) => { değişken b: Fat32Bpb = v; ver sil_ic(imaj, b, yol); }
     }
-    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
-    ver hata("ulasilmaz");
 }
 işlev sil_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<mantıksal, metin> {
     eğer değil fsinfo_gecerli(imaj, b) { ver hata("fsinfo"); }
@@ -243,18 +237,4 @@ işlev sil_ic(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin) -> sonuç<mantıksal, 
             fsinfo_yenile(imaj, b); ver tamam(doğru);
         }
     }
-    // C008: sonuç döndüren eşleş sonrası açık koruma dönüşü.
-    ver hata("ulasilmaz");
-}
-
-// C009: istenen API korunur; self-host çağıranları aşağıdaki adlar yerine
-// imaja_dosya_yaz / imajda_dizin_olustur / imajdan_dosya_sil kullanmalıdır.
-genel işlev dosya_yaz(imaj: Dizi<dtam8>, yol: metin, veri: Dizi<dtam8>) -> sonuç<tam64, metin> {
-    ver imaja_dosya_yaz(imaj, yol, veri);
-}
-genel işlev dizin_olustur(imaj: Dizi<dtam8>, yol: metin) -> sonuç<tam64, metin> {
-    ver imajda_dizin_olustur(imaj, yol);
-}
-genel işlev dosya_sil(imaj: Dizi<dtam8>, yol: metin) -> sonuç<mantıksal, metin> {
-    ver imajdan_dosya_sil(imaj, yol);
 }

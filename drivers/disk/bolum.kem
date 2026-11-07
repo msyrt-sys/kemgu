@@ -1,6 +1,6 @@
 // MBR/GPT ayrıştırma: bütün ofsetler daraltılmadan önce görüntü içinde doğrulanır.
 kullan drivers::ortak::bayt::{ bayt_sinirda, oku_u8, oku_le16, oku_le32, oku_le64, imza_esit, yaz_le32 };
-// Bulgu C001: aynı adlı modül/işlev için probe ile doğrulanmış nitelikli çağrı.
+// C001: aynı adlı modül/üye seçili ithalatı T024 verir; nitelikli çağrı korunur.
 kullan drivers::disk::crc32;
 kullan drivers::ortak::utf8::{ utf16le_coz, utf8_kodla };
 genel yapı Bolum { tur: tam32; baslangic_lba: tam64; sektor_sayisi: tam64; ad: metin; }
@@ -8,8 +8,7 @@ genel çeşit BolumHatasi { KisaGirdi, ImzaYok, KorumaciMBRDegil, GptImzaYok, Gp
 genel işlev mbr_coz(lba0: Dizi<dtam8>) -> sonuç<Dizi<Bolum>, BolumHatasi> {
     eğer değil bayt_sinirda(lba0, 0, 512) { ver hata(BolumHatasi::KisaGirdi); }
     eğer oku_u8(lba0, 510) != 85 veya oku_u8(lba0, 511) != 170 { ver hata(BolumHatasi::ImzaYok); }
-    // Bulgu C002: yapı eleman boyu için tipli boş literal gerekir.
-    değişken sonuc: Dizi<Bolum> = [];
+    değişken sonuc: Dizi<Bolum> = dizi_olustur(0);
     değişken i: tam32 = 0;
     iken i < 4 {
         değişken ofs: tam32 = 446 + i * 16;
@@ -38,8 +37,7 @@ genel işlev gpt_coz(disk: Dizi<dtam8>, sektor: tam32) -> sonuç<Dizi<Bolum>, Bo
     değişken kopya: Dizi<dtam8> = [];
     değişken i: tam32 = 0;
     iken i < (baslik_boyu olarak tam32) {
-        // Bulgu C004: iç içe dizi_al yerine açık bayt dönüşümü.
-        dizi_ekle(kopya, oku_u8(disk, sektor + i) olarak dtam8); i = i + 1;
+        dizi_ekle(kopya, dizi_al(disk, sektor + i)); i = i + 1;
     }
     yaz_le32(kopya, 16, 0);
     eğer crc32::crc32(kopya, 0, baslik_boyu olarak tam32) != oku_le32(disk, sektor + 16) { ver hata(BolumHatasi::GptBaslikCrc); }
@@ -51,8 +49,7 @@ genel işlev gpt_coz(disk: Dizi<dtam8>, sektor: tam32) -> sonuç<Dizi<Bolum>, Bo
     eğer sayi > (boy - bas) / girdi_boyu { ver hata(BolumHatasi::GptBoyut); }
     değişken toplam: tam64 = sayi * girdi_boyu;
     eğer crc32::crc32(disk, bas olarak tam32, toplam olarak tam32) != oku_le32(disk, sektor + 88) { ver hata(BolumHatasi::GptGirdiCrc); }
-    // Bulgu C002: yapı eleman boyu için tipli boş literal gerekir.
-    değişken sonuc: Dizi<Bolum> = [];
+    değişken sonuc: Dizi<Bolum> = dizi_olustur(0);
     değişken j: tam64 = 0;
     iken j < sayi {
         değişken ofs: tam32 = (bas + j * girdi_boyu) olarak tam32;

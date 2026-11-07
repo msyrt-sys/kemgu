@@ -1,0 +1,7 @@
+kullan d3_c007_tipler::{D3Nokta, D3Secim};
+genel işlev uret(n: tam64) -> D3Nokta { ver D3Nokta { x: n }; }
+genel işlev oku(n: D3Nokta) -> tam64 { ver n.x; }
+genel işlev secim_oku(v: D3Secim) -> tam64 {
+    eşleş v { D3Secim::Bos => { ver 0; } D3Secim::Var(n) => { ver n; } }
+}
+genel işlev secim_uret(n: tam64) -> D3Secim { ver D3Secim::Var(n); }
