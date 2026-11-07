@@ -1,0 +1,6 @@
+// F005: başka modül ithal edilmediğinde de aynı tam IR adı kullanılmalı.
+kullan f005::sol::cekirdek olarak sol;
+işlev main() -> tam32 {
+    eğer sol::ortak() == 11 { ver 42; }
+    ver 1;
+}

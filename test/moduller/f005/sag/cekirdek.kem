@@ -1,0 +1,3 @@
+işlev bekle() -> tam32 { ver 17; }
+genel işlev ortak() -> tam32 { ver bekle(); }
+genel işlev sag_deger() -> tam32 { ver ortak(); }

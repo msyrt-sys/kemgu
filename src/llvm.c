@@ -2085,30 +2085,28 @@ static IslevKayit *islev_bul(LlvmGen *g, const char *ad, int ad_uz) {
  * IR ad uzayini duzlestirir. */
 static const char *modul_mangle(LlvmGen *g, const char *onek, int onek_uz,
                                 const char *ad, int ad_uz, int *out_uz) {
-    /* [D-584] Dosya-modulun ADI TAM YOLDUR (`a::b::c`) — `kullan` cozumu onu
-     * oyle arar (tip_kontrol.c `kullan_isle`), yani orada degistirilemez.
-     * IR ONEKI ise SON SEGMENTTIR: self-host kaynak-duzeyi sarmal
-     * (`modül <ad> { .. }`) kullaniyor ve `::` bir TANIMLAYICIYA giremez ->
-     * orada yapisal olarak yalniz son segment mumkun. Tam yolu IR'a tasimak
-     * C'ye `@"a::b.f"`, self'e `@b.f` yaydiriyordu (olculdu).
-     * Kirpma BURADA yapilir: hem kayit hem ARAMA ayni yardimciyi cagirir,
-     * yani ikisi tanim geregi hizali kalir (D-407). Ic ice (satir ici) modul
-     * onekleri `.` ile kurulur ve `::` ICERMEZ -> onlara dokunulmaz. */
-    for (int i = 0; i + 1 < onek_uz; i++) {
-        if (onek[i] == ':' && onek[i + 1] == ':') {
-            onek += i + 2;
-            onek_uz -= i + 2;
-            i = -1;   /* dongu basindan: birden cok `::` olabilir */
-        }
-    }
+    /* F005: dosya yolunun her parcasi ic ice modul gibi adlandirilir.
+     * Cozumleme kanonik `a::b` adini korur; yalniz IR'da `a.b` olur.
+     * Ad, baska hangi modullerin ithal edildiginden bagimsizdir. */
     char *m = (char *)arena_ayir(g->arena,
                                  (size_t)onek_uz + 1 + (size_t)ad_uz + 1);
     if (!m) return NULL;
-    memcpy(m, onek, (size_t)onek_uz);
-    m[onek_uz] = '.';
-    memcpy(m + onek_uz + 1, ad, (size_t)ad_uz);
-    m[onek_uz + 1 + ad_uz] = '\0';
-    if (out_uz) *out_uz = onek_uz + 1 + ad_uz;
+    int n = 0;
+    for (int i = 0; i < onek_uz; i++) {
+        if (onek[i] == ':' && i + 1 < onek_uz && onek[i + 1] == ':') {
+            m[n++] = '.';
+            i++;
+        } else m[n++] = onek[i];
+    }
+    m[n++] = '.';
+    for (int i = 0; i < ad_uz; i++) {
+        if (ad[i] == ':' && i + 1 < ad_uz && ad[i + 1] == ':') {
+            m[n++] = '.';
+            i++;
+        } else m[n++] = ad[i];
+    }
+    m[n] = '\0';
+    if (out_uz) *out_uz = n;
     return m;
 }
 
