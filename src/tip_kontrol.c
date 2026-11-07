@@ -5501,7 +5501,9 @@ static void pre_populate_cesit(TipKontrol *tk, const Dugum *cesit) {
     }
 }
 
-static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
+/* C007: imzalar ancak bütün modüllerin tip kayıtları kurulduktan sonra çözülür.
+ * Düz-ad/kanonik modül fallback kuralları ast_tip_to_bilgi içinde aynen kalır. */
+static TipBilgisi *pre_populate_islev_imzasi(TipKontrol *tk, const Dugum *islev) {
     int n = islev->veri.islev.param_sayi;
     TipBilgisi **ptipler = NULL;
     if (n > 0) {
@@ -5547,12 +5549,17 @@ static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
             islev->veri.islev.gercekzamanli_mi;
     }
 
+    return islev_tipi;
+}
+
+static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
+    /* Adları eski sırada kaydet: modül/işlev çakışması ve gölgeleme korunur. */
     Sembol s;
     memset(&s, 0, sizeof(s));
     s.ad = islev->veri.islev.ad;
     s.ad_uzunluk = islev->veri.islev.ad_uzunluk;
     s.kategori = SEMBOL_ISLEV;
-    s.tip = islev_tipi;
+    s.tip = NULL;  /* C007: ikinci geçiş doldurur; henüz gövde denetlenmez. */
     s.ast_dugumu = islev;
     s.satir = islev->satir;
     s.sutun = islev->sutun;
@@ -5796,10 +5803,42 @@ static void pre_populate_modul(TipKontrol *tk, const Dugum *m) {
     }
 }
 
+/* C007: aynı AST ve aynı kapsamlar; yalnız imza çözümleme zamanı değişir. */
+static void pre_populate_imzalar(TipKontrol *tk, const Dugum *d) {
+    if (!d) return;
+    if (d->tip == DUGUM_DISA) {
+        pre_populate_imzalar(tk, d->veri.disa.tanim);
+    } else if (d->tip == DUGUM_ISLEV) {
+        TipBilgisi *tip = pre_populate_islev_imzasi(tk, d);
+        Sembol *s = sembol_bul_yazilabilir(tk->global_scope,
+            d->veri.islev.ad, d->veri.islev.ad_uzunluk);
+        if (s && s->kategori == SEMBOL_ISLEV && s->ast_dugumu == d)
+            s->tip = tip;
+    } else if (d->tip == DUGUM_PROGRAM) {
+        for (int i = 0; i < d->veri.program.sayi; i++)
+            pre_populate_imzalar(tk, d->veri.program.uyeler[i]);
+    } else if (d->tip == DUGUM_MODUL) {
+        Scope *arama = d->veri.modul.dosya_modulu
+            ? tk->builtin_scope : tk->global_scope;
+        const Sembol *s = sembol_bul_yerel(arama,
+            d->veri.modul.ad, d->veri.modul.ad_uzunluk);
+        if (!s || s->kategori != SEMBOL_MODUL || !s->modul_scope
+            || s->ast_dugumu != d) return;
+        Scope *eski_global = tk->global_scope;
+        Scope *eski_scope = tk->scope;
+        tk->global_scope = tk->scope = s->modul_scope;
+        for (int i = 0; i < d->veri.modul.sayi; i++)
+            pre_populate_imzalar(tk, d->veri.modul.uyeler[i]);
+        tk->global_scope = eski_global;
+        tk->scope = eski_scope;
+    }
+}
+
 static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate_uyeler(tk, program->veri.program.uyeler,
                         program->veri.program.sayi);
+    pre_populate_imzalar(tk, program);
 }
 
 /* === A: kullan baglari (iki-fazli yuklemenin 2. fazi) ===
