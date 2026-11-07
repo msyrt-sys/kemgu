@@ -31,3 +31,5 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] D6 · paket kâhini + 2 çekirdek test / 22 aktarım, 6 hata · CSW etiket sabotajı → kırmızı · self 0,114 sn · köprü 111/111 · 2026-11-07T07:29:11.558355+00:00
 - VARSAYIM D6: xHCI slot/uç bağlamlarını çağıran kurar; özel olay halkası ve önceden sıfırlanmış 128 KiB DMA alanı gerekir. Tek etkin komut, LUN 0. Fiziksel taşıyıcı sözleşmesi bulgularda.
 - [x] D7 · GPT→FAT32 dosya oku-yaz-flush-yeniden oku + 4 hata · CSW artık sabotajı → kırmızı · self 0,465 sn · köprü 112/112 · 2026-11-07T07:31:17.473390+00:00
+- [x] E1 · LRU, kirli atım engeli, kopya yalıtımı, eski onay, aktarım sınırları · sürüm denetimi sabotajı → kırmızı · self 0,002 sn · köprü 114/114 (E2 testi dahil) · 2026-11-07T07:33:58.121451+00:00
+- VARSAYIM E1: geri yazma planı LBA/veri/sürüm içerir; çağıran aygıt tamamlanmasından sonra aynı sürümü onaylar. Başarısız veya eski onay kirli biti temizlemez. Önbellek en çok 16 MiB, bölme planı 4096 parça.

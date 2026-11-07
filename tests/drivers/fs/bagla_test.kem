@@ -1,0 +1,32 @@
+kullan drivers::fs::bagla::{ BagBolum, BagKaydi, BagTablo, bag_bolum, bag_tablosu, yazma_izni };
+kullan drivers::disk::guid::{ guid_coz };
+kullan tests::drivers::ortak::depolama_fikstur::{ depolama_ornek };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_le32 };
+işlev izin(k: BagKaydi, bayrak: mantıksal) -> mantıksal { eşleş yazma_izni(k,bayrak) { tamam(v) => { ver v; } hata(e) => { ver yanlış; } } }
+işlev main() -> tam32 {
+    değişken bpb: Dizi<dtam8> = bayt_sifir(512);
+    eşleş depolama_ornek() { hata(e) => { ver 1; } tamam(v) => { değişken i: tam32 = 0; iken i < 512 { yaz_u8(bpb,i,oku_u8(v,17408+i) olarak tam64); i=i+1; } } }
+    yaz_le32(bpb,67,305419896); değişken guid: Dizi<dtam8> = [];
+    eşleş guid_coz("C12A7328-F81F-11D2-BA4B-00A0C93EC93B") { hata(e) => { ver 2; } tamam(v) => { guid=v; } }
+    değişken bs: Dizi<BagBolum> = [];
+    eşleş bag_bolum("usb",0,1,34,bpb,bayt_sifir(0),12) { hata(e) => { ver 3; } tamam(v) => { eğer v.seri != 305419896 veya v.esp { ver 4; } dizi_ekle(bs,v); } }
+    yaz_le32(bpb,67,1);
+    eşleş bag_bolum("nvme",0,1,34,bpb,guid,238) { hata(e) => { ver 5; } tamam(v) => { eğer değil v.esp { ver 6; } dizi_ekle(bs,v); } }
+    eşleş bag_bolum("sata",12,3,34,bpb,bayt_sifir(0),239) { hata(e) => { ver 7; } tamam(v) => { eğer değil v.esp { ver 8; } dizi_ekle(bs,v); } }
+    değişken kok: seçimlik<tam64> = değer(305419896 olarak tam64);
+    eşleş bag_tablosu(bs,kok) { hata(e) => { ver 9; } tamam(t) => {
+        eğer t.ramdisk veya değil metin_esit(t.uyari,"") { ver 10; }
+        değişken a: BagKaydi = dizi_al(t.kayitlar,0); değişken e: BagKaydi = dizi_al(t.kayitlar,1); değişken m: BagKaydi = dizi_al(t.kayitlar,2);
+        eğer değil metin_esit(a.ad,"/") veya değil metin_esit(e.ad,"/diskler/nvme0p1") veya değil metin_esit(m.ad,"/diskler/sata12p3") veya değil izin(a,yanlış) veya izin(e,yanlış) veya izin(e,doğru) veya izin(m,doğru) { ver 11; }
+        e.kok=doğru; eğer izin(e,doğru) { ver 12; }
+        e.bolum.esp=yanlış; e.kok=yanlış; eğer izin(e,yanlış) veya değil izin(e,doğru) { ver 13; }
+    } }
+    kok=değer(99 olarak tam64); eşleş bag_tablosu(bs,kok) { hata(e) => { ver 14; } tamam(t) => { eğer değil t.ramdisk veya metin_esit(t.uyari,"") { ver 15; } } }
+    kok=değer(1 olarak tam64); eşleş bag_tablosu(bs,kok) { hata(e) => { ver 16; } tamam(t) => { eğer değil t.ramdisk veya metin_esit(t.uyari,"") { ver 17; } } }
+    değişken tek: Dizi<BagBolum> = []; değişken ilk: BagBolum = dizi_al(bs,0); dizi_ekle(tek,ilk);
+    eşleş bag_tablosu(tek,kok) { hata(e) => { ver 18; } tamam(t) => { eğer t.ramdisk veya metin_esit(t.uyari,"") { ver 19; } } }
+    dizi_ekle(tek,ilk); eşleş bag_tablosu(tek,kok) { tamam(v) => { ver 20; } hata(e) => { } }
+    eşleş bag_bolum("usb",0,1,0,bayt_sifir(20),guid,0) { tamam(v) => { ver 21; } hata(e) => { } }
+    değişken bos: Dizi<BagBolum> = []; kok=değer(4294967296 olarak tam64); eşleş bag_tablosu(bos,kok) { tamam(v) => { ver 22; } hata(e) => { } }
+    ver 0;
+}

@@ -1,0 +1,36 @@
+// Saf bağlama tablosu: kok= FAT seri numarası, ESP her koşulda salt okunur.
+kullan drivers::ortak::bayt::{ oku_le32 };
+kullan drivers::disk::guid::{ guid_bicimle };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz };
+genel yapı BagBolum { aygit: metin; aygit_no: tam32; bolum_no: tam32; lba: tam64; seri: tam64; esp: mantıksal; }
+genel yapı BagKaydi { ad: metin; bolum: BagBolum; kok: mantıksal; }
+genel yapı BagTablo { kayitlar: Dizi<BagKaydi>; ramdisk: mantıksal; uyari: metin; }
+genel işlev bag_bolum(aygit: metin, no: tam32, pno: tam32, lba: tam64, bpb: Dizi<dtam8>, gpt_tur: Dizi<dtam8>, mbr_tur: tam32) -> sonuç<BagBolum,metin> {
+    eğer (değil metin_esit(aygit,"nvme") ve değil metin_esit(aygit,"sata") ve değil metin_esit(aygit,"usb")) veya no < 0 veya pno < 1 veya lba < 0 veya mbr_tur < 0 veya mbr_tur > 255 { ver hata("baglama bolum kimligi"); }
+    eşleş bpb_coz(bpb) { hata(e) => { ver hata("baglama fat32 degil"); } tamam(v) => { } }
+    değişken esp: mantıksal = mbr_tur == 239;
+    eğer dizi_boyut(gpt_tur) != 0 { eşleş guid_bicimle(gpt_tur) { hata(e) => { ver hata(e); } tamam(v) => { eğer metin_esit(v,"C12A7328-F81F-11D2-BA4B-00A0C93EC93B") { esp=doğru; } } } }
+    ver tamam(BagBolum { aygit: aygit, aygit_no: no, bolum_no: pno, lba: lba, seri: oku_le32(bpb,67), esp: esp });
+}
+işlev sayi(n: tam32) -> metin { değişken x: tam32 = n; değişken s: metin = ""; değişken h: metin = "0123456789"; eğer x == 0 { ver "0"; } iken x > 0 { s=metin_birlestir(metin_kes(h,x%10,1),s); x=x/10; } ver s; }
+işlev ad(b: BagBolum) -> metin { ver metin_birlestir("/diskler/",metin_birlestir(b.aygit,metin_birlestir(sayi(b.aygit_no),metin_birlestir("p",sayi(b.bolum_no))))); }
+genel işlev bag_tablosu(bs: Dizi<BagBolum>, kok: seçimlik<tam64>) -> sonuç<BagTablo,metin> {
+    eşleş kok { hiç => { } değer(k) => { eğer k < 0 veya k > 4294967295 { ver hata("kok seri araligi"); } } }
+    değişken n: tam32 = dizi_boyut(bs); eğer n > 4096 { ver hata("baglama sayisi"); }
+    değişken sec: tam32 = -1; değişken eslesen: tam32 = 0; değişken i: tam32 = 0;
+    iken i < n {
+        değişken b: BagBolum = dizi_al(bs,i);
+        eğer b.aygit_no < 0 veya b.bolum_no < 1 veya b.lba < 0 veya b.seri < 0 veya b.seri > 4294967295 veya (değil metin_esit(b.aygit,"nvme") ve değil metin_esit(b.aygit,"sata") ve değil metin_esit(b.aygit,"usb")) { ver hata("baglama kimligi"); }
+        değişken j: tam32 = 0; iken j < i { değişken a: BagBolum = dizi_al(bs,j); eğer metin_esit(ad(a),ad(b)) { ver hata("yinelenen baglama"); } j=j+1; }
+        eşleş kok { hiç => { } değer(k) => { eğer k < 0 veya k > 4294967295 { ver hata("kok seri araligi"); } eğer b.seri == k { sec=i; eslesen=eslesen+1; } } } i=i+1;
+    }
+    değişken uyari: metin = "";
+    eğer eslesen == 0 { eğer n == 1 { sec=0; uyari="kok eslesmedi; tek FAT32 secildi"; } değilse { sec=-1; uyari="kok eslesmedi; ramdisk secildi"; } }
+    eğer eslesen > 1 { sec=-1; uyari="kok seri belirsiz; ramdisk secildi"; }
+    değişken xs: Dizi<BagKaydi> = []; i=0; iken i < n { değişken b: BagBolum = dizi_al(bs,i); değişken yol: metin = ad(b); eğer i == sec { yol="/"; } dizi_ekle(xs,BagKaydi { ad: yol, bolum: b, kok: i == sec }); i=i+1; }
+    ver tamam(BagTablo { kayitlar: xs, ramdisk: sec < 0, uyari: uyari });
+}
+genel işlev yazma_izni(k: BagKaydi, yazilabilir: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer k.bolum.esp { ver hata("ESP salt okunur"); }
+    eğer k.kok veya yazilabilir { ver tamam(doğru); } ver hata("bolum salt okunur");
+}
