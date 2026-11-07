@@ -1,0 +1,19 @@
+// F001: seçili ithal edilen tip, sarmalsız yapı alanında da çözülmeli.
+kullan drivers::acpi::tablo::{ Rsdp };
+yapı Kapsayici { r: Rsdp; }
+yapı Kutu<T> { deger: T; }
+işlev kontrol(r: Rsdp, beklenen: tam64) -> mantıksal {
+    ver r.rsdt == beklenen ve r.xsdt == beklenen + 1 ve r.revizyon == 2 ve metin_esit(r.oem, "KEMGU");
+}
+işlev main() -> tam32 {
+    değişken a: Kapsayici = Kapsayici { r: Rsdp { revizyon: 2, rsdt: 8589934615, xsdt: 8589934616, oem: "KEMGU" } };
+    değişken b: Kapsayici = Kapsayici { r: Rsdp { revizyon: 2, rsdt: 17179869221, xsdt: 17179869222, oem: "KEMGU" } };
+    değişken c: Kapsayici = Kapsayici { r: Rsdp { revizyon: 2, rsdt: 34359738421, xsdt: 34359738422, oem: "KEMGU" } };
+    eğer kontrol(a.r, 8589934615) == yanlış { ver 1; }
+    eğer kontrol(b.r, 17179869221) == yanlış { ver 2; }
+    eğer kontrol(c.r, 34359738421) == yanlış { ver 3; }
+    // Pozitif: yerel generic alanın kendi tip parametresi görünür kalır.
+    değişken k: Kutu<tam64> = Kutu { deger: 34359738421 };
+    eğer k.deger != 34359738421 { ver 4; }
+    ver 42;
+}
