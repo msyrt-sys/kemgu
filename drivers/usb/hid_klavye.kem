@@ -1,0 +1,25 @@
+// HID boot klavye rapor farkı. Türkçe düzen mevcut PS/2 dönüştürücüye aittir.
+kullan drivers::usb::hid_tus_tablosu::{ hid_set1 };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_bayt };
+kullan drivers::ortak::bayt::{ oku_u8, bayt_sifir, yaz_u8 };
+genel yapı HidKlavye { onceki: Dizi<dtam8>; }
+genel işlev hid_klavye_yeni() -> HidKlavye { ver HidKlavye { onceki: bayt_sifir(8) }; }
+işlev var_mi(b: Dizi<dtam8>, k: tam32, son: tam32) -> mantıksal { değişken i: tam32 = 2; iken i < son { eğer oku_u8(b,i) == k { ver doğru; } i=i+1; } ver yanlış; }
+işlev olay(d: &değişken KlavyeDurumu, k: tam32, bas: mantıksal) -> TusOlayi {
+    değişken o: tam32 = 0;
+    eğer k == 79 { o=8; } eğer k == 80 { o=7; } eğer k == 81 { o=6; } eğer k == 82 { o=5; } eğer k == 76 { o=9; }
+    eğer o != 0 { ver TusOlayi::Ozel(o,bas); }
+    değişken s: tam32 = hid_set1(k); eğer s == 0 { ver TusOlayi::Yok; } eğer değil bas { s=s|128; } ver klavye_bayt(d,s);
+}
+işlev ekle(xs: Dizi<TusOlayi>, o: TusOlayi) { eşleş o { TusOlayi::Yok => { } _ => { dizi_ekle(xs,o); } } }
+genel işlev hid_klavye_rapor(h: &değişken HidKlavye, d: &değişken KlavyeDurumu, b: Dizi<dtam8>) -> sonuç<Dizi<TusOlayi>,metin> {
+    eğer dizi_boyut(b) != 8 veya dizi_boyut(h.onceki) != 8 { ver hata("hid klavye rapor boyu"); }
+    değişken xs: Dizi<TusOlayi> = []; değişken i: tam32 = 2;
+    // ErrorRollOver/PostFail/ErrorUndefined durumunda son geçerli rapor korunur.
+    iken i < 8 { değişken k: tam32 = oku_u8(b,i); eğer k >= 1 ve k <= 3 { ver tamam(xs); } i=i+1; }
+    değişken m: tam32 = oku_u8(b,0);
+    d.sol_shift=(m&2) != 0; d.sag_shift=(m&32) != 0; d.ctrl=(m&17) != 0; d.alt=(m&4) != 0; d.altgr=(m&64) != 0; d.e0=yanlış;
+    i=2; iken i < 8 { değişken k: tam32 = oku_u8(h.onceki,i); eğer k != 0 ve değil var_mi(h.onceki,k,i) ve değil var_mi(b,k,8) { ekle(xs,olay(d,k,yanlış)); } i=i+1; }
+    i=2; iken i < 8 { değişken k: tam32 = oku_u8(b,i); eğer k != 0 ve değil var_mi(b,k,i) ve değil var_mi(h.onceki,k,8) { ekle(xs,olay(d,k,doğru)); } i=i+1; }
+    değişken yeni: Dizi<dtam8> = bayt_sifir(8); i=0; iken i < 8 { yaz_u8(yeni,i,oku_u8(b,i) olarak tam64); i=i+1; } h.onceki=yeni; ver tamam(xs);
+}

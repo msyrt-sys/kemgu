@@ -24,3 +24,4 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] C5 · 2 test / GPT→FAT32 dosya + 7 hata · TFES sabotajı → kırmızı · self 0,366 sn · köprü 104/104 · 2026-11-07T07:04:23.609001+00:00
 - [x] D1 · 4 test / 57 kesit / USB-HID başlık kâhini · HID uzunluk sabotajı → kırmızı · self 0,002 sn · köprü 105/105 · 2026-11-07T07:08:20.392031+00:00
 - [x] D2 · 3 test · CSZ bit konumu sabotajı → kırmızı · self 0,002 sn · köprü 106/106 · 2026-11-07T07:11:57.338793+00:00
+- [x] D3 · 4 test / TRB, halka sarımı, olay, 32/64 B bağlam · cycle sabotajı → kırmızı · self 0,002 sn · köprü 107/107 · 2026-11-07T07:20:04.666062+00:00
