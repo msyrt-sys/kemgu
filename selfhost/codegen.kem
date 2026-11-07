@@ -9243,7 +9243,9 @@ işlev bolge_yerel_yonlendir(p: &değişken Ayr, idx: tam32, elem: metin) -> met
     // SKALER-eleman (ρ_iter + ρ_yerel ortak ön-koşul): ptr/struct eleman → iç-ptr
     // dizi_al ile kaçabilir → ρ_caller (serbest edilmez).
     eğer metin_esit(elem, "ptr") { ver p.rho_ref; }
-    eğer bayt(elem, 0) == 37 { ver p.rho_ref; }         // '%' = struct-eleman
+    // F002: satır içi seçimlik/sonuç da iç işaretçi taşıyabilir; C'nin
+    // by-value sınıflandırmasıyla aynı çağıran bölgesinde tutulur.
+    eğer dizi_eleman_yapi_mi(elem) { ver p.rho_ref; }
     // F4.3 a3: iterasyon-confined (ky_confined ∧ döngü-gövde-bildirimi) + en-dış ρ_iter
     // mevcut → ρ_iter (HER İTERASYONDA serbest). no-escape ∧ no-loop-carry → SOUND.
     // OS kernel-loop'unu bunun için yaşatır (sonsuz döngüde per-iter free = sınırlı bellek).

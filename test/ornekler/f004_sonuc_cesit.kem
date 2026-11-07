@@ -1,0 +1,3 @@
+// Geniş kapı C oracle bağlama hatasını kırmızı sayar.
+kullan test::cg_korpus::cg_f004_sonuc_cesit::{ f004_sina };
+işlev main() -> tam32 { ver f004_sina(); }
