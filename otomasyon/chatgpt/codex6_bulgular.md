@@ -81,3 +81,11 @@ QMP qcode sözlüğü QEMU v8.2.2 qapi/ui.json’dan doğrulandı. HLT BIOS ve �
 ### SAHTE MODEL DÜZELTİLDİ — HID
 
 Önceki elle üretilmiş basış örneklerine ek olarak gerçek QEMU’nun modifier, basma ve bırakma raporları `hid_qemu_test.kem` içine alındı. Özellikle İ için sol Shift raporu ve ayrı bırakma raporları ölçüldü; mevcut eski test beklentileri değiştirilmedi. Kısa IN tamamlanması çekirdek sahte olay testinde de CC13/artık8 ile korunuyor.
+
+## G5 — fare gerçek QEMU ölçümü
+
+VID1575/PID1, interrupt IN129, paket4, bInterval7; QEMU dev-hid.c desc_iface_mouse2 ile aynı. QMP rel(+17,+9)+left down → ham `[1,17,9,0]`, rel(-5,-7)+left up → `[0,251,249,0]`; C/self aynı, dal1.18 sn. HID Y aşağı-pozitif, mevcut FareOlayi Y yukarı-pozitif olduğu için sonuçlar `(17,-9,true)` ve `(-5,7,false)`. Sürücüde yön düzeltmesi gerekmedi.
+
+### SAHTE MODEL DÜZELTİLDİ — fare
+
+Gerçek iki QMP raporu ayrı `fare_qemu_test.kem` fikstürüne alındı; önceki salt işaretli bayt testleri korunur. QEMU’nun boot protokolünde de 4 bayt döndürdüğü ölçüldü; çözücünün mevcut 3/4 bayt desteği doğru.

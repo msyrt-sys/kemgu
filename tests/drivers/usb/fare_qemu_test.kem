@@ -1,0 +1,13 @@
+// Gerçek QEMU 8.2.2 usb-mouse: QMP rel(+17,+9), left down; rel(-5,-7), left up.
+// Python: [(-5)&255,(-7)&255] == [251,249]; FareOlayi Y yukarı-pozitif.
+kullan drivers::usb::hid_fare::{ hid_fare_rapor };
+kullan drivers::ps2::fare::{ FareOlayi };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+işlev main() -> tam32 {
+    değişken a: Dizi<dtam8> = [1 olarak dtam8,17 olarak dtam8,9 olarak dtam8,0 olarak dtam8];
+    değişken b: Dizi<dtam8> = [0 olarak dtam8,251 olarak dtam8,249 olarak dtam8,0 olarak dtam8];
+    eşleş hid_fare_rapor(a) { hata(e) => { ver 1; } tamam(o) => { eğer o.dx != 17 veya o.dy != -9 veya o.dz != 0 veya değil o.sol veya o.sag veya o.orta { ver 2; } } }
+    eşleş hid_fare_rapor(b) { hata(e) => { ver 3; } tamam(o) => { eğer o.dx != -5 veya o.dy != 7 veya o.dz != 0 veya o.sol veya o.sag veya o.orta { ver 4; } } }
+    eşleş hid_fare_rapor(bayt_sifir(2)) { tamam(v) => { ver 5; } hata(e) => { } }
+    ver 0;
+}

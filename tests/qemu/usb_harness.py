@@ -22,14 +22,16 @@ def port():
         s.bind(('127.0.0.1',0));return s.getsockname()[1]
 
 # QMP sözlüğü tools/codex/dalga6_sabit.py ile sabit QEMU sürümünden doğrulanır.
-def klavye_kos(exe,qp,mp):
+def girdi_kos(exe,qp,mp):
     import json,selectors
     events=[]
-    def key(k,down):events.append({'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}})
+    def key(k,down):events.append([{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}])
     for k,shift in [('a',True),('bracket_left',False),('a',False),('dot',False),('spc',False),('apostrophe',True),('semicolon',False),('ret',False)]:
         if shift:key('shift',True)
         key(k,True);key(k,False)
         if shift:key('shift',False)
+    if MODE=='usb_fare':
+        events=[[{'type':'rel','data':{'axis':'x','value':x}}, {'type':'rel','data':{'axis':'y','value':y}}, {'type':'btn','data':{'down':down,'button':'left'}}] for x,y,down in [(17,9,True),(-5,-7,False)]]
     with socket.create_connection(('127.0.0.1',mp),timeout=kalan()) as sock:
         f=sock.makefile('rwb',buffering=0)
         def response():
@@ -46,7 +48,7 @@ def klavye_kos(exe,qp,mp):
         response();command('qmp_capabilities')
         child=subprocess.Popen(['stdbuf','-oL',str(exe),str(qp)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         sel=selectors.DefaultSelector();sel.register(child.stdout,selectors.EVENT_READ)
-        lines=[];buf=b'';sent=0;codes=[]
+        lines=[];buf=b'';sent=0;codes=[];mouse=[]
         try:
             while sel.get_map():
                 ready=sel.select(kalan())
@@ -58,12 +60,13 @@ def klavye_kos(exe,qp,mp):
                 while b'\n' in buf:
                     raw,buf=buf.split(b'\n',1);line=raw.decode();lines.append(line)
                     if line.startswith('KOD '):codes.append(int(line[4:]))
-                    if line in ['KLAVYE_HAZIR','RAPOR'] and sent<len(events):
-                        command('input-send-event',{'events':[events[sent]]});sent+=1
+                    if line.startswith('FARE '):mouse.append([int(v) for v in line.split()[1:]])
+                    if line in ['KLAVYE_HAZIR','FARE_HAZIR','RAPOR'] and sent<len(events):
+                        command('input-send-event',{'events':events[sent]});sent+=1
             rc=child.wait(timeout=kalan())
             out='\n'.join(lines)+'\n'
             print(out,end='',flush=True)
-            if rc or codes!=[ord(c) for c in 'Ağaç İş\n']:raise RuntimeError(f'HID rc={rc}, kodlar={codes}')
+            if rc or (MODE=='usb_kbd' and codes!=[ord(c) for c in 'Ağaç İş\n']) or (MODE=='usb_fare' and mouse!=[[17,-9,1],[-5,7,0]]):raise RuntimeError(f'HID rc={rc}, kodlar={codes}, fare={mouse}')
             return subprocess.CompletedProcess([],rc,out,'')
         finally:
             sel.close()
@@ -74,9 +77,9 @@ def qemu_kos(w,exe,eksik=False):
     with (w/'disk.img').open('wb') as f:f.truncate((64 if MODE=='usb_depo' else 4)*1024*1024)
     if MODE=='usb_depo':kos(['mkfs.fat','--invariant','-F','32','-s','1','-n','USBQTEST',str(w/'disk.img')],stdout=subprocess.DEVNULL)
     qp=port();mp=port()
-    cmd=['qemu-system-x86_64','-machine','q35','-accel','tcg','-bios',str(w/'dur.bin'),'-display','none','-nodefaults','-m','64M','-qtest',f'tcp:127.0.0.1:{qp},server=on,wait={"off" if MODE=="usb_kbd" else "on"}','-qtest-log','/dev/null','-device','qemu-xhci,id=x','-drive',f'file={w}/disk.img,if=none,id=u0,format=raw','-device','usb-storage,bus=x.0,drive=u0']
-    if MODE=='usb_kbd':cmd+=['-qmp',f'tcp:127.0.0.1:{mp},server=on,wait=off']
-    if not eksik:cmd+=['-device','usb-kbd,bus=x.0']
+    cmd=['qemu-system-x86_64','-machine','q35','-accel','tcg','-bios',str(w/'dur.bin'),'-display','none','-nodefaults','-m','64M','-qtest',f'tcp:127.0.0.1:{qp},server=on,wait={"off" if MODE in ["usb_kbd","usb_fare"] else "on"}','-qtest-log','/dev/null','-device','qemu-xhci,id=x','-drive',f'file={w}/disk.img,if=none,id=u0,format=raw','-device','usb-storage,bus=x.0,drive=u0']
+    if MODE in ['usb_kbd','usb_fare']:cmd+=['-qmp',f'tcp:127.0.0.1:{mp},server=on,wait=off']
+    if not eksik:cmd+=['-device',('usb-mouse' if MODE=='usb_fare' else 'usb-kbd')+',bus=x.0']
     with (w/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT)
         try:
@@ -86,8 +89,8 @@ def qemu_kos(w,exe,eksik=False):
                 r=subprocess.run(['ss','-ltnH',f'sport = :{qp}'],capture_output=True,timeout=kalan())
                 if r.stdout.strip():break
                 time.sleep(.01)
-            r=klavye_kos(exe,qp,mp) if MODE=='usb_kbd' else subprocess.run([str(exe),str(qp)],capture_output=True,text=True,timeout=kalan())
-            if MODE!='usb_kbd':print(r.stdout,end='')
+            r=girdi_kos(exe,qp,mp) if MODE in ['usb_kbd','usb_fare'] else subprocess.run([str(exe),str(qp)],capture_output=True,text=True,timeout=kalan())
+            if MODE not in ['usb_kbd','usb_fare']:print(r.stdout,end='')
             if eksik:
                 if r.returncode!=1 or 'QTEST_XHCI HATA xhci aygit sayisi' not in r.stdout:raise RuntimeError('eksik aygıt olumsuzu yakalanmadı')
             elif r.returncode!=0 or f'QTEST_{MODE.upper()} OK' not in r.stdout:
@@ -101,7 +104,7 @@ def qemu_kos(w,exe,eksik=False):
             except subprocess.TimeoutExpired:p.kill();p.wait()
 
 def main():
-    if MODE not in ['xhci','usb_depo','usb_kbd']:raise ValueError(MODE)
+    if MODE not in ['xhci','usb_depo','usb_kbd','usb_fare']:raise ValueError(MODE)
     with tempfile.TemporaryDirectory(prefix='usb-qtest-',dir=ROOT/'build') as td:
         w=Path(td)
         bios=bytearray(65536);bios[0xfff0:0xfff3]=bytes([0xf4,0xeb,0xfd]);(w/'dur.bin').write_bytes(bios)
