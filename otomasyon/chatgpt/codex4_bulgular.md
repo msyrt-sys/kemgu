@@ -64,3 +64,12 @@ C stdout `128`, rc=0; self stdout `-128`, rc=1. İkisi de derlenip bağlanır.
 Dolanma: alan üzerindeki doğrudan `dizi_al` yerine tipi açık `oku_u8(...)
 olarak dtam8`; yazımlarda mevcut `yaz_u8`. NVMe çekirdeği ve sahte modelde
 F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
+
+### QEMU’da doğrulanacak — AHCI
+
+- PxCMD ST/FRE kapatma, CR/FR bekleme ve başlatma sırası; SSTS DET/IPM, SATA/ATAPI
+  imzaları, PxIS.TFES ve PxTFD.ERR/BSY/DRQ. Yerel kurulu başlıkta AHCI yazmaç tanımı
+  yoktu; sabitler Linux v6.17 `drivers/ata/ahci.h` üzerinden Python ile doğrulandı.
+- H2D FIS tür 0x27/C biti, 48 bit LBA ve count baytları; komut başlığı CFL/W/PRDTL,
+  CTBA hizası; PRDT DBC/I ve 4 MiB parçalama. Bunlar sahte modelden bağımsız gerçek
+  QEMU AHCI ile ayrıca doğrulanmalıdır; sahte e2e donanım doğrulaması sayılmıyor.
