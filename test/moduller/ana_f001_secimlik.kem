@@ -1,0 +1,28 @@
+// F001: seçimlik sarmalı aynı ithal alan tipini korur.
+kullan drivers::acpi::tablo::{ Rsdp };
+yapı Kapsayici { r: seçimlik<Rsdp>; }
+işlev kontrol(k: Kapsayici, beklenen: tam64) -> mantıksal {
+    eşleş k.r {
+        hiç => { ver yanlış; }
+        değer(r) => { ver r.rsdt == beklenen ve r.xsdt == beklenen + 1 ve r.revizyon == 2 ve metin_esit(r.oem, "KEMGU"); }
+    }
+}
+işlev main() -> tam32 {
+    değişken r0: Rsdp = Rsdp { revizyon: 2, rsdt: 8589934615, xsdt: 8589934616, oem: "KEMGU" };
+    değişken o0: seçimlik<Rsdp> = değer(r0);
+    değişken k0: Kapsayici = Kapsayici { r: o0 };
+    eğer kontrol(k0, 8589934615) == yanlış { ver 1; }
+    değişken r1: Rsdp = Rsdp { revizyon: 2, rsdt: 17179869221, xsdt: 17179869222, oem: "KEMGU" };
+    değişken o1: seçimlik<Rsdp> = değer(r1);
+    değişken k1: Kapsayici = Kapsayici { r: o1 };
+    eğer kontrol(k1, 17179869221) == yanlış { ver 2; }
+    değişken r2: Rsdp = Rsdp { revizyon: 2, rsdt: 34359738421, xsdt: 34359738422, oem: "KEMGU" };
+    değişken o2: seçimlik<Rsdp> = değer(r2);
+    değişken k2: Kapsayici = Kapsayici { r: o2 };
+    eğer kontrol(k2, 34359738421) == yanlış { ver 3; }
+    // Pozitif: hiç kolu, olmayan Rsdp'yi var saymamalı.
+    değişken bos: seçimlik<Rsdp> = hiç;
+    değişken k: Kapsayici = Kapsayici { r: bos };
+    eğer kontrol(k, 0) { ver 4; }
+    ver 42;
+}

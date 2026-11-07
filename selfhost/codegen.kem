@@ -4923,8 +4923,9 @@ işlev yapi_alan_ic(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     }
     ver "";
 }
-// Ön-pass: üst-düzey YAPI tanımları → tablo (önce adlar, sonra alanlar — iç içe yapı ref'i için).
-işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+// F001: bütün kapsamların adları alan tiplerinden önce hazır olmalı.
+// Eski sıra korunur: önce bu kapsam, ardından modüller; flat ad çözümü değişmez.
+işlev yapi_adlari_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     // Pass A: adlar
@@ -4934,8 +4935,20 @@ işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, c), "YAPI") { dizi_ekle(p.yapi_ad, dizi_al(p.a_deg, c)); }
         i = i + 1;
     }
-    // Pass B: alanlar (abase/acount + alan_ad/alan_tip)
     i = 0;
+    iken i < cs {
+        değişken c: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
+        eğer metin_esit(dizi_al(p.a_ad, c), "MODUL") { yapi_adlari_topla(p, c); }
+        i = i + 1;
+    }
+    ver 0;
+}
+// F001: ad geçişi tamamlandı; alanlar aynı sırayla paralel tablolara yazılır.
+işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    // Pass B: alanlar (abase/acount + alan_ad/alan_tip)
+    değişken i: tam32 = 0;
     iken i < cs {
         değişken c2: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));   // D3: dışa-aç
         eğer metin_esit(dizi_al(p.a_ad, c2), "YAPI") {
@@ -4960,7 +4973,7 @@ işlev yapi_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
         }
         i = i + 1;
     }
-    // Pass C: nested modül üyelerini recursive topla (flat model) — D3
+    // Pass C: modül alanlarını aynı ad sırasıyla recursive topla (flat model).
     i = 0;
     iken i < cs {
         değişken c3: tam32 = dis_ac(p, dizi_al(p.cocuk, cb + i));
@@ -10015,6 +10028,7 @@ işlev kuresel_topla(p: &değişken Ayr, kok: tam32) -> tam32 {
 }
 
 işlev program_uret(p: &değişken Ayr, kok: tam32) -> tam32 {
+    yapi_adlari_topla(p, kok);   // F001: ithal yapı adları da alanlardan önce.
     yapi_topla(p, kok);   // CG7b: yapı tablosu (ll_tip/imza ondan önce gerekir)
     imza_topla(p, kok);   // CG6: işlev imza tablosu (CAGRI dönüş tipi)
     mono_kesif(p, kok);   // D-307: generic yapı örneklerini kaydet (emit'ten ÖNCE)

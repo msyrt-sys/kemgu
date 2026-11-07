@@ -1,0 +1,2 @@
+yapı K { r: tekkez<tam32>; }
+işlev main() -> tam32 { ver 42; }
