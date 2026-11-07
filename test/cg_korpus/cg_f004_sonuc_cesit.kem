@@ -1,0 +1,42 @@
+// F004: sonuç bağına taşınan çeşit dizisi doğrudan eşleşmede tipini korur.
+çeşit Olay { Bos, Sayi(tam64), Yazi(metin) }
+işlev uret(ok: mantıksal) -> sonuç<Dizi<Olay>, metin> {
+    eğer ok == yanlış { ver hata("korundu"); }
+    değişken xs: Dizi<Olay> = [];
+    dizi_ekle(xs, Olay::Sayi(8589934611));
+    dizi_ekle(xs, Olay::Sayi(17179869215));
+    dizi_ekle(xs, Olay::Sayi(34359738415));
+    dizi_ekle(xs, Olay::Yazi("son"));
+    ver tamam(xs);
+}
+işlev kontrol(r: sonuç<Dizi<Olay>, metin>) -> tam32 {
+    eşleş r {
+        hata(e) => { eğer metin_esit(e, "korundu") { ver 17; } ver 1; }
+        tamam(xs) => {
+            eşleş dizi_al(xs, 0) { Olay::Sayi(n) => { eğer n != 8589934611 { ver 2; } } Olay::Bos => { ver 3; } Olay::Yazi(t) => { ver 4; } }
+            eşleş dizi_al(xs, 1) { Olay::Sayi(n) => { eğer n != 17179869215 { ver 5; } } Olay::Bos => { ver 6; } Olay::Yazi(t) => { ver 7; } }
+            eşleş dizi_al(xs, 2) { Olay::Sayi(n) => { eğer n != 34359738415 { ver 8; } } Olay::Bos => { ver 9; } Olay::Yazi(t) => { ver 10; } }
+            eşleş dizi_al(xs, 3) { Olay::Yazi(t) => { eğer metin_esit(t, "son") == yanlış { ver 11; } } Olay::Bos => { ver 12; } Olay::Sayi(n) => { ver 13; } }
+            ver 42;
+        }
+    }
+}
+genel işlev f004_sina() -> tam32 {
+    değişken r: sonuç<Dizi<Olay>, metin> = uret(doğru);
+    eğer kontrol(r) != 42 { ver 1; }
+    eğer kontrol(uret(yanlış)) != 17 { ver 2; }
+    eşleş r {
+        tamam(xs) => { eşleş dizi_al(xs, 1) { Olay::Sayi(n) => { eğer n != 17179869215 { ver 3; } } Olay::Bos => { ver 4; } Olay::Yazi(t) => { ver 5; } } }
+        hata(e) => { ver 6; }
+    }
+    eşleş uret(doğru) {
+        tamam(xs) => { eşleş dizi_al(xs, 2) { Olay::Sayi(n) => { eğer n != 34359738415 { ver 7; } } Olay::Bos => { ver 8; } Olay::Yazi(t) => { ver 9; } } }
+        hata(e) => { ver 10; }
+    }
+    // Pozitif: sonuç sarmalı olmayan aynı çeşit dizisi.
+    değişken yalın: Dizi<Olay> = [];
+    dizi_ekle(yalın, Olay::Sayi(8589934611));
+    eşleş dizi_al(yalın, 0) { Olay::Sayi(n) => { eğer n != 8589934611 { ver 11; } } Olay::Bos => { ver 12; } Olay::Yazi(t) => { ver 13; } }
+    ver 42;
+}
+işlev main() -> tam32 { ver f004_sina(); }

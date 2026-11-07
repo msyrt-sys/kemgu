@@ -6709,6 +6709,33 @@ static int kosul_i1(LlvmGen *g, const Dugum *d) {
     return r;
 }
 
+/* F004: sonuç/seçimlik desen bağı yalnız LLVM ptr değil, bildirilen
+ * payload AST tipini de taşır. İfade yeniden üretilmez; çağrı tek kez yürür. */
+static const Dugum *esles_deger_tip_ast(LlvmGen *g, const Dugum *d) {
+    if (!d) return NULL;
+    if (d->tip == DUGUM_TANIMLAYICI) {
+        LlvmIsim *i = isim_bul(g, d->veri.tanimlayici.metin,
+                              d->veri.tanimlayici.uzunluk);
+        return i ? i->tip_ast : NULL;
+    }
+    if (d->tip != DUGUM_CAGRI || !d->veri.cagri.hedef) return NULL;
+    const Dugum *h = d->veri.cagri.hedef;
+    const Sembol *s = (const Sembol *)h->cozum_sembol;
+    if (s && s->ast_dugumu && s->ast_dugumu->tip == DUGUM_ISLEV)
+        return s->ast_dugumu->veri.islev.donus_tipi;
+    /* --tip-atla yolu da mevcut işlev kaydından aynı bildirimi bulur. */
+    char ad[256];
+    int uz = yol_noktali_ad(h, ad, sizeof(ad));
+    IslevKayit *ik = uz > 0 ? islev_bul(g, ad, uz) : NULL;
+    if (!ik && uz > 0 && h->tip == DUGUM_TANIMLAYICI && g->aktif_modul_onek) {
+        int muz = 0;
+        const char *m = modul_mangle(g, g->aktif_modul_onek,
+                                    g->aktif_modul_onek_uz, ad, uz, &muz);
+        if (m) ik = islev_bul(g, m, muz);
+    }
+    return ik && ik->ast ? ik->ast->veri.islev.donus_tipi : NULL;
+}
+
 /* === Deyim IR === */
 
 /* Donus: blok 'ver' (terminator) ile bitti mi? */
@@ -7455,6 +7482,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
          * sonraki kollar erisilemez. v1 codegen literal + catch-all
          * destekler (driver ihtiyaci: tamsayi literalleri). */
         case DUGUM_ESLES: {
+            const Dugum *deger_ast = esles_deger_tip_ast(g, d->veri.esles.deger);
             IfadeSonuc s = ifade_uret(g, d->veri.esles.deger, NULL);
             const char *sty = s.tip ? s.tip : "i32";
             /* C3: &Cesit referansı (ptr) üzerinde eşleş — struct'ı yükle
@@ -7682,6 +7710,23 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                                 ctor_bind->veri.desen_tanimlayici.ad,
                                 ctor_bind->veri.desen_tanimlayici.ad_uzunluk,
                                 1, ar, ftcopy);
+                            /* F004: self C003 ve çeşit D-437 bağlarıyla aynı
+                             * eleman bilgisi; dizi_al artık i32'ye düşmez. */
+                            const Dugum *pt = NULL;
+                            if (deger_ast && deger_ast->tip == DUGUM_TIP_SONUC)
+                                pt = ctor_pf == 1
+                                    ? deger_ast->veri.tip_sonuc.deger_tip
+                                    : deger_ast->veri.tip_sonuc.hata_tip;
+                            else if (deger_ast &&
+                                     deger_ast->tip == DUGUM_TIP_SECIMLIK)
+                                pt = deger_ast->veri.tip_secimlik.ic_tip;
+                            g->isimler->tip_ast = pt;
+                            if (pt && pt->tip == DUGUM_TIP_DIZI) {
+                                const Dugum *ea = pt->veri.tip_dizi.eleman_tip;
+                                g->isimler->eleman_llvm_tip = ast_tip_to_ir(g, ea);
+                                g->isimler->eleman_tip_ast = ea;
+                                g->isimler->dinamik_dizi_mi = 1;
+                            }
                         }
                     }
                 }
