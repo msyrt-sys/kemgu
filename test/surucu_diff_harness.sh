@@ -80,7 +80,10 @@ fi
 #   gorunur ad kumesi ITHALAT LISTESIYLE KESINDIR -> ayrisma kalmadi.
 #   5 -> 2. Bayat muafiyet zararsiz DEGILDIR (D-534): o dosyanin gercek
 #   bir kirilmasini sessizce yutar.
-MUAF="virtio_blk_init_test virtqueue_bind_test"
+# ✓ D-740: virtio_blk_init_test BAYATLADI — kok neden GERCEK test hatasiydi
+#   (blk_cfg_adres secili ithal edilmeden cagriliyordu, C T002x5; Codex dalga 4
+#   A0 ithalati ekledi) ve kapi yine kendisi bildirdi. 2 -> 1.
+MUAF="virtqueue_bind_test"
 muaf_mi() {
     for m in $MUAF; do [ "$m" = "$1" ] && return 0; done
     return 1
