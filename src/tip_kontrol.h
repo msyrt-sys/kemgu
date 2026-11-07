@@ -86,6 +86,7 @@ typedef struct TipKontrol {
      * tuketim IKI sayilir -> sahte L002. Pas 1 bu bayrakla sondaj olarak
      * isaretlenir; lineer defter YALNIZ pas 2'de guncellenir. */
     int lineer_sondaj;
+    const Dugum *yetki_odunc_arg;   /* Yalnız doğrudan &yetki çağrı argümanı. */
     /* D-304: blok-form lambda dönüş çıkarsaması. cikarsama>0 iken blok içindeki
      * `ver <e>` deyimi e'nin tipini blok_donus'a KAYDEDER (aktif_donus_tipi'ye
      * karşı kontrol yerine) → lambda dönüş tipi gövdeden çıkarsanır. */

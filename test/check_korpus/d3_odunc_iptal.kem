@@ -1,0 +1,9 @@
+// Çağrı süreli yetki ödüncü: iptal.
+işlev f(y: &yetki<MMIO>) { }
+işlev kotu() {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 3);
+    geri_al(y);
+    f(&y);
+}
+
+işlev main() -> tam32 { ver 42; }

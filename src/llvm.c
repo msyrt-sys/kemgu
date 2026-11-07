@@ -4869,11 +4869,15 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                      * .kem sağlayıcı `çıplak fn(out: *KdlYetki, y: *KdlYetki, izin)`
                      * ile eşleşir. (Eski sret formu bare-metal register-return C
                      * provider ile uyuşmuyordu — bkz. olustur açıklaması.) */
-                    int y_slot = yeni_reg(g);
-                    fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", y_slot);
-                    fprintf(g->out,
-                        "  store %%kdl_yetki %%%d, ptr %%%d\n",
-                        arg_y.reg, y_slot);
+                    /* Ödünç &yetki zaten sahibin %kdl_yetki adresidir. */
+                    int y_slot = arg_y.reg;
+                    if (strcmp(arg_y.tip, "ptr") != 0) {
+                        y_slot = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", y_slot);
+                        fprintf(g->out,
+                            "  store %%kdl_yetki %%%d, ptr %%%d\n",
+                            arg_y.reg, y_slot);
+                    }
                     int sret = yeni_reg(g);
                     fprintf(g->out, "  %%%d = alloca %%kdl_yetki\n", sret);
                     fprintf(g->out,

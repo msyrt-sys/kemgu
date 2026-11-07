@@ -1,0 +1,20 @@
+// Çağrı süreli yetki ödüncü: olumlu.
+işlev ic(y: &yetki<MMIO>) { mmio_yaz32(y, 0, 203); }
+işlev dis(y: &yetki<MMIO>) { ic(y); }
+işlev bellek(y: &yetki<Bellek>) {
+    değişken p: *tam64 = bölge_al(y, 1);
+    güvensiz { p[0] = 8589934592; }
+    değişken alt: yetki<Bellek> = delege(y, 1);
+    geri_al(alt);
+}
+işlev eski(y: yetki<MMIO>) -> yetki<MMIO> { ver y; }
+işlev temiz() {
+    değişken y: yetki<MMIO> = yetki_olustur(6, 3);
+    dis(&y); dis(&y);
+    değişken z: yetki<MMIO> = eski(y);
+    geri_al(z);
+    değişken b: yetki<Bellek> = yetki_olustur(3, 3);
+    bellek(&b); geri_al(b);
+}
+
+işlev main() -> tam32 { ver 42; }

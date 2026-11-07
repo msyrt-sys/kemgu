@@ -1,0 +1,3 @@
+// Çağrı süreli yetki ödüncü: dizi_ekle.
+işlev f(y: &yetki<MMIO>) { değişken d: Dizi<&yetki<MMIO>> = []; dizi_ekle(d, y); }
+işlev main() -> tam32 { ver 42; }

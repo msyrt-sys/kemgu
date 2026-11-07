@@ -1,0 +1,5 @@
+// Çağrı süreli yetki ödüncü: kaynak.
+işlev yanlis(y: &yetki<Soket>) { mmio_yaz32(y, 0, 1); }
+işlev yanlis_adres(y: &yetki<MMIO>) { mmio_yaz32(y, "yanlis", 1); }
+
+işlev main() -> tam32 { ver 42; }

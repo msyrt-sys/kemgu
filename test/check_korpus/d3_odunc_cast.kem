@@ -1,0 +1,3 @@
+// Çağrı süreli yetki ödüncü: cast.
+işlev f(y: &yetki<MMIO>) -> *tam32 { güvensiz { ver y olarak *tam32; } }
+işlev main() -> tam32 { ver 42; }

@@ -1,0 +1,3 @@
+// Çağrı süreli yetki ödüncü: kanal.
+işlev f(y: &yetki<MMIO>) { değişken k: kanal<&yetki<MMIO>> = kanal_oluştur(1); kanal_gönder(k, y); }
+işlev main() -> tam32 { ver 42; }
