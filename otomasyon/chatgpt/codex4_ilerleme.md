@@ -35,3 +35,6 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - VARSAYIM E1: geri yazma planı LBA/veri/sürüm içerir; çağıran aygıt tamamlanmasından sonra aynı sürümü onaylar. Başarısız veya eski onay kirli biti temizlemez. Önbellek en çok 16 MiB, bölme planı 4096 parça.
 - [x] E2 · seri/kök/yol, GPT+MBR ESP, bayrak, belirsizlik, tek-FAT dönüşü · ESP denetimi sabotajı → kırmızı · self 0,114 sn · köprü 114/114 · 2026-11-07T07:35:58.169190+00:00
 - VARSAYIM E2: yinelenen aygıt/bölüm kimliği hata; aynı kök serisini taşıyan birden fazla bölüm ramdisk ve açık uyarı üretir. FAT32 olmayan aday bağlama kaydına alınmaz.
+- [x] E3 · USB kök + NVMe GPT ESP/veri + AHCI, gerçek dosya kalıcılığı · ESP sabotajı → kırmızı · self 0,969 sn · köprü 116/116 (F1 dahil) · F005 dolanması · 2026-11-07T07:39:17.638973+00:00
+- VARSAYIM E3: NVMe modelindeki ikinci ayrık disk aralığı büyük sıfır boşluğu ayırmadan geçerli iki FAT32 bölümünü temsil eder; ESP koruması modelde değil bağlama katmanındadır.
+- [x] F1 · 4500 ikili + 300 metin örneği, boş/tek bayt, 14 geçerli fikstür mutasyonu · VID sabotajı → kırmızı · self 0,115 sn · köprü 117/117 (F2 dahil) · 2026-11-07T07:41:38.082978+00:00
