@@ -1,7 +1,6 @@
 // Sans-IO NVMe: tek sıradaki istek; tüm yanıtlar sonraki adımda doğrulanır.
 // DMA sözleşmesi: taban'dan başlayan, 4096 hizalı 86016 bayt alan çağırana aittir.
 // İlk 4 sayfa ASQ/ACQ/SQ1/CQ1, ardından 64 KiB veri ve bir PRP liste sayfası.
-// F001: ithal kayıtlar durum alanına gömülmez, doğrulanmış skalerler tutulur.
 kullan drivers::ortak::gc::{ GcIstek, GcYanit };
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8 };
 kullan drivers::nvme::kayit::{ NvmeCap, nvme_cap_coz, nvme_hazir, nvme_fatal };
@@ -163,9 +162,8 @@ genel işlev nvme_adim(s: &değişken NvmeDurum, y: GcYanit) -> GcIstek {
     }
     eğer s.adim == 30 {
         eğer dizi_boyut(y.baytlar) != s.parca*s.blok_bayt { ver nvme_hata(s,"nvme kisa veri"); }
-        // F003: yapı alanından bayt okurken dtam8 imzasını oku_u8 üzerinden koru.
         değişken sonuc: Dizi<dtam8> = s.sonuc;
-        değişken i: tam32 = 0; iken i < dizi_boyut(y.baytlar) { dizi_ekle(sonuc,oku_u8(y.baytlar,i) olarak dtam8); i=i+1; }
+        değişken i: tam32 = 0; iken i < dizi_boyut(y.baytlar) { dizi_ekle(sonuc,dizi_al(y.baytlar,i)); i=i+1; }
         ver tamamlandi(s);
     }
     ver nvme_hata(s,"nvme gecersiz adim");

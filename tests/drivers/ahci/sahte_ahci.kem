@@ -1,5 +1,5 @@
 // Bağımsız AHCI aygıt modeli; CI yazımı CLB/FIS/PRDT'yi yorumlar, DMA'yı gerçekleştirir.
-// Kâhin: tools/codex/dalga4_ahci_sahte.py. F003: bayt alanları oku_u8 ile taşınır.
+// Kâhin: tools/codex/dalga4_ahci_sahte.py.
 kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, oku_le64, yaz_u8, yaz_le32, yaz_le64 };
 kullan tests::drivers::ahci::kimlik_fikstur::{ ata_ornek };
@@ -96,7 +96,7 @@ genel işlev sahte_ahci_yanit(s: &değişken SahteAhci, i: GcIstek) -> GcYanit {
         }
         GcIstek::BellekOku(a,n) => {
             eğer değil dma_var(s,a,n olarak tam64) { y.basarili=yanlış; }
-            değilse { değişken b: Dizi<dtam8> = []; değişken j: tam32 = 0; iken j < n { dizi_ekle(b,oku_u8(s.bellek,(a-s.taban) olarak tam32+j) olarak dtam8); j=j+1; } y.baytlar=b; }
+            değilse { değişken b: Dizi<dtam8> = []; değişken j: tam32 = 0; iken j < n { dizi_ekle(b,dizi_al(s.bellek,(a-s.taban) olarak tam32+j)); j=j+1; } y.baytlar=b; }
         }
         GcIstek::Bekle(us) => { s.bekleme=s.bekleme+1; }
         GcIstek::Bitti => { }

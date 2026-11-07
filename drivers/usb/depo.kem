@@ -107,7 +107,7 @@ işlev basit_komut(s: &değişken UsbDepo, op: tam32, boy: tam32) -> sonuç<mant
 işlev parca_baslat(s: &değişken UsbDepo) -> sonuç<mantıksal,metin> {
     s.parca=s.kalan; eğer s.parca > 65536/s.blok_bayt { s.parca=65536/s.blok_bayt; }
     değişken boy: tam32 = s.parca*s.blok_bayt; değişken b: Dizi<dtam8> = [];
-    eğer s.is == 11 { değişken i: tam32 = 0; iken i < boy { dizi_ekle(b,oku_u8(s.girdi,s.konum+i) olarak dtam8); i=i+1; } }
+    eğer s.is == 11 { değişken i: tam32 = 0; iken i < boy { dizi_ekle(b,dizi_al(s.girdi,s.konum+i)); i=i+1; } }
     eşleş scsi_rw10(s.is == 11,s.lba,s.parca) { hata(e) => { ver hata(e); } tamam(c) => { ver komut_baslat(s,c,b,boy,s.is == 10); } }
 }
 genel işlev usb_depo_oku(s: &değişken UsbDepo, lba: tam64, adet: tam32) -> sonuç<mantıksal,metin> {

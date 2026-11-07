@@ -75,7 +75,7 @@ genel işlev sahte_depo_yanit(s: &değişken SahteDepo, q: GcIstek) -> GcYanit {
     değişken y: GcYanit = gc_bos();
     eşleş q {
         GcIstek::BellekYaz(a,b) => { eğer a < 65536 veya a > 196608 veya (dizi_boyut(b) olarak tam64) > 196608-a { y.basarili=yanlış; } değilse { değişken i: tam32 = 0; iken i < dizi_boyut(b) { yaz_u8(s.bellek,(a-65536) olarak tam32+i,oku_u8(b,i) olarak tam64); i=i+1; } } }
-        GcIstek::BellekOku(a,n) => { eğer a < 65536 veya a > 196608 veya n < 0 veya (n olarak tam64) > 196608-a { y.basarili=yanlış; } değilse { değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0; iken i < n { dizi_ekle(b,oku_u8(s.bellek,(a-65536) olarak tam32+i) olarak dtam8); i=i+1; } y.baytlar=b; } }
+        GcIstek::BellekOku(a,n) => { eğer a < 65536 veya a > 196608 veya n < 0 veya (n olarak tam64) > 196608-a { y.basarili=yanlış; } değilse { değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0; iken i < n { dizi_ekle(b,dizi_al(s.bellek,(a-65536) olarak tam32+i)); i=i+1; } y.baytlar=b; } }
         GcIstek::Yaz32(a,v) => { eğer a != 8196 { y.basarili=yanlış; } değilse { y.basarili=zil(s,v); } }
         GcIstek::Yaz64(a,v) => { eğer a != 4152 veya v != ((65792+(s.olay_son olarak tam64)*16)|8) { y.basarili=yanlış; } değilse { s.ack_sayisi=s.ack_sayisi+1; } }
         GcIstek::Bekle(us) => { }

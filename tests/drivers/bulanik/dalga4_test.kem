@@ -1,6 +1,8 @@
+kullan drivers::bellek::harita::{ BellekBolgesi };
+kullan drivers::acpi::tablo::{ Rsdp };
 // Dalga 4 F1: 300 rastgele + her geçerli örnekte 300 tek-bayt mutasyon.
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le64, yaz_u8, yaz_le32, yaz_be32, oku_be16, oku_be32, oku_be64 };
-kullan drivers::acilis::multiboot2::{ AcilisBilgi, AcilisBellek, AcilisModulu, AcilisEkrani, AcilisRsdp, KomutSecenegi, multiboot2_coz, komut_satiri_coz, kok_seri_coz };
+kullan drivers::acilis::multiboot2::{ AcilisBilgi, AcilisModulu, AcilisEkrani, KomutSecenegi, multiboot2_coz, komut_satiri_coz, kok_seri_coz };
 kullan drivers::nvme::kimlik::{ NvmeDenetleyici, NvmeAdAlani, nvme_denetleyici_coz, nvme_ad_alani_coz };
 kullan drivers::nvme::komut::{ NvmeTamamlanma, nvme_cq_coz };
 kullan drivers::nvme::kayit::{ NvmeCap, nvme_cap_coz };

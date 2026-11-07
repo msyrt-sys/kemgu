@@ -1,3 +1,4 @@
+// C001/T024: aynı örtük cekirdek bağı çakışır; F005 yalnız IR adını düzeltir, bu alias’lar gereklidir.
 // Üç bağımsız aygıt aynı anda; dosya erişimleri gerçek sürücü durum makinelerinden geçer.
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni, nvme_yaz, nvme_flush } olarak nv;
 kullan tests::drivers::nvme::sahte_nvme::{ SahteNvme, sahte_nvme_yeni };
