@@ -1,0 +1,29 @@
+// Kaynak ve hesap: python3 tools/codex/dalga4_nvme.py (Linux include/linux/nvme.h).
+genel sabit NVME_REG_CAP: tam64 = 0;
+genel sabit NVME_REG_VS: tam64 = 8;
+genel sabit NVME_REG_CC: tam64 = 20;
+genel sabit NVME_REG_CSTS: tam64 = 28;
+genel sabit NVME_REG_AQA: tam64 = 36;
+genel sabit NVME_REG_ASQ: tam64 = 40;
+genel sabit NVME_REG_ACQ: tam64 = 48;
+genel yapı NvmeCap { kuyruk_azami: tam32; bitisik: mantıksal; zaman_ms: tam32; dstrd: tam32; css: tam32; mps_min: tam32; mps_max: tam32; }
+genel işlev nvme_cap_coz(cap: tam64) -> sonuç<NvmeCap,metin> {
+    değişken min: tam32 = ((cap >> 48)&15) olarak tam32;
+    değişken max: tam32 = ((cap >> 52)&15) olarak tam32;
+    eğer min > max { ver hata("nvme sayfa araligi"); }
+    ver tamam(NvmeCap { kuyruk_azami: ((cap&65535) olarak tam32)+1, bitisik: (cap&65536) != 0, zaman_ms: (((cap>>24)&255) olarak tam32)*500, dstrd: ((cap>>32)&15) olarak tam32, css: ((cap>>37)&255) olarak tam32, mps_min: min, mps_max: max });
+}
+genel işlev nvme_zil(c: NvmeCap, kuyruk: tam32, cq: mantıksal) -> sonuç<tam64,metin> {
+    eğer kuyruk < 0 veya kuyruk > 65535 veya c.dstrd < 0 veya c.dstrd > 15 { ver hata("nvme zil araligi"); }
+    değişken sira: tam64 = (kuyruk olarak tam64)*2;
+    eğer cq { sira=sira+1; }
+    ver tamam(4096+sira*((4 olarak tam64)<<c.dstrd));
+}
+genel işlev nvme_cc_kur(en: mantıksal, mps: tam32, css: tam32, ams: tam32, shn: tam32, sqes: tam32, cqes: tam32) -> sonuç<tam64,metin> {
+    eğer mps < 0 veya mps > 15 veya css < 0 veya css > 7 veya ams < 0 veya ams > 7 veya shn < 0 veya shn > 3 veya sqes < 0 veya sqes > 15 veya cqes < 0 veya cqes > 15 { ver hata("nvme cc alan araligi"); }
+    değişken v: tam64 = ((mps olarak tam64)<<7)|((css olarak tam64)<<4)|((ams olarak tam64)<<11)|((shn olarak tam64)<<14)|((sqes olarak tam64)<<16)|((cqes olarak tam64)<<20);
+    eğer en { v=v|1; } ver tamam(v);
+}
+genel işlev nvme_hazir(csts: tam64) -> mantıksal { ver (csts&1) != 0; }
+genel işlev nvme_fatal(csts: tam64) -> mantıksal { ver (csts&2) != 0; }
+genel işlev nvme_kapanma(csts: tam64) -> tam32 { ver ((csts>>2)&3) olarak tam32; }

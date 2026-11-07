@@ -7,3 +7,6 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] A0 · 8 mevcut test · C/self T002×5 → temiz · kapasite +1 sabotajı → çalışma zamanı kırmızı · köprü 91/91 · 2026-11-07T06:14:15.988212+00:00
 - [x] A1 · 2 test / tüm 9 istek varyantı · kısa DMA yanıtı sabotajı → kırmızı · self 0,002 sn · köprü 92/92 · 2026-11-07T06:16:39.096794+00:00
 - [x] A2 · 3 test · BE bayt sırası sabotajı → kırmızı · self 0,002 sn · köprü 93/93 · 2026-11-07T06:19:00.045899+00:00
+- [x] A3 · 4 test (296 kesit + 8 bozuk alan) · modül adres sırası sabotajı → kırmızı · self 0,003 sn · köprü 94/94 · F001/F002 dolanmaları · 2026-11-07T06:23:49.776448+00:00
+- VARSAYIM A3: komut anahtarları tektir; kok 8 hex hane veya 4-4 biçimindedir. Bilgi 1 MiB / 4096 etiket / metin 4096 bayt ile sınırlıdır. Paletli ekran açık desteklenmiyor hatası verir.
+- [x] B1 · 3 test · CQ kapı zili +1 kaldırma sabotajı → kırmızı · self 0,002 sn · köprü 95/95 · 2026-11-07T06:26:38.115001+00:00
