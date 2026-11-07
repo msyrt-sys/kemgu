@@ -91,10 +91,10 @@
       tipi literal diziye aktariliyor). Yan kazanc: `ilk([2.5])` iki derleyicide LINK-RED idi.
       Fikstur cg_dizi_literal_cikarsama (6 sekil). task_825441de karti bununla ortusuyor.
 - [x] D2a [M] ✓ KARAR (2026-11-06): CAGRI SURELI odunc — belgeler/KEMGU_Yetki_Odunc_Tasarim.md.
-- [ ] D2b [M] Kabiliyet odunc: checker zorlamasi (yeni hata kodu).
-- [ ] D2c [M] Kabiliyet odunc: codegen.
-- [ ] D2d [M] Kabiliyet odunc: self-host parite.
-- [ ] D2e [S] Kabiliyet odunc: `yetki<R>` korpus fiksturu.
+- [x] D2b [M] ✓ D-739 Kabiliyet odunc: checker zorlamasi (yeni hata kodu).
+- [x] D2c [M] ✓ D-739 Kabiliyet odunc: codegen.
+- [x] D2d [M] ✓ D-739 Kabiliyet odunc: self-host parite.
+- [x] D2e [S] ✓ D-739 Kabiliyet odunc: `yetki<R>` korpus fiksturu.
 - [x] D3a -> D-669. Bariyer "herkes gelmeden kimse gecmiyor" + YENIDEN KULLANIM
       (5 tur) eszamanlilik kapisinda. Cok-tur YUK TASIYOR (olculdu, asagida).
 - [x] D3b -> D-667'de yapildi (README semafor/bariyer maddesi duzeltildi).
@@ -216,16 +216,24 @@
       Sonra: surucu_diff globu yeni dizinlere genisletilir; donanim baglama (port/MMIO) Claude'da.
 
 # ===== F. FORMEL =====
-- [ ] E4c [M] FAT32 yazma PERFORMANSI: fat32_coklu (110 dosya) self-host 16 sn, fat32_yaz 14 sn
+- [x] E4c [M] ✓ D-739 (16 -> 2,1 sn; kok E4e). FAT32 yazma PERFORMANSI: fat32_coklu (110 dosya) self-host 16 sn, fat32_yaz 14 sn
       (Spark); x86 CI'da 30 sn'yi asti (D-737). Muhtemel kok: her kume ayiriminda FAT'in bastan
       taranmasi / imaj kopyasi — once PROFILLE, tahmin etme. Gercek OS'te de hissedilir.
 - [x] E4b [M] ✓ D-738: C009 C002 C004 C005 C011 C003 C008 C006 C010 duzeltildi (Codex dalga 2,
       PR #164-#172, entegrasyonda birlikte olculdu). KALAN -> E4d.
-- [ ] E4d [M] Codex dalga 3: C001 (oneri: C kurali korunur, self de T024; etki 0 dosya) ·
+- [x] E4d [M] ✓ D-739. Codex dalga 3: C001 (oneri: C kurali korunur, self de T024; etki 0 dosya) ·
       C007 (oneri: tum modul tip kayitlari imzalardan ONCE; sira bagimliligi kalkar, virtio_blk_init_test
       sahte T011 duzelir) · YAN BULGU: self checker secili ithal edilen kullanici `dosya_sil`'ini
       YERLESIK imzasiyla denetliyor (T001; onek yakalamanin checker kolu) · dalga 1 dolanmalarini
       (tests/drivers/probe, imaj_* ek adlari) kaldir.
+- [ ] E4e [M] DERLEYICI PERFORMANSI: tahsissiz islev/dongu turunda bolge acma. Codex profili (sayac
+      enstrumantasyonu, D-739): her islev cagrisi VE her dongu turu kdl_bolge_olustur/serbest yapiyor,
+      govde hic tahsis etmese bile (oku_le32 9,3M cagri). D-739 iki sicak okuyucuyu `çıplak` yaparak
+      BELIRTIYI kapatti; KOK tum KEMGU programlarinda. Oneri: escape/tahsis ozeti (D9a) ile "tahsis
+      yok" kaniti varsa prologu atla. Kanit: fat32_coklu `çıplak`SIZ da <=3 sn.
+- [ ] E4f [S] tests/drivers/virtio/virtio_blk_init_test.kem 98-102: `blk_cfg_adres` secili ithal
+      edilmeden cagriliyor -> C T002x5 (GERCEK test hatasi, D-739 olcumu). Ithalati ekle, surucu_diff
+      muafiyetini kaldir.
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
       once bu onerilir).
 - [ ] F1b [L] DRF V2: tam-dil kapsami.
@@ -2607,3 +2615,13 @@
   256/256, codegen_diff 194/194, modul_codegen 40/40, kopru 91/91, ASan PASS=128 FAIL=0.
   Ayrica D-737 CI kirmizisi: dogrula.sh 30 sn sinir x86 CI'da asildi (FAT32 testleri) -> 180 sn
   (CHATGPT_ZAMAN_ASIMI); performans E4c.
+- 2026-11-07 D-739: CODEX DALGASI 3 (PR #176-#181, ozet #182; 4 sa, 75 dk on kosul bekleyisi dahil).
+  C001 self T024 (C kurali korundu, etki 0 dosya) · C007 C'de islev ADLARI eski sirada, IMZALAR tum
+  modul tipleri kurulduktan sonra 2. geciste (gölgeleme/cakisma korunur; sira bagimliligi kalkti;
+  CLAUDE NULL-imza penceresini sabit/kuresel/modul/generic baslatici ile ayrica olctu: cokme yok) ·
+  self checker yerlesik imza yakalamasi kapandi · YETKI ODUNC (D2b-e): `&yetki<R>` cagri sureli,
+  CP006 (tasarim belgesi birebir; 18 check_korpus fiksturu, her kacis yolu ayri) + C/self codegen +
+  virtio gocu · FAT32 self-host 14,8->2,1 / 13,0->1,5 sn (kok E4e) · dalga 1 dolanmalari temizlendi.
+  Entegrasyon: tek cakisma (iki PR ayni noktaya ayri fonksiyon) ikisi korunarak cozuldu. test_tumu
+  rc=0, FIXPOINT, checker_diff 297/297 (0 muaf), codegen_diff 195/195, modul_codegen 55/55,
+  surucu_diff 17/17, kopru 91/91, ASan PASS=128 FAIL=0.
