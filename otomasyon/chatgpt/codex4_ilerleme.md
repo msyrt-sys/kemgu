@@ -6,3 +6,4 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - VARSAYIM: Görev 4’ün açık kapsamı ve `codex/surucu-dalga4` dalı, genel AGENTS sürücü dalı kuralının bu görevdeki özel karşılığıdır.
 - [x] A0 · 8 mevcut test · C/self T002×5 → temiz · kapasite +1 sabotajı → çalışma zamanı kırmızı · köprü 91/91 · 2026-11-07T06:14:15.988212+00:00
 - [x] A1 · 2 test / tüm 9 istek varyantı · kısa DMA yanıtı sabotajı → kırmızı · self 0,002 sn · köprü 92/92 · 2026-11-07T06:16:39.096794+00:00
+- [x] A2 · 3 test · BE bayt sırası sabotajı → kırmızı · self 0,002 sn · köprü 93/93 · 2026-11-07T06:19:00.045899+00:00
