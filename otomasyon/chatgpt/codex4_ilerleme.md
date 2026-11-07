@@ -17,3 +17,4 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - VARSAYIM B4: tek etkin istek, 2–64 yuva; çağıranın ayırdığı 86016 bayt bitişik DMA alanı; sayfa 4 KiB, veri tamponu 64 KiB; CAP.TO=0 için 500 ms. Metadata içeren LBA açık hata verir.
 - [x] B5 · 2 test / GPT→FAT32 dosya oku-yaz-flush-yeniden oku + 6 hata · CID denetimi sabotajı → kırmızı · self 0,365 sn · köprü 99/99 · 2026-11-07T06:46:12.235022+00:00
 - [x] C1 · 3 test · IPM denetimi sabotajı → kırmızı · self 0,002 sn · köprü 100/100 · 2026-11-07T06:49:57.095767+00:00
+- [x] C2 · 3 test · DBC bayt−1 sabotajı → kırmızı · self 0,002 sn · köprü 101/101 · 2026-11-07T06:53:44.768116+00:00

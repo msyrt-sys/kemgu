@@ -1,0 +1,25 @@
+// Kâhin: python3 tools/codex/dalga4_ata_kimlik.py; Linux ata_id_logical_sector_size.
+kullan drivers::ahci::ata_kimlik::{ AtaKimlik, ata_kimlik_coz };
+kullan tests::drivers::ahci::kimlik_fikstur::{ ata_ornek };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32, yaz_le64 };
+işlev test_kimlik() -> mantıksal {
+    eşleş ata_kimlik_coz(ata_ornek()) { hata(e) => { ver yanlış; } tamam(k) => { ver metin_esit(k.seri,"SN-AHCI-01") ve metin_esit(k.model,"AHCI DISK") ve k.lba48 ve k.blok_sayisi == 1250999896491 ve k.blok_bayt == 512; } }
+}
+işlev test_uzun_blok() -> mantıksal {
+    değişken b: Dizi<dtam8> = ata_ornek(); yaz_le16(b,212,20480); yaz_le32(b,234,2048);
+    eşleş ata_kimlik_coz(b) { hata(e) => { ver yanlış; } tamam(k) => { eğer k.blok_bayt != 4096 { ver yanlış; } } }
+    yaz_le16(b,212,0); yaz_le32(b,234,1);
+    eşleş ata_kimlik_coz(b) { hata(e) => { ver yanlış; } tamam(k) => { ver k.blok_bayt == 512; } }
+}
+işlev test_olumsuz() -> mantıksal {
+    eşleş ata_kimlik_coz(bayt_sifir(511)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    değişken b: Dizi<dtam8> = ata_ornek(); yaz_le16(b,166,16384);
+    eşleş ata_kimlik_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    b=ata_ornek(); yaz_le64(b,200,0);
+    eşleş ata_kimlik_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    b=ata_ornek(); yaz_le16(b,212,20480); yaz_le32(b,234,128);
+    eşleş ata_kimlik_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    b=ata_ornek(); yaz_u8(b,20,255);
+    eşleş ata_kimlik_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_kimlik() { h=h+1; } eğer değil test_uzun_blok() { h=h+1; } eğer değil test_olumsuz() { h=h+1; } ver h; }

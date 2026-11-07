@@ -1,0 +1,22 @@
+// ATA IDENTIFY: ASCII her 16 bit kelimede ters bayt sırasındadır.
+// Kaynak/hesap: tools/codex/dalga4_ata_kimlik.py; Linux include/linux/ata.h.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32, oku_le64 };
+genel yapı AtaKimlik { seri: metin; model: metin; lba48: mantıksal; blok_sayisi: tam64; blok_bayt: tam64; }
+işlev ata_metin(b: Dizi<dtam8>, kelime: tam32, boy: tam32) -> sonuç<metin,metin> {
+    değişken s: metin = ""; değişken son: tam32 = boy;
+    iken son > 0 ve oku_u8(b,kelime*2+((son-1)^1)) == 32 { son=son-1; }
+    değişken i: tam32 = 0;
+    iken i < son { değişken k: tam32 = oku_u8(b,kelime*2+(i^1)); eğer k < 32 veya k > 126 { ver hata("ata ascii"); } s=metin_birlestir(s,kod_metin(k)); i=i+1; }
+    ver tamam(s);
+}
+genel işlev ata_kimlik_coz(b: Dizi<dtam8>) -> sonuç<AtaKimlik,metin> {
+    eğer dizi_boyut(b) != 512 { ver hata("ata identify boyu"); }
+    değişken destek: tam32 = oku_le16(b,166); değişken sayi: tam64 = oku_le64(b,200);
+    eğer (destek&49152) != 16384 veya (destek&1024) == 0 veya sayi <= 0 veya sayi > 281474976710656 { ver hata("ata lba48 destegi"); }
+    değişken blok: tam64 = 512;
+    eğer (oku_le16(b,212)&53248) == 20480 { değişken kelime: tam64 = oku_le32(b,234); eğer kelime < 256 { ver hata("ata mantiksal sektor"); } blok=kelime*2; }
+    değişken seri: metin = ""; değişken model: metin = "";
+    eşleş ata_metin(b,10,20) { hata(e) => { ver hata(e); } tamam(v) => { seri=v; } }
+    eşleş ata_metin(b,27,40) { hata(e) => { ver hata(e); } tamam(v) => { model=v; } }
+    ver tamam(AtaKimlik { seri: seri, model: model, lba48: doğru, blok_sayisi: sayi, blok_bayt: blok });
+}

@@ -73,3 +73,5 @@ F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
 - H2D FIS tür 0x27/C biti, 48 bit LBA ve count baytları; komut başlığı CFL/W/PRDTL,
   CTBA hizası; PRDT DBC/I ve 4 MiB parçalama. Bunlar sahte modelden bağımsız gerçek
   QEMU AHCI ile ayrıca doğrulanmalıdır; sahte e2e donanım doğrulaması sayılmıyor.
+
+- C2 açıklık: görevde DBC için geçen “çift sayı”, aktarımın bayt sayısıdır. DBC=bayt−1 olduğundan 512 bayt için 511 yazılır; PRDT testi bunu bağımsız Python hesabıyla korur.
