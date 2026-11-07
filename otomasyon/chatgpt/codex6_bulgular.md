@@ -49,3 +49,22 @@ işlev main() -> tam32 {
 `build/{kemgu,codegen} --llvm build/codex6/enum_kuyruk6.kem` + clang/runtime: iki IR/link rc=0. C çıktı68/rc0; self yanlış payload (ölçümde 272412716344864)/rc1. `s.xs=[]` kaldırılınca ikisi68/rc0. Dolanma: `değişken bos: Dizi<GcIstek> = []; s.kuyruk=bos;`. Derleyici değişmedi.
 
 - Gerçek QEMU aktarım halkasında TD sonundaki Link TRB, ardından hazır TD yokken henüz tüketilmemiş olabilir (`xhci_ring_chain_length` yalnız bakar). Link cycle’ını bir sonraki TD ile erken değiştirmek ikinci kontrol aktarımını durdurdu. Enumerasyon EP0 için mevcut 64 TRB üretici halkası kullanıldı; küçük BOT halkasında aynı davranış G3/G6’da ayrıca ölçülecek.
+
+### C6-003 — doğrudan dizi alanı üzerinde için gövdesi atlanıyor
+
+```kem
+yapı S { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken s: S = S { xs: [3,7,11] };
+    değişken toplam: tam32 = 0;
+    için a: s.xs { toplam=toplam+a; }
+    yazdir_tam(toplam);
+    eğer toplam == 21 { ver 0; } ver 1;
+}
+```
+İki derleyici IR/link rc=0; beklenen21 yerine çıktı0/run rc=1. Dolanma: dizi alanını tipli yerel değişkene alıp onun üzerinde `için`, veya indeksli `iken`. Dil kartının `için` örneği yerel dizi kullanır; alan biçimi sessizce kabul edildiği için kaydedildi. Derleyiciye dokunulmadı.
+
+## G2 gerçek aygıt kimlikleri
+
+- C ve self ölçümü aynı: port1/slot1 hız4, VID 18164 (0x46f4), PID1, sınıf8/alt6/protokol80; uç129 bulk IN ve uç2 bulk OUT, paket1024. Port6/slot2 hız3, VID1575 (0x0627), PID1, sınıf3/alt1/protokol1; uç129 interrupt IN, paket8, bInterval7. `tests/qemu/xhci_qtest.kem` bunları ve QEMU’nun çıkış bağlamındaki Configured/Running, endpoint type/MPS alanlarını doğrular.
+- Yerel `/usr/share/hwdata/usb.ids` yok. QEMU v8.2.2 `hw/usb/dev-storage.c` ve `hw/usb/dev-hid.c` ile karşılaştırıldı; Python sabit doğrulayıcı SHA256 ve Unicode/qcode/USB istek sabitlerini kaydeder. Kaynaklar: https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-storage.c ve https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-hid.c .
