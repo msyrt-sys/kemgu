@@ -69,7 +69,11 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
         s.adim=6; ver GcIstek::Oku32(256+(s.aranan olarak tam64)*128+36);
     }
     eğer s.adim == 6 {
-        eğer y.deger == 257 { dizi_ekle(s.portlar,s.aranan); eğer s.port < 0 ve (s.secim < 0 veya s.secim == s.aranan) { s.port=s.aranan; } }
+        // [D-742] İmza (PxSIG) aygıtın ilk D2H FIS'iyle güncellenir; o FIS ancak FIS
+        // alımı (PxFB + PxCMD.FRE) açılınca gelir. Taramada henüz 0xFFFFFFFF olabilir
+        // (gerçek QEMU ICH9 AHCI'de ÖLÇÜLDÜ: SSTS=0x113, SIG=0xFFFFFFFF). Böyle port
+        // ADAY sayılır; SATA olduğu FRE sonrası adım 26-28'de doğrulanır.
+        eğer y.deger == 257 veya y.deger == 4294967295 { dizi_ekle(s.portlar,s.aranan); eğer s.port < 0 ve (s.secim < 0 veya s.secim == s.aranan) { s.port=s.aranan; } }
         s.aranan=s.aranan+1; ver tara(s);
     }
     eğer s.adim == 7 { s.cmd=y.deger&4294967294; s.adim=8; ver GcIstek::Yaz32(p(s,24),s.cmd); }
@@ -87,7 +91,16 @@ genel işlev ahci_adim(s: &değişken AhciDurum, y: GcYanit) -> GcIstek {
     eğer s.adim == 21 { s.adim=22; ver GcIstek::Yaz32(p(s,48),4294967295); }
     eğer s.adim == 22 { s.adim=23; ver GcIstek::Yaz32(p(s,16),4294967295); }
     eğer s.adim == 23 { s.adim=24; ver GcIstek::Yaz32(p(s,20),0); }
-    eğer s.adim == 24 { s.adim=25; ver GcIstek::Yaz32(p(s,24),s.cmd|17); }
+    eğer s.adim == 24 { s.adim=26; ver GcIstek::Yaz32(p(s,24),s.cmd|17); }
+    // [D-742] FRE+ST sonrası imzayı sınırlı yokla: 0xFFFFFFFF = henüz gelmedi.
+    eğer s.adim == 26 veya s.adim == 28 { eğer s.adim == 26 { s.beklenen=0; } s.adim=27; ver GcIstek::Oku32(p(s,36)); }
+    eğer s.adim == 27 {
+        eğer y.deger == 4294967295 { ver ahci_bekle(s,28); }
+        // Aday ATAPI/başka imza çıktıysa kullanıcı açısından "SATA disk yok" ile aynıdır
+        // (taramadaki mesajla AYNI — imza artık taramada bilinemiyor).
+        eğer y.deger != 257 { ver hata_ver(s,"ahci sata aygiti yok"); }
+        ver komut_baslat(s);
+    }
     eğer s.adim == 25 veya s.adim == 29 { ver komut_baslat(s); }
     eğer s.adim == 30 {
         eğer ahci_tfd_hata(y.deger) { ver hata_ver(s,"ahci tfd err"); }

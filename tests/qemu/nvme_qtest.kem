@@ -5,8 +5,7 @@
 // Yazma deseni (bu program yazar, harness doğrular): LBA 200.. bayt j = (j * 31 + 11) & 255.
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni, nvme_adim, nvme_oku, nvme_yaz, nvme_flush };
 kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
-kullan drivers::pci::yapilandirma::{ PciAygit, pci_coz };
-kullan tests::qemu::qtest::{ Qt, qt_ac, qt_kapat, qt_pci_oku32, qt_pci_yaz32, qt_pci_baslik, qt_yurut };
+kullan tests::qemu::qtest::{ Qt, qt_ac, qt_kapat, qt_pci_bul, qt_pci_bar_ata, qt_desen, qt_yurut };
 
 sabit BAR0_TABANI: tam64 = 4273930240;   // 0xFEBF0000 — firmware yok, BAR'ı biz atıyoruz
 sabit DMA_TABANI: tam64 = 1048576;       // 1 MiB — misafir RAM'i, sayfa hizalı
@@ -29,50 +28,10 @@ işlev sur(q: &değişken Qt, s: &değişken NvmeDurum) -> sonuç<mantıksal, me
     ver hata("adim siniri");
 }
 
-// Veriyolu 0'da sınıf 01/08/02 (NVMe) aygıtı ara.
-işlev nvme_bul(q: &değişken Qt) -> sonuç<tam32, metin> {
-    değişken a: tam32 = 0;
-    iken a < 32 {
-        eşleş qt_pci_oku32(q, a, 0) {
-            hata(e) => { ver hata(e); }
-            tamam(v) => {
-                eğer (v & 65535) != 65535 {
-                    eşleş qt_pci_baslik(q, a) {
-                        hata(e) => { ver hata(e); }
-                        tamam(b) => {
-                            eşleş pci_coz(b) {
-                                hiç => { }
-                                değer(p) => {
-                                    eğer p.sinif == 1 ve p.alt_sinif == 8 ve p.prog_if == 2 { ver tamam(a); }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        a = a + 1;
-    }
-    ver hata("NVMe aygiti bulunamadi");
-}
-
-işlev beklenen(s: tam64, j: tam32) -> tam32 {
-    ver (((s * 7) olarak tam32) + j * 13 + 5) & 255;
-}
-
 işlev calis(q: &değişken Qt) -> sonuç<metin, metin> {
     değişken aygit: tam32 = 0;
-    eşleş nvme_bul(q) { hata(e) => { ver hata(e); } tamam(a) => { aygit = a; } }
-    // BAR0 (64 bit bellek BAR'ı) ata, komut yazmacında bellek + veriyolu yöneticisi aç.
-    eşleş qt_pci_yaz32(q, aygit, 16, BAR0_TABANI) { hata(e) => { ver hata(e); } tamam(x) => { } }
-    eşleş qt_pci_yaz32(q, aygit, 20, 0) { hata(e) => { ver hata(e); } tamam(x) => { } }
-    eşleş qt_pci_oku32(q, aygit, 4) {
-        hata(e) => { ver hata(e); }
-        tamam(k) => {
-            eşleş qt_pci_yaz32(q, aygit, 4, (k & 4294901760) | (k & 65535) | 6) { hata(e) => { ver hata(e); } tamam(x) => { } }
-        }
-    }
-
+    eşleş qt_pci_bul(q, 1, 8, 2) { hata(e) => { ver hata(e); } tamam(a) => { aygit = a; } }
+    eşleş qt_pci_bar_ata(q, aygit, 16, BAR0_TABANI, doğru) { hata(e) => { ver hata(e); } tamam(x) => { } }
     eşleş nvme_yeni(DMA_TABANI, 16) {
         hata(e) => { ver hata(e); }
         tamam(d) => { değişken s: NvmeDurum = d; ver akis(q, &değişken s); }
@@ -88,7 +47,7 @@ işlev akis(q: &değişken Qt, s: &değişken NvmeDurum) -> sonuç<metin, metin>
     eğer dizi_boyut(s.sonuc) != 8 * 512 { ver hata("okuma boyu"); }
     değişken i: tam32 = 0;
     iken i < 8 * 512 {
-        eğer (dizi_al(s.sonuc, i) olarak tam32) != beklenen((i / 512) olarak tam64, i % 512) {
+        eğer (dizi_al(s.sonuc, i) olarak tam32) != qt_desen((i / 512) olarak tam64, i % 512) {
             ver hata(metin_birlestir("okuma deseni bozuk, bayt ", tam_metin(i olarak tam64)));
         }
         i = i + 1;

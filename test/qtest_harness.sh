@@ -28,6 +28,8 @@ trap temizle EXIT
 case "$AYGIT" in
   nvme) PROG=tests/qemu/nvme_qtest.kem
         AYGIT_ARG=(-drive "file=$W/disk.img,if=none,id=d0,format=raw" -device nvme,drive=d0,serial=kemgu01) ;;
+  ahci) PROG=tests/qemu/ahci_qtest.kem      # q35 dahili ICH9 AHCI (00:1f.2), port 0
+        AYGIT_ARG=(-drive "file=$W/disk.img,if=none,id=d0,format=raw" -device ide-hd,drive=d0,bus=ide.0) ;;
   *) echo "bilinmeyen aygıt: $AYGIT"; exit 2 ;;
 esac
 
@@ -60,7 +62,7 @@ PY
   timeout 120 "$W/$d" "$PORT" > "$W/$d.out" 2>&1; rc=$?
   kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QPID=""
   cat "$W/$d.out"
-  if [ $rc -ne 0 ] || ! grep -q "QTEST_NVME OK" "$W/$d.out"; then
+  if [ $rc -ne 0 ] || ! grep -qE "QTEST_[A-Z]+ OK" "$W/$d.out"; then
     echo "  🔴 $d: rc=$rc"; cat "$W/qemu.log" | head -5; hata=1; continue
   fi
   # Bağımsız kâhin: QEMU kapandıktan sonra imajı ana makinede oku.
@@ -75,6 +77,6 @@ for s in list(range(0, 200)) + list(range(209, 260)):   # dokunulmayan alan
         if b[s * 512 + j] != (s * 7 + j * 13 + 5) & 255:
             print(f"  imaj: sektor {s} BOZULDU"); sys.exit(1)
 PY
-  then echo "  ✓ $d: QEMU NVMe gidiş-dönüş + imaj kâhini"; else echo "  🔴 $d: imaj kâhini"; hata=1; fi
+  then echo "  ✓ $d: QEMU $AYGIT gidiş-dönüş + imaj kâhini"; else echo "  🔴 $d: imaj kâhini"; hata=1; fi
 done
 [ $hata -eq 0 ] && echo "=== qtest $AYGIT: C + self-host GEÇTİ (gerçek QEMU aygıtı) ===" || { echo "=== qtest $AYGIT: BAŞARISIZ ==="; exit 2; }
