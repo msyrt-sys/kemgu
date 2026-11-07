@@ -1,6 +1,0 @@
-yapı Sayac { n: tam32; }
-işlev main() -> tam32 {
-    değişken d: Sayac = Sayac { n: 0 };
-    d.n = (-2147483648) olarak tam32;
-    eğer d.n == -2147483648 { ver 0; } ver 1;
-}

@@ -43,8 +43,7 @@ genel işlev fat_girdi(fat: Dizi<dtam8>, kume: tam64) -> FatGirdi {
     ver FatGirdi::Sonraki(v);
 }
 genel işlev zincir(fat: Dizi<dtam8>, ilk: tam64, azami: tam32) -> sonuç<Dizi<tam64>, metin> {
-    // C002: eleman genişliğini açık dizi literaliyle koru.
-    değişken sonuc: Dizi<tam64> = [];
+    değişken sonuc: Dizi<tam64> = dizi_olustur(0);
     değişken k: tam64 = ilk;
     değişken adim: tam32 = 0;
     iken adim < azami {

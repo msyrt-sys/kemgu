@@ -2,7 +2,7 @@
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
-kullan drivers::fs::fat32_oku::{ imajdan_dosya_oku, imaj_dizin_listele };
+kullan drivers::fs::fat32_oku;
 kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_kodla };
 işlev satir_sonu(s: metin) -> metin { ver metin_birlestir(s, kod_metin(10)); }
 işlev hata_metni(e: metin) -> metin {
@@ -21,7 +21,7 @@ genel işlev kabuk_calistir(imaj: Dizi<dtam8>, satir: metin) -> metin {
     eğer metin_esit(komut, "echo") { ver satir_sonu(arg); }
     eğer metin_esit(komut, "ls") {
         eğer metin_uzunluk(arg) == 0 { arg = "/"; }
-        eşleş imaj_dizin_listele(imaj, arg) {
+        eşleş fat32_oku::dizin_listele(imaj, arg) {
             hata(e) => { ver hata_metni(e); }
             tamam(v) => {
                 değişken girdiler: Dizi<DizinGirdisi> = v; değişken s: metin = ""; değişken i: tam32 = 0;
@@ -36,7 +36,7 @@ genel işlev kabuk_calistir(imaj: Dizi<dtam8>, satir: metin) -> metin {
     }
     eğer metin_esit(komut, "cat") {
         eğer metin_uzunluk(arg) == 0 { ver satir_sonu("kullanim: cat /yol"); }
-        eşleş imajdan_dosya_oku(imaj, arg) {
+        eşleş fat32_oku::dosya_oku(imaj, arg) {
             hata(e) => { ver hata_metni(e); }
             tamam(v) => {
                 değişken b: Dizi<dtam8> = v;

@@ -33,7 +33,7 @@ kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
 kullan drivers::fs::fat32_bicimle;
-kullan drivers::fs::fat32_yaz::{ imajda_dizin_olustur, imaja_dosya_yaz };
+kullan drivers::fs::fat32_yaz;
 kullan drivers::sim::kabuk::{ kabuk_calistir };
 kullan drivers::ekran::konsol::{ Konsol, konsol_yeni, konsol_metin, konsol_satir };
 kullan drivers::ekran::cerceve::{ Cerceve, cerceve_yeni, piksel_oku };
@@ -48,9 +48,9 @@ işlev bitir(s: metin) -> metin { ver metin_birlestir(s, kod_metin(10)); }
 '''
 c={}
 s=f'''    değişken disk: Dizi<dtam8> = imaj_yeni();
-    eşleş imajda_dizin_olustur(disk, "/belgeler") {{ hata(e) => {{ ver yanlış; }} tamam(n) => {{ }} }}
+    eşleş fat32_yaz::dizin_olustur(disk, "/belgeler") {{ hata(e) => {{ ver yanlış; }} tamam(n) => {{ }} }}
     değişken veri: Dizi<dtam8> = ['''+', '.join(str(b)+' olarak dtam8' for b in text.encode())+'''];
-    eşleş imaja_dosya_yaz(disk, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(n) => { } }
+    eşleş fat32_yaz::dosya_yaz(disk, "/belgeler/merhaba.txt", veri) { hata(e) => { ver yanlış; } tamam(n) => { } }
 '''
 s+=f'''    eşleş konsol_yeni(40, 6, {fg}, {bg}) {{ hata(e) => {{ ver yanlış; }} tamam(kv) => {{ değişken k: Konsol = kv;
     değişken kl: KlavyeDurumu = klavye_yeni(); değişken sat: SatirDuzenleyici = satir_yeni();

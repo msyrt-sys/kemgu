@@ -38,8 +38,7 @@ işlev lfn_metin(b: Dizi<dtam8>, birim: tam32) -> metin {
 }
 genel işlev dizin_coz(b: Dizi<dtam8>) -> sonuç<Dizi<DizinGirdisi>, metin> {
     eğer dizi_boyut(b) % 32 != 0 { ver hata("kisa dizin"); }
-    // C002: yapı elemanlarının genişliği boş literalden belirlenir.
-    değişken sonuc: Dizi<DizinGirdisi> = [];
+    değişken sonuc: Dizi<DizinGirdisi> = dizi_olustur(0);
     değişken lfn: Dizi<dtam8> = bayt_sifir(520);
     değişken beklenen: tam32 = 0;
     değişken parca_sayisi: tam32 = 0;

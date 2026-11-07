@@ -1,4 +1,4 @@
-// C005: yapıdan sonraki sabit argümanlarda açık tam64 dönüşümü.
+// Yapı argümanından sonraki tam64 sabitler imzadan çözülür.
 // Hesap: python3 tools/codex/a4.py; struct BPB, (toplam-ayrılmış-FAT)/küme.
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru, FatGirdi, fat_girdi, zincir };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32 };
@@ -34,7 +34,7 @@ işlev test_bpb() -> mantıksal {
         ver b.sektor_bayt == 512 ve b.kume_sektor == 8 ve b.ayrilmis == 32 ve b.fat_sayisi == 2 ve
             b.toplam_sektor == 1048576 ve b.fat_sektor == 1024 ve b.kok_kume == 2 ve b.fsinfo == 1 ve
             b.ilk_veri_sektoru == 2080 ve b.kume_sayisi == 130812 ve
-            kume_sektoru(b, 2 olarak tam64) == 2080 ve kume_sektoru(b, 3 olarak tam64) == 2088;
+            kume_sektoru(b, 2) == 2080 ve kume_sektoru(b, 3) == 2088;
     } }
 }
 

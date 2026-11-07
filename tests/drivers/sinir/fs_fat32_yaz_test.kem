@@ -4,7 +4,7 @@ kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
 kullan drivers::fs::fat32_imaj::{ FatKayit, DizinResmi, imaj_bpb, imaj_fat_yaz };
 kullan drivers::fs::fat32_bicimle;
-kullan drivers::fs::fat32_yaz::{ imaja_dosya_yaz, imajda_dizin_olustur };
+kullan drivers::fs::fat32_yaz;
 kullan drivers::fs::fat32_onar::{ Fat32Sayim, fsinfo_onar, sahipsiz_kumeler };
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le32, yaz_u8, yaz_le16, yaz_le32 };
 kullan drivers::disk::crc32;
@@ -25,7 +25,7 @@ kullan drivers::fs::fat32_imaj::{ imaj_bul, imaj_zincir };
 
 işlev test_sinir_0() -> mantıksal {
     değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(0);
-    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 0 { ver yanlış; } } }
+    eşleş fat32_yaz::dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 0 { ver yanlış; } } }
     eşleş imaj_bpb(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken bp: Fat32Bpb = v;
     eşleş imaj_bul(b,bp,2 olarak tam64,"A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken k: FatKayit = v;
         eğer k.boyut != 0 { ver yanlış; }
@@ -35,7 +35,7 @@ işlev test_sinir_0() -> mantıksal {
 
 işlev test_sinir_1() -> mantıksal {
     değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(1);
-    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 1 { ver yanlış; } } }
+    eşleş fat32_yaz::dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 1 { ver yanlış; } } }
     eşleş imaj_bpb(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken bp: Fat32Bpb = v;
     eşleş imaj_bul(b,bp,2 olarak tam64,"A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken k: FatKayit = v;
         eğer k.boyut != 1 { ver yanlış; }
@@ -45,7 +45,7 @@ işlev test_sinir_1() -> mantıksal {
 
 işlev test_sinir_2() -> mantıksal {
     değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(512);
-    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 512 { ver yanlış; } } }
+    eşleş fat32_yaz::dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 512 { ver yanlış; } } }
     eşleş imaj_bpb(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken bp: Fat32Bpb = v;
     eşleş imaj_bul(b,bp,2 olarak tam64,"A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken k: FatKayit = v;
         eğer k.boyut != 512 { ver yanlış; }
@@ -55,7 +55,7 @@ işlev test_sinir_2() -> mantıksal {
 
 işlev test_sinir_3() -> mantıksal {
     değişken b: Dizi<dtam8> = imaj_yeni(); değişken veri: Dizi<dtam8> = bayt_sifir(513);
-    eşleş imaja_dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 513 { ver yanlış; } } }
+    eşleş fat32_yaz::dosya_yaz(b,"/A.TXT",veri) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 513 { ver yanlış; } } }
     eşleş imaj_bpb(b) { hata(e) => { ver yanlış; } tamam(v) => { değişken bp: Fat32Bpb = v;
     eşleş imaj_bul(b,bp,2 olarak tam64,"A.TXT") { hata(e) => { ver yanlış; } tamam(v) => { değişken k: FatKayit = v;
         eğer k.boyut != 513 { ver yanlış; }

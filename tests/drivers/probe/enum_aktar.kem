@@ -1,6 +1,0 @@
-kullan drivers::ps2::klavye_tr::{ TusOlayi };
-kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_karakter, satir_metni };
-işlev main() -> tam32 {
-    değişken d: SatirDuzenleyici = satir_yeni(); satir_karakter(&değişken d, 65);
-    eğer metin_esit(satir_metni(d), "A") { ver 0; } ver 1;
-}

@@ -3,7 +3,7 @@ import struct
 T=70000;k=1;fat=(T-32+2*k+128*k+1)//(128*k+2);first=32+2*fat;clusters=(T-first)//k
 print('fat',fat,'ilk',first,'kume',clusters,'boy',(first+k)*512,'serial',int.from_bytes(b'KEMG','little'))
 header='''// Hesap: python3 tools/codex/b5.py; kapasite eşitsizliği 128*F >= floor((T-32-2F)/K)+2.
-// C001: modülle aynı adlı API nitelikli çağrılır.
+// C001: seçili ithalat T024 verdiği için modülle aynı adlı API nitelikli çağrılır.
 kullan drivers::fs::fat32_bicimle;
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb, bpb_coz };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };

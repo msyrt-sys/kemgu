@@ -1,7 +1,7 @@
 from yardim import testler
 import struct
 print('imza',int.from_bytes(b'\x55\xaa','little'),'veri',32+2*1024,'küme',(1048576-2080)//8)
-header='''// C005: yapıdan sonraki sabit argümanlarda açık tam64 dönüşümü.
+header='''// Yapı argümanından sonraki tam64 sabitler imzadan çözülür.
 // Hesap: python3 tools/codex/a4.py; struct BPB, (toplam-ayrılmış-FAT)/küme.
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru, FatGirdi, fat_girdi, zincir };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32 };
@@ -32,7 +32,7 @@ cases['bpb']=f'''    eşleş bpb_coz(bpb_verisi()) {{ hata(e) => {{ ver yanlış
         ver b.sektor_bayt == 512 ve b.kume_sektor == 8 ve b.ayrilmis == 32 ve b.fat_sayisi == 2 ve
             b.toplam_sektor == 1048576 ve b.fat_sektor == 1024 ve b.kok_kume == 2 ve b.fsinfo == 1 ve
             b.ilk_veri_sektoru == {32+2*1024} ve b.kume_sayisi == {(1048576-2080)//8} ve
-            kume_sektoru(b, 2 olarak tam64) == 2080 ve kume_sektoru(b, 3 olarak tam64) == {2080+8};
+            kume_sektoru(b, 2) == 2080 ve kume_sektoru(b, 3) == {2080+8};
     }} }}'''
 cases['kisa']='    ver bpb_hatasi(bayt_sifir(511)) == 1;'
 for name,ofs,size,val,code in [('imza',510,16,0,2),('sektor',11,16,513,3),('kume_sifir',13,8,0,4),('kume_uc',13,8,3,4),('kume_buyuk',13,8,255,4),('kok_girdi',17,16,1,5),('fat16',22,16,1,5),('fat_sifir',36,32,0,5),('toplam',32,32,100,5),('ayrilmis',14,16,0,5),('fat_sayisi',16,8,0,5),('kok_kucuk',44,32,1,5),('kok_buyuk',44,32,9999999,5)]:
