@@ -101,3 +101,28 @@ genel işlev yaz_ascii(b: Dizi<dtam8>, ofs: tam32, s: metin) {
         i = i + 1;
     }
 }
+
+// Büyük-endian API kısa/bozuk aralıkta hata döndürür; mevcut LE API değişmez.
+işlev be_oku(b: Dizi<dtam8>, ofs: tam32, n: tam32) -> sonuç<tam64,metin> {
+    eğer değil bayt_sinirda(b,ofs,n) { ver hata("be okuma araligi"); }
+    değişken v: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < n { v = (v << 8) | (oku_u8(b,ofs+i) olarak tam64); i=i+1; }
+    ver tamam(v);
+}
+genel işlev oku_be16(b: Dizi<dtam8>, ofs: tam32) -> sonuç<tam32,metin> {
+    eşleş be_oku(b,ofs,2) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(v olarak tam32); } }
+}
+genel işlev oku_be32(b: Dizi<dtam8>, ofs: tam32) -> sonuç<tam64,metin> { ver be_oku(b,ofs,4); }
+genel işlev oku_be64(b: Dizi<dtam8>, ofs: tam32) -> sonuç<tam64,metin> { ver be_oku(b,ofs,8); }
+işlev be_yaz(b: Dizi<dtam8>, ofs: tam32, v: tam64, n: tam32) -> sonuç<mantıksal,metin> {
+    eğer değil bayt_sinirda(b,ofs,n) { ver hata("be yazma araligi"); }
+    eğer n == 2 ve (v < 0 veya v > 65535) { ver hata("be16 deger araligi"); }
+    eğer n == 4 ve (v < 0 veya v > 4294967295) { ver hata("be32 deger araligi"); }
+    değişken i: tam32 = 0;
+    iken i < n { yaz_u8(b,ofs+i,v >> ((n-1-i)*8)); i=i+1; }
+    ver tamam(doğru);
+}
+genel işlev yaz_be16(b: Dizi<dtam8>, ofs: tam32, v: tam64) -> sonuç<mantıksal,metin> { ver be_yaz(b,ofs,v,2); }
+genel işlev yaz_be32(b: Dizi<dtam8>, ofs: tam32, v: tam64) -> sonuç<mantıksal,metin> { ver be_yaz(b,ofs,v,4); }
+genel işlev yaz_be64(b: Dizi<dtam8>, ofs: tam32, v: tam64) -> sonuç<mantıksal,metin> { ver be_yaz(b,ofs,v,8); }

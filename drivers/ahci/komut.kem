@@ -1,0 +1,48 @@
+// AHCI H2D FIS / komut tablosu. Kâhin: tools/codex/dalga4_ahci_komut.py.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_le16, yaz_le32, yaz_le64 };
+genel yapı AhciKomut { baslik: Dizi<dtam8>; tablo: Dizi<dtam8>; toplam_bayt: tam64; }
+genel işlev ahci_fis_kur(op: tam32, lba: tam64, sayi: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eğer op != 37 ve op != 53 ve op != 236 ve op != 234 { ver hata("ahci islem kodu"); }
+    eğer op == 37 veya op == 53 {
+        eğer lba < 0 veya lba >= 281474976710656 veya sayi < 1 veya sayi > 65536 veya (sayi olarak tam64) > 281474976710656-lba { ver hata("ata lba48 araligi"); }
+    } değilse { eğer lba != 0 veya sayi != 0 { ver hata("ata yonetim alani"); } }
+    değişken b: Dizi<dtam8> = bayt_sifir(20);
+    yaz_u8(b,0,39); yaz_u8(b,1,128); yaz_u8(b,2,op olarak tam64);
+    eğer op == 37 veya op == 53 {
+        yaz_u8(b,7,64); değişken i: tam32 = 0;
+        iken i < 6 { değişken o: tam32 = 4+i; eğer i >= 3 { o=5+i; } yaz_u8(b,o,lba>>(i*8)); i=i+1; }
+        yaz_le16(b,12,(sayi&65535) olarak tam64);
+    }
+    ver tamam(b);
+}
+// DBC=bayt-1; çift olan aktarım uzunluğu, DBC'nin düşük biti 1 olur.
+genel işlev ahci_prdt_kur(adres: tam64, boy: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    eğer boy < 0 veya boy > 16777216 veya boy%2 != 0 veya adres < 0 veya adres%2 != 0 veya boy > 9223372036854775807-adres { ver hata("ahci prdt araligi"); }
+    değişken adet: tam32 = ((boy+4194303)/4194304) olarak tam32;
+    değişken b: Dizi<dtam8> = bayt_sifir(adet*16); değişken i: tam32 = 0; değişken kalan: tam64 = boy; değişken a: tam64 = adres;
+    iken i < adet {
+        değişken al: tam64 = kalan; eğer al > 4194304 { al=4194304; }
+        yaz_le64(b,i*16,a); değişken dbc: tam64 = al-1;
+        eğer i == adet-1 { dbc=dbc|2147483648; }
+        yaz_le32(b,i*16+12,dbc); a=a+al; kalan=kalan-al; i=i+1;
+    }
+    ver tamam(b);
+}
+genel işlev ahci_baslik_kur(ctba: tam64, prdtl: tam32, yaz: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    eğer ctba <= 0 veya ctba%128 != 0 veya prdtl < 0 veya prdtl > 65535 { ver hata("ahci baslik alani"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(32); değişken bayrak: tam64 = 5|((prdtl olarak tam64)<<16);
+    eğer yaz { bayrak=bayrak|64; }
+    yaz_le32(b,0,bayrak); yaz_le64(b,8,ctba); ver tamam(b);
+}
+genel işlev ahci_komut_kur(op: tam32, lba: tam64, sayi: tam32, blok: tam32, adres: tam64, ctba: tam64) -> sonuç<AhciKomut,metin> {
+    eğer blok < 512 veya blok > 65536 veya (blok&(blok-1)) != 0 { ver hata("ahci blok boyu"); }
+    değişken fis: Dizi<dtam8> = []; değişken prdt: Dizi<dtam8> = []; değişken baslik: Dizi<dtam8> = [];
+    eşleş ahci_fis_kur(op,lba,sayi) { hata(e) => { ver hata(e); } tamam(v) => { fis=v; } }
+    değişken boy: tam64 = (sayi olarak tam64)*(blok olarak tam64); eğer op == 236 { boy=512; } eğer op == 234 { boy=0; }
+    eşleş ahci_prdt_kur(adres,boy) { hata(e) => { ver hata(e); } tamam(v) => { prdt=v; } }
+    eşleş ahci_baslik_kur(ctba,dizi_boyut(prdt)/16,op == 53) { hata(e) => { ver hata(e); } tamam(v) => { baslik=v; } }
+    değişken tablo: Dizi<dtam8> = bayt_sifir(128+dizi_boyut(prdt)); değişken i: tam32 = 0;
+    iken i < 20 { yaz_u8(tablo,i,oku_u8(fis,i) olarak tam64); i=i+1; }
+    i=0; iken i < dizi_boyut(prdt) { yaz_u8(tablo,128+i,oku_u8(prdt,i) olarak tam64); i=i+1; }
+    ver tamam(AhciKomut { baslik: baslik, tablo: tablo, toplam_bayt: boy });
+}

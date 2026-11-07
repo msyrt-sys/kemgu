@@ -1,0 +1,116 @@
+// Kâhin: python3 tools/codex/dalga4_depolama.py (zlib.crc32, uuid.bytes_le, struct).
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+genel işlev gpt_on_ek() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(17408);
+    yaz_u8(b,450,238);
+    yaz_u8(b,454,1);
+    yaz_u8(b,458,127);
+    yaz_u8(b,459,56);
+    yaz_u8(b,460,1);
+    yaz_u8(b,510,85);
+    yaz_u8(b,511,170);
+    yaz_u8(b,512,69);
+    yaz_u8(b,513,70);
+    yaz_u8(b,514,73);
+    yaz_u8(b,515,32);
+    yaz_u8(b,516,80);
+    yaz_u8(b,517,65);
+    yaz_u8(b,518,82);
+    yaz_u8(b,519,84);
+    yaz_u8(b,522,1);
+    yaz_u8(b,524,92);
+    yaz_u8(b,528,7);
+    yaz_u8(b,529,45);
+    yaz_u8(b,530,102);
+    yaz_u8(b,531,84);
+    yaz_u8(b,536,1);
+    yaz_u8(b,544,127);
+    yaz_u8(b,545,56);
+    yaz_u8(b,546,1);
+    yaz_u8(b,552,34);
+    yaz_u8(b,560,94);
+    yaz_u8(b,561,56);
+    yaz_u8(b,562,1);
+    yaz_u8(b,568,120);
+    yaz_u8(b,569,86);
+    yaz_u8(b,570,52);
+    yaz_u8(b,571,18);
+    yaz_u8(b,572,52);
+    yaz_u8(b,573,18);
+    yaz_u8(b,574,120);
+    yaz_u8(b,575,86);
+    yaz_u8(b,576,154);
+    yaz_u8(b,577,188);
+    yaz_u8(b,578,222);
+    yaz_u8(b,579,240);
+    yaz_u8(b,580,18);
+    yaz_u8(b,581,52);
+    yaz_u8(b,582,86);
+    yaz_u8(b,583,120);
+    yaz_u8(b,584,2);
+    yaz_u8(b,592,128);
+    yaz_u8(b,596,128);
+    yaz_u8(b,600,213);
+    yaz_u8(b,601,95);
+    yaz_u8(b,602,224);
+    yaz_u8(b,603,32);
+    yaz_u8(b,1024,162);
+    yaz_u8(b,1025,160);
+    yaz_u8(b,1026,208);
+    yaz_u8(b,1027,235);
+    yaz_u8(b,1028,229);
+    yaz_u8(b,1029,185);
+    yaz_u8(b,1030,51);
+    yaz_u8(b,1031,68);
+    yaz_u8(b,1032,135);
+    yaz_u8(b,1033,192);
+    yaz_u8(b,1034,104);
+    yaz_u8(b,1035,182);
+    yaz_u8(b,1036,183);
+    yaz_u8(b,1037,38);
+    yaz_u8(b,1038,153);
+    yaz_u8(b,1039,199);
+    yaz_u8(b,1040,137);
+    yaz_u8(b,1041,103);
+    yaz_u8(b,1042,69);
+    yaz_u8(b,1043,35);
+    yaz_u8(b,1044,52);
+    yaz_u8(b,1045,18);
+    yaz_u8(b,1046,120);
+    yaz_u8(b,1047,86);
+    yaz_u8(b,1048,154);
+    yaz_u8(b,1049,188);
+    yaz_u8(b,1050,222);
+    yaz_u8(b,1051,240);
+    yaz_u8(b,1052,18);
+    yaz_u8(b,1053,52);
+    yaz_u8(b,1054,86);
+    yaz_u8(b,1055,120);
+    yaz_u8(b,1056,34);
+    yaz_u8(b,1064,145);
+    yaz_u8(b,1065,17);
+    yaz_u8(b,1066,1);
+    yaz_u8(b,1080,86);
+    yaz_u8(b,1082,69);
+    yaz_u8(b,1084,82);
+    yaz_u8(b,1086,73);
+    ver b;
+}
+genel işlev depolama_verisi(n: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(n); değişken i: tam32 = 0;
+    iken i < n { yaz_u8(b,i,((i*29+7)&255) olarak tam64); i=i+1; } ver b;
+}
+genel işlev depolama_ornek() -> sonuç<Dizi<dtam8>,metin> {
+    değişken fat: Dizi<dtam8> = [];
+    eşleş fat32_bicimle::fat32_bicimle(70000,1,"") { hata(e) => { ver hata(e); } tamam(v) => { fat=v; } }
+    değişken once: Dizi<dtam8> = [111 olarak dtam8,110 olarak dtam8,99 olarak dtam8,101 olarak dtam8];
+    eşleş fat32_yaz::dosya_yaz(fat,"/KAYIT.TXT",once) { hata(e) => { ver hata(e); } tamam(v) => { eğer v != 4 { ver hata("fikstur yazimi"); } } }
+    değişken b: Dizi<dtam8> = gpt_on_ek(); değişken i: tam32 = 0;
+    iken i < dizi_boyut(fat) { dizi_ekle(b,dizi_al(fat,i)); i=i+1; }
+    ver tamam(b);
+}

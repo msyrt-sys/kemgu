@@ -1,0 +1,61 @@
+// Kâhin: python3 tools/codex/dalga4_mb2.py (struct.pack, ACPI sağlama, hizalama).
+kullan tests::drivers::acilis::mb2_fikstur::{ mb2_ornek };
+kullan drivers::acilis::multiboot2::{ AcilisBellek, AcilisRsdp, AcilisBilgi, AcilisModulu, AcilisEkrani, KomutSecenegi, multiboot2_coz, komut_satiri_coz, kok_seri_coz };
+kullan drivers::bellek::harita::{ BellekBolgesi };
+kullan drivers::acpi::tablo::{ Rsdp };
+kullan drivers::ortak::bayt::{ yaz_le32 };
+işlev reddet(b: Dizi<dtam8>) -> mantıksal { eşleş multiboot2_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } } }
+işlev test_tam() -> mantıksal {
+    eşleş multiboot2_coz(mb2_ornek()) {
+        hata(e) => { yazdir_metin(e); ver yanlış; }
+        tamam(b) => {
+            eğer değil metin_esit(b.acici,"GRUB") veya b.alt_bellek != 640 veya b.ust_bellek != 1048576 { ver yanlış; }
+            eğer dizi_boyut(b.moduller) != 1 veya dizi_boyut(b.harita) != 1 { ver yanlış; }
+            değişken m: AcilisModulu = dizi_al(b.moduller,0);
+            eğer m.baslangic != 1048576 veya m.bitis != 1179648 veya değil metin_esit(m.ad,"ramdisk") { ver yanlış; }
+            değişken h: AcilisBellek = dizi_al(b.harita,0);
+            eğer h.taban != 1048576 veya h.uzunluk != 4194304 veya h.tur != 1 { ver yanlış; }
+            eşleş b.ekran { hiç => { ver yanlış; } değer(e) => { eğer e.adres != 4294967296 veya e.genislik != 1024 veya e.yukseklik != 768 veya e.adim != 4096 veya e.bpp != 32 veya dizi_al(e.renk,0) != 16 { ver yanlış; } } }
+            eşleş b.acpi { hiç => { ver yanlış; } değer(a) => { eğer a.revizyon != 2 veya a.xsdt != 4886718345 { ver yanlış; } } }
+            eşleş b.kok { hiç => { ver yanlış; } değer(k) => { ver k == 439041101; } }
+        }
+    }
+}
+işlev test_kisa() -> mantıksal {
+    değişken tam: Dizi<dtam8> = mb2_ornek(); değişken b: Dizi<dtam8> = [];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(tam) { eğer değil reddet(b) { ver yanlış; } dizi_ekle(b,dizi_al(tam,i)); i=i+1; }
+    ver doğru;
+}
+işlev test_bozuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = [];
+    b=mb2_ornek(); yaz_le32(b,4,1); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,0,7); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,12,0); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,84,0); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,120,20); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,184,40); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,240,1); eğer değil reddet(b) { ver yanlış; }
+    b=mb2_ornek(); yaz_le32(b,288,1); eğer değil reddet(b) { ver yanlış; }
+    ver doğru;
+}
+işlev test_komut() -> mantıksal {
+    eşleş komut_satiri_coz("kok=1A2B-3C4D sessiz hata=ayikla") {
+        hata(e) => { ver yanlış; }
+        tamam(xs) => { eğer dizi_boyut(xs) != 3 { ver yanlış; } değişken x: KomutSecenegi = dizi_al(xs,1); eğer değil metin_esit(x.anahtar,"sessiz") veya değil metin_esit(x.deger,"") { ver yanlış; } }
+    }
+    eşleş kok_seri_coz("1a2b3c4d") { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 439041101 { ver yanlış; } } }
+    eşleş komut_satiri_coz("kok=GGGG0000") { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş komut_satiri_coz("kok=12345678 kok=12345678") { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş komut_satiri_coz("=x") { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş kok_seri_coz("1-2-3-4-5-6-7-8") { tamam(v) => { ver yanlış; } hata(e) => { } }
+    ver doğru;
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_tam() { yazdir_metin("tam"); h=h+1; }
+    eğer değil test_kisa() { yazdir_metin("kisa"); h=h+1; }
+    eğer değil test_bozuk() { yazdir_metin("bozuk"); h=h+1; }
+    eğer değil test_komut() { yazdir_metin("komut"); h=h+1; }
+    ver h;
+}

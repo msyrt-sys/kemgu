@@ -1,0 +1,12 @@
+// signed int8 ve Y tersi: tools/codex/dalga4_hid.py.
+kullan drivers::usb::hid_fare::{ hid_fare_rapor };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+işlev main() -> tam32 {
+    değişken ham: Dizi<tam32> = [0,1,127,128,255]; değişken bek: Dizi<tam32> = [0,1,127,-128,-1]; değişken i: tam32 = 0;
+    iken i < 5 {
+        değişken b: Dizi<dtam8> = bayt_sifir(4); yaz_u8(b,0,7); yaz_u8(b,1,dizi_al(ham,i) olarak tam64); yaz_u8(b,2,dizi_al(ham,i) olarak tam64); yaz_u8(b,3,dizi_al(ham,i) olarak tam64);
+        eşleş hid_fare_rapor(b) { hata(e) => { ver 1; } tamam(o) => { eğer o.dx != dizi_al(bek,i) veya o.dy != -dizi_al(bek,i) veya o.dz != dizi_al(bek,i) veya değil o.sol veya değil o.sag veya değil o.orta { ver 2; } } } i=i+1;
+    }
+    eşleş hid_fare_rapor(bayt_sifir(3)) { hata(e) => { ver 3; } tamam(o) => { eğer o.dz != 0 veya o.sol veya o.sag veya o.orta { ver 4; } } }
+    i=0; iken i < 8 { eğer i != 3 ve i != 4 { eşleş hid_fare_rapor(bayt_sifir(i)) { tamam(v) => { ver 5; } hata(e) => { } } } i=i+1; } ver 0;
+}

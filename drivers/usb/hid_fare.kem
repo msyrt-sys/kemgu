@@ -1,0 +1,9 @@
+// Boot fare: HID aşağı-pozitif Y, mevcut FareOlayi yukarı-pozitif Y.
+kullan drivers::ps2::fare::{ FareOlayi };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev isaretli(b: tam32) -> tam32 { eğer b >= 128 { ver b-256; } ver b; }
+genel işlev hid_fare_rapor(b: Dizi<dtam8>) -> sonuç<FareOlayi,metin> {
+    değişken n: tam32 = dizi_boyut(b); eğer n != 3 ve n != 4 { ver hata("hid fare rapor boyu"); }
+    değişken dugme: tam32 = oku_u8(b,0); değişken z: tam32 = 0; eğer n == 4 { z=isaretli(oku_u8(b,3)); }
+    ver tamam(FareOlayi { dx: isaretli(oku_u8(b,1)), dy: -isaretli(oku_u8(b,2)), dz: z, sol: (dugme&1) != 0, sag: (dugme&2) != 0, orta: (dugme&4) != 0 });
+}

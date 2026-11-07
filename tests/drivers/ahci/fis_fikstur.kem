@@ -1,0 +1,2 @@
+// Kâhin: python3 tools/codex/dalga4_ahci_komut.py
+genel işlev fis_ornek() -> Dizi<dtam8> { değişken b: Dizi<dtam8> = [39 olarak dtam8,128 olarak dtam8,37 olarak dtam8,0 olarak dtam8,188 olarak dtam8,154 olarak dtam8,120 olarak dtam8,64 olarak dtam8,86 olarak dtam8,52 olarak dtam8,18 olarak dtam8,0 olarak dtam8,52 olarak dtam8,18 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8]; ver b; }

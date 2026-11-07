@@ -1,0 +1,80 @@
+// Python üretimi: dalga4_sinir.py. Protokol hizalama/genişlik/sınır tablosu.
+kullan drivers::nvme::komut::{ NvmePrp, PrpSayfa, nvme_prp_kur } olarak nk;
+kullan drivers::ahci::komut::{ ahci_fis_kur, ahci_prdt_kur } olarak ak;
+kullan drivers::usb::depo::{ scsi_rw10, UsbDepo, usb_depo_yeni };
+kullan drivers::usb::xhci_trb::{ xhci_normal, xhci_slot_baglam, xhci_uc_baglam };
+kullan drivers::usb::tanim::{ usb_setup };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_be16, oku_be32, oku_be64, yaz_be16, yaz_be32, yaz_be64 };
+işlev prp(a: tam64, n: tam64, p: tam32, l: tam64) -> mantıksal { eşleş nvme_prp_kur(a,n,p,l) { tamam(v) => { ver doğru; } hata(e) => { ver yanlış; } } }
+işlev fis(l: tam64, n: tam32) -> mantıksal { eşleş ahci_fis_kur(37,l,n) { tamam(v) => { ver doğru; } hata(e) => { ver yanlış; } } }
+işlev scsi(l: tam64, n: tam32) -> mantıksal { eşleş scsi_rw10(yanlış,l,n) { tamam(v) => { ver doğru; } hata(e) => { ver yanlış; } } }
+işlev normal(a: tam64, n: tam32) -> mantıksal { eşleş xhci_normal(a,n,doğru,doğru) { tamam(v) => { ver doğru; } hata(e) => { ver yanlış; } } }
+işlev paket(a: tam32, v: tam32) -> mantıksal { eşleş usb_setup(a,1,v,0,0) { tamam(b) => { ver doğru; } hata(e) => { ver yanlış; } } }
+işlev main() -> tam32 {
+    eğer prp(4096,1,4096,33554432) != doğru { ver 1; }
+    eğer prp(4097,1,4096,33554432) != yanlış { ver 2; }
+    eğer prp(4096,0,4096,33554432) != yanlış { ver 3; }
+    eğer prp(4096,4096,4096,33554432) != doğru { ver 4; }
+    eğer prp(4092,8,4096,33554432) != doğru { ver 5; }
+    eğer prp(4096,16777216,4096,33554432) != doğru { ver 6; }
+    eğer prp(4096,16777217,4096,33554432) != yanlış { ver 7; }
+    eğer prp(4096,1,2048,33554432) != yanlış { ver 8; }
+    eğer prp(4096,1,65536,33554432) != doğru { ver 9; }
+    eğer prp(4096,1,131072,33554432) != yanlış { ver 10; }
+    eğer prp(9223372036854775804,3,4096,33554432) != doğru { ver 11; }
+    eğer prp(9223372036854775804,4,4096,33554432) != yanlış { ver 12; }
+    eğer prp(9223372036854763520,12287,4096,33554432) != doğru { ver 13; }
+    eğer fis(0,0) != yanlış { ver 14; }
+    eğer fis(0,1) != doğru { ver 15; }
+    eğer fis(0,65536) != doğru { ver 16; }
+    eğer fis(0,65537) != yanlış { ver 17; }
+    eğer fis(281474976710655,1) != doğru { ver 18; }
+    eğer fis(281474976710655,2) != yanlış { ver 19; }
+    eğer fis(281474976710656,1) != yanlış { ver 20; }
+    eğer fis(-1,1) != yanlış { ver 21; }
+    eğer scsi(0,0) != yanlış { ver 22; }
+    eğer scsi(0,1) != doğru { ver 23; }
+    eğer scsi(0,65535) != doğru { ver 24; }
+    eğer scsi(0,65536) != yanlış { ver 25; }
+    eğer scsi(4294967295,1) != doğru { ver 26; }
+    eğer scsi(4294967295,2) != yanlış { ver 27; }
+    eğer scsi(4294967296,1) != yanlış { ver 28; }
+    eğer scsi(-1,1) != yanlış { ver 29; }
+    eğer normal(65536,65536) != doğru { ver 30; }
+    eğer normal(65536,65537) != yanlış { ver 31; }
+    eğer normal(131071,1) != doğru { ver 32; }
+    eğer normal(131071,2) != yanlış { ver 33; }
+    eğer normal(9223372036854775806,1) != doğru { ver 34; }
+    eğer normal(9223372036854775806,2) != yanlış { ver 35; }
+    eğer normal(0,1) != doğru { ver 36; }
+    eğer normal(-1,1) != yanlış { ver 37; }
+    eğer normal(65536,0) != yanlış { ver 38; }
+    eğer paket(0,0) != doğru { ver 39; }
+    eğer paket(255,65535) != doğru { ver 40; }
+    eğer paket(256,0) != yanlış { ver 41; }
+    eğer paket(-1,0) != yanlış { ver 42; }
+    eğer paket(0,65536) != yanlış { ver 43; }
+    eğer paket(0,-1) != yanlış { ver 44; }
+    // Hata veren BE yazısı tamponu değiştiremez.
+    değişken b: Dizi<dtam8> = bayt_sifir(8); değişken i: tam32 = 0;
+    eşleş yaz_be64(b,0,81985529216486895) { hata(e) => { ver 50; } tamam(v) => { } }
+    değişken bek: Dizi<tam32> = [1,35,69,103,137,171,205,239];
+    eşleş yaz_be32(b,5,1) { tamam(v) => { ver 51; } hata(e) => { } }
+    eşleş yaz_be16(b,0,65536) { tamam(v) => { ver 52; } hata(e) => { } }
+    eşleş yaz_be32(b,-1,1) { tamam(v) => { ver 53; } hata(e) => { } }
+    eşleş yaz_be32(b,0,4294967296) { tamam(v) => { ver 68; } hata(e) => { } }
+    eşleş yaz_be32(b,0,-1) { tamam(v) => { ver 69; } hata(e) => { } }
+    eşleş yaz_be16(b,0,-1) { tamam(v) => { ver 70; } hata(e) => { } }
+    iken i < 8 { eğer oku_u8(b,i) != dizi_al(bek,i) { ver 54; } i=i+1; }
+    eşleş oku_be16(b,6) { hata(e) => { ver 55; } tamam(v) => { eğer v != 52719 { ver 56; } } }
+    eşleş oku_be32(b,4) { hata(e) => { ver 57; } tamam(v) => { eğer v != 2309737967 { ver 58; } } }
+    eşleş oku_be64(b,0) { hata(e) => { ver 59; } tamam(v) => { eğer v != 81985529216486895 { ver 60; } } }
+    eşleş oku_be64(b,1) { tamam(v) => { ver 61; } hata(e) => { } }
+    eşleş xhci_slot_baglam(64,1048575,15,127,31) { hata(e) => { ver 62; } tamam(v) => { } }
+    eşleş xhci_slot_baglam(64,1048576,15,127,31) { tamam(v) => { ver 63; } hata(e) => { } }
+    eşleş xhci_uc_baglam(32,7,1024,255,15,65536,doğru) { hata(e) => { ver 64; } tamam(v) => { } }
+    eşleş xhci_uc_baglam(32,7,1025,255,15,65536,doğru) { tamam(v) => { ver 65; } hata(e) => { } }
+    eşleş usb_depo_yeni(65536,8196,4152,255,15,143,255) { hata(e) => { ver 66; } tamam(v) => { } }
+    eşleş usb_depo_yeni(65536,8196,4152,256,15,143,255) { tamam(v) => { ver 67; } hata(e) => { } }
+    ver 0;
+}

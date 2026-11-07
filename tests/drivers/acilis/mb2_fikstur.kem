@@ -1,0 +1,24 @@
+// Üretim: python3 tools/codex/dalga4_mb2.py
+genel işlev mb2_ornek() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = [
+        40 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,41 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        107 olarak dtam8,111 olarak dtam8,107 olarak dtam8,61 olarak dtam8,49 olarak dtam8,65 olarak dtam8,50 olarak dtam8,66 olarak dtam8,45 olarak dtam8,51 olarak dtam8,67 olarak dtam8,52 olarak dtam8,68 olarak dtam8,32 olarak dtam8,115 olarak dtam8,101 olarak dtam8,
+        115 olarak dtam8,115 olarak dtam8,105 olarak dtam8,122 olarak dtam8,32 olarak dtam8,104 olarak dtam8,97 olarak dtam8,116 olarak dtam8,97 olarak dtam8,61 olarak dtam8,97 olarak dtam8,121 olarak dtam8,105 olarak dtam8,107 olarak dtam8,108 olarak dtam8,97 olarak dtam8,
+        0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,13 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        71 olarak dtam8,82 olarak dtam8,85 olarak dtam8,66 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,3 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,24 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,18 olarak dtam8,0 olarak dtam8,114 olarak dtam8,97 olarak dtam8,109 olarak dtam8,100 olarak dtam8,105 olarak dtam8,115 olarak dtam8,107 olarak dtam8,0 olarak dtam8,
+        4 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,128 olarak dtam8,2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,0 olarak dtam8,
+        6 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,40 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,24 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,64 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,8 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,38 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,4 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        0 olarak dtam8,3 olarak dtam8,0 olarak dtam8,0 olarak dtam8,32 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,16 olarak dtam8,8 olarak dtam8,8 olarak dtam8,8 olarak dtam8,0 olarak dtam8,8 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        14 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,28 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,82 olarak dtam8,83 olarak dtam8,68 olarak dtam8,32 olarak dtam8,80 olarak dtam8,84 olarak dtam8,82 olarak dtam8,32 olarak dtam8,
+        2 olarak dtam8,75 olarak dtam8,69 olarak dtam8,77 olarak dtam8,71 olarak dtam8,85 olarak dtam8,32 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,52 olarak dtam8,18 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        15 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,44 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,82 olarak dtam8,83 olarak dtam8,68 olarak dtam8,32 olarak dtam8,80 olarak dtam8,84 olarak dtam8,82 olarak dtam8,32 olarak dtam8,
+        0 olarak dtam8,75 olarak dtam8,69 olarak dtam8,77 olarak dtam8,71 olarak dtam8,85 olarak dtam8,32 olarak dtam8,2 olarak dtam8,0 olarak dtam8,0 olarak dtam8,52 olarak dtam8,18 olarak dtam8,36 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        137 olarak dtam8,103 olarak dtam8,69 olarak dtam8,35 olarak dtam8,1 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,131 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        231 olarak dtam8,3 olarak dtam8,0 olarak dtam8,0 olarak dtam8,11 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,97 olarak dtam8,98 olarak dtam8,99 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,
+        0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8,8 olarak dtam8,0 olarak dtam8,0 olarak dtam8,0 olarak dtam8
+    ]; ver b;
+}

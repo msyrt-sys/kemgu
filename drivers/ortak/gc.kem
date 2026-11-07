@@ -1,0 +1,28 @@
+// Donanımdan bağımsız sürücü istekleri. Adresler BAR'a göreli ya da fiziksel DMA adresidir.
+genel çeşit GcIstek {
+    Bitti, Oku32(tam64), Yaz32(tam64,tam64), Oku64(tam64), Yaz64(tam64,tam64),
+    BellekOku(tam64,tam32), BellekYaz(tam64,Dizi<dtam8>), Bekle(tam32), Hata(metin)
+}
+// Başarısız yanıt taşıyıcıdaki hatadır; aygıt durum kodları deger/baytlar içinde kalır.
+genel yapı GcYanit { deger: tam64; baytlar: Dizi<dtam8>; basarili: mantıksal; }
+genel işlev gc_bos() -> GcYanit { değişken b: Dizi<dtam8> = []; ver GcYanit { deger: 0, baytlar: b, basarili: doğru }; }
+genel işlev gc_aralik(adres: tam64, boy: tam64) -> mantıksal {
+    ver adres >= 0 ve boy >= 0 ve boy <= 9223372036854775807 - adres;
+}
+genel işlev gc_yanit_denetle(i: GcIstek, y: GcYanit) -> sonuç<mantıksal,metin> {
+    eğer değil y.basarili { ver hata("tasiyici hatasi"); }
+    değişken gecerli: mantıksal = doğru;
+    eşleş i {
+        GcIstek::Bitti => { }
+        GcIstek::Hata(m) => { ver hata(m); }
+        GcIstek::Oku32(a) => { gecerli = gc_aralik(a,4) ve a%4 == 0 ve y.deger >= 0 ve y.deger <= 4294967295; }
+        GcIstek::Yaz32(a,v) => { gecerli = gc_aralik(a,4) ve a%4 == 0 ve v >= 0 ve v <= 4294967295; }
+        GcIstek::Oku64(a) => { gecerli = gc_aralik(a,8) ve a%8 == 0; }
+        GcIstek::Yaz64(a,v) => { gecerli = gc_aralik(a,8) ve a%8 == 0; }
+        GcIstek::BellekOku(a,n) => { gecerli = gc_aralik(a,n olarak tam64) ve dizi_boyut(y.baytlar) == n; }
+        GcIstek::BellekYaz(a,b) => { gecerli = gc_aralik(a,dizi_boyut(b) olarak tam64); }
+        GcIstek::Bekle(us) => { gecerli = us >= 0; }
+    }
+    eğer değil gecerli { ver hata("gc aralik veya yanit boyu"); }
+    ver tamam(doğru);
+}

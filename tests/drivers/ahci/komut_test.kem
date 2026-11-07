@@ -1,0 +1,33 @@
+// Kâhin: python3 tools/codex/dalga4_ahci_komut.py; ATA işlem kodları dalga4_ahci.py.
+kullan drivers::ahci::komut::{ AhciKomut, ahci_fis_kur, ahci_prdt_kur, ahci_baslik_kur, ahci_komut_kur };
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32, oku_le64 };
+kullan tests::drivers::ahci::fis_fikstur::{ fis_ornek };
+işlev test_fis_baslik() -> mantıksal {
+    değişken beklenen: Dizi<dtam8> = fis_ornek();
+    eşleş ahci_komut_kur(37,20015998343868,4660,512,1048576,8192) {
+        hata(e) => { ver yanlış; }
+        tamam(k) => {
+            eğer dizi_boyut(k.baslik) != 32 veya dizi_boyut(k.tablo) != 144 veya oku_le32(k.baslik,0) != 65541 veya oku_le32(k.baslik,4) != 0 veya oku_le64(k.baslik,8) != 8192 { ver yanlış; }
+            değişken i: tam32 = 0; iken i < 20 { eğer oku_u8(k.tablo,i) != oku_u8(beklenen,i) { ver yanlış; } i=i+1; }
+            iken i < 128 { eğer oku_u8(k.tablo,i) != 0 { ver yanlış; } i=i+1; }
+            eğer oku_le64(k.tablo,128) != 1048576 veya oku_le32(k.tablo,136) != 0 veya oku_le32(k.tablo,140) != 2149869567 { ver yanlış; }
+        }
+    }
+    eşleş ahci_fis_kur(37,0,65536) { hata(e) => { ver yanlış; } tamam(b) => { ver oku_le16(b,12) == 0; } }
+}
+işlev test_prdt_bolme() -> mantıksal {
+    eşleş ahci_komut_kur(53,0,12289,512,1048576,8192) {
+        hata(e) => { ver yanlış; }
+        tamam(k) => { ver dizi_boyut(k.tablo) == 160 ve oku_le32(k.baslik,0) == 131141 ve oku_le32(k.tablo,140) == 4194303 ve oku_le64(k.tablo,144) == 5242880 ve oku_le32(k.tablo,156) == 2149581311; }
+    }
+}
+işlev test_hata_ve_yonetim() -> mantıksal {
+    eşleş ahci_fis_kur(37,281474976710655,2) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_fis_kur(37,0,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_prdt_kur(4096,3) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_prdt_kur(4097,512) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_baslik_kur(8193,1,yanlış) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_komut_kur(236,0,0,512,4096,8192) { hata(e) => { ver yanlış; } tamam(k) => { eğer k.toplam_bayt != 512 veya oku_u8(k.tablo,2) != 236 { ver yanlış; } } }
+    eşleş ahci_komut_kur(234,0,0,512,0,8192) { hata(e) => { ver yanlış; } tamam(k) => { ver k.toplam_bayt == 0 ve dizi_boyut(k.tablo) == 128 ve oku_le32(k.baslik,0) == 5; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_fis_baslik() { yazdir_metin("fis"); h=h+1; } eğer değil test_prdt_bolme() { yazdir_metin("prdt"); h=h+1; } eğer değil test_hata_ve_yonetim() { h=h+1; } ver h; }

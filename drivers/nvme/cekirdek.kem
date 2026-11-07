@@ -1,0 +1,185 @@
+// Sans-IO NVMe: tek sıradaki istek; tüm yanıtlar sonraki adımda doğrulanır.
+// DMA sözleşmesi: taban'dan başlayan, 4096 hizalı 86016 bayt alan çağırana aittir.
+// İlk 4 sayfa ASQ/ACQ/SQ1/CQ1, ardından 64 KiB veri ve bir PRP liste sayfası.
+// F001: ithal kayıtlar durum alanına gömülmez, doğrulanmış skalerler tutulur.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8 };
+kullan drivers::nvme::kayit::{ NvmeCap, nvme_cap_coz, nvme_hazir, nvme_fatal };
+kullan drivers::nvme::komut::{ NvmePrp, PrpSayfa, NvmeTamamlanma, nvme_identify, nvme_kuyruk_olustur, nvme_io_kur, nvme_flush_kur, nvme_prp_kur, nvme_cq_coz };
+kullan drivers::nvme::kimlik::{ NvmeDenetleyici, NvmeAdAlani, nvme_denetleyici_coz, nvme_ad_alani_coz };
+genel yapı NvmeDurum {
+    adim: tam32; taban: tam64; qboy: tam32; dstrd: tam32; sinir: tam32; beklenen: tam32;
+    hazir: mantıksal; mesaj: metin; yonetim: tam32; cid: tam32;
+    aq_son: tam32; aq_bas: tam32; aq_faz: mantıksal; io_son: tam32; io_bas: tam32; io_faz: mantıksal;
+    azami: tam32; blok_bayt: tam32; kapasite: tam64; islem: tam32; lba: tam64;
+    kalan: tam32; tamamlanan: tam32; parca: tam32; veri: Dizi<dtam8>; sonuc: Dizi<dtam8>;
+    komut: Dizi<dtam8>; prp: Dizi<dtam8>;
+}
+genel işlev nvme_yeni(taban: tam64, qboy: tam32) -> sonuç<NvmeDurum,metin> {
+    eğer taban <= 0 veya taban%4096 != 0 veya taban > 9223372036854775807-86016 veya qboy < 2 veya qboy > 64 { ver hata("nvme dma veya kuyruk"); }
+    değişken bos: Dizi<dtam8> = [];
+    ver tamam(NvmeDurum { adim: 0, taban: taban, qboy: qboy, dstrd: 0, sinir: 500, beklenen: 0, hazir: yanlış, mesaj: "", yonetim: 0, cid: 0, aq_son: 0, aq_bas: 0, aq_faz: doğru, io_son: 0, io_bas: 0, io_faz: doğru, azami: 65536, blok_bayt: 512, kapasite: 0, islem: 0, lba: 0, kalan: 0, tamamlanan: 0, parca: 0, veri: bos, sonuc: bos, komut: bos, prp: bos });
+}
+işlev nvme_hata(s: &değişken NvmeDurum, m: metin) -> GcIstek { s.adim=0-1; s.hazir=yanlış; s.mesaj=m; ver GcIstek::Hata(m); }
+işlev zil(s: &değişken NvmeDurum, cq: mantıksal) -> tam64 {
+    değişken k: tam64 = 0; eğer s.yonetim >= 4 { k=2; } eğer cq { k=k+1; }
+    ver 4096+k*((4 olarak tam64)<<s.dstrd);
+}
+işlev kes(b: Dizi<dtam8>, bas: tam32, n: tam32) -> Dizi<dtam8> {
+    değişken v: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < n { dizi_ekle(v,dizi_al(b,bas+i)); i=i+1; } ver v;
+}
+işlev sq_yaz(s: &değişken NvmeDurum) -> GcIstek {
+    değişken a: tam64 = s.taban+(s.aq_son olarak tam64)*64;
+    eğer s.yonetim >= 4 { a=s.taban+8192+(s.io_son olarak tam64)*64; }
+    s.adim=23; ver GcIstek::BellekYaz(a,s.komut);
+}
+işlev veri_hazir(s: &değişken NvmeDurum) -> GcIstek {
+    eğer s.yonetim >= 4 ve s.islem == 2 { s.adim=22; ver GcIstek::BellekYaz(s.taban+16384,kes(s.veri,s.tamamlanan*s.blok_bayt,s.parca*s.blok_bayt)); }
+    ver sq_yaz(s);
+}
+işlev emir_baslat(s: &değişken NvmeDurum) -> GcIstek {
+    s.cid=(s.cid+1)&65535; değişken bos: Dizi<dtam8> = []; s.prp=bos;
+    değişken r: sonuç<Dizi<dtam8>,metin> = hata("nvme islem");
+    eğer s.yonetim == 0 { r=nvme_identify(s.cid,0,1,s.taban+16384); }
+    eğer s.yonetim == 1 { r=nvme_identify(s.cid,1,0,s.taban+16384); }
+    eğer s.yonetim == 2 { r=nvme_kuyruk_olustur(doğru,s.cid,1,s.qboy,s.taban+12288,1); }
+    eğer s.yonetim == 3 { r=nvme_kuyruk_olustur(yanlış,s.cid,1,s.qboy,s.taban+8192,1); }
+    eğer s.yonetim >= 4 {
+        eğer s.islem == 3 { s.parca=0; r=nvme_flush_kur(s.cid,1); }
+        değilse {
+            s.parca=s.kalan; eğer s.parca > s.azami/s.blok_bayt { s.parca=s.azami/s.blok_bayt; }
+            değişken p1: tam64 = 0; değişken p2: tam64 = 0;
+            eşleş nvme_prp_kur(s.taban+16384,(s.parca olarak tam64)*(s.blok_bayt olarak tam64),4096,s.taban+81920) {
+                hata(e) => { ver nvme_hata(s,e); }
+                tamam(p) => { p1=p.bir; p2=p.iki; eğer dizi_boyut(p.listeler) > 0 { değişken l: PrpSayfa = dizi_al(p.listeler,0); s.prp=l.baytlar; } }
+            }
+            r=nvme_io_kur(s.islem == 2,s.cid,1,s.lba,s.parca,p1,p2);
+        }
+    }
+    eşleş r { hata(e) => { ver nvme_hata(s,e); } tamam(v) => { s.komut=v; } }
+    eğer dizi_boyut(s.prp) > 0 { s.adim=21; ver GcIstek::BellekYaz(s.taban+81920,s.prp); }
+    ver veri_hazir(s);
+}
+işlev tamamlandi(s: &değişken NvmeDurum) -> GcIstek {
+    eğer s.yonetim < 4 {
+        s.yonetim=s.yonetim+1;
+        eğer s.yonetim == 4 { s.hazir=doğru; s.adim=100; ver GcIstek::Bitti; }
+        ver emir_baslat(s);
+    }
+    s.kalan=s.kalan-s.parca; s.tamamlanan=s.tamamlanan+s.parca; s.lba=s.lba+(s.parca olarak tam64);
+    eğer s.kalan > 0 { ver emir_baslat(s); }
+    s.adim=100; ver GcIstek::Bitti;
+}
+işlev cq_oku(s: &değişken NvmeDurum) -> GcIstek {
+    değişken adres: tam64 = s.taban+4096+(s.aq_bas olarak tam64)*16;
+    eğer s.yonetim >= 4 { adres=s.taban+12288+(s.io_bas olarak tam64)*16; }
+    s.adim=26; ver GcIstek::BellekOku(adres,16);
+}
+işlev bekle(s: &değişken NvmeDurum, adim: tam32) -> GcIstek {
+    eğer s.beklenen >= s.sinir { ver nvme_hata(s,"nvme zaman asimi"); }
+    s.beklenen=s.beklenen+1; s.adim=adim; ver GcIstek::Bekle(1000);
+}
+genel işlev nvme_adim(s: &değişken NvmeDurum, y: GcYanit) -> GcIstek {
+    eğer s.adim == 0-1 { ver GcIstek::Hata(s.mesaj); }
+    eğer değil y.basarili { ver nvme_hata(s,"nvme tasiyici"); }
+    eğer s.adim == 2 veya s.adim == 4 veya s.adim == 13 veya s.adim == 25 { eğer y.deger < 0 veya y.deger > 4294967295 { ver nvme_hata(s,"nvme yazmac boyu"); } }
+    eğer s.adim == 100 { ver GcIstek::Bitti; }
+    eğer s.adim == 0 { s.adim=1; ver GcIstek::Oku64(0); }
+    eğer s.adim == 1 {
+        eşleş nvme_cap_coz(y.deger) {
+            hata(e) => { ver nvme_hata(s,e); }
+            tamam(c) => {
+                eğer c.kuyruk_azami < s.qboy veya c.mps_min != 0 veya (c.css&1) == 0 { ver nvme_hata(s,"nvme yetenek destegi"); }
+                s.dstrd=c.dstrd; s.sinir=c.zaman_ms; eğer s.sinir < 1 { s.sinir=500; }
+            }
+        }
+        s.adim=2; ver GcIstek::Oku32(20);
+    }
+    eğer s.adim == 2 { s.adim=3; ver GcIstek::Yaz32(20,y.deger&4294967294); }
+    eğer s.adim == 3 veya s.adim == 15 { s.adim=4; ver GcIstek::Oku32(28); }
+    eğer s.adim == 4 {
+        eğer nvme_fatal(y.deger) { ver nvme_hata(s,"nvme cfs"); }
+        eğer nvme_hazir(y.deger) { ver bekle(s,15); }
+        s.adim=5; ver GcIstek::BellekYaz(s.taban,bayt_sifir(4096));
+    }
+    eğer s.adim >= 5 ve s.adim <= 7 { değişken a: tam64 = s.taban+((s.adim-4) olarak tam64)*4096; s.adim=s.adim+1; ver GcIstek::BellekYaz(a,bayt_sifir(4096)); }
+    eğer s.adim == 8 { s.adim=9; değişken q: tam64 = (s.qboy-1) olarak tam64; ver GcIstek::Yaz32(36,q|(q<<16)); }
+    eğer s.adim == 9 { s.adim=10; ver GcIstek::Yaz64(40,s.taban); }
+    eğer s.adim == 10 { s.adim=11; ver GcIstek::Yaz64(48,s.taban+4096); }
+    eğer s.adim == 11 { s.adim=12; s.beklenen=0; ver GcIstek::Yaz32(20,4587521); }
+    eğer s.adim == 12 veya s.adim == 14 { s.adim=13; ver GcIstek::Oku32(28); }
+    eğer s.adim == 13 {
+        eğer nvme_fatal(y.deger) { ver nvme_hata(s,"nvme cfs"); }
+        eğer değil nvme_hazir(y.deger) { ver bekle(s,14); }
+        ver emir_baslat(s);
+    }
+    eğer s.adim == 19 { ver emir_baslat(s); }
+    eğer s.adim == 21 { ver veri_hazir(s); }
+    eğer s.adim == 22 { ver sq_yaz(s); }
+    eğer s.adim == 23 {
+        değişken son: tam32 = 0;
+        eğer s.yonetim < 4 { s.aq_son=(s.aq_son+1)%s.qboy; son=s.aq_son; }
+        değilse { s.io_son=(s.io_son+1)%s.qboy; son=s.io_son; }
+        s.adim=24; ver GcIstek::Yaz32(zil(s,yanlış),son olarak tam64);
+    }
+    eğer s.adim == 24 veya s.adim == 27 { eğer s.adim == 24 { s.beklenen=0; } s.adim=25; ver GcIstek::Oku32(28); }
+    eğer s.adim == 25 { eğer nvme_fatal(y.deger) { ver nvme_hata(s,"nvme cfs"); } ver cq_oku(s); }
+    eğer s.adim == 26 {
+        eşleş nvme_cq_coz(y.baytlar) {
+            hata(e) => { ver nvme_hata(s,e); }
+            tamam(c) => {
+                değişken faz: mantıksal = s.aq_faz; değişken qid: tam32 = 0; değişken son: tam32 = s.aq_son;
+                eğer s.yonetim >= 4 { faz=s.io_faz; qid=1; son=s.io_son; }
+                eğer c.faz != faz { ver bekle(s,27); }
+                eğer c.cid != s.cid veya c.sqid != qid veya c.sq_bas != son veya c.sq_bas >= s.qboy { ver nvme_hata(s,"nvme tamamlanma kimligi"); }
+                eğer c.durum != 0 { ver nvme_hata(s,"nvme komut durumu"); }
+                değişken bas: tam32 = 0;
+                eğer s.yonetim < 4 { s.aq_bas=(s.aq_bas+1)%s.qboy; eğer s.aq_bas == 0 { s.aq_faz=değil s.aq_faz; } bas=s.aq_bas; }
+                değilse { s.io_bas=(s.io_bas+1)%s.qboy; eğer s.io_bas == 0 { s.io_faz=değil s.io_faz; } bas=s.io_bas; }
+                s.adim=28; ver GcIstek::Yaz32(zil(s,doğru),bas olarak tam64);
+            }
+        }
+    }
+    eğer s.adim == 28 {
+        eğer s.yonetim < 2 { s.adim=29; ver GcIstek::BellekOku(s.taban+16384,4096); }
+        eğer s.yonetim >= 4 ve s.islem == 1 { s.adim=30; ver GcIstek::BellekOku(s.taban+16384,s.parca*s.blok_bayt); }
+        ver tamamlandi(s);
+    }
+    eğer s.adim == 29 {
+        eğer s.yonetim == 0 {
+            eşleş nvme_denetleyici_coz(y.baytlar) {
+                hata(e) => { ver nvme_hata(s,e); }
+                tamam(c) => { eğer c.ad_alani_sayisi < 1 { ver nvme_hata(s,"nvme ad alani yok"); } eğer c.mdts > 0 ve c.mdts < 4 { s.azami=4096<<c.mdts; } }
+            }
+        }
+        değilse {
+            eşleş nvme_ad_alani_coz(y.baytlar) {
+                hata(e) => { ver nvme_hata(s,e); }
+                tamam(n) => { eğer n.meta_bayt != 0 veya n.blok_bayt > (s.azami olarak tam64) { ver nvme_hata(s,"nvme lba destegi"); } s.kapasite=n.blok_sayisi; s.blok_bayt=n.blok_bayt olarak tam32; }
+            }
+        }
+        ver tamamlandi(s);
+    }
+    eğer s.adim == 30 {
+        eğer dizi_boyut(y.baytlar) != s.parca*s.blok_bayt { ver nvme_hata(s,"nvme kisa veri"); }
+        // F003: yapı alanından bayt okurken dtam8 imzasını oku_u8 üzerinden koru.
+        değişken sonuc: Dizi<dtam8> = s.sonuc;
+        değişken i: tam32 = 0; iken i < dizi_boyut(y.baytlar) { dizi_ekle(sonuc,oku_u8(y.baytlar,i) olarak dtam8); i=i+1; }
+        ver tamamlandi(s);
+    }
+    ver nvme_hata(s,"nvme gecersiz adim");
+}
+işlev istek_kur(s: &değişken NvmeDurum, lba: tam64, sayi: tam32, islem: tam32, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    eğer değil s.hazir veya s.adim != 100 { ver hata("nvme hazir degil"); }
+    eğer islem != 3 { eğer lba < 0 veya sayi < 1 veya lba >= s.kapasite veya (sayi olarak tam64) > s.kapasite-lba veya (sayi olarak tam64)*(s.blok_bayt olarak tam64) > 16777216 { ver hata("nvme istek araligi"); } }
+    değişken bos: Dizi<dtam8> = []; s.sonuc=bos; s.veri=veri; s.lba=lba; s.kalan=sayi; s.tamamlanan=0; s.islem=islem; s.adim=19;
+    ver tamam(doğru);
+}
+genel işlev nvme_oku(s: &değişken NvmeDurum, lba: tam64, sayi: tam32) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver istek_kur(s,lba,sayi,1,b); }
+// veri, Bitti/Hata alınana kadar çağıran tarafından değiştirilmemelidir.
+genel işlev nvme_yaz(s: &değişken NvmeDurum, lba: tam64, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    eğer değil s.hazir veya s.blok_bayt < 1 veya dizi_boyut(veri)%s.blok_bayt != 0 { ver hata("nvme yazma boyu"); }
+    ver istek_kur(s,lba,dizi_boyut(veri)/s.blok_bayt,2,veri);
+}
+genel işlev nvme_flush(s: &değişken NvmeDurum) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver istek_kur(s,0,0,3,b); }

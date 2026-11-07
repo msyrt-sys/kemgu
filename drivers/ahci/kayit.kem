@@ -1,0 +1,33 @@
+// Kaynak/hesap: tools/codex/dalga4_ahci.py, Linux v6.17 AHCI yazmaçları.
+genel sabit AHCI_CAP: tam64 = 0;
+genel sabit AHCI_GHC: tam64 = 4;
+genel sabit AHCI_IS: tam64 = 8;
+genel sabit AHCI_PI: tam64 = 12;
+genel sabit AHCI_VS: tam64 = 16;
+genel sabit AHCI_CLB: tam64 = 0;
+genel sabit AHCI_CLBU: tam64 = 4;
+genel sabit AHCI_FB: tam64 = 8;
+genel sabit AHCI_FBU: tam64 = 12;
+genel sabit AHCI_PIS: tam64 = 16;
+genel sabit AHCI_PIE: tam64 = 20;
+genel sabit AHCI_CMD: tam64 = 24;
+genel sabit AHCI_TFD: tam64 = 32;
+genel sabit AHCI_SIG: tam64 = 36;
+genel sabit AHCI_SSTS: tam64 = 40;
+genel sabit AHCI_SCTL: tam64 = 44;
+genel sabit AHCI_SERR: tam64 = 48;
+genel sabit AHCI_CI: tam64 = 56;
+genel yapı AhciCap { port_sayisi: tam32; yuva_sayisi: tam32; adres64: mantıksal; }
+genel işlev ahci_cap_coz(cap: tam64) -> sonuç<AhciCap,metin> {
+    eğer cap < 0 veya cap > 4294967295 { ver hata("ahci cap boyu"); }
+    ver tamam(AhciCap { port_sayisi: (cap&31) olarak tam32+1, yuva_sayisi: ((cap>>8)&31) olarak tam32+1, adres64: (cap&2147483648) != 0 });
+}
+genel işlev ahci_port_ofs(port: tam32, kayit: tam64) -> sonuç<tam64,metin> {
+    eğer port < 0 veya port > 31 veya kayit < 0 veya kayit >= 128 veya kayit%4 != 0 { ver hata("ahci port araligi"); }
+    ver tamam(256+(port olarak tam64)*128+kayit);
+}
+genel işlev ahci_link(ssts: tam64, sig: tam64) -> mantıksal { ver (ssts&15) == 3 ve ((ssts>>8)&15) == 1 ve sig == 257; }
+genel işlev ahci_motor_durdu(cmd: tam64) -> mantıksal { ver (cmd&49152) == 0; }
+genel işlev ahci_tfd_mesgul(tfd: tam64) -> mantıksal { ver (tfd&136) != 0; }
+genel işlev ahci_tfd_hata(tfd: tam64) -> mantıksal { ver (tfd&1) != 0; }
+genel işlev ahci_tfes(pis: tam64) -> mantıksal { ver (pis&1073741824) != 0; }

@@ -1,0 +1,144 @@
+// Kaynak: GNU Multiboot2 §3.6; https://www.gnu.org/software/grub/manual/multiboot2/html_node/Boot-information-format.html
+// F002: seçimlik kurucuları alan atamasından önce tipli ara değişkende oluşturulur.
+// Sınırlı saf ayrıştırıcı: fiziksel adreslere erişmez, bütün boyları daraltmadan denetler.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le32, oku_le64 };
+kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_kodla };
+kullan drivers::bellek::harita::{ BellekBolgesi, mb2_coz };
+kullan drivers::acpi::tablo::{ Rsdp, AcpiHatasi, rsdp_coz };
+genel yapı KomutSecenegi { anahtar: metin; deger: metin; }
+genel yapı AcilisModulu { baslangic: tam64; bitis: tam64; ad: metin; }
+genel yapı AcilisEkrani { adres: tam64; adim: tam32; genislik: tam32; yukseklik: tam32; bpp: tam32; tur: tam32; renk: Dizi<tam32>; }
+// F001: ithal tipler C yapı-alanı geçişinde bulunmuyor; ayrıştırılan değerler yerel kayda aktarılır.
+genel yapı AcilisBellek { taban: tam64; uzunluk: tam64; tur: tam32; }
+genel yapı AcilisRsdp { revizyon: tam32; rsdt: tam64; xsdt: tam64; oem: metin; }
+genel yapı AcilisBilgi { komut: metin; acici: metin; moduller: Dizi<AcilisModulu>; alt_bellek: tam64; ust_bellek: tam64; harita: Dizi<AcilisBellek>; ekran: seçimlik<AcilisEkrani>; acpi: seçimlik<AcilisRsdp>; kok: seçimlik<tam64>; secenekler: Dizi<KomutSecenegi>; }
+genel işlev kok_seri_coz(s: metin) -> sonuç<tam64,metin> {
+    değişken n: tam32 = metin_uzunluk(s) olarak tam32;
+    eğer n != 8 ve n != 9 { ver hata("kok seri boyu"); }
+    değişken v: tam64 = 0; değişken i: tam32 = 0;
+    iken i < n {
+        değişken k: tam32 = (metin_bayt(s,i) olarak tam32) & 255;
+        eğer n == 9 ve i == 4 { eğer k != 45 { ver hata("kok ayraci"); } }
+        değilse {
+            değişken h: tam32 = 0-1;
+            eğer k >= 48 ve k <= 57 { h=k-48; }
+            eğer k >= 65 ve k <= 70 { h=k-55; }
+            eğer k >= 97 ve k <= 102 { h=k-87; }
+            eğer h < 0 { ver hata("kok onaltilik"); }
+            v = v*16 + (h olarak tam64);
+        }
+        i=i+1;
+    }
+    ver tamam(v);
+}
+genel işlev komut_satiri_coz(s: metin) -> sonuç<Dizi<KomutSecenegi>,metin> {
+    değişken xs: Dizi<KomutSecenegi> = [];
+    değişken n: tam32 = metin_uzunluk(s) olarak tam32;
+    eğer n > 4096 { ver hata("komut uzun"); }
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken k: tam32 = (metin_bayt(s,i) olarak tam32) & 255;
+        eğer k == 32 veya k == 9 { i=i+1; }
+        değilse {
+            değişken bas: tam32 = i; değişken esit: tam32 = 0-1;
+            iken i < n ve metin_bayt(s,i) != (32 olarak tam8) ve metin_bayt(s,i) != (9 olarak tam8) {
+                eğer metin_bayt(s,i) == (61 olarak tam8) ve esit < 0 { esit=i; }
+                i=i+1;
+            }
+            değişken anahtar: metin = metin_kes(s,bas,i-bas); değişken deger: metin = "";
+            eğer esit >= 0 { anahtar=metin_kes(s,bas,esit-bas); deger=metin_kes(s,esit+1,i-esit-1); }
+            eğer metin_uzunluk(anahtar) == 0 { ver hata("bos anahtar"); }
+            değişken j: tam32 = 0;
+            iken j < dizi_boyut(xs) { değişken eski: KomutSecenegi = dizi_al(xs,j); eğer metin_esit(eski.anahtar,anahtar) { ver hata("yinelenen anahtar"); } j=j+1; }
+            eğer metin_esit(anahtar,"kok") { eşleş kok_seri_coz(deger) { hata(e) => { ver hata(e); } tamam(v) => { } } }
+            dizi_ekle(xs,KomutSecenegi { anahtar: anahtar, deger: deger });
+        }
+    }
+    ver tamam(xs);
+}
+işlev parca(b: Dizi<dtam8>, o: tam32, n: tam32) -> Dizi<dtam8> {
+    değişken xs: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < n { dizi_ekle(xs,dizi_al(b,o+i)); i=i+1; } ver xs;
+}
+işlev sifirli_metin(b: Dizi<dtam8>, o: tam32, n: tam32) -> sonuç<metin,metin> {
+    eğer n < 1 veya n > 4097 { ver hata("metin boyu"); }
+    değişken i: tam32 = 0;
+    iken i < n ve oku_u8(b,o+i) != 0 { i=i+1; }
+    eğer i == n { ver hata("metin sonu yok"); }
+    ver tamam(utf8_kodla(utf8_bayt_coz(b,o,i)));
+}
+işlev ekran_coz(b: Dizi<dtam8>, o: tam32, n: tam32) -> sonuç<AcilisEkrani,metin> {
+    eğer n < 32 { ver hata("ekran kisa"); }
+    değişken adres: tam64 = oku_le64(b,o+8); değişken adim: tam64 = oku_le32(b,o+16);
+    değişken w: tam64 = oku_le32(b,o+20); değişken h: tam64 = oku_le32(b,o+24);
+    değişken bpp: tam32 = oku_u8(b,o+28); değişken tur: tam32 = oku_u8(b,o+29);
+    eğer adres < 0 veya adim < 1 veya adim > 2147483647 veya w < 1 veya w > 2147483647 veya h < 1 veya h > 2147483647 veya bpp < 1 veya bpp > 32 veya tur > 2 { ver hata("ekran alanlari"); }
+    eğer (w*(bpp olarak tam64)+7)/8 > adim veya adim*h > 9223372036854775807-adres { ver hata("ekran tasma"); }
+    değişken renk: Dizi<tam32> = [];
+    eğer tur == 1 {
+        eğer n < 38 { ver hata("rgb kisa"); }
+        değişken kullanilan: tam64 = 0; değişken i: tam32 = 0;
+        iken i < 3 {
+            değişken konum: tam32 = oku_u8(b,o+32+2*i); değişken boy: tam32 = oku_u8(b,o+33+2*i);
+            eğer boy < 1 veya konum >= bpp veya boy > bpp-konum { ver hata("rgb alan"); }
+            değişken maske: tam64 = (((1 olarak tam64) << boy)-1) << konum;
+            eğer (kullanilan & maske) != 0 { ver hata("rgb cakisma"); }
+            kullanilan=kullanilan|maske; dizi_ekle(renk,konum); dizi_ekle(renk,boy); i=i+1;
+        }
+    }
+    eğer tur == 0 { ver hata("palet destegi yok"); }
+    eğer tur == 2 ve bpp != 16 { ver hata("metin ekran bpp"); }
+    ver tamam(AcilisEkrani { adres: adres, adim: adim olarak tam32, genislik: w olarak tam32, yukseklik: h olarak tam32, bpp: bpp, tur: tur, renk: renk });
+}
+genel işlev multiboot2_coz(b: Dizi<dtam8>) -> sonuç<AcilisBilgi,metin> {
+    eğer dizi_boyut(b) < 16 { ver hata("mb2 kisa"); }
+    değişken toplam: tam64 = oku_le32(b,0);
+    eğer toplam < 16 veya toplam > 1048576 veya toplam > (dizi_boyut(b) olarak tam64) veya toplam%8 != 0 veya oku_le32(b,4) != 0 { ver hata("mb2 baslik"); }
+    değişken moduller: Dizi<AcilisModulu> = []; değişken harita: Dizi<AcilisBellek> = []; değişken secenek: Dizi<KomutSecenegi> = [];
+    değişken bilgi: AcilisBilgi = AcilisBilgi { komut: "", acici: "", moduller: moduller, alt_bellek: 0, ust_bellek: 0, harita: harita, ekran: hiç, acpi: hiç, kok: hiç, secenekler: secenek };
+    değişken ofs: tam32 = 8; değişken adet: tam32 = 0; değişken gorulen: tam64 = 0;
+    iken (ofs olarak tam64) <= toplam-8 {
+        adet=adet+1; eğer adet > 4096 { ver hata("etiket cok"); }
+        değişken tur: tam64 = oku_le32(b,ofs); değişken boy: tam64 = oku_le32(b,ofs+4);
+        eğer boy < 8 veya boy > toplam-(ofs olarak tam64) { ver hata("etiket boyu"); }
+        eğer tur == 0 { eğer boy != 8 veya (ofs olarak tam64)+8 != toplam { ver hata("son etiket"); } ver tamam(bilgi); }
+        eğer tur < 16 ve tur != 3 {
+            değişken bit: tam64 = (1 olarak tam64) << (tur olarak tam32);
+            eğer (gorulen & bit) != 0 { ver hata("yinelenen etiket"); } gorulen=gorulen|bit;
+        }
+        değişken n: tam32 = boy olarak tam32;
+        eğer tur == 1 veya tur == 2 {
+            değişken s: metin = "";
+            eşleş sifirli_metin(b,ofs+8,n-8) { hata(e) => { ver hata(e); } tamam(v) => { s=v; } }
+            eğer tur == 2 { bilgi.acici=s; }
+            değilse {
+                bilgi.komut=s;
+                eşleş komut_satiri_coz(s) { hata(e) => { ver hata(e); } tamam(v) => { bilgi.secenekler=v; } }
+                değişken j: tam32 = 0;
+                iken j < dizi_boyut(bilgi.secenekler) {
+                    değişken x: KomutSecenegi = dizi_al(bilgi.secenekler,j);
+                    eğer metin_esit(x.anahtar,"kok") { eşleş kok_seri_coz(x.deger) { hata(e) => { ver hata(e); } tamam(v) => { değişken kok: seçimlik<tam64> = değer(v); bilgi.kok=kok; } } } j=j+1;
+                }
+            }
+        }
+        eğer tur == 3 {
+            eğer n < 17 { ver hata("modul kisa"); }
+            değişken bas: tam64 = oku_le32(b,ofs+8); değişken son: tam64 = oku_le32(b,ofs+12);
+            eğer son < bas { ver hata("modul araligi"); }
+            eşleş sifirli_metin(b,ofs+16,n-16) { hata(e) => { ver hata(e); } tamam(v) => { dizi_ekle(bilgi.moduller,AcilisModulu { baslangic: bas, bitis: son, ad: v }); } }
+        }
+        eğer tur == 4 { eğer n != 16 { ver hata("temel bellek boyu"); } bilgi.alt_bellek=oku_le32(b,ofs+8); bilgi.ust_bellek=oku_le32(b,ofs+12); }
+        eğer tur == 6 { eşleş mb2_coz(parca(b,ofs,n)) { hata(e) => { ver hata(e); } tamam(v) => { değişken j: tam32 = 0; iken j < dizi_boyut(v) { değişken r: BellekBolgesi = dizi_al(v,j); dizi_ekle(bilgi.harita,AcilisBellek { taban: r.taban, uzunluk: r.uzunluk, tur: r.tur }); j=j+1; } } } }
+        eğer tur == 8 { eşleş ekran_coz(b,ofs,n) { hata(e) => { ver hata(e); } tamam(v) => { değişken ekran: seçimlik<AcilisEkrani> = değer(v); bilgi.ekran=ekran; } } }
+        eğer tur == 14 veya tur == 15 {
+            eşleş rsdp_coz(parca(b,ofs+8,n-8)) {
+                hata(e) => { ver hata("acpi rsdp"); }
+                tamam(v) => { eğer tur == 15 veya (gorulen & 32768) == 0 { değişken rsdp: seçimlik<AcilisRsdp> = değer(AcilisRsdp { revizyon: v.revizyon, rsdt: v.rsdt, xsdt: v.xsdt, oem: v.oem }); bilgi.acpi=rsdp; } }
+            }
+        }
+        değişken adim: tam64 = ((boy+7)/8)*8;
+        eğer adim > toplam-(ofs olarak tam64) { ver hata("etiket hizalama"); }
+        ofs=ofs+(adim olarak tam32);
+    }
+    ver hata("son etiket yok");
+}

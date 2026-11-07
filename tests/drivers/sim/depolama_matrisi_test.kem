@@ -1,0 +1,78 @@
+// Üç bağımsız aygıt aynı anda; dosya erişimleri gerçek sürücü durum makinelerinden geçer.
+kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni, nvme_yaz, nvme_flush } olarak nv;
+kullan tests::drivers::nvme::sahte_nvme::{ SahteNvme, sahte_nvme_yeni };
+kullan tests::drivers::nvme::sahte_nvme_sur::{ nvme_test_sur, nvme_test_oku };
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ah;
+kullan tests::drivers::ahci::sahte_ahci::{ SahteAhci, sahte_ahci_yeni };
+kullan tests::drivers::ahci::sahte_ahci_sur::{ ahci_test_sur, ahci_test_oku };
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni, usb_depo_yaz, usb_depo_flush };
+kullan tests::drivers::usb::sahte_depo::{ SahteDepo, sahte_depo_yeni };
+kullan tests::drivers::usb::sahte_depo_sur::{ usb_test_sur, usb_test_oku };
+kullan tests::drivers::ortak::depolama_fikstur::{ depolama_ornek };
+kullan tests::drivers::sim::matris_fikstur::{ matris_gpt };
+kullan drivers::disk::bolum::{ Bolum, BolumHatasi, gpt_coz };
+kullan drivers::fs::bagla::{ BagBolum, BagKaydi, BagTablo, bag_bolum, bag_tablosu, yazma_izni };
+kullan drivers::acilis::multiboot2::{ KomutSecenegi, komut_satiri_coz, kok_seri_coz };
+kullan drivers::fs::fat32_oku;
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_le32 };
+işlev kes(b: Dizi<dtam8>, bas: tam32, n: tam32) -> Dizi<dtam8> { değişken a: Dizi<dtam8> = []; değişken i: tam32 = 0; iken i < n { dizi_ekle(a,oku_u8(b,bas+i) olarak dtam8); i=i+1; } ver a; }
+işlev kabul(r: sonuç<mantıksal,metin>) -> mantıksal { eşleş r { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { ver v; } } }
+işlev dosya_ekle(f: Dizi<dtam8>) -> mantıksal { değişken v: Dizi<dtam8> = [65 olarak dtam8,128 olarak dtam8,255 olarak dtam8]; eşleş fat32_yaz::dosya_yaz(f,"/MAT.TXT",v) { hata(e) => { ver yanlış; } tamam(n) => { ver n == 3; } } }
+işlev dosya_kontrol(f: Dizi<dtam8>) -> mantıksal { eşleş fat32_oku::dosya_oku(f,"/MAT.TXT") { hata(e) => { ver yanlış; } tamam(v) => { ver dizi_boyut(v) == 3 ve oku_u8(v,0) == 65 ve oku_u8(v,1) == 128 ve oku_u8(v,2) == 255; } } }
+işlev usb_yaz(k: BagKaydi, bayrak: mantıksal, s: &değişken UsbDepo, a: &değişken SahteDepo) -> mantıksal {
+    eşleş yazma_izni(k,bayrak) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    değişken f: Dizi<dtam8> = []; eşleş usb_test_oku(s,a,k.bolum.lba,1112) { hata(e) => { ver yanlış; } tamam(v) => { f=v; } }
+    eğer değil dosya_ekle(f) veya değil kabul(usb_depo_yaz(s,k.bolum.lba,f)) veya değil kabul(usb_test_sur(s,a)) veya değil kabul(usb_depo_flush(s)) veya değil kabul(usb_test_sur(s,a)) { ver yanlış; }
+    eşleş usb_test_oku(s,a,k.bolum.lba,dizi_boyut(f)/512) { hata(e) => { ver yanlış; } tamam(v) => { ver dosya_kontrol(v); } }
+}
+işlev nv_yaz(k: BagKaydi, bayrak: mantıksal, s: &değişken NvmeDurum, a: &değişken SahteNvme) -> mantıksal {
+    eşleş yazma_izni(k,bayrak) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    değişken f: Dizi<dtam8> = []; eşleş nvme_test_oku(s,a,k.bolum.lba,1112) { hata(e) => { ver yanlış; } tamam(v) => { f=v; } }
+    eğer değil dosya_ekle(f) veya değil kabul(nvme_yaz(s,k.bolum.lba,f)) veya değil kabul(nvme_test_sur(s,a)) veya değil kabul(nvme_flush(s)) veya değil kabul(nvme_test_sur(s,a)) { ver yanlış; }
+    eşleş nvme_test_oku(s,a,k.bolum.lba,dizi_boyut(f)/512) { hata(e) => { ver yanlış; } tamam(v) => { ver dosya_kontrol(v); } }
+}
+işlev matris(ns: &değişken NvmeDurum, na: &değişken SahteNvme, ss: &değişken AhciDurum, sa: &değişken SahteAhci, us: &değişken UsbDepo, ua: &değişken SahteDepo) -> mantıksal {
+    eğer değil kabul(nvme_test_sur(ns,na)) veya değil kabul(ahci_test_sur(ss,sa)) veya değil kabul(usb_test_sur(us,ua)) { ver yanlış; }
+    değişken bs: Dizi<BagBolum> = [];
+    eşleş usb_test_oku(us,ua,34,1) { hata(e) => { ver yanlış; } tamam(b) => { eşleş bag_bolum("usb",0,1,34,b,bayt_sifir(0),12) { hata(e) => { ver yanlış; } tamam(v) => { dizi_ekle(bs,v); } } } }
+    değişken gpt: Dizi<dtam8> = []; eşleş nvme_test_oku(ns,na,0,34) { hata(e) => { ver yanlış; } tamam(v) => { gpt=v; } }
+    eşleş gpt_coz(gpt,512) { hata(e) => { ver yanlış; } tamam(xs) => {
+        eğer dizi_boyut(xs) != 2 { ver yanlış; } değişken i: tam32 = 0;
+        iken i < 2 { değişken p: Bolum = dizi_al(xs,i); eşleş nvme_test_oku(ns,na,p.baslangic_lba,1) { hata(e) => { ver yanlış; } tamam(b) => { eşleş bag_bolum("nvme",0,i+1,p.baslangic_lba,b,kes(gpt,1024+i*128,16),238) { hata(e) => { ver yanlış; } tamam(v) => { dizi_ekle(bs,v); } } } } i=i+1; }
+    } }
+    eşleş ahci_test_oku(ss,sa,34,1112) { hata(e) => { ver yanlış; } tamam(b) => {
+        eşleş fat32_oku::dosya_oku(b,"/KAYIT.TXT") { hata(e) => { ver yanlış; } tamam(v) => { eğer dizi_boyut(v) != 4 { ver yanlış; } } }
+        eşleş bag_bolum("sata",0,1,34,b,bayt_sifir(0),12) { hata(e) => { ver yanlış; } tamam(v) => { dizi_ekle(bs,v); } }
+    } }
+    değişken kok: seçimlik<tam64> = hiç;
+    eşleş komut_satiri_coz("kok=12345678") { hata(e) => { ver yanlış; } tamam(xs) => { değişken x: KomutSecenegi = dizi_al(xs,0); eğer değil metin_esit(x.anahtar,"kok") { ver yanlış; } eşleş kok_seri_coz(x.deger) { hata(e) => { ver yanlış; } tamam(v) => { kok=değer(v); } } } }
+    eşleş bag_tablosu(bs,kok) { hata(e) => { ver yanlış; } tamam(t) => {
+        eğer t.ramdisk veya değil metin_esit(t.uyari,"") veya dizi_boyut(t.kayitlar) != 4 { ver yanlış; }
+        değişken root: BagKaydi = dizi_al(t.kayitlar,0); değişken esp: BagKaydi = dizi_al(t.kayitlar,1); değişken veri: BagKaydi = dizi_al(t.kayitlar,2); değişken sata: BagKaydi = dizi_al(t.kayitlar,3);
+        eğer değil metin_esit(root.ad,"/") veya değil metin_esit(esp.ad,"/diskler/nvme0p1") veya değil metin_esit(veri.ad,"/diskler/nvme0p2") veya değil metin_esit(sata.ad,"/diskler/sata0p1") { ver yanlış; }
+        eğer değil usb_yaz(root,yanlış,us,ua) { ver yanlış; }
+        değişken once: tam32 = na.gc_sayisi;
+        eğer nv_yaz(esp,yanlış,ns,na) veya nv_yaz(esp,doğru,ns,na) veya nv_yaz(veri,yanlış,ns,na) veya na.gc_sayisi != once { ver yanlış; }
+        eğer değil nv_yaz(veri,doğru,ns,na) { ver yanlış; }
+        // Salt okunur bölümün gerçek FAT içeriği değişmedi.
+        eşleş nvme_test_oku(ns,na,esp.bolum.lba,1112) { hata(e) => { ver yanlış; } tamam(f) => { eşleş fat32_oku::dosya_oku(f,"/MAT.TXT") { tamam(v) => { ver yanlış; } hata(e) => { } } } }
+        ver doğru;
+    } }
+}
+işlev main() -> tam32 {
+    değişken na: SahteNvme = sahte_nvme_yeni(); değişken sa: SahteAhci = sahte_ahci_yeni(); değişken ua: SahteDepo = sahte_depo_yeni();
+    eşleş depolama_ornek() { hata(e) => { ver 1; } tamam(v) => {
+        ua.disk=kes(v,0,dizi_boyut(v)); sa.disk=kes(v,0,dizi_boyut(v)); na.disk=kes(v,0,dizi_boyut(v)); na.ek_disk=kes(v,17408,dizi_boyut(v)-17408); na.ek_lba=70034; na.kapasite=160000;
+        yaz_le32(ua.disk,17475,305419896); yaz_le32(sa.disk,17475,2); yaz_le32(na.disk,17475,3); yaz_le32(na.ek_disk,67,4);
+        değişken g: Dizi<dtam8> = matris_gpt(); değişken i: tam32 = 0; iken i < dizi_boyut(g) { yaz_u8(na.disk,i,oku_u8(g,i) olarak tam64); i=i+1; }
+    } }
+    eşleş nvme_yeni(65536,4) { hata(e) => { ver 2; } tamam(n) => { değişken ns: NvmeDurum = n;
+        eşleş ahci_yeni(65536,0-1) { hata(e) => { ver 3; } tamam(a) => { değişken ss: AhciDurum = a;
+            eşleş usb_depo_yeni(65536,8196,4152,1,2,130,1) { hata(e) => { ver 4; } tamam(u) => { değişken us: UsbDepo = u; eğer matris(&değişken ns,&değişken na,&değişken ss,&değişken sa,&değişken us,&değişken ua) { ver 0; } ver 5; } }
+        } }
+    } }
+}

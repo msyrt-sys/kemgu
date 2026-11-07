@@ -1,0 +1,17 @@
+// Kâhin: python3 tools/codex/dalga4_ahci.py (Linux v6.17 ahci.h / yerel ata.h).
+kullan drivers::ahci::kayit::{ AhciCap, ahci_cap_coz, ahci_port_ofs, ahci_link, ahci_motor_durdu, ahci_tfd_mesgul, ahci_tfd_hata, ahci_tfes, AHCI_CAP, AHCI_GHC, AHCI_IS, AHCI_PI, AHCI_VS, AHCI_CLB, AHCI_CLBU, AHCI_FB, AHCI_FBU, AHCI_PIS, AHCI_PIE, AHCI_CMD, AHCI_TFD, AHCI_SIG, AHCI_SSTS, AHCI_SCTL, AHCI_SERR, AHCI_CI };
+işlev test_kayitlar() -> mantıksal {
+    ver AHCI_CAP == 0 ve AHCI_GHC == 4 ve AHCI_IS == 8 ve AHCI_PI == 12 ve AHCI_VS == 16 ve AHCI_CLB == 0 ve AHCI_CLBU == 4 ve AHCI_FB == 8 ve AHCI_FBU == 12 ve AHCI_PIS == 16 ve AHCI_PIE == 20 ve AHCI_CMD == 24 ve AHCI_TFD == 32 ve AHCI_SIG == 36 ve AHCI_SSTS == 40 ve AHCI_SCTL == 44 ve AHCI_SERR == 48 ve AHCI_CI == 56;
+}
+işlev test_cap_port() -> mantıksal {
+    eşleş ahci_cap_coz(2147491615) { hata(e) => { ver yanlış; } tamam(c) => { eğer c.port_sayisi != 32 veya c.yuva_sayisi != 32 veya değil c.adres64 { ver yanlış; } } }
+    eşleş ahci_cap_coz(4294967296) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_port_ofs(31,56) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 4280 { ver yanlış; } } }
+    eşleş ahci_port_ofs(32,56) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_port_ofs(0,128) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş ahci_port_ofs(0,3) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev test_durum() -> mantıksal {
+    ver ahci_link(259,257) ve değil ahci_link(515,257) ve değil ahci_link(258,257) ve değil ahci_link(259,3943956737) ve ahci_motor_durdu(17) ve değil ahci_motor_durdu(49152) ve ahci_tfd_mesgul(128) ve ahci_tfd_mesgul(8) ve değil ahci_tfd_mesgul(1) ve ahci_tfd_hata(1) ve değil ahci_tfd_hata(128) ve ahci_tfes(1073741824) ve değil ahci_tfes(1);
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_kayitlar() { h=h+1; } eğer değil test_cap_port() { h=h+1; } eğer değil test_durum() { h=h+1; } ver h; }

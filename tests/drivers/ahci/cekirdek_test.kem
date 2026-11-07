@@ -1,0 +1,36 @@
+// Kâhin: python3 tools/codex/dalga4_ahci_sahte.py; 130*512=66560 → 128+2 blok.
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni, ahci_adim, ahci_oku, ahci_yaz, ahci_flush };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8 };
+kullan tests::drivers::ahci::sahte_ahci::{ SahteAhci, sahte_ahci_yeni, sahte_ahci_yanit };
+işlev sur(s: &değişken AhciDurum, a: &değişken SahteAhci) -> mantıksal {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 20000 { değişken istek: GcIstek = ahci_adim(s,y); eşleş istek { GcIstek::Bitti => { ver doğru; } GcIstek::Hata(m) => { yazdir_metin(m); ver yanlış; } _ => { y=sahte_ahci_yanit(a,istek); } } i=i+1; } ver yanlış;
+}
+işlev kabul(r: sonuç<mantıksal,metin>) -> mantıksal { eşleş r { tamam(v) => { ver v; } hata(e) => { ver yanlış; } } }
+işlev test_io() -> mantıksal {
+    değişken a: SahteAhci = sahte_ahci_yeni();
+    eşleş ahci_yeni(65536,0-1) {
+        hata(e) => { ver yanlış; }
+        tamam(d) => {
+            değişken s: AhciDurum = d;
+            eğer değil sur(&değişken s,&değişken a) veya s.port != 2 veya dizi_boyut(s.portlar) != 1 veya s.kapasite != 80000 { ver yanlış; }
+            // Yuva 0 başka komutla meşgulken sürücü 1'i seçmeli.
+            a.ci=1;
+            değişken b: Dizi<dtam8> = bayt_sifir(66560); değişken i: tam32 = 0;
+            iken i < 66560 { yaz_u8(b,i,((i*17+3)&255) olarak tam64); i=i+1; }
+            eğer değil kabul(ahci_yaz(&değişken s,2,b)) veya değil sur(&değişken s,&değişken a) veya s.yuva != 1 { ver yanlış; }
+            eğer değil kabul(ahci_oku(&değişken s,2,130)) veya değil sur(&değişken s,&değişken a) { ver yanlış; }
+            eğer dizi_boyut(s.sonuc) != 66560 { ver yanlış; }
+            i=0; iken i < 66560 { eğer oku_u8(s.sonuc,i) != ((i*17+3)&255) { ver yanlış; } i=i+1; }
+            eğer değil kabul(ahci_flush(&değişken s)) veya değil sur(&değişken s,&değişken a) { ver yanlış; }
+            ver a.gc_sayisi == 5 ve a.flush_sayisi == 1 ve a.ci == 1 ve değil kabul(ahci_oku(&değişken s,80000,1));
+        }
+    }
+}
+işlev test_yok() -> mantıksal {
+    değişken a: SahteAhci = sahte_ahci_yeni(); a.ariza=3;
+    eşleş ahci_yeni(65536,0-1) { hata(e) => { ver yanlış; } tamam(d) => { değişken s: AhciDurum = d; eğer sur(&değişken s,&değişken a) { ver yanlış; } } }
+    eşleş ahci_yeni(65537,0-1) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_io() { yazdir_metin("ahci io"); h=h+1; } eğer değil test_yok() { h=h+1; } ver h; }

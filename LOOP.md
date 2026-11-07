@@ -231,9 +231,24 @@
       govde hic tahsis etmese bile (oku_le32 9,3M cagri). D-739 iki sicak okuyucuyu `çıplak` yaparak
       BELIRTIYI kapatti; KOK tum KEMGU programlarinda. Oneri: escape/tahsis ozeti (D9a) ile "tahsis
       yok" kaniti varsa prologu atla. Kanit: fat32_coklu `çıplak`SIZ da <=3 sn.
-- [ ] E4f [S] tests/drivers/virtio/virtio_blk_init_test.kem 98-102: `blk_cfg_adres` secili ithal
+- [x] E4f [S] ✓ D-740 (ithalat eklendi, surucu_diff muafiyeti 2->1). tests/drivers/virtio/virtio_blk_init_test.kem 98-102: `blk_cfg_adres` secili ithal
       edilmeden cagriliyor -> C T002x5 (GERCEK test hatasi, D-739 olcumu). Ithalati ekle, surucu_diff
       muafiyetini kaldir.
+- [ ] E4g [M] Codex dalga 4 derleyici bulgulari (otomasyon/chatgpt/codex4_bulgular.md):
+      F003 [S] SESSIZ YANLIS (self): yapi ALANINDAKI Dizi<dtam8>'den dizi_al -> isaret genisletme
+           (128 -> -128). C004'un (D-738) kardesi: C004 yalniz TANIMLAYICI kaynagini duzeltti, ERISIM acik.
+      F005 [M] TASARIM: farkli dizinlerdeki ayni adli modul dosyalari (nvme/cekirdek.kem +
+           ahci/cekirdek.kem) LLVM'de AYNI ad -> `invalid redefinition @cekirdek.bekle`. Kok D-584:
+           onek SON segmente kirpiliyor; tek dizinde dogru, iki dizinde CAKISIR. Benzersiz mangle
+           (tam yol, `::`'siz kodlanmis) gerekli; C ve self AYNI kurala.
+      F002 [S] iki derleyici LINK-RED: `s.x = değer(..)` (yapi alanina yapici atama; D-465 alan kolu).
+      F004 [S] C LINK-RED: sonuc payload'indan gelen Dizi<Cesit> uzerinde `eşleş dizi_al(xs,0)`
+           (C003'un C kolu).
+      F001 [S] C sahte T011: secili ithal tip yapi alaninda `seçimlik<Rsdp>`.
+- [ ] E4h [L] QEMU DOGRULAMA LISTESI (codex4_bulgular.md "QEMU'da dogrulanacak": AHCI, xHCI, USB BOT):
+      sahte aygit modelleri Codex'in standardi ANLAYISIDIR; ayni yanlis hem surucuye hem modele
+      girebilir. Bu liste gercek QEMU aygitlariyla (`-device nvme/ahci/qemu-xhci/usb-storage/usb-kbd`)
+      kapatilacak — Claude'un bare-metal baglama isinin (H7/H10) ilk adimi.
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
       once bu onerilir).
 - [ ] F1b [L] DRF V2: tam-dil kapsami.
@@ -2625,3 +2640,12 @@
   Entegrasyon: tek cakisma (iki PR ayni noktaya ayri fonksiyon) ikisi korunarak cozuldu. test_tumu
   rc=0, FIXPOINT, checker_diff 297/297 (0 muaf), codegen_diff 195/195, modul_codegen 55/55,
   surucu_diff 17/17, kopru 91/91, ASan PASS=128 FAIL=0.
+- 2026-11-07 D-740: CODEX DALGASI 4 (PR #186) — 26/26 is: sans-IO surucu cekirdekleri (drivers/ortak/gc.kem
+  istek sozlugu; testte sahte aygit modeli, gercek OS'te MMIO/DMA): NVMe (kayit/komut/PRP/kimlik/
+  cekirdek, faz biti), AHCI (HBA/port/FIS/PRDT/ATA IDENTIFY), USB (tanimlayici, xHCI halkalari, HID
+  klavye -> mevcut Turkce Q cekirdegi, HID fare, BOT+SCSI depo), multiboot2 + `kok=`, blok onbellegi,
+  coklu baglama + ESP korumasi, depolama matrisi benzetimi (USB+NVMe+AHCI ayni anda). Kopru 117/117,
+  Codex tam test_tumu rc=0 (taban == main). CLAUDE DOGRULAMASI: kapsam temiz, kopru yeniden kosuldu
+  117/117, surucu_diff 17/17, BAGIMSIZ SABOTAJ x2 ESP korumasina (red dali + GUID tanima) -> bagla_test
+  ve depolama_matrisi IKISI de kirmizi. 5 yeni derleyici bulgusu -> E4g; QEMU listesi -> E4h.
+  surucu_diff bayat muafiyeti (virtio_blk_init_test) kaldirildi.

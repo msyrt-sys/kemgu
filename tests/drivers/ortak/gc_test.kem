@@ -1,0 +1,37 @@
+// Hesap: python3 -c "print(2**33+7, 2**32-1, list(bytes([17,34,51])))"
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos, gc_yanit_denetle };
+kullan tests::drivers::ortak::sahte_gc::{ SahteGc, sahte_yeni, sahte_yanit };
+işlev kabul(i: GcIstek, y: GcYanit) -> mantıksal { eşleş gc_yanit_denetle(i,y) { tamam(v) => { ver v; } hata(e) => { ver yanlış; } } }
+işlev test_dongu() -> mantıksal {
+    değişken s: SahteGc = sahte_yeni();
+    değişken b: Dizi<dtam8> = [17 olarak dtam8,34 olarak dtam8,51 olarak dtam8];
+    değişken istekler: Dizi<GcIstek> = [GcIstek::Yaz32(4,4294967295),GcIstek::Oku32(4),GcIstek::Yaz64(8,8589934599),GcIstek::Oku64(8),GcIstek::BellekYaz(4096,b),GcIstek::BellekOku(4096,3),GcIstek::Bekle(10),GcIstek::Bitti];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(istekler) {
+        değişken istek: GcIstek = dizi_al(istekler,i);
+        değişken y: GcYanit = sahte_yanit(&değişken s,istek);
+        eğer değil kabul(istek,y) { ver yanlış; }
+        eğer i == 1 ve y.deger != 4294967295 { ver yanlış; }
+        eğer i == 3 ve y.deger != 8589934599 { ver yanlış; }
+        eğer i == 5 { eğer dizi_boyut(y.baytlar) != 3 veya dizi_al(y.baytlar,2) != (51 olarak dtam8) { ver yanlış; } }
+        i = i + 1;
+    }
+    ver s.beklenen == 10;
+}
+işlev test_olumsuz() -> mantıksal {
+    değişken y: GcYanit = gc_bos();
+    eğer kabul(GcIstek::BellekOku(4096,3),y) { ver yanlış; }
+    eğer kabul(GcIstek::Oku32(0-4),y) veya kabul(GcIstek::Oku32(2),y) { ver yanlış; }
+    eğer kabul(GcIstek::BellekOku(9223372036854775807,2),y) { ver yanlış; }
+    eğer kabul(GcIstek::Bekle(0-1),y) veya kabul(GcIstek::Hata("aygit"),y) { ver yanlış; }
+    y.deger = 4294967296;
+    eğer kabul(GcIstek::Oku32(0),y) { ver yanlış; }
+    y.basarili = yanlış;
+    ver değil kabul(GcIstek::Yaz32(0,1),y);
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_dongu() { h = h+1; }
+    eğer değil test_olumsuz() { h = h+1; }
+    ver h;
+}

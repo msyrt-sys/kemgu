@@ -1,0 +1,19 @@
+// Yalnız test aygıtı; sürücüler bu modülü içe aktarmaz.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+genel yapı SahteGc { r32: tam64; r64: tam64; bellek: Dizi<dtam8>; beklenen: tam32; }
+genel işlev sahte_yeni() -> SahteGc { değişken b: Dizi<dtam8> = []; ver SahteGc { r32: 0, r64: 0, bellek: b, beklenen: 0 }; }
+genel işlev sahte_yanit(s: &değişken SahteGc, i: GcIstek) -> GcYanit {
+    değişken y: GcYanit = gc_bos();
+    eşleş i {
+        GcIstek::Bitti => { }
+        GcIstek::Hata(m) => { y.basarili = yanlış; }
+        GcIstek::Yaz32(a,v) => { s.r32 = v; }
+        GcIstek::Oku32(a) => { y.deger = s.r32; }
+        GcIstek::Yaz64(a,v) => { s.r64 = v; }
+        GcIstek::Oku64(a) => { y.deger = s.r64; }
+        GcIstek::BellekYaz(a,b) => { s.bellek = b; }
+        GcIstek::BellekOku(a,n) => { y.baytlar = s.bellek; }
+        GcIstek::Bekle(us) => { s.beklenen = s.beklenen + us; }
+    }
+    ver y;
+}

@@ -1,0 +1,70 @@
+// NVMe SQ/CQ ve bitişik DMA alanından PRP planı; hiçbir donanım erişimi yapmaz.
+// Kaynak/hesap: tools/codex/dalga4_nvme_komut.py, Linux nvme.h.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_le16, oku_le32, yaz_le32, yaz_le64 };
+genel yapı PrpSayfa { adres: tam64; baytlar: Dizi<dtam8>; }
+genel yapı NvmePrp { bir: tam64; iki: tam64; listeler: Dizi<PrpSayfa>; }
+genel yapı NvmeTamamlanma { sq_bas: tam32; sqid: tam32; cid: tam32; faz: mantıksal; durum: tam32; sc: tam32; sct: tam32; dnr: mantıksal; }
+genel işlev nvme_sq_kur(op: tam32, fuse: tam32, psdt: tam32, cid: tam32, nsid: tam64, mptr: tam64, prp1: tam64, prp2: tam64, cdw: Dizi<tam64>) -> sonuç<Dizi<dtam8>,metin> {
+    eğer op < 0 veya op > 255 veya fuse < 0 veya fuse > 3 veya psdt < 0 veya psdt > 3 veya cid < 0 veya cid > 65535 veya nsid < 0 veya nsid > 4294967295 veya mptr < 0 veya prp1 < 0 veya prp2 < 0 veya dizi_boyut(cdw) != 6 { ver hata("nvme sq alan"); }
+    değişken i: tam32 = 0;
+    iken i < 6 { eğer dizi_al(cdw,i) < 0 veya dizi_al(cdw,i) > 4294967295 { ver hata("nvme cdw alan"); } i=i+1; }
+    değişken b: Dizi<dtam8> = bayt_sifir(64);
+    yaz_le32(b,0,(op olarak tam64)|((fuse olarak tam64)<<8)|((psdt olarak tam64)<<14)|((cid olarak tam64)<<16));
+    yaz_le32(b,4,nsid); yaz_le64(b,16,mptr); yaz_le64(b,24,prp1); yaz_le64(b,32,prp2);
+    i=0; iken i < 6 { yaz_le32(b,40+i*4,dizi_al(cdw,i)); i=i+1; } ver tamam(b);
+}
+genel işlev nvme_identify(cid: tam32, nsid: tam64, cns: tam32, adres: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    eğer cns < 0 veya cns > 1 veya adres <= 0 veya adres%4096 != 0 { ver hata("nvme identify alan"); }
+    değişken dw: Dizi<tam64> = [cns olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64];
+    ver nvme_sq_kur(6,0,0,cid,nsid,0,adres,0,dw);
+}
+genel işlev nvme_kuyruk_olustur(cq: mantıksal, cid: tam32, qid: tam32, boy: tam32, adres: tam64, hedef_cq: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eğer qid < 1 veya qid > 65535 veya boy < 2 veya boy > 65536 veya adres <= 0 veya adres%4096 != 0 veya hedef_cq < 1 veya hedef_cq > 65535 { ver hata("nvme kuyruk alan"); }
+    değişken op: tam32 = 1; değişken bayrak: tam64 = ((hedef_cq olarak tam64)<<16)|1;
+    eğer cq { op=5; bayrak=1; }
+    değişken dw: Dizi<tam64> = [((boy-1) olarak tam64)<<16 | (qid olarak tam64),bayrak,0 olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64];
+    ver nvme_sq_kur(op,0,0,cid,0,0,adres,0,dw);
+}
+genel işlev nvme_io_kur(yaz: mantıksal, cid: tam32, nsid: tam64, lba: tam64, sayi: tam32, prp1: tam64, prp2: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    eğer nsid < 1 veya lba < 0 veya sayi < 1 veya sayi > 65536 veya lba > 9223372036854775807-((sayi-1) olarak tam64) { ver hata("nvme io alan"); }
+    değişken op: tam32 = 2; eğer yaz { op=1; }
+    değişken dw: Dizi<tam64> = [lba&4294967295,(lba>>32)&4294967295,(sayi-1) olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64];
+    ver nvme_sq_kur(op,0,0,cid,nsid,0,prp1,prp2,dw);
+}
+genel işlev nvme_flush_kur(cid: tam32, nsid: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    eğer nsid < 1 { ver hata("nvme nsid"); }
+    değişken dw: Dizi<tam64> = [0 olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64,0 olarak tam64];
+    ver nvme_sq_kur(0,0,0,cid,nsid,0,0,0,dw);
+}
+genel işlev nvme_cq_coz(b: Dizi<dtam8>) -> sonuç<NvmeTamamlanma,metin> {
+    eğer dizi_boyut(b) != 16 { ver hata("nvme cq boyu"); }
+    değişken dw3: tam64 = oku_le32(b,12);
+    ver tamam(NvmeTamamlanma { sq_bas: oku_le16(b,8), sqid: oku_le16(b,10), cid: (dw3&65535) olarak tam32, faz: (dw3&65536) != 0, durum: ((dw3>>17)&32767) olarak tam32, sc: ((dw3>>17)&255) olarak tam32, sct: ((dw3>>25)&7) olarak tam32, dnr: (dw3&2147483648) != 0 });
+}
+// Plan başına 16 MiB üst sınırı; daha büyük G/Ç çekirdek tarafından bölünür.
+genel işlev nvme_prp_kur(adres: tam64, boy: tam64, sayfa: tam32, liste_bas: tam64) -> sonuç<NvmePrp,metin> {
+    eğer adres <= 0 veya adres%4 != 0 veya boy < 1 veya boy > 16777216 veya boy > 9223372036854775807-adres veya sayfa < 4096 veya sayfa > 65536 veya (sayfa & (sayfa-1)) != 0 { ver hata("nvme prp aralik"); }
+    değişken pages: Dizi<PrpSayfa> = [];
+    değişken p: NvmePrp = NvmePrp { bir: adres, iki: 0, listeler: pages };
+    değişken sp: tam64 = sayfa olarak tam64; değişken ilk: tam64 = sp-adres%sp;
+    eğer boy <= ilk { ver tamam(p); }
+    değişken sonraki: tam64 = adres+ilk;
+    değişken kalan: tam64 = (boy-ilk+sp-1)/sp;
+    eğer kalan == 1 { p.iki=sonraki; ver tamam(p); }
+    değişken kapasite: tam64 = sp/8;
+    değişken adet: tam64 = (kalan+kapasite-3)/(kapasite-1);
+    eğer liste_bas <= 0 veya liste_bas%sp != 0 veya adet*sp > 9223372036854775807-liste_bas { ver hata("nvme prp liste aralik"); }
+    eğer liste_bas < adres+boy ve adres < liste_bas+adet*sp { ver hata("nvme prp liste cakisma"); }
+    p.iki=liste_bas;
+    değişken sayfa_no: tam64 = 0;
+    iken kalan > 0 {
+        değişken b: Dizi<dtam8> = bayt_sifir(sayfa);
+        değişken al: tam64 = kalan; eğer al > kapasite { al=kapasite-1; }
+        değişken i: tam64 = 0;
+        iken i < al { yaz_le64(b,(i*8) olarak tam32,sonraki); sonraki=sonraki+sp; i=i+1; }
+        kalan=kalan-al;
+        eğer kalan > 0 { yaz_le64(b,sayfa-8,liste_bas+(sayfa_no+1)*sp); }
+        dizi_ekle(p.listeler,PrpSayfa { adres: liste_bas+sayfa_no*sp, baytlar: b }); sayfa_no=sayfa_no+1;
+    }
+    ver tamam(p);
+}

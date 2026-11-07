@@ -1,0 +1,38 @@
+// Kâhin: python3 -c "import struct; print(list(struct.pack('>HIQ',0x1234,0x89abcdef,0x0123456789abcdef)))"
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_be16, oku_be32, oku_be64, yaz_be16, yaz_be32, yaz_be64 };
+işlev test_okuma() -> mantıksal {
+    değişken b: Dizi<dtam8> = [18 olarak dtam8,52 olarak dtam8,137 olarak dtam8,171 olarak dtam8,205 olarak dtam8,239 olarak dtam8,1 olarak dtam8,35 olarak dtam8,69 olarak dtam8,103 olarak dtam8,137 olarak dtam8,171 olarak dtam8,205 olarak dtam8,239 olarak dtam8];
+    eşleş oku_be16(b,0) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 4660 { ver yanlış; } } }
+    eşleş oku_be32(b,2) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 2309737967 { ver yanlış; } } }
+    eşleş oku_be64(b,6) { hata(e) => { ver yanlış; } tamam(v) => { ver v == 81985529216486895; } }
+}
+işlev test_yazma() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(14);
+    eşleş yaz_be16(b,0,4660) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş yaz_be32(b,2,2309737967) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş yaz_be64(b,6,81985529216486895) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    değişken beklenen: Dizi<dtam8> = [18 olarak dtam8,52 olarak dtam8,137 olarak dtam8,171 olarak dtam8,205 olarak dtam8,239 olarak dtam8,1 olarak dtam8,35 olarak dtam8,69 olarak dtam8,103 olarak dtam8,137 olarak dtam8,171 olarak dtam8,205 olarak dtam8,239 olarak dtam8];
+    değişken i: tam32 = 0;
+    iken i < 14 { eğer dizi_al(b,i) != dizi_al(beklenen,i) { ver yanlış; } i=i+1; }
+    ver doğru;
+}
+işlev test_sinir() -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(8);
+    eşleş oku_be16(b,7) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş oku_be32(b,0-1) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş oku_be64(b,2147483647) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş yaz_be16(b,7,4660) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş yaz_be32(b,0-1,1) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş yaz_be64(b,1,1) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    değişken i: tam32 = 0;
+    iken i < 8 { eğer dizi_al(b,i) != (0 olarak dtam8) { ver yanlış; } i=i+1; }
+    eşleş yaz_be64(b,0,0-81985529216486896) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş oku_be64(b,0) { hata(e) => { ver yanlış; } tamam(v) => { ver v == 0-81985529216486896 ve dizi_al(b,0) == (254 olarak dtam8); } }
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_okuma() { h=h+1; }
+    eğer değil test_yazma() { h=h+1; }
+    eğer değil test_sinir() { h=h+1; }
+    ver h;
+}

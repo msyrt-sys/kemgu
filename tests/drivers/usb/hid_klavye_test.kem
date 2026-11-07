@@ -1,0 +1,27 @@
+// Beklenen Unicode: Python [ord(c) for c in "Ağaç İş"].
+kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+işlev rapor(mod: tam32, k: tam32) -> Dizi<dtam8> { değişken b: Dizi<dtam8> = bayt_sifir(8); yaz_u8(b,0,mod olarak tam64); yaz_u8(b,2,k olarak tam64); ver b; }
+işlev test_metin() -> mantıksal {
+    değişken h: HidKlavye = hid_klavye_yeni(); değişken d: KlavyeDurumu = klavye_yeni();
+    değişken tuslar: Dizi<tam32> = [4,47,4,55,44,52,51]; değişken modlar: Dizi<tam32> = [2,0,0,0,0,32,0]; değişken bek: Dizi<tam32> = [65,287,97,231,32,304,351]; değişken i: tam32 = 0;
+    iken i < 7 {
+        eşleş hid_klavye_rapor(&değişken h,&değişken d,rapor(dizi_al(modlar,i),dizi_al(tuslar,i))) { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 1 { ver yanlış; } değişken o: TusOlayi = dizi_al(xs,0); eşleş o { TusOlayi::Karakter(c) => { eğer c != dizi_al(bek,i) { ver yanlış; } } _ => { ver yanlış; } } } }
+        // Aynı basılı tuş yinelenmez.
+        eşleş hid_klavye_rapor(&değişken h,&değişken d,rapor(dizi_al(modlar,i),dizi_al(tuslar,i))) { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 0 { ver yanlış; } } }
+        i=i+1;
+    } ver doğru;
+}
+işlev test_durum() -> mantıksal {
+    değişken h: HidKlavye = hid_klavye_yeni(); değişken d: KlavyeDurumu = klavye_yeni();
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,rapor(83,79)) { hata(e) => { ver yanlış; } tamam(xs) => { eğer değil d.ctrl veya değil d.sol_shift veya değil d.altgr veya d.alt { ver yanlış; } değişken o: TusOlayi = dizi_al(xs,0); eşleş o { TusOlayi::Ozel(k,b) => { eğer k != 8 veya değil b { ver yanlış; } } _ => { ver yanlış; } } } }
+    değişken kotu: Dizi<dtam8> = [0 olarak dtam8,0 olarak dtam8,1 olarak dtam8,1 olarak dtam8,1 olarak dtam8,1 olarak dtam8,1 olarak dtam8,1 olarak dtam8];
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,kotu) { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 0 veya değil d.ctrl { ver yanlış; } } }
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,bayt_sifir(7)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,rapor(16,0)) { hata(e) => { ver yanlış; } tamam(xs) => { eğer değil d.ctrl veya d.altgr veya d.sol_shift { ver yanlış; } değişken o: TusOlayi = dizi_al(xs,0); eşleş o { TusOlayi::Ozel(k,b) => { eğer k != 8 veya b { ver yanlış; } } _ => { ver yanlış; } } } }
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,rapor(0,57)) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş hid_klavye_rapor(&değişken h,&değişken d,rapor(0,57)) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    ver d.caps ve değil d.ctrl;
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_metin() { h=h+1; } eğer değil test_durum() { h=h+1; } ver h; }

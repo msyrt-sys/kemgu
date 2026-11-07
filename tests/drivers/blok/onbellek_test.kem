@@ -1,0 +1,30 @@
+kullan drivers::blok::onbellek::{ Onbellek, OnbellekKaydi, BlokParcasi, onbellek_yeni, onbellek_koy, onbellek_oku, onbellek_plan, onbellek_onay, blok_bol };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+işlev kabul(r: sonuç<mantıksal,metin>) -> mantıksal { eşleş r { tamam(v) => { ver v; } hata(e) => { ver yanlış; } } }
+işlev test_lru() -> mantıksal {
+    eşleş onbellek_yeni(512,2) { hata(e) => { ver yanlış; } tamam(d) => {
+        değişken c: Onbellek = d; değişken b: Dizi<dtam8> = bayt_sifir(512); yaz_u8(b,0,128);
+        eğer değil kabul(onbellek_koy(&değişken c,1,b,doğru)) veya değil kabul(onbellek_koy(&değişken c,2,b,yanlış)) { ver yanlış; } yaz_u8(b,0,99);
+        eşleş onbellek_oku(&değişken c,1) { hata(e) => { ver yanlış; } tamam(v) => { eğer oku_u8(v,0) != 128 { ver yanlış; } yaz_u8(v,0,1); } }
+        eğer değil kabul(onbellek_koy(&değişken c,3,b,yanlış)) { ver yanlış; }
+        eşleş onbellek_oku(&değişken c,2) { tamam(v) => { ver yanlış; } hata(e) => { } }
+        eşleş onbellek_koy(&değişken c,4,b,yanlış) { tamam(v) => { ver yanlış; } hata(e) => { } }
+        değişken plan: Dizi<OnbellekKaydi> = onbellek_plan(c); eğer dizi_boyut(plan) != 1 { ver yanlış; } değişken p: OnbellekKaydi = dizi_al(plan,0); eğer p.lba != 1 veya oku_u8(p.veri,0) != 128 { ver yanlış; }
+        eğer değil kabul(onbellek_koy(&değişken c,1,b,doğru)) { ver yanlış; }
+        eşleş onbellek_onay(&değişken c,1,p.surum) { tamam(v) => { ver yanlış; } hata(e) => { } }
+        eşleş onbellek_koy(&değişken c,1,b,yanlış) { tamam(v) => { ver yanlış; } hata(e) => { } }
+        plan=onbellek_plan(c); p=dizi_al(plan,0); eğer oku_u8(p.veri,0) != 99 veya değil kabul(onbellek_onay(&değişken c,1,p.surum)) veya dizi_boyut(onbellek_plan(c)) != 0 { ver yanlış; }
+        eşleş onbellek_oku(&değişken c,3) { hata(e) => { ver yanlış; } tamam(v) => { } }
+        eğer değil kabul(onbellek_koy(&değişken c,4,b,yanlış)) { ver yanlış; }
+        eşleş onbellek_oku(&değişken c,1) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+    } }
+}
+işlev test_bol() -> mantıksal {
+    // Python divmod(130, 65536//512) = (1,2).
+    eşleş blok_bol(7,130,512,65536) { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 2 { ver yanlış; } değişken a: BlokParcasi = dizi_al(xs,0); değişken b: BlokParcasi = dizi_al(xs,1); eğer a.lba != 7 veya a.adet != 128 veya b.lba != 135 veya b.adet != 2 { ver yanlış; } } }
+    eşleş blok_bol(9223372036854775807,1,512,512) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    eşleş blok_bol(9223372036854775807,2,512,512) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş blok_bol(0,1,512,511) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş blok_bol(0,0,512,512) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_lru() { h=h+1; } eğer değil test_bol() { h=h+1; } ver h; }

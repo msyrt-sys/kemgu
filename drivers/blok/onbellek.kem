@@ -1,0 +1,39 @@
+// Saf sektör önbelleği. Kirli LRU girdisi onaylanmış geri yazma olmadan atılmaz.
+kullan drivers::ortak::bayt::{ oku_u8 };
+genel yapı OnbellekKaydi { lba: tam64; veri: Dizi<dtam8>; kirli: mantıksal; surum: tam64; }
+genel yapı Onbellek { sektor: tam32; azami: tam32; saat: tam64; kayitlar: Dizi<OnbellekKaydi>; }
+genel yapı BlokParcasi { lba: tam64; adet: tam32; }
+işlev kopya(b: Dizi<dtam8>) -> Dizi<dtam8> { değişken v: Dizi<dtam8> = []; değişken i: tam32 = 0; iken i < dizi_boyut(b) { dizi_ekle(v,oku_u8(b,i) olarak dtam8); i=i+1; } ver v; }
+genel işlev onbellek_yeni(sektor: tam32, azami: tam32) -> sonuç<Onbellek,metin> {
+    eğer sektor < 512 veya sektor > 65536 veya (sektor&(sektor-1)) != 0 veya azami < 1 veya azami > 4096 veya azami > 16777216/sektor { ver hata("onbellek boyutu"); }
+    ver tamam(Onbellek { sektor: sektor, azami: azami, saat: 0, kayitlar: [] });
+}
+işlev bul(c: &değişken Onbellek, lba: tam64) -> tam32 { değişken i: tam32 = 0; iken i < dizi_boyut(c.kayitlar) { değişken k: OnbellekKaydi = dizi_al(c.kayitlar,i); eğer k.lba == lba { ver i; } i=i+1; } ver -1; }
+işlev sona(c: &değişken Onbellek, konum: tam32, yeni: OnbellekKaydi) {
+    değişken xs: Dizi<OnbellekKaydi> = []; değişken i: tam32 = 0;
+    iken i < dizi_boyut(c.kayitlar) { eğer i != konum { değişken k: OnbellekKaydi = dizi_al(c.kayitlar,i); dizi_ekle(xs,k); } i=i+1; } dizi_ekle(xs,yeni); c.kayitlar=xs;
+}
+genel işlev onbellek_oku(c: &değişken Onbellek, lba: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    değişken i: tam32 = bul(c,lba); eğer i < 0 { ver hata("onbellekte yok"); } değişken k: OnbellekKaydi = dizi_al(c.kayitlar,i); sona(c,i,k); ver tamam(kopya(k.veri));
+}
+genel işlev onbellek_koy(c: &değişken Onbellek, lba: tam64, b: Dizi<dtam8>, kirli: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer lba < 0 veya dizi_boyut(b) != c.sektor veya c.saat == 9223372036854775807 { ver hata("onbellek girdi"); }
+    değişken i: tam32 = bul(c,lba);
+    eğer i >= 0 { değişken k: OnbellekKaydi = dizi_al(c.kayitlar,i); eğer k.kirli ve değil kirli { ver hata("kirli verinin uzerine okuma"); } }
+    değilse { eğer dizi_boyut(c.kayitlar) == c.azami { değişken k: OnbellekKaydi = dizi_al(c.kayitlar,0); eğer k.kirli { ver hata("geri yazma gerekli"); } i=0; } }
+    c.saat=c.saat+1; sona(c,i,OnbellekKaydi { lba: lba, veri: kopya(b), kirli: kirli, surum: c.saat }); ver tamam(doğru);
+}
+genel işlev onbellek_plan(c: Onbellek) -> Dizi<OnbellekKaydi> {
+    değişken xs: Dizi<OnbellekKaydi> = []; değişken i: tam32 = 0;
+    iken i < dizi_boyut(c.kayitlar) { değişken k: OnbellekKaydi = dizi_al(c.kayitlar,i); eğer k.kirli { dizi_ekle(xs,OnbellekKaydi { lba: k.lba, veri: kopya(k.veri), kirli: doğru, surum: k.surum }); } i=i+1; } ver xs;
+}
+genel işlev onbellek_onay(c: &değişken Onbellek, lba: tam64, surum: tam64) -> sonuç<mantıksal,metin> {
+    değişken i: tam32 = bul(c,lba); eğer i < 0 { ver hata("onbellek onay kaydi yok"); } değişken k: OnbellekKaydi = dizi_al(c.kayitlar,i);
+    eğer k.surum != surum veya değil k.kirli { ver hata("onbellek eski onay"); } k.kirli=yanlış; dizi_yaz(c.kayitlar,i,k); ver tamam(doğru);
+}
+genel işlev blok_bol(lba: tam64, adet: tam32, sektor: tam32, azami_bayt: tam32) -> sonuç<Dizi<BlokParcasi>,metin> {
+    eğer lba < 0 veya adet < 1 veya (adet olarak tam64)-1 > 9223372036854775807-lba veya sektor < 1 veya azami_bayt < sektor { ver hata("blok bolme araligi"); }
+    değişken sinir: tam32 = azami_bayt/sektor; eğer (adet-1)/sinir+1 > 4096 { ver hata("blok plan siniri"); }
+    değişken xs: Dizi<BlokParcasi> = []; değişken kalan: tam32 = adet; değişken yer: tam64 = lba;
+    iken kalan > 0 { değişken n: tam32 = kalan; eğer n > sinir { n=sinir; } dizi_ekle(xs,BlokParcasi { lba: yer, adet: n }); kalan=kalan-n; eğer kalan > 0 { yer=yer+(n olarak tam64); } } ver tamam(xs);
+}

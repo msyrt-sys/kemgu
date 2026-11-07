@@ -1,0 +1,41 @@
+// Kâhin: python3 tools/codex/dalga4_usb.py; ch9.h/hid.h/struct.pack.
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHidEk, UsbHid, UsbYapilandirma, usb_aygit_coz, usb_yapilandirma_coz, usb_get_descriptor, usb_set_address, usb_set_configuration, usb_hid_set_protocol, usb_hid_set_idle };
+kullan tests::drivers::usb::tanim_fikstur::{ usb_aygit_ornek, usb_yapi_ornek };
+kullan drivers::ortak::bayt::{ yaz_u8, yaz_le16, oku_u8 };
+işlev test_aygit() -> mantıksal {
+    eşleş usb_aygit_coz(usb_aygit_ornek()) { hata(e) => { ver yanlış; } tamam(d) => { eğer d.vid != 4660 veya d.pid != 22136 veya d.ep0_paket != 64 veya d.yapi_sayisi != 1 { ver yanlış; } } }
+    değişken b: Dizi<dtam8> = usb_aygit_ornek(); yaz_u8(b,7,12);
+    eşleş usb_aygit_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev test_yapi() -> mantıksal {
+    eşleş usb_yapilandirma_coz(usb_yapi_ornek()) {
+        hata(e) => { yazdir_metin(e); ver yanlış; }
+        tamam(c) => {
+            eğer c.deger != 1 veya dizi_boyut(c.arayuzlar) != 2 veya dizi_boyut(c.uclar) != 3 veya dizi_boyut(c.hidler) != 1 { ver yanlış; }
+            değişken a: UsbUc = dizi_al(c.uclar,0); değişken b: UsbUc = dizi_al(c.uclar,2);
+            değişken h: UsbHid = dizi_al(c.hidler,0); değişken e: UsbHidEk = dizi_al(h.ekler,0);
+            ver a.adres == 129 ve a.tur == 3 ve a.paket_bayt == 8 ve a.aralik == 10 ve b.adres == 130 ve b.paket_bayt == 512 ve b.arayuz == 1 ve h.surum == 273 ve e.tur == 34 ve e.boy == 63;
+        }
+    }
+}
+işlev red(b: Dizi<dtam8>) -> mantıksal { eşleş usb_yapilandirma_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } } }
+işlev test_bozuk() -> mantıksal {
+    değişken b: Dizi<dtam8> = usb_yapi_ornek(); yaz_u8(b,9,0); eğer değil red(b) { ver yanlış; }
+    b=usb_yapi_ornek(); yaz_le16(b,2,65535); eğer değil red(b) { ver yanlış; }
+    b=usb_yapi_ornek(); yaz_u8(b,23,2); eğer değil red(b) { ver yanlış; }
+    b=usb_yapi_ornek(); yaz_le16(b,31,0); eğer değil red(b) { ver yanlış; }
+    b=usb_yapi_ornek(); yaz_u8(b,29,144); eğer değil red(b) { ver yanlış; }
+    b=usb_yapi_ornek(); yaz_u8(b,36,0); eğer değil red(b) { ver yanlış; }
+    değişken tam: Dizi<dtam8> = usb_yapi_ornek(); değişken kisa: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < dizi_boyut(tam) { eğer değil red(kisa) { ver yanlış; } dizi_ekle(kisa,dizi_al(tam,i)); i=i+1; }
+    ver doğru;
+}
+işlev paket(r: sonuç<Dizi<dtam8>,metin>, b0: tam32, b1: tam32, lo: tam32, hi: tam32, ix: tam32, boy: tam32) -> mantıksal {
+    eşleş r { hata(e) => { ver yanlış; } tamam(b) => { ver dizi_boyut(b) == 8 ve oku_u8(b,0) == b0 ve oku_u8(b,1) == b1 ve oku_u8(b,2) == lo ve oku_u8(b,3) == hi ve oku_u8(b,4) == ix ve oku_u8(b,5) == 0 ve oku_u8(b,6) == boy ve oku_u8(b,7) == 0; } }
+}
+işlev test_setup() -> mantıksal {
+    eğer değil paket(usb_get_descriptor(1,0,0,18),128,6,0,1,0,18) veya değil paket(usb_set_address(7),0,5,7,0,0,0) veya değil paket(usb_set_configuration(1),0,9,1,0,0,0) veya değil paket(usb_hid_set_protocol(2,doğru),33,11,0,0,2,0) veya değil paket(usb_hid_set_idle(2,5,3),33,10,3,5,2,0) { ver yanlış; }
+    eşleş usb_set_address(128) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş usb_get_descriptor(1,0,0,65536) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_aygit() { h=h+1; } eğer değil test_yapi() { h=h+1; } eğer değil test_bozuk() { yazdir_metin("usb bozuk"); h=h+1; } eğer değil test_setup() { h=h+1; } ver h; }
