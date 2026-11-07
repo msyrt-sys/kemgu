@@ -75,3 +75,13 @@ F003 yorumuyla kullanıldı. Derleyiciye dokunulmadı.
   QEMU AHCI ile ayrıca doğrulanmalıdır; sahte e2e donanım doğrulaması sayılmıyor.
 
 - C2 açıklık: görevde DBC için geçen “çift sayı”, aktarımın bayt sayısıdır. DBC=bayt−1 olduğundan 512 bayt için 511 yazılır; PRDT testi bunu bağımsız Python hesabıyla korur.
+
+### QEMU’da doğrulanacak — xHCI
+
+- HCCPARAMS1 CSZ ve 32/64 bayt bağlam yerleşimi; slot/endpoint alanları ve dequeue
+  işaretçisi; Link TRB TC/Cycle ve olay halkası sarma; doorbell endpoint ID, ERDP/EHB.
+- PORTSC RW1C değişim bitleri ile reset yazımları, BAR ofsetleri ve gerçek aygıt hızları.
+  Linux v6.17 xhci.h/xhci-caps.h/xhci-port.h/xhci-ext-caps.h indirilen sabit kaynak
+  olarak Python ile karşılaştırıldı; gerçek QEMU doğrulaması ayrıca gereklidir.
+- D2: görev MaxPorts alanını 8 bit verir; Linux kök hub sınırı 127'dir. Alan 8 bit
+  okunur, 128–255 açık destek sınırı hatasıyla reddedilir; 7 bite sessiz kırpılmaz.

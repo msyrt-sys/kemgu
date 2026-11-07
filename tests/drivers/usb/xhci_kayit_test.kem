@@ -1,0 +1,32 @@
+// Kâhin: python3 tools/codex/dalga4_xhci.py; Linux v6.17 xhci-{caps,port}.h.
+kullan drivers::usb::xhci_kayit::{ XhciYetenek, XhciPort, xhci_yetenek_coz, xhci_port_ofs, xhci_zil_ofs, xhci_intr_ofs, xhci_portsc_coz, xhci_port_reset, xhci_port_ack, xhci_durdu, xhci_hazir };
+kullan tests::drivers::usb::xhci_fikstur::{ xhci_cap_ornek };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+işlev test_yetenek() -> mantıksal {
+    eşleş xhci_yetenek_coz(xhci_cap_ornek(),16384) {
+        hata(e) => { ver yanlış; }
+        tamam(c) => {
+            eğer c.caplength != 32 veya c.surum != 272 veya c.yuva_sayisi != 16 veya c.kesme_sayisi != 8 veya c.port_sayisi != 4 veya değil c.adres64 veya c.baglam_boy != 64 veya c.xecp != 1024 veya c.scratchpad != 103 { ver yanlış; }
+            eşleş xhci_port_ofs(c,4) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 1104 { ver yanlış; } } }
+            eşleş xhci_zil_ofs(c,16) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 8256 { ver yanlış; } } }
+            eşleş xhci_intr_ofs(c,7) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 4352 { ver yanlış; } } }
+            eşleş xhci_port_ofs(c,0) { tamam(v) => { ver yanlış; } hata(e) => { } }
+            eşleş xhci_intr_ofs(c,8) { tamam(v) => { ver yanlış; } hata(e) => { } }
+        }
+    }
+    ver doğru;
+}
+işlev test_port() -> mantıksal {
+    eşleş xhci_portsc_coz(35786243) { hata(e) => { ver yanlış; } tamam(p) => { eğer değil p.bagli veya değil p.etkin veya değil p.guc veya p.hiz != 3 veya değil p.baglanti_degisti veya değil p.reset_bitti { ver yanlış; } } }
+    eşleş xhci_port_reset(35786243,yanlış) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 33554960 { ver yanlış; } } }
+    eşleş xhci_port_ack(35786243,131072) { hata(e) => { ver yanlış; } tamam(v) => { eğer v != 33686016 { ver yanlış; } } }
+    eşleş xhci_port_ack(35786243,2) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    ver xhci_durdu(1) ve değil xhci_durdu(0) ve xhci_hazir(0) ve değil xhci_hazir(2048);
+}
+işlev test_bozuk() -> mantıksal {
+    eşleş xhci_yetenek_coz(bayt_sifir(31),16384) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş xhci_yetenek_coz(xhci_cap_ornek(),8192) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    değişken b: Dizi<dtam8> = xhci_cap_ornek(); yaz_u8(b,0,33);
+    eşleş xhci_yetenek_coz(b,16384) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_yetenek() { h=h+1; } eğer değil test_port() { yazdir_metin("portsc"); h=h+1; } eğer değil test_bozuk() { h=h+1; } ver h; }

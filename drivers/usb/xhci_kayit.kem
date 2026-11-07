@@ -1,0 +1,42 @@
+// Kaynak: tools/codex/dalga4_xhci.py; Linux v6.17 xhci-{caps,port}.h.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32 };
+genel sabit XHCI_USBCMD: tam64 = 0;
+genel sabit XHCI_USBSTS: tam64 = 4;
+genel sabit XHCI_PAGESIZE: tam64 = 8;
+genel sabit XHCI_CRCR: tam64 = 24;
+genel sabit XHCI_DCBAAP: tam64 = 48;
+genel sabit XHCI_CONFIG: tam64 = 56;
+genel sabit XHCI_CMD_RUN: tam64 = 1;
+genel sabit XHCI_CMD_RESET: tam64 = 2;
+genel sabit XHCI_CMD_INTE: tam64 = 4;
+genel yapı XhciYetenek { caplength: tam32; surum: tam32; yuva_sayisi: tam32; kesme_sayisi: tam32; port_sayisi: tam32; adres64: mantıksal; baglam_boy: tam32; dboff: tam64; rtsoff: tam64; xecp: tam64; scratchpad: tam32; }
+genel yapı XhciPort { bagli: mantıksal; etkin: mantıksal; reset: mantıksal; link: tam32; guc: mantıksal; hiz: tam32; baglanti_degisti: mantıksal; reset_bitti: mantıksal; }
+genel işlev xhci_yetenek_coz(b: Dizi<dtam8>, bar_boy: tam64) -> sonuç<XhciYetenek,metin> {
+    eğer dizi_boyut(b) < 32 veya bar_boy < 32 { ver hata("xhci yetenek kisa"); }
+    değişken uzun: tam32 = oku_u8(b,0); değişken hcs: tam64 = oku_le32(b,4); değişken hcs2: tam64 = oku_le32(b,8); değişken hcc: tam64 = oku_le32(b,16);
+    değişken yuva: tam32 = (hcs&255) olarak tam32; değişken intr: tam32 = ((hcs>>8)&2047) olarak tam32; değişken port: tam32 = ((hcs>>24)&255) olarak tam32;
+    değişken db: tam64 = oku_le32(b,20)&4294967292; değişken rt: tam64 = oku_le32(b,24)&4294967264; değişken ext: tam64 = ((hcc>>16)&65535)*4;
+    // Linux/USB kök hub sınırı 127 port; daha fazlası sessizce kırpılmaz.
+    eğer uzun < 32 veya uzun%4 != 0 veya yuva < 1 veya intr < 1 veya port < 1 veya port > 127 veya db < (uzun olarak tam64) veya rt < (uzun olarak tam64) { ver hata("xhci yetenek alanlari"); }
+    eğer db+(yuva olarak tam64)*4+4 > bar_boy veya rt+32+(intr olarak tam64)*32 > bar_boy veya (uzun olarak tam64)+1024+(port olarak tam64)*16 > bar_boy veya (ext != 0 ve ext > bar_boy-4) { ver hata("xhci bar araligi"); }
+    değişken ctx: tam32 = 32; eğer (hcc&4) != 0 { ctx=64; }
+    ver tamam(XhciYetenek { caplength: uzun, surum: oku_le16(b,2), yuva_sayisi: yuva, kesme_sayisi: intr, port_sayisi: port, adres64: (hcc&1) != 0, baglam_boy: ctx, dboff: db, rtsoff: rt, xecp: ext, scratchpad: (((hcs2>>16)&992)|((hcs2>>27)&31)) olarak tam32 });
+}
+genel işlev xhci_port_ofs(c: XhciYetenek, no: tam32) -> sonuç<tam64,metin> { eğer no < 1 veya no > c.port_sayisi { ver hata("xhci port numarasi"); } ver tamam((c.caplength olarak tam64)+1024+((no-1) olarak tam64)*16); }
+genel işlev xhci_zil_ofs(c: XhciYetenek, no: tam32) -> sonuç<tam64,metin> { eğer no < 0 veya no > c.yuva_sayisi { ver hata("xhci yuva numarasi"); } ver tamam(c.dboff+(no olarak tam64)*4); }
+genel işlev xhci_intr_ofs(c: XhciYetenek, no: tam32) -> sonuç<tam64,metin> { eğer no < 0 veya no >= c.kesme_sayisi { ver hata("xhci kesme numarasi"); } ver tamam(c.rtsoff+32+(no olarak tam64)*32); }
+genel işlev xhci_portsc_coz(v: tam64) -> sonuç<XhciPort,metin> {
+    eğer v < 0 veya v > 4294967295 { ver hata("xhci portsc boyu"); }
+    ver tamam(XhciPort { bagli: (v&1) != 0, etkin: (v&2) != 0, reset: (v&16) != 0, link: ((v>>5)&15) olarak tam32, guc: (v&512) != 0, hiz: ((v>>10)&15) olarak tam32, baglanti_degisti: (v&131072) != 0, reset_bitti: (v&2097152) != 0 });
+}
+genel işlev xhci_port_reset(v: tam64, sicak: mantıksal) -> sonuç<tam64,metin> {
+    eğer v < 0 veya v > 4294967295 { ver hata("xhci portsc boyu"); }
+    değişken bit: tam64 = 16; eğer sicak { bit=2147483648; }
+    ver tamam((v&234930688)|bit);
+}
+genel işlev xhci_port_ack(v: tam64, degisen: tam64) -> sonuç<tam64,metin> {
+    eğer v < 0 veya v > 4294967295 veya degisen < 0 veya (degisen&0-16646145) != 0 { ver hata("xhci port degisim maskesi"); }
+    ver tamam((v&234930688)|degisen);
+}
+genel işlev xhci_durdu(sts: tam64) -> mantıksal { ver (sts&1) != 0; }
+genel işlev xhci_hazir(sts: tam64) -> mantıksal { ver (sts&2048) == 0; }
