@@ -1,0 +1,105 @@
+// Bağımsız AHCI aygıt modeli; CI yazımı CLB/FIS/PRDT'yi yorumlar, DMA'yı gerçekleştirir.
+// Kâhin: tools/codex/dalga4_ahci_sahte.py. F003: bayt alanları oku_u8 ile taşınır.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, oku_le64, yaz_u8, yaz_le32, yaz_le64 };
+kullan tests::drivers::ahci::kimlik_fikstur::{ ata_ornek };
+genel yapı SahteAhci { taban: tam64; bellek: Dizi<dtam8>; disk: Dizi<dtam8>; kapasite: tam64; ghc: tam64; clb: tam64; fb: tam64; cmd: tam64; pis: tam64; tfd: tam64; ci: tam64; ariza: tam32; bekleme: tam32; gc_sayisi: tam32; flush_sayisi: tam32; }
+genel işlev sahte_ahci_yeni() -> SahteAhci {
+    değişken b: Dizi<dtam8> = bayt_sifir(73728); değişken d: Dizi<dtam8> = [];
+    ver SahteAhci { taban: 65536, bellek: b, disk: d, kapasite: 80000, ghc: 0, clb: 0, fb: 0, cmd: 17, pis: 0, tfd: 0, ci: 0, ariza: 0, bekleme: 0, gc_sayisi: 0, flush_sayisi: 0 };
+}
+işlev dma_var(s: &değişken SahteAhci, a: tam64, n: tam64) -> mantıksal { ver a >= s.taban ve a-s.taban <= (dizi_boyut(s.bellek) olarak tam64) ve n >= 0 ve n <= (dizi_boyut(s.bellek) olarak tam64)-(a-s.taban); }
+işlev komut_isle(s: &değişken SahteAhci, bit: tam64) -> mantıksal {
+    eğer bit < 1 veya bit > 8 veya (bit&(bit-1)) != 0 veya (s.ci&bit) != 0 veya (s.ghc&2147483648) == 0 veya (s.cmd&17) != 17 { ver yanlış; }
+    s.ci=s.ci|bit; eğer s.ariza == 2 { ver doğru; }
+    değişken yuva: tam32 = 0; iken ((1 olarak tam64)<<yuva) != bit { yuva=yuva+1; }
+    eğer değil dma_var(s,s.clb+(yuva olarak tam64)*32,32) { ver yanlış; }
+    değişken h: tam32 = (s.clb-s.taban) olarak tam32+yuva*32;
+    değişken flags: tam64 = oku_le32(s.bellek,h); değişken ctba: tam64 = oku_le64(s.bellek,h+8); değişken adet: tam32 = (flags>>16) olarak tam32;
+    eğer (flags&31) != 5 veya adet > 4 veya ctba%128 != 0 veya değil dma_var(s,ctba,128+(adet olarak tam64)*16) { ver yanlış; }
+    değişken t: tam32 = (ctba-s.taban) olarak tam32;
+    eğer oku_u8(s.bellek,t) != 39 veya oku_u8(s.bellek,t+1) != 128 { ver yanlış; }
+    değişken op: tam32 = oku_u8(s.bellek,t+2); değişken boy: tam32 = 0; değişken disk_ofs: tam32 = 0; değişken ata: Dizi<dtam8> = [];
+    eğer op == 236 { boy=512; ata=ata_ornek(); yaz_le64(ata,200,s.kapasite); }
+    değilse eğer op == 234 { s.gc_sayisi=s.gc_sayisi+1; s.flush_sayisi=s.flush_sayisi+1; }
+    değilse eğer op == 37 veya op == 53 {
+        s.gc_sayisi=s.gc_sayisi+1;
+        değişken sayi: tam32 = oku_le16(s.bellek,t+12); eğer sayi == 0 { sayi=65536; }
+        değişken poz: Dizi<tam32> = [4,5,6,8,9,10]; değişken lba: tam64 = 0; değişken j: tam32 = 0;
+        iken j < 6 { lba=lba|((oku_u8(s.bellek,t+dizi_al(poz,j)) olarak tam64)<<(j*8)); j=j+1; }
+        eğer oku_u8(s.bellek,t+7) != 64 veya lba >= s.kapasite veya (sayi olarak tam64) > s.kapasite-lba veya sayi > 128 { ver yanlış; }
+        boy=sayi*512; disk_ofs=(lba*512) olarak tam32;
+        eğer op == 53 { eğer disk_ofs > 16777216-boy { ver yanlış; } iken dizi_boyut(s.disk) < disk_ofs+boy { dizi_ekle(s.disk,0 olarak dtam8); } }
+    } değilse { ver yanlış; }
+    eğer ((flags&64) != 0) != (op == 53) { ver yanlış; }
+    değişken aktarilan: tam32 = 0; değişken i: tam32 = 0;
+    iken i < adet {
+        değişken o: tam32 = t+128+i*16; değişken a: tam64 = oku_le64(s.bellek,o); değişken dbc: tam64 = oku_le32(s.bellek,o+12);
+        değişken n: tam32 = ((dbc&4194303)+1) olarak tam32;
+        eğer (dbc&2143289344) != 0 veya oku_le32(s.bellek,o+8) != 0 veya n%2 != 0 veya a%2 != 0 veya n > boy-aktarilan veya değil dma_var(s,a,n olarak tam64) { ver yanlış; }
+        değişken j: tam32 = 0;
+        iken j < n {
+            değişken mem: tam32 = (a-s.taban) olarak tam32+j;
+            eğer op == 53 { yaz_u8(s.disk,disk_ofs+aktarilan+j,oku_u8(s.bellek,mem) olarak tam64); }
+            değilse {
+                değişken v: tam32 = 0;
+                eğer op == 236 { v=oku_u8(ata,aktarilan+j); }
+                değilse eğer disk_ofs+aktarilan+j < dizi_boyut(s.disk) { v=oku_u8(s.disk,disk_ofs+aktarilan+j); }
+                yaz_u8(s.bellek,mem,v olarak tam64);
+            }
+            j=j+1;
+        }
+        aktarilan=aktarilan+n; i=i+1;
+    }
+    eğer aktarilan != boy { ver yanlış; }
+    eğer s.ariza == 6 ve aktarilan > 0 { aktarilan=aktarilan-1; }
+    yaz_le32(s.bellek,h+4,aktarilan olarak tam64); s.ci=s.ci&(4294967295^bit);
+    eğer s.ariza == 1 { s.pis=1073741824; } eğer s.ariza == 5 { s.tfd=1; }
+    ver doğru;
+}
+genel işlev sahte_ahci_yanit(s: &değişken SahteAhci, i: GcIstek) -> GcYanit {
+    değişken y: GcYanit = gc_bos();
+    eşleş i {
+        GcIstek::Oku32(a) => {
+            eğer a == 0 { y.deger=2147484418; }
+            değilse eğer a == 12 { y.deger=5; }
+            değilse eğer a == 4 { y.deger=s.ghc; }
+            değilse eğer a == 296 veya a == 552 { y.deger=259; eğer a == 552 ve s.ariza == 3 { y.deger=0; } }
+            değilse eğer a == 292 { y.deger=3943956737; }
+            değilse eğer a == 548 { y.deger=257; eğer s.ariza == 4 { y.deger=3943956737; } }
+            değilse eğer a == 536 { y.deger=s.cmd; eğer (s.cmd&1) != 0 veya s.ariza == 7 { y.deger=y.deger|32768; } eğer (s.cmd&16) != 0 { y.deger=y.deger|16384; } }
+            değilse eğer a == 528 { y.deger=s.pis; }
+            değilse eğer a == 544 { y.deger=s.tfd; }
+            değilse eğer a == 568 { y.deger=s.ci; }
+            değilse eğer a == 564 { y.deger=0; }
+            değilse { y.basarili=yanlış; }
+        }
+        GcIstek::Yaz32(a,v) => {
+            eğer a == 4 { s.ghc=v; }
+            değilse eğer a == 536 { eğer (s.cmd&1) != 0 ve (v&16) == 0 { y.basarili=yanlış; } s.cmd=v&4294918143; }
+            değilse eğer a >= 512 ve a <= 524 {
+                eğer (s.cmd&17) != 0 { y.basarili=yanlış; }
+                eğer a == 512 { s.clb=(s.clb&0-4294967296)|v; }
+                eğer a == 516 { s.clb=(s.clb&4294967295)|(v<<32); }
+                eğer a == 520 { s.fb=(s.fb&0-4294967296)|v; }
+                eğer a == 524 { s.fb=(s.fb&4294967295)|(v<<32); }
+            }
+            değilse eğer a == 528 { s.pis=s.pis&(4294967295^v); }
+            değilse eğer a == 532 veya a == 560 { }
+            değilse eğer a == 568 { y.basarili=komut_isle(s,v); }
+            değilse { y.basarili=yanlış; }
+        }
+        GcIstek::BellekYaz(a,b) => {
+            eğer değil dma_var(s,a,dizi_boyut(b) olarak tam64) { y.basarili=yanlış; }
+            değilse { değişken j: tam32 = 0; iken j < dizi_boyut(b) { yaz_u8(s.bellek,(a-s.taban) olarak tam32+j,oku_u8(b,j) olarak tam64); j=j+1; } }
+        }
+        GcIstek::BellekOku(a,n) => {
+            eğer değil dma_var(s,a,n olarak tam64) { y.basarili=yanlış; }
+            değilse { değişken b: Dizi<dtam8> = []; değişken j: tam32 = 0; iken j < n { dizi_ekle(b,oku_u8(s.bellek,(a-s.taban) olarak tam32+j) olarak dtam8); j=j+1; } y.baytlar=b; }
+        }
+        GcIstek::Bekle(us) => { s.bekleme=s.bekleme+1; }
+        GcIstek::Bitti => { }
+        _ => { y.basarili=yanlış; }
+    }
+    ver y;
+}
