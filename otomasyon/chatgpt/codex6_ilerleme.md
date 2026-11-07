@@ -6,3 +6,5 @@ Başlangıç: 2026-11-07 22:01:33 UTC. D-743 (fd449cc) origin/main 4fc5e85 üzer
 - VARSAYIM: Görev 6’nın açık yol/Makefile/harness izinleri eski genel AGENTS.md sınırının bu göreve özgü istisnasıdır. NVMe/AHCI case dalları korunacak.
 
 - [x] G0 · F001/F002/F003/F004/F005 dolanmaları temizlendi; gerekli C001 alias’ları gerekçesiyle korundu. Mevcut 117 köprü testi + kart ve NVMe/AHCI qtest C+self yeşil. Sabotaj: NVMe bayt kopyasında bit7 silindi → gerçek qtest rc=2 (iki derleyicide bayt10), sahte çekirdek rc=1; kaynak geri kondu → iki kapı rc=0. Eski testlerin beklentileri değiştirilmedi. Günlükler `build/codex6/G0-*.log`.
+
+- [x] G1 · Sans-IO xHCI çekirdeği; gerçek QEMU C+self iki aygıt enumerasyonu 1.07 sn. Reset/CNR, DCBAA/scratchpad kurma, komut/olay/EP0 halkaları, port reseti, Address Device, 8+18 bayt aygıt ve tam yapılandırma, Set Configuration, Configure Endpoint. Yeni başlangıç/olay testinde geçerli CC1/IN-CC13; hatalı kod/yön/artık/adres/taşıyıcı ve DMA sınırları. Sabotaj ERST64→4: qtest rc=2, sahte başlangıç testi rc=1; geri yükleme → qtest rc=0 ve köprü kart+118 test rc=0. C6-001/C6-002 derleyici bulgularına yalnız sürücü dolanması uygulandı.

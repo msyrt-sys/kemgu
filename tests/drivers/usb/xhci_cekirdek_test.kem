@@ -1,0 +1,46 @@
+// QEMU 8.2.2 ham ölçüm: CAP=[0x1000040,0x8001040,0xf,0,0x87001,0x2000,0x1000,0].
+// Python: [int(x,16) for x in ['1000040','8001040','f','0','87001','2000','1000','0']].
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_yeni, xhci_adim };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_le32, yaz_le32, yaz_le64 };
+işlev test_sinir() -> mantıksal {
+    eşleş xhci_yeni(1,16384) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş xhci_yeni(1048576,32) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş xhci_yeni(1048576,16384) { hata(e) => { ver yanlış; } tamam(v) => { değişken s: XhciDurum = v; değişken y: GcYanit = gc_bos(); y.basarili=yanlış; eşleş xhci_adim(&değişken s,y) { GcIstek::Hata(e) => { ver doğru; } _ => { ver yanlış; } } } }
+}
+// Gerçek QEMU’nun ölçülen reset/yazmaç yanıtları; yalnız başlangıç alt modeli.
+işlev test_kurulum() -> mantıksal {
+    değişken cap: Dizi<tam64> = [16777280,134221888,15,0,552961,8192,4096,0];
+    eşleş xhci_yeni(1048576,16384) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: XhciDurum = v; değişken y: GcYanit = gc_bos(); değişken run: mantıksal = yanlış; değişken erst: mantıksal = yanlış; değişken i: tam32 = 0;
+        iken i < 100 {
+            değişken q: GcIstek = xhci_adim(&değişken s,y); y=gc_bos();
+            eşleş q {
+                GcIstek::Oku32(a) => { eğer a < 32 { y.deger=dizi_al(cap,(a/4) olarak tam32); } değilse eğer a == 68 { eğer değil run { y.deger=1; } } değilse eğer a == 72 { y.deger=1; } değilse eğer a >= 1088 { ver run ve erst; } }
+                GcIstek::Yaz32(a,n) => { eğer a == 64 ve n == 1 { run=doğru; } }
+                GcIstek::BellekYaz(a,b) => { eğer a == 1060864 { eğer oku_le32(b,8) < 16 { ver yanlış; } erst=doğru; } }
+                GcIstek::Hata(e) => { ver yanlış; }
+                _ => { }
+            } i=i+1;
+        } ver yanlış;
+    } }
+}
+// Python: (1<<24)|(3<<16)|(32<<10)|1 = 17006593, CC13 artık8.
+işlev olay(kod: tam32, artik: tam32, giris: mantıksal, adres: tam64) -> mantıksal {
+    eşleş xhci_yeni(1048576,16384) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: XhciDurum = v; s.evre=901; s.bek_tur=32; s.bek_adres=2228224; s.bek_uc=3; s.yuva=1; s.boy=16; s.giris=giris;
+        değişken y: GcYanit = gc_bos(); y.baytlar=bayt_sifir(16); yaz_le64(y.baytlar,0,adres); yaz_le32(y.baytlar,8,((kod olarak tam64)<<24)|(artik olarak tam64)); yaz_le32(y.baytlar,12,17006593);
+        eşleş xhci_adim(&değişken s,y) { GcIstek::Yaz64(a,n) => { ver s.olay.bas == 1 ve s.gercek_boy == 16-artik; } _ => { ver yanlış; } }
+    } }
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil test_sinir() { h=h+1; }
+    eğer değil test_kurulum() { h=h+1; }
+    eğer değil olay(1,0,doğru,2228224) veya değil olay(13,8,doğru,2228224) { h=h+1; }
+    eğer olay(13,8,yanlış,2228224) veya olay(6,0,doğru,2228224) veya olay(1,17,doğru,2228224) veya olay(1,0,doğru,2228240) { h=h+1; }
+    ver h;
+}
