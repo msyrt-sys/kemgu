@@ -11,7 +11,7 @@ kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbY
 
 genel yapı XhciAygit { yuva: tam32; port: tam32; hiz: tam32; dma: tam64; kimlik: UsbAygit; yapi: UsbYapilandirma; ctrl_dongu: mantıksal; ctrl: XhciHalka; in_dongu: mantıksal; }
 genel yapı XhciDurum {
-    dma: tam64; bar_boy: tam64; c: XhciYetenek; evre: tam32; bekleme: tam32; sinir: tam32;
+    dma: tam64; bar_boy: tam64; devredildi: mantıksal; c: XhciYetenek; evre: tam32; bekleme: tam32; sinir: tam32;
     kuyruk: Dizi<GcIstek>; q: tam32; cap: Dizi<dtam8>; cap_no: tam32;
     komut: XhciHalka; ctrl: XhciHalka; olay: XhciOlayHalkasi; aygitlar: Dizi<XhciAygit>;
     port: tam32; hiz: tam32; yuva: tam32; ddma: tam64; ep0: tam32; ctrl_dongu: mantıksal;
@@ -28,7 +28,7 @@ genel işlev xhci_yeni(dma: tam64, bar_boy: tam64) -> sonuç<XhciDurum,metin> {
     değişken c: XhciYetenek = XhciYetenek { caplength: 0, surum: 0, yuva_sayisi: 0, kesme_sayisi: 0, port_sayisi: 0, adres64: yanlış, baglam_boy: 32, dboff: 0, rtsoff: 0, xecp: 0, scratchpad: 0 };
     değişken h: XhciHalka = XhciHalka { taban: dma+4096, adet: 64, son: 0, dongu: doğru, dolu: 0 };
     değişken o: XhciOlayHalkasi = XhciOlayHalkasi { taban: dma+8192, adet: 64, bas: 0, dongu: doğru };
-    ver tamam(XhciDurum { dma: dma, bar_boy: bar_boy, c: c, evre: 0, bekleme: 0, sinir: 4000,
+    ver tamam(XhciDurum { dma: dma, bar_boy: bar_boy, devredildi: yanlış, c: c, evre: 0, bekleme: 0, sinir: 4000,
         kuyruk: [], q: 0, cap: bayt_sifir(32), cap_no: 0, komut: h, ctrl: h, olay: o, aygitlar: [],
         port: 1, hiz: 0, yuva: 0, ddma: 0, ep0: 8, ctrl_dongu: doğru, kimlik: [], yapi: [], toplam: 0,
         bek_tur: 0, bek_adres: 0, bek_uc: 0, sonra: 0, son_yuva: 0, boy: 0, gercek_boy: 0, giris: yanlış, sonuc: [], olay_sayisi: 0, kisa_sayisi: 0 });
@@ -37,17 +37,18 @@ işlev bekle(s: &değişken XhciDurum, oku: GcIstek) -> GcIstek {
     s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci zaman asimi"); }
     ekle(s,oku); ver GcIstek::Bekle(1000);
 }
-işlev komut_kur(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, sonraki: tam32) -> sonuç<mantıksal,metin> {
+işlev komut_ozel(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, bayrak: tam64, sonraki: tam32) -> sonuç<mantıksal,metin> {
     s.bek_adres=s.komut.taban+(s.komut.son olarak tam64)*16;
     // C6-001: alan referansı geçiciye bağlanıyor; yerel kopyayı açıkça geri yaz.
     değişken halka: XhciHalka = s.komut;
-    eşleş xhci_trb_kur(param,0,tur,doğru,(yuva olarak tam64)<<24) {
+    eşleş xhci_trb_kur(param,0,tur,doğru,((yuva olarak tam64)<<24)|bayrak) {
         hata(e) => { ver hata(e); }
         tamam(b) => { eşleş xhci_uret(&değişken halka,b) { hata(e) => { ver hata(e); } tamam(xs) => { s.komut=halka; için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } } }
     }
     ekle(s,GcIstek::Yaz32(s.c.dboff,0)); s.bek_tur=33; s.bek_uc=0; s.sonra=sonraki; s.boy=0; s.giris=yanlış; s.evre=900; s.bekleme=0;
     ver tamam(doğru);
 }
+işlev komut_kur(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, sonraki: tam32) -> sonuç<mantıksal,metin> { ver komut_ozel(s,tur,param,yuva,0,sonraki); }
 işlev ctrl_ekle(s: &değişken XhciDurum, b: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     değişken h: XhciHalka = s.ctrl; s.bek_adres=h.taban+(h.son olarak tam64)*16;
     eşleş xhci_uret(&değişken h,b) { hata(e) => { ver hata(e); } tamam(xs) => { s.ctrl=h; için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } }
@@ -189,6 +190,19 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         eşleş usb_aygit_coz(s.kimlik) { hata(e) => { ver hata_ver(s,e); } tamam(k) => { eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { dizi_ekle(s.aygitlar,XhciAygit { yuva: s.yuva, port: s.port, hiz: s.hiz, dma: s.ddma, kimlik: k, yapi: v, ctrl_dongu: s.ctrl_dongu, ctrl: s.ctrl, in_dongu: doğru }); } } } }
         s.port=s.port+1; s.evre=9; ver GcIstek::Bekle(0);
     }
+    // BOT'a devir: EP0 durdur/dequeue ayarla, sonra boş özel olay halkasına geç.
+    // Aynı anda diğer aygıtlarda bekleyen aktarım olmamalı; enumerasyon bitmiş olmalı.
+    eğer s.evre == 81 { eşleş komut_ozel(s,16,(s.ddma+128)|1,s.yuva,65536,82) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 82 { s.evre=83; ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); ver GcIstek::Yaz32(s.c.caplength olarak tam64,0); }
+    eğer s.evre == 83 {
+        eğer (y.deger&1) == 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); }
+        değişken oh: XhciOlayHalkasi = XhciOlayHalkasi { taban: s.ddma+256, adet: 16, bas: 0, dongu: doğru }; s.olay=oh; s.devredildi=doğru;
+        değişken erst: Dizi<dtam8> = bayt_sifir(16); yaz_le64(erst,0,oh.taban); yaz_le32(erst,8,16);
+        ekle(s,GcIstek::BellekYaz(oh.taban,bayt_sifir(256))); ekle(s,GcIstek::BellekYaz(s.ddma+128,bayt_sifir(64)));
+        ekle(s,GcIstek::BellekYaz(s.dma+12288,erst)); ekle(s,GcIstek::Yaz32(s.c.rtsoff+40,1)); ekle(s,GcIstek::Yaz64(s.c.rtsoff+48,s.dma+12288)); ekle(s,GcIstek::Yaz64(s.c.rtsoff+56,oh.taban));
+        ekle(s,GcIstek::Yaz32(s.c.caplength olarak tam64,1)); ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); s.evre=84; ver GcIstek::Bekle(0);
+    }
+    eğer s.evre == 84 { eğer (y.deger&4096) != 0 { ver hata_ver(s,"xhci depo olay halkasi"); } eğer (y.deger&1) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=100; ver GcIstek::Bitti; }
     eğer s.evre == 900 { s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
     eğer s.evre == 901 {
         eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
@@ -212,4 +226,11 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
     eğer s.evre == 902 { eğer s.giris ve s.gercek_boy > 0 { s.evre=903; ver GcIstek::BellekOku(s.ddma+65536,s.gercek_boy); } s.sonuc=[]; s.evre=s.sonra; ver GcIstek::Bekle(0); }
     eğer s.evre == 903 { eğer dizi_boyut(y.baytlar) != s.gercek_boy { ver hata_ver(s,"xhci veri boyu"); } s.sonuc=y.baytlar; s.evre=s.sonra; ver GcIstek::Bekle(0); }
     ver hata_ver(s,"xhci gecersiz durum");
+}
+
+// Özel BOT halkasına tek sahipli devir; geri enumerasyon/HID aktarımı başlatılmaz.
+genel işlev xhci_depo_hazir(s: &değişken XhciDurum, indeks: tam32) -> sonuç<mantıksal,metin> {
+    eğer s.evre != 100 veya s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci depo devir durumu"); }
+    değişken a: XhciAygit = dizi_al(s.aygitlar,indeks); s.yuva=a.yuva; s.ddma=a.dma;
+    ver komut_ozel(s,15,0,s.yuva,65536,81);
 }

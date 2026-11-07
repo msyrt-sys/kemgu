@@ -7,6 +7,11 @@
 
 ## SAHTE MODEL DÜZELTİLDİ
 
+- G3 olay halkası: gerçek QEMU asgari16 ister; eski BOT tüketicisi ve model4’te sarıyordu. İkisi16’ya taşındı. Eski testlerin beklenen I/O/ack sayıları değiştirilmedi; 22 olaylık eski çekirdek testi yeni sarımı da geçer.
+- G3 Link cycle: eski model Link cycle=data cycle şartını koyuyordu. Gerçek QEMU tüketicisi TD sonundaki Link üzerinde bekleyebilir; yeni TD hazırlanırken Link, geçilecek eski cycle ile kalır. Küçük OUT/IN/EP0 halkası ve sahte model bu gerçek gözleme göre düzeltildi. Önce gerçek BOT istek99’da zaman aşımı verdi; Link onarımından sonra sense6/41 görünür oldu.
+- G3 ilk TUR Unit Attention: gerçek QEMU 6/41/0 (power-on reset) döndürdü. Sürücü yalnız ilk TUR için bir kez REQUEST SENSE sonrası tekrar eder. Modele isteğe bağlı `ua_kalan` eklendi; yeni test1 UA→başarı/13ack, 2 UA→hata/2sense ile sınırı korur. Eski genel aygıt fikstürleri UA’sız ve aynı beklentilerle kalır.
+
+
 ## Derleyici bulguları ve kalan dolanmalar
 
 ### C6-001 — alanın değiştirilebilir referansı geçiciye bağlanıyor

@@ -35,7 +35,7 @@ genel işlev scsi_duyu(b: Dizi<dtam8>) -> sonuç<ScsiDuyu,metin> {
     ver tamam(ScsiDuyu { anahtar: oku_u8(b,2)&15, asc: oku_u8(b,12), ascq: oku_u8(b,13) });
 }
 // Çağıran xHCI slot/endpoint bağlamlarını önceden kurar. Her durum özel event halkası
-// kullanır: OUT dma+0, IN +64, EP0 +128, event +256, 64 KiB tampon +65536.
+// kullanır: OUT dma+0, IN +64, EP0 +128, 16 olay +256, 64 KiB tampon +65536.
 // DMA alanı 128 KiB ve 64 KiB hizalıdır. Aynı anda tek BOT komutu çalışır.
 genel yapı UsbDepo {
     dma: tam64; zil: tam64; erdp: tam64; yuva: tam32; out_uc: tam32; in_uc: tam32; arayuz: tam32;
@@ -43,7 +43,7 @@ genel yapı UsbDepo {
     t: tam32; giris: mantıksal; kontrol: mantıksal; boy: tam32; paket: Dizi<dtam8>; yanit: Dizi<dtam8>; bekleme: tam32; trb_adres: tam64; hedef: tam32;
     evre: tam32; is: tam32; etiket: tam64; cdb: Dizi<dtam8>; veri: Dizi<dtam8>; veri_boy: tam32; veri_giris: mantıksal;
     kapasite: tam64; blok_bayt: tam32; lba: tam64; kalan: tam32; parca: tam32; konum: tam32; girdi: Dizi<dtam8>; sonuc: Dizi<dtam8>;
-    anahtar: tam32; asc: tam32; ascq: tam32; kurtarma: tam32;
+    anahtar: tam32; asc: tam32; ascq: tam32; kurtarma: tam32; onceki_is: tam32; ua_deneme: tam32;
 }
 genel işlev usb_depo_yeni(dma: tam64, zil: tam64, erdp: tam64, yuva: tam32, out_adres: tam32, in_adres: tam32, arayuz: tam32) -> sonuç<UsbDepo,metin> {
     eğer dma <= 0 veya dma%65536 != 0 veya dma > 9223372036854644735 veya zil < 0 veya zil%4 != 0 veya zil > 9223372036854775803 veya erdp < 0 veya erdp%8 != 0 veya erdp > 9223372036854775799 veya yuva < 1 veya yuva > 255 veya out_adres < 1 veya out_adres > 15 veya in_adres < 129 veya in_adres > 143 veya arayuz < 0 veya arayuz > 255 { ver hata("usb depo yapilandirma"); }
@@ -51,7 +51,7 @@ genel işlev usb_depo_yeni(dma: tam64, zil: tam64, erdp: tam64, yuva: tam32, out
     out_dongu: doğru, in_dongu: doğru, ctrl_dongu: doğru, olay_bas: 0, olay_dongu: doğru,
     t: 0, giris: yanlış, kontrol: yanlış, boy: 0, paket: [], yanit: [], bekleme: 0, trb_adres: 0, hedef: 0,
     evre: 0, is: 0, etiket: 0, cdb: [], veri: [], veri_boy: 0, veri_giris: yanlış,
-    kapasite: 0, blok_bayt: 0, lba: 0, kalan: 0, parca: 0, konum: 0, girdi: [], sonuc: [], anahtar: 0, asc: 0, ascq: 0, kurtarma: 0 });
+    kapasite: 0, blok_bayt: 0, lba: 0, kalan: 0, parca: 0, konum: 0, girdi: [], sonuc: [], anahtar: 0, asc: 0, ascq: 0, kurtarma: 0, onceki_is: 0, ua_deneme: 0 });
 }
 işlev aktar_baslat(s: &değişken UsbDepo, b: Dizi<dtam8>, giris: mantıksal, boy: tam32, kontrol: mantıksal) {
     s.paket=b; s.giris=giris; s.boy=boy; s.kontrol=kontrol; s.t=1; s.bekleme=0; s.yanit=[];
@@ -76,7 +76,9 @@ işlev aktar_adim(s: &değişken UsbDepo, y: GcYanit) -> GcIstek {
             eşleş xhci_normal(s.dma+65536,s.boy,dongu,doğru) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { birlestir(b,v); } }
             s.trb_adres=taban; eğer s.giris { s.in_dongu=değil dongu; } değilse { s.out_dongu=değil dongu; }
         }
-        eşleş xhci_trb_kur(taban,0,6,dongu,2) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { birlestir(b,v); } }
+        // QEMU ölçümü: tüketici önceki TD'nin Link TRB'sinde bekleyebilir.
+        // Yeni TD cycle'ı değişirken geçilecek eski Link'in cycle'ı korunur.
+        eşleş xhci_trb_kur(taban,0,6,değil dongu,2) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { birlestir(b,v); } }
         s.t=3; ver GcIstek::BellekYaz(taban,b);
     }
     eğer s.t == 3 { s.t=4; ver GcIstek::Yaz32(s.zil,s.hedef olarak tam64); }
@@ -87,7 +89,7 @@ işlev aktar_adim(s: &değişken UsbDepo, y: GcYanit) -> GcIstek {
             s.bekleme=s.bekleme+1; eğer s.bekleme >= 1000 { ver usb_hata(s,"usb zaman asimi"); } s.t=6; ver GcIstek::Bekle(1000);
         }
         eşleş xhci_olay_coz(y.baytlar) { hata(e) => { ver usb_hata(s,e); } tamam(o) => { eğer o.tur != 32 veya o.kod != 1 veya o.artik != 0 veya o.adres != s.trb_adres veya o.yuva != s.yuva veya o.uc != s.hedef { ver usb_hata(s,"usb aktarim olayi"); } } }
-        s.olay_bas=s.olay_bas+1; eğer s.olay_bas == 4 { s.olay_bas=0; s.olay_dongu=değil s.olay_dongu; }
+        s.olay_bas=s.olay_bas+1; eğer s.olay_bas == 16 { s.olay_bas=0; s.olay_dongu=değil s.olay_dongu; }
         s.t=7; ver GcIstek::Yaz64(s.erdp,(s.dma+256+(s.olay_bas olarak tam64)*16)|8);
     }
     eğer s.t == 7 {
@@ -141,8 +143,12 @@ genel işlev usb_depo_adim(s: &değişken UsbDepo, y: GcYanit) -> GcIstek {
     eğer s.evre == 3 {
         değişken durum: tam32 = 0; eşleş bot_csw(s.yanit,s.etiket,s.veri_boy) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { durum=v; } }
         eğer durum == 2 { s.kurtarma=0; eşleş kurtar_baslat(s) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
-        eğer durum == 1 { eğer s.is == 99 { ver usb_hata(s,"scsi sense basarisiz"); } s.is=99; eşleş basit_komut(s,3,18) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
-        eğer s.is == 99 { eşleş scsi_duyu(s.veri) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { s.anahtar=v.anahtar; s.asc=v.asc; s.ascq=v.ascq; ver usb_hata(s,"scsi komut hatasi"); } } }
+        eğer durum == 1 { eğer s.is == 99 { ver usb_hata(s,"scsi sense basarisiz"); } s.onceki_is=s.is; s.is=99; eşleş basit_komut(s,3,18) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+        eğer s.is == 99 { eşleş scsi_duyu(s.veri) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { s.anahtar=v.anahtar; s.asc=v.asc; s.ascq=v.ascq;
+            // Gerçek QEMU açılışı: Unit Attention / Power-on reset (6/41/0).
+            // Yalnız ilk TUR için bir kez tekrar; genel SCSI hatalarını yutmaz.
+            eğer s.onceki_is == 0 ve s.anahtar == 6 ve s.asc == 41 ve s.ascq == 0 ve s.ua_deneme == 0 { s.ua_deneme=1; s.is=0; eşleş basit_komut(s,0,0) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+            ver usb_hata(s,"scsi komut hatasi"); } } }
         eğer s.is == 0 { s.is=1; eşleş basit_komut(s,18,36) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
         eğer s.is == 1 { eğer dizi_boyut(s.veri) != 36 veya (oku_u8(s.veri,0)&31) != 0 veya (oku_u8(s.veri,0)&224) != 0 { ver usb_hata(s,"scsi disk degil"); } s.is=2; eşleş basit_komut(s,37,8) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
         eğer s.is == 2 { eşleş scsi_kapasite(s.veri) { hata(e) => { ver usb_hata(s,e); } tamam(v) => { s.kapasite=v.adet; s.blok_bayt=v.blok; } } s.evre=100; ver GcIstek::Bitti; }
