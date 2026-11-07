@@ -10,3 +10,5 @@ Başlangıç: 2026-11-07T06:12:06.764000+00:00
 - [x] A3 · 4 test (296 kesit + 8 bozuk alan) · modül adres sırası sabotajı → kırmızı · self 0,003 sn · köprü 94/94 · F001/F002 dolanmaları · 2026-11-07T06:23:49.776448+00:00
 - VARSAYIM A3: komut anahtarları tektir; kok 8 hex hane veya 4-4 biçimindedir. Bilgi 1 MiB / 4096 etiket / metin 4096 bayt ile sınırlıdır. Paletli ekran açık desteklenmiyor hatası verir.
 - [x] B1 · 3 test · CQ kapı zili +1 kaldırma sabotajı → kırmızı · self 0,002 sn · köprü 95/95 · 2026-11-07T06:26:38.115001+00:00
+- [x] B2 · 3 test / SQ-CQ bayt kâhini / zincirli PRP · faz biti kaydırma sabotajı → kırmızı · self 0,004 sn · köprü 96/96 · 2026-11-07T06:29:56.905035+00:00
+- VARSAYIM B2: PRP planı bitişik fiziksel DMA alanı içindir; plan başına 16 MiB, sayfa 4–64 KiB. Büyük aktarım çekirdekte bölünür.

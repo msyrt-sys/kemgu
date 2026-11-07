@@ -1,0 +1,27 @@
+// Kâhin: python3 tools/codex/dalga4_nvme_kimlik.py; ofsetler Linux nvme.h'den.
+kullan tests::drivers::nvme::kimlik_fikstur::{ denetleyici_ornek, ad_alani_ornek };
+kullan drivers::nvme::kimlik::{ NvmeDenetleyici, NvmeAdAlani, nvme_denetleyici_coz, nvme_ad_alani_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16 };
+işlev test_denetleyici() -> mantıksal {
+    eşleş nvme_denetleyici_coz(denetleyici_ornek()) { hata(e) => { ver yanlış; } tamam(k) => { ver k.vid == 4660 ve metin_esit(k.seri,"  SN-123") ve metin_esit(k.model,"NVME TEST") ve metin_esit(k.surum,"1.0") ve k.mdts == 2 ve k.ad_alani_sayisi == 3; } }
+}
+işlev test_ad_alani() -> mantıksal {
+    değişken b: Dizi<dtam8> = ad_alani_ornek();
+    eşleş nvme_ad_alani_coz(b) { hata(e) => { ver yanlış; } tamam(n) => { eğer n.blok_sayisi != 1099511627776 veya n.blok_bayt != 4096 veya n.format != 1 veya n.meta_bayt != 0 veya n.goreli_basari != 2 { ver yanlış; } } }
+    yaz_le16(b,132,8); yaz_u8(b,26,17);
+    eşleş nvme_ad_alani_coz(b) { hata(e) => { ver yanlış; } tamam(n) => { ver n.meta_bayt == 8 ve n.meta_bitisik; } }
+}
+işlev test_olumsuz() -> mantıksal {
+    eşleş nvme_denetleyici_coz(bayt_sifir(4095)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    değişken c: Dizi<dtam8> = denetleyici_ornek(); yaz_u8(c,4,255);
+    eşleş nvme_denetleyici_coz(c) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_ad_alani_coz(bayt_sifir(4096)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    değişken b: Dizi<dtam8> = ad_alani_ornek(); yaz_u8(b,26,2);
+    eşleş nvme_ad_alani_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    b=ad_alani_ornek(); yaz_u8(b,134,63);
+    eşleş nvme_ad_alani_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    b=ad_alani_ornek(); yaz_u8(b,7,128);
+    eşleş nvme_ad_alani_coz(b) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş nvme_ad_alani_coz(bayt_sifir(4097)) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_denetleyici() { h=h+1; } eğer değil test_ad_alani() { h=h+1; } eğer değil test_olumsuz() { h=h+1; } ver h; }

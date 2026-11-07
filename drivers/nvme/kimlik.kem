@@ -1,0 +1,27 @@
+// NVMe Identify: alan ofsetleri tools/codex/dalga4_nvme_kimlik.py ile doğrulanır.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le32, oku_le64 };
+genel yapı NvmeDenetleyici { vid: tam32; seri: metin; model: metin; surum: metin; mdts: tam32; ad_alani_sayisi: tam64; }
+genel yapı NvmeAdAlani { blok_sayisi: tam64; blok_bayt: tam64; format: tam32; meta_bayt: tam32; meta_bitisik: mantıksal; goreli_basari: tam32; }
+işlev ascii_alan(b: Dizi<dtam8>, ofs: tam32, boy: tam32) -> sonuç<metin,metin> {
+    değişken son: tam32 = boy;
+    iken son > 0 ve oku_u8(b,ofs+son-1) == 32 { son=son-1; }
+    değişken s: metin = ""; değişken i: tam32 = 0;
+    iken i < son { değişken k: tam32 = oku_u8(b,ofs+i); eğer k < 32 veya k > 126 { ver hata("nvme ascii alan"); } s=metin_birlestir(s,kod_metin(k)); i=i+1; } ver tamam(s);
+}
+genel işlev nvme_denetleyici_coz(b: Dizi<dtam8>) -> sonuç<NvmeDenetleyici,metin> {
+    eğer dizi_boyut(b) != 4096 { ver hata("nvme identify boyu"); }
+    değişken seri: metin = ""; değişken model: metin = ""; değişken surum: metin = "";
+    eşleş ascii_alan(b,4,20) { hata(e) => { ver hata(e); } tamam(v) => { seri=v; } }
+    eşleş ascii_alan(b,24,40) { hata(e) => { ver hata(e); } tamam(v) => { model=v; } }
+    eşleş ascii_alan(b,64,8) { hata(e) => { ver hata(e); } tamam(v) => { surum=v; } }
+    ver tamam(NvmeDenetleyici { vid: oku_le16(b,0), seri: seri, model: model, surum: surum, mdts: oku_u8(b,77), ad_alani_sayisi: oku_le32(b,516) });
+}
+genel işlev nvme_ad_alani_coz(b: Dizi<dtam8>) -> sonuç<NvmeAdAlani,metin> {
+    eğer dizi_boyut(b) != 4096 { ver hata("nvme namespace boyu"); }
+    değişken sayi: tam64 = oku_le64(b,0); değişken nlbaf: tam32 = oku_u8(b,25);
+    değişken flbas: tam32 = oku_u8(b,26); değişken secili: tam32 = flbas&15;
+    eğer sayi <= 0 veya nlbaf > 15 veya secili > nlbaf veya (flbas&224) != 0 { ver hata("nvme namespace alan"); }
+    değişken o: tam32 = 128+secili*4; değişken lbads: tam32 = oku_u8(b,o+2);
+    eğer lbads < 9 veya lbads > 62 { ver hata("nvme lba ussu"); }
+    ver tamam(NvmeAdAlani { blok_sayisi: sayi, blok_bayt: (1 olarak tam64)<<lbads, format: secili, meta_bayt: oku_le16(b,o), meta_bitisik: (flbas&16) != 0, goreli_basari: oku_u8(b,o+3)&3 });
+}
