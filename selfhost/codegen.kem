@@ -2898,7 +2898,7 @@ işlev mangle(onek: metin, ad: metin) -> metin {
 işlev alias_coz(p: &değişken Ayr, ad: metin) -> metin {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.al_ad) {
-        eğer metin_esit(dizi_al(p.al_ad, i), ad) { ver son_segment(dizi_al(p.al_yol, i)); }
+        eğer metin_esit(dizi_al(p.al_ad, i), ad) { ver metin_yer_degistir(dizi_al(p.al_yol, i), "::", "."); }
         i = i + 1;
     }
     ver ad;
@@ -2943,7 +2943,7 @@ işlev fn_coz(p: &değişken Ayr, ad: metin) -> metin {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.si_ad) {
         eğer metin_esit(dizi_al(p.si_ad, i), ad) {
-            değişken sm: metin = mangle(son_segment(dizi_al(p.si_yol, i)), ad);
+            değişken sm: metin = mangle(metin_yer_degistir(dizi_al(p.si_yol, i), "::", "."), ad);
             eğer fn_kayitli_mi(p, sm) { ver sm; }
         }
         i = i + 1;
@@ -15597,7 +15597,7 @@ işlev modul_yukle(p: &değişken Ayr, modul_yol: metin, importer_dizin: metin, 
 //
 // Modülün KENDİ `kullan`'ları için modül geçici bir `Ayr`e parse edilir — ama
 // yalnız KULLAN düğümlerinin `a_deg` METİNLERİ okunur, AST kopyalanmaz.
-işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
+işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin, sarmallar: Dizi<metin>) -> metin {
     // Modül ADI EN BAŞTA sabitlenir — `p` üzerinde HİÇBİR mutasyon olmadan önce.
     // Çağıran `modul_src_bir(p, dizi_al(p.a_deg, c), ...)` biçiminde çağırıyor:
     // `yol` `p`'nin KENDİ dizisinden okunuyor ve callee aynı `p`yi büyütüyor
@@ -15607,6 +15607,7 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     // okunuyor — aliasing yok. (Aynı hatayı "özyinelemeden önce hesapla" diye
     // düzeltmeye çalıştım, İŞE YARAMADI; belirleyici olan sıra değil, MUTASYON.)
     değişken mad: metin = son_segment(yol);
+    değişken ir_ad: metin = metin_yer_degistir(yol, "::", ".");
     değişken gn: tam32 = dizi_boyut(p.kullan_gorulen);
     değişken gi: tam32 = 0;
     iken gi < gn {
@@ -15670,19 +15671,21 @@ işlev modul_src_bir(p: &değişken Ayr, yol: metin, dizin: metin) -> metin {
     iken ci < cs {
         değişken c: tam32 = dizi_al(mp.cocuk, cb + ci);
         eğer metin_esit(dizi_al(mp.a_ad, c), "KULLAN") {
-            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz));
+            on = metin_birlestir(on, modul_src_bir(p, dizi_al(mp.a_deg, c), mdiz, sarmallar));
         }
         ci = ci + 1;
     }
-    // Sarmal. Modül adı yolun SON segmenti (a::b → "b") — nitelikli erişim
-    // `b::uye` biçiminde yazılır, C de böyle çözer.
+    // F005: kaynak sarmalı hâlâ geçerli bir tanımlayıcı taşır. Tam IR adı
+    // sarmalların YAYIM sırasıyla saklanır; birleşik AST'de geri yüklenir.
+    // Ortak yol önekleri için yinelenen iç içe modül düğümleri üretilmez.
+    dizi_ekle(sarmallar, ir_ad);
     // İç `kullan` satırları sarmalın İÇİNDE kalır: codegen KULLAN düğümünü
     // yok sayar ve nitelikli yollar (mat::topla) MUTLAK çözülür → zararsız.
     // (Ölçüldü: ana_zincir bu biçimde 42.)
     ver metin_birlestir(on, govde);
 }
 // Giriş programının üst-düzey `kullan`'larını kaynak metnine çevirir ("" = modül yok).
-işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin) -> metin {
+işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin, sarmallar: Dizi<metin>) -> metin {
     değişken out: metin = "";
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
@@ -15690,7 +15693,7 @@ işlev modul_src_topla(p: &değişken Ayr, kok: tam32, dizin: metin) -> metin {
     iken i < cs {
         değişken c: tam32 = dizi_al(p.cocuk, cb + i);
         eğer metin_esit(dizi_al(p.a_ad, c), "KULLAN") {
-            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin));
+            out = metin_birlestir(out, modul_src_bir(p, dizi_al(p.a_deg, c), dizin, sarmallar));
         }
         i = i + 1;
     }
@@ -16504,7 +16507,8 @@ işlev main() -> tam32 {
     // İki geçiş şart: `kullan` listesini öğrenmek için önce parse etmek gerekir.
     // Modül yoksa hiçbir şey değişmez (birleşik == "") → mevcut çıktı BİREBİR korunur.
     p.giris_dizin = dizin_al(yol);
-    değişken mods: metin = modul_src_topla(&değişken p, kok, p.giris_dizin);
+    değişken sarmallar: Dizi<metin> = [];
+    değişken mods: metin = modul_src_topla(&değişken p, kok, p.giris_dizin, sarmallar);
     eğer metin_uzunluk(mods) > 0 {
         değişken birlesik: metin = metin_birlestir(mods, kaynak);
         p = ayr_olustur(birlesik);
@@ -16523,6 +16527,20 @@ işlev main() -> tam32 {
         p.hedef_triple = trp;
         lex_et(&değişken p);
         kok = parse_program(&değişken p);
+        // F005: yalnız öne eklenen sentetik dosya modüllerinin IR kimliğini
+        // değiştir. Kaynak ad çözümlemesi yukarıda ayrı pk ile denetlendi.
+        // Açık alias'lar önce kayıtlıdır; mevcut son-segment modül bağları
+        // aynı tam IR kimliğine yönlenir. Satır içi modüller değişmez.
+        değişken si: tam32 = 0;
+        değişken cb: tam32 = dizi_al(p.a_cb, kok);
+        iken si < dizi_boyut(sarmallar) {
+            değişken mn: tam32 = dizi_al(p.cocuk, cb + si);
+            değişken ir_ad: metin = dizi_al(sarmallar, si);
+            dizi_ekle(p.al_ad, dizi_al(p.a_deg, mn));
+            dizi_ekle(p.al_yol, ir_ad);
+            dizi_yaz(p.a_deg, mn, ir_ad);
+            si = si + 1;
+        }
     }
     // [D-656] AS001 CODEGEN KATMANI — `--tip-atla`dan BAĞIMSIZ.
     // C'de denetim İKİ yerde: tip kontrolünde (`tip_kontrol.c`, `--tip-atla`
