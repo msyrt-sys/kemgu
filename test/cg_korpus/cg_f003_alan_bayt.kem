@@ -1,0 +1,30 @@
+// F003: alan kaynağından dar eleman kopyası işaret bilgisini korur.
+yapı Baytlar { c: Dizi<dtam8>; s: Dizi<tam8>; }
+yapı Dis { b: Baytlar; }
+işlev main() -> tam32 {
+    değişken u: Dizi<dtam8> = [128 olarak dtam8, 200 olarak dtam8, 255 olarak dtam8];
+    değişken s: Dizi<tam8> = [-1 olarak tam8];
+    değişken b: Baytlar = Baytlar { c: u, s: s };
+    değişken a: Dis = Dis { b: b };
+    değişken t: Dizi<dtam8> = [];
+    dizi_ekle(t, dizi_al(b.c, 0));
+    dizi_ekle(t, dizi_al(b.c, 1));
+    dizi_ekle(t, dizi_al(b.c, 2));
+    eğer dizi_al(t, 0) != 128 { ver 1; }
+    eğer dizi_al(t, 1) != 200 { ver 2; }
+    eğer dizi_al(t, 2) != 255 { ver 3; }
+    değişken n: Dizi<dtam8> = [];
+    dizi_ekle(n, dizi_al(a.b.c, 0));
+    dizi_ekle(n, dizi_al(a.b.c, 1));
+    dizi_ekle(n, dizi_al(a.b.c, 2));
+    eğer dizi_al(n, 0) != 128 { ver 4; }
+    eğer dizi_al(n, 1) != 200 { ver 5; }
+    eğer dizi_al(n, 2) != 255 { ver 6; }
+    // Pozitif: işaretli alan ve iç içe alan -1 değerini korumalı.
+    değişken isaretli: Dizi<tam8> = [];
+    dizi_ekle(isaretli, dizi_al(b.s, 0));
+    dizi_ekle(isaretli, dizi_al(a.b.s, 0));
+    eğer dizi_al(isaretli, 0) != -1 { ver 7; }
+    eğer dizi_al(isaretli, 1) != -1 { ver 8; }
+    ver 42;
+}
