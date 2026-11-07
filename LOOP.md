@@ -245,7 +245,7 @@
       F004 [S] C LINK-RED: sonuc payload'indan gelen Dizi<Cesit> uzerinde `eşleş dizi_al(xs,0)`
            (C003'un C kolu).
       F001 [S] C sahte T011: secili ithal tip yapi alaninda `seçimlik<Rsdp>`.
-- [ ] E4h [L] QEMU DOGRULAMA LISTESI (codex4_bulgular.md "QEMU'da dogrulanacak": AHCI, xHCI, USB BOT):
+- [ ] E4h [L] (NVMe ✓ D-741 · AHCI ✓ D-742 — xHCI/USB BOT kaldi) QEMU DOGRULAMA LISTESI (codex4_bulgular.md "QEMU'da dogrulanacak": AHCI, xHCI, USB BOT):
       sahte aygit modelleri Codex'in standardi ANLAYISIDIR; ayni yanlis hem surucuye hem modele
       girebilir. Bu liste gercek QEMU aygitlariyla (`-device nvme/ahci/qemu-xhci/usb-storage/usb-kbd`)
       kapatilacak — Claude'un bare-metal baglama isinin (H7/H10) ilk adimi.
@@ -2649,3 +2649,28 @@
   117/117, surucu_diff 17/17, BAGIMSIZ SABOTAJ x2 ESP korumasina (red dali + GUID tanima) -> bagla_test
   ve depolama_matrisi IKISI de kirmizi. 5 yeni derleyici bulgusu -> E4g; QEMU listesi -> E4h.
   surucu_diff bayat muafiyeti (virtio_blk_init_test) kaldirildi.
+- 2026-11-07 D-741: QEMU qtest KAPISI — sans-IO surucu GERCEK QEMU aygitina karsi, bare-metal kod
+  YAZILMADAN. tests/qemu/qtest.kem: KEMGU qtest istemcisi (TCP soket, satir protokolu, PCI yapilandirma
+  0xCF8/0xCFC, misafir bellegi read/write, GcIstek yurutucusu). tests/qemu/nvme_qtest.kem: PCI'da NVMe
+  bul, BAR0 ata (firmware yok), Codex'in drivers/nvme/cekirdek.kem'i ile baslat + oku (desen) + 9
+  sektor yaz (coklu PRP) + flush + geri oku. test/qtest_harness.sh: C ve self ikilileri AYRI QEMU
+  orneklerine karsi; QEMU kapandiktan SONRA imaj Python ile dogrulanir (yazilan alan + dokunulmayan
+  alan). SONUC: C + self GECTI, kapasite 8192 x 512. OLCUM: Ubuntu QEMU 8.2'de `-accel qtest` YOK ->
+  `-accel tcg -S` + `-qtest` chardev calisiyor; `clock_step` YOK -> Bekle bir ana dongu turuna
+  cevrildi (NVMe BH ile isler; sanal saat ilerlemez, zamanlayiciya dayanan yol surucunun zaman
+  asimiyla GURULTULU yakalanir). SABOTAJ 2/2 (kapi zili adim, PRP2=0) -> qtest KIRMIZI. DURUSTCE: ayni
+  iki sabotaji Codex'in sahte testleri DE yakaliyor; qtest'in degeri bagimsiz uygulamaya karsi standart
+  ANLAYISINI dogrulamak (denenen yollarda dogru cikti). QEMU yoksa bildirerek atlar (olculdu).
+- 2026-11-07 D-742: AHCI QEMU'da — ve SAHTE MODELIN GIZLEDIGI GERCEK KUSUR. Codex'in surucusu PxSIG'i
+  (SATA = 0x101) FIS alimi (PxFB + PxCMD.FRE) acilmadan ONCE kontrol ediyordu. OLCULDU (gercek QEMU
+  ICH9 AHCI, Python qtest ile ham yazmac): SSTS=0x113 ama SIG=0xFFFFFFFF — imza aygitin ilk D2H
+  FIS'iyle gelir, o FIS FRE acilinca gelir. Surucu hicbir diski gormezdi ("ahci sata aygiti yok").
+  Sahte model SIG=0x101'i HEMEN donduruyordu -> Codex'in testleri gecti. ONARIM: taramada SIG
+  0xFFFFFFFF olan DET=3/IPM=1 portu ADAY; FRE+ST sonrasi imza sinirli yoklanir (adim 26-28), 0x101
+  degilse ayni "ahci sata aygiti yok" mesaji (kullanici acisindan ayni durum; test beklentisi
+  DEGISMEDI). SAHTE MODEL gercege uyduruldu (FB yazilip FRE acilana kadar SIG 0xFFFFFFFF) -> kusur
+  geri gelirse QEMU'suz CI'da da yakalanir. Ayrica qtest PCI taramasi cok islevli aygitlara
+  genisletildi (q35 AHCI 00:1f.2; yalniz islev 0'a bakan tarama KACIRIYORDU — olculdu).
+  Kapilar: qtest nvme+ahci C+self GECTI (imaj kahini temiz), kopru 117/117. SABOTAJ (duzeltmeyi geri
+  al) -> sahte e2e KIRMIZI + qtest KIRMIZI. DERS: sahte aygit modeli surucuyle AYNI yanlis anlamayi
+  tasiyabilir; bagimsiz uygulama (QEMU) onu ILK OLCUMDE gosterdi.

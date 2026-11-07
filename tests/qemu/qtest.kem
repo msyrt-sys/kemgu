@@ -1,0 +1,300 @@
+// QEMU qtest istemcisi — sans-IO sürücü isteklerini (drivers/ortak/gc.kem) GERÇEK
+// QEMU aygıt modellerine karşı yürütür. CPU koşmaz (`-accel tcg -S`); qtest
+// protokolü yazmaç, port G/Ç ve misafir belleği erişimi sağlar. Böylece sürücü
+// mantığı bare-metal bağlama yapılmadan QEMU'nun kendi NVMe/AHCI/xHCI modeliyle
+// sınanır (LOOP E4h). Protokol satır tabanlıdır: "readl ADR" -> "OK 0x...".
+// Sayılar ondalık gönderilir (QEMU taban-0 ayrıştırır), yanıt onaltılık gelir.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::pci::yapilandirma::{ PciAygit, pci_coz };
+
+genel yapı Qt { h: metin; tampon: metin; hata_sayisi: tam32; }
+
+genel işlev qt_ac(port: tam32) -> sonuç<Qt, metin> {
+    değişken y: yetki<Soket> = yetki_olustur(2, 1);
+    değişken h: metin = soket_baglan(y, "127.0.0.1", port);
+    geri_al(y);
+    eğer soket_gecerli(h) == yanlış { ver hata("qtest baglantisi kurulamadi"); }
+    soket_zaman_asimi(h, 30000);
+    ver tamam(Qt { h: h, tampon: "", hata_sayisi: 0 });
+}
+
+genel işlev qt_kapat(q: &değişken Qt) {
+    soket_kapat(q.h);
+}
+
+// Tampondaki ilk satır sonunun (10) konumu; yoksa -1.
+işlev satir_sonu(s: metin) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(s) olarak tam32;
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer (metin_bayt(s, i) olarak tam32) == 10 { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+
+işlev baslar(s: metin, on: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(on) olarak tam32;
+    eğer (metin_uzunluk(s) olarak tam32) < n { ver yanlış; }
+    ver metin_esit(metin_kes(s, 0, n), on);
+}
+
+// Komut gönder, "OK"/"FAIL"/"ERR" ile başlayan satıra kadar oku. Ara satırlar
+// (ör. "IRQ raise") yutulur. Başarıda "OK"tan sonraki metin döner.
+genel işlev qt_komut(q: &değişken Qt, komut: metin) -> sonuç<metin, metin> {
+    eğer soket_gonder(q.h, metin_birlestir(komut, kod_metin(10))) < 0 {
+        ver hata("qtest gonderim basarisiz");
+    }
+    değişken tur: tam32 = 0;
+    iken tur < 100000 {
+        tur = tur + 1;
+        değişken k: tam32 = satir_sonu(q.tampon);
+        eğer k >= 0 {
+            değişken satir: metin = metin_kes(q.tampon, 0, k);
+            değişken n: tam32 = metin_uzunluk(q.tampon) olarak tam32;
+            q.tampon = metin_kes(q.tampon, k + 1, n - k - 1);
+            eğer baslar(satir, "OK") {
+                değişken sn: tam32 = metin_uzunluk(satir) olarak tam32;
+                eğer sn <= 3 { ver tamam(""); }
+                ver tamam(metin_kes(satir, 3, sn - 3));
+            }
+            eğer baslar(satir, "FAIL") veya baslar(satir, "ERR") {
+                q.hata_sayisi = q.hata_sayisi + 1;
+                ver hata(metin_birlestir(metin_birlestir(komut, " -> "), satir));
+            }
+        } değilse {
+            değişken parca: metin = soket_al(q.h, 65536);
+            eğer soket_gecerli(parca) == yanlış { ver hata("qtest okuma basarisiz"); }
+            eğer metin_uzunluk(parca) == 0 { ver hata("qtest baglantisi kapandi"); }
+            q.tampon = metin_birlestir(q.tampon, parca);
+        }
+    }
+    ver hata("qtest yanit siniri");
+}
+
+// ---- onaltılık ----
+işlev hane(c: tam32) -> tam32 {
+    eğer c >= 48 ve c <= 57 { ver c - 48; }
+    eğer c >= 97 ve c <= 102 { ver c - 87; }
+    eğer c >= 65 ve c <= 70 { ver c - 55; }
+    ver 0 - 1;
+}
+
+// "0x00ff..." -> tam64 (64 bit örüntü; 2^63 üstü negatif görünür).
+genel işlev qt_onalti(s: metin) -> sonuç<tam64, metin> {
+    değişken n: tam32 = metin_uzunluk(s) olarak tam32;
+    eğer n < 3 veya baslar(s, "0x") == yanlış { ver hata(metin_birlestir("onaltilik bekleniyordu: ", s)); }
+    değişken v: tam64 = 0;
+    değişken i: tam32 = 2;
+    iken i < n {
+        değişken d: tam32 = hane(metin_bayt(s, i) olarak tam32);
+        eğer d < 0 { ver hata(metin_birlestir("gecersiz onaltilik: ", s)); }
+        v = (v << 4) | (d olarak tam64);
+        i = i + 1;
+    }
+    ver tamam(v);
+}
+
+işlev hane_metin(d: tam32) -> metin {
+    ver metin_kes("0123456789abcdef", d, 1);
+}
+
+// ---- tek komutluk erişimler ----
+genel işlev qt_oku(q: &değişken Qt, komut: metin) -> sonuç<tam64, metin> {
+    eşleş qt_komut(q, komut) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => { ver qt_onalti(v); }
+    }
+}
+
+işlev komut2(ad: metin, a: tam64) -> metin {
+    ver metin_birlestir(metin_birlestir(ad, " "), tam_metin(a));
+}
+
+işlev komut3(ad: metin, a: tam64, b: tam64) -> metin {
+    ver metin_birlestir(metin_birlestir(komut2(ad, a), " "), tam_metin(b));
+}
+
+genel işlev qt_yaz(q: &değişken Qt, ad: metin, a: tam64, v: tam64) -> sonuç<mantıksal, metin> {
+    eşleş qt_komut(q, komut3(ad, a, v)) {
+        hata(e) => { ver hata(e); }
+        tamam(x) => { ver tamam(doğru); }
+    }
+}
+
+// ---- PCI yapılandırma alanı (port 0xCF8/0xCFC = 3320/3324) ----
+işlev pci_adres(aygit: tam32, islev_no: tam32, ofs: tam32) -> tam64 {
+    ver 2147483648 | ((aygit olarak tam64) << 11) | ((islev_no olarak tam64) << 8) | ((ofs & 252) olarak tam64);
+}
+
+// `bdf` = aygıt × 8 + işlev (veriyolu 0). q35'te AHCI 00:1f.2 = 250.
+genel işlev qt_pci_oku32(q: &değişken Qt, bdf: tam32, ofs: tam32) -> sonuç<tam64, metin> {
+    eşleş qt_yaz(q, "outl", 3320, pci_adres(bdf / 8, bdf % 8, ofs)) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    ver qt_oku(q, komut2("inl", 3324));
+}
+
+genel işlev qt_pci_yaz32(q: &değişken Qt, bdf: tam32, ofs: tam32, v: tam64) -> sonuç<mantıksal, metin> {
+    eşleş qt_yaz(q, "outl", 3320, pci_adres(bdf / 8, bdf % 8, ofs)) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    ver qt_yaz(q, "outl", 3324, v);
+}
+
+// 256 baytlık yapılandırma başlığı (drivers/pci/yapilandirma.kem `pci_coz` girdisi).
+genel işlev qt_pci_baslik(q: &değişken Qt, aygit: tam32) -> sonuç<Dizi<dtam8>, metin> {
+    değişken b: Dizi<dtam8> = [];
+    değişken ofs: tam32 = 0;
+    iken ofs < 256 {
+        eşleş qt_pci_oku32(q, aygit, ofs) {
+            hata(e) => { ver hata(e); }
+            tamam(v) => {
+                değişken k: tam32 = 0;
+                iken k < 4 {
+                    dizi_ekle(b, (((v >> (k * 8)) & 255) olarak tam32) olarak dtam8);
+                    k = k + 1;
+                }
+            }
+        }
+        ofs = ofs + 4;
+    }
+    ver tamam(b);
+}
+
+// Veriyolu 0'da (sınıf, alt sınıf, arayüz) eşleşen ilk işlev; `bdf` döner.
+// Çok işlevli aygıtlar (başlık türü bit 7) için 1..7 işlevleri de taranır —
+// q35 AHCI'si 1f.2'dedir, yalnız işlev 0'a bakan tarama onu KAÇIRIR (ölçüldü).
+genel işlev qt_pci_bul(q: &değişken Qt, sinif: tam32, alt: tam32, arayuz: tam32) -> sonuç<tam32, metin> {
+    değişken a: tam32 = 0;
+    iken a < 256 {
+        eğer a % 8 != 0 {
+            // İşlev 0 çok işlevli değilse bu aygıtın diğer işlevlerini atla.
+            eşleş qt_pci_oku32(q, a - (a % 8), 12) {
+                hata(e) => { ver hata(e); }
+                tamam(t) => {
+                    eğer ((t >> 16) & 128) == 0 { a = a - (a % 8) + 8; }
+                }
+            }
+            eğer a >= 256 { ver hata("PCI aygiti bulunamadi"); }
+        }
+        eşleş qt_pci_oku32(q, a, 0) {
+            hata(e) => { ver hata(e); }
+            tamam(v) => {
+                eğer (v & 65535) != 65535 {
+                    eşleş qt_pci_baslik(q, a) {
+                        hata(e) => { ver hata(e); }
+                        tamam(b) => {
+                            eşleş pci_coz(b) {
+                                hiç => { }
+                                değer(p) => {
+                                    eğer p.sinif == sinif ve p.alt_sinif == alt ve p.prog_if == arayuz { ver tamam(a); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        a = a + 1;
+    }
+    ver hata("PCI aygiti bulunamadi");
+}
+
+// Firmware yok: BAR'ı biz atarız. `bar_ofs` yapılandırma ofseti (0x10 + 4i);
+// 64 bit BAR'ın üst yarısı sıfırlanır. Ardından komut yazmacında bellek alanı
+// (bit 1) + veriyolu yöneticisi (bit 2) açılır.
+genel işlev qt_pci_bar_ata(q: &değişken Qt, aygit: tam32, bar_ofs: tam32, adres: tam64, genis64: mantıksal) -> sonuç<mantıksal, metin> {
+    eşleş qt_pci_yaz32(q, aygit, bar_ofs, adres) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    eğer genis64 {
+        eşleş qt_pci_yaz32(q, aygit, bar_ofs + 4, 0) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    }
+    eşleş qt_pci_oku32(q, aygit, 4) {
+        hata(e) => { ver hata(e); }
+        tamam(k) => { ver qt_pci_yaz32(q, aygit, 4, (k & 4294901760) | (k & 65535) | 6); }
+    }
+}
+
+// Test deseni (harness ile AYNI formül): sektör s, bayt j.
+genel işlev qt_desen(s: tam64, j: tam32) -> tam32 {
+    ver (((s * 7) olarak tam32) + j * 13 + 5) & 255;
+}
+
+// ---- misafir belleği (DMA) — 256 baytlık parçalarla ----
+genel işlev qt_bellek_oku(q: &değişken Qt, adres: tam64, n: tam32) -> sonuç<Dizi<dtam8>, metin> {
+    değişken b: Dizi<dtam8> = [];
+    değişken yapildi: tam32 = 0;
+    iken yapildi < n {
+        değişken p: tam32 = n - yapildi;
+        eğer p > 256 { p = 256; }
+        eşleş qt_komut(q, komut3("read", adres + (yapildi olarak tam64), p olarak tam64)) {
+            hata(e) => { ver hata(e); }
+            tamam(s) => {
+                eğer (metin_uzunluk(s) olarak tam32) != 2 + 2 * p { ver hata("read yanit boyu"); }
+                değişken i: tam32 = 0;
+                iken i < p {
+                    değişken yuk: tam32 = hane(metin_bayt(s, 2 + 2 * i) olarak tam32);
+                    değişken dus: tam32 = hane(metin_bayt(s, 3 + 2 * i) olarak tam32);
+                    eğer yuk < 0 veya dus < 0 { ver hata("read onaltilik"); }
+                    dizi_ekle(b, (yuk * 16 + dus) olarak dtam8);
+                    i = i + 1;
+                }
+            }
+        }
+        yapildi = yapildi + p;
+    }
+    ver tamam(b);
+}
+
+genel işlev qt_bellek_yaz(q: &değişken Qt, adres: tam64, b: Dizi<dtam8>) -> sonuç<mantıksal, metin> {
+    değişken n: tam32 = dizi_boyut(b);
+    değişken yapildi: tam32 = 0;
+    iken yapildi < n {
+        değişken p: tam32 = n - yapildi;
+        eğer p > 256 { p = 256; }
+        değişken hx: metin = "0x";
+        değişken i: tam32 = 0;
+        iken i < p {
+            değişken v: tam32 = dizi_al(b, yapildi + i) olarak tam32;
+            hx = metin_birlestir(hx, metin_birlestir(hane_metin(v / 16), hane_metin(v % 16)));
+            i = i + 1;
+        }
+        değişken c: metin = metin_birlestir(metin_birlestir(komut3("write", adres + (yapildi olarak tam64), p olarak tam64), " "), hx);
+        eşleş qt_komut(q, c) { hata(e) => { ver hata(e); } tamam(x) => { } }
+        yapildi = yapildi + p;
+    }
+    ver tamam(doğru);
+}
+
+// ---- sans-IO yürütücüsü ----
+// `bar`: aygıt yazmaçlarının fiziksel tabanı (GcIstek ofsetleri ona görelidir).
+genel işlev qt_yurut(q: &değişken Qt, bar: tam64, i: GcIstek) -> GcYanit {
+    değişken y: GcYanit = gc_bos();
+    eşleş i {
+        GcIstek::Oku32(a) => {
+            eşleş qt_oku(q, komut2("readl", bar + a)) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(v) => { y.deger = v; } }
+        }
+        GcIstek::Oku64(a) => {
+            eşleş qt_oku(q, komut2("readq", bar + a)) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(v) => { y.deger = v; } }
+        }
+        GcIstek::Yaz32(a, v) => {
+            eşleş qt_yaz(q, "writel", bar + a, v) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
+        }
+        GcIstek::Yaz64(a, v) => {
+            eşleş qt_yaz(q, "writeq", bar + a, v) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
+        }
+        GcIstek::BellekOku(a, n) => {
+            eşleş qt_bellek_oku(q, a, n) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(v) => { y.baytlar = v; } }
+        }
+        GcIstek::BellekYaz(a, b) => {
+            eşleş qt_bellek_yaz(q, a, b) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
+        }
+        GcIstek::Bekle(us) => {
+            // `clock_step` yalnız qtest HIZLANDIRICISINDA var; bu kurulum `-accel tcg -S`
+            // (Ubuntu QEMU 8.2 qtest hızlandırıcısı içermiyor — ölçüldü). Aygıt modelleri
+            // (NVMe/AHCI/xHCI) kuyrukları BH ile işler ve BH'ler her qtest komutu arasında
+            // ana döngüde koşar → zararsız bir okuma bir döngü turu yeter. Sanal saat
+            // İLERLEMEZ: zamanlayıcıya dayanan bir aygıt yolu burada asılır ve sürücünün
+            // zaman aşımı onu GÜRÜLTÜLÜ yakalar (sessiz geçmez).
+            eşleş qt_komut(q, "readl 0") { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
+        }
+        _ => { }
+    }
+    ver y;
+}

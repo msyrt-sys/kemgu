@@ -66,7 +66,8 @@ genel işlev sahte_ahci_yanit(s: &değişken SahteAhci, i: GcIstek) -> GcYanit {
             değilse eğer a == 4 { y.deger=s.ghc; }
             değilse eğer a == 296 veya a == 552 { y.deger=259; eğer a == 552 ve s.ariza == 3 { y.deger=0; } }
             değilse eğer a == 292 { y.deger=3943956737; }
-            değilse eğer a == 548 { y.deger=257; eğer s.ariza == 4 { y.deger=3943956737; } }
+            // [D-742] Gerçek AHCI gibi: imza FB yazılıp FRE açılana kadar 0xFFFFFFFF.
+            değilse eğer a == 548 { y.deger=257; eğer s.ariza == 4 { y.deger=3943956737; } eğer s.fb == 0 veya (s.cmd&16) == 0 { y.deger=4294967295; } }
             değilse eğer a == 536 { y.deger=s.cmd; eğer (s.cmd&1) != 0 veya s.ariza == 7 { y.deger=y.deger|32768; } eğer (s.cmd&16) != 0 { y.deger=y.deger|16384; } }
             değilse eğer a == 528 { y.deger=s.pis; }
             değilse eğer a == 544 { y.deger=s.tfd; }
