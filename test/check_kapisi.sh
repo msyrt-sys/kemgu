@@ -38,6 +38,8 @@ muaf() {
     # [D-693] ortak çekirdek fazları parçası (zamanlayıcı + kanal çekirdek uygulamasına bağlı).
     *test/ornekler/kem_os_cekirdek_ortak.kem) echo "parça dosya — arm64 ve x86 birleşik birimlerinde denetlenir" ;;
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
+    # [D-745] bare-metal NVMe test çekirdeği: kem_pci_hw/kem_uart'tan işlev ister (tek başına T002).
+    *test/ornekler/kem_os_x86_nvme.kem) echo "parça dosya — birleşik bare-metal NVMe birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_asm_kernel.kem)  echo "parça dosya + arch-etiketli asm (AS001 hedefe bağlı)" ;;
     # MODEL B kullanıcı programı: arch-etiketli asm → bayraksız --check AS001 verir.
     # Gerçek denetimi AŞAĞIDA, `--mimari arm64` ile yapılır (muafiyet DEĞİL, doğru bayrak).
@@ -139,7 +141,7 @@ fi
 KEMOS_X86_PARCALAR="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem
                     runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem
                     runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem
-                    runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem"
+                    runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/mimari/x86_64/kem_pci_hw.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem"
 kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
 if [ "$kemos_x86_eksik" -eq 0 ]; then
@@ -159,6 +161,21 @@ else
   red=$((red + 1))
   echo "  🔴 kem_os_x86 parçaları eksik — birleşik x86 kontrolü KOŞAMADI"
 fi
+
+# [D-745] bare-metal NVMe test çekirdeği birleşik birimi — test/bm_x86_nvme_harness.sh
+# CAT sırasıyla AYNI (o harness'taki RT listesi + çekirdek).
+BM_NVME_PARCALAR="$(echo $KEMOS_X86_PARCALAR | tr ' ' '\n' | grep '^runtime/' | grep -v kem_pci_hw | tr '\n' ' ') runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem test/ornekler/kem_os_x86_nvme.kem"
+mkdir -p build
+cat $BM_NVME_PARCALAR > build/kem_bm_nvme_kapi.kem
+tot=$((tot + 1))
+if "$KEMGU" --check --mimari x86_64-none build/kem_bm_nvme_kapi.kem >/dev/null 2>&1; then
+  echo "  ✅ kem_os_x86_nvme (birleşik bare-metal NVMe, $(echo $BM_NVME_PARCALAR | wc -w) parça) --check geçti"
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86_nvme birleşik kaynak --check'ten geçmiyor:"
+  "$KEMGU" --check --mimari x86_64-none build/kem_bm_nvme_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+fi
+rm -f build/kem_bm_nvme_kapi.kem
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir
 # birimdir → doğru mimari bayrağıyla tip kapısından GEÇMELİ.

@@ -1,4 +1,10 @@
 // Donanımdan bağımsız sürücü istekleri. Adresler BAR'a göreli ya da fiziksel DMA adresidir.
+// [D-745] YÜRÜTÜCÜ SÖZLEŞMESİ: `BellekOku` aygıtın eşzamanlı yazımına göre YIRTILMADAN
+// okumalıdır. Aygıt girdiyi artan adreste 8 baytlık parçalarla yazar; bayt bayt okumak
+// NVMe tamamlama girdisinde ESKİ komut kimliği + YENİ faz biti verir (bare-metal QEMU'da
+// ölçüldü, ~%7). Bare-metal yürütücü hizalı 8 baytlık + AZALAN sırayla okur
+// (test/ornekler/kem_os_x86_nvme.kem `bm_bellek_oku`). qtest yürütücüsü her isteği
+// ayrı turda işlediği için bu yarışı GÖREMEZ.
 genel çeşit GcIstek {
     Bitti, Oku32(tam64), Yaz32(tam64,tam64), Oku64(tam64), Yaz64(tam64,tam64),
     BellekOku(tam64,tam32), BellekYaz(tam64,Dizi<dtam8>), Bekle(tam32), Hata(metin)
