@@ -8218,11 +8218,18 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
                 değişken gr: metin = alan_adres_uret(p, lhs);
                 değişken hedef_tip: metin = p.son_tip;
                 değişken eski_beklenen: metin = p.beklenen_ll;
+                // C6-002: C alan ataması gibi dizi eleman bağlamını RHS'ye taşı.
+                değişken eski_eleman: metin = p.beklenen_elem;
+                değişken yad: metin = erisim_yapi_ad(p, obj);
+                değişken mi: tam32 = mono_bul(p, yad);
+                eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
+                p.beklenen_elem = yapi_alan_elem(p, yad, dizi_al(p.a_deg, lhs));
                 eğer metin_uzunluk(hedef_tip) > 0 {
                     eğer bayt(hedef_tip, 0) == 123 { p.beklenen_ll = hedef_tip; }
                 }
                 değişken v2: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
                 p.beklenen_ll = eski_beklenen;
+                p.beklenen_elem = eski_eleman;
                 eğer metin_uzunluk(gr) > 0 {
                     // C011: son_tip artık kaynağa aittir; hedef ayrı saklanır.
                     v2 = int_uydur(p, v2, hedef_tip, ifade_isz(p, dizi_al(p.cocuk, cb + 1)));

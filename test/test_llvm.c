@@ -3490,12 +3490,25 @@ static void test_uzun_kesirli_literal(void) {
     test_sonuc("D-633 67/85 karakterlik kesirli literal (us korunur) -> exit 42", rc == 42);
 }
 
+/* C6-002: boş alan atamasında gerçek payload ve eleman düzeni korunur. */
+static void test_c6_002_bos_alan(void) {
+    test_sonuc("C6-002 yerel -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_yerel.kem") == 42);
+    test_sonuc("C6-002 alan -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_alan.kem") == 42);
+    test_sonuc("C6-002 parametre -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_parametre.kem") == 42);
+    test_sonuc("C6-002 ic_ice -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_ic_ice.kem") == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
 
     printf("\n--- Literaller + aritmetik ---\n");
+    test_c6_002_bos_alan();
     test_lit_42();
     test_aritmetik();
     test_tam64_literal_baglam();
