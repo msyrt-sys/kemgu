@@ -7272,12 +7272,14 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir, &alan_ast);
                 /* [D-092] k.xs = [..]  (alan Dizi<T> heap) — TANIMLAYICI ile
                  * aynı delik: dizi-literali stack ÜRETME, heap KdlDizi yap ve
-                 * alan adresine KdlDizi* store et. dizi_alan_eleman_ast alanın
-                 * Dizi<T> eleman AST'sini verir (NULL → normal skaler alan). */
+                 * alan adresine KdlDizi* store et. lvalue'dan gelen alan_ast
+                 * Dizi<T> elemanını verir (NULL → normal skaler alan). */
                 const Dugum *alan_eleman_ast = NULL;
-                if (d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR) {
-                    alan_eleman_ast =
-                        dizi_alan_eleman_ast(g, d->veri.atama.hedef);
+                if (d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR &&
+                    alan_ast && alan_ast->tip == DUGUM_TIP_DIZI) {
+                    /* C6-002: lvalue çözümü iç içe alanın tipini zaten taşır;
+                     * tek katmanlı ad sorgusu [] değerini stack dizisine düşürüyordu. */
+                    alan_eleman_ast = alan_ast->veri.tip_dizi.eleman_tip;
                 }
                 if (adr >= 0 && alan_eleman_ast) {
                     const Dugum *eski_bt = g->beklenen_tip;

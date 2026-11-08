@@ -1,0 +1,21 @@
+// C6-002: boş alan ataması çeşit elemanının genişliğini korur.
+çeşit Olay { Bos, Veri(tam64, tam32), Baska(tam64) }
+yapı S { xs: Dizi<Olay>; koru: tam64; }
+yapı Dis { ic: S; }
+işlev denetle(xs: Dizi<Olay>) -> tam32 {
+    eğer dizi_boyut(xs) != 3 { ver 1; }
+    değişken e0: Olay = dizi_al(xs, 0);
+    eşleş e0 { Olay::Veri(n, m) => { eğer n != 8589934595 veya m != 13 { ver 2; } } _ => { ver 3; } }
+    değişken e1: Olay = dizi_al(xs, 1);
+    eşleş e1 { Olay::Veri(n, m) => { eğer n != 8589934611 veya m != 29 { ver 2; } } _ => { ver 3; } }
+    değişken e2: Olay = dizi_al(xs, 2);
+    eşleş e2 { Olay::Veri(n, m) => { eğer n != 8589934633 veya m != 37 { ver 2; } } _ => { ver 3; } }
+    ver 42;
+}
+işlev main() -> tam32 {
+    değişken xs: Dizi<Olay> = [];
+    dizi_ekle(xs, Olay::Veri(8589934595, 13));
+    dizi_ekle(xs, Olay::Veri(8589934611, 29));
+    dizi_ekle(xs, Olay::Veri(8589934633, 37));
+    ver denetle(xs);
+}

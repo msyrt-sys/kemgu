@@ -3535,6 +3535,16 @@ static void test_c6_003_alan_dongu(void) {
                derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_yapi.kem") == 42);
     test_sonuc("C6-003 isaretsiz -> exit 42",
                derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_isaretsiz.kem") == 42);
+/* C6-002: boş alan atamasında gerçek payload ve eleman düzeni korunur. */
+static void test_c6_002_bos_alan(void) {
+    test_sonuc("C6-002 yerel -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_yerel.kem") == 42);
+    test_sonuc("C6-002 alan -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_alan.kem") == 42);
+    test_sonuc("C6-002 parametre -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_parametre.kem") == 42);
+    test_sonuc("C6-002 ic_ice -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_ic_ice.kem") == 42);
 }
 
 int main(void) {
@@ -3545,6 +3555,7 @@ int main(void) {
     printf("\n--- Literaller + aritmetik ---\n");
     test_c6_001_alan_odunc();
     test_c6_003_alan_dongu();
+    test_c6_002_bos_alan();
     test_lit_42();
     test_aritmetik();
     test_tam64_literal_baglam();
