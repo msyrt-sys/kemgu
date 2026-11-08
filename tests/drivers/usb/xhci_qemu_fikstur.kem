@@ -5,8 +5,7 @@ kullan tests::drivers::usb::sahte_xhci::{ XhciIz };
 genel işlev xhci_qemu_izi(der: tam32) -> Dizi<XhciIz> {
     // 187 istek; kanonik JSON SHA256 d1f99eba7e7eb7971bf583cf35697e58bb3cb2142e4692ec26f966860f9e59f5
     eğer der == 0 {
-    // C6-004: dönüşte doğrudan yapı dizisi sabiti self’te yanlış genişlik alır.
-    değişken kayitlar: Dizi<XhciIz> = [
+    ver [
         XhciIz { tur: 1, adres: 0, deger: 0, boy: 0, ozet: 0, yanit: 16777280, baytlar: [] },
         XhciIz { tur: 1, adres: 4, deger: 0, boy: 0, ozet: 0, yanit: 134221888, baytlar: [] },
         XhciIz { tur: 1, adres: 8, deger: 0, boy: 0, ozet: 0, yanit: 15, baytlar: [] },
@@ -195,11 +194,9 @@ genel işlev xhci_qemu_izi(der: tam32) -> Dizi<XhciIz> {
         XhciIz { tur: 1, adres: 1200, deger: 0, boy: 0, ozet: 0, yanit: 131744, baytlar: [] },
         XhciIz { tur: 7, adres: 0, deger: 0, boy: 0, ozet: 0, yanit: 0, baytlar: [] }
     ];
-    ver kayitlar;
     }
     // 187 istek; kanonik JSON SHA256 d1f99eba7e7eb7971bf583cf35697e58bb3cb2142e4692ec26f966860f9e59f5
-    // C6-004: dönüşte doğrudan yapı dizisi sabiti self’te yanlış genişlik alır.
-    değişken kayitlar: Dizi<XhciIz> = [
+    ver [
         XhciIz { tur: 1, adres: 0, deger: 0, boy: 0, ozet: 0, yanit: 16777280, baytlar: [] },
         XhciIz { tur: 1, adres: 4, deger: 0, boy: 0, ozet: 0, yanit: 134221888, baytlar: [] },
         XhciIz { tur: 1, adres: 8, deger: 0, boy: 0, ozet: 0, yanit: 15, baytlar: [] },
@@ -388,5 +385,4 @@ genel işlev xhci_qemu_izi(der: tam32) -> Dizi<XhciIz> {
         XhciIz { tur: 1, adres: 1200, deger: 0, boy: 0, ozet: 0, yanit: 131744, baytlar: [] },
         XhciIz { tur: 7, adres: 0, deger: 0, boy: 0, ozet: 0, yanit: 0, baytlar: [] }
     ];
-    ver kayitlar;
 }
