@@ -4898,6 +4898,21 @@ işlev yapi_alan_eleman_isz(p: &değişken Ayr, yad: metin, alan: metin) -> tam3
     }
     ver 0;
 }
+// C6-003: alan dizisindeki metin elemanı içerik karşılaştırmasını korur.
+işlev yapi_alan_eleman_metin(p: &değişken Ayr, yad: metin, alan: metin) -> tam32 {
+    değişken k: tam32 = yapi_idx(p, yad);
+    eğer k < 0 { ver 0; }
+    değişken base: tam32 = dizi_al(p.yapi_abase, k);
+    değişken cnt: tam32 = dizi_al(p.yapi_acount, k);
+    değişken j: tam32 = 0;
+    iken j < cnt {
+        eğer metin_esit(dizi_al(p.alan_ad, base + j), alan) {
+            ver tip_eleman_metin(p, dizi_al(p.alan_tnode, base + j));
+        }
+        j = j + 1;
+    }
+    ver 0;
+}
 // CG8: Dizi alanının eleman tipi ("" Dizi değilse).
 işlev yapi_alan_elem(p: &değişken Ayr, yad: metin, alan: metin) -> metin {
     değişken k: tam32 = yapi_idx(p, yad);
@@ -7724,18 +7739,29 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "ICIN") {
         // D3 P2: için x: dizi { gövde } — heap KdlDizi* iterasyonu (C llvm.c:4350).
-        // koleksiyon TANIMLAYICI + heap dizi (eleman tipi "" değil) olmalı; aksi atla.
+        // C6-003: yerel veya alan koleksiyonu heap dizi olmalı.
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken col: tam32 = dizi_al(p.cocuk, cb);
         değişken govde: tam32 = dizi_al(p.cocuk, cb + 1);
         değişken dvar: metin = dizi_al(p.a_deg, idx);   // döngü değişkeni adı
-        eğer metin_esit(dizi_al(p.a_ad, col), "TANIMLAYICI") == yanlış {
+        değişken alan_mi: mantıksal = metin_esit(dizi_al(p.a_ad, col), "ERISIM");
+        eğer metin_esit(dizi_al(p.a_ad, col), "TANIMLAYICI") == yanlış ve alan_mi == yanlış {
             yaz_str("  ; icin: koleksiyon tanimlayici degil"); yb(10); ver 0;
         }
         değişken kp: metin = ifade_uret(p, col);   // KdlDizi* ptr
         değişken et: metin = p.son_elem;
         eğer metin_esit(et, "") {
             yaz_str("  ; icin: heap dizi degil (v1 sinir)"); yb(10); ver 0;
+        }
+        değişken emet: tam32 = cg_var_emet_bul(p, dizi_al(p.a_deg, col));
+        değişken eisz: tam32 = cg_var_eisz_bul(p, dizi_al(p.a_deg, col));
+        eğer alan_mi {
+            değişken obj: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, col));
+            değişken yad: metin = erisim_yapi_ad(p, obj);
+            değişken mi: tam32 = mono_bul(p, yad);
+            eğer mi >= 0 { yad = dizi_al(p.mono_yad, mi); }
+            emet = yapi_alan_eleman_metin(p, yad, dizi_al(p.a_deg, col));
+            eisz = yapi_alan_eleman_isz(p, yad, dizi_al(p.a_deg, col));
         }
         // n = kdl_dizi_boyut(kp)
         değişken nr: metin = reg_str(yeni_reg(p));
@@ -7753,8 +7779,8 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         cg_var_ekle(p, dvar, xa, et, "", "");
         // [D-449] eleman metin ise döngü değişkeni de metin (`için x: xs` →
         // `x == hedef` içerik karşılaştırmalı olmalı; `dizi.kem` bu yoldan).
-        cg_var_met_isaretle(p, cg_var_emet_bul(p, dizi_al(p.a_deg, col)));
-        cg_var_isz_isaretle(p, cg_var_eisz_bul(p, dizi_al(p.a_deg, col)));   // [D-708] dtamN eleman → x işaretsiz
+        cg_var_met_isaretle(p, emet);
+        cg_var_isz_isaretle(p, eisz);   // [D-708] dtamN eleman → x işaretsiz
         değişken Lhead: metin = yeni_label(p);
         değişken Lbody: metin = yeni_label(p);
         değişken Ldone: metin = yeni_label(p);

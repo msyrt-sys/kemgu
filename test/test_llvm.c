@@ -3517,6 +3517,25 @@ static void test_c6_001_alan_odunc(void) {
     test_sonuc("C6-001 iki_alan -> exit 42",
         derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_iki_alan.kem") == 42);
  }
+/* C6-003: ortak sessiz yanlış sonuç exit 42 beklentisiyle yakalanır. */
+static void test_c6_003_alan_dongu(void) {
+    test_sonuc("C6-003 yerel -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_yerel.kem") == 42);
+    test_sonuc("C6-003 alan -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_alan.kem") == 42);
+    test_sonuc("C6-003 ic_ice -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_ic_ice.kem") == 42);
+    test_sonuc("C6-003 parametre -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_parametre.kem") == 42);
+    test_sonuc("C6-003 bos -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_bos.kem") == 42);
+    test_sonuc("C6-003 metin -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_metin.kem") == 42);
+    test_sonuc("C6-003 yapi -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_yapi.kem") == 42);
+    test_sonuc("C6-003 isaretsiz -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_isaretsiz.kem") == 42);
+}
 
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
@@ -3525,6 +3544,7 @@ int main(void) {
 
     printf("\n--- Literaller + aritmetik ---\n");
     test_c6_001_alan_odunc();
+    test_c6_003_alan_dongu();
     test_lit_42();
     test_aritmetik();
     test_tam64_literal_baglam();

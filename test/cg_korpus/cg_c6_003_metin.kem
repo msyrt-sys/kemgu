@@ -1,0 +1,14 @@
+// C6-003: dizi alanı döngüsü tüm elemanları tipini koruyarak gezer.
+yapı S { xs: Dizi<metin>; }
+işlev main() -> tam32 {
+    değişken s: S = S { xs: [metin_birlestir("a", "gac"), metin_birlestir("de", "niz"), metin_birlestir("yol", "cu")] };
+    değişken maske: tam32 = 0;
+    değişken adet: tam32 = 0;
+    için a: s.xs {
+        eğer a == "agac" { maske = maske + 1; }
+        eğer a == "deniz" { maske = maske + 4; }
+        eğer a == "yolcu" { maske = maske + 16; }
+        adet = adet + 1;
+    }
+    eğer maske == 21 ve adet == 3 { ver 42; } ver 1;
+}
