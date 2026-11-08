@@ -1,0 +1,86 @@
+// kem_pci_hw.kem — [D-745] x86_64 PCI yapılandırma (port 0xCF8/0xCFC) + ham MMIO /
+// fiziksel bellek erişimi. Sans-IO sürücülerin (drivers/*) GcIstek'leri bare-metal
+// çekirdekte bunlarla yürütülür — qtest yürütücüsünün (tests/qemu/qtest.kem)
+// gerçek donanım karşılığı. Yol haritası H1f (32-bit port G/Ç) bu dosyayla açılır.
+// AS001: yalnız x86_64 asm'i; arm64 ikizi ayrı dosya olur (D2b kararı).
+// Çıplak işlevde ham deref `volatile`dır (CLAUDE.md) → MMIO okumaları birleştirilmez.
+// Adresler birebir (identity) eşlenmiş olmalı: boot/start_x86_64.S 0..1 GB (önbellekli
+// RAM) ve 3..4 GB (UC MMIO penceresi) eşler. Pencere dışı adres çağıranın sorumluluğu.
+
+çıplak işlev kem_port_yaz32(port: dtam16, deger: dtam32) {
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"outl $1, $0"# girdi("{dx}", port) girdi("{eax}", deger) bozulan("~{memory}") }
+    }
+}
+
+çıplak işlev kem_port_oku32(port: dtam16) -> dtam32 {
+    değişken v: dtam32 = 0 olarak dtam32;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"inl $1, $0"# çıktı("={eax}", &v) girdi("{dx}", port) bozulan("~{memory}") }
+    }
+    ver v;
+}
+
+// PCI yapılandırma (mekanizma 1). bdf = aygıt * 8 + işlev, veriyolu 0.
+çıplak işlev kem_pci_adres(bdf: tam32, ofs: tam32) -> dtam32 {
+    değişken a: tam64 = 2147483648 | (((bdf / 8) olarak tam64) << 11) | (((bdf % 8) olarak tam64) << 8) | ((ofs & 252) olarak tam64);
+    ver a olarak dtam32;
+}
+
+çıplak işlev kem_pci_oku32(bdf: tam32, ofs: tam32) -> tam64 {
+    kem_port_yaz32(3320 olarak dtam16, kem_pci_adres(bdf, ofs));
+    ver kem_port_oku32(3324 olarak dtam16) olarak tam64;
+}
+
+çıplak işlev kem_pci_yaz32(bdf: tam32, ofs: tam32, v: tam64) {
+    kem_port_yaz32(3320 olarak dtam16, kem_pci_adres(bdf, ofs));
+    kem_port_yaz32(3324 olarak dtam16, (v & 4294967295) olarak dtam32);
+}
+
+// ---- ham MMIO / fiziksel bellek ----
+çıplak işlev kem_mmio_oku32(adres: tam64) -> tam64 {
+    değişken p: *dtam32 = adres olarak *dtam32;
+    değişken v: dtam32 = *p;
+    ver v olarak tam64;
+}
+
+çıplak işlev kem_mmio_yaz32(adres: tam64, v: tam64) {
+    değişken p: *dtam32 = adres olarak *dtam32;
+    *p = (v & 4294967295) olarak dtam32;
+}
+
+çıplak işlev kem_mmio_oku64(adres: tam64) -> tam64 {
+    değişken p: *tam64 = adres olarak *tam64;
+    ver *p;
+}
+
+çıplak işlev kem_mmio_yaz64(adres: tam64, v: tam64) {
+    değişken p: *tam64 = adres olarak *tam64;
+    *p = v;
+}
+
+çıplak işlev kem_fiz_oku8(adres: tam64) -> tam32 {
+    değişken p: *dtam8 = adres olarak *dtam8;
+    değişken v: dtam8 = *p;
+    ver v olarak tam32;
+}
+
+çıplak işlev kem_fiz_yaz8(adres: tam64, v: tam32) {
+    değişken p: *dtam8 = adres olarak *dtam8;
+    *p = ((v & 255) olarak tam32) olarak dtam8;
+}
+
+// Kısa gecikme: port 0x80'e (POST kodu) okuma ~1 µs gerçek donanımda; QEMU'da
+// hızlıdır ama aygıt modelinin işlemesi için ana döngüye zaman tanır.
+çıplak işlev kem_bekle_us(us: tam32) {
+    değişken i: tam32 = 0;
+    iken i < us {
+        değişken x: dtam8 = kem_port_oku8(128 olarak dtam16);
+        i = i + 1;
+    }
+}
+
+// QEMU isa-debug-exit (iobase 0xF4): QEMU (kod << 1) | 1 ile çıkar.
+çıplak işlev kem_qemu_cik(kod: tam32) {
+    kem_port_yaz8(244 olarak dtam16, ((kod & 255) olarak tam32) olarak dtam8);
+}

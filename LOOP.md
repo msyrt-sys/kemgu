@@ -249,6 +249,10 @@
       sahte aygit modelleri Codex'in standardi ANLAYISIDIR; ayni yanlis hem surucuye hem modele
       girebilir. Bu liste gercek QEMU aygitlariyla (`-device nvme/ahci/qemu-xhci/usb-storage/usb-kbd`)
       kapatilacak — Claude'un bare-metal baglama isinin (H7/H10) ilk adimi.
+- [ ] E4j [S] NVMe tamamlama girdisi BELIRLENIMCI okuma (D-745 yaris dersi): surucude faz-ONCE yeniden
+      okuma (faz biti eslesince girdiyi tekrar BellekOku; Linux nvme deseni) + YIRTIK yazan sahte model
+      testi (ilk okumada yeni faz + eski CID). Bugun koruma yalniz yurutucude (8 bayt azalan) ve
+      bm_x86_nvme kapisi bu sinif icin OLASILIKSAL (~%77). Ayni ders xHCI olay halkasi icin de gecerli.
 - [ ] E4i [M] ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -2702,3 +2706,17 @@
   satir silinmis), qtest 6/6 + kopru 122/122 yeniden kosuldu, BAGIMSIZ SABOTAJ (port sifirlama PR biti):
   gercek QEMU KIRMIZI, ESKI sahte test YESIL kaldi, G6'nin gercege uydurulmus modeli KIRMIZI -> G6 kurali
   ise yaradi. 4 derleyici bulgusu (3'u sessiz yanlis, 2'si iki derleyicide) -> E4i.
+- 2026-11-08 D-745: BARE-METAL x86 NVMe — Codex'in sans-IO NVMe surucusu GERCEK x86 cekirdeginde (QEMU q35,
+  PVH, SeaBIOS BAR atar), gercek port G/C + MMIO + DMA ile. YENI: runtime/kem_dizi_genis.kem (kem_heap'in
+  atladigi Dizi tam64/ptr/yapi + metin_birlestir/kod_metin/tam_metin, saf KEMGU, C kdl_dizi.inc ile
+  birebir), runtime/mimari/x86_64/kem_pci_hw.kem (32-bit port G/C — H1f — + volatile MMIO + fiziksel
+  bellek + isa-debug-exit), test/ornekler/kem_os_x86_nvme.kem (PCI tarama, firmware BAR'i, bm_yurut),
+  test/bm_x86_nvme_harness.sh (20 acilis + seri cikti + QEMU rc 33 + imaj kahini). BULGU — YIRTIK
+  OKUMA: ilk acilis "nvme tamamlanma kimligi" verdi. "Cop RAM" hipotezi OLCULDU ve COKTU (DMA bolgesi
+  acilista tamamen sifir); kok: bayt bayt BellekOku, aygit (QEMU'da ayri is parcacigi) girdiyi 8
+  baytlik yazinca ESKI CID + YENI faz biti. Duzeltme yurutucude hizali 8 bayt + AZALAN sira. OLCUM:
+  bayt bayt 2/30 acilis kirmizi (~%7), duzeltilmis 100/100 + 30/30. qtest bu yarisi GOREMEZ (her
+  istek ayri tur). Sabotaj 5 acilista SESSIZ kaldi (%7'yi 5 denemede yakalama ~%30) -> varsayilan
+  20 acilis; kapi bu sinif icin OLASILIKSAL, belirlenimci koruma E4j. Sozlesme drivers/ortak/gc.kem'e
+  yazildi. Kapilar: bm_x86_nvme 20/20, qtest nvme+ahci, kopru 117/117, check_kapisi 0 RED (+birlesik
+  NVMe birimi), baremetal_diff 23/23 (+kem_dizi_genis birimi 52 islev C=self aarch64), kem_os_x86 GECTI.
