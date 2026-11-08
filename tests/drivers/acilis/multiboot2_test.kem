@@ -1,6 +1,6 @@
 // Kâhin: python3 tools/codex/dalga4_mb2.py (struct.pack, ACPI sağlama, hizalama).
 kullan tests::drivers::acilis::mb2_fikstur::{ mb2_ornek };
-kullan drivers::acilis::multiboot2::{ AcilisBellek, AcilisRsdp, AcilisBilgi, AcilisModulu, AcilisEkrani, KomutSecenegi, multiboot2_coz, komut_satiri_coz, kok_seri_coz };
+kullan drivers::acilis::multiboot2::{ AcilisBilgi, AcilisModulu, AcilisEkrani, KomutSecenegi, multiboot2_coz, komut_satiri_coz, kok_seri_coz };
 kullan drivers::bellek::harita::{ BellekBolgesi };
 kullan drivers::acpi::tablo::{ Rsdp };
 kullan drivers::ortak::bayt::{ yaz_le32 };
@@ -13,7 +13,7 @@ işlev test_tam() -> mantıksal {
             eğer dizi_boyut(b.moduller) != 1 veya dizi_boyut(b.harita) != 1 { ver yanlış; }
             değişken m: AcilisModulu = dizi_al(b.moduller,0);
             eğer m.baslangic != 1048576 veya m.bitis != 1179648 veya değil metin_esit(m.ad,"ramdisk") { ver yanlış; }
-            değişken h: AcilisBellek = dizi_al(b.harita,0);
+            değişken h: BellekBolgesi = dizi_al(b.harita,0);
             eğer h.taban != 1048576 veya h.uzunluk != 4194304 veya h.tur != 1 { ver yanlış; }
             eşleş b.ekran { hiç => { ver yanlış; } değer(e) => { eğer e.adres != 4294967296 veya e.genislik != 1024 veya e.yukseklik != 768 veya e.adim != 4096 veya e.bpp != 32 veya dizi_al(e.renk,0) != 16 { ver yanlış; } } }
             eşleş b.acpi { hiç => { ver yanlış; } değer(a) => { eğer a.revizyon != 2 veya a.xsdt != 4886718345 { ver yanlış; } } }

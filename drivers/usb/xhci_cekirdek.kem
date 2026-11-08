@@ -1,0 +1,269 @@
+// Sans-IO xHCI: yalnız GcIstek üretir. Kök portlar, tek yapılandırma, alt ayar 0.
+// Sabit kaynağı: QEMU v8.2.2 hcd-xhci.{c,h}; tools/codex/dalga6_sabit.py.
+// DMA yerleşimi: DCBAA +0, komut +4096, olay +8192, ERST +12288,
+// giriş bağlamı +16384, scratch listesi +32768, çıkış bağlamları +65536.
+// Yuva başına 128 KiB: OUT+0, IN+64, enumerasyon EP0+4096, veri+65536.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le32, yaz_le64 };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek, xhci_yetenek_coz, xhci_port_reset, xhci_port_ack };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi, XhciOlay, XhciYazim, xhci_halka_yeni, xhci_uret, xhci_tuket, xhci_trb_kur, xhci_setup, xhci_data, xhci_status, xhci_slot_baglam, xhci_uc_baglam, xhci_olay_al, xhci_erdp };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma, usb_aygit_coz, usb_yapilandirma_coz, usb_get_descriptor, usb_set_configuration };
+
+genel yapı XhciAygit { yuva: tam32; port: tam32; hiz: tam32; dma: tam64; kimlik: UsbAygit; yapi: UsbYapilandirma; ctrl_dongu: mantıksal; ctrl: XhciHalka; in_dongu: mantıksal; }
+genel yapı XhciDurum {
+    dma: tam64; bar_boy: tam64; devredildi: mantıksal; c: XhciYetenek; evre: tam32; bekleme: tam32; sinir: tam32;
+    kuyruk: Dizi<GcIstek>; q: tam32; cap: Dizi<dtam8>; cap_no: tam32;
+    komut: XhciHalka; ctrl: XhciHalka; olay: XhciOlayHalkasi; aygitlar: Dizi<XhciAygit>;
+    port: tam32; hiz: tam32; yuva: tam32; ddma: tam64; ep0: tam32; ctrl_dongu: mantıksal;
+    kimlik: Dizi<dtam8>; yapi: Dizi<dtam8>; toplam: tam32;
+    bek_tur: tam32; bek_adres: tam64; bek_uc: tam32; sonra: tam32; son_yuva: tam32;
+    boy: tam32; gercek_boy: tam32; giris: mantıksal; sonuc: Dizi<dtam8>; olay_sayisi: tam32; kisa_sayisi: tam32;
+}
+işlev hata_ver(s: &değişken XhciDurum, e: metin) -> GcIstek { s.evre=-1; ver GcIstek::Hata(e); }
+işlev ekle(s: &değişken XhciDurum, i: GcIstek) { dizi_ekle(s.kuyruk,i); }
+işlev kopya(dst: Dizi<dtam8>, ofs: tam32, src: Dizi<dtam8>) { değişken i: tam32 = 0; iken i < dizi_boyut(src) { yaz_u8(dst,ofs+i,(dizi_al(src,i) olarak tam32) olarak tam64); i=i+1; } }
+işlev birlestir(dst: Dizi<dtam8>, src: Dizi<dtam8>) { değişken i: tam32 = 0; iken i < dizi_boyut(src) { dizi_ekle(dst,dizi_al(src,i)); i=i+1; } }
+genel işlev xhci_yeni(dma: tam64, bar_boy: tam64) -> sonuç<XhciDurum,metin> {
+    eğer dma < 65536 veya dma%65536 != 0 veya dma > 9223372036846387199 veya bar_boy < 16384 { ver hata("xhci dma veya bar araligi"); }
+    değişken c: XhciYetenek = XhciYetenek { caplength: 0, surum: 0, yuva_sayisi: 0, kesme_sayisi: 0, port_sayisi: 0, adres64: yanlış, baglam_boy: 32, dboff: 0, rtsoff: 0, xecp: 0, scratchpad: 0 };
+    değişken h: XhciHalka = XhciHalka { taban: dma+4096, adet: 64, son: 0, dongu: doğru, dolu: 0 };
+    değişken o: XhciOlayHalkasi = XhciOlayHalkasi { taban: dma+8192, adet: 64, bas: 0, dongu: doğru };
+    ver tamam(XhciDurum { dma: dma, bar_boy: bar_boy, devredildi: yanlış, c: c, evre: 0, bekleme: 0, sinir: 4000,
+        kuyruk: [], q: 0, cap: bayt_sifir(32), cap_no: 0, komut: h, ctrl: h, olay: o, aygitlar: [],
+        port: 1, hiz: 0, yuva: 0, ddma: 0, ep0: 8, ctrl_dongu: doğru, kimlik: [], yapi: [], toplam: 0,
+        bek_tur: 0, bek_adres: 0, bek_uc: 0, sonra: 0, son_yuva: 0, boy: 0, gercek_boy: 0, giris: yanlış, sonuc: [], olay_sayisi: 0, kisa_sayisi: 0 });
+}
+işlev bekle(s: &değişken XhciDurum, oku: GcIstek) -> GcIstek {
+    s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci zaman asimi"); }
+    ekle(s,oku); ver GcIstek::Bekle(1000);
+}
+işlev komut_ozel(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, bayrak: tam64, sonraki: tam32) -> sonuç<mantıksal,metin> {
+    s.bek_adres=s.komut.taban+(s.komut.son olarak tam64)*16;
+    // C6-001: alan referansı geçiciye bağlanıyor; yerel kopyayı açıkça geri yaz.
+    değişken halka: XhciHalka = s.komut;
+    eşleş xhci_trb_kur(param,0,tur,doğru,((yuva olarak tam64)<<24)|bayrak) {
+        hata(e) => { ver hata(e); }
+        tamam(b) => { eşleş xhci_uret(&değişken halka,b) { hata(e) => { ver hata(e); } tamam(xs) => { s.komut=halka; için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } } }
+    }
+    ekle(s,GcIstek::Yaz32(s.c.dboff,0)); s.bek_tur=33; s.bek_uc=0; s.sonra=sonraki; s.boy=0; s.giris=yanlış; s.evre=900; s.bekleme=0;
+    ver tamam(doğru);
+}
+işlev komut_kur(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, sonraki: tam32) -> sonuç<mantıksal,metin> { ver komut_ozel(s,tur,param,yuva,0,sonraki); }
+işlev ctrl_ekle(s: &değişken XhciDurum, b: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    değişken h: XhciHalka = s.ctrl; s.bek_adres=h.taban+(h.son olarak tam64)*16;
+    eşleş xhci_uret(&değişken h,b) { hata(e) => { ver hata(e); } tamam(xs) => { s.ctrl=h; için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } }
+    ver tamam(doğru);
+}
+işlev kontrol_kur(s: &değişken XhciDurum, paket: Dizi<dtam8>, sonraki: tam32) -> sonuç<mantıksal,metin> {
+    eğer dizi_boyut(paket) != 8 { ver hata("xhci setup boyu"); }
+    s.boy=oku_le16(paket,6); s.giris=(oku_u8(paket,0)&128) != 0;
+    eğer s.boy > 4096 veya (s.boy > 0 ve değil s.giris) { ver hata("xhci kontrol veri destegi"); }
+    eşleş xhci_setup(paket,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } }
+    eğer s.boy > 0 { eşleş xhci_data(s.ddma+65536,s.boy,doğru,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } } }
+    eşleş xhci_status(s.boy == 0 veya değil s.giris,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } }
+    ekle(s,GcIstek::Yaz32(s.c.dboff+(s.yuva olarak tam64)*4,1));
+    s.ctrl_dongu=s.ctrl.dongu; s.bek_tur=32; s.bek_uc=1; s.sonra=sonraki; s.evre=900; s.bekleme=0; s.sonuc=[];
+    ver tamam(doğru);
+}
+işlev tanim_iste(s: &değişken XhciDurum, tur: tam32, boy: tam32, sonra: tam32) -> sonuç<mantıksal,metin> {
+    eşleş usb_get_descriptor(tur,0,0,boy) { hata(e) => { ver hata(e); } tamam(b) => { ver kontrol_kur(s,b,sonra); } }
+}
+işlev baglam(s: &değişken XhciDurum, son: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    değişken b: Dizi<dtam8> = bayt_sifir(s.c.baglam_boy*33);
+    eşleş xhci_slot_baglam(s.c.baglam_boy,0,s.hiz,s.port,son) { hata(e) => { ver hata(e); } tamam(v) => { kopya(b,s.c.baglam_boy,v); } }
+    eşleş xhci_uc_baglam(s.c.baglam_boy,4,s.ep0,0,0,s.ddma+4096,doğru) { hata(e) => { ver hata(e); } tamam(v) => { kopya(b,s.c.baglam_boy*2,v); } }
+    yaz_le32(b,4,3); ver tamam(b);
+}
+// SuperSpeed uç eşlikçisinin burst alanı; diğer tanımlayıcılar çözülmüş olmalı.
+işlev burst(b: Dizi<dtam8>, adres: tam32) -> tam32 {
+    değişken i: tam32 = 9; değişken onceki: tam32 = -1;
+    iken i+2 <= dizi_boyut(b) {
+        değişken n: tam32 = oku_u8(b,i); eğer n < 2 veya n > dizi_boyut(b)-i { ver -1; }
+        değişken t: tam32 = oku_u8(b,i+1);
+        eğer t == 5 ve n >= 7 { onceki=oku_u8(b,i+2); }
+        değilse eğer t == 48 ve n >= 6 ve onceki == adres { ver oku_u8(b,i+2); }
+        i=i+n;
+    } ver 0;
+}
+işlev uclari_kur(s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    eşleş usb_yapilandirma_coz(s.yapi) {
+        hata(e) => { ver hata(e); }
+        tamam(y) => {
+            değişken son: tam32 = 1; değişken mask: tam64 = 1; değişken in_var: mantıksal = yanlış; değişken out_var: mantıksal = yanlış;
+            değişken b: Dizi<dtam8> = bayt_sifir(s.c.baglam_boy*33);
+            değişken uclar: Dizi<UsbUc> = y.uclar; için u: uclar {
+                eğer u.alternatif == 0 {
+                    eğer u.tur != 2 ve u.tur != 3 { ver hata("xhci uc turu desteklenmiyor"); }
+                    değişken giris: mantıksal = (u.adres&128) != 0;
+                    eğer (giris ve in_var) veya (değil giris ve out_var) { ver hata("xhci ayni yon coklu uc destegi yok"); }
+                    eğer giris { in_var=doğru; } değilse { out_var=doğru; }
+                    değişken dci: tam32 = (u.adres&15)*2; değişken tur: tam32 = u.tur; değişken halka: tam64 = s.ddma;
+                    eğer giris { dci=dci+1; tur=tur+4; halka=halka+64; }
+                    eğer dci > son { son=dci; } mask=mask|((1 olarak tam64)<<dci);
+                    değişken aralik: tam32 = 0; değişken br: tam32 = 0;
+                    eğer s.hiz == 4 { br=burst(s.yapi,u.adres); eğer br < 0 veya br > 15 { ver hata("xhci burst alani"); } }
+                    eğer u.tur == 3 {
+                        eğer s.hiz >= 3 { aralik=u.aralik-1; }
+                        değilse { değişken v: tam32 = u.aralik*8; iken v > 1 { aralik=aralik+1; v=v/2; } }
+                        eğer aralik < 0 veya aralik > 15 { ver hata("xhci kesme araligi"); }
+                    }
+                    eşleş xhci_uc_baglam(s.c.baglam_boy,tur,u.paket_bayt,br,aralik,halka,doğru) { hata(e) => { ver hata(e); } tamam(v) => { kopya(b,(dci+1)*s.c.baglam_boy,v); } }
+                }
+            }
+            eşleş xhci_slot_baglam(s.c.baglam_boy,0,s.hiz,s.port,son) { hata(e) => { ver hata(e); } tamam(v) => { kopya(b,s.c.baglam_boy,v); } }
+            yaz_le32(b,4,mask); ekle(s,GcIstek::BellekYaz(s.dma+16384,b)); ver komut_kur(s,12,s.dma+16384,s.yuva,21);
+        }
+    }
+}
+genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
+    eğer s.evre == -1 { ver GcIstek::Hata("xhci durdu"); }
+    eğer değil y.basarili { ver hata_ver(s,"xhci tasiyici hatasi"); }
+    eğer s.q < dizi_boyut(s.kuyruk) { değişken kuyruk_istegi: GcIstek = dizi_al(s.kuyruk,s.q); s.q=s.q+1; ver kuyruk_istegi; }
+    // C6-002: alan=[] self’te eleman genişliğini kaybeder; tipli boş dizi kullan.
+    değişken bos_istekler: Dizi<GcIstek> = []; s.kuyruk=bos_istekler; s.q=0;
+    eğer s.evre == 100 { ver GcIstek::Bitti; }
+    eğer s.evre == 0 { s.evre=1; ver GcIstek::Oku32(0); }
+    eğer s.evre == 1 {
+        yaz_le32(s.cap,s.cap_no*4,y.deger); s.cap_no=s.cap_no+1;
+        eğer s.cap_no < 8 { ver GcIstek::Oku32((s.cap_no*4) olarak tam64); }
+        eşleş xhci_yetenek_coz(s.cap,s.bar_boy) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { s.c=v; } }
+        eğer s.c.scratchpad > 32 { ver hata_ver(s,"xhci scratchpad siniri"); }
+        eğer değil s.c.adres64 ve s.dma+8388608 > 4294967296 { ver hata_ver(s,"xhci 32bit dma siniri"); }
+        ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); s.evre=2; ver GcIstek::Yaz32(s.c.caplength olarak tam64,0);
+    }
+    eğer s.evre == 2 { eğer (y.deger&1) == 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.bekleme=0; s.evre=3; ekle(s,GcIstek::Oku32(s.c.caplength olarak tam64)); ver GcIstek::Yaz32(s.c.caplength olarak tam64,2); }
+    eğer s.evre == 3 { eğer (y.deger&2) != 0 { ver bekle(s,GcIstek::Oku32(s.c.caplength olarak tam64)); } s.evre=4; s.bekleme=0; ver GcIstek::Oku32((s.c.caplength olarak tam64)+4); }
+    eğer s.evre == 4 { eğer (y.deger&2048) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=5; ver GcIstek::Oku32((s.c.caplength olarak tam64)+8); }
+    eğer s.evre == 5 {
+        eğer (y.deger&1) == 0 { ver hata_ver(s,"xhci 4k sayfa yok"); }
+        değişken dc: Dizi<dtam8> = bayt_sifir(2048); değişken sp: Dizi<dtam8> = bayt_sifir(s.c.scratchpad*8);
+        değişken i: tam32 = 0; iken i < s.c.scratchpad { değişken a: tam64 = s.dma+4194304+(i olarak tam64)*4096; yaz_le64(sp,i*8,a); ekle(s,GcIstek::BellekYaz(a,bayt_sifir(4096))); i=i+1; }
+        eğer s.c.scratchpad > 0 { yaz_le64(dc,0,s.dma+32768); ekle(s,GcIstek::BellekYaz(s.dma+32768,sp)); }
+        ekle(s,GcIstek::BellekYaz(s.dma,dc)); ekle(s,GcIstek::BellekYaz(s.dma+4096,bayt_sifir(1024))); ekle(s,GcIstek::BellekYaz(s.dma+8192,bayt_sifir(1024)));
+        değişken erst: Dizi<dtam8> = bayt_sifir(16); yaz_le64(erst,0,s.olay.taban); yaz_le32(erst,8,s.olay.adet olarak tam64); ekle(s,GcIstek::BellekYaz(s.dma+12288,erst));
+        değişken slots: tam32 = s.c.yuva_sayisi; eğer slots > 16 { slots=16; }
+        ekle(s,GcIstek::Yaz32((s.c.caplength olarak tam64)+56,slots olarak tam64)); ekle(s,GcIstek::Yaz64((s.c.caplength olarak tam64)+48,s.dma)); ekle(s,GcIstek::Yaz64((s.c.caplength olarak tam64)+24,(s.dma+4096)|1));
+        ekle(s,GcIstek::Yaz32(s.c.rtsoff+40,1)); ekle(s,GcIstek::Yaz64(s.c.rtsoff+48,s.dma+12288)); ekle(s,GcIstek::Yaz64(s.c.rtsoff+56,s.olay.taban));
+        ekle(s,GcIstek::Yaz32(s.c.caplength olarak tam64,1)); ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); s.evre=7; ver GcIstek::Bekle(0);
+    }
+    eğer s.evre == 7 { eğer (y.deger&4096) != 0 { ver hata_ver(s,"xhci denetleyici hatasi"); } eğer (y.deger&1) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=9; }
+    eğer s.evre == 9 { eğer s.port > s.c.port_sayisi { s.evre=100; ver GcIstek::Bitti; } s.evre=10; s.bekleme=0; ver GcIstek::Oku32((s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16); }
+    eğer s.evre == 10 {
+        eğer (y.deger&1) == 0 { s.port=s.port+1; s.evre=9; ver GcIstek::Bekle(0); }
+        s.hiz=((y.deger>>10)&15) olarak tam32; s.evre=11;
+        eşleş xhci_port_reset(y.deger|512,yanlış) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16)); ver GcIstek::Yaz32((s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16,v); } }
+    }
+    eğer s.evre == 11 {
+        değişken p: tam64 = (s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16;
+        eğer (y.deger&1) == 0 { ver hata_ver(s,"xhci port ayrildi"); }
+        eğer (y.deger&2097152) == 0 veya (y.deger&16) != 0 veya (y.deger&2) == 0 { ver bekle(s,GcIstek::Oku32(p)); }
+        s.hiz=((y.deger>>10)&15) olarak tam32; s.ep0=8; eğer s.hiz == 3 { s.ep0=64; } değilse eğer s.hiz == 4 { s.ep0=512; } değilse eğer s.hiz != 1 ve s.hiz != 2 { ver hata_ver(s,"xhci port hizi"); }
+        eşleş xhci_port_ack(y.deger,y.deger&16646144) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ekle(s,GcIstek::Yaz32(p,v)); } }
+        eşleş komut_kur(s,9,0,0,13) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } }
+    }
+    eğer s.evre == 13 {
+        s.yuva=s.son_yuva; eğer s.yuva < 1 veya s.yuva > 16 { ver hata_ver(s,"xhci yuva siniri"); }
+        s.ddma=s.dma+1048576+(s.yuva olarak tam64)*131072; s.ctrl_dongu=doğru;
+        eşleş xhci_halka_yeni(s.ddma+4096,64) { hata(e) => { ver hata_ver(s,e); } tamam(h) => { s.ctrl=h; } }
+        ekle(s,GcIstek::BellekYaz(s.ddma+4096,bayt_sifir(1024)));
+        değişken out: tam64 = s.dma+65536+(s.yuva olarak tam64)*2048; değişken ptr: Dizi<dtam8> = bayt_sifir(8); yaz_le64(ptr,0,out);
+        ekle(s,GcIstek::BellekYaz(out,bayt_sifir(s.c.baglam_boy*32))); ekle(s,GcIstek::BellekYaz(s.dma+(s.yuva olarak tam64)*8,ptr)); ekle(s,GcIstek::BellekYaz(s.ddma,bayt_sifir(512)));
+        eşleş baglam(s,1) { hata(e) => { ver hata_ver(s,e); } tamam(b) => { ekle(s,GcIstek::BellekYaz(s.dma+16384,b)); } }
+        eşleş komut_kur(s,11,s.dma+16384,s.yuva,14) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } }
+    }
+    eğer s.evre == 14 { eşleş tanim_iste(s,1,8,15) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 15 {
+        eğer dizi_boyut(s.sonuc) != 8 veya oku_u8(s.sonuc,0) != 18 veya oku_u8(s.sonuc,1) != 1 { ver hata_ver(s,"xhci ilk tanimlayici"); }
+        değişken ep: tam32 = oku_u8(s.sonuc,7); eğer s.hiz == 4 ve ep == 9 { ep=512; }
+        eğer ep != 8 ve ep != 16 ve ep != 32 ve ep != 64 ve ep != 512 { ver hata_ver(s,"xhci ep0 paket"); }
+        eğer ep != s.ep0 { s.ep0=ep; eşleş baglam(s,1) { hata(e) => { ver hata_ver(s,e); } tamam(b) => { yaz_le32(b,4,2); ekle(s,GcIstek::BellekYaz(s.dma+16384,b)); } } eşleş komut_kur(s,13,s.dma+16384,s.yuva,16) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+        s.evre=16;
+    }
+    eğer s.evre == 16 { eşleş tanim_iste(s,1,18,17) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 17 { eşleş usb_aygit_coz(s.sonuc) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { } } s.kimlik=s.sonuc; eşleş tanim_iste(s,2,9,18) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 18 { eğer dizi_boyut(s.sonuc) != 9 { ver hata_ver(s,"xhci yapi basligi"); } s.toplam=oku_le16(s.sonuc,2); eğer s.toplam < 9 veya s.toplam > 4096 { ver hata_ver(s,"xhci yapi siniri"); } eşleş tanim_iste(s,2,s.toplam,19) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 19 {
+        s.yapi=s.sonuc; eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { eşleş usb_set_configuration(v.deger) { hata(e) => { ver hata_ver(s,e); } tamam(b) => { eşleş kontrol_kur(s,b,20) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } } } } }
+    }
+    eğer s.evre == 20 { eşleş uclari_kur(s) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 21 {
+        eşleş usb_aygit_coz(s.kimlik) { hata(e) => { ver hata_ver(s,e); } tamam(k) => { eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { dizi_ekle(s.aygitlar,XhciAygit { yuva: s.yuva, port: s.port, hiz: s.hiz, dma: s.ddma, kimlik: k, yapi: v, ctrl_dongu: s.ctrl_dongu, ctrl: s.ctrl, in_dongu: doğru }); } } } }
+        s.port=s.port+1; s.evre=9; ver GcIstek::Bekle(0);
+    }
+    // BOT'a devir: EP0 durdur/dequeue ayarla, sonra boş özel olay halkasına geç.
+    // Aynı anda diğer aygıtlarda bekleyen aktarım olmamalı; enumerasyon bitmiş olmalı.
+    eğer s.evre == 81 { eşleş komut_ozel(s,16,(s.ddma+128)|1,s.yuva,65536,82) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 82 { s.evre=83; ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); ver GcIstek::Yaz32(s.c.caplength olarak tam64,0); }
+    eğer s.evre == 83 {
+        eğer (y.deger&1) == 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); }
+        değişken oh: XhciOlayHalkasi = XhciOlayHalkasi { taban: s.ddma+256, adet: 16, bas: 0, dongu: doğru }; s.olay=oh; s.devredildi=doğru;
+        değişken erst: Dizi<dtam8> = bayt_sifir(16); yaz_le64(erst,0,oh.taban); yaz_le32(erst,8,16);
+        ekle(s,GcIstek::BellekYaz(oh.taban,bayt_sifir(256))); ekle(s,GcIstek::BellekYaz(s.ddma+128,bayt_sifir(64)));
+        ekle(s,GcIstek::BellekYaz(s.dma+12288,erst)); ekle(s,GcIstek::Yaz32(s.c.rtsoff+40,1)); ekle(s,GcIstek::Yaz64(s.c.rtsoff+48,s.dma+12288)); ekle(s,GcIstek::Yaz64(s.c.rtsoff+56,oh.taban));
+        ekle(s,GcIstek::Yaz32(s.c.caplength olarak tam64,1)); ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); s.evre=84; ver GcIstek::Bekle(0);
+    }
+    eğer s.evre == 84 { eğer (y.deger&4096) != 0 { ver hata_ver(s,"xhci depo olay halkasi"); } eğer (y.deger&1) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=100; ver GcIstek::Bitti; }
+    eğer s.evre == 85 {
+        değişken i: tam32 = 0; iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); eğer a.yuva == s.yuva { a.ctrl=s.ctrl; a.ctrl_dongu=s.ctrl.dongu; dizi_yaz(s.aygitlar,i,a); } i=i+1; }
+        s.evre=100; ver GcIstek::Bitti;
+    }
+    eğer s.evre == 900 { s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
+    eğer s.evre == 901 {
+        eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
+        eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay.dongu { s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci olay zaman asimi"); } s.evre=900; ver GcIstek::Bekle(1000); }
+        değişken oh: XhciOlayHalkasi = s.olay;
+        eşleş xhci_olay_al(&değişken oh,y.baytlar) {
+            hata(e) => { ver hata_ver(s,e); }
+            tamam(o) => {
+                s.olay=oh; s.olay_sayisi=s.olay_sayisi+1;
+                eğer o.tur == 34 { eğer o.port < 1 veya o.port > s.c.port_sayisi veya o.kod != 1 { ver hata_ver(s,"xhci port olayi"); } s.evre=900; ver GcIstek::Yaz64(s.c.rtsoff+56,xhci_erdp(s.olay)); }
+                eğer o.tur != s.bek_tur veya o.adres != s.bek_adres veya (s.bek_tur == 32 ve (o.yuva != s.yuva veya o.uc != s.bek_uc)) { ver hata_ver(s,"xhci olay kimligi"); }
+                eğer o.kod != 1 ve (o.kod != 13 veya değil s.giris veya s.bek_tur != 32) { ver hata_ver(s,metin_birlestir("xhci tamamlanma kodu ",tam_metin(o.kod olarak tam64))); }
+                eğer o.artik > s.boy ve s.bek_tur == 32 { ver hata_ver(s,"xhci artik boyu"); }
+                s.gercek_boy=s.boy-o.artik; s.son_yuva=o.yuva; eğer o.kod == 13 { s.kisa_sayisi=s.kisa_sayisi+1; }
+                eğer s.bek_tur == 33 { değişken kh: XhciHalka = s.komut; eşleş xhci_tuket(&değişken kh,1) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { s.komut=kh; } } }
+                eğer s.bek_tur == 32 ve s.bek_uc == 1 { değişken ch: XhciHalka = s.ctrl; değişken n: tam32 = 2; eğer s.boy > 0 { n=3; } eşleş xhci_tuket(&değişken ch,n) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { s.ctrl=ch; } } }
+                s.evre=902; ver GcIstek::Yaz64(s.c.rtsoff+56,xhci_erdp(s.olay));
+            }
+        }
+    }
+    eğer s.evre == 902 { eğer s.giris ve s.gercek_boy > 0 { s.evre=903; ver GcIstek::BellekOku(s.ddma+65536,s.gercek_boy); } s.sonuc=[]; s.evre=s.sonra; ver GcIstek::Bekle(0); }
+    eğer s.evre == 903 { eğer dizi_boyut(y.baytlar) != s.gercek_boy { ver hata_ver(s,"xhci veri boyu"); } s.sonuc=y.baytlar; s.evre=s.sonra; ver GcIstek::Bekle(0); }
+    ver hata_ver(s,"xhci gecersiz durum");
+}
+
+// Özel BOT halkasına tek sahipli devir; geri enumerasyon/HID aktarımı başlatılmaz.
+genel işlev xhci_depo_hazir(s: &değişken XhciDurum, indeks: tam32) -> sonuç<mantıksal,metin> {
+    eğer s.evre != 100 veya s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci depo devir durumu"); }
+    değişken a: XhciAygit = dizi_al(s.aygitlar,indeks); s.yuva=a.yuva; s.ddma=a.dma;
+    ver komut_ozel(s,15,0,s.yuva,65536,81);
+}
+
+// Tek bekleyen aktarım: çağrıdan sonra xhci_adim Bitti verene kadar sürülür.
+işlev aygit_sec(s: &değişken XhciDurum, indeks: tam32) -> sonuç<XhciAygit,metin> {
+    eğer s.evre != 100 veya s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci aktarim durumu"); }
+    değişken a: XhciAygit = dizi_al(s.aygitlar,indeks); s.yuva=a.yuva; s.ddma=a.dma; s.ctrl=a.ctrl; ver tamam(a);
+}
+genel işlev xhci_kontrol(s: &değişken XhciDurum, indeks: tam32, paket: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    eşleş aygit_sec(s,indeks) { hata(e) => { ver hata(e); } tamam(a) => { ver kontrol_kur(s,paket,85); } }
+}
+// QEMU ölçümü: önceki Link cycle korunur; ISP kısa IN paketini CC13 ile bildirir.
+// Python: IOC|ISP = (1<<5)|(1<<2) = 36; Link TC = 1<<1 = 2.
+genel işlev xhci_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32) -> sonuç<mantıksal,metin> {
+    eğer boy < 1 veya boy > 4096 { ver hata("xhci giris boyu"); }
+    eşleş aygit_sec(s,indeks) {
+        hata(e) => { ver hata(e); }
+        tamam(v) => {
+            değişken a: XhciAygit = v; değişken dci: tam32 = 0; değişken uclar: Dizi<UsbUc> = a.yapi.uclar;
+            için u: uclar { eğer u.alternatif == 0 ve u.tur == 3 ve (u.adres&128) != 0 { dci=(u.adres&15)*2+1; } }
+            eğer dci == 0 { ver hata("xhci interrupt IN yok"); }
+            değişken b: Dizi<dtam8> = [];
+            eşleş xhci_trb_kur(a.dma+65536,boy olarak tam64,1,a.in_dongu,36) { hata(e) => { ver hata(e); } tamam(t) => { birlestir(b,t); } }
+            eşleş xhci_trb_kur(a.dma+64,0,6,değil a.in_dongu,2) { hata(e) => { ver hata(e); } tamam(t) => { birlestir(b,t); } }
+            a.in_dongu=değil a.in_dongu; dizi_yaz(s.aygitlar,indeks,a);
+            ekle(s,GcIstek::BellekYaz(a.dma+64,b)); ekle(s,GcIstek::Yaz32(s.c.dboff+(a.yuva olarak tam64)*4,dci olarak tam64));
+            s.bek_adres=a.dma+64; s.bek_tur=32; s.bek_uc=dci; s.boy=boy; s.giris=doğru; s.sonra=100; s.evre=900; s.bekleme=0; s.sonuc=[];
+            ver tamam(doğru);
+        }
+    }
+}

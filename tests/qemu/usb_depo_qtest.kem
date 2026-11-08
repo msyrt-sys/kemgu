@@ -1,0 +1,65 @@
+// mkfs.fat imajı -> gerçek USB BOT -> mevcut FAT32 -> yaz/flush/oku -> dış kâhin.
+// Python beklenen veri: bytes((i*29+7)&255 for i in range(1300)).
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_depo_hazir };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma };
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni, usb_depo_adim, usb_depo_oku, usb_depo_yaz, usb_depo_flush };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ oku_u8 };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit };
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_oku;
+kullan tests::qemu::qtest::{ Qt, qt_ac, qt_kapat, qt_yurut };
+kullan tests::qemu::xhci_qtest::{ XHCI_BAR, xhci_qbaslat, xhci_qsur, xhci_qdogrula };
+
+genel işlev usb_qsur(q: &değişken Qt, s: &değişken UsbDepo) -> sonuç<mantıksal,metin> {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 100000 {
+        değişken r: GcIstek = usb_depo_adim(s,y);
+        eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(metin_birlestir(e,metin_birlestir(" is=",metin_birlestir(tam_metin(s.is olarak tam64),metin_birlestir(" sense=",metin_birlestir(tam_metin(s.anahtar olarak tam64),metin_birlestir("/",tam_metin(s.asc olarak tam64)))))))); } _ => { y=qt_yurut(q,XHCI_BAR,r); } }
+        i=i+1;
+    } ver hata("usb qtest adim siniri");
+}
+işlev oku(q: &değişken Qt, s: &değişken UsbDepo, lba: tam64, n: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eşleş usb_depo_oku(s,lba,n) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(s.sonuc); } }
+}
+işlev dosya(q: &değişken Qt, s: &değişken UsbDepo) -> sonuç<mantıksal,metin> {
+    eşleş usb_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eğer s.blok_bayt != 512 veya s.kapasite != 131072 { ver hata("usb gercek kapasite"); }
+    yazdir_metin("INQUIRY_CAPACITY OK 131072 512");
+    değişken n: tam32 = 0;
+    eşleş oku(q,s,0,1) { hata(e) => { ver hata(e); } tamam(b) => { eşleş bpb_coz(b) { hata(e) => { ver hata("usb bpb"); } tamam(bp) => { n=(bp.ilk_veri_sektoru olarak tam32)+32; } } } }
+    değişken fat: Dizi<dtam8> = [];
+    eşleş oku(q,s,0,n) { hata(e) => { ver hata(e); } tamam(b) => { fat=b; } }
+    değişken veri: Dizi<dtam8> = []; değişken i: tam32 = 0; iken i < 1300 { dizi_ekle(veri,((i*29+7)&255) olarak dtam8); i=i+1; }
+    eşleş fat32_yaz::dosya_yaz(fat,"/DALGA6.TXT",veri) { hata(e) => { ver hata(e); } tamam(v) => { eğer v != 1300 { ver hata("usb dosya boyu"); } } }
+    eşleş usb_depo_yaz(s,0,fat) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_depo_flush(s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş oku(q,s,0,n) { hata(e) => { ver hata(e); } tamam(b) => { fat=b; } }
+    eşleş fat32_oku::dosya_oku(fat,"/DALGA6.TXT") { hata(e) => { ver hata(e); } tamam(v) => { eğer dizi_boyut(v) != 1300 { ver hata("usb dosya geri boyu"); } i=0; iken i < 1300 { eğer oku_u8(v,i) != ((i*29+7)&255) { ver hata("usb dosya geri icerik"); } i=i+1; } } }
+    ver tamam(doğru);
+}
+işlev akis(q: &değişken Qt, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(s.aygitlar) {
+        değişken a: XhciAygit = dizi_al(s.aygitlar,i); değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0);
+        eğer ar.sinif == 8 {
+            eşleş xhci_depo_hazir(s,i) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            eşleş usb_depo_yeni(a.dma,s.c.dboff+(a.yuva olarak tam64)*4,s.c.rtsoff+56,a.yuva,2,129,ar.no) { hata(e) => { ver hata(e); } tamam(v) => { değişken d: UsbDepo = v; ver dosya(q,&değişken d); } }
+        } i=i+1;
+    } ver hata("usb depo yok");
+}
+işlev main() -> tam32 {
+    eşleş qt_ac(metin_tam(arg_al(1)) olarak tam32) { hata(e) => { yazdir_metin(e); ver 1; } tamam(v) => {
+        değişken q: Qt = v; değişken rc: tam32 = 0;
+        eşleş xhci_qbaslat(&değişken q) { hata(e) => { yazdir_metin(e); rc=1; } tamam(v) => { değişken s: XhciDurum = v; eşleş xhci_qdogrula(&değişken q,s) { hata(e) => { yazdir_metin(e); qt_kapat(&değişken q); ver 1; } tamam(v) => { } } eşleş akis(&değişken q,&değişken s) { hata(e) => { yazdir_metin(metin_birlestir("QTEST_USB_DEPO HATA ",e)); rc=1; } tamam(v) => { yazdir_metin("QTEST_USB_DEPO OK"); } } } }
+        qt_kapat(&değişken q); ver rc;
+    } }
+}

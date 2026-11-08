@@ -1,0 +1,51 @@
+// QMP rel (17,9),(-5,-7); Python signed octets: [17,9,(-5)&255,(-7)&255].
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_kontrol, xhci_giris };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma, usb_hid_set_protocol, usb_hid_set_idle };
+kullan drivers::usb::hid_fare::{ hid_fare_rapor };
+kullan drivers::ps2::fare::{ FareOlayi };
+kullan drivers::ortak::gc::{ GcIstek };
+kullan drivers::ortak::bayt::{ oku_u8, oku_le32 };
+kullan tests::qemu::qtest::{ Qt, qt_ac, qt_kapat, qt_bellek_oku };
+kullan tests::qemu::xhci_qtest::{ xhci_qbaslat, xhci_qsur };
+işlev fare_oku(q: &değişken Qt, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    eğer dizi_boyut(s.aygitlar) != 2 { ver hata("fare aygit sayisi"); }
+    değişken indeks: tam32 = -1; değişken arayuz: tam32 = 0; değişken i: tam32 = 0;
+    iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0); eğer ar.sinif == 3 ve ar.protokol == 2 { indeks=i; arayuz=ar.no;
+        yazdir_metin("FARE_AYGIT"); yazdir_tam(a.kimlik.vid); yazdir_tam(a.kimlik.pid);
+        değişken u: UsbUc = dizi_al(a.yapi.uclar,0); yazdir_tam(u.adres); yazdir_tam(u.paket_bayt); yazdir_tam(u.aralik);
+        eğer a.kimlik.vid != 1575 veya a.kimlik.pid != 1 veya u.adres != 129 veya u.paket_bayt != 4 veya u.aralik != 7 { ver hata("fare olculen kimlik"); }
+        eşleş qt_bellek_oku(q,s.dma+65536+(a.yuva olarak tam64)*2048+(3*s.c.baglam_boy) olarak tam64,s.c.baglam_boy) { hata(e) => { ver hata(e); } tamam(b) => { eğer (oku_le32(b,0)&7) != 1 veya ((oku_le32(b,4)>>3)&7) != 7 { ver hata("fare uc baglami"); } } }
+    } i=i+1; }
+    eğer indeks < 0 { ver hata("fare yok"); }
+    eşleş usb_hid_set_protocol(arayuz,doğru) { hata(e) => { ver hata(e); } tamam(p) => { eşleş xhci_kontrol(s,indeks,p) { hata(e) => { ver hata(e); } tamam(v) => { } } } }
+    eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_hid_set_idle(arayuz,0,0) { hata(e) => { ver hata(e); } tamam(p) => { eşleş xhci_kontrol(s,indeks,p) { hata(e) => { ver hata(e); } tamam(v) => { } } } }
+    eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    değişken n: tam32 = 0; değişken rapor: tam32 = 0;
+    yazdir_metin("FARE_HAZIR");
+    iken rapor < 16 {
+        eşleş xhci_giris(s,indeks,16) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        değişken ham: metin = "FARE_HAM"; değişken bi: tam32 = 0; iken bi < dizi_boyut(s.sonuc) { ham=metin_birlestir(ham,metin_birlestir(" ",tam_metin(oku_u8(s.sonuc,bi) olarak tam64))); bi=bi+1; } yazdir_metin(ham);
+        eşleş hid_fare_rapor(s.sonuc) { hata(e) => { ver hata(e); } tamam(o) => {
+            eğer o.dx != 0 veya o.dy != 0 {
+                değişken sol: tam32 = 0; eğer o.sol { sol=1; }
+                yazdir_metin(metin_birlestir("FARE ",metin_birlestir(tam_metin(o.dx olarak tam64),metin_birlestir(" ",metin_birlestir(tam_metin(o.dy olarak tam64),metin_birlestir(" ",tam_metin(sol olarak tam64)))))));
+                eğer (n == 0 ve (o.dx != 17 veya o.dy != -9 veya değil o.sol)) veya (n == 1 ve (o.dx != -5 veya o.dy != 7 veya o.sol)) veya o.sag veya o.orta veya o.dz != 0 { ver hata("fare yon veya dugme"); }
+                n=n+1; yazdir_metin("RAPOR");
+            }
+        } }
+        rapor=rapor+1; eğer n == 2 { eğer s.kisa_sayisi < rapor { ver hata("fare kisa paket yok"); } ver tamam(doğru); }
+    } ver hata("fare rapor siniri");
+}
+işlev main() -> tam32 {
+    eşleş qt_ac(metin_tam(arg_al(1)) olarak tam32) { hata(e) => { yazdir_metin(e); ver 1; } tamam(v) => {
+        değişken q: Qt = v; değişken rc: tam32 = 0;
+        eşleş xhci_qbaslat(&değişken q) { hata(e) => { yazdir_metin(e); rc=1; } tamam(v) => { değişken s: XhciDurum = v;
+            eşleş fare_oku(&değişken q,&değişken s) { hata(e) => { yazdir_metin(metin_birlestir("QTEST_USB_FARE HATA ",e)); rc=1; } tamam(v) => { yazdir_metin("QTEST_USB_FARE OK"); } }
+        } }
+        qt_kapat(&değişken q); ver rc;
+    } }
+}

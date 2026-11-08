@@ -1,0 +1,25 @@
+// Ölçülmüş gerçek QEMU izini yeniden oynatır; sürücü TRB/USB ayrıştırıcısını kullanmaz.
+// Bellek yazısının boyu ve her baytı etkileyen modüler özeti karşılaştırılır.
+// Bu sabit iz modeli genel bir xHCI emülatörü değildir; donanım kâhini qtest'tir.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ oku_u8 };
+genel yapı XhciIz { tur: tam32; adres: tam64; deger: tam64; boy: tam32; ozet: tam64; yanit: tam64; baytlar: Dizi<dtam8>; }
+genel yapı SahteXhci { iz: Dizi<XhciIz>; konum: tam32; bozuk: mantıksal; }
+genel işlev sahte_xhci_yanit(s: &değişken SahteXhci, i: GcIstek) -> GcYanit {
+    değişken y: GcYanit = gc_bos();
+    eğer s.bozuk veya s.konum >= dizi_boyut(s.iz) { s.bozuk=doğru; y.basarili=yanlış; ver y; }
+    değişken r: XhciIz = dizi_al(s.iz,s.konum); s.konum=s.konum+1;
+    değişken tur: tam32 = 0; değişken a: tam64 = 0; değişken v: tam64 = 0; değişken boy: tam32 = 0; değişken h: tam64 = 0;
+    eşleş i {
+        GcIstek::Oku32(x) => { tur=1; a=x; }
+        GcIstek::Yaz32(x,n) => { tur=2; a=x; v=n; }
+        GcIstek::Oku64(x) => { tur=3; a=x; }
+        GcIstek::Yaz64(x,n) => { tur=4; a=x; v=n; }
+        GcIstek::BellekOku(x,n) => { tur=5; a=x; boy=n; }
+        GcIstek::BellekYaz(x,b) => { tur=6; a=x; boy=dizi_boyut(b); değişken j: tam32 = 0; iken j < boy { h=(h*65599+(oku_u8(b,j) olarak tam64))%2147483647; j=j+1; } }
+        GcIstek::Bekle(n) => { tur=7; v=n olarak tam64; }
+        _ => { }
+    }
+    eğer tur != r.tur veya a != r.adres veya v != r.deger veya boy != r.boy veya h != r.ozet { s.bozuk=doğru; y.basarili=yanlış; ver y; }
+    y.deger=r.yanit; y.baytlar=r.baytlar; ver y;
+}

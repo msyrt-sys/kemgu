@@ -1,0 +1,16 @@
+// Gerçek QEMU açılışı: TUR -> CSW1 -> sense6/41/0 -> TUR -> inquiry -> capacity.
+// Python: sum([2,3,2,3,3])=13 aktarım/ack; ikinci UA'da sınır gereği durur.
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni };
+kullan tests::drivers::usb::sahte_depo::{ SahteDepo, sahte_depo_yeni };
+kullan tests::drivers::usb::sahte_depo_sur::{ usb_test_sur };
+işlev test_ua(adet: tam32) -> mantıksal {
+    değişken a: SahteDepo = sahte_depo_yeni(); a.ua_kalan=adet;
+    eşleş usb_depo_yeni(65536,8196,4152,1,2,130,1) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: UsbDepo = v;
+        eşleş usb_test_sur(&değişken s,&değişken a) {
+            hata(e) => { ver adet == 2 ve s.ua_deneme == 1 ve a.sense_sayisi == 2 ve s.anahtar == 6 ve s.asc == 41 ve metin_esit(e,"scsi komut hatasi"); }
+            tamam(v) => { ver adet == 1 ve s.ua_deneme == 1 ve a.sense_sayisi == 1 ve a.ack_sayisi == 13 ve s.kapasite == 80000; }
+        }
+    } }
+}
+işlev main() -> tam32 { değişken h: tam32 = 0; eğer değil test_ua(1) { h=h+1; } eğer değil test_ua(2) { h=h+1; } ver h; }

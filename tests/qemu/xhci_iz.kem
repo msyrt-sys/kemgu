@@ -1,0 +1,22 @@
+// Test yardımcısı: gerçek QEMU G/Ç izini sürücüden bağımsız yeniden oynatmaya aktarır.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit };
+kullan drivers::ortak::bayt::{ oku_u8 };
+genel işlev iz_yaz(i: GcIstek, y: GcYanit) {
+    değişken tur: tam32 = 0; değişken a: tam64 = 0; değişken v: tam64 = 0; değişken boy: tam32 = 0; değişken h: tam64 = 0;
+    eşleş i {
+        GcIstek::Oku32(x) => { tur=1; a=x; }
+        GcIstek::Yaz32(x,n) => { tur=2; a=x; v=n; }
+        GcIstek::Oku64(x) => { tur=3; a=x; }
+        GcIstek::Yaz64(x,n) => { tur=4; a=x; v=n; }
+        GcIstek::BellekOku(x,n) => { tur=5; a=x; boy=n; }
+        GcIstek::BellekYaz(x,b) => { tur=6; a=x; boy=dizi_boyut(b); değişken j: tam32 = 0; iken j < boy { h=(h*65599+(oku_u8(b,j) olarak tam64))%2147483647; j=j+1; } }
+        GcIstek::Bekle(n) => { tur=7; v=n olarak tam64; }
+        _ => { }
+    }
+    değişken satir: metin = metin_birlestir("IZ ",tam_metin(tur olarak tam64));
+    satir=metin_birlestir(satir,metin_birlestir(" ",tam_metin(a))); satir=metin_birlestir(satir,metin_birlestir(" ",tam_metin(v)));
+    satir=metin_birlestir(satir,metin_birlestir(" ",tam_metin(boy olarak tam64))); satir=metin_birlestir(satir,metin_birlestir(" ",tam_metin(h)));
+    satir=metin_birlestir(satir,metin_birlestir(" ",tam_metin(y.deger)));
+    değişken j: tam32 = 0; iken j < dizi_boyut(y.baytlar) { satir=metin_birlestir(satir,metin_birlestir(" ",tam_metin(oku_u8(y.baytlar,j) olarak tam64))); j=j+1; }
+    yazdir_metin(satir);
+}

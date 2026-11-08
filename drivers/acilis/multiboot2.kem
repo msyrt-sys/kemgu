@@ -1,5 +1,4 @@
 // Kaynak: GNU Multiboot2 §3.6; https://www.gnu.org/software/grub/manual/multiboot2/html_node/Boot-information-format.html
-// F002: seçimlik kurucuları alan atamasından önce tipli ara değişkende oluşturulur.
 // Sınırlı saf ayrıştırıcı: fiziksel adreslere erişmez, bütün boyları daraltmadan denetler.
 kullan drivers::ortak::bayt::{ oku_u8, oku_le32, oku_le64 };
 kullan drivers::ortak::utf8::{ utf8_bayt_coz, utf8_kodla };
@@ -8,10 +7,7 @@ kullan drivers::acpi::tablo::{ Rsdp, AcpiHatasi, rsdp_coz };
 genel yapı KomutSecenegi { anahtar: metin; deger: metin; }
 genel yapı AcilisModulu { baslangic: tam64; bitis: tam64; ad: metin; }
 genel yapı AcilisEkrani { adres: tam64; adim: tam32; genislik: tam32; yukseklik: tam32; bpp: tam32; tur: tam32; renk: Dizi<tam32>; }
-// F001: ithal tipler C yapı-alanı geçişinde bulunmuyor; ayrıştırılan değerler yerel kayda aktarılır.
-genel yapı AcilisBellek { taban: tam64; uzunluk: tam64; tur: tam32; }
-genel yapı AcilisRsdp { revizyon: tam32; rsdt: tam64; xsdt: tam64; oem: metin; }
-genel yapı AcilisBilgi { komut: metin; acici: metin; moduller: Dizi<AcilisModulu>; alt_bellek: tam64; ust_bellek: tam64; harita: Dizi<AcilisBellek>; ekran: seçimlik<AcilisEkrani>; acpi: seçimlik<AcilisRsdp>; kok: seçimlik<tam64>; secenekler: Dizi<KomutSecenegi>; }
+genel yapı AcilisBilgi { komut: metin; acici: metin; moduller: Dizi<AcilisModulu>; alt_bellek: tam64; ust_bellek: tam64; harita: Dizi<BellekBolgesi>; ekran: seçimlik<AcilisEkrani>; acpi: seçimlik<Rsdp>; kok: seçimlik<tam64>; secenekler: Dizi<KomutSecenegi>; }
 genel işlev kok_seri_coz(s: metin) -> sonuç<tam64,metin> {
     değişken n: tam32 = metin_uzunluk(s) olarak tam32;
     eğer n != 8 ve n != 9 { ver hata("kok seri boyu"); }
@@ -94,7 +90,7 @@ genel işlev multiboot2_coz(b: Dizi<dtam8>) -> sonuç<AcilisBilgi,metin> {
     eğer dizi_boyut(b) < 16 { ver hata("mb2 kisa"); }
     değişken toplam: tam64 = oku_le32(b,0);
     eğer toplam < 16 veya toplam > 1048576 veya toplam > (dizi_boyut(b) olarak tam64) veya toplam%8 != 0 veya oku_le32(b,4) != 0 { ver hata("mb2 baslik"); }
-    değişken moduller: Dizi<AcilisModulu> = []; değişken harita: Dizi<AcilisBellek> = []; değişken secenek: Dizi<KomutSecenegi> = [];
+    değişken moduller: Dizi<AcilisModulu> = []; değişken harita: Dizi<BellekBolgesi> = []; değişken secenek: Dizi<KomutSecenegi> = [];
     değişken bilgi: AcilisBilgi = AcilisBilgi { komut: "", acici: "", moduller: moduller, alt_bellek: 0, ust_bellek: 0, harita: harita, ekran: hiç, acpi: hiç, kok: hiç, secenekler: secenek };
     değişken ofs: tam32 = 8; değişken adet: tam32 = 0; değişken gorulen: tam64 = 0;
     iken (ofs olarak tam64) <= toplam-8 {
@@ -117,7 +113,7 @@ genel işlev multiboot2_coz(b: Dizi<dtam8>) -> sonuç<AcilisBilgi,metin> {
                 değişken j: tam32 = 0;
                 iken j < dizi_boyut(bilgi.secenekler) {
                     değişken x: KomutSecenegi = dizi_al(bilgi.secenekler,j);
-                    eğer metin_esit(x.anahtar,"kok") { eşleş kok_seri_coz(x.deger) { hata(e) => { ver hata(e); } tamam(v) => { değişken kok: seçimlik<tam64> = değer(v); bilgi.kok=kok; } } } j=j+1;
+                    eğer metin_esit(x.anahtar,"kok") { eşleş kok_seri_coz(x.deger) { hata(e) => { ver hata(e); } tamam(v) => { bilgi.kok=değer(v); } } } j=j+1;
                 }
             }
         }
@@ -128,12 +124,12 @@ genel işlev multiboot2_coz(b: Dizi<dtam8>) -> sonuç<AcilisBilgi,metin> {
             eşleş sifirli_metin(b,ofs+16,n-16) { hata(e) => { ver hata(e); } tamam(v) => { dizi_ekle(bilgi.moduller,AcilisModulu { baslangic: bas, bitis: son, ad: v }); } }
         }
         eğer tur == 4 { eğer n != 16 { ver hata("temel bellek boyu"); } bilgi.alt_bellek=oku_le32(b,ofs+8); bilgi.ust_bellek=oku_le32(b,ofs+12); }
-        eğer tur == 6 { eşleş mb2_coz(parca(b,ofs,n)) { hata(e) => { ver hata(e); } tamam(v) => { değişken j: tam32 = 0; iken j < dizi_boyut(v) { değişken r: BellekBolgesi = dizi_al(v,j); dizi_ekle(bilgi.harita,AcilisBellek { taban: r.taban, uzunluk: r.uzunluk, tur: r.tur }); j=j+1; } } } }
-        eğer tur == 8 { eşleş ekran_coz(b,ofs,n) { hata(e) => { ver hata(e); } tamam(v) => { değişken ekran: seçimlik<AcilisEkrani> = değer(v); bilgi.ekran=ekran; } } }
+        eğer tur == 6 { eşleş mb2_coz(parca(b,ofs,n)) { hata(e) => { ver hata(e); } tamam(v) => { bilgi.harita=v; } } }
+        eğer tur == 8 { eşleş ekran_coz(b,ofs,n) { hata(e) => { ver hata(e); } tamam(v) => { bilgi.ekran=değer(v); } } }
         eğer tur == 14 veya tur == 15 {
             eşleş rsdp_coz(parca(b,ofs+8,n-8)) {
                 hata(e) => { ver hata("acpi rsdp"); }
-                tamam(v) => { eğer tur == 15 veya (gorulen & 32768) == 0 { değişken rsdp: seçimlik<AcilisRsdp> = değer(AcilisRsdp { revizyon: v.revizyon, rsdt: v.rsdt, xsdt: v.xsdt, oem: v.oem }); bilgi.acpi=rsdp; } }
+                tamam(v) => { eğer tur == 15 veya (gorulen & 32768) == 0 { bilgi.acpi=değer(v); } }
             }
         }
         değişken adim: tam64 = ((boy+7)/8)*8;

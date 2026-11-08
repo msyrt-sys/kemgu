@@ -4700,6 +4700,10 @@ calistir_chatgpt_kopru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl
 calistir_qtest: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/qtest_harness.sh nvme
 	@bash test/qtest_harness.sh ahci
+	@bash test/qtest_harness.sh xhci
+	@bash test/qtest_harness.sh usb_depo
+	@bash test/qtest_harness.sh usb_kbd
+	@bash test/qtest_harness.sh usb_fare
 
 # [D-745] BARE-METAL x86 NVMe: sans-IO sürücü GERÇEK x86 çekirdeğinde (QEMU q35, PVH,
 # SeaBIOS BAR atar). Gerçek port G/Ç + MMIO + DMA; 20 açılış + imaj kâhini.

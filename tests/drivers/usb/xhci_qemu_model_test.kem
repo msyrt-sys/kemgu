@@ -1,0 +1,35 @@
+// Gerçek QEMU enumerasyon izinin olumlu/bozuk olay tekrarları.
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_yeni, xhci_adim };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ oku_le32, yaz_u8, bayt_sifir };
+kullan tests::drivers::usb::sahte_xhci::{ XhciIz, SahteXhci, sahte_xhci_yanit };
+kullan tests::drivers::usb::xhci_qemu_fikstur::{ xhci_qemu_izi };
+işlev dene(der: tam32, boz: tam32) -> mantıksal {
+    değişken iz: Dizi<XhciIz> = xhci_qemu_izi(der); değişken i: tam32 = 0; değişken bozuldu: mantıksal = yanlış;
+    eğer boz != 0 { iken i < dizi_boyut(iz) ve değil bozuldu { değişken r: XhciIz = dizi_al(iz,i);
+        eğer r.tur == 5 ve dizi_boyut(r.baytlar) == 16 ve ((oku_le32(r.baytlar,12)>>10)&63) == 33 {
+            eğer boz == 1 { yaz_u8(r.baytlar,11,5); } değilse { r.baytlar=bayt_sifir(15); }
+            dizi_yaz(iz,i,r); bozuldu=doğru;
+        } i=i+1;
+    } eğer değil bozuldu { ver yanlış; } }
+    değişken m: SahteXhci = SahteXhci { iz: iz, konum: 0, bozuk: yanlış };
+    eşleş xhci_yeni(1048576,16384) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: XhciDurum = v; değişken y: GcYanit = gc_bos(); i=0;
+        iken i <= dizi_boyut(iz) {
+            değişken q: GcIstek = xhci_adim(&değişken s,y);
+            eşleş q {
+                GcIstek::Bitti => {
+                    eğer boz != 0 veya m.bozuk veya m.konum != dizi_boyut(iz) veya dizi_boyut(s.aygitlar) != 2 { ver yanlış; }
+                    değişken a: XhciAygit = dizi_al(s.aygitlar,0); değişken b: XhciAygit = dizi_al(s.aygitlar,1);
+                    ver a.kimlik.vid == 18164 ve b.kimlik.vid == 1575 ve dizi_boyut(a.yapi.uclar) == 2 ve dizi_boyut(b.yapi.uclar) == 1;
+                }
+                GcIstek::Hata(e) => { ver boz != 0 ve değil m.bozuk; }
+                _ => { y=sahte_xhci_yanit(&değişken m,q); }
+            } i=i+1;
+        } ver yanlış;
+    } }
+}
+işlev main() -> tam32 { değişken der: tam32 = 0; iken der < 2 { eğer değil dene(der,0) { ver 1; } eğer değil dene(der,1) { ver 2; } eğer değil dene(der,2) { ver 3; } der=der+1; } ver 0; }
