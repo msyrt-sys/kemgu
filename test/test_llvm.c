@@ -3516,7 +3516,8 @@ static void test_c6_001_alan_odunc(void) {
         derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_parametre.kem") == 42);
     test_sonuc("C6-001 iki_alan -> exit 42",
         derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_iki_alan.kem") == 42);
- }
+}
+
 /* C6-003: ortak sessiz yanlış sonuç exit 42 beklentisiyle yakalanır. */
 static void test_c6_003_alan_dongu(void) {
     test_sonuc("C6-003 yerel -> exit 42",
@@ -3535,6 +3536,8 @@ static void test_c6_003_alan_dongu(void) {
                derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_yapi.kem") == 42);
     test_sonuc("C6-003 isaretsiz -> exit 42",
                derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_isaretsiz.kem") == 42);
+}
+
 /* C6-002: boş alan atamasında gerçek payload ve eleman düzeni korunur. */
 static void test_c6_002_bos_alan(void) {
     test_sonuc("C6-002 yerel -> exit 42",
