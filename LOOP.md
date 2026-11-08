@@ -245,10 +245,18 @@
       F004 [S] C LINK-RED: sonuc payload'indan gelen Dizi<Cesit> uzerinde `eşleş dizi_al(xs,0)`
            (C003'un C kolu).
       F001 [S] C sahte T011: secili ithal tip yapi alaninda `seçimlik<Rsdp>`.
-- [ ] E4h [L] (NVMe ✓ D-741 · AHCI ✓ D-742 — xHCI/USB BOT kaldi) QEMU DOGRULAMA LISTESI (codex4_bulgular.md "QEMU'da dogrulanacak": AHCI, xHCI, USB BOT):
+- [x] E4h [L] ✓ KAPANDI (NVMe D-741 · AHCI D-742 · xHCI/USB depo/HID klavye/fare D-744) QEMU DOGRULAMA LISTESI (codex4_bulgular.md "QEMU'da dogrulanacak": AHCI, xHCI, USB BOT):
       sahte aygit modelleri Codex'in standardi ANLAYISIDIR; ayni yanlis hem surucuye hem modele
       girebilir. Bu liste gercek QEMU aygitlariyla (`-device nvme/ahci/qemu-xhci/usb-storage/usb-kbd`)
       kapatilacak — Claude'un bare-metal baglama isinin (H7/H10) ilk adimi.
+- [ ] E4i [M] ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
+      C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
+             kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
+             xHCI olay halkasi imleci bu yuzden ilerlemiyordu. Ya alanin adresi gecmeli ya da REDDET.
+      C6-003 [S] IKI DERLEYICI: `için a: s.xs` (yapi alanindaki dizi) govdesi HIC calismiyor (0, 21 olmali).
+      C6-002 [S] self: `s.xs = []` (Dizi<Cesit> alani) sonraki payload'i bozuyor.
+      C6-004 [S] self: yapi dizisi literalini dogrudan `ver [R{..}]` -> alanlar bozuk.
+      Sonra: dalga 6 dolanmalarini kaldir (codex6_bulgular.md "kalan dolanmalar").
 - [ ] F1a [L] DRF V2: per-thread bolgeler (mevcut L0/L1 lemmalarina EN YAKIN olan;
       once bu onerilir).
 - [ ] F1b [L] DRF V2: tam-dil kapsami.
@@ -2684,3 +2692,13 @@
   ENTEGRASYON (Spark): test_tumu rc=0, FIXPOINT, checker_diff 304/304 (0 muaf), codegen_diff 198/198,
   modul_codegen 59/59, yapi_diff 176/176, surucu_diff 17/17, kopru 117/117, ASan PASS=131 FAIL=0,
   qtest nvme+ahci GECTI (F005'in yeni adlari gercek QEMU surucu programlarinda da sinandi).
+- 2026-11-08 D-744: CODEX DALGASI 6 (PR #198) — xHCI enumerasyon cekirdegi + USB bellek + HID klavye/fare,
+  KAHIN GERCEK QEMU (qemu-xhci + usb-storage/usb-kbd/usb-mouse; `hlt` sahte BIOS + QMP tus olaylari).
+  qtest 6 dal (nvme ahci xhci usb_depo usb_kbd usb_fare) C+self GECTI (13 sn). xhci dogrulamasi QEMU'nun
+  YAZDIGI cikis baglamlarini okur (yuva durumu 3, uc durumu 1, tur, paket boyu; VID 0x46F4/0x0627);
+  usb_depo fsck.fat + bagimsiz Python FAT okuyucu; klavye kod noktalari tam 'Ağaç İş\n'; fare tam
+  hareketler; eksik aygit olumsuzu. OLCULEN QEMU: ERST < 16 -> HCE; Link TRB cycle davranisi; ilk TUR
+  Unit Attention 6/41 — UCU de SAHTE MODELE islendi. CLAUDE DOGRULAMASI: kapsam temiz (harness'tan 0
+  satir silinmis), qtest 6/6 + kopru 122/122 yeniden kosuldu, BAGIMSIZ SABOTAJ (port sifirlama PR biti):
+  gercek QEMU KIRMIZI, ESKI sahte test YESIL kaldi, G6'nin gercege uydurulmus modeli KIRMIZI -> G6 kurali
+  ise yaradi. 4 derleyici bulgusu (3'u sessiz yanlis, 2'si iki derleyicide) -> E4i.
