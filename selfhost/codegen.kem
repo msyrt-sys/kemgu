@@ -1973,8 +1973,13 @@ işlev alan_adres_uret(p: &değişken Ayr, lhs: tam32) -> metin {
         eğer bayt(it, 0) != 37 { ver ""; }   // iç alan yapı-değer değil (ptr/skaler) → V1 dışı
         yad = ir_tip_soy(it);
     }
-    değişken fidx: tam32 = yapi_alan_idx(p, yad, alan);
-    değişken ftip: metin = yapi_alan_tip(p, yad, alan);
+    // C6-001: okuma yoluyla aynı somut jenerik alan tipi ve indeksi.
+    değişken mi: tam32 = mono_bul(p, yad);
+    değişken fbase: metin = yad;
+    eğer mi >= 0 { fbase = dizi_al(p.mono_yad, mi); }
+    değişken fidx: tam32 = yapi_alan_idx(p, fbase, alan);
+    değişken ftip: metin = yapi_alan_tip(p, fbase, alan);
+    eğer mi >= 0 { ftip = agg_alan(dizi_al(p.mono_fields, mi), fidx); }
     değişken g: tam32 = yeni_reg(p);
     değişken gr: metin = reg_str(g);
     yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr %"); yaz_str(yad); yaz_str(", ptr ");
@@ -6995,6 +7000,17 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 değilse { p.son_ref = cg_var_ref_bul(p, on); }
                 ver cg_var_bul(p, on);
             }
+            // C6-001: C erisim_lvalue aynası; değişiklik gerçek alanda kalır.
+            eğer metin_esit(op, "&degisken") ve metin_esit(dizi_al(p.a_ad, opnode), "ERISIM") {
+                değişken adres: metin = alan_adres_uret(p, opnode);
+                eğer metin_uzunluk(adres) > 0 {
+                    değişken alan_tip: metin = p.son_tip;
+                    p.son_ref = "";
+                    eğer metin_baslar(alan_tip, "%") { p.son_ref = ir_tip_soy(alan_tip); }
+                    p.son_tip = "ptr";
+                    ver adres;
+                }
+            }
             // [D-588] TANIMLAYICI OLMAYAN operand (`&n.x` · `&xs[0]` · `&f()`):
             // C, değeri GEÇİCİ BİR YUVAYA materyalize edip yuvanın adresini
             // verir. Kalıp C'den OKUNDU ve üç şekilde de birebir aynı:
@@ -11799,6 +11815,19 @@ işlev tekli_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
         eğer ptr_ifade_mi(p, operand) ve (p.guv_bag == 0) { g001_hata(p, idx); }
         ver 0;
+    }
+    // C6-001: C OP_REF_DEGISKEN ile aynı alan-yolu sınırı. İndeksin
+    // arada bulunması da reddedilir; salt okunur & bu denetime girmez.
+    eğer metin_esit(op, "&degisken") {
+        değişken kok: tam32 = operand;
+        iken metin_esit(dizi_al(p.a_ad, kok), "ERISIM") {
+            kok = dizi_al(p.cocuk, dizi_al(p.a_cb, kok));
+        }
+        eğer metin_esit(dizi_al(p.a_ad, kok), "TANIMLAYICI") == yanlış {
+            sekil_hata(p, idx, "T022");
+            yazdir_hata("T022: gecersiz &degisken yolu: elemani yerele al, degistir, dizi_yaz ile geri yaz");
+            ver 0;
+        }
     }
     // TC5b L004: lineer bağlama referansı alınamaz (& / &değişken).
     eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {

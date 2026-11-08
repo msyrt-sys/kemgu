@@ -1,0 +1,7 @@
+// C6-001: bu değiştirilebilir ödünç T022 ile reddedilmelidir.
+yapı Hucre { n: tam64; }
+yapı Kutu { i: Hucre; xs: Dizi<Hucre>; }
+işlev al(x: &değişken Hucre) { x.n = 73; }
+işlev uret() -> Hucre { ver Hucre { n: 19 }; }
+işlev kutu() -> Kutu { ver Kutu { i: Hucre { n: 31 }, xs: [] }; }
+işlev main() -> tam32 { al(&değişken uret()); ver 0; }

@@ -3490,12 +3490,41 @@ static void test_uzun_kesirli_literal(void) {
     test_sonuc("D-633 67/85 karakterlik kesirli literal (us korunur) -> exit 42", rc == 42);
 }
 
+/* C6-001: iki derleyicinin aynı yanlış cevabı vermesi pariteyi geçiremez. */
+static void test_c6_001_alan_odunc(void) {
+    test_sonuc("C6-001 jenerik -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_jenerik.kem") == 42);
+    test_sonuc("C6-001 c6_001_alan_indeks reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_alan_indeks.kem"));
+    test_sonuc("C6-001 c6_001_cagri reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_cagri.kem"));
+    test_sonuc("C6-001 c6_001_cagri_alan reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_cagri_alan.kem"));
+    test_sonuc("C6-001 c6_001_gecici reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_gecici.kem"));
+    test_sonuc("C6-001 c6_001_indeks reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_indeks.kem"));
+    test_sonuc("C6-001 c6_001_indeks_alan reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_indeks_alan.kem"));
+    test_sonuc("C6-001 yerel -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_yerel.kem") == 42);
+    test_sonuc("C6-001 alan -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_alan.kem") == 42);
+    test_sonuc("C6-001 ic_ice -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_ic_ice.kem") == 42);
+    test_sonuc("C6-001 parametre -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_parametre.kem") == 42);
+    test_sonuc("C6-001 iki_alan -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_iki_alan.kem") == 42);
+ }
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
 
     printf("\n--- Literaller + aritmetik ---\n");
+    test_c6_001_alan_odunc();
     test_lit_42();
     test_aritmetik();
     test_tam64_literal_baglam();

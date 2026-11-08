@@ -3072,6 +3072,8 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
     if (!nesne_d) return -1;
 
     YapiKayit *yk = NULL;
+    const char *taban_ir = NULL;
+    MonoTip *mono_mt = NULL;
     int taban_reg = -1;
 
     if (nesne_d->tip == DUGUM_TANIMLAYICI) {
@@ -3079,21 +3081,22 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
                                 nesne_d->veri.tanimlayici.uzunluk);
         if (!vi || !vi->llvm_tip) return -1;
         if (vi->llvm_tip[0] == '%') {
-            yk = yapi_bul_ir(g, vi->llvm_tip);
+            taban_ir = vi->llvm_tip;
+            yk = yapi_bul_ir(g, taban_ir);
             taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
         } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
             /* D-029 fix: &Yapi lokal/param -> kayitli yapi tipi; yoksa
              * son care alan-adi arama (iki yapi ayni alan adi paylasinca
              * eski global arama YANLIS yapiya cozuyordu). */
-            if (vi->ref_yapi_ir) yk = yapi_bul_ir(g, vi->ref_yapi_ir);
-            for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
+            taban_ir = vi->ref_yapi_ir;
+            if (taban_ir) yk = yapi_bul_ir(g, taban_ir);
+            for (YapiKayit *y = g->yapilar; y && !yk && !taban_ir; y = y->sonraki) {
                 if (yapi_alan_indeksi(y, d->veri.erisim.alan,
                                        d->veri.erisim.alan_uzunluk,
                                        NULL) >= 0) {
                     yk = y;
                 }
             }
-            if (!yk) return -1;
             taban_reg = yeni_reg(g);
             fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
                     taban_reg, vi->reg_no);
@@ -3106,9 +3109,17 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
         const char *ic_ir = NULL;
         taban_reg = erisim_lvalue(g, nesne_d, &ic_ir, NULL);
         if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
-        yk = yapi_bul_ir(g, ic_ir);
+        taban_ir = ic_ir;
+        yk = yapi_bul_ir(g, taban_ir);
     } else {
         return -1;
+    }
+    /* C6-001: okuma yolundaki gibi somut jenerik düzeni ve tip ikamesini koru. */
+    if (!yk && taban_ir) {
+        mono_mt = mono_tip_bul(g, taban_ir);
+        if (mono_mt && mono_mt->ast->tip == DUGUM_YAPI)
+            yk = yapi_bul(g, mono_mt->ast->veri.yapi.ad,
+                          mono_mt->ast->veri.yapi.ad_uzunluk);
     }
     if (!yk || yk->ast->tip != DUGUM_YAPI) return -1;
 
@@ -3116,12 +3127,19 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
     int idx = yapi_alan_indeksi(yk, d->veri.erisim.alan,
                                  d->veri.erisim.alan_uzunluk, &alan_tip_d);
     if (idx < 0) return -1;
+    TipSubst *eski_subst = g->substler;
+    if (mono_mt) g->substler = mono_mt->subst;
     if (alan_ir_out) *alan_ir_out = ast_tip_to_ir(g, alan_tip_d);
+    g->substler = eski_subst;
     if (alan_ast_out) *alan_ast_out = alan_tip_d;
 
     int gep_r = yeni_reg(g);
-    fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
-    yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
+    fprintf(g->out, "  %%%d = getelementptr ", gep_r);
+    if (taban_ir) fprintf(g->out, "%s", taban_ir);
+    else {
+        fputc('%', g->out);
+        yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
+    }
     fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", taban_reg, idx);
     return gep_r;
 }
@@ -4309,6 +4327,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         op_d->veri.tanimlayici.uzunluk);
                     if (vi) {
                         IfadeSonuc s = { vi->reg_no, "ptr", 0, 0};
+                        return s;
+                    }
+                }
+                /* C6-001: değiştirilebilir alan ödüncü kopyaya değil gerçek
+                 * yuvaya bağlanır. Salt okunur & için eski geçici yol korunur. */
+                if (op_d && op_d->tip == DUGUM_ERISIM &&
+                    d->veri.tekli.op == OP_REF_DEGISKEN) {
+                    int adres = erisim_lvalue(g, op_d, NULL, NULL);
+                    if (adres >= 0) {
+                        IfadeSonuc s = { adres, "ptr", 0, 0 };
                         return s;
                     }
                 }
