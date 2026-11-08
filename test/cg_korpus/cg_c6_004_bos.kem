@@ -1,0 +1,11 @@
+// C6-004: doğrudan yapı dizisi dönüşünde tüm alanlar ve eleman genişliği korunur.
+yapı R { t: tam32; a: tam64; v: tam64; n: tam32; h: tam64; y: tam64; b: Dizi<dtam8>; }
+işlev kayitlar() -> Dizi<R> { ver []; }
+işlev main() -> tam32 {
+    değişken xs: Dizi<R> = kayitlar();
+    eğer dizi_boyut(xs) != 0 { ver 1; }
+    dizi_ekle(xs, R { t: 11, a: 8589934595, v: 17179869203, n: 13, h: 34359738409, y: 68719476797, b: [203 olarak dtam8] });
+    değişken r: R = dizi_al(xs, 0);
+    eğer r.t == 11 ve r.a == 8589934595 ve r.v == 17179869203 ve r.n == 13 ve r.h == 34359738409 ve r.y == 68719476797 ve (dizi_al(r.b, 0) olarak tam32) == 203 { ver 42; }
+    ver 1;
+}

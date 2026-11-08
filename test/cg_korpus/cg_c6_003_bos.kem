@@ -1,0 +1,11 @@
+// C6-003: dizi alanı döngüsü tüm elemanları tipini koruyarak gezer.
+yapı S { xs: Dizi<tam64>; }
+yapı Dis { ic: S; }
+işlev main() -> tam32 {
+    değişken s: S = S { xs: [] };
+    değişken xs: Dizi<tam32> = [3, 7, 11];
+    değişken adet: tam32 = 0;
+    için a: xs { adet = adet + 1; }
+    için a: s.xs { adet = adet + 100; }
+    eğer adet == 3 { ver 42; } ver 1;
+}

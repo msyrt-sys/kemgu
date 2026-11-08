@@ -3072,6 +3072,8 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
     if (!nesne_d) return -1;
 
     YapiKayit *yk = NULL;
+    const char *taban_ir = NULL;
+    MonoTip *mono_mt = NULL;
     int taban_reg = -1;
 
     if (nesne_d->tip == DUGUM_TANIMLAYICI) {
@@ -3079,21 +3081,22 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
                                 nesne_d->veri.tanimlayici.uzunluk);
         if (!vi || !vi->llvm_tip) return -1;
         if (vi->llvm_tip[0] == '%') {
-            yk = yapi_bul_ir(g, vi->llvm_tip);
+            taban_ir = vi->llvm_tip;
+            yk = yapi_bul_ir(g, taban_ir);
             taban_reg = vi->reg_no;  /* alloca = struct'in kendisi */
         } else if (strcmp(vi->llvm_tip, "ptr") == 0) {
             /* D-029 fix: &Yapi lokal/param -> kayitli yapi tipi; yoksa
              * son care alan-adi arama (iki yapi ayni alan adi paylasinca
              * eski global arama YANLIS yapiya cozuyordu). */
-            if (vi->ref_yapi_ir) yk = yapi_bul_ir(g, vi->ref_yapi_ir);
-            for (YapiKayit *y = g->yapilar; y && !yk; y = y->sonraki) {
+            taban_ir = vi->ref_yapi_ir;
+            if (taban_ir) yk = yapi_bul_ir(g, taban_ir);
+            for (YapiKayit *y = g->yapilar; y && !yk && !taban_ir; y = y->sonraki) {
                 if (yapi_alan_indeksi(y, d->veri.erisim.alan,
                                        d->veri.erisim.alan_uzunluk,
                                        NULL) >= 0) {
                     yk = y;
                 }
             }
-            if (!yk) return -1;
             taban_reg = yeni_reg(g);
             fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
                     taban_reg, vi->reg_no);
@@ -3106,9 +3109,17 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
         const char *ic_ir = NULL;
         taban_reg = erisim_lvalue(g, nesne_d, &ic_ir, NULL);
         if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
-        yk = yapi_bul_ir(g, ic_ir);
+        taban_ir = ic_ir;
+        yk = yapi_bul_ir(g, taban_ir);
     } else {
         return -1;
+    }
+    /* C6-001: okuma yolundaki gibi somut jenerik düzeni ve tip ikamesini koru. */
+    if (!yk && taban_ir) {
+        mono_mt = mono_tip_bul(g, taban_ir);
+        if (mono_mt && mono_mt->ast->tip == DUGUM_YAPI)
+            yk = yapi_bul(g, mono_mt->ast->veri.yapi.ad,
+                          mono_mt->ast->veri.yapi.ad_uzunluk);
     }
     if (!yk || yk->ast->tip != DUGUM_YAPI) return -1;
 
@@ -3116,12 +3127,19 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
     int idx = yapi_alan_indeksi(yk, d->veri.erisim.alan,
                                  d->veri.erisim.alan_uzunluk, &alan_tip_d);
     if (idx < 0) return -1;
+    TipSubst *eski_subst = g->substler;
+    if (mono_mt) g->substler = mono_mt->subst;
     if (alan_ir_out) *alan_ir_out = ast_tip_to_ir(g, alan_tip_d);
+    g->substler = eski_subst;
     if (alan_ast_out) *alan_ast_out = alan_tip_d;
 
     int gep_r = yeni_reg(g);
-    fprintf(g->out, "  %%%d = getelementptr %%", gep_r);
-    yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
+    fprintf(g->out, "  %%%d = getelementptr ", gep_r);
+    if (taban_ir) fprintf(g->out, "%s", taban_ir);
+    else {
+        fputc('%', g->out);
+        yerel_ad_yaz(g->out, yk->ad, yk->ad_uz);
+    }
     fprintf(g->out, ", ptr %%%d, i32 0, i32 %d\n", taban_reg, idx);
     return gep_r;
 }
@@ -4309,6 +4327,16 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         op_d->veri.tanimlayici.uzunluk);
                     if (vi) {
                         IfadeSonuc s = { vi->reg_no, "ptr", 0, 0};
+                        return s;
+                    }
+                }
+                /* C6-001: değiştirilebilir alan ödüncü kopyaya değil gerçek
+                 * yuvaya bağlanır. Salt okunur & için eski geçici yol korunur. */
+                if (op_d && op_d->tip == DUGUM_ERISIM &&
+                    d->veri.tekli.op == OP_REF_DEGISKEN) {
+                    int adres = erisim_lvalue(g, op_d, NULL, NULL);
+                    if (adres >= 0) {
+                        IfadeSonuc s = { adres, "ptr", 0, 0 };
                         return s;
                     }
                 }
@@ -7244,12 +7272,14 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 int adr = erisim_lvalue(g, d->veri.atama.hedef, &alan_ir, &alan_ast);
                 /* [D-092] k.xs = [..]  (alan Dizi<T> heap) — TANIMLAYICI ile
                  * aynı delik: dizi-literali stack ÜRETME, heap KdlDizi yap ve
-                 * alan adresine KdlDizi* store et. dizi_alan_eleman_ast alanın
-                 * Dizi<T> eleman AST'sini verir (NULL → normal skaler alan). */
+                 * alan adresine KdlDizi* store et. lvalue'dan gelen alan_ast
+                 * Dizi<T> elemanını verir (NULL → normal skaler alan). */
                 const Dugum *alan_eleman_ast = NULL;
-                if (d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR) {
-                    alan_eleman_ast =
-                        dizi_alan_eleman_ast(g, d->veri.atama.hedef);
+                if (d->veri.atama.deger->tip == DUGUM_DIZI_OLUSTUR &&
+                    alan_ast && alan_ast->tip == DUGUM_TIP_DIZI) {
+                    /* C6-002: lvalue çözümü iç içe alanın tipini zaten taşır;
+                     * tek katmanlı ad sorgusu [] değerini stack dizisine düşürüyordu. */
+                    alan_eleman_ast = alan_ast->veri.tip_dizi.eleman_tip;
                 }
                 if (adr >= 0 && alan_eleman_ast) {
                     const Dugum *eski_bt = g->beklenen_tip;
@@ -7354,31 +7384,44 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             return 0;
 
         /* Adim 7: için x: xs { govde } — heap dizi iteration
-         * (KdlDizi*'a dizi_boyut + dizi_al). xs DUGUM_TANIMLAYICI
-         * ve dinamik_dizi_mi = 1 ise loop emit edilir. Aksi halde
-         * not supported (stack dizi iteration v2'de). */
+         * (KdlDizi*'a dizi_boyut + dizi_al). Yerel dizi veya yapı alanı;
+         * stack dizi iteration v2'de. */
         case DUGUM_ICIN: {
             const Dugum *koleksiyon = d->veri.icin.koleksiyon;
-            if (!koleksiyon || koleksiyon->tip != DUGUM_TANIMLAYICI) {
-                fprintf(g->out, "  ; icin: koleksiyon tanimlayici degil\n");
+            if (!koleksiyon) return 0;
+            const char *et = NULL;
+            int kol_adres = -1, eleman_metin = 0, eleman_isz = 0;
+            if (koleksiyon->tip == DUGUM_TANIMLAYICI) {
+                LlvmIsim *kol_isim = isim_bul(g,
+                    koleksiyon->veri.tanimlayici.metin,
+                    koleksiyon->veri.tanimlayici.uzunluk);
+                if (!kol_isim || !kol_isim->dinamik_dizi_mi) return 0;
+                kol_adres = kol_isim->reg_no;
+                et = kol_isim->eleman_llvm_tip ? kol_isim->eleman_llvm_tip : "i32";
+                eleman_metin = kol_isim->eleman_metin_mi;
+                eleman_isz = ast_tip_isaretsiz_mi(kol_isim->eleman_tip_ast);
+            } else if (koleksiyon->tip == DUGUM_ERISIM) {
+                /* C6-003: iç içe ve referans köklü alanı bir kez çöz;
+                 * eleman genişliği, metin ve işaretsizlik bilgisi kaybolmasın. */
+                const Dugum *alan_tip = NULL;
+                kol_adres = erisim_lvalue(g, koleksiyon, NULL, &alan_tip);
+                if (kol_adres < 0 || !alan_tip || alan_tip->tip != DUGUM_TIP_DIZI)
+                    return 0;
+                const Dugum *eleman_tip = alan_tip->veri.tip_dizi.eleman_tip;
+                et = ast_tip_to_ir(g, eleman_tip);
+                eleman_metin = ast_tip_metin_mi(eleman_tip);
+                eleman_isz = ast_tip_isaretsiz_mi(eleman_tip);
+            } else {
+                fprintf(g->out, "  ; icin: desteklenmeyen koleksiyon\n");
                 return 0;
             }
-            LlvmIsim *kol_isim = isim_bul(g,
-                koleksiyon->veri.tanimlayici.metin,
-                koleksiyon->veri.tanimlayici.uzunluk);
-            if (!kol_isim || !kol_isim->dinamik_dizi_mi) {
-                fprintf(g->out, "  ; icin: heap dizi degil (v1 sinir)\n");
-                return 0;
-            }
-            const char *et = kol_isim->eleman_llvm_tip
-                ? kol_isim->eleman_llvm_tip : "i32";
             const char *fn_al = "kdl_dizi_al_tam";
             if (strcmp(et, "i64") == 0) fn_al = "kdl_dizi_al_tam64";
             else if (strcmp(et, "ptr") == 0) fn_al = "kdl_dizi_al_ptr";
             /* Load koleksiyon ptr (kdl_dizi*) */
             int kdl_ptr = yeni_reg(g);
             fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
-                    kdl_ptr, kol_isim->reg_no);
+                    kdl_ptr, kol_adres);
             /* Boyut al */
             int n_reg = yeni_reg(g);
             fprintf(g->out, "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
@@ -7445,9 +7488,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                       d->veri.icin.degisken_adi_uzunluk,
                       1, x_alloca, et);
             /* [D-449] eleman metin ise dongu degiskeni de metin. */
-            g->isimler->metin_mi = kol_isim->eleman_metin_mi;
+            g->isimler->metin_mi = eleman_metin;
             /* [D-708] eleman dtamN ise dongu degiskeni de isaretsiz (genisletme zext). */
-            g->isimler->isaretsiz = ast_tip_isaretsiz_mi(kol_isim->eleman_tip_ast);
+            g->isimler->isaretsiz = eleman_isz;
             int body_term = blok_uret(g, d->veri.icin.govde);
             scope_cik(g, m);
             if (!body_term) {

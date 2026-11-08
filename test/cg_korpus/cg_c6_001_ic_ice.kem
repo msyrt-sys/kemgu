@@ -1,0 +1,11 @@
+// C6-001: alan adresi gerçek depolamayı göstermeli; başarı çıkışı 42.
+yapı Hucre { n: tam64; isaret: tam32; }
+yapı Cift { i: Hucre; j: Hucre; koru: tam32; }
+yapı Dis { ic: Cift; }
+işlev artir(x: &değişken Hucre) { x.n = x.n + 7; x.isaret = x.isaret + 5; }
+işlev main() -> tam32 {
+ değişken e: Dis = Dis { ic: Cift { i: Hucre { n: 8589934595, isaret: 13 }, j: Hucre { n: 8589934611, isaret: 29 }, koru: 61 } };
+ artir(&değişken e.ic.i);
+ eğer e.ic.i.n != 8589934602 veya e.ic.i.isaret != 18 { ver 1; }
+ eğer e.ic.j.n != 8589934611 veya e.ic.koru != 61 { ver 2; } ver 42;
+}

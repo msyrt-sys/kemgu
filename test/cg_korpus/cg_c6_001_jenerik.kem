@@ -1,0 +1,22 @@
+// Jenerik alan zincirinde yerel, iç içe ve referans kökleri gerçek adrese bağlanır.
+yapı Hucre { n: tam64; }
+yapı Kutu<T> { koru: tam64; v: T; son: tam64; }
+yapı Dis<T> { ic: Kutu<T>; }
+işlev artir(x: &değişken Hucre) { x.n = x.n + 7; }
+işlev aktar(p: &değişken Kutu<Hucre>) { artir(&değişken p.v); }
+işlev main() -> tam32 {
+    değişken a: Kutu<Hucre> = Kutu { koru: 61, v: Hucre { n: 8589934595 }, son: 97 };
+    değişken b: Dis<Hucre> = Dis { ic: Kutu { koru: 61, v: Hucre { n: 8589934611 }, son: 97 } };
+    değişken c: Kutu<Hucre> = Kutu { koru: 61, v: Hucre { n: 8589934633 }, son: 97 };
+    artir(&değişken a.v);
+    artir(&değişken b.ic.v);
+    aktar(&değişken c);
+    eğer a.v.n != 8589934602 { ver 1; }
+    eğer a.koru != 61 veya a.son != 97 { ver 2; }
+    değişken sonuc: Hucre = b.ic.v;
+    eğer sonuc.n != 8589934618 { ver 1; }
+    eğer b.ic.koru != 61 veya b.ic.son != 97 { ver 2; }
+    eğer c.v.n != 8589934640 { ver 1; }
+    eğer c.koru != 61 veya c.son != 97 { ver 2; }
+    ver 42;
+}

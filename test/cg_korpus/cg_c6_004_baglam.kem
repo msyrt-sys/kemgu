@@ -1,0 +1,13 @@
+// Dizi dönen son işlevin bağlamı daha sonra yayılan skaler kapanışa sızmaz.
+yapı R { n: tam64; }
+işlev main() -> tam32 {
+    değişken f: işlev() -> tam32 = || { ver dizi_al([3, 7, 11], 2); };
+    değişken xs: Dizi<R> = son();
+    değişken r: R = dizi_al(xs, 0);
+    eğer f() == 11 ve dizi_boyut(xs) == 1 ve r.n == 8589934675 { ver 42; }
+    ver 1;
+}
+işlev son() -> Dizi<R> {
+    değişken xs: Dizi<R> = [R { n: 8589934675 }];
+    ver xs;
+}

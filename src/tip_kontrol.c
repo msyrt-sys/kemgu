@@ -3265,6 +3265,19 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                     return tip_olustur_referans(tk->arena, op, 0);
 
                 case OP_REF_DEGISKEN:
+                    /* C6-001: yalnız tanımlayıcı köklü alan zinciri sabit
+                     * depolamadır. İndeks, çağrı ve geçici değer adresi kaçmaz. */
+                    {
+                        const Dugum *kok = d->veri.tekli.operand;
+                        while (kok && kok->tip == DUGUM_ERISIM)
+                            kok = kok->veri.erisim.nesne;
+                        if (!kok || kok->tip != DUGUM_TANIMLAYICI) {
+                            tip_hata(tk, d, "T022",
+                                "gecersiz &degisken yolu: elemani yerele al, "
+                                "degistir, dizi_yaz ile geri yaz");
+                            return t_hata(tk);
+                        }
+                    }
                     if (tip_lineer_mi(op)) {
                         const char *kod = (op->kategori == TIP_YETKI)
                                           ? "CP005" : "L004";

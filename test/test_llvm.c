@@ -3490,12 +3490,75 @@ static void test_uzun_kesirli_literal(void) {
     test_sonuc("D-633 67/85 karakterlik kesirli literal (us korunur) -> exit 42", rc == 42);
 }
 
+/* C6-001: iki derleyicinin aynı yanlış cevabı vermesi pariteyi geçiremez. */
+static void test_c6_001_alan_odunc(void) {
+    test_sonuc("C6-001 jenerik -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_jenerik.kem") == 42);
+    test_sonuc("C6-001 c6_001_alan_indeks reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_alan_indeks.kem"));
+    test_sonuc("C6-001 c6_001_cagri reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_cagri.kem"));
+    test_sonuc("C6-001 c6_001_cagri_alan reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_cagri_alan.kem"));
+    test_sonuc("C6-001 c6_001_gecici reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_gecici.kem"));
+    test_sonuc("C6-001 c6_001_indeks reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_indeks.kem"));
+    test_sonuc("C6-001 c6_001_indeks_alan reddedilir",
+        !kemgu_check_basarili("test/check_korpus/c6_001_indeks_alan.kem"));
+    test_sonuc("C6-001 yerel -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_yerel.kem") == 42);
+    test_sonuc("C6-001 alan -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_alan.kem") == 42);
+    test_sonuc("C6-001 ic_ice -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_ic_ice.kem") == 42);
+    test_sonuc("C6-001 parametre -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_parametre.kem") == 42);
+    test_sonuc("C6-001 iki_alan -> exit 42",
+        derle_dosya_ve_calistir("test/cg_korpus/cg_c6_001_iki_alan.kem") == 42);
+}
+
+/* C6-003: ortak sessiz yanlış sonuç exit 42 beklentisiyle yakalanır. */
+static void test_c6_003_alan_dongu(void) {
+    test_sonuc("C6-003 yerel -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_yerel.kem") == 42);
+    test_sonuc("C6-003 alan -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_alan.kem") == 42);
+    test_sonuc("C6-003 ic_ice -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_ic_ice.kem") == 42);
+    test_sonuc("C6-003 parametre -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_parametre.kem") == 42);
+    test_sonuc("C6-003 bos -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_bos.kem") == 42);
+    test_sonuc("C6-003 metin -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_metin.kem") == 42);
+    test_sonuc("C6-003 yapi -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_yapi.kem") == 42);
+    test_sonuc("C6-003 isaretsiz -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_003_isaretsiz.kem") == 42);
+}
+
+/* C6-002: boş alan atamasında gerçek payload ve eleman düzeni korunur. */
+static void test_c6_002_bos_alan(void) {
+    test_sonuc("C6-002 yerel -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_yerel.kem") == 42);
+    test_sonuc("C6-002 alan -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_alan.kem") == 42);
+    test_sonuc("C6-002 parametre -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_parametre.kem") == 42);
+    test_sonuc("C6-002 ic_ice -> exit 42",
+               derle_dosya_ve_calistir("test/cg_korpus/cg_c6_002_ic_ice.kem") == 42);
+}
+
 int main(void) {
     gecici_yollari_kur();   /* D-297: PID'li gecici yollar (es zamanli kosum) */
     printf("KEMGU LLVM Backend Entegrasyon Testleri\n");
     printf("=========================================\n");
 
     printf("\n--- Literaller + aritmetik ---\n");
+    test_c6_001_alan_odunc();
+    test_c6_003_alan_dongu();
+    test_c6_002_bos_alan();
     test_lit_42();
     test_aritmetik();
     test_tam64_literal_baglam();
