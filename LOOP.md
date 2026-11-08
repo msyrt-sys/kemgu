@@ -253,7 +253,7 @@
       okuma (faz biti eslesince girdiyi tekrar BellekOku; Linux nvme deseni) + YIRTIK yazan sahte model
       testi (ilk okumada yeni faz + eski CID). Bugun koruma yalniz yurutucude (8 bayt azalan) ve
       bm_x86_nvme kapisi bu sinif icin OLASILIKSAL (~%77). Ayni ders xHCI olay halkasi icin de gecerli.
-- [ ] E4i [M] ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
+- [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
              xHCI olay halkasi imleci bu yuzden ilerlemiyordu. Ya alanin adresi gecmeli ya da REDDET.
@@ -2720,3 +2720,13 @@
   20 acilis; kapi bu sinif icin OLASILIKSAL, belirlenimci koruma E4j. Sozlesme drivers/ortak/gc.kem'e
   yazildi. Kapilar: bm_x86_nvme 20/20, qtest nvme+ahci, kopru 117/117, check_kapisi 0 RED (+birlesik
   NVMe birimi), baremetal_diff 23/23 (+kem_dizi_genis birimi 52 islev C=self aarch64), kem_os_x86 GECTI.
+- 2026-11-08 D-746: CODEX DALGASI 7 — C6-001..004 (PR #201-#204, ozet #205). C6-001 BELLEK MODELI: `&değişken`
+  koku TANIMLAYICI olan `.alan` zincirinde ALANIN GERCEK ADRESI (C erisim_lvalue/getelementptr; self
+  alan_adres_uret; jenerik yapi alani dahil); yolda indeks/cagri/gecici -> T022 (yeni kod yok; dizi
+  buyurse adres bosa duserdi = UAF). C6-003 `için a: s.xs` alan dizisinde govde calisiyor; C6-002 bos
+  dizi alan atamasi eleman tipi; C6-004 yapi dizisi literali donusu (cur_ret_elem; lambda siniri
+  sifirlanir). Ucunun ortak koku: yapi ALANI yolunda dizi eleman tipi bilgisinin kaybi. ENTEGRASYON:
+  test_llvm.c'de "iki tarafi koru" cozumum git'in isaret DISINA koydugu ortak `}` satirini kaybetti ->
+  derleme kirildi, tam takim yakaladi, onarildi (DERS: ortak sonek isaret disindaysa yan yana koymak
+  yetmez). test_tumu rc=0, FIXPOINT, checker_diff 310/310 (0 muaf), codegen_diff 220/220, modul_codegen
+  59/59, llvm_test 317/317, ASan PASS=132 FAIL=0, kopru 122/122, qtest 6/6, bm_x86_nvme 20/20.
