@@ -1,0 +1,82 @@
+// Ortak bare-metal GcIstek yürütücüsü; aynı birimde kem_pci_hw ve kem_uart ister.
+// Yeni asm yok; D-745 okuma sırası ve genişliği korunur.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::pci::yapilandirma::{ PciAygit, pci_coz };
+
+işlev bm_yaz(m: metin) {
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(m) olarak tam32;
+    iken i < n { kem_uart_bayt((metin_bayt(m, i) olarak tam32) & 255); i = i + 1; }
+    kem_uart_bayt(10);
+}
+
+// [D-745] Aygıttan gelen veriyi YIRTILMADAN oku. Aygıt (QEMU'da ayrı iş parçacığı,
+// gerçek donanımda PCIe) girdiyi artan adreste 8 baytlık parçalarla yazar; bayt bayt
+// okumak NVMe tamamlama girdisinde komut kimliğini (bayt 12-13) ESKİ, faz bitini
+// (bayt 14) YENİ görebilir (ölçüldü: "nvme tamamlanma kimligi", gecikmeyle kayboluyor).
+// Hizalı 8 baytlık okuma + AZALAN sıra: üst parça yeniyse altı da (TSO, artan yazım) yenidir.
+işlev bm_bellek_oku(a: tam64, n: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = [];
+    eğer a % 8 == 0 ve n % 8 == 0 {
+        değişken kelimeler: Dizi<tam64> = [];
+        değişken k: tam32 = 0;
+        iken k < n / 8 { dizi_ekle(kelimeler, 0); k = k + 1; }
+        k = n / 8 - 1;
+        iken k >= 0 { dizi_yaz(kelimeler, k, kem_mmio_oku64(a + (k olarak tam64) * 8)); k = k - 1; }
+        k = 0;
+        iken k < n / 8 {
+            değişken w: tam64 = dizi_al(kelimeler, k);
+            değişken j: tam32 = 0;
+            iken j < 8 { dizi_ekle(b, (((w >> (j * 8)) & 255) olarak tam32) olarak dtam8); j = j + 1; }
+            k = k + 1;
+        }
+        ver b;
+    }
+    değişken i: tam32 = 0;
+    iken i < n { dizi_ekle(b, kem_fiz_oku8(a + (i olarak tam64)) olarak dtam8); i = i + 1; }
+    ver b;
+}
+
+// GcIstek → gerçek donanım (qt_yurut'un bare-metal ikizi).
+işlev bm_yurut(bar: tam64, i: GcIstek) -> GcYanit {
+    değişken y: GcYanit = gc_bos();
+    eşleş i {
+        GcIstek::Oku32(a) => { y.deger = kem_mmio_oku32(bar + a); }
+        GcIstek::Oku64(a) => { y.deger = kem_mmio_oku64(bar + a); }
+        GcIstek::Yaz32(a, v) => { kem_mmio_yaz32(bar + a, v); }
+        GcIstek::Yaz64(a, v) => { kem_mmio_yaz64(bar + a, v); }
+        GcIstek::BellekOku(a, n) => { y.baytlar = bm_bellek_oku(a, n); }
+        GcIstek::BellekYaz(a, b) => {
+            değişken k: tam32 = 0;
+            iken k < dizi_boyut(b) { kem_fiz_yaz8(a + (k olarak tam64), dizi_al(b, k) olarak tam32); k = k + 1; }
+        }
+        GcIstek::Bekle(us) => { kem_bekle_us(us); }
+        _ => { }
+    }
+    ver y;
+}
+
+// Veriyolu 0'da sınıf/alt sınıf/programlama arabirimi eşleşen bdf döner. Çok işlevli aygıtlar da taranır.
+işlev bm_pci_bul(sinif: tam32, alt_sinif: tam32, prog_if: tam32) -> sonuç<tam32, metin> {
+    değişken a: tam32 = 0;
+    iken a < 256 {
+        değişken v: tam64 = kem_pci_oku32(a, 0);
+        eğer (v & 65535) != 65535 {
+            değişken b: Dizi<dtam8> = [];
+            değişken ofs: tam32 = 0;
+            iken ofs < 256 {
+                değişken w: tam64 = kem_pci_oku32(a, ofs);
+                değişken k: tam32 = 0;
+                iken k < 4 { dizi_ekle(b, (((w >> (k * 8)) & 255) olarak tam32) olarak dtam8); k = k + 1; }
+                ofs = ofs + 4;
+            }
+            eşleş pci_coz(b) {
+                hiç => { }
+                değer(p) => { eğer p.sinif == sinif ve p.alt_sinif == alt_sinif ve p.prog_if == prog_if { ver tamam(a); } }
+            }
+        }
+        a = a + 1;
+    }
+    ver hata("PCI aygiti bulunamadi");
+}
+
