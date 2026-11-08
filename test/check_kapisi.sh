@@ -39,6 +39,7 @@ muaf() {
     *test/ornekler/kem_os_cekirdek_ortak.kem) echo "parça dosya — arm64 ve x86 birleşik birimlerinde denetlenir" ;;
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     # [D-745] bare-metal NVMe test çekirdeği: kem_pci_hw/kem_uart'tan işlev ister (tek başına T002).
+    *test/ornekler/kem_os_x86_kabuk.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_usb.kem) echo "parça — birleşik USB birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ahci.kem) echo "parça — birleşik AHCI birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_nvme.kem) echo "parça dosya — birleşik bare-metal NVMe birimi aşağıda denetlenir" ;;
@@ -203,6 +204,18 @@ else
   "$KEMGU" --check --mimari x86_64-none build/kem_bm_usb_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
 rm -f build/kem_bm_usb_kapi.kem
+
+BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
+cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
+tot=$((tot + 1))
+if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then
+  echo "  ✅ kem_os_x86_kabuk (birleşik bare-metal KABUK, $(echo $BM_KABUK_PARCALAR | wc -w) parça) --check geçti"
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86_kabuk birleşik kaynak --check'ten geçmiyor:"
+  "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+fi
+rm -f build/kem_bm_kabuk_kapi.kem
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir
 # birimdir → doğru mimari bayrağıyla tip kapısından GEÇMELİ.

@@ -79,3 +79,30 @@ işlev bm_pci_bul(sinif: tam32, alt_sinif: tam32, prog_if: tam32) -> sonuç<tam3
     }
     ver hata("PCI aygiti bulunamadi");
 }
+
+// Kabuk/satır/yol bağımlılıkları: C runtime sözleşmesinin mevcut çıplak ilkellerle eşi.
+// Ham erişim yalnız izinli yürütücüde; sürücüler saf kalır.
+çıplak işlev kdl_metin_esit(a: *tam8, b: *tam8) -> mantıksal {
+    eğer (a olarak tam64) == (b olarak tam64) { ver doğru; }
+    eğer (a olarak tam64) == 0 veya (b olarak tam64) == 0 { ver yanlış; }
+    değişken i: tam64 = 0;
+    iken doğru {
+        değişken pa: *dtam8 = ((a olarak tam64)+i) olarak *dtam8;
+        değişken pb: *dtam8 = ((b olarak tam64)+i) olarak *dtam8;
+        eğer *pa != *pb { ver yanlış; }
+        eğer *pa == (0 olarak dtam8) { ver doğru; }
+        i=i+1;
+    } ver yanlış;
+}
+çıplak işlev kdl_metin_kes(s: *tam8, baslangic: tam32, uzunluk: tam32) -> *tam8 {
+    eğer (s olarak tam64) == 0 { ver s; }
+    değişken n: tam32 = kem_strlen(s) olarak tam32;
+    eğer baslangic < 0 { baslangic=0; } eğer baslangic > n { baslangic=n; }
+    değişken kalan: tam32 = n-baslangic;
+    eğer uzunluk < 0 veya uzunluk > kalan { uzunluk=kalan; }
+    değişken out: *tam8 = kdl_bolge_ayir(kdl_global_bolge_al(),(uzunluk olarak tam64)+1);
+    eğer (out olarak tam64) == 0 { ver out; }
+    memcpy(out,((s olarak tam64)+(baslangic olarak tam64)) olarak *tam8,uzunluk olarak tam64);
+    kem_bayt_yaz((out olarak tam64)+(uzunluk olarak tam64),0);
+    ver out;
+}

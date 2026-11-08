@@ -272,3 +272,12 @@ genel işlev xhci_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32) -> 
         }
     }
 }
+
+// BOT ve HID sırayla aynı olay halkasını kullanır; bekleyen BOT aktarımı olmamalıdır.
+// Çağıran BOT'un güncel tüketici konumunu verir, Bitti sonrası s.olay konumunu BOT'a döndürür.
+genel işlev xhci_depo_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32, bas: tam32, dongu: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer değil s.devredildi veya s.evre != 100 veya bas < 0 veya bas >= s.olay.adet { ver hata("xhci ortak olay durumu"); }
+    s.olay.bas=bas; s.olay.dongu=dongu; s.devredildi=yanlış;
+    değişken r: sonuç<mantıksal,metin> = xhci_giris(s,indeks,boy);
+    s.devredildi=doğru; ver r;
+}
