@@ -7354,31 +7354,44 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             return 0;
 
         /* Adim 7: için x: xs { govde } — heap dizi iteration
-         * (KdlDizi*'a dizi_boyut + dizi_al). xs DUGUM_TANIMLAYICI
-         * ve dinamik_dizi_mi = 1 ise loop emit edilir. Aksi halde
-         * not supported (stack dizi iteration v2'de). */
+         * (KdlDizi*'a dizi_boyut + dizi_al). Yerel dizi veya yapı alanı;
+         * stack dizi iteration v2'de. */
         case DUGUM_ICIN: {
             const Dugum *koleksiyon = d->veri.icin.koleksiyon;
-            if (!koleksiyon || koleksiyon->tip != DUGUM_TANIMLAYICI) {
-                fprintf(g->out, "  ; icin: koleksiyon tanimlayici degil\n");
+            if (!koleksiyon) return 0;
+            const char *et = NULL;
+            int kol_adres = -1, eleman_metin = 0, eleman_isz = 0;
+            if (koleksiyon->tip == DUGUM_TANIMLAYICI) {
+                LlvmIsim *kol_isim = isim_bul(g,
+                    koleksiyon->veri.tanimlayici.metin,
+                    koleksiyon->veri.tanimlayici.uzunluk);
+                if (!kol_isim || !kol_isim->dinamik_dizi_mi) return 0;
+                kol_adres = kol_isim->reg_no;
+                et = kol_isim->eleman_llvm_tip ? kol_isim->eleman_llvm_tip : "i32";
+                eleman_metin = kol_isim->eleman_metin_mi;
+                eleman_isz = ast_tip_isaretsiz_mi(kol_isim->eleman_tip_ast);
+            } else if (koleksiyon->tip == DUGUM_ERISIM) {
+                /* C6-003: iç içe ve referans köklü alanı bir kez çöz;
+                 * eleman genişliği, metin ve işaretsizlik bilgisi kaybolmasın. */
+                const Dugum *alan_tip = NULL;
+                kol_adres = erisim_lvalue(g, koleksiyon, NULL, &alan_tip);
+                if (kol_adres < 0 || !alan_tip || alan_tip->tip != DUGUM_TIP_DIZI)
+                    return 0;
+                const Dugum *eleman_tip = alan_tip->veri.tip_dizi.eleman_tip;
+                et = ast_tip_to_ir(g, eleman_tip);
+                eleman_metin = ast_tip_metin_mi(eleman_tip);
+                eleman_isz = ast_tip_isaretsiz_mi(eleman_tip);
+            } else {
+                fprintf(g->out, "  ; icin: desteklenmeyen koleksiyon\n");
                 return 0;
             }
-            LlvmIsim *kol_isim = isim_bul(g,
-                koleksiyon->veri.tanimlayici.metin,
-                koleksiyon->veri.tanimlayici.uzunluk);
-            if (!kol_isim || !kol_isim->dinamik_dizi_mi) {
-                fprintf(g->out, "  ; icin: heap dizi degil (v1 sinir)\n");
-                return 0;
-            }
-            const char *et = kol_isim->eleman_llvm_tip
-                ? kol_isim->eleman_llvm_tip : "i32";
             const char *fn_al = "kdl_dizi_al_tam";
             if (strcmp(et, "i64") == 0) fn_al = "kdl_dizi_al_tam64";
             else if (strcmp(et, "ptr") == 0) fn_al = "kdl_dizi_al_ptr";
             /* Load koleksiyon ptr (kdl_dizi*) */
             int kdl_ptr = yeni_reg(g);
             fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n",
-                    kdl_ptr, kol_isim->reg_no);
+                    kdl_ptr, kol_adres);
             /* Boyut al */
             int n_reg = yeni_reg(g);
             fprintf(g->out, "  %%%d = call i32 @kdl_dizi_boyut(ptr %%%d)\n",
@@ -7445,9 +7458,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                       d->veri.icin.degisken_adi_uzunluk,
                       1, x_alloca, et);
             /* [D-449] eleman metin ise dongu degiskeni de metin. */
-            g->isimler->metin_mi = kol_isim->eleman_metin_mi;
+            g->isimler->metin_mi = eleman_metin;
             /* [D-708] eleman dtamN ise dongu degiskeni de isaretsiz (genisletme zext). */
-            g->isimler->isaretsiz = ast_tip_isaretsiz_mi(kol_isim->eleman_tip_ast);
+            g->isimler->isaretsiz = eleman_isz;
             int body_term = blok_uret(g, d->veri.icin.govde);
             scope_cik(g, m);
             if (!body_term) {

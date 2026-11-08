@@ -1,0 +1,9 @@
+// C6-003: dizi alanı döngüsü tüm elemanları tipini koruyarak gezer.
+yapı S { xs: Dizi<dtam8>; }
+işlev main() -> tam32 {
+    değişken s: S = S { xs: [128 olarak dtam8, 203 olarak dtam8, 255 olarak dtam8] };
+    değişken toplam: tam32 = 0;
+    değişken adet: tam32 = 0;
+    için a: s.xs { toplam = toplam + (a olarak tam32); adet = adet + 1; }
+    eğer toplam == 586 ve adet == 3 { ver 42; } ver 1;
+}
