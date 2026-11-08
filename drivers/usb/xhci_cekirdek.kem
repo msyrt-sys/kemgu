@@ -204,7 +204,16 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         değişken i: tam32 = 0; iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); eğer a.yuva == s.yuva { a.ctrl=s.ctrl; a.ctrl_dongu=s.ctrl.dongu; dizi_yaz(s.aygitlar,i,a); } i=i+1; }
         s.evre=100; ver GcIstek::Bitti;
     }
-    eğer s.evre == 900 { s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
+    eğer s.evre == 900 { s.evre=899; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
+    // DW3 döngü bitini gördükten sonra girdiyi yeniden oku; ilk adres yırtılmış olabilir.
+    eğer s.evre == 899 {
+        eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
+        eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay.dongu {
+            s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci olay zaman asimi"); }
+            s.evre=900; ver GcIstek::Bekle(1000);
+        }
+        s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16);
+    }
     eğer s.evre == 901 {
         eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
         eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay.dongu { s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci olay zaman asimi"); } s.evre=900; ver GcIstek::Bekle(1000); }

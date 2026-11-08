@@ -8,11 +8,12 @@ genel yapı SahteNvme {
     cc: tam64; aqa: tam64; asq: tam64; acq: tam64; isq: tam64; icq: tam64;
     aqboy: tam32; iqboy: tam32; aqbas: tam32; iqbas: tam32; aqson: tam32; iqson: tam32;
     aqfaz: mantıksal; iqfaz: mantıksal; aqbekleyen: tam32; iqbekleyen: tam32;
+    yirtik: mantıksal; yirtik_adres: tam64; eski_cid: tam32; yirtik_sayisi: tam32;
     ariza: tam32; bekleme: tam32; yonetim: tam32; gc_sayisi: tam32; flush_sayisi: tam32;
 }
 genel işlev sahte_nvme_yeni() -> SahteNvme {
     değişken bellek: Dizi<dtam8> = bayt_sifir(86016); değişken disk: Dizi<dtam8> = [];
-    ver SahteNvme { taban: 65536, bellek: bellek, disk: disk, ek_disk: [], ek_lba: 0, kapasite: 80000, cc: 1, aqa: 0, asq: 0, acq: 0, isq: 0, icq: 0, aqboy: 0, iqboy: 0, aqbas: 0, iqbas: 0, aqson: 0, iqson: 0, aqfaz: doğru, iqfaz: doğru, aqbekleyen: 0, iqbekleyen: 0, ariza: 0, bekleme: 0, yonetim: 0, gc_sayisi: 0, flush_sayisi: 0 };
+    ver SahteNvme { taban: 65536, bellek: bellek, disk: disk, ek_disk: [], ek_lba: 0, kapasite: 80000, cc: 1, aqa: 0, asq: 0, acq: 0, isq: 0, icq: 0, aqboy: 0, iqboy: 0, aqbas: 0, iqbas: 0, aqson: 0, iqson: 0, aqfaz: doğru, iqfaz: doğru, aqbekleyen: 0, iqbekleyen: 0, yirtik: yanlış, yirtik_adres: 0, eski_cid: 0, yirtik_sayisi: 0, ariza: 0, bekleme: 0, yonetim: 0, gc_sayisi: 0, flush_sayisi: 0 };
 }
 işlev dma_var(s: &değişken SahteNvme, adres: tam64, boy: tam64) -> mantıksal {
     ver adres >= s.taban ve adres-s.taban <= (dizi_boyut(s.bellek) olarak tam64) ve boy >= 0 ve boy <= (dizi_boyut(s.bellek) olarak tam64)-(adres-s.taban);
@@ -91,6 +92,7 @@ işlev kuyruk_isle(s: &değişken SahteNvme, io: mantıksal, yeni_son: tam32) ->
     eğer s.ariza == 4 { faz=değil faz; }
     eğer s.ariza == 5 { cid=(cid+1)&65535; }
     değişken co: tam32 = (cq-s.taban) olarak tam32+son*16;
+    eğer s.yirtik { s.yirtik_adres=cq+(son olarak tam64)*16; s.eski_cid=oku_le16(s.bellek,co+12); }
     değişken dw3: tam64 = (cid olarak tam64)|(durum<<17); eğer faz { dw3=dw3|65536; }
     yaz_le32(s.bellek,co+8,(bas olarak tam64)|((qid olarak tam64)<<16)); yaz_le32(s.bellek,co+12,dw3);
     son=(son+1)%boy;
@@ -123,7 +125,11 @@ genel işlev sahte_nvme_yanit(s: &değişken SahteNvme, i: GcIstek) -> GcYanit {
             değilse {
                 değişken b: Dizi<dtam8> = []; değişken j: tam32 = 0; değişken boy: tam32 = n;
                 eğer s.ariza == 6 ve boy > 0 { boy=boy-1; }
-                iken j < boy { dizi_ekle(b,dizi_al(s.bellek,(a-s.taban) olarak tam32+j)); j=j+1; } y.baytlar=b;
+                iken j < boy { dizi_ekle(b,dizi_al(s.bellek,(a-s.taban) olarak tam32+j)); j=j+1; } // İlk görüntü: yeni faz, henüz görünmeyen eski CID; ikinci okuma tam DMA.
+                eğer s.yirtik ve n == 16 ve a == s.yirtik_adres {
+                    yaz_le16(b,12,s.eski_cid olarak tam64); s.yirtik_adres=0; s.yirtik_sayisi=s.yirtik_sayisi+1;
+                }
+                y.baytlar=b;
             }
         }
         GcIstek::Bekle(us) => { s.bekleme=s.bekleme+1; }

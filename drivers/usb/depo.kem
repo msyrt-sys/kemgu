@@ -82,7 +82,16 @@ işlev aktar_adim(s: &değişken UsbDepo, y: GcYanit) -> GcIstek {
         s.t=3; ver GcIstek::BellekYaz(taban,b);
     }
     eğer s.t == 3 { s.t=4; ver GcIstek::Yaz32(s.zil,s.hedef olarak tam64); }
-    eğer s.t == 4 veya s.t == 6 { s.t=5; ver GcIstek::BellekOku(s.dma+256+(s.olay_bas olarak tam64)*16,16); }
+    eğer s.t == 4 veya s.t == 6 { s.t=9; ver GcIstek::BellekOku(s.dma+256+(s.olay_bas olarak tam64)*16,16); }
+    // Döngü biti yayımlandıktan sonra BOT olayını yeniden örnekle.
+    eğer s.t == 9 {
+        eğer dizi_boyut(y.baytlar) != 16 { ver usb_hata(s,"usb kisa olay"); }
+        eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay_dongu {
+            s.bekleme=s.bekleme+1; eğer s.bekleme >= 1000 { ver usb_hata(s,"usb zaman asimi"); }
+            s.t=6; ver GcIstek::Bekle(1000);
+        }
+        s.t=5; ver GcIstek::BellekOku(s.dma+256+(s.olay_bas olarak tam64)*16,16);
+    }
     eğer s.t == 5 {
         eğer dizi_boyut(y.baytlar) != 16 { ver usb_hata(s,"usb kisa olay"); }
         eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay_dongu {

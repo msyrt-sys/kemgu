@@ -1,0 +1,39 @@
+// QEMU 8.2.2 ham ölçüm: CAP=[0x1000040,0x8001040,0xf,0,0x87001,0x2000,0x1000,0].
+// Python: [int(x,16) for x in ['1000040','8001040','f','0','87001','2000','1000','0']].
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_yeni, xhci_adim, xhci_giris, xhci_kontrol, xhci_depo_hazir };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_le32, yaz_le32, yaz_le64 };
+// Python: (1<<24)|(3<<16)|(32<<10)|1 = 17006593; adresler 0x220000/0x220010.
+// İlk görüntünün DW3'ü yeni, ilk sekiz baytı eski. İkinci okuma aygıtın tam girdisi.
+işlev dene(kisa: mantıksal, kalici: mantıksal, faz: mantıksal) -> mantıksal {
+    eşleş xhci_yeni(1048576,16384) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: XhciDurum = v; s.evre=900; s.bek_tur=32; s.bek_adres=2228224; s.bek_uc=3; s.yuva=1; s.boy=16; s.giris=doğru;
+        değişken y: GcYanit = gc_bos();
+        eşleş xhci_adim(&değişken s,y) { GcIstek::BellekOku(a,n) => { eğer a != 1056768 veya n != 16 { ver yanlış; } } _ => { ver yanlış; } }
+        y.baytlar=bayt_sifir(16); yaz_le64(y.baytlar,0,2228240); yaz_le32(y.baytlar,8,16777216); yaz_le32(y.baytlar,12,17006593);
+        eğer değil faz { yaz_le32(y.baytlar,12,17006592); }
+        eşleş xhci_adim(&değişken s,y) {
+            GcIstek::Bekle(us) => { ver değil faz ve s.olay.bas == 0; }
+            GcIstek::BellekOku(a,n) => { eğer değil faz veya a != 1056768 veya n != 16 veya s.olay.bas != 0 { ver yanlış; } }
+            _ => { ver yanlış; }
+        }
+        eğer değil kalici { yaz_le64(y.baytlar,0,2228224); }
+        eğer kisa { y.baytlar=bayt_sifir(15); }
+        eşleş xhci_adim(&değişken s,y) {
+            GcIstek::Hata(e) => { ver kisa veya kalici; }
+            GcIstek::Yaz64(a,n) => { ver değil kisa ve değil kalici ve s.olay.bas == 1 ve s.gercek_boy == 16; }
+            _ => { ver yanlış; }
+        }
+    } }
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil dene(yanlış,yanlış,doğru) { h=h+1; }
+    eğer değil dene(doğru,yanlış,doğru) { h=h+1; }
+    eğer değil dene(yanlış,doğru,doğru) { h=h+1; }
+    eğer değil dene(yanlış,yanlış,yanlış) { h=h+1; }
+    ver h;
+}
