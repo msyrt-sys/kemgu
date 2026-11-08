@@ -1,0 +1,41 @@
+// C6-004: doğrudan yapı dizisi dönüşünde tüm alanlar ve eleman genişliği korunur.
+yapı R { t: tam32; a: tam64; v: tam64; n: tam32; h: tam64; y: tam64; b: Dizi<dtam8>; }
+işlev kayitlar() -> Dizi<R> {
+    ver [
+        R { t: 11, a: 8589934595, v: 17179869203, n: 13, h: 34359738409, y: 68719476797, b: [128 olarak dtam8] },
+        R { t: 23, a: 8589934599, v: 17179869213, n: 31, h: 34359738411, y: 68719476803, b: [203 olarak dtam8] },
+        R { t: 47, a: 8589934609, v: 17179869221, n: 53, h: 34359738427, y: 68719476807, b: [255 olarak dtam8] }
+    ];
+}
+işlev main() -> tam32 {
+    değişken xs: Dizi<R> = kayitlar();
+    eğer dizi_boyut(xs) != 3 { ver 1; }
+    değişken r0: R = dizi_al(xs, 0);
+    eğer r0.t != 11 { ver 2; }
+    eğer r0.a != 8589934595 { ver 2; }
+    eğer r0.v != 17179869203 { ver 2; }
+    eğer r0.n != 13 { ver 2; }
+    eğer r0.h != 34359738409 { ver 2; }
+    eğer r0.y != 68719476797 { ver 2; }
+    eğer dizi_boyut(r0.b) != 1 { ver 3; }
+    eğer (dizi_al(r0.b, 0) olarak tam32) != 128 { ver 4; }
+    değişken r1: R = dizi_al(xs, 1);
+    eğer r1.t != 23 { ver 2; }
+    eğer r1.a != 8589934599 { ver 2; }
+    eğer r1.v != 17179869213 { ver 2; }
+    eğer r1.n != 31 { ver 2; }
+    eğer r1.h != 34359738411 { ver 2; }
+    eğer r1.y != 68719476803 { ver 2; }
+    eğer dizi_boyut(r1.b) != 1 { ver 3; }
+    eğer (dizi_al(r1.b, 0) olarak tam32) != 203 { ver 4; }
+    değişken r2: R = dizi_al(xs, 2);
+    eğer r2.t != 47 { ver 2; }
+    eğer r2.a != 8589934609 { ver 2; }
+    eğer r2.v != 17179869221 { ver 2; }
+    eğer r2.n != 53 { ver 2; }
+    eğer r2.h != 34359738427 { ver 2; }
+    eğer r2.y != 68719476807 { ver 2; }
+    eğer dizi_boyut(r2.b) != 1 { ver 3; }
+    eğer (dizi_al(r2.b, 0) olarak tam32) != 255 { ver 4; }
+    ver 42;
+}
