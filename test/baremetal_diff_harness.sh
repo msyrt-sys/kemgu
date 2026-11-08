@@ -138,6 +138,7 @@ kem_kesif|runtime/mimari/arm64/kem_kesif.kem
 kem_kanal_abi|runtime/kem_kanal_abi.kem
 kem_os_algoritma|test/ornekler/kem_os_algoritma.kem
 kem_heap|runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem
+kem_dizi_genis|runtime/kem_dizi_genis.kem runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem
 kem_bariyer|runtime/mimari/arm64/kem_bariyer.kem
 kem_virtio_blk|runtime/kem_virtio_blk.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem"
 

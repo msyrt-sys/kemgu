@@ -2684,3 +2684,18 @@
   ENTEGRASYON (Spark): test_tumu rc=0, FIXPOINT, checker_diff 304/304 (0 muaf), codegen_diff 198/198,
   modul_codegen 59/59, yapi_diff 176/176, surucu_diff 17/17, kopru 117/117, ASan PASS=131 FAIL=0,
   qtest nvme+ahci GECTI (F005'in yeni adlari gercek QEMU surucu programlarinda da sinandi).
+- [ ] E4j [S] NVMe tamamlama girdisi BELIRLENIMCI okuma — bkz. D-745.
+- 2026-11-08 D-745: BARE-METAL x86 NVMe — Codex'in sans-IO NVMe surucusu GERCEK x86 cekirdeginde (QEMU q35,
+  PVH, SeaBIOS BAR atar), gercek port G/C + MMIO + DMA ile. YENI: runtime/kem_dizi_genis.kem (kem_heap'in
+  atladigi Dizi tam64/ptr/yapi + metin_birlestir/kod_metin/tam_metin, saf KEMGU, C kdl_dizi.inc ile
+  birebir), runtime/mimari/x86_64/kem_pci_hw.kem (32-bit port G/C — H1f — + volatile MMIO + fiziksel
+  bellek + isa-debug-exit), test/ornekler/kem_os_x86_nvme.kem (PCI tarama, firmware BAR'i, bm_yurut),
+  test/bm_x86_nvme_harness.sh (20 acilis + seri cikti + QEMU rc 33 + imaj kahini). BULGU — YIRTIK
+  OKUMA: ilk acilis "nvme tamamlanma kimligi" verdi. "Cop RAM" hipotezi OLCULDU ve COKTU (DMA bolgesi
+  acilista tamamen sifir); kok: bayt bayt BellekOku, aygit (QEMU'da ayri is parcacigi) girdiyi 8
+  baytlik yazinca ESKI CID + YENI faz biti. Duzeltme yurutucude hizali 8 bayt + AZALAN sira. OLCUM:
+  bayt bayt 2/30 acilis kirmizi (~%7), duzeltilmis 100/100 + 30/30. qtest bu yarisi GOREMEZ (her
+  istek ayri tur). Sabotaj 5 acilista SESSIZ kaldi (%7'yi 5 denemede yakalama ~%30) -> varsayilan
+  20 acilis; kapi bu sinif icin OLASILIKSAL, belirlenimci koruma E4j. Sozlesme drivers/ortak/gc.kem'e
+  yazildi. Kapilar: bm_x86_nvme 20/20, qtest nvme+ahci, kopru 117/117, check_kapisi 0 RED (+birlesik
+  NVMe birimi), baremetal_diff 23/23 (+kem_dizi_genis birimi 52 islev C=self aarch64), kem_os_x86 GECTI.

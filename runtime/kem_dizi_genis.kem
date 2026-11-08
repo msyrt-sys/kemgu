@@ -1,0 +1,208 @@
+// kem_dizi_genis.kem — [D-745] SAF-.kem çıplak runtime genişlemesi: kem_heap.kem'in
+// bilerek ATLADIĞI (kem_os kullanmıyordu) `Dizi` tam64/ptr/yapı varyantları + iki
+// metin yerleşiği. Sans-IO sürücüler (drivers/nvme, ahci, usb) bare-metal çekirdekte
+// bunları çağırır (ölçüldü: NVMe çekirdeğinin IR'ı `kdl_dizi_*_tam64`, `_yapi`,
+// `kdl_metin_birlestir`, `kdl_kod_metin` istiyor). Düzen ve davranış C
+// `runtime/kdl_dizi.inc` / `kdl_runtime.c` ile BİREBİR:
+//   KdlDizi { veri@0(ptr), boyut@8(i32), kapasite@12(i32), eleman_byte@16(i32) }
+//   _tam64 / _ptr adımı 8 bayt; _yapi adımı d->eleman_byte (≤ 0 ise 1).
+// Bağımlılıklar AYNI derleme biriminde (CAT): kem_heap.kem'den kem_dizi_buyut,
+// kdl_dizi_oob, kdl_bolge_ayir, kdl_global_bolge_al, memcpy.
+
+çıplak işlev kem_dizi_alan32(d: *tam8, ofs: tam64) -> tam32 {
+    değişken p: *tam32 = ((d olarak tam64) + ofs) olarak *tam32;
+    ver *p;
+}
+
+çıplak işlev kem_dizi_veri(d: *tam8) -> tam64 {
+    değişken vp: *tam64 = (d olarak tam64) olarak *tam64;
+    ver *vp;
+}
+
+// Ortak: dolu ise büyüt (C ile aynı: 4, sonra ikiye katla); eleman adresini döndür.
+çıplak işlev kem_dizi_yer_ac(bolge: *tam8, d: *tam8, eb: tam64) -> tam64 {
+    değişken boyut: tam32 = kem_dizi_alan32(d, 8);
+    değişken kapasite: tam32 = kem_dizi_alan32(d, 12);
+    eğer boyut == kapasite {
+        değişken yk: tam32 = 4;
+        eğer kapasite != 0 { yk = kapasite * 2; }
+        kem_dizi_buyut(bolge, d, yk, eb);
+    }
+    ver kem_dizi_veri(d) + (boyut olarak tam64) * eb;   // büyüme sonrası TAZE veri
+}
+
+çıplak işlev kem_dizi_boyut_artir(d: *tam8) {
+    değişken bp: *tam32 = ((d olarak tam64) + 8) olarak *tam32;
+    *bp = *bp + 1;
+}
+
+// Sınır denetimi (D-069): i < 0 veya i >= boyut → kdl_dizi_oob (temiz durma).
+çıplak işlev kem_dizi_sinir(d: *tam8, i: tam32) {
+    değişken boyut: tam32 = kem_dizi_alan32(d, 8);
+    eğer i < 0 { kdl_dizi_oob(i, boyut); }
+    eğer i >= boyut { kdl_dizi_oob(i, boyut); }
+}
+
+// ---- tam64 ----
+çıplak işlev kdl_dizi_ekle_tam64(bolge: *tam8, d: *tam8, deger: tam64) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken p: *tam64 = kem_dizi_yer_ac(bolge, d, 8) olarak *tam64;
+    *p = deger;
+    kem_dizi_boyut_artir(d);
+}
+
+çıplak işlev kdl_dizi_al_tam64(d: *tam8, i: tam32) -> tam64 {
+    eğer (d olarak tam64) == 0 { ver 0; }
+    kem_dizi_sinir(d, i);
+    değişken p: *tam64 = (kem_dizi_veri(d) + (i olarak tam64) * 8) olarak *tam64;
+    ver *p;
+}
+
+çıplak işlev kdl_dizi_yaz_tam64(d: *tam8, i: tam32, deger: tam64) {
+    eğer (d olarak tam64) == 0 { ver; }
+    kem_dizi_sinir(d, i);
+    değişken p: *tam64 = (kem_dizi_veri(d) + (i olarak tam64) * 8) olarak *tam64;
+    *p = deger;
+}
+
+// ---- ptr (metin, iç içe dizi, yapı işaretçisi) ----
+çıplak işlev kdl_dizi_ekle_ptr(bolge: *tam8, d: *tam8, deger: *tam8) {
+    eğer (d olarak tam64) == 0 { ver; }
+    değişken p: *tam64 = kem_dizi_yer_ac(bolge, d, 8) olarak *tam64;
+    *p = deger olarak tam64;
+    kem_dizi_boyut_artir(d);
+}
+
+çıplak işlev kdl_dizi_al_ptr(d: *tam8, i: tam32) -> *tam8 {
+    eğer (d olarak tam64) == 0 { ver 0 olarak *tam8; }
+    kem_dizi_sinir(d, i);
+    değişken p: *tam64 = (kem_dizi_veri(d) + (i olarak tam64) * 8) olarak *tam64;
+    değişken v: tam64 = *p;
+    ver v olarak *tam8;
+}
+
+çıplak işlev kdl_dizi_yaz_ptr(d: *tam8, i: tam32, deger: *tam8) {
+    eğer (d olarak tam64) == 0 { ver; }
+    kem_dizi_sinir(d, i);
+    değişken p: *tam64 = (kem_dizi_veri(d) + (i olarak tam64) * 8) olarak *tam64;
+    *p = deger olarak tam64;
+}
+
+// ---- yapı (by-value, eleman_byte kadar memcpy) ----
+çıplak işlev kem_dizi_eb(d: *tam8) -> tam64 {
+    değişken eb: tam32 = kem_dizi_alan32(d, 16);
+    eğer eb <= 0 { ver 1; }
+    ver eb olarak tam64;
+}
+
+çıplak işlev kdl_dizi_ekle_yapi(bolge: *tam8, d: *tam8, kaynak: *tam8) {
+    eğer (d olarak tam64) == 0 { ver; }
+    eğer (kaynak olarak tam64) == 0 { ver; }
+    değişken eb: tam64 = kem_dizi_eb(d);
+    değişken hedef: tam64 = kem_dizi_yer_ac(bolge, d, eb);
+    memcpy(hedef olarak *tam8, kaynak, eb);
+    kem_dizi_boyut_artir(d);
+}
+
+çıplak işlev kdl_dizi_al_yapi(d: *tam8, i: tam32, dst: *tam8) {
+    eğer (d olarak tam64) == 0 { ver; }
+    eğer (dst olarak tam64) == 0 { ver; }
+    kem_dizi_sinir(d, i);
+    değişken eb: tam64 = kem_dizi_eb(d);
+    memcpy(dst, (kem_dizi_veri(d) + (i olarak tam64) * eb) olarak *tam8, eb);
+}
+
+çıplak işlev kdl_dizi_yaz_yapi(d: *tam8, i: tam32, kaynak: *tam8) {
+    eğer (d olarak tam64) == 0 { ver; }
+    eğer (kaynak olarak tam64) == 0 { ver; }
+    kem_dizi_sinir(d, i);
+    değişken eb: tam64 = kem_dizi_eb(d);
+    memcpy((kem_dizi_veri(d) + (i olarak tam64) * eb) olarak *tam8, kaynak, eb);
+}
+
+// ---- metin ----
+çıplak işlev kem_strlen(s: *tam8) -> tam64 {
+    eğer (s olarak tam64) == 0 { ver 0; }
+    değişken n: tam64 = 0;
+    değişken a: tam64 = s olarak tam64;
+    iken doğru {
+        değişken p: *dtam8 = (a + n) olarak *dtam8;
+        eğer *p == (0 olarak dtam8) { ver n; }
+        n = n + 1;
+    }
+    ver n;
+}
+
+// C ile aynı: NULL → "" sayılır; sonuç "sızan" genel bölgeden (C kdl_sizan_al).
+çıplak işlev kdl_metin_birlestir(a: *tam8, b: *tam8) -> *tam8 {
+    değişken na: tam64 = kem_strlen(a);
+    değişken nb: tam64 = kem_strlen(b);
+    değişken yeni: *tam8 = kdl_bolge_ayir(kdl_global_bolge_al(), na + nb + 1);
+    eğer (yeni olarak tam64) == 0 { ver yeni; }
+    eğer na > 0 { memcpy(yeni, a, na); }
+    eğer nb > 0 { memcpy(((yeni olarak tam64) + na) olarak *tam8, b, nb); }
+    değişken son: *dtam8 = ((yeni olarak tam64) + na + nb) olarak *dtam8;
+    *son = 0 olarak dtam8;
+    ver yeni;
+}
+
+çıplak işlev kem_bayt_yaz(adres: tam64, v: tam32) {
+    değişken p: *dtam8 = adres olarak *dtam8;
+    *p = ((v & 255) olarak tam32) olarak dtam8;
+}
+
+// UTF-8 kodla (C kdl_kod_metin ile aynı). Geçersiz (0, > 0x10FFFF, vekil aralığı)
+// → boş metin (D-458: gömülü NUL temsil edilemez).
+çıplak işlev kdl_kod_metin(kod: tam32) -> *tam8 {
+    değişken out: *tam8 = kdl_bolge_ayir(kdl_global_bolge_al(), 8);
+    eğer (out olarak tam64) == 0 { ver out; }
+    değişken a: tam64 = out olarak tam64;
+    eğer kod < 1 veya kod > 1114111 veya (kod >= 55296 ve kod <= 57343) {
+        kem_bayt_yaz(a, 0); ver out;
+    }
+    değişken n: tam64 = 0;
+    eğer kod < 128 { kem_bayt_yaz(a, kod); n = 1; }
+    değilse eğer kod < 2048 {
+        kem_bayt_yaz(a, 192 | (kod >> 6)); kem_bayt_yaz(a + 1, 128 | (kod & 63)); n = 2;
+    } değilse eğer kod < 65536 {
+        kem_bayt_yaz(a, 224 | (kod >> 12)); kem_bayt_yaz(a + 1, 128 | ((kod >> 6) & 63));
+        kem_bayt_yaz(a + 2, 128 | (kod & 63)); n = 3;
+    } değilse {
+        kem_bayt_yaz(a, 240 | (kod >> 18)); kem_bayt_yaz(a + 1, 128 | ((kod >> 12) & 63));
+        kem_bayt_yaz(a + 2, 128 | ((kod >> 6) & 63)); kem_bayt_yaz(a + 3, 128 | (kod & 63)); n = 4;
+    }
+    kem_bayt_yaz(a + n, 0);
+    ver out;
+}
+
+// tam64 → ondalık metin (C kdl_tam_metin ile aynı biçim: "-" + basamaklar).
+// En küçük değer (-2^63) işaretsiz büyüklükle işlenir; taşma yok.
+çıplak işlev kdl_tam_metin(v: tam64) -> *tam8 {
+    değişken out: *tam8 = kdl_bolge_ayir(kdl_global_bolge_al(), 24);
+    eğer (out olarak tam64) == 0 { ver out; }
+    değişken a: tam64 = out olarak tam64;
+    değişken u: dtam64 = v olarak dtam64;
+    değişken n: tam64 = 0;
+    eğer v < 0 { kem_bayt_yaz(a, 45); n = 1; u = (0 olarak dtam64) - u; }
+    // Basamakları ters yaz, sonra çevir.
+    değişken bas: tam64 = n;
+    eğer u == (0 olarak dtam64) { kem_bayt_yaz(a + n, 48); n = n + 1; }
+    iken u != (0 olarak dtam64) {
+        değişken d: dtam64 = u % (10 olarak dtam64);
+        kem_bayt_yaz(a + n, 48 + (d olarak tam32));
+        n = n + 1;
+        u = u / (10 olarak dtam64);
+    }
+    değişken i: tam64 = bas;
+    değişken j: tam64 = n - 1;
+    iken i < j {
+        değişken pi: *dtam8 = (a + i) olarak *dtam8;
+        değişken pj: *dtam8 = (a + j) olarak *dtam8;
+        değişken t: dtam8 = *pi;
+        *pi = *pj;
+        *pj = t;
+        i = i + 1; j = j - 1;
+    }
+    kem_bayt_yaz(a + n, 0);
+    ver out;
+}
