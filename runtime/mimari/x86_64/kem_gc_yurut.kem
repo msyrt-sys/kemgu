@@ -79,4 +79,3 @@ işlev bm_pci_bul(sinif: tam32, alt_sinif: tam32, prog_if: tam32) -> sonuç<tam3
     }
     ver hata("PCI aygiti bulunamadi");
 }
-
