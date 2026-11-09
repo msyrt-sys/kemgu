@@ -1,0 +1,116 @@
+// kem_os_x86_ekran.kem — [D-748] BARE-METAL EKRAN v0: QEMU std VGA (PCI 1234:1111) Bochs
+// DISPI ile 640x480x32 doğrusal çerçeve tamponu + PSF yazı tipiyle Türkçe metin.
+// Kaynak: QEMU docs/specs/standard-vga.rst — BAR0 çerçeve tamponu, BAR2 4 KB MMIO; DISPI
+// yazmaçları MMIO 0x500 + indeks*2 (16 bit). Yazmaç indeksleri ve ENABLE bitleri o
+// belgede YOK → çekirdek geri okur ve seriye basar; kâhin QMP screendump boyutunu ve
+// piksellerini bağımsız Python çizimiyle BİREBİR karşılaştırır (test/bm_x86_ekran_harness.sh).
+// Cerceve (Dizi<dtam8>, eleman başına 4 bayt) KULLANILMAZ: 640x480x4 = 1,2 MB çerçeve
+// 4,9 MB heap yerdi. Glif bitleri drivers/ekran/psf.kem'den okunur, piksel doğrudan MMIO.
+kullan drivers::ekran::psf::{ PsfFont, psf_coz, glif_indeksi };
+kullan drivers::ortak::bayt::{ oku_u8 };
+kullan drivers::ortak::utf8::{ utf8_coz };
+kullan tests::drivers::ekran::veri::psf_gercek::{ gercek_font };
+
+sabit EK_GEN: tam32 = 640;
+sabit EK_YUK: tam32 = 480;
+sabit EK_ARKA: tam64 = 1056832;      // 0x102040
+sabit EK_ON: tam64 = 16777215;       // 0xFFFFFF
+sabit EK_SARI: tam64 = 16766976;     // 0xFFD800
+
+çıplak işlev dispi_yaz(mmio: tam64, indeks: tam32, v: tam32) {
+    değişken p: *dtam16 = (mmio + 1280 + ((indeks * 2) olarak tam64)) olarak *dtam16;
+    *p = v olarak dtam16;
+}
+çıplak işlev dispi_oku(mmio: tam64, indeks: tam32) -> tam32 {
+    değişken p: *dtam16 = (mmio + 1280 + ((indeks * 2) olarak tam64)) olarak *dtam16;
+    değişken v: dtam16 = *p;
+    ver v olarak tam32;
+}
+çıplak işlev lfb_doldur(fb: tam64, n: tam64, renk: tam64) {
+    değişken i: tam64 = 0;
+    iken i < n { değişken p: *dtam32 = (fb + i * 4) olarak *dtam32; *p = renk olarak dtam32; i = i + 1; }
+}
+çıplak işlev lfb_px(fb: tam64, adim: tam64, x: tam32, y: tam32, renk: tam64) {
+    eğer x < 0 veya y < 0 veya x >= EK_GEN veya y >= EK_YUK { ver; }
+    değişken p: *dtam32 = (fb + (y olarak tam64) * adim + (x olarak tam64) * 4) olarak *dtam32;
+    *p = renk olarak dtam32;
+}
+
+// drivers/ekran/yazi.kem kod_ciz ile AYNI geri düşme: glif → U+FFFD → '?' → arka dolgu.
+işlev ek_glif(f: PsfFont, kod: tam32) -> tam32 {
+    eşleş glif_indeksi(f, kod) { değer(i) => { ver i; } hiç => { } }
+    eşleş glif_indeksi(f, 65533) { değer(i) => { ver i; } hiç => { } }
+    eşleş glif_indeksi(f, 63) { değer(i) => { ver i; } hiç => { } }
+    ver -1;
+}
+işlev ek_kod(fb: tam64, adim: tam64, f: PsfFont, x: tam32, y: tam32, kod: tam32, on: tam64) {
+    değişken g: tam32 = ek_glif(f, kod);
+    değişken sb: tam32 = (f.genislik + 7) / 8;
+    değişken r: tam32 = 0;
+    iken r < f.yukseklik {
+        değişken c: tam32 = 0;
+        iken c < f.genislik {
+            değişken renk: tam64 = EK_ARKA;
+            eğer g >= 0 {
+                değişken b: tam32 = oku_u8(f.veri, f.veri_ofseti + g * f.glif_bayt + r * sb + c / 8);
+                eğer (b & (128 >> (c % 8))) != 0 { renk = on; }
+            }
+            lfb_px(fb, adim, x + c, y + r, renk);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+}
+işlev ek_metin(fb: tam64, adim: tam64, f: PsfFont, x: tam32, y: tam32, s: metin, on: tam64) {
+    değişken kodlar: Dizi<tam32> = utf8_coz(s);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(kodlar) { ek_kod(fb, adim, f, x + i * f.genislik, y, dizi_al(kodlar, i), on); i = i + 1; }
+}
+
+işlev ek_calis() -> sonuç<metin, metin> {
+    değişken bdf: tam32 = 0;
+    eşleş bm_pci_bul(3, 0, 0) { hata(e) => { ver hata("VGA yok"); } tamam(a) => { bdf = a; } }
+    eğer (kem_pci_oku32(bdf, 0) & 4294967295) != 286331444 { ver hata("1234:1111 degil"); }
+    değişken fb: tam64 = kem_pci_oku32(bdf, 16) & 4294967280;
+    değişken mmio: tam64 = kem_pci_oku32(bdf, 24) & 4294967280;
+    bm_yaz(metin_birlestir(metin_birlestir("EKRAN fb=", tam_metin(fb)), metin_birlestir(" mmio=", tam_metin(mmio))));
+    eğer fb < 3221225472 veya mmio < 3221225472 { ver hata("BAR UC penceresi disinda"); }
+    kem_pci_yaz32(bdf, 4, kem_pci_oku32(bdf, 4) | 2);
+    değişken id: tam32 = dispi_oku(mmio, 0);
+    dispi_yaz(mmio, 4, 0);
+    dispi_yaz(mmio, 1, EK_GEN); dispi_yaz(mmio, 2, EK_YUK); dispi_yaz(mmio, 3, 32);
+    // ENABLE = 0x41 (etkin | doğrusal tampon). ⚠ QEMU VRAM'i BAR0'dan bit 0x40'tan bağımsız
+    // gösterir → kâhin bu biti ÖLÇEMEZ (sabotaj S193 sessiz kaldı, D-748). Çözünürlük ve
+    // derinlik ise screendump boyutu + piksellerle ölçülür (S193b kırmızı).
+    dispi_yaz(mmio, 4, 65);
+    değişken vw: tam32 = dispi_oku(mmio, 6);
+    değişken r: metin = metin_birlestir("DISPI id=", tam_metin(id olarak tam64));
+    r = metin_birlestir(metin_birlestir(r, " x="), tam_metin(dispi_oku(mmio, 1) olarak tam64));
+    r = metin_birlestir(metin_birlestir(r, " y="), tam_metin(dispi_oku(mmio, 2) olarak tam64));
+    r = metin_birlestir(metin_birlestir(r, " bpp="), tam_metin(dispi_oku(mmio, 3) olarak tam64));
+    r = metin_birlestir(metin_birlestir(r, " vw="), tam_metin(vw olarak tam64));
+    bm_yaz(r);
+    eğer id < 45248 veya id > 45253 { ver hata("DISPI kimligi beklenmedik"); }
+    değişken adim: tam64 = (vw olarak tam64) * 4;
+    lfb_doldur(fb, (vw olarak tam64) * (EK_YUK olarak tam64), EK_ARKA);
+    eşleş psf_coz(gercek_font()) {
+        hata(e) => { ver hata(metin_birlestir("psf ", e)); }
+        tamam(f) => {
+            değişken sy: tam32 = f.yukseklik + 4;
+            ek_metin(fb, adim, f, 8, 8, "KEMGU-OS ekran v0", EK_SARI);
+            ek_metin(fb, adim, f, 8, 8 + sy, "Merhaba Dünya — ğüşıöç İ", EK_ON);
+            ek_metin(fb, adim, f, 8, 8 + 2 * sy, "ĞÜŞİÖÇ ğüşıöç 0123456789", EK_ON);
+            ver tamam(metin_birlestir("font=", tam_metin(f.genislik olarak tam64)));
+        }
+    }
+}
+
+işlev main() -> tam32 {
+    bm_yaz("KEMGU-OS x86 ekran v0");
+    eşleş ek_calis() {
+        hata(e) => { bm_yaz(metin_birlestir("EKRAN HATA ", e)); kem_qemu_cik(1); }
+        tamam(m) => { bm_yaz(metin_birlestir("EKRAN_HAZIR ", m)); }
+    }
+    iken doğru { kem_bekle_us(1000); }
+    ver 0;
+}
