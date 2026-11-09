@@ -2765,3 +2765,15 @@
   dizi-elemani isaretsizligi fn_reisz ile esles baglamasina tasindi. C8-002 self LINK-RED: tam64
   yapi alanina negatif literal; alan genisligine int_uydur. Fikstur cg_sonuc_mantiksal_yuva +
   cg_sonuc_dizi_isaretsiz.
+- 2026-11-09 D-748: BARE-METAL EKRAN v0 (yol haritasi H4g + H4j). QEMU std VGA (1234:1111) Bochs DISPI
+  ile 640x480x32 dogrusal cerceve tamponu; drivers/ekran/psf.kem + Codex'in gercek 8x8 Turkce fontu.
+  Sabitler QEMU'nun kendi belgesinden (standard-vga.rst) dogrulandi; belgede olmayan DISPI indeksleri
+  cekirdek tarafindan GERI OKUNUP seriye basiliyor (id=0xB0C5 x=640 y=480 bpp=32). Cerceve
+  (Dizi<dtam8>, eleman basina 4 bayt) KULLANILMADI: 1,2 MB cerceve 4,9 MB heap yerdi; glif bitleri
+  dogrudan MMIO'ya yaziliyor. KAHIN tests/qemu/bm_ekran.py: QMP screendump -> PPM; beklenen goruntu
+  KEMGU'dan BAGIMSIZ (font baytlari fikstur kaynagindan regex, PSF ayristirma + glif geri dusme
+  Python'da yeniden yazildi); 307200 pikselin TAMAMI birebir, 5 acilis. Turkce glif yoklugu assert
+  (kahin yalniz geri dusmeyi olcmesin). Sabotaj: S192 glif bit sirasi -> 1534 piksel farkli · S194
+  Turkce->ASCII -> 114 piksel · S193b x=800 -> "mod 800x480". S193 (ENABLE'dan LFB bitini sil)
+  SESSIZ: QEMU VRAM'i BAR0'dan bitten bagimsiz gosterir -> bu bit QEMU'da OLCULEMEZ, belgelendi.
+

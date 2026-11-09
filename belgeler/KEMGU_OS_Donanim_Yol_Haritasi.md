@@ -149,7 +149,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       → tek kod yolu). Piksel biçimi (RGB/BGR, 32/24 bpp), pitch.
 - [ ] **H4b [S] Framebuffer belleğini yazma-birleştirmeli/önbelleksiz eşle** (PAT).
       Ölç: önbellekli eşlemede ekranda artık görüntü kalıyor mu.
-- [ ] **H4c [M] Bit eşlem yazı tipi** (8×16, PSF2 biçimi gömülü). **Türkçe
+- [ ] **H4c [M] (KISMEN D-748: test yazı tipi 8×8 Lat sistem fontu, Türkçe harfler var; 8×16 + kutu çizim + çekirdeğe GÖMÜLÜ font kaldı) Bit eşlem yazı tipi** (8×16, PSF2 biçimi gömülü). **Türkçe
       karakterler zorunlu:** ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü + ASCII + kutu çizim.
       Kanıt: tüm Türkçe harfler ekranda doğru.
 - [ ] **H4d [M] Metin konsolu:** imleç, satır sonu, kaydırma, sekme, renk (ANSI
@@ -157,8 +157,12 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H4e [S] Çift çıktı:** her `yazdir` hem seriye hem ekrana; seri yoksa yalnız ekran.
 - [ ] **H4f [S] Panik ekranı:** kırmızı zemin, panik mesajı, son 20 log satırı,
       yazmaç dökümü. (Seri yokken tek teşhis aracı budur.)
-- [ ] **H4g [M] Kapı: ekran görüntüsü karşılaştırması.** QEMU monitörü `screendump`
+- [x] **H4g [M] ✓ D-748 (`calistir_bm_x86_ekran`: 640×480 tüm pikseller bağımsız Python çizimiyle BİREBİR, 5 açılış; sabotaj: glif bit sırası, Türkçe→ASCII, çözünürlük KIRMIZI). Kapı: ekran görüntüsü karşılaştırması.** QEMU monitörü `screendump`
       → PPM → bilinen bölgenin piksel özeti. Sabotaj: yazı tipinde `ğ` glifini boz → kırmızı.
+- [x] **H4j [M] ✓ D-748 QEMU std VGA (PCI 1234:1111) + Bochs DISPI çerçeve tamponu** (MMIO BAR2
+      0x500+indeks*2; QEMU docs/specs/standard-vga.rst). Gerçek PC yolu H4a (GOP/multiboot2
+      etiketi) — orada çekirdek modu AYARLAMAZ, firmware'in verdiğini kullanır; çizim kodu ortak.
+      ⚠ ENABLE'ın doğrusal-tampon biti (0x40) QEMU'da ölçülemez (VRAM BAR0'dan bitten bağımsız görünür).
 - [ ] **H4h [S] Performans:** tam ekran kaydırma süresi ölç (çift tampon gerekiyor mu?).
 - [ ] **H4i [S] Çekirdek log halkası** (son N KB) + ekranda `log` komutu.
 
