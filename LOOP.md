@@ -263,6 +263,13 @@
       (dizi_yaz ile yerinde; sans-IO GcYanit yanitini cagiranin tamponuna yaz); (b) dil: alan
       yeniden atanirken eski degerin bolgesini birakan sahiplik; (c) donemsel "durum kopyala +
       eski bolgeyi birak". (a) yalniz surucu isi, (b)/(c) dil yuzeyi -> Mehmet.
+      ⚠ (a) OLCULDU VE YETMEZ (D-747 sonrasi, Mehmet (a)'yi secti): cagri SONUCU daima cagiranin
+      %rho'suna gidiyor — durum TASIMAYAN, sonucu yalniz yerelde okuyan dongude bile (`sur_c`). Zincir
+      main'e = kuresel bolgeye ulasir; kopyalamak hicbir seyi degistirmez. Dar derleyici onarimi
+      ("hapsedilmis cagri sonucu ρ_yerel'e") da kabugu KAPATMAZ: ky_confined degeri ilk alan
+      erisiminde (`y.baytlar`) ve `eşleş` skrutini olunca KACMIS sayar; sicak yol GcYanit/GcIstek.
+      Gercek kapanis = alan/esles turevlerini izleyen escape v3 VEYA (b)/(c). ERTELENDI (~3 KB/tus,
+      16 MB'ta ~5000 tus; kabuk v0 icin kabul).
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
