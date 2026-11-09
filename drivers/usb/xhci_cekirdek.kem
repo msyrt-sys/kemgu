@@ -39,19 +39,17 @@ işlev bekle(s: &değişken XhciDurum, oku: GcIstek) -> GcIstek {
 }
 işlev komut_ozel(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, bayrak: tam64, sonraki: tam32) -> sonuç<mantıksal,metin> {
     s.bek_adres=s.komut.taban+(s.komut.son olarak tam64)*16;
-    // C6-001: alan referansı geçiciye bağlanıyor; yerel kopyayı açıkça geri yaz.
-    değişken halka: XhciHalka = s.komut;
     eşleş xhci_trb_kur(param,0,tur,doğru,((yuva olarak tam64)<<24)|bayrak) {
         hata(e) => { ver hata(e); }
-        tamam(b) => { eşleş xhci_uret(&değişken halka,b) { hata(e) => { ver hata(e); } tamam(xs) => { s.komut=halka; için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } } }
+        tamam(b) => { eşleş xhci_uret(&değişken s.komut,b) { hata(e) => { ver hata(e); } tamam(xs) => { için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } } }
     }
     ekle(s,GcIstek::Yaz32(s.c.dboff,0)); s.bek_tur=33; s.bek_uc=0; s.sonra=sonraki; s.boy=0; s.giris=yanlış; s.evre=900; s.bekleme=0;
     ver tamam(doğru);
 }
 işlev komut_kur(s: &değişken XhciDurum, tur: tam32, param: tam64, yuva: tam32, sonraki: tam32) -> sonuç<mantıksal,metin> { ver komut_ozel(s,tur,param,yuva,0,sonraki); }
 işlev ctrl_ekle(s: &değişken XhciDurum, b: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
-    değişken h: XhciHalka = s.ctrl; s.bek_adres=h.taban+(h.son olarak tam64)*16;
-    eşleş xhci_uret(&değişken h,b) { hata(e) => { ver hata(e); } tamam(xs) => { s.ctrl=h; için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } }
+    s.bek_adres=s.ctrl.taban+(s.ctrl.son olarak tam64)*16;
+    eşleş xhci_uret(&değişken s.ctrl,b) { hata(e) => { ver hata(e); } tamam(xs) => { için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } }
     ver tamam(doğru);
 }
 işlev kontrol_kur(s: &değişken XhciDurum, paket: Dizi<dtam8>, sonraki: tam32) -> sonuç<mantıksal,metin> {
@@ -91,7 +89,7 @@ işlev uclari_kur(s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
         tamam(y) => {
             değişken son: tam32 = 1; değişken mask: tam64 = 1; değişken in_var: mantıksal = yanlış; değişken out_var: mantıksal = yanlış;
             değişken b: Dizi<dtam8> = bayt_sifir(s.c.baglam_boy*33);
-            değişken uclar: Dizi<UsbUc> = y.uclar; için u: uclar {
+            için u: y.uclar {
                 eğer u.alternatif == 0 {
                     eğer u.tur != 2 ve u.tur != 3 { ver hata("xhci uc turu desteklenmiyor"); }
                     değişken giris: mantıksal = (u.adres&128) != 0;
@@ -119,8 +117,7 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
     eğer s.evre == -1 { ver GcIstek::Hata("xhci durdu"); }
     eğer değil y.basarili { ver hata_ver(s,"xhci tasiyici hatasi"); }
     eğer s.q < dizi_boyut(s.kuyruk) { değişken kuyruk_istegi: GcIstek = dizi_al(s.kuyruk,s.q); s.q=s.q+1; ver kuyruk_istegi; }
-    // C6-002: alan=[] self’te eleman genişliğini kaybeder; tipli boş dizi kullan.
-    değişken bos_istekler: Dizi<GcIstek> = []; s.kuyruk=bos_istekler; s.q=0;
+    s.kuyruk=[]; s.q=0;
     eğer s.evre == 100 { ver GcIstek::Bitti; }
     eğer s.evre == 0 { s.evre=1; ver GcIstek::Oku32(0); }
     eğer s.evre == 1 {
@@ -207,22 +204,30 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         değişken i: tam32 = 0; iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); eğer a.yuva == s.yuva { a.ctrl=s.ctrl; a.ctrl_dongu=s.ctrl.dongu; dizi_yaz(s.aygitlar,i,a); } i=i+1; }
         s.evre=100; ver GcIstek::Bitti;
     }
-    eğer s.evre == 900 { s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
+    eğer s.evre == 900 { s.evre=899; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16); }
+    // DW3 döngü bitini gördükten sonra girdiyi yeniden oku; ilk adres yırtılmış olabilir.
+    eğer s.evre == 899 {
+        eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
+        eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay.dongu {
+            s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci olay zaman asimi"); }
+            s.evre=900; ver GcIstek::Bekle(1000);
+        }
+        s.evre=901; ver GcIstek::BellekOku(s.olay.taban+(s.olay.bas olarak tam64)*16,16);
+    }
     eğer s.evre == 901 {
         eğer dizi_boyut(y.baytlar) != 16 { ver hata_ver(s,"xhci kisa olay"); }
         eğer ((oku_le32(y.baytlar,12)&1) != 0) != s.olay.dongu { s.bekleme=s.bekleme+1; eğer s.bekleme > s.sinir { ver hata_ver(s,"xhci olay zaman asimi"); } s.evre=900; ver GcIstek::Bekle(1000); }
-        değişken oh: XhciOlayHalkasi = s.olay;
-        eşleş xhci_olay_al(&değişken oh,y.baytlar) {
+        eşleş xhci_olay_al(&değişken s.olay,y.baytlar) {
             hata(e) => { ver hata_ver(s,e); }
             tamam(o) => {
-                s.olay=oh; s.olay_sayisi=s.olay_sayisi+1;
+                s.olay_sayisi=s.olay_sayisi+1;
                 eğer o.tur == 34 { eğer o.port < 1 veya o.port > s.c.port_sayisi veya o.kod != 1 { ver hata_ver(s,"xhci port olayi"); } s.evre=900; ver GcIstek::Yaz64(s.c.rtsoff+56,xhci_erdp(s.olay)); }
                 eğer o.tur != s.bek_tur veya o.adres != s.bek_adres veya (s.bek_tur == 32 ve (o.yuva != s.yuva veya o.uc != s.bek_uc)) { ver hata_ver(s,"xhci olay kimligi"); }
                 eğer o.kod != 1 ve (o.kod != 13 veya değil s.giris veya s.bek_tur != 32) { ver hata_ver(s,metin_birlestir("xhci tamamlanma kodu ",tam_metin(o.kod olarak tam64))); }
                 eğer o.artik > s.boy ve s.bek_tur == 32 { ver hata_ver(s,"xhci artik boyu"); }
                 s.gercek_boy=s.boy-o.artik; s.son_yuva=o.yuva; eğer o.kod == 13 { s.kisa_sayisi=s.kisa_sayisi+1; }
-                eğer s.bek_tur == 33 { değişken kh: XhciHalka = s.komut; eşleş xhci_tuket(&değişken kh,1) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { s.komut=kh; } } }
-                eğer s.bek_tur == 32 ve s.bek_uc == 1 { değişken ch: XhciHalka = s.ctrl; değişken n: tam32 = 2; eğer s.boy > 0 { n=3; } eşleş xhci_tuket(&değişken ch,n) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { s.ctrl=ch; } } }
+                eğer s.bek_tur == 33 { eşleş xhci_tuket(&değişken s.komut,1) { hata(e) => { ver hata_ver(s,e); } tamam(v) => {  } } }
+                eğer s.bek_tur == 32 ve s.bek_uc == 1 { değişken n: tam32 = 2; eğer s.boy > 0 { n=3; } eşleş xhci_tuket(&değişken s.ctrl,n) { hata(e) => { ver hata_ver(s,e); } tamam(v) => {  } } }
                 s.evre=902; ver GcIstek::Yaz64(s.c.rtsoff+56,xhci_erdp(s.olay));
             }
         }
@@ -254,8 +259,8 @@ genel işlev xhci_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32) -> 
     eşleş aygit_sec(s,indeks) {
         hata(e) => { ver hata(e); }
         tamam(v) => {
-            değişken a: XhciAygit = v; değişken dci: tam32 = 0; değişken uclar: Dizi<UsbUc> = a.yapi.uclar;
-            için u: uclar { eğer u.alternatif == 0 ve u.tur == 3 ve (u.adres&128) != 0 { dci=(u.adres&15)*2+1; } }
+            değişken a: XhciAygit = v; değişken dci: tam32 = 0;
+            için u: a.yapi.uclar { eğer u.alternatif == 0 ve u.tur == 3 ve (u.adres&128) != 0 { dci=(u.adres&15)*2+1; } }
             eğer dci == 0 { ver hata("xhci interrupt IN yok"); }
             değişken b: Dizi<dtam8> = [];
             eşleş xhci_trb_kur(a.dma+65536,boy olarak tam64,1,a.in_dongu,36) { hata(e) => { ver hata(e); } tamam(t) => { birlestir(b,t); } }
@@ -266,4 +271,13 @@ genel işlev xhci_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32) -> 
             ver tamam(doğru);
         }
     }
+}
+
+// BOT ve HID sırayla aynı olay halkasını kullanır; bekleyen BOT aktarımı olmamalıdır.
+// Çağıran BOT'un güncel tüketici konumunu verir, Bitti sonrası s.olay konumunu BOT'a döndürür.
+genel işlev xhci_depo_giris(s: &değişken XhciDurum, indeks: tam32, boy: tam32, bas: tam32, dongu: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer değil s.devredildi veya s.evre != 100 veya bas < 0 veya bas >= s.olay.adet { ver hata("xhci ortak olay durumu"); }
+    s.olay.bas=bas; s.olay.dongu=dongu; s.devredildi=yanlış;
+    değişken r: sonuç<mantıksal,metin> = xhci_giris(s,indeks,boy);
+    s.devredildi=doğru; ver r;
 }

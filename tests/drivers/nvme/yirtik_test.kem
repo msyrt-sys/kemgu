@@ -1,0 +1,35 @@
+// D-745 gerçek QEMU yarışı: yeni faz + eski CID. Python: 4 + 12 = 16 CQ girdisi.
+kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni, nvme_adim, nvme_flush };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan tests::drivers::nvme::sahte_nvme::{ SahteNvme, sahte_nvme_yeni, sahte_nvme_yanit };
+işlev sur(s: &değişken NvmeDurum, a: &değişken SahteNvme) -> mantıksal {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 10000 { değişken r: GcIstek = nvme_adim(s,y);
+        eşleş r { GcIstek::Bitti => { ver doğru; } GcIstek::Hata(e) => { ver yanlış; } _ => { y=sahte_nvme_yanit(a,r); } } i=i+1;
+    } ver yanlış;
+}
+işlev sinama(yirtik: mantıksal, ariza: tam32) -> mantıksal {
+    değişken a: SahteNvme = sahte_nvme_yeni(); a.yirtik=yirtik; a.ariza=ariza;
+    eşleş nvme_yeni(65536,2) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: NvmeDurum = v;
+        değişken ok: mantıksal = sur(&değişken s,&değişken a);
+        eğer ariza != 0 { ver değil ok; }
+        eğer değil ok { ver yanlış; }
+        değişken i: tam32 = 0;
+        iken i < 12 {
+            eşleş nvme_flush(&değişken s) { hata(e) => { ver yanlış; } tamam(v) => { } }
+            eğer değil sur(&değişken s,&değişken a) { ver yanlış; } i=i+1;
+        }
+        ver a.flush_sayisi == 12 ve (değil yirtik veya a.yirtik_sayisi == 16);
+    } }
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil sinama(yanlış,0) { yazdir_metin("normal"); h=h+1; }
+    eğer değil sinama(doğru,0) { yazdir_metin("yirtik"); h=h+1; }
+    eğer değil sinama(doğru,3) { yazdir_metin("durum"); h=h+1; }
+    eğer değil sinama(doğru,4) { yazdir_metin("faz"); h=h+1; }
+    eğer değil sinama(doğru,5) { yazdir_metin("kalici cid"); h=h+1; }
+    eğer değil sinama(doğru,6) { yazdir_metin("kisa"); h=h+1; }
+    ver h;
+}

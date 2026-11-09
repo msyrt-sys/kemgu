@@ -1,0 +1,34 @@
+// Python: (1<<24)|(4<<16)|(32<<10)|1 = 17072129; DMA 65536+256=65792.
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni, usb_depo_adim };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_le32, yaz_le64 };
+// İlk görüntünün DW3'ü yeni, ilk sekiz baytı eski. İkinci okuma aygıtın tam girdisi.
+işlev dene(kisa: mantıksal, kalici: mantıksal, faz: mantıksal) -> mantıksal {
+    eşleş usb_depo_yeni(65536,8196,4152,1,2,129,0) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: UsbDepo = v; s.t=4; s.trb_adres=65536; s.hedef=4; s.boy=16;
+        değişken y: GcYanit = gc_bos();
+        eşleş usb_depo_adim(&değişken s,y) { GcIstek::BellekOku(a,n) => { eğer a != 65792 veya n != 16 { ver yanlış; } } _ => { ver yanlış; } }
+        y.baytlar=bayt_sifir(16); yaz_le64(y.baytlar,0,65552); yaz_le32(y.baytlar,8,16777216); yaz_le32(y.baytlar,12,17072129);
+        eğer değil faz { yaz_le32(y.baytlar,12,17072128); }
+        eşleş usb_depo_adim(&değişken s,y) {
+            GcIstek::Bekle(us) => { ver değil faz ve s.olay_bas == 0; }
+            GcIstek::BellekOku(a,n) => { eğer değil faz veya a != 65792 veya n != 16 veya s.olay_bas != 0 { ver yanlış; } }
+            _ => { ver yanlış; }
+        }
+        eğer değil kalici { yaz_le64(y.baytlar,0,65536); }
+        eğer kisa { y.baytlar=bayt_sifir(15); }
+        eşleş usb_depo_adim(&değişken s,y) {
+            GcIstek::Hata(e) => { ver kisa veya kalici; }
+            GcIstek::Yaz64(a,n) => { ver değil kisa ve değil kalici ve s.olay_bas == 1; }
+            _ => { ver yanlış; }
+        }
+    } }
+}
+işlev main() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer değil dene(yanlış,yanlış,doğru) { h=h+1; }
+    eğer değil dene(doğru,yanlış,doğru) { h=h+1; }
+    eğer değil dene(yanlış,doğru,doğru) { h=h+1; }
+    eğer değil dene(yanlış,yanlış,yanlış) { h=h+1; }
+    ver h;
+}

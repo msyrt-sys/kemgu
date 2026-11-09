@@ -18,8 +18,7 @@ for idx,block in enumerate(blocks):
     print(('C' if idx==0 else 'self'),len(block),'istek',digest)
     out.append(f'    // {len(block)} istek; kanonik JSON SHA256 {digest}')
     if idx==0:out.append('    eğer der == 0 {')
-    out.append('    // C6-004: dönüşte doğrudan yapı dizisi sabiti self’te yanlış genişlik alır.')
-    out.append('    değişken kayitlar: Dizi<XhciIz> = [')
+    out.append('    ver [')
     for row in block:
         assert len(row)>=6
         t,a,v,n,h,y,*b=row
@@ -30,7 +29,6 @@ for idx,block in enumerate(blocks):
     # Dil kartında son elemandan sonra virgül yok.
     out[-1]=out[-1].removesuffix(',')
     out.append('    ];')
-    out.append('    ver kayitlar;')
     if idx==0:out.append('    }')
 out.append('}')
 Path('tests/drivers/usb/xhci_qemu_fikstur.kem').write_text('\n'.join(out)+'\n')
