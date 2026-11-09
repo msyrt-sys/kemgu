@@ -1,0 +1,24 @@
+// [D-750] G003 YERLEŞİKLERDE: annotasyonsuz `değişken xs = [..]` YIĞIN dizi üretir;
+// Dizi<T> bekleyen yerleşikler (dizi_ekle/al/yaz/boyut/kapasite/kapasite_ayarla) onu
+// KdlDizi başlığı sanıp okur → C'de `dizi_ekle` ASan SEGV, `dizi_al` çöp boyut. Kural
+// D-070/D-358'de yalnız kullanıcı parametresinde soruluyordu.
+işlev kotu() -> tam32 {
+    değişken l = [40, 2];
+    dizi_ekle(l, 3);
+    dizi_yaz(l, 0, 1);
+    dizi_kapasite_ayarla(l, 8);
+    ver dizi_al(l, 0) + dizi_boyut(l) + dizi_kapasite(l);
+}
+// POZİTİF: annotasyonlu heap dizi, doğrudan literal argüman, indeksleme ve `için`
+// yığın dizide SERBEST — yalnız negatif şekiller olsaydı "her yerleşik çağrıyı reddet"
+// sabotajı kapıdan GEÇERDİ (D-425).
+işlev iyi() -> tam32 {
+    değişken h: Dizi<tam32> = [40, 2];
+    dizi_ekle(h, 3);
+    dizi_yaz(h, 0, 1);
+    değişken l = [5, 6];
+    değişken t: tam32 = l[0];
+    için x: l { t = t + x; }
+    ver dizi_al(h, 0) + dizi_boyut(h) + dizi_boyut([1, 2]) + t;
+}
+işlev main() -> tam32 { ver kotu() + iyi(); }

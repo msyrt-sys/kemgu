@@ -5,69 +5,19 @@ PSF ayrıştırma ve glif geri düşme kuralı (glif → U+FFFD → '?' → arka
 yazılmıştır."""
 import re, sys, os, json, time, socket, struct, subprocess
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from psf_kahin import font_baytlari, psf, glif_ciz, font_yukle, screendump, karsilastir
 
 GEN, YUK = 640, 480
 ARKA, ON, SARI = 0x102040, 0xFFFFFF, 0xFFD800
 SATIRLAR = [("KEMGU-OS ekran v0", SARI), ("Merhaba Dünya — ğüşıöç İ", ON), ("ĞÜŞİÖÇ ğüşıöç 0123456789", ON)]
 
-def font_baytlari():
-    s = Path('tests/drivers/ekran/veri/psf_gercek.kem').read_text(encoding='utf-8')
-    n = int(re.search(r'bayt_sifir\((\d+)\)', s).group(1))
-    b = bytearray(n)
-    for i, v in re.findall(r'yaz_u8\(b, (\d+), (\d+)\);', s):
-        b[int(i)] = int(v)
-    return bytes(b)
-
-def psf(d):
-    """(genişlik, yükseklik, glif_bayt, veri_ofseti, glif_sayisi, eşleme) — ilk glif kazanır."""
-    m = {}
-    if d[:2] == b'\x36\x04':
-        mode, h = d[2], d[3]; n = 512 if mode & 1 else 256; w, size, off = 8, h, 4
-        u = off + n * size
-        if mode & 6:
-            for g in range(n):
-                seq = False
-                while True:
-                    cp = struct.unpack_from('<H', d, u)[0]; u += 2
-                    if cp == 0xFFFF: break
-                    if cp == 0xFFFE: seq = True
-                    elif not seq: m.setdefault(cp, g)
-        else:
-            m = {i: i for i in range(n)}
-    else:
-        magic, ver, hs, flags, n, size, h, w = struct.unpack_from('<8I', d); assert magic == 0x864ab572
-        off = hs; u = off + n * size
-        if flags & 1:
-            for g in range(n):
-                e = d.index(b'\xff', u); part = d[u:e].split(b'\xfe')[0]
-                for ch in part.decode('utf-8'): m.setdefault(ord(ch), g)
-                u = e + 1
-        else:
-            m = {i: i for i in range(n)}
-    return w, h, size, off, n, m
-
 def beklenen():
-    d = font_baytlari(); w, h, size, off, n, m = psf(d)
-    img = [ARKA] * (GEN * YUK); sb = (w + 7) // 8
-    for k, (s, renk) in enumerate(SATIRLAR):
-        y0 = 8 + k * (h + 4)
-        for i, ch in enumerate(s):
-            g = m.get(ord(ch), m.get(0xFFFD, m.get(ord('?'), -1)))
-            x0 = 8 + i * w
-            for r in range(h):
-                for c in range(w):
-                    x, y = x0 + c, y0 + r
-                    if not (0 <= x < GEN and 0 <= y < YUK): continue
-                    p = ARKA
-                    if g >= 0 and d[off + g * size + r * sb + c // 8] & (0x80 >> (c % 8)): p = renk
-                    img[y * GEN + x] = p
+    font = font_yukle(); w, h = font[1][0], font[1][1]
+    img = [ARKA] * (GEN * YUK)
+    for k, (t, renk) in enumerate(SATIRLAR):
+        for i, ch in enumerate(t): glif_ciz(img, GEN, YUK, font, 8 + i * w, 8 + k * (h + 4), ord(ch), renk, ARKA)
     return img, w, h
-
-def ppm(p):
-    b = p.read_bytes()
-    t = re.match(rb'P6\s+(\d+)\s+(\d+)\s+(\d+)\s', b)
-    assert t, 'PPM başlığı yok'
-    return int(t.group(1)), int(t.group(2)), b[t.end():]
 
 def acilis(elf, w, n, exp):
     ser = w / 'seri.txt'; q = w / 'qmp.sock'; dump = w / 'ekran.ppm'
@@ -89,15 +39,9 @@ def acilis(elf, w, n, exp):
                 if 'error' in d: raise RuntimeError(d['error'])
                 if 'return' in d: return d['return']
         f.readline(); f.write(b'{"execute":"qmp_capabilities"}\n'); yanit()
-        f.write(json.dumps({'execute': 'screendump', 'arguments': {'filename': str(dump)}}).encode() + b'\n'); yanit()
-        gw, gh, px = ppm(dump)
+        gw, gh, px = screendump(f, dump, yanit)
         if (gw, gh) != (GEN, YUK): raise AssertionError(f'açılış {n}: mod {gw}x{gh}, beklenen {GEN}x{YUK}')
-        fark = 0; ilk = None
-        for i, e in enumerate(exp):
-            g = (px[3 * i] << 16) | (px[3 * i + 1] << 8) | px[3 * i + 2]
-            if g != e:
-                fark += 1
-                if ilk is None: ilk = (i % GEN, i // GEN, hex(g), hex(e))
+        fark, ilk = karsilastir(px, exp, GEN)
         kayit = os.environ.get('EKRAN_KAYIT')
         if kayit and n == 1:
             import zlib

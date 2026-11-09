@@ -1087,6 +1087,27 @@ static TipBilgisi *t_hata(TipKontrol *tk) {
  * değilse NULL. Önceden tutarsızdı: `dizi_al(&Dizi)` sessiz kabul (t_hata),
  * `dizi_boyut(&Dizi)` T001 reddi. Artık tüm dizi built-in'leri referansı
  * otomatik soyar (çağıran &a verebilir; codegen D-086 ile deref eder). */
+/* [D-750] G003 TEK KAYNAK: annotasyonsuz `değişken xs = [..]` YIĞIN [N x T] üretir;
+ * `Dizi<T>` bekleyen her alıcı (kullanıcı parametresi VE dizi_* yerleşiği) onu KdlDizi
+ * başlığı sanıp okur → UB/SEGFAULT. Kural D-070'te yalnız kullanıcı parametresinde
+ * soruluyordu; yerleşiklerde sorulmuyordu (ölçüldü: C `dizi_ekle(l, 2)` ASan SEGV,
+ * `dizi_al(l, 0)` çöp boyutla panik). */
+static void g003_yigin_dizi_kontrol(TipKontrol *tk, const Dugum *arg) {
+    if (!arg || arg->tip != DUGUM_TANIMLAYICI) return;
+    const Sembol *as = sembol_bul(tk->scope, arg->veri.tanimlayici.metin,
+                                  arg->veri.tanimlayici.uzunluk);
+    if (as && as->kategori == SEMBOL_DEGISKEN && as->ast_dugumu &&
+        as->ast_dugumu->tip == DUGUM_DEGISKEN &&
+        as->ast_dugumu->veri.degisken.tip == NULL &&
+        as->ast_dugumu->veri.degisken.deger &&
+        as->ast_dugumu->veri.degisken.deger->tip == DUGUM_DIZI_OLUSTUR) {
+        tip_hata(tk, arg, "G003",
+            "stack dizi degiskeni Dizi<T> parametresine "
+            "gecirilemez (annotasyonlu heap Dizi kullanin: "
+            "degisken xs: Dizi<T> = [..])");
+    }
+}
+
 static TipBilgisi *dizi_arg_coz(TipBilgisi *t) {
     if (!t) return NULL;
     if (t->kategori == TIP_DIZI) return t;
@@ -3449,6 +3470,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[0]);   /* [D-750] */
                     TipBilgisi *dz = dizi_arg_coz(dt);   /* &Dizi auto-deref */
                     if (!dz && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
@@ -3476,6 +3498,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[0]);   /* [D-750] */
                     TipBilgisi *idx = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[1],
                         tip_olustur_basit(tk->arena, TIP_TAM32));
@@ -3499,6 +3522,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[0]);   /* [D-750] */
                     TipBilgisi *dz = dizi_arg_coz(dt);   /* &Dizi auto-deref */
                     if (!dz && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
@@ -3533,6 +3557,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[0]);   /* [D-750] */
                     if (!dizi_arg_coz(dt) && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_boyut argumani Dizi<T> olmali");
@@ -3547,6 +3572,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[0]);   /* [D-750] */
                     if (!dizi_arg_coz(dt) && dt->kategori != TIP_HATA) {
                         tip_hata(tk, d->veri.cagri.argumanlar[0], "T001",
                             "dizi_kapasite argumani Dizi<T> olmali");
@@ -3563,6 +3589,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                         return t_hata(tk);
                     }
                     TipBilgisi *dt = tip_belirle(tk, d->veri.cagri.argumanlar[0]);
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[0]);   /* [D-750] */
                     TipBilgisi *yt = tip_belirle_beklenen(tk,
                         d->veri.cagri.argumanlar[1],
                         tip_olustur_basit(tk->arena, TIP_TAM32));
@@ -4630,26 +4657,8 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                  * misaligned UB/SEGFAULT. Compile-time reddet (çökmezlik #1);
                  * programcı annotasyonlu heap Dizi kullansın. (Literal-arg
                  * D-070 codegen'de heap'e route edilir — bu kural değişken yolu.) */
-                if (param_tip && param_tip->kategori == TIP_DIZI) {
-                    const Dugum *arg = d->veri.cagri.argumanlar[i];
-                    if (arg && arg->tip == DUGUM_TANIMLAYICI) {
-                        const Sembol *as = sembol_bul(tk->scope,
-                            arg->veri.tanimlayici.metin,
-                            arg->veri.tanimlayici.uzunluk);
-                        if (as && as->kategori == SEMBOL_DEGISKEN &&
-                            as->ast_dugumu &&
-                            as->ast_dugumu->tip == DUGUM_DEGISKEN &&
-                            as->ast_dugumu->veri.degisken.tip == NULL &&
-                            as->ast_dugumu->veri.degisken.deger &&
-                            as->ast_dugumu->veri.degisken.deger->tip ==
-                                DUGUM_DIZI_OLUSTUR) {
-                            tip_hata(tk, arg, "G003",
-                                "stack dizi degiskeni Dizi<T> parametresine "
-                                "gecirilemez (annotasyonlu heap Dizi kullanin: "
-                                "degisken xs: Dizi<T> = [..])");
-                        }
-                    }
-                }
+                if (param_tip && param_tip->kategori == TIP_DIZI)
+                    g003_yigin_dizi_kontrol(tk, d->veri.cagri.argumanlar[i]);
             }
             /* === Adim 5: Bound-aware monomorphization check ===
              * hedef bir islev tanimlayicisi ise, tip_param_boundlari kontrol

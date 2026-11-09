@@ -1,0 +1,27 @@
+// [D-749] `için x: <ifade>` — koleksiyon her biçimde. Önceden iki derleyici de çağrı sonucu,
+// `dizi_al(..)`, literal (ve C'de `f().alan` + annotasyonsuz stack dizi) koleksiyonunda
+// döngüyü bir YORUM yazıp SESSİZCE ATLIYORDU: program derleniyor, koşuyor, yanlış cevap
+// veriyordu (ölçüldü: 18182618 yerine C 600, self 18000600). Her biçim FARKLI bir değer
+// katar; hangisi düşerse çıkış kodundan okunur. İşaretsiz bayt (>127) ve metin içerik
+// karşılaştırması çağrı-sonucu yolunda eleman bilgisinin taşındığını ölçer. Annotasyonsuz
+// STACK dizi biçimleri (C yığın / self heap — bilinçli temsil farkı, bolge_operand onu ayrı
+// tahsis sayar) test/ornekler/icin_yigin_dizi.kem'de: codegen_genis davranışı ölçer.
+yapı K { xs: Dizi<tam32>; }
+işlev uc() -> Dizi<tam32> { değişken d: Dizi<tam32> = [1, 2, 3]; ver d; }
+işlev baytlar() -> Dizi<dtam8> { değişken d: Dizi<dtam8> = [200 olarak dtam8]; ver d; }
+işlev adlar() -> Dizi<metin> { değişken d: Dizi<metin> = [metin_birlestir("a", "b")]; ver d; }
+işlev kk() -> K { ver K { xs: uc() }; }
+işlev main() -> tam32 {
+    değişken s: tam32 = 0;
+    için a: uc() { s = s + a; }                                     // 6
+    için b: baytlar() { eğer (b olarak tam32) == 200 { s = s + 1; } } // 1  (işaretsiz)
+    için m: adlar() { eğer m == "ab" { s = s + 2; } }                 // 2  (metin içeriği)
+    değişken ic: Dizi<Dizi<tam32>> = [uc()];
+    için e: dizi_al(ic, 0) { s = s + e; }                            // 6
+    için f: kk().xs { s = s + f; }                                   // 6
+    için c: [5, 2] { s = s + c; }                                    // 7
+    için z: [3, 4] { s = s + z; }                                    // 7
+    için y: ["k", "l"] { eğer y == "l" { s = s + 4; } }               // 4
+    için w: ["xy", "zzz"] { eğer w == "zzz" { s = s + 3; } }          // 3
+    ver s;                                                           // 42
+}

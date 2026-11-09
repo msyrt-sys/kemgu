@@ -151,6 +151,14 @@
     *p = ((v & 255) olarak tam32) olarak dtam8;
 }
 
+// [D-749] C kdl_kod_gecerli ile aynı kural: 1..0x10FFFF, vekil aralığı (D800-DFFF) hariç;
+// 0 geçersiz (D-458: gömülü NUL temsil edilemez). drivers/ekran/konsol.kem bare-metal'de ister.
+çıplak işlev kdl_kod_gecerli(kod: tam32) -> mantıksal {
+    eğer kod < 1 veya kod > 1114111 { ver yanlış; }
+    eğer kod >= 55296 ve kod <= 57343 { ver yanlış; }
+    ver doğru;
+}
+
 // UTF-8 kodla (C kdl_kod_metin ile aynı). Geçersiz (0, > 0x10FFFF, vekil aralığı)
 // → boş metin (D-458: gömülü NUL temsil edilemez).
 çıplak işlev kdl_kod_metin(kod: tam32) -> *tam8 {

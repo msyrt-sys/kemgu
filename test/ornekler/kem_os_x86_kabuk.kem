@@ -16,6 +16,9 @@ kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni, usb_depo_adim, usb_depo_oku
 kullan drivers::ortak::bayt::{ oku_u8, oku_le32, yaz_u8 };
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::ekran::psf::{ PsfFont, psf_coz };
+kullan drivers::ekran::konsol::{ Konsol, konsol_yeni };
+kullan tests::drivers::ekran::veri::psf_gercek::{ gercek_font };
 
 // Bare-metal metin runtime'ında metin_esit yok; baytları mevcut ilkellerle karşılaştır.
 işlev bm_esit(a: metin, b: metin) -> mantıksal {
@@ -25,6 +28,16 @@ işlev bm_esit(a: metin, b: metin) -> mantıksal {
     ver doğru;
 }
 sabit BM_DMA_TABANI: tam64 = 134217728;
+// [D-749] H4e ÇİFT ÇIKTI: her kabuk çıktısı seriye VE ekrana (runtime/mimari/x86_64/
+// kem_ekran_bga.kem). Ekran açılamazsa kabuk yalnız seriyle sürer (var = yanlış).
+sabit KE_ON: tam32 = 16777215;       // 0xFFFFFF
+sabit KE_ARKA: tam64 = 1056832;      // 0x102040
+yapı KabukEkran { var: mantıksal; e: Ekran; f: PsfFont; k: Konsol; }
+işlev ke_ciz(ke: &değişken KabukEkran) {
+    eğer değil ke.var { ver; }
+    ekran_ayna_bosalt(&değişken ke.k);
+    ekran_konsol_ciz(ke.e, ke.f, &değişken ke.k, 8, 8);
+}
 işlev bm_xsur(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
     değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
     iken i < 100000 { değişken r: GcIstek = xhci_adim(s,y);
@@ -105,11 +118,11 @@ işlev kd_yeni() -> sonuç<KabukDisk,metin> {
 işlev kd_bul(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64) -> sonuç<mantıksal,metin> {
     eşleş bm_pci_bul(1,8,2) { hata(e) => { } tamam(bdf) => {
         d.bar=(kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32); kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
-        eşleş bm_nvme_sur(d.bar,&değişken d.nv) { hata(e) => { ver hata(e); } tamam(v) => { d.tur=1; bm_yaz("DISK NVMe"); ver tamam(doğru); } }
+        eşleş bm_nvme_sur(d.bar,&değişken d.nv) { hata(e) => { ver hata(e); } tamam(v) => { d.tur=1; ekran_cift_yaz("DISK NVMe"); ver tamam(doğru); } }
     } }
     eşleş bm_pci_bul(1,6,1) { hata(e) => { } tamam(bdf) => {
         d.bar=kem_pci_oku32(bdf,36)&4294967280; kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
-        eşleş bm_ahci_sur(d.bar,&değişken d.ah) { hata(e) => { } tamam(v) => { d.tur=2; bm_yaz("DISK AHCI"); ver tamam(doğru); } }
+        eşleş bm_ahci_sur(d.bar,&değişken d.ah) { hata(e) => { } tamam(v) => { d.tur=2; ekran_cift_yaz("DISK AHCI"); ver tamam(doğru); } }
     } }
     değişken i: tam32 = 0;
     iken i < dizi_boyut(x.aygitlar) {
@@ -121,7 +134,7 @@ işlev kd_bul(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64) -> 
             eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
             eşleş usb_depo_yeni(a.dma,x.c.dboff+(a.yuva olarak tam64)*4,x.c.rtsoff+56,a.yuva,out,gir,ar.no) { hata(e) => { ver hata(e); } tamam(u) => { d.usb=u; } }
             d.bar=xb;
-            eşleş bm_usur(xb,&değişken d.usb) { hata(e) => { ver hata(e); } tamam(v) => { d.tur=3; bm_yaz("DISK USB"); ver tamam(doğru); } }
+            eşleş bm_usur(xb,&değişken d.usb) { hata(e) => { ver hata(e); } tamam(v) => { d.tur=3; ekran_cift_yaz("DISK USB"); ver tamam(doğru); } }
         } i=i+1;
     } ver hata("disk bulunamadi");
 }
@@ -156,28 +169,29 @@ işlev komut(d: &değişken KabukDisk, f: &değişken FatSektor, satir: metin) -
     değişken kodlar: Dizi<tam32> = utf8_coz(satir);
     için k: kodlar { eğer değil bosluk ve k == 32 { bosluk=doğru; } değilse eğer bosluk { dizi_ekle(arg,k); } değilse { dizi_ekle(ad,k); } }
     değişken cmd: metin = utf8_kodla(ad); değişken yol: metin = utf8_kodla(arg);
-    eğer bm_esit(cmd,"echo") { bm_yaz(yol); ver tamam(doğru); }
+    eğer bm_esit(cmd,"echo") { ekran_cift_yaz(yol); ver tamam(doğru); }
     eğer değil bm_esit(cmd,"cat") ve değil bm_esit(cmd,"ls") { ver hata("bilinmeyen komut"); }
     değişken i: tam32 = 0;
     iken i < 257 {
         eğer bm_esit(cmd,"ls") {
             eşleş fat_sektor_listele(f,yol) { hata(e) => { eğer f.gerekli == 0 { ver hata(e); } } tamam(xs) => {
-                için k: xs { eğer değil bm_esit(k.ad,".") ve değil bm_esit(k.ad,"..") { eğer k.dizin_mi { bm_yaz(metin_birlestir(k.ad,"/")); } değilse { bm_yaz(k.ad); } } }
+                için k: xs { eğer değil bm_esit(k.ad,".") ve değil bm_esit(k.ad,"..") { eğer k.dizin_mi { ekran_cift_yaz(metin_birlestir(k.ad,"/")); } değilse { ekran_cift_yaz(k.ad); } } }
                 ver tamam(doğru);
             } }
         } değilse {
             eşleş fat_sektor_oku(f,yol) { hata(e) => { eğer f.gerekli == 0 { ver hata(e); } } tamam(b) => {
-                değişken j: tam32 = 0; iken j < dizi_boyut(b) { kem_uart_bayt(oku_u8(b,j)&255); j=j+1; }
-                eğer j == 0 { kem_uart_bayt(10); } değilse eğer oku_u8(b,j-1) != 10 { kem_uart_bayt(10); }
+                değişken j: tam32 = 0; iken j < dizi_boyut(b) { ekran_cift_bayt(oku_u8(b,j)&255); j=j+1; }
+                eğer j == 0 { ekran_cift_bayt(10); } değilse eğer oku_u8(b,j-1) != 10 { ekran_cift_bayt(10); }
                 ver tamam(doğru);
             } }
         }
         eşleş doldur(d,f) { hata(e) => { ver hata(e); } tamam(v) => { } } i=i+1;
     } ver hata("sektor tekrar siniri");
 }
-işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken XhciDurum, xb: tam64, indeks: tam32) -> sonuç<mantıksal,metin> {
+işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken XhciDurum, xb: tam64, indeks: tam32, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     değişken h: HidKlavye = hid_klavye_yeni(); değişken tr: KlavyeDurumu = klavye_yeni(); değişken satir: SatirDuzenleyici = satir_yeni();
-    bm_yaz("KABUK_HAZIR");
+    ekran_cift_yaz("KABUK_HAZIR");
+    ke_ciz(ke);
     iken doğru {
         değişken r: sonuç<mantıksal,metin> = hata("girdi");
         eğer d.tur == 3 { r=xhci_depo_giris(x,indeks,8,d.usb.olay_bas,d.usb.olay_dongu); }
@@ -187,13 +201,15 @@ işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken 
         eğer d.tur == 3 { d.usb.olay_bas=x.olay.bas; d.usb.olay_dongu=x.olay.dongu; }
         eşleş hid_klavye_rapor(&değişken h,&değişken tr,x.sonuc) { hata(e) => { ver hata(e); } tamam(xs) => {
             için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { } değer(s) => {
-                eşleş komut(d,f,s) { hata(e) => { bm_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } }
-                bm_yaz("KABUK_HAZIR");
+                ekran_ayna_yaz(metin_birlestir("> ", s));
+                eşleş komut(d,f,s) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } }
+                ekran_cift_yaz("KABUK_HAZIR");
+                ke_ciz(ke);
             } } }
         } }
     } ver tamam(doğru);
 }
-işlev hazir(xb: tam64, x: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
     değişken indeks: tam32 = -1; değişken arno: tam32 = 0; değişken i: tam32 = 0;
     için a: x.aygitlar { değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0); eğer ar.sinif == 3 ve ar.protokol == 1 { indeks=i; arno=ar.no; } i=i+1; }
@@ -204,15 +220,28 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
     eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
     eşleş kd_yeni() { hata(e) => { ver hata(e); } tamam(v) => { değişken d: KabukDisk = v;
         eşleş kd_bul(&değişken d,x,xb) { hata(e) => { ver hata(e); } tamam(v) => { } }
-        eşleş kd_bagla(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { değişken f: FatSektor = v; ver kabuk(&değişken d,&değişken f,x,xb,indeks); } }
+        eşleş kd_bagla(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { değişken f: FatSektor = v; ver kabuk(&değişken d,&değişken f,x,xb,indeks,ke); } }
+    } }
+}
+işlev ke_kur() -> sonuç<KabukEkran, metin> {
+    eşleş psf_coz(gercek_font()) { hata(m) => { ver hata(metin_birlestir("psf ", m)); } tamam(f) => {
+        eşleş konsol_yeni((640 - 16) / f.genislik, (480 - 16) / f.yukseklik, KE_ON, KE_ARKA olarak tam32) {
+            hata(m) => { ver hata(metin_birlestir("konsol ", m)); }
+            tamam(k) => {
+                değişken ke: KabukEkran = KabukEkran { var: yanlış, e: Ekran { fb: 0, mmio: 0, adim: 0, gen: 0, yuk: 0, kimlik: 0 }, f: f, k: k };
+                eşleş ekran_bga_ac(640, 480, KE_ARKA) { hata(m) => { } tamam(e) => { ke.e = e; ke.var = doğru; ekran_ayna_ac(); } }
+                ver tamam(ke);
+            }
+        }
     } }
 }
 işlev main() -> tam32 {
-    bm_yaz("KEMGU-OS kabuk v0");
-    eşleş bm_pci_bul(12,3,48) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(bdf) => {
+    eşleş ke_kur() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken ke: KabukEkran = v;
+    ekran_cift_yaz("KEMGU-OS kabuk v0");
+    eşleş bm_pci_bul(12,3,48) { hata(e) => { ekran_cift_yaz(e); kem_qemu_cik(1); } tamam(bdf) => {
         değişken bar: tam64 = (kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32); kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
-        eşleş xhci_yeni(BM_DMA_TABANI,16384) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken x: XhciDurum = v;
-            eşleş hazir(bar,&değişken x) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); kem_qemu_cik(1); } tamam(v) => { } }
+        eşleş xhci_yeni(BM_DMA_TABANI,16384) { hata(e) => { ekran_cift_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken x: XhciDurum = v;
+            eşleş hazir(bar,&değişken x,&değişken ke) { hata(e) => { ekran_cift_yaz(metin_birlestir("KABUK HATA ",e)); kem_qemu_cik(1); } tamam(v) => { } }
         } }
-    } } ver 0;
+    } } } } ver 0;
 }

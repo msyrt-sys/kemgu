@@ -207,6 +207,7 @@ fi
 rm -f build/kem_bm_usb_kapi.kem
 
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then
@@ -220,6 +221,7 @@ rm -f build/kem_bm_kabuk_kapi.kem
 
 # [D-748] bare-metal ekran (std VGA + Bochs DISPI + PSF) — kabuk deseninin aynısı.
 BM_EKRAN_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_ekran.kem}"
+BM_EKRAN_PARCALAR="$BM_EKRAN_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 cat $BM_EKRAN_PARCALAR > build/kem_bm_ekran_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_ekran_kapi.kem >/dev/null 2>&1; then
