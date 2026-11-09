@@ -1,0 +1,100 @@
+// İsteğe bağlı FAT32 okuma. Eksik sektör gerekli alanında döner; çağıran yükleyip tekrarlar.
+// Bellek-içi fat32_oku API'si değişmez. En çok 256 sektör, dosya/dizin başına 64 KiB.
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, kume_sektoru };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::fs::yol::{ yol_bol };
+kullan drivers::ortak::bayt::{ oku_le32, oku_u8 };
+genel yapı FatSektorKaydi { lba: tam64; veri: Dizi<dtam8>; }
+genel yapı FatSektor { bpb: Fat32Bpb; kayitlar: Dizi<FatSektorKaydi>; gerekli: tam64; }
+genel işlev fat_sektor_yeni(b: Fat32Bpb) -> sonuç<FatSektor,metin> {
+    eğer b.sektor_bayt != 512 { ver hata("sektor boyu desteklenmiyor"); }
+    ver tamam(FatSektor { bpb: b, kayitlar: [], gerekli: 0 });
+}
+genel işlev fat_sektor_koy(s: &değişken FatSektor, lba: tam64, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    eğer lba < 0 veya lba >= s.bpb.toplam_sektor veya dizi_boyut(veri) != 512 { ver hata("sektor araligi"); }
+    için k: s.kayitlar { eğer k.lba == lba { ver hata("tekrar sektor"); } }
+    eğer dizi_boyut(s.kayitlar) >= 256 { ver hata("sektor onbellegi siniri"); }
+    dizi_ekle(s.kayitlar,FatSektorKaydi { lba: lba, veri: veri }); ver tamam(doğru);
+}
+işlev al(s: &değişken FatSektor, lba: tam64) -> sonuç<Dizi<dtam8>,metin> {
+    eğer lba < 0 veya lba >= s.bpb.toplam_sektor { ver hata("sektor araligi"); }
+    için k: s.kayitlar { eğer k.lba == lba { ver tamam(k.veri); } }
+    s.gerekli=lba; ver hata("gerekli");
+}
+işlev sonraki(s: &değişken FatSektor, c: tam64) -> sonuç<tam64,metin> {
+    eğer c < 2 veya c-2 >= s.bpb.kume_sayisi veya c*4 >= s.bpb.fat_sektor*512 { ver hata("fat kume araligi"); }
+    eşleş al(s,(s.bpb.ayrilmis olarak tam64)+(c*4)/512) { hata(e) => { ver hata(e); } tamam(b) => {
+        değişken n: tam64 = oku_le32(b,((c*4)%512) olarak tam32)&268435455;
+        eğer n >= 268435448 { ver tamam(n); }
+        eğer n < 2 veya n-2 >= s.bpb.kume_sayisi veya n == 268435447 { ver hata("fat bozuk zincir"); }
+        ver tamam(n);
+    } }
+}
+işlev veri(s: &değişken FatSektor, ilk: tam64, boy: tam64, dizin: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    değişken out: Dizi<dtam8> = []; değişken gezilen: Dizi<tam64> = [];
+    eğer boy > 65536 { ver hata("dosya siniri"); }
+    eğer değil dizin ve boy == 0 { ver tamam(out); }
+    değişken c: tam64 = ilk;
+    iken dizi_boyut(gezilen) < 128 {
+        eğer c < 2 veya c-2 >= s.bpb.kume_sayisi { ver hata("fat kume araligi"); }
+        için eski: gezilen { eğer eski == c { ver hata("fat dongu"); } }
+        dizi_ekle(gezilen,c);
+        değişken i: tam32 = 0;
+        iken i < s.bpb.kume_sektor {
+            değişken lba: tam64 = kume_sektoru(s.bpb,c)+(i olarak tam64);
+            eşleş al(s,lba) { hata(e) => { ver hata(e); } tamam(b) => {
+                değişken j: tam32 = 0;
+                iken j < 512 {
+                    eğer değil dizin ve (dizi_boyut(out) olarak tam64) == boy { ver tamam(out); }
+                    eğer dizi_boyut(out) >= 65536 { ver hata("dizin siniri"); }
+                    // C8-003: sonuç dalındaki baytın self işaret genişletmesini maskele.
+                    dizi_ekle(out,(oku_u8(b,j)&255) olarak dtam8); j=j+1;
+                }
+            } }
+            i=i+1;
+            eğer değil dizin ve (dizi_boyut(out) olarak tam64) == boy { ver tamam(out); }
+        }
+        eşleş sonraki(s,c) { hata(e) => { ver hata(e); } tamam(n) => {
+            eğer n >= 268435448 { eğer dizin { ver tamam(out); } ver hata("kisa zincir"); } c=n;
+        } }
+    } ver hata("zincir siniri");
+}
+işlev liste(s: &değişken FatSektor, c: tam64) -> sonuç<Dizi<DizinGirdisi>,metin> {
+    eşleş veri(s,c,0,doğru) { hata(e) => { ver hata(e); } tamam(b) => { ver dizin_coz(b); } }
+}
+// Kısa adlarla uyumlu ASCII harf katlama; ASCII dışı baytlar birebir karşılaştırılır.
+işlev esit(a: metin, b: metin) -> mantıksal {
+    eğer metin_uzunluk(a) != metin_uzunluk(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < metin_uzunluk(a) {
+        değişken x: tam32 = (metin_bayt(a,i) olarak tam32)&255; değişken y: tam32 = (metin_bayt(b,i) olarak tam32)&255;
+        eğer x >= 65 ve x <= 90 { x=x+32; } eğer y >= 65 ve y <= 90 { y=y+32; }
+        eğer x != y { ver yanlış; } i=i+1;
+    } ver doğru;
+}
+işlev bul(s: &değişken FatSektor, yol: metin) -> sonuç<DizinGirdisi,metin> {
+    değişken sonuc: DizinGirdisi = DizinGirdisi { ad: "/", ozellik: 16, ilk_kume: s.bpb.kok_kume, boyut: 0, dizin_mi: doğru };
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(xs) => {
+        için ad: xs {
+            eğer değil sonuc.dizin_mi { ver hata("dizin degil"); }
+            değişken bulundu: mantıksal = yanlış;
+            eşleş liste(s,sonuc.ilk_kume) { hata(e) => { ver hata(e); } tamam(kayitlar) => {
+                için k: kayitlar { eğer esit(k.ad,ad) { sonuc=k; bulundu=doğru; } }
+            } }
+            eğer değil bulundu { ver hata("bulunamadi"); }
+        }
+    } }
+    ver tamam(sonuc);
+}
+genel işlev fat_sektor_oku(s: &değişken FatSektor, yol: metin) -> sonuç<Dizi<dtam8>,metin> {
+    s.gerekli=0;
+    eşleş bul(s,yol) { hata(e) => { ver hata(e); } tamam(k) => {
+        eğer k.dizin_mi { ver hata("dosya degil"); } ver veri(s,k.ilk_kume,k.boyut,yanlış);
+    } }
+}
+genel işlev fat_sektor_listele(s: &değişken FatSektor, yol: metin) -> sonuç<Dizi<DizinGirdisi>,metin> {
+    s.gerekli=0;
+    eşleş bul(s,yol) { hata(e) => { ver hata(e); } tamam(k) => {
+        eğer değil k.dizin_mi { ver hata("dizin degil"); } ver liste(s,k.ilk_kume);
+    } }
+}

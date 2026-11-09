@@ -1,0 +1,39 @@
+// Python kâhini: tools/codex/dalga8_fikstur.py, FAT32 dosyası 1300 bayt / üç küme.
+kullan drivers::fs::fat32_sektor::{ FatSektor, FatSektorKaydi, fat_sektor_yeni, fat_sektor_koy, fat_sektor_oku, fat_sektor_listele };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::ortak::bayt::{ oku_u8, yaz_le32, bayt_sifir };
+kullan tests::drivers::fs::sektor_fikstur::{ sektor };
+işlev oku(s: &değişken FatSektor, yol: metin, boz: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    değişken i: tam32 = 0;
+    iken i < 32 {
+        eşleş fat_sektor_oku(s,yol) { tamam(v) => { ver tamam(v); } hata(e) => {
+            eğer s.gerekli == 0 { ver hata(e); }
+            değişken b: Dizi<dtam8> = sektor(s.gerekli);
+            eğer boz ve s.gerekli == 32 { yaz_le32(b,12,3); }
+            eşleş fat_sektor_koy(s,s.gerekli,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        } } i=i+1;
+    } ver hata("tekrar siniri");
+}
+işlev dene(b: Fat32Bpb) -> mantıksal {
+    eşleş fat_sektor_yeni(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: FatSektor = v;
+        eşleş oku(&değişken s,"/dalga8.txt",yanlış) { hata(e) => { ver yanlış; } tamam(xs) => {
+            eğer dizi_boyut(xs) != 1300 { ver yanlış; }
+            değişken i: tam32 = 0; iken i < 1300 { eğer oku_u8(xs,i) != ((i*7+3)&255) { ver yanlış; } i=i+1; }
+        } }
+        eğer dizi_boyut(s.kayitlar) != 5 { ver yanlış; }
+        eşleş oku(&değişken s,"/belgeler/not.txt",yanlış) { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 24 veya oku_u8(xs,0) != 66 { ver yanlış; } } }
+        eşleş oku(&değişken s,"/yok",yanlış) { tamam(v) => { ver yanlış; } hata(e) => { eğer s.gerekli != 0 { ver yanlış; } } }
+        eşleş fat_sektor_listele(&değişken s,"/") { hata(e) => { ver yanlış; } tamam(xs) => { eğer dizi_boyut(xs) != 3 { ver yanlış; } } }
+        eşleş fat_sektor_koy(&değişken s,b.toplam_sektor,sektor(0)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+        eşleş fat_sektor_koy(&değişken s,1,bayt_sifir(511)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    } }
+    eşleş fat_sektor_yeni(b) { hata(e) => { ver yanlış; } tamam(v) => {
+        değişken s: FatSektor = v;
+        eşleş oku(&değişken s,"/dalga8.txt",doğru) { tamam(v) => { ver yanlış; } hata(e) => { ver s.gerekli == 0; } }
+    } }
+}
+işlev main() -> tam32 {
+    eşleş bpb_coz(sektor(0)) { hata(e) => { ver 1; } tamam(b) => { eğer dene(b) { ver 0; } ver 2; } }
+}

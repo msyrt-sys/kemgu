@@ -1,0 +1,80 @@
+// kem_os_x86_ahci.kem — dalga 8 BARE-METAL: sans-IO AHCI sürücüsü (drivers/ahci/
+// cekirdek.kem) gerçek x86 çekirdeğinde, QEMU q35 + AHCI. qtest yürütücüsünün
+// (tests/qemu/qtest.kem) yerini GERÇEK port G/Ç + MMIO + fiziksel bellek alır
+// (runtime/mimari/x86_64/kem_pci_hw.kem). Sürücü kodu qtest kapısıyla BİREBİR aynı.
+// Firmware (SeaBIOS) BAR'ları atar; çekirdek okur. Çıktı COM1; sonuç QEMU
+// isa-debug-exit ile (başarı kodu 16 → QEMU çıkışı 33).
+// Disk deseni (harness yazar): sektör s, bayt j = (s*7 + j*13 + 5) & 255.
+// Yazma deseni (çekirdek yazar, harness imajdan doğrular): LBA 200.., j*31+11.
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni, ahci_adim, ahci_oku, ahci_yaz, ahci_flush };
+
+sabit BM_DMA_TABANI: tam64 = 134217728;   // 128 MiB — RAM (-m 256M), çekirdek+heap'in (~18 MiB) üstü
+sabit BM_YAZMA_LBA: tam64 = 200;
+sabit BM_YAZMA_SEKTOR: tam32 = 9;
+
+işlev bm_sur(bar: tam64, s: &değişken AhciDurum) -> sonuç<mantıksal, metin> {
+    değişken y: GcYanit = gc_bos();
+    değişken i: tam32 = 0;
+    iken i < 2000000 {
+        değişken istek: GcIstek = ahci_adim(s, y);
+        eşleş istek {
+            GcIstek::Bitti => { ver tamam(doğru); }
+            GcIstek::Hata(m) => { ver hata(m); }
+            _ => { y = bm_yurut(bar, istek); }
+        }
+        i = i + 1;
+    }
+    ver hata("adim siniri");
+}
+
+işlev bm_desen(s: tam64, j: tam32) -> tam32 {
+    ver (((s * 7) olarak tam32) + j * 13 + 5) & 255;
+}
+
+işlev bm_akis(bar: tam64, s: &değişken AhciDurum) -> sonuç<metin, metin> {
+    eşleş bm_sur(bar, s) { hata(e) => { ver hata(metin_birlestir("baslatma: ", e)); } tamam(x) => { } }
+    eşleş ahci_oku(s, 0, 8) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    eşleş bm_sur(bar, s) { hata(e) => { ver hata(metin_birlestir("okuma: ", e)); } tamam(x) => { } }
+    değişken i: tam32 = 0;
+    iken i < 8 * 512 {
+        eğer (dizi_al(s.sonuc, i) olarak tam32) != bm_desen((i / 512) olarak tam64, i % 512) { ver hata("okuma deseni bozuk"); }
+        i = i + 1;
+    }
+    değişken veri: Dizi<dtam8> = [];
+    i = 0;
+    iken i < BM_YAZMA_SEKTOR * 512 { dizi_ekle(veri, ((i * 31 + 11) & 255) olarak dtam8); i = i + 1; }
+    eşleş ahci_yaz(s, BM_YAZMA_LBA, veri) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    eşleş bm_sur(bar, s) { hata(e) => { ver hata(metin_birlestir("yazma: ", e)); } tamam(x) => { } }
+    eşleş ahci_flush(s) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    eşleş bm_sur(bar, s) { hata(e) => { ver hata(metin_birlestir("flush: ", e)); } tamam(x) => { } }
+    eşleş ahci_oku(s, BM_YAZMA_LBA, BM_YAZMA_SEKTOR) { hata(e) => { ver hata(e); } tamam(x) => { } }
+    eşleş bm_sur(bar, s) { hata(e) => { ver hata(metin_birlestir("geri okuma: ", e)); } tamam(x) => { } }
+    i = 0;
+    iken i < BM_YAZMA_SEKTOR * 512 {
+        eğer (dizi_al(s.sonuc, i) olarak tam32) != ((i * 31 + 11) & 255) { ver hata("geri okuma deseni bozuk"); }
+        i = i + 1;
+    }
+    ver tamam(metin_birlestir("kapasite=", tam_metin(s.kapasite)));
+}
+
+işlev bm_calis() -> sonuç<metin, metin> {
+    değişken bdf: tam32 = 0;
+    eşleş bm_pci_bul(1, 6, 1) { hata(e) => { ver hata(e); } tamam(a) => { bdf = a; } }
+    // Firmware'in atadığı BAR5 (ABAR). Komut yazmacı: bellek alanı + veriyolu yöneticisi.
+    değişken bar: tam64 = kem_pci_oku32(bdf, 36) & 4294967280;
+    eğer bar < 3221225472 veya bar > 4294967295 { ver hata("BAR5 UC MMIO penceresi disinda"); }
+    kem_pci_yaz32(bdf, 4, kem_pci_oku32(bdf, 4) | 6);
+    eşleş ahci_yeni(BM_DMA_TABANI, -1) {
+        hata(e) => { ver hata(e); }
+        tamam(d) => { değişken s: AhciDurum = d; ver bm_akis(bar, &değişken s); }
+    }
+}
+
+işlev main() -> tam32 {
+    bm_yaz("KEMGU-OS x86 bare-metal AHCI");
+    eşleş bm_calis() {
+        hata(e) => { bm_yaz(metin_birlestir("BM_NVME HATA ", e)); kem_qemu_cik(1); }
+        tamam(m) => { bm_yaz(metin_birlestir("BM_NVME OK ", m)); kem_qemu_cik(16); }
+    }
+    ver 0;
+}

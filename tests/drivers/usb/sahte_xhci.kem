@@ -21,5 +21,11 @@ genel işlev sahte_xhci_yanit(s: &değişken SahteXhci, i: GcIstek) -> GcYanit {
         _ => { }
     }
     eğer tur != r.tur veya a != r.adres veya v != r.deger veya boy != r.boy veya h != r.ozet { s.bozuk=doğru; y.basarili=yanlış; ver y; }
+    // Arada aygıt işlemi olmayan ardışık aynı olay okumaları aynı DMA belleğini görür.
+    // Fikstürde ilk görüntüye enjekte edilen kalıcı bozulma ikinci okumada kaybolmaz.
+    eğer tur == 5 ve boy == 16 ve s.konum >= 2 {
+        değişken onceki: XhciIz = dizi_al(s.iz,s.konum-2);
+        eğer onceki.tur == 5 ve onceki.adres == a ve onceki.boy == boy { r.baytlar=onceki.baytlar; }
+    }
     y.deger=r.yanit; y.baytlar=r.baytlar; ver y;
 }

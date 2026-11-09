@@ -1,0 +1,109 @@
+// Bare-metal xHCI + BOT: FAT32 metadata'sı ve dosya sektörleri ayrı okunur.
+// Python kâhini: tests/qemu/fat_yazici.py; 1300 bayt, üç küme.
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_yeni, xhci_adim, xhci_depo_hazir };
+kullan drivers::usb::xhci_kayit::{ XhciYetenek };
+kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma };
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni, usb_depo_adim, usb_depo_oku, usb_depo_yaz, usb_depo_flush };
+kullan drivers::ortak::bayt::{ oku_u8, oku_le32, yaz_u8 };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+
+// Bare-metal metin runtime'ında metin_esit yok; baytları mevcut ilkellerle karşılaştır.
+işlev bm_esit(a: metin, b: metin) -> mantıksal {
+    eğer metin_uzunluk(a) != metin_uzunluk(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < metin_uzunluk(a) { eğer metin_bayt(a,i) != metin_bayt(b,i) { ver yanlış; } i=i+1; }
+    ver doğru;
+}
+sabit BM_DMA_TABANI: tam64 = 134217728;
+işlev bm_xsur(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 100000 { değişken r: GcIstek = xhci_adim(s,y);
+        eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=bm_yurut(bar,r); } } i=i+1;
+    } ver hata("xhci adim siniri");
+}
+işlev bm_usur(bar: tam64, s: &değişken UsbDepo) -> sonuç<mantıksal,metin> {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 100000 { değişken r: GcIstek = usb_depo_adim(s,y);
+        eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=bm_yurut(bar,r); } } i=i+1;
+    } ver hata("usb adim siniri");
+}
+işlev bm_uoku(bar: tam64, s: &değişken UsbDepo, lba: tam64, n: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eşleş usb_depo_oku(s,lba,n) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş bm_usur(bar,s) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(s.sonuc); } }
+}
+işlev bm_dosya_gec(bar: tam64, s: &değişken UsbDepo, b: Fat32Bpb, ilk: tam64, yaz: mantıksal) -> sonuç<mantıksal,metin> {
+    değişken c: tam64 = ilk; değişken pos: tam32 = 0;
+    iken pos < 1300 {
+        eğer c < 2 veya c-2 >= b.kume_sayisi { ver hata("fat kume siniri"); }
+        değişken sektor: Dizi<dtam8> = [];
+        eşleş bm_uoku(bar,s,kume_sektoru(b,c),1) { hata(e) => { ver hata(e); } tamam(v) => { sektor=v; } }
+        değişken j: tam32 = 0;
+        iken j < 512 ve pos+j < 1300 {
+            değişken bek: tam32 = ((pos+j)*31+11)&255;
+            eğer yaz { bek=((pos+j)*7+3)&255; }
+            eğer oku_u8(sektor,j) != bek { ver hata("fat dosya deseni"); }
+            eğer yaz { yaz_u8(sektor,j,(((pos+j)*31+11)&255) olarak tam64); }
+            j=j+1;
+        }
+        eğer yaz {
+            eşleş usb_depo_yaz(s,kume_sektoru(b,c),sektor) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            eşleş bm_usur(bar,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        }
+        eşleş bm_uoku(bar,s,(b.ayrilmis olarak tam64)+(c*4)/512,1) { hata(e) => { ver hata(e); } tamam(v) => { c=oku_le32(v,((c*4)%512) olarak tam32)&268435455; } }
+        pos=pos+j;
+    }
+    eğer c < 268435448 { ver hata("fat zincir sonu"); }
+    ver tamam(doğru);
+}
+işlev bm_fat(bar: tam64, s: &değişken UsbDepo, b: Fat32Bpb) -> sonuç<mantıksal,metin> {
+    eğer b.sektor_bayt != 512 veya b.kume_sektor != 1 { ver hata("fat test geometrisi"); }
+    değişken ilk: tam64 = 0;
+    eşleş bm_uoku(bar,s,kume_sektoru(b,b.kok_kume),1) { hata(e) => { ver hata(e); } tamam(v) => {
+        eşleş dizin_coz(v) { hata(e) => { ver hata(e); } tamam(xs) => {
+            için x: xs { eğer bm_esit(x.ad,"dalga8.txt") { eğer x.boyut != 1300 veya x.dizin_mi { ver hata("fat dosya kaydi"); } ilk=x.ilk_kume; } }
+        } }
+    } }
+    eğer ilk == 0 { ver hata("fat dosya yok"); }
+    eşleş bm_dosya_gec(bar,s,b,ilk,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş usb_depo_flush(s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eşleş bm_usur(bar,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    ver bm_dosya_gec(bar,s,b,ilk,yanlış);
+}
+işlev bm_usb_dosya(bar: tam64, s: &değişken UsbDepo) -> sonuç<mantıksal,metin> {
+    eşleş bm_usur(bar,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    eğer s.blok_bayt != 512 { ver hata("usb blok boyu"); }
+    eşleş bm_uoku(bar,s,0,1) { hata(e) => { ver hata(e); } tamam(v) => {
+        eşleş bpb_coz(v) { hata(e) => { ver hata("fat bpb"); } tamam(b) => { ver bm_fat(bar,s,b); } }
+    } }
+}
+işlev bm_usb_akis(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    eşleş bm_xsur(bar,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(s.aygitlar) {
+        değişken a: XhciAygit = dizi_al(s.aygitlar,i); değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0);
+        eğer ar.sinif == 8 {
+            değişken out: tam32 = 0; değişken gir: tam32 = 0;
+            için u: a.yapi.uclar { eğer u.tur == 2 { eğer (u.adres&128) != 0 { gir=u.adres; } değilse { out=u.adres; } } }
+            eşleş xhci_depo_hazir(s,i) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            eşleş bm_xsur(bar,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            eşleş usb_depo_yeni(a.dma,s.c.dboff+(a.yuva olarak tam64)*4,s.c.rtsoff+56,a.yuva,out,gir,ar.no) {
+                hata(e) => { ver hata(e); } tamam(v) => { değişken d: UsbDepo = v; ver bm_usb_dosya(bar,&değişken d); }
+            }
+        } i=i+1;
+    } ver hata("usb depo yok");
+}
+işlev bm_calis() -> sonuç<mantıksal,metin> {
+    değişken bdf: tam32 = 0;
+    eşleş bm_pci_bul(12,3,48) { hata(e) => { ver hata(e); } tamam(v) => { bdf=v; } }
+    değişken bar: tam64 = (kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);
+    eğer bar < 3221225472 veya bar > 4294967295 { ver hata("xhci BAR UC disinda"); }
+    kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
+    eşleş xhci_yeni(BM_DMA_TABANI,16384) { hata(e) => { ver hata(e); } tamam(v) => { değişken s: XhciDurum = v; ver bm_usb_akis(bar,&değişken s); } }
+}
+işlev main() -> tam32 {
+    bm_yaz("KEMGU-OS x86 bare-metal USB");
+    eşleş bm_calis() { hata(e) => { bm_yaz(metin_birlestir("BM_USB HATA ",e)); kem_qemu_cik(1); } tamam(v) => { bm_yaz("BM_USB OK"); kem_qemu_cik(16); } }
+    ver 0;
+}

@@ -124,13 +124,16 @@ genel işlev nvme_adim(s: &değişken NvmeDurum, y: GcYanit) -> GcIstek {
     }
     eğer s.adim == 24 veya s.adim == 27 { eğer s.adim == 24 { s.beklenen=0; } s.adim=25; ver GcIstek::Oku32(28); }
     eğer s.adim == 25 { eğer nvme_fatal(y.deger) { ver nvme_hata(s,"nvme cfs"); } ver cq_oku(s); }
-    eğer s.adim == 26 {
+    eğer s.adim == 26 veya s.adim == 31 {
         eşleş nvme_cq_coz(y.baytlar) {
             hata(e) => { ver nvme_hata(s,e); }
             tamam(c) => {
                 değişken faz: mantıksal = s.aq_faz; değişken qid: tam32 = 0; değişken son: tam32 = s.aq_son;
                 eğer s.yonetim >= 4 { faz=s.io_faz; qid=1; son=s.io_son; }
                 eğer c.faz != faz { ver bekle(s,27); }
+                // Faz görüldükten sonra CQ girdisini yeniden oku; ilk görüntünün CID'sine güvenme.
+                // Aygıt fazı yayınladıktan sonra bu girdiyi tüketici ilerleyene dek değiştirmez.
+                eğer s.adim == 26 { değişken oku: GcIstek = cq_oku(s); s.adim=31; ver oku; }
                 eğer c.cid != s.cid veya c.sqid != qid veya c.sq_bas != son veya c.sq_bas >= s.qboy { ver nvme_hata(s,"nvme tamamlanma kimligi"); }
                 eğer c.durum != 0 { ver nvme_hata(s,"nvme komut durumu"); }
                 değişken bas: tam32 = 0;

@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Gerçek CPU/USB klavye: üç disk türü, beş açılış, tam seri çıktı eşitliği."""
+from pathlib import Path
+import os,sys,socket,json,time,subprocess,hashlib
+from fat_yazici import hazirla,MERHABA,NOT
+elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve()
+COMMANDS=['ls /','cat /merhaba.txt','cat /yok','echo Ağaç İş','cat /belgeler/not.txt','yanlis']
+OUTPUTS=[b'dalga8.txt\nbelgeler/\nmerhaba.txt\n',MERHABA+b'\n',b'HATA bulunamadi\n','Ağaç İş\n'.encode(),NOT,b'HATA bilinmeyen komut\n']
+# qcodes ayrıca QMP query-qmp-schema ile çalışan QEMU'nun enum sözlüğünden doğrulanır.
+def keys(c):
+    special={'/':('7',True),'.':('slash',False),' ':('spc',False),'\n':('ret',False),'ğ':('bracket_left',False),'ç':('dot',False),'ş':('semicolon',False),'İ':('apostrophe',True),'i':('apostrophe',False),'ı':('i',False)}
+    if c in special:return special[c]
+    return c.lower(),c.isupper()
+def boot(mode,n):
+    disk=w/'disk.img';hazirla(disk,True);before=hashlib.sha256(disk.read_bytes()).hexdigest()
+    serial=w/'seri.txt';qmp=w/'qmp.sock'
+    qmp.unlink(missing_ok=True)
+    cmd=['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-no-reboot','-serial',f'file:{serial}','-kernel',str(elf),'-device','isa-debug-exit,iobase=0xf4,iosize=0x04','-qmp',f'unix:{qmp},server=on,wait=off','-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={disk},if=none,id=d0,format=raw']
+    cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu8','ahci':'ide-hd,drive=d0,bus=ide.0','usb':'usb-storage,bus=x.0,drive=d0'}[mode]]
+    deadline=time.monotonic()+60
+    with (w/'qemu.log').open('w') as log:
+        p=subprocess.Popen(cmd,stdout=log,stderr=log)
+        sock=socket.socket(socket.AF_UNIX)
+        try:
+            while not qmp.exists():
+                if p.poll() is not None or time.monotonic()>deadline:raise RuntimeError('QEMU başlamadı')
+                time.sleep(.01)
+            sock.settimeout(5);sock.connect(str(qmp));f=sock.makefile('rwb',buffering=0)
+            def response():
+                while True:
+                    d=json.loads(f.readline())
+                    if 'error' in d:raise RuntimeError(d['error'])
+                    if 'return' in d:return d['return']
+                    if 'QMP' in d:return d
+            def command(name,args=None):
+                m={'execute':name}
+                if args is not None:m['arguments']=args
+                f.write(json.dumps(m).encode()+b'\n');return response()
+            response();command('qmp_capabilities')
+            schema=command('query-qmp-schema')
+            (w/'qmp-schema.json').write_text(json.dumps(schema))
+            enum=next(x for x in schema if any(m.get('name')=='bracket_left' for m in x.get('members',[]) if isinstance(m,dict)))
+            allowed=set(enum.get('values',[]))|{x['name'] for x in enum.get('members',[])}
+            for text in COMMANDS:
+                for c in text+'\n':assert keys(c)[0] in allowed,(c,keys(c))
+            assert 'shift' in allowed
+            expected=b'KEMGU-OS kabuk v0\nDISK '+{'nvme':b'NVMe','ahci':b'AHCI','usb':b'USB'}[mode]+b'\nKABUK_HAZIR\n'
+            def await_output(target):
+                while True:
+                    actual=serial.read_bytes() if serial.exists() else b''
+                    if actual==target:return
+                    if not target.startswith(actual):raise AssertionError(f'seri farkı: {actual!r}, beklenen {target!r}')
+                    if p.poll() is not None or time.monotonic()>deadline:raise RuntimeError(f'rc={p.poll()}, seri={actual!r}')
+                    time.sleep(.005)
+            def key(k,down):
+                command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]});time.sleep(.025)
+            await_output(expected)
+            # [D-747] İlk açılışta kabuk BOŞTA bekler (gerçek kullanıcı hemen yazmaz). Sürücü
+            # yoklamasıyla beklemek ~4 sn'de "xhci olay zaman asimi" veriyor ve her yoklama
+            # heap sızdırıyordu; hemen yazan bir kâhin bunu GÖREMEZ.
+            if n==1:
+                t_bos=time.monotonic()+float(os.environ.get('KABUK_BOSTA','8'));deadline+=float(os.environ.get('KABUK_BOSTA','8'))
+                while time.monotonic()<t_bos:
+                    if p.poll() is not None:raise RuntimeError(f'boşta çöktü rc={p.poll()}')
+                    if serial.read_bytes()!=expected:raise AssertionError(f'boşta seri değişti: {serial.read_bytes()!r}')
+                    time.sleep(.1)
+            for text,out in zip(COMMANDS,OUTPUTS):
+                for c in text+'\n':
+                    k,shift=keys(c)
+                    if shift:key('shift',True)
+                    key(k,True);key(k,False)
+                    if shift:key('shift',False)
+                expected+=out+b'KABUK_HAZIR\n';await_output(expected)
+            command('quit');p.wait(timeout=5)
+            assert p.returncode==0
+            assert hashlib.sha256(disk.read_bytes()).hexdigest()==before,'salt okuma diski değiştirdi'
+            print(f'✓ kabuk {mode} açılış {n}: 6 komut, tam seri UTF-8 ve disk SHA256 aynı',flush=True)
+        finally:
+            sock.close()
+            if p.poll() is None:p.kill();p.wait()
+            out=w
+            if serial.exists():(out/f'kabuk-{mode}-{n}.seri').write_bytes(serial.read_bytes())
+for mode in os.environ.get('KABUK_TURLER','nvme ahci usb').split():
+    for n in range(1,int(os.environ.get('KABUK_TEKRAR','5'))+1):boot(mode,n)
+print('BM_KABUK OK',flush=True)
