@@ -1,0 +1,20 @@
+// [D-747] İki self-host genişlik kusuru (Codex dalga 8, C8-002/C8-003):
+// (a) `sonuç<Dizi<dtam8>,_>` / `seçimlik<..>` başarı yüküne bağlanan dizinin ELEMANI
+//     işaretsizdir; self `dizi_al` sonucunu sext ediyordu (129 → -127) — SESSİZ YANLIŞ.
+// (b) tam64 yapı alanına negatif literal: self `sub i32 0,1` + `store i64` = LLVM-RED.
+// 2^33 ölçeği tam64 genişliğini ayırt eder (tam32'de görünmez).
+yapı R { a: tam64; b: tam64; }
+işlev al() -> sonuç<Dizi<dtam8>, metin> { değişken b: Dizi<dtam8> = [129 olarak dtam8, 200 olarak dtam8]; ver tamam(b); }
+işlev belki() -> seçimlik<Dizi<dtam8>> { değişken b: Dizi<dtam8> = [250 olarak dtam8]; ver değer(b); }
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    değişken out: Dizi<dtam8> = [];
+    eşleş al() { hata(e) => { ver 1; } tamam(b) => { dizi_ekle(out, dizi_al(b, 0)); dizi_ekle(out, dizi_al(b, 1)); } }
+    eğer (dizi_al(out, 0) olarak tam32) == 129 { t = t + 10; }
+    eğer (dizi_al(out, 1) olarak tam32) == 200 { t = t + 11; }
+    eşleş belki() { hiç => { ver 2; } değer(b) => { eğer (dizi_al(b, 0) olarak tam32) == 250 { t = t + 12; } } }
+    değişken r: R = R { a: -1, b: 8589934592 };
+    eğer r.a == 0 - 1 { t = t + 4; }
+    eğer r.b + r.a == 8589934591 { t = t + 5; }
+    ver t;
+}

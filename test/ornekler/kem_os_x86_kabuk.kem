@@ -31,6 +31,29 @@ işlev bm_xsur(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin>
         eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=bm_yurut(bar,r); } } i=i+1;
     } ver hata("xhci adim siniri");
 }
+// [D-747] Olay beklerken sürücüyü ADIMLAMA. Her yoklama `BellekOku` ile yeni bir dizi
+// üretir; sürücü durumu main'e ait olduğu için bu diziler küresel bölgede kalır ve hiç
+// geri alınmaz (ölçüldü: tuş başına ~200 KB, 16 MB heap birkaç komutta biter). Ayrıca
+// sürücünün yoklama sınırı (4000 × Bekle) boşta duran kabuğu saniyeler içinde
+// "xhci olay zaman asimi" ile düşürüyordu. Çekirdek DW3 döngü bitini AYIRMA YAPMADAN
+// okur ve süresiz bekler; olay gelince sürücü normal (yırtılmayan, D-745) yoldan sürer.
+çıplak işlev bm_olay_bekle(adr: tam64, dongu: tam64) {
+    iken (kem_mmio_oku32(adr) & 1) != dongu { kem_bekle_us(50); }
+}
+işlev bm_xsur_bekle(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+    değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
+    iken i < 100000 { değişken r: GcIstek = xhci_adim(s,y);
+        eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); }
+            GcIstek::Bekle(us) => {
+                eğer s.evre == 900 {
+                    değişken dg: tam64 = 0; eğer s.olay.dongu { dg = 1; }
+                    bm_olay_bekle(s.olay.taban + (s.olay.bas olarak tam64) * 16 + 12, dg);
+                    s.bekleme = 0; y = gc_bos();
+                } değilse { y=bm_yurut(bar,r); }
+            }
+            _ => { y=bm_yurut(bar,r); } } i=i+1;
+    } ver hata("xhci adim siniri");
+}
 işlev bm_usur(bar: tam64, s: &değişken UsbDepo) -> sonuç<mantıksal,metin> {
     değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
     iken i < 100000 { değişken r: GcIstek = usb_depo_adim(s,y);
@@ -160,7 +183,7 @@ işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken 
         eğer d.tur == 3 { r=xhci_depo_giris(x,indeks,8,d.usb.olay_bas,d.usb.olay_dongu); }
         değilse { r=xhci_giris(x,indeks,8); }
         eşleş r { hata(e) => { ver hata(e); } tamam(v) => { } }
-        eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        eşleş bm_xsur_bekle(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
         eğer d.tur == 3 { d.usb.olay_bas=x.olay.bas; d.usb.olay_dongu=x.olay.dongu; }
         eşleş hid_klavye_rapor(&değişken h,&değişken tr,x.sonuc) { hata(e) => { ver hata(e); } tamam(xs) => {
             için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { } değer(s) => {

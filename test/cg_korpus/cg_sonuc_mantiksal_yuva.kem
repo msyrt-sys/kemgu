@@ -1,0 +1,21 @@
+// [D-747] C8-001: `sonuç<mantıksal,_>` / `seçimlik<mantıksal>` payload yuvası C'de i1
+// ({i8, i1, ptr}); self i32 yayıyordu → bare-metal birleşik birimde imzalar ayrışıyordu.
+// Her kol FARKLI değer taşır (10/20/5/4/3 → 42); doğru/yanlış ikisi de bağlanır.
+işlev kucuk(a: tam32, b: tam32) -> sonuç<mantıksal, metin> {
+    eğer a > 100 { ver hata("buyuk"); }
+    ver tamam(a < b);
+}
+işlev var_mi(a: tam32) -> seçimlik<mantıksal> {
+    eğer a == 0 { ver hiç; }
+    ver değer(a > 5);
+}
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    eşleş kucuk(3, 9) { tamam(v) => { eğer v { t = t + 10; } } hata(e) => { t = t + 1000; } }
+    eşleş kucuk(9, 3) { tamam(v) => { eğer v { t = t + 1000; } değilse { t = t + 20; } } hata(e) => { t = t + 1000; } }
+    eşleş kucuk(200, 3) { tamam(v) => { t = t + 1000; } hata(e) => { t = t + 5; } }
+    eşleş var_mi(7) { değer(v) => { eğer v { t = t + 4; } } hiç => { t = t + 1000; } }
+    eşleş var_mi(2) { değer(v) => { eğer değil v { t = t + 3; } } hiç => { t = t + 1000; } }
+    eşleş var_mi(0) { değer(v) => { t = t + 1000; } hiç => { t = t + 0; } }
+    ver t;
+}

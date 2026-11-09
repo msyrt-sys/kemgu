@@ -249,10 +249,20 @@
       sahte aygit modelleri Codex'in standardi ANLAYISIDIR; ayni yanlis hem surucuye hem modele
       girebilir. Bu liste gercek QEMU aygitlariyla (`-device nvme/ahci/qemu-xhci/usb-storage/usb-kbd`)
       kapatilacak — Claude'un bare-metal baglama isinin (H7/H10) ilk adimi.
-- [ ] E4j [S] NVMe tamamlama girdisi BELIRLENIMCI okuma (D-745 yaris dersi): surucude faz-ONCE yeniden
+- [x] E4j [S] ✓ D-747 (Codex dalga 8 A2: NVMe + xHCI + USB depo yirtik-yazim sahte modelleri; duzeltmesiz KIRMIZI). NVMe tamamlama girdisi BELIRLENIMCI okuma (D-745 yaris dersi): surucude faz-ONCE yeniden
       okuma (faz biti eslesince girdiyi tekrar BellekOku; Linux nvme deseni) + YIRTIK yazan sahte model
       testi (ilk okumada yeni faz + eski CID). Bugun koruma yalniz yurutucude (8 bayt azalan) ve
       bm_x86_nvme kapisi bu sinif icin OLASILIKSAL (~%77). Ayni ders xHCI olay halkasi icin de gecerli.
+- [ ] E4k [L] BOLGE MODELI — UZUN OMURLU DURUM (D-747 olcumu). Kabuk v0 her tus turunda ~3 KB
+      (onarimdan once ~200 KB) KURESEL bolgeye sizdiriyor: surucu durumu (XhciDurum, KabukDisk,
+      FatSektor) main'e ait; `&değişken` zinciriyle bu yapilara akan HER dizi (BellekOku yaniti,
+      TRB, s.sonuc) ρ_caller zinciri boyunca main'in bolgesine = kuresel bolgeye dusuyor ve alan
+      yeniden atansa bile eski dizi geri alinmiyor. Olcum (kabuk, sayacli kem_heap kopyasi):
+      bolge olustur/serbest DENGEDE (fark 5, sabit) — sizinti bolge degil, kuresel bolgenin
+      blok sayisi. 16 MB'ta ~5000 tus. Secenekler: (a) suruculerde sabit kapasiteli tamponlar
+      (dizi_yaz ile yerinde; sans-IO GcYanit yanitini cagiranin tamponuna yaz); (b) dil: alan
+      yeniden atanirken eski degerin bolgesini birakan sahiplik; (c) donemsel "durum kopyala +
+      eski bolgeyi birak". (a) yalniz surucu isi, (b)/(c) dil yuzeyi -> Mehmet.
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -2730,3 +2740,21 @@
   derleme kirildi, tam takim yakaladi, onarildi (DERS: ortak sonek isaret disindaysa yan yana koymak
   yetmez). test_tumu rc=0, FIXPOINT, checker_diff 310/310 (0 muaf), codegen_diff 220/220, modul_codegen
   59/59, llvm_test 317/317, ASan PASS=132 FAIL=0, kopru 122/122, qtest 6/6, bm_x86_nvme 20/20.
+- 2026-11-09 D-747: CODEX DALGASI 8 ENTEGRASYONU — bare-metal AHCI + USB (xHCI+BOT) + ortak yurutucu
+  (kem_gc_yurut) + E4j yirtik-yazim modelleri (NVMe/xHCI/USB depo) + FAT32 sektor-istekli okuma +
+  KABUK v0. Codex kabukta 16 MB heap'in tukendigini olcup DURMUSTU. KOK OLCULDU (sayacli kem_heap
+  kopyasi, tahmin degil): bolge olustur/serbest dengede; buyuyen KURESEL bolge (tus basina ~250 KB,
+  ~3900 yeni dizi). Kaynak: klavye beklerken surucu her yoklamada BellekOku ile yeni dizi uretiyor,
+  durum main'e ait oldugu icin kuresele dusup hic geri alinmiyordu. AYRICA ikinci kusur: surucunun
+  yoklama siniri (4000 x Bekle) bosta duran kabugu ~4 sn'de "xhci olay zaman asimi" ile dusuruyordu;
+  Codex'in kahini komutlari ANINDA yazdigi icin GOREMIYORDU. ONARIM (yalniz cekirdek): olay
+  beklenirken (evre 900) DW3 dongu biti ayirmasiz `çıplak` dongude okunur, sure sinirsiz; olay
+  gelince surucu normal (yirtilmayan) yoldan surer. Tus basina sizinti ~200 KB -> ~3 KB (E4k acik).
+  Kahin: ilk acilista 8 sn BOSTA bekleme eklendi. Sabotaj S188 (eski bekleme) -> "bosta coktu rc=3".
+  bm_kabuk.py sabit `build/codex8` yoluna yaziyordu (yok + D-297 paylasimli yol) -> calisma dizini.
+  DERLEYICI: C8-001 self `sonuç/seçimlik<mantıksal>` yuvasi i32 (C i1) -> bare-metal birlesik
+  birimde define ayrismasi; ll_tip_alan i1 + baglamada zext. S189 -> yapi_diff 198/199. C8-003
+  SESSIZ YANLIS (self): sonuc/secimlik yukundeki Dizi<dtam8> elemani sext (129 -> -127); donus
+  dizi-elemani isaretsizligi fn_reisz ile esles baglamasina tasindi. C8-002 self LINK-RED: tam64
+  yapi alanina negatif literal; alan genisligine int_uydur. Fikstur cg_sonuc_mantiksal_yuva +
+  cg_sonuc_dizi_isaretsiz.

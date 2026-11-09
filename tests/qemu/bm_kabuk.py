@@ -38,7 +38,7 @@ def boot(mode,n):
                 f.write(json.dumps(m).encode()+b'\n');return response()
             response();command('qmp_capabilities')
             schema=command('query-qmp-schema')
-            (Path('build/codex8')/'qmp-schema.json').write_text(json.dumps(schema))
+            (w/'qmp-schema.json').write_text(json.dumps(schema))
             enum=next(x for x in schema if any(m.get('name')=='bracket_left' for m in x.get('members',[]) if isinstance(m,dict)))
             allowed=set(enum.get('values',[]))|{x['name'] for x in enum.get('members',[])}
             for text in COMMANDS:
@@ -55,6 +55,15 @@ def boot(mode,n):
             def key(k,down):
                 command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]});time.sleep(.025)
             await_output(expected)
+            # [D-747] İlk açılışta kabuk BOŞTA bekler (gerçek kullanıcı hemen yazmaz). Sürücü
+            # yoklamasıyla beklemek ~4 sn'de "xhci olay zaman asimi" veriyor ve her yoklama
+            # heap sızdırıyordu; hemen yazan bir kâhin bunu GÖREMEZ.
+            if n==1:
+                t_bos=time.monotonic()+float(os.environ.get('KABUK_BOSTA','8'));deadline+=float(os.environ.get('KABUK_BOSTA','8'))
+                while time.monotonic()<t_bos:
+                    if p.poll() is not None:raise RuntimeError(f'boşta çöktü rc={p.poll()}')
+                    if serial.read_bytes()!=expected:raise AssertionError(f'boşta seri değişti: {serial.read_bytes()!r}')
+                    time.sleep(.1)
             for text,out in zip(COMMANDS,OUTPUTS):
                 for c in text+'\n':
                     k,shift=keys(c)
@@ -69,7 +78,7 @@ def boot(mode,n):
         finally:
             sock.close()
             if p.poll() is None:p.kill();p.wait()
-            out=Path('build/codex8');out.mkdir(exist_ok=True)
+            out=w
             if serial.exists():(out/f'kabuk-{mode}-{n}.seri').write_bytes(serial.read_bytes())
 for mode in os.environ.get('KABUK_TURLER','nvme ahci usb').split():
     for n in range(1,int(os.environ.get('KABUK_TEKRAR','5'))+1):boot(mode,n)
