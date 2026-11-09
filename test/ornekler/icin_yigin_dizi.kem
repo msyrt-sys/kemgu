@@ -1,0 +1,17 @@
+// [D-749] Annotasyonsuz literal değişken: C'de YIĞIN dizi `[N x T]`, self-host'ta heap
+// (CLAUDE.md "Self-host dizi temsili"). Bu temsil farkı bolge_operand'da ayrı tahsis
+// sayıldığı için bu biçimler cg_korpus yerine burada; codegen_genis C ile self'in
+// DAVRANIŞINI karşılaştırır. Önceki kusurlar:
+//   - C: `için x: l` stack dizide döngüyü SESSİZCE atlıyordu (42 yerine 0).
+//   - C: `l[1]` metin stack dizide işaretçiyi i32 okuyup kırpıyordu (ASan SEGV).
+//   - self: `["xy", "zzz"]` 4 baytlık gözeye 8 baytlık işaretçi yazıyordu (HEAP TAŞMASI).
+işlev main() -> tam32 {
+    değişken s: tam32 = 0;
+    değişken l = [30, 4];
+    için x: l { s = s + x; }                                // 34
+    değişken ad = ["xy", "zzz", "q"];
+    s = s + (metin_uzunluk(ad[1]) olarak tam32);            // 3
+    için m: ad { eğer m == "q" { s = s + 5; } }             // 5
+    yazdir_tam(s);
+    ver 0;
+}

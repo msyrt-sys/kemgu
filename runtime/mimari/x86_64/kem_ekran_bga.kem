@@ -1,0 +1,150 @@
+// kem_ekran_bga.kem — [D-748/D-749] x86_64 bare-metal EKRAN: QEMU std VGA (PCI 1234:1111)
+// Bochs DISPI doğrusal çerçeve tamponu + PSF glif çizimi + Konsol ızgarası çizimi + ekran
+// AYNASI (seriye giden baytların ekran kopyası). Kaynak: QEMU docs/specs/standard-vga.rst —
+// BAR0 çerçeve tamponu, BAR2 4 KB MMIO; DISPI yazmaçları MMIO 0x500 + indeks*2 (16 bit).
+// Belgede olmayan indeksler (0 kimlik, 1 x, 2 y, 3 bpp, 4 etkin, 6 sanal genişlik) çekirdekte
+// GERİ OKUNUR (kem_os_x86_ekran kâhini basar ve ölçer).
+// Cerceve (Dizi<dtam8>, eleman başına 4 bayt) KULLANILMAZ: 640x480x4 = 1,2 MB çerçeve 4,9 MB
+// heap yerdi. Glif bitleri doğrudan MMIO'ya yazılır.
+// Gerçek PC yolu (yol haritası H4a, GOP/multiboot2 etiketi) çekirdeğin modu AYARLAMADIĞI
+// yoldur; o gün yalnız ekran_bga_ac'ın yerini alan bir açıcı gelir, çizim ortak kalır.
+kullan drivers::ekran::psf::{ PsfFont, glif_indeksi };
+kullan drivers::ekran::konsol::{ Konsol, konsol_kod, kirli_satirlar };
+kullan drivers::ortak::bayt::{ oku_u8 };
+kullan drivers::ortak::utf8::{ utf8_coz, utf8_bayt_coz };
+
+genel yapı Ekran { fb: tam64; mmio: tam64; adim: tam64; gen: tam32; yuk: tam32; kimlik: tam32; }
+
+çıplak işlev dispi_yaz(mmio: tam64, indeks: tam32, v: tam32) {
+    değişken p: *dtam16 = (mmio + 1280 + ((indeks * 2) olarak tam64)) olarak *dtam16;
+    *p = v olarak dtam16;
+}
+çıplak işlev dispi_oku(mmio: tam64, indeks: tam32) -> tam32 {
+    değişken p: *dtam16 = (mmio + 1280 + ((indeks * 2) olarak tam64)) olarak *dtam16;
+    değişken v: dtam16 = *p;
+    ver v olarak tam32;
+}
+çıplak işlev lfb_doldur(fb: tam64, n: tam64, renk: tam64) {
+    değişken i: tam64 = 0;
+    iken i < n { değişken p: *dtam32 = (fb + i * 4) olarak *dtam32; *p = renk olarak dtam32; i = i + 1; }
+}
+çıplak işlev lfb_px(fb: tam64, adim: tam64, gen: tam32, yuk: tam32, x: tam32, y: tam32, renk: tam64) {
+    eğer x < 0 veya y < 0 veya x >= gen veya y >= yuk { ver; }
+    değişken p: *dtam32 = (fb + (y olarak tam64) * adim + (x olarak tam64) * 4) olarak *dtam32;
+    *p = renk olarak dtam32;
+}
+
+// PCI'da std VGA'yı bul, gen x yuk x 32 doğrusal kipe al, ekranı `arka` ile doldur.
+işlev ekran_bga_ac(gen: tam32, yuk: tam32, arka: tam64) -> sonuç<Ekran, metin> {
+    değişken bdf: tam32 = 0;
+    eşleş bm_pci_bul(3, 0, 0) { hata(e) => { ver hata("VGA yok"); } tamam(a) => { bdf = a; } }
+    eğer (kem_pci_oku32(bdf, 0) & 4294967295) != 286331444 { ver hata("VGA 1234:1111 degil"); }
+    değişken fb: tam64 = kem_pci_oku32(bdf, 16) & 4294967280;
+    değişken mmio: tam64 = kem_pci_oku32(bdf, 24) & 4294967280;
+    eğer fb < 3221225472 veya mmio < 3221225472 { ver hata("VGA BAR UC penceresi disinda"); }
+    kem_pci_yaz32(bdf, 4, kem_pci_oku32(bdf, 4) | 2);
+    değişken kimlik: tam32 = dispi_oku(mmio, 0);
+    eğer kimlik < 45248 veya kimlik > 45253 { ver hata("DISPI kimligi beklenmedik"); }
+    dispi_yaz(mmio, 4, 0);
+    dispi_yaz(mmio, 1, gen); dispi_yaz(mmio, 2, yuk); dispi_yaz(mmio, 3, 32);
+    // ENABLE = 0x41 (etkin | doğrusal tampon). ⚠ QEMU VRAM'i BAR0'dan bit 0x40'tan bağımsız
+    // gösterir → kâhin bu biti ÖLÇEMEZ (sabotaj S193 sessiz kaldı, D-748). Çözünürlük ve
+    // derinlik ise screendump boyutu + piksellerle ölçülür (S193b kırmızı).
+    dispi_yaz(mmio, 4, 65);
+    eğer dispi_oku(mmio, 1) != gen veya dispi_oku(mmio, 2) != yuk veya dispi_oku(mmio, 3) != 32 { ver hata("DISPI kip reddedildi"); }
+    değişken vw: tam32 = dispi_oku(mmio, 6);
+    değişken e: Ekran = Ekran { fb: fb, mmio: mmio, adim: (vw olarak tam64) * 4, gen: gen, yuk: yuk, kimlik: kimlik };
+    lfb_doldur(fb, (vw olarak tam64) * (yuk olarak tam64), arka);
+    ver tamam(e);
+}
+
+// drivers/ekran/yazi.kem kod_ciz ile AYNI geri düşme: glif → U+FFFD → '?' → arka dolgu.
+işlev ekran_glif(f: PsfFont, kod: tam32) -> tam32 {
+    eşleş glif_indeksi(f, kod) { değer(i) => { ver i; } hiç => { } }
+    eşleş glif_indeksi(f, 65533) { değer(i) => { ver i; } hiç => { } }
+    eşleş glif_indeksi(f, 63) { değer(i) => { ver i; } hiç => { } }
+    ver -1;
+}
+işlev ekran_kod(e: Ekran, f: PsfFont, x: tam32, y: tam32, kod: tam32, on: tam64, arka: tam64) {
+    değişken g: tam32 = ekran_glif(f, kod);
+    değişken sb: tam32 = (f.genislik + 7) / 8;
+    değişken r: tam32 = 0;
+    iken r < f.yukseklik {
+        değişken bayt: tam32 = 0;
+        değişken c: tam32 = 0;
+        iken c < f.genislik {
+            eğer c % 8 == 0 ve g >= 0 { bayt = oku_u8(f.veri, f.veri_ofseti + g * f.glif_bayt + r * sb + c / 8); }
+            değişken renk: tam64 = arka;
+            eğer g >= 0 ve (bayt & (128 >> (c % 8))) != 0 { renk = on; }
+            lfb_px(e.fb, e.adim, e.gen, e.yuk, x + c, y + r, renk);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+}
+işlev ekran_metin(e: Ekran, f: PsfFont, x: tam32, y: tam32, s: metin, on: tam64, arka: tam64) {
+    değişken kodlar: Dizi<tam32> = utf8_coz(s);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(kodlar) { ekran_kod(e, f, x + i * f.genislik, y, dizi_al(kodlar, i), on, arka); i = i + 1; }
+}
+// Konsol ızgarasının KİRLİ satırlarını (x0, y0) kökünden çiz; hücre = font boyutu.
+işlev ekran_konsol_ciz(e: Ekran, f: PsfFont, k: &değişken Konsol, x0: tam32, y0: tam32) {
+    için satir: kirli_satirlar(k) {
+        değişken s: tam32 = 0;
+        iken s < k.sutunlar {
+            değişken i: tam32 = satir * k.sutunlar + s;
+            ekran_kod(e, f, x0 + s * f.genislik, y0 + satir * f.yukseklik, dizi_al(k.kodlar, i),
+                      dizi_al(k.renkler, i) olarak tam64, dizi_al(k.arkalar, i) olarak tam64);
+            s = s + 1;
+        }
+    }
+}
+
+// ---- AYNA: seriye giden baytların ekran kopyası (H4e çift çıktı) ----
+// Kabuk çıktısı pek çok yerden seriye bayt bayt yazılır; ekran durumunu (Ekran, Konsol)
+// her yere taşımak yerine baytlar sabit bir fiziksel tampona da kopyalanır ve döngü
+// uygun anda `ekran_ayna_bosalt` ile konsola aktarır. Tampon 200 MiB'de (RAM -m 256M,
+// çekirdek+heap ~18 MiB, DMA 128 MiB), 64 KiB; taşan bayt düşülür ve sayılır.
+sabit EKRAN_AYNA_TABAN: tam64 = 209715200;
+sabit EKRAN_AYNA_BOY: tam64 = 65536;
+küresel değişken ekran_ayna_n: tam64 = 0;
+küresel değişken ekran_ayna_tasan: tam64 = 0;
+küresel değişken ekran_ayna_acik: tam64 = 0;
+çıplak işlev ekran_ayna_ac() { ekran_ayna_acik = 1; ekran_ayna_n = 0; }
+çıplak işlev ekran_ayna_bayt(b: tam32) {
+    eğer ekran_ayna_acik == 0 { ver; }
+    eğer ekran_ayna_n >= EKRAN_AYNA_BOY { ekran_ayna_tasan = ekran_ayna_tasan + 1; ver; }
+    değişken p: *dtam8 = (EKRAN_AYNA_TABAN + ekran_ayna_n) olarak *dtam8;
+    *p = ((b & 255) olarak tam32) olarak dtam8;
+    ekran_ayna_n = ekran_ayna_n + 1;
+}
+çıplak işlev ekran_ayna_uzunluk() -> tam64 { ver ekran_ayna_n; }
+çıplak işlev ekran_ayna_sifirla() { ekran_ayna_n = 0; }
+// Seri + ayna: kabuğun bayt çıkışı.
+çıplak işlev ekran_cift_bayt(b: tam32) { kem_uart_bayt(b); ekran_ayna_bayt(b); }
+işlev ekran_cift_yaz(m: metin) {
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(m) olarak tam32;
+    iken i < n { ekran_cift_bayt((metin_bayt(m, i) olarak tam32) & 255); i = i + 1; }
+    ekran_cift_bayt(10);
+}
+// Yalnız aynaya (seriye DEĞİL): kabuğun ekrana yankıladığı komut satırı. Seri çıktı
+// mevcut kâhinle birebir korunur.
+işlev ekran_ayna_yaz(m: metin) {
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(m) olarak tam32;
+    iken i < n { ekran_ayna_bayt((metin_bayt(m, i) olarak tam32) & 255); i = i + 1; }
+    ekran_ayna_bayt(10);
+}
+// Aynadaki baytları UTF-8 çözüp konsola aktar, tamponu boşalt. Yarım kalan son UTF-8
+// dizisi bir sonraki boşaltmaya bırakılmaz (çıktı satır sonuyla biter); bozuk bayt
+// utf8_bayt_coz kuralıyla U+FFFD olur.
+işlev ekran_ayna_bosalt(k: &değişken Konsol) {
+    değişken n: tam64 = ekran_ayna_uzunluk();
+    eğer n == 0 { ver; }
+    değişken b: Dizi<dtam8> = [];
+    değişken i: tam64 = 0;
+    iken i < n { dizi_ekle(b, kem_fiz_oku8(EKRAN_AYNA_TABAN + i) olarak dtam8); i = i + 1; }
+    ekran_ayna_sifirla();
+    için kod: utf8_bayt_coz(b, 0, n olarak tam32) { konsol_kod(k, kod); }
+}

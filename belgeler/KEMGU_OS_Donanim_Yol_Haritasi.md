@@ -154,7 +154,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       Kanıt: tüm Türkçe harfler ekranda doğru.
 - [ ] **H4d [M] Metin konsolu:** imleç, satır sonu, kaydırma, sekme, renk (ANSI
       alt kümesi), UTF-8 çözme (yarım bayt dizisi → `?`, çökme yok).
-- [ ] **H4e [S] Çift çıktı:** her `yazdir` hem seriye hem ekrana; seri yoksa yalnız ekran.
+- [x] **H4e [S] ✓ D-749 (kabuk v0: seri + ekran, ekran kâhini 3 disk türünde piksel piksel; ayna tamponu deseni). Çift çıktı:** her `yazdir` hem seriye hem ekrana; seri yoksa yalnız ekran.
 - [ ] **H4f [S] Panik ekranı:** kırmızı zemin, panik mesajı, son 20 log satırı,
       yazmaç dökümü. (Seri yokken tek teşhis aracı budur.)
 - [x] **H4g [M] ✓ D-748 (`calistir_bm_x86_ekran`: 640×480 tüm pikseller bağımsız Python çizimiyle BİREBİR, 5 açılış; sabotaj: glif bit sırası, Türkçe→ASCII, çözünürlük KIRMIZI). Kapı: ekran görüntüsü karşılaştırması.** QEMU monitörü `screendump`

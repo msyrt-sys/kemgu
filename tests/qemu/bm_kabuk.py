@@ -3,6 +3,7 @@
 from pathlib import Path
 import os,sys,socket,json,time,subprocess,hashlib
 from fat_yazici import hazirla,MERHABA,NOT
+from psf_kahin import font_yukle,glif_ciz,konsol,screendump,karsilastir
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve()
 COMMANDS=['ls /','cat /merhaba.txt','cat /yok','echo Ağaç İş','cat /belgeler/not.txt','yanlis']
 OUTPUTS=[b'dalga8.txt\nbelgeler/\nmerhaba.txt\n',MERHABA+b'\n',b'HATA bulunamadi\n','Ağaç İş\n'.encode(),NOT,b'HATA bilinmeyen komut\n']
@@ -71,10 +72,34 @@ def boot(mode,n):
                     key(k,True);key(k,False)
                     if shift:key('shift',False)
                 expected+=out+b'KABUK_HAZIR\n';await_output(expected)
+            # [D-749] H4e ÇİFT ÇIKTI: ekran = seri akışı + yalnız ekrana yankılanan "> komut"
+            # satırları, drivers/ekran/konsol.kem semantiğiyle (Python modeli) çizilmiş.
+            # Çekirdek KABUK_HAZIR'ı seriye ÇİZİMDEN önce bastığı için ekran yakınsayana dek dene.
+            if os.environ.get('KABUK_EKRAN','1')=='1':
+                GEN,YUK,ON,ARKA=640,480,0xFFFFFF,0x102040
+                font=font_yukle();fw,fh=font[1][0],font[1][1];sut,sat=(GEN-16)//fw,(YUK-16)//fh
+                akis='KEMGU-OS kabuk v0\nDISK '+{'nvme':'NVMe','ahci':'AHCI','usb':'USB'}[mode]+'\nKABUK_HAZIR\n'
+                for text,out in zip(COMMANDS,OUTPUTS):akis+='> '+text+'\n'+out.decode('utf-8')+'KABUK_HAZIR\n'
+                izg=konsol(akis,sut,sat);img=[ARKA]*(GEN*YUK)
+                for r in range(sat):
+                    for c in range(sut):glif_ciz(img,GEN,YUK,font,8+c*fw,8+r*fh,izg[r*sut+c],ON,ARKA)
+                son=time.monotonic()+10
+                while True:
+                    gw,gh,px=screendump(f,w/'ekran.ppm',response)
+                    assert (gw,gh)==(GEN,YUK),f'ekran kipi {gw}x{gh}'
+                    fark,ilk=karsilastir(px,img,GEN)
+                    if fark==0:
+                        if os.environ.get('KABUK_EKRAN_KAYIT') and n==1:
+                            import shutil;shutil.copy(w/'ekran.ppm',os.environ['KABUK_EKRAN_KAYIT']+f'-{mode}.ppm')
+                        break
+                    if time.monotonic()>son:
+                        import shutil;shutil.copy(w/'ekran.ppm','build/_kabuk_ekran_fark.ppm')
+                        raise AssertionError(f'ekran: {fark} piksel FARKLI, ilk (x,y,gelen,beklenen)={ilk}')
+                    time.sleep(.25)
             command('quit');p.wait(timeout=5)
             assert p.returncode==0
             assert hashlib.sha256(disk.read_bytes()).hexdigest()==before,'salt okuma diski değiştirdi'
-            print(f'✓ kabuk {mode} açılış {n}: 6 komut, tam seri UTF-8 ve disk SHA256 aynı',flush=True)
+            print(f'✓ kabuk {mode} açılış {n}: 6 komut, tam seri UTF-8, ekran 640x480 BİREBİR ve disk SHA256 aynı',flush=True)
         finally:
             sock.close()
             if p.poll() is None:p.kill();p.wait()

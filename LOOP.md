@@ -270,6 +270,11 @@
       erisiminde (`y.baytlar`) ve `eşleş` skrutini olunca KACMIS sayar; sicak yol GcYanit/GcIstek.
       Gercek kapanis = alan/esles turevlerini izleyen escape v3 VEYA (b)/(c). ERTELENDI (~3 KB/tus,
       16 MB'ta ~5000 tus; kabuk v0 icin kabul).
+- [ ] E4l [S] C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
+      `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
+      boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
+      Self dogru (heap-uniform, 42). Onarim: dizi_al/dizi_yaz/dizi_boyut arg0 stack ise GEP yolu
+      (D-749 stack_eleman_ir kaydi hazir) ya da GURULTULU hata.
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -2776,4 +2781,31 @@
   (kahin yalniz geri dusmeyi olcmesin). Sabotaj: S192 glif bit sirasi -> 1534 piksel farkli · S194
   Turkce->ASCII -> 114 piksel · S193b x=800 -> "mod 800x480". S193 (ENABLE'dan LFB bitini sil)
   SESSIZ: QEMU VRAM'i BAR0'dan bitten bagimsiz gosterir -> bu bit QEMU'da OLCULEMEZ, belgelendi.
+- 2026-11-09 D-749: KABUK EKRANDA (H4e cift cikti) + `için` KOLEKSIYONU SESSIZ ATLAMA (IKI DERLEYICI).
+  Kabuk ciktisi seriye VE ekrana: ortak runtime/mimari/x86_64/kem_ekran_bga.kem (DISPI + PSF + Konsol
+  izgarasi + AYNA: seriye giden baytlar 200 MiB'deki fiziksel tampona kopyalanir, dongu her komuttan
+  sonra konsola bosaltip kirli satirlari cizer; Ekran/Konsol durumu her yazdirma yerine tasinmaz).
+  Komut satiri yalniz ekrana yankilanir ("> ls /"); seri cikti BIREBIR korundu. Kahin: bm_kabuk.py
+  ekran = seri akisi + yanki, drivers/ekran/konsol.kem semantiginin Python modeliyle (tests/qemu/
+  psf_kahin.py, bm_ekran.py ile ORTAK) cizilip screendump ile piksel piksel; NVMe/AHCI/USB.
+  YOL USTUNDE KOK BULUNDU: ekran bos kaliyordu cunku `için kod: utf8_bayt_coz(..)` HIC CALISMIYORDU.
+  `için x: <cagri sonucu | dizi_al(..) | literal>` (C'de ayrica `f().alan` ve annotasyonsuz stack
+  dizi) koleksiyonunda IKI DERLEYICI de `; icin: desteklenmeyen koleksiyon` YORUMU yazip donguyu
+  SESSIZCE ATLIYORDU: derleme temiz, program kosuyor, cevap yanlis (olculdu: 18182618 yerine C 600,
+  self 18000600). Iki derleyici AYNI yanlisi yaptigi icin parite kapilari GOREMIYORDU (D-422 sinifi).
+  ONARIM: genel deger yolu (koleksiyon BIR KEZ degerlendirilir; C: heap_dizi_eleman_ast + yeni ortak
+  cagri_hedef_kaydi — secili import edilen islevin donus tipini cagri yeriyle AYNI cozumle bulur;
+  self: son_elem + yeni son_eisz/son_emet kanallari (D-747 fn_reisz ikizi fn_remet)); C stack dizi
+  GEP yolu (stack_eleman_ir kaydi); literal elemani ilk literalden. Desteklenmeyen kalan sekil artik
+  GURULTULU (C hata(), self D-341 deseni). YAN BULGULAR: (1) self baglamsiz metin dizi literali
+  (`["aa","bbb"]`) 4 baytlik gozeye 8 baytlik isaretci yaziyordu = HEAP TASMASI (ASan SEGV) — eleman
+  tipi ilk literalden; (2) C `l[1]` ayni stack metin literalinde isaretciyi i32 okuyordu (ASan SEGV)
+  — stack_eleman_ir INDEKS yoluna da baglandi; (3) C `dizi_al(stack, i)` hala bozuk -> E4l.
+  Bare-metal kdl_kod_gecerli (C kurali birebir). Fikstur cg_icin_koleksiyon (9 bicim, ASan temiz,
+  C=SELF=42) + test/ornekler/icin_yigin_dizi.kem (annotasyonsuz STACK bicimleri; C yigin / self heap
+  temsil farki bolge_operand'da ayri tahsis sayildigi icin cg_korpus DISINDA, codegen_genis olcer;
+  S200 orada `C=139 ≠ KEMGU=0`). bolge_operand'a muafiyet EKLENMEDI. Sabotaj: S195 C genel yol -> 10 · S196 self genel yol -> 16 · S197 self eleman
+  isaretsizligi -> 41 · S198 self eleman metin-ligi -> 40 · S199 self literal eleman -> LINK-RED ·
+  S200 C stack indeks -> ASan · S188 (D-747) korundu. ⚠ OLCUM HATAM: ilk dogrulamada clang
+  basarisiz olunca dongu ESKI ikiliyi kosturdu ve self "42" sandim; artik her kosum oncesi rm -f.
 
