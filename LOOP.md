@@ -270,7 +270,7 @@
       erisiminde (`y.baytlar`) ve `eşleş` skrutini olunca KACMIS sayar; sicak yol GcYanit/GcIstek.
       Gercek kapanis = alan/esles turevlerini izleyen escape v3 VEYA (b)/(c). ERTELENDI (~3 KB/tus,
       16 MB'ta ~5000 tus; kabuk v0 icin kabul).
-- [ ] E4l [S] C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
+- [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
       Self dogru (heap-uniform, 42). Onarim: dizi_al/dizi_yaz/dizi_boyut arg0 stack ise GEP yolu
@@ -2808,4 +2808,16 @@
   isaretsizligi -> 41 · S198 self eleman metin-ligi -> 40 · S199 self literal eleman -> LINK-RED ·
   S200 C stack indeks -> ASan · S188 (D-747) korundu. ⚠ OLCUM HATAM: ilk dogrulamada clang
   basarisiz olunca dongu ESKI ikiliyi kosturdu ve self "42" sandim; artik her kosum oncesi rm -f.
+- 2026-11-09 D-750: G003 YERLESIKLERDE (E4l kapandi). Annotasyonsuz `değişken l = [..]` YIGIN dizi
+  uretir; D-070/D-358 bunu `Dizi<T>` KULLANICI parametresine gecirmeyi G003 ile reddediyordu, ama
+  ayni gerekce (alici KdlDizi basligi sanip okur) dizi_* YERLESIKLERINDE hic sorulmuyordu: C'de
+  `dizi_ekle(l, 2)` ASan SEGV, `dizi_al(l, 0)` cop boyutla panik (tesadufen negatif), `dizi_yaz`/
+  `dizi_boyut` ayni. Self (heap-uniform) dogru calisiyordu. KOD URETIMI DEGIL KURAL: yigin dizi
+  buyuyemez (`dizi_ekle`), yani "destekle" ancak gizli heap terfisi olurdu; G003'un gerekcesi
+  birebir burada da gecerli -> D-503/D-517 deseni, YENI TANI KODU YOK. Tek kaynak: C
+  g003_yigin_dizi_kontrol (param yolu + 6 yerlesik: dizi_ekle/al/yaz/boyut/kapasite/
+  kapasite_ayarla, arg0 tip-belirlemeden HEMEN sonra) · self g003_dizi_yerlesik + yedek arguman
+  dongusunde k==1 (ayni sira/konum). ETKI ALANI OLCULDU: depoda bu sekli kullanan 0 dosya (iki
+  esleme yorumdu). Fikstur tc68_01 (6 negatif + POZITIF: annotasyonlu heap, dogrudan literal
+  arguman, yigin dizide indeks ve `için` SERBEST). Sabotaj S201 (C) / S202 (self) -> G003 6 -> 0.
 

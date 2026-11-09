@@ -12901,8 +12901,17 @@ işlev fn_pdizi_bul(p: &değişken Ayr, ad: metin, j: tam32) -> tam32 {
     ver 0;
 }
 // G003: argüman düğümünde raporlanır (C ile aynı konum).
+// [D-750] Dizi<T> bekleyen YERLEŞİKLER (ilk argüman): C tip_kontrol.c Madde B'deki
+// g003_yigin_dizi_kontrol çağrılarıyla AYNI küme. Kural D-358'de yalnız kullanıcı
+// parametresinde soruluyordu (C D-070 ile aynı boşluk).
+işlev g003_dizi_yerlesik(fad: metin) -> mantıksal {
+    ver metin_esit(fad, "dizi_ekle") veya metin_esit(fad, "dizi_al") veya metin_esit(fad, "dizi_yaz")
+        veya metin_esit(fad, "dizi_boyut") veya metin_esit(fad, "dizi_kapasite")
+        veya metin_esit(fad, "dizi_kapasite_ayarla");
+}
 işlev g003_kontrol(p: &değişken Ayr, fad: metin, j: tam32, arg: tam32) -> tam32 {
-    eğer fn_pdizi_bul(p, fad, j) != 1 { ver 0; }
+    değişken yerlesik: mantıksal = (j == 0) ve g003_dizi_yerlesik(fad);
+    eğer (yerlesik == yanlış) ve (fn_pdizi_bul(p, fad, j) != 1) { ver 0; }
     eğer metin_esit(dizi_al(p.a_ad, arg), "TANIMLAYICI") == yanlış { ver 0; }
     eğer bag_biti(p, dizi_al(p.a_deg, arg), 0) { sekil_hata(p, arg, "G003"); }
     ver 0;
@@ -14911,6 +14920,8 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             // Ödünç, büyüyen diziye yazılarak çağrı süresinin dışına taşınamaz.
             eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
                 değişken dan: metin = dizi_al(p.a_deg, hedef);
+                // [D-750] G003 yerleşik ilk argümanında (C Madde B: arg0'dan HEMEN sonra).
+                eğer (k == 1) ve g003_dizi_yerlesik(dan) { g003_kontrol(p, dan, 0, arg2); }
                 eğer (metin_esit(dan, "dizi_ekle") ve (k == 2))
                   veya (metin_esit(dan, "dizi_yaz") ve (k == 3)) { odunc_kacis(p, arg2); }
             }
