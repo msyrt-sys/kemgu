@@ -1,0 +1,44 @@
+// Beklenenler: Python gzip + struct PSF1 ayrıştırıcısı; toplam=sum((i+1)*v for i,v in enumerate(b)).
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
+kullan drivers::ekran::psf::{ psf_coz, glif_indeksi };
+kullan drivers::ortak::bayt::{ oku_u8 };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = font_tr16();
+    eğer dizi_boyut(b) != 10804 { ver 1; }
+    değişken sum: tam64 = 0; değişken i: tam32 = 0;
+    iken i < dizi_boyut(b) { sum=sum+((i+1) olarak tam64)*(oku_u8(b,i) olarak tam64); i=i+1; }
+    eğer sum != 4561817562 { ver 2; }
+    eşleş psf_coz(b) { hata(e) => { ver 3; } tamam(f) => {
+        eğer f.genislik != 8 veya f.yukseklik != 16 veya f.glif_sayisi != 512 { ver 4; }
+        eşleş glif_indeksi(f,231) { hiç => { ver 5; } değer(g) => { eğer g != 135 { ver 6; } } } // ç
+        eşleş glif_indeksi(f,199) { hiç => { ver 5; } değer(g) => { eğer g != 128 { ver 6; } } } // Ç
+        eşleş glif_indeksi(f,287) { hiç => { ver 5; } değer(g) => { eğer g != 311 { ver 6; } } } // ğ
+        eşleş glif_indeksi(f,286) { hiç => { ver 5; } değer(g) => { eğer g != 310 { ver 6; } } } // Ğ
+        eşleş glif_indeksi(f,305) { hiç => { ver 5; } değer(g) => { eğer g != 313 { ver 6; } } } // ı
+        eşleş glif_indeksi(f,304) { hiç => { ver 5; } değer(g) => { eğer g != 312 { ver 6; } } } // İ
+        eşleş glif_indeksi(f,246) { hiç => { ver 5; } değer(g) => { eğer g != 148 { ver 6; } } } // ö
+        eşleş glif_indeksi(f,214) { hiç => { ver 5; } değer(g) => { eğer g != 153 { ver 6; } } } // Ö
+        eşleş glif_indeksi(f,351) { hiç => { ver 5; } değer(g) => { eğer g != 315 { ver 6; } } } // ş
+        eşleş glif_indeksi(f,350) { hiç => { ver 5; } değer(g) => { eğer g != 314 { ver 6; } } } // Ş
+        eşleş glif_indeksi(f,252) { hiç => { ver 5; } değer(g) => { eğer g != 129 { ver 6; } } } // ü
+        eşleş glif_indeksi(f,220) { hiç => { ver 5; } değer(g) => { eğer g != 154 { ver 6; } } } // Ü
+        eşleş glif_indeksi(f,9472) { hiç => { ver 5; } değer(g) => { eğer g != 196 { ver 6; } } } // ─
+        eşleş glif_indeksi(f,9474) { hiç => { ver 5; } değer(g) => { eğer g != 179 { ver 6; } } } // │
+        eşleş glif_indeksi(f,9484) { hiç => { ver 5; } değer(g) => { eğer g != 218 { ver 6; } } } // ┌
+        eşleş glif_indeksi(f,9488) { hiç => { ver 5; } değer(g) => { eğer g != 191 { ver 6; } } } // ┐
+        eşleş glif_indeksi(f,9492) { hiç => { ver 5; } değer(g) => { eğer g != 192 { ver 6; } } } // └
+        eşleş glif_indeksi(f,9496) { hiç => { ver 5; } değer(g) => { eğer g != 217 { ver 6; } } } // ┘
+        eşleş glif_indeksi(f,9500) { hiç => { ver 5; } değer(g) => { eğer g != 195 { ver 6; } } } // ├
+        eşleş glif_indeksi(f,9508) { hiç => { ver 5; } değer(g) => { eğer g != 180 { ver 6; } } } // ┤
+        eşleş glif_indeksi(f,9516) { hiç => { ver 5; } değer(g) => { eğer g != 194 { ver 6; } } } // ┬
+        eşleş glif_indeksi(f,9524) { hiç => { ver 5; } değer(g) => { eğer g != 193 { ver 6; } } } // ┴
+        eşleş glif_indeksi(f,9532) { hiç => { ver 5; } değer(g) => { eğer g != 197 { ver 6; } } } // ┼
+        eşleş glif_indeksi(f,9552) { hiç => { ver 5; } değer(g) => { eğer g != 196 { ver 6; } } } // ═
+        eşleş glif_indeksi(f,9553) { hiç => { ver 5; } değer(g) => { eğer g != 179 { ver 6; } } } // ║
+        eşleş glif_indeksi(f,65533) { hiç => { ver 5; } değer(g) => { eğer g != 4 { ver 6; } } } // �
+        eşleş glif_indeksi(f,1114112) { hiç => { } değer(g) => { ver 7; } }
+    } }
+    değişken kisa: Dizi<dtam8> = [54 olarak dtam8,4 olarak dtam8,3 olarak dtam8,16 olarak dtam8];
+    eşleş psf_coz(kisa) { hata(e) => { } tamam(f) => { ver 8; } }
+    ver 0;
+}

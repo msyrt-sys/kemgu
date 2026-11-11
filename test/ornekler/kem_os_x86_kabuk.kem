@@ -18,7 +18,7 @@ kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
 kullan drivers::ekran::psf::{ PsfFont, psf_coz };
 kullan drivers::ekran::konsol::{ Konsol, konsol_yeni };
-kullan tests::drivers::ekran::veri::psf_gercek::{ gercek_font };
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
 
 // Bare-metal metin runtime'ında metin_esit yok; baytları mevcut ilkellerle karşılaştır.
 işlev bm_esit(a: metin, b: metin) -> mantıksal {
@@ -224,7 +224,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
     } }
 }
 işlev ke_kur() -> sonuç<KabukEkran, metin> {
-    eşleş psf_coz(gercek_font()) { hata(m) => { ver hata(metin_birlestir("psf ", m)); } tamam(f) => {
+    eşleş psf_coz(font_tr16()) { hata(m) => { ver hata(metin_birlestir("psf ", m)); } tamam(f) => {
         eşleş konsol_yeni((640 - 16) / f.genislik, (480 - 16) / f.yukseklik, KE_ON, KE_ARKA olarak tam32) {
             hata(m) => { ver hata(metin_birlestir("konsol ", m)); }
             tamam(k) => {

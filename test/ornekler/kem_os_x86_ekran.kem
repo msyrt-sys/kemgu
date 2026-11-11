@@ -4,7 +4,7 @@
 // geri okumalarını seriye basar; test/bm_x86_ekran_harness.sh QMP screendump'ı bağımsız
 // Python çizimiyle (tests/qemu/bm_ekran.py) piksel piksel karşılaştırır.
 kullan drivers::ekran::psf::{ PsfFont, psf_coz };
-kullan tests::drivers::ekran::veri::psf_gercek::{ gercek_font };
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
 
 sabit EK_ARKA: tam64 = 1056832;      // 0x102040
 sabit EK_ON: tam64 = 16777215;       // 0xFFFFFF
@@ -20,13 +20,14 @@ işlev ek_calis() -> sonuç<metin, metin> {
             r = metin_birlestir(metin_birlestir(r, " bpp="), tam_metin(dispi_oku(e.mmio, 3) olarak tam64));
             r = metin_birlestir(metin_birlestir(r, " vw="), tam_metin(dispi_oku(e.mmio, 6) olarak tam64));
             bm_yaz(r);
-            eşleş psf_coz(gercek_font()) {
+            eşleş psf_coz(font_tr16()) {
                 hata(m) => { ver hata(metin_birlestir("psf ", m)); }
                 tamam(f) => {
                     değişken sy: tam32 = f.yukseklik + 4;
                     ekran_metin(e, f, 8, 8, "KEMGU-OS ekran v0", EK_SARI, EK_ARKA);
                     ekran_metin(e, f, 8, 8 + sy, "Merhaba Dünya — ğüşıöç İ", EK_ON, EK_ARKA);
                     ekran_metin(e, f, 8, 8 + 2 * sy, "ĞÜŞİÖÇ ğüşıöç 0123456789", EK_ON, EK_ARKA);
+                    ekran_metin(e, f, 8, 8 + 3 * sy, "─│┌┐└┘├┤┬┴┼═║", EK_ON, EK_ARKA);
                     ver tamam(metin_birlestir("font=", tam_metin(f.genislik olarak tam64)));
                 }
             }

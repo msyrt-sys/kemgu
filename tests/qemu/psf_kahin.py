@@ -6,12 +6,23 @@ import re, json, struct
 from pathlib import Path
 
 def font_baytlari():
-    s = Path('tests/drivers/ekran/veri/psf_gercek.kem').read_text(encoding='utf-8')
-    n = int(re.search(r'bayt_sifir\((\d+)\)', s).group(1))
-    b = bytearray(n)
-    for i, v in re.findall(r'yaz_u8\(b, (\d+), (\d+)\);', s):
-        b[int(i)] = int(v)
-    return bytes(b)
+    s = Path('drivers/ekran/font_tr16.kem').read_text(encoding='utf-8')
+    hex = re.search(r'değişken hex: metin = "([0-9a-f]+)";', s)
+    parcalar = re.findall(r'font_parca\(b, "([0-9a-f]+)"\);', s)
+    if parcalar:
+        b = bytes.fromhex("".join(parcalar))
+    elif hex:
+        b = bytes.fromhex(hex.group(1))
+    else:
+        n = int(re.search(r'bayt_sifir\((\d+)\)', s).group(1)); b = bytearray(n)
+        for i, v in re.findall(r'yaz_u8\(b, (\d+), (\d+)\);', s): b[int(i)] = int(v)
+        b = bytes(b)
+    # Sabit SHA ayrıca CI'da kaynak paket yokken de üretim hatasını yakalar.
+    import gzip, hashlib
+    assert hashlib.sha256(b).hexdigest() == 'd9025175dcf18f8b7442009a1870837f6ae974fa9561e9d8dae5eb145566fee7', 'font baytları değişti'
+    kaynak = Path('/usr/share/consolefonts/Uni2-Fixed16.psf.gz')
+    if kaynak.exists(): assert b == gzip.decompress(kaynak.read_bytes()), 'özgün PSF ile fark'
+    return b
 
 def psf(d):
     """(genişlik, yükseklik, glif_bayt, veri_ofseti, glif_sayisi, eşleme) — ilk glif kazanır."""
