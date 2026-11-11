@@ -29,29 +29,29 @@
 // SESSİZCE yanlış cevap üretiyordu:
 //     esit_mi(birlestir("", "b"), "b")  →  yanlış   (doğrusu: doğru)
 // Yerleşik `metin_esit` bayt karşılaştırması yapar ve DOĞRUDUR.
-işlev esit_mi(a: metin, b: metin) -> mantıksal {
+genel işlev esit_mi(a: metin, b: metin) -> mantıksal {
     ver metin_esit(a, b);
 }
 
 // Farklı mı. (Aynı gerekçe — `!=` de işaretçi karşılaştırmasıdır.)
-işlev farkli_mi(a: metin, b: metin) -> mantıksal {
+genel işlev farkli_mi(a: metin, b: metin) -> mantıksal {
     ver değil metin_esit(a, b);
 }
 
 // Boş mu (uzunluk 0). D-440: `s == ""` İŞARETÇİ karşılaştırmasıdır —
 // hesaplanmış boş dizgide yanlış cevap verirdi. Uzunluk sorgusu hem doğru
 // hem de niyeti doğrudan söylüyor.
-işlev bos_mu(s: metin) -> mantıksal {
+genel işlev bos_mu(s: metin) -> mantıksal {
     ver metin_uzunluk(s) == 0;
 }
 
 // Dolu mu.
-işlev dolu_mu(s: metin) -> mantıksal {
+genel işlev dolu_mu(s: metin) -> mantıksal {
     ver metin_uzunluk(s) > 0;
 }
 
 // Tek elemanlı opsiyonel sarmalama (helper).
-işlev sarmala(s: metin) -> seçimlik<metin> {
+genel işlev sarmala(s: metin) -> seçimlik<metin> {
     eğer bos_mu(s) { ver hiç; }
     ver değer(s);
 }
@@ -61,23 +61,23 @@ işlev sarmala(s: metin) -> seçimlik<metin> {
 // =============================================================================
 
 // Uzunluk — byte sayisi (UTF-8 codepoint sayisi degil).
-işlev uzunluk(s: metin) -> tam32 {
+genel işlev uzunluk(s: metin) -> tam32 {
     ver metin_uzunluk(s);
 }
 
 // Birlestir — iki metni yan yana koy (heap alloc, leak v1 OK).
-işlev birlestir(a: metin, b: metin) -> metin {
+genel işlev birlestir(a: metin, b: metin) -> metin {
     ver metin_birlestir(a, b);
 }
 
 // Uc metni birlestir.
-işlev birlestir_uc(a: metin, b: metin, c: metin) -> metin {
+genel işlev birlestir_uc(a: metin, b: metin, c: metin) -> metin {
     ver birlestir(birlestir(a, b), c);
 }
 
 // Kes (substring) — [baslangic, baslangic+uzunluk) byte aralik.
 // Multi-byte UTF-8 sequence kirilabilir — kullanici dikkatli olmali.
-işlev kes(s: metin, baslangic: tam32, uzunluk: tam32) -> metin {
+genel işlev kes(s: metin, baslangic: tam32, uzunluk: tam32) -> metin {
     ver metin_kes(s, baslangic, uzunluk);
 }
 
@@ -86,48 +86,48 @@ işlev kes(s: metin, baslangic: tam32, uzunluk: tam32) -> metin {
 //   karakter cikaran primitif yok; bu yuzden byte-tabanli gercek bolme bu imzayla
 //   yapilamaz. v1: tek elemanli dizi (kendisi) doner. GERCEK bolme icin metin
 //   ayirac alan `bol_metin` kullan (asagida) — tam islevsel.
-işlev bol(s: metin, ayirac: karakter) -> Dizi<metin> {
+genel işlev bol(s: metin, ayirac: karakter) -> Dizi<metin> {
     eğer bos_mu(s) { ver []; }
     ver [s];   // STUB: karakter ayirac ile bayt karsilastirma mumkun degil
 }
 
 // Kucuk harfe donustur — Turkce I->ı, İ->i (ASCII + UTF-8 farkindali).
-işlev kucukharf(s: metin) -> metin {
+genel işlev kucukharf(s: metin) -> metin {
     ver metin_kucuk(s);
 }
 
 // Buyuk harfe donustur — Turkce i->İ, ı->I.
-işlev buyukharf(s: metin) -> metin {
+genel işlev buyukharf(s: metin) -> metin {
     ver metin_buyuk(s);
 }
 
 // Icerir — alt metni iceriyor mu (byte tabanli, UTF-8 prefix-safe).
-işlev icerir(s: metin, alt: metin) -> mantıksal {
+genel işlev icerir(s: metin, alt: metin) -> mantıksal {
     ver metin_icerir(s, alt);
 }
 
 // Ile baslar mi.
-işlev baslar_ile(s: metin, prefix: metin) -> mantıksal {
+genel işlev baslar_ile(s: metin, prefix: metin) -> mantıksal {
     ver metin_baslar(s, prefix);
 }
 
 // Ile biter mi.
-işlev biter_ile(s: metin, sufiks: metin) -> mantıksal {
+genel işlev biter_ile(s: metin, sufiks: metin) -> mantıksal {
     ver metin_biter(s, sufiks);
 }
 
 // Kirp (trim) — basindan ve sonundan ASCII whitespace sil.
-işlev kirp(s: metin) -> metin {
+genel işlev kirp(s: metin) -> metin {
     ver metin_kirp(s);
 }
 
 // Yer degistir — hedef altmetnin TUM eslemelerini yeni ile degistir.
-işlev yer_degistir(s: metin, hedef: metin, yeni: metin) -> metin {
+genel işlev yer_degistir(s: metin, hedef: metin, yeni: metin) -> metin {
     ver metin_yer_degistir(s, hedef, yeni);
 }
 
 // Tekrarla — metni n kez yan yana ver.
-işlev tekrarla(s: metin, n: tam32) -> metin {
+genel işlev tekrarla(s: metin, n: tam32) -> metin {
     eğer n <= 0 { ver ""; }
     değişken r: metin = s;
     değişken i: tam32 = 1;
@@ -144,7 +144,7 @@ işlev tekrarla(s: metin, n: tam32) -> metin {
 //   110xxxxx (192..223) -> 2
 //   1110xxxx (224..239) -> 3
 //   11110xxx (240..255) -> 4
-işlev cp_bayt_sayisi(lead: tam32) -> tam32 {
+genel işlev cp_bayt_sayisi(lead: tam32) -> tam32 {
     eğer lead >= 240 { ver 4; }
     eğer lead >= 224 { ver 3; }
     eğer lead >= 192 { ver 2; }
@@ -154,7 +154,7 @@ işlev cp_bayt_sayisi(lead: tam32) -> tam32 {
 // Karakter sayisi — UTF-8 codepoint sayisi (byte degil). Devam baytlari
 // (10xxxxxx) sayilmaz; her oncu byte bir karakter. Turkce metinde dogru
 // sonuc verir (ornek: "çığ" -> 6 byte ama 3 karakter).
-işlev karakter_sayisi(s: metin) -> tam32 {
+genel işlev karakter_sayisi(s: metin) -> tam32 {
     değişken L: tam32 = metin_uzunluk(s);
     değişken sayi: tam32 = 0;
     değişken i: tam32 = 0;
@@ -175,7 +175,7 @@ işlev karakter_sayisi(s: metin) -> tam32 {
 // Yansitma (reverse) — codepoint-aware ters cevirme. Her UTF-8 codepoint'i
 // bir butun olarak one ekler; multi-byte Turkce karakterler bozulmaz
 // (ornek: "açb" -> "bça"). Byte tabanli ters cevirmenin aksine UTF-8 guvenli.
-işlev yansit(s: metin) -> metin {
+genel işlev yansit(s: metin) -> metin {
     değişken L: tam32 = metin_uzunluk(s);
     değişken r: metin = "";
     değişken i: tam32 = 0;
@@ -203,7 +203,7 @@ işlev yansit(s: metin) -> metin {
 // `bol`'un (karakter ayraç) gerçek işlevsel eşi. Ardışık ayraçlar boş parça
 // üretir ("a,,b" -> ["a","","b"]). Boş kaynak -> boş dizi.
 // Boş ayrac -> tek parça (kaynağın kendisi).
-işlev bol_metin(s: metin, ayrac: metin) -> Dizi<metin> {
+genel işlev bol_metin(s: metin, ayrac: metin) -> Dizi<metin> {
     değişken sonuc: Dizi<metin> = dizi_olustur(0);
     eğer bos_mu(s) { ver sonuc; }
     değişken M: tam32 = metin_uzunluk(ayrac);
@@ -230,7 +230,7 @@ işlev bol_metin(s: metin, ayrac: metin) -> Dizi<metin> {
 
 // Birleştir_liste (join) — parçaları ayraç ile birleştir. bol_metin'in tersi.
 // Boş dizi -> "". Tek eleman -> o eleman (ayraç eklenmez).
-işlev birlestir_liste(parcalar: Dizi<metin>, ayrac: metin) -> metin {
+genel işlev birlestir_liste(parcalar: Dizi<metin>, ayrac: metin) -> metin {
     değişken r: metin = "";
     değişken ilk_mi: mantıksal = doğru;
     için p: parcalar {
@@ -246,7 +246,7 @@ işlev birlestir_liste(parcalar: Dizi<metin>, ayrac: metin) -> metin {
 
 // İndeks — `alt` alt metninin `s` içindeki ilk BYTE konumu (yoksa hiç).
 // Boş alt -> değer(0). Byte-indeksli (codepoint değil).
-işlev indeks(s: metin, alt: metin) -> seçimlik<tam32> {
+genel işlev indeks(s: metin, alt: metin) -> seçimlik<tam32> {
     değişken M: tam32 = metin_uzunluk(alt);
     eğer M == 0 { ver değer(0); }
     değişken L: tam32 = metin_uzunluk(s);
@@ -260,7 +260,7 @@ işlev indeks(s: metin, alt: metin) -> seçimlik<tam32> {
 }
 
 // Say — `alt` alt metninin örtüşmeyen geçiş sayısı. Boş alt -> 0.
-işlev say(s: metin, alt: metin) -> tam32 {
+genel işlev say(s: metin, alt: metin) -> tam32 {
     değişken M: tam32 = metin_uzunluk(alt);
     eğer M == 0 { ver 0; }
     değişken L: tam32 = metin_uzunluk(s);
@@ -279,7 +279,7 @@ işlev say(s: metin, alt: metin) -> tam32 {
 }
 
 // Ön_ek_kaldir — `on` ile başlıyorsa o ön eki sil; değilse aynen ver.
-işlev on_ek_kaldir(s: metin, on: metin) -> metin {
+genel işlev on_ek_kaldir(s: metin, on: metin) -> metin {
     eğer baslar_ile(s, on) {
         değişken n: tam32 = metin_uzunluk(on);
         ver metin_kes(s, n, metin_uzunluk(s) - n);
@@ -288,7 +288,7 @@ işlev on_ek_kaldir(s: metin, on: metin) -> metin {
 }
 
 // Son_ek_kaldir — `son` ile bitiyorsa o son eki sil; değilse aynen ver.
-işlev son_ek_kaldir(s: metin, son: metin) -> metin {
+genel işlev son_ek_kaldir(s: metin, son: metin) -> metin {
     eğer biter_ile(s, son) {
         değişken n: tam32 = metin_uzunluk(s) - metin_uzunluk(son);
         ver metin_kes(s, 0, n);
@@ -299,14 +299,14 @@ işlev son_ek_kaldir(s: metin, son: metin) -> metin {
 // Doldur_sol (left pad) — `s`'yi soluna `dolgu` ekleyerek hedef KARAKTER
 // uzunluğuna getir. Mevcut uzunluk >= hedef ise aynen ver. `dolgu` tek karakter
 // varsayılır (codepoint sayısı bazlı). Sayı hizalama için tipik kullanım.
-işlev doldur_sol(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
+genel işlev doldur_sol(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
     değişken mevcut: tam32 = karakter_sayisi(s);
     eğer mevcut >= hedef_uz { ver s; }
     ver birlestir(tekrarla(dolgu, hedef_uz - mevcut), s);
 }
 
 // Doldur_sag (right pad) — sağına `dolgu` ekleyerek hedef uzunluğa getir.
-işlev doldur_sag(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
+genel işlev doldur_sag(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
     değişken mevcut: tam32 = karakter_sayisi(s);
     eğer mevcut >= hedef_uz { ver s; }
     ver birlestir(s, tekrarla(dolgu, hedef_uz - mevcut));
@@ -314,7 +314,7 @@ işlev doldur_sag(s: metin, hedef_uz: tam32, dolgu: metin) -> metin {
 
 // Başharf_büyüt — ilk codepoint'i büyük harfe çevir, kalanı aynen bırak.
 // buyukharf Türkçe-farkında (i->İ). Boş metin -> "".
-işlev basharf_buyut(s: metin) -> metin {
+genel işlev basharf_buyut(s: metin) -> metin {
     eğer bos_mu(s) { ver s; }
     değişken u: tam32 = metin_bayt(s, 0) olarak tam32;
     eğer u < 0 { u = u + 256; }
@@ -337,7 +337,7 @@ işlev basharf_buyut(s: metin) -> metin {
 
 // Bul_tüm — `alt` alt metninin TÜM (örtüşmeyen) başlangıç byte indeksleri.
 // `say` ile tutarlı: eşleşince M kadar atlar. Boş alt -> boş dizi.
-işlev bul_tum(s: metin, alt: metin) -> Dizi<tam32> {
+genel işlev bul_tum(s: metin, alt: metin) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken M: tam32 = metin_uzunluk(alt);
     eğer M == 0 { ver sonuc; }
@@ -357,7 +357,7 @@ işlev bul_tum(s: metin, alt: metin) -> Dizi<tam32> {
 
 // Değiştir_ilk — `hedef`in YALNIZ ilk geçişini `yeni` ile değiştir. `yer_degistir`
 // tümünü değiştirir; bu yalnız ilkini. Bulunamaz/boş hedef -> aynen ver.
-işlev degistir_ilk(s: metin, hedef: metin, yeni: metin) -> metin {
+genel işlev degistir_ilk(s: metin, hedef: metin, yeni: metin) -> metin {
     değişken M: tam32 = metin_uzunluk(hedef);
     eğer M == 0 { ver s; }
     eşleş indeks(s, hedef) {
@@ -375,7 +375,7 @@ işlev degistir_ilk(s: metin, hedef: metin, yeni: metin) -> metin {
 // Kes_arası — `bas` ve `son` ayraçları arasındaki metin (seçimlik). `bas`
 // bulunamaz veya `bas`tan sonra `son` bulunamazsa hiç. `son`, `bas`ın bittiği
 // konumdan sonra aranır (örtüşme yok). Ayraçlar sonuca dahil değildir.
-işlev kes_arasi(s: metin, bas: metin, son: metin) -> seçimlik<metin> {
+genel işlev kes_arasi(s: metin, bas: metin, son: metin) -> seçimlik<metin> {
     eşleş indeks(s, bas) {
         değer(ib) => {
             değişken L: tam32 = metin_uzunluk(s);
@@ -428,7 +428,7 @@ işlev tr_harf_2byte(b0: tam32, b1: tam32) -> mantıksal {
 
 // Sadece_rakam_mı — boş olmayan metnin TÜM baytları ASCII rakam ('0'..'9') mı.
 // Boş metin -> yanlış.
-işlev sadece_rakam_mi(s: metin) -> mantıksal {
+genel işlev sadece_rakam_mi(s: metin) -> mantıksal {
     değişken L: tam32 = metin_uzunluk(s);
     eğer L == 0 { ver yanlış; }
     değişken i: tam32 = 0;
@@ -445,7 +445,7 @@ işlev sadece_rakam_mi(s: metin) -> mantıksal {
 // Sadece_harf_mı — boş olmayan metnin TÜM karakterleri harf mi: ASCII A-Z/a-z
 // + Türkçe (ç ğ ı i ö ş ü ve büyükleri). UTF-8 codepoint-aware; rakam, boşluk,
 // noktalama ve 3+ baytlık codepoint'ler -> yanlış. Boş metin -> yanlış.
-işlev sadece_harf_mi(s: metin) -> mantıksal {
+genel işlev sadece_harf_mi(s: metin) -> mantıksal {
     değişken L: tam32 = metin_uzunluk(s);
     eğer L == 0 { ver yanlış; }
     değişken i: tam32 = 0;
@@ -470,7 +470,7 @@ işlev sadece_harf_mi(s: metin) -> mantıksal {
 }
 
 // [D-731] son_indeks — `alt`ın SON geçişinin bayt indeksi; boş alt -> uzunluk; yoksa hiç.
-işlev son_indeks(s: metin, alt: metin) -> seçimlik<tam32> {
+genel işlev son_indeks(s: metin, alt: metin) -> seçimlik<tam32> {
     değişken M: tam32 = metin_uzunluk(alt);
     eğer M == 0 { ver değer(metin_uzunluk(s)); }
     değişken L: tam32 = metin_uzunluk(s);
@@ -489,7 +489,7 @@ işlev bosluk_bayt_mi(u: tam32) -> mantıksal {
 }
 
 // [D-731] kirp_sol — baştaki boşluk baytlarını at.
-işlev kirp_sol(s: metin) -> metin {
+genel işlev kirp_sol(s: metin) -> metin {
     değişken L: tam32 = metin_uzunluk(s);
     değişken i: tam32 = 0;
     iken i < L {
@@ -502,7 +502,7 @@ işlev kirp_sol(s: metin) -> metin {
 }
 
 // [D-731] kirp_sag — sondaki boşluk baytlarını at.
-işlev kirp_sag(s: metin) -> metin {
+genel işlev kirp_sag(s: metin) -> metin {
     değişken L: tam32 = metin_uzunluk(s);
     değişken son: tam32 = L;
     iken son > 0 {
@@ -515,7 +515,7 @@ işlev kirp_sag(s: metin) -> metin {
 }
 
 // [D-731] sozluk_karsilastir — İŞARETSİZ bayt bayt karşılaştırma.
-işlev sozluk_karsilastir(a: metin, b: metin) -> tam32 {
+genel işlev sozluk_karsilastir(a: metin, b: metin) -> tam32 {
     değişken La: tam32 = metin_uzunluk(a);
     değişken Lb: tam32 = metin_uzunluk(b);
     değişken n: tam32 = La;
@@ -536,7 +536,7 @@ işlev sozluk_karsilastir(a: metin, b: metin) -> tam32 {
 }
 
 // [D-731] kod_noktalari — UTF-8 çöz, kod noktalarını diziye ekle.
-işlev kod_noktalari(s: metin) -> Dizi<tam32> {
+genel işlev kod_noktalari(s: metin) -> Dizi<tam32> {
     değişken d: Dizi<tam32> = [];
     değişken L: tam32 = metin_uzunluk(s);
     değişken i: tam32 = 0;

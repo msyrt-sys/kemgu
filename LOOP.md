@@ -275,6 +275,16 @@
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
       Self dogru (heap-uniform, 42). Onarim: dizi_al/dizi_yaz/dizi_boyut arg0 stack ise GEP yolu
       (D-749 stack_eleman_ir kaydi hazir) ya da GURULTULU hata.
+- [ ] E4m [M] C SEÇİLİ İMPORT PARİTE AÇIKLARI (D-751 stdlib içe alma kapısı buldu; ikisi de self DOĞRU):
+      (1) seçili import edilen GENERIC yapı İŞLEV İMZASINDA (`kullan gm::{ Kap }; işlev yap() ->
+      Kap<tam32>`) C'de T011 + T001; gövde içinde kullanım ve generic olmayan tip SORUNSUZ (olculdu).
+      Muhtemel kök: imza ön-geçişi içe alınan tiplerden ÖNCE (C007 sınıfı). (2) modülle AYNI adlı üye
+      (`stdlib::temel::karsilastir::{ karsilastir }`) seçili import T024 — modül adı da sembol olarak
+      bağlanıyor; üye dışlanınca `karsilastir(3, 5)` çağrısı C --check'ten GEÇİP tanımsız
+      @karsilastir'a LINK-RED, self T002 (C modül adını işlev çağrısı olarak kabul ediyor).
+      Öneri: (1) imza geçişini içe alma sonrasına taşı; (2) seçili importta modül adını bağlama
+      (Python `from m import m` gibi) + C'de modül sembolüne çağrı T002. Kapı muafiyetleri:
+      stdlib_ithal MUAF="karsilastir sonuc" — onarılınca silinmeli.
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -317,16 +327,17 @@
 - [ ] G6  [S] `P000` yer tutucu envanteri (iki dosyada 3'er yer) — C0a ilerledikce
       sifira inmeli; kalanlar listelenmeli.
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
-- [ ] G8  [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
+- [x] G8  ✓ D-751 (369/429 bildirim genel; testler modül sistemiyle derleniyor, calistir_stdlib_ithal). [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
       bu yuzden testleri `cat` ile birlestiriliyor. Dil yuzeyi karari gerekebilir.
 - [ ] G9  [?] stdlib/kilit,semafor,bariyer'in URETIM tuketicisi YOK (D-645 test
       ekledi ama depoda kullanan kod yok). Olu API mi, yoksa kullanilmasi gereken
       mi? Karar gerekiyor.
-- [ ] G11 [S] `aout=` ve `out=1` — IZLENEN 0 BAYTLIK dosyalar, kok dizinde.
+      KARAR (2026-11-11, Opus önerisi): SİLİNMEZ. İlk üretim tüketicisi E2c (kilit/bariyer çekirdekte).
+- [x] G11 ✓ D-751 (silindi). [S] `aout=` ve `out=1` — IZLENEN 0 BAYTLIK dosyalar, kok dizinde.
       Kabuk yonlendirme kazasi (`-o aout=` / `out=1` yazim hatasi) commit'lenmis;
       Makefile/harness'larda REFERANS YOK (olculdu). Silinmeli.
       (.gitignore D-631'de `NUL`/`nul` icin ayni sinifi zaten kapatmisti.)
-- [ ] G12 [?] `dz.kem` (101 bayt) ve `probe_haz.kem` (184 bayt) kok dizinde izleniyor
+- [x] G12 ✓ D-751 (dz.kem silindi — sıfıra bölme test/bolme/ ile kapılı; probe_haz.kem korpusa taşındı: tc69_01, kapanış biçimli G006 başka yerde yoktu). [?] `dz.kem` (101 bayt) ve `probe_haz.kem` (184 bayt) kok dizinde izleniyor
       ama Makefile/harness'larda referansi YOK. Gecici probe artigi mi, yoksa
       belgelenmemis bir fikstur mu? ONCE OLC, sonra sil ya da yerine tasi.
 - [ ] G10 [S] `runtime/kdl_runtime.c` gecerli UTF-8 DEGIL (CLAUDE.md'de kayitli
@@ -2820,4 +2831,21 @@
   dongusunde k==1 (ayni sira/konum). ETKI ALANI OLCULDU: depoda bu sekli kullanan 0 dosya (iki
   esleme yorumdu). Fikstur tc68_01 (6 negatif + POZITIF: annotasyonlu heap, dogrudan literal
   arguman, yigin dizide indeks ve `için` SERBEST). Sabotaj S201 (C) / S202 (self) -> G003 6 -> 0.
+- 2026-11-11 D-751: KARARLAR UYGULANDI (Mehmet onayı, Opus önerileri). (1) E4k ARA ÖNLEM: x86 heap
+  16 -> 28 MB. Öneri 64 MB idi; ÖLÇÜM düzeltti: virtio yedek DMA tabanı 0x02000000 (kem_platform.kem)
+  ve Makefile Kanıt 7 heap'in onun altında bitmesini denetliyor -> 28 MB sığan en büyük yuvarlak
+  değer (__heap_end = 0x1D40000), ~5000 -> ~9000 tuş. Kök (E4k) açık. (2) G8: stdlib HİÇBİR modülü
+  başka dosyadan içe alınamıyordu (D-590 gizliliği evrensel; 0/429 bildirim genel; seçili ve takma
+  adlı kullan ikisi de T041 — stdlib_check `cat` ile birleştirdiği için hiçbir kapı görmüyordu).
+  KURAL dışa açma yönünde yanlı: her bildirim genel, adlandırılmış iç yardımcılar özel
+  (tools/stdlib_genel.py); test-tabanlı kural DENENDİ ve REDDEDİLDİ (testler API'yi kapsamıyor:
+  ag.gonder/al, regex.ara, harita/bagla dışarıda kalıyordu). ⚠ İlk sürümüm `geo_`/`ist_` önekini
+  yardımcı saydı ve iki modülün TÜM API'sini kapattı — kapı yakaladı. kripto/* hariç (birleştirmeyle
+  bağlı). YENİ KAPI calistir_stdlib_ithal: her modülün KENDİ testi `kullan stdlib::<m>::{genel adlar}`
+  başlığıyla modül sisteminden derlenir, C + self ikisi "OK" basmalı (⚠ --checkdump tanı bassa da 0
+  döner; ilk sürüm yalnız self'i ölçüyordu — C açığı (sonuc) ancak düzeltince göründü). 27/27 + 2
+  izlenen muafiyet (E4m). Sabotaj S203 (esit_mi özel) -> 26/27, C tek başına da kırmızı. (3) G9:
+  silinmez, tüketici E2c. (4) G11/G12: kök dizin artıkları; probe_haz.kem'in şekli (kapanıştan &yerel,
+  G006) BAŞKA HİÇBİR YERDE yoktu -> silinmedi, korpusa (tc69_01). (5) H0g: gerçek test H2+H4a
+  (QEMU+OVMF) yeşilinden sonra; PS/2 GEREKMEZ, USB klavye zaten destekleniyor.
 

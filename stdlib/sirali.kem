@@ -28,7 +28,7 @@
 // --- Yardımcılar ---
 
 // (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
-işlev sirali_boyut<T>(xs: Dizi<T>) -> tam32 {
+genel işlev sirali_boyut<T>(xs: Dizi<T>) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         n = n + 1;
@@ -38,7 +38,7 @@ işlev sirali_boyut<T>(xs: Dizi<T>) -> tam32 {
 
 // (İç yardımcı) Artan sıralı mı — karsilastir.kem sirali_mi'nin
 // yereli; test değişmezi olarak da kullanışlı.
-işlev sirali_dogrula<T>(xs: Dizi<T>) -> mantıksal {
+genel işlev sirali_dogrula<T>(xs: Dizi<T>) -> mantıksal {
     değişken n: tam32 = sirali_boyut(xs);
     değişken i: tam32 = 0;
     iken i < n - 1 {
@@ -53,7 +53,7 @@ işlev sirali_dogrula<T>(xs: Dizi<T>) -> mantıksal {
 // Sıralı konum — hedefin sırayı bozmadan eklenebileceği en sol konum
 // (hedeften küçük olmayan ilk elemanın indeksi; hepsi küçükse n).
 // İkili arama, O(log n). Orta nokta taşma-güvenli.
-işlev sirali_konum<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+genel işlev sirali_konum<T>(xs: Dizi<T>, hedef: T) -> tam32 {
     değişken alt: tam32 = 0;
     değişken ust: tam32 = sirali_boyut(xs);
     iken alt < ust {
@@ -71,7 +71,7 @@ işlev sirali_konum<T>(xs: Dizi<T>, hedef: T) -> tam32 {
 
 // Sıralı ekle — x'i doğru konuma yerleştirilmiş YENİ dizi döner.
 // Konum ikili aramayla (O(log n)), kopya O(n).
-işlev sirali_ekle<T>(xs: Dizi<T>, x: T) -> Dizi<T> {
+genel işlev sirali_ekle<T>(xs: Dizi<T>, x: T) -> Dizi<T> {
     değişken konum: tam32 = sirali_konum(xs, x);
     değişken n: tam32 = sirali_boyut(xs);
     değişken sonuc: Dizi<T> = dizi_olustur(0);
@@ -90,7 +90,7 @@ işlev sirali_ekle<T>(xs: Dizi<T>, x: T) -> Dizi<T> {
 
 // Sıralı birleştir (merge) — iki artan sıralı diziyi tek artan sıralı
 // YENİ dizide birleştir. O(n+m), KARARLI (eşitlikte a önce).
-işlev birlestir_sirali<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+genel işlev birlestir_sirali<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
     değişken na: tam32 = sirali_boyut(a);
     değişken nb: tam32 = sirali_boyut(b);
     değişken sonuc: Dizi<T> = dizi_olustur(0);
@@ -143,7 +143,7 @@ işlev hizli_sirala_aralik<T>(xs: Dizi<T>, dus: tam32, yuk: tam32) -> Dizi<T> {
 
 // Hızlı sırala — diziyi YERİNDE artan sırala, aynı diziyi döner
 // (zincirleme). Ortalama O(n log n); sıralı girdide O(n²) — bkz. başlık.
-işlev hizli_sirala<T>(xs: Dizi<T>) -> Dizi<T> {
+genel işlev hizli_sirala<T>(xs: Dizi<T>) -> Dizi<T> {
     ver hizli_sirala_aralik(xs, 0, sirali_boyut(xs) - 1);
 }
 

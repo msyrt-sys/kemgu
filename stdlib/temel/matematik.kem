@@ -10,40 +10,40 @@
 //   - Python: sayısal tip muğlak; KEMGU: explicit tip
 //   - Go: yıllarca generic yoktu; KEMGU: gün 1'den generic
 
-işlev mutlak<T>(x: T) -> T {
+genel işlev mutlak<T>(x: T) -> T {
     eğer x < 0 { ver 0 - x; }
     ver x;
 }
 
-işlev en_kucuk<T>(a: T, b: T) -> T {
+genel işlev en_kucuk<T>(a: T, b: T) -> T {
     eğer a < b { ver a; }
     ver b;
 }
 
-işlev en_buyuk<T>(a: T, b: T) -> T {
+genel işlev en_buyuk<T>(a: T, b: T) -> T {
     eğer a > b { ver a; }
     ver b;
 }
 
 // Kare: x * x. Generic; her sayısal tip için çalışır.
-işlev kare<T>(x: T) -> T {
+genel işlev kare<T>(x: T) -> T {
     ver x * x;
 }
 
 // Küp: x * x * x.
-işlev kup<T>(x: T) -> T {
+genel işlev kup<T>(x: T) -> T {
     ver x * x * x;
 }
 
 // Sınırlandır: x'i [alt, ust] aralığına çek.
-işlev sinirla<T>(x: T, alt: T, ust: T) -> T {
+genel işlev sinirla<T>(x: T, alt: T, ust: T) -> T {
     eğer x < alt { ver alt; }
     eğer x > ust { ver ust; }
     ver x;
 }
 
 // İşaret: -1 negatif, 0 sıfır, +1 pozitif. tam32 döndürür.
-işlev isaret<T>(x: T) -> tam32 {
+genel işlev isaret<T>(x: T) -> tam32 {
     eğer x < 0 { ver 0 - 1; }
     eğer x > 0 { ver 1; }
     ver 0;
@@ -64,7 +64,7 @@ işlev isaret<T>(x: T) -> tam32 {
 // bağlayacak constraint sistemi yok). `bir()` intrinsic'i tam bu boşluk için
 // eklendi: dönüş tipi BEKLENEN'den gelir, monomorfizasyonda somutlaşır.
 // D-441 bu kusuru testle SABİTLEMİŞTİ; artık gerçek değer dönüyor.
-işlev kuvvet<T>(x: T, n: tam32) -> T {
+genel işlev kuvvet<T>(x: T, n: tam32) -> T {
     eğer n == 0 { ver bir(); }
     değişken sonuc: T = x;
     değişken i: tam32 = 1;
@@ -76,7 +76,7 @@ işlev kuvvet<T>(x: T, n: tam32) -> T {
 }
 
 // Kök — tamsayı karekök (Newton-Raphson). n < 0 için 0 döner.
-işlev kok_tam(n: tam32) -> tam32 {
+genel işlev kok_tam(n: tam32) -> tam32 {
     eğer n < 2 { ver n; }
     değişken x: tam32 = n;
     değişken y: tam32 = (x + 1) / 2;
@@ -88,12 +88,12 @@ işlev kok_tam(n: tam32) -> tam32 {
 }
 
 // Modulo — a % b (generic; tüm sayısal tipler).
-işlev mod<T>(a: T, b: T) -> T {
+genel işlev mod<T>(a: T, b: T) -> T {
     ver a % b;
 }
 
 // Asal mı — trial division. n <= 1 için yanlış, n == 2 için doğru.
-işlev asal_mi(n: tam32) -> mantıksal {
+genel işlev asal_mi(n: tam32) -> mantıksal {
     eğer n < 2 { ver yanlış; }
     eğer n == 2 { ver doğru; }
     eğer n % 2 == 0 { ver yanlış; }
@@ -108,7 +108,7 @@ işlev asal_mi(n: tam32) -> mantıksal {
 // Fibonacci — n. terim (0-tabanlı: fib(0)=0, fib(1)=1, fib(2)=1, ...).
 // tam32 döner — overflow ~46. terimde. tam64 versiyonu için
 // fibonacci_genis (tip int conversion'i olmadığı için ayrı imza).
-işlev fibonacci(n: tam32) -> tam32 {
+genel işlev fibonacci(n: tam32) -> tam32 {
     eğer n < 2 { ver n; }
     değişken a: tam32 = 0;
     değişken b: tam32 = 1;
@@ -124,7 +124,7 @@ işlev fibonacci(n: tam32) -> tam32 {
 
 // Faktöriyel — n! (n < 0 için 1, n=0 için 1).
 // tam32 döner — 12! sığar, 13! taşar.
-işlev faktoriyel(n: tam32) -> tam32 {
+genel işlev faktoriyel(n: tam32) -> tam32 {
     eğer n < 1 { ver 1; }
     değişken sonuc: tam32 = 1;
     değişken i: tam32 = 1;
@@ -136,37 +136,37 @@ işlev faktoriyel(n: tam32) -> tam32 {
 }
 
 // Çift mi — n % 2 == 0.
-işlev cift_mi<T>(n: T) -> mantıksal {
+genel işlev cift_mi<T>(n: T) -> mantıksal {
     ver n % 2 == 0;
 }
 
 // Tek mi — n % 2 != 0.
-işlev tek_mi<T>(n: T) -> mantıksal {
+genel işlev tek_mi<T>(n: T) -> mantıksal {
     ver n % 2 != 0;
 }
 
 // Negatif mi.
-işlev negatif_mi<T>(x: T) -> mantıksal {
+genel işlev negatif_mi<T>(x: T) -> mantıksal {
     ver x < 0;
 }
 
 // Pozitif mi (sıfır dahil değil).
-işlev pozitif_mi<T>(x: T) -> mantıksal {
+genel işlev pozitif_mi<T>(x: T) -> mantıksal {
     ver x > 0;
 }
 
 // Sıfır mı.
-işlev sifir_mi<T>(x: T) -> mantıksal {
+genel işlev sifir_mi<T>(x: T) -> mantıksal {
     ver x == 0;
 }
 
 // İki kat (ikiyle çarp).
-işlev iki_kat<T>(x: T) -> T {
+genel işlev iki_kat<T>(x: T) -> T {
     ver x * 2;
 }
 
 // Yarısı (ikiye böl).
-işlev yarisi<T>(x: T) -> T {
+genel işlev yarisi<T>(x: T) -> T {
     ver x / 2;
 }
 
@@ -180,7 +180,7 @@ işlev yarisi<T>(x: T) -> T {
 // değerleri tam64'te tutar.
 
 // İki tamsayının OBEB'i (GCD) — Öklid; ikili_obeb(0, x) = x.
-işlev ikili_obeb(a: tam32, b: tam32) -> tam32 {
+genel işlev ikili_obeb(a: tam32, b: tam32) -> tam32 {
     değişken x: tam32 = a;
     değişken y: tam32 = b;
     iken y != 0 {
@@ -193,7 +193,7 @@ işlev ikili_obeb(a: tam32, b: tam32) -> tam32 {
 
 // İki tamsayının EKOK'u (LCM). a veya b sıfırsa 0 (taşmayı önlemek için
 // önce böl: a / obeb * b).
-işlev ikili_ekok(a: tam32, b: tam32) -> tam32 {
+genel işlev ikili_ekok(a: tam32, b: tam32) -> tam32 {
     eğer a == 0 { ver 0; }
     eğer b == 0 { ver 0; }
     ver (a / ikili_obeb(a, b)) * b;
@@ -201,7 +201,7 @@ işlev ikili_ekok(a: tam32, b: tam32) -> tam32 {
 
 // OBEB_dizi — dizideki tüm sayıların OBEB'i. Boş dizi -> 0; negatifler
 // mutlak değere indirgenir; tek eleman -> |o eleman|.
-işlev obeb_dizi(xs: Dizi<tam32>) -> tam32 {
+genel işlev obeb_dizi(xs: Dizi<tam32>) -> tam32 {
     değişken g: tam32 = 0;
     için x: xs {
         g = ikili_obeb(g, mutlak(x));
@@ -211,7 +211,7 @@ işlev obeb_dizi(xs: Dizi<tam32>) -> tam32 {
 
 // EKOK_dizi — dizideki tüm sayıların EKOK'u. Boş dizi -> 1 (çarpımsal birim);
 // herhangi bir eleman 0 ise 0; negatifler mutlak değere indirgenir.
-işlev ekok_dizi(xs: Dizi<tam32>) -> tam32 {
+genel işlev ekok_dizi(xs: Dizi<tam32>) -> tam32 {
     değişken l: tam32 = 1;
     için x: xs {
         l = ikili_ekok(l, mutlak(x));
@@ -222,7 +222,7 @@ işlev ekok_dizi(xs: Dizi<tam32>) -> tam32 {
 // Modüler üs — (taban^us) mod m, hızlı üs (kareleme yöntemi). Ara çarpımlar
 // tam64'te hesaplanır → tam32 taşması önlenir. us >= 0, m >= 1 varsayılır;
 // m == 1 -> 0. Negatif taban normalleştirilir.
-işlev us_mod(taban: tam32, us: tam32, m: tam32) -> tam32 {
+genel işlev us_mod(taban: tam32, us: tam32, m: tam32) -> tam32 {
     değişken mm: tam64 = m olarak tam64;
     eğer mm == 1 { ver 0; }
     değişken sonuc: tam64 = 1;
@@ -240,7 +240,7 @@ işlev us_mod(taban: tam32, us: tam32, m: tam32) -> tam32 {
 // Kombinasyon — C(n, k) binom katsayısı. Çarpımsal formül (her adımda tam
 // bölünme garantili) + tam64 ara değer. k < 0 veya k > n -> 0; simetri ile
 // k = min(k, n-k) alınarak iterasyon azaltılır.
-işlev kombinasyon(n: tam32, k: tam32) -> tam64 {
+genel işlev kombinasyon(n: tam32, k: tam32) -> tam64 {
     eğer k < 0 { ver 0; }
     eğer k > n { ver 0; }
     değişken kk: tam32 = k;
@@ -257,7 +257,7 @@ işlev kombinasyon(n: tam32, k: tam32) -> tam64 {
 
 // Permütasyon — P(n, k) = n!/(n-k)! = n·(n-1)···(n-k+1). tam64 ara değer.
 // k < 0 veya k > n -> 0; k = 0 -> 1.
-işlev permutasyon(n: tam32, k: tam32) -> tam64 {
+genel işlev permutasyon(n: tam32, k: tam32) -> tam64 {
     eğer k < 0 { ver 0; }
     eğer k > n { ver 0; }
     değişken sonuc: tam64 = 1;
@@ -271,7 +271,7 @@ işlev permutasyon(n: tam32, k: tam32) -> tam64 {
 
 // Palindrom_mu — sayının ondalık basamakları simetrik mi. Negatif -> yanlış;
 // 0 -> doğru. Ters çevirme tam64'te (tam32 ters çevirme taşabilir).
-işlev palindrom_mu(n: tam32) -> mantıksal {
+genel işlev palindrom_mu(n: tam32) -> mantıksal {
     eğer n < 0 { ver yanlış; }
     değişken ters: tam64 = 0;
     değişken kalan: tam32 = n;

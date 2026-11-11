@@ -20,7 +20,7 @@
 // --- Yardımcı ---
 
 // (İç yardımcı) 2^n — n 0..30 aralığında; aralık dışında 0 döner.
-işlev bit_ikinin_ussu(n: tam32) -> tam32 {
+genel işlev bit_ikinin_ussu(n: tam32) -> tam32 {
     eğer n < 0 { ver 0; }
     eğer n > 30 { ver 0; }
     değişken p: tam32 = 1;
@@ -35,7 +35,7 @@ işlev bit_ikinin_ussu(n: tam32) -> tam32 {
 // --- Tek bit sorgulama / değiştirme ---
 
 // Bit al — i. bit 1 mi? Alan dışında (x < 0 veya i 0..30 dışı) yanlış.
-işlev bit_al(x: tam32, i: tam32) -> mantıksal {
+genel işlev bit_al(x: tam32, i: tam32) -> mantıksal {
     eğer x < 0 { ver yanlış; }
     eğer i < 0 { ver yanlış; }
     eğer i > 30 { ver yanlış; }
@@ -43,7 +43,7 @@ işlev bit_al(x: tam32, i: tam32) -> mantıksal {
 }
 
 // Bit kur — i. biti 1 yap. Zaten 1 ise değişmez (idempotent).
-işlev bit_kur(x: tam32, i: tam32) -> tam32 {
+genel işlev bit_kur(x: tam32, i: tam32) -> tam32 {
     eğer x < 0 { ver x; }
     eğer i < 0 { ver x; }
     eğer i > 30 { ver x; }
@@ -52,7 +52,7 @@ işlev bit_kur(x: tam32, i: tam32) -> tam32 {
 }
 
 // Bit temizle — i. biti 0 yap. Zaten 0 ise değişmez (idempotent).
-işlev bit_temizle(x: tam32, i: tam32) -> tam32 {
+genel işlev bit_temizle(x: tam32, i: tam32) -> tam32 {
     eğer x < 0 { ver x; }
     eğer i < 0 { ver x; }
     eğer i > 30 { ver x; }
@@ -61,7 +61,7 @@ işlev bit_temizle(x: tam32, i: tam32) -> tam32 {
 }
 
 // Bit çevir — i. biti tersle (0 -> 1, 1 -> 0).
-işlev bit_cevir(x: tam32, i: tam32) -> tam32 {
+genel işlev bit_cevir(x: tam32, i: tam32) -> tam32 {
     eğer x < 0 { ver x; }
     eğer i < 0 { ver x; }
     eğer i > 30 { ver x; }
@@ -73,7 +73,7 @@ işlev bit_cevir(x: tam32, i: tam32) -> tam32 {
 
 // Bit say — 1 olan bitlerin sayısı (popcount). Alan dışında (x < 0)
 // -1 döner (nötr 0, "hiç bit yok" ile karışırdı — açık işaret).
-işlev bit_say(x: tam32) -> tam32 {
+genel işlev bit_say(x: tam32) -> tam32 {
     eğer x < 0 { ver 0 - 1; }
     değişken kalan: tam32 = x;
     değişken sayi: tam32 = 0;
@@ -86,7 +86,7 @@ işlev bit_say(x: tam32) -> tam32 {
 
 // Önde sıfır — 32-bit sözcükte baştaki (en anlamlı uçtaki) sıfır
 // sayısı. 0 için 32; negatifte işaret biti 1 olduğundan 0.
-işlev onde_sifir(x: tam32) -> tam32 {
+genel işlev onde_sifir(x: tam32) -> tam32 {
     eğer x < 0 { ver 0; }
     eğer x == 0 { ver 32; }
     değişken kalan: tam32 = x;
@@ -102,7 +102,7 @@ işlev onde_sifir(x: tam32) -> tam32 {
 
 // Güç iki mi — x, 2'nin tam kuvveti mi (1, 2, 4, 8, ...)? 0 ve
 // negatifler için yanlış.
-işlev guc_iki_mi(x: tam32) -> mantıksal {
+genel işlev guc_iki_mi(x: tam32) -> mantıksal {
     eğer x <= 0 { ver yanlış; }
     değişken kalan: tam32 = x;
     iken kalan % 2 == 0 {
@@ -117,7 +117,7 @@ işlev guc_iki_mi(x: tam32) -> mantıksal {
 // kaydır (taşan üst bitler alttan girer). Sözleşme: 1 <= genislik <= 30,
 // 0 <= x < 2^genislik, kac >= 0 (genişliğe göre mod alınır). Sözleşme
 // dışı çağrı x'i aynen döner.
-işlev sola_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
+genel işlev sola_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
     eğer genislik < 1 { ver x; }
     eğer genislik > 30 { ver x; }
     eğer kac < 0 { ver x; }
@@ -133,7 +133,7 @@ işlev sola_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
 
 // Sağa döndür — genislik-bitlik sözcükte kac konum sağa çevrimli
 // kaydır (taşan alt bitler üstten girer). Sözleşme sola_dondur ile aynı.
-işlev saga_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
+genel işlev saga_dondur(x: tam32, kac: tam32, genislik: tam32) -> tam32 {
     eğer genislik < 1 { ver x; }
     eğer genislik > 30 { ver x; }
     eğer kac < 0 { ver x; }

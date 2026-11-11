@@ -9,23 +9,23 @@
 //
 // Tasarım kuralı: Java equals/hashCode tuzağına düşme — fonksiyonel.
 
-işlev esit_mi<T>(a: T, b: T) -> mantıksal {
+genel işlev esit_mi<T>(a: T, b: T) -> mantıksal {
     ver a == b;
 }
 
-işlev farkli_mi<T>(a: T, b: T) -> mantıksal {
+genel işlev farkli_mi<T>(a: T, b: T) -> mantıksal {
     ver a != b;
 }
 
 // -1: a < b, 0: a == b, +1: a > b
-işlev karsilastir<T>(a: T, b: T) -> tam32 {
+genel işlev karsilastir<T>(a: T, b: T) -> tam32 {
     eğer a < b { ver 0 - 1; }
     eğer a > b { ver 1; }
     ver 0;
 }
 
 // Üç değerden en küçük.
-işlev en_kucuk_uc<T>(a: T, b: T, c: T) -> T {
+genel işlev en_kucuk_uc<T>(a: T, b: T, c: T) -> T {
     değişken m: T = a;
     eğer b < m { m = b; }
     eğer c < m { m = c; }
@@ -33,7 +33,7 @@ işlev en_kucuk_uc<T>(a: T, b: T, c: T) -> T {
 }
 
 // Üç değerden en büyük.
-işlev en_buyuk_uc<T>(a: T, b: T, c: T) -> T {
+genel işlev en_buyuk_uc<T>(a: T, b: T, c: T) -> T {
     değişken m: T = a;
     eğer b > m { m = b; }
     eğer c > m { m = c; }
@@ -42,7 +42,7 @@ işlev en_buyuk_uc<T>(a: T, b: T, c: T) -> T {
 
 // Ters karşılaştırıcı — karsilastir'ın işaretini çevirir (azalan sıralama için).
 // a < b -> +1, a > b -> -1. (b, a) ile çağırmaya eşdeğer.
-işlev karsilastir_ters<T>(a: T, b: T) -> tam32 {
+genel işlev karsilastir_ters<T>(a: T, b: T) -> tam32 {
     ver karsilastir(b, a);
 }
 
@@ -68,7 +68,7 @@ işlev dizi_uzunluk<T>(xs: Dizi<T>) -> tam32 {
 }
 
 // Sıralı mı — azalmayan (non-decreasing) sırada mı. Boş/tek -> doğru.
-işlev sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
+genel işlev sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
     değişken n: tam32 = dizi_uzunluk(xs);
     eğer n < 2 { ver doğru; }
     değişken i: tam32 = 1;
@@ -80,7 +80,7 @@ işlev sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
 }
 
 // Ters sıralı mı — artmayan (non-increasing) sırada mı. Boş/tek -> doğru.
-işlev ters_sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
+genel işlev ters_sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
     değişken n: tam32 = dizi_uzunluk(xs);
     eğer n < 2 { ver doğru; }
     değişken i: tam32 = 1;
@@ -93,7 +93,7 @@ işlev ters_sirali_mi<T>(xs: Dizi<T>) -> mantıksal {
 
 // Lexicographic dizi karşılaştırma — sözlük sırası. -1: a < b, 0: eşit, +1: a > b.
 // Eleman eşitse daha kısa olan küçük (prefix kuralı). karsilastir<T> kullanır.
-işlev dizi_karsilastir<T>(a: Dizi<T>, b: Dizi<T>) -> tam32 {
+genel işlev dizi_karsilastir<T>(a: Dizi<T>, b: Dizi<T>) -> tam32 {
     değişken na: tam32 = dizi_uzunluk(a);
     değişken nb: tam32 = dizi_uzunluk(b);
     değişken i: tam32 = 0;
@@ -109,13 +109,13 @@ işlev dizi_karsilastir<T>(a: Dizi<T>, b: Dizi<T>) -> tam32 {
 
 // Dizi eşit mi — lexicographic karşılaştırma 0 ise eşit (< > destekli T;
 // dizi_karsilastir üzerinden).
-işlev dizi_esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
+genel işlev dizi_esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
     ver dizi_karsilastir(a, b) == 0;
 }
 
 // En küçük eleman (generic; boş ise hiç). sayisal'ın tam32 dizi_min'inin
 // generic eşi.
-işlev en_kucuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
+genel işlev en_kucuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
     değişken n: tam32 = dizi_uzunluk(xs);
     eğer n == 0 { ver hiç; }
     değişken m: T = xs[0];
@@ -126,7 +126,7 @@ işlev en_kucuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
 }
 
 // En büyük eleman (generic; boş ise hiç).
-işlev en_buyuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
+genel işlev en_buyuk_dizi<T>(xs: Dizi<T>) -> seçimlik<T> {
     değişken n: tam32 = dizi_uzunluk(xs);
     eğer n == 0 { ver hiç; }
     değişken m: T = xs[0];

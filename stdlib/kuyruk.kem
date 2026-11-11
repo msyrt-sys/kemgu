@@ -26,13 +26,13 @@
 // Generic bağlamda: değişken k: Dizi<T> = dizi_olustur(0);
 
 // Boş tam32 kuyruğu kur.
-işlev kuyruk_olustur_tam() -> Dizi<tam32> {
+genel işlev kuyruk_olustur_tam() -> Dizi<tam32> {
     değişken k: Dizi<tam32> = dizi_olustur(0);
     ver k;
 }
 
 // Boş metin kuyruğu kur.
-işlev kuyruk_olustur_metin() -> Dizi<metin> {
+genel işlev kuyruk_olustur_metin() -> Dizi<metin> {
     değişken k: Dizi<metin> = dizi_olustur(0);
     ver k;
 }
@@ -40,7 +40,7 @@ işlev kuyruk_olustur_metin() -> Dizi<metin> {
 // --- Sorgular ---
 
 // Eleman sayısı.
-işlev kuyruk_boyut<T>(k: Dizi<T>) -> tam32 {
+genel işlev kuyruk_boyut<T>(k: Dizi<T>) -> tam32 {
     değişken n: tam32 = 0;
     için x: k {
         n = n + 1;
@@ -49,14 +49,14 @@ işlev kuyruk_boyut<T>(k: Dizi<T>) -> tam32 {
 }
 
 // Boş mu?
-işlev kuyruk_bos_mu<T>(k: Dizi<T>) -> mantıksal {
+genel işlev kuyruk_bos_mu<T>(k: Dizi<T>) -> mantıksal {
     ver kuyruk_boyut(k) == 0;
 }
 
 // --- Erişim ---
 
 // Öndeki eleman (çıkarmadan oku). Boş kuyrukta hiç.
-işlev kuyruk_on<T>(k: Dizi<T>) -> seçimlik<T> {
+genel işlev kuyruk_on<T>(k: Dizi<T>) -> seçimlik<T> {
     eğer kuyruk_bos_mu(k) { ver hiç; }
     ver değer(k[0]);
 }
@@ -65,7 +65,7 @@ işlev kuyruk_on<T>(k: Dizi<T>) -> seçimlik<T> {
 
 // Ekle (enqueue) — elemanı kuyruğun sonuna ekle. Yerinde ekler,
 // aynı diziyi döner (zincirleme kullanım).
-işlev kuyruk_ekle<T>(k: Dizi<T>, x: T) -> Dizi<T> {
+genel işlev kuyruk_ekle<T>(k: Dizi<T>, x: T) -> Dizi<T> {
     dizi_ekle(k, x);
     ver k;
 }
@@ -73,7 +73,7 @@ işlev kuyruk_ekle<T>(k: Dizi<T>, x: T) -> Dizi<T> {
 // Çıkar (dequeue) — öndeki eleman ATILMIŞ yeni kuyruğu döner.
 // Çıkarılan değer gerekiyorsa önce kuyruk_on ile oku. Boş kuyrukta
 // boş döner.
-işlev kuyruk_cikar<T>(k: Dizi<T>) -> Dizi<T> {
+genel işlev kuyruk_cikar<T>(k: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     değişken n: tam32 = kuyruk_boyut(k);
     değişken i: tam32 = 1;

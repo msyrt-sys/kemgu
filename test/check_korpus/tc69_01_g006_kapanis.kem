@@ -1,0 +1,11 @@
+// [D-751] G006 KAPANIŞ BİÇİMİ: ifade-formu lambda yerel değişkenin adresini döndürüyor
+// (`|| &a`) — çerçeve dönünce sarkan işaretçi. Bu şekil yalnız kök dizindeki izlenen bir
+// deneme artığında (probe_haz.kem, D-497) duruyordu, hiçbir kapı onu ölçmüyordu; G12
+// temizliğinde silinmek yerine korpusa taşındı. C ve self-host: G006 7:43.
+işlev f() -> tam32 {
+    değişken a: tam32 = 40;
+    değişken g: işlev() -> &tam32 = || &a;
+    değişken p: &tam32 = g();
+    ver *p + 2;
+}
+işlev main() -> tam32 { ver f(); }

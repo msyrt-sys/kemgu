@@ -18,7 +18,7 @@
 // --- Sorgular (tam generic) ---
 
 // Değer var mı? (değer(v) ise doğru)
-işlev var_mi<T>(opt: seçimlik<T>) -> mantıksal {
+genel işlev var_mi<T>(opt: seçimlik<T>) -> mantıksal {
     eşleş opt {
         değer(v) => { ver doğru; }
         hiç => { ver yanlış; }
@@ -27,7 +27,7 @@ işlev var_mi<T>(opt: seçimlik<T>) -> mantıksal {
 }
 
 // Yok mu? (hiç ise doğru)
-işlev yok_mu<T>(opt: seçimlik<T>) -> mantıksal {
+genel işlev yok_mu<T>(opt: seçimlik<T>) -> mantıksal {
     eşleş opt {
         değer(v) => { ver yanlış; }
         hiç => { ver doğru; }
@@ -36,14 +36,14 @@ işlev yok_mu<T>(opt: seçimlik<T>) -> mantıksal {
 }
 
 // Boş mu — yok_mu için alias (Türkçe okuma kolaylığı).
-işlev bos_mu<T>(opt: seçimlik<T>) -> mantıksal {
+genel işlev bos_mu<T>(opt: seçimlik<T>) -> mantıksal {
     ver yok_mu(opt);
 }
 
 // --- Çözüm (tam generic) ---
 
 // Değeri al, yoksa varsayılan döner.
-işlev ya_da_varsayilan<T>(opt: seçimlik<T>, varsayilan: T) -> T {
+genel işlev ya_da_varsayilan<T>(opt: seçimlik<T>, varsayilan: T) -> T {
     eşleş opt {
         değer(v) => { ver v; }
         hiç => { ver varsayilan; }
@@ -52,7 +52,7 @@ işlev ya_da_varsayilan<T>(opt: seçimlik<T>, varsayilan: T) -> T {
 }
 
 // İki opsiyonel arasında ilk değer olanı döner.
-işlev ilk_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
+genel işlev ilk_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
     eşleş a {
         değer(v) => { ver a; }
         hiç => { ver b; }
@@ -61,7 +61,7 @@ işlev ilk_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
 }
 
 // İki opsiyonel arasından, ikisi de değer ise A'yı, biri eksikse hiç.
-işlev her_iki_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
+genel işlev her_iki_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
     eşleş a {
         değer(v) => {
             eşleş b {
@@ -78,7 +78,7 @@ işlev her_iki_var<T>(a: seçimlik<T>, b: seçimlik<T>) -> seçimlik<T> {
 // --- Eşitlik (her T için) ---
 
 // İki opsiyonel değer-eşitliği. Her iki yan değer ise içerikleri karşılaştırılır.
-işlev esit_mi<T>(a: seçimlik<T>, b: seçimlik<T>) -> mantıksal {
+genel işlev esit_mi<T>(a: seçimlik<T>, b: seçimlik<T>) -> mantıksal {
     eşleş a {
         değer(v) => {
             eşleş b {
@@ -102,14 +102,14 @@ işlev esit_mi<T>(a: seçimlik<T>, b: seçimlik<T>) -> mantıksal {
 
 // Sarmala — değer<T> üret. (Doğrudan `değer(x)` kullanılabilir; bu sarmalayıcı
 // fonksiyonel pipeline'larda kullanışlı.)
-işlev sarmala<T>(x: T) -> seçimlik<T> {
+genel işlev sarmala<T>(x: T) -> seçimlik<T> {
     ver değer(x);
 }
 
 // Boş — `hiç` üreten yardımcı. Generic context'te tipini açıkça verir.
 // Not: parametrik olarak boş üretmek için `<T>` bilgisi gerekiyor;
 // şu an sadece concrete tipte test edilebilir.
-işlev bos_olustur<T>(rumuz: T) -> seçimlik<T> {
+genel işlev bos_olustur<T>(rumuz: T) -> seçimlik<T> {
     // rumuz tipi T'yi taşıyor; gerçekte kullanılmıyor
     ver hiç;
 }
@@ -117,7 +117,7 @@ işlev bos_olustur<T>(rumuz: T) -> seçimlik<T> {
 // --- Harita / Filtre / Bagla (tam generic — Madde D sonrasi) ---
 
 // Harita<T,U> — deger ise f uygula, hic ise hic doner.
-işlev harita<T, U>(opt: seçimlik<T>, f: işlev(T) -> U) -> seçimlik<U> {
+genel işlev harita<T, U>(opt: seçimlik<T>, f: işlev(T) -> U) -> seçimlik<U> {
     eşleş opt {
         değer(v) => { ver değer(f(v)); }
         hiç => { ver hiç; }
@@ -126,7 +126,7 @@ işlev harita<T, U>(opt: seçimlik<T>, f: işlev(T) -> U) -> seçimlik<U> {
 }
 
 // Filtre<T> — deger ise pred uygula, dogru ise koru, degilse hic.
-işlev filtre<T>(opt: seçimlik<T>, pred: işlev(T) -> mantıksal) -> seçimlik<T> {
+genel işlev filtre<T>(opt: seçimlik<T>, pred: işlev(T) -> mantıksal) -> seçimlik<T> {
     eşleş opt {
         değer(v) => {
             eğer pred(v) { ver değer(v); }
@@ -139,7 +139,7 @@ işlev filtre<T>(opt: seçimlik<T>, pred: işlev(T) -> mantıksal) -> seçimlik<
 
 // Bagla<T,U> — deger ise f cagir (yeni secimlik doner), hic ise hic.
 // flatMap karsiligi.
-işlev bagla<T, U>(opt: seçimlik<T>, f: işlev(T) -> seçimlik<U>) -> seçimlik<U> {
+genel işlev bagla<T, U>(opt: seçimlik<T>, f: işlev(T) -> seçimlik<U>) -> seçimlik<U> {
     eşleş opt {
         değer(v) => { ver f(v); }
         hiç => { ver hiç; }
@@ -148,7 +148,7 @@ işlev bagla<T, U>(opt: seçimlik<T>, f: işlev(T) -> seçimlik<U>) -> seçimlik
 }
 
 // Ya da cagir<T> — deger ise doner, hic ise lazy uretici f'i cagirir.
-işlev ya_da_cagir<T>(opt: seçimlik<T>, f: işlev() -> T) -> T {
+genel işlev ya_da_cagir<T>(opt: seçimlik<T>, f: işlev() -> T) -> T {
     eşleş opt {
         değer(v) => { ver v; }
         hiç => { ver f(); }
@@ -160,7 +160,7 @@ işlev ya_da_cagir<T>(opt: seçimlik<T>, f: işlev() -> T) -> T {
 
 // Harita-ya-da<T,U> — deger ise f(v) uygula, hic ise varsayilan U doner.
 // `harita` + `ya_da_varsayilan` birlesimi; tek geciste U uretir.
-işlev harita_ya_da<T, U>(opt: seçimlik<T>, varsayilan: U,
+genel işlev harita_ya_da<T, U>(opt: seçimlik<T>, varsayilan: U,
                           f: işlev(T) -> U) -> U {
     eşleş opt {
         değer(v) => { ver f(v); }
@@ -170,7 +170,7 @@ işlev harita_ya_da<T, U>(opt: seçimlik<T>, varsayilan: U,
 }
 
 // Say<T> — deger varsa 1, hic ise 0 (opsiyoneli sayilabilir gibi gor).
-işlev say<T>(opt: seçimlik<T>) -> tam32 {
+genel işlev say<T>(opt: seçimlik<T>) -> tam32 {
     eşleş opt {
         değer(v) => { ver 1; }
         hiç => { ver 0; }
@@ -185,7 +185,7 @@ işlev say<T>(opt: seçimlik<T>) -> tam32 {
 // --- Harita / Filtre / Bagla (tam32 — concrete, geri uyumluluk) ---
 
 // Harita — deger ise f uygula, hic ise hic doner.
-işlev harita_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> tam32) -> seçimlik<tam32> {
+genel işlev harita_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> tam32) -> seçimlik<tam32> {
     eşleş opt {
         değer(v) => { ver değer(f(v)); }
         hiç => { ver hiç; }
@@ -194,7 +194,7 @@ işlev harita_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> tam32) -> seçimlik
 }
 
 // Filtre — değer ise pred uygula, doğru ise koru, değilse hiç.
-işlev filtre_tam(opt: seçimlik<tam32>, pred: işlev(tam32) -> mantıksal) -> seçimlik<tam32> {
+genel işlev filtre_tam(opt: seçimlik<tam32>, pred: işlev(tam32) -> mantıksal) -> seçimlik<tam32> {
     eşleş opt {
         değer(v) => {
             eğer pred(v) { ver değer(v); }
@@ -207,7 +207,7 @@ işlev filtre_tam(opt: seçimlik<tam32>, pred: işlev(tam32) -> mantıksal) -> s
 
 // Bağla — değer ise f çağır (yeni seçimlik döner), hiç ise hiç.
 // flatMap karşılığı.
-işlev bagla_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> seçimlik<tam32>) -> seçimlik<tam32> {
+genel işlev bagla_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> seçimlik<tam32>) -> seçimlik<tam32> {
     eşleş opt {
         değer(v) => { ver f(v); }
         hiç => { ver hiç; }
@@ -216,7 +216,7 @@ işlev bagla_tam(opt: seçimlik<tam32>, f: işlev(tam32) -> seçimlik<tam32>) ->
 }
 
 // Ya da çağır — değer ise döner, hiç ise lazy üretici f'i çağırır.
-işlev ya_da_cagir_tam(opt: seçimlik<tam32>, f: işlev() -> tam32) -> tam32 {
+genel işlev ya_da_cagir_tam(opt: seçimlik<tam32>, f: işlev() -> tam32) -> tam32 {
     eşleş opt {
         değer(v) => { ver v; }
         hiç => { ver f(); }
@@ -226,7 +226,7 @@ işlev ya_da_cagir_tam(opt: seçimlik<tam32>, f: işlev() -> tam32) -> tam32 {
 
 // --- Harita / Filtre (metin) ---
 
-işlev harita_metin(opt: seçimlik<metin>, f: işlev(metin) -> metin) -> seçimlik<metin> {
+genel işlev harita_metin(opt: seçimlik<metin>, f: işlev(metin) -> metin) -> seçimlik<metin> {
     eşleş opt {
         değer(v) => { ver değer(f(v)); }
         hiç => { ver hiç; }
@@ -234,7 +234,7 @@ işlev harita_metin(opt: seçimlik<metin>, f: işlev(metin) -> metin) -> seçiml
     ver hiç;
 }
 
-işlev filtre_metin(opt: seçimlik<metin>, pred: işlev(metin) -> mantıksal) -> seçimlik<metin> {
+genel işlev filtre_metin(opt: seçimlik<metin>, pred: işlev(metin) -> mantıksal) -> seçimlik<metin> {
     eşleş opt {
         değer(v) => {
             eğer pred(v) { ver değer(v); }

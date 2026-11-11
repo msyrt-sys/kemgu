@@ -39,7 +39,7 @@ işlev arama_boyut<T>(xs: Dizi<T>) -> tam32 {
 // --- Doğrusal arama (sıralılık gerekmez, T == destekli) ---
 
 // Doğrusal ara — hedefe eşit İLK elemanın indeksi, yoksa hiç. O(n).
-işlev dogrusal_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
+genel işlev dogrusal_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
     değişken i: tam32 = 0;
     için x: xs {
         eğer x == hedef { ver değer(i); }
@@ -49,7 +49,7 @@ işlev dogrusal_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
 }
 
 // İlk uygun — predicate'i karşılayan İLK elemanın indeksi, yoksa hiç.
-işlev ilk_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam32> {
+genel işlev ilk_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam32> {
     değişken i: tam32 = 0;
     için x: xs {
         eğer pred(x) { ver değer(i); }
@@ -59,7 +59,7 @@ işlev ilk_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam
 }
 
 // Son uygun — predicate'i karşılayan SON elemanın indeksi, yoksa hiç.
-işlev son_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam32> {
+genel işlev son_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam32> {
     değişken bulunan: tam32 = 0 - 1;
     değişken i: tam32 = 0;
     için x: xs {
@@ -75,7 +75,7 @@ işlev son_uygun<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> seçimlik<tam
 // İkili ara — artan sıralı dizide hedefin indeksi, yoksa hiç. O(log n).
 // Hedef birden çok kez geçiyorsa HANGİ eşleşmenin döneceği belirsizdir;
 // ilk/son konum gerekiyorsa alt_sinir/ust_sinir kullan.
-işlev ikili_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
+genel işlev ikili_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
     değişken alt: tam32 = 0;
     değişken ust: tam32 = arama_boyut(xs) - 1;
     iken alt <= ust {
@@ -93,7 +93,7 @@ işlev ikili_ara<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
 // Alt sınır — artan sıralı dizide hedeften KÜÇÜK OLMAYAN (>=) ilk
 // elemanın konumu; hepsi küçükse n. Hedefin sırayı bozmadan
 // eklenebileceği en sol konum. O(log n).
-işlev alt_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+genel işlev alt_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
     değişken alt: tam32 = 0;
     değişken ust: tam32 = arama_boyut(xs);
     iken alt < ust {
@@ -110,7 +110,7 @@ işlev alt_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
 // Üst sınır — artan sıralı dizide hedeften BÜYÜK ilk elemanın konumu;
 // hepsi küçük-eşitse n. Hedefin eklenebileceği en sağ konum.
 // ust_sinir - alt_sinir = hedefin geçiş sayısı. O(log n).
-işlev ust_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+genel işlev ust_sinir<T>(xs: Dizi<T>, hedef: T) -> tam32 {
     değişken alt: tam32 = 0;
     değişken ust: tam32 = arama_boyut(xs);
     iken alt < ust {

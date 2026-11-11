@@ -36,13 +36,13 @@
 //     döngü kurmalıdır (TCP akış protokolüdür, mesaj sınırı YOKTUR).
 // =============================================================================
 
-yapı tekkez Baglanti { h: metin; }
+genel yapı tekkez Baglanti { h: metin; }
 
 // Bağlan — host:port'a TCP bağlantısı açar. `y` TÜKETİLİR (yukarıdaki not).
 // ⚠ Doğrulamalar `geri_al`DAN ÖNCE yapılamaz: erken `ver` yetkiyi tüketmeden
 // çıkardı ve CP005 verirdi. Bu yüzden yetki ÖNCE iade edilir, hata sonra
 // döndürülür — sıra keyfi değil, lineerlik gereği.
-işlev baglan(y: yetki<Soket>, host: metin, port: tam32) -> sonuç<Baglanti, metin> {
+genel işlev baglan(y: yetki<Soket>, host: metin, port: tam32) -> sonuç<Baglanti, metin> {
     değişken gecerli_giris: mantıksal = doğru;
     eğer metin_uzunluk(host) == 0 { gecerli_giris = yanlış; }
     eğer port < 1 { gecerli_giris = yanlış; }
@@ -71,7 +71,7 @@ işlev baglan(y: yetki<Soket>, host: metin, port: tam32) -> sonuç<Baglanti, met
 // Yalnız `imha` YETMEZDİ: lineer takip susar ama İŞLETİM SİSTEMİ soketi sızar.
 // Anlambilim savunulabilir: başarısız bir G/Ç zaten çoğu zaman bağlantının
 // öldüğü anlamına gelir (fail-fast).
-işlev gonder(b: Baglanti, veri: metin) -> sonuç<Baglanti, metin> {
+genel işlev gonder(b: Baglanti, veri: metin) -> sonuç<Baglanti, metin> {
     // ⚠ AÇIK `değilse` ŞART: erken `ver` içeren bir `eğer` bloğu lineer
     // tüketim analizinde dal-sonu SAYILMIYOR (L005: "bir dal tüketiyor,
     // diğeri tüketmiyor"). İki dalı da açıkça yazmak tek geçerli biçim.
@@ -88,7 +88,7 @@ işlev gonder(b: Baglanti, veri: metin) -> sonuç<Baglanti, metin> {
 // Okuma sonucu: bağlantı GERİ verilir + okunan veri. `Baglanti` lineer olduğu
 // için bu yapı da `tekkez` olmak ZORUNDA (LR002: sıradan yapı lineer alan
 // içeremez).
-yapı tekkez AlSonuc { b: Baglanti; veri: metin; }
+genel yapı tekkez AlSonuc { b: Baglanti; veri: metin; }
 
 // [D-470] Okuma zaman aşımı — milisaniye. `ms <= 0` sonsuz bekleme demektir.
 //
@@ -110,7 +110,7 @@ yapı tekkez AlSonuc { b: Baglanti; veri: metin; }
 // Dilin yerleşik deseni `drivers/virtio`da duruyor (sahiplen + iade).
 // BEDELİ AÇIK: her çağrı bir `eşleş` ister. Lineer sahiplik zincirini
 // kopmadan taşımanın karşılığı budur.
-işlev zaman_asimi_ayarla(b: Baglanti, ms: tam32) -> sonuç<Baglanti, metin> {
+genel işlev zaman_asimi_ayarla(b: Baglanti, ms: tam32) -> sonuç<Baglanti, metin> {
     eğer soket_zaman_asimi(b.h, ms) != 0 { ver hata("zaman asimi ayarlanamadi"); }
     ver tamam(b);
 }
@@ -118,7 +118,7 @@ işlev zaman_asimi_ayarla(b: Baglanti, ms: tam32) -> sonuç<Baglanti, metin> {
 // Al — en fazla `azami` bayt okur.
 // ⚠ BOŞ DİZGİ = karşı taraf bağlantıyı KAPATTI (hata DEĞİL). Bu ayrımı
 // silmek, kapanmış bağlantıyı sonsuza dek okumaya çalışan bir döngü üretirdi.
-işlev al(b: Baglanti, azami: tam32) -> sonuç<AlSonuc, metin> {
+genel işlev al(b: Baglanti, azami: tam32) -> sonuç<AlSonuc, metin> {
     // ⚠ İÇ İÇE `eğer/değilse` yerine TEK dallanma: iç içe yapıda lineer analiz
     // L005 veriyordu (dış `değilse` içindeki iç dallanmanın her iki kolunun da
     // tükettiğini göremiyor). Geçersiz `azami` burada 0 baytlık okumaya
@@ -148,7 +148,7 @@ işlev al(b: Baglanti, azami: tam32) -> sonuç<AlSonuc, metin> {
 }
 
 // Kapat — bağlantıyı TÜKETİR. Çağrıdan sonra `b` kullanılamaz (L002).
-işlev kapat(b: Baglanti) -> sonuç<tam32, metin> {
+genel işlev kapat(b: Baglanti) -> sonuç<tam32, metin> {
     değişken hh: metin = b.h;
     imha(b);
     eğer soket_kapat(hh) != 0 { ver hata("kapatma basarisiz"); }

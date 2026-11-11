@@ -24,7 +24,7 @@
 // --- Yardımcılar / doğrulama ---
 
 // (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
-işlev mat_eleman_sayisi(m: Dizi<tam32>) -> tam32 {
+genel işlev mat_eleman_sayisi(m: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = 0;
     için x: m {
         n = n + 1;
@@ -34,7 +34,7 @@ işlev mat_eleman_sayisi(m: Dizi<tam32>) -> tam32 {
 
 // Matris geçerli mi — eleman sayısı satir*sutun'a eşit ve boyutlar
 // negatif değil mi?
-işlev mat_gecerli_mi(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> mantıksal {
+genel işlev mat_gecerli_mi(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> mantıksal {
     eğer satir < 0 { ver yanlış; }
     eğer sutun < 0 { ver yanlış; }
     ver mat_eleman_sayisi(m) == satir * sutun;
@@ -44,12 +44,12 @@ işlev mat_gecerli_mi(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> mantıksal 
 
 // Eleman oku — (i, j), satır-öncelikli. Sözleşme: 0<=i<satir,
 // 0<=j<sutun (aşımda runtime sınır kontrolü devreye girer).
-işlev mat_al(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32) -> tam32 {
+genel işlev mat_al(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32) -> tam32 {
     ver m[i * sutun + j];
 }
 
 // Eleman yaz — YERİNDE (dizi_yaz).
-işlev mat_yaz(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32, deger: tam32) -> Dizi<tam32> {
+genel işlev mat_yaz(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32, deger: tam32) -> Dizi<tam32> {
     dizi_yaz(m, i * sutun + j, deger);
     ver m;
 }
@@ -57,7 +57,7 @@ işlev mat_yaz(m: Dizi<tam32>, sutun: tam32, i: tam32, j: tam32, deger: tam32) -
 // --- Kurucular ---
 
 // Sabit değerle doldurulmuş satir x sutun matris.
-işlev mat_olustur(satir: tam32, sutun: tam32, deger: tam32) -> Dizi<tam32> {
+genel işlev mat_olustur(satir: tam32, sutun: tam32, deger: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken n: tam32 = satir * sutun;
     değişken i: tam32 = 0;
@@ -69,7 +69,7 @@ işlev mat_olustur(satir: tam32, sutun: tam32, deger: tam32) -> Dizi<tam32> {
 }
 
 // n x n birim matris (köşegen 1, kalan 0).
-işlev mat_birim(n: tam32) -> Dizi<tam32> {
+genel işlev mat_birim(n: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken i: tam32 = 0;
     iken i < n {
@@ -90,7 +90,7 @@ işlev mat_birim(n: tam32) -> Dizi<tam32> {
 // --- Eleman-bazlı işlemler (biçimden bağımsız — aynı uzunluk yeter) ---
 
 // Toplam — a + b, eleman bazlı. Sözleşme: aynı boyut (aynı biçim).
-işlev mat_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev mat_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken n: tam32 = mat_eleman_sayisi(a);
     değişken i: tam32 = 0;
@@ -102,7 +102,7 @@ işlev mat_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
 }
 
 // Skaler çarpım — k * m, eleman bazlı.
-işlev mat_skaler_carp(m: Dizi<tam32>, k: tam32) -> Dizi<tam32> {
+genel işlev mat_skaler_carp(m: Dizi<tam32>, k: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     için x: m {
         dizi_ekle(sonuc, k * x);
@@ -113,7 +113,7 @@ işlev mat_skaler_carp(m: Dizi<tam32>, k: tam32) -> Dizi<tam32> {
 // --- Biçimli işlemler ---
 
 // Matris çarpımı — a (m x n) çarpı b (n x p) = sonuç (m x p). O(mnp).
-işlev mat_carp(a: Dizi<tam32>, b: Dizi<tam32>,
+genel işlev mat_carp(a: Dizi<tam32>, b: Dizi<tam32>,
                m: tam32, n: tam32, p: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken i: tam32 = 0;
@@ -135,7 +135,7 @@ işlev mat_carp(a: Dizi<tam32>, b: Dizi<tam32>,
 }
 
 // Devrik (transpoze) — satir x sutun -> sutun x satir yeni matris.
-işlev mat_transpoze(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> Dizi<tam32> {
+genel işlev mat_transpoze(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken j: tam32 = 0;
     iken j < sutun {
@@ -150,7 +150,7 @@ işlev mat_transpoze(m: Dizi<tam32>, satir: tam32, sutun: tam32) -> Dizi<tam32> 
 }
 
 // İz (trace) — n x n matrisin köşegen toplamı.
-işlev mat_iz(m: Dizi<tam32>, n: tam32) -> tam32 {
+genel işlev mat_iz(m: Dizi<tam32>, n: tam32) -> tam32 {
     değişken toplam: tam32 = 0;
     değişken i: tam32 = 0;
     iken i < n {

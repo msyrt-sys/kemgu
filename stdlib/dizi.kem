@@ -21,7 +21,7 @@
 // --- Sorgular (tam generic) ---
 
 // Uzunluk — eleman sayısı.
-işlev uzunluk<T>(xs: Dizi<T>) -> tam32 {
+genel işlev uzunluk<T>(xs: Dizi<T>) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         n = n + 1;
@@ -30,32 +30,32 @@ işlev uzunluk<T>(xs: Dizi<T>) -> tam32 {
 }
 
 // Boş mu?
-işlev bos_mu<T>(xs: Dizi<T>) -> mantıksal {
+genel işlev bos_mu<T>(xs: Dizi<T>) -> mantıksal {
     ver uzunluk(xs) == 0;
 }
 
 // Dolu mu? (en az bir eleman var)
-işlev dolu_mu<T>(xs: Dizi<T>) -> mantıksal {
+genel işlev dolu_mu<T>(xs: Dizi<T>) -> mantıksal {
     ver uzunluk(xs) > 0;
 }
 
 // --- Erişim (tam generic) ---
 
 // İlk eleman (boş ise hiç).
-işlev ilk<T>(xs: Dizi<T>) -> seçimlik<T> {
+genel işlev ilk<T>(xs: Dizi<T>) -> seçimlik<T> {
     eğer bos_mu(xs) { ver hiç; }
     ver değer(xs[0]);
 }
 
 // Son eleman (boş ise hiç).
-işlev son<T>(xs: Dizi<T>) -> seçimlik<T> {
+genel işlev son<T>(xs: Dizi<T>) -> seçimlik<T> {
     değişken n: tam32 = uzunluk(xs);
     eğer n == 0 { ver hiç; }
     ver değer(xs[n - 1]);
 }
 
 // Güvenli indeks erişimi (sınır dışı için hiç).
-işlev al<T>(xs: Dizi<T>, i: tam32) -> seçimlik<T> {
+genel işlev al<T>(xs: Dizi<T>, i: tam32) -> seçimlik<T> {
     değişken n: tam32 = uzunluk(xs);
     eğer i < 0 { ver hiç; }
     eğer i >= n { ver hiç; }
@@ -65,7 +65,7 @@ işlev al<T>(xs: Dizi<T>, i: tam32) -> seçimlik<T> {
 // --- Arama (T tipi == destekli olmalı) ---
 
 // İçerir mi (eşit eleman var mı).
-işlev icerir<T>(xs: Dizi<T>, hedef: T) -> mantıksal {
+genel işlev icerir<T>(xs: Dizi<T>, hedef: T) -> mantıksal {
     için x: xs {
         eğer x == hedef { ver doğru; }
     }
@@ -73,7 +73,7 @@ işlev icerir<T>(xs: Dizi<T>, hedef: T) -> mantıksal {
 }
 
 // Eşit ilk elemanı bul, yoksa hiç.
-işlev bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<T> {
+genel işlev bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<T> {
     için x: xs {
         eğer x == hedef { ver değer(x); }
     }
@@ -81,7 +81,7 @@ işlev bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<T> {
 }
 
 // Eşit ilk elemanın indeksi, yoksa hiç.
-işlev indeks_bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
+genel işlev indeks_bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
     değişken i: tam32 = 0;
     için x: xs {
         eğer x == hedef { ver değer(i); }
@@ -93,7 +93,7 @@ işlev indeks_bul<T>(xs: Dizi<T>, hedef: T) -> seçimlik<tam32> {
 // --- Yerinde mutasyon (in-place, generic) ---
 
 // Ters çevir — in-place. Aynı diziyi döner (zincirleme kullanım).
-işlev ters_cevir<T>(xs: Dizi<T>) -> Dizi<T> {
+genel işlev ters_cevir<T>(xs: Dizi<T>) -> Dizi<T> {
     değişken n: tam32 = uzunluk(xs);
     eğer n < 2 { ver xs; }
     değişken i: tam32 = 0;
@@ -111,7 +111,7 @@ işlev ters_cevir<T>(xs: Dizi<T>) -> Dizi<T> {
 // Sırala — in-place bubble sort. T tipi < destekli olmalı.
 // Performans: O(n²) — küçük diziler için yeterli. Hızlı sıralama
 // constraint sistemi + recursive helper API ile sonra.
-işlev sirala<T>(xs: Dizi<T>) -> Dizi<T> {
+genel işlev sirala<T>(xs: Dizi<T>) -> Dizi<T> {
     değişken n: tam32 = uzunluk(xs);
     eğer n < 2 { ver xs; }
     değişken i: tam32 = 0;
@@ -134,7 +134,7 @@ işlev sirala<T>(xs: Dizi<T>) -> Dizi<T> {
 
 // İndirgeme — sol-fold. baslangic değerinden başla, her elemana op uygula.
 // Örnek: indirgeme_tam([1,2,3], 0, +) = ((0+1)+2)+3 = 6
-işlev indirgeme_tam(xs: Dizi<tam32>, baslangic: tam32,
+genel işlev indirgeme_tam(xs: Dizi<tam32>, baslangic: tam32,
                     op: işlev(tam32, tam32) -> tam32) -> tam32 {
     değişken sonuc: tam32 = baslangic;
     için x: xs {
@@ -144,7 +144,7 @@ işlev indirgeme_tam(xs: Dizi<tam32>, baslangic: tam32,
 }
 
 // Toplam — sayısal Dizi<tam32> toplamı.
-işlev toplam_tam(xs: Dizi<tam32>) -> tam32 {
+genel işlev toplam_tam(xs: Dizi<tam32>) -> tam32 {
     değişken s: tam32 = 0;
     için x: xs {
         s = s + x;
@@ -153,7 +153,7 @@ işlev toplam_tam(xs: Dizi<tam32>) -> tam32 {
 }
 
 // Çarpım — sayısal Dizi<tam32> çarpımı.
-işlev carpim_tam(xs: Dizi<tam32>) -> tam32 {
+genel işlev carpim_tam(xs: Dizi<tam32>) -> tam32 {
     değişken s: tam32 = 1;
     için x: xs {
         s = s * x;
@@ -162,7 +162,7 @@ işlev carpim_tam(xs: Dizi<tam32>) -> tam32 {
 }
 
 // Min — en küçük (boş ise hiç).
-işlev min_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev min_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
     eğer bos_mu(xs) { ver hiç; }
     değişken m: tam32 = xs[0];
     için x: xs {
@@ -172,7 +172,7 @@ işlev min_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
 }
 
 // Maks — en büyük (boş ise hiç).
-işlev maks_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev maks_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
     eğer bos_mu(xs) { ver hiç; }
     değişken m: tam32 = xs[0];
     için x: xs {
@@ -184,7 +184,7 @@ işlev maks_tam(xs: Dizi<tam32>) -> seçimlik<tam32> {
 // --- Predicate-based (concrete tam32) ---
 
 // Say — predicate'i karşılayan eleman sayısı.
-işlev say_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> tam32 {
+genel işlev say_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         eğer pred(x) { n = n + 1; }
@@ -193,7 +193,7 @@ işlev say_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> tam32 {
 }
 
 // Tümü mü — bütün elemanlar predicate'i karşılar mı.
-işlev tum_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantıksal {
+genel işlev tum_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantıksal {
     için x: xs {
         eğer pred(x) {
             // sürdür
@@ -205,7 +205,7 @@ işlev tum_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantık
 }
 
 // Bir tane mi — en az bir eleman predicate'i karşılar mı.
-işlev bir_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantıksal {
+genel işlev bir_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantıksal {
     için x: xs {
         eğer pred(x) { ver doğru; }
     }
@@ -217,7 +217,7 @@ işlev bir_mu_tam(xs: Dizi<tam32>, pred: işlev(tam32) -> mantıksal) -> mantık
 // Harita yerinde — her elemanı f(eleman) ile değiştir.
 // Yeni Dizi dönen pure harita için dinamik alloc primitifi gerek
 // (KIRMIZI_QUEUE: stdlib::dizi). Şimdilik mutate kullanımı.
-işlev harita_yerinde_tam(xs: Dizi<tam32>,
+genel işlev harita_yerinde_tam(xs: Dizi<tam32>,
                           f: işlev(tam32) -> tam32) -> Dizi<tam32> {
     değişken n: tam32 = uzunluk(xs);
     değişken i: tam32 = 0;
@@ -231,7 +231,7 @@ işlev harita_yerinde_tam(xs: Dizi<tam32>,
 // --- Eşitlik ---
 
 // İki dizi eleman-eşitliği. Tüm konumlar eşitse doğru.
-işlev esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
+genel işlev esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
     değişken na: tam32 = uzunluk(a);
     değişken nb: tam32 = uzunluk(b);
     eğer na != nb { ver yanlış; }
@@ -253,7 +253,7 @@ işlev esit_mi<T>(a: Dizi<T>, b: Dizi<T>) -> mantıksal {
 
 // Harita — her elemana f uygula, yeni Dizi<U> dön.
 // T ve U, f'in imzasından çıkarsanır.
-işlev harita<T, U>(xs: Dizi<T>, f: işlev(T) -> U) -> Dizi<U> {
+genel işlev harita<T, U>(xs: Dizi<T>, f: işlev(T) -> U) -> Dizi<U> {
     değişken sonuc: Dizi<U> = dizi_olustur(uzunluk(xs));
     için x: xs {
         dizi_ekle(sonuc, f(x));
@@ -262,7 +262,7 @@ işlev harita<T, U>(xs: Dizi<T>, f: işlev(T) -> U) -> Dizi<U> {
 }
 
 // Filtre — predicate'i karşılayan elemanları yeni Dizi<T>'de topla.
-işlev filtre<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> Dizi<T> {
+genel işlev filtre<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: xs {
         eğer pred(x) {
@@ -274,7 +274,7 @@ işlev filtre<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> Dizi<T> {
 
 // İndirgeme (fold) — birikim. T ve U çıkarsanır.
 // Örnek: indirgeme(xs, 0, |a, b| a + b) -> toplam
-işlev indirgeme<T, U>(xs: Dizi<T>, baslangic: U,
+genel işlev indirgeme<T, U>(xs: Dizi<T>, baslangic: U,
                       op: işlev(U, T) -> U) -> U {
     değişken sonuc: U = baslangic;
     için x: xs {
@@ -286,7 +286,7 @@ işlev indirgeme<T, U>(xs: Dizi<T>, baslangic: U,
 // İndirgeme sağ (foldRight) — sondan başa op uygula.
 //   katla_sag([1,2,3], 0, op) = op(1, op(2, op(3, 0)))
 // indirgeme'nin (soldan) ayna eşi; çıkarım yönü op'un imzasından (T, U) -> U.
-işlev katla_sag<T, U>(xs: Dizi<T>, baslangic: U,
+genel işlev katla_sag<T, U>(xs: Dizi<T>, baslangic: U,
                       op: işlev(T, U) -> U) -> U {
     değişken sonuc: U = baslangic;
     değişken i: tam32 = uzunluk(xs) - 1;
@@ -306,7 +306,7 @@ işlev katla_sag<T, U>(xs: Dizi<T>, baslangic: U,
 
 // Kopyala — sığ kopya. Aynı elemanlarla yeni Dizi<T>. Mutasyon yapan
 // ters_cevir/sirala'dan önce orijinali korumak için kullanışlı.
-işlev kopyala<T>(xs: Dizi<T>) -> Dizi<T> {
+genel işlev kopyala<T>(xs: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: xs {
         dizi_ekle(sonuc, x);
@@ -316,7 +316,7 @@ işlev kopyala<T>(xs: Dizi<T>) -> Dizi<T> {
 
 // Birleştir_iki — iki diziyi uç uca ekle, yeni Dizi<T> dön (a, sonra b).
 // (Tek argümanlı `birlestir` metin modülünde; burada iki-dizi sürümü.)
-işlev birlestir_iki<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+genel işlev birlestir_iki<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: a {
         dizi_ekle(sonuc, x);
@@ -329,7 +329,7 @@ işlev birlestir_iki<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
 
 // Benzersiz — yinelenen elemanları çıkar (ilk görülen korunur). T == destekli.
 // O(n²) — küçük diziler için. Hash-set tabanlı sürüm constraint sistemi sonrası.
-işlev benzersiz<T>(xs: Dizi<T>) -> Dizi<T> {
+genel işlev benzersiz<T>(xs: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: xs {
         eğer değil icerir(sonuc, x) {
@@ -341,7 +341,7 @@ işlev benzersiz<T>(xs: Dizi<T>) -> Dizi<T> {
 
 // Dilimle — [bas, son) yarı-açık aralığı yeni Dizi<T> olarak ver.
 // Sınır dışı indeksler kırpılır (bas<0 -> 0, son>n -> n). bas>=son -> boş.
-işlev dilimle<T>(xs: Dizi<T>, bas: tam32, son: tam32) -> Dizi<T> {
+genel işlev dilimle<T>(xs: Dizi<T>, bas: tam32, son: tam32) -> Dizi<T> {
     değişken n: tam32 = uzunluk(xs);
     değişken b: tam32 = bas;
     değişken s: tam32 = son;
@@ -357,17 +357,17 @@ işlev dilimle<T>(xs: Dizi<T>, bas: tam32, son: tam32) -> Dizi<T> {
 }
 
 // Al_ilk_n (take) — ilk n elemanı al. n>=uzunluk -> tam kopya, n<=0 -> boş.
-işlev al_ilk_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
+genel işlev al_ilk_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
     ver dilimle(xs, 0, n);
 }
 
 // Atla_n (drop) — ilk n elemanı atla, kalanı ver. n>=uzunluk -> boş.
-işlev atla_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
+genel işlev atla_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
     ver dilimle(xs, n, uzunluk(xs));
 }
 
 // Tekrarla — diziyi kez kadar uç uca koy. kez<=0 -> boş.
-işlev tekrarla<T>(xs: Dizi<T>, kez: tam32) -> Dizi<T> {
+genel işlev tekrarla<T>(xs: Dizi<T>, kez: tam32) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     eğer kez <= 0 { ver sonuc; }
     değişken k: tam32 = 0;
@@ -382,7 +382,7 @@ işlev tekrarla<T>(xs: Dizi<T>, kez: tam32) -> Dizi<T> {
 
 // Aralık — [bas, son) tamsayı dizisi üret (bas dahil, son hariç).
 // bas>=son -> boş dizi. (Literal tip çıkarımı nedeniyle tam32'ye özel.)
-işlev aralik(bas: tam32, son: tam32) -> Dizi<tam32> {
+genel işlev aralik(bas: tam32, son: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken i: tam32 = bas;
     iken i < son {
@@ -393,7 +393,7 @@ işlev aralik(bas: tam32, son: tam32) -> Dizi<tam32> {
 }
 
 // Aralık adımlı — [bas, son) adım ile. adim<=0 -> boş (sonsuz döngü koruması).
-işlev aralik_adim(bas: tam32, son: tam32, adim: tam32) -> Dizi<tam32> {
+genel işlev aralik_adim(bas: tam32, son: tam32, adim: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     eğer adim <= 0 { ver sonuc; }
     değişken i: tam32 = bas;
@@ -409,7 +409,7 @@ işlev aralik_adim(bas: tam32, son: tam32, adim: tam32) -> Dizi<tam32> {
 // =============================================================================
 
 // Say — predicate'i karşılayan eleman sayısı (say_tam'ın generic eşi).
-işlev say<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> tam32 {
+genel işlev say<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         eğer pred(x) {
@@ -420,7 +420,7 @@ işlev say<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> tam32 {
 }
 
 // Tümü mü — bütün elemanlar predicate'i karşılar mı (tum_mu_tam generic eşi).
-işlev tum_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
+genel işlev tum_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
     için x: xs {
         eğer değil pred(x) {
             ver yanlış;
@@ -430,7 +430,7 @@ işlev tum_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
 }
 
 // Bir tane mi — en az bir eleman predicate'i karşılar mı (bir_mu_tam generic eşi).
-işlev bir_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
+genel işlev bir_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
     için x: xs {
         eğer pred(x) {
             ver doğru;
@@ -455,7 +455,7 @@ işlev bir_mu<T>(xs: Dizi<T>, pred: işlev(T) -> mantıksal) -> mantıksal {
 // `toplam_tam` gibi parametre-üzerinden-indirgeyen bir işleve geçir.
 
 // Kesişim — hem a'da hem b'de bulunan elemanlar (tekrarsız).
-işlev kesisim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+genel işlev kesisim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: a {
         eğer icerir(b, x) ve değil icerir(sonuc, x) {
@@ -466,7 +466,7 @@ işlev kesisim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
 }
 
 // Birleşim — a veya b'de bulunan tüm elemanlar (tekrarsız, a önce).
-işlev birlesim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+genel işlev birlesim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: a {
         eğer değil icerir(sonuc, x) { dizi_ekle(sonuc, x); }
@@ -478,7 +478,7 @@ işlev birlesim<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
 }
 
 // Fark — a'da olup b'de olmayan elemanlar (tekrarsız).
-işlev fark<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
+genel işlev fark<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     için x: a {
         eğer değil icerir(b, x) ve değil icerir(sonuc, x) {
@@ -489,7 +489,7 @@ işlev fark<T>(a: Dizi<T>, b: Dizi<T>) -> Dizi<T> {
 }
 
 // Pozisyonlar — hedef değere eşit elemanların TÜM indeksleri (yoksa boş dizi).
-işlev pozisyonlar<T>(xs: Dizi<T>, hedef: T) -> Dizi<tam32> {
+genel işlev pozisyonlar<T>(xs: Dizi<T>, hedef: T) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken i: tam32 = 0;
     için x: xs {
@@ -501,7 +501,7 @@ işlev pozisyonlar<T>(xs: Dizi<T>, hedef: T) -> Dizi<tam32> {
 
 // Son_n — son n elemanı yeni dizide ver. n <= 0 -> boş; n >= uzunluk ->
 // tüm elemanların kopyası.
-işlev son_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
+genel işlev son_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     eğer n <= 0 { ver sonuc; }
     değişken toplam: tam32 = uzunluk(xs);
@@ -516,7 +516,7 @@ işlev son_n<T>(xs: Dizi<T>, n: tam32) -> Dizi<T> {
 }
 
 // Say_eşit — hedef değere eşit eleman sayısı.
-işlev say_esit<T>(xs: Dizi<T>, hedef: T) -> tam32 {
+genel işlev say_esit<T>(xs: Dizi<T>, hedef: T) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         eğer x == hedef { n = n + 1; }
@@ -525,7 +525,7 @@ işlev say_esit<T>(xs: Dizi<T>, hedef: T) -> tam32 {
 }
 
 // Tekrar_eden_mi — herhangi bir eleman birden fazla kez geçiyor mu (O(n²)).
-işlev tekrar_eden_mi<T>(xs: Dizi<T>) -> mantıksal {
+genel işlev tekrar_eden_mi<T>(xs: Dizi<T>) -> mantıksal {
     değişken n: tam32 = uzunluk(xs);
     değişken i: tam32 = 0;
     iken i < n {

@@ -35,7 +35,7 @@
 // --- Kurucu ---
 
 // Kapasitesi verilen boş tablo. kapasite < 1 -> 1'e yükseltilir.
-işlev tablo_olustur(kapasite: tam32) -> Dizi<tam32> {
+genel işlev tablo_olustur(kapasite: tam32) -> Dizi<tam32> {
     değişken k: tam32 = kapasite;
     eğer k < 1 { k = 1; }
     değişken t: Dizi<tam32> = dizi_olustur(0);
@@ -51,7 +51,7 @@ işlev tablo_olustur(kapasite: tam32) -> Dizi<tam32> {
 // --- Sorgular ---
 
 // Kapasite (yuva sayısı).
-işlev tablo_kapasite(t: Dizi<tam32>) -> tam32 {
+genel işlev tablo_kapasite(t: Dizi<tam32>) -> tam32 {
     ver t[0];
 }
 
@@ -63,7 +63,7 @@ işlev tablo_kova(anahtar: tam32, kapasite: tam32) -> tam32 {
 }
 
 // Dolu yuva sayısı (mezartaşları saymaz). O(K).
-işlev tablo_boyut(t: Dizi<tam32>) -> tam32 {
+genel işlev tablo_boyut(t: Dizi<tam32>) -> tam32 {
     değişken k: tam32 = t[0];
     değişken n: tam32 = 0;
     değişken i: tam32 = 0;
@@ -75,7 +75,7 @@ işlev tablo_boyut(t: Dizi<tam32>) -> tam32 {
 }
 
 // Boş mu?
-işlev tablo_bos_mu(t: Dizi<tam32>) -> mantıksal {
+genel işlev tablo_bos_mu(t: Dizi<tam32>) -> mantıksal {
     ver tablo_boyut(t) == 0;
 }
 
@@ -83,7 +83,7 @@ işlev tablo_bos_mu(t: Dizi<tam32>) -> mantıksal {
 
 // Anahtarın değeri — yoksa hiç. Yoklama boş yuvada (işaret 0) durur;
 // mezartaşı (2) üzerinden geçer. En çok K yoklama.
-işlev tablo_bul(t: Dizi<tam32>, anahtar: tam32) -> seçimlik<tam32> {
+genel işlev tablo_bul(t: Dizi<tam32>, anahtar: tam32) -> seçimlik<tam32> {
     değişken k: tam32 = t[0];
     değişken kova: tam32 = tablo_kova(anahtar, k);
     değişken adim: tam32 = 0;
@@ -102,7 +102,7 @@ işlev tablo_bul(t: Dizi<tam32>, anahtar: tam32) -> seçimlik<tam32> {
 }
 
 // Anahtar var mı?
-işlev tablo_var_mi(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
+genel işlev tablo_var_mi(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
     eşleş tablo_bul(t, anahtar) {
         değer(v) => { ver doğru; }
         hiç => { ver yanlış; }
@@ -114,7 +114,7 @@ işlev tablo_var_mi(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
 
 // Koy — anahtar varsa değeri günceller (0), yoksa ilk mezartaşı/boş
 // yuvaya ekler (1). Uygun yuva kalmadıysa -1 (tablo dolu). YERİNDE.
-işlev tablo_koy(t: Dizi<tam32>, anahtar: tam32, deger_yeni: tam32) -> tam32 {
+genel işlev tablo_koy(t: Dizi<tam32>, anahtar: tam32, deger_yeni: tam32) -> tam32 {
     değişken k: tam32 = t[0];
     değişken kova: tam32 = tablo_kova(anahtar, k);
     değişken bos_yuva: tam32 = 0 - 1;
@@ -148,7 +148,7 @@ işlev tablo_koy(t: Dizi<tam32>, anahtar: tam32, deger_yeni: tam32) -> tam32 {
 // Sil — anahtar varsa yuvasına MEZARTAŞI (2) bırakır, doğru döner;
 // yoksa yanlış. YERİNDE. (Boş'a çevirmek sonraki anahtarları
 // ulaşılmaz yapardı — bkz. başlık.)
-işlev tablo_sil(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
+genel işlev tablo_sil(t: Dizi<tam32>, anahtar: tam32) -> mantıksal {
     değişken k: tam32 = t[0];
     değişken kova: tam32 = tablo_kova(anahtar, k);
     değişken adim: tam32 = 0;
