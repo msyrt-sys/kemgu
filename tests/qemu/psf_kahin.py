@@ -66,7 +66,7 @@ def glif_ciz(img, gen, yuk, font, x0, y0, kod, on, arka):
 def font_yukle():
     d = font_baytlari(); return d, psf(d)
 
-def konsol(metin, sutun, satir):
+def konsol(metin, sutun, satir, imlec=False):
     """drivers/ekran/konsol.kem konsol_kod modeli: 10 alt satır, 13 satır başı, 9 sekme (8'e),
     8 geri sil, diğer <32 ve 127 yok sayılır, sütun sonunda kaydırarak satır atla, son satırdan
     sonra yukarı kaydır. Hücre ızgarası (kod listesi) döner."""
@@ -92,7 +92,7 @@ def konsol(metin, sutun, satir):
             izg[y * sutun + x] = 32
         elif k < 32 or k == 127: pass
         else: yaz(k)
-    return izg
+    return (izg, (x, y)) if imlec else izg
 
 def screendump(f, yol, yanit):
     f.write(json.dumps({'execute': 'screendump', 'arguments': {'filename': str(yol)}}).encode() + b'\n'); yanit()
@@ -109,3 +109,19 @@ def karsilastir(px, beklenen, gen):
             fark += 1
             if ilk is None: ilk = (i % gen, i // gen, hex(g), hex(e))
     return fark, ilk
+
+def kabuk_goruntu(akis, girdi='', imlec=None):
+    """Bağımsız model: çıktı kayar; girdi bir satırda yatay kayar, imleç ters renktir."""
+    gen,yuk,on,arka=640,480,0xFFFFFF,0x102040
+    font=font_yukle();fw,fh=font[1][:2];sut,sat=(gen-16)//fw,(yuk-16)//fh
+    izg,(x,y)=konsol(akis,sut,sat,True)
+    imlec=len(girdi) if imlec is None else imlec
+    bas=max(0,imlec-(sut-3)) if imlec>=sut-2 else 0
+    satir=('> '+girdi[bas:]).ljust(sut)[:sut]
+    for c,ch in enumerate(satir):izg[y*sut+c]=ord(ch)
+    img=[arka]*(gen*yuk)
+    for r in range(sat):
+        for c in range(sut):
+            ters=r==y and c==2+imlec-bas
+            glif_ciz(img,gen,yuk,font,8+c*fw,8+r*fh,izg[r*sut+c],arka if ters else on,on if ters else arka)
+    return img

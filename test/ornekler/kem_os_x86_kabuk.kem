@@ -1,3 +1,4 @@
+kullan drivers::ekran::girdi::{ girdi_bas, girdi_kod };
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni, nvme_adim, nvme_oku } olarak nv;
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni, ahci_adim, ahci_oku } olarak ah;
 kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor };
@@ -37,6 +38,19 @@ işlev ke_ciz(ke: &değişken KabukEkran) {
     eğer değil ke.var { ver; }
     ekran_ayna_bosalt(&değişken ke.k);
     ekran_konsol_ciz(ke.e, ke.f, &değişken ke.k, 8, 8);
+}
+// Girdi yalnız ekrana çizilir: seri ve konsol geçmişi Enter'a kadar değişmez.
+işlev ke_girdi(ke: &değişken KabukEkran, satir: SatirDuzenleyici) {
+    eğer değil ke.var { ver; }
+    değişken bas: tam32 = girdi_bas(satir.imlec,ke.k.sutunlar);
+    değişken x: tam32 = 0;
+    iken x < ke.k.sutunlar {
+        değişken on: tam64 = KE_ON olarak tam64; değişken arka: tam64 = KE_ARKA;
+        eğer x == 2 + satir.imlec - bas { on=KE_ARKA; arka=KE_ON olarak tam64; }
+        ekran_kod(ke.e,ke.f,8+x*ke.f.genislik,8+ke.k.y*ke.f.yukseklik,
+            girdi_kod(satir.kodlar,bas,x),on,arka);
+        x=x+1;
+    }
 }
 işlev bm_xsur(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
     değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
@@ -191,7 +205,7 @@ işlev komut(d: &değişken KabukDisk, f: &değişken FatSektor, satir: metin) -
 işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken XhciDurum, xb: tam64, indeks: tam32, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     değişken h: HidKlavye = hid_klavye_yeni(); değişken tr: KlavyeDurumu = klavye_yeni(); değişken satir: SatirDuzenleyici = satir_yeni();
     ekran_cift_yaz("KABUK_HAZIR");
-    ke_ciz(ke);
+    ke_ciz(ke); ke_girdi(ke,satir);
     iken doğru {
         değişken r: sonuç<mantıksal,metin> = hata("girdi");
         eğer d.tur == 3 { r=xhci_depo_giris(x,indeks,8,d.usb.olay_bas,d.usb.olay_dongu); }
@@ -200,11 +214,11 @@ işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken 
         eşleş bm_xsur_bekle(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
         eğer d.tur == 3 { d.usb.olay_bas=x.olay.bas; d.usb.olay_dongu=x.olay.dongu; }
         eşleş hid_klavye_rapor(&değişken h,&değişken tr,x.sonuc) { hata(e) => { ver hata(e); } tamam(xs) => {
-            için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { } değer(s) => {
+            için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { ke_girdi(ke,satir); } değer(s) => {
                 ekran_ayna_yaz(metin_birlestir("> ", s));
                 eşleş komut(d,f,s) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } }
                 ekran_cift_yaz("KABUK_HAZIR");
-                ke_ciz(ke);
+                ke_ciz(ke); ke_girdi(ke,satir);
             } } }
         } }
     } ver tamam(doğru);

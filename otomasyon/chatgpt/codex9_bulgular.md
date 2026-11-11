@@ -18,3 +18,13 @@ Seçim: parçalı hex. `metin_bayt` bare-metal runtime'ında her çağrıda metn
 Sabotaj: Python ile `4 + 311*16 + 2 = 4982` ofsetindeki `ğ` glif baytı 66 → 194. KEMGU fonksiyonunun dönüşünden önce bozma eklendi; kâhinin özgün baytları aynı kaldı. Derleme başarılı; gerçek QEMU **1/1 açılış kırmızı**, iki piksel farklı; C testi exit=2. Geri alındı, dogrula yeşil.
 
 Loglar: `build/codex9/a-{yaz,hex,hex-sabit,parca}.log`, `a-sabotaj-qemu.log`, `a-sabotaj-test.log` (yerel).
+
+## B — canlı girdi, kaydırma, süre ve heap
+
+- VARSAYIM: girdi düzenlemesi tek satırlık yatay pencere, imleç ters renk. Enter sonrası tüm komut mevcut konsola yazılır, normal sarılır. Seri akışa canlı yankı eklenmez.
+- İlk kâhin eski davranışta rc=2: daha boş istemde 137 piksel fark. Gerçek QEMU'da canlı metin, sağ/sol imleç, fazladan `x` ve geri silme Enter ÖNCESİ ölçülür; seri bu arada değişmemeli.
+- Bağımsız FAT32 yazıcısının isteğe bağlı `/kaydir.txt` dosyası: Python ile 70 satır, 910 UTF-8 bayt. Bağımsız okuyucu birebir; `fsck.fat -n` rc=0 (9 kullanılan küme). Önceki imaj biçimi varsayılan olarak korunur.
+- Tam ekran çizimi: 78×29 hücre, her hücre `ğ`, 20 kez bütün satırlar kirli. Gerçek QEMU seri başlangıç/son işaretleri, 1 ms host yoklama: toplam 0,652158 s, ortalama **32,608 ms/çizim**. Kaydırma sonrası screendump+Python karşılaştırma ayrıca yaklaşık 43–80 ms; bu ikinci sayı çizim süresi diye sunulmuyor.
+- Sabotaj: `hiç` dalında canlı çizimi kaldır → gerçek NVMe **1/1 kırmızı**, 268 piksel fark. Yukarı kaydırmada kaynak satırı kendisi yap → **1/1 kırmızı**, 7761 piksel fark. İkisi de derleniyor; kaynaklar geri alındı.
+- Heap ölçümü tahmin değil: QMP `pmemsave` ile ELF'teki `kem_bump` okunup `__heap_start` çıkarılır. Bump geriye gitmez; koşumun tahsis üst sınırıdır. NVMe 3.214.112, AHCI 3.017.360, USB 3.279.728 bayt. Kâhin **16 MiB altında olmayı zorunlu tutar**; linker/heap değiştirilmedi.
+- Yerel loglar `build/codex9/b-*.log`, `b-profil.txt`.
