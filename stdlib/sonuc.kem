@@ -30,17 +30,17 @@
 // (D1 kapsamı dışı). Geçici çözüm o durumda: doğrudan `tamam(v)`/`hata(m)` yazıp
 // sonucu hemen `eşleş` ile tüketin.
 
-işlev tamam_yap<T, E>(d: T) -> sonuç<T, E> {
+genel işlev tamam_yap<T, E>(d: T) -> sonuç<T, E> {
     ver tamam(d);
 }
 
-işlev hata_yap<T, E>(h: E) -> sonuç<T, E> {
+genel işlev hata_yap<T, E>(h: E) -> sonuç<T, E> {
     ver hata(h);
 }
 
 // --- Sorgular (native sonuc<T,E>) ---
 
-işlev basarili_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
+genel işlev basarili_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
     eşleş r {
         tamam(v) => { ver doğru; }
         hata(e) => { ver yanlış; }
@@ -48,7 +48,7 @@ işlev basarili_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
     ver yanlış;
 }
 
-işlev basarisiz_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
+genel işlev basarisiz_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
     eşleş r {
         tamam(v) => { ver yanlış; }
         hata(e) => { ver doğru; }
@@ -59,7 +59,7 @@ işlev basarisiz_mi<T, E>(r: sonuç<T, E>) -> mantıksal {
 // --- Cozumleme (native sonuc<T,E>) ---
 
 // ya_da — basarili degeri al, hatada varsayilan.
-işlev ya_da<T, E>(r: sonuç<T, E>, varsayilan: T) -> T {
+genel işlev ya_da<T, E>(r: sonuç<T, E>, varsayilan: T) -> T {
     eşleş r {
         tamam(v) => { ver v; }
         hata(e) => { ver varsayilan; }
@@ -68,7 +68,7 @@ işlev ya_da<T, E>(r: sonuç<T, E>, varsayilan: T) -> T {
 }
 
 // Harita<T, U, E> — basarili degere f uygula, hata aynen gecer.
-işlev harita<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> U) -> sonuç<U, E> {
+genel işlev harita<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> U) -> sonuç<U, E> {
     eşleş r {
         tamam(v) => { ver tamam(f(v)); }
         hata(e) => { ver hata(e); }
@@ -77,7 +77,7 @@ işlev harita<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> U) -> sonuç<U, E> {
 }
 
 // Harita hata<T, E, F> — hatayi f ile yeni hataya cevir.
-işlev harita_hata<T, E, F>(r: sonuç<T, E>, f: işlev(E) -> F) -> sonuç<T, F> {
+genel işlev harita_hata<T, E, F>(r: sonuç<T, E>, f: işlev(E) -> F) -> sonuç<T, F> {
     eşleş r {
         tamam(v) => { ver tamam(v); }
         hata(e) => { ver hata(f(e)); }
@@ -86,7 +86,7 @@ işlev harita_hata<T, E, F>(r: sonuç<T, E>, f: işlev(E) -> F) -> sonuç<T, F> 
 
 // Bagla<T, U, E> — basarili ise f cagir (yeni sonuc doner), hata gecer.
 // flatMap karsiligi — Madde D ile birlikte calisir.
-işlev bagla<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> sonuç<U, E>) -> sonuç<U, E> {
+genel işlev bagla<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> sonuç<U, E>) -> sonuç<U, E> {
     eşleş r {
         tamam(v) => { ver f(v); }
         hata(e) => { ver hata(e); }
@@ -97,7 +97,7 @@ işlev bagla<T, U, E>(r: sonuç<T, E>, f: işlev(T) -> sonuç<U, E>) -> sonuç<U
 // (KSonuc için k_secimlik / k_hata_secimlik var; bunlar native sonuç içindir.)
 
 // Sonuç -> seçimlik — başarılıysa değer, hatada hiç (hata bilgisi atılır).
-işlev sonuc_to_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<T> {
+genel işlev sonuc_to_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<T> {
     eşleş r {
         tamam(v) => { ver değer(v); }
         hata(e) => { ver hiç; }
@@ -106,7 +106,7 @@ işlev sonuc_to_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<T> {
 }
 
 // Sonuç -> seçimlik (hata tarafı) — hatada değer, başarılıda hiç.
-işlev sonuc_hata_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<E> {
+genel işlev sonuc_hata_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<E> {
     eşleş r {
         tamam(v) => { ver hiç; }
         hata(e) => { ver değer(e); }
@@ -118,7 +118,7 @@ işlev sonuc_hata_opsiyonel<T, E>(r: sonuç<T, E>) -> seçimlik<E> {
 // Bir Option'a "neden boş" bilgisi eklemenin standart yolu.
 // NOT: `sonuç<T, E>` döndürür — yukarıdaki CODEGEN KISITI burada da geçerli
 // (E tamsayı olmalı; metin hata kodu için şimdilik tamsayı kullanın).
-işlev opsiyonel_to_sonuc<T, E>(opt: seçimlik<T>, hata_degeri: E) -> sonuç<T, E> {
+genel işlev opsiyonel_to_sonuc<T, E>(opt: seçimlik<T>, hata_degeri: E) -> sonuç<T, E> {
     eşleş opt {
         değer(v) => { ver tamam(v); }
         hiç => { ver hata(hata_degeri); }
@@ -130,24 +130,24 @@ işlev opsiyonel_to_sonuc<T, E>(opt: seçimlik<T>, hata_degeri: E) -> sonuç<T, 
 // 2. KSonuc<T,E> — Geçici yapı tabanlı sonuç (parser fix gelene kadar)
 // =============================================================================
 
-yapı KSonuc<T, E> {
+genel yapı KSonuc<T, E> {
     deger_d: seçimlik<T>;
     hata_d: seçimlik<E>;
 }
 
 // --- Yapıcılar ---
 
-işlev k_tamam<T, E>(d: T) -> KSonuc<T, E> {
+genel işlev k_tamam<T, E>(d: T) -> KSonuc<T, E> {
     ver KSonuc { deger_d: değer(d), hata_d: hiç };
 }
 
-işlev k_hata<T, E>(h: E) -> KSonuc<T, E> {
+genel işlev k_hata<T, E>(h: E) -> KSonuc<T, E> {
     ver KSonuc { deger_d: hiç, hata_d: değer(h) };
 }
 
 // --- Sorgular (tam generic) ---
 
-işlev k_basarili_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
+genel işlev k_basarili_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
     eşleş r.deger_d {
         değer(v) => { ver doğru; }
         hiç => { ver yanlış; }
@@ -155,7 +155,7 @@ işlev k_basarili_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
     ver yanlış;
 }
 
-işlev k_basarisiz_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
+genel işlev k_basarisiz_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
     eşleş r.hata_d {
         değer(h) => { ver doğru; }
         hiç => { ver yanlış; }
@@ -166,7 +166,7 @@ işlev k_basarisiz_mi<T, E>(r: KSonuc<T, E>) -> mantıksal {
 // --- Çözümleme (tam generic) ---
 
 // Değer al — yoksa varsayılan.
-işlev k_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: T) -> T {
+genel işlev k_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: T) -> T {
     eşleş r.deger_d {
         değer(v) => { ver v; }
         hiç => { ver varsayilan; }
@@ -175,7 +175,7 @@ işlev k_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: T) -> T {
 }
 
 // Hata al — başarılıysa varsayılan.
-işlev k_hata_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: E) -> E {
+genel işlev k_hata_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: E) -> E {
     eşleş r.hata_d {
         değer(h) => { ver h; }
         hiç => { ver varsayilan; }
@@ -184,18 +184,18 @@ işlev k_hata_ya_da<T, E>(r: KSonuc<T, E>, varsayilan: E) -> E {
 }
 
 // Sonuç → seçimlik dönüşümü.
-işlev k_secimlik<T, E>(r: KSonuc<T, E>) -> seçimlik<T> {
+genel işlev k_secimlik<T, E>(r: KSonuc<T, E>) -> seçimlik<T> {
     ver r.deger_d;
 }
 
-işlev k_hata_secimlik<T, E>(r: KSonuc<T, E>) -> seçimlik<E> {
+genel işlev k_hata_secimlik<T, E>(r: KSonuc<T, E>) -> seçimlik<E> {
     ver r.hata_d;
 }
 
 // --- Harita (concrete tam32 — generic callback v2'de) ---
 
 // Harita — başarılıysa değere f uygula, başarısız aynen geçer.
-işlev k_harita_tam(r: KSonuc<tam32, metin>,
+genel işlev k_harita_tam(r: KSonuc<tam32, metin>,
                     f: işlev(tam32) -> tam32) -> KSonuc<tam32, metin> {
     eşleş r.deger_d {
         değer(v) => {
@@ -213,7 +213,7 @@ işlev k_harita_tam(r: KSonuc<tam32, metin>,
 }
 
 // Harita_hata — başarısızsa hataya g uygula, başarılı aynen geçer.
-işlev k_harita_hata_tam(r: KSonuc<tam32, metin>,
+genel işlev k_harita_hata_tam(r: KSonuc<tam32, metin>,
                          g: işlev(metin) -> metin) -> KSonuc<tam32, metin> {
     eşleş r.hata_d {
         değer(h) => {
@@ -231,7 +231,7 @@ işlev k_harita_hata_tam(r: KSonuc<tam32, metin>,
 }
 
 // Bağla — başarılıysa f çağır (yeni KSonuc döner). flatMap karşılığı.
-işlev k_bagla_tam(r: KSonuc<tam32, metin>,
+genel işlev k_bagla_tam(r: KSonuc<tam32, metin>,
                    f: işlev(tam32) -> KSonuc<tam32, metin>) -> KSonuc<tam32, metin> {
     eşleş r.deger_d {
         değer(v) => { ver f(v); }
@@ -247,7 +247,7 @@ işlev k_bagla_tam(r: KSonuc<tam32, metin>,
 }
 
 // Ya da (alternatif) — ilk başarılıysa onu, başarısızsa ikinciyi.
-işlev k_alternatif<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> KSonuc<T, E> {
+genel işlev k_alternatif<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> KSonuc<T, E> {
     eşleş a.deger_d {
         değer(v) => { ver a; }
         hiç => { ver b; }
@@ -257,14 +257,14 @@ işlev k_alternatif<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> KSonuc<T, E> {
 
 // Dene — bir KSonuc döndüren f çağrısı, başarılıysa devam, hatalıysa aynen döner.
 // "Hatayı yay" (? operatörü gibi) pattern.
-işlev k_dene_tam(r: KSonuc<tam32, metin>,
+genel işlev k_dene_tam(r: KSonuc<tam32, metin>,
                   devam: işlev(tam32) -> KSonuc<tam32, metin>) -> KSonuc<tam32, metin> {
     ver k_bagla_tam(r, devam);
 }
 
 // --- Eşitlik ---
 
-işlev k_esit_mi<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> mantıksal {
+genel işlev k_esit_mi<T, E>(a: KSonuc<T, E>, b: KSonuc<T, E>) -> mantıksal {
     eşleş a.deger_d {
         değer(va) => {
             eşleş b.deger_d {

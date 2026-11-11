@@ -30,7 +30,7 @@
 // --- Çekirdek ---
 
 // Tohumla — herhangi bir tam32'yi geçerli duruma (1..m-1) indirger.
-işlev rastgele_tohumla(tohum: tam32) -> tam32 {
+genel işlev rastgele_tohumla(tohum: tam32) -> tam32 {
     değişken m1: tam32 = 2147483646;
     değişken s: tam32 = tohum % m1;
     eğer s < 0 { s = s + m1; }
@@ -40,7 +40,7 @@ işlev rastgele_tohumla(tohum: tam32) -> tam32 {
 // Sonraki durum — MINSTD adımı, Schrage çarpanlamasıyla taşmasız.
 // Dönen değer hem yeni durum hem ham rastgele değerdir (1..m-1).
 // Geçersiz durum (<=0 veya >=m) savunmayla 1'e düzeltilir.
-işlev rastgele_sonraki(durum: tam32) -> tam32 {
+genel işlev rastgele_sonraki(durum: tam32) -> tam32 {
     değişken d: tam32 = durum;
     eğer d <= 0 { d = 1; }
     eğer d >= 2147483647 { d = 1; }
@@ -58,14 +58,14 @@ işlev rastgele_sonraki(durum: tam32) -> tam32 {
 // Aralığa indirge — durumu [alt, ust) aralığına eşler (İLERLETMEZ;
 // önce rastgele_sonraki ile ilerlet, sonra indirge). Boş/ters aralıkta
 // alt döner. Modulo bias notu başlıkta.
-işlev rastgele_aralikta(durum: tam32, alt: tam32, ust: tam32) -> tam32 {
+genel işlev rastgele_aralikta(durum: tam32, alt: tam32, ust: tam32) -> tam32 {
     eğer ust <= alt { ver alt; }
     ver alt + durum % (ust - alt);
 }
 
 // n adet ham değer — tohum önce rastgele_tohumla ile indirgenir,
 // ardından durum zinciri: [s1, s2, ..., sn].
-işlev rastgele_dizi(n: tam32, tohum: tam32) -> Dizi<tam32> {
+genel işlev rastgele_dizi(n: tam32, tohum: tam32) -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     değişken durum: tam32 = rastgele_tohumla(tohum);
     değişken i: tam32 = 0;
@@ -88,7 +88,7 @@ işlev rastgele_boyut<T>(xs: Dizi<T>) -> tam32 {
 
 // Karıştır — Fisher-Yates, YERİNDE; aynı tohum -> aynı permütasyon.
 // Eleman çokluğu (multiset) korunur.
-işlev rastgele_karistir<T>(xs: Dizi<T>, tohum: tam32) -> Dizi<T> {
+genel işlev rastgele_karistir<T>(xs: Dizi<T>, tohum: tam32) -> Dizi<T> {
     değişken n: tam32 = rastgele_boyut(xs);
     değişken durum: tam32 = rastgele_tohumla(tohum);
     değişken i: tam32 = n - 1;

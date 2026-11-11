@@ -58,7 +58,7 @@ işlev ist_sirala_kopya(xs: Dizi<tam32>) -> Dizi<tam32> {
 
 // (İç yardımcı) Kırpılmış tam karekök (floor(sqrt(x))) — std sapma için.
 // Negatifte 0 (varyans negatif olamaz, savunma amaçlı).
-işlev ist_kok_tam(x: tam32) -> tam32 {
+genel işlev ist_kok_tam(x: tam32) -> tam32 {
     eğer x <= 0 { ver 0; }
     değişken k: tam32 = 0;
     iken (k + 1) * (k + 1) <= x {
@@ -70,7 +70,7 @@ işlev ist_kok_tam(x: tam32) -> tam32 {
 // --- Merkezî eğilim ---
 
 // Toplam.
-işlev ist_toplam(xs: Dizi<tam32>) -> tam32 {
+genel işlev ist_toplam(xs: Dizi<tam32>) -> tam32 {
     değişken s: tam32 = 0;
     için x: xs {
         s = s + x;
@@ -79,7 +79,7 @@ işlev ist_toplam(xs: Dizi<tam32>) -> tam32 {
 }
 
 // Ortalama (aritmetik, kırpılmış). Boş dizide hiç.
-işlev ist_ortalama(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev ist_ortalama(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = ist_boyut(xs);
     eğer n == 0 { ver hiç; }
     ver değer(ist_toplam(xs) / n);
@@ -88,7 +88,7 @@ işlev ist_ortalama(xs: Dizi<tam32>) -> seçimlik<tam32> {
 // Medyan — sıralı kopyanın ortası. Çift boyutta iki ortancanın
 // kırpılmış ortalaması (taşma-güvenli a + (b-a)/2). Boş dizide hiç.
 // Girdi DEĞİŞMEZ (kopya üzerinde sıralanır).
-işlev ist_medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev ist_medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = ist_boyut(xs);
     eğer n == 0 { ver hiç; }
     değişken s: Dizi<tam32> = ist_sirala_kopya(xs);
@@ -101,7 +101,7 @@ işlev ist_medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
 
 // En sık eleman (mod) — beraberlikte İLK görülen kazanır. Boş dizide
 // hiç. O(n²) — küçük diziler için (dizi.kem benzersiz ile aynı sınıf).
-işlev ist_en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev ist_en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = ist_boyut(xs);
     eğer n == 0 { ver hiç; }
     değişken kazanan: tam32 = xs[0];
@@ -126,7 +126,7 @@ işlev ist_en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
 // --- Yayılım ---
 
 // Aralık — en büyük ile en küçük fark. Boş dizide hiç; tek elemanda 0.
-işlev ist_aralik(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev ist_aralik(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = ist_boyut(xs);
     eğer n == 0 { ver hiç; }
     değişken kucuk: tam32 = xs[0];
@@ -141,7 +141,7 @@ işlev ist_aralik(xs: Dizi<tam32>) -> seçimlik<tam32> {
 // Varyans (popülasyon: kare sapmaların ortalaması, n'e bölüm).
 // Ortalama ve bölüm kırpılmış tamsayı — tam bölünen örneklerde kesin.
 // Boş dizide hiç.
-işlev ist_varyans(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev ist_varyans(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = ist_boyut(xs);
     eğer n == 0 { ver hiç; }
     değişken ort: tam32 = ist_toplam(xs) / n;
@@ -153,7 +153,7 @@ işlev ist_varyans(xs: Dizi<tam32>) -> seçimlik<tam32> {
 }
 
 // Standart sapma — varyansın kırpılmış tam karekökü. Boş dizide hiç.
-işlev ist_std_sapma(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev ist_std_sapma(xs: Dizi<tam32>) -> seçimlik<tam32> {
     eşleş ist_varyans(xs) {
         değer(v) => { ver değer(ist_kok_tam(v)); }
         hiç => { ver hiç; }

@@ -27,20 +27,20 @@
 
 // Artık yıl mı (Gregoryen: 4'e bölünen, ama 100'e bölünüp 400'e
 // bölünmeyenler hariç).
-işlev artik_yil_mi(yil: tam32) -> mantıksal {
+genel işlev artik_yil_mi(yil: tam32) -> mantıksal {
     eğer yil % 400 == 0 { ver doğru; }
     eğer yil % 100 == 0 { ver yanlış; }
     ver yil % 4 == 0;
 }
 
 // Yılın gün sayısı — 366 / 365.
-işlev yil_gun_sayisi(yil: tam32) -> tam32 {
+genel işlev yil_gun_sayisi(yil: tam32) -> tam32 {
     eğer artik_yil_mi(yil) { ver 366; }
     ver 365;
 }
 
 // Ayın gün sayısı (ay 1..12; şubat artık yıla bakar). Geçersiz ayda 0.
-işlev ay_gun_sayisi(yil: tam32, ay: tam32) -> tam32 {
+genel işlev ay_gun_sayisi(yil: tam32, ay: tam32) -> tam32 {
     eğer ay < 1 { ver 0; }
     eğer ay > 12 { ver 0; }
     eğer ay == 2 {
@@ -54,7 +54,7 @@ işlev ay_gun_sayisi(yil: tam32, ay: tam32) -> tam32 {
 // --- Doğrulama ---
 
 // Tarih geçerli mi — yil >= 1, ay 1..12, gun 1..ay_gun_sayisi.
-işlev tarih_gecerli_mi(yil: tam32, ay: tam32, gun: tam32) -> mantıksal {
+genel işlev tarih_gecerli_mi(yil: tam32, ay: tam32, gun: tam32) -> mantıksal {
     eğer yil < 1 { ver yanlış; }
     eğer ay < 1 veya ay > 12 { ver yanlış; }
     eğer gun < 1 { ver yanlış; }
@@ -65,7 +65,7 @@ işlev tarih_gecerli_mi(yil: tam32, ay: tam32, gun: tam32) -> mantıksal {
 
 // Gün numarası — 1970-01-01'den bu yana geçen gün (öncesi negatif).
 // Hinnant days_from_civil; alan yil >= 1 (bkz. başlık).
-işlev gun_numarasi(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
+genel işlev gun_numarasi(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
     değişken y: tam32 = yil;
     eğer ay <= 2 { y = y - 1; }
     değişken era: tam32 = y / 400;
@@ -82,7 +82,7 @@ işlev gun_numarasi(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
 }
 
 // İki tarih arasındaki gün farkı (ikinci - birinci; ileri pozitif).
-işlev gun_farki(yil1: tam32, ay1: tam32, gun1: tam32,
+genel işlev gun_farki(yil1: tam32, ay1: tam32, gun1: tam32,
                 yil2: tam32, ay2: tam32, gun2: tam32) -> tam32 {
     ver gun_numarasi(yil2, ay2, gun2) - gun_numarasi(yil1, ay1, gun1);
 }
@@ -91,13 +91,13 @@ işlev gun_farki(yil1: tam32, ay1: tam32, gun1: tam32,
 
 // Haftanın günü — 0=Pazartesi .. 6=Pazar. Epoch (1970-01-01) Perşembe
 // olduğu için +3; iç içe % epoch-öncesi (negatif gün numarası) için.
-işlev haftanin_gunu(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
+genel işlev haftanin_gunu(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
     değişken gn: tam32 = gun_numarasi(yil, ay, gun);
     ver ((gn + 3) % 7 + 7) % 7;
 }
 
 // Yılın günü — 1 Ocak = 1 .. 365/366.
-işlev yilin_gunu(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
+genel işlev yilin_gunu(yil: tam32, ay: tam32, gun: tam32) -> tam32 {
     değişken toplam: tam32 = gun;
     değişken a: tam32 = 1;
     iken a < ay {

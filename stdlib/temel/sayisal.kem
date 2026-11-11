@@ -8,12 +8,12 @@
 
 // İki sayının ortalaması (taşma riski azaltılmış: (a/2 + b/2) yerine
 // basitleştirilmiş — tipler küçükse taşabilir; ileride güvenli versiyon).
-işlev ortalama<T>(a: T, b: T) -> T {
+genel işlev ortalama<T>(a: T, b: T) -> T {
     ver (a + b) / 2;
 }
 
 // Üs hesabi: x^n (n negatif olmaz). n=0 -> 1.
-işlev us<T>(x: T, n: tam32) -> T {
+genel işlev us<T>(x: T, n: tam32) -> T {
     // [D-454] n=0 -> 1. ESKIDEN "ozur dilerim" olarak x donuyordu; yorumun
     // kendisi cozumu isaret ediyordu ("tipik bir yaklasim sifir<T>() +
     // bir<T>() helper'i"). O intrinsic eklendi: donus tipi BEKLENEN'den
@@ -31,7 +31,7 @@ işlev us<T>(x: T, n: tam32) -> T {
 }
 
 // İki tamsayinin OBE'si (GCD) — Öklid algoritması, tamsayı için.
-işlev obe<T>(a: T, b: T) -> T {
+genel işlev obe<T>(a: T, b: T) -> T {
     değişken x: T = a;
     değişken y: T = b;
     iken y != 0 {
@@ -43,7 +43,7 @@ işlev obe<T>(a: T, b: T) -> T {
 }
 
 // İki tamsayinin EKOK'u (LCM). a*b/obe(a,b)
-işlev ekok<T>(a: T, b: T) -> T {
+genel işlev ekok<T>(a: T, b: T) -> T {
     ver (a * b) / obe(a, b);
 }
 
@@ -58,7 +58,7 @@ işlev ekok<T>(a: T, b: T) -> T {
 // sürümleri `dizi_` ön ekiyle.
 
 // Dizi toplamı.
-işlev dizi_toplam(xs: Dizi<tam32>) -> tam32 {
+genel işlev dizi_toplam(xs: Dizi<tam32>) -> tam32 {
     değişken s: tam32 = 0;
     için x: xs {
         s = s + x;
@@ -67,7 +67,7 @@ işlev dizi_toplam(xs: Dizi<tam32>) -> tam32 {
 }
 
 // Dizi eleman sayısı (yerel; modülün dizi bağımlılığı yok).
-işlev dizi_say(xs: Dizi<tam32>) -> tam32 {
+genel işlev dizi_say(xs: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         n = n + 1;
@@ -76,14 +76,14 @@ işlev dizi_say(xs: Dizi<tam32>) -> tam32 {
 }
 
 // Aritmetik ortalama (tamsayı bölme). Boş dizi -> 0.
-işlev dizi_ortalama(xs: Dizi<tam32>) -> tam32 {
+genel işlev dizi_ortalama(xs: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver 0; }
     ver dizi_toplam(xs) / n;
 }
 
 // En küçük eleman (boş ise hiç).
-işlev dizi_min(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev dizi_min(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver hiç; }
     değişken m: tam32 = xs[0];
@@ -94,7 +94,7 @@ işlev dizi_min(xs: Dizi<tam32>) -> seçimlik<tam32> {
 }
 
 // En büyük eleman (boş ise hiç).
-işlev dizi_maks(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev dizi_maks(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver hiç; }
     değişken m: tam32 = xs[0];
@@ -106,7 +106,7 @@ işlev dizi_maks(xs: Dizi<tam32>) -> seçimlik<tam32> {
 
 // Popülasyon varyansı (tamsayı): sum((x - ort)^2) / n. Boş dizi -> 0.
 // İki geçiş: önce ortalama, sonra kare farklar.
-işlev varyans(xs: Dizi<tam32>) -> tam32 {
+genel işlev varyans(xs: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver 0; }
     değişken ort: tam32 = dizi_toplam(xs) / n;
@@ -121,7 +121,7 @@ işlev varyans(xs: Dizi<tam32>) -> tam32 {
 // Tamsayı karekök (Newton-Raphson). n < 2 için n döner. Modül kendi kendine
 // yeterli olsun diye yerel (import sistemi yok; matematik.kem'in kok_tam'ı
 // ayrı modülde).
-işlev karekok(n: tam32) -> tam32 {
+genel işlev karekok(n: tam32) -> tam32 {
     eğer n < 2 { ver n; }
     değişken x: tam32 = n;
     değişken y: tam32 = (x + 1) / 2;
@@ -133,14 +133,14 @@ işlev karekok(n: tam32) -> tam32 {
 }
 
 // Standart sapma (tamsayı): varyansın tamsayı karekökü.
-işlev std_sapma(xs: Dizi<tam32>) -> tam32 {
+genel işlev std_sapma(xs: Dizi<tam32>) -> tam32 {
     ver karekok(varyans(xs));
 }
 
 // Medyan — ortanca değer. Kaynağın kopyasını sıralar (kaynak değişmez).
 // Tek uzunluk: ortadaki eleman; çift uzunluk: iki ortancanın (tamsayı)
 // ortalaması. Boş dizi -> hiç.
-işlev medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver hiç; }
     değişken c: Dizi<tam32> = dizi_olustur(0);
@@ -171,7 +171,7 @@ işlev medyan(xs: Dizi<tam32>) -> seçimlik<tam32> {
 // Mod (tepe değer) — en sık görülen eleman. Beraberlikte ilk görülen kazanır.
 // O(n²) sayım. Boş dizi -> hiç. (Modülün `mod` modulo fonksiyonuyla karışmaması
 // için istatistiksel mod `en_sik` adıyla.)
-işlev en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
+genel işlev en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver hiç; }
     değişken en_deger: tam32 = xs[0];
@@ -190,7 +190,7 @@ işlev en_sik(xs: Dizi<tam32>) -> seçimlik<tam32> {
 }
 
 // Aralık (range) — maks - min. Boş dizi -> 0.
-işlev dizi_aralik(xs: Dizi<tam32>) -> tam32 {
+genel işlev dizi_aralik(xs: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = dizi_say(xs);
     eğer n == 0 { ver 0; }
     değişken mn: tam32 = xs[0];

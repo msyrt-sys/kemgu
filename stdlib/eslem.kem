@@ -33,7 +33,7 @@
 // --- Yardımcı ---
 
 // (İç yardımcı) Eleman sayısı — modül bağımsız derlensin diye yerel.
-işlev eslem_boyut<T>(xs: Dizi<T>) -> tam32 {
+genel işlev eslem_boyut<T>(xs: Dizi<T>) -> tam32 {
     değişken n: tam32 = 0;
     için x: xs {
         n = n + 1;
@@ -45,7 +45,7 @@ işlev eslem_boyut<T>(xs: Dizi<T>) -> tam32 {
 
 // Eşlem geçerli mi — boyutlar eşit ve anahtarlar benzersiz mi?
 // (Hata ayıklama + test değişmezi; O(n²).)
-işlev eslem_gecerli_mi<K, V>(ks: Dizi<K>, vs: Dizi<V>) -> mantıksal {
+genel işlev eslem_gecerli_mi<K, V>(ks: Dizi<K>, vs: Dizi<V>) -> mantıksal {
     değişken n: tam32 = eslem_boyut(ks);
     eğer n != eslem_boyut(vs) { ver yanlış; }
     değişken i: tam32 = 0;
@@ -61,7 +61,7 @@ işlev eslem_gecerli_mi<K, V>(ks: Dizi<K>, vs: Dizi<V>) -> mantıksal {
 }
 
 // Anahtarın konumu — yoksa hiç. O(n).
-işlev eslem_indeks<K>(ks: Dizi<K>, k: K) -> seçimlik<tam32> {
+genel işlev eslem_indeks<K>(ks: Dizi<K>, k: K) -> seçimlik<tam32> {
     değişken i: tam32 = 0;
     için x: ks {
         eğer x == k { ver değer(i); }
@@ -71,7 +71,7 @@ işlev eslem_indeks<K>(ks: Dizi<K>, k: K) -> seçimlik<tam32> {
 }
 
 // Anahtar var mı?
-işlev eslem_var_mi<K>(ks: Dizi<K>, k: K) -> mantıksal {
+genel işlev eslem_var_mi<K>(ks: Dizi<K>, k: K) -> mantıksal {
     eşleş eslem_indeks(ks, k) {
         değer(i) => { ver doğru; }
         hiç => { ver yanlış; }
@@ -82,7 +82,7 @@ işlev eslem_var_mi<K>(ks: Dizi<K>, k: K) -> mantıksal {
 // --- Erişim ---
 
 // Anahtarın değeri — yoksa hiç.
-işlev eslem_bul<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> seçimlik<V> {
+genel işlev eslem_bul<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> seçimlik<V> {
     eşleş eslem_indeks(ks, k) {
         değer(i) => { ver değer(vs[i]); }
         hiç => { ver hiç; }
@@ -91,7 +91,7 @@ işlev eslem_bul<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> seçimlik<V> {
 }
 
 // Anahtarın değeri — yoksa varsayılan.
-işlev eslem_bul_ya_da<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, varsayilan: V) -> V {
+genel işlev eslem_bul_ya_da<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, varsayilan: V) -> V {
     eşleş eslem_bul(ks, vs, k) {
         değer(v) => { ver v; }
         hiç => { ver varsayilan; }
@@ -103,7 +103,7 @@ işlev eslem_bul_ya_da<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, varsayilan: V) -> V
 
 // Koy — anahtar varsa değeri YERİNDE günceller (yanlış: yeni değil),
 // yoksa çifti sona ekler (doğru: yeni eklendi). Benzersizliği korur.
-işlev eslem_koy<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, v: V) -> mantıksal {
+genel işlev eslem_koy<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, v: V) -> mantıksal {
     eşleş eslem_indeks(ks, k) {
         değer(i) => {
             dizi_yaz(vs, i, v);
@@ -120,7 +120,7 @@ işlev eslem_koy<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K, v: V) -> mantıksal {
 
 // Sil (anahtar tarafı) — k anahtarı ATILMIŞ yeni anahtar dizisi.
 // Girdi değişmez. eslem_sil_deger ile birlikte kullanılır.
-işlev eslem_sil_anahtar<K>(ks: Dizi<K>, k: K) -> Dizi<K> {
+genel işlev eslem_sil_anahtar<K>(ks: Dizi<K>, k: K) -> Dizi<K> {
     değişken sonuc: Dizi<K> = dizi_olustur(0);
     için x: ks {
         eğer x != k { dizi_ekle(sonuc, x); }
@@ -131,7 +131,7 @@ işlev eslem_sil_anahtar<K>(ks: Dizi<K>, k: K) -> Dizi<K> {
 // Sil (değer tarafı) — k anahtarına karşılık gelen değer ATILMIŞ yeni
 // değer dizisi. Girdi değişmez. eslem_sil_anahtar ile birlikte
 // kullanılır; ikisi de saf olduğu için çağrı sırası fark etmez.
-işlev eslem_sil_deger<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> Dizi<V> {
+genel işlev eslem_sil_deger<K, V>(ks: Dizi<K>, vs: Dizi<V>, k: K) -> Dizi<V> {
     değişken sonuc: Dizi<V> = dizi_olustur(0);
     değişken n: tam32 = eslem_boyut(ks);
     değişken i: tam32 = 0;

@@ -21,18 +21,18 @@
 // ⚠ `Semafor` LİNEER DEĞİLDİR — kilit ile aynı gerekçe: defalarca kullanılır.
 // ⚠ Thread'siz derlemede runtime tarafı NO-OP'tur.
 
-yapı Semafor {
+genel yapı Semafor {
     h: metin;   // opak runtime handle'ı (KdlSemafor*)
 }
 
 // `baslangic` kadar izinle yeni bir semafor yarat.
-işlev olustur(baslangic: tam32) -> Semafor {
+genel işlev olustur(baslangic: tam32) -> Semafor {
     ver Semafor { h: semafor_olustur(baslangic) };
 }
 
 // Bir izin tutarak `f`i çalıştır ve sonucunu döndür. İzin HER durumda bırakılır.
 // İzin yoksa bırakılana dek BLOKLAR.
-işlev semaforda(s: Semafor, f: işlev() -> tam32) -> tam32 {
+genel işlev semaforda(s: Semafor, f: işlev() -> tam32) -> tam32 {
     semafor_al(s.h);
     değişken r: tam32 = f();
     semafor_birak(s.h);
@@ -40,7 +40,7 @@ işlev semaforda(s: Semafor, f: işlev() -> tam32) -> tam32 {
 }
 
 // Semaforu yok et. Bundan sonra kullanılmamalıdır.
-işlev yok_et(s: Semafor) -> tam32 {
+genel işlev yok_et(s: Semafor) -> tam32 {
     semafor_yok(s.h);
     ver 0;
 }

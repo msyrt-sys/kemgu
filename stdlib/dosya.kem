@@ -23,7 +23,7 @@
 // karşılaştırmasına dönünce (D-449) o idiom çöktü. Ayrıca `dosya_ac`
 // başarısızlıkta NULL döndüğü için geçersizliğin İKİ AYRI TEMSİLİ vardı ve
 // her kod yolu yalnızca birini yakalıyordu (D-443'te ölçülmüştü).
-işlev gecersiz_handle() -> metin {
+genel işlev gecersiz_handle() -> metin {
     ver dosya_gecersiz();
 }
 
@@ -48,7 +48,7 @@ işlev gecersiz_handle() -> metin {
 // Bu yüklem yalnız HAM `dosya_ac` sonucunu sınamak için kalır ve tek işlev
 // içinde aç-kapat yapan yollarda (yaz_metin/ekle/kopyala) kullanılır; oralarda
 // handle KAÇMAZ, dolayısıyla lineer sarmalayıcıya gerek yoktur.
-işlev handle_gecerli_mi(h: metin) -> mantıksal {
+genel işlev handle_gecerli_mi(h: metin) -> mantıksal {
     ver dosya_gecerli(h);
 }
 
@@ -57,9 +57,9 @@ işlev handle_gecerli_mi(h: metin) -> mantıksal {
 // =============================================================================
 
 // Mod sabitleri (string tabanlı — runtime'ın bekledigi).
-işlev mod_okuma() -> metin { ver "okuma"; }
-işlev mod_yazma() -> metin { ver "yazma"; }
-işlev mod_ekleme() -> metin { ver "ekleme"; }
+genel işlev mod_okuma() -> metin { ver "okuma"; }
+genel işlev mod_yazma() -> metin { ver "yazma"; }
+genel işlev mod_ekleme() -> metin { ver "ekleme"; }
 
 // =============================================================================
 // [D-452] AÇIK DOSYA — LİNEER OPAK TİP
@@ -81,11 +81,11 @@ işlev mod_ekleme() -> metin { ver "ekleme"; }
 // ⚠ `h` alanı lineer DEĞİLDİR (`metin`), bu yüzden `d.h` okunabilir; lineer
 // olan SARMALAYICIDIR. Kısmi taşıma yasağı (D-315) yalnız lineer ALANLAR
 // içindir.
-yapı tekkez Dosya { h: metin; }
+genel yapı tekkez Dosya { h: metin; }
 
 // Aç — yol ve mod ile AÇIK DOSYA döner. Başarısızlıkta `hata` (D-449: artık
 // gerçekten hata döner; öncesinde NULL handle `tamam` sayılıyordu).
-işlev ac(yol: metin, mod: metin) -> sonuç<Dosya, metin> {
+genel işlev ac(yol: metin, mod: metin) -> sonuç<Dosya, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     eğer metin_uzunluk(mod) == 0 { ver hata("bos mod"); }
     değişken h: metin = dosya_ac(yol, mod);
@@ -94,7 +94,7 @@ işlev ac(yol: metin, mod: metin) -> sonuç<Dosya, metin> {
 }
 
 // Kapat — açık dosyayı TÜKETİR. Çağrıdan sonra `d` kullanılamaz (L002).
-işlev kapat(d: Dosya) -> sonuç<tam32, metin> {
+genel işlev kapat(d: Dosya) -> sonuç<tam32, metin> {
     değişken hh: metin = d.h;
     imha(d);                     // sarmalayıcıyı tüket
     eğer değil handle_gecerli_mi(hh) { ver hata("gecersiz handle"); }
@@ -107,7 +107,7 @@ işlev kapat(d: Dosya) -> sonuç<tam32, metin> {
 // =============================================================================
 
 // Tum dosyayi metin olarak oku.
-işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
+genel işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
     değişken icerik: metin = dosya_oku(yol);
@@ -117,7 +117,7 @@ işlev oku_metin(yol: metin) -> sonuç<metin, metin> {
 // Satir satir oku — Dizi<metin>.
 // SINIR: codepoint-aware split runtime gerek; v1 tum metni doner.
 // Kullanici metin_kes ile manuel parse edebilir.
-işlev oku_satirlar(yol: metin) -> sonuç<Dizi<metin>, metin> {
+genel işlev oku_satirlar(yol: metin) -> sonuç<Dizi<metin>, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     // v1: tek-elemanli dizi (tum icerik)
     değişken bos: Dizi<metin> = [];
@@ -129,7 +129,7 @@ işlev oku_satirlar(yol: metin) -> sonuç<Dizi<metin>, metin> {
 // =============================================================================
 
 // Dosyayi **uzerine yaz** (truncate + write).
-işlev yaz_metin(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
+genel işlev yaz_metin(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     değişken h: metin = dosya_ac(yol, "yazma");
     eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
@@ -139,7 +139,7 @@ işlev yaz_metin(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
 }
 
 // Dosyaya **ekle** (append).
-işlev ekle(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
+genel işlev ekle(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     değişken h: metin = dosya_ac(yol, "ekleme");
     eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
@@ -149,7 +149,7 @@ işlev ekle(yol: metin, icerik: metin) -> sonuç<tam32, metin> {
 }
 
 // Satir ekle — append + newline.
-işlev ekle_satir(yol: metin, satir: metin) -> sonuç<tam32, metin> {
+genel işlev ekle_satir(yol: metin, satir: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     değişken h: metin = dosya_ac(yol, "ekleme");
     eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
@@ -164,13 +164,13 @@ işlev ekle_satir(yol: metin, satir: metin) -> sonuç<tam32, metin> {
 // =============================================================================
 
 // Var mi (dosya).
-işlev var_mi(yol: metin) -> mantıksal {
+genel işlev var_mi(yol: metin) -> mantıksal {
     eğer metin_uzunluk(yol) == 0 { ver yanlış; }
     ver dosya_var_mi(yol);
 }
 
 // Sil (dosya).
-işlev sil(yol: metin) -> sonuç<tam32, metin> {
+genel işlev sil(yol: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     değişken r: tam32 = dosya_sil(yol);
     eğer r != 0 { ver hata("silinemedi"); }
@@ -178,7 +178,7 @@ işlev sil(yol: metin) -> sonuç<tam32, metin> {
 }
 
 // Boyut (byte) — dosya boyutu.
-işlev boyut(yol: metin) -> sonuç<tam64, metin> {
+genel işlev boyut(yol: metin) -> sonuç<tam64, metin> {
     eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
     eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
     değişken s: tam64 = dosya_boyut(yol);
@@ -188,7 +188,7 @@ işlev boyut(yol: metin) -> sonuç<tam64, metin> {
 }
 
 // Yeniden adlandir.
-işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> {
+genel işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(eski) == 0 { ver hata("bos eski yol"); }
     eğer metin_uzunluk(yeni) == 0 { ver hata("bos yeni yol"); }
     değişken r: tam32 = dosya_yeniden_adlandir(eski, yeni);
@@ -197,7 +197,7 @@ işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> {
 }
 
 // Kopyala.
-işlev kopyala(kaynak: metin, hedef: metin) -> sonuç<tam32, metin> {
+genel işlev kopyala(kaynak: metin, hedef: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(kaynak) == 0 { ver hata("bos kaynak"); }
     eğer metin_uzunluk(hedef) == 0 { ver hata("bos hedef"); }
     eğer değil dosya_var_mi(kaynak) { ver hata("kaynak yok"); }

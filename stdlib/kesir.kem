@@ -36,7 +36,7 @@ işlev kesir_obeb(a: tam32, b: tam32) -> tam32 {
 }
 
 // (İç yardımcı) Geçersiz kesir (zehir) üret: [0, 0].
-işlev kesir_gecersiz() -> Dizi<tam32> {
+genel işlev kesir_gecersiz() -> Dizi<tam32> {
     değişken sonuc: Dizi<tam32> = dizi_olustur(0);
     dizi_ekle(sonuc, 0);
     dizi_ekle(sonuc, 0);
@@ -47,7 +47,7 @@ işlev kesir_gecersiz() -> Dizi<tam32> {
 
 // Kesir kur — normalize eder (payda > 0, indirgenmiş, 0 -> [0,1]).
 // payda 0 -> geçersiz kesir [0,0].
-işlev kesir_olustur(pay: tam32, payda: tam32) -> Dizi<tam32> {
+genel işlev kesir_olustur(pay: tam32, payda: tam32) -> Dizi<tam32> {
     eğer payda == 0 { ver kesir_gecersiz(); }
     değişken p: tam32 = pay;
     değişken q: tam32 = payda;
@@ -70,17 +70,17 @@ işlev kesir_olustur(pay: tam32, payda: tam32) -> Dizi<tam32> {
 }
 
 // Pay (geçersizde 0).
-işlev kesir_pay(k: Dizi<tam32>) -> tam32 {
+genel işlev kesir_pay(k: Dizi<tam32>) -> tam32 {
     ver k[0];
 }
 
 // Payda (geçersizde 0 — geçerli kesirde daima > 0).
-işlev kesir_payda(k: Dizi<tam32>) -> tam32 {
+genel işlev kesir_payda(k: Dizi<tam32>) -> tam32 {
     ver k[1];
 }
 
 // Geçerli mi — 2 elemanlı ve payda > 0 mu?
-işlev kesir_gecerli_mi(k: Dizi<tam32>) -> mantıksal {
+genel işlev kesir_gecerli_mi(k: Dizi<tam32>) -> mantıksal {
     değişken n: tam32 = 0;
     için x: k {
         n = n + 1;
@@ -92,28 +92,28 @@ işlev kesir_gecerli_mi(k: Dizi<tam32>) -> mantıksal {
 // --- Aritmetik (zehir yayılır) ---
 
 // Toplama: a/b + c/d = (ad + cb) / bd.
-işlev kesir_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev kesir_topla(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
     eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
     eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
     ver kesir_olustur(a[0] * b[1] + b[0] * a[1], a[1] * b[1]);
 }
 
 // Çıkarma: a/b - c/d = (ad - cb) / bd.
-işlev kesir_cikar(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev kesir_cikar(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
     eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
     eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
     ver kesir_olustur(a[0] * b[1] - b[0] * a[1], a[1] * b[1]);
 }
 
 // Çarpma: (a/b) * (c/d) = ac / bd.
-işlev kesir_carp(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev kesir_carp(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
     eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
     eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
     ver kesir_olustur(a[0] * b[0], a[1] * b[1]);
 }
 
 // Bölme: (a/b) / (c/d) = ad / bc. Sıfıra bölme -> geçersiz.
-işlev kesir_bol(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev kesir_bol(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
     eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
     eğer değil kesir_gecerli_mi(b) { ver kesir_gecersiz(); }
     eğer b[0] == 0 { ver kesir_gecersiz(); }
@@ -121,13 +121,13 @@ işlev kesir_bol(a: Dizi<tam32>, b: Dizi<tam32>) -> Dizi<tam32> {
 }
 
 // Olumsuzlama: -(a/b).
-işlev kesir_neg(a: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev kesir_neg(a: Dizi<tam32>) -> Dizi<tam32> {
     eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
     ver kesir_olustur(0 - a[0], a[1]);
 }
 
 // Ters (çarpmaya göre): b/a. 0'ın tersi -> geçersiz.
-işlev kesir_ters(a: Dizi<tam32>) -> Dizi<tam32> {
+genel işlev kesir_ters(a: Dizi<tam32>) -> Dizi<tam32> {
     eğer değil kesir_gecerli_mi(a) { ver kesir_gecersiz(); }
     eğer a[0] == 0 { ver kesir_gecersiz(); }
     ver kesir_olustur(a[1], a[0]);
@@ -137,14 +137,14 @@ işlev kesir_ters(a: Dizi<tam32>) -> Dizi<tam32> {
 
 // Eşit mi — normalize temsil sayesinde bileşen eşitliği. Geçersiz
 // hiçbir şeye eşit değildir (kendine bile — NaN gibi).
-işlev kesir_esit_mi(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
+genel işlev kesir_esit_mi(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
     eğer değil kesir_gecerli_mi(a) { ver yanlış; }
     eğer değil kesir_gecerli_mi(b) { ver yanlış; }
     ver a[0] == b[0] ve a[1] == b[1];
 }
 
 // Küçük mü: a/b < c/d <=> ad < cb (paydalar > 0). Geçersizde yanlış.
-işlev kesir_kucuk_mu(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
+genel işlev kesir_kucuk_mu(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
     eğer değil kesir_gecerli_mi(a) { ver yanlış; }
     eğer değil kesir_gecerli_mi(b) { ver yanlış; }
     ver a[0] * b[1] < b[0] * a[1];
@@ -154,7 +154,7 @@ işlev kesir_kucuk_mu(a: Dizi<tam32>, b: Dizi<tam32>) -> mantıksal {
 
 // Tam kısım — pay/payda, sıfıra doğru kırpılır (C `/` gibi).
 // Geçersizde 0.
-işlev kesir_tam_kisim(a: Dizi<tam32>) -> tam32 {
+genel işlev kesir_tam_kisim(a: Dizi<tam32>) -> tam32 {
     eğer değil kesir_gecerli_mi(a) { ver 0; }
     ver a[0] / a[1];
 }

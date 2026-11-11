@@ -6,7 +6,7 @@
  * ELF'i PVH note ile yükler, pvh_entry (32-bit) çalışır → long mode → main.
  *
  * Bölümler: .note.Xen (PVH note, başta) / .text / .rodata / .data / .bss
- * (sayfa tabloları dahil) / 16KB stack / 16MB heap (frame allocator backing).
+ * (sayfa tabloları dahil) / 16KB stack / 28MB heap (frame allocator backing).
  * aarch64 muadili linker/bare-metal-aarch64.ld.
  */
 
@@ -53,7 +53,12 @@ SECTIONS
     /* Heap (C1: bölge/dizi tahsisleri) — frame allocator backing. */
     . = ALIGN(4096);
     __heap_start = .;
-    . = . + 0x1000000;       /* 16 MB */
+    /* [D-751] 16 -> 28 MB: kabuk v0 tuş başına ~3 KB'ı küresel bölgede tutuyor (E4k);
+     * 16 MB ~5000 tuşta bitiyordu. 28 MB, virtio yedek DMA tabanının (0x02000000,
+     * kem_platform.kem) ALTINDA kalan en büyük yuvarlak değer — Makefile Kanıt 7
+     * (__heap_end < 0x02000000) bunu her derlemede ölçer. Daha büyüğü DMA haritasını
+     * taşımayı ister (ayrı iş). */
+    . = . + 0x1C00000;       /* 28 MB */
     __heap_end = .;
 
     /DISCARD/ : {

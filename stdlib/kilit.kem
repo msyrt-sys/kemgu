@@ -20,12 +20,12 @@
 // ⚠ Thread'siz derlemede runtime tarafı NO-OP'tur (tek thread'de kilit
 // gereksizdir) — bare-metal/thread'siz yollar kırılmaz.
 
-yapı Kilit {
+genel yapı Kilit {
     h: metin;   // opak runtime handle'ı (KdlKilit*)
 }
 
 // Yeni bir kilit yarat.
-işlev olustur() -> Kilit {
+genel işlev olustur() -> Kilit {
     ver Kilit { h: kilit_olustur() };
 }
 
@@ -37,7 +37,7 @@ işlev olustur() -> Kilit {
 // döner. Yani bu sınır `f`in gövdesindeki `ver` için GEÇERLİ DEĞİLDİR;
 // yalnız runtime panik (dizi sınır ihlali vb.) kilidi tutulu bırakır.
 // Panik zaten süreci sonlandırır, dolayısıyla pratik sonucu yoktur.
-işlev kilitle(k: Kilit, f: işlev() -> tam32) -> tam32 {
+genel işlev kilitle(k: Kilit, f: işlev() -> tam32) -> tam32 {
     kilit_al(k.h);
     değişken r: tam32 = f();
     kilit_birak(k.h);
@@ -47,7 +47,7 @@ işlev kilitle(k: Kilit, f: işlev() -> tam32) -> tam32 {
 // Kilidi yok et. Bundan sonra kullanılmamalıdır.
 // (Lineer tip olmadığı için bu, derleme zamanında zorlanamaz — bilinçli
 // takas: kilit çok-kullanımlıdır, lineerlik ikinci `kilitle`yi engellerdi.)
-işlev yok_et(k: Kilit) -> tam32 {
+genel işlev yok_et(k: Kilit) -> tam32 {
     kilit_yok(k.h);
     ver 0;
 }

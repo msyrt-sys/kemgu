@@ -33,13 +33,13 @@
 //   değişken y: Dizi<T> = dizi_olustur(0);
 
 // Boş tam32 yığını kur.
-işlev yigin_olustur_tam() -> Dizi<tam32> {
+genel işlev yigin_olustur_tam() -> Dizi<tam32> {
     değişken y: Dizi<tam32> = dizi_olustur(0);
     ver y;
 }
 
 // Boş metin yığını kur.
-işlev yigin_olustur_metin() -> Dizi<metin> {
+genel işlev yigin_olustur_metin() -> Dizi<metin> {
     değişken y: Dizi<metin> = dizi_olustur(0);
     ver y;
 }
@@ -47,7 +47,7 @@ işlev yigin_olustur_metin() -> Dizi<metin> {
 // --- Sorgular ---
 
 // Eleman sayısı.
-işlev yigin_boyut<T>(y: Dizi<T>) -> tam32 {
+genel işlev yigin_boyut<T>(y: Dizi<T>) -> tam32 {
     değişken n: tam32 = 0;
     için x: y {
         n = n + 1;
@@ -56,14 +56,14 @@ işlev yigin_boyut<T>(y: Dizi<T>) -> tam32 {
 }
 
 // Boş mu?
-işlev yigin_bos_mu<T>(y: Dizi<T>) -> mantıksal {
+genel işlev yigin_bos_mu<T>(y: Dizi<T>) -> mantıksal {
     ver yigin_boyut(y) == 0;
 }
 
 // --- Erişim ---
 
 // Tepe elemanı (çıkarmadan oku). Boş yığında hiç.
-işlev yigin_tepe<T>(y: Dizi<T>) -> seçimlik<T> {
+genel işlev yigin_tepe<T>(y: Dizi<T>) -> seçimlik<T> {
     değişken n: tam32 = yigin_boyut(y);
     eğer n == 0 { ver hiç; }
     ver değer(y[n - 1]);
@@ -72,14 +72,14 @@ işlev yigin_tepe<T>(y: Dizi<T>) -> seçimlik<T> {
 // --- Dönüşümler ---
 
 // İt (push) — elemanı tepeye ekle. Yerinde ekler, aynı diziyi döner.
-işlev yigin_it<T>(y: Dizi<T>, x: T) -> Dizi<T> {
+genel işlev yigin_it<T>(y: Dizi<T>, x: T) -> Dizi<T> {
     dizi_ekle(y, x);
     ver y;
 }
 
 // Çek (pop) — tepedeki eleman ATILMIŞ yeni yığını döner. Çekilen
 // değer gerekiyorsa önce yigin_tepe ile oku. Boş yığında boş döner.
-işlev yigin_cek<T>(y: Dizi<T>) -> Dizi<T> {
+genel işlev yigin_cek<T>(y: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     değişken n: tam32 = yigin_boyut(y);
     değişken i: tam32 = 0;
@@ -92,7 +92,7 @@ işlev yigin_cek<T>(y: Dizi<T>) -> Dizi<T> {
 
 // Temizle — boş yığın döner. (Eleman silme primitifi olmadığı için
 // yerinde boşaltma yerine yeni boş dizi.)
-işlev yigin_temizle<T>(y: Dizi<T>) -> Dizi<T> {
+genel işlev yigin_temizle<T>(y: Dizi<T>) -> Dizi<T> {
     değişken sonuc: Dizi<T> = dizi_olustur(0);
     ver sonuc;
 }

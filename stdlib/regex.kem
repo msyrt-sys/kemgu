@@ -58,7 +58,7 @@ sabit RX_TEKRAR_AZAMI: tam32 = 1000;
 // 6 BAS   : `^` (yalnız konum 0)
 // 7 SON   : `$` (yalnız girdi sonu)
 
-yapı Regex {
+genel yapı Regex {
     op: Dizi<tam32>;
     a: Dizi<tam32>;
     b: Dizi<tam32>;
@@ -94,7 +94,7 @@ yapı RxAyr {
 }
 
 // ---- Eşleşme sonucu ---------------------------------------------------------
-yapı Eslesme {
+genel yapı Eslesme {
     baslangic: tam32;   // BAYT indeksi (metin_kes ile doğrudan kullanılır)
     uzunluk: tam32;
 }
@@ -509,7 +509,7 @@ işlev rx_derle_dugum(r: &değişken Regex, d: RxDugum) -> tam32 {
 // -----------------------------------------------------------------------------
 // DERLEME GİRİŞİ. Bozuk desen PANİK DEĞİL DEĞER döndürür.
 // -----------------------------------------------------------------------------
-işlev derle(desen: metin) -> sonuç<Regex, metin> {
+genel işlev derle(desen: metin) -> sonuç<Regex, metin> {
     değişken a: RxAyr = RxAyr {
         desen: desen, poz: 0, hatali: yanlış, mesaj: "",
         cr_alt: [], cr_ust: [], cls_bas: [], cls_adet: [], cls_ters: [],
@@ -727,7 +727,7 @@ işlev rx_kosum(r: &değişken Regex, s: metin, bas: tam32) -> tam32 {
 // -----------------------------------------------------------------------------
 
 // Desen metnin HERHANGİ bir yerinde eşleşiyor mu? (arama)
-işlev ara(r: &değişken Regex, s: metin) -> seçimlik<Eslesme> {
+genel işlev ara(r: &değişken Regex, s: metin) -> seçimlik<Eslesme> {
     değişken L: tam32 = metin_uzunluk(s);
     değişken i: tam32 = 0;
     değişken devam: mantıksal = doğru;
@@ -741,7 +741,7 @@ işlev ara(r: &değişken Regex, s: metin) -> seçimlik<Eslesme> {
 }
 
 // [D-463] Desendeki yakalama grubu sayısı.
-işlev grup_sayisi(r: &değişken Regex) -> tam32 { ver r.grup_say; }
+genel işlev grup_sayisi(r: &değişken Regex) -> tam32 { ver r.grup_say; }
 
 // [D-463] Arama + YAKALAMA. Dönüş: düz yuva dizisi
 //   [g1_bas, g1_son, g2_bas, g2_son, ...]   (BAYT indeksleri)
@@ -754,7 +754,7 @@ işlev grup_sayisi(r: &değişken Regex) -> tam32 { ver r.grup_say; }
 // POSIX'in "her alt-ifade de ayrıca en uzun" kuralı UYGULANMAZ. POSIX
 // kuralını yarım uygulamak, ince ve sessiz yanlış yakalamalar üretirdi;
 // öncelik kuralı ise deterministiktir ve alternatifin SOL kolu kazanır.
-işlev ara_gruplar(r: &değişken Regex, s: metin) -> seçimlik<Dizi<tam32>> {
+genel işlev ara_gruplar(r: &değişken Regex, s: metin) -> seçimlik<Dizi<tam32>> {
     değişken ny: tam32 = 2 * r.grup_say;
     değişken L: tam32 = metin_uzunluk(s);
     değişken i: tam32 = 0;
@@ -773,7 +773,7 @@ işlev ara_gruplar(r: &değişken Regex, s: metin) -> seçimlik<Dizi<tam32>> {
 
 // [D-463] `ara_gruplar` yuvalarından k. grubun METNİNİ çıkarır (k 1'den başlar).
 // Yakalanmamış grup ya da aralık dışı k → `hiç`.
-işlev grup_metin(s: metin, yuvalar: Dizi<tam32>, k: tam32) -> seçimlik<metin> {
+genel işlev grup_metin(s: metin, yuvalar: Dizi<tam32>, k: tam32) -> seçimlik<metin> {
     eğer k < 1 { ver hiç; }
     eğer 2 * k > dizi_boyut(yuvalar) { ver hiç; }
     değişken b: tam32 = dizi_al(yuvalar, 2 * (k - 1));
@@ -784,12 +784,12 @@ işlev grup_metin(s: metin, yuvalar: Dizi<tam32>, k: tam32) -> seçimlik<metin> 
 }
 
 // Desen metnin TAMAMINI eşliyor mu?
-işlev tam_eslesir(r: &değişken Regex, s: metin) -> mantıksal {
+genel işlev tam_eslesir(r: &değişken Regex, s: metin) -> mantıksal {
     ver rx_kosum(r, s, 0) == metin_uzunluk(s);
 }
 
 // Eşleşme VAR MI? (`ara`nın mantıksal kısayolu)
-işlev eslesir(r: &değişken Regex, s: metin) -> mantıksal {
+genel işlev eslesir(r: &değişken Regex, s: metin) -> mantıksal {
     eşleş ara(r, s) {
         değer(e) => { ver doğru; }
         hiç => { ver yanlış; }
@@ -800,7 +800,7 @@ işlev eslesir(r: &değişken Regex, s: metin) -> mantıksal {
 // Tüm eşleşmeleri bul (çakışmayan, soldan sağa).
 // ⚠ BOŞ EŞLEŞME (`a*` gibi) sonsuz döngü riskidir: eşleşme uzunluğu 0 ise
 // bir KARAKTER ilerleriz. Bu davranış testte açıkça sabitlenmiştir.
-işlev tum_bul(r: &değişken Regex, s: metin) -> Dizi<Eslesme> {
+genel işlev tum_bul(r: &değişken Regex, s: metin) -> Dizi<Eslesme> {
     değişken sonuc: Dizi<Eslesme> = [];
     değişken L: tam32 = metin_uzunluk(s);
     değişken i: tam32 = 0;
@@ -822,7 +822,7 @@ işlev tum_bul(r: &değişken Regex, s: metin) -> Dizi<Eslesme> {
 }
 
 // Tüm eşleşmeleri `yeni` ile değiştir.
-işlev degistir(r: &değişken Regex, s: metin, yeni: metin) -> metin {
+genel işlev degistir(r: &değişken Regex, s: metin, yeni: metin) -> metin {
     değişken parcalar: Dizi<Eslesme> = tum_bul(r, s);
     değişken cikti: metin = "";
     değişken son: tam32 = 0;

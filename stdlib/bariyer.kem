@@ -18,23 +18,23 @@
 //
 // ⚠ Thread'siz derlemede `bekle` NO-OP'tur (tek katılımcı zaten "buluşmuş"tur).
 
-yapı Bariyer {
+genel yapı Bariyer {
     h: metin;   // opak runtime handle'ı (KdlBariyer*)
 }
 
 // `hedef` katılımcılı yeni bir bariyer yarat.
-işlev olustur(hedef: tam32) -> Bariyer {
+genel işlev olustur(hedef: tam32) -> Bariyer {
     ver Bariyer { h: bariyer_olustur(hedef) };
 }
 
 // Bariyerde bekle. `hedef` katılımcı toplanınca hepsi birlikte devam eder.
-işlev bekle(b: Bariyer) -> tam32 {
+genel işlev bekle(b: Bariyer) -> tam32 {
     bariyer_bekle(b.h);
     ver 0;
 }
 
 // Bariyeri yok et. Bekleyen katılımcı KALMAMIŞ olmalıdır.
-işlev yok_et(b: Bariyer) -> tam32 {
+genel işlev yok_et(b: Bariyer) -> tam32 {
     bariyer_yok(b.h);
     ver 0;
 }

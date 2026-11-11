@@ -46,19 +46,19 @@ işlev geo_boyut(xs: Dizi<tam32>) -> tam32 {
 
 // Çapraz çarpım (o merkezli): (a-o) x (b-o). Pozitif = b, o->a
 // yönünün SOLUNDA (saat tersi dönüş).
-işlev geo_capraz(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
+genel işlev geo_capraz(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
                  bx: tam32, by: tam32) -> tam32 {
     ver (ax - ox) * (by - oy) - (ay - oy) * (bx - ox);
 }
 
 // Nokta çarpım: a . b. Sıfır = dik.
-işlev geo_nokta_carpim(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
+genel işlev geo_nokta_carpim(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
     ver ax * bx + ay * by;
 }
 
 // Yönelim predikatı: o->a->b dönüşü. 1 = saat tersi (ccw),
 // -1 = saat yönü (cw), 0 = doğrusal. KESİN (epsilon yok).
-işlev geo_yon(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
+genel işlev geo_yon(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
               bx: tam32, by: tam32) -> tam32 {
     değişken c: tam32 = geo_capraz(ox, oy, ax, ay, bx, by);
     eğer c > 0 { ver 1; }
@@ -69,13 +69,13 @@ işlev geo_yon(ox: tam32, oy: tam32, ax: tam32, ay: tam32,
 // --- Mesafe ---
 
 // Manhattan mesafesi: |dx| + |dy|.
-işlev geo_manhattan(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
+genel işlev geo_manhattan(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
     ver geo_mutlak(bx - ax) + geo_mutlak(by - ay);
 }
 
 // Öklid mesafesinin KARESİ: dx² + dy² (karekök yok — karşılaştırma
 // için kare yeterli, sıralama korunur).
-işlev geo_uzaklik_kare(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
+genel işlev geo_uzaklik_kare(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
     ver (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
 }
 
@@ -83,7 +83,7 @@ işlev geo_uzaklik_kare(ax: tam32, ay: tam32, bx: tam32, by: tam32) -> tam32 {
 
 // Nokta eksene-hizalı dikdörtgende mi (sınır DAHİL)? Köşeler
 // herhangi iki karşıt köşe olabilir (normalize edilir).
-işlev geo_dikdortgen_icinde_mi(px: tam32, py: tam32,
+genel işlev geo_dikdortgen_icinde_mi(px: tam32, py: tam32,
                                 x1: tam32, y1: tam32,
                                 x2: tam32, y2: tam32) -> mantıksal {
     değişken kx: tam32 = x1;
@@ -101,7 +101,7 @@ işlev geo_dikdortgen_icinde_mi(px: tam32, py: tam32,
 
 // Nokta doğru PARÇASININ üzerinde mi (uçlar dahil)? Doğrusallık +
 // sınırlayıcı kutu — ikisi de kesin.
-işlev geo_parca_uzerinde_mi(px: tam32, py: tam32,
+genel işlev geo_parca_uzerinde_mi(px: tam32, py: tam32,
                              ax: tam32, ay: tam32,
                              bx: tam32, by: tam32) -> mantıksal {
     eğer geo_yon(ax, ay, bx, by, px, py) != 0 { ver yanlış; }
@@ -112,7 +112,7 @@ işlev geo_parca_uzerinde_mi(px: tam32, py: tam32,
 
 // p1p2 ile p3p4 parçaları kesişiyor mu (uç değme ve doğrusal örtüşme
 // DAHİL)? Kesin — kayan nokta/epsilon yok.
-işlev geo_parcalar_kesisir_mi(p1x: tam32, p1y: tam32, p2x: tam32, p2y: tam32,
+genel işlev geo_parcalar_kesisir_mi(p1x: tam32, p1y: tam32, p2x: tam32, p2y: tam32,
                                p3x: tam32, p3y: tam32, p4x: tam32, p4y: tam32) -> mantıksal {
     değişken d1: tam32 = geo_yon(p3x, p3y, p4x, p4y, p1x, p1y);
     değişken d2: tam32 = geo_yon(p3x, p3y, p4x, p4y, p2x, p2y);
@@ -131,7 +131,7 @@ işlev geo_parcalar_kesisir_mi(p1x: tam32, p1y: tam32, p2x: tam32, p2y: tam32,
 // Basit çokgenin alanının İKİ KATI, İŞARETLİ: köşeler saat tersi
 // (ccw) sıralıysa pozitif, saat yönünde negatif. Köşeler paralel
 // xs/ys dizileri; n < 3 -> 0.
-işlev geo_alan_iki_kat_isaretli(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
+genel işlev geo_alan_iki_kat_isaretli(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = geo_boyut(xs);
     eğer n < 3 { ver 0; }
     değişken toplam: tam32 = 0;
@@ -145,7 +145,7 @@ işlev geo_alan_iki_kat_isaretli(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
 }
 
 // Basit çokgenin alanının İKİ KATI (mutlak — yönelimden bağımsız).
-işlev geo_alan_iki_kat(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
+genel işlev geo_alan_iki_kat(xs: Dizi<tam32>, ys: Dizi<tam32>) -> tam32 {
     ver geo_mutlak(geo_alan_iki_kat_isaretli(xs, ys));
 }
 

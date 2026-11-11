@@ -65,7 +65,11 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       iki program: metin düzenleyici + tıklanabilir dosya gezgini. Eski metin: E3a'yı kapat —
       bu belgenin
       bitiş tanımı önerilir.
-- [ ] **H0g [K] Test makinesi profili — AÇIK, YALNIZ MEHMET YANITLAYABİLİR.** Öneri: legacy BIOS seçeneği + PS/2
+- [ ] **H0g [K] Test makinesi profili — ERTELENDİ (2026-11-11, Mehmet).** Gerçek test H2 (USB'den açılış)
+      + H4a (firmware çerçeve tamponu) QEMU+OVMF'de yeşil olunca. PS/2 GEREKMEZ: USB klavye (xHCI+HID+TR)
+      zaten çalışıyor; sıradan bir x86 dizüstü/masaüstü (UEFI, NVMe ya da SATA) yeter, kurulumsuz USB
+      bellekten açılır, iç diske yazılmaz. DGX Spark ARM olduğu için bu yolun makinesi değil.
+      Eski öneri: legacy BIOS seçeneği + PS/2
       portu olan eski bir x86 masaüstü (ikinci el yeter); gelene kadar QEMU q35 + OVMF. Elde hangi makineler var (BIOS/UEFI, PS/2
       portu, SATA/NVMe, seri başlık)? Bu, H4/H6/H9 sırasını değiştirir.
 

@@ -17,7 +17,7 @@
 
 // JSON değer ağacı. Dizi/nesne için KEMGU'nun `Dizi<T>`si kullanılır; nesne
 // anahtar ve değerleri PARALEL iki dizide tutulur (KEMGU'da harita tipi yok).
-çeşit JsonDeger {
+genel çeşit JsonDeger {
     Bos,
     Mantik(mantıksal),
     Sayi(tam64),
@@ -40,8 +40,8 @@
 // KEMGU dizgi literalinde kaçış YOKTUR: `"\""` kaynakta İKİ karakterdir
 // (`\` ve `"`), `"\\"` de iki karakterdir (`\` ve `\`). Bu yüzden ikinci
 // karakteri (indeks 1) kesiyoruz.
-işlev tirnak() -> metin { ver metin_kes("\"", 1, 1); }   // tek `"` (bayt 34)
-işlev ters_bolu() -> metin { ver metin_kes("\\", 1, 1); } // tek `\` (bayt 92)
+genel işlev tirnak() -> metin { ver metin_kes("\"", 1, 1); }   // tek `"` (bayt 34)
+genel işlev ters_bolu() -> metin { ver metin_kes("\\", 1, 1); } // tek `\` (bayt 92)
 
 // JSON dizgi kaçışı: `"` ve `\` ters-bölü ile, kontrol karakterleri \u00XX.
 işlev kacisla(s: metin) -> metin {
@@ -78,7 +78,7 @@ işlev kacisla(s: metin) -> metin {
 // -----------------------------------------------------------------------------
 // Serileştirme. Özyineli; iç içe dizi/nesne desteklenir.
 // -----------------------------------------------------------------------------
-işlev yaz(d: JsonDeger) -> metin {
+genel işlev yaz(d: JsonDeger) -> metin {
     eşleş d {
         JsonDeger::Bos => { ver "null"; }
         JsonDeger::Mantik(b) => {
@@ -355,7 +355,7 @@ işlev ja_hex4(a: &değişken JsonAyristirici) -> tam32 {
     ver toplam;
 }
 
-işlev satir_sonu() -> metin { ver kod_metin(10); }
+genel işlev satir_sonu() -> metin { ver kod_metin(10); }
 işlev sekme() -> metin { ver kod_metin(9); }
 işlev satir_basi() -> metin { ver kod_metin(13); }
 işlev geri_sil() -> metin { ver kod_metin(8); }    // \b
@@ -512,7 +512,7 @@ işlev ja_nesne(a: &değişken JsonAyristirici) -> sonuç<JsonDeger, metin> {
 }
 
 // Genel giriş noktası: tüm girdiyi tüketmeli (arta kalan = hata).
-işlev json_ayristir(girdi: metin) -> sonuç<JsonDeger, metin> {
+genel işlev json_ayristir(girdi: metin) -> sonuç<JsonDeger, metin> {
     değişken a: JsonAyristirici = JsonAyristirici { girdi: girdi, poz: 0 };
     değişken r: sonuç<JsonDeger, metin> = ja_deger(&değişken a);
     eşleş r {
@@ -538,7 +538,7 @@ işlev json_ayristir(girdi: metin) -> sonuç<JsonDeger, metin> {
 // Kusur D-437'de hem `src/llvm.c`te hem `selfhost/codegen.kem`de onarıldı;
 // regresyon fikstürü: `test/snapshots/cesit_payload_dizi_metin.kem`.
 
-işlev json_alan(d: JsonDeger, anahtar: metin) -> seçimlik<JsonDeger> {
+genel işlev json_alan(d: JsonDeger, anahtar: metin) -> seçimlik<JsonDeger> {
     eşleş d {
         JsonDeger::Nesne(anahtarlar, degerler) => {
             değişken n: tam32 = dizi_boyut(anahtarlar);
@@ -565,7 +565,7 @@ işlev json_alan(d: JsonDeger, anahtar: metin) -> seçimlik<JsonDeger> {
 
 // ⚠ Sınır kontrolü BURADA: `dizi_al` aralık dışında runtime panik verir —
 // kütüphane çökmemeli, `hiç` dönmeli.
-işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
+genel işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
     eşleş d {
         JsonDeger::Dizi(ogeler) => {
             eğer i < 0 { ver hiç; }
@@ -582,7 +582,7 @@ işlev json_indeks(d: JsonDeger, i: tam32) -> seçimlik<JsonDeger> {
     ver hiç;
 }
 
-işlev json_sayi_al(d: JsonDeger) -> seçimlik<tam64> {
+genel işlev json_sayi_al(d: JsonDeger) -> seçimlik<tam64> {
     eşleş d {
         JsonDeger::Sayi(n) => { ver değer(n); }
         // [D-460] `json_sayi_al` TAMSAYI erişimcisidir: ondalık bir değeri
@@ -597,7 +597,7 @@ işlev json_sayi_al(d: JsonDeger) -> seçimlik<tam64> {
     ver hiç;
 }
 
-işlev json_metin_al(d: JsonDeger) -> seçimlik<metin> {
+genel işlev json_metin_al(d: JsonDeger) -> seçimlik<metin> {
     eşleş d {
         JsonDeger::Metin(s) => { ver değer(s); }
         JsonDeger::Bos => { ver hiç; }
@@ -610,7 +610,7 @@ işlev json_metin_al(d: JsonDeger) -> seçimlik<metin> {
     ver hiç;
 }
 
-işlev json_uzunluk(d: JsonDeger) -> tam32 {
+genel işlev json_uzunluk(d: JsonDeger) -> tam32 {
     eşleş d {
         JsonDeger::Dizi(ogeler) => { ver dizi_boyut(ogeler); }
         JsonDeger::Nesne(anahtarlar, degerler) => {
@@ -636,7 +636,7 @@ işlev json_uzunluk(d: JsonDeger) -> tam32 {
 // birbirine dönüştürmek, `Sayi`nın tam64 kesinliğini ondalığa taşırdı
 // (2^53 üstü tamsayılar `kesirli64`de KAYIPSIZ DEĞİLDİR). Çağıran hangisini
 // beklediğini bilmeli.
-işlev json_ondalik_al(d: JsonDeger) -> seçimlik<kesirli64> {
+genel işlev json_ondalik_al(d: JsonDeger) -> seçimlik<kesirli64> {
     eşleş d {
         JsonDeger::Ondalik(x) => { ver değer(x); }
         JsonDeger::Sayi(x) => { ver hiç; }
