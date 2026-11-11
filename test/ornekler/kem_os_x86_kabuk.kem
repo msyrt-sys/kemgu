@@ -243,7 +243,7 @@ işlev ke_kur() -> sonuç<KabukEkran, metin> {
             hata(m) => { ver hata(metin_birlestir("konsol ", m)); }
             tamam(k) => {
                 değişken ke: KabukEkran = KabukEkran { var: yanlış, e: Ekran { fb: 0, mmio: 0, adim: 0, gen: 0, yuk: 0, kimlik: 0 }, f: f, k: k };
-                eşleş ekran_bga_ac(640, 480, KE_ARKA) { hata(m) => { } tamam(e) => { ke.e = e; ke.var = doğru; ekran_ayna_ac(); } }
+                eşleş ekran_bga_ac(640, 480, KE_ARKA) { hata(m) => { } tamam(e) => { ke.e = e; ke.var = doğru; ekran_panik_kur(e,f); ekran_ayna_ac(); } }
                 ver tamam(ke);
             }
         }

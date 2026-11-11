@@ -23,6 +23,7 @@ işlev ek_calis() -> sonuç<metin, metin> {
             eşleş psf_coz(font_tr16()) {
                 hata(m) => { ver hata(metin_birlestir("psf ", m)); }
                 tamam(f) => {
+                    ekran_panik_kur(e,f);
                     değişken sy: tam32 = f.yukseklik + 4;
                     ekran_metin(e, f, 8, 8, "KEMGU-OS ekran v0", EK_SARI, EK_ARKA);
                     ekran_metin(e, f, 8, 8 + sy, "Merhaba Dünya — ğüşıöç İ", EK_ON, EK_ARKA);

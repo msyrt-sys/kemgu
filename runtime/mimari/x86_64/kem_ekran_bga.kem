@@ -148,3 +148,32 @@ işlev ekran_ayna_bosalt(k: &değişken Konsol) {
     ekran_ayna_sifirla();
     için kod: utf8_bayt_coz(b, 0, n olarak tam32) { konsol_kod(k, kod); }
 }
+
+// Panik durum kaydı: Python 200*1024*1024+65536=209780736.
+// Ayna [200 MiB, +64 KiB); bu kayıt ve font sonraki 32 KiB'dedir.
+// Bayrak EN SON yazılır. Ekransız çekirdek sıfır RAM kaydını görüp yalnız seri yazar.
+işlev ekran_panik_kur(e: Ekran, f: PsfFont) {
+    güvensiz {
+    değişken t: tam64 = 209780736;
+    değişken flag: *tam64 = t olarak *tam64; *flag=0;
+    eğer f.genislik != 8 veya f.yukseklik != 16 veya f.glif_bayt != 16 veya f.glif_sayisi != 512 { ver; }
+    eğer dizi_boyut(f.kodlar) > 1024 { ver; }
+    değişken p: *tam64 = (t+8) olarak *tam64; *p=e.fb;
+    p=(t+16) olarak *tam64; *p=e.adim;
+    p=(t+24) olarak *tam64; *p=e.gen olarak tam64;
+    p=(t+32) olarak *tam64; *p=e.yuk olarak tam64;
+    p=(t+40) olarak *tam64; *p=dizi_boyut(f.kodlar) olarak tam64;
+    değişken i: tam32 = 0;
+    iken i < 8192 {
+        değişken q: *dtam8 = (t+4096+(i olarak tam64)) olarak *dtam8;
+        *q=oku_u8(f.veri,f.veri_ofseti+i) olarak dtam8; i=i+1;
+    }
+    i=0;
+    iken i < dizi_boyut(f.kodlar) {
+        p=(t+16384+(i olarak tam64)*16) olarak *tam64; *p=dizi_al(f.kodlar,i) olarak tam64;
+        p=(t+16392+(i olarak tam64)*16) olarak *tam64; *p=dizi_al(f.indeksler,i) olarak tam64;
+        i=i+1;
+    }
+    *flag=1346457161; // Python int.from_bytes(b'INAP','little'): tanınan kayıt.
+    }
+}

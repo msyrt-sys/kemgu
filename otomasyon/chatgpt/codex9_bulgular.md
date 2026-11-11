@@ -28,3 +28,13 @@ Loglar: `build/codex9/a-{yaz,hex,hex-sabit,parca}.log`, `a-sabotaj-qemu.log`, `a
 - Sabotaj: `hiç` dalında canlı çizimi kaldır → gerçek NVMe **1/1 kırmızı**, 268 piksel fark. Yukarı kaydırmada kaynak satırı kendisi yap → **1/1 kırmızı**, 7761 piksel fark. İkisi de derleniyor; kaynaklar geri alındı.
 - Heap ölçümü tahmin değil: QMP `pmemsave` ile ELF'teki `kem_bump` okunup `__heap_start` çıkarılır. Bump geriye gitmez; koşumun tahsis üst sınırıdır. NVMe 3.214.112, AHCI 3.017.360, USB 3.279.728 bayt. Kâhin **16 MiB altında olmayı zorunlu tutar**; linker/heap değiştirilmedi.
 - Yerel loglar `build/codex9/b-*.log`, `b-profil.txt`.
+
+## C — panik ekranı
+
+- Panik açıkken 640×480 kırmızı (`0xAA0000`), `PANIK` başlığı ve Türkçe mesaj; Python font çizimiyle 307.200 piksel birebir. Kapı her açık/ekransız/kapalı-eski-kayıt durumunu 5 kez açar. Seri satır tam karşılaştırılır; QMP `info registers` ile **HLT=1** aranır (yoğun döngü başarı sayılmaz).
+- Eski `kdl_panik` yeni fikstürde rc=2 / HLT=0. Yeni gövde seri davranışını korur, mevcut `kdl_idle` ile durur; yeni asm yok. `kem_mmu_hw.kem` içinde yalnız bu gövde değişti.
+- VARSAYIM: mevcut 200 MiB ekran aynasının hemen sonraki 32 KiB alanı panik kayıt/font kopyasına ayrıldı. Başlatma sırasında doğrulanmış 8×16 PSF'nin glifleri ve Unicode eşlemeleri kopyalanır; hazır bayrağı en son yazılır. Panik yolu heap ayırmaz; ekran modülünün sembollerine bağlanmaz, böylece ekransız birleşik birimler korunur. Çizime başlamadan bayrak sıfırlanır (yeniden girişte yalnız seri).
+- Sabotaj: bayrak koşulu `doğru` yapılınca **1/1 gerçek QEMU açılışı kırmızı**. Ekran hiç açılmadan, bayrağı sıfır bırakılmış eski durum kaydı 1×1 RAM kanaryasına işaret eder; `0x12345678` kırmızı renkle ezildi. Sıfır başlıklı normal ekransız açılışın tek başına bu hatayı göstermeyeceği için kanaryalı negatif şekil kapıda kalıcıdır.
+- Fikstür `kdl_panik` yolunu kasıtlı `PANIK: kasitli ekran deneyi ğ` ile tetikler; başka C runtime panik yollarını değiştirmez. Loglar `build/codex9/c-*.log`.
+
+- C/self ek kanıt: panik çekirdeği self-host ile de derlenip 15 ayrı QEMU açılışında aynı pikselleri/seriyi/HLT durumunu verdi (`c-self.log`).

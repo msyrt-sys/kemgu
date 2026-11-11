@@ -1,0 +1,23 @@
+// Kasıtlı kdl_panik: ekran açık/kapalı ve kapalı bayrakta eski kayıt deneyi.
+kullan drivers::ekran::psf::{ psf_coz };
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
+çıplak işlev panik_kapali_kayit() {
+    // Sıfır bayrak yanında eski bir kayıt: framebuffer yerine güvenli RAM kanaryası.
+    değişken t: tam64 = 209780736; değişken p: *tam64 = t olarak *tam64; *p=0;
+    p=(t+8) olarak *tam64; *p=209846272;
+    p=(t+16) olarak *tam64; *p=4;
+    p=(t+24) olarak *tam64; *p=1;
+    p=(t+32) olarak *tam64; *p=1;
+    p=(t+40) olarak *tam64; *p=0;
+    p=209846272 olarak *tam64; *p=305419896; // Python int('12345678',16).
+}
+işlev main() -> tam32 {
+    eğer kem_pvh_cmdline_esit("kapali") == 1 { panik_kapali_kayit(); }
+    değilse eğer kem_pvh_cmdline_esit("ekransiz") != 1 {
+        eşleş ekran_bga_ac(640,480,1056832) { hata(e) => { kem_qemu_cik(1); } tamam(e) => {
+            eşleş psf_coz(font_tr16()) { hata(m) => { kem_qemu_cik(1); } tamam(f) => { ekran_panik_kur(e,f); } }
+        } }
+    }
+    kdl_panik("PANIK: kasitli ekran deneyi ğ");
+    ver 0;
+}

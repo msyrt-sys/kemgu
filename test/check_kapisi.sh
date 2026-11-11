@@ -40,6 +40,7 @@ muaf() {
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     # [D-745] bare-metal NVMe test çekirdeği: kem_pci_hw/kem_uart'tan işlev ister (tek başına T002).
     *test/ornekler/kem_os_x86_kabuk.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
+    *test/ornekler/kem_os_x86_panik.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ekran.kem) echo "parça — birleşik ekran birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_usb.kem) echo "parça — birleşik USB birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ahci.kem) echo "parça — birleşik AHCI birimi aşağıda denetlenir" ;;
@@ -232,6 +233,20 @@ else
   "$KEMGU" --check --mimari x86_64-none build/kem_bm_ekran_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
 rm -f build/kem_bm_ekran_kapi.kem
+
+# [D-748] bare-metal panik (std VGA + Bochs DISPI + PSF) — kabuk deseninin aynısı.
+BM_PANIK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_panik.kem}"
+BM_PANIK_PARCALAR="$BM_PANIK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak panik modülü
+cat $BM_PANIK_PARCALAR > build/kem_bm_panik_kapi.kem
+tot=$((tot + 1))
+if "$KEMGU" --check --mimari x86_64-none build/kem_bm_panik_kapi.kem >/dev/null 2>&1; then
+  echo "  ✅ kem_os_x86_panik (birleşik bare-metal PANIK, $(echo $BM_PANIK_PARCALAR | wc -w) parça) --check geçti"
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86_panik birleşik kaynak --check'ten geçmiyor:"
+  "$KEMGU" --check --mimari x86_64-none build/kem_bm_panik_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+fi
+rm -f build/kem_bm_panik_kapi.kem
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir
 # birimdir → doğru mimari bayrağıyla tip kapısından GEÇMELİ.
