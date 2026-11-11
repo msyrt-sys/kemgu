@@ -85,7 +85,7 @@ Sayılar benzersiz dosya değil **koşum olaylarıdır**; aynı yabancı mimari 
 | QEMU üst bellek senaryosu: RAM ≤ 1 GiB | 1 |
 | **Toplam** | **65** |
 
-64 korpus atlaması + 1 QEMU üst bellek senaryosu. Ayrı muafiyet kayıtları: stdlib 2 + yapısal 24 + sürücü 1 + geniş check 18 + tip kapısı 16 = **61**; ayrıca ASan 4 bilinen durum ve 2 sızıntı muafiyeti. Bu listelere yeni muafiyet eklenmedi; iki yeni bare-metal örneğin `check_kapisi` parça sınıflandırmasının yanında gerçek birleşik denetimleri bulunur.
+64 korpus atlaması + 1 QEMU üst bellek senaryosu. Ayrı muafiyet kayıtları: stdlib 2 + yapısal 24 + sürücü 1 + geniş check 18 + tip kapısı 16 = **61**; ayrıca ASan 4 bilinen durum ve 2 sızıntı muafiyeti. Yasaklanan `bolge_operand/ENV_MUAF`, `check_genis/MUAF` ve `yapi_diff` listeleri değiştirilmedi; iki yeni bare-metal örneğin `check_kapisi` parça sınıflandırmasının yanında gerçek birleşik denetimleri bulunur.
 
 Lean/lake yok: 32 dosyada `sorry/admit` metin taraması temiz; **gerçek Lean tip denetimi çalıştırılmadı**. `bound metin ... skip (v1)` yalnız bir test başlığıdır: `test_tip_kontrol.c` o testi çalıştırıp `h == 0` doğrular; atlama sayılmadı.
 
