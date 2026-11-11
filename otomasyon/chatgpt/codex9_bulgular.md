@@ -52,3 +52,43 @@ Loglar: `build/codex9/a-{yaz,hex,hex-sabit,parca}.log`, `a-sabotaj-qemu.log`, `a
 - Ortam: QEMU 8.2.2 (Ubuntu 1:8.2.2+ds-0ubuntu1.18), clang 18.1.3. D son kapıları: PS/2 17/17, USB klavye 15/15, ekran 5/5, panik 15/15; köprü kart + 129 test; tip kapısı 347/363 (16 sınıflandırma, 0 RED); baremetal_diff 23/23. PS/2 heap üst sınırı 2.361.520–2.623.888 bayt.
 
 - D self-host ek kanıt: ayrı derlenmiş ikiliyle aynı ham PS/2 izi; NVMe/AHCI/USB kabuk 3/3, seri ve ekran birebir. Self heap üst sınırı en çok 2.820.736 bayt (`d-self-tarama.log`, `d-self-kabuk.log`).
+
+## Panik kapsamının sınırı
+
+Yeni ekran yolu **`kdl_panik`** içindir (görevin izin verdiği gövde). Mevcut `runtime/kem_heap.kem` içindeki ayrı `kdl_dizi_oob` yordamı `kdl_panik` çağırmıyor, doğrudan yoğun döngüde duruyor; bu dosya izin dışında olduğundan değiştirilmedi. Bu nedenle panik fikstürü doğrudan kasıtlı `kdl_panik` çağrısı kullanır; bütün dizi sınır hatalarının artık ekrana çıktığı iddia edilmiyor. Seri davranışı korunmuştur: mesajın mevcut baytları ve satır sonu; `PANIK:` öneki fikstür mesajının parçasıdır.
+
+## Son tam doğrulama
+
+`make -j1 test_tumu`, başlangıç 2026-11-11 18:39:35 UTC, bitiş 2026-11-11T19:01:16.512217+00:00. `make ... | tee ...` sonrasında **rc=${PIPESTATUS[0]}=0**; `Tum testler gecti!`. Kod bu koşum boyunca değişmedi; sonrasında yalnız raporlar güncellendi. Yerel tam log: `build/codex9/test-tumu.log`.
+
+- FIXPOINT ✓: **99.048 satır**; üç aşama semantik codegen 223/223.
+- Checker 312/312, geniş codegen 71/71, modül codegen 59/59.
+- Baremetal_diff 23/23; tip kontrol 347/363, 16 parça/muaf sınıflandırması, 0 RED.
+- ASan **133 PASS / 0 FAIL / 38 SKIP**; ASan/UBSan matris 12/12.
+- Köprü: kart + **129/129**; qtest **6/6**, C ve self ayrı QEMU örneklerinde.
+- Ekran 5/5; USB klavye kabuk 15/15; PS/2 kabuk 17/17 (3×5 + denetleyicisiz 2); panik 15/15.
+- Bare-metal NVMe, AHCI ve USB: **20'şer açılış**, hata yok.
+
+### Atlama ve muafiyet hesabı
+
+Sayılar benzersiz dosya değil **koşum olaylarıdır**; aynı yabancı mimari örneği üç codegen aşamasında ayrı atlanır.
+
+| Grup | Atlama |
+|---|---:|
+| Semantik codegen (üç derleyici aşaması × 2 yabancı mimari) | 6 |
+| Geniş codegen: hostta bağlanamayan MMIO örnekleri | 8 |
+| Yapısal IR paritesi | 2 |
+| Sürücü yapı paritesi | 1 |
+| Eski VirtIO koşumunda C oracle reddi | 5 |
+| Bölge operandı | 4 |
+| ASan E2E | 38 |
+| QEMU üst bellek senaryosu: RAM ≤ 1 GiB | 1 |
+| **Toplam** | **65** |
+
+64 korpus atlaması + 1 QEMU üst bellek senaryosu. Ayrı muafiyet kayıtları: stdlib 2 + yapısal 24 + sürücü 1 + geniş check 18 + tip kapısı 16 = **61**; ayrıca ASan 4 bilinen durum ve 2 sızıntı muafiyeti. Bu listelere yeni muafiyet eklenmedi; iki yeni bare-metal örneğin `check_kapisi` parça sınıflandırmasının yanında gerçek birleşik denetimleri bulunur.
+
+Lean/lake yok: 32 dosyada `sorry/admit` metin taraması temiz; **gerçek Lean tip denetimi çalıştırılmadı**. `bound metin ... skip (v1)` yalnız bir test başlığıdır: `test_tip_kontrol.c` o testi çalıştırıp `h == 0` doğrular; atlama sayılmadı.
+
+### Kalan sınırlar
+
+Yeni derleyici bulgusu yok; 60 dakika engeli nedeniyle bırakılan iş yok. E4k uzun ömürlü bölge sızıntısı mevcut kapsam dışında kalır; testler 16 MiB tahsis üst sınırını zorunlu tutar. Ana dalın 28 MiB heap ayarı değiştirilmedi. Panik kayıt alanı mevcut 200 MiB aynasının sonrasındaki 32 KiB'dir; ölçülen platform QEMU q35, 256 MiB RAM'dir. `kdl_dizi_oob` sınırı yukarıda açıklandı.
