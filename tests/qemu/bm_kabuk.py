@@ -18,6 +18,11 @@ def boot(mode,n):
     qmp.unlink(missing_ok=True)
     cmd=['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-no-reboot','-serial',f'file:{serial}','-kernel',str(elf),'-device','isa-debug-exit,iobase=0xf4,iosize=0x04','-qmp',f'unix:{qmp},server=on,wait=off','-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={disk},if=none,id=d0,format=raw']
     cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu8','ahci':'ide-hd,drive=d0,bus=ide.0','usb':'usb-storage,bus=x.0,drive=d0'}[mode]]
+    if os.environ.get('KABUK_KLAVYE','usb')=='ps2':
+        i=cmd.index('usb-kbd,bus=x.0');del cmd[i-1:i+1]
+        if os.environ.get('KABUK_XHCI','1')=='0':
+            assert mode!='usb'
+            i=cmd.index('qemu-xhci,id=x');del cmd[i-1:i+1]
     deadline=time.monotonic()+60
     with (w/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=log)
@@ -60,7 +65,7 @@ def boot(mode,n):
             # yoklamasıyla beklemek ~4 sn'de "xhci olay zaman asimi" veriyor ve her yoklama
             # heap sızdırıyordu; hemen yazan bir kâhin bunu GÖREMEZ.
             if n==1:
-                t_bos=time.monotonic()+float(os.environ.get('KABUK_BOSTA','8'));deadline+=float(os.environ.get('KABUK_BOSTA','8'))
+                t_bos=time.monotonic()+max(8.0,float(os.environ.get('KABUK_BOSTA','8')));deadline+=max(8.0,float(os.environ.get('KABUK_BOSTA','8')))
                 while time.monotonic()<t_bos:
                     if p.poll() is not None:raise RuntimeError(f'boşta çöktü rc={p.poll()}')
                     if serial.read_bytes()!=expected:raise AssertionError(f'boşta seri değişti: {serial.read_bytes()!r}')
@@ -105,7 +110,7 @@ def boot(mode,n):
             command('quit');p.wait(timeout=5)
             assert p.returncode==0
             assert hashlib.sha256(disk.read_bytes()).hexdigest()==before,'salt okuma diski değiştirdi'
-            print(f'✓ kabuk {mode} açılış {n}: 7 komut, canlı yankı/geri silme/imleç/70 satır, tam seri UTF-8, ekran 640x480 BİREBİR ve disk SHA256 aynı',flush=True)
+            print(f'✓ kabuk {mode} klavye={os.environ.get("KABUK_KLAVYE","usb")} açılış {n}: 7 komut, canlı yankı/geri silme/imleç/70 satır, tam seri UTF-8, ekran 640x480 BİREBİR ve disk SHA256 aynı',flush=True)
         finally:
             sock.close()
             if p.poll() is None:p.kill();p.wait()

@@ -6,5 +6,6 @@ işlev main() -> tam32 {
     eğer girdi_bas(-1,8) != 0 veya girdi_bas(4,0) != 0 { ver 2; }
     eğer girdi_kod(xs,0,0) != 62 veya girdi_kod(xs,0,1) != 32 veya girdi_kod(xs,0,3) != 287 { ver 3; }
     eğer girdi_kod(xs,2,2) != 97 veya girdi_kod(xs,0,9) != 32 veya girdi_kod(xs,-1,3) != 32 { ver 4; }
+    eğer girdi_kod(xs,2147483647,3) != 32 veya girdi_kod(xs,0,2147483647) != 32 { ver 5; }
     ver 0;
 }

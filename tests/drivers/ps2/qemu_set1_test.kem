@@ -1,0 +1,20 @@
+// Kaynak: tests/qemu/bm_ps2.py gerçek q35/i8042 ölçümü (XLATE=1, CFG=96).
+// Python ord: a=97, ğ=287, ç=231, İ=304; E0 4B sol bas, E0 CB sol bırak.
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni, klavye_bayt, OZEL_SOL };
+işlev main() -> tam32 {
+    değişken tr: KlavyeDurumu = klavye_yeni();
+    değişken baytlar: Dizi<tam32> = [30,158,26,154,52,180,42,40,168,170,224,75,224,203];
+    değişken beklenen: Dizi<tam32> = [97,287,231,304];
+    değişken n: tam32 = 0; değişken sol: tam32 = 0;
+    için b: baytlar {
+        eşleş klavye_bayt(&değişken tr,b) {
+            TusOlayi::Yok => { }
+            TusOlayi::Karakter(k) => { eğer n >= 4 { ver 1; } eğer k != dizi_al(beklenen,n) { ver 2; } n=n+1; }
+            TusOlayi::Ozel(k,bas) => { eğer k != OZEL_SOL { ver 3; } eğer bas { sol=sol+1; } değilse { sol=sol+2; } }
+        }
+    }
+    eğer n != 4 veya sol != 3 veya tr.sol_shift veya tr.e0 { ver 4; }
+    eşleş klavye_bayt(&değişken tr,256) { TusOlayi::Yok => { } _ => { ver 5; } }
+    eşleş klavye_bayt(&değişken tr,-1) { TusOlayi::Yok => { } _ => { ver 6; } }
+    ver 0;
+}

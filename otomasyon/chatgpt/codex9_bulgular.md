@@ -38,3 +38,17 @@ Loglar: `build/codex9/a-{yaz,hex,hex-sabit,parca}.log`, `a-sabotaj-qemu.log`, `a
 - Fikstür `kdl_panik` yolunu kasıtlı `PANIK: kasitli ekran deneyi ğ` ile tetikler; başka C runtime panik yollarını değiştirmez. Loglar `build/codex9/c-*.log`.
 
 - C/self ek kanıt: panik çekirdeği self-host ile de derlenip 15 ayrı QEMU açılışında aynı pikselleri/seriyi/HLT durumunu verdi (`c-self.log`).
+
+## D — gerçek i8042 ve PS/2 yedek girişi
+
+- Yerel Linux `include/linux/i8042.h` değerleri Python ile ayrıştırıldı: RCTR alt bayt 32, WCTR alt bayt 96, disable 173, enable 174, AUX disable 167; OBF=1, IBF=2, AUX=32, XLATE=64. Mevcut 8 bit port ilkelleri kullanılır; yeni asm yok.
+- Gerçek QEMU q35, **USB klavye olmadan** QMP olayları: denetim baytı **96**, yani çevirme açık. Ham iz: `[30,158,26,154,52,180,42,40,168,170,224,75,224,203]`. Bunlar `a`, `ğ`, `ç`, Shift+`İ`, uzatılmış sol ok bas/bırak; mevcut Türkçe **set 1** çözücüyle uyumlu. Qcode adları çalışan QEMU'nun `query-qmp-schema` sözlüğünden doğrulanır.
+- Negatif başlangıç: USB klavyesiz eski kabuk `KABUK HATA USB klavye yok` ile rc=2. Yeni yol PS/2'yi kurar; USB klavye varsa mevcut HID yolu kullanılır. **xHCI denetleyicisi de hiç yokken** NVMe ve AHCI ayrı açılışlarda geçti; bu iki şekil yeni kapıya eklendi.
+- Başlatma: sınırlı IBF/yanıt beklemesi; IRQ kapalı, AUX kapalı, klavye set 2, i8042 çevirme açık. Girdi beklerken ayırma yapılmaz. Kapının ilk açılışları en az 8 saniye tuşsuz bekler; ortam değişkeni bunu 8'in altına indiremez.
+- Sabotaj: alınan tarama baytının bit 7'sini sil → bırakma ve E0 baytları bozuldu; gerçek QEMU **1/1 kırmızı**, ham iz kâhini farkı yakaladı. Geri alındı. Saf test aynı ölçülmüş iz + geçersiz baytları C/self ile doğrular.
+- Son gözden geçirmede yeni girdi görünümüne `INT_MAX` sınırı eklendi: önce dizi panik/exit=134; toplamadan önce sınır denetimiyle C/self yeşil. Bu kendi sürücü kodumuzun hatasıydı, derleyici bulgusu değildir.
+- Loglar `build/codex9/d-*.log`, `b-sinir-once.log`.
+
+- Ortam: QEMU 8.2.2 (Ubuntu 1:8.2.2+ds-0ubuntu1.18), clang 18.1.3. D son kapıları: PS/2 17/17, USB klavye 15/15, ekran 5/5, panik 15/15; köprü kart + 129 test; tip kapısı 347/363 (16 sınıflandırma, 0 RED); baremetal_diff 23/23. PS/2 heap üst sınırı 2.361.520–2.623.888 bayt.
+
+- D self-host ek kanıt: ayrı derlenmiş ikiliyle aynı ham PS/2 izi; NVMe/AHCI/USB kabuk 3/3, seri ve ekran birebir. Self heap üst sınırı en çok 2.820.736 bayt (`d-self-tarama.log`, `d-self-kabuk.log`).

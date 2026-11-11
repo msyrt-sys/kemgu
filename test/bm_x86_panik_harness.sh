@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# [D-748] BARE-METAL x86 EKRAN kapısı: QEMU std VGA + Bochs DISPI 640x480x32, PSF Türkçe
-# metin. Kanıt: seri "EKRAN_HAZIR" + QMP screendump (PPM) — tests/qemu/bm_ekran.py
-# görüntüyü KEMGU'dan BAĞIMSIZ çizer (PSF baytları fikstür kaynağından okunur, PSF
-# ayrıştırma ve geri düşme kuralı Python'da yeniden yazılmıştır) ve BİREBİR karşılaştırır.
+# Panik: açık/kapalı ekran, piksel/seri paritesi ve HLT; gerçek QEMU.
 set -u
 cd "$(dirname "$0")/.."
 QEMU=qemu-system-x86_64
