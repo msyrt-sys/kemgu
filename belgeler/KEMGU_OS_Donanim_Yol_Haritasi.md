@@ -49,6 +49,11 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       doğrulaması ayrı kalır (x86-TSO onu kanıtlamaz).
 - [x] **H0b [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** Açılış yolu sırası.** Öneri: önce **GRUB + multiboot2** (BIOS ve UEFI'de
       aynı başlık), sonra kendi UEFI stub'ı (isteğe bağlı).
+      ⚠ SIRA DEĞİŞTİ (2026-11-12, ÖLÇÜM): DGX Spark (ARM64 Ubuntu) üzerinde x86 GRUB platformları
+      KURULAMIYOR (`/usr/lib/grub/` yalnız arm64-efi; grub-pc-bin yok, grub-efi-amd64-bin aday yok).
+      OVMF + clang x86_64-windows + lld-link zinciri uçtan uca doğrulandı (EFI uygulaması OVMF'de
+      açılıp seriye yazdı) → önce KENDİ UEFI STUB'I (Codex dalga 10), BIOS/GRUB sonra (amd64
+      çoklu-mimari depo ya da yalnız CI'da x86 koşucusu — Mehmet'in kararı).
 - [x] **H0c [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** Dosya sistemi.** Öneri: **FAT32** (her işletim sistemi okur/yazar →
       dosyaları Linux'tan koyup çıkarabilirsin, test oracle'ı bedava). Kendi
       günlüklü FS'i (KEMFS) sonraki aşama.
