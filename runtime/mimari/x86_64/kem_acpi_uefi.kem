@@ -1,0 +1,60 @@
+// Firmware ACPI belleği salt okunur; bütün ayrıştırma mevcut saf ACPI modülündedir.
+kullan drivers::acpi::tablo::{ Rsdp, SdtBaslik, rsdp_coz, sdt_coz, sdt_girdileri };
+kullan drivers::acpi::kok::{ acpi_kok_coz };
+kullan drivers::ortak::bayt::{ oku_le32, oku_u8, yaz_u8 };
+işlev uefi_acpi_izin(b: UefiBilgi, adr: tam64, boy: tam64) -> mantıksal {
+ eğer adr < 4096 veya adr >= 4294967296 veya boy <= 0 veya boy > 65536 veya boy > 4294967296-adr { ver yanlış; }
+ değişken i: tam64 = 0;
+ iken i < dizi_al(b.alan,10) {
+  değişken p: tam64 = dizi_al(b.alan,9)+i; değişken t: tam64 = kem_mmio_oku32(p);
+  değişken a: tam64 = kem_mmio_oku64(p+8); değişken n: tam64 = kem_mmio_oku64(p+24);
+  eğer (t == 9 veya t == 10) ve a >= 0 ve a <= adr ve n > 0 ve n <= 1048576 {
+   eğer adr-a <= n*4096 ve boy <= n*4096-(adr-a) { ver doğru; }
+  }
+  i=i+dizi_al(b.alan,11);
+ }
+ ver yanlış;
+}
+işlev uefi_acpi_oku(b: UefiBilgi, adr: tam64, boy: tam64) -> sonuç<Dizi<dtam8>,metin> {
+ eğer değil uefi_acpi_izin(b,adr,boy) { ver hata("ACPI korunan harita disinda"); }
+ ver tamam(bm_bellek_oku(adr,boy olarak tam32));
+}
+işlev uefi_sdt(b: UefiBilgi, adr: tam64) -> sonuç<Dizi<dtam8>,metin> {
+ eşleş uefi_acpi_oku(b,adr,36) { hata(e) => { ver hata(e); } tamam(h) => {
+  eşleş uefi_acpi_oku(b,adr,oku_le32(h,4)) { hata(e) => { ver hata(e); } tamam(t) => {
+   eşleş sdt_coz(t) { hata(e) => { ver hata("ACPI SDT gecersiz"); } tamam(v) => { ver tamam(t); } }
+  } }
+ } }
+}
+işlev uefi_rsdp(b: UefiBilgi) -> sonuç<Dizi<dtam8>,metin> {
+ eşleş uefi_acpi_oku(b,dizi_al(b.alan,13),20) { hata(e) => { ver hata(e); } tamam(r) => {
+  eğer oku_u8(r,15) < 2 { ver tamam(r); }
+  eşleş uefi_acpi_oku(b,dizi_al(b.alan,13),36) { hata(e) => { ver hata(e); } tamam(h) => {
+   değişken boy: tam64 = oku_le32(h,20);
+   eğer boy < 36 veya boy > 4096 { ver hata("ACPI RSDP boy"); }
+   ver uefi_acpi_oku(b,dizi_al(b.alan,13),boy);
+  } }
+ } }
+}
+işlev uefi_acpi_dok(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
+ eşleş rsdp_coz(r) { hata(e) => { ver hata("ACPI RSDP gecersiz"); } tamam(rsdp) => {
+  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt;
+  değişken ad: metin = "RSDT"; eğer x { a=rsdp.xsdt; ad="XSDT"; }
+  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
+   eşleş acpi_kok_coz(kok,x) { hata(e) => { ver hata(e); } tamam(adresler) => {
+    bm_yaz(metin_birlestir(metin_birlestir(metin_birlestir("ACPI_KOK ",ad)," "),tam_metin(a)));
+    için adr: adresler {
+     eşleş uefi_sdt(b,adr) { hata(e) => { ver hata(e); } tamam(t) => {
+      eşleş sdt_coz(t) { hata(e) => { ver hata("ACPI SDT gecersiz"); } tamam(h) => {
+       değişken m: metin = metin_birlestir(metin_birlestir("ACPI_TABLO ",h.imza)," ");
+       m=metin_birlestir(m,tam_metin(adr)); m=metin_birlestir(m," "); bm_yaz(metin_birlestir(m,tam_metin(h.uzunluk)));
+      } }
+     } }
+    }
+   } }
+  } }
+ } }
+ } }
+ ver tamam(doğru);
+}

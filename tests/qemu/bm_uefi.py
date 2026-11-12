@@ -3,6 +3,7 @@
 from pathlib import Path
 import os,sys,shutil,subprocess,time,socket,json,struct,re,uuid
 from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
+from acpi_uefi_kahin import denetle as acpi_denetle
 from fat_yazici import hazirla
 from uefi_kabuk_kahin import denetle as kabuk_denetle
 W=Path(sys.argv[1]).resolve()
@@ -83,6 +84,8 @@ def boot(n=1,negative=False,ram='256M'):
             print(f'✓ RAM {ram}: fiziksel tahsisler ve korunan bölgeler {alloc}',flush=True)
             rsdp=dump(fields[13],36,W/'rsdp.bin');assert rsdp[:8]==b'RSD PTR ' and sum(rsdp[:20])%256==0
             if rsdp[15]>=2:assert sum(rsdp)%256==0
+            acpi_denetle(dump,W,descriptors,text)
+            if not KABUK:assert 'ACPI_BOZUK RED\n' in text and 'ACPI_BOZUK KABUL' not in text
             regs=command('human-monitor-command',{'command-line':'info registers'})
             nm=subprocess.check_output(['nm',str(W/'k.elf')],text=True)
             symbols={name:int(a,16) for a,t,name in (l.split() for l in nm.splitlines() if len(l.split())==3)}

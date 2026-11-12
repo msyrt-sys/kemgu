@@ -11,3 +11,5 @@ Başlangıç: 2026-11-12T19:13:50.744781+00:00
 - [x] B · GOP açıcı + BGA ile ortak çizim · 11 saf olumlu/olumsuz şekil, C/self yeşil · QEMU C 5/5, self 1/1, 1.024.000 piksel birebir · adım+4: 1/1 kırmızı (2324 piksel); biçim koruması: exit=2 · tüm seri kapılar rc=0, baremetal_diff 23/23, 0 atlama · 2026-11-12T19:38:36.717948+00:00
 
 - [x] C · UEFI harita/çerçeve ayırıcısı, E4o ayna/panik/DMA tahsisi, 64-bit PCI MMIO sayfa tabloları · C UEFI 15/15 (256M/512M/2G), self 3/3; QMP fiziksel aralık/UC doğrulaması · ayrılmış sayfa sabotajı 1/1 kırmızı, runtime niteliği exit=1; 800 bölgeli yığın sabotajı self exit=139 · C10-001/C10-002 kaydedildi, yığın dolanması · son seri kapılar rc=0, köprü 134 OK, baremetal_diff 23/23 ve 0 atlama · 2026-11-12T20:25:58.468452+00:00
+
+- [x] D · XSDT/RSDT listeleme + bağımsız RAM ACPI kâhini · 9 saf şekil C/self yeşil; self kabuk 1/1; gerçek RSDT geri düşme yeşil · sağlama sabotajı saf exit=1 ve QEMU 1/1 kırmızı · tüm seri kapılar rc=0; köprü 135 OK, baremetal_diff 23/23, 0 atlama · 2026-11-12T20:42:25.961062+00:00

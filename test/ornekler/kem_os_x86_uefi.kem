@@ -36,6 +36,22 @@ işlev uefi_koruma_probe(b: UefiBilgi) -> sonuç<mantıksal,metin> {
  ver tamam(doğru);
 }
 
+// Gerçek firmware kökünün bozuk kopyası: sağlama koruması kaldırılırsa KABUL olur.
+işlev uefi_acpi_probe(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
+ eşleş rsdp_coz(r) { hata(e) => { ver hata("RSDP probe"); } tamam(rsdp) => {
+  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt; eğer x { a=rsdp.xsdt; }
+  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
+   // Dizi kopyası ayrıdır; firmware tablosu değişmez.
+   değişken bozuk: Dizi<dtam8> = []; için v: kok { dizi_ekle(bozuk,v); }
+   yaz_u8(bozuk,9,((oku_u8(bozuk,9)+1)&255) olarak tam64);
+   eşleş acpi_kok_coz(bozuk,x) { hata(e) => { bm_yaz("ACPI_BOZUK RED"); } tamam(xs) => { bm_yaz("ACPI_BOZUK KABUL"); } }
+  } }
+ } }
+ } }
+ ver tamam(doğru);
+}
+
 işlev main() -> tam32 {
  eşleş uefi_bilgi() {
   hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
@@ -43,7 +59,9 @@ işlev main() -> tam32 {
    uefi_dok(b);
    eşleş uefi_koruma_probe(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_ekran(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_acpi_probe(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    bm_yaz("UEFI_HAZIR");
   }
  }

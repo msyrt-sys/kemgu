@@ -116,3 +116,22 @@ işlev main() -> tam32 {
 ```
 
 800 bölgeli testin eski kod sabotajı: C geçer, self exit=139 (stack/segmentation fault); geri alındı.
+
+## D — ACPI bağımsız RAM kâhini
+
+OVMF RAM dökümü, çekirdeğin RSDP adresini kullanmadan ACPI bellek bölgelerinde
+`RSD PTR ` imzasını bayt bayt arar; iki sağlama toplamını, kökü ve bütün çocuk
+SDT'leri Python ile ayrıştırır. 256M ölçümü: RSDT RSDP `0xf77e000`, XSDT RSDP
+`0xf77e014` (ikinci adres 16 bayta hizalı değildir). Çekirdekle eşleşen sıra:
+FACP (244), APIC (120), HPET (56), MCFG (60), WAET (40), BGRT (56 bayt).
+
+- Normal seçim XSDT; gerçek firmware'de revizyon 2 girdisini geçici atlayan
+  deneme RSDT geri düşmesini de çalıştırdı ve aynı bağımsız listeyle geçti.
+  OVMF'den ölçülen eski RSDP GUID'i `eb9d2d30-2d88-11d3-9a16-0090273fc14d`.
+  Geçici stub değişikliği geri alındı.
+- Dokuz yeni saf şekil: ayırt edici XSDT/RSDT adresleri, yanlış imza/boy/sağlama
+  ve hizasız girdi uzunlukları. C/self `dogrula.sh` yeşil.
+- `sdt_coz` sağlama denetimi geçici kaldırıldı: saf test exit=1;
+  gerçek firmware kökünün sağlama baytı bozulmuş kopyası kabul edildiği için
+  QEMU 1/1 kırmızı. Sabotaj geri alındı. Loglar `build/codex10/d-sabotaj*`.
+- Self-host UEFI kabuk 256M 1/1 geçti; bağımsız ACPI, seri ve GOP aynı.

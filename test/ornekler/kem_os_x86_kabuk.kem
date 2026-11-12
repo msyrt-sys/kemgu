@@ -272,6 +272,7 @@ işlev main() -> tam32 {
         eşleş uefi_bilgi() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(b) => {
             uefi_dok(b);
             eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
         } }
     }
     eşleş ke_kur() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken ke: KabukEkran = v;
