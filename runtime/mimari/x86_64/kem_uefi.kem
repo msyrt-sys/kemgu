@@ -17,3 +17,9 @@ işlev uefi_dok(b: UefiBilgi) {
   m=metin_birlestir(m," "); m=metin_birlestir(m,tam_metin(dizi_al(b.alan,i))); bm_yaz(m); i=i+1;
  }
 }
+
+işlev uefi_mi() -> mantıksal {
+ değişken p: tam64 = kem_pvh_bilgi();
+ eğer p < 4096 veya p > 4294967104 { ver yanlış; }
+ ver kem_mmio_oku64(p) == 3551447044756161867;
+}

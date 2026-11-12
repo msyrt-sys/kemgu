@@ -518,10 +518,12 @@ movq %rax, %cr0"#
 // çağırır. arm64 kem_os bunu --gc-sections ile karşılar (çağrılar satır içine açılınca
 // ölü kalır); x86 bağlantısında gc yok → tanım GEREKLİ. Mesaj mimariden bağımsız
 // kem_panik'e (kem_heap.kem, COM1) aktarılır: gerçek bir ihlal temiz durur.
+// PVH varsayılanı; UEFI çerçeve ayırıcısı adresi açılışta değiştirir.
+küresel değişken ekran_panik_taban: tam64 = 209780736;
 çıplak işlev kdl_panik(m: metin) {
     // Ekran modülüne sembol bağımlılığı yok: ekransız birleşik çekirdekler de bağlanır.
     // Sabit kayıt ekran_panik_kur tarafından TAMAMLANINCA bayraklanır; panikte heap yok.
-    değişken t: tam64 = 209780736;
+    değişken t: tam64 = ekran_panik_taban;
     değişken flag: *tam64 = t olarak *tam64;
     eğer *flag == 1346457161 {
         *flag=0; // Yeniden girişte yalnız seri; yarım çizim sonsuz panik üretmez.

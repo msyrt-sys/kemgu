@@ -13,11 +13,36 @@ işlev uefi_ekran(b: UefiBilgi) -> sonuç<mantıksal,metin> {
  } }
  } }
 }
+// Ayrılmış gerçek RAM sayfası: ikinci ayırıcı aynı haritada onu atlamalıdır.
+// Python int.from_bytes(b'KORUMA10','little') ve b'YAZILDI!' bağımsız kâhinde aynıdır.
+işlev uefi_koruma_probe(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ değişken ham: Dizi<dtam8> = bm_bellek_oku(dizi_al(b.alan,9),dizi_al(b.alan,10) olarak tam32);
+ eşleş uefi_harita(b,ham,kem_pvh_bilgi()) { hata(e) => { ver hata(e); } tamam(xs) => {
+ eşleş cerceve_yeni(xs) { hata(e) => { ver hata(e); } tamam(v) => {
+ değişken d: CerceveAyirici = v;
+ eşleş ayir_ardisik(&değişken d,1) { hiç => { ver hata("koruma RAM yok"); } değer(g) => {
+  kem_mmio_yaz64(g,3472628588079107915);
+  eşleş uefi_koru(xs,g,4096) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş cerceve_yeni(xs) { hata(e) => { ver hata(e); } tamam(v) => {
+   değişken ikinci: CerceveAyirici = v;
+   eşleş ayir_ardisik(&değişken ikinci,1) { hiç => { ver hata("koruma RAM yok"); } değer(t) => {
+    kem_mmio_yaz64(t,2398523370990354777);
+    bm_yaz(metin_birlestir(metin_birlestir(metin_birlestir("KORUMA ",tam_metin(g))," "),tam_metin(t)));
+   } }
+  } }
+ } }
+ } }
+ } }
+ ver tamam(doğru);
+}
+
 işlev main() -> tam32 {
  eşleş uefi_bilgi() {
   hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
   tamam(b) => {
    uefi_dok(b);
+   eşleş uefi_koruma_probe(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_ekran(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    bm_yaz("UEFI_HAZIR");
   }

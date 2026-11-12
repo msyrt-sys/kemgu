@@ -28,7 +28,7 @@ işlev bm_esit(a: metin, b: metin) -> mantıksal {
     iken i < metin_uzunluk(a) { eğer metin_bayt(a,i) != metin_bayt(b,i) { ver yanlış; } i=i+1; }
     ver doğru;
 }
-sabit BM_DMA_TABANI: tam64 = 134217728;
+// DMA: PVH varsayılanı veya UEFI fiziksel çerçeve tahsisi.
 // [D-749] H4e ÇİFT ÇIKTI: her kabuk çıktısı seriye VE ekrana (runtime/mimari/x86_64/
 // kem_ekran_bga.kem). Ekran açılamazsa kabuk yalnız seriyle sürer (var = yanlış).
 sabit KE_ON: tam32 = 16777215;       // 0xFFFFFF
@@ -123,8 +123,8 @@ işlev bm_ahci_sur(bar: tam64, s: &değişken AhciDurum) -> sonuç<mantıksal, m
 
 yapı KabukDisk { tur: tam32; bar: tam64; bolum: tam64; nv: NvmeDurum; ah: AhciDurum; usb: UsbDepo; }
 işlev kd_yeni() -> sonuç<KabukDisk,metin> {
-    eşleş nvme_yeni(150994944,16) { hata(e) => { ver hata(e); } tamam(n) => {
-    eşleş ahci_yeni(150994944,-1) { hata(e) => { ver hata(e); } tamam(a) => {
+    eşleş nvme_yeni(bm_disk_dma_al(),16) { hata(e) => { ver hata(e); } tamam(n) => {
+    eşleş ahci_yeni(bm_disk_dma_al(),-1) { hata(e) => { ver hata(e); } tamam(a) => {
     eşleş usb_depo_yeni(65536,8196,4152,1,2,129,0) { hata(e) => { ver hata(e); } tamam(u) => {
         ver tamam(KabukDisk { tur: 0, bar: 0, bolum: 0, nv: n, ah: a, usb: u });
     } } } } } }
@@ -248,17 +248,32 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
 }
 işlev ke_kur() -> sonuç<KabukEkran, metin> {
     eşleş psf_coz(font_tr16()) { hata(m) => { ver hata(metin_birlestir("psf ", m)); } tamam(f) => {
-        eşleş konsol_yeni((640 - 16) / f.genislik, (480 - 16) / f.yukseklik, KE_ON, KE_ARKA olarak tam32) {
-            hata(m) => { ver hata(metin_birlestir("konsol ", m)); }
+        değişken e: Ekran = Ekran { fb:0, mmio:0, adim:0, gen:640, yuk:480, kimlik:0 };
+        değişken var: mantıksal = yanlış;
+        eğer uefi_mi() {
+            eşleş uefi_bilgi() { hata(m) => { ver hata(m); } tamam(b) => {
+                eşleş ekran_gop_ac(b,KE_ARKA) { hata(m) => { ver hata(m); } tamam(v) => { e=v; var=doğru; } }
+            } }
+        } değilse {
+            eşleş ekran_bga_ac(640,480,KE_ARKA) { hata(m) => { } tamam(v) => { e=v; var=doğru; } }
+        }
+        eşleş konsol_yeni((e.gen-16)/f.genislik,(e.yuk-16)/f.yukseklik,KE_ON,KE_ARKA olarak tam32) {
+            hata(m) => { ver hata(metin_birlestir("konsol ",m)); }
             tamam(k) => {
-                değişken ke: KabukEkran = KabukEkran { var: yanlış, e: Ekran { fb: 0, mmio: 0, adim: 0, gen: 0, yuk: 0, kimlik: 0 }, f: f, k: k };
-                eşleş ekran_bga_ac(640, 480, KE_ARKA) { hata(m) => { } tamam(e) => { ke.e = e; ke.var = doğru; ekran_panik_kur(e,f); ekran_ayna_ac(); } }
+                değişken ke: KabukEkran = KabukEkran { var:var, e:e, f:f, k:k };
+                eğer var { ekran_panik_kur(e,f); ekran_ayna_ac(); }
                 ver tamam(ke);
             }
         }
     } }
 }
 işlev main() -> tam32 {
+    eğer uefi_mi() {
+        eşleş uefi_bilgi() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(b) => {
+            uefi_dok(b);
+            eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+        } }
+    }
     eşleş ke_kur() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken ke: KabukEkran = v;
     ekran_cift_yaz("KEMGU-OS kabuk v0");
     değişken bar: tam64 = 0;
@@ -266,7 +281,7 @@ işlev main() -> tam32 {
         bar=(kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);
         kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
     } }
-    eşleş xhci_yeni(BM_DMA_TABANI,16384) { hata(e) => { ekran_cift_yaz(e); kem_qemu_cik(1); } tamam(v) => {
+    eşleş xhci_yeni(bm_dma_al(),16384) { hata(e) => { ekran_cift_yaz(e); kem_qemu_cik(1); } tamam(v) => {
         değişken x: XhciDurum = v;
         eşleş hazir(bar,&değişken x,&değişken ke) { hata(e) => { ekran_cift_yaz(metin_birlestir("KABUK HATA ",e)); kem_qemu_cik(1); } tamam(v) => { } }
     } }

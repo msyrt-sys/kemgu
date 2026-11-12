@@ -110,9 +110,9 @@ def karsilastir(px, beklenen, gen):
             if ilk is None: ilk = (i % gen, i // gen, hex(g), hex(e))
     return fark, ilk
 
-def kabuk_goruntu(akis, girdi='', imlec=None):
+def kabuk_goruntu(akis, girdi='', imlec=None, gen=640, yuk=480):
     """Bağımsız model: çıktı kayar; girdi bir satırda yatay kayar, imleç ters renktir."""
-    gen,yuk,on,arka=640,480,0xFFFFFF,0x102040
+    on,arka=0xFFFFFF,0x102040
     font=font_yukle();fw,fh=font[1][:2];sut,sat=(gen-16)//fw,(yuk-16)//fh
     izg,(x,y)=konsol(akis,sut,sat,True)
     imlec=len(girdi) if imlec is None else imlec

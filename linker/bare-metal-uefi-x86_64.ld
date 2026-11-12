@@ -10,7 +10,7 @@ SECTIONS {
  .data : { *(.data*) } :veri
  .bss (NOLOAD) : { __bss_start = .; *(.bss*) *(COMMON) __bss_end = .; } :veri
  .alan (NOLOAD) : {
-  . = ALIGN(16); . += 0x4000; __stack_top = .;
+  . = ALIGN(16); . += 0x80000; __stack_top = .;
   . = ALIGN(4096); __heap_start = .; . += 0x1C00000; __heap_end = .;
  } :veri
  /DISCARD/ : { *(.note*) *(.comment*) *(.eh_frame*) }

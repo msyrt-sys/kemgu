@@ -505,7 +505,7 @@ kdl_baglam_degis:
     ret
 
 /* UEFI girişi: firmware uzun kipte rdi=bilgi ile devreder. PVH yolu yukarıda aynı.
- * Python: 4*512*2**21 = 4 GiB; son GiB UC, ilk üç GiB normal RAM eşlemesi. */
+ * Python: 4*512*2**21 = 4 GiB; son iki GiB UC, ilk iki GiB normal RAM eşlemesi. */
 .section .text
 .code64
 .global uefi_entry
@@ -521,13 +521,13 @@ uefi_entry:
     movq $__stack_top, %rsp
     leaq uefi_pd(%rip), %rdi
     movq $0x83, %rax
-    movl $1536, %ecx
+    movl $1024, %ecx
 1:  movq %rax, (%rdi)
     addq $0x200000, %rax
     addq $8, %rdi
     loop 1b
     orq $0x18, %rax
-    movl $512, %ecx
+    movl $1024, %ecx
 2:  movq %rax, (%rdi)
     addq $0x200000, %rax
     addq $8, %rdi

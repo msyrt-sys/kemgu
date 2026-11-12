@@ -52,4 +52,67 @@ OVMF ölçümü: GOP 1280×800, adım 5120, biçim 1 (BGRX), taban 0x80000000. U
 
 - OVMF kipine dokunulmaz; `ekran_gop_ac` ölçülen BGRX biçimi, fiziksel aralık, boyut ve bayt adımını doğrular. `Ekran` ve bütün çizim işlevleri BGA yoluyla ortaktır.
 - QMP screendump boyutu bağımsız Python çiziminin ölçüsüdür: 1280×800, 1.024.000 piksel birebir. Sabotaj adım+4: 1/1 açılış kırmızı, 2.324 farklı piksel; biçim korumasını kaldırma: saf test exit=2. İkisi geri alındı.
-- Saf test dolgu adımını (1280 piksele karşı 5376 bayt), RGB/BLT biçimlerini, kısa tamponu, adres taşmasını, hizayı, boş/aşırı boyutu ve kısa yapıyı sınar. Dizi<tam64> fikstürünün literal eklemelerinde açık tam64 dönüşümü gerekir; karttaki örtük genişletme yasağına uyuldu.
+- Saf test dolgu adımını (1280 piksele karşı 5376 bayt), RGB/BLT biçimlerini, kısa tamponu, adres taşmasını, hizayı, boş/aşırı boyutu ve kısa yapıyı sınar. Dizi<tam64> fikstürünün literal yazmalarında açık tam64 dönüşümü gerekir; karttaki örtük genişletme yasağına uyuldu.
+
+## C — firmware RAM haritası ve E4o
+
+- Kaynak: [UEFI 2.10 §7.4.6 ExitBootServices](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html). EBS sonrası 3 (BootServicesCode), 4 (BootServicesData), 7 (ConventionalMemory) kullanılabilir; runtime niteliği taşıyan, Loader, ACPI, MMIO ve diğer türler korunur. Çekirdek/heap, bilgi sayfası, harita kapasitesi, framebuffer, RSDP ve stub aralıkları ayrıca korunur.
+- İlk gerçek tahsisler (256M): ayna 1048576/65536, panik 1114112/32768, DMA 63127552/33615872, VirtIO 1146880/131072. ELF büyüyünce DMA adresi değişir; sabit beklenti değildir. DMA içinde xHCI 64 KiB hizalıdır; disk tabanı 16 MiB sonradır.
+- İlk UEFI kabuk denemesi sayfa hatası verdi: adres `0xc000004000`. OVMF NVMe/xHCI 64-bit BAR'ları 4 GiB üstüne koyuyor; PVH'nin düşük PCI adres varsayımı burada geçersiz. Yeni runtime, aynı çerçeve ayırıcısından sayfa tabloları ayırıp bu aygıtların kullandığı 16 KiB pencereleri UC 2 MiB sayfalarla eşler. Var olan CR3 okuma/yazma ilkelleri kullanılır; yeni asm eklenmez. Python sayfa tablolarını QMP ile bağımsız yürüyerek fiziksel adresi ve UC bitlerini denetler.
+- Yeni girişin 2–4 GiB alanı UC'dir: OVMF'nin düşük PCI BAR'ları 2 GiB'den başlayabilir. İlk 2 GiB RAM WB, GOP'un düşük adrese gelmesi durumunda kendi aralığı ayrıca UC. PVH girişinin kaynak öneki birebir korunur.
+
+- C sabotajları: `uefi_koru` ayrılmış türünü 2→1 yapmak fiziksel işareti ezer; gerçek QEMU 1/1 kırmızı (`ayrılmış sayfa ezildi`). Runtime attribute korumasını kaldırmak saf test exit=1. İkisi derlenir; geri alındı.
+- C kabuk ölçümü için EFI dosyaları firmware'in sanal FAT aygıtındadır, kabuk verisi ayrı bağımsız GPT/FAT32 NVMe disktedir. Böylece RAM ayırıcısı ve kabuk E aşamasındaki tek USB imajından önce sınanır. E kapısı aynı ESP imajını hem açılış hem kabuk verisi için kullanacaktır.
+
+## C10-001 — self-host, tam64 diziye türsüz literal yazma
+
+Komut: `bash otomasyon/chatgpt/dogrula.sh build/codex10/literal_probe.kem`.
+C check/çalıştır geçer (exit=0), self check geçer fakat çalıştır exit=1. Minimal tekrar:
+
+```kem
+işlev main() -> tam32 {
+ değişken a: Dizi<tam64> = [];
+ değişken i: tam32 = 0;
+ iken i < 24 { dizi_ekle(a,0); i=i+1; }
+ dizi_yaz(a,8,1);
+ eğer dizi_al(a,8) != 1 { ver 1; }
+ ver 0;
+}
+```
+
+Yalnız `dizi_ekle` sıfırını tam64 yapmak farkı düzeltmez (self exit=1).
+Yalnız `dizi_yaz` değerini `1 olarak tam64` yapmak iki derleyiciyi eşitler.
+GOP/harita fikstürleri açık tam64 yazma kullanır. Mevcut ortak DMA okuyucusu dinamik
+tam64 değer yazdığından bu bulgudan etkilenmez; değişmedi. Derleyiciye dokunulmadı.
+
+## C10-002 — self-host döngüde yapı okumasının yığın biriktirmesi
+
+OVMF self kabuk 16 KiB yığınla normalleştirme çağrısında durdu. Geçici 1 MiB yığınla
+aynı ikili yedi kabuk komutunu ve piksel kâhinini geçti. LLVM çıktısında
+`harita_duzenle` iç döngüsünde `alloca %BellekBolgesi` / `kdl_dizi_al_yapi` var;
+geçici yapı her iterasyonda yığında kalıyor. C aynı QEMU kapısını geçiyor.
+
+Dolanma: kapsama ve tür okuması küçük yardımcı çağrılara alındı; geçici yapı ömrü
+bir karşılaştırmayla sınırlanır. Harita normalleştirme kuralı/beklentileri değişmez.
+VARSAYIM: UEFI başlangıç yığını 512 KiB (Python `512*1024=524288`, `0x80000`); çok sayıda
+firmware girdisi için ayrılır, ELF memsz ve RAM korumasına dahildir. Heap 28 MiB ve
+PVH linker/yığını değişmez. Yeni 800 bölgeli test C ve self ile geçer; eski iç döngü
+geri konularak sabotaj ayrıca ölçülür. Derleyici/runtime C değişmedi.
+
+C10-002 minimal tekrar (`dogrula.sh build/codex10/yigin_probe.kem`):
+
+```kem
+yapı Hucre { a: tam64; b: tam64; c: tam32; }
+işlev main() -> tam32 {
+ değişken xs: Dizi<Hucre> = [];
+ dizi_ekle(xs,Hucre { a:7, b:11, c:13 });
+ değişken i: tam32 = 0; değişken toplam: tam64 = 0;
+ iken i < 400000 {
+  değişken h: Hucre = dizi_al(xs,0); toplam=toplam+h.a; i=i+1;
+ }
+ eğer toplam != 2800000 { ver 1; }
+ ver 0;
+}
+```
+
+800 bölgeli testin eski kod sabotajı: C geçer, self exit=139 (stack/segmentation fault); geri alındı.

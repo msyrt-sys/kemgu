@@ -212,6 +212,7 @@ rm -f build/kem_bm_usb_kapi.kem
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem"
 cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then
@@ -265,7 +266,7 @@ else
 fi
 rm -f build/kem_bm_ps2_kapi.kem
 
-BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem"
+BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem"
 cat $BM_UEFI_PARCALAR > build/kem_bm_uefi_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_uefi_kapi.kem >/dev/null 2>&1; then
