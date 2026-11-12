@@ -1,0 +1,9 @@
+// Gerçek OVMF bilgisi; bağımsız Python QMP ile aynı fiziksel yapıyı okur.
+işlev main() -> tam32 {
+ eşleş uefi_bilgi() {
+  hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
+  tamam(b) => { uefi_dok(b); bm_yaz("UEFI_HAZIR"); }
+ }
+ iken doğru { kdl_idle(); }
+ ver 0;
+}

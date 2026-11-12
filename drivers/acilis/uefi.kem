@@ -1,0 +1,15 @@
+// EFI köprüsü sözleşmesi: 24 little-endian u64; boot/efi/uefi.h ile aynı.
+// Python: int.from_bytes(b'KEMUEFI1','little')=3551447044756161867, 24*8=192.
+kullan drivers::ortak::bayt::{ oku_le64 };
+genel yapı UefiBilgi { alan: Dizi<tam64>; }
+genel işlev uefi_coz(b: Dizi<dtam8>) -> sonuç<UefiBilgi,metin> {
+    eğer dizi_boyut(b) < 192 { ver hata("UEFI bilgi kisa"); }
+    eğer oku_le64(b,0) != 3551447044756161867 veya oku_le64(b,8) != 192 veya oku_le64(b,16) != 1 { ver hata("UEFI bilgi surumu"); }
+    değişken a: Dizi<tam64> = []; değişken i: tam32 = 0;
+    iken i < 24 { dizi_ekle(a,oku_le64(b,i*8)); i=i+1; }
+    değişken map: tam64 = dizi_al(a,9); değişken boy: tam64 = dizi_al(a,10); değişken adim: tam64 = dizi_al(a,11);
+    eğer map < 4096 veya map >= 4294967296 veya boy < 40 veya boy > 65536 veya boy > 4294967296-map veya adim < 40 veya adim > boy veya boy%adim != 0 veya dizi_al(a,12) != 1 { ver hata("UEFI harita"); }
+    eğer dizi_al(a,14) < 1048576 veya dizi_al(a,15) <= dizi_al(a,14) veya dizi_al(a,15) > 1073741824 { ver hata("UEFI cekirdek araligi"); }
+    eğer dizi_al(a,13) < 4096 veya dizi_al(a,13) >= 4294967296 { ver hata("UEFI RSDP adresi"); }
+    ver tamam(UefiBilgi { alan: a });
+}

@@ -503,3 +503,92 @@ kdl_baglam_degis:
     movq    40(%rsi), %r15
     movq    48(%rsi), %rsp
     ret
+
+/* UEFI girişi: firmware uzun kipte rdi=bilgi ile devreder. PVH yolu yukarıda aynı.
+ * Python: 4*512*2**21 = 4 GiB; son GiB UC, ilk üç GiB normal RAM eşlemesi. */
+.section .text
+.code64
+.global uefi_entry
+uefi_entry:
+    cli
+    cld
+    movq %rdi, kdl_pvh_bilgi(%rip)
+    movq $__bss_start, %rdi
+    movq $__bss_end, %rcx
+    subq %rdi, %rcx
+    xorl %eax, %eax
+    rep stosb
+    movq $__stack_top, %rsp
+    leaq uefi_pd(%rip), %rdi
+    movq $0x83, %rax
+    movl $1536, %ecx
+1:  movq %rax, (%rdi)
+    addq $0x200000, %rax
+    addq $8, %rdi
+    loop 1b
+    orq $0x18, %rax
+    movl $512, %ecx
+2:  movq %rax, (%rdi)
+    addq $0x200000, %rax
+    addq $8, %rdi
+    loop 2b
+    /* GOP BAR bazen 2 GiB'dedir: framebuffer'ın büyük sayfalarını UC yap. */
+    movq kdl_pvh_bilgi(%rip), %rsi
+    movq 24(%rsi), %rax
+    movq 32(%rsi), %rcx
+    movq $0x100000000, %rdx
+    cmpq %rdx, %rax
+    jae 6f
+    addq %rax, %rcx
+    jc 6f
+    cmpq %rdx, %rcx
+    ja 6f
+    addq $0x1fffff, %rcx
+    shrq $21, %rcx
+    shrq $21, %rax
+    leaq uefi_pd(%rip), %rdi
+5:  cmpq %rcx, %rax
+    jae 6f
+    orq $0x18, (%rdi,%rax,8)
+    incq %rax
+    jmp 5b
+6:
+    leaq uefi_pd(%rip), %rax
+    orq $3, %rax
+    leaq uefi_pdpt(%rip), %rdi
+    movl $4, %ecx
+3:  movq %rax, (%rdi)
+    addq $4096, %rax
+    addq $8, %rdi
+    loop 3b
+    leaq uefi_pdpt(%rip), %rax
+    orq $3, %rax
+    movq %rax, uefi_pml4(%rip)
+    leaq uefi_pml4(%rip), %rax
+    movq %rax, %cr3
+    lgdt uefi_gdt_desc(%rip)
+    pushq $8
+    leaq 4f(%rip), %rax
+    pushq %rax
+    lretq
+4:  movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %ss
+    movw %ax, %fs
+    movw %ax, %gs
+    call kdl_idt_kur
+    movq $__heap_start, %rdi
+    movq $__heap_end, %rsi
+    call kem_heap_kur
+    call main
+    jmp _halt
+.section .data
+uefi_gdt_desc:
+    .word gdt_end-gdt-1
+    .quad gdt
+.section .bss
+.align 4096
+uefi_pml4: .skip 4096
+uefi_pdpt: .skip 4096
+uefi_pd: .skip 16384

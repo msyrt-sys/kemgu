@@ -1,0 +1,23 @@
+// Python: alan ofseti=i*8; ayırt edici GOP adımı 5376=1344*4, harita 3*48=144.
+kullan drivers::acilis::uefi::{ UefiBilgi, uefi_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_le64 };
+işlev fikstur() -> Dizi<dtam8> {
+ değişken b: Dizi<dtam8> = bayt_sifir(192);
+ yaz_le64(b,0,3551447044756161867); yaz_le64(b,8,192); yaz_le64(b,16,1);
+ yaz_le64(b,40,1280); yaz_le64(b,48,720); yaz_le64(b,56,5376);
+ yaz_le64(b,72,67108864); yaz_le64(b,80,144); yaz_le64(b,88,48); yaz_le64(b,96,1);
+ yaz_le64(b,104,251658240); yaz_le64(b,112,1048576); yaz_le64(b,120,33554432);
+ ver b;
+}
+işlev reddet(b: Dizi<dtam8>) -> mantıksal { eşleş uefi_coz(b) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } } }
+işlev main() -> tam32 {
+ değişken h: tam32 = 0;
+ eşleş uefi_coz(fikstur()) { hata(e) => { h=h+1; } tamam(v) => { eğer dizi_al(v.alan,7) != 5376 veya dizi_al(v.alan,5) != 1280 veya dizi_al(v.alan,13) != 251658240 { h=h+1; } } }
+ eğer değil reddet(bayt_sifir(191)) { h=h+1; }
+ değişken b: Dizi<dtam8> = fikstur(); yaz_le64(b,0,0); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); yaz_le64(b,88,39); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); yaz_le64(b,80,143); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); yaz_le64(b,120,1048576); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); yaz_le64(b,72,4294967200); eğer değil reddet(b) { h=h+1; }
+ ver h;
+}

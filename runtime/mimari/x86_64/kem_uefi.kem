@@ -1,0 +1,19 @@
+// UEFI girişindeki bilgi, mevcut PVH adres yuvasından okunur; magic iki yolu ayırır.
+// Yeni satıriçi asm yok. PVH ilkelleri yalnız ham adres okuma için yeniden kullanılır.
+kullan drivers::acilis::uefi::{ UefiBilgi, uefi_coz };
+işlev uefi_bilgi() -> sonuç<UefiBilgi,metin> {
+ değişken t: tam64 = kem_pvh_bilgi();
+ eğer t < 4096 veya t > 4294967104 { ver hata("UEFI bilgi adresi"); }
+ değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
+ iken i < 192 { dizi_ekle(b,kem_fiz_oku8(t+(i olarak tam64)) olarak dtam8); i=i+1; }
+ ver uefi_coz(b);
+}
+işlev uefi_dok(b: UefiBilgi) {
+ bm_yaz("KEMGU-OS UEFI");
+ bm_yaz(metin_birlestir("BILGI_ADRES ",tam_metin(kem_pvh_bilgi())));
+ değişken i: tam32 = 0;
+ iken i < 24 {
+  değişken m: metin = metin_birlestir("BILGI ",tam_metin(i olarak tam64));
+  m=metin_birlestir(m," "); m=metin_birlestir(m,tam_metin(dizi_al(b.alan,i))); bm_yaz(m); i=i+1;
+ }
+}
