@@ -158,13 +158,13 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       → tek kod yolu). Piksel biçimi (RGB/BGR, 32/24 bpp), pitch.
 - [ ] **H4b [S] Framebuffer belleğini yazma-birleştirmeli/önbelleksiz eşle** (PAT).
       Ölç: önbellekli eşlemede ekranda artık görüntü kalıyor mu.
-- [ ] **H4c [M] (KISMEN D-748: test yazı tipi 8×8 Lat sistem fontu, Türkçe harfler var; 8×16 + kutu çizim + çekirdeğe GÖMÜLÜ font kaldı) Bit eşlem yazı tipi** (8×16, PSF2 biçimi gömülü). **Türkçe
+- [x] **H4c [M] ✓ D-752 (gömülü 8×16 Uni2-Fixed16; Türkçe + kutu çizim). (KISMEN D-748: test yazı tipi 8×8 Lat sistem fontu, Türkçe harfler var; 8×16 + kutu çizim + çekirdeğe GÖMÜLÜ font kaldı) Bit eşlem yazı tipi** (8×16, PSF2 biçimi gömülü). **Türkçe
       karakterler zorunlu:** ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü + ASCII + kutu çizim.
       Kanıt: tüm Türkçe harfler ekranda doğru.
-- [ ] **H4d [M] Metin konsolu:** imleç, satır sonu, kaydırma, sekme, renk (ANSI
+- [x] **H4d [M] ✓ D-752 (canlı yankı, imleç, geri silme, kaydırma; ANSI renk alt kümesi YOK). Metin konsolu:** imleç, satır sonu, kaydırma, sekme, renk (ANSI
       alt kümesi), UTF-8 çözme (yarım bayt dizisi → `?`, çökme yok).
 - [x] **H4e [S] ✓ D-749 (kabuk v0: seri + ekran, ekran kâhini 3 disk türünde piksel piksel; ayna tamponu deseni). Çift çıktı:** her `yazdir` hem seriye hem ekrana; seri yoksa yalnız ekran.
-- [ ] **H4f [S] Panik ekranı:** kırmızı zemin, panik mesajı, son 20 log satırı,
+- [x] **H4f [S] ✓ D-752 (yalnız kdl_panik yolu — E4n; log satırları/yazmaç dökümü YOK). Panik ekranı:** kırmızı zemin, panik mesajı, son 20 log satırı,
       yazmaç dökümü. (Seri yokken tek teşhis aracı budur.)
 - [x] **H4g [M] ✓ D-748 (`calistir_bm_x86_ekran`: 640×480 tüm pikseller bağımsız Python çizimiyle BİREBİR, 5 açılış; sabotaj: glif bit sırası, Türkçe→ASCII, çözünürlük KIRMIZI). Kapı: ekran görüntüsü karşılaştırması.** QEMU monitörü `screendump`
       → PPM → bilinen bölgenin piksel özeti. Sabotaj: yazı tipinde `ğ` glifini boz → kırmızı.
@@ -172,14 +172,14 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       0x500+indeks*2; QEMU docs/specs/standard-vga.rst). Gerçek PC yolu H4a (GOP/multiboot2
       etiketi) — orada çekirdek modu AYARLAMAZ, firmware'in verdiğini kullanır; çizim kodu ortak.
       ⚠ ENABLE'ın doğrusal-tampon biti (0x40) QEMU'da ölçülemez (VRAM BAR0'dan bitten bağımsız görünür).
-- [ ] **H4h [S] Performans:** tam ekran kaydırma süresi ölç (çift tampon gerekiyor mu?).
+- [x] **H4h [S] ✓ D-752 (tam ekran 78×29 çizim 32,6 ms; çift tampon gerekmiyor). Performans:** tam ekran kaydırma süresi ölç (çift tampon gerekiyor mu?).
 - [ ] **H4i [S] Çekirdek log halkası** (son N KB) + ekranda `log` komutu.
 
 ---
 
 ## H5. Klavye (PS/2)
 
-- [ ] **H5a [M] 8042 denetleyici başlatma:** FADT bayrağına bak, öz-test (`0xAA`),
+- [ ] **H5a [M] (KISMEN D-752: yoklamalı başlatma, IRQ/AUX kapalı, çevirme açık; FADT bayrağı ve öz-test YOK) 8042 denetleyici başlatma:** FADT bayrağına bak, öz-test (`0xAA`),
       port testi, çeviri modu kararı, her bekleyişte zaman aşımı.
 - [ ] **H5b [S] IRQ1 → IOAPIC → işleyici**, tarama kodu kuyruğu (kesme-güvenli halka).
 - [ ] **H5c [M] Tarama kodu kümesi 1 çözücü** (`E0` genişletilmiş, `E1` Pause),
@@ -195,7 +195,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       çekirdekten kullanıcı alanına kanal (`kanal<TusOlayi>` ya da syscall).
 - [ ] **H5h [M] Konsolda satır düzenleme:** geri sil (UTF-8 çok baytlı karakteri TEK
       silmeli), sol/sağ ok, Home/End, geçmiş (yukarı/aşağı), Ctrl+C (süreç sonlandırma).
-- [ ] **H5i [M] Kapı:** QEMU monitörü `sendkey` ile dizi gönder (`s h i f t - i` gibi)
+- [ ] **H5i [M] (KISMEN D-752: QMP input-send-event ile gerçek QEMU i8042, ham iz + kabuk 3 disk; hızlı yazma/aynı anda basma YOK) Kapı:** QEMU monitörü `sendkey` ile dizi gönder (`s h i f t - i` gibi)
       → kabuk yankısı beklenen metin (`İ`!). Sabotaj: AltGr eşlemesini boz → `@` gelmez → kırmızı.
 - [ ] **H5j [S] Pozitif + kenar şekiller:** iki tuşa aynı anda basma, çok hızlı yazma
       (kuyruk taşması → kayıp olay SAYILIR ve bildirilir, çökme yok).

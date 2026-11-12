@@ -519,5 +519,61 @@ movq %rax, %cr0"#
 // ölü kalır); x86 bağlantısında gc yok → tanım GEREKLİ. Mesaj mimariden bağımsız
 // kem_panik'e (kem_heap.kem, COM1) aktarılır: gerçek bir ihlal temiz durur.
 çıplak işlev kdl_panik(m: metin) {
-    kem_panik(m);
+    // Ekran modülüne sembol bağımlılığı yok: ekransız birleşik çekirdekler de bağlanır.
+    // Sabit kayıt ekran_panik_kur tarafından TAMAMLANINCA bayraklanır; panikte heap yok.
+    değişken t: tam64 = 209780736;
+    değişken flag: *tam64 = t olarak *tam64;
+    eğer *flag == 1346457161 {
+        *flag=0; // Yeniden girişte yalnız seri; yarım çizim sonsuz panik üretmez.
+        değişken p: *tam64 = (t+8) olarak *tam64; değişken fb: tam64 = *p;
+        p=(t+16) olarak *tam64; değişken adim: tam64 = *p;
+        p=(t+24) olarak *tam64; değişken gen: tam64 = *p;
+        p=(t+32) olarak *tam64; değişken yuk: tam64 = *p;
+        p=(t+40) olarak *tam64; değişken sayi: tam64 = *p;
+        değişken y: tam64 = 0;
+        iken y < yuk {
+            değişken x: tam64 = 0;
+            iken x < gen { değişken px: *dtam32 = (fb+y*adim+x*4) olarak *dtam32; *px=11141120 olarak dtam32; x=x+1; }
+            y=y+1;
+        }
+        değişken tur: tam32 = 0;
+        iken tur < 2 {
+            değişken met: metin = "PANIK"; eğer tur == 1 { met=m; }
+            değişken n: tam32 = metin_uzunluk(met); değişken i: tam32 = 0;
+            değişken x: tam64 = 8; y=8; eğer tur == 1 { y=28; }
+            iken i < n ve y+16 <= yuk {
+                değişken kod: tam32 = (metin_bayt(met,i) olarak tam32)&255; i=i+1;
+                değişken ek: tam32 = 0;
+                eğer kod >= 240 { kod=kod&7; ek=3; }
+                değilse eğer kod >= 224 { kod=kod&15; ek=2; }
+                değilse eğer kod >= 192 { kod=kod&31; ek=1; }
+                iken ek > 0 ve i < n { kod=(kod<<6)|((metin_bayt(met,i) olarak tam32)&63); i=i+1; ek=ek-1; }
+                eğer kod == 10 { x=8; y=y+16; }
+                değilse {
+                    // Bilinmeyen glif U+FFFD (bu doğrulanmış fontta indeks 4).
+                    değişken g: tam64 = 4; değişken j: tam64 = 0; değişken bulundu: mantıksal = yanlış;
+                    iken j < sayi ve değil bulundu {
+                        p=(t+16384+j*16) olarak *tam64;
+                        eğer *p == (kod olarak tam64) { p=(t+16392+j*16) olarak *tam64; g=*p; bulundu=doğru; }
+                        j=j+1;
+                    }
+                    değişken r: tam64 = 0;
+                    iken r < 16 {
+                        değişken q: *dtam8 = (t+4096+g*16+r) olarak *dtam8; değişken b: tam32 = (*q) olarak tam32;
+                        değişken c: tam64 = 0;
+                        iken c < 8 {
+                            değişken renk: dtam32 = 11141120 olarak dtam32;
+                            eğer (b & (128 >> (c olarak tam32))) != 0 { renk=16777215 olarak dtam32; }
+                            değişken px: *dtam32 = (fb+(y+r)*adim+(x+c)*4) olarak *dtam32; *px=renk; c=c+1;
+                        } r=r+1;
+                    }
+                    x=x+8; eğer x+8 > gen { x=8; y=y+16; }
+                }
+            } tur=tur+1;
+        }
+    }
+    değişken i: tam32 = 0; değişken n: tam32 = metin_uzunluk(m);
+    iken i < n { kem_uart_bayt(metin_bayt(m,i) olarak tam32); i=i+1; }
+    kem_uart_bayt(10);
+    iken doğru { kdl_idle(); }
 }

@@ -1,0 +1,11 @@
+// Python: ord('>')=62, ord('ğ')=287; pencere 8 sütun - 2 istem - 1 imleç = 5.
+kullan drivers::ekran::girdi::{ girdi_bas, girdi_kod };
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [65,287,97,231,32,304,351];
+    eğer girdi_bas(0,8) != 0 veya girdi_bas(5,8) != 0 veya girdi_bas(6,8) != 1 veya girdi_bas(7,8) != 2 { ver 1; }
+    eğer girdi_bas(-1,8) != 0 veya girdi_bas(4,0) != 0 { ver 2; }
+    eğer girdi_kod(xs,0,0) != 62 veya girdi_kod(xs,0,1) != 32 veya girdi_kod(xs,0,3) != 287 { ver 3; }
+    eğer girdi_kod(xs,2,2) != 97 veya girdi_kod(xs,0,9) != 32 veya girdi_kod(xs,-1,3) != 32 { ver 4; }
+    eğer girdi_kod(xs,2147483647,3) != 32 veya girdi_kod(xs,0,2147483647) != 32 { ver 5; }
+    ver 0;
+}

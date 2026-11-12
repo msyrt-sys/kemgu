@@ -10,7 +10,7 @@ from psf_kahin import font_baytlari, psf, glif_ciz, font_yukle, screendump, kars
 
 GEN, YUK = 640, 480
 ARKA, ON, SARI = 0x102040, 0xFFFFFF, 0xFFD800
-SATIRLAR = [("KEMGU-OS ekran v0", SARI), ("Merhaba Dünya — ğüşıöç İ", ON), ("ĞÜŞİÖÇ ğüşıöç 0123456789", ON)]
+SATIRLAR = [("KEMGU-OS ekran v0", SARI), ("Merhaba Dünya — ğüşıöç İ", ON), ("ĞÜŞİÖÇ ğüşıöç 0123456789", ON), ("─│┌┐└┘├┤┬┴┼═║", ON)]
 
 def beklenen():
     font = font_yukle(); w, h = font[1][0], font[1][1]
@@ -25,6 +25,7 @@ def acilis(elf, w, n, exp):
     cmd = ['qemu-system-x86_64', '-M', 'q35', '-m', '256M', '-vga', 'std', '-display', 'none', '-no-reboot',
            '-serial', f'file:{ser}', '-qmp', f'unix:{q},server=on,wait=off', '-kernel', str(elf),
            '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04']
+    bas = time.monotonic()
     p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         son = time.monotonic() + 60
@@ -32,6 +33,7 @@ def acilis(elf, w, n, exp):
             if p.poll() is not None or time.monotonic() > son:
                 raise RuntimeError(f'açılış {n}: EKRAN_HAZIR yok rc={p.poll()} seri={(ser.read_bytes() if ser.exists() else b"")!r}')
             time.sleep(0.05)
+        print(f'  boot-ready {time.monotonic()-bas:.4f} s', flush=True)
         s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(str(q)); f = s.makefile('rwb', buffering=0)
         def yanit():
             while True:

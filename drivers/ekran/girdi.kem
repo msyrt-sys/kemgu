@@ -1,0 +1,18 @@
+// Saf konsol girdi görünümü: iki hücre istem, son hücre imlece ayrılır.
+// Uzun düzenleme satırı yatay kayar; gönderilen komut konsolda normal sarılır.
+genel işlev girdi_bas(imlec: tam32, sutun: tam32) -> tam32 {
+    eğer sutun < 4 veya imlec < 0 { ver 0; }
+    eğer imlec >= sutun - 2 { ver imlec - (sutun - 3); }
+    ver 0;
+}
+genel işlev girdi_kod(kodlar: Dizi<tam32>, bas: tam32, sutun: tam32) -> tam32 {
+    eğer sutun < 0 veya bas < 0 { ver 32; }
+    eğer sutun == 0 { ver 62; }
+    eğer sutun == 1 { ver 32; }
+    // Toplamadan önce sınırla: bozuk çok büyük konum tamsayı taşırmamalı.
+    eğer bas >= dizi_boyut(kodlar) { ver 32; }
+    eğer sutun - 2 >= dizi_boyut(kodlar) - bas { ver 32; }
+    değişken i: tam32 = bas + sutun - 2;
+    eğer i >= dizi_boyut(kodlar) { ver 32; }
+    ver dizi_al(kodlar,i);
+}

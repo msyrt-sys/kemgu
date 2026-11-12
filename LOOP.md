@@ -285,6 +285,15 @@
       Öneri: (1) imza geçişini içe alma sonrasına taşı; (2) seçili importta modül adını bağlama
       (Python `from m import m` gibi) + C'de modül sembolüne çağrı T002. Kapı muafiyetleri:
       stdlib_ithal MUAF="karsilastir sonuc" — onarılınca silinmeli.
+- [ ] E4n [S] Panik ekranı yalnız `kdl_panik` yolunu kapsıyor (D-752). `kdl_dizi_oob` (kem_heap.kem,
+      dizi sınır ihlali) `kdl_panik` çağırmadan yoğun döngüde duruyor → sınır ihlali ekrana ÇIKMIYOR,
+      yalnız seri. Onarım dikkat ister: kem_heap.kem arm64 kem_os'ta da derlenir ve orada `kdl_panik`
+      YOK (D-592) → x86'ya özgü bir kanca ya da mimari başına `kdl_dizi_oob` gerekir. Kâhin: kasıtlı
+      sınır ihlali yapan çekirdek + screendump (bm_panik.py deseni).
+- [ ] E4o [M] SABİT FİZİKSEL ADRESLER (D-749/D-752, gerçek donanım H2d'ye bağlı): ekran aynası 200 MiB,
+      panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
+      bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
+      değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -2848,4 +2857,17 @@
   silinmez, tüketici E2c. (4) G11/G12: kök dizin artıkları; probe_haz.kem'in şekli (kapanıştan &yerel,
   G006) BAŞKA HİÇBİR YERDE yoktu -> silinmedi, korpusa (tc69_01). (5) H0g: gerçek test H2+H4a
   (QEMU+OVMF) yeşilinden sonra; PS/2 GEREKMEZ, USB klavye zaten destekleniyor.
+- 2026-11-11 D-752: CODEX DALGASI 9 ENTEGRASYONU (taslak #215) — ekran konsolu tamamlandı + PS/2.
+  H4c: gömülü 8x16 Türkçe font (Uni2-Fixed16, kamu malı, SHA256 sabit; 512 glif, Türkçe + kutu çizim +
+  U+FFFD). Biçim ÖLÇÜLEREK seçildi: 64 baytlık hex parçaları (yaz_u8 biçimi clang -O2'de 39 sn; tek uzun
+  hex metin 4,8 sn boot — bare-metal `metin_bayt` her çağrıda uzunluğu tarıyor = KARESEL; parçalı 0,15
+  sn). H4d: canlı yankı + imleç + geri silme yalnız ekranda (seri birebir korundu), kaydırma ölçüldü
+  (70 satırlık /kaydir.txt), tam ekran çizim 32,6 ms. H4f: panik ekranı (kırmızı + PANIK + Türkçe mesaj,
+  HLT=1 QMP ile doğrulanır; kanaryalı negatif şekil kapıda) — yalnız kdl_panik yolu (E4n). H5 yarısı:
+  i8042 sabitleri Linux başlığından ayrıştırıldı; QEMU çevirme AÇIK (denetim baytı 96) -> set 1, mevcut
+  Türkçe çözücüyle uyumlu; USB klavye yoksa PS/2, xHCI hiç yokken NVMe/AHCI de geçiyor. Heap ölçümü
+  pmemsave ile (tahmin değil): kabuk tahsis üst sınırı ~3,3 MB (16 MiB altı zorunlu tutuluyor).
+  Codex sabotajları: ğ glif baytı · canlı çizim · kaydırma kaynak satırı · panik bayrağı · tarama
+  bit 7 — hepsi gerçek QEMU'da kırmızı. Derleyiciye dokunulmadı, yeni derleyici bulgusu yok; yasak
+  muafiyet listeleri değişmedi. Entegrasyon: main (D-751) ile ÇAKIŞMASIZ birleşti; tam test_tumu.
 

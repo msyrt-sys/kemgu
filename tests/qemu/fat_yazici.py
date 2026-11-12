@@ -5,7 +5,8 @@ import struct,zlib,uuid,sys
 SEKTOR=512
 MERHABA='Merhaba Dünya — ğüşıöç'.encode()
 NOT=b'Bagimsiz FAT32 yazicisi\n'
-def hazirla(path,gpt=False):
+KAYDIR=''.join(f'Satır {i:02d} ğ\n' for i in range(70)).encode('utf-8')
+def hazirla(path,gpt=False,kaydir=False):
     toplam=64*1024*1024//SEKTOR; ayr=32; fs=1
     while fs*128 < toplam-ayr-2*fs+2:fs+=1
     ilk=ayr+2*fs;kume=toplam-ilk
@@ -44,6 +45,15 @@ def hazirla(path,gpt=False):
     put(2,root);put(3,bytes((i*7+3)&255 for i in range(1300)))
     put(6,entry(b'.          ',6,0,16)+entry(b'..         ',0,0,16)+named('not.txt',b'NOT     TXT',8,len(NOT)))
     put(7,MERHABA);put(8,NOT)
+    if kaydir:
+        # Ek dosya bağımsız yazıcıyla oluşturulur; eski imaj biçimi varsayılan kalır.
+        adet=(len(KAYDIR)+511)//512
+        for i in range(adet):
+            for taban in (ayr,ayr+fs):
+                struct.pack_into('<I',b,taban*512+(9+i)*4,10+i if i+1<adet else 0x0fffffff)
+        for taban in (512,7*512):struct.pack_into('<II',b,taban+488,kume-7-adet,9+adet)
+        put(2,root+named('kaydir.txt',b'KAYDIR  TXT',9,len(KAYDIR)))
+        put(9,KAYDIR)
     if not gpt:Path(path).write_bytes(b);return
     bas=2048;son=bas+toplam-1;n=son+34
     disk=bytearray(n*512);disk[bas*512:(son+1)*512]=b

@@ -1,0 +1,55 @@
+// i8042 yoklamalı klavye: yeni asm yok; kem_uart.kem port ilkelleri kullanılır.
+// Linux include/linux/i8042.h Python ile doğrulandı: OBF=1, IBF=2, AUX=32,
+// XLATE=64; RCTR=0x20, WCTR=0x60, KBD_DISABLE=0xad, ENABLE=0xae, AUX_DISABLE=0xa7.
+// Portlar Python int('60',16)=96 ve int('64',16)=100; gerçek QEMU kapısı ölçer.
+çıplak işlev ps2_yaz(port: tam32, v: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < 10000 {
+        eğer ((kem_port_oku8(100 olarak dtam16) olarak tam32)&2) == 0 {
+            kem_port_yaz8(port olarak dtam16,v olarak dtam8); ver doğru;
+        }
+        kem_bekle_us(50); i=i+1;
+    } ver yanlış;
+}
+çıplak işlev ps2_oku() -> tam32 {
+    değişken s: tam32 = kem_port_oku8(100 olarak dtam16) olarak tam32;
+    eğer (s&1) == 0 { ver -1; }
+    değişken b: tam32 = kem_port_oku8(96 olarak dtam16) olarak tam32;
+    // AUX, parite veya zaman aşımı baytları klavye çözümleyicisine girmez.
+    eğer (s&224) != 0 { ver -2; }
+    ver b;
+}
+çıplak işlev ps2_yanit() -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < 10000 {
+        değişken b: tam32 = ps2_oku(); eğer b >= 0 { ver b; }
+        kem_bekle_us(50); i=i+1;
+    } ver -1;
+}
+çıplak işlev ps2_komut(v: tam32) -> mantıksal {
+    eğer değil ps2_yaz(96,v) { ver yanlış; }
+    ver ps2_yanit() == 250; // QEMU ölçümü: ACK=0xfa (Python int('fa',16)).
+}
+çıplak işlev ps2_kur() -> tam32 {
+    eğer değil ps2_yaz(100,173) veya değil ps2_yaz(100,167) { ver -1; }
+    değişken i: tam32 = 0;
+    iken i < 256 ve ((kem_port_oku8(100 olarak dtam16) olarak tam32)&1) != 0 {
+        değişken b: dtam8 = kem_port_oku8(96 olarak dtam16); i=i+1;
+    }
+    eğer değil ps2_yaz(100,32) { ver -2; }
+    değişken c: tam32 = ps2_yanit(); eğer c < 0 { ver -3; }
+    // IRQ kapalı, klavye saati açık, AUX kapalı, set2→set1 çevirisi açık.
+    c=(c|96)&236;
+    eğer değil ps2_yaz(100,96) veya değil ps2_yaz(96,c) veya değil ps2_yaz(100,174) { ver -4; }
+    eğer değil ps2_komut(240) veya değil ps2_komut(2) veya değil ps2_komut(244) { ver -5; }
+    eğer değil ps2_yaz(100,32) { ver -6; }
+    değişken geri: tam32 = ps2_yanit();
+    eğer geri < 0 veya (geri&64) == 0 { ver -7; }
+    ver geri;
+}
+çıplak işlev ps2_bekle() -> tam32 {
+    iken doğru {
+        değişken b: tam32 = ps2_oku(); eğer b >= 0 { ver b; }
+        kem_bekle_us(50);
+    } ver -1;
+}

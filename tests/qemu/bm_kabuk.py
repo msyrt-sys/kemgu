@@ -2,22 +2,27 @@
 """Gerçek CPU/USB klavye: üç disk türü, beş açılış, tam seri çıktı eşitliği."""
 from pathlib import Path
 import os,sys,socket,json,time,subprocess,hashlib
-from fat_yazici import hazirla,MERHABA,NOT
-from psf_kahin import font_yukle,glif_ciz,konsol,screendump,karsilastir
+from fat_yazici import hazirla,MERHABA,NOT,KAYDIR
+from psf_kahin import font_yukle,glif_ciz,konsol,screendump,karsilastir,kabuk_goruntu
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve()
-COMMANDS=['ls /','cat /merhaba.txt','cat /yok','echo Ağaç İş','cat /belgeler/not.txt','yanlis']
-OUTPUTS=[b'dalga8.txt\nbelgeler/\nmerhaba.txt\n',MERHABA+b'\n',b'HATA bulunamadi\n','Ağaç İş\n'.encode(),NOT,b'HATA bilinmeyen komut\n']
+COMMANDS=['ls /','cat /merhaba.txt','cat /yok','echo Ağaç İş','cat /belgeler/not.txt','yanlis','cat /kaydir.txt']
+OUTPUTS=[b'dalga8.txt\nbelgeler/\nmerhaba.txt\nkaydir.txt\n',MERHABA+b'\n',b'HATA bulunamadi\n','Ağaç İş\n'.encode(),NOT,b'HATA bilinmeyen komut\n',KAYDIR]
 # qcodes ayrıca QMP query-qmp-schema ile çalışan QEMU'nun enum sözlüğünden doğrulanır.
 def keys(c):
     special={'/':('7',True),'.':('slash',False),' ':('spc',False),'\n':('ret',False),'ğ':('bracket_left',False),'ç':('dot',False),'ş':('semicolon',False),'İ':('apostrophe',True),'i':('apostrophe',False),'ı':('i',False)}
     if c in special:return special[c]
     return c.lower(),c.isupper()
 def boot(mode,n):
-    disk=w/'disk.img';hazirla(disk,True);before=hashlib.sha256(disk.read_bytes()).hexdigest()
+    disk=w/'disk.img';hazirla(disk,True,True);before=hashlib.sha256(disk.read_bytes()).hexdigest()
     serial=w/'seri.txt';qmp=w/'qmp.sock'
     qmp.unlink(missing_ok=True)
     cmd=['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-no-reboot','-serial',f'file:{serial}','-kernel',str(elf),'-device','isa-debug-exit,iobase=0xf4,iosize=0x04','-qmp',f'unix:{qmp},server=on,wait=off','-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={disk},if=none,id=d0,format=raw']
     cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu8','ahci':'ide-hd,drive=d0,bus=ide.0','usb':'usb-storage,bus=x.0,drive=d0'}[mode]]
+    if os.environ.get('KABUK_KLAVYE','usb')=='ps2':
+        i=cmd.index('usb-kbd,bus=x.0');del cmd[i-1:i+1]
+        if os.environ.get('KABUK_XHCI','1')=='0':
+            assert mode!='usb'
+            i=cmd.index('qemu-xhci,id=x');del cmd[i-1:i+1]
     deadline=time.monotonic()+60
     with (w/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=log)
@@ -44,7 +49,7 @@ def boot(mode,n):
             allowed=set(enum.get('values',[]))|{x['name'] for x in enum.get('members',[])}
             for text in COMMANDS:
                 for c in text+'\n':assert keys(c)[0] in allowed,(c,keys(c))
-            assert 'shift' in allowed
+            assert {'shift','backspace','left','right'} <= allowed
             expected=b'KEMGU-OS kabuk v0\nDISK '+{'nvme':b'NVMe','ahci':b'AHCI','usb':b'USB'}[mode]+b'\nKABUK_HAZIR\n'
             def await_output(target):
                 while True:
@@ -60,46 +65,52 @@ def boot(mode,n):
             # yoklamasıyla beklemek ~4 sn'de "xhci olay zaman asimi" veriyor ve her yoklama
             # heap sızdırıyordu; hemen yazan bir kâhin bunu GÖREMEZ.
             if n==1:
-                t_bos=time.monotonic()+float(os.environ.get('KABUK_BOSTA','8'));deadline+=float(os.environ.get('KABUK_BOSTA','8'))
+                t_bos=time.monotonic()+max(8.0,float(os.environ.get('KABUK_BOSTA','8')));deadline+=max(8.0,float(os.environ.get('KABUK_BOSTA','8')))
                 while time.monotonic()<t_bos:
                     if p.poll() is not None:raise RuntimeError(f'boşta çöktü rc={p.poll()}')
                     if serial.read_bytes()!=expected:raise AssertionError(f'boşta seri değişti: {serial.read_bytes()!r}')
                     time.sleep(.1)
+            akis=expected.decode('utf-8')
+            def ekran(girdi='',imlec=None):
+                img=kabuk_goruntu(akis,girdi,imlec);son=time.monotonic()+10;bas=time.monotonic()
+                while True:
+                    gw,gh,px=screendump(f,w/'ekran.ppm',response)
+                    assert (gw,gh)==(640,480)
+                    fark,ilk=karsilastir(px,img,640)
+                    if not fark:break
+                    if time.monotonic()>son:raise AssertionError(f'ekran {girdi!r}: {fark} piksel farklı, ilk={ilk}')
+                    time.sleep(.02)
+                return time.monotonic()-bas
+            ekran()
             for text,out in zip(COMMANDS,OUTPUTS):
-                for c in text+'\n':
+                for c in text:
                     k,shift=keys(c)
                     if shift:key('shift',True)
                     key(k,True);key(k,False)
                     if shift:key('shift',False)
+                # Enter ÖNCESİ canlı yankı, bir fazlalık ve geri silme; seri hiç değişmez.
+                ekran(text)
+                if text==COMMANDS[0]:
+                    key('left',True);key('left',False);ekran(text,len(text)-1)
+                    key('right',True);key('right',False);ekran(text)
+                key('x',True);key('x',False);ekran(text+'x')
+                key('backspace',True);key('backspace',False);ekran(text)
+                assert serial.read_bytes()==expected,'canlı yankı seriyi değiştirdi'
+                key('ret',True);key('ret',False)
                 expected+=out+b'KABUK_HAZIR\n';await_output(expected)
-            # [D-749] H4e ÇİFT ÇIKTI: ekran = seri akışı + yalnız ekrana yankılanan "> komut"
-            # satırları, drivers/ekran/konsol.kem semantiğiyle (Python modeli) çizilmiş.
-            # Çekirdek KABUK_HAZIR'ı seriye ÇİZİMDEN önce bastığı için ekran yakınsayana dek dene.
-            if os.environ.get('KABUK_EKRAN','1')=='1':
-                GEN,YUK,ON,ARKA=640,480,0xFFFFFF,0x102040
-                font=font_yukle();fw,fh=font[1][0],font[1][1];sut,sat=(GEN-16)//fw,(YUK-16)//fh
-                akis='KEMGU-OS kabuk v0\nDISK '+{'nvme':'NVMe','ahci':'AHCI','usb':'USB'}[mode]+'\nKABUK_HAZIR\n'
-                for text,out in zip(COMMANDS,OUTPUTS):akis+='> '+text+'\n'+out.decode('utf-8')+'KABUK_HAZIR\n'
-                izg=konsol(akis,sut,sat);img=[ARKA]*(GEN*YUK)
-                for r in range(sat):
-                    for c in range(sut):glif_ciz(img,GEN,YUK,font,8+c*fw,8+r*fh,izg[r*sut+c],ON,ARKA)
-                son=time.monotonic()+10
-                while True:
-                    gw,gh,px=screendump(f,w/'ekran.ppm',response)
-                    assert (gw,gh)==(GEN,YUK),f'ekran kipi {gw}x{gh}'
-                    fark,ilk=karsilastir(px,img,GEN)
-                    if fark==0:
-                        if os.environ.get('KABUK_EKRAN_KAYIT') and n==1:
-                            import shutil;shutil.copy(w/'ekran.ppm',os.environ['KABUK_EKRAN_KAYIT']+f'-{mode}.ppm')
-                        break
-                    if time.monotonic()>son:
-                        import shutil;shutil.copy(w/'ekran.ppm','build/_kabuk_ekran_fark.ppm')
-                        raise AssertionError(f'ekran: {fark} piksel FARKLI, ilk (x,y,gelen,beklenen)={ilk}')
-                    time.sleep(.25)
+                akis+='> '+text+'\n'+out.decode('utf-8')+'KABUK_HAZIR\n'
+                sure=ekran()
+                if text=='cat /kaydir.txt':print(f'  70 satır kaydırma + screendump/model karşılaştırma {sure:.4f} s',flush=True)
+            # Bump geriye gitmez: kalıcı + geçici tahsislerin üst sınırını QMP ile ölç.
+            semboller={l.split()[-1]:int(l.split()[0],16) for l in subprocess.check_output(['nm','-n',str(elf)],text=True).splitlines() if len(l.split())==3}
+            hp=w/'heap.bin';command('pmemsave',{'val':semboller['kem_bump'],'size':8,'filename':str(hp)})
+            kullanilan=int.from_bytes(hp.read_bytes(),'little')-semboller['__heap_start']
+            assert 0<kullanilan<16*1024*1024,f'16 MB test bütçesi aşıldı: {kullanilan}'
+            print(f'  heap bump üst sınırı {kullanilan} bayt (<16 MiB)',flush=True)
             command('quit');p.wait(timeout=5)
             assert p.returncode==0
             assert hashlib.sha256(disk.read_bytes()).hexdigest()==before,'salt okuma diski değiştirdi'
-            print(f'✓ kabuk {mode} açılış {n}: 6 komut, tam seri UTF-8, ekran 640x480 BİREBİR ve disk SHA256 aynı',flush=True)
+            print(f'✓ kabuk {mode} klavye={os.environ.get("KABUK_KLAVYE","usb")} açılış {n}: 7 komut, canlı yankı/geri silme/imleç/70 satır, tam seri UTF-8, ekran 640x480 BİREBİR ve disk SHA256 aynı',flush=True)
         finally:
             sock.close()
             if p.poll() is None:p.kill();p.wait()

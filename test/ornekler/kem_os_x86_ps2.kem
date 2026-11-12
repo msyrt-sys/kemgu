@@ -1,0 +1,10 @@
+// Gerçek i8042 bayt ölçümü; PS/2 QMP olayları set-1 çözümleyicisine girecek.
+işlev main() -> tam32 {
+    değişken c: tam32 = ps2_kur();
+    bm_yaz(metin_birlestir("PS2_CFG ",tam_metin(c olarak tam64)));
+    eğer c < 0 { kem_qemu_cik(1); }
+    bm_yaz("PS2_HAZIR");
+    değişken i: tam32 = 0;
+    iken i < 14 { bm_yaz(tam_metin(ps2_bekle() olarak tam64)); i=i+1; }
+    bm_yaz("PS2_SON"); kem_qemu_cik(0); ver 0;
+}
