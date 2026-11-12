@@ -1,3 +1,5 @@
+// C10-001: self-host için tam64 diziye literal yazmalar açık tam64 dönüşümü taşır.
+// Hesap: python3 tools/codex/dalga10_sabit.py
 // Python: 1344*4=5376, 5376*720=3870720; genişlik 1280 != sanal 1344.
 kullan drivers::acilis::uefi::{ UefiBilgi, gop_denetle };
 işlev fikstur() -> UefiBilgi {

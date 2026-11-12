@@ -52,7 +52,7 @@ OVMF ölçümü: GOP 1280×800, adım 5120, biçim 1 (BGRX), taban 0x80000000. U
 
 - OVMF kipine dokunulmaz; `ekran_gop_ac` ölçülen BGRX biçimi, fiziksel aralık, boyut ve bayt adımını doğrular. `Ekran` ve bütün çizim işlevleri BGA yoluyla ortaktır.
 - QMP screendump boyutu bağımsız Python çiziminin ölçüsüdür: 1280×800, 1.024.000 piksel birebir. Sabotaj adım+4: 1/1 açılış kırmızı, 2.324 farklı piksel; biçim korumasını kaldırma: saf test exit=2. İkisi geri alındı.
-- Saf test dolgu adımını (1280 piksele karşı 5376 bayt), RGB/BLT biçimlerini, kısa tamponu, adres taşmasını, hizayı, boş/aşırı boyutu ve kısa yapıyı sınar. Dizi<tam64> fikstürünün literal yazmalarında açık tam64 dönüşümü gerekir; karttaki örtük genişletme yasağına uyuldu.
+- Saf test dolgu adımını (1280 piksele karşı 5376 bayt), RGB/BLT biçimlerini, kısa tamponu, adres taşmasını, hizayı, boş/aşırı boyutu ve kısa yapıyı sınar. Dizi<tam64> fikstürünün literal yazmalarında açık tam64 dönüşümü gerekir; bu dolanma C10-001 küçük örneğiyle kaydedildi.
 
 ## C — firmware RAM haritası ve E4o
 
@@ -135,3 +135,136 @@ FACP (244), APIC (120), HPET (56), MCFG (60), WAET (40), BGRT (56 bayt).
   gerçek firmware kökünün sağlama baytı bozulmuş kopyası kabul edildiği için
   QEMU 1/1 kırmızı. Sabotaj geri alındı. Loglar `build/codex10/d-sabotaj*`.
 - Self-host UEFI kabuk 256M 1/1 geçti; bağımsız ACPI, seri ve GOP aynı.
+
+## E — Tek GPT/ESP USB ve AHCI imajı
+
+Kaynak: [UEFI 2.10 §5 GPT/koruyucu MBR](https://uefi.org/specs/UEFI/2.10/05_GUID_Partition_Table_Format.html),
+[UEFI 2.10 ESP tür GUID tablosu](https://uefi.org/sites/default/files/resources/UEFI_Spec_2_10_Aug29.pdf).
+GUID bayt sırası Python `uuid.UUID(...).bytes_le` ile hesaplanır.
+Son biçim denetiminde koruyucu MBR CHS alanları da §5.2.3 uyarınca dolduruldu:
+Python hesabıyla başlangıç `(0,2,0)`, son `(73,34,8)` baytları.
+Nihai tam test bu imajı yeniden üretir. Sayısal hesaplar:
+`python3 tools/codex/dalga10_sabit.py`; beklentiler değiştirilmedi.
+
+`make kem_os_pc_img` bağımsız Python FAT32 yazıcısından GPT+ESP üretir:
+68.174.336 bayt; ESP sektörleri 2048–133119; EFI/BOOT/BOOTX64.EFI,
+KEMGU/CEKIRDEK.ELF ve kabuk dosyaları aynı dosya sistemindedir. İki FAT kopyası,
+FSInfo ve yedek GPT başlığı üretilir; Python okuyucu EFI/ELF ve metin dosyalarını
+kaynak baytlarıyla karşılaştırır; `fsck.fat -n` temiz olmalıdır.
+
+İlk gerçek OVMF denemesinde aynı imaj USB ve AHCI ile 1'er kez geçti. Yedi komut,
+Türkçe QMP tuşları, canlı yankı/geri silme, 70 satırlık kaydırma ve 1280×800 GOP
+piksel kâhini geçti. Her türün ilk açılışında en az 8 saniye tuşsuz beklenir.
+QMP `query-blockstats` veri diskinin yazılan bayt sayısını sıfır ister; imajın
+SHA256'sı QEMU başlamadan ve temiz QMP kapanışından sonra aynı olmalıdır.
+Firmware VARS dosyası ayrı, her açılışta temiz kopyadır.
+
+E sabotajı: kabuğun GPT bölüm başlangıcını `+1` sektör kaydırmak derlenir,
+EFI açılışı tamamlanır, fakat gerçek USB kabuğu `KABUK HATA BPB gecersiz` verir;
+kapı 1/1 kırmızı (make rc=2, QEMU rc=3). Kaynak geri alındı.
+
+E sonuçları: C USB 5/5 + AHCI 5/5, self-host USB/AHCI 1’er açılış yeşil.
+Son seri kapılar rc=0; köprü 135 OK, baremetal_diff 23/23 ve 0 atlama.
+CHS alanları tamamlanmış nihai imaj tam takımın PC kapısında yeniden 10/10 geçti.
+Nihai imaj SHA256: `046f6d522362c7af950bf3c9ae837ce1c45009ad4d9f20e3380e07512eb0256b`.
+Bu hash aynı üretilmiş imajın açılışlar arasındaki bütünlüğüdür; EFI PE zaman
+damgası nedeniyle ayrı derlemelerden aynı hash beklenmez.
+
+## Gerçek PC için yönerge — bu oturumda ÇALIŞTIRILMADI
+
+QEMU kanıtı fiziksel PC kanıtı değildir. Bu dalga x86_64 UEFI, Secure Boot kapalı,
+BGRX GOP (çerçeve tamponu 4 GiB altında), 4 GiB altı ACPI ve 32 MiB bağlantı
+adresinde ayrılabilir RAM ister; uymayan firmware açık hatayla durur. Fiziksel
+ayırıcı yalnız ilk 4 GiB'ı kullanır; heap 28 MiB, UEFI yığını 512 KiB'dır.
+
+1. `make kem_os_pc_img` çalıştır; Python okuyucu ve `fsck.fat -n` temiz olmalı.
+   `sha256sum build/kem_os_pc.img` sonucunu kaydet.
+2. USB'yi takmadan/sonra `lsblk -d -o NAME,PATH,TRAN,SIZE,MODEL,SERIAL` çıktısını
+   karşılaştır. `/dev/disk/by-id/usb-...` içinden model/seri numarası o USB ile
+   eşleşen **bütün aygıt** bağlantısını seç (`-part1` değil). `readlink -f` ile
+   çöz ve `lsblk -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS` ile tekrar denetle.
+   İç disk yollarını ayrıca kaydet. Hedef, iç disklerden biri olmamalı.
+3. Yalnız seçilen USB'nin bağlı bölümlerini ayır. Aşağıdaki komutlar yer tutucu
+   çözülmeden çalıştırılmaz; bu rapor hiçbir aygıt seçmez:
+
+```bash
+hedef='/dev/disk/by-id/usb-GERCEK_MODEL_SERI'
+test -b "$hedef" || exit 1
+test "$(lsblk -dn -o TYPE "$hedef")" = disk || exit 1
+test "$(sudo blockdev --getss "$hedef")" = 512 || exit 1
+readlink -f "$hedef"
+lsblk -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS "$hedef"
+# Yukarıdaki model/seri ve bütün aygıt denetiminden sonra:
+sudo dd if=build/kem_os_pc.img of="$hedef" bs=4M conv=fsync status=progress
+sudo cmp -n "$(stat -c %s build/kem_os_pc.img)" build/kem_os_pc.img "$hedef"
+# İmajdan büyük USB için GPT yedek başlığını gerçek aygıt sonuna taşı:
+sudo sgdisk -e "$hedef"
+sudo sgdisk -v "$hedef"
+sudo sha256sum "$hedef" > usb-acilis-oncesi.sha256
+```
+
+   UEFI §5.3.1 yedek GPT başlığını son LBA'da ister; daha büyük USB'ye `dd`
+   bunu kendiliğinden taşımaz. `sgdisk -e` seçeneği yerel `--help` ile doğrulandı.
+   Bu işlem GPT metaverisini bilinçli değiştirir; sonraki bütünlük karşılaştırması
+   ilk imaja karşı değil, onarımdan sonra alınan bütün USB hash'ine karşı yapılır.
+
+
+4. İlk fiziksel denemede iç depolamayı firmware'den devre dışı bırak ya da fiziksel
+   ayır; tek depolama aygıtı bu USB olsun. Mevcut kabuğun aygıt arama sırası
+   NVMe → AHCI → USB'dir; USB'den EFI açılmış olması tek başına kabuğun USB'yi
+   seçtiğini kanıtlamaz. Açılış menüsünde UEFI USB'yi seç; seri çıktıda
+   `DISK USB` ve `KABUK_HAZIR` görülmeden dosya denemesini başarılı sayma.
+5. `ls /`, `cat /merhaba.txt`, `echo Ağaç İş` dene. Salt okuma sonrası
+   `sudo sha256sum -c usb-acilis-oncesi.sha256` ile bütün USB'yi karşılaştır. İç disklerin devre dışı/ayrık
+   olması erişilemediklerinin doğrudan kanıtıdır. Ek bütünlük kaydı istenirse,
+   aynı güvenilir canlı ortamda otomatik bağlama kapalıyken iç disklerin tamamını
+   salt okuyarak açılıştan önce/sonra `sha256sum` karşılaştır; bağlı ve işletim
+   sistemi tarafından yazılan bir diskin hash farkı KEMGU'ya atfedilemez.
+
+## Kalanlar
+
+- F/E4n: `runtime/kem_heap.kem` içindeki `kdl_dizi_oob` için mimariye özgü panik
+  kancası gerekir; bu ortak dosya dalga 10 izin genişletmesinde yok. Arm64
+  davranışını değiştirmeden ayrı görevde ele alınmalı.
+- F/H2e: TSS/IST ve kasıtlı #DF kapsamı bu dalgada tamamlanmadı. Mevcut giriş
+  kendi GDT/IDT'sini kurar; PVH panik kapıları korunur.
+- BIOS/GRUB, Secure Boot, ağ açılışı ve fiziksel donanım testi kapsam dışıdır.
+
+## Tam takım sonucu ve atlamalar
+
+`make -j1 test_tumu 2>&1 | tee build/codex10/test_tumu.log` sonrasında
+`rc=${PIPESTATUS[0]}` ile alınan sonuç **0**. `FIXPOINT ✓` görüldü; CODEGEN
+99.048 IR satırında kararlı. Qtest altı dalın tamamında C+self-host ile yeşil;
+bare-metal NVMe **20/20** açılış geçti. Yeni UEFI kapılarında **0 atlama**.
+`calistir_check_kapisi`: 348/365, 17 sınıflandırılmış muaf, 0 RED;
+`calistir_baremetal_diff`: 23/23, 0 atlama.
+
+Koşum fırsatı bazında toplam **67 atlama** (aynı dosyanın ayrı kapıdaki koşumu
+ayrı sayılır); ayrıca **4 ASan ALLOW** nedeniyle çalıştırılmayan örnek vardır:
+
+| Kapı | Atlama | Gerekçe |
+|---|---:|---|
+| Codegen eşdeğerlik | 4 | 2 yabancı mimari + 2 tek başına bağlanamayan modül parçası |
+| Self-driver, iki LLVM koşumu | 8 | Her biri aynı 227 dosyadan 223'ünü çalıştırır: 2 mimari + 2 modül |
+| Geniş codegen | 8 | Host'ta bağlanamayan bare-metal MMIO örnekleri |
+| Yapısal IR paritesi | 2 | Oracle IR/define karşılaştırması yok |
+| Sürücü paritesi | 1 | Oracle IR/define karşılaştırması yok |
+| Sürücü host-mock koşumu | 5 | C oracle --check reddediyor |
+| ASan E2E | 39 | main yok, host --check/IR/link uygun değil; harness SKIP sayacı |
+
+ASan sonucu PASS=133, FAIL=0, SKIP=39, ALLOW=4, SIZINTI-MUAF=2.
+ALLOW adları: `35_binary_search`, `40_dizi_islemler`, `kem_mmio_ham`, `kem_pointer`.
+Sızıntı muafiyetleri (`kanal_mesaj`, `gorev_temel`) yalnız sızıntı denetimini
+süzüyor; diğer bellek denetimleri çalışıyor. Yeni UEFI örneği birleşik bare-metal
+birim olarak denetlenir; tek başına host ASan örneği değildir.
+
+Diğer kapı muafiyet/sınıflandırma sayaçları: stdlib_ithal=2, yapi_diff=24,
+surucu_diff=1, check_genis=18, check_kapisi=17 (toplam 62 karşılaştırma girdisi).
+Bunlar 67 atlama sayısına karıştırılmadı. Görevde dondurulmuş muafiyet listeleri
+değişmedi. Adında “skip (v1)” geçen bound-metin testi gerçekten assertion çalıştırır,
+bu yüzden atlama sayılmadı. Lean/lake kurulu değil; tam takımda 32 dosyanın
+sorry/admit taraması geçti, gerçek Lean tip denetimi çalıştırılmadı.
+
+Loglar `build/codex10/` altında: `test_tumu.log`, `test_tumu.rc`, `atlamalar.json`,
+aşama ve sabotaj logları. `sgdisk -v build/kem_os_pc.img` ayrıca “No problems found”
+dedi; denetim öncesi/sonrası imaj hash'i aynı.

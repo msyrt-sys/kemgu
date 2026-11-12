@@ -1,3 +1,4 @@
+// Hesap: python3 tools/codex/dalga10_sabit.py
 // C10-002: 800*800 yapı okuması döngüde alloca biriktirmemeli.
 // Python: 800//2=400 kullanılabilir sayfa; 400*4096=1638400 bayt.
 kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle, sayfa_sayisi, kullanilabilir_bayt };

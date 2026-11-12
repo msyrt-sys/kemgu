@@ -1,3 +1,4 @@
+// Hesap: python3 tools/codex/dalga10_sabit.py
 // Python: alan ofseti=i*8; ayırt edici GOP adımı 5376=1344*4, harita 3*48=144.
 kullan drivers::acilis::uefi::{ UefiBilgi, uefi_coz };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_le64 };

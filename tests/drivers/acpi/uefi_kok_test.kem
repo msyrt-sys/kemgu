@@ -1,3 +1,4 @@
+// Hesap: python3 tools/codex/dalga10_sabit.py
 // Python struct: XSDT 36+3*8=60, RSDT 36+2*4=44; sağlama toplamı sıfır.
 kullan drivers::acpi::kok::{ acpi_kok_coz };
 kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Gerçek OVMF: EFI yükleme, ABI ve kendi CR3/GDT'si; KEMGU'dan bağımsız kâhin."""
 from pathlib import Path
-import os,sys,shutil,subprocess,time,socket,json,struct,re,uuid
+import os,sys,shutil,subprocess,time,socket,json,struct,re,uuid,hashlib
 from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
 from acpi_uefi_kahin import denetle as acpi_denetle
 from fat_yazici import hazirla
 from uefi_kabuk_kahin import denetle as kabuk_denetle
 W=Path(sys.argv[1]).resolve()
-KABUK=os.environ.get('UEFI_KABUK')=='1'
+PC=os.environ.get('UEFI_PC_IMG')
+KABUK=os.environ.get('UEFI_KABUK')=='1' or bool(PC)
 
-def boot(n=1,negative=False,ram='256M'):
+def boot(n=1,negative=False,ram='256M',mode='nvme'):
     q=W/'qmp.sock';ser=W/'seri.txt';q.unlink(missing_ok=True);ser.unlink(missing_ok=True)
     shutil.copy('/usr/share/OVMF/OVMF_VARS_4M.fd',W/'vars.fd')
     cmd=['qemu-system-x86_64','-M','q35','-m',ram,'-vga','std','-display','none','-no-reboot',
@@ -18,8 +19,13 @@ def boot(n=1,negative=False,ram='256M'):
          '-serial',f'file:{ser}','-qmp',f'unix:{q},server=on,wait=off',
          '-device','isa-debug-exit,iobase=0xf4,iosize=0x04']
     if KABUK:
-        hazirla(W/'disk.img',True,True)
-        cmd+=['-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={W}/disk.img,if=none,id=d0,format=raw','-device','nvme,drive=d0,serial=kemgu10']
+        if PC:
+            shutil.copyfile(PC,W/'disk.img')
+            i=cmd.index(f'format=raw,file=fat:rw:{W}/esp');del cmd[i-1:i+1]
+        else:hazirla(W/'disk.img',True,True)
+        cmd+=['-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={W}/disk.img,if=none,id=d0,format=raw']
+        cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu10','usb':'usb-storage,bus=x.0,drive=d0,bootindex=1','ahci':'ide-hd,drive=d0,bus=ide.0,bootindex=1'}[mode]]
+        before=hashlib.sha256((W/'disk.img').read_bytes()).hexdigest()
     with (W/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=log);s=socket.socket(socket.AF_UNIX);limit=time.monotonic()+60
         try:
@@ -108,7 +114,7 @@ def boot(n=1,negative=False,ram='256M'):
                                 assert struct.unpack_from('<Q',pd,index*8)[0]&0x18==0x18,(dev,region,index)
             assert int(re.search(r'GDT=\s*([0-9a-fA-F]+)',regs)[1],16)==symbols['kdl_x86_gdt'],regs
             if KABUK:
-                kabuk_denetle(command,response,f,W,ser,p,n,ram,W/'disk.img')
+                kabuk_denetle(command,response,f,W,ser,p,n,ram,W/'disk.img',mode=mode,esp=bool(PC))
             else:
                 gw,gh,px=screendump(f,W/'gop.ppm',response)
                 font=font_yukle();exp=[0x102040]*(gw*gh)
@@ -120,20 +126,30 @@ def boot(n=1,negative=False,ram='256M'):
                 print(f'✓ GOP {gw}x{gh}: {gw*gh} piksel birebir',flush=True)
             guid=str(uuid.UUID(bytes_le=raw[144:160]))
             print(f'✓ UEFI {ram} açılış {n}: ABI 24 alan, ELF, CR3/GDT; GOP {fields[5]}x{fields[6]} adım={fields[7]} biçim={fields[8]}; harita={types}; ACPI GUID={guid}',flush=True)
-            (W/f'uefi-{ram}-{n}.seri').write_bytes(data)
+            (W/f'uefi-{mode}-{ram}-{n}.seri').write_bytes(ser.read_bytes())
+            if KABUK:
+                stats=[b['stats'] for b in command('query-blockstats') if b.get('device')=='d0']
+                assert len(stats)==1 and stats[0]['wr_bytes']==0,stats
+            command('quit');p.wait(timeout=5);assert p.returncode==0
+            if KABUK:
+                assert hashlib.sha256((W/'disk.img').read_bytes()).hexdigest()==before,'açılış/kapanış diski değiştirdi'
+                print(f'✓ Disk {mode}: yazılan bayt=0, açılış/kapanış SHA256={before}',flush=True)
         finally:
             s.close()
             if p.poll() is None:p.kill()
             p.wait()
 
 if __name__=='__main__':
-    kernel=W/'esp/KEMGU/CEKIRDEK.ELF';save=kernel.read_bytes()
-    try:
-        kernel.unlink();boot(negative='ELF ac')
-        bad=bytearray(save);bad[4]=1;kernel.write_bytes(bad);boot(negative='ELF baslik')
-        bad=bytearray(save);struct.pack_into('<Q',bad,24,0);kernel.write_bytes(bad);boot(negative='ELF giris')
-        bad=bytearray(save);ph=struct.unpack_from('<Q',bad,32)[0];struct.pack_into('<Q',bad,ph+40,0)
-        kernel.write_bytes(bad);boot(negative='ELF LOAD')
-    finally:kernel.write_bytes(save)
-    for ram in os.environ.get('UEFI_RAM','256M 512M 2G' if KABUK else '256M').split():
-        for n in range(1,int(os.environ.get('UEFI_TEKRAR','5'))+1):boot(n,ram=ram)
+    if not PC:
+        kernel=W/'esp/KEMGU/CEKIRDEK.ELF';save=kernel.read_bytes()
+        try:
+            kernel.unlink();boot(negative='ELF ac')
+            bad=bytearray(save);bad[4]=1;kernel.write_bytes(bad);boot(negative='ELF baslik')
+            bad=bytearray(save);struct.pack_into('<Q',bad,24,0);kernel.write_bytes(bad);boot(negative='ELF giris')
+            bad=bytearray(save);ph=struct.unpack_from('<Q',bad,32)[0];struct.pack_into('<Q',bad,ph+40,0)
+            kernel.write_bytes(bad);boot(negative='ELF LOAD')
+        finally:kernel.write_bytes(save)
+    modes=os.environ.get('UEFI_PC_TURLER','usb ahci').split() if PC else ['nvme']
+    for mode in modes:
+        for ram in os.environ.get('UEFI_RAM','256M' if PC or not KABUK else '256M 512M 2G').split():
+            for n in range(1,int(os.environ.get('UEFI_TEKRAR','5'))+1):boot(n,ram=ram,mode=mode)

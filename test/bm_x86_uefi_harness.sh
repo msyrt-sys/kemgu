@@ -2,10 +2,10 @@
 # UEFI gerçek firmware kapısı; ikililer her koşumda yeniden üretilir.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [ ! -f /usr/share/OVMF/OVMF_CODE_4M.fd ]; then
+if [ "${UEFI_YALNIZ_DERLE:-0}" != 1 ] && [ ! -f /usr/share/OVMF/OVMF_CODE_4M.fd ]; then
  echo "ATLANDI (OVMF yok)"; exit 0
 fi
-if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+if [ "${UEFI_YALNIZ_DERLE:-0}" != 1 ] && ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
  echo "ATLANDI (QEMU yok)"; exit 0
 fi
 W="build/_bm_uefi"; mkdir -p "$W/esp/EFI/BOOT" "$W/esp/KEMGU"
@@ -20,5 +20,8 @@ awk -f test/strip_defined_declares.awk "$W/ham.ll" > "$W/k.ll"
 clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only -O2 -Wno-override-module -x ir "$W/k.ll" -c -o "$W/k.o"
 ld.lld -m elf_x86_64 -T linker/bare-metal-uefi-x86_64.ld -o "$W/k.elf" "$W/k.o" build/bm_x86_start.o build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o build/bm_x86_panik.o
 cp "$W/k.elf" "$W/esp/KEMGU/CEKIRDEK.ELF"
+if [ "${UEFI_PC_URET:-0}" = 1 ]; then
+ python3 tests/qemu/uefi_imaj.py build/kem_os_pc.img "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
+fi
 if [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then exit 0; fi
 python3 tests/qemu/bm_uefi.py "$W"
