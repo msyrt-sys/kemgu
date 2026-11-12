@@ -2,6 +2,7 @@
 """Gerçek OVMF: EFI yükleme, ABI ve kendi CR3/GDT'si; KEMGU'dan bağımsız kâhin."""
 from pathlib import Path
 import os,sys,shutil,subprocess,time,socket,json,struct,re,uuid
+from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
 W=Path(sys.argv[1]).resolve()
 
 def boot(n=1,negative=False,ram='256M'):
@@ -61,6 +62,14 @@ def boot(n=1,negative=False,ram='256M'):
             symbols={name:int(a,16) for a,t,name in (l.split() for l in nm.splitlines() if len(l.split())==3)}
             assert int(re.search(r'CR3=([0-9a-fA-F]+)',regs)[1],16)==symbols['uefi_pml4'],regs
             assert int(re.search(r'GDT=\s*([0-9a-fA-F]+)',regs)[1],16)==symbols['kdl_x86_gdt'],regs
+            gw,gh,px=screendump(f,W/'gop.ppm',response)
+            font=font_yukle();exp=[0x102040]*(gw*gh)
+            lines=[('KEMGU-OS UEFI',0xffd800),('Merhaba Dünya — ğüşıöç İ',0xffffff),('ĞÜŞİÖÇ ğüşıöç 0123456789',0xffffff),('─│┌┐└┘├┤┬┴┼═║',0xffffff)]
+            for row,(line,color) in enumerate(lines):
+                for col,ch in enumerate(line):glif_ciz(exp,gw,gh,font,8+col*font[1][0],8+row*(font[1][1]+4),ord(ch),color,0x102040)
+            diff,first=karsilastir(px,exp,gw);assert diff==0,(diff,first)
+            assert (gw,gh)==(fields[5],fields[6])
+            print(f'✓ GOP {gw}x{gh}: {gw*gh} piksel birebir',flush=True)
             guid=str(uuid.UUID(bytes_le=raw[144:160]))
             print(f'✓ UEFI {ram} açılış {n}: ABI 24 alan, ELF, CR3/GDT; GOP {fields[5]}x{fields[6]} adım={fields[7]} biçim={fields[8]}; harita={types}; ACPI GUID={guid}',flush=True)
             (W/f'uefi-{ram}-{n}.seri').write_bytes(data)

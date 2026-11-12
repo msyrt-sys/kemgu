@@ -1,0 +1,25 @@
+// Python: 1344*4=5376, 5376*720=3870720; genişlik 1280 != sanal 1344.
+kullan drivers::acilis::uefi::{ UefiBilgi, gop_denetle };
+işlev fikstur() -> UefiBilgi {
+ değişken a: Dizi<tam64> = []; değişken i: tam32 = 0;
+ iken i < 24 { dizi_ekle(a,0 olarak tam64); i=i+1; }
+ dizi_yaz(a,3,2147483648 olarak tam64); dizi_yaz(a,4,3870720 olarak tam64); dizi_yaz(a,5,1280 olarak tam64);
+ dizi_yaz(a,6,720 olarak tam64); dizi_yaz(a,7,5376 olarak tam64); dizi_yaz(a,8,1 olarak tam64);
+ ver UefiBilgi { alan:a };
+}
+işlev reddet(b: UefiBilgi) -> mantıksal { eşleş gop_denetle(b) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } } }
+işlev main() -> tam32 {
+ değişken h: tam32 = 0;
+ eğer reddet(fikstur()) { h=h+1; }
+ değişken b: UefiBilgi = fikstur(); dizi_yaz(b.alan,8,0 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,8,3 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,7,5116 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,7,5377 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,4,3870719 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,3,4294963200 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,3,2147483649 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,6,0 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ b=fikstur(); dizi_yaz(b.alan,5,8193 olarak tam64); eğer değil reddet(b) { h=h+1; }
+ değişken a: Dizi<tam64> = []; b=UefiBilgi { alan:a }; eğer değil reddet(b) { h=h+1; }
+ ver h;
+}

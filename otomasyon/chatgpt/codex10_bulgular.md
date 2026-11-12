@@ -47,3 +47,9 @@ OVMF ölçümü: GOP 1280×800, adım 5120, biçim 1 (BGRX), taban 0x80000000. U
 - Eski ExitBootServices anahtarı: ilk çağrı EFI_INVALID_PARAMETER; yeniden alınan haritayla ikinci çağrı başarılı. Fiziksel ABI alanı 17 ve seri çıktı birlikte 2 deneme gösterdi. Deney değişikliği geri alındı.
 - Eksik ELF, yanlış sınıf, yürütülebilir segment dışında giriş, geçersiz LOAD boyutu ayrı hata mesajlarıyla reddediliyor; çekirdeğe geçilmiyor.
 - Seri kapı zinciri rc=0: UEFI 5/5, PVH kabuk 15/15, ekran 5/5, panik 15/15, kem_os_x86, sürücü köprüsü, check ve baremetal_diff 23/23 (0 atlama).
+
+## B — GOP ve ortak çizici
+
+- OVMF kipine dokunulmaz; `ekran_gop_ac` ölçülen BGRX biçimi, fiziksel aralık, boyut ve bayt adımını doğrular. `Ekran` ve bütün çizim işlevleri BGA yoluyla ortaktır.
+- QMP screendump boyutu bağımsız Python çiziminin ölçüsüdür: 1280×800, 1.024.000 piksel birebir. Sabotaj adım+4: 1/1 açılış kırmızı, 2.324 farklı piksel; biçim korumasını kaldırma: saf test exit=2. İkisi geri alındı.
+- Saf test dolgu adımını (1280 piksele karşı 5376 bayt), RGB/BLT biçimlerini, kısa tamponu, adres taşmasını, hizayı, boş/aşırı boyutu ve kısa yapıyı sınar. Dizi<tam64> fikstürünün literal eklemelerinde açık tam64 dönüşümü gerekir; karttaki örtük genişletme yasağına uyuldu.

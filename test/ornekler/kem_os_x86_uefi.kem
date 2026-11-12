@@ -1,8 +1,26 @@
-// Gerçek OVMF bilgisi; bağımsız Python QMP ile aynı fiziksel yapıyı okur.
+// Gerçek OVMF: bilgi ve GOP pikselleri bağımsız QMP kâhiniyle doğrulanır.
+kullan drivers::ekran::psf::{ psf_coz };
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
+// Python: int('102040',16), int('ffffff',16), int('ffd800',16).
+işlev uefi_ekran(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş ekran_gop_ac(b,1056832) { hata(m) => { ver hata(m); } tamam(e) => {
+ eşleş psf_coz(font_tr16()) { hata(m) => { ver hata(m); } tamam(f) => {
+  ekran_metin(e,f,8,8,"KEMGU-OS UEFI",16766976,1056832);
+  ekran_metin(e,f,8,28,"Merhaba Dünya — ğüşıöç İ",16777215,1056832);
+  ekran_metin(e,f,8,48,"ĞÜŞİÖÇ ğüşıöç 0123456789",16777215,1056832);
+  ekran_metin(e,f,8,68,"─│┌┐└┘├┤┬┴┼═║",16777215,1056832);
+  ver tamam(doğru);
+ } }
+ } }
+}
 işlev main() -> tam32 {
  eşleş uefi_bilgi() {
   hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
-  tamam(b) => { uefi_dok(b); bm_yaz("UEFI_HAZIR"); }
+  tamam(b) => {
+   uefi_dok(b);
+   eşleş uefi_ekran(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   bm_yaz("UEFI_HAZIR");
+  }
  }
  iken doğru { kdl_idle(); }
  ver 0;
