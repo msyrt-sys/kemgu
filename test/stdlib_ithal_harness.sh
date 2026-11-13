@@ -11,16 +11,11 @@ cd "$(dirname "$0")/.."
 KEMGU="${KEMGU:-build/kemgu}"; CODEGEN="${CODEGEN:-build/codegen}"
 [ -x "$KEMGU" ] && [ -x "$CODEGEN" ] || { echo "  🔴 derleyici ikilisi yok"; exit 2; }
 W="build/_stdlib_ithal_$$"; mkdir -p "$W"; trap 'rm -rf "$W"' EXIT
-# MUAFİYET = AÇIK BORÇ ENVANTERİ (LOOP E4m). Satır silinince kapı onu ölçer; muaf modül
+# MUAFİYET = AÇIK BORÇ ENVANTERİ. Satır silinince kapı onu ölçer; muaf modül
 # EŞLEŞİRSE kapı uyarır ("artık geçiyor, satırı sil").
-#   karsilastir: üyesi `karsilastir` modülün KENDİ adıyla aynı → seçili import T024
-#     (modül adı da sembol olarak bağlanıyor). Üye dışlanınca test `karsilastir(3, 5)`
-#     çağrısı C'de --check'ten GEÇİP tanımsız @karsilastir'a link-red, self'te T002
-#     (C denetleyici modül adını işlev çağrısı olarak kabul ediyor). İkisi de E4m.
-#   sonuc: seçili import edilen GENERIC yapı (`KSonuc<T, E>`) C'de tip konumunda T011
-#     "bilinmeyen kullanici tipi" (+ ardışık T001); self-host tanıyor. Generic OLMAYAN
-#     tipler (json `JsonDeger`) geçiyor. E4m.
-MUAF="karsilastir sonuc"
+# [D-756] BOŞ: `karsilastir` (modülle aynı adlı üye, T024) ve `sonuc` (imzada seçili
+# generic tip, C T011) E4m'de kapandı.
+MUAF=""
 gecti=0; kirmizi=0; muaf=0
 for f in stdlib/*.kem stdlib/temel/*.kem; do
   m=$(basename "$f" .kem); [ "$m" = kripto ] && continue

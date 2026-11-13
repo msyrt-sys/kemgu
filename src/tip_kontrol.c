@@ -2880,6 +2880,14 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 tip_hata(tk, d, "T002", "tanimsiz sembol");
                 return t_hata(tk);
             }
+            /* [D-756] E4m(2): modul bagi bir DEGER degildir. `kullan m::{ X };`
+             * modul adini da baglar (nitelikli `m::f` icin; T042 kacis yolu);
+             * cikplak `m(..)` / `m` eskiden burada sessizce kabul edilip
+             * tanimsiz @m'ye LINK-RED oluyordu. Self-host zaten T002 verir. */
+            if (s->kategori == SEMBOL_MODUL) {
+                tip_hata(tk, d, "T002", "tanimsiz sembol (modul adi deger degil)");
+                return t_hata(tk);
+            }
             /* D-252: küresel değişken erişimi (okuma+yazma) YALNIZ güvensiz blokta
              * (Kırılmazlık: paylaşılan-mutable-durum = confinement'ın kaçındığı
              * aliasing → güvensize hapis). Safe .kem'de → E010. */
@@ -6036,6 +6044,14 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
     if (!program || program->tip != DUGUM_PROGRAM) return;
     pre_populate_uyeler(tk, program->veri.program.uyeler,
                         program->veri.program.sayi);
+}
+
+/* [D-756] E4m(1): alan + imza gecisi, kullan baglarindan SONRA kosar —
+ * yoksa secili import edilen tip (`kullan m::{ Kap }; islev f() -> Kap<T>`)
+ * imzada henuz YOKTUR (C T011; self dogruydu). Baglar sembolu DEGERLE
+ * kopyaladigi icin, imzalar bittikten sonra kopyalar sessiz bir ikinci
+ * gecisle tazelenir (kullan_yenile_kipi). */
+static void pre_populate_imza_fazi(TipKontrol *tk, const Dugum *program) {
     pre_populate_alanlar(tk, program);   /* F001: tip kayıtlarından sonra, imzalardan önce. */
     pre_populate_imzalar(tk, program);
 }
@@ -6055,12 +6071,14 @@ static void pre_populate(TipKontrol *tk, const Dugum *program) {
  * import v1'de hata degil). Cok-segment ciplak yol (kullan a::b::c;)
  * legacy duzlestirme olarak tanim fazinda islenir. */
 
+static int kullan_yenile_kipi = 0;   /* [D-756] 1 = yalniz kopya tipini tazele */
 static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
     const char *mad = k->veri.kullan.yol;
     int muz = k->veri.kullan.yol_uzunluk;
     const Sembol *kanonik = sembol_bul_yerel(tk->builtin_scope, mad, muz);
     if (!kanonik || kanonik->kategori != SEMBOL_MODUL ||
         !kanonik->modul_scope) {
+        if (kullan_yenile_kipi) return;
         tip_hata(tk, k, "T040",
             "kullan: mod\xc3\xbcl y\xc3\xbcklenemedi "
             "(dosya bulunamad\xc4\xb1 ya da y\xc3\xbckleyici ko\xc5\x9fmad\xc4\xb1)");
@@ -6068,7 +6086,7 @@ static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
     }
 
     /* Modul bagi — alias varsa o adla (kullan dizi olarak d;) */
-    {
+    if (!kullan_yenile_kipi) {
         Sembol mb;
         memset(&mb, 0, sizeof(mb));
         mb.ad = k->veri.kullan.alias_ad ? k->veri.kullan.alias_ad
@@ -6092,7 +6110,17 @@ static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
         mb.ast_dugumu = kanonik->ast_dugumu;
         mb.satir = k->satir;
         mb.sutun = k->sutun;
-        if (sembol_ekle(hedef, tk->arena, &mb) != 0) {
+        /* [D-756] E4m(2): secili listede modulle AYNI adli uye varsa ad
+         * UYEYE aittir (`kullan ...::karsilastir::{ karsilastir };`); modul
+         * bagi atlanir. Aksi hali T024 idi — o modulun o uyesi hic ithal
+         * edilemiyordu. Nitelikli erisim yalniz bu durumda kaybolur. */
+        int uye_ezer = 0;
+        for (int i = 0; i < k->veri.kullan.secili_sayi; i++) {
+            if (k->veri.kullan.secili_uzunluklar[i] == mb.ad_uzunluk &&
+                memcmp(k->veri.kullan.secili_adlar[i], mb.ad,
+                       (size_t)mb.ad_uzunluk) == 0) uye_ezer = 1;
+        }
+        if (!uye_ezer && sembol_ekle(hedef, tk->arena, &mb) != 0) {
             /* Ayni modul ikinci kez kullan edildiyse sessiz (idempotent);
              * farkli bir tanimla cakistiysa T024. */
             Sembol *mevcut = sembol_bul_yazilabilir(hedef, mb.ad,
@@ -6109,6 +6137,19 @@ static void kullan_isle(TipKontrol *tk, const Dugum *k, Scope *hedef) {
         const char *ad = k->veri.kullan.secili_adlar[i];
         int uz = k->veri.kullan.secili_uzunluklar[i];
         const Sembol *hs = sembol_bul_yerel(kanonik->modul_scope, ad, uz);
+        if (kullan_yenile_kipi) {
+            /* [D-756] ikinci gecis: tani YOK; yalniz ayni ithalatin kopyasi */
+            if (!hs || !hs->genel) continue;
+            Sembol *kopya = sembol_bul_yazilabilir(hedef, ad, uz);
+            if (kopya && kopya->ithal_onek &&
+                kopya->ithal_onek_uz == kanonik->ad_uzunluk &&
+                memcmp(kopya->ithal_onek, kanonik->ad,
+                       (size_t)kanonik->ad_uzunluk) == 0 &&
+                kopya->ast_dugumu == hs->ast_dugumu) {
+                kopya->tip = hs->tip;
+            }
+            continue;
+        }
         if (!hs) {
             tip_hata(tk, k, "T002", "secili import: modul uyesi bulunamadi");
             continue;
@@ -7605,6 +7646,10 @@ void tip_kontrol_program(TipKontrol *tk, const Dugum *program) {
     /* A faz-2: tum moduller kayitli — kullan baglarini kur (dongusel
      * import bildirim sirasi onemsiz). */
     kullan_baglari_kur(tk, program);
+    pre_populate_imza_fazi(tk, program);          /* [D-756] baglardan SONRA */
+    kullan_yenile_kipi = 1;                        /* [D-756] kopyalari tazele */
+    kullan_baglari_kur(tk, program);
+    kullan_yenile_kipi = 0;
     for (int i = 0; i < program->veri.program.sayi; i++) {
         tip_kontrol_tanim(tk, program->veri.program.uyeler[i]);
     }

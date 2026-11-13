@@ -54,6 +54,11 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       OVMF + clang x86_64-windows + lld-link zinciri uçtan uca doğrulandı (EFI uygulaması OVMF'de
       açılıp seriye yazdı) → önce KENDİ UEFI STUB'I (Codex dalga 10), BIOS/GRUB sonra (amd64
       çoklu-mimari depo ya da yalnız CI'da x86 koşucusu — Mehmet'in kararı).
+      ✓ KARAR (2026-11-13, D-756, Opus önerisi): **BIOS/GRUB v1'DEN ÇIKTI, ERTELENDİ.** v1 yolu
+      yalnız UEFI (kendi stub'ımız, D-755). Gerekçe: v1 bitiş tanımı (H0f) "USB'den açılır" der,
+      BIOS şart koşmaz; test makinesi sıradan bir UEFI dizüstü/masaüstü (H0g); amd64 araçlarını
+      ARM64'te öykünmek kırılgan. Eski bir BIOS makinesi gerçekten gerekirse yalnız CI'daki x86
+      koşucusunda açılır. Etkilenen maddeler (H2a/H2b/H2f/H2g, H8k, H10a, H11a) aşağıda işaretli.
 - [x] **H0c [K] ✓ ÖNERİ UYGULANDI (2026-11-06).** Dosya sistemi.** Öneri: **FAT32** (her işletim sistemi okur/yazar →
       dosyaları Linux'tan koyup çıkarabilirsin, test oracle'ı bedava). Kendi
       günlüklü FS'i (KEMFS) sonraki aşama.
@@ -114,7 +119,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 - [ ] **H2a [M] (UEFI KARŞILIĞI ✓ D-755: kendi EFI stub + 64 bit giriş; multiboot2 bekliyor) Multiboot2 başlığı + 32→64 bit giriş.** Mevcut `pvh_entry` uzun-kip
       kurulumu yeniden kullanılır; multiboot2 sihirli sayı + bilgi yapısı işaretçisi.
-- [ ] **H2b [S] GRUB ISO üretici** (`grub-mkrescue`; yoksa açık hata). Makefile hedefi
+- [ ] **H2b [S] ⏸ BIOS YOLU — ERTELENDİ (D-756). GRUB ISO üretici** (`grub-mkrescue`; yoksa açık hata). Makefile hedefi
       `kem_os_pc.iso`.
 - [ ] **H2c [M] (UEFI KARŞILIĞI ✓ D-755: açılış bilgisi ABI v1 — harita, GOP, RSDP) Multiboot2 bilgi etiketleri:** bellek haritası (E820 karşılığı),
       framebuffer etiketi, modül etiketi (ramdisk), komut satırı, ACPI RSDP etiketi.
@@ -124,7 +129,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       Kanıt: 512 MB / 2 GB / 4 GB RAM ile açılış.
 - [ ] **H2e [M] GDT + TSS + IDT tam kurulumu** (çift hata için ayrı IST yığını).
       Kanıt: kasıtlı #PF, #GP, #DF → panik ekranı, asılma yok.
-- [ ] **H2f [S] Kapı `calistir_kem_os_pc`:** QEMU `-M pc -cdrom kem_os_pc.iso
+- [ ] **H2f [S] ⏸ BIOS YOLU — ERTELENDİ (D-756; UEFI karşılığı D-755 OVMF kapıları). Kapı `calistir_kem_os_pc`:** QEMU `-M pc -cdrom kem_os_pc.iso
       -serial file:...`, mevcut faz dizgileri. Sabotaj: multiboot sihirli sayıyı boz
       → GRUB yüklemiyor → kapı kırmızı.
 - [ ] **H2g [S] `q35` ikizi** (modern yonga seti; AHCI yerleşik, PCIe ECAM).
@@ -274,7 +279,9 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       blok aygıtları taranır, her FAT32 bölümü bağlanır: açılış bölümü `/`, diğerleri
       `/diskler/<aygıt><no>p<bölüm>` (`nvme0p1`, `sata0p2`, `usb1p1`). Sürücü harfi YOK.
       `bagla` / `ayir` / `bagli` komutları (H9).
-- [ ] **H8k [S] Açılış bölümünü bulma:** GRUB komut satırı `kok=<FAT32 seri no>` (Linux
+- [ ] **H8k [S] Açılış bölümünü bulma:** ⚠ D-756: GRUB ertelendi → v1'de kaynak UEFI'dir:
+      EFI_LOADED_IMAGE_PROTOCOL.DeviceHandle'ın aygıt yolundaki GPT bölüm GUID'i stub tarafından
+      açılış bilgisi ABI'sine yazılır ve çekirdek o bölümü bağlar. Eski metin (BIOS yolu): GRUB komut satırı `kok=<FAT32 seri no>` (Linux
       `root=UUID` deseni; multiboot2 komut satırı etiketi BIOS ve UEFI'de AYNI). multiboot2
       "açılış aygıtı" etiketi yalnız BIOS'ta var → kullanılmaz. Seri eşleşmezse: tek FAT32
       varsa o, yoksa ramdisk + açık uyarı (sessiz tahmin YOK).
@@ -322,7 +329,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H10. Gerçek donanım uyumu
 
-- [ ] **H10a [M] UEFI açılışı (GRUB EFI) — H2 İLE BİRLİKTE, ilk günden (KARAR 2026-11-07):** multiboot2 aynı; GOP framebuffer; UEFI
+- [ ] **H10a [M] (✓ KENDİ STUB'IMIZLA D-755; GRUB EFI gerekmedi — D-756) UEFI açılışı (GRUB EFI) — H2 İLE BİRLİKTE, ilk günden (KARAR 2026-11-07):** multiboot2 aynı; GOP framebuffer; UEFI
       bellek haritası; ExitBootServices sonrası. Kapı: QEMU + OVMF.
 - [ ] **H10b [S] Secure Boot kapalı gereksinimi belgelenir** (imza zinciri kapsam dışı).
 - [ ] **H10c [L] xHCI (USB 3) sürücüsü:** denetleyici sıfırlama, komut/olay/aktarım
@@ -348,8 +355,8 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H11. Donanım koşumu (Mehmet + ben)
 
-- [ ] **H11a [S] USB imaj üretici:** `make kem_os_usb.img` (GPT + EFI bölümü + BIOS
-      GRUB + FAT32 veri bölümü + örnek dosyalar). `dd` komutu belgede, cihaz adı ASLA
+- [ ] **H11a [S] USB imaj üretici:** `make kem_os_usb.img` (GPT + EFI bölümü + [BIOS
+      GRUB — D-756 ile ertelendi] + FAT32 veri bölümü + örnek dosyalar). `dd` komutu belgede, cihaz adı ASLA
       betikte sabit değil.
 - [ ] **H11b [S] Kontrol listesi** (`belgeler/X86_Fiziksel_Donanim_Kontrol_Listesi.md`,
       ARM64 listesinin deseni): BIOS ayarları (CSM/Legacy, Secure Boot kapalı, SATA AHCI

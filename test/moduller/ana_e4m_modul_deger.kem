@@ -1,0 +1,5 @@
+// [D-756] E4m NEGATİF: modül bağı bir DEĞER değildir. `kullan m::{ X };` modül adını da
+// bağlar (nitelikli `m::f` için), ama çıplak `m(..)` T002 olmalı. C eskiden --check'ten
+// GEÇİRİP tanımsız @e4m_kap'a LINK-RED veriyordu; self-host zaten T002.
+kullan e4m_kap::{ Kap };
+işlev main() -> tam32 { ver e4m_kap(41); }

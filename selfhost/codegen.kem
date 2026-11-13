@@ -16159,12 +16159,10 @@ işlev kullan_yukle_hepsi(p: &değişken Ayr, kok: tam32) -> tam32 {
                       ve (dizi_al(p.si_sut, sk) == dizi_al(p.a_sut, c))
                       ve metin_esit(dizi_al(p.si_yol, sk), sy) {
                         değişken uye: metin = dizi_al(p.si_ad, sk);
+                        // [D-756] E4m(2): modülle AYNI adlı üye artık T024 DEĞİL —
+                        // ad ÜYEYE aittir, modül bağı atlanır (C ile aynı kural).
                         eğer ozel_uye_mi(p, sm, uye) {
                             sekil_hata(p, c, "T041");
-                        } değilse eğer metin_esit(uye, kullan_bag_adi(p, c))
-                          ve fn_var_mi(p, mangle(sm, uye)) {
-                            // C önce modülü bağlar; genel işlev alias'ı T024 olur.
-                            sekil_hata(p, c, "T024");
                         }
                     }
                     sk = sk + 1;

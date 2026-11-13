@@ -270,12 +270,15 @@
       erisiminde (`y.baytlar`) ve `eşleş` skrutini olunca KACMIS sayar; sicak yol GcYanit/GcIstek.
       Gercek kapanis = alan/esles turevlerini izleyen escape v3 VEYA (b)/(c). ERTELENDI (~3 KB/tus,
       16 MB'ta ~5000 tus; kabuk v0 icin kabul).
+      ✓ KARAR (2026-11-13, D-756, Opus onerisi): (b)/(c) dil yuzeyi ACILMAZ; cozum ESCAPE V3
+      (alan + `eşleş` turevlerini izleyen kacis analizi; yeni sozdizimi yok). TETIKLEYICI: H9f
+      metin duzenleyici (uzun omurlu ilk program) baslamadan ONCE yapilir.
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
       Self dogru (heap-uniform, 42). Onarim: dizi_al/dizi_yaz/dizi_boyut arg0 stack ise GEP yolu
       (D-749 stack_eleman_ir kaydi hazir) ya da GURULTULU hata.
-- [ ] E4m [M] C SEÇİLİ İMPORT PARİTE AÇIKLARI (D-751 stdlib içe alma kapısı buldu; ikisi de self DOĞRU):
+- [x] E4m [M] ✓ D-756 C SEÇİLİ İMPORT PARİTE AÇIKLARI (D-751 stdlib içe alma kapısı buldu; ikisi de self DOĞRU):
       (1) seçili import edilen GENERIC yapı İŞLEV İMZASINDA (`kullan gm::{ Kap }; işlev yap() ->
       Kap<tam32>`) C'de T011 + T001; gövde içinde kullanım ve generic olmayan tip SORUNSUZ (olculdu).
       Muhtemel kök: imza ön-geçişi içe alınan tiplerden ÖNCE (C007 sınıfı). (2) modülle AYNI adlı üye
@@ -2914,3 +2917,22 @@
   7 POZİTİF (param/üst-blok aynı ömür, aynı kapsam, dış referans, lambda içi). Sabotaj: S206 C kapalı
   (C 0 / self 4) · S207 self kapalı (4/0) · S208 aşırı-red sx>=sd (C 9 / self 4). Kapılar:
   checker_diff 313/313 (0 muaf) · check_kapisi 0 RED · check_genis 159/159 · sıfır uyarı · FIXPOINT ✓.
+- 2026-11-13 D-756: E4m KAPANDI + ÜÇ KARAR (Mehmet: "olur"). E4m(1): C'de imza geçişi (`pre_populate_imzalar`)
+  `kullan` bağlarından ÖNCE koşuyordu → seçili ithal edilen tip imzada YOK (`işlev f() -> Kap<T>` C T011+T001;
+  self doğruydu). Alan+imza geçişi bağlardan SONRAYA taşındı; bağlar sembolü DEĞERLE kopyaladığı için
+  imzalardan sonra SESSİZ ikinci geçiş kopyaların tipini tazeler (kullan_yenile_kipi; tanı yok).
+  E4m(2) ÖLÇÜM PLANI DEĞİŞTİRDİ: "modül adını hiç bağlama" önerisi YANLIŞTI — iki derleyici de seçili importta
+  modül adını bağlıyor ve gerçek kod buna dayanıyor (ana_nitelikli: T042 belirsizliği `cift_a::f` ile
+  çözülür). Dar kural: seçili listede modülle AYNI adlı üye varsa ad ÜYEYE aittir, modül bağı atlanır
+  (iki derleyicide; self'teki "C önce modülü bağlar → T024" dalı silindi). Bu D-739/C001'in T024 kararını
+  TERSİNE çevirir (ana_d3_c001_secili artık pozitif, exit 42). Ayrıca C'de modül bağı DEĞER olarak
+  kullanılınca (`m(..)`) T002 — eskiden --check'ten geçip tanımsız @m'ye LINK-RED'di; self zaten T002.
+  Fikstürler test/moduller/{e4m_kap, ana_e4m_secili (tam64+2^33, C=S=42), ana_e4m_modul_deger (T002)}.
+  stdlib_ithal MUAF BOŞ (29/29). Sabotaj: S209 eski sıra → ana_e4m_secili + stdlib_ithal kırmızı ·
+  S210 modül-değer T002 kapalı · S211 C üye-ezer kapalı · S212 self T024 geri → hepsi checker_diff kırmızı.
+  (İlk S209 GEÇERSİZDİ: imzaları kayıtlardan önce koydum, C derleyici kendini derleyemedi — S113 sınıfı.)
+  KARARLAR: (1) BIOS/GRUB v1'den çıktı, ertelendi; v1 yalnız UEFI (yol haritası H0b/H2b/H2f/H8k/H10a/H11a).
+  (2) E4k: dil yüzeyi açılmaz, escape v3; tetikleyici H9f. (3) E4m(2) yukarıdaki dar kural.
+  Kapılar: checker_diff 316/316 (0 muaf) · stdlib_ithal 29/29 · check_kapisi 0 RED · check_genis 159/159 ·
+  modul_codegen · surucu_diff · tip_kontrol_test · stdlib_check · sıfır uyarı.
+
