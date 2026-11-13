@@ -592,3 +592,23 @@ uefi_gdt_desc:
 uefi_pml4: .skip 4096
 uefi_pdpt: .skip 4096
 uefi_pd: .skip 16384
+
+/* Dalga 11: bağımsız IST yığınları, alt sınırda kanarya; 4*4096 bayt.
+ * Giriş ve kurtarma yolları değişmez. IDT kurulurken TSS'ye bağlanırlar. */
+.section .bss
+.align 4096
+.global kdl_ist1_alt, kdl_ist1_ust
+kdl_ist1_alt: .skip 16384
+kdl_ist1_ust:
+.align 4096
+.global kdl_ist2_alt, kdl_ist2_ust
+kdl_ist2_alt: .skip 16384
+kdl_ist2_ust:
+.align 4096
+.global kdl_ist3_alt, kdl_ist3_ust
+kdl_ist3_alt: .skip 16384
+kdl_ist3_ust:
+/* İstisna mesajı heap'ten ve kesilen yığından bağımsız, sınırlı tampon. */
+.align 16
+.global kdl_istisna_ileti
+kdl_istisna_ileti: .skip 256

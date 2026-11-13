@@ -43,6 +43,7 @@ muaf() {
     *test/ornekler/kem_os_x86_uefi.kem) echo "parça — birleşik UEFI birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ps2.kem) echo "parça — birleşik PS2 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_panik.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
+    *test/ornekler/kem_os_x86_istisna.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ekran.kem) echo "parça — birleşik ekran birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_usb.kem) echo "parça — birleşik USB birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ahci.kem) echo "parça — birleşik AHCI birimi aşağıda denetlenir" ;;
@@ -251,6 +252,19 @@ else
   "$KEMGU" --check --mimari x86_64-none build/kem_bm_panik_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
 rm -f build/kem_bm_panik_kapi.kem
+
+BM_ISTISNA_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_istisna.kem}"
+BM_ISTISNA_PARCALAR="$BM_ISTISNA_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # Ortak ekran modülü; istisna birleşik biriminde de denetlenir.
+cat $BM_ISTISNA_PARCALAR > build/kem_bm_istisna_kapi.kem
+tot=$((tot + 1))
+if "$KEMGU" --check --mimari x86_64-none build/kem_bm_istisna_kapi.kem >/dev/null 2>&1; then
+  echo "  ✅ kem_os_x86_istisna (birleşik bare-metal ISTISNA, $(echo $BM_ISTISNA_PARCALAR | wc -w) parça) --check geçti"
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86_istisna birleşik kaynak --check'ten geçmiyor:"
+  "$KEMGU" --check --mimari x86_64-none build/kem_bm_istisna_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+fi
+rm -f build/kem_bm_istisna_kapi.kem
 
 BM_PS2_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_ps2.kem}"
 BM_PS2_PARCALAR="$BM_PS2_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # Ortak ekran modülü; PS/2 birleşik biriminde de denetlenir.

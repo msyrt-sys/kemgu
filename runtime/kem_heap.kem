@@ -221,7 +221,7 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
 // OOB (bellek-güvenliği ihlali) → temiz halt. kem_os'ta erişilmez (correct kod);
 // cross-file panik/UART yok (leaf) → spin. Güvenlik: OOB asla belleği bozmaz.
 çıplak işlev kdl_dizi_oob(i: tam32, boyut: tam32) {
-    iken doğru { değişken x: tam32 = 0; }
+    kdl_mimari_dizi_oob(i, boyut);
 }
 
 // kdl_dizi_olustur(bolge, eleman_byte) -> KdlDizi* : boş dizi (veri=NULL).
