@@ -1,0 +1,28 @@
+// MADT ISA yolları ve IOAPIC yönlendirme sözcükleri; donanım erişimi yok.
+// Sabitler: tools/codex/dalga11_sabit.py; gerçek QEMU IRQ0→GSI2 ölçümü.
+kullan drivers::acpi::madt::{ Madt, MadtGirdisi };
+genel yapı KesmeYolu { gsi: tam64; dusuk: mantıksal; seviye: mantıksal; }
+genel yapı KesmeGirdisi { alt: tam64; ust: tam64; }
+genel işlev isa_yolu(m: Madt, irq: tam32) -> sonuç<KesmeYolu,metin> {
+ eğer irq < 0 veya irq > 15 { ver hata("ISA IRQ araligi"); }
+ değişken y: KesmeYolu = KesmeYolu { gsi:irq olarak tam64, dusuk:yanlış, seviye:yanlış };
+ değişken bulundu: mantıksal = yanlış;
+ için g: m.girdiler {
+  eğer g.tur == 2 ve g.veriyolu == 0 ve g.kaynak == irq {
+   eğer bulundu { ver hata("cift ISA ISO"); }
+   eğer g.gsi < 0 veya g.gsi > 4294967295 veya g.bayraklar < 0 veya g.bayraklar > 15 { ver hata("ISO araligi"); }
+   değişken p: tam64 = g.bayraklar&3; değişken t: tam64 = (g.bayraklar>>2)&3;
+   eğer p == 2 veya t == 2 { ver hata("ayrilmis ISO bayragi"); }
+   y.gsi=g.gsi; y.dusuk=p == 3; y.seviye=t == 3; bulundu=doğru;
+  }
+ }
+ ver tamam(y);
+}
+genel işlev kesme_girdisi(y: KesmeYolu, vektor: tam32, hedef: tam32, maskeli: mantıksal) -> sonuç<KesmeGirdisi,metin> {
+ eğer vektor < 32 veya vektor >= 255 veya hedef < 0 veya hedef > 255 { ver hata("APIC hedef veya vektor"); }
+ değişken a: tam64 = vektor olarak tam64;
+ eğer y.dusuk { a=a|8192; }
+ eğer y.seviye { a=a|32768; }
+ eğer maskeli { a=a|65536; }
+ ver tamam(KesmeGirdisi { alt:a, ust:(hedef olarak tam64)<<24 });
+}

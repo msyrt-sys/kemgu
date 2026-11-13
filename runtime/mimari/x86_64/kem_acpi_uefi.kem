@@ -56,5 +56,5 @@ işlev uefi_acpi_dok(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   } }
  } }
  } }
- ver tamam(doğru);
+ ver uefi_apic_kur(b);
 }

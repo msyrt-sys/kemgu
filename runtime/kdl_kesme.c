@@ -520,6 +520,7 @@ struct KdlIdtKapi {
 static struct KdlIdtKapi kdl_idt[256];
 extern void *kdl_isr_tablo[32];   /* asm: isr0..isr31 adresleri */
 
+extern void kdl_irq1_stub(void), kdl_irq12_stub(void), kdl_lapic_timer_stub(void), kdl_spurious_stub(void);
 extern void kdl_irq0_stub(void);     /* boot/start_x86_64.S — IRQ0 (timer) */
 extern void kdl_syscall_stub(void);  /* boot/start_x86_64.S — int 0x80 syscall */
 
@@ -570,6 +571,10 @@ void kdl_idt_kur(void) {
      * verir. Çekirdek (ring0) çağrıları etkilenmez. İstisna/IRQ kapıları DPL0
      * KALIR (ring3 `int 13` gibi yazılımsal istisna taklidini reddeder). */
     kdl_idt[0x80].tip_oz = 0xEE;
+    kdl_idt_gate(33, (uintptr_t)&kdl_irq1_stub, 0);
+    kdl_idt_gate(44, (uintptr_t)&kdl_irq12_stub, 0);
+    kdl_idt_gate(48, (uintptr_t)&kdl_lapic_timer_stub, 0);
+    kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
 
     struct {
         uint16_t limit;

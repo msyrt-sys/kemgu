@@ -91,6 +91,9 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             rsdp=dump(fields[13],36,W/'rsdp.bin');assert rsdp[:8]==b'RSD PTR ' and sum(rsdp[:20])%256==0
             if rsdp[15]>=2:assert sum(rsdp)%256==0
             acpi_denetle(dump,W,descriptors,text)
+            if os.environ.get("UEFI_APIC")=="1":
+                from apic_kahin import denetle as apic_denetle
+                apic_denetle(command,dump,W,descriptors,text)
             if not KABUK:assert 'ACPI_BOZUK RED\n' in text and 'ACPI_BOZUK KABUL' not in text
             regs=command('human-monitor-command',{'command-line':'info registers'})
             nm=subprocess.check_output(['nm',str(W/'k.elf')],text=True)

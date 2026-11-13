@@ -24,6 +24,7 @@ işlev uefi_bellek_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   eşleş uefi_tahsis(&değişken d,8207,"DMA") { hata(e) => { ver hata(e); } tamam(t) => { bm_dma_tabani=((t+65535)/65536)*65536; bm_disk_dma_tabani=bm_dma_tabani+16777216; } }
   eşleş uefi_tahsis(&değişken d,32,"VIRTIO") { hata(e) => { ver hata(e); } tamam(t) => { vblk_dma=t; vnet_dma=t+65536; } }
   eşleş uefi_pci_esle(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   ver tamam(doğru);
  } }
  } }
