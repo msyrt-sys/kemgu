@@ -320,6 +320,12 @@ yapı Ayr {
     lin_yet: Dizi<tam32>;    // D-365: 1 = bağlama `yetki<R>` — L001/L002/L004 yerine CP005
     // [D-505] R-YAKALAMA-THREAD: sahipliği görev thread'ine TAŞINMIŞ ad listesi.
     gtas_ad: Dizi<metin>;
+    e4p_ad: Dizi<metin>;     // [D-754] E4p kapsam yığını (ad) — mantıksal uzunluk e4p_n
+    e4p_sev: Dizi<tam32>;    // [D-754] her bağlamanın ömür seviyesi
+    e4p_n: tam32;
+    e4p_taban: tam32;        // [D-754] lambda çerçeve tabanı (altına bakılmaz)
+    e4p_atama: Dizi<tam32>;  // [D-754] ihlal eden ATAMA düğümleri
+    e4p_ref: Dizi<tam32>;    // [D-754] ...ve raporlanacak `&` düğümü (C konumu)
     kt_ad: Dizi<metin>;      // [D-575] kapanış-taşıma bağlamaları
     lin_tek: Dizi<tam32>;    // D-355: 1 = bağlamanın KESİN `yapı tekkez` olduğu biliniyor.
                              // 0 = tekkez<T> VEYA bilinmiyor (annotasyonsuz `değişken k =
@@ -4346,6 +4352,34 @@ işlev dizi_ekle_sonek(et: metin) -> metin {
 }
 // [D-708] Dar eleman (i8/i16) değeri çalışma zamanının i32 yuvasına genişlet:
 // işaretsiz (dtamN) → zext, işaretli → sext. Diğer tiplerde değer AYNEN döner.
+// [D-451/D-753] Diziye yazılan değeri DİZİNİN eleman tipine uyarla (dizi_ekle ve
+// dizi_yaz ORTAK — aynı soruyu iki yerde ayrı yanıtlamak ayrışır, D-407). Eleman
+// tipini DEĞERDEN almak `Dizi<kesirli32>`de heap taşması, `Dizi<tam64>`de yanlış
+// genişlikte yazma üretiyordu. Sonuç tipi p.son_tip'e yazılır.
+işlev dizi_deger_uyarla(p: &değişken Ayr, dizi_elem: metin, e: metin, dd: tam32) -> metin {
+    değişken et: metin = p.son_tip;
+    değişken r: metin = e;
+    eğer metin_uzunluk(dizi_elem) > 0 ve metin_esit(dizi_elem, et) == yanlış {
+        // Kesirli daraltma: double literal → float göze.
+        eğer metin_esit(et, "double") ve metin_esit(dizi_elem, "float") {
+            değişken ft: metin = reg_str(yeni_reg(p));
+            yaz_str("  "); yaz_str(ft); yaz_str(" = fptrunc double ");
+            yaz_str(r); yaz_str(" to float"); yb(10);
+            r = ft;
+            et = "float";
+        }
+        // [D-451] TAMSAYI genişliği de diziden gelmeli (literal i32 doğar).
+        değilse {
+            eğer int_ll_mi(dizi_elem) ve int_ll_mi(et) {
+                p.son_tip = et;
+                r = int_uydur(p, r, dizi_elem, ifade_isz(p, dd));
+                et = dizi_elem;
+            }
+        }
+    }
+    p.son_tip = et;
+    ver r;
+}
 işlev dizi_dar_genislet(p: &değişken Ayr, op: metin, et: metin, isz: tam32) -> metin {
     eğer metin_esit(et, "i8") veya metin_esit(et, "i16") {
         p.son_tip = et;
@@ -4786,6 +4820,8 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)"); yb(10);
     yaz_str("declare i64 @kdl_dosya_boyut(ptr)"); yb(10);
     yaz_str("declare void @kdl_yazdir_tam(i32)"); yb(10);
+    yaz_str("declare ptr @llvm.stacksave.p0()"); yb(10);          // [D-753] C10-002
+    yaz_str("declare void @llvm.stackrestore.p0(ptr)"); yb(10);   // [D-753] C10-002
     yaz_str("declare void @kdl_yazdir_tam64(i64)"); yb(10);
     yaz_str("declare ptr @kdl_ondalik_bicimle(ptr)"); yb(10);
     yaz_str("declare void @kdl_yazdir_isaretsiz_tam(i32)"); yb(10);
@@ -5537,8 +5573,24 @@ işlev kosul_i1(p: &değişken Ayr, c: metin) -> metin {
 // `için` döngüsü); kopyalanırsa biri düzeltilip diğeri unutulur (D-322/D-334 dersi).
 // NOT: ρ parametresi `bolge` adını taşır — `rho` lifted işlevin örtük `%rho`
 // parametresiyle çakışır (LLVM "redefinition of argument"; ölçüldü).
+// [D-753] C10-002: yapı-eleman dizisi geçici yuvası SATIR İÇİNDE ayrılıyor (C girişe
+// taşır). Döngüde her tur yığın büyüyordu → uzun döngüde SEGFAULT (ölçüldü: 400.000
+// turda self exit=139, C 0). Yuvanın ömrü bu yardımcının içinde biter (çağrı/okuma
+// sonrası ölü) → yerel stacksave/stackrestore ile sarılır. Genel "tur sonunda geri
+// yükle" BİLİNÇLİ OLARAK yapılmadı: dil `d = &x` ile tur-yerelinin adresinin turdan
+// kaçmasına izin veriyor (LOOP E4p) — orada geri yükleme sarkan işaretçi üretirdi.
+işlev yigin_kaydet(p: &değişken Ayr) -> metin {
+    değişken s: metin = reg_str(yeni_reg(p));
+    yaz_str("  "); yaz_str(s); yaz_str(" = call ptr @llvm.stacksave.p0()"); yb(10);
+    ver s;
+}
+işlev yigin_geri(s: metin) -> tam32 {
+    yaz_str("  call void @llvm.stackrestore.p0(ptr "); yaz_str(s); yaz_str(")"); yb(10);
+    ver 0;
+}
 işlev dizi_yapi_ekle_emit(p: &değişken Ayr, bolge: metin, dr: metin,
                           et: metin, val: metin) -> tam32 {
+    değişken ss: metin = yigin_kaydet(p);
     değişken ts: tam32 = yeni_reg(p);
     yaz_str("  "); yaz_str(reg_str(ts)); yaz_str(" = alloca "); yaz_str(et); yb(10);
     yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(val);
@@ -5546,9 +5598,11 @@ işlev dizi_yapi_ekle_emit(p: &değişken Ayr, bolge: metin, dr: metin,
     yaz_str("  call void @kdl_dizi_ekle_yapi(ptr "); yaz_str(bolge);
     yaz_str(", ptr "); yaz_str(dr); yaz_str(", ptr "); yaz_str(reg_str(ts));
     yaz_str(")"); yb(10);
+    yigin_geri(ss);
     ver 0;
 }
 işlev dizi_yapi_al_emit(p: &değişken Ayr, arr: metin, i: metin, et: metin) -> metin {
+    değişken ss: metin = yigin_kaydet(p);
     değişken dst: tam32 = yeni_reg(p);
     yaz_str("  "); yaz_str(reg_str(dst)); yaz_str(" = alloca "); yaz_str(et); yb(10);
     yaz_str("  call void @kdl_dizi_al_yapi(ptr "); yaz_str(arr);
@@ -5557,10 +5611,12 @@ işlev dizi_yapi_al_emit(p: &değişken Ayr, arr: metin, i: metin, et: metin) ->
     değişken fr: tam32 = yeni_reg(p);
     yaz_str("  "); yaz_str(reg_str(fr)); yaz_str(" = load "); yaz_str(et);
     yaz_str(", ptr "); yaz_str(reg_str(dst)); yb(10);
+    yigin_geri(ss);   // değer register'da; yuva artık ölü
     ver reg_str(fr);
 }
 işlev dizi_yapi_yaz_emit(p: &değişken Ayr, arr: metin, i: metin,
                          et: metin, val: metin) -> tam32 {
+    değişken ss: metin = yigin_kaydet(p);
     değişken ts: tam32 = yeni_reg(p);
     yaz_str("  "); yaz_str(reg_str(ts)); yaz_str(" = alloca "); yaz_str(et); yb(10);
     yaz_str("  store "); yaz_str(et); yaz_str(" "); yaz_str(val);
@@ -5568,6 +5624,7 @@ işlev dizi_yapi_yaz_emit(p: &değişken Ayr, arr: metin, i: metin,
     yaz_str("  call void @kdl_dizi_yaz_yapi(ptr "); yaz_str(arr);
     yaz_str(", i32 "); yaz_str(i); yaz_str(", ptr "); yaz_str(reg_str(ts));
     yaz_str(")"); yb(10);
+    yigin_geri(ss);
     ver 0;
 }
 
@@ -6500,31 +6557,8 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             // eklemek kusuru bellek-güvenliği sınıfına taşıyordu — ölçüldü.)
             değişken dizi_elem: metin = p.son_elem;
             değişken e: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
+            e = dizi_deger_uyarla(p, dizi_elem, e, dizi_al(p.cocuk, cb + 2));
             değişken et: metin = p.son_tip;
-            eğer metin_uzunluk(dizi_elem) > 0 {
-                eğer metin_esit(dizi_elem, et) == yanlış {
-                    // Kesirli daraltma: double literal → float göze.
-                    eğer metin_esit(et, "double") ve metin_esit(dizi_elem, "float") {
-                        değişken ft: metin = reg_str(yeni_reg(p));
-                        yaz_str("  "); yaz_str(ft); yaz_str(" = fptrunc double ");
-                        yaz_str(e); yaz_str(" to float"); yb(10);
-                        e = ft;
-                        et = "float";
-                    }
-                    // [D-451] TAMSAYI genişliği de diziden gelmeli. ÖNCEDEN VAR
-                    // OLAN kusur (ölçüldü: bu değişikliklerden ÖNCE de SELF
-                    // `Dizi<tam64>` toplamını 20 veriyordu, C 42): literal `20`
-                    // i32 doğuyor, `_tam` (4 bayt) ile yazılıyor ama okuma
-                    // `_tam64` (8 bayt) — yazma/okuma genişliği ayrışıyor.
-                    değilse {
-                        eğer int_ll_mi(dizi_elem) ve int_ll_mi(et) {
-                            p.son_tip = et;
-                            e = int_uydur(p, e, dizi_elem, ifade_isz(p, dizi_al(p.cocuk, cb + 2)));
-                            et = dizi_elem;
-                        }
-                    }
-                }
-            }
             eğer dizi_eleman_yapi_mi(et) {   // D-342: by-value eleman
                 dizi_yapi_ekle_emit(p, p.rho_ref, d2, et, e);
             }
@@ -6543,8 +6577,14 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         }
         eğer metin_esit(fad, "dizi_yaz") {
             değişken dy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1));
+            // [D-753] C10-001: dizi_ekle (D-451) gibi DİZİNİN eleman tipi otoriter.
+            // Önceden değerin tipi kullanılıyordu: `Dizi<tam64>`e türsüz `1` → `_tam`
+            // (4 bayt adım) → indeks 8 bayt 32'ye, yani BAŞKA bir elemanın (4) alt
+            // yarısına yazılıyordu = sessiz yanlış cevap + komşu eleman bozulması.
+            değişken dizi_elem_y: metin = p.son_elem;
             değişken iy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 2));
             değişken vy: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 3));
+            vy = dizi_deger_uyarla(p, dizi_elem_y, vy, dizi_al(p.cocuk, cb + 3));
             değişken vty: metin = p.son_tip;
             eğer dizi_eleman_yapi_mi(vty) {   // D-342: by-value eleman
                 dizi_yapi_yaz_emit(p, dy, iy, vty, vy);
@@ -7187,9 +7227,16 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             }
         }
         p.beklenen_yapi = "";   // tek seferlik tüket (nested construction sızmasın)
-        değişken ap: tam32 = yeni_reg(p);
-        değişken apr: metin = reg_str(ap);
-        yaz_str("  "); yaz_str(apr); yaz_str(" = alloca "); yaz_str(lltip); yb(10);
+        // [D-753] C10-002: ÖNCE tüm alan değerleri hesaplanır, SONRA yuva ayrılıp
+        // doldurulur ve okunur — yalnız bu ayır/yaz/oku bölümü stacksave/restore ile
+        // sarılır. Yuva eskiden satır içinde ve alan değerlendirmesinden ÖNCE
+        // ayrılıyordu → döngüde her tur yığın büyüyordu (500.000 turda SEGFAULT).
+        // Alan değerlendirmesi sarmalın DIŞINDA kalır: bir alan, değerlendirme
+        // sırasında açılan başka bir geçici yuvayı (ör. `&f()`) gösterebilir; onu
+        // geri yüklemek sarkan işaretçi olurdu. Değerlendirme SIRASI değişmedi.
+        değişken a_tip: Dizi<metin> = [];
+        değişken a_idx: Dizi<tam32> = [];
+        değişken a_deg: Dizi<metin> = [];
         değişken cb: tam32 = dizi_al(p.a_cb, idx);
         değişken cs: tam32 = dizi_al(p.a_cs, idx);
         değişken i: tam32 = 0;
@@ -7232,16 +7279,26 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             p.lam_bek_ret = eski_lbr3;   // RESET (sızdırma)
             p.beklenen_yapi = eski_by;   // reset (dış zaten "" idi)
             p.beklenen_ll = eski_bll2;
+            dizi_ekle(a_tip, ftip); dizi_ekle(a_idx, fidx); dizi_ekle(a_deg, v);
+            i = i + 1;
+        }
+        değişken ss: metin = yigin_kaydet(p);
+        değişken ap: tam32 = yeni_reg(p);
+        değişken apr: metin = reg_str(ap);
+        yaz_str("  "); yaz_str(apr); yaz_str(" = alloca "); yaz_str(lltip); yb(10);
+        i = 0;
+        iken i < dizi_boyut(a_deg) {
             değişken g: tam32 = yeni_reg(p);
             değişken gr: metin = reg_str(g);
             yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr "); yaz_str(lltip); yaz_str(", ptr ");
-            yaz_str(apr); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(fidx olarak tam64)); yb(10);
-            yaz_str("  store "); yaz_str(ftip); yaz_str(" "); yaz_str(v); yaz_str(", ptr "); yaz_str(gr); yb(10);
+            yaz_str(apr); yaz_str(", i32 0, i32 "); yaz_str(tam64_str(dizi_al(a_idx, i) olarak tam64)); yb(10);
+            yaz_str("  store "); yaz_str(dizi_al(a_tip, i)); yaz_str(" "); yaz_str(dizi_al(a_deg, i)); yaz_str(", ptr "); yaz_str(gr); yb(10);
             i = i + 1;
         }
         değişken r: tam32 = yeni_reg(p);
         değişken rs: metin = reg_str(r);
         yaz_str("  "); yaz_str(rs); yaz_str(" = load "); yaz_str(lltip); yaz_str(", ptr "); yaz_str(apr); yb(10);
+        yigin_geri(ss);   // değer register'da; yuva artık ölü
         p.son_tip = lltip;
         ver rs;
     }
@@ -14960,8 +15017,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             eğer odunc_kacis(p, deger) { ver 0; }
         }
         // D-358 G004: `işlev(...)` tipli bağlama yeniden atanamaz (temsil sabitlenir).
-        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI")
-          ve bag_biti(p, dizi_al(p.a_deg, hedef), 1) { sekil_hata(p, idx, "G004"); }
+        değişken g004: mantıksal = metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI")
+          ve bag_biti(p, dizi_al(p.a_deg, hedef), 1);
+        eğer g004 { sekil_hata(p, idx, "G004"); }
         değişken ht: metin = ifade_tip(p, hedef, "?");   // TANIMLAYICI → var_tip; ERISIM/INDEKS → "?"
         eğer metin_esit(ht, "?") == yanlış {
             değişken dt: metin = ifade_tip(p, deger, ht);
@@ -14971,6 +15029,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
             }
         }
+        eğer g004 == yanlış { e4p_rapor(p, idx); }   // [D-754] C: G004 → break (E4p atlanır)
         ver 0;
     }
     // YAPI_OLUSTUR: T002 (tip tanımsız → erken dön) → her alan [T017 / değer T002 +
@@ -15249,7 +15308,140 @@ işlev kontrol_yapi_alanlari(p: &değişken Ayr, c: tam32) -> tam32 {
     ver 0;
 }
 // İşlev gövdesini (BLOK çocuğu) kontrol et.
+// ===== [D-754] E4p: yerelin adresi kapsamından kaçamaz (G006, atama sitesi) =====
+// C tip_kontrol.c e4p_seviye/e4p_denetle AYNASI. Self denetleyicisinin yerel tablosu
+// işlev başına DÜZ (kapsamsız) olduğu için kapsam bilgisi bu ÖN GEÇİŞTE kurulur:
+// blok çıkışında kırpılan bir bağlama yığını. Ömür seviyesi C ile aynı tanım: işlev
+// parametreleri ve gövdenin üst bloğu 0; her iç blok / `için` değişkeni / `eşleş` kolu
+// bağlaması +1. Lambda yeni çerçeve (taban): dışındaki bağlamalar görünmez → hedef
+// orada bulunamazsa BİLDİRİLMEZ (C: zincir en yakın SCOPE_ISLEV'de biter).
+// İhlaller burada yalnız İŞARETLENİR; tanı ana geçişte ATAMA düğümünde (C sırası).
+işlev e4p_it(p: &değişken Ayr, ad: metin, sev: tam32) -> tam32 {
+    eğer p.e4p_n < dizi_boyut(p.e4p_ad) {
+        dizi_yaz(p.e4p_ad, p.e4p_n, ad); dizi_yaz(p.e4p_sev, p.e4p_n, sev);
+    } değilse { dizi_ekle(p.e4p_ad, ad); dizi_ekle(p.e4p_sev, sev); }
+    p.e4p_n = p.e4p_n + 1;
+    ver 0;
+}
+işlev e4p_bul(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = p.e4p_n - 1;
+    iken i >= p.e4p_taban {
+        eğer metin_esit(dizi_al(p.e4p_ad, i), ad) { ver dizi_al(p.e4p_sev, i); }
+        i = i - 1;
+    }
+    ver 0 - 1;
+}
+işlev e4p_desen(p: &değişken Ayr, n: tam32, sev: tam32) -> tam32 {
+    eğer n < 0 { ver 0; }
+    değişken t: metin = dizi_al(p.a_ad, n);
+    eğer metin_esit(t, "DESEN_TANIMLAYICI") { e4p_it(p, dizi_al(p.a_deg, n), sev); }
+    eğer metin_esit(t, "DESEN_YAPI") {
+        değişken q: tam32 = 0;
+        iken q < dizi_boyut(p.dyf_node) {
+            eğer dizi_al(p.dyf_node, q) == n { e4p_it(p, dizi_al(p.dyf_alan, q), sev); }
+            q = q + 1;
+        }
+    }
+    değişken cb: tam32 = dizi_al(p.a_cb, n);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(p.a_cs, n) { e4p_desen(p, dizi_al(p.cocuk, cb + i), sev); i = i + 1; }
+    ver 0;
+}
+işlev e4p_blok_ic(p: &değişken Ayr, b: tam32, sev: tam32) -> tam32 {
+    değişken eski: tam32 = p.e4p_n;
+    değişken cb: tam32 = dizi_al(p.a_cb, b);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(p.a_cs, b) { e4p_tara(p, dizi_al(p.cocuk, cb + i), sev); i = i + 1; }
+    p.e4p_n = eski;
+    ver 0;
+}
+işlev e4p_govde(p: &değişken Ayr, g: tam32, sev: tam32) -> tam32 {
+    // Gövde bir BLOK ise içeriği `sev`de (blok kapsamı ayrıca açılır); değilse ifade.
+    eğer metin_esit(dizi_al(p.a_ad, g), "BLOK") { ver e4p_blok_ic(p, g, sev); }
+    ver e4p_tara(p, g, sev - 1);
+}
+işlev e4p_tara(p: &değişken Ayr, n: tam32, sev: tam32) -> tam32 {
+    eğer n < 0 { ver 0; }
+    değişken t: metin = dizi_al(p.a_ad, n);
+    değişken cb: tam32 = dizi_al(p.a_cb, n);
+    değişken cs: tam32 = dizi_al(p.a_cs, n);
+    değişken i: tam32 = 0;
+    eğer metin_esit(t, "LAMBDA") {
+        değişken eski_n: tam32 = p.e4p_n;
+        değişken eski_t: tam32 = p.e4p_taban;
+        p.e4p_taban = p.e4p_n;
+        iken i < cs {
+            değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+            eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") { e4p_it(p, dizi_al(p.a_deg, c), 0); }
+            değilse eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { e4p_blok_ic(p, c, 0); }
+            değilse { e4p_tara(p, c, 0); }
+            i = i + 1;
+        }
+        p.e4p_n = eski_n; p.e4p_taban = eski_t;
+        ver 0;
+    }
+    eğer metin_esit(t, "BLOK") { ver e4p_blok_ic(p, n, sev + 1); }
+    eğer metin_esit(t, "ICIN") {
+        eğer cs > 0 { e4p_tara(p, dizi_al(p.cocuk, cb), sev); }
+        değişken eski: tam32 = p.e4p_n;
+        e4p_it(p, dizi_al(p.a_deg, n), sev + 1);
+        eğer cs > 1 { e4p_govde(p, dizi_al(p.cocuk, cb + 1), sev + 2); }
+        p.e4p_n = eski;
+        ver 0;
+    }
+    eğer metin_esit(t, "ESLES_KOLU") {
+        değişken eski: tam32 = p.e4p_n;
+        eğer cs > 0 { e4p_desen(p, dizi_al(p.cocuk, cb), sev + 1); }
+        eğer cs > 1 { e4p_govde(p, dizi_al(p.cocuk, cb + 1), sev + 2); }
+        p.e4p_n = eski;
+        ver 0;
+    }
+    eğer metin_esit(t, "ATAMA") ve (cs > 1) {
+        değişken hk: tam32 = g006_kok(p, dizi_al(p.cocuk, cb));
+        değişken dg: tam32 = dizi_al(p.cocuk, cb + 1);
+        eğer (hk >= 0) ve metin_esit(dizi_al(p.a_ad, dg), "TEKLI")
+          ve (metin_esit(dizi_al(p.a_deg, dg), "&") veya metin_esit(dizi_al(p.a_deg, dg), "&degisken"))
+          ve (dizi_al(p.a_cs, dg) > 0) {
+            değişken sd: tam32 = e4p_bul(p, dizi_al(p.a_deg, hk));
+            değişken xk: tam32 = g006_kok(p, dizi_al(p.cocuk, dizi_al(p.a_cb, dg)));
+            eğer (sd >= 0) ve (xk >= 0) {
+                değişken sx: tam32 = e4p_bul(p, dizi_al(p.a_deg, xk));
+                eğer sx > sd { dizi_ekle(p.e4p_atama, n); dizi_ekle(p.e4p_ref, dg); }
+            }
+        }
+    }
+    iken i < cs { e4p_tara(p, dizi_al(p.cocuk, cb + i), sev); i = i + 1; }
+    eğer metin_esit(t, "DEGISKEN") { e4p_it(p, dizi_al(p.a_deg, n), sev); }
+    ver 0;
+}
+işlev e4p_on_gecis(p: &değişken Ayr, fn: tam32) -> tam32 {
+    p.e4p_n = 0; p.e4p_taban = 0; p.e4p_atama = []; p.e4p_ref = [];
+    değişken cb: tam32 = dizi_al(p.a_cb, fn);
+    değişken i: tam32 = 0;
+    iken i < dizi_al(p.a_cs, fn) {
+        değişken c: tam32 = dizi_al(p.cocuk, cb + i);
+        eğer metin_esit(dizi_al(p.a_ad, c), "PARAMETRE") { e4p_it(p, dizi_al(p.a_deg, c), 0); }
+        eğer metin_esit(dizi_al(p.a_ad, c), "BLOK") { e4p_blok_ic(p, c, 0); }
+        i = i + 1;
+    }
+    ver 0;
+}
+işlev e4p_rapor(p: &değişken Ayr, atama: tam32) -> tam32 {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(p.e4p_atama) {
+        eğer dizi_al(p.e4p_atama, i) == atama {
+            değişken r: tam32 = dizi_al(p.e4p_ref, i);
+            dizi_ekle(p.th_kod, "G006");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, r));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, r));
+            ver 0;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
 işlev kontrol_govde(p: &değişken Ayr, fn: tam32) -> tam32 {
+    e4p_on_gecis(p, fn);   // [D-754]
     p.aktif_donus = yerel_tip_filtrele(p, donus_str(p, fn));   // T020 bağlamı (generic dönüş "T" → "?")
     p.aktif_fn = fn;                     // D-324: G005 kaçış taramasının kökü
     p.lin_basla = dizi_boyut(p.lin_ad);  // TC5b: aktif işlev lineer dilimi
@@ -16509,7 +16701,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_hb: [], asm_hs: [], asm_hn: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_cn: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
-        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, odunc_arg: 0 - 1, odunc_lam: 0 - 1, odunc_hata_node: [], odunc_hata_yerel: [], yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
+        ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], e4p_ad: [], e4p_sev: [], e4p_n: 0, e4p_taban: 0, e4p_atama: [], e4p_ref: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, odunc_arg: 0 - 1, odunc_lam: 0 - 1, odunc_hata_node: [], odunc_hata_yerel: [], yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,
         th_kod: [], th_sat: [], th_sut: [], t043_node: [], tasma_node: [], neg_lit: 0,
         tf_cagri: [], tf_bas: [], tf_say: [], tf_tip: [],
         fg_ad: [], fg_gb: [], fg_gs: [], fg_dn: [], fg_nd: [], gp_bl: [], mk_ad: [], cagri_hedef: 0 - 1, ts_ad: [], ts_tip: [], ts_n: 0

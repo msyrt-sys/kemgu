@@ -1,0 +1,24 @@
+// [D-753] C10-002 (Codex dalga 10): self-host yapı-eleman dizisinin geçici yuvasını
+// (`dizi_al`/`dizi_yaz`/`dizi_ekle` by-value) SATIR İÇİNDE ayırıyordu; döngüde her tur
+// yığın büyüyordu → 400.000 turda SEGFAULT (C yuvayı girişe taşır). Tur sayısı, 8 MB
+// varsayılan yığını onarımsız aşacak kadar büyük; değerler her işlem yolunu ölçer.
+yapı Hucre { a: tam64; b: tam64; c: tam32; }
+işlev main() -> tam32 {
+    değişken xs: Dizi<Hucre> = [];
+    dizi_ekle(xs, Hucre { a: 7, b: 11, c: 13 });
+    değişken i: tam32 = 0;
+    değişken toplam: tam64 = 0;
+    iken i < 500000 {
+        değişken h: Hucre = dizi_al(xs, 0);            // okuma geçicisi
+        toplam = toplam + h.a;
+        dizi_yaz(xs, 0, Hucre { a: 7, b: h.b, c: 13 }); // yazma geçicisi
+        i = i + 1;
+    }
+    değişken ys: Dizi<Hucre> = [];
+    i = 0;
+    iken i < 400000 { dizi_ekle(ys, Hucre { a: 1, b: 2, c: 3 }); i = i + 1; }   // ekleme geçicisi
+    değişken t: tam32 = 0;
+    eğer toplam == 3500000 { t = t + 20; }
+    eğer dizi_boyut(ys) == 400000 { t = t + 22; }
+    ver t;   // 42
+}
