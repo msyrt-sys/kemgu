@@ -2935,4 +2935,7 @@
   (2) E4k: dil yüzeyi açılmaz, escape v3; tetikleyici H9f. (3) E4m(2) yukarıdaki dar kural.
   Kapılar: checker_diff 316/316 (0 muaf) · stdlib_ithal 29/29 · check_kapisi 0 RED · check_genis 159/159 ·
   modul_codegen · surucu_diff · tip_kontrol_test · stdlib_check · sıfır uyarı.
+  Codex dalga 11 promptu: otomasyon/chatgpt/CODEX_GOREV_11.md (H2e GDT/TSS/IST + istisna panik ekranı + E4n ·
+  H3c-e MADT/IOAPIC/LAPIC · H5b/H6a-b PS/2 IRQ1/IRQ12 + fare). TSS IST1 ofseti 0x24 ve kapı ist alanı Linux
+  çekirdek başlıklarından (x86_hw_tss / gate_struct) doğrulandı; OVMF'de MADT ("APIC") var (D-755 kâhin çıktısı).
 
