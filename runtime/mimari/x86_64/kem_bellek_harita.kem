@@ -1,0 +1,73 @@
+// EBS sonrası çerçeve ayırıcı: cihaz/ekran adresleri firmware RAM haritasından gelir.
+kullan drivers::acilis::uefi_harita::{ uefi_harita, uefi_koru } olarak uh;
+kullan drivers::bellek::harita::{ BellekBolgesi };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, ayir_ardisik };
+işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> sonuç<tam64,metin> {
+ eşleş ayir_ardisik(d,sayfa) {
+  hiç => { ver hata(metin_birlestir("UEFI RAM yetmedi: ",ad)); }
+  değer(t) => {
+   değişken m: metin = metin_birlestir(metin_birlestir("TAHSIS ",ad)," ");
+   bm_yaz(metin_birlestir(metin_birlestir(metin_birlestir(m,tam_metin(t))," "),tam_metin((sayfa olarak tam64)*4096)));
+   ver tamam(t);
+  }
+ }
+}
+işlev uefi_bellek_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ güvensiz {
+ değişken ham: Dizi<dtam8> = bm_bellek_oku(dizi_al(b.alan,9),dizi_al(b.alan,10) olarak tam32);
+ eşleş uefi_harita(b,ham,kem_pvh_bilgi()) { hata(e) => { ver hata(e); } tamam(xs) => {
+ eşleş cerceve_yeni(xs) { hata(e) => { ver hata(e); } tamam(durum) => {
+  değişken d: CerceveAyirici = durum;
+  eşleş uefi_tahsis(&değişken d,16,"AYNA") { hata(e) => { ver hata(e); } tamam(t) => { EKRAN_AYNA_TABAN=t; } }
+  eşleş uefi_tahsis(&değişken d,8,"PANIK") { hata(e) => { ver hata(e); } tamam(t) => { ekran_panik_taban=t; kem_mmio_yaz64(t,0); } }
+  // Python: xHCI 16 MiB + disk 16 MiB = 8192*4096; hizalama payı 15 sayfa. VirtIO 64 KiB + 64 KiB.
+  eşleş uefi_tahsis(&değişken d,8207,"DMA") { hata(e) => { ver hata(e); } tamam(t) => { bm_dma_tabani=((t+65535)/65536)*65536; bm_disk_dma_tabani=bm_dma_tabani+16777216; } }
+  eşleş uefi_tahsis(&değişken d,32,"VIRTIO") { hata(e) => { ver hata(e); } tamam(t) => { vblk_dma=t; vnet_dma=t+65536; } }
+  eşleş uefi_pci_esle(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  ver tamam(doğru);
+ } }
+ } }
+}
+}
+// OVMF 64-bit PCI BAR'ları 4 GiB üstüne koyabilir. Var olan CR3 ilkelleriyle
+// yalnız aygıtın kullandığı pencereye 2 MiB UC yapraklar eklenir; yeni asm yok.
+işlev uefi_alt_tablo(d: &değişken CerceveAyirici, yuva: tam64) -> sonuç<tam64,metin> {
+ değişken g: tam64 = kem_mmio_oku64(yuva);
+ eğer (g&1) != 0 {
+  eğer (g&128) != 0 { ver hata("UEFI tablo yerine buyuk sayfa"); }
+  ver tamam(g&4503599627366400);
+ }
+ eşleş uefi_tahsis(d,1,"TABLO") { hata(e) => { ver hata(e); } tamam(t) => {
+  değişken i: tam64 = 0; iken i < 512 { kem_mmio_yaz64(t+i*8,0); i=i+1; }
+  kem_mmio_yaz64(yuva,t|3); ver tamam(t);
+ } }
+}
+işlev uefi_mmio_esle(d: &değişken CerceveAyirici, adres: tam64, boy: tam64) -> sonuç<mantıksal,metin> {
+ eğer adres < 4096 veya adres >= 140737488355328 veya boy <= 0 veya boy > 140737488355328-adres { ver hata("UEFI MMIO araligi"); }
+ değişken a: tam64 = (adres/2097152)*2097152;
+ iken a < adres+boy {
+  eşleş uefi_alt_tablo(d,kxm_cr3_oku()+((a>>39)&511)*8) { hata(e) => { ver hata(e); } tamam(pt) => {
+  eşleş uefi_alt_tablo(d,pt+((a>>30)&511)*8) { hata(e) => { ver hata(e); } tamam(pd) => {
+   kem_mmio_yaz64(pd+((a>>21)&511)*8,a|155);
+  } } } }
+  a=a+2097152;
+ }
+ kxm_cr3_yaz(kxm_cr3_oku());
+ ver tamam(doğru);
+}
+işlev uefi_pci_esle(d: &değişken CerceveAyirici) -> sonuç<mantıksal,metin> {
+ // Bu dalganın yürütücüleri NVMe ve xHCI BAR0'da en çok 16 KiB kullanır.
+ // AHCI BAR5 32-bit olduğundan girişin 0..4 GiB eşlemesindedir.
+ değişken siniflar: Dizi<tam32> = [1,12]; değişken altlar: Dizi<tam32> = [8,3]; değişken arabirim: Dizi<tam32> = [2,48];
+ değişken i: tam32 = 0;
+ iken i < 2 {
+  eşleş bm_pci_bul(dizi_al(siniflar,i),dizi_al(altlar,i),dizi_al(arabirim,i)) { hata(e) => { } tamam(bdf) => {
+   değişken alt: tam64 = kem_pci_oku32(bdf,16); değişken a: tam64 = alt&4294967280;
+   eğer (alt&6) == 4 { a=a|(kem_pci_oku32(bdf,20)<<32); }
+   eşleş uefi_mmio_esle(d,a,16384) { hata(e) => { ver hata(e); } tamam(v) => { } }
+   bm_yaz(metin_birlestir("MMIO ",tam_metin(a)));
+  } }
+  i=i+1;
+ }
+ ver tamam(doğru);
+}

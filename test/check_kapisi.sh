@@ -40,6 +40,7 @@ muaf() {
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     # [D-745] bare-metal NVMe test çekirdeği: kem_pci_hw/kem_uart'tan işlev ister (tek başına T002).
     *test/ornekler/kem_os_x86_kabuk.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
+    *test/ornekler/kem_os_x86_uefi.kem) echo "parça — birleşik UEFI birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ps2.kem) echo "parça — birleşik PS2 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_panik.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ekran.kem) echo "parça — birleşik ekran birimi aşağıda denetlenir" ;;
@@ -211,6 +212,7 @@ rm -f build/kem_bm_usb_kapi.kem
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem"
 cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then
@@ -263,6 +265,17 @@ else
   "$KEMGU" --check --mimari x86_64-none build/kem_bm_ps2_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
 rm -f build/kem_bm_ps2_kapi.kem
+
+BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem"
+cat $BM_UEFI_PARCALAR > build/kem_bm_uefi_kapi.kem
+tot=$((tot + 1))
+if "$KEMGU" --check --mimari x86_64-none build/kem_bm_uefi_kapi.kem >/dev/null 2>&1; then
+ echo "  ✅ kem_os_x86_uefi birleşik --check geçti"
+else
+ red=$((red + 1)); echo "  🔴 kem_os_x86_uefi birleşik --check başarısız"
+ "$KEMGU" --check --mimari x86_64-none build/kem_bm_uefi_kapi.kem
+fi
+rm -f build/kem_bm_uefi_kapi.kem
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir
 # birimdir → doğru mimari bayrağıyla tip kapısından GEÇMELİ.

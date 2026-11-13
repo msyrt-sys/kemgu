@@ -1,0 +1,42 @@
+// C10-001: self-host için tam64 diziye literal yazmalar açık tam64 dönüşümü taşır.
+// Hesap: python3 tools/codex/dalga10_sabit.py
+// Python: 7*48=336; kalan sayfa (16-1-12)+(8-2)+(8-1)=16, 16*4096=65536.
+kullan drivers::acilis::uefi::{ UefiBilgi, uefi_coz };
+kullan drivers::acilis::uefi_harita::{ uefi_harita } olarak uh;
+kullan drivers::bellek::harita::{ sayfa_sayisi };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_le32, yaz_le64 };
+işlev bilgi() -> UefiBilgi {
+ değişken a: Dizi<tam64> = []; değişken i: tam32 = 0;
+ iken i < 24 { dizi_ekle(a,0 olarak tam64); i=i+1; }
+ dizi_yaz(a,3,2147483648 olarak tam64); dizi_yaz(a,4,3870720 olarak tam64);
+ dizi_yaz(a,9,1064960 olarak tam64); dizi_yaz(a,10,336 olarak tam64); dizi_yaz(a,11,48 olarak tam64); dizi_yaz(a,12,1 olarak tam64);
+ dizi_yaz(a,13,4194304 olarak tam64); dizi_yaz(a,14,2101248 olarak tam64); dizi_yaz(a,15,2109440 olarak tam64);
+ dizi_yaz(a,16,65536 olarak tam64); dizi_yaz(a,20,3149824 olarak tam64); dizi_yaz(a,21,3153920 olarak tam64);
+ ver UefiBilgi { alan:a };
+}
+işlev ham() -> Dizi<dtam8> {
+ değişken b: Dizi<dtam8> = bayt_sifir(336);
+ değişken turler: Dizi<tam64> = [7 olarak tam64,3 olarak tam64,4 olarak tam64,9 olarak tam64,7 olarak tam64,6 olarak tam64,7 olarak tam64];
+ değişken i: tam32 = 0;
+ iken i < 7 {
+  yaz_le32(b,i*48,dizi_al(turler,i)); yaz_le64(b,i*48+8,((i+1) olarak tam64)*1048576); yaz_le64(b,i*48+24,8);
+  i=i+1;
+ }
+ yaz_le64(b,24,16); yaz_le64(b,4*48+32,-9223372036854775807-1); yaz_le64(b,6*48+8,4294967296);
+ ver b;
+}
+işlev reddet(b: UefiBilgi, m: Dizi<dtam8>) -> mantıksal { eşleş uefi_harita(b,m,1056768) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } } }
+işlev main() -> tam32 {
+ değişken h: tam32 = 0;
+ eşleş uefi_harita(bilgi(),ham(),1056768) { hata(e) => { h=h+1; } tamam(xs) => { eğer sayfa_sayisi(xs) != 16 { h=h+1; } } }
+ değişken b: UefiBilgi = bilgi(); değişken m: Dizi<dtam8> = ham();
+ dizi_yaz(b.alan,11,39 olarak tam64); eğer değil reddet(b,m) { h=h+1; }
+ b=bilgi(); dizi_yaz(b.alan,10,335 olarak tam64); eğer değil reddet(b,m) { h=h+1; }
+ b=bilgi(); dizi_yaz(b.alan,12,2 olarak tam64); eğer değil reddet(b,m) { h=h+1; }
+ b=bilgi(); dizi_yaz(b.alan,15,2101248 olarak tam64); eğer değil reddet(b,m) { h=h+1; }
+ b=bilgi(); yaz_le64(m,24,0); eğer değil reddet(b,m) { h=h+1; }
+ m=ham(); yaz_le64(m,8,-1); eğer değil reddet(b,m) { h=h+1; }
+ m=ham(); yaz_le64(m,8,1048577); eğer değil reddet(b,m) { h=h+1; }
+ m=ham(); yaz_le64(m,24,9223372036854775807); eğer değil reddet(b,m) { h=h+1; }
+ ver h;
+}

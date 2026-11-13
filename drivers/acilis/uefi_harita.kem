@@ -1,0 +1,39 @@
+// UEFI 2.10 §7.4.6: EBS sonrasında 3/4/7 kullanılabilir; Loader/Runtime/ACPI/MMIO korunur.
+// EFI_MEMORY_DESCRIPTOR: Python struct '<IIQQQQ' = 40 bayt; firmware adımı 48 ölçüldü.
+kullan drivers::acilis::uefi::{ UefiBilgi };
+kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle };
+kullan drivers::ortak::bayt::{ oku_le32, oku_le64 };
+genel işlev uefi_koru(xs: Dizi<BellekBolgesi>, bas: tam64, boy: tam64) -> sonuç<mantıksal,metin> {
+ eğer bas < 0 veya bas >= 4294967296 veya boy <= 0 veya boy > 4294967296-bas { ver hata("UEFI koruma araligi"); }
+ dizi_ekle(xs,BellekBolgesi { taban:bas, uzunluk:boy, tur:2 });
+ ver tamam(doğru);
+}
+genel işlev uefi_harita(b: UefiBilgi, ham: Dizi<dtam8>, bilgi: tam64) -> sonuç<Dizi<BellekBolgesi>,metin> {
+ eğer dizi_boyut(b.alan) != 24 { ver hata("UEFI harita bilgisi"); }
+ değişken a: Dizi<tam64> = b.alan;
+ değişken adim: tam64 = dizi_al(a,11); değişken boy: tam64 = dizi_boyut(ham) olarak tam64;
+ eğer adim < 40 veya adim > 65536 veya boy == 0 veya boy > 65536 veya boy%adim != 0 veya boy != dizi_al(a,10) veya dizi_al(a,12) != 1 { ver hata("UEFI harita duzeni"); }
+ değişken xs: Dizi<BellekBolgesi> = []; değişken i: tam32 = 0;
+ iken i < dizi_boyut(ham) {
+  değişken t: tam64 = oku_le32(ham,i); değişken bas: tam64 = oku_le64(ham,i+8);
+  değişken sayfa: tam64 = oku_le64(ham,i+24); değişken nitelik: tam64 = oku_le64(ham,i+32);
+  // 4 GiB üstü fiziksel adres bu girişin eşlemesinde yok; taşan boy yine reddedilir.
+  eğer bas < 0 veya sayfa <= 0 veya sayfa > (9223372036854775807-bas)/4096 veya bas%4096 != 0 { ver hata("UEFI descriptor araligi"); }
+  değişken uzun: tam64 = sayfa*4096;
+  eğer bas < 4294967296 {
+   eğer uzun > 4294967296-bas { uzun=4294967296-bas; }
+   değişken tur: tam32 = 2;
+   eğer (t == 3 veya t == 4 veya t == 7) ve nitelik >= 0 { tur=1; }
+   dizi_ekle(xs,BellekBolgesi { taban:bas, uzunluk:uzun, tur:tur });
+  }
+  i=i+(adim olarak tam32);
+ }
+ değişken baslar: Dizi<tam64> = [dizi_al(a,14),bilgi,dizi_al(a,9),dizi_al(a,3),dizi_al(a,13),dizi_al(a,20)];
+ değişken boylar: Dizi<tam64> = [dizi_al(a,15)-dizi_al(a,14),4096 olarak tam64,dizi_al(a,16),dizi_al(a,4),4096 olarak tam64,dizi_al(a,21)-dizi_al(a,20)];
+ i=0;
+ iken i < dizi_boyut(baslar) {
+  eşleş uefi_koru(xs,dizi_al(baslar,i),dizi_al(boylar,i)) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  i=i+1;
+ }
+ ver harita_duzenle(xs);
+}

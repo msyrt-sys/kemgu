@@ -290,10 +290,17 @@
       yalnız seri. Onarım dikkat ister: kem_heap.kem arm64 kem_os'ta da derlenir ve orada `kdl_panik`
       YOK (D-592) → x86'ya özgü bir kanca ya da mimari başına `kdl_dizi_oob` gerekir. Kâhin: kasıtlı
       sınır ihlali yapan çekirdek + screendump (bm_panik.py deseni).
-- [ ] E4o [M] SABİT FİZİKSEL ADRESLER (D-749/D-752, gerçek donanım H2d'ye bağlı): ekran aynası 200 MiB,
+- [x] E4o [M] ✓ D-755 (UEFI bellek haritasından çerçeve ayırıcı; ayna/panik/DMA artık oradan). SABİT FİZİKSEL ADRESLER (D-749/D-752, gerçek donanım H2d'ye bağlı): ekran aynası 200 MiB,
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
+- [x] E4p [M] ✓ D-754 DİL: döngü (ya da blok) yerelinin adresi kapsamından KAÇABİLİYOR (D-753 ölçümü):
+      `değişken d: &tam32 = &a0; iken .. { değişken x = 40 + i; d = &x; } ver *d;` iki derleyicide
+      de `--check` OK. Bugün C yerelleri girişe taşıdığı için "tesadüfen" çalışıyor; yuva kapsam
+      sonunda geri verilseydi sarkan işaretçi olurdu. G006 yalnız `ver &yerel`i yakalıyor; dış
+      bağlamaya atama yolu sorulmuyor (D-503/D-517 sınıfı). Bu yüzden C10-002 onarımı döngü başına
+      genel yığın geri yüklemesi YAPAMADI. Öneri: referansın hedefi, atandığı bağlamadan DAHA KISA
+      ömürlü bir yerelse tanı (yeni kod ya da G006 genişletmesi) — dil yüzeyi, Mehmet.
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -2870,6 +2877,31 @@
   Codex sabotajları: ğ glif baytı · canlı çizim · kaydırma kaynak satırı · panik bayrağı · tarama
   bit 7 — hepsi gerçek QEMU'da kırmızı. Derleyiciye dokunulmadı, yeni derleyici bulgusu yok; yasak
   muafiyet listeleri değişmedi. Entegrasyon: main (D-751) ile ÇAKIŞMASIZ birleşti; tam test_tumu.
+- 2026-11-13 D-753: SELF-HOST C10-001 + C10-002 (Codex dalga 10 bulguları; Codex'e derleyici yasaktı).
+  C10-001 SESSIZ YANLIS: `dizi_yaz` erisimci sonekini DEGERIN tipinden seciyordu: `Dizi<tam64>`e
+  tursuz `1` -> `_tam` (4 bayt adim) -> indeks 8 bayt 32'ye = BASKA bir elemanin (4) alt yarisina
+  yazma. dizi_ekle bu kurali D-451'de almisti; ikisi artik ORTAK `dizi_deger_uyarla`dan gecer (D-407).
+  C10-002 YIGIN TASMASI: yapi-eleman dizisi gecici yuvasi ve YAPI LITERALI yuvasi satir icinde
+  ayriliyordu (C girise tasir) -> dongude her tur yigin buyur, 400-500 bin turda SEGFAULT. Codex
+  yalniz okumayi gormustu; literal ayrica olculdu. Onarim: omru birkac komutla sinirli yuvalar
+  `llvm.stacksave.p0`/`stackrestore.p0` ile sarilir; yapi literalinde ALANLAR ONCE degerlendirilir
+  (bir alan baska bir gecici yuvayi gosterebilir — o sarmalin DISINDA kalir), sira degismez. Dongu
+  basina genel geri yukleme BILINCLI yapilmadi: E4p. Fikstur cg_dizi_yaz_genislik (eski self 12) +
+  cg_dongu_yapi_yigin (eski self 139). Sabotaj S204 geri yukleme kapali -> 139 · S205 uyarlama
+  kapali -> 12. Kapilar: codegen_diff 225/225 · yapi_diff 203/203 · bolge_operand 227/227 ·
+  codegen_genis 71/71 · checker_diff 312/312 · self_driver FIXPOINT ✓.
+- 2026-11-13 D-755: CODEX DALGASI 10 ENTEGRASYONU (taslak #218) — UEFI açılışı. H0b sırası ölçümle
+  değişti (x86 GRUB bu ARM64 makinede kurulamıyor). Kendi EFI stub'ı (boot/efi/stub.c, freestanding C:
+  firmware MS x64 çağrı kuralı ister; politika YOK — GOP + bellek haritası + RSDP + ELF yükle +
+  ExitBootServices), yeni 64 bit giriş (PVH yolu birebir korundu), 192 baytlık açılış bilgisi ABI v1.
+  OVMF ölçümleri: GOP 1280x800 BGRX adım 5120 · bellek haritası türleri · ACPI 2.0 GUID ARANMADAN
+  bulunan girdiden ölçüldü · 1 MiB yükleme EFI_NOT_FOUND -> UEFI linker 32 MiB. H4a: GOP ortak çiziciye
+  bağlandı. H2d + E4o: UEFI haritasından çerçeve ayırıcı; ayna/panik/DMA oradan; OVMF 64-bit BAR'ları
+  4 GiB üstüne koyuyor -> UC 2 MiB eşleme (PVH varsayımı geçersizdi). H3a-b: ACPI kâhini KEMGU'dan
+  bağımsız (RAM dökümünde Python RSDP arar). E: kem_os_pc.img GPT+ESP (bağımsız Python yazıcı,
+  fsck temiz), OVMF'de usb-storage ve AHCI 5/5 açılış; gerçek donanım yönergesi yazıldı (ÇALIŞTIRILMADI).
+  Codex sabotajları her işte gerçek OVMF'de kırmızı. İki self-host bulgusu (C10-001/002) D-753'te
+  onarıldı. Kalanlar: E4n (dizi sınır ihlali panik ekranında değil), H2e (TSS/IST), BIOS/GRUB.
 - 2026-11-13 D-754: E4p KAPANDI (Mehmet onayı) — yerelin adresi kapsamından kaçamaz (G006 atama
   sitesi). `d = &x` / `d.alan = &x` ile x, d'den DAHA KISA ömürlü kapsamdaysa G006 (yeni kod yok;
   G001 deseni: site başına mesaj, D-517). Ömür: parametreler + gövde üst bloğu 0; her iç blok /
@@ -2882,4 +2914,3 @@
   7 POZİTİF (param/üst-blok aynı ömür, aynı kapsam, dış referans, lambda içi). Sabotaj: S206 C kapalı
   (C 0 / self 4) · S207 self kapalı (4/0) · S208 aşırı-red sx>=sd (C 9 / self 4). Kapılar:
   checker_diff 313/313 (0 muaf) · check_kapisi 0 RED · check_genis 159/159 · sıfır uyarı · FIXPOINT ✓.
-

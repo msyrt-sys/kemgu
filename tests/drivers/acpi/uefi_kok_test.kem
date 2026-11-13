@@ -1,0 +1,73 @@
+// Hesap: python3 tools/codex/dalga10_sabit.py
+// Python struct: XSDT 36+3*8=60, RSDT 36+2*4=44; sağlama toplamı sıfır.
+kullan drivers::acpi::kok::{ acpi_kok_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+işlev xsdt() -> Dizi<dtam8> {
+ değişken b: Dizi<dtam8> = bayt_sifir(60);
+ yaz_u8(b,0,88);
+ yaz_u8(b,1,83);
+ yaz_u8(b,2,68);
+ yaz_u8(b,3,84);
+ yaz_u8(b,4,60);
+ yaz_u8(b,8,1);
+ yaz_u8(b,9,178);
+ yaz_u8(b,10,80);
+ yaz_u8(b,11,89);
+ yaz_u8(b,12,84);
+ yaz_u8(b,13,69);
+ yaz_u8(b,14,83);
+ yaz_u8(b,15,84);
+ yaz_u8(b,36,136);
+ yaz_u8(b,37,119);
+ yaz_u8(b,38,102);
+ yaz_u8(b,39,85);
+ yaz_u8(b,40,68);
+ yaz_u8(b,41,51);
+ yaz_u8(b,42,34);
+ yaz_u8(b,43,17);
+ yaz_u8(b,45,16);
+ yaz_u8(b,46,220);
+ yaz_u8(b,47,254);
+ yaz_u8(b,53,80);
+ yaz_u8(b,54,52);
+ yaz_u8(b,55,18);
+ yaz_u8(b,56,1);
+ ver b;
+}
+işlev rsdt() -> Dizi<dtam8> {
+ değişken b: Dizi<dtam8> = bayt_sifir(44);
+ yaz_u8(b,0,82);
+ yaz_u8(b,1,83);
+ yaz_u8(b,2,68);
+ yaz_u8(b,3,84);
+ yaz_u8(b,4,44);
+ yaz_u8(b,8,1);
+ yaz_u8(b,9,135);
+ yaz_u8(b,10,80);
+ yaz_u8(b,11,89);
+ yaz_u8(b,12,84);
+ yaz_u8(b,13,69);
+ yaz_u8(b,14,83);
+ yaz_u8(b,15,84);
+ yaz_u8(b,37,144);
+ yaz_u8(b,38,87);
+ yaz_u8(b,39,19);
+ yaz_u8(b,41,160);
+ yaz_u8(b,42,104);
+ yaz_u8(b,43,36);
+ ver b;
+}
+işlev reddet(b: Dizi<dtam8>, x: mantıksal) -> mantıksal { eşleş acpi_kok_coz(b,x) { hata(e) => { ver doğru; } tamam(v) => { ver yanlış; } } }
+işlev main() -> tam32 {
+ değişken h: tam32 = 0;
+ eşleş acpi_kok_coz(xsdt(),doğru) { hata(e) => { h=h+1; } tamam(a) => { eğer dizi_boyut(a) != 3 veya dizi_al(a,0) != 1234605616436508552 veya dizi_al(a,1) != 4275834880 veya dizi_al(a,2) != 4600385536 { h=h+1; } } }
+ eşleş acpi_kok_coz(rsdt(),yanlış) { hata(e) => { h=h+1; } tamam(a) => { eğer dizi_boyut(a) != 2 veya dizi_al(a,0) != 324505600 veya dizi_al(a,1) != 610836480 { h=h+1; } } }
+ eğer değil reddet(xsdt(),yanlış) { h=h+1; }
+ eğer değil reddet(rsdt(),doğru) { h=h+1; }
+ eğer değil reddet(bayt_sifir(35),doğru) { h=h+1; }
+ değişken b: Dizi<dtam8> = xsdt(); yaz_u8(b,9,0); eğer değil reddet(b,doğru) { h=h+1; }
+ b=rsdt(); yaz_u8(b,4,255); eğer değil reddet(b,yanlış) { h=h+1; }
+ b=xsdt(); yaz_u8(b,4,59); yaz_u8(b,9,179); eğer değil reddet(b,doğru) { h=h+1; }
+ b=rsdt(); yaz_u8(b,4,43); yaz_u8(b,9,172); eğer değil reddet(b,yanlış) { h=h+1; }
+ ver h;
+}

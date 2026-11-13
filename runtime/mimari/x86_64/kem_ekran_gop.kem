@@ -1,0 +1,9 @@
+// GOP yalnız açıcıdır; BGA ile aynı Ekran ve aynı çizici kullanılır.
+kullan drivers::acilis::uefi::{ gop_denetle };
+işlev ekran_gop_ac(b: UefiBilgi, arka: tam64) -> sonuç<Ekran,metin> {
+ eşleş gop_denetle(b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ değişken a: Dizi<tam64> = b.alan;
+ değişken e: Ekran = Ekran { fb: dizi_al(a,3), mmio: 0, adim: dizi_al(a,7), gen: dizi_al(a,5) olarak tam32, yuk: dizi_al(a,6) olarak tam32, kimlik: 0 };
+ lfb_doldur(e.fb,e.adim*(e.yuk olarak tam64)/4,arka);
+ ver tamam(e);
+}

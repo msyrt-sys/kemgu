@@ -78,3 +78,9 @@ sabit VM_YUVA_SAYISI: tam32 = 24;
         vnet_dma = t + 65536;                            // 64 KB yukarı (net ~19 KB)
     }
 }
+
+// PVH varsayılanları; UEFI harita ayırıcısı aygıt kurulmadan önce değiştirir.
+küresel değişken bm_dma_tabani: tam64 = 134217728;
+küresel değişken bm_disk_dma_tabani: tam64 = 150994944;
+çıplak işlev bm_dma_al() -> tam64 { ver bm_dma_tabani; }
+çıplak işlev bm_disk_dma_al() -> tam64 { ver bm_disk_dma_tabani; }
