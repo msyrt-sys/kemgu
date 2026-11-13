@@ -1,0 +1,20 @@
+// [D-753] C10-001 (Codex dalga 10): self-host `dizi_yaz` erişimci sonekini DEĞERİN tipinden
+// seçiyordu. `Dizi<tam64>`e türsüz literal → `_tam` (4 bayt adım): indeks 8 → bayt 32 =
+// başka bir elemanın (indeks 4) alt yarısı. Sessiz yanlış cevap + KOMŞU eleman bozulması.
+// dizi_ekle D-451'de bu kuralı almıştı; dizi_yaz almamıştı. Her ölçüm FARKLI bir değer katar.
+işlev main() -> tam32 {
+    değişken a: Dizi<tam64> = [];
+    değişken i: tam32 = 0;
+    iken i < 12 { dizi_ekle(a, 0); i = i + 1; }
+    dizi_yaz(a, 4, 7);
+    dizi_yaz(a, 8, 1);                                   // eskiden indeks 4'ün alt yarısına yazıyordu
+    değişken t: tam32 = 0;
+    eğer dizi_al(a, 8) == 1 { t = t + 10; }
+    eğer dizi_al(a, 4) == 7 { t = t + 11; }              // komşu SAĞLAM mı
+    dizi_yaz(a, 2, 8589934592);                          // 2^33: tam64 genişliği şart
+    eğer dizi_al(a, 2) == 8589934592 { t = t + 12; }
+    değişken k: Dizi<kesirli32> = [1.0, 2.0];
+    dizi_yaz(k, 1, 4.5);                                 // double literal → float göze
+    eğer dizi_al(k, 1) > 4.0 ve dizi_al(k, 0) < 2.0 { t = t + 9; }
+    ver t;                                               // 42
+}

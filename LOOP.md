@@ -294,6 +294,13 @@
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
+- [ ] E4p [M] DİL: döngü (ya da blok) yerelinin adresi kapsamından KAÇABİLİYOR (D-753 ölçümü):
+      `değişken d: &tam32 = &a0; iken .. { değişken x = 40 + i; d = &x; } ver *d;` iki derleyicide
+      de `--check` OK. Bugün C yerelleri girişe taşıdığı için "tesadüfen" çalışıyor; yuva kapsam
+      sonunda geri verilseydi sarkan işaretçi olurdu. G006 yalnız `ver &yerel`i yakalıyor; dış
+      bağlamaya atama yolu sorulmuyor (D-503/D-517 sınıfı). Bu yüzden C10-002 onarımı döngü başına
+      genel yığın geri yüklemesi YAPAMADI. Öneri: referansın hedefi, atandığı bağlamadan DAHA KISA
+      ömürlü bir yerelse tanı (yeni kod ya da G006 genişletmesi) — dil yüzeyi, Mehmet.
 - [x] E4i [M] ✓ D-746 (C6-001..004 duzeltildi; dalga 6 dolanma temizligi T1 bekliyor). ONCELIKLI — Codex dalga 6 derleyici bulgulari (codex6_bulgular.md), UCU SESSIZ YANLIS:
       C6-001 [M] IKI DERLEYICI: `f(&değişken d.i)` (yapi ALANINA degistirilebilir referans) GECICI
              kopyaya baglaniyor -> degisiklik kayboluyor (3 kalir, 4 olmali). BELLEK MODELI kusuru;
@@ -2870,4 +2877,17 @@
   Codex sabotajları: ğ glif baytı · canlı çizim · kaydırma kaynak satırı · panik bayrağı · tarama
   bit 7 — hepsi gerçek QEMU'da kırmızı. Derleyiciye dokunulmadı, yeni derleyici bulgusu yok; yasak
   muafiyet listeleri değişmedi. Entegrasyon: main (D-751) ile ÇAKIŞMASIZ birleşti; tam test_tumu.
+- 2026-11-13 D-753: SELF-HOST C10-001 + C10-002 (Codex dalga 10 bulguları; Codex'e derleyici yasaktı).
+  C10-001 SESSIZ YANLIS: `dizi_yaz` erisimci sonekini DEGERIN tipinden seciyordu: `Dizi<tam64>`e
+  tursuz `1` -> `_tam` (4 bayt adim) -> indeks 8 bayt 32'ye = BASKA bir elemanin (4) alt yarisina
+  yazma. dizi_ekle bu kurali D-451'de almisti; ikisi artik ORTAK `dizi_deger_uyarla`dan gecer (D-407).
+  C10-002 YIGIN TASMASI: yapi-eleman dizisi gecici yuvasi ve YAPI LITERALI yuvasi satir icinde
+  ayriliyordu (C girise tasir) -> dongude her tur yigin buyur, 400-500 bin turda SEGFAULT. Codex
+  yalniz okumayi gormustu; literal ayrica olculdu. Onarim: omru birkac komutla sinirli yuvalar
+  `llvm.stacksave.p0`/`stackrestore.p0` ile sarilir; yapi literalinde ALANLAR ONCE degerlendirilir
+  (bir alan baska bir gecici yuvayi gosterebilir — o sarmalin DISINDA kalir), sira degismez. Dongu
+  basina genel geri yukleme BILINCLI yapilmadi: E4p. Fikstur cg_dizi_yaz_genislik (eski self 12) +
+  cg_dongu_yapi_yigin (eski self 139). Sabotaj S204 geri yukleme kapali -> 139 · S205 uyarlama
+  kapali -> 12. Kapilar: codegen_diff 225/225 · yapi_diff 203/203 · bolge_operand 227/227 ·
+  codegen_genis 71/71 · checker_diff 312/312 · self_driver FIXPOINT ✓.
 
