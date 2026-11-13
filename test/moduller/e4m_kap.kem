@@ -1,0 +1,4 @@
+// [D-756] E4m fikstürü: modülle AYNI adlı genel üye + seçili ithal edilen generic yapı.
+genel yapı Kap<T> { v: T; }
+genel işlev e4m_kap(x: tam32) -> tam32 { ver x + 1; }
+genel işlev kap_yap(x: tam64) -> Kap<tam64> { ver Kap { v: x }; }

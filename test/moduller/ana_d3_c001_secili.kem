@@ -1,3 +1,4 @@
-// Aynı ad alanındaki modül ve seçili üye çakışır.
+// [D-756] Seçili üye modülle AYNI adı taşıyabilir: ad ÜYEYE aittir, modül bağı atlanır.
+// (D-739 / C001 bunu T024 olarak sabitlemişti; E4m kararıyla değişti — Mehmet onayı.)
 kullan c001_ad::{c001_ad};
 işlev main() -> tam32 { ver c001_ad(40) olarak tam32; }
