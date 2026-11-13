@@ -1,0 +1,34 @@
+// [D-754] E4p — yerelin adresi KAPSAMINDAN kaçamaz (G006'nın atama sitesi). Önceden
+// `d = &x` ile döngü/blok yerelinin adresi dış bağlamaya yazılabiliyordu; C yerelleri
+// girişe taşıdığı için "tesadüfen" çalışıyordu, kapsam sonunda yuva geri verilseydi
+// sarkan işaretçi olurdu (D-753 C10-002 onarımı bu yüzden genel döngü geri yüklemesi
+// yapamadı). Ömür seviyesi: parametreler ve gövdenin üst bloğu AYNI (0).
+yapı K { r: &tam32; }
+işlev kotu() -> tam32 {
+    değişken a: tam32 = 1;
+    değişken d: &tam32 = &a;
+    değişken k: K = K { r: &a };
+    değişken i: tam32 = 0;
+    iken i < 2 { değişken x: tam32 = 40; d = &x; i = i + 1; }   // döngü yereli → G006
+    için y: [7, 8] { d = &y; }                                    // döngü değişkeni → G006
+    eğer a > 0 { değişken z: tam32 = 3; k.r = &z; }               // alan hedefi → G006
+    eşleş a { 1 => { değişken w: tam32 = 4; d = &w; } _ => { } }  // kol yereli → G006
+    ver *d + *k.r;
+}
+// POZİTİF — hepsi TEMİZ olmalı; yoksa "her &-atamasını reddet" sabotajı geçerdi (D-425).
+işlev iyi(p: &tam32) -> tam32 {
+    değişken q: &tam32 = p;
+    değişken ust: tam32 = 5;
+    q = &ust;                                  // üst blok yereli: parametreyle AYNI ömür
+    p = &ust;                                  // parametre = &üst-düzey yerel
+    eğer ust > 0 {
+        değişken ic: tam32 = 2;
+        değişken r: &tam32 = &ic;
+        r = &ic;                               // aynı kapsam
+        q = &ust;                              // iç blokta, ama gösterilen DIŞ yerel
+    }
+    için x: [1, 2] { değişken s: &tam32 = &ust; s = &ust; }
+    değişken f: işlev() -> tam32 = || { değişken l: tam32 = 1; değişken m: &tam32 = &l; m = &l; ver *m; };
+    ver *q + f();
+}
+işlev main() -> tam32 { değişken a: tam32 = 1; ver kotu() + iyi(&a); }

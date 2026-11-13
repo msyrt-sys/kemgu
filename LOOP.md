@@ -2870,4 +2870,16 @@
   Codex sabotajları: ğ glif baytı · canlı çizim · kaydırma kaynak satırı · panik bayrağı · tarama
   bit 7 — hepsi gerçek QEMU'da kırmızı. Derleyiciye dokunulmadı, yeni derleyici bulgusu yok; yasak
   muafiyet listeleri değişmedi. Entegrasyon: main (D-751) ile ÇAKIŞMASIZ birleşti; tam test_tumu.
+- 2026-11-13 D-754: E4p KAPANDI (Mehmet onayı) — yerelin adresi kapsamından kaçamaz (G006 atama
+  sitesi). `d = &x` / `d.alan = &x` ile x, d'den DAHA KISA ömürlü kapsamdaysa G006 (yeni kod yok;
+  G001 deseni: site başına mesaj, D-517). Ömür: parametreler + gövde üst bloğu 0; her iç blok /
+  `için` değişkeni / `eşleş` kolu bağlaması +1. C: kapsam zinciri en yakın SCOPE_ISLEV'e kadar
+  (e4p_seviye). SELF: denetleyicinin yerel tablosu işlev başına DÜZ olduğu için kapsam ön geçişi
+  (blok çıkışında kırpılan bağlama yığını; dizi_cikar yok → mantıksal uzunluk e4p_n); ihlal ön
+  geçişte işaretlenir, tanı ana geçişte ATAMA sonunda (C sırası; G004'te ikisi de atlar). SINIR:
+  hedef çerçevede yoksa (lambda dışı yakalanan, küresel) BİLDİRİLMEZ — kaçırma yönü, over-reject yok.
+  Depo taraması 1162 .kem: 0 yeni tanı (korpusta bu şekil YOKTU) → fikstür tc70_01: 4 ihlal +
+  7 POZİTİF (param/üst-blok aynı ömür, aynı kapsam, dış referans, lambda içi). Sabotaj: S206 C kapalı
+  (C 0 / self 4) · S207 self kapalı (4/0) · S208 aşırı-red sx>=sd (C 9 / self 4). Kapılar:
+  checker_diff 313/313 (0 muaf) · check_kapisi 0 RED · check_genis 159/159 · sıfır uyarı · FIXPOINT ✓.
 

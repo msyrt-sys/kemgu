@@ -1274,6 +1274,53 @@ static const Dugum *g006_bul(TipKontrol *tk, const Dugum *d) {
     return NULL;
 }
 
+/* [D-754] E4p — YERELIN ADRESI KAPSAMINDAN KACAMAZ (G006'nin atama sitesi).
+ * `d = &x` (ya da `d.alan = &x`) ile x, d'den DAHA KISA omurlu bir kapsamda
+ * tanimliysa referans hedefinden uzun yasar: `iken .. { degisken x = ..; d = &x; }
+ * ver *d;` iki derleyicide de --check'ten geciyordu (D-753 olcumu). Bugun C
+ * yerelleri girise tasidigi icin "tesadufen" calisir; yuva kapsam sonunda geri
+ * verilseydi sarkan isaretci olurdu. AYNI SINIF -> G006, site basina mesaj (G001
+ * deseni, D-517).
+ * OMUR SEVIYESI: aktif zincirde EN YAKIN SCOPE_ISLEV'e kadar. Islev kapsami
+ * (parametreler) ile govdenin UST blogu AYNI omurdur (seviye 0); her ic blok/
+ * icin degiskeni/esles kolu +1. Hedef bu cercevede bulunamazsa (kuresel, modul,
+ * lambda disi yakalanan) BILDIRILMEZ — over-reject yok. */
+static int e4p_seviye(TipKontrol *tk, const char *ad, int uz) {
+    Scope *zincir[256]; int n = 0;
+    for (Scope *s = tk->scope; s && n < 256; s = s->parent) {
+        zincir[n++] = s;
+        if (s->kategori == SCOPE_ISLEV) break;
+        if (s->kategori == SCOPE_MODUL || s->kategori == SCOPE_GLOBAL) return -1;
+    }
+    if (n == 0 || zincir[n-1]->kategori != SCOPE_ISLEV) return -1;
+    for (int i = 0; i < n; i++) {
+        if (sembol_bul_yerel(zincir[i], ad, uz)) {
+            int sev = (n - 2) - i;          /* ISLEV: -1, govde ust blok: 0 */
+            return sev < 0 ? 0 : sev;
+        }
+    }
+    return -1;
+}
+static void e4p_denetle(TipKontrol *tk, const Dugum *hedef, const Dugum *deger) {
+    const Dugum *hk = g006_kok(hedef);
+    if (!hk || !deger) return;
+    int sd = e4p_seviye(tk, hk->veri.tanimlayici.metin, hk->veri.tanimlayici.uzunluk);
+    if (sd < 0) return;
+    const Dugum *r = NULL;
+    if (deger->tip == DUGUM_TEKLI
+        && (deger->veri.tekli.op == OP_REF || deger->veri.tekli.op == OP_REF_DEGISKEN)) r = deger;
+    if (!r) return;
+    const Dugum *xk = g006_kok(r->veri.tekli.operand);
+    if (!xk) return;
+    int sx = e4p_seviye(tk, xk->veri.tanimlayici.metin, xk->veri.tanimlayici.uzunluk);
+    if (sx > sd) {
+        tip_hata(tk, r, "G006",
+            "yerelin adresi kapsamindan kacamaz (hedef baglama daha uzun yasar; "
+            "kapsam bitince isaretci olu gozeyi gosterir): hedefi ayni kapsamda "
+            "tanimla ya da degeri KOPYALA");
+    }
+}
+
 static void g006_denetle(TipKontrol *tk, const Dugum *deger) {
     const Dugum *r = g006_bul(tk, deger);
     if (r) {
@@ -6419,6 +6466,7 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 ht->kategori != TIP_HATA && dt->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T001", "atama tipi uyumsuz");
             }
+            e4p_denetle(tk, hedef, d->veri.atama.deger);   /* [D-754] */
             break;
         }
 
