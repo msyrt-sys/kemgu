@@ -1,0 +1,9 @@
+// SDT sağlama denetimini ortak modülden al; yalnız istenen kök imzasına izin ver.
+kullan drivers::acpi::tablo::{ sdt_coz, sdt_girdileri };
+genel işlev acpi_kok_coz(b: Dizi<dtam8>, xsdt: mantıksal) -> sonuç<Dizi<tam64>,metin> {
+ değişken beklenen: metin = "RSDT"; eğer xsdt { beklenen="XSDT"; }
+ eşleş sdt_coz(b) { hata(e) => { ver hata("ACPI kok saglama/boy"); } tamam(h) => {
+  eğer değil metin_esit(h.imza,beklenen) { ver hata("ACPI kok imza"); }
+ } }
+ eşleş sdt_girdileri(b,xsdt) { hata(e) => { ver hata("ACPI kok girdileri"); } tamam(xs) => { ver tamam(xs); } }
+}

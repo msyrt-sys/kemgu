@@ -1,0 +1,70 @@
+// Gerçek OVMF: bilgi ve GOP pikselleri bağımsız QMP kâhiniyle doğrulanır.
+kullan drivers::ekran::psf::{ psf_coz };
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
+// Python: int('102040',16), int('ffffff',16), int('ffd800',16).
+işlev uefi_ekran(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş ekran_gop_ac(b,1056832) { hata(m) => { ver hata(m); } tamam(e) => {
+ eşleş psf_coz(font_tr16()) { hata(m) => { ver hata(m); } tamam(f) => {
+  ekran_metin(e,f,8,8,"KEMGU-OS UEFI",16766976,1056832);
+  ekran_metin(e,f,8,28,"Merhaba Dünya — ğüşıöç İ",16777215,1056832);
+  ekran_metin(e,f,8,48,"ĞÜŞİÖÇ ğüşıöç 0123456789",16777215,1056832);
+  ekran_metin(e,f,8,68,"─│┌┐└┘├┤┬┴┼═║",16777215,1056832);
+  ver tamam(doğru);
+ } }
+ } }
+}
+// Ayrılmış gerçek RAM sayfası: ikinci ayırıcı aynı haritada onu atlamalıdır.
+// Python int.from_bytes(b'KORUMA10','little') ve b'YAZILDI!' bağımsız kâhinde aynıdır.
+işlev uefi_koruma_probe(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ değişken ham: Dizi<dtam8> = bm_bellek_oku(dizi_al(b.alan,9),dizi_al(b.alan,10) olarak tam32);
+ eşleş uefi_harita(b,ham,kem_pvh_bilgi()) { hata(e) => { ver hata(e); } tamam(xs) => {
+ eşleş cerceve_yeni(xs) { hata(e) => { ver hata(e); } tamam(v) => {
+ değişken d: CerceveAyirici = v;
+ eşleş ayir_ardisik(&değişken d,1) { hiç => { ver hata("koruma RAM yok"); } değer(g) => {
+  kem_mmio_yaz64(g,3472628588079107915);
+  eşleş uefi_koru(xs,g,4096) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş cerceve_yeni(xs) { hata(e) => { ver hata(e); } tamam(v) => {
+   değişken ikinci: CerceveAyirici = v;
+   eşleş ayir_ardisik(&değişken ikinci,1) { hiç => { ver hata("koruma RAM yok"); } değer(t) => {
+    kem_mmio_yaz64(t,2398523370990354777);
+    bm_yaz(metin_birlestir(metin_birlestir(metin_birlestir("KORUMA ",tam_metin(g))," "),tam_metin(t)));
+   } }
+  } }
+ } }
+ } }
+ } }
+ ver tamam(doğru);
+}
+
+// Gerçek firmware kökünün bozuk kopyası: sağlama koruması kaldırılırsa KABUL olur.
+işlev uefi_acpi_probe(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
+ eşleş rsdp_coz(r) { hata(e) => { ver hata("RSDP probe"); } tamam(rsdp) => {
+  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt; eğer x { a=rsdp.xsdt; }
+  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
+   // Dizi kopyası ayrıdır; firmware tablosu değişmez.
+   değişken bozuk: Dizi<dtam8> = []; için v: kok { dizi_ekle(bozuk,v); }
+   yaz_u8(bozuk,9,((oku_u8(bozuk,9)+1)&255) olarak tam64);
+   eşleş acpi_kok_coz(bozuk,x) { hata(e) => { bm_yaz("ACPI_BOZUK RED"); } tamam(xs) => { bm_yaz("ACPI_BOZUK KABUL"); } }
+  } }
+ } }
+ } }
+ ver tamam(doğru);
+}
+
+işlev main() -> tam32 {
+ eşleş uefi_bilgi() {
+  hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
+  tamam(b) => {
+   uefi_dok(b);
+   eşleş uefi_koruma_probe(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_ekran(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eşleş uefi_acpi_probe(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   bm_yaz("UEFI_HAZIR");
+  }
+ }
+ iken doğru { kdl_idle(); }
+ ver 0;
+}

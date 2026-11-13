@@ -112,14 +112,14 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H2. Gerçek PC açılışı (QEMU `-M pc` / `q35` üzerinde)
 
-- [ ] **H2a [M] Multiboot2 başlığı + 32→64 bit giriş.** Mevcut `pvh_entry` uzun-kip
+- [ ] **H2a [M] (UEFI KARŞILIĞI ✓ D-755: kendi EFI stub + 64 bit giriş; multiboot2 bekliyor) Multiboot2 başlığı + 32→64 bit giriş.** Mevcut `pvh_entry` uzun-kip
       kurulumu yeniden kullanılır; multiboot2 sihirli sayı + bilgi yapısı işaretçisi.
 - [ ] **H2b [S] GRUB ISO üretici** (`grub-mkrescue`; yoksa açık hata). Makefile hedefi
       `kem_os_pc.iso`.
-- [ ] **H2c [M] Multiboot2 bilgi etiketleri:** bellek haritası (E820 karşılığı),
+- [ ] **H2c [M] (UEFI KARŞILIĞI ✓ D-755: açılış bilgisi ABI v1 — harita, GOP, RSDP) Multiboot2 bilgi etiketleri:** bellek haritası (E820 karşılığı),
       framebuffer etiketi, modül etiketi (ramdisk), komut satırı, ACPI RSDP etiketi.
       Kanıt: seri çıktıda bellek bölgeleri listesi.
-- [ ] **H2d [M] Fiziksel bellek yöneticisi bellek haritasından** (bugünkü sabit
+- [x] **H2d [M] ✓ D-755 (UEFI haritası; 256M/512M/2G açılış) Fiziksel bellek yöneticisi bellek haritasından** (bugünkü sabit
       yerleşim yerine). Ayrılmış bölgeler, çekirdek imajı, modüller korunur.
       Kanıt: 512 MB / 2 GB / 4 GB RAM ile açılış.
 - [ ] **H2e [M] GDT + TSS + IDT tam kurulumu** (çift hata için ayrı IST yığını).
@@ -133,9 +133,9 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H3. ACPI ve kesme yönlendirme
 
-- [ ] **H3a [M] RSDP bul** (multiboot2 etiketi; yoksa EBDA/0xE0000 taraması) +
+- [x] **H3a [M] ✓ D-755 (UEFI yapılandırma tablosu; bağımsız RAM kâhini) RSDP bul** (multiboot2 etiketi; yoksa EBDA/0xE0000 taraması) +
       sağlama toplamı doğrulama.
-- [ ] **H3b [M] RSDT/XSDT gezgini** + tablo imzası listesi. Kanıt: seri/ekranda
+- [x] **H3b [M] ✓ D-755 (XSDT + RSDT geri düşme) RSDT/XSDT gezgini** + tablo imzası listesi. Kanıt: seri/ekranda
       `APIC FACP HPET MCFG` listesi.
 - [ ] **H3c [M] MADT:** LAPIC adresi, IOAPIC(ler), kesme kaynağı geçersiz kılmaları
       (ISA IRQ0 → GSI2 gibi). Sabotaj: override'ı yok say → timer gelmiyor → kırmızı.
@@ -154,7 +154,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H4. Ekran: framebuffer konsolu
 
-- [ ] **H4a [M] Framebuffer etiketi** (GRUB `gfxpayload`; UEFI GOP ile AYNI veri biçimi
+- [x] **H4a [M] ✓ D-755 (UEFI GOP; multiboot2 etiketi BIOS yolunda) Framebuffer etiketi** (GRUB `gfxpayload`; UEFI GOP ile AYNI veri biçimi
       → tek kod yolu). Piksel biçimi (RGB/BGR, 32/24 bpp), pitch.
 - [ ] **H4b [S] Framebuffer belleğini yazma-birleştirmeli/önbelleksiz eşle** (PAT).
       Ölç: önbellekli eşlemede ekranda artık görüntü kalıyor mu.

@@ -103,9 +103,9 @@ işlev ekran_konsol_ciz(e: Ekran, f: PsfFont, k: &değişken Konsol, x0: tam32, 
 // ---- AYNA: seriye giden baytların ekran kopyası (H4e çift çıktı) ----
 // Kabuk çıktısı pek çok yerden seriye bayt bayt yazılır; ekran durumunu (Ekran, Konsol)
 // her yere taşımak yerine baytlar sabit bir fiziksel tampona da kopyalanır ve döngü
-// uygun anda `ekran_ayna_bosalt` ile konsola aktarır. Tampon 200 MiB'de (RAM -m 256M,
-// çekirdek+heap ~18 MiB, DMA 128 MiB), 64 KiB; taşan bayt düşülür ve sayılır.
-sabit EKRAN_AYNA_TABAN: tam64 = 209715200;
+// uygun anda `ekran_ayna_bosalt` ile konsola aktarır. PVH varsayılanı 200 MiB;
+// UEFI harita ayırıcısı tabanı değiştirir. Boy 64 KiB; taşan bayt düşülür ve sayılır.
+küresel değişken EKRAN_AYNA_TABAN: tam64 = 209715200;
 sabit EKRAN_AYNA_BOY: tam64 = 65536;
 küresel değişken ekran_ayna_n: tam64 = 0;
 küresel değişken ekran_ayna_tasan: tam64 = 0;
@@ -139,22 +139,23 @@ işlev ekran_ayna_yaz(m: metin) {
 // Aynadaki baytları UTF-8 çözüp konsola aktar, tamponu boşalt. Yarım kalan son UTF-8
 // dizisi bir sonraki boşaltmaya bırakılmaz (çıktı satır sonuyla biter); bozuk bayt
 // utf8_bayt_coz kuralıyla U+FFFD olur.
+çıplak işlev ekran_ayna_tabani() -> tam64 { ver EKRAN_AYNA_TABAN; }
 işlev ekran_ayna_bosalt(k: &değişken Konsol) {
     değişken n: tam64 = ekran_ayna_uzunluk();
     eğer n == 0 { ver; }
     değişken b: Dizi<dtam8> = [];
     değişken i: tam64 = 0;
-    iken i < n { dizi_ekle(b, kem_fiz_oku8(EKRAN_AYNA_TABAN + i) olarak dtam8); i = i + 1; }
+    iken i < n { dizi_ekle(b, kem_fiz_oku8(ekran_ayna_tabani() + i) olarak dtam8); i = i + 1; }
     ekran_ayna_sifirla();
     için kod: utf8_bayt_coz(b, 0, n olarak tam32) { konsol_kod(k, kod); }
 }
 
-// Panik durum kaydı: Python 200*1024*1024+65536=209780736.
+// PVH panik varsayılanı: Python 200*1024*1024+65536=209780736; UEFI tahsis eder.
 // Ayna [200 MiB, +64 KiB); bu kayıt ve font sonraki 32 KiB'dedir.
 // Bayrak EN SON yazılır. Ekransız çekirdek sıfır RAM kaydını görüp yalnız seri yazar.
 işlev ekran_panik_kur(e: Ekran, f: PsfFont) {
     güvensiz {
-    değişken t: tam64 = 209780736;
+    değişken t: tam64 = ekran_panik_taban;
     değişken flag: *tam64 = t olarak *tam64; *flag=0;
     eğer f.genislik != 8 veya f.yukseklik != 16 veya f.glif_bayt != 16 veya f.glif_sayisi != 512 { ver; }
     eğer dizi_boyut(f.kodlar) > 1024 { ver; }
