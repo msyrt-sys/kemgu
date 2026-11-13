@@ -178,3 +178,40 @@ işlev ekran_panik_kur(e: Ekran, f: PsfFont) {
     *flag=1346457161; // Python int.from_bytes(b'INAP','little'): tanınan kayıt.
     }
 }
+
+// Basit 7×7 artı imleci; her çizimden önce altındaki 49 piksel saklanır.
+// İlk fare olayı gelene kadar gizli: USB/PS2 klavye konsolunun başlangıcı aynı kalır.
+yapı EkranFare { x: tam32; y: tam32; gorunur: mantıksal; cizildi: mantıksal; alt: Dizi<tam64>; }
+işlev ekran_fare_yeni() -> EkranFare {
+ değişken alt: Dizi<tam64> = [];değişken i: tam32 = 0;
+ iken i < 49 { dizi_ekle(alt,0 olarak tam64);i=i+1; }
+ ver EkranFare { x:16,y:16,gorunur:yanlış,cizildi:yanlış,alt:alt };
+}
+işlev ekran_fare_sil(e: Ekran, f: &değişken EkranFare) {
+ eğer değil f.cizildi { ver; }
+ değişken i: tam32 = 0;
+ iken i < 49 {
+  değişken adr: tam64 = e.fb+((f.y+i/7) olarak tam64)*e.adim+((f.x+i%7) olarak tam64)*4;
+  kem_mmio_yaz32(adr,dizi_al(f.alt,i));i=i+1;
+ }
+ f.cizildi=yanlış;
+}
+işlev ekran_fare_ciz(e: Ekran, f: &değişken EkranFare) {
+ eğer değil f.gorunur veya f.cizildi veya e.fb == 0 veya e.gen < 7 veya e.yuk < 7 { ver; }
+ değişken i: tam32 = 0;
+ iken i < 49 {
+  değişken x: tam32 = i%7;değişken y: tam32 = i/7;
+  değişken adr: tam64 = e.fb+((f.y+y) olarak tam64)*e.adim+((f.x+x) olarak tam64)*4;
+  dizi_yaz(f.alt,i,kem_mmio_oku32(adr));
+  eğer x == 3 veya y == 3 { kem_mmio_yaz32(adr,16777215); }
+  değilse eğer x == 2 veya x == 4 veya y == 2 veya y == 4 { kem_mmio_yaz32(adr,0); }
+  i=i+1;
+ }
+ f.cizildi=doğru;
+}
+işlev ekran_fare_hareket(e: Ekran, f: &değişken EkranFare, dx: tam32, dy: tam32) {
+ ekran_fare_sil(e,f);f.x=f.x+dx;f.y=f.y-dy;
+ eğer f.x < 0 { f.x=0; }eğer f.y < 0 { f.y=0; }
+ eğer f.x > e.gen-7 { f.x=e.gen-7; }eğer f.y > e.yuk-7 { f.y=e.yuk-7; }
+ f.gorunur=doğru;ekran_fare_ciz(e,f);
+}

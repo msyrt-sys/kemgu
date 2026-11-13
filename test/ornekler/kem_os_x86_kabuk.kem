@@ -1,3 +1,4 @@
+kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };
 kullan drivers::ekran::girdi::{ girdi_bas, girdi_kod };
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni, nvme_adim, nvme_oku } olarak nv;
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni, ahci_adim, ahci_oku } olarak ah;
@@ -64,8 +65,10 @@ işlev bm_xsur(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin>
 // sürücünün yoklama sınırı (4000 × Bekle) boşta duran kabuğu saniyeler içinde
 // "xhci olay zaman asimi" ile düşürüyordu. Çekirdek DW3 döngü bitini AYIRMA YAPMADAN
 // okur ve süresiz bekler; olay gelince sürücü normal (yırtılmayan, D-745) yoldan sürer.
-çıplak işlev bm_olay_bekle(adr: tam64, dongu: tam64) {
-    iken (kem_mmio_oku32(adr) & 1) != dongu { kem_bekle_us(50); }
+çıplak işlev bm_olay_bekle(adr: tam64, dongu: tam64) -> mantıksal {
+    iken (kem_mmio_oku32(adr) & 1) != dongu {
+        eğer ps2_kesme_fare_var() { ver yanlış; } kem_bekle_us(50);
+    } ver doğru;
 }
 işlev bm_xsur_bekle(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
     değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
@@ -74,7 +77,9 @@ işlev bm_xsur_bekle(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,
             GcIstek::Bekle(us) => {
                 eğer s.evre == 900 {
                     değişken dg: tam64 = 0; eğer s.olay.dongu { dg = 1; }
-                    bm_olay_bekle(s.olay.taban + (s.olay.bas olarak tam64) * 16 + 12, dg);
+                    eğer değil bm_olay_bekle(s.olay.taban + (s.olay.bas olarak tam64) * 16 + 12, dg) {
+                        s.bekleme=0;ver tamam(yanlış);
+                    }
                     s.bekleme = 0; y = gc_bos();
                 } değilse { y=bm_yurut(bar,r); }
             }
@@ -202,31 +207,60 @@ işlev komut(d: &değişken KabukDisk, f: &değişken FatSektor, satir: metin) -
         eşleş doldur(d,f) { hata(e) => { ver hata(e); } tamam(v) => { } } i=i+1;
     } ver hata("sektor tekrar siniri");
 }
+// ISR yalnız bayt üretir; paket, metin ve imleç tüketici bağlamındadır.
+işlev kabuk_fare(ke: &değişken KabukEkran, fd: &değişken FareDurumu, im: &değişken EkranFare) {
+ değişken b: tam32 = ps2_kesme_fare_oku();
+ iken b >= 0 {
+  eşleş fare_bayt(fd,b) { hiç => { } değer(o) => {
+   değişken dugme: tam32 = 0;eğer o.sol { dugme=dugme|1; }eğer o.sag { dugme=dugme|2; }eğer o.orta { dugme=dugme|4; }
+   değişken mesaj: metin = metin_birlestir("FARE dx=",tam_metin(o.dx olarak tam64));
+   mesaj=metin_birlestir(mesaj," dy=");mesaj=metin_birlestir(mesaj,tam_metin(o.dy olarak tam64));
+   mesaj=metin_birlestir(mesaj," dugme=");bm_yaz(metin_birlestir(mesaj,tam_metin(dugme olarak tam64)));
+   eğer ke.var { ekran_fare_hareket(ke.e,im,o.dx,o.dy); }
+  } }
+  b=ps2_kesme_fare_oku();
+ }
+}
 işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken XhciDurum, xb: tam64, indeks: tam32, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     değişken h: HidKlavye = hid_klavye_yeni(); değişken tr: KlavyeDurumu = klavye_yeni(); değişken satir: SatirDuzenleyici = satir_yeni();
-    ekran_cift_yaz("KABUK_HAZIR");
-    ke_ciz(ke); ke_girdi(ke,satir);
+    değişken fd: FareDurumu = fare_yeni(yanlış);değişken im: EkranFare = ekran_fare_yeni();
+    değişken bekleyen: mantıksal = yanlış;
+    değişken kayip1: tam64 = 0;değişken kayip12: tam64 = 0;değişken irqhata: tam64 = 0;
+    ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
     iken doğru {
+        eğer indeks < 0 ve ps2_kesme_etkin() { ps2_kesme_bekle(); }
+        kabuk_fare(ke,&değişken fd,&değişken im);
+        değişken k1: tam64 = ps2_kesme_kayip(yanlış);değişken k12: tam64 = ps2_kesme_kayip(doğru);değişken kh: tam64 = ps2_kesme_hata_oku();
+        eğer k1 != kayip1 veya k12 != kayip12 veya kh != irqhata {
+            kap_dok("PS2_KAYIP",k1,k12,kh);kayip1=k1;kayip12=k12;irqhata=kh;
+        }
         değişken xs: Dizi<TusOlayi> = [];
         eğer indeks < 0 {
-            değişken b: tam32 = ps2_bekle();
-            dizi_ekle(xs,klavye_bayt(&değişken tr,b));
+            değişken b: tam32 = -1;
+            eğer ps2_kesme_etkin() { b=ps2_kesme_klavye_oku(); } değilse { b=ps2_bekle(); }
+            eğer b >= 0 { dizi_ekle(xs,klavye_bayt(&değişken tr,b)); }
         } değilse {
-        değişken r: sonuç<mantıksal,metin> = hata("girdi");
-        eğer d.tur == 3 { r=xhci_depo_giris(x,indeks,8,d.usb.olay_bas,d.usb.olay_dongu); }
-        değilse { r=xhci_giris(x,indeks,8); }
-        eşleş r { hata(e) => { ver hata(e); } tamam(v) => { } }
-        eşleş bm_xsur_bekle(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
-        eğer d.tur == 3 { d.usb.olay_bas=x.olay.bas; d.usb.olay_dongu=x.olay.dongu; }
-        eşleş hid_klavye_rapor(&değişken h,&değişken tr,x.sonuc) { hata(e) => { ver hata(e); } tamam(olaylar) => { xs=olaylar; } }
+            eğer değil bekleyen {
+                değişken r: sonuç<mantıksal,metin> = hata("girdi");
+                eğer d.tur == 3 { r=xhci_depo_giris(x,indeks,8,d.usb.olay_bas,d.usb.olay_dongu); }
+                değilse { r=xhci_giris(x,indeks,8); }
+                eşleş r { hata(e) => { ver hata(e); } tamam(v) => { } }bekleyen=doğru;
+            }
+            eşleş bm_xsur_bekle(xb,x) { hata(e) => { ver hata(e); } tamam(v) => {
+                eğer v {
+                    bekleyen=yanlış;
+                    eğer d.tur == 3 { d.usb.olay_bas=x.olay.bas; d.usb.olay_dongu=x.olay.dongu; }
+                    eşleş hid_klavye_rapor(&değişken h,&değişken tr,x.sonuc) { hata(e) => { ver hata(e); } tamam(olaylar) => { xs=olaylar; } }
+                }
+            } }
         }
-
-            için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { ke_girdi(ke,satir); } değer(s) => {
-                ekran_ayna_yaz(metin_birlestir("> ", s));
-                eşleş komut(d,f,s) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } }
-                ekran_cift_yaz("KABUK_HAZIR");
-                ke_ciz(ke); ke_girdi(ke,satir);
-            } } }
+        ekran_fare_sil(ke.e,&değişken im);
+        için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { ke_girdi(ke,satir); } değer(s) => {
+            ekran_ayna_yaz(metin_birlestir("> ", s));
+            eşleş komut(d,f,s) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } }
+            ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
+        } } }
+        ekran_fare_ciz(ke.e,&değişken im);
     } ver tamam(doğru);
 }
 işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
@@ -234,7 +268,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
     değişken indeks: tam32 = -1; değişken arno: tam32 = 0; değişken i: tam32 = 0;
     için a: x.aygitlar { değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0); eğer ar.sinif == 3 ve ar.protokol == 1 { indeks=i; arno=ar.no; } i=i+1; }
     eğer indeks < 0 {
-        eğer ps2_kur() < 0 { ver hata("PS2 baslatilamadi"); }
+        eğer değil ps2_kesme_etkin() { eğer ps2_kur() < 0 { ver hata("PS2 baslatilamadi"); } }
     } değilse {
     eşleş usb_hid_set_protocol(arno,doğru) { hata(e) => { ver hata(e); } tamam(p) => { eşleş xhci_kontrol(x,indeks,p) { hata(e) => { ver hata(e); } tamam(v) => { } } } }
     eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
@@ -273,6 +307,9 @@ işlev main() -> tam32 {
             uefi_dok(b);
             eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   değişken fare_kimlik: tam32 = ps2_kesme_kur();
+   eğer fare_kimlik < 0 { bm_yaz(metin_birlestir("PS2 IRQ KUR HATA ",tam_metin(fare_kimlik olarak tam64)));kem_qemu_cik(1); }
+   kap_ps2_ac();bm_yaz("GIRDI PS2 IRQ1 IRQ12");bm_yaz("PS2_FARE 0 3");
         } }
     }
     eşleş ke_kur() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken ke: KabukEkran = v;

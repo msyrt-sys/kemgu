@@ -125,3 +125,11 @@ def kabuk_goruntu(akis, girdi='', imlec=None, gen=640, yuk=480):
             ters=r==y and c==2+imlec-bas
             glif_ciz(img,gen,yuk,font,8+c*fw,8+r*fh,izg[r*sut+c],arka if ters else on,on if ters else arka)
     return img
+
+# KEMGU çiziminden bağımsız sabit 7×7 imleç maskesi; save-under tüm ekranla sınanır.
+def fare_imleci(px,gen,yuk,x,y):
+    mask=('..BWB..','..BWB..','BBBWBBB','WWWWWWW','BBBWBBB','..BWB..','..BWB..')
+    assert 0<=x<=gen-7 and 0<=y<=yuk-7
+    for j,row in enumerate(mask):
+        for i,c in enumerate(row):
+            if c!='.':px[(y+j)*gen+x+i]=0xffffff if c=='W' else 0

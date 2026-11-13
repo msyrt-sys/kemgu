@@ -24,6 +24,8 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             i=cmd.index(f'format=raw,file=fat:rw:{W}/esp');del cmd[i-1:i+1]
         else:hazirla(W/'disk.img',True,True)
         cmd+=['-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={W}/disk.img,if=none,id=d0,format=raw']
+        if os.environ.get('UEFI_PS2_IRQ')=='1':
+            i=cmd.index('usb-kbd,bus=x.0');del cmd[i-1:i+1]
         cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu10','usb':'usb-storage,bus=x.0,drive=d0,bootindex=1','ahci':'ide-hd,drive=d0,bus=ide.0,bootindex=1'}[mode]]
         before=hashlib.sha256((W/'disk.img').read_bytes()).hexdigest()
     with (W/'qemu.log').open('w') as log:
