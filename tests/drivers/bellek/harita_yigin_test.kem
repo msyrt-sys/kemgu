@@ -1,0 +1,16 @@
+// Hesap: python3 tools/codex/dalga10_sabit.py
+// C10-002: 800*800 yapı okuması döngüde alloca biriktirmemeli.
+// Python: 800//2=400 kullanılabilir sayfa; 400*4096=1638400 bayt.
+kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle, sayfa_sayisi, kullanilabilir_bayt };
+işlev main() -> tam32 {
+ değişken xs: Dizi<BellekBolgesi> = []; değişken i: tam32 = 0;
+ iken i < 800 {
+  dizi_ekle(xs,BellekBolgesi { taban:1048576+(i olarak tam64)*4096, uzunluk:4096, tur:1+i%2 }); i=i+1;
+ }
+ eşleş harita_duzenle(xs) { hata(e) => { ver 1; } tamam(v) => {
+  eğer dizi_boyut(v) != 800 veya sayfa_sayisi(v) != 400 veya kullanilabilir_bayt(v) != 1638400 { ver 2; }
+ } }
+ değişken bozuk: Dizi<BellekBolgesi> = [];
+ dizi_ekle(bozuk,BellekBolgesi { taban:-1, uzunluk:4096, tur:1 });
+ eşleş harita_duzenle(bozuk) { hata(e) => { ver 0; } tamam(v) => { ver 3; } }
+}

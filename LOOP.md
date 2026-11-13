@@ -290,7 +290,7 @@
       yalnız seri. Onarım dikkat ister: kem_heap.kem arm64 kem_os'ta da derlenir ve orada `kdl_panik`
       YOK (D-592) → x86'ya özgü bir kanca ya da mimari başına `kdl_dizi_oob` gerekir. Kâhin: kasıtlı
       sınır ihlali yapan çekirdek + screendump (bm_panik.py deseni).
-- [ ] E4o [M] SABİT FİZİKSEL ADRESLER (D-749/D-752, gerçek donanım H2d'ye bağlı): ekran aynası 200 MiB,
+- [x] E4o [M] ✓ D-755 (UEFI bellek haritasından çerçeve ayırıcı; ayna/panik/DMA artık oradan). SABİT FİZİKSEL ADRESLER (D-749/D-752, gerçek donanım H2d'ye bağlı): ekran aynası 200 MiB,
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
@@ -2870,4 +2870,16 @@
   Codex sabotajları: ğ glif baytı · canlı çizim · kaydırma kaynak satırı · panik bayrağı · tarama
   bit 7 — hepsi gerçek QEMU'da kırmızı. Derleyiciye dokunulmadı, yeni derleyici bulgusu yok; yasak
   muafiyet listeleri değişmedi. Entegrasyon: main (D-751) ile ÇAKIŞMASIZ birleşti; tam test_tumu.
+- 2026-11-13 D-755: CODEX DALGASI 10 ENTEGRASYONU (taslak #218) — UEFI açılışı. H0b sırası ölçümle
+  değişti (x86 GRUB bu ARM64 makinede kurulamıyor). Kendi EFI stub'ı (boot/efi/stub.c, freestanding C:
+  firmware MS x64 çağrı kuralı ister; politika YOK — GOP + bellek haritası + RSDP + ELF yükle +
+  ExitBootServices), yeni 64 bit giriş (PVH yolu birebir korundu), 192 baytlık açılış bilgisi ABI v1.
+  OVMF ölçümleri: GOP 1280x800 BGRX adım 5120 · bellek haritası türleri · ACPI 2.0 GUID ARANMADAN
+  bulunan girdiden ölçüldü · 1 MiB yükleme EFI_NOT_FOUND -> UEFI linker 32 MiB. H4a: GOP ortak çiziciye
+  bağlandı. H2d + E4o: UEFI haritasından çerçeve ayırıcı; ayna/panik/DMA oradan; OVMF 64-bit BAR'ları
+  4 GiB üstüne koyuyor -> UC 2 MiB eşleme (PVH varsayımı geçersizdi). H3a-b: ACPI kâhini KEMGU'dan
+  bağımsız (RAM dökümünde Python RSDP arar). E: kem_os_pc.img GPT+ESP (bağımsız Python yazıcı,
+  fsck temiz), OVMF'de usb-storage ve AHCI 5/5 açılış; gerçek donanım yönergesi yazıldı (ÇALIŞTIRILMADI).
+  Codex sabotajları her işte gerçek OVMF'de kırmızı. İki self-host bulgusu (C10-001/002) D-753'te
+  onarıldı. Kalanlar: E4n (dizi sınır ihlali panik ekranında değil), H2e (TSS/IST), BIOS/GRUB.
 

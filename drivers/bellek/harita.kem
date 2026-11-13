@@ -1,6 +1,15 @@
 // E820 / Multiboot2 bellek haritası; işaretli tam64 adres aralığıyla sınırlıdır.
 kullan drivers::ortak::bayt::{ oku_le32, oku_le64 };
 genel yapı BellekBolgesi { taban: tam64; uzunluk: tam64; tur: tam32; }
+// C10-002: self-host döngüde yapı okuması için alloca üretir. Dar yardımcı
+// çağrı geçici yapının yığın ömrünü bir karşılaştırmayla sınırlar; kural değişmez.
+işlev harita_kapsar(xs: Dizi<BellekBolgesi>, i: tam32, bas: tam64, son: tam64) -> mantıksal {
+ değişken b: BellekBolgesi = dizi_al(xs,i);
+ ver b.taban <= bas ve b.taban+b.uzunluk >= son;
+}
+işlev harita_turu(xs: Dizi<BellekBolgesi>, i: tam32) -> tam32 {
+ değişken b: BellekBolgesi = dizi_al(xs,i); ver b.tur;
+}
 genel işlev harita_duzenle(xs: Dizi<BellekBolgesi>) -> sonuç<Dizi<BellekBolgesi>, metin> {
     eğer dizi_boyut(xs) > 4096 { ver hata("cok bolge"); }
     değişken uc: Dizi<tam64> = [];
@@ -32,10 +41,10 @@ genel işlev harita_duzenle(xs: Dizi<BellekBolgesi>) -> sonuç<Dizi<BellekBolges
             değişken tur: tam32 = 1;
             değişken j: tam32 = 0;
             iken j < dizi_boyut(xs) {
-                değişken b: BellekBolgesi = dizi_al(xs, j);
-                eğer b.taban <= bas ve b.taban + b.uzunluk >= son {
-                    eğer değil var { tur = b.tur; var = doğru; }
-                    değilse eğer b.tur != 1 ve (tur == 1 veya b.tur < tur) { tur = b.tur; }
+                eğer harita_kapsar(xs,j,bas,son) {
+                    değişken bt: tam32 = harita_turu(xs,j);
+                    eğer değil var { tur = bt; var = doğru; }
+                    değilse eğer bt != 1 ve (tur == 1 veya bt < tur) { tur = bt; }
                 }
                 j = j + 1;
             }

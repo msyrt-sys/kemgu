@@ -121,7 +121,7 @@ jobs:
           # Yoksa 18 test 'IR reddedildi' diye DUSER — oysa eksik olan ARACTIR.
           # [D-556] `lld` ZORUNLU: bare-metal hedefleri `ld.lld` cagiriyor
           # (olculdu: calistir_uart_merhaba_bare_metal -> Error 127).
-          sudo apt-get install -y clang gcc make file llvm lld
+          sudo apt-get install -y clang gcc make file llvm lld ovmf
           ld.lld --version | head -1
           opt --version | head -2
           gcc --version | head -1
