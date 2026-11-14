@@ -57,7 +57,7 @@ ISO, fare senkronu ve FADT 8042 biti saf testlerde de çalışma sırasında kı
 - [x] A/B · #DF/NMI/#MC için ayrı 16 KiB IST; heap’siz ekran/seri istisnalar, mimariye özel OOB kancası · 140/140 ve üç sabotaj · commit `c9e978c`, 2026-11-13 20:08.
 - [x] C · MADT/ISO, UC IOAPIC/LAPIC eşlemesi, PIT kalibrasyonu, LAPIC zamanlayıcı · 20/20; ISO 10/10 kırmızı · commit `57af204`, 2026-11-13 20:45.
 - [x] D · kesme-güvenli halkalar, PS/2 fare, save-under imleç, USB karma yol · 20/20 + 20/20; üç sabotaj 30/30 kırmızı · commit `47125d0`, 2026-11-13 22:45.
-- [x] E · FADT güç görünümü, PS/2 varlığı, reset geri dönüşleri, kabuk komutları · C+self 8/8; saf bit ve gerçek reset sabotajları kırmızı; tam takım rc=0.
+- [x] E · FADT güç görünümü, PS/2 varlığı, reset geri dönüşleri, kabuk komutları · C+self 8/8; saf bit ve gerçek reset sabotajları kırmızı; tam takım rc=0 · commit `dfb873a`.
 - VARSAYIM: IST taşması için alt kanarya seçildi; koruma sayfası yok. Kanarya erişimi engellemez, panik girişinde ve QMP ölçümünde bozulmayı bildirir.
 - VARSAYIM: PVH PIC yolu korunur. UEFI tek işlemcili xAPIC kullanır; firmware x2APIC açık bırakırsa açık hata döner.
 - VARSAYIM: PS/2 klavye IRQ varsayılandır; mevcut USB klavye varsa USB seçimi korunur ve PS/2 fare birlikte çalışır. Eski yoklamalı yol silinmedi.
@@ -129,3 +129,5 @@ Yerel son log: `build/dalga11_test_tumu.log`; SHA256 `26cfe967be410f7ed7cf7fca92
 ## Sonraki adım
 
 Tek taslak PR ile inceleme. Fiziksel PC doğrulaması ayrıca gerekir; ölçümler QEMU q35/OVMF üzerindedir. C11-001 derleyici sahibine aktarılacak bulgudur. Auto-merge ve merge yapılmadı; yeni D numarası verilmedi.
+
+- [x] Son kayıt · E commit `dfb873a`; kapsam denetimi42/42 ve whitespace denetimi temiz; kaynak değişmeden doğrulama sonuçları raporlandı · 2026-11-14T08:20:48.785922+03:00
