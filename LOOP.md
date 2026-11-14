@@ -297,6 +297,9 @@
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
+- [ ] E4q [M] DERLEYICI PERFORMANSI (self-host): birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
+      --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
+      egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
 - [x] E4p [M] ✓ D-754 DİL: döngü (ya da blok) yerelinin adresi kapsamından KAÇABİLİYOR (D-753 ölçümü):
       `değişken d: &tam32 = &a0; iken .. { değişken x = 40 + i; d = &x; } ver *d;` iki derleyicide
       de `--check` OK. Bugün C yerelleri girişe taşıdığı için "tesadüfen" çalışıyor; yuva kapsam
@@ -2955,4 +2958,7 @@
   codegen_diff kırmızı. Codex'in `0 olarak tam64` dolanmaları artık gereksiz ama zararsız; dokunulmadı.
   VARSAYIM (Codex kaydı): gerçekzamanlı ISR içindeki opak port asm'i için çevrim bütçesi port başına 1024 — fiziksel
   WCET kanıtı DEĞİL. Fiziksel PC testi yapılmadı. Kalan: H3g S5 (AML), tekerlek (H6c), x2APIC, SMP, MSI.
+  CI (Windows) ilk koşumda KIRMIZI: baremetal_diff birleşik x86 birimi self-host IR üretimi rc=124. Asılma DEĞİL:
+  main'de aynı adım Windows'ta 44 sn sürüyordu (log zaman damgaları), birim 5712 → 6184 satıra çıkınca 60 sn
+  sınırı aşıldı. Sınır platforma göre (Windows 240, Linux 60; D-566 deseni). YAN ÖLÇÜM → E4q.
 

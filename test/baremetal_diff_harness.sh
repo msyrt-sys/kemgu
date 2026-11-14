@@ -123,7 +123,13 @@ fi
 # GERİ ALINDI (onarım öncesi sessizce "atlandı"ya düşmüşlerdi).
 # [D-663] PER-BİRİM ZAMAN AŞIMI + BELLEK TAVANI (G15) — self-host ikilisi korpus
 # üzerinde koşar; `timeout` yeteneği ÖLÇÜLÜR (D-661).
-KAP_SN=${KAP_SN:-60}
+# [D-757] Bütçe PLATFORMA göre (D-566 deseni). Birleşik x86 birimi büyüdükçe (dalga 11: 5712 → 6184
+# satır) self-host IR üretimi Windows CI'da 44 sn → >60 sn oldu (Spark: 6,7 → 8,5 sn; süreç başlatma +
+# Defender ~6,5x). Bu bir ASILMA değil bütçe aşımıydı; zaman aşımının amacı asılmayı yakalamak (D-663).
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) KAP_SN=${KAP_SN:-240} ;;
+    *)                    KAP_SN=${KAP_SN:-60} ;;
+esac
 KAP_KB=${KAP_KB:-4000000}
 if command -v timeout >/dev/null 2>&1 && timeout 5 true >/dev/null 2>&1; then
     GTO="timeout $KAP_SN"
