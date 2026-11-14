@@ -24,6 +24,8 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             i=cmd.index(f'format=raw,file=fat:rw:{W}/esp');del cmd[i-1:i+1]
         else:hazirla(W/'disk.img',True,True)
         cmd+=['-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0','-drive',f'file={W}/disk.img,if=none,id=d0,format=raw']
+        if os.environ.get('UEFI_PS2_IRQ')=='1':
+            i=cmd.index('usb-kbd,bus=x.0');del cmd[i-1:i+1]
         cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu10','usb':'usb-storage,bus=x.0,drive=d0,bootindex=1','ahci':'ide-hd,drive=d0,bus=ide.0,bootindex=1'}[mode]]
         before=hashlib.sha256((W/'disk.img').read_bytes()).hexdigest()
     with (W/'qemu.log').open('w') as log:
@@ -45,6 +47,7 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
                 f.write(json.dumps(d).encode()+b'\n');return response()
             command('qmp_capabilities')
             target=('EFI HATA '+negative).encode() if negative else (b'KABUK_HAZIR' if KABUK else b'UEFI_HAZIR')
+            if os.environ.get('UEFI_GUC_DOGRUDAN')=='1':target=b'GUC_HAZIR'
             while target not in (data:=ser.read_bytes() if ser.exists() else b''):
                 if p.poll() is not None or time.monotonic()>limit:raise AssertionError(f'hedef yok: {target!r}, rc={p.poll()}, seri={data!r}')
                 if not negative and b'EFI HATA' in data:raise AssertionError(data)
@@ -91,6 +94,13 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             rsdp=dump(fields[13],36,W/'rsdp.bin');assert rsdp[:8]==b'RSD PTR ' and sum(rsdp[:20])%256==0
             if rsdp[15]>=2:assert sum(rsdp)%256==0
             acpi_denetle(dump,W,descriptors,text)
+            if os.environ.get('UEFI_GUC'):
+                from guc_kahin import denetle as guc_denetle
+                guc_denetle(command,dump,W,descriptors,text,ser,p)
+                return
+            if os.environ.get("UEFI_APIC")=="1":
+                from apic_kahin import denetle as apic_denetle
+                apic_denetle(command,dump,W,descriptors,text)
             if not KABUK:assert 'ACPI_BOZUK RED\n' in text and 'ACPI_BOZUK KABUL' not in text
             regs=command('human-monitor-command',{'command-line':'info registers'})
             nm=subprocess.check_output(['nm',str(W/'k.elf')],text=True)

@@ -8,3 +8,8 @@
 çıplak işlev kem_uart_bayt(b: tam32) {
     kdl_mmio_yaz32(150994944, b);
 }
+
+// E4n mimari kancası: arm64'ün önceki sessiz durma davranışı aynen korunur.
+çıplak işlev kdl_mimari_dizi_oob(i: tam32, boyut: tam32) {
+    iken doğru { değişken x: tam32 = 0; }
+}

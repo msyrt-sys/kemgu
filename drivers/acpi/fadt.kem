@@ -21,3 +21,30 @@ genel işlev dsdt_adresi(f: Fadt) -> tam64 {
     eğer f.x_dsdt != 0 { ver f.x_dsdt; }
     ver f.dsdt;
 }
+
+// FADT güç/8042 bilgisi: yalnız bayt çözümleme, donanım erişimi yok.
+genel yapı FadtGuc {
+ surum: tam32; boot_bayrak: tam32; bayraklar: tam64; ps2_bilgi: mantıksal; ps2_var: mantıksal;
+ reset_var: mantıksal; reset_alan: tam32; reset_boy: tam32; reset_ofs: tam32; reset_erisim: tam32;
+ reset_adr: tam64; reset_deger: tam32; pm_taban: tam64;
+}
+genel işlev fadt_guc_coz(b: Dizi<dtam8>) -> sonuç<FadtGuc,metin> {
+ değişken n: tam64 = 0;
+ eşleş sdt_coz(b) { hata(e) => { ver hata("FADT SDT"); } tamam(h) => { n=h.uzunluk; } }
+ eğer değil imza_esit(b,0,"FACP") veya n < 116 { ver hata("FADT imza veya boy"); }
+ değişken surum: tam32 = oku_u8(b,8);değişken boot: tam32 = oku_le16(b,109);
+ değişken bayrak: tam64 = oku_le32(b,112);değişken rv: mantıksal = (bayrak&1024) != 0;
+ eğer rv ve n < 129 { ver hata("FADT reset kisa"); }
+ değişken f: FadtGuc = FadtGuc { surum:surum,boot_bayrak:boot,bayraklar:bayrak,ps2_bilgi:surum>=3,ps2_var:surum>=3 ve (boot&2)!=0,
+  reset_var:rv,reset_alan:0,reset_boy:0,reset_ofs:0,reset_erisim:0,reset_adr:0,reset_deger:0,pm_taban:oku_le32(b,76) };
+ eğer rv {
+  f.reset_alan=oku_u8(b,116);f.reset_boy=oku_u8(b,117);f.reset_ofs=oku_u8(b,118);f.reset_erisim=oku_u8(b,119);
+  f.reset_adr=oku_le64(b,120);f.reset_deger=oku_u8(b,128);
+ }
+ ver tamam(f);
+}
+genel işlev fadt_guc_reset_uygun(f: FadtGuc) -> mantıksal {
+ eğer değil f.reset_var veya f.reset_boy != 8 veya f.reset_ofs != 0 veya f.reset_erisim < 0 veya f.reset_erisim > 1 veya f.reset_deger < 0 veya f.reset_deger > 255 veya f.reset_adr <= 0 { ver yanlış; }
+ eğer f.reset_alan == 1 { ver f.reset_adr <= 65535; }
+ ver f.reset_alan == 0;
+}

@@ -402,6 +402,7 @@ wrmsr"#
     kis_metin(" b=0x"); kis_onaltilik(b olarak dtam64);
     kis_metin(" adr=0x"); kis_onaltilik(adr olarak dtam64);
     kis_satir();
+    kis_istisna_panik(tip, a, b, adr);
     iken 1 == 1 {
         güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"hlt"# bozulan("~{memory}") } }
     }
@@ -521,6 +522,8 @@ movq %rax, %cr0"#
 // PVH varsayılanı; UEFI çerçeve ayırıcısı adresi açılışta değiştirir.
 küresel değişken ekran_panik_taban: tam64 = 209780736;
 çıplak işlev kdl_panik(m: metin) {
+    kg_irq_kapat();
+    eğer değil kis_ist_denetle() { kis_metin("IST KANARYA BOZUK"); kis_satir(); }
     // Ekran modülüne sembol bağımlılığı yok: ekransız birleşik çekirdekler de bağlanır.
     // Sabit kayıt ekran_panik_kur tarafından TAMAMLANINCA bayraklanır; panikte heap yok.
     değişken t: tam64 = ekran_panik_taban;
@@ -578,4 +581,75 @@ küresel değişken ekran_panik_taban: tam64 = 209780736;
     iken i < n { kem_uart_bayt(metin_bayt(m,i) olarak tam32); i=i+1; }
     kem_uart_bayt(10);
     iken doğru { kdl_idle(); }
+}
+
+// Dalga 11: sınırlı, ayırmasız panik mesajı; hiçbir metin birleştirme/tahsis yok.
+küresel değişken kis_ileti_n: tam32 = 0;
+küresel değişken kis_ileti_aktif: tam32 = 0;
+çıplak işlev kis_ileti_adr() -> tam64 {
+ değişken a: tam64 = 0;
+ güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_istisna_ileti(%rip), $0"# çıktı("=r", &a) } }
+ ver a;
+}
+çıplak işlev kis_ileti_bayt(b: tam32) {
+ eğer kis_ileti_n < 255 {
+  kis_buf_yaz8(kis_ileti_adr(),kis_ileti_n,b); kis_ileti_n=kis_ileti_n+1;
+  kis_buf_yaz8(kis_ileti_adr(),kis_ileti_n,0);
+ }
+}
+çıplak işlev kis_ileti_metin(m: metin) {
+ değişken i: tam32 = 0;
+ iken i < metin_uzunluk(m) { kis_ileti_bayt(metin_bayt(m,i) olarak tam32); i=i+1; }
+}
+çıplak işlev kis_ileti_sayi(d: dtam64, taban: dtam64) {
+ // Taban yalnız 10/16; en çok 20 çağrı, kesilen yığından bağımsız IST'de güvenli.
+ eğer d >= taban { kis_ileti_sayi(d/taban,taban); }
+ değişken r: tam32 = (d%taban) olarak tam32;
+ eğer r < 10 { kis_ileti_bayt(r+48); } değilse { kis_ileti_bayt(r+87); }
+}
+çıplak işlev kis_ileti_basla() {
+ kg_irq_kapat();
+ eğer kis_ileti_aktif != 0 { kis_metin("PANIK yeniden giris"); kis_satir(); iken doğru { kdl_idle(); } }
+ kis_ileti_aktif=1; kis_ileti_n=0; kis_buf_yaz8(kis_ileti_adr(),0,0);
+}
+çıplak işlev kis_istisna_panik(v: tam64, h: tam64, rip: tam64, cr2: tam64) {
+ kis_ileti_basla();
+ kis_ileti_metin("ISTISNA vek=0x"); kis_ileti_sayi(v olarak dtam64,16);
+ kis_ileti_metin(" hata=0x"); kis_ileti_sayi(h olarak dtam64,16);
+ kis_ileti_metin(" rip=0x"); kis_ileti_sayi(rip olarak dtam64,16);
+ kis_ileti_metin(" cr2=0x"); kis_ileti_sayi(cr2 olarak dtam64,16);
+ eğer v == 0 { kis_ileti_metin(" #DE"); }
+ eğer v == 6 { kis_ileti_metin(" #UD"); }
+ eğer v == 8 { kis_ileti_metin(" #DF"); }
+ eğer v == 13 { kis_ileti_metin(" #GP"); }
+ eğer v == 14 { kis_ileti_metin(" #PF"); }
+ kdl_panik(kis_ileti_metin_al());
+}
+çıplak işlev kdl_mimari_dizi_oob(i: tam32, boyut: tam32) {
+ kis_ileti_basla(); kis_ileti_metin("dizi sinir ihlali (i=");
+ değişken x: tam64 = i olarak tam64;
+ eğer x < 0 { kis_ileti_bayt(45); x=0-x; }
+ kis_ileti_sayi(x olarak dtam64,10); kis_ileti_metin(", boyut=");
+ x=boyut olarak tam64; eğer x < 0 { kis_ileti_bayt(45); x=0-x; }
+ kis_ileti_sayi(x olarak dtam64,10); kis_ileti_metin(")");
+ kdl_panik(kis_ileti_metin_al());
+}
+
+// Alt sınır kanaryaları her panik girişinde üretim yolunda denetlenir.
+çıplak işlev kis_ist_denetle() -> mantıksal {
+ değişken a: tam64 = 0;
+ güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_ist1_alt(%rip), $0"# çıktı("=r", &a) } }
+ eğer kxm_o64(a) != 5423826295006516052 { ver yanlış; }
+ güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_ist2_alt(%rip), $0"# çıktı("=r", &a) } }
+ eğer kxm_o64(a) != 5423826295006516052 { ver yanlış; }
+ güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_ist3_alt(%rip), $0"# çıktı("=r", &a) } }
+ eğer kxm_o64(a) != 5423826295006516052 { ver yanlış; }
+ ver doğru;
+}
+
+// Metin ABI'si NUL sonlu adres; ham adres hücresini metin işaretçisi olarak oku.
+çıplak işlev kis_ileti_metin_al() -> metin {
+ değişken adr: tam64 = kis_ileti_adr();
+ değişken p: *metin = (&adr) olarak *metin;
+ ver *p;
 }
