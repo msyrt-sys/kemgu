@@ -47,6 +47,7 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
                 f.write(json.dumps(d).encode()+b'\n');return response()
             command('qmp_capabilities')
             target=('EFI HATA '+negative).encode() if negative else (b'KABUK_HAZIR' if KABUK else b'UEFI_HAZIR')
+            if os.environ.get('UEFI_GUC_DOGRUDAN')=='1':target=b'GUC_HAZIR'
             while target not in (data:=ser.read_bytes() if ser.exists() else b''):
                 if p.poll() is not None or time.monotonic()>limit:raise AssertionError(f'hedef yok: {target!r}, rc={p.poll()}, seri={data!r}')
                 if not negative and b'EFI HATA' in data:raise AssertionError(data)
@@ -93,6 +94,10 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             rsdp=dump(fields[13],36,W/'rsdp.bin');assert rsdp[:8]==b'RSD PTR ' and sum(rsdp[:20])%256==0
             if rsdp[15]>=2:assert sum(rsdp)%256==0
             acpi_denetle(dump,W,descriptors,text)
+            if os.environ.get('UEFI_GUC'):
+                from guc_kahin import denetle as guc_denetle
+                guc_denetle(command,dump,W,descriptors,text,ser,p)
+                return
             if os.environ.get("UEFI_APIC")=="1":
                 from apic_kahin import denetle as apic_denetle
                 apic_denetle(command,dump,W,descriptors,text)

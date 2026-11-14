@@ -1,7 +1,7 @@
 # Dalga 11 bulguları ve tasarım seçimleri
 
-- IST1 #DF, IST2 NMI, IST3 #MC için ayrı 16 KiB yığın; alt sınır kanaryası. PVH/UEFI girişleri ve ring3/kurtarılabilir #PF yolları korunacak.
-- PVH zamanlayıcı PIC olarak korunacak; UEFI yolu MADT/IOAPIC/LAPIC kullanacak.
+- IST1 #DF, IST2 NMI, IST3 #MC için ayrı 16 KiB yığın; alt sınır kanaryası. PVH/UEFI girişleri ve ring3/kurtarılabilir #PF yolları korundu.
+- PVH zamanlayıcı PIC olarak korundu; UEFI yolu MADT/IOAPIC/LAPIC kullanıyor.
 
 - QEMU ölçümü: kanonik olmayan `0x8000000000000000` adresini okumak #GP(0) üretirken CR2’yi de bu adrese değiştirdi. CR2, #GP adresini bildiren kayıt olmadığından fikstür bunun yerine GDT dışı seçici `7*8=0x38` yükler; beklenen hata kodu 0x38. Beklenti üretim çıktısına uydurulmadı, ayırt edici mimari ihlal seçildi.
 
@@ -45,3 +45,17 @@ Tekrar: `python3 tools/codex/c11_001.py` iki derleyicide asıl/dolan biçimlerin
 - Sınırlar: tek işlemcili xAPIC yolu ölçüldü; firmware x2APIC açık bırakırsa açık hata döner. PS/2 fare biçimi kimlik0/üç bayttır; tekerlek, SMP ve MSI/MSI-X bu dalganın dışında. Donanım sonuçları QEMU q35/OVMF ölçümleridir.
 
 - D karma tekrar: C10/10+self10/10 yeşil. USB bekleyişinin fareye yol vermesi kaldırılınca 10/10 gerçek açılış kırmızı (ilk FARE satırı gelmiyor). Geri alınan kaynakla hem karma hem PS/2 klavye biçimi yeniden yeşil. D regresyonu: check351/369, 18 sınıflandırılmış, 0 kırmızı; baremetal_diff23/23, 0 atlama; x86 noredzone480/480.
+
+## E — FADT ve güç ölçümleri
+
+- Gerçek QEMU q35/OVMF FADT: 244 bayt, revizyon3, boot_flags=2 (8042 var), flags=33957 (0x84a5); reset GAS SystemIO, 8 bit, ofset0, erişim0, port3321 (0xcf9), değer15; PM timer1544 (0x608). Bağımsız RAM okuyucu ile seri alanlar birebir. Yerel ACPICA `actbl.h` düzeni Python ile doğrulandı.
+- Mevcut FADT API’si ve testi aynen korundu; ek FadtGuc görünümü, bilinmeyen/eski 8042 bilgisi ve 8 bit SystemIO/SystemMemory reset desteği sağlar. Desteklenmeyen GAS biçiminde 8042/üçlü hata geri dönüşü kullanılır. 8042 yok bayrağında PS/2 probu atlanır; USB klavye gerekir. Bilgi yoksa eski prob davranışına izin verilir.
+- C ve self: FADT reset, QEMU kapat, 8042 reset, üçlü hata toplam8/8; her biri ayrı `-no-reboot` açılışı, tek açılış işareti ve tam seri karşılaştırması. `kapat` yalnız QEMU TCG CPUID imzasında debug-exit kullanır; gerçek PC’de güç tuşu mesajı ve HLT. Tam S5/AML yol haritası H3g’de kapsam dışıdır.
+- Sabotaj: 8042 biti ters → saf test çalışma sırasında kırmızı. FADT reset yazısı yok → gerçek 8042 fallback QEMU’yu kapattı, fakat yanlış yol seri karşılaştırmasını kırmızı yaptı (1/1); kaynaklar geri alındı.
+- Yeni seri etiketi FADT_DURUM seçildi: FADT_BILGI adı mevcut ABI kâhinindeki BILGI alt-dizgesiyle çakışıyordu. Eski kâhin ve ABI beklentileri değiştirilmedi.
+
+## Son doğrulama
+
+- Seri `make -j1 test_tumu calistir_kem_os_x86 calistir_kem_os_arm`, PIPESTATUS[0]=0; FIXPOINT ✓ (100270 IR satırı). Yeni QEMU kapıları 208/208, atlama0; gerçek sabotaj açılışları 53/53 kırmızı. Son kaynaklarda sabotaj yok.
+- check_kapisi352/371, 19 birleşik/parça sınıflandırması, 0RED; baremetal_diff23/23, atlama0; köprü kart+136 test; x86 noredzone493/493. Tam takım 67 atlama kaydı (tekrar koşumlar dahil), ayrıca ARM üst bellek koşulu1; ASan133PASS/0FAIL/41SKIP/4bilinenALLOW/2sızıntı-muaf. Ayrıntılı dağılım ilerleme dosyasında.
+- Başlangıçtan tam takım bitişine 2026-11-13 19:27 → 2026-11-14 00:01; rapor/PR sonuçlandırması kullanıcının devam mesajıyla 2026-11-14 sabahı yapıldı. Fiziksel PC testi yapılmadı.

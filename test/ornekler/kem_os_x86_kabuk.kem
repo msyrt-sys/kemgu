@@ -257,6 +257,10 @@ işlev kabuk(d: &değişken KabukDisk, f: &değişken FatSektor, x: &değişken 
         ekran_fare_sil(ke.e,&değişken im);
         için o: xs { eşleş satir_olay(&değişken satir,o) { hiç => { ke_girdi(ke,satir); } değer(s) => {
             ekran_ayna_yaz(metin_birlestir("> ", s));
+            eğer bm_esit(s,"kapat") {
+                ekran_cift_yaz("Sistem durduruldu; güç tuşuna basın.");ke_ciz(ke);guc_kapat();
+            }
+            eğer bm_esit(s,"yenidenbaslat") { guc_yeniden_asama(0); }
             eşleş komut(d,f,s) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } }
             ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
         } } }
@@ -268,6 +272,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
     değişken indeks: tam32 = -1; değişken arno: tam32 = 0; değişken i: tam32 = 0;
     için a: x.aygitlar { değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0); eğer ar.sinif == 3 ve ar.protokol == 1 { indeks=i; arno=ar.no; } i=i+1; }
     eğer indeks < 0 {
+        eğer değil guc_ps2_izin() { ver hata("FADT PS2 yok; USB klavye gerekli"); }
         eğer değil ps2_kesme_etkin() { eğer ps2_kur() < 0 { ver hata("PS2 baslatilamadi"); } }
     } değilse {
     eşleş usb_hid_set_protocol(arno,doğru) { hata(e) => { ver hata(e); } tamam(p) => { eşleş xhci_kontrol(x,indeks,p) { hata(e) => { ver hata(e); } tamam(v) => { } } } }
@@ -307,9 +312,11 @@ işlev main() -> tam32 {
             uefi_dok(b);
             eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   eğer guc_ps2_izin() {
    değişken fare_kimlik: tam32 = ps2_kesme_kur();
    eğer fare_kimlik < 0 { bm_yaz(metin_birlestir("PS2 IRQ KUR HATA ",tam_metin(fare_kimlik olarak tam64)));kem_qemu_cik(1); }
    kap_ps2_ac();bm_yaz("GIRDI PS2 IRQ1 IRQ12");bm_yaz("PS2_FARE 0 3");
+   } değilse { bm_yaz("GIRDI USB; PS2 FADT YOK"); }
         } }
     }
     eşleş ke_kur() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken ke: KabukEkran = v;
