@@ -127,7 +127,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H2d [M] ✓ D-755 (UEFI haritası; 256M/512M/2G açılış) Fiziksel bellek yöneticisi bellek haritasından** (bugünkü sabit
       yerleşim yerine). Ayrılmış bölgeler, çekirdek imajı, modüller korunur.
       Kanıt: 512 MB / 2 GB / 4 GB RAM ile açılış.
-- [ ] **H2e [M] GDT + TSS + IDT tam kurulumu** (çift hata için ayrı IST yığını).
+- [x] **H2e (✓ D-757 (IST1 #DF / IST2 NMI / IST3 #MC, 16 KiB + kanarya; kasıtlı #DE/#UD/#GP/#PF/#DF panik ekranında)) [M] GDT + TSS + IDT tam kurulumu** (çift hata için ayrı IST yığını).
       Kanıt: kasıtlı #PF, #GP, #DF → panik ekranı, asılma yok.
 - [ ] **H2f [S] ⏸ BIOS YOLU — ERTELENDİ (D-756; UEFI karşılığı D-755 OVMF kapıları). Kapı `calistir_kem_os_pc`:** QEMU `-M pc -cdrom kem_os_pc.iso
       -serial file:...`, mevcut faz dizgileri. Sabotaj: multiboot sihirli sayıyı boz
@@ -142,13 +142,13 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       sağlama toplamı doğrulama.
 - [x] **H3b [M] ✓ D-755 (XSDT + RSDT geri düşme) RSDT/XSDT gezgini** + tablo imzası listesi. Kanıt: seri/ekranda
       `APIC FACP HPET MCFG` listesi.
-- [ ] **H3c [M] MADT:** LAPIC adresi, IOAPIC(ler), kesme kaynağı geçersiz kılmaları
+- [x] **H3c (✓ D-757 (UEFI yolu; OVMF: LAPIC 0xfee00000, IOAPIC 0xfec00000 GSI0, ISO IRQ0→GSI2)) [M] MADT:** LAPIC adresi, IOAPIC(ler), kesme kaynağı geçersiz kılmaları
       (ISA IRQ0 → GSI2 gibi). Sabotaj: override'ı yok say → timer gelmiyor → kırmızı.
-- [ ] **H3d [M] IOAPIC sürücüsü:** yönlendirme tablosu, maske, kenar/seviye, kutup.
+- [x] **H3d (✓ D-757) [M] IOAPIC sürücüsü:** yönlendirme tablosu, maske, kenar/seviye, kutup.
       8259 PIC tamamen maskelenir.
-- [ ] **H3e [M] LAPIC zamanlayıcı** (PIT ile kalibre). PIT'e bağımlılık biter.
-- [ ] **H3f [S] FADT:** `8042` bayrağı (PS/2 var mı?), sıfırlama yazmacı, PM zamanlayıcı.
-- [ ] **H3g [M] Kapatma/yeniden başlatma:** önce FADT reset yazmacı, sonra 8042
+- [x] **H3e (✓ D-757 (PIT mode0 tek atımla kalibrasyon; PVH yolu PIC/PIT kaldı)) [M] LAPIC zamanlayıcı** (PIT ile kalibre). PIT'e bağımlılık biter.
+- [x] **H3f (✓ D-757 (8042 bayrağı + reset GAS)) [S] FADT:** `8042` bayrağı (PS/2 var mı?), sıfırlama yazmacı, PM zamanlayıcı.
+- [ ] **H3g (KISMEN D-757 (FADT reset → 8042 → üçlü hata; S5/AML kapsam dışı)) [M] Kapatma/yeniden başlatma:** önce FADT reset yazmacı, sonra 8042
       `0xFE`, sonra üçlü hata. Tam ACPI kapatma (S5) **AML yorumlayıcısı** ister →
       **KAPSAM DIŞI**; QEMU için `isa-debug-exit`, gerçek PC'de "güç tuşuna bas" mesajı.
 - [ ] **H3h [S] Not: AML'den kaçınma stratejisi.** PCI kesmeleri için `_PRT` (AML)
@@ -186,7 +186,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 - [ ] **H5a [M] (KISMEN D-752: yoklamalı başlatma, IRQ/AUX kapalı, çevirme açık; FADT bayrağı ve öz-test YOK) 8042 denetleyici başlatma:** FADT bayrağına bak, öz-test (`0xAA`),
       port testi, çeviri modu kararı, her bekleyişte zaman aşımı.
-- [ ] **H5b [S] IRQ1 → IOAPIC → işleyici**, tarama kodu kuyruğu (kesme-güvenli halka).
+- [x] **H5b (✓ D-757 (UEFI yolu IRQ1/GSI1 vektör 33, kesme-güvenli halka)) [S] IRQ1 → IOAPIC → işleyici**, tarama kodu kuyruğu (kesme-güvenli halka).
 - [ ] **H5c [M] Tarama kodu kümesi 1 çözücü** (`E0` genişletilmiş, `E1` Pause),
       bas/bırak durumları.
 - [ ] **H5d [M] Değiştirici tuş durum makinesi:** Shift, Ctrl, Alt, **AltGr**,
@@ -209,9 +209,9 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H6. Fare (PS/2 aux) + imleç
 
-- [ ] **H6a [M] Aux port etkinleştirme** (`0xA8`, `0xD4` öneki), varsayılanlar,
+- [x] **H6a (✓ D-757) [M] Aux port etkinleştirme** (`0xA8`, `0xD4` öneki), varsayılanlar,
       veri raporlama (`0xF4`).
-- [ ] **H6b [M] IRQ12 + 3 baytlık paket ayrıştırıcı** + **senkron kurtarma**
+- [x] **H6b (✓ D-757 (IRQ12/GSI12 vektör 44, senkron kurtarma)) [M] IRQ12 + 3 baytlık paket ayrıştırıcı** + **senkron kurtarma**
       (bit 3 her zaman 1 olmalı; kayarsa yeniden hizala).
 - [ ] **H6c [S] IntelliMouse tekerlek** (200-100-80 örnekleme sihirli dizisi → 4 bayt paket).
 - [ ] **H6d [S] Hızlanma eğrisi + hassasiyet + ekran sınırına kenetleme.**

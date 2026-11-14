@@ -7354,7 +7354,27 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                  * side-effect korunur; clang elemez/sıralamaz). */
                 IfadeSonuc p = ifade_uret(g,
                     d->veri.atama.hedef->veri.tekli.operand, "ptr");
-                IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, NULL);
+                /* [D-757] C11-001: deger POINTEE genisliginde uretilir (okuma
+                 * yolu D-265/D-347 ile ayni kaynak). Eskiden beklenen YOKTU →
+                 * `p: *tam64; *p = 0` literali i32 dogup `store i32` = 8 baytlik
+                 * nesnenin yalniz alt yarisi yaziliyordu (sessiz yanlis cevap). */
+                const char *yaz_pointee = NULL;
+                int yaz_isz = 0;
+                const Dugum *yo = d->veri.atama.hedef->veri.tekli.operand;
+                if (yo->tip == DUGUM_TANIMLAYICI) {
+                    LlvmIsim *yvi = isim_bul(g, yo->veri.tanimlayici.metin,
+                                             yo->veri.tanimlayici.uzunluk);
+                    if (yvi && yvi->pointee_llvm_tip) {
+                        yaz_pointee = yvi->pointee_llvm_tip;
+                        yaz_isz = yvi->pointee_isaretsiz;
+                    }
+                }
+                IfadeSonuc v = ifade_uret(g, d->veri.atama.deger, yaz_pointee);
+                if (yaz_pointee && yaz_pointee[0] == 'i' && v.tip &&
+                    v.tip[0] == 'i' && strcmp(v.tip, yaz_pointee) != 0) {
+                    v.reg = int_donustur_im(g, v.reg, v.tip, yaz_pointee, yaz_isz);
+                    v.tip = yaz_pointee;
+                }
                 const char *vol = (g->guvensiz_derinlik > 0) ? "volatile " : "";
                 fprintf(g->out, "  store %s%s %%%d, ptr %%%d\n",
                         vol, v.tip, v.reg, p.reg);

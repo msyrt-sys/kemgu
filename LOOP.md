@@ -288,7 +288,7 @@
       Öneri: (1) imza geçişini içe alma sonrasına taşı; (2) seçili importta modül adını bağlama
       (Python `from m import m` gibi) + C'de modül sembolüne çağrı T002. Kapı muafiyetleri:
       stdlib_ithal MUAF="karsilastir sonuc" — onarılınca silinmeli.
-- [ ] E4n [S] Panik ekranı yalnız `kdl_panik` yolunu kapsıyor (D-752). `kdl_dizi_oob` (kem_heap.kem,
+- [x] E4n [S] ✓ D-757 Panik ekranı yalnız `kdl_panik` yolunu kapsıyor (D-752). `kdl_dizi_oob` (kem_heap.kem,
       dizi sınır ihlali) `kdl_panik` çağırmadan yoğun döngüde duruyor → sınır ihlali ekrana ÇIKMIYOR,
       yalnız seri. Onarım dikkat ister: kem_heap.kem arm64 kem_os'ta da derlenir ve orada `kdl_panik`
       YOK (D-592) → x86'ya özgü bir kanca ya da mimari başına `kdl_dizi_oob` gerekir. Kâhin: kasıtlı
@@ -2938,4 +2938,21 @@
   Codex dalga 11 promptu: otomasyon/chatgpt/CODEX_GOREV_11.md (H2e GDT/TSS/IST + istisna panik ekranı + E4n ·
   H3c-e MADT/IOAPIC/LAPIC · H5b/H6a-b PS/2 IRQ1/IRQ12 + fare). TSS IST1 ofseti 0x24 ve kapı ist alanı Linux
   çekirdek başlıklarından (x86_hw_tss / gate_struct) doğrulandı; OVMF'de MADT ("APIC") var (D-755 kâhin çıktısı).
+- 2026-11-14 D-757: CODEX DALGASI 11 ENTEGRASYONU (taslak #223) — kesme altyapısı. IST1 #DF / IST2 NMI / IST3 #MC
+  (16 KiB yığın + alt kanarya; TSS IST1 ofseti 0x24 QEMU'da doğrulandı), istisnalar (#DE #UD #GP #PF + bozuk RSP'li #DF)
+  ve dizi sınır ihlali (E4n: kdl_dizi_oob → mimari kancası; arm64 sessiz kaldı) heap'siz kırmızı PANIK ekranında,
+  seri satırı birebir. UEFI yolu: MADT → IOAPIC + LAPIC, PIC maskeli, LAPIC zamanlayıcı PIT mode0 ile kalibre (QEMU
+  8.2.2'de mode3 ns yuvarlaması ~200 Hz verdi — kaynak okunarak bulundu); PVH yolu PIC/PIT korundu. PS/2 klavye IRQ1
+  + fare IRQ12 kesme-güvenli halkayla, senkron kurtarma, save-under imleç; USB klavye + PS/2 fare karma kapı. FADT
+  (8042 bayrağı, reset GAS 0xcf9) + reset/kapat. Yeni kapılar: bm_x86_istisna 140/140 · apic 20/20 · ps2_irq 20/20 ·
+  ps2_karma 20/20 · guc 8/8 (her biri C + self, ≥10 açılış, -no-reboot). Codex sabotajları 53/53 kırmızı.
+  C11-001 (Claude onardı; Codex'e derleyici yasaktı): ham işaretçiye literal yazımı (`p: *tam64; *p = 0`) iki
+  derleyicide `store i32` → 8 baytlık nesnenin yalnız alt yarısı (SESSİZ YANLIŞ CEVAP). Okuma yolu pointee'yi D-265/
+  D-347/D-267'den beri kullanıyordu, yazma yolu kullanmıyordu (C'deki yorum aksini iddia ediyordu). Değer artık
+  pointee genişliğinde üretilir (C beklenen tip + int_donustur_im; self beklenen_ll + int_uydur). Fikstür
+  cg_deref_yaz_genislik (düzeltmesiz iki derleyici 1, düzeltmeyle 42) + test_llvm [318] MUTLAK 42 — parite kapısı
+  iki tarafın eşit bozulmasına kör olduğu için. Sabotaj S213 (C) → llvm_test + codegen_diff kırmızı · S214 (self) →
+  codegen_diff kırmızı. Codex'in `0 olarak tam64` dolanmaları artık gereksiz ama zararsız; dokunulmadı.
+  VARSAYIM (Codex kaydı): gerçekzamanlı ISR içindeki opak port asm'i için çevrim bütçesi port başına 1024 — fiziksel
+  WCET kanıtı DEĞİL. Fiziksel PC testi yapılmadı. Kalan: H3g S5 (AML), tekerlek (H6c), x2APIC, SMP, MSI.
 

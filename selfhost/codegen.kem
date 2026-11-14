@@ -8505,7 +8505,23 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, lhs), "TEKLI") ve metin_esit(dizi_al(p.a_deg, lhs), "deref*") {
             değişken pcb: tam32 = dizi_al(p.a_cb, lhs);
             değişken pr: metin = ifade_uret(p, dizi_al(p.cocuk, pcb));    // pointer → ptr
+            // [D-757] C11-001: değer POINTEE genişliğinde (okuma yolu D-267 ile aynı
+            // kaynak). Eskiden `p: *tam64; *p = 0` → `store i32 0` = alt yarı yazılıyordu.
+            değişken yaz_pt: metin = "";
+            değişken pop: tam32 = dizi_al(p.cocuk, pcb);
+            eğer metin_esit(dizi_al(p.a_ad, pop), "TANIMLAYICI") {
+                eğer metin_uzunluk(cg_var_ref_bul(p, dizi_al(p.a_deg, pop))) == 0 {
+                    yaz_pt = cg_var_pointee_bul(p, dizi_al(p.a_deg, pop));
+                }
+            }
+            değişken eski_bek3: metin = p.beklenen_ll;
+            eğer int_ll_mi(yaz_pt) { p.beklenen_ll = yaz_pt; }
             değişken v3: metin = ifade_uret(p, dizi_al(p.cocuk, cb + 1)); // değer
+            p.beklenen_ll = eski_bek3;
+            eğer int_ll_mi(yaz_pt) ve int_ll_mi(p.son_tip) {
+                v3 = int_uydur(p, v3, yaz_pt, cg_var_pointee_isz_bul(p, dizi_al(p.a_deg, pop)));
+                p.son_tip = yaz_pt;
+            }
             değişken vt3: metin = p.son_tip;                             // değer LLVM tipi
             yaz_str("  store volatile "); yaz_str(vt3); yaz_str(" "); yaz_str(v3);
             yaz_str(", ptr "); yaz_str(pr); yb(10);
