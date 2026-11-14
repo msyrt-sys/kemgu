@@ -3490,6 +3490,18 @@ static void test_uzun_kesirli_literal(void) {
     test_sonuc("D-633 67/85 karakterlik kesirli literal (us korunur) -> exit 42", rc == 42);
 }
 
+/* [D-757] C11-001: ham isaretciye literal yazimi POINTEE genisliginde. Eskiden C ve
+ * self-host `p: *tam64; *p = 0` icin `store i32 0` uretiyordu (ust yari kaliyordu).
+ * MUTLAK beklenen deger: iki derleyici AYNI kusuru tasiyordu -> parite kapilari kordu. */
+static void test_c11_001_deref_yaz_genislik(void) {
+    int rc = derle_ve_calistir(
+        "i\xc5\x9flev main() -> tam32 { de\xc4\x9fi\xc5\x9fken a: tam64 = 72623859790382856; de\xc4\x9fi\xc5\x9fken c: tam8 = 7; "
+        "g\xc3\xbcvensiz { de\xc4\x9fi\xc5\x9fken p: *tam64 = (&a) olarak *tam64; *p = 0; "
+        "de\xc4\x9fi\xc5\x9fken q: *tam8 = (&c) olarak *tam8; *q = 3; } "
+        "e\xc4\x9f" "er a != 0 { ver 1; } e\xc4\x9f" "er c != 3 { ver 2; } ver 42; }");
+    test_sonuc("D-757 C11-001 *tam64 = 0 tam genislik (+ *tam8 pozitif) -> exit 42", rc == 42);
+}
+
 /* C6-001: iki derleyicinin aynı yanlış cevabı vermesi pariteyi geçiremez. */
 static void test_c6_001_alan_odunc(void) {
     test_sonuc("C6-001 jenerik -> exit 42",
@@ -3971,6 +3983,8 @@ int main(void) {
     test_dtam64_ust_yari_literal();
     printf("\n--- D-633: uzun kesirli literal ---\n");
     test_uzun_kesirli_literal();
+    printf("\n--- D-757: deref yazim genisligi (C11-001) ---\n");
+    test_c11_001_deref_yaz_genislik();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

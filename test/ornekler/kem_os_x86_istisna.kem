@@ -1,0 +1,41 @@
+// Gerçek işlemci istisnaları; her kip ayrı QEMU açılışında çalışır.
+kullan drivers::ekran::psf::{ psf_coz };
+kullan drivers::ekran::font_tr16::{ font_tr16 } olarak ft;
+çıplak işlev k11_heap_kapat() { kem_bump=0; kem_son=0; }
+işlev main() -> tam32 {
+ kis_metin("K11_BOOT"); kis_satir();
+ eşleş ekran_bga_ac(1024,768,1056832) { hata(e) => { kem_qemu_cik(1); } tamam(e) => {
+  eşleş psf_coz(font_tr16()) { hata(m) => { kem_qemu_cik(1); } tamam(f) => { ekran_panik_kur(e,f); } }
+ } }
+ değişken a: Dizi<tam32> = [17,43,91];
+ eğer dizi_al(a,0) != 17 veya dizi_al(a,2) != 91 { kem_qemu_cik(2); }
+ dizi_yaz(a,1,67);
+ eğer dizi_al(a,1) != 67 { kem_qemu_cik(2); }
+ k11_heap_kapat(); // İstisna/panik yolunda tahsis yapılırsa kapı düşer.
+ eğer kem_pvh_cmdline_esit("de") == 1 { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"xorq %rdx, %rdx
+movq $$7, %rax
+xorq %rcx, %rcx
+.global k11_de_fault
+k11_de_fault:
+divq %rcx"# bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{memory}") } } }
+ eğer kem_pvh_cmdline_esit("ud") == 1 { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#".global k11_ud_fault
+k11_ud_fault:
+ud2"# bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{memory}") } } }
+ eğer kem_pvh_cmdline_esit("gp") == 1 { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"movw $$0x38, %ax
+.global k11_gp_fault
+k11_gp_fault:
+movw %ax, %ds"# bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{memory}") } } }
+ eğer kem_pvh_cmdline_esit("pf") == 1 { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"movq $$0x60001000, %rax
+.global k11_pf_fault
+k11_pf_fault:
+movq (%rax), %rax"# bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{memory}") } } }
+ eğer kem_pvh_cmdline_esit("df") == 1 { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"movq $$0x60001000, %rsp
+.global k11_df_fault
+k11_df_fault:
+ud2"# bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{memory}") } } }
+
+ eğer kem_pvh_cmdline_esit("oob") == 1 { değişken v: tam32 = dizi_al(a,7); kis_onaltilik(v olarak dtam64); }
+ eğer kem_pvh_cmdline_esit("eksi") == 1 { dizi_yaz(a,-2,11); }
+ kis_metin("K11_DONDU"); kis_satir();
+ ver 1;
+}

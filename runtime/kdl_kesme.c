@@ -520,29 +520,61 @@ struct KdlIdtKapi {
 static struct KdlIdtKapi kdl_idt[256];
 extern void *kdl_isr_tablo[32];   /* asm: isr0..isr31 adresleri */
 
+extern void kdl_irq1_stub(void), kdl_irq12_stub(void), kdl_lapic_timer_stub(void), kdl_spurious_stub(void);
 extern void kdl_irq0_stub(void);     /* boot/start_x86_64.S — IRQ0 (timer) */
 extern void kdl_syscall_stub(void);  /* boot/start_x86_64.S — int 0x80 syscall */
 
-static void kdl_idt_gate(int i, uint64_t adr) {
+static void kdl_idt_gate(int i, uint64_t adr, uint8_t ist) {
     kdl_idt[i].offset_dusuk  = (uint16_t)(adr & 0xFFFF);
     kdl_idt[i].segment       = 0x08;       /* 64-bit kod segmenti */
-    kdl_idt[i].ist           = 0;
+    kdl_idt[i].ist           = ist & 7;
     kdl_idt[i].tip_oz        = 0x8E;       /* present, DPL0, interrupt gate */
     kdl_idt[i].offset_orta   = (uint16_t)((adr >> 16) & 0xFFFF);
     kdl_idt[i].offset_yuksek = (uint32_t)((adr >> 32) & 0xFFFFFFFF);
     kdl_idt[i].rezerve       = 0;
 }
 
+/* TSS düzeni: Linux x86_hw_tss; tools/codex/dalga11_sabit.py doğrular.
+ * Packed yazma: IST1 +36, IOPB +102. Yığınlar çekirdeğin .bss alanındadır. */
+extern uint8_t kdl_x86_tss[];
+extern uint64_t kdl_x86_gdt[];
+extern uint64_t kdl_ist1_alt[], kdl_ist1_ust[];
+extern uint64_t kdl_ist2_alt[], kdl_ist2_ust[];
+extern uint64_t kdl_ist3_alt[], kdl_ist3_ust[];
+struct KdlTssIst {
+    uint8_t bas[36];
+    uint64_t ist[7];
+    uint8_t son[10];
+    uint16_t iopb;
+} __attribute__((packed));
+static void kdl_ist_kur(void) {
+    struct KdlTssIst *t = (struct KdlTssIst *)kdl_x86_tss;
+    t->ist[0] = (uintptr_t)kdl_ist1_ust;
+    t->ist[1] = (uintptr_t)kdl_ist2_ust;
+    t->ist[2] = (uintptr_t)kdl_ist3_ust;
+    t->iopb = 104;
+    *kdl_ist1_alt = *kdl_ist2_alt = *kdl_ist3_alt = UINT64_C(0x4b454d4755495354);
+    uint64_t a = (uintptr_t)t;
+    kdl_x86_gdt[5] = 103 | ((a & 0xffffff) << 16) | (UINT64_C(0x89) << 40) | ((a & 0xff000000) << 32);
+    kdl_x86_gdt[6] = a >> 32;
+    __asm__ volatile("ltr %w0" : : "r"((uint16_t)40) : "memory");
+}
+
 void kdl_idt_kur(void) {
+    kdl_ist_kur();
     for (int i = 0; i < 32; i++)
-        kdl_idt_gate(i, (uint64_t)(uintptr_t)kdl_isr_tablo[i]);   /* istisnalar 0-31 */
-    kdl_idt_gate(32, (uint64_t)(uintptr_t)&kdl_irq0_stub);        /* IRQ0 → vektör 32 */
-    kdl_idt_gate(0x80, (uint64_t)(uintptr_t)&kdl_syscall_stub);   /* int 0x80 → syscall */
+        kdl_idt_gate(i, (uint64_t)(uintptr_t)kdl_isr_tablo[i], i == 8 ? 1 : i == 2 ? 2 : i == 18 ? 3 : 0);   /* istisnalar 0-31 */
+    kdl_idt_gate(32, (uint64_t)(uintptr_t)&kdl_irq0_stub, 0);        /* IRQ0 → vektör 32 */
+    kdl_idt_gate(0x80, (uint64_t)(uintptr_t)&kdl_syscall_stub, 0);   /* int 0x80 → syscall */
     /* [D-699] Sistem çağrısı kapısı DPL3 (0xEE = present, DPL3, interrupt gate):
      * ring3 `int 0x80` yalnız kapı DPL >= CPL ise geçer; DPL0 kapı ring3'ten #GP
      * verir. Çekirdek (ring0) çağrıları etkilenmez. İstisna/IRQ kapıları DPL0
      * KALIR (ring3 `int 13` gibi yazılımsal istisna taklidini reddeder). */
     kdl_idt[0x80].tip_oz = 0xEE;
+    kdl_idt_gate(33, (uintptr_t)&kdl_irq1_stub, 0);
+    kdl_idt_gate(44, (uintptr_t)&kdl_irq12_stub, 0);
+    kdl_idt_gate(48, (uintptr_t)&kdl_lapic_timer_stub, 0);
+    kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
 
     struct {
         uint16_t limit;

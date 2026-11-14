@@ -1,0 +1,34 @@
+// Python: 0x2000|0x8000|0x10000|0x31=106545; 0x7b<<24=2063597568.
+kullan drivers::acpi::madt::{ Madt, MadtGirdisi };
+kullan drivers::acpi::yonlendirme::{ KesmeYolu, KesmeGirdisi, isa_yolu, kesme_girdisi };
+işlev iso(irq: tam32, gsi: tam64, bayrak: tam64) -> MadtGirdisi {
+ ver MadtGirdisi { tur:2, islemci:0, apic:0, bayraklar:bayrak, adres:0, gsi:gsi, veriyolu:0, kaynak:irq, lint:0 };
+}
+işlev main() -> tam32 {
+ değişken xs: Dizi<MadtGirdisi> = []; dizi_ekle(xs,iso(0,2,0)); dizi_ekle(xs,iso(5,5,13));
+ değişken m: Madt = Madt { lapic_adresi:4276092928, bayraklar:1, girdiler:xs };
+ eşleş isa_yolu(m,0) { hata(e) => { ver 1; } tamam(y) => { eğer y.gsi != 2 veya y.dusuk veya y.seviye { ver 2; } } }
+ eşleş isa_yolu(m,1) { hata(e) => { ver 3; } tamam(y) => { eğer y.gsi != 1 veya y.dusuk veya y.seviye { ver 4; } } }
+ eşleş isa_yolu(m,12) { hata(e) => { ver 5; } tamam(y) => { eğer y.gsi != 12 { ver 6; } } }
+ eşleş isa_yolu(m,5) { hata(e) => { ver 7; } tamam(y) => { eğer y.gsi != 5 veya y.dusuk veya değil y.seviye { ver 8; } } }
+ değişken z: KesmeYolu = KesmeYolu { gsi:43,dusuk:doğru,seviye:doğru };
+ eşleş kesme_girdisi(z,49,123,doğru) { hata(e) => { ver 9; } tamam(g) => { eğer g.alt != 106545 veya g.ust != 2063597568 { ver 10; } } }
+ z.dusuk=yanlış;z.seviye=yanlış;
+ eşleş kesme_girdisi(z,48,0,yanlış) { hata(e) => { ver 11; } tamam(g) => { eğer g.alt != 48 veya g.ust != 0 { ver 12; } } }
+ eşleş isa_yolu(m,16) { tamam(y) => { ver 13; } hata(e) => { } }
+ eşleş isa_yolu(m,-1) { tamam(y) => { ver 14; } hata(e) => { } }
+ eşleş kesme_girdisi(z,31,0,yanlış) { tamam(g) => { ver 15; } hata(e) => { } }
+ eşleş kesme_girdisi(z,255,0,yanlış) { tamam(g) => { ver 16; } hata(e) => { } }
+ eşleş kesme_girdisi(z,48,256,yanlış) { tamam(g) => { ver 17; } hata(e) => { } }
+ dizi_ekle(xs,iso(1,3,2));
+ eşleş isa_yolu(m,1) { tamam(g) => { ver 18; } hata(e) => { } }
+ değişken g: MadtGirdisi = iso(1,3,8); dizi_yaz(xs,2,g);
+ eşleş isa_yolu(m,1) { tamam(g) => { ver 19; } hata(e) => { } }
+ g=iso(1,3,16); dizi_yaz(xs,2,g);
+ eşleş isa_yolu(m,1) { tamam(g) => { ver 20; } hata(e) => { } }
+ g=iso(1,3,15); dizi_yaz(xs,2,g);
+ eşleş isa_yolu(m,1) { hata(e) => { ver 21; } tamam(y) => { eğer y.gsi != 3 veya değil y.dusuk veya değil y.seviye { ver 22; } } }
+ dizi_ekle(xs,iso(0,3,0));
+ eşleş isa_yolu(m,0) { tamam(g) => { ver 23; } hata(e) => { } }
+ yazdir_metin("APIC YOL OK"); ver 0;
+}

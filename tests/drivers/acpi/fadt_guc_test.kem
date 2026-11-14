@@ -1,0 +1,56 @@
+// Fikstür: python3 tools/codex/dalga11_guc_sabit.py; gerçek QEMU FADT alanları.
+kullan drivers::acpi::fadt::{ FadtGuc, fadt_guc_coz, fadt_guc_reset_uygun };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32, yaz_le64, bayt_toplam8 };
+işlev veri() -> Dizi<dtam8> {
+ değişken b: Dizi<dtam8> = bayt_sifir(244);
+ yaz_u8(b,0,70);
+ yaz_u8(b,1,65);
+ yaz_u8(b,2,67);
+ yaz_u8(b,3,80);
+ yaz_u8(b,4,244);
+ yaz_u8(b,8,3);
+ yaz_u8(b,9,153);
+ yaz_u8(b,76,8);
+ yaz_u8(b,77,6);
+ yaz_u8(b,109,2);
+ yaz_u8(b,112,165);
+ yaz_u8(b,113,132);
+ yaz_u8(b,116,1);
+ yaz_u8(b,117,8);
+ yaz_u8(b,120,249);
+ yaz_u8(b,121,12);
+ yaz_u8(b,128,15);
+ ver b;
+}
+işlev saglama(b: Dizi<dtam8>, n: tam32) {
+ yaz_u8(b,9,0);yaz_u8(b,9,((256-bayt_toplam8(b,0,n))&255) olarak tam64);
+}
+işlev main() -> tam32 {
+ değişken b: Dizi<dtam8> = veri();
+ eşleş fadt_guc_coz(b) { hata(e) => { ver 1; } tamam(f) => {
+  eğer f.surum != 3 veya f.boot_bayrak != 2 veya değil f.ps2_bilgi veya değil f.ps2_var veya f.bayraklar != 33957 veya f.pm_taban != 1544 { ver 2; }
+  eğer değil fadt_guc_reset_uygun(f) veya f.reset_alan != 1 veya f.reset_adr != 3321 veya f.reset_deger != 15 { ver 3; }
+ } }
+ yaz_u8(b,128,14);eşleş fadt_guc_coz(b) { tamam(f) => { ver 4; } hata(e) => { } }
+ b=veri();yaz_u8(b,0,88);saglama(b,244);eşleş fadt_guc_coz(b) { tamam(f) => { ver 5; } hata(e) => { } }
+ b=veri();yaz_le32(b,4,115);saglama(b,115);eşleş fadt_guc_coz(b) { tamam(f) => { ver 6; } hata(e) => { } }
+ b=veri();yaz_le32(b,4,128);saglama(b,128);eşleş fadt_guc_coz(b) { tamam(f) => { ver 7; } hata(e) => { } }
+ b=veri();yaz_u8(b,8,1);yaz_le32(b,4,116);yaz_le32(b,112,0);saglama(b,116);
+ eşleş fadt_guc_coz(b) { hata(e) => { ver 8; } tamam(f) => { eğer f.ps2_bilgi veya f.ps2_var veya fadt_guc_reset_uygun(f) { ver 9; } } }
+ b=veri();yaz_le16(b,109,0);saglama(b,244);
+ eşleş fadt_guc_coz(b) { hata(e) => { ver 10; } tamam(f) => { eğer değil f.ps2_bilgi veya f.ps2_var { ver 11; } } }
+ b=veri();yaz_u8(b,116,0);yaz_le64(b,120,4294991905);saglama(b,244);
+ eşleş fadt_guc_coz(b) { hata(e) => { ver 12; } tamam(f) => {
+  eğer değil fadt_guc_reset_uygun(f) veya f.reset_adr != 4294991905 { ver 13; }
+  f.reset_boy=16;eğer fadt_guc_reset_uygun(f) { ver 14; }f.reset_boy=8;
+  f.reset_ofs=1;eğer fadt_guc_reset_uygun(f) { ver 15; }f.reset_ofs=0;
+  f.reset_erisim=2;eğer fadt_guc_reset_uygun(f) { ver 16; }f.reset_erisim=1;
+  f.reset_alan=2;eğer fadt_guc_reset_uygun(f) { ver 17; }f.reset_alan=1;
+  f.reset_adr=65536;eğer fadt_guc_reset_uygun(f) { ver 18; }
+  f.reset_adr=0;eğer fadt_guc_reset_uygun(f) { ver 19; }
+  f.reset_adr=1019;eğer değil fadt_guc_reset_uygun(f) { ver 20; }
+  f.reset_deger=256;eğer fadt_guc_reset_uygun(f) { ver 21; }f.reset_deger=15;
+  f.reset_erisim=-1;eğer fadt_guc_reset_uygun(f) { ver 22; }
+ } }
+ yazdir_metin("FADT OK");ver 0;
+}

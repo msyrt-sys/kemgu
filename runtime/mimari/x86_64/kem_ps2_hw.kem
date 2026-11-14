@@ -53,3 +53,110 @@
         kem_bekle_us(50);
     } ver -1;
 }
+
+// IRQ yolu: tek üretici ISR, tek tüketici kabuk. 1024 yuva, bir yuva boş.
+// x86 TSO + hizalı 64-bit indeksler; çıplak işaretçi erişimleri volatile'dır.
+küresel değişken ps2_irq_klavye: tam64 = 0;
+küresel değişken ps2_irq_fare: tam64 = 0;
+küresel değişken ps2_irq_acik: tam32 = 0;
+küresel değişken ps2_irq_hata: tam64 = 0;
+küresel değişken ps2_irq1_sayi: tam64 = 0;
+küresel değişken ps2_irq12_sayi: tam64 = 0;
+
+// Döngüsüz ISR: bir hazır baytı alır, halka doluysa sayar; çözümleme/heap/çıktı yok.
+gerçekzamanlı çıplak işlev kdl_ps2_irq(irq: tam64) {
+ eğer irq == 1 { ps2_irq1_sayi=ps2_irq1_sayi+1; }
+ eğer irq == 12 { ps2_irq12_sayi=ps2_irq12_sayi+1; }
+ değişken s: dtam8 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 çevrim:1024 şablon:r#"inb $$100, %al"# çıktı("={ax}",&s) bozulan("~{memory}") } }
+ eğer ((s olarak tam32)&1) == 0 { ver; }
+ değişken b: dtam8 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 çevrim:1024 şablon:r#"inb $$96, %al"# çıktı("={ax}",&b) bozulan("~{memory}") } }
+ değişken t: tam64 = ps2_irq_klavye;
+ eğer ((s olarak tam32)&32) != 0 { t=ps2_irq_fare; }
+ eğer ((s olarak tam32)&192) != 0 veya t == 0 { ps2_irq_hata=ps2_irq_hata+1;ver; }
+ değişken rp: *tam64 = t olarak *tam64;
+ değişken wp: *tam64 = (t+8) olarak *tam64;
+ değişken son: tam64 = *wp; değişken yeni: tam64 = (son+1)&1023;
+ eğer yeni == *rp {
+  değişken kayip: *tam64 = (t+16) olarak *tam64; *kayip=*kayip+1;ver;
+ }
+ değişken hucre: *dtam8 = (t+24+son) olarak *dtam8; *hucre=b;
+ *wp=yeni; // Bayt yazımı tamamlandıktan sonra yayımla.
+}
+çıplak işlev ps2_halka_yeni() -> tam64 {
+ değişken t: tam64 = malloc(1048) olarak tam64;
+ eğer t == 0 { ver 0; }
+ // C11-001: açık tam64 dönüşümü dar sabit store dolanmasıdır.
+ değişken p: *tam64 = t olarak *tam64;*p=0 olarak tam64;p=(t+8) olarak *tam64;*p=0 olarak tam64;p=(t+16) olarak *tam64;*p=0 olarak tam64;
+ ver t;
+}
+çıplak işlev ps2_halka_oku(t: tam64) -> tam32 {
+ eğer t == 0 { ver -1; }
+ değişken rp: *tam64 = t olarak *tam64; değişken wp: *tam64 = (t+8) olarak *tam64;
+ değişken bas: tam64 = *rp;eğer bas == *wp { ver -1; }
+ değişken p: *dtam8 = (t+24+bas) olarak *dtam8;değişken b: tam32 = (*p) olarak tam32;
+ *rp=(bas+1)&1023;ver b;
+}
+çıplak işlev ps2_halka_var(t: tam64) -> mantıksal {
+ eğer t == 0 { ver yanlış; }
+ değişken r: *tam64 = t olarak *tam64; değişken w: *tam64 = (t+8) olarak *tam64;ver *r != *w;
+}
+çıplak işlev ps2_kesme_etkin() -> mantıksal { ver ps2_irq_acik != 0; }
+çıplak işlev ps2_kesme_klavye_oku() -> tam32 { ver ps2_halka_oku(ps2_irq_klavye); }
+çıplak işlev ps2_kesme_fare_oku() -> tam32 { ver ps2_halka_oku(ps2_irq_fare); }
+çıplak işlev ps2_kesme_fare_var() -> mantıksal { ver ps2_halka_var(ps2_irq_fare); }
+çıplak işlev ps2_kesme_bekle() {
+ // Timer uyanışında kabuğa dönüp boş dizi ayırma; yalnız gerçek girdiyle dön.
+ iken değil ps2_halka_var(ps2_irq_fare) ve değil ps2_halka_var(ps2_irq_klavye) {
+  kg_irq_kapat();
+  eğer değil ps2_halka_var(ps2_irq_fare) ve değil ps2_halka_var(ps2_irq_klavye) {
+   güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"sti
+hlt"# bozulan("~{memory}") } }
+  } değilse { kz_irq_ac(); }
+ }
+}
+çıplak işlev ps2_aux_yanit() -> tam32 {
+ değişken i: tam32 = 0;
+ iken i < 10000 {
+  değişken s: tam32 = kem_port_oku8(100 olarak dtam16) olarak tam32;
+  eğer (s&1) != 0 {
+   değişken b: tam32 = kem_port_oku8(96 olarak dtam16) olarak tam32;
+   eğer (s&224) == 32 { ver b; }
+   ps2_irq_hata=ps2_irq_hata+1;ver -1;
+  }
+  kem_bekle_us(50);i=i+1;
+ }
+ ver -1;
+}
+çıplak işlev ps2_aux_komut(v: tam32) -> mantıksal {
+ eğer değil ps2_yaz(100,212) veya değil ps2_yaz(96,v) { ver yanlış; }
+ ver ps2_aux_yanit() == 250;
+}
+çıplak işlev ps2_kesme_kur() -> tam32 {
+ kg_irq_kapat();
+ eğer ps2_kur() < 0 { kz_irq_ac();ver -1; }
+ eğer değil ps2_yaz(100,173) veya değil ps2_yaz(100,168) { kz_irq_ac();ver -2; }
+ eğer değil ps2_aux_komut(246) veya değil ps2_aux_komut(242) { kz_irq_ac();ver -3; }
+ değişken kimlik: tam32 = ps2_aux_yanit();
+ eğer kimlik != 0 { kz_irq_ac();ver -4; }
+ eğer değil ps2_aux_komut(244) { kz_irq_ac();ver -5; }
+ ps2_irq_klavye=ps2_halka_yeni();ps2_irq_fare=ps2_halka_yeni();
+ eğer ps2_irq_klavye == 0 veya ps2_irq_fare == 0 { kz_irq_ac();ver -6; }
+ eğer değil ps2_yaz(100,32) { kz_irq_ac();ver -7; }
+ değişken cfg: tam32 = ps2_yanit();eğer cfg < 0 { kz_irq_ac();ver -8; }
+ cfg=(cfg|67)&207; // IRQ1/12 + XLATE açık; iki saat engeli kapalı.
+ eğer değil ps2_yaz(100,96) veya değil ps2_yaz(96,cfg) veya değil ps2_yaz(100,174) { kz_irq_ac();ver -9; }
+ ps2_irq_acik=1;kz_irq_ac();
+ ver kimlik;
+}
+
+çıplak işlev ps2_kesme_kayip(fare: mantıksal) -> tam64 {
+ değişken t: tam64 = ps2_irq_klavye;eğer fare { t=ps2_irq_fare; }eğer t == 0 { ver 0; }
+ değişken p: *tam64 = (t+16) olarak *tam64;ver *p;
+}
+çıplak işlev ps2_kesme_hata_oku() -> tam64 {
+ değişken n: tam64 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq ps2_irq_hata(%rip), $0"# çıktı("=r",&n) bozulan("~{memory}") } }
+ ver n;
+}

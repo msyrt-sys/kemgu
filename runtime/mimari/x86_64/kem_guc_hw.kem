@@ -1,0 +1,85 @@
+// FADT reset + 8042 + üçlü hata; tam S5/AML bu dalganın dışında.
+kullan drivers::acpi::fadt::{ FadtGuc, fadt_guc_coz, fadt_guc_reset_uygun };
+küresel değişken guc_ps2_durum: tam32 = 2; // 2: eski FADT veya bilgi yok; mevcut yoklama davranışı.
+küresel değişken guc_reset_alan: tam32 = 0;
+küresel değişken guc_reset_adr: tam64 = 0;
+küresel değişken guc_reset_deger: tam32 = 0;
+çıplak işlev guc_ps2_izin() -> mantıksal { ver guc_ps2_durum != 0; }
+işlev uefi_fadt(b: UefiBilgi) -> sonuç<FadtGuc,metin> {
+ eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
+ eşleş rsdp_coz(r) { hata(e) => { ver hata("FADT RSDP"); } tamam(rsdp) => {
+  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt; eğer x { a=rsdp.xsdt; }
+  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
+  eşleş acpi_kok_coz(kok,x) { hata(e) => { ver hata(e); } tamam(xs) => {
+   için adr: xs {
+    eşleş uefi_sdt(b,adr) { hata(e) => { ver hata(e); } tamam(t) => {
+     eşleş sdt_coz(t) { hata(e) => { ver hata("FADT SDT"); } tamam(h) => {
+      eğer imza_esit(t,0,"FACP") { ver fadt_guc_coz(t); }
+     } }
+    } }
+   }
+  } } } }
+ } } } }
+ ver hata("FADT yok");
+}
+
+işlev uefi_guc_esle(d: &değişken CerceveAyirici,b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_fadt(b) { hata(e) => { ver tamam(yanlış); } tamam(f) => {
+  eğer fadt_guc_reset_uygun(f) ve f.reset_alan == 0 { ver uefi_mmio_esle(d,f.reset_adr,1); }
+ } }ver tamam(doğru);
+}
+işlev uefi_guc_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_fadt(b) { hata(e) => { bm_yaz(metin_birlestir("FADT_YOK ",e));ver tamam(yanlış); } tamam(f) => {
+  güvensiz {
+   eğer f.ps2_bilgi { guc_ps2_durum=0;eğer f.ps2_var { guc_ps2_durum=1; } }
+   eğer fadt_guc_reset_uygun(f) { guc_reset_alan=f.reset_alan;guc_reset_adr=f.reset_adr;guc_reset_deger=f.reset_deger; }
+  }
+  kap_dok("FADT_DURUM",f.surum olarak tam64,f.boot_bayrak olarak tam64,f.bayraklar);
+  kap_dok("FADT_RESET",f.reset_alan olarak tam64,f.reset_adr,f.reset_deger olarak tam64);
+  kap_dok("FADT_GAS",f.reset_boy olarak tam64,f.reset_ofs olarak tam64,f.reset_erisim olarak tam64);
+  kap_dok("FADT_PM",f.pm_taban,0,0);
+ } }ver tamam(doğru);
+}
+çıplak işlev guc_fadt_yaz() {
+ eğer guc_reset_alan == 1 { kem_port_yaz8((guc_reset_adr olarak tam32) olarak dtam16,guc_reset_deger olarak dtam8); }
+ değilse { kem_fiz_yaz8(guc_reset_adr,guc_reset_deger); }
+}
+çıplak işlev guc_8042_yaz() {
+ değişken i: tam32 = 0;
+ iken i < 10000 {
+  eğer ((kem_port_oku8(100 olarak dtam16) olarak tam32)&2) == 0 {
+   kem_port_yaz8(100 olarak dtam16,254 olarak dtam8);ver;
+  }kem_bekle_us(50);i=i+1;
+ }
+}
+// Test çekirdeği her mekanizmayı ayrı açılışta ölçer; kabuk her zaman aşama0 çağırır.
+çıplak işlev guc_yeniden_asama(asama: tam32) {
+ kg_irq_kapat();
+ eğer asama == 0 ve guc_reset_adr != 0 {
+  kis_metin("GUC YENIDENBASLAT FADT");kis_satir();guc_fadt_yaz();kem_bekle_us(100000);
+ }
+ eğer asama < 2 ve guc_ps2_izin() {
+  kis_metin("GUC YENIDENBASLAT 8042");kis_satir();guc_8042_yaz();kem_bekle_us(100000);
+ }
+ kis_metin("GUC YENIDENBASLAT UCLU");kis_satir();
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"subq $$16, %rsp
+movq $$0, (%rsp)
+movq $$0, 8(%rsp)
+lidt (%rsp)
+int3
+addq $$16, %rsp"# bozulan("~{memory}") } }
+ iken doğru { kdl_idle(); }
+}
+çıplak işlev guc_tcg_mi() -> mantıksal {
+ değişken b: tam32 = 0;değişken c: tam32 = 0;değişken d: tam32 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1073741824, %eax
+cpuid"#
+  çıktı("={bx}",&b) çıktı("={cx}",&c) çıktı("={dx}",&d) bozulan("~{rax}") bozulan("~{memory}") } }
+ ver b == 1413956436 ve c == 1129596739 ve d == 1195594823;
+}
+çıplak işlev guc_kapat() {
+ kg_irq_kapat();
+ // Yalnız QEMU TCG imzasında test çıkışı; fiziksel PC güç düğmesi ile kapanır.
+ eğer guc_tcg_mi() { kem_qemu_cik(0); }
+ iken doğru { kdl_idle(); }
+}

@@ -345,6 +345,14 @@ kdl_irq0_stub:
     pushq   %r13
     pushq   %r14
     pushq   %r15
+    /* UEFI PIT kalibrasyonu: PIC yolu ve görev çerçevesi PVH'de aynen kalır. */
+    cmpq    $0, kdl_lapic_taban(%rip)
+    je      8f
+    call    kdl_apic_pit_irq
+    movq    kdl_lapic_taban(%rip), %rax
+    movl    $0, 0xb0(%rax)
+    jmp     9f
+8:
     movq    $0, %rdi          /* IRQ no = 0 (timer) */
     call    kdl_kesme_isle
     movq    %rsp, %rdi        /* kesilen görevin çerçeve SP'si */
@@ -352,6 +360,7 @@ kdl_irq0_stub:
     movq    %rax, %rsp        /* seçilen görevin çerçeve SP'si */
     movb    $0x20, %al        /* PIC EOI (master) */
     outb    %al, $0x20
+9:
     popq    %r15
     popq    %r14
     popq    %r13
@@ -592,3 +601,162 @@ uefi_gdt_desc:
 uefi_pml4: .skip 4096
 uefi_pdpt: .skip 4096
 uefi_pd: .skip 16384
+
+/* Dalga 11: bağımsız IST yığınları, alt sınırda kanarya; 4*4096 bayt.
+ * Giriş ve kurtarma yolları değişmez. IDT kurulurken TSS'ye bağlanırlar. */
+.section .bss
+.align 4096
+.global kdl_ist1_alt, kdl_ist1_ust
+kdl_ist1_alt: .skip 16384
+kdl_ist1_ust:
+.align 4096
+.global kdl_ist2_alt, kdl_ist2_ust
+kdl_ist2_alt: .skip 16384
+kdl_ist2_ust:
+.align 4096
+.global kdl_ist3_alt, kdl_ist3_ust
+kdl_ist3_alt: .skip 16384
+kdl_ist3_ust:
+/* İstisna mesajı heap'ten ve kesilen yığından bağımsız, sınırlı tampon. */
+.align 16
+.global kdl_istisna_ileti
+kdl_istisna_ileti: .skip 256
+
+/* UEFI xAPIC tabanı; 0 iken eski PIC yolu. Yeni koçanlar ortak tam kayıt düzeni. */
+.section .data
+.align 8
+.global kdl_lapic_taban
+kdl_lapic_taban: .quad 0
+.section .text
+.code64
+.global kdl_irq1_stub
+kdl_irq1_stub:
+    pushq %rax
+    pushq %rbx
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %rbp
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
+    movq $1, %rdi
+    call kdl_ps2_irq
+    movq kdl_lapic_taban(%rip), %rax
+    testq %rax, %rax
+    jz 1f
+    movl $0, 0xb0(%rax)
+1:
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbp
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rbx
+    popq %rax
+    iretq
+.global kdl_irq12_stub
+kdl_irq12_stub:
+    pushq %rax
+    pushq %rbx
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %rbp
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
+    movq $12, %rdi
+    call kdl_ps2_irq
+    movq kdl_lapic_taban(%rip), %rax
+    testq %rax, %rax
+    jz 1f
+    movl $0, 0xb0(%rax)
+1:
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbp
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rbx
+    popq %rax
+    iretq
+.global kdl_lapic_timer_stub
+kdl_lapic_timer_stub:
+    pushq %rax
+    pushq %rbx
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %rbp
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
+    movq $0, %rdi
+    call kdl_apic_timer_irq
+    movq kdl_lapic_taban(%rip), %rax
+    testq %rax, %rax
+    jz 1f
+    movl $0, 0xb0(%rax)
+1:
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rbp
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rbx
+    popq %rax
+    iretq
+.global kdl_spurious_stub
+kdl_spurious_stub:
+    iretq                   /* Sahte vektöre EOI gönderilmez. */
+/* Eski/C çekirdekleri APIC'i açmaz; yalnız bağlılık için zayıf kancalar. */
+.weak kdl_apic_pit_irq, kdl_apic_timer_irq, kdl_ps2_irq
+kdl_apic_pit_irq:
+    ret
+kdl_apic_timer_irq:
+    ret
+kdl_ps2_irq:
+    ret

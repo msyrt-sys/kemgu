@@ -1,5 +1,5 @@
 """UEFI kabuğu: USB tuşları, tam seri, bağımsız PSF ve salt-okunur disk kâhini."""
-import hashlib,re,struct,subprocess,time
+import hashlib,re,struct,subprocess,time,os
 from fat_yazici import MERHABA,NOT,KAYDIR
 from psf_kahin import screendump,kabuk_goruntu,karsilastir
 
@@ -62,6 +62,9 @@ def denetle(command,response,f,w,serial,p,n,ram,disk,mode='nvme',esp=False):
         key('ret',True);key('ret',False)
         expected+=out+b'KABUK_HAZIR\n';await_output()
         akis+='> '+text+'\n'+(out+b'KABUK_HAZIR\n').decode();ekran()
+    if os.environ.get('UEFI_PS2_IRQ')=='1' or os.environ.get('UEFI_PS2_KARMA')=='1':
+        from ps2_irq_kahin import denetle as irq_denetle
+        irq_denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh)
     assert time.monotonic()<deadline,'kabuk 60 saniyeyi aştı'
     symbols={l.split()[-1]:int(l.split()[0],16) for l in subprocess.check_output(['nm','-n',str(w/'k.elf')],text=True).splitlines() if len(l.split())==3}
     hp=w/'heap.bin';command('pmemsave',{'val':symbols['kem_bump'],'size':8,'filename':str(hp)})

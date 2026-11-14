@@ -1,0 +1,33 @@
+// [D-757] C11-001: ham işaretçiye literal yazımı POINTEE genişliğinde olmalı.
+// Eskiden iki derleyicide `p: *tam64; *p = 0` → `store i32 0`: 8 baytlık nesnenin yalnız
+// alt yarısı yazılıyordu (sessiz yanlış cevap). Başlangıç değerleri üst yarıyı DOLU tutar
+// ki dar yazım çıkış kodunda görünsün; dar tipler (tam8/dtam16) ve tam32 POZİTİF şekillerdir.
+işlev main() -> tam32 {
+    değişken a: tam64 = 72623859790382856;
+    değişken b: tam64 = 72623859790382856;
+    değişken c: tam8 = 7;
+    değişken d: dtam16 = 7;
+    değişken e: tam32 = 7;
+    değişken f: tam64 = 5;
+    güvensiz {
+        değişken pa: *tam64 = (&a) olarak *tam64;
+        *pa = 0;
+        değişken pb: *tam64 = (&b) olarak *tam64;
+        *pb = 8589934592;
+        değişken pc: *tam8 = (&c) olarak *tam8;
+        *pc = 3;
+        değişken pd: *dtam16 = (&d) olarak *dtam16;
+        *pd = 65535;
+        değişken pe: *tam32 = (&e) olarak *tam32;
+        *pe = 4;
+        değişken pf: *tam64 = (&f) olarak *tam64;
+        *pf = f + 8589934592;
+    }
+    eğer a != 0 { ver 1; }
+    eğer b != 8589934592 { ver 2; }
+    eğer c != 3 { ver 3; }
+    eğer d != 65535 { ver 4; }
+    eğer e != 4 { ver 5; }
+    eğer f != 8589934597 { ver 6; }
+    ver 42;
+}

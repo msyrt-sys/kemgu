@@ -1,0 +1,166 @@
+// UEFI MADT → xAPIC/IOAPIC; saf yönlendirme kuralı drivers/acpi'dedir.
+// Yazmaçlar Linux apicdef.h/io_apic.h; tools/codex/dalga11_sabit.py doğrular.
+kullan drivers::acpi::madt::{ Madt, madt_coz };
+kullan drivers::ortak::bayt::{ imza_esit };
+kullan drivers::acpi::yonlendirme::{ KesmeYolu, isa_yolu, kesme_girdisi };
+küresel değişken kap_lapic_tik: tam64 = 0;
+küresel değişken kap_pit_tik: tam64 = 0;
+küresel değişken kap_lapic: tam64 = 0;
+küresel değişken kap_io1: tam64 = 0;
+küresel değişken kap_reg1: tam32 = 0;
+küresel değişken kap_io12: tam64 = 0;
+küresel değişken kap_reg12: tam32 = 0;
+
+// Kalibrasyonda PIT kanal0 tek atım: her IRQ yeniden 11932 sayım kurar.
+// Mode3 kare dalgasını QEMU IOAPIC çift yüksek bildirebilir; PIC/PVH yolu değişmez.
+gerçekzamanlı çıplak işlev kdl_apic_pit_irq() {
+ kap_pit_tik=kap_pit_tik+1;
+ güvensiz { satıriçi_asm { mimari:x86_64 çevrim:2048 şablon:r#"movb $$156, %al
+outb %al, $$64
+movb $$46, %al
+outb %al, $$64"# bozulan("~{rax}") bozulan("~{memory}") } }
+}
+çıplak işlev kap_pit_baslat() {
+ kem_port_yaz8(67 olarak dtam16,48 olarak dtam8);
+ kem_port_yaz8(64 olarak dtam16,156 olarak dtam8);
+ kem_port_yaz8(64 olarak dtam16,46 olarak dtam8);kz_irq_ac();
+}
+gerçekzamanlı çıplak işlev kdl_apic_timer_irq() { kem_tik=kem_tik+1; kap_lapic_tik=kap_lapic_tik+1; }
+çıplak işlev kap_pit_oku() -> tam64 {
+ değişken n: tam64 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq kap_pit_tik(%rip), $0"# çıktı("=r",&n) bozulan("~{memory}") } }
+ ver n;
+}
+çıplak işlev kap_msr_oku() -> tam64 {
+ değişken a: tam64 = 0; değişken d: tam64 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$27, %ecx
+rdmsr"# çıktı("={ax}",&a) çıktı("={dx}",&d) bozulan("~{rcx}") bozulan("~{memory}") } }
+ ver (a&4294967295)|((d&4294967295)<<32);
+}
+çıplak işlev kap_msr_yaz(v: tam64) {
+ değişken a: tam32 = v olarak tam32; değişken d: tam32 = (v>>32) olarak tam32;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$27, %ecx
+wrmsr"# girdi("{ax}",a) girdi("{dx}",d) bozulan("~{rcx}") bozulan("~{memory}") } }
+}
+çıplak işlev kap_taban_yaz(a: tam64) {
+ kap_lapic=a;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $0, kdl_lapic_taban(%rip)"# girdi("r",a) bozulan("~{memory}") } }
+}
+çıplak işlev kap_io_oku(a: tam64, r: tam32) -> tam64 {
+ kem_mmio_yaz32(a,r olarak tam64); ver kem_mmio_oku32(a+16)&4294967295;
+}
+çıplak işlev kap_io_yaz(a: tam64, r: tam32, v: tam64) {
+ kem_mmio_yaz32(a,r olarak tam64); kem_mmio_yaz32(a+16,v);
+}
+çıplak işlev kap_ps2_ac() {
+ // Denetleyici baytları/halka hazır olduktan sonra maskeyi indir.
+ kap_io_yaz(kap_io1,kap_reg1,kap_io_oku(kap_io1,kap_reg1)&4294901759);
+ kap_io_yaz(kap_io12,kap_reg12,kap_io_oku(kap_io12,kap_reg12)&4294901759);
+}
+işlev uefi_madt(b: UefiBilgi) -> sonuç<Madt,metin> {
+ eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
+ eşleş rsdp_coz(r) { hata(e) => { ver hata("APIC RSDP"); } tamam(rsdp) => {
+  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt; eğer x { a=rsdp.xsdt; }
+  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
+  eşleş acpi_kok_coz(kok,x) { hata(e) => { ver hata(e); } tamam(xs) => {
+   için adr: xs {
+    eşleş uefi_sdt(b,adr) { hata(e) => { ver hata(e); } tamam(t) => {
+     eşleş sdt_coz(t) { hata(e) => { ver hata("APIC SDT"); } tamam(h) => {
+      eğer imza_esit(t,0,"APIC") { ver madt_coz(t); }
+     } }
+    } }
+   }
+  } } } }
+ } } } }
+ ver hata("MADT yok");
+}
+işlev uefi_apic_esle(d: &değişken CerceveAyirici, b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_madt(b) { hata(e) => { ver hata(e); } tamam(m) => {
+  eğer (m.lapic_adresi&4095) != 0 { ver hata("LAPIC hizasi"); }
+  eşleş uefi_mmio_esle(d,m.lapic_adresi,4096) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  için g: m.girdiler { eğer g.tur == 1 {
+   eğer (g.adres&4095) != 0 { ver hata("IOAPIC hizasi"); }
+   eşleş uefi_mmio_esle(d,g.adres,4096) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  } }
+ } }
+ ver tamam(doğru);
+}
+işlev kap_dok(ad: metin, a: tam64, b: tam64, c: tam64) {
+ değişken s: metin = metin_birlestir(ad," ");s=metin_birlestir(s,tam_metin(a));s=metin_birlestir(s," ");
+ s=metin_birlestir(s,tam_metin(b));s=metin_birlestir(s," ");bm_yaz(metin_birlestir(s,tam_metin(c)));
+}
+işlev kap_yol_kur(m: Madt, irq: tam32, vektor: tam32, hedef: tam32, maskeli: mantıksal) -> sonuç<mantıksal,metin> {
+ eşleş isa_yolu(m,irq) { hata(e) => { ver hata(e); } tamam(y) => {
+  için g: m.girdiler { eğer g.tur == 1 {
+   değişken n: tam64 = ((kap_io_oku(g.adres,1)>>16)&255)+1;
+   eğer y.gsi >= g.gsi ve y.gsi-g.gsi < n {
+    değişken r: tam32 = 16+((y.gsi-g.gsi) olarak tam32)*2;
+    eşleş kesme_girdisi(y,vektor,hedef,maskeli) { hata(e) => { ver hata(e); } tamam(v) => {
+     // Önce maskele; hedefi yaz; son olarak istenen alt sözcüğü yayımla.
+     kap_io_yaz(g.adres,r,65536); kap_io_yaz(g.adres,r+1,v.ust); kap_io_yaz(g.adres,r,v.alt);
+     eğer kap_io_oku(g.adres,r) != v.alt veya kap_io_oku(g.adres,r+1) != v.ust { ver hata("IOAPIC geri okuma"); }
+     güvensiz {
+      eğer irq == 1 { kap_io1=g.adres;kap_reg1=r; }
+      eğer irq == 12 { kap_io12=g.adres;kap_reg12=r; }
+     }
+     kap_dok("APIC_YOL",irq olarak tam64,y.gsi,v.alt); ver tamam(doğru);
+    } }
+   }
+  } }
+ } }
+ ver hata("GSI IOAPIC disinda");
+}
+çıplak işlev kap_pit_bekle(n: tam64) -> mantıksal {
+ değişken i: tam32 = 0;
+ // Port 0x80 QEMU’da mikrosaniye saati değildir; yalnız sınırlı ilerleme beklenir.
+ iken i < 2000000 {
+  eğer kap_pit_oku() >= n { ver doğru; }
+  kem_bekle_us(50);i=i+1;
+ }
+ ver yanlış;
+}
+işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ kg_irq_kapat();
+ eşleş uefi_madt(b) { hata(e) => { ver hata(e); } tamam(m) => {
+  değişken msr: tam64 = kap_msr_oku();
+  eğer (msr&1024) != 0 { ver hata("x2APIC acik; xAPIC gerekli"); }
+  kap_msr_yaz(m.lapic_adresi|(msr&4095)|2048);
+  kap_taban_yaz(m.lapic_adresi);
+  değişken a: tam64 = m.lapic_adresi;
+  değişken id: tam32 = ((kem_mmio_oku32(a+32)>>24)&255) olarak tam32;
+  kap_dok("APIC_LAPIC",a,id olarak tam64,kem_mmio_oku32(a+48));
+  kem_port_yaz8(33 olarak dtam16,255 olarak dtam8); kem_port_yaz8(161 olarak dtam16,255 olarak dtam8);
+  kem_mmio_yaz32(a+128,0);kem_mmio_yaz32(a+848,65536);kem_mmio_yaz32(a+864,65536);
+  kem_mmio_yaz32(a+800,65584);kem_mmio_yaz32(a+240,511);kem_mmio_yaz32(a+992,3);
+  değişken adet: tam32 = 0;
+  için g: m.girdiler {
+   eğer g.tur == 2 { kap_dok("APIC_ISO",g.kaynak olarak tam64,g.gsi,g.bayraklar); }
+   eğer g.tur == 1 {
+    değişken n: tam64 = ((kap_io_oku(g.adres,1)>>16)&255)+1;
+    eğer n < 1 veya n > 120 { ver hata("IOAPIC girdi sayisi"); }
+    kap_dok("APIC_IO",g.adres,g.gsi,n);adet=adet+1;
+    değişken i: tam32 = 0;iken (i olarak tam64) < n { kap_io_yaz(g.adres,16+i*2,65536);i=i+1; }
+   }
+  }
+  eğer adet == 0 { ver hata("IOAPIC yok"); }
+  eşleş kap_yol_kur(m,0,32,id,yanlış) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş kap_yol_kur(m,1,33,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş kap_yol_kur(m,12,44,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  güvensiz { kap_pit_tik=0; }
+  kap_pit_baslat(); // PIT 100 Hz tek atım; IRQ0 yalnız ISO/GSI yolunda.
+  eğer değil kap_pit_bekle(2) { kg_irq_kapat();ver hata("APIC PIT ISO zaman asimi"); }
+  kem_mmio_yaz32(a+896,4294967295);
+  değişken bas: tam64 = kap_pit_oku();
+  eğer değil kap_pit_bekle(bas+10) { kg_irq_kapat();ver hata("APIC PIT kalibrasyon zaman asimi"); }
+  kg_irq_kapat();
+  değişken fark: tam64 = 4294967295-kem_mmio_oku32(a+912);
+  değişken sure: tam64 = kap_pit_oku()-bas;
+  eğer sure < 10 veya sure > 100 { ver hata("PIT olcum araligi"); }
+  değişken periyot: tam64 = fark/sure;
+  eğer periyot < 100 veya periyot > 2147483647 { ver hata("LAPIC kalibrasyon araligi"); }
+  eşleş kap_yol_kur(m,0,32,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  kap_dok("APIC_KAL",sure,fark,periyot);
+  kem_mmio_yaz32(a+800,131120);kem_mmio_yaz32(a+896,periyot);
+  kz_irq_ac();bm_yaz("APIC_HAZIR");ver tamam(doğru);
+ } }
+}
