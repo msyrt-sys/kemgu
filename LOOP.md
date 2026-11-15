@@ -2961,4 +2961,13 @@
   CI (Windows) ilk koşumda KIRMIZI: baremetal_diff birleşik x86 birimi self-host IR üretimi rc=124. Asılma DEĞİL:
   main'de aynı adım Windows'ta 44 sn sürüyordu (log zaman damgaları), birim 5712 → 6184 satıra çıkınca 60 sn
   sınırı aşıldı. Sınır platforma göre (Windows 240, Linux 60; D-566 deseni). YAN ÖLÇÜM → E4q.
+- 2026-11-15 D-758: Codex dalga 12 promptu (otomasyon/chatgpt/CODEX_GOREV_12.md) — gerçek diskte yazılabilir
+  dosya sistemi: blok katmanı (çeşit+eşleş, D8e), MBR/GPT + çoklu bağlama, açılış bölümü UEFI aygıt yolundan
+  (H8k, D-756), iç disk + ESP salt okunur (H8l), sektör tabanlı FAT32 yazıcı (imaj tabanlı yazıcı kâhin olarak
+  kalır), kirli bayrak, kabuk `cd pwd yaz sil mkdir rmdir mv cp sync diskler bagla`, fsck.fat + bağımsız Python
+  çapraz doğrulaması, USB+NVMe+AHCI matrisi. Ölçüm (Claude): sürücüler yaz/flush'ı ZATEN destekliyor; kabuk tek
+  diske salt okuma bağlıyor; fat32_yaz tam imaj üzerinde. Sabitler: FAT32 BPB `state` ofseti 0x41 (linux/msdos_fs.h
+  struct fat_boot_sector'dan hesaplandı), ESP GUID depodaki guid.kem ile aynı. DOĞRULANAMADI (promptta yazılı):
+  EFI_DEVICE_PATH GUID'i + HardDrive düğüm düzeni — OVMF ikilisi sıkıştırılmış, bayt araması bilgi vermiyor
+  (çalışan LoadedImage GUID'i de 0); çalışan OVMF'de ölçülecek.
 
