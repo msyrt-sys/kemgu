@@ -1,0 +1,105 @@
+// Python: (1300+511)//512=3, 16*32=512, boş imaj için 70000 sektör.
+kullan drivers::fs::fat32_bicimle;
+kullan drivers::fs::fat32_yaz;
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, bpb_coz };
+kullan drivers::fs::fat32_sektor::{ FatSektor, fat_sektor_yeni, fat_sektor_koy };
+kullan drivers::fs::fat32_sektor_yaz::{ FatDegisiklik, FatYazIslem, fat_yaz_plan };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+
+işlev sektor_ilet(s: &değişken FatSektor,imaj: Dizi<dtam8>) -> mantıksal {
+    değişken b: Dizi<dtam8> = bayt_sifir(512);
+    değişken n: tam32 = (s.gerekli*512) olarak tam32;
+    değişken i: tam32 = 0;
+    iken i < 512 {
+        eğer n+i < dizi_boyut(imaj) { yaz_u8(b,i,oku_u8(imaj,n+i) olarak tam64); }
+        i=i+1;
+    }
+    eşleş fat_sektor_koy(s,s.gerekli,b) { hata(e) => { ver yanlış; } tamam(v) => { ver doğru; } }
+}
+işlev uygulas(s: &değişken FatSektor,imaj: Dizi<dtam8>,yol: metin,islem: FatYazIslem) -> sonuç<mantıksal,metin> {
+    değişken n: tam32 = 0;
+    iken n < 257 {
+        eşleş fat_yaz_plan(s,yol,islem) {
+            hata(e) => { eğer s.gerekli < 0 { ver hata(e); } }
+            tamam(plan) => {
+                değişken asama: tam32 = 0;
+                iken asama < 4 {
+                    için k: plan {
+                        eğer k.asama == asama {
+                            değişken bas: tam32 = (k.lba*512) olarak tam32;
+                            iken dizi_boyut(imaj) < bas+512 { dizi_ekle(imaj,0 olarak dtam8); }
+                            değişken i: tam32 = 0;
+                            iken i < 512 { yaz_u8(imaj,bas+i,oku_u8(k.veri,i) olarak tam64); i=i+1; }
+                        }
+                    }
+                    asama=asama+1;
+                }
+                ver tamam(doğru);
+            }
+        }
+        eğer değil sektor_ilet(s,imaj) { ver hata("ilet"); }
+        n=n+1;
+    }
+    ver hata("tekrar siniri");
+}
+işlev dene(imaj: Dizi<dtam8>,yol: metin,islem: FatYazIslem) -> sonuç<mantıksal,metin> {
+    eşleş bpb_coz(imaj) { hata(e) => { ver hata("bpb"); } tamam(b) => {
+        eşleş fat_sektor_yeni(b) { hata(e) => { ver hata(e); } tamam(v) => {
+            değişken s: FatSektor = v;
+            ver uygulas(&değişken s,imaj,yol,islem);
+        } }
+    } }
+}
+işlev ok(r: sonuç<mantıksal,metin>) -> mantıksal {
+    eşleş r { hata(e) => { yazdir_metin(e); ver yanlış; } tamam(v) => { ver v; } }
+}
+işlev imaj() -> Dizi<dtam8> {
+    eşleş fat32_bicimle::fat32_bicimle(70000,1,"") {
+        hata(e) => { değişken b: Dizi<dtam8> = []; ver b; }
+        tamam(v) => { ver v; }
+    }
+}
+işlev fy_test_bayt_esit(a: Dizi<dtam8>,b: Dizi<dtam8>) -> mantıksal {
+    eğer dizi_boyut(a) != dizi_boyut(b) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(a) {
+        eğer oku_u8(a,i) != oku_u8(b,i) { yazdir_tam(i); ver yanlış; }
+        i=i+1;
+    }
+    ver doğru;
+}
+// 512/32=16 slot. İlk 15 kısa girdiden sonra üç LFN/kısa slot sektör sınırını aşar.
+işlev genisleyen_dizin() -> mantıksal {
+    değişken kaynak: Dizi<dtam8> = imaj();
+    değişken hedef: Dizi<dtam8> = imaj();
+    değişken bos: Dizi<dtam8> = [];
+    değişken i: tam32 = 0;
+    iken i < 15 {
+        değişken ad: metin = metin_birlestir("/",kod_metin(65+i));
+        eşleş fat32_yaz::dosya_yaz(kaynak,ad,bos) { hata(e) => { ver yanlış; } tamam(v) => { } }
+        eşleş fat32_yaz::dosya_yaz(hedef,ad,bos) { hata(e) => { ver yanlış; } tamam(v) => { } }
+        i=i+1;
+    }
+    değişken uzun_ad: metin = "/çokuzungünlük.txt";
+    eşleş fat32_yaz::dosya_yaz(kaynak,uzun_ad,bos) { hata(e) => { ver yanlış; } tamam(v) => { } }
+    ver ok(dene(hedef,uzun_ad,FatYazIslem::Yaz(bos))) ve fy_test_bayt_esit(kaynak,hedef);
+}
+işlev main() -> tam32 {
+    değişken referans: Dizi<dtam8> = imaj();
+    değişken aday: Dizi<dtam8> = imaj();
+    eşleş fat32_yaz::dizin_olustur(referans,"/çalışma") { hata(e) => { ver 1; } tamam(v) => { } }
+    eğer değil ok(dene(aday,"/çalışma",FatYazIslem::DizinOlustur)) veya değil fy_test_bayt_esit(referans,aday) { ver 2; }
+    değişken veri: Dizi<dtam8> = bayt_sifir(1300);
+    değişken i: tam32 = 0;
+    iken i < 1300 { yaz_u8(veri,i,((i*17+3)&255) olarak tam64); i=i+1; }
+    eşleş fat32_yaz::dosya_yaz(referans,"/çalışma/günlük.txt",veri) { hata(e) => { ver 3; } tamam(v) => { } }
+    eğer değil ok(dene(aday,"/çalışma/günlük.txt",FatYazIslem::Yaz(veri))) veya değil fy_test_bayt_esit(referans,aday) { ver 4; }
+    eşleş dene(aday,"/çalışma",FatYazIslem::DizinSil) {
+        tamam(v) => { ver 5; } hata(e) => { eğer değil metin_esit(e,"dizin bos degil") { ver 6; } }
+    }
+    eğer değil fy_test_bayt_esit(referans,aday) { ver 7; }
+    eşleş fat32_yaz::dosya_sil(referans,"/çalışma/günlük.txt") { hata(e) => { ver 8; } tamam(v) => { } }
+    eğer değil ok(dene(aday,"/çalışma/günlük.txt",FatYazIslem::DosyaSil)) veya değil fy_test_bayt_esit(referans,aday) { ver 9; }
+    eğer değil genisleyen_dizin() { ver 10; }
+    ver 0;
+}

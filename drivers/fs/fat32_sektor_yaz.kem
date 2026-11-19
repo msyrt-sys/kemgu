@@ -1,0 +1,342 @@
+// Girdi sektörleri salt okunur. Plan tamamen doğrulanmadan hiçbir yazma yayımlanmaz.
+// Oluşturma: veri -> FAT -> dizin -> FSInfo. Silme: dizin -> FAT -> FSInfo.
+kullan drivers::fs::fat32_sektor::{ FatSektor, fat_sektor_al };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, kume_sektoru };
+kullan drivers::fs::fat32_kayit::{ kayit_verisi, uzun_ad_gecerli, FatZaman, fat_zaman_koy, fat_zaman_varsayilan };
+kullan drivers::fs::fat32_kisa_ad::{ kisa_ad_uret, lfn_gerekli_mi };
+kullan drivers::fs::fat32_imaj::{ DizinResmi, FatKayit, imaj_kayitlar, imaj_ad_esit };
+kullan drivers::fs::yol::{ yol_bol };
+kullan drivers::fs::yol_harf::{ yol_bilesen_esit };
+kullan drivers::ortak::utf8::{ utf8_coz, utf16le_kodla };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_ascii, yaz_le16, yaz_le32 };
+
+genel yapı FatDegisiklik { lba: tam64; asama: tam32; veri: Dizi<dtam8>; }
+yapı DizinParcasi { veri: Dizi<dtam8>; sektorler: Dizi<tam64>; son_kume: tam64; }
+yapı Tahsis { kumeler: Dizi<tam64>; ipucu: tam64; }
+işlev fsy_kopya(b: Dizi<dtam8>) -> Dizi<dtam8> {
+    değişken out: Dizi<dtam8> = bayt_sifir(512);
+    değişken i: tam32 = 0;
+    iken i < 512 { yaz_u8(out,i,oku_u8(b,i) olarak tam64); i=i+1; }
+    ver out;
+}
+// Daha eski aşamanın görüntüsü değiştirilmez; her aşamanın ayrı diske yazılacak baytları var.
+işlev fsy_duzenle(s: &değişken FatSektor,p: Dizi<FatDegisiklik>,lba: tam64,asama: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    değişken i: tam32 = dizi_boyut(p)-1;
+    iken i >= 0 {
+        değişken k: FatDegisiklik = dizi_al(p,i);
+        eğer k.lba == lba {
+            eğer k.asama == asama { ver tamam(k.veri); }
+            değişken b: Dizi<dtam8> = fsy_kopya(k.veri);
+            dizi_ekle(p,FatDegisiklik { lba:lba,asama:asama,veri:b });
+            ver tamam(b);
+        }
+        i=i-1;
+    }
+    eşleş fat_sektor_al(s,lba) { hata(e) => { ver hata(e); } tamam(eski) => {
+        değişken b: Dizi<dtam8> = fsy_kopya(eski);
+        dizi_ekle(p,FatDegisiklik { lba:lba,asama:asama,veri:b });
+        ver tamam(b);
+    } }
+}
+işlev fsy_fat_oku(s: &değişken FatSektor,k: tam64) -> sonuç<tam64,metin> {
+    eğer k < 2 veya k-2 >= s.bpb.kume_sayisi veya k/128 >= s.bpb.fat_sektor { ver hata("FAT kume siniri"); }
+    eşleş fat_sektor_al(s,(s.bpb.ayrilmis olarak tam64)+k/128) {
+        hata(e) => { ver hata(e); } tamam(b) => { ver tamam(oku_le32(b,((k%128)*4) olarak tam32)&268435455); }
+    }
+}
+işlev fsy_fat_yaz(s: &değişken FatSektor,p: Dizi<FatDegisiklik>,k: tam64,v: tam64) -> sonuç<mantıksal,metin> {
+    değişken i: tam32 = 0;
+    iken i < s.bpb.fat_sayisi {
+        değişken l: tam64 = (s.bpb.ayrilmis olarak tam64)+(i olarak tam64)*s.bpb.fat_sektor+k/128;
+        eşleş fsy_duzenle(s,p,l,1) { hata(e) => { ver hata(e); } tamam(b) => {
+            değişken o: tam32 = ((k%128)*4) olarak tam32;
+            yaz_le32(b,o,(oku_le32(b,o)&4026531840)|v);
+        } }
+        i=i+1;
+    }
+    ver tamam(doğru);
+}
+işlev fsy_zincir(s: &değişken FatSektor,ilk: tam64) -> sonuç<Dizi<tam64>,metin> {
+    değişken sonuc: Dizi<tam64> = [];
+    değişken k: tam64 = ilk;
+    iken dizi_boyut(sonuc) < 128 {
+        için eski: sonuc { eğer eski == k { ver hata("FAT dongu"); } }
+        eşleş fsy_fat_oku(s,k) { hata(e) => { ver hata(e); } tamam(n) => {
+            dizi_ekle(sonuc,k);
+            eğer n >= 268435448 { ver tamam(sonuc); }
+            eğer n < 2 veya n >= 268435440 { ver hata("FAT bozuk zincir"); }
+            k=n;
+        } }
+    }
+    ver hata("FAT zincir siniri");
+}
+işlev fsy_dizin(s: &değişken FatSektor,k: tam64) -> sonuç<DizinParcasi,metin> {
+    eşleş fsy_zincir(s,k) { hata(e) => { ver hata(e); } tamam(xs) => {
+        değişken v: Dizi<dtam8> = []; değişken ls: Dizi<tam64> = [];
+        için c: xs {
+            değişken l: tam64 = kume_sektoru(s.bpb,c);
+            değişken j: tam32 = 0;
+            iken j < s.bpb.kume_sektor {
+                eğer dizi_boyut(ls) >= 128 { ver hata("dizin sektor siniri"); }
+                eşleş fat_sektor_al(s,l) { hata(e) => { ver hata(e); } tamam(b) => {
+                    değişken i: tam32 = 0;
+                    iken i < 512 { dizi_ekle(v,oku_u8(b,i) olarak dtam8); i=i+1; }
+                } }
+                dizi_ekle(ls,l); j=j+1; l=l+1;
+            }
+        }
+        ver tamam(DizinParcasi { veri:v,sektorler:ls,son_kume:dizi_al(xs,dizi_boyut(xs)-1) });
+    } }
+}
+işlev fsy_kayitlar(d: DizinParcasi) -> sonuç<Dizi<FatKayit>,metin> {
+    değişken ofset: Dizi<tam32> = [];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(d.veri) { dizi_ekle(ofset,i); i=i+32; }
+    değişken r: DizinResmi = DizinResmi { baytlar:d.veri,konumlar:ofset,zincir:[] };
+    ver imaj_kayitlar(r);
+}
+işlev fsy_ad_esit(k: FatKayit,a: metin) -> mantıksal {
+    ver imaj_ad_esit(k,a) veya yol_bilesen_esit(k.ad,a);
+}
+işlev fsy_ebeveyn(s: &değişken FatSektor,parcalar: Dizi<metin>) -> sonuç<tam64,metin> {
+    değişken c: tam64 = s.bpb.kok_kume;
+    değişken i: tam32 = 0;
+    iken i+1 < dizi_boyut(parcalar) {
+        değişken sonraki: tam64 = 0;
+        değişken ad: metin = dizi_al(parcalar,i);
+        eşleş fsy_dizin(s,c) { hata(e) => { ver hata(e); } tamam(d) => {
+            eşleş fsy_kayitlar(d) { hata(e) => { ver hata(e); } tamam(xs) => {
+                için k: xs {
+                    eğer fsy_ad_esit(k,ad) {
+                        eğer (k.ozellik&16) == 0 { ver hata("dizin degil"); }
+                        sonraki=k.ilk;
+                    }
+                }
+            } }
+        } }
+        eğer sonraki == 0 { ver hata("bulunamadi"); }
+        c=sonraki; i=i+1;
+    }
+    ver tamam(c);
+}
+işlev fsy_fsinfo_gecerli(b: Dizi<dtam8>) -> mantıksal {
+    ver oku_le32(b,0) == 1096897106 ve oku_le32(b,484) == 1631679090 ve oku_le32(b,508) == 2857697280;
+}
+işlev fsy_tahsis(s: &değişken FatSektor,ipucu: tam64,adet: tam32) -> sonuç<Tahsis,metin> {
+    değişken xs: Dizi<tam64> = [];
+    eğer adet == 0 { ver tamam(Tahsis { kumeler:xs,ipucu:ipucu }); }
+    değişken k: tam64 = ipucu;
+    değişken son: tam64 = s.bpb.kume_sayisi+2;
+    eğer k < 2 veya k >= son { k=2; }
+    değişken bakilan: tam64 = 0;
+    iken bakilan < s.bpb.kume_sayisi {
+        eşleş fsy_fat_oku(s,k) { hata(e) => { ver hata(e); } tamam(v) => {
+            eğer v == 0 {
+                eğer dizi_boyut(xs) == adet { ver tamam(Tahsis { kumeler:xs,ipucu:k }); }
+                dizi_ekle(xs,k);
+            }
+        } }
+        k=k+1; bakilan=bakilan+1;
+        eğer k == son { k=2; }
+    }
+    eğer dizi_boyut(xs) == adet { ver tamam(Tahsis { kumeler:xs,ipucu:4294967295 }); }
+    ver hata("disk dolu");
+}
+işlev fsy_fsinfo_yaz(s: &değişken FatSektor,p: Dizi<FatDegisiklik>,yedek: tam32,fark: tam32,ipucu: tam64) -> sonuç<mantıksal,metin> {
+    değişken i: tam32 = 0;
+    iken i < 2 {
+        değişken l: tam32 = s.bpb.fsinfo;
+        eğer i == 1 { l=l+yedek; }
+        eğer i == 0 veya (yedek > 0 ve l < s.bpb.ayrilmis) {
+            eşleş fsy_duzenle(s,p,l olarak tam64,3) { hata(e) => { ver hata(e); } tamam(b) => {
+                eğer değil fsy_fsinfo_gecerli(b) { ver hata("FSInfo imza"); }
+                değişken bos: tam64 = oku_le32(b,488);
+                eğer bos != 4294967295 {
+                    bos=bos+(fark olarak tam64);
+                    eğer bos < 0 veya bos > s.bpb.kume_sayisi { bos=4294967295; }
+                    yaz_le32(b,488,bos);
+                }
+                yaz_le32(b,492,ipucu);
+            } }
+        }
+        i=i+1;
+    }
+    ver tamam(doğru);
+}
+yapı BosYer { bas: tam32; sonunda: mantıksal; ek: tam32; }
+işlev fsy_bos_yer(d: DizinParcasi,n: tam32,kb: tam32) -> BosYer {
+    değişken ardisik: tam32 = 0; değişken bas: tam32 = 0;
+    değişken son: mantıksal = yanlış; değişken i: tam32 = 0;
+    iken i < dizi_boyut(d.veri)/32 {
+        değişken v: tam32 = oku_u8(d.veri,i*32);
+        eğer v == 0 { son=doğru; }
+        eğer son veya v == 229 {
+            eğer ardisik == 0 { bas=i; }
+            ardisik=ardisik+1;
+            eğer ardisik == n { ver BosYer { bas:bas,sonunda:son,ek:0 }; }
+        } değilse { ardisik=0; }
+        i=i+1;
+    }
+    eğer ardisik == 0 { bas=i; }
+    ver BosYer { bas:bas,sonunda:son,ek:(n-ardisik+kb/32-1)/(kb/32) };
+}
+işlev fsy_veri_kur(b: Fat32Bpb,p: Dizi<FatDegisiklik>,d: DizinParcasi,ts: Tahsis,ek: tam32,veri: Dizi<dtam8>,klasor: mantıksal,ust: tam64) {
+    değişken konum: tam32 = 0; değişken i: tam32 = 0;
+    için k: ts.kumeler {
+        değişken l: tam64 = kume_sektoru(b,k);
+        değişken j: tam32 = 0;
+        iken j < b.kume_sektor {
+            değişken blok: Dizi<dtam8> = bayt_sifir(512);
+            eğer i < ek { dizi_ekle(d.sektorler,l); }
+            değilse eğer klasor {
+                eğer j == 0 {
+                    yaz_ascii(blok,0,".          "); yaz_u8(blok,11,16);
+                    yaz_le16(blok,20,k>>16); yaz_le16(blok,26,k&65535);
+                    yaz_ascii(blok,32,"..         "); yaz_u8(blok,43,16);
+                    değişken ata: tam64 = ust;
+                    eğer ust == b.kok_kume { ata=0; }
+                    yaz_le16(blok,52,ata>>16); yaz_le16(blok,58,ata&65535);
+                }
+            } değilse {
+                değişken pos: tam32 = 0;
+                iken pos < 512 ve konum < dizi_boyut(veri) {
+                    yaz_u8(blok,pos,oku_u8(veri,konum) olarak tam64);
+                    pos=pos+1; konum=konum+1;
+                }
+            }
+            dizi_ekle(p,FatDegisiklik { lba:l,asama:0,veri:blok });
+            l=l+1; j=j+1;
+        }
+        i=i+1;
+    }
+}
+işlev fsy_dizin_yaz(s: &değişken FatSektor,p: Dizi<FatDegisiklik>,ls: Dizi<tam64>,yer: BosYer,g: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    değişken i: tam32 = 0;
+    değişken uzunluk: tam32 = dizi_boyut(g);
+    iken i < uzunluk {
+        değişken slot: tam32 = yer.bas+i/32;
+        eşleş fsy_duzenle(s,p,dizi_al(ls,slot/16),2) { hata(e) => { ver hata(e); } tamam(b) => {
+            değişken j: tam32 = 0;
+            iken j < 32 { yaz_u8(b,(slot%16)*32+j,oku_u8(g,i+j) olarak tam64); j=j+1; }
+        } }
+        i=i+32;
+    }
+    değişken son: tam32 = yer.bas+i/32;
+    eğer yer.sonunda ve son/16 < dizi_boyut(ls) {
+        eşleş fsy_duzenle(s,p,dizi_al(ls,son/16),2) { hata(e) => { ver hata(e); } tamam(b) => { yaz_u8(b,(son%16)*32,0); } }
+    }
+    ver tamam(doğru);
+}
+işlev fsy_olustur(s: &değişken FatSektor,ust: tam64,ad: metin,veri: Dizi<dtam8>,klasor: mantıksal,yedek: tam32,ipucu: tam64,z: FatZaman) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    eğer değil uzun_ad_gecerli(ad) veya dizi_boyut(veri) > 65536 { ver hata("dosya adi veya boyu"); }
+    değişken birim: Dizi<dtam8> = utf16le_kodla(utf8_coz(ad));
+    eğer dizi_boyut(birim) > 510 { ver hata("uzun ad"); }
+    eşleş fsy_dizin(s,ust) { hata(e) => { ver hata(e); } tamam(d) => {
+        değişken eski: Dizi<metin> = [];
+        eşleş fsy_kayitlar(d) { hata(e) => { ver hata(e); } tamam(xs) => {
+            için k: xs {
+                eğer fsy_ad_esit(k,ad) { ver hata("var"); }
+                dizi_ekle(eski,k.kisa);
+            }
+        } }
+        değişken kisa: metin = ""; değişken tek: Dizi<metin> = []; değişken dogrudan: metin = "";
+        eşleş kisa_ad_uret(ad,eski) { hata(e) => { ver hata(e); } tamam(v) => { kisa=v; } }
+        eşleş kisa_ad_uret(ad,tek) { hata(e) => { ver hata(e); } tamam(v) => { dogrudan=v; } }
+        değişken lfn: tam32 = 0;
+        eğer lfn_gerekli_mi(ad) veya değil metin_esit(kisa,dogrudan) { lfn=(dizi_boyut(birim)/2+12)/13; }
+        değişken kb: tam32 = s.bpb.kume_sektor*512;
+        değişken yer: BosYer = fsy_bos_yer(d,lfn+1,kb);
+        değişken n: tam32 = (dizi_boyut(veri)+kb-1)/kb;
+        eğer klasor { n=1; }
+        eşleş fsy_tahsis(s,ipucu,yer.ek+n) { hata(e) => { ver hata(e); } tamam(t) => {
+            değişken p: Dizi<FatDegisiklik> = [];
+            fsy_veri_kur(s.bpb,p,d,t,yer.ek,veri,klasor,ust);
+            değişken i: tam32 = 0;
+            iken i < dizi_boyut(t.kumeler) {
+                değişken kume: tam64 = dizi_al(t.kumeler,i);
+                değişken sonraki: tam64 = 268435455;
+                eğer i+1 < yer.ek veya (i >= yer.ek ve i+1 < dizi_boyut(t.kumeler)) { sonraki=dizi_al(t.kumeler,i+1); }
+                eşleş fsy_fat_yaz(s,p,kume,sonraki) { hata(e) => { ver hata(e); } tamam(v) => { } }
+                i=i+1;
+            }
+            eğer yer.ek > 0 {
+                eşleş fsy_fat_yaz(s,p,d.son_kume,dizi_al(t.kumeler,0)) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            }
+            değişken ilk: tam64 = 0;
+            eğer n > 0 { ilk=dizi_al(t.kumeler,yer.ek); }
+            değişken g: Dizi<dtam8> = kayit_verisi(ad,kisa,ilk,dizi_boyut(veri) olarak tam64,klasor,lfn);
+            fat_zaman_koy(g,z);
+            eşleş fsy_dizin_yaz(s,p,d.sektorler,yer,g) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            eşleş fsy_fsinfo_yaz(s,p,yedek,0-yer.ek-n,t.ipucu) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            ver tamam(p);
+        } }
+    } }
+}
+işlev fsy_kayit_sil(s: &değişken FatSektor,d: DizinParcasi,k: FatKayit,klasor: mantıksal,yedek: tam32,ipucu: tam64) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    eğer ((k.ozellik&16) != 0) != klasor { ver hata("dosya veya dizin turu"); }
+    eğer klasor {
+        eşleş fsy_dizin(s,k.ilk) { hata(e) => { ver hata(e); } tamam(ic) => {
+            eşleş fsy_kayitlar(ic) { hata(e) => { ver hata(e); } tamam(xs) => {
+                için g: xs {
+                    eğer değil metin_esit(g.ad,".") ve değil metin_esit(g.ad,"..") { ver hata("dizin bos degil"); }
+                }
+            } }
+        } }
+    }
+    değişken serbest: Dizi<tam64> = [];
+    eğer k.ilk != 0 {
+        eşleş fsy_zincir(s,k.ilk) { hata(e) => { ver hata(e); } tamam(xs) => { serbest=xs; } }
+    } değilse eğer k.boyut != 0 { ver hata("FAT bozuk zincir"); }
+    değişken p: Dizi<FatDegisiklik> = [];
+    değişken i: tam32 = k.bas;
+    iken i <= k.son {
+        eşleş fsy_duzenle(s,p,dizi_al(d.sektorler,i/16),0) { hata(e) => { ver hata(e); } tamam(b) => { yaz_u8(b,(i%16)*32,229); } }
+        i=i+1;
+    }
+    değişken sonraki: tam64 = ipucu;
+    için c: serbest {
+        eğer sonraki < 2 veya c < sonraki { sonraki=c; }
+        eşleş fsy_fat_yaz(s,p,c,0) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    }
+    eşleş fsy_fsinfo_yaz(s,p,yedek,dizi_boyut(serbest),sonraki) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    ver tamam(p);
+}
+işlev fsy_sil(s: &değişken FatSektor,ust: tam64,ad: metin,klasor: mantıksal,yedek: tam32,ipucu: tam64) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    eşleş fsy_dizin(s,ust) { hata(e) => { ver hata(e); } tamam(d) => {
+        eşleş fsy_kayitlar(d) { hata(e) => { ver hata(e); } tamam(xs) => {
+            için k: xs { eğer fsy_ad_esit(k,ad) { ver fsy_kayit_sil(s,d,k,klasor,yedek,ipucu); } }
+        } }
+    } }
+    ver hata("bulunamadi");
+}
+genel çeşit FatYazIslem { Yaz(Dizi<dtam8>), DizinOlustur, DosyaSil, DizinSil }
+genel işlev fat_yaz_plan(s: &değişken FatSektor,yol: metin,islem: FatYazIslem) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    ver fat_yaz_plan_saat(s,yol,islem,fat_zaman_varsayilan());
+}
+genel işlev fat_yaz_plan_saat(s: &değişken FatSektor,yol: metin,islem: FatYazIslem,z: FatZaman) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    // -1 eksik yok; LBA 0 da yeniden deneme talebi olabilir.
+    s.gerekli=-1;
+    eğer s.bpb.sektor_bayt != 512 veya s.bpb.fat_sayisi != 2 veya s.bpb.fsinfo < 1 veya s.bpb.fsinfo >= s.bpb.ayrilmis veya s.bpb.kume_sayisi > 268435444 veya s.bpb.fat_sektor*128 < s.bpb.kume_sayisi+2 { ver hata("FAT32 yazma geometrisi"); }
+    değişken yedek: tam32 = 0;
+    eşleş fat_sektor_al(s,0) { hata(e) => { ver hata(e); } tamam(b) => {
+        eğer (oku_le16(b,40)&128) != 0 { ver hata("FAT yansilama kapali"); }
+        yedek=oku_le16(b,50);
+    } }
+    değişken ipucu: tam64 = 0;
+    eşleş fat_sektor_al(s,s.bpb.fsinfo olarak tam64) { hata(e) => { ver hata(e); } tamam(b) => {
+        eğer değil fsy_fsinfo_gecerli(b) { ver hata("FSInfo imza"); }
+        ipucu=oku_le32(b,492);
+    } }
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(xs) => {
+        eğer dizi_boyut(xs) == 0 { ver hata("kok degistirilemez"); }
+        değişken ad: metin = dizi_al(xs,dizi_boyut(xs)-1);
+        eşleş fsy_ebeveyn(s,xs) { hata(e) => { ver hata(e); } tamam(ust) => {
+            eşleş islem {
+                FatYazIslem::Yaz(v) => { ver fsy_olustur(s,ust,ad,v,yanlış,yedek,ipucu,z); }
+                FatYazIslem::DizinOlustur => { değişken bos: Dizi<dtam8> = []; ver fsy_olustur(s,ust,ad,bos,doğru,yedek,ipucu,z); }
+                FatYazIslem::DosyaSil => { ver fsy_sil(s,ust,ad,yanlış,yedek,ipucu); }
+                FatYazIslem::DizinSil => { ver fsy_sil(s,ust,ad,doğru,yedek,ipucu); }
+            }
+        } }
+    } }
+}
