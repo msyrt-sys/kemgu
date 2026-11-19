@@ -1,0 +1,43 @@
+// Python kâhini: aygıt başına 65 kirli sektör, 64 girdilik LRU taşması.
+kullan drivers::usb::xhci_cekirdek::{ xhci_yeni };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8 };
+işlev dene(d: &değişken BlokDonanim,no: tam32) -> sonuç<mantıksal,metin> {
+ eğer blok_kapasite(d.aygit) != 8192 veya blok_sektor(d.aygit) != 512 { ver hata("kapasite"); }
+ değişken s: tam32 = 0;
+ iken s < 65 {
+  değişken b: Dizi<dtam8> = bayt_sifir(512);değişken j: tam32 = 0;
+  iken j < 512 { yaz_u8(b,j,((no*37+s*7+j*13+5)&255) olarak tam64);j=j+1; }
+  eşleş bd_koy(d,(200+s) olarak tam64,b,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }s=s+1;
+ }
+ eşleş bd_bosalt(d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ s=0;iken s < 65 {
+  eşleş bd_ham_oku(d,(200+s) olarak tam64,1) { hata(e) => { ver hata(e); } tamam(b) => {
+   değişken j: tam32 = 0;iken j < 512 { eğer oku_u8(b,j) != ((no*37+s*7+j*13+5)&255) { ver hata("geri okuma"); }j=j+1; }
+  } }s=s+1;
+ }
+ bm_yaz(metin_birlestir("BLOK_OK ",d.ad));ver tamam(doğru);
+}
+işlev calis() -> sonuç<mantıksal,metin> {
+ eşleş uefi_bilgi() { hata(e) => { ver hata(e); } tamam(b) => {
+  eşleş uefi_bellek_kur(b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ } }
+ değişken xb: tam64 = 0;
+ eşleş bm_pci_bul(12,3,48) { hata(e) => { ver hata(e); } tamam(bdf) => {
+  xb=(kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
+ } }
+ eşleş xhci_yeni(bm_dma_al(),16384) { hata(e) => { ver hata(e); } tamam(xx) => {
+  değişken x: XhciDurum = xx;
+  eşleş bd_xsur(xb,&değişken x) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş bd_bul(&değişken x,xb) { hata(e) => { ver hata(e); } tamam(xs) => {
+   eğer dizi_boyut(xs) != 3 { ver hata("uc aygit bulunamadi"); }
+   değişken i: tam32 = 0;
+   iken i < 3 { değişken d: BlokDonanim = dizi_al(xs,i);
+    eşleş dene(&değişken d,i) { hata(e) => { ver hata(e); } tamam(v) => { } }dizi_yaz(xs,i,d);i=i+1;
+   }
+  } }
+ } }ver tamam(doğru);
+}
+işlev main() -> tam32 {
+ bm_yaz("BLOK_BASLA");
+ eşleş calis() { hata(e) => { bm_yaz(metin_birlestir("BLOK_HATA ",e));kem_qemu_cik(1); } tamam(v) => { bm_yaz("BLOK_BITTI");kem_qemu_cik(16); } }ver 0;
+}

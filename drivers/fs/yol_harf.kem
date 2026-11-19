@@ -9,3 +9,28 @@ genel işlev yol_esit(a: metin, b: metin, harf_duyarsiz: mantıksal) -> sonuç<m
     eğer harf_duyarsiz { x = kucuk_harf(x); y = kucuk_harf(y); }
     ver tamam(metin_esit(x, y));
 }
+
+// FAT kabuğunun sıcak yolu: Türkçe ve temel Latin harflerini karşılaştırır.
+// Tam Unicode dönüşümü için üstteki yol_esit API'si kullanılmaya devam eder.
+// Python: [ord(c) for c in 'IİıĞğÜüŞşÖöÇç'].
+kullan drivers::ortak::utf8::{ utf8_coz };
+işlev fat_alt(k: tam32) -> tam32 {
+    eşleş k {
+        73 => { ver 305; } 304 => { ver 105; }
+        286 => { ver 287; } 220 => { ver 252; } 350 => { ver 351; }
+        214 => { ver 246; } 199 => { ver 231; }
+        _ => { eğer k >= 65 ve k <= 90 { ver k+32; } ver k; }
+    }
+}
+genel işlev yol_bilesen_esit(a: metin,b: metin) -> mantıksal {
+    eğer metin_esit(a,b) { ver doğru; }
+    değişken x: Dizi<tam32> = utf8_coz(a);
+    değişken y: Dizi<tam32> = utf8_coz(b);
+    eğer dizi_boyut(x) != dizi_boyut(y) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(x) {
+        eğer fat_alt(dizi_al(x,i)) != fat_alt(dizi_al(y,i)) { ver yanlış; }
+        i=i+1;
+    }
+    ver doğru;
+}

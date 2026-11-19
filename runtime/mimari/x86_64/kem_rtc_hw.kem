@@ -1,0 +1,39 @@
+// Ports 0x70/0x71, register offsets: test/bare_metal/rtc_x86.c,
+// Status A/B bitleri: Linux include/linux/mc146818rtc.h.
+kullan drivers::zaman::rtc::{ RtcHam, RtcAn, rtc_coz };
+işlev rtc_yazmac(i: tam32) -> tam32 {
+    kem_port_yaz8(112,i olarak dtam8);
+    ver kem_port_oku8(113) olarak tam32;
+}
+işlev rtc_ornek() -> RtcHam {
+    ver RtcHam { kip:rtc_yazmac(11),yil:rtc_yazmac(9),ay:rtc_yazmac(8),
+        gun:rtc_yazmac(7),saat:rtc_yazmac(4),dakika:rtc_yazmac(2),saniye:rtc_yazmac(0) };
+}
+işlev rtc_oku() -> sonuç<RtcAn,metin> {
+    değişken i: tam32 = 0;
+    iken i < 2000 {
+        eğer (rtc_yazmac(10)&128) == 0 {
+            değişken a: RtcHam = rtc_ornek();
+            değişken b: RtcHam = rtc_ornek();
+            eğer (rtc_yazmac(10)&128) == 0 ve a.kip == b.kip ve a.yil == b.yil ve a.ay == b.ay ve a.gun == b.gun ve a.saat == b.saat ve a.dakika == b.dakika ve a.saniye == b.saniye {
+                ver rtc_coz(b);
+            }
+        }
+        kem_bekle_us(10);
+        i=i+1;
+    }
+    ver hata("RTC tutarli okunamadi");
+}
+işlev rtc_iki(i: tam32) -> metin {
+    değişken m: metin = tam_metin(i olarak tam64);
+    eğer i < 10 { ver metin_birlestir("0",m); }
+    ver m;
+}
+işlev rtc_metin(a: RtcAn) -> metin {
+    değişken tarih: metin = tam_metin(a.yil olarak tam64);
+    tarih=metin_birlestir(metin_birlestir(tarih,"-"),rtc_iki(a.ay));
+    tarih=metin_birlestir(metin_birlestir(tarih,"-"),rtc_iki(a.gun));
+    değişken saat: metin = metin_birlestir(metin_birlestir(rtc_iki(a.saat),":"),rtc_iki(a.dakika));
+    saat=metin_birlestir(metin_birlestir(saat,":"),rtc_iki(a.saniye));
+    ver metin_birlestir(metin_birlestir(tarih," "),saat);
+}

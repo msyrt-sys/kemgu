@@ -2,7 +2,7 @@
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le16, yaz_le32, yaz_ascii };
 kullan drivers::ortak::utf8::{ utf8_coz, utf16le_kodla };
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb };
-kullan drivers::fs::fat32_dizin::{ kisa_ad_saglama };
+kullan drivers::fs::fat32_kayit::{ kayit_verisi, uzun_ad_gecerli };
 kullan drivers::fs::fat32_kisa_ad::{ kisa_ad_uret, lfn_gerekli_mi };
 kullan drivers::fs::yol::{ yol_bol };
 kullan drivers::fs::fat32_imaj::{ DizinResmi, dizin_resmi_bos, FatKayit, imaj_bpb, imaj_fat_oku, imaj_fat_yaz, imaj_kume_bayt,
@@ -29,51 +29,6 @@ işlev fsinfo_yenile(imaj: Dizi<dtam8>, b: Fat32Bpb) {
         o = (yedek + b.fsinfo) * b.sektor_bayt;
         yaz_le32(imaj, o + 488, bos); yaz_le32(imaj, o + 492, sonraki);
     }
-}
-işlev uzun_ad_gecerli(ad: metin) -> mantıksal {
-    değişken k: Dizi<tam32> = utf8_coz(ad);
-    değişken i: tam32 = 0;
-    iken i < dizi_boyut(k) {
-        değişken v: tam32 = dizi_al(k, i);
-        eğer v < 32 veya v == 34 veya v == 42 veya v == 47 veya v == 58 veya v == 60 veya v == 62 veya v == 63 veya v == 92 veya v == 124 { ver yanlış; }
-        i = i + 1;
-    }
-    ver dizi_boyut(k) > 0;
-}
-işlev lfn_ofset(i: tam32) -> tam32 {
-    eğer i < 5 { ver 1 + i * 2; }
-    eğer i < 11 { ver 14 + (i - 5) * 2; }
-    ver 28 + (i - 11) * 2;
-}
-işlev kayit_verisi(ad: metin, kisa: metin, ilk: tam64, boy: tam64, dizin: mantıksal, lfn: tam32) -> Dizi<dtam8> {
-    değişken b: Dizi<dtam8> = bayt_sifir((lfn + 1) * 32);
-    değişken o: tam32 = lfn * 32;
-    yaz_ascii(b, o, kisa);
-    eğer dizin { yaz_u8(b, o + 11, 16); } değilse { yaz_u8(b, o + 11, 32); }
-    yaz_le16(b, o + 20, ilk >> 16); yaz_le16(b, o + 26, ilk & 65535); yaz_le32(b, o + 28, boy);
-    // Deterministik FAT tarihi: 1980-01-01, saat 00:00.
-    yaz_le16(b, o + 16, 33); yaz_le16(b, o + 18, 33); yaz_le16(b, o + 24, 33);
-    değişken kodlar: Dizi<tam32> = utf8_coz(ad);
-    değişken u: Dizi<dtam8> = utf16le_kodla(kodlar);
-    değişken adet: tam32 = dizi_boyut(u) / 2;
-    değişken saglama: tam32 = kisa_ad_saglama(b, o);
-    değişken parca: tam32 = 0;
-    iken parca < lfn {
-        değişken sira: tam32 = lfn - parca;
-        değişken bayrak: tam32 = sira;
-        eğer parca == 0 { bayrak = bayrak | 64; }
-        yaz_u8(b, parca * 32, bayrak olarak tam64); yaz_u8(b, parca * 32 + 11, 15); yaz_u8(b, parca * 32 + 13, saglama olarak tam64);
-        değişken j: tam32 = 0;
-        iken j < 13 {
-            değişken n: tam32 = (sira - 1) * 13 + j;
-            değişken kod: tam32 = 65535;
-            eğer n < adet { kod = oku_le16(u, n * 2); }
-            eğer n == adet { kod = 0; }
-            yaz_le16(b, parca * 32 + lfn_ofset(j), kod olarak tam64); j = j + 1;
-        }
-        parca = parca + 1;
-    }
-    ver b;
 }
 işlev kayit_yaz(imaj: Dizi<dtam8>, b: Fat32Bpb, yol: metin, veri: Dizi<dtam8>, dizin: mantıksal) -> sonuç<tam64, metin> {
     eğer değil fsinfo_gecerli(imaj, b) { ver hata("fsinfo"); }

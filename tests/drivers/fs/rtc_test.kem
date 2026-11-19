@@ -1,0 +1,14 @@
+// Python: int("92",16)=146 (BCD 12 PM), int("26",16)=38 (2026).
+kullan drivers::zaman::rtc::{ RtcHam, RtcAn, rtc_coz };
+işlev main() -> tam32 {
+    değişken bcd: RtcHam = RtcHam { kip:0,yil:38,ay:7,gun:20,saat:146,dakika:66,saniye:89 };
+    eşleş rtc_coz(bcd) { hata(e) => { ver 1; } tamam(a) => {
+        eğer a.yil != 2026 veya a.ay != 7 veya a.gun != 14 veya a.saat != 12 veya a.dakika != 42 veya a.saniye != 59 { ver 2; }
+    } }
+    değişken ikili: RtcHam = RtcHam { kip:6,yil:24,ay:2,gun:29,saat:23,dakika:9,saniye:18 };
+    eşleş rtc_coz(ikili) { hata(e) => { ver 3; } tamam(a) => {
+        eğer a.yil != 2024 veya a.gun != 29 veya a.saat != 23 { ver 4; }
+    } }
+    ikili.yil=25;
+    eşleş rtc_coz(ikili) { tamam(a) => { ver 5; } hata(e) => { ver 0; } }
+}

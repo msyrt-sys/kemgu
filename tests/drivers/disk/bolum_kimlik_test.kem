@@ -1,0 +1,164 @@
+// Ham fixture: python3 tools/codex/dalga12_bolum_uret.py (struct, uuid, zlib).
+kullan drivers::disk::bolum_kimlik::{ DiskBolumu, GptTabloKonumu, AcilisBolumu, gpt_konum, gpt_kimlikli, mbr_kimlikli, acilis_dugumu, bolum_eslesir };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32 };
+işlev baslik() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(b,0,69);
+    yaz_u8(b,1,70);
+    yaz_u8(b,2,73);
+    yaz_u8(b,3,32);
+    yaz_u8(b,4,80);
+    yaz_u8(b,5,65);
+    yaz_u8(b,6,82);
+    yaz_u8(b,7,84);
+    yaz_u8(b,10,1);
+    yaz_u8(b,12,92);
+    yaz_u8(b,16,238);
+    yaz_u8(b,17,111);
+    yaz_u8(b,18,71);
+    yaz_u8(b,19,225);
+    yaz_u8(b,24,1);
+    yaz_u8(b,32,255);
+    yaz_u8(b,33,31);
+    yaz_u8(b,40,34);
+    yaz_u8(b,48,222);
+    yaz_u8(b,49,31);
+    yaz_u8(b,56,152);
+    yaz_u8(b,57,186);
+    yaz_u8(b,58,220);
+    yaz_u8(b,59,254);
+    yaz_u8(b,60,84);
+    yaz_u8(b,61,118);
+    yaz_u8(b,62,16);
+    yaz_u8(b,63,50);
+    yaz_u8(b,64,17);
+    yaz_u8(b,65,34);
+    yaz_u8(b,66,51);
+    yaz_u8(b,67,68);
+    yaz_u8(b,68,85);
+    yaz_u8(b,69,102);
+    yaz_u8(b,70,119);
+    yaz_u8(b,71,136);
+    yaz_u8(b,72,2);
+    yaz_u8(b,80,4);
+    yaz_u8(b,84,128);
+    yaz_u8(b,88,151);
+    yaz_u8(b,89,67);
+    yaz_u8(b,90,178);
+    yaz_u8(b,91,81);
+    ver b;
+}
+işlev girdiler() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(b,128,162);
+    yaz_u8(b,129,160);
+    yaz_u8(b,130,208);
+    yaz_u8(b,131,235);
+    yaz_u8(b,132,229);
+    yaz_u8(b,133,185);
+    yaz_u8(b,134,51);
+    yaz_u8(b,135,68);
+    yaz_u8(b,136,135);
+    yaz_u8(b,137,192);
+    yaz_u8(b,138,104);
+    yaz_u8(b,139,182);
+    yaz_u8(b,140,183);
+    yaz_u8(b,141,38);
+    yaz_u8(b,142,153);
+    yaz_u8(b,143,199);
+    yaz_u8(b,144,152);
+    yaz_u8(b,145,186);
+    yaz_u8(b,146,220);
+    yaz_u8(b,147,254);
+    yaz_u8(b,148,84);
+    yaz_u8(b,149,118);
+    yaz_u8(b,150,16);
+    yaz_u8(b,151,50);
+    yaz_u8(b,152,17);
+    yaz_u8(b,153,34);
+    yaz_u8(b,154,51);
+    yaz_u8(b,155,68);
+    yaz_u8(b,156,85);
+    yaz_u8(b,157,102);
+    yaz_u8(b,158,119);
+    yaz_u8(b,159,136);
+    yaz_u8(b,161,8);
+    yaz_u8(b,168,255);
+    yaz_u8(b,169,23);
+    ver b;
+}
+işlev dugum() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(42);
+    yaz_u8(b,0,4);
+    yaz_u8(b,1,1);
+    yaz_u8(b,2,42);
+    yaz_u8(b,4,2);
+    yaz_u8(b,9,8);
+    yaz_u8(b,17,16);
+    yaz_u8(b,24,152);
+    yaz_u8(b,25,186);
+    yaz_u8(b,26,220);
+    yaz_u8(b,27,254);
+    yaz_u8(b,28,84);
+    yaz_u8(b,29,118);
+    yaz_u8(b,30,16);
+    yaz_u8(b,31,50);
+    yaz_u8(b,32,17);
+    yaz_u8(b,33,34);
+    yaz_u8(b,34,51);
+    yaz_u8(b,35,68);
+    yaz_u8(b,36,85);
+    yaz_u8(b,37,102);
+    yaz_u8(b,38,119);
+    yaz_u8(b,39,136);
+    yaz_u8(b,40,2);
+    yaz_u8(b,41,2);
+    ver b;
+}
+işlev gpt_test() -> mantıksal {
+    değişken h: Dizi<dtam8> = baslik();
+    değişken b: Dizi<dtam8> = girdiler();
+    değişken yol: Dizi<dtam8> = dugum();
+    eşleş gpt_konum(h,8192) { hata(e) => { ver yanlış; } tamam(k) => {
+        eşleş gpt_kimlikli(k,b) { hata(e) => { ver yanlış; } tamam(xs) => {
+            eğer dizi_boyut(xs) != 1 { ver yanlış; }
+            değişken p: DiskBolumu = dizi_al(xs,0);
+            eğer p.no != 2 veya p.bas != 2048 veya p.adet != 4096 { ver yanlış; }
+            eşleş acilis_dugumu(yol) { hata(e) => { ver yanlış; } tamam(a) => {
+                eğer değil bolum_eslesir(a,p) { ver yanlış; }
+            } }
+            yaz_u8(yol,24,42);
+            eşleş acilis_dugumu(yol) { hata(e) => { ver yanlış; } tamam(a) => {
+                eğer bolum_eslesir(a,p) { ver yanlış; }
+            } }
+        } }
+        // Girdi değişti, başlık CRC'si yerinde. İki CRC bağımsız denetlenir.
+        yaz_u8(b,0,1);
+        eşleş gpt_kimlikli(k,b) { tamam(v) => { ver yanlış; } hata(e) => {
+            eğer değil metin_esit(e,"GPT girdi CRC") { ver yanlış; }
+        } }
+    } }
+    yaz_u8(h,56,1);
+    eşleş gpt_konum(h,8192) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_esit(e,"GPT baslik CRC"); } }
+}
+işlev mbr_test() -> mantıksal {
+    değişken m: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(m,510,85); yaz_u8(m,511,170);
+    yaz_u8(m,466,12); yaz_le32(m,470,2048); yaz_le32(m,474,4096);
+    yaz_le32(m,440,270544960);
+    değişken yol: Dizi<dtam8> = dugum();
+    yaz_le32(yol,24,270544960); yaz_u8(yol,40,1); yaz_u8(yol,41,1);
+    eşleş mbr_kimlikli(m,8192) { hata(e) => { ver yanlış; } tamam(xs) => {
+        eğer dizi_boyut(xs) != 1 { ver yanlış; }
+        değişken p: DiskBolumu = dizi_al(xs,0);
+        eşleş acilis_dugumu(yol) { hata(e) => { ver yanlış; } tamam(a) => {
+            eğer değil bolum_eslesir(a,p) { ver yanlış; }
+        } }
+    } }
+    eşleş mbr_kimlikli(m,6143) { tamam(v) => { ver yanlış; } hata(e) => { ver doğru; } }
+}
+işlev main() -> tam32 {
+    eğer değil gpt_test() { ver 1; }
+    eğer değil mbr_test() { ver 2; }
+    ver 0;
+}

@@ -1,0 +1,50 @@
+// Kapalı blok aygıtı kümesi; MMIO/DMA yürütücüsü çağırana aittir.
+kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_adim, nvme_oku, nvme_yaz, nvme_flush } olarak nvme_mod;
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_adim, ahci_oku, ahci_yaz, ahci_flush } olarak ahci_mod;
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_adim, usb_depo_oku, usb_depo_yaz, usb_depo_flush } olarak usb_depo_mod;
+kullan drivers::ortak::gc::{ GcIstek, GcYanit };
+genel çeşit BlokCesidi { Nvme(NvmeDurum), Ahci(AhciDurum), Usb(UsbDepo) }
+genel yapı BlokAygiti { durum: BlokCesidi; }
+genel işlev blok_adim(s: &değişken BlokAygiti, y: GcYanit) -> GcIstek {
+ eşleş s.durum {
+  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: GcIstek = nvme_adim(&değişken d,y); s.durum=BlokCesidi::Nvme(d); ver r; }
+  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: GcIstek = ahci_adim(&değişken d,y); s.durum=BlokCesidi::Ahci(d); ver r; }
+  BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: GcIstek = usb_depo_adim(&değişken d,y); s.durum=BlokCesidi::Usb(d); ver r; }
+ }
+}
+genel işlev blok_oku(s: &değişken BlokAygiti, lba: tam64, adet: tam32) -> sonuç<mantıksal,metin> {
+ eşleş s.durum {
+  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: sonuç<mantıksal,metin> = nvme_oku(&değişken d,lba,adet); s.durum=BlokCesidi::Nvme(d); ver r; }
+  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: sonuç<mantıksal,metin> = ahci_oku(&değişken d,lba,adet); s.durum=BlokCesidi::Ahci(d); ver r; }
+  BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: sonuç<mantıksal,metin> = usb_depo_oku(&değişken d,lba,adet); s.durum=BlokCesidi::Usb(d); ver r; }
+ }
+}
+genel işlev blok_yaz(s: &değişken BlokAygiti, lba: tam64, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+ eşleş s.durum {
+  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: sonuç<mantıksal,metin> = nvme_yaz(&değişken d,lba,veri); s.durum=BlokCesidi::Nvme(d); ver r; }
+  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: sonuç<mantıksal,metin> = ahci_yaz(&değişken d,lba,veri); s.durum=BlokCesidi::Ahci(d); ver r; }
+  BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: sonuç<mantıksal,metin> = usb_depo_yaz(&değişken d,lba,veri); s.durum=BlokCesidi::Usb(d); ver r; }
+ }
+}
+genel işlev blok_bosalt(s: &değişken BlokAygiti) -> sonuç<mantıksal,metin> {
+ eşleş s.durum {
+  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: sonuç<mantıksal,metin> = nvme_flush(&değişken d); s.durum=BlokCesidi::Nvme(d); ver r; }
+  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: sonuç<mantıksal,metin> = ahci_flush(&değişken d); s.durum=BlokCesidi::Ahci(d); ver r; }
+  BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: sonuç<mantıksal,metin> = usb_depo_flush(&değişken d); s.durum=BlokCesidi::Usb(d); ver r; }
+ }
+}
+genel işlev blok_sektor(s: BlokAygiti) -> tam32 { eşleş s.durum {
+ BlokCesidi::Nvme(v) => { ver v.blok_bayt; }
+ BlokCesidi::Ahci(v) => { ver v.blok_bayt; }
+ BlokCesidi::Usb(v) => { ver v.blok_bayt; }
+} }
+genel işlev blok_kapasite(s: BlokAygiti) -> tam64 { eşleş s.durum {
+ BlokCesidi::Nvme(v) => { ver v.kapasite; }
+ BlokCesidi::Ahci(v) => { ver v.kapasite; }
+ BlokCesidi::Usb(v) => { ver v.kapasite; }
+} }
+genel işlev blok_sonuc(s: BlokAygiti) -> Dizi<dtam8> { eşleş s.durum {
+ BlokCesidi::Nvme(v) => { ver v.sonuc; }
+ BlokCesidi::Ahci(v) => { ver v.sonuc; }
+ BlokCesidi::Usb(v) => { ver v.sonuc; }
+} }

@@ -23,3 +23,22 @@ işlev uefi_mi() -> mantıksal {
  eğer p < 4096 veya p > 4294967104 { ver yanlış; }
  ver kem_mmio_oku64(p) == 3551447044756161867;
 }
+
+// v1 tabanı ve eski okuyucular korunur. 22/23 sıfırsa eski EFI veya ham ortamdır.
+kullan drivers::disk::bolum_kimlik::{ AcilisBolumu, acilis_dugumu };
+işlev uefi_acilis_bolumu() -> sonuç<seçimlik<AcilisBolumu>,metin> {
+    eğer değil uefi_mi() { ver tamam(hiç); }
+    değişken p: tam64 = kem_pvh_bilgi();
+    eğer p > 4294967048 { ver hata("UEFI bolum uzantisi adresi"); }
+    değişken ofset: tam64 = kem_mmio_oku64(p+176);
+    değişken boy: tam64 = kem_mmio_oku64(p+184);
+    eğer ofset == 0 ve boy == 0 { ver tamam(hiç); }
+    eğer ofset != 192 veya boy != 56 veya kem_mmio_oku64(p+ofset) != 1 { ver hata("UEFI bolum uzantisi surumu"); }
+    değişken node: Dizi<dtam8> = [];
+    değişken i: tam32 = 0;
+    iken i < 42 { dizi_ekle(node,kem_fiz_oku8(p+ofset+8+(i olarak tam64)) olarak dtam8); i=i+1; }
+    eşleş acilis_dugumu(node) {
+        hata(e) => { ver hata(e); }
+        tamam(a) => { ver tamam(değer(a)); }
+    }
+}

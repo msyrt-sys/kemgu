@@ -1,0 +1,74 @@
+// Sabit tohumlu 1000 bozuk sektör kümesi. Python: 2**32-1 == 4294967295.
+// LCG: Numerical Recipes 1664525, 1013904223; her örnekte 1–8 bayt/kısalık.
+kullan drivers::disk::bolum_kimlik::{ DiskBolumu, GptTabloKonumu, gpt_konum, gpt_kimlikli };
+kullan drivers::disk::crc32::{ crc32 };
+kullan drivers::fs::fat32_bpb::{ Fat32Bpb, bpb_coz, zincir };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan drivers::fs::fat32_kayit::{ kayit_verisi };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8, yaz_le16, yaz_le32, yaz_le64, yaz_ascii };
+
+işlev bozuk_lcg(tohum: tam64) -> tam64 { ver (tohum*1664525+1013904223)&4294967295; }
+
+işlev bozuk_ornek(b: Dizi<dtam8>,tohum: tam64,n: tam32) -> Dizi<dtam8> {
+    değişken out: Dizi<dtam8> = bayt_sifir(n);
+    değişken i: tam32 = 0;
+    iken i < n { yaz_u8(out,i,oku_u8(b,i) olarak tam64); i=i+1; }
+    eğer n == 0 { ver out; }
+    değişken x: tam64 = tohum;
+    i=0;
+    iken i < 1+(tohum%8) olarak tam32 {
+        x=bozuk_lcg(x);
+        yaz_u8(out,((x>>8)%(n olarak tam64)) olarak tam32,(x>>24)&255);
+        i=i+1;
+    }
+    ver out;
+}
+işlev main() -> tam32 {
+    değişken bpb: Dizi<dtam8> = bayt_sifir(512);
+    yaz_le16(bpb,11,512); yaz_u8(bpb,13,1); yaz_le16(bpb,14,32); yaz_u8(bpb,16,2);
+    yaz_le32(bpb,32,70000); yaz_le32(bpb,36,539); yaz_le32(bpb,44,2);
+    yaz_le16(bpb,510,43605);
+    değişken fat: Dizi<dtam8> = bayt_sifir(512);
+    yaz_le32(fat,8,3); yaz_le32(fat,12,268435455);
+    değişken lfn: Dizi<dtam8> = kayit_verisi("günlük.txt","G_NL_K~1TXT",2,711,yanlış,1);
+    değişken gpt: Dizi<dtam8> = bayt_sifir(512);
+    değişken gir: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(gir,0,161); yaz_u8(gir,16,243); yaz_le64(gir,32,2048); yaz_le64(gir,40,4095);
+    yaz_ascii(gpt,0,"EFI PART"); yaz_le32(gpt,8,65536); yaz_le32(gpt,12,92);
+    yaz_le64(gpt,24,1); yaz_le64(gpt,32,8191); yaz_le64(gpt,40,34); yaz_le64(gpt,48,8158);
+    yaz_le64(gpt,72,2); yaz_le32(gpt,80,4); yaz_le32(gpt,84,128);
+    yaz_le32(gpt,88,crc32(gir,0,512)); yaz_le32(gpt,16,crc32(gpt,0,92));
+    değişken tohum: tam64 = 20261119;
+    değişken i: tam32 = 0;
+    iken i < 1000 {
+        tohum=bozuk_lcg(tohum);
+        değişken boy: tam32 = 512;
+        eğer i%5 == 0 { boy=(tohum%513) olarak tam32; }
+        eşleş bpb_coz(bozuk_ornek(bpb,tohum,boy)) {
+            hata(e) => { }
+            tamam(bp) => { eğer boy < 512 veya bp.toplam_sektor <= bp.ilk_veri_sektoru veya bp.kume_sayisi < 1 { ver 1; } }
+        }
+        eşleş zincir(bozuk_ornek(fat,tohum>>4,boy),2,32) {
+            hata(e) => { }
+            tamam(z) => { eğer dizi_boyut(z) < 1 veya dizi_boyut(z) > 32 { ver 2; } }
+        }
+        eşleş dizin_coz(bozuk_ornek(lfn,tohum>>6,(tohum%65) olarak tam32)) {
+            hata(e) => { }
+            tamam(k) => { eğer dizi_boyut(k) > 2 { ver 3; } }
+        }
+        değişken h: Dizi<dtam8> = gpt;
+        eğer i%2 == 0 { h=bozuk_ornek(gpt,tohum>>3,boy); }
+        eşleş gpt_konum(h,8192) {
+            hata(e) => { }
+            tamam(konum) => {
+                eşleş gpt_kimlikli(konum,bozuk_ornek(gir,tohum>>2,boy)) {
+                    hata(e) => { }
+                    tamam(bs) => { eğer dizi_boyut(bs) > 1 { ver 4; } }
+                }
+            }
+        }
+        i=i+1;
+    }
+    yazdir_tam(i);
+    ver 0;
+}

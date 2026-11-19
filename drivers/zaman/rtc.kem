@@ -1,0 +1,35 @@
+// MC146818 ham alanları: Status B, iki tarih biçimi ve 12/24 saat.
+// Tarih penceresi mevcut bare-metal RTC ile aynı yüzyılı kullanır (2000–2099).
+genel yapı RtcHam { kip: tam32; yil: tam32; ay: tam32; gun: tam32; saat: tam32; dakika: tam32; saniye: tam32; }
+genel yapı RtcAn { yil: tam32; ay: tam32; gun: tam32; saat: tam32; dakika: tam32; saniye: tam32; }
+işlev rtc_ondalik(x: tam32,ikili: mantıksal) -> tam32 {
+    eğer x < 0 veya x > 255 { ver -1; }
+    eğer ikili { ver x; }
+    eğer (x&15) > 9 veya x/16 > 9 { ver -1; }
+    ver (x/16)*10+(x&15);
+}
+genel işlev rtc_coz(r: RtcHam) -> sonuç<RtcAn,metin> {
+    eğer r.kip < 0 veya r.kip > 255 veya r.saat < 0 veya r.saat > 255 { ver hata("RTC yazmac boyu"); }
+    eğer (r.kip&128) != 0 { ver hata("RTC durdurulmus"); }
+    değişken ikili: mantıksal = (r.kip&4) != 0;
+    değişken yil: tam32 = rtc_ondalik(r.yil,ikili);
+    değişken ay: tam32 = rtc_ondalik(r.ay,ikili);
+    değişken gun: tam32 = rtc_ondalik(r.gun,ikili);
+    değişken saat: tam32 = rtc_ondalik(r.saat&127,ikili);
+    değişken dakika: tam32 = rtc_ondalik(r.dakika,ikili);
+    değişken saniye: tam32 = rtc_ondalik(r.saniye,ikili);
+    eğer yil < 0 veya yil > 99 veya ay < 1 veya ay > 12 veya gun < 1 veya dakika < 0 veya dakika > 59 veya saniye < 0 veya saniye > 59 { ver hata("RTC tarih"); }
+    değişken son_gun: tam32 = 31;
+    eğer ay == 4 veya ay == 6 veya ay == 9 veya ay == 11 { son_gun=30; }
+    eğer ay == 2 {
+        son_gun=28;
+        eğer yil%4 == 0 { son_gun=29; }
+    }
+    eğer gun > son_gun { ver hata("RTC gun"); }
+    eğer (r.kip&2) == 0 {
+        eğer saat < 1 veya saat > 12 { ver hata("RTC 12 saat"); }
+        saat=saat%12;
+        eğer (r.saat&128) != 0 { saat=saat+12; }
+    } değilse eğer saat < 0 veya saat > 23 veya (r.saat&128) != 0 { ver hata("RTC 24 saat"); }
+    ver tamam(RtcAn { yil:2000+yil,ay:ay,gun:gun,saat:saat,dakika:dakika,saniye:saniye });
+}
