@@ -1,0 +1,109 @@
+// UEFI 2.10 §5 ve §10.3.5.1. Sektör kaynağı çağırana aittir.
+// Başlık ve girdi sağlama toplamları ayrı denetlenir; yedek GPT'ye otomatik geçilmez.
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le32, oku_le64, yaz_u8, yaz_le32, imza_esit };
+kullan drivers::disk::crc32::{ crc32 };
+kullan drivers::disk::bolum::{ mbr_coz, gpt_mi };
+
+genel yapı DiskBolumu {
+    no: tam32; bas: tam64; adet: tam64; tur: Dizi<dtam8>; mbr_tur: tam32;
+    kimlik: Dizi<dtam8>;
+}
+genel yapı GptTabloKonumu {
+    lba: tam64; sektor: tam32; sayi: tam32; genislik: tam32;
+    crc: tam64; ilk: tam64; son: tam64;
+}
+genel yapı AcilisBolumu { tur: tam32; no: tam64; bas: tam64; adet: tam64; kimlik: Dizi<dtam8>; }
+
+işlev bk_kes(b: Dizi<dtam8>, ofset: tam32, n: tam32) -> Dizi<dtam8> {
+    değişken sonuc: Dizi<dtam8> = bayt_sifir(n);
+    değişken i: tam32 = 0;
+    iken i < n { yaz_u8(sonuc,i,oku_u8(b,ofset+i) olarak tam64); i=i+1; }
+    ver sonuc;
+}
+işlev bk_dolu(b: Dizi<dtam8>, bas: tam32, n: tam32) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < n { eğer oku_u8(b,bas+i) != 0 { ver doğru; } i=i+1; }
+    ver yanlış;
+}
+genel işlev acilis_dugumu(b: Dizi<dtam8>) -> sonuç<AcilisBolumu,metin> {
+    eğer dizi_boyut(b) != 42 veya oku_u8(b,0) != 4 veya oku_u8(b,1) != 1 veya oku_u8(b,2) != 42 veya oku_u8(b,3) != 0 { ver hata("UEFI bolum dugumu"); }
+    değişken tur: tam32 = oku_u8(b,41);
+    eğer (tur != 1 ve tur != 2) veya oku_u8(b,40) != tur { ver hata("UEFI bolum imza turu"); }
+    değişken n: tam32 = 16;
+    eğer tur == 1 { n=4; }
+    değişken no: tam64 = oku_le32(b,4);
+    değişken bas: tam64 = oku_le64(b,8);
+    değişken adet: tam64 = oku_le64(b,16);
+    eğer no < 1 veya bas < 1 veya adet < 1 veya adet > 9223372036854775807-bas veya değil bk_dolu(b,24,n) { ver hata("UEFI bolum kimligi"); }
+    ver tamam(AcilisBolumu { tur:tur,no:no,bas:bas,adet:adet,kimlik:bk_kes(b,24,n) });
+}
+genel işlev bolum_eslesir(a: AcilisBolumu,b: DiskBolumu) -> mantıksal {
+    eğer a.no != (b.no olarak tam64) veya a.bas != b.bas veya a.adet != b.adet { ver yanlış; }
+    değişken n: tam32 = dizi_boyut(a.kimlik);
+    eğer (a.tur != 1 ve a.tur != 2) veya (a.tur == 1 ve n != 4) veya (a.tur == 2 ve n != 16) veya n != dizi_boyut(b.kimlik) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < n { eğer oku_u8(a.kimlik,i) != oku_u8(b.kimlik,i) { ver yanlış; } i=i+1; }
+    ver doğru;
+}
+işlev bk_ekle(xs: Dizi<DiskBolumu>, b: DiskBolumu) -> sonuç<mantıksal,metin> {
+    için eski: xs {
+        eğer b.bas < eski.bas+eski.adet ve eski.bas < b.bas+b.adet { ver hata("cakisan bolumler"); }
+    }
+    dizi_ekle(xs,b);
+    ver tamam(doğru);
+}
+genel işlev mbr_kimlikli(b: Dizi<dtam8>, kapasite: tam64) -> sonuç<Dizi<DiskBolumu>,metin> {
+    eşleş mbr_coz(b) { hata(e) => { ver hata("MBR gecersiz"); } tamam(v) => { } }
+    eğer gpt_mi(b) { ver hata("GPT korumaci MBR"); }
+    değişken sonuc: Dizi<DiskBolumu> = [];
+    değişken i: tam32 = 0;
+    iken i < 4 {
+        değişken o: tam32 = 446+i*16;
+        değişken t: tam32 = oku_u8(b,o+4);
+        eğer t == 238 { ver hata("hibrit GPT/MBR"); }
+        eğer t != 0 {
+            değişken bas: tam64 = oku_le32(b,o+8);
+            değişken adet: tam64 = oku_le32(b,o+12);
+            eğer bas < 1 veya bas >= kapasite veya adet < 1 veya adet > kapasite-bas { ver hata("MBR bolum siniri"); }
+            değişken p: DiskBolumu = DiskBolumu { no:i+1,bas:bas,adet:adet,tur:[],mbr_tur:t,kimlik:bk_kes(b,440,4) };
+            eşleş bk_ekle(sonuc,p) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        }
+        i=i+1;
+    }
+    ver tamam(sonuc);
+}
+genel işlev gpt_konum(b: Dizi<dtam8>, kapasite: tam64) -> sonuç<GptTabloKonumu,metin> {
+    eğer dizi_boyut(b) != 512 veya kapasite < 6 veya değil imza_esit(b,0,"EFI PART") { ver hata("GPT baslik"); }
+    değişken boy: tam64 = oku_le32(b,12);
+    eğer boy < 92 veya boy > 512 veya oku_le64(b,24) != 1 veya oku_le64(b,32) != kapasite-1 { ver hata("GPT baslik boyu"); }
+    değişken kopya: Dizi<dtam8> = bk_kes(b,0,boy olarak tam32);
+    yaz_le32(kopya,16,0);
+    eğer crc32(kopya,0,boy olarak tam32) != oku_le32(b,16) { ver hata("GPT baslik CRC"); }
+    değişken bas: tam64 = oku_le64(b,72);
+    değişken ilk: tam64 = oku_le64(b,40);
+    değişken son: tam64 = oku_le64(b,48);
+    değişken sayi: tam64 = oku_le32(b,80);
+    değişken gen: tam64 = oku_le32(b,84);
+    eğer sayi < 1 veya sayi > 128 veya gen < 128 veya gen > 512 veya gen%128 != 0 { ver hata("GPT girdi boyu"); }
+    değişken ns: tam64 = (sayi*gen+511)/512;
+    eğer bas < 2 veya ilk <= bas veya ns > ilk-bas veya son < ilk veya son >= kapasite-1 { ver hata("GPT alan siniri"); }
+    ver tamam(GptTabloKonumu { lba:bas,sektor:ns olarak tam32,sayi:sayi olarak tam32,genislik:gen olarak tam32,crc:oku_le32(b,88),ilk:ilk,son:son });
+}
+genel işlev gpt_kimlikli(k: GptTabloKonumu,b: Dizi<dtam8>) -> sonuç<Dizi<DiskBolumu>,metin> {
+    eğer k.sayi < 1 veya k.sayi > 128 veya k.genislik < 128 veya k.genislik > 512 veya dizi_boyut(b) < k.sayi*k.genislik { ver hata("GPT kisa girdi"); }
+    eğer crc32(b,0,k.sayi*k.genislik) != k.crc { ver hata("GPT girdi CRC"); }
+    değişken sonuc: Dizi<DiskBolumu> = [];
+    değişken i: tam32 = 0;
+    iken i < k.sayi {
+        değişken o: tam32 = i*k.genislik;
+        eğer bk_dolu(b,o,16) {
+            değişken ilk: tam64 = oku_le64(b,o+32);
+            değişken son: tam64 = oku_le64(b,o+40);
+            eğer ilk < k.ilk veya son < ilk veya son > k.son veya son == 9223372036854775807 veya değil bk_dolu(b,o+16,16) { ver hata("GPT bolum siniri"); }
+            değişken p: DiskBolumu = DiskBolumu { no:i+1,bas:ilk,adet:son-ilk+1,tur:bk_kes(b,o,16),mbr_tur:0,kimlik:bk_kes(b,o+16,16) };
+            eşleş bk_ekle(sonuc,p) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        }
+        i=i+1;
+    }
+    ver tamam(sonuc);
+}

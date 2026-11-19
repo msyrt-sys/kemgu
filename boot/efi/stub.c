@@ -4,6 +4,8 @@
 static Sistem *s;
 static const U64 HATA = 1ULL<<63;
 static Guid yuklu_guid={0x5b1b31a1,0x9562,0x11d2,{0x8e,0x3f,0,0xa0,0xc9,0x69,0x72,0x3b}};
+/* UEFI 2.10 §10: UUID bytes_le = 916e57093f6dd2118e3900a0c969723b. */
+static Guid yol_guid={0x09576e91,0x6d3f,0x11d2,{0x8e,0x39,0,0xa0,0xc9,0x69,0x72,0x3b}};
 static Guid fs_guid={0x964e5b22,0x6459,0x11d2,{0x8e,0x39,0,0xa0,0xc9,0x69,0x72,0x3b}};
 static Guid gop_guid={0x9042a9de,0x23dc,0x4a38,{0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a}};
 static void sifir(void *p,U64 n){U8 *b=p;while(n--)*b++=0;}
@@ -31,6 +33,30 @@ static void acpi(Acilis *b){
   if(j!=8||!saglama(p,20))continue;
   if(p[15]>=2){U64 n=le(p+20,4);if(n<36||n>4096||!saglama(p,n))continue;}
   if(!b->alan[13]||p[15]>=2){b->alan[13]=(U64)p;kopya(&b->alan[18],&s->tablolar[i].guid,16);}
+ }
+}
+/* İlk 192 bayt v1 olarak kalır. 22/23 alanları, aynı bilgi
+ * sayfasındaki sürümlü bölüm uzantısının ofseti ve uzunluğudur. */
+static void acilis_bolumu(Acilis *b,Servis *bs,void *aygit){
+ const U8 *yol=0,*hd=0;
+ if(bs->protokol(aygit,&yol_guid,(void**)&yol)||!yol)return;
+ for(U64 i=0;i<=4092;){
+  const U8 *p=yol+i;
+  U64 n=le(p+2,2);
+  if(n<4||n>4096-i)return;
+  if(p[0]==0x7f){
+   if(p[1]!=0xff||n!=4||!hd)return;
+   U8 *uzanti=(U8*)b+sizeof(*b);
+   uzanti[0]=1;
+   kopya(uzanti+8,hd,42);
+   b->alan[22]=sizeof(*b);b->alan[23]=56;
+   return;
+  }
+  if(p[0]==4&&p[1]==1){
+   if(n!=42||hd)return;
+   hd=p;
+  }
+  i+=n;
  }
 }
 Durum efi_main(void *handle,Sistem *system){
@@ -73,6 +99,7 @@ Durum efi_main(void *handle,Sistem *system){
  b->alan[7]=(U64)g->kip->bilgi->satir*4;b->alan[8]=g->kip->bilgi->bicim;
  b->alan[9]=(U64)map;b->alan[14]=alt;b->alan[15]=ust;b->alan[16]=65536;
  b->alan[20]=(U64)image->taban;b->alan[21]=(U64)image->taban+image->boy;
+ acilis_bolumu(b,bs,image->aygit);
  acpi(b);if(!b->alan[13])return hata(L"gecerli RSDP yok",0);
  s->cikti->yaz(s->cikti,L"KEMGU EFI DEVIR\r\n");
  /* Başarısız ExitBootServices sonrası yalnız harita/çıkış yeniden denenir. */
