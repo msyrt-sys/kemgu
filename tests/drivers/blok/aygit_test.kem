@@ -1,0 +1,38 @@
+// Python: 2**16, 2**18, 2**19, 2**9 = 65536,262144,524288,512.
+// NVMe, AHCI ve USB istekleri yalnız seçili sürücünün durumunu ilerletir.
+kullan drivers::blok::aygit::{ BlokAygiti, BlokCesidi, blok_adim, blok_oku, blok_yaz, blok_bosalt, blok_sektor, blok_kapasite };
+kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni } olarak n;
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak a;
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak u;
+kullan drivers::ortak::gc::{ GcIstek, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+
+işlev dene(d: &değişken BlokAygiti, kapasite: tam64) -> mantıksal {
+    değişken anlik: BlokAygiti = BlokAygiti { durum:d.durum };
+    eğer blok_sektor(anlik) != 512 veya blok_kapasite(anlik) != kapasite { ver yanlış; }
+    eşleş blok_oku(d,kapasite-1,2) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş blok_yaz(d,0,bayt_sifir(511)) { tamam(v) => { ver yanlış; } hata(e) => { } }
+    eşleş blok_bosalt(d) { tamam(v) => { } hata(e) => { ver yanlış; } }
+    eşleş blok_adim(d,gc_bos()) { GcIstek::Hata(e) => { ver yanlış; } GcIstek::Bitti => { ver yanlış; } _ => { ver doğru; } }
+}
+işlev main() -> tam32 {
+    eşleş nvme_yeni(65536,16) { hata(e_nvme) => { ver 1; } tamam(v_nvme) => {
+        değişken s_nvme: NvmeDurum = v_nvme; s_nvme.hazir=doğru; s_nvme.adim=100; s_nvme.kapasite=262144; s_nvme.yonetim=4;
+        değişken d_nvme: BlokAygiti = BlokAygiti { durum:BlokCesidi::Nvme(s_nvme) };
+        eğer değil dene(&değişken d_nvme,262144) { ver 2; }
+        eşleş d_nvme.durum { BlokCesidi::Nvme(son_nvme) => { eğer son_nvme.islem != 3 { ver 3; } } _ => { ver 4; } }
+    } }
+    eşleş ahci_yeni(65536,0) { hata(e_ahci) => { ver 5; } tamam(v_ahci) => {
+        değişken s_ahci: AhciDurum = v_ahci; s_ahci.hazir=doğru; s_ahci.adim=100; s_ahci.kapasite=524288; s_ahci.port=0;
+        değişken d_ahci: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ahci(s_ahci) };
+        eğer değil dene(&değişken d_ahci,524288) { ver 6; }
+        eşleş d_ahci.durum { BlokCesidi::Ahci(son_ahci) => { eğer son_ahci.islem != 3 { ver 7; } } _ => { ver 8; } }
+    } }
+    eşleş usb_depo_yeni(65536,8196,4152,1,2,129,0) { hata(e_usb_depo) => { ver 9; } tamam(v_usb_depo) => {
+        değişken s_usb_depo: UsbDepo = v_usb_depo; s_usb_depo.evre=100; s_usb_depo.kapasite=65536; s_usb_depo.blok_bayt=512;
+        değişken d_usb_depo: BlokAygiti = BlokAygiti { durum:BlokCesidi::Usb(s_usb_depo) };
+        eğer değil dene(&değişken d_usb_depo,65536) { ver 10; }
+        eşleş d_usb_depo.durum { BlokCesidi::Usb(son_usb_depo) => { eğer son_usb_depo.is != 12 { ver 11; } } _ => { ver 12; } }
+    } }
+    ver 0;
+}

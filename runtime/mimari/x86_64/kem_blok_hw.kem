@@ -1,0 +1,116 @@
+// Sabit kapasiteli yazma-geri önbelleği + kapalı sans-IO blok çeşidinin yürütücüsü.
+kullan drivers::blok::aygit::{ BlokCesidi, BlokAygiti, blok_adim, blok_oku, blok_yaz, blok_bosalt, blok_sektor, blok_kapasite, blok_sonuc };
+kullan drivers::blok::onbellek::{ Onbellek, OnbellekKaydi, onbellek_yeni, onbellek_oku, onbellek_koy, onbellek_plan, onbellek_onay };
+kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni } olarak bn;
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ba;
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak bu;
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir } olarak bx;
+kullan drivers::usb::tanim::{ UsbArayuz };
+genel yapı BlokDonanim { ad: metin; bar: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
+işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
+ değişken y: GcYanit = gc_bos();değişken i: tam32 = 0;
+ iken i < 2000000 {
+  değişken r: GcIstek = blok_adim(&değişken d.aygit,y); eşleş r {
+   GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); }
+   _ => { y=bm_yurut(d.bar,r); }
+  } i=i+1;
+ } ver hata("blok adim siniri");
+}
+işlev bd_yeni(ad: metin, bar: tam64, a: BlokAygiti) -> sonuç<BlokDonanim,metin> {
+ eşleş onbellek_yeni(512,64) { hata(e) => { ver hata(e); } tamam(c) => {
+  değişken d: BlokDonanim = BlokDonanim { ad:ad,bar:bar,aygit:a,onbellek:c };
+  eşleş bd_sur(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eğer blok_sektor(d.aygit) != 512 { ver hata("blok sektor boyu desteklenmiyor"); }
+  ver tamam(d);
+ } }
+}
+işlev bd_ham_oku(d: &değişken BlokDonanim,lba: tam64,n: tam32) -> sonuç<Dizi<dtam8>,metin> {
+ eşleş blok_oku(&değişken d.aygit,lba,n) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ eşleş bd_sur(d) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(blok_sonuc(d.aygit)); } }
+}
+işlev bd_ham_yaz(d: &değişken BlokDonanim,lba: tam64,b: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+ eşleş blok_yaz(&değişken d.aygit,lba,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ ver bd_sur(d);
+}
+işlev bd_flush(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
+ eşleş blok_bosalt(&değişken d.aygit) { hata(e) => { ver hata(e); } tamam(v) => { } } ver bd_sur(d);
+}
+işlev bd_bosalt(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
+ değişken plan: Dizi<OnbellekKaydi> = onbellek_plan(d.onbellek);
+ için k: plan { eşleş bd_ham_yaz(d,k.lba,k.veri) { hata(e) => { ver hata(e); } tamam(v) => { } } }
+ // Flush başarısızsa hiçbir kirli sürüm onaylanmaz; yeniden denenebilir.
+ eşleş bd_flush(d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ için k: plan { eşleş onbellek_onay(&değişken d.onbellek,k.lba,k.surum) { hata(e) => { ver hata(e); } tamam(v) => { } } }
+ ver tamam(doğru);
+}
+işlev bd_koy(d: &değişken BlokDonanim,lba: tam64,b: Dizi<dtam8>,kirli: mantıksal) -> sonuç<mantıksal,metin> {
+ eğer lba < 0 veya lba >= blok_kapasite(d.aygit) veya dizi_boyut(b) != 512 { ver hata("blok araligi"); }
+ eşleş onbellek_koy(&değişken d.onbellek,lba,b,kirli) { tamam(v) => { ver tamam(v); } hata(e) => {
+  eğer değil metin_esit(e,"geri yazma gerekli") { ver hata(e); }
+ } }
+ // LRU başındaki kirli sektörü kalıcılaştırmadan yeni girdi kabul edilmez.
+ değişken k: OnbellekKaydi = dizi_al(d.onbellek.kayitlar,0);
+ eşleş bd_ham_yaz(d,k.lba,k.veri) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ eşleş bd_flush(d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ eşleş onbellek_onay(&değişken d.onbellek,k.lba,k.surum) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ ver onbellek_koy(&değişken d.onbellek,lba,b,kirli);
+}
+işlev bd_oku(d: &değişken BlokDonanim,lba: tam64) -> sonuç<Dizi<dtam8>,metin> {
+ eşleş onbellek_oku(&değişken d.onbellek,lba) { tamam(v) => { ver tamam(v); } hata(e) => { } }
+ eşleş bd_ham_oku(d,lba,1) { hata(e) => { ver hata(e); } tamam(b) => {
+  eşleş bd_koy(d,lba,b,yanlış) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(b); } }
+ } }
+}
+işlev bd_xsur(bar: tam64,x: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+ değişken y: GcYanit = gc_bos();değişken i: tam32 = 0;
+ iken i < 100000 { değişken r: GcIstek = xhci_adim(x,y); eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=bm_yurut(bar,r); } } i=i+1; }
+ ver hata("xhci adim siniri");
+}
+işlev bd_bul(x: &değişken XhciDurum,xb: tam64) -> sonuç<Dizi<BlokDonanim>,metin> {
+ değişken ds: Dizi<BlokDonanim> = [];değişken dma: tam64 = bm_disk_dma_al();
+ değişken ni: tam32 = 0;değişken ai: tam32 = 0;değişken ui: tam32 = 0;değişken bdf: tam32 = 0;
+ iken bdf < 256 {
+  eğer (kem_pci_oku32(bdf,0)&65535) != 65535 {
+   değişken tip: tam64 = (kem_pci_oku32(bdf,8)>>8)&16777215;
+   eğer tip == 67586 {
+    değişken bar: tam64 = (kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
+    eşleş nvme_yeni(dma,16) { hata(e) => { ver hata(e); } tamam(n) => {
+     değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Nvme(n) };
+     eşleş bd_yeni(metin_birlestir("nvme",tam_metin(ni olarak tam64)),bar,ay) { hata(e) => { ver hata(e); } tamam(d) => { dizi_ekle(ds,d); } }
+    } } ni=ni+1;dma=dma+131072;
+   }
+   eğer tip == 67073 {
+    değişken bar: tam64 = kem_pci_oku32(bdf,36)&4294967280;kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
+    değişken pi: tam64 = kem_mmio_oku32(bar+12);değişken port: tam32 = 0;
+    iken port < 32 {
+     eğer (pi&((1 olarak tam64)<<port)) != 0 ve (kem_mmio_oku32(bar+256+(port olarak tam64)*128+40)&15) == 3 {
+      eşleş ahci_yeni(dma,port) { hata(e) => { ver hata(e); } tamam(a) => {
+       değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ahci(a) };
+     eşleş bd_yeni(metin_birlestir("ahci",tam_metin(ai olarak tam64)),bar,ay) {
+        // Q35'in varsayılan ATAPI portu SATA taramasında ilk FIS'e kadar aday olabilir.
+        hata(e) => { eğer değil metin_esit(e,"ahci sata aygiti yok") { ver hata(e); } }
+        tamam(d) => { dizi_ekle(ds,d);ai=ai+1;dma=dma+131072; }
+       }
+      } }
+     } port=port+1;
+    }
+   }
+  }
+  eğer dma-bm_disk_dma_al() > 16777216-131072 { ver hata("blok DMA siniri"); } bdf=bdf+1;
+ }
+ değişken i: tam32 = 0;
+ iken i < dizi_boyut(x.aygitlar) {
+  değişken a: XhciAygit = dizi_al(x.aygitlar,i);değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0);
+  eğer ar.sinif == 8 {
+   değişken out: tam32 = 0;değişken gir: tam32 = 0;
+   için u: a.yapi.uclar { eğer u.tur == 2 { eğer (u.adres&128) != 0 { gir=u.adres; } değilse { out=u.adres; } } }
+   eşleş xhci_depo_hazir(x,i) { hata(e) => { ver hata(e); } tamam(v) => { } }
+   eşleş bd_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
+   eşleş usb_depo_yeni(a.dma,x.c.dboff+(a.yuva olarak tam64)*4,x.c.rtsoff+56,a.yuva,out,gir,ar.no) { hata(e) => { ver hata(e); } tamam(u) => {
+    değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Usb(u) };
+     eşleş bd_yeni(metin_birlestir("usb",tam_metin(ui olarak tam64)),xb,ay) { hata(e) => { ver hata(e); } tamam(d) => { dizi_ekle(ds,d); } }
+   } } ui=ui+1;
+  } i=i+1;
+ }
+ eğer dizi_boyut(ds) == 0 { ver hata("disk bulunamadi"); } ver tamam(ds);
+}
