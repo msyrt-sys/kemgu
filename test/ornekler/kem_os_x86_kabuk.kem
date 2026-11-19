@@ -89,8 +89,8 @@ işlev bm_xsur_bekle(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,
     } ver hata("xhci adim siniri");
 }
 yapı KabukBag { indeks: tam32; bolum: DiskBolumu; kayit: BagKaydi; bpb: Fat32Bpb; yazilabilir: mantıksal; kirli: mantıksal; kesik: mantıksal; }
-yapı KabukDisk { aygitlar: Dizi<BlokDonanim>; baglar: Dizi<KabukBag>; kok: tam32; cwd: metin; }
-işlev kd_yeni() -> sonuç<KabukDisk,metin> { ver tamam(KabukDisk { aygitlar:[],baglar:[],kok:-1,cwd:"/" }); }
+yapı KabukDisk { aygitlar: Dizi<BlokDonanim>; baglar: Dizi<KabukBag>; kok: tam32; cwd: metin; uyari: metin; }
+işlev kd_yeni() -> sonuç<KabukDisk,metin> { ver tamam(KabukDisk { aygitlar:[],baglar:[],kok:-1,cwd:"/",uyari:"" }); }
 işlev kd_oku(d: &değişken KabukDisk,indeks: tam32,lba: tam64,n: tam32) -> sonuç<Dizi<dtam8>,metin> {
     değişken a: BlokDonanim = dizi_al(d.aygitlar,indeks);
     değişken r: sonuç<Dizi<dtam8>,metin> = bd_ham_oku(&değişken a,lba,n);
@@ -189,8 +189,15 @@ işlev kd_bagla(d: &değişken KabukDisk) -> sonuç<mantıksal,metin> {
     } değilse {
         d.kok=-1;
         eğer dizi_boyut(d.baglar) == 1 ve eslesme == 0 {
-            d.kok=0; bm_yaz("UYARI acilis bolumu bilinmiyor; tek FAT32 salt okunur kok");
-        } değilse { bm_yaz("UYARI acilis bolumu belirsiz; tum bolumler salt okunur"); }
+            d.kok=0;
+            d.uyari="UYARI acilis bolumu bilinmiyor; tek FAT32 salt okunur kok";
+            // Eski PVH kabuğunun seri giriş protokolü sabittir. diskler ve yazma
+            // reddi nedeni açıkça gösterir; tek bölüm asla yazılabilir varsayılmaz.
+            eğer uefi_mi() { bm_yaz(d.uyari); }
+        } değilse {
+            d.uyari="UYARI acilis bolumu belirsiz; tum bolumler salt okunur";
+            bm_yaz(d.uyari);
+        }
     }
     ver tamam(doğru);
 }
@@ -223,6 +230,7 @@ işlev kd_yol(d: &değişken KabukDisk,yol: metin) -> sonuç<KabukYol,metin> {
     } }
 }
 işlev kd_diskler(d: &değişken KabukDisk) {
+    eğer metin_uzunluk(d.uyari) > 0 { ekran_cift_yaz(d.uyari); }
     için k: d.baglar {
         değişken kip: metin = " salt okunur";
         eşleş yazma_izni(k.kayit,k.yazilabilir) { hata(e) => { } tamam(v) => { kip=" yazilabilir"; } }
@@ -323,6 +331,9 @@ işlev kd_yaz_uygula(a: &değişken BlokDonanim,k: &değişken KabukBag,p: Dizi<
 işlev kd_yaz(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor,islem: FatYazIslem) -> sonuç<mantıksal,metin> {
     değişken k: KabukBag = dizi_al(d.baglar,y.indeks);
     eğer k.kesik { ver hata("FAT32 kesik yazma; kirli bayrak korundu"); }
+    eğer y.indeks == d.kok ve değil k.kayit.kok ve değil k.yazilabilir {
+        ver hata("acilis bolumu bilinmiyor; kok salt okunur");
+    }
     eşleş yazma_izni(k.kayit,k.yazilabilir) { hata(e) => { ver hata(e); } tamam(v) => { } }
     değişken saat: FatZaman = fat_zaman_varsayilan();
     eşleş islem {
