@@ -4,14 +4,41 @@ kullan drivers::blok::onbellek::{ Onbellek, OnbellekKaydi, onbellek_yeni, onbell
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni } olarak bn;
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ba;
 kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak bu;
-kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir } olarak bx;
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle } olarak bx;
 kullan drivers::usb::tanim::{ UsbArayuz };
 genel yapı BlokDonanim { ad: metin; bar: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
+// Bir xHCI denetleyicisinde tek sıradaki tüketici: HID, BOT veya yönetim komutu.
+küresel değişken bd_usb_olay: tam64 = 0;
+küresel değişken bd_usb_bas: tam32 = 0;
+küresel değişken bd_usb_dongu: mantıksal = doğru;
+çıplak işlev bd_usb_olay_al() -> tam64 { ver bd_usb_olay; }
+çıplak işlev bd_usb_bas_al() -> tam32 { ver bd_usb_bas; }
+çıplak işlev bd_usb_dongu_al() -> mantıksal { ver bd_usb_dongu; }
+çıplak işlev bd_usb_konum_koy(taban: tam64,bas: tam32,dongu: mantıksal) {
+    bd_usb_olay=taban; bd_usb_bas=bas; bd_usb_dongu=dongu;
+}
+işlev bd_usb_tuketici(d: &değişken BlokDonanim) {
+    eşleş d.aygit.durum {
+        BlokCesidi::Usb(v) => {
+            değişken u: UsbDepo = v;
+            u.olay_taban=bd_usb_olay_al(); u.olay_bas=bd_usb_bas_al(); u.olay_dongu=bd_usb_dongu_al();
+            d.aygit.durum=BlokCesidi::Usb(u);
+        }
+        _ => { }
+    }
+}
+işlev bd_usb_yayinla(d: &değişken BlokDonanim) {
+    eşleş d.aygit.durum {
+        BlokCesidi::Usb(u) => { bd_usb_konum_koy(u.olay_taban,u.olay_bas,u.olay_dongu); }
+        _ => { }
+    }
+}
 işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
+ bd_usb_tuketici(d);
  değişken y: GcYanit = gc_bos();değişken i: tam32 = 0;
  iken i < 2000000 {
   değişken r: GcIstek = blok_adim(&değişken d.aygit,y); eşleş r {
-   GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); }
+   GcIstek::Bitti => { bd_usb_yayinla(d); ver tamam(doğru); } GcIstek::Hata(e) => { bd_usb_yayinla(d); ver hata(e); }
    _ => { y=bm_yurut(d.bar,r); }
   } i=i+1;
  } ver hata("blok adim siniri");
@@ -100,13 +127,19 @@ işlev bd_bul(x: &değişken XhciDurum,xb: tam64) -> sonuç<Dizi<BlokDonanim>,me
  }
  değişken i: tam32 = 0;
  iken i < dizi_boyut(x.aygitlar) {
-  değişken a: XhciAygit = dizi_al(x.aygitlar,i);değişken ar: UsbArayuz = dizi_al(a.yapi.arayuzlar,0);
-  eğer ar.sinif == 8 {
+  değişken a: XhciAygit = dizi_al(x.aygitlar,i);
+  değişken ar_no: tam32 = -1;
+  için ar: a.yapi.arayuzlar { eğer ar.sinif == 8 ve ar.protokol == 80 { ar_no=ar.no; } }
+  eğer ar_no >= 0 {
    değişken out: tam32 = 0;değişken gir: tam32 = 0;
-   için u: a.yapi.uclar { eğer u.tur == 2 { eğer (u.adres&128) != 0 { gir=u.adres; } değilse { out=u.adres; } } }
-   eşleş xhci_depo_hazir(x,i) { hata(e) => { ver hata(e); } tamam(v) => { } }
+   için u: a.yapi.uclar { eğer u.tur == 2 ve u.arayuz == ar_no ve u.alternatif == 0 { eğer (u.adres&128) != 0 { gir=u.adres; } değilse { out=u.adres; } } }
+   değişken hazir: sonuç<mantıksal,metin> = hata("usb depo");
+   eğer ui == 0 { hazir=xhci_depo_hazir(x,i); }
+   değilse { hazir=xhci_depo_ekle(x,i,bd_usb_bas_al(),bd_usb_dongu_al()); }
+   eşleş hazir { hata(e) => { ver hata(e); } tamam(v) => { } }
    eşleş bd_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
-   eşleş usb_depo_yeni(a.dma,x.c.dboff+(a.yuva olarak tam64)*4,x.c.rtsoff+56,a.yuva,out,gir,ar.no) { hata(e) => { ver hata(e); } tamam(u) => {
+   bd_usb_konum_koy(x.olay.taban,x.olay.bas,x.olay.dongu);
+   eşleş usb_depo_yeni(a.dma,x.c.dboff+(a.yuva olarak tam64)*4,x.c.rtsoff+56,a.yuva,out,gir,ar_no) { hata(e) => { ver hata(e); } tamam(u) => {
     değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Usb(u) };
      eşleş bd_yeni(metin_birlestir("usb",tam_metin(ui olarak tam64)),xb,ay) { hata(e) => { ver hata(e); } tamam(d) => { dizi_ekle(ds,d); } }
    } } ui=ui+1;

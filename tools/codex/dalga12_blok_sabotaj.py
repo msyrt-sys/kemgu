@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import os
 
-p = Path('runtime/mimari/x86_64/kem_blok_hw.kem')
+p = Path('test/ornekler/kem_os_x86_blok_ortak.kem')
 original = p.read_bytes()
 line = ' eşleş bd_ham_yaz(d,k.lba,k.veri) { hata(e) => { ver hata(e); } tamam(v) => { } }\n'
 # Bozma yalnız taşma kolunda. Flush içindeki toplu yazma yerinde kalır.

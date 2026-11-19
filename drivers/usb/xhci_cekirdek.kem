@@ -200,6 +200,13 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         ekle(s,GcIstek::Yaz32(s.c.caplength olarak tam64,1)); ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); s.evre=84; ver GcIstek::Bekle(0);
     }
     eğer s.evre == 84 { eğer (y.deger&4096) != 0 { ver hata_ver(s,"xhci depo olay halkasi"); } eğer (y.deger&1) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=100; ver GcIstek::Bitti; }
+    // İlk BOT'tan sonra ERST değişmez. Yeni slot yalnız kendi EP0 kuyruğunu taşır.
+    eğer s.evre == 86 {
+        ekle(s,GcIstek::BellekYaz(s.ddma+128,bayt_sifir(64)));
+        eşleş komut_ozel(s,16,(s.ddma+128)|1,s.yuva,65536,100) {
+            hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); }
+        }
+    }
     eğer s.evre == 85 {
         değişken i: tam32 = 0; iken i < dizi_boyut(s.aygitlar) { değişken a: XhciAygit = dizi_al(s.aygitlar,i); eğer a.yuva == s.yuva { a.ctrl=s.ctrl; a.ctrl_dongu=s.ctrl.dongu; dizi_yaz(s.aygitlar,i,a); } i=i+1; }
         s.evre=100; ver GcIstek::Bitti;
@@ -242,6 +249,15 @@ genel işlev xhci_depo_hazir(s: &değişken XhciDurum, indeks: tam32) -> sonuç<
     eğer s.evre != 100 veya s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci depo devir durumu"); }
     değişken a: XhciAygit = dizi_al(s.aygitlar,indeks); s.yuva=a.yuva; s.ddma=a.dma;
     ver komut_ozel(s,15,0,s.yuva,65536,81);
+}
+
+// Var olan olay halkasını tüketen ikinci BOT'u hazırla. Bekleyen HID/BOT olmamalı.
+genel işlev xhci_depo_ekle(s: &değişken XhciDurum,indeks: tam32,bas: tam32,dongu: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer s.evre != 100 veya değil s.devredildi veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) veya bas < 0 veya bas >= s.olay.adet { ver hata("xhci ortak depo durumu"); }
+    değişken a: XhciAygit = dizi_al(s.aygitlar,indeks);
+    s.olay.bas=bas; s.olay.dongu=dongu;
+    s.yuva=a.yuva; s.ddma=a.dma;
+    ver komut_ozel(s,15,0,s.yuva,65536,86);
 }
 
 // Tek bekleyen aktarım: çağrıdan sonra xhci_adim Bitti verene kadar sürülür.
