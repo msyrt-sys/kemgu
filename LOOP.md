@@ -2996,4 +2996,11 @@
   fikstür tc71_01 (iki şekil temiz + gerçek T009 POZİTİF), checker_diff 317/317, sabotaj S215 kırmızı.
   C12-002: hata DEĞİL — D-439 temsil farkı (self çeşidi satır içi yazar, yerel çeşitte de; ölçüldü); kapsam boşluğu E4r.
   Self-host derleme süresi (E4q): kabuk birimi 4821 → 5358 satır, 19,7 → 24,2 sn.
+- 2026-11-19 D-760: Codex dalga 13 promptu (otomasyon/chatgpt/CODEX_GOREV_13.md, Mehmet "çok daha detaylı") — kullanıcı
+  programları: syscall ABI v2 + belge, x86 kullanıcı linker betiği + kullanıcı çalışma zamanı, süreç modeli (C1 senkron
+  zorunlu, C2 kesmeli önerilen), ELF'i FAT32'den W^X ile yükleme, dosya + olay çağrıları, KEMGU kullanıcı programları
+  (merhaba/kedi/say/yazdene/tus + 6 kötü niyetli), 10 sabotaj. Ölçüm (Claude): x86 syscall ABI rax=num, rdi=arg1,
+  rdx=arg2 — YALNIZ 2 argüman; adres alanları SABİT fiziksel adreslerde (57-72 MB, 6 yuva, hepsi testlerde kullanılıyor)
+  ve UEFI haritasında o bölgenin boş olduğu ölçülmedi; x86 kullanıcı linker betiği ve ayrı derlenmiş x86 kullanıcı ELF'i
+  YOK; ring3 yalnız senkron test biçiminde. Claude E4k'de paralel çalışıyor → Codex dalga ortasında main'i birleştirmez.
 
