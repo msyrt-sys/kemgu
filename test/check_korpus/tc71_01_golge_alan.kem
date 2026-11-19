@@ -1,0 +1,21 @@
+// [D-759] C12-001: aynı yerel ad kardeş kapsamlarda FARKLI yapı tipiyle bağlanınca self-host alan
+// erişiminde (`a.sayi`) son bağlamanın tipine bakıp sahte T009 veriyordu (C temiz). İki şekil
+// (için değişkeni + blok değişkeni; iki blok değişkeni) TEMİZ kalmalı; POZİTİF: gerçek bir
+// eksik alan (`b.yok`) iki derleyicide de T009.
+yapı Ilk { sayi: tam32; }
+yapı Ikinci { baska: tam32; }
+işlev dongu_blok() -> tam32 {
+    değişken xs: Dizi<Ilk> = [];
+    için a: xs { eğer a.sayi == 17 { ver 1; } }
+    eğer doğru { değişken a: Ikinci = Ikinci { baska: 0 }; ver a.baska; }
+    ver 2;
+}
+işlev iki_blok() -> tam32 {
+    eğer doğru { değişken a: Ilk = Ilk { sayi: 3 }; eğer a.sayi == 17 { ver 1; } }
+    eğer doğru { değişken a: Ikinci = Ikinci { baska: 0 }; ver a.baska; }
+    ver 2;
+}
+işlev gercek_hata() -> tam32 {
+    değişken b: Ilk = Ilk { sayi: 3 };
+    ver b.yok;
+}

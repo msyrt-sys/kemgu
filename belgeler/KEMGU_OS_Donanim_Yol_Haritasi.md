@@ -239,9 +239,9 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       listesi + FIS + PRD tabloları, 48-bit LBA okuma/yazma DMA, hata kurtarma
       (port sıfırlama), zaman aşımları. Kanıt: QEMU `-device ahci` + imaj, sektör
       yaz/oku gidiş-dönüşü + SHA256.
-- [ ] **H7f [M] Blok katmanı:** blok aygıtı soyutlaması (AHCI/ramdisk/virtio/NVMe aynı
+- [x] **H7f (✓ D-759 (çeşit+eşleş: NVMe/AHCI/USB; 64 sektör LRU yazma-geri önbellek)) [M] Blok katmanı:** blok aygıtı soyutlaması (AHCI/ramdisk/virtio/NVMe aynı
       arayüz), sektör önbelleği (LRU + kirli bit), istek kuyruğu.
-- [ ] **H7g [M] Bölüm tabloları:** MBR + GPT (CRC32 doğrulama — `[30] CRC32 OK` zaten var).
+- [x] **H7g (✓ D-759 (birincil MBR + ana GPT, CRC; yedek GPT / genişletilmiş MBR YOK)) [M] Bölüm tabloları:** MBR + GPT (CRC32 doğrulama — `[30] CRC32 OK` zaten var).
       Kanıt: GPT'li imajda doğru bölüm bulunuyor; bozuk GPT başlığı → yedek başlık.
 - [ ] **H7h [S] Ramdisk (multiboot2 modülü)** — H7e beklemeden dosya sistemi işine
       başlamak için ara yol.
@@ -260,37 +260,37 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H8b [M] FAT32 okuma:** BPB doğrulama, FAT zinciri, kök/alt dizin, 8.3 adlar.
 - [ ] **H8c [M] Uzun dosya adı (LFN):** UTF-16 → UTF-8; **Türkçe ad** (`günlük.txt`).
       Sağlama toplamı denetimi.
-- [ ] **H8d [L] FAT32 yazma:** küme ayırma (FSInfo ipucu), iki FAT kopyasını da
+- [x] **H8d (✓ D-759 (sektör tabanlı yazıcı; imaj tabanlı yazıcı kâhin)) [L] FAT32 yazma:** küme ayırma (FSInfo ipucu), iki FAT kopyasını da
       güncelleme, dizin girişi oluşturma/silme, LFN üretme + 8.3 kısa ad çakışması,
       dosya büyütme/küçültme, `mkdir`/`rmdir`/`rename`.
-- [ ] **H8e [M] Senkron + kirli bayrak:** `sync`, bağlarken kirli-kapanma bayrağı
+- [x] **H8e (✓ D-759 (BPB 0x41 bit0; fsck.fat 4.2 ikisini de okuyor)) [M] Senkron + kirli bayrak:** `sync`, bağlarken kirli-kapanma bayrağı
       kontrolü, basit `fsck` (kayıp küme, çapraz bağlı zincir raporu).
-- [ ] **H8f [M] Çapraz doğrulama kapısı (en güçlü oracle):** ana makinede
+- [x] **H8f (✓ D-759 (fsck.fat -n + bağımsız Python okuyucu, iki yönlü)) [M] Çapraz doğrulama kapısı (en güçlü oracle):** ana makinede
       `mkfs.fat` + `mtools` ile imaj hazırla → KEMGU-OS okur; KEMGU-OS'un yazdığı
       dosyaları ana makinede `mtype`/`fsck.fat -n` doğrular. Sabotaj: ikinci FAT
       kopyasını güncelleme → `fsck.fat` uyarır → kırmızı.
-- [ ] **H8g [M] Bozuk imaj dayanıklılığı (GÜVENLİK):** rastgele bozulmuş 1.000 FAT
+- [x] **H8g (✓ D-759 (sabit tohumlu 1000 bozuk sektör kümesi, C + self)) [M] Bozuk imaj dayanıklılığı (GÜVENLİK):** rastgele bozulmuş 1.000 FAT
       imajında çekirdek **asla** çökmez / asılmaz / sınır dışı okumaz (zincir
       döngüsü tespiti, küme numarası aralık denetimi). KEMGU'nun "çökmezlik" vaadinin
       sürücü katmanındaki kanıtı.
 - [ ] **H8h [S] Bellek: dosya önbelleği H1c ile geri verilir.** Kanıt: 1 GB dosya
       okununca heap sabit kalıyor.
-- [ ] **H8j [M] Çoklu bağlama (KARAR 2026-11-07: USB + iç disk BİRLİKTE):** açılışta tüm
+- [x] **H8j (✓ D-759 (/diskler/{nvme,sata,usb}<n>p<b>)) [M] Çoklu bağlama (KARAR 2026-11-07: USB + iç disk BİRLİKTE):** açılışta tüm
       blok aygıtları taranır, her FAT32 bölümü bağlanır: açılış bölümü `/`, diğerleri
       `/diskler/<aygıt><no>p<bölüm>` (`nvme0p1`, `sata0p2`, `usb1p1`). Sürücü harfi YOK.
       `bagla` / `ayir` / `bagli` komutları (H9).
-- [ ] **H8k [S] Açılış bölümünü bulma:** ⚠ D-756: GRUB ertelendi → v1'de kaynak UEFI'dir:
+- [x] **H8k (✓ D-759 (stub HardDrive düğümü → açılış bilgisi uzantısı; OVMF'de ölçüldü)) [S] Açılış bölümünü bulma:** ⚠ D-756: GRUB ertelendi → v1'de kaynak UEFI'dir:
       EFI_LOADED_IMAGE_PROTOCOL.DeviceHandle'ın aygıt yolundaki GPT bölüm GUID'i stub tarafından
       açılış bilgisi ABI'sine yazılır ve çekirdek o bölümü bağlar. Eski metin (BIOS yolu): GRUB komut satırı `kok=<FAT32 seri no>` (Linux
       `root=UUID` deseni; multiboot2 komut satırı etiketi BIOS ve UEFI'de AYNI). multiboot2
       "açılış aygıtı" etiketi yalnız BIOS'ta var → kullanılmaz. Seri eşleşmezse: tek FAT32
       varsa o, yoksa ramdisk + açık uyarı (sessiz tahmin YOK).
-- [ ] **H8l [M] İç disk GÜVENLİĞİ:** açılış bölümü dışındaki her bölüm varsayılan SALT
+- [x] **H8l (✓ D-759 (ESP hiçbir zaman yazılmaz; iç diskler `bagla --yazilabilir`)) [M] İç disk GÜVENLİĞİ:** açılış bölümü dışındaki her bölüm varsayılan SALT
       OKUNUR; GPT türü EFI Sistem Bölümü (ESP, `C12A7328-…`) ASLA yazılmaz (iç diskteki
       Windows/Linux'un açılışını bozardı); yazılabilir bağlama yalnız `bagla --yazilabilir`
       ile ve ESP hariç. Kanıt: QEMU'da ESP'li GPT diskine yazma girişimi → açık hata;
       sabotaj (ESP denetimini kaldır) → kapı kırmızı.
-- [ ] **H8m [M] Depolama matrisi kapısı:** QEMU'ya aynı anda USB bellek imajı + NVMe +
+- [x] **H8m (✓ D-759 (USB + NVMe + AHCI aynı anda, GPT/MBR)) [M] Depolama matrisi kapısı:** QEMU'ya aynı anda USB bellek imajı + NVMe +
       AHCI takılı; {SeaBIOS, OVMF} × açılış aygıtı {USB, NVMe, AHCI}; her birinde
       `/` doğru seçiliyor, `/diskler/*` salt okunur, açılış bölümüne yaz → ana makinede
       `fsck.fat -n` temiz.
@@ -318,7 +318,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H9g [M] Fare kanıt programları:** (1) `dosyalar`: fareyle dosya seç,
       çift tıkla `duzenle`de aç; (2) `ciz`: fareyle çiz, kaydet (BMP → FS'e).
       **Klavye + fare + FS'in birlikte kanıtı.**
-- [ ] **H9h [S] Saat:** RTC (`rtc_x86.c` referans) → `saat` komutu + dosya zaman damgaları.
+- [x] **H9h (✓ D-759 (MC146818; dosya zaman damgaları)) [S] Saat:** RTC (`rtc_x86.c` referans) → `saat` komutu + dosya zaman damgaları.
 - [ ] **H9i [M] Kapı: uçtan uca senaryo** (QEMU, `sendkey` + `mouse_*` betiği):
       aç → `duzenle not.txt` → Türkçe metin yaz → kaydet → yeniden başlat → `cat` →
       aynı metin; ana makinede `mtype` ile de aynı metin. Sabotaj: `sync`i kaldır → kırmızı.

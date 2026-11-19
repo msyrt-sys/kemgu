@@ -270,6 +270,10 @@
       erisiminde (`y.baytlar`) ve `eşleş` skrutini olunca KACMIS sayar; sicak yol GcYanit/GcIstek.
       Gercek kapanis = alan/esles turevlerini izleyen escape v3 VEYA (b)/(c). ERTELENDI (~3 KB/tus,
       16 MB'ta ~5000 tus; kabuk v0 icin kabul).
+      ⚠ ONCELIK DEGISTI (D-759 olcumu): dosya komutlari komut basina 0,2-1,2 MB tahsis ediyor ve hicbiri
+      geri verilmiyor (mv 1,18 MB · cp 1,05 MB · mkdir 0,79 MB · bagla 0,59 MB · cat 0,52 MB; Codex
+      `kem_bump - __heap_start`). 28 MB heap -> birkac duzine dosya isleminden sonra kabuk TUKENIR. E4k artik
+      H9f'yi beklemiyor; siradaki derleyici isi.
       ✓ KARAR (2026-11-13, D-756, Opus onerisi): (b)/(c) dil yuzeyi ACILMAZ; cozum ESCAPE V3
       (alan + `eşleş` turevlerini izleyen kacis analizi; yeni sozdizimi yok). TETIKLEYICI: H9f
       metin duzenleyici (uzun omurlu ilk program) baslamadan ONCE yapilir.
@@ -300,6 +304,11 @@
 - [ ] E4q [M] DERLEYICI PERFORMANSI (self-host): birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
       --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
       egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
+- [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
+      self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
+      kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
+      acilislariyla olculuyor. Oneri: kapida C'de tanimlanip self'te tanimlanmayan `%Ad` tiplerini govdeleriyle
+      genisleterek karsilastir (yapi adlari iki tarafta da adli kalir); sonra kabuk/blok birimlerini kapsama al.
 - [x] E4p [M] ✓ D-754 DİL: döngü (ya da blok) yerelinin adresi kapsamından KAÇABİLİYOR (D-753 ölçümü):
       `değişken d: &tam32 = &a0; iken .. { değişken x = 40 + i; d = &x; } ver *d;` iki derleyicide
       de `--check` OK. Bugün C yerelleri girişe taşıdığı için "tesadüfen" çalışıyor; yuva kapsam
@@ -2970,4 +2979,21 @@
   struct fat_boot_sector'dan hesaplandı), ESP GUID depodaki guid.kem ile aynı. DOĞRULANAMADI (promptta yazılı):
   EFI_DEVICE_PATH GUID'i + HardDrive düğüm düzeni — OVMF ikilisi sıkıştırılmış, bayt araması bilgi vermiyor
   (çalışan LoadedImage GUID'i de 0); çalışan OVMF'de ölçülecek.
+- 2026-11-19 D-759: CODEX DALGASI 12 ENTEGRASYONU (taslak #226) — gerçek diskte yazılabilir dosya sistemi. Blok katmanı
+  (çeşit+eşleş; NVMe/AHCI/USB, 64 sektör LRU yazma-geri önbellek, ayrı 128 KiB DMA dilimleri), birincil MBR + ana GPT
+  (CRC; bozuksa disk atlanır + uyarı), tüm diskler `/diskler/{nvme,sata,usb}<n>p<b>` altında bağlanır. Açılış bölümü:
+  EFI stub aygıt yolundaki HardDrive düğümünü (UEFI 2.10 §10.3.5.1; GUID ve 42 baytlık düzen Python ile doğrulandı,
+  OVMF RAM dökümünde imajın koyduğu GPT GUID / MBR imzasıyla birebir) açılış bilgisi uzantısına yazar (192 B ABI v1
+  öneki korunur). ESP hiçbir zaman yazılmaz; iç diskler `bagla --yazilabilir`. Sektör tabanlı FAT32 yazıcı (tam imaj
+  belleğe alınmaz; imaj tabanlı yazıcı kâhin), yazma sırası veri → iki FAT → dizin → FSInfo; kirli bayrak BPB 0x41
+  bit0 (fsck.fat 4.2 bunu ve FAT[1] bit27'yi okuyor — ölçüldü). Kabuk: cd pwd ls cat yaz sil mkdir rmdir mv cp sync
+  diskler bagla saat; Türkçe LFN. RTC + zaman damgaları. Kâhinler: fsck.fat -n + bağımsız Python okuyucu iki yönlü,
+  USB+NVMe+AHCI matrisi, QMP quit ile kesinti (kirli bayrak doğru raporlanıyor), 1000 bozuk imaj. Yeni QEMU kapıları
+  12/12, Codex sabotajları 8/8 kırmızı, 20 temiz fsck + 2 beklenen kirli. Sınırlar: 512 B sektör, NSID 1, tek xHCI,
+  yedek GPT/genişletilmiş MBR yok, dizin taşıma ve hedef ezme yok. HEAP: komut başına 0,2-1,2 MB kalıcı (E4k → öncelik).
+  C12-001 (Claude onardı): self-host alan erişimi düz yerel tablosunda adın SON bağlamasına bakıyordu → kardeş
+  bloklarda farklı tipli aynı ad sahte T009 (C temiz). var_tip disiplini (farklı tipler → belirsiz, tanı yok);
+  fikstür tc71_01 (iki şekil temiz + gerçek T009 POZİTİF), checker_diff 317/317, sabotaj S215 kırmızı.
+  C12-002: hata DEĞİL — D-439 temsil farkı (self çeşidi satır içi yazar, yerel çeşitte de; ölçüldü); kapsam boşluğu E4r.
+  Self-host derleme süresi (E4q): kabuk birimi 4821 → 5358 satır, 19,7 → 24,2 sn.
 

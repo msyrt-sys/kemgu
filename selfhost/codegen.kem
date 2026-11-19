@@ -10676,11 +10676,29 @@ işlev erisim_yapi_adi(p: &değişken Ayr, n: tam32) -> metin {
     }
     ver "";
 }
+// [D-759] Ad, aktif işlevin yerel diliminde birden fazla FARKLI ham tiple bağlı mı?
+işlev yerel_ham_belirsiz(p: &değişken Ayr, nm: metin) -> mantıksal {
+    değişken i: tam32 = p.yerel_basla;
+    değişken ilk: metin = "";
+    değişken var: mantıksal = yanlış;
+    iken i < dizi_boyut(p.yerel) {
+        eğer metin_esit(dizi_al(p.yerel, i), nm) {
+            eğer var ve (metin_esit(dizi_al(p.yerel_ham, i), ilk) == yanlış) { ver doğru; }
+            ilk = dizi_al(p.yerel_ham, i); var = doğru;
+        }
+        i = i + 1;
+    }
+    ver yanlış;
+}
 işlev metot_alici_tipi(p: &değişken Ayr, nes: tam32) -> metin {
     // [D-730] önce TİP DÜĞÜMÜNDEN (dizgi temsili yapı adlarını "?"e düşürür:
     // `r: &K` ve iç içe `x.ic` çözülemiyordu).
     değişken ey: metin = erisim_yapi_adi(p, nes);
     eğer metin_uzunluk(ey) > 0 { ver ey; }
+    // [D-759] C12-001: düz yerel tablosunda aynı ad kardeş bloklarda FARKLI tiple
+    // bağlanabilir; son bağlamayı almak ilk bloktaki `a.alan` için sahte T009 veriyordu
+    // (C OK). var_tip disiplini: farklı tipler → BELİRSİZ ("?") → tanı yok.
+    eğer metin_esit(dizi_al(p.a_ad, nes), "TANIMLAYICI") ve yerel_ham_belirsiz(p, dizi_al(p.a_deg, nes)) { ver "?"; }
     değişken t: metin = esles_skrutini_tipi(p, nes);
     eğer metin_baslar(t, "&değişken ") { t = metin_kes(t, 11, metin_uzunluk(t) - 11); }
     eğer metin_baslar(t, "&") { t = metin_kes(t, 1, metin_uzunluk(t) - 1); }
