@@ -19,8 +19,8 @@ KEMGU-OS'ta her şey çekirdekte koşuyor: kabuk, dosya sistemi, sürücüler. B
 > calistir /diskler/usb0p2/bin/kedi.elf /diskler/usb0p2/notlar/günlük.txt
 ...dosyanın içeriği...
 [kedi.elf pid=3 cikis=0]
-> calistir /diskler/usb0p2/bin/kotu_isaretci.elf
-[kotu_isaretci.elf pid=4 OLDURULDU: #PF adr=0x... (kullanici)]
+> calistir /diskler/usb0p2/bin/hata_adres.elf
+[hata_adres.elf pid=4 SONLANDIRILDI: #PF adr=0x... (kullanici)]
 >
 ```
 
@@ -248,11 +248,14 @@ entegrasyon sırasında birleştirir. Heap ölçümlerini başta ve sonda yaz ki
 - `yazdene`: yeni dosya oluşturur, yazar, kapatır, yeniden açıp okur, karşılaştırır, `yeniden_adlandir`,
   `sil`; salt okunur bağlamada açma girişiminin hata kodunu doğrular.
 - `tus`: 5 tuş olayı okuyup basar (kâhin QMP ile gönderir).
-- **Kötü niyetli programlar (H9j):** `kotu_cekirdek_oku` (çekirdek VA'sını oku → #PF, ölür),
-  `kotu_isaretci` (syscall'a çekirdek adresi ver → hata kodu döner, ÖLMEZ, çekirdek belleği değişmez),
-  `kotu_wx` (kendi kod sayfasına yazmaya çalış → #PF), `kotu_yigin` (sınırsız özyineleme → koruma
-  sayfası #PF), `kotu_hlt` (ayrıcalıklı komut → #GP), `kotu_dongu` (C2 varsa: sonsuz döngü, kabuk yanıt
-  verir; yoksa bu programı ATLA ve nedenini yaz).
+- **Hata yalıtımı test programları (H9j — negatif testler; her biri kasıtlı olarak HATALI bir program,
+  işletim sisteminin hatayı doğru sınırladığını ölçer):**
+  `hata_adres` (kullanıcı penceresi dışındaki, eşli ama gözetmen olan bir adresi okur → beklenen: #PF,
+  yalnız bu süreç sonlanır), `hata_parametre` (bir sistem çağrısına pencere dışı adres verir → beklenen:
+  belgelenmiş hata kodu döner, süreç DEVAM eder, çekirdek verisi değişmez), `hata_wx` (kendi kod sayfasına
+  yazar → beklenen: #PF, W^X doğrulaması), `hata_yigin` (sınırsız özyineleme → beklenen: koruma sayfası
+  #PF), `hata_komut` (ayrıcalıklı `hlt` → beklenen: #GP), `hata_dongu` (C2 varsa: hiç bitmeyen döngü,
+  beklenen: kabuk yanıt vermeye devam eder; C2 yoksa bu testi ATLA ve nedenini yaz).
 - Programlar diske bağımsız Python yazıcısıyla (`dalga12_imaj.py` / `fat_yazici.py`) `/bin/` altına konur.
 
 ### G — kâhinler ve kapılar (ZORUNLU)
@@ -261,14 +264,15 @@ entegrasyon sırasında birleştirir. Heap ölçümlerini başta ve sonda yaz ki
   iki: hepsi C, hepsi self), her biri ≥10 açılış.
 - Seri + ekran birebir (mevcut ayna/piksel kâhinleri), çıkış kodları, ölüm nedenleri.
 - Kapanış sonrası ana makinede `fsck.fat -n` + bağımsız Python okuyucu: `yazdene`'nin yazdığı dosyalar
-  doğru, `kotu_*` hiçbir dosyayı bozmamış, salt okunur diskler + ESP SHA256 değişmemiş.
-- İzolasyon: QMP ile fiziksel bellek dökümü — `kotu_isaretci` sonrası çekirdek veri bölgesi ve başka
+  doğru, `hata_*` testleri hiçbir dosyayı değiştirmemiş, salt okunur diskler + ESP SHA256 değişmemiş.
+- İzolasyon: QMP ile fiziksel bellek dökümü — `hata_parametre` sonrası çekirdek veri bölgesi ve başka
   sürecin sayfaları değişmemiş.
 - ABI tutarlılık kapısı: belge tablosu ↔ çekirdek dağıtıcısı ↔ kullanıcı sarmalayıcıları (numara ve
   argüman sayısı).
 - **Sabotajlar (en az şunlar, her biri gerçek QEMU'da kırmızı):** (1) işaretçi doğrulamasını kapat →
-  `kotu_isaretci` çekirdek belleğini değiştirir/okur → KIRMIZI; (2) kod sayfasına W ver → `kotu_wx`
-  ölmez → KIRMIZI; (3) koruma sayfasını eşle → `kotu_yigin` sessizce başka belleği bozar → KIRMIZI;
+  `hata_parametre` beklenen hata kodunu almaz ve bellek dökümü farklılaşır → KIRMIZI; (2) kod sayfasına
+  W ver → `hata_wx` beklenen #PF'yi vermez → KIRMIZI; (3) koruma sayfasını eşle → `hata_yigin` beklenen
+  #PF'yi vermez → KIRMIZI;
   (4) süreç geçişinde CR3'ü değiştirme (C2) ya da ELF'i yanlış alana yükle → izolasyon KIRMIZI;
   (5) fd sınır denetimini kaldır → KIRMIZI; (6) salt okunur kuralını syscall yolunda atla →
   `yazdene` salt okunur diske yazar → SHA256 KIRMIZI; (7) süreç bitince çerçeveleri geri verme →
