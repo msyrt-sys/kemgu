@@ -74,7 +74,7 @@ işlev esit(a: metin, b: metin) -> mantıksal {
     } ver doğru;
 }
 işlev bul(s: &değişken FatSektor, yol: metin) -> sonuç<DizinGirdisi,metin> {
-    değişken sonuc: DizinGirdisi = DizinGirdisi { ad: "/", ozellik: 16, ilk_kume: s.bpb.kok_kume, boyut: 0, dizin_mi: doğru };
+    değişken sonuc: DizinGirdisi = DizinGirdisi { ad: "/", ozellik: 16, ilk_kume: s.bpb.kok_kume, boyut: 0, dizin_mi: doğru, tarih: 0, saat: 0 };
     eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(xs) => {
         için ad: xs {
             eğer değil sonuc.dizin_mi { ver hata("dizin degil"); }
@@ -98,4 +98,62 @@ genel işlev fat_sektor_listele(s: &değişken FatSektor, yol: metin) -> sonuç<
     eşleş bul(s,yol) { hata(e) => { ver hata(e); } tamam(k) => {
         eğer değil k.dizin_mi { ver hata("dizin degil"); } ver liste(s,k.ilk_kume);
     } }
+}
+
+// Meta veri ve dosya aralığı ayrı çözümlenir. Çağıran yalnız plandaki veri
+// sektörlerine I/O yapar; atlanan kümelerin içeriğini istemek gerekmez.
+genel işlev fat_sektor_bilgi(s: &değişken FatSektor, yol: metin) -> sonuç<DizinGirdisi,metin> {
+    s.gerekli=0;
+    ver bul(s,yol);
+}
+genel yapı FatOkumaParcasi { lba: tam64; sektor: tam32; bas: tam32; bayt: tam32; }
+genel işlev fat_sektor_okuma_plani(s: &değişken FatSektor, kayit: DizinGirdisi, konum: tam64, istek: tam32) -> sonuç<Dizi<FatOkumaParcasi>,metin> {
+    s.gerekli=0;
+    eğer kayit.dizin_mi veya konum < 0 veya istek < 0 veya istek > 65536 { ver hata("okuma araligi"); }
+    değişken plan: Dizi<FatOkumaParcasi> = [];
+    eğer konum >= kayit.boyut veya istek == 0 { ver tamam(plan); }
+    değişken kb: tam64 = (s.bpb.kume_sektor olarak tam64)*512;
+    eğer kb <= 0 { ver hata("kume boyu"); }
+    değişken kalan: tam32 = istek;
+    eğer (istek olarak tam64) > kayit.boyut-konum { kalan=(kayit.boyut-konum) olarak tam32; }
+    değişken atla: tam64 = konum/kb;
+    değişken ic: tam32 = (konum%kb) olarak tam32;
+    değişken c: tam64 = kayit.ilk_kume;
+    // Floyd yürüyüşünde yavaş işaretçi her ikinci adımda ilerler.
+    değişken yavas: tam64 = c;
+    değişken adim: tam64 = 0;
+    iken adim < s.bpb.kume_sayisi {
+        eğer c < 2 veya c-2 >= s.bpb.kume_sayisi { ver hata("fat kume araligi"); }
+        eğer atla != 0 { atla=atla-1; }
+        değilse {
+            değişken lba: tam64 = kume_sektoru(s.bpb,c)+((ic/512) olarak tam64);
+            değişken bas: tam32 = ic%512;
+            değişken boy: tam32 = (kb olarak tam32)-ic;
+            eğer boy > kalan { boy=kalan; }
+            değişken adet: tam32 = (bas+boy+511)/512;
+            değişken kat: mantıksal = yanlış;
+            değişken i: tam32 = dizi_boyut(plan)-1;
+            eğer i >= 0 {
+                değişken p: FatOkumaParcasi = dizi_al(plan,i);
+                eğer bas == 0 ve p.lba+(p.sektor olarak tam64) == lba {
+                    p.sektor=p.sektor+adet; p.bayt=p.bayt+boy; dizi_yaz(plan,i,p);
+                    kat=doğru;
+                }
+            }
+            eğer değil kat { dizi_ekle(plan,FatOkumaParcasi { lba:lba,sektor:adet,bas:bas,bayt:boy }); }
+            kalan=kalan-boy;
+            eğer kalan == 0 { ver tamam(plan); }
+            ic=0;
+        }
+        eşleş sonraki(s,c) { hata(e) => { ver hata(e); } tamam(n) => {
+            eğer n >= 268435448 { ver hata("kisa zincir"); }
+            c=n;
+        } }
+        adim=adim+1;
+        eğer adim%2 == 0 {
+            eşleş sonraki(s,yavas) { hata(e) => { ver hata(e); } tamam(n) => { yavas=n; } }
+        }
+        eğer c == yavas { ver hata("fat dongu"); }
+    }
+    ver hata("zincir siniri");
 }

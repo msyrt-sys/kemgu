@@ -45,10 +45,13 @@ işlev fsy_fat_oku(s: &değişken FatSektor,k: tam64) -> sonuç<tam64,metin> {
     }
 }
 işlev fsy_fat_yaz(s: &değişken FatSektor,p: Dizi<FatDegisiklik>,k: tam64,v: tam64) -> sonuç<mantıksal,metin> {
+    ver fsy_fat_asama(s,p,k,v,1);
+}
+işlev fsy_fat_asama(s: &değişken FatSektor,p: Dizi<FatDegisiklik>,k: tam64,v: tam64,asama: tam32) -> sonuç<mantıksal,metin> {
     değişken i: tam32 = 0;
     iken i < s.bpb.fat_sayisi {
         değişken l: tam64 = (s.bpb.ayrilmis olarak tam64)+(i olarak tam64)*s.bpb.fat_sektor+k/128;
-        eşleş fsy_duzenle(s,p,l,1) { hata(e) => { ver hata(e); } tamam(b) => {
+        eşleş fsy_duzenle(s,p,l,asama) { hata(e) => { ver hata(e); } tamam(b) => {
             değişken o: tam32 = ((k%128)*4) olarak tam32;
             yaz_le32(b,o,(oku_le32(b,o)&4026531840)|v);
         } }
@@ -309,7 +312,55 @@ işlev fsy_sil(s: &değişken FatSektor,ust: tam64,ad: metin,klasor: mantıksal,
     } }
     ver hata("bulunamadi");
 }
-genel çeşit FatYazIslem { Yaz(Dizi<dtam8>), DizinOlustur, DosyaSil, DizinSil }
+// Yeni zincir dizin kaydına bağlanana kadar eski dosya erişilebilir kalır.
+// Eski zincir ve FSInfo, yayınlanan dizin kaydının ardından yazılır.
+işlev fsy_degistir(s: &değişken FatSektor,ust: tam64,ad: metin,veri: Dizi<dtam8>,yedek: tam32,ipucu: tam64,z: FatZaman) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    eğer dizi_boyut(veri) > 65536 { ver hata("dosya siniri"); }
+    eşleş fsy_dizin(s,ust) { hata(e) => { ver hata(e); } tamam(d) => {
+    eşleş fsy_kayitlar(d) { hata(e) => { ver hata(e); } tamam(xs) => {
+        için k: xs {
+            eğer fsy_ad_esit(k,ad) { ver fsy_kayit_degistir(s,d,k,veri,yedek,ipucu,z); }
+        }
+    } }
+    } }
+    ver hata("bulunamadi");
+}
+işlev fsy_kayit_degistir(s: &değişken FatSektor,d: DizinParcasi,k: FatKayit,veri: Dizi<dtam8>,yedek: tam32,ipucu: tam64,z: FatZaman) -> sonuç<Dizi<FatDegisiklik>,metin> {
+    eğer (k.ozellik&16) != 0 { ver hata("dosya degil"); }
+    değişken eski: Dizi<tam64> = [];
+    eğer k.ilk != 0 {
+        eşleş fsy_zincir(s,k.ilk) { hata(e) => { ver hata(e); } tamam(xs) => { eski=xs; } }
+    } değilse eğer k.boyut != 0 { ver hata("FAT bozuk zincir"); }
+    değişken kb: tam32 = s.bpb.kume_sektor*512;
+    değişken n: tam32 = (dizi_boyut(veri)+kb-1)/kb;
+    eşleş fsy_tahsis(s,ipucu,n) { hata(e) => { ver hata(e); } tamam(t) => {
+        değişken p: Dizi<FatDegisiklik> = [];
+        fsy_veri_kur(s.bpb,p,d,t,0,veri,yanlış,0);
+        değişken i: tam32 = 0;
+        iken i < n {
+            değişken son: tam64 = 268435455;
+            eğer i+1 < n { son=dizi_al(t.kumeler,i+1); }
+            eşleş fsy_fat_yaz(s,p,dizi_al(t.kumeler,i),son) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            i=i+1;
+        }
+        değişken ilk: tam64 = 0;
+        eğer n > 0 { ilk=dizi_al(t.kumeler,0); }
+        eşleş fsy_duzenle(s,p,dizi_al(d.sektorler,k.son/16),2) { hata(e) => { ver hata(e); } tamam(b) => {
+            değişken o: tam32 = (k.son%16)*32;
+            yaz_le16(b,o+20,ilk>>16); yaz_le16(b,o+26,ilk&65535);
+            yaz_le16(b,o+22,z.saat olarak tam64); yaz_le16(b,o+24,z.tarih olarak tam64);
+            yaz_le32(b,o+28,dizi_boyut(veri) olarak tam64);
+        } }
+        değişken ip: tam64 = t.ipucu;
+        için c: eski {
+            eğer ip < 2 veya c < ip { ip=c; }
+            eşleş fsy_fat_asama(s,p,c,0,3) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        }
+        eşleş fsy_fsinfo_yaz(s,p,yedek,dizi_boyut(eski)-n,ip) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        ver tamam(p);
+    } }
+}
+genel çeşit FatYazIslem { Yaz(Dizi<dtam8>), Degistir(Dizi<dtam8>), DizinOlustur, DosyaSil, DizinSil }
 genel işlev fat_yaz_plan(s: &değişken FatSektor,yol: metin,islem: FatYazIslem) -> sonuç<Dizi<FatDegisiklik>,metin> {
     ver fat_yaz_plan_saat(s,yol,islem,fat_zaman_varsayilan());
 }
@@ -333,6 +384,7 @@ genel işlev fat_yaz_plan_saat(s: &değişken FatSektor,yol: metin,islem: FatYaz
         eşleş fsy_ebeveyn(s,xs) { hata(e) => { ver hata(e); } tamam(ust) => {
             eşleş islem {
                 FatYazIslem::Yaz(v) => { ver fsy_olustur(s,ust,ad,v,yanlış,yedek,ipucu,z); }
+                FatYazIslem::Degistir(v) => { ver fsy_degistir(s,ust,ad,v,yedek,ipucu,z); }
                 FatYazIslem::DizinOlustur => { değişken bos: Dizi<dtam8> = []; ver fsy_olustur(s,ust,ad,bos,doğru,yedek,ipucu,z); }
                 FatYazIslem::DosyaSil => { ver fsy_sil(s,ust,ad,yanlış,yedek,ipucu); }
                 FatYazIslem::DizinSil => { ver fsy_sil(s,ust,ad,doğru,yedek,ipucu); }
