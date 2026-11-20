@@ -410,7 +410,12 @@ kdl_syscall_stub:
     subq    $16, %rsp
     movq    %r11, (%rsp)
     call    kdl_syscall_isle
-    movq    (%rsp), %rsp
+    /* Senkron süreç çıkışı yalnız kullanıcı çağrısından işaretlenebilir. */
+    testb   $3, kdl_x86_r3_blok+72(%rip)
+    jz      1f
+    cmpq    $0, kdl_x86_r3_blok(%rip)
+    je      kdl_x86_r3_don
+1:  movq    (%rsp), %rsp
     popq    %r11
     popq    %r10
     popq    %r9
@@ -453,6 +458,51 @@ kdl_x86_ring3_gir:
     pushq   $0x1B                              /* CS  = kullanıcı kod | 3 */
     pushq   %rdi                               /* RIP = kullanıcı girişi */
     iretq
+
+/* C1 giriş noktası: eski test yoluna dokunmadan tüm kullanıcı GP yazmaçlarını
+ * sıfırla. Süreç argv'yi yığından alır. Dönüş ortak ring3 bağlamına gider. */
+.global kdl_x86_surec_gir
+kdl_x86_surec_gir:
+    pushfq
+    cli
+    pushq   %rbx
+    pushq   %rbp
+    pushq   %r12
+    pushq   %r13
+    pushq   %r14
+    pushq   %r15
+    movq    %rsp, kdl_x86_r3_blok+8(%rip)
+    movq    %rsp, %rax
+    andq    $-16, %rax
+    movq    %rax, kdl_x86_tss+4(%rip)
+    movq    $1, kdl_x86_r3_blok(%rip)
+    pushq   $0x23
+    pushq   %rsi
+    pushq   $0x202
+    pushq   $0x1b
+    pushq   %rdi
+    xorl    %eax, %eax
+    xorl    %ebx, %ebx
+    xorl    %ecx, %ecx
+    xorl    %edx, %edx
+    xorl    %esi, %esi
+    xorl    %edi, %edi
+    xorl    %ebp, %ebp
+    xorl    %r8d, %r8d
+    xorl    %r9d, %r9d
+    xorl    %r10d, %r10d
+    xorl    %r11d, %r11d
+    xorl    %r12d, %r12d
+    xorl    %r13d, %r13d
+    xorl    %r14d, %r14d
+    xorl    %r15d, %r15d
+    iretq
+
+.pushsection .bss
+.balign 8
+.global kdl_x86_surec_olcum
+kdl_x86_surec_olcum: .skip 16    /* süreç çekirdek heap'i: giriş ve çıkış */
+.popsection
 
 /* Ring3 istisnasından çekirdek bağlamına dönüş (isr_ortak'tan jmp). Ring3→ring0
  * geçişi SS'i NULL, iretq ring3'e inerken DS/ES/FS/GS'i NULL yapmıştı → çekirdek

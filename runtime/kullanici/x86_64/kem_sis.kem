@@ -15,13 +15,39 @@
 çıplak işlev sis_abi_surumu() -> tam64 { ver sis_cagir(40, 0, 0, 0); }
 çıplak işlev sis_tik() -> tam64 { ver sis_cagir(10, 0, 0, 0); }
 çıplak işlev sis_pid() -> tam64 { ver sis_cagir(11, 0, 0, 0); }
+çıplak işlev sis_durum(pid: tam64) -> tam64 { ver sis_cagir(14, pid, 0, 0); }
 çıplak işlev sis_cik(kod: tam64) {
     sis_cagir(13, kod, 0, 0);
     // Bir ABI hatasında da _start geçersiz bir dönüş adresine gitmez.
     güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"ud2"# } }
 }
 çıplak işlev sis_yaz(fd: tam64, buf: tam64, n: tam64) -> tam64 { ver sis_cagir(44, fd, buf, n); }
-çıplak işlev sis_metin(s: metin) -> tam64 {
+çıplak işlev sis_metin_adres(s: metin) -> tam64 {
     değişken yuva: *tam64 = (&s) olarak *tam64;
-    ver sis_yaz(1, *yuva, metin_uzunluk(s) olarak tam64);
+    ver *yuva;
 }
+çıplak işlev sis_metin(s: metin) -> tam64 {
+    ver sis_yaz(1, sis_metin_adres(s), metin_uzunluk(s) olarak tam64);
+}
+çıplak işlev sis_bayt_yaz(fd: tam64, b: tam32) -> tam64 {
+    değişken byt: dtam8 = b olarak dtam8;
+    değişken p: *dtam8 = (&byt) olarak *dtam8;
+    ver sis_yaz(fd, p olarak tam64, 1);
+}
+
+çıplak işlev sis_ac(yol: metin, kip: tam64) -> tam64 { ver sis_cagir(41,sis_metin_adres(yol),kip,0); }
+çıplak işlev sis_kapat(fd: tam64) -> tam64 { ver sis_cagir(42,fd,0,0); }
+çıplak işlev sis_oku(fd: tam64, buf: tam64, n: tam64) -> tam64 { ver sis_cagir(43,fd,buf,n); }
+çıplak işlev sis_konumla(fd: tam64, ofs: tam64, nereden: tam64) -> tam64 { ver sis_cagir(45,fd,ofs,nereden); }
+çıplak işlev sis_bilgi(yol: metin, buf: tam64) -> tam64 { ver sis_cagir(46,sis_metin_adres(yol),buf,0); }
+çıplak işlev sis_dizin_oku(fd: tam64, buf: tam64, n: tam64) -> tam64 { ver sis_cagir(47,fd,buf,n); }
+çıplak işlev sis_olustur_dizin(yol: metin) -> tam64 { ver sis_cagir(48,sis_metin_adres(yol),0,0); }
+çıplak işlev sis_sil(yol: metin) -> tam64 { ver sis_cagir(49,sis_metin_adres(yol),0,0); }
+çıplak işlev sis_sil_dizin(yol: metin) -> tam64 { ver sis_cagir(50,sis_metin_adres(yol),0,0); }
+çıplak işlev sis_yeniden_adlandir(eski: metin, yeni: metin) -> tam64 { ver sis_cagir(51,sis_metin_adres(eski),sis_metin_adres(yeni),0); }
+çıplak işlev sis_calisma_dizini_al(buf: tam64,n: tam64) -> tam64 { ver sis_cagir(52,buf,n,0); }
+çıplak işlev sis_calisma_dizini_degistir(yol: metin) -> tam64 { ver sis_cagir(53,sis_metin_adres(yol),0,0); }
+çıplak işlev sis_esitle() -> tam64 { ver sis_cagir(54,0,0,0); }
+çıplak işlev sis_tus_bekle(buf: tam64) -> tam64 { ver sis_cagir(55,buf,0,0); }
+çıplak işlev sis_saat(buf: tam64) -> tam64 { ver sis_cagir(56,buf,0,0); }
+çıplak işlev sis_uyu(ms: tam64) -> tam64 { ver sis_cagir(57,ms,0,0); }

@@ -1,0 +1,55 @@
+çıplak işlev yd_esit(p: tam64,m: metin,n: tam64) -> mantıksal {
+    eğer n != (metin_uzunluk(m) olarak tam64) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken (i olarak tam64) < n {
+        değişken b: *dtam8 = (p+(i olarak tam64)) olarak *dtam8;
+        eğer (*b) != (metin_bayt(m,i) olarak dtam8) { ver yanlış; }
+        i=i+1;
+    }
+    ver doğru;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        eğer argc != 4 { ver 2; }
+        eğer sis_calisma_dizini_degistir(sis_argv(argv,1)) != 0 { ver 3; }
+        değişken buf: *tam8 = malloc(4096);
+        değişken p: tam64 = buf olarak tam64;
+        eğer p == 0 { ver 4; }
+        eğer değil yd_esit(p,sis_argv(argv,1),sis_calisma_dizini_al(p,4096)) { ver 5; }
+        değişken yaz: metin = "Ağaç İş";
+        değişken boy: tam64 = metin_uzunluk(yaz) olarak tam64;
+        değişken fd: tam64 = sis_ac("yeni.txt",3);
+        eğer fd < 3 { ver 6; }
+        eğer sis_yaz(fd,sis_metin_adres(yaz),boy) != boy veya sis_kapat(fd) != 0 { ver 7; }
+        fd=sis_ac("yeni.txt",5);
+        eğer fd < 3 { ver 8; }
+        eğer sis_yaz(fd,sis_metin_adres("Son"),3) != 3 veya sis_kapat(fd) != 0 { ver 9; }
+        fd=sis_ac("yeni.txt",0);
+        eğer fd < 3 { ver 10; }
+        eğer değil yd_esit(p,yaz,sis_oku(fd,p,boy)) { ver 11; }
+        eğer sis_konumla(fd,0-3,2) != boy { ver 12; }
+        eğer değil yd_esit(p,"Son",sis_oku(fd,p,4096)) veya sis_kapat(fd) != 0 { ver 13; }
+        eğer sis_bilgi("yeni.txt",p) != 0 { ver 14; }
+        değişken bilgi: *tam64 = p olarak *tam64;
+        değişken tarih: *tam64 = (p+16) olarak *tam64;
+        eğer *bilgi != boy+3 veya *tarih == 0 { ver 15; }
+        eğer sis_yeniden_adlandir("yeni.txt","kalici.txt") != 0 { ver 16; }
+        eğer sis_olustur_dizin("gecici") != 0 { ver 17; }
+        fd=sis_ac(".",16);
+        eğer fd < 3 { ver 18; }
+        eğer sis_dizin_oku(fd,p,2) != (0-34) veya sis_dizin_oku(fd,p,4096) < 16 veya sis_kapat(fd) != 0 { ver 19; }
+        eğer sis_sil_dizin("gecici") != 0 { ver 20; }
+        fd=sis_ac("silinecek.txt",3);
+        eğer fd < 3 veya sis_kapat(fd) != 0 veya sis_sil("silinecek.txt") != 0 { ver 21; }
+        eğer sis_esitle() != 0 { ver 22; }
+        eğer sis_ac(sis_argv(argv,2),3) != (0-30) veya sis_ac(sis_argv(argv,3),3) != (0-30) { ver 23; }
+        // Çıkış yolu açık fd'yi kapatıp "kes" mutasyonunun kirli durumunu temizler.
+        fd=sis_ac("kesilecek.txt",3);
+        eğer fd < 3 veya sis_yaz(fd,sis_metin_adres("sil"),3) != 3 veya sis_kapat(fd) != 0 { ver 24; }
+        fd=sis_ac("kesilecek.txt",9);
+        eğer fd < 3 veya sis_oku(fd,p,4096) != 0 { ver 25; }
+        free(buf);
+        sis_metin("YAZDENE OK"); sis_bayt_yaz(1,10);
+        ver 0;
+    }
+}

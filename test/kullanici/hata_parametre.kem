@@ -1,0 +1,20 @@
+// Çekirdeğe geçersiz aralık verildiğinde hata kodu gelir ve süreç yaşamaya devam eder.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        eğer sis_saat(0) != (0-14) { ver 1; }
+        eğer sis_saat(1411313664) != (0-14) { ver 2; }
+        eğer sis_yaz(1,70368744177664,1) != (0-14) { ver 3; }
+        eğer sis_saat(1411383295) != (0-14) { ver 4; }
+        eğer sis_cagir(79,0,0,0) != (0-38) { ver 5; }
+        eğer sis_kapat(16) != (0-9) { ver 6; }
+        değişken fd: tam64 = 3;
+        iken fd < 16 {
+            eğer sis_ac("/diskler/usb0p2/notlar/günlük.txt",0) != fd { ver 7; }
+            fd=fd+1;
+        }
+        eğer sis_ac("/diskler/usb0p2/notlar/günlük.txt",0) != (0-24) { ver 8; }
+        eğer sis_kapat(3) != 0 veya sis_ac("/diskler/usb0p2/notlar/günlük.txt",0) != 3 { ver 9; }
+        sis_metin("ISARETCI RED"); sis_bayt_yaz(1,10);
+        ver 0;
+    }
+}

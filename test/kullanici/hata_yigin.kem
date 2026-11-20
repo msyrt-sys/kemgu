@@ -1,0 +1,16 @@
+// Her özyineleme bir sayfalık yığın çerçevesi açar; koruma sayfasında #PF.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        güvensiz {
+            satıriçi_asm {
+                mimari: x86_64
+                şablon: r#"movq $$0x541ff000, %rsp
+    1: subq $$4096, %rsp
+    testb $$0, (%rsp)
+    jmp 1b"#
+                bozulan("~{cc}") bozulan("~{memory}")
+            }
+        }
+        ver 91;
+    }
+}

@@ -2,6 +2,7 @@
 """Bağımsız x86_64 kullanıcı ELF derlemesi ve program başlığı denetimi."""
 
 import argparse
+import re
 import struct
 import subprocess
 import tempfile
@@ -13,17 +14,35 @@ HEAP_SON = 0x541EF000
 SAYFA = 4096
 ORTAK = (
     "runtime/kem_heap.kem",
+    "runtime/kem_dizi_genis.kem",
     "runtime/kullanici/x86_64/kem_sis.kem",
     "runtime/kullanici/x86_64/kem_basla.kem",
 )
 # Aynı adlar ELF içinde kendi kullanıcı çalışma zamanından çözülebilir.
 KULLANICI_SEMBOLLERI = {
     "_start", "__heap_start", "__heap_end", "memset", "memcpy", "malloc", "free",
+    "kullanici_main", "kem_heap_kur", "kem_panik", "kem_uart_bayt",
     "kdl_panik", "kdl_dizi_oob", "kdl_mimari_dizi_oob",
     "kdl_bolge_olustur", "kdl_bolge_ayir", "kdl_bolge_serbest", "kdl_global_bolge_al",
     "kdl_dizi_olustur", "kdl_dizi_ekle_tam", "kdl_dizi_al_tam", "kdl_dizi_yaz_tam",
     "kdl_dizi_boyut", "kdl_dizi_kapasite_ayarla", "kdl_metin_uzunluk", "kdl_metin_bayt",
+    "kdl_metin_birlestir", "kdl_tam_metin", "kdl_kod_metin",
+    "kdl_dizi_ekle_tam64", "kdl_dizi_al_tam64", "kdl_dizi_yaz_tam64",
+    "kdl_dizi_ekle_ptr", "kdl_dizi_al_ptr", "kdl_dizi_yaz_ptr",
+    "kdl_dizi_ekle_yapi", "kdl_dizi_al_yapi", "kdl_dizi_yaz_yapi",
 }
+
+
+def cekirdek_sembolleri():
+    yollar = [*Path("runtime/mimari/x86_64").glob("*.kem"),
+              *Path("test/ornekler").glob("kem_os_x86*.kem"),
+              Path("runtime/kem_gorev_cekirdek.kem")]
+    adlar = set()
+    for yol in yollar:
+        adlar.update(re.findall(r"\bişlev\s+(\w+)\s*\(", yol.read_text()))
+    asm = Path("boot/start_x86_64.S").read_text()
+    adlar.update(re.findall(r"^\s*\.(?:global|weak)\s+(\w+)", asm, re.M))
+    return adlar
 
 
 def denetle(elf):
@@ -58,10 +77,11 @@ def denetle(elf):
     if subprocess.check_output(["llvm-nm", "-u", elf], text=True).strip():
         raise ValueError("Kullanıcı ELF'inde çözümlenmemiş sembol var")
     tanimli = subprocess.check_output(
-        ["llvm-nm", "--extern-only", "--defined-only", elf], text=True
+        ["llvm-nm", "--defined-only", elf], text=True
     )
     semboller = {satir.split()[-1] for satir in tanimli.splitlines() if satir.strip()}
-    yabanci = semboller - KULLANICI_SEMBOLLERI
+    cekirdek = cekirdek_sembolleri()
+    yabanci = {s for s in semboller - KULLANICI_SEMBOLLERI if s in cekirdek or s.startswith("kdl_")}
     if yabanci:
         raise ValueError(f"Kullanıcı ELF'inde dış semboller var: {sorted(yabanci)}")
     print(f"✓ {elf.name}: ET_EXEC x86_64, {len(veri)} bayt, {len(bolgeler)} PT_LOAD, çözümsüz veya çekirdek sembolü yok")

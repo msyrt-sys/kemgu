@@ -64,12 +64,42 @@ sabit KG_USER_BOY: tam64 = 2097152;      // 2 MiB
 sabit KX_SIS_ABI_SURUMU: tam64 = 40;
 sabit KX_HATA_NOSYS: tam64 = 38;
 
+// Süreç çalışırken yalnız çekirdek tarafından kurulan servis adresi.
+küresel değişken kx_sis_vekil: tam64 = 0;
+
+çıplak işlev kx_sis_vekil_cagir(fn: tam64, num: tam64, a: tam64, b: tam64, c: tam64) -> tam64 {
+    değişken r: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq $2, %rdi
+movq $3, %rsi
+movq $4, %rdx
+movq $5, %rcx
+movq %rsp, %r11
+andq $$-16, %rsp
+subq $$16, %rsp
+movq %r11, (%rsp)
+call *$1
+movq (%rsp), %rsp"#
+            çıktı("={rax}", &r) girdi("r", fn) girdi("r", num)
+            girdi("r", a) girdi("r", b) girdi("r", c)
+            bozulan("~{rdi}") bozulan("~{rsi}") bozulan("~{rdx}") bozulan("~{rcx}")
+            bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}")
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    ver r;
+}
+
 çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64, arg3: tam64) -> tam64 {
+    eğer num == KX_SIS_ABI_SURUMU { ver 2; }
+    değişken kul: mantıksal = (kxm_o64(kxr_blok_adr() + 72) & 3) == 3;
+    eğer kul ve kx_sis_vekil != 0 { ver kx_sis_vekil_cagir(kx_sis_vekil, num, arg, arg2, arg3); }
     eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
     eğer kem_syscall_kul_mi(num) { ver kem_syscall_kul(num, arg, arg2); }   // [D-705]
-    eğer num == KX_SIS_ABI_SURUMU { ver 2; }
     // Eski ring0 D-686 kâhini ayrılmış aralık dışındaki çağrılarda -1 bekler.
-    eğer (kxm_o64(kxr_blok_adr() + 72) & 3) == 3 veya (num >= 40 ve num <= 79) {
+    eğer kul veya (num >= 40 ve num <= 79) {
         ver 0 - KX_HATA_NOSYS;
     }
     ver 0 - 1;

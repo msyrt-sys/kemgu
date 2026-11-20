@@ -1,0 +1,277 @@
+// C1: tek eşzamanlı kullanıcı yuvası, özel sayfa tabloları ve senkron ring3 dönüşü.
+kullan drivers::elf::elf64::{ Elf64, elf64_coz };
+
+sabit KXS_HEAP: tam64 = 1410334720;       // 0x54100000
+sabit KXS_KORUMA: tam64 = 1411313664;    // 0x541ef000
+sabit KXS_YIGIN: tam64 = 1411317760;     // 0x541f0000
+sabit KXS_ARGC: tam64 = 1411379200;      // 0x541ff000
+sabit KXS_ADRES_MASKESI: tam64 = 4503599627366400;
+sabit KX_SIS_YAZ: tam64 = 44;
+sabit KX_HATA_BADF: tam64 = 9;
+sabit KX_HATA_FAULT: tam64 = 14;
+sabit KX_HATA_INVAL: tam64 = 22;
+
+küresel değişken kxs_ek_vekil: tam64 = 0;
+küresel değişken kxs_pt: tam64 = 0;
+küresel değişken kxs_pid_son: tam64 = 0;
+küresel değişken kxs_pid: tam64 = 0;
+sabit KXS_BOS: tam64 = 0;
+sabit KXS_HAZIR: tam64 = 1;
+sabit KXS_KOSUYOR: tam64 = 2;
+sabit KXS_BITTI: tam64 = 3;
+sabit KXS_OLDURULDU: tam64 = 4;
+sabit KXS_KABUK_PID: tam64 = 0;
+küresel değişken kxs_durum: tam64 = 0;
+küresel değişken kxs_cr3: tam64 = 0;
+küresel değişken kxs_cikis_kodu: tam64 = 0;
+küresel değişken kxs_tss_var: tam64 = 0;
+
+yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vektor: tam64; hata_kodu: tam64; rip: tam64; cr2: tam64; }
+
+çıplak işlev kxs_tablo_kopya(hedef: tam64, kaynak: tam64) {
+    değişken i: tam64 = 0;
+    iken i < 4096 {
+        // Kopyalanan çekirdek dalları yalnız gözetmen.
+        kxm_y64(hedef + i, kxm_o64(kaynak + i) & (0 - 5));
+        i = i + 8;
+    }
+}
+
+çıplak işlev kxs_tablo_kur(taban: tam64, ana: tam64) {
+    değişken kp: tam64 = kxm_o64(ana) & KXS_ADRES_MASKESI;
+    değişken kd: tam64 = kxm_o64(kp + 8) & KXS_ADRES_MASKESI;
+    kxs_tablo_kopya(taban, ana);
+    kxs_tablo_kopya(taban + 4096, kp);
+    kxs_tablo_kopya(taban + 8192, kd);
+    kxm_y64(taban, (taban + 4096) | 7);
+    kxm_y64(taban + 4096 + 8, (taban + 8192) | 7);
+    kxm_y64(taban + 8192 + KMMU_OZEL_IDX * 8, (taban + 12288) | 7);
+}
+çıplak işlev kxs_esle(taban: tam64, va: tam64, son: tam64, izin: tam64) {
+    değişken a: tam64 = va;
+    iken a < son {
+        değişken fark: tam64 = a - KG_USER_MIN;
+        kxm_y64(taban + 12288 + (fark / 4096) * 8, (taban + 16384 + fark) | izin);
+        a = a + 4096;
+    }
+}
+
+çıplak işlev kxs_aralik(p: tam64, n: tam64, yaz: mantıksal) -> mantıksal {
+    eğer p < KG_USER_MIN veya p >= KG_USER_MAX veya n < 0 veya n > KG_USER_MAX - p { ver yanlış; }
+    eğer n == 0 { ver doğru; }
+    değişken maske: tam64 = 5;
+    eğer yaz { maske = 7; }
+    değişken i: tam64 = (p - KG_USER_MIN) / 4096;
+    değişken son: tam64 = (p - KG_USER_MIN + n - 1) / 4096;
+    iken i <= son {
+        eğer (kxm_o64(kxs_pt + i * 8) & maske) != maske { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+çıplak işlev kxs_dize_boyu(p: tam64, azami: tam64) -> tam64 {
+    değişken i: tam64 = 0;
+    eğer p < KG_USER_MIN veya p >= KG_USER_MAX { ver 0 - KX_HATA_FAULT; }
+    iken i < azami {
+        eğer değil kxs_aralik(p+i, 1, yanlış) { ver 0 - KX_HATA_FAULT; }
+        eğer kis_buf_oku8(p+i, 0) == 0 { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 36;
+}
+çıplak işlev kxs_konsol_yaz(fd: tam64, p: tam64, n: tam64) -> tam64 {
+    eğer fd != 1 ve fd != 2 { ver 0 - KX_HATA_BADF; }
+    eğer n > 4096 { ver 0 - KX_HATA_INVAL; }
+    eğer değil kxs_aralik(p, n, yanlış) { ver 0 - KX_HATA_FAULT; }
+    değişken i: tam64 = 0;
+    iken i < n {
+        ekran_cift_bayt(kis_buf_oku8(p+i, 0));
+        i = i + 1;
+    }
+    ver i;
+}
+çıplak işlev kxs_hizmet(num: tam64, a: tam64, b: tam64, c: tam64) -> tam64 {
+    eğer num == KX_SIS_YAZ ve (a == 1 veya a == 2) { ver kxs_konsol_yaz(a,b,c); }
+    eğer num == 5 {
+        değişken n: tam64 = kxs_dize_boyu(a, 4096);
+        eğer n < 0 { ver 0 - 1; }
+        kxs_konsol_yaz(1,a,n);
+        ver 0;
+    }
+    eğer num == 10 { ver kem_tik_oku(); }
+    eğer num == 11 { ver kxs_pid; }
+    eğer num == 13 {
+        kxs_durum = KXS_BITTI;
+        kxs_cikis_kodu = a;
+        kxm_y64(kxr_blok_adr(), 0);
+        ver 0;
+    }
+    eğer num == 14 {
+        eğer a == kxs_pid { ver 0; }
+        ver 1;
+    }
+    eğer num == 26 {
+        eğer b > 4096 veya değil kxs_aralik(a,b,doğru) { ver 0 - 1; }
+        ver kis_satir_oku(a,b olarak tam32) olarak tam64;
+    }
+    eğer kxs_ek_vekil != 0 { ver kx_sis_vekil_cagir(kxs_ek_vekil,num,a,b,c); }
+    ver 0 - KX_HATA_NOSYS;
+}
+çıplak işlev kxs_hizmet_adresi() -> tam64 {
+    değişken adr: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kxs_hizmet(%rip), $0"# çıktı("=r", &adr) } }
+    ver adr;
+}
+çıplak işlev kxs_ring3(giris: tam64, rsp: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq $0, %rdi
+movq $1, %rsi
+call kdl_x86_surec_gir"#
+            girdi("r", giris) girdi("r", rsp)
+            bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rdi}") bozulan("~{rsi}")
+            bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}")
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+}
+// int 0x80 kapısı IF'yi temizler. Beklerken yalnız IRQ'lar açılır ve
+// işleyici dönüşünde yeniden kapanır; kullanıcı RFLAGS'i iretq geri yükler.
+çıplak işlev kxs_irq_bekle() {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti
+hlt
+cli"# bozulan("~{memory}") } }
+}
+çıplak işlev kxs_fpu_kapat() -> tam64 {
+    değişken cr0: tam64 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"movq %cr0, $0
+movq $0, %r11
+orq $$8, %r11
+movq %r11, %cr0"# çıktı("=r", &cr0) bozulan("~{r11}") bozulan("~{cc}") bozulan("~{memory}") }
+    }
+    ver cr0;
+}
+çıplak işlev kxs_fpu_geri(cr0: tam64) {
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"movq $0, %cr0"# girdi("r", cr0) bozulan("~{memory}") } }
+}
+çıplak işlev kxs_bellek_sifirla(taban: tam64) {
+    memset(taban olarak *tam8, 0, 2113536);
+}
+
+çıplak işlev kxs_heap_iz(ofs: tam64) {
+    değişken adr: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_x86_surec_olcum(%rip), $0"# çıktı("=r", &adr) } }
+    kxm_y64(adr+ofs,kem_bump);
+}
+
+işlev kxs_segmentler(e: Elf64) -> mantıksal {
+    eğer e.tur != 2 veya e.makine != 62 { ver yanlış; }
+    değişken giris: mantıksal = yanlış;
+    için s: e.yuklemeler {
+        eğer s.bellek_boyu > 0 {
+            eğer s.hiza != 4096 veya s.sanal_adres % 4096 != 0 veya s.sanal_adres < KG_USER_MIN
+                veya s.sanal_adres >= KXS_HEAP veya s.bellek_boyu > KXS_HEAP - s.sanal_adres
+                veya (s.bayraklar != 4 ve s.bayraklar != 5 ve s.bayraklar != 6) { ver yanlış; }
+            eğer s.bayraklar == 5 ve e.giris >= s.sanal_adres ve e.giris - s.sanal_adres < s.dosya_boyu {
+                giris = doğru;
+            }
+        }
+    }
+    // Segmentlerin ayrı sayfa başlarında başlaması ve ELF64'ün örtüşme denetimi,
+    // aynı sayfaya iki farklı izin verilmesini de önler.
+    ver giris;
+}
+işlev kxs_yukle(taban: tam64, e: Elf64, veri: Dizi<dtam8>) {
+    için s: e.yuklemeler {
+        eğer s.bellek_boyu > 0 {
+            değişken izin: tam64 = 5;
+            eğer s.bayraklar != 5 { izin = izin | KXM_NX_BIT; }
+            eğer s.bayraklar == 6 { izin = izin | 2; }
+            kxs_esle(taban,s.sanal_adres,s.sanal_adres+s.bellek_boyu,izin);
+            değişken fizik: tam64 = taban + 16384 + s.sanal_adres - KG_USER_MIN;
+            değişken i: tam32 = 0;
+            iken (i olarak tam64) < s.dosya_boyu {
+                kxr_y8(fizik+(i olarak tam64),dizi_al(veri,(s.dosya_ofseti olarak tam32)+i));
+                i = i + 1;
+            }
+        }
+    }
+    kxs_esle(taban,KXS_HEAP,KXS_KORUMA,KXM_NX_BIT | 7);
+    kxs_esle(taban,KXS_YIGIN,KG_USER_MAX,KXM_NX_BIT | 7);
+}
+işlev kxs_yigin(taban: tam64, argv: Dizi<metin>) -> mantıksal {
+    değişken adet: tam64 = dizi_boyut(argv) olarak tam64;
+    eğer adet < 1 veya adet > 32 { ver yanlış; }
+    değişken bas: tam64 = taban + 16384 + KXS_ARGC - KG_USER_MIN;
+    değişken yer: tam64 = (adet+2)*8;
+    değişken i: tam64 = 0;
+    iken i < adet {
+        değişken arg: metin = dizi_al(argv,i olarak tam32);
+        değişken boy: tam64 = metin_uzunluk(arg) olarak tam64;
+        eğer boy >= 4096 - yer { ver yanlış; }
+        kxm_y64(bas + (i+1)*8,KXS_ARGC+yer);
+        değişken j: tam32 = 0;
+        iken (j olarak tam64) < boy {
+            kxr_y8(bas+yer+(j olarak tam64),metin_bayt(arg,j) olarak dtam8);
+            j=j+1;
+        }
+        yer = yer + boy + 1;
+        i = i + 1;
+    }
+    kxm_y64(bas,adet);
+    ver doğru;
+}
+
+işlev kxs_calistir(havuz: tam64, e: Elf64, veri: Dizi<dtam8>, argv: Dizi<metin>, cikti: &değişken KxsSonuc) -> sonuç<mantıksal,metin> {
+    eğer havuz == 0 { ver hata("surec icin UEFI belleği gerekli"); }
+    eğer değil kxs_segmentler(e) { ver hata("ELF surec penceresi veya izinleri"); }
+    güvensiz {
+        eğer kxs_durum != KXS_BOS { ver hata("surec tablosu dolu"); }
+        eğer kxs_pid_son == 9223372036854775807 { ver hata("pid siniri"); }
+        değişken taban: tam64 = havuz+(kxs_pid_son%2)*2113536;
+        kxs_durum = KXS_HAZIR;
+        kxs_bellek_sifirla(taban);
+        eğer değil kxs_yigin(taban,argv) {
+            kxs_bellek_sifirla(taban);
+            kxs_durum = KXS_BOS;
+            ver hata("argv surec yigini siniri");
+        }
+        değişken ana: tam64 = kxm_cr3_oku();
+        kxs_tablo_kur(taban,ana);
+        kxs_yukle(taban,e,veri);
+        eğer kxs_tss_var == 0 { kxr_tss_kur(); kxs_tss_var=1; }
+        kxm_nx_ac();
+        kxs_pid_son = kxs_pid_son + 1;
+        kxs_pid = kxs_pid_son;
+        kxs_durum = KXS_KOSUYOR;
+        kxs_cikis_kodu = 0;
+        kxs_pt = taban + 12288;
+        kx_sis_vekil = kxs_hizmet_adresi();
+        değişken cr0: tam64 = kxs_fpu_kapat();
+        kxs_cr3 = taban;
+        kxm_cr3_yaz(kxs_cr3);
+        kxs_ring3(e.giris,KXS_ARGC-8);
+        kxm_cr3_yaz(ana);
+        kxs_fpu_geri(cr0);
+        kx_sis_vekil = 0;
+        kxs_pt = 0;
+        değişken r: tam64 = kxr_blok_adr();
+        eğer kxs_durum == KXS_KOSUYOR { kxs_durum=KXS_OLDURULDU; }
+        cikti.pid=kxs_pid;
+        cikti.ebeveyn=KXS_KABUK_PID;
+        cikti.bitti=kxs_durum == KXS_BITTI;
+        cikti.kod=kxs_cikis_kodu;
+        cikti.vektor=kxm_o64(r+16);
+        cikti.hata_kodu=kxm_o64(r+24);
+        cikti.rip=kxm_o64(r+32);
+        cikti.cr2=kxm_o64(r+64);
+        kxs_pid = 0;
+        kxs_bellek_sifirla(taban);
+        kxs_cr3 = 0;
+        kxs_durum = KXS_BOS;
+        ver tamam(doğru);
+    }
+}

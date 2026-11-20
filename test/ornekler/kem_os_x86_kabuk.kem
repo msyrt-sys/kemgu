@@ -2,10 +2,10 @@ kullan drivers::fs::fat32_kayit::{ FatZaman, fat_zaman_varsayilan };
 kullan drivers::fs::fat32_sektor_yaz::{ FatDegisiklik, FatYazIslem, fat_yaz_plan_saat };
 kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };
 kullan drivers::ekran::girdi::{ girdi_bas, girdi_kod };
-kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor };
-kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_yeni, klavye_bayt };
+kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor, hid_klavye_ham_rapor };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, TusHamOlay, klavye_yeni, klavye_bayt, klavye_ham_bayt };
 kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_olay };
-kullan drivers::fs::fat32_sektor::{ FatSektor, FatSektorKaydi, fat_sektor_yeni, fat_sektor_koy, fat_sektor_oku, fat_sektor_listele };
+kullan drivers::fs::fat32_sektor::{ FatSektor, FatSektorKaydi, fat_sektor_yeni, fat_sektor_koy, fat_sektor_listele };
 kullan drivers::disk::bolum::{ gpt_mi };
 kullan drivers::disk::bolum_kimlik::{ DiskBolumu, GptTabloKonumu, AcilisBolumu, mbr_kimlikli, gpt_konum, gpt_kimlikli, bolum_eslesir };
 kullan drivers::fs::bagla::{ BagBolum, BagKaydi, bag_bolum, bag_ad, yazma_izni };
@@ -67,19 +67,19 @@ işlev bm_xsur(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin>
 // sürücünün yoklama sınırı (4000 × Bekle) boşta duran kabuğu saniyeler içinde
 // "xhci olay zaman asimi" ile düşürüyordu. Çekirdek DW3 döngü bitini AYIRMA YAPMADAN
 // okur ve süresiz bekler; olay gelince sürücü normal (yırtılmayan, D-745) yoldan sürer.
-çıplak işlev bm_olay_bekle(adr: tam64, dongu: tam64) -> mantıksal {
+çıplak işlev bm_olay_bekle(adr: tam64, dongu: tam64, fareye_don: mantıksal) -> mantıksal {
     iken (kem_mmio_oku32(adr) & 1) != dongu {
-        eğer ps2_kesme_fare_var() { ver yanlış; } kem_bekle_us(50);
+        eğer fareye_don ve ps2_kesme_fare_var() { ver yanlış; } kem_bekle_us(50);
     } ver doğru;
 }
-işlev bm_xsur_bekle(bar: tam64, s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
+işlev bm_xsur_bekle(bar: tam64, s: &değişken XhciDurum, fareye_don: mantıksal) -> sonuç<mantıksal,metin> {
     değişken y: GcYanit = gc_bos(); değişken i: tam32 = 0;
     iken i < 100000 { değişken r: GcIstek = xhci_adim(s,y);
         eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); }
             GcIstek::Bekle(us) => {
                 eğer s.evre == 900 {
                     değişken dg: tam64 = 0; eğer s.olay.dongu { dg = 1; }
-                    eğer değil bm_olay_bekle(s.olay.taban + (s.olay.bas olarak tam64) * 16 + 12, dg) {
+                    eğer değil bm_olay_bekle(s.olay.taban + (s.olay.bas olarak tam64) * 16 + 12, dg, fareye_don) {
                         s.bekleme=0;ver tamam(yanlış);
                     }
                     s.bekleme = 0; y = gc_bos();
@@ -328,13 +328,18 @@ işlev kd_yaz_uygula(a: &değişken BlokDonanim,k: &değişken KabukBag,p: Dizi<
     }
     ver tamam(doğru);
 }
-işlev kd_yaz(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor,islem: FatYazIslem) -> sonuç<mantıksal,metin> {
+küresel değişken kd_icerik_surumu: tam64 = 0;
+işlev kd_yazma_izni(d: &değişken KabukDisk,y: KabukYol) -> sonuç<mantıksal,metin> {
     değişken k: KabukBag = dizi_al(d.baglar,y.indeks);
     eğer k.kesik { ver hata("FAT32 kesik yazma; kirli bayrak korundu"); }
     eğer y.indeks == d.kok ve değil k.kayit.kok ve değil k.yazilabilir {
         ver hata("acilis bolumu bilinmiyor; kok salt okunur");
     }
-    eşleş yazma_izni(k.kayit,k.yazilabilir) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    ver yazma_izni(k.kayit,k.yazilabilir);
+}
+işlev kd_yaz(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor,islem: FatYazIslem) -> sonuç<mantıksal,metin> {
+    eşleş kd_yazma_izni(d,y) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    değişken k: KabukBag = dizi_al(d.baglar,y.indeks);
     değişken saat: FatZaman = fat_zaman_varsayilan();
     eşleş islem {
         FatYazIslem::DosyaSil => { } FatYazIslem::DizinSil => { }
@@ -349,6 +354,7 @@ işlev kd_yaz(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor,isle
         eşleş fat_yaz_plan_saat(f,y.yol,islem,saat) {
             hata(e) => { eğer f.gerekli < 0 { ver hata(e); } }
             tamam(p) => {
+                güvensiz { kd_icerik_surumu=kd_icerik_surumu+1; }
                 değişken a: BlokDonanim = dizi_al(d.aygitlar,k.indeks);
                 değişken r: sonuç<mantıksal,metin> = kd_yaz_uygula(&değişken a,&değişken k,p);
                 dizi_yaz(d.aygitlar,k.indeks,a);
@@ -356,19 +362,6 @@ işlev kd_yaz(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor,isle
                 dizi_yaz(d.baglar,y.indeks,k);
                 ver r;
             }
-        }
-        eşleş kd_doldur(d,k,f) { hata(e) => { ver hata(e); } tamam(v) => { } }
-        i=i+1;
-    }
-    ver hata("sektor tekrar siniri");
-}
-işlev kd_dosya(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor) -> sonuç<Dizi<dtam8>,metin> {
-    değişken k: KabukBag = dizi_al(d.baglar,y.indeks);
-    değişken i: tam32 = 0;
-    iken i < 257 {
-        eşleş fat_sektor_oku(f,y.yol) {
-            tamam(b) => { ver tamam(b); }
-            hata(e) => { eğer f.gerekli == 0 { ver hata(e); } }
         }
         eşleş kd_doldur(d,k,f) { hata(e) => { ver hata(e); } tamam(v) => { } }
         i=i+1;
@@ -399,10 +392,7 @@ işlev kd_mutasyon(d: &değişken KabukDisk,y: KabukYol,islem: FatYazIslem) -> s
     } }
 }
 işlev kd_icerik(d: &değişken KabukDisk,y: KabukYol) -> sonuç<Dizi<dtam8>,metin> {
-    eşleş kd_fat(d,y) { hata(e) => { ver hata(e); } tamam(v) => {
-        değişken f: FatSektor = v;
-        ver kd_dosya(d,y,&değişken f);
-    } }
+    ver kv_tum(d,y,65536);
 }
 işlev kd_kopyala(d: &değişken KabukDisk,src: KabukYol,dst: KabukYol,tasi: mantıksal) -> sonuç<mantıksal,metin> {
     eğer tasi {
@@ -490,10 +480,107 @@ işlev kd_komut_yol(d: &değişken KabukDisk,cmd: metin,yol: metin,son: metin) -
         } }
     } }
 }
-işlev komut(d: &değişken KabukDisk,satir: metin) -> sonuç<mantıksal,metin> {
+işlev ks_vektor_ad(v: tam64) -> metin {
+    eğer v == 0 { ver "#DE"; } eğer v == 6 { ver "#UD"; }
+    eğer v == 7 { ver "#NM"; } eğer v == 13 { ver "#GP"; }
+    eğer v == 14 { ver "#PF"; }
+    ver metin_birlestir("vektor=",tam_metin(v));
+}
+işlev ks_hex(adr: tam64) -> metin {
+    değişken s: metin = "";
+    değişken d: tam32 = 0;
+    değişken n: tam64 = adr;
+    iken n != 0 veya d == 0 {
+        s=metin_birlestir(metin_kes("0123456789abcdef",(n&15) olarak tam32,1),s);
+        n=(n>>4)&1152921504606846975;
+        d=d+1;
+    }
+    ver metin_birlestir("0x",s);
+}
+işlev ks_sonuc(ad: metin,s: &KxsSonuc) {
+    değişken m: metin = metin_birlestir(metin_birlestir("[",ad)," pid=");
+    m=metin_birlestir(m,tam_metin(s.pid));
+    eğer s.bitti {
+        ekran_cift_yaz(metin_birlestir(metin_birlestir(metin_birlestir(m," cikis="),tam_metin(s.kod)),"]"));
+    } değilse {
+        m=metin_birlestir(metin_birlestir(m," SONLANDIRILDI: "),ks_vektor_ad(s.vektor));
+        eğer s.vektor == 14 { m=metin_birlestir(metin_birlestir(m," adr="),ks_hex(s.cr2)); }
+        ekran_cift_yaz(metin_birlestir(m," (kullanici)]"));
+    }
+}
+// Son ELF'in ayrıştırılmış görüntüsü kabuk ömrüne aittir. Ortak FAT32 yazma
+// kapısındaki nesil, başarılı ya da kısmi bir mutasyonda eski görüntüyü düşürür.
+yapı KsProgram { var: mantıksal; surum: tam64; yol: metin; cwd: metin; ad: metin; veri: Dizi<dtam8>; plan: Elf64; }
+işlev ks_program_hazirla(d: &değişken KabukDisk,p: &değişken KsProgram,girdi: metin) -> sonuç<mantıksal,metin> {
+    değişken surum: tam64 = 0;
+    güvensiz { surum=kd_icerik_surumu; }
+    eğer p.var ve p.surum == surum ve bm_esit(p.yol,girdi) ve bm_esit(p.cwd,d.cwd) { ver tamam(doğru); }
+    eşleş kd_mutlak(d.cwd,girdi) { hata(e) => { ver hata(e); } tamam(yol) => {
+    eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(y) => {
+    eşleş kd_icerik(d,y) { hata(e) => { ver hata(e); } tamam(b) => {
+    eşleş elf64_coz(b) { hata(e) => { ver hata(metin_birlestir("ELF ",e)); } tamam(plan) => {
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(adlar) => {
+        eğer dizi_boyut(adlar) == 0 { ver hata("ELF dosya adi"); }
+        p.var=doğru; p.surum=surum; p.yol=girdi; p.cwd=d.cwd;
+        p.ad=dizi_al(adlar,dizi_boyut(adlar)-1);
+        p.veri=b; p.plan=plan;
+        ver tamam(doğru);
+    } }
+    } }
+    } }
+    } }
+    } }
+}
+yapı KsKabukSureci { son_program: KsProgram; fds: Dizi<KsvFd>; bos_olaylar: Dizi<TusHamOlay>; }
+işlev ks_komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,arg: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
+              h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
+    eğer değil uefi_mi() { ver hata("calistir UEFI gerektirir"); }
+    değişken argv: Dizi<metin> = [];
+    değişken i: tam32 = 0;
+    değişken n: tam32 = metin_uzunluk(arg);
+    iken i < n {
+        eğer metin_bayt(arg,i) == (32 olarak tam8) { i=i+1; }
+        değilse {
+            değişken bas: tam32 = i;
+            iken i < n ve metin_bayt(arg,i) != (32 olarak tam8) { i=i+1; }
+            eğer dizi_boyut(argv) >= 32 { ver hata("cok arguman"); }
+            dizi_ekle(argv,metin_kes(arg,bas,i-bas));
+        }
+    }
+    eğer dizi_boyut(argv) == 0 { ver hata("calistir <yol> [arg...]"); }
+    eşleş ks_program_hazirla(d,&değişken p.son_program,dizi_al(argv,0)) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    güvensiz {
+        kxs_heap_iz(0);
+        değişken s: KxsSonuc = KxsSonuc {pid:0,ebeveyn:0,bitti:yanlış,kod:0,vektor:0,hata_kodu:0,rip:0,cr2:0};
+        değişken baglam: KsvBaglam = KsvBaglam {
+            disk:*d,fds:p.fds,kabuk_cwd:d.cwd,degisti:yanlış,
+            x:*x,xb:xb,klavye_indeksi:indeks,h:*h,tr:*tr,olaylar:p.bos_olaylar,olay_konum:0,ilk_tus:doğru
+        };
+        değişken isaret: *KsvBaglam = (&baglam) olarak *KsvBaglam;
+        ksv_baglam_adresi=isaret olarak tam64;
+        kxs_ek_vekil=ksv_vekil_adresi();
+        değişken sonuc: sonuç<mantıksal,metin> = kxs_calistir(uefi_surec_taban,p.son_program.plan,p.son_program.veri,argv,&değişken s);
+        kxs_ek_vekil=0;
+        ksv_baglam_adresi=0;
+        *x=baglam.x; *h=baglam.h; *tr=baglam.tr;
+        eşleş sonuc {
+            hata(e) => { kxs_heap_iz(8); ver hata(e); }
+            tamam(v) => {
+                değişken son: tam64 = ksv_temizle(&değişken baglam);
+                kxs_heap_iz(8);
+                ks_sonuc(p.son_program.ad,&s);
+                eğer son < 0 { ver hata("surec dosya esitleme hatasi"); }
+                ver tamam(doğru);
+            }
+        }
+    }
+}
+işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
+            h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
     değişken pos: tam32 = kd_bosluk(satir);
     değişken cmd: metin = kd_bas(satir,pos);
     değişken arg: metin = kd_kalan(satir,pos);
+    eğer bm_esit(cmd,"calistir") { ver ks_komut(d,p,arg,x,xb,indeks,h,tr); }
     eğer bm_esit(cmd,"echo") { ekran_cift_yaz(arg); ver tamam(doğru); }
     eğer bm_esit(cmd,"diskler") { kd_diskler(d); ver tamam(doğru); }
     eğer bm_esit(cmd,"saat") {
@@ -536,6 +623,9 @@ işlev kabuk_fare(ke: &değişken KabukEkran, fd: &değişken FareDurumu, im: &d
 işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, indeks: tam32, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     değişken h: HidKlavye = hid_klavye_yeni(); değişken tr: KlavyeDurumu = klavye_yeni(); değişken satir: SatirDuzenleyici = satir_yeni();
     değişken fd: FareDurumu = fare_yeni(yanlış);değişken im: EkranFare = ekran_fare_yeni();
+    değişken bos_program: KsProgram = KsProgram {var:yanlış,surum:0,yol:"",cwd:"",ad:"",veri:[],
+        plan:Elf64 {tur:0,makine:0,giris:0,yuklemeler:[]}};
+    değişken p: KsKabukSureci = KsKabukSureci {son_program:bos_program,fds:ksv_fd_tablo(),bos_olaylar:[]};
     değişken bekleyen: mantıksal = yanlış;
     değişken kayip1: tam64 = 0;değişken kayip12: tam64 = 0;değişken irqhata: tam64 = 0;
     ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
@@ -557,7 +647,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
                 r=kd_giris(x,indeks);
                 eşleş r { hata(e) => { ver hata(e); } tamam(v) => { } }bekleyen=doğru;
             }
-            eşleş bm_xsur_bekle(xb,x) { hata(e) => { ver hata(e); } tamam(v) => {
+            eşleş bm_xsur_bekle(xb,x,doğru) { hata(e) => { ver hata(e); } tamam(v) => {
                 eğer v {
                     bekleyen=yanlış;
                     kd_giris_son(x);
@@ -576,7 +666,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
                         ekran_cift_yaz("Sistem durduruldu; güç tuşuna basın.");ke_ciz(ke);guc_kapat();
                     }
                 }
-            } değilse { eşleş komut(d,s) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } } }
+            } değilse { eşleş komut(d,&değişken p,s,x,xb,indeks,&değişken h,&değişken tr) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } } }
             ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
         } } }
         ekran_fare_ciz(ke.e,&değişken im);
@@ -641,7 +731,7 @@ işlev main() -> tam32 {
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(b) => {
             uefi_dok(b);
-            eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+            eşleş uefi_bellek_kur_surec(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eğer guc_ps2_izin() {
    değişken fare_kimlik: tam32 = ps2_kesme_kur();

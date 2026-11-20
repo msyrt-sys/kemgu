@@ -12,7 +12,17 @@ işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> so
   }
  }
 }
+// Sırayla kullanılan iki fiziksel alan. Alan başına 512 kullanıcı
+// sayfası ve dört özel sayfa tablosu.
+sabit UEFI_SUREC_CERCEVE: tam32 = 1032;
+küresel değişken uefi_surec_taban: tam64 = 0;
 işlev uefi_bellek_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ ver uefi_bellek_kur_ic(b,yanlış);
+}
+işlev uefi_bellek_kur_surec(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ ver uefi_bellek_kur_ic(b,doğru);
+}
+işlev uefi_bellek_kur_ic(b: UefiBilgi,surec: mantıksal) -> sonuç<mantıksal,metin> {
  güvensiz {
  değişken ham: Dizi<dtam8> = bm_bellek_oku(dizi_al(b.alan,9),dizi_al(b.alan,10) olarak tam32);
  eşleş uefi_harita(b,ham,kem_pvh_bilgi()) { hata(e) => { ver hata(e); } tamam(xs) => {
@@ -26,6 +36,16 @@ işlev uefi_bellek_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   eşleş uefi_pci_esle(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_guc_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eğer surec {
+   eşleş ayir_ardisik(&değişken d,UEFI_SUREC_CERCEVE) {
+    hiç => { ver hata("UEFI surec belleği yok"); }
+    değer(t) => {
+     eğer t > 1073741824-(UEFI_SUREC_CERCEVE olarak tam64)*4096 { ver hata("UEFI surec adresi"); }
+     uefi_surec_taban=t;
+     memset(t olarak *tam8,0,(UEFI_SUREC_CERCEVE olarak tam64)*4096);
+    }
+   }
+  }
   ver tamam(doğru);
  } }
  } }

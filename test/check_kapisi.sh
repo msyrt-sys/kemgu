@@ -40,6 +40,7 @@ muaf() {
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     # [D-745] bare-metal NVMe test çekirdeği: kem_pci_hw/kem_uart'tan işlev ister (tek başına T002).
     *test/ornekler/kem_os_x86_kabuk.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
+    *test/ornekler/kem_os_x86_vfs_ortak.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_blok_ortak.kem) echo "parça — birleşik kabuk ve blok birimleri aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_blok.kem) echo "parça — birleşik blok birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_guc.kem) echo "parça — birleşik güç birimi aşağıda denetlenir" ;;
@@ -217,7 +218,7 @@ rm -f build/kem_bm_usb_kapi.kem
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
-BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
 cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then

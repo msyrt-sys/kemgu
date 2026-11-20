@@ -1,8 +1,6 @@
 // Bu iki kanca ortak, değişmemiş kem_heap.kem'i kullanıcı sürecine bağlar.
 çıplak işlev kem_uart_bayt(b: tam32) {
-    değişken byt: dtam8 = b olarak dtam8;
-    değişken p: *dtam8 = (&byt) olarak *dtam8;
-    sis_yaz(2, p olarak tam64, 1);
+    sis_bayt_yaz(2,b);
     // Ortak kem_panik satırı tamamladığında süreçten çık.
     eğer b == 10 { sis_cik(134); }
 }
@@ -16,6 +14,31 @@
     ver *s;
 }
 
+// Normal KEMGU işlevi, kullanıcı heap'inden gelen örtük bölgeyi ilk argüman alır.
+çıplak işlev kul_program_cagir(argc: tam64,argv: tam64) -> tam64 {
+    değişken rho: *tam8 = kdl_global_bolge_al();
+    eğer (rho olarak tam64) == 0 { sis_cik(134); }
+    değişken sonuc: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"movq $1, %rdi
+movq $2, %rsi
+movq $3, %rdx
+movq %rsp, %r11
+andq $$-16, %rsp
+subq $$16, %rsp
+movq %r11, (%rsp)
+call kullanici_main
+movq (%rsp), %rsp"#
+            çıktı("={rax}", &sonuc) girdi("r", rho) girdi("r", argc) girdi("r", argv)
+            bozulan("~{rdi}") bozulan("~{rsi}") bozulan("~{rdx}") bozulan("~{rcx}")
+            bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}")
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    ver sonuc;
+}
 // argc ve argv sabit üst yığın sayfasında, RSP bunun hemen altında başlar.
 sabit KUL_ARGC_ADRESI: tam64 = 1411379200;
 çıplak işlev _start() {
@@ -27,5 +50,5 @@ sabit KUL_ARGC_ADRESI: tam64 = 1411379200;
     }
     kem_heap_kur(alt, ust);
     değişken argc: *tam64 = KUL_ARGC_ADRESI olarak *tam64;
-    sis_cik(kullanici_main(*argc, KUL_ARGC_ADRESI + 8));
+    sis_cik(kul_program_cagir(*argc, KUL_ARGC_ADRESI + 8));
 }
