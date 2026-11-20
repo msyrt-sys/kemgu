@@ -46,6 +46,7 @@ muaf() {
     *test/ornekler/kem_os_x86_uefi.kem) echo "parça — birleşik UEFI birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ps2.kem) echo "parça — birleşik PS2 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_panik.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
+    *test/ornekler/kem_os_x86_surec_abi.kem) echo "parça — calistir_bm_x86_surec_abi birleşik --check çalıştırır" ;;
     *test/ornekler/kem_os_x86_istisna.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ekran.kem) echo "parça — birleşik ekran birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_usb.kem) echo "parça — birleşik USB birimi aşağıda denetlenir" ;;

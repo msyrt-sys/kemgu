@@ -51,9 +51,8 @@ sabit KG_STK2: tam64 = 52428800;          // 0x03200000: görev2 yığın tepesi
 çıplak işlev kdl_irq_isle(sp: tam64) -> tam64 { ver kem_preempt(sp); }
 
 // [D-686] int 0x80 dağıtıcısı — boot/start_x86_64.S kdl_syscall_stub çağırır
-// (rdi=num, rsi=arg, dönüş rax). Güçlü tanım C bm_x86_kesme.o'daki ZAYIF olanı ezer.
-// Servisler mimariden bağımsız (kem_syscall_temel, kem_gorev_cekirdek.kem) — arm64
-// kdl_syscall_isle ile AYNI yanıt. Bilinmeyen numara → -1.
+// SysV: rdi=num, rsi=arg, rdx=arg2, rcx=arg3. Dönüş rax.
+// Eski servisler kem_gorev_cekirdek.kem'de arm64 ile ortaktır.
 // [D-705] kullanıcı penceresi (D-610 işaretçi doğrulaması): x86 kem_os ring3 süreç-özel
 // 2 MiB pencere [0x54000000, 0x54200000) (kmmu_as_olustur PD[160]; kod sayfa 0, yığın 511).
 sabit KG_USER_MIN: tam64 = 1409286144;   // 0x54000000
@@ -62,9 +61,17 @@ sabit KG_USER_BOY: tam64 = 2097152;      // 2 MiB
 çıplak işlev kg_kul_min() -> tam64 { ver KG_USER_MIN; }
 çıplak işlev kg_kul_max() -> tam64 { ver KG_USER_MAX; }
 çıplak işlev kg_kul_boy() -> tam64 { ver KG_USER_BOY; }
-çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64) -> tam64 {
+sabit KX_SIS_ABI_SURUMU: tam64 = 40;
+sabit KX_HATA_NOSYS: tam64 = 38;
+
+çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64, arg3: tam64) -> tam64 {
     eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
     eğer kem_syscall_kul_mi(num) { ver kem_syscall_kul(num, arg, arg2); }   // [D-705]
+    eğer num == KX_SIS_ABI_SURUMU { ver 2; }
+    // Eski ring0 D-686 kâhini ayrılmış aralık dışındaki çağrılarda -1 bekler.
+    eğer (kxm_o64(kxr_blok_adr() + 72) & 3) == 3 veya (num >= 40 ve num <= 79) {
+        ver 0 - KX_HATA_NOSYS;
+    }
     ver 0 - 1;
 }
 
