@@ -1,6 +1,6 @@
 // HID boot klavye rapor farkı. Türkçe düzen mevcut PS/2 dönüştürücüye aittir.
 kullan drivers::usb::hid_tus_tablosu::{ hid_set1 };
-kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, klavye_bayt };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, TusHamOlay, klavye_bayt, klavye_degistiriciler, klavye_ham_bayt };
 kullan drivers::ortak::bayt::{ oku_u8, bayt_sifir, yaz_u8 };
 genel yapı HidKlavye { onceki: Dizi<dtam8>; }
 genel işlev hid_klavye_yeni() -> HidKlavye { ver HidKlavye { onceki: bayt_sifir(8) }; }
@@ -12,14 +12,83 @@ işlev olay(d: &değişken KlavyeDurumu, k: tam32, bas: mantıksal) -> TusOlayi 
     değişken s: tam32 = hid_set1(k); eğer s == 0 { ver TusOlayi::Yok; } eğer değil bas { s=s|128; } ver klavye_bayt(d,s);
 }
 işlev ekle(xs: Dizi<TusOlayi>, o: TusOlayi) { eşleş o { TusOlayi::Yok => { } _ => { dizi_ekle(xs,o); } } }
-genel işlev hid_klavye_rapor(h: &değişken HidKlavye, d: &değişken KlavyeDurumu, b: Dizi<dtam8>) -> sonuç<Dizi<TusOlayi>,metin> {
+yapı HidTusu { kod: tam32; bas: mantıksal; }
+işlev hid_fark(h: &değişken HidKlavye,b: Dizi<dtam8>) -> Dizi<HidTusu> {
+    değişken xs: Dizi<HidTusu> = [];
+    değişken i: tam32 = 2;
+    iken i < 8 {
+        değişken k: tam32 = oku_u8(h.onceki,i);
+        eğer k != 0 ve değil var_mi(h.onceki,k,i) ve değil var_mi(b,k,8) { dizi_ekle(xs,HidTusu {kod:k,bas:yanlış}); }
+        i=i+1;
+    }
+    i=2;
+    iken i < 8 {
+        değişken k: tam32 = oku_u8(b,i);
+        eğer k != 0 ve değil var_mi(b,k,i) ve değil var_mi(h.onceki,k,8) { dizi_ekle(xs,HidTusu {kod:k,bas:doğru}); }
+        i=i+1;
+    }
+    ver xs;
+}
+işlev hid_rapor_hata(b: Dizi<dtam8>) -> mantıksal {
+    değişken i: tam32 = 2;
+    iken i < 8 { değişken k: tam32 = oku_u8(b,i); eğer k >= 1 ve k <= 3 { ver doğru; } i=i+1; }
+    ver yanlış;
+}
+işlev hid_rapor_sakla(h: &değişken HidKlavye,b: Dizi<dtam8>) {
+    değişken yeni: Dizi<dtam8> = bayt_sifir(8);
+    değişken i: tam32 = 0;
+    iken i < 8 { yaz_u8(yeni,i,oku_u8(b,i) olarak tam64); i=i+1; }
+    h.onceki=yeni;
+}
+işlev hid_degistiriciler(d: &değişken KlavyeDurumu,m: tam32) {
+    d.sol_shift=(m&2) != 0; d.sag_shift=(m&32) != 0; d.ctrl=(m&17) != 0;
+    d.alt=(m&4) != 0; d.altgr=(m&64) != 0; d.e0=yanlış;
+}
+genel işlev hid_klavye_rapor(h: &değişken HidKlavye,d: &değişken KlavyeDurumu,b: Dizi<dtam8>) -> sonuç<Dizi<TusOlayi>,metin> {
     eğer dizi_boyut(b) != 8 veya dizi_boyut(h.onceki) != 8 { ver hata("hid klavye rapor boyu"); }
-    değişken xs: Dizi<TusOlayi> = []; değişken i: tam32 = 2;
-    // ErrorRollOver/PostFail/ErrorUndefined durumunda son geçerli rapor korunur.
-    iken i < 8 { değişken k: tam32 = oku_u8(b,i); eğer k >= 1 ve k <= 3 { ver tamam(xs); } i=i+1; }
+    değişken xs: Dizi<TusOlayi> = [];
+    eğer hid_rapor_hata(b) { ver tamam(xs); }
+    hid_degistiriciler(d,oku_u8(b,0));
+    için k: hid_fark(h,b) { ekle(xs,olay(d,k.kod,k.bas)); }
+    hid_rapor_sakla(h,b);
+    ver tamam(xs);
+}
+işlev hid_ham_ozel(k: tam32) -> tam32 {
+    eğer k == 79 { ver 333; } eğer k == 80 { ver 331; }
+    eğer k == 81 { ver 336; } eğer k == 82 { ver 328; }
+    eğer k == 76 { ver 339; }
+    ver 0;
+}
+genel işlev hid_klavye_ham_rapor(h: &değişken HidKlavye,d: &değişken KlavyeDurumu,b: Dizi<dtam8>) -> sonuç<Dizi<TusHamOlay>,metin> {
+    eğer dizi_boyut(b) != 8 veya dizi_boyut(h.onceki) != 8 { ver hata("hid klavye rapor boyu"); }
+    değişken xs: Dizi<TusHamOlay> = [];
+    eğer hid_rapor_hata(b) { ver tamam(xs); }
     değişken m: tam32 = oku_u8(b,0);
-    d.sol_shift=(m&2) != 0; d.sag_shift=(m&32) != 0; d.ctrl=(m&17) != 0; d.alt=(m&4) != 0; d.altgr=(m&64) != 0; d.e0=yanlış;
-    i=2; iken i < 8 { değişken k: tam32 = oku_u8(h.onceki,i); eğer k != 0 ve değil var_mi(h.onceki,k,i) ve değil var_mi(b,k,8) { ekle(xs,olay(d,k,yanlış)); } i=i+1; }
-    i=2; iken i < 8 { değişken k: tam32 = oku_u8(b,i); eğer k != 0 ve değil var_mi(b,k,i) ve değil var_mi(h.onceki,k,8) { ekle(xs,olay(d,k,doğru)); } i=i+1; }
-    değişken yeni: Dizi<dtam8> = bayt_sifir(8); i=0; iken i < 8 { yaz_u8(yeni,i,oku_u8(b,i) olarak tam64); i=i+1; } h.onceki=yeni; ver tamam(xs);
+    değişken eski: tam32 = oku_u8(h.onceki,0);
+    hid_degistiriciler(d,m);
+    // HID boot raporunun bit sırası ve karşılık gelen set 1 kodları.
+    değişken mods: Dizi<tam32> = [29,42,56,347,285,54,312,348];
+    değişken i: tam32 = 0;
+    iken i < 8 {
+        eğer ((m^eski)&(1<<i)) != 0 {
+            dizi_ekle(xs,TusHamOlay {kod:dizi_al(mods,i),unicode:0,bas:(m>>i)&1,
+                degistirici:klavye_degistiriciler(d)});
+        }
+        i=i+1;
+    }
+    için k: hid_fark(h,b) {
+        değişken o: tam32 = hid_ham_ozel(k.kod);
+        eğer o != 0 {
+            değişken bas: tam32 = 0; eğer k.bas { bas=1; }
+            dizi_ekle(xs,TusHamOlay {kod:o,unicode:0,bas:bas,degistirici:klavye_degistiriciler(d)});
+        } değilse {
+            değişken s: tam32 = hid_set1(k.kod);
+            eğer s != 0 {
+                eğer değil k.bas { s=s|128; }
+                eşleş klavye_ham_bayt(d,s) { hiç => { } değer(v) => { dizi_ekle(xs,v); } }
+            }
+        }
+    }
+    hid_rapor_sakla(h,b);
+    ver tamam(xs);
 }
