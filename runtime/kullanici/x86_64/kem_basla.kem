@@ -5,7 +5,7 @@
     eğer b == 10 { sis_cik(134); }
 }
 çıplak işlev kdl_mimari_dizi_oob(i: tam32, boyut: tam32) { sis_cik(134); }
-çıplak işlev kdl_panik(m: metin) { kem_panik(m); }
+çıplak işlev kdl_panik(m: metin) { sis_metin("PANIK: "); kem_panik(m); }
 
 çıplak işlev sis_argv(argv: tam64, i: tam64) -> metin {
     değişken yuva: *tam64 = (argv + i * 8) olarak *tam64;

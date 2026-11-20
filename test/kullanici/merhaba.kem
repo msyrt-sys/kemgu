@@ -1,6 +1,9 @@
+küresel değişken kul_bss_nobet: tam64 = 0;
 // ELF girişinin argv ve UTF-8 baytlarını olduğu gibi taşıdığını göster.
 işlev kullanici_main(argc: tam64, argv: tam64) -> tam64 {
     güvensiz {
+        eğer kul_bss_nobet != 0 { ver 124; }
+        kul_bss_nobet=711;
         eğer sis_abi_surumu() != 2 { ver 125; }
         // Bağlayıcının ilk değerli RW segmenti, her açılışta yeniden yüklenmeli.
         değişken nobet: tam64 = 0;

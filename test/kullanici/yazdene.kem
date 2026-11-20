@@ -16,6 +16,15 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
         değişken p: tam64 = buf olarak tam64;
         eğer p == 0 { ver 4; }
         eğer değil yd_esit(p,sis_argv(argv,1),sis_calisma_dizini_al(p,4096)) { ver 5; }
+        // On üç dosya yuvası dolar, kapanınca yeniden kullanılabilir.
+        değişken yuva: tam64 = 3;
+        iken yuva < 16 {
+            eğer sis_ac("günlük.txt",0) != yuva { ver 26; }
+            yuva=yuva+1;
+        }
+        eğer sis_ac("günlük.txt",0) != (0-24) veya sis_kapat(16) != (0-9) { ver 27; }
+        yuva=3;
+        iken yuva < 16 { eğer sis_kapat(yuva) != 0 { ver 28; } yuva=yuva+1; }
         değişken yaz: metin = "Ağaç İş";
         değişken boy: tam64 = metin_uzunluk(yaz) olarak tam64;
         değişken fd: tam64 = sis_ac("yeni.txt",3);

@@ -25,6 +25,21 @@ küresel değişken kxs_durum: tam64 = 0;
 küresel değişken kxs_cr3: tam64 = 0;
 küresel değişken kxs_cikis_kodu: tam64 = 0;
 küresel değişken kxs_tss_var: tam64 = 0;
+küresel değişken kxs_heap_giris: tam64 = 0;
+küresel değişken kxs_heap_cikis: tam64 = 0;
+// UEFI ayırıcısının ayırdığı iki alanın süreç havuzu; bit 1 = alan kullanımda.
+küresel değişken kxs_havuz_dolu: tam64 = 0;
+çıplak işlev kxs_yuva_ayir() -> tam64 {
+    değişken i: tam64 = kxs_pid_son % 2;
+    eğer (kxs_havuz_dolu & (1 << i)) != 0 { i=1-i; }
+    eğer (kxs_havuz_dolu & (1 << i)) != 0 { ver 0-1; }
+    kxs_havuz_dolu=kxs_havuz_dolu | (1 << i);
+    ver i;
+}
+çıplak işlev kxs_yuva_serbest(i: tam64) {
+    kxs_havuz_dolu=kxs_havuz_dolu & (3 ^ (1 << i));
+}
+
 
 yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vektor: tam64; hata_kodu: tam64; rip: tam64; cr2: tam64; }
 
@@ -112,7 +127,7 @@ yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vekt
         ver 1;
     }
     eğer num == 26 {
-        eğer b > 4096 veya değil kxs_aralik(a,b,doğru) { ver 0 - 1; }
+        eğer b <= 0 veya b > 4096 veya değil kxs_aralik(a,b,doğru) { ver 0 - 1; }
         ver kis_satir_oku(a,b olarak tam32) olarak tam64;
     }
     eğer kxs_ek_vekil != 0 { ver kx_sis_vekil_cagir(kxs_ek_vekil,num,a,b,c); }
@@ -129,7 +144,44 @@ yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vekt
             mimari: x86_64
             şablon: r#"movq $0, %rdi
 movq $1, %rsi
-call kdl_x86_surec_gir"#
+call 2f
+jmp 3f
+2:
+    pushfq
+    cli
+    pushq   %rbx
+    pushq   %rbp
+    pushq   %r12
+    pushq   %r13
+    pushq   %r14
+    pushq   %r15
+    movq    %rsp, kdl_x86_r3_blok+8(%rip)
+    movq    %rsp, %rax
+    andq    $$-16, %rax
+    movq    %rax, kdl_x86_tss+4(%rip)
+    movq    $$1, kdl_x86_r3_blok(%rip)
+    pushq   $$0x23
+    pushq   %rsi
+    pushq   $$0x202
+    pushq   $$0x1b
+    pushq   %rdi
+    xorl    %eax, %eax
+    xorl    %ebx, %ebx
+    xorl    %ecx, %ecx
+    xorl    %edx, %edx
+    xorl    %esi, %esi
+    xorl    %edi, %edi
+    xorl    %ebp, %ebp
+    xorl    %r8d, %r8d
+    xorl    %r9d, %r9d
+    xorl    %r10d, %r10d
+    xorl    %r11d, %r11d
+    xorl    %r12d, %r12d
+    xorl    %r13d, %r13d
+    xorl    %r14d, %r14d
+    xorl    %r15d, %r15d
+    iretq
+3:"#
             girdi("r", giris) girdi("r", rsp)
             bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rdi}") bozulan("~{rsi}")
             bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}")
@@ -161,10 +213,14 @@ movq %r11, %cr0"# çıktı("=r", &cr0) bozulan("~{r11}") bozulan("~{cc}") bozula
     memset(taban olarak *tam8, 0, 2113536);
 }
 
+// Dış ölçüm işlevi iki sayacın optimize edilip silinmesini önler.
+çıplak işlev kxs_heap_olcum_oku(ofs: tam64) -> tam64 {
+    eğer ofs == 0 { ver kxs_heap_giris; }
+    ver kxs_heap_cikis;
+}
 çıplak işlev kxs_heap_iz(ofs: tam64) {
-    değişken adr: tam64 = 0;
-    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_x86_surec_olcum(%rip), $0"# çıktı("=r", &adr) } }
-    kxm_y64(adr+ofs,kem_bump);
+    eğer ofs == 0 { kxs_heap_giris=kem_bump; }
+    değilse { kxs_heap_cikis=kem_bump; }
 }
 
 işlev kxs_segmentler(e: Elf64) -> mantıksal {
@@ -231,11 +287,14 @@ işlev kxs_calistir(havuz: tam64, e: Elf64, veri: Dizi<dtam8>, argv: Dizi<metin>
     güvensiz {
         eğer kxs_durum != KXS_BOS { ver hata("surec tablosu dolu"); }
         eğer kxs_pid_son == 9223372036854775807 { ver hata("pid siniri"); }
-        değişken taban: tam64 = havuz+(kxs_pid_son%2)*2113536;
+        değişken yuva: tam64 = kxs_yuva_ayir();
+        eğer yuva < 0 { ver hata("surec cerceve havuzu dolu"); }
+        değişken taban: tam64 = havuz+yuva*2113536;
         kxs_durum = KXS_HAZIR;
         kxs_bellek_sifirla(taban);
         eğer değil kxs_yigin(taban,argv) {
             kxs_bellek_sifirla(taban);
+            kxs_yuva_serbest(yuva);
             kxs_durum = KXS_BOS;
             ver hata("argv surec yigini siniri");
         }
@@ -269,7 +328,9 @@ işlev kxs_calistir(havuz: tam64, e: Elf64, veri: Dizi<dtam8>, argv: Dizi<metin>
         cikti.rip=kxm_o64(r+32);
         cikti.cr2=kxm_o64(r+64);
         kxs_pid = 0;
-        kxs_bellek_sifirla(taban);
+        // Alanı erişilemez yap; kullanıcı baytları sonraki tahsiste sıfırlanır.
+        memset(taban olarak *tam8, 0, 16384);
+        kxs_yuva_serbest(yuva);
         kxs_cr3 = 0;
         kxs_durum = KXS_BOS;
         ver tamam(doğru);

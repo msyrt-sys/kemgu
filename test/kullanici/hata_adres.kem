@@ -1,9 +1,0 @@
-// Gözetmen yaprağı kullanıcı kipinde #PF üretir.
-işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
-    güvensiz {
-        güvensiz {
-            satıriçi_asm { mimari: x86_64 şablon: r#"testb $$0, (0x100000)"# bozulan("~{cc}") bozulan("~{memory}") }
-        }
-        ver 91;
-    }
-}

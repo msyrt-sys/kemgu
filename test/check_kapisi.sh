@@ -40,14 +40,12 @@ muaf() {
     *test/ornekler/kem_os_x86.kem)      echo "parça dosya — birleşik x86 birimi aşağıda denetlenir" ;;
     # [D-745] bare-metal NVMe test çekirdeği: kem_pci_hw/kem_uart'tan işlev ister (tek başına T002).
     *test/ornekler/kem_os_x86_kabuk.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
-    *test/ornekler/kem_os_x86_vfs_ortak.kem) echo "parça — birleşik kabuk birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_blok_ortak.kem) echo "parça — birleşik kabuk ve blok birimleri aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_blok.kem) echo "parça — birleşik blok birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_guc.kem) echo "parça — birleşik güç birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_uefi.kem) echo "parça — birleşik UEFI birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ps2.kem) echo "parça — birleşik PS2 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_panik.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
-    *test/ornekler/kem_os_x86_surec_abi.kem) echo "parça — calistir_bm_x86_surec_abi birleşik --check çalıştırır" ;;
     *test/ornekler/kem_os_x86_istisna.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ekran.kem) echo "parça — birleşik ekran birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_usb.kem) echo "parça — birleşik USB birimi aşağıda denetlenir" ;;
@@ -108,6 +106,12 @@ for f in test/cg_korpus/*.kem test/ornekler/*.kem stdlib/*.kem \
   else
     set --
   fi
+  # Yeni parçalar muaf değildir; gerçek birleşik kaynaklarıyla tip denetlenir.
+  case "$f" in
+    test/ornekler/kem_os_x86_vfs_ortak.kem|test/ornekler/kem_os_x86_surec_abi.kem)
+      if python3 tools/codex/surec_check.py "$KEMGU" "$f"; then continue; fi
+      red=$((red + 1)); echo "  🔴 $f (birleşik süreç birimi)"; continue ;;
+  esac
   if "$KEMGU" --check "$@" "$f" >/dev/null 2>&1; then continue; fi
   if gerekce="$(muaf "$f")"; then
     muaf_n=$((muaf_n + 1))

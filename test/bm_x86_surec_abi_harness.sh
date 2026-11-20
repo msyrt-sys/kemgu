@@ -25,6 +25,8 @@ for derleyici in ${SUREC_ABI_DERLEYICILER:-build/kemgu build/codegen}; do
     ld.lld -m elf_x86_64 -T linker/bare-metal-x86_64.ld -o "$W/k.elf" "$W/k.o" \
         build/bm_x86_start.o build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o \
         build/bm_x86_yazdir.o build/bm_x86_panik.o
+    for ((acilis=1; acilis<=${SUREC_ABI_TEKRAR:-10}; acilis++)); do
+    rm -f "$W/seri"
     rc=0
     timeout 20 qemu-system-x86_64 -M q35 -m 256M -display none -no-reboot \
         -serial "file:$W/seri" -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel "$W/k.elf" || rc=$?
@@ -33,5 +35,6 @@ for derleyici in ${SUREC_ABI_DERLEYICILER:-build/kemgu build/codegen}; do
         echo "Süreç ABI kapısı başarısız ($derleyici, QEMU rc=$rc)"
         exit 1
     fi
-    echo "✓ Süreç ABI v2 ($derleyici, tek QEMU açılışı)"
+    echo "✓ Süreç ABI v2 ($derleyici, açılış $acilis, tek boot)"
+    done
 done

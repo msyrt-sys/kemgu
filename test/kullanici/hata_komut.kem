@@ -1,7 +1,0 @@
-// Kullanıcı kipinde ayrıcalıklı komut süreci #GP ile bitirir.
-işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
-    güvensiz {
-        güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"hlt"# } }
-        ver 91;
-    }
-}

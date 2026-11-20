@@ -64,7 +64,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 - `[0x54100000, 0x541ef000)` kullanıcı heap'i, `[0x541ef000, 0x541f0000)` eşlenmemiş koruma sayfası, `[0x541f0000, 0x54200000)` RW+NX yığındır.
 - `RSP=0x541feff8` ile giriş yapılır. `0x541ff000` konumunda little-endian 64 bit argc, ardından argc kadar 64 bit kullanıcı adresi ve bir sıfır işaretçi bulunur. Buradan sonra aynı sayfada NUL sonlu UTF-8 argümanlar yer alır. Argv[0] komutta verilen program yoludur. 1–32 argüman desteklenir. Kabuk ASCII boşlukla ayırır.
 - İşaretçi ve uzunluk önce taşmasız pencere aralığına, ardından aralıktaki her kullanıcı sayfasına göre denetlenir. Çekirdek çıktı tamponlarında RW biti gerekir. Yol taraması en çok 4096 bayt ve bileşen başına 255 bayttır. Böylece eşlenmemiş yığın koruma sayfası da geçersiz bir çağrı tamponudur.
-- C1'de kabuk PID 0'dır ve süreçler bitene kadar sırayla çalışır. Süreç çıkışta açık fd'leri bırakır ve yazma eşitlemesi tamamlanır. Kullanıcı istisnası süreç sonucuna taşınır.
+- C1'de kabuk PID 0'dır ve süreçler bitene kadar sırayla çalışır. Süreç tablosunun kapasitesi bir canlı süreçtir; dolu tablo açık hata verir. UEFI haritasının çerçeve ayırıcısından açılışta 1.032 sayfalık süreç havuzu ayrılır. İki 516 sayfalık yuva sırayla kullanılır. Çıkışta sayfa tabloları kaldırılır ve yuva havuza iade edilir; kullanıcı baytları sonraki tahsiste, ELF kopyalanmadan önce sıfırlanır. Havuz çekirdek ömrü boyunca ayrılmış kalır; genel UEFI ayırıcısına süreç başına geri verilmez. Süreç çıkışta açık fd'leri bırakır ve yazma eşitlemesi tamamlanır. Kullanıcı istisnası süreç sonucuna taşınır.
 
 ## Dosya ve girdi biçimleri
 
