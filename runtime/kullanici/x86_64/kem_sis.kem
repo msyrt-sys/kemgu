@@ -1,0 +1,27 @@
+// x86_64 kullanıcı ABI'si. Ham adresler yalnız süreç adres alanına aittir.
+çıplak işlev sis_cagir(num: tam64, ilk: tam64, ikinci: tam64, ucuncu: tam64) -> tam64 {
+    değişken sonuc: tam64 = num;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"int $$0x80"#
+            çıktı("={rax}", &sonuc)
+            girdi("0", num) girdi("{rdi}", ilk) girdi("{rdx}", ikinci) girdi("{rsi}", ucuncu)
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    ver sonuc;
+}
+çıplak işlev sis_abi_surumu() -> tam64 { ver sis_cagir(40, 0, 0, 0); }
+çıplak işlev sis_tik() -> tam64 { ver sis_cagir(10, 0, 0, 0); }
+çıplak işlev sis_pid() -> tam64 { ver sis_cagir(11, 0, 0, 0); }
+çıplak işlev sis_cik(kod: tam64) {
+    sis_cagir(13, kod, 0, 0);
+    // Bir ABI hatasında da _start geçersiz bir dönüş adresine gitmez.
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"ud2"# } }
+}
+çıplak işlev sis_yaz(fd: tam64, buf: tam64, n: tam64) -> tam64 { ver sis_cagir(44, fd, buf, n); }
+çıplak işlev sis_metin(s: metin) -> tam64 {
+    değişken yuva: *tam64 = (&s) olarak *tam64;
+    ver sis_yaz(1, *yuva, metin_uzunluk(s) olarak tam64);
+}

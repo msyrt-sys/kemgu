@@ -1,0 +1,11 @@
+// ELF girişinin argv ve UTF-8 baytlarını olduğu gibi taşıdığını göster.
+çıplak işlev kullanici_main(argc: tam64, argv: tam64) -> tam64 {
+    eğer sis_abi_surumu() != 2 { ver 125; }
+    değişken i: tam64 = 0;
+    iken i < argc {
+        sis_metin(sis_argv(argv, i));
+        sis_metin("\n");
+        i = i + 1;
+    }
+    ver argc;
+}

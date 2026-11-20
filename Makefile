@@ -4946,3 +4946,12 @@ calistir_bm_x86_disk: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x8
 .PHONY: calistir_bm_x86_surec_abi
 calistir_bm_x86_surec_abi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_surec_abi_harness.sh
+
+KULLANICI_X86_RT = runtime/kem_heap.kem $(wildcard runtime/kullanici/x86_64/*.kem)
+KULLANICI_X86_GIRDI = $(KULLANICI_X86_RT) linker/user-x86_64.ld tests/qemu/surec_elf.py test/strip_defined_declares.awk
+
+$(BUILD)/kullanici/%.elf: test/kullanici/%.kem $(KULLANICI_X86_GIRDI) $(BUILD)/kemgu$(EXE)
+	python3 tests/qemu/surec_elf.py "$@" --kaynak "$<" --derleyici "$(BUILD)/kemgu$(EXE)"
+
+$(BUILD)/kullanici/self/%.elf: test/kullanici/%.kem $(KULLANICI_X86_GIRDI) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE)
+	python3 tests/qemu/surec_elf.py "$@" --kaynak "$<" --derleyici "$(BUILD)/codegen$(EXE)"
