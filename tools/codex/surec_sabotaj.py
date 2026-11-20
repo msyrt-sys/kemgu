@@ -25,7 +25,7 @@ CASES = [
     ('izin', 'tus-usb', CORE, 'eğer s.bayraklar == 6 { izin = izin | 2; }',
      'eğer s.bayraklar == 6 veya s.bayraklar == 5 { izin = izin | 2; }', '0x54000000'),
     ('konum', 'yazma', VFS, 'a.konum=bas+ofset;', 'a.konum=bas+ofset+1;', 'cikis=12'),
-    ('esitle', 'yazma', VFS, 'eğer b.degisti { ver ksv_esitle(b); }', '', 'FSCK surec-cikis rc=1'),
+    ('esitle', 'yazma', VFS, 'eğer b.degisti { ver ksv_esitle(b); }', '', 'Dirty bit is set.'),
 ]
 
 
