@@ -3035,4 +3035,23 @@
   düzenleyici, (5) `dosyalar` dosya gezgini, (6) kabuk geçmiş/Tab/yol araması, (7) tek açılışta uçtan uca v1 senaryosu +
   `make kem_os_usb.img` + X86 fiziksel donanım kontrol listesi, (8) kaynak/süre ölçümleri. Güvenlik terminolojisi yok
   (dalga 13'te ChatGPT filtresi iki kez reddetmişti).
+- 2026-11-22 D-763: CODEX DALGASI 14 ENTEGRASYONU (taslak #234) — v1 QEMU'da tamam. Zaman paylaşımlı çok süreç (LAPIC
+  dilimi 10 ms; süreç başına 3594 çerçeve, çıkışta geri; baslat/bekle/ps/sonlandir, ABI 58-60), parçalı ELF + geniş
+  pencere (giriş 0x54200000, heap sonu 0x54e00000), ekran/fare/olay çağrıları (xHCI MSI-X vektör 65), `duzenle`, `dosyalar`,
+  kabuk geçmişi/Tab/program araması, tek QEMU+OVMF açılışında uçtan uca v1 senaryosu, `make kem_os_usb.img`,
+  belgeler/X86_Fiziksel_Donanim_Kontrol_Listesi.md. QEMU senaryoları C 140/140, self 140/140. 100 çocuk sonrası boş çerçeve
+  başlangıca dönüyor. HEAP (E4k): düzenleyicide aynı açılışta kayıt başına ~2,4 MB kalıcı, 9. kayıtta 24 MiB eşiği aşılıyor
+  → E4k artık pratik kullanımı engelliyor (öncelik 1).
+  🔴 Claude: Codex'in kökünü bulamadığı ARALIKLI USB klavye / "ELF kısa okuma" hataları D-753'ün REGRESYONUYMUŞ. Self-host
+  döngüdeki geçici yapı yuvasını (YAPI_OLUSTUR + dizi_yapi_* yardımcıları) değerden hemen sonra stackrestore ile geri
+  veriyordu; LLVM büyük yapıyı yazmaca almayıp kopyayı/alan okumalarını geri almadan SONRAYA erteledi (x86 xhci_adim makine
+  kodunda ÖLÇÜLDÜ: `movq -184(%rbp),%rsp` sonra serbest yuvadan memcpy; dizi elemanı alanları geri almadan sonra okunuyor)
+  → veri RSP'nin altında, araya giren kesme ezer (Codex'in gözlemi: DMA alanında çekirdek yığını değeri, uç kimliği 0).
+  Düzeltme: geri alma DÖNGÜ GÖVDESİNİN SONUNDA (E4p/D-754 tur-yerelinin adres kaçışını reddettiği için güvenli). Self-host
+  çekirdekte stackrestore 6252 → 447, şüpheli kopya 2 → 0; v1-kesinti 30/30 (Codex düzeltmesiz 4./19./34. açılışta görmüştü).
+  Yeni kapı calistir_yigin_geri (her stackrestore'dan sonra 3 komut içinde döngü geri dalı); sabotaj S219 (literal sonrası
+  geri alma) → 3093/3540 kırmızı. DERS: "değer yazmaçta" bir IR varsayımıdır, makine kodu garantisi DEĞİL.
+  C14-001 (Claude): self-host --check ithal edilen `genel çıplak işlev`in çıplaklığını taşımıyordu (çapraz imza taşıması
+  D-429 düğüm indekslerini taşıyamaz) → sahte E013. cap_cip ad kanalı (geçişli). Fikstür test/moduller/ana_c14_ciplak_ithal
+  (ithal çıplak temiz + ithal normal E013 negatif), checker_diff 319/319, sabotaj S220 kırmızı.
 

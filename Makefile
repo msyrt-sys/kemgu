@@ -5006,3 +5006,9 @@ calistir_bm_x86_buyuk_elf: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 test_tumu: calistir_bm_x86_cok_surec
 calistir_bm_x86_cok_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@SUREC_SENARYO="hesap arka cocuk" bash test/bm_x86_surec_harness.sh
+
+# [D-763] yığın geri alma değişmezi (self-host döngü geçicileri)
+.PHONY: calistir_yigin_geri
+calistir_yigin_geri: $(BUILD)/codegen$(EXE)
+	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/yigin_geri_harness.sh
+test_tumu: calistir_yigin_geri

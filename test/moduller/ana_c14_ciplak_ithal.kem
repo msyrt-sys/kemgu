@@ -1,0 +1,7 @@
+// [D-763] C14-001: seçili ithal edilen `genel çıplak işlev`i çıplak bir işlevden çağırmak GEÇERLİ.
+// Self-host eskiden ithal modülün çıplaklık bilgisini taşımıyordu → sahte E013 (C temiz).
+// NEGATİF: ithal edilen NORMAL işlev çıplaktan çağrılırsa iki derleyicide de E013.
+kullan c14_cip::{ cip_topla, normal_topla };
+çıplak işlev iyi(x: tam64) -> tam64 { ver cip_topla(x); }
+çıplak işlev kotu(x: tam64) -> tam64 { ver normal_topla(x); }
+işlev main() -> tam32 { ver 0; }
