@@ -3007,4 +3007,25 @@
   ikinci kez "hata yalıtımı" diliyle de). Kapsam bölündü: Codex işlevsel kısım (ABI, kullanıcı çalışma zamanı, ELF
   yükleme, süreç, dosya/olay çağrıları, normal programlar + sıfıra bölme); hata yalıtımı testleri (H9j/E3f) ve
   korumaları zorlayan sabotajlar CLAUDE'a (entegrasyon sırasında).
+- 2026-11-21 D-761: CODEX DALGASI 13 ENTEGRASYONU (taslak #231) — kullanıcı programları, C1 (senkron tek süreç). Sistem
+  çağrısı ABI v2 (rax num; rdi, rdx, rsi; eski düzen korunur; DF temizlenir, yığın hizalanır) + belgeler/KEMGU_OS_Syscall_ABI.md,
+  linker/user-x86_64.ld (ET_EXEC 0x54000000, sayfa hizalı R-X / R / RW segmentler), kullanıcı çalışma zamanı
+  (runtime/kullanici/x86_64; kem_heap.kem DEĞİŞİKLİKSİZ derleniyor), ELF'i FAT32'den yükleme (UEFI çerçeve ayırıcısından
+  1032 sayfalık havuz, iki yuva), ortak VFS katmanı (kem_os_x86_vfs_ortak.kem: kabuk ve sistem çağrıları aynı kod),
+  dosya/klavye/zaman çağrıları, `calistir`. Programlar (KEMGU, ayrı ELF, llvm-nm -u boş): merhaba kedi say yazdene tus
+  bolme (D-502 paniği → çıkış 134, kabuk devam). 40 QEMU açılışı + 50 tekrar iki derleyicide (süreç kurma/temizleme +0
+  bayt heap); 8 QEMU + 2 ABI/ELF sabotajı kırmızı. Kullanıcı penceresi 2 MiB (heap 0x54100000-, sınır sayfası
+  0x541ef000, yığın tepesi 0x54200000). Sınırlar: tek süreç, ELF ≤64 KiB, C2/fare/ps/spawn YOK (önerilen işti; Codex
+  zorunluyu bitirip durdu — sonraki dalga daha uzun kurgulanmalı). Kabuk heap'i 50 tekrarda 4,7 → 16 MB (E4k).
+  Hata yalıtımı testleri (H9j/E3f) Claude'da; Codex'in önceki (reddedilen prompt) oturumundaki hata_* programları
+  /tmp/kemgu-codex13-once-uwn28jit altında duruyor (o makinede, geçici).
+  Claude onarımları: C13-001 (self-host negatif `tam64` sabitini `sub i32` üretip `ret i64` diye etiketliyordu → geçersiz
+  IR; değer artık bildirilen tipte üretilip int_uydur ile uyarlanıyor, -8589934592 ve tam8 dahil). C13-002 iki
+  derleyicide: `&küresel` C'de değerin GEÇİCİ KOPYASININ adresini veriyordu → işaretçi üzerinden yazma küresele
+  gitmiyordu (SESSİZ YANLIŞ CEVAP, ölçüldü 349 → exit 93); self-host boş işlenen (`store ptr , ptr`). İkisinde de artık
+  `getelementptr i8, ptr @ad, i64 0`. Fikstürler cg_negatif_sabit + cg_kuresel_adres (yerel adres POZİTİF), test_llvm
+  [319] mutlak 42. Sabotaj S216 (C) → llvm_test + codegen_diff · S217 (self &küresel) · S218 (self sabit genişliği) kırmızı.
+  CI (Windows) ilk koşumda KIRMIZI: surec_abi.py kaynakları `read_text()` ile kodlama belirtmeden okuyordu → Windows'un
+  varsayılan kod sayfasında `çıplak`/`işlev` eşleşmedi (AttributeError). Linux'ta görünmez. Kapının kullandığı üç
+  yerde `encoding="utf-8"`. KURAL: Türkçe kaynak okuyan her Python kâhini kodlamayı açık yazar.
 

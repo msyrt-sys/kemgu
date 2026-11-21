@@ -1,0 +1,15 @@
+// [D-761] C13-001: negatif sabit satır içine BİLDİRİLEN tipte açılmalı. Self-host eskiden
+// `-38`i `sub i32` üretip `ret i64` diye etiketliyordu (GEÇERSİZ IR). 32 bite sığmayan ve dar
+// (tam8) sabitler de ölçülür.
+sabit HATA: tam64 = -38;
+sabit BUYUK: tam64 = -8589934592;
+sabit DAR: tam8 = -5;
+işlev a() -> tam64 { ver HATA; }
+işlev b() -> tam64 { ver BUYUK; }
+işlev c() -> tam8 { ver DAR; }
+işlev main() -> tam32 {
+    eğer a() != 0 - 38 { ver 1; }
+    eğer b() != 0 - 8589934592 { ver 2; }
+    eğer c() != (0 - 5) olarak tam8 { ver 3; }
+    ver 42;
+}

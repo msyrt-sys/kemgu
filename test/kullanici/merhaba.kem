@@ -1,0 +1,29 @@
+küresel değişken kul_bss_nobet: tam64 = 0;
+// ELF girişinin argv ve UTF-8 baytlarını olduğu gibi taşıdığını göster.
+işlev kullanici_main(argc: tam64, argv: tam64) -> tam64 {
+    güvensiz {
+        eğer kul_bss_nobet != 0 { ver 124; }
+        kul_bss_nobet=711;
+        eğer sis_abi_surumu() != 2 { ver 125; }
+        // Bağlayıcının ilk değerli RW segmenti, her açılışta yeniden yüklenmeli.
+        değişken nobet: tam64 = 0;
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#".pushsection .data
+.balign 8
+.Lkul_veri_nobet: .quad 349
+.popsection
+movq .Lkul_veri_nobet(%rip), $0
+movq $$711, .Lkul_veri_nobet(%rip)"#
+            çıktı("=r", &nobet) bozulan("~{memory}")
+        }
+        eğer nobet != 349 veya sis_pid() < 1 { ver 126; }
+        değişken i: tam64 = 0;
+        iken i < argc {
+            sis_metin(sis_argv(argv, i));
+            sis_bayt_yaz(1,10);
+            i = i + 1;
+        }
+        ver argc;
+    }
+}

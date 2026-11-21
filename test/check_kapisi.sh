@@ -106,6 +106,12 @@ for f in test/cg_korpus/*.kem test/ornekler/*.kem stdlib/*.kem \
   else
     set --
   fi
+  # Yeni parçalar muaf değildir; gerçek birleşik kaynaklarıyla tip denetlenir.
+  case "$f" in
+    test/ornekler/kem_os_x86_vfs_ortak.kem|test/ornekler/kem_os_x86_surec_abi.kem)
+      if python3 tools/codex/surec_check.py "$KEMGU" "$f"; then continue; fi
+      red=$((red + 1)); echo "  🔴 $f (birleşik süreç birimi)"; continue ;;
+  esac
   if "$KEMGU" --check "$@" "$f" >/dev/null 2>&1; then continue; fi
   if gerekce="$(muaf "$f")"; then
     muaf_n=$((muaf_n + 1))
@@ -216,7 +222,7 @@ rm -f build/kem_bm_usb_kapi.kem
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
-BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
 cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then

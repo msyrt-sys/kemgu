@@ -18,6 +18,10 @@ jobs:
     # CLAUDE.md zaten bunu sart kosuyor: clang64/bin ONCE gelmeli.
     env:
       MSYS2_PATH_TYPE: inherit
+      # [D-761] Python kâhinleri Windows'un kendi Python'uyla koşuyor; varsayılan dosya ve
+      # çıktı kodlaması cp1252 → Türkçe kaynak okuma ve `✓`/`ğ` yazma düşüyordu (surec_abi.py,
+      # ÖLÇÜLDÜ: önce okuma, sonra yazdırma). UTF-8 kipi Linux davranışıyla eşitler.
+      PYTHONUTF8: "1"
     defaults:
       run:
         shell: msys2 {0}

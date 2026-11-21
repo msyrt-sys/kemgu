@@ -384,8 +384,8 @@ kdl_irq_isle:
     movq    %rdi, %rax
     ret
 
-/* === Sistem çağrısı stub (C6) — int 0x80; num=rax, arg=rdi. KURTARILIR (iretq). ===
- * kdl_syscall_isle(rdi=num, rsi=arg). rax = dönüş (void demo → kullanılmaz). */
+/* int 0x80: rax=num, rdi=ilk, rdx=ikinci, rsi=üçüncü; dönüş rax.
+ * SysV dağıtıcıya sıra: rdi=num, rsi=ilk, rdx=ikinci, rcx=üçüncü. */
 .global kdl_syscall_stub
 kdl_syscall_stub:
     pushq   %rcx
@@ -400,9 +400,22 @@ kdl_syscall_stub:
      * RPL 3 = sistem çağrısı KULLANICI kodundan geldi (ring3 kanıtı). */
     movq    72(%rsp), %r11
     movq    %r11, kdl_x86_r3_blok+72(%rip)
-    movq    %rdi, %rsi        /* arg → 2. param */
-    movq    %rax, %rdi        /* num → 1. param */
+    movq    %rsi, %rcx
+    movq    %rdi, %rsi
+    movq    %rax, %rdi
+    /* Kullanıcı DF ile gelse de SysV dağıtıcı DF=0 bekler; iretq DF'yi geri yükler. */
+    cld
+    movq    %rsp, %r11
+    andq    $-16, %rsp
+    subq    $16, %rsp
+    movq    %r11, (%rsp)
     call    kdl_syscall_isle
+    /* Senkron süreç çıkışı yalnız kullanıcı çağrısından işaretlenebilir. */
+    testb   $3, kdl_x86_r3_blok+72(%rip)
+    jz      1f
+    cmpq    $0, kdl_x86_r3_blok(%rip)
+    je      kdl_x86_r3_don
+1:  movq    (%rsp), %rsp
     popq    %r11
     popq    %r10
     popq    %r9

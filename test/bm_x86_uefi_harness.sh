@@ -12,7 +12,7 @@ W="${UEFI_CALISMA_DIZINI:-build/_bm_uefi}"; mkdir -p "$W/esp/EFI/BOOT" "$W/esp/K
 RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_ps2_hw.kem"
 KAYNAK="${UEFI_KAYNAK:-test/ornekler/kem_os_x86_uefi.kem}"
 case "${KAYNAK##*/}" in
- kem_os_x86_kabuk.kem) RT="$RT runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem" ;;
+ kem_os_x86_kabuk.kem) RT="$RT runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem test/ornekler/kem_os_x86_vfs_ortak.kem" ;;
  kem_os_x86_blok.kem) RT="$RT test/ornekler/kem_os_x86_blok_ortak.kem" ;;
 esac
 rm -f "$W/k.elf" "$W/k.o" "$W/esp/EFI/BOOT/BOOTX64.EFI"

@@ -1,0 +1,34 @@
+// Dosya tampondan büyük olsa da tek tampon, sözcük durumu parçalar arasında taşınır.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        eğer argc != 2 { ver 2; }
+        değişken fd: tam64 = sis_ac(sis_argv(argv,1),0);
+        eğer fd < 0 { ver 3; }
+        değişken buf: *tam8 = malloc(16384);
+        değişken p: tam64 = buf olarak tam64;
+        eğer p == 0 { ver 4; }
+        değişken satir: tam64 = 0;
+        değişken kelime: tam64 = 0;
+        değişken bayt: tam64 = 0;
+        değişken ic: mantıksal = yanlış;
+        değişken n: tam64 = sis_oku(fd,p,16384);
+        iken n > 0 {
+            değişken i: tam64 = 0;
+            iken i < n {
+                değişken q: *dtam8 = (p+i) olarak *dtam8;
+                değişken b: tam32 = ((*q) olarak tam32)&255;
+                eğer b == 10 { satir=satir+1; }
+                eğer b <= 32 { ic=yanlış; } değilse eğer değil ic { kelime=kelime+1; ic=doğru; }
+                i=i+1;
+            }
+            bayt=bayt+n;
+            n=sis_oku(fd,p,16384);
+        }
+        free(buf);
+        eğer n < 0 veya sis_kapat(fd) != 0 { ver 5; }
+        sis_metin("satir="); sis_metin(tam_metin(satir));
+        sis_metin(" kelime="); sis_metin(tam_metin(kelime));
+        sis_metin(" bayt="); sis_metin(tam_metin(bayt)); sis_bayt_yaz(1,10);
+        ver 0;
+    }
+}

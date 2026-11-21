@@ -1,7 +1,7 @@
 // FAT32 kısa ad ve sıralı LFN birleştirme; hatalı LFN kısa ada düşer.
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_le16 };
 kullan drivers::ortak::utf8::{ utf16le_coz, utf8_kodla };
-genel yapı DizinGirdisi { ad: metin; ozellik: tam32; ilk_kume: tam64; boyut: tam64; dizin_mi: mantıksal; }
+genel yapı DizinGirdisi { ad: metin; ozellik: tam32; ilk_kume: tam64; boyut: tam64; dizin_mi: mantıksal; tarih: tam32; saat: tam32; }
 genel işlev kisa_ad_saglama(b: Dizi<dtam8>, ofs: tam32) -> tam32 {
     eğer ofs < 0 veya ofs > dizi_boyut(b) { ver 0; }
     eğer dizi_boyut(b) - ofs < 11 { ver 0; }
@@ -79,7 +79,8 @@ genel işlev dizin_coz(b: Dizi<dtam8>) -> sonuç<Dizi<DizinGirdisi>, metin> {
             }
             değişken kume: tam64 = ((oku_le16(b, ofs + 20) olarak tam64) << 16) | (oku_le16(b, ofs + 26) olarak tam64);
             dizi_ekle(sonuc, DizinGirdisi { ad: ad, ozellik: oz, ilk_kume: kume,
-                boyut: oku_le32(b, ofs + 28), dizin_mi: (oz & 16) != 0 });
+                boyut: oku_le32(b, ofs + 28), dizin_mi: (oz & 16) != 0,
+                tarih: oku_le16(b, ofs + 24), saat: oku_le16(b, ofs + 22) });
             gecerli = yanlış;
         }
         ofs = ofs + 32;

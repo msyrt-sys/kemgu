@@ -1,0 +1,31 @@
+çıplak işlev tus_alan(p: tam64,ofs: tam64) -> tam64 {
+    değişken v: *tam64 = (p+ofs) olarak *tam64;
+    ver *v;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        değişken buf: *tam8 = malloc(48);
+        değişken p: tam64 = buf olarak tam64;
+        eğer p == 0 { ver 2; }
+        eğer sis_saat(p) != 0 { ver 3; }
+        değişken y: tam64 = tus_alan(p,0);
+        değişken ay: tam64 = tus_alan(p,8);
+        değişken gun: tam64 = tus_alan(p,16);
+        eğer y < 1980 veya ay < 1 veya ay > 12 veya gun < 1 veya gun > 31 { ver 4; }
+        değişken bas: tam64 = sis_tik();
+        eğer sis_uyu(50) != 0 veya sis_tik()-bas < 5 { ver 5; }
+        sis_metin("SAAT OK"); sis_bayt_yaz(1,10);
+        sis_metin("TUS_HAZIR"); sis_bayt_yaz(1,10);
+        değişken i: tam32 = 0;
+        iken i < 5 {
+            eğer sis_tus_bekle(p) != 0 { ver 6; }
+            sis_metin("TUS "); sis_metin(tam_metin(tus_alan(p,0)));
+            sis_metin(" "); sis_metin(tam_metin(tus_alan(p,8)));
+            sis_metin(" "); sis_metin(tam_metin(tus_alan(p,16)));
+            sis_metin(" "); sis_metin(tam_metin(tus_alan(p,24))); sis_bayt_yaz(1,10);
+            i=i+1;
+        }
+        free(buf);
+        ver 0;
+    }
+}

@@ -54,6 +54,9 @@ genel işlev klavye_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi {
     eğer k == 1 { ozel = OZEL_ESC; }
     eğer ozel != 0 { ver TusOlayi::Ozel(ozel, basildi); }
     eğer değil basildi { ver TusOlayi::Yok; }
+    ver klavye_karakter(d,k);
+}
+işlev klavye_karakter(d: &değişken KlavyeDurumu,k: tam32) -> TusOlayi {
     değişken shift: mantıksal = d.sol_shift veya d.sag_shift;
     değişken buyuk: mantıksal = shift != d.caps;
     eğer k == 41 { eğer shift { ver TusOlayi::Karakter(233); } ver TusOlayi::Karakter(34); }
@@ -106,4 +109,29 @@ genel işlev klavye_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi {
     eğer k == 53 { eğer shift { ver TusOlayi::Karakter(58); } ver TusOlayi::Karakter(46); }
     eğer k == 57 { eğer shift { ver TusOlayi::Karakter(32); } ver TusOlayi::Karakter(32); }
     ver TusOlayi::Yok;
+}
+
+// ABI olayında her iki geçiş de görünür. E0 öneki birleşik kodun bit 8'idir.
+genel yapı TusHamOlay { kod: tam32; unicode: tam32; bas: tam32; degistirici: tam32; }
+genel işlev klavye_degistiriciler(d: &değişken KlavyeDurumu) -> tam32 {
+    değişken m: tam32 = 0;
+    eğer d.sol_shift veya d.sag_shift { m=m|1; }
+    eğer d.ctrl { m=m|2; }
+    eğer d.alt { m=m|4; }
+    eğer d.altgr { m=m|8; }
+    eğer d.caps { m=m|16; }
+    ver m;
+}
+genel işlev klavye_ham_bayt(d: &değişken KlavyeDurumu,b: tam32) -> seçimlik<TusHamOlay> {
+    değişken e0: mantıksal = d.e0;
+    değişken olay: TusOlayi = klavye_bayt(d,b);
+    eğer b < 1 veya b >= 255 veya b == 224 veya b == 225 { ver hiç; }
+    değişken kod: tam32 = b&127;
+    değişken bas: tam32 = 1;
+    eğer b >= 128 { bas=0; }
+    eğer e0 { kod=kod|256; }
+    değilse eğer bas == 0 { olay=klavye_karakter(d,kod); }
+    değişken un: tam32 = 0;
+    eşleş olay { TusOlayi::Karakter(x) => { un=x; } _ => { } }
+    ver değer(TusHamOlay { kod:kod,unicode:un,bas:bas,degistirici:klavye_degistiriciler(d) });
 }

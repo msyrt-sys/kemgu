@@ -1,0 +1,17 @@
+// [D-761] C13-002: `&küresel` küreselin GERÇEK adresidir. C eskiden değerin geçici bir
+// KOPYASININ adresini veriyordu → işaretçi üzerinden yazma küresele gitmiyordu (SESSİZ YANLIŞ
+// CEVAP: 349 → exit 93); self-host boş işlenen üretiyordu (GEÇERSİZ IR). Okuma + yazma + ikinci
+// okuma birlikte ölçülür; POZİTİF: yerel değişkenin adresi (eski yol) değişmeden çalışır.
+küresel değişken olcek: tam64 = 349;
+işlev main() -> tam32 {
+    değişken yerel: tam64 = 7;
+    güvensiz {
+        değişken p: *tam64 = (&olcek) olarak *tam64;
+        eğer *p != 349 { ver 1; }
+        *p = 40;
+        eğer olcek != 40 { ver 2; }
+        değişken q: *tam64 = (&yerel) olarak *tam64;
+        *q = 2;
+        ver (olcek + yerel) olarak tam32;
+    }
+}

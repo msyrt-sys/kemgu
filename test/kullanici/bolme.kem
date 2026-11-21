@@ -1,0 +1,5 @@
+// D-502 çalışma zamanı denetimi süreci 134 ile bitirir; kabuk çalışmaya devam eder.
+işlev kullanici_main(argc: tam64, argv: tam64) -> tam64 {
+    değişken sifir: tam64 = argc - argc;
+    ver 42 / sifir;
+}

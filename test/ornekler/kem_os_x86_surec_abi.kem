@@ -1,0 +1,26 @@
+// Gerçek IDT üzerinden sürüm sorgusu ve eski x86 yazmaç düzeni.
+çıplak işlev abi_sorgu(num: tam64, ilk: tam64, ikinci: tam64, ucuncu: tam64) -> tam64 {
+    değişken sonuc: tam64 = num;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"int $$0x80"#
+            çıktı("={rax}", &sonuc)
+            girdi("0", num) girdi("{rdi}", ilk) girdi("{rdx}", ikinci) girdi("{rsi}", ucuncu)
+            bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+    ver sonuc;
+}
+
+işlev main() -> tam32 {
+    kis_metin("SUREC_ABI_BOOT"); kis_satir();
+    değişken surum: tam64 = abi_sorgu(40, 17, 43, 89);
+    eğer surum != 2 veya abi_sorgu(79, 0, 0, 0) != -38 veya abi_sorgu(11, 0, 0, 0) != 0 {
+        kis_metin("SUREC_ABI_HATA"); kis_satir();
+        kem_qemu_cik(1);
+    }
+    kis_metin("SUREC_ABI_OK v2"); kis_satir();
+    kem_qemu_cik(0);
+    ver 0;
+}

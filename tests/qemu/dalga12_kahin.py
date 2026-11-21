@@ -53,7 +53,7 @@ def wait_for(proc, fn, seconds=15):
 
 
 @contextmanager
-def boot(w, usb, nvme, sata, usb2=None):
+def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -72,6 +72,9 @@ def boot(w, usb, nvme, sata, usb2=None):
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
            '-device','isa-debug-exit,iobase=0xf4,iosize=0x04',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
+    if klavye == "ps2":
+        i = cmd.index("usb-kbd,bus=x.0")
+        del cmd[i-1:i+1]
     if usb2:
         cmd.extend(['-drive',f'if=none,id=u2,format=raw,file={usb2.disk}',
                     '-device','usb-storage,bus=x.0,drive=u2'])
