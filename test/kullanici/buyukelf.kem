@@ -1,0 +1,65 @@
+// Salt okunur tablo, disk üzerindeki her 4 KiB parçasında farklı bir dizi taşır.
+çıplak işlev buyuk_tablo() -> tam64 {
+    değişken p: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#".pushsection .rodata
+.ifndef .Lbuyuk_tablo
+.balign 4096
+.Lbuyuk_tablo:
+.set .Lindeks, 0
+.rept 327680
+.byte ((.Lindeks * 29 + (.Lindeks >> 12) * 13) & 255)
+.set .Lindeks, .Lindeks + 1
+.endr
+.endif
+.popsection
+leaq .Lbuyuk_tablo(%rip), $0"#
+            çıktı("=r",&p)
+        }
+    }
+    ver p;
+}
+çıplak işlev buyuk_bss() -> tam64 {
+    değişken p: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#".pushsection .bss
+.ifndef .Lbuyuk_bss
+.balign 4096
+.Lbuyuk_bss: .skip 1310720
+.endif
+.popsection
+leaq .Lbuyuk_bss(%rip), $0"# çıktı("=r",&p) } }
+    ver p;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        değişken p: tam64 = buyuk_tablo();
+        değişken i: tam64 = 0;
+        iken i < 327680 {
+            değişken hucre: *dtam8 = (p+i) olarak *dtam8;
+            eğer (((*hucre) olarak tam64)&255) != ((i*29+(i>>12)*13)&255) { ver 11; }
+            i=i+1;
+        }
+        p=buyuk_bss(); i=0;
+        iken i < 1310720 {
+            değişken hucre: *dtam8 = (p+i) olarak *dtam8;
+            eğer *hucre != (0 olarak dtam8) { ver 12; }
+            *hucre=93 olarak dtam8; i=i+1;
+        }
+        değişken h: *tam8 = malloc(4194304);
+        p=h olarak tam64; eğer p == 0 { ver 13; }
+        i=0;
+        iken i < 4194304 {
+            değişken hucre: *dtam8 = (p+i) olarak *dtam8;
+            *hucre=((i&255) olarak tam32) olarak dtam8; i=i+1;
+        }
+        i=0;
+        iken i < 4194304 {
+            değişken hucre: *dtam8 = (p+i) olarak *dtam8;
+            eğer (((*hucre) olarak tam64)&255) != (i&255) { ver 14; }
+            i=i+1;
+        }
+        free(h); ver 0;
+    }
+}

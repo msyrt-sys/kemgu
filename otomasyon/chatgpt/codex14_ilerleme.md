@@ -13,3 +13,9 @@ Kullanıcı kesme çerçevesi 160 bayt. Her süreç kendi CR3'ü ile çalışıy
 Kusur enjeksiyonları ilk koşumda beklenen sonucu verdi. Kaydedilen RAX bozulunca hesap çıkış 1 verdi. Çerçeve iadesi kaldırılınca fiziksel bit eşlemi farklı kaldı. Uyandırma kapatılınca klavye testinde saat aşaması zaman aşımına uğradı.
 
 Çok süreç kapısı C 30/30, self-host 30/30 açılışta geçti (hesap, arka plan ve 100 çocuk için ayrı 10'ar açılış). Adres alanını değiştirmeyen yalıtılmış denemede işlemci kullanıcı girişini reddetti ve çocuk kâhini kırmızı oldu. Dalga 13 matrisinde C 10/10 geçti. Self-host ilk seri 7 başarılı açılıştan sonra USB klavye başlatırken sona erdi, temiz yeniden derlemede 10/10 geçti. 50 tekrarda 49.721 boş çerçeve korundu, süreç heap farkı 0 ve kabuk heap'i 4.919.792 → 16.069.072 bayt oldu. ABI, UEFI PC/kabuk, x86 kabuk/blok/disk/istisna/APIC/PS2 IRQ, x86 çekirdek, sürücü diff/koşum ve köprü kapıları geçti. Başlangıçtan bölüm kapılarına yaklaşık 60 dakika.
+
+## Bölüm 2 — büyük programlar
+
+336.744 baytlık ELF, 320 KiB salt okunur tablo, 1.280 KiB BSS ve yazılıp tekrar okunan 4 MiB kullanıcı heap'i C ve self-host ile 10'ar açılışta doğrulandı. Her açılışta Dalga 13 düzeniyle bağlanan ikinci bir ELF de çalıştı. Büyük yüklemede kabuk heap artışı yaklaşık 8,2 MB ölçüldü. Yükleyici diski en çok 16 KiB'lık parçalarla işler. Parça hedefi bir bayt kaydırıldığında program 11 döndürdü, BSS eşlemesi 1 MiB'a indirildiğinde #PF oluştu. Her iki kâhin kırmızı oldu.
+
+Süreç matrisi C 10/10, self-host temiz tekrarı 10/10. İlk self-host serisinde bir aralıklı ELF okuma hatası görüldü. UEFI PC/kabuk, disk/blok, istisna/APIC/PS2 IRQ, x86 kabuk/çekirdek, ABI ve üç saf sürücü kapısı geçti. Bit eşlemi kâhininin önceki mutlak sayıları düzeltildi, bulgular belgesinde açıklanmıştır. Uygulama ve QEMU tekrarları bölüm 1'in uzun koşumlarıyla örtüştü; son tekrarlar 18:33'te tamamlandı.

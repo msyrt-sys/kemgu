@@ -30,3 +30,13 @@ Beklenen iki derleyicide de başarıydı. Self-host tanısı `E013 3 25`. Çağ�
 ### USB klavye açılışındaki aralıklı hata
 
 Dalga 13 süreç regresyonunun self-host serisinde sekizinci açılışta, ilk kullanıcı programı çalışmadan, seri uçta `KABUK HATA xhci interrupt IN yok` görüldü. Aynı kaynakların yeniden derlendiği 10 açılışın tamamı geçti. QMP bağlantısının kapanması bu çalışmada bir sonuçtu. Altta yatan neden doğrulanmadı.
+
+### Çerçeve kâhininin düzeltilmesi
+
+İlk bölümdeki 49 binli mutlak sayılar tarihsel ham çıktıdır. Kâhin Dizi<dtam8> bit eşleminin tamamını okumuyordu. Çalışma zamanı her elemanı 4 baytlık yuvada tutar. Kâhin tüm yuvaların düşük baytını sayacak şekilde düzeltildi. İlk düzeltilmiş C koşumunda 100 çocuk öncesinde ve sonrasında 47.902 boş çerçeve ölçüldü. Fark, çekirdek ELF boyu ve firmware yerleşimine göre açılışlar arasında değişebilir.
+
+### Yükleyici bütçesi
+
+Yeni ET_EXEC girişi 0x54200000, kod/veri üstü 0x54600000, heap sonu 0x54e00000, yığın tabanı 0x54f00000 ve pencere sonu 0x55000000. Üç üst düzey tablo ve yedi PT dahil 3.594 fiziksel çerçeve ayrılır. Eski giriş 0x54000000 için 516 çerçeveli düzen korunur. FAT32 okuma planı segmentin disk aralıklarını tutar, en büyük veri okuması 16 KiB'dır. Tüm yüklenebilir baytları 16 KiB'a sığan son program için bir adet 16 KiB tampon yeniden kullanılır. Veri bölümündeki değişiklik planı ve tamponu geçersiz kılar. Büyük ELF bu tamponu kullanmaz. Kabuğun heap yüksek su izi FAT/USB katmanının tahsislerini de içerir.
+
+Büyük ELF bağlanmadan önceki 50 tekrar self-host denemesinde süreç kapsamındaki büyüme 4.262.960 bayttı. Sınırlı sıcak tampon ile aynı 50 tekrar +0 bayt oldu. Bir self-host regresyon serisinde ilk programın FAT okuma planı reddedildi. Temiz tekrar 10/10 geçti. Nedenin derleyicide olduğu doğrulanmadı.

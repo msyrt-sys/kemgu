@@ -14,25 +14,24 @@ işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> so
 }
 // Ayırıcının üç dizisi açılış ömründedir. Tek elemanlı dizinin veri
 // adresini saklayarak aynı bit eşlemini süreç çıkışında da kullanırız.
-sabit UEFI_SUREC_CERCEVE: tam32 = 516;
 küresel değişken uefi_surec_ayirici: tam64 = 0;
 çıplak işlev uefi_ayirici_al() -> CerceveAyirici {
  değişken ptr: *CerceveAyirici = uefi_surec_ayirici olarak *CerceveAyirici;
  ver *ptr;
 }
-işlev uefi_surec_ayir() -> tam64 {
+işlev uefi_surec_ayir(adet: tam32) -> tam64 {
  güvensiz {
   değişken d: CerceveAyirici = uefi_ayirici_al();
-  eşleş ayir_ardisik(&değişken d,UEFI_SUREC_CERCEVE) {
+  eşleş ayir_ardisik(&değişken d,adet) {
    hiç => { ver 0; }
    değer(t) => { ver t; }
   }
  }
 }
-işlev uefi_surec_iade(t: tam64) {
+işlev uefi_surec_iade(t: tam64,adet: tam32) {
  güvensiz {
   değişken d: CerceveAyirici = uefi_ayirici_al();
-  eşleş serbest_ardisik(&değişken d,t,UEFI_SUREC_CERCEVE) {
+  eşleş serbest_ardisik(&değişken d,t,adet) {
    hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
    tamam(v) => { }
   }

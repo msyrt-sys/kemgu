@@ -18,11 +18,12 @@ from uefi_kabuk_kahin import keys
 
 SAYFA = 4096
 YUVALAR = 8
-CERCEVELER = 516
+TABLOLAR = 10
+CERCEVELER = 7 * 512 + TABLOLAR
 ALAN = CERCEVELER * SAYFA
-PENCERE = 0x54000000
-YIGIN = 0x541F0000
-KORUMA = YIGIN - SAYFA
+PENCERE = 0x54200000
+YIGIN = 0x54F00000
+KORUMA = 0x54E00000
 NX = 1 << 63
 ADRES = (1 << 52) - SAYFA
 VARSAYILAN = ("baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2",
@@ -58,7 +59,9 @@ class SurecConsole(Console):
         _, bitmap, _, toplam = struct.unpack("<3QI", self.mem(ayirici, 28))
         adres, boy = struct.unpack("<QI", self.mem(bitmap, 12))
         assert boy == (toplam + 7) // 8
-        return toplam - sum(v.bit_count() for v in self.mem(adres, boy))
+        # Dizi<dtam8> çalışma zamanında her elemanı 32 bitlik yuvada tutar.
+        bitler = self.mem(adres, boy * 4)[::4]
+        return toplam - sum(v.bit_count() for v in bitler)
 
 
 def uefi_alan_denetle(c, taban):
@@ -82,17 +85,23 @@ def etkin_tablolar(c, elf):
     assert c.sayi("kxs_havuz_dolu") == 2
     # Bekleyen süreç işlemciyi bırakmıştır. Özel kök adresini kayıttan,
     # beklemeyi donanımın CR3 ve kullanıcı kipinden bağımsız olarak gözle.
-    kayit = c.symbols["kdl_dilim_tablo"] + 256
+    kayit = c.symbols["kdl_dilim_tablo"] + 272
     wait_for(c.p, lambda: int.from_bytes(c.mem(kayit + 160, 8), "little") == 7)
     taban = int.from_bytes(c.mem(kayit + 192, 8), "little")
     uefi_alan_denetle(c, taban)
-    regs = c.q.call("human-monitor-command", {"command-line": "info registers"})
-    assert int(re.search(r"CR3=([0-9a-fA-F]+)", regs)[1], 16) != taban, regs
+    # Durum alanı ve CR3 farklı konuk talimatlarında yazılır. IRQ ile aynı
+    # anda okursak bağlamı bırakmayı bitirene kadar bekle.
+    def cekirdek_adres_alani():
+        kayitlar = c.q.call("human-monitor-command", {"command-line": "info registers"})
+        cr3 = int(re.search(r"CR3=([0-9a-fA-F]+)", kayitlar)[1], 16)
+        return kayitlar if cr3 != taban else None
+    regs = wait_for(c.p, cekirdek_adres_alani)
     assert int(re.search(r"EFER=([0-9a-fA-F]+)", regs)[1], 16) & 2048
-    for ofset, i in ((0, 0), (1, 1), (2, (PENCERE >> 21) & 511)):
+    for ofset, indeksler in ((0, [0]), (1, [1]), (2, range((PENCERE >> 21) & 511, ((PENCERE >> 21) & 511) + 7))):
         tablo = struct.unpack("<512Q", c.mem(taban + ofset * SAYFA, SAYFA))
-        assert tablo[i] & (ADRES | 7) == (taban + (ofset + 1) * SAYFA) | 7
-        assert all(not g & 4 for j, g in enumerate(tablo) if j != i), "gözetmen dalı kullanıcıya açıldı"
+        for j, i in enumerate(indeksler):
+            assert tablo[i] & (ADRES | 7) == (taban + (ofset + 1 + j) * SAYFA) | 7
+        assert all(not g & 4 for j, g in enumerate(tablo) if j not in indeksler), "gözetmen dalı kullanıcıya açıldı"
     ph = struct.unpack_from("<Q", elf, 32)[0]
     n = struct.unpack_from("<H", elf, 56)[0]
     beklenen = {}
@@ -101,14 +110,14 @@ def etkin_tablolar(c, elf):
         if tip == 1 and boy:
             for a in range(va, va + boy, SAYFA):
                 beklenen[a] = (5 if bayrak == 5 else NX | (7 if bayrak == 6 else 5))
-    beklenen.update((a, NX | 7) for a in range(0x54100000, KORUMA, SAYFA))
-    beklenen.update((a, NX | 7) for a in range(YIGIN, 0x54200000, SAYFA))
-    ptes = struct.unpack("<512Q", c.mem(taban + 3 * SAYFA, SAYFA))
+    beklenen.update((a, NX | 7) for a in range(0x54600000, KORUMA, SAYFA))
+    beklenen.update((a, NX | 7) for a in range(YIGIN, 0x55000000, SAYFA))
+    ptes = struct.unpack("<3584Q", c.mem(taban + 3 * SAYFA, 7 * SAYFA))
     for i, g in enumerate(ptes):
         a = PENCERE + i * SAYFA
         if a in beklenen:
             assert (g & (NX | 7)) == beklenen[a], (hex(a), hex(g), hex(beklenen[a]))
-            assert (g & ADRES) == taban + (4 + i) * SAYFA
+            assert (g & ADRES) == taban + (TABLOLAR + i) * SAYFA
         else:
             assert g == 0, (hex(a), hex(g))
     print("✓ QMP: bekleyen süreç, kullanıcı PTE izinleri, NX ve boş koruma sayfası", flush=True)
@@ -166,10 +175,10 @@ def cocuk_kos(c, bos):
 
     def iki_cocuk():
         assert b"[surecden.elf pid=2 cikis=" not in c.output(), "çocuklar ortak adres doğrulamasına ulaşamadı"
-        kayitlar = c.mem(c.symbols["kdl_dilim_tablo"], 8 * 256)
+        kayitlar = c.mem(c.symbols["kdl_dilim_tablo"], 8 * 272)
         bulunan = []
         for i in range(8):
-            durum, pid, _, _, cr3 = struct.unpack_from("<5Q", kayitlar, i * 256 + 160)
+            durum, pid, _, _, cr3 = struct.unpack_from("<5Q", kayitlar, i * 272 + 160)
             if durum == 5:
                 bulunan.append((pid, cr3))
         return bulunan if len(bulunan) >= 2 else None
@@ -235,6 +244,13 @@ def kos(w, tekrar, senaryo):
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip == "buyukelf":
+                assert len(programlar["buyukelf.elf"]) >= 300 * 1024
+                giris = c.heap()
+                c.run("calistir /diskler/usb0p2/bin/buyukelf.elf", b"[buyukelf.elf pid=2 cikis=0]\n")
+                fark = c.heap()-giris
+                c.run("calistir /diskler/usb0p2/bin/eski.elf", b"/diskler/usb0p2/bin/eski.elf\n[eski.elf pid=3 cikis=1]\n")
+                print(f"✓ {len(programlar['buyukelf.elf'])} bayt ELF, 1280 KiB BSS, 4 MiB heap, kabuk heap farkı {fark}", flush=True)
             if kip == "arka":
                 c.run("baslat /diskler/usb0p2/bin/hesap.elf uzun &", b"pid=2\n")
                 once_dilim = c.sayi("kdl_dilim_sayisi")
@@ -301,6 +317,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)

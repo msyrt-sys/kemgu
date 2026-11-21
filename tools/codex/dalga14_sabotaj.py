@@ -15,8 +15,11 @@ CASES = {
     # gözetmen sayfaları içerdiğinden kullanıcı girişinde #PF beklenir.
     "adres": ("cocuk", CORE, "    kxm_cr3_yaz(kxs_cr3);",
               "    eğer kxs_pid < 3 { kxm_cr3_yaz(kxs_cr3); }", "çocuklar ortak adres doğrulamasına ulaşamadı"),
-    "cerceve": ("hesap", SHELL, '    eşleş serbest_ardisik(&değişken ayirici,fizik,UEFI_SUREC_CERCEVE) {\n        hata(e) => { bm_yaz(e); kem_qemu_cik(1); }\n        tamam(v) => { }\n    }',
+    "cerceve": ("hesap", SHELL, '    eşleş serbest_ardisik(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {\n        hata(e) => { bm_yaz(e); kem_qemu_cik(1); }\n        tamam(v) => { }\n    }',
                 "", "süreç çerçevesi geri dönmedi"),
+    "ofset": ("buyukelf", SHELL, "ks_parca_kopyala(b,q.bas,q.boy,hedef)", "ks_parca_kopyala(b,q.bas,q.boy,hedef+1)", "buyukelf.elf pid=2 cikis=11"),
+    "bss": ("buyukelf", CORE, "kxs_esle(taban,yer,s.sanal_adres,s.sanal_adres+s.bellek_boyu,izin);",
+            "değişken son: tam64 = s.bellek_boyu; eğer son > 1048576 { son=1048576; } kxs_esle(taban,yer,s.sanal_adres,s.sanal_adres+son,izin);", "SONLANDIRILDI: #PF"),
     "uyandir": ("tus-ps2", SHELL, "hazir=kem_tik_oku() >= olay;",
                 "hazir=yanlış;", "QEMU sonucu gelmedi"),
 }

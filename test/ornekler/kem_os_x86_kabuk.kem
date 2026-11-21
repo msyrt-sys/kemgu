@@ -17,7 +17,7 @@ kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_yeni, xhci_adim
 kullan drivers::usb::xhci_kayit::{ XhciYetenek };
 kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi };
 kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma, usb_hid_set_protocol, usb_hid_set_idle };
-kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8 };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, oku_le64, yaz_u8 };
 kullan drivers::fs::fat32_bpb::{ Fat32Bpb, BpbHatasi, bpb_coz, kume_sektoru };
 kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
 kullan drivers::ekran::psf::{ PsfFont, psf_coz };
@@ -509,28 +509,122 @@ işlev ks_sonuc(ad: metin,s: &KxsSonuc) {
         ekran_cift_yaz(metin_birlestir(m," (kullanici)]"));
     }
 }
-// Son ELF'in ayrıştırılmış görüntüsü kabuk ömrüne aittir. Ortak FAT32 yazma
-// kapısındaki nesil, başarılı ya da kısmi bir mutasyonda eski görüntüyü düşürür.
-yapı KsProgram { var: mantıksal; surum: tam64; yol: metin; cwd: metin; ad: metin; veri: Dizi<dtam8>; plan: Elf64; }
+// Önbellek ELF'in segmentlerini ve bu segmentlerin disk konumlarını tutar.
+// FAT32 nesli değiştiğinde eski okuma planı yeniden kullanılmaz.
+yapı KsElfParca { lba: tam64; sektor: tam32; bas: tam32; boy: tam32; sanal: tam64; }
+yapı KsProgram { onbellek: tam64; sicak: mantıksal; var: mantıksal; surum: tam64; yol: metin; cwd: metin; ad: metin; aygit: tam32; parcalar: Dizi<KsElfParca>; plan: Elf64; }
+işlev ks_elf_plan(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor,g: DizinGirdisi,p: &değişken KsProgram) -> sonuç<mantıksal,metin> {
+    eğer g.dizin_mi veya g.boyut < 64 { ver hata("ELF basligi eksik"); }
+    eşleş kv_aralik(d,y,f,g,0,64) { hata(e) => { ver hata(e); } tamam(b) => {
+        değişken ofset: tam64 = oku_le64(b,32);
+        değişken n: tam32 = oku_le16(b,56);
+        eğer n < 1 veya n > 256 veya ofset < 64 veya ofset > g.boyut veya (n olarak tam64)*56 > g.boyut-ofset { ver hata("ELF program basligi siniri"); }
+        eşleş kv_aralik(d,y,f,g,ofset,n*56) { hata(e) => { ver hata(e); } tamam(t) => {
+            eşleş elf64_plan(b,t,0,g.boyut) { hata(e) => { ver hata(metin_birlestir("ELF ",e)); } tamam(plan) => {
+                eğer değil kxs_segmentler(plan,kxs_yer(plan.giris)) { ver hata("ELF surec penceresi veya izinleri"); }
+                p.plan=plan;
+            } }
+        } }
+    } }
+    değişken k: KabukBag = dizi_al(d.baglar,y.indeks);
+    p.parcalar=[]; p.aygit=k.indeks;
+    için s: p.plan.yuklemeler {
+        değişken atla: tam64 = 0;
+        iken atla < s.dosya_boyu {
+            değişken n: tam64 = s.dosya_boyu-atla;
+            eğer n > 16384 { n=16384; }
+            eşleş kv_parcalar(d,k,f,g,s.dosya_ofseti+atla,n olarak tam32) { hata(e) => { ver hata(e); } tamam(ps) => {
+                değişken alinan: tam64 = 0;
+                için q: ps {
+                    eğer q.lba < 0 veya q.sektor <= 0 veya (q.sektor olarak tam64) > k.bpb.toplam_sektor-q.lba
+                        veya q.bas < 0 veya q.bayt < 1 veya (q.bayt olarak tam64) > n-alinan { ver hata("ELF okuma plani"); }
+                    dizi_ekle(p.parcalar,KsElfParca {lba:k.bolum.bas+q.lba,sektor:q.sektor,
+                        bas:q.bas,boy:q.bayt,sanal:s.sanal_adres+atla+alinan});
+                    alinan=alinan+(q.bayt olarak tam64);
+                }
+                eğer alinan != n { ver hata("ELF eksik parca"); }
+            } }
+            atla=atla+n;
+        }
+    }
+    ver tamam(doğru);
+}
 işlev ks_program_hazirla(d: &değişken KabukDisk,p: &değişken KsProgram,girdi: metin) -> sonuç<mantıksal,metin> {
     değişken surum: tam64 = 0;
     güvensiz { surum=kd_icerik_surumu; }
     eğer p.var ve p.surum == surum ve bm_esit(p.yol,girdi) ve bm_esit(p.cwd,d.cwd) { ver tamam(doğru); }
+    p.var=yanlış; p.sicak=yanlış;
     eşleş kd_mutlak(d.cwd,girdi) { hata(e) => { ver hata(e); } tamam(yol) => {
     eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(y) => {
-    eşleş kd_icerik(d,y) { hata(e) => { ver hata(e); } tamam(b) => {
-    eşleş elf64_coz(b) { hata(e) => { ver hata(metin_birlestir("ELF ",e)); } tamam(plan) => {
+    eşleş kd_fat(d,y) { hata(e) => { ver hata(e); } tamam(fat) => {
+        değişken f: FatSektor = fat;
+        eşleş kv_bilgi(d,y,&değişken f) { hata(e) => { ver hata(e); } tamam(g) => {
+            eşleş ks_elf_plan(d,y,&değişken f,g,p) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        } }
+    } }
     eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(adlar) => {
         eğer dizi_boyut(adlar) == 0 { ver hata("ELF dosya adi"); }
-        p.var=doğru; p.surum=surum; p.yol=girdi; p.cwd=d.cwd;
-        p.ad=dizi_al(adlar,dizi_boyut(adlar)-1);
-        p.veri=b; p.plan=plan;
+        p.ad=dizi_al(adlar,dizi_boyut(adlar)-1); p.var=doğru; p.surum=surum; p.yol=girdi; p.cwd=d.cwd;
         ver tamam(doğru);
-    } }
-    } }
-    } }
-    } }
-    } }
+    } } } } } }
+}
+çıplak işlev ks_parca_kopyala(b: Dizi<dtam8>,bas: tam32,boy: tam32,hedef: tam64) -> mantıksal {
+    eğer bas < 0 veya boy > dizi_boyut(b)-bas { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < boy { kxr_y8(hedef+(i olarak tam64),dizi_al(b,bas+i)); i=i+1; }
+    ver doğru;
+}
+// Son programın yüklenebilir verisi bir okuma parçasına sığıyorsa, aynı
+// 16 KiB alanı yeniden kullan. FAT nesli değiştiğinde görünüm geçersizleşir.
+çıplak işlev ks_on_kopyala(p: &değişken KsProgram,y: tam64,doldur: mantıksal) {
+    güvensiz {
+        değişken yer: KxsYer = kxs_yer(p.plan.giris);
+        değişken fizik: tam64 = kxm_o64(kxs_baglam(y)+KXS_CR3_OFS)+(yer.tablo olarak tam64)*4096;
+        değişken n: tam64 = 0;
+        için q: p.parcalar { n=n+(q.boy olarak tam64); }
+        eğer n > 16384 { ver; }
+        eğer p.onbellek == 0 { p.onbellek=malloc(16384) olarak tam64; }
+        eğer p.onbellek == 0 { ver; }
+        değişken i: tam64 = 0;
+        için q: p.parcalar {
+            değişken f: tam64 = fizik+q.sanal-yer.alt;
+            değişken h: tam64 = p.onbellek+i;
+            eğer doldur { memcpy(h olarak *tam8,f olarak *tam8,q.boy olarak tam64); }
+            değilse { memcpy(f olarak *tam8,h olarak *tam8,q.boy olarak tam64); }
+            i=i+(q.boy olarak tam64);
+        }
+        p.sicak=doğru;
+    }
+}
+işlev ks_elf_aktar(d: &değişken KabukDisk,p: &KsProgram,y: tam64) -> sonuç<mantıksal,metin> {
+    değişken yer: KxsYer = kxs_yer(p.plan.giris);
+    değişken fizik: tam64 = kxm_o64(kxs_baglam(y)+KXS_CR3_OFS)+(yer.tablo olarak tam64)*4096;
+    değişken a: BlokDonanim = dizi_al(d.aygitlar,p.aygit);
+    için q: p.parcalar {
+        değişken hedef: tam64 = fizik+(q.sanal-yer.alt);
+        // Küçük segmentlerde mevcut 64 sektörlük blok önbelleğini paylaş.
+        // Büyük aktarımlarda tek okuma en fazla 16 KiB segment verisi taşır.
+        eğer q.sektor <= 8 {
+            değişken i: tam32 = 0;
+            değişken kalan: tam32 = q.boy;
+            değişken bas: tam32 = q.bas;
+            iken i < q.sektor {
+                değişken n: tam32 = 512-bas; eğer n > kalan { n=kalan; }
+                eşleş bd_oku(&değişken a,q.lba+(i olarak tam64)) {
+                    hata(e) => { dizi_yaz(d.aygitlar,p.aygit,a); ver hata(e); }
+                    tamam(b) => { eğer değil ks_parca_kopyala(b,bas,n,hedef) { ver hata("ELF kisa sektor"); } }
+                }
+                bas=0; kalan=kalan-n; hedef=hedef+(n olarak tam64); i=i+1;
+            }
+        } değilse {
+            eşleş bd_ham_oku(&değişken a,q.lba,q.sektor) {
+                hata(e) => { dizi_yaz(d.aygitlar,p.aygit,a); ver hata(e); }
+                tamam(b) => { eğer değil ks_parca_kopyala(b,q.bas,q.boy,hedef) { ver hata("ELF kisa okuma"); } }
+            }
+        }
+    }
+    dizi_yaz(d.aygitlar,p.aygit,a);
+    ver tamam(doğru);
 }
 küresel değişken ks_yonetim: tam64 = 0;
 yapı KsKabukSureci {
@@ -543,9 +637,21 @@ işlev ks_baslat(p: &değişken KsKabukSureci,b: &değişken KsvBaglam,argv: Diz
     eşleş ks_program_hazirla(&değişken b.disk,&değişken p.son_program,yol) { hata(e) => { ver hata(e); } tamam(v) => { } }
     güvensiz {
         eğer ebeveyn == 0 { kxs_heap_iz(0); }
-        eşleş kxs_hazirla(uefi_surec_ayirici,p.son_program.plan,p.son_program.veri,argv,ebeveyn) {
+        eşleş kxs_hazirla(uefi_surec_ayirici,p.son_program.plan,argv,ebeveyn) {
             hata(e) => { ver hata(e); }
             tamam(yuva) => {
+                eğer p.son_program.sicak { ks_on_kopyala(&değişken p.son_program,yuva,yanlış); }
+                değilse {
+                eşleş ks_elf_aktar(&değişken b.disk,&p.son_program,yuva) {
+                    hata(e) => {
+                        değişken r: tam64 = kxs_baglam(yuva);
+                        uefi_surec_iade(kxm_o64(r+KXS_CR3_OFS),kxs_cerceve_sayisi(kxs_yer(p.son_program.plan.giris)));
+                        kxs_yuva_serbest(yuva); memset(r olarak *tam8,0,KXS_KAYIT_BOYU);
+                        ver hata(e);
+                    }
+                    tamam(v) => { ks_on_kopyala(&değişken p.son_program,yuva,doğru); }
+                }
+                }
                 değişken i: tam32 = yuva olarak tam32;
                 değişken yeni: KsvBaglam = dizi_al(p.baglamlar,i);
                 yeni.disk=b.disk; yeni.x=b.x; yeni.h=b.h; yeni.tr=b.tr;
@@ -591,9 +697,10 @@ işlev ks_durum_adi(durum: tam64) -> metin {
 işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     değişken r: tam64 = kxs_baglam(y);
     değişken fizik: tam64 = kxm_o64(r+KXS_CR3_OFS);
-    güvensiz { memset(fizik olarak *tam8,0,16384); }
+    değişken yer: KxsYer = kxs_yer(kxm_o64(r+256));
+    güvensiz { memset(fizik olarak *tam8,0,(yer.tablo olarak tam64)*4096); }
     değişken ayirici: CerceveAyirici = uefi_ayirici_al();
-    eşleş serbest_ardisik(&değişken ayirici,fizik,UEFI_SUREC_CERCEVE) {
+    eşleş serbest_ardisik(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {
         hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
         tamam(v) => { }
     }
@@ -769,7 +876,7 @@ işlev kabuk_fare(ke: &değişken KabukEkran, fd: &değişken FareDurumu, im: &d
 işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, indeks: tam32, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     değişken h: HidKlavye = hid_klavye_yeni(); değişken tr: KlavyeDurumu = klavye_yeni(); değişken satir: SatirDuzenleyici = satir_yeni();
     değişken fd: FareDurumu = fare_yeni(yanlış);değişken im: EkranFare = ekran_fare_yeni();
-    değişken bos_program: KsProgram = KsProgram {var:yanlış,surum:0,yol:"",cwd:"",ad:"",veri:[],
+    değişken bos_program: KsProgram = KsProgram {onbellek:0,sicak:yanlış,var:yanlış,surum:0,yol:"",cwd:"",ad:"",aygit:0,parcalar:[],
         plan:Elf64 {tur:0,makine:0,giris:0,yuklemeler:[]}};
     değişken p: KsKabukSureci = KsKabukSureci {son_program:bos_program,baglamlar:[],adlar:[],sonraki:0,son_kod:0,beklenen:-1};
     değişken y: tam64 = 0;

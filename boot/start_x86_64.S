@@ -838,7 +838,7 @@ kdl_dilim_gir:
 .pushsection .bss
 .balign 16
 .global kdl_dilim_tablo
-kdl_dilim_tablo: .skip 2048
+kdl_dilim_tablo: .skip 2176
 .global kdl_dilim_satir
 kdl_dilim_satir: .skip 32832
 .global kdl_dilim_etkin
