@@ -44,6 +44,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 64 | imlec | 3 | sat,sut,gorunur | 0 | x86_64 |
 | 65 | fare_bekle | 1 | 48 baytlık fare tamponu | 0 | x86_64 |
 | 66 | olay_bekle | 3 | 56 baytlık olay tamponu, maske, ms | 0 | x86_64 |
+| 67 | onplan_baslat | 2 | Program yolu ve baslat ile aynı argv | Çocuk PID, -13 ön plan gerekli | x86_64 |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
@@ -98,5 +99,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 Ön plan ekranı sol üst hücreden (0,0) numaralandırılır. Bilgi dört u64 döndürür (sütun, satır, piksel genişliği, piksel yüksekliği). Ekran yazısının üçüncü argümanı NUL sonlu UTF-8 adresi, ön renk ve arka renkten oluşan üç u64 alanlı yapıdır. Renkler 0xRRGGBB biçimindedir. Bir satıra sığmayan metin RANGE, ekranı olmayan bir sistem ENODEV (-19) döndürür.
 
 Fare kaydında altı u64 bulunur (işaretli dx, işaretli dy, x, y, düğmeler, işaretli tekerlek). Ekranda sağa ve aşağı doğru artış pozitiftir. Sol/sağ/orta düğmeler bit 0/1/2 kullanır. Birleşik olayda ilk u64 türdür (0 zaman aşımı, 1 tuş, 2 fare). Kalan 48 baytta ilgili olay yer alır. Maske 1 tuş, 2 fare, 3 ikisi. Süre -1 sınırsız, 0 hazır olayı sorgular, 1–60.000 ms LAPIC saatine yukarı yuvarlanır.
+
+Ön plan süreci bir etkileşimli çocuk açarken 67 ile ekran ve girdi sahipliğini çocuk çalışmaya hazır olmadan devreder. 59 ile çocuğu topladığında sahipliği geri alır.
 
 QEMU xHCI üzerinde USB HID tamamlamaları MSI-X vektör 65'i kullanır. ISR cihazın kesmesini ve LAPIC EOI'yi onaylar. Bekleyen klavye ve fare aktarımları TRB adresi, yuva ve uç ile eşlenir. Bekleyen kullanıcı süreci fiziksel CPU'yu bırakır. PS/2 için IRQ1 ve IRQ12 halkaları aynı olay biçimini besler.

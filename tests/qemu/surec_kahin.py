@@ -13,7 +13,7 @@ from pathlib import Path
 from dalga12_fat import Fat
 from dalga12_kahin import Console, boot, fsck, sha, wait_for
 from surec_imaj import BUYUK, GUNLUK, imajlar
-from duzenle_kahin import duzenle_kos
+from duzenle_kahin import duzenle_kos, gezgin_kos, salt_gezgin
 from uefi_kabuk_kahin import keys
 from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
 
@@ -276,16 +276,20 @@ def kos(w, tekrar, senaryo):
         kip = VARSAYILAN[(n - 1) % len(VARSAYILAN)] if senaryo == "matris" else senaryo
         usb, nvme, sata = imajlar(w, programlar)
         once = {p.disk: sha(p.disk) for p in (nvme, sata)}
-        if kip not in ("yazma","duzenle-icerik","duzenle"):
+        if kip not in ("yazma","duzenle-icerik","duzenle","gezgin"):
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
-        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip == "ekran-usb" else "ps2") as (q, p, seri):
+        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin") else "ps2") as (q, p, seri):
             c = SurecConsole(w, q, p, seri)
             bos = c.bos_cerceve()
             assert bos >= 8 * CERCEVELER
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip == "gezgin-salt":
+                salt_gezgin(c,nvme)
+            if kip == "gezgin":
+                gezgin_kos(c,usb[1])
             if kip in ("duzenle","duzenle-icerik"):
                 duzenle_kos(c,usb[1],kip=="duzenle-icerik")
             if kip.startswith("ekran-"):
@@ -363,6 +367,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)

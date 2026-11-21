@@ -48,3 +48,7 @@ GOP metin hücreleri 8×16 piksel. Ön plan değişiminde ekran kabuk ızgarası
 ### Düzenleyici tamponu
 
 Tek büyüyen dizi UTF-8 baytlarını saklar. Ekleme ve silme son eki kaydırır; imleç bir kod noktasının başında kalır. Satır ve sütun karakter sayısı üzerinden hesaplanır. Bellekte 256 KiB, FAT32 kaydında 64 KiB sınır uygulanır. Büyük bir kayıtta dosyayı açıp kısaltmadan önce boy denetlenir. Kayıt başarısı dosyanın yazılması, kapatılması ve dosya sisteminin eşitlenmesiyle bildirilir.
+
+### Gezgin ve ön plan
+
+`onplan_baslat` mevcut yükleyiciyle aynı yolu ve argv doğrulamasını kullanır. Çağıranın ön plan sahibi olması gerekir. Çocuk daha ilk talimatından önce ekranı devralır. Ebeveyn `bekle` ile sonucu alır, dizini tekrar okur ve seçim satırını korur. Eski `baslat` arka planda çalıştırma davranışını korur. Gezginin 512 satırlık sınırına `../` dahildir; 511 gerçek girdiyi aşan dizinde -34 döner. Silmeden yazma yetkisi yoklanarak salt okunur dosyanın durumu açılışta görünür.

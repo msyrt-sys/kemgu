@@ -69,3 +69,73 @@ def duzenle_kos(c,part,yalniz_icerik=False):
         assert Fat(part.read()).get("/NOTLAR/deneme.txt")=="Ağaç\nİş".encode(), "kaydedilen UTF-8 içerik farklı"
     finally: c.q.call("cont")
     tus(c,"q",ctrl=True); tamam(c,"duzenle",2)
+
+def ge_ekran(c,yol,adlar,sec):
+    rows=[(0,0,yol,0xffffff,ARKA)]
+    for i,ad in enumerate(adlar):
+        rows.append((i+1,0,ad,0 if i==sec else 0xffffff,0xffffff if i==sec else ARKA))
+    piksel(c,rows)
+
+def ge_girdiler(part,dizin):
+    fat=Fat(part.read())
+    records=fat.directory(fat.root) if dizin=="/" else fat.get(dizin)
+    return ["../"]+[ad+("/" if d else f"  {n}") for ad,(_,n,d) in records.items() if ad not in (".","..")]
+
+def ge_cift_tik(c,dy):
+    # QEMU göreli hareketi ile iki ayrı düğme bas/bırak çevrimi.
+    if dy: c.q.call("input-send-event",{"events":[{"type":"rel","data":{"axis":"y","value":dy}}]})
+    time.sleep(.08)
+    for down in (True,False,True,False):
+        c.q.call("input-send-event",{"events":[{"type":"btn","data":{"button":"left","down":down}}]})
+        time.sleep(.05)
+
+def gezgin_kos(c,part):
+    yol="/diskler/usb0p2"
+    c.run("bagla --yazilabilir usb0p2")
+    cmd="calistir "+yol+"/bin/dosyalar.elf "+yol
+    c.input(cmd); c.akis+="> "+cmd+"\n"
+    root=ge_girdiler(part,"/")
+    ge_ekran(c,yol,root,0)
+    n=next(i for i,ad in enumerate(root) if ad.lower()=="notlar/")
+    adi=root[n][:-1]
+    hedef=yol+"/"+adi
+    ge_cift_tik(c,(n+1)*16+3)
+    rows=ge_girdiler(part,"/NOTLAR")
+    ge_ekran(c,hedef,rows,0)
+    tus(c,"ret"); ge_ekran(c,yol,root,0)
+    ge_cift_tik(c,0)
+    ge_ekran(c,hedef,rows,0)
+    k=next(i for i,ad in enumerate(rows) if ad.startswith("günlük.txt "))
+    ge_cift_tik(c,(k-n)*16)
+    dosya=hedef+"/günlük.txt"
+    du_ekran(c,dosya,["Ağaç ve İş",""],0,0)
+    h0=c.heap(); time.sleep(8); assert c.heap()==h0
+    tus(c,"end"); tus(c,"ret"); yaz(c,"İş")
+    tus(c,"s",ctrl=True)
+    du_ekran(c,dosya,["Ağaç ve İş","İş",""],1,2,False,"  Kaydedildi")
+    tus(c,"q",ctrl=True)
+    yeni=ge_girdiler(part,"/NOTLAR")
+    ge_ekran(c,hedef,yeni,k)
+    tus(c,"q"); tamam(c,"dosyalar",2)
+    assert Fat(part.read()).get("/NOTLAR/günlük.txt")=="Ağaç ve İş\nİş\n".encode()
+    fsck(c.w,part,"gezgin")
+
+def salt_gezgin(c,nvme):
+    yol="/diskler";cmd="calistir /diskler/usb0p2/bin/dosyalar.elf "+yol
+    c.input(cmd);c.akis+="> "+cmd+"\n"
+    ge_ekran(c,yol,["../","nvme0p1/","sata0p1/","usb0p1/","usb0p2/"],0)
+    tus(c,"down");tus(c,"ret")
+    rows=ge_girdiler(nvme,"/")
+    ge_ekran(c,yol+"/nvme0p1",rows,0)
+    i=next(i for i,s in enumerate(rows) if s.startswith("merhaba.txt "))
+    ge_cift_tik(c,(i+1)*16+3)
+    dosya=yol+"/nvme0p1/merhaba.txt"
+    metin=Fat(nvme.read()).get("/merhaba.txt").decode()
+    du_ekran(c,dosya,[metin],0,0,False,"  Salt okunur")
+    yaz(c,"a");tus(c,"s",ctrl=True)
+    du_ekran(c,dosya,["a"+metin],0,1,True,"  Salt okunur")
+    tus(c,"q",ctrl=True)
+    du_ekran(c,dosya,["a"+metin],0,1,True,"  Kaydedilmedi. Çıkmak için Ctrl+Q")
+    tus(c,"q",ctrl=True)
+    ge_ekran(c,yol+"/nvme0p1",rows,i)
+    tus(c,"q");tamam(c,"dosyalar",2)

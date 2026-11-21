@@ -82,6 +82,7 @@ sabit KX_SIS_EKRAN_BILGI: tam64 = 61;
 sabit KX_SIS_EKRAN_YAZ: tam64 = 62;
 sabit KX_SIS_EKRAN_TEMIZLE: tam64 = 63;
 sabit KX_SIS_IMLEC: tam64 = 64;
+sabit KX_SIS_ONPLAN_BASLAT: tam64 = 67;
 sabit KX_SIS_FARE_BEKLE: tam64 = 65;
 sabit KX_SIS_OLAY_BEKLE: tam64 = 66;
 sabit KX_HATA_IO: tam64 = 5;
@@ -172,6 +173,10 @@ işlev ksv_yol(b: &değişken KsvBaglam,p: tam64,y: &değişken KabukYol) -> tam
         tamam(v) => { güvensiz { *y=v; } ver 0; }
     }
 }
+// Bağlama dizini VFS'de üretilir. Negatif indeks FAT sürücüsüne geçmez.
+işlev ksv_sanal_girdi(ad: metin) -> DizinGirdisi {
+    ver DizinGirdisi {ad:ad,ozellik:16,ilk_kume:0,boyut:0,dizin_mi:doğru,tarih:0,saat:0};
+}
 işlev ksv_yoldan_bilgi(b: &değişken KsvBaglam,y: KabukYol) -> sonuç<DizinGirdisi,metin> {
     eşleş kd_fat(&değişken b.disk,y) { hata(e) => { ver hata(e); } tamam(fat) => {
         değişken f: FatSektor = fat;
@@ -191,6 +196,13 @@ işlev ksv_ac(b: &değişken KsvBaglam,p: tam64,kip: tam64) -> tam64 {
          veya ((kip&KSV_DIZIN) != 0 ve kip != KSV_DIZIN) { ver 0-KX_HATA_INVAL; }
     değişken fd: tam32 = ksv_fd_yuva(b);
     eğer fd < 0 { ver 0-KX_HATA_MFILE; }
+    değişken mutlak: metin = "";
+    eğer kip == KSV_DIZIN {
+        değişken rr: tam64 = ksv_mutlak(b,p,&değişken mutlak); eğer rr < 0 { ver rr; }
+        eğer bm_esit(mutlak,"/diskler") veya (bm_esit(mutlak,"/") ve b.disk.kok < 0) {
+            dizi_yaz(b.fds,fd,KsvFd {acik:doğru,yol:KabukYol {indeks:-2,yol:mutlak},kip:kip,konum:0}); ver fd olarak tam64;
+        }
+    }
     değişken y: KabukYol = KabukYol {indeks:0,yol:""};
     değişken r: tam64 = ksv_yol(b,p,&değişken y);
     eğer r < 0 { ver r; }
@@ -292,6 +304,11 @@ işlev ksv_konumla(b: &değişken KsvBaglam,fd: tam64,ofset: tam64,nereden: tam6
 }
 işlev ksv_bilgi(b: &değişken KsvBaglam,p: tam64,out: tam64) -> tam64 {
     eğer değil kxs_aralik(out,32,doğru) { ver 0-KX_HATA_FAULT; }
+    değişken m: metin = ""; değişken rr: tam64 = ksv_mutlak(b,p,&değişken m);
+    eğer rr < 0 { ver rr; }
+    eğer bm_esit(m,"/diskler") veya bm_esit(m,"/") {
+        kxm_y64(out,0); kxm_y64(out+8,1); kxm_y64(out+16,0); kxm_y64(out+24,0); ver 0;
+    }
     değişken y: KabukYol = KabukYol {indeks:0,yol:""};
     değişken r: tam64 = ksv_yol(b,p,&değişken y);
     eğer r < 0 { ver r; }
@@ -335,11 +352,22 @@ işlev ksv_dizin_oku(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> ta
     eğer değil kxs_aralik(p,n,doğru) { ver 0-KX_HATA_FAULT; }
     değişken a: KsvFd = dizi_al(b.fds,fd olarak tam32);
     eğer a.kip != KSV_DIZIN { ver 0-KX_HATA_NOTDIR; }
+    eğer a.yol.indeks == -2 {
+        değişken xs: Dizi<DizinGirdisi> = [];
+        eğer bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); }
+        değilse { için k: b.disk.baglar {
+            değişken ad: metin = k.kayit.ad;
+            dizi_ekle(xs,ksv_sanal_girdi(metin_kes(ad,9,metin_uzunluk(ad)-9)));
+        } }
+        ver ksv_dizin_kopyala(b,fd olarak tam32,p,n olarak tam32,xs);
+    }
     eşleş kd_fat(&değişken b.disk,a.yol) { hata(e) => { ver ksv_hata(e); } tamam(fat) => {
         değişken f: FatSektor = fat;
         eşleş kd_liste(&değişken b.disk,a.yol,&değişken f) {
             hata(e) => { ver ksv_hata(e); }
-            tamam(xs) => { ver ksv_dizin_kopyala(b,fd olarak tam32,p,n olarak tam32,xs); }
+            tamam(xs) => {
+                eğer a.yol.indeks == b.disk.kok ve bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); }
+                ver ksv_dizin_kopyala(b,fd olarak tam32,p,n olarak tam32,xs); }
         }
     } }
 }
@@ -466,7 +494,8 @@ işlev ksv_uyu(ms: tam64) -> tam64 {
     eğer ms == 0 { ver 0; }
     ver kxs_beklet(KXS_UYUYOR,kem_tik_oku()+(ms+9)/10,-1);
 }
-işlev ksv_baslat(b: &değişken KsvBaglam,yol: tam64,adresler: tam64) -> tam64 {
+işlev ksv_baslat(b: &değişken KsvBaglam,yol: tam64,adresler: tam64,onplan: mantıksal) -> tam64 {
+    güvensiz { eğer onplan ve kxs_pid != kxs_on_pid { ver -13; } }
     değişken uzun: tam64 = kxs_dize_boyu(yol,4096);
     eğer uzun <= 0 { eğer uzun == 0 { ver -2; } ver uzun; }
     değişken argv: Dizi<metin> = [];
@@ -496,7 +525,7 @@ işlev ksv_baslat(b: &değişken KsvBaglam,yol: tam64,adresler: tam64) -> tam64 
                 eğer bm_esit(e,"argv surec yigini siniri") { ver -7; }
                 ver ksv_hata(e);
             }
-            tamam(y) => { *ptr=p; ver ks_pid(y); }
+            tamam(y) => { *ptr=p; eğer onplan { kxs_on_pid=ks_pid(y); } ver ks_pid(y); }
         }
     }
 }
@@ -678,7 +707,8 @@ işlev ksv_olay(b: &değişken KsvBaglam,p: tam64,maske: tam64,ms: tam64,num: ta
     ver r;
 }
 işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64) -> tam64 {
-    eğer num == KX_SIS_BASLAT { ver ksv_baslat(b,a,c); }
+    eğer num == KX_SIS_BASLAT { ver ksv_baslat(b,a,c,yanlış); }
+    eğer num == KX_SIS_ONPLAN_BASLAT { ver ksv_baslat(b,a,c,doğru); }
     eğer num == KX_SIS_BEKLE { ver ksv_bekle(a,c); }
     eğer num == KX_SIS_SUREC_LISTESI { ver ksv_surec_listesi(a,c); }
     eğer num == KX_SIS_EKRAN_BILGI { ver ksv_ekran_isle(num,a,0,0); }

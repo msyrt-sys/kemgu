@@ -9,6 +9,8 @@ from surec_sabotaj import ROOT, snapshot
 CORE = "runtime/mimari/x86_64/kem_surec_hw.kem"
 SHELL = "test/ornekler/kem_os_x86_kabuk.kem"
 CASES = {
+    "tik-satir": ("gezgin", "test/kullanici/dosyalar.kem", "((sis_alan(p,4)/16) olarak tam32)-1", "((sis_alan(p,4)/16) olarak tam32)-2", "ekran farklı"),
+    "ust-yol": ("gezgin", "test/kullanici/dosyalar.kem", "yol=ge_ust(g.yol);", "yol=g.yol;", "ekran farklı"),
     "utf8": ("duzenle-icerik", "drivers/duzenle/tampon.kem", "bas=du_geri(t,bas);", "eğer bas > 0 { bas=bas-1; }", "kaydedilen UTF-8 içerik farklı"),
     "birlestir": ("duzenle-icerik", "drivers/duzenle/tampon.kem", "eğer bas == son { ver; }", "eğer bas == son { ver; } eğer du_bayt(t,bas) == 10 ve son < t.boy { son=du_ileri(t,son); }", "kaydedilen UTF-8 içerik farklı"),
     "kaydet": ("duzenle", "test/kullanici/duzenle.kem", "ver sis_esitle();", "ver 0;", "Dirty bit is set."),
