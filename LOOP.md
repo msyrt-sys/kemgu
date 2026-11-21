@@ -3025,4 +3025,11 @@
   gitmiyordu (SESSİZ YANLIŞ CEVAP, ölçüldü 349 → exit 93); self-host boş işlenen (`store ptr , ptr`). İkisinde de artık
   `getelementptr i8, ptr @ad, i64 0`. Fikstürler cg_negatif_sabit + cg_kuresel_adres (yerel adres POZİTİF), test_llvm
   [319] mutlak 42. Sabotaj S216 (C) → llvm_test + codegen_diff · S217 (self &küresel) · S218 (self sabit genişliği) kırmızı.
+- 2026-11-21 D-762: Codex dalga 14 promptu (otomasyon/chatgpt/CODEX_GOREV_14.md) — Mehmet "keşke çok daha uzun iş": dalga 13
+  bir saatte zorunluyu bitirip "önerilen"i bırakmıştı. Bu dalgada zorunlu/önerilen ayrımı YOK; sekiz bölüm sıralı ve hepsi
+  zorunlu, bölüm başına commit + kapı + not, takılınca sonraki bölüme geç: (1) zaman paylaşımlı çok süreç + baslat/bekle/ps/
+  sonlandir, (2) ELF ≤64 KiB sınırı kalkar + pencere büyür, (3) ekran ve fare çağrıları + olay_bekle, (4) `duzenle` metin
+  düzenleyici, (5) `dosyalar` dosya gezgini, (6) kabuk geçmiş/Tab/yol araması, (7) tek açılışta uçtan uca v1 senaryosu +
+  `make kem_os_usb.img` + X86 fiziksel donanım kontrol listesi, (8) kaynak/süre ölçümleri. Güvenlik terminolojisi yok
+  (dalga 13'te ChatGPT filtresi iki kez reddetmişti).
 
