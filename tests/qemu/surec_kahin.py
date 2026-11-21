@@ -13,6 +13,7 @@ from pathlib import Path
 from dalga12_fat import Fat
 from dalga12_kahin import Console, boot, fsck, sha, wait_for
 from surec_imaj import BUYUK, GUNLUK, imajlar
+import kaynak14_kahin
 import v1_kahin
 from usb14_imaj import dogrula as usb_dogrula
 from kabuk14_kahin import kabuk14_kos
@@ -280,7 +281,7 @@ def kos(w, tekrar, senaryo):
         usb, nvme, sata = imajlar(w, programlar)
         if kip.startswith("v1"): usb_dogrula(w,usb,programlar)
         once = {p.disk: sha(p.disk) for p in (nvme, sata)}
-        if kip not in ("yazma","duzenle-icerik","duzenle","gezgin","v1","v1-kesinti"):
+        if kip not in ("kaynak-editor","yazma","duzenle-icerik","duzenle","gezgin","v1","v1-kesinti"):
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
         with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin","v1","v1-kesinti") else "ps2") as (q, p, seri):
@@ -290,6 +291,8 @@ def kos(w, tekrar, senaryo):
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip=="kaynak-cocuk": kaynak14_kahin.cocuk(c,n)
+            if kip=="kaynak-editor": kaynak14_kahin.editor(c,usb[1],n)
             if kip.startswith("v1"):
                 v1_kahin.kos(c,usb[1],kip=="v1-kesinti")
             if kip == "kabuk14":
@@ -305,6 +308,9 @@ def kos(w, tekrar, senaryo):
             if kip == "buyukelf":
                 assert len(programlar["buyukelf.elf"]) >= 300 * 1024
                 giris = c.heap()
+                if n == 1:
+                    time.sleep(8)
+                    assert c.heap() == giris
                 c.run("calistir /diskler/usb0p2/bin/buyukelf.elf", b"[buyukelf.elf pid=2 cikis=0]\n")
                 fark = c.heap()-giris
                 c.run("calistir /diskler/usb0p2/bin/eski.elf", b"/diskler/usb0p2/bin/eski.elf\n[eski.elf pid=3 cikis=1]\n")
@@ -378,6 +384,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("v1-kesinti", "v1", "kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("kaynak-cocuk", "kaynak-editor", "v1-kesinti", "v1", "kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)

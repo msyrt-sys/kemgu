@@ -24,6 +24,7 @@ def piksel(c,satirlar,imlec=None):
     font=font_yukle()
     def denetle():
         w,h,px=screendump(c.q.f,c.w/'uygulama.ppm',c.q.response)
+        yakalandi=time.monotonic_ns()
         bek=[ARKA]*(w*h)
         for y,x,s,on,arka in satirlar:
             for i,ch in enumerate(s):
@@ -35,13 +36,13 @@ def piksel(c,satirlar,imlec=None):
                     bek[yy*w+xx]^=0xffffff
         fark=karsilastir(px,bek,w)
         denetle.fark=fark
-        return fark[0]==0
-    try: wait_for(c.p,denetle,7)
+        return yakalandi if fark[0]==0 else None
+    try: return wait_for(c.p,denetle,7)
     except AssertionError as e: raise AssertionError(("ekran farklı",denetle.fark,c.output()[-240:])) from e
 
 def du_ekran(c,yol,lines,row,col,dirty=False,msg=""):
     durum=f"{yol}  {row+1}:{col+1}"+(" *" if dirty else "")+msg
-    piksel(c,[(i,0,s,0xffffff,ARKA) for i,s in enumerate(lines)]+[(-1,0,durum,0,0xffffff)],(row,col))
+    return piksel(c,[(i,0,s,0xffffff,ARKA) for i,s in enumerate(lines)]+[(-1,0,durum,0,0xffffff)],(row,col))
 
 def tamam(c,exe,pid):
     s=f"[{exe}.elf pid={pid} cikis=0]\nKABUK_HAZIR\n"

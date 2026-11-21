@@ -4962,6 +4962,11 @@ $(BUILD)/kullanici/self/%.elf: test/kullanici/%.kem $(KULLANICI_X86_GIRDI) $(BUI
 calistir_bm_x86_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_surec_harness.sh
 
+.PHONY: calistir_bm_x86_kaynak
+test_tumu: calistir_bm_x86_kaynak
+calistir_bm_x86_kaynak: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="kaynak-cocuk kaynak-editor" bash test/bm_x86_surec_harness.sh
+
 .PHONY: calistir_bm_x86_v1
 test_tumu: calistir_bm_x86_v1
 calistir_bm_x86_v1: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
