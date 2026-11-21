@@ -54,7 +54,7 @@ def wait_for(proc, fn, seconds=15):
 
 
 @contextmanager
-def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
+def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2"):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -76,6 +76,8 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
     if klavye == "ps2":
         i = cmd.index("usb-kbd,bus=x.0")
         del cmd[i-1:i+1]
+    if fare == "usb":
+        cmd.extend(["-device", "usb-mouse,bus=x.0"])
     if usb2:
         cmd.extend(['-drive',f'if=none,id=u2,format=raw,file={usb2.disk}',
                     '-device','usb-storage,bus=x.0,drive=u2'])
@@ -180,8 +182,12 @@ class Console:
         def exact():
             w,h,pixels=screendump(self.q.f,self.w/'dalga12.ppm',self.q.response)
             expected=kabuk_goruntu(self.akis,'',gen=w,yuk=h)
-            return karsilastir(pixels,expected,w)[0]==0
-        wait_for(self.p,exact)
+            exact.fark=karsilastir(pixels,expected,w)
+            return exact.fark[0]==0
+        try:
+            wait_for(self.p,exact)
+        except AssertionError as e:
+            raise AssertionError(("kabuk ekranı farklı",getattr(exact,"fark",None))) from e
 
 
 def check_identity(c,part):

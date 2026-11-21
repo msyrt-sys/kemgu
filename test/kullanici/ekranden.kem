@@ -1,0 +1,16 @@
+// Aynı çizimi PS/2 ve USB ile yapan sınama programı.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        değişken p: tam64 = malloc(56) olarak tam64;
+        eğer sis_ekran_bilgi(p) != 0 veya sis_alan(p,0)*8 != sis_alan(p,2) veya sis_alan(p,1)*16 != sis_alan(p,3) { ver 1; }
+        değişken ilk: tam64 = sis_tik();
+        eğer sis_olay_bekle(p,2,60) != 0 veya sis_alan(p,0) != 0 veya sis_tik()-ilk < 6 { ver 2; }
+        sis_metin("EKRAN_HAZIR"); sis_bayt_yaz(1,10);
+        eğer sis_ekran_temizle(2109504) != 0 veya sis_hucre(2,5,"Ağaç İş",16777215,2109504) != 0 veya sis_imlec(4,3,1) != 0 { ver 3; }
+        eğer sis_fare_bekle(p) != 0 { ver 4; }
+        eğer sis_alan(p,0) >= 0 veya sis_alan(p,1) >= 0 veya sis_alan(p,2) != 0 veya sis_alan(p,3) != 0 { ver 5; }
+        eğer sis_olay_bekle(p,2,5000) != 0 veya sis_alan(p,0) != 2 { ver 6; }
+        eğer sis_alan(p,3) != 12 veya sis_alan(p,4) != 7 veya sis_alan(p,5) != 1 { ver 7; }
+        ver 0;
+    }
+}

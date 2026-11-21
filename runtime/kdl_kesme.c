@@ -520,6 +520,15 @@ struct KdlIdtKapi {
 static struct KdlIdtKapi kdl_idt[256];
 extern void *kdl_isr_tablo[32];   /* asm: isr0..isr31 adresleri */
 
+/* xHCI MSI-X: kesilen kodun yazmaçları korunur, olay tüketimi ana döngüdedir. */
+extern void kdl_xhci_irq(void) __attribute__((weak));
+__attribute__((naked)) static void kdl_xhci_kocani(void) {
+    __asm__ volatile("pushq %rax\n pushq %rcx\n pushq %rdx\n pushq %rsi\n pushq %rdi\n"
+                     "pushq %r8\n pushq %r9\n pushq %r10\n pushq %r11\n pushq %rbp\n"
+                     "movq %rsp,%rbp\n andq $-16,%rsp\n cld\n call kdl_xhci_irq\n"
+                     "movq %rbp,%rsp\n popq %rbp\n popq %r11\n popq %r10\n popq %r9\n"
+                     "popq %r8\n popq %rdi\n popq %rsi\n popq %rdx\n popq %rcx\n popq %rax\n iretq");
+}
 extern void kdl_irq1_stub(void), kdl_irq12_stub(void), kdl_lapic_timer_stub(void), kdl_spurious_stub(void);
 extern void kdl_irq0_stub(void);     /* boot/start_x86_64.S — IRQ0 (timer) */
 extern void kdl_syscall_stub(void);  /* boot/start_x86_64.S — int 0x80 syscall */
@@ -573,6 +582,7 @@ void kdl_idt_kur(void) {
     kdl_idt[0x80].tip_oz = 0xEE;
     kdl_idt_gate(33, (uintptr_t)&kdl_irq1_stub, 0);
     kdl_idt_gate(44, (uintptr_t)&kdl_irq12_stub, 0);
+    if (kdl_xhci_irq) kdl_idt_gate(65, (uintptr_t)&kdl_xhci_kocani, 0);
     kdl_idt_gate(48, (uintptr_t)&kdl_lapic_timer_stub, 0);
     kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
 

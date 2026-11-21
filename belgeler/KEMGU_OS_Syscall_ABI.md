@@ -38,6 +38,12 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 58 | baslat | 2 | Program yolu, NUL işaretçiyle biten en çok 31 ek argüman veya 0 | Çocuk PID | x86_64 |
 | 59 | bekle | 2 | Çocuk PID, 16 baytlık sonuç | 0 | x86_64 |
 | 60 | surec_listesi | 2 | Tampon, kayıt kapasitesi (0–8) | Kayıt sayısı | x86_64 |
+| 61 | ekran_bilgi | 1 | p | 0 | x86_64 |
+| 62 | ekran_yaz | 3 | sat,sut,p | 0 | x86_64 |
+| 63 | ekran_temizle | 1 | renk | 0 | x86_64 |
+| 64 | imlec | 3 | sat,sut,gorunur | 0 | x86_64 |
+| 65 | fare_bekle | 1 | 48 baytlık fare tamponu | 0 | x86_64 |
+| 66 | olay_bekle | 3 | 56 baytlık olay tamponu, maske, ms | 0 | x86_64 |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
@@ -88,3 +94,9 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 - Çalışma dizini tamponu NUL sonlandırılır. Süreç kabuğun çalışma dizinini devralır ve sonraki değişiklikler süreçte kalır. Yazılabilirlik ve ESP denetimi kabukla ortaktır.
 - TuşOlayı dört little-endian u64 alandır: set 1 tuş kodu (E0 için bit 8), Unicode kod noktası (yoksa 0), basma (1) veya bırakma (0), değiştiriciler. Değiştiriciler shift=1, ctrl=2, alt=4, altgr=8, caps=16. Ön plandaki süreç PS/2 IRQ halkasından veya USB HID'den giriş alır. Onu başlatan Enter tuşunun bırakması sürece iletilmez. Çıkıştan sonra giriş yeniden kabuğa gider.
 - Saat altı little-endian u64 alandır: yıl, ay, gün, saat, dakika, saniye. `uyu` çağrısı UEFI LAPIC tiklerine göre 10 ms'ye yukarı yuvarlanır. `tik` sistem açılışından beri tik sayısını verir.
+
+Ön plan ekranı sol üst hücreden (0,0) numaralandırılır. Bilgi dört u64 döndürür (sütun, satır, piksel genişliği, piksel yüksekliği). Ekran yazısının üçüncü argümanı NUL sonlu UTF-8 adresi, ön renk ve arka renkten oluşan üç u64 alanlı yapıdır. Renkler 0xRRGGBB biçimindedir. Bir satıra sığmayan metin RANGE, ekranı olmayan bir sistem ENODEV (-19) döndürür.
+
+Fare kaydında altı u64 bulunur (işaretli dx, işaretli dy, x, y, düğmeler, işaretli tekerlek). Ekranda sağa ve aşağı doğru artış pozitiftir. Sol/sağ/orta düğmeler bit 0/1/2 kullanır. Birleşik olayda ilk u64 türdür (0 zaman aşımı, 1 tuş, 2 fare). Kalan 48 baytta ilgili olay yer alır. Maske 1 tuş, 2 fare, 3 ikisi. Süre -1 sınırsız, 0 hazır olayı sorgular, 1–60.000 ms LAPIC saatine yukarı yuvarlanır.
+
+QEMU xHCI üzerinde USB HID tamamlamaları MSI-X vektör 65'i kullanır. ISR cihazın kesmesini ve LAPIC EOI'yi onaylar. Bekleyen klavye ve fare aktarımları TRB adresi, yuva ve uç ile eşlenir. Bekleyen kullanıcı süreci fiziksel CPU'yu bırakır. PS/2 için IRQ1 ve IRQ12 halkaları aynı olay biçimini besler.

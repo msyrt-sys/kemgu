@@ -9,6 +9,9 @@ from surec_sabotaj import ROOT, snapshot
 CORE = "runtime/mimari/x86_64/kem_surec_hw.kem"
 SHELL = "test/ornekler/kem_os_x86_kabuk.kem"
 CASES = {
+    "hucre": ("ekran-ps2", "test/ornekler/kem_os_x86_vfs_ortak.kem", "((c olarak tam32)+i)*8,(a olarak tam32)*16", "((a olarak tam32)+i)*8,(c olarak tam32)*16", "uygulama pikselleri"),
+    "kenar": ("ekran-usb", "test/ornekler/kem_os_x86_vfs_ortak.kem", "eğer ksv_fare_x < 0 { ksv_fare_x=0; }", "", "ekranden.elf pid=2 cikis=5"),
+    "kabuk-ciz": ("ekran-ps2", SHELL, "                ksv_kabugu_ciz();", "", "kabuk ekranı farklı"),
     "yazmac": ("hesap", "boot/start_x86_64.S", "    rep movsq\n    movq $0, kdl_dilim_etkin",
                "    rep movsq\n    movq $0, -48(%rdi)\n    movq $0, kdl_dilim_etkin", "hesap.elf pid=2 cikis=1"),
     # Çocuk girişinde özel CR3 yüklemesi atlanır. Dönülen çekirdek kökü

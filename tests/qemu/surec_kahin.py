@@ -14,6 +14,7 @@ from dalga12_fat import Fat
 from dalga12_kahin import Console, boot, fsck, sha, wait_for
 from surec_imaj import BUYUK, GUNLUK, imajlar
 from uefi_kabuk_kahin import keys
+from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
 
 
 SAYFA = 4096
@@ -159,6 +160,46 @@ def tus_kos(c, metin, elf):
     tam_seri_bekle(c)
 
 
+def ekran_kos(c,usb_fare):
+    komut = "calistir /diskler/usb0p2/bin/ekranden.elf"
+    c.input(komut)
+    c.akis += "> " + komut + "\nEKRAN_HAZIR\n"
+    c.expected += b"EKRAN_HAZIR\n"
+    tam_seri_bekle(c)
+    time.sleep(.15)
+    w,h,px = screendump(c.q.f,c.w/'uygulama.ppm',c.q.response)
+    renk = 0x203040
+    beklenen = [renk]*(w*h)
+    font = font_yukle()
+    for i, harf in enumerate("Ağaç İş"):
+        glif_ciz(beklenen,w,h,font,(5+i)*8,2*16,ord(harf),0xffffff,renk)
+    for y in (78,79):
+        for x in range(24,32):
+            beklenen[y*w+x] ^= 0xffffff
+    fark = karsilastir(px,beklenen,w)
+    assert fark[0] == 0, ("uygulama pikselleri", fark)
+    if usb_fare:
+        assert c.sayi("kh_iman") != 0, "xHCI MSI-X kurulmadı"
+        once_irq = c.sayi("bh_bildirim")
+    h0 = c.heap()
+    time.sleep(8)
+    assert c.output() == c.expected and c.heap() == h0
+    def hareket(dx,dy,bas):
+        olay = [{"type":"rel","data":{"axis":a,"value":v}} for a,v in (("x",dx),("y",dy))]
+        if bas:
+            olay.append({"type":"btn","data":{"button":"left","down":True}})
+        c.q.call("input-send-event",{"events":olay})
+    hareket(-12,-7,False)
+    time.sleep(.12)
+    hareket(12,7,True)
+    if usb_fare:
+        wait_for(c.p,lambda:c.sayi("bh_bildirim")>once_irq)
+    sonuc = "[ekranden.elf pid=2 cikis=0]\nKABUK_HAZIR\n"
+    c.expected += sonuc.encode()
+    c.akis += sonuc
+    tam_seri_bekle(c)
+
+
 def bolme_kos(c):
     c.run("calistir /diskler/usb0p2/bin/bolme.elf",
           b"PANIK: sifira bolme\n[bolme.elf pid=2 cikis=134]\n")
@@ -237,13 +278,15 @@ def kos(w, tekrar, senaryo):
         if kip != "yazma":
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
-        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip == "tus-ps2" else "usb") as (q, p, seri):
+        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip == "ekran-usb" else "ps2") as (q, p, seri):
             c = SurecConsole(w, q, p, seri)
             bos = c.bos_cerceve()
             assert bos >= 8 * CERCEVELER
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip.startswith("ekran-"):
+                ekran_kos(c,kip == "ekran-usb")
             if kip == "buyukelf":
                 assert len(programlar["buyukelf.elf"]) >= 300 * 1024
                 giris = c.heap()
@@ -317,6 +360,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)
