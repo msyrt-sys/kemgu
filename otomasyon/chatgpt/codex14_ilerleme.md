@@ -31,3 +31,7 @@ Süreç matrisi C 10/10, self-host temiz tekrarı 10/10. İlk self-host serisind
 ## Bölüm 5 — dosya gezgini
 
 `dosyalar` bağlama noktalarını, dizinleri, dosya boylarını ve üst dizini gösteriyor. Ön planı çocuğa atomik olarak veren 67 numaralı çağrı, düzenleyicinin ebeveyni beklemeye girmeden önce çalışabilmesi yarışını giderdi. Gezgin kapısında C 10/10; self-host ilk seride 4 başarıdan sonra QMP bağlantısı kesildi, taze seride 10/10. Salt okunur NVMe senaryosu C 10/10; self-host ilk seride 2 başarıdan sonraki açılış ilk ELF okuma planında durdu, taze seride 10/10. Kâhin kaydın reddini, çift Ctrl+Q ile çıkışı, USB'deki Türkçe kaydı ve iç disk özetini doğruladı. Tıklama satırını kaydırmak ve üst dizin yolunu eski bırakmak ayrı ekran uyuşmazlıklarına yol açtı. §7 süreç 20/20 ve diğer regresyon hedefleri geçti. İlk iki derleyicili gezgin denemesinden son salt okunur seriye yaklaşık 39 dakika.
+
+## Bölüm 6 — kabuk
+
+Geçmiş etkin kabukta 32 satır saklıyor. Tab ortak öneki tamamlıyor, birden çok adayda adları gösteriyor. `temizle`, `yardim`, `sonuc` ve belgelenen `/bin` araması eklendi. Sol/sağ okla ortadan düzenleme seri çıktı ve GOP ile karşılaştırıldı. QMP her geçmiş adımında görülen satırı bekledi. C 10/10 ve self-host 10/10 geçti. Geçmiş ofsetinin ve ortak önekin bozulması ayrı piksel uyuşmazlıkları üretti. §7 süreç 20/20, diğer regresyonlar ile saf sürücü diff/koşum/köprü yeşil. İlk iki derleyicili kabuk denemesinden son matrise yaklaşık 31 dakika.

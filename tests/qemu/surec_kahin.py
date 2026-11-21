@@ -13,6 +13,7 @@ from pathlib import Path
 from dalga12_fat import Fat
 from dalga12_kahin import Console, boot, fsck, sha, wait_for
 from surec_imaj import BUYUK, GUNLUK, imajlar
+from kabuk14_kahin import kabuk14_kos
 from duzenle_kahin import duzenle_kos, gezgin_kos, salt_gezgin
 from uefi_kabuk_kahin import keys
 from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
@@ -286,6 +287,8 @@ def kos(w, tekrar, senaryo):
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip == "kabuk14":
+                kabuk14_kos(c)
             if kip == "gezgin-salt":
                 salt_gezgin(c,nvme)
             if kip == "gezgin":
@@ -367,6 +370,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)

@@ -2,11 +2,11 @@
 kullan drivers::ps2::klavye_tr::{ TusOlayi, OZEL_ENTER, OZEL_GERI, OZEL_SIL, OZEL_SOL, OZEL_SAG, OZEL_YUKARI, OZEL_ASAGI };
 kullan drivers::ortak::utf8::{ utf8_coz, utf8_kodla };
 genel yapı SatirDuzenleyici {
-    kodlar: Dizi<tam32>; imlec: tam32; gecmis: Dizi<metin>; konum: tam32; taslak: metin;
+    kodlar: Dizi<tam32>; imlec: tam32; gecmis: Dizi<metin>; sinir: tam32; konum: tam32; taslak: metin;
 }
 genel işlev satir_yeni() -> SatirDuzenleyici {
     değişken k: Dizi<tam32> = []; değişken g: Dizi<metin> = [];
-    ver SatirDuzenleyici { kodlar: k, imlec: 0, gecmis: g, konum: 0, taslak: "" };
+    ver SatirDuzenleyici { kodlar: k, imlec: 0, gecmis: g, sinir: 16, konum: 0, taslak: "" };
 }
 genel işlev satir_metni(d: SatirDuzenleyici) -> metin { ver utf8_kodla(d.kodlar); }
 işlev duzenle(d: &değişken SatirDuzenleyici, yer: tam32, kod: tam32, sil: mantıksal) {
@@ -53,7 +53,7 @@ genel işlev satir_olay(d: &değişken SatirDuzenleyici, olay: TusOlayi) -> seç
                 eğer n > 0 { eğer metin_esit(dizi_al(d.gecmis, n - 1), s) { ekle = yanlış; } }
                 eğer ekle {
                     değişken yeni: Dizi<metin> = []; değişken i: tam32 = 0;
-                    eğer n == 16 { i = 1; }
+                    eğer n >= d.sinir { i = 1; }
                     iken i < n { dizi_ekle(yeni, dizi_al(d.gecmis, i)); i = i + 1; }
                     dizi_ekle(yeni, s); d.gecmis = yeni;
                 }

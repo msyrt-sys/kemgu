@@ -9,6 +9,8 @@ from surec_sabotaj import ROOT, snapshot
 CORE = "runtime/mimari/x86_64/kem_surec_hw.kem"
 SHELL = "test/ornekler/kem_os_x86_kabuk.kem"
 CASES = {
+    "gecmis": ("kabuk14", "drivers/girdi/satir.kem", "d.konum = d.konum - 1;", "eğer d.konum > 1 { d.konum = d.konum - 2; } değilse { d.konum=0; }", "kabuk girdi pikselleri"),
+    "ortak": ("kabuk14", SHELL, "ortak=i; }", "ortak=i; eğer i < dizi_boyut(ilk) { ortak=i+1; } }", "kabuk girdi pikselleri"),
     "tik-satir": ("gezgin", "test/kullanici/dosyalar.kem", "((sis_alan(p,4)/16) olarak tam32)-1", "((sis_alan(p,4)/16) olarak tam32)-2", "ekran farklı"),
     "ust-yol": ("gezgin", "test/kullanici/dosyalar.kem", "yol=ge_ust(g.yol);", "yol=g.yol;", "ekran farklı"),
     "utf8": ("duzenle-icerik", "drivers/duzenle/tampon.kem", "bas=du_geri(t,bas);", "eğer bas > 0 { bas=bas-1; }", "kaydedilen UTF-8 içerik farklı"),

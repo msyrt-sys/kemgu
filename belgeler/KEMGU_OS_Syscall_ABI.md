@@ -102,4 +102,8 @@ Fare kaydında altı u64 bulunur (işaretli dx, işaretli dy, x, y, düğmeler, 
 
 Ön plan süreci bir etkileşimli çocuk açarken 67 ile ekran ve girdi sahipliğini çocuk çalışmaya hazır olmadan devreder. 59 ile çocuğu topladığında sahipliği geri alır.
 
+### Kabuktan program bulma
+
+Bir yol ayıracı içeren ad çalışma dizinine göre çözülür. Yalın adlar için kabuk gerekirse `.elf` uzantısını ekler. Önce `/bin` içinde, ardından açılış bölümüyle aynı fiziksel aygıtın diğer bağlı bölümlerindeki `/bin` dizinlerinde arar. İlk eşleşme çalışır. `sonuc` en son toplanmış sürecin çıkış kodunu verir. Komut geçmişi 32 satırdır. Tab, imlece kadar yazılan yolun ortak önekini tamamlar ve birden çok eşleşme varsa adayları listeler.
+
 QEMU xHCI üzerinde USB HID tamamlamaları MSI-X vektör 65'i kullanır. ISR cihazın kesmesini ve LAPIC EOI'yi onaylar. Bekleyen klavye ve fare aktarımları TRB adresi, yuva ve uç ile eşlenir. Bekleyen kullanıcı süreci fiziksel CPU'yu bırakır. PS/2 için IRQ1 ve IRQ12 halkaları aynı olay biçimini besler.
