@@ -39,8 +39,8 @@ def cekirdek_sembolleri():
               Path("runtime/kem_gorev_cekirdek.kem")]
     adlar = set()
     for yol in yollar:
-        adlar.update(re.findall(r"\bişlev\s+(\w+)\s*\(", yol.read_text()))
-    asm = Path("boot/start_x86_64.S").read_text()
+        adlar.update(re.findall(r"\bişlev\s+(\w+)\s*\(", yol.read_text(encoding="utf-8")))
+    asm = Path("boot/start_x86_64.S").read_text(encoding="utf-8")
     adlar.update(re.findall(r"^\s*\.(?:global|weak)\s+(\w+)", asm, re.M))
     return adlar
 
