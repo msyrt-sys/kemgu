@@ -12,7 +12,7 @@ def islevler(metin, desen):
 
 
 def belge():
-    txt = Path("belgeler/KEMGU_OS_Syscall_ABI.md").read_text()
+    txt = Path("belgeler/KEMGU_OS_Syscall_ABI.md").read_text(encoding="utf-8")
     out = {}
     for no, ad, adet in re.findall(r"^\| (\d+) \| (\w+) \| (\d+) \|", txt, re.M):
         if ad.startswith("eski_"):
@@ -24,7 +24,7 @@ def belge():
 
 
 def sarma():
-    metin = Path("runtime/kullanici/x86_64/kem_sis.kem").read_text()
+    metin = Path("runtime/kullanici/x86_64/kem_sis.kem").read_text(encoding="utf-8")
     out = {}
     for (ad, args), govde in islevler(metin, r"^çıplak işlev sis_(\w+)\(([^)]*)\)"):
         m = re.search(r"\bsis_cagir\((\d+),[ \t]*([^\n;]*)\);", govde)
@@ -46,7 +46,7 @@ def dagitici():
         "runtime/mimari/x86_64/kem_surec_hw.kem": ("kxs_hizmet", {"a", "b", "c"}),
         "test/ornekler/kem_os_x86_vfs_ortak.kem": ("ksv_dagit", {"a", "c", "d"}),
     }
-    kaynaklar = {yol: Path(yol).read_text() for yol in dosyalar}
+    kaynaklar = {yol: Path(yol).read_text(encoding="utf-8") for yol in dosyalar}
     sabitler = dict(re.findall(
         r"^sabit KX_SIS_(\w+): tam64 = (\d+);", "\n".join(kaynaklar.values()), re.M
     ))

@@ -11,7 +11,7 @@ mkdir -p "$W"
 RT=$(python3 - <<'PY'
 from pathlib import Path
 import re
-print(re.search(r'^RT="([^"]+)"', Path("test/bm_x86_istisna_harness.sh").read_text(), re.M)[1])
+print(re.search(r'^RT="([^"]+)"', Path("test/bm_x86_istisna_harness.sh").read_text(encoding="utf-8"), re.M)[1])
 PY
 )
 cat $RT test/ornekler/kem_os_x86_surec_abi.kem > "$W/comb.kem"
