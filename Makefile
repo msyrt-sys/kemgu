@@ -4961,3 +4961,48 @@ $(BUILD)/kullanici/self/%.elf: test/kullanici/%.kem $(KULLANICI_X86_GIRDI) $(BUI
 .PHONY: calistir_bm_x86_surec
 calistir_bm_x86_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_kaynak
+test_tumu: calistir_bm_x86_kaynak
+calistir_bm_x86_kaynak: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="kaynak-cocuk kaynak-editor" bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_v1
+test_tumu: calistir_bm_x86_v1
+calistir_bm_x86_v1: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="v1 v1-kesinti" bash test/bm_x86_surec_harness.sh
+
+.PHONY: kem_os_usb.img
+kem_os_usb.img: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_USB_CIKTI=$(BUILD)/kem_os_usb.img SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_kabuk14
+test_tumu: calistir_bm_x86_kabuk14
+calistir_bm_x86_kabuk14: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO=kabuk14 bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_dosyalar
+test_tumu: calistir_bm_x86_dosyalar
+calistir_bm_x86_dosyalar: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="gezgin gezgin-salt" bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_duzenle
+test_tumu: calistir_bm_x86_duzenle
+calistir_bm_x86_duzenle: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tools/codex/duzenle_tampon_test.kem
+	@SUREC_SENARYO=duzenle bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_ekran_fare
+test_tumu: calistir_bm_x86_ekran_fare
+calistir_bm_x86_ekran_fare: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="ekran-ps2 ekran-usb" bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_buyuk_elf
+test_tumu: calistir_bm_x86_buyuk_elf
+calistir_bm_x86_buyuk_elf: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO=buyukelf bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_cok_surec
+test_tumu: calistir_bm_x86_cok_surec
+calistir_bm_x86_cok_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="hesap arka cocuk" bash test/bm_x86_surec_harness.sh

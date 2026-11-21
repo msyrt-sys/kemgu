@@ -1,0 +1,115 @@
+kullan drivers::duzenle::tampon::{ DuTampon, du_bos, du_ekle, du_sil, du_atla, du_ileri, du_geri, du_bas, du_son, du_bayt, du_dikey, du_goster, du_satir, du_sutun };
+
+işlev du_yukle(t: &değişken DuTampon,yol: metin,p: tam64) -> tam64 {
+    değişken fd: tam64 = sis_ac(yol,0);
+    eğer fd == -2 { ver 0; } eğer fd < 0 { ver fd; }
+    değişken sonuc: tam64 = 1;
+    iken sonuc > 0 {
+        sonuc=sis_oku(fd,p,4096);
+        eğer sonuc > (262144-t.boy olarak tam64) { sonuc=-27; }
+        değişken i: tam64 = 0;
+        iken i < sonuc {
+            değişken b: tam32 = sis_bayt_al(p+i);
+            eğer b == 0 { sis_kapat(fd); ver -22; }
+            dizi_ekle(t.veri,b olarak dtam8); t.boy=t.boy+1; i=i+1;
+        }
+    }
+    sis_kapat(fd); ver sonuc;
+}
+
+işlev du_kaydet(t: &değişken DuTampon,yol: metin,p: tam64) -> tam64 {
+    eğer t.boy > 65536 { ver -27; }
+    değişken fd: tam64 = sis_ac(yol,11);
+    eğer fd < 0 { ver fd; }
+    değişken i: tam32 = 0;
+    iken i < t.boy {
+        değişken n: tam32 = t.boy-i; eğer n > 4096 { n=4096; }
+        değişken j: tam32 = 0;
+        iken j < n { sis_bayt_koy(p+(j olarak tam64),du_bayt(t,i+j)); j=j+1; }
+        değişken r: tam64 = sis_yaz(fd,p,n olarak tam64);
+        eğer r != (n olarak tam64) { sis_kapat(fd); eğer r < 0 { ver r; } ver -5; }
+        i=i+n;
+    }
+    değişken k: tam64 = sis_kapat(fd); eğer k < 0 { ver k; }
+    ver sis_esitle();
+}
+
+işlev du_ciz(t: &değişken DuTampon,yol: metin,ileti: metin,p: tam64,sat: tam32,sut: tam32) {
+    du_goster(t,sat-1,sut);
+    sis_ekran_temizle(1056832);
+    değişken bas: tam32 = 0; değişken y: tam32 = 0;
+    iken y < t.ust { bas=du_son(t,bas)+1; y=y+1; }
+    y=0;
+    iken y < sat-1 ve bas <= t.boy {
+        değişken i: tam32 = du_atla(t,bas,t.sol);
+        değişken son: tam32 = du_atla(t,i,sut);
+        değişken j: tam32 = 0;
+        iken i+j < son { sis_bayt_koy(p+(j olarak tam64),du_bayt(t,i+j)); j=j+1; }
+        sis_bayt_koy(p+(j olarak tam64),0);
+        eğer j > 0 { sis_hucre(y olarak tam64,0,sis_dize(p),16777215,1056832); }
+        bas=du_son(t,bas)+1; y=y+1;
+    }
+    değişken sy: tam32 = du_satir(t,t.yer); değişken sx: tam32 = du_sutun(t,t.yer);
+    değişken durum: metin = metin_birlestir(yol,"  ");
+    durum=metin_birlestir(durum,tam_metin((sy+1) olarak tam64));
+    durum=metin_birlestir(durum,":"); durum=metin_birlestir(durum,tam_metin((sx+1) olarak tam64));
+    eğer t.kirli { durum=metin_birlestir(durum," *"); }
+    durum=metin_birlestir(durum,ileti);
+    // Uzun yol durum satırını taşırsa iletinin görünmesine öncelik ver.
+    eğer sis_hucre((sat-1) olarak tam64,0,durum,0,16777215) < 0 { sis_hucre((sat-1) olarak tam64,0,ileti,0,16777215); }
+    sis_imlec((sy-t.ust) olarak tam64,(sx-t.sol) olarak tam64,1);
+}
+
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    eğer argc != 2 { sis_metin("duzenle <dosya>"); sis_bayt_yaz(1,10); ver 2; }
+    değişken yol: metin = sis_argv(argv,1);
+    değişken p: tam64 = malloc(16384) olarak tam64;
+    eğer p == 0 veya sis_ekran_bilgi(p) < 0 { ver 3; }
+    değişken sut: tam32 = sis_alan(p,0) olarak tam32; değişken sat: tam32 = sis_alan(p,1) olarak tam32;
+    eğer sat < 2 veya sut < 1 veya sut > 2048 { ver 4; }
+    değişken t: DuTampon = du_bos();
+    değişken r: tam64 = du_yukle(&değişken t,yol,p);
+    eğer r < 0 { sis_metin("Dosya açılamadı "); sis_metin(tam_metin(r)); sis_bayt_yaz(1,10); ver 5; }
+    değişken probe: tam64 = sis_ac(yol,1);
+    eğer probe >= 0 { sis_kapat(probe); }
+    değişken ileti: metin = ""; eğer probe == -30 { ileti="  Salt okunur"; }
+    değişken onay: mantıksal = yanlış;
+    du_ciz(&değişken t,yol,ileti,p,sat,sut);
+    iken doğru {
+        eğer sis_olay_bekle(p,1,-1) < 0 { ver 6; }
+        değişken kod: tam64 = sis_alan(p,1); değişken un: tam64 = sis_alan(p,2);
+        eğer sis_alan(p,3) != 0 {
+            değişken ctrl: mantıksal = (sis_alan(p,4)&2) != 0;
+            değişken ciz: mantıksal = doğru;
+            eğer ctrl ve kod == 16 {
+                eğer değil t.kirli veya onay { ver 0; }
+                onay=doğru; ileti="  Kaydedilmedi. Çıkmak için Ctrl+Q";
+            } değilse {
+                eğer ctrl ve kod == 31 {
+                    r=du_kaydet(&değişken t,yol,p);
+                    eğer r == 0 { t.kirli=yanlış; ileti="  Kaydedildi"; }
+                    değilse eğer r == -27 { ileti="  Kayıt sınırı 64 KiB"; }
+                    değilse eğer r == -30 { ileti="  Salt okunur"; }
+                    değilse { ileti=metin_birlestir("  Kayıt hatası ",tam_metin(r)); }
+                }
+                değilse eğer kod == 331 { t.yer=du_geri(&değişken t,t.yer); }
+                değilse eğer kod == 333 { t.yer=du_ileri(&değişken t,t.yer); }
+                değilse eğer kod == 327 { t.yer=du_bas(&değişken t,t.yer); }
+                değilse eğer kod == 335 { t.yer=du_son(&değişken t,t.yer); }
+                değilse eğer kod == 328 { du_dikey(&değişken t,-1); }
+                değilse eğer kod == 336 { du_dikey(&değişken t,1); }
+                değilse eğer kod == 329 { du_dikey(&değişken t,1-sat); }
+                değilse eğer kod == 337 { du_dikey(&değişken t,sat-1); }
+                değilse eğer kod == 14 veya kod == 339 { du_sil(&değişken t,kod == 14); }
+                değilse eğer kod == 28 veya un >= 32 {
+                    değişken harf: metin = kod_metin(10); eğer kod != 28 { harf=kod_metin(un olarak tam32); }
+                    eğer değil du_ekle(&değişken t,harf) { ileti="  Tampon dolu"; }
+                } değilse { ciz=yanlış; }
+                eğer ciz { onay=yanlış; }
+            }
+            eğer ciz { du_ciz(&değişken t,yol,ileti,p,sat,sut); }
+        }
+    }
+    ver 0;
+}
+}

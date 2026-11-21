@@ -1,7 +1,7 @@
 // EBS sonrası çerçeve ayırıcı: cihaz/ekran adresleri firmware RAM haritasından gelir.
 kullan drivers::acilis::uefi_harita::{ uefi_harita, uefi_koru } olarak uh;
 kullan drivers::bellek::harita::{ BellekBolgesi };
-kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, ayir_ardisik };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, ayir_ardisik, serbest_ardisik };
 işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> sonuç<tam64,metin> {
  eşleş ayir_ardisik(d,sayfa) {
   hiç => { ver hata(metin_birlestir("UEFI RAM yetmedi: ",ad)); }
@@ -12,10 +12,31 @@ işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> so
   }
  }
 }
-// Sırayla kullanılan iki fiziksel alan. Alan başına 512 kullanıcı
-// sayfası ve dört özel sayfa tablosu.
-sabit UEFI_SUREC_CERCEVE: tam32 = 1032;
-küresel değişken uefi_surec_taban: tam64 = 0;
+// Ayırıcının üç dizisi açılış ömründedir. Tek elemanlı dizinin veri
+// adresini saklayarak aynı bit eşlemini süreç çıkışında da kullanırız.
+küresel değişken uefi_surec_ayirici: tam64 = 0;
+çıplak işlev uefi_ayirici_al() -> CerceveAyirici {
+ değişken ptr: *CerceveAyirici = uefi_surec_ayirici olarak *CerceveAyirici;
+ ver *ptr;
+}
+işlev uefi_surec_ayir(adet: tam32) -> tam64 {
+ güvensiz {
+  değişken d: CerceveAyirici = uefi_ayirici_al();
+  eşleş ayir_ardisik(&değişken d,adet) {
+   hiç => { ver 0; }
+   değer(t) => { ver t; }
+  }
+ }
+}
+işlev uefi_surec_iade(t: tam64,adet: tam32) {
+ güvensiz {
+  değişken d: CerceveAyirici = uefi_ayirici_al();
+  eşleş serbest_ardisik(&değişken d,t,adet) {
+   hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
+   tamam(v) => { }
+  }
+ }
+}
 işlev uefi_bellek_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
  ver uefi_bellek_kur_ic(b,yanlış);
 }
@@ -37,14 +58,10 @@ işlev uefi_bellek_kur_ic(b: UefiBilgi,surec: mantıksal) -> sonuç<mantıksal,m
   eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_guc_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eğer surec {
-   eşleş ayir_ardisik(&değişken d,UEFI_SUREC_CERCEVE) {
-    hiç => { ver hata("UEFI surec belleği yok"); }
-    değer(t) => {
-     eğer t > 1073741824-(UEFI_SUREC_CERCEVE olarak tam64)*4096 { ver hata("UEFI surec adresi"); }
-     uefi_surec_taban=t;
-     memset(t olarak *tam8,0,(UEFI_SUREC_CERCEVE olarak tam64)*4096);
-    }
-   }
+   değişken sakla: Dizi<CerceveAyirici> = [d];
+   değişken adres: *tam64 = (&sakla) olarak *tam64;
+   uefi_surec_ayirici=kxm_o64(*adres);
+
   }
   ver tamam(doğru);
  } }

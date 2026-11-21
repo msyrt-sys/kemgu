@@ -8,9 +8,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-PENCERE = 0x54000000
-HEAP = 0x54100000
-HEAP_SON = 0x541EF000
+PENCERE = 0x54200000
+HEAP = 0x54600000
+HEAP_SON = 0x54e00000
 SAYFA = 4096
 ORTAK = (
     "runtime/kem_heap.kem",
@@ -52,8 +52,9 @@ def denetle(elf):
     imza, tur, mimari, _, giris, ph, _, _, eb, pb, adet, *_ = struct.unpack_from(
         "<16sHHIQQQIHHHHHH", veri
     )
+    alt, heap = (0x54000000, 0x54100000) if giris == 0x54000000 else (PENCERE, HEAP)
     if (imza[:7], tur, mimari, giris, eb, pb) != (
-        b"\x7fELF\x02\x01\x01", 2, 62, PENCERE, 64, 56
+        b"\x7fELF\x02\x01\x01", 2, 62, alt, 64, 56
     ) or ph < eb or ph + pb * adet > len(veri):
         raise ValueError("ET_EXEC, EM_X86_64, giriş veya başlık boyutu geçersiz")
     bolgeler = []
@@ -65,7 +66,7 @@ def denetle(elf):
         if tip != 1 or not bellek_boyu:
             continue
         son = (va + bellek_boyu + SAYFA - 1) // SAYFA * SAYFA
-        if (bayrak not in (4, 5, 6) or not PENCERE <= va < son <= HEAP
+        if (bayrak not in (4, 5, 6) or not alt <= va < son <= heap
                 or hiza != SAYFA or va % SAYFA or ofset % SAYFA
                 or dosya_boyu > bellek_boyu or ofset + dosya_boyu > len(veri)
                 or any(va < b and a < son for a, b in bolgeler)):
@@ -87,13 +88,21 @@ def denetle(elf):
     print(f"✓ {elf.name}: ET_EXEC x86_64, {len(veri)} bayt, {len(bolgeler)} PT_LOAD, çözümsüz veya çekirdek sembolü yok")
 
 
-def derle(derleyici, kaynak, hedef):
+def derle(derleyici, kaynak, hedef, eski=False):
     hedef.parent.mkdir(parents=True, exist_ok=True)
     hedef.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="elf-", dir=hedef.parent) as tmp:
         w = Path(tmp)
         birlesik, ham, ir, nesne, elf = (w / f"u.{uzanti}" for uzanti in ("kem", "ham.ll", "ll", "o", "elf"))
         birlesik.write_bytes(b"".join(Path(p).read_bytes() for p in (*ORTAK, kaynak)))
+        linker = Path("linker/user-x86_64.ld")
+        if eski:
+            # Dalga 13'ün sabit giriş, heap ve argc adresleriyle bir ET_EXEC üret.
+            kod = birlesik.read_text().replace("KUL_ARGC_ADRESI: tam64 = 1426059264", "KUL_ARGC_ADRESI: tam64 = 1411379200")
+            birlesik.write_text(kod)
+            ld = linker.read_text().replace("0x54200000", "0x54000000").replace("0x54600000", "0x54100000").replace("0x54e00000", "0x541ef000")
+            linker = w / "eski.ld"
+            linker.write_text(ld)
         subprocess.run(["build/kemgu", "--check", "--mimari", "x86_64-none", birlesik], check=True)
         with ham.open("wb") as cikti:
             subprocess.run([derleyici, "--llvm", "--mimari", "x86_64-none", birlesik], stdout=cikti, check=True)
@@ -105,7 +114,7 @@ def derle(derleyici, kaynak, hedef):
             "-fdata-sections", "-x", "ir", ir, "-c", "-o", nesne,
         ], check=True)
         subprocess.run([
-            "ld.lld", "-m", "elf_x86_64", "--gc-sections", "-T", "linker/user-x86_64.ld",
+            "ld.lld", "-m", "elf_x86_64", "--gc-sections", "-T", linker,
             "-z", "max-page-size=4096", "-o", elf, nesne,
         ], check=True)
         denetle(elf)
@@ -115,12 +124,13 @@ def derle(derleyici, kaynak, hedef):
 if __name__ == "__main__":
     ayr = argparse.ArgumentParser(description=__doc__)
     ayr.add_argument("elf", type=Path)
+    ayr.add_argument("--eski", action="store_true")
     ayr.add_argument("--kaynak", type=Path)
     ayr.add_argument("--derleyici", default="build/kemgu")
     args = ayr.parse_args()
     try:
         if args.kaynak:
-            derle(args.derleyici, args.kaynak, args.elf)
+            derle(args.derleyici, args.kaynak, args.elf, args.eski)
         else:
             denetle(args.elf)
     except (OSError, ValueError, subprocess.CalledProcessError) as e:

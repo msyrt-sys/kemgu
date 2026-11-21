@@ -40,7 +40,7 @@ movq (%rsp), %rsp"#
     ver sonuc;
 }
 // argc ve argv sabit üst yığın sayfasında, RSP bunun hemen altında başlar.
-sabit KUL_ARGC_ADRESI: tam64 = 1411379200;
+sabit KUL_ARGC_ADRESI: tam64 = 1426059264;
 çıplak işlev _start() {
     değişken alt: tam64 = 0;
     değişken ust: tam64 = 0;

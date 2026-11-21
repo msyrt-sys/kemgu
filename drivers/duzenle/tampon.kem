@@ -1,0 +1,72 @@
+// Konumlar UTF-8 bayt sınırlarıdır. Görünümün satır ve sütunları karakter sayar.
+genel yapı DuTampon {
+    veri: Dizi<dtam8>; boy: tam32; yer: tam32; ust: tam32; sol: tam32; kirli: mantıksal;
+}
+genel işlev du_bos() -> DuTampon {
+    değişken v: Dizi<dtam8> = [];
+    ver DuTampon {veri:v,boy:0,yer:0,ust:0,sol:0,kirli:yanlış};
+}
+genel işlev du_bayt(t: &değişken DuTampon,i: tam32) -> tam32 { ver (dizi_al(t.veri,i) olarak tam32)&255; }
+genel işlev du_ileri(t: &değişken DuTampon,i: tam32) -> tam32 {
+    eğer i >= t.boy { ver t.boy; }
+    değişken j: tam32 = i+1;
+    iken j < t.boy ve (du_bayt(t,j)&192) == 128 { j=j+1; } ver j;
+}
+genel işlev du_geri(t: &değişken DuTampon,i: tam32) -> tam32 {
+    eğer i <= 0 { ver 0; }
+    değişken j: tam32 = i-1;
+    iken j > 0 ve (du_bayt(t,j)&192) == 128 { j=j-1; } ver j;
+}
+genel işlev du_bas(t: &değişken DuTampon,i: tam32) -> tam32 {
+    değişken j: tam32 = i;
+    iken j > 0 ve du_bayt(t,j-1) != 10 { j=j-1; } ver j;
+}
+genel işlev du_son(t: &değişken DuTampon,i: tam32) -> tam32 {
+    değişken j: tam32 = i;
+    iken j < t.boy ve du_bayt(t,j) != 10 { j=j+1; } ver j;
+}
+genel işlev du_sutun(t: &değişken DuTampon,i: tam32) -> tam32 {
+    değişken j: tam32 = du_bas(t,i); değişken n: tam32 = 0;
+    iken j < i { j=du_ileri(t,j); n=n+1; } ver n;
+}
+genel işlev du_satir(t: &değişken DuTampon,i: tam32) -> tam32 {
+    değişken j: tam32 = 0; değişken n: tam32 = 0;
+    iken j < i { eğer du_bayt(t,j) == 10 { n=n+1; } j=j+1; } ver n;
+}
+genel işlev du_atla(t: &değişken DuTampon,i: tam32,n: tam32) -> tam32 {
+    değişken j: tam32 = i; değişken k: tam32 = 0;
+    iken k < n ve j < t.boy ve du_bayt(t,j) != 10 { j=du_ileri(t,j); k=k+1; } ver j;
+}
+genel işlev du_dikey(t: &değişken DuTampon,yon: tam32) {
+    değişken sut: tam32 = du_sutun(t,t.yer);
+    değişken bas: tam32 = du_bas(t,t.yer); değişken adim: tam32 = 0;
+    iken adim > yon ve bas > 0 { bas=du_bas(t,bas-1); adim=adim-1; }
+    iken adim < yon ve bas < t.boy {
+        değişken son: tam32 = du_son(t,bas); eğer son == t.boy { t.yer=du_atla(t,bas,sut); ver; }
+        bas=son+1; adim=adim+1;
+    }
+    t.yer=du_atla(t,bas,sut);
+}
+genel işlev du_goster(t: &değişken DuTampon,sat: tam32,sut: tam32) {
+    değişken y: tam32 = du_satir(t,t.yer); değişken x: tam32 = du_sutun(t,t.yer);
+    eğer y < t.ust { t.ust=y; } eğer y >= t.ust+sat { t.ust=y-sat+1; }
+    eğer x < t.sol { t.sol=x; } eğer x >= t.sol+sut { t.sol=x-sut+1; }
+}
+genel işlev du_ekle(t: &değişken DuTampon,s: metin) -> mantıksal {
+    değişken n: tam32 = metin_uzunluk(s);
+    eğer n > 262144-t.boy { ver yanlış; }
+    iken dizi_boyut(t.veri) < t.boy+n { dizi_ekle(t.veri,0 olarak dtam8); }
+    değişken i: tam32 = t.boy;
+    iken i > t.yer { i=i-1; dizi_yaz(t.veri,i+n,dizi_al(t.veri,i)); }
+    i=0;
+    iken i < n { dizi_yaz(t.veri,t.yer+i,metin_bayt(s,i) olarak dtam8); i=i+1; }
+    t.boy=t.boy+n; t.yer=t.yer+n; t.kirli=doğru; ver doğru;
+}
+genel işlev du_sil(t: &değişken DuTampon,geri: mantıksal) {
+    değişken bas: tam32 = t.yer; değişken son: tam32 = t.yer;
+    eğer geri { bas=du_geri(t,bas); } değilse { son=du_ileri(t,son); }
+    eğer bas == son { ver; }
+    değişken i: tam32 = son;
+    iken i < t.boy { dizi_yaz(t.veri,bas+i-son,dizi_al(t.veri,i)); i=i+1; }
+    t.yer=bas; t.boy=t.boy-(son-bas); t.kirli=doğru;
+}
