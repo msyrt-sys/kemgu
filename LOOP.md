@@ -3003,4 +3003,8 @@
   rdx=arg2 — YALNIZ 2 argüman; adres alanları SABİT fiziksel adreslerde (57-72 MB, 6 yuva, hepsi testlerde kullanılıyor)
   ve UEFI haritasında o bölgenin boş olduğu ölçülmedi; x86 kullanıcı linker betiği ve ayrı derlenmiş x86 kullanıcı ELF'i
   YOK; ring3 yalnız senkron test biçiminde. Claude E4k'de paralel çalışıyor → Codex dalga ortasında main'i birleştirmez.
+  ⚠ ChatGPT güvenlik filtresi promptu İKİ KEZ reddetti (negatif test programları + korumaları kapatan sabotajlar,
+  ikinci kez "hata yalıtımı" diliyle de). Kapsam bölündü: Codex işlevsel kısım (ABI, kullanıcı çalışma zamanı, ELF
+  yükleme, süreç, dosya/olay çağrıları, normal programlar + sıfıra bölme); hata yalıtımı testleri (H9j/E3f) ve
+  korumaları zorlayan sabotajlar CLAUDE'a (entegrasyon sırasında).
 
