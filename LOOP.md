@@ -3054,4 +3054,10 @@
   C14-001 (Claude): self-host --check ithal edilen `genel çıplak işlev`in çıplaklığını taşımıyordu (çapraz imza taşıması
   D-429 düğüm indekslerini taşıyamaz) → sahte E013. cap_cip ad kanalı (geçişli). Fikstür test/moduller/ana_c14_ciplak_ithal
   (ithal çıplak temiz + ithal normal E013 negatif), checker_diff 319/319, sabotaj S220 kırmızı.
+- 2026-11-22 D-764: Codex dalga 15 promptu (otomasyon/chatgpt/CODEX_GOREV_15.md) — Mehmet "bir sonraki iş çok daha uzun olsun":
+  on bir bölüm, hepsi zorunlu ve sıralı (beklenen 12+ saat). (1) yol haritası denetimi (her açık madde kanıtıyla), (2) H10g
+  bütün bekleme döngülerinin envanteri + zaman aşımı, (3) H10h `donanim` komutu + donanim.txt teşhis paketi, (4) H4i çekirdek
+  günlük halkası + `log`, (5) H12a QEMU açılış matrisi (≥12 yapılandırma), (6) H12b bulanıklaştırma (ACPI/ELF/BMP/GPT, ≥1000
+  örnek), (7) fare tekerleği + hızlanma + tuş tekrarı, (8) `goster` `bul` `hesapla` `saat`, (9) boru hatları ve
+  yönlendirme, (10) H12d açılış süresi + H12c sabotaj envanteri, (11) H12e belgeler (program yazma kılavuzu örnekleri kapıda).
 
