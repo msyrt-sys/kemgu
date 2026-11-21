@@ -15,7 +15,7 @@ jnz 1b"#
     ver toplam;
 }
 işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
-    değişken tekrar: tam32 = 1;
+    değişken tekrar: tam32 = 15;
     eğer argc > 1 { tekrar=200; }
     iken tekrar > 0 {
         eğer hesap_toplam() != 7200000060000000 { ver 1; }

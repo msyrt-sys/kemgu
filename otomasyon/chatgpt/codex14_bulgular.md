@@ -52,3 +52,7 @@ Tek büyüyen dizi UTF-8 baytlarını saklar. Ekleme ve silme son eki kaydırır
 ### Gezgin ve ön plan
 
 `onplan_baslat` mevcut yükleyiciyle aynı yolu ve argv doğrulamasını kullanır. Çağıranın ön plan sahibi olması gerekir. Çocuk daha ilk talimatından önce ekranı devralır. Ebeveyn `bekle` ile sonucu alır, dizini tekrar okur ve seçim satırını korur. Eski `baslat` arka planda çalıştırma davranışını korur. Gezginin 512 satırlık sınırına `../` dahildir; 511 gerçek girdiyi aşan dizinde -34 döner. Silmeden yazma yetkisi yoklanarak salt okunur dosyanın durumu açılışta görünür.
+
+### V1 oturumu ve kayıt kalıcılığı
+
+İç diskler salt okunur kaldı. USB'nin FAT32 veri bölümünde son içerik `Ağaç ve İş\nİş\nAğaç\nSon` oldu. Her düzenleyici kaydından sonra bağımsız FAT okuyucusu ve fsck çalıştı. Normal kapanışa ek olarak ikinci kayıttan hemen sonra QEMU kapatıldı. Bu ölçüm sonradan yapılacak kabuk eşitlemesinin ilk yazma hatasını gizlemesini önlüyor. Fiziksel USB'ye yazma veya gerçek PC açılışı yapılmadı.

@@ -87,12 +87,17 @@ def dosyali_fat(yol, dizinler):
     yol.write_bytes(buf)
 
 
-def imajlar(w, programlar):
+def usb_hazirla(w, programlar):
     kaynak = w / "surec.fat"
     dosyali_fat(kaynak, {"bin": programlar, "notlar": {"günlük.txt": GUNLUK, "buyuk.txt": BUYUK}})
     boot = w / "surec-boot.img"
     hazirla_uefi(boot, w / "esp/EFI/BOOT/BOOTX64.EFI", w / "k.elf")
-    usb = gpt(w / "surec-usb.img", [(boot, 2048, ESP), (kaynak, 0, DATA)])
+    return gpt(w / "kem_os_usb.img", [(boot, 2048, ESP), (kaynak, 0, DATA)])
+
+
+def imajlar(w, programlar):
+    usb = usb_hazirla(w, programlar)
+    kaynak = w / "surec.fat"
     nvme, = gpt(w / "surec-nvme.img", [(kaynak, 0, DATA)])
     sata = mbr(w / "surec-sata.img", kaynak, 0, 0x98F0D0C2)
     return usb, nvme, sata

@@ -4962,6 +4962,15 @@ $(BUILD)/kullanici/self/%.elf: test/kullanici/%.kem $(KULLANICI_X86_GIRDI) $(BUI
 calistir_bm_x86_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_surec_harness.sh
 
+.PHONY: calistir_bm_x86_v1
+test_tumu: calistir_bm_x86_v1
+calistir_bm_x86_v1: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_SENARYO="v1 v1-kesinti" bash test/bm_x86_surec_harness.sh
+
+.PHONY: kem_os_usb.img
+kem_os_usb.img: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_USB_CIKTI=$(BUILD)/kem_os_usb.img SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh
+
 .PHONY: calistir_bm_x86_kabuk14
 test_tumu: calistir_bm_x86_kabuk14
 calistir_bm_x86_kabuk14: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o

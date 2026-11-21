@@ -13,6 +13,8 @@ from pathlib import Path
 from dalga12_fat import Fat
 from dalga12_kahin import Console, boot, fsck, sha, wait_for
 from surec_imaj import BUYUK, GUNLUK, imajlar
+import v1_kahin
+from usb14_imaj import dogrula as usb_dogrula
 from kabuk14_kahin import kabuk14_kos
 from duzenle_kahin import duzenle_kos, gezgin_kos, salt_gezgin
 from uefi_kabuk_kahin import keys
@@ -276,17 +278,20 @@ def kos(w, tekrar, senaryo):
     for n in range(1, tekrar + 1):
         kip = VARSAYILAN[(n - 1) % len(VARSAYILAN)] if senaryo == "matris" else senaryo
         usb, nvme, sata = imajlar(w, programlar)
+        if kip.startswith("v1"): usb_dogrula(w,usb,programlar)
         once = {p.disk: sha(p.disk) for p in (nvme, sata)}
-        if kip not in ("yazma","duzenle-icerik","duzenle","gezgin"):
+        if kip not in ("yazma","duzenle-icerik","duzenle","gezgin","v1","v1-kesinti"):
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
-        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin") else "ps2") as (q, p, seri):
+        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin","v1","v1-kesinti") else "ps2") as (q, p, seri):
             c = SurecConsole(w, q, p, seri)
             bos = c.bos_cerceve()
             assert bos >= 8 * CERCEVELER
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip.startswith("v1"):
+                v1_kahin.kos(c,usb[1],kip=="v1-kesinti")
             if kip == "kabuk14":
                 kabuk14_kos(c)
             if kip == "gezgin-salt":
@@ -342,16 +347,19 @@ def kos(w, tekrar, senaryo):
                 bolme_kos(c)
             if kip == "tekrar":
                 tekrar_kos(c, exe, bos)
-            assert c.bos_cerceve() == bos, "süreç çerçevesi geri dönmedi"
-            c.screen()
+            if kip != "v1-kesinti":
+                assert c.bos_cerceve() == bos, "süreç çerçevesi geri dönmedi"
+                c.screen()
             if kip == "yazma":
                 # Kabuğun kapanış sync'i eksik süreç temizliğini gizleyemez.
                 q.call("stop")
                 fsck(w, usb[1], "surec-cikis")
                 q.call("cont")
-            c.shutdown()
+            if kip != "v1-kesinti": c.shutdown()
         assert all(sha(p) == h for p, h in once.items())
         assert sha256(usb[0].read()).digest() == esp
+        if kip.startswith("v1"):
+            fsck(w,usb[1],"v1-kapanis"); assert Fat(usb[1].read()).get("/NOTLAR/günlük.txt")==v1_kahin.SON
         if kip == "yazma":
             fsck(w, usb[1], "surec-yazma")
             fat = Fat(usb[1].read())
@@ -370,6 +378,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("v1-kesinti", "v1", "kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)

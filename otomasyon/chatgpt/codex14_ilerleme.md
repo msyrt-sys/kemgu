@@ -35,3 +35,9 @@ Süreç matrisi C 10/10, self-host temiz tekrarı 10/10. İlk self-host serisind
 ## Bölüm 6 — kabuk
 
 Geçmiş etkin kabukta 32 satır saklıyor. Tab ortak öneki tamamlıyor, birden çok adayda adları gösteriyor. `temizle`, `yardim`, `sonuc` ve belgelenen `/bin` araması eklendi. Sol/sağ okla ortadan düzenleme seri çıktı ve GOP ile karşılaştırıldı. QMP her geçmiş adımında görülen satırı bekledi. C 10/10 ve self-host 10/10 geçti. Geçmiş ofsetinin ve ortak önekin bozulması ayrı piksel uyuşmazlıkları üretti. §7 süreç 20/20, diğer regresyonlar ile saf sürücü diff/koşum/köprü yeşil. İlk iki derleyicili kabuk denemesinden son matrise yaklaşık 31 dakika.
+
+## Bölüm 7 — v1 oturumu ve USB imajı
+
+Aynı OVMF açılışında USB, NVMe ve AHCI bağlıyken düzenleyici, gezgin, ikinci kayıt, sayım, iç diskten okuma, arka planda hesap, süreç listesi, sonlandırma ve kapanış çalıştı. İlk tam C serisi hesap programına uzun çalışma argümanı veriyordu. Varsayılan hesap süresi uzatılınca tam olarak `baslat hesap &` ile de C ve self-host onar kez geçti. Son kaydın hemen ardından güç kesilen senaryo ayrıca C 10/10 ve self-host 10/10 geçti. İkinci kaydın eşitlemesini kaldırmak FAT kirli-bit kâhinini kırmızıya çevirdi. Kapanışta beklenen UTF-8 baytları ile ESP ve iki iç diskin SHA256 özetleri denetlendi.
+
+İmaj 135.283.200 bayt. Üretici ana ve yedek GPT'nin başlık ve tablo CRC'lerini, iki FAT bölümünü ve kurulan her ELF'in baytlarını kontrol ediyor. H11b belgesinde aygıt seçme, yazdıktan sonra okuma, fiziksel deneme adımları ve sonuç formu var. §7 süreç 20/20, diğer regresyon hedefleri yeşil. İlk doğrulanmış imajdan son yalın komut serisine yaklaşık 37 dakika.
