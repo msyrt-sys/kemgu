@@ -301,14 +301,14 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H9. Kullanıcı alanı: kabuk, programlar, kanıt uygulamaları
 
-- [ ] **H9a [M] Dosya syscall'ları:** `ac/oku/yaz/kapat/konumla/bilgi/dizin_oku/
+- [x] **H9a (✓ D-761 (ABI v2: rax num, rdi/rdx/rsi; ortak VFS katmanı — kabuk ve sistem çağrıları aynı kod)) [M] Dosya syscall'ları:** `ac/oku/yaz/kapat/konumla/bilgi/dizin_oku/
       dizin_olustur/sil/yeniden_adlandir`. Kullanıcı işaretçisi doğrulaması
       (`[28] SYSCALL PTR DOGRULAMA OK` deseni) HER birinde.
-- [ ] **H9b [M] Olay syscall'ları:** klavye olayı bekle, fare olayı bekle,
+- [ ] **H9b (KISMEN D-761 (klavye + zaman; fare_bekle YOK)) [M] Olay syscall'ları:** klavye olayı bekle, fare olayı bekle,
       zaman aşımlı bekleme (seçici: `bekle(olaylar, ms)`).
-- [ ] **H9c [M] ELF'i dosya sisteminden yükle** (`[18] ELF YUKLE OK` arm64'te var →
+- [x] **H9c (✓ D-761 (ELF FAT32'den, sayfa izinleri segment bayraklarından, bss sıfır, argv yığında)) [M] ELF'i dosya sisteminden yükle** (`[18] ELF YUKLE OK` arm64'te var →
       x86 + VFS'e bağla). `/bin/*` programları.
-- [ ] **H9d [M] Süreç modeli (LOOP E3b/E3c):** çok süreç, `baslat(yol, argv)`,
+- [ ] **H9d (KISMEN D-761 (C1 senkron tek süreç; zaman paylaşımlı çok süreç YOK)) [M] Süreç modeli (LOOP E3b/E3c):** çok süreç, `baslat(yol, argv)`,
       `bekle`, çıkış kodu, hata olunca süreci öldür (çekirdek yaşar).
 - [ ] **H9e [L] Kabuk (LOOP E3e):** `ls cd pwd cat yaz sil mkdir rmdir mv cp temizle
       saat bellek lspci log yeniden_baslat`, tırnak, yönlendirme (`>`), geçmiş,

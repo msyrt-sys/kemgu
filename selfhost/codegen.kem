@@ -5807,7 +5807,11 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
             eğer si >= 0 {
                 değişken sbek: metin = p.beklenen_ll;
                 değişken stip: metin = dizi_al(p.g_sabit_tip, si);
+                // [D-761] C13-001: değer BİLDİRİLEN tipte üretilir; yalnız etiketlemek
+                // (`son_tip = stip`) kayıt üreten ifadede (`-38` → `sub i32`) geçersiz IR verirdi.
+                eğer int_ll_mi(stip) { p.beklenen_ll = stip; }
                 değişken sr: metin = ifade_uret(p, dizi_al(p.g_sabit_deger, si));
+                eğer int_ll_mi(stip) ve int_ll_mi(p.son_tip) { sr = int_uydur(p, sr, stip, 0); }
                 // Sabitin BİLDİRİLEN tipi, değer ifadesinin doğal tipinden önce
                 // gelir (`sabit K: tam64 = 24` → i64, literalin i32'si DEĞİL).
                 eğer metin_esit(stip, "") == yanlış { p.son_tip = stip; }
@@ -7115,6 +7119,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer metin_esit(op, "&") veya metin_esit(op, "&degisken") {
             eğer metin_esit(dizi_al(p.a_ad, opnode), "TANIMLAYICI") {
                 değişken on: metin = dizi_al(p.a_deg, opnode);
+                // [D-761] C13-002: yerel değilse ve küresel değişkense adres GERÇEK @ad'dır
+                // (eskiden cg_var_bul "" dönüyordu → `store ptr , ptr` = GEÇERSİZ IR).
+                eğer (metin_uzunluk(cg_var_bul(p, on)) == 0) ve (metin_uzunluk(kuresel_tip_bul(p, on)) > 0) {
+                    değişken gr: metin = reg_str(yeni_reg(p));
+                    yaz_str("  "); yaz_str(gr); yaz_str(" = getelementptr i8, ptr @"); yaz_str(on);
+                    yaz_str(", i64 0"); yb(10);
+                    p.son_tip = "ptr"; p.son_ref = "";
+                    ver gr;
+                }
                 değişken ot: metin = cg_var_tip_bul(p, on);
                 p.son_tip = "ptr";
                 eğer bayt(ot, 0) == 37 { p.son_ref = ir_tip_soy(ot); }
@@ -7652,7 +7665,9 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
         eğer ysi >= 0 {
             değişken ysbek: metin = p.beklenen_ll;
             değişken ystip: metin = dizi_al(p.g_sabit_tip, ysi);
+            eğer int_ll_mi(ystip) { p.beklenen_ll = ystip; }   // [D-761] C13-001
             değişken ysr: metin = ifade_uret(p, dizi_al(p.g_sabit_deger, ysi));
+            eğer int_ll_mi(ystip) ve int_ll_mi(p.son_tip) { ysr = int_uydur(p, ysr, ystip, 0); }
             eğer metin_esit(ystip, "") == yanlış { p.son_tip = ystip; }
             p.beklenen_ll = ysbek;
             ver ysr;

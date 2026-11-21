@@ -3502,6 +3502,16 @@ static void test_c11_001_deref_yaz_genislik(void) {
     test_sonuc("D-757 C11-001 *tam64 = 0 tam genislik (+ *tam8 pozitif) -> exit 42", rc == 42);
 }
 
+/* [D-761] C13-002: `&kuresel` kureselin GERCEK adresi. C eskiden degerin kopyasinin
+ * adresini veriyordu (isaretci uzerinden yazma kurese gitmiyordu: exit 93). MUTLAK 42. */
+static void test_c13_002_kuresel_adres(void) {
+    int rc = derle_ve_calistir(
+        "k\xc3\xbcresel de\xc4\x9fi\xc5\x9fken olcek: tam64 = 349; "
+        "i\xc5\x9flev main() -> tam32 { g\xc3\xbcvensiz { de\xc4\x9fi\xc5\x9fken p: *tam64 = (&olcek) olarak *tam64; "
+        "*p = 42; ver olcek olarak tam32; } }");
+    test_sonuc("D-761 C13-002 &kuresel uzerinden yazma kurese gider -> exit 42", rc == 42);
+}
+
 /* C6-001: iki derleyicinin aynı yanlış cevabı vermesi pariteyi geçiremez. */
 static void test_c6_001_alan_odunc(void) {
     test_sonuc("C6-001 jenerik -> exit 42",
@@ -3985,6 +3995,7 @@ int main(void) {
     test_uzun_kesirli_literal();
     printf("\n--- D-757: deref yazim genisligi (C11-001) ---\n");
     test_c11_001_deref_yaz_genislik();
+    test_c13_002_kuresel_adres();
 
     printf("\n=========================================\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n",

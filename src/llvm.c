@@ -4368,6 +4368,21 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         IfadeSonuc s = { vi->reg_no, "ptr", 0, 0};
                         return s;
                     }
+                    /* [D-761] C13-002: küresel değişkenin adresi GERÇEK @ad'dır.
+                     * Eskiden aşağıdaki geçici-yuva yoluna düşüp DEĞERİN KOPYASININ
+                     * adresini veriyordu: `*(&küresel olarak *T) = v` küresele değil
+                     * kopyaya yazıyordu (SESSİZ YANLIŞ CEVAP; ölçüldü 349 → exit 93). */
+                    SabitKayit *ku = kuresel_bul(g, op_d->veri.tanimlayici.metin,
+                                                 op_d->veri.tanimlayici.uzunluk);
+                    if (ku) {
+                        int r = yeni_reg(g);
+                        fprintf(g->out, "  %%%d = getelementptr i8, ptr @", r);
+                        yerel_ad_yaz(g->out, op_d->veri.tanimlayici.metin,
+                                     op_d->veri.tanimlayici.uzunluk);
+                        fputs(", i64 0\n", g->out);
+                        IfadeSonuc s = { r, "ptr", 0, 0};
+                        return s;
+                    }
                 }
                 /* C6-001: değiştirilebilir alan ödüncü kopyaya değil gerçek
                  * yuvaya bağlanır. Salt okunur & için eski geçici yol korunur. */
