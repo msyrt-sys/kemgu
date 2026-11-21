@@ -75,6 +75,9 @@ sabit KX_SIS_ESITLE: tam64 = 54;
 sabit KX_SIS_TUS_BEKLE: tam64 = 55;
 sabit KX_SIS_SAAT: tam64 = 56;
 sabit KX_SIS_UYU: tam64 = 57;
+sabit KX_SIS_BASLAT: tam64 = 58;
+sabit KX_SIS_BEKLE: tam64 = 59;
+sabit KX_SIS_SUREC_LISTESI: tam64 = 60;
 sabit KX_HATA_IO: tam64 = 5;
 sabit KX_HATA_NOENT: tam64 = 2;
 sabit KX_HATA_ISDIR: tam64 = 21;
@@ -98,11 +101,11 @@ yapı KsvFd { acik: mantıksal; yol: KabukYol; kip: tam64; konum: tam64; }
 yapı KsvBaglam {
     disk: KabukDisk; fds: Dizi<KsvFd>; kabuk_cwd: metin; degisti: mantıksal;
     x: XhciDurum; xb: tam64; klavye_indeksi: tam32; h: HidKlavye; tr: KlavyeDurumu;
-    olaylar: Dizi<TusHamOlay>; olay_konum: tam32; ilk_tus: mantıksal;
+    olaylar: Dizi<TusHamOlay>; olay_konum: tam32; ilk_tus: mantıksal; usb_bekliyor: mantıksal;
 }
 küresel değişken ksv_baglam_adresi: tam64 = 0;
 
-işlev ksv_fd_bos() -> KsvFd {
+çıplak işlev ksv_fd_bos() -> KsvFd {
     ver KsvFd {acik:yanlış,yol:KabukYol {indeks:0,yol:""},kip:0,konum:0};
 }
 işlev ksv_fd_tablo() -> Dizi<KsvFd> {
@@ -387,11 +390,13 @@ işlev ksv_esitle(b: &değişken KsvBaglam) -> tam64 {
         tamam(v) => { b.degisti=yanlış; ver 0; }
     }
 }
-işlev ksv_temizle(b: &değişken KsvBaglam) -> tam64 {
+çıplak işlev ksv_fdleri_birak(b: &değişken KsvBaglam) {
     değişken i: tam32 = 3;
-    iken i < KSV_FD_AZAMI { dizi_yaz(b.fds,i,ksv_fd_bos()); i=i+1; }
-    eğer b.degisti { ver ksv_esitle(b); }
-    ver 0;
+    iken i < KSV_FD_AZAMI {
+        değişken fd: KsvFd = dizi_al(b.fds,i);
+        eğer fd.acik { dizi_yaz(b.fds,i,ksv_fd_bos()); }
+        i=i+1;
+    }
 }
 işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
     b.olay_konum=0;
@@ -400,21 +405,22 @@ işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
         değişken ham: tam32 = -1;
         eğer ps2_kesme_etkin() {
             ham=ps2_kesme_klavye_oku();
-            iken ham < 0 { kxs_irq_bekle(); ham=ps2_kesme_klavye_oku(); }
+            eğer ham < 0 { ver 1; }
         } değilse { ham=ps2_bekle(); }
         eşleş klavye_ham_bayt(&değişken b.tr,ham) {
             hiç => { } değer(v) => { dizi_ekle(b.olaylar,v); }
         }
         ver 0;
     }
-    eşleş kd_giris(&değişken b.x,b.klavye_indeksi) { hata(e) => { ver 0-KX_HATA_IO; } tamam(v) => { } }
-    kz_irq_ac();
-    değişken r: sonuç<mantıksal,metin> = bm_xsur_bekle(b.xb,&değişken b.x,yanlış);
-    kg_irq_kapat();
-    eşleş r {
-        hata(e) => { ver 0-KX_HATA_IO; }
-        tamam(v) => { eğer değil v { ver 0-KX_HATA_IO; } }
+    eğer değil b.usb_bekliyor {
+        eşleş kd_giris(&değişken b.x,b.klavye_indeksi) { hata(e) => { ver 0-KX_HATA_IO; } tamam(v) => { } }
+        b.usb_bekliyor=doğru;
     }
+    eşleş bm_xsur_bekle(b.xb,&değişken b.x,doğru) {
+        hata(e) => { ver 0-KX_HATA_IO; }
+        tamam(v) => { eğer değil v { ver 1; } }
+    }
+    b.usb_bekliyor=yanlış;
     kd_giris_son(&değişken b.x);
     eşleş hid_klavye_ham_rapor(&değişken b.h,&değişken b.tr,b.x.sonuc) {
         hata(e) => { ver 0-KX_HATA_IO; }
@@ -422,10 +428,12 @@ işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
     }
 }
 işlev ksv_tus_bekle(b: &değişken KsvBaglam,p: tam64) -> tam64 {
+    güvensiz { eğer kxs_on_pid != kxs_pid { ver -13; } }
     eğer değil kxs_aralik(p,32,doğru) { ver 0-KX_HATA_FAULT; }
     iken doğru {
         eğer b.olay_konum >= dizi_boyut(b.olaylar) {
             değişken r: tam64 = ksv_tus_doldur(b);
+            eğer r == 1 { ver kxs_beklet(KXS_TUS_BEKLIYOR,0,55); }
             eğer r < 0 { ver r; }
         }
         iken b.olay_konum < dizi_boyut(b.olaylar) {
@@ -455,12 +463,93 @@ işlev ksv_saat(p: tam64) -> tam64 {
 }
 işlev ksv_uyu(ms: tam64) -> tam64 {
     eğer ms < 0 veya ms > 60000 { ver 0-KX_HATA_INVAL; }
-    değişken bas: tam64 = kem_tik_oku();
-    değişken sure: tam64 = (ms+9)/10;
-    iken kem_tik_oku()-bas < sure { kxs_irq_bekle(); }
-    ver 0;
+    eğer ms == 0 { ver 0; }
+    ver kxs_beklet(KXS_UYUYOR,kem_tik_oku()+(ms+9)/10,-1);
+}
+işlev ksv_baslat(b: &değişken KsvBaglam,yol: tam64,adresler: tam64) -> tam64 {
+    değişken uzun: tam64 = kxs_dize_boyu(yol,4096);
+    eğer uzun <= 0 { eğer uzun == 0 { ver -2; } ver uzun; }
+    değişken argv: Dizi<metin> = [];
+    dizi_ekle(argv,metin_kes(ksv_metin(yol),0,uzun olarak tam32));
+    değişken n: tam64 = 0;
+    eğer adresler != 0 {
+        değişken devam: mantıksal = doğru;
+        iken devam {
+            eğer değil kxs_aralik(adresler,8*(n+1),yanlış) { ver -14; }
+            değişken v: tam64 = kxm_o64(adresler+n*8);
+            eğer v == 0 { devam=yanlış; } değilse {
+            eğer n >= 31 { ver -7; }
+            uzun=kxs_dize_boyu(v,4096);
+            eğer uzun < 0 { ver uzun; }
+            dizi_ekle(argv,metin_kes(ksv_metin(v),0,uzun olarak tam32));
+            n=n+1;
+            }
+        }
+    }
+    güvensiz {
+        değişken ptr: *KsKabukSureci = ks_yonetim olarak *KsKabukSureci;
+        değişken p: KsKabukSureci = *ptr;
+        eşleş ks_baslat(&değişken p,b,argv,kxs_pid) {
+            hata(e) => {
+                eğer bm_esit(e,"surec icin RAM yetmedi") { ver -12; }
+                eğer bm_esit(e,"surec tablosu dolu") { ver -11; }
+                eğer bm_esit(e,"argv surec yigini siniri") { ver -7; }
+                ver ksv_hata(e);
+            }
+            tamam(y) => { *ptr=p; ver ks_pid(y); }
+        }
+    }
+}
+işlev ksv_bekle(pid: tam64,out: tam64) -> tam64 {
+    eğer değil kxs_aralik(out,16,doğru) { ver -14; }
+    değişken y: tam64 = kxs_pid_yuva(pid);
+    eğer y < 0 { ver -10; }
+    değişken r: tam64 = kxs_baglam(y);
+    güvensiz {
+        eğer kxm_o64(r+KXS_EBEVEYN_OFS) != kxs_pid { ver -10; }
+        eğer değil ks_bitti(ks_durum(y)) {
+            eğer kxs_on_pid == kxs_pid { kxs_on_pid=pid; }
+            ver kxs_beklet(KXS_COCUK_BEKLIYOR,y,59);
+        }
+        eğer kxs_on_pid == pid { kxs_on_pid=kxs_pid; }
+        değişken s: KxsSonuc = KxsSonuc {pid:0,ebeveyn:0,bitti:yanlış,kod:0,vektor:0,hata_kodu:0,rip:0,cr2:0};
+        kxs_sonuc_al(y,&değişken s);
+        eğer s.bitti { kxm_y64(out,0); kxm_y64(out+8,s.kod); }
+        değilse { kxm_y64(out,1); kxm_y64(out+8,s.vektor); }
+        ver 0;
+    }
+}
+işlev ksv_surec_listesi(out: tam64,n: tam64) -> tam64 {
+    eğer n < 0 veya n > 8 { ver -22; }
+    eğer değil kxs_aralik(out,n*96,doğru) { ver -14; }
+    değişken adet: tam64 = 0;
+    değişken y: tam64 = 0;
+    iken y < KXS_YUVA_ADEDI { eğer ks_durum(y) != KXS_BOS { adet=adet+1; } y=y+1; }
+    eğer adet > n { ver -34; }
+    güvensiz {
+        değişken ptr: *KsKabukSureci = ks_yonetim olarak *KsKabukSureci;
+        değişken p: KsKabukSureci = *ptr;
+        y=0;
+        iken y < KXS_YUVA_ADEDI {
+            eğer ks_durum(y) != KXS_BOS {
+                değişken ad: metin = dizi_al(p.adlar,y olarak tam32);
+                eğer metin_uzunluk(ad) >= 72 { ver -36; }
+                memset(out olarak *tam8,0,96);
+                kxm_y64(out,ks_pid(y)); kxm_y64(out+8,ks_durum(y));
+                kxm_y64(out+16,kxm_o64(kxs_baglam(y)+KXS_DILIM_OFS));
+                değişken i: tam32 = 0;
+                iken i < metin_uzunluk(ad) { kxr_y8(out+24+(i olarak tam64),metin_bayt(ad,i) olarak dtam8); i=i+1; }
+                out=out+96;
+            }
+            y=y+1;
+        }
+    }
+    ver adet;
 }
 işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64) -> tam64 {
+    eğer num == KX_SIS_BASLAT { ver ksv_baslat(b,a,c); }
+    eğer num == KX_SIS_BEKLE { ver ksv_bekle(a,c); }
+    eğer num == KX_SIS_SUREC_LISTESI { ver ksv_surec_listesi(a,c); }
     eğer num == KX_SIS_AC { ver ksv_ac(b,a,c); }
     eğer num == KX_SIS_OKU { ver ksv_oku(b,a,c,d); }
     eğer num == KX_SIS_YAZ { ver ksv_yaz(b,a,c,d); }

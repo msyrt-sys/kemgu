@@ -51,3 +51,6 @@
 çıplak işlev sis_tus_bekle(buf: tam64) -> tam64 { ver sis_cagir(55,buf,0,0); }
 çıplak işlev sis_saat(buf: tam64) -> tam64 { ver sis_cagir(56,buf,0,0); }
 çıplak işlev sis_uyu(ms: tam64) -> tam64 { ver sis_cagir(57,ms,0,0); }
+çıplak işlev sis_baslat(yol: metin,argv: tam64) -> tam64 { ver sis_cagir(58,sis_metin_adres(yol),argv,0); }
+çıplak işlev sis_bekle(pid: tam64,sonuc: tam64) -> tam64 { ver sis_cagir(59,pid,sonuc,0); }
+çıplak işlev sis_surec_listesi(tampon: tam64,n: tam64) -> tam64 { ver sis_cagir(60,tampon,n,0); }

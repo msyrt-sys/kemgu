@@ -35,11 +35,19 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 55 | tus_bekle | 1 | 32 baytlık TuşOlayı tamponu | 0 | x86_64 |
 | 56 | saat | 1 | 48 baytlık Saat tamponu | 0 | x86_64 |
 | 57 | uyu | 1 | Milisaniye (0–60.000) | 0 | x86_64 |
+| 58 | baslat | 2 | Program yolu, NUL işaretçiyle biten en çok 31 ek argüman veya 0 | Çocuk PID | x86_64 |
+| 59 | bekle | 2 | Çocuk PID, 16 baytlık sonuç | 0 | x86_64 |
+| 60 | surec_listesi | 2 | Tampon, kayıt kapasitesi (0–8) | Kayıt sayısı | x86_64 |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
 | Değer | Ad | Anlamı |
 | --- | --- | --- |
+| -7 | E2BIG | Argüman sayısı veya toplam uzunluğu sınırı aştı |
+| -10 | ECHILD | Beklenebilecek çocuk bulunamadı |
+| -11 | EAGAIN | Süreç tablosu dolu |
+| -12 | ENOMEM | Süreç için fiziksel çerçeve bulunamadı |
+| -13 | EACCES | Girdi ön plana ait |
 | -2 | NOENT | Yol bulunamadı |
 | -5 | IO | Aygıt, FAT32 veya RTC hatası |
 | -9 | BADF | Tanımlayıcı kapalı, aralık dışı veya işlem için geçersiz |
@@ -64,7 +72,12 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 - `[0x54100000, 0x541ef000)` kullanıcı heap'i, `[0x541ef000, 0x541f0000)` eşlenmemiş koruma sayfası, `[0x541f0000, 0x54200000)` RW+NX yığındır.
 - `RSP=0x541feff8` ile giriş yapılır. `0x541ff000` konumunda little-endian 64 bit argc, ardından argc kadar 64 bit kullanıcı adresi ve bir sıfır işaretçi bulunur. Buradan sonra aynı sayfada NUL sonlu UTF-8 argümanlar yer alır. Argv[0] komutta verilen program yoludur. 1–32 argüman desteklenir. Kabuk ASCII boşlukla ayırır.
 - İşaretçi ve uzunluk önce taşmasız pencere aralığına, ardından aralıktaki her kullanıcı sayfasına göre denetlenir. Çekirdek çıktı tamponlarında RW biti gerekir. Yol taraması en çok 4096 bayt ve bileşen başına 255 bayttır. Böylece eşlenmemiş yığın koruma sayfası da geçersiz bir çağrı tamponudur.
-- C1'de kabuk PID 0'dır ve süreçler bitene kadar sırayla çalışır. Süreç tablosunun kapasitesi bir canlı süreçtir; dolu tablo açık hata verir. UEFI haritasının çerçeve ayırıcısından açılışta 1.032 sayfalık süreç havuzu ayrılır. İki 516 sayfalık yuva sırayla kullanılır. Çıkışta sayfa tabloları kaldırılır ve yuva havuza iade edilir; kullanıcı baytları sonraki tahsiste, ELF kopyalanmadan önce sıfırlanır. Havuz çekirdek ömrü boyunca ayrılmış kalır; genel UEFI ayırıcısına süreç başına geri verilmez. Süreç çıkışta açık fd'leri bırakır ve yazma eşitlemesi tamamlanır. Kullanıcı istisnası süreç sonucuna taşınır.
+- 516 ardışık UEFI çerçevesi her süreç başlarken ayrılır. Çıkışta kullanıcı sayfa tabloları kaldırılır, çerçeveler aynı UEFI ayırıcısına döner. Bir sonraki süreç alanını kullanmadan önce sıfırlar.
+- Arka plan stdout/stderr yazıları süreç başına tek bir 4096 baytlık satır tamponunu paylaşır. Satır sonu geldiğinde çıktı birlikte yazılır. Sınırı aşacak çağrı RANGE döndürür. Çıkışta son eksik satır da yazılır.
+- Kabuk PID 0 kullanır. En çok sekiz kayıt hazır, çalışıyor, bekliyor veya çıkış sonucu bekleniyor durumunda tutulur. Her LAPIC kesmesinde kullanıcı yazmaçları saklanır. Hazır süreçler döngüsel seçilir. Süreçlerin fd tabloları ve çalışma dizinleri ayrıdır.
+- `baslat` yolu argv[0] yapar. `bekle` kendi çocuğunun iki u64 alanını döndürür. Tür 0 için ikinci alan çıkış kodu, tür 1 için sonlandırma nedenidir. Ön plan süreci beklerken çocuk girdiyi devralır. Kayıt bekleme tamamlanınca yeniden kullanılabilir.
+- `surec_listesi` her süreç için 96 bayt verir. İlk üç u64 alanı PID, durum ve kullanıcı kipinde tamamlanan 10 ms dilim sayısıdır. Kalan 72 baytta NUL sonlu UTF-8 program adı bulunur. Durumlar hazır (1), çalışıyor (2), bitti (3), sonlandırıldı (4), uyuyor (5), çocuk bekliyor (6), girdi bekliyor (7). Kapasite yetmezse RANGE döner.
+
 
 ## Dosya ve girdi biçimleri
 

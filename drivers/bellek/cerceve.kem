@@ -1,6 +1,6 @@
 // Kullanılabilir hizalı sayfaların sıkıştırılmış bit eşlemi; fiziksel boşluklar bit tüketmez.
 kullan drivers::bellek::harita::{ BellekBolgesi, harita_duzenle };
-kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8 };
 genel yapı CerceveAyirici { bolgeler: Dizi<BellekBolgesi>; bitmap: Dizi<dtam8>; sabit_bitmap: Dizi<dtam8>; toplam: tam32; }
 genel işlev cerceve_yeni(harita: Dizi<BellekBolgesi>) -> sonuç<CerceveAyirici, metin> {
     değişken xs: Dizi<BellekBolgesi> = [];
@@ -27,14 +27,14 @@ genel işlev cerceve_yeni(harita: Dizi<BellekBolgesi>) -> sonuç<CerceveAyirici,
     değişken sabitler: Dizi<dtam8> = bayt_sifir(((toplam + 7) / 8) olarak tam32);
     ver tamam(CerceveAyirici { bolgeler: bolgeler, bitmap: bitmap, sabit_bitmap: sabitler, toplam: toplam olarak tam32 });
 }
-işlev bit_oku(b: Dizi<dtam8>, n: tam32) -> mantıksal { ver (oku_u8(b, n / 8) & (1 << (n % 8))) != 0; }
-işlev bit_yaz(b: Dizi<dtam8>, n: tam32, v: mantıksal) {
+çıplak işlev bit_oku(b: Dizi<dtam8>, n: tam32) -> mantıksal { ver (oku_u8(b, n / 8) & (1 << (n % 8))) != 0; }
+çıplak işlev bit_yaz(b: Dizi<dtam8>, n: tam32, v: mantıksal) {
     değişken eski: tam32 = oku_u8(b, n / 8);
     değişken maske: tam32 = 1 << (n % 8);
     eğer v { eski = eski | maske; } değilse { eski = eski & (255 ^ maske); }
-    yaz_u8(b, n / 8, eski olarak tam64);
+    dizi_yaz(b, n / 8, eski olarak dtam8);
 }
-genel işlev ayir_ardisik(d: &değişken CerceveAyirici, n: tam32) -> seçimlik<tam64> {
+genel çıplak işlev ayir_ardisik(d: &değişken CerceveAyirici, n: tam32) -> seçimlik<tam64> {
     eğer n <= 0 veya n > d.toplam { ver hiç; }
     değişken temel: tam32 = 0;
     değişken i: tam32 = 0;
@@ -58,21 +58,33 @@ genel işlev ayir_ardisik(d: &değişken CerceveAyirici, n: tam32) -> seçimlik<
     ver hiç;
 }
 genel işlev ayir(d: &değişken CerceveAyirici) -> seçimlik<tam64> { ver ayir_ardisik(d, 1); }
-genel işlev serbest(d: &değişken CerceveAyirici, adres: tam64) -> sonuç<mantıksal, metin> {
+// Aralığın tamamını denetlemeden hiçbir bit değiştirilmez.
+genel çıplak işlev serbest_ardisik(d: &değişken CerceveAyirici, adres: tam64, adet: tam32) -> sonuç<mantıksal, metin> {
     eğer adres < 0 veya adres % 4096 != 0 { ver hata("hizasiz"); }
+    eğer adet <= 0 { ver hata("adet"); }
     değişken temel: tam32 = 0;
     değişken i: tam32 = 0;
     iken i < dizi_boyut(d.bolgeler) {
         değişken b: BellekBolgesi = dizi_al(d.bolgeler, i);
         eğer adres >= b.taban ve adres < b.taban + b.uzunluk {
+            eğer (adet olarak tam64) > (b.uzunluk - (adres - b.taban)) / 4096 { ver hata("haritada yok"); }
             değişken n: tam32 = temel + ((adres - b.taban) / 4096) olarak tam32;
-            eğer bit_oku(d.sabit_bitmap, n) { ver hata("ayrilmis bolge"); }
-            eğer değil bit_oku(d.bitmap, n) { ver hata("cift serbest"); }
-            bit_yaz(d.bitmap, n, yanlış); ver tamam(doğru);
+            değişken k: tam32 = 0;
+            iken k < adet {
+                eğer bit_oku(d.sabit_bitmap,n+k) { ver hata("ayrilmis bolge"); }
+                eğer değil bit_oku(d.bitmap,n+k) { ver hata("cift serbest"); }
+                k=k+1;
+            }
+            k=0;
+            iken k < adet { bit_yaz(d.bitmap,n+k,yanlış); k=k+1; }
+            ver tamam(doğru);
         }
-        temel = temel + (b.uzunluk / 4096) olarak tam32; i = i + 1;
+        temel=temel+(b.uzunluk/4096) olarak tam32; i=i+1;
     }
     ver hata("haritada yok");
+}
+genel işlev serbest(d: &değişken CerceveAyirici, adres: tam64) -> sonuç<mantıksal, metin> {
+    ver serbest_ardisik(d,adres,1);
 }
 genel işlev ayrilmis_isaretle(d: &değişken CerceveAyirici, taban: tam64, uzunluk: tam64) -> sonuç<mantıksal, metin> {
     eğer taban < 0 veya uzunluk < 0 { ver hata("adres"); }

@@ -1,0 +1,51 @@
+// Aynı ELF'in çocukları aynı sanal hücrede kendi PID'lerini tutar.
+// Ana süreç bekleme sonucunu ve yüz yeniden tahsisi kullanıcı ABI'sinden ölçer.
+küresel değişken surec_nobet: tam64 = 0;
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    güvensiz {
+        değişken benim: tam64 = sis_pid();
+        değişken bas: tam64 = sis_tik();
+        eğer argc == 2 {
+            surec_nobet=benim;
+            değişken sure: tam64 = 40;
+            eğer benim <= 9 { sure=1200; }
+            eğer sis_uyu(sure) != 0 { ver 40; }
+            eğer surec_nobet != benim veya sis_tik()-bas < sure/10 { ver 41; }
+            ver 17;
+        }
+        değişken yol: metin = sis_argv(argv,0);
+        değişken args: tam64 = malloc(16) olarak tam64;
+        değişken sonuc: tam64 = malloc(16) olarak tam64;
+        değişken tablo: tam64 = malloc(768) olarak tam64;
+        değişken cocuklar: tam64 = malloc(56) olarak tam64;
+        eğer args == 0 veya sonuc == 0 veya tablo == 0 veya cocuklar == 0 { ver 42; }
+        değişken p: *tam64 = args olarak *tam64;
+        *p=sis_metin_adres("cocuk"); p=(args+8) olarak *tam64; *p=0 olarak tam64;
+        değişken tur: tam64 = 0;
+        iken tur < 100 {
+            değişken n: tam64 = 1;
+            eğer tur == 0 { n=7; }
+            değişken i: tam64 = 0;
+            iken i < n {
+                değişken kim: tam64 = sis_baslat(yol,args);
+                eğer kim <= benim { ver 43; }
+                p=(cocuklar+i*8) olarak *tam64; *p=kim;
+                i=i+1;
+            }
+            eğer tur == 0 {
+                eğer sis_surec_listesi(tablo,8) != 8 veya sis_surec_listesi(tablo,7) != -34 { ver 44; }
+                eğer sis_baslat(yol,args) != -11 { ver 45; }
+            }
+            i=0;
+            iken i < n {
+                p=(cocuklar+i*8) olarak *tam64;
+                eğer sis_bekle(*p,sonuc) != 0 { ver 46; }
+                p=sonuc olarak *tam64; eğer *p != 0 { ver 47; }
+                p=(sonuc+8) olarak *tam64; eğer *p != 17 { ver 48; }
+                i=i+1;
+            }
+            tur=tur+n;
+        }
+        ver 0;
+    }
+}

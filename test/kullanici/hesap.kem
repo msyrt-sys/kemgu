@@ -1,0 +1,25 @@
+// Kullanıcı kipinde yüz yirmi milyon adım; yazmaçtaki ara sonuç kesmeler boyunca korunur.
+çıplak işlev hesap_toplam() -> tam64 {
+    değişken kalan: tam64 = 120000000;
+    değişken toplam: tam64 = 0;
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon: r#"1: addq %rcx, %rax
+decq %rcx
+jnz 1b"#
+            çıktı("={rax}",&toplam) çıktı("={rcx}",&kalan)
+            girdi("0",toplam) girdi("1",kalan) bozulan("~{cc}")
+        }
+    }
+    ver toplam;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    değişken tekrar: tam32 = 1;
+    eğer argc > 1 { tekrar=200; }
+    iken tekrar > 0 {
+        eğer hesap_toplam() != 7200000060000000 { ver 1; }
+        tekrar=tekrar-1;
+    }
+    ver 0;
+}

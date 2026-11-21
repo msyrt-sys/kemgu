@@ -1,0 +1,15 @@
+2026-11-21T17:09:04+03:00
+
+## Taban
+
+Dal D-762 üzerinden açıldı (9aca00f). Değişiklik öncesi süreç, ABI, UEFI PC ve x86 çekirdek hedefleri çalıştırıldı. Süreç kapısı C ve self-host ile toplam 20 OVMF açılışından geçti.
+
+## Bölüm 1 — zaman paylaşımlı süreçler
+
+Kullanıcı kesme çerçevesi 160 bayt. Her süreç kendi CR3'ü ile çalışıyor. Sekiz kayıt aynı anda canlı kalabiliyor. Klavye, çocuk ve LAPIC zaman aşımı beklemelerinde sistem çağrısı işlemciyi bırakıyor. Hazır süreç yokken çekirdek kesmeye kadar uyuyor. Çocuklar çalışma dizinini devralıyor ve kendilerine ait fd tablosunu kullanıyor.
+
+İlk QEMU ölçümünde 100 çocuk başlatılıp toplandı. Gerçek UEFI ayırıcısında başlangıçta ve sonda 49.761 boş çerçeve vardı. C ve self-host ile arka planda hesap sürerken kabuk girdiyi işledi, ön planda merhaba çalıştı. QMP ile iki giriş yolunun sekiz saniyelik boş beklemesi denendi. İlk hesap testinde doğru toplam 7.200.000.060.000.000 ve 19 kullanıcı zaman dilimi ölçüldü.
+
+Kusur enjeksiyonları ilk koşumda beklenen sonucu verdi. Kaydedilen RAX bozulunca hesap çıkış 1 verdi. Çerçeve iadesi kaldırılınca fiziksel bit eşlemi farklı kaldı. Uyandırma kapatılınca klavye testinde saat aşaması zaman aşımına uğradı.
+
+Çok süreç kapısı C 30/30, self-host 30/30 açılışta geçti (hesap, arka plan ve 100 çocuk için ayrı 10'ar açılış). Adres alanını değiştirmeyen yalıtılmış denemede işlemci kullanıcı girişini reddetti ve çocuk kâhini kırmızı oldu. Dalga 13 matrisinde C 10/10 geçti. Self-host ilk seri 7 başarılı açılıştan sonra USB klavye başlatırken sona erdi, temiz yeniden derlemede 10/10 geçti. 50 tekrarda 49.721 boş çerçeve korundu, süreç heap farkı 0 ve kabuk heap'i 4.919.792 → 16.069.072 bayt oldu. ABI, UEFI PC/kabuk, x86 kabuk/blok/disk/istisna/APIC/PS2 IRQ, x86 çekirdek, sürücü diff/koşum ve köprü kapıları geçti. Başlangıçtan bölüm kapılarına yaklaşık 60 dakika.

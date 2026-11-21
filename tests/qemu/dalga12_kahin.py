@@ -22,14 +22,15 @@ RTC = datetime(2026,7,14,9,42)
 
 
 class Qmp:
-    def __init__(self, f):
+    def __init__(self, f, reader):
         self.f = f
+        self.reader = reader
         assert 'QMP' in self.response(greeting=True)
         self.call('qmp_capabilities')
 
     def response(self, greeting=False):
         while True:
-            line = self.f.readline()
+            line = self.reader.readline()
             assert line, 'QMP kapandı'
             reply = json.loads(line)
             assert 'error' not in reply, reply
@@ -85,8 +86,8 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
             with socket.socket(socket.AF_UNIX) as sock:
                 sock.settimeout(10)
                 sock.connect(str(path))
-                with sock.makefile('rwb',buffering=0) as f:
-                    yield Qmp(f),proc,ser
+                with sock.makefile('wb', buffering=0) as f, sock.makefile('rb') as reader:
+                    yield Qmp(f, reader),proc,ser
         finally:
             if proc.poll() is None:
                 proc.kill()
