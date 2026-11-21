@@ -67,3 +67,9 @@ yapı SisHucreMetni { adres: tam64; on: tam64; arka: tam64; }
 çıplak işlev sis_fare_bekle(p: tam64) -> tam64 { ver sis_cagir(65,p,0,0); }
 çıplak işlev sis_olay_bekle(p: tam64,maske: tam64,ms: tam64) -> tam64 { ver sis_cagir(66,p,maske,ms); }
 çıplak işlev sis_alan(p: tam64,i: tam64) -> tam64 { değişken v: *tam64 = (p+i*8) olarak *tam64; ver *v; }
+// Kullanıcı adres alanındaki sonlandırılmış UTF-8 tamponunun metin görünümü.
+çıplak işlev sis_dize(p: tam64) -> metin {
+    değişken m: *metin = (&p) olarak *metin; ver *m;
+}
+çıplak işlev sis_bayt_al(p: tam64) -> tam32 { değişken v: *dtam8 = p olarak *dtam8; ver ((*v) olarak tam32)&255; }
+çıplak işlev sis_bayt_koy(p: tam64,v: tam32) { değişken b: *dtam8 = p olarak *dtam8; *b=v olarak dtam8; }

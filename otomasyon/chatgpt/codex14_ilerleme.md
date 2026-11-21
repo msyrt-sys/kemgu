@@ -23,3 +23,7 @@ Süreç matrisi C 10/10, self-host temiz tekrarı 10/10. İlk self-host serisind
 ## Bölüm 3 — ekran ve fare
 
 61–66 numaralı çağrılarla ön plan süreci hücre çizebiliyor, imleci yönetebiliyor, klavye, fare veya zaman aşımını bekleyebiliyor. PS/2 ve USB için iki derleyici × iki giriş yolu × on açılışın tamamı geçti. USB koşumu gerçek MSI-X sayacının arttığını da denetledi. Satır ve sütunun ters çevrilmesi, kenetlemenin kaldırılması ve kabuk ekranının geri çizilmemesi ayrı ayrı kırmızı verdi. Dalga 13 süreç matrisi 20/20 geçti. §7 regresyonunda blok hedefinin eksik ithali düzeltildi. Ayrı blok ve PS/2 IRQ tekrarları yeşil. Ekran kapılarının ilk tam serisi 18:08, MSI-X eklenmiş son seri 18:45.
+
+## Bölüm 4 — metin düzenleyici
+
+`duzenle` yeni veya var olan bir dosyayı açar. Türkçe karakter silme, bölme, birleştirme, yatay ve dikey kaydırma saf tampon testinde C ve self-host ile geçti. OVMF düzenleyici kapısı C 10/10, self-host 10/10. Kâhin dosyanın UTF-8 baytlarını, FAT durumunu, ekranı ve sekiz saniye boşta heap'i denetledi. İki ayrı içerik kusuru kaydedilen baytları bozdu. Eşitleme kaldırılınca FAT kirli kaldı. §7 süreç 20/20, kalan dokuz regresyon hedefi ve üç saf sürücü kapısı geçti. İlk düzenleyici ölçümlerinden son regresyon serisine yaklaşık 55 dakika.

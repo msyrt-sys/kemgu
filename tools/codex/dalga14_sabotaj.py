@@ -9,6 +9,9 @@ from surec_sabotaj import ROOT, snapshot
 CORE = "runtime/mimari/x86_64/kem_surec_hw.kem"
 SHELL = "test/ornekler/kem_os_x86_kabuk.kem"
 CASES = {
+    "utf8": ("duzenle-icerik", "drivers/duzenle/tampon.kem", "bas=du_geri(t,bas);", "eğer bas > 0 { bas=bas-1; }", "kaydedilen UTF-8 içerik farklı"),
+    "birlestir": ("duzenle-icerik", "drivers/duzenle/tampon.kem", "eğer bas == son { ver; }", "eğer bas == son { ver; } eğer du_bayt(t,bas) == 10 ve son < t.boy { son=du_ileri(t,son); }", "kaydedilen UTF-8 içerik farklı"),
+    "kaydet": ("duzenle", "test/kullanici/duzenle.kem", "ver sis_esitle();", "ver 0;", "Dirty bit is set."),
     "hucre": ("ekran-ps2", "test/ornekler/kem_os_x86_vfs_ortak.kem", "((c olarak tam32)+i)*8,(a olarak tam32)*16", "((a olarak tam32)+i)*8,(c olarak tam32)*16", "uygulama pikselleri"),
     "kenar": ("ekran-usb", "test/ornekler/kem_os_x86_vfs_ortak.kem", "eğer ksv_fare_x < 0 { ksv_fare_x=0; }", "", "ekranden.elf pid=2 cikis=5"),
     "kabuk-ciz": ("ekran-ps2", SHELL, "                ksv_kabugu_ciz();", "", "kabuk ekranı farklı"),

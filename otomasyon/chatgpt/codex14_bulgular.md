@@ -44,3 +44,7 @@ Büyük ELF bağlanmadan önceki 50 tekrar self-host denemesinde süreç kapsam�
 ### Ekran ve giriş
 
 GOP metin hücreleri 8×16 piksel. Ön plan değişiminde ekran kabuk ızgarasından yeniden çizilir. Olay maskesinde 1 klavye, 2 fare. Klavye ve fare ayrı bekleyen xHCI TRB'lerine sahiptir. Tüketici tamamlamaları slot, uç ve TRB adresiyle ayırır ve depolama sürücüsüyle gerçek halka başını paylaşır. Q35'te MSI-X tablosu 64 bit BAR üzerinden yerleştirildi. Vektör 65 bildirimi cihazı ve LAPIC'i onaylar; HID ayrıştırması kesme dışında yapılır. QEMU deneyi, iki giriş yolunda da sekiz saniye bekleme, piksel eşitliği ve kabuğa dönüşü içerir. Fiziksel denetleyicide henüz ölçüm yok.
+
+### Düzenleyici tamponu
+
+Tek büyüyen dizi UTF-8 baytlarını saklar. Ekleme ve silme son eki kaydırır; imleç bir kod noktasının başında kalır. Satır ve sütun karakter sayısı üzerinden hesaplanır. Bellekte 256 KiB, FAT32 kaydında 64 KiB sınır uygulanır. Büyük bir kayıtta dosyayı açıp kısaltmadan önce boy denetlenir. Kayıt başarısı dosyanın yazılması, kapatılması ve dosya sisteminin eşitlenmesiyle bildirilir.

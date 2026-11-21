@@ -54,6 +54,8 @@ genel işlev hid_klavye_rapor(h: &değişken HidKlavye,d: &değişken KlavyeDuru
     ver tamam(xs);
 }
 işlev hid_ham_ozel(k: tam32) -> tam32 {
+    eğer k == 74 { ver 327; } eğer k == 77 { ver 335; }
+    eğer k == 75 { ver 329; } eğer k == 78 { ver 337; }
     eğer k == 79 { ver 333; } eğer k == 80 { ver 331; }
     eğer k == 81 { ver 336; } eğer k == 82 { ver 328; }
     eğer k == 76 { ver 339; }
