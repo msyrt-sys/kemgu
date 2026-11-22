@@ -1,0 +1,119 @@
+// Seçilen satır aynı dizin kaydını klavyeden ve fareyle açar.
+yapı GeGirdi { ad: metin; etiket: metin; dizin: mantıksal; }
+yapı GeDurum { yol: metin; girdiler: Dizi<GeGirdi>; sec: tam32; ust: tam32; ileti: metin; }
+işlev ge_kes(s: metin,n: tam32) -> metin {
+    güvensiz {
+        değişken p: tam64 = malloc((n olarak tam64)+1) olarak tam64;
+        eğer p == 0 { sis_cik(12); }
+        değişken i: tam32 = 0;
+        iken i < n { sis_bayt_koy(p+(i olarak tam64),metin_bayt(s,i) olarak tam32); i=i+1; }
+        sis_bayt_koy(p+(n olarak tam64),0); ver sis_dize(p);
+    }
+}
+işlev ge_ust(s: metin) -> metin {
+    değişken i: tam32 = metin_uzunluk(s)-1;
+    iken i > 0 ve metin_bayt(s,i) != 47 { i=i-1; }
+    eğer i < 1 { ver "/"; } ver ge_kes(s,i);
+}
+işlev ge_yol(y: metin,ad: metin) -> metin {
+    eğer metin_uzunluk(y) == 1 ve metin_bayt(y,0) == 47 { ver metin_birlestir(y,ad); }
+    ver metin_birlestir(metin_birlestir(y,"/"),ad);
+}
+işlev ge_liste(g: &değişken GeDurum,y: metin,p: tam64) -> tam64 {
+    değişken fd: tam64 = sis_ac(y,16); eğer fd < 0 { ver fd; }
+    değişken xs: Dizi<GeGirdi> = [];
+    dizi_ekle(xs,GeGirdi {ad:"..",etiket:"../",dizin:doğru});
+    değişken n: tam64 = 1;
+    iken n > 0 {
+        n=sis_dizin_oku(fd,p,4096);
+        değişken i: tam64 = 0; değişken bas: tam64 = 0;
+        iken i < n {
+            eğer sis_bayt_al(p+i) == 10 {
+                eğer dizi_boyut(xs) >= 512 { sis_kapat(fd); ver -34; }
+                değişken diz: mantıksal = i > bas ve sis_bayt_al(p+i-1) == 47;
+                değişken boy: tam64 = i-bas; eğer diz { boy=boy-1; }
+                değişken ad: metin = ge_kes(sis_dize(p+bas),boy olarak tam32);
+                değişken etiket: metin = ad;
+                eğer diz { etiket=metin_birlestir(ad,"/"); }
+                değilse {
+                    değişken r: tam64 = sis_bilgi(ge_yol(y,ad),p+4096);
+                    eğer r < 0 { sis_kapat(fd); ver r; }
+                    etiket=metin_birlestir(metin_birlestir(ad,"  "),tam_metin(sis_alan(p+4096,0)));
+                }
+                dizi_ekle(xs,GeGirdi {ad:ad,etiket:etiket,dizin:diz}); bas=i+1;
+            }
+            i=i+1;
+        }
+    }
+    sis_kapat(fd); eğer n < 0 { ver n; }
+    g.yol=y; g.girdiler=xs; g.sec=0; g.ust=0; g.ileti=""; ver 0;
+}
+işlev ge_ciz(g: &değişken GeDurum,sat: tam32) {
+    sis_ekran_temizle(1056832); sis_hucre(0,0,g.yol,16777215,1056832);
+    eğer g.sec < g.ust { g.ust=g.sec; } eğer g.sec >= g.ust+sat-2 { g.ust=g.sec-sat+3; }
+    değişken i: tam32 = g.ust;
+    iken i < dizi_boyut(g.girdiler) ve i-g.ust < sat-2 {
+        değişken on: tam64 = 16777215; değişken arka: tam64 = 1056832;
+        eğer i == g.sec { on=0; arka=16777215; }
+        değişken k: GeGirdi = dizi_al(g.girdiler,i);
+        eğer sis_hucre((1+i-g.ust) olarak tam64,0,k.etiket,on,arka) < 0 { sis_hucre((1+i-g.ust) olarak tam64,0,"[uzun ad]",on,arka); }
+        i=i+1;
+    }
+    sis_hucre((sat-1) olarak tam64,0,g.ileti,16777215,1056832);
+}
+işlev ge_ac(g: &değişken GeDurum,editor: metin,p: tam64) -> tam64 {
+    değişken k: GeGirdi = dizi_al(g.girdiler,g.sec);
+    değişken yol: metin = ge_yol(g.yol,k.ad);
+    eğer g.sec == 0 { yol=ge_ust(g.yol); }
+    eğer k.dizin { ver ge_liste(g,yol,p); }
+    güvensiz {
+        değişken a: *tam64 = p olarak *tam64; *a=sis_metin_adres(yol);
+        değişken b: *tam64 = (p+8) olarak *tam64; *b=0;
+    }
+    değişken pid: tam64 = sis_onplan_baslat(editor,p); eğer pid < 0 { ver pid; }
+    değişken r: tam64 = sis_bekle(pid,p);
+    eğer r < 0 { ver r; } eğer sis_alan(p,0) != 0 veya sis_alan(p,1) != 0 { ver -5; }
+    değişken sec: tam32 = g.sec; r=ge_liste(g,g.yol,p);
+    eğer r == 0 ve sec < dizi_boyut(g.girdiler) { g.sec=sec; } ver r;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    değişken p: tam64 = malloc(8192) olarak tam64;
+    eğer p == 0 veya sis_ekran_bilgi(p) < 0 { ver 2; }
+    değişken sat: tam32 = sis_alan(p,1) olarak tam32;
+    eğer sis_calisma_dizini_al(p,4096) < 0 { ver 2; }
+    değişken yol: metin = ge_kes(sis_dize(p),metin_uzunluk(sis_dize(p)));
+    eğer argc > 1 { yol=sis_argv(argv,1); }
+    değişken editor: metin = ge_yol(ge_ust(sis_argv(argv,0)),"duzenle.elf");
+    değişken g: GeDurum = GeDurum {yol:yol,girdiler:[],sec:0,ust:0,ileti:""};
+    değişken r: tam64 = ge_liste(&değişken g,yol,p);
+    eğer r < 0 { sis_metin("Dizin açılamadı "); sis_metin(tam_metin(r)); sis_bayt_yaz(1,10); ver 3; }
+    değişken sol: mantıksal = yanlış; değişken eski: tam32 = -1; değişken tik: tam64 = -100;
+    ge_ciz(&değişken g,sat);
+    iken doğru {
+        eğer sis_olay_bekle(p,3,-1) < 0 { ver 4; }
+        değişken ac: mantıksal = yanlış; değişken ciz: mantıksal = yanlış;
+        eğer sis_alan(p,0) == 1 ve sis_alan(p,3) != 0 {
+            değişken kod: tam64 = sis_alan(p,1);
+            eğer kod == 16 { ver 0; }
+            eğer kod == 328 ve g.sec > 0 { g.sec=g.sec-1; ciz=doğru; }
+            eğer kod == 336 ve g.sec+1 < dizi_boyut(g.girdiler) { g.sec=g.sec+1; ciz=doğru; }
+            eğer kod == 28 { ac=doğru; }
+        }
+        eğer sis_alan(p,0) == 2 {
+            değişken bas: mantıksal = (sis_alan(p,5)&1) != 0;
+            değişken y: tam32 = ((sis_alan(p,4)/16) olarak tam32)-1;
+            değişken i: tam32 = y+g.ust;
+            eğer bas ve değil sol ve y >= 0 ve y < sat-2 ve i < dizi_boyut(g.girdiler) {
+                değişken simdi: tam64 = sis_tik();
+                ac=eski == i ve simdi-tik <= 50; eski=i; tik=simdi; g.sec=i; ciz=doğru;
+            }
+            sol=bas;
+        }
+        eğer ac {
+            r=ge_ac(&değişken g,editor,p); eski=-1; ciz=doğru;
+            eğer r < 0 { g.ileti=metin_birlestir("Açma hatası ",tam_metin(r)); }
+        }
+        eğer ciz { ge_ciz(&değişken g,sat); }
+    }
+    ver 0;
+} }

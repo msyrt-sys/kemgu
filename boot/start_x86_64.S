@@ -424,6 +424,23 @@ kdl_syscall_stub:
     popq    %rsi
     popq    %rdx
     popq    %rcx
+    /* Bekleme kurulmuşsa kullanıcıya dönmeden aynı iretq çerçevesini sakla. */
+    pushq %r11
+    movq kdl_dilim_etkin(%rip), %r11
+    testq %r11, %r11
+    jz .Lsis_normal
+    cmpq $0, 248(%r11)
+    je .Lsis_normal
+    cmpq $-1, 248(%r11)
+    je .Lsis_uyut
+    movq 248(%r11), %rax
+    subq $2, 8(%rsp)           /* Olay geldiğinde int 0x80 çağrısını tamamla. */
+.Lsis_uyut:
+    movq $0, 248(%r11)
+    popq %r11
+    jmp .Lsis_cerceve
+.Lsis_normal:
+    popq %r11
     iretq
 
 /* === [D-699] RING3 girişi (arm64 kdl_el0_calistir ikizi) ===
@@ -739,13 +756,30 @@ kdl_lapic_timer_stub:
     pushq %r13
     pushq %r14
     pushq %r15
-    movq $0, %rdi
+    cld
+    movq %rsp, %rbp
+    andq $-16, %rsp
     call kdl_apic_timer_irq
+    movq %rbp, %rsp
     movq kdl_lapic_taban(%rip), %rax
     testq %rax, %rax
     jz 1f
     movl $0, 0xb0(%rax)
 1:
+    testb $3, 128(%rsp)
+    jz .Llapic_don
+    movq kdl_dilim_etkin(%rip), %rdi
+    testq %rdi, %rdi
+    jz .Llapic_don
+    incq kdl_dilim_sayisi(%rip)
+.Ldilim_kaydet:
+    /* 15 genel yazmaç + RIP, CS, RFLAGS, RSP ve SS. */
+    movq %rsp, %rsi
+    movl $20, %ecx
+    rep movsq
+    movq $0, kdl_dilim_etkin(%rip)
+    jmp kdl_x86_r3_don
+.Llapic_don:
     popq %r15
     popq %r14
     popq %r13
@@ -762,6 +796,56 @@ kdl_lapic_timer_stub:
     popq %rbx
     popq %rax
     iretq
+.Lsis_cerceve:
+    pushq %rax
+    pushq %rbx
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %rbp
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
+    movq kdl_dilim_etkin(%rip), %rdi
+    jmp .Ldilim_kaydet
+/* Bir zaman dilimi çalıştır. rdi, gözetmen belleğindeki 160 baytlık
+ * kesme çerçevesidir. Çekirdek dönüş bağlamı ring3 dönüş yolu ile ortaktır. */
+.global kdl_dilim_gir
+kdl_dilim_gir:
+    pushfq
+    cli
+    pushq %rbx
+    pushq %rbp
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
+    movq %rsp, kdl_x86_r3_blok+8(%rip)
+    movq %rsp, %rax
+    andq $-16, %rax
+    movq %rax, kdl_x86_tss+4(%rip)
+    movq $1, kdl_x86_r3_blok(%rip)
+    movq %rdi, kdl_dilim_etkin(%rip)
+    movq %rdi, %rsp
+    jmp .Llapic_don
+
+.pushsection .bss
+.balign 16
+.global kdl_dilim_tablo
+kdl_dilim_tablo: .skip 2176
+.global kdl_dilim_satir
+kdl_dilim_satir: .skip 32832
+.global kdl_dilim_etkin
+kdl_dilim_etkin: .skip 8
+.global kdl_dilim_sayisi
+kdl_dilim_sayisi: .skip 8
+.popsection
 .global kdl_spurious_stub
 kdl_spurious_stub:
     iretq                   /* Sahte vektöre EOI gönderilmez. */

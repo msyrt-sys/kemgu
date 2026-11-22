@@ -1,0 +1,30 @@
+// Her tuş bağımsız kâhine bir başlangıç ve bir bitiş ölçümü sağlar.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    değişken p: tam64 = malloc(64) olarak tam64; eğer p == 0 { ver 12; }
+    eğer argc == 2 {
+        iken doğru {
+            değişken r: tam64 = sis_tus_bekle(p);
+            eğer r == -13 { sis_uyu(10); }
+            değilse eğer r < 0 { ver 2; }
+            değilse eğer sis_alan(p,0) == 30 ve sis_alan(p,2) == 0 { ver 17; }
+        }
+    }
+    değişken a: *tam64 = p olarak *tam64; *a=sis_metin_adres("çocuk");
+    a=(p+8) olarak *tam64; *a=0;
+    değişken s: tam64 = p+16;
+    sis_metin("OLC_HAZIR"); sis_bayt_yaz(1,10);
+    değişken i: tam32 = 0;
+    iken i < 100 {
+        değişken bas: mantıksal = yanlış;
+        iken değil bas {
+            eğer sis_tus_bekle(s) < 0 { ver 3; } bas=sis_alan(s,2) != 0 ve sis_alan(s,0) == 57;
+        }
+        değişken tik: tam64 = sis_tik();
+        değişken pid: tam64 = sis_baslat(sis_argv(argv,0),p); eğer pid < 0 { ver 4; }
+        değişken sure: tam64 = sis_tik()-tik;
+        sis_metin("BAS "); sis_metin(tam_metin(sure)); sis_bayt_yaz(1,10);
+        eğer sis_bekle(pid,s) != 0 veya sis_alan(s,0) != 0 veya sis_alan(s,1) != 17 { ver 5; }
+        sis_metin("SON"); sis_bayt_yaz(1,10); i=i+1;
+    }
+    ver 0;
+} }

@@ -22,14 +22,15 @@ RTC = datetime(2026,7,14,9,42)
 
 
 class Qmp:
-    def __init__(self, f):
+    def __init__(self, f, reader):
         self.f = f
+        self.reader = reader
         assert 'QMP' in self.response(greeting=True)
         self.call('qmp_capabilities')
 
     def response(self, greeting=False):
         while True:
-            line = self.f.readline()
+            line = self.reader.readline()
             assert line, 'QMP kapandı'
             reply = json.loads(line)
             assert 'error' not in reply, reply
@@ -53,7 +54,7 @@ def wait_for(proc, fn, seconds=15):
 
 
 @contextmanager
-def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
+def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2"):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -75,6 +76,8 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
     if klavye == "ps2":
         i = cmd.index("usb-kbd,bus=x.0")
         del cmd[i-1:i+1]
+    if fare == "usb":
+        cmd.extend(["-device", "usb-mouse,bus=x.0"])
     if usb2:
         cmd.extend(['-drive',f'if=none,id=u2,format=raw,file={usb2.disk}',
                     '-device','usb-storage,bus=x.0,drive=u2'])
@@ -85,8 +88,8 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb"):
             with socket.socket(socket.AF_UNIX) as sock:
                 sock.settimeout(10)
                 sock.connect(str(path))
-                with sock.makefile('rwb',buffering=0) as f:
-                    yield Qmp(f),proc,ser
+                with sock.makefile('wb', buffering=0) as f, sock.makefile('rb') as reader:
+                    yield Qmp(f, reader),proc,ser
         finally:
             if proc.poll() is None:
                 proc.kill()
@@ -179,8 +182,12 @@ class Console:
         def exact():
             w,h,pixels=screendump(self.q.f,self.w/'dalga12.ppm',self.q.response)
             expected=kabuk_goruntu(self.akis,'',gen=w,yuk=h)
-            return karsilastir(pixels,expected,w)[0]==0
-        wait_for(self.p,exact)
+            exact.fark=karsilastir(pixels,expected,w)
+            return exact.fark[0]==0
+        try:
+            wait_for(self.p,exact)
+        except AssertionError as e:
+            raise AssertionError(("kabuk ekranı farklı",getattr(exact,"fark",None))) from e
 
 
 def check_identity(c,part):

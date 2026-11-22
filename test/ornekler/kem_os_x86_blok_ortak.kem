@@ -4,7 +4,7 @@ kullan drivers::blok::onbellek::{ Onbellek, OnbellekKaydi, onbellek_yeni, onbell
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni } olarak bn;
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ba;
 kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak bu;
-kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle } olarak bx;
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle, xhci_giris } olarak bx;
 kullan drivers::usb::tanim::{ UsbArayuz };
 genel yapı BlokDonanim { ad: metin; bar: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
 // Bir xHCI denetleyicisinde tek sıradaki tüketici: HID, BOT veya yönetim komutu.
@@ -33,12 +33,118 @@ işlev bd_usb_yayinla(d: &değişken BlokDonanim) {
         _ => { }
     }
 }
+// İki HID uç noktası aynı olay halkasını BOT ile paylaşır. Durum ve DMA
+// tamponları çekirdeğindir; tamamlanma bir sonraki ön plan sahibine taşınabilir.
+küresel değişken bh_kayitlar: tam64 = 0;
+küresel değişken bh_halka: tam64 = 0;
+küresel değişken bh_adet: tam64 = 0;
+küresel değişken bh_erdp: tam64 = 0;
+küresel değişken bh_bas: tam64 = 0;
+küresel değişken bh_dongu: tam64 = 0;
+küresel değişken bh_fare_indeks: tam32 = 0;
+
+çıplak işlev bh_kur(x: &değişken XhciDurum,bar: tam64,indeks: tam32) {
+    bh_fare_indeks=indeks;
+    eğer bar == 0 veya x.olay.taban == 0 { ver; }
+    bh_kayitlar=malloc(128) olarak tam64;
+    eğer bh_kayitlar == 0 { ver; }
+    memset(bh_kayitlar olarak *tam8,0,128);
+    bh_halka=x.olay.taban; bh_adet=x.olay.adet olarak tam64;
+    bh_erdp=bar+x.c.rtsoff+56;
+    bh_bas=x.olay.bas olarak tam64; bh_dongu=0;
+    eğer x.olay.dongu { bh_dongu=1; }
+}
+çıplak işlev bh_fare() -> tam32 { ver bh_fare_indeks; }
+çıplak işlev bh_durum(tur: tam64) -> tam64 {
+    eğer bh_kayitlar == 0 { ver -1; }
+    ver kem_mmio_oku64(bh_kayitlar+tur*64);
+}
+// Yalnız gönderilmiş HID TRB adresi, slot ve uç eşleşirse bu olay tüketilir.
+çıplak işlev bh_tuket(taban: tam64,bas: tam64,dongu: tam64) -> mantıksal {
+    eğer bh_kayitlar == 0 veya taban != bh_halka { ver yanlış; }
+    değişken p: tam64 = taban+bas*16;
+    değişken w: tam64 = kem_mmio_oku32(p+12);
+    eğer (w&1) != dongu veya ((w>>10)&63) != 32 { ver yanlış; }
+    değişken trb: tam64 = kem_mmio_oku64(p);
+    değişken i: tam64 = 0;
+    iken i < 2 {
+        değişken r: tam64 = bh_kayitlar+i*64;
+        eğer kem_mmio_oku64(r) == 1 ve kem_mmio_oku64(r+8) == trb ve kem_mmio_oku64(r+16) == (w&4294901760) {
+            değişken v: tam64 = kem_mmio_oku32(p+8);
+            değişken kalan: tam64 = v&16777215;
+            değişken kod: tam64 = (v>>24)&255;
+            değişken boy: tam64 = kem_mmio_oku64(r+24);
+            eğer (kod == 1 veya kod == 13) ve kalan <= boy { kem_mmio_yaz64(r+40,boy-kalan); kem_mmio_yaz64(r,2); }
+            değilse { kem_mmio_yaz64(r,-1); }
+            bh_bas=bas+1; bh_dongu=dongu;
+            eğer bh_bas == bh_adet { bh_bas=0; bh_dongu=1-dongu; }
+            kem_mmio_yaz64(bh_erdp,(taban+bh_bas*16)|8);
+            eğer bd_usb_olay == taban { bd_usb_konum_koy(taban,bh_bas olarak tam32,bh_dongu != 0); }
+            ver doğru;
+        }
+        i=i+1;
+    }
+    ver yanlış;
+}
+küresel değişken bh_kesmeli: tam32 = 0;
+küresel değişken bh_bildirim: tam64 = 0;
+küresel değişken bh_gorulen: tam64 = 0;
+çıplak işlev bh_olaylar() {
+    eğer bh_kayitlar == 0 { ver; }
+    // BOT ilerlediyse yeni başı da denetle. Boşta aynı olayı yoklama.
+    eğer bh_kesmeli != 0 ve bh_gorulen == bh_bildirim ve (bd_usb_olay != bh_halka veya bh_bas == (bd_usb_bas olarak tam64)) { ver; }
+    bh_gorulen=bh_bildirim;
+    eğer bd_usb_olay == bh_halka {
+        bh_bas=bd_usb_bas olarak tam64; bh_dongu=0; eğer bd_usb_dongu { bh_dongu=1; }
+    }
+    iken bh_tuket(bh_halka,bh_bas,bh_dongu) { }
+}
+işlev bh_gonder(x: &değişken XhciDurum,bar: tam64,indeks: tam32,tur: tam64) -> tam64 {
+    eğer indeks < 0 { ver 0; }
+    eğer bh_durum(tur) != 0 { ver bh_durum(tur); }
+    güvensiz {
+        değişken s: XhciDurum = *x;
+        s.kuyruk=[]; s.q=0; s.evre=100; s.devredildi=yanlış;
+        eşleş xhci_giris(&değişken s,indeks,8) { hata(e) => { ver -5; } tamam(v) => { } }
+        değişken r: tam64 = bh_kayitlar+tur*64;
+        kem_mmio_yaz64(r+8,s.bek_adres);
+        kem_mmio_yaz64(r+16,((s.yuva olarak tam64)<<24)|((s.bek_uc olarak tam64)<<16));
+        kem_mmio_yaz64(r+24,s.boy olarak tam64); kem_mmio_yaz64(r+32,s.ddma+65536); kem_mmio_yaz64(r,1);
+        değişken y: GcYanit = gc_bos();
+        iken s.q < dizi_boyut(s.kuyruk) {
+            değişken istek: GcIstek = xhci_adim(&değişken s,y);
+            y=bm_yurut(bar,istek); eğer değil y.basarili { kem_mmio_yaz64(r,-1); ver -5; }
+        }
+        ver 1;
+    }
+}
+işlev bh_rapor(tur: tam64) -> Dizi<dtam8> {
+    güvensiz {
+        değişken r: tam64 = bh_kayitlar+tur*64;
+        değişken b: Dizi<dtam8> = bm_bellek_oku(kem_mmio_oku64(r+32),kem_mmio_oku64(r+40) olarak tam32);
+        kem_mmio_yaz64(r,0);
+        ver b;
+    }
+}
+işlev bh_depo_oku(d: &değişken BlokDonanim,adr: tam64,n: tam32) -> tam64 {
+    güvensiz { eğer bh_kayitlar == 0 veya n != 16 veya adr < bh_halka veya adr >= bh_halka+bh_adet*16 { ver adr; } }
+    eşleş d.aygit.durum { BlokCesidi::Usb(v) => {
+        değişken u: UsbDepo = v;
+        değişken dg: tam64 = 0; eğer u.olay_dongu { dg=1; }
+        iken bh_tuket(u.olay_taban,u.olay_bas olarak tam64,dg) {
+            güvensiz { u.olay_bas=bh_bas olarak tam32; dg=bh_dongu; u.olay_dongu=dg != 0; }
+        }
+        d.aygit.durum=BlokCesidi::Usb(u);
+        ver u.olay_taban+(u.olay_bas olarak tam64)*16;
+    } _ => { ver adr; } }
+}
 işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
  bd_usb_tuketici(d);
  değişken y: GcYanit = gc_bos();değişken i: tam32 = 0;
  iken i < 2000000 {
   değişken r: GcIstek = blok_adim(&değişken d.aygit,y); eşleş r {
    GcIstek::Bitti => { bd_usb_yayinla(d); ver tamam(doğru); } GcIstek::Hata(e) => { bd_usb_yayinla(d); ver hata(e); }
+   GcIstek::BellekOku(adr,n) => { y=bm_yurut(d.bar,GcIstek::BellekOku(bh_depo_oku(d,adr,n),n)); }
    _ => { y=bm_yurut(d.bar,r); }
   } i=i+1;
  } ver hata("blok adim siniri");

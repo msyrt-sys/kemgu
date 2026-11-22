@@ -4,6 +4,7 @@
 import argparse
 import re
 import struct
+import subprocess
 import time
 from hashlib import sha256
 from contextlib import contextmanager
@@ -12,15 +13,23 @@ from pathlib import Path
 from dalga12_fat import Fat
 from dalga12_kahin import Console, boot, fsck, sha, wait_for
 from surec_imaj import BUYUK, GUNLUK, imajlar
+import kaynak14_kahin
+import v1_kahin
+from usb14_imaj import dogrula as usb_dogrula
+from kabuk14_kahin import kabuk14_kos
+from duzenle_kahin import duzenle_kos, gezgin_kos, salt_gezgin
 from uefi_kabuk_kahin import keys
+from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
 
 
 SAYFA = 4096
-CERCEVELER = 516
+YUVALAR = 8
+TABLOLAR = 10
+CERCEVELER = 7 * 512 + TABLOLAR
 ALAN = CERCEVELER * SAYFA
-PENCERE = 0x54000000
-YIGIN = 0x541F0000
-KORUMA = YIGIN - SAYFA
+PENCERE = 0x54200000
+YIGIN = 0x54F00000
+KORUMA = 0x54E00000
 NX = 1 << 63
 ADRES = (1 << 52) - SAYFA
 VARSAYILAN = ("baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2",
@@ -29,7 +38,7 @@ VARSAYILAN = ("baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2",
 
 class SurecConsole(Console):
     def input(self, text):
-        tr = {"ü": ("bracket_right", False), "ö": ("comma", False),
+        tr = {"&": ("6", True), "ü": ("bracket_right", False), "ö": ("comma", False),
               "-": ("equal", False), "_": ("equal", True)}
         for harf in text + "\n":
             ad, shift = tr.get(harf, keys(harf))
@@ -50,21 +59,18 @@ class SurecConsole(Console):
     def sayi(self, sembol):
         return struct.unpack("<Q", self.mem(self.symbols[sembol], 8))[0]
 
-    def havuz(self):
-        return self.sayi("uefi_surec_taban")
-
     def bos_cerceve(self):
-        icerik = self.mem(self.havuz(), 2 * ALAN)
-        dolu = self.sayi("kxs_havuz_dolu")
-        assert dolu in (0, 1, 2, 3)
-        for yuva in (0, 1):
-            if not dolu & (1 << yuva):
-                assert icerik[yuva * ALAN:yuva * ALAN + 4 * SAYFA] == bytes(4 * SAYFA)
-        return (2 - dolu.bit_count()) * CERCEVELER
+        # Sürücünün sayacını değil, fiziksel ayırıcının gerçek bitmap'ini say.
+        ayirici = self.sayi("uefi_surec_ayirici")
+        _, bitmap, _, toplam = struct.unpack("<3QI", self.mem(ayirici, 28))
+        adres, boy = struct.unpack("<QI", self.mem(bitmap, 12))
+        assert boy == (toplam + 7) // 8
+        # Dizi<dtam8> çalışma zamanında her elemanı 32 bitlik yuvada tutar.
+        bitler = self.mem(adres, boy * 4)[::4]
+        return toplam - sum(v.bit_count() for v in bitler)
 
 
-def uefi_havuz_denetle(c):
-    taban = c.havuz()
+def uefi_alan_denetle(c, taban):
     assert taban % SAYFA == 0 and taban >= 0x100000
     b = int(re.search(rb"BILGI_ADRES (\d+)", c.ser.read_bytes())[1])
     alan = struct.unpack("<24Q", c.mem(b, 192))
@@ -74,24 +80,34 @@ def uefi_havuz_denetle(c):
     for t, _, bas, _, sayfa, nitelik in sorted(kayitlar, key=lambda k: k[2]):
         if t in (3, 4, 7) and not nitelik & NX and bas <= konum < bas + sayfa * SAYFA:
             konum = bas + sayfa * SAYFA
-    assert konum >= taban + 2 * ALAN
+    assert konum >= taban + ALAN
     korunan = [(alan[14], alan[15]), (b, b + SAYFA), (alan[9], alan[9] + alan[16]),
                (alan[3], alan[3] + alan[4]), (alan[20], alan[21])]
-    assert all(taban + 2 * ALAN <= lo or taban >= hi for lo, hi in korunan)
+    assert all(taban + ALAN <= lo or taban >= hi for lo, hi in korunan)
 
 
 def etkin_tablolar(c, elf):
-    # Önce merhaba çalıştı. İkinci süreç öteki fiziksel alana geçmeli.
+    # Birinci süreç toplandı. İkinci süreç klavye beklerken özel tabloları canlı.
     assert c.sayi("kxs_havuz_dolu") == 2
-    taban = c.havuz() + ALAN
-    regs = c.q.call("human-monitor-command", {"command-line": "info registers"})
-    assert int(re.search(r"CR3=([0-9a-fA-F]+)", regs)[1], 16) == taban, regs
+    # Bekleyen süreç işlemciyi bırakmıştır. Özel kök adresini kayıttan,
+    # beklemeyi donanımın CR3 ve kullanıcı kipinden bağımsız olarak gözle.
+    kayit = c.symbols["kdl_dilim_tablo"] + 272
+    wait_for(c.p, lambda: int.from_bytes(c.mem(kayit + 160, 8), "little") == 7)
+    taban = int.from_bytes(c.mem(kayit + 192, 8), "little")
+    uefi_alan_denetle(c, taban)
+    # Durum alanı ve CR3 farklı konuk talimatlarında yazılır. IRQ ile aynı
+    # anda okursak bağlamı bırakmayı bitirene kadar bekle.
+    def cekirdek_adres_alani():
+        kayitlar = c.q.call("human-monitor-command", {"command-line": "info registers"})
+        cr3 = int(re.search(r"CR3=([0-9a-fA-F]+)", kayitlar)[1], 16)
+        return kayitlar if cr3 != taban else None
+    regs = wait_for(c.p, cekirdek_adres_alani)
     assert int(re.search(r"EFER=([0-9a-fA-F]+)", regs)[1], 16) & 2048
-    assert c.mem(c.havuz(), 4 * SAYFA) == bytes(4 * SAYFA), "önceki süreç tabloları kaldırılmadı"
-    for ofset, i in ((0, 0), (1, 1), (2, (PENCERE >> 21) & 511)):
+    for ofset, indeksler in ((0, [0]), (1, [1]), (2, range((PENCERE >> 21) & 511, ((PENCERE >> 21) & 511) + 7))):
         tablo = struct.unpack("<512Q", c.mem(taban + ofset * SAYFA, SAYFA))
-        assert tablo[i] & (ADRES | 7) == (taban + (ofset + 1) * SAYFA) | 7
-        assert all(not g & 4 for j, g in enumerate(tablo) if j != i), "gözetmen dalı kullanıcıya açıldı"
+        for j, i in enumerate(indeksler):
+            assert tablo[i] & (ADRES | 7) == (taban + (ofset + 1 + j) * SAYFA) | 7
+        assert all(not g & 4 for j, g in enumerate(tablo) if j not in indeksler), "gözetmen dalı kullanıcıya açıldı"
     ph = struct.unpack_from("<Q", elf, 32)[0]
     n = struct.unpack_from("<H", elf, 56)[0]
     beklenen = {}
@@ -100,17 +116,17 @@ def etkin_tablolar(c, elf):
         if tip == 1 and boy:
             for a in range(va, va + boy, SAYFA):
                 beklenen[a] = (5 if bayrak == 5 else NX | (7 if bayrak == 6 else 5))
-    beklenen.update((a, NX | 7) for a in range(0x54100000, KORUMA, SAYFA))
-    beklenen.update((a, NX | 7) for a in range(YIGIN, 0x54200000, SAYFA))
-    ptes = struct.unpack("<512Q", c.mem(taban + 3 * SAYFA, SAYFA))
+    beklenen.update((a, NX | 7) for a in range(0x54600000, KORUMA, SAYFA))
+    beklenen.update((a, NX | 7) for a in range(YIGIN, 0x55000000, SAYFA))
+    ptes = struct.unpack("<3584Q", c.mem(taban + 3 * SAYFA, 7 * SAYFA))
     for i, g in enumerate(ptes):
         a = PENCERE + i * SAYFA
         if a in beklenen:
             assert (g & (NX | 7)) == beklenen[a], (hex(a), hex(g), hex(beklenen[a]))
-            assert (g & ADRES) == taban + (4 + i) * SAYFA
+            assert (g & ADRES) == taban + (TABLOLAR + i) * SAYFA
         else:
             assert g == 0, (hex(a), hex(g))
-    print("✓ QMP: iki ayrı fiziksel alan, kullanıcı PTE izinleri, NX ve boş koruma sayfası", flush=True)
+    print("✓ QMP: bekleyen süreç, kullanıcı PTE izinleri, NX ve boş koruma sayfası", flush=True)
 
 
 def tam_seri_bekle(c):
@@ -149,24 +165,102 @@ def tus_kos(c, metin, elf):
     tam_seri_bekle(c)
 
 
+def ekran_kos(c,usb_fare):
+    komut = "calistir /diskler/usb0p2/bin/ekranden.elf"
+    c.input(komut)
+    c.akis += "> " + komut + "\nEKRAN_HAZIR\n"
+    c.expected += b"EKRAN_HAZIR\n"
+    tam_seri_bekle(c)
+    time.sleep(.15)
+    w,h,px = screendump(c.q.f,c.w/'uygulama.ppm',c.q.response)
+    renk = 0x203040
+    beklenen = [renk]*(w*h)
+    font = font_yukle()
+    for i, harf in enumerate("Ağaç İş"):
+        glif_ciz(beklenen,w,h,font,(5+i)*8,2*16,ord(harf),0xffffff,renk)
+    for y in (78,79):
+        for x in range(24,32):
+            beklenen[y*w+x] ^= 0xffffff
+    fark = karsilastir(px,beklenen,w)
+    assert fark[0] == 0, ("uygulama pikselleri", fark)
+    if usb_fare:
+        assert c.sayi("kh_iman") != 0, "xHCI MSI-X kurulmadı"
+        once_irq = c.sayi("bh_bildirim")
+    h0 = c.heap()
+    time.sleep(8)
+    assert c.output() == c.expected and c.heap() == h0
+    def hareket(dx,dy,bas):
+        olay = [{"type":"rel","data":{"axis":a,"value":v}} for a,v in (("x",dx),("y",dy))]
+        if bas:
+            olay.append({"type":"btn","data":{"button":"left","down":True}})
+        c.q.call("input-send-event",{"events":olay})
+    hareket(-12,-7,False)
+    time.sleep(.12)
+    hareket(12,7,True)
+    if usb_fare:
+        wait_for(c.p,lambda:c.sayi("bh_bildirim")>once_irq)
+    sonuc = "[ekranden.elf pid=2 cikis=0]\nKABUK_HAZIR\n"
+    c.expected += sonuc.encode()
+    c.akis += sonuc
+    tam_seri_bekle(c)
+
+
 def bolme_kos(c):
     c.run("calistir /diskler/usb0p2/bin/bolme.elf",
           b"PANIK: sifira bolme\n[bolme.elf pid=2 cikis=134]\n")
     c.run("echo yasiyor", b"yasiyor\n")
 
 
-def tekrar_kos(c, exe):
+def cocuk_kos(c, bos):
+    # Aynı simgeyi iki canlı çocuğun gerçek PT yaprakları üzerinden oku.
+    semboller = subprocess.check_output(
+        ["llvm-nm", c.w / "kullanici/surecden.elf"], text=True)
+    va = int(re.search(r"^([0-9a-f]+) [bB] surec_nobet$", semboller, re.M)[1], 16)
+    komut = "calistir /diskler/usb0p2/bin/surecden.elf"
+    c.input(komut)
+
+    def iki_cocuk():
+        assert b"[surecden.elf pid=2 cikis=" not in c.output(), "çocuklar ortak adres doğrulamasına ulaşamadı"
+        kayitlar = c.mem(c.symbols["kdl_dilim_tablo"], 8 * 272)
+        bulunan = []
+        for i in range(8):
+            durum, pid, _, _, cr3 = struct.unpack_from("<5Q", kayitlar, i * 272 + 160)
+            if durum == 5:
+                bulunan.append((pid, cr3))
+        return bulunan if len(bulunan) >= 2 else None
+
+    cocuklar = wait_for(c.p, iki_cocuk)
+    fizikler = set()
+    for pid, cr3 in cocuklar:
+        ptr = cr3
+        for kaydir in (39, 30, 21, 12):
+            pte, = struct.unpack("<Q", c.mem(ptr + ((va >> kaydir) & 511) * 8, 8))
+            assert pte & 7 == 7
+            ptr = pte & ADRES
+        fizik = ptr + va % SAYFA
+        deger, = struct.unpack("<Q", c.mem(fizik, 8))
+        assert fizik not in fizikler and deger == pid, (pid, deger, hex(fizik))
+        fizikler.add(fizik)
+    son = "[surecden.elf pid=2 cikis=0]\nKABUK_HAZIR\n"
+    c.expected += son.encode()
+    c.akis += "> " + komut + "\n" + son
+    tam_seri_bekle(c)
+    assert c.bos_cerceve() == bos, "süreç çerçevesi geri dönmedi"
+    print(f"✓ 100 çocuk, aynı VA için {len(fizikler)} farklı fiziksel sayfa, {bos} boş çerçeve", flush=True)
+
+
+def tekrar_kos(c, exe, bos):
     once = c.heap()
     surec_artisi = 0
     for pid in range(2, 52):
         c.run(f"calistir {exe}", f"{exe}\n[merhaba.elf pid={pid} cikis=1]\n".encode())
-        assert c.bos_cerceve() == 2 * CERCEVELER, f"süreç {pid}"
+        assert c.bos_cerceve() == bos, f"süreç {pid}"
         giris, cikis = c.sayi("kxs_heap_giris"), c.sayi("kxs_heap_cikis")
         assert c.symbols["__heap_start"] <= giris <= cikis < c.symbols["__heap_end"], (giris, cikis)
         surec_artisi += cikis - giris
     sonra = c.heap()
     assert surec_artisi <= 64 * 1024 + 80, surec_artisi
-    print(f"✓ 50 tekrar: {2 * CERCEVELER} boş çerçeve; süreç heap +{surec_artisi}; kabuk heap {once} → {sonra} bayt", flush=True)
+    print(f"✓ 50 tekrar: {bos} boş çerçeve; süreç heap +{surec_artisi}; kabuk heap {once} → {sonra} bayt", flush=True)
 
 
 @contextmanager
@@ -185,17 +279,62 @@ def kos(w, tekrar, senaryo):
     for n in range(1, tekrar + 1):
         kip = VARSAYILAN[(n - 1) % len(VARSAYILAN)] if senaryo == "matris" else senaryo
         usb, nvme, sata = imajlar(w, programlar)
+        if kip.startswith("v1"): usb_dogrula(w,usb,programlar)
         once = {p.disk: sha(p.disk) for p in (nvme, sata)}
-        if kip != "yazma":
+        if kip not in ("kaynak-editor","yazma","duzenle-icerik","duzenle","gezgin","v1","v1-kesinti"):
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
-        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip == "tus-ps2" else "usb") as (q, p, seri):
+        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin","v1","v1-kesinti") else "ps2") as (q, p, seri):
             c = SurecConsole(w, q, p, seri)
-            uefi_havuz_denetle(c)
-            assert c.bos_cerceve() == 2 * CERCEVELER
+            bos = c.bos_cerceve()
+            assert bos >= 8 * CERCEVELER
             exe = "/diskler/usb0p2/bin/merhaba.elf"
             c.run(f"calistir {exe} Ağaç İş",
                   (f"{exe}\nAğaç\nİş\n[merhaba.elf pid=1 cikis=3]\n").encode())
+            if kip=="kaynak-cocuk": kaynak14_kahin.cocuk(c,n)
+            if kip=="kaynak-editor": kaynak14_kahin.editor(c,usb[1],n)
+            if kip.startswith("v1"):
+                v1_kahin.kos(c,usb[1],kip=="v1-kesinti")
+            if kip == "kabuk14":
+                kabuk14_kos(c)
+            if kip == "gezgin-salt":
+                salt_gezgin(c,nvme)
+            if kip == "gezgin":
+                gezgin_kos(c,usb[1])
+            if kip in ("duzenle","duzenle-icerik"):
+                duzenle_kos(c,usb[1],kip=="duzenle-icerik")
+            if kip.startswith("ekran-"):
+                ekran_kos(c,kip == "ekran-usb")
+            if kip == "buyukelf":
+                assert len(programlar["buyukelf.elf"]) >= 300 * 1024
+                giris = c.heap()
+                if n == 1:
+                    time.sleep(8)
+                    assert c.heap() == giris
+                c.run("calistir /diskler/usb0p2/bin/buyukelf.elf", b"[buyukelf.elf pid=2 cikis=0]\n")
+                fark = c.heap()-giris
+                c.run("calistir /diskler/usb0p2/bin/eski.elf", b"/diskler/usb0p2/bin/eski.elf\n[eski.elf pid=3 cikis=1]\n")
+                print(f"✓ {len(programlar['buyukelf.elf'])} bayt ELF, 1280 KiB BSS, 4 MiB heap, kabuk heap farkı {fark}", flush=True)
+            if kip == "arka":
+                c.run("baslat /diskler/usb0p2/bin/hesap.elf uzun &", b"pid=2\n")
+                once_dilim = c.sayi("kdl_dilim_sayisi")
+                c.run("echo cevap", b"cevap\n")
+                c.run(f"calistir {exe}", f"{exe}\n[merhaba.elf pid=3 cikis=1]\n".encode())
+                def ps(seri):
+                    m = re.fullmatch(rb"2 hazir hesap.elf ([0-9]+)\n", seri)
+                    assert m and int(m[1]) >= 2, seri
+                c.run("ps", ps)
+                assert c.sayi("kdl_dilim_sayisi") > once_dilim
+                c.run("sonlandir 2")
+                c.run("bekle 2", b"[hesap.elf pid=2 SONLANDIRILDI: sonlandir (kullanici)]\n")
+            if kip == "cocuk":
+                cocuk_kos(c, bos)
+            if kip == "hesap":
+                once_tik = c.sayi("kdl_dilim_sayisi")
+                c.run("calistir /diskler/usb0p2/bin/hesap.elf", b"[hesap.elf pid=2 cikis=0]\n")
+                fark = c.sayi("kdl_dilim_sayisi") - once_tik
+                assert fark >= 2, f"LAPIC zaman dilimi sayısı: {fark}"
+                print(f"✓ hesap: {fark} zaman dilimi, toplam doğru", flush=True)
             if kip == "dosya":
                 c.run("calistir /diskler/usb0p2/bin/kedi.elf /diskler/usb0p2/notlar/günlük.txt",
                       "Ağaç ve İş\n[kedi.elf pid=2 cikis=0]\n".encode())
@@ -213,17 +352,20 @@ def kos(w, tekrar, senaryo):
             if kip == "bolme":
                 bolme_kos(c)
             if kip == "tekrar":
-                tekrar_kos(c, exe)
-            assert c.bos_cerceve() == 2 * CERCEVELER, "süreç çerçevesi geri dönmedi"
-            c.screen()
+                tekrar_kos(c, exe, bos)
+            if kip != "v1-kesinti":
+                assert c.bos_cerceve() == bos, "süreç çerçevesi geri dönmedi"
+                c.screen()
             if kip == "yazma":
                 # Kabuğun kapanış sync'i eksik süreç temizliğini gizleyemez.
                 q.call("stop")
                 fsck(w, usb[1], "surec-cikis")
                 q.call("cont")
-            c.shutdown()
+            if kip != "v1-kesinti": c.shutdown()
         assert all(sha(p) == h for p, h in once.items())
         assert sha256(usb[0].read()).digest() == esp
+        if kip.startswith("v1"):
+            fsck(w,usb[1],"v1-kapanis"); assert Fat(usb[1].read()).get("/NOTLAR/günlük.txt")==v1_kahin.SON
         if kip == "yazma":
             fsck(w, usb[1], "surec-yazma")
             fat = Fat(usb[1].read())
@@ -242,6 +384,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
     p.add_argument("--tekrar", type=int, default=10)
-    p.add_argument("--senaryo", choices=("matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
+    p.add_argument("--senaryo", choices=("kaynak-cocuk", "kaynak-editor", "v1-kesinti", "v1", "kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
     kos(args.dizin.resolve(), args.tekrar, args.senaryo)

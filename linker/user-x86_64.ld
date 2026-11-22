@@ -9,7 +9,7 @@ PHDRS {
 }
 
 SECTIONS {
-    . = 0x54000000;
+    . = 0x54200000;
     .text : ALIGN(4096) {
         KEEP(*(.text._start))
         *(.text .text.*)
@@ -17,9 +17,9 @@ SECTIONS {
     .rodata : ALIGN(4096) { *(.rodata .rodata.*) } :salt_okunur
     .data : ALIGN(4096) { *(.data .data.*) } :veri
     .bss (NOLOAD) : ALIGN(4096) { *(.bss .bss.* COMMON) } :sifir
-    ASSERT(. <= 0x54100000, "Kullanıcı ELF'i görüntü alanına sığmadı")
-    __heap_start = 0x54100000;
-    __heap_end = 0x541ef000;
+    ASSERT(. <= 0x54600000, "Kullanıcı ELF'i görüntü alanına sığmadı")
+    __heap_start = 0x54600000;
+    __heap_end = 0x54e00000;
 
     /DISCARD/ : { *(.note* .comment .eh_frame*) }
 }

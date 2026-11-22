@@ -1,0 +1,3 @@
+// [D-763] C14-001 fikstür modülü: biri çıplak, biri normal iki genel işlev.
+genel çıplak işlev cip_topla(x: tam64) -> tam64 { ver x + 1; }
+genel işlev normal_topla(x: tam64) -> tam64 { ver x + 2; }

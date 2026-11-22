@@ -35,11 +35,26 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 55 | tus_bekle | 1 | 32 baytlık TuşOlayı tamponu | 0 | x86_64 |
 | 56 | saat | 1 | 48 baytlık Saat tamponu | 0 | x86_64 |
 | 57 | uyu | 1 | Milisaniye (0–60.000) | 0 | x86_64 |
+| 58 | baslat | 2 | Program yolu, NUL işaretçiyle biten en çok 31 ek argüman veya 0 | Çocuk PID | x86_64 |
+| 59 | bekle | 2 | Çocuk PID, 16 baytlık sonuç | 0 | x86_64 |
+| 60 | surec_listesi | 2 | Tampon, kayıt kapasitesi (0–8) | Kayıt sayısı | x86_64 |
+| 61 | ekran_bilgi | 1 | p | 0 | x86_64 |
+| 62 | ekran_yaz | 3 | sat,sut,p | 0 | x86_64 |
+| 63 | ekran_temizle | 1 | renk | 0 | x86_64 |
+| 64 | imlec | 3 | sat,sut,gorunur | 0 | x86_64 |
+| 65 | fare_bekle | 1 | 48 baytlık fare tamponu | 0 | x86_64 |
+| 66 | olay_bekle | 3 | 56 baytlık olay tamponu, maske, ms | 0 | x86_64 |
+| 67 | onplan_baslat | 2 | Program yolu ve baslat ile aynı argv | Çocuk PID, -13 ön plan gerekli | x86_64 |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
 | Değer | Ad | Anlamı |
 | --- | --- | --- |
+| -7 | E2BIG | Argüman sayısı veya toplam uzunluğu sınırı aştı |
+| -10 | ECHILD | Beklenebilecek çocuk bulunamadı |
+| -11 | EAGAIN | Süreç tablosu dolu |
+| -12 | ENOMEM | Süreç için fiziksel çerçeve bulunamadı |
+| -13 | EACCES | Girdi ön plana ait |
 | -2 | NOENT | Yol bulunamadı |
 | -5 | IO | Aygıt, FAT32 veya RTC hatası |
 | -9 | BADF | Tanımlayıcı kapalı, aralık dışı veya işlem için geçersiz |
@@ -60,11 +75,17 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 
 ## Adres alanı ve giriş
 
-- Kullanıcı sanal penceresi `[0x54000000, 0x54200000)` ve sayfa boyutu 4 KiB. `_start` x86_64 ET_EXEC girişidir. Bu ilk yükleyicide diskteki ELF dosyası en çok 64 KiB olabilir; daha büyüğü açık `dosya siniri` hatası verir. ELF segmentleri `[0x54000000, 0x54100000)` içinde, ayrı sayfalarda R-X, R+NX veya RW+NX eşlenir. Dosya boyunun ötesindeki BSS baytları sıfırdır.
-- `[0x54100000, 0x541ef000)` kullanıcı heap'i, `[0x541ef000, 0x541f0000)` eşlenmemiş koruma sayfası, `[0x541f0000, 0x54200000)` RW+NX yığındır.
-- `RSP=0x541feff8` ile giriş yapılır. `0x541ff000` konumunda little-endian 64 bit argc, ardından argc kadar 64 bit kullanıcı adresi ve bir sıfır işaretçi bulunur. Buradan sonra aynı sayfada NUL sonlu UTF-8 argümanlar yer alır. Argv[0] komutta verilen program yoludur. 1–32 argüman desteklenir. Kabuk ASCII boşlukla ayırır.
+- Yeni ET_EXEC görüntüleri `0x54200000` adresinde başlar. Kod ve veri için 4 MiB bulunur. Heap `[0x54600000, 0x54e00000)`, eşlenmemiş alan `[0x54e00000, 0x54f00000)`, yığın `[0x54f00000, 0x55000000)` aralığındadır. Yığın sonundaki sayfa argc/argv taşır. Giriş RSP değeri argc adresinin sekiz bayt altındadır.
+- Dalga 13 ET_EXEC dosyaları özgün 2 MiB penceresini, 0x54100000 heap başlangıcını, 0x541ef000 koruma sayfasını ve 0x541ff000 argc adresini kullanır. Segment izinleri R-X, R+NX veya RW+NX olabilir.
+- Yükleyici 64 baytlık ELF başlığını ve en çok 256 girdilik program tablosunu ayrı okur. Her PT_LOAD segmenti en çok 16 KiB dosya verisi taşıyan parçalarla kendi fiziksel çerçevelerine yazılır. BSS ilk tahsiste sıfırlanır. Dosyada PT_LOAD dışında kalan içerik yüklenmez.
+- Argüman sayısını argc adet u64 adres ve bir sıfır işaretçi izler. Aynı sayfanın kalanında NUL sonlu UTF-8 metinler bulunur. Argv[0] program yoludur. En çok 32 argüman desteklenir.
 - İşaretçi ve uzunluk önce taşmasız pencere aralığına, ardından aralıktaki her kullanıcı sayfasına göre denetlenir. Çekirdek çıktı tamponlarında RW biti gerekir. Yol taraması en çok 4096 bayt ve bileşen başına 255 bayttır. Böylece eşlenmemiş yığın koruma sayfası da geçersiz bir çağrı tamponudur.
-- C1'de kabuk PID 0'dır ve süreçler bitene kadar sırayla çalışır. Süreç tablosunun kapasitesi bir canlı süreçtir; dolu tablo açık hata verir. UEFI haritasının çerçeve ayırıcısından açılışta 1.032 sayfalık süreç havuzu ayrılır. İki 516 sayfalık yuva sırayla kullanılır. Çıkışta sayfa tabloları kaldırılır ve yuva havuza iade edilir; kullanıcı baytları sonraki tahsiste, ELF kopyalanmadan önce sıfırlanır. Havuz çekirdek ömrü boyunca ayrılmış kalır; genel UEFI ayırıcısına süreç başına geri verilmez. Süreç çıkışta açık fd'leri bırakır ve yazma eşitlemesi tamamlanır. Kullanıcı istisnası süreç sonucuna taşınır.
+- Yeni düzende 3594, eski düzende 516 ardışık UEFI çerçevesi her süreç başlarken ayrılır. Çıkışta kullanıcı sayfa tabloları kaldırılır, çerçeveler aynı UEFI ayırıcısına döner. Bir sonraki süreç alanını kullanmadan önce sıfırlar.
+- Arka plan stdout/stderr yazıları süreç başına tek bir 4096 baytlık satır tamponunu paylaşır. Satır sonu geldiğinde çıktı birlikte yazılır. Sınırı aşacak çağrı RANGE döndürür. Çıkışta son eksik satır da yazılır.
+- Kabuk PID 0 kullanır. En çok sekiz kayıt hazır, çalışıyor, bekliyor veya çıkış sonucu bekleniyor durumunda tutulur. Her LAPIC kesmesinde kullanıcı yazmaçları saklanır. Hazır süreçler döngüsel seçilir. Süreçlerin fd tabloları ve çalışma dizinleri ayrıdır.
+- `baslat` yolu argv[0] yapar. `bekle` kendi çocuğunun iki u64 alanını döndürür. Tür 0 için ikinci alan çıkış kodu, tür 1 için sonlandırma nedenidir. Ön plan süreci beklerken çocuk girdiyi devralır. Kayıt bekleme tamamlanınca yeniden kullanılabilir.
+- `surec_listesi` her süreç için 96 bayt verir. İlk üç u64 alanı PID, durum ve kullanıcı kipinde tamamlanan 10 ms dilim sayısıdır. Kalan 72 baytta NUL sonlu UTF-8 program adı bulunur. Durumlar hazır (1), çalışıyor (2), bitti (3), sonlandırıldı (4), uyuyor (5), çocuk bekliyor (6), girdi bekliyor (7). Kapasite yetmezse RANGE döner.
+
 
 ## Dosya ve girdi biçimleri
 
@@ -74,3 +95,15 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 - Çalışma dizini tamponu NUL sonlandırılır. Süreç kabuğun çalışma dizinini devralır ve sonraki değişiklikler süreçte kalır. Yazılabilirlik ve ESP denetimi kabukla ortaktır.
 - TuşOlayı dört little-endian u64 alandır: set 1 tuş kodu (E0 için bit 8), Unicode kod noktası (yoksa 0), basma (1) veya bırakma (0), değiştiriciler. Değiştiriciler shift=1, ctrl=2, alt=4, altgr=8, caps=16. Ön plandaki süreç PS/2 IRQ halkasından veya USB HID'den giriş alır. Onu başlatan Enter tuşunun bırakması sürece iletilmez. Çıkıştan sonra giriş yeniden kabuğa gider.
 - Saat altı little-endian u64 alandır: yıl, ay, gün, saat, dakika, saniye. `uyu` çağrısı UEFI LAPIC tiklerine göre 10 ms'ye yukarı yuvarlanır. `tik` sistem açılışından beri tik sayısını verir.
+
+Ön plan ekranı sol üst hücreden (0,0) numaralandırılır. Bilgi dört u64 döndürür (sütun, satır, piksel genişliği, piksel yüksekliği). Ekran yazısının üçüncü argümanı NUL sonlu UTF-8 adresi, ön renk ve arka renkten oluşan üç u64 alanlı yapıdır. Renkler 0xRRGGBB biçimindedir. Bir satıra sığmayan metin RANGE, ekranı olmayan bir sistem ENODEV (-19) döndürür.
+
+Fare kaydında altı u64 bulunur (işaretli dx, işaretli dy, x, y, düğmeler, işaretli tekerlek). Ekranda sağa ve aşağı doğru artış pozitiftir. Sol/sağ/orta düğmeler bit 0/1/2 kullanır. Birleşik olayda ilk u64 türdür (0 zaman aşımı, 1 tuş, 2 fare). Kalan 48 baytta ilgili olay yer alır. Maske 1 tuş, 2 fare, 3 ikisi. Süre -1 sınırsız, 0 hazır olayı sorgular, 1–60.000 ms LAPIC saatine yukarı yuvarlanır.
+
+Ön plan süreci bir etkileşimli çocuk açarken 67 ile ekran ve girdi sahipliğini çocuk çalışmaya hazır olmadan devreder. 59 ile çocuğu topladığında sahipliği geri alır.
+
+### Kabuktan program bulma
+
+Bir yol ayıracı içeren ad çalışma dizinine göre çözülür. Yalın adlar için kabuk gerekirse `.elf` uzantısını ekler. Önce `/bin` içinde, ardından açılış bölümüyle aynı fiziksel aygıtın diğer bağlı bölümlerindeki `/bin` dizinlerinde arar. İlk eşleşme çalışır. `sonuc` en son toplanmış sürecin çıkış kodunu verir. Komut geçmişi 32 satırdır. Tab, imlece kadar yazılan yolun ortak önekini tamamlar ve birden çok eşleşme varsa adayları listeler.
+
+QEMU xHCI üzerinde USB HID tamamlamaları MSI-X vektör 65'i kullanır. ISR cihazın kesmesini ve LAPIC EOI'yi onaylar. Bekleyen klavye ve fare aktarımları TRB adresi, yuva ve uç ile eşlenir. Bekleyen kullanıcı süreci fiziksel CPU'yu bırakır. PS/2 için IRQ1 ve IRQ12 halkaları aynı olay biçimini besler.

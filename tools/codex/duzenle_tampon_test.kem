@@ -1,0 +1,15 @@
+kullan drivers::duzenle::tampon::{ DuTampon, du_bos, du_ekle, du_sil, du_atla, du_ileri, du_geri, du_bas, du_son, du_bayt, du_dikey, du_goster, du_satir, du_sutun };
+işlev main() -> tam32 {
+    değişken t: DuTampon = du_bos();
+    du_ekle(&değişken t,"Ağaç"); du_ekle(&değişken t,kod_metin(10)); du_ekle(&değişken t,"İş");
+    eğer t.boy != 11 veya du_sutun(&değişken t,t.yer) != 2 { ver 1; }
+    du_sil(&değişken t,doğru); eğer t.boy != 9 veya du_sutun(&değişken t,t.yer) != 1 { ver 2; }
+    t.yer=du_bas(&değişken t,t.yer); du_sil(&değişken t,doğru);
+    eğer t.boy != 8 veya du_satir(&değişken t,t.boy) != 0 veya t.yer != 6 { ver 3; }
+    du_sil(&değişken t,yanlış); eğer t.boy != 6 { ver 4; }
+    du_goster(&değişken t,1,3); eğer t.sol != 2 { ver 5; }
+    du_ekle(&değişken t,kod_metin(10)); du_goster(&değişken t,1,3); eğer t.ust != 1 veya t.sol != 0 { ver 6; }
+    du_dikey(&değişken t,-10); eğer t.yer != 0 { ver 7; }
+    du_dikey(&değişken t,10); eğer t.yer != t.boy { ver 8; }
+    ver 0;
+}

@@ -304,22 +304,22 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H9a (✓ D-761 (ABI v2: rax num, rdi/rdx/rsi; ortak VFS katmanı — kabuk ve sistem çağrıları aynı kod)) [M] Dosya syscall'ları:** `ac/oku/yaz/kapat/konumla/bilgi/dizin_oku/
       dizin_olustur/sil/yeniden_adlandir`. Kullanıcı işaretçisi doğrulaması
       (`[28] SYSCALL PTR DOGRULAMA OK` deseni) HER birinde.
-- [ ] **H9b (KISMEN D-761 (klavye + zaman; fare_bekle YOK)) [M] Olay syscall'ları:** klavye olayı bekle, fare olayı bekle,
+- [x] **H9b (✓ D-763 (fare_bekle + olay_bekle)) (KISMEN D-761 (klavye + zaman; fare_bekle YOK)) [M] Olay syscall'ları:** klavye olayı bekle, fare olayı bekle,
       zaman aşımlı bekleme (seçici: `bekle(olaylar, ms)`).
 - [x] **H9c (✓ D-761 (ELF FAT32'den, sayfa izinleri segment bayraklarından, bss sıfır, argv yığında)) [M] ELF'i dosya sisteminden yükle** (`[18] ELF YUKLE OK` arm64'te var →
       x86 + VFS'e bağla). `/bin/*` programları.
-- [ ] **H9d (KISMEN D-761 (C1 senkron tek süreç; zaman paylaşımlı çok süreç YOK)) [M] Süreç modeli (LOOP E3b/E3c):** çok süreç, `baslat(yol, argv)`,
+- [x] **H9d (✓ D-763 (zaman paylaşımlı çok süreç; baslat/bekle/ps/sonlandir)) (KISMEN D-761 (C1 senkron tek süreç; zaman paylaşımlı çok süreç YOK)) [M] Süreç modeli (LOOP E3b/E3c):** çok süreç, `baslat(yol, argv)`,
       `bekle`, çıkış kodu, hata olunca süreci öldür (çekirdek yaşar).
-- [ ] **H9e [L] Kabuk (LOOP E3e):** `ls cd pwd cat yaz sil mkdir rmdir mv cp temizle
+- [x] **H9e (✓ D-763 (geçmiş, Tab, /bin araması)) [L] Kabuk (LOOP E3e):** `ls cd pwd cat yaz sil mkdir rmdir mv cp temizle
       saat bellek lspci log yeniden_baslat`, tırnak, yönlendirme (`>`), geçmiş,
       sekme ile tamamlama (dosya adı).
-- [ ] **H9f [M] Metin düzenleyici `duzenle`** (nano benzeri: aç, imleç, yaz,
+- [x] **H9f (✓ D-763 (`duzenle`)) [M] Metin düzenleyici `duzenle`** (nano benzeri: aç, imleç, yaz,
       Ctrl+S kaydet, Ctrl+Q çık) — **klavye + FS'in birlikte kanıtı.**
-- [ ] **H9g [M] Fare kanıt programları:** (1) `dosyalar`: fareyle dosya seç,
+- [x] **H9g (✓ D-763 (`dosyalar`)) [M] Fare kanıt programları:** (1) `dosyalar`: fareyle dosya seç,
       çift tıkla `duzenle`de aç; (2) `ciz`: fareyle çiz, kaydet (BMP → FS'e).
       **Klavye + fare + FS'in birlikte kanıtı.**
 - [x] **H9h (✓ D-759 (MC146818; dosya zaman damgaları)) [S] Saat:** RTC (`rtc_x86.c` referans) → `saat` komutu + dosya zaman damgaları.
-- [ ] **H9i [M] Kapı: uçtan uca senaryo** (QEMU, `sendkey` + `mouse_*` betiği):
+- [x] **H9i (✓ D-763 (tek açılışta v1 senaryosu)) [M] Kapı: uçtan uca senaryo** (QEMU, `sendkey` + `mouse_*` betiği):
       aç → `duzenle not.txt` → Türkçe metin yaz → kaydet → yeniden başlat → `cat` →
       aynı metin; ana makinede `mtype` ile de aynı metin. Sabotaj: `sync`i kaldır → kırmızı.
 - [ ] **H9j [S] Süreç izolasyonu kapısı (LOOP E3f):** kötü niyetli program diğerinin
@@ -355,10 +355,10 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H11. Donanım koşumu (Mehmet + ben)
 
-- [ ] **H11a [S] USB imaj üretici:** `make kem_os_usb.img` (GPT + EFI bölümü + [BIOS
+- [x] **H11a (✓ D-763 (`make kem_os_usb.img`)) [S] USB imaj üretici:** `make kem_os_usb.img` (GPT + EFI bölümü + [BIOS
       GRUB — D-756 ile ertelendi] + FAT32 veri bölümü + örnek dosyalar). `dd` komutu belgede, cihaz adı ASLA
       betikte sabit değil.
-- [ ] **H11b [S] Kontrol listesi** (`belgeler/X86_Fiziksel_Donanim_Kontrol_Listesi.md`,
+- [x] **H11b (✓ D-763 (X86_Fiziksel_Donanim_Kontrol_Listesi.md)) [S] Kontrol listesi** (`belgeler/X86_Fiziksel_Donanim_Kontrol_Listesi.md`,
       ARM64 listesinin deseni): BIOS ayarları (CSM/Legacy, Secure Boot kapalı, SATA AHCI
       kipi), beklenen ekran çıktıları, başarısızlıkta ne fotoğraflanacak.
 - [ ] **H11c [M] Makine 1 — eski BIOS'lu masaüstü** (PS/2 + SATA): tam senaryo H9i.
