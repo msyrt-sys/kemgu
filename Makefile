@@ -5080,3 +5080,9 @@ calistir_bm_x86_pci16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x
 test_tumu: calistir_bm_x86_msi
 calistir_bm_x86_msi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_msi_harness.sh
+
+.PHONY: calistir_bm_x86_disk_hata
+test_tumu: calistir_bm_x86_disk_hata
+calistir_bm_x86_disk_hata: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/ahci/kurtarma_test.kem
+	@SUREC_KAHIN=disk_hata_kahin bash test/bm_x86_surec_harness.sh

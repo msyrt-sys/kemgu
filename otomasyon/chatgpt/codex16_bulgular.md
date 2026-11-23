@@ -51,3 +51,17 @@ Q35 üzerinde SATA dosyası okunurken AHCI vektörü 67’nin sayacı 2’den 5�
 QEMU 8.2.2 `ich9-ahci,help` bir MSI kapatma özelliği sunmadı. Yedek yol için ayrı çekirdekte yalnız AHCI yetenek aramasına “yok” sonucu verildi. Dosya içeriği host FAT okuyucusuyla eşleşti. Dinamik aralık tek işlemcide 14 MSI vektörü barındırır. Donanım raporu dosyası ve ekran farklı anlarda üretilir; değişken sayaçlar QMP ile alınan alt ve üst sınırlar arasında doğrulanır.
 
 MSI veri alanına boş 79 yazılan kopyada `KABUK HATA ahci MSI zaman asimi; yoklama` görüldü. Kâhin dosya baytlarını yedek yoldan doğruladıktan sonra “MSI bekleniyordu” ile rc 1 verdi. Kayıt çakışmasını kabul eden kopyada `kesme sina` çıktısı `HATA kesme vektoru cakismasi` oldu, kapı rc 1 verdi.
+
+## Disk hatası enjeksiyonu
+
+Doğrudan blkdebug → file düzeninde `read_aio` geçici hatayı tetiklemedi. QEMU 8.2.2’nin açılış olayına `event="none"` ile bağlanan, `iotype="read"` ve hedef sektörle sınırlanan kural kullanıldı. Ayrı `qemu-io` ölçümünde sırasıyla EIO ve 512/512 bayt okuma görüldü. Konukta her senaryonun gerçek hata sayısı QMP `query-blockstats` ile alındı. [QEMU 8.2.2 blkdebug kaynağı](https://github.com/qemu/qemu/blob/v8.2.2/block/blkdebug.c)
+
+| Taşıyıcı | Disk LBA | Geçici / kalıcı hata sayısı | Kalıcı hatada konuk durumu |
+|---|---:|---|---|
+| AHCI | 4103 | 1 / 4 | TFD 1089, PxIS 1073741824 |
+| NVMe | 4103 | 1 / 4 | SC 129, SCT 2 |
+| USB BOT | 135175 | 1 / 4 | SENSE 11, ASC 0, ASCQ 6 |
+
+USB SCSI izinde her başarısız okuma başına bir REQUEST SENSE ölçüldü. İki derleyicide de geçici hata sonrası dosya baytları host FAT imajıyla eşleşti. Kalıcı hatadan sonra aynı bölümün başka dosyası okundu ve fsck temizdi. QEMU’daki AHCI EIO durumunda BSY ve DRQ kapalıydı. COMRESET gerektiren meşgul durumunun yazmaç sırası ve bir milisaniyelik beklemesi ayrı host testinde doğrulandı.
+
+Sıfır yeniden denemede tek seferlik hatadan sonra SATA dosyası yerine LBA/TFD/PxIS hata satırı döndü. Port yeniden başlatma yazımını atlayan kopyada hem hatalı dosya (LBA 4103) hem de sonraki dosya için gereken sektör (4102) okunamadı. İki sabotaj koşumu rc 1 verdi.

@@ -1406,6 +1406,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
 }
 // ISR yalnız bayt üretir; paket, metin ve imleç tüketici bağlamındadır.
 işlev kabuk_hata(m: metin) {
+    eğer metin_uzunluk(m) >= 11 ve bm_esit(metin_kes(m,0,11),"KABUK HATA ") { ekran_cift_yaz(m); ver; }
     eğer bm_esit(m,"usb bellek cikarildi") { ekran_cift_yaz("KABUK HATA usb bellek cikarildi"); }
     değilse { ekran_cift_yaz(metin_birlestir("HATA ",m)); }
 }

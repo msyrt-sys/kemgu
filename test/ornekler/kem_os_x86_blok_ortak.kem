@@ -270,12 +270,38 @@ işlev bd_msi_komut(d: &değişken BlokDonanim,ofs: tam64,deger: tam64) {
         }
     }
 }
+işlev bd_hata_alan(s: metin,alan: metin,v: tam64) -> metin {
+    ver metin_birlestir(metin_birlestir(s,alan),tam_metin(v));
+}
+işlev bd_disk_hata(d: &değişken BlokDonanim,e: metin) -> metin {
+    eşleş d.aygit.durum {
+        BlokCesidi::Ahci(a) => {
+            eğer a.hazir ve (metin_esit(e,"ahci tfes") veya metin_esit(e,"ahci tfd err")) {
+                değişken m: metin = bd_hata_alan("KABUK HATA ahci"," LBA ",a.lba);
+                ver bd_hata_alan(bd_hata_alan(m," TFD ",a.son_tfd)," PxIS ",a.son_is);
+            }
+        }
+        BlokCesidi::Nvme(n) => {
+            eğer n.hazir ve metin_esit(e,"nvme komut durumu") {
+                değişken m: metin = bd_hata_alan("KABUK HATA nvme"," LBA ",n.lba);
+                ver bd_hata_alan(bd_hata_alan(m," SC ",n.son_sc olarak tam64)," SCT ",n.son_sct olarak tam64);
+            }
+        }
+        BlokCesidi::Usb(u) => {
+            eğer u.evre == 100 ve metin_esit(e,"scsi komut hatasi") {
+                değişken m: metin = bd_hata_alan("KABUK HATA usb"," LBA ",u.lba);
+                m=bd_hata_alan(m," SENSE ",u.anahtar olarak tam64);
+                ver bd_hata_alan(bd_hata_alan(m," ASC ",u.asc olarak tam64)," ASCQ ",u.ascq olarak tam64);
+            }
+        }
+    } ver e;
+}
 işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
  bd_usb_tuketici(d);
  değişken y: GcYanit = gc_bos();değişken i: tam32 = 0;
  iken i < 2000000 {
   değişken r: GcIstek = blok_adim(&değişken d.aygit,y); eşleş r {
-   GcIstek::Bitti => { bd_usb_yayinla(d); ver tamam(doğru); } GcIstek::Hata(e) => { bd_usb_yayinla(d); ver hata(e); }
+   GcIstek::Bitti => { bd_usb_yayinla(d); ver tamam(doğru); } GcIstek::Hata(e) => { bd_usb_yayinla(d); ver hata(bd_disk_hata(d,e)); }
    GcIstek::BellekOku(adr,n) => { y=bm_yurut(d.bar,GcIstek::BellekOku(bh_depo_oku(d,adr,n),n)); }
    GcIstek::Yaz32(ofs,v) => { bd_msi_komut(d,ofs,v); y=gc_bos(); }
    _ => { y=bm_yurut(d.bar,r); }

@@ -25,3 +25,9 @@ PCI kapısı, PC matrisi, dört saf sürücü kapısı ve sekiz regresyonun son 
 IRQ1, IRQ12, LAPIC zamanlayıcısı ve xHCI MSI-X kayıt arayüzüne bağlandı. 66–79 aralığında dinamik vektör ayırma ve bırakma eklendi. AHCI komutları MSI, NVMe CQ1 ise MSI-X bildirimi bekliyor. Geciken bildirimin ardından sürücü sınırlı beklemeden yoklamaya dönüyor. Donanım raporunda vektör, işleyici ve kesme sayısı var.
 
 Yeni MSI kapısı iki derleyiciyle normal ve AHCI MSI yeteneği atlanan dört açılışta geçti. İki gerçek sabotaj kırmızı verdi. Yanlış MSI vektöründe zaman aşımından sonra SATA dosyası yoklama ile yine okundu. İkinci işleyicinin aynı vektöre bağlanmasına izin verilince çakışma testi hata verdi. PC matrisinin 72 açılışı ve §7 regresyonları yeşil. Birleşik koşum 1281 saniye, bölüm 21 dakika.
+
+## Bölüm 4 — disk kurtarma
+
+AHCI hatasında port durduruluyor, hata durumu temizleniyor, BSY/DRQ sürüyorsa COMRESET uygulanıyor ve motor yeniden başlatılıyor. NVMe başarısız tamamlanmayı kuyruktan tüketiyor. USB BOT, yeniden denemeden önce REQUEST SENSE gönderiyor. İlk komuta ek olarak en fazla üç deneme yapılır. Kalıcı sektör hatasının ardından her diskte bağımsız dosya aynı açılışta okundu.
+
+C ve self-host için altışar blkdebug senaryosu geçti. Üç disk türünde tek seferlik hatada bir, kalıcı hatada dört başarısız fiziksel okuma ölçüldü. Yeniden denemeyi sıfırlama ve AHCI portunu yeniden başlatmama sabotajlarının ikisi de kırmızı. Disk kâhini, dört saf sürücü kapısı ve sekiz regresyon yeşil. İlk toplu koşumda eski USB model testi bir REQUEST SENSE beklediğinden kırmızı verdi. Model kalıcı hata için dört REQUEST SENSE ve sonraki geçerli okumayı denetleyecek şekilde güncellendi. Üç ilgili saf test hedefi yeniden yeşil tamamlandı. Toplam test süresi 1391 saniye, bölüm 23 dakika.

@@ -1,13 +1,14 @@
 // Sans-IO NVMe: tek sıradaki istek; tüm yanıtlar sonraki adımda doğrulanır.
 // DMA sözleşmesi: taban'dan başlayan, 4096 hizalı 86016 bayt alan çağırana aittir.
 // İlk 4 sayfa ASQ/ACQ/SQ1/CQ1, ardından 64 KiB veri ve bir PRP liste sayfası.
+kullan drivers::blok::kurtarma::{ disk_yeniden_dene };
 kullan drivers::ortak::gc::{ GcIstek, GcYanit };
 kullan drivers::ortak::bayt::{ yaz_le32, bayt_sifir, oku_u8 };
 kullan drivers::nvme::kayit::{ NvmeCap, nvme_cap_coz, nvme_hazir, nvme_fatal };
 kullan drivers::nvme::komut::{ NvmePrp, PrpSayfa, NvmeTamamlanma, nvme_identify, nvme_kuyruk_olustur, nvme_io_kur, nvme_flush_kur, nvme_prp_kur, nvme_cq_coz };
 kullan drivers::nvme::kimlik::{ NvmeDenetleyici, NvmeAdAlani, nvme_denetleyici_coz, nvme_ad_alani_coz };
 genel yapı NvmeDurum {
-    cq1_kesmeli: mantıksal; adim: tam32; taban: tam64; qboy: tam32; dstrd: tam32; sinir: tam32; beklenen: tam32;
+    deneme: tam32; son_sc: tam32; son_sct: tam32; cq1_kesmeli: mantıksal; adim: tam32; taban: tam64; qboy: tam32; dstrd: tam32; sinir: tam32; beklenen: tam32;
     hazir: mantıksal; mesaj: metin; yonetim: tam32; cid: tam32;
     aq_son: tam32; aq_bas: tam32; aq_faz: mantıksal; io_son: tam32; io_bas: tam32; io_faz: mantıksal;
     azami: tam32; blok_bayt: tam32; kapasite: tam64; islem: tam32; lba: tam64;
@@ -17,7 +18,7 @@ genel yapı NvmeDurum {
 genel işlev nvme_yeni(taban: tam64, qboy: tam32) -> sonuç<NvmeDurum,metin> {
     eğer taban <= 0 veya taban%4096 != 0 veya taban > 9223372036854775807-86016 veya qboy < 2 veya qboy > 64 { ver hata("nvme dma veya kuyruk"); }
     değişken bos: Dizi<dtam8> = [];
-    ver tamam(NvmeDurum { cq1_kesmeli:yanlış, adim: 0, taban: taban, qboy: qboy, dstrd: 0, sinir: 500, beklenen: 0, hazir: yanlış, mesaj: "", yonetim: 0, cid: 0, aq_son: 0, aq_bas: 0, aq_faz: doğru, io_son: 0, io_bas: 0, io_faz: doğru, azami: 65536, blok_bayt: 512, kapasite: 0, islem: 0, lba: 0, kalan: 0, tamamlanan: 0, parca: 0, veri: bos, sonuc: bos, komut: bos, prp: bos });
+    ver tamam(NvmeDurum { deneme:0, son_sc:0, son_sct:0, cq1_kesmeli:yanlış, adim: 0, taban: taban, qboy: qboy, dstrd: 0, sinir: 500, beklenen: 0, hazir: yanlış, mesaj: "", yonetim: 0, cid: 0, aq_son: 0, aq_bas: 0, aq_faz: doğru, io_son: 0, io_bas: 0, io_faz: doğru, azami: 65536, blok_bayt: 512, kapasite: 0, islem: 0, lba: 0, kalan: 0, tamamlanan: 0, parca: 0, veri: bos, sonuc: bos, komut: bos, prp: bos });
 }
 işlev nvme_hata(s: &değişken NvmeDurum, m: metin) -> GcIstek { s.adim=0-1; s.hazir=yanlış; s.mesaj=m; ver GcIstek::Hata(m); }
 işlev zil(s: &değişken NvmeDurum, cq: mantıksal) -> tam64 {
@@ -137,13 +138,21 @@ genel işlev nvme_adim(s: &değişken NvmeDurum, y: GcYanit) -> GcIstek {
                 // Aygıt fazı yayınladıktan sonra bu girdiyi tüketici ilerleyene dek değiştirmez.
                 eğer s.adim == 26 { değişken oku: GcIstek = cq_oku(s); s.adim=31; ver oku; }
                 eğer c.cid != s.cid veya c.sqid != qid veya c.sq_bas != son veya c.sq_bas >= s.qboy { ver nvme_hata(s,"nvme tamamlanma kimligi"); }
-                eğer c.durum != 0 { ver nvme_hata(s,"nvme komut durumu"); }
+                eğer c.durum != 0 ve s.yonetim < 4 { ver nvme_hata(s,"nvme komut durumu"); }
+                s.son_sc=c.sc; s.son_sct=c.sct;
                 değişken bas: tam32 = 0;
                 eğer s.yonetim < 4 { s.aq_bas=(s.aq_bas+1)%s.qboy; eğer s.aq_bas == 0 { s.aq_faz=değil s.aq_faz; } bas=s.aq_bas; }
                 değilse { s.io_bas=(s.io_bas+1)%s.qboy; eğer s.io_bas == 0 { s.io_faz=değil s.io_faz; } bas=s.io_bas; }
-                s.adim=28; ver GcIstek::Yaz32(zil(s,doğru),bas olarak tam64);
+                s.adim=28;
+                eğer c.durum != 0 { s.adim=32; }
+                ver GcIstek::Yaz32(zil(s,doğru),bas olarak tam64);
             }
         }
+    }
+    // Başarısız CQ girdisi de tüketilir; yeni gönderim yeni CID kullanır.
+    eğer s.adim == 32 {
+        eğer değil disk_yeniden_dene(s.deneme) { s.adim=100; ver GcIstek::Hata("nvme komut durumu"); }
+        s.deneme=s.deneme+1; ver emir_baslat(s);
     }
     eğer s.adim == 28 {
         eğer s.yonetim < 2 { s.adim=29; ver GcIstek::BellekOku(s.taban+16384,4096); }
@@ -176,7 +185,7 @@ genel işlev nvme_adim(s: &değişken NvmeDurum, y: GcYanit) -> GcIstek {
 işlev istek_kur(s: &değişken NvmeDurum, lba: tam64, sayi: tam32, islem: tam32, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     eğer değil s.hazir veya s.adim != 100 { ver hata("nvme hazir degil"); }
     eğer islem != 3 { eğer lba < 0 veya sayi < 1 veya lba >= s.kapasite veya (sayi olarak tam64) > s.kapasite-lba veya (sayi olarak tam64)*(s.blok_bayt olarak tam64) > 16777216 { ver hata("nvme istek araligi"); } }
-    değişken bos: Dizi<dtam8> = []; s.sonuc=bos; s.veri=veri; s.lba=lba; s.kalan=sayi; s.tamamlanan=0; s.islem=islem; s.adim=19;
+    değişken bos: Dizi<dtam8> = []; s.deneme=0; s.sonuc=bos; s.veri=veri; s.lba=lba; s.kalan=sayi; s.tamamlanan=0; s.islem=islem; s.adim=19;
     ver tamam(doğru);
 }
 genel işlev nvme_oku(s: &değişken NvmeDurum, lba: tam64, sayi: tam32) -> sonuç<mantıksal,metin> { değişken b: Dizi<dtam8> = []; ver istek_kur(s,lba,sayi,1,b); }

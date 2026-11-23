@@ -55,7 +55,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz"):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -110,7 +110,12 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
             cmd.extend(['-device',aygit])
             continue
         ek = ',bootindex=1' if ad == acilis else ''
-        cmd.extend(['-drive',f'if=none,id=d{ad},format=raw,file={aygitlar[ad]}',
+        surucu = f'if=none,id=d{ad},format=raw,file={aygitlar[ad]}'
+        if disk_hatasi and disk_hatasi[0] == ad:
+            surucu = f'if=none,id=d{ad},driver=blkdebug,config={disk_hatasi[1]},image.driver=file,image.filename={aygitlar[ad]}'
+            if ad == 'usb':
+                cmd.extend(['-trace','enable=scsi_req_parsed'])
+        cmd.extend(['-drive',surucu,
                     '-device',f'{aygit},drive=d{ad}{ek}'])
     if fare == "usb":
         cmd.extend(["-device", "usb-mouse,bus=x.0"])
