@@ -1053,6 +1053,29 @@ işlev kd_pci_tani() {
         ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi("CFG",ofs olarak tam64),p),e)); ofs=ofs+4;
     }
 }
+işlev kd_kesme_rapor(satirlar: Dizi<metin>) {
+    güvensiz {
+        eğer kesme_tablo == 0 { ver; }
+        değişken v: tam32 = 32;
+        iken v < 80 {
+            değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+            değişken kim: tam64 = kem_mmio_oku64(p);
+            eğer kim > 0 {
+                dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi(kd_tamsayi("KESME",v olarak tam64),kim),kem_mmio_oku64(p+8)));
+            }
+            v=v+1;
+        }
+    }
+}
+işlev kd_kesme_sina() -> sonuç<mantıksal,metin> {
+    değişken v: tam32 = kesme_ayir();
+    eğer v < 0 { ver hata("kesme sinamasi icin bos vektor yok"); }
+    değişken ilk: mantıksal = kesme_kaydet(v,5);
+    değişken ikinci: mantıksal = kesme_kaydet(v,6);
+    değişken bos: mantıksal = kesme_birak(v);
+    eğer değil ilk veya ikinci veya değil bos { ver hata("kesme vektoru cakismasi"); }
+    ekran_cift_yaz("KESME CAKISMA RED"); ver tamam(doğru);
+}
 işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal,yol: metin) -> sonuç<mantıksal,metin> {
     değişken satirlar: Dizi<metin> = []; dizi_ekle(satirlar,kd_cpu());
     eğer uefi_mi() {
@@ -1072,7 +1095,7 @@ işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam3
         } }
     } değilse { dizi_ekle(satirlar,"PVH: UEFI bilgisi yok"); }
     güvensiz { dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi(kd_tamsayi("8042 oztest port1 port2",ps2_oztest olarak tam64),ps2_port1 olarak tam64),ps2_port2 olarak tam64)); }
-    kd_pci_rapor(satirlar);
+    kd_pci_rapor(satirlar); kd_kesme_rapor(satirlar);
     için a: x.aygitlar {
         değişken s: metin = kd_tamsayi("USB",a.yuva olarak tam64);
         s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(a.kimlik.vid olarak tam64,4)));
@@ -1352,6 +1375,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         tr.us=bm_esit(arg,"us"); ver tamam(doğru);
     }
     eğer bm_esit(cmd,"echo") { ekran_cift_yaz(arg); ver tamam(doğru); }
+    eğer bm_esit(cmd,"kesme") ve bm_esit(arg,"sina") { ver kd_kesme_sina(); }
     eğer bm_esit(cmd,"pci") { kd_pci_tani(); ver tamam(doğru); }
     eğer bm_esit(cmd,"diskler") { kd_diskler(d); ver tamam(doğru); }
     eğer bm_esit(cmd,"saat") {
@@ -1513,6 +1537,7 @@ küresel değişken kh_iman: tam64 = 0;
 küresel değişken kh_durum: tam64 = 0;
 // ISR yalnız kaynağı ve LAPIC'i onaylar. HID/BOT halkası tek tüketicide kalır.
 gerçekzamanlı çıplak işlev kdl_xhci_irq() {
+    eğer değil kesme_geldi(65,4) { ver; }
     güvensiz { satıriçi_asm {
         mimari:x86_64 çevrim:2048
         şablon:r#"movl $$8, ($0)
@@ -1541,6 +1566,7 @@ işlev kh_kur(bar: tam64,x: &değişken XhciDurum) {
                 }
                 değişken tablo: tam64 = taban+(t&4294967288);
                 eğer taban != bar veya tablo < taban veya tablo > 9223372036854775791 { ver; }
+                eğer değil kesme_kaydet(65,4) { bm_yaz("KABUK HATA xHCI kesme vektoru dolu"); ver; }
                 kem_pci_yaz32(kh_bdf,o,v|3221225472);
                 kem_mmio_yaz32(tablo+12,1);
                 değişken hedef: tam64 = (kem_mmio_oku32(kap_lapic+32)>>24)&255;

@@ -5075,3 +5075,8 @@ test_tumu: calistir_bm_x86_pci16
 calistir_bm_x86_pci16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/acpi/mcfg_test.kem tests/drivers/pci/port16_test.kem
 	@SUREC_KAHIN=pci16_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_msi
+test_tumu: calistir_bm_x86_msi
+calistir_bm_x86_msi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_msi_harness.sh

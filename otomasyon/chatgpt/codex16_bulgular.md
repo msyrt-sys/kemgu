@@ -43,3 +43,11 @@ işlev main() -> tam32 {
 ```
 
 İlk PCI regresyonunda her iki kaynakta 68 LAPIC tikinde tekrar sayısı kabul aralığındaydı. Son dosya düzeniyle yük altında tekrarlanan koşumda self-host PS/2 konuk 7 karakter verdi (aralık 4–6). Önceki kâhin basmayı yollayıp en az iki tik onay bekledikten sonra 68 tik beklemeye başlıyor ve bırakmayı ayrı bir host çağrısıyla yolluyordu. Basılı kalınan süreyi QEMU’nun sanal saatinde 200 veya 680 ms programlayan `send-key` ile aynı GOP görüntüsü ve aynı eşikler korundu. İki derleyicide, PS/2 ve USB için dört senaryoda da 200 ms’de 1, 680 ms’de 5 karakter ölçüldü.
+
+## Kesme çerçevesi ve MSI
+
+Q35 üzerinde SATA dosyası okunurken AHCI vektörü 67’nin sayacı 2’den 5’e çıktı. NVMe dosyası okunurken CQ1’in MSI-X vektörü 66 için 4’ten 7’ye çıktı. Her iki derleyicide de ilgili PCI okuması sırasında IOAPIC 16–23 girişlerinde artış sıfırdı. Host ayrıca PCI MSI enable, INTx Disable, MSI mesaj verisi ile NVMe MSI-X tablo girişinin adresini, verisini ve maskesini doğrudan QEMU belleğinde sınadı.
+
+QEMU 8.2.2 `ich9-ahci,help` bir MSI kapatma özelliği sunmadı. Yedek yol için ayrı çekirdekte yalnız AHCI yetenek aramasına “yok” sonucu verildi. Dosya içeriği host FAT okuyucusuyla eşleşti. Dinamik aralık tek işlemcide 14 MSI vektörü barındırır. Donanım raporu dosyası ve ekran farklı anlarda üretilir; değişken sayaçlar QMP ile alınan alt ve üst sınırlar arasında doğrulanır.
+
+MSI veri alanına boş 79 yazılan kopyada `KABUK HATA ahci MSI zaman asimi; yoklama` görüldü. Kâhin dosya baytlarını yedek yoldan doğruladıktan sonra “MSI bekleniyordu” ile rc 1 verdi. Kayıt çakışmasını kabul eden kopyada `kesme sina` çıktısı `HATA kesme vektoru cakismasi` oldu, kapı rc 1 verdi.

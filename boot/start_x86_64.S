@@ -857,3 +857,59 @@ kdl_apic_timer_irq:
     ret
 kdl_ps2_irq:
     ret
+
+/* Dinamik MSI kapıları. Kesilen kodun çağrıda bozulabilen yazmaçlarını koru. */
+.section .text
+.code64
+.macro KDL_MSI n
+.global kdl_msi_stub_\n
+kdl_msi_stub_\n:
+    pushq $\n
+    jmp .Lkdl_msi_ortak
+.endm
+.irp n,66,67,68,69,70,71,72,73,74,75,76,77,78,79
+    KDL_MSI \n
+.endr
+.Lkdl_msi_ortak:
+    pushq %rax
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %rbp
+    movq %rsp,%rbp
+    movq 80(%rbp),%rdi
+    andq $-16,%rsp
+    cld
+    call kdl_disk_irq
+    movq kdl_lapic_taban(%rip),%rax
+    testq %rax,%rax
+    jz 1f
+    movl $0,176(%rax)
+1:  movq %rbp,%rsp
+    popq %rbp
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rax
+    addq $8,%rsp
+    iretq
+.weak kdl_disk_irq
+kdl_disk_irq:
+    ret
+.section .rodata
+.balign 8
+.global kdl_msi_kocanlari
+kdl_msi_kocanlari:
+.irp n,66,67,68,69,70,71,72,73,74,75,76,77,78,79
+    .quad kdl_msi_stub_\n
+.endr

@@ -2,12 +2,12 @@
 // DMA sözleşmesi: taban'dan başlayan, 4096 hizalı 86016 bayt alan çağırana aittir.
 // İlk 4 sayfa ASQ/ACQ/SQ1/CQ1, ardından 64 KiB veri ve bir PRP liste sayfası.
 kullan drivers::ortak::gc::{ GcIstek, GcYanit };
-kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8 };
+kullan drivers::ortak::bayt::{ yaz_le32, bayt_sifir, oku_u8 };
 kullan drivers::nvme::kayit::{ NvmeCap, nvme_cap_coz, nvme_hazir, nvme_fatal };
 kullan drivers::nvme::komut::{ NvmePrp, PrpSayfa, NvmeTamamlanma, nvme_identify, nvme_kuyruk_olustur, nvme_io_kur, nvme_flush_kur, nvme_prp_kur, nvme_cq_coz };
 kullan drivers::nvme::kimlik::{ NvmeDenetleyici, NvmeAdAlani, nvme_denetleyici_coz, nvme_ad_alani_coz };
 genel yapı NvmeDurum {
-    adim: tam32; taban: tam64; qboy: tam32; dstrd: tam32; sinir: tam32; beklenen: tam32;
+    cq1_kesmeli: mantıksal; adim: tam32; taban: tam64; qboy: tam32; dstrd: tam32; sinir: tam32; beklenen: tam32;
     hazir: mantıksal; mesaj: metin; yonetim: tam32; cid: tam32;
     aq_son: tam32; aq_bas: tam32; aq_faz: mantıksal; io_son: tam32; io_bas: tam32; io_faz: mantıksal;
     azami: tam32; blok_bayt: tam32; kapasite: tam64; islem: tam32; lba: tam64;
@@ -17,7 +17,7 @@ genel yapı NvmeDurum {
 genel işlev nvme_yeni(taban: tam64, qboy: tam32) -> sonuç<NvmeDurum,metin> {
     eğer taban <= 0 veya taban%4096 != 0 veya taban > 9223372036854775807-86016 veya qboy < 2 veya qboy > 64 { ver hata("nvme dma veya kuyruk"); }
     değişken bos: Dizi<dtam8> = [];
-    ver tamam(NvmeDurum { adim: 0, taban: taban, qboy: qboy, dstrd: 0, sinir: 500, beklenen: 0, hazir: yanlış, mesaj: "", yonetim: 0, cid: 0, aq_son: 0, aq_bas: 0, aq_faz: doğru, io_son: 0, io_bas: 0, io_faz: doğru, azami: 65536, blok_bayt: 512, kapasite: 0, islem: 0, lba: 0, kalan: 0, tamamlanan: 0, parca: 0, veri: bos, sonuc: bos, komut: bos, prp: bos });
+    ver tamam(NvmeDurum { cq1_kesmeli:yanlış, adim: 0, taban: taban, qboy: qboy, dstrd: 0, sinir: 500, beklenen: 0, hazir: yanlış, mesaj: "", yonetim: 0, cid: 0, aq_son: 0, aq_bas: 0, aq_faz: doğru, io_son: 0, io_bas: 0, io_faz: doğru, azami: 65536, blok_bayt: 512, kapasite: 0, islem: 0, lba: 0, kalan: 0, tamamlanan: 0, parca: 0, veri: bos, sonuc: bos, komut: bos, prp: bos });
 }
 işlev nvme_hata(s: &değişken NvmeDurum, m: metin) -> GcIstek { s.adim=0-1; s.hazir=yanlış; s.mesaj=m; ver GcIstek::Hata(m); }
 işlev zil(s: &değişken NvmeDurum, cq: mantıksal) -> tam64 {
@@ -57,6 +57,8 @@ işlev emir_baslat(s: &değişken NvmeDurum) -> GcIstek {
         }
     }
     eşleş r { hata(e) => { ver nvme_hata(s,e); } tamam(v) => { s.komut=v; } }
+    // CQ1 için PC, IEN ve MSI-X tablo girdisi 1. Yönetim kuyruğunun bildirimi maskelidir.
+    eğer s.yonetim == 2 ve s.cq1_kesmeli { yaz_le32(s.komut,44,65539); }
     eğer dizi_boyut(s.prp) > 0 { s.adim=21; ver GcIstek::BellekYaz(s.taban+81920,s.prp); }
     ver veri_hazir(s);
 }

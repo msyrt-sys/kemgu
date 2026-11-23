@@ -120,3 +120,43 @@ orq %rdx,%rax"# çıktı("={ax}",&n) bozulan("~{dx},~{flags},~{memory}") } }
 çıplak işlev kem_qemu_cik(kod: tam32) {
     kem_port_yaz8(244 olarak dtam16, ((kod & 255) olarak tam32) olarak dtam8);
 }
+
+// Her vektörün 32 baytında işleyici kimliği, kesme sayısı ve PCI bağlamı tutulur.
+// 33/44 PS/2, 48 LAPIC, 65 xHCI. 66..79 MSI için kurulmuş dinamik IDT kapılarıdır.
+küresel değişken kesme_tablo: tam64 = 0;
+çıplak işlev kesme_kaydet(v: tam32,kim: tam32) -> mantıksal {
+    eğer kesme_tablo == 0 veya v < 0 veya v > 255 { ver yanlış; }
+    değişken uygun: mantıksal = (v == 33 ve kim == 1) veya (v == 44 ve kim == 2) veya (v == 48 ve kim == 3) veya (v == 65 ve kim == 4);
+    eğer v >= 66 ve v < 80 ve (kim == 5 veya kim == 6) { uygun=doğru; }
+    değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+    değişken eski: tam64 = kem_mmio_oku64(p);
+    eğer değil uygun veya (eski != 0 ve eski != -1) { ver yanlış; }
+    kem_mmio_yaz64(p,kim olarak tam64); ver doğru;
+}
+çıplak işlev kesme_ayir() -> tam32 {
+    eğer kesme_tablo == 0 { ver -1; }
+    değişken v: tam32 = 66;
+    iken v < 80 {
+        değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+        eğer kem_mmio_oku64(p) == 0 { kem_mmio_yaz64(p,-1); ver v; }
+        v=v+1;
+    } ver -1;
+}
+çıplak işlev kesme_birak(v: tam32) -> mantıksal {
+    eğer kesme_tablo == 0 veya v < 66 veya v >= 80 { ver yanlış; }
+    değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+    eğer kem_mmio_oku64(p) == 0 { ver yanlış; }
+    kem_mmio_yaz64(p,0); kem_mmio_yaz64(p+8,0);
+    kem_mmio_yaz64(p+16,0); kem_mmio_yaz64(p+24,0); ver doğru;
+}
+gerçekzamanlı çıplak işlev kesme_geldi(v: tam64,kim: tam64) -> mantıksal {
+    // Eski PVH çekirdeklerinde bu tablo kurulmaz.
+    eğer kesme_tablo == 0 { ver doğru; }
+    değişken p: *tam64 = (kesme_tablo+v*32) olarak *tam64;
+    eğer *p != kim { ver yanlış; }
+    değişken sayac: *tam64 = (kesme_tablo+v*32+8) olarak *tam64;
+    *sayac=*sayac+1; ver doğru;
+}
+gerçekzamanlı çıplak işlev kdl_disk_irq(v: tam64) {
+    eğer v >= 66 ve v < 80 { eğer değil kesme_geldi(v,5) { kesme_geldi(v,6); } }
+}

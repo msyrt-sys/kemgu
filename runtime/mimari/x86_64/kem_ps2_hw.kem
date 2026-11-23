@@ -77,8 +77,8 @@ küresel değişken ps2_irq12_sayi: tam64 = 0;
 
 // Döngüsüz ISR: bir hazır baytı alır, halka doluysa sayar; çözümleme/heap/çıktı yok.
 gerçekzamanlı çıplak işlev kdl_ps2_irq(irq: tam64) {
- eğer irq == 1 { ps2_irq1_sayi=ps2_irq1_sayi+1; }
- eğer irq == 12 { ps2_irq12_sayi=ps2_irq12_sayi+1; }
+ eğer irq == 1 { eğer değil kesme_geldi(33,1) { ver; } ps2_irq1_sayi=ps2_irq1_sayi+1; }
+ eğer irq == 12 { eğer değil kesme_geldi(44,2) { ver; } ps2_irq12_sayi=ps2_irq12_sayi+1; }
  değişken s: dtam8 = 0;
  güvensiz { satıriçi_asm { mimari:x86_64 çevrim:1024 şablon:r#"inb $$100, %al"# çıktı("={ax}",&s) bozulan("~{memory}") } }
  eğer ((s olarak tam32)&1) == 0 { ver; }

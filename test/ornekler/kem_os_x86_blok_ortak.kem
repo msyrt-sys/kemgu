@@ -6,7 +6,7 @@ kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ba;
 kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak bu;
 kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle, xhci_giris } olarak bx;
 kullan drivers::usb::tanim::{ UsbArayuz };
-genel yapı BlokDonanim { ad: metin; bar: tam64; usb_portsc: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
+genel yapı BlokDonanim { msi: tam32; ad: metin; bar: tam64; usb_portsc: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
 // Bir xHCI denetleyicisinde tek sıradaki tüketici: HID, BOT veya yönetim komutu.
 küresel değişken bd_usb_olay: tam64 = 0;
 küresel değişken bd_usb_bas: tam32 = 0;
@@ -145,6 +145,131 @@ işlev bh_depo_oku(d: &değişken BlokDonanim,adr: tam64,n: tam32) -> tam64 {
         ver u.olay_taban+(u.olay_bas olarak tam64)*16;
     } _ => { ver adr; } }
 }
+// PCI yetenek başlığı: 64 bit adres ve vektör maskesi isteğe bağlıdır.
+çıplak işlev bd_pci_yetenek(bdf: tam32,tip: tam64) -> tam32 {
+    eğer (kem_pci_oku16(bdf,6)&16) == 0 { ver 0; }
+    değişken k: tam32 = (kem_pci_oku32(bdf,52)&252) olarak tam32;
+    değişken n: tam32 = 0;
+    iken k >= 64 ve k <= 244 ve n < 48 {
+        değişken v: tam64 = kem_pci_oku32(bdf,k);
+        eğer (v&255) == tip { ver k; }
+        k=((v>>8)&252) olarak tam32; n=n+1;
+    } ver 0;
+}
+işlev bd_msi_ac(bdf: tam32,bar: tam64) -> tam32 {
+    güvensiz {
+        eğer kesme_tablo == 0 veya kap_lapic == 0 { ver 0; }
+        değişken k: tam32 = bd_pci_yetenek(bdf,5);
+        eğer k == 0 { ver 0; }
+        değişken i: tam32 = 66;
+        iken i < 80 {
+            değişken p: tam64 = kesme_tablo+(i olarak tam64)*32;
+            eğer kem_mmio_oku64(p) == 5 ve kem_mmio_oku64(p+16) == bar { ver i; }
+            i=i+1;
+        }
+        değişken ctl: tam32 = kem_pci_oku16(bdf,k+2);
+        değişken veri: tam32 = k+8;
+        eğer (ctl&128) != 0 { veri=k+12; }
+        eğer veri > 254 veya ((ctl&256) != 0 ve veri+4 > 252) { ver 0; }
+        değişken v: tam32 = kesme_ayir();
+        eğer v < 0 { bm_yaz("KABUK HATA ahci MSI vektoru yok"); ver 0; }
+        eğer değil kesme_kaydet(v,5) { kesme_birak(v); ver 0; }
+        değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+        kem_mmio_yaz64(p+16,bar); kem_mmio_yaz64(p+24,((bdf olarak tam64)<<8)|(k olarak tam64));
+        // Tek mesaj, hedef fiziksel LAPIC kimliği. INTx kapalı kalır.
+        kem_pci_yaz16(bdf,k+2,ctl&65422);
+        kem_pci_yaz16(bdf,4,kem_pci_oku16(bdf,4)|1024);
+        kem_pci_yaz32(bdf,k+4,4276092928|(((kem_mmio_oku32(kap_lapic+32)>>24)&255)<<12));
+        eğer (ctl&128) != 0 { kem_pci_yaz32(bdf,k+8,0); }
+        kem_pci_yaz16(bdf,veri,v);
+        eğer (ctl&256) != 0 { kem_pci_yaz32(bdf,veri+4,kem_pci_oku32(bdf,veri+4)&4294967294); }
+        kem_pci_yaz16(bdf,k+2,(ctl&65423)|1);
+        ver v;
+    }
+}
+çıplak işlev bd_msi_kapat(p: tam64,bar: tam64,port: tam64) {
+    kem_mmio_yaz32(port+20,0);
+    kem_mmio_yaz32(bar+4,kem_mmio_oku32(bar+4)&4294967293);
+    değişken adres: tam64 = kem_mmio_oku64(p+24);
+    değişken bdf: tam32 = (adres>>8) olarak tam32; değişken k: tam32 = (adres&255) olarak tam32;
+    kem_pci_yaz16(bdf,k+2,kem_pci_oku16(bdf,k+2)&65534);
+}
+// MSI-X tablosu, CAP.BIR ile seçilen ve açılışta UC eşlenen bir BAR içinde olmalıdır.
+işlev bd_nvme_kesme(bdf: tam32,bar: tam64) -> tam32 {
+    güvensiz {
+        eğer kesme_tablo == 0 veya kap_lapic == 0 { ver 0; }
+        değişken k: tam32 = bd_pci_yetenek(bdf,17);
+        eğer k == 0 { ver 0; }
+        değişken ctl: tam32 = kem_pci_oku16(bdf,k+2);
+        eğer (ctl&2047) < 1 { ver 0; }
+        değişken t: tam64 = kem_pci_oku32(bdf,k+4);
+        değişken i: tam64 = 0; değişken tablo: tam64 = 0;
+        iken i < pci_bar_sayi {
+            değişken p: tam64 = pci_bar_tablo+i*40;
+            eğer kem_mmio_oku64(p) == (bdf olarak tam64) ve kem_mmio_oku64(p+8) == (t&7) ve (kem_mmio_oku64(p+16)&1) == 0 {
+                değişken adr: tam64 = kem_mmio_oku64(p+24);
+                eğer adr > 0 ve (t&4294967288)+32 <= kem_mmio_oku64(p+32) { tablo=adr+(t&4294967288); }
+            }
+            i=i+1;
+        }
+        eğer tablo == 0 { ver 0; }
+        değişken v: tam32 = kesme_ayir();
+        eğer v < 0 { bm_yaz("KABUK HATA NVMe MSI-X vektoru yok"); ver 0; }
+        eğer değil kesme_kaydet(v,6) { kesme_birak(v); ver 0; }
+        değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+        kem_mmio_yaz64(p+16,bar); kem_mmio_yaz64(p+24,tablo+16);
+        kem_pci_yaz16(bdf,k+2,ctl|49152);
+        kem_pci_yaz16(bdf,4,kem_pci_oku16(bdf,4)|1024);
+        kem_mmio_yaz32(tablo+12,1); kem_mmio_yaz32(tablo+28,1);
+        kem_mmio_yaz32(tablo+16,4276092928|(((kem_mmio_oku32(kap_lapic+32)>>24)&255)<<12));
+        kem_mmio_yaz32(tablo+20,0); kem_mmio_yaz32(tablo+24,v olarak tam64);
+        kem_mmio_yaz32(tablo+28,0); kem_pci_yaz16(bdf,k+2,(ctl|32768)&49151);
+        ver v;
+    }
+}
+çıplak işlev bd_zil_bekle(p: tam64,bas: tam64,zil: tam64,deger: tam64) -> mantıksal {
+    güvensiz {
+        değişken bayrak: tam64 = 0;
+        satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+popq $0
+sti"# çıktı("=r",&bayrak) bozulan("~{memory}") }
+        kem_mmio_yaz32(zil,deger);
+        değişken t: tam64 = bm_tsc_oku(); değişken i: tam32 = 0;
+        iken kem_mmio_oku64(p+8) == bas ve bm_tsc_oku()-t < 50*kap_tsc_ms ve i < 5000000 { i=i+1; }
+        eğer (bayrak&512) == 0 { kg_irq_kapat(); }
+        ver kem_mmio_oku64(p+8) != bas;
+    }
+}
+// CI yazımından önce sayaç örneklenir. SATA durumunu sürücü okuyana kadar PxIS korunur.
+işlev bd_msi_komut(d: &değişken BlokDonanim,ofs: tam64,deger: tam64) {
+    güvensiz {
+        değişken bar: tam64 = d.bar;
+        eğer d.msi < 66 { kem_mmio_yaz32(bar+ofs,deger); ver; }
+        değişken v: tam32 = d.msi;
+        değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+        eğer kem_mmio_oku64(p) == 6 ve kem_mmio_oku64(p+16) == bar {
+            değişken zil: tam64 = 4096+(8<<((kem_mmio_oku32(bar+4))&15));
+            eğer ofs != zil { kem_mmio_yaz32(bar+ofs,deger); ver; }
+            eğer değil bd_zil_bekle(p,kem_mmio_oku64(p+8),bar+ofs,deger) {
+                kem_mmio_yaz32(kem_mmio_oku64(p+24)+12,1); kesme_birak(v); d.msi=0;
+                bm_yaz("KABUK HATA NVMe MSI-X zaman asimi; yoklama");
+            } ver;
+        }
+        eğer kem_mmio_oku64(p) != 5 veya kem_mmio_oku64(p+16) != bar veya ofs < 312 veya (ofs-312)%128 != 0 { kem_mmio_yaz32(bar+ofs,deger); ver; }
+        değişken bit: tam64 = 1<<((ofs-312)/128);
+        değişken port: tam64 = bar+ofs-56;
+        kem_mmio_yaz32(bar+8,bit);
+        değişken bas: tam64 = kem_mmio_oku64(p+8);
+        kem_mmio_yaz32(port+20,1073741825);
+        kem_mmio_yaz32(bar+4,kem_mmio_oku32(bar+4)|2);
+        eğer değil bd_zil_bekle(p,bas,bar+ofs,deger) {
+            bd_msi_kapat(p,bar,port); kesme_birak(v); d.msi=0;
+            bm_yaz("KABUK HATA ahci MSI zaman asimi; yoklama");
+        } değilse {
+            kem_mmio_yaz32(port+20,0); kem_mmio_yaz32(bar+8,bit);
+        }
+    }
+}
 işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
  bd_usb_tuketici(d);
  değişken y: GcYanit = gc_bos();değişken i: tam32 = 0;
@@ -152,13 +277,14 @@ işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
   değişken r: GcIstek = blok_adim(&değişken d.aygit,y); eşleş r {
    GcIstek::Bitti => { bd_usb_yayinla(d); ver tamam(doğru); } GcIstek::Hata(e) => { bd_usb_yayinla(d); ver hata(e); }
    GcIstek::BellekOku(adr,n) => { y=bm_yurut(d.bar,GcIstek::BellekOku(bh_depo_oku(d,adr,n),n)); }
+   GcIstek::Yaz32(ofs,v) => { bd_msi_komut(d,ofs,v); y=gc_bos(); }
    _ => { y=bm_yurut(d.bar,r); }
   } i=i+1;
  } ver hata("blok adim siniri");
 }
 işlev bd_yeni(ad: metin, bar: tam64, a: BlokAygiti) -> sonuç<BlokDonanim,metin> {
  eşleş onbellek_yeni(512,64) { hata(e) => { ver hata(e); } tamam(c) => {
-  değişken d: BlokDonanim = BlokDonanim { ad:ad,bar:bar,usb_portsc:0,aygit:a,onbellek:c };
+  değişken d: BlokDonanim = BlokDonanim { msi:0,ad:ad,bar:bar,usb_portsc:0,aygit:a,onbellek:c };
   eşleş bd_sur(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eğer blok_sektor(d.aygit) != 512 { ver hata("blok sektor boyu desteklenmiyor"); }
   ver tamam(d);
@@ -240,8 +366,21 @@ işlev bd_bul(x: &değişken XhciDurum,xb: tam64,uyar: mantıksal) -> sonuç<Diz
    eğer tip == 67586 {
     değişken bar: tam64 = (kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
     eşleş nvme_yeni(dma,16) { hata(e) => { ver hata(e); } tamam(n) => {
-     değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Nvme(n) };
-     eşleş bd_yeni(metin_birlestir("nvme",tam_metin(ni olarak tam64)),bar,ay) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(d) => { dizi_ekle(ds,d); } }
+     değişken irq: tam32 = bd_nvme_kesme(bdf,bar);
+     değişken denetleyici: NvmeDurum = n; denetleyici.cq1_kesmeli=irq != 0;
+     değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Nvme(denetleyici) };
+     eşleş bd_yeni(metin_birlestir("nvme",tam_metin(ni olarak tam64)),bar,ay) {
+      hata(e) => {
+       eğer irq != 0 { güvensiz {
+        değişken p: tam64 = kesme_tablo+(irq olarak tam64)*32;
+        kem_mmio_yaz32(kem_mmio_oku64(p+24)+12,1); kesme_birak(irq);
+       } } bm_yaz(metin_birlestir("KABUK HATA ",e));
+      }
+      tamam(d) => { değişken disk: BlokDonanim = d; disk.msi=irq;
+       eğer irq != 0 { bm_yaz(metin_birlestir("NVME YOL MSI-X CQ1 ",tam_metin(irq olarak tam64))); }
+       dizi_ekle(ds,disk);
+      }
+     }
     } } ni=ni+1;dma=dma+131072;
    }
    eğer tip == 67073 {
@@ -255,7 +394,10 @@ işlev bd_bul(x: &değişken XhciDurum,xb: tam64,uyar: mantıksal) -> sonuç<Diz
      eşleş bd_yeni(metin_birlestir("ahci",tam_metin(ai olarak tam64)),bar,ay) {
         // Q35'in varsayılan ATAPI portu SATA taramasında ilk FIS'e kadar aday olabilir.
         hata(e) => { eğer değil metin_esit(e,"ahci sata aygiti yok") { bm_yaz(metin_birlestir("KABUK HATA ",e)); } }
-        tamam(d) => { dizi_ekle(ds,d);ai=ai+1;dma=dma+131072; }
+        tamam(d) => {
+         değişken disk: BlokDonanim = d; disk.msi=bd_msi_ac(bdf,bar);
+         eğer disk.msi == 0 { bm_yaz("AHCI YOL yoklama"); } değilse { bm_yaz(metin_birlestir("AHCI YOL MSI ",tam_metin(disk.msi olarak tam64))); }
+         dizi_ekle(ds,disk);ai=ai+1;dma=dma+131072; }
        }
       } }
      } port=port+1;

@@ -25,7 +25,7 @@ outb %al, $$64"# bozulan("~{rax}") bozulan("~{memory}") } }
  kem_port_yaz8(64 olarak dtam16,156 olarak dtam8);
  kem_port_yaz8(64 olarak dtam16,46 olarak dtam8);kz_irq_ac();
 }
-gerçekzamanlı çıplak işlev kdl_apic_timer_irq() { kem_tik=kem_tik+1; kap_lapic_tik=kap_lapic_tik+1; }
+gerçekzamanlı çıplak işlev kdl_apic_timer_irq() { eğer değil kesme_geldi(48,3) { ver; } kem_tik=kem_tik+1; kap_lapic_tik=kap_lapic_tik+1; }
 çıplak işlev kap_pit_oku() -> tam64 {
  değişken n: tam64 = 0;
  güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq kap_pit_tik(%rip), $0"# çıktı("=r",&n) bozulan("~{memory}") } }
@@ -121,6 +121,12 @@ işlev kap_yol_kur(m: Madt, irq: tam32, vektor: tam32, hedef: tam32, maskeli: ma
 }
 işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
  kg_irq_kapat();
+ güvensiz {
+  kesme_tablo=malloc(8192) olarak tam64;
+  eğer kesme_tablo == 0 { ver hata("kesme kayit tablosu icin RAM yok"); }
+  memset(kesme_tablo olarak *tam8,0,8192);
+ }
+ eğer değil kesme_kaydet(33,1) veya değil kesme_kaydet(44,2) veya değil kesme_kaydet(48,3) { ver hata("sabit kesme vektoru dolu"); }
  eşleş uefi_madt(b) { hata(e) => { ver hata(e); } tamam(m) => {
   değişken msr: tam64 = kap_msr_oku();
   eğer (msr&1024) != 0 { ver hata("x2APIC acik; xAPIC gerekli"); }

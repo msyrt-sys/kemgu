@@ -19,6 +19,18 @@ rm -f "$W/k.elf" "$W/k.o" "$W/esp/EFI/BOOT/BOOTX64.EFI"
 clang --target=x86_64-unknown-windows -ffreestanding -fno-stack-protector -fno-builtin -mno-red-zone -Wall -Wextra -Werror -O2 -c boot/efi/stub.c -o "$W/stub.obj"
 lld-link /subsystem:efi_application /entry:efi_main /nodefaultlib /out:"$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/stub.obj"
 cat $RT "$KAYNAK" > "$W/comb.kem"
+# QEMU 8.2 ich9-ahci MSI yeteneğini kapatamıyor. Ayrı test çekirdeğinde yalnız keşfi atla.
+if [[ "${UEFI_AHCI_MSI_YOK:-0}" == 1 ]]; then
+    python3 - "$W/comb.kem" <<'KEM_MSI'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text(encoding='utf-8')
+arama = 'değişken k: tam32 = bd_pci_yetenek(bdf,5);'
+assert s.count(arama) == 1
+p.write_text(s.replace(arama, 'değişken k: tam32 = 0;'), encoding='utf-8')
+KEM_MSI
+fi
 "${UEFI_DERLEYICI:-build/kemgu}" --llvm --mimari x86_64-none "$W/comb.kem" > "$W/ham.ll"
 awk -f test/strip_defined_declares.awk "$W/ham.ll" > "$W/k.ll"
 clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only -O2 -Wno-override-module -x ir "$W/k.ll" -c -o "$W/k.o"

@@ -19,3 +19,9 @@ Genel 16/32 bit port erişimi, MCFG pencereleri, segment 0 ECAM ve CF8/CFC yede�
 Üç sabotaj da kırmızı döndü. İşlev kaydırmasında iki PCI işlevi eksildi, alt veri yolu sabotajında arkadaki üç işlev kayboldu, üst BAR yarısı atılınca gerçek MMIO erişimi sayfa hatası verdi. Ayrıntılar bulgular dosyasında.
 
 PCI kapısı, PC matrisi, dört saf sürücü kapısı ve sekiz regresyonun son koşumları yeşil. Birleşik koşumda yalnız girdi15 rc 1 verdi (make rc 2). Tuşu bırakma QEMU sanal saatine bağlandıktan sonra girdi15 iki derleyicide aynı kabul aralığıyla bağımsız olarak rc 0 verdi. Birleşik koşum süresi 1283 saniye, bölüm süresi 44 dakika.
+
+## Bölüm 3 — kesme kaydı ve disk bildirimleri
+
+IRQ1, IRQ12, LAPIC zamanlayıcısı ve xHCI MSI-X kayıt arayüzüne bağlandı. 66–79 aralığında dinamik vektör ayırma ve bırakma eklendi. AHCI komutları MSI, NVMe CQ1 ise MSI-X bildirimi bekliyor. Geciken bildirimin ardından sürücü sınırlı beklemeden yoklamaya dönüyor. Donanım raporunda vektör, işleyici ve kesme sayısı var.
+
+Yeni MSI kapısı iki derleyiciyle normal ve AHCI MSI yeteneği atlanan dört açılışta geçti. İki gerçek sabotaj kırmızı verdi. Yanlış MSI vektöründe zaman aşımından sonra SATA dosyası yoklama ile yine okundu. İkinci işleyicinin aynı vektöre bağlanmasına izin verilince çakışma testi hata verdi. PC matrisinin 72 açılışı ve §7 regresyonları yeşil. Birleşik koşum 1281 saniye, bölüm 21 dakika.
