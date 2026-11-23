@@ -1254,6 +1254,17 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
     }
 
     değişken kayip1: tam64 = 0;değişken kayip12: tam64 = 0;değişken irqhata: tam64 = 0;
+    güvensiz { eğer kap_tsc_bas != 0 { bm_yaz(metin_birlestir("ACILIS_CEVRIM_MS ",tam_metin(kap_tsc_ms))); } }
+    kap_damga("kabuk");
+        ekran_cift_yaz("KEMGU-OS kabuk v0");
+        eğer d.kok >= 0 {
+            değişken k: KabukBag = dizi_al(d.baglar,d.kok);
+            değişken kok_aygit: BlokDonanim = dizi_al(d.aygitlar,k.indeks);
+            değişken tur: metin = kd_tur(kok_aygit);
+            eğer bm_esit(tur,"nvme") { ekran_cift_yaz("DISK NVMe"); }
+            değilse eğer bm_esit(tur,"sata") { ekran_cift_yaz("DISK AHCI"); }
+            değilse { ekran_cift_yaz("DISK USB"); }
+        }
     ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
     iken doğru {
         eğer indeks >= 0 {
@@ -1398,6 +1409,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         } }
         eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
     }
+    kap_damga("usb");
     eşleş kd_yeni() { hata(e) => { ver hata(e); } tamam(v) => { değişken d: KabukDisk = v;
         eşleş bd_bul(x,xb,uefi_mi()) { hata(e) => { ver hata(e); } tamam(xs) => { d.aygitlar=xs; } }
         eşleş kd_bagla(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
@@ -1410,15 +1422,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
                 }
             }
         }
-        ekran_cift_yaz("KEMGU-OS kabuk v0");
-        eğer d.kok >= 0 {
-            değişken k: KabukBag = dizi_al(d.baglar,d.kok);
-            değişken kok_aygit: BlokDonanim = dizi_al(d.aygitlar,k.indeks);
-            değişken tur: metin = kd_tur(kok_aygit);
-            eğer bm_esit(tur,"nvme") { ekran_cift_yaz("DISK NVMe"); }
-            değilse eğer bm_esit(tur,"sata") { ekran_cift_yaz("DISK AHCI"); }
-            değilse { ekran_cift_yaz("DISK USB"); }
-        }
+        kap_damga("diskler");
         bh_kur(x,xb,fare_indeksi); kh_kur(xb,x);
         ver kabuk(&değişken d,x,xb,indeks,ke);
     } }
@@ -1445,12 +1449,14 @@ işlev ke_kur() -> sonuç<KabukEkran, metin> {
     } }
 }
 işlev main() -> tam32 {
-    güvensiz { kgun_kur(malloc(KGUN_BOY) olarak tam64); }
+    güvensiz { eğer uefi_mi() { kap_tsc_bas=kap_tsc(); } kgun_kur(malloc(KGUN_BOY) olarak tam64); }
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(b) => {
-            uefi_dok(b);
+            uefi_dok(b); bm_yaz("ACILIS_TSC devir 0");
             eşleş uefi_bellek_kur_surec(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   kap_damga("bellek");
    eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
+   kap_damga("acpi");
    eğer guc_ps2_izin() {
    değişken fare_kimlik: tam32 = ps2_kesme_kur();
    eğer fare_kimlik < 0 { bm_yaz(metin_birlestir("KABUK HATA ps2 baslatma ",tam_metin(fare_kimlik olarak tam64))); }
@@ -1465,6 +1471,7 @@ işlev main() -> tam32 {
         bar=(kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);
         kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
     } }
+    kap_damga("pci");
     eşleş xhci_yeni(bm_dma_al(),16384) { hata(e) => { ekran_cift_yaz(e); kem_qemu_cik(1); } tamam(v) => {
         değişken x: XhciDurum = v;
         eşleş hazir(bar,&değişken x,&değişken ke) { hata(e) => { ekran_cift_yaz(metin_birlestir("KABUK HATA ",e)); kem_qemu_cik(1); } tamam(v) => { } }

@@ -5054,3 +5054,8 @@ test_tumu: calistir_bm_x86_boru
 calistir_bm_x86_boru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@python3 tests/qemu/surec_abi.py
 	@SUREC_KAHIN=boru_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_acilis_suresi
+test_tumu: calistir_bm_x86_acilis_suresi
+calistir_bm_x86_acilis_suresi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=acilis_suresi bash test/bm_x86_surec_harness.sh

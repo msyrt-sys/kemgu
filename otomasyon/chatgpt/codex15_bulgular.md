@@ -91,3 +91,22 @@ Görüntüleyici 256 KiB'ye kadar BMP okuyor. Çekirdek, kullanıcı penceresind
 ## Boru ve dosya doğrulaması
 
 `kedi < iz.txt | bul ağaç | say > sonuc.txt` zincirinde ev sahibi beklenen satır, kelime ve UTF-8 bayt sayılarını kendi girdisinden hesapladı. Tampon kapasitesini aşan aktarım 1401 satır ve 26.619 bayttı. Son okuyucunun kapanması yazıcıya hata verir. Son yazıcı kapandığında okuyucu önce kuyruktaki baytları, sonra EOF alır. Her oturumdan sonra veri FAT32 bölümü fsck ile ve iki salt okunur disk tam SHA256 ile doğrulandı.
+
+## Açılış süreleri
+
+Aşağıdaki milisaniyeler firmware devrinden itibaren birikimlidir. Host zamanı seri dosyadaki devir ve hazır işaretlerinden bağımsız okunur. İlk denemede host medyanı yaklaşık 267 ms ölçüldü. 650 ms sınırı normal dağılımın üzerinde ve eklenen 1,5 saniyelik gecikmenin altındadır.
+
+| Derleyici | Bellek | ACPI | PCI | USB | Diskler | Kabuk | Host |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| C | 20.6 | 145.3 | 178.1 | 187.3 | 233.6 | 235.1 | 242.4 |
+| C | 36.3 | 160.3 | 201.4 | 213.8 | 267.9 | 270.7 | 322.3 |
+| C | 19.9 | 144.3 | 189.8 | 204.3 | 260.7 | 263.0 | 269.8 |
+| C | 19.0 | 142.4 | 173.4 | 181.4 | 223.8 | 226.1 | 235.0 |
+| C | 30.9 | 154.6 | 193.9 | 202.8 | 236.3 | 237.8 | 247.0 |
+| Self-host | 24.0 | 148.6 | 189.5 | 204.1 | 271.7 | 274.1 | 292.5 |
+| Self-host | 23.8 | 148.2 | 183.5 | 197.9 | 258.9 | 261.7 | 268.0 |
+| Self-host | 23.6 | 148.1 | 182.8 | 197.2 | 252.9 | 254.4 | 260.8 |
+| Self-host | 24.7 | 149.6 | 184.3 | 199.1 | 274.3 | 275.8 | 283.9 |
+| Self-host | 24.2 | 149.1 | 185.5 | 199.9 | 265.3 | 268.0 | 274.1 |
+
+Konuk medyanları sırasıyla 237,8 ve 268,0 ms. Sabotajlı konuğun medyanı 1751,1 ms. Tarihsel sabotaj sayısı kaynakta bulunamadığında envanter bunu belirtir.

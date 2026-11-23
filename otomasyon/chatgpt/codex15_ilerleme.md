@@ -110,3 +110,9 @@ Bölümün ilk gerilemesi 18 dakika sürdü. Çocuk süreci oturumlarından biri
 Sekiz adet 4096 baytlık boru, fd uçları ve hazır olunca uyandırma eklendi. ABI 69 boruyu açıyor. ABI 70 çocuğu fd eşlemeleriyle başlatıyor. Eşlemelerin tek çağrıda yapılması ebeveyn kabuğun kendi standart fd'lerini geçici olarak değiştirmesini önlüyor. Üç aşamalı Türkçe arama, dosyaya ekleme/kesme, dolu boru ve kullanıcı ABI senaryoları iki derleyicide geçti. Kayıplı yazmayı başarı sayan ayrı çekirdekte büyük aktarım karşılaştırması kırmızı.
 
 İlk gerilemede yüz çocuklu senaryo host bekleme süresini bir kez aştı. Çok süreç ve boru kapılarının yaklaşık 19 dakikalık yeniden koşumu 60/60 ve 8/8 geçti. Sekiz gerileme hedefinin tamamı için yeşil sonuç alındı.
+
+## Bölüm 10 — açılış süresi ve sabotaj envanteri
+
+PIT ile kalibre edilen TSC'den yedi aşama ve bağımsız host saati ölçüldü. Beşer açılışta host medyanları C için 247,0 ms ve self-host için 274,1 ms çıktı. Eşik 650 ms. Yapay 150 tik gecikmesi üç açılışta host medyanını 1866,5 ms'ye çıkardı ve kapı rc=1 verdi. Dalga 9–15 için 71 sabotaj kaydı, özgün kapı ve bilinen açılış sayılarıyla tek tabloda toplandı.
+
+Sekiz gerileme hedefi ve süre kapısı birlikte yaklaşık 21 dakika sürdü, çıkış kodu 0.
