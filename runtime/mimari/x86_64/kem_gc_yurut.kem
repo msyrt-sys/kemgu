@@ -1,5 +1,5 @@
 // Ortak bare-metal GcIstek yürütücüsü; aynı birimde kem_pci_hw ve kem_uart ister.
-// Yeni asm yok; D-745 okuma sırası ve genişliği korunur.
+// D-745 DMA okuma sırası ve genişliği korunur.
 kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
 kullan drivers::pci::yapilandirma::{ PciAygit, pci_coz };
 
@@ -37,6 +37,49 @@ işlev bm_bellek_oku(a: tam64, n: tam32) -> Dizi<dtam8> {
     ver b;
 }
 
+// PIT kanal 2 tek atım. BIOS kesmelerini ve LAPIC kalibrasyonunun kanal 0'ını kullanmaz.
+// 1.193.182 Hz * 0,010 s = 11.932 sayaç. Hoparlör çıkışı ölçüm boyunca kapalı.
+küresel değişken bm_cevrim_us: tam64 = 0;
+çıplak işlev bm_pit_olc() -> tam64 {
+    değişken ilk: tam32 = kem_port_oku8(97 olarak dtam16) olarak tam32;
+    kem_port_yaz8(97 olarak dtam16, (ilk&252) olarak dtam8);
+    kem_port_yaz8(67 olarak dtam16, 176 olarak dtam8);
+    kem_port_yaz8(66 olarak dtam16, 156 olarak dtam8);
+    kem_port_yaz8(66 olarak dtam16, 46 olarak dtam8);
+    eğer ((kem_port_oku8(97 olarak dtam16) olarak tam32)&32) != 0 {
+        kem_port_yaz8(97 olarak dtam16, ilk olarak dtam8); ver -1;
+    }
+    değişken bas: tam64 = bm_tsc_oku();
+    kem_port_yaz8(97 olarak dtam16, ((ilk&252)|1) olarak dtam8);
+    değişken tur: tam32 = 0;
+    iken tur < 1000000 ve ((kem_port_oku8(97 olarak dtam16) olarak tam32)&32) == 0 {
+        tur=tur+1;
+    }
+    değişken sure: tam64 = (bm_tsc_oku()-bas)/10000;
+    kem_port_yaz8(97 olarak dtam16, ilk olarak dtam8);
+    eğer tur == 1000000 veya sure <= 0 { ver -1; }
+    ver sure;
+}
+işlev bm_gc_bekle(us: tam32) -> mantıksal {
+    eğer us == 0 { ver doğru; }
+    eğer us < 0 veya us > 1000000 { bm_yaz("KABUK HATA GC bekleme araligi"); ver yanlış; }
+    güvensiz {
+        eğer bm_cevrim_us == 0 {
+            bm_cevrim_us=bm_pit_olc();
+            eğer bm_cevrim_us < 0 { bm_yaz("KABUK HATA PIT kanal2 zaman asimi"); }
+        }
+        eğer bm_cevrim_us < 0 { ver yanlış; }
+        değişken bas: tam64 = bm_tsc_oku();
+        değişken hedef: tam64 = bm_cevrim_us*(us olarak tam64);
+        değişken tur: tam64 = 0;
+        iken tur < 1000000+(us olarak tam64)*1000 {
+            eğer bm_tsc_oku()-bas >= hedef { ver doğru; }
+            tur=tur+1;
+        }
+        bm_yaz("KABUK HATA TSC bekleme zaman asimi"); ver yanlış;
+    }
+}
+
 // GcIstek → gerçek donanım (qt_yurut'un bare-metal ikizi).
 işlev bm_yurut(bar: tam64, i: GcIstek) -> GcYanit {
     değişken y: GcYanit = gc_bos();
@@ -50,7 +93,7 @@ işlev bm_yurut(bar: tam64, i: GcIstek) -> GcYanit {
             değişken k: tam32 = 0;
             iken k < dizi_boyut(b) { kem_fiz_yaz8(a + (k olarak tam64), dizi_al(b, k) olarak tam32); k = k + 1; }
         }
-        GcIstek::Bekle(us) => { kem_bekle_us(us); }
+        GcIstek::Bekle(us) => { y.basarili = bm_gc_bekle(us); }
         _ => { }
     }
     ver y;

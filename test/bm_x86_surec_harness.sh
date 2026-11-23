@@ -25,7 +25,7 @@ for derleyici in ${SUREC_DERLEYICILER:-build/kemgu build/codegen}; do
     fi
     echo "Süreç derleyicisi: $derleyici; ölçüm dizini: $w"
     if [[ -n "${SUREC_KAHIN:-}" ]]; then
-        python3 "tests/qemu/$SUREC_KAHIN.py" "$w"
+        SUREC_KAHIN_DERLEYICI="$derleyici" python3 "tests/qemu/$SUREC_KAHIN.py" "$w"
         continue
     fi
     for senaryo in ${SUREC_SENARYO:-matris}; do

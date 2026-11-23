@@ -1122,6 +1122,42 @@ işlev kb_calistir(d: &değişken KabukDisk,p: &değişken KsKabukSureci,s: meti
     } }
 }
 
+işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
+    eğer bm_esit(ad,"ls") { ekran_cift_yaz("ls [yol] dizindeki adları gösterir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"cd") { ekran_cift_yaz("cd [yol] çalışma dizinini değiştirir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"pwd") { ekran_cift_yaz("pwd çalışma dizinini gösterir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"cat") { ekran_cift_yaz("cat <dosya> içeriği ekrana yazar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"echo") { ekran_cift_yaz("echo <metin> satırı yazar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"yaz") { ekran_cift_yaz("yaz <dosya> <metin> dosya içeriğini değiştirir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"cp") { ekran_cift_yaz("cp <kaynak> <hedef> dosyayı kopyalar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"mv") { ekran_cift_yaz("mv <kaynak> <hedef> dosyayı taşır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"sil") { ekran_cift_yaz("sil <dosya> dosyayı siler."); ver tamam(doğru); }
+    eğer bm_esit(ad,"mkdir") { ekran_cift_yaz("mkdir <yol> dizin oluşturur."); ver tamam(doğru); }
+    eğer bm_esit(ad,"rmdir") { ekran_cift_yaz("rmdir <yol> boş dizini kaldırır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"diskler") { ekran_cift_yaz("diskler aygıtları ve bölümleri listeler."); ver tamam(doğru); }
+    eğer bm_esit(ad,"bagla") { ekran_cift_yaz("bagla --yazilabilir <bölüm> veri bölümünü yazmaya açar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"sync") { ekran_cift_yaz("sync bekleyen disk yazılarını tamamlar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"saat") { ekran_cift_yaz("saat tarih ve saati yazar. baslat saat canlı saati açar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"calistir") { ekran_cift_yaz("calistir <yol> [argüman] ELF dosyasını çalıştırır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"baslat") { ekran_cift_yaz("baslat <ad> [argüman] program arar. Sona & eklenirse arka planda çalışır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"bekle") { ekran_cift_yaz("bekle <pid> süreç sonlanınca çıkış kodunu toplar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"ps") { ekran_cift_yaz("ps süreç durumlarını listeler."); ver tamam(doğru); }
+    eğer bm_esit(ad,"sonlandir") { ekran_cift_yaz("sonlandir <pid> süreci durdurur."); ver tamam(doğru); }
+    eğer bm_esit(ad,"sonuc") { ekran_cift_yaz("sonuc en son toplanan çıkış kodunu gösterir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"temizle") { ekran_cift_yaz("temizle konsol ekranını siler."); ver tamam(doğru); }
+    eğer bm_esit(ad,"yardim") { ekran_cift_yaz("yardim <komut> komutun kullanımını gösterir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"kapat") { ekran_cift_yaz("kapat diskleri eşitler ve sistemi kapatır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"yenidenbaslat") { ekran_cift_yaz("yenidenbaslat diskleri eşitler ve sistemi yeniden başlatır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"donanim") { ekran_cift_yaz("donanim aygıtları listeler. donanim kaydet <yol> raporu yazar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"log") { ekran_cift_yaz("log [sayfa] günlük halkasını gösterir. log kaydet <yol> dosyaya yazar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"hassasiyet") { ekran_cift_yaz("hassasiyet <1..4> fare hızını ayarlar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"goster") { ekran_cift_yaz("baslat goster <BMP> resmi gösterir. Oklarla kaydırın, Q ile çıkın."); ver tamam(doğru); }
+    eğer bm_esit(ad,"bul") { ekran_cift_yaz("baslat bul [-i] <metin> [dosya...] eşleşen satırları numaralandırır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"hesapla") { ekran_cift_yaz("baslat hesapla <ifade> parantez ve işlem önceliğiyle tam sayı hesaplar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"duzenle") { ekran_cift_yaz("baslat duzenle <dosya> metni açar. Ctrl+S kaydeder, Ctrl+Q çıkar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"dosyalar") { ekran_cift_yaz("baslat dosyalar [dizin] dosya gezginini açar."); ver tamam(doğru); }
+    ver hata("yardim konusu bulunamadi");
+}
 işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
             h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
     eğer kb_hat_mi(satir) { ver kb_calistir(d,p,satir,x,h,tr); }
@@ -1149,8 +1185,10 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
     eğer bm_esit(cmd,"temizle") { kd_temizle(); ver tamam(doğru); }
     eğer bm_esit(cmd,"sonuc") { ekran_cift_yaz(tam_metin(p.son_kod)); ver tamam(doğru); }
     eğer bm_esit(cmd,"yardim") {
+        eğer metin_uzunluk(arg) > 0 { ver kd_yardim(arg); }
         ekran_cift_yaz("ls cd pwd cat echo yaz cp mv sil mkdir rmdir diskler bagla sync saat");
         ekran_cift_yaz("calistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat");
+        ekran_cift_yaz("donanim log hassasiyet goster bul hesapla duzenle dosyalar");
         ver tamam(doğru);
     }
     eğer bm_esit(cmd,"ps") {
@@ -1449,7 +1487,7 @@ işlev ke_kur() -> sonuç<KabukEkran, metin> {
     } }
 }
 işlev main() -> tam32 {
-    güvensiz { eğer uefi_mi() { kap_tsc_bas=kap_tsc(); } kgun_kur(malloc(KGUN_BOY) olarak tam64); }
+    güvensiz { eğer uefi_mi() { kap_tsc_bas=bm_tsc_oku(); } kgun_kur(malloc(KGUN_BOY) olarak tam64); }
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(b) => {
             uefi_dok(b); bm_yaz("ACILIS_TSC devir 0");

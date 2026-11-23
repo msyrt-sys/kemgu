@@ -116,3 +116,125 @@ Sekiz adet 4096 baytlık boru, fd uçları ve hazır olunca uyandırma eklendi. 
 PIT ile kalibre edilen TSC'den yedi aşama ve bağımsız host saati ölçüldü. Beşer açılışta host medyanları C için 247,0 ms ve self-host için 274,1 ms çıktı. Eşik 650 ms. Yapay 150 tik gecikmesi üç açılışta host medyanını 1866,5 ms'ye çıkardı ve kapı rc=1 verdi. Dalga 9–15 için 71 sabotaj kaydı, özgün kapı ve bilinen açılış sayılarıyla tek tabloda toplandı.
 
 Sekiz gerileme hedefi ve süre kapısı birlikte yaklaşık 21 dakika sürdü, çıkış kodu 0.
+
+## Bölüm 11 — çalışan belgeler
+
+Kullanıcı programı yazma, x86_64 mimarisi ve Türkçe Q klavye düzeni için üç kılavuz eklendi. Markdown içinden alınan iki örnek iki derleyicide de derlendi ve QEMU'da çalıştı. 33 komutun açıklaması gerçek `yardim <komut>` çıktısıyla eşleşti. Sınıflandırma kapısında 358/379 ve mevcut 21 muafiyet, bare-metal yapı paritesinde 23/23 ve sıfır atlama ölçüldü.
+
+Sekiz gerileme hedefini içeren bölüm koşumu 21 dakika sürdü ve rc=0 döndü. Tam takımda ortaya çıkan erken G/Ç zaman aşımının ölçümü ve düzeltmesi bulgular belgesinde. Düzeltmeyle USB ve AHCI 40/40, eski disk yazma kapısı her iki derleyicide geçti. Yol haritasındaki bölüm 1 tablosu D-764 durumunu saklıyor. Yol haritası belgesi dalga sonunda yeni kanıtlarla güncellendi.
+
+## Kapsam ve ölçüm ortamı
+
+D-764 tabanı `030b0f8`. x86_64 Q35, TCG ve OVMF. Kod C bootstrap ve self-host derleyicileriyle sınandı. ARM64 ve x86_64 birleşik çekirdek yapı paritesi de denetlendi. E4k ve fiziksel PC denemesi sonraki entegrasyonun kapsamındadır.
+
+`make kem_os_usb.img` 135.283.200 bayt, 19 ELF ve iki temiz FAT32 bölümü üretti. Bu koşumun SHA256 özeti `17d465c89c7d7ce410b3c88e4df7bbb6b9c2bd7f717ee16874387d1c49b0dc08`. ABI v2 tutarlılık kapısı 35 çağrıyı eşleştirdi. Sürücü alt-makefile'ı `drivers_test` hedefinde her iki testi geçti.
+
+## Dil özellikleri
+
+Saf sürücüler mevcut sonuç, dizi ve yapı tiplerini kullanıyor. Var olan kesme işleyicileri giriş baytlarını ve zaman sayaçlarını aktarıyor. Yeni kesme işleyicisi, `tekkez` veya `yetki` bildirimi eklenmedi.
+
+Son G/Ç düzeltmesiyle v1 ve v1 kesinti senaryoları iki derleyicide toplam 40/40 açılışta geçti. Aynı koşumda sınıflandırma, bare-metal parite, belge, açılış süresi, USB, AHCI ve disk kapıları rc=0 verdi.
+
+## Tam takım
+
+`make -j6 -k --output-sync=target test_tumu` 117 önkoşul hedefiyle 72 dakika 18 saniyede tamamlandı. `PIPESTATUS=(0 0)`, son satır `Tum testler gecti!`. Aynı geçici imaj adını kullanan eski UEFI/PS2/güç/blok hedefleri yerel kabuk kilidiyle sıraya alındı. Diğer hedefler normal paralellikte koştu. Teslim dalındaki iki rapor dışındaki 61 değişen dosya doğrulama kopyasıyla bayt bayt eşleşti.
+
+| Dalga 15 kapısı | Başarılı QEMU açılışı, iki derleyici toplamı |
+|---|---:|
+| Sağlamlık | 10 |
+| Donanım | 4 |
+| Günlük | 2 |
+| PC matrisi | 72 |
+| Bozuk ELF | 2 |
+| Giriş | 4 |
+| Kullanıcı programları | 8 |
+| Boru ve yönlendirme | 8 |
+| Açılış süresi | 10 |
+| Belgeler | 2 |
+| **Toplam** | **122** |
+
+### Mevcut atlamalar
+
+| Kapı | Atlanan girdi |
+|---|---:|
+| ASan uçtan uca | 45 |
+| Geniş codegen | 8 |
+| Semantik codegen, yabancı mimari ve bağlanamayan iki çapraz modül | 4 |
+| Sürücü paritesi | 1 |
+| Yapısal IR paritesi | 2 |
+| Sürücü host-mock | 5 |
+| Bölge operandı paritesi | 4 |
+| ARM konuk üst bellek deneyi | 1 |
+| **Ana kapı toplamı** | **70** |
+
+Dalga 15 QEMU kapılarında atlama sıfır. Bir girdinin detay satırı ve aynı kapının özeti tek sayıldı. Self-driver aynı semantik korpusu iki sürücüyle ayrıca çalıştırdı. ASan 4 bilinen sonuç ve 2 sızıntı muafiyeti, yapısal IR 24, sürücü paritesi 1, geniş tip kontrolü 18 ve genel tip kapısı 21 mevcut muafiyet bildirdi. Yeni muafiyet sayısı sıfır. Uyarı kapısı 38 C dosyasında sıfır uyarı verdi. Tam takım sonrasında sınıflandırma ve bare-metal parite tekrar rc=0 döndürdü.
+
+## Dosya değişiklikleri
+
+D-764 ile teslim arasındaki izin listesi denetlendi.
+
+```text
+Makefile
+belgeler/KEMGU_OS_Donanim_Yol_Haritasi.md
+belgeler/KEMGU_OS_Klavye_Duzeni.md
+belgeler/KEMGU_OS_Mimari.md
+belgeler/KEMGU_OS_Program_Yazma.md
+belgeler/KEMGU_OS_Sabotaj_Envanteri.md
+belgeler/KEMGU_OS_Syscall_ABI.md
+belgeler/X86_Fiziksel_Donanim_Kontrol_Listesi.md
+drivers/acilis/uefi_harita.kem
+drivers/ekran/bmp.kem
+drivers/ps2/klavye_tr.kem
+drivers/uygulama/bul.kem
+drivers/uygulama/hesapla.kem
+otomasyon/chatgpt/codex15_bulgular.md
+otomasyon/chatgpt/codex15_ilerleme.md
+runtime/kullanici/x86_64/kem_sis.kem
+runtime/mimari/x86_64/kem_acpi_uefi.kem
+runtime/mimari/x86_64/kem_apic_hw.kem
+runtime/mimari/x86_64/kem_gc_yurut.kem
+runtime/mimari/x86_64/kem_pci_hw.kem
+runtime/mimari/x86_64/kem_ps2_hw.kem
+runtime/mimari/x86_64/kem_surec_hw.kem
+runtime/mimari/x86_64/kem_uart.kem
+test/bm_x86_surec_harness.sh
+test/kullanici/boruden.kem
+test/kullanici/bul.kem
+test/kullanici/dosyalar.kem
+test/kullanici/duzenle.kem
+test/kullanici/echo.kem
+test/kullanici/goster.kem
+test/kullanici/hesapla.kem
+test/kullanici/kedi.kem
+test/kullanici/saat.kem
+test/kullanici/say.kem
+test/ornekler/kem_os_x86_blok.kem
+test/ornekler/kem_os_x86_blok_ortak.kem
+test/ornekler/kem_os_x86_guc.kem
+test/ornekler/kem_os_x86_kabuk.kem
+test/ornekler/kem_os_x86_ps2.kem
+test/ornekler/kem_os_x86_vfs_ortak.kem
+tests/drivers/bulanik/acpi_test.kem
+tests/drivers/bulanik/bmp_test.kem
+tests/drivers/bulanik/bolum_test.kem
+tests/drivers/bulanik/bolum_uyum_test.kem
+tests/drivers/bulanik/elf_test.kem
+tests/drivers/bulanik/fadt_test.kem
+tests/drivers/bulanik/madt_test.kem
+tests/drivers/uygulama/program_test.kem
+tests/qemu/acilis_suresi.py
+tests/qemu/belge15_kahin.py
+tests/qemu/boru_kahin.py
+tests/qemu/bozuk_elf_kahin.py
+tests/qemu/dalga12_kahin.py
+tests/qemu/donanim_kahin.py
+tests/qemu/girdi15_kahin.py
+tests/qemu/kabuk14_kahin.py
+tests/qemu/log_kahin.py
+tests/qemu/pc_matris.py
+tests/qemu/program15_kahin.py
+tests/qemu/ps2_irq_kahin.py
+tests/qemu/saglamlik_kahin.py
+tests/qemu/surec_kahin.py
+tools/codex/e2.py
+```

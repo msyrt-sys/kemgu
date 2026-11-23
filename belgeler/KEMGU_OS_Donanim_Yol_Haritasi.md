@@ -178,7 +178,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       etiketi) — orada çekirdek modu AYARLAMAZ, firmware'in verdiğini kullanır; çizim kodu ortak.
       ⚠ ENABLE'ın doğrusal-tampon biti (0x40) QEMU'da ölçülemez (VRAM BAR0'dan bitten bağımsız görünür).
 - [x] **H4h [S] ✓ D-752 (tam ekran 78×29 çizim 32,6 ms; çift tampon gerekmiyor). Performans:** tam ekran kaydırma süresi ölç (çift tampon gerekiyor mu?).
-- [ ] **H4i (Açık D-763 kabuğunda log halkası ve log komutu eksik.) [S] Çekirdek log halkası** (son N KB) + ekranda `log` komutu.
+- [x] **H4i (✓ Dalga 15, calistir_bm_x86_log. 8192 bayt, kayıp sayısı, sayfalama ve FAT32 kaydı.) [S] Çekirdek log halkası** (son N KB) + ekranda `log` komutu.
 
 ---
 
@@ -195,7 +195,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       AltGr katmanı (`@ € { [ ] } \ | ~ #`), **Caps Lock'ta i→İ, ı→I** (Türkçe büyük
       harf kuralı — `metin_buyuk_tr` ile tutarlı), ölü tuşlar gerekmez (Türkçe Q'da yok).
       Ayrıca ABD düzeni (geçiş: Ctrl+Boşluk). Kanıt: her tuş için beklenen UTF-8 tablosu.
-- [ ] **H5f (Açık drivers/ps2/klavye_tr.kem. Zamanlanmış yazılım tekrarı eksik.) [S] Tuş tekrarı** (yazılım tarafı; donanım tekrar hızını ayarla `0xF3`).
+- [ ] **H5f (Kısmen Dalga 15, calistir_bm_x86_girdi15. İki kaynakta 500/50 ms yazılım tekrarı var. PS/2 donanım tekrar hızı için 0xF3 ayarı eksik.) [S] Tuş tekrarı** (yazılım tarafı; donanım tekrar hızını ayarla `0xF3`).
 - [x] **H5g (✓ D-763, calistir_bm_x86_surec ile kullanıcıya basma ve bırakma olayları.) [M] Olay modeli:** `TusOlayi { kod, unicode, bas/bırak, değiştiriciler }`;
       çekirdekten kullanıcı alanına kanal (`kanal<TusOlayi>` ya da syscall).
 - [ ] **H5h (Kısmen D-763 geçmiş ve satır ortası düzenleme var. Ctrl+C ile süreç sonlandırma eksik.) [M] Konsolda satır düzenleme:** geri sil (UTF-8 çok baytlı karakteri TEK
@@ -213,11 +213,11 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       veri raporlama (`0xF4`).
 - [x] **H6b (✓ D-757 (IRQ12/GSI12 vektör 44, senkron kurtarma)) [M] IRQ12 + 3 baytlık paket ayrıştırıcı** + **senkron kurtarma**
       (bit 3 her zaman 1 olmalı; kayarsa yeniden hizala).
-- [ ] **H6c (Kısmen drivers/ps2/fare.kem dört baytı çözebiliyor. 200-100-80 ile cihazı bu kipe geçirme eksik.) [S] IntelliMouse tekerlek** (200-100-80 örnekleme sihirli dizisi → 4 bayt paket).
-- [ ] **H6d (Kısmen D-763 sınırda kenetlemeyi deniyor. Ayarlanabilir hassasiyet ve hızlanma eğrisi eksik.) [S] Hızlanma eğrisi + hassasiyet + ekran sınırına kenetleme.**
+- [x] **H6c (✓ Dalga 15, calistir_bm_x86_girdi15. PS/2 kimlik 3 ve dört baytlık paket.) [S] IntelliMouse tekerlek** (200-100-80 örnekleme sihirli dizisi → 4 bayt paket).
+- [x] **H6d (✓ Dalga 15, calistir_bm_x86_girdi15. QMP hareketiyle hız ve kenetleme.) [S] Hızlanma eğrisi + hassasiyet + ekran sınırına kenetleme.**
 - [x] **H6e (✓ D-757, calistir_bm_x86_ps2_irq ile save-under ve ekran karşılaştırması.) [M] İmleç çizimi:** altını kaydet/geri yükle (save-under), titreme yok,
       metin konsoluyla çakışmada doğru yeniden çizim.
-- [ ] **H6f (Kısmen D-763 hareket, düğme ve gezginde çift tıklama var. Ham ABI alanı var. Fiziksel tekerleğin uçtan uca uygulama sınaması eksik.) [M] Fare olayları:** hareket, bas/bırak (sol/sağ/orta), tekerlek,
+- [x] **H6f (✓ D-763 ve Dalga 15, calistir_bm_x86_ekran_fare ve calistir_bm_x86_girdi15. Gezgin ve düzenleyicide tekerlek.) [M] Fare olayları:** hareket, bas/bırak (sol/sağ/orta), tekerlek,
       çift tıklama (zaman eşiği); kullanıcı alanına kanal.
 - [x] **H6g (✓ D-757, calistir_bm_x86_ps2_irq ile kayık AUX baytı, gerçek hareket ve piksel karşılaştırması.) [M] Kapı:** QEMU monitörü `mouse_move` / `mouse_button` → olay günlüğü
       + imleç konumu ekran görüntüsünde. Sabotaj: senkron kurtarmayı kaldır, paket
@@ -231,7 +231,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 - [ ] **H7a (Kısmen runtime/mimari/x86_64/kem_pci_hw.kem CF8/CFC kullanıyor. ECAM erişimi eksik.) [M] PCI yapılandırma alanı:** önce legacy `0xCF8/0xCFC` (H1f'e bağlı),
       sonra ECAM (ACPI MCFG). `pci_enum_x86.c` mantığı `.kem`e taşınır.
-- [ ] **H7b (Kısmen kem_pci_hw.kem ve bd_bul veri yolu 0 üzerinde sınıf tarıyor. Köprü arkası tarama ve konsol listesi eksik.) [M] Aygıt numaralandırma + sınıf kodları + köprüler** (veri yolu tarama).
+- [ ] **H7b (Kısmen Dalga 15, kd_pci_rapor köprülerin ikincil yollarını tarıyor ve sınıfları listeliyor. Köprü arkasına bağlanmış aygıt için ayrı QEMU kanıtı eksik.) [M] Aygıt numaralandırma + sınıf kodları + köprüler** (veri yolu tarama).
       Ekranda `lspci` benzeri çıktı (gerçek donanımda teşhis için ŞART).
 - [ ] **H7c (Kısmen D-745 MMIO penceresi ve BAR erişimi var. Tüm atanmamış BAR'lar için UC eşleme kanıtı eksik.) [M] BAR boyutlandırma + MMIO eşleme** (önbelleksiz), 64-bit BAR.
 - [ ] **H7d (Kısmen D-763 xHCI MSI-X hazır. AHCI MSI doğrulaması eksik.) [M] MSI / MSI-X** (H3h gereği INTx yerine). Kanıt: AHCI kesmesi MSI ile geliyor.
@@ -342,10 +342,10 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H10e (Açık drivers/usb/xhci_cekirdek.kem kök portlarla sınırlı. Harici hub enumerasyonu eksik.) [S] USB hub desteği** (çoğu dizüstünde dahili cihazlar hub arkasında).
 - [x] **H10f (✓ D-759, calistir_bm_x86_v1 ile BOT/SCSI üzerinden kalıcı FAT32 kayıt ve okuma.) [L] ZORUNLU (KARAR 2026-11-07, v1 USB bellekten açılır) USB yığın depolama (BOT + SCSI)** — dosya sistemi
       açılış USB belleğinde olsun istenirse. Yoksa iç SATA/NVMe bölümü kullanılır.
-- [ ] **H10g (Kısmen drivers/usb/xhci_cekirdek.kem sınırlı bekliyor. Eksik aygıt ve sökme sonrası kabuğa dönüşün ortak kapısı eksik.) [M] Sağlamlık turu:** her donanım bekleyişinde zaman aşımı + net hata
+- [ ] **H10g (Kısmen Dalga 15, calistir_bm_x86_saglamlik. Beş hata senaryosunda kabuk devam ediyor. Eski C UART beklemeleri ve disksiz ramdisk yolu açık.) [M] Sağlamlık turu:** her donanım bekleyişinde zaman aşımı + net hata
       mesajı (hangi aygıt, hangi yazmaç); eksik aygıtta zarif düşüş (PS/2 yoksa USB'ye,
       AHCI yoksa NVMe'ye, hiç disk yoksa ramdisk).
-- [ ] **H10h (Kısmen D-755 seri açılış bilgisi var. Diskte donanim.txt eksik.) [M] Teşhis paketi:** açılışta `donanim.txt` (PCI listesi, ACPI tabloları,
+- [x] **H10h (✓ Dalga 15, calistir_bm_x86_donanim. Yazılabilir açılış köküne donanim.txt ve host donanım karşılaştırması.) [M] Teşhis paketi:** açılışta `donanim.txt` (PCI listesi, ACPI tabloları,
       bellek haritası, bulunan/bulunamayan aygıtlar) → FS'e yazılır. Seri port yokken
       sorun bildirmenin tek yolu.
 - [ ] **H10i [S] SMP (isteğe bağlı):** LAPIC INIT-SIPI (`smp_x86.c` referans). Tek
@@ -372,14 +372,14 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H12. Kalite kapıları ve bakım
 
-- [ ] **H12a (Kısmen D-759 ve D-763 ayrı kapılar var. Birleşik açılış, giriş ve RAM matrisi eksik.) [M] QEMU kapı matrisi `calistir_kem_os_pc_matris`:** {BIOS, UEFI} ×
+- [ ] **H12a (Kısmen Dalga 15, calistir_kem_os_pc_matris ile 12 UEFI yapılandırması ve 72 açılış. BIOS yolu D-756 ile ertelendi.) [M] QEMU kapı matrisi `calistir_kem_os_pc_matris`:** {BIOS, UEFI} ×
       {PS/2, USB} × {AHCI, NVMe}. `test_tumu`ya süreye göre ALT KÜME bağlanır
       (D-453 deseni: temsilciler her koşumda, tam matris haftalık/CI).
-- [ ] **H12b (Kısmen D-759 FAT korpusu var. ACPI, ELF, BMP ve bölüm tablosu için birleşik korpus eksik.) [M] Bulanıklaştırma:** bozuk FAT imajları (H8g), bozuk ACPI tabloları,
+- [ ] **H12b (Kısmen Dalga 15, calistir_kem_os_ayristirici ile her derleyicide 17.000 örnek. Bu korpusta PS/2 paketleri ve USB tanımlayıcıları yok.) [M] Bulanıklaştırma:** bozuk FAT imajları (H8g), bozuk ACPI tabloları,
       saçma PS/2 paketleri, bozuk USB tanımlayıcıları → çekirdek asla çökmez.
-- [ ] **H12c (Kısmen codex9–14 ilerleme belgelerinde bölüm kayıtları var. Tek envanter eksik.) [S] Sabotaj envanteri:** her H maddesinin sabotajı tek tabloda (S-numaralı).
-- [ ] **H12d (Açık D-763 program başlatma süresi var. Firmware devrinden kabuğa aşamalı süre kapısı eksik.) [S] Açılış süresi ölçümü** (GRUB → kabuk istemi) ve gerilemeyi yakalayan eşik.
-- [ ] **H12e (Kısmen belgeler/KEMGU_OS_Syscall_ABI.md hazır. Mimari, program yazma ve düzen kılavuzları eksik.) [S] Belgeler:** sürücü mimarisi, syscall tablosu, klavye düzeni tablosu,
+- [ ] **H12c (Kısmen Dalga 15, KEMGU_OS_Sabotaj_Envanteri.md içinde dalga 9–15 için 71 kayıt. Daha eski H maddelerinin tamamı sınıflandırılmadı.) [S] Sabotaj envanteri:** her H maddesinin sabotajı tek tabloda (S-numaralı).
+- [x] **H12d (✓ Dalga 15, calistir_bm_x86_acilis_suresi. Etkin UEFI yolunda devirden kabuğa yedi işaret ve 650 ms medyan eşiği.) [S] Açılış süresi ölçümü** (GRUB → kabuk istemi) ve gerilemeyi yakalayan eşik.
+- [x] **H12e (✓ Dalga 15, calistir_bm_x86_belge15. Mimari, kullanıcı ABI’si, klavye düzeni ve çalışan örnekler.) [S] Belgeler:** sürücü mimarisi, syscall tablosu, klavye düzeni tablosu,
       "yeni sürücü nasıl eklenir".
 
 ---

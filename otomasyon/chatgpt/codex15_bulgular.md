@@ -110,3 +110,26 @@ Aşağıdaki milisaniyeler firmware devrinden itibaren birikimlidir. Host zaman�
 | Self-host | 24.2 | 149.1 | 185.5 | 199.9 | 265.3 | 268.0 | 274.1 |
 
 Konuk medyanları sırasıyla 237,8 ve 268,0 ms. Sabotajlı konuğun medyanı 1751,1 ms. Tarihsel sabotaj sayısı kaynakta bulunamadığında envanter bunu belirtir.
+
+## Son doğrulamada ölçülen G/Ç beklemesi
+
+İlk tam takımda x86 USB testinde 20 açılıştan biri ve AHCI testinde 20 açılıştan biri zaman aşımı üretti. FAT32 GPT yazma senaryosu da USB zaman aşımı bildirdi. Ayrı USB tekrarında oran yine 1/20 oldu. Üç PVH açılışında PIT kanal 2 zaman tabanına göre port 0x80 ile istenen 1000 µs'nin 52, 53 ve 52 µs sürdüğü ölçüldü. Sürücü isteklerinin sayısal zaman aşımı bu nedenle QEMU'da gerçek süresinden erken doluyordu.
+
+G/Ç yürütücüsü artık UEFI yolunda mevcut PIT kanal 0 kalibrasyonunu paylaşır. PVH yolunda gerektiğinde PIT kanal 2'yi bir kez ölçer ve hoparlör denetim bitlerini geri yükler. Ölçüm denemesinde yeni beklemeler 1048, 1039 ve 1037 µs çıktı. USB ve AHCI aynı koşullarda 20/20'şer açılışı geçti. Disk kapısında GPT ve MBR yazma, güç kesintisi ve iki USB belleği iki derleyicide de geçti.
+
+| Ek bekleme | Koşul | Sınır ve hata |
+|---|---|---|
+| `runtime/mimari/x86_64/kem_gc_yurut.kem:55` | PIT kanal 2 çıkış biti | 1.000.000 port okuması, açık PIT hatası |
+| `runtime/mimari/x86_64/kem_gc_yurut.kem:75` | Kalibre TSC gecikmesi | İstek en çok 1.000.000 µs, döngü en çok 1.000.000 + 1000 × µs tur, açık TSC hatası |
+
+QEMU ölçümleri fiziksel PC sonucunu bekliyor. E4k açık. Yeni bir derleyici kusuru saptanmadı. Eski C UART beklemeleri ve tarihsel sabotajlarda kayıtsız açılış sayıları ilgili tablolarda belirtilmiştir.
+
+## Heap ve fiziksel çerçeveler
+
+Teslim kaynağının C derleyicili ilk düzenleyici oturumunda beş aç–kaydet–kapat çevrimi işlendi. Kabukta başlangıç ve son fiziksel boş çerçeve sayısı 47.885'ti. Aynı iki anda çekirdek heap'i 4.657.280 ve 16.790.576 bayttı. Ayrı üç aşamalı boru oturumunda C heap artışı 10.493.600 bayt, self-host artışı 10.821.616 bayt ölçüldü. Oturumları taze açılışlara bölmek uzun testlerin karşılaştırılmasını sağladı. Kalıcı tahsislerin geri kazanımı E4k çalışmasında açık.
+
+İlk keşif amaçlı tam koşumun son `PIPESTATUS` değerleri `(2 0)` oldu. Üç başarısız hedef `calistir_bm_x86_usb`, `calistir_bm_x86_ahci` ve `calistir_bm_x86_disk` idi. Düzeltmenin ölçümü yukarıdaki G/Ç tablosunda, teslim kaynaklarıyla yapılan ayrı tam koşumun sonucu ilerleme belgesindedir.
+
+## Son tam takım
+
+Tam takımda host/konuk açılış medyanları C için 236.5/229.6 ms, self-host için 266.9/258.0 ms oldu. İki derleyicide de 650 ms sınırı korundu. PC matrisi 72/72. Yeni on QEMU kapısının 122 açılışında atlama yok.

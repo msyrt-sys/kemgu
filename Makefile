@@ -5059,3 +5059,8 @@ calistir_bm_x86_boru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x8
 test_tumu: calistir_bm_x86_acilis_suresi
 calistir_bm_x86_acilis_suresi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@SUREC_KAHIN=acilis_suresi bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_belge15
+test_tumu: calistir_bm_x86_belge15
+calistir_bm_x86_belge15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=belge15_kahin bash test/bm_x86_surec_harness.sh

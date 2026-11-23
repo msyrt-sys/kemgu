@@ -150,13 +150,17 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   kap_pit_baslat(); // PIT 100 Hz tek atım; IRQ0 yalnız ISO/GSI yolunda.
   eğer değil kap_pit_bekle(2) { kg_irq_kapat();ver hata("APIC PIT ISO zaman asimi"); }
   kem_mmio_yaz32(a+896,4294967295);
-  değişken bas: tam64 = kap_pit_oku(); değişken tsc_ilk: tam64 = kap_tsc();
+  değişken bas: tam64 = kap_pit_oku(); değişken tsc_ilk: tam64 = bm_tsc_oku();
   eğer değil kap_pit_bekle(bas+10) { kg_irq_kapat();ver hata("APIC PIT kalibrasyon zaman asimi"); }
   kg_irq_kapat();
   değişken fark: tam64 = 4294967295-kem_mmio_oku32(a+912);
   değişken sure: tam64 = kap_pit_oku()-bas;
   eğer sure < 10 veya sure > 100 { ver hata("PIT olcum araligi"); }
-  güvensiz { kap_tsc_ms=(kap_tsc()-tsc_ilk)/(sure*10); }
+  güvensiz {
+   kap_tsc_ms=(bm_tsc_oku()-tsc_ilk)/(sure*10);
+   // LAPIC kurulduktan sonra sürücüler mevcut PIT kanal 0 ölçüsünü paylaşır.
+   eğer kap_tsc_ms >= 1000 { bm_cevrim_us=kap_tsc_ms/1000; }
+  }
   değişken periyot: tam64 = fark/sure;
   eğer periyot < 100 veya periyot > 2147483647 { ver hata("LAPIC kalibrasyon araligi"); }
   eşleş kap_yol_kur(m,0,32,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
@@ -169,14 +173,6 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
 // Firmware devrini takip eden ilk ana işlevden itibaren TSC çevrimleri.
 küresel değişken kap_tsc_bas: tam64 = 0;
 küresel değişken kap_tsc_ms: tam64 = 0;
-çıplak işlev kap_tsc() -> tam64 {
- değişken n: tam64 = 0;
- güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"lfence
-rdtsc
-shlq $$32,%rdx
-orq %rdx,%rax"# çıktı("={ax}",&n) bozulan("~{dx},~{flags},~{memory}") } }
- ver n;
-}
 işlev kap_damga(ad: metin) {
- güvensiz { eğer kap_tsc_bas != 0 { bm_yaz(metin_birlestir(metin_birlestir("ACILIS_TSC ",ad),metin_birlestir(" ",tam_metin(kap_tsc()-kap_tsc_bas)))); } }
+ güvensiz { eğer kap_tsc_bas != 0 { bm_yaz(metin_birlestir(metin_birlestir("ACILIS_TSC ",ad),metin_birlestir(" ",tam_metin(bm_tsc_oku()-kap_tsc_bas)))); } }
 }
