@@ -1,0 +1,41 @@
+// Hex fikstürü OVMF'nin ACPI bölgesinden QMP pmemsave ile alınmış tam q35 DSDT'sidir.
+kullan drivers::acpi::s5::{ S5Tipleri, s5_coz, s5_pm1_degeri };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_ascii, bayt_toplam8 };
+işlev s5_ornek(aml: Dizi<dtam8>) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(36);
+    için v: aml { dizi_ekle(b,v); }
+    değişken n: tam32 = dizi_boyut(b);
+    yaz_ascii(b,0,"DSDT"); yaz_le32(b,4,n olarak tam64);
+    yaz_u8(b,9,((256-bayt_toplam8(b,0,n))&255) olarak tam64);
+    ver b;
+}
+işlev s5_bekle(b: Dizi<dtam8>, a: tam32, d: tam32) -> mantıksal {
+    eşleş s5_coz(b) { hata(e) => { ver a < 0; } tamam(s) => { ver s.a == a ve s.b == d; } }
+}
+işlev s5_hane(k: tam32) -> tam32 {
+    eğer k >= 48 ve k <= 57 { ver k-48; }
+    eğer k >= 97 ve k <= 102 { ver k-87; } ver -1;
+}
+işlev main() -> tam32 {
+    değişken hex: metin = dosya_oku("tests/drivers/acpi/qemu_q35_dsdt.hex");
+    değişken i: tam32 = 0; değişken ham: Dizi<dtam8> = [];
+    iken i < metin_uzunluk(hex)-1 {
+        değişken hi: tam32 = s5_hane(metin_bayt(hex,i) olarak tam32);
+        değişken lo: tam32 = s5_hane(metin_bayt(hex,i+1) olarak tam32);
+        eğer hi < 0 veya lo < 0 { ver 1; }
+        dizi_ekle(ham,(hi*16+lo) olarak dtam8); i=i+2;
+    }
+    eğer dizi_boyut(ham) != 8424 veya değil s5_bekle(ham,0,0) { ver 2; }
+    değişken tipler: Dizi<dtam8> = [8,92,95,83,53,95,18,8,2,10,5,11,7,0,0];
+    eğer değil s5_bekle(s5_ornek(tipler),5,7) { ver 3; }
+    değişken uzun: Dizi<dtam8> = [8,95,83,53,95,18,69,0,2,1,0];
+    eğer değil s5_bekle(s5_ornek(uzun),1,0) { ver 4; }
+    dizi_yaz(uzun,6,76 olarak dtam8);
+    eğer değil s5_bekle(s5_ornek(uzun),-1,0) { ver 5; }
+    dizi_yaz(tipler,10,8 olarak dtam8);
+    eğer değil s5_bekle(s5_ornek(tipler),-1,0) { ver 6; }
+    dizi_yaz(ham,9,0 olarak dtam8);
+    eğer değil s5_bekle(ham,-1,0) { ver 7; }
+    eğer s5_pm1_degeri(1,5) != 13313 veya s5_pm1_degeri(65535,0) != 58367 { ver 8; }
+    ver 0;
+}

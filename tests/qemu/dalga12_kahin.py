@@ -25,6 +25,7 @@ class Qmp:
     def __init__(self, f, reader):
         self.f = f
         self.reader = reader
+        self.olaylar = []
         assert 'QMP' in self.response(greeting=True)
         self.call('qmp_capabilities')
 
@@ -33,6 +34,8 @@ class Qmp:
             line = self.reader.readline()
             assert line, 'QMP kapandı'
             reply = json.loads(line)
+            if 'event' in reply:
+                self.olaylar.append(reply)
             assert 'error' not in reply, reply
             if greeting or 'return' in reply:
                 return reply if greeting else reply['return']
@@ -55,7 +58,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -70,8 +73,9 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
            '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
-           '-device','isa-debug-exit,iobase=0xf4,iosize=0x04',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
+    if debug_cikis:
+        cmd.extend(['-device','isa-debug-exit,iobase=0xf4,iosize=0x04'])
     if klavye_izi:
         cmd.extend(['-trace', 'enable=ps2_set_ledstate',
                     '-trace', 'enable=ps2_write_keyboard'])
@@ -222,8 +226,8 @@ class Console:
         except (BrokenPipeError,ConnectionResetError,AssertionError):
             # QEMU çıkışı son QMP tuş yanıtından önce gelebilir.
             pass
-        assert self.p.wait(timeout=5)==1
-        assert self.output()==self.expected+'Sistem durduruldu; güç tuşuna basın.\n'.encode()
+        assert self.p.wait(timeout=5)==0
+        assert self.output()==self.expected+'Sistem kapatılıyor.\n'.encode()
 
     def screen(self):
         def exact():

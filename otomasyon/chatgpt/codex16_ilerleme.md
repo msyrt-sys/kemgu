@@ -43,3 +43,7 @@ Dört portlu bir ve iki katlı hub arkasında klavye, fare ve USB disk çalışt
 İki derleyicide USB açılışındaki MBR ve NVMe açılışındaki GPT imajı fiziksel çerçevelere yüklendi. Konuktaki bütün imajın SHA256 değeri host dosyasıyla eşleşti. FAT32'ye yazılan dosya QMP ile okunan RAM'de bulundu. Kapanış sonrası ESP içindeki imaj ve kaynak diskin tamamı ilk özetini korudu. H7j depolama hedefine ramdisk satırları eklendi.
 
 Geçici dosya sisteminde dizin oluşturma, yeniden adlandırma, listeleme, silme, ELF çalıştırma, boru ve yönlendirme iki derleyicide geçti. 33.001 baytlık kopyada çerçeve sınırı açıkça bildirildi. Yeni açılışta önceki dosya bulunamadı. Blok ofseti bir sektör kaydırılan çekirdek MBR'yi bağlayamadı. Düğüm silme işareti kaldırıldığında aynı ad dizin listesinde kaldı. İki sabotajın da dönüşü 1. Bölüm kapıları 1300 saniye, bölüm 22 dakika. PC matrisi 72 açılışı tamamladı.
+
+## Bölüm 7 — ACPI S5 ile kapatma
+
+Kabuk dosya sistemlerini boşalttı ve FADT/DSDT üzerinden bulunan S5 tipini PM1 denetim portuna yazdı. QEMU her iki derleyicide de QMP guest-shutdown olayıyla kendiliğinden kapandı. Host kapanırken yazılan dosyayı doğruladı, fsck.fat dönüşü 0. FADT, 8042 ve üçlü hata ile yeniden başlatma denemeleri de geçti. SLP_EN bitini çıkarmak gerçek QEMU kapısında beş saniyelik zaman aşımı verdi. SLP_TYP kaydırmasını değiştirmek sıfırdan farklı tip içeren host testinde 8 ile döndü. Q35'in S5 tipi sıfır olduğu için ikinci hata q35 üzerinde gözlemlenemez. Test takımı 1284 saniye, bölüm 22 dakika.

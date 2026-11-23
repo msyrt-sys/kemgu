@@ -1718,7 +1718,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
                     hata(e) => { kabuk_hata(e); }
                     tamam(v) => {
                         eğer bm_esit(s,"yenidenbaslat") { guc_yeniden_asama(0); }
-                        ekran_cift_yaz("Sistem durduruldu; güç tuşuna basın.");ke_ciz(ke);guc_kapat();
+                        ekran_cift_yaz("Sistem kapatılıyor.");ke_ciz(ke);guc_kapat();
                     }
                 }
             } değilse { eşleş komut(d,&değişken p,s,x,xb,indeks,&değişken h,&değişken tr) { hata(e) => { kabuk_hata(e); } tamam(v) => { } } }

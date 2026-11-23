@@ -1,9 +1,27 @@
-// FADT reset + 8042 + üçlü hata; tam S5/AML bu dalganın dışında.
+// Kapatma ve yeniden başlatma ayrı ACPI yollarını kullanır.
+kullan drivers::acpi::s5::{ S5Tipleri, s5_coz, s5_pm1_degeri };
 kullan drivers::acpi::fadt::{ FadtGuc, fadt_guc_coz, fadt_guc_reset_uygun };
 küresel değişken guc_ps2_durum: tam32 = 2; // 2: eski FADT veya bilgi yok; mevcut yoklama davranışı.
 küresel değişken guc_reset_alan: tam32 = 0;
 küresel değişken guc_reset_adr: tam64 = 0;
 küresel değişken guc_reset_deger: tam32 = 0;
+küresel değişken guc_pm1a: tam32 = 0;
+küresel değişken guc_pm1b: tam32 = 0;
+küresel değişken guc_s5a: tam32 = 0;
+küresel değişken guc_s5b: tam32 = 0;
+işlev uefi_s5_kur(b: UefiBilgi, f: FadtGuc) -> sonuç<mantıksal,metin> {
+ eğer f.pm1a <= 0 veya f.pm1b < 0 { ver hata("PM1 denetim portu desteklenmiyor"); }
+ eşleş uefi_sdt(b,f.dsdt_adr) { hata(e) => { ver hata(e); } tamam(t) => {
+  eşleş s5_coz(t) { hata(e) => { ver hata(e); } tamam(tip) => {
+   güvensiz {
+    guc_pm1a=f.pm1a olarak tam32; guc_pm1b=f.pm1b olarak tam32;
+    guc_s5a=tip.a; guc_s5b=tip.b;
+   }
+   kap_dok("ACPI_S5",f.dsdt_adr,tip.a olarak tam64,tip.b olarak tam64);
+  } }
+ } }
+ ver tamam(doğru);
+}
 çıplak işlev guc_ps2_izin() -> mantıksal { ver guc_ps2_durum != 0; }
 işlev uefi_fadt(b: UefiBilgi) -> sonuç<FadtGuc,metin> {
  eşleş uefi_tablo_bul(b,"FACP") { hata(e) => { ver hata(e); } tamam(t) => {
@@ -26,6 +44,7 @@ işlev uefi_guc_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   kap_dok("FADT_RESET",f.reset_alan olarak tam64,f.reset_adr,f.reset_deger olarak tam64);
   kap_dok("FADT_GAS",f.reset_boy olarak tam64,f.reset_ofs olarak tam64,f.reset_erisim olarak tam64);
   kap_dok("FADT_PM",f.pm_taban,0,0);
+  eşleş uefi_s5_kur(b,f) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ACPI S5 ",e)); } tamam(v) => {} }
  } }ver tamam(doğru);
 }
 çıplak işlev guc_fadt_yaz() {
@@ -65,9 +84,20 @@ cpuid"#
   çıktı("={bx}",&b) çıktı("={cx}",&c) çıktı("={dx}",&d) bozulan("~{rax}") bozulan("~{memory}") } }
  ver b == 1413956436 ve c == 1129596739 ve d == 1195594823;
 }
+çıplak işlev guc_pm1_yaz(port: tam32, tip: tam32) {
+ değişken p: dtam16 = port olarak dtam16;
+ değişken eski: tam32 = (kem_port_oku16(p) olarak tam32)&65535;
+ kem_port_yaz16(p,s5_pm1_degeri(eski,tip) olarak dtam16);
+}
 çıplak işlev guc_kapat() {
  kg_irq_kapat();
- // Yalnız QEMU TCG imzasında test çıkışı; fiziksel PC güç düğmesi ile kapanır.
+ eğer guc_pm1a > 0 {
+  guc_pm1_yaz(guc_pm1a,guc_s5a);
+  eğer guc_pm1b > 0 { guc_pm1_yaz(guc_pm1b,guc_s5b); }
+  kem_bekle_us(250000);
+ }
+ kis_metin("KABUK HATA ACPI S5 kapanmadi");kis_satir();
+ kis_metin("Sistem durduruldu; güç tuşuna basın.");kis_satir();
  eğer guc_tcg_mi() { kem_qemu_cik(0); }
  iken doğru { kdl_idle(); }
 }
