@@ -3060,4 +3060,21 @@
   günlük halkası + `log`, (5) H12a QEMU açılış matrisi (≥12 yapılandırma), (6) H12b bulanıklaştırma (ACPI/ELF/BMP/GPT, ≥1000
   örnek), (7) fare tekerleği + hızlanma + tuş tekrarı, (8) `goster` `bul` `hesapla` `saat`, (9) boru hatları ve
   yönlendirme, (10) H12d açılış süresi + H12c sabotaj envanteri, (11) H12e belgeler (program yazma kılavuzu örnekleri kapıda).
+- 2026-11-23 D-765: CODEX DALGASI 15 ENTEGRASYONU (taslak #236) — on bir bölüm, ayrı commit'ler. Yol haritası denetimi
+  (açık maddeler kanıt kapısıyla işaretlendi), bekleme envanteri + zaman aşımları (`KABUK HATA <aygıt> ... zaman asimi`;
+  xHCI yok / AHCI boş / NVMe namespace'siz / USB `device_del` → kabuk asılmadan devam), `donanim` + donanim.txt, 64 KiB
+  çekirdek günlük halkası (`log`, `log kaydet`, düşen satır sayılır), PC matrisi 12 yapılandırma × 2 derleyici × 3 açılış =
+  72/72, ACPI/MADT/FADT/ELF/BMP/GPT/MBR bulanıklaştırıcıları (her biri ≥1000 sabit tohumlu örnek, C ve self), PS/2
+  IntelliMouse + USB tekerleği, hızlanma/hassasiyet, ortak yazılım tuş tekrarı (500/50 ms), `goster` `bul` `hesapla` `saat`,
+  `a | b | c` + `>` `>>` `<` (çekirdek boru nesnesi, ABI 61+), açılış süresi kapısı (medyan ~230/265 ms, eşik 650 ms),
+  belgeler/KEMGU_OS_{Program_Yazma,Mimari,Klavye_Duzeni,Sabotaj_Envanteri}.md (kılavuz örnekleri kapıda derlenip koşuyor).
+  İki gerçek kusur yol üstünde: (a) 4 GiB RAM'de OVMF yükleyiciyi yüksek adrese koyuyor, çerçeve ayırıcısının üst sınırı onu
+  reddediyordu (ilk matris C 24/36); (b) port 0x80 gecikmesi QEMU'da 1000 µs yerine 52-53 µs → USB/AHCI sayısal zaman
+  aşımları erken doluyordu (1/20 aralıklı kırmızı); G/Ç yürütücüsü artık PIT kalibreli TSC beklemesi kullanıyor (20/20).
+  Derleyici bulgusu (C15-xxx) YOK. Kapsam temiz (src/ selfhost/ boot/efi/ linker/ dokunulmadı).
+  Claude: Codex'in atladığı S210'u koştu (ELF program başlığı sınır denetimlerini kaldır) → bulanıklaştırıcı `PANIK: dizi
+  sınır ihlali (i=34627, boyut=512)` ile KIRMIZI; envantere eklendi. Tam takım rc=0, 4 sa 2 dk (Codex 72 dk ölçmüştü; fark
+  ölçülmedi). Atlama satırlarının tamamı önceden kayıtlı küratörlü sınıflar (bare-metal MMIO, yabancı-mimari, oracle-link,
+  kem_os ≤1 GiB); yeni atlama yok. AÇIK: E4k heap (boru oturumu +10,5 MB), C UART çalışma zamanında sınırsız LSR beklemeleri
+  (16550/PL011 — Codex'in izni dışında), fiziksel PC denemesi.
 

@@ -67,6 +67,7 @@
 | 15-3 | 4 | Günlük başı iki bayt ilerledi | `calistir_bm_x86_log` | 1 |
 | 15-4 | 5 | MBR bölüm başlangıcı bir sektör kaydı | `calistir_kem_os_pc_matris` | 6 |
 | 15-5 | 6 | Geçerli ELF program başlığı reddedildi | `calistir_kem_os_ayristirici` | Host |
+| S210 | 6 | ELF program başlığı sınır denetimleri (`elf64.kem` iki satır) kaldırıldı → bulanıklaştırıcı `PANIK: dizi sınır ihlali (i=34627, boyut=512)` ile düştü (Claude, D-765) | `calistir_kem_os_ayristirici` | Host |
 | 15-6 | 7 | Tekerlek işareti ters | `calistir_bm_x86_girdi15` | 1 |
 | 15-7 | 7 | Tuş tekrar gecikmesi sıfır | `calistir_bm_x86_girdi15` | 1 |
 | 15-8 | 8 | İfade sonucu +1 | `calistir_bm_x86_program15` | 1 |
