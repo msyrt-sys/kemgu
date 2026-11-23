@@ -87,3 +87,7 @@ PS/2 aygıtı tekerlekli kimlik 3 ve dört baytlık paket bildirdi. USB ve PS/2 
 ## Program sınırları
 
 Görüntüleyici 256 KiB'ye kadar BMP okuyor. Çekirdek, kullanıcı penceresinden bir piksel satırı kopyalarken satır genişliği ile bellek aralığını doğruluyor. Metin araması satır başına 4096 bayt destekliyor. Hesaplayıcı işaretli 32 bit sınırını ve sıfıra bölmeyi bildiriyor. Saat QEMU RTC'sinin iki ayrı görüntüsüyle karşılaştırıldı.
+
+## Boru ve dosya doğrulaması
+
+`kedi < iz.txt | bul ağaç | say > sonuc.txt` zincirinde ev sahibi beklenen satır, kelime ve UTF-8 bayt sayılarını kendi girdisinden hesapladı. Tampon kapasitesini aşan aktarım 1401 satır ve 26.619 bayttı. Son okuyucunun kapanması yazıcıya hata verir. Son yazıcı kapandığında okuyucu önce kuyruktaki baytları, sonra EOF alır. Her oturumdan sonra veri FAT32 bölümü fsck ile ve iki salt okunur disk tam SHA256 ile doğrulandı.

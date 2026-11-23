@@ -5048,3 +5048,9 @@ test_tumu: calistir_bm_x86_program15
 calistir_bm_x86_program15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/uygulama/program_test.kem tests/drivers/ekran/bmp_test.kem
 	@SUREC_KAHIN=program15_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_boru
+test_tumu: calistir_bm_x86_boru
+calistir_bm_x86_boru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@python3 tests/qemu/surec_abi.py
+	@SUREC_KAHIN=boru_kahin bash test/bm_x86_surec_harness.sh

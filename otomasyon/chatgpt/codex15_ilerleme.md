@@ -104,3 +104,9 @@ Tuş sayısı son kâhinde komut satırının GOP gliflerinden okundu. Gecikmesi
 `goster` BMP'yi oranını koruyarak sığdırıyor ve oklarla özgün ölçekte kaydırıyor. `bul -i` Türkçe harfleri ve birden çok dosyayı, `hesapla` önceliği, parantezi ve taşmayı, `saat` canlı RTC saniyesini kapsıyor. Saf mantık testleri ve iki derleyicide dört programın sekiz QEMU senaryosu geçti. Sonuç, satır numarası, mavi kanal ve saat alanı için bağımsız dört yanlış uygulama birer açılışta yakalandı.
 
 Bölümün ilk gerilemesi 18 dakika sürdü. Çocuk süreci oturumlarından birinde program bulunamadı. Aynı çok süreç hedefinin 19 dakikalık yeniden koşumu 60/60 geçti. Son görüntüleyici ve hata iletimiyle dört program ayrıca iki derleyicide yeniden doğrulandı. Saf uygulama testleri köprüye dahil edildi.
+
+## Bölüm 9 — borular ve yönlendirme
+
+Sekiz adet 4096 baytlık boru, fd uçları ve hazır olunca uyandırma eklendi. ABI 69 boruyu açıyor. ABI 70 çocuğu fd eşlemeleriyle başlatıyor. Eşlemelerin tek çağrıda yapılması ebeveyn kabuğun kendi standart fd'lerini geçici olarak değiştirmesini önlüyor. Üç aşamalı Türkçe arama, dosyaya ekleme/kesme, dolu boru ve kullanıcı ABI senaryoları iki derleyicide geçti. Kayıplı yazmayı başarı sayan ayrı çekirdekte büyük aktarım karşılaştırması kırmızı.
+
+İlk gerilemede yüz çocuklu senaryo host bekleme süresini bir kez aştı. Çok süreç ve boru kapılarının yaklaşık 19 dakikalık yeniden koşumu 60/60 ve 8/8 geçti. Sekiz gerileme hedefinin tamamı için yeşil sonuç alındı.

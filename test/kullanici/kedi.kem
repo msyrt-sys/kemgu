@@ -1,8 +1,9 @@
 // Dosyadan konsola UTF-8 verisini olduğu gibi aktar.
 işlev kullanici_main(argc: tam64, argv: tam64) -> tam64 {
     güvensiz {
-        eğer argc != 2 { ver 2; }
-        değişken fd: tam64 = sis_ac(sis_argv(argv,1),0);
+        eğer argc > 2 { ver 2; }
+        değişken fd: tam64 = 0;
+        eğer argc == 2 { fd=sis_ac(sis_argv(argv,1),0); }
         eğer fd < 0 { ver 3; }
         değişken b: *tam8 = malloc(4096);
         eğer (b olarak tam64) == 0 { ver 4; }
