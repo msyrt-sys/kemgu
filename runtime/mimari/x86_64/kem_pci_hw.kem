@@ -70,6 +70,16 @@
     *p = ((v & 255) olarak tam32) olarak dtam8;
 }
 
+// Önceki yüklemelerden sonra işlemcinin zaman sayacını örnekle.
+çıplak işlev bm_tsc_oku() -> tam64 {
+    değişken n: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"lfence
+rdtsc
+shlq $$32,%rdx
+orq %rdx,%rax"# çıktı("={ax}",&n) bozulan("~{dx},~{flags},~{memory}") } }
+    ver n;
+}
+
 // Kısa gecikme: port 0x80'e (POST kodu) okuma ~1 µs gerçek donanımda; QEMU'da
 // hızlıdır ama aygıt modelinin işlemesi için ana döngüye zaman tanır.
 çıplak işlev kem_bekle_us(us: tam32) {

@@ -44,6 +44,17 @@ işlev renk_bileseni(v: tam64, m: tam64) -> tam32 {
     iken (maske & 1) == 0 { maske = maske >> 1; deger = deger >> 1; }
     ver ((deger * 255) / maske) olarak tam32;
 }
+// bmp_coz ile doğrulanmış bir görüntüden tek piksel al.
+genel işlev bmp_renk(b: Bmp,x: tam32,y: tam32) -> tam32 {
+    eğer x < 0 veya y < 0 veya x >= b.genislik veya y >= b.yukseklik { ver -1; }
+    değişken satir: tam32 = y;
+    eğer değil b.yukaridan { satir=b.yukseklik-1-y; }
+    değişken o: tam32 = b.ofset + satir * b.adim + x * (b.bpp / 8);
+    değişken ham: tam64 = (oku_u8(b.veri, o) olarak tam64) | ((oku_u8(b.veri, o + 1) olarak tam64) << 8) | ((oku_u8(b.veri, o + 2) olarak tam64) << 16);
+    eğer b.bpp == 32 { ham = ham | ((oku_u8(b.veri, o + 3) olarak tam64) << 24); }
+    değişken renk: tam32 = (renk_bileseni(ham, b.kirmizi) << 16) | (renk_bileseni(ham, b.yesil) << 8) | renk_bileseni(ham, b.mavi);
+    ver renk;
+}
 genel işlev bmp_ciz(c: Cerceve, veri: Dizi<dtam8>, x: tam32, y: tam32) -> sonuç<tam32, metin> {
     eğer değil cerceve_gecerli(c) { ver hata("cerceve"); }
     eşleş bmp_coz(veri) {
@@ -58,14 +69,9 @@ genel işlev bmp_ciz(c: Cerceve, veri: Dizi<dtam8>, x: tam32, y: tam32) -> sonu�
             eğer x1 > sag { x1 = sag; } eğer y1 > alt { y1 = alt; }
             değişken yy: tam64 = y0;
             iken yy < y1 {
-                değişken satir: tam32 = yy olarak tam32;
-                eğer değil b.yukaridan { satir = b.yukseklik - 1 - satir; }
                 değişken xx: tam64 = x0;
                 iken xx < x1 {
-                    değişken o: tam32 = b.ofset + satir * b.adim + (xx olarak tam32) * (b.bpp / 8);
-                    değişken ham: tam64 = (oku_u8(veri, o) olarak tam64) | ((oku_u8(veri, o + 1) olarak tam64) << 8) | ((oku_u8(veri, o + 2) olarak tam64) << 16);
-                    eğer b.bpp == 32 { ham = ham | ((oku_u8(veri, o + 3) olarak tam64) << 24); }
-                    değişken renk: tam32 = (renk_bileseni(ham, b.kirmizi) << 16) | (renk_bileseni(ham, b.yesil) << 8) | renk_bileseni(ham, b.mavi);
+                    değişken renk: tam32 = bmp_renk(b,xx olarak tam32,yy olarak tam32);
                     piksel_yaz(c, (xx + (x olarak tam64)) olarak tam32, (yy + (y olarak tam64)) olarak tam32, renk);
                     adet = adet + 1; xx = xx + 1;
                 }

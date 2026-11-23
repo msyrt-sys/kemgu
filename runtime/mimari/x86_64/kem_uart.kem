@@ -21,7 +21,37 @@
     ver v;
 }
 
+// Tek çekirdekte seri baytlarıyla aynı sırada ilerleyen, satır sınırını koruyan halka.
+sabit KGUN_BOY: tam64 = 8192;
+küresel değişken kgun_adres: tam64 = 0;
+küresel değişken kgun_bas: tam64 = 0;
+küresel değişken kgun_adet: tam64 = 0;
+küresel değişken kgun_dusen: tam64 = 0;
+küresel değişken kgun_uzun: mantıksal = yanlış;
+çıplak işlev kgun_kur(adres: tam64) { kgun_adres=adres; }
+çıplak işlev kgun_oku(i: tam64) -> tam32 {
+    değişken p: *dtam8 = (kgun_adres+((kgun_bas+i)%KGUN_BOY)) olarak *dtam8;
+    ver (*p) olarak tam32;
+}
+çıplak işlev kgun_ekle(b: tam32) {
+    eğer kgun_adres == 0 { ver; }
+    eğer kgun_uzun {
+        eğer b == 10 { kgun_uzun=yanlış; }
+        ver;
+    }
+    eğer kgun_adet == KGUN_BOY {
+        değişken c: tam32 = 0;
+        iken kgun_adet > 0 ve c != 10 {
+            c=kgun_oku(0); kgun_bas=(kgun_bas+1)%KGUN_BOY; kgun_adet=kgun_adet-1;
+        }
+        kgun_dusen=kgun_dusen+1;
+        eğer c != 10 { kgun_uzun=b != 10; ver; }
+    }
+    değişken p: *dtam8 = (kgun_adres+((kgun_bas+kgun_adet)%KGUN_BOY)) olarak *dtam8;
+    *p=b olarak dtam8; kgun_adet=kgun_adet+1;
+}
 çıplak işlev kem_uart_bayt(b: tam32) {
+    kgun_ekle(b);
     değişken deneme: tam32 = 0;
     iken deneme < 100000 {
         değişken lsr: tam32 = kem_port_oku8(1021) olarak tam32;

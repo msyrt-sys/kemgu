@@ -1,0 +1,16 @@
+işlev sa_iki(n: tam64) -> metin { eğer n < 10 { ver metin_birlestir("0",tam_metin(n)); } ver tam_metin(n); }
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    değişken p: tam64 = malloc(56) olarak tam64;
+    eğer p == 0 veya sis_ekran_bilgi(p) < 0 { ver 2; }
+    değişken sut: tam64 = (sis_alan(p,0)-8)/2; değişken sat: tam64 = sis_alan(p,1)/2;
+    eğer sis_ekran_temizle(1056832) < 0 { ver 2; }
+    iken doğru {
+        eğer sis_saat(p) != 0 { sis_metin("HATA RTC"); sis_bayt_yaz(1,10); ver 2; }
+        değişken m: metin = metin_birlestir(sa_iki(sis_alan(p,3)),":");
+        m=metin_birlestir(m,sa_iki(sis_alan(p,4))); m=metin_birlestir(m,":");
+        m=metin_birlestir(m,sa_iki(sis_alan(p,5)));
+        eğer sis_hucre(sat,sut,m,16777215,1056832) < 0 { ver 2; }
+        eğer sis_olay_bekle(p,1,1000) < 0 { ver 3; }
+        eğer sis_alan(p,0) == 1 ve sis_alan(p,3) != 0 { ver 0; }
+    } ver 0;
+} }

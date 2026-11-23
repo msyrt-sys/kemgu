@@ -48,10 +48,8 @@
     ver geri;
 }
 çıplak işlev ps2_bekle() -> tam32 {
-    iken doğru {
-        değişken b: tam32 = ps2_oku(); eğer b >= 0 { ver b; }
-        kem_bekle_us(50);
-    } ver -1;
+    // Kullanıcı girdisi gecikebilir. Tek yoklama dilimi bittiğinde çağıran yeniden planlar.
+    ver ps2_yanit();
 }
 
 // IRQ yolu: tek üretici ISR, tek tüketici kabuk. 1024 yuva, bir yuva boş.
@@ -133,13 +131,24 @@ hlt"# bozulan("~{memory}") } }
  eğer değil ps2_yaz(100,212) veya değil ps2_yaz(96,v) { ver yanlış; }
  ver ps2_aux_yanit() == 250;
 }
+küresel değişken ps2_paket_kimligi: tam32 = 0;
+çıplak işlev ps2_teker_var() -> mantıksal { ver ps2_paket_kimligi == 3; }
+çıplak işlev ps2_ornekleme(hiz: tam32) -> mantıksal {
+ ver ps2_aux_komut(243) ve ps2_aux_komut(hiz);
+}
 çıplak işlev ps2_kesme_kur() -> tam32 {
  kg_irq_kapat();
  eğer ps2_kur() < 0 { kz_irq_ac();ver -1; }
  eğer değil ps2_yaz(100,173) veya değil ps2_yaz(100,168) { kz_irq_ac();ver -2; }
- eğer değil ps2_aux_komut(246) veya değil ps2_aux_komut(242) { kz_irq_ac();ver -3; }
+ eğer değil ps2_aux_komut(246) { kz_irq_ac();ver -3; }
+ // IntelliMouse dizisini tanımayan standart fare kimlik 0 ile devam eder.
+ eğer değil ps2_ornekleme(200) veya değil ps2_ornekleme(100) veya değil ps2_ornekleme(80) {
+  eğer değil ps2_aux_komut(246) { kz_irq_ac();ver -3; }
+ }
+ eğer değil ps2_aux_komut(242) { kz_irq_ac();ver -3; }
  değişken kimlik: tam32 = ps2_aux_yanit();
- eğer kimlik != 0 { kz_irq_ac();ver -4; }
+ ps2_paket_kimligi=kimlik;
+ eğer kimlik != 0 ve kimlik != 3 { kz_irq_ac();ver -4; }
  eğer değil ps2_aux_komut(244) { kz_irq_ac();ver -5; }
  ps2_irq_klavye=ps2_halka_yeni();ps2_irq_fare=ps2_halka_yeni();
  eğer ps2_irq_klavye == 0 veya ps2_irq_fare == 0 { kz_irq_ac();ver -6; }

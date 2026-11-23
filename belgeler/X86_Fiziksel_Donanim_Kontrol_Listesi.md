@@ -42,6 +42,10 @@ KABUK_HAZIR
 5. `baslat hesap &` çalıştırın. Verilen PID'yi kaydedin. `ps`, `sonlandir <pid>` ve `bekle <pid>` ile sonucu görün. `kapat` çalıştırın. “Sistem durduruldu; güç tuşuna basın.” satırını gördükten sonra makineyi kapatın.
 6. USB belleği başka bir makinede yeniden tanımlayın, veri bölümünü ayırın ve `fsck.fat -n` ile doğrulayın. `günlük.txt` içeriğini beklenen UTF-8 metniyle karşılaştırın. Ataç olarak seri kayıt, ekran fotoğrafı ve imaj SHA256 değerini saklayın.
 
+### Donanım sonucunu getirme
+
+`donanim` komutuyla aygıtları ekranda inceleyin. Yazılabilir açılış kökünde çekirdek açılış sırasında `/donanim.txt` dosyasını kaydeder. Standart GPT USB imajında veri bölümünü `diskler` ile bulun. Örneğin veri bölümü `usb0p2` ise `bagla --yazilabilir usb0p2`, ardından `donanim kaydet /diskler/usb0p2/donanim.txt` ve `kapat` çalıştırın. USB’den aldığınız `donanim.txt` dosyasını makine bilgileri ve ekran fotoğrafıyla birlikte sonuç kaydına ekleyin.
+
 ## Sorun giderme
 
 | Gözlem | Kontrol |

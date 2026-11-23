@@ -54,28 +54,37 @@ def wait_for(proc, fn, seconds=15):
 
 
 @contextmanager
-def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2"):
+def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
     ser.unlink(missing_ok=True)
     shutil.copy('/usr/share/OVMF/OVMF_VARS_4M.fd',w/'dalga12-vars.fd')
-    cmd = ['qemu-system-x86_64','-M','q35','-m','256M','-vga','std','-display','none','-no-reboot',
+    aygitlar = {"usb": usb.disk, "nvme": nvme.disk, "sata": sata.disk}
+    aygitlar["usb"], aygitlar[acilis] = aygitlar[acilis], usb.disk
+    cmd = ['qemu-system-x86_64','-M','q35','-m',ram,'-vga','std','-display','none','-no-reboot',
            '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
-           '-device','qemu-xhci,id=x','-device','usb-kbd,bus=x.0',
-           '-drive',f'if=none,id=u,format=raw,file={usb.disk}',
-           '-device','usb-storage,bus=x.0,drive=u,bootindex=1',
-           '-drive',f'if=none,id=n,format=raw,file={nvme.disk}',
-           '-device','nvme,drive=n,serial=dalga12',
-           '-drive',f'if=none,id=a,format=raw,file={sata.disk}',
-           '-device','ide-hd,drive=a,bus=ide.0',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
            '-device','isa-debug-exit,iobase=0xf4,iosize=0x04',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
-    if klavye == "ps2":
-        i = cmd.index("usb-kbd,bus=x.0")
-        del cmd[i-1:i+1]
+    if not sata_takili:
+        cmd.append('-nodefaults')
+    if xhci:
+        cmd.extend(['-device','qemu-xhci,id=x'])
+        if klavye == 'usb':
+            cmd.extend(['-device','usb-kbd,bus=x.0'])
+    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'), ('nvme','nvme,serial=dalga12'),
+                      ('sata','ide-hd,bus=ide.0')]:
+        if (ad == 'usb' and not xhci) or (ad == 'sata' and not sata_takili):
+            continue
+        if ad == 'nvme' and not nvme_ns:
+            cmd.extend(['-device',aygit])
+            continue
+        ek = ',bootindex=1' if ad == acilis else ''
+        cmd.extend(['-drive',f'if=none,id=d{ad},format=raw,file={aygitlar[ad]}',
+                    '-device',f'{aygit},drive=d{ad}{ek}'])
     if fare == "usb":
         cmd.extend(["-device", "usb-mouse,bus=x.0"])
     if usb2:
@@ -102,15 +111,15 @@ def sha(path):
 
 
 class Console:
-    def __init__(self, w, q, p, ser):
+    def __init__(self, w, q, p, ser, *, disk="USB"):
         self.w, self.q, self.p, self.ser = w,q,p,ser
         try:
             start = wait_for(p,lambda: b'KABUK_HAZIR\n' in ser.read_bytes() if ser.exists() else False)
         except AssertionError as exc:
-            raise AssertionError(ser.read_text(errors='replace')) from exc
+            raise AssertionError(ser.read_text(encoding='utf-8',errors='replace')) from exc
         assert start
         self.marker = b'KEMGU-OS kabuk v0\n'
-        self.expected = self.marker+b'DISK USB\nKABUK_HAZIR\n'
+        self.expected = self.marker+f'DISK {disk}\nKABUK_HAZIR\n'.encode()
         self.akis = self.expected.decode()
         assert self.output() == self.expected, self.output()
         schema = q.call('query-qmp-schema')
@@ -206,8 +215,30 @@ def check_identity(c,part):
 def run(w,mode):
     usb,nvme,sata=images(w,mode)
     before={p.disk:sha(p.disk) for p in [usb[0],nvme,sata]}
+    if mode == 'mbr':
+        from dalga12_fat import Fat
+        def dosyalar(fat, yol=''):
+            sonuc = {}
+            for ad, (_, _, dizin) in (fat.get(yol) if yol else fat.directory(fat.root)).items():
+                tam = yol+'/'+ad
+                if ad in ('.','..'):
+                    continue
+                if dizin:
+                    sonuc.update(dosyalar(fat,tam))
+                else:
+                    sonuc[tam] = sha256(fat.get(tam)).digest()
+            return sonuc
+        ilk = dosyalar(Fat(usb[0].read()))
     with boot(w,usb[0],nvme,sata) as (q,p,ser):
         c=Console(w,q,p,ser)
+        if mode == 'mbr':
+            # Yazılabilir açılış kökünde tek ek dosya donanım raporudur.
+            fat = Fat(usb[0].read())
+            son = dosyalar(fat)
+            assert son.pop('/donanim.txt') == sha256(fat.get('/donanim.txt')).digest()
+            assert son == ilk and b'PCI ' in fat.get('/donanim.txt')
+            fsck(w,usb[0],'donanim-acilis')
+            before[usb[0].disk] = sha(usb[0].disk)
         check_identity(c,usb[0])
         c.run('cat /merhaba.txt',MERHABA+b'\n')
         c.run('cat /diskler/nvme0p1/merhaba.txt',MERHABA+b'\n')
@@ -244,7 +275,7 @@ def fsck(w,part,suffix,dirty=False):
     volume=w/f'dalga12-{suffix}.fat'
     volume.write_bytes(part.read())
     p=subprocess.run(['fsck.fat','-n',str(volume)],capture_output=True,text=True)
-    (w/f'dalga12-{suffix}.fsck.log').write_text(p.stdout+p.stderr)
+    (w/f'dalga12-{suffix}.fsck.log').write_text(p.stdout+p.stderr,encoding='utf-8')
     assert p.returncode==int(dirty), (suffix,p.returncode,p.stdout,p.stderr)
     if dirty:
         assert 'Dirty bit is set' in p.stdout,p.stdout

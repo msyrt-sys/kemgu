@@ -4685,7 +4685,7 @@ calistir_uart_pl011_bare_metal:
 #     derlenip koşar + stdout eşitliği. Yeni test dosyası kendiliğinden kapsanır.
 #     surucu_diff yalnız YAPIYI ölçer (linklemez); bu kapı DAVRANIŞI ölçer.
 CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/blok/*_test.kem tests/drivers/usb/*_test.kem tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
-                     tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem tests/drivers/pci/*_test.kem tests/drivers/bellek/*_test.kem tests/drivers/elf/*_test.kem tests/drivers/ekran/*_test.kem tests/drivers/girdi/*_test.kem tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem tests/drivers/sinir/*_test.kem))
+                     tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem tests/drivers/pci/*_test.kem tests/drivers/bellek/*_test.kem tests/drivers/elf/*_test.kem tests/drivers/ekran/*_test.kem tests/drivers/girdi/*_test.kem tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem tests/drivers/sinir/*_test.kem tests/drivers/uygulama/*_test.kem))
 calistir_chatgpt_kopru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@echo "=== ChatGPT köprüsü: dil kartı + saf-mantık sürücü testleri ==="
 	@bash otomasyon/chatgpt/dogrula.sh --kart
@@ -5012,3 +5012,55 @@ calistir_bm_x86_cok_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 calistir_yigin_geri: $(BUILD)/codegen$(EXE)
 	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/yigin_geri_harness.sh
 test_tumu: calistir_yigin_geri
+
+.PHONY: calistir_bm_x86_saglamlik
+test_tumu: calistir_bm_x86_saglamlik
+calistir_bm_x86_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=saglamlik_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_donanim
+test_tumu: calistir_bm_x86_donanim
+calistir_bm_x86_donanim: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=donanim_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_log
+test_tumu: calistir_bm_x86_log
+calistir_bm_x86_log: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=log_kahin bash test/bm_x86_surec_harness.sh
+.PHONY: calistir_kem_os_pc_matris
+test_tumu: calistir_kem_os_pc_matris
+calistir_kem_os_pc_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=pc_matris bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_kem_os_ayristirici
+test_tumu: calistir_kem_os_ayristirici
+calistir_kem_os_ayristirici: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum)) tests/drivers/fs/fat32_bozuk_test.kem
+	@SUREC_KAHIN=bozuk_elf_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_girdi15
+test_tumu: calistir_bm_x86_girdi15
+calistir_bm_x86_girdi15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=girdi15_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_program15
+test_tumu: calistir_bm_x86_program15
+calistir_bm_x86_program15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/uygulama/program_test.kem tests/drivers/ekran/bmp_test.kem
+	@SUREC_KAHIN=program15_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_boru
+test_tumu: calistir_bm_x86_boru
+calistir_bm_x86_boru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@python3 tests/qemu/surec_abi.py
+	@SUREC_KAHIN=boru_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_acilis_suresi
+test_tumu: calistir_bm_x86_acilis_suresi
+calistir_bm_x86_acilis_suresi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=acilis_suresi bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_belge15
+test_tumu: calistir_bm_x86_belge15
+calistir_bm_x86_belge15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=belge15_kahin bash test/bm_x86_surec_harness.sh

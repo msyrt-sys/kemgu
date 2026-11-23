@@ -1,0 +1,10 @@
+kullan drivers::uygulama::hesapla::{ ifade_hesapla };
+kullan drivers::uygulama::bul::{ satirda_bul };
+işlev dogru_mu(s: metin,n: tam64) -> mantıksal { eşleş ifade_hesapla(s) { tamam(v) => { ver v == n; } hata(e) => { ver yanlış; } } }
+işlev hata_mi(s: metin) -> mantıksal { eşleş ifade_hesapla(s) { tamam(v) => { ver yanlış; } hata(e) => { ver metin_uzunluk(e) > 0; } } }
+işlev main() -> tam32 {
+    eğer değil dogru_mu(" 2+(3+1)*-5",-18) veya değil dogru_mu("20 / 3 % 4",2) { ver 1; }
+    eğer değil hata_mi("1/0") veya değil hata_mi("(1") veya değil hata_mi("3 4") veya değil hata_mi("2147483647+1") { ver 2; }
+    eğer değil satirda_bul("AĞAÇ IŞIK ve İŞ","ışık",doğru) veya değil satirda_bul("AĞAÇ IŞIK ve İŞ","iş",doğru) { ver 3; }
+    eğer satirda_bul("İŞ","ış",doğru) veya satirda_bul("AĞAÇ","ağaç",yanlış) { ver 4; } ver 0;
+}

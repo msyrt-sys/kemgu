@@ -1,0 +1,9 @@
+// Boruya ve yönlendirilen stdout'a da tek satır yazar.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    değişken m: metin = ""; değişken i: tam64 = 1;
+    iken i < argc {
+        eğer i > 1 { m=metin_birlestir(m," "); }
+        m=metin_birlestir(m,sis_argv(argv,i)); i=i+1;
+    }
+    m=metin_birlestir(m,kod_metin(10)); eğer sis_metin(m) < 0 { ver 1; } ver 0;
+}

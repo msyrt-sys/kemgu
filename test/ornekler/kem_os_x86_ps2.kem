@@ -5,6 +5,6 @@ işlev main() -> tam32 {
     eğer c < 0 { kem_qemu_cik(1); }
     bm_yaz("PS2_HAZIR");
     değişken i: tam32 = 0;
-    iken i < 14 { bm_yaz(tam_metin(ps2_bekle() olarak tam64)); i=i+1; }
+    iken i < 14 { değişken b: tam32 = ps2_bekle(); eğer b >= 0 { bm_yaz(tam_metin(b olarak tam64)); i=i+1; } }
     bm_yaz("PS2_SON"); kem_qemu_cik(0); ver 0;
 }

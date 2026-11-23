@@ -1,0 +1,61 @@
+kullan drivers::ekran::bmp::{ Bmp,bmp_coz,bmp_renk };
+işlev go_ciz(b: Bmp,p: tam64,x: tam32,y: tam32,pay: tam64,payda: tam64,gen: tam32,yuk: tam32) -> mantıksal {
+    değişken j: tam32 = 0;
+    iken j < yuk {
+        değişken sy: tam32 = y+(((j olarak tam64)*pay/payda) olarak tam32);
+        değişken i: tam32 = 0;
+        iken i < gen {
+            değişken sx: tam32 = x+(((i olarak tam64)*pay/payda) olarak tam32);
+            değişken rgb: tam32 = bmp_renk(b,sx,sy);
+            güvensiz { değişken hucre: *dtam32 = (p+(i olarak tam64)*4) olarak *dtam32; *hucre=rgb olarak dtam32; }
+            i=i+1;
+        }
+        eğer sis_piksel_satiri(j olarak tam64,p,i olarak tam64) < 0 { ver yanlış; }
+        j=j+1;
+    } ver doğru;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    eğer argc != 2 { sis_metin("goster <dosya.bmp>"); sis_bayt_yaz(1,10); ver 2; }
+    değişken fd: tam64 = sis_ac(sis_argv(argv,1),0); eğer fd < 0 { sis_metin("HATA BMP acma"); sis_bayt_yaz(1,10); ver 2; }
+    değişken p: tam64 = malloc(4096) olarak tam64; eğer p == 0 { ver 3; }
+    değişken veri: Dizi<dtam8> = [];
+    değişken n: tam64 = sis_oku(fd,p,4096);
+    iken n > 0 {
+        eğer (dizi_boyut(veri) olarak tam64)+n > 262144 { sis_metin("HATA BMP 256 KiB siniri"); sis_bayt_yaz(1,10); ver 2; }
+        değişken i: tam64 = 0;
+        iken i < n { dizi_ekle(veri,sis_bayt_al(p+i) olarak dtam8); i=i+1; }
+        n=sis_oku(fd,p,4096);
+    }
+    sis_kapat(fd); eğer n < 0 veya sis_ekran_bilgi(p) < 0 { ver 3; }
+    değişken gen: tam32 = sis_alan(p,2) olarak tam32; değişken yuk: tam32 = sis_alan(p,3) olarak tam32;
+    değişken satir: tam64 = malloc((gen olarak tam64)*4) olarak tam64;
+    eğer satir == 0 { ver 3; }
+    eşleş bmp_coz(veri) { hata(e) => { sis_metin(metin_birlestir("HATA BMP ",e)); sis_bayt_yaz(1,10); ver 2; } tamam(b) => {
+        değişken x: tam32 = 0; değişken y: tam32 = 0;
+        değişken pay: tam64 = 1; değişken payda: tam64 = 1;
+        eğer b.genislik > gen { pay=b.genislik olarak tam64; payda=gen olarak tam64; }
+        eğer (b.yukseklik olarak tam64)*payda > (yuk olarak tam64)*pay { pay=b.yukseklik olarak tam64; payda=yuk olarak tam64; }
+        değişken ciz: mantıksal = doğru;
+        iken doğru {
+            eğer ciz {
+                değişken w: tam32 = (((b.genislik-x) olarak tam64)*payda/pay) olarak tam32;
+                değişken h: tam32 = (((b.yukseklik-y) olarak tam64)*payda/pay) olarak tam32;
+                eğer w < 1 { w=1; } eğer w > gen { w=gen; }
+                eğer h < 1 { h=1; } eğer h > yuk { h=yuk; }
+                eğer sis_ekran_temizle(0) < 0 veya değil go_ciz(b,satir,x,y,pay,payda,w,h) { ver 3; }
+                ciz=yanlış;
+            }
+            eğer sis_olay_bekle(p,1,-1) < 0 { ver 3; }
+            eğer sis_alan(p,3) != 0 {
+                değişken kod: tam64 = sis_alan(p,1); eğer kod == 16 { ver 0; }
+                eğer kod == 331 veya kod == 333 veya kod == 328 veya kod == 336 {
+                    pay=1; payda=1; ciz=doğru;
+                    eğer kod == 331 { x=x-16; } eğer kod == 333 { x=x+16; }
+                    eğer kod == 328 { y=y-16; } eğer kod == 336 { y=y+16; }
+                    eğer x > b.genislik-gen { x=b.genislik-gen; } eğer y > b.yukseklik-yuk { y=b.yukseklik-yuk; }
+                    eğer x < 0 { x=0; } eğer y < 0 { y=0; }
+                }
+            }
+        }
+    } } ver 0;
+} }

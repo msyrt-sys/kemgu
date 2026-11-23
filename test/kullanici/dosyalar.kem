@@ -100,6 +100,13 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
             eğer kod == 28 { ac=doğru; }
         }
         eğer sis_alan(p,0) == 2 {
+            değişken teker: tam32 = sis_alan(p,6) olarak tam32;
+            eğer teker != 0 ve dizi_boyut(g.girdiler) > 0 {
+                g.sec=g.sec+teker*3;
+                eğer g.sec < 0 { g.sec=0; }
+                eğer g.sec >= dizi_boyut(g.girdiler) { g.sec=dizi_boyut(g.girdiler)-1; }
+                ciz=doğru;
+            }
             değişken bas: mantıksal = (sis_alan(p,5)&1) != 0;
             değişken y: tam32 = ((sis_alan(p,4)/16) olarak tam32)-1;
             değişken i: tam32 = y+g.ust;

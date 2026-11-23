@@ -96,7 +96,7 @@ işlev klavye_karakter(d: &değişken KlavyeDurumu,k: tam32) -> TusOlayi {
     eğer k == 39 { eğer buyuk { ver TusOlayi::Karakter(350); } ver TusOlayi::Karakter(351); }
     eğer k == 40 { eğer buyuk { ver TusOlayi::Karakter(304); } ver TusOlayi::Karakter(105); }
     eğer k == 43 { eğer shift { ver TusOlayi::Karakter(59); } ver TusOlayi::Karakter(44); }
-    eğer k == 86 { eğer shift { ver TusOlayi::Karakter(62); } ver TusOlayi::Karakter(60); }
+    eğer k == 86 { eğer d.altgr { ver TusOlayi::Karakter(124); } eğer shift { ver TusOlayi::Karakter(62); } ver TusOlayi::Karakter(60); }
     eğer k == 44 { eğer buyuk { ver TusOlayi::Karakter(90); } ver TusOlayi::Karakter(122); }
     eğer k == 45 { eğer buyuk { ver TusOlayi::Karakter(88); } ver TusOlayi::Karakter(120); }
     eğer k == 46 { eğer buyuk { ver TusOlayi::Karakter(67); } ver TusOlayi::Karakter(99); }

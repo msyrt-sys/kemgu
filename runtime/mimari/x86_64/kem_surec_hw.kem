@@ -21,6 +21,7 @@ sabit KX_HATA_FAULT: tam64 = 14;
 sabit KX_HATA_INVAL: tam64 = 22;
 
 küresel değişken kxs_ek_vekil: tam64 = 0;
+küresel değişken kxs_cikis_eslendi: mantıksal = yanlış;
 küresel değişken kxs_pt: tam64 = 0;
 küresel değişken kxs_pid_son: tam64 = 0;
 küresel değişken kxs_pid: tam64 = 0;
@@ -51,6 +52,7 @@ sabit KXS_CR2_OFS: tam64 = 224;
 sabit KXS_EBEVEYN_OFS: tam64 = 232;
 sabit KXS_UYUYOR: tam64 = 5;
 sabit KXS_COCUK_BEKLIYOR: tam64 = 6;
+sabit KXS_BORU_BEKLIYOR: tam64 = 8;
 sabit KXS_TUS_BEKLIYOR: tam64 = 7;
 sabit KXS_OLAY_OFS: tam64 = 240;
 küresel değişken kxs_etkin_kayit: tam64 = 0;
@@ -195,7 +197,7 @@ yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vekt
     ver i;
 }
 çıplak işlev kxs_hizmet(num: tam64, a: tam64, b: tam64, c: tam64) -> tam64 {
-    eğer num == KX_SIS_YAZ ve (a == 1 veya a == 2) { ver kxs_konsol_yaz(a,b,c); }
+    eğer num == KX_SIS_YAZ ve (a == 2 veya (a == 1 ve değil kxs_cikis_eslendi)) { ver kxs_konsol_yaz(a,b,c); }
     eğer num == 5 {
         değişken n: tam64 = kxs_dize_boyu(a, 4096);
         eğer n < 0 { ver 0 - 1; }

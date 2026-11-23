@@ -5,7 +5,7 @@ from psf_kahin import screendump,kabuk_goruntu,karsilastir,fare_imleci
 def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
     karma=os.environ.get('UEFI_PS2_KARMA')=='1'
     header=serial.read_bytes()[:start]
-    assert b'GIRDI PS2 IRQ1 IRQ12\n' in header and b'PS2_FARE 0 3\n' in header,'PS/2 kesme yolu kurulmadı'
+    assert b'GIRDI PS2 IRQ1 IRQ12\n' in header and b'PS2_FARE 3 4\n' in header,'PS/2 kesme yolu kurulmadı'
     enums=[set(v.get('values',[]))|{m['name'] for m in v.get('members',[]) if 'name' in m} for v in command('query-qmp-schema')]
     assert any({'left','right','middle'}<=e for e in enums),'QEMU düğme sözlüğü'
     assert any(set('abcdefghijklm')|{'o','ret','spc','apostrophe'}<=e for e in enums),'QEMU qcode sözlüğü'
@@ -103,4 +103,4 @@ def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
         assert 'masked' not in line and re.search(r'vec='+str(vector)+r'\s',line),line
     if karma:print(f'✓ PS2 KARMA: USB klavye + USB FAT32 + IRQ12, AUX senkron kurtarma, 5 hareket/düğme, save-under {gw*gh} piksel; IRQ sayıları {counts}, kayıp0',flush=True)
     else:
-        print(f'✓ PS2 IRQ: kimlik0/3bayt, 12×48 hızlı tuş, halka sarımı, AUX senkron kurtarma, 5 hareket/düğme, save-under {gw*gh} piksel; IRQ sayıları {counts}, kayıp0',flush=True)
+        print(f'✓ PS2 IRQ: kimlik3/4bayt, 12×48 hızlı tuş, halka sarımı, AUX senkron kurtarma, 5 hareket/düğme, save-under {gw*gh} piksel; IRQ sayıları {counts}, kayıp0',flush=True)

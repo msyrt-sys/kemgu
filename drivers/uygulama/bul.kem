@@ -1,0 +1,23 @@
+kullan drivers::ortak::utf8::{ utf8_coz };
+// Türkçe Q alfabesi ve temel Latin harflerini aynı küçük harfe eşle.
+işlev bul_harf(k: tam32) -> tam32 {
+    eğer k == 73 { ver 305; } eğer k == 304 { ver 105; }
+    eğer k >= 65 ve k <= 90 { ver k+32; }
+    eğer k == 199 veya k == 214 veya k == 220 { ver k+32; }
+    eğer k == 286 veya k == 350 { ver k+1; } ver k;
+}
+genel işlev satirda_bul(s: metin,aranan: metin,katla: mantıksal) -> mantıksal {
+    değişken a: Dizi<tam32> = utf8_coz(s); değişken b: Dizi<tam32> = utf8_coz(aranan);
+    değişken i: tam32 = 0;
+    iken i <= dizi_boyut(a)-dizi_boyut(b) {
+        değişken j: tam32 = 0;
+        değişken ayni: mantıksal = doğru;
+        iken ayni ve j < dizi_boyut(b) {
+            değişken x: tam32 = dizi_al(a,i+j); değişken y: tam32 = dizi_al(b,j);
+            eğer katla { x=bul_harf(x); y=bul_harf(y); }
+            eğer x != y { ayni=yanlış; } değilse { j=j+1; }
+        }
+        eğer j == dizi_boyut(b) { ver doğru; } i=i+1;
+    }
+    ver yanlış;
+}

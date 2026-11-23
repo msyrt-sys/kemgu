@@ -6,7 +6,7 @@ kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ba;
 kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak bu;
 kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle, xhci_giris } olarak bx;
 kullan drivers::usb::tanim::{ UsbArayuz };
-genel yapı BlokDonanim { ad: metin; bar: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
+genel yapı BlokDonanim { ad: metin; bar: tam64; usb_portsc: tam64; aygit: BlokAygiti; onbellek: Onbellek; }
 // Bir xHCI denetleyicisinde tek sıradaki tüketici: HID, BOT veya yönetim komutu.
 küresel değişken bd_usb_olay: tam64 = 0;
 küresel değişken bd_usb_bas: tam32 = 0;
@@ -59,12 +59,21 @@ küresel değişken bh_fare_indeks: tam32 = 0;
     eğer bh_kayitlar == 0 { ver -1; }
     ver kem_mmio_oku64(bh_kayitlar+tur*64);
 }
+çıplak işlev bh_ilerlet(taban: tam64, bas: tam64, dongu: tam64) {
+    bh_bas=bas+1; bh_dongu=dongu;
+    eğer bh_bas == bh_adet { bh_bas=0; bh_dongu=1-dongu; }
+    kem_mmio_yaz64(bh_erdp,(taban+bh_bas*16)|8);
+    eğer bd_usb_olay == taban { bd_usb_konum_koy(taban,bh_bas olarak tam32,bh_dongu != 0); }
+}
 // Yalnız gönderilmiş HID TRB adresi, slot ve uç eşleşirse bu olay tüketilir.
 çıplak işlev bh_tuket(taban: tam64,bas: tam64,dongu: tam64) -> mantıksal {
     eğer bh_kayitlar == 0 veya taban != bh_halka { ver yanlış; }
     değişken p: tam64 = taban+bas*16;
     değişken w: tam64 = kem_mmio_oku32(p+12);
-    eğer (w&1) != dongu veya ((w>>10)&63) != 32 { ver yanlış; }
+    eğer (w&1) != dongu { ver yanlış; }
+    // Port değişikliği iki HID isteğinden bağımsızdır. ERDP ilerlemezse klavye de susar.
+    eğer ((w>>10)&63) == 34 { bh_ilerlet(taban,bas,dongu); ver doğru; }
+    eğer ((w>>10)&63) != 32 { ver yanlış; }
     değişken trb: tam64 = kem_mmio_oku64(p);
     değişken i: tam64 = 0;
     iken i < 2 {
@@ -76,10 +85,7 @@ küresel değişken bh_fare_indeks: tam32 = 0;
             değişken boy: tam64 = kem_mmio_oku64(r+24);
             eğer (kod == 1 veya kod == 13) ve kalan <= boy { kem_mmio_yaz64(r+40,boy-kalan); kem_mmio_yaz64(r,2); }
             değilse { kem_mmio_yaz64(r,-1); }
-            bh_bas=bas+1; bh_dongu=dongu;
-            eğer bh_bas == bh_adet { bh_bas=0; bh_dongu=1-dongu; }
-            kem_mmio_yaz64(bh_erdp,(taban+bh_bas*16)|8);
-            eğer bd_usb_olay == taban { bd_usb_konum_koy(taban,bh_bas olarak tam32,bh_dongu != 0); }
+            bh_ilerlet(taban,bas,dongu);
             ver doğru;
         }
         i=i+1;
@@ -97,7 +103,8 @@ küresel değişken bh_gorulen: tam64 = 0;
     eğer bd_usb_olay == bh_halka {
         bh_bas=bd_usb_bas olarak tam64; bh_dongu=0; eğer bd_usb_dongu { bh_dongu=1; }
     }
-    iken bh_tuket(bh_halka,bh_bas,bh_dongu) { }
+    değişken islenen: tam64 = 0;
+    iken islenen < bh_adet ve bh_tuket(bh_halka,bh_bas,bh_dongu) { islenen=islenen+1; }
 }
 işlev bh_gonder(x: &değişken XhciDurum,bar: tam64,indeks: tam32,tur: tam64) -> tam64 {
     eğer indeks < 0 { ver 0; }
@@ -151,24 +158,34 @@ işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
 }
 işlev bd_yeni(ad: metin, bar: tam64, a: BlokAygiti) -> sonuç<BlokDonanim,metin> {
  eşleş onbellek_yeni(512,64) { hata(e) => { ver hata(e); } tamam(c) => {
-  değişken d: BlokDonanim = BlokDonanim { ad:ad,bar:bar,aygit:a,onbellek:c };
+  değişken d: BlokDonanim = BlokDonanim { ad:ad,bar:bar,usb_portsc:0,aygit:a,onbellek:c };
   eşleş bd_sur(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eğer blok_sektor(d.aygit) != 512 { ver hata("blok sektor boyu desteklenmiyor"); }
   ver tamam(d);
  } }
 }
+// PORTSC.CSC sıfırlanana kadar eski yuvanın önbelleği tekrar kullanılmaz.
+çıplak işlev bd_ortam_var(portsc: tam64) -> mantıksal {
+ eğer portsc == 0 { ver doğru; }
+ değişken port: tam64 = kem_mmio_oku32(portsc);
+ ver (port&131073) == 1;
+}
 işlev bd_ham_oku(d: &değişken BlokDonanim,lba: tam64,n: tam32) -> sonuç<Dizi<dtam8>,metin> {
+ eğer değil bd_ortam_var(d.usb_portsc) { ver hata("usb bellek cikarildi"); }
  eşleş blok_oku(&değişken d.aygit,lba,n) { hata(e) => { ver hata(e); } tamam(v) => { } }
  eşleş bd_sur(d) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(blok_sonuc(d.aygit)); } }
 }
 işlev bd_ham_yaz(d: &değişken BlokDonanim,lba: tam64,b: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+ eğer değil bd_ortam_var(d.usb_portsc) { ver hata("usb bellek cikarildi"); }
  eşleş blok_yaz(&değişken d.aygit,lba,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
  ver bd_sur(d);
 }
 işlev bd_flush(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
+ eğer değil bd_ortam_var(d.usb_portsc) { ver hata("usb bellek cikarildi"); }
  eşleş blok_bosalt(&değişken d.aygit) { hata(e) => { ver hata(e); } tamam(v) => { } } ver bd_sur(d);
 }
 işlev bd_bosalt(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
+ eğer değil bd_ortam_var(d.usb_portsc) { ver hata("usb bellek cikarildi"); }
  değişken plan: Dizi<OnbellekKaydi> = onbellek_plan(d.onbellek);
  için k: plan { eşleş bd_ham_yaz(d,k.lba,k.veri) { hata(e) => { ver hata(e); } tamam(v) => { } } }
  // Flush başarısızsa hiçbir kirli sürüm onaylanmaz; yeniden denenebilir.
@@ -177,6 +194,7 @@ işlev bd_bosalt(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
  ver tamam(doğru);
 }
 işlev bd_koy(d: &değişken BlokDonanim,lba: tam64,b: Dizi<dtam8>,kirli: mantıksal) -> sonuç<mantıksal,metin> {
+ eğer değil bd_ortam_var(d.usb_portsc) { ver hata("usb bellek cikarildi"); }
  eğer lba < 0 veya lba >= blok_kapasite(d.aygit) veya dizi_boyut(b) != 512 { ver hata("blok araligi"); }
  eşleş onbellek_koy(&değişken d.onbellek,lba,b,kirli) { tamam(v) => { ver tamam(v); } hata(e) => {
   eğer değil metin_esit(e,"geri yazma gerekli") { ver hata(e); }
@@ -189,6 +207,7 @@ işlev bd_koy(d: &değişken BlokDonanim,lba: tam64,b: Dizi<dtam8>,kirli: mantı
  ver onbellek_koy(&değişken d.onbellek,lba,b,kirli);
 }
 işlev bd_oku(d: &değişken BlokDonanim,lba: tam64) -> sonuç<Dizi<dtam8>,metin> {
+ eğer değil bd_ortam_var(d.usb_portsc) { ver hata("usb bellek cikarildi"); }
  eşleş onbellek_oku(&değişken d.onbellek,lba) { tamam(v) => { ver tamam(v); } hata(e) => { } }
  eşleş bd_ham_oku(d,lba,1) { hata(e) => { ver hata(e); } tamam(b) => {
   eşleş bd_koy(d,lba,b,yanlış) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(b); } }
@@ -199,7 +218,20 @@ işlev bd_xsur(bar: tam64,x: &değişken XhciDurum) -> sonuç<mantıksal,metin> 
  iken i < 100000 { değişken r: GcIstek = xhci_adim(x,y); eşleş r { GcIstek::Bitti => { ver tamam(doğru); } GcIstek::Hata(e) => { ver hata(e); } _ => { y=bm_yurut(bar,r); } } i=i+1; }
  ver hata("xhci adim siniri");
 }
-işlev bd_bul(x: &değişken XhciDurum,xb: tam64) -> sonuç<Dizi<BlokDonanim>,metin> {
+// HBA'nın uyguladığı portlarda fiziksel bağlantı kurulması için sınırlı bekleme.
+çıplak işlev bd_sata_bagli(bar: tam64, pi: tam64) -> mantıksal {
+ değişken tur: tam32 = 0;
+ iken tur < 12 {
+  değişken p: tam32 = 0;
+  iken p < 32 {
+   eğer (pi&((1 olarak tam64)<<p)) != 0 ve (kem_mmio_oku32(bar+296+(p olarak tam64)*128)&15) == 3 { ver doğru; }
+   p=p+1;
+  }
+  kem_bekle_us(1000);tur=tur+1;
+ }
+ ver yanlış;
+}
+işlev bd_bul(x: &değişken XhciDurum,xb: tam64,uyar: mantıksal) -> sonuç<Dizi<BlokDonanim>,metin> {
  değişken ds: Dizi<BlokDonanim> = [];değişken dma: tam64 = bm_disk_dma_al();
  değişken ni: tam32 = 0;değişken ai: tam32 = 0;değişken ui: tam32 = 0;değişken bdf: tam32 = 0;
  iken bdf < 256 {
@@ -209,19 +241,20 @@ işlev bd_bul(x: &değişken XhciDurum,xb: tam64) -> sonuç<Dizi<BlokDonanim>,me
     değişken bar: tam64 = (kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
     eşleş nvme_yeni(dma,16) { hata(e) => { ver hata(e); } tamam(n) => {
      değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Nvme(n) };
-     eşleş bd_yeni(metin_birlestir("nvme",tam_metin(ni olarak tam64)),bar,ay) { hata(e) => { ver hata(e); } tamam(d) => { dizi_ekle(ds,d); } }
+     eşleş bd_yeni(metin_birlestir("nvme",tam_metin(ni olarak tam64)),bar,ay) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(d) => { dizi_ekle(ds,d); } }
     } } ni=ni+1;dma=dma+131072;
    }
    eğer tip == 67073 {
     değişken bar: tam64 = kem_pci_oku32(bdf,36)&4294967280;kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);
     değişken pi: tam64 = kem_mmio_oku32(bar+12);değişken port: tam32 = 0;
+    eğer uyar ve değil bd_sata_bagli(bar,pi) { bm_yaz("KABUK HATA ahci PxSSTS zaman asimi"); }
     iken port < 32 {
      eğer (pi&((1 olarak tam64)<<port)) != 0 ve (kem_mmio_oku32(bar+256+(port olarak tam64)*128+40)&15) == 3 {
       eşleş ahci_yeni(dma,port) { hata(e) => { ver hata(e); } tamam(a) => {
        değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ahci(a) };
      eşleş bd_yeni(metin_birlestir("ahci",tam_metin(ai olarak tam64)),bar,ay) {
         // Q35'in varsayılan ATAPI portu SATA taramasında ilk FIS'e kadar aday olabilir.
-        hata(e) => { eğer değil metin_esit(e,"ahci sata aygiti yok") { ver hata(e); } }
+        hata(e) => { eğer değil metin_esit(e,"ahci sata aygiti yok") { bm_yaz(metin_birlestir("KABUK HATA ",e)); } }
         tamam(d) => { dizi_ekle(ds,d);ai=ai+1;dma=dma+131072; }
        }
       } }
@@ -247,9 +280,13 @@ işlev bd_bul(x: &değişken XhciDurum,xb: tam64) -> sonuç<Dizi<BlokDonanim>,me
    bd_usb_konum_koy(x.olay.taban,x.olay.bas,x.olay.dongu);
    eşleş usb_depo_yeni(a.dma,x.c.dboff+(a.yuva olarak tam64)*4,x.c.rtsoff+56,a.yuva,out,gir,ar_no) { hata(e) => { ver hata(e); } tamam(u) => {
     değişken ay: BlokAygiti = BlokAygiti { durum:BlokCesidi::Usb(u) };
-     eşleş bd_yeni(metin_birlestir("usb",tam_metin(ui olarak tam64)),xb,ay) { hata(e) => { ver hata(e); } tamam(d) => { dizi_ekle(ds,d); } }
+     eşleş bd_yeni(metin_birlestir("usb",tam_metin(ui olarak tam64)),xb,ay) { hata(e) => { ver hata(e); } tamam(d) => {
+      değişken depo: BlokDonanim = d;
+      depo.usb_portsc=xb+(x.c.caplength olarak tam64)+1024+((a.port-1) olarak tam64)*16;
+      dizi_ekle(ds,depo);
+     } }
    } } ui=ui+1;
   } i=i+1;
  }
- eğer dizi_boyut(ds) == 0 { ver hata("disk bulunamadi"); } ver tamam(ds);
+ eğer dizi_boyut(ds) == 0 { bm_yaz("KABUK HATA disk bulunamadi"); } ver tamam(ds);
 }

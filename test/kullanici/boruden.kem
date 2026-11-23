@@ -1,0 +1,15 @@
+// İki boru ile çocuğun stdin ve stdout uçlarını karşılıklı bağla.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    değişken p: tam64 = malloc(128) olarak tam64;
+    eğer p == 0 veya sis_boru(p) < 0 veya sis_boru(p+16) < 0 { ver 1; }
+    değişken gir: tam64 = sis_alan(p,0); değişken yaz: tam64 = sis_alan(p,1);
+    değişken oku: tam64 = sis_alan(p,2); değişken cik: tam64 = sis_alan(p,3);
+    değişken a: *tam64 = (p+32) olarak *tam64; *a=gir; a=(p+40) olarak *tam64; *a=cik;
+    değişken pid: tam64 = sis_baslat_eslemeli("/diskler/usb0p2/bin/kedi.elf",0,p+32);
+    eğer pid < 1 { ver 2; }
+    sis_kapat(gir); sis_kapat(cik);
+    eğer sis_bayt_yaz(yaz,83) != 1 veya sis_kapat(yaz) < 0 { ver 3; }
+    eğer sis_oku(oku,p+64,8) != 1 veya sis_bayt_al(p+64) != 83 { ver 4; }
+    eğer sis_oku(oku,p+64,8) != 0 veya sis_kapat(oku) < 0 { ver 5; }
+    eğer sis_bekle(pid,p+64) < 0 { ver 6; } ver 0;
+} }
