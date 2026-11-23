@@ -1,0 +1,111 @@
+// /ram düğümleri ebeveyn kimliğine göre çözülür. Dosya verisi çağıranın ayırdığı çerçevelerdedir.
+kullan drivers::fs::yol::{ yol_bol };
+kullan drivers::fs::yol_harf::{ yol_bilesen_esit };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi };
+kullan drivers::fs::fat32_sektor::{ FatOkumaParcasi };
+genel yapı RamDugum { etkin: mantıksal; ust: tam32; ad: metin; dizin: mantıksal; boy: tam32; sayfalar: Dizi<tam32>; }
+genel yapı RamDosyalar { taban: tam64; dolu: Dizi<tam32>; dugumler: Dizi<RamDugum>; }
+genel yapı RamYer { ust: tam32; ad: metin; no: tam32; }
+genel işlev ramfs_yeni(taban: tam64,say: tam32) -> RamDosyalar {
+    değişken dolu: Dizi<tam32> = []; değişken i: tam32 = 0;
+    iken i < say { dizi_ekle(dolu,0); i=i+1; }
+    değişken kok: RamDugum = RamDugum {etkin:doğru,ust:0,ad:"",dizin:doğru,boy:0,sayfalar:[]};
+    değişken xs: Dizi<RamDugum> = [kok];
+    ver RamDosyalar { taban:taban,dolu:dolu,dugumler:xs };
+}
+işlev ramfs_alt(s: &RamDosyalar,ust: tam32,ad: metin) -> tam32 {
+    değişken i: tam32 = 1;
+    iken i < dizi_boyut(s.dugumler) {
+        değişken n: RamDugum = dizi_al(s.dugumler,i);
+        eğer n.etkin ve n.ust == ust ve yol_bilesen_esit(n.ad,ad) { ver i; }
+        i=i+1;
+    } ver -1;
+}
+genel işlev ramfs_yer(s: &RamDosyalar,yol: metin) -> sonuç<RamYer,metin> {
+    eşleş yol_bol(yol) { hata(e) => { ver hata(e); } tamam(xs) => {
+        değişken yer: RamYer = RamYer { ust:0,ad:"",no:0 }; değişken i: tam32 = 0;
+        iken i < dizi_boyut(xs) {
+            eğer yer.no < 0 { ver hata("ust dizin bulunamadi"); }
+            değişken n: RamDugum = dizi_al(s.dugumler,yer.no);
+            eğer değil n.dizin { ver hata("ust yol dizin degil"); }
+            yer.ust=yer.no; yer.ad=dizi_al(xs,i); yer.no=ramfs_alt(s,yer.ust,yer.ad); i=i+1;
+        }
+        ver tamam(yer);
+    } }
+}
+işlev ramfs_kayit(n: RamDugum,i: tam32) -> DizinGirdisi {
+    değişken kip: tam32 = 32; eğer n.dizin { kip=16; }
+    ver DizinGirdisi { ad:n.ad,ozellik:kip,ilk_kume:i olarak tam64,boyut:n.boy olarak tam64,dizin_mi:n.dizin,tarih:0,saat:0 };
+}
+genel işlev ramfs_bilgi(s: &RamDosyalar,yol: metin) -> sonuç<DizinGirdisi,metin> {
+    eşleş ramfs_yer(s,yol) { hata(e) => { ver hata(e); } tamam(y) => {
+        eğer y.no < 0 { ver hata("bulunamadi"); } ver tamam(ramfs_kayit(dizi_al(s.dugumler,y.no),y.no));
+    } }
+}
+genel işlev ramfs_liste(s: &RamDosyalar,yol: metin) -> sonuç<Dizi<DizinGirdisi>,metin> {
+    eşleş ramfs_bilgi(s,yol) { hata(e) => { ver hata(e); } tamam(k) => {
+        eğer değil k.dizin_mi { ver hata("dizin degil"); }
+        değişken xs: Dizi<DizinGirdisi> = []; değişken i: tam32 = 1;
+        iken i < dizi_boyut(s.dugumler) { değişken n: RamDugum = dizi_al(s.dugumler,i);
+            eğer n.etkin ve (n.ust olarak tam64) == k.ilk_kume { dizi_ekle(xs,ramfs_kayit(n,i)); } i=i+1;
+        }
+        ver tamam(xs);
+    } }
+}
+genel işlev ramfs_parcalar(s: &RamDosyalar,g: DizinGirdisi,ofs: tam64,istek: tam32) -> sonuç<Dizi<FatOkumaParcasi>,metin> {
+    değişken ps: Dizi<FatOkumaParcasi> = [];
+    eğer g.ilk_kume < 1 veya g.ilk_kume >= (dizi_boyut(s.dugumler) olarak tam64) veya ofs < 0 veya istek < 0 { ver hata("/ram okuma araligi"); }
+    değişken n: RamDugum = dizi_al(s.dugumler,g.ilk_kume olarak tam32);
+    eğer değil n.etkin veya n.dizin { ver hata("/ram dosya degil"); }
+    değişken yer: tam64 = ofs; değişken kalan: tam32 = istek;
+    iken yer < (n.boy olarak tam64) ve kalan > 0 {
+        değişken ic: tam32 = (yer%4096) olarak tam32; değişken boy: tam32 = 4096-ic;
+        eğer boy > kalan { boy=kalan; } eğer (boy olarak tam64) > (n.boy olarak tam64)-yer { boy=n.boy-(yer olarak tam32); }
+        değişken sayfa: tam32 = dizi_al(n.sayfalar,(yer/4096) olarak tam32);
+        dizi_ekle(ps,FatOkumaParcasi { lba:(sayfa*8+ic/512) olarak tam64,sektor:(ic%512+boy+511)/512,bas:ic%512,bayt:boy });
+        kalan=kalan-boy; yer=yer+(boy olarak tam64);
+    }
+    ver tamam(ps);
+}
+genel işlev ramfs_yaz(s: &değişken RamDosyalar,y: RamYer,boy: tam32,dizin: mantıksal,degistir: mantıksal) -> sonuç<RamDugum,metin> {
+    eğer y.no == 0 veya boy < 0 { ver hata("/ram kok degistirilemez"); }
+    eğer degistir ve y.no < 0 { ver hata("bulunamadi"); }
+    eğer değil degistir ve y.no >= 0 { ver hata("hedef zaten var"); }
+    eğer boy > dizi_boyut(s.dolu)*4096 { ver hata("/ram cerceve siniri"); }
+    değişken n: RamDugum = RamDugum {etkin:doğru,ust:y.ust,ad:y.ad,dizin:dizin,boy:boy,sayfalar:[]};
+    değişken i: tam32 = 0; değişken no: tam32 = y.no;
+    değişken eski: Dizi<tam32> = [];
+    eğer no > 0 {
+        değişken once: RamDugum = dizi_al(s.dugumler,no);
+        eğer once.dizin { ver hata("hedef dizin"); } eski=once.sayfalar;
+    } değilse {
+        no=1; değişken bos: mantıksal = yanlış;
+        iken no < dizi_boyut(s.dugumler) ve değil bos { değişken k: RamDugum = dizi_al(s.dugumler,no); eğer k.etkin { no=no+1; } değilse { bos=doğru; } }
+        eğer no > dizi_boyut(s.dolu)*8 { ver hata("/ram dugum siniri"); }
+    }
+    değişken gerekli: tam32 = (boy+4095)/4096;
+    iken i < dizi_boyut(eski) ve i < gerekli { dizi_ekle(n.sayfalar,dizi_al(eski,i)); i=i+1; }
+    i=0;
+    iken dizi_boyut(n.sayfalar) < gerekli ve i < dizi_boyut(s.dolu) {
+        eğer dizi_al(s.dolu,i) == 0 { dizi_ekle(n.sayfalar,i); } i=i+1;
+    }
+    eğer dizi_boyut(n.sayfalar) < gerekli { ver hata("/ram cerceve siniri"); }
+    için p: eski { dizi_yaz(s.dolu,p,0); }
+    için p: n.sayfalar { dizi_yaz(s.dolu,p,1); }
+    eğer no == dizi_boyut(s.dugumler) { dizi_ekle(s.dugumler,n); } değilse { dizi_yaz(s.dugumler,no,n); }
+    ver tamam(n);
+}
+genel işlev ramfs_sil(s: &değişken RamDosyalar,y: RamYer,dizin: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer y.no <= 0 { ver hata("bulunamadi"); }
+    değişken n: RamDugum = dizi_al(s.dugumler,y.no);
+    eğer n.dizin != dizin { ver hata("/ram silme turu uyusmuyor"); }
+    için alt: s.dugumler { eğer alt.etkin ve alt.ust == y.no { ver hata("dizin bos degil"); } }
+    için p: n.sayfalar { dizi_yaz(s.dolu,p,0); }
+    n.etkin=yanlış; n.sayfalar=[]; dizi_yaz(s.dugumler,y.no,n); ver tamam(doğru);
+}
+genel işlev ramfs_tasi(s: &değişken RamDosyalar,eski: RamYer,yeni: RamYer) -> sonuç<mantıksal,metin> {
+    eğer eski.no <= 0 veya yeni.no >= 0 { ver hata("/ram tasima hedefi"); }
+    değişken n: RamDugum = dizi_al(s.dugumler,eski.no); değişken ust: tam32 = yeni.ust;
+    iken ust > 0 { eğer ust == eski.no { ver hata("dizin kendi altina tasinamaz"); } değişken a: RamDugum = dizi_al(s.dugumler,ust); ust=a.ust; }
+    n.ust=yeni.ust; n.ad=yeni.ad; dizi_yaz(s.dugumler,eski.no,n); ver tamam(doğru);
+}

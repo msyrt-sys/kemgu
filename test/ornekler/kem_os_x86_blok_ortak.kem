@@ -303,6 +303,7 @@ işlev bd_disk_hata(d: &değişken BlokDonanim,e: metin) -> metin {
                 ver bd_hata_alan(bd_hata_alan(m," ASC ",u.asc olarak tam64)," ASCQ ",u.ascq olarak tam64);
             }
         }
+        BlokCesidi::Ram(v) => { }
     } ver e;
 }
 işlev bd_sur(d: &değişken BlokDonanim) -> sonuç<mantıksal,metin> {
@@ -373,6 +374,7 @@ işlev bd_koy(d: &değişken BlokDonanim,lba: tam64,b: Dizi<dtam8>,kirli: mantı
 }
 işlev bd_oku(d: &değişken BlokDonanim,lba: tam64) -> sonuç<Dizi<dtam8>,metin> {
  eğer değil bd_bagli(d) { ver hata("usb bellek cikarildi"); }
+ eğer metin_esit(d.ad,"/ram") { ver bd_ham_oku(d,lba,1); }
  eşleş onbellek_oku(&değişken d.onbellek,lba) { tamam(v) => { ver tamam(v); } hata(e) => { } }
  eşleş bd_ham_oku(d,lba,1) { hata(e) => { ver hata(e); } tamam(b) => {
   eşleş bd_koy(d,lba,b,yanlış) { hata(e) => { ver hata(e); } tamam(v) => { ver tamam(b); } }

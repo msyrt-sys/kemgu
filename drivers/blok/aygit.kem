@@ -3,13 +3,15 @@ kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_adim, nvme_oku, nvme_yaz, nvme
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_adim, ahci_oku, ahci_yaz, ahci_flush } olarak ahci_mod;
 kullan drivers::usb::depo::{ UsbDepo, usb_depo_adim, usb_depo_oku, usb_depo_yaz, usb_depo_flush } olarak usb_depo_mod;
 kullan drivers::ortak::gc::{ GcIstek, GcYanit };
-genel çeşit BlokCesidi { Nvme(NvmeDurum), Ahci(AhciDurum), Usb(UsbDepo) }
+kullan drivers::blok::ram::{ RamBlok, ram_blok_yeni, ram_blok_iste, ram_blok_adim };
+genel çeşit BlokCesidi { Nvme(NvmeDurum), Ahci(AhciDurum), Usb(UsbDepo), Ram(RamBlok) }
 genel yapı BlokAygiti { durum: BlokCesidi; }
 genel işlev blok_adim(s: &değişken BlokAygiti, y: GcYanit) -> GcIstek {
  eşleş s.durum {
   BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: GcIstek = nvme_adim(&değişken d,y); s.durum=BlokCesidi::Nvme(d); ver r; }
   BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: GcIstek = ahci_adim(&değişken d,y); s.durum=BlokCesidi::Ahci(d); ver r; }
   BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: GcIstek = usb_depo_adim(&değişken d,y); s.durum=BlokCesidi::Usb(d); ver r; }
+  BlokCesidi::Ram(v) => { değişken d: RamBlok = v; değişken r: GcIstek = ram_blok_adim(&değişken d,y); s.durum=BlokCesidi::Ram(d); ver r; }
  }
 }
 genel işlev blok_oku(s: &değişken BlokAygiti, lba: tam64, adet: tam32) -> sonuç<mantıksal,metin> {
@@ -17,6 +19,7 @@ genel işlev blok_oku(s: &değişken BlokAygiti, lba: tam64, adet: tam32) -> son
   BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: sonuç<mantıksal,metin> = nvme_oku(&değişken d,lba,adet); s.durum=BlokCesidi::Nvme(d); ver r; }
   BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: sonuç<mantıksal,metin> = ahci_oku(&değişken d,lba,adet); s.durum=BlokCesidi::Ahci(d); ver r; }
   BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: sonuç<mantıksal,metin> = usb_depo_oku(&değişken d,lba,adet); s.durum=BlokCesidi::Usb(d); ver r; }
+  BlokCesidi::Ram(v) => { değişken d: RamBlok = v; değişken b: Dizi<dtam8> = []; değişken r: sonuç<mantıksal,metin> = ram_blok_iste(&değişken d,lba,adet,b,yanlış); s.durum=BlokCesidi::Ram(d); ver r; }
  }
 }
 genel işlev blok_yaz(s: &değişken BlokAygiti, lba: tam64, veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
@@ -24,6 +27,7 @@ genel işlev blok_yaz(s: &değişken BlokAygiti, lba: tam64, veri: Dizi<dtam8>) 
   BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: sonuç<mantıksal,metin> = nvme_yaz(&değişken d,lba,veri); s.durum=BlokCesidi::Nvme(d); ver r; }
   BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: sonuç<mantıksal,metin> = ahci_yaz(&değişken d,lba,veri); s.durum=BlokCesidi::Ahci(d); ver r; }
   BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: sonuç<mantıksal,metin> = usb_depo_yaz(&değişken d,lba,veri); s.durum=BlokCesidi::Usb(d); ver r; }
+  BlokCesidi::Ram(v) => { değişken d: RamBlok = v; değişken r: sonuç<mantıksal,metin> = ram_blok_iste(&değişken d,lba,dizi_boyut(veri)/512,veri,doğru); s.durum=BlokCesidi::Ram(d); ver r; }
  }
 }
 genel işlev blok_bosalt(s: &değişken BlokAygiti) -> sonuç<mantıksal,metin> {
@@ -31,20 +35,39 @@ genel işlev blok_bosalt(s: &değişken BlokAygiti) -> sonuç<mantıksal,metin> 
   BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; değişken r: sonuç<mantıksal,metin> = nvme_flush(&değişken d); s.durum=BlokCesidi::Nvme(d); ver r; }
   BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; değişken r: sonuç<mantıksal,metin> = ahci_flush(&değişken d); s.durum=BlokCesidi::Ahci(d); ver r; }
   BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; değişken r: sonuç<mantıksal,metin> = usb_depo_flush(&değişken d); s.durum=BlokCesidi::Usb(d); ver r; }
+  BlokCesidi::Ram(v) => { eğer v.evre != 0 { ver hata("ramdisk mesgul"); } ver tamam(doğru); }
  }
 }
 genel işlev blok_sektor(s: BlokAygiti) -> tam32 { eşleş s.durum {
  BlokCesidi::Nvme(v) => { ver v.blok_bayt; }
  BlokCesidi::Ahci(v) => { ver v.blok_bayt; }
  BlokCesidi::Usb(v) => { ver v.blok_bayt; }
+  BlokCesidi::Ram(v) => { ver 512; }
 } }
 genel işlev blok_kapasite(s: BlokAygiti) -> tam64 { eşleş s.durum {
  BlokCesidi::Nvme(v) => { ver v.kapasite; }
  BlokCesidi::Ahci(v) => { ver v.kapasite; }
  BlokCesidi::Usb(v) => { ver v.kapasite; }
+  BlokCesidi::Ram(v) => { ver v.sektor; }
 } }
 genel işlev blok_sonuc(s: BlokAygiti) -> Dizi<dtam8> { eşleş s.durum {
  BlokCesidi::Nvme(v) => { ver v.sonuc; }
  BlokCesidi::Ahci(v) => { ver v.sonuc; }
  BlokCesidi::Usb(v) => { ver v.sonuc; }
+  BlokCesidi::Ram(v) => { ver v.veri; }
 } }
+
+// Doğrudan DMA hedefi çekirdeğin ayırdığı çerçevelerdir. USB Normal TRB 64 KiB sınırını aşmaz.
+genel işlev blok_cerceve_oku(s: &değişken BlokAygiti,lba: tam64,adet: tam32,hedef: tam64) -> sonuç<mantıksal,metin> {
+ değişken boy: tam32 = 0; güvensiz { boy=blok_sektor(*s); }
+ eğer boy != 512 veya hedef < 4096 veya hedef%512 != 0 veya adet <= 0 veya adet > 128 veya hedef%65536+(adet olarak tam64)*512 > 65536 veya hedef > 9223372036854710271 { ver hata("blok cerceve araligi"); }
+ eşleş s.durum { BlokCesidi::Ram(v) => { ver hata("ramdisk kaynagi fiziksel disk olmali"); } _ => { } }
+ eşleş blok_oku(s,lba,adet) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ eşleş s.durum {
+  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; d.cerceve_hedefi=hedef; s.durum=BlokCesidi::Nvme(d); }
+  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; d.cerceve_hedefi=hedef; s.durum=BlokCesidi::Ahci(d); }
+  BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; d.cerceve_hedefi=hedef; s.durum=BlokCesidi::Usb(d); }
+  _ => { ver hata("ramdisk kaynagi"); }
+ }
+ ver tamam(doğru);
+}

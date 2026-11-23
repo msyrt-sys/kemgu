@@ -2,6 +2,7 @@
 kullan drivers::fs::fat32_sektor::{ FatOkumaParcasi, fat_sektor_bilgi, fat_sektor_okuma_plani };
 
 işlev kv_bilgi(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor) -> sonuç<DizinGirdisi,metin> {
+    eğer y.indeks == d.ram_bag { ver ramfs_bilgi(&d.ram,y.yol); }
     değişken k: KabukBag = dizi_al(d.baglar,y.indeks);
     değişken i: tam32 = 0;
     iken i < 257 {
@@ -15,6 +16,7 @@ işlev kv_bilgi(d: &değişken KabukDisk,y: KabukYol,f: &değişken FatSektor) -
     ver hata("sektor tekrar siniri");
 }
 işlev kv_parcalar(d: &değişken KabukDisk,k: KabukBag,f: &değişken FatSektor,g: DizinGirdisi,ofs: tam64,n: tam32) -> sonuç<Dizi<FatOkumaParcasi>,metin> {
+    eğer bm_esit(k.kayit.ad,"/ram") { ver ramfs_parcalar(&d.ram,g,ofs,n); }
     değişken i: tam32 = 0;
     iken i < 257 {
         eşleş fat_sektor_okuma_plani(f,g,ofs,n) {
@@ -148,7 +150,7 @@ işlev ksv_hata(e: metin) -> tam64 {
     eğer bm_esit(e,"uzun bilesen") { ver 0-36; }
     eğer bm_esit(e,"dizin degil") { ver 0-KX_HATA_NOTDIR; }
     eğer bm_esit(e,"var") { ver 0-KX_HATA_EXIST; }
-    eğer bm_esit(e,"disk dolu") { ver 0-KX_HATA_NOSPC; }
+    eğer bm_esit(e,"disk dolu") veya bm_esit(e,"/ram cerceve siniri") veya bm_esit(e,"/ram dugum siniri") { ver 0-KX_HATA_NOSPC; }
     eğer bm_esit(e,"dizin bos degil") { ver 0-KX_HATA_NOTEMPTY; }
     eğer bm_esit(e,"dosya siniri") { ver 0-KX_HATA_FBIG; }
     eğer bm_esit(e,"bolum salt okunur") veya bm_esit(e,"ESP salt okunur")
@@ -449,8 +451,8 @@ işlev ksv_dizin_oku(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> ta
     eğer a.kip != KSV_DIZIN { ver 0-KX_HATA_NOTDIR; }
     eğer a.yol.indeks == -2 {
         değişken xs: Dizi<DizinGirdisi> = [];
-        eğer bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); }
-        değilse { için k: b.disk.baglar { eğer kd_hub_bagli(&değişken b.disk,k.indeks) {
+        eğer bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); eğer b.disk.ram_bag >= 0 { dizi_ekle(xs,ksv_sanal_girdi("ram")); } }
+        değilse { için k: b.disk.baglar { eğer değil bm_esit(k.kayit.ad,"/ram") ve kd_hub_bagli(&değişken b.disk,k.indeks) {
             değişken ad: metin = k.kayit.ad;
             dizi_ekle(xs,ksv_sanal_girdi(metin_kes(ad,9,metin_uzunluk(ad)-9)));
         } } }
@@ -461,7 +463,7 @@ işlev ksv_dizin_oku(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> ta
         eşleş kd_liste(&değişken b.disk,a.yol,&değişken f) {
             hata(e) => { ver ksv_hata(e); }
             tamam(xs) => {
-                eğer a.yol.indeks == b.disk.kok ve bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); }
+                eğer a.yol.indeks == b.disk.kok ve bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); eğer b.disk.ram_bag >= 0 { dizi_ekle(xs,ksv_sanal_girdi("ram")); } }
                 ver ksv_dizin_kopyala(b,fd olarak tam32,p,n olarak tam32,xs); }
         }
     } }

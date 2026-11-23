@@ -4,7 +4,7 @@ from pathlib import Path
 import sys,struct,zlib,uuid,subprocess,tempfile
 from fat_yazici import hazirla,oku,MERHABA,NOT,KAYDIR
 
-def hazirla_uefi(path,efi,elf):
+def hazirla_uefi(path,efi,elf,ramdisk=None):
     path=Path(path)
     with tempfile.TemporaryDirectory(dir=path.parent) as tmp:
         base=Path(tmp)/'base.fat';hazirla(base,False,True);b=bytearray(base.read_bytes())
@@ -37,6 +37,15 @@ def hazirla_uefi(path,efi,elf):
     while b[end]!=0:end+=32
     assert end+96<=root+sb
     b[end:end+64]=entry(b'EFI        ',efidir,directory=True)+entry(b'KEMGU      ',kerneldir,directory=True)
+    if ramdisk:
+        veri=Path(ramdisk).read_bytes()
+        yer=end+64
+        # Genişletilebilir kök dizinde dosya kaydı için bağımsız bir küme ekle.
+        if yer+32>root+sb:
+            ek=ayir(bytes(sb))
+            for kop in (ayr,ayr+fs): struct.pack_into('<I',b,kop*sb+8,ek)
+            yer=(ilk+ek-2)*sb
+        b[yer:yer+32]=entry(b'RAMDISK IMG',ayir(veri),len(veri))
     label=b'KEMGU10    ';b[root:root+11]=label
     for off in (0,6*sb):
         b[off+71:off+82]=label;struct.pack_into('<I',b,off+28,2048)

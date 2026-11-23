@@ -43,6 +43,10 @@ genel işlev nvme_cq_coz(b: Dizi<dtam8>) -> sonuç<NvmeTamamlanma,metin> {
 }
 // Plan başına 16 MiB üst sınırı; daha büyük G/Ç çekirdek tarafından bölünür.
 genel işlev nvme_prp_kur(adres: tam64, boy: tam64, sayfa: tam32, liste_bas: tam64) -> sonuç<NvmePrp,metin> {
+    ver nvme_prp_listesi(adres,boy,sayfa,liste_bas,doğru);
+}
+// Son PRP listesinde yalnız komutun okuyacağı girdiler DMA'ya yazılabilir.
+genel işlev nvme_prp_listesi(adres: tam64,boy: tam64,sayfa: tam32,liste_bas: tam64,tam_sayfa: mantıksal) -> sonuç<NvmePrp,metin> {
     eğer adres <= 0 veya adres%4 != 0 veya boy < 1 veya boy > 16777216 veya boy > 9223372036854775807-adres veya sayfa < 4096 veya sayfa > 65536 veya (sayfa & (sayfa-1)) != 0 { ver hata("nvme prp aralik"); }
     değişken pages: Dizi<PrpSayfa> = [];
     değişken p: NvmePrp = NvmePrp { bir: adres, iki: 0, listeler: pages };
@@ -58,7 +62,9 @@ genel işlev nvme_prp_kur(adres: tam64, boy: tam64, sayfa: tam32, liste_bas: tam
     p.iki=liste_bas;
     değişken sayfa_no: tam64 = 0;
     iken kalan > 0 {
-        değişken b: Dizi<dtam8> = bayt_sifir(sayfa);
+        değişken liste_boyu: tam32 = sayfa;
+        eğer değil tam_sayfa ve kalan <= kapasite { liste_boyu=(kalan*8) olarak tam32; }
+        değişken b: Dizi<dtam8> = bayt_sifir(liste_boyu);
         değişken al: tam64 = kalan; eğer al > kapasite { al=kapasite-1; }
         değişken i: tam64 = 0;
         iken i < al { yaz_le64(b,(i*8) olarak tam32,sonraki); sonraki=sonraki+sp; i=i+1; }

@@ -37,3 +37,9 @@ C ve self-host için altışar blkdebug senaryosu geçti. Üç disk türünde te
 Dört portlu bir ve iki katlı hub arkasında klavye, fare ve USB disk çalıştı. İki derleyicide de dosya gezgininin seçim satırı QMP tekerlek olayıyla değişti. Veri diskine yazılan dosyanın baytları kapanışta host imajından okundu. İç içe hub senaryosunda çıkarılan diskin eski tanıtıcısı reddedildi ve yeniden takılan diskten dosya tekrar okundu. Her açılışta boş porta önce tablet, sonra ikinci bir hub takılıp çıkarıldı. Her değişimden sonra HMP ağacı, konuk envanteri ve denetleyicinin fiziksel yuva bağlamları karşılaştırıldı.
 
 İki sabotaj da uygulandı. Port numarası kaydırıldığında xHCI adresleme kod 5 ile durdu. Çıkarmada bağlantı değişim biti onaylanmayınca ilk tablet kaldırıldı fakat ikinci takılan hub konuğun listesine girmedi. USB hub kapısı, dört saf sürücü kapısı, sekiz regresyon ve 72 PC matrisi açılışı geçti. Birleşik koşum 1295 saniye, bölüm 22 dakika.
+
+## Bölüm 6 — Ramdisk ve geçici dosyalar
+
+İki derleyicide USB açılışındaki MBR ve NVMe açılışındaki GPT imajı fiziksel çerçevelere yüklendi. Konuktaki bütün imajın SHA256 değeri host dosyasıyla eşleşti. FAT32'ye yazılan dosya QMP ile okunan RAM'de bulundu. Kapanış sonrası ESP içindeki imaj ve kaynak diskin tamamı ilk özetini korudu. H7j depolama hedefine ramdisk satırları eklendi.
+
+Geçici dosya sisteminde dizin oluşturma, yeniden adlandırma, listeleme, silme, ELF çalıştırma, boru ve yönlendirme iki derleyicide geçti. 33.001 baytlık kopyada çerçeve sınırı açıkça bildirildi. Yeni açılışta önceki dosya bulunamadı. Blok ofseti bir sektör kaydırılan çekirdek MBR'yi bağlayamadı. Düğüm silme işareti kaldırıldığında aynı ad dizin listesinde kaldı. İki sabotajın da dönüşü 1. Bölüm kapıları 1300 saniye, bölüm 22 dakika. PC matrisi 72 açılışı tamamladı.

@@ -73,3 +73,9 @@ QEMU 8.2.2 üzerinde USB 2 kök portu 5, HMP fiziksel portu 1 ile eşleşti. Hos
 Sürücü hub tanımlayıcısını iki istekte okur. Her portun gücünü açar, gücün kararlı olmasını bekler, portu sıfırlar ve değişim bitlerini onaylar. Yuva, klavye/fare ve BOT yönetim işlemleri aynı olay halkasını paylaşır. Sınırlar beş rota hanesi, hub başına 15 port, denetleyici başına 16 eşzamanlı aygıttır. Eski açık dosyaların yeniden kullanılan USB yuvasından okumasını engellemek için sökülen hub disklerinde ortam nesli kontrol edilir. Bir oturumdaki blok tanıtıcı geçmişi 64 ile sınırlıdır. Hub sürücüsü USB 2 sınıfı içindir.
 
 Rota sabotajında konuk `KABUK HATA xhci tamamlanma kodu 5` verdi. Çıkarma sırasında C_PORT_CONNECTION onayını atlayan kopyada ilk çıkarma işlendi, ikinci takmada HMP 1.1.4 üzerinde hub gösterdi ve konuk aynı yolu listelemedi. İlgili iki süreç de rc 1 döndürdü.
+
+## Fiziksel ramdisk ve geçici VFS
+
+MBR kaynağı 36.700.160 bayt, SHA256 28c8e4fa7e98718e844741a287e097af9d52b0828717ba4516bae343089cd7ad. GPT kaynağı 36.717.056 bayt, SHA256 4c6552d38ad1db0ac02babeba3efb3858059d8aa9309c7ab22510f2924e94b32. Her ikisinde de host FAT32 bölümündeki dosya içeriğiyle konuk okuması eşleşti. Verinin tamamı bitişik fiziksel çerçevelerde tutulur. Konuk, kaynak FAT zincirindeki bitişik alanları en fazla 64 KiB'lık DMA istekleriyle aktarır. Denenen görüntülerde yazma ve geri okuma sonrasında bootstrap çekirdeğinin heap tüketimi NVMe ile 6.427.936, USB ile 7.411.680 bayttı. Bu değerler ramdisk için ayrılan fiziksel çerçeveleri içermez.
+
+İmaj boyu sınırı 128 MiB. Sürücü RAM imajının bölüm tablosunu ve FAT bağını doğruladıktan sonra aygıtı görünür kılar. Geçici dosya sistemi 64 düğüm ve sekiz veri çerçevesiyle yapılandırıldı. Silinen düğümler ve dosya sayfaları tekrar kullanılabilir. İmaj yokluğunda konuk “ramdisk yok” kaydı verdi. Fiziksel PC'de ölçüm yapılmadı.

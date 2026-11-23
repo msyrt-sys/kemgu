@@ -5092,3 +5092,11 @@ test_tumu: calistir_bm_x86_usb_hub
 calistir_bm_x86_usb_hub: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/usb/hub_test.kem
 	@SUREC_KAHIN=usb_hub_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_ramdisk
+# H7j depolama matrisinde bellek aygıtının MBR/GPT satırları.
+calistir_bm_x86_disk: calistir_bm_x86_ramdisk
+test_tumu: calistir_bm_x86_ramdisk
+calistir_bm_x86_ramdisk: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/blok/ram_test.kem
+	@SUREC_KAHIN=ramdisk_kahin bash test/bm_x86_surec_harness.sh

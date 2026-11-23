@@ -1,0 +1,25 @@
+// Bellek aygıtının bütün adresleri çağıranın ayırdığı fiziksel aralıkla sınırlıdır.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_aralik };
+genel yapı RamBlok {
+    taban: tam64; sektor: tam64; evre: tam32; adres: tam64; boy: tam32; veri: Dizi<dtam8>;
+}
+genel işlev ram_blok_yeni(taban: tam64,boy: tam64) -> sonuç<RamBlok,metin> {
+    eğer taban <= 0 veya taban%4096 != 0 veya boy <= 0 veya boy%512 != 0 veya değil gc_aralik(taban,boy) { ver hata("ramdisk fiziksel araligi"); }
+    ver tamam(RamBlok {taban:taban,sektor:boy/512,evre:0,adres:taban,boy:0,veri:[]});
+}
+genel işlev ram_blok_iste(s: &değişken RamBlok,lba: tam64,n: tam32,b: Dizi<dtam8>,yaz: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer s.evre != 0 veya lba < 0 veya n < 1 veya n > 32768 veya lba >= s.sektor veya (n olarak tam64) > s.sektor-lba { ver hata("ramdisk sektor araligi"); }
+    eğer yaz ve dizi_boyut(b) != n*512 { ver hata("ramdisk bayt boyu"); }
+    s.adres=s.taban+lba*512; s.boy=n*512; s.veri=b;
+    s.evre=1; eğer yaz { s.evre=2; } ver tamam(doğru);
+}
+genel işlev ram_blok_adim(s: &değişken RamBlok,y: GcYanit) -> GcIstek {
+    eğer değil y.basarili { s.evre=0; ver GcIstek::Hata("ramdisk tasiyici hatasi"); }
+    eğer s.evre == 1 { s.evre=3; ver GcIstek::BellekOku(s.adres,s.boy); }
+    eğer s.evre == 2 { s.evre=4; ver GcIstek::BellekYaz(s.adres,s.veri); }
+    eğer s.evre == 3 {
+        s.evre=0; eğer dizi_boyut(y.baytlar) != s.boy { ver GcIstek::Hata("ramdisk kisa okuma"); }
+        s.veri=y.baytlar;
+    }
+    s.evre=0; ver GcIstek::Bitti;
+}
