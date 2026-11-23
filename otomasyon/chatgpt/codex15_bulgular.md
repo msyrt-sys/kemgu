@@ -79,3 +79,7 @@ Her taşıma iki klavye ve iki tabloyla sınandı. RAM seçimi taşıma, klavye 
 | FAT32 | 1.000 | D-759 sabit tohumlu dosya sistemi korpusu |
 
 Üreticinin sınır örnekleri bu sayılara eklenir. Host'ta iki derleyicinin çıktısı karşılaştırıldı. Bozuk kullanıcı ELF'sini yükleme denemesi QEMU'da üç diskin özgün imaj özetlerini korudu.
+
+## Giriş ölçümleri
+
+PS/2 aygıtı tekerlekli kimlik 3 ve dört baytlık paket bildirdi. USB ve PS/2 yollarında üçüncü satıra kaydırma ve başlangıca dönüş aynı GOP görüntüsünü verdi. Hız deneyi hassasiyet 2 ile 12 birim hareketi 36 piksel olarak ölçtü, ters yönde büyük hareket sol kenarda sıfıra kenetlendi. Tekrarın ilk gecikmesi 500 ms, aralığı 50 ms. Sabotajlar birer gerçek açılışta yakalandı.

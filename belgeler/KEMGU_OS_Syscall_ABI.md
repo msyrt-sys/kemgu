@@ -98,7 +98,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 
 Ön plan ekranı sol üst hücreden (0,0) numaralandırılır. Bilgi dört u64 döndürür (sütun, satır, piksel genişliği, piksel yüksekliği). Ekran yazısının üçüncü argümanı NUL sonlu UTF-8 adresi, ön renk ve arka renkten oluşan üç u64 alanlı yapıdır. Renkler 0xRRGGBB biçimindedir. Bir satıra sığmayan metin RANGE, ekranı olmayan bir sistem ENODEV (-19) döndürür.
 
-Fare kaydında altı u64 bulunur (işaretli dx, işaretli dy, x, y, düğmeler, işaretli tekerlek). Ekranda sağa ve aşağı doğru artış pozitiftir. Sol/sağ/orta düğmeler bit 0/1/2 kullanır. Birleşik olayda ilk u64 türdür (0 zaman aşımı, 1 tuş, 2 fare). Kalan 48 baytta ilgili olay yer alır. Maske 1 tuş, 2 fare, 3 ikisi. Süre -1 sınırsız, 0 hazır olayı sorgular, 1–60.000 ms LAPIC saatine yukarı yuvarlanır.
+Fare kaydında altı u64 bulunur (işaretli dx, işaretli dy, x, y, düğmeler, işaretli tekerlek). Ekranda sağa ve aşağı doğru artış pozitiftir. Tekerlek aşağı çevrilince +1, yukarı çevrilince −1 gelir. PS/2 kimlik 3 dört bayt, kimlik 0 üç bayt gönderir. HID raporunun işareti aynı yöne çevrilir. Kabukta `hassasiyet 1..4` hareketi ölçekler. Varsayılan 1 doğrusal, 2–4 düzeylerinde mutlak değeri 8 pikselden büyük eksen bir ek katsayı alır. Basılı yazı ve gezinme tuşları 500 ms sonra 50 ms arayla yinelenir. Sol/sağ/orta düğmeler bit 0/1/2 kullanır. Birleşik olayda ilk u64 türdür (0 zaman aşımı, 1 tuş, 2 fare). Kalan 48 baytta ilgili olay yer alır. Maske 1 tuş, 2 fare, 3 ikisi. Süre -1 sınırsız, 0 hazır olayı sorgular, 1–60.000 ms LAPIC saatine yukarı yuvarlanır.
 
 Ön plan süreci bir etkileşimli çocuk açarken 67 ile ekran ve girdi sahipliğini çocuk çalışmaya hazır olmadan devreder. 59 ile çocuğu topladığında sahipliği geri alır.
 

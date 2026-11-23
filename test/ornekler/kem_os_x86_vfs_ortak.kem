@@ -432,6 +432,25 @@ işlev ksv_esitle(b: &değişken KsvBaglam) -> tam64 {
         i=i+1;
     }
 }
+küresel değişken kt_kod: tam32 = 0;
+küresel değişken kt_unicode: tam32 = 0;
+küresel değişken kt_mod: tam32 = 0;
+küresel değişken kt_sonraki: tam64 = 0;
+çıplak işlev kt_hazir() -> mantıksal { ver kt_kod != 0 ve kem_tik_oku() >= kt_sonraki; }
+çıplak işlev kt_izle(o: TusHamOlay) -> mantıksal {
+    eğer o.bas == 0 {
+        eğer kt_kod == o.kod { kt_kod=0; } ver doğru;
+    }
+    eğer o.kod == kt_kod { ver yanlış; }
+    eğer o.unicode > 0 veya o.kod == 14 veya (o.kod >= 327 ve o.kod <= 339) {
+        kt_kod=o.kod; kt_unicode=o.unicode; kt_mod=o.degistirici; kt_sonraki=kem_tik_oku()+50;
+    } değilse { kt_kod=0; }
+    ver doğru;
+}
+çıplak işlev kt_yinele() -> TusHamOlay {
+    kt_sonraki=kem_tik_oku()+5;
+    ver TusHamOlay {kod:kt_kod,unicode:kt_unicode,bas:1,degistirici:kt_mod};
+}
 işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
     b.olay_konum=0;
     b.olaylar=[];
@@ -461,14 +480,19 @@ işlev ksv_tus_al(b: &değişken KsvBaglam,p: tam64) -> tam64 {
     iken doğru {
         eğer b.olay_konum >= dizi_boyut(b.olaylar) {
             değişken r: tam64 = ksv_tus_doldur(b);
-            eğer r == 1 { ver 1; }
+            eğer r == 1 {
+                eğer değil kt_hazir() { ver 1; }
+                değişken t: TusHamOlay = kt_yinele();
+                kxm_y64(p,t.kod olarak tam64); kxm_y64(p+8,t.unicode olarak tam64);
+                kxm_y64(p+16,1); kxm_y64(p+24,t.degistirici olarak tam64); ver 0;
+            }
             eğer r < 0 { ver r; }
         }
         iken b.olay_konum < dizi_boyut(b.olaylar) {
             değişken o: TusHamOlay = dizi_al(b.olaylar,b.olay_konum);
             b.olay_konum=b.olay_konum+1;
             // Kabuğun çalıştırma komutuna ait Enter bırakması ön plana taşınmaz.
-            eğer değil b.ilk_tus veya o.kod != 28 veya o.bas != 0 {
+            eğer kt_izle(o) ve (değil b.ilk_tus veya o.kod != 28 veya o.bas != 0) {
                 b.ilk_tus=yanlış;
                 kxm_y64(p,o.kod olarak tam64); kxm_y64(p+8,o.unicode olarak tam64);
                 kxm_y64(p+16,o.bas olarak tam64); kxm_y64(p+24,o.degistirici olarak tam64);
@@ -646,6 +670,12 @@ işlev ksv_kabugu_ciz() {
         ke_ciz(&değişken ke); *ptr=ke;
     }
 }
+küresel değişken ksv_hassasiyet: tam32 = 1;
+çıplak işlev ksv_hareket(v: tam32) -> tam32 {
+    değişken carpan: tam32 = ksv_hassasiyet;
+    eğer carpan > 1 ve (v < -8 veya v > 8) { carpan=carpan+1; }
+    ver v*carpan;
+}
 küresel değişken ksv_fare_x: tam64 = 0;
 küresel değişken ksv_fare_y: tam64 = 0;
 işlev ksv_fare_koy(p: tam64,o: FareOlayi) -> tam64 {
@@ -653,8 +683,8 @@ işlev ksv_fare_koy(p: tam64,o: FareOlayi) -> tam64 {
         değişken gp: *KabukEkran = ksv_ekran_adr olarak *KabukEkran;
         değişken ke: KabukEkran = *gp;
         eğer değil ke.var { ver -19; }
-        değişken dx: tam64 = o.dx olarak tam64;
-        değişken dy: tam64 = 0-(o.dy olarak tam64);
+        değişken dx: tam64 = ksv_hareket(o.dx) olarak tam64;
+        değişken dy: tam64 = 0-(ksv_hareket(o.dy) olarak tam64);
         ksv_fare_x=ksv_fare_x+dx; ksv_fare_y=ksv_fare_y+dy;
         eğer ksv_fare_x < 0 { ksv_fare_x=0; } eğer ksv_fare_y < 0 { ksv_fare_y=0; }
         eğer ksv_fare_x >= (ke.e.gen olarak tam64) { ksv_fare_x=(ke.e.gen olarak tam64)-1; }
@@ -671,7 +701,10 @@ işlev ksv_fare_al(b: &değişken KsvBaglam,p: tam64) -> tam64 {
         eğer bh_gonder(&değişken b.x,b.xb,bh_fare(),1) < 0 { ver -5; }
         bh_olaylar();
         eğer bh_durum(1) == 2 {
-            eşleş hid_fare_rapor(bh_rapor(1)) { hata(e) => { ver -5; } tamam(o) => { ver ksv_fare_koy(p,o); } }
+            eşleş hid_fare_rapor(bh_rapor(1)) { hata(e) => { ver -5; } tamam(o) => {
+                // HID tekerleğinde yukarı pozitif, ABI tekerleğinde aşağı pozitiftir.
+                değişken olay: FareOlayi = o; olay.dz=0-o.dz; ver ksv_fare_koy(p,olay);
+            } }
         }
     }
     değişken ham: tam32 = ps2_kesme_fare_oku();

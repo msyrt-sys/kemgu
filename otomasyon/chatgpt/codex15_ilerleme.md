@@ -33,7 +33,7 @@
 | H6c | Kısmen | drivers/ps2/fare.kem dört baytı çözebiliyor. 200-100-80 ile cihazı bu kipe geçirme eksik |
 | H6d | Kısmen | D-763 sınırda kenetlemeyi deniyor. Ayarlanabilir hassasiyet ve hızlanma eğrisi eksik |
 | H6e | Tamam | D-757, calistir_bm_x86_ps2_irq ile save-under ve ekran karşılaştırması |
-| H6f | Kısmen | D-763 hareket, düğme ve gezginde çift tıklama var. Tekerlek alanı kullanıcı ABI’sinde eksik |
+| H6f | Kısmen | D-763 hareket, düğme ve gezginde çift tıklama var. Ham ABI alanı var. Fiziksel tekerleğin uçtan uca uygulama sınaması eksik |
 | H6g | Tamam | D-757, calistir_bm_x86_ps2_irq ile kayık AUX baytı, gerçek hareket ve piksel karşılaştırması |
 | H6h | Tamam | D-763, calistir_bm_x86_ekran_fare PS/2 göreli fareyi ölçüyor |
 | H7a | Kısmen | runtime/mimari/x86_64/kem_pci_hw.kem CF8/CFC kullanıyor. ECAM erişimi eksik |
@@ -92,3 +92,9 @@ Matrisin düzeltme sonrası koşumu 12 dakika sürdü. İlk gerileme koşumunda 
 ## Bölüm 6 — ayrıştırıcılar ve bozuk ELF
 
 İki derleyici sabit tohumlarla 17.000'er örnek çalıştırdı. Kısa ELF için QEMU iki derleyicide de açık hata verdi ve aynı oturumda ikinci kabuk komutu çalıştı. Geçerli ELF başlığını yanlış reddeden değişiklik derlendi ve host kâhini rc=1 verdi. İstenen sınır denetimini kaldırıp bir çökme üretme deneyi uygulanmadı. Sekiz gerileme hedefi ile sürücü kapıları geçti. Bölümün ana koşumu 18 dakika sürdü.
+
+## Bölüm 7 — tekerlek, hız ve tuş tekrarı
+
+PS/2 IntelliMouse ve USB HID ile iki uygulamada aşağı ve yukarı kaydırma GOP piksellerinden ölçüldü. Dört açılışta 20 tik boyunca tek harf, 68 tik boyunca 5–6 harf görüldü. Tekerlek yönünü ters çevirmek ve ilk tekrar gecikmesini kaldırmak ayrı ayrı kâhini kırdı. İlk sekizli koşum 18 dakika sürdü. Aynı derleme dizinini paylaşan PS/2 IRQ, karma ve UEFI PC hedefleri ayrı dizinlerde yeniden çalıştırıldığında üçü de geçti.
+
+Tuş sayısı son kâhinde komut satırının GOP gliflerinden okundu. Gecikmesi kaldırılmış çekirdek, 20 tikte beklenen bir harf yerine altı harf çizdi. Özgün çekirdek dört açılışta da sınırı karşıladı.

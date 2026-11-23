@@ -76,9 +76,12 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
     değişken onay: mantıksal = yanlış;
     du_ciz(&değişken t,yol,ileti,p,sat,sut);
     iken doğru {
-        eğer sis_olay_bekle(p,1,-1) < 0 { ver 6; }
+        eğer sis_olay_bekle(p,3,-1) < 0 { ver 6; }
         değişken kod: tam64 = sis_alan(p,1); değişken un: tam64 = sis_alan(p,2);
-        eğer sis_alan(p,3) != 0 {
+        eğer sis_alan(p,0) == 2 {
+            değişken teker: tam32 = sis_alan(p,6) olarak tam32;
+            eğer teker != 0 { du_dikey(&değişken t,teker*3); du_ciz(&değişken t,yol,ileti,p,sat,sut); }
+        } değilse eğer sis_alan(p,3) != 0 {
             değişken ctrl: mantıksal = (sis_alan(p,4)&2) != 0;
             değişken ciz: mantıksal = doğru;
             eğer ctrl ve kod == 16 {

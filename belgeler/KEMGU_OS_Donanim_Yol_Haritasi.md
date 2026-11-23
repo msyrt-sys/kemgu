@@ -217,7 +217,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H6d (Kısmen D-763 sınırda kenetlemeyi deniyor. Ayarlanabilir hassasiyet ve hızlanma eğrisi eksik.) [S] Hızlanma eğrisi + hassasiyet + ekran sınırına kenetleme.**
 - [x] **H6e (✓ D-757, calistir_bm_x86_ps2_irq ile save-under ve ekran karşılaştırması.) [M] İmleç çizimi:** altını kaydet/geri yükle (save-under), titreme yok,
       metin konsoluyla çakışmada doğru yeniden çizim.
-- [ ] **H6f (Kısmen D-763 hareket, düğme ve gezginde çift tıklama var. Tekerlek alanı kullanıcı ABI’sinde eksik.) [M] Fare olayları:** hareket, bas/bırak (sol/sağ/orta), tekerlek,
+- [ ] **H6f (Kısmen D-763 hareket, düğme ve gezginde çift tıklama var. Ham ABI alanı var. Fiziksel tekerleğin uçtan uca uygulama sınaması eksik.) [M] Fare olayları:** hareket, bas/bırak (sol/sağ/orta), tekerlek,
       çift tıklama (zaman eşiği); kullanıcı alanına kanal.
 - [x] **H6g (✓ D-757, calistir_bm_x86_ps2_irq ile kayık AUX baytı, gerçek hareket ve piksel karşılaştırması.) [M] Kapı:** QEMU monitörü `mouse_move` / `mouse_button` → olay günlüğü
       + imleç konumu ekran görüntüsünde. Sabotaj: senkron kurtarmayı kaldır, paket

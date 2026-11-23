@@ -630,7 +630,7 @@ işlev ks_baslat(p: &değişken KsKabukSureci,b: &değişken KsvBaglam,argv: Diz
                 değişken i: tam32 = yuva olarak tam32;
                 değişken yeni: KsvBaglam = dizi_al(p.baglamlar,i);
                 yeni.disk=b.disk; yeni.x=b.x; yeni.h=b.h; yeni.tr=b.tr;
-                yeni.olay_konum=dizi_boyut(yeni.olaylar); yeni.ilk_tus=doğru; yeni.bekleme_kurulu=yanlış; yeni.fare_durum=fare_yeni(yanlış);
+                yeni.olay_konum=dizi_boyut(yeni.olaylar); yeni.ilk_tus=doğru; yeni.bekleme_kurulu=yanlış; yeni.fare_durum=fare_yeni(ps2_teker_var());
                 yeni.degisti=yanlış;
                 dizi_yaz(p.baglamlar,i,yeni);
                 dizi_yaz(p.adlar,i,p.son_program.ad);
@@ -663,6 +663,7 @@ işlev ks_durum_adi(durum: tam64) -> metin {
         eğer (b.olay_maskesi&1) != 0 {
             eğer b.klavye_indeksi < 0 { hazir=ps2_halka_var(ps2_irq_klavye); }
             değilse { hazir=bh_durum(0) != 1; }
+            hazir=hazir veya kt_hazir();
         }
         eğer (b.olay_maskesi&2) != 0 {
             hazir=hazir veya ps2_kesme_fare_var() veya (bh_fare() >= 0 ve bh_durum(1) != 1);
@@ -1020,6 +1021,11 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
     değişken pos: tam32 = kd_bosluk(satir);
     değişken cmd: metin = kd_bas(satir,pos);
     değişken arg: metin = kd_kalan(satir,pos);
+    eğer bm_esit(cmd,"hassasiyet") {
+        değişken seviye: tam64 = kd_sayi_arg(arg);
+        eğer seviye < 1 veya seviye > 4 { ver hata("hassasiyet 1..4"); }
+        güvensiz { ksv_hassasiyet=seviye olarak tam32; } ver tamam(doğru);
+    }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
     eğer bm_esit(cmd,"donanim") {
         eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }
@@ -1109,15 +1115,25 @@ işlev kabuk_fare(ke: &değişken KabukEkran, fd: &değişken FareDurumu, im: &d
    değişken mesaj: metin = metin_birlestir("FARE dx=",tam_metin(o.dx olarak tam64));
    mesaj=metin_birlestir(mesaj," dy=");mesaj=metin_birlestir(mesaj,tam_metin(o.dy olarak tam64));
    mesaj=metin_birlestir(mesaj," dugme=");bm_yaz(metin_birlestir(mesaj,tam_metin(dugme olarak tam64)));
-   eğer ke.var { ekran_fare_hareket(ke.e,im,o.dx,o.dy); }
+   eğer ke.var { ekran_fare_hareket(ke.e,im,ksv_hareket(o.dx),ksv_hareket(o.dy)); }
   } }
   b=ps2_kesme_fare_oku();
  }
 }
+işlev kt_satir(o: TusHamOlay) -> TusOlayi {
+    değişken k: tam32 = o.kod; değişken oz: tam32 = 0;
+    eğer k == 28 veya k == 284 { oz=1; }
+    eğer k == 14 { oz=2; } eğer k == 15 { oz=3; } eğer k == 1 { oz=4; }
+    eğer k == 328 { oz=5; } eğer k == 336 { oz=6; } eğer k == 331 { oz=7; }
+    eğer k == 333 { oz=8; } eğer k == 339 { oz=9; }
+    eğer oz != 0 { ver TusOlayi::Ozel(oz,o.bas != 0); }
+    eğer o.bas != 0 ve o.unicode != 0 { ver TusOlayi::Karakter(o.unicode); }
+    ver TusOlayi::Yok;
+}
 işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, indeks: tam32, ke: &değişken KabukEkran) -> sonuç<mantıksal,metin> {
     değişken h: HidKlavye = hid_klavye_yeni(); değişken tr: KlavyeDurumu = klavye_yeni(); değişken satir: SatirDuzenleyici = satir_yeni(); satir.sinir=32;
     güvensiz { değişken gp: *KabukEkran = ke olarak *KabukEkran; ksv_ekran_adr=gp olarak tam64; }
-    değişken fd: FareDurumu = fare_yeni(yanlış);değişken im: EkranFare = ekran_fare_yeni();
+    değişken fd: FareDurumu = fare_yeni(ps2_teker_var());değişken im: EkranFare = ekran_fare_yeni();
     değişken bos_program: KsProgram = KsProgram {onbellek:0,sicak:yanlış,var:yanlış,surum:0,yol:"",cwd:"",ad:"",aygit:0,parcalar:[],
         plan:Elf64 {tur:0,makine:0,giris:0,yuklemeler:[]}};
     değişken p: KsKabukSureci = KsKabukSureci {son_program:bos_program,baglamlar:[],adlar:[],sonraki:0,son_kod:0,beklenen:-1};
@@ -1125,7 +1141,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
     iken y < KXS_YUVA_ADEDI {
         güvensiz {
             dizi_ekle(p.baglamlar,KsvBaglam {disk:*d,fds:ksv_fd_tablo(),kabuk_cwd:d.cwd,degisti:yanlış,
-                x:*x,xb:xb,klavye_indeksi:indeks,h:h,tr:tr,olaylar:[],olay_konum:0,ilk_tus:doğru,fare_durum:fare_yeni(yanlış),olay_maskesi:0,son_tik:-1,bekleme_kurulu:yanlış});
+                x:*x,xb:xb,klavye_indeksi:indeks,h:h,tr:tr,olaylar:[],olay_konum:0,ilk_tus:doğru,fare_durum:fare_yeni(ps2_teker_var()),olay_maskesi:0,son_tik:-1,bekleme_kurulu:yanlış});
         }
         dizi_ekle(p.adlar,""); y=y+1;
     }
@@ -1136,17 +1152,19 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
         eğer indeks >= 0 {
             eğer bh_gonder(x,xb,indeks,0) < 0 { ver hata("USB klavye aktarimi"); }
             bh_olaylar();
-            iken bh_durum(0) == 1 ve değil ps2_kesme_fare_var() {
+            iken bh_durum(0) == 1 ve değil kt_hazir() ve değil ps2_kesme_fare_var() {
                 değişken kos: mantıksal = yanlış;
                 eğer ks_etkin_mi() { kos=ks_adim(&değişken p,x,&değişken h,&değişken tr); }
                 eğer değil kos { güvensiz { eğer kap_lapic != 0 { ks_hlt(); } değilse { kem_bekle_us(50); } } }
                 bh_olaylar();
             }
         } değilse eğer ps2_kesme_etkin() {
-            iken ks_etkin_mi() ve değil ps2_tus_var() ve değil ps2_kesme_fare_var() {
+            iken ks_etkin_mi() ve değil kt_hazir() ve değil ps2_tus_var() ve değil ps2_kesme_fare_var() {
                 eğer değil ks_adim(&değişken p,x,&değişken h,&değişken tr) { ks_hlt(); }
             }
-            eğer değil ks_etkin_mi() { ps2_kesme_bekle(); }
+            eğer değil ks_etkin_mi() {
+                iken değil kt_hazir() ve değil ps2_tus_var() ve değil ps2_kesme_fare_var() { ks_hlt(); }
+            }
         }
         kabuk_fare(ke,&değişken fd,&değişken im);
         değişken k1: tam64 = ps2_kesme_kayip(yanlış);değişken k12: tam64 = ps2_kesme_kayip(doğru);değişken kh: tam64 = ps2_kesme_hata_oku();
@@ -1159,17 +1177,20 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
             iken yoklanan < 0 { yoklanan=ps2_bekle(); }
         }
         değişken xs: Dizi<TusOlayi> = [];
+        değişken hamlar: Dizi<TusHamOlay> = [];
         eğer indeks < 0 {
             değişken b: tam32 = -1;
             eğer ps2_kesme_etkin() { b=ps2_kesme_klavye_oku(); } değilse { b=yoklanan; }
-            eğer b >= 0 { dizi_ekle(xs,klavye_bayt(&değişken tr,b)); }
+            eğer b >= 0 { eşleş klavye_ham_bayt(&değişken tr,b) { hiç => { } değer(o) => { dizi_ekle(hamlar,o); } } }
         } değilse {
             eğer bh_durum(0) == 2 {
-                eşleş hid_klavye_rapor(&değişken h,&değişken tr,bh_rapor(0)) {
-                    hata(e) => { ver hata(e); } tamam(olaylar) => { xs=olaylar; }
+                eşleş hid_klavye_ham_rapor(&değişken h,&değişken tr,bh_rapor(0)) {
+                    hata(e) => { ver hata(e); } tamam(olaylar) => { hamlar=olaylar; }
                 }
             }
         }
+        için o: hamlar { eğer kt_izle(o) { dizi_ekle(xs,kt_satir(o)); } }
+        eğer kt_hazir() { dizi_ekle(xs,kt_satir(kt_yinele())); }
         ekran_fare_sil(ke.e,&değişken im);
         için o: xs {
             eğer kd_tab_mi(o) {
@@ -1326,7 +1347,7 @@ işlev main() -> tam32 {
    eğer guc_ps2_izin() {
    değişken fare_kimlik: tam32 = ps2_kesme_kur();
    eğer fare_kimlik < 0 { bm_yaz(metin_birlestir("KABUK HATA ps2 baslatma ",tam_metin(fare_kimlik olarak tam64))); }
-   değilse { kap_ps2_ac();bm_yaz("GIRDI PS2 IRQ1 IRQ12");bm_yaz("PS2_FARE 0 3"); }
+   değilse { kap_ps2_ac();bm_yaz("GIRDI PS2 IRQ1 IRQ12");eğer fare_kimlik == 3 { bm_yaz("PS2_FARE 3 4"); } değilse { bm_yaz("PS2_FARE 0 3"); } }
    } değilse { bm_yaz("GIRDI USB; PS2 FADT YOK"); }
         } }
     }
