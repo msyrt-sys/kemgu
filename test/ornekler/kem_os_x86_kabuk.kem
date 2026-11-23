@@ -941,6 +941,10 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
     eşleş kd_mutlak(d.cwd,arg) { hata(e) => { ver hata(e); } tamam(y) => { ver kd_komut_yol(d,cmd,y,son); } }
 }
 // ISR yalnız bayt üretir; paket, metin ve imleç tüketici bağlamındadır.
+işlev kabuk_hata(m: metin) {
+    eğer bm_esit(m,"usb bellek cikarildi") { ekran_cift_yaz("KABUK HATA usb bellek cikarildi"); }
+    değilse { ekran_cift_yaz(metin_birlestir("HATA ",m)); }
+}
 işlev kabuk_fare(ke: &değişken KabukEkran, fd: &değişken FareDurumu, im: &değişken EkranFare) {
  değişken b: tam32 = ps2_kesme_fare_oku();
  iken b >= 0 {
@@ -993,10 +997,15 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
         eğer k1 != kayip1 veya k12 != kayip12 veya kh != irqhata {
             kap_dok("PS2_KAYIP",k1,k12,kh);kayip1=k1;kayip12=k12;irqhata=kh;
         }
+        // Eski yoklamalı kabukta kullanıcı gelene kadar heap ayırma.
+        değişken yoklanan: tam32 = -1;
+        eğer indeks < 0 ve değil ps2_kesme_etkin() {
+            iken yoklanan < 0 { yoklanan=ps2_bekle(); }
+        }
         değişken xs: Dizi<TusOlayi> = [];
         eğer indeks < 0 {
             değişken b: tam32 = -1;
-            eğer ps2_kesme_etkin() { b=ps2_kesme_klavye_oku(); } değilse { b=ps2_bekle(); }
+            eğer ps2_kesme_etkin() { b=ps2_kesme_klavye_oku(); } değilse { b=yoklanan; }
             eğer b >= 0 { dizi_ekle(xs,klavye_bayt(&değişken tr,b)); }
         } değilse {
             eğer bh_durum(0) == 2 {
@@ -1014,13 +1023,13 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
             ekran_ayna_yaz(metin_birlestir("> ", s));
             eğer bm_esit(s,"kapat") veya bm_esit(s,"yenidenbaslat") {
                 eşleş kd_sync(d) {
-                    hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); }
+                    hata(e) => { kabuk_hata(e); }
                     tamam(v) => {
                         eğer bm_esit(s,"yenidenbaslat") { guc_yeniden_asama(0); }
                         ekran_cift_yaz("Sistem durduruldu; güç tuşuna basın.");ke_ciz(ke);guc_kapat();
                     }
                 }
-            } değilse { eşleş komut(d,&değişken p,s,x,xb,indeks,&değişken h,&değişken tr) { hata(e) => { ekran_cift_yaz(metin_birlestir("HATA ",e)); } tamam(v) => { } } }
+            } değilse { eşleş komut(d,&değişken p,s,x,xb,indeks,&değişken h,&değişken tr) { hata(e) => { kabuk_hata(e); } tamam(v) => { } } }
             eğer p.beklenen >= 0 {
                 ks_bekle(&değişken p,p.beklenen,x,&değişken h,&değişken tr);
                 p.beklenen=-1; güvensiz { kxs_on_pid=0; }
@@ -1106,7 +1115,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         eşleş bm_xsur(xb,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
     }
     eşleş kd_yeni() { hata(e) => { ver hata(e); } tamam(v) => { değişken d: KabukDisk = v;
-        eşleş bd_bul(x,xb) { hata(e) => { ver hata(e); } tamam(xs) => { d.aygitlar=xs; } }
+        eşleş bd_bul(x,xb,uefi_mi()) { hata(e) => { ver hata(e); } tamam(xs) => { d.aygitlar=xs; } }
         eşleş kd_bagla(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
         eşleş kd_kok_durum(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
         ekran_cift_yaz("KEMGU-OS kabuk v0");
@@ -1151,14 +1160,14 @@ işlev main() -> tam32 {
    eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eğer guc_ps2_izin() {
    değişken fare_kimlik: tam32 = ps2_kesme_kur();
-   eğer fare_kimlik < 0 { bm_yaz(metin_birlestir("PS2 IRQ KUR HATA ",tam_metin(fare_kimlik olarak tam64)));kem_qemu_cik(1); }
-   kap_ps2_ac();bm_yaz("GIRDI PS2 IRQ1 IRQ12");bm_yaz("PS2_FARE 0 3");
+   eğer fare_kimlik < 0 { bm_yaz(metin_birlestir("KABUK HATA ps2 baslatma ",tam_metin(fare_kimlik olarak tam64))); }
+   değilse { kap_ps2_ac();bm_yaz("GIRDI PS2 IRQ1 IRQ12");bm_yaz("PS2_FARE 0 3"); }
    } değilse { bm_yaz("GIRDI USB; PS2 FADT YOK"); }
         } }
     }
     eşleş ke_kur() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { değişken ke: KabukEkran = v;
     değişken bar: tam64 = 0;
-    eşleş bm_pci_bul(12,3,48) { hata(e) => { } tamam(bdf) => {
+    eşleş bm_pci_bul(12,3,48) { hata(e) => { eğer uefi_mi() { bm_yaz("KABUK HATA xhci denetleyici yok"); } } tamam(bdf) => {
         güvensiz { kh_bdf=bdf; }
         bar=(kem_pci_oku32(bdf,16)&4294967280)|(kem_pci_oku32(bdf,20)<<32);
         kem_pci_yaz32(bdf,4,kem_pci_oku32(bdf,4)|6);

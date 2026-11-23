@@ -48,10 +48,8 @@
     ver geri;
 }
 çıplak işlev ps2_bekle() -> tam32 {
-    iken doğru {
-        değişken b: tam32 = ps2_oku(); eğer b >= 0 { ver b; }
-        kem_bekle_us(50);
-    } ver -1;
+    // Kullanıcı girdisi gecikebilir. Tek yoklama dilimi bittiğinde çağıran yeniden planlar.
+    ver ps2_yanit();
 }
 
 // IRQ yolu: tek üretici ISR, tek tüketici kabuk. 1024 yuva, bir yuva boş.

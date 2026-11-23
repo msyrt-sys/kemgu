@@ -5012,3 +5012,8 @@ calistir_bm_x86_cok_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 calistir_yigin_geri: $(BUILD)/codegen$(EXE)
 	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/yigin_geri_harness.sh
 test_tumu: calistir_yigin_geri
+
+.PHONY: calistir_bm_x86_saglamlik
+test_tumu: calistir_bm_x86_saglamlik
+calistir_bm_x86_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=saglamlik_kahin bash test/bm_x86_surec_harness.sh

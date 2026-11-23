@@ -6,7 +6,8 @@ işlev main() -> tam32 {
   eşleş uefi_acpi_dok(b) { hata(e) => { bm_yaz(e);kem_qemu_cik(1); } tamam(v) => { } }
  } }
  eğer ps2_kur() < 0 { bm_yaz("GUC PS2 HATA");kem_qemu_cik(1); }
- bm_yaz("GUC_HAZIR");değişken tus: tam32 = ps2_bekle();
+ bm_yaz("GUC_HAZIR");değişken tus: tam32 = -1;
+ iken tus < 0 { tus=ps2_bekle(); }
  guc_yeniden_asama(1); // Harness yalnız bu yeni fikstürün kopyasında 8042/üçlü-hata aşamasını seçer.
  ver 0;
 }

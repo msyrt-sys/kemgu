@@ -70,3 +70,7 @@
 | H12e | Kısmen | belgeler/KEMGU_OS_Syscall_ABI.md hazır. Mimari, program yazma ve düzen kılavuzları eksik |
 
 64 açık kayıt incelendi. 14 madde için işaret güncellendi. D-764 tabanında v1, UEFI PC, çok süreç ve x86 çekirdek kapıları geçti. Düzenleyici, gezgin, kabuk14, süreç, ekran/fare, PS/2 IRQ, NVMe ve qtest kapıları da geçti. Yetki kapısı 60/60. Belge denetimi ve yeni QEMU koşumları 17 dakika sürdü.
+
+## Bölüm 2 — aygıt hatalarından sonra kabuk
+
+Beş QEMU senaryosu iki derleyicide geçti (10/10). USB bellek çıkarıldıktan sonra hem USB hem PS/2 klavye ile komut çalıştı. Sekiz gerileme hedefi rc=0 döndürdü. Süreç ailesinde 200 ölçümlü açılış vardı. Boş SATA için yoklama üst sınırını kaldıran ayrı kopyada ELF derlendi, konuk isteme ulaşamadı ve sağlamlık kâhini rc=1 döndürdü. Envanter ve iki eski C UART yolunun kapsam sınırı bulgular dosyasında. Bölümün QEMU gerileme koşumu yaklaşık 17 dakika sürdü.

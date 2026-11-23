@@ -440,7 +440,7 @@ işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
         eğer ps2_kesme_etkin() {
             ham=ps2_kesme_klavye_oku();
             eğer ham < 0 { ver 1; }
-        } değilse { ham=ps2_bekle(); }
+        } değilse { ham=ps2_bekle(); eğer ham < 0 { ver 1; } }
         eşleş klavye_ham_bayt(&değişken b.tr,ham) {
             hiç => { } değer(v) => { dizi_ekle(b.olaylar,v); }
         }
