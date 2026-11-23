@@ -6,21 +6,9 @@ küresel değişken guc_reset_adr: tam64 = 0;
 küresel değişken guc_reset_deger: tam32 = 0;
 çıplak işlev guc_ps2_izin() -> mantıksal { ver guc_ps2_durum != 0; }
 işlev uefi_fadt(b: UefiBilgi) -> sonuç<FadtGuc,metin> {
- eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
- eşleş rsdp_coz(r) { hata(e) => { ver hata("FADT RSDP"); } tamam(rsdp) => {
-  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt; eğer x { a=rsdp.xsdt; }
-  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
-  eşleş acpi_kok_coz(kok,x) { hata(e) => { ver hata(e); } tamam(xs) => {
-   için adr: xs {
-    eşleş uefi_sdt(b,adr) { hata(e) => { ver hata(e); } tamam(t) => {
-     eşleş sdt_coz(t) { hata(e) => { ver hata("FADT SDT"); } tamam(h) => {
-      eğer imza_esit(t,0,"FACP") { ver fadt_guc_coz(t); }
-     } }
-    } }
-   }
-  } } } }
- } } } }
- ver hata("FADT yok");
+ eşleş uefi_tablo_bul(b,"FACP") { hata(e) => { ver hata(e); } tamam(t) => {
+  eğer dizi_boyut(t) == 0 { ver hata("FADT yok"); } ver fadt_guc_coz(t);
+ } }
 }
 
 işlev uefi_guc_esle(d: &değişken CerceveAyirici,b: UefiBilgi) -> sonuç<mantıksal,metin> {

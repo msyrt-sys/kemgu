@@ -7,32 +7,58 @@
 // Adresler birebir (identity) eşlenmiş olmalı: boot/start_x86_64.S 0..1 GB (önbellekli
 // RAM) ve 3..4 GB (UC MMIO penceresi) eşler. Pencere dışı adres çağıranın sorumluluğu.
 
-çıplak işlev kem_port_yaz32(port: dtam16, deger: dtam32) {
-    güvensiz {
-        satıriçi_asm { mimari: x86_64 şablon: r#"outl $1, $0"# girdi("{dx}", port) girdi("{eax}", deger) bozulan("~{memory}") }
-    }
-}
+kullan runtime::mimari::x86_64::kem_pci_adres::{ pci_port_adres, pci_port_veri16 } olarak pa;
 
-çıplak işlev kem_port_oku32(port: dtam16) -> dtam32 {
-    değişken v: dtam32 = 0 olarak dtam32;
-    güvensiz {
-        satıriçi_asm { mimari: x86_64 şablon: r#"inl $1, $0"# çıktı("={eax}", &v) girdi("{dx}", port) bozulan("~{memory}") }
-    }
-    ver v;
+// Eşlenen her veri yolu için 1 MiB pencerenin fiziksel başlangıcı. Sıfır CF8/CFC seçer.
+küresel değişken pci_ecam_yollari: tam64 = 0;
+çıplak işlev kem_ecam_yolu(bdf: tam32) -> tam64 {
+    eğer pci_ecam_yollari == 0 veya bdf < 0 veya bdf > 65535 { ver 0; }
+    ver kem_mmio_oku64(pci_ecam_yollari+((bdf/256) olarak tam64)*8);
 }
-
-// PCI yapılandırma (mekanizma 1). bdf = aygıt * 8 + işlev, veriyolu 0.
+çıplak işlev kem_ecam_adres(bdf: tam32,ofs: tam32) -> tam64 {
+    değişken taban: tam64 = kem_ecam_yolu(bdf);
+    eğer taban == 0 veya ofs < 0 veya ofs > 4095 { ver 0; }
+    ver taban+(((bdf&255) olarak tam64)<<12)+(ofs olarak tam64);
+}
+// PCI yapılandırma (mekanizma 1). bdf = veriyolu * 256 + aygıt * 8 + işlev.
 çıplak işlev kem_pci_adres(bdf: tam32, ofs: tam32) -> dtam32 {
-    değişken a: tam64 = 2147483648 | (((bdf / 8) olarak tam64) << 11) | (((bdf % 8) olarak tam64) << 8) | ((ofs & 252) olarak tam64);
-    ver a olarak dtam32;
+    ver pci_port_adres(bdf,ofs);
 }
 
-çıplak işlev kem_pci_oku32(bdf: tam32, ofs: tam32) -> tam64 {
+çıplak işlev kem_cf8_oku32(bdf: tam32, ofs: tam32) -> tam64 {
     kem_port_yaz32(3320 olarak dtam16, kem_pci_adres(bdf, ofs));
-    ver kem_port_oku32(3324 olarak dtam16) olarak tam64;
+    // C16-001: genişletmenin üst bitlerini iki derleyicide de temizle.
+    ver (kem_port_oku32(3324 olarak dtam16) olarak tam64)&4294967295;
 }
 
+çıplak işlev kem_pci_oku32(bdf: tam32,ofs: tam32) -> tam64 {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4092 veya (ofs&3) != 0 { ver 4294967295; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { ver kem_mmio_oku32(a); }
+    eğer ofs >= 256 { ver 4294967295; }
+    ver kem_cf8_oku32(bdf,ofs);
+}
+çıplak işlev kem_pci_oku16(bdf: tam32,ofs: tam32) -> tam32 {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4094 veya (ofs&1) != 0 { ver 65535; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { değişken p: *dtam16 = a olarak *dtam16; ver ((*p) olarak tam32)&65535; }
+    eğer ofs >= 256 { ver 65535; }
+    kem_port_yaz32(3320 olarak dtam16,kem_pci_adres(bdf,ofs));
+    ver (kem_port_oku16(pci_port_veri16(ofs)) olarak tam32)&65535;
+}
+çıplak işlev kem_pci_yaz16(bdf: tam32,ofs: tam32,v: tam32) {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4094 veya (ofs&1) != 0 { ver; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { değişken p: *dtam16 = a olarak *dtam16; *p=v olarak dtam16; ver; }
+    eğer ofs >= 256 { ver; }
+    kem_port_yaz32(3320 olarak dtam16,kem_pci_adres(bdf,ofs));
+    kem_port_yaz16(pci_port_veri16(ofs),v olarak dtam16);
+}
 çıplak işlev kem_pci_yaz32(bdf: tam32, ofs: tam32, v: tam64) {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4092 veya (ofs&3) != 0 { ver; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { kem_mmio_yaz32(a,v); ver; }
+    eğer ofs >= 256 { ver; }
     kem_port_yaz32(3320 olarak dtam16, kem_pci_adres(bdf, ofs));
     kem_port_yaz32(3324 olarak dtam16, (v & 4294967295) olarak dtam32);
 }
@@ -41,7 +67,7 @@
 çıplak işlev kem_mmio_oku32(adres: tam64) -> tam64 {
     değişken p: *dtam32 = adres olarak *dtam32;
     değişken v: dtam32 = *p;
-    ver v olarak tam64;
+    ver (v olarak tam64)&4294967295;
 }
 
 çıplak işlev kem_mmio_yaz32(adres: tam64, v: tam64) {

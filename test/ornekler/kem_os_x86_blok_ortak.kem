@@ -233,8 +233,8 @@ işlev bd_xsur(bar: tam64,x: &değişken XhciDurum) -> sonuç<mantıksal,metin> 
 }
 işlev bd_bul(x: &değişken XhciDurum,xb: tam64,uyar: mantıksal) -> sonuç<Dizi<BlokDonanim>,metin> {
  değişken ds: Dizi<BlokDonanim> = [];değişken dma: tam64 = bm_disk_dma_al();
- değişken ni: tam32 = 0;değişken ai: tam32 = 0;değişken ui: tam32 = 0;değişken bdf: tam32 = 0;
- iken bdf < 256 {
+ değişken ni: tam32 = 0;değişken ai: tam32 = 0;değişken ui: tam32 = 0;
+ için bdf: kem_pci_islevler() {
   eğer (kem_pci_oku32(bdf,0)&65535) != 65535 {
    değişken tip: tam64 = (kem_pci_oku32(bdf,8)>>8)&16777215;
    eğer tip == 67586 {
@@ -262,7 +262,7 @@ işlev bd_bul(x: &değişken XhciDurum,xb: tam64,uyar: mantıksal) -> sonuç<Diz
     }
    }
   }
-  eğer dma-bm_disk_dma_al() > 16777216-131072 { ver hata("blok DMA siniri"); } bdf=bdf+1;
+  eğer dma-bm_disk_dma_al() > 16777216-131072 { ver hata("blok DMA siniri"); }
  }
  değişken i: tam32 = 0;
  iken i < dizi_boyut(x.aygitlar) {

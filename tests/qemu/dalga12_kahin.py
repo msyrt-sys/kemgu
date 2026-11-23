@@ -55,7 +55,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz"):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -63,7 +63,10 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
     shutil.copy('/usr/share/OVMF/OVMF_VARS_4M.fd',w/'dalga12-vars.fd')
     aygitlar = {"usb": usb.disk, "nvme": nvme.disk, "sata": sata.disk}
     aygitlar["usb"], aygitlar[acilis] = aygitlar[acilis], usb.disk
-    cmd = ['qemu-system-x86_64','-M','q35' if i8042 else 'q35,i8042=off','-m',ram,'-vga','std','-display','none','-no-reboot',
+    makine = 'pc' if pci_topolojisi == 'cf8' else 'q35'
+    if not i8042:
+        makine += ',i8042=off'
+    cmd = ['qemu-system-x86_64','-M',makine,'-m',ram,'-vga','std','-display','none','-no-reboot',
            '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
@@ -81,8 +84,26 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
             if klavye_izi:
                 aygit += f',pcap={w}/klavye.pcap'
             cmd.extend(['-device',aygit])
-    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'), ('nvme','nvme,serial=dalga12'),
-                      ('sata','ide-hd,bus=ide.0')]:
+    nvme_aygiti = 'nvme,serial=dalga12'
+    sata_aygiti = 'ide-hd,bus=ide.0'
+    if pci_topolojisi == 'kok':
+        cmd.extend(['-device', 'pcie-root-port,id=rp1,chassis=1',
+                    '-device', 'pcie-root-port,id=rp2,chassis=2',
+                    '-device', 'ich9-ahci,id=harici,bus=rp2'])
+        nvme_aygiti += ',bus=rp1'
+        sata_aygiti = 'ide-hd,bus=harici.0'
+    elif pci_topolojisi == 'kopru':
+        cmd.extend(['-device', 'pcie-pci-bridge,id=cevir',
+                    '-device', 'pci-bridge,id=alt,chassis_nr=2,bus=cevir',
+                    '-device', 'ich9-ahci,id=harici,bus=alt'])
+        nvme_aygiti += ',bus=alt'
+        sata_aygiti = 'ide-hd,bus=harici.0'
+    elif pci_topolojisi == 'cf8':
+        cmd.extend(['-device', 'ich9-ahci,id=harici'])
+        sata_aygiti = 'ide-hd,bus=harici.0'
+    elif pci_topolojisi != 'duz':
+        raise ValueError(pci_topolojisi)
+    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'), ('nvme',nvme_aygiti), ('sata',sata_aygiti)]:
         if (ad == 'usb' and not xhci) or (ad == 'sata' and not sata_takili):
             continue
         if ad == 'nvme' and not nvme_ns:

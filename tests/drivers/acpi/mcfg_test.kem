@@ -1,0 +1,35 @@
+// python3 -c "print(0x80000000 + (767 << 12) + 4095)"
+// İki pencereli MCFG. İkinci kayıt, ayrı kesimde aynı veri yolu aralığını kullanabilir.
+kullan drivers::acpi::mcfg::{ McfgPencere, mcfg_coz, mcfg_adres };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le16, yaz_le32, yaz_le64, bayt_toplam8 };
+işlev saglama(b: Dizi<dtam8>,n: tam32) {
+    yaz_le32(b,4,n olarak tam64); yaz_u8(b,9,0);
+    yaz_u8(b,9,((256-bayt_toplam8(b,0,n))&255) olarak tam64);
+}
+işlev ornek() -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = bayt_sifir(76);
+    yaz_u8(b,0,77); yaz_u8(b,1,67); yaz_u8(b,2,70); yaz_u8(b,3,71);
+    yaz_le64(b,44,2147483648); yaz_u8(b,54,2); yaz_u8(b,55,2);
+    yaz_le64(b,60,4294967296); yaz_le16(b,68,1); yaz_u8(b,70,2); yaz_u8(b,71,4);
+    saglama(b,76); ver b;
+}
+işlev gecerli(b: Dizi<dtam8>) -> mantıksal {
+    eşleş mcfg_coz(b) { hata(e) => { ver yanlış; } tamam(xs) => { ver doğru; } }
+}
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = ornek();
+    eşleş mcfg_coz(b) { hata(e) => { ver 1; } tamam(xs) => {
+        eğer dizi_boyut(xs) != 2 { ver 2; }
+        değişken w: McfgPencere = xs[0];
+        eğer mcfg_adres(w,767,4095) != 2150629375 veya mcfg_adres(w,511,0) != -1 veya mcfg_adres(w,768,0) != -1 veya mcfg_adres(w,512,4096) != -1 { ver 3; }
+        değişken u: McfgPencere = xs[1];
+        eğer u.kesim != 1 veya u.son != 4 veya u.taban != 4294967296 { ver 4; }
+    } }
+    yaz_le16(b,68,0); saglama(b,76); eğer gecerli(b) { ver 5; }
+    b=ornek(); yaz_u8(b,54,3); saglama(b,76); eğer gecerli(b) { ver 6; }
+    b=ornek(); yaz_u8(b,44,1); saglama(b,76); eğer gecerli(b) { ver 7; }
+    b=ornek(); yaz_u8(b,8,99); eğer gecerli(b) { ver 8; }
+    b=ornek(); saglama(b,59); eğer gecerli(b) { ver 9; }
+    b=ornek(); saglama(b,61); eğer gecerli(b) { ver 10; }
+    ver 0;
+}

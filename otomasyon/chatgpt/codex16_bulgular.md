@@ -18,3 +18,28 @@ Taşma ölçümünde QMP, PS/2 aygıtına 1.600 adet tek baytlık A basışı g�
 | Dolu halkada kayıp sayacını artırma | 1.600 basışın 1.022’si okundu, sayaç 0 kaldı. | 1 |
 
 Bölüm kapılarını ayrı `make` süreçleriyle paralel başlatmak, `selfhost/konak.kem` hedefinin geçici dosyasında yarışa neden oldu. Derleyici yeniden üretildi, teslim kaynağındaki regresyonlar tek `make -k -j6 --output-sync=target` çağrısında başlatıldı.
+
+## PCI
+
+QEMU 8.2.2 ve OVMF ile düz Q35, iki PCIe root-port, iç içe PCIe–PCI ve PCI–PCI köprüsü ve i440FX denendi. Her açılışta SATA ve NVMe bölümündeki dosyanın UTF-8 baytları host FAT okuyucusuyla eşleşti. Her iki köprü topolojisinde QMP 11 işlev, 17 BAR ve iki köprü gösterdi. MCFG bulunmayan i440FX’te CF8/CFC ile dokuz işlev ve 11 BAR bulundu.
+
+MCFG kullanan konukta iki erişim yolunun kök aygıttan okuduğu 64 dword, QMP fiziksel bellek okumasıyla karşılaştırıldı. Her etkin bellek BAR’ının yaprağındaki PCD/PWT bitleri 1 idi. İç içe topolojide QEMU monitörü dış köprünün alt veri yolu yazmacını sıfırladı. Yeniden taramada konuk ikincil numarayı koruyup alt sınırı yeniden programladı. Pasif ROM’un yapılandırma yazmacında boy maskesi kalabildiği için raporlanan etkin taban, ROM enable biti kapalıyken sıfırdır.
+
+| Üretim kodunun ayrı kopyasındaki sabotaj | Gerçek QEMU sonucu |
+|---|---|
+| ECAM işlev bitlerini bir fazla sola kaydır | `00:1f.2` ve `00:1f.3` konuk envanterinden eksildi. QMP karşılaştırması rc 1. |
+| Sıfırlanmış köprü alt yol sınırını güncelleme | Konuk ilk taramada `01:00.0`, `02:00.0` ve `02:01.0` işlevlerini bulamadı. QMP karşılaştırması rc 1. |
+| 64 bit BAR’ın üst yarısını at | Gerçek sürücü açılışta `0xc000004000` için sayfa hatası verdi. Kâhin kabuk istemine ulaşamadı, rc 1. |
+
+C16-001. Host üzerinde `pci_port_adres(767,254) olarak tam64` değerini `tam_metin` ile yazdıran küçük birim için `build/kemgu --llvm` ve `build/codegen --llvm` çıktıları ayrı ayrı clang ve `build/kdl_runtime.o` ile bağlandı. Beklenen 2147680252; C 2147680252, self-host −2147287044 verdi. İkisinin düşük 32 biti aynı. Donanım sözcüğünü genişletirken alan maskesi uygulanıyor. Derleyiciye değişiklik yapılmadı.
+
+Küçük tekrar üretimi aşağıdadır. Her derleyici için `<derleyici> --llvm port_tani.kem > port.ll` ve `clang -x ir port.ll -x none build/kdl_runtime.o -o port && ./port` kullanılır.
+
+```kemgu
+kullan runtime::mimari::x86_64::kem_pci_adres::{ pci_port_adres } olarak pa;
+işlev main() -> tam32 {
+    yazdir_metin(tam_metin(pci_port_adres(767,254) olarak tam64)); ver 0;
+}
+```
+
+İlk PCI regresyonunda her iki kaynakta 68 LAPIC tikinde tekrar sayısı kabul aralığındaydı. Son dosya düzeniyle yük altında tekrarlanan koşumda self-host PS/2 konuk 7 karakter verdi (aralık 4–6). Önceki kâhin basmayı yollayıp en az iki tik onay bekledikten sonra 68 tik beklemeye başlıyor ve bırakmayı ayrı bir host çağrısıyla yolluyordu. Basılı kalınan süreyi QEMU’nun sanal saatinde 200 veya 680 ms programlayan `send-key` ile aynı GOP görüntüsü ve aynı eşikler korundu. İki derleyicide, PS/2 ve USB için dört senaryoda da 200 ms’de 1, 680 ms’de 5 karakter ölçüldü.

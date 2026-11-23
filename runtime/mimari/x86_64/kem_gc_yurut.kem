@@ -1,7 +1,7 @@
 // Ortak bare-metal GcIstek yürütücüsü; aynı birimde kem_pci_hw ve kem_uart ister.
 // D-745 DMA okuma sırası ve genişliği korunur.
 kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
-kullan drivers::pci::yapilandirma::{ PciAygit, pci_coz };
+kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
 
 işlev bm_yaz(m: metin) {
     değişken i: tam32 = 0;
@@ -99,26 +99,61 @@ işlev bm_yurut(bar: tam64, i: GcIstek) -> GcYanit {
     ver y;
 }
 
-// Veriyolu 0'da sınıf/alt sınıf/programlama arabirimi eşleşen bdf döner. Çok işlevli aygıtlar da taranır.
-işlev bm_pci_bul(sinif: tam32, alt_sinif: tam32, prog_if: tam32) -> sonuç<tam32, metin> {
-    değişken a: tam32 = 0;
-    iken a < 256 {
-        değişken v: tam64 = kem_pci_oku32(a, 0);
-        eğer (v & 65535) != 65535 {
-            değişken b: Dizi<dtam8> = [];
-            değişken ofs: tam32 = 0;
-            iken ofs < 256 {
-                değişken w: tam64 = kem_pci_oku32(a, ofs);
-                değişken k: tam32 = 0;
-                iken k < 4 { dizi_ekle(b, (((w >> (k * 8)) & 255) olarak tam32) olarak dtam8); k = k + 1; }
-                ofs = ofs + 4;
-            }
-            eşleş pci_coz(b) {
-                hiç => { }
-                değer(p) => { eğer p.sinif == sinif ve p.alt_sinif == alt_sinif ve p.prog_if == prog_if { ver tamam(a); } }
+// Firmware'in numaralandırdığı köprü pencerelerini koru. Sıfır numaralı
+// köprüye kardeşlerin ayrılmış pencerelerinden sonra yeni bir aralık ver.
+işlev kem_pci_yol_tara(bus: tam32,sinir: tam32,goruldu: Dizi<dtam8>,islevler: Dizi<tam32>) -> tam32 {
+    eğer bus < 0 veya bus > sinir veya oku_u8(goruldu,bus) != 0 { ver bus; }
+    yaz_u8(goruldu,bus,1);
+    değişken kopruler: Dizi<tam32> = [];
+    değişken son: tam32 = bus;
+    değişken devfn: tam32 = 0;
+    iken devfn < 256 {
+        değişken bdf: tam32 = bus*256+devfn;
+        eğer (kem_pci_oku32(bdf,0)&65535) != 65535 {
+            dizi_ekle(islevler,bdf);
+            eğer (kem_pci_oku32(bdf,8)>>16) == 1540 {
+                dizi_ekle(kopruler,bdf);
+                değişken v: tam64 = kem_pci_oku32(bdf,24);
+                değişken ikincil: tam32 = ((v>>8)&255) olarak tam32;
+                değişken alt: tam32 = ((v>>16)&255) olarak tam32;
+                eğer ikincil > bus ve ikincil <= alt ve alt <= sinir ve alt > son { son=alt; }
             }
         }
-        a = a + 1;
+        devfn=devfn+1;
+    }
+    için kopru: kopruler {
+        değişken v: tam64 = kem_pci_oku32(kopru,24);
+        değişken ikincil: tam32 = ((v>>8)&255) olarak tam32;
+        değişken alt: tam32 = ((v>>16)&255) olarak tam32;
+        // Firmware bir numara ayırmış ama alt sınırı kurmamışsa aynı ikincil yolu koru.
+        eğer (ikincil == 0 ve son < sinir) veya (ikincil > bus ve ikincil <= sinir ve alt < ikincil) {
+            eğer ikincil == 0 { ikincil=son+1; }
+            alt=sinir;
+            için diger: kopruler {
+                değişken sonraki: tam32 = ((kem_pci_oku32(diger,24)>>8)&255) olarak tam32;
+                eğer sonraki > ikincil ve sonraki <= alt { alt=sonraki-1; }
+            }
+            değişken ayar: tam64 = (v&4278190080)|((alt olarak tam64)<<16)|((ikincil olarak tam64)<<8)|(bus olarak tam64);
+            kem_pci_yaz32(kopru,24,ayar);
+            değişken kullanilan: tam32 = kem_pci_yol_tara(ikincil,alt,goruldu,islevler);
+            eğer kullanilan > son { son=kullanilan; }
+            kem_pci_yaz32(kopru,24,(ayar&4278255615)|((kullanilan olarak tam64)<<16));
+        } değilse eğer (v&255) == (bus olarak tam64) ve ikincil > bus ve ikincil <= alt ve alt <= sinir {
+            kem_pci_yol_tara(ikincil,alt,goruldu,islevler);
+        }
+    }
+    ver son;
+}
+işlev kem_pci_islevler() -> Dizi<tam32> {
+    değişken sonuc: Dizi<tam32> = [];
+    değişken goruldu: Dizi<dtam8> = bayt_sifir(256);
+    kem_pci_yol_tara(0,255,goruldu,sonuc);
+    ver sonuc;
+}
+işlev bm_pci_bul(sinif: tam32, alt_sinif: tam32, prog_if: tam32) -> sonuç<tam32, metin> {
+    değişken hedef: tam64 = ((sinif olarak tam64)<<16)|((alt_sinif olarak tam64)<<8)|(prog_if olarak tam64);
+    için bdf: kem_pci_islevler() {
+        eğer (kem_pci_oku32(bdf,8)>>8) == hedef { ver tamam(bdf); }
     }
     ver hata("PCI aygiti bulunamadi");
 }

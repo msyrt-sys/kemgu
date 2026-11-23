@@ -1,0 +1,12 @@
+// python3 -c "print(hex(0x80000000 | 767 << 8 | (254 & 252)))"
+// Mekanizma 1 adresindeki son işlev ve alt/üst 16 bitlik veri portları.
+kullan runtime::mimari::x86_64::kem_pci_adres::{ pci_port_adres, pci_port_veri16 } olarak pa;
+işlev main() -> tam32 {
+    eğer ((pci_port_adres(767,254) olarak tam64)&4294967295) != 2147680252 { ver 1; }
+    eğer ((pci_port_adres(0,0) olarak tam64)&4294967295) != 2147483648 { ver 2; }
+    eğer ((pci_port_adres(65535,255) olarak tam64)&4294967295) != 2164260860 { ver 3; }
+    eğer ((pci_port_adres(65536,0) olarak tam64)&4294967295) != 0 veya ((pci_port_adres(0,256) olarak tam64)&4294967295) != 0 { ver 4; }
+    eğer (pci_port_veri16(252) olarak tam32) != 3324 veya (pci_port_veri16(254) olarak tam32) != 3326 { ver 5; }
+    eğer (pci_port_veri16(1) olarak tam32) != 0 veya (pci_port_veri16(256) olarak tam32) != 0 { ver 6; }
+    ver 0;
+}

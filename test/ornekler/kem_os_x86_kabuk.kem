@@ -985,13 +985,8 @@ işlev kd_hex_n(v: tam64,n: tam32) -> metin {
 }
 işlev kd_tamsayi(s: metin,v: tam64) -> metin { ver metin_birlestir(metin_birlestir(s," "),tam_metin(v)); }
 işlev kd_pci_rapor(satirlar: Dizi<metin>) {
-    değişken yollar: Dizi<tam32> = [0];
-    değişken goruldu: Dizi<dtam8> = bayt_sifir(256); yaz_u8(goruldu,0,1);
-    değişken i: tam32 = 0;
-    iken i < dizi_boyut(yollar) {
-        değişken bus: tam32 = dizi_al(yollar,i); değişken devfn: tam32 = 0;
-        iken devfn < 256 {
-            değişken bdf: tam32 = bus*256+devfn;
+    için bdf: kem_pci_islevler() {
+            değişken bus: tam32 = bdf/256; değişken devfn: tam32 = bdf%256;
             değişken kim: tam64 = kem_pci_oku32(bdf,0);
             eğer (kim&65535) != 65535 {
                 değişken sinif: tam64 = (kem_pci_oku32(bdf,8)>>8)&16777215;
@@ -1001,12 +996,61 @@ işlev kd_pci_rapor(satirlar: Dizi<metin>) {
                 s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(kim&65535,4)));
                 s=metin_birlestir(s,metin_birlestir(":",kd_hex_n(kim>>16,4)));
                 dizi_ekle(satirlar,metin_birlestir(s,metin_birlestir(" ",kd_hex_n(sinif,6))));
-                eğer (sinif>>8) == 1540 {
-                    değişken hedef: tam32 = ((kem_pci_oku32(bdf,24)>>8)&255) olarak tam32;
-                    eğer oku_u8(goruldu,hedef) == 0 { yaz_u8(goruldu,hedef,1);dizi_ekle(yollar,hedef); }
-                }
-            } devfn=devfn+1;
-        } i=i+1;
+            }
+    }
+}
+işlev kd_pci_genis(bdf: tam32) {
+    değişken ofs: tam32 = 256; değişken goruldu: Dizi<dtam8> = bayt_sifir(128);
+    iken ofs >= 256 ve ofs <= 4092 {
+        değişken maske: tam32 = 1<<((ofs/4)&7);
+        değişken once: tam32 = oku_u8(goruldu,ofs/32);
+        eğer (once&maske) != 0 { ekran_cift_yaz("KABUK HATA PCI genis yetenek dongusu"); ver; }
+        yaz_u8(goruldu,ofs/32,(once|maske) olarak tam64);
+        değişken v: tam64 = kem_pci_oku32(bdf,ofs);
+        eğer v == 0 veya v == 4294967295 { ofs=0; }
+        değilse {
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi("GENIS",bdf olarak tam64),ofs olarak tam64),v));
+            değişken yeni: tam32 = ((v>>20)&4095) olarak tam32;
+            eğer yeni != 0 ve (yeni < 256 veya (yeni&3) != 0) { ekran_cift_yaz("KABUK HATA PCI genis yetenek zinciri"); ofs=0; }
+            değilse { ofs=yeni; }
+        }
+    }
+}
+işlev kd_pci_tani() {
+    değişken aygitlar: Dizi<metin> = [];
+    kd_pci_rapor(aygitlar); için satir: aygitlar { ekran_cift_yaz(satir); }
+    için bdf: kem_pci_islevler() {
+        değişken a: tam64 = kem_ecam_adres(bdf,0);
+        eğer (kem_pci_oku32(bdf,8)>>16) == 1540 {
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi("KOPRU",bdf olarak tam64),kem_pci_oku32(bdf,24)&16777215));
+        }
+        eğer a != 0 { kd_pci_genis(bdf); }
+    }
+    güvensiz {
+        değişken i: tam64 = 0;
+        iken i < pci_bar_sayi {
+            değişken p: tam64 = pci_bar_tablo+i*40; değişken adr: tam64 = kem_mmio_oku64(p+24);
+            değişken tur: tam64 = kem_mmio_oku64(p+16);
+            değişken g: tam64 = 0; eğer (tur&1) == 0 ve adr != 0 { g=uefi_yaprak(adr); }
+            değişken m: metin = kd_tamsayi(kd_tamsayi(kd_tamsayi("BAR",kem_mmio_oku64(p)),kem_mmio_oku64(p+8)),tur);
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi(m,adr),kem_mmio_oku64(p+32)),g));
+            i=i+1;
+        }
+        // Kök aygıtın vendor/command yazmaçlarına doğal genişlikte port erişimi.
+        kem_port_yaz32(3320 olarak dtam16,kem_pci_adres(0,4));
+        değişken cmd: dtam16 = kem_port_oku16(3324 olarak dtam16);
+        kem_port_yaz16(3324 olarak dtam16,cmd);
+        kem_port_yaz32(3320 olarak dtam16,kem_pci_adres(0,0));
+        değişken vendor: dtam16 = kem_port_oku16(3324 olarak dtam16);
+        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("PORT16",(vendor olarak tam64)&65535),(cmd olarak tam64)&65535));
+    }
+    değişken taban: tam64 = kem_ecam_adres(0,0);
+    ekran_cift_yaz(kd_tamsayi("ECAM0",taban));
+    değişken ofs: tam32 = 0;
+    iken ofs < 256 {
+        değişken p: tam64 = kem_cf8_oku32(0,ofs);
+        değişken e: tam64 = kem_pci_oku32(0,ofs);
+        ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi("CFG",ofs olarak tam64),p),e)); ofs=ofs+4;
     }
 }
 işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal,yol: metin) -> sonuç<mantıksal,metin> {
@@ -1308,6 +1352,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         tr.us=bm_esit(arg,"us"); ver tamam(doğru);
     }
     eğer bm_esit(cmd,"echo") { ekran_cift_yaz(arg); ver tamam(doğru); }
+    eğer bm_esit(cmd,"pci") { kd_pci_tani(); ver tamam(doğru); }
     eğer bm_esit(cmd,"diskler") { kd_diskler(d); ver tamam(doğru); }
     eğer bm_esit(cmd,"saat") {
         eşleş rtc_oku() { hata(e) => { ver hata(e); } tamam(a) => {

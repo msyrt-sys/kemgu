@@ -11,10 +11,11 @@ from surec_kahin import SurecConsole
 
 
 def tekrar(c, sure, alt, ust):
-    c.key('a',True)
+    # QEMU basma ve bırakmayı kendi sanal saatinde programlar. Host iki QMP
+    # çağrısı arasında bekletilirse tuşun basılı süresi uzamaz.
     ilk = c.sayi('kap_lapic_tik')
-    wait_for(c.p, lambda: c.sayi('kap_lapic_tik')-ilk >= sure)
-    c.key('a',False)
+    c.q.call('send-key', {'keys':[{'type':'qcode','data':'a'}], 'hold-time':sure*10})
+    wait_for(c.p, lambda: c.sayi('kap_lapic_tik')-ilk >= sure+3 and int.from_bytes(c.mem(c.symbols['kt_kod'],4),'little') == 0)
     # Komut öneki de tekrarlanabilir. Basılı tuşun etkisini doğrudan giriş satırından say.
     font = font_yukle()
     fw, fh = font[1][:2]
