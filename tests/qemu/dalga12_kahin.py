@@ -55,7 +55,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -63,18 +63,24 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
     shutil.copy('/usr/share/OVMF/OVMF_VARS_4M.fd',w/'dalga12-vars.fd')
     aygitlar = {"usb": usb.disk, "nvme": nvme.disk, "sata": sata.disk}
     aygitlar["usb"], aygitlar[acilis] = aygitlar[acilis], usb.disk
-    cmd = ['qemu-system-x86_64','-M','q35','-m',ram,'-vga','std','-display','none','-no-reboot',
+    cmd = ['qemu-system-x86_64','-M','q35' if i8042 else 'q35,i8042=off','-m',ram,'-vga','std','-display','none','-no-reboot',
            '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
            '-device','isa-debug-exit,iobase=0xf4,iosize=0x04',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
+    if klavye_izi:
+        cmd.extend(['-trace', 'enable=ps2_set_ledstate',
+                    '-trace', 'enable=ps2_write_keyboard'])
     if not sata_takili:
         cmd.append('-nodefaults')
     if xhci:
         cmd.extend(['-device','qemu-xhci,id=x'])
         if klavye == 'usb':
-            cmd.extend(['-device','usb-kbd,bus=x.0'])
+            aygit = 'usb-kbd,bus=x.0'
+            if klavye_izi:
+                aygit += f',pcap={w}/klavye.pcap'
+            cmd.extend(['-device',aygit])
     for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'), ('nvme','nvme,serial=dalga12'),
                       ('sata','ide-hd,bus=ide.0')]:
         if (ad == 'usb' and not xhci) or (ad == 'sata' and not sata_takili):

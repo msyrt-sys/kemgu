@@ -30,6 +30,14 @@
     eğer değil ps2_yaz(96,v) { ver yanlış; }
     ver ps2_yanit() == 250; // QEMU ölçümü: ACK=0xfa (Python int('fa',16)).
 }
+// 256 sınanmamış, -2 zaman aşımı; diğer değerler denetleyicinin ham yanıtıdır.
+küresel değişken ps2_oztest: tam32 = 256;
+küresel değişken ps2_port1: tam32 = 256;
+küresel değişken ps2_port2: tam32 = 256;
+çıplak işlev ps2_denetle(komut: tam32) -> tam32 {
+    eğer değil ps2_yaz(100,komut) { ver -2; }
+    değişken b: tam32 = ps2_yanit(); eğer b < 0 { ver -2; } ver b;
+}
 çıplak işlev ps2_kur() -> tam32 {
     eğer değil ps2_yaz(100,173) veya değil ps2_yaz(100,167) { ver -1; }
     değişken i: tam32 = 0;
@@ -38,10 +46,16 @@
     }
     eğer değil ps2_yaz(100,32) { ver -2; }
     değişken c: tam32 = ps2_yanit(); eğer c < 0 { ver -3; }
+    ps2_oztest=ps2_denetle(170);
+    eğer ps2_oztest != 85 { ver -10; }
+    ps2_port1=ps2_denetle(171); ps2_port2=ps2_denetle(169);
+    eğer ps2_port1 != 0 { ver -11; }
     // IRQ kapalı, klavye saati açık, AUX kapalı, set2→set1 çevirisi açık.
     c=(c|96)&236;
     eğer değil ps2_yaz(100,96) veya değil ps2_yaz(96,c) veya değil ps2_yaz(100,174) { ver -4; }
-    eğer değil ps2_komut(240) veya değil ps2_komut(2) veya değil ps2_komut(244) { ver -5; }
+    eğer değil ps2_komut(240) veya değil ps2_komut(2) { ver -5; }
+    // En yavaş donanım ayarı. Ortak yazılım tekrarı 500/50 ms üretir.
+    eğer değil ps2_komut(243) veya değil ps2_komut(127) veya değil ps2_komut(244) { ver -5; }
     eğer değil ps2_yaz(100,32) { ver -6; }
     değişken geri: tam32 = ps2_yanit();
     eğer geri < 0 veya (geri&64) == 0 { ver -7; }
@@ -70,6 +84,9 @@ gerçekzamanlı çıplak işlev kdl_ps2_irq(irq: tam64) {
  eğer ((s olarak tam32)&1) == 0 { ver; }
  değişken b: dtam8 = 0;
  güvensiz { satıriçi_asm { mimari:x86_64 çevrim:1024 şablon:r#"inb $$96, %al"# çıktı("={ax}",&b) bozulan("~{memory}") } }
+ ps2_halka_koy(s,b);
+}
+gerçekzamanlı çıplak işlev ps2_halka_koy(s: dtam8,b: dtam8) {
  değişken t: tam64 = ps2_irq_klavye;
  eğer ((s olarak tam32)&32) != 0 { t=ps2_irq_fare; }
  eğer ((s olarak tam32)&192) != 0 veya t == 0 { ps2_irq_hata=ps2_irq_hata+1;ver; }
@@ -81,6 +98,39 @@ gerçekzamanlı çıplak işlev kdl_ps2_irq(irq: tam64) {
  }
  değişken hucre: *dtam8 = (t+24+son) olarak *dtam8; *hucre=b;
  *wp=yeni; // Bayt yazımı tamamlandıktan sonra yayımla.
+}
+// LED yanıtı beklenirken gelen tarama/fare baytları da normal halkalarına yazılır.
+çıplak işlev ps2_led_komut(v: tam32) -> mantıksal {
+    değişken tekrar: tam32 = 0;
+    iken tekrar < 3 {
+        eğer değil ps2_yaz(96,v) { ver yanlış; }
+        değişken i: tam32 = 0;
+        değişken yeniden: mantıksal = yanlış;
+        iken i < 200 ve değil yeniden {
+            değişken s: dtam8 = kem_port_oku8(100 olarak dtam16);
+            eğer ((s olarak tam32)&1) != 0 {
+                değişken b: dtam8 = kem_port_oku8(96 olarak dtam16);
+                eğer ((s olarak tam32)&224) == 0 {
+                    eğer (b olarak tam32) == 250 { ver doğru; }
+                    eğer (b olarak tam32) == 254 { yeniden=doğru; }
+                }
+                eğer değil yeniden { ps2_halka_koy(s,b); }
+            }
+            kem_bekle_us(50); i=i+1;
+        }
+        eğer i >= 200 { ver yanlış; }
+        tekrar=tekrar+1;
+    }
+    ver yanlış;
+}
+çıplak işlev ps2_led_yaz(maske: tam32) -> mantıksal {
+    değişken bayrak: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+popq $0
+cli"# çıktı("=r",&bayrak) bozulan("~{memory}") } }
+    değişken ok: mantıksal = ps2_led_komut(237) ve ps2_led_komut(maske);
+    eğer (bayrak&512) != 0 { kz_irq_ac(); }
+    ver ok;
 }
 çıplak işlev ps2_halka_yeni() -> tam64 {
  değişken t: tam64 = malloc(1048) olarak tam64;
@@ -139,6 +189,7 @@ küresel değişken ps2_paket_kimligi: tam32 = 0;
 çıplak işlev ps2_kesme_kur() -> tam32 {
  kg_irq_kapat();
  eğer ps2_kur() < 0 { kz_irq_ac();ver -1; }
+ eğer ps2_port2 != 0 { kz_irq_ac();ver -12; }
  eğer değil ps2_yaz(100,173) veya değil ps2_yaz(100,168) { kz_irq_ac();ver -2; }
  eğer değil ps2_aux_komut(246) { kz_irq_ac();ver -3; }
  // IntelliMouse dizisini tanımayan standart fare kimlik 0 ile devam eder.

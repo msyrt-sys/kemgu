@@ -2,6 +2,8 @@
 genel yapı KlavyeDurumu {
     sol_shift: mantıksal; sag_shift: mantıksal; ctrl: mantıksal; alt: mantıksal;
     altgr: mantıksal; caps: mantıksal; e0: mantıksal;
+    num: mantıksal; scroll: mantıksal; us: mantıksal;
+    kilit_basili: tam32; dizi_adimi: tam32; kisayol_basili: mantıksal; basili: Dizi<tam32>;
 }
 genel çeşit TusOlayi { Yok, Karakter(tam32), Ozel(tam32, mantıksal) }
 genel sabit OZEL_ENTER: tam32 = 1;
@@ -15,17 +17,58 @@ genel sabit OZEL_SAG: tam32 = 8;
 genel sabit OZEL_SIL: tam32 = 9;
 
 genel işlev klavye_yeni() -> KlavyeDurumu {
+    değişken basili: Dizi<tam32> = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
     ver KlavyeDurumu { sol_shift: yanlış, sag_shift: yanlış, ctrl: yanlış,
-        alt: yanlış, altgr: yanlış, caps: yanlış, e0: yanlış };
+        alt: yanlış, altgr: yanlış, caps: yanlış, e0: yanlış, num: yanlış, scroll: yanlış, us: yanlış, kilit_basili: 0, dizi_adimi: 0, kisayol_basili: yanlış, basili: basili };
 }
 
-genel işlev klavye_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi {
-    eğer b < 0 veya b > 255 { d.e0 = yanlış; ver TusOlayi::Yok; }
-    eğer b == 224 { d.e0 = doğru; ver TusOlayi::Yok; }
-    değişken uzatilmis: mantıksal = d.e0;
-    d.e0 = yanlış;
-    değişken basildi: mantıksal = b < 128;
-    değişken k: tam32 = b & 127;
+// Bit 8 E0, bit 7 bırakma; Pause'un ayrı bir bırakma kodu yoktur.
+işlev klavye_tarama(d: &değişken KlavyeDurumu,b: tam32) -> tam32 {
+    eğer b < 1 veya b >= 255 { d.e0=yanlış; d.dizi_adimi=0; ver -1; }
+    değişken a: tam32 = d.dizi_adimi;
+    eğer a != 0 {
+        değişken beklenen: tam32 = 0;
+        eğer a == 1 { beklenen=29; }
+        eğer a == 2 { beklenen=69; }
+        eğer a == 3 { beklenen=225; }
+        eğer a == 4 { beklenen=157; }
+        eğer a == 5 { beklenen=197; }
+        eğer b == beklenen {
+            d.dizi_adimi=a+1;
+            eğer a == 5 { d.dizi_adimi=0; ver 581; }
+            ver -1;
+        }
+        // Yarım Pause dizisini bırak, uyuşmayan baytı yeni tuş olarak çöz.
+        d.dizi_adimi=0;
+    }
+    eğer b == 225 { d.e0=yanlış; d.dizi_adimi=1; ver -1; }
+    eğer b == 224 { d.e0=doğru; ver -1; }
+    eğer d.e0 {
+        d.e0=yanlış;
+        // PrintScreen ve bazı gezinme dizilerindeki yapay Shift geçişleri.
+        eğer (b&127) == 42 { ver -1; }
+        ver b|256;
+    }
+    ver b;
+}
+genel işlev klavye_led(d: &değişken KlavyeDurumu,usb: mantıksal) -> tam32 {
+    değişken m: tam32 = 0;
+    eğer d.caps { eğer usb { m=2; } değilse { m=4; } }
+    eğer d.scroll { eğer usb { m=m|4; } değilse { m=m|1; } }
+    eğer d.num { eğer usb { m=m|1; } değilse { m=m|2; } }
+    ver m;
+}
+işlev klavye_gezinme(k: tam32) -> mantıksal {
+    ver k >= 71 ve k <= 83 ve k != 74 ve k != 78;
+}
+işlev klavye_olayi(d: &değişken KlavyeDurumu,t: tam32) -> TusOlayi {
+    eğer t < 0 { ver TusOlayi::Yok; }
+    eğer t == 581 { ver TusOlayi::Ozel(10,doğru); }
+    değişken uzatilmis: mantıksal = (t&256) != 0;
+    değişken basildi: mantıksal = (t&128) == 0;
+    değişken k: tam32 = t&127;
+    eğer t == 311 veya t == 439 { ver TusOlayi::Ozel(11,basildi); }
+    eğer değil d.num ve klavye_gezinme(k) { uzatilmis=doğru; }
     eğer k == 29 { d.ctrl = basildi; ver TusOlayi::Yok; }
     eğer k == 56 {
         eğer uzatilmis { d.altgr = basildi; } değilse { d.alt = basildi; }
@@ -44,8 +87,16 @@ genel işlev klavye_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi {
     }
     eğer k == 42 { d.sol_shift = basildi; ver TusOlayi::Yok; }
     eğer k == 54 { d.sag_shift = basildi; ver TusOlayi::Yok; }
-    eğer k == 58 {
-        eğer basildi { d.caps = değil d.caps; }
+    değişken bit: tam32 = 0;
+    eğer k == 58 { bit=4; } eğer k == 69 { bit=2; } eğer k == 70 { bit=1; }
+    eğer bit != 0 {
+        eğer basildi ve (d.kilit_basili&bit) == 0 {
+            eğer k == 58 { d.caps=değil d.caps; }
+            eğer k == 69 { d.num=değil d.num; }
+            eğer k == 70 { d.scroll=değil d.scroll; }
+        }
+        eğer basildi { d.kilit_basili=d.kilit_basili|bit; }
+        değilse { d.kilit_basili=d.kilit_basili&(7-bit); }
         ver TusOlayi::Yok;
     }
     eğer k == 28 { ozel = OZEL_ENTER; }
@@ -56,9 +107,89 @@ genel işlev klavye_bayt(d: &değişken KlavyeDurumu, b: tam32) -> TusOlayi {
     eğer değil basildi { ver TusOlayi::Yok; }
     ver klavye_karakter(d,k);
 }
+genel işlev klavye_bayt(d: &değişken KlavyeDurumu,b: tam32) -> TusOlayi {
+    değişken tarama: tam32 = klavye_tarama(d,b);
+    ver klavye_olayi(d,tarama);
+}
 işlev klavye_karakter(d: &değişken KlavyeDurumu,k: tam32) -> TusOlayi {
     değişken shift: mantıksal = d.sol_shift veya d.sag_shift;
     değişken buyuk: mantıksal = shift != d.caps;
+    eğer k == 55 { ver TusOlayi::Karakter(42); }
+    eğer k == 74 { ver TusOlayi::Karakter(45); }
+    eğer k == 78 { ver TusOlayi::Karakter(43); }
+    eğer d.num ve k == 71 { ver TusOlayi::Karakter(55); }
+    eğer d.num ve k == 72 { ver TusOlayi::Karakter(56); }
+    eğer d.num ve k == 73 { ver TusOlayi::Karakter(57); }
+    eğer d.num ve k == 75 { ver TusOlayi::Karakter(52); }
+    eğer d.num ve k == 76 { ver TusOlayi::Karakter(53); }
+    eğer d.num ve k == 77 { ver TusOlayi::Karakter(54); }
+    eğer d.num ve k == 79 { ver TusOlayi::Karakter(49); }
+    eğer d.num ve k == 80 { ver TusOlayi::Karakter(50); }
+    eğer d.num ve k == 81 { ver TusOlayi::Karakter(51); }
+    eğer d.num ve k == 82 { ver TusOlayi::Karakter(48); }
+    eğer d.num ve k == 83 { ver TusOlayi::Karakter(46); }
+    eğer d.us {
+        eğer k == 3 { eğer shift { ver TusOlayi::Karakter(64); } ver TusOlayi::Karakter(50); }
+        eğer k == 4 { eğer shift { ver TusOlayi::Karakter(35); } ver TusOlayi::Karakter(51); }
+        eğer k == 5 { eğer shift { ver TusOlayi::Karakter(36); } ver TusOlayi::Karakter(52); }
+        eğer k == 7 { eğer shift { ver TusOlayi::Karakter(94); } ver TusOlayi::Karakter(54); }
+        eğer k == 8 { eğer shift { ver TusOlayi::Karakter(38); } ver TusOlayi::Karakter(55); }
+        eğer k == 9 { eğer shift { ver TusOlayi::Karakter(42); } ver TusOlayi::Karakter(56); }
+        eğer k == 10 { eğer shift { ver TusOlayi::Karakter(40); } ver TusOlayi::Karakter(57); }
+        eğer k == 11 { eğer shift { ver TusOlayi::Karakter(41); } ver TusOlayi::Karakter(48); }
+        eğer k == 12 { eğer shift { ver TusOlayi::Karakter(95); } ver TusOlayi::Karakter(45); }
+        eğer k == 13 { eğer shift { ver TusOlayi::Karakter(43); } ver TusOlayi::Karakter(61); }
+        eğer k == 23 { eğer buyuk { ver TusOlayi::Karakter(73); } ver TusOlayi::Karakter(105); }
+        eğer k == 26 { eğer shift { ver TusOlayi::Karakter(123); } ver TusOlayi::Karakter(91); }
+        eğer k == 27 { eğer shift { ver TusOlayi::Karakter(125); } ver TusOlayi::Karakter(93); }
+        eğer k == 39 { eğer shift { ver TusOlayi::Karakter(58); } ver TusOlayi::Karakter(59); }
+        eğer k == 40 { eğer shift { ver TusOlayi::Karakter(34); } ver TusOlayi::Karakter(39); }
+        eğer k == 41 { eğer shift { ver TusOlayi::Karakter(126); } ver TusOlayi::Karakter(96); }
+        eğer k == 51 { eğer shift { ver TusOlayi::Karakter(60); } ver TusOlayi::Karakter(44); }
+        eğer k == 52 { eğer shift { ver TusOlayi::Karakter(62); } ver TusOlayi::Karakter(46); }
+        eğer k == 53 { eğer shift { ver TusOlayi::Karakter(63); } ver TusOlayi::Karakter(47); }
+        eğer k == 43 { eğer shift { ver TusOlayi::Karakter(124); } ver TusOlayi::Karakter(92); }
+        eğer k == 86 { eğer shift { ver TusOlayi::Karakter(124); } ver TusOlayi::Karakter(92); }
+    } değilse eğer d.altgr ve değil d.ctrl ve değil d.alt {
+        eğer k == 2 { ver TusOlayi::Karakter(62); }
+        eğer k == 3 { ver TusOlayi::Karakter(163); }
+        eğer k == 4 { ver TusOlayi::Karakter(35); }
+        eğer k == 5 { ver TusOlayi::Karakter(36); }
+        eğer k == 6 { ver TusOlayi::Karakter(189); }
+        eğer k == 7 { ver TusOlayi::Karakter(190); }
+        eğer k == 8 { ver TusOlayi::Karakter(123); }
+        eğer k == 9 { ver TusOlayi::Karakter(91); }
+        eğer k == 10 { ver TusOlayi::Karakter(93); }
+        eğer k == 11 { ver TusOlayi::Karakter(125); }
+        eğer k == 12 { ver TusOlayi::Karakter(92); }
+        eğer k == 13 { ver TusOlayi::Karakter(124); }
+        eğer k == 16 { ver TusOlayi::Karakter(64); }
+        eğer k == 18 { ver TusOlayi::Karakter(8364); }
+        eğer k == 20 { ver TusOlayi::Karakter(8378); }
+        eğer k == 22 { ver TusOlayi::Karakter(251); }
+        eğer k == 23 { ver TusOlayi::Karakter(238); }
+        eğer k == 24 { ver TusOlayi::Karakter(244); }
+        eğer k == 27 { ver TusOlayi::Karakter(126); }
+        eğer k == 30 { ver TusOlayi::Karakter(226); }
+        eğer k == 31 { ver TusOlayi::Karakter(223); }
+        eğer k == 33 { ver TusOlayi::Karakter(170); }
+        eğer k == 39 { ver TusOlayi::Karakter(180); }
+        eğer k == 40 { ver TusOlayi::Karakter(39); }
+        eğer k == 41 { ver TusOlayi::Karakter(60); }
+        eğer k == 43 { ver TusOlayi::Karakter(96); }
+        eğer k == 51 { ver TusOlayi::Karakter(215); }
+        eğer k == 52 { ver TusOlayi::Karakter(183); }
+        eğer k == 86 { ver TusOlayi::Karakter(124); }
+        eğer k == 19 { ver TusOlayi::Karakter(182); }
+        eğer k == 21 { ver TusOlayi::Karakter(8592); }
+        eğer k == 44 { ver TusOlayi::Karakter(171); }
+        eğer k == 45 { ver TusOlayi::Karakter(187); }
+        eğer k == 46 { ver TusOlayi::Karakter(162); }
+        eğer k == 47 { ver TusOlayi::Karakter(8222); }
+        eğer k == 48 { ver TusOlayi::Karakter(8220); }
+        eğer k == 49 { ver TusOlayi::Karakter(8221); }
+        eğer k == 50 { ver TusOlayi::Karakter(181); }
+    }
     eğer k == 41 { eğer shift { ver TusOlayi::Karakter(233); } ver TusOlayi::Karakter(34); }
     eğer k == 2 { eğer shift { ver TusOlayi::Karakter(33); } ver TusOlayi::Karakter(49); }
     eğer k == 3 { eğer shift { ver TusOlayi::Karakter(39); } ver TusOlayi::Karakter(50); }
@@ -123,14 +254,31 @@ genel işlev klavye_degistiriciler(d: &değişken KlavyeDurumu) -> tam32 {
     ver m;
 }
 genel işlev klavye_ham_bayt(d: &değişken KlavyeDurumu,b: tam32) -> seçimlik<TusHamOlay> {
-    değişken e0: mantıksal = d.e0;
-    değişken olay: TusOlayi = klavye_bayt(d,b);
-    eğer b < 1 veya b >= 255 veya b == 224 veya b == 225 { ver hiç; }
-    değişken kod: tam32 = b&127;
+    değişken t: tam32 = klavye_tarama(d,b);
+    eğer t < 0 { ver hiç; }
+    // Yalnız fiziksel geçişleri yayımla. İkinci bir tuş basılıyken de ilk
+    // tuşun donanım tekrarları yazılım tekrarına karışamaz. Pause tek atımlıdır.
+    eğer t != 581 {
+        değişken fiziksel: tam32 = t&383;
+        değişken i: tam32 = fiziksel/32;
+        değişken bit: tam32 = 1<<(fiziksel%32);
+        değişken eski: tam32 = dizi_al(d.basili,i);
+        eğer (t&128) == 0 {
+            eğer (eski&bit) != 0 { ver hiç; }
+            dizi_yaz(d.basili,i,eski|bit);
+        } değilse { dizi_yaz(d.basili,i,eski^(eski&bit)); }
+    }
+    eğer t == 57 ve (d.ctrl veya d.kisayol_basili) {
+        eğer değil d.kisayol_basili { d.us=değil d.us; d.kisayol_basili=doğru; }
+        ver hiç;
+    }
+    eğer t == 185 ve d.kisayol_basili { d.kisayol_basili=yanlış; ver hiç; }
+    değişken olay: TusOlayi = klavye_olayi(d,t);
+    değişken kod: tam32 = t&895;
     değişken bas: tam32 = 1;
-    eğer b >= 128 { bas=0; }
-    eğer e0 { kod=kod|256; }
-    değilse eğer bas == 0 { olay=klavye_karakter(d,kod); }
+    eğer (t&128) != 0 { bas=0; }
+    eğer kod < 128 ve değil d.num ve klavye_gezinme(kod) { kod=kod|256; }
+    eğer kod < 128 ve bas == 0 { olay=klavye_karakter(d,kod); }
     değişken un: tam32 = 0;
     eşleş olay { TusOlayi::Karakter(x) => { un=x; } _ => { } }
     ver değer(TusHamOlay { kod:kod,unicode:un,bas:bas,degistirici:klavye_degistiriciler(d) });

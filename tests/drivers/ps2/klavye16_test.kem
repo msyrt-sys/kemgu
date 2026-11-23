@@ -1,0 +1,70 @@
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusHamOlay, klavye_yeni, klavye_ham_bayt, klavye_led };
+
+// Set 1 baytları: Python bytes.fromhex("e1 1d 45 e1 9d c5"). Kod bitleri E0=1<<8, E1=1<<9.
+işlev sessiz(d: &değişken KlavyeDurumu,b: tam32) -> mantıksal {
+    eşleş klavye_ham_bayt(d,b) { hiç => { ver doğru; } değer(v) => { ver yanlış; } }
+}
+işlev tus(d: &değişken KlavyeDurumu,b: tam32,kod: tam32,bas: tam32,u: tam32) -> mantıksal {
+    eşleş klavye_ham_bayt(d,b) { hiç => { ver yanlış; }
+        değer(o) => { ver o.kod == kod ve o.bas == bas ve o.unicode == u; }
+    }
+}
+işlev test_diziler() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    değişken on: Dizi<tam32> = [225,29,69,225,157];
+    için b: on { eğer değil sessiz(&değişken d,b) { ver yanlış; } }
+    eğer değil tus(&değişken d,197,581,1,0) veya d.ctrl veya d.num { ver yanlış; }
+    // Her eksik önekten sonra bağımsız 'a' kaybolmadan okunur.
+    değişken n: tam32 = 1;
+    iken n <= 5 {
+        değişken i: tam32 = 0;
+        iken i < n { eğer değil sessiz(&değişken d,dizi_al(on,i)) { ver yanlış; } i=i+1; }
+        eğer değil tus(&değişken d,30,30,1,97) veya d.ctrl veya d.num { ver yanlış; }
+        klavye_ham_bayt(&değişken d,158); n=n+1;
+    }
+    değişken s: Dizi<tam32> = [224,42,224];
+    için b: s { eğer değil sessiz(&değişken d,b) { ver yanlış; } }
+    eğer değil tus(&değişken d,55,311,1,0) veya d.sol_shift { ver yanlış; }
+    eğer değil sessiz(&değişken d,224) veya değil tus(&değişken d,183,311,0,0) { ver yanlış; }
+    ver sessiz(&değişken d,224) ve sessiz(&değişken d,170) ve değil d.sol_shift;
+}
+işlev test_kilitler() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil tus(&değişken d,72,328,1,0) { ver yanlış; }
+    klavye_ham_bayt(&değişken d,200);
+    klavye_ham_bayt(&değişken d,69); klavye_ham_bayt(&değişken d,69);
+    eğer değil tus(&değişken d,72,72,1,56) veya klavye_led(&değişken d,doğru) != 1 veya klavye_led(&değişken d,yanlış) != 2 { ver yanlış; }
+    klavye_ham_bayt(&değişken d,197); klavye_ham_bayt(&değişken d,69);
+    klavye_ham_bayt(&değişken d,58); klavye_ham_bayt(&değişken d,70);
+    ver klavye_led(&değişken d,doğru) == 6 ve klavye_led(&değişken d,yanlış) == 5;
+}
+işlev test_duzen() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    klavye_ham_bayt(&değişken d,224); klavye_ham_bayt(&değişken d,56);
+    // Python list(map(ord, "@€{}[]\\|~")).
+    değişken kodlar: Dizi<tam32> = [16,18,8,11,9,10,12,13,27];
+    değişken beklenen: Dizi<tam32> = [64,8364,123,125,91,93,92,124,126];
+    değişken i: tam32 = 0;
+    için k: kodlar { eğer değil tus(&değişken d,k,k,1,dizi_al(beklenen,i)) { ver yanlış; } klavye_ham_bayt(&değişken d,k+128); i=i+1; }
+    klavye_ham_bayt(&değişken d,224); klavye_ham_bayt(&değişken d,184);
+    klavye_ham_bayt(&değişken d,29);
+    eğer değil sessiz(&değişken d,57) veya değil sessiz(&değişken d,57) veya değil d.us { ver yanlış; }
+    klavye_ham_bayt(&değişken d,157);
+    eğer değil sessiz(&değişken d,185) veya değil tus(&değişken d,23,23,1,105) { ver yanlış; }
+    klavye_ham_bayt(&değişken d,42);
+    ver tus(&değişken d,3,3,1,64);
+}
+işlev test_fiziksel_tekrar() -> mantıksal {
+    değişken d: KlavyeDurumu = klavye_yeni();
+    eğer değil tus(&değişken d,30,30,1,97) veya değil tus(&değişken d,48,48,1,98) { ver yanlış; }
+    eğer değil sessiz(&değişken d,30) veya değil sessiz(&değişken d,48) { ver yanlış; }
+    klavye_ham_bayt(&değişken d,158);
+    ver tus(&değişken d,30,30,1,97);
+}
+işlev main() -> tam32 {
+    eğer değil test_fiziksel_tekrar() { yazdir_metin("fiziksel tus tekrari"); ver 4; }
+    eğer değil test_diziler() { yazdir_metin("Pause/PrintScreen dizisi"); ver 1; }
+    eğer değil test_kilitler() { yazdir_metin("kilit ve LED"); ver 2; }
+    eğer değil test_duzen() { yazdir_metin("duzen ve AltGr"); ver 3; }
+    ver 0;
+}

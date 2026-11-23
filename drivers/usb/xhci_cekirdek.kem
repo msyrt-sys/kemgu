@@ -52,16 +52,25 @@ işlev ctrl_ekle(s: &değişken XhciDurum, b: Dizi<dtam8>) -> sonuç<mantıksal,
     eşleş xhci_uret(&değişken s.ctrl,b) { hata(e) => { ver hata(e); } tamam(xs) => { için x: xs { ekle(s,GcIstek::BellekYaz(x.adres,x.baytlar)); } } }
     ver tamam(doğru);
 }
-işlev kontrol_kur(s: &değişken XhciDurum, paket: Dizi<dtam8>, sonraki: tam32) -> sonuç<mantıksal,metin> {
+işlev kontrol_veri_kur(s: &değişken XhciDurum, paket: Dizi<dtam8>, veri: Dizi<dtam8>, sonraki: tam32) -> sonuç<mantıksal,metin> {
     eğer dizi_boyut(paket) != 8 { ver hata("xhci setup boyu"); }
     s.boy=oku_le16(paket,6); s.giris=(oku_u8(paket,0)&128) != 0;
-    eğer s.boy > 4096 veya (s.boy > 0 ve değil s.giris) { ver hata("xhci kontrol veri destegi"); }
+    eğer s.boy > 4096 veya (değil s.giris ve s.boy != dizi_boyut(veri)) veya (s.giris ve dizi_boyut(veri) != 0) { ver hata("xhci kontrol veri boyu"); }
+    değişken tampon: tam64 = s.ddma+65536;
+    eğer değil s.giris ve s.boy > 0 {
+        // EP0 OUT, eşzamanlı HID IN tamponunu paylaşmaz.
+        tampon=s.ddma+32768;
+        ekle(s,GcIstek::BellekYaz(tampon,veri));
+    }
     eşleş xhci_setup(paket,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } }
-    eğer s.boy > 0 { eşleş xhci_data(s.ddma+65536,s.boy,doğru,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } } }
+    eğer s.boy > 0 { eşleş xhci_data(tampon,s.boy,s.giris,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } } }
     eşleş xhci_status(s.boy == 0 veya değil s.giris,doğru) { hata(e) => { ver hata(e); } tamam(v) => { eşleş ctrl_ekle(s,v) { hata(e) => { ver hata(e); } tamam(x) => { } } } }
     ekle(s,GcIstek::Yaz32(s.c.dboff+(s.yuva olarak tam64)*4,1));
     s.ctrl_dongu=s.ctrl.dongu; s.bek_tur=32; s.bek_uc=1; s.sonra=sonraki; s.evre=900; s.bekleme=0; s.sonuc=[];
     ver tamam(doğru);
+}
+işlev kontrol_kur(s: &değişken XhciDurum, paket: Dizi<dtam8>, sonraki: tam32) -> sonuç<mantıksal,metin> {
+    değişken bos: Dizi<dtam8> = []; ver kontrol_veri_kur(s,paket,bos,sonraki);
 }
 işlev tanim_iste(s: &değişken XhciDurum, tur: tam32, boy: tam32, sonra: tam32) -> sonuç<mantıksal,metin> {
     eşleş usb_get_descriptor(tur,0,0,boy) { hata(e) => { ver hata(e); } tamam(b) => { ver kontrol_kur(s,b,sonra); } }
@@ -267,6 +276,9 @@ işlev aygit_sec(s: &değişken XhciDurum, indeks: tam32) -> sonuç<XhciAygit,me
 }
 genel işlev xhci_kontrol(s: &değişken XhciDurum, indeks: tam32, paket: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     eşleş aygit_sec(s,indeks) { hata(e) => { ver hata(e); } tamam(a) => { ver kontrol_kur(s,paket,85); } }
+}
+genel işlev xhci_kontrol_yaz(s: &değişken XhciDurum,indeks: tam32,paket: Dizi<dtam8>,veri: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
+    eşleş aygit_sec(s,indeks) { hata(e) => { ver hata(e); } tamam(a) => { ver kontrol_veri_kur(s,paket,veri,85); } }
 }
 // QEMU ölçümü: önceki Link cycle korunur; ISP kısa IN paketini CC13 ile bildirir.
 // Python: IOC|ISP = (1<<5)|(1<<2) = 36; Link TC = 1<<1 = 2.

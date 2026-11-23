@@ -8,6 +8,8 @@ işlev var_mi(b: Dizi<dtam8>, k: tam32, son: tam32) -> mantıksal { değişken i
 işlev olay(d: &değişken KlavyeDurumu, k: tam32, bas: mantıksal) -> TusOlayi {
     değişken o: tam32 = 0;
     eğer k == 79 { o=8; } eğer k == 80 { o=7; } eğer k == 81 { o=6; } eğer k == 82 { o=5; } eğer k == 76 { o=9; }
+    eğer k == 70 { o=11; }
+    eğer k == 72 { eğer bas { o=10; } değilse { ver TusOlayi::Yok; } }
     eğer o != 0 { ver TusOlayi::Ozel(o,bas); }
     değişken s: tam32 = hid_set1(k); eğer s == 0 { ver TusOlayi::Yok; } eğer değil bas { s=s|128; } ver klavye_bayt(d,s);
 }
@@ -54,6 +56,9 @@ genel işlev hid_klavye_rapor(h: &değişken HidKlavye,d: &değişken KlavyeDuru
     ver tamam(xs);
 }
 işlev hid_ham_ozel(k: tam32) -> tam32 {
+    eğer k == 70 { ver 311; } eğer k == 72 { ver 581; }
+    eğer k == 84 { ver 309; } eğer k == 88 { ver 284; }
+    eğer k == 73 { ver 338; }
     eğer k == 74 { ver 327; } eğer k == 77 { ver 335; }
     eğer k == 75 { ver 329; } eğer k == 78 { ver 337; }
     eğer k == 79 { ver 333; } eğer k == 80 { ver 331; }
@@ -82,7 +87,10 @@ genel işlev hid_klavye_ham_rapor(h: &değişken HidKlavye,d: &değişken Klavye
         değişken o: tam32 = hid_ham_ozel(k.kod);
         eğer o != 0 {
             değişken bas: tam32 = 0; eğer k.bas { bas=1; }
-            dizi_ekle(xs,TusHamOlay {kod:o,unicode:0,bas:bas,degistirici:klavye_degistiriciler(d)});
+            eğer o != 581 veya k.bas {
+                değişken un: tam32 = 0; eğer o == 309 { un=47; }
+                dizi_ekle(xs,TusHamOlay {kod:o,unicode:un,bas:bas,degistirici:klavye_degistiriciler(d)});
+            }
         } değilse {
             değişken s: tam32 = hid_set1(k.kod);
             eğer s != 0 {
