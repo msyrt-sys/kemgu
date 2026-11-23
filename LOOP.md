@@ -3077,4 +3077,16 @@
   ölçülmedi). Atlama satırlarının tamamı önceden kayıtlı küratörlü sınıflar (bare-metal MMIO, yabancı-mimari, oracle-link,
   kem_os ≤1 GiB); yeni atlama yok. AÇIK: E4k heap (boru oturumu +10,5 MB), C UART çalışma zamanında sınırsız LSR beklemeleri
   (16550/PL011 — Codex'in izni dışında), fiziksel PC denemesi.
+- 2026-11-23 D-766: Codex dalga 16 promptu (otomasyon/chatgpt/CODEX_GOREV_16.md) — on üç bölüm, hepsi zorunlu, kısmi yol
+  haritası maddelerini kapıyla tamamlar: (1) klavye H5a/c/d/e/f/h/i/j (8042 öz-test, Pause, Num Lock + LED, TR↔US, 0xF3,
+  Ctrl+C, AltGr kanıtı, halka taşması sayacı), (2) PCI H1f/H7a/b/c (16 bit port, MCFG/ECAM, köprü arkası, BAR + UC),
+  (3) kesme kayıt arayüzü + AHCI MSI (H1g/H7d/H3h), (4) disk hata kurtarma H7e (QEMU blkdebug; doğru sözdizimi
+  image.driver=file — Claude ölçtü), (5) USB hub H10e (iki seviye, sıcak takma), (6) ESP'den ramdisk + /ram (H7h UEFI
+  karşılığı, H7j, H8a; boot/efi'ye dokunmadan), (7) ACPI S5 (AML'siz _S5_ tarama, QMP SHUTDOWN), (8) PAT/WC H4b,
+  (9) bulanıklaştırma H12b genişlemesi (PS/2, USB/HID/hub tanımlayıcıları, xHCI TRB, MCFG, _S5_, LFN), (10) UART C TX
+  sınırları (izin genişletmesi, yalnız TX) + MMIO volatile IR/objdump kapısı H1h, (11) H1a derleme ölçümü (5k/10k/20k,
+  yalnız ölçüm; E4q Claude'da), (12) bilgi + duzenle arama/geri al + dosyalar kopyala/taşı/sil, (13) yol haritası +
+  sabotaj envanteri (dalga 9 öncesi dahil) + belgeler. ABI 71-89. "Her sabotajı gerçekten uygula, yapmadıysan yaz"
+  kuralı (dalga 15'te ELF sabotajı yapılmamıştı → S210). QEMU 8.2.2 aygıtları (usb-hub, pcie-root-port, pci-bridge)
+  ve tüm kapı adları kaynakta doğrulandı.
 
