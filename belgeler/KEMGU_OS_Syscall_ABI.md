@@ -45,6 +45,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 65 | fare_bekle | 1 | 48 baytlık fare tamponu | 0 | x86_64 |
 | 66 | olay_bekle | 3 | 56 baytlık olay tamponu, maske, ms | 0 | x86_64 |
 | 67 | onplan_baslat | 2 | Program yolu ve baslat ile aynı argv | Çocuk PID, -13 ön plan gerekli | x86_64 |
+| 68 | piksel_satiri | 3 | Piksel y, u32 RGB dizi adresi, piksel sayısı | 0, -22 sınır, -14 adres, -13 ön plan | x86_64 |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 

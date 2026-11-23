@@ -75,3 +75,5 @@ yapı SisHucreMetni { adres: tam64; on: tam64; arka: tam64; }
 çıplak işlev sis_bayt_koy(p: tam64,v: tam32) { değişken b: *dtam8 = p olarak *dtam8; *b=v olarak dtam8; }
 
 çıplak işlev sis_onplan_baslat(yol: metin,argv: tam64) -> tam64 { ver sis_cagir(67,sis_metin_adres(yol),argv,0); }
+
+çıplak işlev sis_piksel_satiri(y: tam64,renkler: tam64,adet: tam64) -> tam64 { ver sis_cagir(68,y,renkler,adet); }

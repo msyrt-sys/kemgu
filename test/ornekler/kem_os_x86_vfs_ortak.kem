@@ -82,6 +82,7 @@ sabit KX_SIS_EKRAN_BILGI: tam64 = 61;
 sabit KX_SIS_EKRAN_YAZ: tam64 = 62;
 sabit KX_SIS_EKRAN_TEMIZLE: tam64 = 63;
 sabit KX_SIS_IMLEC: tam64 = 64;
+sabit KX_SIS_PIKSEL_SATIRI: tam64 = 68;
 sabit KX_SIS_ONPLAN_BASLAT: tam64 = 67;
 sabit KX_SIS_FARE_BEKLE: tam64 = 65;
 sabit KX_SIS_OLAY_BEKLE: tam64 = 66;
@@ -629,6 +630,17 @@ işlev ksv_ekran_isle(num: tam64,a: tam64,c: tam64,d: tam64) -> tam64 {
             kxm_y64(a+16,ke.e.gen olarak tam64); kxm_y64(a+24,ke.e.yuk olarak tam64);
             ver 0;
         }
+        eğer num == 68 {
+            eğer a < 0 veya a >= (ke.e.yuk olarak tam64) veya d < 1 veya d > (ke.e.gen olarak tam64) { ver -22; }
+            eğer değil kxs_aralik(c,d*4,yanlış) { ver -14; }
+            değişken i: tam64 = 0;
+            iken i < d {
+                değişken renk: *dtam32 = (c+i*4) olarak *dtam32;
+                kem_mmio_yaz32(ke.e.fb+a*ke.e.adim+i*4,((*renk) olarak tam64)&16777215);
+                i=i+1;
+            }
+            ksv_ekran_sahibi=kxs_pid; ver 0;
+        }
         eğer num == 63 {
             eğer a < 0 veya a > 16777215 { ver -22; }
             ksv_ekran_sahibi=kxs_pid; ksv_imlec_acik=0;
@@ -747,6 +759,7 @@ işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64
     eğer num == KX_SIS_EKRAN_BILGI { ver ksv_ekran_isle(num,a,0,0); }
     eğer num == KX_SIS_EKRAN_YAZ { ver ksv_ekran_isle(num,a,c,d); }
     eğer num == KX_SIS_EKRAN_TEMIZLE { ver ksv_ekran_isle(num,a,0,0); }
+    eğer num == KX_SIS_PIKSEL_SATIRI { ver ksv_ekran_isle(num,a,c,d); }
     eğer num == KX_SIS_IMLEC { ver ksv_ekran_isle(num,a,c,d); }
     eğer num == KX_SIS_FARE_BEKLE { ver ksv_olay(b,a,2,-1,65); }
     eğer num == KX_SIS_OLAY_BEKLE { ver ksv_olay(b,a,c,d,66); }

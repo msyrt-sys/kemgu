@@ -1,0 +1,54 @@
+// Ara işlemler tam64 ile yapılır. Her sonuç işaretli 32 bit aralığında kalır.
+yapı Ifade { metin_degeri: metin; yer: tam32; hata_iletisi: metin; }
+işlev hp_bak(s: &değişken Ifade) -> tam32 {
+    iken s.yer < metin_uzunluk(s.metin_degeri) {
+        değişken c: tam32 = metin_bayt(s.metin_degeri,s.yer) olarak tam32;
+        eğer c != 32 ve c != 9 { ver c; } s.yer=s.yer+1;
+    }
+    ver 0;
+}
+işlev hp_deger(s: &değişken Ifade,derin: tam32) -> tam64 {
+    eğer derin >= 32 { s.hata_iletisi="parantez siniri"; ver 0; }
+    değişken c: tam32 = hp_bak(s); değişken isaret: tam64 = 1;
+    eğer c == 45 veya c == 43 { eğer c == 45 { isaret=-1; } s.yer=s.yer+1; c=hp_bak(s); }
+    eğer c == 40 {
+        s.yer=s.yer+1;
+        değişken sonuc: tam64 = hp_islem(s,1,derin+1);
+        eğer hp_bak(s) != 41 { s.hata_iletisi="kapanis parantezi"; ver 0; }
+        s.yer=s.yer+1; ver sonuc*isaret;
+    }
+    eğer c < 48 veya c > 57 { s.hata_iletisi="sayi bekleniyor"; ver 0; }
+    değişken n: tam64 = 0;
+    iken s.yer < metin_uzunluk(s.metin_degeri) {
+        c=metin_bayt(s.metin_degeri,s.yer) olarak tam32;
+        eğer c < 48 veya c > 57 { ver n*isaret; }
+        n=n*10+(c olarak tam64)-48;
+        eğer n*isaret > 2147483647 veya n*isaret < -2147483648 { s.hata_iletisi="tasma"; ver 0; }
+        s.yer=s.yer+1;
+    }
+    ver n*isaret;
+}
+işlev hp_islem(s: &değişken Ifade,kat: tam32,derin: tam32) -> tam64 {
+    değişken sol: tam64 = 0;
+    eğer kat == 1 { sol=hp_islem(s,2,derin); } değilse { sol=hp_deger(s,derin); }
+    iken metin_uzunluk(s.hata_iletisi) == 0 {
+        eğer sol < -2147483648 veya sol > 2147483647 { s.hata_iletisi="tasma"; ver 0; }
+        değişken op: tam32 = hp_bak(s);
+        eğer kat == 1 ve op != 43 ve op != 45 { ver sol; }
+        eğer kat == 2 ve op != 42 ve op != 47 ve op != 37 { ver sol; }
+        s.yer=s.yer+1; değişken sag: tam64 = 0;
+        eğer kat == 1 { sag=hp_islem(s,2,derin); } değilse { sag=hp_deger(s,derin); }
+        eğer metin_uzunluk(s.hata_iletisi) != 0 { ver 0; }
+        eğer op == 43 { sol=sol+sag; } değilse eğer op == 45 { sol=sol-sag; }
+        değilse eğer op == 42 { sol=sol*sag; }
+        değilse eğer sag == 0 { s.hata_iletisi="sifira bolme"; }
+        değilse eğer op == 47 { sol=sol/sag; } değilse { sol=sol%sag; }
+    }
+    ver sol;
+}
+genel işlev ifade_hesapla(m: metin) -> sonuç<tam64,metin> {
+    değişken s: Ifade = Ifade {metin_degeri:m,yer:0,hata_iletisi:""};
+    değişken n: tam64 = hp_islem(&değişken s,1,0);
+    eğer metin_uzunluk(s.hata_iletisi) > 0 { ver hata(s.hata_iletisi); }
+    eğer hp_bak(&değişken s) != 0 { ver hata("beklenmeyen karakter"); } ver tamam(n);
+}

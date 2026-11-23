@@ -98,3 +98,9 @@ Matrisin düzeltme sonrası koşumu 12 dakika sürdü. İlk gerileme koşumunda 
 PS/2 IntelliMouse ve USB HID ile iki uygulamada aşağı ve yukarı kaydırma GOP piksellerinden ölçüldü. Dört açılışta 20 tik boyunca tek harf, 68 tik boyunca 5–6 harf görüldü. Tekerlek yönünü ters çevirmek ve ilk tekrar gecikmesini kaldırmak ayrı ayrı kâhini kırdı. İlk sekizli koşum 18 dakika sürdü. Aynı derleme dizinini paylaşan PS/2 IRQ, karma ve UEFI PC hedefleri ayrı dizinlerde yeniden çalıştırıldığında üçü de geçti.
 
 Tuş sayısı son kâhinde komut satırının GOP gliflerinden okundu. Gecikmesi kaldırılmış çekirdek, 20 tikte beklenen bir harf yerine altı harf çizdi. Özgün çekirdek dört açılışta da sınırı karşıladı.
+
+## Bölüm 8 — dört kullanıcı programı
+
+`goster` BMP'yi oranını koruyarak sığdırıyor ve oklarla özgün ölçekte kaydırıyor. `bul -i` Türkçe harfleri ve birden çok dosyayı, `hesapla` önceliği, parantezi ve taşmayı, `saat` canlı RTC saniyesini kapsıyor. Saf mantık testleri ve iki derleyicide dört programın sekiz QEMU senaryosu geçti. Sonuç, satır numarası, mavi kanal ve saat alanı için bağımsız dört yanlış uygulama birer açılışta yakalandı.
+
+Bölümün ilk gerilemesi 18 dakika sürdü. Çocuk süreci oturumlarından birinde program bulunamadı. Aynı çok süreç hedefinin 19 dakikalık yeniden koşumu 60/60 geçti. Son görüntüleyici ve hata iletimiyle dört program ayrıca iki derleyicide yeniden doğrulandı. Saf uygulama testleri köprüye dahil edildi.
