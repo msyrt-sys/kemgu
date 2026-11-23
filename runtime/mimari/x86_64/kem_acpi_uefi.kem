@@ -36,19 +36,19 @@ işlev uefi_rsdp(b: UefiBilgi) -> sonuç<Dizi<dtam8>,metin> {
   } }
  } }
 }
-işlev uefi_acpi_dok(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+işlev uefi_tablo_raporu(b: UefiBilgi,satirlar: Dizi<metin>,seri: mantıksal) -> sonuç<mantıksal,metin> {
  eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
  eşleş rsdp_coz(r) { hata(e) => { ver hata("ACPI RSDP gecersiz"); } tamam(rsdp) => {
   değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt;
   değişken ad: metin = "RSDT"; eğer x { a=rsdp.xsdt; ad="XSDT"; }
   eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
    eşleş acpi_kok_coz(kok,x) { hata(e) => { ver hata(e); } tamam(adresler) => {
-    bm_yaz(metin_birlestir(metin_birlestir(metin_birlestir("ACPI_KOK ",ad)," "),tam_metin(a)));
+    eğer seri { bm_yaz(metin_birlestir(metin_birlestir(metin_birlestir("ACPI_KOK ",ad)," "),tam_metin(a))); }
     için adr: adresler {
      eşleş uefi_sdt(b,adr) { hata(e) => { ver hata(e); } tamam(t) => {
       eşleş sdt_coz(t) { hata(e) => { ver hata("ACPI SDT gecersiz"); } tamam(h) => {
        değişken m: metin = metin_birlestir(metin_birlestir("ACPI_TABLO ",h.imza)," ");
-       m=metin_birlestir(m,tam_metin(adr)); m=metin_birlestir(m," "); bm_yaz(metin_birlestir(m,tam_metin(h.uzunluk)));
+       m=metin_birlestir(m,tam_metin(adr)); m=metin_birlestir(m," "); m=metin_birlestir(m,tam_metin(h.uzunluk)); eğer seri { bm_yaz(m); } değilse { dizi_ekle(satirlar,m); }
       } }
      } }
     }
@@ -56,6 +56,11 @@ işlev uefi_acpi_dok(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   } }
  } }
  } }
+ ver tamam(doğru);
+}
+işlev uefi_acpi_dok(b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ değişken bos: Dizi<metin> = [];
+ eşleş uefi_tablo_raporu(b,bos,doğru) { hata(e) => { ver hata(e); } tamam(v) => {} }
  eşleş uefi_guc_kur(b) { hata(e) => { ver hata(e); } tamam(v) => { } }
  ver uefi_apic_kur(b);
 }

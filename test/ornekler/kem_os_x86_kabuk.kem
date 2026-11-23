@@ -866,11 +866,131 @@ işlev ks_komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,arg: metin
         ver tamam(doğru);
     } }
 }
+// Bir CPUID yaprağının dört sözcüğünü birlikte oku.
+yapı KdCpuid { a: dtam32; b: dtam32; c: dtam32; d: dtam32; }
+çıplak işlev kd_cpuid(sayfa: dtam32) -> KdCpuid {
+    değişken a: dtam32 = 0; değişken b: dtam32 = 0;
+    değişken c: dtam32 = 0; değişken d: dtam32 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl %edi, %eax
+xorl %ecx, %ecx
+cpuid"#
+        çıktı("={ax}",&a) çıktı("={bx}",&b) çıktı("={cx}",&c) çıktı("={dx}",&d)
+        girdi("{di}",sayfa) bozulan("~{flags}") } }
+    ver KdCpuid {a:a,b:b,c:c,d:d};
+}
+işlev kd_ascii(w: dtam32) -> metin {
+    değişken s: metin = ""; değişken i: tam32 = 0;
+    iken i < 4 {
+        değişken b: tam32 = (((w olarak tam64)>>(i*8))&255) olarak tam32;
+        eğer b == 0 { ver s; }
+        eğer b < 32 veya b > 126 { b=63; }
+        s=metin_birlestir(s,kod_metin(b)); i=i+1;
+    }
+    ver s;
+}
+işlev kd_cpu() -> metin {
+    değişken v: KdCpuid = kd_cpuid(0 olarak dtam32);
+    değişken s: metin = metin_birlestir("CPU ",kd_ascii(v.b));
+    s=metin_birlestir(s,kd_ascii(v.d));s=metin_birlestir(s,kd_ascii(v.c));
+    s=metin_birlestir(s," ");
+    değişken ust: KdCpuid = kd_cpuid(2147483648 olarak dtam32);
+    eğer (ust.a olarak tam64) < 2147483652 { ver metin_birlestir(s,"ad bildirilmedi"); }
+    değişken yaprak: tam64 = 2147483650;
+    iken yaprak <= 2147483652 {
+        v=kd_cpuid(yaprak olarak dtam32);
+        s=metin_birlestir(s,metin_birlestir(kd_ascii(v.a),kd_ascii(v.b)));
+        s=metin_birlestir(s,metin_birlestir(kd_ascii(v.c),kd_ascii(v.d)));
+        yaprak=yaprak+1;
+    }
+    ver s;
+}
+işlev kd_hex_n(v: tam64,n: tam32) -> metin {
+    değişken s: metin = "";
+    iken n > 0 { n=n-1; değişken k: tam32 = ((v>>(4*n))&15) olarak tam32;
+        eğer k < 10 { k=k+48; } değilse { k=k+87; }
+        s=metin_birlestir(s,kod_metin(k));
+    } ver s;
+}
+işlev kd_tamsayi(s: metin,v: tam64) -> metin { ver metin_birlestir(metin_birlestir(s," "),tam_metin(v)); }
+işlev kd_pci_rapor(satirlar: Dizi<metin>) {
+    değişken yollar: Dizi<tam32> = [0];
+    değişken goruldu: Dizi<dtam8> = bayt_sifir(256); yaz_u8(goruldu,0,1);
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(yollar) {
+        değişken bus: tam32 = dizi_al(yollar,i); değişken devfn: tam32 = 0;
+        iken devfn < 256 {
+            değişken bdf: tam32 = bus*256+devfn;
+            değişken kim: tam64 = kem_pci_oku32(bdf,0);
+            eğer (kim&65535) != 65535 {
+                değişken sinif: tam64 = (kem_pci_oku32(bdf,8)>>8)&16777215;
+                değişken s: metin = metin_birlestir("PCI ",kd_hex_n(bus olarak tam64,2));
+                s=metin_birlestir(s,metin_birlestir(":",kd_hex_n((devfn/8) olarak tam64,2)));
+                s=metin_birlestir(s,metin_birlestir(".",kd_hex_n((devfn%8) olarak tam64,1)));
+                s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(kim&65535,4)));
+                s=metin_birlestir(s,metin_birlestir(":",kd_hex_n(kim>>16,4)));
+                dizi_ekle(satirlar,metin_birlestir(s,metin_birlestir(" ",kd_hex_n(sinif,6))));
+                eğer (sinif>>8) == 1540 {
+                    değişken hedef: tam32 = ((kem_pci_oku32(bdf,24)>>8)&255) olarak tam32;
+                    eğer oku_u8(goruldu,hedef) == 0 { yaz_u8(goruldu,hedef,1);dizi_ekle(yollar,hedef); }
+                }
+            } devfn=devfn+1;
+        } i=i+1;
+    }
+}
+işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal,yol: metin) -> sonuç<mantıksal,metin> {
+    değişken satirlar: Dizi<metin> = []; dizi_ekle(satirlar,kd_cpu());
+    eğer uefi_mi() {
+        eşleş uefi_bilgi() { hata(e) => { ver hata(e); } tamam(b) => {
+            değişken harita: tam64 = dizi_al(b.alan,9);
+            değişken n: tam64 = dizi_al(b.alan,10);
+            değişken adim: tam64 = dizi_al(b.alan,11);
+            değişken ofs: tam64 = 0; değişken sayfa: tam64 = 0;
+            iken ofs < n { eğer kem_mmio_oku32(harita+ofs) == 7 { sayfa=sayfa+kem_mmio_oku64(harita+ofs+24); } ofs=ofs+adim; }
+            dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi("BELLEK bolge sayfa",n/adim),sayfa));
+            değişken g: metin = kd_tamsayi("GOP",dizi_al(b.alan,5));
+            g=kd_tamsayi(g,dizi_al(b.alan,6));g=kd_tamsayi(g,dizi_al(b.alan,7));dizi_ekle(satirlar,kd_tamsayi(g,dizi_al(b.alan,8)));
+            eşleş uefi_tablo_raporu(b,satirlar,yanlış) { hata(e) => { dizi_ekle(satirlar,metin_birlestir("ACPI HATA ",e)); } tamam(v) => {} }
+            eşleş uefi_madt(b) { hata(e) => { dizi_ekle(satirlar,metin_birlestir("MADT HATA ",e)); } tamam(m) => {
+                dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi("MADT lapic girdiler",m.lapic_adresi),dizi_boyut(m.girdiler) olarak tam64));
+            } }
+        } }
+    } değilse { dizi_ekle(satirlar,"PVH: UEFI bilgisi yok"); }
+    kd_pci_rapor(satirlar);
+    için a: x.aygitlar {
+        değişken s: metin = kd_tamsayi("USB",a.yuva olarak tam64);
+        s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(a.kimlik.vid olarak tam64,4)));
+        s=metin_birlestir(s,metin_birlestir(":",kd_hex_n(a.kimlik.pid olarak tam64,4)));
+        için ar: a.yapi.arayuzlar { s=kd_tamsayi(s,ar.sinif olarak tam64); }
+        dizi_ekle(satirlar,s);
+    }
+    için ay: d.aygitlar { dizi_ekle(satirlar,metin_birlestir("DISK ",ay.ad)); }
+    için k: d.baglar { dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi(metin_birlestir("BOLUM ",k.kayit.ad),k.bolum.bas),k.bolum.adet)); }
+    değişken klavye: metin = "KLAVYE PS/2"; eğer indeks >= 0 { klavye="KLAVYE USB"; }
+    dizi_ekle(satirlar,klavye);
+    değişken fare: metin = "FARE yok"; eğer ps2_kesme_etkin() { fare="FARE PS/2"; }
+    eğer usb_fare { fare="FARE USB"; } dizi_ekle(satirlar,fare);
+    eğer metin_uzunluk(yol) == 0 { için s: satirlar { ekran_cift_yaz(s); } ver tamam(doğru); }
+    değişken b: Dizi<dtam8> = [];
+    için s: satirlar {
+        değişken n: tam32 = metin_uzunluk(s) olarak tam32;
+        eğer n+1 > 65536-dizi_boyut(b) { ver hata("donanim raporu 64 KiB siniri"); }
+        değişken i: tam32 = 0;
+        iken i < n { dizi_ekle(b,metin_bayt(s,i) olarak dtam8);i=i+1; }
+        dizi_ekle(b,10 olarak dtam8);
+    }
+    eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(k) => { eşleş kd_mutasyon(d,k,FatYazIslem::Yaz(b)) { hata(e) => { ver hata(e); } tamam(v) => { ver kd_sync(d); } } } }
+}
 işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
             h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
     değişken pos: tam32 = kd_bosluk(satir);
     değişken cmd: metin = kd_bas(satir,pos);
     değişken arg: metin = kd_kalan(satir,pos);
+    eğer bm_esit(cmd,"donanim") {
+        eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }
+        değişken bos: tam32 = kd_bosluk(arg);
+        eğer değil bm_esit(kd_bas(arg,bos),"kaydet") { ver hata("donanim kaydet <yol>"); }
+        eşleş kd_mutlak(d.cwd,kd_kalan(arg,bos)) { hata(e) => { ver hata(e); } tamam(y) => { ver kd_donanim(d,x,indeks,bh_fare() >= 0,y); } }
+    }
     eğer bm_esit(cmd,"calistir") veya bm_esit(cmd,"baslat") {
         değişken arama: mantıksal = bm_esit(cmd,"baslat");
         değişken n: tam32 = metin_uzunluk(arg);
@@ -1118,6 +1238,14 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         eşleş bd_bul(x,xb,uefi_mi()) { hata(e) => { ver hata(e); } tamam(xs) => { d.aygitlar=xs; } }
         eşleş kd_bagla(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
         eşleş kd_kok_durum(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        eğer uefi_mi() ve d.kok >= 0 {
+            değişken k: KabukBag = dizi_al(d.baglar,d.kok);
+            eğer k.kayit.kok ve değil k.kayit.bolum.esp {
+                eşleş kd_donanim(&değişken d,x,indeks,fare_indeksi >= 0,"/donanim.txt") {
+                    hata(e) => { bm_yaz(metin_birlestir("KABUK HATA donanim.txt ",e)); } tamam(v) => { bm_yaz("DONANIM_KAYDI /donanim.txt"); }
+                }
+            }
+        }
         ekran_cift_yaz("KEMGU-OS kabuk v0");
         eğer d.kok >= 0 {
             değişken k: KabukBag = dizi_al(d.baglar,d.kok);

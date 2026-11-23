@@ -5017,3 +5017,8 @@ test_tumu: calistir_yigin_geri
 test_tumu: calistir_bm_x86_saglamlik
 calistir_bm_x86_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@SUREC_KAHIN=saglamlik_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_donanim
+test_tumu: calistir_bm_x86_donanim
+calistir_bm_x86_donanim: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=donanim_kahin bash test/bm_x86_surec_harness.sh

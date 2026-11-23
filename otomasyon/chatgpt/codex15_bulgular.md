@@ -35,3 +35,7 @@
 Sürücü durum makineleri çağrı başına bir adım yürütür. Tablo hem bu tekrarları hem onları süren dış sınırları gösterir. Klavye girdisi, çocuğun çıkışı ve boşta HLT bir kullanıcı olayını bekler. Panik ve kapanış sonrası HLT son durumlardır. Eski PVH kabuğu girdi gelene kadar sonlu PS/2 yoklama dilimlerini heap ayırmadan yineliyor.
 
 QEMU’nun NVMe denetleyicisi komutlara yanıt verir. Namespace bağlamadan çalıştırılan gerçek aygıt, kullanılamayan NVMe hedefini temsil etti. Kabuk çalışan USB’yi bağlayıp komut kabul etti. Sökme deneyi gerçek `device_del` kullandı. PORTSC bağlantı ve değişim bitleri, önbellekte duran sektörlerin sökülmüş ortama ait olduklarını da saptadı. xHCI port olayını halkadan alan kod USB klavyenin sıradaki tamamlamasını işleyebildi. Boş SATA denetleyicisindeki süre sınırı kaldırıldığında kâhin istemi beklerken süreyi doldurdu.
+
+## Donanım raporu
+
+GPT açılışında ESP salt okunur. Veri bölümüne kullanıcı yazma izni verdikten sonra açık kaydetme komutu çalıştı. MBR'de yazılabilir açılış FAT32 köküne rapor kendiliğinden kaydedildi. Her iki düzen için konuk seri raporu ve FAT32 dosyası birebir karşılaştırıldı. PCI kimlikleri QMP ağacından, ACPI ve MADT fiziksel RAM'den, CPU QOM'dan, USB aygıt sayısı HMP'den denetlendi. MBR eski bağlama kâhini de özgün dosyaların özetlerini ve oturum boyunca diskin değişmediğini doğruladı.

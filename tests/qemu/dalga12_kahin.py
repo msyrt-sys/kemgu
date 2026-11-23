@@ -215,8 +215,30 @@ def check_identity(c,part):
 def run(w,mode):
     usb,nvme,sata=images(w,mode)
     before={p.disk:sha(p.disk) for p in [usb[0],nvme,sata]}
+    if mode == 'mbr':
+        from dalga12_fat import Fat
+        def dosyalar(fat, yol=''):
+            sonuc = {}
+            for ad, (_, _, dizin) in (fat.get(yol) if yol else fat.directory(fat.root)).items():
+                tam = yol+'/'+ad
+                if ad in ('.','..'):
+                    continue
+                if dizin:
+                    sonuc.update(dosyalar(fat,tam))
+                else:
+                    sonuc[tam] = sha256(fat.get(tam)).digest()
+            return sonuc
+        ilk = dosyalar(Fat(usb[0].read()))
     with boot(w,usb[0],nvme,sata) as (q,p,ser):
         c=Console(w,q,p,ser)
+        if mode == 'mbr':
+            # Yazılabilir açılış kökünde tek ek dosya donanım raporudur.
+            fat = Fat(usb[0].read())
+            son = dosyalar(fat)
+            assert son.pop('/donanim.txt') == sha256(fat.get('/donanim.txt')).digest()
+            assert son == ilk and b'PCI ' in fat.get('/donanim.txt')
+            fsck(w,usb[0],'donanim-acilis')
+            before[usb[0].disk] = sha(usb[0].disk)
         check_identity(c,usb[0])
         c.run('cat /merhaba.txt',MERHABA+b'\n')
         c.run('cat /diskler/nvme0p1/merhaba.txt',MERHABA+b'\n')

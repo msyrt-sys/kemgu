@@ -74,3 +74,7 @@
 ## Bölüm 2 — aygıt hatalarından sonra kabuk
 
 Beş QEMU senaryosu iki derleyicide geçti (10/10). USB bellek çıkarıldıktan sonra hem USB hem PS/2 klavye ile komut çalıştı. Sekiz gerileme hedefi rc=0 döndürdü. Süreç ailesinde 200 ölçümlü açılış vardı. Boş SATA için yoklama üst sınırını kaldıran ayrı kopyada ELF derlendi, konuk isteme ulaşamadı ve sağlamlık kâhini rc=1 döndürdü. Envanter ve iki eski C UART yolunun kapsam sınırı bulgular dosyasında. Bölümün QEMU gerileme koşumu yaklaşık 17 dakika sürdü.
+
+## Bölüm 3 — gerçek PC teşhis paketi
+
+GPT ve MBR donanım raporu C ve self-host ile 4/4 geçti. İki diskte de fsck temizdi. MBR bağlama kâhini ayrıca geçti. PCI sınıfı bir bayt kaydırılmış geçici çekirdekte PCI kümesi karşılaştırması rc=1 verdi. Sekiz gerileme hedefi rc=0. QEMU ve derleme ölçümleri yaklaşık 17 dakika sürdü.
