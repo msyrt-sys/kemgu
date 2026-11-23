@@ -1,4 +1,4 @@
-// Deterministik panik-yok kahini: python3 tools/codex/e2.py; her döngü tam 300 örnek.
+// Deterministik panik-yok kahini: python3 tools/codex/e2.py; her döngü tam 1000 örnek.
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, yaz_u8 };
 yapı Tohum { x: tam64; }
 işlev rastgele(s: &değişken Tohum) -> tam32 {
@@ -14,48 +14,48 @@ işlev test_sifir_ve_bir() -> mantıksal {
 
 işlev test_rastgele() -> mantıksal {
     değişken s: Tohum = Tohum { x: 123 }; değişken i: tam32 = 0;
-    iken i < 300 {
+    iken i < 1000 {
         değişken n: tam32 = rastgele(&değişken s) % 601; değişken b: Dizi<dtam8> = []; değişken j: tam32 = 0;
         iken j < n { dizi_ekle(b, (rastgele(&değişken s) & 255) olarak dtam8); j = j + 1; }
         eğer değil dene(b) { ver yanlış; } i = i + 1;
     }
-    ver i == 300;
+    ver i == 1000;
 }
 
 işlev test_mutasyon_rsdp() -> mantıksal {
     değişken b: Dizi<dtam8> = rsdp2(); eşleş rsdp_coz(b) { tamam(v) => { } hata(e) => { ver yanlış; } }
     değişken s: Tohum = Tohum { x: 456 }; değişken i: tam32 = 0;
-    iken i < 300 {
+    iken i < 1000 {
         değişken yer: tam32 = rastgele(&değişken s) % dizi_boyut(b);
         değişken eski: tam32 = oku_u8(b, yer); değişken fark: tam32 = 1 + rastgele(&değişken s) % 255;
         yaz_u8(b, yer, (eski ^ fark) olarak tam64);
         eğer değil dene(b) { ver yanlış; }
         yaz_u8(b, yer, eski olarak tam64); i = i + 1;
-    } ver i == 300;
+    } ver i == 1000;
 }
 
 işlev test_mutasyon_xsdt() -> mantıksal {
     değişken b: Dizi<dtam8> = sdt_verisi(doğru); eşleş sdt_coz(b) { tamam(v) => { } hata(e) => { ver yanlış; } }
     değişken s: Tohum = Tohum { x: 456 }; değişken i: tam32 = 0;
-    iken i < 300 {
+    iken i < 1000 {
         değişken yer: tam32 = rastgele(&değişken s) % dizi_boyut(b);
         değişken eski: tam32 = oku_u8(b, yer); değişken fark: tam32 = 1 + rastgele(&değişken s) % 255;
         yaz_u8(b, yer, (eski ^ fark) olarak tam64);
         eğer değil dene(b) { ver yanlış; }
         yaz_u8(b, yer, eski olarak tam64); i = i + 1;
-    } ver i == 300;
+    } ver i == 1000;
 }
 
 işlev test_mutasyon_rsdt() -> mantıksal {
     değişken b: Dizi<dtam8> = sdt_verisi(yanlış); eşleş sdt_coz(b) { tamam(v) => { } hata(e) => { ver yanlış; } }
     değişken s: Tohum = Tohum { x: 456 }; değişken i: tam32 = 0;
-    iken i < 300 {
+    iken i < 1000 {
         değişken yer: tam32 = rastgele(&değişken s) % dizi_boyut(b);
         değişken eski: tam32 = oku_u8(b, yer); değişken fark: tam32 = 1 + rastgele(&değişken s) % 255;
         yaz_u8(b, yer, (eski ^ fark) olarak tam64);
         eğer değil dene(b) { ver yanlış; }
         yaz_u8(b, yer, eski olarak tam64); i = i + 1;
-    } ver i == 300;
+    } ver i == 1000;
 }
 
 işlev main() -> tam32 {

@@ -64,3 +64,18 @@ Her taşıma iki klavye ve iki tabloyla sınandı. RAM seçimi taşıma, klavye 
 | USB | USB | 4G | GPT | 3/3 | 3/3 |
 
 İlk C koşusunda 24/36 açılış geçti. Kalan 12 açılış, çerçeve ayırıcısının üst sınırına göre yüksek adresli yükleyiciyi reddetti. Düzeltmeden sonraki 72 matris açılışında aralıklı hata sayısı sıfır. MBR başlangıcındaki tek sektörlük sapma altı yapılandırmayı da bozdu.
+
+## Ayrıştırıcı örnekleri
+
+| Ayrıştırıcı | Bir derleyicide örnek | Korpus |
+|---|---:|---|
+| ACPI kökleri | 4.000 | Rastgele girdi ve RSDP, XSDT, RSDT şablonları |
+| MADT | 2.000 | Rastgele veri ve geçerli kayıt mutasyonları |
+| FADT | 2.000 | Rastgele veri ve geçerli tablo mutasyonları |
+| ELF | 2.000 | Rastgele veri ve geçerli yüklenebilir başlık mutasyonları |
+| BMP | 3.000 | Rastgele veri ve iki geçerli resim şablonu |
+| GPT/MBR | 2.000 | Rastgele veri ve bölüm tablosu mutasyonları |
+| MBR sınırları | 1.000 | Bağımsız beklenen başlangıç, boy ve disk sınırı |
+| FAT32 | 1.000 | D-759 sabit tohumlu dosya sistemi korpusu |
+
+Üreticinin sınır örnekleri bu sayılara eklenir. Host'ta iki derleyicinin çıktısı karşılaştırıldı. Bozuk kullanıcı ELF'sini yükleme denemesi QEMU'da üç diskin özgün imaj özetlerini korudu.

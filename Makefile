@@ -5031,3 +5031,9 @@ calistir_bm_x86_log: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86
 test_tumu: calistir_kem_os_pc_matris
 calistir_kem_os_pc_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@SUREC_KAHIN=pc_matris bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_kem_os_ayristirici
+test_tumu: calistir_kem_os_ayristirici
+calistir_kem_os_ayristirici: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum)) tests/drivers/fs/fat32_bozuk_test.kem
+	@SUREC_KAHIN=bozuk_elf_kahin bash test/bm_x86_surec_harness.sh

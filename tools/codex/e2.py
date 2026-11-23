@@ -6,7 +6,7 @@ kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, yaz_le32, yaz_le64, yaz_ascii
 '''
 sources=[('disk/bolum','test_diski'),('fs/fat32_bpb','bpb_verisi'),('fs/fat32_dizin','uzun_veri'),('acpi/tablo','rsdp2'),('acpi/tablo','sdt_verisi'),('acpi/madt','madt_verisi'),('acpi/fadt','fadt_verisi'),('pci/yapilandirma','pci_verisi'),('bellek/harita','e820_veri'),('bellek/harita','mb2_veri'),('elf/elf64','elf_verisi')]
 for file,fn in sources:
- s=Path('tests/drivers/'+file+'_test.kem').read_text();a=s.index('işlev '+fn+'(');b=s.index('{',a);depth=1;i=b+1
+ s=Path('tests/drivers/'+file+'_test.kem').read_text(encoding='utf-8');a=s.index('işlev '+fn+'(');b=s.index('{',a);depth=1;i=b+1
  while depth:
   depth+=(s[i]=='{')-(s[i]=='}');i+=1
  fixture+='genel '+s[a:i]+'\n'
@@ -40,6 +40,7 @@ randomcase='''    değişken s: Tohum = Tohum { x: 123 }; değişken i: tam32 = 
         eğer değil dene(b) { ver yanlış; } i = i + 1;
     }
     ver i == 300;'''
+genis = {'elf','acpi','madt','fadt','bolum','bmp'}
 for name,imports,calls,fixtures in specs:
  header=common+imports+'\nkullan tests::drivers::bulanik::veri::fikstur::{ '+', '.join(fn for _,fn in sources)+' };\n'
  header+='işlev dene(b: Dizi<dtam8>) -> mantıksal { '+calls+' ver doğru; }\n'
@@ -56,6 +57,9 @@ for name,imports,calls,fixtures in specs:
         eğer değil dene(b) {{ ver yanlış; }}
         yaz_u8(b, yer, eski olarak tam64); i = i + 1;
     }} ver i == 300;'''
+ if name in genis:
+  header = header.replace('tam 300', 'tam 1000')
+  cases = {k:v.replace('i < 300','i < 1000').replace('i == 300','i == 1000') for k,v in cases.items()}
  testler('tests/drivers/bulanik/'+name+'_test.kem',header,cases)
 # VT akışında güvenlik yanında ekran imleci ve tampon sınırları da korunmalı.
 header=common+'''kullan drivers::ekran::konsol::{ Konsol, konsol_yeni };
@@ -77,5 +81,6 @@ case=f'''    değişken b: Dizi<dtam8> = [{', '.join(str(v)+' olarak dtam8' for 
         eğer değil dene(b) {{ ver yanlış; }} yaz_u8(b, yer, eski olarak tam64); i = i + 1;
     }} ver i == 300;'''
 testler('tests/drivers/bulanik/vt_test.kem',header,{'sifir_ve_bir':'    ver dene(bayt_sifir(0)) ve dene(bayt_sifir(1));','rastgele':randomcase,'mutasyon':case})
-p=Path('Makefile');s=p.read_text();s=s.replace('tests/drivers/sim/*_test.kem))','tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem))');p.write_text(s)
-print('13 ayrıştırıcı, 3900 rastgele +',sum(len(x[3]) for x in specs)*300+300,'tek-bayt mutasyonu')
+p=Path('Makefile');s=p.read_text(encoding='utf-8');s=s.replace('tests/drivers/sim/*_test.kem))','tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem))');p.write_text(s,encoding='utf-8')
+print('Rastgele',300+sum(1000 if x[0] in genis else 300 for x in specs),
+      'tek-bayt mutasyonu',300+sum(len(x[3])*(1000 if x[0] in genis else 300) for x in specs))

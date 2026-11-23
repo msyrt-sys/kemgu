@@ -1,0 +1,26 @@
+// Harici MBR düzeni ile gerçek bağlama ayrıştırıcısının sonuçlarını karşılaştır.
+kullan drivers::disk::bolum_kimlik::{ DiskBolumu,mbr_kimlikli };
+kullan drivers::ortak::bayt::{ bayt_sifir,yaz_le32,yaz_u8 };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(512);
+    yaz_u8(b,510,85); yaz_u8(b,511,170); yaz_u8(b,450,12);
+    değişken tohum: tam64 = 764;
+    değişken i: tam32 = 0;
+    iken i < 1000 {
+        tohum=(tohum*1664525+1013904223)&4294967295;
+        değişken bas: tam64 = 1+tohum%4095;
+        değişken adet: tam64 = (tohum/4096)%8192;
+        yaz_le32(b,454,bas); yaz_le32(b,458,adet);
+        değişken gecerli: mantıksal = adet > 0 ve adet <= 4096-bas;
+        eşleş mbr_kimlikli(b,4096) {
+            hata(e) => { eğer gecerli veya metin_uzunluk(e) == 0 { ver 1; } }
+            tamam(xs) => {
+                eğer değil gecerli veya dizi_boyut(xs) != 1 { ver 2; }
+                değişken d: DiskBolumu = dizi_al(xs,0);
+                eğer d.bas != bas veya d.adet != adet veya d.no != 1 { ver 3; }
+            }
+        }
+        i=i+1;
+    }
+    ver 0;
+}

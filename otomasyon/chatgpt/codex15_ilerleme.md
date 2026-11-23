@@ -88,3 +88,7 @@ GPT ve MBR donanım raporu C ve self-host ile 4/4 geçti. İki diskte de fsck te
 12 yapılandırma iki derleyicide üçer kez açıldı. 72/72 koşumda program çalıştı, FAT32 dosya içeriği, fsck ve salt okunur alanların SHA256 denetimi geçti. İlk C taramasında 4 GiB belleğe sahip dört satırın 12/12 açılışı başarısızdı. OVMF'nin 4 GiB üzerine koyduğu EFI yükleyicisini düşük fiziksel çerçeve ayırıcısının dışında tutarak giderildi. Bir sektör kaydırılmış MBR ile altı MBR satırının altısı kırmızı. Matris ve sürücü koşumlarına ek olarak sekiz gerileme hedefi çalıştırıldı.
 
 Matrisin düzeltme sonrası koşumu 12 dakika sürdü. İlk gerileme koşumunda çok süreç ve kabuk14 aralıklı kırmızı verdi. QMP tuşlarını konuk LAPIC saatine göre gönderen koşumda çok süreç 60/60, kabuk14 20/20 geçti. Son kabuk14 tekrarı 13:03'te tamamlandı.
+
+## Bölüm 6 — ayrıştırıcılar ve bozuk ELF
+
+İki derleyici sabit tohumlarla 17.000'er örnek çalıştırdı. Kısa ELF için QEMU iki derleyicide de açık hata verdi ve aynı oturumda ikinci kabuk komutu çalıştı. Geçerli ELF başlığını yanlış reddeden değişiklik derlendi ve host kâhini rc=1 verdi. İstenen sınır denetimini kaldırıp bir çökme üretme deneyi uygulanmadı. Sekiz gerileme hedefi ile sürücü kapıları geçti. Bölümün ana koşumu 18 dakika sürdü.
