@@ -28,12 +28,21 @@ genel işlev uefi_harita(b: UefiBilgi, ham: Dizi<dtam8>, bilgi: tam64) -> sonuç
   }
   i=i+(adim olarak tam32);
  }
- değişken baslar: Dizi<tam64> = [dizi_al(a,14),bilgi,dizi_al(a,9),dizi_al(a,3),dizi_al(a,13),dizi_al(a,20)];
- değişken boylar: Dizi<tam64> = [dizi_al(a,15)-dizi_al(a,14),4096 olarak tam64,dizi_al(a,16),dizi_al(a,4),4096 olarak tam64,dizi_al(a,21)-dizi_al(a,20)];
+ değişken baslar: Dizi<tam64> = [dizi_al(a,14),bilgi,dizi_al(a,9),dizi_al(a,3),dizi_al(a,13)];
+ değişken boylar: Dizi<tam64> = [dizi_al(a,15)-dizi_al(a,14),4096 olarak tam64,dizi_al(a,16),dizi_al(a,4),4096 olarak tam64];
  i=0;
  iken i < dizi_boyut(baslar) {
   eşleş uefi_koru(xs,dizi_al(baslar,i),dizi_al(boylar,i)) { hata(e) => { ver hata(e); } tamam(v) => { } }
   i=i+1;
+ }
+ // Yükleyicinin sayfaları EBS öncesi OVMF tarafından 4 GiB üstüne de konabilir.
+ // Yalnız ayırıcının yönettiği alt 4 GiB ile kesişen kısmı rezerve et.
+ değişken yukleyici: tam64 = dizi_al(a,20);
+ değişken son: tam64 = dizi_al(a,21);
+ eğer yukleyici < 0 veya son <= yukleyici { ver hata("UEFI yukleyici araligi"); }
+ eğer yukleyici < 4294967296 {
+  eğer son > 4294967296 { son=4294967296; }
+  eşleş uefi_koru(xs,yukleyici,son-yukleyici) { hata(e) => { ver hata(e); } tamam(v) => { } }
  }
  ver harita_duzenle(xs);
 }

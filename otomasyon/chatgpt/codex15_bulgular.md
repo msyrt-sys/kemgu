@@ -43,3 +43,24 @@ GPT açılışında ESP salt okunur. Veri bölümüne kullanıcı yazma izni ver
 ## Günlük
 
 450 numaralı Türkçe satır yazdırıldı. Tek bir satırın kendisi kapasiteyi aştığında satır sonuna kadar tek kayıp sayılır. Günlük sorgusu kendi çıktısını tekrar okumamak için çıktıdan önce anlık kopya alır. Uzun çıktıdan hemen sonra USB HID ile sentetik tuş gönderildiğinde ilk denemede komutun bazı harfleri kayboldu. Günlük bayt karşılaştırması ve sarım testi kesme tamponlu PS/2 klavyeyle yapıldı. USB klavye ayrıca sağlamlık ve kabuk kapılarında sınandı.
+
+## PC açılış matrisi
+
+Her taşıma iki klavye ve iki tabloyla sınandı. RAM seçimi taşıma, klavye ve tablo indislerine göre döndürüldü. Böylece her değer öbür eksenlerin her değeriyle en az bir kez karşılaştı. MBR imajı iki bölüm içeriyor. Okunan ve yazılan veri yolu seri açılış aygıtıyla eşleştirildi. Her satır üç C ve üç self-host açılışıdır.
+
+| Açılış | Klavye | RAM | Tablo | C | Self-host |
+|---|---|---|---|---:|---:|
+| NVMe | PS/2 | 1G | MBR | 3/3 | 3/3 |
+| NVMe | PS/2 | 4G | GPT | 3/3 | 3/3 |
+| NVMe | USB | 256M | GPT | 3/3 | 3/3 |
+| NVMe | USB | 4G | MBR | 3/3 | 3/3 |
+| AHCI | PS/2 | 256M | GPT | 3/3 | 3/3 |
+| AHCI | PS/2 | 4G | MBR | 3/3 | 3/3 |
+| AHCI | USB | 1G | GPT | 3/3 | 3/3 |
+| AHCI | USB | 256M | MBR | 3/3 | 3/3 |
+| USB | PS/2 | 1G | GPT | 3/3 | 3/3 |
+| USB | PS/2 | 256M | MBR | 3/3 | 3/3 |
+| USB | USB | 1G | MBR | 3/3 | 3/3 |
+| USB | USB | 4G | GPT | 3/3 | 3/3 |
+
+İlk C koşusunda 24/36 açılış geçti. Kalan 12 açılış, çerçeve ayırıcısının üst sınırına göre yüksek adresli yükleyiciyi reddetti. Düzeltmeden sonraki 72 matris açılışında aralıklı hata sayısı sıfır. MBR başlangıcındaki tek sektörlük sapma altı yapılandırmayı da bozdu.

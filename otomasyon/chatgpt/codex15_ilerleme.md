@@ -82,3 +82,9 @@ GPT ve MBR donanım raporu C ve self-host ile 4/4 geçti. İki diskte de fsck te
 ## Bölüm 4 — çekirdek günlük halkası
 
 8192 baytlık halkadan yalnız tam satırlar çıkarılır. İki derleyicide de FAT32 dosyası, düşen satır sayısı ve iki ekran sayfası bağımsız seri kayıtla eşleşti. Örnek oturumda 268 satır düştü, 8183 bayt dışa aktarıldı. Başı bir yerine iki ilerleten çalışma kopyasında kâhin rc=1 döndü. Sekiz gerileme hedefi geçti. İlk gerileme koşumu yaklaşık 16 dakika, ikinci sayfa kâhini iki derleyicide ayrıca çalıştırıldı.
+
+## Bölüm 5 — PC açılış matrisi
+
+12 yapılandırma iki derleyicide üçer kez açıldı. 72/72 koşumda program çalıştı, FAT32 dosya içeriği, fsck ve salt okunur alanların SHA256 denetimi geçti. İlk C taramasında 4 GiB belleğe sahip dört satırın 12/12 açılışı başarısızdı. OVMF'nin 4 GiB üzerine koyduğu EFI yükleyicisini düşük fiziksel çerçeve ayırıcısının dışında tutarak giderildi. Bir sektör kaydırılmış MBR ile altı MBR satırının altısı kırmızı. Matris ve sürücü koşumlarına ek olarak sekiz gerileme hedefi çalıştırıldı.
+
+Matrisin düzeltme sonrası koşumu 12 dakika sürdü. İlk gerileme koşumunda çok süreç ve kabuk14 aralıklı kırmızı verdi. QMP tuşlarını konuk LAPIC saatine göre gönderen koşumda çok süreç 60/60, kabuk14 20/20 geçti. Son kabuk14 tekrarı 13:03'te tamamlandı.

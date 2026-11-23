@@ -116,7 +116,7 @@ class Console:
         try:
             start = wait_for(p,lambda: b'KABUK_HAZIR\n' in ser.read_bytes() if ser.exists() else False)
         except AssertionError as exc:
-            raise AssertionError(ser.read_text(errors='replace')) from exc
+            raise AssertionError(ser.read_text(encoding='utf-8',errors='replace')) from exc
         assert start
         self.marker = b'KEMGU-OS kabuk v0\n'
         self.expected = self.marker+f'DISK {disk}\nKABUK_HAZIR\n'.encode()
@@ -275,7 +275,7 @@ def fsck(w,part,suffix,dirty=False):
     volume=w/f'dalga12-{suffix}.fat'
     volume.write_bytes(part.read())
     p=subprocess.run(['fsck.fat','-n',str(volume)],capture_output=True,text=True)
-    (w/f'dalga12-{suffix}.fsck.log').write_text(p.stdout+p.stderr)
+    (w/f'dalga12-{suffix}.fsck.log').write_text(p.stdout+p.stderr,encoding='utf-8')
     assert p.returncode==int(dirty), (suffix,p.returncode,p.stdout,p.stderr)
     if dirty:
         assert 'Dirty bit is set' in p.stdout,p.stdout
