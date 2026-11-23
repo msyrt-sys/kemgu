@@ -78,3 +78,7 @@ Beş QEMU senaryosu iki derleyicide geçti (10/10). USB bellek çıkarıldıktan
 ## Bölüm 3 — gerçek PC teşhis paketi
 
 GPT ve MBR donanım raporu C ve self-host ile 4/4 geçti. İki diskte de fsck temizdi. MBR bağlama kâhini ayrıca geçti. PCI sınıfı bir bayt kaydırılmış geçici çekirdekte PCI kümesi karşılaştırması rc=1 verdi. Sekiz gerileme hedefi rc=0. QEMU ve derleme ölçümleri yaklaşık 17 dakika sürdü.
+
+## Bölüm 4 — çekirdek günlük halkası
+
+8192 baytlık halkadan yalnız tam satırlar çıkarılır. İki derleyicide de FAT32 dosyası, düşen satır sayısı ve iki ekran sayfası bağımsız seri kayıtla eşleşti. Örnek oturumda 268 satır düştü, 8183 bayt dışa aktarıldı. Başı bir yerine iki ilerleten çalışma kopyasında kâhin rc=1 döndü. Sekiz gerileme hedefi geçti. İlk gerileme koşumu yaklaşık 16 dakika, ikinci sayfa kâhini iki derleyicide ayrıca çalıştırıldı.

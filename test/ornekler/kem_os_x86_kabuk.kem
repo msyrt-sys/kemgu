@@ -743,7 +743,7 @@ hlt"# bozulan("~{memory}") } } }
     p.son_kod=s.kod;
     eğer değil s.bitti { p.son_kod=128+s.vektor; }
 }
-işlev ks_pid_arg(m: metin) -> tam64 {
+işlev kd_sayi_arg(m: metin) -> tam64 {
     değişken i: tam32 = 0;
     değişken n: tam64 = 0;
     iken i < metin_uzunluk(m) {
@@ -751,8 +751,9 @@ işlev ks_pid_arg(m: metin) -> tam64 {
         eğer b < 48 veya b > 57 veya n > (9223372036854775807-(b-48))/10 { ver -1; }
         n=n*10+b-48; i=i+1;
     }
-    ver kxs_pid_yuva(n);
+    ver n;
 }
+işlev ks_pid_arg(m: metin) -> tam64 { ver kxs_pid_yuva(kd_sayi_arg(m)); }
 işlev kd_adaylar(d: &değişken KabukDisk,yol: metin) -> sonuç<Dizi<DizinGirdisi>,metin> {
     eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(y) => {
         eşleş kd_fat(d,y) { hata(e) => { ver hata(e); } tamam(fat) => {
@@ -980,11 +981,46 @@ işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam3
     }
     eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(k) => { eşleş kd_mutasyon(d,k,FatYazIslem::Yaz(b)) { hata(e) => { ver hata(e); } tamam(v) => { ver kd_sync(d); } } } }
 }
+işlev kd_log(d: &değişken KabukDisk,arg: metin) -> sonuç<mantıksal,metin> {
+    değişken veri: Dizi<dtam8> = [];
+    değişken n: tam64 = 0; değişken dusen: tam64 = 0;
+    güvensiz { n=kgun_adet; dusen=kgun_dusen; }
+    değişken baslik: metin = kd_tamsayi("LOG dusen_satir",dusen);
+    değişken j: tam32 = 0;
+    iken j < metin_uzunluk(baslik) { dizi_ekle(veri,metin_bayt(baslik,j) olarak dtam8);j=j+1; }
+    dizi_ekle(veri,10 olarak dtam8);
+    // Yazdırmadan önce kopya al, log çıktısı bir sonraki anlık görüntüye girer.
+    değişken i: tam64 = 0;
+    iken i < n { dizi_ekle(veri,kgun_oku(i) olarak dtam8);i=i+1; }
+    değişken pos: tam32 = kd_bosluk(arg);
+    eğer bm_esit(kd_bas(arg,pos),"kaydet") {
+        değişken ad: metin = kd_kalan(arg,pos);
+        eğer metin_uzunluk(ad) == 0 { ver hata("log kaydet <yol>"); }
+        eşleş kd_mutlak(d.cwd,ad) { hata(e) => { ver hata(e); } tamam(y) => {
+            eşleş kd_yol(d,y) { hata(e) => { ver hata(e); } tamam(k) => {
+                eşleş kd_mutasyon(d,k,FatYazIslem::Yaz(veri)) { hata(e) => { ver hata(e); } tamam(v) => { ver kd_sync(d); } }
+            } }
+        } }
+    }
+    değişken sayfa: tam64 = 1;
+    eğer metin_uzunluk(arg) > 0 { sayfa=kd_sayi_arg(arg); }
+    eğer sayfa < 1 veya sayfa > KGUN_BOY { ver hata("log sayfa siniri"); }
+    değişken satir: tam64 = 0; j=0;
+    iken j < dizi_boyut(veri) {
+        değişken c: tam32 = oku_u8(veri,j);
+        eğer satir/20+1 == sayfa { ekran_cift_bayt(c); }
+        eğer c == 10 { satir=satir+1; } j=j+1;
+    }
+    eğer (sayfa-1)*20 >= satir { ver hata("log sayfa yok"); }
+    eğer sayfa*20 < satir { ekran_cift_yaz(metin_birlestir("Devami: log ",tam_metin(sayfa+1))); }
+    ver tamam(doğru);
+}
 işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
             h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
     değişken pos: tam32 = kd_bosluk(satir);
     değişken cmd: metin = kd_bas(satir,pos);
     değişken arg: metin = kd_kalan(satir,pos);
+    eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
     eğer bm_esit(cmd,"donanim") {
         eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }
         değişken bos: tam32 = kd_bosluk(arg);
@@ -1281,6 +1317,7 @@ işlev ke_kur() -> sonuç<KabukEkran, metin> {
     } }
 }
 işlev main() -> tam32 {
+    güvensiz { kgun_kur(malloc(KGUN_BOY) olarak tam64); }
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(b) => {
             uefi_dok(b);

@@ -39,3 +39,7 @@ QEMU’nun NVMe denetleyicisi komutlara yanıt verir. Namespace bağlamadan çal
 ## Donanım raporu
 
 GPT açılışında ESP salt okunur. Veri bölümüne kullanıcı yazma izni verdikten sonra açık kaydetme komutu çalıştı. MBR'de yazılabilir açılış FAT32 köküne rapor kendiliğinden kaydedildi. Her iki düzen için konuk seri raporu ve FAT32 dosyası birebir karşılaştırıldı. PCI kimlikleri QMP ağacından, ACPI ve MADT fiziksel RAM'den, CPU QOM'dan, USB aygıt sayısı HMP'den denetlendi. MBR eski bağlama kâhini de özgün dosyaların özetlerini ve oturum boyunca diskin değişmediğini doğruladı.
+
+## Günlük
+
+450 numaralı Türkçe satır yazdırıldı. Tek bir satırın kendisi kapasiteyi aştığında satır sonuna kadar tek kayıp sayılır. Günlük sorgusu kendi çıktısını tekrar okumamak için çıktıdan önce anlık kopya alır. Uzun çıktıdan hemen sonra USB HID ile sentetik tuş gönderildiğinde ilk denemede komutun bazı harfleri kayboldu. Günlük bayt karşılaştırması ve sarım testi kesme tamponlu PS/2 klavyeyle yapıldı. USB klavye ayrıca sağlamlık ve kabuk kapılarında sınandı.
