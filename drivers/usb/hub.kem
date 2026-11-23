@@ -1,0 +1,34 @@
+// USB 2.0 bölüm 11. Port bit eşleminin sıfırıncı biti hub'a aittir.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16 };
+kullan drivers::usb::tanim::{ usb_setup };
+
+genel yapı UsbHub { portlar: tam32; guc_ms: tam32; tt_suresi: tam32; }
+genel işlev hub_tanim(b: Dizi<dtam8>) -> sonuç<UsbHub,metin> {
+    eğer dizi_boyut(b) < 7 veya oku_u8(b,1) != 41 { ver hata("USB hub tanimlayicisi"); }
+    değişken n: tam32 = oku_u8(b,2);
+    eğer n < 1 veya n > 15 { ver hata("USB hub port siniri"); }
+    değişken boy: tam32 = oku_u8(b,0);
+    eğer boy != dizi_boyut(b) veya boy < 7+(n+8)/8+(n+7)/8 { ver hata("USB hub tanimlayici boyu"); }
+    ver tamam(UsbHub { portlar:n, guc_ms:2*oku_u8(b,5), tt_suresi:(oku_le16(b,3)>>5)&3 });
+}
+genel işlev hub_rota(rota: tam32, derinlik: tam32, port: tam32) -> sonuç<tam32,metin> {
+    eğer derinlik < 0 veya derinlik >= 5 veya port < 1 veya port > 15 { ver hata("USB hub rota siniri"); }
+    değişken kayma: tam32 = derinlik*4;
+    eğer rota < 0 veya (rota>>kayma) != 0 { ver hata("USB hub ust rota"); }
+    ver tamam(rota|(port<<kayma));
+}
+genel işlev hub_hiz(durum: tam32) -> tam32 {
+    eğer (durum&3) != 3 { ver 0; }
+    eğer (durum&1536) == 1024 { ver 3; }
+    eğer (durum&1536) == 512 { ver 2; }
+    eğer (durum&1536) == 0 { ver 1; }
+    ver 0;
+}
+genel işlev hub_tanim_iste(boy: tam32) -> sonuç<Dizi<dtam8>,metin> { ver usb_setup(160,6,10496,0,boy); }
+genel işlev hub_port_iste(port: tam32, istek: tam32, secici: tam32) -> sonuç<Dizi<dtam8>,metin> {
+    eğer port < 1 veya port > 15 { ver hata("USB hub port numarasi"); }
+    eğer istek == 0 ve secici == 0 { ver usb_setup(163,0,0,port,4); }
+    eğer istek == 3 ve (secici == 4 veya secici == 8) { ver usb_setup(35,3,secici,port,0); }
+    eğer istek == 1 ve secici >= 16 ve secici <= 20 { ver usb_setup(35,1,secici,port,0); }
+    ver hata("USB hub port ozelligi");
+}

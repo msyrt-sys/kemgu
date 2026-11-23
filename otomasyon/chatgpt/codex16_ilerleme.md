@@ -31,3 +31,9 @@ Yeni MSI kapısı iki derleyiciyle normal ve AHCI MSI yeteneği atlanan dört a�
 AHCI hatasında port durduruluyor, hata durumu temizleniyor, BSY/DRQ sürüyorsa COMRESET uygulanıyor ve motor yeniden başlatılıyor. NVMe başarısız tamamlanmayı kuyruktan tüketiyor. USB BOT, yeniden denemeden önce REQUEST SENSE gönderiyor. İlk komuta ek olarak en fazla üç deneme yapılır. Kalıcı sektör hatasının ardından her diskte bağımsız dosya aynı açılışta okundu.
 
 C ve self-host için altışar blkdebug senaryosu geçti. Üç disk türünde tek seferlik hatada bir, kalıcı hatada dört başarısız fiziksel okuma ölçüldü. Yeniden denemeyi sıfırlama ve AHCI portunu yeniden başlatmama sabotajlarının ikisi de kırmızı. Disk kâhini, dört saf sürücü kapısı ve sekiz regresyon yeşil. İlk toplu koşumda eski USB model testi bir REQUEST SENSE beklediğinden kırmızı verdi. Model kalıcı hata için dört REQUEST SENSE ve sonraki geçerli okumayı denetleyecek şekilde güncellendi. Üç ilgili saf test hedefi yeniden yeşil tamamlandı. Toplam test süresi 1391 saniye, bölüm 23 dakika.
+
+## Bölüm 5 — USB 2 hub
+
+Dört portlu bir ve iki katlı hub arkasında klavye, fare ve USB disk çalıştı. İki derleyicide de dosya gezgininin seçim satırı QMP tekerlek olayıyla değişti. Veri diskine yazılan dosyanın baytları kapanışta host imajından okundu. İç içe hub senaryosunda çıkarılan diskin eski tanıtıcısı reddedildi ve yeniden takılan diskten dosya tekrar okundu. Her açılışta boş porta önce tablet, sonra ikinci bir hub takılıp çıkarıldı. Her değişimden sonra HMP ağacı, konuk envanteri ve denetleyicinin fiziksel yuva bağlamları karşılaştırıldı.
+
+İki sabotaj da uygulandı. Port numarası kaydırıldığında xHCI adresleme kod 5 ile durdu. Çıkarmada bağlantı değişim biti onaylanmayınca ilk tablet kaldırıldı fakat ikinci takılan hub konuğun listesine girmedi. USB hub kapısı, dört saf sürücü kapısı, sekiz regresyon ve 72 PC matrisi açılışı geçti. Birleşik koşum 1295 saniye, bölüm 22 dakika.

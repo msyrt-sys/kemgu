@@ -5086,3 +5086,9 @@ test_tumu: calistir_bm_x86_disk_hata
 calistir_bm_x86_disk_hata: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/ahci/kurtarma_test.kem
 	@SUREC_KAHIN=disk_hata_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_usb_hub
+test_tumu: calistir_bm_x86_usb_hub
+calistir_bm_x86_usb_hub: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/usb/hub_test.kem
+	@SUREC_KAHIN=usb_hub_kahin bash test/bm_x86_surec_harness.sh

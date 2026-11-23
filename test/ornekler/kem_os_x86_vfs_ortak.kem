@@ -450,10 +450,10 @@ işlev ksv_dizin_oku(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> ta
     eğer a.yol.indeks == -2 {
         değişken xs: Dizi<DizinGirdisi> = [];
         eğer bm_esit(a.yol.yol,"/") { dizi_ekle(xs,ksv_sanal_girdi("diskler")); }
-        değilse { için k: b.disk.baglar {
+        değilse { için k: b.disk.baglar { eğer kd_hub_bagli(&değişken b.disk,k.indeks) {
             değişken ad: metin = k.kayit.ad;
             dizi_ekle(xs,ksv_sanal_girdi(metin_kes(ad,9,metin_uzunluk(ad)-9)));
-        } }
+        } } }
         ver ksv_dizin_kopyala(b,fd olarak tam32,p,n olarak tam32,xs);
     }
     eşleş kd_fat(&değişken b.disk,a.yol) { hata(e) => { ver ksv_hata(e); } tamam(fat) => {

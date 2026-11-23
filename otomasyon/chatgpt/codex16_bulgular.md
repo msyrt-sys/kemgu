@@ -65,3 +65,11 @@ Doğrudan blkdebug → file düzeninde `read_aio` geçici hatayı tetiklemedi. Q
 USB SCSI izinde her başarısız okuma başına bir REQUEST SENSE ölçüldü. İki derleyicide de geçici hata sonrası dosya baytları host FAT imajıyla eşleşti. Kalıcı hatadan sonra aynı bölümün başka dosyası okundu ve fsck temizdi. QEMU’daki AHCI EIO durumunda BSY ve DRQ kapalıydı. COMRESET gerektiren meşgul durumunun yazmaç sırası ve bir milisaniyelik beklemesi ayrı host testinde doğrulandı.
 
 Sıfır yeniden denemede tek seferlik hatadan sonra SATA dosyası yerine LBA/TFD/PxIS hata satırı döndü. Port yeniden başlatma yazımını atlayan kopyada hem hatalı dosya (LBA 4103) hem de sonraki dosya için gereken sektör (4102) okunamadı. İki sabotaj koşumu rc 1 verdi.
+
+## USB hub ağacı ve olayları
+
+QEMU 8.2.2 üzerinde USB 2 kök portu 5, HMP fiziksel portu 1 ile eşleşti. Host bu dönüşümü denetleyicinin Supported Protocol alanından çıkardı. İkinci hub için rota 1, klavye, disk ve fare için sırasıyla 17, 33, 49 bulundu. Ek tabletin rotası 65 idi. QMP ile DCBAA üzerinden okunan çıkış bağlamlarının kök portu, hızıyla uyumlu TT alanı, rota ve yapılandırılmış yuva durumu denetlendi. QEMU'nun hub modeli full-speed çalıştığı için high-speed işlem çeviricisi fiziksel olarak sınanmadı. [QEMU hub](https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-hub.c) ve [xHCI](https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/hcd-xhci.c)
+
+Sürücü hub tanımlayıcısını iki istekte okur. Her portun gücünü açar, gücün kararlı olmasını bekler, portu sıfırlar ve değişim bitlerini onaylar. Yuva, klavye/fare ve BOT yönetim işlemleri aynı olay halkasını paylaşır. Sınırlar beş rota hanesi, hub başına 15 port, denetleyici başına 16 eşzamanlı aygıttır. Eski açık dosyaların yeniden kullanılan USB yuvasından okumasını engellemek için sökülen hub disklerinde ortam nesli kontrol edilir. Bir oturumdaki blok tanıtıcı geçmişi 64 ile sınırlıdır. Hub sürücüsü USB 2 sınıfı içindir.
+
+Rota sabotajında konuk `KABUK HATA xhci tamamlanma kodu 5` verdi. Çıkarma sırasında C_PORT_CONNECTION onayını atlayan kopyada ilk çıkarma işlendi, ikinci takmada HMP 1.1.4 üzerinde hub gösterdi ve konuk aynı yolu listelemedi. İlgili iki süreç de rc 1 döndürdü.

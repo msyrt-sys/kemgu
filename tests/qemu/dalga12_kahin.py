@@ -55,7 +55,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -77,10 +77,16 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
                     '-trace', 'enable=ps2_write_keyboard'])
     if not sata_takili:
         cmd.append('-nodefaults')
+    hub_yolu = '.'.join(['1']*hub_derinligi)
+    def alt_port(n):
+        return f',port={hub_yolu}.{n}' if hub_yolu else ''
     if xhci:
         cmd.extend(['-device','qemu-xhci,id=x'])
+        for i in range(hub_derinligi):
+            port = '.'.join(['1']*(i+1))
+            cmd.extend(['-device',f'usb-hub,id=h{i+1},bus=x.0,port={port},ports=4,port-power=on'])
         if klavye == 'usb':
-            aygit = 'usb-kbd,bus=x.0'
+            aygit = 'usb-kbd,bus=x.0'+alt_port(1)
             if klavye_izi:
                 aygit += f',pcap={w}/klavye.pcap'
             cmd.extend(['-device',aygit])
@@ -103,7 +109,7 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
         sata_aygiti = 'ide-hd,bus=harici.0'
     elif pci_topolojisi != 'duz':
         raise ValueError(pci_topolojisi)
-    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'), ('nvme',nvme_aygiti), ('sata',sata_aygiti)]:
+    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'+alt_port(2)), ('nvme',nvme_aygiti), ('sata',sata_aygiti)]:
         if (ad == 'usb' and not xhci) or (ad == 'sata' and not sata_takili):
             continue
         if ad == 'nvme' and not nvme_ns:
@@ -118,7 +124,7 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
         cmd.extend(['-drive',surucu,
                     '-device',f'{aygit},drive=d{ad}{ek}'])
     if fare == "usb":
-        cmd.extend(["-device", "usb-mouse,bus=x.0"])
+        cmd.extend(["-device", "usb-mouse,bus=x.0"+alt_port(3)])
     if usb2:
         cmd.extend(['-drive',f'if=none,id=u2,format=raw,file={usb2.disk}',
                     '-device','usb-storage,bus=x.0,drive=u2'])

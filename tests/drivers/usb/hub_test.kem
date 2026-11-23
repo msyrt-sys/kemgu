@@ -1,0 +1,20 @@
+// Dört portlu USB 2 hub tanımı ile iki katlı xHCI rota ve sınıf istekleri.
+kullan drivers::usb::hub::{ UsbHub, hub_tanim, hub_tanim_iste, hub_port_iste, hub_rota, hub_hiz };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8, oku_u8, oku_le16 };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(9);
+    yaz_u8(b,0,9); yaz_u8(b,1,41); yaz_u8(b,2,4); yaz_u8(b,3,9); yaz_u8(b,5,3); yaz_u8(b,8,255);
+    eşleş hub_tanim(b) { hata(e) => { ver 1; } tamam(h) => { eğer h.portlar != 4 veya h.guc_ms != 6 { ver 2; } } }
+    yaz_u8(b,2,16); eşleş hub_tanim(b) { hata(e) => { } tamam(h) => { ver 3; } }
+    eşleş hub_rota(2,1,3) { hata(e) => { ver 4; } tamam(r) => { eğer r != 50 { ver 5; } } }
+    eşleş hub_rota(2,5,3) { hata(e) => { } tamam(r) => { ver 6; } }
+    eşleş hub_tanim_iste(7) { hata(e) => { ver 7; } tamam(p) => { eğer oku_le16(p,2) != 10496 veya oku_u8(p,0) != 160 { ver 8; } } }
+    eşleş hub_port_iste(2,0,0) { hata(e) => { ver 9; } tamam(p) => {
+        eğer oku_u8(p,0) != 163 veya oku_le16(p,4) != 2 veya oku_le16(p,6) != 4 { ver 10; }
+    } }
+    eşleş hub_port_iste(4,1,16) { hata(e) => { ver 11; } tamam(p) => {
+        eğer oku_u8(p,0) != 35 veya oku_u8(p,1) != 1 veya oku_le16(p,2) != 16 { ver 12; }
+    } }
+    eğer hub_hiz(3) != 1 veya hub_hiz(515) != 2 veya hub_hiz(1027) != 3 veya hub_hiz(1) != 0 { ver 13; }
+    ver 0;
+}
