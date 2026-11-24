@@ -116,7 +116,7 @@ Dalga 15'in [donanım bekleme envanterindeki](codex15_bulgular.md) satırlara a�
 |---|---|---|
 | 16550 C TX ve PL011 C TX | THRE ve boş TX FIFO | Bayt başına 100.000 durum okuması |
 | 16550 C RX ve PL011 C RX | Kullanıcının karakter göndermesi | Bloklayan alma API'sinin sözleşmesi gereği açık uçlu |
-| AHCI ve NVMe MSI | Kesme sayacı değişimi | 50 ms veya beş milyon turdan önce tamamlanma, yoksa yoklamaya dönüş |
+| AHCI ve NVMe MSI | Kesme sayacı değişimi | 500 ms veya elli milyon turdan önce tamamlanma, yoksa yoklamaya dönüş |
 | AHCI, NVMe ve USB disk işlemi | Geçici ortam hatası | İlk girişim ve en çok üç yeniden deneme |
 | Hub portu | Bağlantı değişimi ve port sıfırlaması | Sayılı durum yoklamaları, güç gecikmesi tanımlayıcıdan |
 | ACPI S5 | Sistemin gücü kesmesi | Yazma sonrasında 250 ms, sonra hata ve eski durdurma yolu |
@@ -129,14 +129,14 @@ MMIO ölçümü VirtIO blok/TX/RX used.idx, SATA port durumu, kesme sayacı, xHC
 
 | Birim | Kaynak satırı | Derleyici | Süre (s) | Tepe RSS (KiB) | IR satırı | En büyük işlev (IR satırı) |
 |---|---:|---|---:|---:|---:|---|
-| 5000 | 4987 | kemgu | 0.0470 | 8100 | 26517 | main (2419) |
-| 5000 | 4987 | codegen | 2.3654 | 14464 | 23502 | main (2260) |
-| 10000 | 9985 | kemgu | 0.0581 | 14492 | 52936 | main (4800) |
-| 10000 | 9985 | codegen | 7.2759 | 26640 | 46906 | main (4482) |
-| 20000 | 19981 | kemgu | 0.1476 | 27156 | 105771 | main (9559) |
-| 20000 | 19981 | codegen | 24.0433 | 51120 | 93712 | main (8924) |
-| kabuk | 9041 | kemgu | 0.5414 | 41004 | 177929 | drivers.ortak.harf_veri.ust_eslemeler (19835) |
-| kabuk | 9041 | codegen | 43.6064 | 120076 | 167212 | drivers.ortak.harf_veri.ust_eslemeler (16786) |
+| 5000 | 4987 | kemgu | 0.0287 | 8176 | 26517 | main (2419) |
+| 5000 | 4987 | codegen | 2.4514 | 14672 | 23502 | main (2260) |
+| 10000 | 9985 | kemgu | 0.0901 | 14432 | 52936 | main (4800) |
+| 10000 | 9985 | codegen | 7.6341 | 26768 | 46906 | main (4482) |
+| 20000 | 19981 | kemgu | 0.1550 | 27236 | 105771 | main (9559) |
+| 20000 | 19981 | codegen | 25.2305 | 51088 | 93712 | main (8924) |
+| kabuk | 9186 | kemgu | 0.5694 | 40352 | 179256 | drivers.ortak.harf_veri.ust_eslemeler (19835) |
+| kabuk | 9186 | codegen | 46.0809 | 124848 | 168466 | drivers.ortak.harf_veri.ust_eslemeler (16786) |
 <!-- derleme-olcum-son -->
 
 İlk ölçümde 5k'dan 20k'ya kaynak boyutu dört, IR büyüklüğü iki derleyicide de yaklaşık dört katına çıktı. Self-host duvar süresi 2,27 saniyeden 24,09 saniyeye, bootstrap süresi 0,043 saniyeden 0,129 saniyeye çıktı. Birleşik kabukta ilk ölçüm sırasıyla 43,91 s / 120.272 KiB ve 0,55 s / 41.232 KiB idi. Üç katlık eşikler paralel QEMU yüküne pay bırakırken on kat çoğaltmayı yakalar. En büyük işlev sabotajda bootstrap için 23.749 IR satırına (eşik 7.257), self-host için 22.168'e (eşik 6.780) çıktı.
@@ -155,3 +155,33 @@ FAT32 FSInfo boş kümeyi bilinmiyor olarak işaretlediğinde ilk uygulama 64 Mi
 
 ✓ 50 tekrar: 47834 boş çerçeve; süreç heap +0; kabuk heap 4919632 → 7083904 bayt
 ✓ 50 tekrar: 47804 boş çerçeve; süreç heap +0; kabuk heap 5182096 → 7346368 bayt
+
+## Belgeler ve geçmiş kanıtların denetimi
+
+H4e için ekran aynasına tek bayt aktarımı kaldırılmış PVH çekirdeğinde seri çıktı korunurken ilk ekran görüntüsünde 940 piksel farklıydı. İlk fark x=24, y=8 noktasında beyaz ve 0x102040 renkleri arasındaydı. H5i için AltGr+Q karakterini değiştiren ayrı çekirdekte host UTF-8 karşılaştırması rc 1 verdi. İki değişiklik de üretim kodundan ayrı kaynak kopyalarında sınandı.
+
+PVH kabuk kapısı önce AHCI'nin seri hatta yazdığı yoklama bildirimini reddetti. Üçüncü bölümle eklenen satır şimdi AHCI topolojisinde birebir bekleniyor. Ekran modeli kabuk başlığından başlıyor. USB ve PS/2 klavye, üç disk türünde aynı seri ve piksel ölçütleriyle tekrar sınandı.
+
+Ek disksiz senaryoda OVMF çekirdeği bağımsız bir SCSI diskinden yükledi. Çekirdeğin yönettiği NVMe, SATA ve USB diski sıfırdı. Seri hatta disk bulunamadığı görüldü. Host başlangıç diskini QMP ile de çıkardıktan sonra /ram üzerinde yazma ve okuma çalıştı. QEMU kapandı ve giriş imajlarının özetleri aynı kaldı. Fiziksel bir PC ölçülmedi.
+
+İlk bağımsız bare-metal yapı kapısı iki birleşik IR'da da bulunan pci_port_adres ve pci_port_veri16 için CAT listesinde doğrudan kaynak aradığı için kırmızı verdi. Modül ithalat yoluyla derleniyor. Kapıya iki IR'da da doğru dönüş türüne sahip iki tam nitelikli tanımı doğrulayan bir sınıflandırma eklendi. Sonuç 24/24, atlama 0. Genel tip denetiminin 21 mevcut muafiyeti korundu. 38 C dosyasının sıfır uyarı kapısı geçti.
+
+
+## Tam koşumda NVMe bildirim süresi
+
+İlk genel koşumda NVMe veri bölümünü yazılabilir bağlarken 50 ms içinde MSI-X bildirimi alınamadı. Sürücü hatayı bildirip yoklamaya geçti, eski disk kapısının tam seri karşılaştırması bu satırı yakaladı. QMP'den okuma hızı 8 IOPS'a indirildiğinde aynı durum eski çekirdekte tek başına da görüldü. Yeni bekleme, TSC ile 500 ms ve bağımsız en fazla 50 milyon tur sınırı uygular. Döngü x86 PAUSE kullanır. Süre dolarsa açık hata ve yoklama yolu korunur.
+
+C ve self-host ile normal ve AHCI MSI kapalı açılışlarda QMP aynı hız sınırını bildirdi. Dört NVMe dosya okumasının fiziksel istek sayıları 3, 3, 3, 3. İmaj baytları ve CQ1 vektör sayacı doğrulandı. Hatalı AHCI vektöründe yoklama ile okuma çalıştı ve MSI kapısı kırmızı döndü. Çakışan vektör deneyi de rc 1 verdi. Gecikme için yapılan değişiklikte disk, MSI ve MMIO IR/makine kodu kapıları topluca yeşil geçti.
+
+
+## Son Enter yanıtından önce güç kesilmesi
+
+Çok süreç kapısında hesaplama tamamlandıktan sonra S5 beklenirken SurecConsole son tuş için iki LAPIC tiki okumaya çalışıyordu. Kaydedilen hatada QMP pmemsave yanıtının on saniyelik soket süresi doldu. Konuğun seri kapanış mesajı mevcuttu. Kapanış çevresinde erken bağlantı kapanışı zaten ele alınıyordu. Aynı noktada soket zaman aşımı da ele alınır. Ardından beş saniye içinde QEMU çıkış kodunun sıfır ve seri çıktının beklenen baytlarla birebir olması zorunludur. Komutların çalıştırılmasındaki QMP zaman aşımı hata vermeye devam eder. Ayrı iki QEMU oturumunda son yanıtı alamama durumu enjekte edildi. ACPI S5 ile temiz kapanış geçti, konuk kapanış satırı bulunmadan host tarafından kapatılan makine reddedildi.
+
+## USB klavye raporunun süreç içindeki ömrü
+
+Kısa merhaba süreci ilk diliminde sonlanırsa komutu başlatan Enter bırakmasını kabuk görür. Süreç bir dilim daha çalışırsa aynı olayı planlayıcı çözer. Özgün 50 başlatma deneyi üçüncü tam koşumda 131.168 bayt ölçtü. Deney için kullanıcı ELF’ine 80 milyon yinelemeli sınırlı bir sayaç eklendi. QEMU fiziksel belleğindeki başlangıç/bitiş değerleri ve izleme ikilisindeki çağrı sayaçları, eski çekirdekte 50 başlatmanın 34 tanesinde 65.584 baytlık artışı HID raporuna bağladı. Yalnız önceki sekiz baytı yerinde güncellemek sorunu gidermedi. Ara uygulamada Set 1 gezinme karşılaştırmasındaki bölge oluşturma da aynı artışı üretti.
+
+Son uygulama önceki HID boot raporunu sekiz baytlık bir değer olarak saklar. Tek bir rapor en çok sekiz değiştirici, altı bırakma ve altı basma üretir. Kabuk başlangıçta 20 olaylık bir alan ayırır. Donanım raporu doğru boydaysa x86 hizalı DMA alanını tek okumayla alır. Mevcut alanları okuyan veya güncelleyen HID ve Set 1 işlevleri yeni bölge açmaz. Host testi aynı rapordaki 20 olayın sırasını, tamponun yeniden kullanımını ve kopyalanmış klavye geçmişini doğrular. Eski API boy ve rollover denetimlerini sürdürür.
+
+Her derleyiciyle iki ayrı QEMU açılışında 50 uzun merhaba başlatıldı. Tüm koşumlarda süreç içi heap artışı 0 ve boş fiziksel çerçeve sayısı sabit kaldı. Kabukta komut yazarken kullanılan bellek bu sayaçtan ayrı ölçülür. Kalıcı regresyon testi bir başka programla çalışır. 8042’siz Q35 üzerinde QMP, her seferinde hesap sürecinin ön plan PID’sini okuyup Enter’ı bırakır. İlk açılış sonrası 31 süreç eski çekirdekte 1.049.344 bayt, yeni C ve self-host çekirdeklerinde 0 bayt ölçtü. Bu deney E4k genel bölge yönetimini değiştirmedi.

@@ -51,8 +51,22 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
 } }
 ```
 
+## Bağlama noktaları arasında dosya aktarma
+
+Bu örnek bir FAT32 dosyasını geçici dosya sistemine kopyalar ve orada yeniden adlandırır. İki çağrı da mutlak veya çalışma dizinine göre çözülen iki yol alır. Hedef aygıttaki yazma başarısız olursa kaynak yerinde kalır. Kaynak silinemediğinde taşıma hata döndürür ve yazılmış hedef elde kalır.
+
+<!-- program: aktarornek -->
+```kem
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc != 2 { ver 2; }
+    eğer sis_kopyala(sis_argv(argv,1),"/ram/ornek.tmp") < 0 { ver 3; }
+    eğer sis_tasi("/ram/ornek.tmp","/ram/ornek.txt") < 0 { ver 4; }
+    ver 0;
+}
+```
+
 ## Sınırlar
 
 Kod ve verinin başlangıcı `0x54200000`, üst sınırı `0x54600000` olur. Kullanıcı heap'i 8 MiB'dir. ELF yükleyicisi örtüşen segmentleri, yazılabilir ve çalıştırılabilir bir sayfayı ve görüntü alanı dışındaki hedefi reddeder. En fazla sekiz süreç yuvası ve süreç başına 16 fd bulunur. Bir çağrıda en çok 16 KiB okunur veya 4 KiB yazılır. FAT32 yazma sınırı dosya başına 64 KiB'dir. Komut en çok 32 argüman alır. Hata numaraları, kayıtlardaki alanların sırası ve boru uçlarının sahipliği ABI tablosundadır. [Sistem çağrıları](KEMGU_OS_Syscall_ABI.md)
 
-`make calistir_bm_x86_belge15` bu sayfadaki iki kaynak bloğunu çıkarır, iki derleyiciyle yeniden üretir ve OVMF altında çalıştırır.
+`make calistir_bm_x86_belge15` bu sayfadaki üç kaynak bloğunu çıkarır, iki derleyiciyle yeniden üretir ve OVMF altında çalıştırır.

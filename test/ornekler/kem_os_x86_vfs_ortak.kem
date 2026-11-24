@@ -115,7 +115,7 @@ yapı KsvFd { acik: mantıksal; yol: KabukYol; kip: tam64; konum: tam64; }
 yapı KsvBaglam {
     disk: KabukDisk; fds: Dizi<KsvFd>; kabuk_cwd: metin; degisti: mantıksal;
     x: XhciDurum; xb: tam64; klavye_indeksi: tam32; h: HidKlavye; tr: KlavyeDurumu;
-    olaylar: Dizi<TusHamOlay>; olay_konum: tam32; ilk_tus: mantıksal; dilim_calisti: mantıksal; fare_durum: FareDurumu; olay_maskesi: tam64; son_tik: tam64; bekleme_kurulu: mantıksal;
+    hid_tampon: Dizi<TusHamOlay>; olaylar: Dizi<TusHamOlay>; olay_konum: tam32; ilk_tus: mantıksal; dilim_calisti: mantıksal; fare_durum: FareDurumu; olay_maskesi: tam64; son_tik: tam64; bekleme_kurulu: mantıksal;
 }
 küresel değişken ksv_baglam_adresi: tam64 = 0;
 
@@ -570,6 +570,11 @@ işlev ksv_tus_kuyruk(b: &değişken KsvBaglam,o: TusHamOlay) -> tam64 {
     }
     dizi_ekle(b.olaylar,o); ver 0;
 }
+çıplak işlev ksv_hid_oku(h: &değişken HidKlavye,tr: &değişken KlavyeDurumu,tampon: Dizi<TusHamOlay>) -> tam32 {
+    değişken rapor: tam64 = 0;
+    eğer değil bh_klavye_raporu(&değişken rapor) { ver -1; }
+    ver hid_klavye_ham_doldur(h,tr,rapor,tampon);
+}
 işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
     değişken led: tam32 = klavye_led(&değişken b.tr,b.klavye_indeksi >= 0);
     eğer b.klavye_indeksi < 0 {
@@ -587,14 +592,16 @@ işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
     eğer bh_gonder(&değişken b.x,b.xb,b.klavye_indeksi,0) < 0 { ver -5; }
     bh_olaylar();
     eğer bh_durum(0) != 2 { ver 0; }
-    eşleş hid_klavye_ham_rapor(&değişken b.h,&değişken b.tr,bh_rapor(0)) {
-        hata(e) => { ver 0-KX_HATA_IO; }
-        tamam(xs) => {
-            kl_led_degisti(&değişken b.x,b.xb,b.klavye_indeksi,&değişken b.tr,led);
-            için o: xs { değişken r: tam64 = ksv_tus_kuyruk(b,o); eğer r != 0 { ver r; } }
-            ver 0;
-        }
+    değişken n: tam32 = ksv_hid_oku(&değişken b.h,&değişken b.tr,b.hid_tampon);
+    eğer n < 0 { ver 0-KX_HATA_IO; }
+    kl_led_degisti(&değişken b.x,b.xb,b.klavye_indeksi,&değişken b.tr,led);
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken r: tam64 = ksv_tus_kuyruk(b,dizi_al(b.hid_tampon,i));
+        eğer r != 0 { ver r; }
+        i=i+1;
     }
+    ver 0;
 }
 işlev ksv_tus_al(b: &değişken KsvBaglam,p: tam64) -> tam64 {
     güvensiz { eğer kxs_on_pid != kxs_pid { ver -13; } }

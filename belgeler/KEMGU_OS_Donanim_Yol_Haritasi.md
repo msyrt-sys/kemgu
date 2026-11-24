@@ -89,7 +89,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 Çekirdek büyüdükçe bugünkü "her şeyi `cat` ile tek dosyaya birleştir" yolu darboğaz olur.
 
-- [ ] **H1a (Kısmen D-763 birleşik kabuk ölçümü var. 20 bin satırlık karşılaştırma eksik.) [S] Ölç:** `kem_os_x86` derleme süresi + IR boyutu; 20k satırlık
+- [x] **H1a (✓ D-766/dalga 16 (calistir_derleme_olcum)) [S] Ölç:** `kem_os_x86` derleme süresi + IR boyutu; 20k satırlık
       sentetik çekirdekte aynısı. Darboğaz gerçekse H1b zorunlu, değilse ertelenir.
 - [ ] **H1b (Kısmen test/bm_x86_uefi_harness.sh birimleri birleştiriyor. Tek sürücülük artımlı çekirdek derlemesi eksik.) [L] Ayrık derleme (LOOP D7a–f).** Sürücü başına derleme birimi,
       imza-only arayüz dosyaları, artımlı derleme. Kanıt: tek sürücü değişince
@@ -104,12 +104,12 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       hepsini `drivers/ortak/bayt.kem` okuyucularıyla yazdı, dış kâhinlerle doğrulandı. Eski madde: ACPI tabloları,
       AHCI komut başlıkları, FAT BPB bayt-hizasızdır. Yoksa: ham bayt okuma
       yardımcıları (`oku16le/oku32le`) yeter mi, yoksa `yapı` için `paketli` gerekir mi?
-- [ ] **H1f (Kısmen runtime/mimari/x86_64/kem_pci_hw.kem 32 bit port erişimini sağlıyor. Genel 16 bit çiftinin kapısı eksik.) [S] Port G/Ç genişletme.** `kem_port_oku16/32`, `yaz16/32` (PCI config,
+- [x] **H1f (✓ D-766/dalga 16 (calistir_bm_x86_pci16)) [S] Port G/Ç genişletme.** `kem_port_oku16/32`, `yaz16/32` (PCI config,
       ATA, PS/2 hepsi ister). Kanıt: QEMU'da PCI vendor ID okunuyor.
-- [ ] **H1g (Kısmen D-757 ve D-763 IRQ1, IRQ12, LAPIC ve xHCI kullanıyor. Ortak kaydedilebilir vektör arayüzü eksik.) [M] Kesme işleyici çerçevesi.** IDT girişi → `.kem` işleyiciye köprü
+- [x] **H1g (✓ D-766/dalga 16 (calistir_bm_x86_msi)) [M] Kesme işleyici çerçevesi.** IDT girişi → `.kem` işleyiciye köprü
       genelleştirilmeli (bugün IRQ0/timer'a özel). Vektör tablosu, EOI, iç içe kesme
       yasağı. Kanıt: 3 farklı IRQ aynı çerçeveden geçiyor.
-- [ ] **H1h (Kısmen D-757 kesme halkasındaki volatile yükleme ve saklamaları ölçtü. MMIO döngüsünün bariyer mutasyonu eksik.) [S] `volatile` anlamı denetimi.** MMIO okumalarının optimize edilip
+- [x] **H1h (✓ D-766/dalga 16 (calistir_mmio_volatile)) [S] `volatile` anlamı denetimi.** MMIO okumalarının optimize edilip
       silinmediğini ölç (`-O2`de durum yazmacı döngüsü). Sabotaj: bariyer/asm
       bozulan listesini kaldır → test asılmalı/kırmızı olmalı.
 
@@ -148,10 +148,9 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       8259 PIC tamamen maskelenir.
 - [x] **H3e (✓ D-757 (PIT mode0 tek atımla kalibrasyon; PVH yolu PIC/PIT kaldı)) [M] LAPIC zamanlayıcı** (PIT ile kalibre). PIT'e bağımlılık biter.
 - [x] **H3f (✓ D-757 (8042 bayrağı + reset GAS)) [S] FADT:** `8042` bayrağı (PS/2 var mı?), sıfırlama yazmacı, PM zamanlayıcı.
-- [ ] **H3g (Kısmen D-757 FADT ve 8042 yeniden başlatma var. ACPI S5 kapatması eksik.) (KISMEN D-757 (FADT reset → 8042 → üçlü hata; S5/AML kapsam dışı)) [M] Kapatma/yeniden başlatma:** önce FADT reset yazmacı, sonra 8042
-      `0xFE`, sonra üçlü hata. Tam ACPI kapatma (S5) **AML yorumlayıcısı** ister →
-      **KAPSAM DIŞI**; QEMU için `isa-debug-exit`, gerçek PC'de "güç tuşuna bas" mesajı.
-- [ ] **H3h (Kısmen D-763 xHCI MSI-X kullanıyor. AHCI kesmesi için MSI doğrulanmadı.) [S] Not: AML'den kaçınma stratejisi.** PCI kesmeleri için `_PRT` (AML)
+- [x] **H3g (✓ D-766/dalga 16 (calistir_bm_x86_kapat)) [M] Kapatma ve yeniden başlatma.** Kapatmada S5, yeniden başlatmada FADT reset ve 8042 yolu kullanılır.
+      S5 için tanınan AML paketleri okunur. Çözülemeyen tabloda açık hata ve belgelenen yedek kapanış yolu kullanılır.
+- [x] **H3h (✓ D-766/dalga 16 (calistir_bm_x86_msi)) [S] Not: AML'den kaçınma stratejisi.** PCI kesmeleri için `_PRT` (AML)
       yerine **MSI/MSI-X** kullanılır (H6d) — tam ACPI yorumlayıcısı yazmamak için
       bilinçli seçim.
 
@@ -161,7 +160,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 - [x] **H4a [M] ✓ D-755 (UEFI GOP; multiboot2 etiketi BIOS yolunda) Framebuffer etiketi** (GRUB `gfxpayload`; UEFI GOP ile AYNI veri biçimi
       → tek kod yolu). Piksel biçimi (RGB/BGR, 32/24 bpp), pitch.
-- [ ] **H4b (Açık runtime/mimari/x86_64/kem_ekran_gop.kem. GOP için PAT karşılaştırması eksik.) [S] Framebuffer belleğini yazma-birleştirmeli/önbelleksiz eşle** (PAT).
+- [x] **H4b (✓ D-766/dalga 16 (calistir_bm_x86_pat)) [S] Framebuffer belleğini yazma-birleştirmeli/önbelleksiz eşle** (PAT).
       Ölç: önbellekli eşlemede ekranda artık görüntü kalıyor mu.
 - [x] **H4c [M] ✓ D-752 (gömülü 8×16 Uni2-Fixed16; Türkçe + kutu çizim). (KISMEN D-748: test yazı tipi 8×8 Lat sistem fontu, Türkçe harfler var; 8×16 + kutu çizim + çekirdeğe GÖMÜLÜ font kaldı) Bit eşlem yazı tipi** (8×16, PSF2 biçimi gömülü). **Türkçe
       karakterler zorunlu:** ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü + ASCII + kutu çizim.
@@ -184,25 +183,25 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H5. Klavye (PS/2)
 
-- [ ] **H5a (Kısmen D-757 FADT ve IRQ kuruyor. 8042 öz-test ve port testi eksik.) [M] (KISMEN D-752: yoklamalı başlatma, IRQ/AUX kapalı, çevirme açık; FADT bayrağı ve öz-test YOK) 8042 denetleyici başlatma:** FADT bayrağına bak, öz-test (`0xAA`),
+- [x] **H5a (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [M] 8042 denetleyici başlatma:** FADT bayrağına bak, öz-test (`0xAA`),
       port testi, çeviri modu kararı, her bekleyişte zaman aşımı.
 - [x] **H5b (✓ D-757 (UEFI yolu IRQ1/GSI1 vektör 33, kesme-güvenli halka)) [S] IRQ1 → IOAPIC → işleyici**, tarama kodu kuyruğu (kesme-güvenli halka).
-- [ ] **H5c (Kısmen drivers/ps2/klavye_tr.kem E0 ile basma ve bırakmayı çözüyor. E1 Pause dizisi eksik.) [M] Tarama kodu kümesi 1 çözücü** (`E0` genişletilmiş, `E1` Pause),
+- [x] **H5c (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [M] Tarama kodu kümesi 1 çözücü** (`E0` genişletilmiş, `E1` Pause),
       bas/bırak durumları.
-- [ ] **H5d (Kısmen drivers/ps2/klavye_tr.kem Shift, Ctrl, AltGr ve Caps tutuyor. Num/Scroll Lock ve LED komutu eksik.) [M] Değiştirici tuş durum makinesi:** Shift, Ctrl, Alt, **AltGr**,
+- [x] **H5d (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [M] Değiştirici tuş durum makinesi:** Shift, Ctrl, Alt, **AltGr**,
       Caps/Num/Scroll Lock + LED güncelleme komutu (`0xED`).
-- [ ] **H5e (Kısmen D-752 Türkçe Q ve AltGr var. ABD düzenine geçiş eksik.) [M] Türkçe Q klavye düzeni** (asıl iş): `ı İ ğ Ğ ü Ü ş Ş ö Ö ç Ç`,
+- [x] **H5e (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [M] Türkçe Q klavye düzeni** (asıl iş): `ı İ ğ Ğ ü Ü ş Ş ö Ö ç Ç`,
       AltGr katmanı (`@ € { [ ] } \ | ~ #`), **Caps Lock'ta i→İ, ı→I** (Türkçe büyük
       harf kuralı — `metin_buyuk_tr` ile tutarlı), ölü tuşlar gerekmez (Türkçe Q'da yok).
       Ayrıca ABD düzeni (geçiş: Ctrl+Boşluk). Kanıt: her tuş için beklenen UTF-8 tablosu.
-- [ ] **H5f (Kısmen Dalga 15, calistir_bm_x86_girdi15. İki kaynakta 500/50 ms yazılım tekrarı var. PS/2 donanım tekrar hızı için 0xF3 ayarı eksik.) [S] Tuş tekrarı** (yazılım tarafı; donanım tekrar hızını ayarla `0xF3`).
+- [x] **H5f (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [S] Tuş tekrarı** (yazılım tarafı; donanım tekrar hızını ayarla `0xF3`).
 - [x] **H5g (✓ D-763, calistir_bm_x86_surec ile kullanıcıya basma ve bırakma olayları.) [M] Olay modeli:** `TusOlayi { kod, unicode, bas/bırak, değiştiriciler }`;
       çekirdekten kullanıcı alanına kanal (`kanal<TusOlayi>` ya da syscall).
-- [ ] **H5h (Kısmen D-763 geçmiş ve satır ortası düzenleme var. Ctrl+C ile süreç sonlandırma eksik.) [M] Konsolda satır düzenleme:** geri sil (UTF-8 çok baytlı karakteri TEK
+- [x] **H5h (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [M] Konsolda satır düzenleme:** geri sil (UTF-8 çok baytlı karakteri TEK
       silmeli), sol/sağ ok, Home/End, geçmiş (yukarı/aşağı), Ctrl+C (süreç sonlandırma).
-- [ ] **H5i (Kısmen D-752 ve D-757 gerçek klavye ve hızlı tuş dizilerini deniyor. AltGr mutasyonu için ayrı QEMU kanıtı eksik.) [M] (KISMEN D-752: QMP input-send-event ile gerçek QEMU i8042, ham iz + kabuk 3 disk; hızlı yazma/aynı anda basma YOK) Kapı:** QEMU monitörü `sendkey` ile dizi gönder (`s h i f t - i` gibi)
+- [x] **H5i (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [M] Kapı:** QEMU monitörü `sendkey` ile dizi gönder (`s h i f t - i` gibi)
       → kabuk yankısı beklenen metin (`İ`!). Sabotaj: AltGr eşlemesini boz → `@` gelmez → kırmızı.
-- [ ] **H5j (Kısmen D-757 hızlı girişi deniyor, kabuk PS2_KAYIP bildiriyor. Gerçek halka taşmasıyla artan kayıp sayısının kapısı eksik.) [S] Pozitif + kenar şekiller:** iki tuşa aynı anda basma, çok hızlı yazma
+- [x] **H5j (✓ D-766/dalga 16 (calistir_bm_x86_klavye16)) [S] Pozitif + kenar şekiller:** iki tuşa aynı anda basma, çok hızlı yazma
       (kuyruk taşması → kayıp olay SAYILIR ve bildirilir, çökme yok).
 
 ---
@@ -229,13 +228,13 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 ## H7. PCI ve depolama
 
-- [ ] **H7a (Kısmen runtime/mimari/x86_64/kem_pci_hw.kem CF8/CFC kullanıyor. ECAM erişimi eksik.) [M] PCI yapılandırma alanı:** önce legacy `0xCF8/0xCFC` (H1f'e bağlı),
+- [x] **H7a (✓ D-766/dalga 16 (calistir_bm_x86_pci16)) [M] PCI yapılandırma alanı:** önce legacy `0xCF8/0xCFC` (H1f'e bağlı),
       sonra ECAM (ACPI MCFG). `pci_enum_x86.c` mantığı `.kem`e taşınır.
-- [ ] **H7b (Kısmen Dalga 15, kd_pci_rapor köprülerin ikincil yollarını tarıyor ve sınıfları listeliyor. Köprü arkasına bağlanmış aygıt için ayrı QEMU kanıtı eksik.) [M] Aygıt numaralandırma + sınıf kodları + köprüler** (veri yolu tarama).
+- [x] **H7b (✓ D-766/dalga 16 (calistir_bm_x86_pci16)) [M] Aygıt numaralandırma + sınıf kodları + köprüler** (veri yolu tarama).
       Ekranda `lspci` benzeri çıktı (gerçek donanımda teşhis için ŞART).
-- [ ] **H7c (Kısmen D-745 MMIO penceresi ve BAR erişimi var. Tüm atanmamış BAR'lar için UC eşleme kanıtı eksik.) [M] BAR boyutlandırma + MMIO eşleme** (önbelleksiz), 64-bit BAR.
-- [ ] **H7d (Kısmen D-763 xHCI MSI-X hazır. AHCI MSI doğrulaması eksik.) [M] MSI / MSI-X** (H3h gereği INTx yerine). Kanıt: AHCI kesmesi MSI ile geliyor.
-- [ ] **H7e (Kısmen drivers/ahci/cekirdek.kem ve calistir_qtest IDENTIFY ve sektör G/Ç yolunu içeriyor. Hata sonrası portu sıfırlayıp sürdürme kanıtı eksik.) [L] AHCI sürücüsü:** HBA sıfırlama, port başlatma, IDENTIFY, komut
+- [x] **H7c (✓ D-766/dalga 16 (calistir_bm_x86_pci16)) [M] BAR boyutlandırma + MMIO eşleme** (önbelleksiz), 64-bit BAR.
+- [x] **H7d (✓ D-766/dalga 16 (calistir_bm_x86_msi)) [M] MSI / MSI-X** (H3h gereği INTx yerine). Kanıt: AHCI kesmesi MSI ile geliyor.
+- [x] **H7e (✓ D-766/dalga 16 (calistir_bm_x86_disk_hata)) [L] AHCI sürücüsü:** HBA sıfırlama, port başlatma, IDENTIFY, komut
       listesi + FIS + PRD tabloları, 48-bit LBA okuma/yazma DMA, hata kurtarma
       (port sıfırlama), zaman aşımları. Kanıt: QEMU `-device ahci` + imaj, sektör
       yaz/oku gidiş-dönüşü + SHA256.
@@ -243,18 +242,18 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       arayüz), sektör önbelleği (LRU + kirli bit), istek kuyruğu.
 - [x] **H7g (✓ D-759 (birincil MBR + ana GPT, CRC; yedek GPT / genişletilmiş MBR YOK)) [M] Bölüm tabloları:** MBR + GPT (CRC32 doğrulama — `[30] CRC32 OK` zaten var).
       Kanıt: GPT'li imajda doğru bölüm bulunuyor; bozuk GPT başlığı → yedek başlık.
-- [ ] **H7h [S] Ramdisk (multiboot2 modülü)** — H7e beklemeden dosya sistemi işine
-      başlamak için ara yol.
+- [x] **H7h (✓ D-766/dalga 16 (calistir_bm_x86_ramdisk)) [S] UEFI ramdisk imajı.** Açılış bölümündeki ramdisk.img dosyası fiziksel çerçevelere yüklenir.
+      BIOS/multiboot2 modül devri D-756 kapsamında ertelidir.
 - [x] **H7i (✓ D-745, calistir_bm_x86_nvme ve calistir_qtest ile IDENTIFY ve gerçek blok aktarımı.) [L] NVMe sürücüsü — AHCI'DEN ÖNCE (KARAR 2026-11-07: daha basit, modern makinelerin çoğu):** admin + I/O kuyrukları,
       IDENTIFY, okuma/yazma. Kanıt: QEMU `-device nvme`.
-- [ ] **H7j (Kısmen D-759 AHCI/NVMe/USB ve GPT/MBR kapsıyor. Ramdisk satırı eksik.) [S] Kapı matrisi:** ahci / nvme / ramdisk × MBR / GPT.
+- [x] **H7j (✓ D-766/dalga 16 (calistir_bm_x86_ramdisk)) [S] Kapı matrisi:** ahci / nvme / ramdisk × MBR / GPT.
       Sabotaj: PRD bayt sayısını bir eksik yaz → SHA256 tutmaz → kırmızı.
 
 ---
 
 ## H8. Dosya sistemi
 
-- [ ] **H8a (Kısmen D-761 süreç fd tablosu ve ortak VFS var. /ram bağlama noktası eksik.) [M] VFS katmanı:** düğüm, açık dosya, dosya tanımlayıcı tablosu (LOOP E3d),
+- [x] **H8a (✓ D-766/dalga 16 (calistir_bm_x86_ramdisk)) [M] VFS katmanı:** düğüm, açık dosya, dosya tanımlayıcı tablosu (LOOP E3d),
       yol çözümleme (`/`, `.`, `..`), bağlama noktası (`/` = AÇILIŞ bölümü, `/ram`,
       `/diskler/*` — H8j).
 - [x] **H8b (✓ D-759, calistir_bm_x86_v1 ile FAT32 kök, alt dizin ve dosya okuma.) [M] FAT32 okuma:** BPB doğrulama, FAT zinciri, kök/alt dizin, 8.3 adlar.
@@ -339,10 +338,10 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H10d (✓ D-763, calistir_bm_x86_ekran_fare ile USB HID klavye ve fare.) [M] USB HID boot protokolü:** klavye (8 baytlık rapor → H5 düzen
       katmanına aynı olay) + fare (göreli rapor → H6 katmanına aynı olay).
       Kapı: QEMU `usb-kbd`, `usb-mouse`.
-- [ ] **H10e (Açık drivers/usb/xhci_cekirdek.kem kök portlarla sınırlı. Harici hub enumerasyonu eksik.) [S] USB hub desteği** (çoğu dizüstünde dahili cihazlar hub arkasında).
+- [x] **H10e (✓ D-766/dalga 16 (calistir_bm_x86_usb_hub)) [S] USB hub desteği** (çoğu dizüstünde dahili cihazlar hub arkasında).
 - [x] **H10f (✓ D-759, calistir_bm_x86_v1 ile BOT/SCSI üzerinden kalıcı FAT32 kayıt ve okuma.) [L] ZORUNLU (KARAR 2026-11-07, v1 USB bellekten açılır) USB yığın depolama (BOT + SCSI)** — dosya sistemi
       açılış USB belleğinde olsun istenirse. Yoksa iç SATA/NVMe bölümü kullanılır.
-- [ ] **H10g (Kısmen Dalga 15, calistir_bm_x86_saglamlik. Beş hata senaryosunda kabuk devam ediyor. Eski C UART beklemeleri ve disksiz ramdisk yolu açık.) [M] Sağlamlık turu:** her donanım bekleyişinde zaman aşımı + net hata
+- [x] **H10g (✓ D-766/dalga 16 (calistir_uart_16550_test, calistir_uart_pl011_test, calistir_bm_x86_saglamlik)) [M] Sağlamlık turu:** her donanım bekleyişinde zaman aşımı + net hata
       mesajı (hangi aygıt, hangi yazmaç); eksik aygıtta zarif düşüş (PS/2 yoksa USB'ye,
       AHCI yoksa NVMe'ye, hiç disk yoksa ramdisk).
 - [x] **H10h (✓ Dalga 15, calistir_bm_x86_donanim. Yazılabilir açılış köküne donanim.txt ve host donanım karşılaştırması.) [M] Teşhis paketi:** açılışta `donanim.txt` (PCI listesi, ACPI tabloları,
@@ -375,11 +374,11 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H12a (Kısmen Dalga 15, calistir_kem_os_pc_matris ile 12 UEFI yapılandırması ve 72 açılış. BIOS yolu D-756 ile ertelendi.) [M] QEMU kapı matrisi `calistir_kem_os_pc_matris`:** {BIOS, UEFI} ×
       {PS/2, USB} × {AHCI, NVMe}. `test_tumu`ya süreye göre ALT KÜME bağlanır
       (D-453 deseni: temsilciler her koşumda, tam matris haftalık/CI).
-- [ ] **H12b (Kısmen Dalga 15, calistir_kem_os_ayristirici ile her derleyicide 17.000 örnek. Bu korpusta PS/2 paketleri ve USB tanımlayıcıları yok.) [M] Bulanıklaştırma:** bozuk FAT imajları (H8g), bozuk ACPI tabloları,
+- [ ] **H12b (Kısmen D-766/dalga 16. Dokuz ek korpus geçti. USB sıfır uzunluk sabotajı uygulanmadı.) [M] Bulanıklaştırma:** bozuk FAT imajları (H8g), bozuk ACPI tabloları,
       saçma PS/2 paketleri, bozuk USB tanımlayıcıları → çekirdek asla çökmez.
-- [ ] **H12c (Kısmen Dalga 15, KEMGU_OS_Sabotaj_Envanteri.md içinde dalga 9–15 için 71 kayıt. Daha eski H maddelerinin tamamı sınıflandırılmadı.) [S] Sabotaj envanteri:** her H maddesinin sabotajı tek tabloda (S-numaralı).
+- [x] **H12c (✓ D-766/dalga 16 (KEMGU_OS_Sabotaj_Envanteri.md)) [S] Sabotaj envanteri:** her H maddesinin sabotajı tek tabloda (S-numaralı).
 - [x] **H12d (✓ Dalga 15, calistir_bm_x86_acilis_suresi. Etkin UEFI yolunda devirden kabuğa yedi işaret ve 650 ms medyan eşiği.) [S] Açılış süresi ölçümü** (GRUB → kabuk istemi) ve gerilemeyi yakalayan eşik.
-- [x] **H12e (✓ Dalga 15, calistir_bm_x86_belge15. Mimari, kullanıcı ABI’si, klavye düzeni ve çalışan örnekler.) [S] Belgeler:** sürücü mimarisi, syscall tablosu, klavye düzeni tablosu,
+- [x] **H12e (✓ D-766/dalga 16 (calistir_bm_x86_belge15)) [S] Belgeler:** sürücü mimarisi, syscall tablosu, klavye düzeni tablosu,
       "yeni sürücü nasıl eklenir".
 
 ---

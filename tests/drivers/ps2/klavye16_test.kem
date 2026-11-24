@@ -1,4 +1,5 @@
 kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusHamOlay, klavye_yeni, klavye_ham_bayt, klavye_led };
+kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_ham_tampon, hid_klavye_ham_doldur };
 
 // Set 1 baytları: Python bytes.fromhex("e1 1d 45 e1 9d c5"). Kod bitleri E0=1<<8, E1=1<<9.
 işlev sessiz(d: &değişken KlavyeDurumu,b: tam32) -> mantıksal {
@@ -61,7 +62,34 @@ işlev test_fiziksel_tekrar() -> mantıksal {
     klavye_ham_bayt(&değişken d,158);
     ver tus(&değişken d,30,30,1,97);
 }
+// F1..F6 bırakılırken F7..F12 ve sekiz değiştirici aynı raporda basılır.
+işlev test_hid_tampon() -> mantıksal {
+    değişken h: HidKlavye = hid_klavye_yeni();
+    değişken d: KlavyeDurumu = klavye_yeni();
+    değişken xs: Dizi<TusHamOlay> = hid_ham_tampon();
+    değişken ilk: tam64 = 0; değişken son: tam64 = 255;
+    değişken i: tam32 = 0;
+    iken i < 6 {
+        ilk=ilk|(((58+i) olarak tam64)<<((i+2)*8));
+        son=son|(((64+i) olarak tam64)<<((i+2)*8));
+        i=i+1;
+    }
+    eğer hid_klavye_ham_doldur(&değişken h,&değişken d,ilk,xs) != 6 { ver yanlış; }
+    değişken kopya: HidKlavye = h;
+    eğer hid_klavye_ham_doldur(&değişken h,&değişken d,son,xs) != 20 { ver yanlış; }
+    değişken kodlar: Dizi<tam32> = [29,42,56,347,285,54,312,348,59,60,61,62,63,64,65,66,67,68,87,88];
+    i=0;
+    iken i < 20 {
+        değişken o: TusHamOlay = dizi_al(xs,i);
+        değişken bas: tam32 = 1; eğer i >= 8 ve i < 14 { bas=0; }
+        eğer o.kod != dizi_al(kodlar,i) veya o.bas != bas { ver yanlış; }
+        i=i+1;
+    }
+    eğer hid_klavye_ham_doldur(&değişken h,&değişken d,son,xs) != 0 { ver yanlış; }
+    ver hid_klavye_ham_doldur(&değişken kopya,&değişken d,ilk,xs) == 0;
+}
 işlev main() -> tam32 {
+    eğer değil test_hid_tampon() { yazdir_metin("HID yirmi olay"); ver 5; }
     eğer değil test_fiziksel_tekrar() { yazdir_metin("fiziksel tus tekrari"); ver 4; }
     eğer değil test_diziler() { yazdir_metin("Pause/PrintScreen dizisi"); ver 1; }
     eğer değil test_kilitler() { yazdir_metin("kilit ve LED"); ver 2; }

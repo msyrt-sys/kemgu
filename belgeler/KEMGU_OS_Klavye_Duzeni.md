@@ -80,3 +80,18 @@ Num Lock açıkken sayısal tuş takımı rakam üretir. Kapalıyken yön, Home,
 PS/2 başlatılırken F3 komutuna 7F parametresi verilir. Donanımın tekrar basma baytları fiziksel tuş bırakılana kadar süzülür. Böylece USB ile PS/2 aynı 500 ms ilk gecikme ve 50 ms tekrar aralığını kullanır.
 
 Ctrl+C ön plan sürecini sonlandırır. Kabuk `^C` yazar ve komut almaya döner. Arka plan süreçleri çalışmayı sürdürür. `girdisay N` bir PS/2 IRQ tanısıdır. 1–20 saniyelik ölçüm boyunca kabuk girişi tüketmeyi erteler, ardından basma, bırakma ve kayıp bayt sayılarını seri hatta yazar.
+
+## Uygulama kısayolları
+
+| Uygulama | Tuş | İşlem |
+|---|---|---|
+| Düzenleyici | Ctrl+F / Ctrl+B | İleri / geri ara. Dosyanın ucunda öbür uçtan devam eder. |
+| Düzenleyici | Ctrl+I | Türkçe harfe duyarlı veya duyarsız karşılaştırmayı seç. |
+| Düzenleyici | Ctrl+H | Arananı ve yeni metni gir. 1 tek eşleşmeyi, 2 tümünü seçer. E uygular, H iptal eder. |
+| Düzenleyici | Ctrl+G | Birden başlayan satır numarasına git. |
+| Düzenleyici | Ctrl+Z / Ctrl+Y | Son 64 değişiklik içinde geri al / yinele. Yeni düzenleme, ileri geçmişi bırakır. |
+| Gezgin | F5 / F6 | Seçili dosyayı kopyala / taşı. Hedef aynı dizinde bir ad veya mutlak yol olabilir. |
+| Gezgin | F7 / Delete | Yeni dizin oluştur / seçili girdiyi onayla sil. |
+| Her ikisi | Escape | Açık giriş veya onay kutusunu iptal et. |
+
+Arama, değiştirme ve hedef yolu alanları en çok 255 UTF-8 baytı alır. Alan dolduğunda Enter işlemi başlatmaz. Geri Sil ile bir karakter kaldırın veya Escape ile iptal edin.

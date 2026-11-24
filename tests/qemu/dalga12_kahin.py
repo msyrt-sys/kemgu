@@ -58,7 +58,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -113,7 +113,14 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
         sata_aygiti = 'ide-hd,bus=harici.0'
     elif pci_topolojisi != 'duz':
         raise ValueError(pci_topolojisi)
+    if yalniz_firmware_diski:
+        # OVMF çekirdeği SCSI'den yükler. Kabuk bu taşıyıcıya sürücü bağlamaz.
+        cmd.extend(['-drive', f'if=none,id=ddevir,format=raw,file={usb.disk}',
+                    '-device','virtio-scsi-pci,id=scsi',
+                    '-device','scsi-hd,id=devir,drive=ddevir,bus=scsi.0,bootindex=1'])
     for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'+alt_port(2)), ('nvme',nvme_aygiti), ('sata',sata_aygiti)]:
+        if yalniz_firmware_diski:
+            continue
         if (ad == 'usb' and not xhci) or (ad == 'sata' and not sata_takili):
             continue
         if ad == 'nvme' and not nvme_ns:
@@ -161,7 +168,7 @@ class Console:
             raise AssertionError(ser.read_text(encoding='utf-8',errors='replace')) from exc
         assert start
         self.marker = b'KEMGU-OS kabuk v0\n'
-        self.expected = self.marker+f'DISK {disk}\nKABUK_HAZIR\n'.encode()
+        self.expected = self.marker+(f'DISK {disk}\n'.encode() if disk else b'')+b'KABUK_HAZIR\n'
         self.akis = self.expected.decode()
         assert self.output() == self.expected, self.output()
         schema = q.call('query-qmp-schema')
@@ -223,8 +230,9 @@ class Console:
     def shutdown(self):
         try:
             self.input('kapat')
-        except (BrokenPipeError,ConnectionResetError,AssertionError):
-            # QEMU çıkışı son QMP tuş yanıtından önce gelebilir.
+        except (BrokenPipeError,ConnectionResetError,TimeoutError,AssertionError):
+            # S5 son Enter basışında QMP'yi kapatabilir. Son tuş/tik yanıtı
+            # gelmese de aşağıda hem gerçek süreç çıkışı hem tam seri çıktı şarttır.
             pass
         assert self.p.wait(timeout=5)==0
         assert self.output()==self.expected+'Sistem kapatılıyor.\n'.encode()

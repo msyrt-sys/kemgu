@@ -152,6 +152,16 @@ işlev bh_gonder(x: &değişken XhciDurum,bar: tam64,indeks: tam32,tur: tam64) -
         ver 1;
     }
 }
+// x86 boot klavyesinin hizalı DMA arabelleği tek sekiz baytlık rapor taşır.
+çıplak işlev bh_klavye_raporu(rapor: &değişken tam64) -> mantıksal {
+    güvensiz {
+        değişken r: tam64 = bh_kayitlar;
+        değişken tam: mantıksal = kem_mmio_oku64(r+40) == 8;
+        eğer tam { *rapor=kem_mmio_oku64(kem_mmio_oku64(r+32)); }
+        kem_mmio_yaz64(r,0);
+        ver tam;
+    }
+}
 işlev bh_rapor(tur: tam64) -> Dizi<dtam8> {
     güvensiz {
         değişken r: tam64 = bh_kayitlar+tur*64;
@@ -262,7 +272,13 @@ popq $0
 sti"# çıktı("=r",&bayrak) bozulan("~{memory}") }
         kem_mmio_yaz32(zil,deger);
         değişken t: tam64 = bm_tsc_oku(); değişken i: tam32 = 0;
-        iken kem_mmio_oku64(p+8) == bas ve bm_tsc_oku()-t < 50*kap_tsc_ms ve i < 5000000 { i=i+1; }
+        // Arka uçta sıralanan disk isteği birden çok zamanlayıcı dilimi sürebilir.
+        // TSC yanında bağımsız tur sınırı da bozuk saat yolunu sonlandırır.
+        değişken sinir: tam64 = 500*kap_tsc_ms;
+        iken kem_mmio_oku64(p+8) == bas ve bm_tsc_oku()-t < sinir ve i < 50000000 {
+            satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") }
+            i=i+1;
+        }
         eğer (bayrak&512) == 0 { kg_irq_kapat(); }
         ver kem_mmio_oku64(p+8) != bas;
     }

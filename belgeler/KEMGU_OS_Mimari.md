@@ -20,6 +20,18 @@ Saf testleri `tests/drivers/` altına ekleyin. Yeni test dizinini Makefile'daki 
 
 IDT ve TSS denetimi çekirdek girişinde kurulur. IOAPIC, PS/2 IRQ1 ve IRQ12'yi hedef vektöre yönlendirir. Gerçek zamanlı kesme işleyicisi gelen baytı halkaya ekler. Tuş ve fare paketleri tüketici bağlamında çözülür. xHCI MSI-X vektörü 65 kullanır. PIT ile kalibre edilen LAPIC dilimi 10 ms'dir. Kullanıcı `int 0x80` ile hizmet ister. Her süreç kendi CR3 kökü, kullanıcı yığını ve ELF sayfalarıyla çalışır. Uyku, girdi, çocuk veya boru bekleyen süreç hazır kuyruğuna koşulu gerçekleştiğinde döner. Son çalışan ön plan süreci ekranı ve klavyeyi kullanır. Çıkışta fd uçları ve fiziksel çerçeveler bırakılır. Ebeveyn sonuç kaydını toplar. [Giriş koçanları](../boot/start_x86_64.S) · [APIC](../runtime/mimari/x86_64/kem_apic_hw.kem) · [Süreç adres alanı](../runtime/mimari/x86_64/kem_surec_hw.kem)
 
+## PCI, bellek ve güç
+
+MCFG bir kesim 0 penceresi verirse çekirdek ECAM kullanır. MCFG bulunmayan makinede CF8/CFC ilk 256 baytı sağlar. Köprülerin ikincil ve alt veri yolları izlenir. BAR boyutu ölçülürken I/O ve bellek çözme geçici olarak kapatılır, 64 bitlik BAR iki yarısıyla geri yüklenir. Aygıt MMIO sayfaları UC olarak eşlenir. GOP için IA32_PAT girdisi 7 WC yapılır. Yalnız framebuffer içindeki 4 KiB yapraklarda PAT, PCD ve PWT birlikte kurulur.
+
+`kesme_kaydet` vektörü bir işleyici kimliğine bağlar. `kesme_ayir` boş vektörü ayırır, `kesme_birak` kaydı kaldırır. IRQ1, IRQ12, LAPIC ve xHCI sabit vektörlerle aynı sayaç tablosundadır. AHCI MSI ve NVMe tamamlanma kuyruğu 1 MSI-X kullanır. Beklenen kesme gecikirse sürücü bunu bildirir ve donanım durumunu yoklar. AHCI, NVMe ve USB BOT hatalarında ilk istekten sonra en fazla üç yeniden deneme vardır. USB BOT aygıtından hata nedeni REQUEST SENSE ile okunur.
+
+xHCI hub sürücüsü port gücünü, bağlantı değişimini, sıfırlamayı ve alt aygıt hızını yönetir. Rota kök porttan başlar, her hub için dört bitlik port numarası ekler. Düşük veya tam hızlı aygıtta yüksek hızlı hub'ın işlem çeviricisi bilgisi yuva bağlamına yazılır. Çıkarılan aygıtın eski tanıtıcısıyla yapılan erişim hata verir.
+
+Açılış bölümünde `ramdisk.img` varsa çekirdek, dosyayı kendi FAT okuyucusu üzerinden bitişik fiziksel çerçevelere yükler. İçindeki GPT/MBR bölümleri `/diskler/ram0pN` altında görünür. Yazılar bellekteki imaja gider. Ayrı bir bağlama noktası olan `/ram` açılışta boştur. Dosya verisi sekiz çerçeve, toplam 32 KiB kullanabilir. İki alan da kapanışta bırakılır.
+
+`kapat` önce kirli dosya sistemlerini eşitler. FADT'den bulunan DSDT içindeki tanınan AML `_S5_` paketi PM1a ve varsa PM1b uyku türlerini sağlar. Çekirdek türü ve SLP_EN bitini yazar. S5 eksikse veya makine kapanmazsa tanı mesajından sonra kapanış yedeğine geçer. `yenidenbaslat` FADT reset, 8042 ve son işlemci sıfırlama yolunu izler.
+
 ## Kabuk komutları
 
 Aşağıdaki açıklamalar `yardim <komut>` ile okunabilir. Yalın program adları boru hattında aranır. Tek program için `baslat` komutu aynı aramayı yapar. Bir hat en fazla üç program içerir. `<` ilk aşamanın girdisini, `>` ve `>>` son aşamanın çıktısını açar. `>` dosyayı keser, `>>` sonuna ekler. Bir borudaki son yazıcı kapanınca okur kalan veriyi ve ardından EOF'u alır.
@@ -57,5 +69,12 @@ Aşağıdaki açıklamalar `yardim <komut>` ile okunabilir. Yalın program adlar
 | `goster` | baslat goster &lt;BMP&gt; resmi gösterir. Oklarla kaydırın, Q ile çıkın. |
 | `bul` | baslat bul [-i] &lt;metin&gt; [dosya...] eşleşen satırları numaralandırır. |
 | `hesapla` | baslat hesapla &lt;ifade&gt; parantez ve işlem önceliğiyle tam sayı hesaplar. |
-| `duzenle` | baslat duzenle &lt;dosya&gt; metni açar. Ctrl+S kaydeder, Ctrl+Q çıkar. |
-| `dosyalar` | baslat dosyalar [dizin] dosya gezginini açar. |
+| `duzenle` | duzenle: Ctrl+F/B ara, Ctrl+I harf duyarlılığı, Ctrl+H değiştir, Ctrl+G satır, Ctrl+Z/Y geri al/yinele, Ctrl+S kaydet, Ctrl+Q çık. |
+| `dosyalar` | dosyalar: F5 kopyala, F6 taşı, F7 dizin oluştur, Delete sil, Q çık. |
+| `bilgi` | bilgi süreyi, boş belleği, süreçleri, diskleri, kesmeleri ve giriş durumunu gösterir. |
+| `kopyala` | kopyala &lt;kaynak&gt; &lt;hedef&gt; dosyayı aynı veya farklı bağlama noktasına kopyalar. |
+| `tasi` | tasi &lt;kaynak&gt; &lt;hedef&gt; dosyayı taşır veya adını değiştirir. |
+| `kesme` | kesme sina vektör kayıt çakışmasını sınar. |
+| `pci` | pci yapılandırma alanını ve BAR eşlemelerini gösterir. |
+| `duzen` | duzen tr&#124;us düzeni seçer. Ctrl+Boşluk düzeni değiştirir. |
+| `girdisay` | girdisay 1..20 PS/2 baytlarını sayar. Bu sürede yazılan giriş tüketilir. |

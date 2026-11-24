@@ -131,6 +131,27 @@ def tasma(c):
     print('PS2 halka', adet, bas, birak, kayip, flush=True)
 
 
+def surecte_birak(c):
+    # Fiziksel Enter bırakmasını ön plan süreci klavyeyi devraldıktan sonra gönder.
+    bos = c.bos_cerceve()
+    artis = 0
+    for pid in range(1, 33):
+        yaz(c, 'calistir /diskler/usb0p2/bin/hesap.elf')
+        c.key('ret', True)
+        wait_for(c.p, lambda: c.sayi('kxs_on_pid') == pid)
+        c.key('ret', False)
+        satir(c, f'[hesap.elf pid={pid} cikis=0]')
+        wait_for(c.p, lambda: c.output().endswith(b'KABUK_HAZIR\n'))
+        assert c.bos_cerceve() == bos
+        giris = c.sayi('kxs_heap_giris')
+        cikis = c.sayi('kxs_heap_cikis')
+        assert c.symbols['__heap_start'] <= giris <= cikis < c.symbols['__heap_end']
+        if pid > 1:
+            artis += cikis - giris
+    assert artis <= 64 * 1024 + 80, ('ön plan HID bırakma', artis)
+    print(f'HID süreçte Enter bırakma: 31 tekrar, heap +{artis}, {bos} boş çerçeve', flush=True)
+
+
 def denetleyicisiz(w):
     programlar = {p.name: p.read_bytes() for p in (w / 'kullanici').glob('*.elf')}
     usb, nvme, sata = imajlar(w, programlar)
@@ -138,6 +159,7 @@ def denetleyicisiz(w):
         c = SurecConsole(w, q, p, seri)
         assert b'8042 yok' in seri.read_bytes()
         c.run('echo usb', b'usb\n')
+        surecte_birak(c)
     print('KLAVYE16 OK 8042 yok, USB ile giriş', flush=True)
 
 
