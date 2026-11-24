@@ -3119,4 +3119,13 @@
   Üçüncü tur: derleme_olcum — bash (MSYS) /usr/bin/time'ı görüyor ama ölçümü yapan YEREL Windows Python'u o yolu açamıyor
   (FileNotFoundError). Yetenek artık aracı ÇALIŞTIRACAK süreçten (python) ölçülüyor. Codex taslağı #239'un son hâli (ef40ab7,
   597a245'in yerine zorla gönderilmiş) kodda birebir aynı; yalnız iki rapor dosyası farklıydı → alındı.
+- 2026-11-24 D-769: Codex dalga 17 promptu (otomasyon/chatgpt/CODEX_GOREV_17.md) — AĞ YIĞINI, on üç bölüm, sıralı: (1) H13 yol
+  haritası + host Ethernet eşi (`-netdev dgram` → Python, elle struct; scapy YOK) + pcap ayrıştırıcı, (2) e1000, (3) e1000e +
+  virtio-net-pci + NIC matrisi, (4) Ethernet/ARP/IPv4/ICMP + ping, (5) UDP/DHCP/DNS, (6) TCP temel (32 bit sıra sarması),
+  (7) TCP güvenilirlik (RTO, hızlı yeniden iletim, cwnd; %5 kayıp/sıra bozma ile 1 MiB SHA256), (8) soket ABI 73+, (9) ag/
+  cozumle/indir/sunucu/nc, (10) USB CDC-ECM (Realtek'li makineler için yedek), (11) bulanıklaştırma + link kopması + heap
+  tablosu, (12) iki KEMGU arası ağ + NIC'li PC matrisi + fiziksel liste, (13) belgeler. Claude doğruladı: QEMU 8.2.2'de e1000/
+  e1000e/igb/rtl8139/virtio-net-pci/usb-net, `dgram` + `filter-dump` + slirp `hostfwd` sözdizimleri açılıyor; ABI 72'ye
+  kadar dolu. Dersler prompta yazıldı: her sabotajı uygula (S210/S223), korpus korunan şekli üretmeli, PR sonrası commit
+  yeniden yazma (ef40ab7), test koşumu izlenen belgeyi değiştirmesin, Windows derleme-yalnız yolu (D-768).
 
