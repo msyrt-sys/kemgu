@@ -59,3 +59,7 @@ Her derleyici dokuz korpusta toplam 12.000 örneği tamamladı. USB korpusunda a
 ## Bölüm 10 — UART gönderme sınırı ve MMIO
 
 16550 ve PL011 bir baytta art arda 100.000 meşgul okumasından sonra kayıp sayacını artırır. Host modellerinde sürekli meşgul, sınırın son denemesinde hazır ve sonraki baytta toparlanma geçti. Sınır kaldırıldığında gerçek 16550 mock testi üç saniyede zaman aşımıyla 124 verdi. Dokuz donanım beklemesi iki derleyicide ham IR, optimize IR ve x86 makine kodunda geçti. Sıradan bayt toplamı döngüsü listeye eklenince volatile kapısı 1 ile döndü. ARM çekirdek kapıları ve iki UART bare-metal kapısı geçti. Testler 1257 saniye, bölüm 21 dakika.
+
+## Bölüm 11 — Derleme büyüme eğrisi
+
+Deterministik sürücü birimlerinde 4.987, 9.985, 19.981 satır ve birleşik kabuk için iki derleyici ölçüldü. Her satırın süre, tepe RSS, IR satırı ve en büyük işlev değerleri bulgulara yazıldı. Her eşik aynı makinedeki ilk ölçümün üç katıdır. 5k üreticinin ana işlevindeki çağrı dizisini on kez çoğaltan sabotajda en büyük işlev her iki derleyicide sınırı aştı. Kapılar 1251 saniye, bölüm 21 dakika.

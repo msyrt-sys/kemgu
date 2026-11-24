@@ -123,3 +123,22 @@ Dalga 15'in [donanım bekleme envanterindeki](codex15_bulgular.md) satırlara a�
 | Bekleyen kabuk, süreç ve son HLT | Kullanıcı olayı, süreç çıkışı veya son durum | Sürücü durum biti beklemesi içermeyen açık uçlu durumlar |
 
 MMIO ölçümü VirtIO blok/TX/RX used.idx, SATA port durumu, kesme sayacı, xHCI olay halkası, USB kontrol ve blok/yapılandırma durum makinelerini kapsar. PIO ile çalışan 8042, UART ve RTC, x86 in talimatını kullanır. Kâhin ardıllardan yeniden erişilebilen döngü bloklarını seçer. Bölünmüş yürütücüde aynı döngü içinden donanım okuyan yordamın çağrıldığı da doğrulanır. Gerçek çalışma zamanının iki UART dosyasında RX gövdeleri korunmuştur.
+
+<!-- derleme-olcum-bas -->
+## Derleme büyüme ölçümü
+
+| Birim | Kaynak satırı | Derleyici | Süre (s) | Tepe RSS (KiB) | IR satırı | En büyük işlev (IR satırı) |
+|---|---:|---|---:|---:|---:|---|
+| 5000 | 4987 | kemgu | 0.0470 | 8100 | 26517 | main (2419) |
+| 5000 | 4987 | codegen | 2.3654 | 14464 | 23502 | main (2260) |
+| 10000 | 9985 | kemgu | 0.0581 | 14492 | 52936 | main (4800) |
+| 10000 | 9985 | codegen | 7.2759 | 26640 | 46906 | main (4482) |
+| 20000 | 19981 | kemgu | 0.1476 | 27156 | 105771 | main (9559) |
+| 20000 | 19981 | codegen | 24.0433 | 51120 | 93712 | main (8924) |
+| kabuk | 9041 | kemgu | 0.5414 | 41004 | 177929 | drivers.ortak.harf_veri.ust_eslemeler (19835) |
+| kabuk | 9041 | codegen | 43.6064 | 120076 | 167212 | drivers.ortak.harf_veri.ust_eslemeler (16786) |
+<!-- derleme-olcum-son -->
+
+İlk ölçümde 5k'dan 20k'ya kaynak boyutu dört, IR büyüklüğü iki derleyicide de yaklaşık dört katına çıktı. Self-host duvar süresi 2,27 saniyeden 24,09 saniyeye, bootstrap süresi 0,043 saniyeden 0,129 saniyeye çıktı. Birleşik kabukta ilk ölçüm sırasıyla 43,91 s / 120.272 KiB ve 0,55 s / 41.232 KiB idi. Üç katlık eşikler paralel QEMU yüküne pay bırakırken on kat çoğaltmayı yakalar. En büyük işlev sabotajda bootstrap için 23.749 IR satırına (eşik 7.257), self-host için 22.168'e (eşik 6.780) çıktı.
+
+Her koşum kendi build/derleme-olcum.* dizininde olcum.json ve GNU time -v çıktıları bırakır. Kaynak ve eşikler test/olcum altında sürümlenir.
