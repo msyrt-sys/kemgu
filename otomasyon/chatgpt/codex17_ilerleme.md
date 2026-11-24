@@ -39,3 +39,7 @@ Ayrı koşumda geçen kapı: calistir_bm_x86_nic_matris
 ## Bölüm 7 — TCP temeli
 
 Etkin ve pasif açılış, iki yönde 64 KiB, sekiz eşzamanlı bağlantı ve dokuzuncu isteğin reddi, kapalı port, RST, FIN, sıfır pencere yoklaması ve loopback doğrulandı. QEMU kâhini iki derleyicide geçti. Geçen süre 1629 saniye. Sarmaya dayanıksız karşılaştırma ve FIN sıra tüketiminin kaldırılması, iki ayrı host imajında C ve self-host durum testiyle sırasıyla çıkış 4 ve 7 verdi. Değiştirilmiş çekirdekle QEMU üzerinde aktarımı ya da kapanışı asma sabotajı uygulanmadı.
+
+## Bölüm 8 — TCP kaybı ve yeniden iletim
+
+İki derleyici ve QEMU ile iki yönde 4 MiB, sabit tohumlu %5 kayıp, %5 sıra değişimi ve %2 çiftlemede SHA-256 eşleşti. Çekirdek ve tel yeniden iletim sayıları ölçüldü. Geçen süre 1618 saniye. Üç ayrı değiştirilmiş saf durum makinesi gerçek C ve self-host çalıştırmalarında kırıldı. Sıfır ve çok uzun RTO zamanlayıcı kapısında çıkış 2, yinelenen veriyi ekleme alıcı sırasında çıkış 9 verdi. Değiştirilmiş çekirdekte paket taşması veya bağlantı asılması oluşturan ağ sabotajları ve bu değişikliklerle QEMU SHA-256 sabotajı uygulanmadı.

@@ -98,3 +98,8 @@ Gelen üç datagramda sırasıyla yedi, beş ve altı parça kaydedildi. İlkind
 
 - TCP OK 65536 bayt pasif=9a73523567c3b7d85f8f63c1591f546e6e1d0f8fb37be17db28cdf9644f540ec aktif=51fe7c95debcfefba857851144285f2450a5f2355c37dd6d99a5733b73e0ae6a, loopback 65536, pcap=300, heap=4066880 boş=47199
 - TCP OK 65536 bayt pasif=9a73523567c3b7d85f8f63c1591f546e6e1d0f8fb37be17db28cdf9644f540ec aktif=51fe7c95debcfefba857851144285f2450a5f2355c37dd6d99a5733b73e0ae6a, loopback 65536, pcap=300, heap=4263728 boş=47168
+
+## 4 MiB kayıplı TCP aktarımı
+
+- TCP KAYIP OK 4194304x2 SHA256=fd9565e7e4f3b08e85dee2ccabed09e07c3e34756de9d801dd6c44455135090b süre=152.556s konuk_tekrar=141 pcap_tekrar=140 eş_tekrar=505 kayıp/sıra/çift=[(219, 214, 79), (333, 321, 148)] heap=4066880 boş=47196
+- TCP KAYIP OK 4194304x2 SHA256=fd9565e7e4f3b08e85dee2ccabed09e07c3e34756de9d801dd6c44455135090b süre=159.619s konuk_tekrar=137 pcap_tekrar=136 eş_tekrar=554 kayıp/sıra/çift=[(210, 209, 79), (368, 289, 150)] heap=4263728 boş=47165

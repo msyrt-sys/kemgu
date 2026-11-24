@@ -112,17 +112,22 @@ class Hat:
     def __init__(self, tohum, kayip=0, cift=0, sira_boz=0):
         if not all(0 <= oran <= 1 for oran in (kayip, cift, sira_boz)):
             raise ValueError('hat olasılığı')
+        self.atilan = self.ciftlenen = self.siralanan = 0
         self.rastgele = random.Random(tohum)
         self.kayip, self.cift, self.sira_boz = kayip, cift, sira_boz
         self.bekleyen = None
 
     def uygula(self, paket):
         if self.rastgele.random() < self.kayip:
+            self.atilan += 1
             return []
         cikti = [paket] * (2 if self.rastgele.random() < self.cift else 1)
+        if len(cikti)==2:
+            self.ciftlenen += 1
         if self.bekleyen is not None:
             cikti.extend(self.bosalt())
         elif self.rastgele.random() < self.sira_boz:
+            self.siralanan += 1
             self.bekleyen = cikti
             return []
         return cikti

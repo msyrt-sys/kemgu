@@ -47,11 +47,15 @@ genel yapı TcpBag {
     durum: tam32; ip: tam64; es: tam64; port: tam32; es_port: tam32;
     una: tam64; sonraki: tam64; beklenen: tam64; pencere: tam32; mss: tam32;
     rx: Dizi<dtam8>; tx: Dizi<dtam8>; rx_ilk: tam32; rx_boy: tam32; tx_ilk: tam32; tx_boy: tam32; tx_ucus: tam32;
+    srtt: tam64; sapma: tam64; rto: tam64; alarm: tam64; olcum_ms: tam64; olcum_son: tam64;
+    cwnd: tam32; esik: tam32; artis: tam64; yinelenen: tam32; hizli: mantıksal; kurtar: mantıksal; kurtar_son: tam64;
+    deneme: tam32; yeniden: tam64; sira_disi: mantıksal; ara_bas: tam64; ara_son: tam64;
     syn: tam32; onay: mantıksal; kapat: mantıksal; fin_yolda: mantıksal; son_ms: tam64; yokla_ms: tam64; hata_kodu: tam32;
 }
 genel işlev tcp_yeni(ip: tam64,es: tam64,port: tam32,ep: tam32,isn: tam64,rx: Dizi<dtam8>,tx: Dizi<dtam8>) -> TcpBag {
     ver TcpBag {durum:0,ip:ip,es:es,port:port,es_port:ep,una:tcp_sira(isn),sonraki:tcp_sira(isn),beklenen:0,pencere:0,mss:536,rx:rx,tx:tx,
-        rx_ilk:0,rx_boy:0,tx_ilk:0,tx_boy:0,tx_ucus:0,syn:0,onay:yanlış,kapat:yanlış,fin_yolda:yanlış,son_ms:0,yokla_ms:0,hata_kodu:0};
+        rx_ilk:0,rx_boy:0,tx_ilk:0,tx_boy:0,tx_ucus:0,srtt:0,sapma:0,rto:1000,alarm:0,olcum_ms:0,olcum_son:0,
+        cwnd:5360,esik:65535,artis:0,yinelenen:0,hizli:yanlış,kurtar:yanlış,kurtar_son:0,deneme:0,yeniden:0,sira_disi:yanlış,ara_bas:0,ara_son:0,syn:0,onay:yanlış,kapat:yanlış,fin_yolda:yanlış,son_ms:0,yokla_ms:0,hata_kodu:0};
 }
 genel işlev tcp_aktif(s: &değişken TcpBag,ms: tam64) { s.durum=TCP_SYN_GITTI; s.syn=2; s.son_ms=ms+10000; }
 genel işlev tcp_yaz(s: &değişken TcpBag,b: Dizi<dtam8>,ofs: tam32,n: tam32) -> tam32 {
@@ -81,7 +85,60 @@ genel işlev tcp_sure(s: &değişken TcpBag,ms: tam64) {
     }
 }
 işlev tcp_es_ayar(s: &değişken TcpBag,v: &TcpBaslik) {
-    s.pencere=v.pencere; s.mss=v.mss; eğer s.mss>1460 { s.mss=1460; }
+    s.pencere=v.pencere; s.mss=v.mss; eğer s.mss>1460 { s.mss=1460; } s.cwnd=10*s.mss;
+}
+// RTT tahmini milisaniye. Yeniden yollanan aralıktan örnek alınmaz (Karn).
+işlev tcp_rtt(s: &değişken TcpBag,ms: tam64,ack: tam64) {
+    eğer s.olcum_ms==0 veya tcp_once(ack,s.olcum_son) { ver; }
+    değişken r: tam64 = ms-s.olcum_ms; eğer r<1 { r=1; }
+    eğer s.srtt==0 { s.srtt=r; s.sapma=(r+1)/2; }
+    değilse {
+        değişken fark: tam64 = s.srtt-r; eğer fark<0 { fark=0-fark; }
+        s.sapma=(3*s.sapma+fark)/4; s.srtt=(7*s.srtt+r)/8;
+    }
+    s.rto=s.srtt+4*s.sapma; eğer s.rto<1000 { s.rto=1000; } eğer s.rto>60000 { s.rto=60000; } s.olcum_ms=0;
+}
+işlev tcp_esik_indir(s: &değişken TcpBag) {
+    s.esik=s.tx_ucus/2; eğer s.esik<2*s.mss { s.esik=2*s.mss; } s.artis=0;
+}
+işlev tcp_onay_ilerledi(s: &değişken TcpBag,ack: tam64,veri: tam32,ms: tam64) {
+    tcp_rtt(s,ms,ack); s.deneme=0; s.yinelenen=0;
+    eğer ack==s.sonraki { s.alarm=0; } değilse { s.alarm=ms+s.rto; }
+    eğer s.kurtar {
+        eğer tcp_once(ack,s.kurtar_son) { s.hizli=doğru; s.cwnd=s.esik+s.mss; }
+        değilse { s.kurtar=yanlış; s.cwnd=s.esik; }
+    } değilse eğer veri>0 {
+        değişken al: tam32 = veri; eğer al>s.mss { al=s.mss; }
+        eğer s.cwnd<s.esik { s.cwnd=s.cwnd+al; }
+        değilse {
+            s.artis=s.artis+(veri olarak tam64);
+            eğer s.artis>=(s.cwnd olarak tam64) { s.artis=s.artis-(s.cwnd olarak tam64); s.cwnd=s.cwnd+s.mss; }
+        }
+    }
+    eğer s.cwnd>1048576 { s.cwnd=1048576; }
+}
+işlev tcp_kopya_onay(s: &değişken TcpBag) {
+    s.yinelenen=s.yinelenen+1;
+    eğer s.yinelenen==3 ve değil s.kurtar {
+        tcp_esik_indir(s); s.kurtar=doğru; s.kurtar_son=s.sonraki; s.cwnd=s.esik+3*s.mss; s.hizli=doğru;
+    } değilse eğer s.kurtar ve s.cwnd<1048576 { s.cwnd=s.cwnd+s.mss; }
+}
+// Alım halkasında tek bir sıra dışı aralık tutulur. Ayrık ikinci aralık tekrar istenir.
+işlev tcp_ara_al(s: &değişken TcpBag,v: &TcpBaslik,b: Dizi<dtam8>,o: tam32) {
+    değişken uzak: tam64 = tcp_sira(v.seq-s.beklenen); değişken kap: tam32 = dizi_boyut(s.rx);
+    eğer v.n<=0 veya uzak+(v.n olarak tam64)>(kap-s.rx_boy) olarak tam64 { ver; }
+    değişken son: tam64 = tcp_sira(v.seq+(v.n olarak tam64));
+    eğer s.sira_disi ve (tcp_once(son,s.ara_bas) veya tcp_once(s.ara_son,v.seq)) { ver; }
+    değişken i: tam32 = 0;
+    iken i<v.n {
+        değişken j: tam64 = tcp_sira(v.seq+(i olarak tam64));
+        eğer değil s.sira_disi veya tcp_once(j,s.ara_bas) veya değil tcp_once(j,s.ara_son) {
+            dizi_yaz(s.rx,(s.rx_ilk+s.rx_boy+(uzak olarak tam32)+i)%kap,dizi_al(b,o+v.h+i));
+        }
+        i=i+1;
+    }
+    eğer değil s.sira_disi veya tcp_once(v.seq,s.ara_bas) { s.ara_bas=v.seq; }
+    eğer değil s.sira_disi veya tcp_once(s.ara_son,son) { s.ara_son=son; } s.sira_disi=doğru;
 }
 genel işlev tcp_al(s: &değişken TcpBag,v: &TcpBaslik,b: Dizi<dtam8>,o: tam32,ms: tam64) {
     eğer v.h<20 veya v.n<0 veya o<0 veya o>dizi_boyut(b)-v.h-v.n { ver; }
@@ -95,23 +152,29 @@ genel işlev tcp_al(s: &değişken TcpBag,v: &TcpBaslik,b: Dizi<dtam8>,o: tam32,
     eğer s.durum==TCP_SYN_GITTI {
         eğer değil ack veya v.ack!=s.sonraki veya s.una==s.sonraki { ver; }
         eğer rst { s.durum=TCP_KAPALI; s.hata_kodu= -111; ver; }
-        eğer syn { s.una=v.ack; s.beklenen=tcp_sira(v.seq+1); tcp_es_ayar(s,v); s.durum=TCP_BAGLI; s.onay=doğru; s.son_ms=0; } ver;
+        eğer syn { tcp_onay_ilerledi(s,v.ack,0,ms); s.una=v.ack; s.beklenen=tcp_sira(v.seq+1); tcp_es_ayar(s,v); s.durum=TCP_BAGLI; s.onay=doğru; s.son_ms=0; } ver;
     }
     eğer s.durum==TCP_KAPALI { ver; }
     eğer v.seq!=s.beklenen {
-        eğer değil rst { s.onay=doğru; }
-        eğer fin ve s.durum==TCP_SURE_BEKLE ve tcp_sira(v.seq+1)==s.beklenen { s.son_ms=ms+4000; } ver;
+        eğer syn ve s.durum==TCP_SYN_GELDI ve tcp_sira(v.seq+1)==s.beklenen { s.hizli=doğru; ver; }
+        eğer fin ve s.durum==TCP_SURE_BEKLE ve tcp_sira(v.seq+1)==s.beklenen { s.son_ms=ms+4000; }
+        eğer rst veya syn veya tcp_once(v.seq,s.beklenen) veya tcp_sira(v.seq-s.beklenen)>=(dizi_boyut(s.rx)-s.rx_boy) olarak tam64 {
+            eğer değil rst ve (v.n>0 veya fin veya syn) { s.onay=doğru; } ver;
+        }
     }
     eğer rst { s.durum=TCP_KAPALI; s.hata_kodu= -104; ver; }
     eğer değil ack veya syn { s.onay=doğru; ver; }
     eğer tcp_once(s.sonraki,v.ack) { s.onay=doğru; ver; }
     eğer s.durum==TCP_SYN_GELDI {
         eğer v.ack!=s.sonraki veya s.sonraki==s.una { ver; }
-        s.durum=TCP_BAGLI; s.son_ms=0; s.una=v.ack;
+        tcp_onay_ilerledi(s,v.ack,0,ms); s.durum=TCP_BAGLI; s.son_ms=0; s.una=v.ack;
     }
     eğer değil tcp_once(v.ack,s.una) {
-        değişken al: tam64 = tcp_sira(v.ack-s.una); s.una=v.ack; s.pencere=v.pencere;
+        değişken al: tam64 = tcp_sira(v.ack-s.una);
+        eğer al==0 ve v.n==0 ve değil fin ve s.tx_ucus>0 ve s.pencere==v.pencere { tcp_kopya_onay(s); }
+        s.una=v.ack; s.pencere=v.pencere;
         değişken veri: tam32 = s.tx_ucus; eğer al<(veri olarak tam64) { veri=al olarak tam32; }
+        eğer al>0 { tcp_onay_ilerledi(s,v.ack,veri,ms); }
         eğer veri>0 { s.tx_ilk=(s.tx_ilk+veri)%dizi_boyut(s.tx); s.tx_boy=s.tx_boy-veri; s.tx_ucus=s.tx_ucus-veri; }
         eğer s.fin_yolda ve s.una==s.sonraki {
             s.fin_yolda=yanlış;
@@ -122,10 +185,19 @@ genel işlev tcp_al(s: &değişken TcpBag,v: &TcpBaslik,b: Dizi<dtam8>,o: tam32,
     }
     eğer v.n==0 ve değil fin { ver; } s.onay=doğru;
     eğer s.durum!=TCP_BAGLI ve s.durum!=TCP_FIN_1 ve s.durum!=TCP_FIN_2 { ver; }
+    eğer v.seq!=s.beklenen { tcp_ara_al(s,v,b,o); ver; }
     değişken kap: tam32 = dizi_boyut(s.rx);
     değişken al: tam32 = v.n; eğer al>kap-s.rx_boy { al=kap-s.rx_boy; }
-    değişken i: tam32 = 0; iken i<al { dizi_yaz(s.rx,(s.rx_ilk+s.rx_boy+i)%kap,dizi_al(b,o+v.h+i)); i=i+1; }
+    değişken i: tam32 = 0; iken i<al {
+        değişken j: tam64 = tcp_sira(v.seq+(i olarak tam64));
+        eğer değil s.sira_disi veya tcp_once(j,s.ara_bas) veya değil tcp_once(j,s.ara_son) { dizi_yaz(s.rx,(s.rx_ilk+s.rx_boy+i)%kap,dizi_al(b,o+v.h+i)); }
+        i=i+1;
+    }
     s.rx_boy=s.rx_boy+al; s.beklenen=tcp_sira(s.beklenen+(al olarak tam64));
+    eğer s.sira_disi ve değil tcp_once(s.beklenen,s.ara_bas) {
+        eğer tcp_once(s.beklenen,s.ara_son) { s.rx_boy=s.rx_boy+(tcp_sira(s.ara_son-s.beklenen) olarak tam32); s.beklenen=s.ara_son; }
+        s.sira_disi=yanlış;
+    }
     eğer fin ve al==v.n ve kap>s.rx_boy {
         s.beklenen=tcp_sira(s.beklenen+1);
         eğer s.durum==TCP_BAGLI { s.durum=TCP_KAPAT_BEKLE; }
@@ -145,9 +217,21 @@ genel işlev tcp_cikar(s: &değişken TcpBag,b: Dizi<dtam8>,o: tam32,ms: tam64) 
     tcp_sure(s,ms); eğer s.durum<2 veya o<0 veya o>dizi_boyut(b)-24 { ver 0; }
     değişken seq: tam64 = s.sonraki; değişken fl: tam32 = 16; değişken n: tam32 = 0;
     değişken ilerle: tam32 = 0;
-    eğer s.syn!=0 { fl=s.syn; s.syn=0; ilerle=1; }
+    eğer s.una!=s.sonraki ve (s.hizli veya (s.alarm!=0 ve ms>=s.alarm)) {
+        eğer değil s.hizli {
+            s.deneme=s.deneme+1; eğer s.deneme>=8 { s.durum=TCP_KAPALI; s.hata_kodu= -110; ver 0; }
+            tcp_esik_indir(s); s.cwnd=s.mss; s.kurtar=yanlış; s.yinelenen=0;
+            s.rto=s.rto*2; eğer s.rto>60000 { s.rto=60000; }
+        }
+        s.hizli=yanlış; s.alarm=ms+s.rto; s.olcum_ms=0; seq=s.una; s.yeniden=s.yeniden+1;
+        eğer s.durum==TCP_SYN_GITTI { fl=2; } değilse eğer s.durum==TCP_SYN_GELDI { fl=18; }
+        değilse eğer s.tx_ucus>0 {
+            n=s.tx_ucus; eğer n>s.mss { n=s.mss; } eğer n>dizi_boyut(b)-o-20 { n=dizi_boyut(b)-o-20; }
+            değişken i: tam32 = 0; iken i<n { dizi_yaz(b,o+20+i,dizi_al(s.tx,(s.tx_ilk+i)%dizi_boyut(s.tx))); i=i+1; } fl=24;
+        } değilse eğer s.fin_yolda { fl=17; }
+    } değilse eğer s.syn!=0 { fl=s.syn; s.syn=0; ilerle=1; }
     değilse eğer s.durum==TCP_BAGLI veya s.durum==TCP_KAPAT_BEKLE {
-        n=s.tx_boy-s.tx_ucus; değişken yer: tam32 = s.pencere-s.tx_ucus;
+        n=s.tx_boy-s.tx_ucus; değişken yer: tam32 = s.pencere; eğer yer>s.cwnd { yer=s.cwnd; } yer=yer-s.tx_ucus;
         eğer n>yer { n=yer; } eğer n<0 { n=0; }
         eğer n>s.mss { n=s.mss; } eğer n>dizi_boyut(b)-o-20 { n=dizi_boyut(b)-o-20; }
         eğer n>0 {
@@ -163,7 +247,11 @@ genel işlev tcp_cikar(s: &değişken TcpBag,b: Dizi<dtam8>,o: tam32,ms: tam64) 
     } değilse eğer değil s.onay { ver 0; }
     değişken win: tam32 = dizi_boyut(s.rx)-s.rx_boy; eğer win>65535 { win=65535; }
     değişken boy: tam32 = tcp_bas_yaz(b,o,n,s.ip,s.es,s.port,s.es_port,seq,s.beklenen,fl,win);
-    eğer ilerle>0 { s.sonraki=tcp_sira(s.sonraki+(ilerle olarak tam64)); }
+    eğer ilerle>0 {
+        s.sonraki=tcp_sira(s.sonraki+(ilerle olarak tam64));
+        eğer s.alarm==0 { s.alarm=ms+s.rto; }
+        eğer s.olcum_ms==0 ve s.deneme==0 ve değil s.kurtar { s.olcum_ms=ms; s.olcum_son=s.sonraki; }
+    }
     s.onay=yanlış; ver boy;
 }
 genel işlev tcp_red(b: Dizi<dtam8>,o: tam32,ip: tam64,es: tam64,v: &TcpBaslik) -> tam32 {

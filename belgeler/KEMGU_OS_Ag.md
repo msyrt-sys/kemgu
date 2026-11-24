@@ -72,3 +72,7 @@ Yerel UDP çıkışında MTU 1500’dür. Giden son parça dışında yük uzunl
 TCP sıra ve ACK karşılaştırmaları 32 bit sarmalı hesaba katar. Etkin ve pasif açılışta MSS ilan edilir. Gönderim eşin penceresiyle sınırlıdır. Sıfır pencerede yoklama yeni sıra numarası tüketmez. Sekiz bağlantının her birinde ikişer 32 KiB halka bulunur. Dokuzuncu bağlantıya RST verilir. SYN için on saniye, FIN için on beş saniye, TIME-WAIT için dört saniye kullanılır. Sayılar yerel KEMGU profilinindir.
 
 `ag tcp dinle` 9001 numaralı portta yankıyı açar. `ag tcp bagla <adres>` aynı porta 64 KiB gönderip dönen baytları karşılaştırır. `ag tcp durum` gönderilen ve doğrulanan miktarı, hata ve kapanış sayısını gösterir.
+
+## TCP yeniden iletimi
+
+SRTT ve RTTVAR milisaniye cinsindendir. İlk RTO bir saniye, alt sınır bir saniye ve üst sınır 60 saniyedir. Zaman aşımında RTO iki katına çıkar. Sekizinci zaman aşımında uygulamaya -110 döner. Yeniden gönderilen veriden RTT örneği çıkarılmaz. Tıkanıklık penceresi başlangıçta on MSS’dir. Yavaş başlangıcı toplamsal artış izler. Üç yinelenen ACK hızlı yeniden iletimi başlatır. Kayıpta eşik uçuşta olan veri miktarının yarısı, en az iki MSS olur. Alıcı, halkada bir bitişik sıra dışı aralık saklar. Bundan ayrık ikinci aralık gönderenin sonraki iletiminden alınır. `ag tcp sayac` yeniden iletim, reddedilen bağlantı ve hatayla kapanış sayılarını gösterir.
