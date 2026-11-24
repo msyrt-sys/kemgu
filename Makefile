@@ -5136,3 +5136,8 @@ calistir_bm_x86_arac16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl
 	@bash otomasyon/chatgpt/dogrula.sh tools/codex/arac16_test.kem
 	@python3 tests/qemu/surec_abi.py
 	@SUREC_KAHIN=arac16_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_ag_es
+test_tumu: calistir_ag_es
+calistir_ag_es:
+	@python3 tests/qemu/ag_es_test.py

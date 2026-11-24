@@ -374,7 +374,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [ ] **H12a (Kısmen Dalga 15, calistir_kem_os_pc_matris ile 12 UEFI yapılandırması ve 72 açılış. BIOS yolu D-756 ile ertelendi.) [M] QEMU kapı matrisi `calistir_kem_os_pc_matris`:** {BIOS, UEFI} ×
       {PS/2, USB} × {AHCI, NVMe}. `test_tumu`ya süreye göre ALT KÜME bağlanır
       (D-453 deseni: temsilciler her koşumda, tam matris haftalık/CI).
-- [ ] **H12b (Kısmen D-766/dalga 16. Dokuz ek korpus geçti. USB sıfır uzunluk sabotajı uygulanmadı.) [M] Bulanıklaştırma:** bozuk FAT imajları (H8g), bozuk ACPI tabloları,
+- [x] **H12b (D-767, S223. Dokuz ek korpus ve USB sınır örneği, `calistir_kem_os_ayristirici`.) [M] Bulanıklaştırma:** bozuk FAT imajları (H8g), bozuk ACPI tabloları,
       saçma PS/2 paketleri, bozuk USB tanımlayıcıları → çekirdek asla çökmez.
 - [x] **H12c (✓ D-766/dalga 16 (KEMGU_OS_Sabotaj_Envanteri.md)) [S] Sabotaj envanteri:** her H maddesinin sabotajı tek tabloda (S-numaralı).
 - [x] **H12d (✓ Dalga 15, calistir_bm_x86_acilis_suresi. Etkin UEFI yolunda devirden kabuğa yedi işaret ve 650 ms medyan eşiği.) [S] Açılış süresi ölçümü** (GRUB → kabuk istemi) ve gerilemeyi yakalayan eşik.
@@ -382,6 +382,31 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
       "yeni sürücü nasıl eklenir".
 
 ---
+
+## H13. Ağ
+
+- [x] **H13a** Host Ethernet eşi ve pcap. `calistir_ag_es`
+- [ ] **H13b** 82540EM sürücüsü. `calistir_bm_x86_e1000`
+- [ ] **H13c** 82574L, 82576 ve VirtIO PCI. `calistir_bm_x86_nic_matris`
+- [ ] **H13d** IPv4, ARP, ICMP ve loopback. `calistir_bm_x86_ag_l3`
+- [ ] **H13e** UDP, DHCP ve DNS. `calistir_bm_x86_ag_udp`
+- [ ] **H13f** IPv4 parçaları ve ICMP hataları. `calistir_bm_x86_ag_parca`
+- [ ] **H13g** TCP bağlantı durumları. `calistir_bm_x86_tcp_temel`
+- [ ] **H13h** TCP kayıp kurtarma. `calistir_bm_x86_tcp_kayip`
+- [ ] **H13i** TCP seçenekleri ve verim. `calistir_bm_x86_tcp_verim` ve `calistir_bm_x86_tcp_secenek`
+- [ ] **H13j** Soket ABI ve çoklu bekleme. `calistir_bm_x86_soket`
+- [ ] **H13k** Ağ komutları ve borular. `calistir_bm_x86_ag_arac`
+- [ ] **H13l** HTTP istemcisi ve sunucusu. `calistir_bm_x86_http`
+- [ ] **H13m** NTP ve RTC. `calistir_bm_x86_ntp`
+- [ ] **H13n** TFTP ve uzak teşhis. `calistir_bm_x86_tftp_teshis`
+- [ ] **H13o** Paket kurucu. `calistir_bm_x86_paket`
+- [ ] **H13p** USB CDC-ECM. `calistir_bm_x86_usb_ag`
+- [ ] **H13q** ARM virtio-mmio köprüsü. `calistir_kem_os_arm_ag`
+- [ ] **H13r** Ağ ayrıştırıcıları ve kaynak sınırları. `calistir_kem_os_ayristirici`
+- [ ] **H13s** İki konuk ve NIC matrisi. `calistir_kem_os_pc_matris`
+- [ ] **H13t** ABI ve derlenebilir ağ örnekleri. `calistir_bm_x86_belge15`
+
+IPv6 ve TLS bu dalganın kapsamı dışındadır.
 
 ## Bağımlılık özeti (kritik yol)
 
@@ -413,7 +438,6 @@ H8/H9 başlamadan H1c bitmiş olmalı (dosya önbelleği bellek geri ister).
 
 ## Bilinçli olarak kapsam dışı
 
-Tam ACPI/AML yorumlayıcısı · pencere yöneticisi / GUI araç takımı · ses · ağ
-(virtio dışında gerçek NIC sürücüsü: e1000/rtl8169 sonraki yol haritası) · GPU
+Tam ACPI/AML yorumlayıcısı · pencere yöneticisi / GUI araç takımı · ses · Realtek dahili Ethernet · GPU
 hızlandırma · I²C-HID dokunmatik yüzey · Wi-Fi/Bluetooth · Secure Boot imzalama ·
 ARM64 donanım hattı (ayrı: E1 + D-490).
