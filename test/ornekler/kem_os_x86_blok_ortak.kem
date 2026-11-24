@@ -110,19 +110,37 @@ küresel değişken bh_gorulen: tam64 = 0;
     değişken islenen: tam64 = 0;
     iken islenen < bh_adet ve bh_tuket(bh_halka,bh_bas,bh_dongu) { islenen=islenen+1; }
 }
+// İlk gönderimde sans-IO sürücüsü iki TRB'yi kurar. Aynı uç ve boy için
+// parametreler sabittir. Döngü bitlerini güncellemek yeni bir G/Ç listesi gerektirmez.
+çıplak işlev bh_giris_yenile(x: &değişken XhciDurum,bar: tam64,indeks: tam32,r: tam64,boy: tam32) -> mantıksal {
+    değişken a: XhciAygit = dizi_al(x.aygitlar,indeks);
+    değişken halka: tam64 = a.dma+64;
+    değişken kimlik: tam64 = kem_mmio_oku64(r+16);
+    eğer a.yuva <= 0 veya kem_mmio_oku64(r+8) != halka veya (kimlik>>24) != (a.yuva olarak tam64) veya kem_mmio_oku64(r+24) != (boy olarak tam64) { ver yanlış; }
+    değişken dongu: tam64 = 0; eğer a.in_dongu { dongu=1; }
+    kem_mmio_yaz32(halka+28,(kem_mmio_oku32(halka+28)&4294967294)|(1-dongu));
+    a.in_dongu=değil a.in_dongu; dizi_yaz(x.aygitlar,indeks,a);
+    // Normal TRB'nin sahiplik bitini en son yayımla, sonra kapı zilini çal.
+    kem_mmio_yaz64(r,1);
+    kem_mmio_yaz32(halka+12,(kem_mmio_oku32(halka+12)&4294967294)|dongu);
+    kem_mmio_yaz32(bar+x.c.dboff+(a.yuva olarak tam64)*4,(kimlik>>16)&31);
+    ver doğru;
+}
 işlev bh_gonder(x: &değişken XhciDurum,bar: tam64,indeks: tam32,tur: tam64) -> tam64 {
     eğer indeks < 0 { ver 0; }
     eğer bh_durum(tur) != 0 { ver bh_durum(tur); }
     güvensiz {
-        değişken s: XhciDurum = *x;
-        s.kuyruk=[]; s.q=0; s.evre=100; s.devredildi=yanlış;
+        eğer indeks >= dizi_boyut(x.aygitlar) { ver -5; }
         değişken boy: tam32 = 8;
         eğer tur >= 2 {
             değişken a: XhciAygit = dizi_al(x.aygitlar,indeks); boy=(a.hub.portlar+8)/8;
             eğer tur >= bh_kayit_sayisi { bh_kayit_sayisi=tur+1; }
         }
-        eşleş xhci_giris(&değişken s,indeks,boy) { hata(e) => { ver -5; } tamam(v) => { } }
         değişken r: tam64 = bh_kayitlar+tur*64;
+        eğer bh_giris_yenile(x,bar,indeks,r,boy) { ver 1; }
+        değişken s: XhciDurum = *x;
+        s.kuyruk=[]; s.q=0; s.evre=100; s.devredildi=yanlış;
+        eşleş xhci_giris(&değişken s,indeks,boy) { hata(e) => { ver -5; } tamam(v) => { } }
         kem_mmio_yaz64(r+8,s.bek_adres);
         kem_mmio_yaz64(r+16,((s.yuva olarak tam64)<<24)|((s.bek_uc olarak tam64)<<16));
         kem_mmio_yaz64(r+24,s.boy olarak tam64); kem_mmio_yaz64(r+32,s.ddma+65536); kem_mmio_yaz64(r,1);
@@ -458,7 +476,7 @@ işlev bh_alt_kaldir(x: &değişken XhciDurum,bar: tam64,h: XhciAygit,port: tam3
                     değişken k: tam64 = 0;
                     iken k < bh_kayit_sayisi {
                         değişken kayit: tam64 = bh_kayitlar+k*64;
-                        eğer (kem_mmio_oku64(kayit+16)>>24) == (a.yuva olarak tam64) { kem_mmio_yaz64(kayit,0); }
+                        eğer (kem_mmio_oku64(kayit+16)>>24) == (a.yuva olarak tam64) { memset(kayit olarak *tam8,0,64); }
                         k=k+1;
                     }
                     // Çıkış bağlamı başka aygıta atanırsa eski blok tanıtıcısı geçersiz kalır.

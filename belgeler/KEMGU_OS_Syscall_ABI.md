@@ -48,6 +48,8 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 68 | piksel_satiri | 3 | Piksel y, u32 RGB dizi adresi, piksel sayısı | 0, -22 sınır, -14 adres, -13 ön plan | x86_64 |
 | 69 | boru | 1 | Yazılabilir iki i64 adresi (okuma fd, yazma fd) | 0, -23 boru havuzu dolu, -24 fd yok | x86_64 |
 | 70 | baslat_eslemeli | 3 | Program yolu, argv adresi, iki i64 (giriş ve çıkış boru fd; -1 varsayılan) | Çocuk PID veya negatif hata | x86_64 |
+| 71 | kopyala | 2 | Kaynak ve hedef UTF-8 yol adresleri | 0 veya negatif hata | x86_64 |
+| 72 | tasi | 2 | Kaynak ve hedef UTF-8 yol adresleri | Hedef yazıldıktan sonra kaynağı siler, 0 veya negatif hata | x86_64 |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 

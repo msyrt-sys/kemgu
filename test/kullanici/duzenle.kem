@@ -1,3 +1,4 @@
+kullan drivers::duzenle::islem::{ DuGecmis, du_gecmis, du_duzelt, du_geri_al, du_metin_baytlari, du_bul, du_degistir, du_goto };
 kullan drivers::duzenle::tampon::{ DuTampon, du_bos, du_ekle, du_sil, du_atla, du_ileri, du_geri, du_bas, du_son, du_bayt, du_dikey, du_goster, du_satir, du_sutun };
 
 işlev du_yukle(t: &değişken DuTampon,yol: metin,p: tam64) -> tam64 {
@@ -60,6 +61,41 @@ işlev du_ciz(t: &değişken DuTampon,yol: metin,ileti: metin,p: tam64,sat: tam3
     sis_imlec((sy-t.ust) olarak tam64,(sx-t.sol) olarak tam64,1);
 }
 
+işlev du_satir_girdisi(s: metin) -> tam32 {
+    değişken n: tam32 = 0; değişken i: tam32 = 0;
+    iken i < metin_uzunluk(s) {
+        değişken b: tam32 = metin_bayt(s,i) olarak tam32;
+        eğer b < 48 veya b > 57 veya n > 262144 { ver -1; } n=n*10+b-48; i=i+1;
+    } ver n;
+}
+işlev du_ara_komutu(t: &değişken DuTampon,g: &değişken DuGecmis,kod: tam64,katla: mantıksal,p: tam64,sat: tam32) -> metin {
+    eğer kod == 34 {
+        eşleş kul_metin_al(p,sat,"Satıra git: ") { hiç => { ver "  İptal"; } değer(s) => {
+            eğer du_goto(t,du_satir_girdisi(s)) { ver ""; } ver "  Satır bulunamadı";
+        } }
+    }
+    değişken etiket: metin = "İleri ara: "; eğer kod == 48 { etiket="Geri ara: "; }
+    eğer kod == 35 { etiket="Değiştir, aranan: "; }
+    eşleş kul_metin_al(p,sat,etiket) { hiç => { ver "  İptal"; } değer(aranan) => {
+        eğer metin_uzunluk(aranan) == 0 { ver "  Arama metni boş"; }
+        eğer kod != 35 {
+            değişken ilk: tam32 = t.yer;
+            eğer kod == 33 { t.yer=du_ileri(t,t.yer); }
+            eğer du_bul(t,aranan,kod == 48,katla) >= 0 { ver "  Bulundu"; }
+            t.yer=ilk; ver "  Bulunamadı";
+        }
+        eşleş kul_metin_al(p,sat,"Yerine: ") { hiç => { ver "  İptal"; } değer(yeni) => {
+            eşleş kul_metin_al(p,sat,"1 tek, 2 tümü: ") { hiç => { ver "  İptal"; } değer(tercih) => {
+                eğer metin_uzunluk(tercih) != 1 { ver "  1 veya 2 gerekli"; }
+                değişken sec: tam32 = metin_bayt(tercih,0) olarak tam32; eğer sec != 49 ve sec != 50 { ver "  1 veya 2 gerekli"; }
+                eğer değil kul_onay(p,sat,"Değiştirilsin mi? E/H") { ver "  İptal"; }
+                değişken n: tam32 = du_degistir(t,g,aranan,yeni,sec == 50,katla);
+                eğer n < 0 { ver "  Tampon dolu"; } eğer n == 0 { ver "  Bulunamadı"; }
+                ver metin_birlestir("  Değiştirilen ",tam_metin(n olarak tam64));
+            } }
+        } }
+    } }
+}
 işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
     eğer argc != 2 { sis_metin("duzenle <dosya>"); sis_bayt_yaz(1,10); ver 2; }
     değişken yol: metin = sis_argv(argv,1);
@@ -73,6 +109,7 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
     değişken probe: tam64 = sis_ac(yol,1);
     eğer probe >= 0 { sis_kapat(probe); }
     değişken ileti: metin = ""; eğer probe == -30 { ileti="  Salt okunur"; }
+    değişken gecmis: DuGecmis = du_gecmis(); değişken katla: mantıksal = yanlış;
     değişken onay: mantıksal = yanlış;
     du_ciz(&değişken t,yol,ileti,p,sat,sut);
     iken doğru {
@@ -90,10 +127,20 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
             } değilse {
                 eğer ctrl ve kod == 31 {
                     r=du_kaydet(&değişken t,yol,p);
-                    eğer r == 0 { t.kirli=yanlış; ileti="  Kaydedildi"; }
+                    eğer r == 0 { gecmis.kayitli=gecmis.surum; t.kirli=yanlış; ileti="  Kaydedildi"; }
                     değilse eğer r == -27 { ileti="  Kayıt sınırı 64 KiB"; }
                     değilse eğer r == -30 { ileti="  Salt okunur"; }
                     değilse { ileti=metin_birlestir("  Kayıt hatası ",tam_metin(r)); }
+                }
+                değilse eğer ctrl ve (kod == 44 veya kod == 21) {
+                    eğer du_geri_al(&değişken t,&değişken gecmis,kod == 21) { ileti=""; }
+                    değilse { ileti="  Geçmiş sınırı"; }
+                }
+                değilse eğer ctrl ve kod == 23 {
+                    katla=değil katla; ileti="  Harfe duyarlı"; eğer katla { ileti="  Harfe duyarsız"; }
+                }
+                değilse eğer ctrl ve (kod == 33 veya kod == 48 veya kod == 35 veya kod == 34) {
+                    ileti=du_ara_komutu(&değişken t,&değişken gecmis,kod,katla,p+8192,sat-1);
                 }
                 değilse eğer kod == 331 { t.yer=du_geri(&değişken t,t.yer); }
                 değilse eğer kod == 333 { t.yer=du_ileri(&değişken t,t.yer); }
@@ -103,10 +150,12 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
                 değilse eğer kod == 336 { du_dikey(&değişken t,1); }
                 değilse eğer kod == 329 { du_dikey(&değişken t,1-sat); }
                 değilse eğer kod == 337 { du_dikey(&değişken t,sat-1); }
-                değilse eğer kod == 14 veya kod == 339 { du_sil(&değişken t,kod == 14); }
+                değilse eğer kod == 14 veya kod == 339 { değişken bas: tam32 = t.yer; değişken son: tam32 = t.yer;
+                    eğer kod == 14 { bas=du_geri(&değişken t,bas); } değilse { son=du_ileri(&değişken t,son); }
+                    değişken bos: Dizi<dtam8> = []; du_duzelt(&değişken t,&değişken gecmis,bas,son,bos); }
                 değilse eğer kod == 28 veya un >= 32 {
                     değişken harf: metin = kod_metin(10); eğer kod != 28 { harf=kod_metin(un olarak tam32); }
-                    eğer değil du_ekle(&değişken t,harf) { ileti="  Tampon dolu"; }
+                    eğer değil du_duzelt(&değişken t,&değişken gecmis,t.yer,t.yer,du_metin_baytlari(harf)) { ileti="  Tampon dolu"; }
                 } değilse { ciz=yanlış; }
                 eğer ciz { onay=yanlış; }
             }

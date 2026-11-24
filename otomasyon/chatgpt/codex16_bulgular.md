@@ -142,3 +142,16 @@ MMIO ölçümü VirtIO blok/TX/RX used.idx, SATA port durumu, kesme sayacı, xHC
 İlk ölçümde 5k'dan 20k'ya kaynak boyutu dört, IR büyüklüğü iki derleyicide de yaklaşık dört katına çıktı. Self-host duvar süresi 2,27 saniyeden 24,09 saniyeye, bootstrap süresi 0,043 saniyeden 0,129 saniyeye çıktı. Birleşik kabukta ilk ölçüm sırasıyla 43,91 s / 120.272 KiB ve 0,55 s / 41.232 KiB idi. Üç katlık eşikler paralel QEMU yüküne pay bırakırken on kat çoğaltmayı yakalar. En büyük işlev sabotajda bootstrap için 23.749 IR satırına (eşik 7.257), self-host için 22.168'e (eşik 6.780) çıktı.
 
 Her koşum kendi build/derleme-olcum.* dizininde olcum.json ve GNU time -v çıktıları bırakır. Kaynak ve eşikler test/olcum altında sürümlenir.
+
+## Kullanıcı araçları
+
+256 MiB Q35 üzerinde karşılaştırma açılışında toplam 56.109 çerçeve, boş 47.834 çerçeve bulundu. Hesap, EFI türlerini ve korunacak alanları fiziksel bellekten okudu, sabit tahsisleri ve gerçekten kullanılan ek sayfa tablolarını çıkardı. Konuk bir fazla boş çerçeve raporladığında beklenen 47.834 karşısında 47.835 ile kırmızı döndü. Düzenleyici iki karakterden tekini geri alırken önceki adımı da atlayan mutasyon, GOP karşılaştırmasında 329 pikseli farklı kıldı. Çapraz bağlama kopyasında son kısmi kümeyi atlayan mutasyonun imajında 1.264 yerine 1.024 bayt vardı.
+
+FAT32 FSInfo boş kümeyi bilinmiyor olarak işaretlediğinde ilk uygulama 64 MiB'lik bir NVMe bölümünü sayarken heap'i 12.658.736 bayt büyüttü. Aynı sayım tek bir DMA tamponunun yeniden kullanılmasıyla 393.456 bayta indi. USB, NVMe ve SATA üzerinde üç FSInfo sayacı da bilinmiyorken bilgi komutu 590.208 bayt kullandı ve üçü de host FAT girdileriyle eşleşti.
+
+İlk gezgin denemesinde USB F5 uygulamaya iletilmediği için Enter seçili dosyayı açtı. HID F1–F12 fiziksel kodları ortak set 1 olaylarına eklendi. İlk başarısız kopya deneyi kanıt sayılmadı. Düzeltmeden sonra üretim kodu ve ayrı mutasyon tekrar derlendi. Geri alma verisi kullanıcı sürecinin ömründedir. Kalıcı FAT32 yazma sınırı 64 KiB, bu yapılandırmadaki /ram kapasitesi 32 KiB'dir. Çapraz bağlama taşıması önce hedefi yazar, ardından kaynağı siler. Kaynak silme hatası çağırana bildirilir ve hedef kopya korunur.
+
+Önceki 50 süreçlik kapı ilk koşuda 65.616 bayt sınırını aştı. Toplam 7.542.160 baytlık artışın kaynağı, ön plan girdi yoklamasında xHCI aktarımının yeniden kurulmasıydı. Tanı çekirdeğinde çağrılardan önce ve sonra kem_bump okundu. bh_gonder çağrıları tek başına 131.168 veya 196.752 baytlık artışları açıklıyordu. İlk IN isteğini sans-IO sürücüsü kuruyor. Aynı yuva, halka ve rapor boyunda sonraki istek mevcut Normal ve Link TRB'lerinin sahiplik bitlerini değiştiriyor. Aygıt çıkınca uç kaydı temizleniyor. İlk düzeltmeyle tekil 50 çalıştırma 0 bayt ölçerken aynı hedefin toplu koşumu 262.336 bayt verdi. Planlayıcı yeni süreç için ilk kullanıcı dilimini önce çalıştırıyor. Uzun süren veya girdide bekleyen süreç sonraki adımda girdiyi devralıyor. Üç paralel bağımsız açılışta 150 çalıştırmanın süreç heap artışı 0 bayttı. USB ve PS/2 girdi testleri, hub arkasındaki çıkarma ve yeniden takma ile 50 çalıştırma özgün sınırlarıyla yeniden koşuldu. Süreç ve kabuk ölçümleri ayrı gösteriliyor.
+
+✓ 50 tekrar: 47834 boş çerçeve; süreç heap +0; kabuk heap 4919632 → 7083904 bayt
+✓ 50 tekrar: 47804 boş çerçeve; süreç heap +0; kabuk heap 5182096 → 7346368 bayt

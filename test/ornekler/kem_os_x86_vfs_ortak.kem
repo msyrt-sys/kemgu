@@ -72,6 +72,8 @@ sabit KX_SIS_DIZIN_OKU: tam64 = 47;
 sabit KX_SIS_OLUSTUR_DIZIN: tam64 = 48;
 sabit KX_SIS_SIL: tam64 = 49;
 sabit KX_SIS_SIL_DIZIN: tam64 = 50;
+sabit KX_SIS_KOPYALA: tam64 = 71;
+sabit KX_SIS_TASI: tam64 = 72;
 sabit KX_SIS_YENIDEN_ADLANDIR: tam64 = 51;
 sabit KX_SIS_CALISMA_DIZINI_AL: tam64 = 52;
 sabit KX_SIS_CALISMA_DIZINI_DEGISTIR: tam64 = 53;
@@ -113,7 +115,7 @@ yapı KsvFd { acik: mantıksal; yol: KabukYol; kip: tam64; konum: tam64; }
 yapı KsvBaglam {
     disk: KabukDisk; fds: Dizi<KsvFd>; kabuk_cwd: metin; degisti: mantıksal;
     x: XhciDurum; xb: tam64; klavye_indeksi: tam32; h: HidKlavye; tr: KlavyeDurumu;
-    olaylar: Dizi<TusHamOlay>; olay_konum: tam32; ilk_tus: mantıksal; fare_durum: FareDurumu; olay_maskesi: tam64; son_tik: tam64; bekleme_kurulu: mantıksal;
+    olaylar: Dizi<TusHamOlay>; olay_konum: tam32; ilk_tus: mantıksal; dilim_calisti: mantıksal; fare_durum: FareDurumu; olay_maskesi: tam64; son_tik: tam64; bekleme_kurulu: mantıksal;
 }
 küresel değişken ksv_baglam_adresi: tam64 = 0;
 
@@ -501,16 +503,16 @@ işlev ksv_yol_isle(b: &değişken KsvBaglam,num: tam64,p: tam64) -> tam64 {
         ver ksv_mutasyon(b,y,FatYazIslem::DizinSil);
     } }
 }
-işlev ksv_adlandir(b: &değişken KsvBaglam,p: tam64,q: tam64) -> tam64 {
+işlev ksv_aktar(b: &değişken KsvBaglam,p: tam64,q: tam64,tasi: mantıksal,yerel: mantıksal) -> tam64 {
     değişken eski: KabukYol = KabukYol {indeks:0,yol:""};
     değişken yeni: KabukYol = KabukYol {indeks:0,yol:""};
     değişken r: tam64 = ksv_yol(b,p,&değişken eski);
     eğer r < 0 { ver r; }
     r=ksv_yol(b,q,&değişken yeni);
     eğer r < 0 { ver r; }
-    eğer eski.indeks != yeni.indeks { ver 0-KX_HATA_XDEV; }
+    eğer yerel ve eski.indeks != yeni.indeks { ver 0-KX_HATA_XDEV; }
     b.degisti=doğru;
-    eşleş kd_kopyala(&değişken b.disk,eski,yeni,doğru) {
+    eşleş kd_kopyala(&değişken b.disk,eski,yeni,tasi) {
         hata(e) => { ver ksv_hata(e); }
         tamam(v) => { ver 0; }
     }
@@ -891,7 +893,9 @@ işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64
     eğer num == KX_SIS_BILGI { ver ksv_bilgi(b,a,c); }
     eğer num == KX_SIS_DIZIN_OKU { ver ksv_dizin_oku(b,a,c,d); }
     eğer num == KX_SIS_OLUSTUR_DIZIN veya num == KX_SIS_SIL veya num == KX_SIS_SIL_DIZIN { ver ksv_yol_isle(b,num,a); }
-    eğer num == KX_SIS_YENIDEN_ADLANDIR { ver ksv_adlandir(b,a,c); }
+    eğer num == KX_SIS_YENIDEN_ADLANDIR { ver ksv_aktar(b,a,c,doğru,doğru); }
+    eğer num == KX_SIS_KOPYALA { ver ksv_aktar(b,a,c,yanlış,yanlış); }
+    eğer num == KX_SIS_TASI { ver ksv_aktar(b,a,c,doğru,yanlış); }
     eğer num == KX_SIS_CALISMA_DIZINI_AL { ver ksv_cwd_al(b,a,c); }
     eğer num == KX_SIS_CALISMA_DIZINI_DEGISTIR { ver ksv_cwd_degistir(b,a); }
     eğer num == KX_SIS_ESITLE { ver ksv_esitle(b); }

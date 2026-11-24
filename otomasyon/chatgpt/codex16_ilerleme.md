@@ -63,3 +63,9 @@ Her derleyici dokuz korpusta toplam 12.000 örneği tamamladı. USB korpusunda a
 ## Bölüm 11 — Derleme büyüme eğrisi
 
 Deterministik sürücü birimlerinde 4.987, 9.985, 19.981 satır ve birleşik kabuk için iki derleyici ölçüldü. Her satırın süre, tepe RSS, IR satırı ve en büyük işlev değerleri bulgulara yazıldı. Her eşik aynı makinedeki ilk ölçümün üç katıdır. 5k üreticinin ana işlevindeki çağrı dizisini on kez çoğaltan sabotajda en büyük işlev her iki derleyicide sınırı aştı. Kapılar 1251 saniye, bölüm 21 dakika.
+
+## Bölüm 12 — Bilgi, düzenleyici ve dosya gezgini
+
+Bilgi komutu UEFI çerçevelerini, çalışma süresini, heap kullanımını, canlı süreçleri, disklerdeki boş baytları, kesmeleri ve giriş kaynaklarını listeler. Düzenleyici Türkçe harf katlamalı ileri/geri arama, onaylı tek/tüm değiştirme, satıra gitme ve 64 değişikliğe kadar geri alma/yineleme sağlar. Gezgin ve kabuk kopyalama, taşıma ve silme için aynı VFS işlevlerini kullanır. 71 ve 72 numaralı çağrılar çapraz bağlamada kullanılabilir. Gezgin F7 ile dizin oluşturur, Delete öncesinde onay ister.
+
+Üç saf model ve iki derleyiciyle altı araç açılışı geçti. Konuğun çerçeve sayıları QMP'den okunan firmware haritası ve gerçek CR3 ağacıyla, disklerdeki boş alan FAT girdileriyle karşılaştırıldı. Kaydedilen UTF-8 metni ve son kısmı 240 bayt olan ikili kopya host imajında doğrulandı. Üç sabotaj kırmızı. Bölüm kapıları 1499 saniye, bölüm 25 dakika.

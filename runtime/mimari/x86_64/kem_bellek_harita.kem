@@ -4,7 +4,7 @@ kullan drivers::acilis::uefi_harita::{ uefi_harita, uefi_koru } olarak uh;
 kullan drivers::acpi::mcfg::{ McfgPencere, mcfg_coz, mcfg_adres };
 kullan drivers::pci::yapilandirma::{ bar_boyu, bar_boyu64 };
 kullan drivers::bellek::harita::{ BellekBolgesi };
-kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, ayir_ardisik, serbest_ardisik };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, cerceve_bos, ayir_ardisik, serbest_ardisik };
 işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> sonuç<tam64,metin> {
  eşleş ayir_ardisik(d,sayfa) {
   hiç => { ver hata(metin_birlestir("UEFI RAM yetmedi: ",ad)); }

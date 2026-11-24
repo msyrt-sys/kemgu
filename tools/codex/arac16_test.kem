@@ -1,0 +1,41 @@
+kullan drivers::fs::yol_harf::{ yol_bilesen_esit };
+kullan drivers::duzenle::tampon::{ DuTampon, du_bos, du_ekle, du_bayt };
+kullan drivers::duzenle::islem::{ DuGecmis, du_gecmis, du_duzelt, du_geri_al, du_metin_baytlari, du_bul, du_degistir, du_goto };
+kullan drivers::uygulama::gezgin::{ gezgin_hedef };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, cerceve_bos, ayir_ardisik, serbest_ardisik };
+kullan drivers::bellek::harita::{ BellekBolgesi };
+işlev main() -> tam32 {
+    değişken t: DuTampon = du_bos(); değişken g: DuGecmis = du_gecmis(); değişken i: tam32 = 0;
+    iken i < 65 {
+        eğer değil du_duzelt(&değişken t,&değişken g,t.yer,t.yer,du_metin_baytlari(kod_metin(32+i))) { ver 1; }
+        i=i+1;
+    }
+    g.kayitli=g.surum;
+    iken i > 1 {
+        eğer değil du_geri_al(&değişken t,&değişken g,yanlış) veya t.boy != i-1 veya du_bayt(&değişken t,t.boy-1) != 30+i { ver 2; }
+        i=i-1;
+    }
+    eğer du_geri_al(&değişken t,&değişken g,yanlış) { ver 3; }
+    iken i < 65 { eğer değil du_geri_al(&değişken t,&değişken g,doğru) { ver 4; } i=i+1; }
+    eğer t.kirli veya du_bayt(&değişken t,64) != 96 { ver 5; }
+    du_geri_al(&değişken t,&değişken g,yanlış);
+    du_duzelt(&değişken t,&değişken g,t.boy,t.boy,du_metin_baytlari("!"));
+    eğer değil t.kirli veya du_geri_al(&değişken t,&değişken g,doğru) { ver 6; }
+    t=du_bos(); g=du_gecmis(); du_ekle(&değişken t,"IŞIK"); du_ekle(&değişken t,kod_metin(10)); du_ekle(&değişken t,"ışık İÇ");
+    eğer değil du_goto(&değişken t,2) veya t.yer != 6 veya du_goto(&değişken t,3) { ver 7; }
+    eğer du_bul(&değişken t,"ışık",doğru,doğru) != 0 veya du_bul(&değişken t,"iç",doğru,doğru) <= 6 { ver 8; }
+    eğer du_bul(&değişken t,"iç",yanlış,yanlış) != -1 { ver 9; }
+    eğer du_degistir(&değişken t,&değişken g,"ışık","a",doğru,doğru) != 2 veya t.boy != 8 { ver 10; }
+    t.yer=0; eğer du_degistir(&değişken t,&değişken g,"a","b",yanlış,yanlış) != 1 veya du_bayt(&değişken t,0) != 98 { ver 11; }
+    eşleş gezgin_hedef("/ram","x") { hiç => { ver 12; } değer(y) => { eğer değil yol_bilesen_esit(y,"/ram/x") { ver 13; } } }
+    eşleş gezgin_hedef("/ram","/diskler/x") { hiç => { ver 14; } değer(y) => { eğer değil yol_bilesen_esit(y,"/diskler/x") { ver 15; } } }
+    eşleş gezgin_hedef("/","") { hiç => { } değer(y) => { ver 16; } }
+    değişken xs: Dizi<BellekBolgesi> = [BellekBolgesi {taban:1048576,uzunluk:36864,tur:1}];
+    eşleş cerceve_yeni(xs) { hata(e) => { ver 17; } tamam(a) => { değişken c: CerceveAyirici = a;
+        eşleş ayir_ardisik(&değişken c,4) { hiç => { ver 18; } değer(p) => {
+            eğer cerceve_bos(&c) != 5 { ver 19; }
+            serbest_ardisik(&değişken c,p,4); eğer cerceve_bos(&c) != 9 { ver 20; }
+        } }
+    } }
+    ver 0;
+}

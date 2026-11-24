@@ -1,0 +1,110 @@
+// Geçmiş kaydı yalnız değişen UTF-8 baytlarını tutar. İmleç konumu da geri yüklenir.
+kullan drivers::duzenle::tampon::{ DuTampon, du_bayt, du_ileri, du_geri, du_son };
+kullan drivers::uygulama::bul::{ bul_harf };
+kullan drivers::ortak::utf8::{ utf8_coz };
+genel yapı DuAdim { bas: tam32; eski: Dizi<dtam8>; yeni: Dizi<dtam8>; once: tam32; sonra: tam32; ilk_sur: tam64; son_sur: tam64; }
+genel yapı DuGecmis { kayit: Dizi<DuAdim>; ilk: tam32; boy: tam32; konum: tam32; sira: tam64; surum: tam64; kayitli: tam64; }
+
+genel işlev du_gecmis() -> DuGecmis {
+    ver DuGecmis {kayit:[],ilk:0,boy:0,konum:0,sira:0,surum:0,kayitli:0};
+}
+genel işlev du_metin_baytlari(s: metin) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
+    iken i < metin_uzunluk(s) { dizi_ekle(b,metin_bayt(s,i) olarak dtam8); i=i+1; } ver b;
+}
+işlev du_dilim(t: &değişken DuTampon,bas: tam32,son: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = []; değişken i: tam32 = bas;
+    iken i < son { dizi_ekle(b,dizi_al(t.veri,i)); i=i+1; } ver b;
+}
+işlev du_aralik_yaz(t: &değişken DuTampon,bas: tam32,son: tam32,b: Dizi<dtam8>) {
+    değişken fark: tam32 = dizi_boyut(b)-(son-bas); değişken i: tam32 = 0;
+    iken dizi_boyut(t.veri) < t.boy+fark { dizi_ekle(t.veri,0 olarak dtam8); }
+    eğer fark > 0 {
+        i=t.boy; iken i > son { i=i-1; dizi_yaz(t.veri,i+fark,dizi_al(t.veri,i)); }
+    } değilse eğer fark < 0 {
+        i=son; iken i < t.boy { dizi_yaz(t.veri,i+fark,dizi_al(t.veri,i)); i=i+1; }
+    }
+    i=bas; için x: b { dizi_yaz(t.veri,i,x); i=i+1; }
+    t.boy=t.boy+fark;
+}
+genel işlev du_duzelt(t: &değişken DuTampon,g: &değişken DuGecmis,bas: tam32,son: tam32,b: Dizi<dtam8>) -> mantıksal {
+    eğer bas < 0 veya son < bas veya son > t.boy veya dizi_boyut(b) > 262144-t.boy+(son-bas) { ver yanlış; }
+    eğer bas == son ve dizi_boyut(b) == 0 { ver doğru; }
+    değişken a: DuAdim = DuAdim {bas:bas,eski:du_dilim(t,bas,son),yeni:b,once:t.yer,sonra:bas+dizi_boyut(b),ilk_sur:g.surum,son_sur:g.sira+1};
+    g.boy=g.konum;
+    eğer g.boy == 64 { g.ilk=(g.ilk+1)%64; g.boy=63; }
+    değişken yuva: tam32 = (g.ilk+g.boy)%64;
+    eğer yuva == dizi_boyut(g.kayit) { dizi_ekle(g.kayit,a); } değilse { dizi_yaz(g.kayit,yuva,a); }
+    g.boy=g.boy+1; g.konum=g.boy; g.sira=a.son_sur; g.surum=g.sira;
+    du_aralik_yaz(t,bas,son,b); t.yer=a.sonra; t.kirli=g.surum != g.kayitli;
+    ver doğru;
+}
+genel işlev du_geri_al(t: &değişken DuTampon,g: &değişken DuGecmis,yinele: mantıksal) -> mantıksal {
+    eğer yinele {
+        eğer g.konum == g.boy { ver yanlış; }
+        değişken a: DuAdim = dizi_al(g.kayit,(g.ilk+g.konum)%64);
+        du_aralik_yaz(t,a.bas,a.bas+dizi_boyut(a.eski),a.yeni); t.yer=a.sonra; g.surum=a.son_sur; g.konum=g.konum+1;
+    } değilse {
+        eğer g.konum == 0 { ver yanlış; }
+        g.konum=g.konum-1;
+        değişken a: DuAdim = dizi_al(g.kayit,(g.ilk+g.konum)%64);
+        du_aralik_yaz(t,a.bas,a.bas+dizi_boyut(a.yeni),a.eski); t.yer=a.once; g.surum=a.ilk_sur;
+    }
+    t.kirli=g.surum != g.kayitli; ver doğru;
+}
+işlev du_kod(t: &değişken DuTampon,p: tam32,son: tam32) -> tam32 {
+    değişken k: tam32 = du_bayt(t,p); değişken n: tam32 = son-p;
+    eğer n == 1 { ver k; } eğer n > 4 { ver 65533; }
+    k=k&(127>>n); değişken i: tam32 = p+1;
+    iken i < son { k=(k<<6)|(du_bayt(t,i)&63); i=i+1; } ver k;
+}
+işlev du_eslesme_sonu(t: &değişken DuTampon,p: tam32,kodlar: Dizi<tam32>,katla: mantıksal) -> tam32 {
+    değişken yer: tam32 = p;
+    için a: kodlar {
+        eğer yer >= t.boy { ver -1; }
+        değişken son: tam32 = du_ileri(t,yer); değişken k: tam32 = du_kod(t,yer,son); değişken hedef: tam32 = a;
+        eğer katla { k=bul_harf(k); hedef=bul_harf(a); }
+        eğer k != hedef { ver -1; } yer=son;
+    } ver yer;
+}
+genel işlev du_bul(t: &değişken DuTampon,aranan: metin,geri: mantıksal,katla: mantıksal) -> tam32 {
+    değişken ks: Dizi<tam32> = utf8_coz(aranan); eğer dizi_boyut(ks) == 0 veya t.boy == 0 { ver -1; }
+    değişken p: tam32 = t.yer;
+    eğer geri { eğer p == 0 { p=t.boy; } p=du_geri(t,p); }
+    değilse eğer p == t.boy { p=0; }
+    değişken ilk: tam32 = p;
+    iken doğru {
+        eğer du_eslesme_sonu(t,p,ks,katla) >= 0 { t.yer=p; ver p; }
+        eğer geri { eğer p == 0 { p=t.boy; } p=du_geri(t,p); }
+        değilse { p=du_ileri(t,p); eğer p == t.boy { p=0; } }
+        eğer p == ilk { ver -1; }
+    } ver -1;
+}
+genel işlev du_degistir(t: &değişken DuTampon,g: &değişken DuGecmis,aranan: metin,yeni: metin,tumu: mantıksal,katla: mantıksal) -> tam32 {
+    değişken ks: Dizi<tam32> = utf8_coz(aranan); değişken y: Dizi<dtam8> = du_metin_baytlari(yeni);
+    eğer dizi_boyut(ks) == 0 { ver 0; }
+    eğer değil tumu {
+        eğer du_bul(t,aranan,yanlış,katla) < 0 { ver 0; }
+        değişken son: tam32 = du_eslesme_sonu(t,t.yer,ks,katla);
+        eğer değil du_duzelt(t,g,t.yer,son,y) { ver -1; } ver 1;
+    }
+    değişken b: Dizi<dtam8> = []; değişken p: tam32 = 0; değişken n: tam32 = 0;
+    iken p < t.boy {
+        değişken son: tam32 = du_eslesme_sonu(t,p,ks,katla);
+        eğer son > p {
+            eğer dizi_boyut(y) > 262144-dizi_boyut(b) { ver -1; }
+            için x: y { dizi_ekle(b,x); } n=n+1; p=son;
+        } değilse {
+            son=du_ileri(t,p); eğer son-p > 262144-dizi_boyut(b) { ver -1; }
+            iken p < son { dizi_ekle(b,dizi_al(t.veri,p)); p=p+1; }
+        }
+    }
+    eğer n > 0 { eğer değil du_duzelt(t,g,0,t.boy,b) { ver -1; } }
+    ver n;
+}
+genel işlev du_goto(t: &değişken DuTampon,satir: tam32) -> mantıksal {
+    eğer satir < 1 { ver yanlış; }
+    değişken p: tam32 = 0; değişken i: tam32 = 1;
+    iken i < satir { p=du_son(t,p); eğer p == t.boy { ver yanlış; } p=p+1; i=i+1; }
+    t.yer=p; ver doğru;
+}

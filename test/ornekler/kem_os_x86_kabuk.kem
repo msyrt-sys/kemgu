@@ -588,6 +588,7 @@ işlev kd_icerik(d: &değişken KabukDisk,y: KabukYol) -> sonuç<Dizi<dtam8>,met
     ver kv_tum(d,y,65536);
 }
 işlev kd_kopyala(d: &değişken KabukDisk,src: KabukYol,dst: KabukYol,tasi: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer src.indeks == dst.indeks ve yol_bilesen_esit(src.yol,dst.yol) { ver hata("kaynak ve hedef ayni"); }
     eğer tasi ve src.indeks == d.ram_bag ve dst.indeks == d.ram_bag {
         eşleş ramfs_yer(&d.ram,src.yol) { hata(e) => { ver hata(e); } tamam(a) => {
             eşleş ramfs_yer(&d.ram,dst.yol) { hata(e) => { ver hata(e); } tamam(b) => {
@@ -855,7 +856,7 @@ işlev ks_baslat(p: &değişken KsKabukSureci,b: &değişken KsvBaglam,argv: Diz
                 değişken i: tam32 = yuva olarak tam32;
                 değişken yeni: KsvBaglam = dizi_al(p.baglamlar,i);
                 yeni.disk=b.disk; yeni.x=b.x; yeni.h=b.h; yeni.tr=b.tr;
-                yeni.olay_konum=dizi_boyut(yeni.olaylar); yeni.ilk_tus=doğru; yeni.bekleme_kurulu=yanlış; yeni.fare_durum=fare_yeni(ps2_teker_var());
+                yeni.olay_konum=dizi_boyut(yeni.olaylar); yeni.ilk_tus=doğru; yeni.dilim_calisti=yanlış; yeni.bekleme_kurulu=yanlış; yeni.fare_durum=fare_yeni(ps2_teker_var());
                 yeni.degisti=yanlış;
                 dizi_yaz(p.baglamlar,i,yeni);
                 dizi_yaz(p.adlar,i,p.son_program.ad);
@@ -946,7 +947,9 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
                     eşleş kd_hub_olayi(&değişken b.disk,x,b.xb) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(v) => { } }
                 }
                 b.klavye_indeksi=kl_indeks();
-                eğer kxs_on_pid == ks_pid(y) {
+                // İlk kullanıcı dilimini hemen başlat. Süren veya girdi bekleyen
+                // süreçler sonraki planlama adımında klavyeyi devralır.
+                eğer b.dilim_calisti ve kxs_on_pid == ks_pid(y) {
                     b.x=*x; b.h=*h; b.tr=*tr;
                     değişken girdi: tam64 = ksv_tus_doldur(&değişken b);
                     *x=b.x; *h=b.h; *tr=b.tr;
@@ -967,7 +970,7 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
                     ks_yonetim=yonetim olarak tam64;
                     kxs_ek_vekil=ksv_vekil_adresi();
                     kxs_cikis_eslendi=dizi_al(b.fds,1).acik;
-                    kxs_bir_dilim(y);
+                    kxs_bir_dilim(y); b.dilim_calisti=doğru;
                     kxs_cikis_eslendi=yanlış;
                     ks_yonetim=0; ksv_baglam_adresi=0; kxs_ek_vekil=0;
                     *x=b.x; *h=b.h; *tr=b.tr;
@@ -1252,6 +1255,82 @@ işlev kd_kesme_rapor(satirlar: Dizi<metin>) {
         }
     }
 }
+// FSInfo sayacı bilinmiyorsa tek bir DMA tamponunu bütün FAT boyunca yeniden kullan.
+işlev kd_fat_bos_kume(ay: &değişken BlokDonanim,k: KabukBag,hedef: tam64) -> sonuç<tam64,metin> {
+    değişken son: tam64 = k.bpb.kume_sayisi+2;
+    eğer k.bpb.sektor_bayt != 512 veya son > k.bpb.fat_sektor*128 { ver hata("FAT32 sayim geometrisi"); }
+    değişken bas: tam64 = k.bolum.bas+(k.bpb.ayrilmis olarak tam64);
+    değişken sektor: tam64 = 0; değişken bos: tam64 = 0;
+    iken sektor*128 < son {
+        değişken adet: tam64 = (son+127)/128-sektor; eğer adet > 128 { adet=128; }
+        değişken veri: tam64 = hedef;
+        eşleş ay.aygit.durum {
+            BlokCesidi::Ram(r) => {
+                eğer bas < 0 veya bas+sektor > r.sektor-adet { ver hata("ramdisk FAT araligi"); }
+                veri=r.taban+(bas+sektor)*512;
+            }
+            _ => {
+                eşleş kd_ram_aktar(ay,bas+sektor,adet,hedef) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            }
+        }
+        değişken i: tam64 = 0;
+        iken i < adet*128 ve sektor*128+i < son {
+            eğer sektor*128+i >= 2 ve (kem_mmio_oku32(veri+i*4)&268435455) == 0 { bos=bos+1; }
+            i=i+1;
+        }
+        sektor=sektor+adet;
+    }
+    ver tamam(bos);
+}
+işlev kd_bos_bayt(d: &değişken KabukDisk,k: KabukBag) -> sonuç<tam64,metin> {
+    eğer bm_esit(k.kayit.ad,"/ram") {
+        değişken bos: tam64 = 0; için sayfa: d.ram.dolu { eğer sayfa == 0 { bos=bos+4096; } }
+        ver tamam(bos);
+    }
+    değişken birim: tam64 = (k.bpb.kume_sektor olarak tam64)*(k.bpb.sektor_bayt olarak tam64);
+    eğer k.bpb.fsinfo > 0 ve k.bpb.fsinfo < k.bpb.ayrilmis {
+        eşleş kd_oku(d,k.indeks,k.bolum.bas+(k.bpb.fsinfo olarak tam64),1) {
+            hata(e) => { ver hata(e); } tamam(b) => {
+                değişken say: tam64 = oku_le32(b,488);
+                eğer oku_le32(b,0) == 1096897106 ve oku_le32(b,484) == 1631679090 ve oku_le32(b,508) == 2857697280 ve say <= k.bpb.kume_sayisi { ver tamam(say*birim); }
+            }
+        }
+    }
+    değişken ay: BlokDonanim = dizi_al(d.aygitlar,k.indeks);
+    güvensiz {
+        değişken tampon: *tam8 = malloc(131072); eğer (tampon olarak tam64) == 0 { ver hata("FAT sayimi icin bellek yok"); }
+        değişken hedef: tam64 = (((tampon olarak tam64)+65535)/65536)*65536;
+        değişken r: sonuç<tam64,metin> = kd_fat_bos_kume(&değişken ay,k,hedef);
+        free(tampon); dizi_yaz(d.aygitlar,k.indeks,ay);
+        eşleş r { hata(e) => { ver hata(e); } tamam(n) => { ver tamam(n*birim); } }
+    }
+}
+işlev kd_bilgi(d: &değişken KabukDisk,indeks: tam32,us: mantıksal) -> sonuç<mantıksal,metin> {
+    değişken sure: tam64 = kem_tik_oku()*10;
+    güvensiz { eğer kap_tsc_ms > 0 ve kap_tsc_bas > 0 { sure=(bm_tsc_oku()-kap_tsc_bas)/kap_tsc_ms; } }
+    ekran_cift_yaz(kd_tamsayi("CALISMA ms",sure));
+    eğer uefi_mi() {
+        değişken c: CerceveAyirici = uefi_ayirici_al();
+        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("CERCEVE bos toplam",cerceve_bos(&c) olarak tam64),c.toplam olarak tam64));
+    } değilse { ekran_cift_yaz("CERCEVE PVH haritasi yok"); }
+    ekran_cift_yaz(kd_tamsayi("HEAP bayt",kem_heap_kullanimi()));
+    değişken say: tam64 = 0; değişken i: tam64 = 0;
+    iken i < KXS_YUVA_ADEDI { değişken durum: tam64 = ks_durum(i); eğer durum != KXS_BOS ve değil ks_bitti(durum) { say=say+1; } i=i+1; }
+    ekran_cift_yaz(kd_tamsayi("SUREC etkin",say));
+    değişken kl: metin = "PS2"; değişken fa: metin = "PS2"; değişken duz: metin = "tr";
+    eğer indeks >= 0 { kl="USB"; } eğer bh_fare() >= 0 { fa="USB"; } eğer us { duz="us"; }
+    ekran_cift_yaz(metin_birlestir(metin_birlestir(metin_birlestir("GIRDI ",kl),metin_birlestir(" ",fa)),metin_birlestir(" ",duz)));
+    değişken satirlar: Dizi<metin> = []; kd_kesme_rapor(satirlar); için s: satirlar { ekran_cift_yaz(s); }
+    için k: d.baglar {
+        eğer bm_esit(k.kayit.ad,"/ram") veya kd_hub_bagli(d,k.indeks) {
+            eşleş kd_bos_bayt(d,k) {
+                hata(e) => { ver hata(metin_birlestir(metin_birlestir(k.kayit.ad," "),e)); }
+                tamam(bos) => { ekran_cift_yaz(kd_tamsayi(metin_birlestir("BOS_BAYT ",k.kayit.ad),bos)); }
+            }
+        }
+    }
+    ver tamam(doğru);
+}
 işlev kd_kesme_sina() -> sonuç<mantıksal,metin> {
     değişken v: tam32 = kesme_ayir();
     eğer v < 0 { ver hata("kesme sinamasi icin bos vektor yok"); }
@@ -1496,6 +1575,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer seviye < 1 veya seviye > 4 { ver hata("hassasiyet 1..4"); }
         güvensiz { ksv_hassasiyet=seviye olarak tam32; } ver tamam(doğru);
     }
+    eğer bm_esit(cmd,"bilgi") { ver kd_bilgi(d,indeks,tr.us); }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
     eğer bm_esit(cmd,"donanim") {
         eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }
@@ -1581,6 +1661,8 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer değil bm_esit(kd_bas(arg,n),"--yazilabilir") veya n+1 >= metin_uzunluk(arg) { ver hata("bagla --yazilabilir <ad>"); }
         ver kd_yazilabilir(d,kd_kalan(arg,n));
     }
+    eğer bm_esit(cmd,"kopyala") { cmd="cp"; }
+    eğer bm_esit(cmd,"tasi") { cmd="mv"; }
     değişken iki: mantıksal = bm_esit(cmd,"yaz") veya bm_esit(cmd,"mv") veya bm_esit(cmd,"cp");
     değişken son: metin = "";
     eğer iki {
@@ -1635,7 +1717,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
     iken y < KXS_YUVA_ADEDI {
         güvensiz {
             dizi_ekle(p.baglamlar,KsvBaglam {disk:*d,fds:ksv_fd_tablo(),kabuk_cwd:d.cwd,degisti:yanlış,
-                x:*x,xb:xb,klavye_indeksi:indeks,h:h,tr:tr,olaylar:[],olay_konum:0,ilk_tus:doğru,fare_durum:fare_yeni(ps2_teker_var()),olay_maskesi:0,son_tik:-1,bekleme_kurulu:yanlış});
+                x:*x,xb:xb,klavye_indeksi:indeks,h:h,tr:tr,olaylar:[],olay_konum:0,ilk_tus:doğru,dilim_calisti:yanlış,fare_durum:fare_yeni(ps2_teker_var()),olay_maskesi:0,son_tik:-1,bekleme_kurulu:yanlış});
         }
         dizi_ekle(p.adlar,""); y=y+1;
     }

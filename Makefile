@@ -5129,3 +5129,10 @@ calistir_mmio_volatile: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_
 test_tumu: calistir_derleme_olcum
 calistir_derleme_olcum: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/olcum/derleme_harness.sh
+
+.PHONY: calistir_bm_x86_arac16
+test_tumu: calistir_bm_x86_arac16
+calistir_bm_x86_arac16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tools/codex/arac16_test.kem
+	@python3 tests/qemu/surec_abi.py
+	@SUREC_KAHIN=arac16_kahin bash test/bm_x86_surec_harness.sh

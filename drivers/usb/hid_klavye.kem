@@ -56,6 +56,9 @@ genel işlev hid_klavye_rapor(h: &değişken HidKlavye,d: &değişken KlavyeDuru
     ver tamam(xs);
 }
 işlev hid_ham_ozel(k: tam32) -> tam32 {
+    // HID F1..F12 kullanımları, PS/2 küme 1 ile aynı fiziksel olay kodlarını üretir.
+    eğer k >= 58 ve k <= 67 { ver k+1; }
+    eğer k == 68 { ver 87; } eğer k == 69 { ver 88; }
     eğer k == 70 { ver 311; } eğer k == 72 { ver 581; }
     eğer k == 84 { ver 309; } eğer k == 88 { ver 284; }
     eğer k == 73 { ver 338; }
