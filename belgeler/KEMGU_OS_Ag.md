@@ -76,3 +76,9 @@ TCP sıra ve ACK karşılaştırmaları 32 bit sarmalı hesaba katar. Etkin ve p
 ## TCP yeniden iletimi
 
 SRTT ve RTTVAR milisaniye cinsindendir. İlk RTO bir saniye, alt sınır bir saniye ve üst sınır 60 saniyedir. Zaman aşımında RTO iki katına çıkar. Sekizinci zaman aşımında uygulamaya -110 döner. Yeniden gönderilen veriden RTT örneği çıkarılmaz. Tıkanıklık penceresi başlangıçta on MSS’dir. Yavaş başlangıcı toplamsal artış izler. Üç yinelenen ACK hızlı yeniden iletimi başlatır. Kayıpta eşik uçuşta olan veri miktarının yarısı, en az iki MSS olur. Alıcı, halkada bir bitişik sıra dışı aralık saklar. Bundan ayrık ikinci aralık gönderenin sonraki iletiminden alınır. `ag tcp sayac` yeniden iletim, reddedilen bağlantı ve hatayla kapanış sayılarını gösterir.
+
+## TCP seçenekleri ve verim
+
+Bir bağlantının alım ve gönderim halkaları 128 KiB’dir. SYN penceresi ölçeklenmez. Ölçek iki taraf da önerdiğinde kullanılır. Yerel kaydırma 2, kabul edilen en büyük kaydırma 14’tür. Zaman damgası anlaşılmışsa TSecr RTT ölçümüne katılır. PAWS, 24 gün içinde önceki zaman damgasından eski veriyi reddeder. İlk veri segmentinin ACK üst sınırı 25 ms’dir. İkinci segment hemen onaylanır. Nagle küçük yazıları uçuşta veri varken biriktirir. Keepalive boş bağlantıda üç yoklamadan sonra -110 verir.
+
+Paralel QEMU yükünde ölçülen ilk 64 MiB aktarım 1,075 MiB/s sürdü. Kapı 0,25 MiB/s altını yakalar. Her ölçümde Python eşi ve ayrıca pcap okuyucusu bütün veri akışının SHA-256 değerini doğrular.

@@ -10,7 +10,12 @@ for derleyici in build/kemgu build/codegen; do
     echo "NIC derleyicisi $derleyici ($w)"
     UEFI_CALISMA_DIZINI="$w" UEFI_DERLEYICI="$derleyici" UEFI_YALNIZ_DERLE=1 \
         UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-    if [[ "${1:-e1000}" == kayip ]]; then
+    if [[ "${1:-e1000}" == secenek ]]; then
+        python3 tests/qemu/ag_tcp_secenek.py "$w" secenek
+    elif [[ "${1:-e1000}" == verim ]]; then
+        python3 tests/qemu/ag_tcp_secenek.py "$w" olcekli
+        python3 tests/qemu/ag_tcp_secenek.py "$w" olceksiz
+    elif [[ "${1:-e1000}" == kayip ]]; then
         python3 tests/qemu/ag_tcp_kayip.py "$w"
     elif [[ "${1:-e1000}" == tcp ]]; then
         python3 tests/qemu/ag_tcp_kahin.py "$w"

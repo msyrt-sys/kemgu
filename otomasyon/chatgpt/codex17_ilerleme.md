@@ -43,3 +43,7 @@ Etkin ve pasif açılış, iki yönde 64 KiB, sekiz eşzamanlı bağlantı ve do
 ## Bölüm 8 — TCP kaybı ve yeniden iletim
 
 İki derleyici ve QEMU ile iki yönde 4 MiB, sabit tohumlu %5 kayıp, %5 sıra değişimi ve %2 çiftlemede SHA-256 eşleşti. Çekirdek ve tel yeniden iletim sayıları ölçüldü. Geçen süre 1618 saniye. Üç ayrı değiştirilmiş saf durum makinesi gerçek C ve self-host çalıştırmalarında kırıldı. Sıfır ve çok uzun RTO zamanlayıcı kapısında çıkış 2, yinelenen veriyi ekleme alıcı sırasında çıkış 9 verdi. Değiştirilmiş çekirdekte paket taşması veya bağlantı asılması oluşturan ağ sabotajları ve bu değişikliklerle QEMU SHA-256 sabotajı uygulanmadı.
+
+## Bölüm 9 — TCP seçenekleri ve verim
+
+Pencere ölçeği iki yönde, TCP zaman damgası ve PAWS, gecikmeli ACK, kapatılabilir Nagle ve keepalive eklendi. 64 MiB tek yön aktarım ölçek açık ve kapalı olarak iki derleyicide ölçüldü. Geçen süre 1707 saniye. Alıcı tarafında ölçek kaydırması kaldırılan ayrı QEMU imajında 131.068 yerine 262.140 baytlık pencere gözlendi ve kapı kırıldı. Gecikmeli ACK zamanlayıcısının çıkarıldığı iki host ikilisinde tek segment denetimi çıkış 5 verdi. Değiştirilmiş çekirdekte ağ üzerinden kapanmayan oturum oluşturma sabotajı uygulanmadı.

@@ -103,3 +103,12 @@ Gelen üç datagramda sırasıyla yedi, beş ve altı parça kaydedildi. İlkind
 
 - TCP KAYIP OK 4194304x2 SHA256=fd9565e7e4f3b08e85dee2ccabed09e07c3e34756de9d801dd6c44455135090b süre=152.556s konuk_tekrar=141 pcap_tekrar=140 eş_tekrar=505 kayıp/sıra/çift=[(219, 214, 79), (333, 321, 148)] heap=4066880 boş=47196
 - TCP KAYIP OK 4194304x2 SHA256=fd9565e7e4f3b08e85dee2ccabed09e07c3e34756de9d801dd6c44455135090b süre=159.619s konuk_tekrar=137 pcap_tekrar=136 eş_tekrar=554 kayıp/sıra/çift=[(210, 209, 79), (368, 289, 150)] heap=4263728 boş=47165
+
+## 64 MiB TCP aktarımı ve seçenekler
+
+- TCP SECENEK OK ACK 0.031s, pencere 131068, keepalive=3 heap=4066880 boş=45658
+- TCP SECENEK OK ACK 0.031s, pencere 131068, keepalive=3 heap=4263728 boş=45628
+- TCP VERIM OK olcekli 64 MiB süre=65.308s hız=0.980 MiB/s QEMU_CPU=49.55 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4066880 boş=45658
+- TCP VERIM OK olceksiz 64 MiB süre=60.051s hız=1.066 MiB/s QEMU_CPU=47.67 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4066880 boş=45658
+- TCP VERIM OK olcekli 64 MiB süre=106.508s hız=0.601 MiB/s QEMU_CPU=88.82 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4263728 boş=45628
+- TCP VERIM OK olceksiz 64 MiB süre=106.494s hız=0.601 MiB/s QEMU_CPU=89.03 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4263728 boş=45628
