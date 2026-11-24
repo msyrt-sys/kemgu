@@ -1,0 +1,117 @@
+// Her korpus ayrı sabit tohum ve hem geçerli hem mutasyona uğramış başlangıçlar kullanır.
+kullan drivers::ortak::bayt::{ oku_u8, yaz_u8, bayt_sifir, yaz_ascii, yaz_le32, yaz_le64, bayt_toplam8 };
+kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusHamOlay, klavye_yeni, klavye_ham_bayt };
+kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };
+kullan drivers::usb::tanim::{ UsbAygit, UsbYapilandirma, usb_aygit_coz, usb_yapilandirma_coz };
+kullan drivers::usb::hid_tanim::{ HidRaporBoylari, hid_tanim_coz };
+kullan drivers::usb::hub::{ UsbHub, hub_tanim };
+kullan drivers::usb::xhci_trb::{ XhciOlay, XhciOlayHalkasi, xhci_olay_al };
+kullan drivers::acpi::mcfg::{ McfgPencere, mcfg_coz };
+kullan drivers::acpi::s5::{ S5Tipleri, s5_coz };
+kullan drivers::fs::fat32_dizin::{ DizinGirdisi, dizin_coz };
+kullan tests::drivers::usb::tanim_fikstur::{ usb_yapi_ornek, usb_aygit_ornek };
+kullan tests::drivers::bulanik::veri::fikstur::{ uzun_veri };
+
+yapı AkisTohumu { durum: tam64; }
+işlev cek(s: &değişken AkisTohumu,n: tam32) -> tam32 {
+    s.durum=(s.durum*1664525+1013904223)&4294967295;
+    ver ((s.durum>>8)%(n olarak tam64)) olarak tam32;
+}
+işlev sdt_sagla(b: Dizi<dtam8>) {
+    yaz_u8(b,9,0); yaz_u8(b,9,((256-bayt_toplam8(b,0,dizi_boyut(b)))&255) olarak tam64);
+}
+işlev taban(tur: tam32,i: tam32) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = [];
+    eğer tur == 0 { b=[225,29,69,225,157,197,224,42,224,55,224,183,224,170,30,158]; }
+    değilse eğer tur == 1 { b=[8,3,2,0,8,7,6,15]; }
+    değilse eğer tur == 2 { eğer i%2 == 0 { ver usb_yapi_ornek(); } ver usb_aygit_ornek(); }
+    değilse eğer tur == 3 { b=[5,1,9,2,161,1,161,0,254,2,1,10,11,117,8,149,3,129,2,192,192]; }
+    değilse eğer tur == 4 { b=[9,41,4,9,0,3,0,0,255]; }
+    değilse eğer tur == 5 { b=bayt_sifir(16); yaz_le32(b,8,16777216); yaz_le32(b,12,(1|(32<<10)) olarak tam64); }
+    değilse eğer tur == 6 {
+        b=bayt_sifir(60); yaz_ascii(b,0,"MCFG"); yaz_le32(b,4,60); yaz_le64(b,44,2147483648); yaz_u8(b,55,7); sdt_sagla(b);
+    } değilse eğer tur == 7 {
+        b=bayt_sifir(36); değişken aml: Dizi<dtam8> = [8,95,83,53,95,18,7,2,10,5,11,6,0];
+        için a: aml { dizi_ekle(b,a); } yaz_ascii(b,0,"DSDT"); yaz_le32(b,4,dizi_boyut(b) olarak tam64); sdt_sagla(b);
+    } değilse { ver uzun_veri(); }
+    ver b;
+}
+işlev uret(tur: tam32,i: tam32,s: &değişken AkisTohumu) -> Dizi<dtam8> {
+    değişken b: Dizi<dtam8> = taban(tur,i); değişken kip: tam32 = (i/2)%6;
+    eğer kip == 0 { ver b; }
+    eğer kip == 1 { değişken ham: Dizi<dtam8> = []; değişken n: tam32 = cek(s,97); değişken j: tam32 = 0;
+        iken j < n { dizi_ekle(ham,cek(s,256) olarak dtam8); j=j+1; } ver ham;
+    }
+    eğer kip == 2 { değişken kisa: Dizi<dtam8> = []; değişken n: tam32 = cek(s,dizi_boyut(b)); değişken j: tam32 = 0;
+        iken j < n { dizi_ekle(kisa,dizi_al(b,j)); j=j+1; } ver kisa;
+    }
+    değişken p: tam32 = cek(s,dizi_boyut(b)); değişken v: tam32 = cek(s,256);
+    eğer kip == 3 {
+        eğer tur == 1 { p=0; v=v&247; }
+        eğer tur == 2 ve i%2 == 0 { p=2; }
+        eğer tur == 3 { p=14; }
+        eğer tur == 5 { p=12; v=0; }
+        eğer tur == 8 { p=13; }
+    }
+    eğer kip == 4 {
+        eğer tur == 2 ve i%2 == 0 { p=9; v=0; }
+        eğer tur == 3 { p=8; v=255; }
+        eğer tur == 5 { p=13; v=252; }
+        eğer tur == 8 { p=0; }
+    }
+    eğer tur == 3 ve kip == 5 {
+        değişken buyuk: Dizi<dtam8> = [161,1,118,0,32,149,3,129,2,192];
+        yaz_u8(buyuk,6,(2+cek(s,250)) olarak tam64); ver buyuk;
+    }
+    eğer tur == 8 ve kip == 5 { p=2; v=216+cek(s,8); }
+    yaz_u8(b,p,v olarak tam64);
+    eğer (tur == 6 veya tur == 7) ve kip != 3 { sdt_sagla(b); }
+    ver b;
+}
+// 1 geçerli sonuç/olay, 0 açıklamalı ret veya henüz tamamlanmamış akış, -1 bozuk çıktı.
+işlev dene(tur: tam32,b: Dizi<dtam8>,i: tam32) -> tam32 {
+    eğer tur == 0 {
+        değişken k: KlavyeDurumu = klavye_yeni(); değişken var: tam32 = 0;
+        için x: b { eşleş klavye_ham_bayt(&değişken k,x olarak tam32) { değer(o) => {
+            eğer o.kod < 0 veya o.kod >= 1024 veya o.unicode < 0 veya o.unicode > 1114111 veya (o.bas != 0 ve o.bas != 1) { ver -1; } var=1;
+        } hiç => {} } } ver var;
+    }
+    eğer tur == 1 {
+        değişken k: FareDurumu = fare_yeni(i%2 == 0); değişken var: tam32 = 0;
+        için x: b { eşleş fare_bayt(&değişken k,x olarak tam32) { değer(o) => {
+            eğer o.dx < -256 veya o.dx > 255 veya o.dy < -256 veya o.dy > 255 veya o.dz < -8 veya o.dz > 7 { ver -1; } var=1;
+        } hiç => {} } } ver var;
+    }
+    eğer tur == 2 {
+        eğer i%2 == 0 { eşleş usb_yapilandirma_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { ver 1; } } }
+        eşleş usb_aygit_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { ver 1; } }
+    }
+    eğer tur == 3 { eşleş hid_tanim_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { eğer v.koleksiyonlar < 1 { ver -1; } ver 1; } } }
+    eğer tur == 4 { eşleş hub_tanim(b) { hata(e) => { ver ret(e); } tamam(v) => { eğer v.portlar < 1 veya v.portlar > 15 { ver -1; } ver 1; } } }
+    eğer tur == 5 {
+        değişken h: XhciOlayHalkasi = XhciOlayHalkasi {taban:65536,adet:16,bas:0,dongu:doğru};
+        eşleş xhci_olay_al(&değişken h,b) { hata(e) => { eğer h.bas != 0 { ver -1; } ver ret(e); } tamam(v) => { eğer h.bas != 1 { ver -1; } ver 1; } }
+    }
+    eğer tur == 6 { eşleş mcfg_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { ver 1; } } }
+    eğer tur == 7 { eşleş s5_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { eğer v.a > 7 veya v.b > 7 { ver -1; } ver 1; } } }
+    eşleş dizin_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { eğer dizi_boyut(v) > dizi_boyut(b)/32 { ver -1; } ver 1; } }
+}
+işlev ret(e: metin) -> tam32 { eğer metin_uzunluk(e) == 0 { ver -1; } ver 0; }
+işlev main() -> tam32 {
+    değişken adlar: Dizi<metin> = ["ps2-klavye","ps2-fare","usb","hid","hub","xhci","mcfg","s5","lfn"];
+    değişken tur: tam32 = 0;
+    iken tur < dizi_boyut(adlar) {
+        değişken s: AkisTohumu = AkisTohumu {durum:160000+(tur olarak tam64)};
+        değişken kabul: tam32 = 0; değişken i: tam32 = 0;
+        değişken adet: tam32 = 1200;
+        eğer tur == 2 { adet=2400; }
+        iken i < adet {
+            değişken r: tam32 = dene(tur,uret(tur,i,&değişken s),i);
+            eğer r < 0 veya ((i/2)%6 == 0 ve r != 1) { ver tur+1; }
+            kabul=kabul+r; i=i+1;
+        }
+        eğer kabul == 0 veya kabul == i { ver 10+tur; }
+        yazdir_metin(metin_birlestir(metin_birlestir(dizi_al(adlar,tur)," kabul="),tam_metin(kabul olarak tam64))); tur=tur+1;
+    }
+    ver 0;
+}

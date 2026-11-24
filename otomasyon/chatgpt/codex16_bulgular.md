@@ -93,3 +93,17 @@ IA32_PAT için ölçülen değişim 0x0007040600070406 → 0x0107040600070406. G
 Aşağıdaki süreler 1.024.000 pikselin doldurulması için TSC çevrimleridir. QEMU TCG süresi fiziksel performansı göstermez. Fiziksel PC'de üç soğuk açılışla ölçüm adımı kontrol listesine eklendi.
 PAT_TSC UC=4575064 WC=4432823 piksel=1024000
 PAT_TSC UC=4658138 WC=4438295 piksel=1024000
+
+## Ayrıştırıcı örnekleri
+
+Tohumlar sırasıyla 160000–160008. Korpuslar geçerli taban, rastgele akış, kesilmiş önek, tek bayt mutasyonu ve türe özgü alan değişiklikleri içeriyor. Tüm çalıştırmalar zaman sınırlıdır. USB 2.400 girdide, diğer satırlar 1.200 girdide ölçüldü. PS/2 için olay üreten akış sayısı, diğerlerinde kabul edilen girdi sayısı aşağıdadır. Kalan girdiler eksik olay veya açıklamalı ret verdi. Bootstrap ve self-host tutanakları aynıdır.
+
+ps2-klavye kabul=1118
+ps2-fare kabul=1079
+usb kabul=974
+hid kabul=598
+hub kabul=599
+xhci kabul=378
+mcfg kabul=528
+s5 kabul=449
+lfn kabul=812

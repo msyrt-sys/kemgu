@@ -51,3 +51,7 @@ Kabuk dosya sistemlerini boşalttı ve FADT/DSDT üzerinden bulunan S5 tipini PM
 ## Bölüm 8 — GOP sayfalarında PAT
 
 C ve self-host çekirdeklerinde QMP ile etkin sayfa tablosu yüründü. 1280×800 GOP alanının 1.000 sayfası WC, normal RAM örneği WB, LAPIC ve GOP dışındaki MMIO UC çıktı. Ekrandaki 1.024.000 piksel beklenen görüntüyle eşleşti. PAT girişini varsayılan UC bırakan tek değişiklik, ilk sayfanın bağımsız tür denetiminde rc 1 verdi. Birleşik kapılar 1286 saniye, bölüm 22 dakika.
+
+## Bölüm 9 — Ayrıştırıcı korpusları
+
+Her derleyici dokuz korpusta toplam 12.000 örneği tamamladı. USB korpusunda aygıt ve yapılandırma zincirine 1.200'er örnek ayrıldı. Diğer sekiz korpusta 1.200'er girdi işlendi. Her korpusta hem kabul hem ret veya eksik olay görüldü. İki derleyicide sayaçlar birebir eşleşti. USB yapılandırma zincirindeki sıfır uzunluk korumasını kaldırıp asılma üretme sabotajı uygulanmadı. H12b'nin bu kanıtı açık. Kapılar 1256 saniye, bölüm 21 dakika.

@@ -1,0 +1,61 @@
+// HID 1.11 rapor tanımlayıcısının öğe sınırları, koleksiyonları ve rapor bit uzunlukları.
+kullan drivers::ortak::bayt::{ oku_u8 };
+genel yapı HidRaporBoylari { bitler: Dizi<tam32>; koleksiyonlar: tam32; }
+yapı HidKuresel { boy: tam32; sayi: tam32; kimlik: tam32; }
+
+genel işlev hid_tanim_coz(b: Dizi<dtam8>) -> sonuç<HidRaporBoylari,metin> {
+    değişken son: tam32 = dizi_boyut(b);
+    eğer son < 1 veya son > 65535 { ver hata("HID tanim boyu"); }
+    değişken bitler: Dizi<tam32> = [];
+    değişken i: tam32 = 0; iken i < 768 { dizi_ekle(bitler,0); i=i+1; }
+    değişken g: HidKuresel = HidKuresel { boy:0,sayi:0,kimlik:0 };
+    değişken yigin: Dizi<HidKuresel> = []; değişken ust: tam32 = 0;
+    değişken p: tam32 = 0; değişken derinlik: tam32 = 0; değişken toplam: tam32 = 0;
+    değişken alan: mantıksal = yanlış;
+    iken p < son {
+        değişken on: tam32 = oku_u8(b,p); p=p+1;
+        eğer on == 254 {
+            eğer son-p < 2 { ver hata("HID uzun oge basligi"); }
+            değişken uzun: tam32 = oku_u8(b,p); p=p+2;
+            eğer uzun > son-p { ver hata("HID uzun oge boyu"); }
+            p=p+uzun;
+        } değilse {
+            değişken n: tam32 = on&3; eğer n == 3 { n=4; }
+            eğer n > son-p { ver hata("HID kisa oge boyu"); }
+            değişken v: tam64 = 0; i=0;
+            iken i < n { v=v|((oku_u8(b,p+i) olarak tam64)<<(i*8)); i=i+1; }
+            p=p+n;
+            değişken tur: tam32 = (on>>2)&3; değişken etiket: tam32 = on>>4;
+            eğer tur == 1 {
+                eğer etiket == 7 veya etiket == 9 {
+                    eğer v > 8192 { ver hata("HID rapor bit siniri"); }
+                    eğer etiket == 7 { g.boy=v olarak tam32; } değilse { g.sayi=v olarak tam32; }
+                } değilse eğer etiket == 8 {
+                    eğer n != 1 veya v == 0 { ver hata("HID rapor kimligi"); } g.kimlik=v olarak tam32;
+                } değilse eğer etiket == 10 {
+                    eğer ust >= 16 { ver hata("HID global yigin siniri"); }
+                    eğer ust == dizi_boyut(yigin) { dizi_ekle(yigin,g); } değilse { dizi_yaz(yigin,ust,g); }
+                    ust=ust+1;
+                } değilse eğer etiket == 11 {
+                    eğer ust == 0 { ver hata("HID bos global yigin"); } ust=ust-1; g=dizi_al(yigin,ust);
+                }
+            } değilse eğer tur == 0 {
+                eğer etiket == 10 {
+                    eğer derinlik >= 32 { ver hata("HID koleksiyon siniri"); }
+                    derinlik=derinlik+1; toplam=toplam+1;
+                } değilse eğer etiket == 12 {
+                    eğer derinlik == 0 { ver hata("HID koleksiyon sonu"); } derinlik=derinlik-1;
+                } değilse eğer etiket == 8 veya etiket == 9 veya etiket == 11 {
+                    eğer derinlik == 0 veya g.boy == 0 veya g.sayi == 0 { ver hata("HID rapor alani"); }
+                    değişken no: tam32 = g.kimlik*3;
+                    eğer etiket == 9 { no=no+1; } değilse eğer etiket == 11 { no=no+2; }
+                    değişken yeni: tam32 = dizi_al(bitler,no)+g.sayi*g.boy;
+                    eğer yeni > 8192 { ver hata("HID rapor bit siniri"); }
+                    dizi_yaz(bitler,no,yeni); alan=doğru;
+                }
+            }
+        }
+    }
+    eğer derinlik != 0 veya ust != 0 veya değil alan { ver hata("HID eksik rapor"); }
+    ver tamam(HidRaporBoylari { bitler:bitler,koleksiyonlar:toplam });
+}
