@@ -1,44 +1,33 @@
 yapı PingIstek { sira: tam64; sure: tam64; }
-kullan drivers::ag::bayt::{ ag_ip_oku };
 çıplak işlev ping_iste(fd: tam64,ip: tam64,sira: tam64,ms: tam64) -> tam64 {
     değişken istek: PingIstek = PingIstek {sira:sira,sure:ms};
     değişken ptr: *PingIstek = (&istek) olarak *PingIstek;
     ver sis_icmp_yanki(fd,ip,ptr olarak tam64);
 }
-işlev ping_sayi(s: metin,ust: tam64) -> tam64 {
-    değişken n: tam64 = 0; değişken i: tam32 = 0;
-    eğer metin_uzunluk(s)==0 { ver -1; }
-    iken i<metin_uzunluk(s) {
-        değişken k: tam32 = metin_bayt(s,i) olarak tam32; eğer k<48 veya k>57 { ver -1; }
-        n=n*10+(k-48) olarak tam64; eğer n>ust { ver -1; } i=i+1;
-    }
-    ver n;
-}
-işlev ping_satir(m: metin) { sis_metin(m); sis_bayt_yaz(1,10); }
 işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
-    eğer argc<2 veya argc>5 { ping_satir("ping <ip> [adet [aralik_ms [zaman_asimi_ms]]]"); ver 2; }
-    değişken ip: tam64 = ag_ip_oku(sis_argv(argv,1)); değişken adet: tam64 = 4;
+    eğer argc<2 veya argc>5 { kag_satir("ping <ip> [adet [aralik_ms [zaman_asimi_ms]]]"); ver 2; }
+    değişken ip: tam64 = kag_coz(sis_argv(argv,1)); değişken adet: tam64 = 4;
     değişken aralik: tam64 = 1000; değişken ms: tam64 = 1000;
-    eğer argc>2 { adet=ping_sayi(sis_argv(argv,2),10000); }
-    eğer argc>3 { aralik=ping_sayi(sis_argv(argv,3),60000); }
-    eğer argc>4 { ms=ping_sayi(sis_argv(argv,4),5000); }
-    eğer ip<0 veya adet<1 veya aralik<0 veya ms<1 { ping_satir("HATA ping argumanlari"); ver 2; }
+    eğer argc>2 { adet=kag_sayi(sis_argv(argv,2),10000); }
+    eğer argc>3 { aralik=kag_sayi(sis_argv(argv,3),60000); }
+    eğer argc>4 { ms=kag_sayi(sis_argv(argv,4),5000); }
+    eğer ip<0 veya adet<1 veya aralik<0 veya ms<1 { kag_satir("HATA ping argumanlari"); ver 2; }
     değişken i: tam64 = 0; değişken alinan: tam64 = 0; değişken toplam: tam64 = 0;
     değişken az: tam64 = 0; değişken cok: tam64 = 0;
-    değişken fd: tam64 = sis_soket(3); eğer fd<0 { ping_satir("HATA ICMP soketi"); ver 1; }
+    değişken fd: tam64 = sis_soket(3); eğer fd<0 { kag_satir("HATA ICMP soketi"); ver 1; }
     iken i<adet {
         değişken r: tam64 = ping_iste(fd,ip,i,ms);
         eğer r>=0 {
             eğer alinan==0 veya az>r { az=r; } eğer r>cok { cok=r; }
             toplam=toplam+r; alinan=alinan+1;
-            ping_satir(metin_birlestir(metin_birlestir(metin_birlestir("PING ",tam_metin(i))," us "),tam_metin(r)));
-        } değilse { ping_satir(metin_birlestir("PING HATA ",tam_metin(r))); }
+            kag_satir(metin_birlestir(metin_birlestir(metin_birlestir("PING ",tam_metin(i))," us "),tam_metin(r)));
+        } değilse { kag_satir(metin_birlestir("PING HATA ",tam_metin(r))); }
         i=i+1; eğer i<adet ve aralik>0 { sis_uyu(aralik); }
     }
-    ping_satir(metin_birlestir(metin_birlestir(metin_birlestir("PING alinan ",tam_metin(alinan))," / "),tam_metin(adet)));
+    kag_satir(metin_birlestir(metin_birlestir(metin_birlestir("PING alinan ",tam_metin(alinan))," / "),tam_metin(adet)));
     eğer alinan>0 {
         değişken m: metin = metin_birlestir("RTT us min ort max ",tam_metin(az));
-        ping_satir(metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir(m," "),tam_metin(toplam/alinan))," "),tam_metin(cok)));
+        kag_satir(metin_birlestir(metin_birlestir(metin_birlestir(metin_birlestir(m," "),tam_metin(toplam/alinan))," "),tam_metin(cok)));
     }
     sis_kapat(fd);
     eğer alinan!=adet { ver 1; } ver 0;

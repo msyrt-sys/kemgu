@@ -2680,6 +2680,22 @@ işlev kb_calistir(d: &değişken KabukDisk,p: &değişken KsKabukSureci,s: meti
     } }
 }
 
+// Küçük firmware imajında bu iki ELF bulunmayabilir. Boş dizin aramasını her
+// sayaç sorgusunda tekrarlama. Dosya değişince program araması yeniden yapılır.
+küresel değişken ag_arac_surumu: tam64 = 0;
+küresel değişken ag_arac_maske: tam32 = 0;
+işlev ag_arac_var(d: &değişken KabukDisk,bit: tam32) -> mantıksal {
+    güvensiz {
+        eğer değil uefi_mi() { ver yanlış; }
+        eğer ag_arac_surumu!=kd_icerik_surumu+1 {
+            ag_arac_maske=0;
+            eşleş ks_program_adi(d,"ag") { hata(e)=>{} tamam(y)=>{ ag_arac_maske=1; } }
+            eşleş ks_program_adi(d,"cozumle") { hata(e)=>{} tamam(y)=>{ ag_arac_maske=ag_arac_maske|2; } }
+            ag_arac_surumu=kd_icerik_surumu+1;
+        }
+        ver (ag_arac_maske&bit)!=0;
+    }
+}
 işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"bilgi") { ekran_cift_yaz("bilgi süreyi, boş belleği, süreçleri, diskleri, kesmeleri ve giriş durumunu gösterir."); ver tamam(doğru); }
     eğer bm_esit(ad,"kopyala") { ekran_cift_yaz("kopyala <kaynak> <hedef> dosyayı aynı veya farklı bağlama noktasına kopyalar."); ver tamam(doğru); }
@@ -2734,8 +2750,12 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer seviye < 1 veya seviye > 4 { ver hata("hassasiyet 1..4"); }
         güvensiz { ksv_hassasiyet=seviye olarak tam32; } ver tamam(doğru);
     }
-    eğer bm_esit(cmd,"cozumle") { ver ag_cozumle(arg); }
-    eğer bm_esit(cmd,"ag") { ver ag_komut(arg); }
+    eğer bm_esit(cmd,"cozumle") {
+        eğer ag_arac_var(d,2) { ver ks_komut(d,p,satir,x,xb,indeks,h,tr,yanlış,doğru); }
+        ver ag_cozumle(arg);
+    }
+    eğer bm_esit(cmd,"ag") ve metin_uzunluk(arg)==0 ve ag_arac_var(d,1) { ver ks_komut(d,p,satir,x,xb,indeks,h,tr,yanlış,doğru); }
+    eğer bm_esit(cmd,"ag") ve değil bm_esit(arg,"arp") ve değil bm_esit(arg,"baglantilar") ve değil bm_esit(arg,"arayuzler") { ver ag_komut(arg); }
     eğer bm_esit(cmd,"bilgi") { ver kd_bilgi(d,indeks,tr.us); }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
     eğer bm_esit(cmd,"donanim") {

@@ -395,7 +395,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H13h** TCP kayıp kurtarma. `calistir_bm_x86_tcp_kayip`
 - [x] **H13i** TCP seçenekleri ve verim. `calistir_bm_x86_tcp_verim` ve `calistir_bm_x86_tcp_secenek`
 - [x] **H13j** Soket ABI ve çoklu bekleme. `calistir_bm_x86_soket`
-- [ ] **H13k** Ağ komutları ve borular. `calistir_bm_x86_ag_arac`
+- [x] **H13k** Ağ komutları ve borular. `calistir_bm_x86_ag_arac`
 - [ ] **H13l** HTTP istemcisi ve sunucusu. `calistir_bm_x86_http`
 - [ ] **H13m** NTP ve RTC. `calistir_bm_x86_ntp`
 - [ ] **H13n** TFTP ve uzak teşhis. `calistir_bm_x86_tftp_teshis`

@@ -16,6 +16,7 @@ ORTAK = (
     "runtime/kem_heap.kem",
     "runtime/kem_dizi_genis.kem",
     "runtime/kullanici/x86_64/kem_sis.kem",
+    "runtime/kullanici/x86_64/kem_ag.kem",
     "runtime/kullanici/x86_64/kem_basla.kem",
 )
 # Aynı adlar ELF içinde kendi kullanıcı çalışma zamanından çözülebilir.

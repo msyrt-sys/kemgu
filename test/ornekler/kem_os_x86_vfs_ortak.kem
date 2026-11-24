@@ -74,6 +74,7 @@ sabit KX_SIS_AG_BILGI: tam64 = 83;
 sabit KX_SIS_SOKET_SECENEK: tam64 = 84;
 sabit KX_SIS_BEKLE_COKLU: tam64 = 85;
 sabit KX_SIS_ICMP_YANKI: tam64 = 86;
+sabit KX_SIS_AG_KAYIT: tam64 = 88;
 sabit KX_SIS_YAZMAYI_KAPAT: tam64 = 87;
 sabit KX_SIS_BORU: tam64 = 69;
 sabit KX_SIS_BASLAT_ESLEMELI: tam64 = 70;
@@ -1107,7 +1108,46 @@ işlev sk_icmp(b: &değişken KsvBaglam,fd: tam64,ip: tam64,req: tam64) -> tam64
     }
 }
 
+// Tek satırlık kopya, ağ tablosunun iç adreslerini kullanıcıya taşımaz.
+işlev sk_ag_kayit(tur: tam64,i: tam64,out: tam64) -> tam64 {
+    güvensiz {
+        eğer değil kxs_aralik(out,64,doğru) { ver -14; }
+        eğer i<0 veya tur<1 veya tur>4 { ver -22; } memset(out olarak *tam8,0,64);
+        eğer tur==4 {
+            eğer i!=0 veya ag_l5==0 { ver 0; }
+            değişken kira: *DhcpKirasi=ag_l5 olarak *DhcpKirasi;
+            değişken kalan: tam64=(*kira).son-ag_us()/1000; eğer kalan<0 { kalan=0; }
+            kxm_y64(out,kalan); kxm_y64(out+8,(*kira).t1); kxm_y64(out+16,(*kira).t2); kxm_y64(out+24,(*kira).son); ver 1;
+        }
+        eğer tur==3 {
+            eğer i>1 veya (i==0 ve ag_bar==0) { ver 0; }
+            değişken a: AgArayuz=ag_durumu(i==1);
+            kxm_y64(out,a.model olarak tam64); kxm_y64(out+8,a.mac);
+            eğer a.bagli { kxm_y64(out+16,1); } kxm_y64(out+24,a.rx); kxm_y64(out+32,a.tx);
+            kxm_y64(out+40,a.rx_bayt); kxm_y64(out+48,a.tx_bayt); kxm_y64(out+56,a.atilan); ver 1;
+        }
+        eğer tur==1 {
+            eğer i>=16 veya ag_l3_alan==0 { ver 0; }
+            değişken l: *AgL3=ag_l3_alan olarak *AgL3; değişken t: Dizi<tam64> =(*l).arp;
+            değişken j: tam32=(3*i) olarak tam32; değişken yas: tam64=dizi_al(t,j+2)-ag_us()/1000;
+            eğer yas<=0 veya dizi_al(t,j)==0 { ver 0; }
+            kxm_y64(out,dizi_al(t,j)); kxm_y64(out+8,dizi_al(t,j+1)); kxm_y64(out+16,yas); ver 1;
+        }
+        eğer i>=8 {
+            eğer i>=24 veya sk_alan==0 { ver 0; }
+            değişken din: *SkKayit=(sk_alan+SK_ADIM*(i-8)) olarak *SkKayit;
+            eğer (*din).ref==0 veya (*din).tur!=1 veya (*din).durum!=3 { ver 0; }
+            kxm_y64(out+8,(*din).port olarak tam64); kxm_y64(out+32,1); ver 1;
+        }
+        eğer ag_tcp_alan==0 { ver 0; } değişken k: tam64=ag_tcp_alan+1052672*i;
+        eğer kem_mmio_oku32(k+576)==0 { ver 0; }
+        değişken b: *TcpBag=k olarak *TcpBag;
+        kxm_y64(out,(*b).ip); kxm_y64(out+8,(*b).port olarak tam64); kxm_y64(out+16,(*b).es); kxm_y64(out+24,(*b).es_port olarak tam64);
+        kxm_y64(out+32,(*b).durum olarak tam64); kxm_y64(out+40,(*b).tx_boy olarak tam64); kxm_y64(out+48,(*b).rx_boy olarak tam64); ver 1;
+    }
+}
 işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64) -> tam64 {
+    eğer num == KX_SIS_AG_KAYIT { ver sk_ag_kayit(a,c,d); }
     eğer num == KX_SIS_SOKET { ver sk_soket(b,a); }
     eğer num == KX_SIS_BAGLA { ver sk_bagla(b,a,c,d); }
     eğer num == KX_SIS_BAGLAN_DINLE { ver sk_dinle(b,a,c,d); }

@@ -86,3 +86,9 @@ Paralel QEMU yükünde ölçülen ilk 64 MiB aktarım 1,075 MiB/s sürdü. Kapı
 ## Kullanıcı soketleri
 
 16 soket yuvası toplam 208 fiziksel sayfada açılışta ayrılır. Her UDP soketi dört datagram saklar. Bir TCP soketi sekiz bağlantı yuvasından birini kullanır. Bekleyen çağrıda süreç bir sonraki zamanlayıcı tikine kadar uyur. Çoklu beklemenin listesinde soket, boru ve ön plan klavyesi bulunabilir. Süreçler soketi standart giriş ve çıkış olarak çocuğa aktarabilir. Son fd kapanınca TCP FIN gönderir. İmzalar ve tampon alanları sistem çağrısı ABI belgesindedir.
+
+## Kullanıcı araçları
+
+`ag` arayüz, sayaç, IPv4, geçit, DNS, NTP ve kalan DHCP kira süresini gösterir. `ag arp` komşuları, `ag baglantilar` dinleyiciler ve akışlar için yerel ve uzak uçları, TCP durum numarasını, TX ve RX kuyruk boyunu gösterir. ELF bulunmayan küçük imajda temel donanım sorgusu çekirdekte çalışır. `cozumle ornek.test` DNS A kaydını çözer.
+
+`nc [-z ms] ad port` ve `nc -d [-z ms] port` TCP üzerinden standart girdi ve çıktıyı taşır. `-u` UDP seçer. Varsayılan hareketsizlik sınırı 30 saniyedir. `echo merhaba | nc 127.0.0.1 9000` yerel bağlantıya yazar. `nc -d 9000 > gelen.bin` alınan baytları dosyaya yönlendirir. TCP’de standart girdi bitince yazma yarısı kapanır, yanıtın sonuna kadar okumaya devam edilir.

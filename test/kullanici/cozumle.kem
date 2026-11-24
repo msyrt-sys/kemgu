@@ -1,0 +1,5 @@
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc!=2 { kag_satir("cozumle <ad>"); ver 2; }
+    değişken ip: tam64=kag_coz(sis_argv(argv,1)); eğer ip<0 { kag_satir(metin_birlestir("HATA DNS ",tam_metin(ip))); ver 1; }
+    kag_satir(kag_ip_yaz(ip)); ver 0;
+}

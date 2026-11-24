@@ -1,0 +1,84 @@
+// Kullanıcı alanında IPv4, isim çözümü, akış ve süreli bekleme işlemleri.
+kullan drivers::ag::bayt::{ ag_ip_oku };
+
+çıplak işlev kag_ayir(n: tam64) -> tam64 { ver malloc(n) olarak tam64; }
+çıplak işlev kag_koy(p: tam64,i: tam64,v: tam64) { değişken a: *tam64=(p+i*8) olarak *tam64; *a=v; }
+işlev kag_sayi(s: metin,ust: tam64) -> tam64 {
+    değişken n: tam64=0; değişken i: tam32=0; eğer metin_uzunluk(s)==0 { ver -1; }
+    iken i<metin_uzunluk(s) {
+        değişken c: tam64=(metin_bayt(s,i) olarak tam64)-48;
+        eğer c<0 veya c>9 veya n>(ust-c)/10 { ver -1; }
+        n=n*10+c; eğer n>ust { ver -1; } i=i+1;
+    } ver n;
+}
+işlev kag_ip_yaz(ip: tam64) -> metin {
+    değişken ad: metin=tam_metin((ip>>24)&255); değişken k: tam32=16;
+    iken k>=0 { ad=metin_birlestir(metin_birlestir(ad,"."),tam_metin((ip>>k)&255)); k=k-8; } ver ad;
+}
+işlev kag_esit(a: metin,b: metin) -> mantıksal {
+    değişken n: tam32=metin_uzunluk(a); eğer n!=metin_uzunluk(b) { ver yanlış; }
+    değişken i: tam32=0; iken i<n { eğer metin_bayt(a,i)!=metin_bayt(b,i) { ver yanlış; } i=i+1; }
+    ver doğru;
+}
+işlev kag_mac_yaz(mac: tam64) -> metin {
+    değişken bas: metin="0123456789abcdef"; değişken p: tam64=kag_ayir(18); eğer p==0 { ver ""; }
+    değişken i: tam32=0; iken i<6 {
+        değişken b: tam32=((mac>>(i*8))&255) olarak tam32; değişken k: tam64=p+3*(i olarak tam64);
+        sis_bayt_koy(k,metin_bayt(bas,b/16) olarak tam32); sis_bayt_koy(k+1,metin_bayt(bas,b%16) olarak tam32);
+        sis_bayt_koy(k+2,58); i=i+1;
+    } sis_bayt_koy(p+17,0); ver sis_dize(p);
+}
+işlev kag_coz(ad: metin) -> tam64 {
+    değişken ip: tam64=ag_ip_oku(ad); eğer ip>=0 { ver ip; }
+    değişken a: tam64=0; güvensiz {
+        değişken p: *tam64=(&a) olarak *tam64;
+        değişken r: tam64=sis_dns_coz(ad,p olarak tam64); eğer r<0 { ver r; } ver a;
+    }
+}
+işlev kag_bagla_sureli(ad: metin,port: tam64,tur: tam64,ms: tam64) -> tam64 {
+    eğer ms<0 veya ms>60000 { ver -22; }
+    değişken ip: tam64=kag_coz(ad); eğer ip<0 { ver ip; }
+    değişken fd: tam64=sis_soket(tur); eğer fd<0 { ver fd; }
+    değişken r: tam64=sis_soket_secenek(fd,1,1);
+    eğer r==0 { r=sis_bagla(fd,ip,port); }
+    eğer r== -11 {
+        değişken p: tam64=kag_ayir(24);
+        eğer p==0 { r= -12; } değilse {
+            kag_bekleme(p,fd,2); r=sis_bekle_coklu(p,1,ms);
+            eğer r==0 { r= -110; } değilse eğer r>0 { r=sis_bagla(fd,ip,port); }
+            güvensiz { free(p olarak *tam8); }
+        }
+    }
+    eğer r==0 { r=sis_soket_secenek(fd,1,0); }
+    eğer r<0 { sis_kapat(fd); ver r; } ver fd;
+}
+işlev kag_ad_ile_bagla(ad: metin,port: tam64,tur: tam64) -> tam64 { ver kag_bagla_sureli(ad,port,tur,10000); }
+işlev kag_dinle(port: tam64,tur: tam64,kuyruk: tam64) -> tam64 {
+    değişken fd: tam64=sis_soket(tur); eğer fd<0 { ver fd; }
+    değişken r: tam64=sis_baglan_dinle(fd,port,kuyruk); eğer r<0 { sis_kapat(fd); ver r; } ver fd;
+}
+işlev kag_bekleme(p: tam64,fd: tam64,maske: tam64) { kag_koy(p,0,fd); kag_koy(p,1,maske); kag_koy(p,2,0); }
+işlev kag_sureli_oku(fd: tam64,p: tam64,n: tam64,ms: tam64) -> tam64 {
+    değişken r: tam64=sis_soket_secenek(fd,4,ms); eğer r<0 { ver r; } ver sis_al(fd,p,n);
+}
+işlev kag_hepsini_yaz(fd: tam64,p: tam64,n: tam64) -> tam64 {
+    eğer n<0 { ver -22; } değişken i: tam64=0; iken i<n {
+        değişken k: tam64=n-i; eğer k>4096 { k=4096; }
+        değişken r: tam64=sis_yaz(fd,p+i,k);
+        eğer r<0 { ver r; } eğer r==0 { ver -32; } i=i+r;
+    } ver i;
+}
+yapı KagOkuyucu { fd: tam64; tampon: tam64; konum: tam64; boy: tam64; }
+işlev kag_okuyucu(fd: tam64,tampon: tam64) -> KagOkuyucu { ver KagOkuyucu {fd:fd,tampon:tampon,konum:0,boy:0}; }
+// Okuyucu 1024 baytlık çalışma alanını çağırandan alır. LF dahil okunan boy döner.
+işlev kag_satir_oku(s: &değişken KagOkuyucu,p: tam64,n: tam64) -> tam64 {
+    eğer n<=0 { ver -22; } değişken i: tam64=0; iken i<n {
+        eğer s.konum>=s.boy {
+            s.boy=sis_oku(s.fd,s.tampon,1024); s.konum=0;
+            eğer s.boy<=0 { eğer s.boy<0 { ver s.boy; } ver i; }
+        }
+        değişken c: tam32=sis_bayt_al(s.tampon+s.konum); s.konum=s.konum+1;
+        sis_bayt_koy(p+i,c); i=i+1; eğer c==10 { ver i; }
+    } ver -90;
+}
+işlev kag_satir(m: metin) { sis_metin(m); sis_bayt_yaz(1,10); }

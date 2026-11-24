@@ -52,3 +52,7 @@ Pencere ölçeği iki yönde, TCP zaman damgası ve PAWS, gecikmeli ACK, kapatı
 
 74–87 çağrıları ve 73 ile uyumlu kullanıcı ping eklendi. C ve self-host konuklarında üç ayrı süreçte üç bağlantı, doğal çıkış ve Ctrl+C ile üç FIN, iki UDP soketi arasında QMP tuşu, boru, kabul ve çocuğa aynı soketin stdin/stdout olarak devri doğrulandı. Süre 2536 saniye. Onuncu bölümün ara regresyonu 22 hedef içerdi. İlk koşumda ring0 çağrı 99 ve self-host IR tipi düzeltme gerektirdi. Boruda okunabilir bit kaldırılınca bekleme üst sınırında konuk 15, kâhin 1 döndürdü. Süreç sonlandırmada soketi açık bırakma sabotajı uygulanmadı.
 - calistir_bm_x86_tcp_temel ilk sonuç kırmızı, ayrı koşum çıkışı 0.
+
+## Bölüm 11 — kullanıcı ağ araçları
+
+Ağ kitaplığı, `ag`, `cozumle`, `nc` ve soketli `ping` derlendi. C ve self-host konuklarında iki yönlü 1 MiB boru aktarımı, UDP yankısı, gerçek FAT32 yönlendirmesi ve loopback geçti. DHCP, DNS, ARP, fiziksel MAC, dinleyici ve bağlantı durumu ve 200 ms bağlantı zaman aşımı ile sekiz datagramlık sayaç farkı bağımsız eşle karşılaştırıldı. Geçen süre 2057 saniye. FIN çağrısının çıkarıldığı gerçek C kullanıcı ELF’inde eş bütün 1 MiB veriyi aldıktan sonra üç saniyelik sınırda eksik FIN’i bildirdi, kâhin çıkış 1 verdi.

@@ -66,6 +66,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 85 | bekle_coklu | 3 | liste, adet, ms | 24 baytlık kayıtlar. Hazır kayıt sayısı veya sürede sıfır | x86_64 |
 | 86 | icmp_yanki | 3 | fd, ip, istek | ICMP soketi. İki i64 sıra ve süre (ms). RTT mikrosaniye | x86_64 |
 | 87 | yazmayi_kapat | 1 | fd | TCP yazma yarısını sonlandırır, okuma devam eder | x86_64 |
+| 88 | ag_kayit | 3 | tür, indeks, 64 bayt çıktı | 1 ARP, 2 TCP (dinleyiciler dahil), 3 arayüz, 4 DHCP süreleri. Dolu 1, boş 0 | x86_64 |
 
 40–119 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. PVH ring0 kapısı eski davranışını korur. 40–79 dışında bilinmeyen çağrının sonucu `-1` olur. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 

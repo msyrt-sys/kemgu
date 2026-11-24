@@ -131,3 +131,14 @@ eğer sok.dinleyen!=0 { sok.ref=0; } *q=sok;
 ```
 
 Her derleyici için `UEFI_DERLEYICI=build/kemgu UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh` uygulanır. İkinci çalıştırmada `build/codegen` seçilir. Beklenen iki çekirdeğin de bağlanması. C geçti, self-host IR doğrulamasında `load volatile %TcpBag` sonucunu `store %SkKayit` satırında kullanarak LLVM tür hatası verdi. Tek yapı türüyle çalışan kapatma yardımcısında iki imaj da bağlandı ve QEMU sınaması geçti.
+
+## Kullanıcı araçlarında tel ve bellek
+
+- araç heap/boş çerçeve (4066880, 45439) (14954304, 45439)
+- ✓ nc iki yön boru 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 c70fa909b5587a8d363b6dec6a33d6ad3794c5f74fbca496bddd27b25db19b5d UDP, FAT32, loopback, QMP ve pcap
+- araç eş heap/boş çerçeve (4066880, 45439) (6952800, 45439)
+- araç heap/boş çerçeve (4263728, 45409) (15151280, 45409)
+- ✓ nc iki yön boru 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 c70fa909b5587a8d363b6dec6a33d6ad3794c5f74fbca496bddd27b25db19b5d UDP, FAT32, loopback, QMP ve pcap
+- araç eş heap/boş çerçeve (4263728, 45409) (7739936, 45409)
+
+Dinleyicinin son FIN’i tüketmesi ile istemcinin kabuğa dönmesi farklı süreç dilimlerinde gerçekleşebilir. Ölçüm en çok beş saniyede süreç çerçevelerinin başlangıç değerine dönmesini gerektirir. İki yönlü akışın SHA-256 değerleri tel kaydından yeniden kurularak doğrulandı.

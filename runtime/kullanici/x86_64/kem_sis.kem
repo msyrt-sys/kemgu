@@ -143,3 +143,4 @@ işlev kul_onay(p: tam64,sat: tam32,etiket: metin) -> mantıksal {
 çıplak işlev sis_bekle_coklu(liste: tam64,adet: tam64,ms: tam64) -> tam64 { ver sis_cagir(85,liste,adet,ms); }
 çıplak işlev sis_icmp_yanki(fd: tam64,ip: tam64,istek: tam64) -> tam64 { ver sis_cagir(86,fd,ip,istek); }
 çıplak işlev sis_yazmayi_kapat(fd: tam64) -> tam64 { ver sis_cagir(87,fd,0,0); }
+çıplak işlev sis_ag_kayit(tur: tam64,i: tam64,out: tam64) -> tam64 { ver sis_cagir(88,tur,i,out); }

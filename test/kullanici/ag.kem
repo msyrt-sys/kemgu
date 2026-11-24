@@ -1,0 +1,37 @@
+işlev ka_ikili(ad: metin,a: tam64,b: tam64) {
+    sis_metin(ad); sis_metin(tam_metin(a)); sis_metin(" "); kag_satir(tam_metin(b));
+}
+işlev ka_model(k: tam64) -> metin {
+    eşleş k { 1=>{ver "e1000";} 2=>{ver "e1000e";} 3=>{ver "igb";} 4=>{ver "virtio-net-pci";} 5=>{ver "lo";} 6=>{ver "cdc-ecm";} _=>{ver "bilinmeyen";} }
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    değişken p: tam64=kag_ayir(160); eğer p==0 { ver 1; }
+    değişken tur: tam64=3; değişken son: tam64=2;
+    eğer argc==2 {
+        değişken ad: metin=sis_argv(argv,1);
+        eğer kag_esit(ad,"arp") { tur=1; son=16; }
+        değilse eğer kag_esit(ad,"baglantilar") { tur=2; son=24; }
+        değilse eğer değil kag_esit(ad,"arayuzler") { kag_satir("ag [arayuzler|arp|baglantilar]"); ver 2; }
+    } değilse eğer argc!=1 { ver 2; }
+    değişken i: tam64=0; iken i<son {
+        değişken r: tam64=sis_ag_kayit(tur,i,p); eğer r<0 { ver 1; }
+        eğer r==1 {
+            eğer tur==3 {
+                sis_metin(ka_model(sis_alan(p,0))); sis_metin(" MAC "); sis_metin(kag_mac_yaz(sis_alan(p,1)));
+                sis_metin(" bag "); kag_satir(tam_metin(sis_alan(p,2))); ka_ikili("RX TX ",sis_alan(p,3),sis_alan(p,4)); ka_ikili("bayt ",sis_alan(p,5),sis_alan(p,6));
+                eğer sis_alan(p,0)==5 { kag_satir("IPv4 127.0.0.1/8"); }
+            } değilse eğer tur==1 {
+                sis_metin(kag_ip_yaz(sis_alan(p,0))); sis_metin(" "); kag_satir(kag_mac_yaz(sis_alan(p,1)));
+            } değilse {
+                sis_metin(kag_ip_yaz(sis_alan(p,0))); sis_metin(":"); sis_metin(tam_metin(sis_alan(p,1))); sis_metin(" ");
+                sis_metin(kag_ip_yaz(sis_alan(p,2))); sis_metin(":"); sis_metin(tam_metin(sis_alan(p,3))); sis_metin(" durum "); kag_satir(tam_metin(sis_alan(p,4)));
+                ka_ikili("TX RX kuyruk ",sis_alan(p,5),sis_alan(p,6));
+            }
+        } i=i+1;
+    }
+    eğer tur==3 ve sis_ag_bilgi(p,96)==96 {
+        sis_metin("IPv4 "); sis_metin(kag_ip_yaz(sis_alan(p,1))); sis_metin("/"); kag_satir(tam_metin(sis_alan(p,2)));
+        sis_metin("gecit "); kag_satir(kag_ip_yaz(sis_alan(p,3))); sis_metin("DNS "); kag_satir(kag_ip_yaz(sis_alan(p,4)));
+        sis_metin("NTP "); kag_satir(kag_ip_yaz(sis_alan(p,5))); eğer sis_ag_kayit(4,0,p)==1 { sis_metin("kira kalan ms "); kag_satir(tam_metin(sis_alan(p,0))); }
+    } ver 0;
+}
