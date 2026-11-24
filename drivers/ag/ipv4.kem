@@ -1,0 +1,20 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_y8, ag_y16, ag_y32, ag_saglama };
+genel işlev ip4_baslik(b: Dizi<dtam8>,n: tam32) -> tam32 {
+    eğer n<34 veya n>dizi_boyut(b) { ver -1; }
+    değişken v: tam32 = ag_b8(b,14); değişken h: tam32 = (v&15)*4;
+    değişken t: tam32 = ag_be16(b,16);
+    eğer v>>4!=4 veya h<20 veya h>n-14 veya t<h veya t>n-14 { ver -1; }
+    eğer ag_saglama(b,14,h,0)!=0 { ver -2; }
+    eğer ag_b8(b,22)==0 { ver -3; } ver 14+h;
+}
+genel işlev ip4_yaz(b: Dizi<dtam8>,kaynak: tam64,hedef: tam64,p: tam32,n: tam32,kim: tam32) {
+    ag_y8(b,14,69); ag_y8(b,15,0); ag_y16(b,16,(20+n) olarak tam64);
+    ag_y16(b,18,kim olarak tam64); ag_y16(b,20,0); ag_y8(b,22,64); ag_y8(b,23,p olarak tam64);
+    ag_y16(b,24,0); ag_y32(b,26,kaynak); ag_y32(b,30,hedef); ag_y16(b,24,ag_saglama(b,14,20,0) olarak tam64);
+}
+genel işlev ip4_sonraki(ip: tam64,onek: tam32,gecit: tam64,hedef: tam64) -> tam64 {
+    eğer onek<0 veya onek>32 { ver -1; }
+    değişken maske: tam64 = 0;
+    eğer onek>0 { değişken bitler: tam64 = 4294967295; maske=(bitler<<(32-onek))&bitler; }
+    eğer (ip&maske)==(hedef&maske) { ver hedef; } ver gecit;
+}

@@ -42,3 +42,11 @@ Düşük adresli halkalar için UEFI’nin açılışta fiziksel çerçevelerden
 82576 SRRCTL ile tanımlayıcı türünü, RXDCTL/TXDCTL ile kuyrukları seçer. Gelişmiş RX geri yazımı tanımlayıcının özgün tampon adresini örter. Sürücü her tüketimde adresi geri koyar. 82574L tek MSI-X girdisine IVAR, 82576 GPIE ve IVAR0 ile yönlendirir. VirtIO sürücüsü VERSION_1, MAC ve STATUS özelliklerini uzlaştırır. PCI yeteneklerinin BAR sınırlarını ve kuyruk bildirim ofsetini denetler. Her NIC için `AgArayuz` bağlantı ve sayaç görünümü sunar.
 
 RTL8139 bu dalganın desteklediği NIC listesine alınmadı. Emülasyonu olan bu aygıt, desteklenmeyen aygıtların raporda görünmesini doğrular. [QEMU 82574L uygulaması](https://github.com/qemu/qemu/blob/v8.2.2/hw/net/e1000e_core.c) [QEMU 82576 yazmaçları](https://github.com/qemu/qemu/blob/v8.2.2/hw/net/igb_regs.h)
+
+## IPv4 ve komşu çözümü
+
+`ag ayarla 192.0.2.2/24 192.0.2.1` statik adresi kurar ve gratuitous ARP yollar. Aynı IP'yi başka bir MAC kullanırsa seri uyarı ve çakışma sayacı artar. `ag sayac` kısa paket, sağlama, bilinmeyen protokol, dolu ARP tablosu, çakışma, TTL ve ICMP hata sayılarını gösterir. Önek dışındaki paketler yapılandırılmış ağ geçidine gider. IPv4 seçenekleri başlıktaki IHL ile atlanır.
+
+ARP önbelleği 16 komşu tutar. Bir kayıt 30 saniye yaşar. Çözüm bekleyen dört çerçeve için fiziksel tampon ayrılır. Yeniden sorgu aralığı 250 ms, üst süre göndericinin zaman aşımıdır. Bekleme kuyruğu doluysa -105 alınır. Bağlantı kapalıysa -100, adres yoksa -99, yön yoksa -101, zaman dolarsa -110 döner.
+
+`ping <ip> [adet [aralık_ms [zaman_aşımı_ms]]]` kullanıcı ELF'idir. Varsayılan dört istek, 1 saniye aralık ve istek başına 1 saniye sınır vardır. Çıktıda RTT mikrosaniyedir. `ag lo` yerel 127.0.0.0/8 arayüzünün sayaçlarını gösterir. Yerel echo istek ve yanıtları fiziksel NIC'e verilmeden IP ve ICMP katmanlarından geçer.

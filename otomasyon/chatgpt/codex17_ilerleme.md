@@ -18,3 +18,11 @@ Kök Q35 yuvasında gerçek INTx ve iki PCI köprüsünün ardında yoklama kull
 ## Bölüm 3 — PCI ağ matrisi
 
 82540EM, 82574L, 82576 ve modern VirtIO PCI aktarımı iki derleyici ve ikişer açılışta pcap ile doğrulandı. 82574L için ikinci açılış 4 GiB RAM ile yüksek fiziksel adres kullandı. Ayrıca iki RTL8139 açılışı destek durumunu doğruladı. NIC matrisi, PC matrisi ve §7’de istenen regresyonlar geçti. Son regresyon koşusu 1303 saniye sürdü. 82574L'de RDBAH yazımı atlanınca taban geri okuması başarısız oldu. 82576'da alıcı kuyruğunu etkinleştirmeyince ilk çerçeve alınamadı. Her iki değiştirilmiş çekirdekte çıkış 1.
+
+## Bölüm 4 — ARP, IPv4, ICMP, loopback ve ping
+
+İki derleyicide dgram üzerinden konuğa 100 ping, konuktan eşe 20 ping, ARP yaşlanmasından sonra bir ping, dış trafiği olmayan üç loopback ping ve slirp ağ geçidine iki ping doğrulandı. Kullanıcı ELF'inin min/ortalama/maksimum RTT'si çıktılardan bağımsız hesaplandı. Çıkış IPv4 sağlamasının taşıma katlamasını atlamak, ARP yanıtında yanlış MAC yazmak ve loopback paketini dış arayüze göndermek üç ayrı çekirdekte ilgili kapıları kırdı. Regresyon koşusu 1823 saniye sürdü.
+
+İlk toplu çalışmada hata veren kapılar özgün eşiklerle ayrı koşulup geçti.
+- calistir_bm_x86_boru
+- calistir_bm_x86_program15

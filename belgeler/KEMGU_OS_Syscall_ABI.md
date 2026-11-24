@@ -50,6 +50,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 70 | baslat_eslemeli | 3 | Program yolu, argv adresi, iki i64 (giriş ve çıkış boru fd; -1 varsayılan) | Çocuk PID veya negatif hata | x86_64 |
 | 71 | kopyala | 2 | Kaynak ve hedef UTF-8 yol adresleri | 0 veya negatif hata | x86_64 |
 | 72 | tasi | 2 | Kaynak ve hedef UTF-8 yol adresleri | Hedef yazıldıktan sonra kaynağı siler, 0 veya negatif hata | x86_64 |
+| 73 | ping | 3 | IPv4 adresi, sıra, zaman aşımı (ms) | Geçici ICMP çağrısı. Başarıda RTT (µs), zaman aşımında -110. |
 
 40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 

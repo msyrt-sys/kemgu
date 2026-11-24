@@ -125,3 +125,5 @@ işlev kul_onay(p: tam64,sat: tam32,etiket: metin) -> mantıksal {
         }
     } ver yanlış;
 }
+
+çıplak işlev sis_ping(ip: tam64,sira: tam64,ms: tam64) -> tam64 { ver sis_cagir(73,ip,sira,ms); }

@@ -1,0 +1,18 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_y8, ag_y16, ag_be16 };
+// MAC'in en düşük baytı teldeki ilk bayttır, Intel RAL ve VirtIO MAC ile aynıdır.
+genel işlev eth_mac(b: Dizi<dtam8>,i: tam32) -> tam64 {
+    değişken m: tam64 = 0; değişken k: tam32 = 0;
+    iken k<6 { m=m|((ag_b8(b,i+k) olarak tam64)<<(8*k)); k=k+1; } ver m;
+}
+genel işlev eth_mac_yaz(b: Dizi<dtam8>,i: tam32,m: tam64) {
+    değişken k: tam32 = 0; iken k<6 { ag_y8(b,i+k,m>>(8*k)); k=k+1; }
+}
+genel işlev eth_tur(b: Dizi<dtam8>,n: tam32,mac: tam64) -> tam32 {
+    eğer n<14 veya n>dizi_boyut(b) { ver -1; }
+    değişken m: tam64 = eth_mac(b,0);
+    eğer m!=mac ve m!=281474976710655 { ver 0; }
+    ver ag_be16(b,12);
+}
+genel işlev eth_yaz(b: Dizi<dtam8>,hedef: tam64,kaynak: tam64,tur: tam32) {
+    eth_mac_yaz(b,0,hedef); eth_mac_yaz(b,6,kaynak); ag_y16(b,12,tur olarak tam64);
+}

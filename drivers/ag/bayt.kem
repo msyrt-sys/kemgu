@@ -1,0 +1,34 @@
+// Ağ sırası. Çağıran protokol önce gerçek çerçeve boyunu doğrular.
+genel işlev ag_b8(b: Dizi<dtam8>,i: tam32) -> tam32 { ver (dizi_al(b,i) olarak tam32)&255; }
+genel işlev ag_be16(b: Dizi<dtam8>,i: tam32) -> tam32 { ver (ag_b8(b,i)<<8)|ag_b8(b,i+1); }
+genel işlev ag_be32(b: Dizi<dtam8>,i: tam32) -> tam64 { ver ((ag_be16(b,i) olarak tam64)<<16)|(ag_be16(b,i+2) olarak tam64); }
+genel işlev ag_y8(b: Dizi<dtam8>,i: tam32,v: tam64) { dizi_yaz(b,i,((v&255) olarak tam32) olarak dtam8); }
+genel işlev ag_y16(b: Dizi<dtam8>,i: tam32,v: tam64) { ag_y8(b,i,v>>8); ag_y8(b,i+1,v); }
+genel işlev ag_y32(b: Dizi<dtam8>,i: tam32,v: tam64) { ag_y16(b,i,v>>16); ag_y16(b,i+2,v); }
+// RFC 1071. Tek kalan bayt üst sekiz bittir; ilk toplam sözde başlık için kullanılabilir.
+genel işlev ag_saglama(b: Dizi<dtam8>,i: tam32,n: tam32,ilk: tam64) -> tam32 {
+    eğer i<0 veya n<0 veya n>dizi_boyut(b)-i veya ilk<0 veya ilk>4294967295 { ver -1; }
+    değişken t: tam64 = ilk;
+    iken n>=2 { t=t+(ag_be16(b,i) olarak tam64); i=i+2; n=n-2; }
+    eğer n==1 { t=t+((ag_b8(b,i) olarak tam64)<<8); }
+    iken t>65535 { t=(t&65535)+(t>>16); }
+    ver (65535^t) olarak tam32;
+}
+genel işlev ag_kopyala(hedef: Dizi<dtam8>,h: tam32,kaynak: Dizi<dtam8>,k: tam32,n: tam32) {
+    değişken i: tam32 = 0; iken i<n { dizi_yaz(hedef,h+i,dizi_al(kaynak,k+i)); i=i+1; }
+}
+genel işlev ag_ip_oku(s: metin) -> tam64 {
+    değişken i: tam32 = 0; değişken alan: tam32 = 0; değişken n: tam32 = 0;
+    değişken hane: tam32 = 0; değişken v: tam64 = 0;
+    iken i<metin_uzunluk(s) {
+        değişken k: tam32 = metin_bayt(s,i) olarak tam32; i=i+1;
+        eğer k==46 {
+            eğer hane==0 veya alan>=3 { ver -1; }
+            v=(v<<8)|(n olarak tam64); n=0; hane=0; alan=alan+1;
+        } değilse {
+            eğer k<48 veya k>57 veya hane>=3 { ver -1; }
+            n=n*10+k-48; eğer n>255 { ver -1; } hane=hane+1;
+        }
+    }
+    eğer alan!=3 veya hane==0 { ver -1; } ver (v<<8)|(n olarak tam64);
+}

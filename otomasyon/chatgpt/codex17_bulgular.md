@@ -39,3 +39,39 @@ Her derleyicide önce 256 MiB, sonra 512 MiB (82574L için 4 GiB). Her satır ye
 - NIC OK virtio-net-pci TX=1 RX=18 pcap; heap=4460512→4460512 boş=113336→113336
 
 82576 sıfırlamasından sonra QEMU STATUS.LU kendiliğinden yükselmedi. PHY 1 BMCR ile görüşmeyi yeniden başlatınca gerçek bağlantı, kesme ve RX/TX çalıştı. Yüksek DMA negatifinde yanlış adrese DMA yapılmadan donanım geri okuması açık hata üretti.
+
+## ARP ve ICMP
+
+- 100 ping heap 4066880→4066880 boş 47818→47818
+- HEAP 'ping 192.0.2.1 20 0 1000' +721552 toplam=4788432
+- HEAP 'ping 127.0.0.1 3 0 1000' +0 toplam=4788432
+- HEAP 'ping 192.0.2.1 1 0 1000' +0 toplam=4788432
+- L3 OK dgram 249
+- HEAP 'ping 10.0.2.2 2 0 1000' +721552 toplam=4788432
+- L3 OK slirp 7
+- 100 ping heap 4263728→4263728 boş 47786→47786
+- HEAP 'ping 192.0.2.1 20 0 1000' +721584 toplam=4985312
+- HEAP 'ping 127.0.0.1 3 0 1000' +131168 toplam=5116480
+- HEAP 'ping 192.0.2.1 1 0 1000' +131168 toplam=5247648
+- L3 OK dgram 249
+- HEAP 'ping 10.0.2.2 2 0 1000' +721584 toplam=4985312
+- L3 OK slirp 7
+
+Kâhin, her kullanıcı programı çalıştırıldıktan sonra seri RTT örneklerini özetle karşılaştırır. İlk kullanıcı ELF yüklemesinde ölçülen heap artışı yukarıda ayrıca görünür.
+
+### C17-001 — ham işaretçiden yapı alanına yazma
+
+Aşağıdaki girdi için iki derleyici de tip denetimini geçirdi. Beklenen çıkış 0, ölçülen çıkış 1. Gerçek konukta GARP doğru adresten çıkarken yapıdaki IPv4 adresi 0 kalıyordu. Yapıyı yerele kopyalayıp değiştirerek bütün olarak geri yazmak sorunu dolandı.
+
+```kem
+yapı Konum { ip: tam64; }
+işlev main() -> tam32 { güvensiz {
+    değişken k: Konum = Konum {ip:1};
+    değişken p: *Konum = (&k) olarak *Konum;
+    (*p).ip=7;
+    eğer k.ip!=7 { ver 1; }
+    ver 0;
+} }
+```
+
+Her `c` için (`kemgu`, `codegen`) komutlar `build/$c --llvm c17_001.kem > ornek.ll`, `clang ornek.ll build/kdl_runtime.o -lm -o ornek`, `./ornek`.

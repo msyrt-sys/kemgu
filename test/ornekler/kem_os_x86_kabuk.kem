@@ -1,3 +1,8 @@
+kullan drivers::ag::l3::{ AgL3, l3_yeni, l3_al, l3_ping };
+kullan drivers::ag::bayt::{ ag_y8, ag_b8, ag_ip_oku } olarak agbayt;
+kullan drivers::ag::arp::{ arp_yaz, arp_bul, arp_beklet, arp_bekleme_adimi };
+kullan drivers::ag::eth::{ eth_mac_yaz };
+kullan drivers::ag::ipv4::{ ip4_sonraki };
 kullan drivers::ortak::bayt::{ imza_esit };
 kullan drivers::ag::e1000::{ E1kKurulum, E1K_ADET, E1K_SAYFA, e1k_yeni, e1k_adim, e1k_rx_boyu, e1k_tx_sozcugu, igb_rx_boyu, igb_tx_sozcugu };
 kullan drivers::ag::virtio_pci::{ vnic_ozellik, vnic_bildirim };
@@ -1478,7 +1483,8 @@ işlev ag_virtio_kur(bdf: tam32) -> sonuç<mantıksal,metin> {
     kem_dma_bariyeri(); vblk_y16(a+130,ag_vtx_uretilen olarak dtam16); kem_dma_bariyeri(); vblk_y16(ag_vtx_bildir,1 olarak dtam16);
     ver 0;
 }
-çıplak işlev ag_vrx() {
+işlev ag_vrx() {
+    güvensiz {
     değişken a: tam64 = ag_dma;
     değişken tur: tam32 = 0;
     iken tur<8 ve (vblk_o16(a+162) olarak tam32)!=ag_vrx_gorulen {
@@ -1490,7 +1496,7 @@ işlev ag_virtio_kur(bdf: tam32) -> sonuç<mantıksal,metin> {
         eğer boy>=26 ve boy<=1530 {
             ag_son_boy=(boy-12) olarak tam32;
             memcpy((a+40960) olarak *tam8,(a+8192+2048*id+12) olarak *tam8,boy-12);
-            ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+boy-12;
+            ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+boy-12; ag_l3_girdi();
         } değilse { ag_atilan=ag_atilan+1; }
         vblk_y16(a+132+((ag_vrx_gorulen&7) olarak tam64)*2,(id olarak tam32) olarak dtam16);
         ag_vrx_gorulen=(ag_vrx_gorulen+1)&65535; tur=tur+1;
@@ -1498,6 +1504,7 @@ işlev ag_virtio_kur(bdf: tam32) -> sonuç<mantıksal,metin> {
     }
     eğer tur>0 { kem_dma_bariyeri(); vblk_y16(ag_vrx_bildir,0 olarak dtam16); }
 }
+    }
 çıplak işlev ag_link() -> tam64 {
     eğer ag_model==4 { ver (vblk_o16(ag_vcihaz+6) olarak tam64)&1; }
     ver (kem_mmio_oku32(ag_bar+8)>>1)&1;
@@ -1643,6 +1650,7 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
 işlev ag_al() {
     güvensiz {
     eğer ag_bar==0 { ver; }
+    ag_bekleyenleri_isle();
     eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
@@ -1655,7 +1663,7 @@ işlev ag_al() {
             değişken a: tam64 = ag_dma+8192+(ag_rx olarak tam64)*2048;
             değişken j: tam32 = 0;
             iken j<n { kem_fiz_yaz8(ag_dma+40960+(j olarak tam64),kem_fiz_oku8(a+(j olarak tam64))); j=j+1; }
-            ag_son_boy=n; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+(n olarak tam64);
+            ag_son_boy=n; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+(n olarak tam64); ag_l3_girdi();
         } değilse { ag_atilan=ag_atilan+1; }
         kem_mmio_yaz64(t,ag_dma+8192+(ag_rx olarak tam64)*2048);
         kem_mmio_yaz64(t+8,0);
@@ -1664,6 +1672,164 @@ işlev ag_al() {
     }
     }
 }
+// Durum, Dizi başlıkları ve tamponları tek bir açılış tahsisindedir.
+// Ağ sıralı Dizi<dtam8> elemanlarının runtime genişliği dört bayttır.
+küresel değişken ag_l3_alan: tam64 = 0;
+küresel değişken ag_lo_rx: tam64 = 0;
+küresel değişken ag_lo_tx: tam64 = 0;
+küresel değişken ag_lo_bayt: tam64 = 0;
+küresel değişken ag_sonraki_kim: tam32 = 1;
+çıplak işlev ag_dizi_baslik(a: tam64,buf: tam64,n: tam32,boy: tam32) {
+    kem_mmio_yaz64(a,buf); kem_mmio_yaz32(a+8,n olarak tam64); kem_mmio_yaz32(a+12,n olarak tam64); kem_mmio_yaz32(a+16,boy olarak tam64);
+}
+çıplak işlev ag_dizi8(a: tam64) -> Dizi<dtam8> { değişken p: *Dizi<dtam8> = (&a) olarak *Dizi<dtam8>; ver *p; }
+çıplak işlev ag_dizi64(a: tam64) -> Dizi<tam64> { değişken p: *Dizi<tam64> = (&a) olarak *Dizi<tam64>; ver *p; }
+çıplak işlev ag_us() -> tam64 { eğer bm_cevrim_us<=0 { ver 0; } ver bm_tsc_oku()/bm_cevrim_us; }
+işlev ag_l3_kur() -> mantıksal {
+    güvensiz {
+        eğer ag_l3_alan!=0 { ver doğru; }
+        eğer bm_cevrim_us<=0 { bm_cevrim_us=bm_pit_olc(); }
+        eğer bm_cevrim_us<=0 { ver yanlış; }
+        değişken a: tam64 = uefi_surec_ayir(7);
+        eğer a==0 { ver yanlış; }
+        memset(a olarak *tam8,0,28672);
+        ag_dizi_baslik(a+256,a+4096,1536,4); ag_dizi_baslik(a+288,a+12288,1536,4);
+        ag_dizi_baslik(a+320,a+512,48,8); ag_dizi_baslik(a+352,a+1024,16,8);
+        değişken s: *AgL3 = a olarak *AgL3;
+        *s=l3_yeni(ag_mac,ag_dizi64(a+320)); ag_l3_alan=a;
+        ver doğru;
+    }
+}
+işlev ag_dizi_gonder(b: Dizi<dtam8>,n: tam32) -> tam32 {
+    güvensiz {
+        eğer ag_l3_alan==0 veya n<14 veya n>dizi_boyut(b) veya n>1518 { ver -90; }
+        değişken a: tam64 = ag_l3_alan+20480;
+        değişken i: tam32 = 0;
+        iken i<n { kem_fiz_yaz8(a+(i olarak tam64),ag_b8(b,i)); i=i+1; }
+        // Kısa Ethernet çerçevesinin dolgusu daha önceki paketin baytlarını taşımamalı.
+        iken i<60 { kem_fiz_yaz8(a+(i olarak tam64),0); i=i+1; }
+        ver ag_gonder(a,i);
+    }
+}
+işlev ag_l3_isle(rx: Dizi<dtam8>,n: tam32,tx: Dizi<dtam8>,ms: tam64,lo: mantıksal) -> tam32 {
+    güvensiz {
+        değişken p: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken s: AgL3 = *p;
+        değişken sonuc: tam32 = l3_al(&değişken s,rx,n,tx,ms,lo);
+        *p=s; ver sonuc;
+    }
+}
+işlev ag_l3_ping(tx: Dizi<dtam8>,ip: tam64,mac: tam64,hedef: tam64,kim: tam32,sira: tam32) -> tam32 {
+    güvensiz {
+        değişken p: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken s: AgL3 = *p;
+        değişken n: tam32 = l3_ping(&değişken s,tx,ip,mac,hedef,kim,sira);
+        *p=s; ver n;
+    }
+}
+işlev ag_l3_girdi() {
+    güvensiz {
+        eğer ag_l3_alan==0 veya ag_son_boy<14 veya ag_son_boy>1518 { ver; }
+        değişken t: tam32 = (kem_fiz_oku8(ag_dma+40972)<<8)|kem_fiz_oku8(ag_dma+40973);
+        değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
+        eğer t!=2048 ve t!=2054 { değişken yeni: AgL3 = *s; yeni.bilinmeyen=yeni.bilinmeyen+1; *s=yeni; ver; }
+        değişken rx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        değişken i: tam32 = 0;
+        iken i<ag_son_boy { ag_y8(rx,i,kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64); i=i+1; }
+        değişken once: tam64 = (*s).cakisma;
+        değişken n: tam32 = ag_l3_isle(rx,ag_son_boy,tx,ag_us()/1000,yanlış);
+        eğer once!=(*s).cakisma { bm_yaz("AG UYARI IPv4 adres cakismasi"); }
+        eğer n>0 { eğer ag_dizi_gonder(tx,n)<0 { ag_atilan=ag_atilan+1; } }
+    }
+}
+işlev ag_ip_ayarla(adres: tam64,onek: tam32,gecit: tam64) -> tam32 {
+    güvensiz {
+        eğer ag_bar==0 veya ag_l3_alan==0 { ver -19; }
+        eğer adres<=0 veya (adres>>24)==127 veya (adres>>24)>=224 veya onek<0 veya onek>32 veya gecit<0 { ver -22; }
+        değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken t: Dizi<tam64> = (*s).arp;
+        değişken i: tam32 = 0; iken i<dizi_boyut(t) { dizi_yaz(t,i,0 olarak tam64); i=i+1; }
+        değişken yeni: AgL3 = *s; yeni.ip=adres; yeni.gecit=gecit; yeni.onek=onek; *s=yeni;
+        değişken b: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        değişken n: tam32 = arp_yaz(b,1,ag_mac,adres,0,adres);
+        ver ag_dizi_gonder(b,n);
+    }
+}
+küresel değişken ag_bekleyen: tam32 = 0;
+işlev ag_bekleyenleri_isle() {
+    güvensiz {
+        eğer ag_bekleyen<=0 { ver; }
+        değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken t: Dizi<tam64> = ag_dizi64(ag_l3_alan+352); değişken ms: tam64 = ag_us()/1000;
+        değişken i: tam32 = 0;
+        iken i<4 {
+            değişken k: tam32 = i*4; değişken n: tam32 = dizi_al(t,k+1) olarak tam32;
+            eğer n>0 {
+                değişken ip: tam64 = dizi_al(t,k);
+                değişken m: tam64 = arp_bul((*s).arp,ip,ms);
+                değişken adim: tam32 = arp_bekleme_adimi(t,i,ms,m);
+                eğer adim==1 {
+                    değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+                    değişken boy: tam32 = arp_yaz(tx,1,(*s).mac,(*s).ip,0,ip);
+                    ag_dizi_gonder(tx,boy);
+                }
+                eğer adim==2 {
+                    değişken a: tam64 = ag_l3_alan+22528+(i olarak tam64)*1536;
+                    değişken j: tam32 = 0;
+                    iken j<6 { kem_fiz_yaz8(a+(j olarak tam64),((m>>(8*j))&255) olarak tam32); j=j+1; }
+                    değişken r: tam32 = ag_gonder(a,n);
+                    eğer r== -11 { adim=0; } değilse eğer r<0 { adim=r; }
+                }
+                eğer adim<0 veya adim==2 {
+                    dizi_yaz(t,k+1,0 olarak tam64); ag_bekleyen=ag_bekleyen-1;
+                    eğer adim<0 { ag_atilan=ag_atilan+1; }
+                }
+            }
+            i=i+1;
+        }
+    }
+}
+işlev ag_ip_cik(b: Dizi<dtam8>,n: tam32,hop: tam64,ms: tam64) -> tam32 {
+    güvensiz {
+        değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken m: tam64 = arp_bul((*s).arp,hop,ag_us()/1000);
+        eğer m>0 { eth_mac_yaz(b,0,m); ver ag_dizi_gonder(b,n); }
+        değişken t: Dizi<tam64> = ag_dizi64(ag_l3_alan+352);
+        değişken yuva: tam32 = arp_beklet(t,hop,n,ag_us()/1000,ms);
+        eğer yuva<0 { ag_atilan=ag_atilan+1; ver yuva; }
+        değişken a: tam64 = ag_l3_alan+22528+(yuva olarak tam64)*1536;
+        değişken j: tam32 = 0; iken j<n { kem_fiz_yaz8(a+(j olarak tam64),ag_b8(b,j)); j=j+1; }
+        ag_bekleyen=ag_bekleyen+1; ag_bekleyenleri_isle(); ver 0;
+    }
+}
+
+işlev ag_ping_iste(hedef: tam64,sira: tam64,ms: tam64) -> tam64 {
+    güvensiz {
+        eğer ag_l3_alan==0 { ver -19; }
+        eğer hedef<=0 veya hedef>4294967295 veya sira<0 veya sira>65535 veya ms<1 veya ms>5000 { ver -22; }
+        değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        değişken rx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256);
+        değişken kim: tam32 = ag_sonraki_kim; ag_sonraki_kim=(kim+1)&65535;
+        değişken bas: tam64 = ag_us(); değişken son: tam64 = bas+ms*1000;
+        eğer (hedef>>24)==127 {
+            değişken n: tam32 = ag_l3_ping(tx,2130706433,(*s).mac,hedef,kim,sira olarak tam32);
+            n=ag_l3_isle(tx,n,rx,bas/1000,doğru); ag_lo_tx=ag_lo_tx+1; ag_lo_rx=ag_lo_rx+1; ag_lo_bayt=ag_lo_bayt+74;
+            eğer n>0 { ag_l3_isle(rx,n,tx,ag_us()/1000,doğru); ag_lo_tx=ag_lo_tx+1; ag_lo_rx=ag_lo_rx+1; ag_lo_bayt=ag_lo_bayt+74; }
+        } değilse {
+            eğer ag_bar==0 veya ag_link()==0 { ver -100; }
+            eğer (*s).ip==0 { ver -99; }
+            değişken hop: tam64 = ip4_sonraki((*s).ip,(*s).onek,(*s).gecit,hedef);
+            eğer hop<=0 { ver -101; }
+            değişken n: tam32 = ag_l3_ping(tx,(*s).ip,0,hedef,kim,sira olarak tam32);
+            değişken g: tam32 = ag_ip_cik(tx,n,hop,ms); eğer g<0 { ver g olarak tam64; }
+            iken (*s).ping_sonuc==0 ve ag_us()<son { ag_al(); }
+        }
+        eğer (*s).ping_sonuc==0 { ver -110; } eğer (*s).ping_sonuc<0 { ver (*s).ping_sonuc olarak tam64; }
+        ver ag_us()-bas;
+    }
+}
+
 işlev ag_mac_metin(mac: tam64) -> metin {
     değişken m: metin = ""; değişken i: tam32 = 0;
     iken i<6 {
@@ -1672,12 +1838,13 @@ işlev ag_mac_metin(mac: tam64) -> metin {
     }
     ver m;
 }
-çıplak işlev ag_durumu() -> AgArayuz {
+çıplak işlev ag_durumu(lo: mantıksal) -> AgArayuz {
+    eğer lo { ver AgArayuz {model:5,mac:0,bagli:doğru,rx:ag_lo_rx,tx:ag_lo_tx,rx_bayt:ag_lo_bayt,tx_bayt:ag_lo_bayt,atilan:0}; }
     ver AgArayuz {model:ag_model,mac:ag_mac,bagli:ag_link()!=0,rx:ag_rx_sayi,tx:ag_tx_sayi,rx_bayt:ag_rx_bayt,tx_bayt:ag_tx_bayt,atilan:ag_atilan};
 }
 işlev ag_satir() -> metin {
     güvensiz {
-        değişken ar: AgArayuz = ag_durumu();
+        değişken ar: AgArayuz = ag_durumu(yanlış);
         değişken link: tam64 = 0; eğer ar.bagli { link=1; }
         değişken s: metin = metin_birlestir(metin_birlestir("NIC ",ag_model_adi(ar.model)),metin_birlestir(" ",ag_mac_metin(ar.mac)));
         s=kd_tamsayi(metin_birlestir(s," link"),link);
@@ -1691,8 +1858,36 @@ işlev ag_satir() -> metin {
 }
 işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
     güvensiz {
+        eğer bm_esit(arg,"lo") {
+            değişken ar: AgArayuz = ag_durumu(doğru);
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi("lo 127.0.0.1/8 rx tx",ar.rx),ar.tx)); ver tamam(doğru);
+        }
         eğer ag_bar==0 { ver hata("ag arayuzu yok"); }
         ag_al();
+        eğer bm_esit(arg,"sayac") {
+            eğer ag_l3_alan==0 { ver hata("L3 tablosu yok"); }
+            değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
+            değişken m: metin = kd_tamsayi(kd_tamsayi("kisa saglama",(*s).kisa),(*s).saglama_hatasi);
+            m=kd_tamsayi(kd_tamsayi(metin_birlestir(m," bilinmeyen arp_dolu"),(*s).bilinmeyen),(*s).arp_dolu);
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi(metin_birlestir(m," cakisma ttl icmp_hata"),(*s).cakisma),(*s).ttl),(*s).icmp_hata));
+            ver tamam(doğru);
+        }
+        değişken ilk: tam32 = kd_bosluk(arg);
+        eğer bm_esit(kd_bas(arg,ilk),"ayarla") {
+            değişken kal: metin = kd_kalan(arg,ilk);
+            değişken bos: tam32 = kd_bosluk(kal);
+            değişken sol: metin = kd_bas(kal,bos); değişken k: tam32 = 0;
+            iken k<metin_uzunluk(sol) ve (metin_bayt(sol,k) olarak tam32)!=47 { k=k+1; }
+            eğer k==metin_uzunluk(sol) { ver hata("ag ayarla adres/onek gecit"); }
+            değişken onek: tam32 = 0; değişken i: tam32 = k+1;
+            eğer i==metin_uzunluk(sol) { ver hata("ag onek"); }
+            iken i<metin_uzunluk(sol) {
+                değişken d: tam32 = metin_bayt(sol,i) olarak tam32; eğer d<48 veya d>57 { ver hata("ag onek"); }
+                onek=onek*10+d-48; eğer onek>32 { ver hata("ag onek"); } i=i+1;
+            }
+            eğer ag_ip_ayarla(ag_ip_oku(kd_bas(sol,k)),onek,ag_ip_oku(kd_kalan(kal,bos)))<0 { ver hata("ag adresi uygulanamadi"); }
+            ekran_cift_yaz("AG AYAR OK"); ver tamam(doğru);
+        }
         eğer bm_esit(arg,"") { ekran_cift_yaz(ag_satir()); ver tamam(doğru); }
         eğer bm_esit(arg,"dene") {
             değişken a: tam64 = ag_dma+43008;
@@ -1711,7 +1906,7 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
             iken i<ag_son_boy { s=metin_birlestir(s,kd_hex_n(kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64,2)); i=i+1; }
             ekran_cift_yaz(s); ver tamam(doğru);
         }
-        ver hata("ag [dene|son]");
+        ver hata("ag [ayarla|lo|sayac|dene|son]");
     }
 }
 
@@ -2271,7 +2466,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         eğer uefi_mi() { eşleş kd_ramdisk_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ramdisk ",e)); } tamam(v) => { } } }
         eğer uefi_mi() { eşleş kd_gecici_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(v) => { } } }
         eşleş kd_kok_durum(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
-        eğer uefi_mi() { eşleş ag_kur() { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ag ",e)); } tamam(v) => { } } }
+        eğer uefi_mi() { eşleş ag_kur() { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ag ",e)); } tamam(v) => { } } eğer değil ag_l3_kur() { bm_yaz("KABUK HATA ag L3 belleği veya zaman kaynağı"); } }
         eğer uefi_mi() ve d.kok >= 0 {
             değişken k: KabukBag = dizi_al(d.baglar,d.kok);
             eğer k.kayit.kok ve değil k.kayit.bolum.esp {

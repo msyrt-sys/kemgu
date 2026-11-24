@@ -1,0 +1,72 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_be32, ag_y8, ag_kopyala };
+kullan drivers::ag::eth::{ eth_tur, eth_mac, eth_yaz };
+kullan drivers::ag::arp::{ arp_islem, arp_yaz, arp_bul, arp_kaydet };
+kullan drivers::ag::ipv4::{ ip4_baslik, ip4_yaz, ip4_sonraki };
+kullan drivers::ag::icmp::{ icmp_tur, icmp_yanki };
+genel yapı AgL3 {
+    mac: tam64; ip: tam64; onek: tam32; gecit: tam64; arp: Dizi<tam64>;
+    // Bekleyen echo için yalnız eşleşen adres, kimlik ve sıra numarası kabul edilir.
+    ping_ip: tam64; ping_kim: tam32; ping_sira: tam32; ping_sonuc: tam32;
+    kisa: tam64; saglama_hatasi: tam64; bilinmeyen: tam64; arp_dolu: tam64; cakisma: tam64; ttl: tam64; icmp_hata: tam64;
+}
+genel işlev l3_yeni(mac: tam64,tablo: Dizi<tam64>) -> AgL3 {
+    ver AgL3 {mac:mac,ip:0,onek:0,gecit:0,arp:tablo,ping_ip:0,ping_kim:0,ping_sira:0,ping_sonuc:0,kisa:0,saglama_hatasi:0,bilinmeyen:0,arp_dolu:0,cakisma:0,ttl:0,icmp_hata:0};
+}
+genel işlev l3_al(s: &değişken AgL3,b: Dizi<dtam8>,n: tam32,out: Dizi<dtam8>,simdi: tam64,lo: mantıksal) -> tam32 {
+    değişken tip: tam32 = eth_tur(b,n,s.mac);
+    eğer tip<0 { s.kisa=s.kisa+1; ver 0; }
+    eğer tip==0 { ver 0; }
+    eğer tip==2054 {
+        değişken islem: tam32 = arp_islem(b,n);
+        eğer islem<0 { s.kisa=s.kisa+1; ver 0; }
+        değişken kaynak: tam64 = ag_be32(b,28); değişken m: tam64 = eth_mac(b,22);
+        eğer s.ip!=0 ve kaynak==s.ip ve m!=s.mac { s.cakisma=s.cakisma+1; ver 0; }
+        eğer s.ip==0 veya ag_be32(b,38)!=s.ip { ver 0; }
+        eğer islem==2 ve eth_mac(b,32)!=s.mac { ver 0; }
+        eğer kaynak!=0 ve değil arp_kaydet(s.arp,kaynak,m,simdi,30000) { s.arp_dolu=s.arp_dolu+1; }
+        eğer islem==1 ve dizi_boyut(out)>=42 { ver arp_yaz(out,2,s.mac,s.ip,m,kaynak); }
+        ver 0;
+    }
+    eğer tip!=2048 { s.bilinmeyen=s.bilinmeyen+1; ver 0; }
+    değişken ofs: tam32 = ip4_baslik(b,n);
+    eğer ofs<0 {
+        eğer ofs== -2 { s.saglama_hatasi=s.saglama_hatasi+1; }
+        değilse eğer ofs== -3 { s.ttl=s.ttl+1; } değilse { s.kisa=s.kisa+1; }
+        ver 0;
+    }
+    değişken hedef: tam64 = ag_be32(b,30); değişken kaynak: tam64 = ag_be32(b,26);
+    eğer lo { eğer (hedef>>24)!=127 veya (kaynak>>24)!=127 { ver 0; } }
+    değilse eğer s.ip==0 veya hedef!=s.ip veya (hedef>>24)==127 veya (kaynak>>24)==127 { ver 0; }
+    eğer (ag_be16(b,20)&16383)!=0 { s.bilinmeyen=s.bilinmeyen+1; ver 0; }
+    eğer ag_b8(b,23)!=1 { s.bilinmeyen=s.bilinmeyen+1; ver 0; }
+    değişken boy: tam32 = ag_be16(b,16)+14-ofs;
+    değişken tur: tam32 = icmp_tur(b,ofs,boy);
+    eğer tur<0 {
+        eğer tur== -2 { s.saglama_hatasi=s.saglama_hatasi+1; } değilse { s.kisa=s.kisa+1; }
+        ver 0;
+    }
+    eğer tur==8 ve ag_b8(b,ofs+1)==0 ve boy<=dizi_boyut(out)-34 {
+        eth_yaz(out,eth_mac(b,6),s.mac,2048); ip4_yaz(out,hedef,kaynak,1,boy,ag_be16(b,18));
+        ag_kopyala(out,42,b,ofs+8,boy-8); icmp_yanki(out,34,boy,0,ag_be16(b,ofs+4),ag_be16(b,ofs+6));
+        ver 34+boy;
+    }
+    eğer tur==0 ve ag_b8(b,ofs+1)==0 ve kaynak==s.ping_ip ve ag_be16(b,ofs+4)==s.ping_kim ve ag_be16(b,ofs+6)==s.ping_sira {
+        s.ping_sonuc=1;
+    }
+    eğer tur==3 veya tur==11 {
+        s.icmp_hata=s.icmp_hata+1;
+        // Gömülü IPv4 başlığının ardından özgün echo kimliği/sırası gelir.
+        eğer boy>=36 ve ag_b8(b,ofs+8)>>4==4 {
+            değişken h: tam32 = (ag_b8(b,ofs+8)&15)*4;
+            eğer h>=20 ve boy>=16+h ve ag_b8(b,ofs+17)==1 ve ag_be32(b,ofs+24)==s.ping_ip ve ag_b8(b,ofs+8+h)==8 ve ag_be16(b,ofs+12+h)==s.ping_kim ve ag_be16(b,ofs+14+h)==s.ping_sira { s.ping_sonuc= -113; }
+        }
+    }
+    ver 0;
+}
+genel işlev l3_ping(s: &değişken AgL3,b: Dizi<dtam8>,ip: tam64,mac: tam64,hedef: tam64,kim: tam32,sira: tam32) -> tam32 {
+    eğer dizi_boyut(b)<74 { ver 0; }
+    eth_yaz(b,mac,s.mac,2048); ip4_yaz(b,ip,hedef,1,40,sira);
+    değişken i: tam32 = 0; iken i<32 { ag_y8(b,42+i,(i+sira) olarak tam64); i=i+1; }
+    icmp_yanki(b,34,40,8,kim,sira); s.ping_ip=hedef; s.ping_kim=kim; s.ping_sira=sira; s.ping_sonuc=0;
+    ver 74;
+}

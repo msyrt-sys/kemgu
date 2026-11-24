@@ -73,6 +73,7 @@ sabit KX_SIS_OLUSTUR_DIZIN: tam64 = 48;
 sabit KX_SIS_SIL: tam64 = 49;
 sabit KX_SIS_SIL_DIZIN: tam64 = 50;
 sabit KX_SIS_KOPYALA: tam64 = 71;
+sabit KX_SIS_PING: tam64 = 73;
 sabit KX_SIS_TASI: tam64 = 72;
 sabit KX_SIS_YENIDEN_ADLANDIR: tam64 = 51;
 sabit KX_SIS_CALISMA_DIZINI_AL: tam64 = 52;
@@ -902,6 +903,7 @@ işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64
     eğer num == KX_SIS_OLUSTUR_DIZIN veya num == KX_SIS_SIL veya num == KX_SIS_SIL_DIZIN { ver ksv_yol_isle(b,num,a); }
     eğer num == KX_SIS_YENIDEN_ADLANDIR { ver ksv_aktar(b,a,c,doğru,doğru); }
     eğer num == KX_SIS_KOPYALA { ver ksv_aktar(b,a,c,yanlış,yanlış); }
+    eğer num == KX_SIS_PING { ver ag_ping_iste(a,c,d); }
     eğer num == KX_SIS_TASI { ver ksv_aktar(b,a,c,doğru,yanlış); }
     eğer num == KX_SIS_CALISMA_DIZINI_AL { ver ksv_cwd_al(b,a,c); }
     eğer num == KX_SIS_CALISMA_DIZINI_DEGISTIR { ver ksv_cwd_degistir(b,a); }

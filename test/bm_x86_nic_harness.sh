@@ -10,7 +10,11 @@ for derleyici in build/kemgu build/codegen; do
     echo "NIC derleyicisi $derleyici ($w)"
     UEFI_CALISMA_DIZINI="$w" UEFI_DERLEYICI="$derleyici" UEFI_YALNIZ_DERLE=1 \
         UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-    if [[ "${1:-e1000}" == matris ]]; then
+    if [[ "${1:-e1000}" == l3 ]]; then
+        python3 tests/qemu/surec_elf.py "$w/ping.elf" --kaynak test/kullanici/ping.kem --derleyici "$derleyici"
+        python3 tests/qemu/ag_l3_kahin.py "$w"
+        python3 tests/qemu/ag_l3_kahin.py "$w" --slirp
+    elif [[ "${1:-e1000}" == matris ]]; then
         for model in e1000 e1000e igb virtio-net-pci; do
             python3 tests/qemu/e1000_kahin.py "$w" --model "$model"
             ram=512M
