@@ -3109,4 +3109,7 @@
   boş), qwen3.8-flash-next 7 bölüm. 22 bulgunun 2'si gerçek (ikisi de istenen↔yapılan boşluğu); 15 qwen bulgusunun HEPSİ yanlış
   (AHCI IS/GHC, NVMe CDW11, PxCMD bitleri, 2 MiB PDE PAT biti 12 — kendinden emin ve yanlış). Karar: donanım semantiği
   incelemesi için KULLANMA; yalnız "istenen her sabotaj/kapı için kanıt var mı" gibi dar denetimler. Tam takım rc=0, 4 sa 38 dk.
+- 2026-11-24 D-768: Windows CI: tests/drivers/acpi/s5_test.kem exit 1 — core.autocrlf hex fikstürünü CRLF yaptı, ayrıştırıcı
+  sondaki `\r`yi geçersiz hane saydı (Linux'ta LF, görünmüyordu; D-482/D-761 sınıfı). İki katman: test satır sonunu veri sonu
+  sayar (yabancı bayt HÂLÂ exit 1 — ölçüldü), .gitattributes `*.hex text eol=lf`. LF + benzetilmiş CRLF ikisi de geçti.
 
