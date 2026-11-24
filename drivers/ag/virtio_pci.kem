@@ -1,0 +1,12 @@
+// VirtIO 1.2, PCI taşıyıcısı. Modern özelliklerin ve iki split kuyruğun boyları.
+genel işlev vnic_ozellik(alt: tam64,ust: tam64) -> tam64 {
+    // MAC ve bağlantı durumu okunmalı. VERSION_1, özellik sözcüğü 1'in bit 0'ıdır.
+    eğer (ust&1)==0 veya (alt&65568)!=65568 { ver -1; }
+    ver 65568;
+}
+genel işlev vnic_bildirim(ofs: tam64,carpan: tam64,boy: tam64) -> tam64 {
+    eğer ofs<0 veya ofs>65535 veya carpan<0 veya carpan>4294967295 { ver -1; }
+    değişken k: tam64 = ofs*carpan;
+    eğer boy<2 veya k>boy-2 veya k%2!=0 { ver -1; }
+    ver k;
+}

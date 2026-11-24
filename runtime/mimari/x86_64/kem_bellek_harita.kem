@@ -291,3 +291,43 @@ işlev pat_gop_kur(d: &değişken CerceveAyirici, b: UefiBilgi) -> sonuç<mantı
  kap_dok("PAT_MMIO",4276092928,uefi_yaprak(4276092928),0);
  ver tamam(doğru);
 }
+
+// Mevcut alçak PMM 4 GiB altında kalır. UEFI'nin yalnız ConventionalMemory,
+// WB özellikli tam bir 2 MiB penceresini NIC için bağımsız ayırıcıya veririz.
+işlev uefi_nic_ust_dma() -> sonuç<tam64,metin> {
+    eşleş uefi_bilgi() { hata(e) => { ver hata(e); } tamam(b) => {
+        değişken ham: tam64 = dizi_al(b.alan,9);
+        değişken adim: tam64 = dizi_al(b.alan,11);
+        değişken boy: tam64 = dizi_al(b.alan,10);
+        eğer adim<40 veya boy%adim!=0 { ver hata("NIC RAM haritasi"); }
+        değişken i: tam64 = 0;
+        iken i<boy {
+            değişken p: tam64 = ham+i; i=i+adim;
+            değişken a: tam64 = kem_mmio_oku64(p+8);
+            değişken adet: tam64 = kem_mmio_oku64(p+24);
+            değişken oz: tam64 = kem_mmio_oku64(p+32);
+            eğer kem_mmio_oku32(p)==7 ve oz>=0 ve (oz&8)!=0 ve a>=0 ve a<140737488355328 ve adet>0 ve adet<=(140737488355328-a)/4096 {
+                değişken son: tam64 = a+adet*4096;
+                eğer a<4294967296 { a=4294967296; }
+                a=((a+2097151)/2097152)*2097152;
+                eğer son-a>=2097152 {
+                    güvensiz {
+                        değişken d: CerceveAyirici = uefi_ayirici_al();
+                        eşleş uefi_alt_tablo(&değişken d,kxm_cr3_oku()+((a>>39)&511)*8) { hata(e) => { ver hata(e); } tamam(pt) => {
+                        eşleş uefi_alt_tablo(&değişken d,pt+((a>>30)&511)*8) { hata(e) => { ver hata(e); } tamam(pd) => {
+                            değişken yuva: tam64 = pd+((a>>21)&511)*8;
+                            eğer (kem_mmio_oku64(yuva)&1)!=0 { ver hata("NIC ust RAM esleme cakismasi"); }
+                            kem_mmio_yaz64(yuva,a|131); kxm_cr3_yaz(kxm_cr3_oku());
+                        } } } }
+                    }
+                    değişken xs: Dizi<BellekBolgesi> = [BellekBolgesi {taban:a,uzunluk:2097152,tur:1}];
+                    eşleş cerceve_yeni(xs) { hata(e) => { ver hata(e); } tamam(h) => {
+                        değişken havuz: CerceveAyirici = h;
+                        eşleş ayir_ardisik(&değişken havuz,11) { hiç => { ver hata("NIC ust RAM yetmedi"); } değer(t) => { ver tamam(t); } }
+                    } }
+                }
+            }
+        }
+        ver tamam(0 olarak tam64);
+    } }
+}

@@ -1,0 +1,15 @@
+// PCI kimliği sürücünün aktarım biçimini belirler. Üst katmanlar yalnız çerçeve görür.
+genel yapı AgArayuz { model: tam32; mac: tam64; bagli: mantıksal; rx: tam64; tx: tam64; rx_bayt: tam64; tx_bayt: tam64; atilan: tam64; }
+genel işlev ag_pci_model(kim: tam64) -> tam32 {
+    eşleş kim {
+        269385862 => { ver 1; }
+        282296454 => { ver 2; }
+        281641094 => { ver 3; }
+        268442356 => { ver 4; }
+        272702196 => { ver 4; }
+        _ => { ver 0; }
+    }
+}
+genel işlev ag_model_adi(n: tam32) -> metin {
+    eşleş n { 1 => { ver "e1000"; } 2 => { ver "e1000e"; } 3 => { ver "igb"; } 4 => { ver "virtio-net-pci"; } _ => { ver "bilinmeyen"; } }
+}

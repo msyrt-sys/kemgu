@@ -387,7 +387,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 
 - [x] **H13a** Host Ethernet eşi ve pcap. `calistir_ag_es`
 - [x] **H13b** 82540EM sürücüsü. `calistir_bm_x86_e1000`
-- [ ] **H13c** 82574L, 82576 ve VirtIO PCI. `calistir_bm_x86_nic_matris`
+- [x] **H13c** 82574L, 82576 ve VirtIO PCI. `calistir_bm_x86_nic_matris`
 - [ ] **H13d** IPv4, ARP, ICMP ve loopback. `calistir_bm_x86_ag_l3`
 - [ ] **H13e** UDP, DHCP ve DNS. `calistir_bm_x86_ag_udp`
 - [ ] **H13f** IPv4 parçaları ve ICMP hataları. `calistir_bm_x86_ag_parca`

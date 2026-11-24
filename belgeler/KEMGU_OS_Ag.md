@@ -25,3 +25,20 @@ Host testi ilk DHCP işlemini en çok 20 saniye bekler. Yeniden gönderilen DISC
 PCI kimliği `8086:100e` olan aygıtın BAR0 alanı kullanılır. Sıfırlama için üst sınır yaklaşık 100 ms’dir. RAL0 ve RAH0 donanımın MAC adresini verir. Alıcı ve vericide sekizer adet 16 baytlık tanımlayıcı ve her biri için 2048 baytlık tampon vardır. Sürücü bu alanları başlangıçta ayrılan fiziksel sayfalarda tutar. `ag` bağlantı durumunu, çerçeve ve bayt sayılarını, düşen çerçeveleri ve kesme vektörünü gösterir. `donanim` aynı satırı aygıt listesine yazar.
 
 Q35’in tanınan kök yuvalarında sürücü IOAPIC üzerinden INTx yönlendirmesini kurar ve bir deneme kesmesiyle doğrular. Desteklenen bir yönlendirme bulunamazsa kabuk beklerken alıcıyı yoklar. `vektor -1` bu yolu gösterir. `ag dene` özel EtherType 0x88b5 ile 60 bayt yollar. `ag son` son çerçevenin FCS hariç baytlarını onaltılık gösterir. Gönderimde bağlantı kopuksa -100, boy geçersizse -90, halka doluysa -11 döner.
+
+## PCI aktarımı ve kuyruklar
+
+| PCI kimliği | Aygıt | Aktarım |
+|---|---|---|
+| `8086:100e` | Intel 82540EM | Eski tanımlayıcılar, INTx veya yoklama |
+| `8086:10d3` | Intel 82574L | Eski tanımlayıcılar, kuyruk 0 ve MSI-X |
+| `8086:10c9` | Intel 82576 | Gelişmiş tek tamponlu RX ve gelişmiş TX, kuyruk etkinleştirme, MSI-X |
+| `1af4:1000`, `1af4:1041` | VirtIO ağ | Modern PCI yetenekleri, split RX/TX kuyrukları, yoklama |
+| `10ec:8139` | Realtek RTL8139 | PCI raporunda desteklenmiyor |
+| Realtek RTL8111/8168 | Dahili Ethernet | Sanal donanım doğrulaması bulunmuyor |
+
+Düşük adresli halkalar için UEFI’nin açılışta fiziksel çerçevelerden ayırdığı 64 KiB VirtIO ağ alanı kullanılır. 82574L için yüksek bellek varsa firmware’in ConventionalMemory ve WB olarak bildirdiği hizalı bir alan eşlenir. Sürücü RX tabanının yüksek sözcüğünü aygıttan geri okuduktan sonra kuyruğu açar.
+
+82576 SRRCTL ile tanımlayıcı türünü, RXDCTL/TXDCTL ile kuyrukları seçer. Gelişmiş RX geri yazımı tanımlayıcının özgün tampon adresini örter. Sürücü her tüketimde adresi geri koyar. 82574L tek MSI-X girdisine IVAR, 82576 GPIE ve IVAR0 ile yönlendirir. VirtIO sürücüsü VERSION_1, MAC ve STATUS özelliklerini uzlaştırır. PCI yeteneklerinin BAR sınırlarını ve kuyruk bildirim ofsetini denetler. Her NIC için `AgArayuz` bağlantı ve sayaç görünümü sunar.
+
+RTL8139 bu dalganın desteklediği NIC listesine alınmadı. Emülasyonu olan bu aygıt, desteklenmeyen aygıtların raporda görünmesini doğrular. [QEMU 82574L uygulaması](https://github.com/qemu/qemu/blob/v8.2.2/hw/net/e1000e_core.c) [QEMU 82576 yazmaçları](https://github.com/qemu/qemu/blob/v8.2.2/hw/net/igb_regs.h)

@@ -16,3 +16,26 @@ Sırayla C kök yuva, C köprü, self-host kök yuva, self-host köprü. Her aç
 - NIC OK e1000 TX=1 RX=18 pcap; heap=4198144→4198144 boş=47793→47793
 
 RDT negatifinde ikinci yerine sekizinci çerçevede alım durdu. Sekiz tanımlayıcı ile başlangıç RDT=7 değeri donanıma yedi kullanılabilir tanımlayıcı bırakıyor. Kâhin ilk eksik çerçeveyi bildiriyor.
+
+## PCI ağ matrisi
+
+Her derleyicide önce 256 MiB, sonra 512 MiB (82574L için 4 GiB). Her satır yeni imaj, yeni QEMU süreci ve yeni pcap ile ölçüldü.
+
+- NIC OK e1000 TX=1 RX=18 pcap; heap=4066880→4066880 boş=47831→47831
+- NIC OK e1000 TX=1 RX=18 pcap; heap=4263664→4263664 boş=113367→113367
+- NIC OK e1000e TX=1 RX=18 pcap; heap=4066880→4066880 boş=47831→47831
+- NIC OK e1000e TX=1 RX=18 pcap; heap=5050352→5050352 boş=506587→506587
+- NIC OK igb TX=1 RX=18 pcap; heap=4066880→4066880 boş=47831→47831
+- NIC OK igb TX=1 RX=18 pcap; heap=4263664→4263664 boş=113367→113367
+- NIC OK virtio-net-pci TX=1 RX=18 pcap; heap=4066880→4066880 boş=47831→47831
+- NIC OK virtio-net-pci TX=1 RX=18 pcap; heap=4263664→4263664 boş=113367→113367
+- NIC OK e1000 TX=1 RX=18 pcap; heap=4263728→4263728 boş=47800→47800
+- NIC OK e1000 TX=1 RX=18 pcap; heap=4460512→4460512 boş=113336→113336
+- NIC OK e1000e TX=1 RX=18 pcap; heap=4263728→4263728 boş=47800→47800
+- NIC OK e1000e TX=1 RX=18 pcap; heap=5247200→5247200 boş=506556→506556
+- NIC OK igb TX=1 RX=18 pcap; heap=4263728→4263728 boş=47800→47800
+- NIC OK igb TX=1 RX=18 pcap; heap=4460512→4460512 boş=113336→113336
+- NIC OK virtio-net-pci TX=1 RX=18 pcap; heap=4263728→4263728 boş=47800→47800
+- NIC OK virtio-net-pci TX=1 RX=18 pcap; heap=4460512→4460512 boş=113336→113336
+
+82576 sıfırlamasından sonra QEMU STATUS.LU kendiliğinden yükselmedi. PHY 1 BMCR ile görüşmeyi yeniden başlatınca gerçek bağlantı, kesme ve RX/TX çalıştı. Yüksek DMA negatifinde yanlış adrese DMA yapılmadan donanım geri okuması açık hata üretti.

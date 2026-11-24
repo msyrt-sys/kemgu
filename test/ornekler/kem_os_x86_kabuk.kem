@@ -1,5 +1,7 @@
 kullan drivers::ortak::bayt::{ imza_esit };
-kullan drivers::ag::e1000::{ E1kKurulum, E1K_ADET, E1K_SAYFA, e1k_yeni, e1k_adim, e1k_rx_boyu, e1k_tx_sozcugu };
+kullan drivers::ag::e1000::{ E1kKurulum, E1K_ADET, E1K_SAYFA, e1k_yeni, e1k_adim, e1k_rx_boyu, e1k_tx_sozcugu, igb_rx_boyu, igb_tx_sozcugu };
+kullan drivers::ag::virtio_pci::{ vnic_ozellik, vnic_bildirim };
+kullan drivers::ag::arayuz::{ AgArayuz, ag_pci_model, ag_model_adi };
 kullan drivers::fs::ram::{ RamDugum, RamDosyalar, RamYer, ramfs_yeni, ramfs_yer, ramfs_bilgi, ramfs_liste, ramfs_parcalar, ramfs_yaz, ramfs_sil, ramfs_tasi } olarak gecici_fs;
 kullan drivers::blok::ram::{ RamBlok, ram_blok_yeni };
 kullan drivers::blok::aygit::{ blok_cerceve_oku } olarak rblok;
@@ -1187,6 +1189,12 @@ işlev kd_pci_rapor(satirlar: Dizi<metin>) {
                 s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(kim&65535,4)));
                 s=metin_birlestir(s,metin_birlestir(":",kd_hex_n(kim>>16,4)));
                 dizi_ekle(satirlar,metin_birlestir(s,metin_birlestir(" ",kd_hex_n(sinif,6))));
+                eğer (sinif>>16)==2 ve ag_pci_model(kim)==0 {
+                    değişken ad: metin = "PCI ag aygiti";
+                    eğer (kim&65535)==4332 { ad="Realtek"; }
+                    eğer kim==2168000748 { ad="Realtek rtl8139"; }
+                    dizi_ekle(satirlar,metin_birlestir(metin_birlestir(s,metin_birlestir(" ",ad))," desteklenmiyor"));
+                }
             }
     }
 }
@@ -1344,6 +1352,7 @@ işlev kd_kesme_sina() -> sonuç<mantıksal,metin> {
     ekran_cift_yaz("KESME CAKISMA RED"); ver tamam(doğru);
 }
 // Tek etkin arayüzün halkaları ve çerçeveleri UEFI fiziksel ayırıcısına aittir.
+küresel değişken ag_model: tam32 = 0;
 küresel değişken ag_bar: tam64 = 0;
 küresel değişken ag_dma: tam64 = 0;
 küresel değişken ag_mac: tam64 = 0;
@@ -1366,6 +1375,178 @@ küresel değişken ag_vektor: tam32 = 0;
         i=i+1;
     }
 }
+küresel değişken ag_vcihaz: tam64 = 0;
+küresel değişken ag_vrx_bildir: tam64 = 0;
+küresel değişken ag_vtx_bildir: tam64 = 0;
+küresel değişken ag_vrx_gorulen: tam32 = 0;
+küresel değişken ag_vtx_uretilen: tam32 = 0;
+
+// Kullanılacak her yetenek bildirilen MMIO BAR'ın içinde kalmalıdır.
+işlev ag_pci_pencere(bdf: tam32, bir: tam32, ofs: tam64, boy: tam64) -> tam64 {
+    güvensiz {
+        değişken i: tam64 = 0;
+        iken i<pci_bar_sayi {
+            değişken p: tam64 = pci_bar_tablo+i*40; i=i+1;
+            eğer kem_mmio_oku64(p)==(bdf olarak tam64) ve kem_mmio_oku64(p+8)==(bir olarak tam64) ve (kem_mmio_oku64(p+16)&1)==0 {
+                değişken bas: tam64 = kem_mmio_oku64(p+24);
+                eğer bas>0 ve ofs>=0 ve boy>0 ve ofs<=kem_mmio_oku64(p+32)-boy { ver bas+ofs; }
+            }
+        }
+        ver 0;
+    }
+}
+işlev ag_virtio_kur(bdf: tam32) -> sonuç<mantıksal,metin> {
+    güvensiz {
+        değişken k: tam32 = kem_pci_oku16(bdf,52)&255;
+        değişken c: tam64 = 0; değişken bildir: tam64 = 0; değişken carpan: tam64 = 0; değişken uzun: tam64 = 0;
+        değişken cihaz: tam64 = 0; değişken tur: tam32 = 0;
+        iken k!=0 {
+            eğer k<64 veya k>252 veya (k&3)!=0 veya tur>=48 { ver hata("virtio PCI yetenek zinciri"); }
+            tur=tur+1;
+            değişken v: tam64 = kem_pci_oku32(bdf,k);
+            eğer (v&255)==9 {
+                değişken tip: tam64 = (v>>24)&255;
+                eğer tip>=1 ve tip<=4 {
+                    değişken n: tam32 = ((v>>16)&255) olarak tam32;
+                    eğer n<16 veya n>256-k { ver hata("virtio PCI yetenek boyu"); }
+                    değişken boy: tam64 = kem_pci_oku32(bdf,k+12);
+                    değişken a: tam64 = ag_pci_pencere(bdf,kem_pci_oku16(bdf,k+4)&255,kem_pci_oku32(bdf,k+8),boy);
+                    eğer tip==1 ve boy>=56 { c=a; }
+                    eğer tip==2 ve n>=20 { bildir=a; carpan=kem_pci_oku32(bdf,k+16); uzun=boy; }
+                    eğer tip==4 ve boy>=8 { cihaz=a; }
+                }
+            }
+            k=((v>>8)&255) olarak tam32;
+        }
+        eğer c==0 veya cihaz==0 veya bildir==0 { ver hata("virtio modern alan eksik"); }
+        değişken once: tam32 = kem_pci_oku16(bdf,4);
+        kem_pci_yaz16(bdf,4,once|1030);
+        kem_fiz_yaz8(c+20,0);
+        tur=0; iken kem_fiz_oku8(c+20)!=0 ve tur<100 { kem_bekle_us(1000); tur=tur+1; }
+        eğer kem_fiz_oku8(c+20)!=0 { ver hata("virtio sifirlama zaman asimi"); }
+        kem_fiz_yaz8(c+20,1); kem_fiz_yaz8(c+20,3);
+        kem_mmio_yaz32(c,0); değişken alt: tam64 = kem_mmio_oku32(c+4);
+        kem_mmio_yaz32(c,1); değişken oz: tam64 = vnic_ozellik(alt,kem_mmio_oku32(c+4));
+        eğer oz<0 { kem_fiz_yaz8(c+20,131); ver hata("virtio MAC/STATUS/VERSION_1"); }
+        kem_mmio_yaz32(c+8,0); kem_mmio_yaz32(c+12,oz); kem_mmio_yaz32(c+8,1); kem_mmio_yaz32(c+12,1);
+        kem_fiz_yaz8(c+20,11);
+        eğer (kem_fiz_oku8(c+20)&8)==0 { kem_fiz_yaz8(c+20,139); ver hata("virtio ozellik reddedildi"); }
+        değişken dma: tam64 = vnet_dma;
+        memset(dma olarak *tam8,0,65536);
+        değişken q: tam32 = 0;
+        iken q<2 {
+            vblk_y16(c+22,q olarak dtam16);
+            eğer vblk_o16(c+24)<8 veya vblk_o16(c+28)!=0 { kem_fiz_yaz8(c+20,139); ver hata("virtio kuyruk boyu"); }
+            vblk_y16(c+24,8 olarak dtam16);
+            değişken a: tam64 = dma+(q olarak tam64)*4096;
+            kem_mmio_yaz64(c+32,a); kem_mmio_yaz64(c+40,a+128); kem_mmio_yaz64(c+48,a+160);
+            değişken kapi: tam64 = vnic_bildirim(vblk_o16(c+30) olarak tam64,carpan,uzun);
+            eğer kapi<0 { kem_fiz_yaz8(c+20,139); ver hata("virtio kuyruk bildirim ofseti"); }
+            vblk_y16(a+128,1 olarak dtam16);
+            eğer q==0 {
+                ag_vrx_bildir=bildir+kapi;
+                değişken i: tam64 = 0;
+                iken i<8 {
+                    kem_mmio_yaz64(a+i*16,dma+8192+i*2048);
+                    kem_mmio_yaz32(a+i*16+8,2048);
+                    vblk_y16(a+i*16+12,2 olarak dtam16);
+                    vblk_y16(a+132+i*2,(i olarak tam32) olarak dtam16); i=i+1;
+                }
+                vblk_y16(a+130,8 olarak dtam16);
+            } değilse { ag_vtx_bildir=bildir+kapi; }
+            vblk_y16(c+28,1 olarak dtam16); q=q+1;
+        }
+        değişken mac: tam64 = 0; değişken j: tam32 = 0;
+        iken j<6 { mac=mac|((kem_fiz_oku8(cihaz+(j olarak tam64)) olarak tam64)<<(j*8)); j=j+1; }
+        eğer mac==0 veya (mac&1)!=0 { kem_fiz_yaz8(c+20,139); ver hata("virtio gecersiz MAC"); }
+        ag_dma=dma; ag_bar=c; ag_vcihaz=cihaz; ag_mac=mac; ag_model=4; ag_vektor=-1;
+        ag_vrx_gorulen=0; ag_vtx_uretilen=0;
+        kem_dma_bariyeri(); kem_fiz_yaz8(c+20,15); vblk_y16(ag_vrx_bildir,0 olarak dtam16);
+        ver tamam(doğru);
+    }
+}
+çıplak işlev ag_vtx(adres: tam64,n: tam32) -> tam32 {
+    değişken a: tam64 = ag_dma+4096;
+    değişken used: tam32 = vblk_o16(a+162) olarak tam32;
+    eğer ((ag_vtx_uretilen-used)&65535)>=8 { ver -11; }
+    değişken slot: tam64 = (ag_vtx_uretilen&7) olarak tam64;
+    değişken buf: tam64 = ag_dma+24576+2048*slot;
+    memcpy((buf+12) olarak *tam8,adres olarak *tam8,n olarak tam64);
+    kem_mmio_yaz64(a+16*slot,buf); kem_mmio_yaz32(a+16*slot+8,(n+12) olarak tam64);
+    vblk_y16(a+132+2*slot,(slot olarak tam32) olarak dtam16);
+    ag_vtx_uretilen=(ag_vtx_uretilen+1)&65535;
+    kem_dma_bariyeri(); vblk_y16(a+130,ag_vtx_uretilen olarak dtam16); kem_dma_bariyeri(); vblk_y16(ag_vtx_bildir,1 olarak dtam16);
+    ver 0;
+}
+çıplak işlev ag_vrx() {
+    değişken a: tam64 = ag_dma;
+    değişken tur: tam32 = 0;
+    iken tur<8 ve (vblk_o16(a+162) olarak tam32)!=ag_vrx_gorulen {
+        kem_dma_bariyeri();
+        değişken p: tam64 = a+164+((ag_vrx_gorulen&7) olarak tam64)*8;
+        değişken id: tam64 = kem_mmio_oku32(p);
+        değişken boy: tam64 = kem_mmio_oku32(p+4);
+        eğer id>=8 { ag_atilan=ag_atilan+1; kem_fiz_yaz8(ag_bar+20,143); ver; }
+        eğer boy>=26 ve boy<=1530 {
+            ag_son_boy=(boy-12) olarak tam32;
+            memcpy((a+40960) olarak *tam8,(a+8192+2048*id+12) olarak *tam8,boy-12);
+            ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+boy-12;
+        } değilse { ag_atilan=ag_atilan+1; }
+        vblk_y16(a+132+((ag_vrx_gorulen&7) olarak tam64)*2,(id olarak tam32) olarak dtam16);
+        ag_vrx_gorulen=(ag_vrx_gorulen+1)&65535; tur=tur+1;
+        kem_dma_bariyeri(); vblk_y16(a+130,((ag_vrx_gorulen+8)&65535) olarak dtam16);
+    }
+    eğer tur>0 { kem_dma_bariyeri(); vblk_y16(ag_vrx_bildir,0 olarak dtam16); }
+}
+çıplak işlev ag_link() -> tam64 {
+    eğer ag_model==4 { ver (vblk_o16(ag_vcihaz+6) olarak tam64)&1; }
+    ver (kem_mmio_oku32(ag_bar+8)>>1)&1;
+}
+
+// Kuyruk sıfır ve bağlantı bildirimleri aynı MSI-X tablo girişine yönelir.
+işlev ag_msix(bdf: tam32) -> tam32 {
+    güvensiz {
+        eğer kesme_tablo==0 veya kap_lapic==0 { ver -1; }
+        değişken k: tam32 = bd_pci_yetenek(bdf,17);
+        eğer k==0 veya k>244 { ver -1; }
+        değişken ctl: tam32 = kem_pci_oku16(bdf,k+2);
+        değişken t: tam64 = kem_pci_oku32(bdf,k+4);
+        değişken a: tam64 = ag_pci_pencere(bdf,(t&7) olarak tam32,t&4294967288,16);
+        eğer a==0 { ver -1; }
+        değişken v: tam32 = kesme_ayir();
+        eğer v<0 { ver -1; }
+        eğer değil kesme_kaydet(v,7) { kesme_birak(v); ver -1; }
+        değişken kayit: tam64 = kesme_tablo+32*(v olarak tam64);
+        kem_mmio_yaz64(kayit+16,ag_bar+192);
+        kem_pci_yaz16(bdf,k+2,ctl|49152);
+        kem_mmio_yaz32(a+12,1);
+        kem_mmio_yaz32(a,4276092928|(((kem_mmio_oku32(kap_lapic+32)>>24)&255)<<12));
+        kem_mmio_yaz32(a+4,0); kem_mmio_yaz32(a+8,v olarak tam64); kem_mmio_yaz32(a+12,0);
+        kem_pci_yaz16(bdf,k+2,(ctl|32768)&49151);
+        eğer ag_model==2 {
+            kem_mmio_yaz32(ag_bar+228,2148009992);
+            kem_mmio_yaz32(ag_bar+220,22020096);
+            kem_mmio_yaz32(ag_bar+208,22020100);
+            kem_mmio_yaz32(ag_bar+200,1048576);
+        } değilse {
+            kem_mmio_yaz32(ag_bar+5396,16);
+            kem_mmio_yaz32(ag_bar+5888,32896);
+            kem_mmio_yaz32(ag_bar+5952,32768);
+            kem_mmio_yaz32(ag_bar+5420,1);
+            kem_mmio_yaz32(ag_bar+5412,1);
+            kem_mmio_yaz32(ag_bar+208,4);
+            kem_mmio_yaz32(ag_bar+5408,1);
+        }
+        değişken i: tam32 = 0;
+        iken i<100 ve kem_mmio_oku64(kayit+8)==0 { kem_bekle_us(100); i=i+1; }
+        eğer kem_mmio_oku64(kayit+8)>0 { ver v; }
+        kem_mmio_yaz32(ag_bar+216,4294967295);
+        eğer ag_model==3 { kem_mmio_yaz32(ag_bar+5416,4294967295); kem_mmio_yaz32(ag_bar+5396,0); }
+        kem_mmio_yaz32(a+12,1); kem_pci_yaz16(bdf,k+2,ctl&32767);
+        kesme_birak(v); ver -1;
+    }
+}
+
 işlev ag_intx(bdf: tam32) -> tam32 {
     güvensiz {
         // QEMU Q35'in harici kök yuvaları PIRQ E..H üzerinden GSI 20..23'e gider.
@@ -1407,26 +1588,32 @@ işlev ag_kur() -> sonuç<mantıksal,metin> {
         iken n < pci_bar_sayi {
             değişken p: tam64 = pci_bar_tablo+40*n; n=n+1;
             değişken bdf: tam32 = kem_mmio_oku64(p) olarak tam32;
-            eğer kem_mmio_oku64(p+8)==0 ve kem_pci_oku32(bdf,0)==269385862 {
+            değişken model: tam32 = ag_pci_model(kem_pci_oku32(bdf,0));
+            eğer model==4 { ver ag_virtio_kur(bdf); }
+            eğer kem_mmio_oku64(p+8)==0 ve model>=1 ve model<=3 {
                 değişken bar: tam64 = kem_mmio_oku64(p+24);
                 eğer bar==0 veya (kem_mmio_oku64(p+16)&1)!=0 veya kem_mmio_oku64(p+32)<21512 { ver hata("e1000 BAR0"); }
-                değişken dma: tam64 = uefi_surec_ayir(E1K_SAYFA);
+                değişken dma: tam64 = vnet_dma;
+                eğer model==2 { eşleş uefi_nic_ust_dma() { hata(e) => { ver hata(e); } tamam(a) => { eğer a!=0 { dma=a; } } } }
                 eğer dma==0 { ver hata("e1000 icin cerceve yok"); }
                 değişken eski: tam32 = kem_pci_oku16(bdf,4);
                 kem_pci_yaz16(bdf,4,eski|1030);
                 ag_kuyruk_hazirla(dma);
                 değişken s: E1kKurulum = e1k_yeni(dma);
+                s.model=model;
                 değişken y: GcYanit = gc_bos();
                 iken doğru {
                     değişken istek: GcIstek = e1k_adim(&değişken s,y);
                     eşleş istek {
                         GcIstek::Bitti => {
-                            ag_dma=dma; ag_bar=bar; ag_mac=s.mac; ag_vektor=ag_intx(bdf);
+                            ag_model=model; ag_dma=dma; ag_bar=bar; ag_mac=s.mac; ag_vektor=-1;
+                            eğer model>1 { ag_vektor=ag_msix(bdf); }
+                            eğer ag_vektor<0 { ag_vektor=ag_intx(bdf); }
                             ver tamam(doğru);
                         }
                         GcIstek::Hata(m) => {
                             kem_mmio_yaz32(bar+256,0); kem_mmio_yaz32(bar+1024,0);
-                            kem_pci_yaz16(bdf,4,eski&65531); uefi_surec_iade(dma,E1K_SAYFA); ver hata(m);
+                            kem_pci_yaz16(bdf,4,eski&65531); ver hata(m);
                         }
                         _ => { y=bm_yurut(bar,istek); }
                     }
@@ -1438,14 +1625,16 @@ işlev ag_kur() -> sonuç<mantıksal,metin> {
 }
 işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
     güvensiz {
-    eğer ag_bar==0 veya (kem_mmio_oku32(ag_bar+8)&2)==0 { ver -100; }
+    eğer ag_bar==0 veya ag_link()==0 { ver -100; }
     eğer boy<14 veya boy>1518 { ver -90; }
+    eğer ag_model==4 { değişken r: tam32 = ag_vtx(adres,boy); eğer r==0 { ag_tx_sayi=ag_tx_sayi+1; ag_tx_bayt=ag_tx_bayt+(boy olarak tam64); } ver r; }
     değişken t: tam64 = ag_dma+4096+(ag_tx olarak tam64)*16;
     eğer (kem_fiz_oku8(t+12)&1)==0 { ver -11; }
     değişken a: tam64 = kem_mmio_oku64(t);
     değişken i: tam32 = 0;
     iken i<boy { kem_fiz_yaz8(a+(i olarak tam64),kem_fiz_oku8(adres+(i olarak tam64))); i=i+1; }
-    kem_mmio_yaz64(t+8,e1k_tx_sozcugu(boy));
+    eğer ag_model==3 { kem_mmio_yaz64(t+8,igb_tx_sozcugu(boy)); }
+    değilse { kem_mmio_yaz64(t+8,e1k_tx_sozcugu(boy)); }
     ag_tx=(ag_tx+1)%E1K_ADET;
     kem_mmio_yaz32(ag_bar+14360,ag_tx olarak tam64);
     ag_tx_sayi=ag_tx_sayi+1; ag_tx_bayt=ag_tx_bayt+(boy olarak tam64); ver 0;
@@ -1454,17 +1643,21 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
 işlev ag_al() {
     güvensiz {
     eğer ag_bar==0 { ver; }
+    eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
         değişken t: tam64 = ag_dma+(ag_rx olarak tam64)*16;
-        değişken n: tam32 = e1k_rx_boyu(kem_mmio_oku64(t+8));
+        değişken bilgi: tam64 = kem_mmio_oku64(t+8);
+        değişken n: tam32 = e1k_rx_boyu(bilgi);
+        eğer ag_model==3 { n=igb_rx_boyu(bilgi); }
         eğer n==0 { ver; }
         eğer n>0 {
-            değişken a: tam64 = kem_mmio_oku64(t);
+            değişken a: tam64 = ag_dma+8192+(ag_rx olarak tam64)*2048;
             değişken j: tam32 = 0;
             iken j<n { kem_fiz_yaz8(ag_dma+40960+(j olarak tam64),kem_fiz_oku8(a+(j olarak tam64))); j=j+1; }
             ag_son_boy=n; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+(n olarak tam64);
         } değilse { ag_atilan=ag_atilan+1; }
+        kem_mmio_yaz64(t,ag_dma+8192+(ag_rx olarak tam64)*2048);
         kem_mmio_yaz64(t+8,0);
         kem_mmio_yaz32(ag_bar+10264,ag_rx olarak tam64);
         ag_rx=(ag_rx+1)%E1K_ADET; i=i+1;
@@ -1479,15 +1672,20 @@ işlev ag_mac_metin(mac: tam64) -> metin {
     }
     ver m;
 }
+çıplak işlev ag_durumu() -> AgArayuz {
+    ver AgArayuz {model:ag_model,mac:ag_mac,bagli:ag_link()!=0,rx:ag_rx_sayi,tx:ag_tx_sayi,rx_bayt:ag_rx_bayt,tx_bayt:ag_tx_bayt,atilan:ag_atilan};
+}
 işlev ag_satir() -> metin {
     güvensiz {
-        değişken s: metin = metin_birlestir("NIC e1000 ",ag_mac_metin(ag_mac));
-        s=kd_tamsayi(metin_birlestir(s," link"),(kem_mmio_oku32(ag_bar+8)>>1)&1);
-        s=kd_tamsayi(metin_birlestir(s," rx"),ag_rx_sayi);
-        s=kd_tamsayi(metin_birlestir(s," tx"),ag_tx_sayi);
-        s=kd_tamsayi(metin_birlestir(s," rx_bayt"),ag_rx_bayt);
-        s=kd_tamsayi(metin_birlestir(s," tx_bayt"),ag_tx_bayt);
-        s=kd_tamsayi(metin_birlestir(s," atilan"),ag_atilan);
+        değişken ar: AgArayuz = ag_durumu();
+        değişken link: tam64 = 0; eğer ar.bagli { link=1; }
+        değişken s: metin = metin_birlestir(metin_birlestir("NIC ",ag_model_adi(ar.model)),metin_birlestir(" ",ag_mac_metin(ar.mac)));
+        s=kd_tamsayi(metin_birlestir(s," link"),link);
+        s=kd_tamsayi(metin_birlestir(s," rx"),ar.rx);
+        s=kd_tamsayi(metin_birlestir(s," tx"),ar.tx);
+        s=kd_tamsayi(metin_birlestir(s," rx_bayt"),ar.rx_bayt);
+        s=kd_tamsayi(metin_birlestir(s," tx_bayt"),ar.tx_bayt);
+        s=kd_tamsayi(metin_birlestir(s," atilan"),ar.atilan);
         ver kd_tamsayi(metin_birlestir(s," vektor"),ag_vektor olarak tam64);
     }
 }

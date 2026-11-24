@@ -14,3 +14,7 @@ Kök Q35 yuvasında gerçek INTx ve iki PCI köprüsünün ardında yoklama kull
 
 İlk toplu çalışmada hata veren kapılar özgün eşiklerle ayrı koşulup geçti.
 - calistir_bm_x86_program15
+
+## Bölüm 3 — PCI ağ matrisi
+
+82540EM, 82574L, 82576 ve modern VirtIO PCI aktarımı iki derleyici ve ikişer açılışta pcap ile doğrulandı. 82574L için ikinci açılış 4 GiB RAM ile yüksek fiziksel adres kullandı. Ayrıca iki RTL8139 açılışı destek durumunu doğruladı. NIC matrisi, PC matrisi ve §7’de istenen regresyonlar geçti. Son regresyon koşusu 1303 saniye sürdü. 82574L'de RDBAH yazımı atlanınca taban geri okuması başarısız oldu. 82576'da alıcı kuyruğunu etkinleştirmeyince ilk çerçeve alınamadı. Her iki değiştirilmiş çekirdekte çıkış 1.

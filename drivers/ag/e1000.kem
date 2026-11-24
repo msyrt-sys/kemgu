@@ -2,9 +2,9 @@
 kullan drivers::ortak::gc::{ GcIstek, GcYanit };
 genel sabit E1K_ADET: tam32 = 8;
 genel sabit E1K_SAYFA: tam32 = 11;
-genel yapı E1kKurulum { sira: tam32; bekleme: tam32; dma: tam64; ctrl: tam64; mac: tam64; }
+genel yapı E1kKurulum { model: tam32; sira: tam32; bekleme: tam32; dma: tam64; ctrl: tam64; mac: tam64; }
 genel işlev e1k_yeni(dma: tam64) -> E1kKurulum {
-    ver E1kKurulum {sira:0,bekleme:0,dma:dma,ctrl:0,mac:0};
+    ver E1kKurulum {model:1,sira:0,bekleme:0,dma:dma,ctrl:0,mac:0};
 }
 genel işlev e1k_adim(s: &değişken E1kKurulum,y: GcYanit) -> GcIstek {
     eğer değil y.basarili { ver GcIstek::Hata("e1000 tasiyici"); }
@@ -44,10 +44,33 @@ genel işlev e1k_adim(s: &değişken E1kKurulum,y: GcYanit) -> GcIstek {
         18 => { ver GcIstek::Yaz32(14344,(E1K_ADET olarak tam64)*16); }
         19 => { ver GcIstek::Yaz32(14352,0); }
         20 => { ver GcIstek::Yaz32(14360,0); }
-        21 => { ver GcIstek::Yaz32(1040,6297610); }
-        22 => { ver GcIstek::Yaz32(1024,262394); }
-        23 => { ver GcIstek::Yaz32(256,67141634); }
-        24 => { ver GcIstek::Oku32(192); }
+        21 => { ver GcIstek::Oku32(10244); }
+        22 => {
+            // Aygıtın DMA tabanını geri okuyup doğrulamadan alıcıyı açma.
+            eğer y.deger != s.dma>>32 { ver GcIstek::Hata("NIC RX tabani geri okuma"); }
+            eğer s.model==3 { s.sira=32; ver GcIstek::Yaz32(10280,0); }
+            s.sira=26; ver GcIstek::Yaz32(1040,6297610);
+        }
+        23 => { ver GcIstek::Yaz32(10280,33554432); }
+        24 => { ver GcIstek::Yaz32(14376,33554432); }
+        25 => { ver GcIstek::Yaz32(1040,6297610); }
+        26 => { ver GcIstek::Yaz32(1024,262394); }
+        27 => { ver GcIstek::Yaz32(256,67141634); }
+        28 => { ver GcIstek::Oku32(192); }
+        29 => {
+            eğer s.model!=3 { ver GcIstek::Bitti; }
+            // 82576 sıfırlamasından sonra PHY 1'de otomatik görüşmeyi yeniden başlat.
+            s.bekleme=0; ver GcIstek::Yaz32(32,69210624);
+        }
+        30 => { ver GcIstek::Oku32(32); }
+        31 => {
+            eğer (y.deger&1073741824)!=0 { ver GcIstek::Hata("igb MDIC hata"); }
+            eğer (y.deger&268435456)!=0 { ver GcIstek::Bitti; }
+            s.bekleme=s.bekleme+1;
+            eğer s.bekleme>=100 { ver GcIstek::Hata("igb MDIC zaman asimi"); }
+            s.sira=30; ver GcIstek::Bekle(100);
+        }
+        32 => { s.sira=23; ver GcIstek::Yaz32(10252,33554434); }
         _ => { ver GcIstek::Bitti; }
     }
 }
@@ -60,4 +83,15 @@ genel işlev e1k_rx_boyu(bilgi: tam64) -> tam32 {
     değişken boy: tam32 = (bilgi&65535) olarak tam32;
     eğer ((bilgi>>32)&2) == 0 veya ((bilgi>>40)&255) != 0 veya boy < 14 veya boy > 1518 { ver -1; }
     ver boy;
+}
+
+// 82576 tek tamponlu gelişmiş tanımlayıcıda DD/EOP ve uzunluk ayrı sözcüklerdedir.
+genel işlev igb_rx_boyu(bilgi: tam64) -> tam32 {
+    eğer (bilgi&1)==0 { ver 0; }
+    değişken n: tam32 = ((bilgi>>32)&65535) olarak tam32;
+    eğer (bilgi&2)==0 veya (bilgi&2533359616)!=0 veya n<14 veya n>1518 { ver -1; }
+    ver n;
+}
+genel işlev igb_tx_sozcugu(boy: tam32) -> tam64 {
+    ver ((boy olarak tam64)<<46)|724566016|(boy olarak tam64);
 }
