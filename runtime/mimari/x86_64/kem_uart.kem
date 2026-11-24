@@ -21,6 +21,34 @@
     ver v;
 }
 
+çıplak işlev kem_port_yaz16(port: dtam16, deger: dtam16) {
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"outw $1, $0"# girdi("{dx}", port) girdi("{ax}", deger) bozulan("~{memory}") }
+    }
+}
+
+çıplak işlev kem_port_oku16(port: dtam16) -> dtam16 {
+    değişken v: dtam16 = 0 olarak dtam16;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"inw $1, $0"# çıktı("={ax}", &v) girdi("{dx}", port) bozulan("~{memory}") }
+    }
+    ver v;
+}
+
+çıplak işlev kem_port_yaz32(port: dtam16, deger: dtam32) {
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"outl $1, $0"# girdi("{dx}", port) girdi("{eax}", deger) bozulan("~{memory}") }
+    }
+}
+
+çıplak işlev kem_port_oku32(port: dtam16) -> dtam32 {
+    değişken v: dtam32 = 0 olarak dtam32;
+    güvensiz {
+        satıriçi_asm { mimari: x86_64 şablon: r#"inl $1, $0"# çıktı("={eax}", &v) girdi("{dx}", port) bozulan("~{memory}") }
+    }
+    ver v;
+}
+
 // Tek çekirdekte seri baytlarıyla aynı sırada ilerleyen, satır sınırını koruyan halka.
 sabit KGUN_BOY: tam64 = 8192;
 küresel değişken kgun_adres: tam64 = 0;

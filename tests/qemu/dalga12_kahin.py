@@ -25,6 +25,7 @@ class Qmp:
     def __init__(self, f, reader):
         self.f = f
         self.reader = reader
+        self.olaylar = []
         assert 'QMP' in self.response(greeting=True)
         self.call('qmp_capabilities')
 
@@ -33,6 +34,8 @@ class Qmp:
             line = self.reader.readline()
             assert line, 'QMP kapandı'
             reply = json.loads(line)
+            if 'event' in reply:
+                self.olaylar.append(reply)
             assert 'error' not in reply, reply
             if greeting or 'return' in reply:
                 return reply if greeting else reply['return']
@@ -55,7 +58,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -63,30 +66,76 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
     shutil.copy('/usr/share/OVMF/OVMF_VARS_4M.fd',w/'dalga12-vars.fd')
     aygitlar = {"usb": usb.disk, "nvme": nvme.disk, "sata": sata.disk}
     aygitlar["usb"], aygitlar[acilis] = aygitlar[acilis], usb.disk
-    cmd = ['qemu-system-x86_64','-M','q35','-m',ram,'-vga','std','-display','none','-no-reboot',
+    makine = 'pc' if pci_topolojisi == 'cf8' else 'q35'
+    if not i8042:
+        makine += ',i8042=off'
+    cmd = ['qemu-system-x86_64','-M',makine,'-m',ram,'-vga','std','-display','none','-no-reboot',
            '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd',
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
-           '-device','isa-debug-exit,iobase=0xf4,iosize=0x04',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
+    if debug_cikis:
+        cmd.extend(['-device','isa-debug-exit,iobase=0xf4,iosize=0x04'])
+    if klavye_izi:
+        cmd.extend(['-trace', 'enable=ps2_set_ledstate',
+                    '-trace', 'enable=ps2_write_keyboard'])
     if not sata_takili:
         cmd.append('-nodefaults')
+    hub_yolu = '.'.join(['1']*hub_derinligi)
+    def alt_port(n):
+        return f',port={hub_yolu}.{n}' if hub_yolu else ''
     if xhci:
         cmd.extend(['-device','qemu-xhci,id=x'])
+        for i in range(hub_derinligi):
+            port = '.'.join(['1']*(i+1))
+            cmd.extend(['-device',f'usb-hub,id=h{i+1},bus=x.0,port={port},ports=4,port-power=on'])
         if klavye == 'usb':
-            cmd.extend(['-device','usb-kbd,bus=x.0'])
-    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'), ('nvme','nvme,serial=dalga12'),
-                      ('sata','ide-hd,bus=ide.0')]:
+            aygit = 'usb-kbd,bus=x.0'+alt_port(1)
+            if klavye_izi:
+                aygit += f',pcap={w}/klavye.pcap'
+            cmd.extend(['-device',aygit])
+    nvme_aygiti = 'nvme,serial=dalga12'
+    sata_aygiti = 'ide-hd,bus=ide.0'
+    if pci_topolojisi == 'kok':
+        cmd.extend(['-device', 'pcie-root-port,id=rp1,chassis=1',
+                    '-device', 'pcie-root-port,id=rp2,chassis=2',
+                    '-device', 'ich9-ahci,id=harici,bus=rp2'])
+        nvme_aygiti += ',bus=rp1'
+        sata_aygiti = 'ide-hd,bus=harici.0'
+    elif pci_topolojisi == 'kopru':
+        cmd.extend(['-device', 'pcie-pci-bridge,id=cevir',
+                    '-device', 'pci-bridge,id=alt,chassis_nr=2,bus=cevir',
+                    '-device', 'ich9-ahci,id=harici,bus=alt'])
+        nvme_aygiti += ',bus=alt'
+        sata_aygiti = 'ide-hd,bus=harici.0'
+    elif pci_topolojisi == 'cf8':
+        cmd.extend(['-device', 'ich9-ahci,id=harici'])
+        sata_aygiti = 'ide-hd,bus=harici.0'
+    elif pci_topolojisi != 'duz':
+        raise ValueError(pci_topolojisi)
+    if yalniz_firmware_diski:
+        # OVMF çekirdeği SCSI'den yükler. Kabuk bu taşıyıcıya sürücü bağlamaz.
+        cmd.extend(['-drive', f'if=none,id=ddevir,format=raw,file={usb.disk}',
+                    '-device','virtio-scsi-pci,id=scsi',
+                    '-device','scsi-hd,id=devir,drive=ddevir,bus=scsi.0,bootindex=1'])
+    for ad, aygit in [('usb','usb-storage,id=bellek,bus=x.0'+alt_port(2)), ('nvme',nvme_aygiti), ('sata',sata_aygiti)]:
+        if yalniz_firmware_diski:
+            continue
         if (ad == 'usb' and not xhci) or (ad == 'sata' and not sata_takili):
             continue
         if ad == 'nvme' and not nvme_ns:
             cmd.extend(['-device',aygit])
             continue
         ek = ',bootindex=1' if ad == acilis else ''
-        cmd.extend(['-drive',f'if=none,id=d{ad},format=raw,file={aygitlar[ad]}',
+        surucu = f'if=none,id=d{ad},format=raw,file={aygitlar[ad]}'
+        if disk_hatasi and disk_hatasi[0] == ad:
+            surucu = f'if=none,id=d{ad},driver=blkdebug,config={disk_hatasi[1]},image.driver=file,image.filename={aygitlar[ad]}'
+            if ad == 'usb':
+                cmd.extend(['-trace','enable=scsi_req_parsed'])
+        cmd.extend(['-drive',surucu,
                     '-device',f'{aygit},drive=d{ad}{ek}'])
     if fare == "usb":
-        cmd.extend(["-device", "usb-mouse,bus=x.0"])
+        cmd.extend(["-device", "usb-mouse,bus=x.0"+alt_port(3)])
     if usb2:
         cmd.extend(['-drive',f'if=none,id=u2,format=raw,file={usb2.disk}',
                     '-device','usb-storage,bus=x.0,drive=u2'])
@@ -119,7 +168,7 @@ class Console:
             raise AssertionError(ser.read_text(encoding='utf-8',errors='replace')) from exc
         assert start
         self.marker = b'KEMGU-OS kabuk v0\n'
-        self.expected = self.marker+f'DISK {disk}\nKABUK_HAZIR\n'.encode()
+        self.expected = self.marker+(f'DISK {disk}\n'.encode() if disk else b'')+b'KABUK_HAZIR\n'
         self.akis = self.expected.decode()
         assert self.output() == self.expected, self.output()
         schema = q.call('query-qmp-schema')
@@ -181,11 +230,12 @@ class Console:
     def shutdown(self):
         try:
             self.input('kapat')
-        except (BrokenPipeError,ConnectionResetError,AssertionError):
-            # QEMU çıkışı son QMP tuş yanıtından önce gelebilir.
+        except (BrokenPipeError,ConnectionResetError,TimeoutError,AssertionError):
+            # S5 son Enter basışında QMP'yi kapatabilir. Son tuş/tik yanıtı
+            # gelmese de aşağıda hem gerçek süreç çıkışı hem tam seri çıktı şarttır.
             pass
-        assert self.p.wait(timeout=5)==1
-        assert self.output()==self.expected+'Sistem durduruldu; güç tuşuna basın.\n'.encode()
+        assert self.p.wait(timeout=5)==0
+        assert self.output()==self.expected+'Sistem kapatılıyor.\n'.encode()
 
     def screen(self):
         def exact():

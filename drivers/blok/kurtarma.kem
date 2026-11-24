@@ -1,0 +1,2 @@
+// İlk komuta ek olarak aynı LBA için en çok üç yeniden gönderim yapılır.
+genel işlev disk_yeniden_dene(deneme: tam32) -> mantıksal { ver deneme < 3; }

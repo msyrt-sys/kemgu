@@ -28,6 +28,7 @@ işlev calis() -> sonuç<mantıksal,metin> {
  eşleş xhci_yeni(bm_dma_al(),16384) { hata(e) => { ver hata(e); } tamam(xx) => {
   değişken x: XhciDurum = xx;
   eşleş bd_xsur(xb,&değişken x) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş bh_hublari_kur(&değişken x,xb) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş bd_bul(&değişken x,xb,yanlış) { hata(e) => { ver hata(e); } tamam(xs) => {
    eğer dizi_boyut(xs) != 3 { ver hata("uc aygit bulunamadi"); }
    değişken i: tam32 = 0;

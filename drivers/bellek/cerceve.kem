@@ -108,3 +108,10 @@ genel işlev ayrilmis_isaretle(d: &değişken CerceveAyirici, taban: tam64, uzun
     }
     ver tamam(doğru);
 }
+// Son bayttaki hizalama bitleri yönetilen sayfalardan sayılmaz.
+genel çıplak işlev cerceve_bos(d: &CerceveAyirici) -> tam32 {
+    değişken bos: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < d.toplam { eğer değil bit_oku(d.bitmap,i) { bos=bos+1; } i=i+1; }
+    ver bos;
+}

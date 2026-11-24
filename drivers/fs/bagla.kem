@@ -6,7 +6,7 @@ genel yapı BagBolum { aygit: metin; aygit_no: tam32; bolum_no: tam32; lba: tam6
 genel yapı BagKaydi { ad: metin; bolum: BagBolum; kok: mantıksal; }
 genel yapı BagTablo { kayitlar: Dizi<BagKaydi>; ramdisk: mantıksal; uyari: metin; }
 genel işlev bag_bolum(aygit: metin, no: tam32, pno: tam32, lba: tam64, bpb: Dizi<dtam8>, gpt_tur: Dizi<dtam8>, mbr_tur: tam32) -> sonuç<BagBolum,metin> {
-    eğer (değil metin_esit(aygit,"nvme") ve değil metin_esit(aygit,"sata") ve değil metin_esit(aygit,"usb")) veya no < 0 veya pno < 1 veya lba < 0 veya mbr_tur < 0 veya mbr_tur > 255 { ver hata("baglama bolum kimligi"); }
+    eğer (değil metin_esit(aygit,"nvme") ve değil metin_esit(aygit,"sata") ve değil metin_esit(aygit,"usb") ve değil metin_esit(aygit,"ram")) veya no < 0 veya pno < 1 veya lba < 0 veya mbr_tur < 0 veya mbr_tur > 255 { ver hata("baglama bolum kimligi"); }
     eşleş bpb_coz(bpb) { hata(e) => { ver hata("baglama fat32 degil"); } tamam(v) => { } }
     değişken esp: mantıksal = mbr_tur == 239;
     eğer dizi_boyut(gpt_tur) != 0 { eşleş guid_bicimle(gpt_tur) { hata(e) => { ver hata(e); } tamam(v) => { eğer metin_esit(v,"C12A7328-F81F-11D2-BA4B-00A0C93EC93B") { esp=doğru; } } } }
@@ -20,7 +20,7 @@ genel işlev bag_tablosu(bs: Dizi<BagBolum>, kok: seçimlik<tam64>) -> sonuç<Ba
     değişken sec: tam32 = -1; değişken eslesen: tam32 = 0; değişken i: tam32 = 0;
     iken i < n {
         değişken b: BagBolum = dizi_al(bs,i);
-        eğer b.aygit_no < 0 veya b.bolum_no < 1 veya b.lba < 0 veya b.seri < 0 veya b.seri > 4294967295 veya (değil metin_esit(b.aygit,"nvme") ve değil metin_esit(b.aygit,"sata") ve değil metin_esit(b.aygit,"usb")) { ver hata("baglama kimligi"); }
+        eğer b.aygit_no < 0 veya b.bolum_no < 1 veya b.lba < 0 veya b.seri < 0 veya b.seri > 4294967295 veya (değil metin_esit(b.aygit,"nvme") ve değil metin_esit(b.aygit,"sata") ve değil metin_esit(b.aygit,"usb") ve değil metin_esit(b.aygit,"ram")) { ver hata("baglama kimligi"); }
         değişken j: tam32 = 0; iken j < i { değişken a: BagBolum = dizi_al(bs,j); eğer metin_esit(bag_ad(a),bag_ad(b)) { ver hata("yinelenen baglama"); } j=j+1; }
         eşleş kok { hiç => { } değer(k) => { eğer k < 0 veya k > 4294967295 { ver hata("kok seri araligi"); } eğer b.seri == k { sec=i; eslesen=eslesen+1; } } } i=i+1;
     }

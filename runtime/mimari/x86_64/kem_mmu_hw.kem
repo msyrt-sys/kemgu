@@ -653,3 +653,9 @@ küresel değişken kis_ileti_aktif: tam32 = 0;
  değişken p: *metin = (&adr) olarak *metin;
  ver *p;
 }
+
+çıplak işlev kem_heap_kullanimi() -> tam64 {
+    değişken alt: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq __heap_start(%rip), $0"# çıktı("=r",&alt) } }
+    ver kem_bump-alt;
+}

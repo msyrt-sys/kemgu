@@ -27,7 +27,7 @@ def denetle(command,dump,w,descriptors,text,serial,p):
         start=serial.read_bytes().index(b'KEMGU-OS kabuk v0\n')
         prefix=b'KEMGU-OS kabuk v0\nDISK NVMe\nKABUK_HAZIR\n';request=mode
         assert serial.read_bytes()[start:]==prefix
-    tail={'yenidenbaslat':b'GUC YENIDENBASLAT FADT\n','8042':b'GUC YENIDENBASLAT 8042\n','uclu':b'GUC YENIDENBASLAT UCLU\n','kapat':'Sistem durduruldu; güç tuşuna basın.\n'.encode()}[mode]
+    tail={'yenidenbaslat':b'GUC YENIDENBASLAT FADT\n','8042':b'GUC YENIDENBASLAT 8042\n','uclu':b'GUC YENIDENBASLAT UCLU\n','kapat':'Sistem kapatılıyor.\n'.encode()}[mode]
     expected=prefix+tail;before=hashlib.sha256((w/'disk.img').read_bytes()).hexdigest() if not direct else None
     schema=command('query-qmp-schema');allowed=next({m['name'] for m in e['members']} for e in schema if any(m.get('name')=='apostrophe' for m in e.get('members',[])))
     def press(c):
@@ -44,7 +44,7 @@ def denetle(command,dump,w,descriptors,text,serial,p):
         pass
     until=time.monotonic()+5
     while p.poll() is None and time.monotonic()<until:time.sleep(.02)
-    assert p.poll()==(1 if mode=='kapat' else 0),(mode,p.poll(),serial.read_bytes()[-400:])
+    assert p.poll()==0,(mode,p.poll(),serial.read_bytes()[-400:])
     data=serial.read_bytes();assert data.count(b'KEMGU-OS UEFI\n')==1,'QEMU yeniden açıldı'
     assert data[start:]==expected,(data[start:],expected)
     if before is not None:assert hashlib.sha256((w/'disk.img').read_bytes()).hexdigest()==before

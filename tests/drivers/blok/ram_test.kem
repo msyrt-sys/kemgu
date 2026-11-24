@@ -1,0 +1,28 @@
+// İki sektörlük aygıtta LBA 1 son geçerli istektir. Hatalı sınırda yazma oluşmamalı.
+kullan drivers::blok::ram::{ RamBlok, ram_blok_yeni, ram_blok_iste, ram_blok_adim } olarak blokram;
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+kullan drivers::fs::ram::{ RamDosyalar, RamYer, ramfs_yeni, ramfs_yaz, ramfs_yer, ramfs_sil, ramfs_liste };
+işlev main() -> tam32 {
+    eşleş ram_blok_yeni(8192,1024) { hata(e) => { ver 1; } tamam(v) => {
+        değişken a: RamBlok = v; değişken bos: Dizi<dtam8> = [];
+        eşleş ram_blok_iste(&değişken a,2,1,bos,yanlış) { tamam(w) => { ver 2; } hata(e) => { } }
+        eşleş ram_blok_iste(&değişken a,1,1,bos,yanlış) { hata(e) => { ver 3; } tamam(w) => { } }
+        değişken y: GcYanit = gc_bos();
+        eşleş ram_blok_adim(&değişken a,y) { GcIstek::BellekOku(p,n) => { eğer p != 8704 veya n != 512 { ver 4; } } _ => { ver 5; } }
+        y.baytlar=bayt_sifir(512);
+        eşleş ram_blok_adim(&değişken a,y) { GcIstek::Bitti => { } _ => { ver 6; } }
+    } }
+    değişken s: RamDosyalar = ramfs_yeni(8192,2);
+    eşleş ramfs_yer(&s,"/ilk") { hata(e) => { ver 7; } tamam(y) => {
+        eşleş ramfs_yaz(&değişken s,y,4097,yanlış,yanlış) { hata(e) => { ver 8; } tamam(n) => { } }
+    } }
+    eşleş ramfs_yer(&s,"/ikinci") { hata(e) => { ver 9; } tamam(y) => {
+        eşleş ramfs_yaz(&değişken s,y,1,yanlış,yanlış) { tamam(n) => { ver 10; } hata(e) => { } }
+    } }
+    eşleş ramfs_yer(&s,"/ilk") { hata(e) => { ver 11; } tamam(y) => {
+        eşleş ramfs_sil(&değişken s,y,yanlış) { hata(e) => { ver 12; } tamam(w) => { } }
+    } }
+    eşleş ramfs_liste(&s,"/") { hata(e) => { ver 13; } tamam(xs) => { eğer dizi_boyut(xs) != 0 { ver 14; } } }
+    ver 0;
+}

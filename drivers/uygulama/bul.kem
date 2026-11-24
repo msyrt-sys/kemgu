@@ -1,6 +1,6 @@
 kullan drivers::ortak::utf8::{ utf8_coz };
 // Türkçe Q alfabesi ve temel Latin harflerini aynı küçük harfe eşle.
-işlev bul_harf(k: tam32) -> tam32 {
+genel işlev bul_harf(k: tam32) -> tam32 {
     eğer k == 73 { ver 305; } eğer k == 304 { ver 105; }
     eğer k >= 65 ve k <= 90 { ver k+32; }
     eğer k == 199 veya k == 214 veya k == 220 { ver k+32; }

@@ -1,7 +1,10 @@
+kullan drivers::acilis::uefi::{ gop_denetle };
 // EBS sonrası çerçeve ayırıcı: cihaz/ekran adresleri firmware RAM haritasından gelir.
 kullan drivers::acilis::uefi_harita::{ uefi_harita, uefi_koru } olarak uh;
+kullan drivers::acpi::mcfg::{ McfgPencere, mcfg_coz, mcfg_adres };
+kullan drivers::pci::yapilandirma::{ bar_boyu, bar_boyu64 };
 kullan drivers::bellek::harita::{ BellekBolgesi };
-kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, ayir_ardisik, serbest_ardisik };
+kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, cerceve_bos, ayir_ardisik, serbest_ardisik };
 işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> sonuç<tam64,metin> {
  eşleş ayir_ardisik(d,sayfa) {
   hiç => { ver hata(metin_birlestir("UEFI RAM yetmedi: ",ad)); }
@@ -54,9 +57,10 @@ işlev uefi_bellek_kur_ic(b: UefiBilgi,surec: mantıksal) -> sonuç<mantıksal,m
   // Python: xHCI 16 MiB + disk 16 MiB = 8192*4096; hizalama payı 15 sayfa. VirtIO 64 KiB + 64 KiB.
   eşleş uefi_tahsis(&değişken d,8207,"DMA") { hata(e) => { ver hata(e); } tamam(t) => { bm_dma_tabani=((t+65535)/65536)*65536; bm_disk_dma_tabani=bm_dma_tabani+16777216; } }
   eşleş uefi_tahsis(&değişken d,32,"VIRTIO") { hata(e) => { ver hata(e); } tamam(t) => { vblk_dma=t; vnet_dma=t+65536; } }
-  eşleş uefi_pci_esle(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş uefi_pci_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_guc_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş pat_gop_kur(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eğer surec {
    değişken sakla: Dizi<CerceveAyirici> = [d];
    değişken adres: *tam64 = (&sakla) olarak *tam64;
@@ -94,19 +98,196 @@ işlev uefi_mmio_esle(d: &değişken CerceveAyirici, adres: tam64, boy: tam64) -
  kxm_cr3_yaz(kxm_cr3_oku());
  ver tamam(doğru);
 }
-işlev uefi_pci_esle(d: &değişken CerceveAyirici) -> sonuç<mantıksal,metin> {
- // Bu dalganın yürütücüleri NVMe ve xHCI BAR0'da en çok 16 KiB kullanır.
- // AHCI BAR5 32-bit olduğundan girişin 0..4 GiB eşlemesindedir.
- değişken siniflar: Dizi<tam32> = [1,12]; değişken altlar: Dizi<tam32> = [8,3]; değişken arabirim: Dizi<tam32> = [2,48];
- değişken i: tam32 = 0;
- iken i < 2 {
-  eşleş bm_pci_bul(dizi_al(siniflar,i),dizi_al(altlar,i),dizi_al(arabirim,i)) { hata(e) => { } tamam(bdf) => {
-   değişken alt: tam64 = kem_pci_oku32(bdf,16); değişken a: tam64 = alt&4294967280;
-   eğer (alt&6) == 4 { a=a|(kem_pci_oku32(bdf,20)<<32); }
-   eşleş uefi_mmio_esle(d,a,16384) { hata(e) => { ver hata(e); } tamam(v) => { } }
-   bm_yaz(metin_birlestir("MMIO ",tam_metin(a)));
+işlev uefi_ecam_kur(d: &değişken CerceveAyirici,b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_tablo_bul(b,"MCFG") { hata(e) => { ver hata(e); } tamam(t) => {
+  eğer dizi_boyut(t) == 0 { bm_yaz("PCI YOL CF8"); ver tamam(yanlış); }
+  eşleş mcfg_coz(t) { hata(e) => { ver hata(e); } tamam(xs) => {
+   güvensiz {
+    değişken tablo: tam64 = malloc(2048) olarak tam64;
+    eğer tablo == 0 { ver hata("MCFG yol tablosu icin RAM yok"); }
+    memset(tablo olarak *tam8,0,2048);
+    değişken var: mantıksal = yanlış;
+    için w: xs {
+     // Eski BDF arayüzü PCI kesim 0'a aittir.
+     eğer w.kesim == 0 {
+      değişken a: tam64 = mcfg_adres(w,w.ilk*256,0);
+      değişken boy: tam64 = ((w.son-w.ilk+1) olarak tam64)<<20;
+      eşleş uefi_mmio_esle(d,a,boy) { hata(e) => { ver hata(e); } tamam(v) => { } }
+      değişken bus: tam32 = w.ilk;
+      iken bus <= w.son { kem_mmio_yaz64(tablo+(bus olarak tam64)*8,mcfg_adres(w,bus*256,0)); bus=bus+1; }
+      var=doğru;
+     }
+    }
+    pci_ecam_yollari=tablo;
+    eğer var { bm_yaz("PCI YOL ECAM"); } değilse { bm_yaz("PCI YOL CF8"); }
+    ver tamam(var);
+   }
   } }
-  i=i+1;
+ } }
+}
+çıplak işlev uefi_yaprak(adres: tam64) -> tam64 {
+ değişken tablo: tam64 = kxm_cr3_oku()&4503599627366400;
+ değişken bit: tam32 = 39;
+ iken bit >= 12 {
+  değişken g: tam64 = kem_mmio_oku64(tablo+((adres>>bit)&511)*8);
+  eğer (g&1) == 0 { ver 0; }
+  eğer bit == 12 veya (bit < 39 ve (g&128) != 0) { ver g; }
+  tablo=g&4503599627366400; bit=bit-9;
+ } ver 0;
+}
+// Her BAR için 5 adet 64-bit alan: BDF, indeks, tür bayrakları, adres ve boy.
+küresel değişken pci_bar_tablo: tam64 = 0;
+küresel değişken pci_bar_sayi: tam64 = 0;
+çıplak işlev pci_bar_ekle(bdf: tam32,i: tam32,tur: tam32,adr: tam64,boy: tam64) {
+ değişken p: tam64 = pci_bar_tablo+pci_bar_sayi*40;
+ kem_mmio_yaz64(p,bdf olarak tam64); kem_mmio_yaz64(p+8,i olarak tam64);
+ kem_mmio_yaz64(p+16,tur olarak tam64); kem_mmio_yaz64(p+24,adr); kem_mmio_yaz64(p+32,boy);
+ pci_bar_sayi=pci_bar_sayi+1;
+}
+işlev pci_bar_olc(bdf: tam32) {
+ değişken baslik: tam32 = ((kem_pci_oku32(bdf,12)>>16)&127) olarak tam32;
+ eğer baslik != 0 ve baslik != 1 { ver; }
+ değişken adet: tam32 = 6; değişken rom: tam32 = 48;
+ eğer baslik == 1 { adet=2; rom=56; }
+ değişken komut: tam32 = kem_pci_oku16(bdf,4);
+ // Yalnız command yarı sözcüğünü yaz: status W1C bitleri korunur.
+ kem_pci_yaz16(bdf,4,komut&65532);
+ değişken i: tam32 = 0;
+ iken i < adet {
+  değişken ofs: tam32 = 16+i*4;
+  değişken alt: tam64 = kem_pci_oku32(bdf,ofs);
+  değişken genis: mantıksal = (alt&7) == 4 ve i+1 < adet;
+  değişken ust: tam64 = 0; eğer genis { ust=kem_pci_oku32(bdf,ofs+4); }
+  kem_pci_yaz32(bdf,ofs,4294967295); eğer genis { kem_pci_yaz32(bdf,ofs+4,4294967295); }
+  değişken m: tam64 = kem_pci_oku32(bdf,ofs); değişken yuk: tam64 = 0;
+  eğer genis { yuk=kem_pci_oku32(bdf,ofs+4); kem_pci_yaz32(bdf,ofs+4,ust); }
+  kem_pci_yaz32(bdf,ofs,alt);
+  değişken adr: tam64 = alt&4294967280; değişken tur: tam32 = 0;
+  değişken boy: tam64 = bar_boyu(m);
+  eğer (alt&1) != 0 { tur=1; adr=alt&4294967292; }
+  değilse { eğer (alt&8) != 0 { tur=4; }
+   eğer genis { tur=tur|2; adr=adr|(ust<<32); boy=bar_boyu64(((yuk<<32)|m) olarak dtam64) olarak tam64; }
+  }
+  eğer boy > 0 { pci_bar_ekle(bdf,i,tur,adr,boy); }
+  eğer genis { i=i+1; } i=i+1;
  }
+ değişken eski: tam64 = kem_pci_oku32(bdf,rom);
+ kem_pci_yaz32(bdf,rom,4294965248); değişken maske: tam64 = kem_pci_oku32(bdf,rom)&4294965248;
+ kem_pci_yaz32(bdf,rom,eski);
+ eğer maske != 0 {
+  değişken rom_adr: tam64 = 0; eğer (eski&1) != 0 { rom_adr=eski&4294965248; }
+  pci_bar_ekle(bdf,6,8,rom_adr,(maske^4294967295)+1);
+ }
+ kem_pci_yaz16(bdf,4,komut);
+}
+işlev uefi_pci_esle(d: &değişken CerceveAyirici,b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eşleş uefi_ecam_kur(d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+ değişken islevler: Dizi<tam32> = kem_pci_islevler();
+ güvensiz {
+  pci_bar_tablo=malloc(((dizi_boyut(islevler)+1) olarak tam64)*7*40) olarak tam64;
+  eğer pci_bar_tablo == 0 { ver hata("PCI BAR tablosu icin RAM yok"); }
+  için bdf: islevler { pci_bar_olc(bdf); }
+  değişken i: tam64 = 0;
+  iken i < pci_bar_sayi {
+   değişken p: tam64 = pci_bar_tablo+i*40; değişken a: tam64 = kem_mmio_oku64(p+24);
+   eğer (kem_mmio_oku64(p+16)&1) == 0 ve a > 0 {
+    eşleş uefi_mmio_esle(d,a,kem_mmio_oku64(p+32)) { hata(e) => { ver hata(e); } tamam(v) => { } }
+    bm_yaz(metin_birlestir("MMIO ",tam_metin(a)));
+   }
+   i=i+1;
+  }
+ }
+ ver tamam(doğru);
+}
+
+// IA32_PAT[7] yazma-birleştirme. CPUID.01H:EDX[16] PAT desteğini bildirir.
+çıplak işlev pat_destekli() -> mantıksal {
+ değişken oz: tam32 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1, %eax
+cpuid"# çıktı("={dx}",&oz) bozulan("~{rax}") bozulan("~{rbx}") bozulan("~{rcx}") } }
+ ver (oz&65536) != 0;
+}
+çıplak işlev pat_oku() -> tam64 {
+ değişken a: tam32 = 0; değişken d: tam32 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$631, %ecx
+rdmsr"# çıktı("={ax}",&a) çıktı("={dx}",&d) bozulan("~{rcx}") bozulan("~{memory}") } }
+ ver ((a olarak tam64)&4294967295)|((d olarak tam64)<<32);
+}
+çıplak işlev pat_yaz(v: tam64) {
+ değişken a: tam32 = v olarak tam32; değişken d: tam32 = (v>>32) olarak tam32;
+ // Tek işlemcili erken açılışta CD=1/NW=0 ile önbellekleri ve TLB'yi temizle.
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+cli
+movq %cr0, %r8
+movq %r8, %r9
+btsq $$30, %r9
+btrq $$29, %r9
+movq %r9, %cr0
+wbinvd
+movq %cr3, %r9
+movq %r9, %cr3
+movl $$631, %ecx
+wrmsr
+wbinvd
+movq %r9, %cr3
+movq %r8, %cr0
+popfq"# girdi("{ax}",a) girdi("{dx}",d) bozulan("~{rcx}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{memory}") } }
+}
+çıplak işlev pat_doldurma(fb: tam64, piksel: tam64) -> tam64 {
+ değişken bas: tam64 = bm_tsc_oku();
+ lfb_doldur(fb,piksel,0);
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"mfence"# bozulan("~{memory}") } }
+ ver bm_tsc_oku()-bas;
+}
+// Büyük yaprağın dışarıda kalan 4 KiB sayfaları eski fiziksel adres ve öznitelikleri korur.
+işlev pat_gop_tablo(d: &değişken CerceveAyirici, adres: tam64) -> sonuç<tam64,metin> {
+ değişken tablo: tam64 = kxm_cr3_oku()&4503599627366400;
+ değişken bit: tam32 = 39;
+ iken bit > 21 {
+  değişken g: tam64 = kem_mmio_oku64(tablo+((adres>>bit)&511)*8);
+  eğer (g&1) == 0 veya (g&128) != 0 { ver hata("GOP ust sayfa tablosu"); }
+  tablo=g&4503599627366400; bit=bit-9;
+ }
+ değişken yuva: tam64 = tablo+((adres>>21)&511)*8;
+ değişken buyuk: tam64 = kem_mmio_oku64(yuva);
+ eğer (buyuk&1) == 0 { ver hata("GOP PDE yok"); }
+ eğer (buyuk&128) == 0 { ver tamam(buyuk&4503599627366400); }
+ eşleş uefi_tahsis(d,1,"TABLO") { hata(e) => { ver hata(e); } tamam(t) => {
+  değişken taban: tam64 = buyuk&4503599625273344;
+  değişken bayrak: tam64 = (buyuk&3967)|((buyuk&4096)>>5)|((buyuk>>63)<<63);
+  değişken i: tam64 = 0;
+  iken i < 512 { kem_mmio_yaz64(t+i*8,(taban+i*4096)|bayrak); i=i+1; }
+  kem_mmio_yaz64(yuva,t|(buyuk&7)); ver tamam(t);
+ } }
+}
+küresel değişken pat_olcum_acik: mantıksal = yanlış;
+işlev pat_gop_kur(d: &değişken CerceveAyirici, b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eğer değil pat_destekli() { bm_yaz("GOP PAT destegi yok"); ver tamam(yanlış); }
+ eşleş gop_denetle(b) { hata(e) => { ver hata(e); } tamam(v) => {} }
+ değişken fb: tam64 = dizi_al(b.alan,3); değişken son: tam64 = fb+dizi_al(b.alan,4);
+ değişken piksel: tam64 = dizi_al(b.alan,7)*dizi_al(b.alan,6)/4;
+ değişken once: tam64 = 0;
+ güvensiz { eğer pat_olcum_acik { once=pat_doldurma(fb,piksel); } }
+ değişken eski: tam64 = pat_oku();
+ değişken yeni: tam64 = (eski&72057594037927935)|72057594037927936;
+ pat_yaz(yeni);
+ değişken a: tam64 = (fb/4096)*4096;
+ iken a < son {
+  eşleş pat_gop_tablo(d,a) { hata(e) => { ver hata(e); } tamam(t) => {
+   değişken sinir: tam64 = ((a/2097152)+1)*2097152;
+   iken a < sinir ve a < son {
+    değişken yuva: tam64 = t+((a>>12)&511)*8;
+    değişken g: tam64 = kem_mmio_oku64(yuva);
+    eğer (g&1) == 0 veya (g&4503599627366400) != a { ver hata("GOP fiziksel esleme"); }
+    kem_mmio_yaz64(yuva,g|152); a=a+4096;
+   }
+  } }
+ }
+ kxm_cr3_yaz(kxm_cr3_oku());
+ güvensiz { eğer pat_olcum_acik { kap_dok("PAT_TSC",once,pat_doldurma(fb,piksel),piksel); } }
+ kap_dok("PAT_MSR",eski,pat_oku(),kxm_cr3_oku());
+ kap_dok("PAT_ILK",fb,uefi_yaprak(fb),0); kap_dok("PAT_SON",son-1,uefi_yaprak(son-1),0);
+ değişken ram: tam64 = dizi_al(b.alan,14); kap_dok("PAT_RAM",ram,uefi_yaprak(ram),0);
+ kap_dok("PAT_MMIO",4276092928,uefi_yaprak(4276092928),0);
  ver tamam(doğru);
 }

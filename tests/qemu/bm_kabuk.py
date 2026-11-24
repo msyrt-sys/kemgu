@@ -50,7 +50,9 @@ def boot(mode,n):
             for text in COMMANDS:
                 for c in text+'\n':assert keys(c)[0] in allowed,(c,keys(c))
             assert {'shift','backspace','left','right'} <= allowed
-            expected=b'KEMGU-OS kabuk v0\nDISK '+{'nvme':b'NVMe','ahci':b'AHCI','usb':b'USB'}[mode]+b'\nKABUK_HAZIR\n'
+            kabuk_basligi=b'KEMGU-OS kabuk v0\nDISK '+{'nvme':b'NVMe','ahci':b'AHCI','usb':b'USB'}[mode]+b'\nKABUK_HAZIR\n'
+            # PVH'de LAPIC/MSI kurulmaz. AHCI sürücüsü yoklama yolunu seri hatta bildirir.
+            expected=(b'AHCI YOL yoklama\n' if mode=='ahci' else b'')+kabuk_basligi
             def await_output(target):
                 while True:
                     actual=serial.read_bytes() if serial.exists() else b''
@@ -70,7 +72,7 @@ def boot(mode,n):
                     if p.poll() is not None:raise RuntimeError(f'boşta çöktü rc={p.poll()}')
                     if serial.read_bytes()!=expected:raise AssertionError(f'boşta seri değişti: {serial.read_bytes()!r}')
                     time.sleep(.1)
-            akis=expected.decode('utf-8')
+            akis=kabuk_basligi.decode('utf-8')
             def ekran(girdi='',imlec=None):
                 img=kabuk_goruntu(akis,girdi,imlec);son=time.monotonic()+10;bas=time.monotonic()
                 while True:

@@ -1,0 +1,62 @@
+// Name(_S5_, Package(...)) için sabit AML alt kümesi. Hiçbir yöntem çalıştırılmaz.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, imza_esit };
+kullan drivers::acpi::tablo::{ sdt_coz };
+genel yapı S5Tipleri { a: tam32; b: tam32; }
+yapı S5Sabit { deger: tam32; sonraki: tam32; }
+
+işlev s5_sabit(b: Dizi<dtam8>, p: tam32, son: tam32) -> sonuç<S5Sabit,metin> {
+    eğer p >= son { ver hata("_S5_ sabiti eksik"); }
+    değişken v: tam32 = oku_u8(b,p);
+    değişken n: tam32 = 1;
+    eğer v == 10 ve son-p >= 2 { v=oku_u8(b,p+1); n=2; }
+    değilse eğer v == 11 ve son-p >= 3 { v=oku_le16(b,p+1); n=3; }
+    değilse eğer v > 1 { ver hata("_S5_ sabit bicimi"); }
+    eğer v > 7 { ver hata("_S5_ uyku tipi"); }
+    ver tamam(S5Sabit { deger:v, sonraki:p+n });
+}
+
+işlev s5_paket(b: Dizi<dtam8>, bas: tam32, son: tam32) -> sonuç<S5Tipleri,metin> {
+    eğer bas >= son veya oku_u8(b,bas) != 18 veya son-bas < 3 { ver hata("_S5_ paket bekleniyor"); }
+    değişken p: tam32 = bas+1;
+    değişken ilk: tam32 = oku_u8(b,p);
+    değişken ek: tam32 = ilk>>6;
+    eğer son-p <= ek+1 { ver hata("_S5_ kisa uzunluk"); }
+    değişken boy: tam32 = ilk&63;
+    eğer ek > 0 {
+        eğer (ilk&48) != 0 { ver hata("_S5_ ayrilmis uzunluk bitleri"); }
+        boy=ilk&15;
+        değişken i: tam32 = 0;
+        iken i < ek { boy=boy|(oku_u8(b,p+1+i)<<(4+i*8)); i=i+1; }
+    }
+    eğer boy > son-p veya boy <= ek+2 { ver hata("_S5_ paket siniri"); }
+    değişken bitis: tam32 = p+boy;
+    p=p+1+ek;
+    eğer oku_u8(b,p) < 2 { ver hata("_S5_ iki uyku tipi gerekli"); }
+    eşleş s5_sabit(b,p+1,bitis) { hata(e) => { ver hata(e); } tamam(a) => {
+        eşleş s5_sabit(b,a.sonraki,bitis) { hata(e) => { ver hata(e); } tamam(v) => {
+            ver tamam(S5Tipleri { a:a.deger,b:v.deger });
+        } }
+    } }
+}
+
+genel işlev s5_coz(b: Dizi<dtam8>) -> sonuç<S5Tipleri,metin> {
+    eşleş sdt_coz(b) { hata(e) => { ver hata("DSDT saglama veya uzunluk"); } tamam(h) => {
+        eğer değil imza_esit(b,0,"DSDT") { ver hata("DSDT imza"); }
+        değişken son: tam32 = h.uzunluk olarak tam32;
+        değişken i: tam32 = 36;
+        iken i <= son-5 {
+            eğer oku_u8(b,i) == 8 {
+                değişken p: tam32 = i+1;
+                eğer oku_u8(b,p) == 92 { p=p+1; }
+                eğer p <= son-4 ve imza_esit(b,p,"_S5_") { ver s5_paket(b,p+4,son); }
+            }
+            i=i+1;
+        }
+    } }
+    ver hata("DSDT _S5_ yok");
+}
+
+// PM1_CNT içindeki SCI_EN ve ilgisiz denetim bitlerini korur.
+genel çıplak işlev s5_pm1_degeri(eski: tam32, tip: tam32) -> tam32 {
+    ver (eski&50175)|(tip<<10)|8192;
+}

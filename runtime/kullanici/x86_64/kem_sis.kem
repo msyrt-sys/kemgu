@@ -44,6 +44,8 @@
 çıplak işlev sis_olustur_dizin(yol: metin) -> tam64 { ver sis_cagir(48,sis_metin_adres(yol),0,0); }
 çıplak işlev sis_sil(yol: metin) -> tam64 { ver sis_cagir(49,sis_metin_adres(yol),0,0); }
 çıplak işlev sis_sil_dizin(yol: metin) -> tam64 { ver sis_cagir(50,sis_metin_adres(yol),0,0); }
+çıplak işlev sis_kopyala(eski: metin,yeni: metin) -> tam64 { ver sis_cagir(71,sis_metin_adres(eski),sis_metin_adres(yeni),0); }
+çıplak işlev sis_tasi(eski: metin,yeni: metin) -> tam64 { ver sis_cagir(72,sis_metin_adres(eski),sis_metin_adres(yeni),0); }
 çıplak işlev sis_yeniden_adlandir(eski: metin, yeni: metin) -> tam64 { ver sis_cagir(51,sis_metin_adres(eski),sis_metin_adres(yeni),0); }
 çıplak işlev sis_calisma_dizini_al(buf: tam64,n: tam64) -> tam64 { ver sis_cagir(52,buf,n,0); }
 çıplak işlev sis_calisma_dizini_degistir(yol: metin) -> tam64 { ver sis_cagir(53,sis_metin_adres(yol),0,0); }
@@ -80,3 +82,46 @@ yapı SisHucreMetni { adres: tam64; on: tam64; arka: tam64; }
 
 çıplak işlev sis_boru(cift: tam64) -> tam64 { ver sis_cagir(69,cift,0,0); }
 çıplak işlev sis_baslat_eslemeli(yol: metin,argv: tam64,cift: tam64) -> tam64 { ver sis_cagir(70,sis_metin_adres(yol),argv,cift); }
+
+// Son satırdaki alanı Enter ile kabul eder, Escape ile iptal eder.
+// Çağıran olay kaydı ve UTF-8 alanı için en az 512 bayt ayırır.
+işlev kul_metin_al(p: tam64,sat: tam32,etiket: metin) -> seçimlik<metin> {
+    değişken n: tam32 = 0; değişken dolu: mantıksal = yanlış;
+    iken doğru {
+        sis_bayt_koy(p+128+(n olarak tam64),0);
+        değişken bas: tam32 = 0;
+        eğer n > 40 { bas=n-40; iken bas < n ve (sis_bayt_al(p+128+(bas olarak tam64))&192) == 128 { bas=bas+1; } }
+        değişken mesaj: metin = metin_birlestir(etiket,sis_dize(p+128+(bas olarak tam64)));
+        eğer dolu { mesaj="Alan sınırı 255 bayt. Geri silin."; }
+        sis_hucre(sat olarak tam64,0,"                                                               ",0,16777215);
+        sis_hucre(sat olarak tam64,0,mesaj,0,16777215);
+        eğer sis_olay_bekle(p,1,-1) < 0 { ver hiç; }
+        eğer sis_alan(p,3) != 0 {
+            değişken kod: tam64 = sis_alan(p,1); değişken un: tam64 = sis_alan(p,2);
+            eğer kod == 1 { ver hiç; }
+            eğer kod == 28 ve değil dolu { ver değer(metin_birlestir("",sis_dize(p+128))); }
+            eğer kod == 14 ve n > 0 {
+                n=n-1; iken n > 0 ve (sis_bayt_al(p+128+(n olarak tam64))&192) == 128 { n=n-1; }
+                dolu=yanlış;
+            } değilse eğer un >= 32 ve değil dolu {
+                değişken s: metin = kod_metin(un olarak tam32); değişken boy: tam32 = metin_uzunluk(s);
+                eğer boy > 255-n { dolu=doğru; } değilse {
+                    değişken i: tam32 = 0;
+                    iken i < boy { sis_bayt_koy(p+128+(n olarak tam64),metin_bayt(s,i) olarak tam32); n=n+1; i=i+1; }
+                    dolu=yanlış;
+                }
+            }
+        }
+    }
+    ver hiç;
+}
+işlev kul_onay(p: tam64,sat: tam32,etiket: metin) -> mantıksal {
+    sis_hucre(sat olarak tam64,0,etiket,0,16777215);
+    iken doğru {
+        eğer sis_olay_bekle(p,1,-1) < 0 { ver yanlış; }
+        eğer sis_alan(p,3) != 0 {
+            değişken kod: tam64 = sis_alan(p,1);
+            eğer kod == 18 { ver doğru; } eğer kod == 1 veya kod == 35 { ver yanlış; }
+        }
+    } ver yanlış;
+}

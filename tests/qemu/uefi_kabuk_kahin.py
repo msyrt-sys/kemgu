@@ -30,7 +30,7 @@ def denetle(command,response,f,w,serial,p,n,ram,disk,mode='nvme',esp=False):
     enum=next(x for x in schema if any(m.get('name')=='bracket_left' for m in x.get('members',[]) if isinstance(m,dict)))
     allowed=set(enum.get('values',[]))|{m['name'] for m in enum.get('members',[])}
     commands=['ls /','cat /merhaba.txt','cat /yok','echo Ağaç İş','cat /belgeler/not.txt','yanlis','cat /kaydir.txt']
-    root=b'dalga8.txt\nbelgeler/\nmerhaba.txt\nkaydir.txt\n'
+    root=b'ram/\ndalga8.txt\nbelgeler/\nmerhaba.txt\nkaydir.txt\n'
     if esp:root+=b'EFI/\nKEMGU/\n'
     outputs=[root,MERHABA+b'\n',b'HATA bulunamadi\n','Ağaç İş\n'.encode(),NOT,b'HATA bilinmeyen komut\n',KAYDIR]
     for text in commands:

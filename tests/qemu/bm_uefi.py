@@ -106,22 +106,8 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             nm=subprocess.check_output(['nm',str(W/'k.elf')],text=True)
             symbols={name:int(a,16) for a,t,name in (l.split() for l in nm.splitlines() if len(l.split())==3)}
             assert int(re.search(r'CR3=([0-9a-fA-F]+)',regs)[1],16)==symbols['uefi_pml4'],regs
-            pd=dump(symbols['uefi_pd'],16384,W/'pd.bin')
-            for a in map(int,re.findall(r'MMIO (\d+)',text)):
-                pt=symbols['uefi_pml4']
-                for shift in (39,30):
-                    g=int.from_bytes(dump(pt+((a>>shift)&511)*8,8,W/'pt.bin'),'little')
-                    assert g&1 and not g&128
-                    pt=g&(((1<<52)-1)&~4095)
-                g=int.from_bytes(dump(pt+((a>>21)&511)*8,8,W/'pt.bin'),'little')
-                assert g&0x9b==0x9b and g&(((1<<52)-1)&~((1<<21)-1))==a&~((1<<21)-1),(a,g)
-            for bus in command('query-pci'):
-                for dev in bus['devices']:
-                    for region in dev.get('regions',[]):
-                        a=region.get('address',0);size=region.get('size',0)
-                        if region.get('type')=='memory' and a>0 and a+size<=2**32:
-                            for index in range(a//2**21,(a+size+2**21-1)//2**21):
-                                assert struct.unpack_from('<Q',pd,index*8)[0]&0x18==0x18,(dev,region,index)
+            from pat_kahin import denetle as pat_denetle
+            pat_denetle(dump,W,symbols['uefi_pml4'],text,fields,command('query-pci'))
             assert int(re.search(r'GDT=\s*([0-9a-fA-F]+)',regs)[1],16)==symbols['kdl_x86_gdt'],regs
             if KABUK:
                 kabuk_denetle(command,response,f,W,ser,p,n,ram,W/'disk.img',mode=mode,esp=bool(PC))

@@ -26,7 +26,17 @@ genel işlev dsdt_adresi(f: Fadt) -> tam64 {
 genel yapı FadtGuc {
  surum: tam32; boot_bayrak: tam32; bayraklar: tam64; ps2_bilgi: mantıksal; ps2_var: mantıksal;
  reset_var: mantıksal; reset_alan: tam32; reset_boy: tam32; reset_ofs: tam32; reset_erisim: tam32;
- reset_adr: tam64; reset_deger: tam32; pm_taban: tam64;
+ reset_adr: tam64; reset_deger: tam32; pm_taban: tam64; dsdt_adr: tam64; pm1a: tam64; pm1b: tam64;
+}
+// Genişletilmiş PM1 denetim yazmacı varsa onun adres uzayı önceliklidir.
+işlev fadt_pm1_portu(b: Dizi<dtam8>, n: tam64, eski: tam32, gas: tam32) -> tam64 {
+ değişken adres: tam64 = oku_le32(b,eski);
+ eğer n >= ((gas+12) olarak tam64) ve oku_le64(b,gas+4) != 0 {
+  eğer oku_u8(b,gas) != 1 veya oku_u8(b,gas+1) < 16 veya oku_u8(b,gas+2) != 0 { ver -1; }
+  adres=oku_le64(b,gas+4);
+ }
+ eğer adres < 0 veya adres > 65534 veya (adres != 0 ve oku_u8(b,89) < 2) { ver -1; }
+ ver adres;
 }
 genel işlev fadt_guc_coz(b: Dizi<dtam8>) -> sonuç<FadtGuc,metin> {
  değişken n: tam64 = 0;
@@ -36,7 +46,9 @@ genel işlev fadt_guc_coz(b: Dizi<dtam8>) -> sonuç<FadtGuc,metin> {
  değişken bayrak: tam64 = oku_le32(b,112);değişken rv: mantıksal = (bayrak&1024) != 0;
  eğer rv ve n < 129 { ver hata("FADT reset kisa"); }
  değişken f: FadtGuc = FadtGuc { surum:surum,boot_bayrak:boot,bayraklar:bayrak,ps2_bilgi:surum>=3,ps2_var:surum>=3 ve (boot&2)!=0,
-  reset_var:rv,reset_alan:0,reset_boy:0,reset_ofs:0,reset_erisim:0,reset_adr:0,reset_deger:0,pm_taban:oku_le32(b,76) };
+  reset_var:rv,reset_alan:0,reset_boy:0,reset_ofs:0,reset_erisim:0,reset_adr:0,reset_deger:0,pm_taban:oku_le32(b,76),
+  dsdt_adr:oku_le32(b,40),pm1a:fadt_pm1_portu(b,n,64,172),pm1b:fadt_pm1_portu(b,n,68,184) };
+ eğer n >= 148 ve oku_le64(b,140) != 0 { f.dsdt_adr=oku_le64(b,140); }
  eğer rv {
   f.reset_alan=oku_u8(b,116);f.reset_boy=oku_u8(b,117);f.reset_ofs=oku_u8(b,118);f.reset_erisim=oku_u8(b,119);
   f.reset_adr=oku_le64(b,120);f.reset_deger=oku_u8(b,128);

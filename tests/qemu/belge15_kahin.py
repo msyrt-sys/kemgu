@@ -15,7 +15,7 @@ from surec_kahin import SurecConsole
 def kos(w):
     metin=Path('belgeler/KEMGU_OS_Program_Yazma.md').read_text(encoding='utf-8')
     ornekler=re.findall(r'<!-- program: (\w+) -->\s*```kem\n(.*?)\n```',metin,re.S)
-    assert len(ornekler)==metin.count('```kem\n')==2
+    assert len(ornekler)==metin.count('```kem\n')==3
     programlar={}
     for ad,kaynak in ornekler:
         p=w/(ad+'.kem')
@@ -32,9 +32,17 @@ def kos(w):
         piksel(c,[(2,1,'Tuşa bas',65280,0x102040)])
         tus(c,'a')
         tamam(c,'olayornek',2)
+        c.run('baslat aktarornek /diskler/usb0p2/notlar/günlük.txt',b'[aktarornek.elf pid=3 cikis=0]\n')
+        c.run('ls /ram',b'ornek.txt\n')
+        c.run('cat /ram/ornek.txt',GUNLUK)
         tablo=Path('belgeler/KEMGU_OS_Mimari.md').read_text(encoding='utf-8').split('## Kabuk komutları')[1]
         yardim=re.findall(r'^\| `(\w+)` \| ([^|]+) \|$',tablo,re.M)
-        assert len(yardim)>=30 and len(dict(yardim))==len(yardim)
+        assert {'bilgi','kopyala','tasi','duzen','girdisay','kesme','pci'} <= dict(yardim).keys()
+        assert len(dict(yardim))==len(yardim)
+        def adlari_denetle(ham):
+            adlar=ham.decode().split()
+            assert len(set(adlar))==len(adlar) and set(adlar)==dict(yardim).keys()
+        c.run('yardim',adlari_denetle)
         for ad,acik in yardim:
             c.run('yardim '+ad,(html.unescape(acik)+'\n').encode())
         c.run('yardim bilinmeyen',b'HATA yardim konusu bulunamadi\n')

@@ -1,0 +1,9 @@
+// CF8'de mekanizma 1 etkinlik biti, BDF ve dword ofseti. CFC..CFF doğal genişlikte seçilir.
+genel çıplak işlev pci_port_adres(bdf: tam32,ofs: tam32) -> dtam32 {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs >= 256 { ver 0 olarak dtam32; }
+    ver (2147483648|((bdf olarak tam64)<<8)|((ofs&252) olarak tam64)) olarak dtam32;
+}
+genel çıplak işlev pci_port_veri16(ofs: tam32) -> dtam16 {
+    eğer ofs < 0 veya ofs > 254 veya (ofs&1) != 0 { ver 0 olarak dtam16; }
+    ver (3324+(ofs&2)) olarak dtam16;
+}

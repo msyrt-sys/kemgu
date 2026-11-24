@@ -1,3 +1,4 @@
+kullan drivers::uygulama::gezgin::{ gezgin_hedef };
 // Seçilen satır aynı dizin kaydını klavyeden ve fareyle açar.
 yapı GeGirdi { ad: metin; etiket: metin; dizin: mantıksal; }
 yapı GeDurum { yol: metin; girdiler: Dizi<GeGirdi>; sec: tam32; ust: tam32; ileti: metin; }
@@ -76,8 +77,31 @@ işlev ge_ac(g: &değişken GeDurum,editor: metin,p: tam64) -> tam64 {
     değişken sec: tam32 = g.sec; r=ge_liste(g,g.yol,p);
     eğer r == 0 ve sec < dizi_boyut(g.girdiler) { g.sec=sec; } ver r;
 }
+işlev ge_islem(g: &değişken GeDurum,p: tam64,sat: tam32,kod: tam64) {
+    eğer g.sec == 0 ve kod != 65 { g.ileti="Bir girdi seçin"; ver; }
+    değişken secili: GeGirdi = dizi_al(g.girdiler,g.sec);
+    değişken kaynak: metin = ge_yol(g.yol,secili.ad);
+    değişken r: tam64 = 0;
+    eğer kod == 339 {
+        eğer değil kul_onay(p+8192,sat-1,"Seçili girdiyi sil? E/H") { g.ileti=""; ver; }
+        eğer secili.dizin { r=sis_sil_dizin(kaynak); } değilse { r=sis_sil(kaynak); }
+    } değilse {
+        değişken etiket: metin = "Kopyala, hedef: ";
+        eğer kod == 64 { etiket="Taşı, hedef: "; } eğer kod == 65 { etiket="Yeni dizin: "; }
+        eşleş kul_metin_al(p+8192,sat-1,etiket) { hiç => { g.ileti=""; ver; } değer(ad) => {
+            eşleş gezgin_hedef(g.yol,ad) { hiç => { g.ileti="Hedef boş"; ver; } değer(hedef) => {
+                eğer kod == 63 { r=sis_kopyala(kaynak,hedef); }
+                değilse eğer kod == 64 { r=sis_tasi(kaynak,hedef); }
+                değilse { r=sis_olustur_dizin(hedef); }
+            } }
+        } }
+    }
+    eğer r == 0 { r=ge_liste(g,g.yol,p); }
+    eğer r == -30 { g.ileti="Salt okunur"; }
+    değilse eğer r < 0 { g.ileti=metin_birlestir("İşlem hatası ",tam_metin(r)); }
+}
 işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
-    değişken p: tam64 = malloc(8192) olarak tam64;
+    değişken p: tam64 = malloc(16384) olarak tam64;
     eğer p == 0 veya sis_ekran_bilgi(p) < 0 { ver 2; }
     değişken sat: tam32 = sis_alan(p,1) olarak tam32;
     eğer sis_calisma_dizini_al(p,4096) < 0 { ver 2; }
@@ -98,6 +122,7 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
             eğer kod == 328 ve g.sec > 0 { g.sec=g.sec-1; ciz=doğru; }
             eğer kod == 336 ve g.sec+1 < dizi_boyut(g.girdiler) { g.sec=g.sec+1; ciz=doğru; }
             eğer kod == 28 { ac=doğru; }
+            eğer kod == 63 veya kod == 64 veya kod == 65 veya kod == 339 { ge_islem(&değişken g,p,sat,kod); eski=-1; ciz=doğru; }
         }
         eğer sis_alan(p,0) == 2 {
             değişken teker: tam32 = sis_alan(p,6) olarak tam32;

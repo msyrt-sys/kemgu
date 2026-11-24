@@ -8,24 +8,26 @@ fi
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
  echo "ATLANDI (QEMU yok)"; exit 0
 fi
+export UEFI_CALISMA_DIZINI
+UEFI_CALISMA_DIZINI=$(mktemp -d build/guc.XXXXXX)
 for derleyici in build/kemgu build/codegen; do
  for kip in yenidenbaslat kapat 8042 uclu; do
   kaynak=test/ornekler/kem_os_x86_kabuk.kem
   kabuk=1;dogrudan=0
   if [ "$kip" = 8042 ] || [ "$kip" = uclu ]; then
-   kaynak=build/kem_os_x86_guc_case.kem;kabuk=0;dogrudan=1
-   GUC_KIP="$kip" python3 - <<'PY'
+   kaynak="$UEFI_CALISMA_DIZINI/kem_os_x86_guc_case.kem";kabuk=0;dogrudan=1
+   GUC_KAYNAK="$kaynak" GUC_KIP="$kip" python3 - <<'PY'
 import os
 from pathlib import Path
-s=Path('test/ornekler/kem_os_x86_guc.kem').read_text()
+s=Path('test/ornekler/kem_os_x86_guc.kem').read_text(encoding='utf-8')
 if os.environ['GUC_KIP']=='uclu':s=s.replace('guc_yeniden_asama(1);','guc_yeniden_asama(2);')
-Path('build/kem_os_x86_guc_case.kem').write_text(s)
+Path(os.environ['GUC_KAYNAK']).write_text(s,encoding='utf-8')
 PY
   fi
   UEFI_YALNIZ_DERLE=1 UEFI_DERLEYICI="$derleyici" UEFI_KAYNAK="$kaynak" bash test/bm_x86_uefi_harness.sh
   UEFI_GUC="$kip" UEFI_GUC_DOGRUDAN="$dogrudan" UEFI_KABUK="$kabuk" UEFI_PS2_IRQ=1 python3 - <<'PY'
-import sys
-sys.path.insert(0,'tests/qemu');sys.argv=['bm_uefi.py','build/_bm_uefi']
+import sys,os
+sys.path.insert(0,'tests/qemu');sys.argv=['bm_uefi.py',os.environ['UEFI_CALISMA_DIZINI']]
 import bm_uefi
 bm_uefi.boot()
 PY

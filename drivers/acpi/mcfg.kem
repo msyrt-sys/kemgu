@@ -1,0 +1,28 @@
+// PCI Firmware MCFG, 44 baytlık başlığı 16 baytlık pencere kayıtları izler.
+kullan drivers::acpi::tablo::{ SdtBaslik, sdt_coz };
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16, oku_le64, imza_esit };
+genel yapı McfgPencere { taban: tam64; kesim: tam32; ilk: tam32; son: tam32; }
+genel işlev mcfg_coz(b: Dizi<dtam8>) -> sonuç<Dizi<McfgPencere>,metin> {
+    değişken n: tam32 = 0;
+    eşleş sdt_coz(b) { hata(e) => { ver hata("MCFG SDT"); } tamam(h) => { n=h.uzunluk olarak tam32; } }
+    eğer değil imza_esit(b,0,"MCFG") veya n < 60 veya (n-44)%16 != 0 { ver hata("MCFG imza veya boy"); }
+    değişken xs: Dizi<McfgPencere> = [];
+    değişken pos: tam32 = 44;
+    iken pos < n {
+        değişken w: McfgPencere = McfgPencere {taban:oku_le64(b,pos),kesim:oku_le16(b,pos+8),
+            ilk:oku_u8(b,pos+10),son:oku_u8(b,pos+11)};
+        eğer w.ilk > w.son veya w.taban <= 0 veya (w.taban&1048575) != 0 veya w.taban > 9223372036854775807-(((w.son olarak tam64)+1)<<20) {
+            ver hata("MCFG adres araligi");
+        }
+        için v: xs {
+            eğer v.kesim == w.kesim ve v.ilk <= w.son ve w.ilk <= v.son { ver hata("MCFG cift veri yolu"); }
+        }
+        dizi_ekle(xs,w); pos=pos+16;
+    }
+    ver tamam(xs);
+}
+// MCFG tabanı her zaman veri yolu sıfıra göredir.
+genel işlev mcfg_adres(w: McfgPencere,bdf: tam32,ofs: tam32) -> tam64 {
+    eğer bdf < 0 veya bdf/256 < w.ilk veya bdf/256 > w.son veya ofs < 0 veya ofs >= 4096 { ver -1; }
+    ver w.taban+((bdf olarak tam64)<<12)+(ofs olarak tam64);
+}

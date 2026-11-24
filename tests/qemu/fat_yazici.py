@@ -6,8 +6,8 @@ SEKTOR=512
 MERHABA='Merhaba Dünya — ğüşıöç'.encode()
 NOT=b'Bagimsiz FAT32 yazicisi\n'
 KAYDIR=''.join(f'Satır {i:02d} ğ\n' for i in range(70)).encode('utf-8')
-def hazirla(path,gpt=False,kaydir=False):
-    toplam=64*1024*1024//SEKTOR; ayr=32; fs=1
+def hazirla(path,gpt=False,kaydir=False,toplam=64*1024*1024//SEKTOR):
+    ayr=32; fs=1
     while fs*128 < toplam-ayr-2*fs+2:fs+=1
     ilk=ayr+2*fs;kume=toplam-ilk
     b=bytearray(toplam*SEKTOR)

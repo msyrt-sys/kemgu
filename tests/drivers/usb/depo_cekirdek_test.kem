@@ -24,7 +24,12 @@ işlev test_hata() -> mantıksal {
             eğer değil kabul(usb_depo_oku(&değişken s,1,1)) { ver yanlış; }
             eşleş usb_test_sur(&değişken s,&değişken a) { tamam(v) => { ver yanlış; } hata(e) => { } }
             eğer mod == 3 ve (a.kurtarma != 3 veya s.kurtarma != 3) { ver yanlış; }
-            eğer mod == 5 ve (a.sense_sayisi != 1 veya s.anahtar != 5 veya s.asc != 32) { ver yanlış; }
+            eğer mod == 5 {
+                eğer a.sense_sayisi != 4 veya s.deneme != 3 veya s.evre != 100 veya s.anahtar != 5 veya s.asc != 32 { ver yanlış; }
+                a.ariza=0;
+                eğer değil kabul(usb_depo_oku(&değişken s,2,1)) veya değil kabul(usb_test_sur(&değişken s,&değişken a)) { ver yanlış; }
+                eğer dizi_boyut(s.sonuc) != 512 { ver yanlış; }
+            }
         } } mod=mod+1;
     } ver doğru;
 }

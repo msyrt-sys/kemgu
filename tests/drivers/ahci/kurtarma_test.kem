@@ -1,0 +1,31 @@
+// Port 0 için ofsetler: python3 -c "print([0x100+x for x in (0x10,0x18,0x20,0x28,0x2c,0x30)])"
+kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni, ahci_adim };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+işlev adim(s: &değişken AhciDurum,deger: tam64,tur: tam32,adres: tam64,veri: tam64) -> mantıksal {
+    değişken y: GcYanit = gc_bos(); y.deger=deger;
+    eşleş ahci_adim(s,y) {
+        GcIstek::Oku32(a) => { ver tur == 1 ve a == adres; }
+        GcIstek::Yaz32(a,v) => { ver tur == 2 ve a == adres ve v == veri; }
+        GcIstek::Bekle(us) => { ver tur == 3 ve (us olarak tam64) == veri; }
+        _ => { ver yanlış; }
+    }
+}
+işlev main() -> tam32 {
+    eşleş ahci_yeni(65536,0) { hata(e) => { ver 1; } tamam(v) => {
+        değişken s: AhciDurum = v; s.hazir=doğru; s.port=0; s.adim=40;
+        eğer değil adim(&değişken s,1073741824,1,288,0) { ver 2; }
+        eğer değil adim(&değişken s,129,1,280,0) { ver 3; }
+        eğer değil adim(&değişken s,17,2,280,16) { ver 4; }
+        eğer değil adim(&değişken s,0,1,280,0) { ver 5; }
+        eğer değil adim(&değişken s,16,2,272,4294967295) { ver 6; }
+        eğer değil adim(&değişken s,0,2,304,4294967295) { ver 7; }
+        eğer değil adim(&değişken s,0,1,300,0) { ver 8; }
+        // Hız/güç alanları korunur; DET birden sıfıra geçmeden önce en az 1 ms beklenir.
+        eğer değil adim(&değişken s,48,2,300,49) { ver 9; }
+        eğer değil adim(&değişken s,0,3,0,1000) { ver 10; }
+        eğer değil adim(&değişken s,0,2,300,48) { ver 11; }
+        eğer değil adim(&değişken s,0,1,296,0) { ver 12; }
+        eğer değil adim(&değişken s,259,2,280,17) { ver 13; }
+        eğer değil adim(&değişken s,0,1,288,0) veya s.deneme != 1 { ver 14; }
+    } } ver 0;
+}

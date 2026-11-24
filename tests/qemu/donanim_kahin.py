@@ -64,17 +64,32 @@ def kos(w, tur):
     ilk = {d: sha(d) for d in (nvme.disk, sata.disk)}
     with boot(w, usb[0], nvme, sata) as (q, p, ser):
         c = Console(w, q, p, ser)
+        def sayaclar():
+            tablo, = struct.unpack('<Q', c.mem(c.symbols['kesme_tablo'],8))
+            return {v:(kim,n) for v,(kim,n,_,_) in enumerate(struct.iter_unpack('<4Q',c.mem(tablo,8192))) if 1 <= kim <= 6}
         alinan = []
+        alt = {}
+        ust = sayaclar()
         def rapor(b):
             karsilastir(c, b)
             alinan.append(b)
         c.run('donanim', rapor)
         if tur == 'gpt':
             c.run('bagla --yazilabilir usb0p2')
+            alt = sayaclar()
             c.run('donanim kaydet /diskler/usb0p2/donanim.txt')
+            ust = sayaclar()
         c.shutdown()
     fsck(w, disk, 'donanim')
-    assert Fat(disk.read()).get('/donanim.txt') == alinan[0]
+    kayit = Fat(disk.read()).get('/donanim.txt')
+    # Dosya ile ekran farklı anlara aittir. Değişen sayaçları QMP RAM örnekleri sınırlar.
+    kalip = rb'^KESME (\d+) (\d+) (\d+)\n'
+    assert re.sub(kalip,b'',kayit,flags=re.M) == re.sub(kalip,b'',alinan[0],flags=re.M)
+    sayilan = {int(v):(int(k),int(n)) for v,k,n in re.findall(kalip,kayit,re.M)}
+    beklenen = set(ust) if tur == 'gpt' else set(ust)-{65}
+    assert set(sayilan) == beklenen,(sayilan,ust)
+    for v,(kim,n) in sayilan.items():
+        assert kim == ust[v][0] and alt.get(v,(kim,0))[1] <= n <= ust[v][1]
     assert all(sha(d) == oz for d, oz in ilk.items())
     print(f'✓ {tur} donanim.txt, PCI, USB, ACPI, MADT, CPU, GOP ve bellek', flush=True)
 

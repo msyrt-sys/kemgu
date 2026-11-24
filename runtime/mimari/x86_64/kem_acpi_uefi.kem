@@ -36,6 +36,22 @@ işlev uefi_rsdp(b: UefiBilgi) -> sonuç<Dizi<dtam8>,metin> {
   } }
  } }
 }
+// İmza yoksa boş dizi; okunamayan kök ve bozuk hedef hata olarak kalır.
+işlev uefi_tablo_bul(b: UefiBilgi,imza: metin) -> sonuç<Dizi<dtam8>,metin> {
+ eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
+ eşleş rsdp_coz(r) { hata(e) => { ver hata("ACPI RSDP"); } tamam(rsdp) => {
+  değişken x: mantıksal = rsdp.xsdt != 0; değişken a: tam64 = rsdp.rsdt; eğer x { a=rsdp.xsdt; }
+  eşleş uefi_sdt(b,a) { hata(e) => { ver hata(e); } tamam(kok) => {
+  eşleş acpi_kok_coz(kok,x) { hata(e) => { ver hata(e); } tamam(xs) => {
+   için adr: xs {
+    eşleş uefi_acpi_oku(b,adr,36) { hata(e) => { ver hata(e); } tamam(h) => {
+     eğer imza_esit(h,0,imza) { ver uefi_sdt(b,adr); }
+    } }
+   }
+  } } } }
+ } } } }
+ değişken bos: Dizi<dtam8> = []; ver tamam(bos);
+}
 işlev uefi_tablo_raporu(b: UefiBilgi,satirlar: Dizi<metin>,seri: mantıksal) -> sonuç<mantıksal,metin> {
  eşleş uefi_rsdp(b) { hata(e) => { ver hata(e); } tamam(r) => {
  eşleş rsdp_coz(r) { hata(e) => { ver hata("ACPI RSDP gecersiz"); } tamam(rsdp) => {

@@ -1,0 +1,58 @@
+{
+  "5000": {
+    "kemgu": {
+      "saniye": 0.13,
+      "rss_kib": 24180,
+      "ir_satir": 79551,
+      "en_buyuk_ir": 7257
+    },
+    "codegen": {
+      "saniye": 6.82,
+      "rss_kib": 43416,
+      "ir_satir": 70506,
+      "en_buyuk_ir": 6780
+    }
+  },
+  "10000": {
+    "kemgu": {
+      "saniye": 0.2,
+      "rss_kib": 43236,
+      "ir_satir": 158808,
+      "en_buyuk_ir": 14400
+    },
+    "codegen": {
+      "saniye": 21.3,
+      "rss_kib": 80964,
+      "ir_satir": 140718,
+      "en_buyuk_ir": 13446
+    }
+  },
+  "20000": {
+    "kemgu": {
+      "saniye": 0.39,
+      "rss_kib": 82116,
+      "ir_satir": 317313,
+      "en_buyuk_ir": 28677
+    },
+    "codegen": {
+      "saniye": 72.28,
+      "rss_kib": 154404,
+      "ir_satir": 281136,
+      "en_buyuk_ir": 26772
+    }
+  },
+  "kabuk": {
+    "kemgu": {
+      "saniye": 1.65,
+      "rss_kib": 123696,
+      "ir_satir": 533787,
+      "en_buyuk_ir": 59505
+    },
+    "codegen": {
+      "saniye": 131.74,
+      "rss_kib": 360816,
+      "ir_satir": 501636,
+      "en_buyuk_ir": 50358
+    }
+  }
+}

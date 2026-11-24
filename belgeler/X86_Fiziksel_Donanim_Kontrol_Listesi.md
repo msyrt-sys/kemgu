@@ -71,3 +71,21 @@ Tarih, makine/anakart, CPU, firmware sürümü, imaj SHA256, Git commit'i ve kul
 | NVMe / AHCI okuma | | | |
 | Düzenleyici ve gezgin | | | |
 | Süreçler ve kapanış | | | |
+
+### GOP yazma süresi
+
+Tanı çekirdeğini aşağıdaki komutlarla bir UEFI imajına yerleştirin. İmajı yukarıdaki USB hazırlama yöntemiyle ayrı bir deneme belleğine yazıp seri kaydı açın.
+
+```sh
+UEFI_CALISMA_DIZINI=build/pat-tani UEFI_YALNIZ_DERLE=1 bash test/bm_x86_uefi_harness.sh
+python3 tests/qemu/uefi_imaj.py build/pat-tani.img build/pat-tani/esp/EFI/BOOT/BOOTX64.EFI build/pat-tani/k.elf
+```
+
+Aynı çözünürlükte üç soğuk açılış yapın. Her açılış için PAT_TSC satırındaki UC ve WC doldurma sürelerini TSC çevrimi olarak, üçüncü değeri piksel sayısı olarak kaydedin. PAT_MSR, PAT_ILK, PAT_SON, PAT_RAM ve PAT_MMIO satırlarını iliştirin. Üç ölçümün medyanını ve ekrandaki Türkçe gliflerin durumunu belirtin.
+
+### Girdi, hub, depolama ve kapatma
+
+- PS/2 ve USB klavyede Num, Caps ve Scroll kilitlerini ayrı ayrı açıp kapatın. LED'leri, sayısal takımın rakam ve gezinme modlarını, Pause ve PrintScreen olaylarını kaydedin.
+- Harici USB hub'a klavye, fare ve bir deneme belleği takın. İkinci hub üzerinden dosya okuyup yazın. Belleği güvenli biçimde eşitledikten sonra iki kez çıkarıp takın ve her geçişin seri kaydını alın.
+- Açılış bölümüne SHA256'sı kaydedilmiş bir ramdisk.img koyun. İçindeki deneme dosyasını bellekten değiştirin, /ram altında da bir dosya oluşturun. Yeniden açılışta kaynak imaj özetini ve /ram dizininin boş olduğunu denetleyin.
+- Veri bölümüne yazıp kapat komutunu verin. ACPI_S5 kaydını ve gücün kesildiği anı kaydedin. Bir sonraki açılıştan önce imajda fsck.fat -n ile dosya sistemi tutarlılığını kontrol edin.

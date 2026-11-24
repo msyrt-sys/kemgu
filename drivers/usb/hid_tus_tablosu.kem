@@ -1,5 +1,5 @@
 // Python üretimi: dalga4_hid.py, /usr/include/linux/input-event-codes.h.
-genel işlev hid_set1(k: tam32) -> tam32 {
+genel çıplak işlev hid_set1(k: tam32) -> tam32 {
     eğer k == 4 { ver 30; }
     eğer k == 5 { ver 48; }
     eğer k == 6 { ver 46; }
@@ -54,5 +54,21 @@ genel işlev hid_set1(k: tam32) -> tam32 {
     eğer k == 56 { ver 53; }
     eğer k == 57 { ver 58; }
     eğer k == 100 { ver 86; }
+    eğer k == 71 { ver 70; }
+    eğer k == 83 { ver 69; }
+    eğer k == 85 { ver 55; }
+    eğer k == 86 { ver 74; }
+    eğer k == 87 { ver 78; }
+    eğer k == 89 { ver 79; }
+    eğer k == 90 { ver 80; }
+    eğer k == 91 { ver 81; }
+    eğer k == 92 { ver 75; }
+    eğer k == 93 { ver 76; }
+    eğer k == 94 { ver 77; }
+    eğer k == 95 { ver 71; }
+    eğer k == 96 { ver 72; }
+    eğer k == 97 { ver 73; }
+    eğer k == 98 { ver 82; }
+    eğer k == 99 { ver 83; }
     ver 0;
 }

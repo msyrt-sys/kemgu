@@ -1,0 +1,7 @@
+// Gezgin hedefleri seçili dizine göre çözülür. Boş giriş işlem başlatmaz.
+genel işlev gezgin_hedef(dizin: metin,ad: metin) -> seçimlik<metin> {
+    eğer metin_uzunluk(ad) == 0 { ver hiç; }
+    eğer metin_bayt(ad,0) == 47 { ver değer(ad); }
+    eğer metin_uzunluk(dizin) == 1 ve metin_bayt(dizin,0) == 47 { ver değer(metin_birlestir(dizin,ad)); }
+    ver değer(metin_birlestir(metin_birlestir(dizin,"/"),ad));
+}

@@ -1000,7 +1000,11 @@ $(BUILD)/test_uart_pl011$(EXE): runtime/kdl_runtime_uart_pl011.c \
                                 $(TESTDIR)/test_uart_pl011.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
-calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE)
+$(BUILD)/test_uart_pl011_tx$(EXE): runtime/kdl_runtime_uart_pl011.c tests/drivers/uart/tx_sinir.c runtime/kdl_uart.h | $(BUILD)
+	$(CC) $(CFLAGS) -Iruntime -DKEMGU_UART_MOCK  $(filter %.c,$^) -o $@
+
+calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE) $(BUILD)/test_uart_pl011_tx$(EXE)
+	@python3 -c "import subprocess; subprocess.run(['./$(BUILD)/test_uart_pl011_tx$(EXE)'], check=True, timeout=3)"
 	$(ASAN_RUN) ./$(BUILD)/test_uart_pl011$(EXE)
 
 # === Bare-metal yazdir_* port (PL011 backend, mock test) ===
@@ -4620,7 +4624,11 @@ $(BUILD)/test_uart_16550$(EXE): runtime/kdl_runtime_uart_16550.c \
                                 $(TESTDIR)/test_uart_16550.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
-calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE)
+$(BUILD)/test_uart_16550_tx$(EXE): runtime/kdl_runtime_uart_16550.c tests/drivers/uart/tx_sinir.c runtime/kdl_uart.h | $(BUILD)
+	$(CC) $(CFLAGS) -Iruntime -DKEMGU_UART_MOCK -DTEST_16550 $(filter %.c,$^) -o $@
+
+calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE) $(BUILD)/test_uart_16550_tx$(EXE)
+	@python3 -c "import subprocess; subprocess.run(['./$(BUILD)/test_uart_16550_tx$(EXE)'], check=True, timeout=3)"
 	$(ASAN_RUN) ./$(BUILD)/test_uart_16550$(EXE)
 
 # === 16550A bare-metal cross-compile (x86_64 freestanding) ===
@@ -5035,13 +5043,18 @@ calistir_kem_os_pc_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 .PHONY: calistir_kem_os_ayristirici
 test_tumu: calistir_kem_os_ayristirici
 calistir_kem_os_ayristirici: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum)) tests/drivers/fs/fat32_bozuk_test.kem
+	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum dalga16)) tests/drivers/fs/fat32_bozuk_test.kem
 	@SUREC_KAHIN=bozuk_elf_kahin bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_girdi15
 test_tumu: calistir_bm_x86_girdi15
 calistir_bm_x86_girdi15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@SUREC_KAHIN=girdi15_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_klavye16
+test_tumu: calistir_bm_x86_klavye16
+calistir_bm_x86_klavye16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@SUREC_KAHIN=klavye16_kahin bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_program15
 test_tumu: calistir_bm_x86_program15
@@ -5064,3 +5077,62 @@ calistir_bm_x86_acilis_suresi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUI
 test_tumu: calistir_bm_x86_belge15
 calistir_bm_x86_belge15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@SUREC_KAHIN=belge15_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_pci16
+test_tumu: calistir_bm_x86_pci16
+calistir_bm_x86_pci16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/acpi/mcfg_test.kem tests/drivers/pci/port16_test.kem
+	@SUREC_KAHIN=pci16_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_msi
+test_tumu: calistir_bm_x86_msi
+calistir_bm_x86_msi: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_msi_harness.sh
+
+.PHONY: calistir_bm_x86_disk_hata
+test_tumu: calistir_bm_x86_disk_hata
+calistir_bm_x86_disk_hata: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/ahci/kurtarma_test.kem
+	@SUREC_KAHIN=disk_hata_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_usb_hub
+test_tumu: calistir_bm_x86_usb_hub
+calistir_bm_x86_usb_hub: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/usb/hub_test.kem
+	@SUREC_KAHIN=usb_hub_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_ramdisk
+# H7j depolama matrisinde bellek aygıtının MBR/GPT satırları.
+calistir_bm_x86_disk: calistir_bm_x86_ramdisk
+test_tumu: calistir_bm_x86_ramdisk
+calistir_bm_x86_ramdisk: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/blok/ram_test.kem
+	@SUREC_KAHIN=ramdisk_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_kapat
+test_tumu: calistir_bm_x86_kapat
+calistir_bm_x86_kapat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/acpi/s5_test.kem
+	@SUREC_KAHIN=kapat_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_pat
+test_tumu: calistir_bm_x86_pat
+calistir_bm_x86_pat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_pat_harness.sh
+
+.PHONY: calistir_mmio_volatile
+test_tumu: calistir_mmio_volatile
+calistir_mmio_volatile: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_mmio_volatile_harness.sh
+
+.PHONY: calistir_derleme_olcum
+test_tumu: calistir_derleme_olcum
+calistir_derleme_olcum: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/olcum/derleme_harness.sh
+
+.PHONY: calistir_bm_x86_arac16
+test_tumu: calistir_bm_x86_arac16
+calistir_bm_x86_arac16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tools/codex/arac16_test.kem
+	@python3 tests/qemu/surec_abi.py
+	@SUREC_KAHIN=arac16_kahin bash test/bm_x86_surec_harness.sh

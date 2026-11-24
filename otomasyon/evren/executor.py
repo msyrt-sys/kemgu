@@ -32,7 +32,7 @@ TABAN = "https://evren-llmapi.ssyz.org.tr/v1"
 # EVREN_MODEL ile geçersiz kılınabilir (örn. deepseek-v4.1-flash kapasitesi dolu olduğunda).
 MODEL = os.environ.get("EVREN_MODEL", "deepseek-v4.1-flash")
 # Birincil model 503 (kapasite dolu) dönerse bu model ile AYNI istem yeniden gönderilir.
-YEDEK_MODEL = os.environ.get("EVREN_YEDEK_MODEL", "deepseek-v4-flash")
+YEDEK_MODEL = os.environ.get("EVREN_YEDEK_MODEL", "qwen3.8-flash-next")  # [2026-11-24] v4-flash listeden kalktı
 MAX_TOKENS = 16384
 KOTA_ALT = 2_000_000
 DEPO = pathlib.Path(__file__).resolve().parents[2]

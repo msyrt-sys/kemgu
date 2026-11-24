@@ -7,32 +7,58 @@
 // Adresler birebir (identity) eşlenmiş olmalı: boot/start_x86_64.S 0..1 GB (önbellekli
 // RAM) ve 3..4 GB (UC MMIO penceresi) eşler. Pencere dışı adres çağıranın sorumluluğu.
 
-çıplak işlev kem_port_yaz32(port: dtam16, deger: dtam32) {
-    güvensiz {
-        satıriçi_asm { mimari: x86_64 şablon: r#"outl $1, $0"# girdi("{dx}", port) girdi("{eax}", deger) bozulan("~{memory}") }
-    }
-}
+kullan runtime::mimari::x86_64::kem_pci_adres::{ pci_port_adres, pci_port_veri16 } olarak pa;
 
-çıplak işlev kem_port_oku32(port: dtam16) -> dtam32 {
-    değişken v: dtam32 = 0 olarak dtam32;
-    güvensiz {
-        satıriçi_asm { mimari: x86_64 şablon: r#"inl $1, $0"# çıktı("={eax}", &v) girdi("{dx}", port) bozulan("~{memory}") }
-    }
-    ver v;
+// Eşlenen her veri yolu için 1 MiB pencerenin fiziksel başlangıcı. Sıfır CF8/CFC seçer.
+küresel değişken pci_ecam_yollari: tam64 = 0;
+çıplak işlev kem_ecam_yolu(bdf: tam32) -> tam64 {
+    eğer pci_ecam_yollari == 0 veya bdf < 0 veya bdf > 65535 { ver 0; }
+    ver kem_mmio_oku64(pci_ecam_yollari+((bdf/256) olarak tam64)*8);
 }
-
-// PCI yapılandırma (mekanizma 1). bdf = aygıt * 8 + işlev, veriyolu 0.
+çıplak işlev kem_ecam_adres(bdf: tam32,ofs: tam32) -> tam64 {
+    değişken taban: tam64 = kem_ecam_yolu(bdf);
+    eğer taban == 0 veya ofs < 0 veya ofs > 4095 { ver 0; }
+    ver taban+(((bdf&255) olarak tam64)<<12)+(ofs olarak tam64);
+}
+// PCI yapılandırma (mekanizma 1). bdf = veriyolu * 256 + aygıt * 8 + işlev.
 çıplak işlev kem_pci_adres(bdf: tam32, ofs: tam32) -> dtam32 {
-    değişken a: tam64 = 2147483648 | (((bdf / 8) olarak tam64) << 11) | (((bdf % 8) olarak tam64) << 8) | ((ofs & 252) olarak tam64);
-    ver a olarak dtam32;
+    ver pci_port_adres(bdf,ofs);
 }
 
-çıplak işlev kem_pci_oku32(bdf: tam32, ofs: tam32) -> tam64 {
+çıplak işlev kem_cf8_oku32(bdf: tam32, ofs: tam32) -> tam64 {
     kem_port_yaz32(3320 olarak dtam16, kem_pci_adres(bdf, ofs));
-    ver kem_port_oku32(3324 olarak dtam16) olarak tam64;
+    // C16-001: genişletmenin üst bitlerini iki derleyicide de temizle.
+    ver (kem_port_oku32(3324 olarak dtam16) olarak tam64)&4294967295;
 }
 
+çıplak işlev kem_pci_oku32(bdf: tam32,ofs: tam32) -> tam64 {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4092 veya (ofs&3) != 0 { ver 4294967295; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { ver kem_mmio_oku32(a); }
+    eğer ofs >= 256 { ver 4294967295; }
+    ver kem_cf8_oku32(bdf,ofs);
+}
+çıplak işlev kem_pci_oku16(bdf: tam32,ofs: tam32) -> tam32 {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4094 veya (ofs&1) != 0 { ver 65535; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { değişken p: *dtam16 = a olarak *dtam16; ver ((*p) olarak tam32)&65535; }
+    eğer ofs >= 256 { ver 65535; }
+    kem_port_yaz32(3320 olarak dtam16,kem_pci_adres(bdf,ofs));
+    ver (kem_port_oku16(pci_port_veri16(ofs)) olarak tam32)&65535;
+}
+çıplak işlev kem_pci_yaz16(bdf: tam32,ofs: tam32,v: tam32) {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4094 veya (ofs&1) != 0 { ver; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { değişken p: *dtam16 = a olarak *dtam16; *p=v olarak dtam16; ver; }
+    eğer ofs >= 256 { ver; }
+    kem_port_yaz32(3320 olarak dtam16,kem_pci_adres(bdf,ofs));
+    kem_port_yaz16(pci_port_veri16(ofs),v olarak dtam16);
+}
 çıplak işlev kem_pci_yaz32(bdf: tam32, ofs: tam32, v: tam64) {
+    eğer bdf < 0 veya bdf > 65535 veya ofs < 0 veya ofs > 4092 veya (ofs&3) != 0 { ver; }
+    değişken a: tam64 = kem_ecam_adres(bdf,ofs);
+    eğer a != 0 { kem_mmio_yaz32(a,v); ver; }
+    eğer ofs >= 256 { ver; }
     kem_port_yaz32(3320 olarak dtam16, kem_pci_adres(bdf, ofs));
     kem_port_yaz32(3324 olarak dtam16, (v & 4294967295) olarak dtam32);
 }
@@ -41,7 +67,7 @@
 çıplak işlev kem_mmio_oku32(adres: tam64) -> tam64 {
     değişken p: *dtam32 = adres olarak *dtam32;
     değişken v: dtam32 = *p;
-    ver v olarak tam64;
+    ver (v olarak tam64)&4294967295;
 }
 
 çıplak işlev kem_mmio_yaz32(adres: tam64, v: tam64) {
@@ -93,4 +119,44 @@ orq %rdx,%rax"# çıktı("={ax}",&n) bozulan("~{dx},~{flags},~{memory}") } }
 // QEMU isa-debug-exit (iobase 0xF4): QEMU (kod << 1) | 1 ile çıkar.
 çıplak işlev kem_qemu_cik(kod: tam32) {
     kem_port_yaz8(244 olarak dtam16, ((kod & 255) olarak tam32) olarak dtam8);
+}
+
+// Her vektörün 32 baytında işleyici kimliği, kesme sayısı ve PCI bağlamı tutulur.
+// 33/44 PS/2, 48 LAPIC, 65 xHCI. 66..79 MSI için kurulmuş dinamik IDT kapılarıdır.
+küresel değişken kesme_tablo: tam64 = 0;
+çıplak işlev kesme_kaydet(v: tam32,kim: tam32) -> mantıksal {
+    eğer kesme_tablo == 0 veya v < 0 veya v > 255 { ver yanlış; }
+    değişken uygun: mantıksal = (v == 33 ve kim == 1) veya (v == 44 ve kim == 2) veya (v == 48 ve kim == 3) veya (v == 65 ve kim == 4);
+    eğer v >= 66 ve v < 80 ve (kim == 5 veya kim == 6) { uygun=doğru; }
+    değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+    değişken eski: tam64 = kem_mmio_oku64(p);
+    eğer değil uygun veya (eski != 0 ve eski != -1) { ver yanlış; }
+    kem_mmio_yaz64(p,kim olarak tam64); ver doğru;
+}
+çıplak işlev kesme_ayir() -> tam32 {
+    eğer kesme_tablo == 0 { ver -1; }
+    değişken v: tam32 = 66;
+    iken v < 80 {
+        değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+        eğer kem_mmio_oku64(p) == 0 { kem_mmio_yaz64(p,-1); ver v; }
+        v=v+1;
+    } ver -1;
+}
+çıplak işlev kesme_birak(v: tam32) -> mantıksal {
+    eğer kesme_tablo == 0 veya v < 66 veya v >= 80 { ver yanlış; }
+    değişken p: tam64 = kesme_tablo+(v olarak tam64)*32;
+    eğer kem_mmio_oku64(p) == 0 { ver yanlış; }
+    kem_mmio_yaz64(p,0); kem_mmio_yaz64(p+8,0);
+    kem_mmio_yaz64(p+16,0); kem_mmio_yaz64(p+24,0); ver doğru;
+}
+gerçekzamanlı çıplak işlev kesme_geldi(v: tam64,kim: tam64) -> mantıksal {
+    // Eski PVH çekirdeklerinde bu tablo kurulmaz.
+    eğer kesme_tablo == 0 { ver doğru; }
+    değişken p: *tam64 = (kesme_tablo+v*32) olarak *tam64;
+    eğer *p != kim { ver yanlış; }
+    değişken sayac: *tam64 = (kesme_tablo+v*32+8) olarak *tam64;
+    *sayac=*sayac+1; ver doğru;
+}
+gerçekzamanlı çıplak işlev kdl_disk_irq(v: tam64) {
+    eğer v >= 66 ve v < 80 { eğer değil kesme_geldi(v,5) { kesme_geldi(v,6); } }
 }
