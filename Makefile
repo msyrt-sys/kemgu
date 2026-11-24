@@ -5186,3 +5186,8 @@ calistir_bm_x86_tcp_secenek: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD
 test_tumu: calistir_bm_x86_tcp_verim
 calistir_bm_x86_tcp_verim: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh verim
+
+.PHONY: calistir_bm_x86_soket
+test_tumu: calistir_bm_x86_soket
+calistir_bm_x86_soket: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh soket

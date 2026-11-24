@@ -82,3 +82,7 @@ SRTT ve RTTVAR milisaniye cinsindendir. İlk RTO bir saniye, alt sınır bir san
 Bir bağlantının alım ve gönderim halkaları 128 KiB’dir. SYN penceresi ölçeklenmez. Ölçek iki taraf da önerdiğinde kullanılır. Yerel kaydırma 2, kabul edilen en büyük kaydırma 14’tür. Zaman damgası anlaşılmışsa TSecr RTT ölçümüne katılır. PAWS, 24 gün içinde önceki zaman damgasından eski veriyi reddeder. İlk veri segmentinin ACK üst sınırı 25 ms’dir. İkinci segment hemen onaylanır. Nagle küçük yazıları uçuşta veri varken biriktirir. Keepalive boş bağlantıda üç yoklamadan sonra -110 verir.
 
 Paralel QEMU yükünde ölçülen ilk 64 MiB aktarım 1,075 MiB/s sürdü. Kapı 0,25 MiB/s altını yakalar. Her ölçümde Python eşi ve ayrıca pcap okuyucusu bütün veri akışının SHA-256 değerini doğrular.
+
+## Kullanıcı soketleri
+
+16 soket yuvası toplam 208 fiziksel sayfada açılışta ayrılır. Her UDP soketi dört datagram saklar. Bir TCP soketi sekiz bağlantı yuvasından birini kullanır. Bekleyen çağrıda süreç bir sonraki zamanlayıcı tikine kadar uyur. Çoklu beklemenin listesinde soket, boru ve ön plan klavyesi bulunabilir. Süreçler soketi standart giriş ve çıkış olarak çocuğa aktarabilir. Son fd kapanınca TCP FIN gönderir. İmzalar ve tampon alanları sistem çağrısı ABI belgesindedir.

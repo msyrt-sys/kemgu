@@ -47,3 +47,8 @@ Etkin ve pasif açılış, iki yönde 64 KiB, sekiz eşzamanlı bağlantı ve do
 ## Bölüm 9 — TCP seçenekleri ve verim
 
 Pencere ölçeği iki yönde, TCP zaman damgası ve PAWS, gecikmeli ACK, kapatılabilir Nagle ve keepalive eklendi. 64 MiB tek yön aktarım ölçek açık ve kapalı olarak iki derleyicide ölçüldü. Geçen süre 1707 saniye. Alıcı tarafında ölçek kaydırması kaldırılan ayrı QEMU imajında 131.068 yerine 262.140 baytlık pencere gözlendi ve kapı kırıldı. Gecikmeli ACK zamanlayıcısının çıkarıldığı iki host ikilisinde tek segment denetimi çıkış 5 verdi. Değiştirilmiş çekirdekte ağ üzerinden kapanmayan oturum oluşturma sabotajı uygulanmadı.
+
+## Bölüm 10 — kullanıcı soketleri ve çoklu bekleme
+
+74–87 çağrıları ve 73 ile uyumlu kullanıcı ping eklendi. C ve self-host konuklarında üç ayrı süreçte üç bağlantı, doğal çıkış ve Ctrl+C ile üç FIN, iki UDP soketi arasında QMP tuşu, boru, kabul ve çocuğa aynı soketin stdin/stdout olarak devri doğrulandı. Süre 2536 saniye. Onuncu bölümün ara regresyonu 22 hedef içerdi. İlk koşumda ring0 çağrı 99 ve self-host IR tipi düzeltme gerektirdi. Boruda okunabilir bit kaldırılınca bekleme üst sınırında konuk 15, kâhin 1 döndürdü. Süreç sonlandırmada soketi açık bırakma sabotajı uygulanmadı.
+- calistir_bm_x86_tcp_temel ilk sonuç kırmızı, ayrı koşum çıkışı 0.

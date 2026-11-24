@@ -112,3 +112,22 @@ Gelen üç datagramda sırasıyla yedi, beş ve altı parça kaydedildi. İlkind
 - TCP VERIM OK olceksiz 64 MiB süre=60.051s hız=1.066 MiB/s QEMU_CPU=47.67 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4066880 boş=45658
 - TCP VERIM OK olcekli 64 MiB süre=106.508s hız=0.601 MiB/s QEMU_CPU=88.82 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4263728 boş=45628
 - TCP VERIM OK olceksiz 64 MiB süre=106.494s hız=0.601 MiB/s QEMU_CPU=89.03 SHA256=9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814 heap=4263728 boş=45628
+
+## Soket ABI ve süreç ömrü
+
+- soket heap/boş çerçeve (4066880, 45441) (5050768, 45441)
+- soket heap/boş çerçeve (4263728, 45411) (5509984, 45411)
+
+Klavye/boru/UDP sınamasında dolu boruyu fd listesinde bekleyen süreç 100 ms içinde döner. Borunun hazır biti kapatılmış ayrı C imajında konuk çıkışı 15 oldu. Aynı test normal imajlarda geçer. Yükleyici ve kullanıcı bağlamları heap kullanır, iki derleyicide de süreçler kapanınca ayrılan fiziksel çerçeveler geri geldi.
+
+### C17-002 — iç blokta yapı okumasının IR tipi
+
+Gerçek çekirdek bağlamında en küçük değişiklik, `ag_tcp_adim` içindeki `sk_tcp_sonlandi(sahip,s.hata_kodu)` çağrısının yerine aşağıdaki gövdeyi koymaktır. Bağımsız iki yapılı küçük program aynı sorunu göstermedi.
+
+```kem
+değişken q: *SkKayit = sahip olarak *SkKayit; değişken sok: SkKayit = *q;
+sok.durum=4; sok.tcp=0; sok.hata_kodu=s.hata_kodu olarak tam64;
+eğer sok.dinleyen!=0 { sok.ref=0; } *q=sok;
+```
+
+Her derleyici için `UEFI_DERLEYICI=build/kemgu UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh` uygulanır. İkinci çalıştırmada `build/codegen` seçilir. Beklenen iki çekirdeğin de bağlanması. C geçti, self-host IR doğrulamasında `load volatile %TcpBag` sonucunu `store %SkKayit` satırında kullanarak LLVM tür hatası verdi. Tek yapı türüyle çalışan kapatma yardımcısında iki imaj da bağlandı ve QEMU sınaması geçti.

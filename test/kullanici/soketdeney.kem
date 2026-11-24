@@ -1,0 +1,69 @@
+// Gerçek süreç fd tablosunu denemek için küçük ağ istemcisi.
+çıplak işlev sd_yaz(p: tam64,i: tam64,v: tam64) { değişken a: *tam64 = (p+8*i) olarak *tam64; *a=v; }
+işlev sd_satir(m: metin) { sis_metin(m); sis_bayt_yaz(1,10); }
+işlev sd_istemci(p: tam64,id: tam32) -> tam64 {
+    değişken f: tam64 = sis_soket(1); eğer f<0 { ver 2; }
+    eğer sis_bagla(f,3221225985,9100)!=0 { ver 3; }
+    sis_bayt_koy(p,id);
+    eğer sis_gonder(f,p,1)!=1 veya sis_al(f,p,1)!=1 veya sis_bayt_al(p)!=id { ver 4; }
+    sis_bayt_koy(p,id+32); eğer sis_yaz(f,p,1)!=1 { ver 5; }
+    // İlk iki süreç eşi üçüncü bağlantıdan sonra serbest bırakınca doğal çıkış yapar.
+    eğer sis_soket_secenek(f,4,60000)!=0 veya sis_oku(f,p,1)!=1 veya sis_bayt_al(p)!=71 { ver 6; }
+    ver 0;
+}
+işlev sd_satir_kur(p: tam64,fd: tam64) { sd_yaz(p,0,fd); sd_yaz(p,1,1); sd_yaz(p,2,0); }
+işlev sd_karisik(p: tam64) -> tam64 {
+    değişken a: tam64 = sis_soket(2); değişken b: tam64 = sis_soket(2);
+    eğer a<0 veya b<0 veya sis_baglan_dinle(a,9101,1)<0 veya sis_baglan_dinle(b,9102,1)<0 { ver 10; }
+    eğer sis_soket_secenek(a,1,1)!=0 veya sis_al(a,p,1)!= -11 { ver 11; }
+    eğer sis_soket_secenek(b,4,60)!=0 veya sis_al(b,p,1)!= -110 { ver 12; }
+    eğer sis_boru(p+256)!=0 { ver 13; }
+    değişken rd: tam64 = sis_alan(p+256,0); değişken wr: tam64 = sis_alan(p+256,1);
+    sd_satir_kur(p,rd); eğer sis_bekle_coklu(p,1,30)!=0 { ver 14; }
+    eğer sis_bayt_yaz(wr,74)!=1 veya sis_bekle_coklu(p,1,100)!=1 veya sis_alan(p,2)!=1 { ver 15; }
+    eğer sis_oku(rd,p+128,1)!=1 veya sis_bayt_al(p+128)!=74 { ver 16; }
+    sd_satir_kur(p,0); sd_satir_kur(p+24,a); sd_satir_kur(p+48,b); sd_satir_kur(p+72,rd);
+    sd_satir("KARISIK HAZIR"); değişken say: tam32 = 0;
+    iken say<3 {
+        değişken r: tam64 = sis_bekle_coklu(p,4,8000); eğer r<=0 { ver 17; }
+        eğer sis_alan(p,2)==1 {
+            eğer sis_tus_bekle(p+128)<0 { ver 18; }
+            eğer sis_alan(p+128,1)==107 ve sis_alan(p+128,2)==1 { sd_satir("KLAVYE K"); say=say+1; }
+        }
+        değişken i: tam32 = 1; iken i<=2 {
+            değişken sat: tam64 = p+24*(i olarak tam64);
+            eğer sis_alan(sat,2)==1 {
+                sd_yaz(p+192,0,p+224); sd_yaz(p+192,1,1);
+                değişken fd: tam64 = sis_alan(sat,0);
+                eğer sis_udp_al_kaynak(fd,p+192,p+208)!=1 veya sis_alan(p+208,0)!=3221225985 veya sis_alan(p+208,1)!=9200 veya sis_bayt_al(p+224)!=64+i { ver 19; }
+                eğer sis_udp_gonder_hedef(fd,p+192,p+208)!=1 { ver 20; }
+                eğer i==1 { sd_satir("SOKET A"); } değilse { sd_satir("SOKET B"); }
+                say=say+1;
+            } i=i+1;
+        }
+    }
+    eğer sis_ag_bilgi(p,96)!=96 veya sis_alan(p,1)!=3221225986 { ver 21; } ver 0;
+}
+işlev sd_dinle(p: tam64) -> tam64 {
+    değişken l: tam64 = sis_soket(1);
+    eğer l<0 veya sis_baglan_dinle(l,9110,3)!=0 veya sis_soket_secenek(l,1,1)!=0 veya sis_kabul(l)!= -11 { ver 30; }
+    eğer sis_soket_secenek(l,1,0)!=0 { ver 31; }
+    sd_satir("DINLE HAZIR");
+    değişken fd: tam64 = sis_kabul(l); eğer fd<0 veya sis_kapat(l)!=0 { ver 32; }
+    sd_yaz(p,0,fd); sd_yaz(p,1,fd); sd_yaz(p,2,sis_metin_adres("yavru")); sd_yaz(p,3,0);
+    değişken pid: tam64 = sis_baslat_eslemeli("/diskler/usb0p2/bin/soketdeney.elf",p+16,p);
+    eğer pid<1 veya sis_kapat(fd)<0 { ver 33; }
+    eğer sis_bekle(pid,p+32)<0 veya sis_alan(p+32,0)!=0 veya sis_alan(p+32,1)!=0 { ver 34; } ver 0;
+}
+işlev sd_yavru(p: tam64) -> tam64 {
+    eğer sis_oku(0,p,1)!=1 veya sis_bayt_al(p)!=90 { ver 35; }
+    eğer sis_yaz(1,p,1)!=1 veya sis_yazmayi_kapat(1)!=0 { ver 36; }
+    eğer sis_oku(0,p,1)!=0 { ver 37; } ver 0;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 { güvensiz {
+    eğer argc!=2 { ver 1; }
+    değişken p: tam64 = malloc(512) olarak tam64; eğer p==0 { ver 1; }
+    değişken kip: metin = sis_argv(argv,1); değişken id: tam32 = metin_bayt(kip,0) olarak tam32;
+    eğer id==100 { ver sd_dinle(p); } eğer id==121 { ver sd_yavru(p); }
+    eğer id==109 { ver sd_karisik(p); } ver sd_istemci(p,id);
+} }
