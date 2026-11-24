@@ -5106,3 +5106,8 @@ test_tumu: calistir_bm_x86_kapat
 calistir_bm_x86_kapat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/acpi/s5_test.kem
 	@SUREC_KAHIN=kapat_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_pat
+test_tumu: calistir_bm_x86_pat
+calistir_bm_x86_pat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_pat_harness.sh

@@ -47,3 +47,7 @@ Geçici dosya sisteminde dizin oluşturma, yeniden adlandırma, listeleme, silme
 ## Bölüm 7 — ACPI S5 ile kapatma
 
 Kabuk dosya sistemlerini boşalttı ve FADT/DSDT üzerinden bulunan S5 tipini PM1 denetim portuna yazdı. QEMU her iki derleyicide de QMP guest-shutdown olayıyla kendiliğinden kapandı. Host kapanırken yazılan dosyayı doğruladı, fsck.fat dönüşü 0. FADT, 8042 ve üçlü hata ile yeniden başlatma denemeleri de geçti. SLP_EN bitini çıkarmak gerçek QEMU kapısında beş saniyelik zaman aşımı verdi. SLP_TYP kaydırmasını değiştirmek sıfırdan farklı tip içeren host testinde 8 ile döndü. Q35'in S5 tipi sıfır olduğu için ikinci hata q35 üzerinde gözlemlenemez. Test takımı 1284 saniye, bölüm 22 dakika.
+
+## Bölüm 8 — GOP sayfalarında PAT
+
+C ve self-host çekirdeklerinde QMP ile etkin sayfa tablosu yüründü. 1280×800 GOP alanının 1.000 sayfası WC, normal RAM örneği WB, LAPIC ve GOP dışındaki MMIO UC çıktı. Ekrandaki 1.024.000 piksel beklenen görüntüyle eşleşti. PAT girişini varsayılan UC bırakan tek değişiklik, ilk sayfanın bağımsız tür denetiminde rc 1 verdi. Birleşik kapılar 1286 saniye, bölüm 22 dakika.

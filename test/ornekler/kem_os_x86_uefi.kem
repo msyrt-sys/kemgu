@@ -56,6 +56,7 @@ işlev main() -> tam32 {
  eşleş uefi_bilgi() {
   hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
   tamam(b) => {
+   güvensiz { pat_olcum_acik=doğru; }
    uefi_dok(b);
    eşleş uefi_koruma_probe(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }
    eşleş uefi_bellek_kur(b) { hata(e) => { bm_yaz(e); kem_qemu_cik(1); } tamam(v) => { } }

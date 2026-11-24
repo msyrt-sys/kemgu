@@ -71,3 +71,14 @@ Tarih, makine/anakart, CPU, firmware sürümü, imaj SHA256, Git commit'i ve kul
 | NVMe / AHCI okuma | | | |
 | Düzenleyici ve gezgin | | | |
 | Süreçler ve kapanış | | | |
+
+### GOP yazma süresi
+
+Tanı çekirdeğini aşağıdaki komutlarla bir UEFI imajına yerleştirin. İmajı yukarıdaki USB hazırlama yöntemiyle ayrı bir deneme belleğine yazıp seri kaydı açın.
+
+```sh
+UEFI_CALISMA_DIZINI=build/pat-tani UEFI_YALNIZ_DERLE=1 bash test/bm_x86_uefi_harness.sh
+python3 tests/qemu/uefi_imaj.py build/pat-tani.img build/pat-tani/esp/EFI/BOOT/BOOTX64.EFI build/pat-tani/k.elf
+```
+
+Aynı çözünürlükte üç soğuk açılış yapın. Her açılış için PAT_TSC satırındaki UC ve WC doldurma sürelerini TSC çevrimi olarak, üçüncü değeri piksel sayısı olarak kaydedin. PAT_MSR, PAT_ILK, PAT_SON, PAT_RAM ve PAT_MMIO satırlarını iliştirin. Üç ölçümün medyanını ve ekrandaki Türkçe gliflerin durumunu belirtin.

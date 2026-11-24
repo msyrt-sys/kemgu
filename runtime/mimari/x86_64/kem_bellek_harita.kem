@@ -1,3 +1,4 @@
+kullan drivers::acilis::uefi::{ gop_denetle };
 // EBS sonrası çerçeve ayırıcı: cihaz/ekran adresleri firmware RAM haritasından gelir.
 kullan drivers::acilis::uefi_harita::{ uefi_harita, uefi_koru } olarak uh;
 kullan drivers::acpi::mcfg::{ McfgPencere, mcfg_coz, mcfg_adres };
@@ -59,6 +60,7 @@ işlev uefi_bellek_kur_ic(b: UefiBilgi,surec: mantıksal) -> sonuç<mantıksal,m
   eşleş uefi_pci_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_guc_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  eşleş pat_gop_kur(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eğer surec {
    değişken sakla: Dizi<CerceveAyirici> = [d];
    değişken adres: *tam64 = (&sakla) olarak *tam64;
@@ -195,5 +197,97 @@ işlev uefi_pci_esle(d: &değişken CerceveAyirici,b: UefiBilgi) -> sonuç<mant�
    i=i+1;
   }
  }
+ ver tamam(doğru);
+}
+
+// IA32_PAT[7] yazma-birleştirme. CPUID.01H:EDX[16] PAT desteğini bildirir.
+çıplak işlev pat_destekli() -> mantıksal {
+ değişken oz: tam32 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1, %eax
+cpuid"# çıktı("={dx}",&oz) bozulan("~{rax}") bozulan("~{rbx}") bozulan("~{rcx}") } }
+ ver (oz&65536) != 0;
+}
+çıplak işlev pat_oku() -> tam64 {
+ değişken a: tam32 = 0; değişken d: tam32 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$631, %ecx
+rdmsr"# çıktı("={ax}",&a) çıktı("={dx}",&d) bozulan("~{rcx}") bozulan("~{memory}") } }
+ ver ((a olarak tam64)&4294967295)|((d olarak tam64)<<32);
+}
+çıplak işlev pat_yaz(v: tam64) {
+ değişken a: tam32 = v olarak tam32; değişken d: tam32 = (v>>32) olarak tam32;
+ // Tek işlemcili erken açılışta CD=1/NW=0 ile önbellekleri ve TLB'yi temizle.
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+cli
+movq %cr0, %r8
+movq %r8, %r9
+btsq $$30, %r9
+btrq $$29, %r9
+movq %r9, %cr0
+wbinvd
+movq %cr3, %r9
+movq %r9, %cr3
+movl $$631, %ecx
+wrmsr
+wbinvd
+movq %r9, %cr3
+movq %r8, %cr0
+popfq"# girdi("{ax}",a) girdi("{dx}",d) bozulan("~{rcx}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{memory}") } }
+}
+çıplak işlev pat_doldurma(fb: tam64, piksel: tam64) -> tam64 {
+ değişken bas: tam64 = bm_tsc_oku();
+ lfb_doldur(fb,piksel,0);
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"mfence"# bozulan("~{memory}") } }
+ ver bm_tsc_oku()-bas;
+}
+// Büyük yaprağın dışarıda kalan 4 KiB sayfaları eski fiziksel adres ve öznitelikleri korur.
+işlev pat_gop_tablo(d: &değişken CerceveAyirici, adres: tam64) -> sonuç<tam64,metin> {
+ değişken tablo: tam64 = kxm_cr3_oku()&4503599627366400;
+ değişken bit: tam32 = 39;
+ iken bit > 21 {
+  değişken g: tam64 = kem_mmio_oku64(tablo+((adres>>bit)&511)*8);
+  eğer (g&1) == 0 veya (g&128) != 0 { ver hata("GOP ust sayfa tablosu"); }
+  tablo=g&4503599627366400; bit=bit-9;
+ }
+ değişken yuva: tam64 = tablo+((adres>>21)&511)*8;
+ değişken buyuk: tam64 = kem_mmio_oku64(yuva);
+ eğer (buyuk&1) == 0 { ver hata("GOP PDE yok"); }
+ eğer (buyuk&128) == 0 { ver tamam(buyuk&4503599627366400); }
+ eşleş uefi_tahsis(d,1,"TABLO") { hata(e) => { ver hata(e); } tamam(t) => {
+  değişken taban: tam64 = buyuk&4503599625273344;
+  değişken bayrak: tam64 = (buyuk&3967)|((buyuk&4096)>>5)|((buyuk>>63)<<63);
+  değişken i: tam64 = 0;
+  iken i < 512 { kem_mmio_yaz64(t+i*8,(taban+i*4096)|bayrak); i=i+1; }
+  kem_mmio_yaz64(yuva,t|(buyuk&7)); ver tamam(t);
+ } }
+}
+küresel değişken pat_olcum_acik: mantıksal = yanlış;
+işlev pat_gop_kur(d: &değişken CerceveAyirici, b: UefiBilgi) -> sonuç<mantıksal,metin> {
+ eğer değil pat_destekli() { bm_yaz("GOP PAT destegi yok"); ver tamam(yanlış); }
+ eşleş gop_denetle(b) { hata(e) => { ver hata(e); } tamam(v) => {} }
+ değişken fb: tam64 = dizi_al(b.alan,3); değişken son: tam64 = fb+dizi_al(b.alan,4);
+ değişken piksel: tam64 = dizi_al(b.alan,7)*dizi_al(b.alan,6)/4;
+ değişken once: tam64 = 0;
+ güvensiz { eğer pat_olcum_acik { once=pat_doldurma(fb,piksel); } }
+ değişken eski: tam64 = pat_oku();
+ değişken yeni: tam64 = (eski&72057594037927935)|72057594037927936;
+ pat_yaz(yeni);
+ değişken a: tam64 = (fb/4096)*4096;
+ iken a < son {
+  eşleş pat_gop_tablo(d,a) { hata(e) => { ver hata(e); } tamam(t) => {
+   değişken sinir: tam64 = ((a/2097152)+1)*2097152;
+   iken a < sinir ve a < son {
+    değişken yuva: tam64 = t+((a>>12)&511)*8;
+    değişken g: tam64 = kem_mmio_oku64(yuva);
+    eğer (g&1) == 0 veya (g&4503599627366400) != a { ver hata("GOP fiziksel esleme"); }
+    kem_mmio_yaz64(yuva,g|152); a=a+4096;
+   }
+  } }
+ }
+ kxm_cr3_yaz(kxm_cr3_oku());
+ güvensiz { eğer pat_olcum_acik { kap_dok("PAT_TSC",once,pat_doldurma(fb,piksel),piksel); } }
+ kap_dok("PAT_MSR",eski,pat_oku(),kxm_cr3_oku());
+ kap_dok("PAT_ILK",fb,uefi_yaprak(fb),0); kap_dok("PAT_SON",son-1,uefi_yaprak(son-1),0);
+ değişken ram: tam64 = dizi_al(b.alan,14); kap_dok("PAT_RAM",ram,uefi_yaprak(ram),0);
+ kap_dok("PAT_MMIO",4276092928,uefi_yaprak(4276092928),0);
  ver tamam(doğru);
 }

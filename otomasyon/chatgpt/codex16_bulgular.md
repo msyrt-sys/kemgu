@@ -85,3 +85,11 @@ MBR kaynağı 36.700.160 bayt, SHA256 28c8e4fa7e98718e844741a287e097af9d52b08287
 Q35'te QMP fiziksel bellek dökümündeki 8.424 baytlık DSDT'nin adı kök altında _S5_, paket uzunluğu 6 ve ilk iki değeri sıfırdı. PM1a_CNT portu 0x604, PM1b yoktu. QMP olayının reason alanı guest-shutdown, guest alanı true ve süreç dönüşü 0 oldu. Kapatma kapısında debug-exit aygıtı bağlı değildir. tests/drivers/acpi/qemu_q35_dsdt.hex aynı tablonun onaltılık dökümüdür.
 
 Ayrıştırıcı geçerli SDT imzası, uzunluk, sağlama toplamı, NameOp ve PackageOp kalıbını arar. Sıfır, bir, BytePrefix ve WordPrefix sabitlerini destekler. Bu sınırın dışında veya PM1 adres uzayı desteklenmediğinde açık hata kaydı üretilir. I/O portlu PM1b varsa ikinci uyku tipi o porta yazılır. Q35 yalnız PM1a ile ölçüldü. SLP_EN sabotajında konuk geri dönüş yolunu bildirdi ve QEMU açık kaldı. Yalnız kaydırmayı değiştiren ikinci kopyada tip 5 için beklenen 0x3401 sözcüğünü denetleyen test başarısız oldu. [QEMU ACPI PM1 uygulaması](https://github.com/qemu/qemu/blob/v8.2.2/hw/acpi/core.c)
+
+## GOP bellek öznitelikleri
+
+IA32_PAT için ölçülen değişim 0x0007040600070406 → 0x0107040600070406. Giriş 7 WC, giriş 3 UC, giriş 0 WB. Etkin CR3 ve QMP fiziksel sayfa tablolarından çözülen küçük GOP yaprakları PAT/PCD/PWT için 1/1/1 verdi. Host ilk ve son GOP sayfasıyla beraber tüm aralığı ve BAR'ların dışarıda kalan sayfalarını denetledi. Sabotaj kopyasında ilk sayfa 0x80000000, PTE 0x800000fb ve PAT indeksi 7 olduğu halde tip UC çıktı.
+
+Aşağıdaki süreler 1.024.000 pikselin doldurulması için TSC çevrimleridir. QEMU TCG süresi fiziksel performansı göstermez. Fiziksel PC'de üç soğuk açılışla ölçüm adımı kontrol listesine eklendi.
+PAT_TSC UC=4575064 WC=4432823 piksel=1024000
+PAT_TSC UC=4658138 WC=4438295 piksel=1024000
