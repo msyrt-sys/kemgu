@@ -151,11 +151,23 @@ void kdl_uart_16550_init(void) {
      */
 }
 
+uint32_t kdl_uart_16550_tx_kayip = 0;
+
+static inline int kdl_16550_tx_mesgul(void) {
+#ifdef KEMGU_UART_MOCK
+    /* UINT32_MAX, TX durum yazmacı hiç hazır olmayan aygıtı modeller. */
+    if (kdl_uart_16550_mock_thre_bekle == UINT32_MAX) return 1;
+#endif
+    return (kdl_16550_inb((uint16_t)(KDL_16550_BASE + KDL_16550_LSR)) & KDL_16550_LSR_THRE) == 0;
+}
+
 void kdl_uart_16550_putc(char c) {
-    /* LSR.THRE temiz oldugu surece dön */
-    while ((kdl_16550_inb((uint16_t)(KDL_16550_BASE + KDL_16550_LSR))
-            & KDL_16550_LSR_THRE) == 0) {
-        /* spin */
+    uint32_t kalan = 100000U;
+    while (kdl_16550_tx_mesgul()) {
+        if (--kalan == 0U) {
+            ++kdl_uart_16550_tx_kayip;
+            return;
+        }
     }
     kdl_16550_outb((uint16_t)(KDL_16550_BASE + KDL_16550_THR),
                    (uint8_t)c);

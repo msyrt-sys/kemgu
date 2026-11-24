@@ -148,10 +148,23 @@ void kdl_uart_pl011_init(void) {
      */
 }
 
+uint32_t kdl_uart_pl011_tx_kayip = 0;
+
+static inline int kdl_pl011_tx_mesgul(void) {
+#ifdef KEMGU_UART_MOCK
+    /* UINT32_MAX, TX durum yazmacı hiç hazır olmayan aygıtı modeller. */
+    if (kdl_uart_pl011_mock_fr_full_kalan == UINT32_MAX) return 1;
+#endif
+    return (kdl_pl011_oku32(KDL_PL011_FR) & KDL_PL011_FR_TXFF) != 0;
+}
+
 void kdl_uart_pl011_putc(char c) {
-    /* FR.TXFF set olduğu sürece dön. Spin lock — irq/timer yok. */
-    while (kdl_pl011_oku32(KDL_PL011_FR) & KDL_PL011_FR_TXFF) {
-        /* boşa dön */
+    uint32_t kalan = 100000U;
+    while (kdl_pl011_tx_mesgul()) {
+        if (--kalan == 0U) {
+            ++kdl_uart_pl011_tx_kayip;
+            return;
+        }
     }
     kdl_pl011_yaz32(KDL_PL011_DR, (uint32_t)(unsigned char)c);
 }

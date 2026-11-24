@@ -1000,7 +1000,11 @@ $(BUILD)/test_uart_pl011$(EXE): runtime/kdl_runtime_uart_pl011.c \
                                 $(TESTDIR)/test_uart_pl011.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
-calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE)
+$(BUILD)/test_uart_pl011_tx$(EXE): runtime/kdl_runtime_uart_pl011.c tests/drivers/uart/tx_sinir.c runtime/kdl_uart.h | $(BUILD)
+	$(CC) $(CFLAGS) -Iruntime -DKEMGU_UART_MOCK  $(filter %.c,$^) -o $@
+
+calistir_uart_pl011_test: $(BUILD)/test_uart_pl011$(EXE) $(BUILD)/test_uart_pl011_tx$(EXE)
+	@python3 -c "import subprocess; subprocess.run(['./$(BUILD)/test_uart_pl011_tx$(EXE)'], check=True, timeout=3)"
 	$(ASAN_RUN) ./$(BUILD)/test_uart_pl011$(EXE)
 
 # === Bare-metal yazdir_* port (PL011 backend, mock test) ===
@@ -4620,7 +4624,11 @@ $(BUILD)/test_uart_16550$(EXE): runtime/kdl_runtime_uart_16550.c \
                                 $(TESTDIR)/test_uart_16550.c | $(BUILD)
 	$(CC_ASAN) $(CFLAGS) $(ASAN_FLAGS) -DKEMGU_UART_MOCK -Iruntime -o $@ $^
 
-calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE)
+$(BUILD)/test_uart_16550_tx$(EXE): runtime/kdl_runtime_uart_16550.c tests/drivers/uart/tx_sinir.c runtime/kdl_uart.h | $(BUILD)
+	$(CC) $(CFLAGS) -Iruntime -DKEMGU_UART_MOCK -DTEST_16550 $(filter %.c,$^) -o $@
+
+calistir_uart_16550_test: $(BUILD)/test_uart_16550$(EXE) $(BUILD)/test_uart_16550_tx$(EXE)
+	@python3 -c "import subprocess; subprocess.run(['./$(BUILD)/test_uart_16550_tx$(EXE)'], check=True, timeout=3)"
 	$(ASAN_RUN) ./$(BUILD)/test_uart_16550$(EXE)
 
 # === 16550A bare-metal cross-compile (x86_64 freestanding) ===
@@ -5111,3 +5119,8 @@ calistir_bm_x86_kapat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x
 test_tumu: calistir_bm_x86_pat
 calistir_bm_x86_pat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_pat_harness.sh
+
+.PHONY: calistir_mmio_volatile
+test_tumu: calistir_mmio_volatile
+calistir_mmio_volatile: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_mmio_volatile_harness.sh

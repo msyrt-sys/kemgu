@@ -107,3 +107,19 @@ xhci kabul=378
 mcfg kabul=528
 s5 kabul=449
 lfn kabul=812
+
+## Güncel bekleme envanteri
+
+Dalga 15'in [donanım bekleme envanterindeki](codex15_bulgular.md) satırlara aşağıdaki sonuçlar uygulanır. C sürücülerindeki kayıp sayacı her düşen TX baytı için bir artar.
+
+| Yol | Beklenen olay | Güncel sınır |
+|---|---|---|
+| 16550 C TX ve PL011 C TX | THRE ve boş TX FIFO | Bayt başına 100.000 durum okuması |
+| 16550 C RX ve PL011 C RX | Kullanıcının karakter göndermesi | Bloklayan alma API'sinin sözleşmesi gereği açık uçlu |
+| AHCI ve NVMe MSI | Kesme sayacı değişimi | 50 ms veya beş milyon turdan önce tamamlanma, yoksa yoklamaya dönüş |
+| AHCI, NVMe ve USB disk işlemi | Geçici ortam hatası | İlk girişim ve en çok üç yeniden deneme |
+| Hub portu | Bağlantı değişimi ve port sıfırlaması | Sayılı durum yoklamaları, güç gecikmesi tanımlayıcıdan |
+| ACPI S5 | Sistemin gücü kesmesi | Yazma sonrasında 250 ms, sonra hata ve eski durdurma yolu |
+| Bekleyen kabuk, süreç ve son HLT | Kullanıcı olayı, süreç çıkışı veya son durum | Sürücü durum biti beklemesi içermeyen açık uçlu durumlar |
+
+MMIO ölçümü VirtIO blok/TX/RX used.idx, SATA port durumu, kesme sayacı, xHCI olay halkası, USB kontrol ve blok/yapılandırma durum makinelerini kapsar. PIO ile çalışan 8042, UART ve RTC, x86 in talimatını kullanır. Kâhin ardıllardan yeniden erişilebilen döngü bloklarını seçer. Bölünmüş yürütücüde aynı döngü içinden donanım okuyan yordamın çağrıldığı da doğrulanır. Gerçek çalışma zamanının iki UART dosyasında RX gövdeleri korunmuştur.

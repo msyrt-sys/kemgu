@@ -55,3 +55,7 @@ C ve self-host çekirdeklerinde QMP ile etkin sayfa tablosu yüründü. 1280×80
 ## Bölüm 9 — Ayrıştırıcı korpusları
 
 Her derleyici dokuz korpusta toplam 12.000 örneği tamamladı. USB korpusunda aygıt ve yapılandırma zincirine 1.200'er örnek ayrıldı. Diğer sekiz korpusta 1.200'er girdi işlendi. Her korpusta hem kabul hem ret veya eksik olay görüldü. İki derleyicide sayaçlar birebir eşleşti. USB yapılandırma zincirindeki sıfır uzunluk korumasını kaldırıp asılma üretme sabotajı uygulanmadı. H12b'nin bu kanıtı açık. Kapılar 1256 saniye, bölüm 21 dakika.
+
+## Bölüm 10 — UART gönderme sınırı ve MMIO
+
+16550 ve PL011 bir baytta art arda 100.000 meşgul okumasından sonra kayıp sayacını artırır. Host modellerinde sürekli meşgul, sınırın son denemesinde hazır ve sonraki baytta toparlanma geçti. Sınır kaldırıldığında gerçek 16550 mock testi üç saniyede zaman aşımıyla 124 verdi. Dokuz donanım beklemesi iki derleyicide ham IR, optimize IR ve x86 makine kodunda geçti. Sıradan bayt toplamı döngüsü listeye eklenince volatile kapısı 1 ile döndü. ARM çekirdek kapıları ve iki UART bare-metal kapısı geçti. Testler 1257 saniye, bölüm 21 dakika.
