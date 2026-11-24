@@ -1,3 +1,4 @@
+kullan drivers::ag::parca::{ ParcaYuvasi, PARCA_SINIR, parca_es, parca_yaslandir, parca_al, parca_giden };
 kullan drivers::ag::udp::{ udp_yaz, udp_oku, udp_yuva, udp_bagla };
 kullan drivers::ag::dhcp::{ DhcpKirasi, dhcp_yeni, dhcp_tick, dhcp_onek, dhcp_istek, dhcp_al };
 kullan drivers::ag::dns::{ DnsA, dns_sorgu, dns_cevap, dns_ad_yaz, dns_ad_esit };
@@ -1656,6 +1657,7 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
 işlev ag_al() {
     güvensiz {
     eğer ag_bar==0 { ver; }
+    eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
     ag_bekleyenleri_isle(); ag_dhcp_adim();
     eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
@@ -1755,6 +1757,7 @@ işlev ag_adres_kuyrugunu_bosalt() {
             iken i<4 { dizi_yaz(t,i*4+1,0 olarak tam64); i=i+1; }
             ag_atilan=ag_atilan+(ag_bekleyen olarak tam64); ag_bekleyen=0;
         }
+        eğer ag_parca_aktif>0 { ag_parca_sure(9223372036854775807); }
         ag_dns_on_son=0;
     }
 }
@@ -1800,9 +1803,10 @@ işlev ag_udp_girdi(rx: Dizi<dtam8>,n: tam32) -> mantıksal {
             değişken r: DnsA = dns_cevap(rx,h+8,u,ag_dns_id,ag_dizi8(ag_l5+288),ag_dizi8(ag_l5+320));
             eğer r.kod!= -74 { ag_dns_sonuc=r.kod; ag_dns_ip=r.adres; ag_dns_ttl=r.ttl; } ver doğru;
         }
-        eğer dp==ag_udp_port ve udp_yuva(ag_dizi64(ag_l5+256),dp)>=0 ve u<=1472 {
+        eğer dp==ag_udp_port ve udp_yuva(ag_dizi64(ag_l5+256),dp)>=0 ve u<=PARCA_SINIR-8 {
+            eğer u>1472 { tx=ag_dizi8(ag_parca_alan+262144); }
             ag_kopyala(tx,42,rx,h+8,u); değişken boy: tam32 = ag_udp_cerceve(tx,dst,src,dp,sp,u,mac);
-            eğer boy>0 { ag_dizi_gonder(tx,boy); } ver doğru;
+            eğer boy>0 ve ag_ip_buyuk_gonder(tx,boy)<0 { ag_atilan=ag_atilan+1; } ver doğru;
         }
         ag_udp_kapali=ag_udp_kapali+1;
         değişken ms: tam64 = ag_us()/1000;
@@ -1853,6 +1857,80 @@ işlev ag_cozumle(ad: metin) -> sonuç<mantıksal,metin> {
     }
 }
 
+// Dört adet 64 KiB yuva ve bir adet büyük gönderim alanı.
+küresel değişken ag_parca_alan: tam64 = 0;
+küresel değişken ag_parca_birlesen: tam64 = 0;
+küresel değişken ag_parca_atilan: tam64 = 0;
+küresel değişken ag_parca_giden: tam64 = 0;
+küresel değişken ag_parca_aktif: tam32 = 0;
+işlev ag_parca_kur() -> mantıksal {
+    güvensiz {
+        eğer ag_bar==0 { ver doğru; }
+        değişken a: tam64 = uefi_surec_ayir(77);
+        eğer a==0 { ver yanlış; }
+        memset(a olarak *tam8,0,315392);
+        değişken i: tam32 = 0;
+        iken i<4 {
+            değişken k: tam64 = a+65536*(i olarak tam64);
+            ag_dizi_baslik(k+128,k+512,74+PARCA_SINIR,4); ag_dizi_baslik(k+160,k+50176,PARCA_SINIR/8,4); i=i+1;
+        }
+        ag_dizi_baslik(a+262144,a+262272,74+PARCA_SINIR,4); ag_parca_alan=a; ver doğru;
+    }
+}
+işlev ag_parca_sure(ms: tam64) {
+    güvensiz {
+        eğer ag_parca_aktif==0 { ver; }
+        değişken i: tam32 = 0;
+        iken i<4 {
+            değişken p: *ParcaYuvasi = (ag_parca_alan+65536*(i olarak tam64)) olarak *ParcaYuvasi;
+            değişken yuva: ParcaYuvasi = *p;
+            eğer parca_yaslandir(&değişken yuva,ms) { *p=yuva; ag_parca_atilan=ag_parca_atilan+1; ag_parca_aktif=ag_parca_aktif-1; }
+            i=i+1;
+        }
+    }
+}
+işlev ag_ip_buyuk_gonder(b: Dizi<dtam8>,n: tam32) -> tam32 {
+    güvensiz {
+        eğer n<=1514 { ver ag_dizi_gonder(b,n); }
+        değişken kucuk: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        değişken bas: tam32 = 0;
+        iken bas<n-34 {
+            değişken boy: tam32 = parca_giden(b,n,bas,1500,kucuk);
+            eğer boy<0 { ver boy; }
+            değişken r: tam32 = ag_dizi_gonder(kucuk,boy);
+            eğer r<0 { ver r; }
+            bas=bas+boy-34; ag_parca_giden=ag_parca_giden+1;
+        }
+        ver 0;
+    }
+}
+işlev ag_parca_girdi(b: Dizi<dtam8>,n: tam32,ms: tam64) {
+    güvensiz {
+        değişken l: *AgL3 = ag_l3_alan olarak *AgL3;
+        eğer ag_parca_alan==0 veya (*l).ip==0 veya ag_be32(b,30)!=(*l).ip veya eth_tur(b,n,ag_mac)!=2048 { ver; }
+        ag_parca_sure(ms);
+        değişken sec: tam64 = 0; değişken i: tam32 = 0;
+        iken i<4 {
+            değişken k: tam64 = ag_parca_alan+65536*(i olarak tam64);
+            değişken p: *ParcaYuvasi = k olarak *ParcaYuvasi; değişken y: ParcaYuvasi = *p;
+            eğer parca_es(&değişken y,b) { sec=k; }
+            eğer y.bitis_ms==0 ve sec==0 { sec=k; } i=i+1;
+        }
+        eğer sec==0 { ag_parca_atilan=ag_parca_atilan+1; ver; }
+        değişken p: *ParcaYuvasi = sec olarak *ParcaYuvasi; değişken y: ParcaYuvasi = *p; değişken once: tam64 = y.bitis_ms;
+        değişken buf: Dizi<dtam8> = ag_dizi8(sec+128);
+        değişken boy: tam32 = parca_al(&değişken y,b,n,buf,ag_dizi8(sec+160),ms); *p=y;
+        eğer once==0 ve y.bitis_ms!=0 { ag_parca_aktif=ag_parca_aktif+1; }
+        eğer once!=0 ve y.bitis_ms==0 { ag_parca_aktif=ag_parca_aktif-1; }
+        eğer boy<0 { ag_parca_atilan=ag_parca_atilan+1; ver; }
+        eğer boy==0 { ver; }
+        ag_parca_birlesen=ag_parca_birlesen+1;
+        eğer ag_udp_girdi(buf,boy) { ver; }
+        değişken tx: Dizi<dtam8> = ag_dizi8(ag_parca_alan+262144);
+        boy=ag_l3_isle(buf,boy,tx,ms,yanlış);
+        eğer boy>0 ve ag_ip_buyuk_gonder(tx,boy)<0 { ag_atilan=ag_atilan+1; }
+    }
+}
 işlev ag_l3_kur() -> mantıksal {
     güvensiz {
         eğer ag_l3_alan!=0 { ver doğru; }
@@ -1865,7 +1943,7 @@ işlev ag_l3_kur() -> mantıksal {
         ag_dizi_baslik(a+320,a+512,48,8); ag_dizi_baslik(a+352,a+1024,16,8);
         değişken s: *AgL3 = a olarak *AgL3;
         *s=l3_yeni(ag_mac,ag_dizi64(a+320)); ag_l3_alan=a;
-        ver ag_l5_kur();
+        eğer değil ag_l5_kur() { ver yanlış; } ver ag_parca_kur();
     }
 }
 işlev ag_dizi_gonder(b: Dizi<dtam8>,n: tam32) -> tam32 {
@@ -1904,6 +1982,7 @@ işlev ag_l3_girdi() {
         değişken rx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
         değişken i: tam32 = 0;
         iken i<ag_son_boy { ag_y8(rx,i,kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64); i=i+1; }
+        eğer t==2048 ve (ag_be16(rx,20)&16383)!=0 ve ip4_baslik(rx,ag_son_boy)>=0 { ag_parca_girdi(rx,ag_son_boy,ag_us()/1000); ver; }
         eğer t==2048 ve ag_udp_girdi(rx,ag_son_boy) { ver; }
         değişken once: tam64 = (*s).cakisma;
         değişken n: tam32 = ag_l3_isle(rx,ag_son_boy,tx,ag_us()/1000,yanlış);
@@ -2026,6 +2105,9 @@ işlev ag_satir() -> metin {
         ver kd_tamsayi(metin_birlestir(s," vektor"),ag_vektor olarak tam64);
     }
 }
+işlev ag_parca_satir() -> metin {
+    güvensiz { ver kd_tamsayi(kd_tamsayi(kd_tamsayi("PARCA birlesen atilan giden",ag_parca_birlesen),ag_parca_atilan),ag_parca_giden); }
+}
 işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
     güvensiz {
         eğer bm_esit(arg,"lo") {
@@ -2034,12 +2116,16 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
         }
         eğer ag_bar==0 { ver hata("ag arayuzu yok"); }
         ag_al();
+        eğer bm_esit(arg,"parca") {
+            ekran_cift_yaz(ag_parca_satir()); ver tamam(doğru);
+        }
         eğer bm_esit(arg,"sayac") {
             eğer ag_l3_alan==0 { ver hata("L3 tablosu yok"); }
             değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
             değişken m: metin = kd_tamsayi(kd_tamsayi("kisa saglama",(*s).kisa),(*s).saglama_hatasi);
             m=kd_tamsayi(kd_tamsayi(metin_birlestir(m," bilinmeyen arp_dolu"),(*s).bilinmeyen),(*s).arp_dolu);
             ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi(metin_birlestir(m," cakisma ttl icmp_hata"),(*s).cakisma),(*s).ttl),(*s).icmp_hata));
+            ekran_cift_yaz(ag_parca_satir());
             ver tamam(doğru);
         }
         eğer bm_esit(arg,"dhcp") veya bm_esit(arg,"dhcp kapat") {
@@ -2119,7 +2205,7 @@ işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam3
     } değilse { dizi_ekle(satirlar,"PVH: UEFI bilgisi yok"); }
     güvensiz { dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi(kd_tamsayi("8042 oztest port1 port2",ps2_oztest olarak tam64),ps2_port1 olarak tam64),ps2_port2 olarak tam64)); }
     kd_pci_rapor(satirlar); kd_kesme_rapor(satirlar);
-    güvensiz { eğer ag_bar!=0 { dizi_ekle(satirlar,ag_satir()); } }
+    güvensiz { eğer ag_bar!=0 { dizi_ekle(satirlar,ag_satir()); dizi_ekle(satirlar,ag_parca_satir()); } }
     için a: x.aygitlar { eğer a.yuva != 0 {
         değişken s: metin = kd_tamsayi("USB",a.yuva olarak tam64);
         s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(a.kimlik.vid olarak tam64,4)));

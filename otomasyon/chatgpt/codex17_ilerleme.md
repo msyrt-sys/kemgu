@@ -31,3 +31,7 @@ Kök Q35 yuvasında gerçek INTx ve iki PCI köprüsünün ardında yoklama kull
 
 DHCP DORA, T1 yenilemesi, T2 yeniden bağlaması, bağlantı kesikken kira bitişi ve yeniden adres alma, DNS CNAME ve sıkıştırma, ilk DNS sunucusu susunca ikinciye geçme ve TTL önbelleği gerçek dgram trafiğinde sınandı. Slirp 10.0.2.15 adresini verdi. Her derleyicide 1000 UDP datagramının tamamı yankılandı ve pcap içeriği bağımsız okundu. Bölüm ve ara regresyon kapıları 1350 saniyede tamamlandı. T1'i kira sonuna öteleyen çekirdek, telde yenileme görülmeyince testi kırdı. DNS işaretçi döngüsü korumasını kaldırıp konuğu asma sabotajı uygulanmadı.
 Ayrı koşumda geçen kapı: calistir_bm_x86_nic_matris
+
+## Bölüm 6 — IPv4 parçaları
+
+8 KiB UDP aktarımı iki derleyici ve gerçek QEMU ile geçti. Sırasız ve çift parçalar birleştirildi. Bir parça eksikken süre doldu, sonraki datagram tam döndü. Bölüm ve §7 kapılarının doğrulama süresi 1268 saniyeydi. İlk toplu koşunun bir imajı sayaç çıktısına yeni satır eklenmeden derlenmişti. Son kaynaklarla iki derleyicide de bağımsız bölüm kapısı geçti. Ofseti sekizle çarpmayan ayrı çekirdek için 8 KiB yankı gelmedi. Yuva zaman aşımını kapatıp ağdan yuvaları tüketme sabotajı uygulanmadı.

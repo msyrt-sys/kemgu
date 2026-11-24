@@ -1,0 +1,65 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_be32, ag_y8, ag_y16, ag_kopyala, ag_saglama };
+kullan drivers::ag::ipv4::{ ip4_baslik };
+
+genel sabit PARCA_SINIR: tam32 = 12288;
+genel yapı ParcaYuvasi {
+    kaynak: tam64; hedef: tam64; kim: tam32; protokol: tam32;
+    bitis_ms: tam64; baslik: tam32; alinan: tam32; en_uzak: tam32; son: tam32;
+}
+genel işlev parca_es(s: &değişken ParcaYuvasi,b: Dizi<dtam8>) -> mantıksal {
+    ver s.bitis_ms!=0 ve s.kim==ag_be16(b,18) ve s.kaynak==ag_be32(b,26) ve s.hedef==ag_be32(b,30) ve s.protokol==ag_b8(b,23);
+}
+genel işlev parca_yaslandir(s: &değişken ParcaYuvasi,ms: tam64) -> mantıksal {
+    eğer s.bitis_ms!=0 ve ms>=s.bitis_ms { s.bitis_ms=0; ver doğru; } ver yanlış;
+}
+işlev parca_boy_yaz(b: Dizi<dtam8>,h: tam32,yuk: tam32,bayrak: tam32) {
+    ag_y16(b,16,(h-14+yuk) olarak tam64); ag_y16(b,20,bayrak olarak tam64);
+    ag_y16(b,24,0); ag_y16(b,24,ag_saglama(b,14,h-14,0) olarak tam64);
+}
+// Tamamlanan çerçeve tamponun başında çıkar. Örtüşen her baytta ilk değer korunur.
+genel işlev parca_al(s: &değişken ParcaYuvasi,b: Dizi<dtam8>,n: tam32,buf: Dizi<dtam8>,harita: Dizi<dtam8>,ms: tam64) -> tam32 {
+    değişken h: tam32 = ip4_baslik(b,n);
+    eğer h<0 veya dizi_boyut(buf)<74+PARCA_SINIR veya dizi_boyut(harita)<PARCA_SINIR/8 { ver -22; }
+    değişken alan: tam32 = ag_be16(b,20);
+    değişken bas: tam32 = (alan&8191)*8;
+    değişken boy: tam32 = ag_be16(b,16)+14-h;
+    değişken devam: mantıksal = (alan&8192)!=0;
+    eğer (alan&49152)!=0 veya (değil devam ve bas==0) veya boy<=0 veya bas>PARCA_SINIR-boy veya (devam ve boy%8!=0) { ver -90; }
+    parca_yaslandir(s,ms);
+    eğer s.bitis_ms==0 {
+        s.kaynak=ag_be32(b,26); s.hedef=ag_be32(b,30); s.kim=ag_be16(b,18); s.protokol=ag_b8(b,23);
+        s.bitis_ms=ms+3000; s.baslik=0; s.alinan=0; s.en_uzak=0; s.son= -1;
+        değişken i: tam32 = 0;
+        iken i<PARCA_SINIR/8 { ag_y8(harita,i,0); i=i+1; }
+    } değilse eğer değil parca_es(s,b) { ver -105; }
+    değişken bit: tam32 = bas+boy;
+    eğer (s.son>=0 ve bit>s.son) veya (değil devam ve ((s.son>=0 ve bit!=s.son) veya bit<s.en_uzak)) { ver -22; }
+    eğer değil devam { s.son=bit; }
+    eğer bas==0 ve s.baslik==0 { ag_kopyala(buf,0,b,0,h); s.baslik=h; }
+    eğer bit>s.en_uzak { s.en_uzak=bit; }
+    değişken i: tam32 = bas;
+    iken i<bit {
+        değişken indis: tam32 = i/8; değişken maske: tam32 = 1<<(i%8);
+        değişken eski: tam32 = ag_b8(harita,indis);
+        eğer (eski&maske)==0 {
+            ag_y8(harita,indis,(eski|maske) olarak tam64);
+            ag_y8(buf,74+i,ag_b8(b,h+i-bas) olarak tam64); s.alinan=s.alinan+1;
+        }
+        i=i+1;
+    }
+    eğer s.baslik==0 veya s.son!=s.alinan { ver 0; }
+    ag_kopyala(buf,s.baslik,buf,74,s.son);
+    parca_boy_yaz(buf,s.baslik,s.son,0);
+    s.bitis_ms=0; ver s.baslik+s.son;
+}
+// Yerel kurucu 20 baytlık IPv4 başlığı üretir. Son parça dışında yük sekizin katıdır.
+genel işlev parca_giden(b: Dizi<dtam8>,n: tam32,bas: tam32,mtu: tam32,out: Dizi<dtam8>) -> tam32 {
+    değişken h: tam32 = ip4_baslik(b,n);
+    eğer h!=34 veya ag_be16(b,20)!=0 veya mtu<28 veya mtu>65535 veya bas<0 veya bas%8!=0 { ver -22; }
+    değişken toplam: tam32 = ag_be16(b,16)-20;
+    eğer toplam>PARCA_SINIR veya bas>=toplam { ver -90; }
+    değişken boy: tam32 = toplam-bas; değişken alan: tam32 = bas/8;
+    eğer boy>mtu-20 { boy=(mtu-20)/8*8; alan=alan|8192; }
+    eğer dizi_boyut(out)<34+boy { ver -90; }
+    ag_kopyala(out,0,b,0,34); ag_kopyala(out,34,b,34+bas,boy); parca_boy_yaz(out,34,boy,alan); ver 34+boy;
+}

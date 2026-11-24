@@ -86,3 +86,10 @@ Her `c` için (`kemgu`, `codegen`) komutlar `build/$c --llvm c17_001.kem > ornek
 - UDP OK slirp 5
 
 Otomatik DHCP trafiğinden sonra 82574L 18 çerçeveyi aldı, fakat MSI-X sayacı artmadı. EIAC ilk kesmede neden bitinin yanında IMS maskesini de kaldırıyordu. CTRL_EXT.IAME açıldı, IAM sıfırlandı. Düzeltilen sürücüde kâhin her ayrı RX çerçevesi için kesme sayacının yeniden arttığını doğruladı. Dört NIC, iki bellek düzeni ve iki derleyicide matris yeniden geçti.
+
+## Parçalama ve birleştirme
+
+Gelen üç datagramda sırasıyla yedi, beş ve altı parça kaydedildi. İlkinde bir parça yinelendi. Ortadaki datagramın üçüncü saniyede süresi doldu. İki tam yanıtta altışar parça vardı. Host her IP sağlama toplamını, UDP sözde başlık sağlamasını, ofsetleri, MF bitini ve SHA-256 sonucunu doğruladı. TTL sıfır olan ayrı datagram için konuk sayacı bir arttı.
+
+- PARCA OK 8192 bayt SHA256=3b1ca569e7021f5d25ed0b9b92dabe731b87b225ddcfb522448db79ac02e2474 iki yanıt, süre aşımı 1, heap=4066880 boş=47729
+- PARCA OK 8192 bayt SHA256=3b1ca569e7021f5d25ed0b9b92dabe731b87b225ddcfb522448db79ac02e2474 iki yanıt, süre aşımı 1, heap=4263728 boş=47697

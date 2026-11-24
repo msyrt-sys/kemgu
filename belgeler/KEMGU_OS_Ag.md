@@ -58,3 +58,11 @@ UDP soketleri için 16 sabit port kaydı bulunur. Sıfır port geçersizdir (-22
 Arayüz açılınca DHCP başlar. `ag durum` kira evresi, adres, DNS ve NTP sunucusunu gösterir. `ag dhcp` yeni işlem açar, `ag dhcp kapat` dinamik adresi bırakır. Statik adres ayarı da DHCP'yi kapatır. Yanıt XID, istemci MAC’i, seçenek sınırları ve seçili sunucuyla doğrulanır. T1'de unicast, T2'de broadcast REQUEST çıkar. Kira bittiğinde adres bırakılır. Seçenek 42 NTP sunucusunu taşır.
 
 `cozumle <ad>` IPv4 A kaydı arar. En çok sekiz CNAME ve bir ad içinde en çok 32 geriye sıkıştırma işaretçisi izlenir. Soru adı, tür, sınıf, kaynak sunucu, port ve işlem kimliği yanıtla uyuşmalıdır. Önbellekte son başarılı ad, zincirin en kısa TTL'si kadar tutulur. Her DNS denemesi 650 ms ile sınırlıdır. Üç denemede ilk sunucu yanıtlamazsa ikinci sunucuya geçilir.
+
+## IPv4 parçaları
+
+Arayüz, kaynak adresi, hedef adresi, IPv4 kimliği ve protokolü aynı olan parçaları dört sabit yuvada toplar. Bir datagramın IP yükü en çok 12.288 bayttır. Her yuva ilk parçasından itibaren üç saniye boyunca tutulur. Çift veya örtüşen parçalarda her bayt için ilk gelen değer korunur. Birinci parça, son parça ve aradaki bütün baytlar gelince üst katman çerçeveyi alır. Son boyla çelişen parçalar reddedilir. Boş yuva kalmazsa yeni datagramın parçası düşürülür. Adres değişiminde bekleyen birleştirmeler temizlenir.
+
+Yerel UDP çıkışında MTU 1500’dür. Giden son parça dışında yük uzunluğu sekizin katıdır. Aynı datagramın bütün parçalarında kimlik ortaktır ve başlık sağlaması ayrı hesaplanır. DF işaretli datagram için parçalama işlevi hata verir. TTL sıfır olan paket yerel alımda sayılır ve düşürülür. Çekirdek yönlendirme yapmaz. Kapalı bir UDP portuna ICMP 3/3 yanıtı 100 ms’de en çok bir kez gönderilir.
+
+`ag parca`, `ag sayac` ve `donanim` birleştirilen datagramları, düşen parçaları veya zaman aşımına uğrayan yuvaları ve giden parçaları gösterir. x86 arayüzü dört yuva ve büyük gönderim tamponu için açılışta 77 fiziksel sayfa ayırır.

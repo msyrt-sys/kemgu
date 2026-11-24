@@ -1,0 +1,28 @@
+kullan drivers::ortak::bayt::{ bayt_sifir };
+kullan drivers::ag::bayt::{ ag_y8, ag_b8, ag_y16, ag_saglama } olarak agbayt;
+kullan drivers::ag::ipv4::{ ip4_yaz, ip4_baslik };
+kullan drivers::ag::parca::{ ParcaYuvasi, PARCA_SINIR, parca_al, parca_giden, parca_yaslandir };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(256); değişken f: Dizi<dtam8> = bayt_sifir(128);
+    değişken buf: Dizi<dtam8> = bayt_sifir(74+PARCA_SINIR); değişken maske: Dizi<dtam8> = bayt_sifir(PARCA_SINIR/8);
+    değişken s: ParcaYuvasi = ParcaYuvasi {kaynak:0,hedef:0,kim:0,protokol:0,bitis_ms:0,baslik:0,alinan:0,en_uzak:0,son:0};
+    ip4_yaz(b,1,2,17,197,81);
+    değişken i: tam32 = 0;
+    iken i<197 { ag_y8(b,34+i,i olarak tam64); i=i+1; }
+    değişken n: tam32 = parca_giden(b,231,160,100,f);
+    eğer n!=71 veya parca_al(&değişken s,f,n,buf,maske,10)!=0 { ver 1; }
+    n=parca_giden(b,231,80,100,f);
+    eğer n!=114 veya parca_al(&değişken s,f,n,buf,maske,11)!=0 { ver 2; }
+    ag_y8(f,34,0);
+    eğer parca_al(&değişken s,f,n,buf,maske,12)!=0 veya s.alinan!=117 { ver 3; }
+    // Kısmi örtüşmede yeni sekiz bayt eklenir, önceki 80 bayt değişmez.
+    n=parca_giden(b,231,72,108,f); ag_y8(f,42,0);
+    eğer n!=122 veya parca_al(&değişken s,f,n,buf,maske,12)!=0 veya s.alinan!=125 { ver 9; }
+    n=parca_giden(b,231,0,100,f);
+    eğer parca_al(&değişken s,f,n,buf,maske,13)!=231 veya ip4_baslik(buf,231)!=34 { ver 4; }
+    i=0; iken i<197 { eğer ag_b8(buf,34+i)!=i { ver 5; } i=i+1; }
+    eğer parca_al(&değişken s,f,n,buf,maske,100)!=0 veya parca_yaslandir(&değişken s,3099) { ver 6; }
+    eğer değil parca_yaslandir(&değişken s,3100) veya s.bitis_ms!=0 { ver 7; }
+    ag_y16(b,20,16384); ag_y16(b,24,0); ag_y16(b,24,ag_saglama(b,14,20,0) olarak tam64);
+    eğer ip4_baslik(b,231)!=34 veya parca_giden(b,231,0,100,f)>=0 { ver 8; } ver 0;
+}
