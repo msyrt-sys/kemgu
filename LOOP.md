@@ -3119,4 +3119,16 @@
   Üçüncü tur: derleme_olcum — bash (MSYS) /usr/bin/time'ı görüyor ama ölçümü yapan YEREL Windows Python'u o yolu açamıyor
   (FileNotFoundError). Yetenek artık aracı ÇALIŞTIRACAK süreçten (python) ölçülüyor. Codex taslağı #239'un son hâli (ef40ab7,
   597a245'in yerine zorla gönderilmiş) kodda birebir aynı; yalnız iki rapor dosyası farklıydı → alındı.
+- 2026-11-24 D-769: Codex dalga 17 promptu (otomasyon/chatgpt/CODEX_GOREV_17.md) — AĞ YIĞINI (x86 + ARM), YİRMİ bölüm, sıralı
+  (Mehmet "daha uzun olsun"; ilk taslak 13 bölümdü, aynı PR'da genişletildi): host Python Ethernet eşi (`-netdev dgram`, elle
+  struct; scapy YOK) + pcap; e1000, e1000e, igb, virtio-net-pci; Ethernet/ARP/IPv4/ICMP + loopback; UDP/DHCP (T1/T2)/DNS;
+  IPv4 parça birleştirme; TCP temel/güvenilirlik (%5 kayıp, 4 MiB)/uzantılar (pencere ölçeği, zaman damgası, keepalive, verim
+  kapısı); soket ABI 73-119 + bloksuz + bekle_coklu; kullanıcı ağ kütüphanesi + ag/cozumle/nc; HTTP/1.1 indir (chunked,
+  yönlendirme) + 8 istemcili sunucu; NTP + RTC yazma; TFTP + `donanim gonder` (fiziksel PC sonucunu ağdan getirme); SHA256
+  doğrulamalı `paket` kurucu; USB CDC-ECM; ARM KEMGU-OS'ta aynı sans-IO yığın; bulanıklaştırma + kaynak tükenmesi + heap
+  tablosu; iki x86 ve x86↔ARM konuk arası ağ, NIC'li PC matrisi. Claude doğruladı: QEMU 8.2.2 NIC'leri, `dgram`/`filter-dump`/
+  slirp sözdizimi, QMP `/machine rtc-time`; ABI 72'ye kadar dolu; ARM'deki `test/bare_metal/*_arm.c` ağ prototipleri C ve
+  test_tumu'ya BAĞLI DEĞİL (yalnız başvuru); SHA-256 stdlib/kripto/karma.kem. Dersler prompta: her sabotajı uygula (S210/S223),
+  korpus korunan şekli üretmeli, PR sonrası commit yeniden yazma (ef40ab7), testler izlenen belgeyi değiştirmesin (D-767),
+  Windows derleme-yalnız yolu (D-768), bölüm sonunda onay isteme.
 
