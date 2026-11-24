@@ -23,7 +23,7 @@ genel işlev klavye_yeni() -> KlavyeDurumu {
 }
 
 // Bit 8 E0, bit 7 bırakma; Pause'un ayrı bir bırakma kodu yoktur.
-işlev klavye_tarama(d: &değişken KlavyeDurumu,b: tam32) -> tam32 {
+çıplak işlev klavye_tarama(d: &değişken KlavyeDurumu,b: tam32) -> tam32 {
     eğer b < 1 veya b >= 255 { d.e0=yanlış; d.dizi_adimi=0; ver -1; }
     değişken a: tam32 = d.dizi_adimi;
     eğer a != 0 {
@@ -51,17 +51,17 @@ işlev klavye_tarama(d: &değişken KlavyeDurumu,b: tam32) -> tam32 {
     }
     ver b;
 }
-genel işlev klavye_led(d: &değişken KlavyeDurumu,usb: mantıksal) -> tam32 {
+genel çıplak işlev klavye_led(d: &değişken KlavyeDurumu,usb: mantıksal) -> tam32 {
     değişken m: tam32 = 0;
     eğer d.caps { eğer usb { m=2; } değilse { m=4; } }
     eğer d.scroll { eğer usb { m=m|4; } değilse { m=m|1; } }
     eğer d.num { eğer usb { m=m|1; } değilse { m=m|2; } }
     ver m;
 }
-işlev klavye_gezinme(k: tam32) -> mantıksal {
+çıplak işlev klavye_gezinme(k: tam32) -> mantıksal {
     ver k >= 71 ve k <= 83 ve k != 74 ve k != 78;
 }
-işlev klavye_olayi(d: &değişken KlavyeDurumu,t: tam32) -> TusOlayi {
+çıplak işlev klavye_olayi(d: &değişken KlavyeDurumu,t: tam32) -> TusOlayi {
     eğer t < 0 { ver TusOlayi::Yok; }
     eğer t == 581 { ver TusOlayi::Ozel(10,doğru); }
     değişken uzatilmis: mantıksal = (t&256) != 0;
@@ -111,7 +111,7 @@ genel işlev klavye_bayt(d: &değişken KlavyeDurumu,b: tam32) -> TusOlayi {
     değişken tarama: tam32 = klavye_tarama(d,b);
     ver klavye_olayi(d,tarama);
 }
-işlev klavye_karakter(d: &değişken KlavyeDurumu,k: tam32) -> TusOlayi {
+çıplak işlev klavye_karakter(d: &değişken KlavyeDurumu,k: tam32) -> TusOlayi {
     değişken shift: mantıksal = d.sol_shift veya d.sag_shift;
     değişken buyuk: mantıksal = shift != d.caps;
     eğer k == 55 { ver TusOlayi::Karakter(42); }
@@ -244,7 +244,7 @@ işlev klavye_karakter(d: &değişken KlavyeDurumu,k: tam32) -> TusOlayi {
 
 // ABI olayında her iki geçiş de görünür. E0 öneki birleşik kodun bit 8'idir.
 genel yapı TusHamOlay { kod: tam32; unicode: tam32; bas: tam32; degistirici: tam32; }
-genel işlev klavye_degistiriciler(d: &değişken KlavyeDurumu) -> tam32 {
+genel çıplak işlev klavye_degistiriciler(d: &değişken KlavyeDurumu) -> tam32 {
     değişken m: tam32 = 0;
     eğer d.sol_shift veya d.sag_shift { m=m|1; }
     eğer d.ctrl { m=m|2; }
@@ -253,7 +253,7 @@ genel işlev klavye_degistiriciler(d: &değişken KlavyeDurumu) -> tam32 {
     eğer d.caps { m=m|16; }
     ver m;
 }
-genel işlev klavye_ham_bayt(d: &değişken KlavyeDurumu,b: tam32) -> seçimlik<TusHamOlay> {
+genel çıplak işlev klavye_ham_bayt(d: &değişken KlavyeDurumu,b: tam32) -> seçimlik<TusHamOlay> {
     değişken t: tam32 = klavye_tarama(d,b);
     eğer t < 0 { ver hiç; }
     // Yalnız fiziksel geçişleri yayımla. İkinci bir tuş basılıyken de ilk

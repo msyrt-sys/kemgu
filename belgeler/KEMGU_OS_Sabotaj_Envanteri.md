@@ -80,3 +80,79 @@
 Kaynaklar [`Dalga 9`](../otomasyon/chatgpt/codex9_ilerleme.md), [`Dalga 10`](../otomasyon/chatgpt/codex10_ilerleme.md), [`Dalga 11`](../otomasyon/chatgpt/codex11_ilerleme.md), [`Dalga 12`](../otomasyon/chatgpt/codex12_ilerleme.md), [`Dalga 13`](../otomasyon/chatgpt/codex13_ilerleme.md), [`Dalga 14`](../otomasyon/chatgpt/codex14_ilerleme.md), [`Dalga 15`](../otomasyon/chatgpt/codex15_ilerleme.md).
 
 Dalga 14 için korunmuş tek-açılış QEMU kayıtları da kontrol edildi. Sayısı belirtilmeyen ölçümlerde tablodaki kapı adı `tools/codex/dalga14_sabotaj.py` içindeki senaryoya dayanır.
+
+## Dalga 9 öncesi yol haritası kanıtları
+
+D-751 ağacında H0a–f donanım ve kabul kararlarıydı. Uygulama olarak işaretli H1e, H4e, H4g ve H4j aşağıda ayrı satırlardadır. D-739 ve D-745 ile çalışan, işareti daha sonra güncellenmiş maddeler ve daha eski saf mantık kanıtları da dahildir. Bir saf test, yalnız o satırdaki alt davranışı sınar. Fiziksel PC kabulü Mehmet'in kontrol listesinde açıktır.
+
+| H maddesi | Kaydedilen değişiklik | Kapı ve gözlem | Kaynak |
+|---|---|---|---|
+| H0a, H4j | Bochs DISPI genişliği 800 yapıldı | x86 ekran kâhini 640×480 yerine 800×480 gördü | [D-748, S193b](../LOOP.md) |
+| H0b, H2c | Multiboot2 modül adres sırası değiştirildi | Host ayrıştırıcı kâhini kırmızı. BIOS yolu ertelidir. | [Dalga 4 A3](../otomasyon/chatgpt/codex4_ilerleme.md) |
+| H0c, H8d | Yalnız ilk FAT kopyası yazıldı | FAT32 yazma testi kırmızı | [Dalga 1 B6](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H0d, H6d, H6f, H6g | HID fare Y yönü ters çevrilmedi | QEMU qtest rc 2, sahte aygıt rc 1 | [Dalga 6 G5](../otomasyon/chatgpt/codex6_bulgular.md) |
+| H0e, H10d | HID kısa paket tamamlanma kodu değiştirildi | QEMU qtest rc 2, USB çekirdek testi rc 1 | [Dalga 6 G4](../otomasyon/chatgpt/codex6_bulgular.md) |
+| H0f, H8f | Küme zincirinden kopyalanan baytlar bozuldu | Haricî FAT dosya karşılaştırması kırmızı. Uçtan uca v1 için ayrıca 14-v1-esitle satırına bakın. | [Dalga 1 B8](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H1d | Ödünç yetki denetimi ve kod üretimi değiştirildi | 16 C kuralı, self-host ve iki kod üretimi değişikliğinde kurulum 0, kapı 2 | [Dalga 3 D2b–e](../otomasyon/chatgpt/codex3_ilerleme.md) |
+| H1e, H7c | Bayt okuyucuyla çözülen 64 bit BAR'ın üst sözcüğü atıldı | PCI saf ayrıştırıcı testi kırmızı | [Dalga 1 C3](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H2d | İlk MiB'nin çerçeve koruması değiştirildi | Çerçeve ayırıcı koşumu kırmızı | [Dalga 1 C5](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H3a, H3b | ACPI SDT sağlama kararı değiştirildi | ACPI tablo koşumu kırmızı | [Dalga 1 A6](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H3c | MADT'de kayıttan okunan adres sıfırlandı | MADT koşumu kırmızı | [Dalga 1 C1](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H3f | FADT X_DSDT seçimi atlandı | FADT koşumu kırmızı | [Dalga 1 C2](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H4a | Çerçeve genişliğinin kenar testi değiştirildi | Piksel sınır testi kırmızı | [Dalga 1 D1](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H4c, H4g | Türkçe glif ASCII'ye döndürüldü, ayrıca glif bit sırası ters çevrildi | QEMU ekranında sırasıyla 114 ve 1.534 piksel farklı | [D-748, S194 ve S192](../LOOP.md) |
+| H4d | Konsol kirli satır işaretleri temizlenmedi | Konsol modeli kırmızı | [Dalga 1 D4](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H4e | Seri bayt yazılırken ekran aynasına kopya atlandı | Bu dalgada taze PVH çekirdeğiyle kabuk kapısı rc 1, ilk görünümde 940 piksel farklı | [Dalga 16 bulguları](../otomasyon/chatgpt/codex16_bulgular.md) |
+| H5c, H5d, H5e | Shift ve Caps ilişkisi değiştirildi | Türkçe ve ABD düzeni testleri kırmızı | [Dalga 1 A1 ve F3](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H5h | Satır düzenleyicisinin giriş sınırı bir arttı | Satır düzenleme koşumu kırmızı | [Dalga 1 D6](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H5i | USB Türkçe ğ kodu değiştirildi | Gerçek QMP girdisinde beklenen kod noktası yerine 286, qtest rc 2 | [Dalga 6 G4](../otomasyon/chatgpt/codex6_bulgular.md) |
+| H5j | Dolu girdi halkasında kayıp sayacı sabit tutuldu | Halka koşumu kırmızı | [Dalga 1 D8](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H6b, H6c | PS/2 fare taşma bitleri ters yorumlandı | Fare paket testi kırmızı | [Dalga 1 A2](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H7e | AHCI yanlış LBA'dan okudu | 20 gerçek açılışın tamamında disk kâhini kırmızı | [Dalga 8 B](../otomasyon/chatgpt/codex8_ilerleme.md) |
+| H7f, H8e | Önbellek sürüm denetimi değiştirildi | Kirli LRU ve eski yazma onayı testi kırmızı | [Dalga 4 E1](../otomasyon/chatgpt/codex4_ilerleme.md) |
+| H7g | GPT bölüm tablosu CRC kararı değiştirildi | Bölüm testi kırmızı | [Dalga 1 A3](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H7i | NVMe okunan verinin yüksek biti silindi | Gerçek qtest rc 2, ilk fark bayt 10 | [Dalga 6 G0](../otomasyon/chatgpt/codex6_bulgular.md) |
+| H7j, H8j, H8k, H8l, H8m | Çoklu disk bağlama planında ESP denetimi değiştirildi | Bölüm bağlama ve depolama matrisi kırmızı | [Dalga 4 E2–E3](../otomasyon/chatgpt/codex4_ilerleme.md) |
+| H8a | Yol bileşeninde izin verilen uzunluk değiştirildi | Yol ayrıştırıcı testi kırmızı | [Dalga 1 B3](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H8b | FAT zincirinden dosyaya kopyalanan veri bozuldu | Çok kümeli dosya okuma testi kırmızı | [Dalga 1 B7](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H8c | LFN kısa ad sağlama karşılaştırması değiştirildi | Eklenen iki parçalı olumsuz örnek kırmızı | [Dalga 1 A5](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H8g | FAT'ten FSInfo onarılırken tahsis hesabı ters çevrildi | Bozuk imaj ve onarım testi kırmızı | [Dalga 1 F2](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H9c | ELF segmentinin izin değerlendirmesi değiştirildi | ELF64 koşumu kırmızı | [Dalga 1 C6](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H9i | Masaüstü benzetiminde seçilen dosya adı değiştirildi | Uçtan uca saf benzetim kırmızı | [Dalga 1 E1](../otomasyon/chatgpt/codex_ilerleme.md) |
+| H10c | xHCI olay halkası dört girdiye indirildi | Gerçek qtest rc 2 ve tam sahte enumerasyon rc 1 | [Dalga 6 G1/G6](../otomasyon/chatgpt/codex6_bulgular.md) |
+| H10f | İlk Unit Attention sonrası yeniden deneme atlandı | SCSI sense 6/41, qtest rc 2 | [Dalga 6 G3](../otomasyon/chatgpt/codex6_bulgular.md) |
+| H12b | Bozuk USB korpusundaki VID yorumu değiştirildi | Belirlenimci ayrıştırıcı testi kırmızı | [Dalga 4 F1](../otomasyon/chatgpt/codex4_ilerleme.md) |
+| H12e | BMP modülü belge envanterinden çıkarıldı | Belge envanteri kırmızı | [Dalga 1 E3](../otomasyon/chatgpt/codex_ilerleme.md) |
+
+## Dalga 16
+
+| Bölüm / doğrulama | Tek değişiklik | Ölçülen sonuç |
+|---|---|---|
+| 1 · klavye16 | Pause dördüncü baytı yutuldu | 581 olayı kayboldu |
+| 1 · klavye16 | Caps ve Scroll LED bitleri yer değiştirdi | PS/2 maske dizisi değişti |
+| 1 · klavye16 | Ctrl+C kabuğu sonlandırdı | Yeni istem gelmedi |
+| 1 · klavye16 | Taşmada sayaç artırılmadı | 578 eksik basışa karşı sayaç 0 |
+| 2 · pci16 | ECAM işlev adresi bir bit kaydı | QMP karşılaştırmasında iki işlev eksik |
+| 2 · pci16 | Köprü alt sınırı yenilenmedi | Arkadaki üç PCI işlevi eksik |
+| 2 · pci16 | BAR üst yarısı atlandı | MMIO sayfa hatası ve açılış başarısızlığı |
+| 3 · msi | AHCI MSI veri vektörü değiştirildi | Kesme zaman aşımı ve yoklama yedeği |
+| 3 · msi | Aynı vektöre ikinci işleyici kabul edildi | Çakışma kâhini reddetti |
+| 4 · disk_hata | Yeniden deneme sayısı sıfırlandı | Tek seferlik blkdebug hatası kaldı |
+| 4 · disk_hata | AHCI portu yeniden başlatılmadı | Aynı porttaki sonraki geçerli dosya okunamadı |
+| 5 · usb_hub | Rota port numarası bir kaydırıldı | Aygıt adresleme kodu 5 |
+| 5 · usb_hub | Port değişim biti onaylanmadı | İkinci canlı takma konukta görülmedi |
+| 6 · ramdisk | LBA bir sektör kaydırıldı | RAM imajında geçersiz MBR |
+| 6 · ramdisk | Silinen düğüm listede kaldı | ls sonucunda eski ad görüldü |
+| 7 · kapat | SLP_EN atlandı | QEMU beş saniyede kapanmadı |
+| 7 · ACPI host | SLP_TYP kaydırması değiştirildi | Sıfır dışı tipte host testi çıkış 8 |
+| 8 · pat | PAT giriş 7 varsayılan UC bırakıldı | İlk GOP sayfası UC çözüldü |
+| 9 · ayrıştırıcı | USB sıfır uzunluk denetimini kaldırma | Uygulanmadı. Kırmızı kanıt yok. |
+| 10 · UART | 16550 TX sınırı kaldırıldı | Meşgul host aygıtında zaman aşımı, rc 124 |
+| 10 · mmio_volatile | Sıradan FAT toplama döngüsü listeye eklendi | Volatile ve döngü denetimi reddetti |
+| 11 · derleme_olcum | Ana işlev çağrı dizisi on kat çoğaltıldı | Her iki derleyicide en büyük işlev eşiği aşıldı |
+| 12 · arac16 | Geçmişte bir adım atlandı | Geri alma ekranında 329 piksel farklı |
+| 12 · arac16 | Çapraz kopyada son kısmi küme atlandı | İmajda 1.264 yerine 1.024 bayt |
+| 12 · arac16 | Boş çerçeve sayısı bir artırıldı | QMP hesabı 47.834, konuk 47.835 |
+| 13 · klavye16 | AltGr+Q işareti değiştirildi | AltGr dizisinin fiziksel tampondaki UTF-8 karşılaştırması kırmızı |
+
+[Dalga 16 koşumları ve ölçümler](../otomasyon/chatgpt/codex16_bulgular.md)

@@ -72,7 +72,20 @@ def kos(w, yoklama):
         taban = next(r['address'] for r in aygit['regions'] if r['bar'] == (yer&7))
         adr,ust,vektor,maske = struct.unpack('<4I',c.mem(taban+(yer&~7)+16,16))
         assert adr&0xfff00000 == 0xfee00000 and ust == 0 and vektor == nv and maske&1 == 0
+        # Zaten bağlanmış diskten ilk dosya okumasını 8 IOPS ile sınırla.
+        # CQ1 gerçek I/O gecikmesinde de vektörünü korumalı.
+        sinir = dict(device='dnvme', bps=0, bps_rd=0, bps_wr=0, iops=0, iops_rd=8, iops_wr=0)
+        q.call('block_set_io_throttle',sinir)
+        disk = next(d['inserted'] for d in q.call('query-block') if d['device']=='dnvme')
+        assert disk['iops_rd'] == 8
+        def okuma_adedi():
+            return next(d['stats']['rd_operations'] for d in q.call('query-blockstats') if d.get('device')=='dnvme')
+        istek = okuma_adedi()
         c.run('cat /diskler/nvme0p1/merhaba.txt', Fat(nvme.read()).get('/merhaba.txt')+b'\n')
+        adet = okuma_adedi()-istek
+        assert adet >= 2, adet
+        q.call('block_set_io_throttle',dict(sinir, iops_rd=0))
+        print(f'NVMe CQ1 gecikme: 8 IOPS, {adet} fiziksel okuma',flush=True)
         son = kesmeler()
         assert son[nv][1] > b[nv][1] and irq() == sonra
         print('NVMe CQ1',nv,b[nv][1],son[nv][1],flush=True)

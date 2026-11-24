@@ -309,6 +309,25 @@ fi
 # kalır (D-675 sınıfı sessiz körlük).
 for f in runtime/mimari/x86_64/*.kem; do
     [ -f "$f" ] || continue
+    # PCI port adresi doğrudan ithal edilen saf modüldür. İki gerçek IR'da da
+    # iki tanımın tüm adı ve tipi ölçülür. CAT listesine ikinci kopya eklenmez.
+    if [ "$f" = runtime/mimari/x86_64/kem_pci_adres.kem ]; then
+        bulunan=0
+        for ir in "$TMP/x86_c.d" "$TMP/x86_s.d"; do
+            if grep -Fxq 'define i32 @runtime.mimari.x86_64.kem_pci_adres.pci_port_adres' "$ir" &&
+               grep -Fxq 'define i16 @runtime.mimari.x86_64.kem_pci_adres.pci_port_veri16' "$ir"; then
+                bulunan=$((bulunan+1))
+            fi
+        done
+        if [ "$bulunan" -eq 2 ]; then
+            echo "  ✅ $f — iki PCI adres işlevi iki birleşik IR'da"
+            pass=$((pass+1))
+        else
+            echo "  🔴 $f — PCI adres işlevi birleşik IR'da eksik"
+            fail=$((fail+1))
+        fi
+        continue
+    fi
     case " $X86_PARCA " in
         *" $f "*) ;;
         *) echo "  🔴 $f — SINIFLANDIRILMAMIŞ: Makefile calistir_kem_os_x86 CAT listesine ekle"; fail=$((fail+1)) ;;

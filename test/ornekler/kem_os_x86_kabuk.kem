@@ -6,7 +6,7 @@ kullan drivers::fs::fat32_sektor_yaz::{ FatDegisiklik, FatYazIslem, fat_yaz_plan
 kullan drivers::usb::hid_fare::{ hid_fare_rapor };
 kullan drivers::ps2::fare::{ FareDurumu, FareOlayi, fare_yeni, fare_bayt };
 kullan drivers::ekran::girdi::{ girdi_bas, girdi_kod };
-kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_klavye_rapor, hid_klavye_ham_rapor };
+kullan drivers::usb::hid_klavye::{ HidKlavye, hid_klavye_yeni, hid_ham_tampon, hid_klavye_ham_doldur };
 kullan drivers::ps2::klavye_tr::{ KlavyeDurumu, TusOlayi, TusHamOlay, klavye_yeni, klavye_led, klavye_bayt, klavye_ham_bayt };
 kullan drivers::ortak::utf8::{ utf8_coz, utf8_kodla };
 kullan drivers::girdi::satir::{ SatirDuzenleyici, satir_yeni, satir_olay };
@@ -1527,6 +1527,11 @@ işlev kb_calistir(d: &değişken KabukDisk,p: &değişken KsKabukSureci,s: meti
 }
 
 işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
+    eğer bm_esit(ad,"bilgi") { ekran_cift_yaz("bilgi süreyi, boş belleği, süreçleri, diskleri, kesmeleri ve giriş durumunu gösterir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"kopyala") { ekran_cift_yaz("kopyala <kaynak> <hedef> dosyayı aynı veya farklı bağlama noktasına kopyalar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"tasi") { ekran_cift_yaz("tasi <kaynak> <hedef> dosyayı taşır veya adını değiştirir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"kesme") { ekran_cift_yaz("kesme sina vektör kayıt çakışmasını sınar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"pci") { ekran_cift_yaz("pci yapılandırma alanını ve BAR eşlemelerini gösterir."); ver tamam(doğru); }
     eğer bm_esit(ad,"ls") { ekran_cift_yaz("ls [yol] dizindeki adları gösterir."); ver tamam(doğru); }
     eğer bm_esit(ad,"cd") { ekran_cift_yaz("cd [yol] çalışma dizinini değiştirir."); ver tamam(doğru); }
     eğer bm_esit(ad,"pwd") { ekran_cift_yaz("pwd çalışma dizinini gösterir."); ver tamam(doğru); }
@@ -1560,8 +1565,8 @@ işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"goster") { ekran_cift_yaz("baslat goster <BMP> resmi gösterir. Oklarla kaydırın, Q ile çıkın."); ver tamam(doğru); }
     eğer bm_esit(ad,"bul") { ekran_cift_yaz("baslat bul [-i] <metin> [dosya...] eşleşen satırları numaralandırır."); ver tamam(doğru); }
     eğer bm_esit(ad,"hesapla") { ekran_cift_yaz("baslat hesapla <ifade> parantez ve işlem önceliğiyle tam sayı hesaplar."); ver tamam(doğru); }
-    eğer bm_esit(ad,"duzenle") { ekran_cift_yaz("baslat duzenle <dosya> metni açar. Ctrl+S kaydeder, Ctrl+Q çıkar."); ver tamam(doğru); }
-    eğer bm_esit(ad,"dosyalar") { ekran_cift_yaz("baslat dosyalar [dizin] dosya gezginini açar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"duzenle") { ekran_cift_yaz("duzenle: Ctrl+F/B ara, Ctrl+I harf duyarlılığı, Ctrl+H değiştir, Ctrl+G satır, Ctrl+Z/Y geri al/yinele, Ctrl+S kaydet, Ctrl+Q çık."); ver tamam(doğru); }
+    eğer bm_esit(ad,"dosyalar") { ekran_cift_yaz("dosyalar: F5 kopyala, F6 taşı, F7 dizin oluştur, Delete sil, Q çık."); ver tamam(doğru); }
     ver hata("yardim konusu bulunamadi");
 }
 işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
@@ -1596,6 +1601,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         ekran_cift_yaz("ls cd pwd cat echo yaz cp mv sil mkdir rmdir diskler bagla sync saat");
         ekran_cift_yaz("calistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat");
         ekran_cift_yaz("donanim log hassasiyet goster bul hesapla duzenle dosyalar");
+        ekran_cift_yaz("bilgi duzen kopyala tasi girdisay kesme pci");
         ver tamam(doğru);
     }
     eğer bm_esit(cmd,"ps") {
@@ -1713,11 +1719,13 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
     değişken bos_program: KsProgram = KsProgram {onbellek:0,sicak:yanlış,var:yanlış,surum:0,yol:"",cwd:"",ad:"",aygit:0,parcalar:[],
         plan:Elf64 {tur:0,makine:0,giris:0,yuklemeler:[]}};
     değişken p: KsKabukSureci = KsKabukSureci {son_program:bos_program,baglamlar:[],adlar:[],sonraki:0,son_kod:0,beklenen:-1};
+    // Kabuk ve ön plan süreci fiziksel klavyeyi sırayla okur.
+    değişken hid_tampon: Dizi<TusHamOlay> = hid_ham_tampon();
     değişken y: tam64 = 0;
     iken y < KXS_YUVA_ADEDI {
         güvensiz {
             dizi_ekle(p.baglamlar,KsvBaglam {disk:*d,fds:ksv_fd_tablo(),kabuk_cwd:d.cwd,degisti:yanlış,
-                x:*x,xb:xb,klavye_indeksi:indeks,h:h,tr:tr,olaylar:[],olay_konum:0,ilk_tus:doğru,dilim_calisti:yanlış,fare_durum:fare_yeni(ps2_teker_var()),olay_maskesi:0,son_tik:-1,bekleme_kurulu:yanlış});
+                x:*x,xb:xb,klavye_indeksi:indeks,h:h,tr:tr,hid_tampon:hid_tampon,olaylar:[],olay_konum:0,ilk_tus:doğru,dilim_calisti:yanlış,fare_durum:fare_yeni(ps2_teker_var()),olay_maskesi:0,son_tik:-1,bekleme_kurulu:yanlış});
         }
         dizi_ekle(p.adlar,""); y=y+1;
     }
@@ -1772,21 +1780,25 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
             iken yoklanan < 0 { yoklanan=ps2_bekle(); }
         }
         değişken xs: Dizi<TusOlayi> = [];
-        değişken hamlar: Dizi<TusHamOlay> = [];
+        değişken adet: tam32 = 0;
         değişken eski_led: tam32 = klavye_led(&değişken tr,indeks >= 0);
         eğer indeks < 0 {
             değişken b: tam32 = -1;
             eğer ps2_kesme_etkin() { b=ps2_kesme_klavye_oku(); } değilse { b=yoklanan; }
-            eğer b >= 0 { eşleş klavye_ham_bayt(&değişken tr,b) { hiç => { } değer(o) => { dizi_ekle(hamlar,o); } } }
+            eğer b >= 0 { eşleş klavye_ham_bayt(&değişken tr,b) { hiç => { } değer(o) => { dizi_yaz(hid_tampon,0,o); adet=1; } } }
         } değilse {
             eğer bh_durum(0) == 2 {
-                eşleş hid_klavye_ham_rapor(&değişken h,&değişken tr,bh_rapor(0)) {
-                    hata(e) => { ver hata(e); } tamam(olaylar) => { hamlar=olaylar; }
-                }
+                adet=ksv_hid_oku(&değişken h,&değişken tr,hid_tampon);
+                eğer adet < 0 { ver hata("hid klavye rapor boyu"); }
             }
         }
         kl_led_degisti(x,xb,indeks,&değişken tr,eski_led);
-        için o: hamlar { eğer kt_izle(o) { dizi_ekle(xs,kt_satir(o)); } }
+        değişken hi: tam32 = 0;
+        iken hi < adet {
+            değişken o: TusHamOlay = dizi_al(hid_tampon,hi);
+            eğer kt_izle(o) { dizi_ekle(xs,kt_satir(o)); }
+            hi=hi+1;
+        }
         eğer kt_hazir() { dizi_ekle(xs,kt_satir(kt_yinele())); }
         ekran_fare_sil(ke.e,&değişken im);
         için o: xs {
