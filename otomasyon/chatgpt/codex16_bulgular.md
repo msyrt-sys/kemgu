@@ -129,14 +129,14 @@ MMIO ölçümü VirtIO blok/TX/RX used.idx, SATA port durumu, kesme sayacı, xHC
 
 | Birim | Kaynak satırı | Derleyici | Süre (s) | Tepe RSS (KiB) | IR satırı | En büyük işlev (IR satırı) |
 |---|---:|---|---:|---:|---:|---|
-| 5000 | 4987 | kemgu | 0.0460 | 8076 | 26517 | main (2419) |
-| 5000 | 4987 | codegen | 2.4186 | 14608 | 23502 | main (2260) |
-| 10000 | 9985 | kemgu | 0.0784 | 14352 | 52936 | main (4800) |
-| 10000 | 9985 | codegen | 7.2338 | 26928 | 46906 | main (4482) |
-| 20000 | 19981 | kemgu | 0.1265 | 27372 | 105771 | main (9559) |
-| 20000 | 19981 | codegen | 24.2356 | 51464 | 93712 | main (8924) |
-| kabuk | 9163 | kemgu | 0.5352 | 41580 | 179429 | drivers.ortak.harf_veri.ust_eslemeler (19835) |
-| kabuk | 9163 | codegen | 45.3534 | 120736 | 168682 | drivers.ortak.harf_veri.ust_eslemeler (16786) |
+| 5000 | 4987 | kemgu | 0.0287 | 8176 | 26517 | main (2419) |
+| 5000 | 4987 | codegen | 2.4514 | 14672 | 23502 | main (2260) |
+| 10000 | 9985 | kemgu | 0.0901 | 14432 | 52936 | main (4800) |
+| 10000 | 9985 | codegen | 7.6341 | 26768 | 46906 | main (4482) |
+| 20000 | 19981 | kemgu | 0.1550 | 27236 | 105771 | main (9559) |
+| 20000 | 19981 | codegen | 25.2305 | 51088 | 93712 | main (8924) |
+| kabuk | 9186 | kemgu | 0.5694 | 40352 | 179256 | drivers.ortak.harf_veri.ust_eslemeler (19835) |
+| kabuk | 9186 | codegen | 46.0809 | 124848 | 168466 | drivers.ortak.harf_veri.ust_eslemeler (16786) |
 <!-- derleme-olcum-son -->
 
 İlk ölçümde 5k'dan 20k'ya kaynak boyutu dört, IR büyüklüğü iki derleyicide de yaklaşık dört katına çıktı. Self-host duvar süresi 2,27 saniyeden 24,09 saniyeye, bootstrap süresi 0,043 saniyeden 0,129 saniyeye çıktı. Birleşik kabukta ilk ölçüm sırasıyla 43,91 s / 120.272 KiB ve 0,55 s / 41.232 KiB idi. Üç katlık eşikler paralel QEMU yüküne pay bırakırken on kat çoğaltmayı yakalar. En büyük işlev sabotajda bootstrap için 23.749 IR satırına (eşik 7.257), self-host için 22.168'e (eşik 6.780) çıktı.

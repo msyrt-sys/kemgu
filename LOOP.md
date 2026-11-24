@@ -3116,4 +3116,7 @@
   oldu. Önceki x86 kapıları QEMU denetiminde ATLADIĞI için bu satıra hiç ulaşmıyordu; derleme-yalnız yeni kapılar ilk kez
   ulaştı. `-` önekli bayraklar (Linux'ta EFI açılışı yeniden doğrulandı); derleme_olcum `/usr/bin/time` yoksa BİLDİREREK atlar
   (D-566 emsali).
+  Üçüncü tur: derleme_olcum — bash (MSYS) /usr/bin/time'ı görüyor ama ölçümü yapan YEREL Windows Python'u o yolu açamıyor
+  (FileNotFoundError). Yetenek artık aracı ÇALIŞTIRACAK süreçten (python) ölçülüyor. Codex taslağı #239'un son hâli (ef40ab7,
+  597a245'in yerine zorla gönderilmiş) kodda birebir aynı; yalnız iki rapor dosyası farklıydı → alındı.
 

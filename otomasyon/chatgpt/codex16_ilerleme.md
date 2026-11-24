@@ -120,3 +120,140 @@ Yol haritasındaki kanıt notları, ABI, mimari, klavye, program yazma ve fiziks
 ## Üçüncü tam koşum ve ön plan klavyesi
 
 Üçüncü denemede 50 süreçlik kaynak denetimi 131.168 bayt çekirdek heap artışı bildirdi. Düzeltme ayrı QEMU oturumlarında doğrulandıktan sonra eski sürümdeki koşum 33 dakika 25 saniyede durduruldu. Tamamlanan hedeflerde kaydedilen tek hata buydu. Kesilen make/tee boru hattının çıkışları (143 0). Ardından ek üç kapı geçti. Ölçüm sınırı 65.616 bayt olarak korundu. HID raporu için ayrılan geçici olaylar ile Set 1 çözümündeki bölgeler kaldırıldı. Kabuk ve ön plan süreci tek klavyenin sabit çıkış alanını sırayla kullanıyor. Yeni QEMU kapısı 32 hesap sürecinde Enter bırakmasını etkin PID ile eşzamanlıyor. Eski çekirdekte ilk başlatmadan sonraki 31 çalıştırma toplam 1.049.344 bayt ile reddedildi. Düzeltilmiş C ve self-host çekirdeklerinde aynı ölçüm 0 bayt. İki derleyicide ikişer kez yapılan uzatılmış 50 süreç deneylerinin dördü de 0 bayt verdi. Tam takım dördüncü kez başlatıldı.
+
+## Son kabul koşumu
+
+D-766 tabanındaki on üç bölüm commit'iyle `make -j6 -k --output-sync=target test_tumu` 52 dakika 1 saniyede tamamlandı. Make ve tee çıkışları PIPESTATUS=(0 0). Eski ortak OVMF imajına yazan hedefler yerel dosya kilidi kullandı. Sonrasında genel tip kapısı, bare-metal farkı ve C sıfır uyarı kapısı tekrar rc 0 verdi.
+
+| Birincil kapı | Atlanan girdi |
+|---|---:|
+| ASan uçtan uca, mevcut korpus | 45 |
+| Semantik kod üretimi, yabancı mimari | 2 |
+| Semantik kod üretimi, C ile bağlanamayan modül | 2 |
+| Geniş kod üretimi, bare-metal sembolleri | 8 |
+| Yapısal IR | 2 |
+| Sürücü IR paritesi | 1 |
+| Eski VirtIO host-mock | 5 |
+| Bölge operandı | 4 |
+| ARM konuk üst bellek deneyi | 1 |
+| **Toplam** | **70** |
+
+Self-driver tekrarlarının yabancı mimari sayaçları kemgu_self 2, kemgu_self2.exe 2.
+
+=== tip kontrol kapısı: 358/379 geçti, 21 muaf, 0 RED ===
+=== ASan E2E denetimi: PASS=133  FAIL=0  SKIP=45  ALLOW(bilinen)=4  SIZINTI-MUAF=2 ===
+=== stdlib modül içe alma: 29/29 modül (0 muaf; test modül sistemiyle derlendi) ===
+=== modül codegen eşdeğerlik: 62/62 (0 atlandı, 0 muaf) ===
+=== codegen GENİŞ eşdeğerlik: 76/76 gerçek program (8 atlandı, 0 muaf) ===
+=== yapısal IR paritesi: 206/206 dosya (24 muaf, 2 atlandı) ===
+=== sürücü paritesi (--check + yapısal --llvm): 17/17 (1 muaf, 1 atlandı) ===
+=== geniş --check paritesi: 159/159 dosya (18 muaf) ===
+=== checker --checkdump sıfır-diff: 319/319 korpus (0 muaf) ===
+
+## Teslim kapsamı
+
+H12b'deki USB sıfır uzunluk denetimini kaldırma sabotajı uygulanmadı. Q35'in iki S5 tipi de sıfır olduğundan SLP_TYP kaydırmasının hatası sıfır dışı tipli host testinde ölçüldü. Kayıtlar QEMU ve host ölçümleridir. Fiziksel makine adımları kontrol listesindedir.
+
+D-766 ile teslim arasındaki 99 dosyanın yolları izin listesiyle eşleşti.
+
+```text
+Makefile
+belgeler/KEMGU_OS_Donanim_Yol_Haritasi.md
+belgeler/KEMGU_OS_Klavye_Duzeni.md
+belgeler/KEMGU_OS_Mimari.md
+belgeler/KEMGU_OS_Program_Yazma.md
+belgeler/KEMGU_OS_Sabotaj_Envanteri.md
+belgeler/KEMGU_OS_Syscall_ABI.md
+belgeler/X86_Fiziksel_Donanim_Kontrol_Listesi.md
+boot/start_x86_64.S
+drivers/acpi/fadt.kem
+drivers/acpi/mcfg.kem
+drivers/acpi/s5.kem
+drivers/ahci/cekirdek.kem
+drivers/bellek/cerceve.kem
+drivers/blok/aygit.kem
+drivers/blok/kurtarma.kem
+drivers/blok/ram.kem
+drivers/duzenle/islem.kem
+drivers/fs/bagla.kem
+drivers/fs/ram.kem
+drivers/nvme/cekirdek.kem
+drivers/nvme/komut.kem
+drivers/ps2/klavye_tr.kem
+drivers/usb/depo.kem
+drivers/usb/hid_klavye.kem
+drivers/usb/hid_tanim.kem
+drivers/usb/hid_tus_tablosu.kem
+drivers/usb/hub.kem
+drivers/usb/xhci_cekirdek.kem
+drivers/uygulama/bul.kem
+drivers/uygulama/gezgin.kem
+otomasyon/chatgpt/codex16_bulgular.md
+otomasyon/chatgpt/codex16_ilerleme.md
+runtime/kdl_kesme.c
+runtime/kdl_runtime_uart_16550.c
+runtime/kdl_runtime_uart_pl011.c
+runtime/kullanici/x86_64/kem_sis.kem
+runtime/mimari/x86_64/kem_acpi_uefi.kem
+runtime/mimari/x86_64/kem_apic_hw.kem
+runtime/mimari/x86_64/kem_bellek_harita.kem
+runtime/mimari/x86_64/kem_gc_yurut.kem
+runtime/mimari/x86_64/kem_guc_hw.kem
+runtime/mimari/x86_64/kem_mmu_hw.kem
+runtime/mimari/x86_64/kem_pci_adres.kem
+runtime/mimari/x86_64/kem_pci_hw.kem
+runtime/mimari/x86_64/kem_ps2_hw.kem
+runtime/mimari/x86_64/kem_uart.kem
+test/baremetal_diff_harness.sh
+test/bm_x86_guc_harness.sh
+test/bm_x86_mmio_volatile_harness.sh
+test/bm_x86_msi_harness.sh
+test/bm_x86_pat_harness.sh
+test/bm_x86_uefi_harness.sh
+test/kullanici/dosyalar.kem
+test/kullanici/duzenle.kem
+test/olcum/birim_uret.py
+test/olcum/derleme.py
+test/olcum/derleme_harness.sh
+test/olcum/esikler.json
+test/ornekler/kem_os_x86_blok.kem
+test/ornekler/kem_os_x86_blok_ortak.kem
+test/ornekler/kem_os_x86_kabuk.kem
+test/ornekler/kem_os_x86_uefi.kem
+test/ornekler/kem_os_x86_vfs_ortak.kem
+tests/drivers/acpi/mcfg_test.kem
+tests/drivers/acpi/qemu_q35_dsdt.hex
+tests/drivers/acpi/s5_test.kem
+tests/drivers/ahci/kurtarma_test.kem
+tests/drivers/blok/ram_test.kem
+tests/drivers/bulanik/dalga16_test.kem
+tests/drivers/pci/port16_test.kem
+tests/drivers/ps2/klavye16_test.kem
+tests/drivers/uart/tx_sinir.c
+tests/drivers/usb/depo_cekirdek_test.kem
+tests/drivers/usb/hub_test.kem
+tests/qemu/arac16_kahin.py
+tests/qemu/belge15_kahin.py
+tests/qemu/bm_kabuk.py
+tests/qemu/bm_uefi.py
+tests/qemu/dalga12_kahin.py
+tests/qemu/disk_hata_kahin.py
+tests/qemu/donanim_kahin.py
+tests/qemu/fat_yazici.py
+tests/qemu/girdi15_kahin.py
+tests/qemu/guc_kahin.py
+tests/qemu/kabuk14_kahin.py
+tests/qemu/kapat_kahin.py
+tests/qemu/klavye16_kahin.py
+tests/qemu/msi_kahin.py
+tests/qemu/pat_kahin.py
+tests/qemu/pci16_kahin.py
+tests/qemu/ramdisk_kahin.py
+tests/qemu/saglamlik_kahin.py
+tests/qemu/uefi_imaj.py
+tests/qemu/uefi_kabuk_kahin.py
+tests/qemu/usb_hub_kahin.py
+tools/codex/arac16_test.kem
+tools/codex/dalga4_hid.py
+tools/codex/mmio_volatile.py
+```
