@@ -1,0 +1,26 @@
+kullan drivers::ag::bayt::{ ag_be16, ag_saglama, ag_y16 };
+genel işlev udp_onek(kaynak: tam64,hedef: tam64,n: tam32) -> tam64 {
+    ver (kaynak>>16)+(kaynak&65535)+(hedef>>16)+(hedef&65535)+17+(n olarak tam64);
+}
+genel işlev udp_oku(b: Dizi<dtam8>,ofs: tam32,kalan: tam32,kaynak: tam64,hedef: tam64) -> tam32 {
+    eğer ofs<0 veya kalan<8 veya kalan>dizi_boyut(b)-ofs { ver -1; }
+    değişken n: tam32 = ag_be16(b,ofs+4);
+    eğer n<8 veya n>kalan { ver -1; }
+    eğer ag_be16(b,ofs+6)!=0 ve ag_saglama(b,ofs,n,udp_onek(kaynak,hedef,n))!=0 { ver -2; }
+    ver n-8;
+}
+genel işlev udp_yaz(b: Dizi<dtam8>,ofs: tam32,n: tam32,kaynak: tam64,hedef: tam64,sp: tam32,dp: tam32) -> tam32 {
+    eğer n<0 veya n>65527 veya ofs<0 veya ofs>dizi_boyut(b)-8-n veya sp<0 veya sp>65535 veya dp<=0 veya dp>65535 { ver -1; }
+    ag_y16(b,ofs,sp olarak tam64); ag_y16(b,ofs+2,dp olarak tam64); ag_y16(b,ofs+4,(n+8) olarak tam64); ag_y16(b,ofs+6,0);
+    değişken c: tam32 = ag_saglama(b,ofs,n+8,udp_onek(kaynak,hedef,n+8));
+    eğer c==0 { c=65535; } ag_y16(b,ofs+6,c olarak tam64); ver n+8;
+}
+genel işlev udp_yuva(t: Dizi<tam64>,port: tam32) -> tam32 {
+    eğer port<=0 veya port>65535 { ver -1; }
+    değişken i: tam32 = 0; iken i<dizi_boyut(t) { eğer dizi_al(t,i)==(port olarak tam64) { ver i; } i=i+1; } ver -1;
+}
+genel işlev udp_bagla(t: Dizi<tam64>,port: tam32) -> tam32 {
+    eğer port<1 veya port>65535 { ver -22; }
+    eğer udp_yuva(t,port)>=0 { ver -98; }
+    değişken i: tam32 = 0; iken i<dizi_boyut(t) { eğer dizi_al(t,i)==0 { dizi_yaz(t,i,port olarak tam64); ver i; } i=i+1; } ver -105;
+}

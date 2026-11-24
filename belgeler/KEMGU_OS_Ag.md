@@ -50,3 +50,11 @@ RTL8139 bu dalganın desteklediği NIC listesine alınmadı. Emülasyonu olan bu
 ARP önbelleği 16 komşu tutar. Bir kayıt 30 saniye yaşar. Çözüm bekleyen dört çerçeve için fiziksel tampon ayrılır. Yeniden sorgu aralığı 250 ms, üst süre göndericinin zaman aşımıdır. Bekleme kuyruğu doluysa -105 alınır. Bağlantı kapalıysa -100, adres yoksa -99, yön yoksa -101, zaman dolarsa -110 döner.
 
 `ping <ip> [adet [aralık_ms [zaman_aşımı_ms]]]` kullanıcı ELF'idir. Varsayılan dört istek, 1 saniye aralık ve istek başına 1 saniye sınır vardır. Çıktıda RTT mikrosaniyedir. `ag lo` yerel 127.0.0.0/8 arayüzünün sayaçlarını gösterir. Yerel echo istek ve yanıtları fiziksel NIC'e verilmeden IP ve ICMP katmanlarından geçer.
+
+## UDP, DHCP ve DNS
+
+UDP soketleri için 16 sabit port kaydı bulunur. Sıfır port geçersizdir (-22), kullanımda olan porta yeniden bağlanma -98, dolu tablo -105 döner. IPv4 UDP sağlaması sözde başlık dahil doğrulanır. Kapalı porta gelen istekler için ICMP port ulaşılamaz cevabı en çok 100 ms’de bir çıkar. `ag yanki` 9000 numaralı portta yankıyı açar.
+
+Arayüz açılınca DHCP başlar. `ag durum` kira evresi, adres, DNS ve NTP sunucusunu gösterir. `ag dhcp` yeni işlem açar, `ag dhcp kapat` dinamik adresi bırakır. Statik adres ayarı da DHCP'yi kapatır. Yanıt XID, istemci MAC’i, seçenek sınırları ve seçili sunucuyla doğrulanır. T1'de unicast, T2'de broadcast REQUEST çıkar. Kira bittiğinde adres bırakılır. Seçenek 42 NTP sunucusunu taşır.
+
+`cozumle <ad>` IPv4 A kaydı arar. En çok sekiz CNAME ve bir ad içinde en çok 32 geriye sıkıştırma işaretçisi izlenir. Soru adı, tür, sınıf, kaynak sunucu, port ve işlem kimliği yanıtla uyuşmalıdır. Önbellekte son başarılı ad, zincirin en kısa TTL'si kadar tutulur. Her DNS denemesi 650 ms ile sınırlıdır. Üç denemede ilk sunucu yanıtlamazsa ikinci sunucuya geçilir.

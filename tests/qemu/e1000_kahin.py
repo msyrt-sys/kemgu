@@ -13,7 +13,8 @@ from surec_kahin import SurecConsole
 
 def kos(w, model='e1000', kopru=False, ram='256M'):
     mac = bytes.fromhex('525400170002')
-    pcap = w/'nic.pcap'
+    topoloji = 'kopru' if kopru else 'kok'
+    pcap = w/f'nic-{model}-{ram}-{topoloji}.pcap'
     usb,nvme,sata = imajlar(w, {})
     yol = ',bus=alt' if kopru else ''
     with EthernetEs() as es:
@@ -48,6 +49,7 @@ def kos(w, model='e1000', kopru=False, ram='256M'):
                     return bool(int.from_bytes(c.mem(c.sayi('ag_vcihaz')+6,2),'little')&1)
                 return bool(int.from_bytes(c.mem(c.sayi('ag_bar')+8,4),'little')&2)
             wait_for(p, link_acik)
+            c.run('ag dhcp kapat', b'DHCP OK\n')
             bas = durum(1)
             if ram=='4G':
                 dma = c.sayi('ag_dma')
@@ -96,12 +98,19 @@ def kos(w, model='e1000', kopru=False, ram='256M'):
             gelen = []
             for i in range(18):
                 ham = ethernet(mac,ES_MAC,0x88b5,bytes([i+29])*46)
+                if not yoklama:
+                    rx_once = int.from_bytes(c.mem(irq,8),'little')
                 es.gonder(ham)
                 gelen.append(ham)
                 try:
                     wait_for(p,lambda: c.sayi('ag_rx_sayi')==once+i+1,seconds=3)
                 except AssertionError as exc:
                     raise AssertionError(f'RX çerçeve {i+1}, alınan {c.sayi("ag_rx_sayi")-once}') from exc
+                if not yoklama:
+                    try:
+                        wait_for(p,lambda: int.from_bytes(c.mem(irq,8),'little') > rx_once,seconds=3)
+                    except AssertionError as exc:
+                        raise AssertionError(f'{model} RX {i+1} kesmesi yok, sayaç {rx_once}') from exc
                 assert c.mem(c.sayi('ag_dma')+40960,len(ham)) == ham
             assert c.sayi('ag_rx_bayt') == boy + sum(map(len,gelen))
             if not yoklama:

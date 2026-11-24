@@ -75,3 +75,14 @@ işlev main() -> tam32 { güvensiz {
 ```
 
 Her `c` için (`kemgu`, `codegen`) komutlar `build/$c --llvm c17_001.kem > ornek.ll`, `clang ornek.ll build/kdl_runtime.o -lm -o ornek`, `./ornek`.
+
+## UDP, DHCP ve DNS ölçümleri
+
+- 1000 UDP heap 4066880→4066880 boş 47808→47808, T1 4.130s T2 7.227s
+- UDP OK dgram 2044
+- UDP OK slirp 5
+- 1000 UDP heap 4263728→4263728 boş 47776→47776, T1 4.022s T2 7.030s
+- UDP OK dgram 2044
+- UDP OK slirp 5
+
+Otomatik DHCP trafiğinden sonra 82574L 18 çerçeveyi aldı, fakat MSI-X sayacı artmadı. EIAC ilk kesmede neden bitinin yanında IMS maskesini de kaldırıyordu. CTRL_EXT.IAME açıldı, IAM sıfırlandı. Düzeltilen sürücüde kâhin her ayrı RX çerçevesi için kesme sayacının yeniden arttığını doğruladı. Dört NIC, iki bellek düzeni ve iki derleyicide matris yeniden geçti.

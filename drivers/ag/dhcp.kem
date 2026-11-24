@@ -1,0 +1,91 @@
+kullan drivers::ag::bayt::{ ag_be32, ag_b8, ag_y8, ag_y32 };
+kullan drivers::ag::eth::{ eth_mac, eth_mac_yaz };
+// 0 kapalı, 1 seçim, 2 istek, 3 kiralı, 4 yenileme, 5 yeniden bağlama.
+genel yapı DhcpKirasi { durum: tam32; xid: tam64; adres: tam64; sunucu: tam64; maske: tam64; gecit: tam64; dns: tam64; dns2: tam64; ntp: tam64; t1: tam64; t2: tam64; son: tam64; tekrar: tam64; deneme: tam32; }
+genel işlev dhcp_yeni(x: tam64) -> DhcpKirasi {
+    ver DhcpKirasi {durum:1,xid:x,adres:0,sunucu:0,maske:0,gecit:0,dns:0,dns2:0,ntp:0,t1:0,t2:0,son:0,tekrar:0,deneme:0};
+}
+genel işlev dhcp_onek(m: tam64) -> tam32 {
+    değişken n: tam32 = 0;
+    iken n<32 ve (m&2147483648)!=0 { n=n+1; m=(m<<1)&4294967295; }
+    eğer m!=0 { ver -1; } ver n;
+}
+// Eski ağdaki sunucu ve seçenekler yeni bir adres seçimine taşınmaz.
+işlev dhcp_birak(s: &değişken DhcpKirasi,tekrar: tam64) {
+    s.durum=1; s.xid=(s.xid+1)&4294967295; s.adres=0; s.sunucu=0; s.deneme=0; s.tekrar=tekrar;
+    s.maske=0; s.gecit=0; s.dns=0; s.dns2=0; s.ntp=0; s.t1=0; s.t2=0; s.son=0;
+}
+genel işlev dhcp_tick(s: &değişken DhcpKirasi,ms: tam64) -> tam32 {
+    eğer s.durum==0 { ver 0; }
+    eğer s.durum>=3 {
+        eğer ms>=s.son { dhcp_birak(s,0); }
+        değilse eğer s.durum!=5 ve ms>=s.t2 { s.durum=5; s.tekrar=0; s.deneme=0; }
+        değilse eğer s.durum==3 ve ms>=s.t1 { s.durum=4; s.xid=(s.xid+1)&4294967295; s.tekrar=0; s.deneme=0; }
+    }
+    eğer s.durum==3 veya ms<s.tekrar { ver 0; }
+    eğer s.durum==2 ve s.deneme>=4 { dhcp_birak(s,0); }
+    değişken aralik: tam64 = 1000; değişken i: tam32 = 0;
+    iken i<s.deneme ve i<3 { aralik=aralik*2; i=i+1; }
+    s.tekrar=ms+aralik; eğer s.deneme<8 { s.deneme=s.deneme+1; }
+    eğer s.durum==1 { ver 1; } ver 3;
+}
+genel işlev dhcp_istek(s: &DhcpKirasi,b: Dizi<dtam8>,ofs: tam32,mac: tam64,tur: tam32) -> tam32 {
+    eğer ofs<0 veya ofs>dizi_boyut(b)-300 { ver -1; }
+    değişken i: tam32 = 0; iken i<300 { ag_y8(b,ofs+i,0); i=i+1; }
+    ag_y8(b,ofs,1); ag_y8(b,ofs+1,1); ag_y8(b,ofs+2,6); ag_y32(b,ofs+4,s.xid);
+    eğer s.durum==4 veya s.durum==5 { ag_y32(b,ofs+12,s.adres); }
+    değilse { ag_y8(b,ofs+10,128); }
+    eth_mac_yaz(b,ofs+28,mac); ag_y32(b,ofs+236,1669485411);
+    değişken k: tam32 = ofs+240;
+    ag_y8(b,k,53); ag_y8(b,k+1,1); ag_y8(b,k+2,tur olarak tam64); k=k+3;
+    ag_y8(b,k,61); ag_y8(b,k+1,7); ag_y8(b,k+2,1); eth_mac_yaz(b,k+3,mac); k=k+9;
+    eğer s.durum==2 {
+        ag_y8(b,k,50); ag_y8(b,k+1,4); ag_y32(b,k+2,s.adres); k=k+6;
+        ag_y8(b,k,54); ag_y8(b,k+1,4); ag_y32(b,k+2,s.sunucu); k=k+6;
+    }
+    ag_y8(b,k,55); ag_y8(b,k+1,7); ag_y8(b,k+2,1); ag_y8(b,k+3,3); ag_y8(b,k+4,6);
+    ag_y8(b,k+5,42); ag_y8(b,k+6,51); ag_y8(b,k+7,58); ag_y8(b,k+8,59); ag_y8(b,k+9,255);
+    ver 300;
+}
+// Önce yerel adayın bütün seçenekleri doğrulanır. Kesik yanıtta kiraya dokunulmaz.
+genel işlev dhcp_al(s: &değişken DhcpKirasi,b: Dizi<dtam8>,ofs: tam32,n: tam32,mac: tam64,ms: tam64) -> tam32 {
+    eğer ofs<0 veya n<241 veya n>dizi_boyut(b)-ofs { ver -1; }
+    eğer ag_b8(b,ofs)!=2 veya ag_b8(b,ofs+1)!=1 veya ag_b8(b,ofs+2)!=6 veya ag_be32(b,ofs+4)!=s.xid veya eth_mac(b,ofs+28)!=mac veya ag_be32(b,ofs+236)!=1669485411 { ver 0; }
+    değişken ip: tam64 = ag_be32(b,ofs+16); değişken sid: tam64 = 0; değişken m: tam64 = s.maske;
+    değişken g: tam64 = s.gecit; değişken dns: tam64 = s.dns; değişken dns2: tam64 = s.dns2; değişken ntp: tam64 = s.ntp;
+    değişken kira: tam64 = 0; değişken t1: tam64 = 0; değişken t2: tam64 = 0;
+    değişken tur: tam32 = 0; değişken son: mantıksal = yanlış; değişken k: tam32 = ofs+240;
+    iken k<ofs+n ve değil son {
+        değişken kod: tam32 = ag_b8(b,k); k=k+1;
+        eğer kod==255 { son=doğru; }
+        değilse eğer kod!=0 {
+            eğer k==ofs+n { ver -1; }
+            değişken u: tam32 = ag_b8(b,k); k=k+1; eğer u>ofs+n-k { ver -1; }
+            eğer kod==53 { eğer u!=1 { ver -1; } tur=ag_b8(b,k); }
+            eğer kod==54 veya kod==1 veya kod==51 veya kod==58 veya kod==59 {
+                eğer u!=4 { ver -1; } değişken v: tam64 = ag_be32(b,k);
+                eğer kod==54 { sid=v; } eğer kod==1 { m=v; } eğer kod==51 { kira=v; }
+                eğer kod==58 { t1=v; } eğer kod==59 { t2=v; }
+            }
+            eğer kod==3 veya kod==6 veya kod==42 {
+                eğer u<4 veya u%4!=0 { ver -1; }
+                değişken v: tam64 = ag_be32(b,k); eğer kod==3 { g=v; } eğer kod==42 { ntp=v; }
+                eğer kod==6 { dns=v; dns2=0; eğer u>=8 { dns2=ag_be32(b,k+4); } }
+            }
+            k=k+u;
+        }
+    }
+    eğer değil son veya sid==0 { ver -1; }
+    eğer s.durum==2 veya s.durum==4 { eğer s.sunucu!=sid { ver 0; } }
+    eğer tur==6 ve (s.durum==2 veya s.durum==4 veya s.durum==5) {
+        dhcp_birak(s,ms+1000); ver 6;
+    }
+    eğer tur==2 ve s.durum==1 ve ip!=0 { s.adres=ip; s.sunucu=sid; s.durum=2; s.tekrar=0; s.deneme=0; ver 2; }
+    eğer tur!=5 veya (s.durum!=2 ve s.durum!=4 ve s.durum!=5) { ver 0; }
+    eğer ip==0 ve s.durum>=4 { ip=s.adres; }
+    eğer ip==0 veya kira==0 veya dhcp_onek(m)<0 { ver -1; }
+    eğer t1==0 veya t2<=t1 veya t2>=kira { t1=kira*1000/2; t2=kira*875; }
+    değilse { t1=t1*1000; t2=t2*1000; }
+    s.durum=3; s.adres=ip; s.sunucu=sid; s.maske=m; s.gecit=g; s.dns=dns; s.dns2=dns2; s.ntp=ntp;
+    s.t1=ms+t1; s.t2=ms+t2; s.son=ms+kira*1000; s.tekrar=0; s.deneme=0; ver 5;
+}

@@ -29,7 +29,8 @@ def ping(c, ip, adet):
 
 def kos(w, slirp=False):
     usb,nvme,sata=imajlar(w, {'ping.elf':(w/'ping.elf').read_bytes()})
-    pcap=w/'l3.pcap'
+    arka_uc = 'slirp' if slirp else 'dgram'
+    pcap = w/f'l3-{arka_uc}.pcap'
     with (contextlib.nullcontext() if slirp else EthernetEs()) as es:
         net = 'user,id=n0' if slirp else es.qemu_netdev()
         args=('-netdev',net,'-device',f'e1000,id=ag0,netdev=n0,mac={MAC.hex(":")}',

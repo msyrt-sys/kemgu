@@ -26,3 +26,8 @@ Kök Q35 yuvasında gerçek INTx ve iki PCI köprüsünün ardında yoklama kull
 İlk toplu çalışmada hata veren kapılar özgün eşiklerle ayrı koşulup geçti.
 - calistir_bm_x86_boru
 - calistir_bm_x86_program15
+
+## Bölüm 5 — UDP, DHCP ve DNS
+
+DHCP DORA, T1 yenilemesi, T2 yeniden bağlaması, bağlantı kesikken kira bitişi ve yeniden adres alma, DNS CNAME ve sıkıştırma, ilk DNS sunucusu susunca ikinciye geçme ve TTL önbelleği gerçek dgram trafiğinde sınandı. Slirp 10.0.2.15 adresini verdi. Her derleyicide 1000 UDP datagramının tamamı yankılandı ve pcap içeriği bağımsız okundu. Bölüm ve ara regresyon kapıları 1350 saniyede tamamlandı. T1'i kira sonuna öteleyen çekirdek, telde yenileme görülmeyince testi kırdı. DNS işaretçi döngüsü korumasını kaldırıp konuğu asma sabotajı uygulanmadı.
+Ayrı koşumda geçen kapı: calistir_bm_x86_nic_matris

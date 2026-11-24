@@ -77,7 +77,7 @@ def dhcp_secenekleri(b):
     raise ValueError('DHCP son işareti eksik')
 
 
-def dhcp_yanit(c, ip, mac, kiraci, kira=60):
+def dhcp_yanit(c, ip, mac, kiraci, kira=60, dnsler=None, zorla_nak=False):
     b = c.yuk[8:]
     alan = dhcp_secenekleri(b)
     istek = alan.get(53)
@@ -86,7 +86,7 @@ def dhcp_yanit(c, ip, mac, kiraci, kira=60):
     if istek == b'\x03' and alan.get(54, ip) != ip:
         return None
     secilen = alan.get(50, b[12:16])
-    tur = 2 if istek == b'\x01' else (5 if secilen == kiraci else 6)
+    tur = 2 if istek == b'\x01' else (5 if secilen == kiraci and not zorla_nak else 6)
     mesaj = bytearray(240)
     mesaj[:3] = bytes((2, 1, 6))
     mesaj[4:12] = b[4:12]
@@ -97,7 +97,7 @@ def dhcp_yanit(c, ip, mac, kiraci, kira=60):
     mesaj[236:240] = b[236:240]
     secenek = [(53, bytes([tur])), (54, ip)]
     if tur != 6:
-        secenek.extend([(1, bytes((255, 255, 255, 0))), (3, ip), (6, ip), (42, ip),
+        secenek.extend([(1, bytes((255, 255, 255, 0))), (3, ip), (6, b''.join(dnsler) if dnsler else ip), (42, ip),
                         (51, struct.pack('!I', kira)), (58, struct.pack('!I', kira//2)),
                         (59, struct.pack('!I', kira*7//8))])
     for kod, deger in secenek:
@@ -131,6 +131,25 @@ class Hat:
         once = self.bekleyen
         self.bekleyen = None
         return once or []
+
+
+def dns_a_yanit(sorgu, adres, ttl=2):
+    if len(sorgu)<17 or sorgu[2:6]!=bytes((1,0,0,1)):
+        raise ValueError('DNS A sorgusu')
+    k=12
+    while k<len(sorgu) and sorgu[k]:
+        n=sorgu[k]
+        if n>63 or k+1+n>=len(sorgu):
+            raise ValueError('DNS soru etiketi')
+        k+=n+1
+    if k+5!=len(sorgu) or sorgu[k+1:]!=bytes((0,1,0,1)):
+        raise ValueError('DNS sınıfı veya türü')
+    soru=sorgu[12:]
+    isim=bytes([3])+b'srv'+bytes([192,12])
+    ilk=struct.pack('!HHHIH',0xc00c,5,1,ttl,len(isim))
+    ikinci_ad=12+len(soru)+len(ilk)
+    ikinci=struct.pack('!HHHIH4s',0xc000|ikinci_ad,1,1,ttl+5,4,adres)
+    return sorgu[:2]+struct.pack('!5H',0x8180,1,2,0,0)+soru+ilk+isim+ikinci
 
 
 class EthernetEs(AbstractContextManager):

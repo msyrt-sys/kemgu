@@ -1,8 +1,11 @@
+kullan drivers::ag::udp::{ udp_yaz, udp_oku, udp_yuva, udp_bagla };
+kullan drivers::ag::dhcp::{ DhcpKirasi, dhcp_yeni, dhcp_tick, dhcp_onek, dhcp_istek, dhcp_al };
+kullan drivers::ag::dns::{ DnsA, dns_sorgu, dns_cevap, dns_ad_yaz, dns_ad_esit };
 kullan drivers::ag::l3::{ AgL3, l3_yeni, l3_al, l3_ping };
-kullan drivers::ag::bayt::{ ag_y8, ag_b8, ag_ip_oku } olarak agbayt;
-kullan drivers::ag::arp::{ arp_yaz, arp_bul, arp_beklet, arp_bekleme_adimi };
-kullan drivers::ag::eth::{ eth_mac_yaz };
-kullan drivers::ag::ipv4::{ ip4_sonraki };
+kullan drivers::ag::bayt::{ ag_y8, ag_b8, ag_ip_oku, ag_be16, ag_be32, ag_y16, ag_y32, ag_saglama, ag_kopyala } olarak agbayt;
+kullan drivers::ag::arp::{ arp_yaz, arp_bul, arp_beklet, arp_bekleme_adimi, arp_kaydet };
+kullan drivers::ag::eth::{ eth_mac_yaz, eth_mac, eth_yaz, eth_tur };
+kullan drivers::ag::ipv4::{ ip4_sonraki, ip4_baslik, ip4_yaz };
 kullan drivers::ortak::bayt::{ imza_esit };
 kullan drivers::ag::e1000::{ E1kKurulum, E1K_ADET, E1K_SAYFA, e1k_yeni, e1k_adim, e1k_rx_boyu, e1k_tx_sozcugu, igb_rx_boyu, igb_tx_sozcugu };
 kullan drivers::ag::virtio_pci::{ vnic_ozellik, vnic_bildirim };
@@ -1532,6 +1535,9 @@ işlev ag_msix(bdf: tam32) -> tam32 {
         kem_pci_yaz16(bdf,k+2,(ctl|32768)&49151);
         eğer ag_model==2 {
             kem_mmio_yaz32(ag_bar+228,2148009992);
+            // IAME açık ve IAM sıfırken EIAC nedeni temizler, MSI-X maskesi açık kalır.
+            kem_mmio_yaz32(ag_bar+224,0);
+            kem_mmio_yaz32(ag_bar+24,kem_mmio_oku32(ag_bar+24)|134217728);
             kem_mmio_yaz32(ag_bar+220,22020096);
             kem_mmio_yaz32(ag_bar+208,22020100);
             kem_mmio_yaz32(ag_bar+200,1048576);
@@ -1650,7 +1656,7 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
 işlev ag_al() {
     güvensiz {
     eğer ag_bar==0 { ver; }
-    ag_bekleyenleri_isle();
+    ag_bekleyenleri_isle(); ag_dhcp_adim();
     eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
@@ -1685,6 +1691,168 @@ küresel değişken ag_sonraki_kim: tam32 = 1;
 çıplak işlev ag_dizi8(a: tam64) -> Dizi<dtam8> { değişken p: *Dizi<dtam8> = (&a) olarak *Dizi<dtam8>; ver *p; }
 çıplak işlev ag_dizi64(a: tam64) -> Dizi<tam64> { değişken p: *Dizi<tam64> = (&a) olarak *Dizi<tam64>; ver *p; }
 çıplak işlev ag_us() -> tam64 { eğer bm_cevrim_us<=0 { ver 0; } ver bm_tsc_oku()/bm_cevrim_us; }
+// Kiralama, port tablosu, DNS sorgu ve cevap tamponları fiziksel sayfalarda.
+küresel değişken ag_l5: tam64 = 0;
+küresel değişken ag_dns_id: tam32 = 0;
+küresel değişken ag_dns_port: tam32 = 0;
+küresel değişken ag_dns_sunucu: tam64 = 0;
+küresel değişken ag_dns_sonuc: tam32 = 0;
+küresel değişken ag_dns_ip: tam64 = 0;
+küresel değişken ag_dns_ttl: tam64 = 0;
+küresel değişken ag_dns_on_son: tam64 = 0;
+küresel değişken ag_udp_port: tam32 = 0;
+küresel değişken ag_udp_kapali: tam64 = 0;
+küresel değişken ag_udp_son_icmp: tam64 = 0;
+
+işlev ag_l5_kur() -> mantıksal {
+    güvensiz {
+        değişken a: tam64 = uefi_surec_ayir(3); eğer a==0 { ver yanlış; }
+        memset(a olarak *tam8,0,12288);
+        ag_dizi_baslik(a+256,a+512,16,8); ag_dizi_baslik(a+288,a+1024,256,4);
+        ag_dizi_baslik(a+320,a+4096,768,4); ag_dizi_baslik(a+352,a+8192,256,4);
+        değişken p: *DhcpKirasi = a olarak *DhcpKirasi;
+        değişken s: DhcpKirasi = dhcp_yeni((ag_mac^ag_us())&4294967295);
+        eğer ag_bar==0 { s.durum=0; } *p=s; ag_l5=a; ver doğru;
+    }
+}
+işlev ag_udp_cerceve(b: Dizi<dtam8>,src: tam64,dst: tam64,sp: tam32,dp: tam32,n: tam32,dmac: tam64) -> tam32 {
+    güvensiz {
+        değişken uzun: tam32 = udp_yaz(b,34,n,src,dst,sp,dp);
+        eğer uzun<0 { ver -90; }
+        eth_yaz(b,dmac,ag_mac,2048); ip4_yaz(b,src,dst,17,uzun,ag_sonraki_kim); ag_sonraki_kim=(ag_sonraki_kim+1)&65535;
+        ver uzun+34;
+    }
+}
+işlev ag_dhcp_adim() {
+    güvensiz {
+        eğer ag_l5==0 veya ag_bar==0 { ver; }
+        değişken p: *DhcpKirasi = ag_l5 olarak *DhcpKirasi;
+        değişken s: DhcpKirasi = *p;
+        eğer s.durum==0 { ver; }
+        değişken ms: tam64 = ag_us()/1000;
+        eğer s.durum==3 ve ms<s.t1 { ver; }
+        eğer s.durum<3 ve ms<s.tekrar { ver; }
+        değişken once: tam32 = s.durum;
+        değişken tur: tam32 = dhcp_tick(&değişken s,ms); *p=s;
+        eğer once>=3 ve s.durum==1 { ag_ip_sil(); }
+        eğer tur==0 veya ag_link()==0 { ver; }
+        değişken b: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        değişken n: tam32 = dhcp_istek(&s,b,42,ag_mac,tur);
+        eğer n<0 { ver; }
+        değişken src: tam64 = 0; değişken dst: tam64 = 4294967295;
+        eğer s.durum>=4 { src=s.adres; } eğer s.durum==4 { dst=s.sunucu; }
+        n=ag_udp_cerceve(b,src,dst,68,67,n,281474976710655);
+        eğer n<0 { ver; }
+        eğer s.durum==4 { ag_ip_cik(b,n,dst,750); } değilse { ag_dizi_gonder(b,n); }
+    }
+}
+// Farklı bir kaynak adrese geçerken önceki adresle yazılmış çerçeveler gönderilemez.
+işlev ag_adres_kuyrugunu_bosalt() {
+    güvensiz {
+        eğer ag_bekleyen>0 {
+            değişken t: Dizi<tam64> = ag_dizi64(ag_l3_alan+352);
+            değişken i: tam32 = 0;
+            iken i<4 { dizi_yaz(t,i*4+1,0 olarak tam64); i=i+1; }
+            ag_atilan=ag_atilan+(ag_bekleyen olarak tam64); ag_bekleyen=0;
+        }
+        ag_dns_on_son=0;
+    }
+}
+işlev ag_ip_sil() {
+    güvensiz {
+        değişken p: *AgL3 = ag_l3_alan olarak *AgL3; değişken s: AgL3 = *p;
+        s.ip=0; s.gecit=0; s.onek=0; *p=s;
+        değişken t: Dizi<tam64> = s.arp; değişken i: tam32 = 0;
+        iken i<dizi_boyut(t) { dizi_yaz(t,i,0 olarak tam64); i=i+1; }
+        ag_adres_kuyrugunu_bosalt();
+    }
+}
+işlev ag_dhcp_girdi(b: Dizi<dtam8>,ofs: tam32,boy: tam32,smac: tam64) {
+    güvensiz {
+        değişken p: *DhcpKirasi = ag_l5 olarak *DhcpKirasi; değişken s: DhcpKirasi = *p;
+        eğer s.durum==0 { ver; }
+        değişken ms: tam64 = ag_us()/1000;
+        değişken olay: tam32 = dhcp_al(&değişken s,b,ofs,boy,ag_mac,ms);
+        eğer olay<=0 { ver; } *p=s;
+        eğer olay==5 {
+            değişken lp: *AgL3 = ag_l3_alan olarak *AgL3;
+            eğer (*lp).ip!=s.adres veya (*lp).onek!=dhcp_onek(s.maske) veya (*lp).gecit!=s.gecit { ag_ip_ayarla(s.adres,dhcp_onek(s.maske),s.gecit); }
+            arp_kaydet((*lp).arp,s.sunucu,smac,ms,30000);
+        }
+        eğer olay==6 { ag_ip_sil(); }
+    }
+}
+işlev ag_udp_girdi(rx: Dizi<dtam8>,n: tam32) -> mantıksal {
+    güvensiz {
+        eğer ag_l5==0 veya n<34 veya ag_b8(rx,23)!=17 veya eth_tur(rx,n,ag_mac)!=2048 { ver yanlış; }
+        değişken h: tam32 = ip4_baslik(rx,n); eğer h<0 veya (ag_be16(rx,20)&16383)!=0 { ver yanlış; }
+        değişken src: tam64 = ag_be32(rx,26); değişken dst: tam64 = ag_be32(rx,30);
+        değişken l: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken u: tam32 = udp_oku(rx,h,ag_be16(rx,16)+14-h,src,dst);
+        eğer u<0 {
+            değişken ss: AgL3 = *l; eğer u== -2 { ss.saglama_hatasi=ss.saglama_hatasi+1; } değilse { ss.kisa=ss.kisa+1; } *l=ss; ver doğru;
+        }
+        değişken sp: tam32 = ag_be16(rx,h); değişken dp: tam32 = ag_be16(rx,h+2);
+        değişken mac: tam64 = eth_mac(rx,6); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        eğer sp==67 ve dp==68 { ag_dhcp_girdi(rx,h+8,u,mac); ver doğru; }
+        eğer (*l).ip==0 veya dst!=(*l).ip { ver doğru; }
+        eğer dp==ag_dns_port ve sp==53 ve src==ag_dns_sunucu {
+            değişken r: DnsA = dns_cevap(rx,h+8,u,ag_dns_id,ag_dizi8(ag_l5+288),ag_dizi8(ag_l5+320));
+            eğer r.kod!= -74 { ag_dns_sonuc=r.kod; ag_dns_ip=r.adres; ag_dns_ttl=r.ttl; } ver doğru;
+        }
+        eğer dp==ag_udp_port ve udp_yuva(ag_dizi64(ag_l5+256),dp)>=0 ve u<=1472 {
+            ag_kopyala(tx,42,rx,h+8,u); değişken boy: tam32 = ag_udp_cerceve(tx,dst,src,dp,sp,u,mac);
+            eğer boy>0 { ag_dizi_gonder(tx,boy); } ver doğru;
+        }
+        ag_udp_kapali=ag_udp_kapali+1;
+        değişken ms: tam64 = ag_us()/1000;
+        eğer ms-ag_udp_son_icmp>=100 ve src!=0 ve (src>>24)<224 {
+            ag_udp_son_icmp=ms;
+            değişken al: tam32 = h-14+8; değişken boy: tam32 = 8+al;
+            eth_yaz(tx,mac,ag_mac,2048); ip4_yaz(tx,dst,src,1,boy,0);
+            ag_y8(tx,34,3); ag_y8(tx,35,3); ag_y16(tx,36,0); ag_y32(tx,38,0);
+            ag_kopyala(tx,42,rx,14,al); ag_y16(tx,36,ag_saglama(tx,34,boy,0) olarak tam64); ag_dizi_gonder(tx,34+boy);
+        }
+        ver doğru;
+    }
+}
+işlev ag_ip_metin(ip: tam64) -> metin {
+    değişken m: metin = tam_metin((ip>>24)&255); değişken kay: tam32 = 16;
+    iken kay>=0 { m=metin_birlestir(metin_birlestir(m,"."),tam_metin((ip>>kay)&255)); kay=kay-8; } ver m;
+}
+işlev ag_cozumle(ad: metin) -> sonuç<mantıksal,metin> {
+    güvensiz {
+        eğer ag_l5==0 veya ag_bar==0 { ver hata("ag yok"); }
+        değişken p: *DhcpKirasi = ag_l5 olarak *DhcpKirasi; değişken s: DhcpKirasi = *p;
+        değişken l: *AgL3 = ag_l3_alan olarak *AgL3;
+        eğer (*l).ip==0 veya s.dns==0 { ver hata("DNS sunucusu yok"); }
+        değişken isim: Dizi<dtam8> = ag_dizi8(ag_l5+288); değişken on: Dizi<dtam8> = ag_dizi8(ag_l5+352);
+        değişken boy: tam32 = dns_ad_yaz(ad,isim,0); eğer boy<0 { ver hata("DNS adi gecersiz"); }
+        eğer ag_dns_on_son>ag_us()/1000 ve dns_ad_esit(isim,0,on,0) { ekran_cift_yaz(ag_ip_metin(ag_dns_ip)); ver tamam(doğru); }
+        değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288); değişken dene: tam32 = 0;
+        ag_dns_on_son=0;
+        iken dene<3 {
+            ag_dns_sunucu=s.dns; eğer dene>0 ve s.dns2!=0 { ag_dns_sunucu=s.dns2; }
+            ag_dns_id=((ag_us()^ag_mac)&65535) olarak tam32;
+            ag_dns_port=49152+(ag_dns_id&16383); ag_dns_sonuc= -11;
+            değişken n: tam32 = dns_sorgu(tx,42,ag_dns_id,isim,boy);
+            n=ag_udp_cerceve(tx,(*l).ip,ag_dns_sunucu,ag_dns_port,53,n,0);
+            değişken hop: tam64 = ip4_sonraki((*l).ip,(*l).onek,(*l).gecit,ag_dns_sunucu);
+            eğer hop>0 ve n>0 ve ag_ip_cik(tx,n,hop,600)==0 {
+                değişken son: tam64 = ag_us()+650000;
+                iken ag_dns_sonuc== -11 ve ag_us()<son { ag_al(); }
+            }
+            eğer ag_dns_sonuc==0 {
+                ag_kopyala(on,0,isim,0,boy); ag_dns_on_son=ag_us()/1000+ag_dns_ttl*1000; ag_dns_port=0;
+                ekran_cift_yaz(ag_ip_metin(ag_dns_ip)); ver tamam(doğru);
+            }
+            eğer ag_dns_sonuc== -2 { ag_dns_port=0; ver hata("DNS kaydi bulunamadi"); }
+            dene=dene+1;
+        }
+        ag_dns_port=0; ver hata("DNS zaman asimi");
+    }
+}
+
 işlev ag_l3_kur() -> mantıksal {
     güvensiz {
         eğer ag_l3_alan!=0 { ver doğru; }
@@ -1697,7 +1865,7 @@ işlev ag_l3_kur() -> mantıksal {
         ag_dizi_baslik(a+320,a+512,48,8); ag_dizi_baslik(a+352,a+1024,16,8);
         değişken s: *AgL3 = a olarak *AgL3;
         *s=l3_yeni(ag_mac,ag_dizi64(a+320)); ag_l3_alan=a;
-        ver doğru;
+        ver ag_l5_kur();
     }
 }
 işlev ag_dizi_gonder(b: Dizi<dtam8>,n: tam32) -> tam32 {
@@ -1736,6 +1904,7 @@ işlev ag_l3_girdi() {
         değişken rx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
         değişken i: tam32 = 0;
         iken i<ag_son_boy { ag_y8(rx,i,kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64); i=i+1; }
+        eğer t==2048 ve ag_udp_girdi(rx,ag_son_boy) { ver; }
         değişken once: tam64 = (*s).cakisma;
         değişken n: tam32 = ag_l3_isle(rx,ag_son_boy,tx,ag_us()/1000,yanlış);
         eğer once!=(*s).cakisma { bm_yaz("AG UYARI IPv4 adres cakismasi"); }
@@ -1749,6 +1918,7 @@ işlev ag_ip_ayarla(adres: tam64,onek: tam32,gecit: tam64) -> tam32 {
         değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
         değişken t: Dizi<tam64> = (*s).arp;
         değişken i: tam32 = 0; iken i<dizi_boyut(t) { dizi_yaz(t,i,0 olarak tam64); i=i+1; }
+        ag_adres_kuyrugunu_bosalt();
         değişken yeni: AgL3 = *s; yeni.ip=adres; yeni.gecit=gecit; yeni.onek=onek; *s=yeni;
         değişken b: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
         değişken n: tam32 = arp_yaz(b,1,ag_mac,adres,0,adres);
@@ -1872,6 +2042,24 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
             ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi(metin_birlestir(m," cakisma ttl icmp_hata"),(*s).cakisma),(*s).ttl),(*s).icmp_hata));
             ver tamam(doğru);
         }
+        eğer bm_esit(arg,"dhcp") veya bm_esit(arg,"dhcp kapat") {
+            eğer ag_l5==0 { ver hata("DHCP tablosu yok"); }
+            değişken p: *DhcpKirasi = ag_l5 olarak *DhcpKirasi; değişken v: DhcpKirasi = dhcp_yeni((ag_us()^ag_mac)&4294967295);
+            ag_ip_sil(); eğer bm_esit(arg,"dhcp kapat") { v.durum=0; }
+            *p=v; ag_dhcp_adim(); ekran_cift_yaz("DHCP OK"); ver tamam(doğru);
+        }
+        eğer bm_esit(arg,"durum") {
+            değişken p: *DhcpKirasi = ag_l5 olarak *DhcpKirasi; değişken l: *AgL3 = ag_l3_alan olarak *AgL3;
+            değişken m: metin = kd_tamsayi("DHCP",(*p).durum olarak tam64);
+            m=metin_birlestir(metin_birlestir(m," ip "),ag_ip_metin((*l).ip));
+            m=metin_birlestir(metin_birlestir(m," dns "),ag_ip_metin((*p).dns));
+            ekran_cift_yaz(metin_birlestir(metin_birlestir(m," ntp "),ag_ip_metin((*p).ntp))); ver tamam(doğru);
+        }
+        eğer bm_esit(arg,"yanki") {
+            değişken t: Dizi<tam64> = ag_dizi64(ag_l5+256);
+            eğer ag_udp_port!=9000 ve udp_bagla(t,9000)<0 { ver hata("UDP port tablosu dolu"); }
+            ag_udp_port=9000; ekran_cift_yaz("UDP yanki 9000"); ver tamam(doğru);
+        }
         değişken ilk: tam32 = kd_bosluk(arg);
         eğer bm_esit(kd_bas(arg,ilk),"ayarla") {
             değişken kal: metin = kd_kalan(arg,ilk);
@@ -1886,6 +2074,7 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
                 onek=onek*10+d-48; eğer onek>32 { ver hata("ag onek"); } i=i+1;
             }
             eğer ag_ip_ayarla(ag_ip_oku(kd_bas(sol,k)),onek,ag_ip_oku(kd_kalan(kal,bos)))<0 { ver hata("ag adresi uygulanamadi"); }
+            eğer ag_l5!=0 { değişken p: *DhcpKirasi = ag_l5 olarak *DhcpKirasi; değişken v: DhcpKirasi = *p; v.durum=0; *p=v; }
             ekran_cift_yaz("AG AYAR OK"); ver tamam(doğru);
         }
         eğer bm_esit(arg,"") { ekran_cift_yaz(ag_satir()); ver tamam(doğru); }
@@ -2151,6 +2340,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer seviye < 1 veya seviye > 4 { ver hata("hassasiyet 1..4"); }
         güvensiz { ksv_hassasiyet=seviye olarak tam32; } ver tamam(doğru);
     }
+    eğer bm_esit(cmd,"cozumle") { ver ag_cozumle(arg); }
     eğer bm_esit(cmd,"ag") { ver ag_komut(arg); }
     eğer bm_esit(cmd,"bilgi") { ver kd_bilgi(d,indeks,tr.us); }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }

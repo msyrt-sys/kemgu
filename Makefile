@@ -5156,3 +5156,8 @@ calistir_bm_x86_nic_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)
 test_tumu: calistir_bm_x86_ag_l3
 calistir_bm_x86_ag_l3: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh l3
+
+.PHONY: calistir_bm_x86_ag_udp
+test_tumu: calistir_bm_x86_ag_udp
+calistir_bm_x86_ag_udp: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh udp
