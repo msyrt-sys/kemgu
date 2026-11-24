@@ -74,6 +74,7 @@ sabit KX_SIS_AG_BILGI: tam64 = 83;
 sabit KX_SIS_SOKET_SECENEK: tam64 = 84;
 sabit KX_SIS_BEKLE_COKLU: tam64 = 85;
 sabit KX_SIS_ICMP_YANKI: tam64 = 86;
+sabit KX_SIS_DOSYA_AKIS: tam64 = 89;
 sabit KX_SIS_AG_KAYIT: tam64 = 88;
 sabit KX_SIS_YAZMAYI_KAPAT: tam64 = 87;
 sabit KX_SIS_BORU: tam64 = 69;
@@ -127,7 +128,7 @@ sabit KSV_KES: tam64 = 8;
 sabit KSV_DIZIN: tam64 = 16;
 sabit KSV_FD_AZAMI: tam32 = 16;
 
-yapı KsvFd { acik: mantıksal; yol: KabukYol; kip: tam64; konum: tam64; }
+yapı KsvFd { akis: tam64; acik: mantıksal; yol: KabukYol; kip: tam64; konum: tam64; }
 yapı KsvBaglam {
     disk: KabukDisk; fds: Dizi<KsvFd>; kabuk_cwd: metin; degisti: mantıksal;
     x: XhciDurum; xb: tam64; klavye_indeksi: tam32; h: HidKlavye; tr: KlavyeDurumu;
@@ -136,7 +137,7 @@ yapı KsvBaglam {
 küresel değişken ksv_baglam_adresi: tam64 = 0;
 
 çıplak işlev ksv_fd_bos() -> KsvFd {
-    ver KsvFd {acik:yanlış,yol:KabukYol {indeks:0,yol:""},kip:0,konum:0};
+    ver KsvFd {akis:0,acik:yanlış,yol:KabukYol {indeks:0,yol:""},kip:0,konum:0};
 }
 işlev ksv_fd_tablo() -> Dizi<KsvFd> {
     değişken fds: Dizi<KsvFd> = [];
@@ -223,7 +224,7 @@ işlev ksv_ac(b: &değişken KsvBaglam,p: tam64,kip: tam64) -> tam64 {
     eğer kip == KSV_DIZIN {
         değişken rr: tam64 = ksv_mutlak(b,p,&değişken mutlak); eğer rr < 0 { ver rr; }
         eğer bm_esit(mutlak,"/diskler") veya (bm_esit(mutlak,"/") ve b.disk.kok < 0) {
-            dizi_yaz(b.fds,fd,KsvFd {acik:doğru,yol:KabukYol {indeks:-2,yol:mutlak},kip:kip,konum:0}); ver fd olarak tam64;
+            dizi_yaz(b.fds,fd,KsvFd {akis:0,acik:doğru,yol:KabukYol {indeks:-2,yol:mutlak},kip:kip,konum:0}); ver fd olarak tam64;
         }
     }
     değişken y: KabukYol = KabukYol {indeks:0,yol:""};
@@ -257,7 +258,7 @@ işlev ksv_dosya_ac(b: &değişken KsvBaglam,fd: tam32,y: KabukYol,kip: tam64) -
         }
     }
     eğer (kip&KSV_SONA) == 0 { boy=0; }
-    dizi_yaz(b.fds,fd,KsvFd {acik:doğru,yol:y,kip:kip,konum:boy});
+    dizi_yaz(b.fds,fd,KsvFd {akis:0,acik:doğru,yol:y,kip:kip,konum:boy});
     ver fd olarak tam64;
 }
 // Her yuvada baş, doluluk, okur ve yazar sayıları ile 4096 bayt vardır.
@@ -283,9 +284,10 @@ küresel değişken kb_havuz: tam64 = 0;
     eğer yaz { indeks=-4; kip=1; }
     değişken sayac: tam64 = p+16+kip*8;
     kxm_y64(sayac,kxm_o64(sayac)+1);
-    ver KsvFd {acik:doğru,yol:KabukYol {indeks:indeks,yol:""},kip:kip,konum:p};
+    ver KsvFd {akis:0,acik:doğru,yol:KabukYol {indeks:indeks,yol:""},kip:kip,konum:p};
 }
 işlev kb_birak(f: KsvFd) {
+    eğer f.acik ve f.akis!=0 { ksa_birak(f.akis); ver; }
     güvensiz {
     eğer f.acik ve f.yol.indeks== -5 { sk_birak(f.konum); ver; }
     eğer f.acik ve (f.yol.indeks == -3 veya f.yol.indeks == -4) {
@@ -344,6 +346,7 @@ işlev kb_ac(b: &değişken KsvBaglam,adres: tam64) -> tam64 {
 işlev ksv_oku(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> tam64 {
     eğer fd >= 0 ve fd < (KSV_FD_AZAMI olarak tam64) {
         değişken f: KsvFd = dizi_al(b.fds,fd olarak tam32);
+        eğer f.acik ve f.akis!=0 { ver ksa_veri(b,fd,p,n,yanlış); }
         eğer f.acik ve f.yol.indeks== -5 { ver sk_veri(b,fd,p,n,0,yanlış,43); }
         eğer f.acik ve (f.yol.indeks == -3 veya f.yol.indeks == -4) { ver kb_aktar(f,fd,p,n,yanlış); }
     }
@@ -373,6 +376,7 @@ işlev ksv_oku(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> tam64 {
 işlev ksv_yaz(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64) -> tam64 {
     eğer fd >= 0 ve fd < (KSV_FD_AZAMI olarak tam64) {
         değişken f: KsvFd = dizi_al(b.fds,fd olarak tam32);
+        eğer f.acik ve f.akis!=0 { ver ksa_veri(b,fd,p,n,doğru); }
         eğer f.acik ve f.yol.indeks== -5 { ver sk_veri(b,fd,p,n,0,doğru,44); }
         eğer f.acik ve (f.yol.indeks == -3 veya f.yol.indeks == -4) { ver kb_aktar(f,fd,p,n,doğru); }
         eğer değil f.acik ve (fd == 1 veya fd == 2) { ver kxs_konsol_yaz(fd,p,n); }
@@ -414,7 +418,8 @@ işlev ksv_konumla(b: &değişken KsvBaglam,fd: tam64,ofset: tam64,nereden: tam6
     eğer a.kip == KSV_DIZIN veya nereden < 0 veya nereden > 2 { ver 0-KX_HATA_INVAL; }
     değişken bas: tam64 = 0;
     eğer nereden == 1 { bas=a.konum; }
-    eğer nereden == 2 {
+    eğer nereden == 2 ve a.akis!=0 { bas=kxm_o64(a.akis+16); }
+    değilse eğer nereden == 2 {
         eşleş ksv_yoldan_bilgi(b,a.yol) { hata(e) => { ver ksv_hata(e); } tamam(g) => { bas=g.boyut; } }
     }
     eğer ofset < 0-bas veya ofset > 4294967295-bas { ver 0-KX_HATA_INVAL; }
@@ -908,7 +913,7 @@ işlev ksv_olay(b: &değişken KsvBaglam,p: tam64,maske: tam64,ms: tam64,num: ta
     }
     ver r;
 }
-işlev sk_fd(k: tam64) -> KsvFd { ver KsvFd {acik:doğru,yol:KabukYol {indeks:-5,yol:""},kip:1,konum:k}; }
+işlev sk_fd(k: tam64) -> KsvFd { ver KsvFd {akis:0,acik:doğru,yol:KabukYol {indeks:-5,yol:""},kip:1,konum:k}; }
 işlev sk_fd_adresi(b: &değişken KsvBaglam,fd: tam64) -> tam64 {
     eğer değil ksv_fd_gecerli(b,fd) { ver 0; } değişken f: KsvFd = dizi_al(b.fds,fd olarak tam32);
     eğer f.yol.indeks!= -5 { ver 0; } ver f.konum;
@@ -1147,6 +1152,7 @@ işlev sk_ag_kayit(tur: tam64,i: tam64,out: tam64) -> tam64 {
     }
 }
 işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64) -> tam64 {
+    eğer num == KX_SIS_DOSYA_AKIS { ver ksa_islem(b,a,c,d); }
     eğer num == KX_SIS_AG_KAYIT { ver sk_ag_kayit(a,c,d); }
     eğer num == KX_SIS_SOKET { ver sk_soket(b,a); }
     eğer num == KX_SIS_BAGLA { ver sk_bagla(b,a,c,d); }
@@ -1231,4 +1237,270 @@ movq (%rsp), %rsp"#
     değişken adr: tam64 = 0;
     güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq ksv_vekil(%rip), $0"# çıktı("=r", &adr) } }
     ver adr;
+}
+
+// Akış tanımlayıcısında ilk çerçeve tür, kapasite ve geçerli uzunluğu tutar.
+// Ardındaki paketlenmiş baytlar yalnız ilgili sürecin denetlenmiş çağrısıyla taşınır.
+işlev ksa_kopya(hedef: tam64,kaynak: tam64,n: tam64) {
+    güvensiz { memcpy(hedef olarak *tam8,kaynak olarak *tam8,n); }
+}
+işlev ksa_sifir(hedef: tam64,n: tam64) {
+    güvensiz { memset(hedef olarak *tam8,0,n); }
+}
+işlev ksa_birak(p: tam64) {
+    eğer p!=0 { uefi_surec_iade(p,((kxm_o64(p+8)+4095)/4096+1) olarak tam32); }
+}
+işlev ksa_veri(b: &değişken KsvBaglam,fd: tam64,p: tam64,n: tam64,yaz: mantıksal) -> tam64 {
+    değişken f: KsvFd=dizi_al(b.fds,fd olarak tam32); değişken t: tam64=f.akis;
+    eğer n<0 veya n>16384 { ver -22; }
+    eğer yaz ve kxm_o64(t)!=2 { ver -9; }
+    eğer n==0 { ver 0; }
+    eğer değil kxs_aralik(p,n,değil yaz) { ver -14; }
+    değişken boy: tam64=kxm_o64(t+16);
+    eğer yaz {
+        eğer f.konum>kxm_o64(t+8)-n { ver -27; }
+        eğer f.konum>boy { ksa_sifir(t+4096+boy,f.konum-boy); }
+        ksa_kopya(t+4096+f.konum,p,n);
+        eğer f.konum+n>boy { kxm_y64(t+16,f.konum+n); }
+    } değilse {
+        eğer f.konum>=boy { ver 0; }
+        eğer n>boy-f.konum { n=boy-f.konum; }
+        ksa_kopya(p,t+4096+f.konum,n);
+    }
+    f.konum=f.konum+n; dizi_yaz(b.fds,fd olarak tam32,f); ver n;
+}
+işlev ksa_ram(d: &değişken KabukDisk,yol: metin,adres: tam64,boy: tam64,yaz: mantıksal) -> sonuç<mantıksal,metin> {
+    eşleş ramfs_yer(&d.ram,yol) { hata(e)=>{ver hata(e);} tamam(y)=>{
+        eğer y.no<=0 { ver hata("bulunamadi"); }
+        değişken n: RamDugum=dizi_al(d.ram.dugumler,y.no);
+        eğer yaz {
+            eşleş ramfs_yaz(&değişken d.ram,y,boy olarak tam32,yanlış,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{n=v;} }
+        }
+        değişken i: tam64=0;
+        için p: n.sayfalar {
+            değişken k: tam64=boy-i; eğer k>4096 { k=4096; } eğer k<=0 { ver hata("/ram boyut"); }
+            değişken a: tam64=d.ram.taban+(p olarak tam64)*4096;
+            eğer yaz { ksa_kopya(a,adres+i,k); } değilse { ksa_kopya(adres+i,a,k); } i=i+k;
+        }
+        eğer i!=boy { ver hata("/ram uzunluk"); } ver tamam(doğru);
+    } }
+}
+işlev ksa_yer(d: &değişken KabukDisk,y: KabukYol,k: KabukBag) -> sonuç<FatDosyaYeri,metin> {
+    eşleş kd_fat(d,y) { hata(e)=>{ver hata(e);} tamam(v)=>{
+        değişken f: FatSektor=v; değişken i: tam32=0;
+        iken i<257 {
+            eşleş fat_dosya_yeri(&değişken f,y.yol) {
+                tamam(yer)=>{ver tamam(yer);}
+                hata(e)=>{eğer f.gerekli<0 { ver hata(e); }}
+            }
+            eşleş kd_doldur(d,k,&değişken f) { hata(e)=>{ver hata(e);} tamam(t)=>{} }
+            i=i+1;
+        }
+    } } ver hata("dizin sektor siniri");
+}
+işlev ksa_disk(a: &değişken BlokDonanim,lba: tam64,n: tam64,adres: tam64,yaz: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer değil bd_bagli(a) { ver hata("usb bellek cikarildi"); }
+    eşleş a.aygit.durum {
+        BlokCesidi::Ram(r)=>{
+            eğer lba<0 veya n<0 veya lba>r.sektor-n { ver hata("ramdisk araligi"); }
+            değişken p: tam64=r.taban+lba*512;
+            eğer yaz { ksa_kopya(p,adres,n*512); } değilse { ksa_kopya(adres,p,n*512); }
+            ver tamam(doğru);
+        }
+        _=>{}
+    }
+    iken n>0 {
+        değişken adet: tam64=(65536-adres%65536)/512; eğer adet>n { adet=n; }
+        eşleş blok_cerceve_aktar(&değişken a.aygit,lba,adet olarak tam32,adres,yaz) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+        eşleş bd_sur(a) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+        n=n-adet; lba=lba+adet; adres=adres+adet*512;
+    } ver tamam(doğru);
+}
+işlev ksa_girdi(tab: tam64,kume: tam64) -> tam64 { ver kem_mmio_oku32(tab+kume*4)&268435455; }
+işlev ksa_bagla(tab: tam64,kume: tam64,son: tam64) {
+    değişken a: tam64=tab+kume*4;
+    kem_mmio_yaz32(a,(kem_mmio_oku32(a)&4026531840)|son);
+}
+// Öbekler fiziksel olarak ardışıksa tüm seriyi tek G/Ç yoluna verir.
+işlev ksa_zincir(a: &değişken BlokDonanim,k: KabukBag,fat: tam64,ilk: tam64,boy: tam64,adres: tam64,yaz: mantıksal) -> sonuç<mantıksal,metin> {
+    değişken c: tam64=ilk; değişken kalan: tam64=(boy+511)/512;
+    eğer kalan==0 { eğer c!=0 { ver hata("bos FAT zinciri"); } ver tamam(doğru); }
+    iken kalan>0 {
+        değişken bas: tam64=c; değişken adet: tam64=0; değişken sirali: mantıksal=doğru;
+        iken kalan>0 ve sirali {
+            eğer c<2 veya c-2>=k.bpb.kume_sayisi { ver hata("FAT zinciri"); }
+            değişken n: tam64=k.bpb.kume_sektor olarak tam64; eğer n>kalan { n=kalan; }
+            kalan=kalan-n; adet=adet+n;
+            değişken son: tam64=ksa_girdi(fat,c); sirali=son==c+1; c=son;
+        }
+        değişken lba: tam64=kume_sektoru(k.bpb,bas);
+        eğer lba<0 veya lba>k.bpb.toplam_sektor-adet { ver hata("bolum disi okuma"); }
+        eşleş ksa_disk(a,k.bolum.bas+lba,adet,adres,yaz) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+        adres=adres+adet*512;
+    }
+    eğer c<268435448 { ver hata("FAT zincir sonu"); } ver tamam(doğru);
+}
+işlev ksa_fat_yayinla(a: &değişken BlokDonanim,k: KabukBag,eski: tam64,yeni: tam64,n: tam64) -> sonuç<mantıksal,metin> {
+    değişken i: tam64=0;
+    iken i<n {
+        değişken j: tam64=0;
+        iken j<512 ve kxm_o64(eski+i*512+j)==kxm_o64(yeni+i*512+j) { j=j+8; }
+        eğer j==512 { i=i+1; } değilse {
+            değişken bas: tam64=i; i=i+1;
+            // Aradaki değişmemiş sektörleri yazmadan bitişik değişiklikleri grupla.
+            değişken devam: mantıksal=doğru;
+            iken i<n ve devam {
+                j=0; iken j<512 ve kxm_o64(eski+i*512+j)==kxm_o64(yeni+i*512+j) { j=j+8; }
+                eğer j==512 { devam=yanlış; } değilse { i=i+1; }
+            }
+            değişken kopya: tam64=0;
+            iken kopya<2 {
+                değişken lba: tam64=k.bolum.bas+(k.bpb.ayrilmis olarak tam64)+kopya*k.bpb.fat_sektor+bas;
+                eşleş ksa_disk(a,lba,i-bas,yeni+bas*512,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+                kopya=kopya+1;
+            }
+        }
+    }
+    ver bd_flush(a);
+}
+işlev ksa_kisa_yaz(p: tam64,v: tam64) {
+    kem_fiz_yaz8(p,(v&255) olarak tam32); kem_fiz_yaz8(p+1,((v>>8)&255) olarak tam32);
+}
+işlev ksa_fsinfo(a: &değişken BlokDonanim,k: KabukBag,lba: tam64,p: tam64) -> sonuç<mantıksal,metin> {
+    eğer lba<1 veya lba>=(k.bpb.ayrilmis olarak tam64) { ver hata("FSInfo sektoru"); }
+    eşleş ksa_disk(a,k.bolum.bas+lba,1,p,yanlış) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eğer kem_mmio_oku32(p)!=1096897106 veya kem_mmio_oku32(p+484)!=1631679090 veya kem_mmio_oku32(p+508)!=2857697280 { ver hata("FSInfo imza"); }
+    ver tamam(doğru);
+}
+çıplak işlev ksa_bag(k: &değişken KabukBag) -> KabukBag { ver *k; }
+işlev ksa_uzun_yaz(a: &değişken BlokDonanim,k: &değişken KabukBag,y: FatDosyaYeri,adres: tam64,boy: tam64,eski: tam64,fat: tam64,n: tam64,meta: tam64) -> sonuç<mantıksal,metin> {
+    değişken kb: tam64=(k.bpb.kume_sektor olarak tam64)*512;
+    değişken say: tam64=(boy+kb-1)/kb; değişken once: tam64=(y.boy+kb-1)/kb;
+    değişken ust: tam64=k.bpb.kume_sayisi+2; değişken c: tam64=y.ilk; değişken i: tam64=0;
+    iken i<once {
+        eğer c<2 veya c>=ust { ver hata("eski FAT zinciri"); }
+        c=ksa_girdi(eski,c); i=i+1;
+    }
+    eğer (once>0 ve c<268435448) veya (once==0 ve c!=0) { ver hata("eski FAT uzunlugu"); }
+    değişken ilk: tam64=0; değişken son: tam64=0; değişken alin: tam64=0; değişken bos: tam64=0; değişken ip: tam64=4294967295;
+    c=2;
+    iken c<ust {
+        eğer ksa_girdi(fat,c)==0 {
+            eğer alin<say {
+                eğer son!=0 { ksa_bagla(fat,son,c); } değilse { ilk=c; }
+                ksa_bagla(fat,c,268435455); son=c; alin=alin+1;
+            } değilse { bos=bos+1; eğer ip>c { ip=c; } }
+        }
+        c=c+1;
+    }
+    eğer alin!=say { ver hata("disk dolu"); }
+    değişken bpb: tam64=meta; değişken dizin: tam64=meta+512; değişken fs: tam64=meta+1024;
+    eşleş ksa_disk(a,k.bolum.bas,1,bpb,yanlış) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eğer (kem_fiz_oku8(bpb+40)&128)!=0 { ver hata("FAT yansilama kapali"); }
+    değişken yedek: tam64=(kem_fiz_oku8(bpb+50) olarak tam64)+256*(kem_fiz_oku8(bpb+51) olarak tam64);
+    değişken bilgi: tam64=k.bpb.fsinfo olarak tam64;
+    değişken yedek_var: mantıksal=yedek>0 ve yedek+bilgi<(k.bpb.ayrilmis olarak tam64);
+    eşleş ksa_fsinfo(a,ksa_bag(k),bilgi,fs) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eğer yedek_var { eşleş ksa_fsinfo(a,ksa_bag(k),bilgi+yedek,fs+512) { hata(e)=>{ver hata(e);} tamam(v)=>{} } }
+    eşleş ksa_disk(a,k.bolum.bas+y.lba,1,dizin,yanlış) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    değişken kay: tam64=dizin+(y.ofset olarak tam64);
+    ksa_kisa_yaz(kay+20,ilk>>16); ksa_kisa_yaz(kay+26,ilk); kem_mmio_yaz32(kay+28,boy);
+    eşleş rtc_oku() { hata(e)=>{} tamam(t)=>{
+        ksa_kisa_yaz(kay+22,((t.saat<<11)|(t.dakika<<5)|(t.saniye/2)) olarak tam64);
+        ksa_kisa_yaz(kay+24,(((t.yil-1980)<<9)|(t.ay<<5)|t.gun) olarak tam64);
+    } }
+    eğer değil k.kirli { eşleş kd_durum_aygit(a,k,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{} } }
+    eğer boy%512!=0 { ksa_sifir(adres+boy,512-boy%512); }
+    eşleş ksa_zincir(a,ksa_bag(k),fat,ilk,boy,adres,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eşleş bd_flush(a) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    // Veri kalıcı. Meta veri yazımında hata olursa temiz bayrak ancak onarımdan sonra verilir.
+    k.kesik=doğru;
+    eşleş ksa_fat_yayinla(a,ksa_bag(k),eski,fat,n) {
+        hata(e)=>{
+            eşleş ksa_fat_yayinla(a,ksa_bag(k),fat,eski,n) { tamam(v)=>{k.kesik=yanlış;} hata(e2)=>{} }
+            ver hata(e);
+        } tamam(v)=>{}
+    }
+    eşleş ksa_disk(a,k.bolum.bas+y.lba,1,dizin,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eşleş bd_flush(a) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eğer once>0 {
+        ksa_kopya(eski,fat,n*512);
+        c=y.ilk; i=0;
+        iken i<once {
+            değişken ard: tam64=ksa_girdi(fat,c); ksa_bagla(fat,c,0);
+            eğer c<ip { ip=c; } c=ard; i=i+1;
+        }
+        eşleş ksa_fat_yayinla(a,ksa_bag(k),eski,fat,n) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    }
+    kem_mmio_yaz32(fs+488,bos+once); kem_mmio_yaz32(fs+492,ip);
+    eşleş ksa_disk(a,k.bolum.bas+bilgi,1,fs,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eğer yedek_var {
+        kem_mmio_yaz32(fs+512+488,bos+once); kem_mmio_yaz32(fs+512+492,ip);
+        eşleş ksa_disk(a,k.bolum.bas+bilgi+yedek,1,fs+512,doğru) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    }
+    eşleş bd_flush(a) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    k.kesik=yanlış; ver tamam(doğru);
+}
+işlev ksa_ham(a: &değişken BlokDonanim,k: &değişken KabukBag,y: FatDosyaYeri,adres: tam64,boy: tam64,yaz: mantıksal,n: tam64,tab: tam64) -> sonuç<mantıksal,metin> {
+    eşleş bd_bosalt(a) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    değişken taban: tam64=k.bolum.bas+(k.bpb.ayrilmis olarak tam64);
+    eşleş ksa_disk(a,taban,n,tab,yanlış) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    eğer değil yaz { ver ksa_zincir(a,ksa_bag(k),tab,y.ilk,y.boy,adres,yanlış); }
+    değişken fat: tam64=tab+n*512;
+    eşleş ksa_disk(a,taban+k.bpb.fat_sektor,n,fat,yanlış) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+    değişken j: tam64=0;
+    iken j<n*512 { eğer kxm_o64(tab+j)!=kxm_o64(fat+j) { ver hata("FAT kopyalari farkli"); } j=j+8; }
+    ver ksa_uzun_yaz(a,k,y,adres,boy,tab,fat,n,fat+n*512);
+}
+işlev ksa_dosya(d: &değişken KabukDisk,y: KabukYol,adres: tam64,boy: tam64,yaz: mantıksal) -> sonuç<mantıksal,metin> {
+    eğer yaz { eşleş kd_yazma_izni(d,y) { hata(e)=>{ver hata(e);} tamam(v)=>{} } }
+    eğer y.indeks==d.ram_bag { ver ksa_ram(d,y.yol,adres,boy,yaz); }
+    değişken k: KabukBag=dizi_al(d.baglar,y.indeks);
+    eğer k.kesik veya k.bpb.sektor_bayt!=512 veya k.bpb.fat_sayisi!=2 { ver hata("FAT32 akis geometrisi"); }
+    değişken n: tam64=(k.bpb.kume_sayisi+129)/128;
+    eğer n<1 veya n>k.bpb.fat_sektor veya n>32768 { ver hata("FAT32 akis tablosu siniri"); }
+    eşleş ksa_yer(d,y,k) { hata(e)=>{ver hata(e);} tamam(yer)=>{
+        eğer değil yaz ve yer.boy!=boy { ver hata("dosya boyu degisti"); }
+        değişken adet: tam32=((n+7)/8) olarak tam32;
+        eğer yaz { adet=((2*n+4+7)/8) olarak tam32; }
+        değişken p: tam64=uefi_surec_ayir(adet); eğer p==0 { ver hata("cerceve yok"); }
+        değişken a: BlokDonanim=dizi_al(d.aygitlar,k.indeks);
+        değişken r: sonuç<mantıksal,metin> =ksa_ham(&değişken a,&değişken k,yer,adres,boy,yaz,n,p);
+        uefi_surec_iade(p,adet);
+        // Yazımdan önce bütün kirli önbellekler geri yazılmıştır.
+        eğer yaz ve dizi_boyut(onbellek_plan(a.onbellek))==0 {
+            eşleş onbellek_yeni(512,64) { tamam(o)=>{a.onbellek=o;} hata(e)=>{} }
+        }
+        dizi_yaz(d.aygitlar,k.indeks,a); dizi_yaz(d.baglar,y.indeks,k); ver r;
+    } }
+}
+işlev ksa_islem(b: &değişken KsvBaglam,fd: tam64,islem: tam64,sinir: tam64) -> tam64 {
+    eğer değil ksv_fd_gecerli(b,fd) { ver -9; }
+    değişken f: KsvFd=dizi_al(b.fds,fd olarak tam32);
+    eğer f.yol.indeks<0 veya f.kip==KSV_DIZIN { ver -22; }
+    eğer islem==3 {
+        eğer sinir!=0 veya f.akis==0 veya kxm_o64(f.akis)!=2 { ver -22; }
+        eşleş ksa_dosya(&değişken b.disk,f.yol,f.akis+4096,kxm_o64(f.akis+16),doğru) {
+            hata(e)=>{ver ksv_hata(e);} tamam(v)=>{}
+        }
+        güvensiz { kd_icerik_surumu=kd_icerik_surumu+1; }
+        ksa_birak(f.akis); f.akis=0; dizi_yaz(b.fds,fd olarak tam32,f); ver 0;
+    }
+    eğer f.akis!=0 veya (islem!=1 ve islem!=2) veya sinir<0 veya sinir>16777216 { ver -22; }
+    eğer islem==1 {
+        eşleş ksv_yoldan_bilgi(b,f.yol) { hata(e)=>{ver ksv_hata(e);} tamam(g)=>{
+            eğer g.boyut>sinir { ver -27; } sinir=g.boyut;
+        } }
+    } değilse {
+        eğer (f.kip&KSV_YAZ)==0 veya (f.kip&KSV_SONA)!=0 { ver -9; }
+        eşleş kd_yazma_izni(&değişken b.disk,f.yol) { hata(e)=>{ver ksv_hata(e);} tamam(v)=>{} }
+    }
+    değişken t: tam64=uefi_surec_ayir(((sinir+4095)/4096+1) olarak tam32);
+    eğer t==0 { ver -12; } kxm_y64(t,islem); kxm_y64(t+8,sinir); kxm_y64(t+16,0);
+    eğer islem==1 {
+        eşleş ksa_dosya(&değişken b.disk,f.yol,t+4096,sinir,yanlış) {
+            hata(e)=>{ksa_birak(t); ver ksv_hata(e);} tamam(v)=>{}
+        } kxm_y64(t+16,sinir);
+    }
+    f.konum=0; f.akis=t; dizi_yaz(b.fds,fd olarak tam32,f); ver 0;
 }

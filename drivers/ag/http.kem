@@ -1,0 +1,222 @@
+// HTTP/1.1 satırları CRLF çözüldükten sonra verilir. Tek mesaj başı en çok 8 KiB'dır.
+genel yapı HttpBaslik {
+    kod: tam32; boy: tam64; parcali: mantıksal; kapat: mantıksal;
+    sayi: tam32; bayt: tam32; konum: metin; hedef: metin; sunucu: metin;
+}
+genel işlev http_yeni() -> HttpBaslik {
+    ver HttpBaslik { kod:0,boy:-1,parcali:yanlış,kapat:yanlış,sayi:0,bayt:0,konum:"",hedef:"",sunucu:"" };
+}
+işlev http_harf(c: tam32) -> tam32 {
+    eğer c>=65 ve c<=90 { ver c+32; }
+    ver c;
+}
+işlev http_bayt(s: metin,i: tam32) -> tam32 { ver (metin_bayt(s,i) olarak tam32)&255; }
+işlev http_es(s: metin,bas: tam32,son: tam32,ad: metin,katla: mantıksal) -> mantıksal {
+    eğer bas<0 veya son>metin_uzunluk(s) veya son-bas!=metin_uzunluk(ad) { ver yanlış; }
+    değişken i: tam32=0;
+    iken i<son-bas {
+        değişken c: tam32=http_bayt(s,bas+i);
+        eğer katla { c=http_harf(c); }
+        eğer c!=http_bayt(ad,i) { ver yanlış; }
+        i=i+1;
+    }
+    ver doğru;
+}
+genel işlev http_hane(c: tam32) -> tam32 {
+    eğer c>=48 ve c<=57 { ver c-48; }
+    c=http_harf(c);
+    eğer c>=97 ve c<=102 { ver c-87; }
+    ver -1;
+}
+işlev http_sayi(s: metin,bas: tam32,son: tam32,taban: tam32,ust: tam64) -> tam64 {
+    eğer bas<0 veya son<=bas veya son>metin_uzunluk(s) { ver -1; }
+    değişken n: tam64=0;
+    iken bas<son {
+        değişken h: tam32=http_hane(http_bayt(s,bas));
+        eğer h<0 veya h>=taban veya (h olarak tam64)>ust veya n>(ust-(h olarak tam64))/(taban olarak tam64) { ver -1; }
+        n=n*(taban olarak tam64)+(h olarak tam64); bas=bas+1;
+    }
+    ver n;
+}
+genel işlev http_parca_boyu(s: metin,kalan: tam64) -> tam64 {
+    değişken n: tam32=metin_uzunluk(s);
+    eğer n<1 veya n>1024 veya kalan<0 { ver -1; }
+    değişken i: tam32=0;
+    iken i<n ve http_bayt(s,i)!=59 { i=i+1; }
+    değişken j: tam32=i;
+    iken j<n { değişken c: tam32=http_bayt(s,j); eğer c<32 veya c>126 { ver -1; } j=j+1; }
+    ver http_sayi(s,0,i,16,kalan);
+}
+işlev http_sozcuk(c: tam32) -> mantıksal {
+    eğer (c>=48 ve c<=57) veya (http_harf(c)>=97 ve http_harf(c)<=122) { ver doğru; }
+    değişken izin: metin="!#$%&'*+-.^_`|~";
+    değişken i: tam32=0; iken i<metin_uzunluk(izin) { eğer c==http_bayt(izin,i) { ver doğru; } i=i+1; }
+    ver yanlış;
+}
+// Kesitler düz metin olarak saklanır. Yalnız uygulamanın kullanacağı alanlar kopyalanır.
+// ASCII alanları dengeli birleştirmek uzun bir yolda karesel kopyalamayı önler.
+işlev http_ascii_kes(s: metin,bas: tam32,son: tam32) -> metin {
+    eğer son<=bas { ver ""; }
+    eğer son==bas+1 { ver kod_metin(http_bayt(s,bas)); }
+    değişken orta: tam32=bas+(son-bas)/2;
+    ver metin_birlestir(http_ascii_kes(s,bas,orta),http_ascii_kes(s,orta,son));
+}
+genel işlev http_kes(s: metin,bas: tam32,son: tam32) -> metin {
+    eğer bas<0 veya son<bas veya son>metin_uzunluk(s) veya son-bas>2048 { ver ""; }
+    ver http_ascii_kes(s,bas,son);
+}
+genel işlev http_ilk(h: &değişken HttpBaslik,s: metin,yanit: mantıksal) -> mantıksal {
+    değişken n: tam32=metin_uzunluk(s);
+    eğer n>2048 veya n<12 { ver yanlış; }
+    değişken i: tam32=0;
+    iken i<n { değişken c: tam32=http_bayt(s,i); eğer c<32 veya c>=127 { ver yanlış; } i=i+1; }
+    h.bayt=n+2;
+    eğer yanit {
+        eğer değil http_es(s,0,9,"HTTP/1.1 ",yanlış) {
+            eğer değil http_es(s,0,9,"HTTP/1.0 ",yanlış) { ver yanlış; }
+            h.kapat=doğru;
+        }
+        h.kod=http_sayi(s,9,12,10,599) olarak tam32;
+        ver h.kod>=100 ve (n==12 veya http_bayt(s,12)==32);
+    }
+    eğer değil http_es(s,0,4,"GET ",yanlış) veya değil http_es(s,n-9,n," HTTP/1.1",yanlış) veya n<14 { ver yanlış; }
+    i=4; iken i<n-9 { eğer http_bayt(s,i)==32 { ver yanlış; } i=i+1; }
+    h.hedef=http_kes(s,4,n-9); ver doğru;
+}
+işlev http_baglanti(h: &değişken HttpBaslik,s: metin,bas: tam32,son: tam32) -> mantıksal {
+    iken bas<son {
+        iken bas<son ve (http_bayt(s,bas)==32 veya http_bayt(s,bas)==9) { bas=bas+1; }
+        değişken i: tam32=bas; iken i<son ve http_sozcuk(http_bayt(s,i)) { i=i+1; }
+        eğer i==bas { ver yanlış; }
+        eğer http_es(s,bas,i,"close",doğru) { h.kapat=doğru; }
+        iken i<son ve (http_bayt(s,i)==32 veya http_bayt(s,i)==9) { i=i+1; }
+        eğer i==son { ver doğru; }
+        eğer http_bayt(s,i)!=44 veya i+1==son { ver yanlış; }
+        bas=i+1;
+    }
+    ver yanlış;
+}
+genel işlev http_alan(h: &değişken HttpBaslik,s: metin) -> mantıksal {
+    değişken n: tam32=metin_uzunluk(s);
+    eğer n<2 veya n>2048 veya h.bayt>8192-n-2 veya h.sayi>=64 { ver yanlış; }
+    değişken i: tam32=0; iken i<n ve http_sozcuk(http_bayt(s,i)) { i=i+1; }
+    eğer i==0 veya i==n veya http_bayt(s,i)!=58 { ver yanlış; }
+    değişken bas: tam32=i+1; değişken son: tam32=n;
+    iken bas<son ve (http_bayt(s,bas)==9 veya http_bayt(s,bas)==32) { bas=bas+1; }
+    iken son>bas ve (http_bayt(s,son-1)==9 veya http_bayt(s,son-1)==32) { son=son-1; }
+    değişken j: tam32=bas;
+    iken j<son { değişken c: tam32=http_bayt(s,j); eğer (c<32 ve c!=9) veya c==127 { ver yanlış; } j=j+1; }
+    h.bayt=h.bayt+n+2; h.sayi=h.sayi+1;
+    eğer http_es(s,0,i,"content-length",doğru) {
+        değişken boy: tam64=http_sayi(s,bas,son,10,2147483647);
+        eğer h.parcali veya boy<0 veya (h.boy>=0 ve boy!=h.boy) { ver yanlış; }
+        h.boy=boy;
+    } değilse eğer http_es(s,0,i,"transfer-encoding",doğru) {
+        eğer h.parcali veya h.boy>=0 veya değil http_es(s,bas,son,"chunked",doğru) { ver yanlış; }
+        h.parcali=doğru;
+    } değilse eğer http_es(s,0,i,"connection",doğru) {
+        ver http_baglanti(h,s,bas,son);
+    } değilse eğer http_es(s,0,i,"location",doğru) {
+        eğer son==bas veya metin_uzunluk(h.konum)>0 { ver yanlış; }
+        h.konum=http_kes(s,bas,son);
+    } değilse eğer http_es(s,0,i,"host",doğru) {
+        eğer son==bas veya metin_uzunluk(h.sunucu)>0 { ver yanlış; }
+        h.sunucu=http_kes(s,bas,son);
+    }
+    ver doğru;
+}
+genel işlev http_crlf() -> metin { ver metin_birlestir(kod_metin(13),kod_metin(10)); }
+genel işlev http_istek(yol: metin,yetkili: metin) -> metin {
+    değişken son: metin=http_crlf();
+    değişken r: metin=metin_birlestir(metin_birlestir("GET ",yol)," HTTP/1.1");
+    r=metin_birlestir(metin_birlestir(r,son),"Host: "); r=metin_birlestir(r,yetkili);
+    r=metin_birlestir(metin_birlestir(r,son),"Connection: keep-alive");
+    ver metin_birlestir(metin_birlestir(r,son),son);
+}
+// Hedef başındaki tek eğik çizgi HTTP origin-form parçasıdır. VFS'ye göreli ad döner.
+genel işlev http_goreli(hedef: metin) -> sonuç<metin,metin> {
+    değişken n: tam32=metin_uzunluk(hedef);
+    eğer n<1 veya n>1024 veya http_bayt(hedef,0)!=47 { ver hata("gecersiz hedef"); }
+    değişken yol: metin=""; değişken bas: tam32=1; değişken i: tam32=1;
+    iken i<=n {
+        değişken c: tam32=47; eğer i<n { c=http_bayt(hedef,i); }
+        eğer c==47 veya c==63 {
+            eğer i==bas ve i<n ve c!=63 { ver hata("bos yol bileseni"); }
+            değişken parca: metin=""; değişken j: tam32=bas; değişken blok: tam32=j;
+            iken j<i {
+                değişken b: tam32=http_bayt(hedef,j);
+                eğer b==37 {
+                    eğer j+2>=i { ver hata("yuzde kodu"); }
+                    değişken bir: tam32=http_hane(http_bayt(hedef,j+1)); değişken iki: tam32=http_hane(http_bayt(hedef,j+2));
+                    eğer bir<0 veya iki<0 { ver hata("yuzde kodu"); }
+                    parca=metin_birlestir(parca,http_kes(hedef,blok,j));
+                    b=bir*16+iki;
+                    // VFS ayıracı ve ikinci bir yüzde çözümü dosya adına giremez.
+                    eğer b==47 veya b==37 { ver hata("kodlu ayirac"); }
+                    eğer b<32 veya b>=127 { ver hata("desteklenmeyen ad"); }
+                    parca=metin_birlestir(parca,kod_metin(b)); j=j+2; blok=j+1;
+                }
+                eğer b<32 veya b>=127 veya b==92 veya b==58 veya b==42 veya b==63 veya b==34 veya b==60 veya b==62 veya b==124 { ver hata("dosya adi"); }
+                j=j+1;
+            }
+            parca=metin_birlestir(parca,http_kes(hedef,blok,i));
+            değişken uzun: tam32=metin_uzunluk(parca);
+            eğer uzun>0 {
+                // FAT kısa/uzun ad eşlemesinde sondaki nokta veya boşluk belirsizdir.
+                eğer http_bayt(parca,uzun-1)==46 veya http_bayt(parca,uzun-1)==32 { ver hata("yol bileseni"); }
+                eğer metin_uzunluk(yol)>0 { yol=metin_birlestir(yol,"/"); }
+                yol=metin_birlestir(yol,parca);
+            }
+            eğer c==63 { ver tamam(yol); }
+            bas=i+1;
+        }
+        i=i+1;
+    }
+    ver tamam(yol);
+}
+genel yapı HttpUrl { yetkili: metin; ad: metin; port: tam64; yol: metin; }
+genel işlev http_url(s: metin) -> sonuç<HttpUrl,metin> {
+    değişken n: tam32=metin_uzunluk(s);
+    eğer n<8 veya n>2048 veya değil http_es(s,0,7,"http://",yanlış) { ver hata("http URL"); }
+    değişken i: tam32=7;
+    iken i<n ve http_bayt(s,i)!=47 ve http_bayt(s,i)!=63 ve http_bayt(s,i)!=35 ve http_bayt(s,i)!=58 {
+        değişken c: tam32=http_harf(http_bayt(s,i));
+        eğer değil ((c>=97 ve c<=122) veya (c>=48 ve c<=57) veya c==45 veya c==46) { ver hata("sunucu adi"); } i=i+1;
+    }
+    eğer i==7 veya i>260 { ver hata("sunucu adi"); }
+    değişken ad: metin=http_kes(s,7,i); değişken port: tam64=80;
+    eğer i<n ve http_bayt(s,i)==58 {
+        i=i+1; değişken bas: tam32=i;
+        iken i<n ve http_bayt(s,i)>=48 ve http_bayt(s,i)<=57 { i=i+1; }
+        port=http_sayi(s,bas,i,10,65535); eğer port<1 { ver hata("sunucu portu"); }
+    }
+    değişken yetkili: metin=http_kes(s,7,i); değişken yol: metin="/";
+    değişken son: tam32=i;
+    iken son<n ve http_bayt(s,son)!=35 {
+        eğer http_bayt(s,son)<=32 veya http_bayt(s,son)>=127 { ver hata("istek hedefi"); }
+        son=son+1;
+    }
+    eğer son>i {
+        eğer http_bayt(s,i)==63 { yol=metin_birlestir("/",http_kes(s,i,son)); }
+        değilse eğer http_bayt(s,i)==47 { yol=http_kes(s,i,son); }
+        değilse { ver hata("istek hedefi"); }
+    }
+    ver tamam(HttpUrl {yetkili:yetkili,ad:ad,port:port,yol:yol});
+}
+genel işlev http_yon(u: HttpUrl,s: metin) -> sonuç<HttpUrl,metin> {
+    eğer metin_uzunluk(s)==0 { ver hata("bos yonlendirme"); }
+    eğer http_es(s,0,7,"http://",yanlış) { ver http_url(s); }
+    eğer http_es(s,0,2,"//",yanlış) { ver http_url(metin_birlestir("http:",s)); }
+    değişken j: tam32=0;
+    iken j<metin_uzunluk(s) ve http_bayt(s,j)!=47 ve http_bayt(s,j)!=63 ve http_bayt(s,j)!=35 {
+        eğer http_bayt(s,j)==58 { ver hata("desteklenmeyen URL semasi"); } j=j+1;
+    }
+    değişken taban: metin=metin_birlestir("http://",u.yetkili);
+    eğer http_bayt(s,0)==47 { ver http_url(metin_birlestir(taban,s)); }
+    değişken i: tam32=0; değişken bas: tam32=1;
+    iken i<metin_uzunluk(u.yol) ve http_bayt(u.yol,i)!=63 {
+        eğer http_bayt(u.yol,i)==47 { bas=i+1; } i=i+1;
+    }
+    eğer http_bayt(s,0)==63 { bas=i; }
+    ver http_url(metin_birlestir(metin_birlestir(taban,http_kes(u.yol,0,bas)),s));
+}

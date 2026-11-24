@@ -92,3 +92,21 @@ Paralel QEMU yükünde ölçülen ilk 64 MiB aktarım 1,075 MiB/s sürdü. Kapı
 `ag` arayüz, sayaç, IPv4, geçit, DNS, NTP ve kalan DHCP kira süresini gösterir. `ag arp` komşuları, `ag baglantilar` dinleyiciler ve akışlar için yerel ve uzak uçları, TCP durum numarasını, TX ve RX kuyruk boyunu gösterir. ELF bulunmayan küçük imajda temel donanım sorgusu çekirdekte çalışır. `cozumle ornek.test` DNS A kaydını çözer.
 
 `nc [-z ms] ad port` ve `nc -d [-z ms] port` TCP üzerinden standart girdi ve çıktıyı taşır. `-u` UDP seçer. Varsayılan hareketsizlik sınırı 30 saniyedir. `echo merhaba | nc 127.0.0.1 9000` yerel bağlantıya yazar. `nc -d 9000 > gelen.bin` alınan baytları dosyaya yönlendirir. TCP’de standart girdi bitince yazma yarısı kapanır, yanıtın sonuna kadar okumaya devam edilir.
+
+## HTTP
+
+`indir http://sunucu:8000/dosya /ram/kopya` komutu IPv4 veya DNS adıyla GET yapar. İkinci bir URL ve hedef aynı komuta eklenebilir. Aynı kökende, gövdenin sonu biliniyor ve sunucu izin veriyorsa ikinci istek açık TCP bağlantısından geçer. 301, 302 ve 307 yanıtlarında en fazla beş yönlendirme izlenir. Gövde uzunluğu başlıktan, parçalı aktarımın sonundan veya bağlantının kapanmasından belirlenir. Eksik bir gövde hata verir. Başlık ve parça sonları telde CR LF bayt çiftidir. [HTTP/1.1 ileti biçimi, RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html)
+
+`sunucu 8080 /diskler/usb0p2/bin` sekiz bağlantıyı tek süreçte bekler. İlk yedi istemcinin başlıkları tamamlanmadan sekizinci istemci dosyasını alabilir. Dizinler satır başına bir ad döndürür. Yüzde kodları bir kez çözülür. Bileşen ayraçları, üst dizinler, sonda nokta veya boşluk ve FAT ad alanına giremeyen karakterler reddedilir. Yol ve sonuç kodu konsol günlüğüne girer. Ctrl+C açık bağlantıları ve dosya tanımlayıcılarını kapatır.
+
+| Sınır | Değer |
+|---|---|
+| İstek ya da durum satırı ve tek başlık | 2048 bayt |
+| Başlık alanları | 64 alan, toplam 8192 bayt |
+| Sunucunun göreli dosya yolu | 1024 bayt |
+| Sunucu dizin listesi | 32 KiB |
+| Tek dosya aktarımı | 16 MiB, ayrıca disk veya `/ram` kotası |
+| İstemcide bağlantı ve okuma beklemesi | 10 saniye |
+| Sunucuda hareketsiz bağlantı | 30 saniye |
+
+Dosya akışında ABI 89, veriyi fiziksel çerçevelerde biriktirir. Tam gövde gelince FAT32 verisi, iki FAT kopyası, dizin kaydı ve FSInfo sırasıyla yayımlanır. Önceki zincir yeni dizin kaydı kalıcılaştıktan sonra bırakılır. Okuma, dosyanın anlık kopyasını aynı süreçteki tanımlayıcıya bağlar. NVMe, AHCI ve USB BOT için fiziksel G/Ç istekleri 64 KiB sınırında bölünür. FAT tablosunun kullanılan kısmı en fazla 16 MiB olabilir. Süreç çıkışı ve yayımlamadan kapatma geçici çerçeveleri ayırıcıya iade eder.

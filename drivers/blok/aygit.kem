@@ -1,7 +1,7 @@
 // Kapalı blok aygıtı kümesi; MMIO/DMA yürütücüsü çağırana aittir.
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_adim, nvme_oku, nvme_yaz, nvme_flush } olarak nvme_mod;
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_adim, ahci_oku, ahci_yaz, ahci_flush } olarak ahci_mod;
-kullan drivers::usb::depo::{ UsbDepo, usb_depo_adim, usb_depo_oku, usb_depo_yaz, usb_depo_flush } olarak usb_depo_mod;
+kullan drivers::usb::depo::{ UsbDepo, usb_depo_cerceve, usb_depo_adim, usb_depo_oku, usb_depo_yaz, usb_depo_flush } olarak usb_depo_mod;
 kullan drivers::ortak::gc::{ GcIstek, GcYanit };
 kullan drivers::blok::ram::{ RamBlok, ram_blok_yeni, ram_blok_iste, ram_blok_adim };
 genel çeşit BlokCesidi { Nvme(NvmeDurum), Ahci(AhciDurum), Usb(UsbDepo), Ram(RamBlok) }
@@ -58,16 +58,26 @@ genel işlev blok_sonuc(s: BlokAygiti) -> Dizi<dtam8> { eşleş s.durum {
 } }
 
 // Doğrudan DMA hedefi çekirdeğin ayırdığı çerçevelerdir. USB Normal TRB 64 KiB sınırını aşmaz.
-genel işlev blok_cerceve_oku(s: &değişken BlokAygiti,lba: tam64,adet: tam32,hedef: tam64) -> sonuç<mantıksal,metin> {
+genel işlev blok_cerceve_aktar(s: &değişken BlokAygiti,lba: tam64,adet: tam32,hedef: tam64,yaz: mantıksal) -> sonuç<mantıksal,metin> {
  değişken boy: tam32 = 0; güvensiz { boy=blok_sektor(*s); }
  eğer boy != 512 veya hedef < 4096 veya hedef%512 != 0 veya adet <= 0 veya adet > 128 veya hedef%65536+(adet olarak tam64)*512 > 65536 veya hedef > 9223372036854710271 { ver hata("blok cerceve araligi"); }
- eşleş s.durum { BlokCesidi::Ram(v) => { ver hata("ramdisk kaynagi fiziksel disk olmali"); } _ => { } }
+ eşleş s.durum {
+  BlokCesidi::Usb(v) => {
+   değişken d: UsbDepo = v;
+   değişken r: sonuç<mantıksal,metin> = usb_depo_cerceve(&değişken d,lba,adet,hedef,yaz);
+   s.durum=BlokCesidi::Usb(d); ver r;
+  }
+  BlokCesidi::Ram(v) => { ver hata("ramdisk kaynagi fiziksel disk olmali"); }
+  _ => { }
+ }
  eşleş blok_oku(s,lba,adet) { hata(e) => { ver hata(e); } tamam(v) => { } }
  eşleş s.durum {
-  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; d.cerceve_hedefi=hedef; s.durum=BlokCesidi::Nvme(d); }
-  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; d.cerceve_hedefi=hedef; s.durum=BlokCesidi::Ahci(d); }
-  BlokCesidi::Usb(v) => { değişken d: UsbDepo = v; d.cerceve_hedefi=hedef; s.durum=BlokCesidi::Usb(d); }
-  _ => { ver hata("ramdisk kaynagi"); }
+  BlokCesidi::Nvme(v) => { değişken d: NvmeDurum = v; d.cerceve_hedefi=hedef; eğer yaz { d.islem=2; } s.durum=BlokCesidi::Nvme(d); }
+  BlokCesidi::Ahci(v) => { değişken d: AhciDurum = v; d.cerceve_hedefi=hedef; eğer yaz { d.islem=2; } s.durum=BlokCesidi::Ahci(d); }
+  _ => { ver hata("fiziksel disk gerekli"); }
  }
  ver tamam(doğru);
+}
+genel işlev blok_cerceve_oku(s: &değişken BlokAygiti,lba: tam64,adet: tam32,hedef: tam64) -> sonuç<mantıksal,metin> {
+ ver blok_cerceve_aktar(s,lba,adet,hedef,yanlış);
 }

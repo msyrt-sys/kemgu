@@ -56,3 +56,7 @@ Pencere ölçeği iki yönde, TCP zaman damgası ve PAWS, gecikmeli ACK, kapatı
 ## Bölüm 11 — kullanıcı ağ araçları
 
 Ağ kitaplığı, `ag`, `cozumle`, `nc` ve soketli `ping` derlendi. C ve self-host konuklarında iki yönlü 1 MiB boru aktarımı, UDP yankısı, gerçek FAT32 yönlendirmesi ve loopback geçti. DHCP, DNS, ARP, fiziksel MAC, dinleyici ve bağlantı durumu ve 200 ms bağlantı zaman aşımı ile sekiz datagramlık sayaç farkı bağımsız eşle karşılaştırıldı. Geçen süre 2057 saniye. FIN çağrısının çıkarıldığı gerçek C kullanıcı ELF’inde eş bütün 1 MiB veriyi aldıktan sonra üç saniyelik sınırda eksik FIN’i bildirdi, kâhin çıkış 1 verdi.
+
+## Bölüm 12 — HTTP istemcisi ve sunucusu
+
+`indir` ve `sunucu`, sınırlı HTTP ayrıştırıcısı ve dosya akışı ABI 89 eklendi. İki derleyiciyle gerçek QEMU, 8 MiB parçalı yanıt ve yönlendirmeler, aynı TCP oturumunda ikinci dosya, pcap ve FAT32 SHA-256, sekiz eşzamanlı istemci, engellenen yollar, Ctrl+C, üç fiziksel disk sürücüsü, /ram ve fsck geçti. Beş yönlendirme sonrasında altıncı geçiş reddedildi. Geçen süre 1585 saniye. Son sıfır parçayı tanımayan kullanıcı ELF’i, gerçek gövdeden sonra geçerli treyleri okuyunca -74 verdi. Kâhin çıkışı 1 oldu. Yüzde kodlu üst dizin korumasını kaldırma ve sınırsız yönlendirme döngüsü sabotajları uygulanmadı.

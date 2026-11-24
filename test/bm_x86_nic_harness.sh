@@ -10,7 +10,12 @@ for derleyici in build/kemgu build/codegen; do
     echo "NIC derleyicisi $derleyici ($w)"
     UEFI_CALISMA_DIZINI="$w" UEFI_DERLEYICI="$derleyici" UEFI_YALNIZ_DERLE=1 \
         UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-    if [[ "${1:-e1000}" == arac ]]; then
+    if [[ "${1:-e1000}" == http ]]; then
+        for program in indir sunucu; do
+            python3 tests/qemu/surec_elf.py "$w/$program.elf" --kaynak "test/kullanici/$program.kem" --derleyici "$derleyici"
+        done
+        python3 tests/qemu/ag_http_kahin.py "$w"
+    elif [[ "${1:-e1000}" == arac ]]; then
         for program in ag cozumle nc agakim echo; do
             python3 tests/qemu/surec_elf.py "$w/$program.elf" --kaynak "test/kullanici/$program.kem" --derleyici "$derleyici"
         done

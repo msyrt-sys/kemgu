@@ -148,3 +148,7 @@ IPv4 adresi ağdaki dört sekizlinin sayısal değeridir (örneğin 192.0.2.1 i�
 | 86 | İstek tamponu iki alandır (ICMP sıra numarası, zaman aşımı ms). Sonuç RTT mikrosaniye veya negatif hatadır. |
 
 Bloksuz okumada veri yoksa `-11`, dolu fd tablosunda `-24`, sınırlı soket veya TCP havuzu doluysa `-105`, kullanımda olan dinleme portunda `-98`, zaman aşımında `-110` döner. TCP’de okumanın sıfır dönmesi veri sonudur. Dinleme kuyruğu 1–8 aralığında seçilir. UDP’de her sokette dört datagramlık kuyruk vardır. Alım süresi ve keepalive milisaniye cinsindendir.
+
+| Numara | Ad | Argüman | Davranış |
+|---|---|---|---|
+| 89 | dosya_akis | 3 | fd, işlem, üst sınır. 1 dosyanın okumalık kopyasını açar. 2 yazılacak içeriği fiziksel çerçevelerde biriktirir. 3 ve sıfır sınır dosyayı yayımlar. Yayımlamadan kapatma veya süreç çıkışı birikimi bırakır. Üst sınır 16 MiB. |

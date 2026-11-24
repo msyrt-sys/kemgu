@@ -1,0 +1,91 @@
+kullan drivers::ag::http::{ HttpBaslik, HttpUrl, http_yeni, http_ilk, http_alan, http_parca_boyu, http_url, http_yon, http_istek, http_goreli };
+işlev kh_satir(r: &değişken KagOkuyucu,p: tam64) -> tam64 {
+    değişken n: tam64=kag_satir_oku(r,p,2050);
+    eğer n<0 { ver n; }
+    eğer n<2 veya sis_bayt_al(p+n-2)!=13 veya sis_bayt_al(p+n-1)!=10 { ver -74; }
+    değişken i: tam64=0; iken i<n-2 { eğer sis_bayt_al(p+i)==0 { ver -74; } i=i+1; }
+    sis_bayt_koy(p+n-2,0); ver n-2;
+}
+işlev kh_baslik(r: &değişken KagOkuyucu,h: &değişken HttpBaslik,p: tam64) -> tam64 {
+    değişken n: tam64=kh_satir(r,p); eğer n<0 { ver n; }
+    eğer değil http_ilk(h,sis_dize(p),doğru) { ver -74; }
+    iken doğru {
+        n=kh_satir(r,p); eğer n<=0 { ver n; }
+        eğer değil http_alan(h,sis_dize(p)) { ver -74; }
+    } ver -74;
+}
+işlev kh_oku(r: &değişken KagOkuyucu,p: tam64,n: tam64) -> tam64 {
+    eğer r.konum==r.boy { ver sis_oku(r.fd,p,n); }
+    değişken k: tam64=r.boy-r.konum; eğer k>n { k=n; }
+    güvensiz { memcpy(p olarak *tam8,(r.tampon+r.konum) olarak *tam8,k); }
+    r.konum=r.konum+k; ver k;
+}
+işlev kh_govde(r: &değişken KagOkuyucu,h: HttpBaslik,fd: tam64,p: tam64,sinir: tam64) -> tam64 {
+    değişken toplam: tam64=0; değişken n: tam64=h.boy; değişken belirsiz: mantıksal=n<0 ve değil h.parcali;
+    değişken ilerleme: tam64=1048576;
+    iken doğru {
+        eğer h.parcali {
+            değişken c: tam64=kh_satir(r,p); eğer c<0 { ver c; }
+            n=http_parca_boyu(sis_dize(p),sinir-toplam); eğer n<0 { ver -74; }
+            eğer n==0 {
+                değişken son: HttpBaslik=http_yeni();
+                iken doğru { c=kh_satir(r,p); eğer c<0 { ver c; } eğer c==0 { ver toplam; }
+                    eğer değil http_alan(&değişken son,sis_dize(p)) veya son.boy>=0 veya son.parcali { ver -74; }
+                }
+            }
+        }
+        eğer n>sinir-toplam { ver -27; }
+        iken n>0 veya belirsiz {
+            değişken k: tam64=4096; eğer değil belirsiz ve k>n { k=n; }
+            değişken a: tam64=kh_oku(r,p,k); eğer a<0 { ver a; }
+            eğer a==0 { eğer belirsiz { ver toplam; } ver -74; }
+            eğer a>sinir-toplam { ver -27; }
+            eğer fd>=0 { değişken v: tam64=kag_hepsini_yaz(fd,p,a); eğer v<0 { ver v; } }
+            toplam=toplam+a;
+            eğer toplam>=ilerleme ve fd>=0 { kag_satir(metin_birlestir("indir bayt ",tam_metin(toplam))); ilerleme=ilerleme+1048576; }
+            eğer değil belirsiz { n=n-a; }
+        }
+        eğer değil h.parcali { ver toplam; }
+        eğer kh_satir(r,p)!=0 { ver -74; }
+    } ver -74;
+}
+yapı KhOturum { ag: tam64; ad: metin; port: tam64; tampon: tam64; }
+işlev kh_kapat(o: &değişken KhOturum) { eğer o.ag>=0 { sis_kapat(o.ag); o.ag= -1; } }
+işlev kh_indir(o: &değişken KhOturum,url: metin,dosya: metin) -> tam64 {
+    değişken u: HttpUrl=HttpUrl {yetkili:"",ad:"",port:0,yol:""};
+    eşleş http_url(url) { hata(e)=>{ver -22;} tamam(v)=>{u=v;} }
+    değişken yon: tam32=0;
+    iken yon<=5 {
+        eğer o.ag>=0 ve (değil kag_esit(o.ad,u.ad) veya o.port!=u.port) { kh_kapat(o); }
+        eğer o.ag<0 {
+            o.ag=kag_ad_ile_bagla(u.ad,u.port,1); eğer o.ag<0 { ver o.ag; }
+            o.ad=u.ad; o.port=u.port; sis_soket_secenek(o.ag,4,10000);
+        }
+        değişken istek: metin=http_istek(u.yol,u.yetkili);
+        değişken q: tam64=kag_hepsini_yaz(o.ag,sis_metin_adres(istek),metin_uzunluk(istek) olarak tam64); eğer q<0 { ver q; }
+        değişken r: KagOkuyucu=kag_okuyucu(o.ag,o.tampon);
+        değişken h: HttpBaslik=http_yeni(); değişken p: tam64=o.tampon+1024;
+        q=kh_baslik(&değişken r,&değişken h,p); eğer q<0 { ver q; }
+        eğer h.kod==301 veya h.kod==302 veya h.kod==307 {
+            eğer yon>=5 { ver -40; }
+            // Yönlendirme gövdesi tüketilmediği için eski bağlantı burada kapanır.
+            kh_kapat(o);
+            eşleş http_yon(u,h.konum) { hata(e)=>{ver -22;} tamam(v)=>{u=v;} }
+            yon=yon+1;
+        } değilse {
+            eğer h.kod!=200 { kag_satir(metin_birlestir("HTTP ",tam_metin(h.kod olarak tam64))); ver -2; }
+            değişken sinir: tam64=16777216; eğer h.boy>sinir { ver -27; } eğer h.boy>=0 { sinir=h.boy; }
+            değişken durum: tam64=sis_bilgi(dosya,p);
+            eğer durum<0 ve durum!= -2 { ver durum; }
+            değişken eski: mantıksal=durum==0;
+            değişken fd: tam64=sis_ac(dosya,3); eğer fd<0 { ver fd; }
+            q=sis_dosya_akis(fd,2,sinir);
+            eğer q>=0 { q=kh_govde(&değişken r,h,fd,p,sinir); }
+            eğer q>=0 { değişken sonuc: tam64=sis_dosya_akis(fd,3,0); eğer sonuc<0 { q=sonuc; } }
+            sis_kapat(fd);
+            eğer q<0 { eğer değil eski { sis_sil(dosya); } ver q; }
+            eğer h.kapat veya (h.boy<0 ve değil h.parcali) { kh_kapat(o); }
+            ver q;
+        }
+    } ver -40;
+}

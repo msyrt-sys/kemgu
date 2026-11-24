@@ -95,7 +95,8 @@ def derle(derleyici, kaynak, hedef, eski=False):
     with tempfile.TemporaryDirectory(prefix="elf-", dir=hedef.parent) as tmp:
         w = Path(tmp)
         birlesik, ham, ir, nesne, elf = (w / f"u.{uzanti}" for uzanti in ("kem", "ham.ll", "ll", "o", "elf"))
-        birlesik.write_bytes(b"".join(Path(p).read_bytes() for p in (*ORTAK, kaynak)))
+        ek = ("runtime/kullanici/x86_64/kem_http.kem",) if Path(kaynak).stem in {"indir", "sunucu", "paket"} else ()
+        birlesik.write_bytes(b"".join(Path(p).read_bytes() for p in (*ORTAK, *ek, kaynak)))
         linker = Path("linker/user-x86_64.ld")
         if eski:
             # Dalga 13'ün sabit giriş, heap ve argc adresleriyle bir ET_EXEC üret.

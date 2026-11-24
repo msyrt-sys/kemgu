@@ -142,3 +142,15 @@ Her derleyici için `UEFI_DERLEYICI=build/kemgu UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=
 - araç eş heap/boş çerçeve (4263728, 45409) (7739936, 45409)
 
 Dinleyicinin son FIN’i tüketmesi ile istemcinin kabuğa dönmesi farklı süreç dilimlerinde gerçekleşebilir. Ölçüm en çok beş saniyede süreç çerçevelerinin başlangıç değerine dönmesini gerektirir. İki yönlü akışın SHA-256 değerleri tel kaydından yeniden kurularak doğrulandı.
+
+## HTTP ve dosya akışı
+
+Önceki dosya yolunda, QEMU'da gerçek kullanıcı ELF'i 65.536 konumuna gidip tek bayt yazdı ve `-27` aldı. Eski yol her yazıda dosyanın tamamını yeniden kuruyordu. ABI 89'un fiziksel çerçevelerde biriktirme ve yayımlama yolu 8.388.608 baytlık indirmeyi USB FAT32'ye yazdı. Host imajının SHA-256 özeti `1c9f2482f5b03efac6b414668dd3263702fa646d8cf9522d6c0b79a9a3f4c82f` çıktı. Eski hedefe gelen eksik HTTP yanıtı dosyayı korudu. İstemci için seçilen üst sınır 16 MiB. Kısa dosya ve `/ram` aynı çağrıdan geçiyor. Dosya sistemi ayrı bir FAT32 günlüğü tutmuyor. Meta veri yazılırken donanım hatası oluşursa bağlama, önceki FAT32 yazma yolundaki gibi kirli kalabiliyor.
+
+Ayrı bir C konuğunda, var olan 155.649 baytlık dosya önce 73.793, ardından 1.807 baytla değiştirildi. Host her yayımdan hemen sonra gerçek imajı okudu. İki içerik birebir eşleşti ve kapanıştan sonra `fsck.fat -n` çıkışı 0 oldu.
+- HTTP istemci heap/boş çerçeve (4066880, 45434) (10560176, 45434)
+- HTTP sunucu heap/boş çerçeve (4066880, 45434) (13248864, 45434)
+- HTTP NVMe/AHCI heap/boş çerçeve (4066880, 45434) (7674352, 45434)
+- HTTP istemci heap/boş çerçeve (4263728, 45404) (11281824, 45404)
+- HTTP sunucu heap/boş çerçeve (4263728, 45404) (13773696, 45404)
+- HTTP NVMe/AHCI heap/boş çerçeve (4263728, 45404) (8199280, 45404)

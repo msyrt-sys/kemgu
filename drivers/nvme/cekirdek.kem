@@ -36,7 +36,7 @@ işlev sq_yaz(s: &değişken NvmeDurum) -> GcIstek {
     s.adim=23; ver GcIstek::BellekYaz(a,s.komut);
 }
 işlev veri_hazir(s: &değişken NvmeDurum) -> GcIstek {
-    eğer s.yonetim >= 4 ve s.islem == 2 { s.adim=22; ver GcIstek::BellekYaz(s.taban+16384,kes(s.veri,s.tamamlanan*s.blok_bayt,s.parca*s.blok_bayt)); }
+    eğer s.yonetim >= 4 ve s.islem == 2 ve s.cerceve_hedefi == 0 { s.adim=22; ver GcIstek::BellekYaz(s.taban+16384,kes(s.veri,s.tamamlanan*s.blok_bayt,s.parca*s.blok_bayt)); }
     ver sq_yaz(s);
 }
 işlev emir_baslat(s: &değişken NvmeDurum) -> GcIstek {
@@ -52,7 +52,7 @@ işlev emir_baslat(s: &değişken NvmeDurum) -> GcIstek {
             s.parca=s.kalan; eğer s.parca > s.azami/s.blok_bayt { s.parca=s.azami/s.blok_bayt; }
             değişken p1: tam64 = 0; değişken p2: tam64 = 0;
             değişken tampon: tam64 = s.taban+16384;
-            eğer s.cerceve_hedefi != 0 ve s.islem == 1 { tampon=s.cerceve_hedefi+(s.tamamlanan olarak tam64)*(s.blok_bayt olarak tam64); }
+            eğer s.cerceve_hedefi != 0 { tampon=s.cerceve_hedefi+(s.tamamlanan olarak tam64)*(s.blok_bayt olarak tam64); }
             eşleş nvme_prp_listesi(tampon,(s.parca olarak tam64)*(s.blok_bayt olarak tam64),4096,s.taban+81920,s.cerceve_hedefi == 0) {
                 hata(e) => { ver nvme_hata(s,e); }
                 tamam(p) => { p1=p.bir; p2=p.iki; eğer dizi_boyut(p.listeler) > 0 { değişken l: PrpSayfa = dizi_al(p.listeler,0); s.prp=l.baytlar; } }

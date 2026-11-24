@@ -39,9 +39,9 @@ işlev emir_hazirla(s: &değişken AhciDurum) -> GcIstek {
         değilse { s.parca=s.kalan; eğer s.parca > 65536/s.blok_bayt { s.parca=65536/s.blok_bayt; } sayi=s.parca; lba=s.lba; op=37; eğer s.islem == 2 { op=53; } }
     }
     değişken tampon: tam64 = s.taban+8192;
-    eğer s.cerceve_hedefi != 0 ve s.islem == 1 { tampon=s.cerceve_hedefi+(s.tamamlanan olarak tam64)*(s.blok_bayt olarak tam64); }
+    eğer s.cerceve_hedefi != 0 { tampon=s.cerceve_hedefi+(s.tamamlanan olarak tam64)*(s.blok_bayt olarak tam64); }
     eşleş ahci_komut_kur(op,lba,sayi,s.blok_bayt,tampon,s.taban+4096) { hata(e) => { ver hata_ver(s,e); } tamam(k) => { s.baslik=k.baslik; s.tablo=k.tablo; s.bayt=k.toplam_bayt olarak tam32; } }
-    eğer s.hazir ve s.islem == 2 {
+    eğer s.hazir ve s.islem == 2 ve s.cerceve_hedefi == 0 {
         değişken b: Dizi<dtam8> = []; değişken i: tam32 = 0;
         iken i < s.bayt { dizi_ekle(b,dizi_al(s.veri,s.tamamlanan*s.blok_bayt+i)); i=i+1; }
         s.adim=35; ver GcIstek::BellekYaz(s.taban+8192,b);
