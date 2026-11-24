@@ -1,0 +1,4 @@
+// [D-767] C16-001 fikstürü: modül üyelerinin dönüş işareti ve metin-liği.
+genel işlev isaretsiz_ust(a: tam32) -> dtam32 { ver (2147483648 | (a olarak tam64)) olarak dtam32; }
+genel işlev isaretli_eksi(a: tam32) -> tam32 { ver 0 - a; }
+genel işlev birlesik() -> metin { ver metin_birlestir("ağ", "aç"); }

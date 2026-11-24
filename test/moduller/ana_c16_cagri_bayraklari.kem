@@ -1,0 +1,38 @@
+// [D-767] C16-001: çağrı sonucunun dönüş işareti (dtamN → zext) ve metin-liği
+// (`==` içerik karşılaştırması) modül üyesi ve metot çağrılarında da korunmalı.
+// Önce: self-host seçili ithalde, İKİ derleyici nitelikli/takma adlı/metot
+// çağrısında bayrakları düşürüyordu → `dtam32` sonucu `sext`, `f() != "x"` işaretçi
+// karşılaştırması (sessiz yanlış cevap). Her biçim AYRI çıkış kodu taşır.
+// POZİTİF (10, 11): işaretli dönüş negatif kalır, farklı içerik farklı kalır —
+// yoksa "her çağrıyı işaretsiz/eşit say" sabotajı kapıdan geçerdi (D-425).
+kullan c16_isz::{ isaretsiz_ust, birlesik };
+kullan c16_isz olarak ci;
+yapı Kutu { a: tam32; }
+uygula Kutu {
+    işlev ust(kendin) -> dtam32 { ver (2147483648 | (kendin.a olarak tam64)) olarak dtam32; }
+    işlev ad(kendin) -> metin { ver metin_birlestir("ağ", "aç"); }
+}
+modül ic {
+    genel işlev ust(a: tam32) -> dtam32 { ver (2147483648 | (a olarak tam64)) olarak dtam32; }
+    genel işlev ad() -> metin { ver metin_birlestir("ağ", "aç"); }
+    genel işlev kardes() -> tam32 {
+        eğer (ust(5) olarak tam64) < 0 { ver 1; }
+        eğer ad() != "ağaç" { ver 1; }
+        ver 0;
+    }
+}
+işlev main() -> tam32 {
+    eğer (isaretsiz_ust(5) olarak tam64) < 0 { ver 1; }
+    eğer birlesik() != "ağaç" { ver 2; }
+    eğer (ci::isaretsiz_ust(5) olarak tam64) < 0 { ver 3; }
+    eğer ci::birlesik() != "ağaç" { ver 4; }
+    eğer (ic::ust(5) olarak tam64) < 0 { ver 5; }
+    eğer ic::ad() != "ağaç" { ver 6; }
+    eğer ic::kardes() != 0 { ver 7; }
+    değişken k: Kutu = Kutu { a: 5 };
+    eğer (k.ust() olarak tam64) < 0 { ver 8; }
+    eğer k.ad() != "ağaç" { ver 9; }
+    eğer (ci::isaretli_eksi(5) olarak tam64) >= 0 { ver 10; }
+    eğer ci::birlesik() == "ağac" { ver 11; }
+    ver 42;
+}

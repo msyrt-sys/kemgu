@@ -70,7 +70,10 @@ def main():
     p.add_argument('cekirdek',type=Path)
     p.add_argument('dizin',type=Path)
     p.add_argument('--esikler',type=Path,default=Path('test/olcum/esikler.json'))
-    p.add_argument('--rapor',type=Path,default=Path('otomasyon/chatgpt/codex16_bulgular.md'))
+    # [D-767] Varsayılan rapor ÖLÇÜM DİZİNİNE: kapı her koşumda izlenen
+    # otomasyon/chatgpt/codex16_bulgular.md'yi yeniden yazıyordu (kirli ağaç).
+    # Belgeyi bilerek güncellemek için: --rapor otomasyon/chatgpt/codex16_bulgular.md
+    p.add_argument('--rapor',type=Path,default=None)
     a=p.parse_args()
     a.dizin.mkdir(parents=True,exist_ok=True)
     kaynaklar={}
@@ -94,9 +97,10 @@ def main():
     (a.dizin/'olcum.json').write_text(json.dumps(satirlar,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     metin=tablo(satirlar)
     print(metin,flush=True)
+    # [D-767] EVREN bulgusu: KIRMIZI durumda da değerler rapora yazılır.
+    rapor_yaz(a.rapor or (a.dizin/'rapor.md'),metin)
     if hatalar:
         raise SystemExit('DERLEME RED\n'+'\n'.join(hatalar))
-    rapor_yaz(a.rapor,metin)
 
 
 if __name__ == '__main__':

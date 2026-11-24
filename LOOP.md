@@ -3089,4 +3089,24 @@
   sabotaj envanteri (dalga 9 öncesi dahil) + belgeler. ABI 71-89. "Her sabotajı gerçekten uygula, yapmadıysan yaz"
   kuralı (dalga 15'te ELF sabotajı yapılmamıştı → S210). QEMU 8.2.2 aygıtları (usb-hub, pcie-root-port, pci-bridge)
   ve tüm kapı adları kaynakta doğrulandı.
+- 2026-11-24 D-767: CODEX DALGASI 16 ENTEGRASYONU (13 bölüm) + C16-001 (GENİŞLETİLDİ) + EVREN incelemesi. Codex: klavye
+  (8042 öz-test, Pause/PrintScreen, Num/Caps/Scroll LED, TR↔US, Ctrl+C, AltGr QMP, PS/2 kayıp sayacı), PCI ECAM/MCFG + köprü
+  arkası + 64 bit BAR, kesme kayıt arayüzü + AHCI MSI + NVMe CQ1 MSI-X, blkdebug ile AHCI/NVMe/USB hata kurtarma, USB 2 hub
+  (iki seviye, sıcak takma), ESP ramdisk + /ram, ACPI S5 (AML'siz _S5_), PAT/WC GOP, 9 yeni bulanıklaştırma korpusu, UART TX
+  sınırları + MMIO volatile IR/objdump kapısı, derleme büyüme ölçümü, bilgi/duzenle/dosyalar. Kapsam temiz (yalnız izinli C).
+  🔴 C16-001 (Codex: "self-host seçili ithalde dtam32 sext") ÖLÇÜLÜNCE GENİŞ ÇIKTI: çağrı sonucunun dönüş İŞARETİ ve METİN-LİĞİ
+  modül üyesi + metot çağrılarında düşüyordu. Self: seçili/nitelikli/takma ad/metot (ifade_isz/ifade_metin ham adla arıyordu);
+  C: nitelikli + takma ad + metot (iki dal IfadeSonuc'u sabit `0,0` kuruyordu). Belirti sessiz yanlış cevap: `dtam32` sonucu
+  `olarak tam64` negatif, `m::f() != "abc"` / `k.m() != "abc"` eşit dizgide İŞARETÇİ karşılaştırması (D-449'un açık yarısı).
+  Nitelikli/metotta İKİ derleyici AYNI şekilde yanlıştı → yalnız parite kapısı GÖREMEZDİ. Onarım: self `cagri_hedef_coz`
+  (çağrı yerinin çözümünün aynası), C kayıttan bayrak. Fikstür test/moduller/ana_c16_cagri_bayraklari (12 çıkış kodu, 2 POZİTİF)
+  hem modul_codegen hem test_llvm MUTLAK [320]; eski derleyicilerde C=3, self=1. Sabotaj S221/S222 kırmızı.
+  S223 (Codex yine uygulamadı, "asılma üretme"): ilk denemede SESSİZ — bilinen tanımlayıcı türleri boyu kendileri denetliyor,
+  `n < 2` yalnız sınıfa özgü türde gerekli ve korpus o şekli üretmiyordu. Sınır örneği (geçerli yapılandırma + tür 36/boy 0,
+  POZİTİF tür 36/boy 4) → exit 124. S224 MMIO kapısı ayırt ediyor. Ölçüm kapısı her koşumda İZLENEN codex16_bulgular.md'yi
+  yeniden yazıyordu (kirli ağaç) → varsayılan rapor build/ altına.
+  EVREN inceleme deneyi (otomasyon/evren/inceleme.py): deepseek-v4.1-flash 16k/32k bütçeyi düşünmeye harcadı (11 bölümün 6'sı
+  boş), qwen3.8-flash-next 7 bölüm. 22 bulgunun 2'si gerçek (ikisi de istenen↔yapılan boşluğu); 15 qwen bulgusunun HEPSİ yanlış
+  (AHCI IS/GHC, NVMe CDW11, PxCMD bitleri, 2 MiB PDE PAT biti 12 — kendinden emin ve yanlış). Karar: donanım semantiği
+  incelemesi için KULLANMA; yalnız "istenen her sabotaj/kapı için kanıt var mı" gibi dar denetimler. Tam takım rc=0, 4 sa 38 dk.
 

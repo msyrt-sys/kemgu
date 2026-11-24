@@ -389,6 +389,14 @@ static void test_crossfile_sonuc_yeni_verify(void) {
     test_sonuc("crossfile yeni-bicim sonuc ABI: opt -passes=verify PASS", ok);
 }
 
+/* [D-767] C16-001: modul uyesi + metot cagrisinin donus isareti ve metin-ligi.
+ * modul_codegen yalniz C <-> self kiyaslar; iki derleyici AYNI sekilde bozulursa
+ * (nitelikli/metot cagrisinda oyleydi) parite yesil kalir -> burada MUTLAK olcum. */
+static void test_c16_cagri_bayraklari(void) {
+    int rc = derle_dosya_ve_calistir("test/moduller/ana_c16_cagri_bayraklari.kem");
+    test_sonuc("C16-001 cagri donus isareti/metin-ligi (secili/nitelikli/takma ad/metot) -> exit 42", rc == 42);
+}
+
 static void test_crossfile_sonuc_yeni_calistir(void) {
     int rc = derle_dosya_ve_calistir("test/crossfile/sonuc_cagri_yeni.kem");
     test_sonuc("crossfile yeni-bicim sonuc donuslu cagri -> exit 42", rc == 42);
@@ -3764,6 +3772,7 @@ int main(void) {
     test_crossfile_transitif_yeni_calistir();
     test_crossfile_sonuc_yeni_verify();
     test_crossfile_sonuc_yeni_calistir();
+    test_c16_cagri_bayraklari();
 
     printf("\n--- C2.7: cesit (custom sum type) + exhaustiveness ---\n");
     test_cesit_temel_verify();

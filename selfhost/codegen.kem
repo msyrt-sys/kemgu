@@ -5090,6 +5090,31 @@ işlev fn_ret_bul(p: &değişken Ayr, ad: metin) -> metin {
 // D-337: çağrılan işlevin dönüş tipi işaretsiz (dtamN) mi? (C donus_isaretsiz aynası)
 // NOT: fn_ad checker ile PAYLAŞILIR (fn_kaydet de ekler) → fn_risz daha kısa
 // olabilir; sınır fn_risz'in kendi boyutu (fn_ret_bul'un fn_ad sınırı yerine).
+// [D-767] C16-001: çağrı hedefinin İMZA TABLOSUNDAKİ adı — çağrı yerinin kullandığı
+// çözümün aynası (fn_coz: modül-önce + seçili import; YOL: yol_noktali + göreli önek;
+// metot: "<Tip>.<m>"). Dönüş bayrakları (fn_risz/fn_rmet) ham adla aranınca modül
+// üyesi ve metot çağrılarında BOŞ dönüyordu → dtamN sonucu `sext`, metin sonucu
+// işaretçi karşılaştırması (sessiz yanlış cevap). Çözülemezse "" (bayrak 0).
+işlev cagri_hedef_coz(p: &değişken Ayr, h: tam32) -> metin {
+    değişken na: metin = dizi_al(p.a_ad, h);
+    eğer metin_esit(na, "TANIMLAYICI") { ver fn_coz(p, dizi_al(p.a_deg, h)); }
+    eğer metin_esit(na, "YOL") {
+        değişken rn: metin = yol_noktali(p, h);
+        eğer metin_uzunluk(p.mod_onek) > 0 {
+            değişken gy: metin = mangle(p.mod_onek, rn);
+            eğer fn_kayitli_mi(p, gy) { rn = gy; }
+        }
+        ver rn;
+    }
+    eğer metin_esit(na, "ERISIM") ve (dizi_al(p.a_cs, h) > 0) ve metod_var_mi(p, dizi_al(p.a_deg, h)) {
+        değişken mnes: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, h));
+        değişken tad: metin = erisim_yapi_ad(p, mnes);
+        değişken rt: metin = "";
+        eğer metin_uzunluk(tad) > 0 { rt = metin_birlestir("%", tad); }
+        ver metod_cagri_adi(p, rt, mnes, dizi_al(p.a_deg, h));
+    }
+    ver "";
+}
 işlev fn_risz_bul(p: &değişken Ayr, ad: metin) -> tam32 {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(p.fn_risz) {
@@ -5188,7 +5213,7 @@ işlev ifade_metin(p: &değişken Ayr, idx: tam32) -> tam32 {
         // `ifade_isz`in CAGRI dalıyla AYNI şekil: çağrı adı çocuk[0]'daki
         // TANIMLAYICI düğümündedir.
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
-        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver fn_rmet_bul(p, cagri_hedef_coz(p, h)); }   // [D-767]
         değişken fad: metin = dizi_al(p.a_deg, h);
         // `metin_*` yerleşiklerinin METİN DÖNENLERİ (uzunluk/bayt/içerir/
         // başlar/biter/eşit BOOLEAN ya da SAYI döner — onlar metin DEĞİL).
@@ -5208,7 +5233,7 @@ işlev ifade_metin(p: &değişken Ayr, idx: tam32) -> tam32 {
           veya metin_esit(fad, "kod_metin")       // [D-458]
           veya metin_esit(fad, "tam_metin")       // [D-459]
           veya metin_esit(fad, "dosya_oku") veya metin_esit(fad, "dosya_gecersiz") { ver 1; }
-        ver fn_rmet_bul(p, fad);
+        ver fn_rmet_bul(p, cagri_hedef_coz(p, h));
     }
     ver 0;
 }
@@ -5485,7 +5510,8 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
     }
     eğer metin_esit(ad, "CAGRI") {
         değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
-        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver 0; }
+        // [D-767] C16-001: dönüş işareti ÇÖZÜLMÜŞ adla aranır (çağrı yeriyle aynı).
+        eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver fn_risz_bul(p, cagri_hedef_coz(p, h)); }
         değişken fad: metin = dizi_al(p.a_deg, h);
         // C004: dizi_al(xs, i), xs[i] ile aynı dar eleman işaretini taşır.
         // C llvm.c dar okuma sonucunda bu bilgiyi eleman tipinden alır.
@@ -5509,7 +5535,7 @@ işlev ifade_isz(p: &değişken Ayr, idx: tam32) -> tam32 {
                 ver yapi_alan_eleman_isz(p, yad, dizi_al(p.a_deg, kaynak));
             }
         }
-        ver fn_risz_bul(p, fad);
+        ver fn_risz_bul(p, cagri_hedef_coz(p, h));
     }
     // D-339: `k.alan` — alan tipi dtamN ise imzasızlık AKAR (C llvm.c:2594
     // alan_isz; hem extractvalue hem GEP+load dalı aynı değeri IfadeSonuc'a koyar).

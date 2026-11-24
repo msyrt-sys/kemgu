@@ -97,6 +97,19 @@ işlev dene(tur: tam32,b: Dizi<dtam8>,i: tam32) -> tam32 {
     eşleş dizin_coz(b) { hata(e) => { ver ret(e); } tamam(v) => { eğer dizi_boyut(v) > dizi_boyut(b)/32 { ver -1; } ver 1; } }
 }
 işlev ret(e: metin) -> tam32 { eğer metin_uzunluk(e) == 0 { ver -1; } ver 0; }
+// [D-767] S223: bilinen türler (arayüz/uç/HID) kendi boy denetimini yapar; `n < 2`
+// korunması YALNIZ bilinmeyen/sınıfa özgü türde (ör. 36, gerçek aygıtlarda yaygın)
+// gereklidir — yoksa `ofs = ofs + 0` sonsuz döngüdür. Rastgele korpus bu şekli
+// üretmiyordu (korunma kaldırılınca bulanıklaştırıcı YEŞİL kalıyordu). Sınır örneği:
+// geçerli yapılandırma + tür 36/bLength 0 → hata (asılma DEĞİL); + tür 36/boy 4 → kabul (POZİTİF).
+işlev usb_sinif_sinir() -> tam32 {
+    değişken sifir: Dizi<dtam8> = usb_yapi_ornek(); yaz_u8(sifir, 2, 61);
+    dizi_ekle(sifir, 0 olarak dtam8); dizi_ekle(sifir, 36 olarak dtam8); dizi_ekle(sifir, 0 olarak dtam8); dizi_ekle(sifir, 0 olarak dtam8);
+    eşleş usb_yapilandirma_coz(sifir) { tamam(v) => { ver 1; } hata(e) => { } }
+    değişken iyi: Dizi<dtam8> = usb_yapi_ornek(); yaz_u8(iyi, 2, 61);
+    dizi_ekle(iyi, 4 olarak dtam8); dizi_ekle(iyi, 36 olarak dtam8); dizi_ekle(iyi, 0 olarak dtam8); dizi_ekle(iyi, 0 olarak dtam8);
+    eşleş usb_yapilandirma_coz(iyi) { tamam(v) => { ver 0; } hata(e) => { ver 2; } }
+}
 işlev main() -> tam32 {
     değişken adlar: Dizi<metin> = ["ps2-klavye","ps2-fare","usb","hid","hub","xhci","mcfg","s5","lfn"];
     değişken tur: tam32 = 0;
@@ -113,5 +126,6 @@ işlev main() -> tam32 {
         eğer kabul == 0 veya kabul == i { ver 10+tur; }
         yazdir_metin(metin_birlestir(metin_birlestir(dizi_al(adlar,tur)," kabul="),tam_metin(kabul olarak tam64))); tur=tur+1;
     }
+    eğer usb_sinif_sinir() != 0 { ver 30 + usb_sinif_sinir(); }
     ver 0;
 }

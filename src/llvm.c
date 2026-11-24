@@ -4605,7 +4605,11 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
                 }
                 fputs(")\n", g->out);
-                IfadeSonuc s = { r, donus, 0, 0};
+                /* [D-767] C16-001: metot donusunun isaret/metin bayraklari
+                 * kayittan tasinir (0,0 sabiti `k.m() == "x"` icin isaretci
+                 * karsilastirmasi, dtamN icin sext uretiyordu). */
+                IfadeSonuc s = { r, donus, mik ? mik->donus_isaretsiz : 0,
+                                 mik ? mik->donus_metin : 0 };
                 return s;
             }
             /* C3: çeşit varyant YAPICISI X::V(args) — modül-fonksiyon YOL
@@ -4719,7 +4723,8 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                         IfadeSonuc s = { r, "i32", 0, 0};
                         return s;
                     }
-                    IfadeSonuc s = { r, donus, 0, 0};
+                    /* [D-767] C16-001: nitelikli `m::f()` donus bayraklari. */
+                    IfadeSonuc s = { r, donus, mik->donus_isaretsiz, mik->donus_metin };
                     return s;
                 }
                 /* cozulemedi — mevcut hata yoluna dus (gorunur yorum) */
