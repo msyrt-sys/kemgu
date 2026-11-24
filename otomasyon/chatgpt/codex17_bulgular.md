@@ -93,3 +93,8 @@ Gelen üç datagramda sırasıyla yedi, beş ve altı parça kaydedildi. İlkind
 
 - PARCA OK 8192 bayt SHA256=3b1ca569e7021f5d25ed0b9b92dabe731b87b225ddcfb522448db79ac02e2474 iki yanıt, süre aşımı 1, heap=4066880 boş=47729
 - PARCA OK 8192 bayt SHA256=3b1ca569e7021f5d25ed0b9b92dabe731b87b225ddcfb522448db79ac02e2474 iki yanıt, süre aşımı 1, heap=4263728 boş=47697
+
+## TCP temel aktarımı
+
+- TCP OK 65536 bayt pasif=9a73523567c3b7d85f8f63c1591f546e6e1d0f8fb37be17db28cdf9644f540ec aktif=51fe7c95debcfefba857851144285f2450a5f2355c37dd6d99a5733b73e0ae6a, loopback 65536, pcap=300, heap=4066880 boş=47199
+- TCP OK 65536 bayt pasif=9a73523567c3b7d85f8f63c1591f546e6e1d0f8fb37be17db28cdf9644f540ec aktif=51fe7c95debcfefba857851144285f2450a5f2355c37dd6d99a5733b73e0ae6a, loopback 65536, pcap=300, heap=4263728 boş=47168

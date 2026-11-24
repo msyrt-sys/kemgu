@@ -66,3 +66,9 @@ Arayüz, kaynak adresi, hedef adresi, IPv4 kimliği ve protokolü aynı olan par
 Yerel UDP çıkışında MTU 1500’dür. Giden son parça dışında yük uzunluğu sekizin katıdır. Aynı datagramın bütün parçalarında kimlik ortaktır ve başlık sağlaması ayrı hesaplanır. DF işaretli datagram için parçalama işlevi hata verir. TTL sıfır olan paket yerel alımda sayılır ve düşürülür. Çekirdek yönlendirme yapmaz. Kapalı bir UDP portuna ICMP 3/3 yanıtı 100 ms’de en çok bir kez gönderilir.
 
 `ag parca`, `ag sayac` ve `donanim` birleştirilen datagramları, düşen parçaları veya zaman aşımına uğrayan yuvaları ve giden parçaları gösterir. x86 arayüzü dört yuva ve büyük gönderim tamponu için açılışta 77 fiziksel sayfa ayırır.
+
+## TCP bağlantıları
+
+TCP sıra ve ACK karşılaştırmaları 32 bit sarmalı hesaba katar. Etkin ve pasif açılışta MSS ilan edilir. Gönderim eşin penceresiyle sınırlıdır. Sıfır pencerede yoklama yeni sıra numarası tüketmez. Sekiz bağlantının her birinde ikişer 32 KiB halka bulunur. Dokuzuncu bağlantıya RST verilir. SYN için on saniye, FIN için on beş saniye, TIME-WAIT için dört saniye kullanılır. Sayılar yerel KEMGU profilinindir.
+
+`ag tcp dinle` 9001 numaralı portta yankıyı açar. `ag tcp bagla <adres>` aynı porta 64 KiB gönderip dönen baytları karşılaştırır. `ag tcp durum` gönderilen ve doğrulanan miktarı, hata ve kapanış sayısını gösterir.

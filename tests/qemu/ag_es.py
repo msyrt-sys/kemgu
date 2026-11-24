@@ -200,3 +200,37 @@ class EthernetEs(AbstractContextManager):
         else:
             return None
         return ethernet(c.kaynak, self.mac, 0x0800, ipv4(self.ip, c.ip_kaynak, c.protokol, veri))
+
+
+def tcp_paket(kaynak,hedef,sp,dp,seq,ack,bayrak,pencere=32768,yuk=b'',secenek=b''):
+    """Yerel eşin sıra ve ACK değerleriyle tek TCP segmenti kurar."""
+    if len(secenek)>40 or len(secenek)%4:
+        raise ValueError('TCP seçenek hizası')
+    alan=struct.pack('!HHIIBBHHH',sp,dp,seq&0xffffffff,ack&0xffffffff,
+                     (5+len(secenek)//4)<<4,bayrak,pencere,0,0)+secenek+yuk
+    sozde=struct.pack('!4s4sBBH',kaynak,hedef,0,6,len(alan))
+    return alan[:16]+struct.pack('!H',saglama(sozde+alan))+alan[18:]
+
+
+class TcpEs:
+    """QEMU testindeki tek komşuya ait ARP ve TCP çerçevelerini taşır."""
+    def __init__(self,hat,konuk_mac):
+        self.hat=hat
+        self.mac=konuk_mac
+        self.kim=1000
+
+    def yolla(self,sp,dp,seq,ack,bayrak,yuk=b'',win=32768,sec=b''):
+        t=tcp_paket(ES_IP,KONUK_IP,sp,dp,seq,ack,bayrak,win,yuk,sec)
+        self.kim=(self.kim+1)&65535
+        self.hat.gonder(ethernet(self.mac,ES_MAC,2048,ipv4(ES_IP,KONUK_IP,6,t,self.kim)))
+
+    def al(self,sure=5):
+        import time
+        son=time.monotonic()+sure
+        while time.monotonic()<son:
+            p=cerceve_oku(self.hat.al(max(.001,son-time.monotonic())))
+            if p.tur==2054 and p.yuk[6:8]==b'\0\1' and p.yuk[24:28]==ES_IP:
+                self.hat.gonder(ethernet(self.mac,ES_MAC,2054,arp(2,ES_MAC,ES_IP,self.mac,KONUK_IP)))
+            if p.kaynak==self.mac and p.protokol==6 and p.ip_hedef==ES_IP:
+                return p,p.yuk[4*(p.yuk[12]>>4):]
+        raise TimeoutError('TCP segmenti gelmedi')

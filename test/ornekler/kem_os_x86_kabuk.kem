@@ -1,3 +1,4 @@
+kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, TCP_DINLE, TCP_BAGLI, TCP_KAPAT_BEKLE, TCP_KAPALI, tcp_yeni, tcp_aktif, tcp_al, tcp_cikar, tcp_baslik, tcp_red, tcp_yaz, tcp_oku, tcp_kapat_iste };
 kullan drivers::ag::parca::{ ParcaYuvasi, PARCA_SINIR, parca_es, parca_yaslandir, parca_al, parca_giden };
 kullan drivers::ag::udp::{ udp_yaz, udp_oku, udp_yuva, udp_bagla };
 kullan drivers::ag::dhcp::{ DhcpKirasi, dhcp_yeni, dhcp_tick, dhcp_onek, dhcp_istek, dhcp_al };
@@ -1658,7 +1659,7 @@ işlev ag_al() {
     güvensiz {
     eğer ag_bar==0 { ver; }
     eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
-    ag_bekleyenleri_isle(); ag_dhcp_adim();
+    ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_tcp_adim();
     eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
@@ -1857,6 +1858,161 @@ işlev ag_cozumle(ad: metin) -> sonuç<mantıksal,metin> {
     }
 }
 
+// Sekiz bağlantının halkaları ve iki ayrı çalışma tamponu fiziksel sayfalardadır.
+küresel değişken ag_tcp_alan: tam64 = 0;
+küresel değişken ag_tcp_etkin: tam32 = 0;
+küresel değişken ag_tcp_dinle: tam32 = 0;
+küresel değişken ag_tcp_red: tam64 = 0;
+küresel değişken ag_tcp_rst: tam64 = 0;
+küresel değişken ag_tcp_bitti: tam64 = 0;
+küresel değişken ag_tcp_okunan: tam64 = 0;
+küresel değişken ag_tcp_yazilan: tam64 = 0;
+küresel değişken ag_tcp_veri_hatasi: tam64 = 0;
+küresel değişken ag_tcp_kim: tam64 = 0;
+küresel değişken ag_tcp_hedef_boy: tam64 = 65536;
+işlev ag_tcp_kur() -> mantıksal {
+    güvensiz {
+        değişken a: tam64 = uefi_surec_ayir(524); eğer a==0 { ver yanlış; }
+        memset(a olarak *tam8,0,2146304);
+        değişken i: tam32 = 0; iken i<8 {
+            değişken k: tam64 = a+266240*(i olarak tam64);
+            ag_dizi_baslik(k+256,k+512,32768,4); ag_dizi_baslik(k+288,k+132096,32768,4); i=i+1;
+        }
+        ag_dizi_baslik(a+2129920,a+2130432,1536,4); ag_dizi_baslik(a+2129952,a+2138112,1536,4);
+        ag_tcp_alan=a; ver doğru;
+    }
+}
+işlev ag_tcp_ac(ip: tam64,es: tam64,port: tam32,ep: tam32,uyg: tam32,aktif: mantıksal) -> tam64 {
+    güvensiz {
+        eğer ag_tcp_alan==0 { ver 0; } değişken i: tam32 = 0;
+        iken i<8 {
+            değişken k: tam64 = ag_tcp_alan+266240*(i olarak tam64); i=i+1;
+            eğer kem_mmio_oku32(k+320)==0 {
+                ag_tcp_kim=ag_tcp_kim+1;
+                değişken b: TcpBag = tcp_yeni(ip,es,port,ep,(ag_us()*4+ag_tcp_kim*65537)&4294967295,ag_dizi8(k+256),ag_dizi8(k+288));
+                eğer aktif { tcp_aktif(&değişken b,ag_us()/1000); } değilse { b.durum=TCP_DINLE; }
+                değişken p: *TcpBag = k olarak *TcpBag; *p=b; kem_mmio_yaz32(k+320,uyg olarak tam64);
+                ag_tcp_etkin=ag_tcp_etkin+1; ver k;
+            }
+        } ver 0;
+    }
+}
+işlev ag_tcp_paket(b: Dizi<dtam8>,n: tam32,ip: tam64,es: tam64) -> tam32 {
+    güvensiz {
+        eth_yaz(b,ag_mac,ag_mac,2048); ip4_yaz(b,ip,es,6,n,ag_sonraki_kim); ag_sonraki_kim=(ag_sonraki_kim+1)&65535;
+        eğer (es>>24)==127 {
+            ag_lo_tx=ag_lo_tx+1; ag_lo_rx=ag_lo_rx+1; ag_lo_bayt=ag_lo_bayt+(n olarak tam64)+34;
+            ag_tcp_girdi(b,34+n,doğru); ver 0;
+        }
+        değişken l: *AgL3 = ag_l3_alan olarak *AgL3;
+        değişken hop: tam64 = ip4_sonraki((*l).ip,(*l).onek,(*l).gecit,es);
+        eğer hop<=0 { ver -113; } ver ag_ip_cik(b,34+n,hop,1000);
+    }
+}
+işlev ag_tcp_girdi(b: Dizi<dtam8>,n: tam32,lo: mantıksal) -> mantıksal {
+    güvensiz {
+        eğer n<34 veya ag_b8(b,23)!=6 veya ag_tcp_alan==0 { ver yanlış; }
+        değişken h: tam32 = ip4_baslik(b,n); eğer h<0 veya (ag_be16(b,20)&16383)!=0 { ver yanlış; }
+        değişken l: *AgL3 = ag_l3_alan olarak *AgL3; değişken ip: tam64 = ag_be32(b,30); değişken es: tam64 = ag_be32(b,26);
+        eğer lo { eğer ip>>24!=127 veya es>>24!=127 { ver doğru; } }
+        değilse eğer eth_tur(b,n,ag_mac)!=2048 veya (*l).ip==0 veya ip!=(*l).ip veya es>>24==127 { ver doğru; }
+        değişken v: TcpBaslik = tcp_baslik(b,h,ag_be16(b,16)+14-h,es,ip);
+        eğer v.h<0 {
+            değişken y: AgL3 = *l; eğer v.h== -2 { y.saglama_hatasi=y.saglama_hatasi+1; } değilse { y.kisa=y.kisa+1; } *l=y; ver doğru;
+        }
+        değişken k: tam64 = 0; değişken i: tam32 = 0;
+        iken i<8 ve k==0 {
+            değişken a: tam64 = ag_tcp_alan+266240*(i olarak tam64); i=i+1;
+            eğer kem_mmio_oku32(a+320)>0 {
+                değişken p: *TcpBag = a olarak *TcpBag;
+                eğer (*p).ip==ip ve (*p).es==es ve (*p).port==v.dp ve (*p).es_port==v.sp { k=a; }
+            }
+        }
+        eğer k==0 ve v.dp==ag_tcp_dinle ve (v.bayrak&23)==2 { k=ag_tcp_ac(ip,es,v.dp,v.sp,1,yanlış); }
+        eğer k==0 {
+            değişken tx: Dizi<dtam8> = ag_dizi8(ag_tcp_alan+2129920);
+            değişken boy: tam32 = tcp_red(tx,34,ip,es,&v);
+            eğer boy>0 { ag_tcp_red=ag_tcp_red+1; ag_tcp_paket(tx,boy,ip,es); } ver doğru;
+        }
+        değişken p: *TcpBag = k olarak *TcpBag; değişken s: TcpBag = *p;
+        tcp_al(&değişken s,&v,b,h,ag_us()/1000); *p=s; ver doğru;
+    }
+}
+// Soket ABI'sinden önceki yankı ve aktarım sınaması aynı gönder/al halkalarını kullanır.
+işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
+    güvensiz {
+    eğer s.durum!=TCP_BAGLI ve s.durum!=TCP_KAPAT_BEKLE { ver; }
+    değişken n: tam32 = s.rx_boy; eğer n>1460 { n=1460; }
+    eğer uyg==1 {
+        değişken yer: tam32 = dizi_boyut(s.tx)-s.tx_boy; eğer n>yer { n=yer; }
+        eğer n>0 { n=tcp_oku(s,buf,0,n); tcp_yaz(s,buf,0,n); }
+        eğer s.durum==TCP_KAPAT_BEKLE ve s.rx_boy==0 { tcp_kapat_iste(s); }
+    } değilse eğer uyg==2 {
+        eğer n>0 {
+            n=tcp_oku(s,buf,0,n); değişken i: tam32 = 0;
+            iken i<n {
+                değişken j: tam64 = ag_tcp_okunan+(i olarak tam64);
+                eğer (ag_b8(buf,i) olarak tam64)!=((j*37+j/251)&255) { ag_tcp_veri_hatasi=ag_tcp_veri_hatasi+1; }
+                i=i+1;
+            } ag_tcp_okunan=ag_tcp_okunan+(n olarak tam64);
+        }
+        değişken kalan: tam64 = ag_tcp_hedef_boy-ag_tcp_yazilan;
+        eğer kalan>0 {
+            değişken adet: tam32 = 1460; eğer kalan<1460 { adet=kalan olarak tam32; }
+            değişken i: tam32 = 0; iken i<adet { değişken j: tam64 = ag_tcp_yazilan+(i olarak tam64); ag_y8(buf,i,j*37+j/251); i=i+1; }
+            adet=tcp_yaz(s,buf,0,adet); eğer adet>0 { ag_tcp_yazilan=ag_tcp_yazilan+(adet olarak tam64); }
+        }
+        eğer ag_tcp_okunan==ag_tcp_hedef_boy ve ag_tcp_yazilan==ag_tcp_hedef_boy { tcp_kapat_iste(s); }
+    }
+    }
+}
+işlev ag_tcp_adim() {
+    güvensiz {
+        eğer ag_tcp_etkin==0 { ver; }
+        değişken ms: tam64 = ag_us()/1000;
+        değişken buf: Dizi<dtam8> = ag_dizi8(ag_tcp_alan+2129952); değişken tx: Dizi<dtam8> = ag_dizi8(ag_tcp_alan+2129920);
+        değişken i: tam32 = 0;
+        iken i<8 {
+            değişken k: tam64 = ag_tcp_alan+266240*(i olarak tam64); i=i+1;
+            değişken uyg: tam32 = kem_mmio_oku32(k+320) olarak tam32;
+            eğer uyg>0 {
+                değişken p: *TcpBag = k olarak *TcpBag; değişken s: TcpBag = *p;
+                ag_tcp_uygulama(&değişken s,uyg,buf); değişken once: TcpBag = s;
+                değişken n: tam32 = tcp_cikar(&değişken s,tx,34,ms); *p=s;
+                eğer n>0 {
+                    değişken aktarim: tam32 = ag_tcp_paket(tx,n,s.ip,s.es);
+                    eğer aktarim<0 { *p=once; }
+                }
+                eğer s.durum==TCP_KAPALI {
+                    eğer s.hata_kodu!=0 { ag_tcp_rst=ag_tcp_rst+1; } değilse { ag_tcp_bitti=ag_tcp_bitti+1; }
+                    kem_mmio_yaz32(k+320,0); ag_tcp_etkin=ag_tcp_etkin-1;
+                }
+            }
+        }
+    }
+}
+işlev ag_tcp_komut(arg: metin) -> sonuç<mantıksal,metin> {
+    güvensiz {
+        eğer bm_esit(arg,"tcp dinle") { ag_tcp_dinle=9001; ekran_cift_yaz("TCP dinle 9001"); ver tamam(doğru); }
+        eğer bm_esit(arg,"tcp durum") {
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi(kd_tamsayi(kd_tamsayi("TCP yazilan okunan hata kapanan",ag_tcp_yazilan),ag_tcp_okunan),ag_tcp_veri_hatasi),ag_tcp_bitti));
+            ver tamam(doğru);
+        }
+        eğer bm_esit(kd_bas(arg,9),"tcp bagla") {
+            değişken ip: tam64 = ag_ip_oku(kd_kalan(arg,9)); değişken l: *AgL3 = ag_l3_alan olarak *AgL3; değişken yer: tam64 = (*l).ip;
+            eğer ip<=0 { ver hata("TCP hedef adresi"); }
+            eğer ip>>24==127 { yer=2130706433; } eğer yer==0 { ver hata("TCP yerel adres yok"); }
+            değişken i: tam32 = 0; iken i<8 {
+                eğer kem_mmio_oku32(ag_tcp_alan+266240*(i olarak tam64)+320)==2 { ver hata("TCP aktarimi suruyor"); } i=i+1;
+            }
+            ag_tcp_yazilan=0; ag_tcp_okunan=0; ag_tcp_veri_hatasi=0;
+            eğer ag_tcp_ac(yer,ip,49152+(ag_tcp_kim%16384) olarak tam32,9001,2,doğru)==0 { ver hata("TCP tablosu dolu"); }
+            ekran_cift_yaz("TCP baglanti basladi"); ver tamam(doğru);
+        }
+        ver hata("ag tcp dinle/bagla/durum");
+    }
+}
+
 // Dört adet 64 KiB yuva ve bir adet büyük gönderim alanı.
 küresel değişken ag_parca_alan: tam64 = 0;
 küresel değişken ag_parca_birlesen: tam64 = 0;
@@ -1874,7 +2030,7 @@ işlev ag_parca_kur() -> mantıksal {
             değişken k: tam64 = a+65536*(i olarak tam64);
             ag_dizi_baslik(k+128,k+512,74+PARCA_SINIR,4); ag_dizi_baslik(k+160,k+50176,PARCA_SINIR/8,4); i=i+1;
         }
-        ag_dizi_baslik(a+262144,a+262272,74+PARCA_SINIR,4); ag_parca_alan=a; ver doğru;
+        ag_dizi_baslik(a+262144,a+262272,74+PARCA_SINIR,4); ag_parca_alan=a; ver ag_tcp_kur();
     }
 }
 işlev ag_parca_sure(ms: tam64) {
@@ -1925,7 +2081,7 @@ işlev ag_parca_girdi(b: Dizi<dtam8>,n: tam32,ms: tam64) {
         eğer boy<0 { ag_parca_atilan=ag_parca_atilan+1; ver; }
         eğer boy==0 { ver; }
         ag_parca_birlesen=ag_parca_birlesen+1;
-        eğer ag_udp_girdi(buf,boy) { ver; }
+        eğer ag_udp_girdi(buf,boy) veya ag_tcp_girdi(buf,boy,yanlış) { ver; }
         değişken tx: Dizi<dtam8> = ag_dizi8(ag_parca_alan+262144);
         boy=ag_l3_isle(buf,boy,tx,ms,yanlış);
         eğer boy>0 ve ag_ip_buyuk_gonder(tx,boy)<0 { ag_atilan=ag_atilan+1; }
@@ -1983,7 +2139,7 @@ işlev ag_l3_girdi() {
         değişken i: tam32 = 0;
         iken i<ag_son_boy { ag_y8(rx,i,kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64); i=i+1; }
         eğer t==2048 ve (ag_be16(rx,20)&16383)!=0 ve ip4_baslik(rx,ag_son_boy)>=0 { ag_parca_girdi(rx,ag_son_boy,ag_us()/1000); ver; }
-        eğer t==2048 ve ag_udp_girdi(rx,ag_son_boy) { ver; }
+        eğer t==2048 ve (ag_udp_girdi(rx,ag_son_boy) veya ag_tcp_girdi(rx,ag_son_boy,yanlış)) { ver; }
         değişken once: tam64 = (*s).cakisma;
         değişken n: tam32 = ag_l3_isle(rx,ag_son_boy,tx,ag_us()/1000,yanlış);
         eğer once!=(*s).cakisma { bm_yaz("AG UYARI IPv4 adres cakismasi"); }
@@ -2116,6 +2272,7 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
         }
         eğer ag_bar==0 { ver hata("ag arayuzu yok"); }
         ag_al();
+        eğer bm_esit(kd_bas(arg,kd_bosluk(arg)),"tcp") { ver ag_tcp_komut(arg); }
         eğer bm_esit(arg,"parca") {
             ekran_cift_yaz(ag_parca_satir()); ver tamam(doğru);
         }

@@ -35,3 +35,7 @@ Ayrı koşumda geçen kapı: calistir_bm_x86_nic_matris
 ## Bölüm 6 — IPv4 parçaları
 
 8 KiB UDP aktarımı iki derleyici ve gerçek QEMU ile geçti. Sırasız ve çift parçalar birleştirildi. Bir parça eksikken süre doldu, sonraki datagram tam döndü. Bölüm ve §7 kapılarının doğrulama süresi 1268 saniyeydi. İlk toplu koşunun bir imajı sayaç çıktısına yeni satır eklenmeden derlenmişti. Son kaynaklarla iki derleyicide de bağımsız bölüm kapısı geçti. Ofseti sekizle çarpmayan ayrı çekirdek için 8 KiB yankı gelmedi. Yuva zaman aşımını kapatıp ağdan yuvaları tüketme sabotajı uygulanmadı.
+
+## Bölüm 7 — TCP temeli
+
+Etkin ve pasif açılış, iki yönde 64 KiB, sekiz eşzamanlı bağlantı ve dokuzuncu isteğin reddi, kapalı port, RST, FIN, sıfır pencere yoklaması ve loopback doğrulandı. QEMU kâhini iki derleyicide geçti. Geçen süre 1629 saniye. Sarmaya dayanıksız karşılaştırma ve FIN sıra tüketiminin kaldırılması, iki ayrı host imajında C ve self-host durum testiyle sırasıyla çıkış 4 ve 7 verdi. Değiştirilmiş çekirdekle QEMU üzerinde aktarımı ya da kapanışı asma sabotajı uygulanmadı.

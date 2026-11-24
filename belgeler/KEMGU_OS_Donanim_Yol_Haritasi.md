@@ -391,7 +391,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H13d** IPv4, ARP, ICMP ve loopback. `calistir_bm_x86_ag_l3`
 - [x] **H13e** UDP, DHCP ve DNS. `calistir_bm_x86_ag_udp`
 - [x] **H13f** IPv4 parçaları ve ICMP hataları. `calistir_bm_x86_ag_parca`
-- [ ] **H13g** TCP bağlantı durumları. `calistir_bm_x86_tcp_temel`
+- [x] **H13g** TCP bağlantı durumları. `calistir_bm_x86_tcp_temel`
 - [ ] **H13h** TCP kayıp kurtarma. `calistir_bm_x86_tcp_kayip`
 - [ ] **H13i** TCP seçenekleri ve verim. `calistir_bm_x86_tcp_verim` ve `calistir_bm_x86_tcp_secenek`
 - [ ] **H13j** Soket ABI ve çoklu bekleme. `calistir_bm_x86_soket`
