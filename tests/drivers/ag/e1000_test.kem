@@ -1,0 +1,14 @@
+kullan drivers::ag::e1000::{ E1kKurulum, e1k_yeni, e1k_adim, e1k_rx_boyu, e1k_tx_sozcugu };
+kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
+işlev main() -> tam32 {
+    // Python: (3 << 32) | 60 (DD/EOP), 60 | (0x0b << 24) (EOP/IFCS/RS).
+    eğer e1k_tx_sozcugu(60) != 184549436 veya e1k_rx_boyu(12884901948) != 60 { ver 1; }
+    eğer e1k_rx_boyu(0) != 0 veya e1k_rx_boyu(4294967356) != -1 { ver 2; }
+    değişken s: E1kKurulum = e1k_yeni(4097);
+    değişken y: GcYanit = gc_bos();
+    eşleş e1k_adim(&değişken s,y) { GcIstek::Hata(e) => { } _ => { ver 3; } }
+    s=e1k_yeni(4294971392); s.sira=12;
+    eşleş e1k_adim(&değişken s,y) { GcIstek::Yaz32(a,v) => { eğer a!=10244 veya v!=1 { ver 4; } } _ => { ver 5; } }
+    s.sira=7; s.bekleme=99; y.deger=67108864;
+    eşleş e1k_adim(&değişken s,y) { GcIstek::Hata(e) => { ver 0; } _ => { ver 6; } }
+}

@@ -1,3 +1,5 @@
+kullan drivers::ortak::bayt::{ imza_esit };
+kullan drivers::ag::e1000::{ E1kKurulum, E1K_ADET, E1K_SAYFA, e1k_yeni, e1k_adim, e1k_rx_boyu, e1k_tx_sozcugu };
 kullan drivers::fs::ram::{ RamDugum, RamDosyalar, RamYer, ramfs_yeni, ramfs_yer, ramfs_bilgi, ramfs_liste, ramfs_parcalar, ramfs_yaz, ramfs_sil, ramfs_tasi } olarak gecici_fs;
 kullan drivers::blok::ram::{ RamBlok, ram_blok_yeni };
 kullan drivers::blok::aygit::{ blok_cerceve_oku } olarak rblok;
@@ -936,6 +938,7 @@ işlev kd_hub_olayi(d: &değişken KabukDisk,x: &değişken XhciDurum,xb: tam64)
 }
 işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> mantıksal {
     güvensiz {
+        ag_al();
         bh_olaylar();
         değişken n: tam64 = 0;
         iken n < KXS_YUVA_ADEDI {
@@ -1340,6 +1343,180 @@ işlev kd_kesme_sina() -> sonuç<mantıksal,metin> {
     eğer değil ilk veya ikinci veya değil bos { ver hata("kesme vektoru cakismasi"); }
     ekran_cift_yaz("KESME CAKISMA RED"); ver tamam(doğru);
 }
+// Tek etkin arayüzün halkaları ve çerçeveleri UEFI fiziksel ayırıcısına aittir.
+küresel değişken ag_bar: tam64 = 0;
+küresel değişken ag_dma: tam64 = 0;
+küresel değişken ag_mac: tam64 = 0;
+küresel değişken ag_rx: tam32 = 0;
+küresel değişken ag_tx: tam32 = 0;
+küresel değişken ag_rx_sayi: tam64 = 0;
+küresel değişken ag_tx_sayi: tam64 = 0;
+küresel değişken ag_rx_bayt: tam64 = 0;
+küresel değişken ag_tx_bayt: tam64 = 0;
+küresel değişken ag_atilan: tam64 = 0;
+küresel değişken ag_son_boy: tam32 = 0;
+küresel değişken ag_vektor: tam32 = 0;
+çıplak işlev ag_kuyruk_hazirla(dma: tam64) {
+    memset(dma olarak *tam8,0,(E1K_SAYFA olarak tam64)*4096);
+    değişken i: tam64 = 0;
+    iken i < (E1K_ADET olarak tam64) {
+        kem_mmio_yaz64(dma+i*16,dma+8192+i*2048);
+        kem_mmio_yaz64(dma+4096+i*16,dma+24576+i*2048);
+        kem_fiz_yaz8(dma+4096+i*16+12,1);
+        i=i+1;
+    }
+}
+işlev ag_intx(bdf: tam32) -> tam32 {
+    güvensiz {
+        // QEMU Q35'in harici kök yuvaları PIRQ E..H üzerinden GSI 20..23'e gider.
+        // Diğer platformlarda _PRT çözülene kadar yoklama yolunu kullan.
+        eğer bdf/256 != 0 veya bdf/8 >= 25 veya kem_pci_oku32(0,0) != 700481670 veya kap_io1 == 0 { ver -1; }
+        eşleş uefi_bilgi() { hata(e) => { ver -1; } tamam(b) => {
+            eşleş uefi_tablo_bul(b,"APIC") { hata(e) => { ver -1; } tamam(t) => {
+                eğer dizi_boyut(t)<44 veya değil imza_esit(t,10,"BOCHS ") { ver -1; }
+            } }
+        } }
+        değişken pin: tam32 = (kem_pci_oku16(bdf,60)>>8)&255;
+        eğer pin < 1 veya pin > 4 { ver -1; }
+        değişken gsi: tam32 = 20+((bdf/8+pin-1)%4);
+        eğer ((kap_io_oku(kap_io1,1)>>16)&255) < (gsi olarak tam64) { ver -1; }
+        değişken reg: tam32 = 16+2*gsi;
+        değişken alt: tam64 = kap_io_oku(kap_io1,reg); değişken ust: tam64 = kap_io_oku(kap_io1,reg+1);
+        eğer (alt&65536) == 0 { ver -1; }
+        değişken v: tam32 = kesme_ayir();
+        eğer v < 0 { ver -1; }
+        eğer değil kesme_kaydet(v,7) { kesme_birak(v); ver -1; }
+        değişken k: tam64 = kesme_tablo+(v olarak tam64)*32;
+        kem_mmio_yaz64(k+16,ag_bar+192);
+        kap_io_yaz(kap_io1,reg+1,kem_mmio_oku32(kap_lapic+32)&4278190080);
+        kap_io_yaz(kap_io1,reg,(v olarak tam64)|40960);
+        kem_pci_yaz16(bdf,4,kem_pci_oku16(bdf,4)&64511);
+        kem_mmio_yaz32(ag_bar+208,197);
+        kem_mmio_yaz32(ag_bar+200,4);
+        değişken i: tam32 = 0;
+        iken i<100 ve kem_mmio_oku64(k+8)==0 { kem_bekle_us(100); i=i+1; }
+        eğer kem_mmio_oku64(k+8)>0 { ver v; }
+        kem_mmio_yaz32(ag_bar+216,4294967295);
+        kap_io_yaz(kap_io1,reg,alt); kap_io_yaz(kap_io1,reg+1,ust);
+        kesme_birak(v); ver -1;
+    }
+}
+işlev ag_kur() -> sonuç<mantıksal,metin> {
+    güvensiz {
+        değişken n: tam64 = 0;
+        iken n < pci_bar_sayi {
+            değişken p: tam64 = pci_bar_tablo+40*n; n=n+1;
+            değişken bdf: tam32 = kem_mmio_oku64(p) olarak tam32;
+            eğer kem_mmio_oku64(p+8)==0 ve kem_pci_oku32(bdf,0)==269385862 {
+                değişken bar: tam64 = kem_mmio_oku64(p+24);
+                eğer bar==0 veya (kem_mmio_oku64(p+16)&1)!=0 veya kem_mmio_oku64(p+32)<21512 { ver hata("e1000 BAR0"); }
+                değişken dma: tam64 = uefi_surec_ayir(E1K_SAYFA);
+                eğer dma==0 { ver hata("e1000 icin cerceve yok"); }
+                değişken eski: tam32 = kem_pci_oku16(bdf,4);
+                kem_pci_yaz16(bdf,4,eski|1030);
+                ag_kuyruk_hazirla(dma);
+                değişken s: E1kKurulum = e1k_yeni(dma);
+                değişken y: GcYanit = gc_bos();
+                iken doğru {
+                    değişken istek: GcIstek = e1k_adim(&değişken s,y);
+                    eşleş istek {
+                        GcIstek::Bitti => {
+                            ag_dma=dma; ag_bar=bar; ag_mac=s.mac; ag_vektor=ag_intx(bdf);
+                            ver tamam(doğru);
+                        }
+                        GcIstek::Hata(m) => {
+                            kem_mmio_yaz32(bar+256,0); kem_mmio_yaz32(bar+1024,0);
+                            kem_pci_yaz16(bdf,4,eski&65531); uefi_surec_iade(dma,E1K_SAYFA); ver hata(m);
+                        }
+                        _ => { y=bm_yurut(bar,istek); }
+                    }
+                }
+            }
+        }
+        ver tamam(yanlış);
+    }
+}
+işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
+    güvensiz {
+    eğer ag_bar==0 veya (kem_mmio_oku32(ag_bar+8)&2)==0 { ver -100; }
+    eğer boy<14 veya boy>1518 { ver -90; }
+    değişken t: tam64 = ag_dma+4096+(ag_tx olarak tam64)*16;
+    eğer (kem_fiz_oku8(t+12)&1)==0 { ver -11; }
+    değişken a: tam64 = kem_mmio_oku64(t);
+    değişken i: tam32 = 0;
+    iken i<boy { kem_fiz_yaz8(a+(i olarak tam64),kem_fiz_oku8(adres+(i olarak tam64))); i=i+1; }
+    kem_mmio_yaz64(t+8,e1k_tx_sozcugu(boy));
+    ag_tx=(ag_tx+1)%E1K_ADET;
+    kem_mmio_yaz32(ag_bar+14360,ag_tx olarak tam64);
+    ag_tx_sayi=ag_tx_sayi+1; ag_tx_bayt=ag_tx_bayt+(boy olarak tam64); ver 0;
+    }
+}
+işlev ag_al() {
+    güvensiz {
+    eğer ag_bar==0 { ver; }
+    değişken i: tam32 = 0;
+    iken i<E1K_ADET {
+        değişken t: tam64 = ag_dma+(ag_rx olarak tam64)*16;
+        değişken n: tam32 = e1k_rx_boyu(kem_mmio_oku64(t+8));
+        eğer n==0 { ver; }
+        eğer n>0 {
+            değişken a: tam64 = kem_mmio_oku64(t);
+            değişken j: tam32 = 0;
+            iken j<n { kem_fiz_yaz8(ag_dma+40960+(j olarak tam64),kem_fiz_oku8(a+(j olarak tam64))); j=j+1; }
+            ag_son_boy=n; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+(n olarak tam64);
+        } değilse { ag_atilan=ag_atilan+1; }
+        kem_mmio_yaz64(t+8,0);
+        kem_mmio_yaz32(ag_bar+10264,ag_rx olarak tam64);
+        ag_rx=(ag_rx+1)%E1K_ADET; i=i+1;
+    }
+    }
+}
+işlev ag_mac_metin(mac: tam64) -> metin {
+    değişken m: metin = ""; değişken i: tam32 = 0;
+    iken i<6 {
+        eğer i>0 { m=metin_birlestir(m,":"); }
+        m=metin_birlestir(m,kd_hex_n((mac>>(8*i))&255,2)); i=i+1;
+    }
+    ver m;
+}
+işlev ag_satir() -> metin {
+    güvensiz {
+        değişken s: metin = metin_birlestir("NIC e1000 ",ag_mac_metin(ag_mac));
+        s=kd_tamsayi(metin_birlestir(s," link"),(kem_mmio_oku32(ag_bar+8)>>1)&1);
+        s=kd_tamsayi(metin_birlestir(s," rx"),ag_rx_sayi);
+        s=kd_tamsayi(metin_birlestir(s," tx"),ag_tx_sayi);
+        s=kd_tamsayi(metin_birlestir(s," rx_bayt"),ag_rx_bayt);
+        s=kd_tamsayi(metin_birlestir(s," tx_bayt"),ag_tx_bayt);
+        s=kd_tamsayi(metin_birlestir(s," atilan"),ag_atilan);
+        ver kd_tamsayi(metin_birlestir(s," vektor"),ag_vektor olarak tam64);
+    }
+}
+işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
+    güvensiz {
+        eğer ag_bar==0 { ver hata("ag arayuzu yok"); }
+        ag_al();
+        eğer bm_esit(arg,"") { ekran_cift_yaz(ag_satir()); ver tamam(doğru); }
+        eğer bm_esit(arg,"dene") {
+            değişken a: tam64 = ag_dma+43008;
+            değişken i: tam32 = 0;
+            iken i<60 {
+                değişken x: tam32 = i;
+                eğer i<6 { x=255; } değilse eğer i<12 { x=((ag_mac>>((i-6)*8))&255) olarak tam32; }
+                eğer i==12 { x=136; } eğer i==13 { x=181; }
+                kem_fiz_yaz8(a+(i olarak tam64),x); i=i+1;
+            }
+            eğer ag_gonder(a,60)<0 { ver hata("ag gonderilemedi"); }
+            ver tamam(doğru);
+        }
+        eğer bm_esit(arg,"son") {
+            değişken s: metin = "CERCEVE "; değişken i: tam32 = 0;
+            iken i<ag_son_boy { s=metin_birlestir(s,kd_hex_n(kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64,2)); i=i+1; }
+            ekran_cift_yaz(s); ver tamam(doğru);
+        }
+        ver hata("ag [dene|son]");
+    }
+}
+
 işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal,yol: metin) -> sonuç<mantıksal,metin> {
     değişken satirlar: Dizi<metin> = []; dizi_ekle(satirlar,kd_cpu());
     eğer uefi_mi() {
@@ -1360,6 +1537,7 @@ işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam3
     } değilse { dizi_ekle(satirlar,"PVH: UEFI bilgisi yok"); }
     güvensiz { dizi_ekle(satirlar,kd_tamsayi(kd_tamsayi(kd_tamsayi("8042 oztest port1 port2",ps2_oztest olarak tam64),ps2_port1 olarak tam64),ps2_port2 olarak tam64)); }
     kd_pci_rapor(satirlar); kd_kesme_rapor(satirlar);
+    güvensiz { eğer ag_bar!=0 { dizi_ekle(satirlar,ag_satir()); } }
     için a: x.aygitlar { eğer a.yuva != 0 {
         değişken s: metin = kd_tamsayi("USB",a.yuva olarak tam64);
         s=metin_birlestir(s,metin_birlestir(" ",kd_hex_n(a.kimlik.vid olarak tam64,4)));
@@ -1580,6 +1758,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer seviye < 1 veya seviye > 4 { ver hata("hassasiyet 1..4"); }
         güvensiz { ksv_hassasiyet=seviye olarak tam32; } ver tamam(doğru);
     }
+    eğer bm_esit(cmd,"ag") { ver ag_komut(arg); }
     eğer bm_esit(cmd,"bilgi") { ver kd_bilgi(d,indeks,tr.us); }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
     eğer bm_esit(cmd,"donanim") {
@@ -1745,6 +1924,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
     ekran_cift_yaz("KABUK_HAZIR");ke_ciz(ke);ke_girdi(ke,satir);
     eşleş bh_hub_dinle(x,xb) { hata(e) => { ver hata(e); } tamam(v) => { } }
     iken doğru {
+        ag_al();
         eğer bh_hub_olayi() {
             eşleş kd_hub_olayi(d,x,xb) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(v) => { } }
         }
@@ -1758,7 +1938,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
                 değişken kos: mantıksal = yanlış;
                 eğer ks_etkin_mi() { kos=ks_adim(&değişken p,x,&değişken h,&değişken tr); }
                 eğer değil kos { güvensiz { eğer kap_lapic != 0 { ks_hlt(); } değilse { kem_bekle_us(50); } } }
-                bh_olaylar();
+                ag_al(); bh_olaylar();
             }
         } değilse eğer ps2_kesme_etkin() {
             bh_olaylar();
@@ -1766,7 +1946,7 @@ işlev kabuk(d: &değişken KabukDisk, x: &değişken XhciDurum, xb: tam64, inde
                 eğer değil ks_adim(&değişken p,x,&değişken h,&değişken tr) { ks_hlt(); }
             }
             eğer değil ks_etkin_mi() {
-                iken değil kt_hazir() ve değil ps2_tus_var() ve değil ps2_kesme_fare_var() ve değil bh_hub_olayi() { ks_hlt(); bh_olaylar(); }
+                iken değil kt_hazir() ve değil ps2_tus_var() ve değil ps2_kesme_fare_var() ve değil bh_hub_olayi() { ks_hlt(); ag_al(); bh_olaylar(); }
             }
         }
         kabuk_fare(ke,&değişken fd,&değişken im);
@@ -1893,6 +2073,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         eğer uefi_mi() { eşleş kd_ramdisk_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ramdisk ",e)); } tamam(v) => { } } }
         eğer uefi_mi() { eşleş kd_gecici_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(v) => { } } }
         eşleş kd_kok_durum(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
+        eğer uefi_mi() { eşleş ag_kur() { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ag ",e)); } tamam(v) => { } } }
         eğer uefi_mi() ve d.kok >= 0 {
             değişken k: KabukBag = dizi_al(d.baglar,d.kok);
             eğer k.kayit.kok ve değil k.kayit.bolum.esp {
