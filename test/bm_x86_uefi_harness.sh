@@ -17,7 +17,9 @@ case "${KAYNAK##*/}" in
 esac
 rm -f "$W/k.elf" "$W/k.o" "$W/esp/EFI/BOOT/BOOTX64.EFI"
 clang --target=x86_64-unknown-windows -ffreestanding -fno-stack-protector -fno-builtin -mno-red-zone -Wall -Wextra -Werror -O2 -c boot/efi/stub.c -o "$W/stub.obj"
-lld-link /subsystem:efi_application /entry:efi_main /nodefaultlib /out:"$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/stub.obj"
+# [D-768] `-` önekli bayraklar: MSYS (Windows CI) `/nodefaultlib` gibi `/` önekli
+# argümanları POSIX yolu sanıp `D:/.../msys64/nodefaultlib`e çeviriyordu.
+lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:"$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/stub.obj"
 cat $RT "$KAYNAK" > "$W/comb.kem"
 # QEMU 8.2 ich9-ahci MSI yeteneğini kapatamıyor. Ayrı test çekirdeğinde yalnız keşfi atla.
 if [[ "${UEFI_AHCI_MSI_YOK:-0}" == 1 ]]; then

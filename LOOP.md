@@ -3112,4 +3112,8 @@
 - 2026-11-24 D-768: Windows CI: tests/drivers/acpi/s5_test.kem exit 1 — core.autocrlf hex fikstürünü CRLF yaptı, ayrıştırıcı
   sondaki `\r`yi geçersiz hane saydı (Linux'ta LF, görünmüyordu; D-482/D-761 sınıfı). İki katman: test satır sonunu veri sonu
   sayar (yabancı bayt HÂLÂ exit 1 — ölçüldü), .gitattributes `*.hex text eol=lf`. LF + benzetilmiş CRLF ikisi de geçti.
+  İkinci Windows turu: calistir_mmio_volatile — `lld-link /nodefaultlib` MSYS yol çevirisiyle `D:/.../msys64/nodefaultlib`
+  oldu. Önceki x86 kapıları QEMU denetiminde ATLADIĞI için bu satıra hiç ulaşmıyordu; derleme-yalnız yeni kapılar ilk kez
+  ulaştı. `-` önekli bayraklar (Linux'ta EFI açılışı yeniden doğrulandı); derleme_olcum `/usr/bin/time` yoksa BİLDİREREK atlar
+  (D-566 emsali).
 
