@@ -226,20 +226,27 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
 
 // kdl_dizi_olustur(bolge, eleman_byte) -> KdlDizi* : boş dizi (veri=NULL).
 çıplak işlev kdl_dizi_olustur(bolge: *tam8, eleman_byte: tam32) -> *tam8 {
-    değişken d: *tam8 = kdl_bolge_ayir(bolge, 24);
+    değişken d: *tam8 = kdl_bolge_ayir(bolge, 32);   // [D-770] +8: bolge (ofset 24)
     eğer (d olarak tam64) == 0 { ver 0 olarak *tam8; }
     değişken da: tam64 = d olarak tam64;
     değişken vp: *tam64 = da olarak *tam64;         *vp = 0;            // veri = NULL
     değişken bp: *tam32 = (da + 8) olarak *tam32;   *bp = 0;            // boyut
     değişken kp: *tam32 = (da + 12) olarak *tam32;  *kp = 0;            // kapasite
     değişken ep: *tam32 = (da + 16) olarak *tam32;  *ep = eleman_byte;  // eleman_byte
+    // [D-770] E4k-A: olusturuldugu bolge; buyume tamponu BURADAN (tampon omru = baslik omru).
+    değişken gp: *tam64 = (da + 24) olarak *tam64;  *gp = bolge olarak tam64;
     ver d;
 }
 
 // İç: yeni_kap*eb kapasiteli tampon (bölgeden), canlı kopyala, d->veri/kapasite güncelle.
 çıplak işlev kem_dizi_buyut(bolge: *tam8, d: *tam8, yeni_kap: tam32, eb: tam64) {
-    değişken yeni: *tam8 = kdl_bolge_ayir(bolge, (yeni_kap olarak tam64) * eb);
     değişken da: tam64 = d olarak tam64;
+    // [D-770] dizinin kendi bölgesi (ofset 24); yoksa çağıranınki (geriye uyum).
+    değişken gp: *tam64 = (da + 24) olarak *tam64;
+    değişken hb: *tam8 = bolge;
+    değişken gv: tam64 = *gp;
+    eğer gv != 0 { hb = gv olarak *tam8; }
+    değişken yeni: *tam8 = kdl_bolge_ayir(hb, (yeni_kap olarak tam64) * eb);
     değişken vp: *tam64 = da olarak *tam64;
     değişken eski_veri: tam64 = *vp;
     değişken bp: *tam32 = (da + 8) olarak *tam32;

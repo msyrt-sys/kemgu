@@ -42,9 +42,21 @@ typedef struct KdlBolgeBlok {
     unsigned char veri[];          /* C99 esnek dizi — bump alanı */
 } KdlBolgeBlok;
 
+/* [D-770] E4k-A: bolgeyi OLUSTURAN is parcacigi. Dizi buyumesi kendi
+ * bolgesini yalniz AYNI is parcacigindaysa kullanir (kdl_bolge_bu_is_parcacigi);
+ * gorev'e tasinan/kanaldan gelen dizide ayirici kilitsiz oldugu icin baska
+ * is parcacigininin bolgesine yazmak veri yarisi olurdu. Bare-metal: tek. */
+#if __STDC_HOSTED__ && !defined(KEMGU_BARE_METAL) && !defined(__STDC_NO_THREADS__)
+static _Thread_local char kdl_bolge_ip_isaret;
+#  define KDL_BOLGE_IP_ISARET ((const void *)&kdl_bolge_ip_isaret)
+#else
+#  define KDL_BOLGE_IP_ISARET ((const void *)0)
+#endif
+
 struct KdlBolge {
     KdlBolgeBlok *bas;             /* aktif blok = en yeni (liste başı) */
     int blok_sayisi;              /* teşhis/test için blok adedi */
+    const void *sahip_ip;          /* [D-770] olusturan is parcacigi (SONDA: kem_os ofsetleri korunur) */
 };
 
 /* === Sızıntı-tanığı sayaçları === */
@@ -81,6 +93,7 @@ KdlBolge *kdl_bolge_olustur(void) {
     b->bas = blok_olustur(KDL_BOLGE_VARSAYILAN);
     if (!b->bas) { free(b); return NULL; }
     b->blok_sayisi = 1;
+    b->sahip_ip = KDL_BOLGE_IP_ISARET;   /* [D-770] */
     kdl_bolge_olustur_sayisi++;
     return b;
 }
@@ -134,6 +147,13 @@ void kdl_bolge_serbest(KdlBolge *b) {
     kdl_bolge_serbest_sayisi++;
 }
 
+int kdl_bolge_bu_is_parcacigi(const KdlBolge *b) {   /* [D-770] */
+    return b && b->sahip_ip == KDL_BOLGE_IP_ISARET;
+}
+#else
+/* KEM_MALLOC (kem_os saf-.kem bolgeleri): cekirdek ayiricisi tek baglamli
+ * kabul edilir (kem_heap.kem buyumeyi zaten kendi bolgesinden yapar). */
+int kdl_bolge_bu_is_parcacigi(const KdlBolge *b) { return b != 0; }
 #endif  /* !KEMGU_KEM_MALLOC — region primitifleri .kem'den (kem_os) */
 
 int kdl_bolge_bakiye(void) {

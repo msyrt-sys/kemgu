@@ -24,6 +24,11 @@ typedef struct {
     int32_t boyut;
     int32_t kapasite;
     int32_t eleman_byte;
+    /* [D-770] E4k-A: dizinin OLUSTURULDUGU bolge. Buyume tamponu buradan
+     * ayrilir (cagri yerinin rho'sundan DEGIL): tampon omru = baslik omru.
+     * Onceden yerel bolgedeki bir dizinin tamponlari cagiranin bolgesine
+     * (zincir boyunca main'in = kuresel bolgeye) siziyordu. */
+    KdlBolge *bolge;
 } KdlDizi;
 
 /* V2-F4.2a: büyüme çağıranın bölgesinden (ρ). ρ NULL ise global bölge. */
@@ -46,8 +51,8 @@ static void kdl_dizi_buyut(KdlBolge *rho, KdlDizi *d, int32_t yeni_kap, size_t e
     if (yeni_kap <= d->kapasite)
         kdl_panik("dizi kapasitesi tasti (buyume int32 sinirini asti)");
 
-    void *yeni = kdl_bolge_ayir(rho ? rho : kdl_global_bolge_al(),
-                               (uint64_t)yeni_kap * (uint64_t)eb);
+    KdlBolge *hb = (kdl_bolge_bu_is_parcacigi(d->bolge) ? d->bolge : (rho ? rho : kdl_global_bolge_al()));
+    void *yeni = kdl_bolge_ayir(hb, (uint64_t)yeni_kap * (uint64_t)eb);
     if (!yeni)
         kdl_panik("dizi buyutulemedi (tahsis basarisiz)");
     if (d->veri && d->boyut > 0)
@@ -64,6 +69,7 @@ KdlDizi *kdl_dizi_olustur(KdlBolge *rho, int32_t eleman_byte) {
     d->boyut = 0;
     d->kapasite = 0;
     d->eleman_byte = eleman_byte;
+    d->bolge = rho ? rho : kdl_global_bolge_al();   /* [D-770] */
     return d;
 }
 
@@ -198,8 +204,8 @@ int32_t kdl_dizi_kapasite(KdlDizi *d) {
 void kdl_dizi_kapasite_ayarla(KdlBolge *rho, KdlDizi *d, int32_t yeni_kapasite) {
     if (!d || yeni_kapasite <= d->kapasite) return;
     int32_t eb = d->eleman_byte > 0 ? d->eleman_byte : 4;
-    void *yeni = kdl_bolge_ayir(rho ? rho : kdl_global_bolge_al(),
-                               (uint64_t)yeni_kapasite * (uint64_t)eb);
+    KdlBolge *hb = (kdl_bolge_bu_is_parcacigi(d->bolge) ? d->bolge : (rho ? rho : kdl_global_bolge_al()));   /* [D-770] */
+    void *yeni = kdl_bolge_ayir(hb, (uint64_t)yeni_kapasite * (uint64_t)eb);
     if (!yeni) return;
     if (d->veri && d->boyut > 0)
         memcpy(yeni, d->veri, (size_t)d->boyut * (size_t)eb);
