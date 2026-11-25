@@ -5016,6 +5016,12 @@ calistir_bm_x86_cok_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 	@SUREC_SENARYO="hesap arka cocuk" bash test/bm_x86_surec_harness.sh
 
 # [D-763] yığın geri alma değişmezi (self-host döngü geçicileri)
+.PHONY: calistir_e4k_bellek
+test_tumu: calistir_e4k_bellek
+# [D-770] E4k-A: dizi büyütmesi kendi bölgesinden + iş parçacığı kuralı (TSan).
+calistir_e4k_bellek: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o
+	@bash test/e4k_harness.sh
+
 .PHONY: calistir_yigin_geri
 calistir_yigin_geri: $(BUILD)/codegen$(EXE)
 	@CODEGEN=$(BUILD)/codegen$(EXE) bash test/yigin_geri_harness.sh

@@ -76,5 +76,7 @@ int kdl_bolge_bakiye(void);
 
 /* Bölgedeki blok adedi (teşhis/test — büyüme doğrulaması). NULL → 0. */
 int kdl_bolge_blok_sayisi(const KdlBolge *b);
+/* [D-770] b bu is parcacigi tarafindan mi olusturuldu? (dizi buyumesi icin) */
+int kdl_bolge_bu_is_parcacigi(const KdlBolge *b);
 
 #endif /* KDL_BOLGE_H */
