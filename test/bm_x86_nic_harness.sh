@@ -23,6 +23,35 @@ for derleyici in build/kemgu build/codegen; do
         python3 tests/qemu/ag_usb_kahin.py "$w" --ham
         python3 tests/qemu/ag_usb_kahin.py "$w" --hub
         python3 tests/qemu/ag_usb_kahin.py "$w" --hub --ham
+    elif [[ "${1:-e1000}" == ag_pc || "${1:-e1000}" == iki_konuk ]]; then
+        for program in ping indir paket; do
+            python3 tests/qemu/surec_elf.py "$w/$program.elf" --kaynak "test/kullanici/$program.kem" --derleyici "$derleyici"
+        done
+        if [[ "$1" == ag_pc ]]; then
+            python3 tests/qemu/ag_pc_matris.py "$w"
+        else
+            for program in sunucu nc tftp; do
+                python3 tests/qemu/surec_elf.py "$w/$program.elf" --kaynak "test/kullanici/$program.kem" --derleyici "$derleyici"
+            done
+            python3 tests/qemu/surec_elf.py "$w/alicix.elf" --kaynak tests/qemu/ag_tftp_alici.kem --derleyici "$derleyici"
+            python3 tests/qemu/ag_iki_konuk.py "$w" x86
+            if command -v qemu-system-aarch64 >/dev/null; then
+                imaj=build/kem_os.img
+                if [[ "$derleyici" == build/codegen ]]; then
+                    PYTHONPATH=tests/qemu python3 -c 'from pathlib import Path; from ag_arm_derle import derle; import sys; derle(Path(sys.argv[1]),Path("build/codegen"),Path("build/kem_os_comb.kem"))' "$w/arm-self"
+                    imaj="$w/arm-self/kem_os.img"
+                fi
+                python3 tests/qemu/ag_iki_konuk.py "$w" "$imaj"
+            else
+                echo 'ATLANDI (qemu-system-aarch64 yok): x86 ile ARM arasındaki TCP aktarımı'
+            fi
+            mkdir -p "$w/arp-kapali"
+            kaynak="$w/arp-kapali/kem_os_x86_kabuk.kem"
+            python3 tests/qemu/ag_arp_sessiz.py "$kaynak"
+            UEFI_CALISMA_DIZINI="$w/arp-kapali" UEFI_DERLEYICI="$derleyici" UEFI_YALNIZ_DERLE=1 \
+                UEFI_KAYNAK="$kaynak" bash test/bm_x86_uefi_harness.sh
+            python3 tests/qemu/ag_iki_konuk.py "$w" arp
+        fi
     elif [[ "${1:-e1000}" == saglamlik_ag ]]; then
         python3 tests/qemu/surec_elf.py "$w/sunucu.elf" --kaynak test/kullanici/sunucu.kem --derleyici "$derleyici"
         python3 tests/qemu/ag_saglamlik_tel.py "$w" cerceve

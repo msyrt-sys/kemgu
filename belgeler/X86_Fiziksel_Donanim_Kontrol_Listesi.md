@@ -89,3 +89,12 @@ Aynı çözünürlükte üç soğuk açılış yapın. Her açılış için PAT_
 - Harici USB hub'a klavye, fare ve bir deneme belleği takın. İkinci hub üzerinden dosya okuyup yazın. Belleği güvenli biçimde eşitledikten sonra iki kez çıkarıp takın ve her geçişin seri kaydını alın.
 - Açılış bölümüne SHA256'sı kaydedilmiş bir ramdisk.img koyun. İçindeki deneme dosyasını bellekten değiştirin, /ram altında da bir dosya oluşturun. Yeniden açılışta kaynak imaj özetini ve /ram dizininin boş olduğunu denetleyin.
 - Veri bölümüne yazıp kapat komutunu verin. ACPI_S5 kaydını ve gücün kesildiği anı kaydedin. Bir sonraki açılıştan önce imajda fsck.fat -n ile dosya sistemi tutarlılığını kontrol edin.
+
+## Ağ ile deneme ve rapor alma
+
+- Yazılabilir veri bölümünü bağlayıp `cd /diskler/<veri>` çalıştırın. `donanim` ile dökümü okuyun ve `donanim kaydet donanim.txt` ile bu dizine yazın. Rapordaki PCI satıcı ve aygıt kimliğini, NIC modelini, MAC adresini ve bağlantı durumunu kaydedin. Kabloyu DHCP hizmeti bulunan test ağına takın.
+- `ag dhcp` ve `ag durum` ile kiralanan IPv4 adresini, DNS ve NTP adreslerini okuyun. `ping <ağ-geçidi> 4` ile yanıt sayısını, `ag sayac` ile hata sayaçlarını kaydedin.
+- Test ağındaki HTTP sunucusundan `indir http://<sunucu>/deneme.bin /diskler/<veri>/deneme.bin` çalıştırın. Sunucudaki boyu, indirilen bayt sayısını ve aktarılan dosyanın SHA256 değerini karşılaştırın.
+- Desteklenmeyen bir Realtek dahili NIC görülürse satıcı ve aygıt kimliğini raporda tutun. USB CDC-ECM sınıfı (iletişim sınıfı 02, ECM alt sınıfı 06, CDC veri sınıfı 0a) sunan adaptörü doğrudan USB porta veya desteklenen huba takın. Yeni MAC ve bağlantı satırını kaydedip aynı DHCP, ping ve indirme adımlarını tekrarlayın.
+- `baslat saat metin`, `ag ntp <sunucu-ip>` ve tekrar `baslat saat metin` çalıştırın. İlk ve son UTC zamanı ile bildirilen ofset/gecikmeyi kaydedin.
+- Test ağındaki bilgisayarda `python3 tools/codex/teshis_al.py donanim.txt --adres <alıcı-ip> --port 9140` çalıştırın. Konukta aynı dizinden `donanim gonder <alıcı-ip> 9140` ile raporu gönderin. Alıcıdaki bayt sayısını ve rapordaki NIC kimliğini doğrulayın. USB bellek bu işlem boyunca takılı kalır.

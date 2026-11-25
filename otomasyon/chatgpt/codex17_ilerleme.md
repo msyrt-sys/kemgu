@@ -84,3 +84,7 @@ Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön b
 ## Bölüm 18 — ağ sağlamlığı
 
 1397 saniye. İki derleyici, 13 protokol ailesine 1024’er sabit tohumlu örnek. QEMU’da aynı açılışta 100 tablo turu, 10.000 karışık çerçeve, 10.000 ping, 500 TCP ve 100 HTTP isteği. İkinci açılışta 100+100 MiB TCP ve aktarım sırasında gerçek QMP link off/on. DNS ve NTP zaman aşımı, DHCP kirasının bitip yeniden alınması. §7 dahil 14 hedef. TCP seçenek sıfır korumasını, IPv4 toplam boy kontrolünü ve HTTP chunk boy taşma denetimini kaldırma sabotajları uygulanmadı. Kırmızı sabotaj kanıtı yok.
+
+## Bölüm 19 — konuklar arası ağ ve PC matrisi
+
+1860 saniye. İki x86 KEMGU, yalnız geçici UNIX soketine bağlı QEMU stream hattında HTTP indirme, nc, TFTP ve doğrulanmış paket kurdu. x86 ve ARM ortak TCP yığını iki yönde birer MiB aktardı. Üç çıktı bağımsız karşılaştırıldı. Sekiz PC satırı her iki derleyicide DHCP, ping, küçük HTTP indirmesi ve paket kurulumuyla geçti. Tek tarafta ARP yanıtını sessize alan ayrı çekirdek ile diğer konuk PING HATA -110 verdi. Kâhin telde yanıt bulunmadığını ve kabuğun hâlâ yanıt verdiğini gördü. §7 ve PC matrisi dahil 16 hedef. Fiziksel makine adımları belgeye eklendi.

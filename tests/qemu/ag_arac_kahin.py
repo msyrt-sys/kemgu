@@ -59,9 +59,9 @@ def udp_es(s):
     s.sendto(b, a)
 
 
-def pcap_akim(paketler, port, giden):
+def pcap_akim(paketler, port, giden, mac=MAC):
     sec = [p for p in paketler if p.protokol==6 and
-           (p.kaynak==MAC and p.hedef_port==port if giden else p.hedef==MAC and p.kaynak_port==port)]
+           (p.kaynak==mac and p.hedef_port==port if giden else p.hedef==mac and p.kaynak_port==port)]
     syn = next(p for p in sec if p.bayrak&2)
     birikim = bytearray()
     for p in sec:

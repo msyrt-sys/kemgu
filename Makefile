@@ -5240,3 +5240,11 @@ calistir_kem_os_arm_ag: calistir_kem_os_arm $(BUILD)/codegen$(EXE)
 test_tumu: calistir_bm_x86_ag_saglamlik
 calistir_bm_x86_ag_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+.PHONY: calistir_bm_x86_ag_iki calistir_bm_x86_ag_pc
+test_tumu: calistir_bm_x86_ag_iki
+calistir_kem_os_pc_matris: calistir_bm_x86_ag_pc
+calistir_bm_x86_ag_iki: calistir_kem_os_arm kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh iki_konuk
+calistir_bm_x86_ag_pc: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh ag_pc

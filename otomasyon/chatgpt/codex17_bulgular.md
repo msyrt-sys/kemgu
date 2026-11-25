@@ -242,3 +242,30 @@ Tohum 170018. Her derleyicide 13 × 1024 protokol örneği. Canlı 10.000 çerç
 - AG18 DNS ve NTP zaman asimi, DHCP kira bitisi ve yeni ACK
 
 HTTP sırasında çekirdek heap’i büyüyor (E4k). Bu dalga geri kazanım uygulamadı. Üç ayrıştırıcı sabotajı uygulanmadı. Sağlam korumaların reddettiği girdi şekilleri iki derleyiciyle ayrıca doğrulandı.
+
+## İki konuk ve karma PC matrisi
+
+QEMU stream arka ucunun UNIX adresi her koşuma özeldir. Sunucu ucunu x86 açar, ikinci x86 ya da ARM bağlanır. Host trafiği yönlendirmez. x86 HTTP sunucusu depo bildirimini ve ELF baytlarını sundu. NC ve TFTP dosyaları iki ayrı konuk diski üzerinden dışarıdan okundu. TFTP alıcı fikstürü tek WRQ ve sabit çıktı için sınırlıdır. ARM testinde iki yöndeki pcap TCP sıra uzayları ve konuk diski kaynakla birebir eşleşti. Matris satırları C ve self-host sırasındadır. İkinci aşamada fiziksel donanım koşumu yapılmadı.
+
+- AG19 PC e1000e nvme 512 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4329248, 110959) (19282976, 110959)
+- AG19 PC e1000 usb 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4198048, 45423) (20529040, 45423)
+- AG19 PC igb sata 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4132464, 45423) (19217360, 45423)
+- AG19 PC virtio-net-pci usb 512 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4329248, 110959) (20660240, 110959)
+- AG19 PC usb-net sata 512 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4329248, 110959) (19414144, 110959)
+- AG19 PC hub nvme 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4263632, 45423) (19217360, 45423)
+- AG19 PC e1000e sata 1024 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4591520, 242031) (19742000, 242031)
+- AG19 PC virtio-net-pci nvme 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4132464, 45423) (19086192, 45423)
+- AG19 PC e1000e nvme 512 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4460512, 110928) (20135824, 110928)
+- AG19 PC e1000 usb 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4329312, 45392) (21185136, 45392)
+- AG19 PC virtio-net-pci usb 512 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4460512, 110928) (21381920, 110928)
+- AG19 PC igb sata 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4329344, 45392) (19939072, 45392)
+- AG19 PC usb-net sata 512 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4526128, 110928) (20135856, 110928)
+- AG19 PC hub nvme 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4394896, 45392) (20070208, 45392)
+- AG19 PC e1000e sata 1024 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4788400, 242000) (20398128, 242000)
+- AG19 PC virtio-net-pci nvme 256 MiB DHCP ping indir paket SHA256 204b6c159df1d960b6a4d660bd013844442bcc0fabdb99b4111e591c5599d3f7 (4263728, 45392) (19939040, 45392)
+- AG19 x86 x86 HTTP nc TFTP ve konuk paket deposu SHA256 dca0ee3c03813f420ee602f1ecbd24a174c7913436aff655d797f686af5a9137 [(4198048, 45423), (4198048, 45423)] [(20791152, 45423), (22824544, 45423)]
+- AG19 x86 ARM iki yon 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 heap/cerceve (4198048, 45423)
+- AG19 ARP zaman asimi ve kabuk hazir b'PING HATA -110\nPING alinan 0 / 1\n[ping.elf pid=1 cikis=1]\nKABUK_HAZIR\n'
+- AG19 x86 x86 HTTP nc TFTP ve konuk paket deposu SHA256 dca0ee3c03813f420ee602f1ecbd24a174c7913436aff655d797f686af5a9137 [(4329312, 45392), (4329312, 45392)] [(20922512, 45392), (23808560, 45392)]
+- AG19 x86 ARM iki yon 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 heap/cerceve (4329312, 45392)
+- AG19 ARP zaman asimi ve kabuk hazir b'PING HATA -110\nPING alinan 0 / 1\n[ping.elf pid=1 cikis=1]\nKABUK_HAZIR\n'
