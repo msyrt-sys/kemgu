@@ -17,7 +17,7 @@ DNS1=bytes((192,0,2,10))
 CEVAP=bytes((198,51,100,17))
 
 
-def kos(w,slirp):
+def kos(w,slirp,zaman=False):
     usb,nvme,sata=imajlar(w,{})
     arka_uc = 'slirp' if slirp else 'dgram'
     pcap = w/f'udp-{arka_uc}.pcap'
@@ -28,6 +28,7 @@ def kos(w,slirp):
         dur=threading.Event()
         olay=[]
         dns=[]
+        ntp=[]
         hata=[]
         sessiz=threading.Event()
         nak=threading.Event()
@@ -72,9 +73,11 @@ def kos(w,slirp):
                         es.gonder(ethernet(MAC,ES_MAC,2054,arp(2,ES_MAC,ip,MAC,KONUK_IP)))
                     elif v.hedef_port==53:
                         dns.append(v.ip_hedef)
-                        if v.ip_hedef==ES_IP:
+                        if v.ip_hedef==ES_IP and not zaman:
                             cevap=dns_a_yanit(v.yuk[8:],CEVAP,5)
                             es.gonder(ethernet(MAC,ES_MAC,2048,ipv4(ES_IP,KONUK_IP,17,udp(ES_IP,KONUK_IP,53,v.kaynak_port,cevap))))
+                    elif v.hedef_port==123:
+                        ntp.append(v.ip_hedef)
                     elif v.protokol==1 and (v.icmp_tur,v.icmp_kod)==(3,3):
                         icmp.append(v)
                     elif v.kaynak_port==9000 and v.hedef_port==18000:
@@ -95,6 +98,21 @@ def kos(w,slirp):
                     def slirp_durumu(b):
                         assert b.startswith(b'DHCP 3 ip 10.0.2.15 '), b
                     c.run('ag durum',slirp_durumu)
+                elif zaman:
+                    # Sunucu süresiz sessizken konuk DNS iki adrese, NTP belirtilen adrese gider.
+                    for komut,mesaj in [('cozumle yok.test',b'DNS zaman asimi'),('ag ntp 192.0.2.1',b'NTP zaman asimi')]:
+                        ilk=seri.stat().st_size
+                        c.input(komut)
+                        wait_for(p,lambda:seri.read_bytes()[ilk:].endswith(b'KABUK_HAZIR\n'),seconds=20)
+                        assert mesaj in seri.read_bytes()[ilk:],seri.read_bytes()[ilk:]
+                    assert DNS1 in dns and ES_IP in dns and ES_IP in ntp and not hata
+                    sessiz.set()
+                    wait_for(p,lambda:int.from_bytes(c.mem(c.sayi('ag_l3_alan')+8,8),'little')==0,seconds=14)
+                    sessiz.clear()
+                    wait_for(p,durum,seconds=14)
+                    assert not hata and len([k for k,_ in olay if k=='ack'])>=2
+                    print('AG18 DNS ve NTP zaman asimi, DHCP kira bitisi ve yeni ACK',flush=True)
+                    c.expected=c.output()
                 else:
                     c.run('ag durum',b'DHCP 3 ip 192.0.2.2 dns 192.0.2.10 ntp 192.0.2.1\n')
                     c.run('cozumle ornek.test',b'198.51.100.17\n')
@@ -143,7 +161,7 @@ def kos(w,slirp):
         with pcap.open('rb') as f:
             kayit=list(pcap_kayitlari(f))
         assert any((v.kaynak_port,v.hedef_port)==(67,68) and dhcp_secenekleri(v.yuk[8:]).get(53)==b'\x05' for v in kayit)
-        if not slirp:
+        if not slirp and not zaman:
             assert [v.yuk[8:] for v in kayit if v.kaynak_port==9000]==[struct.pack('!I',i)*13 for i in range(1000)]
         print('UDP OK', 'slirp' if slirp else 'dgram',len(kayit),flush=True)
 

@@ -1,4 +1,5 @@
 // HTTP/1.1 satırları CRLF çözüldükten sonra verilir. Tek mesaj başı en çok 8 KiB'dır.
+genel işlev http_satir_sonu(once: tam32,son: tam32) -> mantıksal { ver once==13 ve son==10; }
 genel yapı HttpBaslik {
     kod: tam32; boy: tam64; parcali: mantıksal; kapat: mantıksal;
     sayi: tam32; bayt: tam32; konum: metin; hedef: metin; sunucu: metin;

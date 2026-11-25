@@ -5043,7 +5043,7 @@ calistir_kem_os_pc_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 .PHONY: calistir_kem_os_ayristirici
 test_tumu: calistir_kem_os_ayristirici
 calistir_kem_os_ayristirici: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum dalga16)) tests/drivers/fs/fat32_bozuk_test.kem
+	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum dalga16 ag17)) tests/drivers/fs/fat32_bozuk_test.kem
 	@SUREC_KAHIN=bozuk_elf_kahin bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_girdi15
@@ -5235,3 +5235,8 @@ calistir_bm_x86_usb_ag: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codege
 test_tumu: calistir_kem_os_arm_ag
 calistir_kem_os_arm_ag: calistir_kem_os_arm $(BUILD)/codegen$(EXE)
 	@python3 tests/qemu/ag_arm_derle.py $(BUILD)/arm_ag
+
+.PHONY: calistir_bm_x86_ag_saglamlik
+test_tumu: calistir_bm_x86_ag_saglamlik
+calistir_bm_x86_ag_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh saglamlik_ag

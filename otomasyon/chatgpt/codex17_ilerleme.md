@@ -80,3 +80,7 @@ Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön b
 ## Bölüm 17 — ARM virtio-mmio ve ortak ağ yığını
 
 1338 saniye. [9] ARP ve [10] PING CANLI ortak sürücülerden geçiyor. Denetlenen 42 eski faz korundu. DHCP, slirp üzerinde Python TCP eşine iki yönde 1 MiB, HTTP ile 1048459 bayt. Konuk diskindeki iki alanın ve ağ kaydının SHA256 değerleri host girdileriyle aynı. C ve self-host ayrı imajlarla açıldı. Her iki derleyicide RX tamponlarını yeniden vermeme sabotajında [10] geçti, [43] AG TCP HATA çıktı ve pozitif aktarım kâhini kırmızı oldu. §7 dahil 14 hedef.
+
+## Bölüm 18 — ağ sağlamlığı
+
+1397 saniye. İki derleyici, 13 protokol ailesine 1024’er sabit tohumlu örnek. QEMU’da aynı açılışta 100 tablo turu, 10.000 karışık çerçeve, 10.000 ping, 500 TCP ve 100 HTTP isteği. İkinci açılışta 100+100 MiB TCP ve aktarım sırasında gerçek QMP link off/on. DNS ve NTP zaman aşımı, DHCP kirasının bitip yeniden alınması. §7 dahil 14 hedef. TCP seçenek sıfır korumasını, IPv4 toplam boy kontrolünü ve HTTP chunk boy taşma denetimini kaldırma sabotajları uygulanmadı. Kırmızı sabotaj kanıtı yok.

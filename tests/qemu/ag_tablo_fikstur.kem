@@ -1,0 +1,35 @@
+// Yalnız sınama imajına bağlanır. Tüm çağrılar yerel tablolarda çalışır.
+işlev ag_tablo_sina() -> tam32 { güvensiz {
+    değişken tur: tam32=0;
+    değişken b: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256);
+    değişken l: *AgL3=ag_l3_alan olarak *AgL3;
+    iken tur<100 {
+        değişken i: tam32=0;
+        iken i<16 {
+            eğer sk_yeni(2)!=sk_alan+(i olarak tam64)*SK_ADIM { ver 1; }
+            i=i+1;
+        }
+        eğer sk_yeni(2)!=0 { ver 2; }
+        i=0; iken i<16 { sk_birak(sk_alan+(i olarak tam64)*SK_ADIM); i=i+1; }
+        i=0; iken i<8 {
+            eğer ag_tcp_ac((*l).ip,3221225985,9100,2000+i,4,yanlış)!=ag_tcp_alan+(i olarak tam64)*1052672 { ver 3; }
+            i=i+1;
+        }
+        eğer ag_tcp_ac((*l).ip,3221225985,9100,2010,4,yanlış)!=0 { ver 4; }
+        i=0; iken i<8 {
+            değişken p: *TcpBag=(ag_tcp_alan+(i olarak tam64)*1052672) olarak *TcpBag;
+            değişken bag: TcpBag=*p; bag.durum=TCP_KAPALI; *p=bag; i=i+1;
+        }
+        ag_tcp_adim(); eğer ag_tcp_etkin!=0 { ver 5; }
+        değişken ms: tam64=1+(tur olarak tam64)*3001; değişken dusen: tam64=ag_parca_atilan;
+        i=0; iken i<5 {
+            eth_yaz(b,ag_mac,2,2048); ip4_yaz(b,3221225985,(*l).ip,17,8,i);
+            ag_y16(b,20,8192); ag_y16(b,24,0); ag_y16(b,24,ag_saglama(b,14,20,0) olarak tam64);
+            ag_parca_girdi(b,42,ms); i=i+1;
+        }
+        eğer ag_parca_aktif!=4 veya ag_parca_atilan!=dusen+1 { ver 6; }
+        ag_parca_sure(ms+3000);
+        eğer ag_parca_aktif!=0 veya ag_parca_atilan!=dusen+5 { ver 7; }
+        tur=tur+1;
+    } ver 0;
+} }

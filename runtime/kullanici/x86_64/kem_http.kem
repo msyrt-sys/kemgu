@@ -1,8 +1,8 @@
-kullan drivers::ag::http::{ HttpBaslik, HttpUrl, http_yeni, http_ilk, http_alan, http_parca_boyu, http_url, http_yon, http_istek, http_goreli };
+kullan drivers::ag::http::{ http_satir_sonu, HttpBaslik, HttpUrl, http_yeni, http_ilk, http_alan, http_parca_boyu, http_url, http_yon, http_istek, http_goreli };
 işlev kh_satir(r: &değişken KagOkuyucu,p: tam64) -> tam64 {
     değişken n: tam64=kag_satir_oku(r,p,2050);
     eğer n<0 { ver n; }
-    eğer n<2 veya sis_bayt_al(p+n-2)!=13 veya sis_bayt_al(p+n-1)!=10 { ver -74; }
+    eğer n<2 veya değil http_satir_sonu(sis_bayt_al(p+n-2),sis_bayt_al(p+n-1)) { ver -74; }
     değişken i: tam64=0; iken i<n-2 { eğer sis_bayt_al(p+i)==0 { ver -74; } i=i+1; }
     sis_bayt_koy(p+n-2,0); ver n-2;
 }

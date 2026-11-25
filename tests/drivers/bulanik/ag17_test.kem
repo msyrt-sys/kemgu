@@ -1,0 +1,132 @@
+// Sabit tohumlu tel biçimi korpusu. Her dal kabul/ret değerini ayrıca doğrular.
+kullan drivers::ortak::bayt::{ bayt_sifir } olarak ortakb;
+kullan drivers::ag::bayt::{ ag_y8, ag_y16, ag_y32, ag_saglama };
+kullan drivers::ag::eth::{ eth_yaz, eth_tur, eth_mac_yaz };
+kullan drivers::ag::arp::{ arp_islem, arp_yaz, arp_bul, arp_kaydet };
+kullan drivers::ag::ipv4::{ ip4_yaz, ip4_baslik };
+kullan drivers::ag::parca::{ ParcaYuvasi, PARCA_SINIR, parca_al };
+kullan drivers::ag::icmp::{ icmp_yanki, icmp_tur };
+kullan drivers::ag::udp::{ udp_yaz, udp_oku, udp_bagla, udp_yuva };
+kullan drivers::ag::dhcp::{ DhcpKirasi, dhcp_yeni, dhcp_al };
+kullan drivers::ag::dns::{ dns_ad_ac, dns_ad_yaz, dns_sorgu, dns_cevap };
+kullan drivers::ag::tcp::{ TcpBaslik, tcp_sec_yaz, tcp_baslik };
+kullan drivers::ag::http::{ http_satir_sonu, HttpBaslik, http_yeni, http_alan, http_parca_boyu };
+kullan drivers::ag::ntp::{ NtpOlcum, ntp_iste, ntp_damga_yaz, ntp_cevap };
+kullan drivers::ag::tftp::{ tftp_kur, tftp_baslik };
+kullan drivers::ag::paket::{ PaketGirdi, pk_satir };
+
+işlev ag17_l2(b: Dizi<dtam8>,i: tam32,r: tam64) -> tam32 {
+    değişken mac: tam64=(r<<8)|2; eth_yaz(b,mac,2,2048);
+    eğer eth_tur(b,14,mac)!=2048 veya eth_tur(b,i%14,mac)>=0 veya eth_tur(b,14,mac+2)!=0 { ver 1; }
+    arp_yaz(b,1,mac,r,0,1); eğer arp_islem(b,42)!=1 veya arp_islem(b,41)>=0 { ver 2; }
+    ag_y8(b,18,7); eğer arp_islem(b,42)>=0 { ver 3; }
+    değişken n: tam32=16+(r%128) olarak tam32; ip4_yaz(b,r,1,17,n,i);
+    eğer ip4_baslik(b,34+n)!=34 veya ip4_baslik(b,33+n)>=0 { ver 4; }
+    değişken k: tam32=8+i%46;
+    icmp_yanki(b,0,k,8,i,i+1); eğer icmp_tur(b,0,k)!=8 veya icmp_tur(b,0,i%8)>=0 { ver 5; }
+    ag_y8(b,0,0); eğer icmp_tur(b,0,k)!= -2 { ver 6; }
+    değişken u: tam32=udp_yaz(b,0,n,r,1,5200,53);
+    eğer udp_oku(b,0,u,r,1)!=n veya udp_oku(b,0,u-1,r,1)>=0 { ver 7; }
+    ver 0;
+}
+işlev ag17_parca(b: Dizi<dtam8>,buf: Dizi<dtam8>,m: Dizi<dtam8>,i: tam32,r: tam64) -> tam32 {
+    değişken s: ParcaYuvasi=ParcaYuvasi {kaynak:0,hedef:0,kim:0,protokol:0,bitis_ms:0,baslik:0,alinan:0,en_uzak:0,son:0};
+    değişken kip: tam32=i%4; değişken alan: tam32=8192; değişken n: tam32=8*(1+(r%8) olarak tam32);
+    eğer kip==2 { n=0; } eğer kip==3 { alan=8191; }
+    ip4_yaz(b,1,2,17,n,i); ag_y16(b,20,alan olarak tam64); ag_y16(b,24,0); ag_y16(b,24,ag_saglama(b,14,20,0) olarak tam64);
+    değişken sonuc: tam32=parca_al(&değişken s,b,34+n,buf,m,0);
+    eğer kip>=2 { eğer sonuc!= -90 { ver 8; } }
+    değilse {
+        eğer sonuc!=0 veya s.alinan!=n { ver 9; }
+        eğer kip==1 ve (parca_al(&değişken s,b,34+n,buf,m,1)!=0 veya s.alinan!=n) { ver 10; }
+    }
+    ver 0;
+}
+işlev ag17_dhcp_dns(b: Dizi<dtam8>,ad: Dizi<dtam8>,calisma: Dizi<dtam8>,i: tam32,r: tam64) -> tam32 {
+    değişken s: DhcpKirasi=dhcp_yeni(r); ag_y8(b,0,2); ag_y8(b,1,1); ag_y8(b,2,6); ag_y32(b,4,s.xid);
+    eth_mac_yaz(b,28,2); ag_y32(b,16,r+1); ag_y32(b,236,1669485411);
+    ag_y8(b,240,53); ag_y8(b,241,1); ag_y8(b,242,2); ag_y8(b,243,54); ag_y8(b,244,4); ag_y32(b,245,1); ag_y8(b,249,255);
+    değişken n: tam32=250; eğer i%3==1 { n=249; } eğer i%3==2 { ag_y8(b,244,17); }
+    değişken sonuc: tam32=dhcp_al(&değişken s,b,0,n,2,0);
+    eğer i%3==0 { eğer sonuc!=2 veya s.durum!=2 { ver 11; } } değilse eğer sonuc>=0 veya s.durum!=1 { ver 12; }
+    // Dört adet 63 baytlık etiket açılınca DNS adının 255 baytlık sınırını geçer.
+    değişken x: tam32=0;
+    iken x<256 { eğer x%64==0 { ag_y8(b,x,63); } değilse { ag_y8(b,x,97); } x=x+1; } ag_y8(b,256,0);
+    eğer dns_ad_ac(b,0,257,0,ad,0)>=0 { ver 26; }
+    değişken uzunluk: tam32=dns_ad_yaz("ornek.test",ad,0);
+    değişken kayit: tam32=dns_sorgu(b,0,i,ad,uzunluk);
+    ag_y16(b,2,33152); ag_y16(b,6,1); ag_y16(b,kayit,49164);
+    ag_y16(b,kayit+2,1); ag_y16(b,kayit+4,1); ag_y32(b,kayit+6,60);
+    ag_y16(b,kayit+10,4); ag_y32(b,kayit+12,r);
+    eğer dns_cevap(b,0,kayit+16,i,ad,calisma).adres!=r veya dns_cevap(b,0,kayit+15,i,ad,calisma).kod>=0 { ver 32; }
+    değişken etiket: tam32=1+(r%63) olarak tam32;
+    ag_y8(b,0,etiket olarak tam64); değişken j: tam32=1;
+    iken j<=etiket { ag_y8(b,j,97+((r+(j olarak tam64))%26)); j=j+1; } ag_y8(b,j,0);
+    eğer dns_ad_ac(b,0,j+1,0,ad,0)<0 veya dns_ad_ac(b,0,j,0,ad,0)>=0 { ver 13; }
+    eğer i%2==0 { ag_y8(b,0,192); ag_y8(b,1,0); } değilse { ag_y8(b,0,64); }
+    eğer dns_ad_ac(b,0,j+1,0,ad,0)>=0 { ver 14; } ver 0;
+}
+işlev ag17_tcp(b: Dizi<dtam8>,i: tam32,r: tam64) -> tam32 {
+    değişken kip: tam32=i%5;
+    değişken n: tam32=tcp_sec_yaz(b,0,0,1,2,3000,80,r,0,2,4096,3,-1,0);
+    eğer kip==1 veya kip==2 { ag_y8(b,21,(kip-1) olarak tam64); }
+    eğer kip==3 { ag_y8(b,12,240); }
+    eğer kip==4 { ag_y8(b,27,15+(r%240)); }
+    ag_y16(b,16,0); ag_y16(b,16,ag_saglama(b,0,n,9+(n olarak tam64)) olarak tam64);
+    değişken v: TcpBaslik=tcp_baslik(b,0,n,1,2);
+    eğer kip==0 { eğer v.h!=28 veya v.olcek!=3 { ver 15; } }
+    değilse eğer kip==4 { eğer v.h!=28 veya v.olcek!=14 { ver 16; } }
+    değilse eğer v.h>=0 veya v.h== -2 { ver 17; }
+    ver 0;
+}
+işlev ag17_uygulama(b: Dizi<dtam8>,i: tam32,r: tam64) -> tam32 {
+    eğer değil http_satir_sonu(13,10) veya http_satir_sonu(10,10) veya http_satir_sonu(13,13) { ver 27; }
+    değişken h: HttpBaslik=http_yeni(); değişken satir: metin=metin_birlestir("Content-Length: ",tam_metin(r));
+    eğer değil http_alan(&değişken h,satir) veya h.boy!=r { ver 18; }
+    h.bayt=8191; eğer http_alan(&değişken h,"X: a") { ver 19; }
+    eğer http_parca_boyu("ff",255)!=255 veya http_parca_boyu("100",255)>=0 veya http_parca_boyu("fffffffffffffffff",r)>=0 { ver 20; }
+    değişken t: tam64=1700000000000000+r; ntp_iste(b,0,t); ag_y8(b,0,36); ag_y8(b,1,2);
+    ntp_damga_yaz(b,24,t); ntp_damga_yaz(b,32,t+100000); ntp_damga_yaz(b,40,t+100300);
+    eğer ntp_cevap(b,0,48,t,t+200000).kod!=0 veya ntp_cevap(b,0,i%48,t,t+200000).kod==0 { ver 21; }
+    değişken n: tam32=tftp_kur(b,3,(i%65535)+1,(r%513) olarak tam32);
+    eğer tftp_baslik(b,n).op!=3 veya tftp_baslik(b,i%4).op!=0 { ver 22; }
+    değişken sha: metin="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    satir=metin_birlestir(metin_birlestir("ornek 1 ornek.elf ",tam_metin(r+1)),metin_birlestir(" ",sha));
+    eşleş pk_satir(satir) { hata(e)=>{ver 23;} tamam(p)=>{eğer p.boy!=r+1 {ver 24;}} }
+    eşleş pk_satir(metin_birlestir(satir,"f")) { hata(e)=>{} tamam(p)=>{ver 25;} } ver 0;
+}
+işlev ag17_tablolar() -> tam32 {
+    değişken arp: Dizi<tam64> = []; değişken portlar: Dizi<tam64> = [];
+    değişken i: tam32=0;
+    iken i<48 { dizi_ekle(arp,0 olarak tam64); eğer i<16 { dizi_ekle(portlar,0 olarak tam64); } i=i+1; }
+    değişken tur: tam32=0;
+    iken tur<100 {
+        değişken zaman: tam64=(tur olarak tam64)*10; i=0;
+        iken i<16 {
+            değişken ip: tam64=1+((tur*16+i) olarak tam64);
+            eğer değil arp_kaydet(arp,ip,2,zaman,10) veya arp_bul(arp,ip,zaman)!=2 { ver 28; }
+            eğer udp_bagla(portlar,2000+i)!=i veya udp_yuva(portlar,2000+i)!=i { ver 29; } i=i+1;
+        }
+        eğer arp_kaydet(arp,99999,2,zaman+9,10) veya udp_bagla(portlar,4000)!= -105 { ver 30; }
+        i=0; iken i<16 {
+            eğer arp_bul(arp,1+((tur*16+i) olarak tam64),zaman+10)!=0 { ver 31; }
+            dizi_yaz(portlar,i,0 olarak tam64); i=i+1;
+        }
+        tur=tur+1;
+    } ver 0;
+}
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(1024); değişken ad: Dizi<dtam8> = bayt_sifir(768);
+    değişken buf: Dizi<dtam8> = bayt_sifir(74+PARCA_SINIR); değişken maske: Dizi<dtam8> = bayt_sifir(PARCA_SINIR/8);
+    değişken i: tam32=0; değişken calisma: Dizi<dtam8> = bayt_sifir(768); değişken tohum: tam64=170018; değişken tablolar: tam32=ag17_tablolar(); eğer tablolar!=0 { ver tablolar; }
+    iken i<1024 {
+        tohum=(tohum*1664525+1013904223)&4294967295; değişken r: tam64=tohum%16777215;
+        değişken rc: tam32=ag17_l2(b,i,r); eğer rc!=0 { ver rc; }
+        rc=ag17_parca(b,buf,maske,i,r); eğer rc!=0 { ver rc; }
+        rc=ag17_dhcp_dns(b,ad,calisma,i,r); eğer rc!=0 { ver rc; }
+        rc=ag17_tcp(b,i,r); eğer rc!=0 { ver rc; }
+        rc=ag17_uygulama(b,i,r); eğer rc!=0 { ver rc; }
+        i=i+1;
+    }
+    yazdir_metin("AG17 tohum 170018; Ethernet ARP IPv4 parca ICMP UDP DHCP DNS TCP HTTP NTP TFTP manifest: her biri 1024 ornek"); ver 0;
+}

@@ -212,3 +212,33 @@ Transport ortak AgArayuz kayıtlarını tutuyor. MAC ve isteğe bağlı link dur
 - ✓ ARM virtio-mmio DHCP ARP ping TCP 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 HTTP 1048459 d2599a3a7d32cca7ba20fc6026fd15db0344be41eb35aed639e405e379ad7da6 saniye 10.44
 - kemgu RX iadesiz: ping yeşil, gerçek TCP kırmızı, tel çerçevesi 54
 - codegen RX iadesiz: ping yeşil, gerçek TCP kırmızı, tel çerçevesi 54
+
+## Bölüm 18 — sabit tohum, kaynaklar ve bağlantı kesintisi
+
+Tohum 170018. Her derleyicide 13 × 1024 protokol örneği. Canlı 10.000 çerçeve dört sınıftan oluştu. Uygulama protokollerinin bozuk girdileri host korpusunda çalıştı. Sonraki sağlıklı HTTP, TCP ve ICMP işlemleri aynı çekirdekte gerçekleşti. Tablo testi ağdan trafik üretmeden gerçek çekirdek ayırma ve bırakma işlevlerini çağırdı. ARP ve UDP port tablosu ömür ve doluluk kurallarını iki host derleyicisiyle sınadı. TCP tablosunda kapanmış durumun geri kazanımı ve fragment süresinin dolması sınandı. 200 MiB, 100 MiB gidiş + 100 MiB dönüş olarak ölçüldü.
+
+| Derleyici | İş | Çekirdek heap, bayt | Boş fiziksel çerçeve |
+|---|---|---:|---:|
+| build/kemgu | 100-tablo-turu | 4198048 → 4198048 | 45422 → 45422 |
+| build/kemgu | 10000-karisik | 4198048 → 4198048 | 45422 → 45422 |
+| build/kemgu | 10000-ping | 4198048 → 4198048 | 45422 → 45422 |
+| build/kemgu | 500-tcp | 4198048 → 4198048 | 45422 → 45422 |
+| build/kemgu | 100-http | 5509920 → 27480560 | 41828 → 41828 |
+| build/kemgu | 200-MiB-toplam | 4198048 → 4198048 | 45422 → 45422 |
+| build/codegen | 100-tablo-turu | 4329312 → 4329312 | 45391 → 45391 |
+| build/codegen | 10000-karisik | 4329312 → 4329312 | 45391 → 45391 |
+| build/codegen | 10000-ping | 4329312 → 4329312 | 45391 → 45391 |
+| build/codegen | 500-tcp | 4329312 → 4329312 | 45391 → 45391 |
+| build/codegen | 100-http | 5903552 → 27939776 | 41797 → 41797 |
+| build/codegen | 200-MiB-toplam | 4329312 → 4329312 | 45391 → 45391 |
+
+- AG18 saglama/bilinmeyen artisi (5000, 2500)
+- AG18 link off/on TCP yeniden iletim 24187226 1400
+- AG18 iki yön 100+100 MiB SHA256 0742ba24c68d455b95ad0807a4b5d33c36c235ab2de58626bd87082721a83d1e saniye 284.77
+- AG18 DNS ve NTP zaman asimi, DHCP kira bitisi ve yeni ACK
+- AG18 saglama/bilinmeyen artisi (5000, 2500)
+- AG18 link off/on TCP yeniden iletim 24738354 1400
+- AG18 iki yön 100+100 MiB SHA256 0742ba24c68d455b95ad0807a4b5d33c36c235ab2de58626bd87082721a83d1e saniye 462.46
+- AG18 DNS ve NTP zaman asimi, DHCP kira bitisi ve yeni ACK
+
+HTTP sırasında çekirdek heap’i büyüyor (E4k). Bu dalga geri kazanım uygulamadı. Üç ayrıştırıcı sabotajı uygulanmadı. Sağlam korumaların reddettiği girdi şekilleri iki derleyiciyle ayrıca doğrulandı.
