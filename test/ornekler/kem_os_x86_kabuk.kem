@@ -2588,7 +2588,7 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
     }
 }
 
-işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal,yol: metin) -> sonuç<mantıksal,metin> {
+işlev kd_donanim_satirlari(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal) -> sonuç<Dizi<metin>,metin> {
     değişken satirlar: Dizi<metin> = []; dizi_ekle(satirlar,kd_cpu());
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { ver hata(e); } tamam(b) => {
@@ -2628,7 +2628,9 @@ işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam3
     dizi_ekle(satirlar,klavye);
     değişken fare: metin = "FARE yok"; eğer ps2_kesme_etkin() { fare="FARE PS/2"; }
     eğer usb_fare { fare="FARE USB"; } dizi_ekle(satirlar,fare);
-    eğer metin_uzunluk(yol) == 0 { için s: satirlar { ekran_cift_yaz(s); } ver tamam(doğru); }
+    ver tamam(satirlar);
+}
+işlev kd_rapor_baytlari(satirlar: Dizi<metin>) -> sonuç<Dizi<dtam8>,metin> {
     değişken b: Dizi<dtam8> = [];
     için s: satirlar {
         değişken n: tam32 = metin_uzunluk(s) olarak tam32;
@@ -2637,9 +2639,16 @@ işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam3
         iken i < n { dizi_ekle(b,metin_bayt(s,i) olarak dtam8);i=i+1; }
         dizi_ekle(b,10 olarak dtam8);
     }
-    eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(k) => { eşleş kd_mutasyon(d,k,FatYazIslem::Yaz(b)) { hata(e) => { ver hata(e); } tamam(v) => { ver kd_sync(d); } } } }
+    ver tamam(b);
 }
-işlev kd_log(d: &değişken KabukDisk,arg: metin) -> sonuç<mantıksal,metin> {
+işlev kd_donanim(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal,yol: metin) -> sonuç<mantıksal,metin> {
+    eşleş kd_donanim_satirlari(d,x,indeks,usb_fare) { hata(e)=>{ver hata(e);} tamam(satirlar)=>{
+    eğer metin_uzunluk(yol) == 0 { için s: satirlar { ekran_cift_yaz(s); } ver tamam(doğru); }
+    eşleş kd_rapor_baytlari(satirlar) { hata(e)=>{ver hata(e);} tamam(b)=>{
+    eşleş kd_yol(d,yol) { hata(e) => { ver hata(e); } tamam(k) => { eşleş kd_mutasyon(d,k,FatYazIslem::Yaz(b)) { hata(e) => { ver hata(e); } tamam(v) => { ver kd_sync(d); } } } }
+    } } } }
+}
+işlev kd_log_baytlari() -> Dizi<dtam8> {
     değişken veri: Dizi<dtam8> = [];
     değişken n: tam64 = 0; değişken dusen: tam64 = 0;
     güvensiz { n=kgun_adet; dusen=kgun_dusen; }
@@ -2650,6 +2659,10 @@ işlev kd_log(d: &değişken KabukDisk,arg: metin) -> sonuç<mantıksal,metin> {
     // Yazdırmadan önce kopya al, log çıktısı bir sonraki anlık görüntüye girer.
     değişken i: tam64 = 0;
     iken i < n { dizi_ekle(veri,kgun_oku(i) olarak dtam8);i=i+1; }
+    ver veri;
+}
+işlev kd_log(d: &değişken KabukDisk,arg: metin) -> sonuç<mantıksal,metin> {
+    değişken veri: Dizi<dtam8> = kd_log_baytlari();
     değişken pos: tam32 = kd_bosluk(arg);
     eğer bm_esit(kd_bas(arg,pos),"kaydet") {
         değişken ad: metin = kd_kalan(arg,pos);
@@ -2663,7 +2676,7 @@ işlev kd_log(d: &değişken KabukDisk,arg: metin) -> sonuç<mantıksal,metin> {
     değişken sayfa: tam64 = 1;
     eğer metin_uzunluk(arg) > 0 { sayfa=kd_sayi_arg(arg); }
     eğer sayfa < 1 veya sayfa > KGUN_BOY { ver hata("log sayfa siniri"); }
-    değişken satir: tam64 = 0; j=0;
+    değişken satir: tam64 = 0; değişken j: tam32=0;
     iken j < dizi_boyut(veri) {
         değişken c: tam32 = oku_u8(veri,j);
         eğer satir/20+1 == sayfa { ekran_cift_bayt(c); }
@@ -2724,7 +2737,7 @@ işlev kb_dosya(b: &değişken KsvBaglam,fd: tam32,ad: metin,kip: tam64) -> sonu
         } }
     } }
 }
-işlev kb_hazirla(p: &değişken KsKabukSureci,b: &değişken KsvBaglam,adimlar: Dizi<KbAsama>,yuvalar: Dizi<tam64>) -> sonuç<mantıksal,metin> {
+işlev kb_hazirla(p: &değişken KsKabukSureci,b: &değişken KsvBaglam,adimlar: Dizi<KbAsama>,yuvalar: Dizi<tam64>,girdi: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     için a: adimlar {
         değişken ad: metin = dizi_al(a.argv,0);
         eşleş ks_program_adi(&değişken b.disk,ad) { hata(e) => { ver hata(e); } tamam(yol) => { dizi_yaz(a.argv,0,yol); } }
@@ -2746,15 +2759,27 @@ işlev kb_hazirla(p: &değişken KsKabukSureci,b: &değişken KsvBaglam,adimlar:
             dizi_yaz(cocuk.fds,1,kb_uc(halka,doğru)); dizi_yaz(sonraki.fds,0,kb_uc(halka,yanlış));
         }
         dizi_yaz(p.baglamlar,y,cocuk); i=i+1;
+    }
+    // Yerel kabuğun seçtiği anlık görüntü yalnız ilk sürecin standart girdisine bağlanır.
+    değişken n: tam64=dizi_boyut(girdi) olarak tam64;
+    eğer n>0 {
+        değişken t: tam64=uefi_surec_ayir(((n+4095)/4096+1) olarak tam32);
+        eğer t==0 { ver hata("teshis cerceve yok"); }
+        kxm_y64(t,1); kxm_y64(t+8,n); kxm_y64(t+16,n);
+        değişken j: tam32=0;
+        iken j<dizi_boyut(girdi) { kis_buf_yaz8(t+4096,j,oku_u8(girdi,j)); j=j+1; }
+        değişken cocuk: KsvBaglam=dizi_al(p.baglamlar,dizi_al(yuvalar,0) olarak tam32);
+        değişken fd: KsvFd=ksv_fd_bos(); fd.acik=doğru; fd.akis=t;
+        dizi_yaz(cocuk.fds,0,fd);
     } ver tamam(doğru);
 }
-işlev kb_calistir(d: &değişken KabukDisk,p: &değişken KsKabukSureci,s: metin,x: &değişken XhciDurum,h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
+işlev kb_calistir(d: &değişken KabukDisk,p: &değişken KsKabukSureci,s: metin,x: &değişken XhciDurum,h: &değişken HidKlavye,tr: &değişken KlavyeDurumu,girdi: Dizi<dtam8>) -> sonuç<mantıksal,metin> {
     eğer değil uefi_mi() { ver hata("boru UEFI gerektirir"); }
     eşleş kb_bol(s) { hata(e) => { ver hata(e); } tamam(adimlar) => {
         değişken b: KsvBaglam = dizi_al(p.baglamlar,0);
         güvensiz { b.disk=*d; b.x=*x; b.h=*h; b.tr=*tr; }
         değişken ys: Dizi<tam64> = [];
-        eşleş kb_hazirla(p,&değişken b,adimlar,ys) { hata(e) => {
+        eşleş kb_hazirla(p,&değişken b,adimlar,ys,girdi) { hata(e) => {
             // Planlayıcı henüz çalışmadı. Oluşturulan uç ve adres alanlarını geri ver.
             için y: ys {
                 değişken c: KsvBaglam = dizi_al(p.baglamlar,y olarak tam32);
@@ -2824,8 +2849,8 @@ işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"yardim") { ekran_cift_yaz("yardim <komut> komutun kullanımını gösterir."); ver tamam(doğru); }
     eğer bm_esit(ad,"kapat") { ekran_cift_yaz("kapat diskleri eşitler ve sistemi kapatır."); ver tamam(doğru); }
     eğer bm_esit(ad,"yenidenbaslat") { ekran_cift_yaz("yenidenbaslat diskleri eşitler ve sistemi yeniden başlatır."); ver tamam(doğru); }
-    eğer bm_esit(ad,"donanim") { ekran_cift_yaz("donanim aygıtları listeler. donanim kaydet <yol> raporu yazar."); ver tamam(doğru); }
-    eğer bm_esit(ad,"log") { ekran_cift_yaz("log [sayfa] günlük halkasını gösterir. log kaydet <yol> dosyaya yazar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"donanim") { ekran_cift_yaz("donanim aygıtları listeler. donanim kaydet <yol> raporu yazar. donanim gonder <ip> <port> kaydı yollar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"log") { ekran_cift_yaz("log [sayfa] günlük halkasını gösterir. log kaydet <yol> dosyaya yazar. log gonder <ip> <port> bir anlık görüntü yollar."); ver tamam(doğru); }
     eğer bm_esit(ad,"hassasiyet") { ekran_cift_yaz("hassasiyet <1..4> fare hızını ayarlar."); ver tamam(doğru); }
     eğer bm_esit(ad,"goster") { ekran_cift_yaz("baslat goster <BMP> resmi gösterir. Oklarla kaydırın, Q ile çıkın."); ver tamam(doğru); }
     eğer bm_esit(ad,"bul") { ekran_cift_yaz("baslat bul [-i] <metin> [dosya...] eşleşen satırları numaralandırır."); ver tamam(doğru); }
@@ -2834,9 +2859,24 @@ işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"dosyalar") { ekran_cift_yaz("dosyalar: F5 kopyala, F6 taşı, F7 dizin oluştur, Delete sil, Q çık."); ver tamam(doğru); }
     ver hata("yardim konusu bulunamadi");
 }
+işlev kd_teshis_baytlari(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,log_mu: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
+    eğer log_mu { ver tamam(kd_log_baytlari()); }
+    // Çalışma dizinindeki kayıt önceliklidir. USB önyükleme kaydı kökte tutulur.
+    değişken yollar: Dizi<metin> = [];
+    eşleş kd_mutlak(d.cwd,"donanim.txt") { hata(e)=>{ver hata(e);} tamam(y)=>{dizi_ekle(yollar,y);} }
+    dizi_ekle(yollar,"/donanim.txt");
+    için ad: yollar {
+        eşleş kd_yol(d,ad) { hata(e)=>{} tamam(y)=>{
+            eşleş kd_icerik(d,y) { tamam(veri)=>{ver tamam(veri);} hata(e)=>{eğer ksv_hata(e)!= -2 { ver hata(e); }} }
+        } }
+    }
+    eşleş kd_donanim_satirlari(d,x,indeks,bh_fare()>=0) {
+        hata(e)=>{ver hata(e);} tamam(satirlar)=>{ver kd_rapor_baytlari(satirlar);}
+    }
+}
 işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,x: &değişken XhciDurum,xb: tam64,indeks: tam32,
             h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> sonuç<mantıksal,metin> {
-    eğer kb_hat_mi(satir) { ver kb_calistir(d,p,satir,x,h,tr); }
+    eğer kb_hat_mi(satir) { değişken bos: Dizi<dtam8> = []; ver kb_calistir(d,p,satir,x,h,tr,bos); }
     değişken pos: tam32 = kd_bosluk(satir);
     değişken cmd: metin = kd_bas(satir,pos);
     değişken arg: metin = kd_kalan(satir,pos);
@@ -2852,6 +2892,17 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
     eğer bm_esit(cmd,"ag") ve metin_uzunluk(arg)==0 ve ag_arac_var(d,1) { ver ks_komut(d,p,satir,x,xb,indeks,h,tr,yanlış,doğru); }
     eğer bm_esit(cmd,"ag") ve değil bm_esit(arg,"arp") ve değil bm_esit(arg,"baglantilar") ve değil bm_esit(arg,"arayuzler") { ver ag_komut(arg); }
     eğer bm_esit(cmd,"bilgi") { ver kd_bilgi(d,indeks,tr.us); }
+    eğer (bm_esit(cmd,"log") veya bm_esit(cmd,"donanim")) ve bm_esit(kd_bas(arg,kd_bosluk(arg)),"gonder") {
+        güvensiz { eğer ag_bar==0 veya ag_link()==0 { ver hata("teshis ag yok"); } }
+        değişken hedef: metin=kd_kalan(arg,kd_bosluk(arg)); değişken bos: tam32=kd_bosluk(hedef);
+        değişken ip: metin=kd_bas(hedef,bos); değişken port: tam64=kd_sayi_arg(kd_kalan(hedef,bos));
+        eğer ag_ip_oku(ip)<=0 veya port<1 veya port>65535 { ver hata("gonder <ip> <port>"); }
+        eşleş kd_teshis_baytlari(d,x,indeks,bm_esit(cmd,"log")) { hata(e)=>{ver hata(e);} tamam(veri)=>{
+            eğer dizi_boyut(veri)==0 { ver hata("teshis raporu bos"); }
+            değişken cagri: metin=metin_birlestir("teshis ",kd_tamsayi(ip,port));
+            ver kb_calistir(d,p,kd_tamsayi(cagri,dizi_boyut(veri) olarak tam64),x,h,tr,veri);
+        } }
+    }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
     eğer bm_esit(cmd,"donanim") {
         eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }

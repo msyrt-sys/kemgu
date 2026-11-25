@@ -64,3 +64,7 @@ Ağ kitaplığı, `ag`, `cozumle`, `nc` ve soketli `ping` derlendi. C ve self-ho
 ## Bölüm 13 — SNTP ile RTC eşitleme
 
 Açılışta DHCP seçenek 42, elle IP, dört zaman damgasıyla ofset/gecikme, BCD/ikili ve 12/24 saat CMOS yazımı eklendi. QMP ve pcap ölçümleri iki derleyicide geçti. Gerçek kullanım programı `baslat saat metin` eşitlenmiş saati gösterdi. Süre 1304 saniye. 1900/1970 dönüşümü çıkarılınca 2024 tarihine karşın QMP 2094 gösterdi. BCD tarih alanları ikili yazılınca 2031 yerine 2025 ölçüldü. İki kâhin de çıkış 1 verdi.
+
+## Bölüm 14 — TFTP ve teşhis aktarımı
+
+Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön başına 205 ilk blok kaybı ve indirmede 41 yinelenen blok ölçüldü. FAT32, eş kaydı ve iki yönün pcap SHA256 değerleri eşleşti. Teşhis alıcısı iki raporu yerel dosyaya yazdı. Donanım raporu FAT32 ile, günlük QMP ile okunan çekirdek halkasıyla aynı. Bağlantı kapalıyken kabuk açık hata verdi. §7 kapıları ve yeni hedef çalıştırıldı. Yinelenen bloğu yeniden yazan değişiklik 16384 yerine 16896 bayt ve farklı SHA256 verdi. Kısa son bloğu tanımayan değişiklik -110 ile başarısız oldu. İki bağımsız koşumun çıkış kodu 1.

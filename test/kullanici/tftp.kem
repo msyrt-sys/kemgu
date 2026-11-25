@@ -1,0 +1,79 @@
+kullan drivers::ag::tftp::{ TftpAkis, TftpPaket, tftp_yeni, tftp_iste, tftp_baslik, tftp_kur, tftp_adim, tftp_zaman };
+kullan drivers::ortak::bayt::{ bayt_sifir } olarak ortakb;
+işlev kt_yolla(fd: tam64,p: tam64,n: tam64,ip: tam64,port: tam64) -> tam64 {
+    kag_koy(p,0,p+64); kag_koy(p,1,n); kag_koy(p+16,0,ip); kag_koy(p+16,1,port);
+    ver sis_udp_gonder_hedef(fd,p,p+16);
+}
+işlev kt_al(fd: tam64,p: tam64) -> tam64 {
+    kag_koy(p,0,p+640); kag_koy(p,1,517); ver sis_udp_al_kaynak(fd,p,p+16);
+}
+işlev kt_isle(fd: tam64,dosya: tam64,ad: metin,ip: tam64,yaz: mantıksal,p: tam64) -> tam64 {
+    değişken b: Dizi<dtam8> = bayt_sifir(517); değişken h: Dizi<dtam8> = bayt_sifir(248+1);
+    değişken s: TftpAkis=tftp_yeni(yaz); değişken n: tam32=tftp_iste(h,ad,yaz); eğer n<0 { ver n olarak tam64; }
+    değişken i: tam32=0; iken i<n { sis_bayt_koy(p+64+(i olarak tam64),dizi_al(h,i) olarak tam32); i=i+1; }
+    değişken port: tam64=69; değişken sabit_uc: mantıksal=yanlış; değişken toplam: tam64=0;
+    değişken yolla: mantıksal=doğru; değişken dally: tam64=0; değişken son: tam64=sis_tik()+20;
+    değişken ilerleme_son: tam64=sis_tik()+1200;
+    iken doğru {
+        eğer sis_tik()>=ilerleme_son { ver -110; }
+        eğer yolla {
+            değişken r: tam64=kt_yolla(fd,p,n olarak tam64,ip,port); eğer r<0 { ver r; }
+            yolla=yanlış; son=sis_tik()+((s.sure_ms+9)/10) olarak tam64;
+        }
+        eğer s.bitti ve (yaz veya sis_tik()>=dally) { ver toplam; }
+        değişken kalan: tam64=(son-sis_tik())*10;
+        eğer s.bitti { kalan=(dally-sis_tik())*10; }
+        değişken r: tam64= -110;
+        eğer kalan>0 {
+            sis_soket_secenek(fd,4,kalan); r=kt_al(fd,p);
+        }
+        eğer r== -110 veya r== -11 {
+            eğer s.bitti { ver toplam; }
+            eğer değil tftp_zaman(&değişken s) { ver -110; } yolla=doğru;
+        } değilse eğer r<0 { ver r; }
+        değilse eğer sis_alan(p+16,0)==ip ve (değil sabit_uc veya sis_alan(p+16,1)==port) {
+            i=0; iken (i olarak tam64)<r { dizi_yaz(b,i,sis_bayt_al(p+640+(i olarak tam64)) olarak dtam8); i=i+1; }
+            değişken paket: TftpPaket=tftp_baslik(b,r olarak tam32);
+            değişken olay: tam32=tftp_adim(&değişken s,paket);
+            eğer olay<0 { ver olay olarak tam64; }
+            eğer olay>0 ve (sabit_uc veya olay==1 veya olay==2) {
+                port=sis_alan(p+16,1); sabit_uc=doğru;
+                eğer olay==1 veya olay==2 { ilerleme_son=sis_tik()+1200; }
+                eğer olay==3 { ver toplam; }
+                eğer olay==1 {
+                    değişken ek: tam64=paket.boy olarak tam64;
+                    eğer toplam>16777216-ek { ver -27; }
+                    değişken a: tam64=kag_hepsini_yaz(dosya,p+644,ek); eğer a<0 { ver a; }
+                    toplam=toplam+ek; eğer s.bitti { dally=sis_tik()+40; }
+                }
+                eğer olay==2 {
+                    değişken ek: tam64=sis_oku(dosya,p+68,512); eğer ek<0 { ver ek; }
+                    s.son=ek<512; toplam=toplam+ek; n=tftp_kur(b,3,s.blok,ek olarak tam32);
+                } değilse { n=tftp_kur(b,4,paket.blok,0); }
+                i=0; iken i<4 { sis_bayt_koy(p+64+(i olarak tam64),dizi_al(b,i) olarak tam32); i=i+1; }
+                yolla=doğru;
+            }
+        }
+    } ver -5;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc!=5 { kag_satir("tftp al <ip> <uzak> <yerel> | tftp gonder <ip> <yerel> <uzak>"); ver 2; }
+    değişken yaz: mantıksal=kag_esit(sis_argv(argv,1),"gonder");
+    eğer değil yaz ve değil kag_esit(sis_argv(argv,1),"al") { ver 2; }
+    değişken ip: tam64=kag_coz(sis_argv(argv,2)); eğer ip<=0 { ver 2; }
+    değişken yer: metin=sis_argv(argv,4); değişken uzak: metin=sis_argv(argv,3); değişken kip: tam64=3; değişken islem: tam64=2;
+    eğer yaz { yer=sis_argv(argv,3); uzak=sis_argv(argv,4); kip=0; islem=1; }
+    değişken p: tam64=kag_ayir(1280); eğer p==0 { ver 1; }
+    değişken durum: tam64=sis_bilgi(yer,p); eğer durum<0 ve durum!= -2 { ver 1; }
+    değişken fd: tam64=sis_soket(2); eğer fd<0 { kag_satir("tftp ag yok"); ver 1; }
+    değişken f: tam64=sis_ac(yer,kip); eğer f<0 { sis_kapat(fd); kag_satir(metin_birlestir("tftp dosya ",tam_metin(f))); ver 1; }
+    değişken r: tam64=sis_dosya_akis(f,islem,16777216);
+    eğer r>=0 { r=kt_isle(fd,f,uzak,ip,yaz,p); }
+    eğer değil yaz ve r>=0 { değişken k: tam64=sis_dosya_akis(f,3,0); eğer k<0 { r=k; } }
+    sis_kapat(f); sis_kapat(fd);
+    eğer r<0 {
+        eğer değil yaz ve durum== -2 { sis_sil(yer); }
+        kag_satir(metin_birlestir("tftp hata ",tam_metin(r))); ver 1;
+    }
+    kag_satir(metin_birlestir("TFTP tamam ",tam_metin(r))); ver 0;
+}

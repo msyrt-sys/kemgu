@@ -116,3 +116,9 @@ Dosya akışında ABI 89, veriyi fiziksel çerçevelerde biriktirir. Tam gövde 
 `ag ntp` DHCP seçenek 42 adresini kullanır. `ag ntp 192.0.2.1` açıkça seçilen sunucuya gider. Açılış bölümünde `/KEMGU/NTP.OTO` dosyası varsa kira alındığında ilk eşitleme otomatik yapılır. Her istek bir yanıta ve iki saniyelik beklemeye bağlıdır. Yanıtta sunucu IP ve portu, sürüm, mod, stratum, eşzamanlılık ve gönderilen zaman damgası denetlenir. Saat farkı ve gidiş dönüş süresi mikrosaniye olarak gösterilir. [RFC 4330](https://www.rfc-editor.org/rfc/rfc4330.html)
 
 RTC tarih aralığı 2000–2099’dur. 2036 saniye sarmalında dönem yerel saate göre seçilir. CMOS Status B 12/24 saat ve BCD/ikili biçimi korunur. SET biti tarih alanları birlikte yayımlanana kadar saniye güncellemesini durdurur. `baslat saat metin` anlık UTC tarihini ve saati standart çıktıya verir.
+
+## TFTP ve teşhis
+
+`tftp al <ip> <uzak> <yerel>` ve `tftp gonder <ip> <yerel> <uzak>` octet kipinde 512 baytlık blok kullanır. İstek UDP 69’a gider, ilk geçerli cevaptan sonra aynı aktarım portu kullanılır. İlk zaman aşımı 200 ms, üst sınır 1600 ms, blok başına en fazla beş yeniden iletim ve 12 saniye ilerleme süresi vardır. Son ACK 400 ms boyunca yinelenebilir. İndirmeler en çok 16 MiB olup ancak son blok alındığında yayımlanır. [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html)
+
+Host üzerinde `python3 tools/codex/teshis_al.py rapor.txt --adres 192.0.2.1 --port 9140` çalıştırılır. Konukta `donanim gonder 192.0.2.1 9140` çalışma dizinindeki veya kökteki donanim.txt dosyasını yollar. İkisi de yoksa yeni rapor üretilir. `log gonder 192.0.2.1 9140` günlüğün o andaki içeriğini gönderir. Her komut için alıcı yeniden açılır. Alıcı varsayılan olarak 127.0.0.1 üzerinde dinler, tam uzunluğu ve akış sonunu gördükten sonra dosyayı yayımlar, SHA256 değerini basar ve onay yollar.

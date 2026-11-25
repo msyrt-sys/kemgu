@@ -161,3 +161,18 @@ QEMU QMP `/machine rtc-time` alanını konuğun istek ve cevap kaydından bağı
 
 - SNTP QMP 2031-07-15T13:34:56+00:00 ofset_us 3598289911 gecikme_us 129054 heap/çerçeve (4198048, 45430) (4854016, 45430)
 - SNTP QMP 2031-07-15T13:34:56+00:00 ofset_us 3598456254 gecikme_us 128625 heap/çerçeve (4329312, 45400) (5050896, 45400)
+
+## TFTP ve teşhis ölçümleri
+
+Kayıp her yirminci veri bloğunun ilk denemesine uygulanır. Okuma ve yazma için son kısa DATA sıfır uzunluklu olabilir. Standart girdiye bağlanan salt okunur anlık görüntü süreç kapanınca geri verilir. 16 KiB yinelenen yazma deneyinde FAT32 karması 01488e78f48dfd40471b4cc09d82fd42060c7f9bfe4a6758f2f677d69d121253, beklenen c6962ef93671130e5598944c24b8c65254cf4f8046916373a59c2515d59c478b. Son kısa bloğu yok sayan konuk 33. blokta bekleme bütçesini tüketti ve kabuğa döndü.
+
+- TFTP heap/boş çerçeve (4591616, 45430) (7411952, 45430)
+- ✓ TFTP FAT32, iki yön pcap ve eş SHA256 cfc8d96831a8bb2b7e72888555a48f09957608057e793e5d9b652eddb733b9c7 bayt 2097152 yön başına kayıp 205 yinelenen 41
+- Teşhis heap/boş çerçeve (5313072, 45430) (5837808, 45430)
+- ✓ Teşhis alıcı + pcap 1041 92ff22d8db7a919c56c7b6575a700acc8771ed8978d4e36d204931eee476bb50
+- ✓ Teşhis alıcı + pcap 1945 86c1574f54cc05a3e23cd7930d5322f8ed193c4d48ae18404d4d548e8fb1d010
+- TFTP heap/boş çerçeve (4788496, 45399) (7805680, 45399)
+- ✓ TFTP FAT32, iki yön pcap ve eş SHA256 cfc8d96831a8bb2b7e72888555a48f09957608057e793e5d9b652eddb733b9c7 bayt 2097152 yön başına kayıp 205 yinelenen 41
+- Teşhis heap/boş çerçeve (5575568, 45399) (6297024, 45399)
+- ✓ Teşhis alıcı + pcap 1041 3e6618141ddebb7f8981e3fbb507cd41188fa77a0e2562911c3d49ddfe020a3d
+- ✓ Teşhis alıcı + pcap 1945 ba81d309326709c4d783b082d48148cb90e0cb6623f258f7a120a6ff3f4ecf8d
