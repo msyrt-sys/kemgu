@@ -193,3 +193,13 @@ E4k açık. İlk tek açılış denemesinde dizin işlemleri ve ELF çağrılar�
 - ✓ Büyük paket 524349 870202797a69a71dd741d3ec78e77f122bd33a2b2b3924957d6ce2014141438b heap/boş çerçeve (4788496, 45399) (19086384, 45399)
 
 Geçici dosyayı silme çağrısını kaldırmak gerçek QEMU çalışmasında `bozuk paketin gecici dosyasi kaldi` doğrulamasını kırdı. SHA doğrulamasının atlanmasıyla bozuk kodun kurulmasını sağlayan sabotaj uygulanmadı.
+
+## USB Ethernet ölçümleri
+
+Eski xHCI ilk yapılandırmayı kurarken `xhci ayni yon coklu uc destegi yok` hatasında duruyordu. CDC denetim ucuyla iki toplu uç ayrı halkalara alındı. QEMU'nun bildirimi kontrol arayüzü 0 yerine veri arayüzü 1'i gösteriyor. Konuk MAC adresini dizgiden `40:54:00:17:00:16` olarak okudu. İlk ping denemesinde pcap her iki yanıtı da gösterdiği halde kullanıcı ELF'i iki kez -110 aldı. Senkron çağrı kesmeleri beklerken ISR sayacı ilerlemiyordu. ECM aktarımı beklenirken ortak olay halkasını yoklamak bu durumu giderdi. Hub üzerinde firmware USB önyüklemesi OVMF kabuğuna düştü. Aynı USB hub korunarak NVMe önyükleme seçildi. Kök port senaryosu USB'den açıldı.
+
+MAC dizgisinin hanelerini bir konum döndürme sabotajı gerçek QEMU'da altı DHCP isteği üretti. Pcap kaynak adresi `64:05:40:01:70:01`, eşten OFFER sayısı sıfır ve kira kapısının çıkışı 1. Sabotaj yalnız ayrı derleme kopyasındaydı.
+
+Ek QEMU koşumunda PCI envanterinde `10ec:8139` Realtek ile aynı makinede CDC-ECM seçildi. Aynı MAC, 2 MiB dosya ve paket kurulumu denetimleri geçti. Ham eşin toplam uzunluğu tam 64 bayt olan ICMP yanıtı pcap'te tek Ethernet çerçevesi olarak görüldü.
+
+Aynı MAC sabotajı slirp ile de çalıştırıldı. Slirp değişmiş MAC adresine DHCP yanıtı verdi. Bu topolojide kapıyı kıran denetim konuk arayüzünün beklenen MAC adresiydi (rc=1). Ham eş topolojisinde kapıyı kira zaman aşımı kırdı.

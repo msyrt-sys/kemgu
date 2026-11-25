@@ -72,3 +72,7 @@ Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön b
 ## Bölüm 15 — ağ üzerinden paket kurucu
 
 1990 saniye. 27 hedeflik ara regresyon. Depo üretimi ve ELF aracında guncelle/liste/bilgi/kur/kaldir komutları, standart kütüphaneden SHA-256, yazılabilir bölüme kurulum, günlükten devam ve kurulu kayıtları. C ve self-host QEMU aynı hesapla ELF dosyasını indirip çalıştırdı, 44-2 sonucu 42. Kurulu liste yeniden açılışta okundu, bir bayt değişmiş paket SHA256 hatasıyla reddedildi, kaldırılan komut artık bulunmadı. 524349 baytlık ikinci ELF iki derleyicide çalıştı. FSInfo ve fsck temiz. Geçici dosya temizliğini atlama sabotajında FAT32 üzerinde yuk.tmp kaldı ve kâhin çıkış 1 verdi. **Uygulanmayan sabotaj:** Çalıştırılabilir paket için SHA256 karşılaştırmasını atlayıp bozuk ELF yayımlama değişikliği uygulanmadı. Kayıp denetim hedefindeki eksiklik budur.
+
+## Bölüm 16 — xHCI üzerinde USB CDC-ECM
+
+2203 saniye. C ve self-host derleyicilerinde kök port/USB 2 hub ve slirp/ham Ethernet eşi olmak üzere sekiz QEMU koşumu. DHCP, ping, 2 MiB HTTP indirmesi, paket kur, QMP ile ağ aygıtını çıkarıp tekrar takma, yeniden DHCP ve ping geçti. FAT32 dosyasının SHA256 değeri cfdf2227590f50c8310d4e3990e91c507ef7dec14399955c2d40e3d0ec939b2c. Ham eş 64 baytlık çerçeve sonunu da doğruladı. MAC dizgisi kaydırıldığında altı DISCOVER, sıfır OFFER ve kira kâhini kırmızı (rc=1). §7 ve PC donanım matrisi dahil 13 hedef geçti. Fiziksel adaptör denenmedi.

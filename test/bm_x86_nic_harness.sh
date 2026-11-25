@@ -10,7 +10,15 @@ for derleyici in build/kemgu build/codegen; do
     echo "NIC derleyicisi $derleyici ($w)"
     UEFI_CALISMA_DIZINI="$w" UEFI_DERLEYICI="$derleyici" UEFI_YALNIZ_DERLE=1 \
         UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-    if [[ "${1:-e1000}" == paket ]]; then
+    if [[ "${1:-e1000}" == usb_ag ]]; then
+        for program in ping indir paket; do
+            python3 tests/qemu/surec_elf.py "$w/$program.elf" --kaynak "test/kullanici/$program.kem" --derleyici "$derleyici"
+        done
+        python3 tests/qemu/ag_usb_kahin.py "$w"
+        python3 tests/qemu/ag_usb_kahin.py "$w" --ham
+        python3 tests/qemu/ag_usb_kahin.py "$w" --hub
+        python3 tests/qemu/ag_usb_kahin.py "$w" --hub --ham
+    elif [[ "${1:-e1000}" == paket ]]; then
         python3 tests/qemu/surec_elf.py "$w/paket.elf" --kaynak test/kullanici/paket.kem --derleyici "$derleyici"
         python3 tests/qemu/ag_paket_kahin.py "$w"
         python3 tests/qemu/ag_paket_buyuk.py "$w"

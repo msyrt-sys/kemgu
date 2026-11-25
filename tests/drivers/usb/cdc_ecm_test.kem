@@ -1,0 +1,13 @@
+// Dizgi ve bildirimler QEMU CDC ECM'in sunduğu alan sırasındadır.
+kullan drivers::usb::cdc_ecm::{ ecm_mac_coz, ecm_baglanti };
+kullan drivers::ortak::bayt::{ bayt_sifir, yaz_u8 };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(26); yaz_u8(b,0,26); yaz_u8(b,1,3);
+    değişken h: Dizi<tam32> = [52,48,53,52,48,48,49,55,48,48,49,54];
+    değişken i: tam32=0; iken i<12 { yaz_u8(b,2+2*i,dizi_al(h,i) olarak tam64); i=i+1; }
+    eşleş ecm_mac_coz(b) { hata(e)=>{ver 1;} tamam(m)=>{eğer m!=24189641708608 {ver 2;}} }
+    yaz_u8(b,25,1); eşleş ecm_mac_coz(b) { hata(e)=>{} tamam(m)=>{ver 3;} }
+    eğer ecm_baglanti(161,0,1,1,0,0,1)!=1 veya ecm_baglanti(161,0,0,0,0,0,1)!=0 { ver 4; }
+    eğer ecm_baglanti(161,42,1,1,0,0,1)>=0 veya ecm_baglanti(161,0,1,2,0,0,1)>=0 { ver 5; }
+    ver 0;
+}

@@ -1,3 +1,4 @@
+kullan drivers::usb::cdc_ecm::{ CdcEcm, ecm_baglanti };
 kullan drivers::ag::ntp::{ NtpOlcum, ntp_iste, ntp_cevap, ntp_takvim, ntp_unix };
 kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, TCP_DINLE, TCP_BAGLI, TCP_KAPAT_BEKLE, TCP_KAPALI, tcp_yeni, tcp_aktif, tcp_al, tcp_cikar, tcp_baslik, tcp_red, tcp_yaz, tcp_oku, tcp_kapat_iste };
 kullan drivers::ag::parca::{ ParcaYuvasi, PARCA_SINIR, parca_es, parca_yaslandir, parca_al, parca_giden };
@@ -946,9 +947,10 @@ işlev ks_sonlandir(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     ver ks_birak(y,b);
 }
 işlev kd_hub_olayi(d: &değişken KabukDisk,x: &değişken XhciDurum,xb: tam64) -> sonuç<mantıksal,metin> {
+    eşleş ag_ecm_kok_olayi(x,xb) { hata(e) => { ver hata(e); } tamam(v) => { } }
     eşleş bh_hub_isle(x,xb) { hata(e) => { ver hata(e); } tamam(v) => { } }
     eşleş kl_hidleri_sec(x,xb) { hata(e) => { ver hata(e); } tamam(v) => { } }
-    ver kd_hub_diskleri(d,x,xb);
+    ag_ecm_sec(x,xb); ver kd_hub_diskleri(d,x,xb);
 }
 işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) -> mantıksal {
     güvensiz {
@@ -1519,7 +1521,110 @@ işlev ag_vrx() {
     eğer tur>0 { kem_dma_bariyeri(); vblk_y16(ag_vrx_bildir,0 olarak dtam16); }
 }
     }
+küresel değişken ag_ecm_denetim: tam32=0;
+küresel değişken ag_ecm_veri: tam32=0;
+işlev ag_ecm_adres(bagli: mantıksal) {
+    güvensiz {
+        eğer ag_l5==0 veya ag_l3_alan==0 { ver; }
+        ag_ip_sil();
+        değişken l: *AgL3=ag_l3_alan olarak *AgL3; değişken s: AgL3=*l;
+        s.mac=ag_mac; *l=s;
+        değişken p: *DhcpKirasi=ag_l5 olarak *DhcpKirasi; değişken d: DhcpKirasi=dhcp_yeni((ag_mac^ag_us())&4294967295);
+        eğer değil bagli { d.durum=0; } *p=d;
+        değişken i: tam32=0;
+        iken ag_tcp_alan!=0 ve i<8 {
+            değişken k: tam64=ag_tcp_alan+1052672*(i olarak tam64);
+            eğer kem_mmio_oku32(k+576)!=0 {
+                değişken t: *TcpBag=k olarak *TcpBag; değişken b: TcpBag=*t; b.durum=TCP_KAPALI; b.hata_kodu= -100; *t=b;
+            }
+            i=i+1;
+        }
+    }
+}
+işlev ag_ecm_tanit(a: XhciAygit,bar: tam64) {
+    güvensiz { ag_model=6; ag_mac=a.ecm.mac; ag_dma=vnet_dma; ag_bar=bar; ag_vektor= -1;
+        ag_ecm_denetim=a.ecm.denetim; ag_ecm_veri=a.ecm.veri; }
+}
+işlev ag_ecm_sec(x: &değişken XhciDurum,bar: tam64) {
+    güvensiz {
+        eğer bar==0 veya (ag_model!=0 ve ag_model!=6) { ver; }
+        için a: x.aygitlar {
+            eğer a.yuva>0 ve a.ecm.denetim>=0 {
+                eğer be_kayit!=0 { ver; }
+                ag_ecm_tanit(a,bar);
+                eğer ag_parca_alan==0 ve değil ag_parca_kur() { bm_yaz("KABUK HATA CDC ECM ag bellegi"); ver; }
+                be_baslat(a,bar+x.c.dboff+(a.yuva olarak tam64)*4);
+                ag_ecm_adres(doğru); ver;
+            }
+        }
+        eğer ag_model==6 ve be_kayit==0 ve ag_l5!=0 {
+            değişken p: *DhcpKirasi=ag_l5 olarak *DhcpKirasi;
+            eğer (*p).durum!=0 { ag_ecm_adres(yanlış); }
+        }
+    }
+}
+işlev ag_ecm_kok_olayi(x: &değişken XhciDurum,bar: tam64) -> sonuç<mantıksal,metin> {
+    güvensiz {
+        eğer be_kok_degisti==0 { ver tamam(yanlış); } be_kok_degisti=0;
+        değişken adres: tam64=bar+(x.c.caplength olarak tam64)+1024+16*((be_kok-1) olarak tam64);
+        değişken durum: tam64=kem_mmio_oku32(adres);
+        kem_mmio_yaz32(adres,(durum&234930688)|(durum&16646144));
+        değişken i: tam32=0;
+        iken i<dizi_boyut(x.aygitlar) {
+            değişken a: XhciAygit=dizi_al(x.aygitlar,i);
+            eğer a.yuva>0 ve a.port==be_kok ve a.derinlik==0 {
+                eğer (durum&1)!=0 ve (durum&131072)==0 { ver tamam(yanlış); }
+                bh_yonet_bas(x); eşleş xhci_alt_birak(x,i) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+                eşleş bd_xsur(bar,x) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+                be_kayit=0; be_bagli=0; ag_ecm_adres(yanlış);
+            }
+            i=i+1;
+        }
+        eğer (durum&1)!=0 {
+            bh_yonet_bas(x); eşleş xhci_kok_baslat(x,be_kok) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+            eşleş bd_xsur(bar,x) { hata(e)=>{ver hata(e);} tamam(v)=>{} }
+        }
+        ver tamam(doğru);
+    }
+}
+işlev ag_ecm_al() {
+    güvensiz {
+        eğer be_kayit==0 { ver; }
+        bh_olaylar(); değişken r: tam64=be_kayit+128;
+        eğer kem_mmio_oku64(r)==2 {
+            değişken p: tam64=kem_mmio_oku64(r+32);
+            eğer kem_mmio_oku64(r+40)>=8 {
+                değişken v: tam32=ecm_baglanti(kem_fiz_oku8(p) olarak tam32,kem_fiz_oku8(p+1) olarak tam32,
+                    vblk_o16(p+2) olarak tam32,vblk_o16(p+4) olarak tam32,vblk_o16(p+6) olarak tam32,ag_ecm_denetim,ag_ecm_veri);
+                eğer v>=0 ve be_bagli!=(v olarak tam64) { be_bagli=v olarak tam64; ag_ecm_adres(v!=0); }
+            }
+            be_iste(r,16);
+        }
+        r=be_kayit+64; değişken i: tam32=0;
+        iken i<16 ve kem_mmio_oku64(r)==2 {
+            değişken n: tam64=kem_mmio_oku64(r+40);
+            eğer n>=14 ve n<=1518 {
+                memcpy((ag_dma+40960) olarak *tam8,kem_mmio_oku64(r+32) olarak *tam8,n);
+                be_iste(r,1536); ag_son_boy=n olarak tam32; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+n; ag_l3_girdi();
+            } değilse { be_iste(r,1536); ag_atilan=ag_atilan+1; }
+            bh_olaylar(); i=i+1;
+        }
+    }
+}
+işlev ag_ecm_gonder(adres: tam64,boy: tam32) -> tam32 {
+    güvensiz {
+        değişken r: tam64=be_kayit; eğer r==0 { ver -100; }
+        değişken son: tam64=ag_us()+2000;
+        iken kem_mmio_oku64(r)==1 ve ag_us()<son { bh_olaylar(); }
+        eğer kem_mmio_oku64(r)==1 { ver -11; } eğer kem_mmio_oku64(r)<0 { ver -5; }
+        memcpy(kem_mmio_oku64(r+32) olarak *tam8,adres olarak *tam8,boy olarak tam64);
+        be_zlp=(boy%be_paket)==0; be_iste(r,boy olarak tam64);
+        ag_tx_sayi=ag_tx_sayi+1; ag_tx_bayt=ag_tx_bayt+(boy olarak tam64); ver 0;
+    }
+}
+
 çıplak işlev ag_link() -> tam64 {
+    eğer ag_model==6 { ver be_bagli; }
     eğer ag_model==4 { ver (vblk_o16(ag_vcihaz+6) olarak tam64)&1; }
     ver (kem_mmio_oku32(ag_bar+8)>>1)&1;
 }
@@ -1651,6 +1756,7 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
     güvensiz {
     eğer ag_bar==0 veya ag_link()==0 { ver -100; }
     eğer boy<14 veya boy>1518 { ver -90; }
+    eğer ag_model==6 { ver ag_ecm_gonder(adres,boy); }
     eğer ag_model==4 { değişken r: tam32 = ag_vtx(adres,boy); eğer r==0 { ag_tx_sayi=ag_tx_sayi+1; ag_tx_bayt=ag_tx_bayt+(boy olarak tam64); } ver r; }
     değişken t: tam64 = ag_dma+4096+(ag_tx olarak tam64)*16;
     eğer (kem_fiz_oku8(t+12)&1)==0 { ver -11; }
@@ -1669,6 +1775,7 @@ işlev ag_al() {
     eğer ag_bar==0 { ver; }
     eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
     ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_ntp_adim(); ag_tcp_adim();
+    eğer ag_model==6 { ag_ecm_al(); ver; }
     eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
@@ -3224,7 +3331,9 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         eğer uefi_mi() { eşleş kd_ramdisk_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ramdisk ",e)); } tamam(v) => { } } }
         eğer uefi_mi() { eşleş kd_gecici_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(v) => { } } }
         eşleş kd_kok_durum(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
-        eğer uefi_mi() { eşleş ag_kur() { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ag ",e)); } tamam(v) => { } } eğer değil ag_l3_kur() { bm_yaz("KABUK HATA ag L3 belleği veya zaman kaynağı"); } }
+        eğer uefi_mi() { eşleş ag_kur() { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ag ",e)); } tamam(v) => { } }
+            güvensiz { eğer ag_model==0 { için a: x.aygitlar { eğer a.yuva>0 ve a.ecm.denetim>=0 ve ag_model==0 { ag_ecm_tanit(a,xb); } } } }
+            eğer değil ag_l3_kur() { bm_yaz("KABUK HATA ag L3 belleği veya zaman kaynağı"); } }
         eğer uefi_mi() { ag_ntp_kur(&değişken d); }
         eğer uefi_mi() ve d.kok >= 0 {
             değişken k: KabukBag = dizi_al(d.baglar,d.kok);
@@ -3235,7 +3344,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
             }
         }
         kap_damga("diskler");
-        bh_kur(x,xb,fare_indeksi); kh_kur(xb,x);
+        bh_kur(x,xb,fare_indeksi); kh_kur(xb,x); eğer uefi_mi() { ag_ecm_sec(x,xb); }
         ver kabuk(&değişken d,x,xb,indeks,ke);
     } }
 }

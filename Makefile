@@ -5224,3 +5224,9 @@ $(BUILD)/kullanici/paket.elf $(BUILD)/kullanici/self/paket.elf: stdlib/kripto/ka
 test_tumu: calistir_bm_x86_paket
 calistir_bm_x86_paket: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh paket
+
+.PHONY: calistir_bm_x86_usb_ag
+test_tumu: calistir_bm_x86_usb_ag
+calistir_bm_x86_usb_ag: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/usb/cdc_ecm_test.kem
+	@bash test/bm_x86_nic_harness.sh usb_ag
