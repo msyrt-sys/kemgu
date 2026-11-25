@@ -136,3 +136,9 @@ xHCI kök portunda veya USB 2 hub arkasında CDC Ethernet Control Model (ECM) ad
 Toplu IN, toplu OUT ve kesme IN kendi DMA tamponlarını ve halkalarını kullanır. OUT uzunluğu uç paket boyunun tam katıysa sürücü çerçeveyi sıfır uzunluklu USB paketiyle bitirir. Kesme ucundaki NETWORK_CONNECTION bildirimi bağlantı durumunu günceller. Adaptörü çıkarmak DHCP kirasını ve komşu kayıtlarını temizler. Yeniden takılan adaptörün MAC adresi tekrar okunur ve yeni kira alınır. PCI ağ kartı seçilmişse USB adaptörünün takılması etkin arayüzü değiştirmez.
 
 `make calistir_bm_x86_usb_ag` kök/hub ve slirp/bağımsız Ethernet eşi birleşimlerinde DHCP, ping, 2 MiB HTTP dosyası, FAT32 paket kurulumu ve QMP ile çıkarıp takmayı sınar. QEMU'nun usb-net tanımları ve çerçeve sonlandırması için [aygıt kaynağı](https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-network.c).
+
+## ARM virtio-mmio
+
+ARM64 virt makinesinde ağ aygıtı MMIO kimliği 1 ile bulunur. VERSION_1, MAC ve sunulduğunda link durumu özelliği kabul edilir. Sekiz adet 2048 baytlık RX tanımlayıcısı çerçeve kopyalandıktan sonra yeniden kullanılır. ARP, ping, DHCP ve TCP zamanlayıcıları ARM genel sayacının milisaniye değerini kullanır. [9] ve [10] açılış sınamaları Ethernet, ARP, IPv4 ve ICMP için x86 ile aynı kaynak modüllerinden geçer.
+
+`make calistir_kem_os_arm_ag` her iki derleyicinin ARM imajını gerçek virtio-mmio aygıtıyla açar. Python eşi slirp üzerinden TCP verisini yansıtır ve HTTP dosyasını sunar. İsteğe bağlı [43]/[44] fazları yalnız `KEMAG017` işaretli ve en az 4352 sektörlük sınama diskinde çalışır. 128. sektör hedef IP, isteğe bağlı yerel IPv4 ve iki portu ağ sırasında içerir. TCP sonucu 256., HTTP gövdesi 2304. sektörden itibaren en çok birer MiB yazar. Host iki alanı beklenen içerik ve bağımsız pcap ile karşılaştırır.

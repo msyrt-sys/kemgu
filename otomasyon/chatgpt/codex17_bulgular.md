@@ -203,3 +203,12 @@ MAC dizgisinin hanelerini bir konum döndürme sabotajı gerçek QEMU'da altı D
 Ek QEMU koşumunda PCI envanterinde `10ec:8139` Realtek ile aynı makinede CDC-ECM seçildi. Aynı MAC, 2 MiB dosya ve paket kurulumu denetimleri geçti. Ham eşin toplam uzunluğu tam 64 bayt olan ICMP yanıtı pcap'te tek Ethernet çerçevesi olarak görüldü.
 
 Aynı MAC sabotajı slirp ile de çalıştırıldı. Slirp değişmiş MAC adresine DHCP yanıtı verdi. Bu topolojide kapıyı kıran denetim konuk arayüzünün beklenen MAC adresiydi (rc=1). Ham eş topolojisinde kapıyı kira zaman aşımı kırdı.
+
+## ARM ağı
+
+Transport ortak AgArayuz kayıtlarını tutuyor. MAC ve isteğe bağlı link durumu virtio özellik uzlaşmasından geliyor. RX kopyası tamamlanınca used kimliği available halkasına tek kez verilir. ARM zaman kaynağı CNTVCT_EL0 ve CNTFRQ_EL0. Önceki ARM örneğinin ARP ve ICMP tel kurucuları kaldırıldı. Protokol kodu iki mimaride aynı modüllerden derlendi. TCP ve HTTP için ARM kullanıcı soket ABI’si eklemek yerine istenen çekirdek fazı seçildi. Kısıtlı HTTP fazı Content-Length içeren 200 yanıtını ortak başlık ayrıştırıcısıyla okur. Sonuç yalnız işaretlenmiş QEMU test diskinin ayrılmış alanına yazılır. Bu ölçüm RAM içeriğinin ötesinde kalıcı baytların doğruluğunu kapsar.
+
+- ✓ ARM virtio-mmio DHCP ARP ping TCP 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 HTTP 1048459 d2599a3a7d32cca7ba20fc6026fd15db0344be41eb35aed639e405e379ad7da6 saniye 8.8
+- ✓ ARM virtio-mmio DHCP ARP ping TCP 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 HTTP 1048459 d2599a3a7d32cca7ba20fc6026fd15db0344be41eb35aed639e405e379ad7da6 saniye 10.44
+- kemgu RX iadesiz: ping yeşil, gerçek TCP kırmızı, tel çerçevesi 54
+- codegen RX iadesiz: ping yeşil, gerçek TCP kırmızı, tel çerçevesi 54

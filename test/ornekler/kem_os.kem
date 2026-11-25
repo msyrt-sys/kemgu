@@ -361,140 +361,6 @@ işlev net_dev_testi() -> tam32 {
     ver 1;
 }
 
-// [9] NET ARP — saf-.kem GERÇEK ağ round-trip. Gateway (10.0.2.2) için ARP request GÖNDER →
-// QEMU SLIRP'ten ARP reply AL → oper=2 + spa=gateway + gateway MAC nonzero DOĞRULA. 2-yönlü ağ
-// (TX+RX). Sentetik değil: gerçek paket gönderilir + SLIRP'ten gerçek yanıt alınır+parse edilir.
-işlev net_arp_testi() -> tam32 {
-    değişken base: tam64 = vnet_bul();
-    eğer base == 0 { ver 0; }
-    eğer vnet_kur(base) != 0 { ver 0; }
-    değişken m0: dtam8 = vnet_mac_bayt(base, 0);       // bizim MAC (config'ten)
-    değişken m1: dtam8 = vnet_mac_bayt(base, 1);
-    değişken m2: dtam8 = vnet_mac_bayt(base, 2);
-    değişken m3: dtam8 = vnet_mac_bayt(base, 3);
-    değişken m4: dtam8 = vnet_mac_bayt(base, 4);
-    değişken m5: dtam8 = vnet_mac_bayt(base, 5);
-    // ARP request çerçevesi (60 bayt), önce sıfırla
-    değişken i: tam32 = 0;
-    iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
-    i = 0; iken i < 6 { vnet_tx_yaz(i, 255 olarak dtam8); i = i + 1; }   // eth dst broadcast @0..5
-    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2);         // eth src @6..11
-    vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5);
-    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 6 olarak dtam8);   // ethertype 0x0806 ARP
-    vnet_tx_yaz(14, 0 olarak dtam8); vnet_tx_yaz(15, 1 olarak dtam8);   // htype ethernet
-    vnet_tx_yaz(16, 8 olarak dtam8); vnet_tx_yaz(17, 0 olarak dtam8);   // ptype IPv4
-    vnet_tx_yaz(18, 6 olarak dtam8); vnet_tx_yaz(19, 4 olarak dtam8);   // hlen, plen
-    vnet_tx_yaz(20, 0 olarak dtam8); vnet_tx_yaz(21, 1 olarak dtam8);   // oper request
-    vnet_tx_yaz(22, m0); vnet_tx_yaz(23, m1); vnet_tx_yaz(24, m2);      // sha @22..27
-    vnet_tx_yaz(25, m3); vnet_tx_yaz(26, m4); vnet_tx_yaz(27, m5);
-    vnet_tx_yaz(28, 10 olarak dtam8); vnet_tx_yaz(29, 0 olarak dtam8);  // spa 10.0.2.15
-    vnet_tx_yaz(30, 2 olarak dtam8); vnet_tx_yaz(31, 15 olarak dtam8);
-    vnet_tx_yaz(38, 10 olarak dtam8); vnet_tx_yaz(39, 0 olarak dtam8);  // tpa 10.0.2.2 (gateway)
-    vnet_tx_yaz(40, 2 olarak dtam8); vnet_tx_yaz(41, 2 olarak dtam8);
-    eğer vnet_gonder(base, 60) != 0 { ver 0; }
-    // Yanıtı AL (birkaç paket dinle): ARP reply (oper=2) + spa=gateway.
-    değişken deneme: tam32 = 0;
-    iken deneme < 20 {
-        değişken n: tam32 = vnet_al(base, 8000000);
-        eğer n >= 42 {
-            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (6 olarak dtam8))
-                ve (vnet_rx_oku(20) == (0 olarak dtam8)) ve (vnet_rx_oku(21) == (2 olarak dtam8))
-                ve (vnet_rx_oku(28) == (10 olarak dtam8)) ve (vnet_rx_oku(30) == (2 olarak dtam8))
-                ve (vnet_rx_oku(31) == (2 olarak dtam8)) {
-                // gateway MAC (sha @22..27) nonzero mu?
-                değişken gw: tam32 = (vnet_rx_oku(22) olarak tam32) + (vnet_rx_oku(23) olarak tam32)
-                    + (vnet_rx_oku(24) olarak tam32) + (vnet_rx_oku(27) olarak tam32);
-                eğer gw != 0 { ver 1; }
-            }
-        }
-        deneme = deneme + 1;
-    }
-    ver 0;
-}
-
-// [10] PING — saf-.kem GERÇEK ICMP echo round-trip ("OS ping atıyor"). ARP ile gateway MAC çöz →
-// IPv4+ICMP Echo Request (RFC1071 checksum) GÖNDER → SLIRP echo reply AL → proto=1 + type=0 +
-// payload "KEMGU" geri döndü DOĞRULA. Tüm ağ yığını (ARP+IPv4+ICMP+checksum) saf-.kem, gerçek.
-işlev net_icmp_testi() -> tam32 {
-    değişken base: tam64 = vnet_bul();
-    eğer base == 0 { ver 0; }
-    eğer vnet_kur(base) != 0 { ver 0; }
-    değişken m0: dtam8 = vnet_mac_bayt(base, 0); değişken m1: dtam8 = vnet_mac_bayt(base, 1);
-    değişken m2: dtam8 = vnet_mac_bayt(base, 2); değişken m3: dtam8 = vnet_mac_bayt(base, 3);
-    değişken m4: dtam8 = vnet_mac_bayt(base, 4); değişken m5: dtam8 = vnet_mac_bayt(base, 5);
-    // --- 1) ARP: gateway (10.0.2.2) MAC çöz ---
-    değişken i: tam32 = 0;
-    iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
-    i = 0; iken i < 6 { vnet_tx_yaz(i, 255 olarak dtam8); i = i + 1; }
-    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2); vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5);
-    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 6 olarak dtam8);
-    vnet_tx_yaz(14, 0 olarak dtam8); vnet_tx_yaz(15, 1 olarak dtam8);
-    vnet_tx_yaz(16, 8 olarak dtam8); vnet_tx_yaz(17, 0 olarak dtam8);
-    vnet_tx_yaz(18, 6 olarak dtam8); vnet_tx_yaz(19, 4 olarak dtam8);
-    vnet_tx_yaz(20, 0 olarak dtam8); vnet_tx_yaz(21, 1 olarak dtam8);
-    vnet_tx_yaz(22, m0); vnet_tx_yaz(23, m1); vnet_tx_yaz(24, m2); vnet_tx_yaz(25, m3); vnet_tx_yaz(26, m4); vnet_tx_yaz(27, m5);
-    vnet_tx_yaz(28, 10 olarak dtam8); vnet_tx_yaz(29, 0 olarak dtam8); vnet_tx_yaz(30, 2 olarak dtam8); vnet_tx_yaz(31, 15 olarak dtam8);
-    vnet_tx_yaz(38, 10 olarak dtam8); vnet_tx_yaz(39, 0 olarak dtam8); vnet_tx_yaz(40, 2 olarak dtam8); vnet_tx_yaz(41, 2 olarak dtam8);
-    eğer vnet_gonder(base, 60) != 0 { ver 0; }
-    değişken g0: dtam8 = 0 olarak dtam8; değişken g1: dtam8 = 0 olarak dtam8; değişken g2: dtam8 = 0 olarak dtam8;
-    değişken g3: dtam8 = 0 olarak dtam8; değişken g4: dtam8 = 0 olarak dtam8; değişken g5: dtam8 = 0 olarak dtam8;
-    değişken arp_ok: tam32 = 0;
-    değişken deneme: tam32 = 0;
-    iken deneme < 20 {
-        değişken n: tam32 = vnet_al(base, 8000000);
-        eğer n >= 42 {
-            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (6 olarak dtam8))
-                ve (vnet_rx_oku(20) == (0 olarak dtam8)) ve (vnet_rx_oku(21) == (2 olarak dtam8)) {
-                g0 = vnet_rx_oku(22); g1 = vnet_rx_oku(23); g2 = vnet_rx_oku(24);
-                g3 = vnet_rx_oku(25); g4 = vnet_rx_oku(26); g5 = vnet_rx_oku(27);
-                arp_ok = 1; deneme = 20;
-            }
-        }
-        deneme = deneme + 1;
-    }
-    eğer arp_ok == 0 { ver 0; }
-    // --- 2) IPv4 + ICMP Echo Request kur ---
-    i = 0; iken i < 60 { vnet_tx_yaz(i, 0 olarak dtam8); i = i + 1; }
-    vnet_tx_yaz(0, g0); vnet_tx_yaz(1, g1); vnet_tx_yaz(2, g2); vnet_tx_yaz(3, g3); vnet_tx_yaz(4, g4); vnet_tx_yaz(5, g5);   // dst=gw
-    vnet_tx_yaz(6, m0); vnet_tx_yaz(7, m1); vnet_tx_yaz(8, m2); vnet_tx_yaz(9, m3); vnet_tx_yaz(10, m4); vnet_tx_yaz(11, m5); // src
-    vnet_tx_yaz(12, 8 olarak dtam8); vnet_tx_yaz(13, 0 olarak dtam8);   // ethertype IPv4 0x0800
-    vnet_tx_yaz(14, 69 olarak dtam8);                                  // 0x45 ver4/IHL5
-    vnet_tx_yaz(16, 0 olarak dtam8); vnet_tx_yaz(17, 33 olarak dtam8); // total_len = 20+13
-    vnet_tx_yaz(20, 64 olarak dtam8);                                  // 0x40 flags DF
-    vnet_tx_yaz(22, 64 olarak dtam8);                                  // TTL
-    vnet_tx_yaz(23, 1 olarak dtam8);                                   // proto ICMP
-    vnet_tx_yaz(26, 10 olarak dtam8); vnet_tx_yaz(27, 0 olarak dtam8); vnet_tx_yaz(28, 2 olarak dtam8); vnet_tx_yaz(29, 15 olarak dtam8); // src IP
-    vnet_tx_yaz(30, 10 olarak dtam8); vnet_tx_yaz(31, 0 olarak dtam8); vnet_tx_yaz(32, 2 olarak dtam8); vnet_tx_yaz(33, 2 olarak dtam8);  // dst IP
-    değişken ihs: tam32 = vnet_tx_checksum(14, 20);   // IP başlık checksum
-    vnet_tx_yaz(24, ((ihs >> 8) & 255) olarak dtam8); vnet_tx_yaz(25, (ihs & 255) olarak dtam8);
-    vnet_tx_yaz(34, 8 olarak dtam8);                                   // ICMP type echo
-    vnet_tx_yaz(35, 0 olarak dtam8);                                   // code
-    vnet_tx_yaz(38, 190 olarak dtam8); vnet_tx_yaz(39, 239 olarak dtam8);   // id 0xBEEF
-    vnet_tx_yaz(40, 0 olarak dtam8); vnet_tx_yaz(41, 1 olarak dtam8);       // seq 1
-    vnet_tx_yaz(42, 75 olarak dtam8); vnet_tx_yaz(43, 69 olarak dtam8); vnet_tx_yaz(44, 77 olarak dtam8);   // "KEM"
-    vnet_tx_yaz(45, 71 olarak dtam8); vnet_tx_yaz(46, 85 olarak dtam8);                                     // "GU"
-    değişken ics: tam32 = vnet_tx_checksum(34, 13);   // ICMP checksum
-    vnet_tx_yaz(36, ((ics >> 8) & 255) olarak dtam8); vnet_tx_yaz(37, (ics & 255) olarak dtam8);
-    eğer vnet_gonder(base, 47) != 0 { ver 0; }                        // 14 eth + 20 ip + 13 icmp
-    // --- 3) ICMP Echo Reply AL: proto=1 + type=0 + payload "KEMGU" ---
-    deneme = 0;
-    iken deneme < 24 {
-        değişken n: tam32 = vnet_al(base, 8000000);
-        eğer n >= 34 {
-            eğer (vnet_rx_oku(12) == (8 olarak dtam8)) ve (vnet_rx_oku(13) == (0 olarak dtam8))
-                ve (vnet_rx_oku(23) == (1 olarak dtam8)) ve (vnet_rx_oku(34) == (0 olarak dtam8)) {
-                eğer (vnet_rx_oku(42) == (75 olarak dtam8)) ve (vnet_rx_oku(43) == (69 olarak dtam8))
-                    ve (vnet_rx_oku(44) == (77 olarak dtam8)) ve (vnet_rx_oku(45) == (71 olarak dtam8))
-                    ve (vnet_rx_oku(46) == (85 olarak dtam8)) {
-                    ver 1;
-                }
-            }
-        }
-        deneme = deneme + 1;
-    }
-    ver 0;
-}
-
 // [D-692] [25] BIGNUM, [26] SHA256 → test/ornekler/kem_os_algoritma.kem (ortak, arm64 + x86).
 
 // [D-693] [27] GOREV KAPASITE → test/ornekler/kem_os_cekirdek_ortak.kem (ortak, arm64 + x86).
@@ -664,7 +530,11 @@ işlev main() -> tam32 {
     }
 
     // [9] NET ARP — saf-.kem GERÇEK ağ round-trip (ARP request→SLIRP reply). Additive.
-    değişken arp_ok: tam32 = net_arp_testi();
+    değişken arm_ag: ArmAg=arm_ag_yeni(net_ok);
+    değişken ag_hedef: ArmAgHedef=arm_ag_hedef();
+    eğer ag_hedef.yerel!=0 ve ag_hedef.es!=0 { arm_ag.l3.ip=ag_hedef.yerel; arm_ag.l3.gecit=ag_hedef.es; arm_ag.l3.onek=24; }
+    değilse eğer arm_ag_kira(&değişken arm_ag) { uart_satir("ARM AG DHCP OK"); }
+    değişken arp_ok: tam32 = net_arp_testi(&değişken arm_ag);
     eğer arp_ok == 1 {
         uart_satir("[9] NET ARP OK");
     } değilse {
@@ -672,7 +542,7 @@ işlev main() -> tam32 {
     }
 
     // [10] PING — saf-.kem GERÇEK ICMP echo round-trip (ARP+IPv4+ICMP+checksum). Additive.
-    değişken ping_ok: tam32 = net_icmp_testi();
+    değişken ping_ok: tam32 = net_icmp_testi(&değişken arm_ag);
     eğer ping_ok == 1 {
         uart_satir("[10] PING CANLI");
     } değilse {
@@ -986,6 +856,15 @@ işlev main() -> tam32 {
         uart_satir("[42] GOREV HATA");
     }
 
+    eğer ag_hedef.es!=0 ve ag_hedef.tcp>0 {
+        eğer arm_ag_aktar(&değişken arm_ag,ag_hedef.es,ag_hedef.tcp,yanlış) {
+            uart_satir("[43] AG TCP 1048576 OK");
+            eğer ag_hedef.http>0 {
+                eğer arm_ag_aktar(&değişken arm_ag,ag_hedef.es,ag_hedef.http,doğru) { uart_satir("[44] AG HTTP OK"); }
+                değilse { uart_satir("[44] AG HTTP HATA"); }
+            }
+        } değilse { uart_satir("[43] AG TCP HATA"); }
+    }
     // Entegrasyon doğrulaması — BEŞ alt-sistem de doğru mu (6 kontrol: heap+mmio+hesap×3+exc)?
     değişken gecti: tam32 = 0;
     eğer dt == 55 {

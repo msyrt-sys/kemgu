@@ -1,0 +1,236 @@
+// ARM virtio-mmio yalnız çerçeve taşır. İki mimari aynı tel ayrıştırıcılarını ve zamanlayıcıları çağırır.
+kullan drivers::ag::arayuz::{ AgArayuz };
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_be32, ag_y8 };
+kullan drivers::ag::eth::{ eth_tur, eth_yaz, eth_mac };
+kullan drivers::ag::arp::{ arp_yaz, arp_bul };
+kullan drivers::ag::ipv4::{ ip4_yaz, ip4_baslik };
+kullan drivers::ag::l3::{ AgL3, l3_yeni, l3_al, l3_ping };
+kullan drivers::ag::udp::{ udp_yaz, udp_oku };
+kullan drivers::ag::dhcp::{ DhcpKirasi, dhcp_yeni, dhcp_tick, dhcp_istek, dhcp_al, dhcp_onek };
+kullan drivers::ortak::bayt::{ bayt_sifir } olarak a_bayt;
+
+yapı ArmAg {
+    taban: tam64; frekans: tam64; ar: AgArayuz; l3: AgL3; kira: DhcpKirasi;
+    rx: Dizi<dtam8>; tx: Dizi<dtam8>;
+}
+çıplak işlev arm_ag_sayac() -> tam64 {
+    değişken v: tam64=0;
+    güvensiz { satıriçi_asm { mimari:arm64 şablon:r#"isb
+mrs $0, cntvct_el0"# çıktı("=r",&v) } }
+    ver v;
+}
+işlev arm_ag_ms(a: &değişken ArmAg) -> tam64 { ver arm_ag_sayac()/a.frekans; }
+işlev arm_ag_yeni(hazir: tam32) -> ArmAg {
+    değişken base: tam64=0; değişken mac: tam64=0;
+    eğer hazir==1 {
+        base=vnet_bul(); değişken i: tam32=0;
+        iken i<6 { mac=mac|((vnet_mac_bayt(base,i) olarak tam64)<<(i*8)); i=i+1; }
+    }
+    değişken t: Dizi<tam64> =[]; değişken j: tam32=0;
+    iken j<48 { dizi_ekle(t,0 olarak tam64); j=j+1; }
+    değişken frekans: tam64=kz_cntfrq()/1000; eğer frekans<1 { frekans=1; base=0; }
+    ver ArmAg {taban:base,frekans:frekans,ar:AgArayuz {model:7,mac:mac,bagli:vnet_bagli(base),rx:0,tx:0,rx_bayt:0,tx_bayt:0,atilan:0},
+        l3:l3_yeni(mac,t),kira:dhcp_yeni((mac^arm_ag_sayac())&4294967295),rx:bayt_sifir(1536),tx:bayt_sifir(1536)};
+}
+işlev arm_ag_gonder(a: &değişken ArmAg,n: tam32) -> mantıksal {
+    eğer değil vnet_bagli(a.taban) veya n<14 veya n>1518 { ver yanlış; }
+    değişken i: tam32=0;
+    iken i<n { vnet_tx_yaz(i,dizi_al(a.tx,i)); i=i+1; }
+    iken i<60 { vnet_tx_yaz(i,0 olarak dtam8); i=i+1; }
+    eğer vnet_gonder(a.taban,i)!=0 { a.ar.atilan=a.ar.atilan+1; ver yanlış; }
+    a.ar.tx=a.ar.tx+1; a.ar.tx_bayt=a.ar.tx_bayt+(i olarak tam64); ver doğru;
+}
+işlev arm_ag_oku(a: &değişken ArmAg) -> tam32 {
+    değişken n: tam32=vnet_al(a.taban,100);
+    eğer n<=0 { ver 0; }
+    eğer n<=1518 {
+        değişken i: tam32=0; iken i<n { dizi_yaz(a.rx,i,vnet_rx_oku(i)); i=i+1; }
+    }
+    güvensiz { vnet_rx_iade(a.taban,vnet_rx_id); }
+    eğer n<14 veya n>1518 { a.ar.atilan=a.ar.atilan+1; ver 0; }
+    a.ar.rx=a.ar.rx+1; a.ar.rx_bayt=a.ar.rx_bayt+(n olarak tam64); ver n;
+}
+işlev arm_ag_l3(a: &değişken ArmAg,n: tam32) {
+    değişken g: tam32=l3_al(&değişken a.l3,a.rx,n,a.tx,arm_ag_ms(a),yanlış);
+    eğer g>0 { arm_ag_gonder(a,g); }
+}
+işlev arm_ag_kira(a: &değişken ArmAg) -> mantıksal {
+    eğer a.taban==0 { ver yanlış; }
+    değişken son: tam64=arm_ag_ms(a)+2500;
+    iken arm_ag_ms(a)<son {
+        değişken tur: tam32=dhcp_tick(&değişken a.kira,arm_ag_ms(a));
+        eğer tur>0 {
+            değişken boy: tam32=dhcp_istek(&a.kira,a.tx,42,a.ar.mac,tur);
+            değişken u: tam32=udp_yaz(a.tx,34,boy,0,4294967295,68,67);
+            eğer u<0 { ver yanlış; }
+            eth_yaz(a.tx,281474976710655,a.ar.mac,2048); ip4_yaz(a.tx,0,4294967295,17,u,tur);
+            arm_ag_gonder(a,34+u);
+        }
+        değişken n: tam32=arm_ag_oku(a);
+        eğer n>=42 ve eth_tur(a.rx,n,a.ar.mac)==2048 {
+            değişken h: tam32=ip4_baslik(a.rx,n);
+            eğer h>=0 ve n-h>=8 ve ag_b8(a.rx,23)==17 ve (ag_be16(a.rx,20)&16383)==0 ve ag_be16(a.rx,h)==67 ve ag_be16(a.rx,h+2)==68 {
+                değişken boy: tam32=udp_oku(a.rx,h,ag_be16(a.rx,16)+14-h,ag_be32(a.rx,26),ag_be32(a.rx,30));
+                eğer boy>=0 ve dhcp_al(&değişken a.kira,a.rx,h+8,boy,a.ar.mac,arm_ag_ms(a))==5 {
+                    a.l3.ip=a.kira.adres; a.l3.gecit=a.kira.gecit; a.l3.onek=dhcp_onek(a.kira.maske); ver doğru;
+                }
+            }
+        }
+    }
+    ver yanlış;
+}
+işlev arm_ag_komsu(a: &değişken ArmAg,ip: tam64) -> tam64 {
+    eğer a.l3.ip==0 veya ip==0 { ver 0; }
+    değişken son: tam64=arm_ag_ms(a)+1500; değişken tekrar: tam64=0;
+    iken arm_ag_ms(a)<son {
+        değişken mac: tam64=arp_bul(a.l3.arp,ip,arm_ag_ms(a)); eğer mac>0 { ver mac; }
+        eğer arm_ag_ms(a)>=tekrar {
+            arm_ag_gonder(a,arp_yaz(a.tx,1,a.ar.mac,a.l3.ip,0,ip)); tekrar=arm_ag_ms(a)+300;
+        }
+        değişken n: tam32=arm_ag_oku(a); eğer n>0 { arm_ag_l3(a,n); }
+    }
+    ver 0;
+}
+işlev net_arp_testi(a: &değişken ArmAg) -> tam32 {
+    eğer arm_ag_komsu(a,a.l3.gecit)>0 { ver 1; } ver 0;
+}
+işlev net_icmp_testi(a: &değişken ArmAg) -> tam32 {
+    değişken mac: tam64=arm_ag_komsu(a,a.l3.gecit); eğer mac<=0 { ver 0; }
+    değişken g: tam32=l3_ping(&değişken a.l3,a.tx,a.l3.ip,mac,a.l3.gecit,17,1); arm_ag_gonder(a,g);
+    değişken son: tam64=arm_ag_ms(a)+1500;
+    iken arm_ag_ms(a)<son {
+        değişken n: tam32=arm_ag_oku(a); eğer n>0 { arm_ag_l3(a,n); }
+        eğer a.l3.ping_sonuc==1 { ver 1; }
+    }
+    ver 0;
+}
+// Ağ modüllerinin bölme/sınır denetimleri ARM çekirdeğinin mevcut panik yolunu kullanır.
+çıplak işlev kdl_panik(m: metin) { kem_panik(m); }
+
+kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, tcp_yeni, tcp_aktif, tcp_baslik, tcp_al, tcp_yaz, tcp_oku, tcp_cikar, tcp_kapat_iste, TCP_BAGLI, TCP_KAPAT_BEKLE, TCP_KAPALI, TCP_SURE_BEKLE };
+kullan drivers::ag::http::{ HttpBaslik, http_yeni, http_ilk, http_alan, http_istek };
+
+// Ayrı QEMU ağ denemesinde LBA 128 konuk için hedef ve iki TCP portu içerir.
+yapı ArmAgHedef { es: tam64; yerel: tam64; tcp: tam32; http: tam32; }
+işlev arm_ag_disk_ip(i: tam32) -> tam64 {
+    değişken ip: tam64=0; değişken j: tam32=0;
+    iken j<4 { ip=ip*256+(vblk_data_oku(i+j) olarak tam64); j=j+1; } ver ip;
+}
+işlev arm_ag_hedef() -> ArmAgHedef {
+    değişken h: ArmAgHedef=ArmAgHedef {es:0,yerel:0,tcp:0,http:0}; değişken d: tam64=vblk_bul();
+    eğer d==0 veya vblk_o32(d+256)<4352 veya vblk_oku(d,128)!=0 { ver h; }
+    değişken im: metin="KEMAG017"; değişken i: tam32=0;
+    iken i<8 { eğer (vblk_data_oku(i) olarak tam32)!=(metin_bayt(im,i) olarak tam32) { ver h; } i=i+1; }
+    h.es=arm_ag_disk_ip(8); h.yerel=arm_ag_disk_ip(12);
+    h.tcp=(vblk_data_oku(16) olarak tam32)*256+(vblk_data_oku(17) olarak tam32);
+    h.http=(vblk_data_oku(18) olarak tam32)*256+(vblk_data_oku(19) olarak tam32); ver h;
+}
+// İşaretli sınama diskinde TCP ve HTTP için ayrı, birer MiB alan ayrılmıştır.
+işlev arm_ag_kaydet(alan: tam64,n: tam32,http: mantıksal) -> mantıksal {
+    değişken d: tam64=vblk_bul(); eğer d==0 veya n<0 veya n>1048576 veya vblk_o32(d+256)<4352 { ver yanlış; }
+    değişken lba: tam64=256; eğer http { lba=2304; }
+    değişken ofs: tam32=0;
+    iken ofs<n {
+        değişken i: tam32=0; iken i<512 {
+            değişken v: dtam8=0 olarak dtam8; eğer ofs+i<n { v=vblk_o8(alan+((ofs+i) olarak tam64)); }
+            vblk_data_yaz(i,v); i=i+1;
+        }
+        eğer vblk_yaz(d,lba)!=0 { ver yanlış; }
+        ofs=ofs+512; lba=lba+1;
+    }
+    ver doğru;
+}
+yapı ArmAgAkis {
+    http: mantıksal; istek: metin; giden: tam32; alinan: tam32; alan: tam64;
+    baslik: HttpBaslik; satir: metin; ilk: mantıksal; cr: mantıksal; govde: mantıksal;
+}
+işlev arm_ag_bayt(i: tam32) -> tam32 { ver (i*37+i/251)&255; }
+işlev arm_ag_veri_al(u: &değişken ArmAgAkis,b: Dizi<dtam8>,n: tam32) -> mantıksal {
+    değişken i: tam32=0;
+    iken i<n {
+        değişken v: tam32=ag_b8(b,i);
+        eğer u.http ve değil u.govde {
+            eğer u.cr {
+                eğer v!=10 { ver yanlış; } u.cr=yanlış;
+                eğer u.ilk {
+                    eğer değil http_ilk(&değişken u.baslik,u.satir,doğru) veya u.baslik.kod!=200 { ver yanlış; } u.ilk=yanlış;
+                } değilse eğer metin_uzunluk(u.satir)==0 {
+                    eğer u.baslik.boy<0 veya u.baslik.boy>1048576 veya u.baslik.parcali { ver yanlış; } u.govde=doğru;
+                } değilse eğer değil http_alan(&değişken u.baslik,u.satir) { ver yanlış; }
+                u.satir="";
+            } değilse eğer v==13 { u.cr=doğru; }
+            değilse {
+                eğer v<32 veya v>126 veya metin_uzunluk(u.satir)>=1024 { ver yanlış; }
+                u.satir=metin_birlestir(u.satir,kod_metin(v));
+            }
+        } değilse {
+            eğer u.alinan>=1048576 veya (u.http ve (u.alinan olarak tam64)>=u.baslik.boy) { ver yanlış; }
+            eğer değil u.http ve v!=arm_ag_bayt(u.alinan) { ver yanlış; }
+            vblk_y8(u.alan+(u.alinan olarak tam64),v olarak dtam8); u.alinan=u.alinan+1;
+        }
+        i=i+1;
+    }
+    ver doğru;
+}
+işlev arm_ag_uygulama(s: &değişken TcpBag,u: &değişken ArmAgAkis,b: Dizi<dtam8>) -> mantıksal {
+    eğer s.durum==TCP_BAGLI veya s.durum==TCP_KAPAT_BEKLE {
+        değişken hedef: tam32=1048576; eğer u.http { hedef=metin_uzunluk(u.istek); }
+        değişken n: tam32=hedef-u.giden;
+        eğer n>dizi_boyut(b) { n=dizi_boyut(b); }
+        eğer n>dizi_boyut(s.tx)-s.tx_boy { n=dizi_boyut(s.tx)-s.tx_boy; }
+        eğer n>0 {
+            değişken i: tam32=0;
+            iken i<n {
+                değişken v: tam32=arm_ag_bayt(u.giden+i);
+                eğer u.http { v=metin_bayt(u.istek,u.giden+i) olarak tam32; }
+                ag_y8(b,i,v olarak tam64); i=i+1;
+            }
+            değişken g: tam32=tcp_yaz(s,b,0,n); eğer g!=n { ver yanlış; } u.giden=u.giden+g;
+        }
+    }
+    iken s.rx_boy>0 {
+        değişken n: tam32=tcp_oku(s,b,0,dizi_boyut(b));
+        eğer n<=0 veya değil arm_ag_veri_al(u,b,n) { ver yanlış; }
+    }
+    eğer (u.http ve u.govde ve (u.alinan olarak tam64)==u.baslik.boy) veya (değil u.http ve u.alinan==1048576 ve u.giden==1048576) {
+        tcp_kapat_iste(s);
+    }
+    ver doğru;
+}
+işlev arm_ag_tcp_girdi(a: &değişken ArmAg,s: &değişken TcpBag,n: tam32) {
+    eğer eth_tur(a.rx,n,a.ar.mac)==2048 ve ag_b8(a.rx,23)==6 {
+        değişken h: tam32=ip4_baslik(a.rx,n);
+        eğer h<0 veya (ag_be16(a.rx,20)&16383)!=0 veya ag_be32(a.rx,26)!=s.es veya ag_be32(a.rx,30)!=s.ip { ver; }
+        değişken v: TcpBaslik=tcp_baslik(a.rx,h,ag_be16(a.rx,16)+14-h,s.es,s.ip);
+        eğer v.h>=20 ve v.sp==s.es_port ve v.dp==s.port { tcp_al(s,&v,a.rx,h,arm_ag_ms(a)); }
+    } değilse { arm_ag_l3(a,n); }
+}
+işlev arm_ag_akisi_sur(a: &değişken ArmAg,ip: tam64,port: tam32,http: mantıksal,alan: tam64) -> mantıksal {
+    değişken mac: tam64=arm_ag_komsu(a,ip); eğer mac<=0 veya port<=0 { ver yanlış; }
+    değişken yerel: tam32=17170; eğer http { yerel=17171; }
+    değişken s: TcpBag=tcp_yeni(a.l3.ip,ip,yerel,port,arm_ag_sayac()&4294967295,bayt_sifir(16384),bayt_sifir(16384));
+    değişken u: ArmAgAkis=ArmAgAkis {http:http,istek:"",giden:0,alinan:0,alan:alan,baslik:http_yeni(),satir:"",ilk:doğru,cr:yanlış,govde:yanlış};
+    eğer http { u.istek=http_istek("/veri.bin","kemgu.test"); }
+    değişken b: Dizi<dtam8> = bayt_sifir(2048);
+    tcp_aktif(&değişken s,arm_ag_ms(a)); değişken son: tam64=arm_ag_ms(a)+18000; değişken kim: tam32=17;
+    iken arm_ag_ms(a)<son {
+        değişken n: tam32=arm_ag_oku(a); eğer n>0 { arm_ag_tcp_girdi(a,&değişken s,n); }
+        değişken once: tam32=u.alinan;
+        eğer değil arm_ag_uygulama(&değişken s,&değişken u,b) { ver yanlış; }
+        eğer u.alinan!=once { son=arm_ag_ms(a)+18000; }
+        değişken g: tam32=tcp_cikar(&değişken s,a.tx,34,arm_ag_ms(a));
+        eğer g>0 { eth_yaz(a.tx,mac,a.ar.mac,2048); ip4_yaz(a.tx,s.ip,s.es,6,g,kim); kim=(kim+1)&65535; eğer değil arm_ag_gonder(a,34+g) { ver yanlış; } }
+        eğer s.durum==TCP_SURE_BEKLE veya s.durum==TCP_KAPALI {
+            eğer s.hata_kodu!=0 veya değil s.kapat { ver yanlış; }
+            ver arm_ag_kaydet(alan,u.alinan,http);
+        }
+    }
+    ver yanlış;
+}
+işlev arm_ag_aktar(a: &değişken ArmAg,ip: tam64,port: tam32,http: mantıksal) -> mantıksal {
+    güvensiz {
+        değişken alan: tam64=malloc(1048576) olarak tam64; eğer alan==0 { ver yanlış; }
+        değişken v: mantıksal=arm_ag_akisi_sur(a,ip,port,http,alan);
+        free(alan olarak *tam8); ver v;
+    }
+}

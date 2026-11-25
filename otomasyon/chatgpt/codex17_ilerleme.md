@@ -76,3 +76,7 @@ Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön b
 ## Bölüm 16 — xHCI üzerinde USB CDC-ECM
 
 2203 saniye. C ve self-host derleyicilerinde kök port/USB 2 hub ve slirp/ham Ethernet eşi olmak üzere sekiz QEMU koşumu. DHCP, ping, 2 MiB HTTP indirmesi, paket kur, QMP ile ağ aygıtını çıkarıp tekrar takma, yeniden DHCP ve ping geçti. FAT32 dosyasının SHA256 değeri cfdf2227590f50c8310d4e3990e91c507ef7dec14399955c2d40e3d0ec939b2c. Ham eş 64 baytlık çerçeve sonunu da doğruladı. MAC dizgisi kaydırıldığında altı DISCOVER, sıfır OFFER ve kira kâhini kırmızı (rc=1). §7 ve PC donanım matrisi dahil 13 hedef geçti. Fiziksel adaptör denenmedi.
+
+## Bölüm 17 — ARM virtio-mmio ve ortak ağ yığını
+
+1338 saniye. [9] ARP ve [10] PING CANLI ortak sürücülerden geçiyor. Denetlenen 42 eski faz korundu. DHCP, slirp üzerinde Python TCP eşine iki yönde 1 MiB, HTTP ile 1048459 bayt. Konuk diskindeki iki alanın ve ağ kaydının SHA256 değerleri host girdileriyle aynı. C ve self-host ayrı imajlarla açıldı. Her iki derleyicide RX tamponlarını yeniden vermeme sabotajında [10] geçti, [43] AG TCP HATA çıktı ve pozitif aktarım kâhini kırmızı oldu. §7 dahil 14 hedef.

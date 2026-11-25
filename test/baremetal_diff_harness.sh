@@ -70,7 +70,7 @@ pass=0; fail=0
 # Makefile `calistir_kem_os_arm` cat sırasıyla AYNI olmalı.
 OS_PARCA="runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem \
 runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem \
-runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem \
+runtime/kem_dizi_genis.kem runtime/kem_virtio_net.kem runtime/kem_ag_arm.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem \
 test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem"
 os_ok=0
 os_eksik=""
@@ -191,7 +191,7 @@ EOF
 # `@ad = `). `sabit`ler IR'da sembol bırakmaz (satır içi) → sayılamaz.
 # Gerekçeler (neden tek başına derlenemiyor): docs/BAREMETAL_DIFF_KAPSAM.md
 PARCALAR="runtime/kem_elf.kem runtime/kem_gorev.kem runtime/kem_minifs.kem
-runtime/kem_mmu.kem runtime/kem_virtio_net.kem runtime/kem_zaman.kem
+runtime/kem_mmu.kem runtime/kem_virtio_net.kem runtime/kem_ag_arm.kem runtime/kem_zaman.kem
 runtime/mimari/arm64/kem_uart.kem runtime/mimari/arm64/kem_platform.kem
 runtime/mimari/arm64/kem_zaman_hw.kem
 runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem
