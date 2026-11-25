@@ -392,6 +392,13 @@ static void test_crossfile_sonuc_yeni_verify(void) {
 /* [D-767] C16-001: modul uyesi + metot cagrisinin donus isareti ve metin-ligi.
  * modul_codegen yalniz C <-> self kiyaslar; iki derleyici AYNI sekilde bozulursa
  * (nitelikli/metot cagrisinda oyleydi) parite yesil kalir -> burada MUTLAK olcum. */
+/* [D-771] C17-001: ham isaretciden yapi alanina yazma `(*p).alan = v`. Iki derleyici de
+ * atamayi SESSIZCE dusuruyordu (ayni sekilde) -> parite yesil kalirdi; burada MUTLAK olcum. */
+static void test_c17_isaretci_alan_yaz(void) {
+    int rc = derle_dosya_ve_calistir("test/cg_korpus/cg_isaretci_alan_yaz.kem");
+    test_sonuc("C17-001 (*p).alan = v yazimi (tekil/ic ice/parametre) -> exit 42", rc == 42);
+}
+
 static void test_c16_cagri_bayraklari(void) {
     int rc = derle_dosya_ve_calistir("test/moduller/ana_c16_cagri_bayraklari.kem");
     test_sonuc("C16-001 cagri donus isareti/metin-ligi (secili/nitelikli/takma ad/metot) -> exit 42", rc == 42);
@@ -3773,6 +3780,7 @@ int main(void) {
     test_crossfile_sonuc_yeni_verify();
     test_crossfile_sonuc_yeni_calistir();
     test_c16_cagri_bayraklari();
+    test_c17_isaretci_alan_yaz();
 
     printf("\n--- C2.7: cesit (custom sum type) + exhaustiveness ---\n");
     test_cesit_temel_verify();

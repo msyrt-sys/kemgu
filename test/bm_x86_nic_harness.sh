@@ -5,7 +5,7 @@ if ! command -v qemu-system-x86_64 >/dev/null || [[ ! -r /usr/share/OVMF/OVMF_CO
     echo 'ATLANDI (QEMU veya OVMF yok): NIC gidiş dönüşü'
     exit 0
 fi
-for derleyici in build/kemgu build/codegen; do
+for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
     w=$(mktemp -d build/nic.XXXXXX)
     echo "NIC derleyicisi $derleyici ($w)"
     kaynak=test/ornekler/kem_os_x86_kabuk.kem
@@ -114,4 +114,7 @@ for derleyici in build/kemgu build/codegen; do
         python3 tests/qemu/e1000_kahin.py "$w"
         python3 tests/qemu/e1000_kahin.py "$w" --kopru
     fi
+    # [D-771] Başarılı turun çalışma dizini silinir (her tam koşum ~25 GB bırakıp diski dolduruyordu);
+    # başarısız turda set -e erken çıkar ve dizin teşhis için kalır.
+    rm -rf "$w"
 done

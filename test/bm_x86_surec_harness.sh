@@ -26,9 +26,13 @@ for derleyici in ${SUREC_DERLEYICILER:-build/kemgu build/codegen}; do
     echo "Süreç derleyicisi: $derleyici; ölçüm dizini: $w"
     if [[ -n "${SUREC_KAHIN:-}" ]]; then
         SUREC_KAHIN_DERLEYICI="$derleyici" python3 "tests/qemu/$SUREC_KAHIN.py" "$w"
+        rm -rf "$w"   # [D-771] aşağıdaki temizlikle aynı kural; bu dal ondan önce döner
         continue
     fi
     for senaryo in ${SUREC_SENARYO:-matris}; do
         python3 tests/qemu/surec_kahin.py "$w" --tekrar "${SUREC_TEKRAR:-10}" --senaryo "$senaryo"
     done
+    # [D-771] Başarılı turun çalışma dizini silinir (her tam koşum ~25 GB bırakıp diski dolduruyordu);
+    # başarısız turda set -e erken çıkar ve dizin teşhis için kalır.
+    rm -rf "$w"
 done

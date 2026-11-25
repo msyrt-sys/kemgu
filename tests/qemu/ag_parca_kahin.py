@@ -70,6 +70,10 @@ def kos(w):
                 return gelen[0].kimlik
             yolla(kimlikler[0],[5,2,0,0,1,4,3])
             ilk=yankiyi_al()
+            # [D-771] Yüksek su işareti (kem_bump) ilk 8 KiB yankıda bir kez büyüyebilir (dizi büyümesi kendi
+            # bölgesinden, D-770); 40 ardışık yankıda sabit kaldığı ölçüldü. Sızıntı sorusu ilk yankıdan
+            # SONRA sorulur: düşürülen parça + ikinci yankı heap'i değiştirmemeli. Boş çerçeve tabanı değişmez.
+            heap=c.heap()
             yolla(kimlikler[1],[5,0,4,2,1])
             wait_for(p,lambda: c.sayi('ag_parca_atilan')==1,seconds=6)
             assert c.sayi('ag_parca_birlesen')==1

@@ -64,12 +64,23 @@ işlev ag17_dhcp_dns(b: Dizi<dtam8>,ad: Dizi<dtam8>,calisma: Dizi<dtam8>,i: tam3
     iken j<=etiket { ag_y8(b,j,97+((r+(j olarak tam64))%26)); j=j+1; } ag_y8(b,j,0);
     eğer dns_ad_ac(b,0,j+1,0,ad,0)<0 veya dns_ad_ac(b,0,j,0,ad,0)>=0 { ver 13; }
     eğer i%2==0 { ag_y8(b,0,192); ag_y8(b,1,0); } değilse { ag_y8(b,0,64); }
-    eğer dns_ad_ac(b,0,j+1,0,ad,0)>=0 { ver 14; } ver 0;
+    eğer dns_ad_ac(b,0,j+1,0,ad,0)>=0 { ver 14; }
+    // [D-771] S243: ETİKETSİZ iki işaretçi döngüsü (12 → 14, 14 → 12). Etiketli döngüyü 255 baytlık
+    // ad sınırı zaten bitirir; sonsuz döngüyü yalnız bu şekil üretir ve iki korunmadan (32 sıçrama,
+    // yalnız geriye işaretçi) BİRİ yeter. Korpus bu şekli üretmiyordu: ikisi birden kaldırılınca
+    // kapı yeşil kalıyordu. Şimdi ikisi birden kaldırılırsa asılma (zaman aşımı) yakalanır.
+    ag_y8(b,12,192); ag_y8(b,13,14); ag_y8(b,14,192); ag_y8(b,15,12);
+    eğer dns_ad_ac(b,0,16,12,ad,0)>=0 { ver 33; }
+    ver 0;
 }
 işlev ag17_tcp(b: Dizi<dtam8>,i: tam32,r: tam64) -> tam32 {
-    değişken kip: tam32=i%5;
+    // [D-771] S238: kip 5 = BİLİNMEYEN seçenek türü (30) + uzunluk 0. Bilinen türler (MSS, ölçek,
+    // damga) boyu kendileri denetler; `boy<2` korunması yalnız bilinmeyen türde gereklidir, yoksa
+    // `k=k+0` sonsuz döngü. Korpus bu şekli üretmeden korunma kaldırılınca kapı yeşil kalıyordu.
+    değişken kip: tam32=i%6;
     değişken n: tam32=tcp_sec_yaz(b,0,0,1,2,3000,80,r,0,2,4096,3,-1,0);
     eğer kip==1 veya kip==2 { ag_y8(b,21,(kip-1) olarak tam64); }
+    eğer kip==5 { ag_y8(b,20,30); ag_y8(b,21,0); }
     eğer kip==3 { ag_y8(b,12,240); }
     eğer kip==4 { ag_y8(b,27,15+(r%240)); }
     ag_y16(b,16,0); ag_y16(b,16,ag_saglama(b,0,n,9+(n olarak tam64)) olarak tam64);

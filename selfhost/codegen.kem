@@ -1976,6 +1976,20 @@ işlev alan_adres_uret(p: &değişken Ayr, lhs: tam32) -> metin {
             base = lrs;
             yad = cg_var_ref_bul(p, oname);
         }
+    } değilse eğer metin_esit(oa, "TEKLI") ve metin_esit(dizi_al(p.a_deg, obj), "deref*") {
+        // [D-771] C17-001: `(*p).alan = v` — ham işaretçinin GÖSTERDİĞİ yapıya yaz
+        // (C erisim_lvalue aynası). Önceden atama SESSİZCE düşüyordu (C ve self: çıkış 1).
+        değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, obj));
+        eğer metin_esit(dizi_al(p.a_ad, ic), "TANIMLAYICI") == yanlış { ver ""; }
+        değişken pn: metin = dizi_al(p.a_deg, ic);
+        değişken pt: metin = cg_var_pointee_bul(p, pn);
+        eğer metin_uzunluk(pt) == 0 { ver ""; }
+        eğer bayt(pt, 0) != 37 { ver ""; }
+        değişken plr: tam32 = yeni_reg(p);
+        değişken plrs: metin = reg_str(plr);
+        yaz_str("  "); yaz_str(plrs); yaz_str(" = load ptr, ptr "); yaz_str(cg_var_bul(p, pn)); yb(10);
+        base = plrs;
+        yad = ir_tip_soy(pt);
     } değilse {
         eğer metin_esit(oa, "ERISIM") == yanlış { ver ""; }
         base = alan_adres_uret(p, obj);
@@ -8467,7 +8481,8 @@ işlev deyim_uret(p: &değişken Ayr, idx: tam32) -> tam32 {
         eğer metin_esit(dizi_al(p.a_ad, lhs), "ERISIM") {
             değişken obj: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, lhs));
             değişken oa0: metin = dizi_al(p.a_ad, obj);
-            eğer metin_esit(oa0, "TANIMLAYICI") veya metin_esit(oa0, "ERISIM") {
+            eğer metin_esit(oa0, "TANIMLAYICI") veya metin_esit(oa0, "ERISIM")
+              veya (metin_esit(oa0, "TEKLI") ve metin_esit(dizi_al(p.a_deg, obj), "deref*")) {   // [D-771]
                 // F002: C gibi hedefi önce çöz; yapıcı beklenen alan tipini görsün.
                 değişken gr: metin = alan_adres_uret(p, lhs);
                 değişken hedef_tip: metin = p.son_tip;

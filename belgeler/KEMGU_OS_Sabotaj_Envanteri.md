@@ -187,3 +187,24 @@ Her satırdaki sonuç değiştirilen bileşenin gerçekten çalıştırıldığ�
 | 18 | TCP sıfır seçenek uzunluğu, IPv4 toplam boyu ve HTTP chunk boy taşması korumalarını kaldırma | Üçü de uygulanmadı. Sınır girdilerinin korumalı sürümde reddi C ve self-host korpusunda denetlendi. |
 | 19 | İki konuktan birinin ARP yanıtı kapatıldı | Eş telde ARP isteği gördü. Yanıt gelmedi. Konuk PING HATA -110 ve KABUK_HAZIR verdi. Olumlu sağlamlık kâhini geçti. |
 | 20 | Belge örnekleri ve yardım metinleri | Bu bölümde sabotaj istenmedi. Beş belge programı ve kabuk yardım tablosu için `calistir_bm_x86_belge15`. |
+
+### Dalga 17 — Claude'un tamamladığı sabotajlar (D-771)
+
+Codex'in "uygulanmadı" dediği değişiklikler tek tek uygulandı. Sessiz kalan sabotajda önce korpus düzeltildi, kural silinmedi.
+
+| Sabotaj | Bölüm | Değişiklik → ölçüm | Kapı | QEMU |
+|---|---|---|---|---|
+| S236 | C17-001 | C `erisim_lvalue` içindeki `(*p).alan = …` dalı kaldırıldı → C exit 1 (self 42) | `calistir_codegen_diff` + `calistir_llvm_test` | Host |
+| S237 | C17-001 | Self-host `alan_adres_uret` TEKLI `deref*` dalı kaldırıldı → self exit 1 (C 42) | `calistir_codegen_diff` | Host |
+| S238 | 18 | TCP seçenek `boy<2` koruması kaldırıldı → ilk denemede SESSİZ (korpus yalnız bilinen türlerde sıfır boy üretiyordu); bilinmeyen tür 30 + boy 0 sınır örneği eklenince exit 124 asılma | `calistir_chatgpt_kopru` (`ag17_test`) | Host |
+| S239 | 18 | IPv4 `t>n-14` toplam boy koruması kaldırıldı → `ag17_test` exit 4, `l3_test` exit 7 | `calistir_chatgpt_kopru` | Host |
+| S240 | 18 | HTTP chunk boyu taşma denetimi kaldırıldı → `ag17_test` exit 20, `http_test` exit 5 | `calistir_chatgpt_kopru` | Host |
+| S241 | 5 | DNS `adim>=32` sıçrama sınırı kaldırıldı → SESSİZ. Ölçülmüş fazlalık: yalnız-geriye işaretçi kuralı döngüyü tek başına bitirir | — | Host |
+| S242 | 5 | DNS "işaretçi yalnız geriye" (`hedef>=k`) kuralı kaldırıldı → SESSİZ. Ölçülmüş fazlalık: 32 sıçrama sınırı döngüyü tek başına bitirir | — | Host |
+| S243 | 5 | S241+S242 birlikte → ilk denemede SESSİZ (korpusta etiketsiz iki-işaretçi döngüsü yoktu); 12→14→12 döngüsü eklenince exit 124 asılma. İki koruma birbirini yedekler, birlikte kapılı | `calistir_chatgpt_kopru` (`ag17_test`) | Host |
+| S244 | 12 | HTTP yol bileşeni sondaki `.` denetimi kaldırıldı → `http_test` exit 10 | `calistir_chatgpt_kopru` | Host |
+| S245 | 15 | `paket.kem` SHA256 karşılaştırması kaldırıldı → bozuk paket `paket kuruldu bozuk`, kâhin AssertionError | `calistir_bm_x86_paket` | 1 |
+| S246 | 10 | Süreç çıkışında `ksv_fdleri_birak` içindeki `kb_birak` atlandı → soket açık kaldı, kâhin FIN beklerken zaman aşımı | `calistir_bm_x86_soket` | 1 |
+| S247 | 12 | Yönlendirme içi `yon>=5` sınırı gevşetildi → SESSİZ. Ölçülmüş fazlalık: döngü koşulu `iken yon<=5` ve sonraki `ver -40` aynı sınırı yeniden uygular | — | 1 |
+| S247b | 12 | Sınır iki yerde birden 5→6 → yedinci istek `/yon6` gitti, kâhin altı istek bekliyordu | `calistir_bm_x86_http` | 1 |
+| S248 | 6 | Parça yuvası yaşlanması kaldırıldı → `parca_test` exit 7 | `calistir_chatgpt_kopru` | Host |

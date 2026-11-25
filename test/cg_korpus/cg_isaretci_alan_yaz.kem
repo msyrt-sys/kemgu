@@ -1,0 +1,21 @@
+// [D-771] C17-001: ham işaretçiden yapı alanına yazma `(*p).alan = v`. Önceden iki derleyici de
+// atamayı SESSİZCE düşürüyordu (C: `; atama: erisim hedefi cozulemedi` yorumu; self: dal yok) →
+// tip denetimi geçiyor, program çalışıyor, değer yazılmıyor (Codex dalga 17: GARP'ta IPv4 0 kaldı).
+// İki derleyici AYNI şekilde yanlıştı → parite kapısı göremezdi; test_llvm MUTLAK ölçer.
+// Her biçim ayrı çıkış kodu; POZİTİF (7): bir alana yazmak komşu alanı bozmamalı.
+yapı Ic { x: tam32; y: tam32; }
+yapı Konum { ip: tam64; port: tam32; ic: Ic; }
+işlev ayarla(p: *Konum, v: tam32) { güvensiz { (*p).port = v; } }
+işlev main() -> tam32 { güvensiz {
+    değişken k: Konum = Konum { ip: 1, port: 2, ic: Ic { x: 3, y: 4 } };
+    değişken p: *Konum = (&k) olarak *Konum;
+    (*p).ip = 8589934599;
+    eğer k.ip != 8589934599 { ver 1; }
+    (*p).ic.x = 30;
+    eğer k.ic.x != 30 { ver 2; }
+    ayarla(p, 12);
+    eğer k.port != 12 { ver 3; }
+    eğer (*p).ic.x != 30 { ver 4; }
+    eğer k.ic.y != 4 { ver 7; }
+    ver k.port + k.ic.x;
+} }

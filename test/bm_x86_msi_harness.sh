@@ -14,5 +14,7 @@ for c in build/kemgu build/codegen; do
         if [[ $yoklama == 1 ]]; then secenek=(--yoklama); fi
         echo "MSI derleyicisi $c, yoklama $yoklama"
         python3 tests/qemu/msi_kahin.py "$w" "${secenek[@]}"
+        # [D-771] Başarılı turun çalışma dizini silinir; başarısızlıkta set -e erken çıkar, dizin kalır.
+        rm -rf "$w"
     done
 done

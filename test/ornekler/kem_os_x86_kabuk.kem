@@ -1806,6 +1806,7 @@ küresel değişken ag_lo_bayt: tam64 = 0;
 küresel değişken ag_sonraki_kim: tam32 = 1;
 çıplak işlev ag_dizi_baslik(a: tam64,buf: tam64,n: tam32,boy: tam32) {
     kem_mmio_yaz64(a,buf); kem_mmio_yaz32(a+8,n olarak tam64); kem_mmio_yaz32(a+12,n olarak tam64); kem_mmio_yaz32(a+16,boy olarak tam64);
+    kem_mmio_yaz64(a+24,0);   // [D-771] KdlDizi.bolge (D-770: başlık 32 bayt) — elle kurulan başlıkta SIFIR = çağıranın bölgesi
 }
 çıplak işlev ag_dizi8(a: tam64) -> Dizi<dtam8> { değişken p: *Dizi<dtam8> = (&a) olarak *Dizi<dtam8>; ver *p; }
 çıplak işlev ag_dizi64(a: tam64) -> Dizi<tam64> { değişken p: *Dizi<tam64> = (&a) olarak *Dizi<tam64>; ver *p; }
