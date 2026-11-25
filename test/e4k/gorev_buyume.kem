@@ -1,0 +1,23 @@
+// [D-770] E4k-A iş parçacığı kuralı: göreve taşınan dizi görevde büyütülürken main de
+// ana bölgeye ayırıyor. Büyütme, bölgeyi OLUŞTURAN iş parçacığı değilse dizinin kendi
+// bölgesini KULLANMAZ (kilitsiz ayırıcıda veri yarışı olurdu). TSan altında 0 uyarı;
+// denetim kaldırılınca (S225) TSan kdl_bolge_ayir ← kdl_dizi_buyut yarışını yakalar.
+işlev yap(n: tam32) -> Dizi<tam32> { değişken a: Dizi<tam32> = dizi_olustur(8); dizi_ekle(a, n); ver a; }
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    eşleş görev_başlat(|| {
+        değişken j: tam32 = 0;
+        iken j < 20000 { dizi_ekle(d, j); j = j + 1; }
+        ver dizi_boyut(d);
+    }) {
+        tamam(g) => {
+            değişken k: tam32 = 0; değişken t: tam64 = 0;
+            iken k < 20000 { değişken x: Dizi<tam32> = yap(k); t = t + (dizi_al(x, 0) olarak tam64); k = k + 1; }
+            değişken n: tam32 = görev_birleştir(g);
+            eğer n != 20000 { ver 1; }
+            eğer t < 0 { ver 2; }
+            ver 42;
+        }
+        hata(e) => { ver 3; }
+    }
+}

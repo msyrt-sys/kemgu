@@ -277,6 +277,18 @@
       ✓ KARAR (2026-11-13, D-756, Opus onerisi): (b)/(c) dil yuzeyi ACILMAZ; cozum ESCAPE V3
       (alan + `eşleş` turevlerini izleyen kacis analizi; yeni sozdizimi yok). TETIKLEYICI: H9f
       metin duzenleyici (uzun omurlu ilk program) baslamadan ONCE yapilir.
+      ⚠ KÖK YENİDEN ÖLÇÜLDÜ (D-770): "alan erişimi/eşleş kaçış sayılıyor" EKSİKTİ. Hiçbir çağrı yeri kendi yerel
+      bölgesini %rho olarak AŞAĞI geçirmiyor → her işlevin %rho'su zincir boyunca main'inki = ana bölge; programda
+      DÖNDÜRÜLEN her değer ana bölgeye düşüyor (5 örüntü, iki derleyici birebir: sonuç yalnız `dizi_al` ile okunsa bile
+      tur başına ~280 B). Ayrıca dizi büyütmesi çağrı yerinin %rho'sundan → yerel dizinin TAMPONLARI da ana bölgeye.
+      Tur başına bölge (F4.3) D-101'de sağlamlık için geri çekilmiş; hiç yok. AŞAMALAR: A dizi kendi bölgesinden büyür
+      ✓ D-770 · B çağrılan işlev "dönüş-saf" özeti (bölgeye ayırdığını yalnız dönüşle verir; param dizisi büyütmez,
+      işaretçi taşıyan param yok, küresele yazmaz, kapanış yok; ad tekil değilse RED — ea_fn_bul ilk eşleşmeyi döner) ·
+      C tur başına bölge (döngü girişinde oluştur, tur sonunda SIFIRLA, çıkışta/`ver`de serbest; KEMGU'da kır/devam yok)
+      + çağrı sonucu yönlendirme (ilk: Dizi<skaler>/metin sonuç) · D alan/eşleş türevleri (yapı/sonuç döndüren çekirdek
+      yolları; `değişken w = V[0]` gibi iç işaretçi takma adları İZLENMELİ, yoksa UAF) · E her aşamanın self-host karşılığı.
+      ⚠ Tek bölge parametresi hem sonucu hem durum büyümesini taşıdığından `&değişken` durum dizisine yazan sürücü
+      işlevleri B'yi GEÇEMEZ; A bu yüzden ön koşul (büyüme artık dizinin kendi bölgesinden).
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
@@ -3131,4 +3143,18 @@
   test_tumu'ya BAĞLI DEĞİL (yalnız başvuru); SHA-256 stdlib/kripto/karma.kem. Dersler prompta: her sabotajı uygula (S210/S223),
   korpus korunan şekli üretmeli, PR sonrası commit yeniden yazma (ef40ab7), testler izlenen belgeyi değiştirmesin (D-767),
   Windows derleme-yalnız yolu (D-768), bölüm sonunda onay isteme.
+- 2026-11-25 D-770: E4k AŞAMA A — dizi büyütmesi KENDİ bölgesinden. KdlDizi'ye `bolge` (C kdl_dizi.inc; kem_heap.kem başlık
+  24 → 32 bayt, ofset 24) eklendi; kdl_dizi_buyut/kapasite_ayarla tamponu çağrı yerinin %rho'su yerine dizinin oluşturulduğu
+  bölgeden ayırır (tampon ömrü = başlık ömrü). Ölçüm (döngüde çağrılan yardımcı, yerel diziyi dizi_ekle ile 64'e büyütüp skaler
+  döndürüyor): 4000 çağrıda ana bölge 31 → 1 blok (çağrı başına ~496 B = 16+32+64+128+256 sızıyordu). Çekirdek: düzenleyici
+  kapısında `calistir merhaba.elf` komutu +983.952 → +787.168 B. İŞ PARÇACIĞI KURALI: kilitsiz ayırıcıda göreve taşınan dizi
+  başka iş parçacığının bölgesine büyürse veri yarışı → KdlBolge `sahip_ip` (_Thread_local işaret; yapının SONUNDA, kem_os
+  ofsetleri korunur), büyütme kendi bölgeyi yalnız AYNI iş parçacığındaysa kullanır. TSan: düzeltmeyle 0 uyarı; S225
+  (denetim kaldırıldı) → 3-10 uyarı `kdl_bolge_ayir ← kdl_dizi_buyut`, ilk senaryo SESSİZDİ (main'in dizisi yerel bölgeye
+  gidiyordu, çakışma yoktu) → senaryo ana bölgeye eşzamanlı ayırmayla düzeltildi. Yeni kapı calistir_e4k_bellek (C + self;
+  TSan yoksa bildirerek atlar). S226 (eski büyüme) → 31 blok KIRMIZI. Yol üstünde: kem_heap.kem `*gp olarak *tam8` E002
+  (dereferansın doğrudan işaretçiye dönüşümü) → geçici değişken. x86 Kanıt 29 (UART RX) yük ortalaması ~9'da 1/3 aralıklı
+  (Codex eşzamanlı QEMU); Aşama A'ya bağlı değil, iki yeniden koşum yeşil. İlk tam koşum calistir_bm_x86_dosyalar'da
+  7. açılışın kapanışında (QMP sonrası 5 sn'de çıkmadı) durdu — tek başına 2/2 yeşil, aynı yük sınıfı. `make -k test_tumu`:
+  rc=0, "Tum testler gecti!", 4 sa 41 dk, FIXPOINT ✓ (101.921 satır).
 
