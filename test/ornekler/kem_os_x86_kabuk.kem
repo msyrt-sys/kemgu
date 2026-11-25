@@ -2972,6 +2972,14 @@ işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"hesapla") { ekran_cift_yaz("baslat hesapla <ifade> parantez ve işlem önceliğiyle tam sayı hesaplar."); ver tamam(doğru); }
     eğer bm_esit(ad,"duzenle") { ekran_cift_yaz("duzenle: Ctrl+F/B ara, Ctrl+I harf duyarlılığı, Ctrl+H değiştir, Ctrl+G satır, Ctrl+Z/Y geri al/yinele, Ctrl+S kaydet, Ctrl+Q çık."); ver tamam(doğru); }
     eğer bm_esit(ad,"dosyalar") { ekran_cift_yaz("dosyalar: F5 kopyala, F6 taşı, F7 dizin oluştur, Delete sil, Q çık."); ver tamam(doğru); }
+    eğer bm_esit(ad,"ag") { ekran_cift_yaz("ag durum kira ve adresi, ag sayac protokol sayaçlarını, ag ntp <ip> saat eşitlemesini gösterir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"ping") { ekran_cift_yaz("ping <adres> [adet [aralik_ms [zaman_asimi_ms]]] ICMP yanıtlarını ve RTT değerlerini ölçer."); ver tamam(doğru); }
+    eğer bm_esit(ad,"cozumle") { ekran_cift_yaz("cozumle <ad> IPv4 adresini DNS ile çözer."); ver tamam(doğru); }
+    eğer bm_esit(ad,"nc") { ekran_cift_yaz("nc <adres> <port> akışı standart girdiye ve çıktıya bağlar. nc -d <port> dinler."); ver tamam(doğru); }
+    eğer bm_esit(ad,"indir") { ekran_cift_yaz("indir <http-url> <dosya> HTTP gövdesini diske veya geçici dosya sistemine yazar."); ver tamam(doğru); }
+    eğer bm_esit(ad,"sunucu") { ekran_cift_yaz("sunucu <port> <dizin> dizini HTTP ile sunar. Ctrl+C ile kapanır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"tftp") { ekran_cift_yaz("tftp al <ip> <uzak> <yerel> indirir. tftp gonder <ip> <yerel> <uzak> gönderir."); ver tamam(doğru); }
+    eğer bm_esit(ad,"paket") { ekran_cift_yaz("paket guncelle <url> depoyu okur. liste, bilgi, kur ve kaldir paketleri yönetir."); ver tamam(doğru); }
     ver hata("yardim konusu bulunamadi");
 }
 işlev kd_teshis_baytlari(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,log_mu: mantıksal) -> sonuç<Dizi<dtam8>,metin> {
@@ -3039,6 +3047,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         ekran_cift_yaz("calistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat");
         ekran_cift_yaz("donanim log hassasiyet goster bul hesapla duzenle dosyalar");
         ekran_cift_yaz("bilgi duzen kopyala tasi girdisay kesme pci");
+        ekran_cift_yaz("ag ping cozumle nc indir sunucu tftp paket");
         ver tamam(doğru);
     }
     eğer bm_esit(cmd,"ps") {

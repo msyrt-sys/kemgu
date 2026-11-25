@@ -26,7 +26,12 @@ def karsilastir(c, rapor):
     text = rapor.decode('utf-8')
     gercek = {bdf: (int(v, 16), int(d, 16), int(k, 16) >> 8)
               for bdf, v, d, k in re.findall(r'^PCI ([\da-f:.]+) (\w{4}):(\w{4}) (\w{6})$', text, re.M)}
-    assert gercek == pci_kumesi(c.q), (gercek, pci_kumesi(c.q))
+    qmp_pci = pci_kumesi(c.q)
+    assert gercek == qmp_pci, (gercek, qmp_pci)
+    # Q35'in yerleşik 82574L kimliği, rapordaki NIC ve kayıtlı kesme aynı aygıtı göstermeli.
+    assert any((uretici, aygit) == (0x8086, 0x10D3) for uretici, aygit, _ in qmp_pci.values())
+    nic = re.search(r'^NIC e1000e [^\n]+ vektor (\d+)$', text, re.M)
+    assert nic and re.search(rf'^KESME {nic[1]} 7 \d+$', text, re.M), text
     hmp = lambda komut: c.q.call('human-monitor-command', {'command-line': komut})
     assert len(gercek) == len(re.findall(r'Bus\s+\d+, device\s+\d+, function\s+\d+', hmp('info pci')))
     usb = hmp('info usb')
@@ -62,29 +67,46 @@ def kos(w, tur):
     usb, nvme, sata = images(w, tur)
     disk = usb[-1]
     ilk = {d: sha(d) for d in (nvme.disk, sata.disk)}
-    with boot(w, usb[0], nvme, sata) as (q, p, ser):
+    with boot(w, usb[0], nvme, sata, ag_aygitlari=('-nic', 'user,model=e1000e')) as (q, p, ser):
         c = Console(w, q, p, ser)
         def sayaclar():
             tablo, = struct.unpack('<Q', c.mem(c.symbols['kesme_tablo'],8))
-            return {v:(kim,n) for v,(kim,n,_,_) in enumerate(struct.iter_unpack('<4Q',c.mem(tablo,8192))) if 1 <= kim <= 6}
+            return {v:(kim,n) for v,(kim,n,_,_) in enumerate(struct.iter_unpack('<4Q',c.mem(tablo,8192))) if 1 <= kim <= 7}
+        nic_alanlari = ('ag_rx_sayi', 'ag_tx_sayi', 'ag_rx_bayt', 'ag_tx_bayt', 'ag_atilan')
+        def nic_sayaclari():
+            return tuple(int.from_bytes(c.mem(c.symbols[ad], 8), 'little') for ad in nic_alanlari)
         alinan = []
         alt = {}
         ust = sayaclar()
+        ekran_alt = nic_sayaclari()
+        disk_alt = (0,) * len(nic_alanlari)
+        disk_ust = ekran_alt
         def rapor(b):
             karsilastir(c, b)
             alinan.append(b)
         c.run('donanim', rapor)
+        ekran_ust = nic_sayaclari()
         if tur == 'gpt':
             c.run('bagla --yazilabilir usb0p2')
             alt = sayaclar()
+            disk_alt = nic_sayaclari()
             c.run('donanim kaydet /diskler/usb0p2/donanim.txt')
             ust = sayaclar()
+            disk_ust = nic_sayaclari()
         c.shutdown()
     fsck(w, disk, 'donanim')
     kayit = Fat(disk.read()).get('/donanim.txt')
     # Dosya ile ekran farklı anlara aittir. Değişen sayaçları QMP RAM örnekleri sınırlar.
     kalip = rb'^KESME (\d+) (\d+) (\d+)\n'
-    assert re.sub(kalip,b'',kayit,flags=re.M) == re.sub(kalip,b'',alinan[0],flags=re.M)
+    # Otomatik MBR raporu ilk DHCP çerçevesinden önce diske yazılabilir.
+    nic_kalibi = rb' rx (\d+) tx (\d+) rx_bayt (\d+) tx_bayt (\d+) atilan (\d+)(?= vektor )'
+    def sabit_alanlar(rapor, once, sonra):
+        nic = re.findall(nic_kalibi, rapor)
+        assert len(nic) == 1, rapor
+        degerler = tuple(map(int, nic[0]))
+        assert all(a <= n <= b for a, n, b in zip(once, degerler, sonra)), (once, degerler, sonra)
+        return re.sub(nic_kalibi, b'', re.sub(kalip, b'', rapor, flags=re.M))
+    assert sabit_alanlar(kayit, disk_alt, disk_ust) == sabit_alanlar(alinan[0], ekran_alt, ekran_ust)
     sayilan = {int(v):(int(k),int(n)) for v,k,n in re.findall(kalip,kayit,re.M)}
     beklenen = set(ust) if tur == 'gpt' else set(ust)-{65}
     assert set(sayilan) == beklenen,(sayilan,ust)

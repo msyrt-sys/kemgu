@@ -160,3 +160,30 @@ D-751 ağacında H0a–f donanım ve kabul kararlarıydı. Uygulama olarak işar
 | 13 · klavye16 | AltGr+Q işareti değiştirildi | AltGr dizisinin fiziksel tampondaki UTF-8 karşılaştırması kırmızı |
 
 [Dalga 16 koşumları ve ölçümler](../otomasyon/chatgpt/codex16_bulgular.md)
+
+## Dalga 17 — ağ
+
+Her satırdaki sonuç değiştirilen bileşenin gerçekten çalıştırıldığı ortamı belirtir. Host sonuçları C ve self-host durum makinelerinden alınmıştır. Normal korumalarla geçen sınama, uygulanmamış bir değişikliğe kırmızı sonuç olarak sayılmaz.
+
+| Bölüm | Değişiklik | Ölçüm ve kapı |
+|---|---|---|
+| 1 | Eşin IPv4 sağlama hesabından bir bayt çıkarıldı | Sabit çerçeve testi çıkış 1, `calistir_ag_es` |
+| 2 | TX EOP kaldırıldı. Ayrı imajda RX RDT ilerletilmedi. | Gerçek eşe TX ulaşmadı. Sekizinci RX alınmadı. `calistir_bm_x86_e1000` |
+| 3 | 82574L RDBAH yazımı atlandı. 82576 alıcı kuyruğu açılmadı. | Yüksek adres geri okuması ve ilk RX ayrı QEMU imajlarında başarısız, `calistir_bm_x86_nic_matris` |
+| 4 | IPv4 taşıma katlama adımı atlandı. ARP yanıt MAC'i ve loopback çıkışı ayrı ayrı değiştirildi. | Üç ayrı QEMU imajı ilgili ping, ARP veya fiziksel kablo denetiminde kırmızı, `calistir_bm_x86_ag_l3` |
+| 5 | DHCP T1 zamanı kira sonuna taşındı | Telde beklenen yenileme görülmedi. DNS döngü denetimini kaldırma uygulanmadı. |
+| 6 | Parça ofsetinin sekiz çarpanı çıkarıldı | 8 KiB UDP yankısı tamamlanmadı. Yuva zaman aşımını kaldırma uygulanmadı. |
+| 7 | Sıra karşılaştırması ve FIN sıra tüketimi ayrı ayrı değiştirildi | Host durum testlerinde çıkış 4 ve 7. Değiştirilmiş çekirdekle QEMU asılma deneyleri uygulanmadı. |
+| 8 | RTO sıfırlandı, ayrı denemede çok büyütüldü. Yinelenen payload yeniden eklendi. | Host zamanlayıcı testleri çıkış 2 ve alıcı testi çıkış 9. Bu üç değişiklikle QEMU trafik, süre ve SHA deneyleri uygulanmadı. |
+| 9 | Pencere kaydırması kaldırıldı. Host durum makinesinde gecikmeli ACK zamanlayıcısı kaldırıldı. | QEMU 131.068 yerine 262.140 bayt bildirdi. Host tek segment testi çıkış 5. Değiştirilmiş çekirdekte kapanmayan oturum deneyi uygulanmadı. |
+| 10 | Çoklu beklemede borunun okunabilir biti kaldırıldı | Konuk çıkış 15 ve kâhin çıkış 1. Süreç çıkışında soketi açık bırakma uygulanmadı. |
+| 11 | nc kullanıcı ELF'inde stdin EOF sonrası FIN kaldırıldı | Eş 1 MiB aldı, üç saniyede FIN gelmedi, kâhin çıkış 1. |
+| 12 | Sıfır boylu HTTP chunk sonlandırıcı olarak tanınmadı | Geçerli trailer işlenirken -74, kâhin çıkış 1. Yüzde kodlu üst dizin korumasını kaldırma ve sınırsız yönlendirme uygulanmadı. |
+| 13 | NTP epoch düzeltmesi kaldırıldı. CMOS BCD alanları ikili yazıldı. | Ayrı QEMU RTC okumalarında 2024 yerine 2094, 2031 yerine 2025. İki çıkış da 1. |
+| 14 | Çift blok ikinci kez yazıldı. Kısa son blok tanınmadı. | SHA ve boy farkı (16.384 → 16.896 bayt), ayrı denemede -110. İki kâhin de kırmızı. |
+| 15 | Hatalı indirmede geçici dosyayı silme atlandı | FAT32 üzerinde yuk.tmp kaldı, çıkış 1. Bozuk ELF'i yayımlamak için SHA256 karşılaştırmasını kaldırma uygulanmadı. |
+| 16 | CDC-ECM MAC dizgisinde haneler kaydırıldı | Ham eşte altı DISCOVER, sıfır OFFER. Slirp üzerinde de beklenen MAC ile uyuşmadı. |
+| 17 | Virtio-mmio RX tamponu halkaya geri verilmedi | İki derleyicide [10] PING CANLI sonrasında [43] AG TCP HATA. Pozitif aktarım kâhini başarısız. |
+| 18 | TCP sıfır seçenek uzunluğu, IPv4 toplam boyu ve HTTP chunk boy taşması korumalarını kaldırma | Üçü de uygulanmadı. Sınır girdilerinin korumalı sürümde reddi C ve self-host korpusunda denetlendi. |
+| 19 | İki konuktan birinin ARP yanıtı kapatıldı | Eş telde ARP isteği gördü. Yanıt gelmedi. Konuk PING HATA -110 ve KABUK_HAZIR verdi. Olumlu sağlamlık kâhini geçti. |
+| 20 | Belge örnekleri ve yardım metinleri | Bu bölümde sabotaj istenmedi. Beş belge programı ve kabuk yardım tablosu için `calistir_bm_x86_belge15`. |

@@ -4,8 +4,8 @@ from pathlib import Path
 import hashlib
 import re
 import socket
+import struct
 import sys
-import time
 
 from boru_kahin import BoruConsole
 from dalga12_kahin import boot, fsck, wait_for
@@ -30,6 +30,18 @@ def komut(c, metin, sure=35, es=None):
     s = wait_for(c.p, bitti, seconds=sure)
     assert b'HATA' not in s and b'nc:' not in s, (metin,s)
     return s
+
+
+def dinleyici_bekle(c, port):
+    # SYN göndermeden önce o porttaki gerçek kullanıcı soketinin LISTEN kaydını gör.
+    tablo = c.sayi('sk_alan')
+    def dinliyor():
+        for i in range(16):
+            ref, tur, durum, yerel = struct.unpack('<Qiii', c.mem(tablo + 53248*i, 20))
+            if ref and (tur, durum, yerel) == (1, 3, port):
+                return True
+        return False
+    wait_for(c.p, dinliyor, seconds=5)
 
 
 def tcp_es(s):
@@ -122,7 +134,7 @@ def kos(w):
             komut(c,'cd /diskler/usb0p2/bin')
             ilk = seri.stat().st_size
             c.input('nc -d -z 10000 9121 > gelen.bin')
-            time.sleep(.4)
+            dinleyici_bekle(c, 9121)
             with socket.create_connection(('127.0.0.1',ileri),timeout=6) as istemci:
                 istemci.sendall(VERI[:3072]); istemci.shutdown(socket.SHUT_WR)
                 assert istemci.recv(1)==b''
@@ -130,11 +142,16 @@ def kos(w):
             ilk = seri.stat().st_size
             SurecConsole.input(c,'baslat nc -d -z 15000 9123 &')
             wait_for(p,lambda:b'KABUK_HAZIR\n' in seri.read_bytes()[ilk:])
-            s = komut(c,'echo yerelveri | nc -z 6000 127.0.0.1 9123')
-            assert b'yerelveri\n' in s, s
+            dinleyici_bekle(c, 9123)
+            ilk = seri.stat().st_size
+            komut(c,'echo yerelveri | nc -z 6000 127.0.0.1 9123')
+            # Ön plan istemcisinin dönüşü ve arka plan dinleyicisinin stdout'u ayrı olaylardır.
+            wait_for(p, lambda: b'yerelveri\n' in seri.read_bytes()[ilk:], seconds=5)
             # Komut istemi istemci bittiğinde gelir. Arka plandaki dinleyici
             # son FIN'i bir sonraki zamanlayıcı diliminde tüketebilir.
             wait_for(p,lambda:c.bos_cerceve()==once[1],seconds=5)
+            sonuc = seri.read_bytes()[ilk:]
+            assert sonuc.count(b'yerelveri\n') == 1 and b'nc:' not in sonuc, sonuc
             son = c.heap(),c.bos_cerceve()
             assert once[1]==son[1], (once,son)
             print('araç heap/boş çerçeve',once,son,flush=True)

@@ -88,3 +88,37 @@ Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön b
 ## Bölüm 19 — konuklar arası ağ ve PC matrisi
 
 1860 saniye. İki x86 KEMGU, yalnız geçici UNIX soketine bağlı QEMU stream hattında HTTP indirme, nc, TFTP ve doğrulanmış paket kurdu. x86 ve ARM ortak TCP yığını iki yönde birer MiB aktardı. Üç çıktı bağımsız karşılaştırıldı. Sekiz PC satırı her iki derleyicide DHCP, ping, küçük HTTP indirmesi ve paket kurulumuyla geçti. Tek tarafta ARP yanıtını sessize alan ayrı çekirdek ile diğer konuk PING HATA -110 verdi. Kâhin telde yanıt bulunmadığını ve kabuğun hâlâ yanıt verdiğini gördü. §7 ve PC matrisi dahil 16 hedef. Fiziksel makine adımları belgeye eklendi.
+
+## Bölüm 20 — ağ programlama belgeleri ve kabul
+
+21117 saniye. Ağın iki mimarideki yolu, adresleme, aygıtlar, zaman aşımı ve hata tablosu, ABI 73–90, paketler ve teşhis belgelendi. Kitaptan çıkarılan beş ELF iki derleyicide gerçek QEMU’da çalıştı. Yeni ICMP örneği ve iki UDP fd’siyle bekleme örneğinin her iki portu sınandı. 48 yardım konusu seri çıktıyla karşılaştırıldı. H13 kanıt kapıları ile sabotaj sonuçları güncellendi. Bu bölümde ayrıca sabotaj istenmedi. Bölüm kapısı ve §7 kapsamında 15 hedef geçti.
+
+## Son kabul koşumu
+
+Ortak x86 regresyonu v1, UEFI-PC, sağlamlık, çok süreç, boru, program15 ve KEMGU-OS x86 hedeflerini kapsadı. Sans-IO değişikliklerinde sürücü farkı, sürücü koşumu, ChatGPT köprüsü ve ayrıştırıcı takımı çalıştı. ARM değişikliklerinde ARM önyüklemesi ve çekirdek QEMU hedefi de koştu. 3, 16 ve 19. bölümlerde PC matrisi, 5, 10 ve 15. bölümlerde birikimli ağ regresyonu alındı.
+
+İlk tam takım çıkışı 2. Donanım raporu kâhini, NIC kesme kaydını kimlik 7 olduğu için QMP sayımından çıkarıyordu. MBR açılış kaydında RX/TX sıfırken kabuk raporunda DHCP çerçeveleri sayılmıştı. Kâhin 82574L kimliğini QMP PCI ile ve değişen sayaçları fiziksel RAM okumalarıyla doğrulayacak biçimde güncellendi. GPT ve MBR ile C ve self-host için dört rapor geçti. `bilgi` karşılaştırması beş ağ tamponunun QMP fiziksel adreslerini, aralıkların ayrıklığını ve 2.355 sayfayı hesaba katacak biçimde düzeltildi. UDP eşindeki zaman damgalarına ayrı bir değişken verilince T2 ölçümü DNS yanıtlarını kapatan deney kipini etkinleştirmiyor. 1.000 UDP yükü yeniden hem eşte hem pcap üzerinde denetlendi. İkinci tam takım çıkışı 2. Loopback sınamasında ön plan istemcisinin kabuk istemi, arka plan dinleyicisinin stdout satırından önce gözlendi. Güncellenen kâhin bağlanmadan önce gerçek dinleyici kaydını, ardından tam yükün tek kopyasını ve süreçler bitince boş çerçeveleri ayrı ayrı bekler.
+
+Linux’ta `make -j4 -k --output-sync=target test_tumu` çıkış kodu (PIPESTATUS[0]) 0. Ardından `make calistir_check_kapisi calistir_baremetal_diff` çıkışı 0. Son takım ve ek kontroller 6528 saniye. Sayım, ana kapılardaki atlanan girdileri toplar. Aynı korpusun self-driver tekrarları ve özet satırları ikinci kez sayılmaz.
+
+| Birincil kapı / gerekçe | Atlanan |
+|---|---:|
+| ASan, main işlevi bulunamadı | 15 |
+| ASan, C derleyicisi tip denetiminde reddetti | 28 |
+| ASan, host bağlama aşaması başarısız | 2 |
+| Semantik kod üretimi, yabancı mimari | 2 |
+| Geniş kod üretimi, host üzerinde bağlanamayan bare-metal MMIO | 8 |
+| Yapısal IR, karşılaştırılabilir C işlev gövdesi yok | 2 |
+| Sürücü IR paritesi, C tarafında işlev gövdesi yok | 1 |
+| Bölge operandı, iki derleyiciden birinde IR üretilemedi | 4 |
+| Semantik kod üretimi, C bağlama | 2 |
+| Sürücü host-mock, mevcut C oracle reddi | 5 |
+| ARM RAM üst bölgesi | 1 |
+| **Toplam** | **70** |
+
+- === tip kontrol kapısı: 358/379 geçti, 21 muaf, 0 RED ===
+- === bare-metal (aarch64 + x86_64) yapı paritesi: 25/25 (birleşik OS + birimler + parça kapsamı: 208 işlev, 10 küresel), 0 atlandı ===
+
+Son günlükte geleneksel PC matrisinin 72 açılışı ve ağ matrisinin 16 koşumu geçti. x86 ve ARM konukları iki yönde birer MiB aktardı. Son `nc` düzeltmesi ayrıca hatanın görüldüğü self-host imajıyla dört yeni QEMU açılışında sınandı.
+
+Açık sabotajlar ve yalnız host durum makinelerinde uygulanmış değişiklikler `belgeler/KEMGU_OS_Sabotaj_Envanteri.md` içinde ayrı ayrı gösterilir. Fiziksel PC denemesi donanım kontrol listesinde bekliyor.

@@ -5,7 +5,7 @@ import re
 import sys
 import threading
 
-from ag_arac_kahin import komut, MAC
+from ag_arac_kahin import komut, dinleyici_bekle, MAC
 from ag_es import EthernetEs, TcpEs, ES_IP, ES_MAC, KONUK_IP, dns_a_yanit, ethernet, ipv4, udp
 from dalga12_kahin import boot, wait_for
 from pcap_oku import cerceve_oku, pcap_kayitlari
@@ -62,11 +62,7 @@ def kos(w):
                     assert udp_yanit.get(timeout=3)==veri
                 assert say()==(once_say[0]+8,once_say[1]+8)
                 assert b'pid=' in komut(c,'baslat nc -d -z 20000 9143 &')
-                def dinliyor():
-                    alan=c.sayi('sk_alan')
-                    # Eş SYN'i, kullanıcı soketi dinlemeye geçince gönderir.
-                    return int.from_bytes(c.mem(alan+12,4),'little')==3
-                wait_for(p,dinliyor,seconds=5)
+                dinleyici_bekle(c, 9143)
                 assert b'0.0.0.0:9143 0.0.0.0:0 durum 1' in komut(c,'ag baglantilar')
                 es=TcpEs(hat,MAC)
                 es.yolla(28811,9143,2048,0,2)

@@ -404,7 +404,9 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H13q** ARM virtio-mmio köprüsü. `calistir_kem_os_arm_ag`
 - [x] **H13r** Ağ ayrıştırıcıları ve kaynak sınırları. `calistir_kem_os_ayristirici`, `calistir_bm_x86_ag_saglamlik`. Üç koruma kaldırma sabotajı açık.
 - [x] **H13s** İki konuk ve NIC matrisi. `calistir_bm_x86_ag_iki`, `calistir_kem_os_pc_matris`
-- [ ] **H13t** ABI ve derlenebilir ağ örnekleri. `calistir_bm_x86_belge15`
+- [x] **H13t** ABI ve derlenebilir ağ örnekleri. `calistir_bm_x86_belge15`
+
+H13 işaretleri ilgili işlevin belirtilen kapıdan geçtiğini gösterir. Uygulanmayan ve yalnız host düzeyinde ölçülen sabotajlar [sabotaj envanterinde](KEMGU_OS_Sabotaj_Envanteri.md) bölüm bazında kayıtlıdır.
 
 IPv6 ve TLS bu dalganın kapsamı dışındadır.
 

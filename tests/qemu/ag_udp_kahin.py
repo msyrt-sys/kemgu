@@ -135,8 +135,9 @@ def kos(w,slirp,zaman=False):
                     wait_for(p,lambda: any(k=='t2' for k,_ in olay) or hata,seconds=15)
                     assert not hata,hata
                     assert any(k=='t1' for k,_ in olay), 'T1 yenilemesi yok'
-                    zaman={k:next(v for a,v in olay if a==k) for k in ('ack','t1','t2')}
-                    t1=zaman['t1']-zaman['ack'];t2=zaman['t2']-zaman['ack']
+                    damgalar = {k: next(v for a, v in olay if a == k) for k in ('ack', 't1', 't2')}
+                    t1 = damgalar['t1'] - damgalar['ack']
+                    t2 = damgalar['t2'] - damgalar['ack']
                     assert 2.5<=t1<=5.8 and 5.5<=t2<=9.8 and t1<t2,(t1,t2)
                     dn_once=len(dns)
                     c.run('cozumle ornek.test',b'198.51.100.17\n')

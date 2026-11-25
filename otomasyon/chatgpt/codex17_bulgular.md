@@ -269,3 +269,9 @@ QEMU stream arka ucunun UNIX adresi her koşuma özeldir. Sunucu ucunu x86 açar
 - AG19 x86 x86 HTTP nc TFTP ve konuk paket deposu SHA256 dca0ee3c03813f420ee602f1ecbd24a174c7913436aff655d797f686af5a9137 [(4329312, 45392), (4329312, 45392)] [(20922512, 45392), (23808560, 45392)]
 - AG19 x86 ARM iki yon 1 MiB SHA256 a4a3ec30d6388244ded06c36c1c7f501ee42fd7940c04350c6e367a644220313 heap/cerceve (4329312, 45392)
 - AG19 ARP zaman asimi ve kabuk hazir b'PING HATA -110\nPING alinan 0 / 1\n[ping.elf pid=1 cikis=1]\nKABUK_HAZIR\n'
+
+## Dalga 17 son ölçümü
+
+Beş belge programı × iki derleyici ve 48 yardım konusu geçti. Örnekler doğrudan Markdown kod bloklarından çıkarıldı. ICMP loopback ve zaman sınırı olan iki UDP tanıtıcısına ayrı ayrı gerçek girdi verildi. `make test_tumu` ve ardından check / bare-metal fark koşumları çıkış 0. Atlanan 70 girdi ve sınıfları ilerleme belgesinde.
+
+Kalanlar fiziksel PC doğrulaması, E4k çekirdek heap geri kazanımı, envanterde açıkça listelenen ağ sabotajları ve C17-001/C17-002 derleyici bulgularıdır. Canlı karışık çerçeve testi dört sınıf yük kullandı. On üç protokol ailesinin sınır girdileri host tarafında çalıştı.

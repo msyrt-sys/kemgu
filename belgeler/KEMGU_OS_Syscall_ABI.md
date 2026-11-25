@@ -50,8 +50,7 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 70 | baslat_eslemeli | 3 | Program yolu, argv adresi, iki i64 (giriş ve çıkış boru veya soket fd, -1 varsayılan) | Çocuk PID veya negatif hata | x86_64 |
 | 71 | kopyala | 2 | Kaynak ve hedef UTF-8 yol adresleri | 0 veya negatif hata | x86_64 |
 | 72 | tasi | 2 | Kaynak ve hedef UTF-8 yol adresleri | Hedef yazıldıktan sonra kaynağı siler, 0 veya negatif hata | x86_64 |
-| 73 | ping | 3 | IPv4 adresi, sıra, zaman aşımı (ms) | İlk ping ELF sürümünün uyumluluk çağrısı. Başarıda RTT (µs), zaman aşımında -110. |
-
+| 73 | ping | 3 | IPv4 adresi, sıra, zaman aşımı (ms) | İlk ping ELF sürümünün uyumluluk çağrısı. Başarıda RTT (µs), zaman aşımında -110. | x86_64 |
 | 74 | soket | 1 | tur | 1 TCP, 2 UDP, 3 ICMP. Yeni süreç fd değeri | x86_64 |
 | 75 | bagla | 3 | fd, ip, port | Uzak IPv4 ve port. Bloksuz bağlantıda -11 | x86_64 |
 | 76 | baglan_dinle | 3 | fd, port, kuyruk | TCP için kuyruk 1–8, UDP için yerel porta bağlar | x86_64 |
@@ -67,6 +66,8 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 86 | icmp_yanki | 3 | fd, ip, istek | ICMP soketi. İki i64 sıra ve süre (ms). RTT mikrosaniye | x86_64 |
 | 87 | yazmayi_kapat | 1 | fd | TCP yazma yarısını sonlandırır, okuma devam eder | x86_64 |
 | 88 | ag_kayit | 3 | tür, indeks, 64 bayt çıktı | 1 ARP, 2 TCP (dinleyiciler dahil), 3 arayüz, 4 DHCP süreleri. Dolu 1, boş 0 | x86_64 |
+| 89 | dosya_akis | 3 | fd, işlem, üst sınır | 1 dosyanın okumalık kopyasını açar. 2 yazılacak içeriği fiziksel çerçevelerde biriktirir. 3 ve sıfır sınır dosyayı yayımlar. Yayımlamadan kapatma veya süreç çıkışı birikimi bırakır. Üst sınır 16 MiB. | x86_64 |
+| 90 | paket_hedef | 2 | Çıktı adresi ve tampon boyu | Yazılabilir veri bölümünü seçer, yolunu sıfır sonlandırmalı yazar. Paket işlem kilidi süreç çıkışında bırakılır. Meşgulken -16, uygun bölüm yoksa -30 döner. | x86_64 |
 
 40–119 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. PVH ring0 kapısı eski davranışını korur. 40–79 dışında bilinmeyen çağrının sonucu `-1` olur. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
@@ -148,8 +149,3 @@ IPv4 adresi ağdaki dört sekizlinin sayısal değeridir (örneğin 192.0.2.1 i�
 | 86 | İstek tamponu iki alandır (ICMP sıra numarası, zaman aşımı ms). Sonuç RTT mikrosaniye veya negatif hatadır. |
 
 Bloksuz okumada veri yoksa `-11`, dolu fd tablosunda `-24`, sınırlı soket veya TCP havuzu doluysa `-105`, kullanımda olan dinleme portunda `-98`, zaman aşımında `-110` döner. TCP’de okumanın sıfır dönmesi veri sonudur. Dinleme kuyruğu 1–8 aralığında seçilir. UDP’de her sokette dört datagramlık kuyruk vardır. Alım süresi ve keepalive milisaniye cinsindendir.
-
-| Numara | Ad | Argüman | Davranış |
-|---|---|---|---|
-| 89 | dosya_akis | 3 | fd, işlem, üst sınır. 1 dosyanın okumalık kopyasını açar. 2 yazılacak içeriği fiziksel çerçevelerde biriktirir. 3 ve sıfır sınır dosyayı yayımlar. Yayımlamadan kapatma veya süreç çıkışı birikimi bırakır. Üst sınır 16 MiB. |
-| 90 | paket_hedef | 2 | Çıktı adresi ve tampon boyu. Yazılabilir veri bölümünü seçer, yolunu sıfır sonlandırmalı yazar. Paket işlem kilidi süreç çıkışında bırakılır. Meşgulken -16, uygun bölüm yoksa -30 döner. |

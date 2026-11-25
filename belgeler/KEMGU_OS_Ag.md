@@ -4,15 +4,24 @@
 
 QEMU her Ethernet çerçevesini yerel UDP soketine tek datagram olarak verir. Eş ve QEMU kendi portlarını işletim sistemine ayırtır. İlk konuk çerçevesinin kaynak adresi dönüş yoludur. Böylece eşzamanlı açılışlar birbirinin trafiğini almaz. Host eşinin MAC adresi `02:51:59:17:00:01`, IPv4 adresi `192.0.2.1/24`, test için dağıttığı adres `192.0.2.2` olur.
 
-## Katmanlar
+## Katmanlar ve arayüz
 
-| Katman | Sorumluluk | Kanıt |
-|---|---|---|
-| QEMU dgram ve filter-dump | Çerçeveyi taşımak ve iki yönde kaydetmek | `make calistir_ag_es` |
-| Host eşi | ARP, ICMP echo, UDP echo ve DHCP yanıtı kurmak | Sabit tel örneği, iPXE DHCP istemcisi |
-| Pcap okuyucu | Ethernet, IPv4, TCP, UDP ve ICMP başlıklarını ve sağlamalarını bağımsız okumak | Kesik, geçerli ve sağlaması hatalı kayıtlar |
+```text
+x86 kullanıcı programı                     ARM çekirdek sınama fazı
+        │ soket fd, bekle_coklu                   │ çekirdek çağrısı
+        └──────── TCP / UDP / ICMP ────────────────┘
+                       │
+              IPv4 ve parça birleştirme
+                       │
+                  Ethernet ve ARP
+                       │
+      ┌────────────────┴──────────────────┐
+   x86 PCI NIC veya USB CDC-ECM      ARM virtio-mmio
+```
 
-Konuk tarafındaki geliştirme sırası sürücü, Ethernet ve IP, taşıma, soket ABI’si ve kullanıcı programlarıdır. H13 yol haritasındaki işaretler konukta hangi katmanın çalıştığını gösterir.
+`drivers/ag` protokol modülleri bayt dizilerini, kayıtları ve monoton zamanı işler. Aygıt katmanı tamamlanan RX tanımlayıcısından çerçeveyi alır, hazır TX çerçevesini uygun halkaya yazar. `AgArayuz` kaydı model, MAC, bağlantı durumu, alınan ve gönderilen çerçeve ve bayt sayıları ile düşen çerçeveleri taşır. x86 ve ARM aynı kayıt tanımını kullanır. x86 soket API'si süreç tanıtıcılarını çekirdeğin soket tablosuna bağlar. ARM TCP ve HTTP sınamaları doğrudan çekirdek fazından başlar.
+
+Kabukta `ag` ve `ag durum` yerel arayüzü ve kira durumunu, `ag arp` komşuları, `ag baglantilar` TCP uçlarını gösterir. `ag sayac` kısa paket, sağlama hatası, bilinmeyen tür, dolu ARP, adres çakışması, TTL, ICMP hatası, parça ve TCP sayaçlarını verir. Ayrıntılı kayıtlar ABI 83 ve 88 ile kullanıcı programlarına açılır.
 
 ## Zaman, sınırlar ve hatalar
 
@@ -69,7 +78,7 @@ Yerel UDP çıkışında MTU 1500’dür. Giden son parça dışında yük uzunl
 
 ## TCP bağlantıları
 
-TCP sıra ve ACK karşılaştırmaları 32 bit sarmalı hesaba katar. Etkin ve pasif açılışta MSS ilan edilir. Gönderim eşin penceresiyle sınırlıdır. Sıfır pencerede yoklama yeni sıra numarası tüketmez. Sekiz bağlantının her birinde ikişer 32 KiB halka bulunur. Dokuzuncu bağlantıya RST verilir. SYN için on saniye, FIN için on beş saniye, TIME-WAIT için dört saniye kullanılır. Sayılar yerel KEMGU profilinindir.
+TCP sıra ve ACK karşılaştırmaları 32 bit sarmalı hesaba katar. Etkin ve pasif açılışta MSS ilan edilir. Gönderim eşin penceresiyle sınırlıdır. Sıfır pencerede yoklama yeni sıra numarası tüketmez. Sekiz bağlantının her birinde gönderim ve alım için iki ayrı 128 KiB mantıksal halka bulunur. Dokuzuncu bağlantıya RST verilir. SYN için on saniye, FIN için on beş saniye, TIME-WAIT için dört saniye kullanılır. Sayılar yerel KEMGU profilinindir.
 
 `ag tcp dinle` 9001 numaralı portta yankıyı açar. `ag tcp bagla <adres>` aynı porta 64 KiB gönderip dönen baytları karşılaştırır. `ag tcp durum` gönderilen ve doğrulanan miktarı, hata ve kapanış sayısını gösterir.
 
@@ -142,3 +151,24 @@ Toplu IN, toplu OUT ve kesme IN kendi DMA tamponlarını ve halkalarını kullan
 ARM64 virt makinesinde ağ aygıtı MMIO kimliği 1 ile bulunur. VERSION_1, MAC ve sunulduğunda link durumu özelliği kabul edilir. Sekiz adet 2048 baytlık RX tanımlayıcısı çerçeve kopyalandıktan sonra yeniden kullanılır. ARP, ping, DHCP ve TCP zamanlayıcıları ARM genel sayacının milisaniye değerini kullanır. [9] ve [10] açılış sınamaları Ethernet, ARP, IPv4 ve ICMP için x86 ile aynı kaynak modüllerinden geçer.
 
 `make calistir_kem_os_arm_ag` her iki derleyicinin ARM imajını gerçek virtio-mmio aygıtıyla açar. Python eşi slirp üzerinden TCP verisini yansıtır ve HTTP dosyasını sunar. İsteğe bağlı [43]/[44] fazları yalnız `KEMAG017` işaretli ve en az 4352 sektörlük sınama diskinde çalışır. 128. sektör hedef IP, isteğe bağlı yerel IPv4 ve iki portu ağ sırasında içerir. TCP sonucu 256., HTTP gövdesi 2304. sektörden itibaren en çok birer MiB yazar. Host iki alanı beklenen içerik ve bağımsız pcap ile karşılaştırır.
+
+
+## Sınırlar ve gözlenebilir sonuçlar
+
+| Kaynak veya olay | Sınır veya süre | Konukta görülen sonuç |
+|---|---|---|
+| ARP komşusu ve çözüm bekleyen çerçeve | 16 komşu, 30 sn ömür, 4 bekleyen çerçeve, 250 ms sorgu aralığı | Dolu komşu tablosu sayacı artar. Bekleme kuyruğu doluysa -105 döner. |
+| IPv4 parçası | 4 yuva, 12.288 bayt yük, ilk parçadan itibaren 3 sn | Beşinci bağımsız datagram düşer. Süresi dolan yuva yeniden kullanılır. |
+| TCP ve kullanıcı soketleri | 8 TCP bağlantısı, 16 soket, UDP soketi başına 4 datagram | Yeni bağlantı reddedilir veya boş yuva hatası verilir. Son fd kapanınca soket bırakılır. |
+| DNS | Sorgu denemesinde 650 ms yanıt bekleme | İkinci sunucu varsa yeniden sorulur. Başarısız çözüm kabuğa zaman aşımı verir. |
+| HTTP | 8192 bayt başlık, sunucuda 8 istemci, dosya işlemlerinde 16 MiB | Eksik gövde veya bozuk çerçeveleme -74, boy sınırı aşımı ilgili hata ile döner. |
+| SNTP | Tek bekleyen istek, 2 sn yanıt sınırı | Başarılı yanıtta RTC güncellenir. Süre dolduğunda kabuk hata verir. |
+| TFTP | 512 bayt veri, blok başına 5 yeniden iletim, 12 sn ilerleme sınırı | Zaman aşımı -110. Son kısa bloktan sonra alıcı son ACK'i yineleyebilir. |
+| FD bekleme | 24 baytlık kayıt, okuma 1, yazma 2, hata 4 | Süre dolunca hazır kayıt sayısı sıfırdır. |
+| Paket yükleme | Bildirimde boy ve SHA256, bölüm başına işlem kilidi | Uyuşmazlıkta -74 ve geçici dosyanın temizlenmesi, kilit doluysa -16. |
+
+Sık görülen diğer hatalar geçersiz argüman için -22, bloksuz işlemde hazır olmama için -11, kullanımda olan port için -98 ve bağlantının kapalı olması için -100'dür. `make calistir_bm_x86_ag_saglamlik` geçen süreyi, hata sayaçlarını, çekirdek heap'ini ve fiziksel ayırıcının boş çerçevelerini ayrı ölçer. `make calistir_bm_x86_ag_iki` iki gerçek konuk arasındaki aktarımı, `make calistir_kem_os_pc_matris` ise açılış aygıtı, RAM ve NIC bileşimlerini çalıştırır.
+
+## Destek sınırı
+
+Ağ yığını yerel IPv4 ve tek dış arayüz içindir. IPv6, TLS, kablosuz ağ, IP yönlendirme/NAT, multicast ve Realtek dahili NIC sürücüleri bu sürümün dışında tutulmuştur. USB sınıf desteği CDC-ECM ile sınırlıdır. Fiziksel bilgisayar için ağ adımları ve teşhis raporu aktarımı donanım kontrol listesinde yer alır.
