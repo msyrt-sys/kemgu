@@ -1,0 +1,39 @@
+kullan drivers::ag::ntp::{ NtpOlcum, ntp_unix, ntp_takvim, ntp_iste, ntp_damga_yaz, ntp_cevap };
+kullan drivers::ag::bayt::{ ag_y8, ag_be32, ag_y32 };
+kullan drivers::zaman::rtc::{ RtcAn, RtcHam, rtc_coz, rtc_kodla };
+kullan drivers::ortak::bayt::{ bayt_sifir } olarak ortakb;
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(48);
+    değişken y: RtcAn=RtcAn {yil:2031,ay:7,gun:15,saat:12,dakika:34,saniye:56};
+    değişken s: tam64=ntp_unix(y); eğer s!=1941885296 { ver 1; }
+    değişken t1: tam64=s*1000000+500000; değişken t4: tam64=t1+400000;
+    eğer ntp_iste(b,0,t1)!=48 veya ag_be32(b,40)!=4150874096 veya ag_be32(b,44)!=2147483648 { ver 2; }
+    ag_y8(b,0,36); ag_y8(b,1,2); ntp_damga_yaz(b,24,t1);
+    ntp_damga_yaz(b,32,t1+250000); ntp_damga_yaz(b,40,t1+375000);
+    değişken r: NtpOlcum=ntp_cevap(b,0,48,t1,t4);
+    eğer r.kod!=0 veya r.ofset_us!=112500 veya r.gecikme_us!=275000 { ver 3; }
+    ag_y32(b,28,3); eğer ntp_cevap(b,0,48,t1,t4).kod==0 { ver 4; }
+    s=946684800;
+    iken s<4102444800 {
+        eşleş ntp_takvim(s) { hata(e)=>{ver 5;} tamam(a)=>{eğer ntp_unix(a)!=s { ver 6; }} }
+        s=s+86400;
+    }
+    t1=2208988800000000; ntp_iste(b,0,t1); ag_y8(b,0,36); ag_y8(b,1,1);
+    ntp_damga_yaz(b,24,t1); ntp_damga_yaz(b,32,t1+1000000); ntp_damga_yaz(b,40,t1+1000000);
+    eğer ntp_cevap(b,0,48,t1,t1).zaman_us!=t1+1000000 { ver 7; }
+    değişken kip: tam32=0;
+    iken kip<8 {
+        değişken sa: tam32=0;
+        iken sa<24 {
+            y.saat=sa;
+            eşleş rtc_kodla(y,kip) { hata(e)=>{ver 8;} tamam(k)=>{
+                eğer (kip&4)==0 ve (k.yil!=49 veya k.dakika!=52 veya k.saniye!=86) { ver 9; }
+                eğer (kip&4)!=0 ve (k.yil!=31 veya k.dakika!=34 veya k.saniye!=56) { ver 10; }
+                eşleş rtc_coz(k) { hata(e)=>{ver 11;} tamam(a)=>{eğer a.saat!=sa {ver 12;}} }
+            } }
+            sa=sa+1;
+        }
+        kip=kip+2;
+    }
+    ver 0;
+}

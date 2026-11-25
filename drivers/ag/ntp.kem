@@ -1,0 +1,58 @@
+// RFC 4330. İç saat Unix mikrosaniyesi, tel alanları 1900 tabanlı saniye ve 2^-32 kesirdir.
+kullan drivers::ag::bayt::{ ag_b8, ag_y8, ag_be32, ag_y32 };
+kullan drivers::zaman::rtc::{ RtcAn };
+sabit NTP_DONEM: tam64 = 2208988800;
+genel yapı NtpOlcum { kod: tam32; ofset_us: tam64; gecikme_us: tam64; zaman_us: tam64; }
+işlev ntp_ay_gun(y: tam32,a: tam32) -> tam32 {
+    eğer a==2 { eğer y%4==0 ve (y%100!=0 veya y%400==0) { ver 29; } ver 28; }
+    eğer a==4 veya a==6 veya a==9 veya a==11 { ver 30; } ver 31;
+}
+genel işlev ntp_unix(a: RtcAn) -> tam64 {
+    eğer a.yil<2000 veya a.yil>2099 veya a.ay<1 veya a.ay>12 veya a.gun<1 veya a.gun>ntp_ay_gun(a.yil,a.ay) veya a.saat<0 veya a.saat>23 veya a.dakika<0 veya a.dakika>59 veya a.saniye<0 veya a.saniye>59 { ver -1; }
+    değişken yil: tam32=a.yil-2000; değişken gun: tam64=(365*yil+(yil+3)/4+a.gun-1) olarak tam64;
+    değişken ay: tam32=1; iken ay<a.ay { gun=gun+(ntp_ay_gun(a.yil,ay) olarak tam64); ay=ay+1; }
+    ver 946684800+gun*86400+((a.saat*3600+a.dakika*60+a.saniye) olarak tam64);
+}
+genel işlev ntp_takvim(s: tam64) -> sonuç<RtcAn,metin> {
+    eğer s<946684800 veya s>=4102444800 { ver hata("RTC yil araligi"); }
+    değişken gun: tam64=(s-946684800)/86400; değişken yil: tam32=2000;
+    iken gun>=(337+ntp_ay_gun(yil,2) olarak tam64) {
+        gun=gun-(337+ntp_ay_gun(yil,2) olarak tam64); yil=yil+1;
+    }
+    değişken ay: tam32=1; iken gun>=(ntp_ay_gun(yil,ay) olarak tam64) {
+        gun=gun-(ntp_ay_gun(yil,ay) olarak tam64); ay=ay+1;
+    }
+    ver tamam(RtcAn {yil:yil,ay:ay,gun:(gun+1) olarak tam32,saat:(s/3600%24) olarak tam32,dakika:(s/60%60) olarak tam32,saniye:(s%60) olarak tam32});
+}
+işlev ntp_saniye(t: tam64) -> tam64 { ver (t/1000000+NTP_DONEM)&4294967295; }
+işlev ntp_kesir(t: tam64) -> tam64 { ver (t%1000000)*4294967296/1000000; }
+genel işlev ntp_damga_yaz(b: Dizi<dtam8>,i: tam32,t: tam64) {
+    ag_y32(b,i,ntp_saniye(t)); ag_y32(b,i+4,ntp_kesir(t));
+}
+genel işlev ntp_iste(b: Dizi<dtam8>,ofs: tam32,t1: tam64) -> tam32 {
+    eğer ofs<0 veya ofs>dizi_boyut(b)-48 veya t1<946684800000000 veya t1>=4102444800000000 { ver -22; }
+    değişken i: tam32=0; iken i<48 { ag_y8(b,ofs+i,0); i=i+1; }
+    ag_y8(b,ofs,35); ntp_damga_yaz(b,ofs+40,t1); ver 48;
+}
+// Yerel saatin en yakın NTP dönemini seçer. 2036 sonrasında 32 bit saniye sıfırdan başlar.
+işlev ntp_damga_oku(b: Dizi<dtam8>,i: tam32,yerel: tam64) -> tam64 {
+    değişken taban: tam64=yerel/1000000+NTP_DONEM;
+    değişken s: tam64=ag_be32(b,i)+(taban/4294967296)*4294967296;
+    eğer s-taban>2147483647 { s=s-4294967296; }
+    eğer taban-s>2147483648 { s=s+4294967296; }
+    ver (s-NTP_DONEM)*1000000+ag_be32(b,i+4)*1000000/4294967296;
+}
+genel işlev ntp_cevap(b: Dizi<dtam8>,ofs: tam32,n: tam32,t1: tam64,t4: tam64) -> NtpOlcum {
+    değişken r: NtpOlcum=NtpOlcum {kod:-74,ofset_us:0,gecikme_us:0,zaman_us:0};
+    eğer ofs<0 veya n<48 veya n>dizi_boyut(b)-ofs veya t1<946684800000000 veya t4<t1 veya t4>=4102444800000000 veya t4-t1>10000000 { ver r; }
+    değişken k: tam32=ag_b8(b,ofs); değişken surum: tam32=(k>>3)&7;
+    eğer (k>>6)==3 veya (k&7)!=4 veya (surum!=3 ve surum!=4) veya ag_b8(b,ofs+1)<1 veya ag_b8(b,ofs+1)>15 { ver r; }
+    eğer ag_be32(b,ofs+24)!=ntp_saniye(t1) veya ag_be32(b,ofs+28)!=ntp_kesir(t1) { ver r; }
+    eğer (ag_be32(b,ofs+32)|ag_be32(b,ofs+36))==0 veya (ag_be32(b,ofs+40)|ag_be32(b,ofs+44))==0 { ver r; }
+    değişken t2: tam64=ntp_damga_oku(b,ofs+32,t1); değişken t3: tam64=ntp_damga_oku(b,ofs+40,t1);
+    eğer t3<t2 veya t3-t2>t4-t1+2000 { ver r; }
+    r.gecikme_us=(t4-t1)-(t3-t2); eğer r.gecikme_us<0 { r.gecikme_us=0; }
+    r.ofset_us=((t2-t1)+(t3-t4))/2; r.zaman_us=t4+r.ofset_us;
+    eğer r.zaman_us<946684800000000 veya r.zaman_us>=4102444800000000 { ver r; }
+    r.kod=0; ver r;
+}

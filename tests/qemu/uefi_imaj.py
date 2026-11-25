@@ -4,7 +4,7 @@ from pathlib import Path
 import sys,struct,zlib,uuid,subprocess,tempfile
 from fat_yazici import hazirla,oku,MERHABA,NOT,KAYDIR
 
-def hazirla_uefi(path,efi,elf,ramdisk=None):
+def hazirla_uefi(path,efi,elf,ramdisk=None,*,ntp_otomatik=False):
     path=Path(path)
     with tempfile.TemporaryDirectory(dir=path.parent) as tmp:
         base=Path(tmp)/'base.fat';hazirla(base,False,True);b=bytearray(base.read_bytes())
@@ -32,7 +32,10 @@ def hazirla_uefi(path,efi,elf,ramdisk=None):
     def directory(c,parent,children):koy(c,entry(b'.          ',c,directory=True)+entry(b'..         ',parent,directory=True)+children)
     directory(efidir,0,entry(b'BOOT       ',bootdir,directory=True))
     directory(bootdir,efidir,entry(b'BOOTX64 EFI',efifile,len(efi)))
-    directory(kerneldir,0,entry(b'CEKIRDEKELF',elffile,len(elf)))
+    cekirdek=entry(b'CEKIRDEKELF',elffile,len(elf))
+    if ntp_otomatik:
+        cekirdek+=entry(b'NTP     OTO',0)
+    directory(kerneldir,0,cekirdek)
     root=ilk*sb;end=root
     while b[end]!=0:end+=32
     assert end+96<=root+sb

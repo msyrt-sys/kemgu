@@ -1,3 +1,4 @@
+kullan drivers::ag::ntp::{ NtpOlcum, ntp_iste, ntp_cevap, ntp_takvim, ntp_unix };
 kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, TCP_DINLE, TCP_BAGLI, TCP_KAPAT_BEKLE, TCP_KAPALI, tcp_yeni, tcp_aktif, tcp_al, tcp_cikar, tcp_baslik, tcp_red, tcp_yaz, tcp_oku, tcp_kapat_iste };
 kullan drivers::ag::parca::{ ParcaYuvasi, PARCA_SINIR, parca_es, parca_yaslandir, parca_al, parca_giden };
 kullan drivers::ag::udp::{ udp_yaz, udp_oku, udp_yuva, udp_bagla };
@@ -1659,7 +1660,7 @@ işlev ag_al() {
     güvensiz {
     eğer ag_bar==0 { ver; }
     eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
-    ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_tcp_adim();
+    ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_ntp_adim(); ag_tcp_adim();
     eğer ag_model==4 { ag_vrx(); ver; }
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
@@ -1726,6 +1727,98 @@ işlev ag_udp_cerceve(b: Dizi<dtam8>,src: tam64,dst: tam64,sp: tam32,dp: tam32,n
         ver uzun+34;
     }
 }
+// T1, tel saati ve yerel monoton başlangıç ayrı tutulur. DHCP seçeneği 42 isteğe bağlıdır.
+küresel değişken ag_ntp_oto: tam32=0;
+küresel değişken ag_ntp_durum: tam32=0;
+küresel değişken ag_ntp_port: tam32=0;
+küresel değişken ag_ntp_soket: tam64=0;
+küresel değişken ag_ntp_sunucu: tam64=0;
+küresel değişken ag_ntp_t1: tam64=0;
+küresel değişken ag_ntp_bas: tam64=0;
+küresel değişken ag_ntp_ofset: tam64=0;
+küresel değişken ag_ntp_gecikme: tam64=0;
+işlev ag_ntp_kur(d: &değişken KabukDisk) {
+    güvensiz {
+        eğer ag_bar==0 veya d.kok<0 { ver; }
+        değişken k: KabukBag=dizi_al(d.baglar,d.kok); eğer değil k.kayit.kok { ver; }
+        değişken y: KabukYol=KabukYol {indeks:d.kok,yol:"/KEMGU/NTP.OTO"};
+        eşleş kd_fat(d,y) { hata(e)=>{} tamam(v)=>{
+            değişken f: FatSektor=v;
+            eşleş kv_bilgi(d,y,&değişken f) { hata(e)=>{} tamam(g)=>{eğer değil g.dizin_mi { ag_ntp_oto=1; }} }
+        } }
+    }
+}
+işlev ag_ntp_birak(kod: tam32) {
+    güvensiz {
+        eğer ag_ntp_soket!=0 { sk_birak(ag_ntp_soket); ag_ntp_soket=0; }
+        ag_ntp_port=0; ag_ntp_durum=kod;
+    }
+}
+işlev ag_ntp_gonder(ip: tam64) -> tam32 {
+    güvensiz {
+        eğer ag_l3_alan==0 veya ag_l5==0 veya ip<=0 veya (ip>>24)>=224 { ver -22; }
+        değişken l: *AgL3=ag_l3_alan olarak *AgL3;
+        eğer (*l).ip==0 { ver -100; }
+        değişken s: tam64=0; eşleş rtc_oku() { hata(e)=>{ver -5;} tamam(a)=>{s=ntp_unix(a);} }
+        eğer s<0 { ver -34; }
+        ag_ntp_bas=ag_us(); ag_ntp_t1=s*1000000+ag_ntp_bas%1000000;
+        değişken hop: tam64=ip4_sonraki((*l).ip,(*l).onek,(*l).gecit,ip);
+        eğer hop<=0 { ver -113; }
+        ag_ntp_birak(0); ag_ntp_port=sk_port_sec(2); eğer ag_ntp_port==0 { ver -98; }
+        ag_ntp_soket=sk_yeni(2); eğer ag_ntp_soket==0 { ag_ntp_port=0; ver -105; }
+        değişken sp: *SkKayit=ag_ntp_soket olarak *SkKayit; değişken sok: SkKayit=*sp;
+        sok.port=ag_ntp_port; sok.uzak=ip; sok.uzak_port=123; sok.durum=2; *sp=sok; ag_ntp_sunucu=ip;
+        değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
+        değişken n: tam32=ntp_iste(tx,42,ag_ntp_t1);
+        eğer n<=0 { ag_ntp_birak(-22); ver -22; }
+        n=ag_udp_cerceve(tx,(*l).ip,ip,ag_ntp_port,123,n,0);
+        eğer n<=0 { ag_ntp_birak(-90); ver -90; }
+        ag_ntp_durum=1;
+        değişken son: tam32=ag_ip_cik(tx,n,hop,750);
+        eğer son<0 { ag_ntp_birak(son); } ver son;
+    }
+}
+işlev ag_ntp_adim() {
+    güvensiz {
+        eğer ag_ntp_durum==1 ve ag_us()-ag_ntp_bas>=2000000 { ag_ntp_birak(-110); }
+        eğer ag_ntp_oto==1 ve ag_l5!=0 ve ag_ntp_durum!=1 {
+            değişken p: *DhcpKirasi=ag_l5 olarak *DhcpKirasi;
+            eğer (*p).durum==3 ve (*p).ntp>0 { ag_ntp_oto=2; değişken r: tam32=ag_ntp_gonder((*p).ntp); eğer r<0 { ag_ntp_durum=r; } }
+        }
+    }
+}
+işlev ag_ntp_al(b: Dizi<dtam8>,ofs: tam32,n: tam32) {
+    güvensiz {
+        değişken t4: tam64=ag_ntp_t1+ag_us()-ag_ntp_bas;
+        değişken o: NtpOlcum=ntp_cevap(b,ofs,n,ag_ntp_t1,t4); eğer o.kod!=0 { ver; }
+        değişken s: tam64=(o.zaman_us+500000)/1000000;
+        eşleş ntp_takvim(s) { hata(e)=>{ag_ntp_birak(-34);} tamam(v)=>{
+            eşleş rtc_yaz(v,((s/86400+4)%7+1) olarak tam32) { hata(e)=>{ag_ntp_birak(-5);} tamam(r)=>{
+                ag_ntp_ofset=o.ofset_us; ag_ntp_gecikme=o.gecikme_us; ag_ntp_birak(2);
+                bm_yaz(metin_birlestir("NTP RTC ",rtc_metin(v)));
+            } }
+        } }
+    }
+}
+işlev ag_ntp_komut(arg: metin) -> sonuç<mantıksal,metin> {
+    güvensiz {
+        eğer ag_l5==0 { ver hata("ag yok"); }
+        değişken sil: tam32=kd_bosluk(arg); değişken ad: metin=kd_kalan(arg,sil);
+        eğer bm_esit(ad,"durum") {
+            ekran_cift_yaz(kd_tamsayi(kd_tamsayi("NTP durum oto",ag_ntp_durum olarak tam64),ag_ntp_oto olarak tam64)); ver tamam(doğru);
+        }
+        değişken p: *DhcpKirasi=ag_l5 olarak *DhcpKirasi; değişken ip: tam64=(*p).ntp;
+        eğer metin_uzunluk(ad)>0 { ip=ag_ip_oku(ad); }
+        eğer ip<=0 { ver hata("NTP sunucusu yok"); }
+        değişken g: tam32=ag_ntp_gonder(ip); eğer g<0 { ver hata("NTP istek gonderilemedi"); }
+        değişken bitis: tam64=ag_ntp_bas+2000000;
+        iken ag_ntp_durum==1 ve ag_us()<bitis { ag_al(); }
+        eğer ag_ntp_durum==1 { ag_ntp_birak(-110); }
+        eğer ag_ntp_durum!=2 { ver hata("NTP zaman asimi veya RTC hatasi"); }
+        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("NTP ofset_us gecikme_us",ag_ntp_ofset),ag_ntp_gecikme)); ver tamam(doğru);
+    }
+}
+
 işlev ag_dhcp_adim() {
     güvensiz {
         eğer ag_l5==0 veya ag_bar==0 { ver; }
@@ -1800,6 +1893,7 @@ işlev ag_udp_girdi(rx: Dizi<dtam8>,n: tam32) -> mantıksal {
         değişken mac: tam64 = eth_mac(rx,6); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
         eğer sp==67 ve dp==68 { ag_dhcp_girdi(rx,h+8,u,mac); ver doğru; }
         eğer (*l).ip==0 veya dst!=(*l).ip { ver doğru; }
+        eğer ag_ntp_durum==1 ve sp==123 ve dp==ag_ntp_port ve src==ag_ntp_sunucu { ag_ntp_al(rx,h+8,u); ver doğru; }
         eğer dp==ag_dns_port ve sp==53 ve src==ag_dns_sunucu {
             değişken r: DnsA = dns_cevap(rx,h+8,u,ag_dns_id,ag_dizi8(ag_l5+288),ag_dizi8(ag_l5+320));
             eğer r.kod!= -74 { ag_dns_sonuc=r.kod; ag_dns_ip=r.adres; ag_dns_ttl=r.ttl; } ver doğru;
@@ -2423,6 +2517,7 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
         }
         eğer ag_bar==0 { ver hata("ag arayuzu yok"); }
         ag_al();
+        eğer bm_esit(kd_bas(arg,kd_bosluk(arg)),"ntp") { ver ag_ntp_komut(arg); }
         eğer bm_esit(kd_bas(arg,kd_bosluk(arg)),"tcp") { ver ag_tcp_komut(arg); }
         eğer bm_esit(arg,"parca") {
             ekran_cift_yaz(ag_parca_satir()); ver tamam(doğru);
@@ -3071,6 +3166,7 @@ işlev hazir(xb: tam64, x: &değişken XhciDurum, ke: &değişken KabukEkran) ->
         eğer uefi_mi() { eşleş kd_gecici_kur(&değişken d) { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ",e)); } tamam(v) => { } } }
         eşleş kd_kok_durum(&değişken d) { hata(e) => { ver hata(e); } tamam(v) => { } }
         eğer uefi_mi() { eşleş ag_kur() { hata(e) => { bm_yaz(metin_birlestir("KABUK HATA ag ",e)); } tamam(v) => { } } eğer değil ag_l3_kur() { bm_yaz("KABUK HATA ag L3 belleği veya zaman kaynağı"); } }
+        eğer uefi_mi() { ag_ntp_kur(&değişken d); }
         eğer uefi_mi() ve d.kok >= 0 {
             değişken k: KabukBag = dizi_al(d.baglar,d.kok);
             eğer k.kayit.kok ve değil k.kayit.bolum.esp {

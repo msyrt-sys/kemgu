@@ -1,6 +1,6 @@
 // Ports 0x70/0x71, register offsets: test/bare_metal/rtc_x86.c,
 // Status A/B bitleri: Linux include/linux/mc146818rtc.h.
-kullan drivers::zaman::rtc::{ RtcHam, RtcAn, rtc_coz };
+kullan drivers::zaman::rtc::{ RtcHam, RtcAn, rtc_coz, rtc_kodla };
 işlev rtc_yazmac(i: tam32) -> tam32 {
     kem_port_yaz8(112,i olarak dtam8);
     ver kem_port_oku8(113) olarak tam32;
@@ -36,4 +36,25 @@ işlev rtc_metin(a: RtcAn) -> metin {
     değişken saat: metin = metin_birlestir(metin_birlestir(rtc_iki(a.saat),":"),rtc_iki(a.dakika));
     saat=metin_birlestir(metin_birlestir(saat,":"),rtc_iki(a.saniye));
     ver metin_birlestir(metin_birlestir(tarih," "),saat);
+}
+
+işlev rtc_koy(i: tam32,v: tam32) {
+    kem_port_yaz8(112,i olarak dtam8); kem_port_yaz8(113,v olarak dtam8);
+}
+işlev rtc_yaz(a: RtcAn,hafta_gunu: tam32) -> sonuç<mantıksal,metin> {
+    eğer hafta_gunu<1 veya hafta_gunu>7 { ver hata("RTC hafta gunu"); }
+    değişken i: tam32=0;
+    iken i<2000 {
+        eğer (rtc_yazmac(10)&128)==0 {
+            değişken kip: tam32=rtc_yazmac(11);
+            eşleş rtc_kodla(a,kip) { hata(e)=>{ver hata(e);} tamam(r)=>{
+                // SET, yedi alan aynı ana ait olana dek saniye güncellemesini durdurur.
+                rtc_koy(11,kip|128); rtc_koy(9,r.yil); rtc_koy(8,r.ay); rtc_koy(7,r.gun);
+                rtc_koy(6,hafta_gunu); rtc_koy(4,r.saat); rtc_koy(2,r.dakika); rtc_koy(0,r.saniye);
+                rtc_koy(11,kip); ver tamam(doğru);
+            } }
+        }
+        kem_bekle_us(10); i=i+1;
+    }
+    ver hata("RTC guncelleme zaman asimi");
 }

@@ -60,3 +60,7 @@ Ağ kitaplığı, `ag`, `cozumle`, `nc` ve soketli `ping` derlendi. C ve self-ho
 ## Bölüm 12 — HTTP istemcisi ve sunucusu
 
 `indir` ve `sunucu`, sınırlı HTTP ayrıştırıcısı ve dosya akışı ABI 89 eklendi. İki derleyiciyle gerçek QEMU, 8 MiB parçalı yanıt ve yönlendirmeler, aynı TCP oturumunda ikinci dosya, pcap ve FAT32 SHA-256, sekiz eşzamanlı istemci, engellenen yollar, Ctrl+C, üç fiziksel disk sürücüsü, /ram ve fsck geçti. Beş yönlendirme sonrasında altıncı geçiş reddedildi. Geçen süre 1585 saniye. Son sıfır parçayı tanımayan kullanıcı ELF’i, gerçek gövdeden sonra geçerli treyleri okuyunca -74 verdi. Kâhin çıkışı 1 oldu. Yüzde kodlu üst dizin korumasını kaldırma ve sınırsız yönlendirme döngüsü sabotajları uygulanmadı.
+
+## Bölüm 13 — SNTP ile RTC eşitleme
+
+Açılışta DHCP seçenek 42, elle IP, dört zaman damgasıyla ofset/gecikme, BCD/ikili ve 12/24 saat CMOS yazımı eklendi. QMP ve pcap ölçümleri iki derleyicide geçti. Gerçek kullanım programı `baslat saat metin` eşitlenmiş saati gösterdi. Süre 1304 saniye. 1900/1970 dönüşümü çıkarılınca 2024 tarihine karşın QMP 2094 gösterdi. BCD tarih alanları ikili yazılınca 2031 yerine 2025 ölçüldü. İki kâhin de çıkış 1 verdi.

@@ -239,3 +239,14 @@ class TcpEs:
             if p.kaynak==self.mac and p.protokol==6 and p.ip_hedef==ES_IP:
                 return p,p.yuk[4*(p.yuk[12]>>4):]
         raise TimeoutError('TCP segmenti gelmedi')
+
+
+def ntp_yanit(istek, alis, cikis):
+    """SNTP mod 4. Zamanlar Unix nanosaniyesidir, originate alanı telden aynen döner."""
+    if len(istek)!=48 or istek[0]&7!=3 or istek[40:48]==bytes(8):
+        raise ValueError('geçersiz SNTP istemci isteği')
+    def damga(ns):
+        s,kesir=divmod(ns,10**9)
+        return struct.pack('!II',(s+2208988800)&0xffffffff,(kesir<<32)//10**9)
+    return (bytes([36,2,4,236])+bytes(8)+b'LOCL'+damga(alis-10**9)
+            +istek[40:48]+damga(alis)+damga(cikis))

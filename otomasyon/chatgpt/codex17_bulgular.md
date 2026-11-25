@@ -154,3 +154,10 @@ Ayrı bir C konuğunda, var olan 155.649 baytlık dosya önce 73.793, ardından 
 - HTTP istemci heap/boş çerçeve (4263728, 45404) (11281824, 45404)
 - HTTP sunucu heap/boş çerçeve (4263728, 45404) (13773696, 45404)
 - HTTP NVMe/AHCI heap/boş çerçeve (4263728, 45404) (8199280, 45404)
+
+## SNTP tel ve RTC ölçümü
+
+QEMU QMP `/machine rtc-time` alanını konuğun istek ve cevap kaydından bağımsız okuduk. 2031-07-15 12:34:56 otomatik, 13:34:56 elle ayarlandı. 150 ms yapay gecikme ve 20 ms sunucu işlem süresinde gecikme ve tel zamanlarından hesaplanan ofset karşılaştırıldı. Dönem mutasyonu 2031 denemesinde tarih aralığına takıldı. 2024 eşinde QMP’nin 2094’e gittiği ayrıca ölçüldü. [QEMU 8.2.2 RTC aygıtı](https://github.com/qemu/qemu/blob/v8.2.2/hw/rtc/mc146818rtc.c)
+
+- SNTP QMP 2031-07-15T13:34:56+00:00 ofset_us 3598289911 gecikme_us 129054 heap/çerçeve (4198048, 45430) (4854016, 45430)
+- SNTP QMP 2031-07-15T13:34:56+00:00 ofset_us 3598456254 gecikme_us 128625 heap/çerçeve (4329312, 45400) (5050896, 45400)

@@ -110,3 +110,9 @@ Paralel QEMU yükünde ölçülen ilk 64 MiB aktarım 1,075 MiB/s sürdü. Kapı
 | Sunucuda hareketsiz bağlantı | 30 saniye |
 
 Dosya akışında ABI 89, veriyi fiziksel çerçevelerde biriktirir. Tam gövde gelince FAT32 verisi, iki FAT kopyası, dizin kaydı ve FSInfo sırasıyla yayımlanır. Önceki zincir yeni dizin kaydı kalıcılaştıktan sonra bırakılır. Okuma, dosyanın anlık kopyasını aynı süreçteki tanımlayıcıya bağlar. NVMe, AHCI ve USB BOT için fiziksel G/Ç istekleri 64 KiB sınırında bölünür. FAT tablosunun kullanılan kısmı en fazla 16 MiB olabilir. Süreç çıkışı ve yayımlamadan kapatma geçici çerçeveleri ayırıcıya iade eder.
+
+## SNTP ve RTC
+
+`ag ntp` DHCP seçenek 42 adresini kullanır. `ag ntp 192.0.2.1` açıkça seçilen sunucuya gider. Açılış bölümünde `/KEMGU/NTP.OTO` dosyası varsa kira alındığında ilk eşitleme otomatik yapılır. Her istek bir yanıta ve iki saniyelik beklemeye bağlıdır. Yanıtta sunucu IP ve portu, sürüm, mod, stratum, eşzamanlılık ve gönderilen zaman damgası denetlenir. Saat farkı ve gidiş dönüş süresi mikrosaniye olarak gösterilir. [RFC 4330](https://www.rfc-editor.org/rfc/rfc4330.html)
+
+RTC tarih aralığı 2000–2099’dur. 2036 saniye sarmalında dönem yerel saate göre seçilir. CMOS Status B 12/24 saat ve BCD/ikili biçimi korunur. SET biti tarih alanları birlikte yayımlanana kadar saniye güncellemesini durdurur. `baslat saat metin` anlık UTC tarihini ve saati standart çıktıya verir.
