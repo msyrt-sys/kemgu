@@ -1,0 +1,39 @@
+// Bildirim satırları ASCII'dir. Dizin bilgisi ve hedef adları yerel olarak kurulur.
+kullan drivers::ag::http::{http_kes};
+genel sabit PK_AZAMI_BOY: tam64=16777216;
+genel yapı PaketGirdi { ad: metin; surum: metin; dosya: metin; boy: tam64; sha: metin; satir: metin; }
+işlev pk_harf(c: tam32) -> mantıksal { ver c>=97 ve c<=122; }
+işlev pk_rakam(c: tam32) -> mantıksal { ver c>=48 ve c<=57; }
+genel işlev pk_ad_mi(s: metin) -> mantıksal {
+    değişken n: tam32=metin_uzunluk(s); eğer n<1 veya n>32 veya değil pk_harf(metin_bayt(s,0) olarak tam32) { ver yanlış; }
+    değişken i: tam32=1; iken i<n {
+        değişken c: tam32=metin_bayt(s,i) olarak tam32;
+        eğer değil pk_harf(c) ve değil pk_rakam(c) ve c!=45 ve c!=95 { ver yanlış; } i=i+1;
+    } ver doğru;
+}
+genel işlev pk_satir(s: metin) -> sonuç<PaketGirdi,metin> {
+    değişken n: tam32=metin_uzunluk(s); eğer n<74 veya n>200 { ver hata("bildirim uzunlugu"); }
+    değişken alan: Dizi<metin> = []; değişken bas: tam32=0; değişken i: tam32=0;
+    iken i<=n {
+        eğer i==n veya metin_bayt(s,i)==32 {
+            eğer i==bas veya dizi_boyut(alan)>=5 { ver hata("bildirim alanlari"); }
+            dizi_ekle(alan,http_kes(s,bas,i)); bas=i+1;
+        } i=i+1;
+    }
+    eğer dizi_boyut(alan)!=5 { ver hata("bildirim alanlari"); }
+    değişken ad: metin=alan[0]; değişken surum: metin=alan[1]; değişken dosya: metin=alan[2];
+    değişken v: tam32=metin_uzunluk(surum); değişken f: tam32=metin_uzunluk(dosya);
+    eğer değil pk_ad_mi(ad) veya v<1 veya v>24 veya f<=4 veya f>36 { ver hata("bildirim ad veya surum"); }
+    eğer değil pk_ad_mi(http_kes(dosya,0,f-4)) veya metin_bayt(dosya,f-4)!=46 veya metin_bayt(dosya,f-3)!=101 veya metin_bayt(dosya,f-2)!=108 veya metin_bayt(dosya,f-1)!=102 { ver hata("bildirim ELF adi"); }
+    i=0; iken i<v { değişken c: tam32=metin_bayt(surum,i) olarak tam32;
+        eğer değil pk_rakam(c) ve değil pk_harf(c) ve c!=46 ve c!=45 { ver hata("bildirim surum"); } i=i+1; }
+    değişken uzun: metin=alan[3]; değişken boy: tam64=0;
+    i=0; iken i<metin_uzunluk(uzun) {
+        değişken c: tam32=metin_bayt(uzun,i) olarak tam32; eğer değil pk_rakam(c) { ver hata("bildirim boy"); }
+        boy=boy*10+(c-48) olarak tam64; eğer boy>PK_AZAMI_BOY { ver hata("bildirim boy siniri"); } i=i+1;
+    }
+    değişken sha: metin=alan[4]; eğer boy<1 veya metin_uzunluk(sha)!=64 { ver hata("bildirim boy veya SHA256"); }
+    i=0; iken i<64 { değişken c: tam32=metin_bayt(sha,i) olarak tam32;
+        eğer değil pk_rakam(c) ve (c<97 veya c>102) { ver hata("bildirim SHA256"); } i=i+1; }
+    ver tamam(PaketGirdi {ad:ad,surum:surum,dosya:dosya,boy:boy,sha:sha,satir:s});
+}

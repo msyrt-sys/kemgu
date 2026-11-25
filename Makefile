@@ -5211,3 +5211,16 @@ calistir_bm_x86_ntp: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86
 test_tumu: calistir_bm_x86_tftp_teshis
 calistir_bm_x86_tftp_teshis: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh tftp
+
+
+PAKET_ELFLERI := $(addprefix $(BUILD)/kullanici/,$(addsuffix .elf,hesapla kedi say saat ping cozumle nc indir sunucu tftp))
+.PHONY: kem_os_paket_deposu
+kem_os_paket_deposu: $(PAKET_ELFLERI)
+	python3 tools/codex/paket_deposu.py $(BUILD)/paket_deposu $^
+
+$(BUILD)/kullanici/paket.elf $(BUILD)/kullanici/self/paket.elf: stdlib/kripto/karma.kem drivers/ag/paket.kem
+
+.PHONY: calistir_bm_x86_paket
+test_tumu: calistir_bm_x86_paket
+calistir_bm_x86_paket: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh paket

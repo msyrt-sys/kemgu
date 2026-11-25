@@ -82,7 +82,7 @@ def dagitici():
 
 if __name__ == "__main__":
     a, b, c = belge(), sarma(), dagitici()
-    if set(range(73, 90)) - a.keys():
+    if set(range(73, 91)) - a.keys():
         raise SystemExit("Ağ ABI dizisinde eksik çağrı")
     if a != b or a != c:
         for no in sorted(a.keys() | b.keys() | c.keys()):

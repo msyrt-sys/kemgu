@@ -176,3 +176,20 @@ Kayıp her yirminci veri bloğunun ilk denemesine uygulanır. Okuma ve yazma iç
 - Teşhis heap/boş çerçeve (5575568, 45399) (6297024, 45399)
 - ✓ Teşhis alıcı + pcap 1041 3e6618141ddebb7f8981e3fbb507cd41188fa77a0e2562911c3d49ddfe020a3d
 - ✓ Teşhis alıcı + pcap 1945 ba81d309326709c4d783b082d48148cb90e0cb6623f258f7a120a6ff3f4ecf8d
+
+## Paket deposu ve SHA256
+
+`stdlib/kripto/karma.kem` içindeki işlevler modül dışına açık değil (seçili import T041). Kullanıcı ELF derleme adımı aynı kaynak dosyasını paket derleme birimine ekler. Kütüphanenin bağımsız kopyası yoktur. Clang 18.1.3 genel yazmaç hedefine LLVM SSE2 LFENCE içselini seçemedi. Bu hedef için aynı LFENCE makine komutu ve derleyici bellek bariyeri üretildi. llvm-objdump çıktısında 0f ae e8 doğrulandı. Her SHA-256 sıkıştırmasının geçici bölgesi bırakılır. 16 MiB üst sınır manifest ve aktarım boyunca korunur. Büyük geçici dosyayı silmeden önce ABI 89 ile zinciri serbest bırakmak gerekiyor. İlk 524349 baytlık deneyde ELF ve kayıt doğru yayımlandı ama normal dizin silme planı uzun zinciri bırakamadı.
+
+E4k açık. İlk tek açılış denemesinde dizin işlemleri ve ELF çağrıları çekirdek heap değerini 25.907.248 bayta taşıdı, ardından USB FAT32 erişimi hata verdi. Liste okumaları ve gereksiz dizin mutasyonları azaltıldı. Kurulum/tamlık ve bozuk dosya/kaldırma dizileri aynı FAT32 imajını kullanan iki gerçek açılışta ölçüldü. Bu ayrıca kurulu kaydının yeniden açılışta geçerli olduğunu sınar.
+
+- Paket heap/boş çerçeve (4526032, 45429) (20397936, 45429)
+- Paket heap/boş çerçeve (4526032, 45429) (17840160, 45429)
+- ✓ Paket HTTP + FAT32 SHA256 3d75013fcb941e48dda94ed72cfa785bd19bbe1b85eadb5a52f92e77a419bd03 çalıştırma 42, bozuk paket ve geçici dosya yok, fsck temiz
+- ✓ Büyük paket 524349 870202797a69a71dd741d3ec78e77f122bd33a2b2b3924957d6ce2014141438b heap/boş çerçeve (4526032, 45429) (18299120, 45429)
+- Paket heap/boş çerçeve (4788496, 45399) (21316400, 45399)
+- Paket heap/boş çerçeve (4788496, 45399) (18824208, 45399)
+- ✓ Paket HTTP + FAT32 SHA256 3d75013fcb941e48dda94ed72cfa785bd19bbe1b85eadb5a52f92e77a419bd03 çalıştırma 42, bozuk paket ve geçici dosya yok, fsck temiz
+- ✓ Büyük paket 524349 870202797a69a71dd741d3ec78e77f122bd33a2b2b3924957d6ce2014141438b heap/boş çerçeve (4788496, 45399) (19086384, 45399)
+
+Geçici dosyayı silme çağrısını kaldırmak gerçek QEMU çalışmasında `bozuk paketin gecici dosyasi kaldi` doğrulamasını kırdı. SHA doğrulamasının atlanmasıyla bozuk kodun kurulmasını sağlayan sabotaj uygulanmadı.

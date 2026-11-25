@@ -75,6 +75,7 @@ sabit KX_SIS_SOKET_SECENEK: tam64 = 84;
 sabit KX_SIS_BEKLE_COKLU: tam64 = 85;
 sabit KX_SIS_ICMP_YANKI: tam64 = 86;
 sabit KX_SIS_DOSYA_AKIS: tam64 = 89;
+sabit KX_SIS_PAKET_HEDEF: tam64 = 90;
 sabit KX_SIS_AG_KAYIT: tam64 = 88;
 sabit KX_SIS_YAZMAYI_KAPAT: tam64 = 87;
 sabit KX_SIS_BORU: tam64 = 69;
@@ -1151,7 +1152,28 @@ işlev sk_ag_kayit(tur: tam64,i: tam64,out: tam64) -> tam64 {
         kxm_y64(out+32,(*b).durum olarak tam64); kxm_y64(out+40,(*b).tx_boy olarak tam64); kxm_y64(out+48,(*b).rx_boy olarak tam64); ver 1;
     }
 }
+// Bir paket işlemi bittiğinde ya da süreç öldürüldüğünde sahiplik serbest kalır.
+küresel değişken ksv_paket_sahibi: tam64=0;
+işlev ksv_paket_hedef(b: &değişken KsvBaglam,p: tam64,n: tam64) -> tam64 {
+    eğer n<1 veya n>256 { ver -22; } eğer değil kxs_aralik(p,n,doğru) { ver -14; }
+    güvensiz { eğer ksv_paket_sahibi!=0 ve ksv_paket_sahibi!=kxs_pid { ver -16; } }
+    değişken sec: tam32= -1; değişken aday: tam32= -1;
+    eşleş kd_yol(&değişken b.disk,b.disk.cwd) { hata(e)=>{} tamam(y)=>{aday=y.indeks;} }
+    değişken i: tam32=0;
+    iken i<dizi_boyut(b.disk.baglar) {
+        değişken k: KabukBag=dizi_al(b.disk.baglar,i);
+        eğer i!=b.disk.ram_bag ve i!=b.disk.kok ve k.yazilabilir ve değil k.kesik ve kd_hub_bagli(&değişken b.disk,k.indeks) {
+            eğer sec<0 veya i==aday { sec=i; }
+        } i=i+1;
+    }
+    eğer sec<0 { ver -30; } değişken k: KabukBag=dizi_al(b.disk.baglar,sec);
+    değişken yol: metin=k.kayit.ad; değişken boy: tam32=metin_uzunluk(yol);
+    eğer n<=boy olarak tam64 { ver -34; } i=0;
+    iken i<boy { kis_buf_yaz8(p,i,metin_bayt(yol,i) olarak tam32); i=i+1; }
+    kis_buf_yaz8(p,boy,0); güvensiz { ksv_paket_sahibi=kxs_pid; } ver 0;
+}
 işlev ksv_dagit(b: &değişken KsvBaglam, num: tam64,a: tam64,c: tam64,d: tam64) -> tam64 {
+    eğer num == KX_SIS_PAKET_HEDEF { ver ksv_paket_hedef(b,a,c); }
     eğer num == KX_SIS_DOSYA_AKIS { ver ksa_islem(b,a,c,d); }
     eğer num == KX_SIS_AG_KAYIT { ver sk_ag_kayit(a,c,d); }
     eğer num == KX_SIS_SOKET { ver sk_soket(b,a); }

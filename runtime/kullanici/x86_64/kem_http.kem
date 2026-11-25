@@ -51,7 +51,8 @@ işlev kh_govde(r: &değişken KagOkuyucu,h: HttpBaslik,fd: tam64,p: tam64,sinir
 }
 yapı KhOturum { ag: tam64; ad: metin; port: tam64; tampon: tam64; }
 işlev kh_kapat(o: &değişken KhOturum) { eğer o.ag>=0 { sis_kapat(o.ag); o.ag= -1; } }
-işlev kh_indir(o: &değişken KhOturum,url: metin,dosya: metin) -> tam64 {
+işlev kh_indir_sinir(o: &değişken KhOturum,url: metin,dosya: metin,azami: tam64) -> tam64 {
+    eğer azami<0 veya azami>16777216 { ver -22; }
     değişken u: HttpUrl=HttpUrl {yetkili:"",ad:"",port:0,yol:""};
     eşleş http_url(url) { hata(e)=>{ver -22;} tamam(v)=>{u=v;} }
     değişken yon: tam32=0;
@@ -74,7 +75,7 @@ işlev kh_indir(o: &değişken KhOturum,url: metin,dosya: metin) -> tam64 {
             yon=yon+1;
         } değilse {
             eğer h.kod!=200 { kag_satir(metin_birlestir("HTTP ",tam_metin(h.kod olarak tam64))); ver -2; }
-            değişken sinir: tam64=16777216; eğer h.boy>sinir { ver -27; } eğer h.boy>=0 { sinir=h.boy; }
+            değişken sinir: tam64=azami; eğer h.boy>sinir { ver -27; } eğer h.boy>=0 { sinir=h.boy; }
             değişken durum: tam64=sis_bilgi(dosya,p);
             eğer durum<0 ve durum!= -2 { ver durum; }
             değişken eski: mantıksal=durum==0;
@@ -89,3 +90,5 @@ işlev kh_indir(o: &değişken KhOturum,url: metin,dosya: metin) -> tam64 {
         }
     } ver -40;
 }
+
+işlev kh_indir(o: &değişken KhOturum,url: metin,dosya: metin) -> tam64 { ver kh_indir_sinir(o,url,dosya,16777216); }

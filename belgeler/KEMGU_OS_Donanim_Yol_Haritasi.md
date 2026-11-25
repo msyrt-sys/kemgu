@@ -399,7 +399,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H13l** HTTP istemcisi ve sunucusu. `calistir_bm_x86_http`
 - [x] **H13m** NTP ve RTC. `calistir_bm_x86_ntp`
 - [x] **H13n** TFTP ve uzak teşhis. `calistir_bm_x86_tftp_teshis`
-- [ ] **H13o** Paket kurucu. `calistir_bm_x86_paket`
+- [x] **H13o** Paket kurucu. `calistir_bm_x86_paket`
 - [ ] **H13p** USB CDC-ECM. `calistir_bm_x86_usb_ag`
 - [ ] **H13q** ARM virtio-mmio köprüsü. `calistir_kem_os_arm_ag`
 - [ ] **H13r** Ağ ayrıştırıcıları ve kaynak sınırları. `calistir_kem_os_ayristirici`

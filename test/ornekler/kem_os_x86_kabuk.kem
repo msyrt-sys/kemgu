@@ -916,6 +916,7 @@ işlev ks_durum_adi(durum: tam64) -> metin {
     eğer hazir { kxm_y64(r+KXS_DURUM_OFS,KXS_HAZIR); }
 }
 işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
+    güvensiz { eğer ksv_paket_sahibi==ks_pid(y) { ksv_paket_sahibi=0; } }
     değişken r: tam64 = kxs_baglam(y);
     değişken fizik: tam64 = kxm_o64(r+KXS_CR3_OFS);
     değişken yer: KxsYer = kxs_yer(kxm_o64(r+256));
@@ -1048,6 +1049,13 @@ işlev ks_program_adi(d: &değişken KabukDisk,ad: metin) -> sonuç<metin,metin>
         için k: d.baglar { eğer k.indeks == kok.indeks ve değil k.kayit.kok {
             dizi_ekle(yollar,metin_birlestir(k.kayit.ad,"/bin"));
         } }
+    }
+    için k: d.baglar {
+        eğer k.yazilabilir ve değil bm_esit(k.kayit.ad,"/ram") ve kd_hub_bagli(d,k.indeks) {
+            değişken baska: mantıksal=doğru;
+            eğer d.kok>=0 { değişken acilis: KabukBag=dizi_al(d.baglar,d.kok); baska=k.indeks!=acilis.indeks; }
+            eğer baska { dizi_ekle(yollar,metin_birlestir(k.kayit.ad,"/bin")); }
+        }
     }
     için yol: yollar {
         eşleş kd_adaylar(d,yol) { hata(e) => { eğer değil bm_esit(e,"bulunamadi") { ver hata(e); } }

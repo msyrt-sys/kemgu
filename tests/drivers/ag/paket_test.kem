@@ -1,0 +1,9 @@
+kullan drivers::ag::paket::{pk_ad_mi,pk_satir,PaketGirdi};
+işlev main() -> tam32 {
+    değişken h: metin="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    değişken s: metin=metin_birlestir("hesapla 1.0 hesapla.elf 27890 ",h);
+    eşleş pk_satir(s) { hata(e)=>{ver 1;} tamam(g)=>{eğer g.boy!=27890 veya metin_uzunluk(g.sha)!=64 {ver 2;}} }
+    değişken bozuk: Dizi<metin> = ["p 1 p.elf 0 ","p 1 p.elf 16777217 ","p 1 p.txt 1 ","p 1  p.elf 1 ","p 1 P.elf 1 "];
+    için satir: bozuk { eşleş pk_satir(metin_birlestir(satir,h)) { tamam(v)=>{ver 3;} hata(e)=>{} } }
+    eğer pk_ad_mi("") veya pk_ad_mi("a/b") veya pk_ad_mi("a.b") veya değil pk_ad_mi("kedi-2") { ver 4; } ver 0;
+}

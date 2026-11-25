@@ -96,6 +96,8 @@ def derle(derleyici, kaynak, hedef, eski=False):
         w = Path(tmp)
         birlesik, ham, ir, nesne, elf = (w / f"u.{uzanti}" for uzanti in ("kem", "ham.ll", "ll", "o", "elf"))
         ek = ("runtime/kullanici/x86_64/kem_http.kem",) if Path(kaynak).stem in {"indir", "sunucu", "paket"} else ()
+        if Path(kaynak).stem == "paket":
+            ek += ("stdlib/kripto/karma.kem",)
         birlesik.write_bytes(b"".join(Path(p).read_bytes() for p in (*ORTAK, *ek, kaynak)))
         linker = Path("linker/user-x86_64.ld")
         if eski:
@@ -110,6 +112,12 @@ def derle(derleyici, kaynak, hedef, eski=False):
             subprocess.run([derleyici, "--llvm", "--mimari", "x86_64-none", birlesik], stdout=cikti, check=True)
         with ir.open("wb") as cikti:
             subprocess.run(["awk", "-f", "test/strip_defined_declares.awk", ham], stdout=cikti, check=True)
+        if Path(kaynak).stem == "paket":
+            # LFENCE genel yazmaçlarla çalışır. LLVM SSE2 içseli -mgeneral-regs-only
+            # hedefinde seçilemez, aynı donanım çitini bu hedefte açıkça kodla.
+            kod = ir.read_bytes().replace(b"call void @llvm.x86.sse2.lfence()",
+                                          b'call void asm sideeffect "lfence", "~{memory}"()')
+            ir.write_bytes(kod)
         subprocess.run([
             "clang", "-target", "x86_64-unknown-none", "-ffreestanding", "-nostdlib",
             "-mgeneral-regs-only", "-O2", "-Wno-override-module", "-ffunction-sections",

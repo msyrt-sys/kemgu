@@ -152,3 +152,4 @@ Bloksuz okumada veri yoksa `-11`, dolu fd tablosunda `-24`, sınırlı soket vey
 | Numara | Ad | Argüman | Davranış |
 |---|---|---|---|
 | 89 | dosya_akis | 3 | fd, işlem, üst sınır. 1 dosyanın okumalık kopyasını açar. 2 yazılacak içeriği fiziksel çerçevelerde biriktirir. 3 ve sıfır sınır dosyayı yayımlar. Yayımlamadan kapatma veya süreç çıkışı birikimi bırakır. Üst sınır 16 MiB. |
+| 90 | paket_hedef | 2 | Çıktı adresi ve tampon boyu. Yazılabilir veri bölümünü seçer, yolunu sıfır sonlandırmalı yazar. Paket işlem kilidi süreç çıkışında bırakılır. Meşgulken -16, uygun bölüm yoksa -30 döner. |

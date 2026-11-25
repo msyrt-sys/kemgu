@@ -68,3 +68,7 @@ Açılışta DHCP seçenek 42, elle IP, dört zaman damgasıyla ofset/gecikme, B
 ## Bölüm 14 — TFTP ve teşhis aktarımı
 
 Süre 1394 saniye. C ve self-host QEMU’da ayrı ayrı iki yönde 2 MiB, yön başına 205 ilk blok kaybı ve indirmede 41 yinelenen blok ölçüldü. FAT32, eş kaydı ve iki yönün pcap SHA256 değerleri eşleşti. Teşhis alıcısı iki raporu yerel dosyaya yazdı. Donanım raporu FAT32 ile, günlük QMP ile okunan çekirdek halkasıyla aynı. Bağlantı kapalıyken kabuk açık hata verdi. §7 kapıları ve yeni hedef çalıştırıldı. Yinelenen bloğu yeniden yazan değişiklik 16384 yerine 16896 bayt ve farklı SHA256 verdi. Kısa son bloğu tanımayan değişiklik -110 ile başarısız oldu. İki bağımsız koşumun çıkış kodu 1.
+
+## Bölüm 15 — ağ üzerinden paket kurucu
+
+1990 saniye. 27 hedeflik ara regresyon. Depo üretimi ve ELF aracında guncelle/liste/bilgi/kur/kaldir komutları, standart kütüphaneden SHA-256, yazılabilir bölüme kurulum, günlükten devam ve kurulu kayıtları. C ve self-host QEMU aynı hesapla ELF dosyasını indirip çalıştırdı, 44-2 sonucu 42. Kurulu liste yeniden açılışta okundu, bir bayt değişmiş paket SHA256 hatasıyla reddedildi, kaldırılan komut artık bulunmadı. 524349 baytlık ikinci ELF iki derleyicide çalıştı. FSInfo ve fsck temiz. Geçici dosya temizliğini atlama sabotajında FAT32 üzerinde yuk.tmp kaldı ve kâhin çıkış 1 verdi. **Uygulanmayan sabotaj:** Çalıştırılabilir paket için SHA256 karşılaştırmasını atlayıp bozuk ELF yayımlama değişikliği uygulanmadı. Kayıp denetim hedefindeki eksiklik budur.

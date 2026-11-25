@@ -146,3 +146,5 @@ işlev kul_onay(p: tam64,sat: tam32,etiket: metin) -> mantıksal {
 çıplak işlev sis_ag_kayit(tur: tam64,i: tam64,out: tam64) -> tam64 { ver sis_cagir(88,tur,i,out); }
 
 çıplak işlev sis_dosya_akis(fd: tam64,islem: tam64,sinir: tam64) -> tam64 { ver sis_cagir(89,fd,islem,sinir); }
+
+çıplak işlev sis_paket_hedef(p: tam64,n: tam64) -> tam64 { ver sis_cagir(90,p,n,0); }
