@@ -12,6 +12,15 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
+- [ ] TEST ALTYAPISI DENETİMİ + DETAYLI ÖLÇÜM (kullanıcı isteği, 2026-11-25). Tetikleyici: tam takım 4,5-5 sa,
+      20 çekirdekte yük ~1 (seri), her koşum ~25 GB geçici dizin bırakıyordu (D-771) ve aynı çekirdek ≥73 kez
+      derleniyordu (D-772). Kimse süreyi/diski ÖLÇMÜYORDU — doğruluk kapıları var, maliyet kapısı yoktu.
+      Araç hazır: `make test_tumu_olcum` (kapı başına süre, en yavaş 15, build/ boyutu; D-772). Yapılacak:
+      (a) kapı başına süre tablosu + QEMU açılış/kâhin bekleme payı; (b) geçici dizin/temizlik denetimi TÜM
+      harness'larda (mktemp, trap, başarısızlıkta bırak); (c) kendi çekirdeğini derleyen 8 harness önbelleğe;
+      (d) paralel koşum ön koşulları: paylaşılan build/ yazımları (D-468), sabit portlar, QEMU soket adları;
+      (e) tekrar eden işler (aynı ELF/imaj, aynı fsck) ve sleep/zaman aşımı payları; (f) değişikliğe göre
+      kapı seçimi (belge-yalnız değişiklikte tam takım gereksiz).
 - [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
       HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
