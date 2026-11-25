@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UEFI gerçek firmware kapısı; ikililer her koşumda yeniden üretilir.
+# UEFI gerçek firmware kapısı; çekirdek içerik anahtarlı önbellekten gelir (D-772), stub her koşumda üretilir.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ "${UEFI_YALNIZ_DERLE:-0}" != 1 ] && [ ! -f /usr/share/OVMF/OVMF_CODE_4M.fd ]; then
@@ -33,10 +33,44 @@ assert s.count(arama) == 1
 p.write_text(s.replace(arama, 'değişken k: tam32 = 0;'), encoding='utf-8')
 KEM_MSI
 fi
-"${UEFI_DERLEYICI:-build/kemgu}" --llvm --mimari x86_64-none "$W/comb.kem" > "$W/ham.ll"
-awk -f test/strip_defined_declares.awk "$W/ham.ll" > "$W/k.ll"
-clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only -O2 -Wno-override-module -x ir "$W/k.ll" -c -o "$W/k.o"
-ld.lld -m elf_x86_64 -T linker/bare-metal-uefi-x86_64.ld -o "$W/k.elf" "$W/k.o" build/bm_x86_start.o build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o build/bm_x86_panik.o
+DERLEYICI="${UEFI_DERLEYICI:-build/kemgu}"
+NESNELER="build/bm_x86_start.o build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o build/bm_x86_panik.o"
+CLANG_IR="clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only -O2 -Wno-override-module"
+# [D-772] Çekirdek önbelleği. Aynı derleyici + aynı birleşik kaynak tam takımda onlarca kez
+# derleniyordu (self-host 74,5 sn, C 10,7 sn; bir koşumda ≥73 derleme). Anahtar ÇIKTIYI
+# belirleyen her girdinin içeriğidir: derleyici ikilisi, birleşik kaynak (MSI yamasından SONRA),
+# awk süzgeci, bağlayıcı betiği, altı başlangıç nesnesi, IR derleme komutu ve araç sürümleri.
+# Herhangi biri değişirse anahtar değişir → yeniden derlenir. KEMGU_CEKIRDEK_ONBELLEK=0 kapatır.
+cekirdek_derle() {
+    "$DERLEYICI" --llvm --mimari x86_64-none "$W/comb.kem" > "$W/ham.ll"
+    awk -f test/strip_defined_declares.awk "$W/ham.ll" > "$W/k.ll"
+    $CLANG_IR -x ir "$W/k.ll" -c -o "$W/k.o"
+    # shellcheck disable=SC2086
+    ld.lld -m elf_x86_64 -T linker/bare-metal-uefi-x86_64.ld -o "$W/k.elf" "$W/k.o" $NESNELER
+}
+if [ "${KEMGU_CEKIRDEK_ONBELLEK:-1}" = 1 ]; then
+    OB_KOK="${KEMGU_CEKIRDEK_ONBELLEK_KOK:-build/cekirdek_onbellek}"
+    # shellcheck disable=SC2086
+    ANAHTAR=$( { printf '%s\n' "$CLANG_IR" "$(clang --version | head -1)" "$(ld.lld --version | head -1)";
+                sha256sum "$DERLEYICI" "$W/comb.kem" test/strip_defined_declares.awk \
+                          linker/bare-metal-uefi-x86_64.ld $NESNELER | cut -d' ' -f1; } | sha256sum | cut -c1-32)
+    OB="$OB_KOK/$ANAHTAR"
+    if [ -f "$OB/k.elf" ]; then
+        cp "$OB/ham.ll" "$OB/k.ll" "$OB/k.o" "$OB/k.elf" "$W/"
+        echo "CEKIRDEK_ONBELLEK isabet ${ANAHTAR:0:12} ($DERLEYICI)"
+    else
+        cekirdek_derle
+        mkdir -p "$OB_KOK"; ara=$(mktemp -d "$OB_KOK/.yaz.XXXXXX")
+        cp "$W/ham.ll" "$W/k.ll" "$W/k.o" "$W/k.elf" "$ara/"
+        # Yarışta başka bir koşum aynı anahtarı yazdıysa ikinci kopya atılır (içerik aynı).
+        mv -T "$ara" "$OB" 2>/dev/null || rm -rf "$ara"
+        # Disk sınırı: en yeni 16 kayıt kalır (kayıt başına ~20 MB).
+        ls -1dt "$OB_KOK"/*/ 2>/dev/null | tail -n +17 | xargs -r rm -rf
+        echo "CEKIRDEK_ONBELLEK derlendi ${ANAHTAR:0:12} ($DERLEYICI)"
+    fi
+else
+    cekirdek_derle
+fi
 cp "$W/k.elf" "$W/esp/KEMGU/CEKIRDEK.ELF"
 if [ "${UEFI_PC_URET:-0}" = 1 ]; then
  python3 tests/qemu/uefi_imaj.py build/kem_os_pc.img "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
