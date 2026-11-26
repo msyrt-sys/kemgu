@@ -3230,4 +3230,7 @@
   başına geçici ad, önbellek isabeti kopya düşerse yeniden derler (64 kayıt LRU). Yedi kapı -j7 birlikte rc=0 (12 dk).
   TAM TAKIM -j10: rc=0, "Tum testler gecti!", FIXPOINT ✓, DUVAR 44 dk 59 sn (seri 5 sa 25 dk → ~7,2×); kapı toplamı
   5 sa 19 dk. Artık kritik yol en uzun kapı: bm_x86_kaynak 24,5 dk (duvarın %54'ü) → sıradaki kazanç o kapıyı bölmek.
+  SÜREÇ TURLARI EŞZAMANLI (bm_x86_surec_harness: iki derleyicinin turu ayrı mktemp/QEMU ile aynı anda; SUREC_PARALEL=0
+  sıralı): bm_x86_kaynak 24,5 → 12,9 dk. TAM TAKIM -j10 (main'e yeniden temellenmiş): rc=0, "Tum testler gecti!", FIXPOINT ✓,
+  DUVAR 33 dk 41 sn (seri 5 sa 25 dk → ~9,7×), kapı toplamı 3 sa 48 dk. Yeni kritik yol bm_x86_ag_saglamlik 16,6 dk.
 
