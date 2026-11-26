@@ -657,10 +657,10 @@ calistir_lambda_test: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # ⚠ `kemgu` ON KOSUL: son satirdaki `--check` denetimi onu kullanir ve
 # KOSULSUZ olmali (D-486: sessiz atlama). Dongu YOK — kemgu yalniz src/*.c'ye bagli.
 selfhost/konak.kem: selfhost/konak.kem.in $(BUILD)/kemgu$(EXE) FORCE
-	@sed -e 's|@ARCH@|$(ARCH)|g' -e 's|@TRIPLE@|$(HOST_TRIPLE)|g' selfhost/konak.kem.in > $@.tmp
-	@grep -q '@ARCH@\|@TRIPLE@' $@.tmp && { echo "🔴 konak.kem: yer tutucu IKAME EDILMEDI (ARCH=$(ARCH))"; rm -f $@.tmp; exit 1; } || true
-	@cmp -s $@.tmp $@ 2>/dev/null || mv -f $@.tmp $@
-	@rm -f $@.tmp
+	@# [D-772] Geçici ad süreç başına (paralel/özyineli make aynı .tmp'yi yarışarak yazıyordu; Codex dalga 16).
+	@g=$@.tmp.$$$$; sed -e 's|@ARCH@|$(ARCH)|g' -e 's|@TRIPLE@|$(HOST_TRIPLE)|g' selfhost/konak.kem.in > $$g; \
+	 if grep -q '@ARCH@\|@TRIPLE@' $$g; then echo "🔴 konak.kem: yer tutucu IKAME EDILMEDI (ARCH=$(ARCH))"; rm -f $$g; exit 1; fi; \
+	 if cmp -s $$g $@ 2>/dev/null; then rm -f $$g; else mv -f $$g $@; fi
 	@$(BUILD)/kemgu$(EXE) --check $@ >/dev/null 2>&1 || { echo "🔴 konak.kem GECERSIZ KEMGU uretildi (kodlama bozulmasi?) — tani:"; $(BUILD)/kemgu$(EXE) --check $@ 2>&1 | head -4; exit 1; }
 
 

@@ -55,8 +55,10 @@ if [ "${KEMGU_CEKIRDEK_ONBELLEK:-1}" = 1 ]; then
                 sha256sum "$DERLEYICI" "$W/comb.kem" test/strip_defined_declares.awk \
                           linker/bare-metal-uefi-x86_64.ld $NESNELER | cut -d' ' -f1; } | sha256sum | cut -c1-32)
     OB="$OB_KOK/$ANAHTAR"
-    if [ -f "$OB/k.elf" ]; then
-        cp "$OB/ham.ll" "$OB/k.ll" "$OB/k.o" "$OB/k.elf" "$W/"
+    # Paralel koşumda başka bir süreç kaydı tam kopyalama sırasında silebilir (eskime); kopya
+    # düşerse sessizce yanlış ürün kullanılmaz, yeniden derlenir.
+    if [ -f "$OB/k.elf" ] && cp "$OB/ham.ll" "$OB/k.ll" "$OB/k.o" "$OB/k.elf" "$W/" 2>/dev/null; then
+        touch "$OB"
         echo "CEKIRDEK_ONBELLEK isabet ${ANAHTAR:0:12} ($DERLEYICI)"
     else
         cekirdek_derle
@@ -64,8 +66,8 @@ if [ "${KEMGU_CEKIRDEK_ONBELLEK:-1}" = 1 ]; then
         cp "$W/ham.ll" "$W/k.ll" "$W/k.o" "$W/k.elf" "$ara/"
         # Yarışta başka bir koşum aynı anahtarı yazdıysa ikinci kopya atılır (içerik aynı).
         mv -T "$ara" "$OB" 2>/dev/null || rm -rf "$ara"
-        # Disk sınırı: en yeni 16 kayıt kalır (kayıt başına ~20 MB).
-        ls -1dt "$OB_KOK"/*/ 2>/dev/null | tail -n +17 | xargs -r rm -rf
+        # Disk sınırı: en son KULLANILAN 64 kayıt kalır (kayıt başına ~20 MB; tek tam koşum ~18 ayrı anahtar).
+        ls -1dt "$OB_KOK"/*/ 2>/dev/null | tail -n +65 | xargs -r rm -rf
         echo "CEKIRDEK_ONBELLEK derlendi ${ANAHTAR:0:12} ($DERLEYICI)"
     fi
 else
