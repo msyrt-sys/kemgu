@@ -285,6 +285,10 @@ typedef struct LlvmGen {
      * kdl_bolge_olustur ile açılır, TÜM ret'lerden önce kdl_bolge_serbest. Kaçmayan
      * (BOLGE_YEREL) tahsisler buraya; kaçanlar rho_ref'e (ρ_caller). NULL → yok. */
     const char *rho_yerel;
+    /* [D-775] E4k-C (self-host F4.3 aynası): en dış döngünün TUR bölgesi. Gövde girişinde
+     * kdl_bolge_olustur, geri dalıştan ve döngü içindeki her `ver`den önce serbest. NULL = döngü dışı. */
+    const char *rho_tur;
+    int tur_derinlik;
     /* [D-543] Bu islevde CIKISTA serbest birakilacak kanal baglama adlari.
      * Liste BOS ise emisyon YOK (default-DENY). */
     const char **kanal_ad; int *kanal_uz; int kanal_sayi;
@@ -596,6 +600,55 @@ static void kanal_serbest_emit(LlvmGen *g) {
 }
 /* F4.2b (d): ρ_yerel'i serbest bırak — HER ret'ten ÖNCE çağrılır (R4: dönüş değeri
  * zaten materyalize/ρ_caller'da). NULL ρ_yerel → no-op. */
+static void rho_tur_serbest_emit(LlvmGen *g) {
+    if (g->rho_tur) fprintf(g->out, "  call void @kdl_bolge_serbest(ptr %s)\n", g->rho_tur);
+}
+/* [D-775] Gövde alt ağacında tur-yerel işaretli bir bağlama var mı? Yoksa tur bölgesi AÇILMAZ:
+ * her turda kdl_bolge_olustur/serbest donanım bekleme döngülerinde çekirdeği ~1,7 kat yavaşlattı
+ * (açılış 300 -> 530 ms; yük altında zaman aşımları — ölçüldü). */
+static int tur_gerekli_mi(const LlvmGen *g, const Dugum *d) {
+    if (!d || !g->aktif_escape) return 0;
+    switch (d->tip) {
+        case DUGUM_DEGISKEN:
+            return d->veri.degisken.deger && escape_tur_yerel(g->aktif_escape, d->veri.degisken.deger);
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                if (tur_gerekli_mi(g, d->veri.blok.deyimler[i])) return 1;
+            return 0;
+        case DUGUM_EGER: return tur_gerekli_mi(g, d->veri.eger.gozdoldur) || tur_gerekli_mi(g, d->veri.eger.yan);
+        case DUGUM_IKEN: return tur_gerekli_mi(g, d->veri.iken.govde);
+        case DUGUM_ICIN: return tur_gerekli_mi(g, d->veri.icin.govde);
+        case DUGUM_GUVENSIZ: return tur_gerekli_mi(g, d->veri.guvensiz.blok);
+        case DUGUM_ESLES:
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                const Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU && tur_gerekli_mi(g, k->veri.esles_kolu.govde)) return 1;
+            }
+            return 0;
+        default: return 0;
+    }
+}
+/* [D-775] En dış döngü gövdesine giriş: tur bölgesi aç (çıplak işlevde YOK — sıfır bölge
+ * sembolü invaryantı; ρ_yerel'in olmaması çıplaklığın işaretidir). Yalnız gövdede tur-yerel
+ * bir tahsis varsa (tembel). */
+static void rho_tur_gir(LlvmGen *g, const Dugum *govde) {
+    g->tur_derinlik++;
+    if (g->tur_derinlik == 1 && g->rho_yerel && tur_gerekli_mi(g, govde)) {
+        int r = yeni_reg(g);
+        fprintf(g->out, "  %%%d = call ptr @kdl_bolge_olustur()\n", r);
+        char *s = (char *)arena_ayir(g->arena, 16);
+        snprintf(s, 16, "%%%d", r);
+        g->rho_tur = s;
+    }
+}
+/* Gövde sonu: gövde sonlanmadıysa (fall-through -> geri dalış) serbest; derinlik geri. */
+static void rho_tur_cik(LlvmGen *g, int govde_sonlandi) {
+    if (g->tur_derinlik == 1) {
+        if (!govde_sonlandi) rho_tur_serbest_emit(g);
+        g->rho_tur = NULL;
+    }
+    g->tur_derinlik--;
+}
 static void rho_yerel_serbest_emit(LlvmGen *g) {
     kanal_serbest_emit(g);   /* [D-543] kanal ONCE — bolge serbestinden sonra
                               * slot okumak yanlis olurdu */
@@ -1636,6 +1689,25 @@ static int dizi_eleman_struct_mi(const char *et) {
     return et[0] == '{';
 }
 
+/* [D-774] E4k-B — kullanıcı çağrısının ρ argümanı. Çağrılan DÖNÜŞ-SAF ise
+ * (escape.c: bölgeye ayırdığını yalnız dönüşle verir) ve (a) sonucu
+ * hapsedilmiş bir Dizi<skaler> bağlamasıdır (ÇAĞRI düğümü kesin_yerel) ya da
+ * (b) dönüşü yok/skalerdir (dışarı işaretçi çıkamaz), çağıranın ρ_yerel'i
+ * verilir: tahsisler çağıranın her `ret`inden önce topluca serbest. Aksi hâlde
+ * eski davranış (ρ_caller). Kanıt yoksa DAİMA eski yol. */
+static const char *cagri_rho_sec(LlvmGen *g, const Dugum *d) {
+    if (!g->rho_yerel || !g->aktif_escape || !d || d->tip != DUGUM_CAGRI) return g->rho_ref;
+    if (escape_kesin_yerel(g->aktif_escape, d)) {
+        if (g->rho_tur && escape_tur_yerel(g->aktif_escape, d)) return g->rho_tur;   /* [D-775] */
+        return g->rho_yerel;
+    }
+    const Dugum *h = d->veri.cagri.hedef;
+    if (h && h->tip == DUGUM_TANIMLAYICI
+        && escape_cagri_skaler_saf(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk))
+        return g->rho_yerel;   /* [D-775] skaler dönüş: işlev düzeyi (tur bölgesi açtırmaz) */
+    return g->rho_ref;
+}
+
 /* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
  * ρ_yerel'e (serbest edilecek) SADECE: escape analizinde AÇIKÇA KAYITLI
  * (escape_kayitli_mi) VE BOLGE_YEREL (kaçmaz) VE skaler-eleman dizisi gider.
@@ -1657,6 +1729,9 @@ static const char *bolge_yerel_yonlendir(LlvmGen *g, const Dugum *dizi_d,
         && !dizi_eleman_struct_mi(elem_ir)
         && strcmp(elem_ir, "ptr") != 0
         && escape_kesin_yerel(g->aktif_escape, dizi_d)) {
+        /* [D-775] E4k-C: döngü gövdesinde bildirilmiş hapsedilmiş bağlama -> tur bölgesi
+         * (self-host F4.3 rho_iter aynası; her turda serbest -> sonsuz döngüde sınırlı bellek). */
+        if (g->rho_tur && escape_tur_yerel(g->aktif_escape, dizi_d)) return g->rho_tur;
         return g->rho_yerel;
     }
     return g->rho_ref;
@@ -6540,12 +6615,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in (ik==NULL:
              * yazdir/metin/dosya/...) ρ ALMAZ. D-257: çıplak user-fn → C-ABI, ρ YOK. */
             int u_rho = (ik != NULL) && !(ik->ast && ik->ast->veri.islev.ciplak_mi);
+            /* [D-774] E4k-B: dönüş-saf çağrılana ρ_yerel (çağıranın dönüşünde serbest). */
+            const char *u_rho_arg = cagri_rho_sec(g, d);
             if (strcmp(donus, "void") == 0) {
                 /* void-returning call: register atama yok */
                 fputs("  call void @", g->out);
                 yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
                 fputs("(", g->out);
-                if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);
+                if (u_rho) fprintf(g->out, "ptr %s", u_rho_arg);
                 for (int i = 0; i < n; i++) {
                     if (i > 0 || u_rho) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
@@ -6561,7 +6638,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             fprintf(g->out, "  %%%d = call %s @", r, donus);
             yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
-            if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+            if (u_rho) fprintf(g->out, "ptr %s", u_rho_arg);   /* V2-F4.2a: ρ (kullanıcı-fn) */
             for (int i = 0; i < n; i++) {
                 if (i > 0 || u_rho) fputs(", ", g->out);
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
@@ -6853,9 +6930,11 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                 IfadeSonuc s = ifade_uret(g, d->veri.ver.deger, donus_tip);
                 g->beklenen_tip = eski_bt;
                 int rr = int_donustur(g, s.reg, s.tip, donus_tip);
+                rho_tur_serbest_emit(g);     /* [D-775] döngü içi ver: önce tur bölgesi */
                 rho_yerel_serbest_emit(g);   /* F4.2b (d): dönüş değeri (rr) materyalize sonrası */
                 fprintf(g->out, "  ret %s %%%d\n", donus_tip, rr);
             } else {
+                rho_tur_serbest_emit(g);     /* [D-775] */
                 rho_yerel_serbest_emit(g);   /* F4.2b (d) */
                 if (donus_tip && strcmp(donus_tip, "void") == 0) {
                     fputs("  ret void\n", g->out);
@@ -7459,7 +7538,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     i1r, L_body, L_done);
             fprintf(g->out, "bb%d:\n", L_body);
             ScopeMarker m = scope_gir(g);
+            rho_tur_gir(g, d->veri.iken.govde);               /* [D-775] */
             int body_term = blok_uret(g, d->veri.iken.govde);
+            rho_tur_cik(g, body_term);
             scope_cik(g, m);
             if (!body_term) fprintf(g->out, "  br label %%bb%d\n", L_head);
             fprintf(g->out, "bb%d:\n", L_done);
@@ -7657,7 +7738,9 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             g->isimler->metin_mi = eleman_metin;
             /* [D-708] eleman dtamN ise dongu degiskeni de isaretsiz (genisletme zext). */
             g->isimler->isaretsiz = eleman_isz;
+            rho_tur_gir(g, d->veri.icin.govde);               /* [D-775] */
             int body_term = blok_uret(g, d->veri.icin.govde);
+            rho_tur_cik(g, body_term);
             scope_cik(g, m);
             if (!body_term) {
                 /* i++ + br */
@@ -8557,6 +8640,7 @@ static void islev_uret(LlvmGen *g, const Dugum *islev) {
     g->reg = 0;
     g->label = 0;
     g->isimler = NULL;
+    g->rho_tur = NULL; g->tur_derinlik = 0;   /* [D-775] */
 
     /* D-254/D-257 çıplak işlev: region-prologue EMIT EDİLMEZ (WALL-2 / bootstrap
      * circularity çözümü). @kdl_global_bolge_al + @kdl_bolge_olustur çağrısı YOK
@@ -8771,6 +8855,7 @@ static void lambda_emit(LlvmGen *g, BekleyenLambda *bl) {
     /* F4.2b: lambda bu fazda ρ_yerel ALMAZ (yönlendirme yok) → VER ret'leri
      * serbest emit etmesin (NULL). Kuşatan fn'in ρ_yerel'ini serbest etme. */
     g->rho_yerel = NULL;
+    g->rho_tur = NULL; g->tur_derinlik = 0;   /* [D-775] kuşatan döngünün tur bölgesi lambda'ya sızmaz */
     int np = d->veri.lambda.param_sayi;
     char envtip[512]; int eo = 0;
     eo += snprintf(envtip + eo, sizeof(envtip) - eo, "{ ");

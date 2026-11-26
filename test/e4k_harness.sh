@@ -19,6 +19,46 @@ PY
   if [ -z "$blok" ] || [ "$rc" != 0 ] || [ "$blok" -gt 2 ]; then echo "🔴 E4K $c yerel_buyume: ana bölge $blok blok (sınır 2), rc=$rc"; fail=1
   else echo "E4K OK $c yerel_buyume ana bölge $blok blok"; fi
 done
+# ASan'lı çalışma zamanı: dizi erişimleri (kdl_dizi_al_* vb.) runtime'da yapılır; ASan'sız runtime ile
+# serbest bırakılmış bölgeden okuma GÖRÜNMEZ (D-775 S262 bu yüzden ilk denemede sessiz kaldı).
+RT_ASAN=""
+if clang -std=c11 -g -O1 -fsanitize=address -Iruntime -c runtime/kdl_runtime.c -o "$W/rt_asan.o" 2>/dev/null; then RT_ASAN="$W/rt_asan.o"; fi
+# (3) [D-774] E4k-B dönüş-saf: yönlendirme kararları beklenen tabloyla birebir (iki derleyici),
+#     program ASan altında 42; (4) çağrı-sonucu örüntüsünde ana bölge büyümez.
+for c in kemgu codegen; do
+  "build/$c$EXE" --llvm test/e4k/donus_saf.kem > "$W/ds_$c.ll" 2> "$W/ds_$c.err" || { echo "🔴 $c donus_saf --llvm"; cat "$W/ds_$c.err"; fail=1; continue; }
+  python3 test/e4k/rho_tablosu.py "$W/ds_$c.ll" > "$W/ds_$c.tablo"
+  if ! diff -u test/e4k/donus_saf.beklenen "$W/ds_$c.tablo" > "$W/ds_$c.fark"; then
+    echo "🔴 E4K $c donus_saf: ρ yönlendirme tablosu beklenenden farklı"; cat "$W/ds_$c.fark"; fail=1
+  else echo "E4K OK $c donus_saf yönlendirme $(wc -l < "$W/ds_$c.tablo") çağrı"; fi
+  if [ -n "$RT_ASAN" ] && clang -w -fsanitize=address -g -x ir "$W/ds_$c.ll" -x none "$RT_ASAN" -lpthread -o "$W/ds_$c.bin" 2>/dev/null; then
+    ASAN_OPTIONS=detect_leaks=0 "$W/ds_$c.bin" > "$W/ds_$c.out" 2>&1; r=$?
+    if [ "$r" != 42 ] || grep -q "AddressSanitizer" "$W/ds_$c.out"; then echo "🔴 E4K $c donus_saf ASan: rc=$r"; head -20 "$W/ds_$c.out"; fail=1
+    else echo "E4K OK $c donus_saf ASan temiz, 42"; fi
+  else echo "ATLANDI ($c donus_saf: ASan bağlanamadı)"; fi
+  "build/$c$EXE" --llvm test/e4k/cagri_sonucu.kem > "$W/cs_$c.ll" || { echo "🔴 $c cagri_sonucu --llvm"; fail=1; continue; }
+  python3 - "$W/cs_$c.ll" "$W/cs_$c.y.ll" <<'PY'
+import sys
+t=open(sys.argv[1],encoding='utf-8').read()
+open(sys.argv[2],'w',encoding='utf-8').write(t.replace('define i32 @main(','define i32 @kem_main(',1))
+PY
+  clang -w -x ir "$W/cs_$c.y.ll" -x none test/e4k/surucu.c build/kdl_runtime.o -o "$W/cs_$c.bin" || { echo "🔴 $c cagri_sonucu bağlama"; fail=1; continue; }
+  out=$("$W/cs_$c.bin"); blok=$(echo "$out" | sed -n 's/^BLOK \([0-9]*\) RC 0$/\1/p')
+  if [ -z "$blok" ] || [ "$blok" -gt 2 ]; then echo "🔴 E4K $c cagri_sonucu: ana bölge ${blok:-?} blok (sınır 2) — $out"; fail=1
+  else echo "E4K OK $c cagri_sonucu ana bölge $blok blok"; fi
+done
+# (5) [D-775] E4k-C: döngü doğrudan main'de; tur bölgesi her turda serbest -> zirve bellek <8 MB.
+if [ -x /usr/bin/time ]; then
+  for c in kemgu codegen; do
+    "build/$c$EXE" --llvm test/e4k/dongu_sonucu.kem > "$W/du_$c.ll" || { echo "🔴 $c dongu_sonucu --llvm"; fail=1; continue; }
+    clang -w -O2 -x ir "$W/du_$c.ll" -x none build/kdl_runtime.o -o "$W/du_$c.bin" || { echo "🔴 $c dongu_sonucu bağlama"; fail=1; continue; }
+    /usr/bin/time -f "%M" "$W/du_$c.bin" > /dev/null 2> "$W/du_$c.t"; r=$?; kb=$(tail -1 "$W/du_$c.t")
+    if [ "$r" != 0 ] || [ -z "$kb" ] || [ "$kb" -gt 8192 ]; then echo "🔴 E4K $c dongu_sonucu: zirve ${kb:-?} KB (sınır 8192), rc=$r"; fail=1
+    else echo "E4K OK $c dongu_sonucu zirve $kb KB"; fi
+  done
+else
+  echo "ATLANDI (/usr/bin/time yok — dongu_sonucu zirve bellek ölçülmedi)"
+fi
 if [ -n "$EXE" ] || ! echo 'int main(void){return 0;}' | clang -fsanitize=thread -x c - -o "$W/tsan_dene" >/dev/null 2>&1; then
   echo "ATLANDI (ThreadSanitizer yok — görev büyütme yarış denetimi yapılmadı)"
 else

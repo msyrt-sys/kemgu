@@ -3244,4 +3244,58 @@
   PC matrisi -smp ekseni. Claude doğruladı: son ABI çağrısı 90; `-smp 4 -accel tcg,thread=multi` uyarısız açılıyor;
   madt.kem + smp_x86.c (başvuru) mevcut; satıriçi_asm x86 çekirdekte kullanılabilir; belge/kapı adları Makefile'da var.
   Ön koşul: D-772 (#245) ve D-773 main'de.
+- 2026-11-26 D-774: E4k AŞAMA B — "DÖNÜŞ-SAF" ÇAĞRILAN ÖZETİ (C src/escape.c ds_* + self-host codegen.kem aynası).
+  f bölgeye ayırdığı her şeyi yalnız dönüşle veriyorsa çağıran ona %rho yerine KENDİ ρ_yerel'ini verir:
+  (a) sonuç hapsedilmiş Dizi<skaler> bağlaması (ÇAĞRI düğümü kesin_yerel), (b) dönüş yok/skaler. VARSAYILAN RED:
+  P1 imza skaler/metin/Dizi<skaler> (referans/işaretçi/yapı/kendin/generic/çıplak RED) · P2 atama kökü yalnız yerel ·
+  P3 Dizi parametresi ve TAKMA ADI (bağlama/atama değeri param adını ya da herhangi bir çağrıyı içeriyorsa; sabit
+  noktaya kadar) dizi_ekle/kapasite_ayarla arg0 OLAMAZ — elle kurulmuş başlıkta bolge=0 iken büyütme çağıranın
+  %rho'suna düşer, kalıcı dizi ölen tampona işaret ederdi (UAF) · P4 kapanış/görev/kanal/dondur/güvensiz/asm/yöntem/
+  modül/dolaylı çağrı RED · P5 kullanıcı çağrısı TEKİL adla + özyinelemeli dönüş-saf, özyineleme/derinlik>24 RED ·
+  P6 tanınmayan düğüm RED. Self-host'ta ek: işlevde kapanış varsa (a) yolu kapalı (mevcut bolge_yerel_yonlendir
+  koruyucusu); kararlar fikstürde C ile birebir. ÖLÇÜM (yardımcı yap()ı çağırıp yerelde okuyor, 200K çağrı): zirve
+  407 MB → 1,1 MB, iki derleyici. Döngünün doğrudan main'de olduğu örüntü DEĞİŞMEZ (tahsis main'in ρ_yerel'inde
+  birikir → tur başına bölge, E4k-C; self-host'ta F4.3 rho_iter VAR, C'de YOK). ⚠ ÇEKİRDEK ETKİSİ YOK: kabuk komut
+  heap artışı toplamı 877,7 → 877,9 MB (32 KB blok gürültüsü) — komut işleyicileri `&değişken` durum aldığı için
+  dönüş-saf DEĞİL; çekirdeğin kapanışı D (alan/eşleş türevleri) + durum parametreli işlevler ister. Kapı
+  calistir_e4k_bellek genişledi: test/e4k/donus_saf.kem 13 çağrının ρ kararı beklenen tabloyla (iki derleyici) +
+  ASan 42 · cagri_sonucu.kem ana bölge ≤2 blok. Sabotaj 8/8 kırmızı: S252 ds_islev hep doğru · S253 C seçici
+  kapalı (127 blok) · S254 P3 kapalı · S255 takma ad yayılımı kapalı · S256 self seçici kapalı · S257 self P3 · S258
+  self takma ad · S259 self özyinelemeli denetim kapalı. P2 ölçülmüş FAZLALIK: küresel yazım güvensiz/çıplak ister,
+  ikisi de P4/P1'de zaten RED. Tam takım -j10: rc=0, 36 dk 23 sn, FIXPOINT ✓. ASan E2E 133/0, ASan matris 12/12.
+- 2026-11-26 D-775: E4k AŞAMA C — TUR BÖLGESİ. C'ye self-host F4.3 aynası: en dış döngünün gövde girişinde ρ_tur,
+  geri dalıştan ve döngü içi her `ver`den önce serbest, lambda gövdelerine sızmaz, çıplakta yok. Döngü gövdesinde
+  bildirilmiş hapsedilmiş Dizi<skaler> (literal, dizi_olustur, dönüş-saf çağrı sonucu) ρ_tur'a; skaler dönen
+  dönüş-saf çağrı döngü içinde ρ_tur'a. Self-host'ta dönüş-saf çağrı yolu rho_iter'e bağlandı (kararlar birebir).
+  ÖLÇÜM: döngü doğrudan main'de, 200K tur: 407 MB → 1,3 MB (C). E4k kapısı: dongu_sonucu zirve <8 MB (908/940 KB),
+  donus_saf'a 'tur' sınıfı + dışarı atanan döngü dizisi. ⚠ KÂHİN KÖRDÜ: ASan IR erişimini denetler ama dizi okuması
+  ASan'sız runtime'da (kdl_dizi_al_*) → serbest bölgeden okuma GÖRÜNMEZDİ; S262 (her döngü dizisini kanıtsız
+  ρ_tur'a) ilk denemede SESSİZ → kapı ASan'lı runtime ile bağlanınca KIRMIZI (UAF). Sabotajlar: S260 tur serbesti
+  yok (zirve 20 GB) · S261 C çağrı→ρ_yerel (41 MB + tablo) · S262 kanıtsız ρ_tur (ASan UAF) · S263 self rho_iter
+  yok (41 MB) · S264 self kanıtsız rho_iter (ASan UAF) — hepsi KIRMIZI; S265 `dongu>0` denetimi kaldırıldı →
+  SESSİZ = ölçülmüş FAZLALIK (döngü dışında ρ_tur yok).
+  ⚠ YERLEŞİK İZİN LİSTESİ (B'ye de uygulanır): ilk sürüm tanınmayan adı (yerleşik / gövdesiz dış işlev = çekirdekte
+  asm/C sembolü) dönüş-saf sayıyordu — "varsayılan RED" ihlali; KEMGU'da adres tam64 olarak dolaşır, böyle bir
+  işlev tahsisin adresini saklayabilir/döndürebilir. Artık yalnız argüman tutmayan/adres vermeyen yerleşikler (dizi
+  okuma/yazma, saf metin, sayı↔metin, çıktı, değer kurucuları). ⚠ DÜRÜSTÇE: tam takımda 5 kapı (ciplak_region_free,
+  bm_x86_msi/pci16/cok_surec/ps2_irq; msi C çekirdeğinde `cat` "bulunamadi") kırmızıydı; izin listesiyle 5/5 yeşil
+  AMA S266 (izin listesini C'de kaldır) msi+pci16'da SESSİZ → bu kırmızılar izin listesine BAĞLANAMADI. Koşum Codex
+  dalga 18'in aynı makinedeki -j10 tam takımıyla ÇAKIŞIYORDU (80+ QEMU, yük 11) — en olası kök, kanıtsız. Ayrıca
+  calistir_ciplak_region_free build/codegen'e bağımlı değildi (kurulurken koştu) → bağımlılık eklendi.
+  #247 (B) bu yüzden birleşmeden kapatıldı; B+C+izin listesi tek PR. Host kapıları (-j4, Codex çalışırken): ASan E2E
+  133/0, matris 12/12, LLVM 321/321, checker 321/321, codegen_diff 229/229, yapi_diff 207/207, bolge_operand 231/231,
+  E4k 12/12, FIXPOINT ✓. Çekirdek heap etkisi: B'de ölçüldü (yok); tam takım Codex'in taban ölçümü bitince.
+  ⚠⚠ KÖK BULUNDU — İKİ AYRI SORUN, ikisi de SAĞLAMLIK DEĞİL:
+  (1) PERFORMANS: C'nin ρ_tur'u her en dış döngünün HER turunda (içinde tahsis olmasa da) kdl_bolge_olustur/serbest
+  yapıyordu; çekirdekte tur'a giden dizi tahsisi 0, açılan tur bölgesi 1031 çağrı noktası → açılış 300 → 530-577 ms
+  (acilis_suresi kırmızı), yük altında donanım bekleme döngüleri zaman aşımı ("QEMU sonucu gelmedi", PS/2 karakter
+  kaybı, `cat` "bulunamadi", "bilinmeyen komut" — bellek bozulması gibi GÖRÜNÜYORDU). Onarım: TEMBEL tur bölgesi
+  (yalnız gövde alt ağacında tur-yerel bağlama varsa; tur_gerekli_mi) + skaler dönüş-saf çağrı ρ_yerel'e (iki
+  derleyici). Çekirdekte döngü-içi bölge 1031 → 2; açılış C 300 / self 339 ms (taban). dongu_sonucu hâlâ ~900 KB.
+  (2) PARALEL YARIŞ (D-772'den beri, E4k'den bağımsız): calistir_ciplak_region_free ve calistir_kem_malloc_kompozisyon
+  self-host ikilisini ORTAK build/codegen'in ÜZERİNE bağlıyordu (`clang … -o build/codegen`); -j altında o anda onu
+  kullanan kapılar yarım yazılmış ikiliyle BOŞ çıktı aldı (check_genis: test_bit, sonra matris+metin; build/codegen
+  mtime koşum ortasında 17:17:59 — zaman.tsv'den o anda koşan kapılar çıkarılıp bulundu). 2880 paralel tekrar ve
+  ASan'lı self-host taraması (292 dosya + çekirdek) temizdi → derleyici çökmesi DEĞİL. İki harness artık kendi
+  mktemp dizinine kurar. Benim eklediğim ciplak→codegen bağımlılığı kapının zamanlamasını kaydırıp yarışı SIKLAŞTIRDI.
 

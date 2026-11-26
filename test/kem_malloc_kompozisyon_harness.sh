@@ -14,13 +14,13 @@ set -u
 cd "$(dirname "$0")/.."
 
 KEMGU=build/kemgu${EXE}
-SELF=build/codegen${EXE}
 KEM=test/ornekler/kem_malloc.kem
 HARNESS=test/kem_malloc_kompozisyon.c
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
 # recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
 TMP=$(mktemp -d "build/kemmalloc.XXXXXX" 2>/dev/null || echo "build/kemmalloc.$$")
 mkdir -p "$TMP"
+SELF="$TMP/codegen${EXE}"   # [D-775] ortak build/codegen'in üzerine bağlama (-j yarışı; ciplak_region_free ile aynı)
 gecti=0; kaldi=0
 
 # self-host binary'yi güncel codegen.kem'den üret (stale = yanlış PASS).

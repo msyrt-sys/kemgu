@@ -17,11 +17,14 @@ set -u
 cd "$(dirname "$0")/.."
 
 KEMGU=build/kemgu${EXE}
-SELF=build/codegen${EXE}
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
 # recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
 TMP=$(mktemp -d "build/ciplak_rf.XXXXXX" 2>/dev/null || echo "build/ciplak_rf.$$")
 mkdir -p "$TMP"
+# [D-775] Self-host ikilisi KAPININ KENDİ dizinine kurulur. Önceden ortak build/codegen'in ÜZERİNE
+# bağlanıyordu: -j altında o anda build/codegen'i kullanan kapılar (check_genis ölçüldü: mtime koşum
+# ortasında değişti, birkaç dosyada self-host çıktısı BOŞ) yarım yazılmış ikiliyle karşılaşıyordu.
+SELF="$TMP/codegen${EXE}"
 gecti=0; kaldi=0
 
 # self-host binary'yi HER ZAMAN güncel codegen.kem'den üret (stale binary = yanlış PASS).
