@@ -3341,5 +3341,8 @@
   kararlılığı + iç içe içerik) · test_kdl_bolge T8 (41/41). Sabotajlar: S271 çekirdek uzatma kapalı → bump eşik üstü ·
   S272 "en son tahsis" koşulu kalktı → içerik bozuk · S273 host uzatma daima 0 → işaretçi testi · S274 host koşul kalktı
   → iç içe içerik · S275 çekirdek OOM koruması yok → #PF, panik yok. Hepsi KIRMIZI.
+  Tam takım (-j10, 156 kapı, 36 dk): tek kırmızı check_kapisi — yeni test çekirdeği tek başına --check'ten geçmez
+  (runtime sembolleri birleşik birimde); deponun x86 deseniyle "parça" muaf + birleşik birim denetimi eklendi
+  (361/383, 0 RED). S276 (test çekirdeğine tip hatası) → birleşik denetim KIRMIZI.
   KALAN E4k: yoklama döngüsü tahsisleri (zamanlamaya bağlı, gerçek donanımda daha kötü) + çağrı sonucu/durum yazımı
   (D-776 notu) + (a) gerçek 1/2 baytlık eleman (4×).
