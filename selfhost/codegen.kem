@@ -9955,8 +9955,7 @@ işlev cagri_rho_sec(p: &değişken Ayr, idx: tam32, ad: metin) -> metin {
         }
     }
     eğer ds_cagri_skaler_saf(p, ad) {
-        eğer metin_esit(p.rho_iter, "") == yanlış { ver p.rho_iter; }   // [D-775] skaler dönüş: çağrı sonrası çöp
-        ver p.rho_yerel;
+        ver p.rho_yerel;   // [D-775] skaler dönüş: işlev düzeyi (C ile aynı; tur bölgesi açtırmaz)
     }
     ver p.rho_ref;
 }

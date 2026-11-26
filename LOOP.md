@@ -3285,4 +3285,17 @@
   #247 (B) bu yüzden birleşmeden kapatıldı; B+C+izin listesi tek PR. Host kapıları (-j4, Codex çalışırken): ASan E2E
   133/0, matris 12/12, LLVM 321/321, checker 321/321, codegen_diff 229/229, yapi_diff 207/207, bolge_operand 231/231,
   E4k 12/12, FIXPOINT ✓. Çekirdek heap etkisi: B'de ölçüldü (yok); tam takım Codex'in taban ölçümü bitince.
+  ⚠⚠ KÖK BULUNDU — İKİ AYRI SORUN, ikisi de SAĞLAMLIK DEĞİL:
+  (1) PERFORMANS: C'nin ρ_tur'u her en dış döngünün HER turunda (içinde tahsis olmasa da) kdl_bolge_olustur/serbest
+  yapıyordu; çekirdekte tur'a giden dizi tahsisi 0, açılan tur bölgesi 1031 çağrı noktası → açılış 300 → 530-577 ms
+  (acilis_suresi kırmızı), yük altında donanım bekleme döngüleri zaman aşımı ("QEMU sonucu gelmedi", PS/2 karakter
+  kaybı, `cat` "bulunamadi", "bilinmeyen komut" — bellek bozulması gibi GÖRÜNÜYORDU). Onarım: TEMBEL tur bölgesi
+  (yalnız gövde alt ağacında tur-yerel bağlama varsa; tur_gerekli_mi) + skaler dönüş-saf çağrı ρ_yerel'e (iki
+  derleyici). Çekirdekte döngü-içi bölge 1031 → 2; açılış C 300 / self 339 ms (taban). dongu_sonucu hâlâ ~900 KB.
+  (2) PARALEL YARIŞ (D-772'den beri, E4k'den bağımsız): calistir_ciplak_region_free ve calistir_kem_malloc_kompozisyon
+  self-host ikilisini ORTAK build/codegen'in ÜZERİNE bağlıyordu (`clang … -o build/codegen`); -j altında o anda onu
+  kullanan kapılar yarım yazılmış ikiliyle BOŞ çıktı aldı (check_genis: test_bit, sonra matris+metin; build/codegen
+  mtime koşum ortasında 17:17:59 — zaman.tsv'den o anda koşan kapılar çıkarılıp bulundu). 2880 paralel tekrar ve
+  ASan'lı self-host taraması (292 dosya + çekirdek) temizdi → derleyici çökmesi DEĞİL. İki harness artık kendi
+  mktemp dizinine kurar. Benim eklediğim ciplak→codegen bağımlılığı kapının zamanlamasını kaydırıp yarışı SIKLAŞTIRDI.
 

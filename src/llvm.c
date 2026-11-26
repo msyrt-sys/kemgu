@@ -603,11 +603,37 @@ static void kanal_serbest_emit(LlvmGen *g) {
 static void rho_tur_serbest_emit(LlvmGen *g) {
     if (g->rho_tur) fprintf(g->out, "  call void @kdl_bolge_serbest(ptr %s)\n", g->rho_tur);
 }
+/* [D-775] Gövde alt ağacında tur-yerel işaretli bir bağlama var mı? Yoksa tur bölgesi AÇILMAZ:
+ * her turda kdl_bolge_olustur/serbest donanım bekleme döngülerinde çekirdeği ~1,7 kat yavaşlattı
+ * (açılış 300 -> 530 ms; yük altında zaman aşımları — ölçüldü). */
+static int tur_gerekli_mi(const LlvmGen *g, const Dugum *d) {
+    if (!d || !g->aktif_escape) return 0;
+    switch (d->tip) {
+        case DUGUM_DEGISKEN:
+            return d->veri.degisken.deger && escape_tur_yerel(g->aktif_escape, d->veri.degisken.deger);
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                if (tur_gerekli_mi(g, d->veri.blok.deyimler[i])) return 1;
+            return 0;
+        case DUGUM_EGER: return tur_gerekli_mi(g, d->veri.eger.gozdoldur) || tur_gerekli_mi(g, d->veri.eger.yan);
+        case DUGUM_IKEN: return tur_gerekli_mi(g, d->veri.iken.govde);
+        case DUGUM_ICIN: return tur_gerekli_mi(g, d->veri.icin.govde);
+        case DUGUM_GUVENSIZ: return tur_gerekli_mi(g, d->veri.guvensiz.blok);
+        case DUGUM_ESLES:
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                const Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU && tur_gerekli_mi(g, k->veri.esles_kolu.govde)) return 1;
+            }
+            return 0;
+        default: return 0;
+    }
+}
 /* [D-775] En dış döngü gövdesine giriş: tur bölgesi aç (çıplak işlevde YOK — sıfır bölge
- * sembolü invaryantı; ρ_yerel'in olmaması çıplaklığın işaretidir). */
-static void rho_tur_gir(LlvmGen *g) {
+ * sembolü invaryantı; ρ_yerel'in olmaması çıplaklığın işaretidir). Yalnız gövdede tur-yerel
+ * bir tahsis varsa (tembel). */
+static void rho_tur_gir(LlvmGen *g, const Dugum *govde) {
     g->tur_derinlik++;
-    if (g->tur_derinlik == 1 && g->rho_yerel) {
+    if (g->tur_derinlik == 1 && g->rho_yerel && tur_gerekli_mi(g, govde)) {
         int r = yeni_reg(g);
         fprintf(g->out, "  %%%d = call ptr @kdl_bolge_olustur()\n", r);
         char *s = (char *)arena_ayir(g->arena, 16);
@@ -1678,7 +1704,7 @@ static const char *cagri_rho_sec(LlvmGen *g, const Dugum *d) {
     const Dugum *h = d->veri.cagri.hedef;
     if (h && h->tip == DUGUM_TANIMLAYICI
         && escape_cagri_skaler_saf(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk))
-        return g->rho_tur ? g->rho_tur : g->rho_yerel;   /* [D-775] skaler dönüş: çağrı sonrası çöp */
+        return g->rho_yerel;   /* [D-775] skaler dönüş: işlev düzeyi (tur bölgesi açtırmaz) */
     return g->rho_ref;
 }
 
@@ -7512,7 +7538,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
                     i1r, L_body, L_done);
             fprintf(g->out, "bb%d:\n", L_body);
             ScopeMarker m = scope_gir(g);
-            rho_tur_gir(g);                                   /* [D-775] */
+            rho_tur_gir(g, d->veri.iken.govde);               /* [D-775] */
             int body_term = blok_uret(g, d->veri.iken.govde);
             rho_tur_cik(g, body_term);
             scope_cik(g, m);
@@ -7712,7 +7738,7 @@ static int deyim_uret_terminated(LlvmGen *g, const Dugum *d,
             g->isimler->metin_mi = eleman_metin;
             /* [D-708] eleman dtamN ise dongu degiskeni de isaretsiz (genisletme zext). */
             g->isimler->isaretsiz = eleman_isz;
-            rho_tur_gir(g);                                   /* [D-775] */
+            rho_tur_gir(g, d->veri.icin.govde);               /* [D-775] */
             int body_term = blok_uret(g, d->veri.icin.govde);
             rho_tur_cik(g, body_term);
             scope_cik(g, m);
