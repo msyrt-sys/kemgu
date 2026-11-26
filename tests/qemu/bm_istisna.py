@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Gerçek #DE/#UD/#GP/#PF/#DF, OOB; bağımsız seri/PSF, IST ve HLT kâhini."""
-import os,sys,json,socket,time,subprocess,re,struct
+from bekle import bekle, hlt_bekle, seri_oku, soket_bekle
+import os,sys,json,socket,subprocess,re,struct
 from pathlib import Path
 from psf_kahin import font_yukle,glif_ciz,screendump,karsilastir
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve()
@@ -11,10 +12,7 @@ for kip in os.environ.get('ISTISNA_KIPLER','de ud gp pf df oob eksi').split():
   p=subprocess.Popen(['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-vga','std','-no-reboot','-serial',f'file:{ser}','-qmp',f'unix:{q},server=on,wait=off','-kernel',str(elf),'-append',kip],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
   sock=socket.socket(socket.AF_UNIX)
   try:
-   end=time.monotonic()+10
-   while not q.exists():
-    assert time.monotonic()<end and p.poll() is None,'QMP başlamadı'
-    time.sleep(.01)
+   soket_bekle(q,p)
    sock.settimeout(3);sock.connect(str(q));f=sock.makefile('rwb',buffering=0);f.readline()
    def yanit():
     while True:
@@ -35,11 +33,8 @@ for kip in os.environ.get('ISTISNA_KIPLER','de ud gp pf df oob eksi').split():
     cr2={'pf':0x60001000,'df':0x60000ff8}.get(kip,0)
     msg=f'ISTISNA vek=0x{vec:x} hata=0x{hata:x} rip=0x{rip:x} cr2=0x{cr2:x} #{kip.upper()}'
     expected=f'K11_BOOT\nISTISNA tip=0x{vec:x} a=0x{hata:x} b=0x{rip:x} adr=0x{cr2:x}\n'+msg+'\n'
-   while (ser.read_text() if ser.exists() else '')!=expected:
-    assert p.poll() is None and time.monotonic()<end,(kip,p.poll(),ser.read_text() if ser.exists() else '',expected)
-    time.sleep(.02)
-   time.sleep(.05)
-   regs=komut('human-monitor-command',{'command-line':'info registers'})
+   bekle('istisna seri iletisi',lambda: seri_oku(ser),lambda b: b==expected.encode(),surec=p)
+   regs=hlt_bekle(komut,p)
    assert 'HLT=1' in regs,regs
    assert ser.read_text().count('K11_BOOT\n')==1,'yeniden açıldı'
    if kip=='df':

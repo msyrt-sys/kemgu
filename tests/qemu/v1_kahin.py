@@ -1,6 +1,5 @@
 """İki veri diski, iki kullanıcı arayüzü ve kalıcılık aynı OVMF açılışında."""
 import re
-import time
 from dalga12_fat import Fat
 from dalga12_kahin import fsck
 from duzenle_kahin import du_ekran, ge_cift_tik, ge_ekran, ge_girdiler, tamam, tus, yaz
@@ -21,7 +20,7 @@ def kos(c,part,kesinti=False):
     cmd="duzenle "+YOL
     c.input(cmd);c.akis+="> "+cmd+"\n"
     du_ekran(c,YOL,["Ağaç ve İş",""],0,0)
-    h=c.heap();time.sleep(8);assert h==c.heap()
+    c.bosta_gozle()
     tus(c,"down");yaz(c,"İş\nAğaç");tus(c,"s",ctrl=True)
     ilk=["Ağaç ve İş","İş","Ağaç"]
     du_ekran(c,YOL,ilk,2,4,False,"  Kaydedildi")

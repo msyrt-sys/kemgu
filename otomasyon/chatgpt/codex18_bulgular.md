@@ -545,3 +545,284 @@ Taban `be1cd2c:Makefile` ve yeni Makefile ayrı ayrı `make -n` ile açıldı. 2
 Bir parçadan `ag_saglamlik_tel.py cerceve` çağrısı gerçekten çıkarıldı. Kapı `Eksik (1): calistir_bm_x86_ag_saglamlik kemgu ag_saglamlik_tel.py cerceve` bildirdi (make rc=2). Geri alınca 288 çağrı eşleşti. Süre bütçeleri ölçülen sürelerin 1,5 katı, alt sınır 60 sn; yeni QEMU parçalarında ayrıca 600 sn üst sınırı var.
 
 === ZAMAN RAPORU: duvar saati 25 dk 08 sn · 169 kapı · kapı toplamı 3 sa 53 dk 13 sn · derleme/diğer 00 dk 00 sn ===
+
+## Bölüm 5 — olay bekleme, RTC ve süreler
+
+RTC nesnesi QOM ağacında türünden bulunur. Ekran glifleri iki donanım tarihi okumasının arasına alınır. İlk geçerli çiftin ardından hem donanım saati hem görüntü daha ileri bir değer göstermeli. Birden çok saniyenin atlandığı yoğun koşum geçerlidir. Donanım durduğunda kâhin kırmızıya düşer.
+
+- Gerçek `make -j20 --output-sync=target calistir_bm_x86_rtc_stres` koşumunda C 10/10, self-host 10/10 geçti. RTC ilerlemesi için host gözlem süresi en az 1.018, medyan 1.038, en çok 1.062 sn. Her tur ayrı disk ve QMP soketi kullandı.
+- Konukta CMOS Status B SET yazılınca `HATA RTC` ve kullanıcı süreç çıkışı 2 görüldü, kapı rc=1. İkinci gerçek deneyde donanım aynı şekilde durduruldu, SET yalnız okunan örnekte maskelendi. Ekran ve iki QOM saati de 09:42:04 değerinde kaldı. 15 saniyelik ilerleme sınırı rc=1 verdi.
+- Ekran kâhininde hazır işareti `EKRAN_HIC_GELMEYECEK` yapıldı. 60 saniyede rc=1 ve son seri durumu gerçek `EKRAN_HAZIR` satırıyla basıldı.
+
+İlk aday tam koşumu 1386 sn, rc=2. Self-host USB Girdi15 tekrarı 68 tikte 3 glif gösterdi (beklenen 4–6). O sırada tuş basılı kalma süresini QEMU milisaniyesi belirliyordu. Yeni ölçüm, konuğun tuşu aldığını fiziksel bellekten doğrular, ardından LAPIC sayacıyla 20 veya 68 tik ölçüp tuşu bırakır. Beklenen glif sayıları korundu. Aynı self-host ELF ile PS/2 ve USB yeniden geçti (31 sn). Sekiz eşzamanlı açılışta (4 USB, 4 PS/2) 20 tikte bir, 68 tikte beş glif ölçüldü. İlk başarısız koşum ve iki tanı dizini `build/d18/bolum5-kirmizi-girdi.3vSwPN/` altında.
+
+Önceki 68 çağrının konumları `b0d09ee` satırlarıdır. i olay/koşul, ii zamanlamayı ölçen protokol fikstürü, iii gereksiz bekleme. Sekiz saniyelik boşta sızıntı/hız gözlemlerinde denetim süresi korundu. Ortak koşul yardımcısındaki kısa yoklama aralığı yalnız koşul gerçekleşmediği sürece işler.
+ | Bölüm 4 dosyası ve satırı | Sınıf | Ölçülen olay veya bekleme nedeni |
+|---|---|---|
+| `tests/qemu/acilis_suresi.py:27` | i | EFI devri ve hazır satırı, ardışık monotonic_ns örnekleri |
+| `tests/qemu/ag_l3_kahin.py:93` | ii | ARP komşu kaydının 30 sn yaşlanma sınırını aş |
+| `tests/qemu/ag_ntp_kahin.py:44` | ii | NTP eşinde gecikme ölçümü için isteğe kasıtlı ağ gecikmesi |
+| `tests/qemu/ag_saglamlik_tel.py:56` | i | alınan paket sayacı ilerlesin |
+| `tests/qemu/ag_saglamlik_tel.py:106` | ii | TCP yeniden iletim penceresi boyunca bağlantı aşağıda |
+| `tests/qemu/ag_saglamlik_tel.py:217` | iii | ICMP yanıtı zaten alındığından tur sonundaki duraklama kaldırıldı |
+| `tests/qemu/apic_kahin.py:66` | i | sekiz saniyelik ölçümde PIT sabit, sonunda LAPIC tık sayısını denetle |
+| `tests/qemu/bm_ekran.py:35` | i | EKRAN_HAZIR seri işareti |
+| `tests/qemu/bm_istisna.py:17` | i | QMP soketi |
+| `tests/qemu/bm_istisna.py:40` | i | beklenen tam seri |
+| `tests/qemu/bm_istisna.py:41` | i | HMP HLT=1 |
+| `tests/qemu/bm_kabuk.py:33` | i | QMP soketi |
+| `tests/qemu/bm_kabuk.py:62` | i | beklenen tam seri |
+| `tests/qemu/bm_kabuk.py:64` | i | xHCI tüketici göstergesi ya da i8042 çıkış tamponu |
+| `tests/qemu/bm_kabuk.py:74` | i | boşta kabuk gözlemi boyunca seri ve canlılık |
+| `tests/qemu/bm_kabuk.py:84` | i | beklenen ekran pikselleri |
+| `tests/qemu/bm_panik.py:17` | i | QMP soketi |
+| `tests/qemu/bm_panik.py:31` | i | beklenen tam seri |
+| `tests/qemu/bm_panik.py:32` | i | HMP HLT=1 |
+| `tests/qemu/bm_ps2.py:12` | i | QMP soketi |
+| `tests/qemu/bm_ps2.py:30` | i | PS2_HAZIR |
+| `tests/qemu/bm_ps2.py:32` | i | set 1 tarama baytlarının seri sayısı, E0 önekleri dahil |
+| `tests/qemu/bm_uefi.py:36` | i | QMP soketi |
+| `tests/qemu/bm_uefi.py:54` | i | seri açılış işareti ya da beklenen EFI hatası |
+| `tests/qemu/dalga12_kahin.py:60` | i | koşul ve son okuma ile ortak üst sınır |
+| `tests/qemu/dalga12_kahin.py:218` | i | iki konuk LAPIC tiki |
+| `tests/qemu/duzenle_kahin.py:58` | i | sekiz saniye boyunca heap sabit |
+| `tests/qemu/duzenle_kahin.py:66` | i | kayıt tamamlandı ekranı |
+| `tests/qemu/duzenle_kahin.py:88` | i | hareketten sonra konuk tikleri |
+| `tests/qemu/duzenle_kahin.py:91` | i | düğme geçişinden sonra konuk tikleri |
+| `tests/qemu/duzenle_kahin.py:113` | i | sekiz saniye boyunca heap sabit |
+| `tests/qemu/girdi15_kahin.py:47` | i | tekerlek geçişinin ardından iki konuk tiki |
+| `tests/qemu/guc_kahin.py:36` | iii | QMP sıralı olayları kabul ediyor, gereksiz host gecikmesi kalktı |
+| `tests/qemu/guc_kahin.py:46` | i | QEMU süreci çıktı |
+| `tests/qemu/kabuk14_kahin.py:47` | i | sekiz saniye boyunca heap sabit |
+| `tests/qemu/kaynak14_kahin.py:39` | i | çocuk beklerken sekiz saniye heap ve son çerçeve sayısı |
+| `tests/qemu/ps2_irq_kahin.py:15` | i | LAPIC ilerlemesi |
+| `tests/qemu/ps2_irq_kahin.py:20` | i | sekiz saniye boşta sayaç ve seri denetimi |
+| `tests/qemu/ps2_irq_kahin.py:27` | i | HLT=1 |
+| `tests/qemu/ps2_irq_kahin.py:34` | i | beklenen tam seri |
+| `tests/qemu/ps2_irq_kahin.py:44` | i | ekran pikselleri |
+| `tests/qemu/ps2_irq_kahin.py:51` | i | konuk tikleriyle USB girdisi |
+| `tests/qemu/ps2_irq_kahin.py:62` | i | i8042 kapasitesi içindeki tuş grubunun IRQ1 teslim sayısı |
+| `tests/qemu/ps2_irq_kahin.py:72` | i | halka üretici ve tüketici eşitliği |
+| `tests/qemu/ps2_irq_kahin.py:87` | i | bağımsız IRQ12 sayacı |
+| `tests/qemu/surec_kahin.py:58` | i | konuk LAPIC tıkı |
+| `tests/qemu/surec_kahin.py:152` | i | sekiz saniye boyunca seri değişmesin |
+| `tests/qemu/surec_kahin.py:159` | i | konuk tuş yoklaması |
+| `tests/qemu/surec_kahin.py:176` | i | uygulama pikselleri |
+| `tests/qemu/surec_kahin.py:192` | i | sekiz saniye boyunca seri ve heap sabit |
+| `tests/qemu/surec_kahin.py:200` | i | ilk fare hareketinin IRQ sayacı |
+| `tests/qemu/surec_kahin.py:316` | i | sekiz saniye boyunca heap sabit |
+| `tests/qemu/uefi_kabuk_kahin.py:22` | i | tam seri |
+| `tests/qemu/uefi_kabuk_kahin.py:28` | i | boşta seri sabit |
+| `tests/qemu/uefi_kabuk_kahin.py:40` | i | konuk tikleriyle USB girdisi |
+| `tests/qemu/uefi_kabuk_kahin.py:50` | i | ekran pikselleri |
+| `tests/qemu/usb_harness.py:92` | i | tek istemcili qtest portunun dinleme durumu |
+| `tests/qemu/v1_kahin.py:24` | i | sekiz saniye boyunca heap sabit |
+| `test/ag_kosum_harness.sh:67` | i | dinleyici HAZIR satırı |
+| `test/asan_matris_calistir.sh:72` | i | yerel programın çalıştırılabilir olması, geçici 127 |
+| `test/codegen_diff_harness.sh:57` | i | yerel programın çalıştırılabilir olması, geçici 127 |
+| `test/codegen_diff_harness.sh:69` | i | ikinci kopyayı çalıştırma sonucu |
+| `test/codegen_genis_harness.sh:74` | i | süre sınırıyla gerçek yürütme sonucu, geçici 127 |
+| `test/drf_gorunurluk_harness.sh:61` | i | ilk gerçek yürütme sonucu, geçici 127 |
+| `test/kripto_kosum_harness.sh:59` | i | boş çıktılı geçici 127, çıktılı panik ayrı |
+| `test/modul_codegen_harness.sh:80` | i | ilk yürütme sonucu, geçici 127 |
+| `test/qtest_harness.sh:69` | i | qtest portunun bağlantı tüketmeden dinleme durumu |
+| `test/sifir_bolme_harness.sh:68` | i | gerçek yürütme sonucu, geçici 127 |
+
+
+Aynı `-j10 --output-sync=target test_tumu_olcum` komutunun duvar süreleri (sn) 1508, 1545, 1504 → 1383, 1393, 1381. İkinci önce ölçümünde bağımsız aday QEMU denemeleri de ana makineyi kullandı. Tablo tüm ölçülen kapıları içerir. GNU make aynı anda birden fazla kapı çalıştırır.
+ | Kapı | Önce 1 | Önce 2 | Önce 3 | Sonra 1 | Sonra 2 | Sonra 3 | Ortalama fark (sn) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `calistir_ag_es` | 6.754 | 6.765 | 6.752 | 6.757 | 6.743 | 6.732 | -0.013 |
+| `calistir_ag_kosum` | 0.221 | 0.227 | 0.217 | 0.216 | 0.205 | 0.197 | -0.016 |
+| `calistir_anahtar_kelime_kapisi` | 0.050 | 0.053 | 0.053 | 0.054 | 0.052 | 0.052 | +0.001 |
+| `calistir_arena_test` | 0.011 | 0.012 | 0.011 | 0.011 | 0.011 | 0.012 | -0.000 |
+| `calistir_arm64_test` | 0.057 | 0.055 | 0.055 | 0.061 | 0.062 | 0.054 | +0.004 |
+| `calistir_asan_denetim` | 35.492 | 34.834 | 34.777 | 35.787 | 36.567 | 36.177 | +1.142 |
+| `calistir_asan_matris` | 3.704 | 3.497 | 3.622 | 3.656 | 3.619 | 3.615 | +0.022 |
+| `calistir_ast_test` | 0.021 | 0.011 | 0.014 | 0.011 | 0.009 | 0.011 | -0.005 |
+| `calistir_baremetal_diff` | 22.283 | 35.087 | 22.190 | 22.284 | 22.392 | 22.521 | -4.121 |
+| `calistir_belge_kapisi` | 0.032 | 0.032 | 0.030 | 0.037 | 0.032 | 0.033 | +0.003 |
+| `calistir_bm_x86_acilis_suresi` | 49.773 | 50.823 | 49.842 | 51.977 | 51.071 | 52.048 | +1.553 |
+| `calistir_bm_x86_ag_arac` | 110.115 | 111.337 | 111.735 | 91.920 | 94.848 | 93.017 | -17.801 |
+| `calistir_bm_x86_ag_iki` | 165.814 | 166.371 | 165.320 | 145.014 | 140.833 | 140.761 | -23.633 |
+| `calistir_bm_x86_ag_l3` | 102.626 | 103.533 | 102.776 | 95.781 | 96.485 | 96.006 | -6.888 |
+| `calistir_bm_x86_ag_parca` | 24.985 | 24.686 | 24.794 | 21.952 | 22.055 | 21.822 | -2.879 |
+| `calistir_bm_x86_ag_pc` | 169.725 | 171.279 | 169.656 | 143.160 | 140.819 | 143.897 | -27.594 |
+| `calistir_bm_x86_ag_saglamlik_c_aktarim` | 444.077 | 440.552 | 438.592 | 434.064 | 437.334 | 438.598 | -4.408 |
+| `calistir_bm_x86_ag_saglamlik_c_cerceve` | 46.573 | 46.052 | 46.006 | 39.049 | 45.456 | 39.389 | -4.912 |
+| `calistir_bm_x86_ag_saglamlik_c_zaman` | 15.249 | 15.404 | 15.229 | 15.083 | 15.238 | 15.083 | -0.159 |
+| `calistir_bm_x86_ag_saglamlik_self_aktarim` | 509.684 | 517.749 | 512.255 | 517.645 | 516.576 | 517.367 | +3.967 |
+| `calistir_bm_x86_ag_saglamlik_self_cerceve` | 47.901 | 47.849 | 47.684 | 39.619 | 46.674 | 40.963 | -5.393 |
+| `calistir_bm_x86_ag_saglamlik_self_zaman` | 16.027 | 16.122 | 15.997 | 15.767 | 16.116 | 16.073 | -0.063 |
+| `calistir_bm_x86_ag_udp` | 95.440 | 94.934 | 94.954 | 62.027 | 61.968 | 62.072 | -33.087 |
+| `calistir_bm_x86_ahci` | 13.109 | 13.116 | 13.333 | 13.206 | 13.396 | 13.244 | +0.096 |
+| `calistir_bm_x86_apic` | 260.442 | 272.263 | 260.773 | 262.352 | 262.909 | 263.056 | -1.720 |
+| `calistir_bm_x86_arac16` | 86.269 | 86.020 | 85.328 | 76.587 | 76.886 | 77.039 | -9.035 |
+| `calistir_bm_x86_belge15` | 93.328 | 94.884 | 94.825 | 78.820 | 78.011 | 78.728 | -15.826 |
+| `calistir_bm_x86_blok` | 7.408 | 7.439 | 7.550 | 7.417 | 7.589 | 7.743 | +0.117 |
+| `calistir_bm_x86_boru` | 69.586 | 71.863 | 70.793 | 65.703 | 63.931 | 66.816 | -5.264 |
+| `calistir_bm_x86_buyuk_elf` | 192.712 | 197.324 | 193.380 | 168.978 | 170.852 | 170.498 | -24.363 |
+| `calistir_bm_x86_cok_surec_arka` | 201.317 | 201.204 | 199.321 | 163.832 | 167.403 | 166.398 | -34.736 |
+| `calistir_bm_x86_cok_surec_cocuk` | 271.914 | 272.973 | 270.967 | 254.801 | 254.628 | 256.060 | -16.789 |
+| `calistir_bm_x86_cok_surec_hesap` | 174.231 | 175.762 | 172.887 | 158.086 | 156.865 | 157.038 | -16.964 |
+| `calistir_bm_x86_disk` | 106.288 | 106.179 | 104.835 | 137.952 | 137.224 | 135.042 | +30.972 |
+| `calistir_bm_x86_disk_hata` | 67.462 | 67.282 | 66.687 | 77.267 | 76.819 | 76.801 | +9.819 |
+| `calistir_bm_x86_donanim` | 39.630 | 40.783 | 39.773 | 41.986 | 42.470 | 42.113 | +2.128 |
+| `calistir_bm_x86_dosyalar` | 428.909 | 429.347 | 428.355 | 369.393 | 370.878 | 370.611 | -58.576 |
+| `calistir_bm_x86_duzenle` | 285.983 | 291.516 | 284.387 | 257.470 | 255.856 | 256.461 | -30.700 |
+| `calistir_bm_x86_e1000` | 34.408 | 34.145 | 33.603 | 30.888 | 30.622 | 30.403 | -3.414 |
+| `calistir_bm_x86_ekran` | 1.346 | 1.382 | 1.406 | 1.358 | 1.234 | 1.377 | -0.055 |
+| `calistir_bm_x86_ekran_fare` | 431.727 | 432.397 | 431.559 | 390.196 | 391.686 | 392.209 | -40.531 |
+| `calistir_bm_x86_girdi15` | 68.482 | 68.812 | 66.993 | 61.566 | 60.565 | 60.839 | -7.106 |
+| `calistir_bm_x86_guc` | 34.848 | 35.409 | 34.864 | 34.564 | 34.559 | 34.758 | -0.413 |
+| `calistir_bm_x86_http` | 223.007 | 222.119 | 221.279 | 203.155 | 202.657 | 201.976 | -19.539 |
+| `calistir_bm_x86_istisna` | 47.348 | 56.441 | 47.496 | 39.679 | 39.356 | 39.310 | -10.980 |
+| `calistir_bm_x86_kabuk` | 162.582 | 162.466 | 162.164 | 100.354 | 100.681 | 100.350 | -61.942 |
+| `calistir_bm_x86_kabuk14_1` | 351.532 | 357.790 | 351.980 | 307.673 | 308.296 | 308.179 | -45.718 |
+| `calistir_bm_x86_kabuk14_6` | 352.062 | 356.560 | 350.767 | 307.700 | 307.098 | 307.987 | -45.535 |
+| `calistir_bm_x86_kapat` | 34.040 | 34.111 | 33.836 | 35.850 | 36.441 | 36.351 | +2.218 |
+| `calistir_bm_x86_kaynak_cocuk` | 354.861 | 359.977 | 358.796 | 291.431 | 292.633 | 291.750 | -65.940 |
+| `calistir_bm_x86_kaynak_editor` | 423.920 | 427.870 | 425.753 | 327.455 | 328.027 | 327.359 | -98.234 |
+| `calistir_bm_x86_klavye16` | 267.013 | 268.276 | 268.072 | 234.399 | 234.331 | 235.436 | -33.065 |
+| `calistir_bm_x86_log` | 40.938 | 40.411 | 40.157 | 37.803 | 38.443 | 38.295 | -2.322 |
+| `calistir_bm_x86_msi` | 31.063 | 31.054 | 31.068 | 39.015 | 38.940 | 39.338 | +8.036 |
+| `calistir_bm_x86_nic_matris` | 142.685 | 142.999 | 142.787 | 126.051 | 127.068 | 126.764 | -16.196 |
+| `calistir_bm_x86_ntp` | 17.419 | 17.245 | 17.602 | 15.608 | 15.929 | 15.859 | -1.623 |
+| `calistir_bm_x86_nvme` | 13.780 | 13.789 | 13.862 | 13.940 | 13.935 | 14.074 | +0.173 |
+| `calistir_bm_x86_paket` | 93.600 | 91.989 | 93.829 | 77.939 | 81.278 | 78.609 | -13.864 |
+| `calistir_bm_x86_panik` | 3.351 | 3.386 | 3.342 | 2.691 | 2.688 | 2.545 | -0.718 |
+| `calistir_bm_x86_pat` | 7.996 | 7.965 | 7.890 | 8.025 | 8.223 | 8.012 | +0.136 |
+| `calistir_bm_x86_pci16` | 67.086 | 65.864 | 66.319 | 60.936 | 61.939 | 61.334 | -5.020 |
+| `calistir_bm_x86_program15` | 59.301 | 60.528 | 59.245 | 59.301 | 56.930 | 58.672 | -1.390 |
+| `calistir_bm_x86_ps2` | 197.598 | 197.727 | 197.314 | 102.163 | 102.286 | 102.598 | -95.197 |
+| `calistir_bm_x86_ps2_irq_c` | 371.395 | 393.604 | 372.036 | 347.354 | 348.156 | 348.784 | -30.913 |
+| `calistir_bm_x86_ps2_irq_self` | 383.753 | 409.680 | 383.335 | 373.226 | 373.159 | 374.447 | -18.645 |
+| `calistir_bm_x86_ps2_karma_c` | 307.566 | 327.926 | 307.084 | 291.396 | 291.864 | 292.714 | -22.201 |
+| `calistir_bm_x86_ps2_karma_self` | 308.502 | 329.047 | 309.327 | 292.878 | 293.237 | 293.905 | -22.286 |
+| `calistir_bm_x86_ramdisk` | 93.269 | 95.036 | 94.455 | 86.726 | 86.381 | 87.338 | -7.439 |
+| `calistir_bm_x86_saglamlik` | 66.861 | 68.807 | 67.406 | 64.560 | 66.068 | 64.230 | -2.739 |
+| `calistir_bm_x86_soket` | 29.358 | 28.679 | 29.002 | 23.627 | 23.635 | 23.553 | -5.408 |
+| `calistir_bm_x86_surec` | 312.720 | 311.390 | 311.314 | 241.490 | 241.589 | 244.046 | -69.433 |
+| `calistir_bm_x86_surec_abi` | 7.720 | 7.793 | 7.516 | 7.770 | 7.863 | 7.771 | +0.125 |
+| `calistir_bm_x86_tcp_kayip` | 288.074 | 299.052 | 286.388 | 281.361 | 289.984 | 273.427 | -9.581 |
+| `calistir_bm_x86_tcp_secenek` | 19.592 | 19.215 | 19.435 | 17.479 | 17.410 | 17.539 | -1.938 |
+| `calistir_bm_x86_tcp_temel` | 42.790 | 42.964 | 43.019 | 38.595 | 38.960 | 38.886 | -4.111 |
+| `calistir_bm_x86_tcp_verim` | 387.203 | 445.234 | 389.126 | 396.127 | 396.565 | 389.066 | -13.268 |
+| `calistir_bm_x86_tftp_teshis` | 395.802 | 395.817 | 395.239 | 381.634 | 380.560 | 383.078 | -13.862 |
+| `calistir_bm_x86_uefi` | 31.485 | 31.577 | 31.324 | 31.151 | 31.353 | 31.480 | -0.134 |
+| `calistir_bm_x86_uefi_kabuk` | 322.106 | 321.752 | 321.924 | 304.733 | 304.349 | 305.290 | -17.136 |
+| `calistir_bm_x86_uefi_pc` | 196.862 | 197.126 | 197.149 | 184.256 | 185.395 | 184.933 | -12.184 |
+| `calistir_bm_x86_usb` | 9.691 | 9.529 | 9.937 | 9.597 | 9.624 | 9.661 | -0.092 |
+| `calistir_bm_x86_usb_ag` | 205.665 | 205.958 | 203.566 | 171.727 | 172.548 | 170.218 | -33.565 |
+| `calistir_bm_x86_usb_hub` | 79.597 | 80.685 | 79.544 | 71.303 | 71.756 | 72.200 | -8.189 |
+| `calistir_bm_x86_v1_kesinti` | 292.175 | 294.187 | 293.170 | 253.977 | 255.603 | 256.166 | -37.929 |
+| `calistir_bm_x86_v1_tam` | 377.260 | 377.599 | 377.600 | 314.830 | 317.249 | 317.812 | -60.856 |
+| `calistir_bolge_atama_test` | 0.009 | 0.011 | 0.010 | 0.012 | 0.011 | 0.011 | +0.001 |
+| `calistir_bolge_operand` | 5.608 | 6.617 | 5.503 | 5.496 | 5.710 | 5.696 | -0.275 |
+| `calistir_bolge_sayac_yarisi` | 1.003 | 0.958 | 0.962 | 0.984 | 0.971 | 1.007 | +0.012 |
+| `calistir_bolge_test` | 0.010 | 0.010 | 0.011 | 0.010 | 0.010 | 0.011 | -0.000 |
+| `calistir_bolge_yonlendirme` | 0.023 | 0.020 | 0.022 | 0.022 | 0.019 | 0.021 | -0.001 |
+| `calistir_capability_test` | 0.027 | 0.023 | 0.025 | 0.018 | 0.018 | 0.018 | -0.007 |
+| `calistir_cekirdek_onbellek` | 89.284 | 89.310 | 88.649 | 88.848 | 90.303 | 89.313 | +0.407 |
+| `calistir_chatgpt_kopru` | 161.812 | 164.847 | 161.414 | 165.843 | 165.075 | 165.659 | +2.835 |
+| `calistir_check_genis` | 2.837 | 3.193 | 2.609 | 2.765 | 2.765 | 2.680 | -0.143 |
+| `calistir_check_kapisi` | 3.715 | 3.642 | 3.622 | 3.644 | 3.623 | 3.697 | -0.005 |
+| `calistir_checker_diff` | 4.022 | 5.368 | 4.100 | 4.157 | 4.103 | 4.196 | -0.344 |
+| `calistir_ciplak_region_free` | 0.639 | 0.635 | 0.632 | 0.601 | 0.632 | 0.624 | -0.016 |
+| `calistir_codegen_bootstrap` | 330.291 | 330.097 | 329.107 | 332.458 | 334.781 | 334.388 | +4.044 |
+| `calistir_codegen_diff` | 24.981 | 30.837 | 25.013 | 25.133 | 25.122 | 25.257 | -1.773 |
+| `calistir_codegen_genis` | 19.036 | 26.585 | 19.002 | 19.179 | 19.119 | 19.236 | -2.363 |
+| `calistir_ct_bariyer` | 1.303 | 1.636 | 1.193 | 1.240 | 1.252 | 1.299 | -0.114 |
+| `calistir_derleme_olcum` | 100.254 | 102.321 | 101.077 | 100.507 | 101.289 | 101.309 | -0.182 |
+| `calistir_dizi_perf_test` | 0.310 | 0.302 | 0.285 | 0.307 | 0.271 | 0.302 | -0.005 |
+| `calistir_dizi_sinir_test` | 14.777 | 14.686 | 14.776 | 14.751 | 14.783 | 14.815 | +0.037 |
+| `calistir_drf_gorunurluk` | 0.240 | 0.233 | 0.241 | 0.246 | 0.247 | 0.246 | +0.008 |
+| `calistir_drf_test` | 0.026 | 0.024 | 0.017 | 0.023 | 0.018 | 0.018 | -0.002 |
+| `calistir_e4k_bellek` | 1.576 | 1.650 | 1.646 | 1.742 | 1.642 | 1.737 | +0.084 |
+| `calistir_escape_test` | 0.009 | 0.012 | 0.012 | 0.013 | 0.011 | 0.012 | +0.001 |
+| `calistir_eszamanli_kosum` | 0.410 | 0.411 | 0.412 | 0.413 | 0.421 | 0.396 | -0.001 |
+| `calistir_fuzz_advanced` | 0.735 | 0.717 | 0.732 | 0.735 | 0.733 | 0.718 | +0.000 |
+| `calistir_fuzz_test` | 0.461 | 0.445 | 0.456 | 0.460 | 0.453 | 0.463 | +0.005 |
+| `calistir_gorev_msan` | 0.504 | 0.456 | 0.499 | 0.513 | 0.484 | 0.464 | +0.001 |
+| `calistir_gorev_rt_test` | 0.126 | 0.125 | 0.125 | 0.126 | 0.124 | 0.125 | -0.001 |
+| `calistir_json_test` | 0.009 | 0.009 | 0.009 | 0.010 | 0.009 | 0.010 | +0.001 |
+| `calistir_kanal_omru` | 0.586 | 0.757 | 0.623 | 0.602 | 0.615 | 0.615 | -0.044 |
+| `calistir_kapi_butcesi` | 0.170 | 0.191 | 0.169 | 0.215 | 0.190 | 0.210 | +0.029 |
+| `calistir_kapi_kapsam` | 0.167 | 0.155 | 0.153 | 0.160 | 0.136 | 0.178 | -0.000 |
+| `calistir_kdl_bolge_test` | 0.010 | 0.009 | 0.007 | 0.008 | 0.011 | 0.011 | +0.001 |
+| `calistir_kem_malloc_kompozisyon` | 0.770 | 0.730 | 0.741 | 0.751 | 0.731 | 0.768 | +0.003 |
+| `calistir_kem_os_arm` | 14.931 | 14.906 | 14.909 | 14.961 | 15.061 | 14.961 | +0.079 |
+| `calistir_kem_os_arm_ag` | 42.345 | 42.143 | 42.385 | 28.760 | 42.151 | 28.911 | -9.017 |
+| `calistir_kem_os_ayristirici` | 42.311 | 42.452 | 42.353 | 44.094 | 44.177 | 44.191 | +1.782 |
+| `calistir_kem_os_pc_matris_gpt` | 299.117 | 302.904 | 302.678 | 252.282 | 248.296 | 251.784 | -50.779 |
+| `calistir_kem_os_pc_matris_mbr` | 301.108 | 304.518 | 300.985 | 251.268 | 249.337 | 252.960 | -51.015 |
+| `calistir_kripto_check` | 0.046 | 0.038 | 0.050 | 0.039 | 0.042 | 0.041 | -0.004 |
+| `calistir_kripto_kosum` | 0.873 | 0.887 | 0.900 | 0.866 | 0.864 | 0.869 | -0.020 |
+| `calistir_lambda_test` | 0.224 | 0.246 | 0.237 | 0.227 | 0.231 | 0.244 | -0.002 |
+| `calistir_lean_sorry` | 0.078 | 0.075 | 0.081 | 0.079 | 0.079 | 0.080 | +0.001 |
+| `calistir_lexer_diff` | 0.176 | 0.167 | 0.165 | 0.163 | 0.157 | 0.160 | -0.009 |
+| `calistir_linear_test` | 0.021 | 0.029 | 0.032 | 0.032 | 0.029 | 0.022 | +0.000 |
+| `calistir_llvm_dogrula_test` | 0.009 | 0.008 | 0.013 | 0.010 | 0.006 | 0.007 | -0.002 |
+| `calistir_llvm_test` | 13.578 | 13.097 | 13.532 | 13.563 | 13.318 | 13.727 | +0.133 |
+| `calistir_lsp_test` | 0.022 | 0.030 | 0.029 | 0.033 | 0.032 | 0.030 | +0.005 |
+| `calistir_mmio_bare_metal` | 0.024 | 0.021 | 0.024 | 0.023 | 0.022 | 0.017 | -0.003 |
+| `calistir_mmio_test` | 0.016 | 0.012 | 0.015 | 0.012 | 0.011 | 0.013 | -0.002 |
+| `calistir_mmio_volatile` | 11.811 | 11.596 | 11.442 | 11.718 | 11.465 | 11.399 | -0.089 |
+| `calistir_modul_codegen` | 6.426 | 7.159 | 6.217 | 6.369 | 6.479 | 6.335 | -0.206 |
+| `calistir_otp_cli_test` | 0.066 | 0.066 | 0.066 | 0.073 | 0.052 | 0.069 | -0.001 |
+| `calistir_panik_test` | 0.007 | 0.008 | 0.009 | 0.008 | 0.009 | 0.008 | -0.000 |
+| `calistir_parser_diff` | 0.239 | 0.239 | 0.235 | 0.238 | 0.229 | 0.231 | -0.005 |
+| `calistir_parser_test` | 0.013 | 0.017 | 0.016 | 0.015 | 0.016 | 0.017 | +0.001 |
+| `calistir_perf_bellek` | 1.228 | 1.356 | 1.222 | 1.249 | 1.248 | 1.205 | -0.035 |
+| `calistir_qemu_cekirdek` | 0.013 | 0.015 | 0.013 | 0.014 | 0.014 | 0.014 | +0.000 |
+| `calistir_qemu_smoke` | 8.015 | 8.013 | 8.013 | 8.013 | 8.012 | 8.014 | -0.000 |
+| `calistir_qtest` | 14.014 | 14.334 | 14.168 | 13.925 | 14.021 | 14.077 | -0.165 |
+| `calistir_ring3_page_test_x86` | 20.079 | 20.083 | 20.081 | 20.086 | 20.073 | 20.086 | +0.001 |
+| `calistir_runtime_link_test` | 0.003 | 0.003 | 0.004 | 0.004 | 0.003 | 0.003 | -0.000 |
+| `calistir_sabitsure_test` | 0.019 | 0.015 | 0.020 | 0.014 | 0.019 | 0.017 | -0.002 |
+| `calistir_self_driver` | 187.392 | 186.601 | 186.820 | 188.957 | 190.533 | 191.259 | +3.312 |
+| `calistir_sembol_test` | 0.021 | 0.018 | 0.022 | 0.021 | 0.021 | 0.018 | -0.001 |
+| `calistir_sifir_bolme` | 24.880 | 37.866 | 24.846 | 25.013 | 25.061 | 24.941 | -4.192 |
+| `calistir_sifir_uyari` | 1.627 | 1.666 | 1.696 | 1.679 | 1.629 | 1.704 | +0.008 |
+| `calistir_simd_llvm_test` | 0.231 | 0.238 | 0.248 | 0.248 | 0.241 | 0.259 | +0.011 |
+| `calistir_simd_test` | 0.017 | 0.017 | 0.019 | 0.014 | 0.017 | 0.016 | -0.002 |
+| `calistir_snapshot_test` | 0.062 | 0.068 | 0.064 | 0.064 | 0.066 | 0.072 | +0.003 |
+| `calistir_stdlib_check` | 0.999 | 1.054 | 0.980 | 0.947 | 1.043 | 1.023 | -0.007 |
+| `calistir_stdlib_ithal` | 1.610 | 1.705 | 1.570 | 1.546 | 1.646 | 1.702 | +0.003 |
+| `calistir_surucu_diff` | 3.252 | 4.954 | 3.334 | 3.382 | 3.370 | 3.321 | -0.489 |
+| `calistir_surucu_kosum` | 1.884 | 2.841 | 1.801 | 1.886 | 1.854 | 1.812 | -0.325 |
+| `calistir_tasma` | 0.542 | 0.710 | 0.581 | 0.601 | 0.612 | 0.534 | -0.029 |
+| `calistir_tip_kontrol_test` | 0.032 | 0.033 | 0.053 | 0.032 | 0.046 | 0.032 | -0.002 |
+| `calistir_tip_test` | 0.011 | 0.011 | 0.011 | 0.010 | 0.010 | 0.012 | -0.000 |
+| `calistir_uart_16550_test` | 0.039 | 0.037 | 0.037 | 0.028 | 0.028 | 0.036 | -0.007 |
+| `calistir_uart_pl011_test` | 0.036 | 0.026 | 0.039 | 0.036 | 0.034 | 0.027 | -0.001 |
+| `calistir_uart_vtable_test` | 0.008 | 0.009 | 0.009 | 0.008 | 0.009 | 0.008 | -0.000 |
+| `calistir_wcet_test` | 0.020 | 0.019 | 0.020 | 0.019 | 0.018 | 0.020 | -0.000 |
+| `calistir_yapi_diff` | 3.994 | 4.185 | 3.985 | 3.972 | 3.994 | 3.964 | -0.078 |
+| `calistir_yazdir_bare_test` | 0.009 | 0.008 | 0.010 | 0.008 | 0.007 | 0.009 | -0.001 |
+| `calistir_yigin_geri` | 67.294 | 66.545 | 67.596 | 68.004 | 67.210 | 67.098 | +0.292 |
+
+Doğrudan değişen kâhinleri çağıran örnek kapıların üç koşum ortalamaları (sn).
+
+| Kapı | Önce | Sonra | Fark |
+|---|---:|---:|---:|
+| calistir_bm_x86_program15 | 59.7 | 58.3 | -1.4 |
+| calistir_bm_x86_girdi15 | 68.1 | 61.0 | -7.1 |
+| calistir_bm_x86_ps2_irq_self | 392.3 | 373.6 | -18.6 |
+| calistir_bm_x86_v1_tam | 377.5 | 316.6 | -60.9 |
+| calistir_bm_x86_ekran_fare | 431.9 | 391.4 | -40.5 |
+| calistir_bm_x86_ag_saglamlik_c_cerceve | 46.2 | 41.3 | -4.9 |
+| calistir_ag_kosum | 0.2 | 0.2 | -0.0 |
+
+Her son koşumun en uzun kapısı ve ölçülen süre (sn).
+- 1. koşumda calistir_bm_x86_ag_saglamlik_self_aktarim 517.6 sn sürdü.
+- 2. koşumda calistir_bm_x86_ag_saglamlik_self_aktarim 516.6 sn sürdü.
+- 3. koşumda calistir_bm_x86_ag_saglamlik_self_aktarim 517.4 sn sürdü.
+
+Son üç ölçüm sırasında 60 saniyede bir sayılan QEMU süreçleri. Diğer QEMU sütunu aynı ana makinedeki başka çalışma dizinlerini içerir.
+
+| Ölçüm | Örnek | Dalga 18 QEMU en çok | Diğer QEMU en çok | Bir dakikalık sistem yükü medyanı |
+|---|---:|---:|---:|---:|
+| 1 | 23 | 17 | 1 | 9.39 |
+| 2 | 23 | 16 | 0 | 9.29 |
+| 3 | 23 | 15 | 0 | 9.39 |

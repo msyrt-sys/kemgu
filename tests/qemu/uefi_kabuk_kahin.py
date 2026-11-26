@@ -1,4 +1,6 @@
 """UEFI kabuğu: USB tuşları, tam seri, bağımsız PSF ve salt-okunur disk kâhini."""
+from bekle import bekle, gozle, konuk_sayaci, tam_seri, tik_bekle
+from protokol_suresi import BOSTA_GOZLEM
 import hashlib,re,struct,subprocess,time,os
 from fat_yazici import MERHABA,NOT,KAYDIR
 from psf_kahin import screendump,kabuk_goruntu,karsilastir
@@ -14,18 +16,12 @@ def denetle(command,response,f,w,serial,p,n,ram,disk,mode='nvme',esp=False):
     expected=b'KEMGU-OS kabuk v0\nDISK '+{'nvme':b'NVMe','ahci':b'AHCI','usb':b'USB'}[mode]+b'\nKABUK_HAZIR\n'
     def actual():return serial.read_bytes()[start:]
     def await_output():
-        while True:
-            a=actual()
-            if a==expected:return
-            assert expected.startswith(a),(a,expected)
-            assert p.poll() is None and time.monotonic()<deadline,(p.poll(),a)
-            time.sleep(.01)
+        tam_seri('UEFI kabuk',actual,expected,p,deadline-time.monotonic())
     await_output()
     if n==1:
-        until=time.monotonic()+8
-        while time.monotonic()<until:
-            assert p.poll() is None and actual()==expected,'boşta kabuk değişti'
-            time.sleep(.1)
+        def sessiz():
+            assert actual()==expected, 'boşta kabuk değişti'
+        gozle('UEFI boşta kabuk',BOSTA_GOZLEM,sessiz,surec=p)
     schema=command('query-qmp-schema')
     enum=next(x for x in schema if any(m.get('name')=='bracket_left' for m in x.get('members',[]) if isinstance(m,dict)))
     allowed=set(enum.get('values',[]))|{m['name'] for m in enum.get('members',[])}
@@ -36,18 +32,18 @@ def denetle(command,response,f,w,serial,p,n,ram,disk,mode='nvme',esp=False):
     for text in commands:
         for c in text+'\n':assert keys(c)[0] in allowed
     assert {'shift','backspace'}<=allowed
+    tik=konuk_sayaci(w,command,"kap_lapic_tik")
     def key(k,down):
-        command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]});time.sleep(.025)
+        command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]})
+        tik_bekle(tik,surec=p)
     gw,gh,px=screendump(f,w/'kabuk.ppm',response)
     akis=expected.decode()
     def ekran(girdi=''):
-        exp=kabuk_goruntu(akis,girdi,gen=gw,yuk=gh);until=time.monotonic()+5
-        while True:
+        exp=kabuk_goruntu(akis,girdi,gen=gw,yuk=gh)
+        def fark():
             width,height,px=screendump(f,w/'kabuk.ppm',response);assert (width,height)==(gw,gh)
-            diff,first=karsilastir(px,exp,gw)
-            if not diff:return
-            assert time.monotonic()<until,(diff,first,girdi)
-            time.sleep(.02)
+            return karsilastir(px,exp,gw)
+        bekle(f'UEFI ekranı {girdi!r}',fark,lambda v:v[0]==0,sure=5,surec=p)
     ekran()
     for text,out in zip(commands,outputs):
         for c in text:

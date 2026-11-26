@@ -1,5 +1,4 @@
 """Geçmiş, imleç ve tamamlama için bağımsız kabuk ekranı."""
-import time
 from dalga12_kahin import wait_for
 from duzenle_kahin import tus, yaz
 from psf_kahin import kabuk_goruntu, screendump, karsilastir
@@ -44,4 +43,4 @@ def kabuk14_kos(c):
     girdi(c,"taslak")
     for _ in "taslak":tus(c,"backspace")
     girdi(c,"")
-    once=c.heap();time.sleep(8);assert c.heap()==once
+    c.bosta_gozle()

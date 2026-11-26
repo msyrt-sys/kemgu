@@ -1,4 +1,5 @@
 """OVMF seri devir işaretini gerçek kabuk istemi ve konuk TSC ölçümüyle eşler."""
+from bekle import bekle, seri_oku
 import argparse
 import re
 import time
@@ -15,16 +16,14 @@ def olc(w):
     usb,nvme,sata=imajlar(w,{})
     with boot(w,usb[0],nvme,sata) as (q,p,s):
         ilk=None
-        son_sure=time.monotonic()+20
-        while time.monotonic() < son_sure:
-            ham=s.read_bytes() if s.exists() else b''
+        def ornek():
+            nonlocal ilk
+            ham=seri_oku(s)
             simdi=time.monotonic_ns()
-            if ilk is None and b'KEMGU EFI DEVIR' in ham:
-                ilk=simdi
-            if b'KABUK_HAZIR\n' in ham:
-                break
-            assert p.poll() is None
-            time.sleep(.002)
+            if ilk is None and b'KEMGU EFI DEVIR' in ham: ilk=simdi
+            return ham,simdi
+        ham,simdi=bekle('EFI devir ve KABUK_HAZIR',ornek,lambda o:b'KABUK_HAZIR\n' in o[0],
+                         sure=20,aralik=.002,surec=p)
         assert ilk is not None and ham.count(b'KABUK_HAZIR\n') == 1
         host=(simdi-ilk)/1e6
         damgalar=[(ad.decode(),int(t)) for ad,t in re.findall(rb'^ACILIS_TSC (\w+) (\d+)$',ham,re.M)]

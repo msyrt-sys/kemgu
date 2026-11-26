@@ -3,6 +3,7 @@
 piksel piksel karşılaştırır. Yazı tipi baytları fikstür KAYNAĞINDAN okunur (KEMGU derlenmez),
 PSF ayrıştırma ve glif geri düşme kuralı (glif → U+FFFD → '?' → arka dolgu) burada yeniden
 yazılmıştır."""
+from bekle import bekle, seri_oku
 import re, sys, os, json, time, socket, struct, subprocess
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,11 +29,7 @@ def acilis(elf, w, n, exp):
     bas = time.monotonic()
     p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
-        son = time.monotonic() + 60
-        while b'EKRAN_HAZIR' not in (ser.read_bytes() if ser.exists() else b''):
-            if p.poll() is not None or time.monotonic() > son:
-                raise RuntimeError(f'açılış {n}: EKRAN_HAZIR yok rc={p.poll()} seri={(ser.read_bytes() if ser.exists() else b"")!r}')
-            time.sleep(0.05)
+        bekle('EKRAN_HAZIR',lambda: seri_oku(ser),lambda b:b'EKRAN_HAZIR' in b,sure=60,surec=p)
         print(f'  boot-ready {time.monotonic()-bas:.4f} s', flush=True)
         s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(str(q)); f = s.makefile('rwb', buffering=0)
         def yanit():

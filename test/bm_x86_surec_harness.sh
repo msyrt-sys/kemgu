@@ -12,7 +12,11 @@ tur() (
     w=$(mktemp -d build/surec.XXXXXX)
     calisma_izle "$w"
     mkdir -p "$w/kullanici"
-    for kaynak in test/kullanici/*.kem; do
+    local -a kaynaklar=(test/kullanici/*.kem)
+    if [[ ${SUREC_KAHIN:-} == program15_kahin && ${PROGRAM15_TEK:-} == saat ]]; then
+        kaynaklar=(test/kullanici/saat.kem)
+    fi
+    for kaynak in "${kaynaklar[@]}"; do
         ad="${kaynak##*/}"
         python3 tests/qemu/surec_elf.py "$w/kullanici/${ad%.kem}.elf" \
             --kaynak "$kaynak" --derleyici "$derleyici"

@@ -1,4 +1,5 @@
 """Kullanıcı uygulamalarının görünür ekranı, klavyesi ve disk kalıcılığı."""
+from bekle import tik_bekle
 import time
 from dalga12_fat import Fat
 from dalga12_kahin import fsck, wait_for
@@ -55,7 +56,7 @@ def duzenle_kos(c,part,yalniz_icerik=False):
     cmd=f"calistir /diskler/usb0p2/bin/duzenle.elf {yol}"
     c.input(cmd); c.akis+="> "+cmd+"\n"
     du_ekran(c,yol,[],0,0)
-    once=c.heap(); time.sleep(8); assert c.heap()==once
+    c.bosta_gozle()
     yaz(c,"Ağaç"); tus(c,"backspace"); yaz(c,"ç\nİş")
     tus(c,"home"); tus(c,"backspace")
     if not yalniz_icerik: du_ekran(c,yol,["Ağaçİş"],0,4,True)
@@ -63,7 +64,8 @@ def duzenle_kos(c,part,yalniz_icerik=False):
     if not yalniz_icerik: du_ekran(c,yol,["Ağaç","İş"],1,2,True,"  Kaydedilmedi. Çıkmak için Ctrl+Q")
     tus(c,"s",ctrl=True)
     if not yalniz_icerik: du_ekran(c,yol,["Ağaç","İş"],1,2,False,"  Kaydedildi")
-    if yalniz_icerik: time.sleep(.5)
+    if yalniz_icerik:
+        du_ekran(c,yol,["Ağaç","İş"],1,2,False,"  Kaydedildi")
     c.q.call("stop")
     try:
         fsck(c.w,part,"duzenle-kaydet")
@@ -84,11 +86,12 @@ def ge_girdiler(part,dizin):
 
 def ge_cift_tik(c,dy):
     # QEMU göreli hareketi ile iki ayrı düğme bas/bırak çevrimi.
-    if dy: c.q.call("input-send-event",{"events":[{"type":"rel","data":{"axis":"y","value":dy}}]})
-    time.sleep(.08)
+    if dy:
+        c.q.call("input-send-event",{"events":[{"type":"rel","data":{"axis":"y","value":dy}}]})
+        tik_bekle(c.tik,surec=c.p)
     for down in (True,False,True,False):
         c.q.call("input-send-event",{"events":[{"type":"btn","data":{"button":"left","down":down}}]})
-        time.sleep(.05)
+        tik_bekle(c.tik,surec=c.p)
 
 def gezgin_kos(c,part):
     yol="/diskler/usb0p2"
@@ -110,7 +113,7 @@ def gezgin_kos(c,part):
     ge_cift_tik(c,(k-n)*16)
     dosya=hedef+"/günlük.txt"
     du_ekran(c,dosya,["Ağaç ve İş",""],0,0)
-    h0=c.heap(); time.sleep(8); assert c.heap()==h0
+    c.bosta_gozle()
     tus(c,"end"); tus(c,"ret"); yaz(c,"İş")
     tus(c,"s",ctrl=True)
     du_ekran(c,dosya,["Ağaç ve İş","İş",""],1,2,False,"  Kaydedildi")

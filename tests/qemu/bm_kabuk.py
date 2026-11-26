@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Gerçek CPU/USB klavye: üç disk türü, beş açılış, tam seri çıktı eşitliği."""
+from bekle import bekle, gozle, konuk_sayaci, seri_oku, soket_bekle, tam_seri
+from protokol_suresi import BOSTA_GOZLEM
 from pathlib import Path
 import os,sys,socket,json,time,subprocess,hashlib
 from fat_yazici import hazirla,MERHABA,NOT,KAYDIR
@@ -28,9 +30,7 @@ def boot(mode,n):
         p=subprocess.Popen(cmd,stdout=log,stderr=log)
         sock=socket.socket(socket.AF_UNIX)
         try:
-            while not qmp.exists():
-                if p.poll() is not None or time.monotonic()>deadline:raise RuntimeError('QEMU başlamadı')
-                time.sleep(.01)
+            soket_bekle(qmp,p,sure=60)
             sock.settimeout(5);sock.connect(str(qmp));f=sock.makefile('rwb',buffering=0)
             def response():
                 while True:
@@ -54,34 +54,37 @@ def boot(mode,n):
             # PVH'de LAPIC/MSI kurulmaz. AHCI sürücüsü yoklama yolunu seri hatta bildirir.
             expected=(b'AHCI YOL yoklama\n' if mode=='ahci' else b'')+kabuk_basligi
             def await_output(target):
-                while True:
-                    actual=serial.read_bytes() if serial.exists() else b''
-                    if actual==target:return
-                    if not target.startswith(actual):raise AssertionError(f'seri farkı: {actual!r}, beklenen {target!r}')
-                    if p.poll() is not None or time.monotonic()>deadline:raise RuntimeError(f'rc={p.poll()}, seri={actual!r}')
-                    time.sleep(.005)
+                tam_seri('PVH kabuk',lambda:seri_oku(serial),target,p,deadline-time.monotonic())
+            ps2 = os.environ.get('KABUK_KLAVYE','usb')=='ps2'
+            if not ps2: halka=konuk_sayaci(w,command,'bh_bas',elf=elf)
             def key(k,down):
-                command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]});time.sleep(.025)
+                if not ps2: ilk=halka()
+                command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]})
+                if ps2:
+                    def durum():
+                        yanit=command('human-monitor-command',{'command-line':'i /b 0x64'})
+                        return int(yanit.split()[-1],16)
+                    bekle('i8042 çıkış tamponu boş',durum,lambda s:not s&1,surec=p)
+                else:
+                    bekle('PVH xHCI klavye tamamlaması',halka,lambda bas:bas!=ilk,surec=p,aralik=.002)
             await_output(expected)
             # [D-747] İlk açılışta kabuk BOŞTA bekler (gerçek kullanıcı hemen yazmaz). Sürücü
             # yoklamasıyla beklemek ~4 sn'de "xhci olay zaman asimi" veriyor ve her yoklama
             # heap sızdırıyordu; hemen yazan bir kâhin bunu GÖREMEZ.
             if n==1:
-                t_bos=time.monotonic()+max(8.0,float(os.environ.get('KABUK_BOSTA','8')));deadline+=max(8.0,float(os.environ.get('KABUK_BOSTA','8')))
-                while time.monotonic()<t_bos:
-                    if p.poll() is not None:raise RuntimeError(f'boşta çöktü rc={p.poll()}')
-                    if serial.read_bytes()!=expected:raise AssertionError(f'boşta seri değişti: {serial.read_bytes()!r}')
-                    time.sleep(.1)
+                sure=max(BOSTA_GOZLEM,float(os.environ.get('KABUK_BOSTA',BOSTA_GOZLEM)))
+                deadline+=sure
+                def sessiz():
+                    assert seri_oku(serial)==expected, 'boşta seri değişti'
+                gozle('PVH boşta kabuk',sure,sessiz,surec=p)
             akis=kabuk_basligi.decode('utf-8')
             def ekran(girdi='',imlec=None):
-                img=kabuk_goruntu(akis,girdi,imlec);son=time.monotonic()+10;bas=time.monotonic()
-                while True:
+                img=kabuk_goruntu(akis,girdi,imlec);bas=time.monotonic()
+                def fark():
                     gw,gh,px=screendump(f,w/'ekran.ppm',response)
                     assert (gw,gh)==(640,480)
-                    fark,ilk=karsilastir(px,img,640)
-                    if not fark:break
-                    if time.monotonic()>son:raise AssertionError(f'ekran {girdi!r}: {fark} piksel farklı, ilk={ilk}')
-                    time.sleep(.02)
+                    return karsilastir(px,img,640)
+                bekle(f'kabuk ekranı {girdi!r}',fark,lambda sonuc:sonuc[0]==0,sure=10,surec=p)
                 return time.monotonic()-bas
             ekran()
             for text,out in zip(COMMANDS,OUTPUTS):

@@ -64,10 +64,8 @@ PY
   QPID=$!
   # QEMU dinlemeye başlayana kadar bekle (en çok 10 sn). BAĞLANMADAN bak:
   # wait=on soketi tek istemci kabul eder; yoklama bağlantısı onu tüketirdi.
-  for i in $(seq 1 100); do
-    ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q . && break
-    sleep 0.1
-  done
+  dinliyor() { ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; }
+  calisma_kosul_bekle "qtest TCP $PORT dinleyicisi" 10 dinliyor || exit 1
   timeout 120 "$W/$d" "$PORT" > "$W/$d.out" 2>&1; rc=$?
   kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QPID=""
   cat "$W/$d.out"

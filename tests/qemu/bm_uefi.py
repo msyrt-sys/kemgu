@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Gerçek OVMF: EFI yükleme, ABI ve kendi CR3/GDT'si; KEMGU'dan bağımsız kâhin."""
+from bekle import bekle, seri_oku, soket_bekle
 from pathlib import Path
 import os,sys,shutil,subprocess,time,socket,json,struct,re,uuid,hashlib
 from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
@@ -31,9 +32,7 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
     with (W/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=log);s=socket.socket(socket.AF_UNIX);limit=time.monotonic()+60
         try:
-            while not q.exists():
-                assert p.poll() is None and time.monotonic()<limit,'QEMU başlatılamadı'
-                time.sleep(.02)
+            soket_bekle(q,p,sure=60)
             s.settimeout(10);s.connect(str(q));f=s.makefile('rwb',buffering=0)
             def response():
                 while True:
@@ -48,10 +47,10 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
             command('qmp_capabilities')
             target=('EFI HATA '+negative).encode() if negative else (b'KABUK_HAZIR' if KABUK else b'UEFI_HAZIR')
             if os.environ.get('UEFI_GUC_DOGRUDAN')=='1':target=b'GUC_HAZIR'
-            while target not in (data:=ser.read_bytes() if ser.exists() else b''):
-                if p.poll() is not None or time.monotonic()>limit:raise AssertionError(f'hedef yok: {target!r}, rc={p.poll()}, seri={data!r}')
+            def seri_hazir(data):
                 if not negative and b'EFI HATA' in data:raise AssertionError(data)
-                time.sleep(.05)
+                return target in data
+            data=bekle(repr(target),lambda:seri_oku(ser),seri_hazir,sure=limit-time.monotonic(),surec=p)
             if negative:
                 assert b'KEMGU-OS UEFI' not in data
                 print(f'✓ UEFI negatif: {negative}',flush=True);return

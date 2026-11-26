@@ -55,11 +55,7 @@ clang -O2 -x ir "$TMP/d.ll" -x none "$RT" -o "$TMP/d.exe" 2>/dev/null \
 # [D-564] ISINDIRMA: Windows'ta TAZE .exe'nin ILK kosumu 127 dondurebilir
 # (Defender/exec yarisi, D-413). Bu kapi 300 turu SAYIYOR; isinmadan
 # baslamak o 127'leri 'gorunurluk ihlali' gibi sayardi — yanlis atif.
-d127=0
-timeout 30 "$TMP/d.exe" >/dev/null 2>&1; wrc=$?
-while [ "$wrc" -eq 127 ] && [ "$d127" -lt 12 ]; do
-    sleep 0.3; timeout 30 "$TMP/d.exe" >/dev/null 2>&1; wrc=$?; d127=$((d127+1))
-done
+calisma_127_dene timeout 30 "$TMP/d.exe" >/dev/null 2>&1; wrc=$?
 
 kotu=0; ilk=""
 for i in $(seq 1 "$TUR"); do

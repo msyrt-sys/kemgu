@@ -1,5 +1,6 @@
 """FADT ham RAM karşılaştırması + gerçek reset/kapanış; -no-reboot zorunlu."""
-import os,re,struct,time,hashlib
+import os,re,struct,hashlib
+from subprocess import TimeoutExpired
 from uefi_kabuk_kahin import keys
 
 def denetle(command,dump,w,descriptors,text,serial,p):
@@ -33,7 +34,7 @@ def denetle(command,dump,w,descriptors,text,serial,p):
     def press(c):
         key,shift=keys(c);assert key in allowed and not shift
         command('input-send-event',{'events':[{'type':'key','data':{'down':v,'key':{'type':'qcode','data':key}}} for v in (True,False)]})
-        time.sleep(.003)
+
     try:
         if direct:press('r')
         else:
@@ -42,8 +43,10 @@ def denetle(command,dump,w,descriptors,text,serial,p):
     except (AssertionError,BrokenPipeError,ConnectionResetError):
         # Reset son key komutunun QMP yanıtından önce gelebilir; aşağıda çıkış/seri tamlığı zorunlu.
         pass
-    until=time.monotonic()+5
-    while p.poll() is None and time.monotonic()<until:time.sleep(.02)
+    try:
+        p.wait(timeout=5)
+    except TimeoutExpired as exc:
+        raise AssertionError((mode, 'QEMU çıkışı bekleniyor', p.poll(), serial.read_bytes()[-400:])) from exc
     assert p.poll()==0,(mode,p.poll(),serial.read_bytes()[-400:])
     data=serial.read_bytes();assert data.count(b'KEMGU-OS UEFI\n')==1,'QEMU yeniden açıldı'
     assert data[start:]==expected,(data[start:],expected)

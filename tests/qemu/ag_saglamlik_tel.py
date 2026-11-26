@@ -1,4 +1,6 @@
 """Hızı sınırlı yerel QEMU trafiğini ve her iş yükündeki çekirdek kaynaklarını ölçer."""
+from bekle import bekle
+from protokol_suresi import TCP_ACK_GECIKMESI
 import argparse
 import hashlib
 from pathlib import Path
@@ -35,7 +37,7 @@ def yankila(es,i):
     raise AssertionError('ICMP yanıtı gelmedi')
 
 
-def ornekler(es):
+def ornekler(es, c):
     rng=random.Random(170018)
     for i in range(10000):
         govde=rng.randbytes(16+i%61)
@@ -52,8 +54,10 @@ def ornekler(es):
             icmp=bytearray(yankilama(8,18,i,govde))
             icmp[2]^=1
             paket=ethernet(MAC,ES_MAC,2048,ipv4(ES_IP,KONUK_IP,1,icmp))
+        once=c.sayi('ag_rx_sayi')
         es.gonder(paket)
-        time.sleep(.001)
+        bekle('yerel konuğun RX sayacı',lambda:c.sayi('ag_rx_sayi'),
+              lambda n:n>once,surec=c.p,aralik=.001)
         if i%128==127:
             yankila(es,i)
 
@@ -103,7 +107,7 @@ def baglanti(es,i,adet,q=None):
                 if q is not None and giden==1400 and not got:
                     # İlk kopyayı onaylamadan kabloyu kes ve aynı sıranın yeniden geldiğini gör.
                     q.call('set_link',{'name':'ag0','up':False})
-                    time.sleep(.45)
+                    time.sleep(TCP_ACK_GECIKMESI)
                     q.call('set_link',{'name':'ag0','up':True})
                     while True:
                         tekrar,veri=es.al(8)
@@ -205,7 +209,7 @@ def kos(w,kip):
                 def sayaclar():
                     return struct.unpack('<QQ',c.mem(l3+72,16))
                 ilk=sayaclar()
-                ornekler(es)
+                ornekler(es,c)
                 assert c.sayi('ag_rx_sayi')-say>=10000
                 son=sayaclar()
                 fark=tuple(a-b for a,b in zip(son,ilk))
@@ -214,7 +218,6 @@ def kos(w,kip):
                 olc(c,'10000-karisik',once)
                 for i in range(10000):
                     yankila(es,i)
-                    time.sleep(.0005)
                 olc(c,'10000-ping',once)
                 biten=c.sayi('ag_tcp_bitti')
                 for i in range(500):

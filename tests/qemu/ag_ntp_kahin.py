@@ -1,4 +1,5 @@
 """Konuğun CMOS güncellemesini QMP RTC, tel zaman damgaları ve kullanıcı programıyla ölçer."""
+from protokol_suresi import NTP_ES_GECIKMESI
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import re
@@ -41,7 +42,7 @@ def kos(w):
                         fark=len(kayit)*3600*10**9
                         alis=NS+fark
                         # Ağda gecikme oluşturan bağımsız eş, işlem süresini de T3'e işler.
-                        time.sleep(.15)
+                        time.sleep(NTP_ES_GECIKMESI)
                         yan=ntp_yanit(istek,alis,alis+20_000_000)
                         kayit.append((istek,yan))
                         hat.gonder(ethernet(MAC,ES_MAC,2048,ipv4(ES_IP,KONUK_IP,17,udp(ES_IP,KONUK_IP,123,v.kaynak_port,yan))))

@@ -1,5 +1,7 @@
 """MADT RAM dökümü, UC sayfa yürüyüşü ve gerçek LAPIC kesme sayacı."""
-import re,struct,time,subprocess
+from bekle import gozle
+from protokol_suresi import BOSTA_GOZLEM
+import re,struct,subprocess
 
 def denetle(command,dump,w,descriptors,text):
     assert 'APIC_HAZIR\n' in text,'UEFI LAPIC yolu kurulmadı'
@@ -62,8 +64,9 @@ def denetle(command,dump,w,descriptors,text):
     for irq,gsi,low in expected[-3:]:
         assert pins[gsi]&((1<<32)-1)==low,(gsi,pins[gsi],low)
     start=mem(symbols['kap_lapic_tik']);pit=mem(symbols['kap_pit_tik']);kem=mem(symbols['kem_tik'])
-    until=time.monotonic()+8
-    while time.monotonic()<until:time.sleep(.1)
+    def pit_durdu():
+        assert mem(symbols['kap_pit_tik']) == pit
+    gozle('8 sn LAPIC/PIT kalibrasyonu', BOSTA_GOZLEM, pit_durdu)
     end=mem(symbols['kap_lapic_tik']);pit_end=mem(symbols['kap_pit_tik']);kem_end=mem(symbols['kem_tik'])
     assert 400<=end-start<=1200 and pit==pit_end and kem_end-kem>=400,(start,end,pit,pit_end,kem,kem_end)
     print(f'✓ APIC: MADT bağımsız, IRQ0/1/12 GSI, UC, kalibrasyon {period}, 8 sn LAPIC +{end-start}/PIT +{pit_end-pit}',flush=True)

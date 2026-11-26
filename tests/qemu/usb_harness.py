@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """USB dalları: gerçek QEMU, C ve self için ayrı süreç/imaj, toplam 58 sn sınır."""
+from bekle import bekle
 from pathlib import Path
 import os,sys,socket,subprocess,time,shutil
 from calisma_dizini import calisma_dizini
@@ -84,12 +85,9 @@ def qemu_kos(w,exe,eksik=False):
     with (w/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT)
         try:
-            while True:
-                kalan()
-                if p.poll() is not None:raise RuntimeError((w/'qemu.log').read_text())
-                r=subprocess.run(['ss','-ltnH',f'sport = :{qp}'],capture_output=True,timeout=kalan())
-                if r.stdout.strip():break
-                time.sleep(.01)
+            def dinleme():
+                return subprocess.run(['ss','-ltnH',f'sport = :{qp}'],capture_output=True,timeout=kalan(),check=True).stdout.strip()
+            bekle(f'qtest TCP dinleyicisi {qp}',dinleme,sure=kalan(),surec=p)
             r=girdi_kos(exe,qp,mp) if MODE in ['usb_kbd','usb_fare'] else subprocess.run([str(exe),str(qp)]+(["iz"] if os.environ.get("USB_QTEST_IZ") and not eksik else []),capture_output=True,text=True,timeout=kalan())
             if MODE not in ['usb_kbd','usb_fare']:print(r.stdout,end='')
             if eksik:

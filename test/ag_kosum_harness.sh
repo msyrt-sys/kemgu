@@ -61,11 +61,11 @@ kosum() {   # $1 = derleyici yolu, $2 = etiket
     local spid=$!
     # Dinleyici "HAZIR" yazana dek bekle (sabit sleep YERINE kosula bak:
     # sabit gecikme yavas makinede ARALIKLI kirmizi uretirdi).
-    local i=0
-    while [ $i -lt 50 ]; do
-        grep -q HAZIR "$log" 2>/dev/null && break
-        sleep 0.1; i=$((i+1))
-    done
+    if ! calisma_kosul_bekle "Dinleyici HAZIR: $log" 5 grep -q HAZIR "$log"; then
+        cat "$log" >&2
+        kill "$spid" 2>/dev/null; wait "$spid" 2>/dev/null
+        return 1
+    fi
     # ⚠ ZAMAN AŞIMI ŞART — SABOTAJLA ÖLÇÜLDÜ (S66): yetki argümanı düşürülmezse
     # istemci yanlış register'lardan okuyup çöp handle üretiyor, dinleyici ise
     # gelmeyen bağlantıyı SONSUZA DEK bekliyor → kapı ASILIYOR. Asılan kapı,

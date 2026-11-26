@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Ayrı kullanıcı ELF'lerini gerçek QEMU ve OVMF ile sınar."""
 
+from bekle import bekle, gozle
+from protokol_suresi import BOSTA_GOZLEM
 import argparse
 import re
 import struct
 import subprocess
-import time
 from hashlib import sha256
 from contextlib import contextmanager
 from pathlib import Path
@@ -49,14 +50,12 @@ class SurecConsole(Console):
             if shift:
                 self.key("shift", False)
 
-    def key(self, ad, bas):
-        assert ad in self.qcodes, ad
-        ilk = self.sayi("kap_lapic_tik")
-        self.tus_gonder(ad, bas)
-        # TCG yük altındayken hostta 12 ms, konukta bir HID yoklamasından kısa kalabilir.
-        # Bırakma ve sonraki basma arasında konukta iki LAPIC tiki geçmesini bekle.
-        time.sleep(.012)
-        wait_for(self.p, lambda: self.sayi("kap_lapic_tik")-ilk >= 2)
+    def bosta_gozle(self, heap=True, seri=False):
+        ilk=self.heap() if heap else None
+        def saglam():
+            if heap: assert self.heap()==ilk, 'boşta heap değişti'
+            if seri: assert self.output()==self.expected, 'boşta seri değişti'
+        gozle('süreç boşta',BOSTA_GOZLEM,saglam,surec=self.p)
 
     def sayi(self, sembol):
         return struct.unpack("<Q", self.mem(self.symbols[sembol], 8))[0]
@@ -146,17 +145,10 @@ def tus_kos(c, metin, elf):
     c.akis += "> " + metin + "\n" + hazir.decode()
     tam_seri_bekle(c)
     etkin_tablolar(c, elf)
-    son = time.monotonic() + 8
-    while time.monotonic() < son:
-        assert c.p.poll() is None and c.output() == c.expected
-        time.sleep(.05)
+    c.bosta_gozle(heap=False,seri=True)
     for ad, bas in (("shift", True), ("a", True), ("a", False), ("shift", False),
                     ("bracket_left", True)):
-        assert ad in c.qcodes, ad
-        c.q.call("input-send-event", {"events": [{"type": "key", "data": {
-            "down": bas, "key": {"type": "qcode", "data": ad},
-        }}]})
-        time.sleep(.04)
+        c.key(ad,bas)
     c.q.call("input-send-event", {"events": [{"type": "key", "data": {
         "down": False, "key": {"type": "qcode", "data": "bracket_left"},
     }}]})
@@ -173,7 +165,6 @@ def ekran_kos(c,usb_fare):
     c.akis += "> " + komut + "\nEKRAN_HAZIR\n"
     c.expected += b"EKRAN_HAZIR\n"
     tam_seri_bekle(c)
-    time.sleep(.15)
     w,h,px = screendump(c.q.f,c.w/'uygulama.ppm',c.q.response)
     renk = 0x203040
     beklenen = [renk]*(w*h)
@@ -183,21 +174,24 @@ def ekran_kos(c,usb_fare):
     for y in (78,79):
         for x in range(24,32):
             beklenen[y*w+x] ^= 0xffffff
-    fark = karsilastir(px,beklenen,w)
-    assert fark[0] == 0, ("uygulama pikselleri", fark)
+    def ekran_farki():
+        gen,yuk,pikseller=screendump(c.q.f,c.w/'uygulama.ppm',c.q.response)
+        assert (gen,yuk)==(w,h)
+        return karsilastir(pikseller,beklenen,w)
+    bekle('uygulama pikselleri',ekran_farki,lambda fark:fark[0]==0,surec=c.p)
     if usb_fare:
         assert c.sayi("kh_iman") != 0, "xHCI MSI-X kurulmadı"
         once_irq = c.sayi("bh_bildirim")
-    h0 = c.heap()
-    time.sleep(8)
-    assert c.output() == c.expected and c.heap() == h0
+    c.bosta_gozle(seri=True)
     def hareket(dx,dy,bas):
         olay = [{"type":"rel","data":{"axis":a,"value":v}} for a,v in (("x",dx),("y",dy))]
         if bas:
             olay.append({"type":"btn","data":{"button":"left","down":True}})
         c.q.call("input-send-event",{"events":olay})
+    sembol='bh_bildirim' if usb_fare else 'ps2_irq12_sayi'
+    once=c.sayi(sembol)
     hareket(-12,-7,False)
-    time.sleep(.12)
+    bekle('ilk fare hareketi',lambda:c.sayi(sembol),lambda n:n>once,surec=c.p)
     hareket(12,7,True)
     if usb_fare:
         wait_for(c.p,lambda:c.sayi("bh_bildirim")>once_irq)
@@ -313,7 +307,7 @@ def kos(w, tekrar, senaryo, ilk=1):
                 assert len(programlar["buyukelf.elf"]) >= 300 * 1024
                 giris = c.heap()
                 if n == 1:
-                    time.sleep(8)
+                    c.bosta_gozle()
                     assert c.heap() == giris
                 c.run("calistir /diskler/usb0p2/bin/buyukelf.elf", b"[buyukelf.elf pid=2 cikis=0]\n")
                 fark = c.heap()-giris

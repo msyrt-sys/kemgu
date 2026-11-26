@@ -1,6 +1,6 @@
 """Gerçek QMP girişini kabuk çıktısı ve uygulamaların GOP görüntüsünde ölçer."""
+from bekle import bekle, tik_bekle
 import argparse
-import time
 from pathlib import Path
 
 from dalga12_kahin import boot, wait_for
@@ -11,11 +11,17 @@ from surec_kahin import SurecConsole
 
 
 def tekrar(c, sure, alt, ust):
-    # QEMU basma ve bırakmayı kendi sanal saatinde programlar. Host iki QMP
-    # çağrısı arasında bekletilirse tuşun basılı süresi uzamaz.
-    ilk = c.sayi('kap_lapic_tik')
-    c.q.call('send-key', {'keys':[{'type':'qcode','data':'a'}], 'hold-time':sure*10})
-    wait_for(c.p, lambda: c.sayi('kap_lapic_tik')-ilk >= sure+3 and int.from_bytes(c.mem(c.symbols['kt_kod'],4),'little') == 0)
+    # QEMU'nun sanal milisaniyesi yük altında işlenen LAPIC tikinden ayrılabilir.
+    # Basılı süreyi konuk make kodunu aldıktan sonra donanım tikleriyle ölç.
+    def kod():
+        return int.from_bytes(c.mem(c.symbols['kt_kod'], 4), 'little')
+    c.tus_gonder('a', True)
+    bekle('tekrar deneyi: A basma kodu', kod, lambda k: k == 30, aralik=.001, surec=c.p)
+    ilk = c.tik()
+    birak = bekle(f'tekrar için {sure} LAPIC tiki', c.tik, lambda t: t-ilk >= sure,
+                  aralik=.001, surec=c.p)
+    c.tus_gonder('a', False)
+    bekle('tekrar deneyi: A bırakma kodu', kod, lambda k: k == 0, aralik=.001, surec=c.p)
     # Komut öneki de tekrarlanabilir. Basılı tuşun etkisini doğrudan giriş satırından say.
     font = font_yukle()
     fw, fh = font[1][:2]
@@ -34,8 +40,8 @@ def tekrar(c, sure, alt, ust):
                 break
             adet += 1
         return adet
-    adet = wait_for(c.p,harf_say)
-    print('TEKRAR',sure,adet,flush=True)
+    adet = bekle('GOP üzerinde yinelenen A glifleri', harf_say, lambda n: n >= alt, surec=c.p)
+    print('TEKRAR',sure,adet,'ölçülen tik',birak-ilk,flush=True)
     assert alt <= adet <= ust, (sure,adet,alt,ust)
     for _ in range(adet):
         tus(c,'backspace')
@@ -44,7 +50,7 @@ def tekrar(c, sure, alt, ust):
 def teker(c, yon):
     for bas in (True,False):
         c.q.call('input-send-event', {'events':[{'type':'btn','data':{'button':'wheel-'+yon,'down':bas}}]})
-        time.sleep(.04)
+        tik_bekle(c.tik,surec=c.p)
 
 
 def kos(w, tur):

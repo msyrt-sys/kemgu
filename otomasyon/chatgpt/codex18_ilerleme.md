@@ -83,3 +83,29 @@ Sekiz eski hedef 21 bağımsız parçaya açıldı. Önce/sonra 288 kâhin işle
        05 dk 22 sn  %21.4  calistir_bm_x86_uefi_kabuk
   disk: build 9.2G · boş 444 GiB
 ```
+
+## Bölüm 5 — beklemeler ve RTC
+
+68 eski bekleme envanterde. QEMU seri, piksel, kesme, QMP soketi, HALT ve konuk zamanlayıcı koşulları üst sınırla denetleniyor. RTC iki derleyiciyle 20/20 geçti. İki RTC durdurma deneyi ve olanaksız hazır işareti doğru yerde kırmızıya düştü. Üçer ölçümlü tam takımda make ve tee çıkış kodları 0. Duvar süreleri (sn) 1508, 1545, 1504 → 1383, 1393, 1381. Ayrı ara `test_tumu`, tip kontrolü, bare-metal farkı ve x86 çekirdek kapısı rc=0. Süre 2:47:28.
+
+```text
+=== ZAMAN RAPORU: duvar saati 23 dk 01 sn · 169 kapı · kapı toplamı 3 sa 32 dk 08 sn · derleme/diğer 00 dk 00 sn ===
+       08 dk 37 sn  %37.5  calistir_bm_x86_ag_saglamlik_self_aktarim
+       07 dk 19 sn  %31.8  calistir_bm_x86_ag_saglamlik_c_aktarim
+       06 dk 32 sn  %28.4  calistir_bm_x86_ekran_fare
+       06 dk 29 sn  %28.2  calistir_bm_x86_tcp_verim
+       06 dk 23 sn  %27.7  calistir_bm_x86_tftp_teshis
+       06 dk 14 sn  %27.1  calistir_bm_x86_ps2_irq_self
+       06 dk 11 sn  %26.8  calistir_bm_x86_dosyalar
+       05 dk 49 sn  %25.3  calistir_bm_x86_ps2_irq_c
+       05 dk 34 sn  %24.2  calistir_codegen_bootstrap
+       05 dk 27 sn  %23.7  calistir_bm_x86_kaynak_editor
+       05 dk 18 sn  %23.0  calistir_bm_x86_v1_tam
+       05 dk 08 sn  %22.3  calistir_bm_x86_kabuk14_1
+       05 dk 08 sn  %22.3  calistir_bm_x86_kabuk14_6
+       05 dk 05 sn  %22.1  calistir_bm_x86_uefi_kabuk
+       04 dk 54 sn  %21.3  calistir_bm_x86_ps2_karma_self
+  disk: build 23G · boş 431 GiB
+Disk build: önce 23757295616 B, sonra 23758569472 B, büyüme +1273856 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```

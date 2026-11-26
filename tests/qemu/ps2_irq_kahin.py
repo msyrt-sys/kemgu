@@ -1,4 +1,6 @@
 """Gerçek i8042 IRQ1/IRQ12, hızlı tuşlar, kayık AUX baytı ve save-under kâhini."""
+from bekle import bekle as kosul_bekle, gozle, hlt_bekle, tam_seri, tik_bekle
+from protokol_suresi import BOSTA_GOZLEM
 import time,subprocess,re,os
 from psf_kahin import screendump,kabuk_goruntu,karsilastir,fare_imleci
 
@@ -12,43 +14,35 @@ def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
     symbols={v[2]:int(v[0],16) for line in subprocess.check_output(['nm',str(w/'k.elf')],text=True).splitlines() if len(v:=line.split())==3}
     def mem(a):
         path=w/'irq-oku.bin';command('pmemsave',{'val':a,'size':8,'filename':str(path)});return int.from_bytes(path.read_bytes(),'little')
-    time.sleep(.05)
+    tik=lambda:mem(symbols["kap_lapic_tik"])
+    tik_bekle(tik,surec=p)
     heap=mem(symbols['kem_bump']);ticks=mem(symbols['kap_lapic_tik'])
-    until=time.monotonic()+8
-    while time.monotonic()<until:
-        assert p.poll() is None and serial.read_bytes()[start:]==expected,'boşta IRQ kabuğu değişti'
-        time.sleep(.1)
+    def sessiz():
+        assert serial.read_bytes()[start:]==expected,'boşta IRQ kabuğu değişti'
+    gozle('PS/2 boşta IRQ kabuğu',BOSTA_GOZLEM,sessiz,surec=p)
     assert mem(symbols['kem_bump'])==heap,'timer uyanışları heap tüketti'
     assert 400<=mem(symbols['kap_lapic_tik'])-ticks<=1200,'boşta LAPIC ilerlemedi'
     if not karma:
-        for attempt in range(20):
-            regs=command('human-monitor-command',{'command-line':'info registers'})
-            if 'HLT=1' in regs:break
-            time.sleep(.01)
-        assert 'HLT=1' in regs,'PS/2 kesme tüketicisi HLT ile beklemiyor'
+        hlt_bekle(command,p)
     end=time.monotonic()+25;cursor=None
     def actual():return serial.read_bytes()[start:]
     def bekle():
-        while actual()!=expected:
-            assert expected.startswith(actual()) and p.poll() is None and time.monotonic()<end,(actual()[-200:],expected[-200:])
-            time.sleep(.01)
+        tam_seri('PS/2 tam seri',actual,expected,p,end-time.monotonic())
     def ekran():
         exp=kabuk_goruntu(akis,'',gen=gw,yuk=gh)
         if cursor is not None:fare_imleci(exp,gw,gh,*cursor)
-        until=time.monotonic()+3
-        while True:
-            width,height,px=screendump(f,w/'fare.ppm',response);assert (width,height)==(gw,gh)
-            diff,first=karsilastir(px,exp,gw)
-            if diff==0:return
-            assert time.monotonic()<until,(diff,first,cursor)
-            time.sleep(.02)
+        def fark():
+            width,height,px=screendump(f,w/'fare.ppm',response)
+            assert (width,height)==(gw,gh)
+            return karsilastir(px,exp,gw)
+        kosul_bekle('PS/2 ekranı',fark,lambda v:v[0]==0,sure=5,surec=p)
     def burst(text):
         # QEMU i8042 aygıt kuyruğu 16 bayt: 108 olay tek QMP çağrısına sığmaz.
-        # Ardışık 54 tuş, 3 ms aralık; eski kâhinin 50 ms/tuş hızından >16 kat hızlı.
         if karma:
             from uefi_kabuk_kahin import keys
             def usb_key(k,down):
-                command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]});time.sleep(.025)
+                command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}]})
+                tik_bekle(tik,surec=p)
             for c in text+'\n':
                 key,shift=keys(c)
                 assert any(key in e and (not shift or 'shift' in e) for e in enums),'QEMU qcode sözlüğü'
@@ -56,10 +50,16 @@ def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
                 usb_key(key,True);usb_key(key,False)
                 if shift:usb_key('shift',False)
             return
-        for c in text+'\n':
-            key={' ':'spc','\n':'ret','i':'apostrophe'}.get(c,c)
-            command('input-send-event',{'events':[{'type':'key','data':{'down':down,'key':{'type':'qcode','data':key}}} for down in (True,False)]})
-            time.sleep(.003)
+        # Altı tuşun bas/bırak olayları 16 baytlık i8042 kuyruğuna sığar.
+        metin=text+'\n'
+        for bas in range(0,len(metin),6):
+            grup=metin[bas:bas+6]
+            once=mem(symbols['ps2_irq1_sayi'])
+            for c in grup:
+                key={' ':'spc','\n':'ret','i':'apostrophe'}.get(c,c)
+                command('input-send-event',{'events':[{'type':'key','data':{'down':v,'key':{'type':'qcode','data':key}}} for v in (True,False)]})
+            kosul_bekle('IRQ1 hızlı tuş tüketimi',lambda:mem(symbols['ps2_irq1_sayi']),
+                        lambda n:n>=once+2*len(grup),sure=3,aralik=.001,surec=p)
     sent=0
     if not karma:
         ring=mem(symbols['ps2_irq_klavye']);head=mem(ring+8)
@@ -68,8 +68,7 @@ def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
             out=(letter*48+'\nKABUK_HAZIR\n').encode();expected+=out;bekle();akis+='> '+text+'\n'+out.decode();ekran()
         # Her seri 54 tuş × bas/bırak; 12 seri 1024 yuvalı halkayı kesin sarar.
         sent=12*(len('echo ')+48+1)*2
-        until=time.monotonic()+3
-        while mem(ring)!=mem(ring+8) and time.monotonic()<until:time.sleep(.01)
+        kosul_bekle('PS/2 halka boş',lambda:(mem(ring),mem(ring+8)),lambda v:v[0]==v[1],sure=3,surec=p)
         assert mem(ring)==mem(ring+8)==(head+sent)%1024,(head,mem(ring),mem(ring+8),sent)
     def fare(dx,dy,buttons):
         nonlocal expected,cursor
@@ -82,9 +81,11 @@ def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
         cursor=(min(gw-7,max(0,x+dx)),min(gh-7,max(0,y+dy)));ekran()
     fare(17,11,1)
     # Gerçek i8042 AUX çıkış tamponuna senkron biti olmayan bir bayt; belleğe test kancası yok.
+    irq12=mem(symbols['ps2_irq12_sayi'])
     command('human-monitor-command',{'command-line':'o /b 0x64 0xd3'})
     command('human-monitor-command',{'command-line':'o /b 0x60 0x00'})
-    time.sleep(.03);assert actual()==expected
+    kosul_bekle('AUX baytı IRQ12',lambda:mem(symbols['ps2_irq12_sayi']),lambda n:n>irq12,surec=p)
+    assert actual()==expected
     fare(-9,-4,0)
     text='echo imlec';burst(text);out=b'imlec\nKABUK_HAZIR\n';expected+=out;bekle();akis+='> '+text+'\n'+out.decode();ekran()
     if karma:

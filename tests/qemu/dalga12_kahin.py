@@ -1,4 +1,5 @@
 """OVMF + üç disk. ELF, bölüm kimliği, seri/GOP ve host disk baytları ölçülür."""
+from bekle import bekle, tik_bekle
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from hashlib import file_digest, sha256
@@ -11,7 +12,6 @@ import socket
 import struct
 import subprocess
 import sys
-import time
 
 from dalga12_imaj import images, gpt, DATA
 from fat_yazici import MERHABA
@@ -51,14 +51,10 @@ class Qmp:
 
 
 def wait_for(proc, fn, seconds=15):
-    end = time.monotonic()+seconds
-    while time.monotonic()<end:
-        v = fn()
-        if v:
-            return v
-        assert proc.poll() is None, (proc.returncode, v)
-        time.sleep(.02)
-    raise AssertionError('QEMU sonucu gelmedi')
+    kod = getattr(fn, '__code__', None)
+    ad = getattr(fn, '__qualname__', repr(fn))
+    if kod is not None: ad = f'{Path(kod.co_filename).name}:{kod.co_firstlineno} {ad}'
+    return bekle(ad, fn, sure=seconds, surec=proc)
 
 
 @contextmanager
@@ -213,9 +209,12 @@ class Console:
         self.q.call('input-send-event', {'events': [dict(type='key', data=dict(
             down=bas, key=dict(type='qcode', data=ad)))]})
 
+    def tik(self):
+        return int.from_bytes(self.mem(self.symbols['kap_lapic_tik'], 8), 'little')
+
     def key(self, ad, bas):
         self.tus_gonder(ad, bas)
-        time.sleep(.012)
+        tik_bekle(self.tik, surec=self.p)
 
     def run(self,text,out=b''):
         before = self.heap()

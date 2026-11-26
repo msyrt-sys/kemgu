@@ -74,11 +74,7 @@ link_retry() {
     return 1
 }
 run_exe() {
-    "$1" > "$2" 2>&1; RC=$?
-    d=0
-    while [ "$RC" -eq 127 ] && [ "$d" -lt 12 ]; do
-        sleep 0.3; "$1" > "$2" 2>&1; RC=$?; d=$((d+1))
-    done
+    calisma_127_dene calisma_cikti_yaz "$2" "$1"; RC=$?
     return 0
 }
 

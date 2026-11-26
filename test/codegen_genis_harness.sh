@@ -67,14 +67,7 @@ run_exe() {   # $1=exe  $2=stdout dosyasi ; RC global
     # kaldı. Asılan kapı, sessiz kapı kadar kötüdür: kimse onu koşturmaz.
     # (Aynı sınıf `ag_kosum`da S66 sabotajıyla yakalanıp orada da `timeout`
     # ile kapatılmıştı — D-466.)
-    timeout 30 "$1" > "$2" 2>&1; RC=$?
-    deneme=0
-    # 127 = Defender/exec yarışı (D-413) — ortamsal, yeniden dene.
-    while [ "$RC" -eq 127 ] && [ "$deneme" -lt 12 ]; do
-        sleep 0.3
-        timeout 30 "$1" > "$2" 2>&1; RC=$?
-        deneme=$((deneme+1))
-    done
+    calisma_127_dene calisma_cikti_yaz "$2" timeout 30 "$1"; RC=$?
     return 0
 }
 

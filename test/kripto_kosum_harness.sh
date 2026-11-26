@@ -51,13 +51,13 @@ if ! clang -x ir "$TMP/bundle.ll" -x none "$RT" -o "$TMP/bundle.exe" 2>"$TMP/lin
     echo "FAIL: clang bağlama"; grep -v "overriding the module target" "$TMP/link.log" | head -20; exit 1
 fi
 
-CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
-
-# Win11: taze .exe ilk exec'te Defender taramasında 127 verebilir (ortamsal).
-# Gerçek panik de 127 döner AMA stdout'a "PANIK:" yazar → ikisini AYIR.
-if [ "$RC" -eq 127 ] && [ -z "$CIKTI" ]; then
-    sleep 2; CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
-fi
+# Panik de 127 dönebilir. Çıktılı 127 kesin sonuçtur; yalnız boş ilk çalıştırmayı yinele.
+kripto_dene() {
+    CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
+    if [[ $RC == 127 && -z $CIKTI ]]; then return 127; fi
+    return 0
+}
+calisma_127_dene kripto_dene
 
 echo "=== stdlib/kripto bilinen-cevap koşumu [$ETIKET] ==="
 [ -n "$CIKTI" ] && echo "  çalışma-anı çıktısı: $CIKTI"

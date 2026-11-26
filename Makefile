@@ -5172,6 +5172,17 @@ calistir_bm_x86_program15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/uygulama/program_test.kem tests/drivers/ekran/bmp_test.kem
 	@SUREC_KAHIN=program15_kahin bash test/bm_x86_surec_harness.sh
 
+# RTC stresini ayrı çağır: make -j20 --output-sync=target calistir_bm_x86_rtc_stres
+RTC_TURLARI := 1 2 3 4 5 6 7 8 9 10
+RTC_C_TURLARI := $(addprefix calistir_bm_x86_rtc_c_,$(RTC_TURLARI))
+RTC_SELF_TURLARI := $(addprefix calistir_bm_x86_rtc_self_,$(RTC_TURLARI))
+.PHONY: calistir_bm_x86_rtc_stres $(RTC_C_TURLARI) $(RTC_SELF_TURLARI)
+calistir_bm_x86_rtc_stres: $(RTC_C_TURLARI) $(RTC_SELF_TURLARI)
+$(RTC_C_TURLARI): RTC_DERLEYICI = $(BUILD)/kemgu$(EXE)
+$(RTC_SELF_TURLARI): RTC_DERLEYICI = $(BUILD)/codegen$(EXE)
+$(RTC_C_TURLARI) $(RTC_SELF_TURLARI): $(X86_KAHIN_ON)
+	@PROGRAM15_TEK=saat SUREC_KAHIN=program15_kahin SUREC_DERLEYICILER=$(RTC_DERLEYICI) bash test/bm_x86_surec_harness.sh
+
 .PHONY: calistir_bm_x86_boru
 test_tumu: calistir_bm_x86_boru
 calistir_bm_x86_boru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
