@@ -1745,16 +1745,16 @@ static void kdl_eleman_byte_yaz(FILE *out, const char *et) {
             "ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i32)", et);
         return;
     }
-    /* [D-776] i8/i16 eleman DA 4 bayttir. Skaler erisimciler (`kdl_dizi_*_tam`)
-     * DAIMA 4 baytlik yuva yazar/okur ve buyume de 4 ile yapilir; `eleman_byte`
-     * yalniz `kdl_dizi_kapasite_ayarla` (ve yapi yolu) tarafindan okunur. Eskiden
-     * burada i8->1, i16->2 yaziliyordu: `Dizi<dtam8> = []` + `dizi_kapasite_ayarla
-     * (d, N)` N BAYT ayiriyor, eklemeler 4N bayt yaziyordu -> bolge blogu icinde
-     * komsu tahsisi ezen TASMA (olculdu: SEGV; ASan blok-ici bump tahsisi
-     * GORMEZ). `dizi_olustur(N)` yolu (i8/i16/i32 -> 4) ve self-host zaten 4
-     * yaziyordu; bu yardimci onlarla hizalandi. */
+    /* [D-778] DAR ELEMAN: i8 -> 1, i16 -> 2 baytlik yuva. Skaler erisimciler
+     * (`kdl_dizi_*_tam`, host + kem_heap.kem) artik eleman_byte'a DUYARLI: yazma,
+     * okuma ve buyume ayni genislikle yapilir. (D-776: bu yardimci 1/2 yazarken
+     * erisimciler 4 baytlik yuva yaziyordu -> kapasite_ayarla ile TASMA; o gun
+     * genislik 4'e hizalanmisti, simdi erisimciler genislige hizalandi.)
+     * `dizi_olustur(N)` yolu ve self-host `dizi_eleman_byte` ayni kurali izler. */
     int eb = 4;
-    if (et && (strcmp(et, "i64") == 0 || strcmp(et, "double") == 0 ||
+    if (et && strcmp(et, "i8") == 0) eb = 1;
+    else if (et && strcmp(et, "i16") == 0) eb = 2;
+    else if (et && (strcmp(et, "i64") == 0 || strcmp(et, "double") == 0 ||
                     strcmp(et, "ptr") == 0)) eb = 8;
     fprintf(out, "%d", eb);
 }
@@ -6355,7 +6355,10 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                             dz_elem = eir;
                             if (strcmp(eir, "ptr") != 0 &&
                                 strcmp(eir, "i64") != 0) {
-                                eb = 4;  /* i8/i16/i32 -> 4 byte */
+                                eb = 4;  /* i32 (ve bilinmeyen skaler) -> 4 byte */
+                                /* [D-778] dar eleman: eleman_byte_yaz ile ayni kural */
+                                if (strcmp(eir, "i8") == 0) eb = 1;
+                                else if (strcmp(eir, "i16") == 0) eb = 2;
                             }
                         }
                     }

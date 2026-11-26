@@ -53,7 +53,31 @@ işlev main() -> tam32 {
         eğer dizi_al(c, i) != (i olarak tam64) * 8589934592 { yanlis_kod = 3; }
         i = i + 1;
     }
+    // [D-778] DAR ELEMAN: 64 Dizi<dtam8> x 1024 eleman. Yuva 1 baytsa ~64 KB, eski
+    // 4 baytlık yuvayla ~256 KB. Değerler ≥128 (işaretsiz genişletme de ölçülür).
+    değişken tb: Dizi<Dizi<dtam8>> = [];
+    dizi_kapasite_ayarla(tb, 64);
+    değişken b2: tam64 = uzat_bump();
+    k = 0;
+    iken k < 64 {
+        değişken e: Dizi<dtam8> = [];
+        i = 0;
+        iken i < 1024 { dizi_ekle(e, ((128 + (i + k) % 128) olarak tam32) olarak dtam8); i = i + 1; }
+        dizi_ekle(tb, e);
+        k = k + 1;
+    }
+    değişken b3: tam64 = uzat_bump();
+    k = 0;
+    iken k < 64 {
+        değişken e: Dizi<dtam8> = dizi_al(tb, k);
+        i = 0;
+        iken i < 1024 { eğer (dizi_al(e, i) olarak tam32) != 128 + (i + k) % 128 { yanlis_kod = 4; } i = i + 1; }
+        k = k + 1;
+    }
     güvensiz {
+        bm_yaz_ham("HEAP_UZAT bayt ");
+        uzat_sayi(b3 - b2);
+        kem_uart_bayt(10);
         bm_yaz_ham("HEAP_UZAT bump ");
         uzat_sayi(b1 - b0);
         bm_yaz_ham(" hata ");

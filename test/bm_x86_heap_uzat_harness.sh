@@ -4,7 +4,8 @@
 # (aygıt yoklaması her turda tahsis eder; aynı kaynağın iki derlemesi %33 ayrıştı) → o
 # metrik AYIRT EDİCİ DEĞİL. Bu program 64 diziyi sırayla 1024 elemana büyütür ve malloc
 # bump işaretçisinin ilerlemesini basar. Ölçüm: açık C 262336 / self 327952 bayt,
-# kapalı (S271) C 524672 / self 590288 bayt → eşik 400000.
+# kapalı (S271) C 524672 / self 590288 bayt → eşik 400000. [D-778] Dar eleman: 64 x 1024
+# Dizi<dtam8> bump 65584 (iki derleyici) → eşik 150000.
 set -u
 cd "$(dirname "$0")/.."
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
@@ -31,6 +32,11 @@ for c in build/kemgu build/codegen; do
   # kem_qemu_cik(0) → QEMU çıkış kodu (0<<1)|1 = 1; zaman aşımı 124.
   if [ "$rc" != 1 ] || [ -z "$bump" ]; then echo "  🔴 $c: QEMU rc=$rc satır='$satir'"; tail -c 400 "$W/seri"; kaldi=$((kaldi+1)); continue; fi
   if [ "$yk" != 0 ]; then echo "  🔴 $c: içerik bozuk (yanlis_kod=$yk)"; kaldi=$((kaldi+1)); continue; fi
+  # [D-778] dar eleman: 64 x 1024 Dizi<dtam8>. 1 baytlık yuva → tek 64 KB blok (ölçüm 65584
+  # iki derleyicide); eski 4 baytlık yuva ~4x. Eşik 150000.
+  bayt=$(grep -a "HEAP_UZAT bayt" "$W/seri" | tail -1 | sed -n 's/.*bayt \([0-9]*\).*/\1/p')
+  if [ -z "$bayt" ] || [ "$bayt" -gt "${HEAP_BAYT_ESIK:-150000}" ]; then echo "  🔴 $c: dar eleman bump '$bayt' > ${HEAP_BAYT_ESIK:-150000} (bayt dizisi 1 baytlık yuvada değil)"; kaldi=$((kaldi+1)); continue; fi
+  echo "  ✅ $c: Dizi<dtam8> 64x1024 → bump $bayt (1 baytlık yuva)"
   if [ "$bump" -gt "$ESIK" ]; then echo "  🔴 $c: bump $bump > eşik $ESIK (yerinde uzatma çalışmıyor)"; kaldi=$((kaldi+1)); continue; fi
   echo "  ✅ $c: bump $bump ≤ $ESIK, içerik doğru"
   # OOM: büyütme tahsisi başarısızsa TEMİZ PANİK (kem_panik sonsuz döngüde bekler → mesaj

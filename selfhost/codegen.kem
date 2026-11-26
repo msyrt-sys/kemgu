@@ -4345,6 +4345,10 @@ işlev dizi_eleman_byte(elem: metin) -> metin {
         }
     }
     eğer metin_esit(elem, "ptr") veya metin_esit(elem, "i64") { ver "8"; }
+    // [D-778] DAR ELEMAN: tam8/dtam8 1, tam16/dtam16 2 baytlık yuva. Runtime `_tam`
+    // erişimcileri eleman_byte'a duyarlı (kdl_dizi.inc + kem_heap.kem); C eleman_byte_yaz aynası.
+    eğer metin_esit(elem, "i8") { ver "1"; }
+    eğer metin_esit(elem, "i16") { ver "2"; }
     ver "4";
 }
 // CG8: değer tipi → kdl_dizi_ekle_* sonek (tam/tam64/ptr).
@@ -6676,6 +6680,15 @@ işlev ifade_uret(p: &değişken Ayr, idx: tam32) -> metin {
                 değişken fr3: metin = bitcast_uret(p, rs3, kes_tasiyici(elem), elem);
                 p.son_tip = elem;
                 ver fr3;
+            }
+            // [D-778] dar eleman: yuva artık eleman genişliğinde (1/2 bayt) ve runtime
+            // değeri SIFIR-genişletir; işaret bilgisi yok. Eleman genişliğine daralt —
+            // sonraki genişletme ifadenin işaretine göre yapılır (C `dizi_dar_oku` ve
+            // indeksleme yolu D-714 ile aynı). Öncesinde i32 doğrudan sext ediliyordu.
+            eğer metin_esit(elem, "i8") veya metin_esit(elem, "i16") {
+                değişken dr3: metin = int_uydur(p, rs3, elem, 0);
+                p.son_tip = elem;
+                ver dr3;
             }
             ver rs3;
         }

@@ -60,6 +60,23 @@ int main(void) {
     for (int32_t i = 0; i < 1000 && saglam; i++) if (kdl_dizi_al_tam(d, i) != i * 7) saglam = 0;
     onayla("onceki dizi sonraki buyumelerden ETKILENMEDI", saglam);
 
+    /* [D-778] dar eleman: eleman_byte 1/2 olan dizide `_tam` erişimcileri yuvayı eleman
+     * genişliğinde tutar (bayt düzeni DOĞRUDAN okunur) ve okuma sıfır-genişletir. */
+    KdlDizi *e8 = kdl_dizi_olustur(b, 1);
+    for (int32_t i = 0; i < 300; i++) kdl_dizi_ekle_tam(b, e8, (200 + i) & 255);
+    saglam = e8->boyut == 300;
+    for (int32_t i = 0; i < 300 && saglam; i++) {
+        if (((uint8_t *)e8->veri)[i] != (uint8_t)((200 + i) & 255)) saglam = 0;
+        if (kdl_dizi_al_tam(e8, i) != ((200 + i) & 255)) saglam = 0;
+    }
+    onayla("Dizi<dtam8>: 1 baytlik yuva + sifir-genisletme", saglam);
+    KdlDizi *e16 = kdl_dizi_olustur(b, 2);
+    for (int32_t i = 0; i < 300; i++) kdl_dizi_ekle_tam(b, e16, 50000 + i);
+    saglam = e16->boyut == 300;
+    for (int32_t i = 0; i < 300 && saglam; i++)
+        if (((uint16_t *)e16->veri)[i] != (uint16_t)(50000 + i)) saglam = 0;
+    onayla("Dizi<dtam16>: 2 baytlik yuva", saglam);
+
     kdl_bolge_serbest(b);
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n", toplam, basarili, toplam - basarili);
     return basarili == toplam ? 0 : 1;
