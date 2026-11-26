@@ -9527,7 +9527,10 @@ işlev ky_isaretle(p: &değişken Ayr, node: tam32, govde: tam32, dongu_d: tam32
                     değişken ufi: tam32 = ds_sorgu(p, dizi_al(p.a_deg, uh));
                     eğer ufi >= 0 {
                         eğer ds_tip_dizi_skaler(p, ds_donus_dugumu(p, ufi)) {
-                            eğer ky_confined(p, govde, dizi_al(p.a_deg, node)) { dizi_ekle(p.ky_node, udeg); }
+                            eğer ky_confined(p, govde, dizi_al(p.a_deg, node)) {
+                                dizi_ekle(p.ky_node, udeg);
+                                eğer dongu_d >= 1 { dizi_ekle(p.ky_iter_node, udeg); }   // [D-775] tur-yerel
+                            }
                         }
                     }
                 }
@@ -9940,8 +9943,17 @@ işlev ds_cagri_skaler_saf(p: &değişken Ayr, ad: metin) -> mantıksal {
 // kapanış koruyucusu (bolge_yerel_yonlendir ile aynı) uygulanır.
 işlev cagri_rho_sec(p: &değişken Ayr, idx: tam32, ad: metin) -> metin {
     eğer metin_esit(p.rho_yerel, "") { ver p.rho_ref; }
-    eğer p.ky_lambda == 0 { eğer ky_kesin_yerel(p, idx) { ver p.rho_yerel; } }
-    eğer ds_cagri_skaler_saf(p, ad) { ver p.rho_yerel; }
+    eğer p.ky_lambda == 0 {
+        eğer ky_kesin_yerel(p, idx) {
+            // [D-775] E4k-C: döngü gövdesindeki hapsedilmiş bağlama -> tur bölgesi (F4.3).
+            eğer metin_esit(p.rho_iter, "") == yanlış { eğer ky_iter_kesin(p, idx) { ver p.rho_iter; } }
+            ver p.rho_yerel;
+        }
+    }
+    eğer ds_cagri_skaler_saf(p, ad) {
+        eğer metin_esit(p.rho_iter, "") == yanlış { ver p.rho_iter; }   // [D-775] skaler dönüş: çağrı sonrası çöp
+        ver p.rho_yerel;
+    }
     ver p.rho_ref;
 }
 

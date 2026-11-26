@@ -76,6 +76,7 @@ static EscapeKayit *kayit_ekle(EscapeAnaliz *ea, const Dugum *d) {
     k->kategori = ESC_YEREL;
     k->dongu_derinligi = ea->dongu_derinligi;
     k->kesin_yerel = 0;   /* F4.2b: ky_isaretle sonradan KANITLARSA 1 yapar (uninit garbage = UAF). */
+    k->tur_yerel = 0;     /* [D-775] aynı gerekçe: çöp değer = tur sonunda serbest = UAF. */
     return k;
 }
 
@@ -1294,10 +1295,15 @@ static void ky_set(EscapeAnaliz *ea, const Dugum *d) {
     for (int i = 0; i < ea->kayit_sayi; i++)
         if (ea->kayitlar[i].dugum == d) { ea->kayitlar[i].kesin_yerel = 1; return; }
 }
+/* [D-775] tur-yerel: yalnız kesin_yerel kanıtı olan düğüm ve döngü gövdesindeki bildirim. */
+static void ky_tur_set(EscapeAnaliz *ea, const Dugum *d) {
+    for (int i = 0; i < ea->kayit_sayi; i++)
+        if (ea->kayitlar[i].dugum == d && ea->kayitlar[i].kesin_yerel) { ea->kayitlar[i].tur_yerel = 1; return; }
+}
 
 /* Govdeyi gez; her `değişken V: Dizi<...> = [literal]` icin V confined ise
  * literal-dugumunu kesin_yerel isaretle. */
-static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde) {
+static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde, int dongu) {
     if (!d) return;
     switch (d->tip) {
         case DUGUM_DEGISKEN:
@@ -1359,6 +1365,7 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
                                    d->veri.degisken.ad_uzunluk)) {
                     kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
                     ky_set(ea, d->veri.degisken.deger);
+                    if (dongu > 0) ky_tur_set(ea, d->veri.degisken.deger);
                 }
             }
             /* [D-774] E4k-B: `değişken V = f(..)`, f DÖNÜŞ-SAF ve Dizi<skaler> döndürür,
@@ -1377,6 +1384,7 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
                     && ky_confined(fn_govde, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk)) {
                     kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
                     ky_set(ea, d->veri.degisken.deger);
+                    if (dongu > 0) ky_tur_set(ea, d->veri.degisken.deger);
                 }
             }
             if (d->veri.degisken.tip && d->veri.degisken.tip->tip == DUGUM_TIP_DIZI
@@ -1385,28 +1393,36 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
                 && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0
                 && ky_confined(fn_govde, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk)) {
                 ky_set(ea, d->veri.degisken.deger);
+                if (dongu > 0) ky_tur_set(ea, d->veri.degisken.deger);
             }
             return;
         case DUGUM_BLOK:
             for (int i = 0; i < d->veri.blok.sayi; i++)
-                ky_isaretle(ea, d->veri.blok.deyimler[i], fn_govde);
+                ky_isaretle(ea, d->veri.blok.deyimler[i], fn_govde, dongu);
             return;
         case DUGUM_EGER:
-            ky_isaretle(ea, d->veri.eger.gozdoldur, fn_govde);
-            ky_isaretle(ea, d->veri.eger.yan, fn_govde);
+            ky_isaretle(ea, d->veri.eger.gozdoldur, fn_govde, dongu);
+            ky_isaretle(ea, d->veri.eger.yan, fn_govde, dongu);
             return;
-        case DUGUM_IKEN: ky_isaretle(ea, d->veri.iken.govde, fn_govde); return;
-        case DUGUM_ICIN: ky_isaretle(ea, d->veri.icin.govde, fn_govde); return;
+        case DUGUM_IKEN: ky_isaretle(ea, d->veri.iken.govde, fn_govde, dongu + 1); return;
+        case DUGUM_ICIN: ky_isaretle(ea, d->veri.icin.govde, fn_govde, dongu + 1); return;
         case DUGUM_ESLES:
             for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
                 Dugum *k = d->veri.esles.kollar[i];
                 if (k && k->tip == DUGUM_ESLES_KOLU)
-                    ky_isaretle(ea, k->veri.esles_kolu.govde, fn_govde);
+                    ky_isaretle(ea, k->veri.esles_kolu.govde, fn_govde, dongu);
             }
             return;
-        case DUGUM_GUVENSIZ: ky_isaretle(ea, d->veri.guvensiz.blok, fn_govde); return;
+        case DUGUM_GUVENSIZ: ky_isaretle(ea, d->veri.guvensiz.blok, fn_govde, dongu); return;
         default: return;
     }
+}
+
+int escape_tur_yerel(const EscapeAnaliz *ea, const Dugum *d) {
+    if (!ea || !d) return 0;
+    for (int i = 0; i < ea->kayit_sayi; i++)
+        if (ea->kayitlar[i].dugum == d) return ea->kayitlar[i].kesin_yerel && ea->kayitlar[i].tur_yerel;
+    return 0;
 }
 
 int escape_kesin_yerel(const EscapeAnaliz *ea, const Dugum *d) {
@@ -1453,7 +1469,7 @@ void escape_analiz_islev(EscapeAnaliz *ea, const Dugum *islev) {
     /* F4.2b: fixed-point bitti → POZİTİF kesin-yerel kanıtı (confined dizi-değişkenleri
      * isaretle). free-routing YALNIZ bu işaretli + skaler-eleman dizileri ρ_yerel'e
      * yönlendirir (bolge_yerel_yonlendir). */
-    ky_isaretle(ea, govde, govde);
+    ky_isaretle(ea, govde, govde, 0);
 }
 
 void escape_analiz_program(EscapeAnaliz *ea, const Dugum *program) {

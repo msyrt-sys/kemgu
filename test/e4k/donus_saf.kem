@@ -57,10 +57,15 @@ işlev main() -> tam32 {
     değişken t: tam32 = 0;
     değişken i: tam32 = 0;
     değişken uzun: Dizi<tam32> = [];
+    değişken son: Dizi<tam32> = [0];
     iken i < 50 {
         t = t + saf_toplam(0) - 39;                         // +0 (olumlu: skaler saf)
         t = t + kirli_kuresel(0) - 1;                       // +0 (olumsuz)
         t = t + kirli_zincir(0) - 1;                        // +0 (olumsuz)
+        değişken tr: Dizi<tam32> = saf_yap(i);              // [D-775] gövdede bildirilmiş: tur bölgesi
+        t = t + dizi_al(tr, 0) - i;                         // +0
+        değişken kac: Dizi<tam32> = [i, 5];                 // [D-775] OLUMSUZ: dışarı atanır -> tur DEĞİL
+        son = kac;                                          //   (tur bölgesine gitseydi döngü sonrası UAF)
         i = i + 1;
     }
     t = t + kirli_buyut(uzun, 7) - 1;                       // +0 (olumsuz) uzun=[7]
@@ -69,6 +74,7 @@ işlev main() -> tam32 {
     değişken k: Dizi<tam32> = olumsuz_kacan();
     t = t + dizi_al(k, 0) - 2 + olumlu_bagla() - 1;        // +0
     t = t + dizi_al(uzun, 0) + dizi_al(uzun, 1) + 27;      // 7+8+27 = 42
+    t = t + dizi_al(son, 1) - 5 + dizi_al(son, 0) - 49;    // +0: son = [49, 5]
     güvensiz { eğer k_sayac != 100 { ver 1; } }
     ver t;
 }

@@ -76,6 +76,9 @@ typedef struct EscapeKayit {
     int kesin_yerel;           /* F4.2b: POZİTİF kanıt — bağlı değişken "confined"
                                 * (tüm kullanımları yerinde okuma/yazma + retain-etmeyen
                                 * dizi-builtin); ρ_yerel free-routing YALNIZ bunu kullanır. */
+    int tur_yerel;             /* [D-775] E4k-C (self-host F4.3 aynası): kesin_yerel VE bağlama bir
+                                * döngü GÖVDESİNDE bildirildi -> her tur taze bağlama, tur sonunda
+                                * ölü -> en dış döngünün tur bölgesine (ρ_tur) gidebilir. */
 } EscapeKayit;
 
 typedef struct EscapeBag {
@@ -170,6 +173,8 @@ int escape_kesin_yerel(const EscapeAnaliz *ea, const Dugum *d);
  * %rho yerine kendi ρ_yerel'ini verebilir (f bölgeye ayırdığı hiçbir şeyi dışarı
  * veremez). escape_fn_tablo_kur sonrası anlamlıdır; tablo yoksa 0 (RED). */
 int escape_cagri_skaler_saf(const char *ad, int uz);
+/* [D-775] E4k-C: düğüm tur-yerel işaretli mi (kesin_yerel ∧ döngü gövdesinde bildirildi)? */
+int escape_tur_yerel(const EscapeAnaliz *ea, const Dugum *d);
 
 /* Tahsis bolgesinin dongu derinligi (0 = islev seviyesi). */
 int escape_dongu_derinligi(const EscapeAnaliz *ea, const Dugum *d);
