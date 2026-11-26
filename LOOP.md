@@ -3244,4 +3244,23 @@
   PC matrisi -smp ekseni. Claude doğruladı: son ABI çağrısı 90; `-smp 4 -accel tcg,thread=multi` uyarısız açılıyor;
   madt.kem + smp_x86.c (başvuru) mevcut; satıriçi_asm x86 çekirdekte kullanılabilir; belge/kapı adları Makefile'da var.
   Ön koşul: D-772 (#245) ve D-773 main'de.
+- 2026-11-26 D-774: E4k AŞAMA B — "DÖNÜŞ-SAF" ÇAĞRILAN ÖZETİ (C src/escape.c ds_* + self-host codegen.kem aynası).
+  f bölgeye ayırdığı her şeyi yalnız dönüşle veriyorsa çağıran ona %rho yerine KENDİ ρ_yerel'ini verir:
+  (a) sonuç hapsedilmiş Dizi<skaler> bağlaması (ÇAĞRI düğümü kesin_yerel), (b) dönüş yok/skaler. VARSAYILAN RED:
+  P1 imza skaler/metin/Dizi<skaler> (referans/işaretçi/yapı/kendin/generic/çıplak RED) · P2 atama kökü yalnız yerel ·
+  P3 Dizi parametresi ve TAKMA ADI (bağlama/atama değeri param adını ya da herhangi bir çağrıyı içeriyorsa; sabit
+  noktaya kadar) dizi_ekle/kapasite_ayarla arg0 OLAMAZ — elle kurulmuş başlıkta bolge=0 iken büyütme çağıranın
+  %rho'suna düşer, kalıcı dizi ölen tampona işaret ederdi (UAF) · P4 kapanış/görev/kanal/dondur/güvensiz/asm/yöntem/
+  modül/dolaylı çağrı RED · P5 kullanıcı çağrısı TEKİL adla + özyinelemeli dönüş-saf, özyineleme/derinlik>24 RED ·
+  P6 tanınmayan düğüm RED. Self-host'ta ek: işlevde kapanış varsa (a) yolu kapalı (mevcut bolge_yerel_yonlendir
+  koruyucusu); kararlar fikstürde C ile birebir. ÖLÇÜM (yardımcı yap()ı çağırıp yerelde okuyor, 200K çağrı): zirve
+  407 MB → 1,1 MB, iki derleyici. Döngünün doğrudan main'de olduğu örüntü DEĞİŞMEZ (tahsis main'in ρ_yerel'inde
+  birikir → tur başına bölge, E4k-C; self-host'ta F4.3 rho_iter VAR, C'de YOK). ⚠ ÇEKİRDEK ETKİSİ YOK: kabuk komut
+  heap artışı toplamı 877,7 → 877,9 MB (32 KB blok gürültüsü) — komut işleyicileri `&değişken` durum aldığı için
+  dönüş-saf DEĞİL; çekirdeğin kapanışı D (alan/eşleş türevleri) + durum parametreli işlevler ister. Kapı
+  calistir_e4k_bellek genişledi: test/e4k/donus_saf.kem 13 çağrının ρ kararı beklenen tabloyla (iki derleyici) +
+  ASan 42 · cagri_sonucu.kem ana bölge ≤2 blok. Sabotaj 8/8 kırmızı: S252 ds_islev hep doğru · S253 C seçici
+  kapalı (127 blok) · S254 P3 kapalı · S255 takma ad yayılımı kapalı · S256 self seçici kapalı · S257 self P3 · S258
+  self takma ad · S259 self özyinelemeli denetim kapalı. P2 ölçülmüş FAZLALIK: küresel yazım güvensiz/çıplak ister,
+  ikisi de P4/P1'de zaten RED. Tam takım -j10: rc=0, 36 dk 23 sn, FIXPOINT ✓. ASan E2E 133/0, ASan matris 12/12.
 
