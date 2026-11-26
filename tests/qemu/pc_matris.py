@@ -1,5 +1,6 @@
 """Q35 açılış diski, klavye, bellek ve disk etiketi çapraz denemeleri."""
 import argparse
+import os
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('dizin', type=Path)
     p.add_argument('--tekrar', type=int, default=3)
-    p.add_argument('--tablo', choices=('mbr', 'gpt'))
+    p.add_argument('--tablo', default=os.environ.get('PC_MATRIS_TABLO'), choices=('mbr', 'gpt'))
     a = p.parse_args()
     assert a.tekrar >= 1
     hatalar = Counter()

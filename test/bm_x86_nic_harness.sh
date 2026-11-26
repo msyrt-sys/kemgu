@@ -56,9 +56,9 @@ for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
         fi
     elif [[ "${1:-e1000}" == saglamlik_ag ]]; then
         python3 tests/qemu/surec_elf.py "$w/sunucu.elf" --kaynak test/kullanici/sunucu.kem --derleyici "$derleyici"
-        python3 tests/qemu/ag_saglamlik_tel.py "$w" cerceve
-        python3 tests/qemu/ag_saglamlik_tel.py "$w" aktarim
-        python3 tests/qemu/ag_saglamlik_tel.py "$w" zaman
+        for senaryo in ${NIC_SAGLAMLIK:-cerceve aktarim zaman}; do
+            python3 tests/qemu/ag_saglamlik_tel.py "$w" "$senaryo"
+        done
     elif [[ "${1:-e1000}" == paket ]]; then
         python3 tests/qemu/surec_elf.py "$w/paket.elf" --kaynak test/kullanici/paket.kem --derleyici "$derleyici"
         python3 tests/qemu/ag_paket_kahin.py "$w"

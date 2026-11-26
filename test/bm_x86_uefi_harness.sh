@@ -51,6 +51,7 @@ source test/cekirdek_onbellek.sh
 cekirdek_onbellek "$W" "$DERLEYICI" linker/bare-metal-uefi-x86_64.ld "${OBJ[@]}"
 cp "$W/k.elf" "$W/esp/KEMGU/CEKIRDEK.ELF"
 if [ "${UEFI_PC_URET:-0}" = 1 ]; then
+ if [[ ${UEFI_PC_GECICI:-0} == 1 ]]; then export UEFI_PC_IMG="$W/pc.img"; fi
  # [D-772] Paralel kapılar aynı imajı ezmesin: hedef UEFI_PC_IMG (bm_uefi.py de onu açar).
  python3 tests/qemu/uefi_imaj.py "${UEFI_PC_IMG:-build/kem_os_pc.img}" "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
 fi

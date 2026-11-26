@@ -275,10 +275,12 @@ def diskleri_koru(once, esp_bolum, esp):
         assert sha256(esp_bolum.read()).digest() == esp, "ESP SHA256 değişti"
 
 
-def kos(w, tekrar, senaryo):
+def kos(w, tekrar, senaryo, ilk=1):
+    if ilk < 1 or tekrar < 1:
+        raise ValueError("İlk açılış ve tekrar sayısı pozitif olmalı")
     programlar = {p.name: p.read_bytes() for p in (w / "kullanici").glob("*.elf")}
     assert "merhaba.elf" in programlar
-    for n in range(1, tekrar + 1):
+    for n in range(ilk, ilk + tekrar):
         kip = VARSAYILAN[(n - 1) % len(VARSAYILAN)] if senaryo == "matris" else senaryo
         usb, nvme, sata = imajlar(w, programlar)
         if kip.startswith("v1"): usb_dogrula(w,usb,programlar)
@@ -385,7 +387,8 @@ def kos(w, tekrar, senaryo):
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("dizin", type=Path)
+    p.add_argument("--ilk", type=int, default=1)
     p.add_argument("--tekrar", type=int, default=10)
     p.add_argument("--senaryo", choices=("kaynak-cocuk", "kaynak-editor", "v1-kesinti", "v1", "kabuk14", "gezgin-salt", "gezgin", "duzenle-icerik", "duzenle", "ekran-ps2", "ekran-usb", "buyukelf", "arka", "cocuk", "hesap", "matris", "baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2", "bolme", "tekrar"), default="matris")
     args = p.parse_args()
-    kos(args.dizin.resolve(), args.tekrar, args.senaryo)
+    kos(args.dizin.resolve(), args.tekrar, args.senaryo, args.ilk)

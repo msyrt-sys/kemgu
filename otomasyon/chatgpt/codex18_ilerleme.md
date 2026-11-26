@@ -59,3 +59,27 @@ Sekiz PVH girişinde dokuz yolun toplamı 23,220 sn → 0,746 sn. Host önbellek
 Disk build: önce 9785061376 B, sonra 9786150912 B, büyüme +1089536 B
 Geçici dizin: önce 0, sonra 0, yeni 0
 ```
+
+## Bölüm 4 — kritik yolun bölünmesi
+
+Sekiz eski hedef 21 bağımsız parçaya açıldı. Önce/sonra 288 kâhin işlemi aynı, gerçek QEMU günlüklerinde 302 sonuç eşit. Eksik senaryo sabotajı kapıyı adıyla kırmızıya düşürdü (make rc=2). En uzun parça 509.68 sn. Tam takım ve §7 kapıları rc=0, ayrıca `calistir_kem_os_x86` rc=0. Bölüm süresi 0:29:20.
+
+```text
+=== ZAMAN RAPORU: duvar saati 25 dk 08 sn · 169 kapı · kapı toplamı 3 sa 53 dk 13 sn · derleme/diğer 00 dk 00 sn ===
+       08 dk 30 sn  %33.8  calistir_bm_x86_ag_saglamlik_self_aktarim
+       07 dk 24 sn  %29.4  calistir_bm_x86_ag_saglamlik_c_aktarim
+       07 dk 12 sn  %28.6  calistir_bm_x86_ekran_fare
+       07 dk 09 sn  %28.4  calistir_bm_x86_dosyalar
+       07 dk 04 sn  %28.1  calistir_bm_x86_kaynak_editor
+       06 dk 36 sn  %26.2  calistir_bm_x86_tftp_teshis
+       06 dk 27 sn  %25.7  calistir_bm_x86_tcp_verim
+       06 dk 24 sn  %25.4  calistir_bm_x86_ps2_irq_self
+       06 dk 17 sn  %25.0  calistir_bm_x86_v1_tam
+       06 dk 11 sn  %24.6  calistir_bm_x86_ps2_irq_c
+       05 dk 55 sn  %23.5  calistir_bm_x86_kaynak_cocuk
+       05 dk 52 sn  %23.3  calistir_bm_x86_kabuk14_6
+       05 dk 52 sn  %23.3  calistir_bm_x86_kabuk14_1
+       05 dk 30 sn  %21.9  calistir_codegen_bootstrap
+       05 dk 22 sn  %21.4  calistir_bm_x86_uefi_kabuk
+  disk: build 9.2G · boş 444 GiB
+```

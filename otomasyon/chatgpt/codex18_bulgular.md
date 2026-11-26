@@ -524,3 +524,24 @@ Aynı Bash gözlemcisi dokuz girişte gerçek LLVM IR nesne derlemelerini ve ön
 | Sonra | 137 | 18 | 14 | 133 | 0 | 2044 |
 
 Tam takımın duvar süresindeki fark (sonra eksi önce) -113 sn. Ölçüm dosyaları `build/d18/ortak-onbellek-{once,sonra}.tsv`, son rapor `build/d18/bolum3-son-tam.hGGrHC/zaman_raporu.txt`. Makine yükü koşumlar arasında değişti.
+
+## Bölüm 4 — kritik yol ve kapsam eşitliği
+
+Üç başlangıç ölçümünün en yükseğinde 480 saniyeyi aşan sekiz kapı bölündü. Make şemsiyeleri eski adlarını korudu. Süreç ve PC parçaları, özgün iki derleyici turunu birbirinden bağımsız dizinlerde eşzamanlı çalıştırır. PS/2 karma imajı her çalışmanın kendi dizinindedir. Ağ aktarımı ve diğer uzun işler tam takımın ilk yuvalarını alır. İlk denemede ayrı bir Make önkoşul satırına verilen öncelik, tarifin bulunduğu ana satırın gerisine düşüyordu; `make -qp` ile görülünce bu deneme durduruldu. Aşağıdaki ölçüm düzeltilmiş sıranın tam koşumudur.
+
+Taban `be1cd2c:Makefile` ve yeni Makefile ayrı ayrı `make -n` ile açıldı. 288 kayıt; betik, derleyici, senaryo, açılış numarası, UEFI seçimi, PC aygıt/klavye/RAM/tablo alanlarıyla sıralanmış TSV SHA-256 değeri ikisinde de `2513b097982acf44dba5ca8edb89910f28ee99cb7b5fc97ac7b87315ca90750f`. PC ağ matrisindeki iki Python çağrısı toplam on altı QEMU sonucu üretir. Gerçek iki tam koşum günlüğünde de derleyici ve senaryo bazında 302 sonuç kaydı eşleşti.
+
+| Şemsiye | Eski ve yeni çağrı | Parçalar ve gerçek süre (sn) |
+|---|---:|---|
+| `calistir_bm_x86_ag_saglamlik` | 6 | c_aktarim 444.08, c_cerceve 46.57, c_zaman 15.25, self_aktarim 509.68, self_cerceve 47.90, self_zaman 16.03 |
+| `calistir_bm_x86_cok_surec` | 60 | arka 201.32, cocuk 271.91, hesap 174.23 |
+| `calistir_bm_x86_kabuk14` | 20 | 1 351.53, 6 352.06 |
+| `calistir_bm_x86_kaynak` | 40 | cocuk 354.86, editor 423.92 |
+| `calistir_bm_x86_ps2_irq` | 28 | c 371.40, self 383.75 |
+| `calistir_bm_x86_ps2_karma` | 20 | c 307.57, self 308.50 |
+| `calistir_bm_x86_v1` | 40 | kesinti 292.17, tam 377.26 |
+| `calistir_kem_os_pc_matris` | 74 | gpt 299.12, mbr 301.11 |
+
+Bir parçadan `ag_saglamlik_tel.py cerceve` çağrısı gerçekten çıkarıldı. Kapı `Eksik (1): calistir_bm_x86_ag_saglamlik kemgu ag_saglamlik_tel.py cerceve` bildirdi (make rc=2). Geri alınca 288 çağrı eşleşti. Süre bütçeleri ölçülen sürelerin 1,5 katı, alt sınır 60 sn; yeni QEMU parçalarında ayrıca 600 sn üst sınırı var.
+
+=== ZAMAN RAPORU: duvar saati 25 dk 08 sn · 169 kapı · kapı toplamı 3 sa 53 dk 13 sn · derleme/diğer 00 dk 00 sn ===
