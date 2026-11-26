@@ -657,10 +657,10 @@ calistir_lambda_test: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # ⚠ `kemgu` ON KOSUL: son satirdaki `--check` denetimi onu kullanir ve
 # KOSULSUZ olmali (D-486: sessiz atlama). Dongu YOK — kemgu yalniz src/*.c'ye bagli.
 selfhost/konak.kem: selfhost/konak.kem.in $(BUILD)/kemgu$(EXE) FORCE
-	@sed -e 's|@ARCH@|$(ARCH)|g' -e 's|@TRIPLE@|$(HOST_TRIPLE)|g' selfhost/konak.kem.in > $@.tmp
-	@grep -q '@ARCH@\|@TRIPLE@' $@.tmp && { echo "🔴 konak.kem: yer tutucu IKAME EDILMEDI (ARCH=$(ARCH))"; rm -f $@.tmp; exit 1; } || true
-	@cmp -s $@.tmp $@ 2>/dev/null || mv -f $@.tmp $@
-	@rm -f $@.tmp
+	@# [D-772] Geçici ad süreç başına (paralel/özyineli make aynı .tmp'yi yarışarak yazıyordu; Codex dalga 16).
+	@g=$@.tmp.$$$$; sed -e 's|@ARCH@|$(ARCH)|g' -e 's|@TRIPLE@|$(HOST_TRIPLE)|g' selfhost/konak.kem.in > $$g; \
+	 if grep -q '@ARCH@\|@TRIPLE@' $$g; then echo "🔴 konak.kem: yer tutucu IKAME EDILMEDI (ARCH=$(ARCH))"; rm -f $$g; exit 1; fi; \
+	 if cmp -s $$g $@ 2>/dev/null; then rm -f $$g; else mv -f $$g $@; fi
 	@$(BUILD)/kemgu$(EXE) --check $@ >/dev/null 2>&1 || { echo "🔴 konak.kem GECERSIZ KEMGU uretildi (kodlama bozulmasi?) — tani:"; $(BUILD)/kemgu$(EXE) --check $@ 2>&1 | head -4; exit 1; }
 
 
@@ -4760,7 +4760,19 @@ calistir_bm_x86_ps2: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x8
 	@bash test/bm_x86_ps2_harness.sh
 
 
-test_tumu: calistir_bm_x86_surec_abi calistir_bm_x86_surec calistir_bm_x86_disk calistir_bm_x86_blok calistir_bm_x86_guc calistir_bm_x86_ps2_karma calistir_bm_x86_ps2_irq calistir_bm_x86_apic calistir_bm_x86_istisna calistir_bm_x86_uefi_pc calistir_bm_x86_uefi_kabuk calistir_bm_x86_uefi calistir_bm_x86_ps2 calistir_bm_x86_panik calistir_stdlib_ithal calistir_bm_x86_ekran calistir_bm_x86_kabuk calistir_bm_x86_usb calistir_bm_x86_ahci calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_surucu_kosum calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test calistir_chatgpt_kopru calistir_qtest calistir_bm_x86_nvme
+# [D-772] Ölçümlü tam koşum: her tarif satırı zaman_kabuk.sh üzerinden koşar, sonunda kapı başına
+# süre + en yavaş kapılar + build/ disk raporu basılır. Çıkış kodu test_tumu'nunkidir.
+ifneq ($(ZAMAN_KAYDI),)
+SHELL := $(abspath test/zaman_kabuk.sh)
+.SHELLFLAGS = $@ -c
+export KEMGU_ZAMAN_DOSYASI := $(abspath $(ZAMAN_KAYDI))
+endif
+.PHONY: test_tumu_olcum
+test_tumu_olcum:
+	@rm -f $(BUILD)/zaman.tsv; rc=0; $(MAKE) -k test_tumu ZAMAN_KAYDI=$(BUILD)/zaman.tsv || rc=$$?; \
+	 python3 test/zaman_raporu.py $(BUILD)/zaman.tsv $(BUILD) 15 | tee $(BUILD)/zaman_raporu.txt; exit $$rc
+
+test_tumu: calistir_cekirdek_onbellek calistir_bm_x86_surec_abi calistir_bm_x86_surec calistir_bm_x86_disk calistir_bm_x86_blok calistir_bm_x86_guc calistir_bm_x86_ps2_karma calistir_bm_x86_ps2_irq calistir_bm_x86_apic calistir_bm_x86_istisna calistir_bm_x86_uefi_pc calistir_bm_x86_uefi_kabuk calistir_bm_x86_uefi calistir_bm_x86_ps2 calistir_bm_x86_panik calistir_stdlib_ithal calistir_bm_x86_ekran calistir_bm_x86_kabuk calistir_bm_x86_usb calistir_bm_x86_ahci calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_surucu_kosum calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test calistir_chatgpt_kopru calistir_qtest calistir_bm_x86_nvme
 	@echo "Tum testler gecti!"
 
 # ============================================================================
@@ -4935,8 +4947,8 @@ calistir_bm_x86_ps2_irq: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm
 
 .PHONY: calistir_bm_x86_ps2_karma
 calistir_bm_x86_ps2_karma: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
+	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc_ps2karma.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
+	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc_ps2karma.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_guc
 calistir_bm_x86_guc: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
@@ -4967,6 +4979,12 @@ $(BUILD)/kullanici/self/%.elf: test/kullanici/%.kem $(KULLANICI_X86_GIRDI) $(BUI
 
 
 .PHONY: calistir_bm_x86_surec
+# [D-772] Çekirdek önbelleği kapısı (host, QEMU'suz): isabet, bayt eşitliği ve kaynak/derleyici
+# değişince geçersizleşme. test_tumu'da QEMU kapılarından ÖNCE koşar.
+.PHONY: calistir_cekirdek_onbellek
+calistir_cekirdek_onbellek: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/cekirdek_onbellek_harness.sh
+
 calistir_bm_x86_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_surec_harness.sh
 

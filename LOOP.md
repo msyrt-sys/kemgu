@@ -12,6 +12,15 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
+- [ ] TEST ALTYAPISI DENETİMİ + DETAYLI ÖLÇÜM (kullanıcı isteği, 2026-11-25). Tetikleyici: tam takım 4,5-5 sa,
+      20 çekirdekte yük ~1 (seri), her koşum ~25 GB geçici dizin bırakıyordu (D-771) ve aynı çekirdek ≥73 kez
+      derleniyordu (D-772). Kimse süreyi/diski ÖLÇMÜYORDU — doğruluk kapıları var, maliyet kapısı yoktu.
+      Araç hazır: `make test_tumu_olcum` (kapı başına süre, en yavaş 15, build/ boyutu; D-772). Yapılacak:
+      (a) kapı başına süre tablosu + QEMU açılış/kâhin bekleme payı; (b) geçici dizin/temizlik denetimi TÜM
+      harness'larda (mktemp, trap, başarısızlıkta bırak); (c) kendi çekirdeğini derleyen 8 harness önbelleğe;
+      (d) paralel koşum ön koşulları: paylaşılan build/ yazımları (D-468), sabit portlar, QEMU soket adları;
+      (e) tekrar eden işler (aynı ELF/imaj, aynı fsck) ve sleep/zaman aşımı payları; (f) değişikliğe göre
+      kapı seçimi (belge-yalnız değişiklikte tam takım gereksiz).
 - [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
       HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
@@ -3197,3 +3206,31 @@
   CI Windows ikinci koşumda KIRMIZI: calistir_kem_os_arm_ag → ag_arm_derle.py `ld.lld`yi Python'dan çağırıyor; Windows
   CreateProcess adında NOKTA olan programa `.exe` EKLEMEZ → WinError 2. ag_arm_derle.py + surec_elf.py araçları
   shutil.which ile çözüyor (PATHEXT). Depoda adında nokta olan başka Python-çağrılı araç yok (tarandı).
+- 2026-11-26 D-772: TEST ALTYAPISI HIZI — x86 çekirdek önbelleği + ölçümlü koşum. (Kullanıcı sorusu: "koşuların maliyeti".)
+  ÖLÇÜM ÖNCESİ: tam takım 4,5-6,5 sa, 20 çekirdekte yük ~1 (SERİ); bm_x86_uefi_harness.sh "ikililer her koşumda yeniden
+  üretilir" kuralıyla aynı çekirdeği tek koşumda ≥73 kez derliyordu (self-host 74,5 sn · C 10,7 sn). Önbellek: anahtar
+  çıktıyı belirleyen her girdinin içeriği (derleyici ikilisi, MSI yamasından SONRAKİ birleşik kaynak, awk süzgeci, bağlayıcı
+  betiği, 6 başlangıç nesnesi, IR derleme komutu, clang/ld.lld sürümü); isabet 0,1-0,2 sn ve dört ürün önbelleksiz
+  derlemeyle BAYT BAYT aynı; en yeni 16 kayıt; KEMGU_CEKIRDEK_ONBELLEK=0 kapatır. Kapı calistir_cekirdek_onbellek
+  (55 sn): isabet + bayt eşitliği + kaynak/derleyici değişince yeniden derleme. S249 (kaynak anahtardan çıktı) · S250
+  (derleyici anahtardan çıktı) · S251 (isabette yanlış ürün) → üçü de rc=2. `make test_tumu_olcum`: her tarif satırı
+  test/zaman_kabuk.sh'tan geçer, sonunda kapı başına süre + en yavaş 15 + build/ boyutu (varsayılan test_tumu/CI değişmedi).
+  İLK ÖLÇÜMLÜ KOŞUM (soğuk önbellek): duvar 5 sa 25 dk, 155 kapı; önbellek 103 isabet (codegen 48, C 55) / 18 derleme →
+  tahmini kazanç 48×74,5 + 55×10,7 ≈ 69 dk (A/B değil, derleme ölçümünden). QEMU kapıları sürenin %94'ü (61 kapı, ort.
+  4,4 dk, en uzun bm_x86_kaynak 25 dk); host kapıları toplam ~18 dk. calistir_bm_x86_program15 RTC "1 sn tık 4 sn içinde"
+  beklemesi bir kez kırmızı (QEMU sonucu gelmedi), tek başına 2/2 yeşil → zamanlama kırılganlığı, denetim maddesine.
+  ASIL KAZANÇ SIRADA: Codex aynı takımı -j6 ile 52 dk (dalga 16), -j4 ile ~1 sa 49 dk (dalga 17) koşmuş; seri koşan BİZİZ.
+  Projeksiyon (QEMU kapısı dalga başına +10..20; 67 → ~130-220): seri ~9,5-16 sa, -j6 ~1,8-3 sa, -j12 ~1-1,6 sa (doğrusal
+  ölçekleme varsayımı). x86 konuklar ARM ana makinede TCG zorunlu (KVM çapraz mimari yapmaz); /dev/kvm erişimi VAR → ARM
+  konukları KVM'de koşma adayı.
+  PARALEL KOŞUM (-j10 --output-sync=target): ilk deneme 41 dk ama 7 kapı KIRMIZI — uefi/uefi_kabuk/uefi_pc/apic/ps2_irq/
+  ps2_karma/blok build/_bm_uefi çalışma dizinini, uefi_pc+ps2_karma build/kem_os_pc.img'yi yarışarak paylaşıyordu; konak.kem
+  aynı .tmp'ye yazıyordu (Codex dalga 16 da görmüştü). Onarım: UEFI harness kapı kipinde koşum başına mktemp dizini (başarıda
+  silinir; yalnız-derle kipinde eski yol — tools/codex araçları), blok kendi dizini, ps2_karma ayrı imaj, konak.kem süreç
+  başına geçici ad, önbellek isabeti kopya düşerse yeniden derler (64 kayıt LRU). Yedi kapı -j7 birlikte rc=0 (12 dk).
+  TAM TAKIM -j10: rc=0, "Tum testler gecti!", FIXPOINT ✓, DUVAR 44 dk 59 sn (seri 5 sa 25 dk → ~7,2×); kapı toplamı
+  5 sa 19 dk. Artık kritik yol en uzun kapı: bm_x86_kaynak 24,5 dk (duvarın %54'ü) → sıradaki kazanç o kapıyı bölmek.
+  SÜREÇ TURLARI EŞZAMANLI (bm_x86_surec_harness: iki derleyicinin turu ayrı mktemp/QEMU ile aynı anda; SUREC_PARALEL=0
+  sıralı): bm_x86_kaynak 24,5 → 12,9 dk. TAM TAKIM -j10 (main'e yeniden temellenmiş): rc=0, "Tum testler gecti!", FIXPOINT ✓,
+  DUVAR 33 dk 41 sn (seri 5 sa 25 dk → ~9,7×), kapı toplamı 3 sa 48 dk. Yeni kritik yol bm_x86_ag_saglamlik 16,6 dk.
+
