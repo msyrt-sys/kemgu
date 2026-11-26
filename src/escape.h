@@ -166,6 +166,10 @@ int escape_kayitli_mi(const EscapeAnaliz *ea, const Dugum *d);
  * local-proof — bağlı değişkenin TÜM kullanımları yerinde okuma/yazma + retain-etmeyen
  * dizi-builtin ise 1. ρ_yerel free-routing'in TEK sound koşulu (escape DFA'ya GÜVENME). */
 int escape_kesin_yerel(const EscapeAnaliz *ea, const Dugum *d);
+/* [D-774] E4k-B: f (tekil ad) DÖNÜŞ-SAF ve dönüşü yok/skaler mi? Evetse çağıran f'e
+ * %rho yerine kendi ρ_yerel'ini verebilir (f bölgeye ayırdığı hiçbir şeyi dışarı
+ * veremez). escape_fn_tablo_kur sonrası anlamlıdır; tablo yoksa 0 (RED). */
+int escape_cagri_skaler_saf(const char *ad, int uz);
 
 /* Tahsis bolgesinin dongu derinligi (0 = islev seviyesi). */
 int escape_dongu_derinligi(const EscapeAnaliz *ea, const Dugum *d);

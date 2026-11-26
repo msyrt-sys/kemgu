@@ -1636,6 +1636,22 @@ static int dizi_eleman_struct_mi(const char *et) {
     return et[0] == '{';
 }
 
+/* [D-774] E4k-B — kullanıcı çağrısının ρ argümanı. Çağrılan DÖNÜŞ-SAF ise
+ * (escape.c: bölgeye ayırdığını yalnız dönüşle verir) ve (a) sonucu
+ * hapsedilmiş bir Dizi<skaler> bağlamasıdır (ÇAĞRI düğümü kesin_yerel) ya da
+ * (b) dönüşü yok/skalerdir (dışarı işaretçi çıkamaz), çağıranın ρ_yerel'i
+ * verilir: tahsisler çağıranın her `ret`inden önce topluca serbest. Aksi hâlde
+ * eski davranış (ρ_caller). Kanıt yoksa DAİMA eski yol. */
+static const char *cagri_rho_sec(LlvmGen *g, const Dugum *d) {
+    if (!g->rho_yerel || !g->aktif_escape || !d || d->tip != DUGUM_CAGRI) return g->rho_ref;
+    if (escape_kesin_yerel(g->aktif_escape, d)) return g->rho_yerel;
+    const Dugum *h = d->veri.cagri.hedef;
+    if (h && h->tip == DUGUM_TANIMLAYICI
+        && escape_cagri_skaler_saf(h->veri.tanimlayici.metin, h->veri.tanimlayici.uzunluk))
+        return g->rho_yerel;
+    return g->rho_ref;
+}
+
 /* F4.2b YÖNLENDİRME (SOUND, principle 1+3): dizi-tahsis-düğümü `dizi_d` için ρ seç.
  * ρ_yerel'e (serbest edilecek) SADECE: escape analizinde AÇIKÇA KAYITLI
  * (escape_kayitli_mi) VE BOLGE_YEREL (kaçmaz) VE skaler-eleman dizisi gider.
@@ -6540,12 +6556,14 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             /* V2-F4.2a: kullanıcı-fn (ik!=NULL) ρ ilk arg alır; built-in (ik==NULL:
              * yazdir/metin/dosya/...) ρ ALMAZ. D-257: çıplak user-fn → C-ABI, ρ YOK. */
             int u_rho = (ik != NULL) && !(ik->ast && ik->ast->veri.islev.ciplak_mi);
+            /* [D-774] E4k-B: dönüş-saf çağrılana ρ_yerel (çağıranın dönüşünde serbest). */
+            const char *u_rho_arg = cagri_rho_sec(g, d);
             if (strcmp(donus, "void") == 0) {
                 /* void-returning call: register atama yok */
                 fputs("  call void @", g->out);
                 yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
                 fputs("(", g->out);
-                if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);
+                if (u_rho) fprintf(g->out, "ptr %s", u_rho_arg);
                 for (int i = 0; i < n; i++) {
                     if (i > 0 || u_rho) fputs(", ", g->out);
                     fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);
@@ -6561,7 +6579,7 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
             fprintf(g->out, "  %%%d = call %s @", r, donus);
             yerel_ad_yaz(g->out, cagri_adi, cagri_adi_uz);
             fputs("(", g->out);
-            if (u_rho) fprintf(g->out, "ptr %s", g->rho_ref);   /* V2-F4.2a: ρ (kullanıcı-fn) */
+            if (u_rho) fprintf(g->out, "ptr %s", u_rho_arg);   /* V2-F4.2a: ρ (kullanıcı-fn) */
             for (int i = 0; i < n; i++) {
                 if (i > 0 || u_rho) fputs(", ", g->out);
                 fprintf(g->out, "%s %%%d", args[i].tip, args[i].reg);

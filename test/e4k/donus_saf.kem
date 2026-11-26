@@ -1,0 +1,74 @@
+// [D-774] E4k-B: dönüş-saf çağrılana çağıranın ρ_yerel'i verilir. Her `beklenen_*`
+// işlevinin adı kapının beklediği yönlendirmeyi söyler (kapı IR'dan okur):
+//   olumlu_*  : çağrı ρ_yerel ile yapılmalı
+//   olumsuz_* : çağrı %rho (ρ_caller) ile yapılmalı — aksi UAF olurdu
+// Program ASan altında koşar ve 42 döner; sayılar her yolun gerçekten çalıştığını gösterir.
+küresel değişken k_sayac: tam64 = 0;
+
+// --- olumlu: taze dizi kurup döndürür
+işlev saf_yap(n: tam32) -> Dizi<tam32> {
+    değişken d: Dizi<tam32> = [];
+    değişken j: tam32 = 0;
+    iken j < 40 { dizi_ekle(d, n + j); j = j + 1; }
+    ver d;
+}
+// --- olumlu: skaler döndüren, içeride saf_yap çağıran
+işlev saf_toplam(n: tam32) -> tam32 {
+    değişken r: Dizi<tam32> = saf_yap(n);
+    ver dizi_al(r, 0) + dizi_al(r, 39);
+}
+// --- olumsuz: dönüşü küresele de yazar (küresel yazım = dönüş-saf değil)
+işlev kirli_kuresel(n: tam32) -> tam32 {
+    değişken r: Dizi<tam32> = saf_yap(n);
+    güvensiz { k_sayac = k_sayac + 1; }
+    ver dizi_al(r, 1);
+}
+// --- olumsuz: parametre dizisini büyütür
+işlev kirli_buyut(p: Dizi<tam32>, n: tam32) -> tam32 {
+    dizi_ekle(p, n);
+    ver dizi_boyut(p);
+}
+// --- olumsuz: parametre dizisini takma adla büyütür
+işlev kirli_takma(p: Dizi<tam32>, n: tam32) -> tam32 {
+    değişken q: Dizi<tam32> = p;
+    dizi_ekle(q, n);
+    ver dizi_boyut(q);
+}
+// --- olumsuz: kendini çağırır (özyineleme -> RED)
+işlev kirli_ozyineli(n: tam32) -> tam32 {
+    eğer n <= 0 { ver 0; }
+    değişken r: Dizi<tam32> = saf_yap(n);
+    ver dizi_al(r, 0) - n + kirli_ozyineli(n - 1);
+}
+// --- olumsuz: dönüş-saf olmayan işlevi çağırır
+işlev kirli_zincir(n: tam32) -> tam32 { ver kirli_kuresel(n); }
+
+işlev olumlu_bagla() -> tam32 {
+    // hapsedilmiş Dizi bağlaması -> saf_yap(ρ_yerel)
+    değişken r: Dizi<tam32> = saf_yap(1);
+    ver dizi_al(r, 0);                                      // 1
+}
+işlev olumsuz_kacan() -> Dizi<tam32> {
+    // sonuç döndürülüyor (hapsedilmemiş) -> saf_yap(%rho)
+    değişken r: Dizi<tam32> = saf_yap(2);
+    ver r;
+}
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    değişken i: tam32 = 0;
+    değişken uzun: Dizi<tam32> = [];
+    iken i < 50 {
+        t = t + saf_toplam(0) - 39;                         // +0 (olumlu: skaler saf)
+        t = t + kirli_kuresel(0) - 1;                       // +0 (olumsuz)
+        t = t + kirli_zincir(0) - 1;                        // +0 (olumsuz)
+        i = i + 1;
+    }
+    t = t + kirli_buyut(uzun, 7) - 1;                       // +0 (olumsuz) uzun=[7]
+    t = t + kirli_takma(uzun, 8) - 2;                       // +0 (olumsuz) uzun=[7,8]
+    t = t + kirli_ozyineli(3);                              // +0
+    değişken k: Dizi<tam32> = olumsuz_kacan();
+    t = t + dizi_al(k, 0) - 2 + olumlu_bagla() - 1;        // +0
+    t = t + dizi_al(uzun, 0) + dizi_al(uzun, 1) + 27;      // 7+8+27 = 42
+    güvensiz { eğer k_sayac != 100 { ver 1; } }
+    ver t;
+}
