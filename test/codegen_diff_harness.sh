@@ -25,8 +25,9 @@ KORPUS=${KORPUS:-test/cg_korpus}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/cgdiff.XXXXXX" 2>/dev/null || echo "build/cgdiff.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/cgdiff) || exit 1
+calisma_izle "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
     # [D-486] Bu mesaj BAYATTI (D-072/CG1 donemi); kapi artik 155/155.

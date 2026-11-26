@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source test/calisma_dizini.sh
 if [[ -z "${SUREC_USB_CIKTI:-}" ]] && { ! command -v qemu-system-x86_64 >/dev/null || [[ ! -f /usr/share/OVMF/OVMF_CODE_4M.fd ]]; }; then
     echo 'ATLANDI (QEMU veya OVMF yok)'
     exit 0
 fi
 # [D-772] Bir derleyicinin turu: kullanıcı ELF'leri + çekirdek + kâhin. Dizin turun kendisine aittir.
-tur() {
+tur() (
     local derleyici=$1 w ad kaynak senaryo
     w=$(mktemp -d build/surec.XXXXXX)
+    calisma_izle "$w"
     mkdir -p "$w/kullanici"
     for kaynak in test/kullanici/*.kem; do
         ad="${kaynak##*/}"
@@ -28,7 +30,6 @@ tur() {
     echo "Süreç derleyicisi: $derleyici; ölçüm dizini: $w"
     if [[ -n "${SUREC_KAHIN:-}" ]]; then
         SUREC_KAHIN_DERLEYICI="$derleyici" python3 "tests/qemu/$SUREC_KAHIN.py" "$w"
-        rm -rf "$w"   # [D-771] aşağıdaki temizlikle aynı kural; bu dal ondan önce döner
         return 0
     fi
     for senaryo in ${SUREC_SENARYO:-matris}; do
@@ -36,8 +37,7 @@ tur() {
     done
     # [D-771] Başarılı turun çalışma dizini silinir (her tam koşum ~25 GB bırakıp diski dolduruyordu);
     # başarısız turda set -e erken çıkar ve dizin teşhis için kalır.
-    rm -rf "$w"
-}
+)
 
 DERLEYICILER=(${SUREC_DERLEYICILER:-build/kemgu build/codegen})
 # USB imaj üretimi tek derleyiciyle tek iş (eski davranış: ilk turdan sonra çıkış).
@@ -59,5 +59,4 @@ for k in "${!pidler[@]}"; do
     echo "── süreç turu: $d (rc=$r)"; cat "$g/${d##*/}.log"
     [[ $r -eq 0 ]] || kod=$r
 done
-rm -rf "$g"
-exit "$kod"
+calisma_bitir "$kod" "$g" || exit "$?"

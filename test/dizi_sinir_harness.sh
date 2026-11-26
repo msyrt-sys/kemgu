@@ -24,8 +24,9 @@ RT=${RT:-build/kdl_runtime.o}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/dizisinir.XXXXXX" 2>/dev/null || echo "build/dizisinir.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/dizisinir) || exit 1
+calisma_izle "$TMP"
 pass=0; fail=0
 
 # panic_bekle <ad> <kaynak>: OOB → PANIC (rc≠0, rc≠139, stderr PANIK) doğrula.

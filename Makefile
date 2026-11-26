@@ -4767,13 +4767,23 @@ SHELL := $(abspath test/zaman_kabuk.sh)
 .SHELLFLAGS = $@ -c
 export KEMGU_ZAMAN_DOSYASI := $(abspath $(ZAMAN_KAYDI))
 endif
-.PHONY: test_tumu_olcum calistir_kapi_butcesi
+.PHONY: test_tumu_olcum calistir_kapi_butcesi calistir_disk_denetimi
 test_tumu_olcum: | $(BUILD)
+	@python3 test/disk_denetimi.py basla $(BUILD) $(BUILD)/disk_baslangic.json
 	@rm -f $(BUILD)/zaman.tsv; takim=0; rapor=0; \
 	 $(MAKE) -k test_tumu ZAMAN_KAYDI=$(BUILD)/zaman.tsv || takim=$$?; \
 	 python3 test/zaman_raporu.py $(BUILD)/zaman.tsv $(BUILD) 15 > $(BUILD)/zaman_raporu.txt || rapor=$$?; \
+	 disk=0; python3 test/disk_denetimi.py denetle $(BUILD) $(BUILD)/disk_baslangic.json >> $(BUILD)/zaman_raporu.txt || disk=$$?; \
 	 cat $(BUILD)/zaman_raporu.txt || exit $$?; \
+	 if [ "$$takim" -eq 0 ] && [ "$$disk" -ne 0 ]; then exit "$$disk"; fi; \
 	 if [ "$$takim" -ne 0 ]; then exit "$$takim"; fi; exit "$$rapor"
+
+# İlk kullanımda karşılaştırma için gerçek takımın başlangıç kaydını oluştur.
+$(BUILD)/disk_baslangic.json: | $(BUILD)
+	+$(MAKE) -j10 --output-sync=target test_tumu_olcum
+
+calistir_disk_denetimi: $(BUILD)/disk_baslangic.json
+	@python3 test/disk_denetimi.py denetle $(BUILD) $(BUILD)/disk_baslangic.json
 
 test_tumu: calistir_kapi_butcesi
 calistir_kapi_butcesi: | $(BUILD)

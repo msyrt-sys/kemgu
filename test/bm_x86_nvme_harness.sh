@@ -18,7 +18,9 @@ if ! command -v "$QEMU" >/dev/null 2>&1; then
   echo "  ⚠ bm_x86_nvme: $QEMU YOK — kapı ATLANDI (CI ortamı; Spark'ta koşar)"; exit 0
 fi
 TEKRAR="${TEKRAR:-20}"
-W="build/_bm_nvme_$$"; mkdir -p "$W"; trap 'rm -rf "$W"' EXIT
+source test/calisma_dizini.sh
+W=$(calisma_ac build/_bm_nvme) || exit 1
+calisma_izle "$W"
 RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem"
 RT="$RT runtime/mimari/x86_64/kem_gc_yurut.kem"
 BM="clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only"

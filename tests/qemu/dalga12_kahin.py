@@ -235,7 +235,8 @@ class Console:
             # S5 son Enter basışında QMP'yi kapatabilir. Son tuş/tik yanıtı
             # gelmese de aşağıda hem gerçek süreç çıkışı hem tam seri çıktı şarttır.
             pass
-        assert self.p.wait(timeout=5)==0
+        kod = self.p.wait(timeout=5)
+        assert kod == 0, ('S5 QEMU çıkışı', kod, self.output()[-400:])
         assert self.output()==self.expected+'Sistem kapatılıyor.\n'.encode()
 
     def screen(self):

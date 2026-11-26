@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """USB dalları: gerçek QEMU, C ve self için ayrı süreç/imaj, toplam 58 sn sınır."""
 from pathlib import Path
-import os,sys,socket,subprocess,time,tempfile,shutil
+import os,sys,socket,subprocess,time,shutil
+from calisma_dizini import calisma_dizini
 from fat_kahin import dogrula as fat_dogrula
 ROOT=Path(__file__).resolve().parents[2]
 os.chdir(ROOT)
@@ -105,7 +106,7 @@ def qemu_kos(w,exe,eksik=False):
 
 def main():
     if MODE not in ['xhci','usb_depo','usb_kbd','usb_fare']:raise ValueError(MODE)
-    with tempfile.TemporaryDirectory(prefix='usb-qtest-',dir=ROOT/'build') as td:
+    with calisma_dizini(prefix='usb-qtest-',dir=ROOT/'build') as td:
         w=Path(td)
         bios=bytearray(65536);bios[0xfff0:0xfff3]=bytes([0xf4,0xeb,0xfd]);(w/'dur.bin').write_bytes(bios)
         for der in ['kemgu','codegen']:

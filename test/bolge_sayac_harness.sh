@@ -23,9 +23,10 @@ CC=${CC_BOLGE:-clang}
 command -v "$CC" >/dev/null 2>&1 || CC=gcc
 TUR=${TUR:-3}
 
-TMP=$(mktemp -d "build/bolge_sayac.XXXXXX" 2>/dev/null || echo "build/bolge_sayac.$$")
-mkdir -p "$TMP"
-trap 'rm -rf "$TMP"' EXIT
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/bolge_sayac) || exit 1
+calisma_izle "$TMP"
+
 
 SRC="runtime/kdl_bolge.c test/test_kdl_bolge_eszamanli.c"
 LIBS=""

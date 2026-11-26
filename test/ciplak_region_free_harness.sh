@@ -20,8 +20,9 @@ KEMGU=build/kemgu${EXE}
 SELF=build/codegen${EXE}
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
 # recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
-TMP=$(mktemp -d "build/ciplak_rf.XXXXXX" 2>/dev/null || echo "build/ciplak_rf.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/ciplak_rf) || exit 1
+calisma_izle "$TMP"
 gecti=0; kaldi=0
 
 # self-host binary'yi HER ZAMAN güncel codegen.kem'den üret (stale binary = yanlış PASS).
@@ -94,6 +95,5 @@ else
     echo "  ❌ normal döngü: self-host ρ_iter KAYBOLDU ($nr) — F4.3 regresyonu"; kaldi=$((kaldi+1))
 fi
 
-rm -rf "$TMP"
 echo "=== çıplak region-free IR parite: $gecti/$((gecti+kaldi)) ==="
 [ "$kaldi" -eq 0 ]

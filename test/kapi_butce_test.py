@@ -3,12 +3,13 @@
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 
 DIZIN = Path(__file__).resolve().parent
 ORNEK = DIZIN / "olcum"
+sys.path.insert(0, str(DIZIN.parent / "tests" / "qemu"))
+from calisma_dizini import calisma_dizini
 
 
 def rapor(kayit, butce, calisma, siki, beklenen):
@@ -42,7 +43,6 @@ def denetle(calisma):
 
 
 if __name__ == "__main__":
-    Path("build").mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="butce-", dir="build") as dizin:
+    with calisma_dizini(prefix="butce-") as dizin:
         denetle(Path(dizin))
     print("KAPI_BUTCE OK: toplama, sınır ve aşım, eksik bütçe, başarısız kapı, boş kayıt, sıfır süre")

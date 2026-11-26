@@ -27,8 +27,9 @@ RT=${RT:-build/kdl_runtime.o}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/modcg.XXXXXX" 2>/dev/null || echo "build/modcg.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/modcg) || exit 1
+calisma_izle "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
 # [D-486] EKSIK IKILI = HATA, ATLAMA DEGIL. Bu kapinin make hedefi

@@ -277,3 +277,214 @@ Yeni `calistir_kapi_butcesi` kapısının kendi üç koşumu 0,149 / 0,166 / 0,1
 Sıkı kipte yalnız süre aşımı raporu 3 ile bitirir. GNU Make tarif hatasını `Error 3` olarak gösterir ve çağıran sürece 2 döndürür. Ayrı bir tarif denemesinde hem takım hem rapor başarısız olduğunda takımın hatası öncelikli kaldı. Başarısız hedef raporda adıyla görüldü.
 
 İkinci tabandaki eşzamanlılık kapısı değişiklik yapılmadan üçüncü tabanda 20/20 geçti. Ayrıca kabuk izi açık koşumda kilit, semafor, semafor_n ve bariyerin her biri 100/100 kez beklenen 42 kodunu verdi. İkinci tabanın çıkış kodu 2 olarak korundu. İlk hatanın nedeni kesinleşmedi.
+
+## Bölüm 2 — geçici dosya envanteri
+
+Envanter 67 adet `test/*.sh`, bir adet `test/olcum/*.sh` ve 76 adet `tests/qemu/*.py` dosyasını kapsar. Çalışma dizini altındaki desenler üretilen dosya aileleridir. “Üst harness” sütunda belirtilen dosyayı içeren koşum dizininin sahibidir. Başarısızlıkta dizinin yolu stderr’e veya derleyici turunun günlüğüne yazılır.
+
+### test altındaki kabuk betikleri
+
+| Betik | Oluşturduğu çalışma dizini ve dosyalar | Başarı / hata |
+|---|---|---|
+| `ag_kosum_harness.sh` | build/agkosum.XXXXXX — dinleyici.exe, $2.ll, $2.exe, $2.srv, $2.out | Kendi dizinini siler / korur. |
+| `anahtar_kelime_kapisi.sh` | Kaynakları ve testleri tarar, sonucu stdout’a yazar. | Dosya üretmez. |
+| `asan_e2e_denetim.sh` | build/asan_denetim.XXXXXX — a.ll, a.exe | Kendi dizinini siler / korur. |
+| `asan_matris_calistir.sh` | build/asan_matris.XXXXXX — m.ll, n.exe, a.exe | Kendi dizinini siler / korur. |
+| `baremetal_diff_harness.sh` | build/bmdiff.XXXXXX — os.kem, os_c.ll, os_c.err, os_s.ll, os_c.d, os_s.d, $b.kem, c.ll, c.err, s.ll, c.d, s.d, p.ll, x86.kem, x86_c.ll, x86_c.err, x86_s.ll, x86_c.d, x86_s.d, x86_c.a, x86_s.a | Kendi dizinini siler / korur. |
+| `belge_kapisi_harness.sh` | JSON modülü ve korpus satırlarını okur, sonuç stdout’a gider. | Dosya üretmez. |
+| `bm_x86_ahci_harness.sh` | build/_bm_ahci.XXXXXX — comb.kem, ham.ll, err, k.ll, k.o, cerr, k.elf, lerr, disk.img, disk.img,if=none,id=d0,format=raw, seri.txt | Kendi dizinini siler / korur. |
+| `bm_x86_blok_harness.sh` | build/blok.XXXXXX | Kendi dizinini siler / korur. |
+| `bm_x86_disk_harness.sh` | disk.XXXXXX ya da DALGA12_CALISMA_DIZINI; disk imajları, çekirdek ve QEMU kayıtları. | Kendi dizinini siler / korur. Açıkça verilen dizin çağırana aittir. |
+| `bm_x86_ekran_harness.sh` | build/_bm_ekran.XXXXXX — comb.kem, ham.ll, err, k.ll, k.o, cerr, k.elf, lerr | Kendi dizinini siler / korur. |
+| `bm_x86_guc_harness.sh` | build/guc.XXXXXX | Kendi dizinini siler / korur. |
+| `bm_x86_istisna_harness.sh` | build/istisna.XXXXXX — k.elf, k.o, comb.kem, ham.ll, err, k.ll, cerr, lerr | Kendi dizinini siler / korur. |
+| `bm_x86_kabuk_harness.sh` | build/_bm_kabuk.XXXXXX — comb.kem, ham.ll, err, k.ll, k.o, cerr, k.elf, lerr | Kendi dizinini siler / korur. |
+| `bm_x86_mmio_volatile_harness.sh` | build/mmio.XXXXXX — k.ll, o2.ll | Kendi dizinini siler / korur. |
+| `bm_x86_msi_harness.sh` | build/msi.XXXXXX | Kendi dizinini siler / korur. |
+| `bm_x86_nic_harness.sh` | build/nic.XXXXXX — kem_os_x86_kabuk.kem, $program.elf, alicix.elf, arm-self, arm-self/kem_os.img, arp-kapali, arp-kapali/kem_os_x86_kabuk.kem, sunucu.elf, paket.elf, saat.elf, soketdeney.elf, ping.elf | Kendi dizinini siler / korur. |
+| `bm_x86_nvme_harness.sh` | build/_bm_nvme.XXXXXX — comb.kem, ham.ll, err, k.ll, k.o, cerr, k.elf, lerr, disk.img, disk.img,if=none,id=d0,format=raw, seri.txt | Kendi dizinini siler / korur. |
+| `bm_x86_panik_harness.sh` | build/_bm_panik.XXXXXX — k.elf, k.o, comb.kem, ham.ll, err, k.ll, cerr, lerr | Kendi dizinini siler / korur. |
+| `bm_x86_pat_harness.sh` | build/pat.XXXXXX | Kendi dizinini siler / korur. |
+| `bm_x86_ps2_harness.sh` | build/_bm_ps2.XXXXXX — k.elf, k.o, comb.kem, ham.ll, err, k.ll, cerr, lerr | Kendi dizinini siler / korur. |
+| `bm_x86_surec_abi_harness.sh` | build/surec_abi.XXXXXX — comb.kem, k.elf, k.o, seri, ham.ll, k.ll | Kendi dizinini siler / korur. |
+| `bm_x86_surec_harness.sh` | surec.XXXXXX, kullanıcı ELF’leri, disk, seri ve QMP; surec_gunluk.XXXXXX, derleyici günlükleri. SUREC_USB_CIKTI dış çıktıdır. | Her başarılı turu siler. Hatalı tur ve birleştirilmiş günlük dizini korunur. |
+| `bm_x86_uefi_harness.sh` | uefi.XXXXXX, k.elf/IR ve ESP. Yalnız-derle kipinde _bm_uefi veya verilen dizin. İçeriğe göre anahtarlanan çekirdek önbelleği. | Kendi açılış dizinini siler / korur. Yalnız-derle ürünü çağırana aittir. |
+| `bm_x86_usb_harness.sh` | build/_bm_usb.XXXXXX — comb.kem, ham.ll, err, k.ll, k.o, cerr, k.elf, lerr, disk.img, disk.img,if=none,id=u0,format=raw, seri.txt | Kendi dizinini siler / korur. |
+| `bolge_operand_harness.sh` | build/bolge_op.XXXXXX — c.ll, s.ll, c.env, s.env, c.rho, s.rho | Kendi dizinini siler / korur. |
+| `bolge_sayac_harness.sh` | build/bolge_sayac.XXXXXX — duz$EXE, duz.err, duz.out, p.c, p, tsan, tsan.err, tsan.out | Kendi dizinini siler / korur. |
+| `bolge_yonlendirme_harness.sh` | Derleyicinin LLVM çıktısını kabukta inceler. | Dosya üretmez. |
+| `calisma_dizini.sh` | Başlatanın verdiği dizine EXIT temizliği kurar. | Geçerse siler, hatada yolu bildirir. |
+| `cekirdek_onbellek_harness.sh` | build/obkapi.XXXXXX | Kendi dizinini siler / korur. |
+| `check_genis_harness.sh` | build/chkgenis.XXXXXX — c.chk, s.chk | Kendi dizinini siler / korur. |
+| `check_kapisi.sh` | check-kapisi.XXXXXX içinde kem_*_kapi.kem birleşik kaynakları. | Siler / korur. |
+| `checker_diff_harness.sh` | build/checkdiff.XXXXXX — oracle.txt, aday.txt | Kendi dizinini siler / korur. |
+| `ciplak_region_free_harness.sh` | build/ciplak_rf.XXXXXX — self.ll, dongu.kem, c_dongu.ll, s_dongu.ll, icin.kem, s_icin.ll, normal.kem, s_normal.ll | Kendi dizinini siler / korur. |
+| `codegen_bootstrap_harness.sh` | build/cgboot.XXXXXX — ref.ll, codegen.exe, cg.ll, r.txt, c.txt, stage0.ll, lexer_ref.exe, lexer_cg.exe, parser_ref.exe, parser_cg.exe, checker_ref.exe, checker_cg.exe, stage1.ll, codegen2.exe, stage2.ll | Kendi dizinini siler / korur. |
+| `codegen_diff_harness.sh` | build/cgdiff.XXXXXX — $b.c.ll, $b.c.exe, $b.k.ll, $b.k.exe | Kendi dizinini siler / korur. |
+| `codegen_genis_harness.sh` | build/cggenis.XXXXXX — $b.c.ll, $b.s.ll, $b.c.exe, $b.c.out, $b.s.exe, $b.s.out | Kendi dizinini siler / korur. |
+| `ct_bariyer_harness.sh` | Derleyicilerin IR metni kabuk değişkenindedir. | Dosya üretmez. |
+| `dizi_sinir_harness.sh` | build/dizisinir.XXXXXX — $ad.kem, $ad.ll, $ad.exe, $ad.out, $ad.err, $ad.c | Kendi dizinini siler / korur. |
+| `drf_gorunurluk_harness.sh` | build/drf_gor.XXXXXX — d.ll, d.exe | Kendi dizinini siler / korur. |
+| `e4k_harness.sh` | build/e4k.XXXXXX — $c.ll, $c.err, $c.y.ll, $c.bin, tsan_dene, rt_tsan.o, g_$c.ll, g_$c, g_$c.$r.log | Kendi dizinini siler / korur. |
+| `eszamanli_kosum_harness.sh` | build/eszamanli.XXXXXX — $m.kem, $m.ll, $m.err, $m.out, $m.clang, hatali-turlar.log | Kendi dizinini siler / korur. |
+| `gorev_msan_harness.sh` | build/gorev_msan.XXXXXX — p.c, p, t, e, o | Kendi dizinini siler / korur. |
+| `kanal_omru_harness.sh` | build/kanal_kapi.XXXXXX — $et.ll, $et, ${et}a, $et.err, $et-n.ll, $et-n | Kendi dizinini siler / korur. |
+| `kem_malloc_kompozisyon_harness.sh` | build/kemmalloc.XXXXXX — self.ll, $cg.ll, $cg.o, $cg.exe, $cg.out | Kendi dizinini siler / korur. |
+| `kripto_kosum_harness.sh` | build/_kripto_kosum.XXXXXX — bundle.kem, check.log, bundle.ll, gen.log, bundle.exe, link.log | Kendi dizinini siler / korur. |
+| `lambda_v2_harness.sh` | build/lambdav2.XXXXXX — $ad.ll, $ad.ce, $ad.exe, $ad.le | Kendi dizinini siler / korur. |
+| `lean_aksiyom_harness.sh` | build/tmp.XXXXXX — $f.olean, $, son_hata.txt, aksiyom_denetim.lean, aks.txt | Kendi dizinini siler / korur. |
+| `lean_sorry_harness.sh` | Lean kaynakları ve lakefile taranır, sonuç stdout’a yazılır. | Dosya üretmez. |
+| `lean_tam_harness.sh` | Lake derleme önbelleği ve modül ürünleri. | Lake yönetir, derleme çıktısı korunur. |
+| `lexer_bootstrap_harness.sh` | build/lexboot.XXXXXX — lex.ll, kemlex.exe, oracle.txt, aday.txt | Kendi dizinini siler / korur. |
+| `lexer_diff_harness.sh` | build/lexdiff.XXXXXX — lex.ll, kemlex.exe, oracle.txt, aday.txt | Kendi dizinini siler / korur. |
+| `modul_codegen_harness.sh` | build/modcg.XXXXXX — $b.c.ll, $b.s.ll, $b.c.exe, $b.c.out, $b.s.exe, $b.err, $b.s.out, $b.c.ad, $b.s.ad | Kendi dizinini siler / korur. |
+| `olcum/derleme_harness.sh` | derleme-olcum.XXXXXX, çekirdek ve IR; build/derleme_olcum.json. | Ara ürünleri siler / korur. Başarıda JSON ölçümü yayımlanır. |
+| `parser_bootstrap_harness.sh` | build/parseboot.XXXXXX — p.ll, kemparse.exe, oracle.txt, aday.txt | Kendi dizinini siler / korur. |
+| `parser_diff_harness.sh` | build/parsediff.XXXXXX — p.ll, kemparse.exe, oracle.txt, aday.txt | Kendi dizinini siler / korur. |
+| `perf_bellek_harness.sh` | build/perfbellek.XXXXXX — p.ll, p_$b | Kendi dizinini siler / korur. |
+| `qtest_harness.sh` | build/_qtest.XXXXXX — disk.img,if=none,id=d0,format=raw, $d.ll, $d.err, $d, $d.cerr, disk.img, qemu.log, $d.out | Kendi dizinini siler / korur. |
+| `selfhost_driver_harness.sh` | build/selfdrv.XXXXXX — self.ll, self2.ll, self2b.ll, o.txt, a.txt, llvm.out | Kendi dizinini siler / korur. |
+| `sifir_bolme_harness.sh` | build/sifir_bolme.XXXXXX — a.ll, a.exe | Kendi dizinini siler / korur. |
+| `sifir_uyari_harness.sh` | build/sifir_uyari.XXXXXX — uyari.log, o.o | Kendi dizinini siler / korur. |
+| `stdlib_ithal_harness.sh` | build/_stdlib_ithal.XXXXXX — $m.kem, $m.c, $m.s | Kendi dizinini siler / korur. |
+| `surucu_diff_harness.sh` | build/surdiff.XXXXXX — c.chk, s.chk, c.ll, s.ll, c.d, s.d | Kendi dizinini siler / korur. |
+| `surucu_kosum_harness.sh` | Doğrulama alt sürecini başlatır. | Alt süreç kendi ürünlerini yönetir. |
+| `tasma_harness.sh` | build/tasma.XXXXXX — a.ll, a_$O.exe | Kendi dizinini siler / korur. |
+| `test_llvm.sh` | build/llvm-test.XXXXXX — ${ad}.exe, ${ad}.ll, ${ad}.out.actual | Kendi dizinini siler / korur. |
+| `yapi_diff_harness.sh` | build/yapidiff.XXXXXX — c.ll, s.ll, c.d, s.d | Kendi dizinini siler / korur. |
+| `yigin_geri_harness.sh` | build/_yigin_geri.XXXXXX — birim.kem, b.ll, err | Kendi dizinini siler / korur. |
+| `zaman_kabuk.sh` | Tarifin hedefi, başlangıcı, bitişi ve kodu; KEMGU_ZAMAN_DOSYASI. | İstenen ölçüm dosyası korunur. |
+
+### tests/qemu altındaki Python modülleri
+
+| Modül | Ürünler veya erişim | Başarı / hata |
+|---|---|---|
+| `acilis_suresi.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `acpi_uefi_kahin.py` | QMP bellek dökümleri acpi-ram-*.bin | Üst harness siler / hata dizininde korur. |
+| `ag_arac_es.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_arac_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_arm_derle.py` | Çağıranın belirttiği ARM çekirdek dizininde birleşik kaynak, ham/süzülmüş IR, nesne ve ELF | Yolun sahibi çağırandır. |
+| `ag_arm_kahin.py` | Çalışma dizininde disk, seri ve qemu.log; build altında geçici Eş soket dizini | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `ag_arp_sessiz.py` | Verilen birleşik kaynak kopyasında görev senaryosu | Yolun sahibi çağırandır. |
+| `ag_es.py` | Host ağ soketi ve bellek içi çerçeve izi | Yeni geçici dosya yok. |
+| `ag_es_test.py` | build altında ham çerçeve/pcap fikstürleri | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `ag_http_ham_es.py` | Host Ethernet eşi üzerinden çerçeveler, bellek içi HTTP durumu | Yeni geçici dosya yok. |
+| `ag_http_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_iki_konuk.py` | İki ayrı konuk dizini, imajlar, pcap, kısa soket yolları için build içinde geçici dizinler | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `ag_l3_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_ntp_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_paket_buyuk.py` | Paket deposunda buyuk.elf ve paketler.txt, konuk imajları | Üst harness siler / hata dizininde korur. |
+| `ag_paket_kahin.py` | Test deposunda bozuk.elf ve paketler.txt, disk imajları | Üst harness siler / hata dizininde korur. |
+| `ag_parca_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_pc_matris.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_saglamlik_tel.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_soket_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_tablo_imaj.py` | Verilen birleşik kaynak kopyasına test tablosu | Yolun sahibi çağırandır. |
+| `ag_tcp_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_tcp_kayip.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_tcp_secenek.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_tftp_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_udp_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `ag_usb_kahin.py` | Depoda veri.bin, USB imajları ve pcap | Üst harness siler / hata dizininde korur. |
+| `apic_kahin.py` | apic-*.txt sayaç anlık görüntüleri | Üst harness siler / hata dizininde korur. |
+| `arac16_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `belge15_kahin.py` | Belgeden çıkarılan *.kem, bunların *.elf dosyaları ve kullanıcı diski | Üst harness siler / hata dizininde korur. |
+| `blok_kahin.py` | Aygıt başına *.img, seri ve blok-qemu.log | Üst harness siler / hata dizininde korur. |
+| `bm_ekran.py` | QEMU seri/QMP, ekran görüntüleri ve piksel kaydı | Üst harness siler / hata dizininde korur. |
+| `bm_istisna.py` | QMP soketi ve seri günlük | Üst harness siler / hata dizininde korur. |
+| `bm_kabuk.py` | qemu.log, qmp-schema.json, açılış başına *.seri ve disk imajları | Üst harness siler / hata dizininde korur. |
+| `bm_panik.py` | QMP soketi, seri ve panik görüntüsü | Üst harness siler / hata dizininde korur. |
+| `bm_ps2.py` | PS/2 QMP soketi ve kayıtları | Üst harness siler / hata dizininde korur. |
+| `bm_uefi.py` | Firmware değişken kopyası, USB/NVMe/SATA imajları, qemu.log, *.seri ve RAM dökümleri | Üst harness siler / hata dizininde korur. |
+| `boru_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `bozuk_elf_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `calisma_dizini.py` | build altındaki kemgu-py.* dizinlerinin yaşam döngüsü | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `dalga12_fat.py` | Çağıranın disk imajındaki FAT girdi ve sektörleri | Yolun sahibi çağırandır. |
+| `dalga12_imaj.py` | Verilen yolda EFI/GPT ve veri bölüm imajları | Yolun sahibi çağırandır. |
+| `dalga12_kahin.py` | dalga12.seri, dalga12-qemu.log, QMP soketi, *.fsck.log, pcap ve bölüm kopyaları | Üst harness siler / hata dizininde korur. |
+| `disk_hata_kahin.py` | Enjeksiyon yapılandırması ile senaryoya ait disk ve seri günlükleri | Üst harness siler / hata dizininde korur. |
+| `donanim_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri | Üst harness siler / hata dizininde korur. |
+| `duzenle_kahin.py` | Üst senaryonun diskine editör kaydı, ekran örnekleri | Üst harness siler / hata dizininde korur. |
+| `e1000_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `fat_kahin.py` | Verilen dosya sistemi imajındaki sektörler | Yolun sahibi çağırandır. |
+| `fat_yazici.py` | Verilen yola FAT imajı | Yolun sahibi çağırandır. |
+| `girdi15_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `guc_kahin.py` | guc-*.seri ve üst açılışın izleri | Üst harness siler / hata dizininde korur. |
+| `kabuk14_kahin.py` | Üst konsolda kabuk komutları ve test diski | Üst harness siler / hata dizininde korur. |
+| `kapat_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri | Üst harness siler / hata dizininde korur. |
+| `kaynak14_kahin.py` | Kaynak sayacı ölçümlerini içeren koşum dosyası | Üst harness siler / hata dizininde korur. |
+| `klavye16_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları, pcap | Üst harness siler / hata dizininde korur. |
+| `log_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `msi_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri | Üst harness siler / hata dizininde korur. |
+| `pat_kahin.py` | QEMU kayıtları ve bellek tipi ölçümleri | Üst harness siler / hata dizininde korur. |
+| `pc_matris.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `pcap_oku.py` | Mevcut pcap dosyasını okur | Yeni geçici dosya yok. |
+| `pci16_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri | Üst harness siler / hata dizininde korur. |
+| `program15_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `ps2_irq_kahin.py` | Üst konsolun IRQ, QMP ve seri kayıtları | Üst harness siler / hata dizininde korur. |
+| `psf_kahin.py` | Verilen yolda QMP screendump çıktısı | Üst harness siler / hata dizininde korur. |
+| `ramdisk_kahin.py` | İç ramdisk kopyası, dış bölüm imajları | Üst harness siler / hata dizininde korur. |
+| `saglamlik_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `surec_abi.py` | ABI belgesi, çalışma zamanı ve sarmalayıcı kaynaklarını okur | Yeni geçici dosya yok. |
+| `surec_elf.py` | Geçici bağlayıcı/LLVM IR/nesne dizini; çağıranın istediği kullanıcı ELF’i | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `surec_imaj.py` | Çağıranın dizininde kullanıcı programları içeren disk imajları | Yolun sahibi çağırandır. |
+| `surec_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `uefi_imaj.py` | Verilen yolda FAT/GPT imajı; build altındaki geçici FAT kopyası | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `uefi_kabuk_kahin.py` | kabuk-*.seri ve kabuk test diski | Üst harness siler / hata dizininde korur. |
+| `usb14_imaj.py` | Çağıranın seçtiği yolda kullanıcı USB imajı | Yolun sahibi çağırandır. |
+| `usb_harness.py` | build içinde USB qtest dizini, disk.img, qemu.log, dur.bin ve derleyici başına IR/ikili | Kendi geçici dizinini siler / yolunu bildirip korur. İstenen çıktı çağırana aittir. |
+| `usb_hub_kahin.py` | Senaryo dizinindeki QMP/seri günlükleri, USB/NVMe/SATA test imajları | Üst harness siler / hata dizininde korur. |
+| `v1_kahin.py` | Üst konsolun disk, görüntü ve seri kayıtları | Üst harness siler / hata dizininde korur. |
+
+### Disk kapısı ve MSI temizleme deneyi
+
+Bölüm 1 sonunda `build/` altında önceki tam koşumlardan kalan 93 geçici dizin vardı. Ölçümde toplam 2.283.462.656 bayt ayrılmıştı. Dizinler adlarıyla arşivlendi. Bölüm 2 pozitif ölçümü başlarken kökte geçici dizin sayısı sıfırdı. Başarıda yayımlanan derleme ölçümü `build/derleme_olcum.json` dosyasında bulunur.
+
+MSI harness’ının başarılı yolundaki `rm -rf "$w"` geçici olarak çıkarıldı. Gerçek MSI kapısı iki derleyici ve iki kesme kipinde tamamlandı (rc 0). Disk kapısının tarif kodu 1, GNU Make çıkışı 2 oldu. Ayrılmış alan 1.697.509.376 bayt arttı.
+
+```text
+Disk build: önce 2283470848 B, sonra 3980980224 B, büyüme +1697509376 B
+Geçici dizin: önce 0, sonra 4, yeni 4
+  yeni: build/msi.Tqlo7O
+  yeni: build/msi.XVrfpD
+  yeni: build/msi.aSa1Ar
+  yeni: build/msi.t0pOsz
+make: *** [Makefile:4782: calistir_disk_denetimi] Error 1
+```
+
+Kaynak geri alındı. Deney dizinleri adlarıyla arşivlendikten sonra aynı disk kapısı 0 geçici dizinle geçti. Kabuk ve Python yardımcıları ayrıca sınandı. Başarıda çalışma dizini silindi. Kontrollü hatada dosyalar ve tanı yolu korundu. Kabuktaki özgün çıkış kodu 23 kaldı.
+
+### İlk tam disk ölçümündeki yedi başarısız kapı
+
+`-j10` takımının ölçülen süresi 35 dk 47 sn, çıkış kodu 2. Aynı makinede başka bir çalışma ağacının da `-j10` tam takımı çalışıyordu. Saat 16.24’te bir dakikalık yük ortalaması 31,54 idi. Bu ağaçta 14, diğerinde 9 QEMU süreci sayıldı.
+
+```text
+  başarısız: calistir_bm_x86_cok_surec calistir_bm_x86_girdi15 calistir_bm_x86_guc calistir_bm_x86_kabuk14 calistir_bm_x86_msi calistir_bm_x86_pci16 calistir_bm_x86_ps2_irq
+Disk build: önce 3981037568 B, sonra 7169925120 B, büyüme +3188887552 B
+Geçici dizin: önce 0, sonra 13, yeni 13
+```
+
+Yedi başarısız kapının bildirdiği 13 dizin, disk kapısının listelediği 13 adla birebir eşleşti. Seri, ELF ve derleyici günlükleri arşivlendi. Güç kâhini kendini barındıran derleyicide kapatma sırasında konuktan “KABUK HATA ACPI S5 kapanmadi” aldı (QEMU rc 1). O ELF, başarılı taban koşumlarının kullandığı önbellek anahtarıyla bayt bayt eşitti (SHA-256 `3b558716096b9005ca9cb480c380a18b2644b2d7a76dfe44700ff21400034d80`). Girdi15 kâhininde 68 ms’lik tuş basışında beklenen 4–6 tekrarın 1’i görüldü. Çok süreç kâhininde seri gelmedi. Bu sonuçlar korunuyor.
+
+Ayrıca `make calistir_disk_denetimi` üç kez kökte sıfır geçici dizinle geçti (0,129 / 0,139 / 0,127 sn). Bütçe 60 sn.
+
+### İkinci tam disk ölçümü
+
+`-j10` takımının çıkış kodu 2. Yalnız hatalı kapıların bildirdiği dizinler arşivlendi. Bu kapıların ayrı tekrarları geçti.
+
+```text
+=== ZAMAN RAPORU: duvar saati 34 dk 55 sn · 155 kapı · kapı toplamı 3 sa 51 dk 23 sn · derleme/diğer 00 dk 00 sn ===
+  başarısız: calistir_bm_x86_program15
+Disk build: önce 7170084864 B, sonra 7599353856 B, büyüme +429268992 B
+Geçici dizin: önce 0, sonra 2, yeni 2
+```
+
+### Üçüncü tam disk ölçümü
+
+İlk koşumda adı yazılan tanı dizinleri arşivlendi. Ayrı `calistir_kem_os_x86` kapısı geçti. Aynı denetimlerle tam takım yeniden koştu (rc 0).
+
+```text
+=== ZAMAN RAPORU: duvar saati 35 dk 57 sn · 155 kapı · kapı toplamı 3 sa 54 dk 12 sn · derleme/diğer 00 dk 00 sn ===
+Disk build: önce 7599525888 B, sonra 7600599040 B, büyüme +1073152 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```

@@ -23,8 +23,9 @@ RT=${RT:-build/kdl_runtime.o}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/checkdiff.XXXXXX" 2>/dev/null || echo "build/checkdiff.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/checkdiff) || exit 1
+calisma_izle "$TMP"
 
 # [D-734] TEK KAYNAK (D10b/D10c): aday artık `selfhost/codegen.kem`in `--check`
 # yoludur. Eskiden ayrı bir kopya olan `selfhost/checker.kem` derlenip ölçülüyordu;

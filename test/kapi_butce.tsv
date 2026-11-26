@@ -89,6 +89,7 @@ calistir_codegen_diff	60	host
 calistir_codegen_genis	60	host
 calistir_ct_bariyer	60	derleme
 calistir_derleme_olcum	152	derleme
+calistir_disk_denetimi	60	host
 calistir_dizi_perf_test	60	host
 calistir_dizi_sinir_test	60	host
 calistir_drf_gorunurluk	60	host

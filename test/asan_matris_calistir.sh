@@ -47,8 +47,9 @@ if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/asan_matris.XXXXXX" 2>/dev/null || echo "build/asan_matris.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/asan_matris) || exit 1
+calisma_izle "$TMP"
 pass=0; fail=0
 
 for f in "$DIR"/m*.kem; do

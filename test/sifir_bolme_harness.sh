@@ -49,8 +49,9 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) ABORT_RC=127 ;;
     *)                    ABORT_RC=134 ;;
 esac
-TMP=$(mktemp -d "build/sifir_bolme.XXXXXX" 2>/dev/null || echo "build/sifir_bolme.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/sifir_bolme) || exit 1
+calisma_izle "$TMP"
 hata=0; olculen=0
 
 kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]

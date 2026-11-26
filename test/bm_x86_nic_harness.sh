@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source test/calisma_dizini.sh
 if ! command -v qemu-system-x86_64 >/dev/null || [[ ! -r /usr/share/OVMF/OVMF_CODE_4M.fd ]]; then
     echo 'ATLANDI (QEMU veya OVMF yok): NIC gidiş dönüşü'
     exit 0
 fi
 for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
     w=$(mktemp -d build/nic.XXXXXX)
+    trap 'calisma_hatasi "$?" "$w" || exit "$?"' EXIT
     echo "NIC derleyicisi $derleyici ($w)"
     kaynak=test/ornekler/kem_os_x86_kabuk.kem
     if [[ "${1:-e1000}" == saglamlik_ag ]]; then

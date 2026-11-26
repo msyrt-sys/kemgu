@@ -26,9 +26,10 @@ KEMGU="${KEMGU:-build/kemgu${EXE}}"
 RT=build/kdl_runtime.o
 [ -f "$RT" ] || { echo "🔴 HATA: $RT yok — kapı KOŞMADI"; exit 1; }
 
-TMP=$(mktemp -d "build/eszamanli.XXXXXX" 2>/dev/null || echo "build/eszamanli.$$")
-mkdir -p "$TMP"
-trap 'rm -rf "$TMP"' EXIT
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/eszamanli) || exit 1
+calisma_izle "$TMP"
+
 
 pass=0; fail=0
 # [D-668] `modul:test` ciftleri. `semafor_n` AYNI modulu (semafor) kullanir ama
@@ -55,14 +56,17 @@ for cift in kilit:kilit semafor:semafor semafor:semafor_n bariyer:bariyer; do
     fi
 
     kotu=0
-    for _ in $(seq 1 "$TUR"); do
+    for tur in $(seq 1 "$TUR"); do
         "$TMP/$m.out" >/dev/null 2>&1; son=$?
-        [ "$son" -eq 42 ] || kotu=$((kotu+1))
+        if [ "$son" -ne 42 ]; then
+            echo "  $m tur $tur/$TUR: çıkış $son" | tee -a "$TMP/hatali-turlar.log"
+            kotu=$((kotu+1))
+        fi
     done
     if [ "$kotu" -ne 0 ]; then
         case "$m" in
-            semafor_n) echo "  🔴 $m — $TUR turun $kotu'inde semafor n>1 sozlesmesi BOZUK (son cikis: $son; 1=n asildi 2=kilit gibi 3=olcum guvenilmez)" ;;
-            bariyer)   echo "  🔴 $m — $TUR turun $kotu'inde bariyer sozlesmesi BOZUK (son cikis: $son; 1=erken gecirdi 3=sayac bozuk)" ;;
+            semafor_n) echo "  🔴 $m — $TUR turun $kotu'inde semafor n>1 sozlesmesi BOZUK (1=n asildi 2=kilit gibi 3=olcum guvenilmez)" ;;
+            bariyer)   echo "  🔴 $m — $TUR turun $kotu'inde bariyer sozlesmesi BOZUK (1=erken gecirdi 3=sayac bozuk)" ;;
             *)         echo "  🔴 $m — $TUR turun $kotu'inde sayaç yanlış (karşılıklı dışlama YOK)" ;;
         esac
         fail=$((fail+1))

@@ -10,7 +10,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 D="${KEMGU:-build/kemgu}"
 T=$(mktemp -d build/obkapi.XXXXXX)
-trap 'rm -rf "$T"' EXIT
+
+source test/calisma_dizini.sh
+calisma_izle "$T"
 export KEMGU_CEKIRDEK_ONBELLEK_KOK="$T/ob" UEFI_YALNIZ_DERLE=1
 hata=0
 derle() {  # derle <derleyici> <kaynak> <calisma> <onbellek 0/1> -> "isabet"/"derlendi"/"kapali"

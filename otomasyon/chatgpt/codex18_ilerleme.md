@@ -15,3 +15,19 @@ Başlangıç 2026-11-26T14:07:15+03:00
 İki sabotaj uygulandı. Gerçek 120 sn bekleme, 60 sn bütçeli kapıyı 120,022 sn yaptı ve sıkı rapor 3 döndürdü. Bütçe tablosunun kopyasından aynı kapı silinince rapor “bütçe yok” uyarısı verdi.
 
 Bölüm süresi 1 sa 57 dk 15 sn. Son kapı takımı 10 dk 18 sn, make çıkış kodu 0.
+
+## Bölüm 2 — geçici dizinler ve disk denetimi
+
+67 kabuk betiği, derleme ölçüm harness’ı ve 76 QEMU Python modülü dosya sahipliği bakımından incelendi. Başarıda koşum dizinleri temizleniyor, hatada yol ve günlükler korunuyor. Ölçümlü takım disk büyümesini ve geride kalan dizinleri raporluyor.
+
+Önceki koşumlardan kalan 93 dizin arşivlendi. MSI temizliğini kaldırma sabotajında gerçek QEMU kapısı geçti, disk kapısı 4 dizini adıyla bildirdi (tarif rc 1, make rc 2). Kaynak geri alındı.
+
+Diğer bir tam takımla örtüşen ilk `-j10` ölçümünde 7 kapı başarısız oldu (rc 2). Bildirilen 13 tanı dizini saklandı. İkinci ölçümde program15 kapısının S5 kapanış denetimi hata verdi. Tekil tekrar geçti. Üçüncü `-j10` ölçümü rc 0 ile geçti. Bölümün standart QEMU ve önbellek kapıları bu tam koşumda, `calistir_kem_os_x86` ayrıca geçti.
+
+```text
+=== ZAMAN RAPORU: duvar saati 35 dk 57 sn · 155 kapı · kapı toplamı 3 sa 54 dk 12 sn · derleme/diğer 00 dk 00 sn ===
+Disk build: önce 7599525888 B, sonra 7600599040 B, büyüme +1073152 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```
+
+Bölüm süresi 2 sa 9 dk 20 sn.

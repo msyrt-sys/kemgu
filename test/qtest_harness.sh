@@ -20,9 +20,17 @@ if ! command -v "$QEMU" >/dev/null 2>&1; then
   echo "  ⚠ qtest: $QEMU YOK — kapı ATLANDI (CI ortamı; Spark'ta koşar)"; exit 0
 fi
 AYGIT="${1:-nvme}"
-W="build/_qtest_$$"; mkdir -p "$W"
+source test/calisma_dizini.sh
+W=$(calisma_ac build/_qtest) || exit 1
 QPID=""
-temizle() { [ -n "$QPID" ] && kill "$QPID" 2>/dev/null; wait 2>/dev/null; rm -rf "$W"; }
+temizle() {
+    local kod=$?
+    if [[ -n "$QPID" ]]; then
+        kill "$QPID" 2>/dev/null || true
+        wait "$QPID" 2>/dev/null || true
+    fi
+    calisma_bitir "$kod" "$W" || exit "$?"
+}
 trap temizle EXIT
 
 case "$AYGIT" in

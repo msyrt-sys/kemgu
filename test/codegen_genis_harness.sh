@@ -32,8 +32,9 @@ RT=${RT:-build/kdl_runtime.o}
 # (Git-for-Windows sh vs MSYS2), yani ayni dizgi iki AYRI gercek dizine
 # isaret ediyor. Depo-goreli yol bu belirsizligi tumden kaldirir ve
 # D-297in "build/ altinda PID-benzersiz yol" disiplinine de uyar.
-TMP=$(mktemp -d "build/cggenis.XXXXXX" 2>/dev/null || echo "build/cggenis.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/cggenis) || exit 1
+calisma_izle "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
 # [D-486] EKSIK IKILI = HATA, ATLAMA DEGIL. Bu kapinin make hedefi

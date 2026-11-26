@@ -25,8 +25,9 @@ RT=${RT:-build/kdl_runtime.o}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/cgboot.XXXXXX" 2>/dev/null || echo "build/cgboot.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/cgboot) || exit 1
+calisma_izle "$TMP"
 hata=0
 
 link() {  # $1=ll $2=exe ; Win11 .exe yeniden-yazım yarışına 3 deneme

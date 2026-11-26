@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import shutil
 import sys
-import tempfile
+from calisma_dizini import calisma_dizini
 
 from ag_arac_kahin import komut, pcap_akim
 from ag_arm_kahin import TCP, arm_ac
@@ -53,7 +53,7 @@ def arm(kok,imaj):
     w=hazir(kok,'es-x86')
     disk=imajlar(w,{})
     a=kok/'es-arm'
-    with tempfile.TemporaryDirectory(prefix='kem-ag-') as tmp:
+    with calisma_dizini(prefix='kem-ag-') as tmp:
         yol=Path(tmp)/'ether'
         with pc(w,disk,hat(yol,True),'52:54:00:17:19:01') as c:
             c.run('ag ayarla 192.0.2.1/24 192.0.2.2',b'AG AYAR OK\n')
@@ -92,7 +92,7 @@ def x86(kok,arp_kapali=False):
     sag={ad+'.elf':(kok/(ad+'.elf')).read_bytes() for ad in ('indir','nc','paket','tftp','ping')}
     sol_disk=imajlar(a,{} if arp_kapali else sol)
     sag_disk=imajlar(b,sag)
-    with tempfile.TemporaryDirectory(prefix='kem-iki-') as tmp:
+    with calisma_dizini(prefix='kem-iki-') as tmp:
         yol=Path(tmp)/'ether'
         with pc(a,sol_disk,hat(yol,True),'52:54:00:17:19:01') as c,pc(b,sag_disk,hat(yol,False),'52:54:00:17:19:02') as d:
             c.run('ag ayarla 192.0.2.1/24 192.0.2.2',b'AG AYAR OK\n')

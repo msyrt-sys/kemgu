@@ -29,10 +29,9 @@ RT=${RT:-build/kdl_runtime.o}
 TEST=${TEST:-test/stdlib/test_kripto_kosum.kem}
 ETIKET=${ETIKET:-C}   # [D-714] hangi derleyici olculuyor
 # Paralel koşumda birbirini ezmesin (D-297 dersi): PID ile benzersiz yol.
-TMP="build/_kripto_kosum_$$"
-mkdir -p "$TMP"
-temizle() { rm -rf "$TMP"; }
-trap temizle EXIT
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/_kripto_kosum) || exit 1
+calisma_izle "$TMP"
 
 BEKLENEN=255  # D-713: +128 OS rastgele · D-710: +64 BLAKE3 · D-709: +16 çok bloklu SHA-256, +32 HMAC-SHA256 (RFC 4231)
 

@@ -41,8 +41,9 @@ F=test/drf_gorunurluk.kem
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/drf_gor.XXXXXX" 2>/dev/null || echo "build/drf_gor.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/drf_gor) || exit 1
+calisma_izle "$TMP"
 TUR=${TUR:-100}
 
 # -O2 BILEREK: optimizasyon yeniden siralama firsatlarini artirir. -O0'da

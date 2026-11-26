@@ -29,8 +29,9 @@ CODEGEN="${CODEGEN:-build/codegen${EXE}}"
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/bolge_op.XXXXXX" 2>/dev/null || echo "build/bolge_op.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/bolge_op) || exit 1
+calisma_izle "$TMP"
 
 # ρ SINIFI: `%rho` (çağıran/parametre) mi, `%N` (yerel, kdl_bolge_olustur) mi?
 # Register NUMARASINI kasten YOK SAYAR — o iki derleyicide farklı olabilir ve

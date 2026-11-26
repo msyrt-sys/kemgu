@@ -9,7 +9,9 @@ set -u
 cd "$(dirname "$0")/.."
 CODEGEN="${CODEGEN:-build/codegen}"
 [ -x "$CODEGEN" ] || { echo "  🔴 $CODEGEN yok"; exit 2; }
-W="build/_yigin_geri_$$"; mkdir -p "$W"; trap 'rm -rf "$W"' EXIT
+source test/calisma_dizini.sh
+W=$(calisma_ac build/_yigin_geri) || exit 1
+calisma_izle "$W"
 kirmizi=0; toplam=0
 for f in test/cg_korpus/cg_dongu_yapi_yigin.kem test/cg_korpus/cg_dizi_yaz_genislik.kem test/ornekler/kem_os_x86_kabuk.kem; do
   if [ "$f" = test/ornekler/kem_os_x86_kabuk.kem ]; then

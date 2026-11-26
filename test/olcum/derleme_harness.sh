@@ -9,6 +9,10 @@ if ! python3 -c 'import os,subprocess,sys; sys.exit(0 if os.access("/usr/bin/tim
     echo "ATLANDI (/usr/bin/time ölçüm sürecinden çalıştırılamıyor — derleme ölçümü yapılmadı)"; exit 0
 fi
 w=$(mktemp -d build/derleme-olcum.XXXXXX)
+source test/calisma_dizini.sh
+calisma_izle "$w"
 UEFI_CALISMA_DIZINI="$w/uefi" UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 python3 test/olcum/derleme.py "$w/uefi/comb.kem" "$w" "$@"
-echo "DERLEME OK $w/olcum.json"
+# JSON kullanıcıya sunulan kalıcı ölçüm ürünüdür. IR ve geçici ikililer temizlenir.
+mv -f -- "$w/olcum.json" build/derleme_olcum.json
+echo "DERLEME OK build/derleme_olcum.json"
