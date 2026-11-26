@@ -298,6 +298,17 @@
       yolları; `değişken w = V[0]` gibi iç işaretçi takma adları İZLENMELİ, yoksa UAF) · E her aşamanın self-host karşılığı.
       ⚠ Tek bölge parametresi hem sonucu hem durum büyümesini taşıdığından `&değişken` durum dizisine yazan sürücü
       işlevleri B'yi GEÇEMEZ; A bu yüzden ön koşul (büyüme artık dizinin kendi bölgesinden).
+      ⚠ D-776 ÖLÇÜMÜ (D AŞAMASINI DEĞİŞTİRİR): kaçış değil ÜZERİNE YAZMA. Sızıntının baskın yolu `&değişken` durum
+      işlevleri ve durum alanına her adımda yeni dizi atanması (`s.kuyruk=[]`, `s.sonuc=[]`, `n.sayfalar=[]`; sürücülerde
+      11 yer). Eski dizi erişilemez ama durumun bölgesinde (ana bölge) kalır → HİÇBİR kaçış analizi onu serbest
+      bırakamaz; D-756'nın "escape v3" kararı bu sınıfı KAPATMAZ. İçerik dökümüyle (komut öncesi/sonrası ana bölgedeki
+      yeni KdlDizi başlıkları) iki ÇARPAN ölçüldü: (1) Dizi<tam8/dtam8/tam16> elemanları 4 baytlık `_tam` yuvasında —
+      512 baytlık sektör tamponu ~2 KB; (2) ikiye katlama büyümesi eski tamponları bırakır (~2×). Sektör okuması ~6 KB.
+      `mv` +720 KB'ın baskını kap=512/1024 bayt/tamsayı tamponları. Seçenekler: (a) gerçek 1/2 baytlık eleman
+      erişimcisi (iki derleyici + host runtime + kem_heap.kem; ABI) → 4× · (b) sürücülerde sabit kapasite + yerinde
+      yeniden kullanım (yeni `dizi_bosalt(d)`: boyut=0, tampon korunur) → üzerine yazma çöpü kalkar · (c) dönemsel
+      durum kopyalama (D-756'da RED). gdb (QEMU gdbstub) kesme noktası örnekleyicisi denendi: kararsız (VM durdukça
+      QMP tuşları reddediyor) → bırakıldı; içerik dökümü ucuz ve yeterli.
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
@@ -3298,4 +3309,14 @@
   mtime koşum ortasında 17:17:59 — zaman.tsv'den o anda koşan kapılar çıkarılıp bulundu). 2880 paralel tekrar ve
   ASan'lı self-host taraması (292 dosya + çekirdek) temizdi → derleyici çökmesi DEĞİL. İki harness artık kendi
   mktemp dizinine kurar. Benim eklediğim ciplak→codegen bağımlılığı kapının zamanlamasını kaydırıp yarışı SIKLAŞTIRDI.
-
+- 2026-11-26 D-776: C DERLEYİCİSİNDE DAR ELEMAN TAŞMASI (E4k-D ölçümü sırasında). `Dizi<dtam8>`/`Dizi<tam16>` BOŞ
+  literali (`[]`) başlığa eleman_byte 1/2 yazıyordu (`kdl_eleman_byte_yaz`); skaler erişimciler (`kdl_dizi_*_tam`) DAİMA
+  4 baytlık yuva yazar ve büyüme 4 ile yapılır, `eleman_byte`ı yalnız `kdl_dizi_kapasite_ayarla` (+ yapı yolu) okur →
+  `[]` + `dizi_kapasite_ayarla(d,N)` N bayt ayırıp 4N bayt yazdırıyordu: AYNI bölge bloğundaki komşu diziyi ezen taşma,
+  `güvensiz` YOK, --check temiz → SEGV (ölçüldü). ASan GÖRMEZ (bölge-içi bump tahsisi; ASan'lı runtime ile de temiz).
+  `dizi_olustur(N)` yolu ("i8/i16/i32 -> 4") ve self-host zaten 4 yazıyordu → yalnız literal yolu ayrışıyordu (D-407).
+  Bulunuşu: çekirdek ana bölgesinin içerik dökümünde eb=1 başlıklarının verisi 4 baytlık adımla yazılmıştı. Onarım tek
+  yardımcıda (i8/i16 → 4). Fikstür cg_korpus/cg_dar_eleman_kapasite.kem — tam8 + tam16 + POZİTİF tam32, ölçüm KOMŞU
+  dizinin bütünlüğü (ASan kör olduğu için). S270 (onarımı geri al) → fikstür SEGV (rc=139); geri → 42. Kapılar:
+  codegen_diff 230/230 · yapi_diff 208/208 (24 muaf) · bolge_operand 232/232 · llvm_test 321/321 · snapshot 50/50 ·
+  sıfır uyarı 38/0.

@@ -1745,10 +1745,16 @@ static void kdl_eleman_byte_yaz(FILE *out, const char *et) {
             "ptrtoint (ptr getelementptr (%s, ptr null, i32 1) to i32)", et);
         return;
     }
+    /* [D-776] i8/i16 eleman DA 4 bayttir. Skaler erisimciler (`kdl_dizi_*_tam`)
+     * DAIMA 4 baytlik yuva yazar/okur ve buyume de 4 ile yapilir; `eleman_byte`
+     * yalniz `kdl_dizi_kapasite_ayarla` (ve yapi yolu) tarafindan okunur. Eskiden
+     * burada i8->1, i16->2 yaziliyordu: `Dizi<dtam8> = []` + `dizi_kapasite_ayarla
+     * (d, N)` N BAYT ayiriyor, eklemeler 4N bayt yaziyordu -> bolge blogu icinde
+     * komsu tahsisi ezen TASMA (olculdu: SEGV; ASan blok-ici bump tahsisi
+     * GORMEZ). `dizi_olustur(N)` yolu (i8/i16/i32 -> 4) ve self-host zaten 4
+     * yaziyordu; bu yardimci onlarla hizalandi. */
     int eb = 4;
-    if (et && strcmp(et, "i8") == 0) eb = 1;
-    else if (et && strcmp(et, "i16") == 0) eb = 2;
-    else if (et && (strcmp(et, "i64") == 0 || strcmp(et, "double") == 0 ||
+    if (et && (strcmp(et, "i64") == 0 || strcmp(et, "double") == 0 ||
                     strcmp(et, "ptr") == 0)) eb = 8;
     fprintf(out, "%d", eb);
 }
