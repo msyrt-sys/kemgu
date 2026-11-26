@@ -7,6 +7,12 @@ import sys
 from ag_arm_kahin import kos
 
 
+
+def arac(ad):
+    """[D-771] Araç yolunu PATH(EXT) ile çöz. Windows CreateProcess adında nokta olan programa
+    `.exe` eklemez (`ld.lld` → WinError 2, CI); shutil.which PATHEXT'i uygular."""
+    return shutil.which(ad) or ad
+
 def derle(w,derleyici,kaynak):
     w.mkdir(exist_ok=True,parents=True)
     ham=w/'ham.ll'
@@ -20,19 +26,19 @@ def derle(w,derleyici,kaynak):
     with ham.open('wb') as f:
         subprocess.run([derleyici,'--llvm','--mimari','arm64',kaynak],stdout=f,check=True)
     with ir.open('wb') as f:
-        subprocess.run(['awk','-f','test/strip_defined_declares.awk',ham],stdout=f,check=True)
-    subprocess.run(['clang','-target','aarch64-unknown-none','-ffreestanding','-nostdlib','-O2',
+        subprocess.run([arac('awk'),'-f','test/strip_defined_declares.awk',ham],stdout=f,check=True)
+    subprocess.run([arac('clang'),'-target','aarch64-unknown-none','-ffreestanding','-nostdlib','-O2',
                     '-Wno-override-module','-ffunction-sections','-fdata-sections','-x','ir',ir,'-c','-o',nesne],check=True)
     # KEMGU-OS'un kullanıcı bölümlerini özgün bağlayıcı betiğinin karşıladığı adlara taşı.
-    semboller=subprocess.check_output(['llvm-nm',nesne],text=True)
+    semboller=subprocess.check_output([arac('llvm-nm'),nesne],text=True)
     bayrak=[]
     for ad in sorted({l.split()[-1] for l in semboller.splitlines() if l.split() and l.split()[-1].startswith('kul_')}):
         for src,dst in (('text','user'),('data','user_data'),('bss','user_data'),('rodata','user_data')):
             bayrak.append(f'--rename-section=.{src}.{ad}=.{dst}.{ad}')
-    subprocess.run(['llvm-objcopy',*bayrak,nesne,hedef],check=True)
-    subprocess.run(['ld.lld','-m','aarch64linux','-T','linker/bare-metal-aarch64.ld','--defsym=__kem_yukleme_tabani=0x40080000',
+    subprocess.run([arac('llvm-objcopy'),*bayrak,nesne,hedef],check=True)
+    subprocess.run([arac('ld.lld'),'-m','aarch64linux','-T','linker/bare-metal-aarch64.ld','--defsym=__kem_yukleme_tabani=0x40080000',
                     '--gc-sections','-o',elf,hedef,'build/bm_a64_start.o'],check=True)
-    subprocess.run(['llvm-objcopy','-O','binary',elf,imaj],check=True)
+    subprocess.run([arac('llvm-objcopy'),'-O','binary',elf,imaj],check=True)
     return imaj
 
 

@@ -3194,3 +3194,6 @@
   CI Windows ilk koşumda KIRMIZI: test_tumu → calistir_bm_x86_paket → kem_os_paket_deposu QEMU olmayan Windows'ta da
   kullanıcı ELF'lerini derletiyordu; surec_elf.py yerel Python'dan MSYS `awk`ını çağırınca WinError 2. Depo yalnız QEMU
   kapılarının girdisi → önkoşul PAKET_DEPOSU_ON ile yalnız QEMU+OVMF varken (dört kapı; kapılar QEMU yoksa zaten ATLANDI).
+  CI Windows ikinci koşumda KIRMIZI: calistir_kem_os_arm_ag → ag_arm_derle.py `ld.lld`yi Python'dan çağırıyor; Windows
+  CreateProcess adında NOKTA olan programa `.exe` EKLEMEZ → WinError 2. ag_arm_derle.py + surec_elf.py araçları
+  shutil.which ile çözüyor (PATHEXT). Depoda adında nokta olan başka Python-çağrılı araç yok (tarandı).
