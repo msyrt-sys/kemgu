@@ -3233,4 +3233,15 @@
   SÜREÇ TURLARI EŞZAMANLI (bm_x86_surec_harness: iki derleyicinin turu ayrı mktemp/QEMU ile aynı anda; SUREC_PARALEL=0
   sıralı): bm_x86_kaynak 24,5 → 12,9 dk. TAM TAKIM -j10 (main'e yeniden temellenmiş): rc=0, "Tum testler gecti!", FIXPOINT ✓,
   DUVAR 33 dk 41 sn (seri 5 sa 25 dk → ~9,7×), kapı toplamı 3 sa 48 dk. Yeni kritik yol bm_x86_ag_saglamlik 16,6 dk.
+- 2026-11-26 D-773: Codex dalga 18 promptu (otomasyon/chatgpt/CODEX_GOREV_18.md) — TEST ALTYAPISI + x86 SMP, YİRMİ bölüm.
+  Kullanıcı seçimi ("Altyapı + SMP"). Bölüm 1-8 altyapı: süre bütçesi + gerileme kapısı, bütün harness'larda geçici dizin
+  denetimi, önbellek mantığı tek kaynaklı kütüphaneye + kendi çekirdeğini derleyen 8 harness, ≤10 dk kuralıyla kapı bölme
+  (kapsam multiset kanıtı), program15 RTC + 58 sabit `sleep` sınıflandırması, statik paylaşım denetimi + -j20 stres,
+  değişikliğe göre kapı seçici (eşlenmeyen dosya → tam takım), CI -j. Bölüm 9-20 SMP: MADT işlemci süzgeci + QMP
+  query-cpus-fast kâhini, UEFI bellek haritasından trampolin sayfası + INIT-SIPI-SIPI (yeni boot/ap_x86_64.S), GS tabanlı
+  çekirdek başı veri + AP TSS/LAPIC, bilet kilidi + sıra denetimi + saf model, IPI, SMP-güvenli çerçeve ayırıcı + heap
+  kilidi, TLB vurgulama, iş çalan zamanlayıcı + büyük çekirdek kilidi, ABI 91-99, paralel kullanıcı programı, sağlamlık,
+  PC matrisi -smp ekseni. Claude doğruladı: son ABI çağrısı 90; `-smp 4 -accel tcg,thread=multi` uyarısız açılıyor;
+  madt.kem + smp_x86.c (başvuru) mevcut; satıriçi_asm x86 çekirdekte kullanılabilir; belge/kapı adları Makefile'da var.
+  Ön koşul: D-772 (#245) ve D-773 main'de.
 
