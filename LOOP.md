@@ -3360,3 +3360,10 @@
   doğrudan). Sabotajlar: S277 C oluşturma 4 → C bump 262336 · S278 self oluşturma 4 → self · S279 çekirdek eb yok
   sayılır → ikisi · S280 host eb yok sayılır → bayt düzeni testleri. Hepsi KIRMIZI. Hedefli: codegen_diff 230/230 ·
   yapi_diff 208/208 · bolge_operand 232/232 · llvm 321/321 · snapshot 50/50 · dizi_sinir 39/39 · FIXPOINT ✓.
+  Tam takım (nice -j6, Codex seri ölçümüyle aynı anda; 155 kapı, 48 dk): iki kırmızı (bm_x86_kaynak, bm_x86_ag_pc), TEK
+  kök ÖLÇÜM ARACINDA: surec_kahin.bos_cerceve konuk belleğindeki ayırıcı bitmap'ini (Dizi<dtam8>) "her eleman 32 bitlik
+  yuvada" varsayımıyla `[::4]` okuyordu → süreç 3594 yerine "896 çerçeve" göründü. Çekirdeğe geçici yazdırmayla ELF
+  girişi DOĞRU (0x54200000) ölçüldü; host ve bare-metal probe'larında oku_le64 doğru → derleyici/çekirdek kusuru DEĞİL.
+  Okuyucu artık yuva genişliğini başlıktan (eleman_byte @16) alır; iki kapı yeşil (kaynak tam 3594 iddiasıyla).
+  ⚠ DERS: dizi yerleşimini değiştirmek konuk belleğini HAM okuyan Python kâhinlerini de etkiler; tarama `[::4]`
+  ile yapıldı, diğer eşleşme (ag_l3_kahin) yalnız hata mesajında.

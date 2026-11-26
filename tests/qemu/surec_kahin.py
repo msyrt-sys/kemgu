@@ -67,10 +67,12 @@ class SurecConsole(Console):
         # Sürücünün sayacını değil, fiziksel ayırıcının gerçek bitmap'ini say.
         ayirici = self.sayi("uefi_surec_ayirici")
         _, bitmap, _, toplam = struct.unpack("<3QI", self.mem(ayirici, 28))
-        adres, boy = struct.unpack("<QI", self.mem(bitmap, 12))
+        # KdlDizi başlığı { veri@0, boyut@8, kapasite@12, eleman_byte@16 }. [D-778] Yuva
+        # genişliği BAŞLIKTAN okunur: dar eleman (dtam8) artık 1 bayt; eski düzen 4 bayttı.
+        adres, boy, _kap, eb = struct.unpack("<QiiI", self.mem(bitmap, 20))
         assert boy == (toplam + 7) // 8
-        # Dizi<dtam8> çalışma zamanında her elemanı 32 bitlik yuvada tutar.
-        bitler = self.mem(adres, boy * 4)[::4]
+        adim = eb if eb in (1, 2) else 4
+        bitler = self.mem(adres, boy * adim)[::adim]
         return toplam - sum(v.bit_count() for v in bitler)
 
 
