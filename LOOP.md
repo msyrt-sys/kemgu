@@ -3320,3 +3320,26 @@
   dizinin bütünlüğü (ASan kör olduğu için). S270 (onarımı geri al) → fikstür SEGV (rc=139); geri → 42. Kapılar:
   codegen_diff 230/230 · yapi_diff 208/208 (24 muaf) · bolge_operand 232/232 · llvm_test 321/321 · snapshot 50/50 ·
   sıfır uyarı 38/0.
+- 2026-11-27 D-777: E4k-D (b) — YERİNDE UZATMA + çekirdek OOM koruması + kalıcı ölçüm. Mehmet (b)'yi seçti (sabit kapasite
+  + yerinde yeniden kullanım). ÖLÇÜM PLANI DEĞİŞTİRDİ: (1) `s.sonuc=[]` türü alan sıfırlamaları yalnız 32 B başlık ayırır
+  ve `s.kimlik=s.sonuc` gibi takma adlar var → `dizi_bosalt` ile yerinde boşaltma YANLIŞ SONUÇ üretirdi; yerleşik
+  EKLENMEDİ (güvenli + değerli kullanım yeri bulunamadı). (2) Oluşturucu atfı (çekirdek IR'ında kdl_dizi_olustur'a
+  llvm.returnaddress → başlık ofset 20): `mv`de bayt_sifir 181 dizi/135 KB, onbellek.kopya 39/81 KB, fsy_dizin, depo,
+  bm_bellek_oku (247 × 16 B yoklama) — ama oluşturan ile BÜYÜTEN farklı; üreticilerde kapasite rezervasyonu (5 yer)
+  ölçülebilir kazanç VERMEDİ → geri alındı. (3) ⚠ DOSYA OTURUMU HEAP KULLANIMI ZAMANLAMAYA BAĞLI: aygıt yoklama
+  döngüleri her turda tahsis eder; aynı kaynağın yalnız ÖLÜ kodla farklı iki derlemesi 2,42 MB / 1,62 MB verdi (kod
+  yerleşimi → TCG hızı → yoklama sayısı). Toplam-bayt bütçe kapısı bu yüzden AYIRT EDİCİ DEĞİL (S271 sessiz kaldı) →
+  eklenmedi. ÇÖZÜM SİSTEMİK: bump bölgede büyüyen dizi çoğunlukla aktif bloğun EN SON tahsisidir → tampon yerinde
+  uzatılır (kem_heap.kem kem_dizi_buyut + host kdl_bolge_uzat/kdl_dizi_buyut, aynı kural). Gerçek etki ~%13-15
+  (dosya oturumu 1,62 → 1,40 MB); 64 KB'ı aşan tampon adanmış blokta durur, orada uzatma yok. Yol üstünde: çekirdek
+  kem_dizi_buyut tahsis başarısızsa `veri=0` + büyük kapasite yazıyordu (D-579'un çekirdek yarısı AÇIKTI) → heap
+  tükenince fiziksel düşük adreslere sessiz yazma; artık host ile birebir temiz panik; kapasite_ayarla başarısızlıkta
+  dokunmaz. Ayrıca Makefile kdl_runtime.d'yi DAHİL ETMİYORDU → kdl_dizi.inc/kdl_bolge.c değişince artımlı yapım
+  runtime'ı YENİDEN KURMUYORDU (kapılar bayat runtime ölçüyordu; CI temiz kurduğu için görünmez). Kapılar:
+  calistir_bm_x86_heap_uzat (deterministik, yoklama yok: 64 dizi × 1024 eleman; bump açık C 262336 / self 327952,
+  kapalı C 524672 / self 590288 → eşik 400000; + `oom` kipi temiz panik) · calistir_dizi_uzat_test (host: işaretçi
+  kararlılığı + iç içe içerik) · test_kdl_bolge T8 (41/41). Sabotajlar: S271 çekirdek uzatma kapalı → bump eşik üstü ·
+  S272 "en son tahsis" koşulu kalktı → içerik bozuk · S273 host uzatma daima 0 → işaretçi testi · S274 host koşul kalktı
+  → iç içe içerik · S275 çekirdek OOM koruması yok → #PF, panik yok. Hepsi KIRMIZI.
+  KALAN E4k: yoklama döngüsü tahsisleri (zamanlamaya bağlı, gerçek donanımda daha kötü) + çağrı sonucu/durum yazımı
+  (D-776 notu) + (a) gerçek 1/2 baytlık eleman (4×).

@@ -150,10 +150,30 @@ void kdl_bolge_serbest(KdlBolge *b) {
 int kdl_bolge_bu_is_parcacigi(const KdlBolge *b) {   /* [D-770] */
     return b && b->sahip_ip == KDL_BOLGE_IP_ISARET;
 }
+
+/* [D-777] Yerinde uzatma: p aktif blogun EN SON tahsisiyse (eski_n bayt, 16-hizali
+ * sonu bump ucuna denk) ve ek alan blokta varsa tahsisi yeni_n bayta uzatir, 1 doner.
+ * Degilse hicbir sey yapmaz, 0 doner (cagiran yeni tampon + kopya yoluna gider).
+ * Dizi buyumesinde eski tamponun bolgede cop olarak kalmasini onler. */
+int kdl_bolge_uzat(KdlBolge *b, void *p, uint64_t eski_n, uint64_t yeni_n) {
+    if (!b || !p || !b->bas || yeni_n < eski_n) return 0;
+    KdlBolgeBlok *blok = b->bas;
+    uint64_t e = hiza_yukari(eski_n), y = hiza_yukari(yeni_n);
+    if (e < eski_n || y < yeni_n) return 0;                 /* hizalama tasmasi */
+    uintptr_t uc = (uintptr_t)blok->veri + (uintptr_t)blok->kullanilan;
+    if ((uintptr_t)p + (uintptr_t)e != uc) return 0;        /* en son tahsis degil */
+    if (y - e > blok->kapasite - blok->kullanilan) return 0; /* yer yok */
+    blok->kullanilan += y - e;
+    return 1;
+}
 #else
 /* KEM_MALLOC (kem_os saf-.kem bolgeleri): cekirdek ayiricisi tek baglamli
  * kabul edilir (kem_heap.kem buyumeyi zaten kendi bolgesinden yapar). */
 int kdl_bolge_bu_is_parcacigi(const KdlBolge *b) { return b != 0; }
+/* [D-777] KEM_MALLOC: yerinde uzatma kem_heap.kem'in kem_dizi_buyut'unda yapilir. */
+int kdl_bolge_uzat(KdlBolge *b, void *p, uint64_t eski_n, uint64_t yeni_n) {
+    (void)b; (void)p; (void)eski_n; (void)yeni_n; return 0;
+}
 #endif  /* !KEMGU_KEM_MALLOC — region primitifleri .kem'den (kem_os) */
 
 int kdl_bolge_bakiye(void) {
