@@ -1,0 +1,24 @@
+// [D-774] E4k-B: döngü bir yardımcıyı çağırıyor, yardımcı dönüş-saf `yap`ı çağırıp sonucu
+// yalnız yerelde okuyor. Önceden `yap`ın dizisi ve büyütme tamponları ana bölgeye düşüyordu
+// (200K çağrıda zirve 407 MB); dönüş-saf özetiyle yardımcının ρ_yerel'ine gider ve her
+// dönüşte serbest kalır (1,1 MB). Kapı ana bölge blok sayısını ölçer.
+işlev yap(n: tam32) -> Dizi<tam32> {
+    değişken d: Dizi<tam32> = [];
+    değişken j: tam32 = 0;
+    iken j < 256 { dizi_ekle(d, n + j); j = j + 1; }
+    ver d;
+}
+işlev islem(n: tam32) -> tam32 {
+    değişken r: Dizi<tam32> = yap(n);
+    ver dizi_al(r, 255);
+}
+işlev main() -> tam32 {
+    değişken t: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < 4000 {
+        t = t + (islem(i) olarak tam64);
+        i = i + 1;
+    }
+    eğer t < 0 { ver 1; }
+    ver 0;
+}

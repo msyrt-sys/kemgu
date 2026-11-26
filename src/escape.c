@@ -540,6 +540,7 @@ typedef struct EaFnKayit {
     const char *ad;
     int uz;
     const Dugum *islev;
+    int ds_durum;          /* [D-774] 0 hesaplanmadı · 1 dönüş-saf · 2 değil (yalnız üst düzey sonuç önbelleği) */
 } EaFnKayit;
 
 /* ky_confined ile karsilikli ozyineli — ileri bildirim. */
@@ -950,6 +951,345 @@ static int ky_confined(const Dugum *d, const char *ad, int uz) {
     }
 }
 
+/* ===================================================================
+ * [D-774] E4k-B — "DÖNÜŞ-SAF" ÇAĞRILAN ÖZETİ.
+ *
+ * Soru: f, ÇAĞIRANIN verdiği bölgeye (%rho) ayırdığı HER ŞEYİ yalnız dönüş
+ * değeriyle mi dışarı verir? Evetse çağıran, sonucu hapsedilmiş bir
+ * değişkene bağladığında %rho yerine KENDİ ρ_yerel'ini verebilir: f'in
+ * bütün tahsisleri çağıranın dönüşünde topluca serbest kalır (bugün ana
+ * bölgeye, zincir boyunca main'inkine düşüyorlar — D-770 ölçümü).
+ *
+ * VARSAYILAN RED. Sağlamlık koşulları (hepsi POZİTİF olarak aranır):
+ *  P1 imza: generic değil, çıplak değil, parametreler yalnız skaler/metin/
+ *     Dizi<skaler> (referans, işaretçi, yapı, kapanış, kendin → RED);
+ *     dönüş yok/skaler/metin/Dizi<skaler>. Dizi<skaler> işaretçi tutamaz →
+ *     ρ'daki bir değer parametre üzerinden dışarı taşınamaz.
+ *  P2 gövde atamaları yalnız f'in KENDİ yerellerine/parametrelerine (kök
+ *     tanımlayıcı yerel kümede); küresel yazım, deref yazımı → RED.
+ *  P3 Dizi parametresi BÜYÜTÜLMEZ (dizi_ekle/dizi_kapasite_ayarla arg0):
+ *     elle kurulmuş başlıkta bolge=0 iken büyütme çağıranın %rho'suna (yani
+ *     bizim ρ_yerel'imize) düşer, çağıranın KALICI dizisi ölen tampona
+ *     işaret ederdi = UAF (D-771 ag_dizi_baslik).
+ *  P4 kapanış, görev/kanal, dondur, güvensiz, satır içi asm, modül-nitelikli
+ *     ya da yöntem çağrısı, yerel değişkenden (kapanış) çağrı → RED.
+ *  P5 kullanıcı çağrıları: çağrılan TEKİL adla bulunur (ea_fn_bul ilk
+ *     eşleşmeyi verir — aynı adda iki işlev varsa RED) ve özyinelemeli olarak
+ *     dönüş-saf; özyineleme/derinlik aşımı → RED. Kendisi P3'ü taşıdığı için
+ *     Dizi parametresini ona geçirmek güvenlidir.
+ *  P6 tanınmayan düğüm türü → RED.
+ * =================================================================== */
+static int ds_skaler_ad(const char *a, int n) {
+    static const char *const ad[] = {
+        "tam8","tam16","tam32","tam64","dtam8","dtam16","dtam32","dtam64",
+        "kesirli32","kesirli64","karakter","mant\xc4\xb1ksal", NULL };
+    for (int i = 0; ad[i]; i++)
+        if ((int)strlen(ad[i]) == n && memcmp(ad[i], a, (size_t)n) == 0) return 1;
+    return 0;
+}
+static int ds_tip_skaler(const Dugum *t) {
+    return t && t->tip == DUGUM_TIP_BASIT
+        && ds_skaler_ad(t->veri.tip_basit.ad, t->veri.tip_basit.ad_uzunluk);
+}
+static int ds_tip_metin(const Dugum *t) {
+    return t && t->tip == DUGUM_TIP_BASIT && t->veri.tip_basit.ad_uzunluk == 5
+        && memcmp(t->veri.tip_basit.ad, "metin", 5) == 0;
+}
+static int ds_tip_dizi_skaler(const Dugum *t) {
+    return t && t->tip == DUGUM_TIP_DIZI && ds_tip_skaler(t->veri.tip_dizi.eleman_tip);
+}
+
+typedef struct { const char *ad[64]; int uz[64]; int n; int dizi[64]; } DsYerel;
+
+static int ds_yerel_bul(const DsYerel *y, const char *a, int n) {
+    for (int i = 0; i < y->n; i++)
+        if (y->uz[i] == n && memcmp(y->ad[i], a, (size_t)n) == 0) return i;
+    return -1;
+}
+static int ds_yerel_ekle(DsYerel *y, const char *a, int n, int dizi_param) {
+    if (!a || n <= 0) return 0;
+    if (ds_yerel_bul(y, a, n) >= 0) return 1;
+    if (y->n >= 64) return 0;                 /* tablo doldu -> RED */
+    y->ad[y->n] = a; y->uz[y->n] = n; y->dizi[y->n] = dizi_param; y->n++;
+    return 1;
+}
+static int ds_ad(const Dugum *h, const char *a) {
+    int n = (int)strlen(a);
+    return h && h->tip == DUGUM_TANIMLAYICI && h->veri.tanimlayici.uzunluk == n
+        && memcmp(h->veri.tanimlayici.metin, a, (size_t)n) == 0;
+}
+static int ds_tekil(const char *ad, int uz) {
+    int say = 0;
+    for (int i = 0; i < g_fn_sayi; i++)
+        if (g_fn_tablo[i].uz == uz && memcmp(g_fn_tablo[i].ad, ad, (size_t)uz) == 0) say++;
+    return say == 1;
+}
+
+static int ds_islev(const Dugum *fn, int derinlik);
+
+/* Desen bağlamaları da yereldir (eşleş kolları). Desen içindeki her
+ * TANIMLAYICI'yı yerel say — yanlışlıkla bir varyant adını yerel saymak
+ * yalnız atama kökü denetimini GEVŞETİR mi? Hayır: varyant adına atama
+ * sözdizimsel olarak yoktur; yalnız daha fazla adı "yerel" kabul ederiz ve
+ * atanan kök bir desen bağlamasıysa bu doğru yereldir. */
+static int ds_desen_topla(const Dugum *d, DsYerel *y) {
+    if (!d) return 1;
+    if (d->tip == DUGUM_TANIMLAYICI)
+        return ds_yerel_ekle(y, d->veri.tanimlayici.metin, d->veri.tanimlayici.uzunluk, 0);
+    if (d->tip == DUGUM_CAGRI) {
+        for (int i = 0; i < d->veri.cagri.sayi; i++)
+            if (!ds_desen_topla(d->veri.cagri.argumanlar[i], y)) return 0;
+        return 1;
+    }
+    return 1;
+}
+
+/* Ön tarama: f'in yerel değişken adlarını topla (atama kökü denetimi için).
+ * Gölgeleme/blok kapsamı gözetilmez: aynı ad yerel kabul edilir — küresel
+ * aynı adı taşıyorsa ve gövdede yerel bir tanım varsa ayrım yapılamaz, ama
+ * KEMGU'da küresel yazım `güvensiz`/çıplak ister ve P4 `güvensiz`i reddeder. */
+static int ds_yerel_topla(const Dugum *d, DsYerel *y) {
+    if (!d) return 1;
+    switch (d->tip) {
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                if (!ds_yerel_topla(d->veri.blok.deyimler[i], y)) return 0;
+            return 1;
+        case DUGUM_DEGISKEN:
+            if (d->veri.degisken.kuresel_mi) return 0;
+            return ds_yerel_ekle(y, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk, 0);
+        case DUGUM_EGER:
+            return ds_yerel_topla(d->veri.eger.gozdoldur, y) && ds_yerel_topla(d->veri.eger.yan, y);
+        case DUGUM_IKEN: return ds_yerel_topla(d->veri.iken.govde, y);
+        case DUGUM_ICIN:
+            if (d->veri.icin.degisken_adi && !ds_yerel_ekle(y, d->veri.icin.degisken_adi,
+                                                             d->veri.icin.degisken_adi_uzunluk, 0)) return 0;
+            return ds_yerel_topla(d->veri.icin.govde, y);
+        case DUGUM_ESLES:
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU
+                    && (!ds_desen_topla(k->veri.esles_kolu.desen, y) || !ds_yerel_topla(k->veri.esles_kolu.govde, y)))
+                    return 0;
+            }
+            return 1;
+        default: return 1;
+    }
+}
+
+/* P3 takma ad yayılımı: Dizi parametresine işaret edebilecek yereller de
+ * "parametre dizisi" sayılır. Değeri bir işaretli adı İÇEREN ya da herhangi
+ * bir ÇAĞRI içeren (sonuç bir parametrenin takma adı olabilir) bağlama/atama
+ * hedefi işaretlenir; sabit noktaya kadar. Taze `[]`/literal işaretlenmez. */
+static int ds_cagri_icerir(const Dugum *d) {
+    if (!d) return 0;
+    switch (d->tip) {
+        case DUGUM_CAGRI: return 1;
+        case DUGUM_IKILI: return ds_cagri_icerir(d->veri.ikili.sol) || ds_cagri_icerir(d->veri.ikili.sag);
+        case DUGUM_TEKLI: return ds_cagri_icerir(d->veri.tekli.operand);
+        case DUGUM_TIP_DONUSTUR: return ds_cagri_icerir(d->veri.tip_donustur.kaynak);
+        case DUGUM_ERISIM: return ds_cagri_icerir(d->veri.erisim.nesne);
+        case DUGUM_INDEKS: return ds_cagri_icerir(d->veri.indeks.nesne) || ds_cagri_icerir(d->veri.indeks.indeks);
+        case DUGUM_TANIMLAYICI: case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_KARAKTER:
+        case DUGUM_MANTIKSAL: case DUGUM_BOS: case DUGUM_METIN: case DUGUM_DIZI_OLUSTUR:
+            return 0;
+        default: return 1;   /* bilinmeyen -> takma ad olabilir */
+    }
+}
+static int ds_isaretli_gecer(const Dugum *v, const DsYerel *y) {
+    if (ds_cagri_icerir(v)) return 1;
+    for (int i = 0; i < y->n; i++)
+        if (y->dizi[i] && ky_var_gecer(v, y->ad[i], y->uz[i])) return 1;
+    return 0;
+}
+static int ds_isaretle(DsYerel *y, const char *a, int n) {
+    int ix = ds_yerel_bul(y, a, n);
+    if (ix < 0 || y->dizi[ix]) return 0;
+    y->dizi[ix] = 1; return 1;
+}
+static int ds_taint(const Dugum *d, DsYerel *y) {
+    if (!d) return 0;
+    int deg = 0;
+    switch (d->tip) {
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++) deg |= ds_taint(d->veri.blok.deyimler[i], y);
+            return deg;
+        case DUGUM_DEGISKEN:
+            if (d->veri.degisken.deger && ds_isaretli_gecer(d->veri.degisken.deger, y))
+                deg |= ds_isaretle(y, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk);
+            return deg;
+        case DUGUM_ATAMA: {
+            const Dugum *k = d->veri.atama.hedef;
+            if (k && k->tip == DUGUM_TANIMLAYICI && ds_isaretli_gecer(d->veri.atama.deger, y))
+                deg |= ds_isaretle(y, k->veri.tanimlayici.metin, k->veri.tanimlayici.uzunluk);
+            return deg;
+        }
+        case DUGUM_EGER: return ds_taint(d->veri.eger.gozdoldur, y) | ds_taint(d->veri.eger.yan, y);
+        case DUGUM_IKEN: return ds_taint(d->veri.iken.govde, y);
+        case DUGUM_ICIN: {
+            /* `için x: p` — eleman skaler; x işaretlenmez. Gövde yine gezilir. */
+            return ds_taint(d->veri.icin.govde, y);
+        }
+        case DUGUM_ESLES:
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *k = d->veri.esles.kollar[i];
+                if (k && k->tip == DUGUM_ESLES_KOLU) deg |= ds_taint(k->veri.esles_kolu.govde, y);
+            }
+            return deg;
+        default: return 0;
+    }
+}
+
+static const Dugum *ds_atama_kok(const Dugum *h) {
+    while (h) {
+        if (h->tip == DUGUM_ERISIM) { h = h->veri.erisim.nesne; continue; }
+        if (h->tip == DUGUM_INDEKS) { h = h->veri.indeks.nesne; continue; }
+        break;
+    }
+    return h;
+}
+
+/* P2-P6 gövde gezgini. 1 = güvenli, 0 = RED. */
+static int ds_gez(const Dugum *d, DsYerel *y, int derinlik) {
+    if (!d) return 1;
+    switch (d->tip) {
+        case DUGUM_TAM: case DUGUM_KESIRLI: case DUGUM_KARAKTER: case DUGUM_MANTIKSAL:
+        case DUGUM_BOS: case DUGUM_METIN: case DUGUM_TANIMLAYICI:
+            return 1;
+        case DUGUM_YOL:
+            return 1;   /* değer konumunda çeşit varyantı / sabit; çağrı hedefi CAGRI'da elenir */
+        case DUGUM_BLOK:
+            for (int i = 0; i < d->veri.blok.sayi; i++)
+                if (!ds_gez(d->veri.blok.deyimler[i], y, derinlik)) return 0;
+            return 1;
+        case DUGUM_IFADE_DEYIMI: return ds_gez(d->veri.ifade_deyimi.ifade, y, derinlik);
+        case DUGUM_DEGISKEN:
+            if (d->veri.degisken.kuresel_mi) return 0;
+            return ds_gez(d->veri.degisken.deger, y, derinlik);
+        case DUGUM_SABIT: return ds_gez(d->veri.sabit.deger, y, derinlik);
+        case DUGUM_VER: return ds_gez(d->veri.ver.deger, y, derinlik);
+        case DUGUM_ATAMA: {
+            const Dugum *k = ds_atama_kok(d->veri.atama.hedef);
+            if (!k || k->tip != DUGUM_TANIMLAYICI) return 0;          /* deref/çağrı kökü */
+            if (ds_yerel_bul(y, k->veri.tanimlayici.metin, k->veri.tanimlayici.uzunluk) < 0)
+                return 0;                                                /* küresel yazım */
+            return ds_gez(d->veri.atama.hedef, y, derinlik) && ds_gez(d->veri.atama.deger, y, derinlik);
+        }
+        case DUGUM_EGER:
+            return ds_gez(d->veri.eger.kosul, y, derinlik) && ds_gez(d->veri.eger.gozdoldur, y, derinlik)
+                && ds_gez(d->veri.eger.yan, y, derinlik);
+        case DUGUM_IKEN:
+            return ds_gez(d->veri.iken.kosul, y, derinlik) && ds_gez(d->veri.iken.govde, y, derinlik);
+        case DUGUM_ICIN:
+            return ds_gez(d->veri.icin.koleksiyon, y, derinlik) && ds_gez(d->veri.icin.govde, y, derinlik);
+        case DUGUM_ESLES:
+            if (!ds_gez(d->veri.esles.deger, y, derinlik)) return 0;
+            for (int i = 0; i < d->veri.esles.kol_sayi; i++) {
+                Dugum *k = d->veri.esles.kollar[i];
+                if (!k || k->tip != DUGUM_ESLES_KOLU) return 0;
+                if (!ds_gez(k->veri.esles_kolu.govde, y, derinlik)) return 0;
+            }
+            return 1;
+        case DUGUM_IKILI:
+            return ds_gez(d->veri.ikili.sol, y, derinlik) && ds_gez(d->veri.ikili.sag, y, derinlik);
+        case DUGUM_TEKLI: return ds_gez(d->veri.tekli.operand, y, derinlik);
+        case DUGUM_ERISIM: return ds_gez(d->veri.erisim.nesne, y, derinlik);
+        case DUGUM_INDEKS:
+            return ds_gez(d->veri.indeks.nesne, y, derinlik) && ds_gez(d->veri.indeks.indeks, y, derinlik);
+        case DUGUM_TIP_DONUSTUR: return ds_gez(d->veri.tip_donustur.kaynak, y, derinlik);
+        case DUGUM_DIZI_OLUSTUR:
+            for (int i = 0; i < d->veri.dizi_olustur.sayi; i++)
+                if (!ds_gez(d->veri.dizi_olustur.elemanlar[i], y, derinlik)) return 0;
+            return 1;
+        case DUGUM_YAPI_OLUSTUR:
+            for (int i = 0; i < d->veri.yapi_olustur.alan_sayi; i++) {
+                Dugum *aa = d->veri.yapi_olustur.alanlar[i];
+                if (!aa || aa->tip != DUGUM_ALAN_ATAMA) return 0;
+                if (!ds_gez(aa->veri.alan_atama.deger, y, derinlik)) return 0;
+            }
+            return 1;
+        case DUGUM_CAGRI: {
+            for (int i = 0; i < d->veri.cagri.sayi; i++)
+                if (!ds_gez(d->veri.cagri.argumanlar[i], y, derinlik)) return 0;
+            const Dugum *h = d->veri.cagri.hedef;
+            if (!h || h->tip != DUGUM_TANIMLAYICI) return 0;            /* yöntem/modül/dolaylı */
+            const char *a = h->veri.tanimlayici.metin; int n = h->veri.tanimlayici.uzunluk;
+            /* P3: Dizi parametresini büyütmek RED. */
+            if ((ds_ad(h, "dizi_ekle") || ds_ad(h, "dizi_kapasite_ayarla")) && d->veri.cagri.sayi > 0) {
+                const Dugum *a0 = d->veri.cagri.argumanlar[0];
+                if (!a0 || a0->tip != DUGUM_TANIMLAYICI) return 0;
+                int ix = ds_yerel_bul(y, a0->veri.tanimlayici.metin, a0->veri.tanimlayici.uzunluk);
+                if (ix < 0 || y->dizi[ix]) return 0;
+                return 1;
+            }
+            /* P4: eşzamanlılık / dondur. */
+            if (n >= 6 && (memcmp(a, "g\xc3\xb6rev", 6) == 0)) return 0;
+            if (n >= 5 && memcmp(a, "kanal", 5) == 0) return 0;
+            if (ds_ad(h, "dondur")) return 0;
+            if (ds_yerel_bul(y, a, n) >= 0) return 0;                    /* kapanış değişkeni */
+            const Dugum *fn = ea_fn_bul(a, n);
+            if (!fn) return 1;                                           /* yerleşik (yukarıdaki RED dışı) */
+            if (!ds_tekil(a, n)) return 0;
+            return ds_islev(fn, derinlik + 1);
+        }
+        case DUGUM_IMHA_IFADE: return ds_gez(d->veri.imha_ifade.operand, y, derinlik);
+        case DUGUM_KULLAN_IFADE: return ds_gez(d->veri.kullan_ifade.operand, y, derinlik);
+        default: return 0;   /* P6: LAMBDA, GUVENSIZ, SATIRICI_ASM, bilinmeyen -> RED */
+    }
+}
+
+static const Dugum *g_ds_yigin[32];
+static int g_ds_yigin_n = 0;
+
+static int ds_islev(const Dugum *fn, int derinlik) {
+    if (!fn || fn->tip != DUGUM_ISLEV || !fn->veri.islev.govde) return 0;
+    if (derinlik > 24) return 0;
+    if (fn->veri.islev.ciplak_mi || fn->veri.islev.tip_param_sayi > 0) return 0;
+    const Dugum *dt = fn->veri.islev.donus_tipi;
+    if (dt && !ds_tip_skaler(dt) && !ds_tip_metin(dt) && !ds_tip_dizi_skaler(dt)) return 0;
+    for (int i = 0; i < g_ds_yigin_n; i++) if (g_ds_yigin[i] == fn) return 0;   /* özyineleme */
+    if (g_ds_yigin_n >= 32) return 0;
+    DsYerel y; y.n = 0;
+    for (int i = 0; i < fn->veri.islev.param_sayi; i++) {
+        const Dugum *p = fn->veri.islev.parametreler[i];
+        if (!p || p->tip != DUGUM_PARAMETRE) return 0;
+        if (p->veri.parametre.kendin_mi || p->veri.parametre.referans_mi || p->veri.parametre.degisken_mi)
+            return 0;
+        const Dugum *pt = p->veri.parametre.tip;
+        int dz = ds_tip_dizi_skaler(pt);
+        if (!dz && !ds_tip_skaler(pt) && !ds_tip_metin(pt)) return 0;
+        if (!ds_yerel_ekle(&y, p->veri.parametre.ad, p->veri.parametre.ad_uzunluk, dz)) return 0;
+    }
+    if (!ds_yerel_topla(fn->veri.islev.govde, &y)) return 0;
+    for (int tur = 0; tur < 70 && ds_taint(fn->veri.islev.govde, &y); tur++) { }
+    /* eşleş desen bağlamalarını da yerel say (ayrı geçiş: kollar gövdede). */
+    g_ds_yigin[g_ds_yigin_n++] = fn;
+    int r = ds_gez(fn->veri.islev.govde, &y, derinlik);
+    g_ds_yigin_n--;
+    return r;
+}
+
+/* Üst düzey sorgu (önbellekli). ad tekil değilse ya da bulunamazsa 0. */
+static int ds_sorgu(const char *ad, int uz, const Dugum **fn_cikti) {
+    if (!ad || uz <= 0 || !g_fn_tablo || !ds_tekil(ad, uz)) return 0;
+    for (int i = 0; i < g_fn_sayi; i++) {
+        EaFnKayit *k = &g_fn_tablo[i];
+        if (k->uz == uz && memcmp(k->ad, ad, (size_t)uz) == 0) {
+            if (fn_cikti) *fn_cikti = k->islev;
+            if (k->ds_durum == 0) { g_ds_yigin_n = 0; k->ds_durum = ds_islev(k->islev, 0) ? 1 : 2; }
+            return k->ds_durum == 1;
+        }
+    }
+    return 0;
+}
+
+int escape_cagri_skaler_saf(const char *ad, int uz) {
+    const Dugum *fn = NULL;
+    if (!ds_sorgu(ad, uz, &fn) || !fn) return 0;
+    const Dugum *dt = fn->veri.islev.donus_tipi;
+    return dt == NULL || ds_tip_skaler(dt);
+}
+
 static void ky_set(EscapeAnaliz *ea, const Dugum *d) {
     for (int i = 0; i < ea->kayit_sayi; i++)
         if (ea->kayitlar[i].dugum == d) { ea->kayitlar[i].kesin_yerel = 1; return; }
@@ -1017,6 +1357,24 @@ static void ky_isaretle(EscapeAnaliz *ea, const Dugum *d, const Dugum *fn_govde)
                     && memcmp(dh->veri.tanimlayici.metin, "dizi_olustur", 12) == 0
                     && ky_confined(fn_govde, d->veri.degisken.ad,
                                    d->veri.degisken.ad_uzunluk)) {
+                    kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
+                    ky_set(ea, d->veri.degisken.deger);
+                }
+            }
+            /* [D-774] E4k-B: `değişken V = f(..)`, f DÖNÜŞ-SAF ve Dizi<skaler> döndürür,
+             * V hapsedilmiş -> ÇAĞRI düğümü kesin_yerel: codegen f'e %rho yerine ρ_yerel
+             * verir; f'in bu çağrıdaki bütün tahsisleri çağıranın dönüşünde serbest.
+             * Annotasyon varsa Dizi<skaler> olmalı (yoksa f'in bildirilen dönüş tipi
+             * belirleyicidir). */
+            if (d->veri.degisken.deger && d->veri.degisken.deger->tip == DUGUM_CAGRI
+                && d->veri.degisken.ad && d->veri.degisken.ad_uzunluk > 0
+                && (!d->veri.degisken.tip || ds_tip_dizi_skaler(d->veri.degisken.tip))) {
+                const Dugum *uh = d->veri.degisken.deger->veri.cagri.hedef;
+                const Dugum *ufn = NULL;
+                if (uh && uh->tip == DUGUM_TANIMLAYICI
+                    && ds_sorgu(uh->veri.tanimlayici.metin, uh->veri.tanimlayici.uzunluk, &ufn)
+                    && ufn && ds_tip_dizi_skaler(ufn->veri.islev.donus_tipi)
+                    && ky_confined(fn_govde, d->veri.degisken.ad, d->veri.degisken.ad_uzunluk)) {
                     kayit_bul_veya_ekle(ea, d->veri.degisken.deger);
                     ky_set(ea, d->veri.degisken.deger);
                 }

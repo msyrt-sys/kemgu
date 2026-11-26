@@ -1,0 +1,13 @@
+kirli_kuresel saf_yap yerel
+kirli_ozyineli kirli_ozyineli caller
+kirli_ozyineli saf_yap yerel
+kirli_zincir kirli_kuresel caller
+main kirli_buyut caller
+main kirli_kuresel caller
+main kirli_ozyineli caller
+main kirli_takma caller
+main kirli_zincir caller
+main saf_toplam yerel
+olumlu_bagla saf_yap yerel
+olumsuz_kacan saf_yap caller
+saf_toplam saf_yap yerel
