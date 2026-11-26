@@ -817,7 +817,8 @@ calistir_codegen_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # codegen_diff exit-kodu bunu yakalayamaz (çıplak allocator host'ta linklenir → sızıntı
 # exit'te görünmez). Çıplak+döngü fn'de @kdl_bolge_olustur/serbest/global_bolge_al = 0
 # HEM C-codegen HEM self-host için; normal döngüde ρ_iter korunur (F4.3 regresyon kontrolü).
-calistir_ciplak_region_free: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+# [D-775] harness build/codegen kullanır; bağımlılık yoktu -> -j altında derleyici kurulurken koşabiliyordu.
+calistir_ciplak_region_free: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/ciplak_region_free_harness.sh
 
 # F3 (D-259): SAF-.kem çıplak+küresel allocator KOMPOZİSYON gate'i — iki primitif

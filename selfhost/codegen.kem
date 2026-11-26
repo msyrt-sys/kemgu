@@ -9782,6 +9782,10 @@ işlev ds_gez_cocuklar(p: &değişken Ayr, taban: tam32, n: tam32, der: tam32) -
     iken i < cs { eğer ds_gez(p, taban, dizi_al(p.cocuk, cb + i), der) == yanlış { ver yanlış; } i = i + 1; }
     ver doğru;
 }
+// P4' YERLEŞİK İZİN LİSTESİ (C ds_yerlesik_izinli aynası; VARSAYILAN RED).
+işlev ds_yerlesik_izinli(a: metin) -> mantıksal {
+    ver metin_esit(a, "dizi_al") veya metin_esit(a, "dizi_yaz") veya metin_esit(a, "dizi_boyut") veya metin_esit(a, "dizi_olustur") veya metin_esit(a, "dizi_kapasite") veya metin_esit(a, "metin_uzunluk") veya metin_esit(a, "metin_bayt") veya metin_esit(a, "metin_esit") veya metin_esit(a, "metin_birlestir") veya metin_esit(a, "metin_kes") veya metin_esit(a, "metin_kucuk") veya metin_esit(a, "metin_buyuk") veya metin_esit(a, "metin_kucuk_tr") veya metin_esit(a, "metin_buyuk_tr") veya metin_esit(a, "metin_kucuk_ascii") veya metin_esit(a, "metin_buyuk_ascii") veya metin_esit(a, "metin_icerir") veya metin_esit(a, "metin_baslar") veya metin_esit(a, "metin_biter") veya metin_esit(a, "metin_kirp") veya metin_esit(a, "metin_yer_degistir") veya metin_esit(a, "metin_tam") veya metin_esit(a, "metin_tam_gecerli") veya metin_esit(a, "metin_kesirli") veya metin_esit(a, "metin_kesirli_gecerli") veya metin_esit(a, "tam_metin") veya metin_esit(a, "kod_metin") veya metin_esit(a, "kod_gecerli") veya metin_esit(a, "kesirli_metin") veya metin_esit(a, "ondalik_bicimle") veya metin_esit(a, "yazdir") veya metin_esit(a, "yazdir_tam") veya metin_esit(a, "yazdir_tam64") veya metin_esit(a, "yazdir_satir") veya metin_esit(a, "yaz_tam") veya metin_esit(a, "yaz_tam64") veya metin_esit(a, "yaz_bayt") veya metin_esit(a, "yazdir_hata") veya metin_esit(a, "yazdir_metin") veya metin_esit(a, "yazdir_isaretsiz_tam") veya metin_esit(a, "yazdir_isaretsiz_tam64") veya metin_esit(a, "yazdir_onaltilik") veya metin_esit(a, "yaz_onaltilik") veya metin_esit(a, "yazdir_karakter") veya metin_esit(a, "yaz_karakter") veya metin_esit(a, "tamam") veya metin_esit(a, "hata") veya metin_esit(a, "değer") veya metin_esit(a, "hiç") veya metin_esit(a, "bir") veya metin_esit(a, "sıfır");
+}
 işlev ds_gez(p: &değişken Ayr, taban: tam32, n: tam32, der: tam32) -> mantıksal {
     eğer n < 0 { ver doğru; }
     değişken t: metin = dizi_al(p.a_ad, n);
@@ -9861,7 +9865,7 @@ işlev ds_gez(p: &değişken Ayr, taban: tam32, n: tam32, der: tam32) -> mantık
         eğer metin_esit(a, "dondur") { ver yanlış; }
         eğer ds_yerel_bul(p, taban, a) >= 0 { ver yanlış; }                // kapanış değişkeni
         değişken fi: tam32 = ds_fn_tekil(p, a);
-        eğer fi == 0 - 1 { ver doğru; }                                     // yerleşik
+        eğer fi == 0 - 1 { ver ds_yerlesik_izinli(a); }                     // P4': izin listesi
         eğer fi < 0 { ver yanlış; }                                         // tekil değil
         ver ds_islev(p, fi, der + 1);
     }

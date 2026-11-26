@@ -1028,6 +1028,27 @@ static int ds_tekil(const char *ad, int uz) {
 
 static int ds_islev(const Dugum *fn, int derinlik);
 
+/* P4' YERLEŞİK İZİN LİSTESİ (VARSAYILAN RED). Yalnız argümanını TUTMAYAN ve ADRES AÇIĞA
+ * ÇIKARMAYAN yerleşikler. ⚠ "skaler dönüş işaretçi taşımaz" KEMGU'da DOĞRU DEĞİL: çekirdekte
+ * adres tamsayı (tam64) olarak dolaşır; tanınmayan yerleşik/gövdesiz dış işlev (asm/C sembolü)
+ * bir tahsisin adresini saklayabilir ya da döndürebilir. D-775'te ölçüldü: tur bölgesiyle iki
+ * çekirdek de bozuldu (`cat` "bulunamadi"); ilk sürüm bilinmeyen adı "yerleşik" sayıp geçiriyordu. */
+static int ds_yerlesik_izinli(const char *a, int n) {
+    static const char *const ad[] = {
+        "dizi_al", "dizi_yaz", "dizi_boyut", "dizi_olustur", "dizi_kapasite", "metin_uzunluk",
+        "metin_bayt", "metin_esit", "metin_birlestir", "metin_kes", "metin_kucuk", "metin_buyuk",
+        "metin_kucuk_tr", "metin_buyuk_tr", "metin_kucuk_ascii", "metin_buyuk_ascii", "metin_icerir", "metin_baslar",
+        "metin_biter", "metin_kirp", "metin_yer_degistir", "metin_tam", "metin_tam_gecerli", "metin_kesirli",
+        "metin_kesirli_gecerli", "tam_metin", "kod_metin", "kod_gecerli", "kesirli_metin", "ondalik_bicimle",
+        "yazdir", "yazdir_tam", "yazdir_tam64", "yazdir_satir", "yaz_tam", "yaz_tam64",
+        "yaz_bayt", "yazdir_hata", "yazdir_metin", "yazdir_isaretsiz_tam", "yazdir_isaretsiz_tam64", "yazdir_onaltilik",
+        "yaz_onaltilik", "yazdir_karakter", "yaz_karakter", "tamam", "hata", "de\xc4\x9f" "er",
+        "hi\xc3\xa7", "bir", "s\xc4\xb1" "f\xc4\xb1r", NULL };
+    for (int i = 0; ad[i]; i++)
+        if ((int)strlen(ad[i]) == n && memcmp(ad[i], a, (size_t)n) == 0) return 1;
+    return 0;
+}
+
 /* Desen bağlamaları da yereldir (eşleş kolları). Desen içindeki her
  * TANIMLAYICI'yı yerel say — yanlışlıkla bir varyant adını yerel saymak
  * yalnız atama kökü denetimini GEVŞETİR mi? Hayır: varyant adına atama
@@ -1229,7 +1250,7 @@ static int ds_gez(const Dugum *d, DsYerel *y, int derinlik) {
             if (ds_ad(h, "dondur")) return 0;
             if (ds_yerel_bul(y, a, n) >= 0) return 0;                    /* kapanış değişkeni */
             const Dugum *fn = ea_fn_bul(a, n);
-            if (!fn) return 1;                                           /* yerleşik (yukarıdaki RED dışı) */
+            if (!fn) return ds_yerlesik_izinli(a, n);                    /* P4': izin listesi */
             if (!ds_tekil(a, n)) return 0;
             return ds_islev(fn, derinlik + 1);
         }

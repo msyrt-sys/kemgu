@@ -3263,4 +3263,26 @@
   kapalı (127 blok) · S254 P3 kapalı · S255 takma ad yayılımı kapalı · S256 self seçici kapalı · S257 self P3 · S258
   self takma ad · S259 self özyinelemeli denetim kapalı. P2 ölçülmüş FAZLALIK: küresel yazım güvensiz/çıplak ister,
   ikisi de P4/P1'de zaten RED. Tam takım -j10: rc=0, 36 dk 23 sn, FIXPOINT ✓. ASan E2E 133/0, ASan matris 12/12.
+- 2026-11-26 D-775: E4k AŞAMA C — TUR BÖLGESİ. C'ye self-host F4.3 aynası: en dış döngünün gövde girişinde ρ_tur,
+  geri dalıştan ve döngü içi her `ver`den önce serbest, lambda gövdelerine sızmaz, çıplakta yok. Döngü gövdesinde
+  bildirilmiş hapsedilmiş Dizi<skaler> (literal, dizi_olustur, dönüş-saf çağrı sonucu) ρ_tur'a; skaler dönen
+  dönüş-saf çağrı döngü içinde ρ_tur'a. Self-host'ta dönüş-saf çağrı yolu rho_iter'e bağlandı (kararlar birebir).
+  ÖLÇÜM: döngü doğrudan main'de, 200K tur: 407 MB → 1,3 MB (C). E4k kapısı: dongu_sonucu zirve <8 MB (908/940 KB),
+  donus_saf'a 'tur' sınıfı + dışarı atanan döngü dizisi. ⚠ KÂHİN KÖRDÜ: ASan IR erişimini denetler ama dizi okuması
+  ASan'sız runtime'da (kdl_dizi_al_*) → serbest bölgeden okuma GÖRÜNMEZDİ; S262 (her döngü dizisini kanıtsız
+  ρ_tur'a) ilk denemede SESSİZ → kapı ASan'lı runtime ile bağlanınca KIRMIZI (UAF). Sabotajlar: S260 tur serbesti
+  yok (zirve 20 GB) · S261 C çağrı→ρ_yerel (41 MB + tablo) · S262 kanıtsız ρ_tur (ASan UAF) · S263 self rho_iter
+  yok (41 MB) · S264 self kanıtsız rho_iter (ASan UAF) — hepsi KIRMIZI; S265 `dongu>0` denetimi kaldırıldı →
+  SESSİZ = ölçülmüş FAZLALIK (döngü dışında ρ_tur yok).
+  ⚠ YERLEŞİK İZİN LİSTESİ (B'ye de uygulanır): ilk sürüm tanınmayan adı (yerleşik / gövdesiz dış işlev = çekirdekte
+  asm/C sembolü) dönüş-saf sayıyordu — "varsayılan RED" ihlali; KEMGU'da adres tam64 olarak dolaşır, böyle bir
+  işlev tahsisin adresini saklayabilir/döndürebilir. Artık yalnız argüman tutmayan/adres vermeyen yerleşikler (dizi
+  okuma/yazma, saf metin, sayı↔metin, çıktı, değer kurucuları). ⚠ DÜRÜSTÇE: tam takımda 5 kapı (ciplak_region_free,
+  bm_x86_msi/pci16/cok_surec/ps2_irq; msi C çekirdeğinde `cat` "bulunamadi") kırmızıydı; izin listesiyle 5/5 yeşil
+  AMA S266 (izin listesini C'de kaldır) msi+pci16'da SESSİZ → bu kırmızılar izin listesine BAĞLANAMADI. Koşum Codex
+  dalga 18'in aynı makinedeki -j10 tam takımıyla ÇAKIŞIYORDU (80+ QEMU, yük 11) — en olası kök, kanıtsız. Ayrıca
+  calistir_ciplak_region_free build/codegen'e bağımlı değildi (kurulurken koştu) → bağımlılık eklendi.
+  #247 (B) bu yüzden birleşmeden kapatıldı; B+C+izin listesi tek PR. Host kapıları (-j4, Codex çalışırken): ASan E2E
+  133/0, matris 12/12, LLVM 321/321, checker 321/321, codegen_diff 229/229, yapi_diff 207/207, bolge_operand 231/231,
+  E4k 12/12, FIXPOINT ✓. Çekirdek heap etkisi: B'de ölçüldü (yok); tam takım Codex'in taban ölçümü bitince.
 
