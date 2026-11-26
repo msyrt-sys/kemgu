@@ -4947,8 +4947,8 @@ calistir_bm_x86_ps2_irq: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm
 
 .PHONY: calistir_bm_x86_ps2_karma
 calistir_bm_x86_ps2_karma: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
+	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc_ps2karma.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
+	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc_ps2karma.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_guc
 calistir_bm_x86_guc: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o

@@ -7,6 +7,9 @@ if ! command -v qemu-system-x86_64 >/dev/null || [ ! -f /usr/share/OVMF/OVMF_COD
  exit 0
 fi
 for c in ${BLOK_DERLEYICILER:-build/kemgu build/codegen}; do
- UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_blok.kem UEFI_DERLEYICI="$c" bash test/bm_x86_uefi_harness.sh
- python3 tests/qemu/blok_kahin.py build/_bm_uefi
+ # [D-772] Kendi çalışma dizini (paralel koşumda build/_bm_uefi paylaşılıyordu); başarıda silinir.
+ w=$(mktemp -d build/blok.XXXXXX)
+ UEFI_CALISMA_DIZINI="$w" UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_blok.kem UEFI_DERLEYICI="$c" bash test/bm_x86_uefi_harness.sh
+ python3 tests/qemu/blok_kahin.py "$w"
+ rm -rf "$w"
 done

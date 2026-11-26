@@ -8,7 +8,15 @@ fi
 if [ "${UEFI_YALNIZ_DERLE:-0}" != 1 ] && ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
  echo "ATLANDI (QEMU yok)"; exit 0
 fi
-W="${UEFI_CALISMA_DIZINI:-build/_bm_uefi}"; mkdir -p "$W/esp/EFI/BOOT" "$W/esp/KEMGU"
+# [D-772] Açılış (kapı) kipinde varsayılan çalışma dizini KOŞUM BAŞINA benzersizdir: paralel `make -j`
+# altında uefi/uefi_kabuk/apic/ps2_irq aynı build/_bm_uefi'yi yarışarak yazıp okuyordu (yedi kapı kırmızı).
+# Başarılı açılıştan sonra silinir; başarısızlıkta teşhis için kalır. Yalnız-derle kipinde (dışarıdan
+# tüketen araçlar: blok harness'ı öncesi, tools/codex/*_sabotaj.py) eski sabit yol korunur.
+KENDI_W=""
+if [ -n "${UEFI_CALISMA_DIZINI:-}" ]; then W="$UEFI_CALISMA_DIZINI"
+elif [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then W=build/_bm_uefi
+else mkdir -p build; W=$(mktemp -d build/uefi.XXXXXX); KENDI_W=1; fi
+mkdir -p "$W/esp/EFI/BOOT" "$W/esp/KEMGU"
 RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_ps2_hw.kem"
 KAYNAK="${UEFI_KAYNAK:-test/ornekler/kem_os_x86_uefi.kem}"
 case "${KAYNAK##*/}" in
@@ -75,7 +83,9 @@ else
 fi
 cp "$W/k.elf" "$W/esp/KEMGU/CEKIRDEK.ELF"
 if [ "${UEFI_PC_URET:-0}" = 1 ]; then
- python3 tests/qemu/uefi_imaj.py build/kem_os_pc.img "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
+ # [D-772] Paralel kapılar aynı imajı ezmesin: hedef UEFI_PC_IMG (bm_uefi.py de onu açar).
+ python3 tests/qemu/uefi_imaj.py "${UEFI_PC_IMG:-build/kem_os_pc.img}" "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
 fi
 if [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then exit 0; fi
 python3 tests/qemu/bm_uefi.py "$W"
+if [ -n "$KENDI_W" ]; then rm -rf "$W"; fi
