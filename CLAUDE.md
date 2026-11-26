@@ -23,8 +23,10 @@ Ana hedefler:
 # Derleme (Linux / DGX Spark: make · Windows: mingw32-make)
 make
 
-# Tüm testleri çalıştır
-make test_tumu
+# Tüm testleri çalıştır — PARALEL (D-772: -j10 ~45 dk; seri ~5,5 sa)
+make -j10 --output-sync=target test_tumu
+# Ölçümlü: kapı başına süre + en yavaş 15 kapı + build/ boyutu
+make -j10 --output-sync=target test_tumu_olcum
 
 # Sadece lexer testleri
 make calistir_lexer_test

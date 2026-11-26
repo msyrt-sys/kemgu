@@ -3223,4 +3223,11 @@
   Projeksiyon (QEMU kapısı dalga başına +10..20; 67 → ~130-220): seri ~9,5-16 sa, -j6 ~1,8-3 sa, -j12 ~1-1,6 sa (doğrusal
   ölçekleme varsayımı). x86 konuklar ARM ana makinede TCG zorunlu (KVM çapraz mimari yapmaz); /dev/kvm erişimi VAR → ARM
   konukları KVM'de koşma adayı.
+  PARALEL KOŞUM (-j10 --output-sync=target): ilk deneme 41 dk ama 7 kapı KIRMIZI — uefi/uefi_kabuk/uefi_pc/apic/ps2_irq/
+  ps2_karma/blok build/_bm_uefi çalışma dizinini, uefi_pc+ps2_karma build/kem_os_pc.img'yi yarışarak paylaşıyordu; konak.kem
+  aynı .tmp'ye yazıyordu (Codex dalga 16 da görmüştü). Onarım: UEFI harness kapı kipinde koşum başına mktemp dizini (başarıda
+  silinir; yalnız-derle kipinde eski yol — tools/codex araçları), blok kendi dizini, ps2_karma ayrı imaj, konak.kem süreç
+  başına geçici ad, önbellek isabeti kopya düşerse yeniden derler (64 kayıt LRU). Yedi kapı -j7 birlikte rc=0 (12 dk).
+  TAM TAKIM -j10: rc=0, "Tum testler gecti!", FIXPOINT ✓, DUVAR 44 dk 59 sn (seri 5 sa 25 dk → ~7,2×); kapı toplamı
+  5 sa 19 dk. Artık kritik yol en uzun kapı: bm_x86_kaynak 24,5 dk (duvarın %54'ü) → sıradaki kazanç o kapıyı bölmek.
 
