@@ -3158,3 +3158,42 @@
   7. açılışın kapanışında (QMP sonrası 5 sn'de çıkmadı) durdu — tek başına 2/2 yeşil, aynı yük sınıfı. `make -k test_tumu`:
   rc=0, "Tum testler gecti!", 4 sa 41 dk, FIXPOINT ✓ (101.921 satır).
 
+- 2026-11-25 D-771: Codex dalga 17 ENTEGRASYONU (taslak PR #243 → bu dal; origin/main #242 ile birleştirildi). Kapsam
+  temiz (src/ ve selfhost/'a Codex dokunmadı). İKİ DERLEYİCİ BULGUSU:
+  · C17-001 GERÇEK — `(*p).alan = v` (ham işaretçiden yapı alanına yazma) iki derleyicide de SESSİZCE düşüyordu (exit 1;
+    gerçek konukta GARP doğru adresten çıkıp yapıdaki IPv4 0 kalıyordu → Codex yerel kopya + bütün geri yazmayla dolanmıştı).
+    C `erisim_lvalue`'ya TEKLI(OP_DEREFERANS, TANIMLAYICI) dalı (pointee yapı tipini `pointee_llvm_tip`ten alır, işaretçiyi
+    load eder); self-host `alan_adres_uret`'e `deref*` dalı + ERISIM atama koşulu. Fikstür cg_korpus/cg_isaretci_alan_yaz.kem
+    (C=SELF=42) + test_llvm `test_c17_isaretci_alan_yaz`. S236 (C dalı) → C 1 · S237 (self dalı) → self 1.
+  · C17-002 YENİDEN ÜRETİLEMEDİ — Codex'in tarifi (`ag_tcp_adim`'de `sk_tcp_sonlandi` yerine `*q` okuyup alanları yazıp
+    geri koyma) bugünkü çekirdekte HEM düzeltmeli HEM düzeltmesiz self-host ikilisiyle UEFI derle-yalnız rc=0. Kayıt
+    açık bırakılmadı; yeniden görülürse IR satırıyla birlikte açılacak.
+  SABOTAJLAR (Codex'in "uygulanmadı" dediklerinin hepsi uygulandı; belgeler/KEMGU_OS_Sabotaj_Envanteri.md "Dalga 17 —
+  Claude'un tamamladığı"): S238 TCP seçenek `boy<2` İLK DENEMEDE SESSİZ (korpus sıfır boyu yalnız bilinen türlerde
+  üretiyordu) → ag17_test kip 5 = bilinmeyen tür 30 + boy 0 → exit 124. S243 DNS iki koruma birlikte İLK DENEMEDE SESSİZ
+  (etiketsiz iki-işaretçi döngüsü korpusta yoktu) → 12→14→12 döngüsü eklendi → exit 124. S241 (`adim>=32`) ve S242
+  (yalnız-geriye işaretçi) TEK TEK sessiz: ÖLÇÜLMÜŞ FAZLALIK, biri tek başına döngüyü bitirir; birlikte S243 ile kapılı.
+  S247 yönlendirme içi `yon>=5` gevşetmesi SESSİZ: döngü koşulu `iken yon<=5` + sonraki `ver -40` aynı sınırı yeniden
+  uygular (ölçülmüş fazlalık); S247b sınır iki yerde 5→6 → yedinci istek `/yon6`, calistir_bm_x86_http KIRMIZI.
+  QEMU: S245 paket SHA256 karşılaştırması → bozuk paket kuruldu (calistir_bm_x86_paket) · S246 süreç çıkışında
+  `ksv_fdleri_birak`'ta `kb_birak` atlandı → FIN gelmedi, zaman aşımı (calistir_bm_x86_soket). Host: S239 IPv4 toplam
+  boy (exit 4/7) · S240 HTTP chunk taşması (exit 20/5) · S244 yol sondaki `.` (exit 10) · S248 parça yuvası yaşlanması (7).
+  ⚠ İLK TAM KOŞUM DİSK DOLDUĞU İÇİN DÜŞTÜ (3.7 TB %100). Kök (bizim payımız): bm_x86_surec/nic/msi harness'ları
+  `mktemp -d build/…` çalışma dizinini HİÇ silmiyordu — tam koşum başına ~25 GB (surec.* ~1 GB × 52); eski dalga çalışma
+  kopyalarında birikmiş (codex16/build 272 GB). Onarım: başarılı turun sonunda `rm -rf "$w"` (surec'te `continue` dalında
+  da); başarısızlıkta set -e erken çıkar, dizin teşhis için kalır. Birleşmiş dalga kopyalarının build/'leri silindi (+381 GB).
+  YOL ÜSTÜNDE GERÇEK KIRMIZI — calistir_bm_x86_ag_parca, YALNIZ self-host çekirdek: 8 KiB birleştirmeden sonra heap
+  (kem_bump yüksek su işareti) +65.584 B. Bisect: C17-001 değil; 463a734'ün kem_heap.kem'iyle YEŞİL → D-770 kaynaklı. 40
+  ardışık yankı ölçüldü: eski kodda taban 4.329.312 sabit; yeni kodda taban 4.066.976 (−262 KB), İLK yankıda bir kez
+  +65.584 (64 KiB blok + başlık), sonra 40 yankı boyunca SABİT → sızıntı DEĞİL, tek seferlik ısınma. Kâhin heap tabanını
+  ilk yankıdan SONRA alır (düşürülen parça + ikinci yankı hâlâ sızıntıyı ölçer; boş çerçeve tabanı değişmedi). Ayrıca
+  `ag_dizi_baslik` (elle kurulan KdlDizi başlıkları, 32 baytlık yuvalar) D-770'in yeni `bolge` alanını (ofset 24) SIFIRLAR
+  — sıfırlanmamış sayfada çöp bölge işaretçisi sayılırdı. NIC harness'ına NIC_DERLEYICILER (tek derleyiciyle koşum).
+  `make -k test_tumu` (ikinci koşum): rc=0, "Tum testler gecti!", 6 sa 34 dk (aynı makinede önbellek dalı derleme/ölçümüyle
+  eşzamanlı), FIXPOINT ✓ (102.074 satır), koşum sonu build/ 1,5 GB (temizlik çalışıyor; öncesi ~25 GB).
+  CI Windows ilk koşumda KIRMIZI: test_tumu → calistir_bm_x86_paket → kem_os_paket_deposu QEMU olmayan Windows'ta da
+  kullanıcı ELF'lerini derletiyordu; surec_elf.py yerel Python'dan MSYS `awk`ını çağırınca WinError 2. Depo yalnız QEMU
+  kapılarının girdisi → önkoşul PAKET_DEPOSU_ON ile yalnız QEMU+OVMF varken (dört kapı; kapılar QEMU yoksa zaten ATLANDI).
+  CI Windows ikinci koşumda KIRMIZI: calistir_kem_os_arm_ag → ag_arm_derle.py `ld.lld`yi Python'dan çağırıyor; Windows
+  CreateProcess adında NOKTA olan programa `.exe` EKLEMEZ → WinError 2. ag_arm_derle.py + surec_elf.py araçları
+  shutil.which ile çözüyor (PATHEXT). Depoda adında nokta olan başka Python-çağrılı araç yok (tarandı).

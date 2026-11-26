@@ -58,7 +58,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False, ag_aygitlari=()):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -113,6 +113,7 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
         sata_aygiti = 'ide-hd,bus=harici.0'
     elif pci_topolojisi != 'duz':
         raise ValueError(pci_topolojisi)
+    cmd.extend(ag_aygitlari)
     if yalniz_firmware_diski:
         # OVMF çekirdeği SCSI'den yükler. Kabuk bu taşıyıcıya sürücü bağlamaz.
         cmd.extend(['-drive', f'if=none,id=ddevir,format=raw,file={usb.disk}',

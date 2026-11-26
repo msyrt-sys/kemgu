@@ -4,7 +4,7 @@ kullan drivers::blok::onbellek::{ Onbellek, OnbellekKaydi, onbellek_yeni, onbell
 kullan drivers::nvme::cekirdek::{ NvmeDurum, nvme_yeni } olarak bn;
 kullan drivers::ahci::cekirdek::{ AhciDurum, ahci_yeni } olarak ba;
 kullan drivers::usb::depo::{ UsbDepo, usb_depo_yeni } olarak bu;
-kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle, xhci_giris, xhci_kontrol, xhci_alt_baslat, xhci_alt_birak } olarak bx;
+kullan drivers::usb::xhci_cekirdek::{ XhciDurum, XhciAygit, xhci_adim, xhci_depo_hazir, xhci_depo_ekle, xhci_giris, xhci_kontrol, xhci_alt_baslat, xhci_alt_birak, xhci_kok_baslat } olarak bx;
 kullan drivers::usb::tanim::{ UsbArayuz };
 kullan drivers::usb::hub::{ hub_port_iste, hub_hiz, hub_rota };
 kullan drivers::ortak::bayt::{ oku_le32 } olarak hb;
@@ -68,6 +68,57 @@ küresel değişken bh_fare_indeks: tam32 = 0;
     kem_mmio_yaz64(bh_erdp,(taban+bh_bas*16)|8);
     eğer bd_usb_olay == taban { bd_usb_konum_koy(taban,bh_bas olarak tam32,bh_dongu != 0); }
 }
+// ECM'nin üç ucu için ayrı halka ve tampon. Kayıt başına durum, TRB, kimlik,
+// istek boyu, tampon, gerçek boy ve sonraki cycle bit ayrılır.
+küresel değişken be_kayit: tam64=0;
+küresel değişken be_zil: tam64=0;
+küresel değişken be_bagli: tam64=0;
+küresel değişken be_kok: tam32=0;
+küresel değişken be_kok_degisti: tam32=0;
+küresel değişken be_paket: tam32=0;
+küresel değişken be_zlp: mantıksal=yanlış;
+çıplak işlev be_iste(r: tam64,boy: tam64) {
+    değişken h: tam64=kem_mmio_oku64(r+8);
+    değişken dongu: tam64=kem_mmio_oku64(r+48);
+    kem_mmio_yaz64(h+16,h); kem_mmio_yaz32(h+24,0); kem_mmio_yaz32(h+28,6146|(1-dongu));
+    kem_mmio_yaz64(h,kem_mmio_oku64(r+32)); kem_mmio_yaz32(h+8,boy);
+    kem_mmio_yaz64(r+24,boy); kem_mmio_yaz64(r+48,1-dongu); kem_mmio_yaz64(r,1);
+    kem_dma_bariyeri(); kem_mmio_yaz32(h+12,1060|dongu);
+    kem_mmio_yaz32(be_zil,(kem_mmio_oku64(r+16)>>16)&31);
+}
+çıplak işlev be_uc(r: tam64,a: XhciAygit,ep: tam32,halka: tam64,tampon: tam64) {
+    değişken dci: tam32=(ep&15)*2+(ep>>7);
+    kem_mmio_yaz64(r+8,a.dma+halka); kem_mmio_yaz64(r+16,((a.yuva olarak tam64)<<24)|((dci olarak tam64)<<16));
+    kem_mmio_yaz64(r+32,a.dma+tampon); kem_mmio_yaz64(r+48,1);
+}
+çıplak işlev be_baslat(a: XhciAygit,zil: tam64) {
+    be_zil=zil; be_kayit=a.dma+12288; be_zlp=yanlış; be_bagli=0; be_paket=a.ecm.paket;
+    eğer a.derinlik==0 { be_kok=a.port; }
+    memset(be_kayit olarak *tam8,0,192);
+    be_uc(be_kayit,a,a.ecm.cikis,0,67584);
+    be_uc(be_kayit+64,a,a.ecm.giris,64,65536);
+    be_uc(be_kayit+128,a,a.ecm.bildirim,128,69632);
+    be_iste(be_kayit+64,1536); be_iste(be_kayit+128,16);
+}
+çıplak işlev be_tuket(trb: tam64,kim: tam64,durum: tam64) -> mantıksal {
+    eğer be_kayit==0 { ver yanlış; }
+    değişken i: tam32=0;
+    iken i<3 {
+        değişken r: tam64=be_kayit+(i olarak tam64)*64;
+        eğer kem_mmio_oku64(r)==1 ve kem_mmio_oku64(r+8)==trb ve kem_mmio_oku64(r+16)==kim {
+            değişken n: tam64=kem_mmio_oku64(r+24); değişken kalan: tam64=durum&16777215;
+            değişken kod: tam64=durum>>24;
+            eğer (kod!=1 ve kod!=13) veya kalan>n { kem_mmio_yaz64(r,-1); ver doğru; }
+            kem_mmio_yaz64(r+40,n-kalan); kem_mmio_yaz64(r,2);
+            // Tam paket katındaki OUT sonunu ayrı bir sıfır boyutlu USB paketi bildirir.
+            eğer i==0 ve be_zlp { be_zlp=yanlış; be_iste(r,0); }
+            ver doğru;
+        }
+        i=i+1;
+    }
+    ver yanlış;
+}
+
 // Yalnız gönderilmiş HID TRB adresi, slot ve uç eşleşirse bu olay tüketilir.
 çıplak işlev bh_tuket(taban: tam64,bas: tam64,dongu: tam64) -> mantıksal {
     eğer bh_kayitlar == 0 veya taban != bh_halka { ver yanlış; }
@@ -75,9 +126,12 @@ küresel değişken bh_fare_indeks: tam32 = 0;
     değişken w: tam64 = kem_mmio_oku32(p+12);
     eğer (w&1) != dongu { ver yanlış; }
     // Port değişikliği iki HID isteğinden bağımsızdır. ERDP ilerlemezse klavye de susar.
-    eğer ((w>>10)&63) == 34 { bh_ilerlet(taban,bas,dongu); ver doğru; }
+    eğer ((w>>10)&63) == 34 {
+        eğer be_kok>0 ve ((kem_mmio_oku64(p)>>24)&255)==(be_kok olarak tam64) { be_kok_degisti=1; }
+        bh_ilerlet(taban,bas,dongu); ver doğru; }
     eğer ((w>>10)&63) != 32 { ver yanlış; }
     değişken trb: tam64 = kem_mmio_oku64(p);
+    eğer be_tuket(trb,w&4294901760,kem_mmio_oku32(p+8)) { bh_ilerlet(taban,bas,dongu); ver doğru; }
     değişken i: tam64 = 0;
     iken i < bh_kayit_sayisi {
         değişken r: tam64 = bh_kayitlar+i*64;
@@ -102,7 +156,8 @@ küresel değişken bh_gorulen: tam64 = 0;
 çıplak işlev bh_olaylar() {
     eğer bh_kayitlar == 0 { ver; }
     // BOT ilerlediyse yeni başı da denetle. Boşta aynı olayı yoklama.
-    eğer bh_kesmeli != 0 ve bh_gorulen == bh_bildirim ve (bd_usb_olay != bh_halka veya bh_bas == (bd_usb_bas olarak tam64)) { ver; }
+    // Eşzamanlı soket çağrısı sırasında IF kapalı olabilir. Bekleyen ECM uçlarını da yokla.
+    eğer be_kayit==0 ve bh_kesmeli != 0 ve bh_gorulen == bh_bildirim ve (bd_usb_olay != bh_halka veya bh_bas == (bd_usb_bas olarak tam64)) { ver; }
     bh_gorulen=bh_bildirim;
     eğer bd_usb_olay == bh_halka {
         bh_bas=bd_usb_bas olarak tam64; bh_dongu=0; eğer bd_usb_dongu { bh_dongu=1; }
@@ -489,6 +544,7 @@ işlev bh_alt_kaldir(x: &değişken XhciDurum,bar: tam64,h: XhciAygit,port: tam3
                 eşleş xhci_alt_birak(x,j) { hata(e) => { ver hata(e); } tamam(v) => { } }
                 eşleş bd_xsur(bar,x) { hata(e) => { ver hata(e); } tamam(v) => { } }
                 güvensiz {
+                    eğer be_kayit==a.dma+12288 { be_bagli=0; be_kayit=0; }
                     değişken k: tam64 = 0;
                     iken k < bh_kayit_sayisi {
                         değişken kayit: tam64 = bh_kayitlar+k*64;
@@ -556,7 +612,7 @@ işlev bh_hublari_kur(x: &değişken XhciDurum,bar: tam64) -> sonuç<mantıksal,
 }
 // Bir hub için bekleyen IN tamamlanana kadar yeni TRB hazırlanmaz.
 küresel değişken bh_hub_bekliyor: tam32 = 0;
-çıplak işlev bh_hub_olayi() -> mantıksal { ver bh_hub_bekliyor != 0; }
+çıplak işlev bh_hub_olayi() -> mantıksal { ver bh_hub_bekliyor != 0 veya be_kok_degisti!=0; }
 işlev bh_hub_dinle(x: &değişken XhciDurum,bar: tam64) -> sonuç<mantıksal,metin> {
     değişken i: tam32 = 0;
     iken i < dizi_boyut(x.aygitlar) {

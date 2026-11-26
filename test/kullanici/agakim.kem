@@ -1,0 +1,24 @@
+// Ağ aracının iki yönündeki boruları sabit boyutlu bir tamponla doğrular.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc!=2 { ver 2; }
+    eğer kag_esit(sis_argv(argv,1),"satir") {
+        değişken yer: tam64=kag_ayir(2048); eğer yer==0 { ver 1; }
+        değişken oku: KagOkuyucu=kag_okuyucu(0,yer);
+        değişken adet: tam64=kag_satir_oku(&değişken oku,yer+1024,1024);
+        eğer adet!=4 veya sis_bayt_al(yer+1027)!=10 veya kag_hepsini_yaz(1,yer+1024,adet)!=4 { ver 7; }
+        eğer kag_satir_oku(&değişken oku,yer+1024,1024)!=0 { ver 8; } ver 0;
+    }
+    değişken uret: mantıksal=kag_esit(sis_argv(argv,1),"uret");
+    değişken p: tam64=kag_ayir(4096); değişken konum: tam64=0; eğer p==0 { ver 1; }
+    iken konum<1048576 {
+        değişken n: tam64=4096;
+        eğer değil uret { n=sis_oku(0,p,4096); eğer n<=0 veya n>1048576-konum { ver 3; } }
+        değişken i: tam64=0; iken i<n {
+            değişken j: tam64=konum+i; değişken b: tam32=((j*37+j/251)&255) olarak tam32;
+            eğer uret { sis_bayt_koy(p+i,b); } değilse eğer sis_bayt_al(p+i)!=(b^165) { ver 4; }
+            i=i+1;
+        }
+        eğer uret ve kag_hepsini_yaz(1,p,n)!=n { ver 5; } konum=konum+n;
+    }
+    eğer değil uret { eğer sis_oku(0,p,1)!=0 { ver 6; } kag_satir("AKIM 1048576 OK"); } ver 0;
+}

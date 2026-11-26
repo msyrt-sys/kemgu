@@ -1,0 +1,26 @@
+kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, TCP_BAGLI, TCP_FIN_1, TCP_KAPANIYOR, TCP_SURE_BEKLE, TCP_KAPALI, tcp_once, tcp_sira, tcp_yeni, tcp_aktif, tcp_cikar, tcp_baslik, tcp_bas_yaz, tcp_al, tcp_yaz, tcp_kapat_iste, tcp_sure };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(1600);
+    değişken rx: Dizi<dtam8> = bayt_sifir(2048); değişken tx: Dizi<dtam8> = bayt_sifir(2048);
+    değişken s: TcpBag = tcp_yeni(1,2,10,20,4294967293,rx,tx);
+    tcp_aktif(&değişken s,0); değişken n: tam32 = tcp_cikar(&değişken s,b,0,1);
+    değişken v: TcpBaslik = tcp_baslik(b,0,n,1,2);
+    eğer v.h!=24 { ver 1; }
+    eğer v.seq!=4294967293 veya v.bayrak!=2 veya v.mss!=1460 { ver 1; }
+    n=tcp_bas_yaz(b,0,0,2,1,20,10,9,4294967294,18,20);
+    v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,2);
+    eğer s.durum!=TCP_BAGLI veya s.beklenen!=10 { ver 2; }
+    eğer tcp_yaz(&değişken s,b,0,25)!=25 veya tcp_cikar(&değişken s,b,0,3)!=40 { ver 3; }
+    eğer s.sonraki!=18 veya s.tx_ucus!=20 veya değil tcp_once(4294967294,18) { ver 4; }
+    n=tcp_bas_yaz(b,0,0,2,1,20,10,10,18,16,20); v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,4);
+    eğer s.tx_boy!=5 veya s.una!=18 veya tcp_cikar(&değişken s,b,0,5)!=25 { ver 5; }
+    n=tcp_bas_yaz(b,0,0,2,1,20,10,10,23,16,20); v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,6);
+    tcp_kapat_iste(&değişken s); n=tcp_cikar(&değişken s,b,0,7);
+    v=tcp_baslik(b,0,n,1,2); eğer v.bayrak!=17 veya s.durum!=TCP_FIN_1 veya s.sonraki!=24 { ver 6; }
+    n=tcp_bas_yaz(b,0,0,2,1,20,10,10,23,17,20); v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,8);
+    eğer s.durum!=TCP_KAPANIYOR veya s.beklenen!=11 { ver 7; }
+    n=tcp_bas_yaz(b,0,0,2,1,20,10,11,24,16,20); v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,9);
+    eğer s.durum!=TCP_SURE_BEKLE { ver 8; }
+    tcp_sure(&değişken s,4009); eğer s.durum!=TCP_KAPALI { ver 9; } ver 0;
+}

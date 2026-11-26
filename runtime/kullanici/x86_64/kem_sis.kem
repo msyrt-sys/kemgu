@@ -125,3 +125,26 @@ işlev kul_onay(p: tam64,sat: tam32,etiket: metin) -> mantıksal {
         }
     } ver yanlış;
 }
+
+çıplak işlev sis_ping(ip: tam64,sira: tam64,ms: tam64) -> tam64 { ver sis_cagir(73,ip,sira,ms); }
+
+// Soket ve çoklu bekleme çağrıları işlem tablosundaki fd değerlerini kullanır.
+çıplak işlev sis_soket(tur: tam64) -> tam64 { ver sis_cagir(74,tur,0,0); }
+çıplak işlev sis_bagla(fd: tam64,ip: tam64,port: tam64) -> tam64 { ver sis_cagir(75,fd,ip,port); }
+çıplak işlev sis_baglan_dinle(fd: tam64,port: tam64,kuyruk: tam64) -> tam64 { ver sis_cagir(76,fd,port,kuyruk); }
+çıplak işlev sis_kabul(fd: tam64) -> tam64 { ver sis_cagir(77,fd,0,0); }
+çıplak işlev sis_gonder(fd: tam64,adres: tam64,boy: tam64) -> tam64 { ver sis_cagir(78,fd,adres,boy); }
+çıplak işlev sis_al(fd: tam64,adres: tam64,boy: tam64) -> tam64 { ver sis_cagir(79,fd,adres,boy); }
+çıplak işlev sis_udp_gonder_hedef(fd: tam64,io: tam64,uc: tam64) -> tam64 { ver sis_cagir(80,fd,io,uc); }
+çıplak işlev sis_udp_al_kaynak(fd: tam64,io: tam64,uc: tam64) -> tam64 { ver sis_cagir(81,fd,io,uc); }
+çıplak işlev sis_dns_coz(ad: metin,out: tam64) -> tam64 { ver sis_cagir(82,sis_metin_adres(ad),out,0); }
+çıplak işlev sis_ag_bilgi(out: tam64,boy: tam64) -> tam64 { ver sis_cagir(83,out,boy,0); }
+çıplak işlev sis_soket_secenek(fd: tam64,ad: tam64,deger: tam64) -> tam64 { ver sis_cagir(84,fd,ad,deger); }
+çıplak işlev sis_bekle_coklu(liste: tam64,adet: tam64,ms: tam64) -> tam64 { ver sis_cagir(85,liste,adet,ms); }
+çıplak işlev sis_icmp_yanki(fd: tam64,ip: tam64,istek: tam64) -> tam64 { ver sis_cagir(86,fd,ip,istek); }
+çıplak işlev sis_yazmayi_kapat(fd: tam64) -> tam64 { ver sis_cagir(87,fd,0,0); }
+çıplak işlev sis_ag_kayit(tur: tam64,i: tam64,out: tam64) -> tam64 { ver sis_cagir(88,tur,i,out); }
+
+çıplak işlev sis_dosya_akis(fd: tam64,islem: tam64,sinir: tam64) -> tam64 { ver sis_cagir(89,fd,islem,sinir); }
+
+çıplak işlev sis_paket_hedef(p: tam64,n: tam64) -> tam64 { ver sis_cagir(90,p,n,0); }

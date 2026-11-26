@@ -1,4 +1,4 @@
-// Sans-IO xHCI: yalnız GcIstek üretir. Kök ve USB 2 hub portları, tek yapılandırma, alt ayar 0.
+// Sans-IO xHCI: yalnız GcIstek üretir. Kök ve USB 2 hub portları, CDC ECM dâhil sınıfa göre yapılandırma ve alt ayar.
 // Sabit kaynağı: QEMU v8.2.2 hcd-xhci.{c,h}; tools/codex/dalga6_sabit.py.
 // DMA yerleşimi: DCBAA +0, komut +4096, olay +8192, ERST +12288,
 // giriş bağlamı +16384, scratch listesi +32768, çıkış bağlamları +65536.
@@ -7,15 +7,19 @@ kullan drivers::ortak::gc::{ GcIstek, GcYanit };
 kullan drivers::ortak::bayt::{ bayt_sifir, oku_u8, oku_le16, oku_le32, yaz_u8, yaz_le32, yaz_le64 };
 kullan drivers::usb::xhci_kayit::{ XhciYetenek, xhci_yetenek_coz, xhci_port_reset, xhci_port_ack };
 kullan drivers::usb::xhci_trb::{ XhciHalka, XhciOlayHalkasi, XhciOlay, XhciYazim, xhci_halka_yeni, xhci_uret, xhci_tuket, xhci_trb_kur, xhci_setup, xhci_data, xhci_status, xhci_slot_baglam, xhci_uc_baglam, xhci_olay_al, xhci_erdp };
-kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma, usb_aygit_coz, usb_yapilandirma_coz, usb_get_descriptor, usb_set_configuration };
+kullan drivers::usb::tanim::{ UsbAygit, UsbArayuz, UsbUc, UsbHid, UsbHidEk, UsbYapilandirma, usb_aygit_coz, usb_yapilandirma_coz, usb_get_descriptor, usb_set_configuration, usb_setup };
 
 kullan drivers::usb::hub::{ UsbHub, hub_tanim, hub_tanim_iste, hub_rota };
 
+kullan drivers::usb::cdc_ecm::{ CdcEcm, ecm_bos, ecm_coz, ecm_uc_sec, ecm_mac_coz };
+
 genel yapı XhciAygit {
+    ecm: CdcEcm;
     hid_hazir: mantıksal; depo_bagli: mantıksal; hub_hazir: mantıksal; hub_askida: mantıksal;
     rota: tam32; derinlik: tam32; ust: tam32; alt: tam32; tt: tam32; tt_port: tam32; hub: UsbHub;
      yuva: tam32; port: tam32; hiz: tam32; dma: tam64; kimlik: UsbAygit; yapi: UsbYapilandirma; ctrl_dongu: mantıksal; ctrl: XhciHalka; in_dongu: mantıksal; }
 genel yapı XhciDurum {
+    ecm: CdcEcm; yapi_no: tam32; tek_port: mantıksal;
     rota: tam32; derinlik: tam32; ust: tam32; alt: tam32; tt: tam32; tt_port: tam32; hub: UsbHub;
     dma: tam64; bar_boy: tam64; devredildi: mantıksal; c: XhciYetenek; evre: tam32; bekleme: tam32; sinir: tam32;
     kuyruk: Dizi<GcIstek>; q: tam32; cap: Dizi<dtam8>; cap_no: tam32;
@@ -34,7 +38,7 @@ genel işlev xhci_yeni(dma: tam64, bar_boy: tam64) -> sonuç<XhciDurum,metin> {
     değişken c: XhciYetenek = XhciYetenek { caplength: 0, surum: 0, yuva_sayisi: 0, kesme_sayisi: 0, port_sayisi: 0, adres64: yanlış, baglam_boy: 32, dboff: 0, rtsoff: 0, xecp: 0, scratchpad: 0 };
     değişken h: XhciHalka = XhciHalka { taban: dma+4096, adet: 64, son: 0, dongu: doğru, dolu: 0 };
     değişken o: XhciOlayHalkasi = XhciOlayHalkasi { taban: dma+8192, adet: 64, bas: 0, dongu: doğru };
-    ver tamam(XhciDurum { dma: dma, bar_boy: bar_boy, devredildi: yanlış, c: c, evre: 0, bekleme: 0, sinir: 4000,
+    ver tamam(XhciDurum { ecm:ecm_bos(), yapi_no:0, tek_port:yanlış, dma: dma, bar_boy: bar_boy, devredildi: yanlış, c: c, evre: 0, bekleme: 0, sinir: 4000,
         kuyruk: [], q: 0, cap: bayt_sifir(32), cap_no: 0, komut: h, ctrl: h, olay: o, aygitlar: [],
         rota:0, derinlik:0, ust:0, alt:0, tt:0, tt_port:0, hub:UsbHub { portlar:0, guc_ms:0, tt_suresi:0 },
         port: 1, hiz: 0, yuva: 0, ddma: 0, ep0: 8, ctrl_dongu: doğru, kimlik: [], yapi: [], toplam: 0,
@@ -82,7 +86,18 @@ işlev kontrol_kur(s: &değişken XhciDurum, paket: Dizi<dtam8>, sonraki: tam32)
     değişken bos: Dizi<dtam8> = []; ver kontrol_veri_kur(s,paket,bos,sonraki);
 }
 işlev tanim_iste(s: &değişken XhciDurum, tur: tam32, boy: tam32, sonra: tam32) -> sonuç<mantıksal,metin> {
-    eşleş usb_get_descriptor(tur,0,0,boy) { hata(e) => { ver hata(e); } tamam(b) => { ver kontrol_kur(s,b,sonra); } }
+    değişken no: tam32 = 0; eğer tur==2 { no=s.yapi_no; }
+    eşleş usb_get_descriptor(tur,no,0,boy) { hata(e) => { ver hata(e); } tamam(b) => { ver kontrol_kur(s,b,sonra); } }
+}
+işlev ecm_iste(s: &değişken XhciDurum, paket: sonuç<Dizi<dtam8>,metin>, sonra: tam32) -> GcIstek {
+    eşleş paket { hata(e) => { ver hata_ver(s,e); } tamam(b) => {
+        eşleş kontrol_kur(s,b,sonra) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } }
+    } }
+}
+genel işlev xhci_kok_baslat(s: &değişken XhciDurum,port: tam32) -> sonuç<mantıksal,metin> {
+    eğer s.evre!=100 veya port<1 veya port>s.c.port_sayisi { ver hata("xhci kok port durumu"); }
+    s.port=port; s.rota=0; s.derinlik=0; s.ust=0; s.alt=0; s.tt=0; s.tt_port=0;
+    s.hub=UsbHub {portlar:0,guc_ms:0,tt_suresi:0}; s.tek_port=doğru; s.evre=9; ver tamam(doğru);
 }
 işlev aygit_baglami(s: &değişken XhciDurum, son: tam32) -> sonuç<Dizi<dtam8>,metin> {
     eşleş xhci_slot_baglam(s.c.baglam_boy,s.rota,s.hiz,s.port,son) {
@@ -114,7 +129,7 @@ genel işlev xhci_alt_baslat(s: &değişken XhciDurum, indeks: tam32, port: tam3
 genel işlev xhci_alt_birak(s: &değişken XhciDurum, indeks: tam32) -> sonuç<mantıksal,metin> {
     eğer s.evre != 100 veya indeks < 0 veya indeks >= dizi_boyut(s.aygitlar) { ver hata("xhci birakma durumu"); }
     değişken a: XhciAygit = dizi_al(s.aygitlar,indeks);
-    eğer a.yuva == 0 veya a.derinlik == 0 { ver hata("xhci alt yuva yok"); }
+    eğer a.yuva == 0 veya (a.derinlik == 0 ve a.ecm.denetim < 0) { ver hata("xhci alt yuva yok"); }
     s.yuva=a.yuva; ver komut_kur(s,10,0,a.yuva,87);
 }
 işlev baglam(s: &değişken XhciDurum, son: tam32) -> sonuç<Dizi<dtam8>,metin> {
@@ -141,13 +156,14 @@ işlev uclari_kur(s: &değişken XhciDurum) -> sonuç<mantıksal,metin> {
             değişken son: tam32 = 1; değişken mask: tam64 = 1; değişken in_var: mantıksal = yanlış; değişken out_var: mantıksal = yanlış;
             değişken b: Dizi<dtam8> = bayt_sifir(s.c.baglam_boy*33);
             için u: y.uclar {
-                eğer u.alternatif == 0 {
+                eğer ecm_uc_sec(s.ecm,u) {
                     eğer u.tur != 2 ve u.tur != 3 { ver hata("xhci uc turu desteklenmiyor"); }
                     değişken giris: mantıksal = (u.adres&128) != 0;
-                    eğer (giris ve in_var) veya (değil giris ve out_var) { ver hata("xhci ayni yon coklu uc destegi yok"); }
+                    eğer s.ecm.denetim<0 ve ((giris ve in_var) veya (değil giris ve out_var)) { ver hata("xhci ayni yon coklu uc destegi yok"); }
                     eğer giris { in_var=doğru; } değilse { out_var=doğru; }
                     değişken dci: tam32 = (u.adres&15)*2; değişken tur: tam32 = u.tur; değişken halka: tam64 = s.ddma;
                     eğer giris { dci=dci+1; tur=tur+4; halka=halka+64; }
+                    eğer s.ecm.denetim>=0 ve u.adres==s.ecm.bildirim { halka=s.ddma+128; }
                     eğer dci > son { son=dci; } mask=mask|((1 olarak tam64)<<dci);
                     değişken aralik: tam32 = 0; değişken br: tam32 = 0;
                     eğer s.hiz == 4 { br=burst(s.yapi,u.adres); eğer br < 0 veya br > 15 { ver hata("xhci burst alani"); } }
@@ -197,7 +213,7 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
     eğer s.evre == 7 { eğer (y.deger&4096) != 0 { ver hata_ver(s,"xhci denetleyici hatasi"); } eğer (y.deger&1) != 0 { ver bekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+4)); } s.evre=9; }
     eğer s.evre == 9 { eğer s.port > s.c.port_sayisi { s.evre=100; ver GcIstek::Bitti; } s.evre=10; s.bekleme=0; ver GcIstek::Oku32((s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16); }
     eğer s.evre == 10 {
-        eğer (y.deger&1) == 0 { s.port=s.port+1; s.evre=9; ver GcIstek::Bekle(0); }
+        eğer (y.deger&1) == 0 { eğer s.tek_port { s.tek_port=yanlış; s.evre=100; ver GcIstek::Bitti; } s.port=s.port+1; s.evre=9; ver GcIstek::Bekle(0); }
         s.hiz=((y.deger>>10)&15) olarak tam32; s.evre=11;
         eşleş xhci_port_reset(y.deger|512,yanlış) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ekle(s,GcIstek::Oku32((s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16)); ver GcIstek::Yaz32((s.c.caplength olarak tam64)+1024+((s.port-1) olarak tam64)*16,v); } }
     }
@@ -210,7 +226,7 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         eşleş komut_kur(s,9,0,0,13) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } }
     }
     eğer s.evre == 13 {
-        s.yuva=s.son_yuva; eğer s.yuva < 1 veya s.yuva > 16 { ver hata_ver(s,"xhci yuva siniri"); }
+        s.yapi_no=0; s.ecm=ecm_bos(); s.yuva=s.son_yuva; eğer s.yuva < 1 veya s.yuva > 16 { ver hata_ver(s,"xhci yuva siniri"); }
         s.ddma=s.dma+1048576+(s.yuva olarak tam64)*131072; s.ctrl_dongu=doğru;
         eşleş xhci_halka_yeni(s.ddma+4096,64) { hata(e) => { ver hata_ver(s,e); } tamam(h) => { s.ctrl=h; } }
         ekle(s,GcIstek::BellekYaz(s.ddma+4096,bayt_sifir(1024)));
@@ -231,7 +247,30 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
     eğer s.evre == 17 { eşleş usb_aygit_coz(s.sonuc) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { } } s.kimlik=s.sonuc; eşleş tanim_iste(s,2,9,18) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
     eğer s.evre == 18 { eğer dizi_boyut(s.sonuc) != 9 { ver hata_ver(s,"xhci yapi basligi"); } s.toplam=oku_le16(s.sonuc,2); eğer s.toplam < 9 veya s.toplam > 4096 { ver hata_ver(s,"xhci yapi siniri"); } eşleş tanim_iste(s,2,s.toplam,19) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
     eğer s.evre == 19 {
-        s.yapi=s.sonuc; eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { eşleş usb_set_configuration(v.deger) { hata(e) => { ver hata_ver(s,e); } tamam(b) => { eşleş kontrol_kur(s,b,20) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } } } } }
+        s.yapi=s.sonuc;
+        eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(yapi) => {
+            eşleş ecm_coz(s.yapi,yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { s.ecm=v; } }
+            // QEMU ilk sırada RNDIS sunar. Değer ile tanımlayıcı dizini farklıdır.
+            eğer s.ecm.denetim<0 ve s.yapi_no+1<oku_u8(s.kimlik,17) {
+                için a: yapi.arayuzlar {
+                    eğer a.sinif==2 veya a.sinif==224 {
+                        s.yapi_no=s.yapi_no+1;
+                        eşleş tanim_iste(s,2,9,18) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } }
+                    }
+                }
+            }
+            ver ecm_iste(s,usb_set_configuration(yapi.deger),20);
+        } }
+    }
+    eğer s.evre==20 ve s.ecm.denetim>=0 { ver ecm_iste(s,usb_setup(1,11,s.ecm.alternatif,s.ecm.veri,0),54); }
+    eğer s.evre==54 { ver ecm_iste(s,usb_get_descriptor(3,0,0,4),55); }
+    eğer s.evre==55 {
+        eğer dizi_boyut(s.sonuc)!=4 veya oku_u8(s.sonuc,1)!=3 veya oku_u8(s.sonuc,0)<4 { ver hata_ver(s,"CDC ECM dil tanimi"); }
+        ver ecm_iste(s,usb_get_descriptor(3,s.ecm.mac_no,oku_le16(s.sonuc,2),26),56);
+    }
+    eğer s.evre==56 {
+        eşleş ecm_mac_coz(s.sonuc) { hata(e) => { ver hata_ver(s,e); } tamam(mac) => { s.ecm.mac=mac; } }
+        ver ecm_iste(s,usb_setup(33,67,12,s.ecm.denetim,0),57);
     }
     eğer s.evre == 20 ve oku_u8(s.kimlik,4) == 9 {
         eğer s.hiz >= 4 { ver hata_ver(s,"USB 3 hub desteklenmiyor"); }
@@ -242,15 +281,15 @@ genel işlev xhci_adim(s: &değişken XhciDurum, y: GcYanit) -> GcIstek {
         eşleş hub_tanim_iste(oku_u8(s.sonuc,0)) { hata(e) => { ver hata_ver(s,e); } tamam(b) => { eşleş kontrol_kur(s,b,51) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } } }
     }
     eğer s.evre == 51 { eşleş hub_tanim(s.sonuc) { hata(e) => { ver hata_ver(s,e); } tamam(h) => { s.hub=h; } } }
-    eğer s.evre == 20 veya s.evre == 51 { eşleş uclari_kur(s) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
+    eğer s.evre == 20 veya s.evre == 51 veya s.evre==57 { eşleş uclari_kur(s) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { ver GcIstek::Bekle(0); } } }
     eğer s.evre == 21 {
-        eşleş usb_aygit_coz(s.kimlik) { hata(e) => { ver hata_ver(s,e); } tamam(k) => { eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { değişken a: XhciAygit = XhciAygit { hid_hazir:yanlış, depo_bagli:yanlış, hub_hazir:yanlış, hub_askida:yanlış, rota:s.rota, derinlik:s.derinlik, ust:s.ust, alt:s.alt, tt:s.tt, tt_port:s.tt_port, hub:s.hub, yuva: s.yuva, port: s.port, hiz: s.hiz, dma: s.ddma, kimlik: k, yapi: v, ctrl_dongu: s.ctrl_dongu, ctrl: s.ctrl, in_dongu: doğru };
+        eşleş usb_aygit_coz(s.kimlik) { hata(e) => { ver hata_ver(s,e); } tamam(k) => { eşleş usb_yapilandirma_coz(s.yapi) { hata(e) => { ver hata_ver(s,e); } tamam(v) => { değişken a: XhciAygit = XhciAygit { ecm:s.ecm, hid_hazir:yanlış, depo_bagli:yanlış, hub_hazir:yanlış, hub_askida:yanlış, rota:s.rota, derinlik:s.derinlik, ust:s.ust, alt:s.alt, tt:s.tt, tt_port:s.tt_port, hub:s.hub, yuva: s.yuva, port: s.port, hiz: s.hiz, dma: s.ddma, kimlik: k, yapi: v, ctrl_dongu: s.ctrl_dongu, ctrl: s.ctrl, in_dongu: doğru };
             değişken i: tam32 = 0;
             değişken bulundu: mantıksal = yanlış;
             iken i < dizi_boyut(s.aygitlar) ve değil bulundu { değişken eski: XhciAygit = dizi_al(s.aygitlar,i); eğer eski.yuva == 0 { bulundu=doğru; } değilse { i=i+1; } }
             eğer i == dizi_boyut(s.aygitlar) { dizi_ekle(s.aygitlar,a); } değilse { dizi_yaz(s.aygitlar,i,a); }
         } } } }
-        eğer s.derinlik != 0 { s.evre=100; ver GcIstek::Bitti; }
+        eğer s.derinlik != 0 veya s.tek_port { s.tek_port=yanlış; s.evre=100; ver GcIstek::Bitti; }
         s.hub=UsbHub { portlar:0, guc_ms:0, tt_suresi:0 };
         s.port=s.port+1; s.evre=9; ver GcIstek::Bekle(0);
     }

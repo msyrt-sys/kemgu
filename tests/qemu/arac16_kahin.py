@@ -41,9 +41,18 @@ def cerceveler(c):
             if g & 1 and not g & 128:
                 gez(g & 0x000ffffffffff000, seviye-1)
     gez(cr3 & ~4095, 4)
-    ek = len(sayfalar & {p//4096 for p in tablolar})
-    assert ek > 0
-    return len(sayfalar)-16-8-8207-32-8-ek, len(sayfalar)
+    tablo_sayfalari = sayfalar & {p//4096 for p in tablolar}
+    assert tablo_sayfalari
+    # Ağın sabit tamponlarını QMP'den okunan fiziksel tabanlarından say.
+    ag_sayfalari = set()
+    for ad, adet in (('ag_l3_alan', 7), ('ag_l5', 3), ('ag_parca_alan', 77),
+                     ('ag_tcp_alan', 2060), ('sk_alan', 208)):
+        taban, = struct.unpack('<Q', c.mem(c.symbols[ad], 8))
+        assert taban and taban % 4096 == 0, (ad, taban)
+        alan = set(range(taban//4096, taban//4096 + adet))
+        assert alan <= sayfalar and alan.isdisjoint(tablo_sayfalari | ag_sayfalari), ad
+        ag_sayfalari.update(alan)
+    return len(sayfalar - tablo_sayfalari - ag_sayfalari)-16-8-8207-32-8, len(sayfalar)
 
 
 def bos_bayt(part):

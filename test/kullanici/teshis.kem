@@ -1,0 +1,24 @@
+// Kabuğun standart girdiye bağladığı anlık görüntüyü gönder, alıcının disk onayını bekle.
+işlev kt_rapor(fd: tam64,n: tam64,p: tam64) -> tam64 {
+    değişken bas: metin=metin_birlestir(metin_birlestir("KEMGU-TESHIS/1 ",tam_metin(n)),kod_metin(10));
+    değişken r: tam64=kag_hepsini_yaz(fd,sis_metin_adres(bas),metin_uzunluk(bas) olarak tam64);
+    değişken i: tam64=0;
+    iken r>=0 ve i<n {
+        değişken k: tam64=n-i; eğer k>4096 { k=4096; }
+        r=sis_oku(0,p,k); eğer r==0 { ver -5; }
+        eğer r>0 { r=kag_hepsini_yaz(fd,p,r); eğer r>0 { i=i+r; } }
+    }
+    eğer r<0 { ver r; }
+    r=sis_yazmayi_kapat(fd); eğer r<0 { ver r; }
+    r=kag_sureli_oku(fd,p,1,10000);
+    eğer r<0 { ver r; } eğer r!=1 veya sis_bayt_al(p)!=6 { ver -5; } ver i;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc!=4 { ver 2; }
+    değişken n: tam64=kag_sayi(sis_argv(argv,3),131072); değişken port: tam64=kag_sayi(sis_argv(argv,2),65535);
+    eğer n<1 veya port<1 { ver 2; } değişken p: tam64=kag_ayir(4096); eğer p==0 { ver 1; }
+    değişken fd: tam64=kag_bagla_sureli(sis_argv(argv,1),port,1,10000); değişken r: tam64=fd;
+    eğer fd>=0 { r=sis_soket_secenek(fd,4,10000); eğer r>=0 { r=kt_rapor(fd,n,p); } sis_kapat(fd); }
+    eğer r<0 { kag_satir(metin_birlestir("teshis hata ",tam_metin(r))); ver 1; }
+    kag_satir(metin_birlestir("teshis gonderildi ",tam_metin(r))); ver 0;
+}

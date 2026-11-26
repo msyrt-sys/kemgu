@@ -1,0 +1,159 @@
+kullan drivers::ag::http::{ http_crlf } olarak satir_sonu;
+// Her bağlantının ayrı istek ve yanıt tamponu ile dosya konumu vardır.
+yapı HsIstemci {
+    fd: tam64; tampon: tam64; alinan: tam64; evre: tam32; hazir: tam64; sure: tam64;
+    dosya: tam64; yol: metin; kalan: tam64; veri: tam64; boy: tam64; giden: tam64;
+    liste: tam64; liste_boy: tam64; kod: tam32; kapat: mantıksal;
+}
+işlev hs_yeni(p: tam64) -> HsIstemci {
+    ver HsIstemci {fd:-1,tampon:p,alinan:0,evre:0,hazir:0,sure:0,dosya:-1,yol:"",kalan:0,veri:0,boy:0,giden:0,liste:p+12288,liste_boy:0,kod:0,kapat:yanlış};
+}
+işlev hs_kapat(s: &değişken HsIstemci) {
+    eğer s.dosya>=0 { sis_kapat(s.dosya); s.dosya= -1; }
+    eğer s.fd>=0 { sis_kapat(s.fd); s.fd= -1; }
+}
+işlev hs_yanit(s: &değişken HsIstemci,kod: tam32,n: tam64) {
+    değişken ad: metin="200 OK";
+    eşleş kod { 400=>{ad="400 Bad Request";} 403=>{ad="403 Forbidden";} 404=>{ad="404 Not Found";} 500=>{ad="500 Internal Server Error";} _=>{} }
+    değişken cr: metin=http_crlf();
+    değişken h: metin=metin_birlestir(metin_birlestir("HTTP/1.1 ",ad),cr);
+    h=metin_birlestir(metin_birlestir(metin_birlestir(h,"Content-Length: "),tam_metin(n)),cr);
+    eğer s.kapat { h=metin_birlestir(h,"Connection: close"); } değilse { h=metin_birlestir(h,"Connection: keep-alive"); }
+    h=metin_birlestir(metin_birlestir(h,cr),cr);
+    s.kod=kod; s.veri=sis_metin_adres(h); s.boy=metin_uzunluk(h) olarak tam64; s.giden=0; s.kalan=n; s.evre=3;
+    değişken log: metin=metin_birlestir(metin_birlestir("HTTP ",ad)," GET ");
+    log=metin_birlestir(log,s.yol); sis_yaz(2,sis_metin_adres(log),metin_uzunluk(log) olarak tam64); sis_bayt_yaz(2,10);
+}
+işlev hs_ac(s: &değişken HsIstemci) {
+    değişken bilgi: tam64=s.tampon+8192;
+    eğer sis_bilgi(s.yol,bilgi)<0 { hs_yanit(s,404,0); ver; }
+    değişken dizin: mantıksal=sis_alan(bilgi,1)!=0;
+    değişken kip: tam64=0; eğer dizin { kip=16; }
+    değişken fd: tam64=sis_ac(s.yol,kip);
+    // Sınırlı süreç tablosunda dört disk fd'si kalabilir. Biri kapanınca yeniden denenir.
+    eğer fd== -24 { s.evre=2; ver; }
+    eğer fd<0 { hs_yanit(s,404,0); ver; }
+    eğer dizin {
+        değişken n: tam64=0; değişken r: tam64=1;
+        iken r>0 ve n<32768 {
+            değişken alan: tam64=32768-n; eğer alan>4096 { alan=4096; }
+            r=sis_dizin_oku(fd,s.liste+n,alan); eğer r>0 { n=n+r; }
+        }
+        eğer n==32768 { r=sis_dizin_oku(fd,bilgi,4096); }
+        sis_kapat(fd);
+        eğer r!=0 { hs_yanit(s,500,0); ver; } s.liste_boy=n; hs_yanit(s,200,n); ver;
+    }
+    değişken n: tam64=sis_alan(bilgi,0);
+    eğer n>16384 {
+        eğer sis_dosya_akis(fd,1,16777216)<0 { sis_kapat(fd); hs_yanit(s,500,0); ver; }
+    }
+    s.dosya=fd; hs_yanit(s,200,n);
+}
+// Tam başlığın sonunda artan baytlar aynı bağlantının sonraki isteğine kalır.
+işlev hs_iste(s: &değişken HsIstemci,kok: metin) {
+    değişken son: tam64=0; değişken i: tam64=3;
+    iken i<s.alinan ve son==0 {
+        eğer sis_bayt_al(s.tampon+i-3)==13 ve sis_bayt_al(s.tampon+i-2)==10 ve sis_bayt_al(s.tampon+i-1)==13 ve sis_bayt_al(s.tampon+i)==10 { son=i+1; }
+        i=i+1;
+    }
+    eğer son==0 {
+        eğer s.alinan==8192 { s.kapat=doğru; hs_yanit(s,400,0); }
+        ver;
+    }
+    değişken h: HttpBaslik=http_yeni(); değişken bas: tam64=0; i=0; değişken iyi: mantıksal=doğru;
+    iken i<son-2 ve iyi {
+        değişken c: tam32=sis_bayt_al(s.tampon+i);
+        eğer c==0 veya c==10 { iyi=yanlış; }
+        eğer c==13 {
+            eğer sis_bayt_al(s.tampon+i+1)!=10 { iyi=yanlış; }
+            değilse {
+                sis_bayt_koy(s.tampon+i,0);
+                değişken satir: metin=sis_dize(s.tampon+bas);
+                eğer bas==0 { iyi=http_ilk(&değişken h,satir,yanlış); } değilse { iyi=http_alan(&değişken h,satir); }
+                i=i+1; bas=i+1;
+            }
+        } i=i+1;
+    }
+    s.yol=h.hedef;
+    eğer değil iyi veya metin_uzunluk(h.sunucu)==0 veya h.parcali veya h.boy>0 { s.kapat=doğru; hs_yanit(s,400,0); ver; }
+    i=son;
+    iken i<s.alinan { sis_bayt_koy(s.tampon+i-son,sis_bayt_al(s.tampon+i)); i=i+1; }
+    s.alinan=s.alinan-son; s.kapat=h.kapat;
+    eşleş http_goreli(h.hedef) {
+        hata(e)=>{hs_yanit(s,403,0); ver;}
+        tamam(y)=>{ s.yol=kok; eğer metin_uzunluk(y)>0 { s.yol=metin_birlestir(metin_birlestir(kok,"/"),y); } }
+    }
+    s.evre=2;
+}
+işlev hs_gonder(s: &değişken HsIstemci,kok: metin) -> mantıksal {
+    eğer s.giden<s.boy {
+        değişken n: tam64=s.boy-s.giden; eğer n>4096 { n=4096; }
+        değişken v: tam64=sis_gonder(s.fd,s.veri+s.giden,n);
+        eğer v== -11 { ver doğru; } eğer v<=0 { ver yanlış; }
+        s.giden=s.giden+v; s.sure=sis_tik()+3000;
+        eğer s.giden<s.boy { ver doğru; }
+    }
+    eğer s.kalan>0 {
+        eğer s.dosya>=0 {
+            değişken adet: tam64=s.kalan; eğer adet>4096 { adet=4096; } s.veri=s.tampon+8192;
+            s.boy=sis_oku(s.dosya,s.veri,adet); eğer s.boy<=0 { ver yanlış; }
+        } değilse { s.veri=s.liste; s.boy=s.liste_boy; eğer s.boy!=s.kalan { ver yanlış; } }
+        s.kalan=s.kalan-s.boy; s.giden=0; ver doğru;
+    }
+    eğer s.dosya>=0 { sis_kapat(s.dosya); s.dosya= -1; }
+    eğer s.kapat { ver yanlış; }
+    s.evre=1; s.liste_boy=0; s.yol=""; hs_iste(s,kok); ver doğru;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc!=3 { kag_satir("sunucu <port> <dizin>"); ver 2; }
+    değişken port: tam64=kag_sayi(sis_argv(argv,1),65535); eğer port<1 { ver 2; }
+    değişken kok: metin=sis_argv(argv,2);
+    değişken p: tam64=kag_ayir(8*49152+256); eğer p==0 { ver 1; }
+    eğer sis_bilgi(kok,p)<0 veya sis_alan(p,1)==0 { kag_satir("sunucu dizin bulunamadi"); ver 1; }
+    değişken fd: tam64=kag_dinle(port,1,8); eğer fd<0 { ver 1; } sis_soket_secenek(fd,1,1);
+    değişken xs: Dizi<HsIstemci> = []; değişken i: tam32=0;
+    iken i<8 { dizi_ekle(xs,hs_yeni(p+256+(i olarak tam64)*49152)); i=i+1; }
+    kag_satir(metin_birlestir("HTTP dinliyor ",tam_metin(port)));
+    iken doğru {
+        değişken acik: tam32=0; i=0;
+        iken i<8 { değişken kayit: HsIstemci=dizi_al(xs,i); eğer kayit.dosya>=0 { acik=acik+1; } i=i+1; }
+        değişken adet: tam64=1; kag_bekleme(p,fd,1); i=0;
+        iken i<8 {
+            değişken s: HsIstemci=dizi_al(xs,i);
+            eğer s.fd>=0 {
+                eğer s.evre==2 ve acik<4 {
+                    hs_ac(&değişken s); eğer s.dosya>=0 { acik=acik+1; }
+                }
+                s.hazir= -1;
+                eğer s.evre!=2 {
+                    s.hazir=adet; değişken maske: tam64=1; eğer s.evre!=1 { maske=2; }
+                kag_bekleme(p+24*adet,s.fd,maske); adet=adet+1;
+                } dizi_yaz(xs,i,s);
+            } i=i+1;
+        }
+        değişken r: tam64=sis_bekle_coklu(p,adet,200); eğer r<0 { ver 1; }
+        değişken kabul: mantıksal=(sis_alan(p,2)&1)!=0; i=0;
+        iken i<8 {
+            değişken s: HsIstemci=dizi_al(xs,i);
+            eğer s.fd<0 {
+                eğer kabul {
+                    değişken yeni: tam64=sis_kabul(fd);
+                    eğer yeni>=0 {
+                        s=hs_yeni(s.tampon); s.fd=yeni; s.evre=1; s.sure=sis_tik()+3000; sis_soket_secenek(yeni,1,1);
+                    } değilse { kabul=yanlış; }
+                }
+            } değilse {
+                değişken durum: tam64=0; eğer s.hazir>=0 { durum=sis_alan(p+24*s.hazir,2); }
+                değişken iyi: mantıksal=(durum&4)==0 ve sis_tik()<s.sure;
+                eğer iyi ve s.evre==1 ve (durum&1)!=0 {
+                    değişken n: tam64=sis_al(s.fd,s.tampon+s.alinan,8192-s.alinan);
+                    eğer n>0 { s.alinan=s.alinan+n; s.sure=sis_tik()+3000; hs_iste(&değişken s,kok); }
+                    değilse eğer n!= -11 { iyi=yanlış; }
+                }
+                değilse eğer iyi ve s.evre==3 ve (durum&2)!=0 { iyi=hs_gonder(&değişken s,kok); }
+                eğer değil iyi { hs_kapat(&değişken s); }
+            }
+            dizi_yaz(xs,i,s); i=i+1;
+        }
+    } ver 0;
+}

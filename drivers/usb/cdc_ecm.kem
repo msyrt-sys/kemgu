@@ -1,0 +1,79 @@
+// CDC ECM 1.2: Union seçilen veri arayüzünü, Ethernet tanımı MAC dizgisini belirtir.
+kullan drivers::ortak::bayt::{ oku_u8, oku_le16 };
+kullan drivers::usb::tanim::{ UsbYapilandirma, UsbUc };
+
+genel yapı CdcEcm {
+    denetim: tam32; veri: tam32; alternatif: tam32; mac_no: tam32; cerceve: tam32;
+    bildirim: tam32; giris: tam32; cikis: tam32; paket: tam32; mac: tam64;
+}
+genel işlev ecm_bos() -> CdcEcm {
+    ver CdcEcm {denetim:-1,veri:-1,alternatif:-1,mac_no:0,cerceve:0,bildirim:0,giris:0,cikis:0,paket:0,mac:0};
+}
+genel işlev ecm_coz(b: Dizi<dtam8>, y: UsbYapilandirma) -> sonuç<CdcEcm,metin> {
+    değişken s: CdcEcm = ecm_bos();
+    için a: y.arayuzlar {
+        eğer a.sinif==2 ve a.alt_sinif==6 ve a.protokol==0 ve a.alternatif==0 {
+            eğer s.denetim>=0 { ver hata("CDC ECM birden fazla denetim arayuzu"); }
+            s.denetim=a.no;
+        }
+    }
+    eğer s.denetim<0 { ver tamam(s); }
+    değişken i: tam32 = 9; değişken secili: mantıksal = yanlış;
+    iken i<dizi_boyut(b) {
+        eğer dizi_boyut(b)-i<2 { ver hata("CDC ECM kisa tanim"); }
+        değişken n: tam32 = oku_u8(b,i); değişken tur: tam32 = oku_u8(b,i+1);
+        eğer n<2 veya n>dizi_boyut(b)-i { ver hata("CDC ECM tanim boyu"); }
+        eğer tur==4 {
+            eğer n<9 { ver hata("CDC ECM arayuz boyu"); }
+            secili=oku_u8(b,i+2)==s.denetim ve oku_u8(b,i+3)==0;
+        } değilse eğer secili ve tur==36 {
+            eğer n<3 { ver hata("CDC ECM sinif tanimi"); }
+            değişken alt: tam32 = oku_u8(b,i+2);
+            eğer alt==6 {
+                eğer n!=5 veya oku_u8(b,i+3)!=s.denetim veya s.veri>=0 { ver hata("CDC ECM Union"); }
+                s.veri=oku_u8(b,i+4);
+            } değilse eğer alt==15 {
+                eğer n!=13 veya s.mac_no!=0 { ver hata("CDC ECM Ethernet tanimi"); }
+                s.mac_no=oku_u8(b,i+3); s.cerceve=oku_le16(b,i+8);
+            }
+        }
+        i=i+n;
+    }
+    eğer s.veri<0 veya s.veri==s.denetim veya s.mac_no==0 veya s.cerceve<1514 { ver hata("CDC ECM Ethernet alanlari"); }
+    için a: y.arayuzlar {
+        eğer a.no==s.veri ve a.sinif==10 ve a.uc_sayisi==2 ve s.alternatif<0 { s.alternatif=a.alternatif; }
+    }
+    için u: y.uclar {
+        eğer u.arayuz==s.denetim ve u.alternatif==0 ve u.tur==3 ve (u.adres&128)!=0 ve u.paket_bayt>=8 {
+            s.bildirim=u.adres;
+        } değilse eğer u.arayuz==s.veri ve u.alternatif==s.alternatif ve u.tur==2 {
+            eğer (u.adres&128)!=0 { s.giris=u.adres; } değilse { s.cikis=u.adres; s.paket=u.paket_bayt; }
+        }
+    }
+    eğer s.giris==0 veya s.cikis==0 veya s.bildirim==0 veya s.giris==s.bildirim { ver hata("CDC ECM uc takimi"); }
+    ver tamam(s);
+}
+genel işlev ecm_uc_sec(s: CdcEcm,u: UsbUc) -> mantıksal {
+    eğer s.denetim<0 { ver u.alternatif==0; }
+    ver (u.arayuz==s.denetim ve u.alternatif==0 ve u.adres==s.bildirim) veya
+        (u.arayuz==s.veri ve u.alternatif==s.alternatif ve (u.adres==s.giris veya u.adres==s.cikis));
+}
+işlev hane(n: tam32) -> tam32 {
+    eğer n>=48 ve n<=57 { ver n-48; } eğer n>=65 ve n<=70 { ver n-55; }
+    eğer n>=97 ve n<=102 { ver n-87; } ver -1;
+}
+genel işlev ecm_mac_coz(b: Dizi<dtam8>) -> sonuç<tam64,metin> {
+    eğer dizi_boyut(b)!=26 veya oku_u8(b,0)!=26 veya oku_u8(b,1)!=3 { ver hata("CDC ECM MAC dizgisi"); }
+    değişken mac: tam64 = 0; değişken i: tam32 = 0;
+    iken i<6 {
+        değişken ofs: tam32 = 2+4*i; değişken ust: tam32 = hane(oku_le16(b,ofs)); değişken alt: tam32 = hane(oku_le16(b,ofs+2));
+        eğer ust<0 veya alt<0 { ver hata("CDC ECM MAC hanesi"); }
+        mac=mac|(((ust*16+alt) olarak tam64)<<(8*i)); i=i+1;
+    }
+    eğer mac==0 veya (mac&1)!=0 { ver hata("CDC ECM tekil MAC"); } ver tamam(mac);
+}
+// -1 diğer bildirimleri, 0 ve 1 NETWORK_CONNECTION durumunu gösterir.
+genel işlev ecm_baglanti(tip: tam32,kod: tam32,deger: tam32,arayuz: tam32,boy: tam32,denetim: tam32,veri: tam32) -> tam32 {
+    eğer tip!=161 veya kod!=0 veya deger<0 veya deger>1 veya boy!=0 veya (arayuz!=denetim ve arayuz!=veri) { ver -1; }
+    ver deger;
+}

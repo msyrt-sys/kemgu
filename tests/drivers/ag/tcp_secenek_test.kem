@@ -1,0 +1,28 @@
+kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, TCP_BAGLI, tcp_yeni, tcp_aktif, tcp_cikar, tcp_baslik, tcp_sec_yaz, tcp_yaz, tcp_al };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(1600); değişken buf: Dizi<dtam8> = bayt_sifir(128);
+    değişken s: TcpBag = tcp_yeni(1,2,10,20,500,bayt_sifir(131072),bayt_sifir(8192));
+    s.olcek_iste=2; s.damga_iste=doğru; s.gecikmeli=doğru; s.nagle=doğru;
+    tcp_aktif(&değişken s,100); değişken n: tam32 = tcp_cikar(&değişken s,b,0,100);
+    değişken v: TcpBaslik = tcp_baslik(b,0,n,1,2);
+    eğer v.h!=40 veya v.olcek!=2 veya v.damga!=100 veya v.pencere!=65535 { ver 1; }
+    n=tcp_sec_yaz(b,0,0,2,1,20,10,1500,501,18,16,3,200,100);
+    v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,102);
+    eğer s.durum!=TCP_BAGLI veya s.es_olcek!=3 veya s.pencere!=16 veya değil s.damgali { ver 2; }
+    n=tcp_cikar(&değişken s,b,0,103); v=tcp_baslik(b,0,n,1,2);
+    eğer v.pencere!=32768 veya v.damga!=103 veya v.yanki!=200 { ver 3; }
+    n=tcp_sec_yaz(b,0,1,2,1,20,10,1501,501,24,16,-1,201,103); v=tcp_baslik(b,0,n,2,1);
+    tcp_al(&değişken s,&v,b,0,104);
+    eğer s.pencere!=128 veya s.rx_boy!=1 veya tcp_cikar(&değişken s,b,0,128)!=0 { ver 4; }
+    n=tcp_cikar(&değişken s,b,0,129); v=tcp_baslik(b,0,n,1,2);
+    eğer v.h!=32 veya v.ack!=1502 veya v.pencere!=32767 { ver 5; }
+    // Daha eski zaman damgası yeni sıra numarasını ilerletmez.
+    n=tcp_sec_yaz(b,0,1,2,1,20,10,1502,501,24,16,-1,198,129); v=tcp_baslik(b,0,n,2,1);
+    tcp_al(&değişken s,&v,b,0,130); eğer s.rx_boy!=1 veya s.beklenen!=1502 { ver 6; }
+    tcp_cikar(&değişken s,b,0,130);
+    tcp_yaz(&değişken s,buf,0,4); n=tcp_cikar(&değişken s,b,0,131);
+    eğer n!=36 { ver 7; } tcp_yaz(&değişken s,buf,4,4);
+    eğer tcp_cikar(&değişken s,b,0,132)!=0 { ver 8; } s.nagle=yanlış;
+    eğer tcp_cikar(&değişken s,b,0,133)!=36 { ver 9; } ver 0;
+}

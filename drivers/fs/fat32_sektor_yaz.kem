@@ -392,3 +392,23 @@ genel işlev fat_yaz_plan_saat(s: &değişken FatSektor,yol: metin,islem: FatYaz
         } }
     } }
 }
+
+genel yapı FatDosyaYeri { lba: tam64; ofset: tam32; ilk: tam64; boy: tam64; }
+genel işlev fat_dosya_yeri(s: &değişken FatSektor,yol: metin) -> sonuç<FatDosyaYeri,metin> {
+    s.gerekli= -1;
+    eşleş yol_bol(yol) { hata(e)=>{ver hata(e);} tamam(xs)=>{
+        eğer dizi_boyut(xs)==0 { ver hata("dosya degil"); }
+        değişken ad: metin=dizi_al(xs,dizi_boyut(xs)-1);
+        eşleş fsy_ebeveyn(s,xs) { hata(e)=>{ver hata(e);} tamam(ust)=>{
+        eşleş fsy_dizin(s,ust) { hata(e)=>{ver hata(e);} tamam(d)=>{
+        eşleş fsy_kayitlar(d) { hata(e)=>{ver hata(e);} tamam(ks)=>{
+            için k: ks {
+                eğer fsy_ad_esit(k,ad) {
+                    eğer (k.ozellik&16)!=0 { ver hata("dosya degil"); }
+                    ver tamam(FatDosyaYeri {lba:dizi_al(d.sektorler,k.son/16),ofset:(k.son%16)*32,ilk:k.ilk,boy:k.boyut});
+                }
+            }
+        } } } } } }
+    } }
+    ver hata("bulunamadi");
+}

@@ -47,11 +47,29 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 67 | onplan_baslat | 2 | Program yolu ve baslat ile aynı argv | Çocuk PID, -13 ön plan gerekli | x86_64 |
 | 68 | piksel_satiri | 3 | Piksel y, u32 RGB dizi adresi, piksel sayısı | 0, -22 sınır, -14 adres, -13 ön plan | x86_64 |
 | 69 | boru | 1 | Yazılabilir iki i64 adresi (okuma fd, yazma fd) | 0, -23 boru havuzu dolu, -24 fd yok | x86_64 |
-| 70 | baslat_eslemeli | 3 | Program yolu, argv adresi, iki i64 (giriş ve çıkış boru fd; -1 varsayılan) | Çocuk PID veya negatif hata | x86_64 |
+| 70 | baslat_eslemeli | 3 | Program yolu, argv adresi, iki i64 (giriş ve çıkış boru veya soket fd, -1 varsayılan) | Çocuk PID veya negatif hata | x86_64 |
 | 71 | kopyala | 2 | Kaynak ve hedef UTF-8 yol adresleri | 0 veya negatif hata | x86_64 |
 | 72 | tasi | 2 | Kaynak ve hedef UTF-8 yol adresleri | Hedef yazıldıktan sonra kaynağı siler, 0 veya negatif hata | x86_64 |
+| 73 | ping | 3 | IPv4 adresi, sıra, zaman aşımı (ms) | İlk ping ELF sürümünün uyumluluk çağrısı. Başarıda RTT (µs), zaman aşımında -110. | x86_64 |
+| 74 | soket | 1 | tur | 1 TCP, 2 UDP, 3 ICMP. Yeni süreç fd değeri | x86_64 |
+| 75 | bagla | 3 | fd, ip, port | Uzak IPv4 ve port. Bloksuz bağlantıda -11 | x86_64 |
+| 76 | baglan_dinle | 3 | fd, port, kuyruk | TCP için kuyruk 1–8, UDP için yerel porta bağlar | x86_64 |
+| 77 | kabul | 1 | fd | Kabul edilen bağlantının fd değeri | x86_64 |
+| 78 | gonder | 3 | fd, adres, boy | Gönderim halkasına alınan bayt sayısı | x86_64 |
+| 79 | al | 3 | fd, adres, boy | Alınan bayt veya akış sonunda sıfır | x86_64 |
+| 80 | udp_gonder_hedef | 3 | fd, io, uc | io iki i64 adres ve boy, uç iki i64 IPv4 ve port | x86_64 |
+| 81 | udp_al_kaynak | 3 | fd, io, uc | Bir datagram alınır, yazılabilir uca kaynak döner | x86_64 |
+| 82 | dns_coz | 2 | ad, out | NUL ile biten ad, 8 baytlık IPv4 çıktısı | x86_64 |
+| 83 | ag_bilgi | 2 | out, boy | 96 baytlık ağ bilgisi kaydının dolu uzunluğu | x86_64 |
+| 84 | soket_secenek | 3 | fd, ad, deger | 1 bloksuz, 2 Nagle, 3 keepalive ms, 4 alım zaman aşımı ms | x86_64 |
+| 85 | bekle_coklu | 3 | liste, adet, ms | 24 baytlık kayıtlar. Hazır kayıt sayısı veya sürede sıfır | x86_64 |
+| 86 | icmp_yanki | 3 | fd, ip, istek | ICMP soketi. İki i64 sıra ve süre (ms). RTT mikrosaniye | x86_64 |
+| 87 | yazmayi_kapat | 1 | fd | TCP yazma yarısını sonlandırır, okuma devam eder | x86_64 |
+| 88 | ag_kayit | 3 | tür, indeks, 64 bayt çıktı | 1 ARP, 2 TCP (dinleyiciler dahil), 3 arayüz, 4 DHCP süreleri. Dolu 1, boş 0 | x86_64 |
+| 89 | dosya_akis | 3 | fd, işlem, üst sınır | 1 dosyanın okumalık kopyasını açar. 2 yazılacak içeriği fiziksel çerçevelerde biriktirir. 3 ve sıfır sınır dosyayı yayımlar. Yayımlamadan kapatma veya süreç çıkışı birikimi bırakır. Üst sınır 16 MiB. | x86_64 |
+| 90 | paket_hedef | 2 | Çıktı adresi ve tampon boyu | Yazılabilir veri bölümünü seçer, yolunu sıfır sonlandırmalı yazar. Paket işlem kilidi süreç çıkışında bırakılır. Meşgulken -16, uygun bölüm yoksa -30 döner. | x86_64 |
 
-40–79 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. Eski PVH ring0 çağrı kapısı ayrılmış aralığın dışındaki bilinmeyen numaralarda `-1` döndürür. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
+40–119 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. PVH ring0 kapısı eski davranışını korur. 40–79 dışında bilinmeyen çağrının sonucu `-1` olur. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
 | Değer | Ad | Anlamı |
 | --- | --- | --- |
@@ -116,3 +134,18 @@ QEMU xHCI üzerinde USB HID tamamlamaları MSI-X vektör 65'i kullanır. ISR cih
 Boru havuzu sekiz adet 4096 baytlık halka içerir. Yazma en fazla 4096 baytlık çağrıyı bütünüyle kabul eder veya yer açılana kadar süreci uyutur. Eksik okuma geçerlidir. Son yazar kapandığında kalan baytlar okunur ve ardından EOF gelir. Okur kalmadığında yazma -32 döner. Eşlemeli başlatma uçlara çocuğun ayrı referanslarını ekler. Ebeveyn kendi uçlarını kapatır.
 
 71 ve 72 numaralı çağrılar dosya aktarımı için kabukla aynı VFS yolunu kullanır. Her yol NUL sonlandırmalı UTF-8'dir. Kaynak belleği okunabilir olmalıdır. Hedef salt okunursa EROFS, yazma sınırı aşılırsa EFBIG veya ENOSPC döner. 51 numaralı yeniden_adlandir farklı bağlama noktaları arasında EXDEV döndürür. 72 numaralı tasi hedefi yazdıktan sonra kaynağı kaldırır. Hedef yazılmışken kaynağın silinmesi başarısız olursa hata döner ve iki kopya da kalabilir.
+
+## Soketlerin bellek düzeni ve bekleme
+
+Bir süreçte fd 0–15 aralığındadır. Yeni soket en küçük boş fd’yi 3’ten başlayarak kullanır. 74 numaralı çağrı TCP, UDP veya ICMP uç noktası açar. 42 numaralı kapatma çağrısı bütün fd türlerinde ortaktır. Bir soket 70 ile çocuğun standart girdisine, çıktısına veya ikisine birden eşlenebilir. Son sahip kapattığında ya da süreç sonlandığında bağlı TCP akışı FIN gönderir. 87 ile yalnızca yazma yönü kapatılabilir.
+
+IPv4 adresi ağdaki dört sekizlinin sayısal değeridir (örneğin 192.0.2.1 için 3221225985). Adres, port, işaretçi, uzunluk ve süre alanları kullanıcı belleğinde x86_64 yerel düzeninde sekizer bayttır.
+
+| Çağrı | Tampon |
+|---|---|
+| 80, 81 | `io` iki alandır (bayt tamponu adresi, tampon boyu). `uc` iki alandır (IPv4, port). 81 kaynak adresini ve portunu yazar. Bir okumada bir datagram tüketilir. |
+| 83 | Sırasıyla MAC, IPv4, önek, geçit, DNS, NTP, DHCP bitiş anı (monoton ms), RX çerçeve, TX çerçeve, RX bayt, TX bayt, TCP yeniden iletim. Tampon 96 bayttır. |
+| 85 | Her kayıt fd, istenen bitler, dönen bitler alanlarından oluşur. Okuma 1, yazma 2, hata 4. Her çağrıda dönen alan yeniden yazılır. Sonuç hazır kayıt sayısıdır. Süre sıfırsa hemen döner. |
+| 86 | İstek tamponu iki alandır (ICMP sıra numarası, zaman aşımı ms). Sonuç RTT mikrosaniye veya negatif hatadır. |
+
+Bloksuz okumada veri yoksa `-11`, dolu fd tablosunda `-24`, sınırlı soket veya TCP havuzu doluysa `-105`, kullanımda olan dinleme portunda `-98`, zaman aşımında `-110` döner. TCP’de okumanın sıfır dönmesi veri sonudur. Dinleme kuyruğu 1–8 aralığında seçilir. UDP’de her sokette dört datagramlık kuyruk vardır. Alım süresi ve keepalive milisaniye cinsindendir.

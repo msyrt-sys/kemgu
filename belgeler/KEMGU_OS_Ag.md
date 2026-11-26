@@ -1,0 +1,174 @@
+# KEMGU-OS ağ yığını
+
+## Kablo ve adresler
+
+QEMU her Ethernet çerçevesini yerel UDP soketine tek datagram olarak verir. Eş ve QEMU kendi portlarını işletim sistemine ayırtır. İlk konuk çerçevesinin kaynak adresi dönüş yoludur. Böylece eşzamanlı açılışlar birbirinin trafiğini almaz. Host eşinin MAC adresi `02:51:59:17:00:01`, IPv4 adresi `192.0.2.1/24`, test için dağıttığı adres `192.0.2.2` olur.
+
+## Katmanlar ve arayüz
+
+```text
+x86 kullanıcı programı                     ARM çekirdek sınama fazı
+        │ soket fd, bekle_coklu                   │ çekirdek çağrısı
+        └──────── TCP / UDP / ICMP ────────────────┘
+                       │
+              IPv4 ve parça birleştirme
+                       │
+                  Ethernet ve ARP
+                       │
+      ┌────────────────┴──────────────────┐
+   x86 PCI NIC veya USB CDC-ECM      ARM virtio-mmio
+```
+
+`drivers/ag` protokol modülleri bayt dizilerini, kayıtları ve monoton zamanı işler. Aygıt katmanı tamamlanan RX tanımlayıcısından çerçeveyi alır, hazır TX çerçevesini uygun halkaya yazar. `AgArayuz` kaydı model, MAC, bağlantı durumu, alınan ve gönderilen çerçeve ve bayt sayıları ile düşen çerçeveleri taşır. x86 ve ARM aynı kayıt tanımını kullanır. x86 soket API'si süreç tanıtıcılarını çekirdeğin soket tablosuna bağlar. ARM TCP ve HTTP sınamaları doğrudan çekirdek fazından başlar.
+
+Kabukta `ag` ve `ag durum` yerel arayüzü ve kira durumunu, `ag arp` komşuları, `ag baglantilar` TCP uçlarını gösterir. `ag sayac` kısa paket, sağlama hatası, bilinmeyen tür, dolu ARP, adres çakışması, TTL, ICMP hatası, parça ve TCP sayaçlarını verir. Ayrıntılı kayıtlar ABI 83 ve 88 ile kullanıcı programlarına açılır.
+
+## Zaman, sınırlar ve hatalar
+
+Host testi ilk DHCP işlemini en çok 20 saniye bekler. Yeniden gönderilen DISCOVER aynı işlem içinde geçerlidir. Pcap okuyucu IPv4 başlığının toplam boyunu ve başlık uzunluğunu denetler. Parçaların taşıma sağlaması ancak birleştirmeden sonra doğrulanabilir. Kısa kayıt, yanlış bağlantı tipi ve bozuk sağlama ayrı tanılar üretir. Ağ bayt sırası büyük endian’dır. [İnternet sağlaması, RFC 1071](https://www.rfc-editor.org/rfc/rfc1071.html)
+
+`Hat` kayıp, çiftleme ve iki iletinin sırasını değiştirme kararlarını her koşuma özel tohumdan üretir. Son bekleyen çerçeve `bosalt()` ile teslim edilir. Giden IPv4 parçalarının sonuncusu hariç veri uzunlukları sekizin katıdır.
+
+## Intel 82540EM
+
+PCI kimliği `8086:100e` olan aygıtın BAR0 alanı kullanılır. Sıfırlama için üst sınır yaklaşık 100 ms’dir. RAL0 ve RAH0 donanımın MAC adresini verir. Alıcı ve vericide sekizer adet 16 baytlık tanımlayıcı ve her biri için 2048 baytlık tampon vardır. Sürücü bu alanları başlangıçta ayrılan fiziksel sayfalarda tutar. `ag` bağlantı durumunu, çerçeve ve bayt sayılarını, düşen çerçeveleri ve kesme vektörünü gösterir. `donanim` aynı satırı aygıt listesine yazar.
+
+Q35’in tanınan kök yuvalarında sürücü IOAPIC üzerinden INTx yönlendirmesini kurar ve bir deneme kesmesiyle doğrular. Desteklenen bir yönlendirme bulunamazsa kabuk beklerken alıcıyı yoklar. `vektor -1` bu yolu gösterir. `ag dene` özel EtherType 0x88b5 ile 60 bayt yollar. `ag son` son çerçevenin FCS hariç baytlarını onaltılık gösterir. Gönderimde bağlantı kopuksa -100, boy geçersizse -90, halka doluysa -11 döner.
+
+## PCI aktarımı ve kuyruklar
+
+| PCI kimliği | Aygıt | Aktarım |
+|---|---|---|
+| `8086:100e` | Intel 82540EM | Eski tanımlayıcılar, INTx veya yoklama |
+| `8086:10d3` | Intel 82574L | Eski tanımlayıcılar, kuyruk 0 ve MSI-X |
+| `8086:10c9` | Intel 82576 | Gelişmiş tek tamponlu RX ve gelişmiş TX, kuyruk etkinleştirme, MSI-X |
+| `1af4:1000`, `1af4:1041` | VirtIO ağ | Modern PCI yetenekleri, split RX/TX kuyrukları, yoklama |
+| `10ec:8139` | Realtek RTL8139 | PCI raporunda desteklenmiyor |
+| Realtek RTL8111/8168 | Dahili Ethernet | Sanal donanım doğrulaması bulunmuyor |
+
+Düşük adresli halkalar için UEFI’nin açılışta fiziksel çerçevelerden ayırdığı 64 KiB VirtIO ağ alanı kullanılır. 82574L için yüksek bellek varsa firmware’in ConventionalMemory ve WB olarak bildirdiği hizalı bir alan eşlenir. Sürücü RX tabanının yüksek sözcüğünü aygıttan geri okuduktan sonra kuyruğu açar.
+
+82576 SRRCTL ile tanımlayıcı türünü, RXDCTL/TXDCTL ile kuyrukları seçer. Gelişmiş RX geri yazımı tanımlayıcının özgün tampon adresini örter. Sürücü her tüketimde adresi geri koyar. 82574L tek MSI-X girdisine IVAR, 82576 GPIE ve IVAR0 ile yönlendirir. VirtIO sürücüsü VERSION_1, MAC ve STATUS özelliklerini uzlaştırır. PCI yeteneklerinin BAR sınırlarını ve kuyruk bildirim ofsetini denetler. Her NIC için `AgArayuz` bağlantı ve sayaç görünümü sunar.
+
+RTL8139 bu dalganın desteklediği NIC listesine alınmadı. Emülasyonu olan bu aygıt, desteklenmeyen aygıtların raporda görünmesini doğrular. [QEMU 82574L uygulaması](https://github.com/qemu/qemu/blob/v8.2.2/hw/net/e1000e_core.c) [QEMU 82576 yazmaçları](https://github.com/qemu/qemu/blob/v8.2.2/hw/net/igb_regs.h)
+
+## IPv4 ve komşu çözümü
+
+`ag ayarla 192.0.2.2/24 192.0.2.1` statik adresi kurar ve gratuitous ARP yollar. Aynı IP'yi başka bir MAC kullanırsa seri uyarı ve çakışma sayacı artar. `ag sayac` kısa paket, sağlama, bilinmeyen protokol, dolu ARP tablosu, çakışma, TTL ve ICMP hata sayılarını gösterir. Önek dışındaki paketler yapılandırılmış ağ geçidine gider. IPv4 seçenekleri başlıktaki IHL ile atlanır.
+
+ARP önbelleği 16 komşu tutar. Bir kayıt 30 saniye yaşar. Çözüm bekleyen dört çerçeve için fiziksel tampon ayrılır. Yeniden sorgu aralığı 250 ms, üst süre göndericinin zaman aşımıdır. Bekleme kuyruğu doluysa -105 alınır. Bağlantı kapalıysa -100, adres yoksa -99, yön yoksa -101, zaman dolarsa -110 döner.
+
+`ping <ip> [adet [aralık_ms [zaman_aşımı_ms]]]` kullanıcı ELF'idir. Varsayılan dört istek, 1 saniye aralık ve istek başına 1 saniye sınır vardır. Çıktıda RTT mikrosaniyedir. `ag lo` yerel 127.0.0.0/8 arayüzünün sayaçlarını gösterir. Yerel echo istek ve yanıtları fiziksel NIC'e verilmeden IP ve ICMP katmanlarından geçer.
+
+## UDP, DHCP ve DNS
+
+UDP soketleri için 16 sabit port kaydı bulunur. Sıfır port geçersizdir (-22), kullanımda olan porta yeniden bağlanma -98, dolu tablo -105 döner. IPv4 UDP sağlaması sözde başlık dahil doğrulanır. Kapalı porta gelen istekler için ICMP port ulaşılamaz cevabı en çok 100 ms’de bir çıkar. `ag yanki` 9000 numaralı portta yankıyı açar.
+
+Arayüz açılınca DHCP başlar. `ag durum` kira evresi, adres, DNS ve NTP sunucusunu gösterir. `ag dhcp` yeni işlem açar, `ag dhcp kapat` dinamik adresi bırakır. Statik adres ayarı da DHCP'yi kapatır. Yanıt XID, istemci MAC’i, seçenek sınırları ve seçili sunucuyla doğrulanır. T1'de unicast, T2'de broadcast REQUEST çıkar. Kira bittiğinde adres bırakılır. Seçenek 42 NTP sunucusunu taşır.
+
+`cozumle <ad>` IPv4 A kaydı arar. En çok sekiz CNAME ve bir ad içinde en çok 32 geriye sıkıştırma işaretçisi izlenir. Soru adı, tür, sınıf, kaynak sunucu, port ve işlem kimliği yanıtla uyuşmalıdır. Önbellekte son başarılı ad, zincirin en kısa TTL'si kadar tutulur. Her DNS denemesi 650 ms ile sınırlıdır. Üç denemede ilk sunucu yanıtlamazsa ikinci sunucuya geçilir.
+
+## IPv4 parçaları
+
+Arayüz, kaynak adresi, hedef adresi, IPv4 kimliği ve protokolü aynı olan parçaları dört sabit yuvada toplar. Bir datagramın IP yükü en çok 12.288 bayttır. Her yuva ilk parçasından itibaren üç saniye boyunca tutulur. Çift veya örtüşen parçalarda her bayt için ilk gelen değer korunur. Birinci parça, son parça ve aradaki bütün baytlar gelince üst katman çerçeveyi alır. Son boyla çelişen parçalar reddedilir. Boş yuva kalmazsa yeni datagramın parçası düşürülür. Adres değişiminde bekleyen birleştirmeler temizlenir.
+
+Yerel UDP çıkışında MTU 1500’dür. Giden son parça dışında yük uzunluğu sekizin katıdır. Aynı datagramın bütün parçalarında kimlik ortaktır ve başlık sağlaması ayrı hesaplanır. DF işaretli datagram için parçalama işlevi hata verir. TTL sıfır olan paket yerel alımda sayılır ve düşürülür. Çekirdek yönlendirme yapmaz. Kapalı bir UDP portuna ICMP 3/3 yanıtı 100 ms’de en çok bir kez gönderilir.
+
+`ag parca`, `ag sayac` ve `donanim` birleştirilen datagramları, düşen parçaları veya zaman aşımına uğrayan yuvaları ve giden parçaları gösterir. x86 arayüzü dört yuva ve büyük gönderim tamponu için açılışta 77 fiziksel sayfa ayırır.
+
+## TCP bağlantıları
+
+TCP sıra ve ACK karşılaştırmaları 32 bit sarmalı hesaba katar. Etkin ve pasif açılışta MSS ilan edilir. Gönderim eşin penceresiyle sınırlıdır. Sıfır pencerede yoklama yeni sıra numarası tüketmez. Sekiz bağlantının her birinde gönderim ve alım için iki ayrı 128 KiB mantıksal halka bulunur. Dokuzuncu bağlantıya RST verilir. SYN için on saniye, FIN için on beş saniye, TIME-WAIT için dört saniye kullanılır. Sayılar yerel KEMGU profilinindir.
+
+`ag tcp dinle` 9001 numaralı portta yankıyı açar. `ag tcp bagla <adres>` aynı porta 64 KiB gönderip dönen baytları karşılaştırır. `ag tcp durum` gönderilen ve doğrulanan miktarı, hata ve kapanış sayısını gösterir.
+
+## TCP yeniden iletimi
+
+SRTT ve RTTVAR milisaniye cinsindendir. İlk RTO bir saniye, alt sınır bir saniye ve üst sınır 60 saniyedir. Zaman aşımında RTO iki katına çıkar. Sekizinci zaman aşımında uygulamaya -110 döner. Yeniden gönderilen veriden RTT örneği çıkarılmaz. Tıkanıklık penceresi başlangıçta on MSS’dir. Yavaş başlangıcı toplamsal artış izler. Üç yinelenen ACK hızlı yeniden iletimi başlatır. Kayıpta eşik uçuşta olan veri miktarının yarısı, en az iki MSS olur. Alıcı, halkada bir bitişik sıra dışı aralık saklar. Bundan ayrık ikinci aralık gönderenin sonraki iletiminden alınır. `ag tcp sayac` yeniden iletim, reddedilen bağlantı ve hatayla kapanış sayılarını gösterir.
+
+## TCP seçenekleri ve verim
+
+Bir bağlantının alım ve gönderim halkaları 128 KiB’dir. SYN penceresi ölçeklenmez. Ölçek iki taraf da önerdiğinde kullanılır. Yerel kaydırma 2, kabul edilen en büyük kaydırma 14’tür. Zaman damgası anlaşılmışsa TSecr RTT ölçümüne katılır. PAWS, 24 gün içinde önceki zaman damgasından eski veriyi reddeder. İlk veri segmentinin ACK üst sınırı 25 ms’dir. İkinci segment hemen onaylanır. Nagle küçük yazıları uçuşta veri varken biriktirir. Keepalive boş bağlantıda üç yoklamadan sonra -110 verir.
+
+Paralel QEMU yükünde ölçülen ilk 64 MiB aktarım 1,075 MiB/s sürdü. Kapı 0,25 MiB/s altını yakalar. Her ölçümde Python eşi ve ayrıca pcap okuyucusu bütün veri akışının SHA-256 değerini doğrular.
+
+## Kullanıcı soketleri
+
+16 soket yuvası toplam 208 fiziksel sayfada açılışta ayrılır. Her UDP soketi dört datagram saklar. Bir TCP soketi sekiz bağlantı yuvasından birini kullanır. Bekleyen çağrıda süreç bir sonraki zamanlayıcı tikine kadar uyur. Çoklu beklemenin listesinde soket, boru ve ön plan klavyesi bulunabilir. Süreçler soketi standart giriş ve çıkış olarak çocuğa aktarabilir. Son fd kapanınca TCP FIN gönderir. İmzalar ve tampon alanları sistem çağrısı ABI belgesindedir.
+
+## Kullanıcı araçları
+
+`ag` arayüz, sayaç, IPv4, geçit, DNS, NTP ve kalan DHCP kira süresini gösterir. `ag arp` komşuları, `ag baglantilar` dinleyiciler ve akışlar için yerel ve uzak uçları, TCP durum numarasını, TX ve RX kuyruk boyunu gösterir. ELF bulunmayan küçük imajda temel donanım sorgusu çekirdekte çalışır. `cozumle ornek.test` DNS A kaydını çözer.
+
+`nc [-z ms] ad port` ve `nc -d [-z ms] port` TCP üzerinden standart girdi ve çıktıyı taşır. `-u` UDP seçer. Varsayılan hareketsizlik sınırı 30 saniyedir. `echo merhaba | nc 127.0.0.1 9000` yerel bağlantıya yazar. `nc -d 9000 > gelen.bin` alınan baytları dosyaya yönlendirir. TCP’de standart girdi bitince yazma yarısı kapanır, yanıtın sonuna kadar okumaya devam edilir.
+
+## HTTP
+
+`indir http://sunucu:8000/dosya /ram/kopya` komutu IPv4 veya DNS adıyla GET yapar. İkinci bir URL ve hedef aynı komuta eklenebilir. Aynı kökende, gövdenin sonu biliniyor ve sunucu izin veriyorsa ikinci istek açık TCP bağlantısından geçer. 301, 302 ve 307 yanıtlarında en fazla beş yönlendirme izlenir. Gövde uzunluğu başlıktan, parçalı aktarımın sonundan veya bağlantının kapanmasından belirlenir. Eksik bir gövde hata verir. Başlık ve parça sonları telde CR LF bayt çiftidir. [HTTP/1.1 ileti biçimi, RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html)
+
+`sunucu 8080 /diskler/usb0p2/bin` sekiz bağlantıyı tek süreçte bekler. İlk yedi istemcinin başlıkları tamamlanmadan sekizinci istemci dosyasını alabilir. Dizinler satır başına bir ad döndürür. Yüzde kodları bir kez çözülür. Bileşen ayraçları, üst dizinler, sonda nokta veya boşluk ve FAT ad alanına giremeyen karakterler reddedilir. Yol ve sonuç kodu konsol günlüğüne girer. Ctrl+C açık bağlantıları ve dosya tanımlayıcılarını kapatır.
+
+| Sınır | Değer |
+|---|---|
+| İstek ya da durum satırı ve tek başlık | 2048 bayt |
+| Başlık alanları | 64 alan, toplam 8192 bayt |
+| Sunucunun göreli dosya yolu | 1024 bayt |
+| Sunucu dizin listesi | 32 KiB |
+| Tek dosya aktarımı | 16 MiB, ayrıca disk veya `/ram` kotası |
+| İstemcide bağlantı ve okuma beklemesi | 10 saniye |
+| Sunucuda hareketsiz bağlantı | 30 saniye |
+
+Dosya akışında ABI 89, veriyi fiziksel çerçevelerde biriktirir. Tam gövde gelince FAT32 verisi, iki FAT kopyası, dizin kaydı ve FSInfo sırasıyla yayımlanır. Önceki zincir yeni dizin kaydı kalıcılaştıktan sonra bırakılır. Okuma, dosyanın anlık kopyasını aynı süreçteki tanımlayıcıya bağlar. NVMe, AHCI ve USB BOT için fiziksel G/Ç istekleri 64 KiB sınırında bölünür. FAT tablosunun kullanılan kısmı en fazla 16 MiB olabilir. Süreç çıkışı ve yayımlamadan kapatma geçici çerçeveleri ayırıcıya iade eder.
+
+## SNTP ve RTC
+
+`ag ntp` DHCP seçenek 42 adresini kullanır. `ag ntp 192.0.2.1` açıkça seçilen sunucuya gider. Açılış bölümünde `/KEMGU/NTP.OTO` dosyası varsa kira alındığında ilk eşitleme otomatik yapılır. Her istek bir yanıta ve iki saniyelik beklemeye bağlıdır. Yanıtta sunucu IP ve portu, sürüm, mod, stratum, eşzamanlılık ve gönderilen zaman damgası denetlenir. Saat farkı ve gidiş dönüş süresi mikrosaniye olarak gösterilir. [RFC 4330](https://www.rfc-editor.org/rfc/rfc4330.html)
+
+RTC tarih aralığı 2000–2099’dur. 2036 saniye sarmalında dönem yerel saate göre seçilir. CMOS Status B 12/24 saat ve BCD/ikili biçimi korunur. SET biti tarih alanları birlikte yayımlanana kadar saniye güncellemesini durdurur. `baslat saat metin` anlık UTC tarihini ve saati standart çıktıya verir.
+
+## TFTP ve teşhis
+
+`tftp al <ip> <uzak> <yerel>` ve `tftp gonder <ip> <yerel> <uzak>` octet kipinde 512 baytlık blok kullanır. İstek UDP 69’a gider, ilk geçerli cevaptan sonra aynı aktarım portu kullanılır. İlk zaman aşımı 200 ms, üst sınır 1600 ms, blok başına en fazla beş yeniden iletim ve 12 saniye ilerleme süresi vardır. Son ACK 400 ms boyunca yinelenebilir. İndirmeler en çok 16 MiB olup ancak son blok alındığında yayımlanır. [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350.html)
+
+Host üzerinde `python3 tools/codex/teshis_al.py rapor.txt --adres 192.0.2.1 --port 9140` çalıştırılır. Konukta `donanim gonder 192.0.2.1 9140` çalışma dizinindeki veya kökteki donanim.txt dosyasını yollar. İkisi de yoksa yeni rapor üretilir. `log gonder 192.0.2.1 9140` günlüğün o andaki içeriğini gönderir. Her komut için alıcı yeniden açılır. Alıcı varsayılan olarak 127.0.0.1 üzerinde dinler, tam uzunluğu ve akış sonunu gördükten sonra dosyayı yayımlar, SHA256 değerini basar ve onay yollar.
+
+## HTTP paket deposu
+
+`make kem_os_paket_deposu` çalışır ELF dosyaları ve UTF-8/ASCII `paketler.txt` bildirimini `build/paket_deposu` altında üretir. Her satır LF ile biter. Alanlar tek boşlukla ayrılır ve sırasıyla ad, sürüm, ELF dosya adı, onluk bayt sayısı ve küçük harfli 64 haneli SHA256 içerir. En fazla 64 paket ve 16 KiB bildirim desteklenir. Paket başına sınır 16 MiB. HTTP dizinindeki bildirimin kaynağına güvenmek gerekir, bu biçimde imza yoktur.
+
+Veri bölümünü `bagla --yazilabilir usb0p2` ile açın. `paket guncelle http://192.0.2.1:8000/` veya tam paketler.txt adresi yerel depo kaydını günceller. `paket liste` dizini gösterir. `paket kur hesapla`, `paket bilgi hesapla` ve `paket kaldir hesapla` kurulumu yönetir. Program `/diskler/<veri>/bin/hesapla.elf` altında, kurulu kayıt `/diskler/<veri>/paket/kurulu.txt` içindedir. Yarım kalan yayımlama sonraki paket komutunda islem.txt kaydından devam eder. ELF doğrulama ve kopyalama aynı salt okunur dosya görüntüsünü kullanır. Farklı içeriğe sahip kurulum dışı hedefe dokunulmaz.
+
+## USB Ethernet
+
+xHCI kök portunda veya USB 2 hub arkasında CDC Ethernet Control Model (ECM) adaptörü kullanılabilir. Sürücü denetim arayüzünü sınıf 2, alt sınıf 6 ve protokol 0 ile tanır. CDC Union tanımı veri arayüzünü belirler. Ethernet işlev tanımındaki iMACAddress dizgisi on iki UTF-16LE onaltılık haneden oluşur. QEMU 8.2.2 usb-net ilk sırada RNDIS yapılandırmasını (değer 2), ikinci sırada CDC-ECM'i (değer 1) sunar. KEMGU ikinci tanımlayıcıyı okur, değer 1'i etkinleştirir ve toplu uçların bulunduğu veri alt ayarını seçer. Sınıfa özgü paket filtresi tekil ve yayın çerçevelerini açar.
+
+Toplu IN, toplu OUT ve kesme IN kendi DMA tamponlarını ve halkalarını kullanır. OUT uzunluğu uç paket boyunun tam katıysa sürücü çerçeveyi sıfır uzunluklu USB paketiyle bitirir. Kesme ucundaki NETWORK_CONNECTION bildirimi bağlantı durumunu günceller. Adaptörü çıkarmak DHCP kirasını ve komşu kayıtlarını temizler. Yeniden takılan adaptörün MAC adresi tekrar okunur ve yeni kira alınır. PCI ağ kartı seçilmişse USB adaptörünün takılması etkin arayüzü değiştirmez.
+
+`make calistir_bm_x86_usb_ag` kök/hub ve slirp/bağımsız Ethernet eşi birleşimlerinde DHCP, ping, 2 MiB HTTP dosyası, FAT32 paket kurulumu ve QMP ile çıkarıp takmayı sınar. QEMU'nun usb-net tanımları ve çerçeve sonlandırması için [aygıt kaynağı](https://github.com/qemu/qemu/blob/v8.2.2/hw/usb/dev-network.c).
+
+## ARM virtio-mmio
+
+ARM64 virt makinesinde ağ aygıtı MMIO kimliği 1 ile bulunur. VERSION_1, MAC ve sunulduğunda link durumu özelliği kabul edilir. Sekiz adet 2048 baytlık RX tanımlayıcısı çerçeve kopyalandıktan sonra yeniden kullanılır. ARP, ping, DHCP ve TCP zamanlayıcıları ARM genel sayacının milisaniye değerini kullanır. [9] ve [10] açılış sınamaları Ethernet, ARP, IPv4 ve ICMP için x86 ile aynı kaynak modüllerinden geçer.
+
+`make calistir_kem_os_arm_ag` her iki derleyicinin ARM imajını gerçek virtio-mmio aygıtıyla açar. Python eşi slirp üzerinden TCP verisini yansıtır ve HTTP dosyasını sunar. İsteğe bağlı [43]/[44] fazları yalnız `KEMAG017` işaretli ve en az 4352 sektörlük sınama diskinde çalışır. 128. sektör hedef IP, isteğe bağlı yerel IPv4 ve iki portu ağ sırasında içerir. TCP sonucu 256., HTTP gövdesi 2304. sektörden itibaren en çok birer MiB yazar. Host iki alanı beklenen içerik ve bağımsız pcap ile karşılaştırır.
+
+
+## Sınırlar ve gözlenebilir sonuçlar
+
+| Kaynak veya olay | Sınır veya süre | Konukta görülen sonuç |
+|---|---|---|
+| ARP komşusu ve çözüm bekleyen çerçeve | 16 komşu, 30 sn ömür, 4 bekleyen çerçeve, 250 ms sorgu aralığı | Dolu komşu tablosu sayacı artar. Bekleme kuyruğu doluysa -105 döner. |
+| IPv4 parçası | 4 yuva, 12.288 bayt yük, ilk parçadan itibaren 3 sn | Beşinci bağımsız datagram düşer. Süresi dolan yuva yeniden kullanılır. |
+| TCP ve kullanıcı soketleri | 8 TCP bağlantısı, 16 soket, UDP soketi başına 4 datagram | Yeni bağlantı reddedilir veya boş yuva hatası verilir. Son fd kapanınca soket bırakılır. |
+| DNS | Sorgu denemesinde 650 ms yanıt bekleme | İkinci sunucu varsa yeniden sorulur. Başarısız çözüm kabuğa zaman aşımı verir. |
+| HTTP | 8192 bayt başlık, sunucuda 8 istemci, dosya işlemlerinde 16 MiB | Eksik gövde veya bozuk çerçeveleme -74, boy sınırı aşımı ilgili hata ile döner. |
+| SNTP | Tek bekleyen istek, 2 sn yanıt sınırı | Başarılı yanıtta RTC güncellenir. Süre dolduğunda kabuk hata verir. |
+| TFTP | 512 bayt veri, blok başına 5 yeniden iletim, 12 sn ilerleme sınırı | Zaman aşımı -110. Son kısa bloktan sonra alıcı son ACK'i yineleyebilir. |
+| FD bekleme | 24 baytlık kayıt, okuma 1, yazma 2, hata 4 | Süre dolunca hazır kayıt sayısı sıfırdır. |
+| Paket yükleme | Bildirimde boy ve SHA256, bölüm başına işlem kilidi | Uyuşmazlıkta -74 ve geçici dosyanın temizlenmesi, kilit doluysa -16. |
+
+Sık görülen diğer hatalar geçersiz argüman için -22, bloksuz işlemde hazır olmama için -11, kullanımda olan port için -98 ve bağlantının kapalı olması için -100'dür. `make calistir_bm_x86_ag_saglamlik` geçen süreyi, hata sayaçlarını, çekirdek heap'ini ve fiziksel ayırıcının boş çerçevelerini ayrı ölçer. `make calistir_bm_x86_ag_iki` iki gerçek konuk arasındaki aktarımı, `make calistir_kem_os_pc_matris` ise açılış aygıtı, RAM ve NIC bileşimlerini çalıştırır.
+
+## Destek sınırı
+
+Ağ yığını yerel IPv4 ve tek dış arayüz içindir. IPv6, TLS, kablosuz ağ, IP yönlendirme/NAT, multicast ve Realtek dahili NIC sürücüleri bu sürümün dışında tutulmuştur. USB sınıf desteği CDC-ECM ile sınırlıdır. Fiziksel bilgisayar için ağ adımları ve teşhis raporu aktarımı donanım kontrol listesinde yer alır.

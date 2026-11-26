@@ -1,0 +1,33 @@
+kullan drivers::ag::tcp::{ TcpBag, TcpBaslik, TCP_BAGLI, tcp_yeni, tcp_yaz, tcp_baslik, tcp_bas_yaz, tcp_cikar, tcp_al };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+işlev main() -> tam32 {
+    değişken rx: Dizi<dtam8> = bayt_sifir(4096); değişken tx: Dizi<dtam8> = bayt_sifir(4096);
+    değişken b: Dizi<dtam8> = bayt_sifir(1600);
+    değişken s: TcpBag = tcp_yeni(1,2,10,20,500,rx,tx);
+    s.durum=TCP_BAGLI; s.beklenen=50; s.pencere=4096; s.mss=128; s.cwnd=1024;
+    eğer tcp_yaz(&değişken s,b,0,1024)!=1024 { ver 1; }
+    eğer tcp_cikar(&değişken s,b,0,100)!=148 veya s.alarm!=1100 { ver 2; }
+    değişken n: tam32 = tcp_bas_yaz(b,0,0,2,1,20,10,50,628,16,4096);
+    değişken v: TcpBaslik = tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,140);
+    eğer s.srtt!=40 veya s.sapma!=20 veya s.rto!=1000 veya s.cwnd!=1152 { ver 3; }
+    değişken i: tam32 = 0; iken i<4 { eğer tcp_cikar(&değişken s,b,0,201+i olarak tam64)!=148 { ver 4; } i=i+1; }
+    i=0; iken i<3 { tcp_al(&değişken s,&v,b,0,210+i olarak tam64); i=i+1; }
+    eğer değil s.hizli veya s.esik!=256 veya değil s.kurtar { ver 5; }
+    n=tcp_cikar(&değişken s,b,0,220); değişken tekrar: TcpBaslik = tcp_baslik(b,0,n,1,2);
+    eğer tekrar.seq!=628 veya s.yeniden!=1 veya s.tx_ucus!=512 { ver 6; }
+    n=tcp_cikar(&değişken s,b,0,1220); tekrar=tcp_baslik(b,0,n,1,2);
+    eğer tekrar.seq!=628 veya s.rto!=2000 veya s.cwnd!=128 veya s.alarm!=3220 veya s.kurtar { ver 7; }
+    n=tcp_bas_yaz(b,0,3,2,1,20,10,53,s.sonraki,24,4096);
+    v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,1230);
+    eğer s.rx_boy!=0 veya değil s.sira_disi { ver 8; }
+    n=tcp_bas_yaz(b,0,3,2,1,20,10,50,s.sonraki,24,4096);
+    v=tcp_baslik(b,0,n,2,1); tcp_al(&değişken s,&v,b,0,1240); tcp_al(&değişken s,&v,b,0,1250);
+    eğer s.rx_boy!=6 veya s.beklenen!=56 veya s.sira_disi veya s.srtt!=40 { ver 9; }
+    // Eş kapanıp hiç ACK vermediğinde denemeler sınırlıdır.
+    n=tcp_cikar(&değişken s,b,0,1300); eğer n<=20 { ver 10; }
+    i=0; iken i<8 {
+        değişken zaman: tam64 = s.alarm; eğer zaman==0 { ver 11; }
+        tcp_cikar(&değişken s,b,0,zaman); i=i+1;
+    }
+    eğer s.durum!=0 veya s.hata_kodu!= -110 veya s.deneme!=8 { ver 12; } ver 0;
+}

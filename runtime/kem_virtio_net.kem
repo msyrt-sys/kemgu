@@ -24,6 +24,7 @@ sabit VN_DEV_NET: tam32 = 1;
 
 // [D-673] `vnet_dma` artık runtime/mimari/<arch>/kem_platform.kem'de (arm64 0x46800000,
 // x86_64 0x02100000; CAT birimi).
+küresel değişken vnet_ozellik: tam32 = 0;
 küresel değişken vnet_rx_gorulen: tam32 = 0;     // işlenen RX used indeksi (kur'da sıfırlanır)
 küresel değişken vnet_rx_id: tam32 = 0;           // son alınan çerçevenin buffer id'si
 
@@ -56,10 +57,14 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
     vblk_y32(base + VM_STATUS, 0);
     vblk_y32(base + VM_STATUS, 1);
     vblk_y32(base + VM_STATUS, 3);
+    // Virtio-mmio DeviceFeaturesSel/DeviceFeatures. Config MAC ve link alanları onay gerektirir.
+    vblk_y32(base+20,1); eğer (vblk_o32(base+16)&1)==0 { ver -2; }
+    vblk_y32(base+20,0); vnet_ozellik=vblk_o32(base+16)&65568;
+    eğer (vnet_ozellik&32)==0 { ver -2; }
     vblk_y32(base + VM_DRV_FEAT_SEL, 1);
     vblk_y32(base + VM_DRV_FEAT, 1);        // bit32 VERSION_1
     vblk_y32(base + VM_DRV_FEAT_SEL, 0);
-    vblk_y32(base + VM_DRV_FEAT, 0);
+    vblk_y32(base + VM_DRV_FEAT, vnet_ozellik);
     vblk_y32(base + VM_STATUS, 11);
     eğer (vblk_o32(base + VM_STATUS) & 8) == 0 { ver 0 - 2; }   // FEAT_OK device onayı
     // --- RX queue (0): 8 descriptor, her biri rx_buf[i] (2048, device WRITE flag=2) ---
@@ -104,6 +109,9 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
 }
 
 // MAC config word0 (@ base+0x100, device-PROVIDED) — [8] gerçek-kanıt: cihaz canlı + config erişilir.
+çıplak işlev vnet_bagli(base: tam64) -> mantıksal {
+    ver base!=0 ve ((vnet_ozellik&65536)==0 veya ((vblk_o16(base+262) olarak tam32)&1)!=0);
+}
 çıplak işlev vnet_mac_w0(base: tam64) -> tam32 { ver vblk_o32(base + 256); }
 // MAC baytı oku (config @ base+0x100+i) — Ethernet src için.
 çıplak işlev vnet_mac_bayt(base: tam64, i: tam32) -> dtam8 { ver vblk_o8(base + 256 + (i olarak tam64)); }
@@ -149,12 +157,21 @@ sabit NO_TXBUF: tam64   = 16896;    // 2048 (TX çerçeve tamponu — [9])
     değişken slot: tam32 = vnet_rx_gorulen % 8;
     değişken id: tam32 = vblk_o32(ru + 4 + (slot olarak tam64) * 8);         // used.ring[slot].id
     değişken len: tam32 = vblk_o32(ru + 4 + (slot olarak tam64) * 8 + 4);    // used.ring[slot].len (net-başlığı dâhil)
-    vnet_rx_gorulen = vnet_rx_gorulen + 1;
-    eğer id >= 8 { ver 0 - 1; }
+    vnet_rx_gorulen = (vnet_rx_gorulen + 1)&65535;
+    eğer id < 0 veya id >= 8 { ver 0 - 1; }
     vnet_rx_id = id;
     değişken govde: tam32 = len - 12;
-    eğer govde < 0 { ver 0; }
+    eğer govde <= 0 veya len > 2048 { vnet_rx_iade(base,id); ver 0; }
     ver govde;
+}
+
+// Gövde kopyalandıktan sonra yalnız kullanılan RX tanımlayıcısı aygıta iade edilir.
+çıplak işlev vnet_rx_iade(base: tam64,id: tam32) {
+    eğer id<0 veya id>=8 { ver; }
+    değişken a: tam64=vnet_dma+NO_RXAVAIL; değişken idx: tam32=vblk_o16(a+2) olarak tam32;
+    vblk_y16(a+4+((idx&7) olarak tam64)*2,id olarak dtam16);
+    vblk_dsb(); vblk_y16(a+2,((idx+1)&65535) olarak dtam16);
+    vblk_dsb(); vblk_y32(base+VM_QUEUE_NOTIFY,0);
 }
 
 // Alınan çerçeveden bayt oku (net-başlığı 12 atlanmış).

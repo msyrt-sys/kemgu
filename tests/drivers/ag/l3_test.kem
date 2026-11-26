@@ -1,0 +1,24 @@
+kullan drivers::ag::bayt::{ ag_saglama, ag_ip_oku, ag_y8, ag_y16, ag_be16 };
+kullan drivers::ag::eth::{ eth_mac };
+kullan drivers::ag::arp::{ arp_yaz, arp_bul, arp_kaydet };
+kullan drivers::ag::ipv4::{ ip4_sonraki, ip4_baslik };
+kullan drivers::ag::l3::{ AgL3, l3_yeni, l3_ping, l3_al };
+kullan drivers::ortak::bayt::{ bayt_sifir } olarak ortakb;
+işlev main() -> tam32 {
+    değişken a: Dizi<dtam8> = bayt_sifir(128); değişken b: Dizi<dtam8> = bayt_sifir(128);
+    değişken t: Dizi<tam64> = [0 olarak tam64,0 olarak tam64,0 olarak tam64];
+    değişken s: AgL3 = l3_yeni(2,t); s.ip=3221225986; s.onek=24;
+    eğer ag_ip_oku("192.0.2.2")!=s.ip veya ag_ip_oku("2..0.1")!=-1 veya ag_ip_oku("256.1.2.3")!=-1 { ver 1; }
+    // RFC 1071 örneği: Python sum([0x0001,0xf203,0xf4f5,0xf6f7]) katlanınca 0xddf2.
+    ag_y16(a,0,1); ag_y16(a,2,61955); ag_y16(a,4,62709); ag_y16(a,6,63223);
+    eğer ag_saglama(a,0,8,0)!=8717 { ver 2; }
+    eğer arp_yaz(a,1,4,3221225985,0,s.ip)!=42 veya l3_al(&değişken s,a,42,b,1,yanlış)!=42 veya eth_mac(b,0)!=4 { ver 3; }
+    eğer arp_bul(t,3221225985,30000)!=4 veya arp_bul(t,3221225985,30001)!=0 { ver 4; }
+    eğer arp_kaydet(t,1,6,20,50) { ver 5; }
+    değişken komsu: tam64 = 3221225985;
+    eğer ip4_sonraki(s.ip,24,42,komsu)!=komsu veya ip4_sonraki(s.ip,24,42,42)!=42 { ver 6; }
+    eğer l3_ping(&değişken s,a,2130706433,2,2130706433,7,9)!=74 veya ip4_baslik(a,73)>=0 { ver 7; }
+    eğer l3_al(&değişken s,a,74,b,1,doğru)!=74 veya l3_al(&değişken s,b,74,a,2,doğru)!=0 veya s.ping_sonuc!=1 { ver 8; }
+    ag_y8(a,15,1); eğer ip4_baslik(a,74)!=-2 { ver 9; }
+    ver 0;
+}

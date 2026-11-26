@@ -1,0 +1,272 @@
+// Paket ELF'i SHA-256 sıkıştırmasını doğrudan KEMGU standart kütüphanesinden bağlar.
+kullan drivers::ag::paket::{PaketGirdi, pk_satir, pk_ad_mi, PK_AZAMI_BOY};
+kullan drivers::ag::http::{http_kes} olarak ph;
+
+yapı PkDepo { kok: metin; dizin: metin; url: metin; p: tam64; liste: Dizi<PaketGirdi>; kurulu: Dizi<PaketGirdi>; }
+işlev pk_yol(d: &değişken PkDepo,ad: metin) -> metin { ver metin_birlestir(d.dizin,ad); }
+işlev pk_hedef(d: &değişken PkDepo,ad: metin) -> metin { ver metin_birlestir(metin_birlestir(metin_birlestir(d.kok,"/bin/"),ad),".elf"); }
+işlev pk_bul(xs: Dizi<PaketGirdi>,ad: metin) -> tam32 {
+    değişken i: tam32=0; iken i<dizi_boyut(xs) { değişken g: PaketGirdi=xs[i]; eğer kag_esit(g.ad,ad) { ver i; } i=i+1; } ver -1;
+}
+işlev pk_sil(ad: metin,p: tam64) -> tam64 {
+    değişken r: tam64=sis_bilgi(ad,p); eğer r== -2 { ver 0; } eğer r<0 { ver r; }
+    // Uzun zinciri paketlenmiş FAT32 yolu bırakır, dizin silme planı tek kayda iner.
+    eğer sis_alan(p,0)>65536 {
+        değişken fd: tam64=sis_ac(ad,1); eğer fd<0 { ver fd; }
+        r=sis_dosya_akis(fd,2,0); eğer r>=0 { r=sis_dosya_akis(fd,3,0); }
+        sis_kapat(fd); eğer r<0 { ver r; }
+    }
+    ver sis_sil(ad);
+}
+işlev pk_dizin(ad: metin,p: tam64) -> tam64 {
+    değişken r: tam64=sis_bilgi(ad,p); eğer r== -2 { ver sis_olustur_dizin(ad); }
+    eğer r<0 { ver r; } eğer sis_alan(p,1)!=1 { ver -20; } ver 0;
+}
+işlev pk_yaz(ad: metin,s: metin,p: tam64) -> tam64 {
+    değişken n: tam64=metin_uzunluk(s) olarak tam64; eğer n>16384 { ver -27; }
+    değişken once: tam64=sis_bilgi(ad,p); eğer once<0 ve once!= -2 { ver once; }
+    değişken fd: tam64=sis_ac(ad,3); eğer fd<0 { ver fd; }
+    değişken r: tam64=sis_dosya_akis(fd,2,n);
+    eğer r>=0 { r=kag_hepsini_yaz(fd,sis_metin_adres(s),n); }
+    eğer r>=0 { r=sis_dosya_akis(fd,3,0); } sis_kapat(fd);
+    eğer r<0 ve once== -2 { sis_sil(ad); } ver r;
+}
+işlev pk_oku(ad: metin,p: tam64,eksik: mantıksal) -> tam64 {
+    değişken fd: tam64=sis_ac(ad,0);
+    eğer fd== -2 ve eksik { sis_bayt_koy(p,0); ver 0; } eğer fd<0 { ver fd; }
+    değişken n: tam64=sis_oku(fd,p,16384);
+    eğer n==16384 { değişken ek: tam64=sis_oku(fd,p+16384,1); eğer ek!=0 { n= -27; } }
+    sis_kapat(fd); eğer n<0 { ver n; } sis_bayt_koy(p+n,0); değişken i: tam64=0;
+    iken i<n {
+        değişken c: tam32=sis_bayt_al(p+i);
+        eğer c!=10 ve (c<32 veya c>126) { ver -74; } i=i+1;
+    } ver n;
+}
+işlev pk_ayristir(p: tam64,n: tam64,xs: Dizi<PaketGirdi>) -> tam64 {
+    değişken i: tam64=0; değişken bas: tam64=0;
+    iken i<n {
+        eğer sis_bayt_al(p+i)==10 {
+            eğer i-bas>200 veya dizi_boyut(xs)>=64 { ver -27; } sis_bayt_koy(p+i,0);
+            değişken satir: metin=http_kes(sis_dize(p+bas),0,(i-bas) olarak tam32);
+            eşleş pk_satir(satir) {
+                hata(e)=>{kag_satir(e); ver -74;}
+                tamam(g)=>{eğer pk_bul(xs,g.ad)>=0 { ver -17; } dizi_ekle(xs,g);}
+            }
+            bas=i+1;
+        } i=i+1;
+    }
+    eğer bas!=n { ver -74; } ver 0;
+}
+işlev pk_liste_metin(xs: Dizi<PaketGirdi>,cikar: metin) -> metin {
+    değişken s: metin=""; değişken nl: metin=kod_metin(10);
+    için g: xs { eğer değil kag_esit(g.ad,cikar) { s=metin_birlestir(metin_birlestir(s,g.satir),nl); } } ver s;
+}
+işlev pk_http(d: &değişken PkDepo,url: metin,yol: metin,azami: tam64) -> tam64 {
+    değişken o: KhOturum=KhOturum {ag:-1,ad:"",port:0,tampon:d.p+20000};
+    değişken r: tam64=kh_indir_sinir(&değişken o,url,yol,azami); kh_kapat(&değişken o); ver r;
+}
+işlev pk_guncelle(d: &değişken PkDepo,url: metin) -> tam64 {
+    değişken n: tam32=metin_uzunluk(url); eğer n<8 veya n>500 { ver -22; }
+    eşleş http_url(url) { hata(e)=>{ver -22;} tamam(u)=>{} }
+    değişken bas: metin=url;
+    eğer n>=13 ve kag_esit(http_kes(url,n-13,n),"/paketler.txt") { bas=http_kes(url,0,n-12); }
+    değilse eğer metin_bayt(url,n-1)!=47 { bas=metin_birlestir(url,"/"); }
+    değişken tmp: metin=pk_yol(d,"paketler.tmp");
+    değişken r: tam64=pk_http(d,metin_birlestir(bas,"paketler.txt"),tmp,16384);
+    eğer r>=0 { r=pk_oku(tmp,d.p,yanlış); }
+    eğer r>=0 { r=pk_ayristir(d.p,r,d.liste); }
+    eğer r>=0 ve dizi_boyut(d.liste)==0 { r= -74; }
+    eğer r>=0 { değişken s: metin=metin_birlestir(metin_birlestir(bas,kod_metin(10)),pk_liste_metin(d.liste,"")); r=pk_yaz(pk_yol(d,"depo.txt"),s,d.p); }
+    değişken sil: tam64=pk_sil(tmp,d.p); eğer r<0 { ver r; } eğer sil<0 { ver sil; } kag_satir("paket bildirimi guncellendi"); ver 0;
+}
+işlev pk_depo_oku(d: &değişken PkDepo) -> tam64 {
+    değişken n: tam64=pk_oku(pk_yol(d,"depo.txt"),d.p,yanlış); eğer n<0 { ver n; }
+    değişken i: tam64=0; iken i<n ve sis_bayt_al(d.p+i)!=10 { i=i+1; }
+    eğer i<8 veya i>=n veya i>501 { ver -74; }
+    sis_bayt_koy(d.p+i,0); d.url=http_kes(sis_dize(d.p),0,i olarak tam32);
+    eşleş http_url(d.url) { hata(e)=>{ver -74;} tamam(u)=>{} }
+    ver pk_ayristir(d.p+i+1,n-i-1,d.liste);
+}
+// Her sıkıştırmadan sonra çalışma bölgesi ve sha256_K tablosu birlikte geri verilir.
+çıplak işlev pk_sha_cagir(rho: *tam8,s: Dizi<sabitsüre<dtam32>>,b: Dizi<sabitsüre<dtam32>>) {
+    değişken sp: *tam64=(&s) olarak *tam64; değişken bp: *tam64=(&b) olarak *tam64;
+    değişken durum: tam64=*sp; değişken blok: tam64=*bp;
+    satıriçi_asm { mimari: x86_64
+        şablon: r#"movq $0, %rdi
+movq $1, %rsi
+movq $2, %rdx
+movq %rsp, %r11
+andq $$-16, %rsp
+subq $$16, %rsp
+movq %r11, (%rsp)
+call sha256_blok_sikistir
+movq (%rsp), %rsp"#
+        girdi("r",rho) girdi("r",durum) girdi("r",blok)
+        bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}") bozulan("~{rdi}")
+        bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}")
+    }
+}
+işlev pk_sha_blok(s: Dizi<sabitsüre<dtam32>>,b: Dizi<sabitsüre<dtam32>>,p: tam64) -> mantıksal {
+    değişken i: tam32=0; iken i<16 {
+        değişken k: tam64=p+4*(i olarak tam64); değişken w: dtam32=sis_bayt_al(k) olarak dtam32;
+        değişken j: tam64=1; iken j<4 { w=(w<<8)|(sis_bayt_al(k+j) olarak dtam32); j=j+1; }
+        dizi_yaz(b,i,sabitsüre_olustur(w)); i=i+1;
+    }
+    güvensiz { değişken rho: *tam8=kdl_bolge_olustur(); eğer (rho olarak tam64)==0 { ver yanlış; } pk_sha_cagir(rho,s,b); kdl_bolge_serbest(rho); } ver doğru;
+}
+işlev pk_sha(fd: tam64,boy: tam64,p: tam64) -> metin {
+    değişken h: Dizi<dtam32> = sha256_H0(); değişken s: Dizi<sabitsüre<dtam32>> = [];
+    değişken b: Dizi<sabitsüre<dtam32>> = [];
+    değişken i: tam32=0; iken i<16 {
+        dizi_ekle(b,sabitsüre_olustur(0 olarak dtam32)); eğer i<8 { dizi_ekle(s,sabitsüre_olustur(h[i])); } i=i+1;
+    }
+    değişken pos: tam64=0; değişken artik: tam64=0;
+    iken pos<boy {
+        değişken n: tam64=boy-pos; eğer n>4096 { n=4096; }
+        değişken r: tam64=sis_oku(fd,p,n); eğer r!=n { ver ""; }
+        değişken k: tam64=0; iken k+64<=n { eğer değil pk_sha_blok(s,b,p+k) { ver ""; } k=k+64; } artik=n-k;
+        eğer artik>0 { değişken j: tam64=0; iken j<artik { sis_bayt_koy(p+j,sis_bayt_al(p+k+j)); j=j+1; } }
+        pos=pos+n;
+    }
+    sis_bayt_koy(p+artik,128); değişken bitis: tam64=64; eğer artik>=56 { bitis=128; }
+    değişken j: tam64=artik+1; iken j<bitis { sis_bayt_koy(p+j,0); j=j+1; }
+    j=0; iken j<8 { sis_bayt_koy(p+bitis-1-j,((boy*8)>>(8*j) & 255) olarak tam32); j=j+1; }
+    eğer değil pk_sha_blok(s,b,p) { ver ""; } eğer bitis==128 ve değil pk_sha_blok(s,b,p+64) { ver ""; }
+    değişken hex: metin="0123456789abcdef"; i=0;
+    iken i<8 { değişken w: dtam32=ifşa(s[i]); değişken a: tam32=0;
+        iken a<8 { değişken v: tam32=((w>>(28-4*a))&15) olarak tam32; sis_bayt_koy(p+(8*i+a) olarak tam64,metin_bayt(hex,v) olarak tam32); a=a+1; } i=i+1;
+    } sis_bayt_koy(p+64,0); ver http_kes(sis_dize(p),0,64);
+}
+işlev pk_ozet_ac(d: &değişken PkDepo,g: PaketGirdi,yol: metin) -> tam64 {
+    değişken r: tam64=sis_bilgi(yol,d.p); eğer r<0 { ver r; }
+    eğer sis_alan(d.p,0)!=g.boy { kag_satir("paket boy uyusmuyor"); ver -74; }
+    değişken fd: tam64=sis_ac(yol,0); eğer fd<0 { ver fd; }
+    r=sis_dosya_akis(fd,1,g.boy);
+    eğer r>=0 {
+        değişken ozet: metin=pk_sha(fd,g.boy,d.p);
+        eğer değil kag_esit(ozet,g.sha) { kag_satir("paket SHA256 uyusmuyor"); r= -74; }
+    }
+    eğer r>=0 { r=sis_konumla(fd,0,0); }
+    eğer r<0 { sis_kapat(fd); ver r; } ver fd;
+}
+// Karma ve kopyalama aynı salt okunur dosya görüntüsünde çalışır.
+işlev pk_yayin(d: &değişken PkDepo,g: PaketGirdi,kaynak: tam64) -> tam64 {
+    değişken hedef: metin=pk_hedef(d,g.ad); değişken once: tam64=sis_bilgi(hedef,d.p);
+    eğer once<0 ve once!= -2 { ver once; }
+    değişken fd: tam64=sis_ac(hedef,3); eğer fd<0 { ver fd; }
+    değişken r: tam64=sis_dosya_akis(fd,2,g.boy); değişken pos: tam64=0;
+    iken r>=0 ve pos<g.boy {
+        değişken n: tam64=g.boy-pos; eğer n>4096 { n=4096; }
+        r=sis_oku(kaynak,d.p,n); eğer r!=n { r= -5; }
+        eğer r>0 { r=kag_hepsini_yaz(fd,d.p,n); pos=pos+n; }
+    }
+    eğer r>=0 { r=sis_dosya_akis(fd,3,0); }
+    sis_kapat(fd); eğer r<0 ve once== -2 { sis_sil(hedef); } ver r;
+}
+işlev pk_gorev(d: &değişken PkDepo,g: PaketGirdi,kur: mantıksal,kaynak: tam64) -> tam64 {
+    değişken r: tam64=0;
+    eğer kur { r=pk_yayin(d,g,kaynak); } değilse { r=pk_sil(pk_hedef(d,g.ad),d.p); }
+    eğer r<0 { ver r; }
+    değişken s: metin=pk_liste_metin(d.kurulu,g.ad);
+    eğer kur { s=metin_birlestir(metin_birlestir(s,g.satir),kod_metin(10)); }
+    r=pk_yaz(pk_yol(d,"kurulu.txt"),s,d.p);
+    eğer r>=0 { r=sis_esitle(); }
+    eğer r>=0 { r=pk_sil(pk_yol(d,"islem.txt"),d.p); }
+    eğer r>=0 { r=pk_sil(pk_yol(d,"yuk.tmp"),d.p); } ver r;
+}
+işlev pk_kurulu_oku(d: &değişken PkDepo) -> tam64 {
+    değişken xs: Dizi<PaketGirdi> = []; d.kurulu=xs;
+    değişken n: tam64=pk_oku(pk_yol(d,"kurulu.txt"),d.p,doğru); eğer n<0 { ver n; }
+    ver pk_ayristir(d.p,n,d.kurulu);
+}
+işlev pk_devam(d: &değişken PkDepo) -> tam64 {
+    değişken r: tam64=pk_kurulu_oku(d); eğer r<0 { ver r; }
+    değişken islem: metin=pk_yol(d,"islem.txt");
+    değişken n: tam64=pk_oku(islem,d.p,doğru); eğer n<0 { ver n; }
+    eğer n==0 {
+        r=pk_sil(pk_yol(d,"yuk.tmp"),d.p); eğer r<0 { ver r; } ver pk_sil(pk_yol(d,"paketler.tmp"),d.p);
+    }
+    eğer n<3 veya n>202 veya sis_bayt_al(d.p+n-1)!=10 { ver -74; }
+    değişken op: tam32=sis_bayt_al(d.p); eğer op!=43 ve op!=45 { ver -74; }
+    sis_bayt_koy(d.p+n-1,0);
+    eşleş pk_satir(http_kes(sis_dize(d.p+1),0,(n-2) olarak tam32)) {
+        hata(e)=>{ver -74;} tamam(g)=>{
+            değişken fd: tam64= -1;
+            eğer op==43 { fd=pk_ozet_ac(d,g,pk_yol(d,"yuk.tmp")); eğer fd<0 { ver fd; } }
+            r=pk_gorev(d,g,op==43,fd); eğer fd>=0 { sis_kapat(fd); }
+            eğer r>=0 { r=pk_kurulu_oku(d); } ver r;
+        }
+    }
+}
+işlev pk_islem(d: &değişken PkDepo,g: PaketGirdi,kur: mantıksal) -> tam64 {
+    değişken fd: tam64= -1; değişken op: metin="-"; değişken r: tam64=0;
+    eğer kur {
+        eğer pk_bul(d.kurulu,g.ad)<0 ve sis_bilgi(pk_hedef(d,g.ad),d.p)==0 {
+            değişken eski: tam64=pk_ozet_ac(d,g,pk_hedef(d,g.ad));
+            eğer eski<0 { kag_satir("hedef baska bir programa ait"); ver -17; } sis_kapat(eski);
+        }
+        değişken tmp: metin=pk_yol(d,"yuk.tmp");
+        r=pk_http(d,metin_birlestir(d.url,g.dosya),tmp,g.boy);
+        eğer r>=0 { fd=pk_ozet_ac(d,g,pk_yol(d,"yuk.tmp")); r=fd; }
+        eğer r<0 {
+            değişken temiz: tam64=pk_sil(tmp,d.p);
+            eğer temiz<0 { kag_satir(metin_birlestir("gecici dosya temizlenemedi ",tam_metin(temiz))); }
+            ver r;
+        } op="+";
+    }
+    değişken gorev: metin=metin_birlestir(metin_birlestir(op,g.satir),kod_metin(10));
+    r=pk_yaz(pk_yol(d,"islem.txt"),gorev,d.p);
+    eğer r>=0 { r=sis_esitle(); }
+    eğer r>=0 { r=pk_gorev(d,g,kur,fd); }
+    eğer fd>=0 { sis_kapat(fd); }
+    eğer r>=0 {
+        eğer kur { kag_satir(metin_birlestir("paket kuruldu ",g.ad)); }
+        değilse { kag_satir(metin_birlestir("paket kaldirildi ",g.ad)); }
+    } ver r;
+}
+işlev pk_calistir(d: &değişken PkDepo,komut: metin,arg: metin) -> tam64 {
+    değişken r: tam64=0;
+    eğer kag_esit(komut,"guncelle") { r=pk_dizin(d.dizin,d.p); eğer r<0 { ver r; } }
+    r=pk_devam(d); eğer r<0 { ver r; }
+    eğer kag_esit(komut,"guncelle") { ver pk_guncelle(d,arg); }
+    eğer kag_esit(komut,"kaldir") {
+        değişken i: tam32=pk_bul(d.kurulu,arg); eğer i<0 { ver -2; }
+        ver pk_islem(d,dizi_al(d.kurulu,i),yanlış);
+    }
+    r=pk_depo_oku(d); eğer r<0 { ver r; }
+    eğer kag_esit(komut,"liste") { için g: d.liste { kag_satir(metin_birlestir(metin_birlestir(g.ad," "),g.surum)); } ver 0; }
+    değişken i: tam32=pk_bul(d.liste,arg);
+    eğer i<0 {
+        değişken j: tam32=pk_bul(d.kurulu,arg);
+        eğer kag_esit(komut,"bilgi") ve j>=0 { değişken yerel: PaketGirdi=dizi_al(d.kurulu,j); kag_satir(yerel.satir); kag_satir(metin_birlestir("kurulu ",yerel.surum)); ver 0; }
+        ver -2;
+    }
+    değişken g: PaketGirdi=dizi_al(d.liste,i);
+    eğer kag_esit(komut,"bilgi") {
+        kag_satir(g.satir); değişken j: tam32=pk_bul(d.kurulu,g.ad);
+        eğer j>=0 { değişken k: PaketGirdi=dizi_al(d.kurulu,j); kag_satir(metin_birlestir("kurulu ",k.surum)); }
+        değilse { kag_satir("kurulu degil"); } ver 0;
+    }
+    r=pk_dizin(metin_birlestir(d.kok,"/bin"),d.p);
+    eğer r<0 { ver r; } ver pk_islem(d,g,doğru);
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc<2 veya argc>3 { kag_satir("paket guncelle <url> | liste | bilgi <ad> | kur <ad> | kaldir <ad>"); ver 2; }
+    değişken cmd: metin=sis_argv(argv,1); değişken arg: metin="";
+    eğer argc==3 { arg=sis_argv(argv,2); }
+    eğer kag_esit(cmd,"liste") { eğer argc!=2 { ver 2; } }
+    değilse eğer kag_esit(cmd,"guncelle") { eğer argc!=3 { ver 2; } }
+    değilse eğer değil (kag_esit(cmd,"bilgi") veya kag_esit(cmd,"kaldir") veya kag_esit(cmd,"kur")) veya değil pk_ad_mi(arg) { ver 2; }
+    değişken p: tam64=kag_ayir(32768); eğer p==0 { ver 1; }
+    değişken r: tam64=sis_paket_hedef(p,256);
+    eğer r>=0 {
+        değişken kok: metin=http_kes(sis_dize(p),0,metin_uzunluk(sis_dize(p)));
+        değişken musait: Dizi<PaketGirdi> = []; değişken kurulu: Dizi<PaketGirdi> = [];
+        değişken d: PkDepo=PkDepo {kok:kok,dizin:metin_birlestir(kok,"/paket/"),url:"",p:p,liste:musait,kurulu:kurulu};
+        r=pk_calistir(&değişken d,cmd,arg);
+    }
+    eğer r<0 {
+        eğer r== -30 { kag_satir("yazilabilir veri bolumu gerekli: bagla --yazilabilir <bolum>"); }
+        eğer r== -16 { kag_satir("baska bir paket islemi suruyor"); }
+        kag_satir(metin_birlestir("paket hata ",tam_metin(r))); ver 1; } ver 0;
+}

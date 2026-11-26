@@ -4,6 +4,7 @@
 import argparse
 import re
 import struct
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -16,6 +17,7 @@ ORTAK = (
     "runtime/kem_heap.kem",
     "runtime/kem_dizi_genis.kem",
     "runtime/kullanici/x86_64/kem_sis.kem",
+    "runtime/kullanici/x86_64/kem_ag.kem",
     "runtime/kullanici/x86_64/kem_basla.kem",
 )
 # Aynı adlar ELF içinde kendi kullanıcı çalışma zamanından çözülebilir.
@@ -32,6 +34,12 @@ KULLANICI_SEMBOLLERI = {
     "kdl_dizi_ekle_yapi", "kdl_dizi_al_yapi", "kdl_dizi_yaz_yapi",
 }
 
+
+
+def arac(ad):
+    """[D-771] Araç yolunu PATH(EXT) ile çöz. Windows CreateProcess adında nokta olan programa
+    `.exe` eklemez (`ld.lld` → WinError 2, CI); shutil.which PATHEXT'i uygular."""
+    return shutil.which(ad) or ad
 
 def cekirdek_sembolleri():
     yollar = [*Path("runtime/mimari/x86_64").glob("*.kem"),
@@ -75,10 +83,10 @@ def denetle(elf):
         giris_segmenti |= bayrak == 5 and va <= giris < va + dosya_boyu
     if not giris_segmenti:
         raise ValueError("Giriş, dosyada yer alan R-X segmentinde bulunamadı")
-    if subprocess.check_output(["llvm-nm", "-u", elf], text=True).strip():
+    if subprocess.check_output([arac("llvm-nm"), "-u", elf], text=True).strip():
         raise ValueError("Kullanıcı ELF'inde çözümlenmemiş sembol var")
     tanimli = subprocess.check_output(
-        ["llvm-nm", "--defined-only", elf], text=True
+        [arac("llvm-nm"), "--defined-only", elf], text=True
     )
     semboller = {satir.split()[-1] for satir in tanimli.splitlines() if satir.strip()}
     cekirdek = cekirdek_sembolleri()
@@ -94,7 +102,10 @@ def derle(derleyici, kaynak, hedef, eski=False):
     with tempfile.TemporaryDirectory(prefix="elf-", dir=hedef.parent) as tmp:
         w = Path(tmp)
         birlesik, ham, ir, nesne, elf = (w / f"u.{uzanti}" for uzanti in ("kem", "ham.ll", "ll", "o", "elf"))
-        birlesik.write_bytes(b"".join(Path(p).read_bytes() for p in (*ORTAK, kaynak)))
+        ek = ("runtime/kullanici/x86_64/kem_http.kem",) if Path(kaynak).stem in {"indir", "sunucu", "paket"} else ()
+        if Path(kaynak).stem == "paket":
+            ek += ("stdlib/kripto/karma.kem",)
+        birlesik.write_bytes(b"".join(Path(p).read_bytes() for p in (*ORTAK, *ek, kaynak)))
         linker = Path("linker/user-x86_64.ld")
         if eski:
             # Dalga 13'ün sabit giriş, heap ve argc adresleriyle bir ET_EXEC üret.
@@ -107,14 +118,20 @@ def derle(derleyici, kaynak, hedef, eski=False):
         with ham.open("wb") as cikti:
             subprocess.run([derleyici, "--llvm", "--mimari", "x86_64-none", birlesik], stdout=cikti, check=True)
         with ir.open("wb") as cikti:
-            subprocess.run(["awk", "-f", "test/strip_defined_declares.awk", ham], stdout=cikti, check=True)
+            subprocess.run([arac("awk"), "-f", "test/strip_defined_declares.awk", ham], stdout=cikti, check=True)
+        if Path(kaynak).stem == "paket":
+            # LFENCE genel yazmaçlarla çalışır. LLVM SSE2 içseli -mgeneral-regs-only
+            # hedefinde seçilemez, aynı donanım çitini bu hedefte açıkça kodla.
+            kod = ir.read_bytes().replace(b"call void @llvm.x86.sse2.lfence()",
+                                          b'call void asm sideeffect "lfence", "~{memory}"()')
+            ir.write_bytes(kod)
         subprocess.run([
-            "clang", "-target", "x86_64-unknown-none", "-ffreestanding", "-nostdlib",
+            arac("clang"), "-target", "x86_64-unknown-none", "-ffreestanding", "-nostdlib",
             "-mgeneral-regs-only", "-O2", "-Wno-override-module", "-ffunction-sections",
             "-fdata-sections", "-x", "ir", ir, "-c", "-o", nesne,
         ], check=True)
         subprocess.run([
-            "ld.lld", "-m", "elf_x86_64", "--gc-sections", "-T", linker,
+            arac("ld.lld"), "-m", "elf_x86_64", "--gc-sections", "-T", linker,
             "-z", "max-page-size=4096", "-o", elf, nesne,
         ], check=True)
         denetle(elf)

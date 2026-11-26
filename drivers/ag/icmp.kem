@@ -1,0 +1,10 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_y8, ag_y16, ag_saglama };
+genel işlev icmp_tur(b: Dizi<dtam8>,ofs: tam32,n: tam32) -> tam32 {
+    eğer n<8 veya ofs<0 veya ofs>dizi_boyut(b)-n { ver -1; }
+    eğer ag_saglama(b,ofs,n,0)!=0 { ver -2; } ver ag_b8(b,ofs);
+}
+genel işlev icmp_yanki(b: Dizi<dtam8>,ofs: tam32,n: tam32,tur: tam32,kim: tam32,sira: tam32) {
+    ag_y8(b,ofs,tur olarak tam64); ag_y8(b,ofs+1,0); ag_y16(b,ofs+2,0);
+    ag_y16(b,ofs+4,kim olarak tam64); ag_y16(b,ofs+6,sira olarak tam64);
+    ag_y16(b,ofs+2,ag_saglama(b,ofs,n,0) olarak tam64);
+}

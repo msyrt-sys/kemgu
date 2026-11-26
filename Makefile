@@ -1438,7 +1438,7 @@ calistir_kem_os_arm: $(BUILD)/kemgu$(EXE) $(KEM_OS_A64_OBJS) $(BUILD)/bm_a64_mmi
 	@# yalnız `özellik` gövdesinde geçerli (src/parser.c:738). Dolayısıyla tek-birim
 	@# birleştirme, dil değişikliği GEREKTİRMEYEN tek çözüm. Falsifiye-kanıt gate'leri
 	@# (SAF-.kem allocator/metin/mmio/yetki) bm_a64_kem_heap.o yerine kem_os.o'ya bakar.
-	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
+	@cat runtime/kem_heap.kem runtime/mimari/arm64/kem_uart.kem runtime/kem_mmu.kem runtime/kem_gorev.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/arm64/kem_gorev_hw.kem runtime/kem_zaman.kem runtime/mimari/arm64/kem_zaman_hw.kem runtime/mimari/arm64/kem_bariyer.kem runtime/mimari/arm64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_dizi_genis.kem runtime/kem_virtio_net.kem runtime/kem_ag_arm.kem runtime/kem_elf.kem runtime/mimari/arm64/kem_kesif.kem runtime/kem_dtb.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os.kem > $(BUILD)/kem_os_comb.kem
 	@# D-337 TİP BORCU KAPANDI: `--tip-atla` KALDIRILDI. kem_os birleşik kaynağı
 	@# artık dilin kendi tip kapısından geçer (0 hata). Bayrağı geri EKLEME —
 	@# eklemek, "derleme zamanı güvenlik" tezini çekirdeğin kendisinde askıya alır.
@@ -4692,7 +4692,7 @@ calistir_uart_pl011_bare_metal:
 # (2) Saf-mantık sürücü testleri (ortak/ps2/disk/fs/acpi) İKİ derleyicide
 #     derlenip koşar + stdout eşitliği. Yeni test dosyası kendiliğinden kapsanır.
 #     surucu_diff yalnız YAPIYI ölçer (linklemez); bu kapı DAVRANIŞI ölçer.
-CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/blok/*_test.kem tests/drivers/usb/*_test.kem tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
+CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/ag/*_test.kem tests/drivers/blok/*_test.kem tests/drivers/usb/*_test.kem tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
                      tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem tests/drivers/pci/*_test.kem tests/drivers/bellek/*_test.kem tests/drivers/elf/*_test.kem tests/drivers/ekran/*_test.kem tests/drivers/girdi/*_test.kem tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem tests/drivers/sinir/*_test.kem tests/drivers/uygulama/*_test.kem))
 calistir_chatgpt_kopru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@echo "=== ChatGPT köprüsü: dil kartı + saf-mantık sürücü testleri ==="
@@ -5049,7 +5049,7 @@ calistir_kem_os_pc_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 .PHONY: calistir_kem_os_ayristirici
 test_tumu: calistir_kem_os_ayristirici
 calistir_kem_os_ayristirici: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum dalga16)) tests/drivers/fs/fat32_bozuk_test.kem
+	@bash otomasyon/chatgpt/dogrula.sh $(addprefix tests/drivers/bulanik/,$(addsuffix _test.kem,acpi madt fadt elf bmp bolum bolum_uyum dalga16 ag17)) tests/drivers/fs/fat32_bozuk_test.kem
 	@SUREC_KAHIN=bozuk_elf_kahin bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_girdi15
@@ -5142,3 +5142,119 @@ calistir_bm_x86_arac16: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl
 	@bash otomasyon/chatgpt/dogrula.sh tools/codex/arac16_test.kem
 	@python3 tests/qemu/surec_abi.py
 	@SUREC_KAHIN=arac16_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_ag_es
+test_tumu: calistir_ag_es
+calistir_ag_es:
+	@python3 tests/qemu/ag_es_test.py
+
+.PHONY: calistir_bm_x86_e1000
+test_tumu: calistir_bm_x86_e1000
+calistir_bm_x86_e1000: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh
+
+.PHONY: calistir_bm_x86_nic_matris
+test_tumu: calistir_bm_x86_nic_matris
+calistir_bm_x86_nic_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh matris
+
+.PHONY: calistir_bm_x86_ag_l3
+test_tumu: calistir_bm_x86_ag_l3
+calistir_bm_x86_ag_l3: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh l3
+
+.PHONY: calistir_bm_x86_ag_udp
+test_tumu: calistir_bm_x86_ag_udp
+calistir_bm_x86_ag_udp: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh udp
+
+.PHONY: calistir_bm_x86_ag_parca
+test_tumu: calistir_bm_x86_ag_parca
+calistir_bm_x86_ag_parca: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh parca
+
+.PHONY: calistir_bm_x86_tcp_temel
+test_tumu: calistir_bm_x86_tcp_temel
+calistir_bm_x86_tcp_temel: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh tcp
+
+.PHONY: calistir_bm_x86_tcp_kayip
+test_tumu: calistir_bm_x86_tcp_kayip
+calistir_bm_x86_tcp_kayip: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh kayip
+
+.PHONY: calistir_bm_x86_tcp_secenek
+test_tumu: calistir_bm_x86_tcp_secenek
+calistir_bm_x86_tcp_secenek: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh secenek
+
+.PHONY: calistir_bm_x86_tcp_verim
+test_tumu: calistir_bm_x86_tcp_verim
+calistir_bm_x86_tcp_verim: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh verim
+
+.PHONY: calistir_bm_x86_soket
+test_tumu: calistir_bm_x86_soket
+calistir_bm_x86_soket: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh soket
+
+.PHONY: calistir_bm_x86_ag_arac
+test_tumu: calistir_bm_x86_ag_arac
+calistir_bm_x86_ag_arac: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh arac
+
+.PHONY: calistir_bm_x86_http
+test_tumu: calistir_bm_x86_http
+calistir_bm_x86_http: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh http
+
+.PHONY: calistir_bm_x86_ntp
+test_tumu: calistir_bm_x86_ntp
+calistir_bm_x86_ntp: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh ntp
+
+.PHONY: calistir_bm_x86_tftp_teshis
+test_tumu: calistir_bm_x86_tftp_teshis
+calistir_bm_x86_tftp_teshis: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh tftp
+
+
+PAKET_ELFLERI := $(addprefix $(BUILD)/kullanici/,$(addsuffix .elf,hesapla kedi say saat ping cozumle nc indir sunucu tftp))
+# [D-771] Paket deposu yalnız QEMU kapılarının girdisidir. QEMU/OVMF yoksa o kapılar zaten
+# "ATLANDI" der; depoyu yine de kurmak Windows CI'da kullanıcı ELF'lerini derletiyor ve yerel
+# Python MSYS `awk`ını çalıştıramadığı için düşüyordu (WinError 2). Önkoşul yalnız QEMU varken.
+PAKET_DEPOSU_ON := $(if $(and $(shell command -v qemu-system-x86_64 2>/dev/null),$(wildcard /usr/share/OVMF/OVMF_CODE_4M.fd)),kem_os_paket_deposu)
+.PHONY: kem_os_paket_deposu
+kem_os_paket_deposu: $(PAKET_ELFLERI)
+	python3 tools/codex/paket_deposu.py $(BUILD)/paket_deposu $^
+
+$(BUILD)/kullanici/paket.elf $(BUILD)/kullanici/self/paket.elf: stdlib/kripto/karma.kem drivers/ag/paket.kem
+
+.PHONY: calistir_bm_x86_paket
+test_tumu: calistir_bm_x86_paket
+calistir_bm_x86_paket: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh paket
+
+.PHONY: calistir_bm_x86_usb_ag
+test_tumu: calistir_bm_x86_usb_ag
+calistir_bm_x86_usb_ag: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/usb/cdc_ecm_test.kem
+	@bash test/bm_x86_nic_harness.sh usb_ag
+
+.PHONY: calistir_kem_os_arm_ag
+test_tumu: calistir_kem_os_arm_ag
+calistir_kem_os_arm_ag: calistir_kem_os_arm $(BUILD)/codegen$(EXE)
+	@python3 tests/qemu/ag_arm_derle.py $(BUILD)/arm_ag
+
+.PHONY: calistir_bm_x86_ag_saglamlik
+test_tumu: calistir_bm_x86_ag_saglamlik
+calistir_bm_x86_ag_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+.PHONY: calistir_bm_x86_ag_iki calistir_bm_x86_ag_pc
+test_tumu: calistir_bm_x86_ag_iki
+calistir_kem_os_pc_matris: calistir_bm_x86_ag_pc
+calistir_bm_x86_ag_iki: calistir_kem_os_arm $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh iki_konuk
+calistir_bm_x86_ag_pc: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_nic_harness.sh ag_pc

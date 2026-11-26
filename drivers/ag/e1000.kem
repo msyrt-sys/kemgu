@@ -1,0 +1,97 @@
+// Intel 8254x. Başlatma yalnız MMIO istekleri üretir; DMA alanı çağırana aittir.
+kullan drivers::ortak::gc::{ GcIstek, GcYanit };
+genel sabit E1K_ADET: tam32 = 8;
+genel sabit E1K_SAYFA: tam32 = 11;
+genel yapı E1kKurulum { model: tam32; sira: tam32; bekleme: tam32; dma: tam64; ctrl: tam64; mac: tam64; }
+genel işlev e1k_yeni(dma: tam64) -> E1kKurulum {
+    ver E1kKurulum {model:1,sira:0,bekleme:0,dma:dma,ctrl:0,mac:0};
+}
+genel işlev e1k_adim(s: &değişken E1kKurulum,y: GcYanit) -> GcIstek {
+    eğer değil y.basarili { ver GcIstek::Hata("e1000 tasiyici"); }
+    eğer s.dma <= 0 veya s.dma%4096 != 0 { ver GcIstek::Hata("e1000 DMA hizasi"); }
+    değişken n: tam32 = s.sira;
+    s.sira=n+1;
+    eşleş n {
+        0 => { ver GcIstek::Yaz32(216,4294967295); }
+        1 => { ver GcIstek::Yaz32(256,0); }
+        2 => { ver GcIstek::Yaz32(1024,0); }
+        3 => { ver GcIstek::Oku32(0); }
+        4 => { s.ctrl=y.deger; ver GcIstek::Yaz32(0,s.ctrl|67108864); }
+        5 => { ver GcIstek::Bekle(1000); }
+        6 => { ver GcIstek::Oku32(0); }
+        7 => {
+            eğer (y.deger&67108864) != 0 {
+                s.bekleme=s.bekleme+1;
+                eğer s.bekleme >= 100 { ver GcIstek::Hata("e1000 sifirlama zaman asimi"); }
+                s.sira=6; ver GcIstek::Bekle(1000);
+            }
+            ver GcIstek::Yaz32(0,y.deger|64);
+        }
+        8 => { ver GcIstek::Oku32(21504); }
+        9 => { s.mac=y.deger; ver GcIstek::Oku32(21508); }
+        10 => {
+            s.mac=s.mac|((y.deger&65535)<<32);
+            eğer s.mac == 0 veya (s.mac&1) != 0 { ver GcIstek::Hata("e1000 gecersiz MAC"); }
+            ver GcIstek::Yaz32(21508,(y.deger&65535)|2147483648);
+        }
+        11 => { ver GcIstek::Yaz32(10240,s.dma&4294967295); }
+        12 => { ver GcIstek::Yaz32(10244,s.dma>>32); }
+        13 => { ver GcIstek::Yaz32(10248,(E1K_ADET olarak tam64)*16); }
+        14 => { ver GcIstek::Yaz32(10256,0); }
+        15 => { ver GcIstek::Yaz32(10264,(E1K_ADET-1) olarak tam64); }
+        16 => { ver GcIstek::Yaz32(14336,(s.dma+4096)&4294967295); }
+        17 => { ver GcIstek::Yaz32(14340,(s.dma+4096)>>32); }
+        18 => { ver GcIstek::Yaz32(14344,(E1K_ADET olarak tam64)*16); }
+        19 => { ver GcIstek::Yaz32(14352,0); }
+        20 => { ver GcIstek::Yaz32(14360,0); }
+        21 => { ver GcIstek::Oku32(10244); }
+        22 => {
+            // Aygıtın DMA tabanını geri okuyup doğrulamadan alıcıyı açma.
+            eğer y.deger != s.dma>>32 { ver GcIstek::Hata("NIC RX tabani geri okuma"); }
+            eğer s.model==3 { s.sira=32; ver GcIstek::Yaz32(10280,0); }
+            s.sira=26; ver GcIstek::Yaz32(1040,6297610);
+        }
+        23 => { ver GcIstek::Yaz32(10280,33554432); }
+        24 => { ver GcIstek::Yaz32(14376,33554432); }
+        25 => { ver GcIstek::Yaz32(1040,6297610); }
+        26 => { ver GcIstek::Yaz32(1024,262394); }
+        27 => { ver GcIstek::Yaz32(256,67141634); }
+        28 => { ver GcIstek::Oku32(192); }
+        29 => {
+            eğer s.model!=3 { ver GcIstek::Bitti; }
+            // 82576 sıfırlamasından sonra PHY 1'de otomatik görüşmeyi yeniden başlat.
+            s.bekleme=0; ver GcIstek::Yaz32(32,69210624);
+        }
+        30 => { ver GcIstek::Oku32(32); }
+        31 => {
+            eğer (y.deger&1073741824)!=0 { ver GcIstek::Hata("igb MDIC hata"); }
+            eğer (y.deger&268435456)!=0 { ver GcIstek::Bitti; }
+            s.bekleme=s.bekleme+1;
+            eğer s.bekleme>=100 { ver GcIstek::Hata("igb MDIC zaman asimi"); }
+            s.sira=30; ver GcIstek::Bekle(100);
+        }
+        32 => { s.sira=23; ver GcIstek::Yaz32(10252,33554434); }
+        _ => { ver GcIstek::Bitti; }
+    }
+}
+// Tek tanımlayıcıdaki çerçeveyi tamamla, FCS eklet ve DD geri yazımını iste.
+genel işlev e1k_tx_sozcugu(boy: tam32) -> tam64 {
+    ver (boy olarak tam64)|184549376;
+}
+genel işlev e1k_rx_boyu(bilgi: tam64) -> tam32 {
+    eğer ((bilgi>>32)&1) == 0 { ver 0; }
+    değişken boy: tam32 = (bilgi&65535) olarak tam32;
+    eğer ((bilgi>>32)&2) == 0 veya ((bilgi>>40)&255) != 0 veya boy < 14 veya boy > 1518 { ver -1; }
+    ver boy;
+}
+
+// 82576 tek tamponlu gelişmiş tanımlayıcıda DD/EOP ve uzunluk ayrı sözcüklerdedir.
+genel işlev igb_rx_boyu(bilgi: tam64) -> tam32 {
+    eğer (bilgi&1)==0 { ver 0; }
+    değişken n: tam32 = ((bilgi>>32)&65535) olarak tam32;
+    eğer (bilgi&2)==0 veya (bilgi&2533359616)!=0 veya n<14 veya n>1518 { ver -1; }
+    ver n;
+}
+genel işlev igb_tx_sozcugu(boy: tam32) -> tam64 {
+    ver ((boy olarak tam64)<<46)|724566016|(boy olarak tam64);
+}

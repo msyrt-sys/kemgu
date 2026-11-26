@@ -1,0 +1,12 @@
+kullan drivers::ag::arayuz::{ ag_pci_model };
+kullan drivers::ag::virtio_pci::{ vnic_ozellik, vnic_bildirim };
+kullan drivers::ag::e1000::{ igb_rx_boyu, igb_tx_sozcugu };
+işlev main() -> tam32 {
+    eğer ag_pci_model(281641094)!=3 veya ag_pci_model(0)!=0 { ver 1; }
+    eğer vnic_ozellik(65568,1)!=65568 veya vnic_ozellik(65568,2)>=0 veya vnic_ozellik(32,1)>=0 { ver 2; }
+    eğer vnic_bildirim(1,4,6)!=4 veya vnic_bildirim(1,4,5)>=0 veya vnic_bildirim(0,0,2)!=0 { ver 3; }
+    // 60 baytın ileri RX geri yazımı: uzunluk bit 32, DD/EOP bit 0/1.
+    eğer igb_rx_boyu(257698037763)!=60 veya igb_rx_boyu(0)!=0 veya igb_rx_boyu(1)!=-1 { ver 4; }
+    eğer igb_tx_sozcugu(60)!=4222125375225916 { ver 5; }
+    ver 0;
+}

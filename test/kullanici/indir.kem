@@ -1,0 +1,11 @@
+// Her URL/hedef çiftinden sonra aynı kökendeki açık HTTP bağlantısı sonraki çifte devredilir.
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    eğer argc<3 veya argc%2!=1 { kag_satir("indir <http://ad/yol> <dosya> [url dosya]"); ver 2; }
+    değişken p: tam64=kag_ayir(6144); eğer p==0 { ver 1; }
+    değişken o: KhOturum=KhOturum {ag:-1,ad:"",port:0,tampon:p};
+    değişken i: tam64=1; iken i<argc {
+        değişken n: tam64=kh_indir(&değişken o,sis_argv(argv,i),sis_argv(argv,i+1));
+        eğer n<0 { kh_kapat(&değişken o); kag_satir(metin_birlestir("indir hata ",tam_metin(n))); ver 1; }
+        kag_satir(metin_birlestir("indir tamam ",tam_metin(n))); i=i+2;
+    } kh_kapat(&değişken o); ver 0;
+}

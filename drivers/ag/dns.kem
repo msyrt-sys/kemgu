@@ -1,0 +1,92 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_be32, ag_y8, ag_y16, ag_kopyala };
+genel yapı DnsA { kod: tam32; adres: tam64; ttl: tam64; }
+işlev dns_kucuk(k: tam32) -> tam32 { eğer k>=65 ve k<=90 { ver k+32; } ver k; }
+// Kanonik biçim: küçük harfli, etiket uzunluklarıyla birlikte ve son sıfırla.
+genel işlev dns_ad_yaz(ad: metin,b: Dizi<dtam8>,ofs: tam32) -> tam32 {
+    değişken n: tam32 = metin_uzunluk(ad) olarak tam32;
+    eğer n<=0 veya n>254 veya ofs<0 veya ofs>dizi_boyut(b)-256 { ver -22; }
+    değişken i: tam32 = 0; değişken k: tam32 = ofs+1; değişken bas: tam32 = ofs;
+    iken i<n {
+        değişken c: tam32 = (metin_bayt(ad,i) olarak tam32)&255; i=i+1;
+        eğer c==46 {
+            eğer k-bas<=1 { ver -22; } ag_y8(b,bas,(k-bas-1) olarak tam64);
+            eğer i==n { eğer k-ofs>=255 { ver -22; } ag_y8(b,k,0); ver k-ofs+1; }
+            bas=k; k=k+1;
+        } değilse {
+            eğer c<=32 veya c>=127 veya k-bas>63 veya k-ofs>=254 { ver -22; }
+            ag_y8(b,k,dns_kucuk(c) olarak tam64); k=k+1;
+        }
+    }
+    eğer k-bas<=1 veya k-ofs>=255 { ver -22; }
+    ag_y8(b,bas,(k-bas-1) olarak tam64); ag_y8(b,k,0); ver k-ofs+1;
+}
+genel işlev dns_sorgu(b: Dizi<dtam8>,ofs: tam32,id: tam32,ad: Dizi<dtam8>,n: tam32) -> tam32 {
+    eğer n<1 veya n>255 veya n>dizi_boyut(ad) veya ofs<0 veya ofs>dizi_boyut(b)-16-n { ver -1; }
+    ag_y16(b,ofs,id olarak tam64); ag_y16(b,ofs+2,256); ag_y16(b,ofs+4,1); ag_y16(b,ofs+6,0);
+    ag_y16(b,ofs+8,0); ag_y16(b,ofs+10,0); ag_kopyala(b,ofs+12,ad,0,n);
+    ag_y16(b,ofs+12+n,1); ag_y16(b,ofs+14+n,1); ver 16+n;
+}
+// Yalnız önceki etikete işaret kabul edilir. Çözülmüş ad ≤255 bayt, en çok 32 sıçrama.
+// Dönüş özgün adın teldeki sonrasıdır; sıçrama bunun yerini değiştirmez.
+genel işlev dns_ad_ac(b: Dizi<dtam8>,bas: tam32,son: tam32,konum: tam32,out: Dizi<dtam8>,o: tam32) -> tam32 {
+    eğer bas<0 veya son>dizi_boyut(b) veya konum<bas veya konum>=son veya o<0 veya o>dizi_boyut(out)-256 { ver -1; }
+    değişken k: tam32 = konum; değişken bitis: tam32 = -1; değişken j: tam32 = 0; değişken adim: tam32 = 0;
+    iken k<son ve j<255 {
+        değişken c: tam32 = ag_b8(b,k);
+        eğer c==0 { ag_y8(out,o+j,0); eğer bitis>=0 { ver bitis; } ver k+1; }
+        eğer (c&192)==192 {
+            eğer k+1>=son veya adim>=32 { ver -1; }
+            değişken hedef: tam32 = bas+((c&63)<<8)+ag_b8(b,k+1);
+            eğer hedef<bas+12 veya hedef>=k { ver -1; }
+            eğer bitis<0 { bitis=k+2; } k=hedef; adim=adim+1;
+        } değilse {
+            eğer c>63 veya c>son-k-1 veya j+c+1>=255 { ver -1; }
+            ag_y8(out,o+j,c olarak tam64); j=j+1; k=k+1;
+            değişken i: tam32 = 0;
+            iken i<c {
+                değişken ch: tam32 = ag_b8(b,k); eğer ch<=32 veya ch>=127 { ver -1; }
+                ag_y8(out,o+j,dns_kucuk(ch) olarak tam64); i=i+1; j=j+1; k=k+1;
+            }
+        }
+    }
+    ver -1;
+}
+genel işlev dns_ad_esit(a: Dizi<dtam8>,i: tam32,b: Dizi<dtam8>,j: tam32) -> mantıksal {
+    değişken n: tam32 = 0;
+    iken n<255 ve i+n<dizi_boyut(a) ve j+n<dizi_boyut(b) {
+        değişken x: tam32 = ag_b8(a,i+n); eğer x!=ag_b8(b,j+n) { ver yanlış; }
+        eğer x==0 { ver doğru; } n=n+1;
+    } ver yanlış;
+}
+genel işlev dns_cevap(b: Dizi<dtam8>,ofs: tam32,n: tam32,id: tam32,ad: Dizi<dtam8>,w: Dizi<dtam8>) -> DnsA {
+    değişken r: DnsA = DnsA {kod:-74,adres:0,ttl:0};
+    eğer ofs<0 veya n<12 veya n>dizi_boyut(b)-ofs veya dizi_boyut(w)<768 { ver r; }
+    değişken son: tam32 = ofs+n; değişken bayrak: tam32 = ag_be16(b,ofs+2);
+    eğer ag_be16(b,ofs)!=id veya (bayrak&63488)!=32768 veya (bayrak&512)!=0 veya ag_be16(b,ofs+4)!=1 { ver r; }
+    değişken k: tam32 = dns_ad_ac(b,ofs,son,ofs+12,w,0);
+    eğer k<0 veya k>son-4 veya değil dns_ad_esit(ad,0,w,0) veya ag_be16(b,k)!=1 veya ag_be16(b,k+2)!=1 { ver r; }
+    eğer (bayrak&15)!=0 { r.kod= -2; ver r; }
+    değişken adet: tam32 = ag_be16(b,ofs+6); eğer adet>128 { ver r; }
+    değişken ilk: tam32 = k+4; değişken zincir: tam32 = 0; değişken ttl: tam64 = 4294967295;
+    iken zincir<=8 {
+        k=ilk; değişken degisti: mantıksal = yanlış; değişken i: tam32 = 0;
+        iken i<adet ve değil degisti {
+            k=dns_ad_ac(b,ofs,son,k,w,256); eğer k<0 veya k>son-10 { ver r; }
+            değişken tip: tam32 = ag_be16(b,k); değişken sinif: tam32 = ag_be16(b,k+2);
+            değişken sure: tam64 = ag_be32(b,k+4); değişken boy: tam32 = ag_be16(b,k+8); k=k+10;
+            eğer boy>son-k { ver r; }
+            eğer sinif==1 ve dns_ad_esit(w,0,w,256) {
+                eğer tip==1 ve boy==4 {
+                    eğer sure<ttl { ttl=sure; } r.kod=0; r.adres=ag_be32(b,k); r.ttl=ttl; ver r;
+                }
+                eğer tip==5 {
+                    eğer dns_ad_ac(b,ofs,son,k,w,512)!=k+boy { ver r; }
+                    ag_kopyala(w,0,w,512,256); eğer sure<ttl { ttl=sure; } degisti=doğru;
+                }
+            }
+            k=k+boy; i=i+1;
+        }
+        eğer değil degisti { r.kod= -2; ver r; } zincir=zincir+1;
+    }
+    ver r;
+}

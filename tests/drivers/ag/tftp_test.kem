@@ -1,0 +1,17 @@
+kullan drivers::ag::tftp::{ TftpPaket, TftpAkis, tftp_iste, tftp_kur, tftp_baslik, tftp_yeni, tftp_adim, tftp_zaman };
+kullan drivers::ortak::bayt::{ bayt_sifir };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(517);
+    eğer tftp_iste(b,"a",yanlış)!=10 veya (dizi_al(b,1) olarak tam32)!=1 veya (dizi_al(b,4) olarak tam32)!=111 { ver 1; }
+    değişken s: TftpAkis=tftp_yeni(yanlış);
+    değişken n: tam32=tftp_kur(b,3,1,512); değişken p: TftpPaket=tftp_baslik(b,n);
+    eğer n!=516 veya tftp_adim(&değişken s,p)!=1 veya tftp_adim(&değişken s,p)!=4 veya s.bitti { ver 2; }
+    n=tftp_kur(b,3,2,0); p=tftp_baslik(b,n);
+    eğer tftp_adim(&değişken s,p)!=1 veya değil s.bitti veya tftp_adim(&değişken s,p)!=4 { ver 3; }
+    s=tftp_yeni(doğru); n=tftp_kur(b,4,0,0); p=tftp_baslik(b,n);
+    eğer tftp_adim(&değişken s,p)!=2 veya tftp_adim(&değişken s,p)!=0 { ver 4; }
+    s.son=doğru; n=tftp_kur(b,4,1,0); p=tftp_baslik(b,n);
+    eğer tftp_adim(&değişken s,p)!=3 veya değil s.bitti { ver 5; }
+    s=tftp_yeni(yanlış); değişken i: tam32=0; iken tftp_zaman(&değişken s) { i=i+1; }
+    eğer i!=5 veya s.sure_ms!=1600 veya tftp_baslik(b,517).op!=0 { ver 6; } ver 0;
+}

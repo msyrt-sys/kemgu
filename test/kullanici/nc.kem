@@ -1,0 +1,78 @@
+// Standart girdiyi ve ağı aynı bekleme listesinde izler. Kısa yazı sonraki turda sürer.
+işlev nc_tus(p: tam64,tampon: tam64) -> tam64 {
+    değişken r: tam64=sis_tus_bekle(p); eğer r<0 { ver r; }
+    eğer sis_alan(p,2)==0 { ver -11; } değişken un: tam64=sis_alan(p,1);
+    eğer un==4 veya (sis_alan(p,0)==32 ve (sis_alan(p,3)&2)!=0) { ver 0; }
+    eğer sis_alan(p,0)==28 { un=10; } eğer un<1 { ver -11; }
+    değişken m: metin=kod_metin(un olarak tam32); değişken n: tam32=metin_uzunluk(m);
+    değişken i: tam32=0; iken i<n { sis_bayt_koy(tampon+(i olarak tam64),metin_bayt(m,i) olarak tam32); i=i+1; }
+    ver n olarak tam64;
+}
+işlev nc_aktar(fd: tam64,udp: mantıksal,dinle: mantıksal,ms: tam64,p: tam64) -> tam64 {
+    değişken dis: tam64=p+128; değişken ic: tam64=p+4352; değişken io: tam64=p+8600; değişken uc: tam64=p+8624;
+    değişken klavye: mantıksal=sis_konumla(0,0,1)== -9;
+    değişken gir: mantıksal=doğru; değişken ag_oku: mantıksal=doğru; değişken es_var: mantıksal=değil (udp ve dinle);
+    değişken fin: mantıksal=yanlış; değişken boy: tam64=0; değişken konum: tam64=0;
+    değişken giden: tam64=0; değişken gelen: tam64=0;
+    eğer sis_soket_secenek(fd,1,1)!=0 { ver -22; }
+    iken doğru {
+        eğer değil gir ve boy==konum ve değil fin {
+            eğer değil udp { değişken r: tam64=sis_yazmayi_kapat(fd); eğer r<0 { ver r; } }
+            fin=doğru;
+        }
+        eğer değil ag_oku ve (fin veya (klavye ve konum==boy)) { ver 0; }
+        eğer udp ve değil dinle ve fin ve gelen>=giden { ver 0; }
+        değişken mask: tam64=0; eğer ag_oku { mask=1; } eğer boy>konum ve es_var { mask=mask|2; }
+        kag_bekleme(p,fd,mask); değişken say: tam64=1;
+        eğer gir ve boy==konum ve es_var { kag_bekleme(p+24,0,1); say=2; }
+        değişken r: tam64=sis_bekle_coklu(p,say,ms);
+        eğer r<0 { ver r; } eğer r==0 { eğer udp ve gelen>0 { ver 0; } ver -110; }
+        değişken akis: tam64=sis_alan(p,2);
+        eğer (akis&1)!=0 {
+            değişken n: tam64=0;
+            eğer udp ve dinle {
+                kag_koy(io,0,ic); kag_koy(io,1,4096); n=sis_udp_al_kaynak(fd,io,uc); eğer n>=0 { es_var=doğru; }
+            } değilse { n=sis_al(fd,ic,4096); }
+            eğer n<0 ve n!= -11 { ver n; }
+            eğer n==0 { eğer udp { gelen=gelen+1; } değilse { ag_oku=yanlış; } }
+            eğer n>0 { eğer kag_hepsini_yaz(1,ic,n)!=n { ver -5; } gelen=gelen+1; }
+        }
+        eğer (akis&4)!=0 { ver -104; }
+        eğer (akis&2)!=0 ve boy>konum {
+            değişken n: tam64=0;
+            eğer udp ve dinle {
+                kag_koy(io,0,dis+konum); kag_koy(io,1,boy-konum); n=sis_udp_gonder_hedef(fd,io,uc);
+            } değilse { n=sis_gonder(fd,dis+konum,boy-konum); }
+            eğer n<0 ve n!= -11 { ver n; }
+            eğer n>0 { konum=konum+n; giden=giden+1; }
+        }
+        eğer say==2 {
+            değişken hazir: tam64=sis_alan(p+24,2);
+            eğer (hazir&4)!=0 { gir=yanlış; }
+            değilse eğer (hazir&1)!=0 {
+                değişken n: tam64=0; eğer klavye { n=nc_tus(p+8704,dis); } değilse { n=sis_oku(0,dis,4096); }
+                eğer n==0 { gir=yanlış; } değilse eğer n>0 { boy=n; konum=0; } değilse eğer n!= -11 { ver n; }
+            }
+        }
+    } ver 0;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    değişken i: tam64=1; değişken dinle: mantıksal=yanlış; değişken udp: mantıksal=yanlış; değişken ms: tam64=30000;
+    iken i<argc ve metin_bayt(sis_argv(argv,i),0)==45 {
+        değişken s: metin=sis_argv(argv,i);
+        eğer kag_esit(s,"-d") { dinle=doğru; } değilse eğer kag_esit(s,"-u") { udp=doğru; }
+        değilse eğer kag_esit(s,"-z") { i=i+1; eğer i>=argc { ver 2; } ms=kag_sayi(sis_argv(argv,i),60000); eğer ms<1 { ver 2; } }
+        değilse { ver 2; } i=i+1;
+    }
+    değişken port: tam64=0; değişken fd: tam64= -1; değişken tur: tam64=1; eğer udp { tur=2; }
+    eğer dinle ve argc-i==1 {
+        port=kag_sayi(sis_argv(argv,i),65535); eğer port<1 { ver 2; } fd=kag_dinle(port,tur,1);
+        eğer fd>=0 ve değil udp { sis_soket_secenek(fd,4,ms); değişken l: tam64=fd; fd=sis_kabul(l); sis_kapat(l); }
+    } değilse eğer değil dinle ve argc-i==2 {
+        port=kag_sayi(sis_argv(argv,i+1),65535); eğer port<1 { ver 2; } fd=kag_bagla_sureli(sis_argv(argv,i),port,tur,ms);
+    } değilse { kag_satir("nc [-u] [-z ms] <ad> <port> | nc -d [-u] [-z ms] <port>"); ver 2; }
+    eğer fd<0 { değişken hata1: metin=metin_birlestir("nc: baglanti ",tam_metin(fd)); sis_yaz(2,sis_metin_adres(hata1),metin_uzunluk(hata1) olarak tam64); sis_bayt_yaz(2,10); ver 1; }
+    değişken p: tam64=kag_ayir(9000); eğer p==0 { sis_kapat(fd); ver 1; }
+    değişken r: tam64=nc_aktar(fd,udp,dinle,ms,p); sis_kapat(fd);
+    eğer r<0 { değişken hata2: metin=metin_birlestir("nc: aktarim ",tam_metin(r)); sis_yaz(2,sis_metin_adres(hata2),metin_uzunluk(hata2) olarak tam64); sis_bayt_yaz(2,10); ver 1; } ver 0;
+}

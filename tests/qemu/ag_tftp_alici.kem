@@ -1,0 +1,38 @@
+// İki konuk kâhininde tek dosya için WRQ dinler. İstekten dosya yolu türetilmez.
+işlev ka_al(fd: tam64,p: tam64) -> tam64 {
+    kag_koy(p,0,p+64); kag_koy(p,1,517); ver sis_udp_al_kaynak(fd,p,p+16);
+}
+işlev ka_aktar(fd: tam64,dosya: tam64,p: tam64) -> tam64 {
+    değişken n: tam64=ka_al(fd,p);
+    değişken ad: metin="iz.bin"; değişken kip: metin="octet";
+    eğer n!=15 veya sis_bayt_al(p+64)!=0 veya sis_bayt_al(p+65)!=2 veya sis_bayt_al(p+72)!=0 veya sis_bayt_al(p+78)!=0 { ver -74; }
+    değişken i: tam32=0; iken i<6 { eğer sis_bayt_al(p+66+(i olarak tam64))!=metin_bayt(ad,i) olarak tam32 { ver -74; } i=i+1; }
+    i=0; iken i<5 { eğer sis_bayt_al(p+73+(i olarak tam64))!=metin_bayt(kip,i) olarak tam32 { ver -74; } i=i+1; }
+    değişken ip: tam64=sis_alan(p+16,0); değişken port: tam64=sis_alan(p+16,1);
+    eğer ip!=3221225986 veya port<=0 { ver -22; }
+    değişken blok: tam32=0; değişken toplam: tam64=0; değişken bitti: mantıksal=yanlış;
+    iken doğru {
+        sis_bayt_koy(p+600,0); sis_bayt_koy(p+601,4);
+        sis_bayt_koy(p+602,blok>>8); sis_bayt_koy(p+603,blok&255);
+        kag_koy(p,0,p+600); kag_koy(p,1,4); kag_koy(p+16,0,ip); kag_koy(p+16,1,port);
+        eğer sis_udp_gonder_hedef(fd,p,p+16)!=4 { ver -5; }
+        eğer bitti { ver toplam; }
+        n=ka_al(fd,p);
+        eğer n<4 veya n>516 veya sis_alan(p+16,0)!=ip veya sis_alan(p+16,1)!=port { ver -74; }
+        eğer sis_bayt_al(p+64)!=0 veya sis_bayt_al(p+65)!=3 { ver -74; }
+        değişken no: tam32=(sis_bayt_al(p+66)<<8)|sis_bayt_al(p+67);
+        eğer no==blok+1 {
+            eğer n-4>65536-toplam veya kag_hepsini_yaz(dosya,p+68,n-4)!=n-4 { ver -5; }
+            toplam=toplam+n-4; blok=no; bitti=n<516;
+        } değilse eğer no!=blok { ver -74; }
+    } ver -5;
+}
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    değişken fd: tam64=kag_dinle(69,2,0); değişken p: tam64=kag_ayir(640);
+    eğer fd<0 veya p==0 { ver 1; } sis_soket_secenek(fd,4,15000);
+    değişken f: tam64=sis_ac("/diskler/usb0p2/bin/tftp.bin",3); eğer f<0 { sis_kapat(fd); ver 1; }
+    kag_satir("TFTP alici hazir");
+    değişken r: tam64=ka_aktar(fd,f,p); sis_kapat(f); sis_kapat(fd);
+    kag_satir(metin_birlestir("TFTP alici sonuc ",tam_metin(r)));
+    eğer r<0 { ver 1; } ver 0;
+}

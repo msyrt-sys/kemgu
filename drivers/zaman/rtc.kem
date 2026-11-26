@@ -33,3 +33,20 @@ genel işlev rtc_coz(r: RtcHam) -> sonuç<RtcAn,metin> {
     } değilse eğer saat < 0 veya saat > 23 veya (r.saat&128) != 0 { ver hata("RTC 24 saat"); }
     ver tamam(RtcAn { yil:2000+yil,ay:ay,gun:gun,saat:saat,dakika:dakika,saniye:saniye });
 }
+
+işlev rtc_hane_yaz(v: tam32,kip: tam32) -> tam32 {
+    eğer (kip&4)!=0 { ver v; } ver (v/10)*16+v%10;
+}
+genel işlev rtc_kodla(a: RtcAn,kip: tam32) -> sonuç<RtcHam,metin> {
+    eğer a.yil<2000 veya a.yil>2099 veya a.saat<0 veya a.saat>23 veya a.ay<1 veya a.ay>12 veya a.gun<1 veya a.gun>31 veya a.dakika<0 veya a.dakika>59 veya a.saniye<0 veya a.saniye>59 veya kip<0 veya kip>127 { ver hata("RTC tarih veya kip"); }
+    değişken saat: tam32=a.saat; değişken ogleden: tam32=0;
+    eğer (kip&2)==0 {
+        eğer saat>=12 { ogleden=128; } saat=saat%12; eğer saat==0 { saat=12; }
+    }
+    değişken r: RtcHam=RtcHam {kip:kip,yil:rtc_hane_yaz(a.yil-2000,kip),ay:rtc_hane_yaz(a.ay,kip),gun:rtc_hane_yaz(a.gun,kip),
+        saat:rtc_hane_yaz(saat,kip)|ogleden,dakika:rtc_hane_yaz(a.dakika,kip),saniye:rtc_hane_yaz(a.saniye,kip)};
+    eşleş rtc_coz(r) { hata(e)=>{ver hata(e);} tamam(v)=>{
+        eğer v.yil!=a.yil veya v.ay!=a.ay veya v.gun!=a.gun veya v.saat!=a.saat veya v.dakika!=a.dakika veya v.saniye!=a.saniye { ver hata("RTC tarih"); }
+        ver tamam(r);
+    } }
+}

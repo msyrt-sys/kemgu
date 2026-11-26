@@ -1,0 +1,21 @@
+kullan drivers::ag::http::{ HttpBaslik, HttpUrl, http_yeni, http_ilk, http_alan, http_parca_boyu, http_goreli, http_url, http_yon, http_istek };
+işlev main() -> tam32 {
+    değişken h: HttpBaslik=http_yeni();
+    eğer değil http_ilk(&değişken h,"HTTP/1.1 307 Temporary Redirect",doğru) veya h.kod!=307 { ver 1; }
+    eğer değil http_alan(&değişken h,"loCatIon: /dosya") veya değil metin_esit(h.konum,"/dosya") { ver 2; }
+    eğer değil http_alan(&değişken h,"Transfer-Encoding: Chunked") veya değil h.parcali { ver 3; }
+    eğer http_alan(&değişken h,"Content-Length: 12") { ver 4; }
+    eğer http_parca_boyu("Ff;isim=veri",255)!=255 veya http_parca_boyu("0",0)!=0 veya http_parca_boyu("100",255)>=0 { ver 5; }
+    h=http_yeni();
+    eğer değil http_ilk(&değişken h,"GET /a HTTP/1.1",yanlış) veya değil metin_esit(h.hedef,"/a") { ver 6; }
+    eğer değil http_alan(&değişken h,"Connection: keep-alive, CLOSE") veya değil h.kapat { ver 7; }
+    eşleş http_goreli("/klasor/yaz%20ay.txt?indir") { hata(e)=>{ver 8;} tamam(y)=>{eğer değil metin_esit(y,"klasor/yaz ay.txt"){ver 9;}} }
+    eşleş http_goreli("/%2e%2e/ad") { tamam(y)=>{ver 10;} hata(e)=>{} }
+    eşleş http_url("http://ornek.test:81/a/b") { hata(e)=>{ver 11;} tamam(u)=>{
+        eğer u.port!=81 veya değil metin_esit(u.ad,"ornek.test") { ver 12; }
+        eşleş http_yon(u,"c") { hata(e)=>{ver 13;} tamam(v)=>{eğer değil metin_esit(v.yol,"/a/c"){ver 14;}} }
+    } }
+    değişken istek: metin=http_istek("/a","ad");
+    eğer metin_uzunluk(istek)!=53 veya (metin_bayt(istek,15) olarak tam32)!=13 veya (metin_bayt(istek,16) olarak tam32)!=10 { ver 15; }
+    ver 0;
+}

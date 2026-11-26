@@ -1,0 +1,53 @@
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_y8, ag_y16, ag_y32 };
+kullan drivers::ag::eth::{ eth_mac, eth_yaz, eth_mac_yaz };
+genel işlev arp_islem(b: Dizi<dtam8>,n: tam32) -> tam32 {
+    eğer n<42 veya n>dizi_boyut(b) { ver -1; }
+    eğer ag_be16(b,14)!=1 veya ag_be16(b,16)!=2048 veya ag_b8(b,18)!=6 veya ag_b8(b,19)!=4 { ver -1; }
+    değişken m: tam64 = eth_mac(b,22);
+    eğer m==0 veya (m&1)!=0 veya m!=eth_mac(b,6) { ver -1; }
+    değişken tur: tam32 = ag_be16(b,20); eğer tur!=1 ve tur!=2 { ver -1; } ver tur;
+}
+genel işlev arp_yaz(b: Dizi<dtam8>,tur: tam32,mac: tam64,ip: tam64,hedef_mac: tam64,hedef: tam64) -> tam32 {
+    değişken tel: tam64 = hedef_mac; eğer tur==1 { tel=281474976710655; }
+    eth_yaz(b,tel,mac,2054); ag_y16(b,14,1); ag_y16(b,16,2048); ag_y8(b,18,6); ag_y8(b,19,4);
+    ag_y16(b,20,tur olarak tam64); eth_mac_yaz(b,22,mac); ag_y32(b,28,ip);
+    eth_mac_yaz(b,32,hedef_mac); ag_y32(b,38,hedef); ver 42;
+}
+// 16 giriş, satır başına IP / MAC / bitiş zamanı. Geçerli komşuyu doluyken silme.
+genel işlev arp_bul(t: Dizi<tam64>,ip: tam64,simdi: tam64) -> tam64 {
+    değişken i: tam32 = 0;
+    iken i+2<dizi_boyut(t) { eğer dizi_al(t,i)==ip ve dizi_al(t,i+2)>simdi { ver dizi_al(t,i+1); } i=i+3; } ver 0;
+}
+genel işlev arp_kaydet(t: Dizi<tam64>,ip: tam64,mac: tam64,simdi: tam64,omur: tam64) -> mantıksal {
+    eğer ip<=0 veya mac<=0 veya (mac&1)!=0 veya omur<=0 { ver yanlış; }
+    değişken bos: tam32 = -1; değişken i: tam32 = 0;
+    iken i+2<dizi_boyut(t) {
+        eğer dizi_al(t,i)==ip { bos=i; i=dizi_boyut(t); }
+        değilse eğer bos<0 ve dizi_al(t,i+2)<=simdi { bos=i; }
+        i=i+3;
+    }
+    eğer bos<0 { ver yanlış; }
+    dizi_yaz(t,bos,ip); dizi_yaz(t,bos+1,mac); dizi_yaz(t,bos+2,simdi+omur); ver doğru;
+}
+
+// Bekleme tablosu satırı: sonraki IP, paket boyu, bitiş ms, sonraki sorgu ms.
+// Boş boy sıfırdır. Paket içeriğini çağıran aynı indeksli fiziksel tamponda saklar.
+genel işlev arp_beklet(t: Dizi<tam64>,ip: tam64,boy: tam32,simdi: tam64,ms: tam64) -> tam32 {
+    eğer ip<=0 veya boy<14 veya boy>1518 veya ms<=0 { ver -22; }
+    değişken i: tam32 = 0;
+    iken i+3<dizi_boyut(t) {
+        eğer dizi_al(t,i+1)==0 {
+            dizi_yaz(t,i,ip); dizi_yaz(t,i+1,boy olarak tam64); dizi_yaz(t,i+2,simdi+ms); dizi_yaz(t,i+3,0 olarak tam64); ver i/4;
+        }
+        i=i+4;
+    }
+    ver -105;
+}
+genel işlev arp_bekleme_adimi(t: Dizi<tam64>,yuva: tam32,simdi: tam64,mac: tam64) -> tam32 {
+    değişken i: tam32 = yuva*4;
+    eğer yuva<0 veya yuva>=dizi_boyut(t)/4 veya dizi_al(t,i+1)==0 { ver 0; }
+    eğer simdi>=dizi_al(t,i+2) { ver -110; }
+    eğer mac>0 { ver 2; }
+    eğer simdi>=dizi_al(t,i+3) { dizi_yaz(t,i+3,simdi+250); ver 1; }
+    ver 0;
+}

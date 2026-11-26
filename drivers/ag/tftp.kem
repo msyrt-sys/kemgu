@@ -1,0 +1,52 @@
+// RFC 1350 octet aktarımı. Bir sonraki blok ancak beklenen onay geldiğinde üretilir.
+kullan drivers::ag::bayt::{ ag_b8, ag_be16, ag_y8, ag_y16 };
+genel sabit TFTP_BLOK: tam32=512;
+genel yapı TftpPaket { op: tam32; blok: tam32; boy: tam32; }
+genel yapı TftpAkis { yaz: mantıksal; blok: tam32; son: mantıksal; bitti: mantıksal; tekrar: tam32; sure_ms: tam32; }
+genel işlev tftp_yeni(yaz: mantıksal) -> TftpAkis {
+    değişken blok: tam32=1; eğer yaz { blok=0; }
+    ver TftpAkis {yaz:yaz,blok:blok,son:yanlış,bitti:yanlış,tekrar:0,sure_ms:200};
+}
+genel işlev tftp_iste(b: Dizi<dtam8>,ad: metin,yaz: mantıksal) -> tam32 {
+    değişken n: tam32=metin_uzunluk(ad);
+    eğer n<1 veya n>240 veya dizi_boyut(b)<n+9 { ver -22; }
+    değişken op: tam64=1; eğer yaz { op=2; } ag_y16(b,0,op);
+    değişken i: tam32=0; iken i<n {
+        değişken c: tam32=(metin_bayt(ad,i) olarak tam32)&255;
+        eğer c<32 veya c>126 { ver -22; } ag_y8(b,2+i,c olarak tam64); i=i+1;
+    }
+    ag_y8(b,2+n,0); değişken kip: metin="octet"; i=0;
+    iken i<5 { ag_y8(b,3+n+i,metin_bayt(kip,i) olarak tam64); i=i+1; }
+    ag_y8(b,8+n,0); ver 9+n;
+}
+genel işlev tftp_baslik(b: Dizi<dtam8>,n: tam32) -> TftpPaket {
+    değişken p: TftpPaket=TftpPaket {op:0,blok:0,boy:0};
+    eğer n<4 veya n>dizi_boyut(b) veya n>516 { ver p; }
+    değişken op: tam32=ag_be16(b,0); p.blok=ag_be16(b,2);
+    eğer op==3 veya (op==4 ve n==4) { p.op=op; p.boy=n-4; }
+    değilse eğer op==5 ve n>=5 ve ag_b8(b,n-1)==0 { p.op=5; p.boy=n-5; }
+    ver p;
+}
+genel işlev tftp_kur(b: Dizi<dtam8>,op: tam32,blok: tam32,n: tam32) -> tam32 {
+    eğer blok<0 veya blok>65535 veya n<0 veya n>TFTP_BLOK veya n+4>dizi_boyut(b) veya (op!=3 ve op!=4) veya (op==4 ve n!=0) { ver -22; }
+    ag_y16(b,0,op olarak tam64); ag_y16(b,2,blok olarak tam64); ver n+4;
+}
+// 1 = veriyi yaz ve ACK gönder, 2 = sıradaki DATA'yı kur, 3 = son ACK, 4 = önceki ACK'i yinele.
+genel işlev tftp_adim(s: &değişken TftpAkis,p: TftpPaket) -> tam32 {
+    eğer p.op==5 { ver -1000-p.blok; }
+    eğer s.yaz {
+        eğer p.op!=4 veya p.blok!=s.blok veya s.bitti { ver 0; }
+        s.tekrar=0; s.sure_ms=200;
+        eğer s.son { s.bitti=doğru; ver 3; }
+        s.blok=(s.blok+1)&65535; ver 2;
+    }
+    eğer p.op!=3 { ver 0; }
+    eğer p.blok==((s.blok+65535)&65535) { ver 4; }
+    eğer p.blok!=s.blok veya s.bitti { ver 0; }
+    s.tekrar=0; s.sure_ms=200; s.blok=(s.blok+1)&65535;
+    s.bitti=p.boy<TFTP_BLOK; ver 1;
+}
+genel işlev tftp_zaman(s: &değişken TftpAkis) -> mantıksal {
+    eğer s.bitti veya s.tekrar>=5 { ver yanlış; }
+    s.tekrar=s.tekrar+1; eğer s.sure_ms<1600 { s.sure_ms=s.sure_ms*2; } ver doğru;
+}

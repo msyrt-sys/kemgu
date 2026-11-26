@@ -1,0 +1,26 @@
+kullan drivers::ag::bayt::{ ag_y8, ag_y16, ag_y32, ag_b8 } olarak agbayt;
+kullan drivers::ortak::bayt::{ bayt_sifir };
+kullan drivers::ag::udp::{ udp_yaz, udp_oku, udp_bagla, udp_yuva };
+kullan drivers::ag::dns::{ DnsA, dns_ad_yaz, dns_sorgu, dns_cevap };
+kullan drivers::ag::dhcp::{ DhcpKirasi, dhcp_yeni, dhcp_tick, dhcp_istek, dhcp_onek };
+işlev main() -> tam32 {
+    değişken b: Dizi<dtam8> = bayt_sifir(512); değişken ad: Dizi<dtam8> = bayt_sifir(256);
+    değişken w: Dizi<dtam8> = bayt_sifir(768);
+    değişken n: tam32 = dns_ad_yaz("Ornek.test.",ad,0); eğer n!=12 veya ag_b8(ad,1)!=111 { ver 1; }
+    n=dns_sorgu(b,0,9,ad,n); ag_y16(b,2,33152); ag_y16(b,6,1);
+    // Python struct.pack('!HHHIH4s', 0xc00c, 1, 1, 60, 4, b'\xc0\x00\x02\x01').
+    ag_y16(b,n,49164); ag_y16(b,n+2,1); ag_y16(b,n+4,1); ag_y32(b,n+6,60); ag_y16(b,n+10,4); ag_y32(b,n+12,3221225985);
+    değişken r: DnsA = dns_cevap(b,0,n+16,9,ad,w);
+    eğer r.kod!=0 veya r.adres!=3221225985 veya r.ttl!=60 { ver 2; }
+    r=dns_cevap(b,0,n+15,9,ad,w); eğer r.kod>=0 { ver 3; }
+    eğer udp_yaz(b,0,21,1,2,1000,2000)!=29 veya udp_oku(b,0,29,1,2)!=21 { ver 4; }
+    ag_y8(b,8,ag_b8(b,8) olarak tam64+1); eğer udp_oku(b,0,29,1,2)!=-2 { ver 5; }
+    değişken t: Dizi<tam64> = [0 olarak tam64]; eğer udp_bagla(t,15)!=0 veya udp_bagla(t,15)!=-98 veya udp_bagla(t,16)!=-105 veya udp_yuva(t,15)!=0 { ver 6; }
+    değişken s: DhcpKirasi = dhcp_yeni(9);
+    eğer dhcp_tick(&değişken s,0)!=1 veya dhcp_tick(&değişken s,5)!=0 veya dhcp_istek(&s,b,0,2,1)!=300 { ver 7; }
+    eğer dhcp_onek(4294967040)!=24 veya dhcp_onek(65280)!=-1 { ver 8; }
+    s.durum=3; s.adres=1; s.dns=2; s.dns2=3; s.ntp=4; s.gecit=5; s.t1=5000; s.t2=8750; s.son=10000; s.tekrar=0;
+    eğer dhcp_tick(&değişken s,4999)!=0 veya dhcp_tick(&değişken s,5000)!=3 veya s.durum!=4 { ver 9; }
+    eğer dhcp_tick(&değişken s,8750)!=3 veya s.durum!=5 veya dhcp_tick(&değişken s,10000)!=1 veya s.adres!=0 { ver 10; }
+    eğer s.dns!=0 veya s.dns2!=0 veya s.ntp!=0 veya s.gecit!=0 { ver 11; } ver 0;
+}

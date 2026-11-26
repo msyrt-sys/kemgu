@@ -32,6 +32,12 @@ Açılış bölümünde `ramdisk.img` varsa çekirdek, dosyayı kendi FAT okuyuc
 
 `kapat` önce kirli dosya sistemlerini eşitler. FADT'den bulunan DSDT içindeki tanınan AML `_S5_` paketi PM1a ve varsa PM1b uyku türlerini sağlar. Çekirdek türü ve SLP_EN bitini yazar. S5 eksikse veya makine kapanmazsa tanı mesajından sonra kapanış yedeğine geçer. `yenidenbaslat` FADT reset, 8042 ve son işlemci sıfırlama yolunu izler.
 
+## Ağın iki mimaride çalışması
+
+x86_64 üzerinde PCI veya USB CDC-ECM sürücüsü, AArch64 virt makinesinde virtio-mmio RX/TX halkaları Ethernet çerçevelerini taşır. Her iki çekirdek aynı `drivers/ag` paketinden Ethernet, ARP, IPv4, ICMP, DHCP, TCP ve HTTP kodunu derler. x86 zamanlayıcıları kalibre edilmiş sayacı, ARM ise CNTVCT_EL0 ve CNTFRQ_EL0 değerlerini milisaniyeye dönüştürür.
+
+x86 kullanıcı programları süreç fd tablosu üzerinden soketlere erişir. Hazır olan fd'ler bekleyen süreci uyandırır. ARM sınama imajı TCP ve HTTP işlemini çekirdek içinde başlatır. `calistir_bm_x86_ag_iki` bir x86 ve bir ARM konuk arasında iki yönlü TCP içeriğini ve ARM diskine yazılan sonucu karşılaştırır.
+
 ## Kabuk komutları
 
 Aşağıdaki açıklamalar `yardim <komut>` ile okunabilir. Yalın program adları boru hattında aranır. Tek program için `baslat` komutu aynı aramayı yapar. Bir hat en fazla üç program içerir. `<` ilk aşamanın girdisini, `>` ve `>>` son aşamanın çıktısını açar. `>` dosyayı keser, `>>` sonuna ekler. Bir borudaki son yazıcı kapanınca okur kalan veriyi ve ardından EOF'u alır.
@@ -63,8 +69,8 @@ Aşağıdaki açıklamalar `yardim <komut>` ile okunabilir. Yalın program adlar
 | `yardim` | yardim &lt;komut&gt; komutun kullanımını gösterir. |
 | `kapat` | kapat diskleri eşitler ve sistemi kapatır. |
 | `yenidenbaslat` | yenidenbaslat diskleri eşitler ve sistemi yeniden başlatır. |
-| `donanim` | donanim aygıtları listeler. donanim kaydet &lt;yol&gt; raporu yazar. |
-| `log` | log [sayfa] günlük halkasını gösterir. log kaydet &lt;yol&gt; dosyaya yazar. |
+| `donanim` | donanim aygıtları listeler. donanim kaydet &lt;yol&gt; raporu yazar. donanim gonder &lt;ip&gt; &lt;port&gt; kaydı yollar. |
+| `log` | log [sayfa] günlük halkasını gösterir. log kaydet &lt;yol&gt; dosyaya yazar. log gonder &lt;ip&gt; &lt;port&gt; bir anlık görüntü yollar. |
 | `hassasiyet` | hassasiyet &lt;1..4&gt; fare hızını ayarlar. |
 | `goster` | baslat goster &lt;BMP&gt; resmi gösterir. Oklarla kaydırın, Q ile çıkın. |
 | `bul` | baslat bul [-i] &lt;metin&gt; [dosya...] eşleşen satırları numaralandırır. |
@@ -78,3 +84,11 @@ Aşağıdaki açıklamalar `yardim <komut>` ile okunabilir. Yalın program adlar
 | `pci` | pci yapılandırma alanını ve BAR eşlemelerini gösterir. |
 | `duzen` | duzen tr&#124;us düzeni seçer. Ctrl+Boşluk düzeni değiştirir. |
 | `girdisay` | girdisay 1..20 PS/2 baytlarını sayar. Bu sürede yazılan giriş tüketilir. |
+| `ag` | ag durum kira ve adresi, ag sayac protokol sayaçlarını, ag ntp &lt;ip&gt; saat eşitlemesini gösterir. |
+| `ping` | ping &lt;adres&gt; [adet [aralik_ms [zaman_asimi_ms]]] ICMP yanıtlarını ve RTT değerlerini ölçer. |
+| `cozumle` | cozumle &lt;ad&gt; IPv4 adresini DNS ile çözer. |
+| `nc` | nc &lt;adres&gt; &lt;port&gt; akışı standart girdiye ve çıktıya bağlar. nc -d &lt;port&gt; dinler. |
+| `indir` | indir &lt;http-url&gt; &lt;dosya&gt; HTTP gövdesini diske veya geçici dosya sistemine yazar. |
+| `sunucu` | sunucu &lt;port&gt; &lt;dizin&gt; dizini HTTP ile sunar. Ctrl+C ile kapanır. |
+| `tftp` | tftp al &lt;ip&gt; &lt;uzak&gt; &lt;yerel&gt; indirir. tftp gonder &lt;ip&gt; &lt;yerel&gt; &lt;uzak&gt; gönderir. |
+| `paket` | paket guncelle &lt;url&gt; depoyu okur. liste, bilgi, kur ve kaldir paketleri yönetir. |

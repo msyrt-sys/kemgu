@@ -3140,6 +3140,19 @@ static int erisim_lvalue(LlvmGen *g, const Dugum *d,
         if (taban_reg < 0 || !ic_ir || ic_ir[0] != '%') return -1;
         taban_ir = ic_ir;
         yk = yapi_bul_ir(g, taban_ir);
+    } else if (nesne_d->tip == DUGUM_TEKLI && nesne_d->veri.tekli.op == OP_DEREFERANS
+               && nesne_d->veri.tekli.operand
+               && nesne_d->veri.tekli.operand->tip == DUGUM_TANIMLAYICI) {
+        /* [D-771] C17-001: `(*p).alan = v` — ham isaretcinin GOSTERDIGI yapiya yaz.
+         * Onceden bu dal yoktu; cagiran `; atama: erisim hedefi cozulemedi` YORUMUNU
+         * yazip atamayi SESSIZCE dusuruyordu (olculdu: GARP'ta IPv4 adresi 0 kaldi). */
+        const Dugum *pd = nesne_d->veri.tekli.operand;
+        LlvmIsim *vi = isim_bul(g, pd->veri.tanimlayici.metin, pd->veri.tanimlayici.uzunluk);
+        if (!vi || !vi->pointee_llvm_tip || vi->pointee_llvm_tip[0] != '%') return -1;
+        taban_ir = vi->pointee_llvm_tip;
+        yk = yapi_bul_ir(g, taban_ir);
+        taban_reg = yeni_reg(g);
+        fprintf(g->out, "  %%%d = load ptr, ptr %%%d\n", taban_reg, vi->reg_no);
     } else {
         return -1;
     }
