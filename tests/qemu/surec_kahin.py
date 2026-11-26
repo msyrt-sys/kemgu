@@ -52,9 +52,7 @@ class SurecConsole(Console):
     def key(self, ad, bas):
         assert ad in self.qcodes, ad
         ilk = self.sayi("kap_lapic_tik")
-        self.q.call("input-send-event", {"events": [{"type": "key", "data": {
-            "down": bas, "key": {"type": "qcode", "data": ad},
-        }}]})
+        self.tus_gonder(ad, bas)
         # TCG yük altındayken hostta 12 ms, konukta bir HID yoklamasından kısa kalabilir.
         # Bırakma ve sonraki basma arasında konukta iki LAPIC tiki geçmesini bekle.
         time.sleep(.012)

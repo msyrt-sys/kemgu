@@ -78,7 +78,7 @@ calistir_bolge_sayac_yarisi	60	host
 calistir_bolge_test	60	host
 calistir_bolge_yonlendirme	60	host
 calistir_capability_test	60	host
-calistir_cekirdek_onbellek	80	derleme
+calistir_cekirdek_onbellek	138	derleme
 calistir_chatgpt_kopru	254	host
 calistir_check_genis	60	derleme
 calistir_check_kapisi	60	derleme

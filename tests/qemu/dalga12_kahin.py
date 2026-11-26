@@ -21,6 +21,10 @@ from uefi_kabuk_kahin import keys
 RTC = datetime(2026,7,14,9,42)
 
 
+class QmpKapandi(AssertionError):
+    pass
+
+
 class Qmp:
     def __init__(self, f, reader):
         self.f = f
@@ -32,7 +36,8 @@ class Qmp:
     def response(self, greeting=False):
         while True:
             line = self.reader.readline()
-            assert line, 'QMP kapandı'
+            if not line:
+                raise QmpKapandi('QMP kapandı')
             reply = json.loads(line)
             if 'event' in reply:
                 self.olaylar.append(reply)
@@ -201,9 +206,16 @@ class Console:
             if shifted:
                 seq = [('shift',True),*seq,('shift',False)]
             for name,down in seq:
-                self.q.call('input-send-event',{'events':[dict(type='key',data=dict(
-                    down=down,key=dict(type='qcode',data=name)))]})
-                time.sleep(.012)
+                self.key(name, down)
+
+    def tus_gonder(self, ad, bas):
+        assert ad in self.qcodes, ad
+        self.q.call('input-send-event', {'events': [dict(type='key', data=dict(
+            down=bas, key=dict(type='qcode', data=ad)))]})
+
+    def key(self, ad, bas):
+        self.tus_gonder(ad, bas)
+        time.sleep(.012)
 
     def run(self,text,out=b''):
         before = self.heap()
@@ -229,11 +241,13 @@ class Console:
         print(f'HEAP {text!r} +{after-before} toplam={after}',flush=True)
 
     def shutdown(self):
+        for harf in 'kapat':
+            self.key(harf, True)
+            self.key(harf, False)
+        # Bu basış S5'i başlatır. Aygıt sökülürken tuş bırakma veya pmemsave isteme.
         try:
-            self.input('kapat')
-        except (BrokenPipeError,ConnectionResetError,TimeoutError,AssertionError):
-            # S5 son Enter basışında QMP'yi kapatabilir. Son tuş/tik yanıtı
-            # gelmese de aşağıda hem gerçek süreç çıkışı hem tam seri çıktı şarttır.
+            self.tus_gonder('ret', True)
+        except (BrokenPipeError, ConnectionResetError, QmpKapandi):
             pass
         kod = self.p.wait(timeout=5)
         assert kod == 0, ('S5 QEMU çıkışı', kod, self.output()[-400:])

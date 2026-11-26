@@ -14,7 +14,6 @@ set -u
 cd "$(dirname "$0")/.."
 
 KEMGU=build/kemgu${EXE}
-SELF=build/codegen${EXE}
 KEM=test/ornekler/kem_malloc.kem
 HARNESS=test/kem_malloc_kompozisyon.c
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
@@ -22,11 +21,13 @@ HARNESS=test/kem_malloc_kompozisyon.c
 source test/calisma_dizini.sh
 TMP=$(calisma_ac build/kemmalloc) || exit 1
 calisma_izle "$TMP"
+# Diğer kapıların kullandığı derleyici, bu turun yeniden bağlamasından etkilenmez.
+SELF="$TMP/codegen${EXE}"
 gecti=0; kaldi=0
 
 # self-host binary'yi güncel codegen.kem'den üret (stale = yanlış PASS).
-"$KEMGU" --llvm selfhost/codegen.kem > "$TMP/self.ll" 2>/dev/null
-clang -x ir "$TMP/self.ll" -x none build/kdl_runtime.o -o "$SELF" -Wno-override-module 2>/dev/null
+"$KEMGU" --llvm selfhost/codegen.kem > "$TMP/self.ll" || exit 1
+clang -x ir "$TMP/self.ll" -x none build/kdl_runtime.o -o "$SELF" -Wno-override-module || exit 1
 if [ ! -x "$SELF" ]; then echo "  ❌ self-host codegen.exe üretilemedi"; exit 1; fi
 
 kontrol() {

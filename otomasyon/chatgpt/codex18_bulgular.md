@@ -488,3 +488,39 @@ Geçici dizin: önce 0, sonra 2, yeni 2
 Disk build: önce 7599525888 B, sonra 7600599040 B, büyüme +1073152 B
 Geçici dizin: önce 0, sonra 0, yeni 0
 ```
+
+## Bölüm 3 — ortak çekirdek önbelleği
+
+Dokuz giriş (UEFI + sekiz PVH harness'ı) aynı dört ürünü yayımlıyor. Bağlayıcı betiği ve başlangıç nesneleri girişten gelir. Derleyici ikilisi, son birleşik kaynak, awk süzgeci, bağlayıcı betiği, sıralı nesneler, clang bayrakları, clang/lld sürümleri ve içe aktarılan KEM modüllerinin içerikleri anahtara girer. Önceki UEFI anahtarı birleşik metinde adı geçen bir sürücünün kendi dosyasındaki değişikliği kapsamıyordu. Yeni kapıda ekran çekirdeğinin çalışma dizinindeki `drivers/ekran/psf.kem` kopyasına bir yorum eklenince yalnız bu tur yeniden derlendi.
+
+Sekiz PVH harness'ının yalnız-derle girişinde önbellek kapalı koşum ve ardından sıcak isabet ölçüldü. Her satırda dört dosyanın tamamı bayt bayt karşılaştırıldı. ARM ana makinede tam takım da çalışıyordu. Süreler saniyedir.
+
+| Harness | Derleyici | Kapalı | İsabet |
+|---|---|---:|---:|
+| kabuk | C | 12,133 | 0,108 |
+| ahci | C | 0,726 | 0,076 |
+| usb | C | 1,308 | 0,081 |
+| panik | C | 0,784 | 0,080 |
+| ps2 | C | 0,768 | 0,082 |
+| ekran | C | 0,720 | 0,079 |
+| nvme | C | 0,718 | 0,077 |
+| istisna | C | 0,800 | 0,077 |
+| istisna | self-host | 5,263 | 0,086 |
+| **Toplam** | | **23,220** | **0,746** |
+
+- Nesne sabotajında başlangıç nesneleri bağlayıcıya verildi, yalnız anahtardan çıkarıldı. Günlükte `uefi/nesne-farki beklenen=derlendi gelen=isabet` çıktı, gerçek kapı rc=1. Kayıt `build/d18/bolum3-son-nesne.*/komut.log`.
+- Yama sabotajında UEFI anahtarı gerçekten MSI yamasından önce hesaplandı. Günlükte `uefi/msi-yamali beklenen=derlendi gelen=isabet` çıktı, gerçek kapı rc=1. Kayıt `build/d18/bolum3-son-yama.*/komut.log`. İki deney ayrı çalışma ve önbellek kökleri kullandı.
+- Düzeltmeden sonra gerçek kapı UEFI, panik ve koordinat yaması uygulanmış ekran kaynaklarını sınadı. Kaynak, derleyici ve nesne değişikliklerinin her biri üç girişte de yeniden derlemeyi tetikledi. UEFI MSI yamasının ELF'i değiştirdiği ayrıca karşılaştırıldı.
+- İlk geçiş koşumunda kaldırılmış `RT` tanımları sekiz girişin açılmasını engelledi. Özgün kaynak listeleri geri kondu. Ayrıca `ciplak_region_free` ile `kem_malloc_kompozisyon` aynı anda `build/codegen` yazabiliyordu. İlk kapı bu koşumda ikiliyi bulamadı. İkisi de artık kendi çalışma dizininde bağlar ve araç hatasını döndürür. Birlikte `make -j2` rc=0. Geçiş koşumu karşılaştırmadan çıkarıldı, 16 tanı dizini korundu.
+- Genişleyen önbellek kapısı tam takım yükünde 91.788 sn sürdü (rc=0). Bölüm 1 kuralıyla güncel bütçesi 138 sn, eski UEFI kapısının taban bütçesi 80 sn idi.
+- İlk tamamlanan Bölüm 3 tam koşumunda 155 kapıdan ikisi kırmızıydı (36 dk 38 sn, rc=2). PCI16 köprü topolojisinde konuk SATA dosyasına `HATA bulunamadi` döndürdü. Başarısız self-host turun birleşik kaynağı ve dört ürünü, aynı kaynağın önbelleksiz derlemesiyle eşleşti (ELF SHA-256 `3b558716096b9005ca9cb480c380a18b2644b2d7a76dfe44700ff21400034d80`). Kâhin, USB tuşları arasındaki sabit host beklemesi yerine projedeki konuk LAPIC tiklerini de denetleyen süreç konsoluna geçti. Dört topoloji × iki derleyici 64 sn, rc=0. Eski kâhinle ayrı tekrar da geçtiğinden, ilk hatanın nedenini tek başına bu tekrar belirlemiyor.
+- Aynı koşumda çok süreç kâhini konuk kapanış iletisini gördü, QEMU S5'te SIGSEGV ile çıktı. Kapatma komutunun Enter basışından sonra bırakma veya konuk belleğine QMP isteği gönderilmesi kaldırıldı. Süreç çıkışının 0 olması ve tam kapanış iletisi hâlâ zorunlu. Çok süreç, boru ve program15 birlikte 573 sn, rc=0. Kırmızı koşumun dört tanı dizini `build/d18/bolum3-tam.Dhj9n5/tani/` altında.
+
+Aynı Bash gözlemcisi dokuz girişte gerçek LLVM IR nesne derlemelerini ve önbellek olaylarını saydı. Her iki tam takımın çıkış kodu 0. Zorunlu soğuk ve kapalı derlemeleri yapan host önbellek kapısı önce 5, sonra 22 çağrı yaptı. Son iki sütunda bu çağrılar çıkarıldı. Her iki takım sıcak olağan çekirdeklerle başladı.
+
+| Tam takım | Tüm isabet | Gerçek IR derlemesi | Önbelleğe yayın | Host önbellek kapısı hariç isabet | Host önbellek kapısı hariç derleme | Duvar (sn) |
+|---|---:|---:|---:|---:|---:|---:|
+| Önce | 123 | 15 | 3 | 122 | 11 | 2157 |
+| Sonra | 137 | 18 | 14 | 133 | 0 | 2044 |
+
+Tam takımın duvar süresindeki fark (sonra eksi önce) -113 sn. Ölçüm dosyaları `build/d18/ortak-onbellek-{once,sonra}.tsv`, son rapor `build/d18/bolum3-son-tam.hGGrHC/zaman_raporu.txt`. Makine yükü koşumlar arasında değişti.

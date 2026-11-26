@@ -31,3 +31,31 @@ Geçici dizin: önce 0, sonra 0, yeni 0
 ```
 
 Bölüm süresi 2 sa 9 dk 20 sn.
+
+## Bölüm 3 — ortak çekirdek önbelleği
+
+UEFI ve sekiz PVH girişinin anahtar ve ürün kuralları ortak kütüphaneye taşındı. İçe aktarılan modül değişiklikleri de kaydı geçersiz kılar. Ekran yaması, MSI yaması, üç girişte kaynak/derleyici/nesne değişiklikleri ve sıcak ürünlerin önbelleksiz derlemeyle bayt eşitliği doğrulandı. İki gerçek sabotajda kapı rc=1 verdi (nesne farkında ve MSI yamasında yanlış isabet).
+
+Sekiz PVH girişinde dokuz yolun toplamı 23,220 sn → 0,746 sn. Host önbellek deneyi dışındaki tam takımda isabet 122 → 133, gerçek çekirdek derlemesi 11 → 0. İlk tam koşumda görülen PCI16 ve S5 hatalarının günlükleri ve düzeltmeleri bulgular dosyasında. Yeni tam takım rc=0 ve §7 kapıları yeşil; ayrıca `calistir_kem_os_x86` rc=0, 28 sn. Bölüm süresi 1:19:29.
+
+```text
+=== ZAMAN RAPORU: duvar saati 34 dk 04 sn · 155 kapı · kapı toplamı 3 sa 49 dk 04 sn · derleme/diğer 00 dk 00 sn ===
+       16 dk 48 sn  %49.3  calistir_bm_x86_ag_saglamlik
+       12 dk 56 sn  %38.0  calistir_bm_x86_kaynak
+       12 dk 40 sn  %37.2  calistir_bm_x86_ps2_irq
+       11 dk 26 sn  %33.5  calistir_bm_x86_kabuk14
+       10 dk 45 sn  %31.6  calistir_bm_x86_v1
+       10 dk 20 sn  %30.3  calistir_bm_x86_ps2_karma
+       09 dk 48 sn  %28.8  calistir_bm_x86_cok_surec
+       09 dk 01 sn  %26.5  calistir_kem_os_pc_matris
+       07 dk 20 sn  %21.5  calistir_bm_x86_ekran_fare
+       07 dk 15 sn  %21.3  calistir_bm_x86_dosyalar
+       06 dk 33 sn  %19.2  calistir_bm_x86_tftp_teshis
+       06 dk 06 sn  %17.9  calistir_bm_x86_tcp_verim
+       05 dk 30 sn  %16.2  calistir_codegen_bootstrap
+       05 dk 24 sn  %15.8  calistir_bm_x86_uefi_kabuk
+       05 dk 09 sn  %15.1  calistir_bm_x86_surec
+  disk: build 9.2G · boş 444 GiB
+Disk build: önce 9785061376 B, sonra 9786150912 B, büyüme +1089536 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```
