@@ -3191,3 +3191,6 @@
   — sıfırlanmamış sayfada çöp bölge işaretçisi sayılırdı. NIC harness'ına NIC_DERLEYICILER (tek derleyiciyle koşum).
   `make -k test_tumu` (ikinci koşum): rc=0, "Tum testler gecti!", 6 sa 34 dk (aynı makinede önbellek dalı derleme/ölçümüyle
   eşzamanlı), FIXPOINT ✓ (102.074 satır), koşum sonu build/ 1,5 GB (temizlik çalışıyor; öncesi ~25 GB).
+  CI Windows ilk koşumda KIRMIZI: test_tumu → calistir_bm_x86_paket → kem_os_paket_deposu QEMU olmayan Windows'ta da
+  kullanıcı ELF'lerini derletiyordu; surec_elf.py yerel Python'dan MSYS `awk`ını çağırınca WinError 2. Depo yalnız QEMU
+  kapılarının girdisi → önkoşul PAKET_DEPOSU_ON ile yalnız QEMU+OVMF varken (dört kapı; kapılar QEMU yoksa zaten ATLANDI).

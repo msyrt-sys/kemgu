@@ -5220,6 +5220,10 @@ calistir_bm_x86_tftp_teshis: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD
 
 
 PAKET_ELFLERI := $(addprefix $(BUILD)/kullanici/,$(addsuffix .elf,hesapla kedi say saat ping cozumle nc indir sunucu tftp))
+# [D-771] Paket deposu yalnız QEMU kapılarının girdisidir. QEMU/OVMF yoksa o kapılar zaten
+# "ATLANDI" der; depoyu yine de kurmak Windows CI'da kullanıcı ELF'lerini derletiyor ve yerel
+# Python MSYS `awk`ını çalıştıramadığı için düşüyordu (WinError 2). Önkoşul yalnız QEMU varken.
+PAKET_DEPOSU_ON := $(if $(and $(shell command -v qemu-system-x86_64 2>/dev/null),$(wildcard /usr/share/OVMF/OVMF_CODE_4M.fd)),kem_os_paket_deposu)
 .PHONY: kem_os_paket_deposu
 kem_os_paket_deposu: $(PAKET_ELFLERI)
 	python3 tools/codex/paket_deposu.py $(BUILD)/paket_deposu $^
@@ -5228,12 +5232,12 @@ $(BUILD)/kullanici/paket.elf $(BUILD)/kullanici/self/paket.elf: stdlib/kripto/ka
 
 .PHONY: calistir_bm_x86_paket
 test_tumu: calistir_bm_x86_paket
-calistir_bm_x86_paket: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+calistir_bm_x86_paket: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh paket
 
 .PHONY: calistir_bm_x86_usb_ag
 test_tumu: calistir_bm_x86_usb_ag
-calistir_bm_x86_usb_ag: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+calistir_bm_x86_usb_ag: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/usb/cdc_ecm_test.kem
 	@bash test/bm_x86_nic_harness.sh usb_ag
 
@@ -5250,7 +5254,7 @@ calistir_bm_x86_ag_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUIL
 .PHONY: calistir_bm_x86_ag_iki calistir_bm_x86_ag_pc
 test_tumu: calistir_bm_x86_ag_iki
 calistir_kem_os_pc_matris: calistir_bm_x86_ag_pc
-calistir_bm_x86_ag_iki: calistir_kem_os_arm kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+calistir_bm_x86_ag_iki: calistir_kem_os_arm $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh iki_konuk
-calistir_bm_x86_ag_pc: kem_os_paket_deposu $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+calistir_bm_x86_ag_pc: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh ag_pc
