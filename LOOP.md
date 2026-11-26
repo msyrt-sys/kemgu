@@ -3206,3 +3206,21 @@
   CI Windows ikinci koşumda KIRMIZI: calistir_kem_os_arm_ag → ag_arm_derle.py `ld.lld`yi Python'dan çağırıyor; Windows
   CreateProcess adında NOKTA olan programa `.exe` EKLEMEZ → WinError 2. ag_arm_derle.py + surec_elf.py araçları
   shutil.which ile çözüyor (PATHEXT). Depoda adında nokta olan başka Python-çağrılı araç yok (tarandı).
+- 2026-11-26 D-772: TEST ALTYAPISI HIZI — x86 çekirdek önbelleği + ölçümlü koşum. (Kullanıcı sorusu: "koşuların maliyeti".)
+  ÖLÇÜM ÖNCESİ: tam takım 4,5-6,5 sa, 20 çekirdekte yük ~1 (SERİ); bm_x86_uefi_harness.sh "ikililer her koşumda yeniden
+  üretilir" kuralıyla aynı çekirdeği tek koşumda ≥73 kez derliyordu (self-host 74,5 sn · C 10,7 sn). Önbellek: anahtar
+  çıktıyı belirleyen her girdinin içeriği (derleyici ikilisi, MSI yamasından SONRAKİ birleşik kaynak, awk süzgeci, bağlayıcı
+  betiği, 6 başlangıç nesnesi, IR derleme komutu, clang/ld.lld sürümü); isabet 0,1-0,2 sn ve dört ürün önbelleksiz
+  derlemeyle BAYT BAYT aynı; en yeni 16 kayıt; KEMGU_CEKIRDEK_ONBELLEK=0 kapatır. Kapı calistir_cekirdek_onbellek
+  (55 sn): isabet + bayt eşitliği + kaynak/derleyici değişince yeniden derleme. S249 (kaynak anahtardan çıktı) · S250
+  (derleyici anahtardan çıktı) · S251 (isabette yanlış ürün) → üçü de rc=2. `make test_tumu_olcum`: her tarif satırı
+  test/zaman_kabuk.sh'tan geçer, sonunda kapı başına süre + en yavaş 15 + build/ boyutu (varsayılan test_tumu/CI değişmedi).
+  İLK ÖLÇÜMLÜ KOŞUM (soğuk önbellek): duvar 5 sa 25 dk, 155 kapı; önbellek 103 isabet (codegen 48, C 55) / 18 derleme →
+  tahmini kazanç 48×74,5 + 55×10,7 ≈ 69 dk (A/B değil, derleme ölçümünden). QEMU kapıları sürenin %94'ü (61 kapı, ort.
+  4,4 dk, en uzun bm_x86_kaynak 25 dk); host kapıları toplam ~18 dk. calistir_bm_x86_program15 RTC "1 sn tık 4 sn içinde"
+  beklemesi bir kez kırmızı (QEMU sonucu gelmedi), tek başına 2/2 yeşil → zamanlama kırılganlığı, denetim maddesine.
+  ASIL KAZANÇ SIRADA: Codex aynı takımı -j6 ile 52 dk (dalga 16), -j4 ile ~1 sa 49 dk (dalga 17) koşmuş; seri koşan BİZİZ.
+  Projeksiyon (QEMU kapısı dalga başına +10..20; 67 → ~130-220): seri ~9,5-16 sa, -j6 ~1,8-3 sa, -j12 ~1-1,6 sa (doğrusal
+  ölçekleme varsayımı). x86 konuklar ARM ana makinede TCG zorunlu (KVM çapraz mimari yapmaz); /dev/kvm erişimi VAR → ARM
+  konukları KVM'de koşma adayı.
+
