@@ -299,3 +299,14 @@ SMP mimarisi, üretim kilit sırası, IPI ve TLB, ABI 91–99, hızlanma ve geci
 Disk build: önce 57848848384 B, sonra 57850281984 B, büyüme +1433600 B
 Geçici dizin: önce 0, sonra 0, yeni 0
 ```
+
+## Taslak PR ve CI ölçümü
+
+[Taslak PR #257](https://github.com/msyrt-sys/kemgu/pull/257) açıldı. GitHub, bölüm 20 commit'i `4456ab0` ile `main` (`dea24dd`) arasında `CONFLICTING` bildirdi. PR denetimleri ve bu dala ait Actions koşum listesi boştu. `git merge-tree` dört dosyada çakışma gösterdi.
+
+- `Makefile`
+- `test/ciplak_region_free_harness.sh`
+- `test/kem_malloc_kompozisyon_harness.sh`
+- `tests/qemu/surec_kahin.py`
+
+D-772'de Linux işi 35:17, Windows işi 1:03:43 sürmüştü. Sonraki CI süreleri Claude'un entegrasyonunu bekliyor. Yerel `-j10` ve `-j20` sonuçları yukarıda. [D-772 Actions günlüğü](https://github.com/msyrt-sys/kemgu/actions/runs/45807330890)
