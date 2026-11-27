@@ -47,6 +47,7 @@ muaf() {
     *test/ornekler/kem_os_x86_ps2.kem) echo "parça — birleşik PS2 birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_panik.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_istisna.kem) echo "parça — birleşik panik birimi aşağıda denetlenir" ;;
+    *test/ornekler/kem_os_x86_heap_uzat.kem) echo "parça — birleşik heap_uzat birimi aşağıda denetlenir (D-777)" ;;
     *test/ornekler/kem_os_x86_ekran.kem) echo "parça — birleşik ekran birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_usb.kem) echo "parça — birleşik USB birimi aşağıda denetlenir" ;;
     *test/ornekler/kem_os_x86_ahci.kem) echo "parça — birleşik AHCI birimi aşağıda denetlenir" ;;
@@ -261,6 +262,19 @@ else
   "$KEMGU" --check --mimari x86_64-none build/kem_bm_panik_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
 rm -f build/kem_bm_panik_kapi.kem
+
+# [D-777] heap yerinde uzatma test çekirdeği — bm_x86_heap_uzat_harness.sh ile AYNI parça listesi.
+BM_HEAP_UZAT_PARCALAR="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem test/ornekler/kem_os_x86_heap_uzat.kem"
+cat $BM_HEAP_UZAT_PARCALAR > build/kem_bm_heap_uzat_kapi.kem
+tot=$((tot + 1))
+if "$KEMGU" --check --mimari x86_64-none build/kem_bm_heap_uzat_kapi.kem >/dev/null 2>&1; then
+  echo "  ✅ kem_os_x86_heap_uzat (birleşik bare-metal HEAP_UZAT, $(echo $BM_HEAP_UZAT_PARCALAR | wc -w) parça) --check geçti"
+else
+  red=$((red + 1))
+  echo "  🔴 kem_os_x86_heap_uzat birleşik kaynak --check'ten geçmiyor:"
+  "$KEMGU" --check --mimari x86_64-none build/kem_bm_heap_uzat_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+fi
+rm -f build/kem_bm_heap_uzat_kapi.kem
 
 BM_ISTISNA_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_istisna.kem}"
 BM_ISTISNA_PARCALAR="$BM_ISTISNA_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # Ortak ekran modülü; istisna birleşik biriminde de denetlenir.

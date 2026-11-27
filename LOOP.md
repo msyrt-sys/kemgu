@@ -298,6 +298,17 @@
       yolları; `değişken w = V[0]` gibi iç işaretçi takma adları İZLENMELİ, yoksa UAF) · E her aşamanın self-host karşılığı.
       ⚠ Tek bölge parametresi hem sonucu hem durum büyümesini taşıdığından `&değişken` durum dizisine yazan sürücü
       işlevleri B'yi GEÇEMEZ; A bu yüzden ön koşul (büyüme artık dizinin kendi bölgesinden).
+      ⚠ D-776 ÖLÇÜMÜ (D AŞAMASINI DEĞİŞTİRİR): kaçış değil ÜZERİNE YAZMA. Sızıntının baskın yolu `&değişken` durum
+      işlevleri ve durum alanına her adımda yeni dizi atanması (`s.kuyruk=[]`, `s.sonuc=[]`, `n.sayfalar=[]`; sürücülerde
+      11 yer). Eski dizi erişilemez ama durumun bölgesinde (ana bölge) kalır → HİÇBİR kaçış analizi onu serbest
+      bırakamaz; D-756'nın "escape v3" kararı bu sınıfı KAPATMAZ. İçerik dökümüyle (komut öncesi/sonrası ana bölgedeki
+      yeni KdlDizi başlıkları) iki ÇARPAN ölçüldü: (1) Dizi<tam8/dtam8/tam16> elemanları 4 baytlık `_tam` yuvasında —
+      512 baytlık sektör tamponu ~2 KB; (2) ikiye katlama büyümesi eski tamponları bırakır (~2×). Sektör okuması ~6 KB.
+      `mv` +720 KB'ın baskını kap=512/1024 bayt/tamsayı tamponları. Seçenekler: (a) gerçek 1/2 baytlık eleman
+      erişimcisi (iki derleyici + host runtime + kem_heap.kem; ABI) → 4× · (b) sürücülerde sabit kapasite + yerinde
+      yeniden kullanım (yeni `dizi_bosalt(d)`: boyut=0, tampon korunur) → üzerine yazma çöpü kalkar · (c) dönemsel
+      durum kopyalama (D-756'da RED). gdb (QEMU gdbstub) kesme noktası örnekleyicisi denendi: kararsız (VM durdukça
+      QMP tuşları reddediyor) → bırakıldı; içerik dökümü ucuz ve yeterli.
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
@@ -3298,4 +3309,40 @@
   mtime koşum ortasında 17:17:59 — zaman.tsv'den o anda koşan kapılar çıkarılıp bulundu). 2880 paralel tekrar ve
   ASan'lı self-host taraması (292 dosya + çekirdek) temizdi → derleyici çökmesi DEĞİL. İki harness artık kendi
   mktemp dizinine kurar. Benim eklediğim ciplak→codegen bağımlılığı kapının zamanlamasını kaydırıp yarışı SIKLAŞTIRDI.
-
+- 2026-11-26 D-776: C DERLEYİCİSİNDE DAR ELEMAN TAŞMASI (E4k-D ölçümü sırasında). `Dizi<dtam8>`/`Dizi<tam16>` BOŞ
+  literali (`[]`) başlığa eleman_byte 1/2 yazıyordu (`kdl_eleman_byte_yaz`); skaler erişimciler (`kdl_dizi_*_tam`) DAİMA
+  4 baytlık yuva yazar ve büyüme 4 ile yapılır, `eleman_byte`ı yalnız `kdl_dizi_kapasite_ayarla` (+ yapı yolu) okur →
+  `[]` + `dizi_kapasite_ayarla(d,N)` N bayt ayırıp 4N bayt yazdırıyordu: AYNI bölge bloğundaki komşu diziyi ezen taşma,
+  `güvensiz` YOK, --check temiz → SEGV (ölçüldü). ASan GÖRMEZ (bölge-içi bump tahsisi; ASan'lı runtime ile de temiz).
+  `dizi_olustur(N)` yolu ("i8/i16/i32 -> 4") ve self-host zaten 4 yazıyordu → yalnız literal yolu ayrışıyordu (D-407).
+  Bulunuşu: çekirdek ana bölgesinin içerik dökümünde eb=1 başlıklarının verisi 4 baytlık adımla yazılmıştı. Onarım tek
+  yardımcıda (i8/i16 → 4). Fikstür cg_korpus/cg_dar_eleman_kapasite.kem — tam8 + tam16 + POZİTİF tam32, ölçüm KOMŞU
+  dizinin bütünlüğü (ASan kör olduğu için). S270 (onarımı geri al) → fikstür SEGV (rc=139); geri → 42. Kapılar:
+  codegen_diff 230/230 · yapi_diff 208/208 (24 muaf) · bolge_operand 232/232 · llvm_test 321/321 · snapshot 50/50 ·
+  sıfır uyarı 38/0.
+- 2026-11-27 D-777: E4k-D (b) — YERİNDE UZATMA + çekirdek OOM koruması + kalıcı ölçüm. Mehmet (b)'yi seçti (sabit kapasite
+  + yerinde yeniden kullanım). ÖLÇÜM PLANI DEĞİŞTİRDİ: (1) `s.sonuc=[]` türü alan sıfırlamaları yalnız 32 B başlık ayırır
+  ve `s.kimlik=s.sonuc` gibi takma adlar var → `dizi_bosalt` ile yerinde boşaltma YANLIŞ SONUÇ üretirdi; yerleşik
+  EKLENMEDİ (güvenli + değerli kullanım yeri bulunamadı). (2) Oluşturucu atfı (çekirdek IR'ında kdl_dizi_olustur'a
+  llvm.returnaddress → başlık ofset 20): `mv`de bayt_sifir 181 dizi/135 KB, onbellek.kopya 39/81 KB, fsy_dizin, depo,
+  bm_bellek_oku (247 × 16 B yoklama) — ama oluşturan ile BÜYÜTEN farklı; üreticilerde kapasite rezervasyonu (5 yer)
+  ölçülebilir kazanç VERMEDİ → geri alındı. (3) ⚠ DOSYA OTURUMU HEAP KULLANIMI ZAMANLAMAYA BAĞLI: aygıt yoklama
+  döngüleri her turda tahsis eder; aynı kaynağın yalnız ÖLÜ kodla farklı iki derlemesi 2,42 MB / 1,62 MB verdi (kod
+  yerleşimi → TCG hızı → yoklama sayısı). Toplam-bayt bütçe kapısı bu yüzden AYIRT EDİCİ DEĞİL (S271 sessiz kaldı) →
+  eklenmedi. ÇÖZÜM SİSTEMİK: bump bölgede büyüyen dizi çoğunlukla aktif bloğun EN SON tahsisidir → tampon yerinde
+  uzatılır (kem_heap.kem kem_dizi_buyut + host kdl_bolge_uzat/kdl_dizi_buyut, aynı kural). Gerçek etki ~%13-15
+  (dosya oturumu 1,62 → 1,40 MB); 64 KB'ı aşan tampon adanmış blokta durur, orada uzatma yok. Yol üstünde: çekirdek
+  kem_dizi_buyut tahsis başarısızsa `veri=0` + büyük kapasite yazıyordu (D-579'un çekirdek yarısı AÇIKTI) → heap
+  tükenince fiziksel düşük adreslere sessiz yazma; artık host ile birebir temiz panik; kapasite_ayarla başarısızlıkta
+  dokunmaz. Ayrıca Makefile kdl_runtime.d'yi DAHİL ETMİYORDU → kdl_dizi.inc/kdl_bolge.c değişince artımlı yapım
+  runtime'ı YENİDEN KURMUYORDU (kapılar bayat runtime ölçüyordu; CI temiz kurduğu için görünmez). Kapılar:
+  calistir_bm_x86_heap_uzat (deterministik, yoklama yok: 64 dizi × 1024 eleman; bump açık C 262336 / self 327952,
+  kapalı C 524672 / self 590288 → eşik 400000; + `oom` kipi temiz panik) · calistir_dizi_uzat_test (host: işaretçi
+  kararlılığı + iç içe içerik) · test_kdl_bolge T8 (41/41). Sabotajlar: S271 çekirdek uzatma kapalı → bump eşik üstü ·
+  S272 "en son tahsis" koşulu kalktı → içerik bozuk · S273 host uzatma daima 0 → işaretçi testi · S274 host koşul kalktı
+  → iç içe içerik · S275 çekirdek OOM koruması yok → #PF, panik yok. Hepsi KIRMIZI.
+  Tam takım (-j10, 156 kapı, 36 dk): tek kırmızı check_kapisi — yeni test çekirdeği tek başına --check'ten geçmez
+  (runtime sembolleri birleşik birimde); deponun x86 deseniyle "parça" muaf + birleşik birim denetimi eklendi
+  (361/383, 0 RED). S276 (test çekirdeğine tip hatası) → birleşik denetim KIRMIZI.
+  KALAN E4k: yoklama döngüsü tahsisleri (zamanlamaya bağlı, gerçek donanımda daha kötü) + çağrı sonucu/durum yazımı
+  (D-776 notu) + (a) gerçek 1/2 baytlık eleman (4×).

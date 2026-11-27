@@ -78,5 +78,7 @@ int kdl_bolge_bakiye(void);
 int kdl_bolge_blok_sayisi(const KdlBolge *b);
 /* [D-770] b bu is parcacigi tarafindan mi olusturuldu? (dizi buyumesi icin) */
 int kdl_bolge_bu_is_parcacigi(const KdlBolge *b);
+/* [D-777] p aktif blogun en son tahsisiyse yerinde yeni_n bayta uzat (1) yoksa 0. */
+int kdl_bolge_uzat(KdlBolge *b, void *p, uint64_t eski_n, uint64_t yeni_n);
 
 #endif /* KDL_BOLGE_H */

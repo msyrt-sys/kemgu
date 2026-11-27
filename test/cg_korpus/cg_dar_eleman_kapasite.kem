@@ -1,0 +1,58 @@
+// [D-776] Dar elemanli (tam8/tam16) BOS literal dizide kapasite rezervasyonu.
+// C derleyicisi `[]` icin eleman_byte'i 1/2 yaziyordu; `dizi_kapasite_ayarla(d, N)`
+// N(x1/x2) bayt ayiriyor, eklemeler ise 4 baytlik yuva yaziyordu -> ayni bolge
+// blogundaki KOMSU diziyi ezen tasma (olculdu: SEGV). ASan bu sinifi GORMEZ
+// (bolge-ici bump tahsisi), bu yuzden olcum KOMSU DIZININ BUTUNLUGUDUR.
+// POZITIF: genis eleman (tam32) ayni sekilde zaten dogruydu ve dogru kalmali.
+
+işlev bayt_kontrol() -> tam32 {
+    değişken d: Dizi<tam8> = [];
+    dizi_kapasite_ayarla(d, 64);
+    değişken k: Dizi<tam32> = [];
+    dizi_kapasite_ayarla(k, 8);
+    değişken j: tam32 = 0;
+    iken j < 8 { dizi_ekle(k, 1000 + j); j = j + 1; }
+    değişken i: tam32 = 0;
+    iken i < 64 { dizi_ekle(d, (5 olarak tam8)); i = i + 1; }
+    değişken t: tam32 = 0;
+    j = 0;
+    iken j < 8 { t = t + dizi_al(k, j); j = j + 1; }
+    i = 0;
+    iken i < 64 { t = t + (dizi_al(d, i) olarak tam32); i = i + 1; }
+    ver t;          // 8028 + 64*5 = 8348
+}
+
+işlev yarim_kontrol() -> tam32 {
+    değişken d: Dizi<tam16> = [];
+    dizi_kapasite_ayarla(d, 64);
+    değişken k: Dizi<tam32> = [];
+    dizi_kapasite_ayarla(k, 8);
+    değişken j: tam32 = 0;
+    iken j < 8 { dizi_ekle(k, 2000 + j); j = j + 1; }
+    değişken i: tam32 = 0;
+    iken i < 64 { dizi_ekle(d, (300 olarak tam16)); i = i + 1; }
+    değişken t: tam32 = 0;
+    j = 0;
+    iken j < 8 { t = t + dizi_al(k, j); j = j + 1; }
+    i = 0;
+    iken i < 64 { t = t + (dizi_al(d, i) olarak tam32); i = i + 1; }
+    ver t;          // 16028 + 64*300 = 35228
+}
+
+işlev genis_kontrol() -> tam32 {
+    değişken d: Dizi<tam32> = [];
+    dizi_kapasite_ayarla(d, 16);
+    değişken i: tam32 = 0;
+    iken i < 16 { dizi_ekle(d, i); i = i + 1; }
+    değişken t: tam32 = 0;
+    i = 0;
+    iken i < 16 { t = t + dizi_al(d, i); i = i + 1; }
+    ver t;          // 120
+}
+
+işlev main() -> tam32 {
+    eğer bayt_kontrol() != 8348 { ver 1; }
+    eğer yarim_kontrol() != 35228 { ver 2; }
+    eğer genis_kontrol() != 120 { ver 3; }
+    ver 42;
+}

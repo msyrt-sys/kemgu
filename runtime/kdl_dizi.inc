@@ -52,6 +52,14 @@ static void kdl_dizi_buyut(KdlBolge *rho, KdlDizi *d, int32_t yeni_kap, size_t e
         kdl_panik("dizi kapasitesi tasti (buyume int32 sinirini asti)");
 
     KdlBolge *hb = (kdl_bolge_bu_is_parcacigi(d->bolge) ? d->bolge : (rho ? rho : kdl_global_bolge_al()));
+    /* [D-777] Tampon bolgenin en son tahsisiyse yerinde uzat (kopya yok, eski tampon
+     * cop olarak KALMAZ). kem_heap.kem kem_dizi_buyut ile ayni kural. */
+    if (d->veri && d->kapasite > 0 &&
+        kdl_bolge_uzat(hb, d->veri, (uint64_t)d->kapasite * (uint64_t)eb,
+                       (uint64_t)yeni_kap * (uint64_t)eb)) {
+        d->kapasite = yeni_kap;
+        return;
+    }
     void *yeni = kdl_bolge_ayir(hb, (uint64_t)yeni_kap * (uint64_t)eb);
     if (!yeni)
         kdl_panik("dizi buyutulemedi (tahsis basarisiz)");

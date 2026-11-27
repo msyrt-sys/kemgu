@@ -246,7 +246,35 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken hb: *tam8 = bolge;
     değişken gv: tam64 = *gp;
     eğer gv != 0 { hb = gv olarak *tam8; }
+    // [D-777] D-579'un ÇEKİRDEK yarısı (host kdl_dizi_buyut ile birebir). Eskiden
+    // tahsis başarısızsa `veri = 0` ve büyük `kapasite` yazılıyordu; çağıran HEMEN
+    // ardından yazdığı için fiziksel 0 adresinin üstüne yazılırdı (heap tükenince =
+    // E4k'nin sonucu). Büyüme daima ARTMALI; artmıyorsa int32 taşmıştır.
+    değişken eski_kp: *tam32 = (da + 12) olarak *tam32;
+    değişken eski_kap: tam32 = *eski_kp;
+    eğer yeni_kap <= eski_kap { kem_panik("PANIK: dizi kapasitesi tasti (buyume int32 sinirini asti)"); }
+    // [D-777] YERİNDE UZATMA. Bump bölgede büyüyen dizi çoğunlukla aktif bloğun EN SON
+    // tahsisidir; o zaman tampon olduğu yerde uzatılır (kopya yok, eski tampon çöp
+    // olarak KALMAZ). Koşul kesin: eski tamponun 16-hizalı sonu = bloğun bump ucu ve
+    // ek alan blokta var. Aksi hâlde eski yol (yeni tampon + kopya) aynen.
+    değişken ev: tam64 = *((da olarak tam64) olarak *tam64);
+    eğer ev != 0 ve (hb olarak tam64) != 0 {
+        değişken blok: tam64 = *((hb olarak tam64) olarak *tam64);
+        eğer blok != 0 {
+            değişken bkp: *tam64 = (blok + 8) olarak *tam64;
+            değişken bup: *tam64 = (blok + 16) olarak *tam64;
+            değişken eski_n: tam64 = (((eski_kap olarak tam64) * eb + 15) / 16) * 16;
+            değişken yeni_n: tam64 = (((yeni_kap olarak tam64) * eb + 15) / 16) * 16;
+            değişken uc: tam64 = (blok + 24) + *bup;
+            eğer ev + eski_n == uc ve *bup + (yeni_n - eski_n) <= *bkp {
+                *bup = *bup + (yeni_n - eski_n);
+                *eski_kp = yeni_kap;
+                ver;
+            }
+        }
+    }
     değişken yeni: *tam8 = kdl_bolge_ayir(hb, (yeni_kap olarak tam64) * eb);
+    eğer (yeni olarak tam64) == 0 { kem_panik("PANIK: dizi buyutulemedi (tahsis basarisiz)"); }
     değişken vp: *tam64 = da olarak *tam64;
     değişken eski_veri: tam64 = *vp;
     değişken bp: *tam32 = (da + 8) olarak *tam32;
@@ -332,7 +360,22 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken ep: *tam32 = (da + 16) olarak *tam32;
     değişken eb: tam32 = *ep;
     eğer eb <= 0 { eb = 4; }
-    kem_dizi_buyut(bolge, d, yeni_kapasite, eb olarak tam64);
+    // [D-777] Host kdl_dizi_kapasite_ayarla ile aynı: tahsis başarısızsa diziye
+    // DOKUNMA (çağıran yazmaz → sessiz dönüş doğru). Büyütme yolunun paniği burada
+    // istenmez: rezervasyon bir ipucudur, gerekirse ekleme yolu kendi büyür.
+    değişken gp2: *tam64 = (da + 24) olarak *tam64;
+    değişken hb2: *tam8 = bolge;
+    değişken gv2: tam64 = *gp2;
+    eğer gv2 != 0 { hb2 = gv2 olarak *tam8; }
+    değişken yeni: *tam8 = kdl_bolge_ayir(hb2, (yeni_kapasite olarak tam64) * (eb olarak tam64));
+    eğer (yeni olarak tam64) == 0 { ver; }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken eski_veri: tam64 = *vp;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer eski_veri != 0 ve boyut > 0 { memcpy(yeni, eski_veri olarak *tam8, (boyut olarak tam64) * (eb olarak tam64)); }
+    *vp = yeni olarak tam64;
+    *kp = yeni_kapasite;
 }
 
 // ============================================================================
