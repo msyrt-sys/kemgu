@@ -3375,7 +3375,7 @@
 - 2026-11-27 D-779: E4k KALAN İŞ — TASARIM (belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md, karar bekliyor). Ölçümler
   (güncel main, C çekirdeği): BOŞTA büyüme 40 sn'de +752 B (yoklama boşta SIZDIRMAZ; zamanlama bağımlılığı yalnız G/Ç
   beklerken) · komut sonrası yeni dizi başlıklarının REFERANSSIZ (kesin çöp) oranı cat 98/113, mkdir 381/433, yaz
-  413/459, mv 790/873 (mv baytta ≥%73; geçişsiz tarama = ALT sınır) · mv'de dizin_coz aynı dizini 181 kez ayrıştırıyor
+  413/459, mv 790/873 (mv baytta ≥%73; geçişsiz tarama = ALT sınır) · mv'de dizin_coz aynı dizini 181 kez ayrıştırıyor [⚠ D-781: YANLIŞ — 17]
   (bayt_sifir 520 B LFN tamponu). ÇIKARIM: baskın kalem geçici çalışma verisi; hayatta kalan durum adlı ve küçük
   (döngüden önce bildirilen yereller + &değişken parametreler). ⚠ ÖLÇÜLDÜ: güvenli kodda yapı alanı &T ve *T
   tutabilir → derin kopyalayıcı yönlendirme tablosu + çalışma anı bölge üyeliği sınaması ister. Öneri: D (dizin
@@ -3409,3 +3409,22 @@
   kopyalanacak dizi verisi onlarca KB.
   ⚠ ÖLÇÜM DERSİ: ilk tarama yalnız doğrudan dönüşümü saydı ve 'gizli adres riski yapısal olarak yok' sonucunu
   verdi; siteleri okumak düzeltti (D-500). Kod değişikliği YOK; ölçüm araçları scratchpad'de kaldı.
+- 2026-11-27 D-781: E4k A1 ÖNCESİ ÖLÇÜMLER + D-779 SAYI DÜZELTMESİ (tasarım belgesi §10; kod değişikliği YOK).
+  DÜZELTME: D-779'daki 'mv başına 181 dizin_coz' YANLIŞTI — 181 bayt_sifir çağrısının TOPLAMIYDI. Atıf yamalı çekirdekte
+  boyuta göre ayrılınca mv: 520 B LFN tamponu (=dizin_coz) 17 · 16 B xHCI TRB 100 · 512 B sektör 24 · 31 B USB CBW 19 ·
+  10 B SCSI CDB 19 · 64 B 2. Diğer: cp 10, yaz 7, mkdir 3 ayrıştırma. Host ölçümü (fat32_sektor_yaz_test öykünmesi,
+  sayaçlı; 70000 ve 131072 sektörlük taze imaj): tek yazma planı 6-7 koşu, koşu başına 1 dizin_coz; mv = oku + Yaz +
+  DosyaSil → 17 ile tutarlı. SONUÇ: D(1) (FatSektor ömürlü ayrıştırma önbelleği) mv'de 17 → ~3, kazanç D-779'un ima
+  ettiğinden ~6 kat küçük; asıl çarpan her işlemin TAZE FatSektor ile aynı sektörleri diskten yeniden okuması (mv'de ~19
+  sektör G/Ç'si). Dalga 19 kapsamı yeniden değerlendirilecek (Mehmet).
+  ⚠ ÖLÇÜM DERSİ: oluşturucu atfı ÇAĞRILANI (bayt_sifir) gösterir, ÇAĞIRANI değil; bir sayıyı tek bir çağırana yormadan
+  önce boyut/örnek dağılımına bak (tek 'örnek' satırı dağılım değildir).
+  A1 OLGULARI (hepsi ölçüldü): (1) bölgedeki her metin ayrı bir tahsisin başı; metin tipli opak tutamaklar (bellek_al,
+  dosya_oku → malloc; dosya_ac FILE*; kilit/semafor/bariyer) bölge DIŞINDA. (2) `(&x) olarak *U` güvenli kodda E002;
+  güvensiz'de okuma/yazma yeniden yorumlaması kabul → gizli kanalların HEPSİ güvensiz ister, güvenli alt küme
+  kendiliğinden sağlam. (3) Referanslar asla bölge belleğini göstermez: `&değişken xs[0]` T022, `&xs[0]` iki derleyicide
+  yığın kopyası → `&T → *T` dönüşümleri daima yığın adresi. (4) C'de yığın dizisi yalnız açıklamasız literal yerelde.
+  (5) §9.4-2 İNCELTİLDİ: ham işaretçi yazımında yükseltme yalnız hedef yığın DIŞINDAYSA (sistem çağrısı işleyicileri
+  yığındaki durum yapılarına yazar; her yazımı yükseltmek sızıntıyı geri getirirdi). (6) Dalga 18 bölüm 16 (birleşmeden,
+  salt okuma): çekirdekler arası süreç kaydı HAM bellek (kxm_o64/kxm_y64 ofsetleri) → bölge nesnesi el değiştirmiyor;
+  kalan soru: AP işleyicileri ks_yonetim/ksv_* üzerinden BSP durumuna erişiyor mu.
