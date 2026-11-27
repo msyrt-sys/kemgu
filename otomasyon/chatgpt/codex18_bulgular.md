@@ -1339,3 +1339,24 @@ Dokuzuncu ham takım 1319 sn, rc=2. Dört 64 MiB ölçümü 52,150–99,821 sn v
 Son ham -j10 koşumu 1309 sn, ölçümlü -j10 koşumu 1332 sn, her ikisi rc=0 ve tee=0. Bölüm süresi 5 sa 5 dk 39 sn.
 
 === ZAMAN RAPORU: duvar saati 22 dk 10 sn · 181 kapı · kapı toplamı 3 sa 21 dk 58 sn · derleme/diğer 00 dk 00 sn ===
+
+## Bölüm 16 — kullanıcı süreçlerinin x86 çekirdekleri arasında zamanlanması
+
+Her çekirdeğin hazır maskesi, tarama başlangıcı, yerel çalıştırma ve gerçek iş çalma sayaçları bulunuyor. Süreç kaydı kullanıcıda, kuyrukta veya BSP'deki hizmette tek sahibi olacak şekilde sıra 10 kilidiyle el değiştiriyor. Gönderici CPU sistem çağrısı anında tutuluyor. BSP, dosya ve aygıt çağrılarını gönderenin CR3'üyle sıraya alıyor. Süreç sıra 20 çerçeve ve sıra 30 heap kilitleriyle var olan düzeni kullanabiliyor. Kesmeden dönen AP çekirdek CR3'üne geçmeden kaydı yeni çalıştırıcıya vermiyor. Geçiş sürümü tekse önceki ve amaçlanan kök birlikte korunuyor.
+
+İlk küçük UEFI imajında bağlayıcı `smp_zaman_kanca` için tanımsız sembol bildirdi. Bu imajda işaretçiye yüksek seviyede yazan kabuk yoktu ve tek okuma asm içindeki sabit sembol adıydı. Kanca adresi artık KEMGU'dan asm girdisi olarak taşınıyor. İlk 15 bölümdeki planlayıcısız UEFI yolu da aynı çağrıyı sıfır döndüren dalıyla kullanıyor. Ön hazırlık ve olumsuz imajlar ayrı derleme dizinlerinde tutuldu. Bölüm 16'nın izlenen dosyaları Bölüm 15 commit ve uzak dal kontrolünden sonra kuruldu.
+
+İşlemci raporundaki süreç sayısı aynı çocuğun tekrar zamanlanmasını tek sayar. Sekiz süreç yuvasının her biri için son PID çekirdeğe özel tutuluyor. Yuva yeniden kullanıldığında yeni PID ekleniyor. Ayrı PID'ler QMP'den okunup konuk satırıyla karşılaştırılıyor. Bir çekirdekte ebeveyn ve dört çocuk için yüzlerce zaman dilimine karşılık tam beş süreç bekleniyor. Dondurulmuş dört vCPU'da her TR tabanı kendi TSS'ine eşit, donanımın kullanacağı RSP0 16 bayta hizalı ve o çekirdeğin yığını içinde.
+
+C ile dört hesap süreci tek vCPU'da 6.444 sn, dört vCPU'da 2.283 sn (2.823×). Self-host ile 5.646 ve 1.701 sn (3.319×). Tek çekirdek beş ayrı PID saydı. Dört farklı CPL3, CR3 ve PID aynı QMP duraklamasında okundu. Her çalışan vCPU'nun donanım TR tabanı ile özel TSS eşleşti, TSS.RSP0 hizalıydı ve o işlemcinin çekirdek yığını içindeydi. Dört sonuç bağımsız üçgensel sayı hesabına eşitti. x86 konuklar ARM hostta çok iş parçacıklı TCG ile koştu.
+
+İş çalma kapalıyken yalnız CPU0 üzerinde bir çocuk görüldü, kapı rc=1 (20 sn). Göçte canlı GS güncellemesini kapatma sabotajı uygulanmadı. Eski çekirdek numarası göç denetimine verildiğinde kullanıcı girişinden önce `SMP goc cekirdek kimligi` ile kapı rc=1 (38 sn) verdi.
+
+§7 ile dört vCPU'da eski hesap/arka/çocuk, boru, kabuk14, dosyalar, tık/TLB, iki bölüm düzeninde donanım, seçici, paylaşım ve tip denetimi 439 sn, make/tee rc=0. Bölüm süresi 19 dk 23 sn.
+
+| Derleyici | QMP işlemci, PID ve CR3 |
+|---|---|
+| C | `[(0, 2, '0x5e05000'), (1, 5, '0x8823000'), (2, 3, '0x6c0f000'), (3, 4, '0x7a19000')]` |
+| Self-host | `[(0, 4, '0x7a21000'), (1, 5, '0x882b000'), (2, 3, '0x6c17000'), (3, 2, '0x5e0d000')]` |
+
+Kuyruk ve sistem çağrısı dışındaki kullanıcı hesapları eşzamanlı. İlk ASM kanca düzeltmesi önbellek testi sürerken girdi özetini değiştirdi. Son takım sabit kaynaklarla çalıştı.

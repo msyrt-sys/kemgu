@@ -197,6 +197,10 @@ yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vekt
     ver i;
 }
 çıplak işlev kxs_hizmet(num: tam64, a: tam64, b: tam64, c: tam64) -> tam64 {
+    eğer num == KX_SIS_ISLEMCI_SAYISI { ver smp_cevrimici olarak tam64; }
+    eğer num == KX_SIS_ISLEMCI_NO { ver kzs_kaynak(); }
+    eğer num == KX_SIS_YAKINLIK_AYARLA { ver kzs_yakinlik(a); }
+    eğer num == KX_SIS_ISLEMCI_KAYIT { ver kzs_kayit(a,b,c); }
     eğer num == KX_SIS_YAZ ve (a == 2 veya (a == 1 ve değil kxs_cikis_eslendi)) { ver kxs_konsol_yaz(a,b,c); }
     eğer num == 5 {
         değişken n: tam64 = kxs_dize_boyu(a, 4096);
@@ -390,6 +394,15 @@ işlev kxs_hazirla(ayirici: tam64, e: Elf64, argv: Dizi<metin>, ebeveyn: tam64) 
         ver tamam(yuva);
     }
 }
+// Bu dizinin tek yazarı yerel çalıştırıcıdır. Yuva yeni bir PID'ye
+// geçince yeni süreç sayılır. Aynı PID'nin sonraki dilimleri sayacı artırmaz.
+çıplak işlev kzs_surec_say(cpu:tam64,yuva:tam64,pid:tam64) {
+    değişken kayit:tam64=cpu+232+8*yuva;
+    eğer ipi_oku(kayit)!=pid {
+        ipi_yaz(kayit,pid);
+        ipi_yaz(cpu+224,ipi_oku(cpu+224)+1);
+    }
+}
 çıplak işlev kxs_bir_dilim(yuva: tam64) {
     değişken kayit: tam64 = kxs_baglam(yuva);
     eğer kxm_o64(kayit+KXS_DURUM_OFS) != KXS_HAZIR { ver; }
@@ -407,6 +420,9 @@ işlev kxs_hazirla(ayirici: tam64, e: Elf64, argv: Dizi<metin>, ebeveyn: tam64) 
     kx_sis_vekil=kxs_hizmet_adresi();
     değişken cr0: tam64 = kxs_fpu_kapat();
     smp_alan_degistir(kxs_cr3,kxs_pid);
+    değişken cpu:tam64=smp_bsp_verisi();
+    ipi_yaz(cpu+192,ipi_oku(cpu+192)+1);
+    kzs_surec_say(cpu,yuva,kxs_pid);
     değişken durdu: tam64 = kxs_dilim(kayit);
     smp_alan_degistir(ana,0);
     kxs_fpu_geri(cr0);
@@ -441,4 +457,281 @@ işlev kxs_hazirla(ayirici: tam64, e: Elf64, argv: Dizi<metin>, ebeveyn: tam64) 
     cikti.rip=kxm_o64(kayit+KXS_RIP_OFS);
     cikti.cr2=kxm_o64(kayit+KXS_CR2_OFS);
     memset(kayit olarak *tam8,0,KXS_KAYIT_BOYU);
+}
+
+// Yalnız gözetmen belleğindeki kayıt kullanılır. TSS.RSP0 önceki
+// değeriyle geri yüklenir. Kesme koçanı GS'deki yerel dönüş adresine gelir.
+çıplak işlev kxs_smp_gir(kayit: tam64) {
+    güvensiz {
+        satıriçi_asm {
+            mimari: x86_64
+            şablon:r#"subq $$128,%rsp
+pushfq
+cli
+pushq %rbx
+pushq %rbp
+pushq %r12
+pushq %r13
+pushq %r14
+pushq %r15
+movq $0,%rdi
+movq %rsp,%gs:144
+leaq 2f(%rip),%rax
+movq %rax,%gs:152
+movq %rdi,%gs:136
+movq %gs:48,%rdx
+movq 4(%rdx),%rax
+movq %rax,%gs:160
+movq %rsp,%rax
+andq $$-16,%rax
+movq %rax,4(%rdx)
+movq %rdi,%rsp
+popq %r15
+popq %r14
+popq %r13
+popq %r12
+popq %r11
+popq %r10
+popq %r9
+popq %r8
+popq %rbp
+popq %rdi
+popq %rsi
+popq %rdx
+popq %rcx
+popq %rbx
+popq %rax
+swapgs
+iretq
+2: movq %gs:48,%rdx
+movq %gs:160,%rax
+movq %rax,4(%rdx)
+movq $$0,%gs:136
+popq %r15
+popq %r14
+popq %r13
+popq %r12
+popq %rbp
+popq %rbx
+popfq
+addq $$128,%rsp"#
+            girdi("r",kayit) bozulan("~{rax}") bozulan("~{rdi}") bozulan("~{rsi}")
+            bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{r8}") bozulan("~{r9}")
+            bozulan("~{r10}") bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}")
+        }
+    }
+}
+// Süreç yuvasının sabit 64 baytlık zamanlayıcı kaydı. İlk sözcük evredir:
+// 0 bekliyor, 1 kuyrukta, 2 bir işlemcide, 3 BSP hizmetini bekliyor.
+sabit KZS_PID:tam64=8;
+sabit KZS_YAKINLIK:tam64=16;
+sabit KZS_SON_CPU:tam64=24;
+sabit KZS_VEKTOR:tam64=32;
+sabit KZS_HATA:tam64=40;
+sabit KZS_CR2:tam64=48;
+sabit KZS_IPTAL:tam64=56;
+// BKL sıra 10; kuyruk maskesinin her biti sekiz süreç yuvasından biridir.
+// Süreç ömrü BSP'de yönetilir. AP yalnız atanan kullanıcı çerçevesini yürütür.
+sabit SMP_IS_CAL: mantıksal = doğru;
+çıplak işlev kzs_kilit() -> tam64 { ver smp_bellek_kilitleri+128; }
+çıplak işlev kzs_kuyruk(no: tam64) -> tam64 { ver kzs_kilit()+64+no*64; }
+çıplak işlev kzs_is(y: tam64) -> tam64 { ver kzs_kuyruk(smp_cekirdek_sayisi olarak tam64)+y*64; }
+çıplak işlev kzs_cpu(no: tam64) -> tam64 {
+    eğer no==0 { ver smp_bsp_verisi(); }
+    ver ipi_oku(smp_ap_kayitlari+no*64+48);
+}
+çıplak işlev kzs_koy(y: tam64,no: tam64) {
+    değişken ku: tam64=kzs_kuyruk(no);
+    ipi_yaz(ku,ipi_oku(ku)|(1<<y));
+    ipi_yaz(kzs_is(y),1);
+    ipi_yaz(kzs_kilit()+32,ipi_oku(kzs_kilit()+32)+1);
+}
+çıplak işlev kzs_hazirla(y: tam64) {
+    değişken r: tam64=kxs_baglam(y);
+    değişken m: tam64=kzs_is(y);
+    değişken f: tam64=kilit_al_kesmesiz(kzs_kilit());
+    eğer ipi_oku(m)==0 ve kxm_o64(r+KXS_DURUM_OFS)==KXS_HAZIR {
+        değişken pid: tam64=kxm_o64(r+KXS_PID_OFS);
+        eğer pid!=ipi_oku(m+KZS_PID) {
+            memset(m olarak *tam8,0,64); ipi_yaz(m+KZS_PID,pid);
+        }
+        değişken no:tam64=ipi_oku(m+KZS_SON_CPU);
+        eğer ipi_oku(m+KZS_YAKINLIK)>0 { no=ipi_oku(m+KZS_YAKINLIK)-1; }
+        kxm_y64(r+KXS_DURUM_OFS,KXS_KOSUYOR);
+        kzs_koy(y,no);
+    }
+    kilit_birak_kesmesiz(kzs_kilit(),f);
+}
+çıplak işlev kzs_sec(no:tam64) -> tam64 {
+    değişken n:tam64=smp_cevrimici olarak tam64;
+    değişken k:tam64=0;
+    iken k<n {
+        değişken sahip:tam64=(no+k)%n;
+        değişken q:tam64=kzs_kuyruk(sahip);
+        değişken maske:tam64=ipi_oku(q);
+        eğer maske!=0 {
+            değişken bas:tam64=ipi_oku(q+8);
+            değişken j:tam64=0;
+            iken j<KXS_YUVA_ADEDI {
+                değişken y:tam64=(bas+j)%KXS_YUVA_ADEDI;
+                eğer (maske&(1<<y))!=0 {
+                    değişken m:tam64=kzs_is(y);
+                    değişken bag:tam64=ipi_oku(m+KZS_YAKINLIK);
+                    eğer bag==0 veya bag==no+1 {
+                        ipi_yaz(q,maske^(1<<y)); ipi_yaz(q+8,(y+1)%KXS_YUVA_ADEDI);
+                        ipi_yaz(m,2); ipi_yaz(m+KZS_SON_CPU,no);
+                        ipi_yaz(kzs_kilit()+32,ipi_oku(kzs_kilit()+32)-1);
+                        değişken yerel:tam64=kzs_kuyruk(no);
+                        ipi_yaz(yerel+16,ipi_oku(yerel+16)+1);
+                        eğer k>0 { ipi_yaz(yerel+24,ipi_oku(yerel+24)+1); }
+                        ver y;
+                    }
+                }
+                j=j+1;
+            }
+        }
+        eğer değil SMP_IS_CAL { ver -1; }
+        k=k+1;
+    }
+    ver -1;
+}
+çıplak işlev kxs_smp_isci(no:tam64) -> tam64 {
+    eğer ipi_oku(kzs_kilit()+32)==0 { ver 0; }
+    değişken f:tam64=kilit_al_kesmesiz(kzs_kilit());
+    değişken y:tam64=kzs_sec(no);
+    kilit_birak_kesmesiz(kzs_kilit(),f);
+    eğer y<0 { ver 0; }
+    değişken r:tam64=kxs_baglam(y);
+    değişken cpu:tam64=kzs_cpu(no);
+    eğer cekirdek_no()!=no veya ipi_oku(cpu)!=no { kdl_panik("SMP goc cekirdek kimligi"); ver 0; }
+    değişken ana:tam64=kxm_cr3_oku();
+    değişken cr0:tam64=kxs_fpu_kapat();
+    smp_alan_degistir(kxm_o64(r+KXS_CR3_OFS),kxm_o64(r+KXS_PID_OFS));
+    kzs_surec_say(cpu,y,kxm_o64(r+KXS_PID_OFS));
+    kxs_smp_gir(r);
+    smp_alan_degistir(ana,0);
+    kxs_fpu_geri(cr0);
+    f=kilit_al_kesmesiz(kzs_kilit());
+    değişken m:tam64=kzs_is(y);
+    değişken v:tam64=ipi_oku(cpu+168);
+    eğer v==48 veya v==49 {
+        kxm_y64(r+KXS_DILIM_OFS,kxm_o64(r+KXS_DILIM_OFS)+1);
+    }
+    eğer (v==48 veya v==49) ve ipi_oku(m+KZS_IPTAL)==0 {
+        kzs_koy(y,no);
+    } değilse {
+        ipi_yaz(m+KZS_VEKTOR,v); ipi_yaz(m+KZS_HATA,ipi_oku(cpu+176)); ipi_yaz(m+KZS_CR2,ipi_oku(cpu+184)); ipi_yaz(m,3);
+    }
+    kilit_birak_kesmesiz(kzs_kilit(),f);
+    ver 1;
+}
+çıplak işlev kzs_iptal(y:tam64) -> mantıksal {
+    değişken m:tam64=kzs_is(y);
+    değişken f:tam64=kilit_al_kesmesiz(kzs_kilit());
+    değişken durum:tam64=ipi_oku(m);
+    eğer durum==1 {
+        değişken no:tam64=ipi_oku(m+KZS_SON_CPU);
+        eğer ipi_oku(m+KZS_YAKINLIK)>0 { no=ipi_oku(m+KZS_YAKINLIK)-1; }
+        değişken q:tam64=kzs_kuyruk(no);
+        ipi_yaz(q,ipi_oku(q)&(255^(1<<y)));
+        ipi_yaz(kzs_kilit()+32,ipi_oku(kzs_kilit()+32)-1);
+    }
+    eğer durum==2 { ipi_yaz(m+KZS_IPTAL,1); }
+    değilse { ipi_yaz(m,0); }
+    kilit_birak_kesmesiz(kzs_kilit(),f);
+    // AP'nin en geç yerel zaman dilimi sonunda çekirdek köküne dönmesi gerekir.
+    eğer durum==2 {
+        değişken bas:tam64=bm_tsc_oku();
+        iken ipi_oku(m)!=3 {
+            eğer bm_tsc_oku()-bas>kap_tsc_ms*1000 { ver yanlış; }
+            güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } }
+        }
+        f=kilit_al_kesmesiz(kzs_kilit()); ipi_yaz(m,0); kilit_birak_kesmesiz(kzs_kilit(),f);
+    }
+    ver doğru;
+}
+// Kullanıcı yazmaçlarını AP'den alan BSP yalnız sistem çağrısının süresince
+// süreç köküne geçer. Dosya tanımlayıcıları, sürücüler ve süreç tablosu tek yazarlıdır.
+çıplak işlev kzs_hizmet(y: tam64) {
+    değişken r:tam64=kxs_baglam(y);
+    değişken m:tam64=kzs_is(y);
+    değişken f:tam64=kilit_al_kesmesiz(kzs_kilit());
+    değişken v:tam64=ipi_oku(m+KZS_VEKTOR);
+    eğer ipi_oku(m+KZS_IPTAL)!=0 { v=15; }
+    eğer v!=128 {
+        kxm_y64(r+KXS_DURUM_OFS,KXS_OLDURULDU);
+        kxm_y64(r+KXS_VEKTOR_OFS,v);
+        kxm_y64(r+KXS_HATA_OFS,ipi_oku(m+KZS_HATA));
+        kxm_y64(r+KXS_RIP_OFS,kxm_o64(r+120));
+        eğer v==14 { kxm_y64(r+KXS_CR2_OFS,ipi_oku(m+KZS_CR2)); }
+        ipi_yaz(m,0); kilit_birak_kesmesiz(kzs_kilit(),f); ver;
+    }
+    değişken ana:tam64=kxm_cr3_oku();
+    değişken yer:KxsYer=kxs_yer(kxm_o64(r+256));
+    kxs_alt=yer.alt; kxs_ust=yer.ust;
+    kxs_etkin_kayit=r; kxs_ana_cr3=ana;
+    kxs_pid=kxm_o64(r+KXS_PID_OFS); kxs_cr3=kxm_o64(r+KXS_CR3_OFS); kxs_pt=kxs_cr3+12288;
+    kxs_durum=KXS_KOSUYOR; kxs_cikis_kodu=0;
+    smp_alan_degistir(kxs_cr3,kxs_pid);
+    değişken num:tam64=kxm_o64(r+112);
+    değişken sonuc:tam64=2;
+    eğer num!=KX_SIS_ABI_SURUMU {
+        sonuc=kxs_hizmet(num,kxm_o64(r+72),kxm_o64(r+88),kxm_o64(r+80));
+    }
+    smp_alan_degistir(ana,0);
+    değişken tekrar:tam64=kxm_o64(r+248);
+    eğer tekrar>0 { kxm_y64(r+120,kxm_o64(r+120)-2); sonuc=tekrar; }
+    kxm_y64(r+248,0); kxm_y64(r+112,sonuc);
+    eğer kxs_durum==KXS_KOSUYOR { kxs_durum=KXS_HAZIR; }
+    kxm_y64(r+KXS_DURUM_OFS,kxs_durum); kxm_y64(r+KXS_CIKIS_OFS,kxs_cikis_kodu);
+    kxs_etkin_kayit=0; kxs_pid=0; kxs_cr3=0; kxs_pt=0; kxs_durum=KXS_BOS;
+    ipi_yaz(m,0);
+    kilit_birak_kesmesiz(kzs_kilit(),f);
+}
+sabit KX_SIS_ISLEMCI_SAYISI: tam64 = 91;
+sabit KX_SIS_ISLEMCI_NO: tam64 = 92;
+sabit KX_SIS_YAKINLIK_AYARLA: tam64 = 93;
+sabit KX_SIS_ISLEMCI_KAYIT: tam64 = 94;
+çıplak işlev kzs_kaynak() -> tam64 {
+    eğer smp_cevrimici==1 { ver 0; }
+    ver ipi_oku(kzs_is(kxs_pid_yuva(kxs_pid))+KZS_SON_CPU);
+}
+çıplak işlev kzs_yakinlik(no:tam64) -> tam64 {
+    eğer no< -1 veya no>=(smp_cevrimici olarak tam64) { ver -22; }
+    eğer smp_cevrimici>1 { ipi_yaz(kzs_is(kxs_pid_yuva(kxs_pid))+KZS_YAKINLIK,no+1); }
+    ver 0;
+}
+çıplak işlev kzs_olcu(no:tam64,alan:tam64) -> tam64 {
+    değişken cpu:tam64=kzs_cpu(no);
+    eğer alan==0 { ver no; }
+    eğer alan==1 { ver ipi_oku(cpu+8); }
+    eğer alan==2 { ver ipi_oku(cpu+16); }
+    eğer alan==6 { ver ipi_oku(cpu+24); }
+    eğer alan==3 { ver ipi_oku(cpu+224); }
+    değişken calinan:tam64=0; değişken hazir:tam64=0;
+    eğer smp_cevrimici>1 {
+        değişken q:tam64=kzs_kuyruk(no);
+        calinan=ipi_oku(q+24);
+        değişken maske:tam64=ipi_oku(q); iken maske!=0 { hazir=hazir+1; maske=maske&(maske-1); }
+    }
+    eğer alan==4 {
+        değişken bos:tam64=ipi_oku(cpu+208);
+        değişken tik:tam64=ipi_oku(cpu+16);
+        eğer tik==0 { ver 0; } ver bos*100/tik;
+    }
+    eğer alan==5 { ver calinan; }
+    ver hazir;
+}
+çıplak işlev kzs_kayit(no:tam64,p:tam64,n:tam64) -> tam64 {
+    eğer no<0 veya no>=(smp_cevrimici olarak tam64) veya n<64 { ver -22; }
+    eğer değil kxs_aralik(p,64,doğru) { ver -14; }
+    değişken i:tam64=0; iken i<8 { kxm_y64(p+i*8,kzs_olcu(no,i)); i=i+1; }
+    ver 0;
+}
+çıplak işlev kzs_baslat() {
+    eğer smp_cevrimici<=1 veya smp_zaman_kanca!=0 { ver; }
+    değişken a:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1,kdl_smp_dilim_acik(%rip)
+leaq kxs_smp_isci(%rip),$0"# çıktı("=r",&a) bozulan("~{memory}") } }
+    smp_zaman_kanca=a;
 }

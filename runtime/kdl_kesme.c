@@ -575,8 +575,16 @@ struct CekirdekVeri {
     uint64_t yigin_alt, yigin_ust, tss, gdt, ist[3], cr3;
     uint64_t kullanici_giris, kullanici_gs;
     uint64_t kilit_sirasi, kilit_beklemeleri, alan_surumu;
+    uint64_t dilim, donus_rsp, donus_rip, onceki_rsp0, vektor, hata, hata_adresi;
+    uint64_t tek_dilim, bekliyor, bosta_tik, gecis_hedef;
+    uint64_t farkli_surec, yuva_pid[8];
 };
 _Static_assert(__builtin_offsetof(struct CekirdekVeri, alan_surumu) == 128, "GS CR3 surumu");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, dilim) == 136, "GS dilim");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, hata_adresi) == 184, "GS CR2");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, bosta_tik) == 208, "GS bosta");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, gecis_hedef) == 216, "GS sonraki CR3");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, farkli_surec) == 224, "GS PID sayaci");
 struct ApTablolari {
     struct CekirdekVeri veri;
     uint64_t gdt[7];
@@ -676,6 +684,64 @@ __attribute__((naked)) static void kdl_ap_zaman_kocani(void) {
         "testb $3,8(%rsp)\n jz 2f\n swapgs\n 2: iretq");
 }
 
+/* SMP diliminde donanımın kesme çerçevesini yalnız yerel GS kaydına aktar.
+ * Eski çekirdek ve tek çekirdekli kullanıcı girişleri kendi koçanlarını kullanır. */
+volatile int kdl_smp_dilim_acik;
+extern void kdl_apic_timer_irq(void);
+__attribute__((naked, used)) static void kdl_smp_dilim_yakala(void) {
+    __asm__ volatile(
+        "pushq %rax\n pushq %rbx\n pushq %rcx\n pushq %rdx\n pushq %rsi\n pushq %rdi\n"
+        "pushq %rbp\n pushq %r8\n pushq %r9\n pushq %r10\n pushq %r11\n pushq %r12\n"
+        "pushq %r13\n pushq %r14\n pushq %r15\n cld\n"
+        "movq %rsp,%rsi\n movq %gs:136,%rdi\n movl $15,%ecx\n rep movsq\n"
+        "lodsq\n movq %rax,%gs:168\n lodsq\n movq %rax,%gs:176\n"
+        "movq %cr2,%rax\n movq %rax,%gs:184\n movl $5,%ecx\n rep movsq\n"
+        "andq $-16,%rsp\n cmpq $48,%gs:168\n je 1f\n cmpq $49,%gs:168\n je 2f\n"
+        "cmpq $128,%gs:168\n jne 4f\n incq %gs:96\n movl $0xc0000102,%ecx\n"
+        "rdmsr\n shlq $32,%rdx\n orq %rdx,%rax\n movq %rax,%gs:104\n jmp 4f\n"
+        "1: call kdl_apic_timer_irq\n jmp 3f\n 2: call smp_ap_zaman_irq\n"
+        "3: lock incq kdl_dilim_sayisi(%rip)\n movq kdl_lapic_taban(%rip),%rax\n movl $0,176(%rax)\n"
+        "4: movq %gs:144,%rsp\n jmp *%gs:152");
+}
+#define KDL_SMP_KAPI(vektor, cs, hata, eski)                                 \
+    __attribute__((naked)) static void kdl_smp_kapi_##vektor(void) {          \
+        __asm__ volatile("testb $3," #cs "(%rsp)\n jz 2f\n"                  \
+                         "cmpl $0,kdl_smp_dilim_acik(%rip)\n je 2f\n"         \
+                         "swapgs\n cmpq $0,%gs:136\n jne 1f\n swapgs\n"         \
+                         "2: jmp " eski "\n1: " hata "pushq $" #vektor       \
+                         "\n jmp kdl_smp_dilim_yakala");                       \
+    }
+#define KDL_SMP_KAPILAR(X) \
+    X(0,    8, "pushq $0\n", "*kdl_isr_tablo(%rip)") \
+    X(1,    8, "pushq $0\n", "*kdl_isr_tablo+8(%rip)") \
+    X(3,    8, "pushq $0\n", "*kdl_isr_tablo+24(%rip)") \
+    X(4,    8, "pushq $0\n", "*kdl_isr_tablo+32(%rip)") \
+    X(5,    8, "pushq $0\n", "*kdl_isr_tablo+40(%rip)") \
+    X(6,    8, "pushq $0\n", "*kdl_isr_tablo+48(%rip)") \
+    X(7,    8, "pushq $0\n", "*kdl_isr_tablo+56(%rip)") \
+    X(10,  16, "", "*kdl_isr_tablo+80(%rip)") \
+    X(11,  16, "", "*kdl_isr_tablo+88(%rip)") \
+    X(12,  16, "", "*kdl_isr_tablo+96(%rip)") \
+    X(13,  16, "", "*kdl_isr_tablo+104(%rip)") \
+    X(14,  16, "", "*kdl_isr_tablo+112(%rip)") \
+    X(16,   8, "pushq $0\n", "*kdl_isr_tablo+128(%rip)") \
+    X(17,  16, "", "*kdl_isr_tablo+136(%rip)") \
+    X(19,   8, "pushq $0\n", "*kdl_isr_tablo+152(%rip)") \
+    X(48,   8, "pushq $0\n", "kdl_lapic_timer_stub") \
+    X(49,   8, "pushq $0\n", "kdl_ap_zaman_kocani") \
+    X(128,  8, "pushq $0\n", "kdl_syscall_stub")
+KDL_SMP_KAPILAR(KDL_SMP_KAPI)
+#undef KDL_SMP_KAPI
+
+/* BSP ilk AP'yi uyandırmadan önce IDT kurulur, canlı bir IDT girdisi yamanmaz. */
+static void kdl_smp_kapilari_kur(void) {
+#define KDL_DILIM_KAPISI(v, cs, hata, eski) kdl_idt_gate(v, (uintptr_t)&kdl_smp_kapi_##v, 0);
+    KDL_SMP_KAPILAR(KDL_DILIM_KAPISI)
+    kdl_idt[128].tip_oz = 0xee;
+#undef KDL_DILIM_KAPISI
+}
+#undef KDL_SMP_KAPILAR
+
 void kdl_idt_kur(void) {
     kdl_ist_kur();
     struct CekirdekVeri *c = &kdl_cekirdek_bsp;
@@ -709,6 +775,8 @@ void kdl_idt_kur(void) {
         kdl_idt_gate(82, (uintptr_t)&kdl_ipi_82, 0);
         kdl_idt_gate(83, (uintptr_t)&kdl_ipi_83, 0);
     }
+    extern void kxs_smp_isci(void) __attribute__((weak));
+    if (kxs_smp_isci) kdl_smp_kapilari_kur();
     kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
     extern void *kdl_msi_kocanlari[14];
     for (int i = 0; i < 14; ++i) kdl_idt_gate(66 + i, (uintptr_t)kdl_msi_kocanlari[i], 0);

@@ -239,3 +239,13 @@ Son ham -j10 koşumu 1309 sn, ölçümlü -j10 koşumu 1332 sn, her ikisi rc=0 v
 Disk build: önce 42618396672 B, sonra 42619535360 B, büyüme +1138688 B
 Geçici dizin: önce 0, sonra 0, yeni 0
 ```
+
+## Bölüm 16 — SMP süreç zamanlayıcısı ve ABI
+
+Çekirdek başına hazır kuyruk, iş çalma, büyük çekirdek kilidi, yakınlık, dört yeni ABI çağrısı (91–94), `islemci` ve `donanim` satırları eklendi.
+
+C ile dört hesap süreci tek vCPU'da 6.444 sn, dört vCPU'da 2.283 sn (2.823×). Self-host ile 5.646 ve 1.701 sn (3.319×). Tek çekirdek beş ayrı PID saydı. Dört farklı CPL3, CR3 ve PID aynı QMP duraklamasında okundu. Her çalışan vCPU'nun donanım TR tabanı ile özel TSS eşleşti, TSS.RSP0 hizalıydı ve o işlemcinin çekirdek yığını içindeydi. Dört sonuç bağımsız üçgensel sayı hesabına eşitti. x86 konuklar ARM hostta çok iş parçacıklı TCG ile koştu.
+
+İş çalma kapalıyken yalnız CPU0 üzerinde bir çocuk görüldü, kapı rc=1 (20 sn). Göçte canlı GS güncellemesini kapatma sabotajı uygulanmadı. Eski çekirdek numarası göç denetimine verildiğinde kullanıcı girişinden önce `SMP goc cekirdek kimligi` ile kapı rc=1 (38 sn) verdi.
+
+§7 ile dört vCPU'da eski hesap/arka/çocuk, boru, kabuk14, dosyalar, tık/TLB, iki bölüm düzeninde donanım, seçici, paylaşım ve tip denetimi 439 sn, make/tee rc=0. Bölüm süresi 19 dk 23 sn.

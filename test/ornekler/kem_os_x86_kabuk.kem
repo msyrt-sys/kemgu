@@ -947,6 +947,7 @@ işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
 }
 işlev ks_sonlandir(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     değişken r: tam64 = kxs_baglam(y);
+    güvensiz { eğer smp_cevrimici>1 ve değil kzs_iptal(y) { ver -16; } }
     kxm_y64(r+KXS_DURUM_OFS,KXS_OLDURULDU); kxm_y64(r+KXS_VEKTOR_OFS,15);
     ver ks_birak(y,b);
 }
@@ -961,6 +962,8 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
         ag_al();
         bh_olaylar();
         değişken n: tam64 = 0;
+        kzs_baslat();
+        değişken cok:mantıksal=smp_cevrimici>1;
         iken n < KXS_YUVA_ADEDI {
             değişken y: tam64 = (p.sonraki+n)%KXS_YUVA_ADEDI;
             eğer ks_durum(y) != KXS_BOS ve değil ks_bitti(ks_durum(y)) {
@@ -985,7 +988,8 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
                     dizi_yaz(p.baglamlar,i,b);
                 }
                 ks_uyandir(y,&b);
-                eğer ks_durum(y) == KXS_HAZIR {
+                eğer cok ve ks_durum(y)==KXS_HAZIR { kzs_hazirla(y); }
+                eğer (değil cok ve ks_durum(y)==KXS_HAZIR) veya (cok ve ipi_oku(kzs_is(y))==3) {
                     b.x=*x; b.h=*h; b.tr=*tr;
                     değişken isaret: *KsvBaglam = (&b) olarak *KsvBaglam;
                     ksv_baglam_adresi=isaret olarak tam64;
@@ -993,7 +997,8 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
                     ks_yonetim=yonetim olarak tam64;
                     kxs_ek_vekil=ksv_vekil_adresi();
                     kxs_cikis_eslendi=dizi_al(b.fds,1).acik;
-                    kxs_bir_dilim(y); b.dilim_calisti=doğru;
+                    eğer cok { kzs_hizmet(y); } değilse { kxs_bir_dilim(y); }
+                    b.dilim_calisti=doğru;
                     kxs_cikis_eslendi=yanlış;
                     ks_yonetim=0; ksv_baglam_adresi=0; kxs_ek_vekil=0;
                     *x=b.x; *h=b.h; *tr=b.tr;
@@ -1007,12 +1012,16 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
             }
             n=n+1;
         }
+        eğer cok { ver kxs_smp_isci(0)!=0; }
     }
     ver yanlış;
 }
 çıplak işlev ps2_tus_var() -> mantıksal { ver ps2_halka_var(ps2_irq_klavye); }
-çıplak işlev ks_hlt() { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti
-hlt"# bozulan("~{memory}") } } }
+çıplak işlev ks_hlt() { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"cli
+movq $$1,kdl_cekirdek_bsp+200(%rip)
+sti
+hlt
+movq $$0,kdl_cekirdek_bsp+200(%rip)"# bozulan("~{memory}") } } }
 işlev ks_bekle(p: &değişken KsKabukSureci,y: tam64,x: &değişken XhciDurum,h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) {
     iken değil ks_bitti(ks_durum(y)) {
         eğer değil ks_adim(p,x,h,tr) { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti
@@ -2753,8 +2762,17 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
     }
 }
 
+işlev kd_islemci(no:tam64) -> metin {
+    değişken satir:metin=kd_tamsayi("ISLEMCI",no);
+    değişken i:tam64=1;
+    iken i<=4 { satir=kd_tamsayi(satir,kzs_olcu(no,i)); i=i+1; }
+    ver satir;
+}
 işlev kd_donanim_satirlari(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal) -> sonuç<Dizi<metin>,metin> {
     değişken satirlar: Dizi<metin> = []; dizi_ekle(satirlar,kd_cpu());
+    güvensiz { değişken no:tam64=0;
+        iken no<(smp_cevrimici olarak tam64) { dizi_ekle(satirlar,kd_islemci(no)); no=no+1; }
+    }
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { ver hata(e); } tamam(b) => {
             değişken harita: tam64 = dizi_al(b.alan,9);
@@ -3014,6 +3032,7 @@ işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"yardim") { ekran_cift_yaz("yardim <komut> komutun kullanımını gösterir."); ver tamam(doğru); }
     eğer bm_esit(ad,"kapat") { ekran_cift_yaz("kapat diskleri eşitler ve sistemi kapatır."); ver tamam(doğru); }
     eğer bm_esit(ad,"yenidenbaslat") { ekran_cift_yaz("yenidenbaslat diskleri eşitler ve sistemi yeniden başlatır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"islemci") { ekran_cift_yaz("islemci: no, APIC, tik, ayrı süreç sayısı, boşta yüzde."); ver tamam(doğru); }
     eğer bm_esit(ad,"donanim") { ekran_cift_yaz("donanim aygıtları listeler. donanim kaydet <yol> raporu yazar. donanim gonder <ip> <port> kaydı yollar."); ver tamam(doğru); }
     eğer bm_esit(ad,"log") { ekran_cift_yaz("log [sayfa] günlük halkasını gösterir. log kaydet <yol> dosyaya yazar. log gonder <ip> <port> bir anlık görüntü yollar."); ver tamam(doğru); }
     eğer bm_esit(ad,"hassasiyet") { ekran_cift_yaz("hassasiyet <1..4> fare hızını ayarlar."); ver tamam(doğru); }
@@ -3077,6 +3096,12 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         } }
     }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
+    eğer bm_esit(cmd,"islemci") {
+        güvensiz { değişken no:tam64=0;
+            iken no<(smp_cevrimici olarak tam64) { ekran_cift_yaz(kd_islemci(no)); no=no+1; }
+        }
+        ver tamam(doğru);
+    }
     eğer bm_esit(cmd,"donanim") {
         eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }
         değişken bos: tam32 = kd_bosluk(arg);
@@ -3105,7 +3130,11 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         iken y < KXS_YUVA_ADEDI {
             eğer ks_durum(y) != KXS_BOS {
                 değişken m: metin = metin_birlestir(tam_metin(ks_pid(y))," ");
-                m=metin_birlestir(m,ks_durum_adi(ks_durum(y)));
+                değişken ad:metin=ks_durum_adi(ks_durum(y));
+                güvensiz { eğer smp_cevrimici>1 ve ks_durum(y)==KXS_KOSUYOR {
+                    eğer ipi_oku(kzs_is(y))==2 { ad="kosuyor"; } değilse { ad="hazir"; }
+                } }
+                m=metin_birlestir(m,ad);
                 m=metin_birlestir(metin_birlestir(m," "),dizi_al(p.adlar,y olarak tam32));
                 ekran_cift_yaz(metin_birlestir(metin_birlestir(m," "),tam_metin(kxm_o64(kxs_baglam(y)+KXS_DILIM_OFS))));
             }

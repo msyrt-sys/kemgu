@@ -109,3 +109,29 @@ Dolu kutuda −2, süre aşımında −4 döner. Çağıran çerçeveyi ve `SmpT
 ## Donanım ve ölçüm kapsamı
 
 Dalga x86-64 UEFI ve xAPIC yolunu hedefler. ARM SMP, x2APIC, NUMA, işlemci hotplug, süreç içi iş parçacıkları ve fiziksel makine koşumu ayrı çalışmalardır. ARM ana makinedeki x86 TCG, paralel host iş parçacıkları kullansa da kesme gecikmeleri ve bellek işlemlerinin serpiştirilmesi gerçek x86 donanımından farklıdır.
+
+
+### Kullanıcı süreçlerinin zamanlanması
+
+Çok çekirdekli x86 kabuğunda her mantıksal işlemcinin sekiz yuvalı hazır
+kuyruğu vardır. Yerel tarama son kullanılan yuvadan devam eder. Boş işlemci
+diğer kuyrukları dolaşır ve yakınlığı izin veren ilk hazır süreci alır.
+Her süreç aynı anda tek bir işlemcide çalışır. Yerel LAPIC kesmesi yazmaçları
+ve IRET çerçevesini süreç kaydına yazar. Çekirdek köküne döndükten sonra
+süreç yeniden kuyruğa girebilir. Göçte yeni işlemcinin TSS.RSP0 değeri o
+işlemcinin yığınını gösterir. Kullanıcı kipinde GS sıfırdır. Kesmede swapgs
+ile mevcut mantıksal işlemcinin kaydına dönülür.
+
+Süreç kuyruğu ve sistem çağrısı hizmeti 10 sıra numaralı büyük çekirdek
+kilidini kullanır. Kullanıcı hesabı sırasında kilit açıktır. Sistem çağrısının
+kaynağı görev kaydında tutulur. BSP dosyayı, soketi veya aygıtı çağıran
+sürecin adres alanında işler ve sonucu aynı göreve yazar. Kabuk, aygıt
+durumu ve dosya tanımlayıcıları böylece tek yazarlıdır. Bir işlemcinin
+kullanıcı hesabı diğerinin kullanıcı hesabıyla paralel çalışabilir. İki
+dosya ya da aygıt çağrısı BSP'de sırasıyla çalışır. Tek vCPU eski kesme ve
+dilim yolunu kullanır.
+
+`islemci` ve `donanim` çıktılarında her `ISLEMCI` satırı sıra numarası,
+APIC kimliği, yerel tık, çalıştırılan farklı PID sayısı ve boşta tık yüzdesini
+taşır. ABI 91–94 aynı bilgilere ve işlemci yakınlığına kullanıcı erişimi
+verir. İşlemci numarası sistem çağrısına girilen noktada kaydedilir.

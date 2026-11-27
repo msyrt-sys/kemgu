@@ -148,3 +148,9 @@ işlev kul_onay(p: tam64,sat: tam32,etiket: metin) -> mantıksal {
 çıplak işlev sis_dosya_akis(fd: tam64,islem: tam64,sinir: tam64) -> tam64 { ver sis_cagir(89,fd,islem,sinir); }
 
 çıplak işlev sis_paket_hedef(p: tam64,n: tam64) -> tam64 { ver sis_cagir(90,p,n,0); }
+
+// x86 çok çekirdekli zamanlayıcı, ABI v2.
+çıplak işlev sis_islemci_sayisi() -> tam64 { ver sis_cagir(91,0,0,0); }
+çıplak işlev sis_islemci_no() -> tam64 { ver sis_cagir(92,0,0,0); }
+çıplak işlev sis_yakinlik_ayarla(no: tam64) -> tam64 { ver sis_cagir(93,no,0,0); }
+çıplak işlev sis_islemci_kayit(no: tam64,p: tam64,n: tam64) -> tam64 { ver sis_cagir(94,no,p,n); }

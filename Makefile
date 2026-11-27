@@ -5483,3 +5483,19 @@ test_tumu: calistir_bm_x86_smp_tlb
 calistir_bm_x86_smp_tlb: $(X86_SMP_ON)
 	@bash test/bm_x86_smp_harness.sh tlb
 	@SUREC_SMP=4 SUREC_SENARYO="tus-usb cocuk" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+
+# Tek vCPU zamanlamasını ve dört vCPU üzerinde her eski kullanıcı senaryosunu da çalıştır.
+SMP_SUREC_PARCA := $(addprefix calistir_bm_x86_smp_surec_,hesap boru kabuk14 dosyalar)
+.PHONY: calistir_bm_x86_smp_surec $(SMP_SUREC_PARCA)
+test_tumu: calistir_bm_x86_smp_surec
+calistir_bm_x86_smp_surec: $(SMP_SUREC_PARCA)
+$(SMP_SUREC_PARCA): $(X86_SMP_ON)
+calistir_bm_x86_smp_surec_hesap:
+	@SUREC_KAHIN=smp_surec_kahin bash test/bm_x86_surec_harness.sh
+	@SUREC_SMP=4 SUREC_SENARYO="hesap arka cocuk" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+calistir_bm_x86_smp_surec_boru:
+	@KEMGU_QEMU_SMP=4 SUREC_KAHIN=boru_kahin bash test/bm_x86_surec_harness.sh
+calistir_bm_x86_smp_surec_kabuk14:
+	@SUREC_SMP=4 SUREC_SENARYO=kabuk14 SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+calistir_bm_x86_smp_surec_dosyalar:
+	@SUREC_SMP=4 SUREC_SENARYO="gezgin gezgin-salt" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh

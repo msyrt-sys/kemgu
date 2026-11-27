@@ -16,6 +16,9 @@ tur() (
     if [[ ${SUREC_KAHIN:-} == program15_kahin && ${PROGRAM15_TEK:-} == saat ]]; then
         kaynaklar=(test/kullanici/saat.kem)
     fi
+    if [[ ${SUREC_KAHIN:-} == smp_surec_kahin ]]; then
+        kaynaklar=(test/kullanici/smpden.kem)
+    fi
     for kaynak in "${kaynaklar[@]}"; do
         ad="${kaynak##*/}"
         python3 tests/qemu/surec_elf.py "$w/kullanici/${ad%.kem}.elf" \

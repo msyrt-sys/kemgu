@@ -68,6 +68,10 @@ x86_64'te `int 0x80` girişinde RAX çağrı numarasıdır. İlk üç argüman s
 | 88 | ag_kayit | 3 | tür, indeks, 64 bayt çıktı | 1 ARP, 2 TCP (dinleyiciler dahil), 3 arayüz, 4 DHCP süreleri. Dolu 1, boş 0 | x86_64 |
 | 89 | dosya_akis | 3 | fd, işlem, üst sınır | 1 dosyanın okumalık kopyasını açar. 2 yazılacak içeriği fiziksel çerçevelerde biriktirir. 3 ve sıfır sınır dosyayı yayımlar. Yayımlamadan kapatma veya süreç çıkışı birikimi bırakır. Üst sınır 16 MiB. | x86_64 |
 | 90 | paket_hedef | 2 | Çıktı adresi ve tampon boyu | Yazılabilir veri bölümünü seçer, yolunu sıfır sonlandırmalı yazar. Paket işlem kilidi süreç çıkışında bırakılır. Meşgulken -16, uygun bölüm yoksa -30 döner. | x86_64 |
+| 91 | islemci_sayisi | 0 | — | Çevrimiçi mantıksal işlemci sayısı. | x86_64 |
+| 92 | islemci_no | 0 | — | Çağrının kullanıcı kipinden geldiği anda işlemcinin sıfır tabanlı sıra numarası. | x86_64 |
+| 93 | yakinlik_ayarla | 1 | İşlemci numarası | Çağıran sürecin sonraki dilimini bu işlemciye bağlar. −1 bağı kaldırır. Başarıda 0, aralık dışı numarada −22. | x86_64 |
+| 94 | islemci_kayit | 3 | İşlemci, tampon, boy | 64 bayt yazar ve 0 döner. Boy 64'ten küçükse veya işlemci geçersizse −22, aralık yazılamıyorsa −14. | x86_64 |
 
 40–119 v2 x86_64 çağrılarına ayrılmıştır. Bilinmeyen kullanıcı çağrıları `NOSYS` döndürür. PVH ring0 kapısı eski davranışını korur. 40–79 dışında bilinmeyen çağrının sonucu `-1` olur. Eski minifs çağrıları PVH servisidir. UEFI C1 süreçlerine minifs bağlanmadığında 17 ve 18 `NOSYS` döndürür. VFS çağrıları 41–54 FAT32 bağlamalarını kullanır.
 
@@ -149,3 +153,13 @@ IPv4 adresi ağdaki dört sekizlinin sayısal değeridir (örneğin 192.0.2.1 i�
 | 86 | İstek tamponu iki alandır (ICMP sıra numarası, zaman aşımı ms). Sonuç RTT mikrosaniye veya negatif hatadır. |
 
 Bloksuz okumada veri yoksa `-11`, dolu fd tablosunda `-24`, sınırlı soket veya TCP havuzu doluysa `-105`, kullanımda olan dinleme portunda `-98`, zaman aşımında `-110` döner. TCP’de okumanın sıfır dönmesi veri sonudur. Dinleme kuyruğu 1–8 aralığında seçilir. UDP’de her sokette dört datagramlık kuyruk vardır. Alım süresi ve keepalive milisaniye cinsindendir.
+
+
+### İşlemci kaydı
+
+64 baytlık kayıtta sekiz küçük uçlu 64 bit alan bulunur. Sırasıyla işlemci numarası,
+APIC kimliği, LAPIC tıkı, bu işlemcide çalıştırılan farklı PID sayısı, açılıştan beri boşta
+tık yüzdesi, başka kuyruktan çalınan dilim sayısı, çalışan PID ve hazır süreç
+sayısıdır. PID sıfırsa o anda kullanıcı süreci yoktur. Bir süreç başka bir işlemcide
+devam edebileceğinden iki bağımsız çağrı arasındaki işlemci numarası değişebilir.
+95–99 sonraki genişletmelere ayrılmıştır.

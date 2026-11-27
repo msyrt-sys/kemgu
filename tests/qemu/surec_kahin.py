@@ -362,7 +362,8 @@ def kos(w, tekrar, senaryo, ilk=1):
                 c.run("echo cevap", b"cevap\n")
                 c.run(f"calistir {exe}", f"{exe}\n[merhaba.elf pid=3 cikis=1]\n".encode())
                 def ps(seri):
-                    m = re.fullmatch(rb"2 hazir hesap.elf ([0-9]+)\n", seri)
+                    durum = rb"(?:hazir|kosuyor)" if (smp or 1)>1 else rb"hazir"
+                    m = re.fullmatch(rb"2 "+durum+rb" hesap\.elf ([0-9]+)\n", seri)
                     assert m and int(m[1]) >= 2, seri
                 c.run("ps", ps)
                 assert c.sayi("kdl_dilim_sayisi") > once_dilim

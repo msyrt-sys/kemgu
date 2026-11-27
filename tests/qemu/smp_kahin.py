@@ -510,12 +510,19 @@ def gs_kabuk(dizin):
         with boot(dizin, usb[0], nvme, sata, smp=adet) as (q, p, seri):
             c = Console(dizin, q, p, seri)
             adr = c.symbols["kdl_cekirdek_bsp"]
-            ilk = sayac(q, dizin, adr + 96)
+            adresler = [adr]
+            if adet > 1:
+                kayit = sayac(q, dizin, c.symbols["smp_ap_kayitlari"])
+                adresler.extend(sayac(q, dizin, kayit+i*64+48) for i in range(1, adet))
+            ilk = sum(sayac(q, dizin, a + 96) for a in adresler)
             c.run(
                 f"calistir {exe} Ağaç",
                 f"{exe}\nAğaç\n[merhaba.elf pid=1 cikis=2]\n".encode(),
             )
-            n, kullanici_gs = struct.unpack("<QQ", bellek(q, dizin, adr + 96, 16))
+            veriler = [struct.unpack("<QQ", bellek(q, dizin, a+96, 16)) for a in adresler]
+            n = sum(v[0] for v in veriler)
+            assert all(v[1] == 0 for v in veriler), veriler
+            kullanici_gs = veriler[0][1]
             durum = q.call(
                 "human-monitor-command",
                 {"command-line": "info registers", "cpu-index": 0},

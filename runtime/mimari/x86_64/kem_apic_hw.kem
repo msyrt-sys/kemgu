@@ -27,7 +27,11 @@ outb %al, $$64"# bozulan("~{rax}") bozulan("~{memory}") } }
  kem_port_yaz8(64 olarak dtam16,46 olarak dtam8);kz_irq_ac();
 }
 gerçekzamanlı çıplak işlev kdl_apic_timer_irq() {
- güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"incq kdl_cekirdek_bsp+16(%rip)"# bozulan("~{cc}") bozulan("~{memory}") } }
+ güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"incq kdl_cekirdek_bsp+16(%rip)
+cmpq $$0,kdl_cekirdek_bsp+200(%rip)
+je 1f
+incq kdl_cekirdek_bsp+208(%rip)
+1:"# bozulan("~{cc}") bozulan("~{memory}") } }
  eğer değil kesme_geldi(48,3) { ver; } kem_tik=kem_tik+1; kap_lapic_tik=kap_lapic_tik+1; }
 çıplak işlev kap_pit_oku() -> tam64 {
  değişken n: tam64 = 0;
@@ -324,7 +328,11 @@ gerçekzamanlı çıplak işlev cekirdek_no() -> tam64 {
     ver no;
 }
 gerçekzamanlı çıplak işlev smp_ap_zaman_irq() {
-    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"incq %gs:16"# bozulan("~{cc}") bozulan("~{memory}") } }
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"incq %gs:16
+cmpq $$0,%gs:200
+je 1f
+incq %gs:208
+1:"# bozulan("~{cc}") bozulan("~{memory}") } }
 }
 çıplak işlev smp_bsp_verisi() -> tam64 {
     değişken adr: tam64 = 0;
@@ -399,6 +407,28 @@ movq (%rsp), %rsp"# girdi("r",no) bozulan("~{rax}") bozulan("~{rcx}") bozulan("~
 
 // Kayıt yayımlanmadan BSP bu parametreleri başka AP için kullanamaz.
 // Yalnız ilgili AP kendi kaydını yazar. Tablolar kurulduktan sonra IRQ açılır.
+küresel değişken smp_zaman_kanca:tam64=0;
+çıplak işlev smp_ap_is_dene(no:tam32) -> tam64 {
+    değişken v:tam64=0;
+    güvensiz {
+        // Adresi LLVM girdisi taşıdığı için zamanlayıcısız çekirdekte de depolama yaşar.
+        değişken kanca:*tam64=(&smp_zaman_kanca) olarak *tam64;
+        satıriçi_asm { mimari:x86_64 şablon:r#"movq $1,%rdi
+movq ($2),%rax
+testq %rax,%rax
+jz 1f
+movq %rsp,%r11
+subq $$128,%rsp
+andq $$-16,%rsp
+subq $$16,%rsp
+movq %r11,(%rsp)
+call *%rax
+movq (%rsp),%rsp
+1:"# çıktı("={ax}",&v) girdi("r",no olarak tam64) girdi("r",kanca olarak tam64)
+        bozulan("~{rdi}") bozulan("~{rsi}") bozulan("~{rcx}") bozulan("~{rdx}")
+        bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}") } }
+    ver v;
+}
 çıplak işlev kem_ap_giris(no: tam32) {
     kg_irq_kapat();
     değişken k: tam64 = smp_ap_kayitlari + (no olarak tam64)*64;
@@ -418,7 +448,13 @@ movq (%rsp), %rsp"# girdi("r",no) bozulan("~{rax}") bozulan("~{rcx}") bozulan("~
         kz_irq_ac();
         smp_acilis_dene(no);
     }
-    iken doğru { güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } } }
+    iken doğru {
+        eğer smp_ap_is_dene(no)==0 { güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"cli
+movq $$1,%gs:200
+sti
+hlt
+movq $$0,%gs:200"# bozulan("~{memory}") } } }
+    }
 }
 
 işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
@@ -429,11 +465,11 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
     eğer cr3 <= 0 veya cr3 >= 4294967296 veya (cr3&4095) != 0 { ver hata("AP CR3 araligi"); }
     güvensiz {
         değişken n: tam32 = smp_cekirdek_sayisi;
-        değişken kayit: tam64 = uefi_surec_ayir((n*192+128+4095)/4096);
+        değişken kayit: tam64 = uefi_surec_ayir((n*256+704+4095)/4096);
         eğer kayit == 0 { ver hata("AP kayitlari icin RAM yok"); }
-        memset(kayit olarak *tam8,0,(n olarak tam64)*192+128);
+        memset(kayit olarak *tam8,0,(n olarak tam64)*256+704);
         değişken kilit:tam64=kayit+(n olarak tam64)*192;
-        kilit_kur(kilit,20); kilit_kur(kilit+64,30);
+        kilit_kur(kilit,20); kilit_kur(kilit+64,30); kilit_kur(kilit+128,10);
         smp_bellek_kilitleri=kilit;
         değişken j:tam32=0;
         iken j<n {
@@ -617,6 +653,7 @@ gerçekzamanlı çıplak işlev kem_ipi_isle(tur:tam32) -> tam32 {
 çıplak işlev smp_alan_degistir(kok:tam64,pid:tam64) {
     güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
 cli
+movq $0,%gs:216
 lock incq %gs:128
 movq $0,%cr3
 movq $0,%gs:88
@@ -636,7 +673,23 @@ popfq"# girdi("r",kok) girdi("r",pid) bozulan("~{cc}") bozulan("~{memory}") } }
     eğer smp_cevrimici<=1 { ver doğru; }
     değişken no:tam32=0;
     iken no<smp_cevrimici {
-        eğer smp_alan_kullaniyor(no,kok) { ver yanlış; }
+        değişken d:tam64=ipi_oku(smp_ap_kayitlari+(no olarak tam64)*64+48);
+        değişken deneme:tam64=0;
+        değişken kararlı:mantıksal=yanlış;
+        iken değil kararlı {
+            değişken s:tam64=ipi_oku(d+128);
+            değişken alan:tam64=ipi_oku(d+88);
+            // AP başka iki kök arasında durdurulmuş olsa bile bu sürecin
+            // iadesi ilerler. Değişim sırasında eski ve yeni CR3 birlikte canlıdır.
+            değişken hedef:tam64=ipi_oku(d+216);
+            eğer ipi_oku(d+128)==s {
+                eğer alan==kok veya ((s&1)!=0 ve hedef==kok) { ver yanlış; }
+                kararlı=doğru;
+            } değilse {
+            deneme=deneme+1; eğer deneme>=4096 { ver yanlış; }
+            güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } }
+            }
+        }
         no=no+1;
     }
     ver doğru;
