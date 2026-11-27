@@ -18,6 +18,8 @@ tur() (
     fi
     if [[ ${SUREC_KAHIN:-} == smp_surec_kahin ]]; then
         kaynaklar=(test/kullanici/smpden.kem)
+    elif [[ ${SUREC_KAHIN:-} == smp_paralel_kahin ]]; then
+        kaynaklar=(test/kullanici/paralel.kem)
     fi
     for kaynak in "${kaynaklar[@]}"; do
         ad="${kaynak##*/}"

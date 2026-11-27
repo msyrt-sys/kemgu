@@ -1360,3 +1360,29 @@ C ile dört hesap süreci tek vCPU'da 6.444 sn, dört vCPU'da 2.283 sn (2.823×)
 | Self-host | `[(0, 4, '0x7a21000'), (1, 5, '0x882b000'), (2, 3, '0x6c17000'), (3, 2, '0x5e0d000')]` |
 
 Kuyruk ve sistem çağrısı dışındaki kullanıcı hesapları eşzamanlı. İlk ASM kanca düzeltmesi önbellek testi sürerken girdi özetini değiştirdi. Son takım sabit kaynaklarla çalıştı.
+
+## Bölüm 17 — asal sayımının duvar süresi
+
+Her hücre saniye ve aynı N için tek vCPU süresine göre hızlanmadır. Konuğun ASAL BAS satırından süreç çıkıp kabuk dönene kadar ölçüldü. Her açılışta QMP işlemci sayısı ve ayrı TCG iş parçacıkları denetlendi.
+
+C bootstrap
+
+| vCPU | N=1 | N=2 | N=4 | N=8 |
+|---:|---:|---:|---:|---:|
+| 1 | 1.063 sn (1.00×) | 1.402 sn (1.00×) | 1.548 sn (1.00×) | 2.170 sn (1.00×) |
+| 2 | 1.329 sn (0.80×) | 1.052 sn (1.33×) | 1.000 sn (1.55×) | 1.407 sn (1.54×) |
+| 4 | 1.056 sn (1.01×) | 1.044 sn (1.34×) | 1.046 sn (1.48×) | 1.627 sn (1.33×) |
+| 8 | 1.087 sn (0.98×) | 0.810 sn (1.73×) | 0.719 sn (2.15×) | 1.291 sn (1.68×) |
+
+Self-host
+
+| vCPU | N=1 | N=2 | N=4 | N=8 |
+|---:|---:|---:|---:|---:|
+| 1 | 1.110 sn (1.00×) | 1.261 sn (1.00×) | 1.419 sn (1.00×) | 1.880 sn (1.00×) |
+| 2 | 1.394 sn (0.80×) | 0.897 sn (1.41×) | 1.060 sn (1.34×) | 1.799 sn (1.05×) |
+| 4 | 1.121 sn (0.99×) | 0.858 sn (1.47×) | 0.798 sn (1.78×) | 1.793 sn (1.05×) |
+| 8 | 0.918 sn (1.21×) | 0.770 sn (1.64×) | 0.622 sn (2.28×) | 1.064 sn (1.77×) |
+
+Toplam 2.063.689. Bağımsız Python eleğinin sekiz dilimi 295947, 268216, 259586, 254122, 250359, 247431, 244984, 243044. Konuk her dilimi ayrı süreçten 16 baytlık boru kaydıyla aldı. Sekiz süreçlik tabloda ebeveyn bir yuva tuttuğundan N=8'de son çocuk ilk sonuç toplandıktan sonra açılır. Süreler ELF yükleme, bekleme ve sonuç birleştirmeyi içerir. İki derleyicide de en kısa gözlenen süre 8 vCPU ve 4 çocukta. TCG zamanlaması fiziksel donanımı temsil etmez.
+
+Son parçanın toplama işlemi çıkarılmış özel ELF ile 4 vCPU/4 çocukta her dilim doğru kaldı, toplam 1.575.661 geldi. Host 2.063.689 bekledi ve rc=1 verdi.

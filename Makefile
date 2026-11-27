@@ -5499,3 +5499,8 @@ calistir_bm_x86_smp_surec_kabuk14:
 	@SUREC_SMP=4 SUREC_SENARYO=kabuk14 SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
 calistir_bm_x86_smp_surec_dosyalar:
 	@SUREC_SMP=4 SUREC_SENARYO="gezgin gezgin-salt" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_paralel
+test_tumu: calistir_bm_x86_smp_paralel
+calistir_bm_x86_smp_paralel: $(X86_SMP_ON)
+	@SUREC_KAHIN=smp_paralel_kahin bash test/bm_x86_surec_harness.sh

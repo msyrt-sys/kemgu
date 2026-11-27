@@ -249,3 +249,9 @@ C ile dört hesap süreci tek vCPU'da 6.444 sn, dört vCPU'da 2.283 sn (2.823×)
 İş çalma kapalıyken yalnız CPU0 üzerinde bir çocuk görüldü, kapı rc=1 (20 sn). Göçte canlı GS güncellemesini kapatma sabotajı uygulanmadı. Eski çekirdek numarası göç denetimine verildiğinde kullanıcı girişinden önce `SMP goc cekirdek kimligi` ile kapı rc=1 (38 sn) verdi.
 
 §7 ile dört vCPU'da eski hesap/arka/çocuk, boru, kabuk14, dosyalar, tık/TLB, iki bölüm düzeninde donanım, seçici, paylaşım ve tip denetimi 439 sn, make/tee rc=0. Bölüm süresi 19 dk 23 sn.
+
+## Bölüm 17 — paralel kullanıcı programı
+
+Bölütlü asal eleği iki derleyicide, 1/2/4/8 vCPU ve 1/2/4/8 çocukla 32 matris noktasında 2.063.689 verdi. Her dilim bağımsız Python eleğiyle eşleşti. 8 vCPU ve N=4 ile C 0,719 sn, self-host 0,622 sn. Tam tablolar bulgularda. Son parçayı toplamayan ELF 1.575.661 verdi, kâhin 7 sn içinde rc=1 döndü. Süre yalnız raporlanır.
+
+Matris kapısı 83,58 sn. §7, tip, paylaşım ve seçici kapıları 271 sn, make/tee rc=0. Bölüm süresi 6 dk 50 sn.
