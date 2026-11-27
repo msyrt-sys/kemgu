@@ -135,3 +135,33 @@ Taban Actions koşumunda Linux işi 35:17 (tam takım adımı 35:00), Windows i�
 BSP kimliği LAPIC yazmacından, işlemci listesi UEFI MADT'den geliyor. C ve self-host UEFI imajlarının her birinde 1/2/4/8 vCPU için ham MADT, QOM APIC kimliği, QMP fiziksel kayıt ve seri liste eşleşti. Her vCPU ayrı TCG host iş parçacığına sahipti. Bu koşum ARM host üzerinde x86 emülasyonudur.
 
 Bit 1'i yok sayma sabotajı, gerçek firmware bütün kayıtlarda yalnız bit 0'ı verdiği için dört topolojide sessiz kaldı. Host'ta yalnız bit 1'i açık kayıt ile iki derleyici de rc=3 verdi. Ek deneyde etkin APIC 1 listeden çıkarılınca iki vCPU'lu QEMU kapısı rc=1 verdi. Normal keşif kapısı isabette 26 sn, yeni önbellekle 37 sn, bütçe 60 sn. §7 x86 kapıları, üç sans-IO kapısı, paylaşım ve seçim denetimleriyle 315 sn, make/tee rc=0. Bölüm süresi 9 dk 57 sn.
+
+## Bölüm 10 — UEFI yolunda uygulama işlemcilerini başlatma
+
+C ve self-host ile 2/4/8 vCPU üzerinde gerçek UEFI çekirdeği açıldı. QMP işlemci başına uzun kipi, CR3'ü, ayrı yığını ve gerçek APIC kimliğini doğruladı. Dört vCPU'lu süreç kabuğu da düzenli kapandı. EfiConventionalMemory sayfa çifti bulunamazsa BSP tek başına çalışmayı sürdürdü.
+
+İkinci SIPI kaldırılınca altı konukta kapı sessiz kaldı. Ayrılmış yanlış vektör sayfasıyla gerçek AP onay zaman aşımı görüldü (rc=1). Gerçek BSP yığın tepesi aday olarak verildiğinde SIPI öncesi sınır denetimi düştü (rc=1). AP’yi canlı BSP yığınında çalıştırıp bellek bozma deneyi uygulanmadı. Tek vCPU'da süreç heap artışı yine 0 bayt. Mutlak boş çerçeve sayısı C'de 1, self-host'ta 3 azaldı. Yüklü ELF'nin fiziksel kapsamı sırasıyla 1 ve 3 sayfa büyüdü.
+
+Ham `-j10 test_tumu` 1485 sn, ölçümlü takım 1386 sn, ek check/baremetal diff/x86 kapıları 28 sn. Her üçünde make/tee rc=0. SMP AP kapısı yüklü koşumda 35,36 sn. Önceki 57 sn'lik ölçümle bütçe 86 sn. QEMU'suz temiz PATH deneyi derleme yapmadan atlama mesajlarını verdi. Bölüm süresi 57 dk 55 sn.
+
+```text
+=== ZAMAN RAPORU: duvar saati 23 dk 06 sn · 173 kapı · kapı toplamı 3 sa 34 dk 08 sn · derleme/diğer 00 dk 00 sn ===
+       08 dk 27 sn  %36.6  calistir_bm_x86_ag_saglamlik_self_aktarim
+       07 dk 19 sn  %31.7  calistir_bm_x86_ag_saglamlik_c_aktarim
+       06 dk 42 sn  %29.0  calistir_bm_x86_tcp_verim
+       06 dk 31 sn  %28.2  calistir_bm_x86_ekran_fare
+       06 dk 22 sn  %27.5  calistir_bm_x86_tftp_teshis
+       06 dk 14 sn  %27.0  calistir_bm_x86_ps2_irq_self
+       06 dk 10 sn  %26.7  calistir_bm_x86_dosyalar
+       05 dk 50 sn  %25.2  calistir_bm_x86_ps2_irq_c
+       05 dk 32 sn  %24.0  calistir_codegen_bootstrap
+       05 dk 26 sn  %23.5  calistir_bm_x86_kaynak_editor
+       05 dk 17 sn  %22.9  calistir_bm_x86_v1_tam
+       05 dk 06 sn  %22.1  calistir_bm_x86_kabuk14_6
+       05 dk 05 sn  %22.0  calistir_bm_x86_kabuk14_1
+       05 dk 04 sn  %21.9  calistir_bm_x86_uefi_kabuk
+       04 dk 55 sn  %21.3  calistir_bm_x86_ps2_karma_self
+  disk: build 14G · boş 425 GiB
+Disk build: önce 14470782976 B, sonra 14471913472 B, büyüme +1130496 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```

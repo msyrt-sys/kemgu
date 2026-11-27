@@ -1925,8 +1925,13 @@ $(BUILD)/bm_x86_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
 $(BUILD)/bm_x86_gorev.o: runtime/kdl_gorev.c | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
-$(BUILD)/bm_x86_start.o: boot/start_x86_64.S | $(BUILD)
+$(BUILD)/bm_x86_bsp.o: boot/start_x86_64.S | $(BUILD)
 	$(BM_X86) -c $< -o $@
+$(BUILD)/bm_x86_ap.o: boot/ap_x86_64.S | $(BUILD)
+	$(BM_X86) -c $< -o $@
+# Bütün x86 çağıranları ve çekirdek önbelleği aynı başlangıç nesnesini tüketir.
+$(BUILD)/bm_x86_start.o: $(BUILD)/bm_x86_bsp.o $(BUILD)/bm_x86_ap.o
+	ld.lld -m elf_x86_64 -r -o $@ $^
 
 BM_X86_OBJS = $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
               $(BUILD)/bm_x86_bolge.o $(BUILD)/bm_x86_heap.o $(BUILD)/bm_x86_panik.o \
@@ -5421,7 +5426,15 @@ test_tumu: calistir_kapi_secici
 calistir_kapi_secici:
 	@python3 tools/kapi/secici_ornekleri.py
 
+# QEMU/OVMF bulunmayan konakta SMP kapıları hazırlık derlemesinden önce atlar.
+X86_SMP_ON := $(if $(PAKET_DEPOSU_ON),$(X86_KAHIN_ON))
 .PHONY: calistir_bm_x86_smp_kesif
 test_tumu: calistir_bm_x86_smp_kesif
-calistir_bm_x86_smp_kesif: $(X86_KAHIN_ON)
+calistir_bm_x86_smp_kesif: $(X86_SMP_ON)
 	@bash test/bm_x86_smp_harness.sh kesif
+
+.PHONY: calistir_bm_x86_smp_ap
+test_tumu: calistir_bm_x86_smp_ap
+calistir_bm_x86_smp_ap: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh ap
+	@SUREC_KAHIN=smp_kahin SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh

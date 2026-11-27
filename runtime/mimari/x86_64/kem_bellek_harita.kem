@@ -61,7 +61,7 @@ işlev uefi_bellek_kur_ic(b: UefiBilgi,surec: mantıksal) -> sonuç<mantıksal,m
   eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_guc_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş pat_gop_kur(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
-  eğer surec {
+  eğer surec veya smp_birden_cok {
    değişken sakla: Dizi<CerceveAyirici> = [d];
    değişken adres: *tam64 = (&sakla) olarak *tam64;
    uefi_surec_ayirici=kxm_o64(*adres);

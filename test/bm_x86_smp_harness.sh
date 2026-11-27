@@ -12,7 +12,7 @@ w=$(calisma_ac build/smp)
 calisma_izle "$w"
 for derleyici in kemgu codegen; do
     tur="$w/$derleyici"
-    UEFI_KAYNAK=test/ornekler/kem_os_x86_smp.kem UEFI_DERLEYICI="build/$derleyici" \
+    UEFI_KAYNAK=test/ornekler/kem_os_x86_uefi.kem UEFI_DERLEYICI="build/$derleyici" \
         UEFI_CALISMA_DIZINI="$tur" UEFI_PC_URET=1 UEFI_PC_GECICI=1 UEFI_YALNIZ_DERLE=1 \
         bash test/bm_x86_uefi_harness.sh
     echo "SMP $kip ($derleyici)"

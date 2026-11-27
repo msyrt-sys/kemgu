@@ -1166,3 +1166,41 @@ Bütün yerel APIC kayıtları tür 0 ve bayrak 1 idi. Ayrı host iş parçacık
 İlk geliştirme denemesinde yalnız yazılan iki dahili küresel değişken LLVM iyileştirmesinde siliniyordu. Konuk listesi doğruydu ancak QMP fiziksel kayıt denetimi eksik sembolde durdu. Çekirdek numarasını doğrulayarak fiziksel listeden APIC kimliğini alan çalışma zamanı erişimcisi eklendi. Ardından iki derleyiciyle ELF sembolleri ve bellek değerleri doğrulandı.
 
 Temiz keşif kapısı sıcak önbellekte 26 sn, iki derleyici için boş özel önbellekte 37 sn sürdü. Kapı bütçesi 60 sn. §7 ve sans-IO regresyonları dahil birleşik koşum 315 sn, rc=0.
+
+## Bölüm 10 — UEFI'den uygulama işlemcilerini başlatma
+
+Olağan UEFI çekirdeği ve süreç kabuğu aynı başlatma yolunu kullanıyor. QMP üzerinden firmware tanımını ve her vCPU'nun CR0, CR3, EFER, CS ve RSP yazmaçlarını okuduk. Her AP'nin fiziksel kaydındaki LAPIC kimliği QOM ile eşleşti. BSP'nin 512 KiB yığını ile AP'lerin 16 KiB yığınlarının sınırları ayrı ayrı karşılaştırıldı.
+
+| Gerçek konuk değişikliği | Gözlem | Kapı rc |
+|---|---|---:|
+| İkinci SIPI gönderimi kaldırıldı | C ve self-host, 2/4/8 işlemcili altı konuk da açıldı. Bu QEMU sürümünde tek SIPI yeterli. | 0 |
+| SIPI iki sayfa ileri, deney için ayrılmış ve yalnız durma döngüsü içeren sayfaya gitti | Konuk bir saniyelik AP onay süresini doldurdu. Seri günlükte zaman aşımı vardı, AP onayı yoktu. | 1 |
+| Yığın adayı BSP'nin gerçek yığın tepesine değiştirildi | Konuk SIPI öncesinde `AP yigin siniri` verdi. İki aktif işlemciye aynı yığını vererek bellek bozulmasını tetikleme deneyi uygulanmadı. | 1 |
+| Alçak bellekte uygun sayfa çifti bulunamadı | Seri günlük gerekçeyi verdi. QMP iki vCPU saydı, konuk fiziksel çevrimiçi sayacı birde kaldı ve BSP açılışa devam etti. | 0 |
+
+Dört değişiklik birbirinden yalıtılmış derlemelerde sınandı. Trampolin, başlangıç nesnesinin gerçek girdisi ve önbellek anahtarına bu nesnenin içeriği giriyor. İlk bütünleşme kontrolü önceki bölümün tek başına tür denetiminden geçmeyen özel tanı girişini buldu. Keşif ve başlatma kapıları artık dağıtılan UEFI çekirdeğini açıyor. Muafiyet eklenmedi.
+
+Tek vCPU'da 50 süreç tekrarı boyunca süreç heap artışı yine 0 bayt. C kabuğu 4788464 → 5247552 bayt, self-host kabuğu 5050928 → 5510016 bayt kullandı. Her iki çift taban koşumunda da görüldü. Serbest çerçeve sayısında §5.6 farkı var. Aynı kabuğun eski ve yeni ELF program başlıklarını doğrudan okuyunca firmware'in ayırdığı fiziksel aralık şu şekilde değişti.
+
+| Derleyici | Önceki PT_LOAD kapsamı | Yeni PT_LOAD kapsamı | Önce / sonra boş çerçeve |
+|---|---:|---:|---:|
+| C | 7716 sayfa | 7717 sayfa | 45416 / 45415 |
+| self-host | 7747 sayfa | 7750 sayfa | 45385 / 45382 |
+
+Dört ELF de 0x2000000 adresinden başlıyor. C için son adres 0x3e24000 → 0x3e25000, self-host için 0x3e43000 → 0x3e46000. Farkın tamamı büyüyen yüklü imajla örtüşüyor. Tek işlemcide AP yığını ayrılmıyor. Bölüm 14'te aynı ölçüm yinelenecek. Mutlak eşitlik bu sürümde açık.
+
+Ham tam koşumda AP başına zamanlar INIT gönderiminden onayın BSP tarafından okunmasına kadar ölçüldü. Her AP için zorunlu 10 ms INIT beklemesi dahildir. Yedi konuğun her biri 0x1000 fiziksel sayfasını kullandı.
+
+| İmaj | vCPU | CR3 | Ayrı AP yığını | AP başına µs |
+|---|---:|---:|---:|---|
+| C UEFI | 2 | 0x203d000 | 1 | 10457 |
+| C UEFI | 4 | 0x203d000 | 3 | 10454, 10248, 10259 |
+| C UEFI | 8 | 0x203d000 | 7 | 10478, 10281, 10269, 10262, 10247, 10248, 10228 |
+| self-host UEFI | 2 | 0x2044000 | 1 | 10483 |
+| self-host UEFI | 4 | 0x2044000 | 3 | 10436, 10255, 10241 |
+| self-host UEFI | 8 | 0x2044000 | 7 | 10501, 10363, 10279, 10268, 10259, 10261, 10278 |
+| C kabuk | 4 | 0x2188000 | 3 | 10435, 10361, 10288 |
+
+Dalga 14 tanı aracının kendi başına derlediği başlangıç nesnesi de olağan Make tarifini kullanıyor. Yalıtılmış kopyada değişiklik uygulanmadan yeniden üretilen nesne ana nesneyle bayt bayt aynıydı.
+
+Ölçümlü tam takım 23:06, 173 kapı, en uzun kapı 8:27, bütçe aşımı yok. Geçici dizin 0 → 0. Ham takım 24:45. QEMU’suz PATH ile iki SMP hedefinde de hazırlık derlemesi yapılmadan atlama bildirildi.

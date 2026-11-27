@@ -58,7 +58,7 @@ def wait_for(proc, fn, seconds=15):
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False, ag_aygitlari=()):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False, ag_aygitlari=(), smp=None):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -74,6 +74,10 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
+    if smp is None:
+        smp = int(os.environ.get('KEMGU_QEMU_SMP', '1'))
+    if smp != 1:
+        cmd.extend(['-smp', str(smp), '-accel', 'tcg,thread=multi'])
     if debug_cikis:
         cmd.extend(['-device','isa-debug-exit,iobase=0xf4,iosize=0x04'])
     if klavye_izi:

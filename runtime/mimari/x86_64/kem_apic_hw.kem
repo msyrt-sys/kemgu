@@ -1,6 +1,7 @@
 // UEFI MADT → xAPIC/IOAPIC; saf yönlendirme kuralı drivers/acpi'dedir.
 // Yazmaçlar Linux apicdef.h/io_apic.h; tools/codex/dalga11_sabit.py doğrular.
 kullan drivers::acpi::madt::{ Madt, madt_coz };
+kullan drivers::smp::islemci::{ smp_islemciler };
 kullan drivers::ortak::bayt::{ imza_esit };
 kullan drivers::acpi::yonlendirme::{ KesmeYolu, isa_yolu, kesme_girdisi };
 küresel değişken kap_lapic_tik: tam64 = 0;
@@ -76,6 +77,7 @@ işlev uefi_madt(b: UefiBilgi) -> sonuç<Madt,metin> {
 }
 işlev uefi_apic_esle(d: &değişken CerceveAyirici, b: UefiBilgi) -> sonuç<mantıksal,metin> {
  eşleş uefi_madt(b) { hata(e) => { ver hata(e); } tamam(m) => {
+  güvensiz { smp_birden_cok = smp_cok_mu(m); }
   eğer (m.lapic_adresi&4095) != 0 { ver hata("LAPIC hizasi"); }
   eşleş uefi_mmio_esle(d,m.lapic_adresi,4096) { hata(e) => { ver hata(e); } tamam(v) => { } }
   için g: m.girdiler { eğer g.tur == 1 {
@@ -134,6 +136,12 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   kap_taban_yaz(m.lapic_adresi);
   değişken a: tam64 = m.lapic_adresi;
   değişken id: tam32 = ((kem_mmio_oku32(a+32)>>24)&255) olarak tam32;
+  güvensiz {
+   smp_bsp_kimligi=id olarak tam64;
+   değişken kayit_ptr: *tam64 = (&smp_bsp_kimligi) olarak *tam64;
+   smp_kimlik_sayfasi=kayit_ptr olarak tam64;
+   smp_cekirdek_sayisi=1;
+  }
   kap_dok("APIC_LAPIC",a,id olarak tam64,kem_mmio_oku32(a+48));
   kem_port_yaz8(33 olarak dtam16,255 olarak dtam8); kem_port_yaz8(161 olarak dtam16,255 olarak dtam8);
   kem_mmio_yaz32(a+128,0);kem_mmio_yaz32(a+848,65536);kem_mmio_yaz32(a+864,65536);
@@ -172,7 +180,11 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   eşleş kap_yol_kur(m,0,32,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
   kap_dok("APIC_KAL",sure,fark,periyot);
   kem_mmio_yaz32(a+800,131120);kem_mmio_yaz32(a+896,periyot);
-  kz_irq_ac();bm_yaz("APIC_HAZIR");ver tamam(doğru);
+  kz_irq_ac();
+  güvensiz { eğer uefi_surec_ayirici != 0 ve smp_birden_cok {
+   eşleş smp_baslat(b,m) { hata(e) => { ver hata(e); } tamam(v) => {} }
+  } }
+  bm_yaz("APIC_HAZIR");ver tamam(doğru);
  } }
 }
 
@@ -182,3 +194,189 @@ küresel değişken kap_tsc_ms: tam64 = 0;
 işlev kap_damga(ad: metin) {
  güvensiz { eğer kap_tsc_bas != 0 { bm_yaz(metin_birlestir(metin_birlestir("ACILIS_TSC ",ad),metin_birlestir(" ",tam_metin(bm_tsc_oku()-kap_tsc_bas)))); } }
 }
+
+küresel değişken smp_birden_cok: mantıksal = yanlış;
+küresel değişken smp_bsp_kimligi: tam64 = 0;
+küresel değişken smp_kimlik_sayfasi: tam64 = 0;
+küresel değişken smp_cekirdek_sayisi: tam32 = 0;
+
+işlev smp_kesfet_madt(m: Madt) -> sonuç<mantıksal, metin> {
+        değişken bsp: tam32 = ((kem_mmio_oku32(m.lapic_adresi + 32) >> 24) & 255) olarak tam32;
+        eşleş smp_islemciler(m.girdiler, bsp) { hata(e) => { ver hata(e); } tamam(ids) => {
+            değişken sayfa: tam64 = uefi_surec_ayir(1);
+            eğer sayfa == 0 { ver hata("SMP kimlik sayfasi icin RAM yok"); }
+            değişken no: tam32 = 0;
+            için id: ids {
+                kem_mmio_yaz64(sayfa + (no olarak tam64) * 8, id olarak tam64);
+                kap_dok("SMP_CPU", no olarak tam64, id olarak tam64, bsp olarak tam64);
+                no = no + 1;
+            }
+            güvensiz { smp_kimlik_sayfasi = sayfa; smp_cekirdek_sayisi = no; }
+            ver tamam(doğru);
+        } }
+    ver hata("SMP MADT");
+}
+
+// Daha sonraki IPI hedefleri de çekirdek numarasından donanım kimliğine bu yolla geçer.
+çıplak işlev smp_apic_kimligi(no: tam32) -> tam32 {
+    eğer no < 0 veya no >= smp_cekirdek_sayisi { ver -1; }
+    ver kem_mmio_oku64(smp_kimlik_sayfasi + (no olarak tam64) * 8) olarak tam32;
+}
+
+küresel değişken smp_ap_kayitlari: tam64 = 0;
+küresel değişken smp_cevrimici: tam32 = 1;
+
+// Bayrakları okumak tek işlemcili normal açılışta liste ya da çerçeve ayırmaz.
+işlev smp_cok_mu(m: Madt) -> mantıksal {
+    değişken n: tam32 = 0;
+    için g: m.girdiler {
+        eğer g.tur == 0 ve (g.bayraklar & 3) != 0 {
+            n = n + 1;
+            eğer n > 1 { ver doğru; }
+        }
+    }
+    ver yanlış;
+}
+
+// Fiziksel ayırıcı ilk MiB'yi yönetmez. Firmware'in tür 7 olarak bıraktığı
+// bitişik iki sayfa kullanılır. Sayfa sıfır ve SIPI aralığının sonu dışarıdadır.
+işlev smp_alcak_sayfa(b: UefiBilgi) -> tam64 {
+    değişken adres: tam64 = dizi_al(b.alan,9);
+    değişken boy: tam64 = dizi_al(b.alan,10);
+    değişken adim: tam64 = dizi_al(b.alan,11);
+    eğer adim < 40 veya boy <= 0 veya boy % adim != 0 { ver 0; }
+    değişken ofset: tam64 = 0;
+    iken ofset < boy {
+        değişken d: tam64 = adres + ofset;
+        eğer kem_mmio_oku32(d) == 7 {
+            değişken bas: tam64 = kem_mmio_oku64(d+8);
+            değişken n: tam64 = kem_mmio_oku64(d+24);
+            eğer bas >= 0 ve bas < 1048576 ve (bas & 4095) == 0 ve n >= 2 {
+                değişken ilk: tam64 = bas;
+                eğer ilk == 0 { ilk = 4096; }
+                eğer ilk <= 1040384 ve n >= (ilk-bas)/4096+2 { ver ilk; }
+            }
+        }
+        ofset = ofset + adim;
+    }
+    ver 0;
+}
+
+çıplak işlev smp_trampolin_yaz(sayfa: tam64, cr3: tam64, ust: tam64, no: tam32) {
+    güvensiz { satıriçi_asm {
+        mimari: x86_64
+        şablon: r#"movq $0, %rdi
+movq $1, %rsi
+movq $2, %rdx
+movl $3, %r8d
+leaq kem_ap_giris(%rip), %rcx
+subq $$128, %rsp
+call kem_ap_sayfa_hazirla
+addq $$128, %rsp"#
+        girdi("r",sayfa) girdi("r",cr3) girdi("r",ust) girdi("r",no)
+        bozulan("~{rax}") bozulan("~{rdi}") bozulan("~{rsi}") bozulan("~{rdx}")
+        bozulan("~{rcx}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{cc}") bozulan("~{memory}")
+    } }
+}
+
+çıplak işlev smp_rsp() -> tam64 {
+    değişken p: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %rsp, $0"# çıktı("=r",&p) } }
+    ver p;
+}
+çıplak işlev smp_bsp_yigin_ustu() -> tam64 {
+    değişken p: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"leaq __stack_top(%rip), $0"# çıktı("=r",&p) } }
+    ver p;
+}
+çıplak işlev smp_icr_bekle() -> mantıksal {
+    değişken ilk: tam64 = bm_tsc_oku();
+    iken (kem_mmio_oku32(kap_lapic+768)&4096) != 0 {
+        eğer bm_tsc_oku()-ilk > kap_tsc_ms*100 { ver yanlış; }
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } }
+    }
+    ver doğru;
+}
+çıplak işlev smp_icr_yaz(hedef: tam32, komut: tam64) -> mantıksal {
+    eğer değil smp_icr_bekle() { ver yanlış; }
+    kem_mmio_yaz32(kap_lapic+784,(hedef olarak tam64)<<24);
+    kem_mmio_yaz32(kap_lapic+768,komut);
+    ver smp_icr_bekle();
+}
+çıplak işlev smp_gecik_us(us: tam64) {
+    değişken ilk: tam64 = bm_tsc_oku();
+    değişken sure: tam64 = (kap_tsc_ms*us+999)/1000;
+    iken bm_tsc_oku()-ilk < sure {
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } }
+    }
+}
+
+// Kayıt yayımlanmadan BSP bu parametreleri başka AP için kullanamaz.
+// Girişte yalnız ilgili AP kendi kaydını yazar ve kesmeleri kapalı tutar.
+çıplak işlev kem_ap_giris(no: tam32) {
+    kg_irq_kapat();
+    değişken k: tam64 = smp_ap_kayitlari + (no olarak tam64)*64;
+    değişken rsp: tam64 = smp_rsp();
+    değişken alt: tam64 = kem_mmio_oku64(k+8);
+    değişken ust: tam64 = kem_mmio_oku64(k+16);
+    değişken id: tam64 = (kem_mmio_oku32(kap_lapic+32)>>24)&255;
+    eğer rsp >= alt ve rsp < ust ve id == (smp_apic_kimligi(no) olarak tam64) {
+        kem_mmio_yaz64(k+24,rsp);
+        kem_mmio_yaz64(k+32,kxm_cr3_oku());
+        kem_mmio_yaz64(k+40,id);
+        kem_mmio_yaz64(k,1);
+    }
+    iken doğru { güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } } }
+}
+
+işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
+    eşleş smp_kesfet_madt(m) { hata(e) => { ver hata(e); } tamam(v) => {} }
+    değişken sayfa: tam64 = smp_alcak_sayfa(b);
+    eğer sayfa == 0 { bm_yaz("SMP tek cekirdek: dusuk UEFI sayfasi yok"); ver tamam(doğru); }
+    değişken cr3: tam64 = kxm_cr3_oku();
+    eğer cr3 <= 0 veya cr3 >= 4294967296 veya (cr3&4095) != 0 { ver hata("AP CR3 araligi"); }
+    güvensiz {
+        değişken n: tam32 = smp_cekirdek_sayisi;
+        değişken kayit: tam64 = uefi_surec_ayir((n*64+4095)/4096);
+        eğer kayit == 0 { ver hata("AP kayitlari icin RAM yok"); }
+        memset(kayit olarak *tam8,0,(n olarak tam64)*64);
+        smp_ap_kayitlari = kayit;
+        kap_dok("SMP_SAYFA",sayfa,kem_pvh_bilgi(),cr3);
+        değişken no: tam32 = 1;
+        iken no < n {
+            değişken alt: tam64 = uefi_surec_ayir(4);
+            eğer alt == 0 { ver hata("AP yigini icin RAM yok"); }
+            değişken k: tam64 = kayit + (no olarak tam64)*64;
+            kem_mmio_yaz64(k+8,alt); kem_mmio_yaz64(k+16,alt+16384);
+            no = no + 1;
+        }
+        no = 1;
+        iken no < n {
+            değişken k: tam64 = kayit + (no olarak tam64)*64;
+            değişken ust: tam64 = kem_mmio_oku64(k+16);
+            değişken bsp_ust: tam64 = smp_bsp_yigin_ustu();
+            eğer ust != kem_mmio_oku64(k+8)+16384 veya (ust&4095) != 0 veya
+                (ust-16384 < bsp_ust ve ust > bsp_ust-524288) { ver hata("AP yigin siniri"); }
+            smp_trampolin_yaz(sayfa,cr3,ust,no);
+            değişken id: tam32 = smp_apic_kimligi(no);
+            değişken bas: tam64 = bm_tsc_oku();
+            eğer değil smp_icr_yaz(id,50432) { ver hata("AP INIT teslim"); }
+            smp_gecik_us(10000);
+            eğer değil smp_icr_yaz(id,34048) { ver hata("AP INIT birak"); }
+            değişken sipi: tam64 = 1536 | (sayfa>>12);
+            eğer değil smp_icr_yaz(id,sipi) { ver hata("AP ilk SIPI teslim"); }
+            smp_gecik_us(200);
+            eğer değil smp_icr_yaz(id,sipi) { ver hata("AP ikinci SIPI teslim"); }
+            iken kem_mmio_oku64(k) == 0 {
+                eğer bm_tsc_oku()-bas > kap_tsc_ms*1000 { ver hata("AP cevrimici zaman asimi"); }
+                smp_gecik_us(10);
+            }
+            smp_cevrimici = no+1;
+            kap_dok("SMP_AP",no olarak tam64,id olarak tam64,((bm_tsc_oku()-bas)*1000)/kap_tsc_ms);
+            no = no+1;
+        }
+    }
+    ver tamam(doğru);
+}
+
+çıplak işlev smp_cevrimici_say() -> tam32 { ver smp_cevrimici; }
