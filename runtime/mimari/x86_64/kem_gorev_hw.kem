@@ -93,8 +93,29 @@ movq (%rsp), %rsp"#
 }
 
 çıplak işlev kdl_syscall_isle(num: tam64, arg: tam64, arg2: tam64, arg3: tam64) -> tam64 {
-    eğer num == KX_SIS_ABI_SURUMU { ver 2; }
     değişken kul: mantıksal = (kxm_o64(kxr_blok_adr() + 72) & 3) == 3;
+    eğer kul {
+        kx_gs_degistir();
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"incq %gs:96
+cmpq $$1, %gs:96
+jne 1f
+movl $$0xc0000102, %ecx
+rdmsr
+shlq $$32, %rdx
+orq %rdx, %rax
+movq %rax, %gs:104
+1:"# bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{memory}") bozulan("~{cc}") } }
+    }
+    değişken sonuc: tam64 = 0;
+    eğer num == KX_SIS_ABI_SURUMU { sonuc=2; }
+    değilse { sonuc=kx_syscall_dagit(kul,num,arg,arg2,arg3); }
+    eğer kul { kx_gs_degistir(); }
+    ver sonuc;
+}
+çıplak işlev kx_gs_degistir() {
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"swapgs"# bozulan("~{memory}") } }
+}
+çıplak işlev kx_syscall_dagit(kul: mantıksal,num: tam64,arg: tam64,arg2: tam64,arg3: tam64) -> tam64 {
     eğer kul ve kx_sis_vekil != 0 { ver kx_sis_vekil_cagir(kx_sis_vekil, num, arg, arg2, arg3); }
     eğer kem_syscall_temel_mi(num) { ver kem_syscall_temel(num, arg); }
     eğer kem_syscall_kul_mi(num) { ver kem_syscall_kul(num, arg, arg2); }   // [D-705]

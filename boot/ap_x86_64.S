@@ -9,6 +9,8 @@
 .set AP_JUMP32, 40
 .set AP_JUMP64, 48
 .set AP_CR4, 56
+.set AP_CR0, 64
+.set AP_PAT, 72
 
 .section .rodata.kem_ap,"a",@progbits
 .balign 16
@@ -40,7 +42,14 @@ kem_ap_korumali:
     rdmsr
     orl $0x900, %eax              /* LME, NXE: çekirdek sayfa tablolarıyla aynı. */
     wrmsr
-    movl %cr0, %eax
+    /* Ortak sayfa tabloları BSP ile aynı PAT ve önbellek kipi gerektirir. */
+    movl $0x277, %ecx
+    movl AP_PARAM+AP_PAT(%esi), %eax
+    movl AP_PARAM+AP_PAT+4(%esi), %edx
+    wbinvd
+    wrmsr
+    wbinvd
+    movl AP_PARAM+AP_CR0(%esi), %eax
     orl $0x80010001, %eax         /* PG, WP, PE */
     movl %eax, %cr0
     ljmpl *AP_PARAM+AP_JUMP64(%esi)
@@ -74,6 +83,12 @@ kem_ap_sayfa_hazirla:
     movl %r8d, AP_PARAM+AP_NO(%r9)
     movq %cr4, %rax
     movl %eax, AP_PARAM+AP_CR4(%r9)
+    movq %cr0, %rax
+    movl %eax, AP_PARAM+AP_CR0(%r9)
+    movl $0x277, %ecx
+    rdmsr
+    movl %eax, AP_PARAM+AP_PAT(%r9)
+    movl %edx, AP_PARAM+AP_PAT+4(%r9)
     movw $31, AP_PARAM+AP_GDTR(%r9)
     leal kem_ap_gdt-kem_ap_sablon(%r9), %eax
     movl %eax, AP_PARAM+AP_GDTR+2(%r9)

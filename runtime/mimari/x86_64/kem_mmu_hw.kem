@@ -637,14 +637,17 @@ küresel değişken kis_ileti_aktif: tam32 = 0;
 
 // Alt sınır kanaryaları her panik girişinde üretim yolunda denetlenir.
 çıplak işlev kis_ist_denetle() -> mantıksal {
- değişken a: tam64 = 0;
- güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_ist1_alt(%rip), $0"# çıktı("=r", &a) } }
- eğer kxm_o64(a) != 5423826295006516052 { ver yanlış; }
- güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_ist2_alt(%rip), $0"# çıktı("=r", &a) } }
- eğer kxm_o64(a) != 5423826295006516052 { ver yanlış; }
- güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"leaq kdl_ist3_alt(%rip), $0"# çıktı("=r", &a) } }
- eğer kxm_o64(a) != 5423826295006516052 { ver yanlış; }
- ver doğru;
+ değişken rc: tam32 = 0;
+ güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %rsp, %r11
+subq $$128, %rsp
+andq $$-16, %rsp
+subq $$16, %rsp
+movq %r11, (%rsp)
+call kdl_smp_ist_denetle
+movq (%rsp), %rsp"# çıktı("={ax}",&rc)
+   bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rdi}") bozulan("~{rsi}")
+   bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{cc}") bozulan("~{memory}") } }
+ ver rc == 1;
 }
 
 // Metin ABI'si NUL sonlu adres; ham adres hücresini metin işaretçisi olarak oku.

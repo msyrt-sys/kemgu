@@ -33,9 +33,19 @@ make -j10 --output-sync=target calistir_bm_x86_smp_ap
 
 Kapı olağan UEFI çekirdeğini 2, 4 ve 8 vCPU ile iki derleyicide açar. QMP, her vCPU'dan CR0, EFER, CS, CR3 ve RSP okur. Kâhin uzun kipi, ortak açılış CR3'ünü, ayrık yığınları, firmware'deki gerçek sayfa türünü ve AP'lerin bellek kayıtlarını doğrular. Ayrı bir dört işlemcili koşum olağan UEFI kabuğunun komut istemine kadar ulaşıp düzenli kapandığını gösterir.
 
-## Çekirdek başına durum ve zamanlama tasarımı
+## Çekirdek başına veri ve kesmeler
 
-Her çekirdek için çekirdek numarası, APIC kimliği, yığınlar, TSS, GDT, yerel zamanlayıcı ve çalışan süreç tutulur. GS tabanı bu kayda erişim sağlar. Ortak IDT, çekirdek başına TSS üzerinden o çekirdeğin IST yığınlarını seçer. Zamanlayıcıda süreç tek iş parçacıklıdır. Hazır kuyrukları çekirdek başınadır. Boş çekirdek başka bir kuyruktan hazır süreç alabilir.
+Her işlemcinin çekirdek GS tabanı kendi `CekirdekVeri` kaydını gösterir. `cekirdek_no()` ilk sekiz baytı GS üzerinden okur. Kayıtta APIC kimliği, yerel tık, çalışan süreç, yığın aralığı, TSS, GDT, üç IST tepesi ve CR3 bulunur. BSP açılışta statik kaydı ve var olan tabloları kullanır. Her AP'nin fiziksel ayırıcıdan alınan 13 bitişik sayfasının ilki veri ve tablolar, kalan 12 sayfası üç ayrı 16 KiB IST yığını içindir. Normal AP yığını bu alanın dışındadır.
+
+BSP'nin IDT'si ortaktır. AP kendi GDT'sini, 0x08 kod seçicisini ve 0x28 TSS seçicisini yükler. Üç IST sırasıyla çift hata, NMI ve makine denetimi içindir. Panik yolu etkin TR ve GDTR'den o işlemcinin TSS'ine ulaşır ve üç yığının alt sınırındaki kanaryayı denetler. Normal kullanıcı zaman dilimi kurulurken süreç kimliği ve CR3 kayda yazılır. Ring3 girişinde `swapgs` kullanıcı tabanını seçer. Kullanıcıdan gelen sistem çağrısının dağıtımı çekirdek tabanını kullanır. Dilim bittiğinde önceki GS ve kesme durumu geri yüklenir.
+
+AP'ler ortak sayfa tablolarını kullanırken BSP'nin PAT ve CR0 önbellek ayarlarını devralır. Yerel zamanlayıcıların bölücüsü ve başlangıç değeri BSP'nin PIT kalibrasyonundan gelir. BSP vektör 48 üzerinden sistem saatini de ilerletir. AP'ler vektör 49 üzerinden yalnız kendi tıklarına yazar ve kendi LAPIC'lerine EOI verir.
+
+```sh
+make -j10 --output-sync=target calistir_bm_x86_smp_tik
+```
+
+Kapı dört vCPU'da gerçek GS, GDT, TR ve IDT tabanlarını QMP ile okur. TSS tanımlayıcılarını, on iki IST aralığını ve kanaryaları fiziksel bellekte doğrular. QEMU duraklatılarak alınan iki örnekte BSP en az 150 tık ilerler. AP farklarının BSP farkına göre sapma sınırı %20'dir. Ayrı kabuk senaryosu bir ve dört vCPU'da kullanıcı ELF'sini çalıştırıp sistem çağrısı, kullanıcı GS tabanı ve dönüşten sonraki BSP GS tabanını doğrular.
 
 ## Kilitler, IPI ve adres alanı tasarımı
 

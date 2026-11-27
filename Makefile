@@ -1920,7 +1920,7 @@ $(BUILD)/bm_x86_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl
 $(BUILD)/bm_x86_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) $(BM_X86_UART) -c $< -o $@
 $(BUILD)/bm_x86_kesme.o: runtime/kdl_kesme.c | $(BUILD)
-	$(BM_X86) $(BM_X86_CF) -c $< -o $@
+	$(BM_X86) $(BM_X86_CF) -mno-red-zone -c $< -o $@
 $(BUILD)/bm_x86_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
 $(BUILD)/bm_x86_gorev.o: runtime/kdl_gorev.c | $(BUILD)
@@ -2003,7 +2003,11 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 #          (IR'da sayılır) ve imajda RSP altına erişim 0.
 # Kanıt 26 (D-699): "X86 RING3 OK" — ring3 (CPL 3) giriş, ring3 int 0x80 (DPL3 kapı),
 #          #GP/#PF ile çekirdeğe kontrollü dönüş; yapısal: iretq + 0xee kapı baytı.
-calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
+# PVH kanıtlarının aynı imajı, seri günlüğü ve ara IR'ı bütün koşum boyunca korunur.
+.PHONY: _kem_os_x86_kos
+calistir_kem_os_x86: | $(BUILD)
+	+@python3 tools/kapi/kilitli.py $(BUILD)/kilitler/kem_os_x86.lock "$(MAKE)" --no-print-directory _kem_os_x86_kos
+_kem_os_x86_kos: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
@@ -5438,3 +5442,9 @@ test_tumu: calistir_bm_x86_smp_ap
 calistir_bm_x86_smp_ap: $(X86_SMP_ON)
 	@bash test/bm_x86_smp_harness.sh ap
 	@SUREC_KAHIN=smp_kahin SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_tik
+test_tumu: calistir_bm_x86_smp_tik
+calistir_bm_x86_smp_tik: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh tik
+	@SMP_KABUK_GS=1 SUREC_KAHIN=smp_kahin SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh

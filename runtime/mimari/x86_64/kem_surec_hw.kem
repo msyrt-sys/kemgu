@@ -249,7 +249,14 @@ yapı KxsSonuc { pid: tam64; ebeveyn: tam64; bitti: mantıksal; kod: tam64; vekt
         satıriçi_asm {
             mimari: x86_64
             şablon: r#"movq $1, %rdi
+subq $$128, %rsp
+pushfq
+cli
+swapgs
 call kdl_dilim_gir
+swapgs
+popfq
+addq $$128, %rsp
 movq kdl_dilim_etkin(%rip), $0
 movq $$0, kdl_dilim_etkin(%rip)"#
             çıktı("={rax}",&sonuc) girdi("r",baglam) bozulan("~{rdi}")
@@ -400,8 +407,12 @@ işlev kxs_hazirla(ayirici: tam64, e: Elf64, argv: Dizi<metin>, ebeveyn: tam64) 
     kx_sis_vekil=kxs_hizmet_adresi();
     değişken cr0: tam64 = kxs_fpu_kapat();
     kxm_cr3_yaz(kxs_cr3);
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $0, %gs:24
+movq $1, %gs:88"# girdi("r",kxs_pid) girdi("r",kxs_cr3) bozulan("~{memory}") } }
     değişken durdu: tam64 = kxs_dilim(kayit);
     kxm_cr3_yaz(ana);
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $$0, %gs:24
+movq $0, %gs:88"# girdi("r",ana) bozulan("~{memory}") } }
     kxs_fpu_geri(cr0);
     kx_sis_vekil=0;
     eğer durdu == 0 {

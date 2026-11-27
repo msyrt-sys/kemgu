@@ -1204,3 +1204,22 @@ Ham tam koşumda AP başına zamanlar INIT gönderiminden onayın BSP tarafında
 Dalga 14 tanı aracının kendi başına derlediği başlangıç nesnesi de olağan Make tarifini kullanıyor. Yalıtılmış kopyada değişiklik uygulanmadan yeniden üretilen nesne ana nesneyle bayt bayt aynıydı.
 
 Ölçümlü tam takım 23:06, 173 kapı, en uzun kapı 8:27, bütçe aşımı yok. Geçici dizin 0 → 0. Ham takım 24:45. QEMU’suz PATH ile iki SMP hedefinde de hazırlık derlemesi yapılmadan atlama bildirildi.
+
+## Bölüm 11 — çekirdek başı tablolar, GS ve LAPIC tıkları
+
+BSP ve üç AP'de QMP ile okunan IDT tabanları eşit, dört GS, dört GDT ve dört TSS tabanı ayrıydı. Üç AP'nin GS kayıtları 0x142000, 0x153000 ve 0x164000 adresindeydi. Normal yığınlar, 12 IST aralığı ve kanaryalar fiziksel bellekten doğrulandı. İlk yük ölçümünde C tık farkları 159/159/159/159, self-host farkları 150/149/149/149 oldu. Ayrı bir ve dört vCPU'lu kullanıcı programında yedi sistem çağrısı, sıfır kullanıcı GS tabanı ve dönüşten sonra doğru çekirdek GS tabanı ölçüldü. ARM ana makinede x86 MTTCG kullanıldı.
+
+AP saati kurulmayınca QMP 159/0/0/0 ölçtü (rc=1). Ayrı deneyde BSP'nin TSS'i AP için aday verildi. Özel sayfa sınırı denetimi bunu TR yüklenmeden reddetti, ilk AP onayı zaman aşımına uğradı (rc=1). Paylaşılan TSS'i birden çok işlemcide etkinleştirip yığın bozulması üretme sabotajı uygulanmadı.
+
+D-757 tek vCPU kasıtlı çift hata senaryosu her iki derleyicide onar açılışta geçti. Özel yığını doğru kurulmuş AP2'de ayrıca kasıtlı çift hata denendi. QEMU kendi iothread kilit denetiminde sonlandı (rc=-6). AP2 için bu koşumdan çift hata kanıtı alınamadı. Ayrı, yalıtılmış bir tanı imajında donanımın IST1 seçimi dört çekirdekte de kesme kapısıyla ölçüldü. Her işleyicinin gerçek RSP'si kendi IST1 tepesinden 40 bayt aşağıdaydı, dört kanarya korundu. Bu ölçüm çift hata sonucu olarak sayılmadı.
+
+İlk bütünleşmede ABI tarayıcısı 40 numaralı dalı bulamadı. Sürüm çağrısı asıl dağıtıcıda tutuldu ve kullanıcı GS değişimi bu çağrıyı da kapsadı. Tekil gerçek PVH imajı beklenen seri çıktıyı verirken iki bağımsız `make calistir_kem_os_x86` aynı IR, disk ve seri dosyaları üzerinde çakıştı. Kanıt tarifinin tamamı süreçler arası kilide alındı. Aynı anda başlatılan iki ayrı make bundan sonra 27 ve 55 sn'de tamamlandı (ikisi de rc=0). Yeni x86 IDT nesnesi kırmızı bölge kullanmadan derleniyor. Objdump'ta GDTR için yer ayrıldığı ve `cekirdek_no` gövdesinin tek GS okuması ile dönüşten oluştuğu doğrulandı.
+
+Son §7 koşumunda iki derleyicinin tık ve ring3 kayıtları aşağıdadır. Keşif, AP, tık, istisna/IST, süreç ABI, seçim ve paylaşım kapıları dahil make/tee rc=0.
+
+```text
+SMP tık 4: GS=['0x2058d80', '0x142000', '0x153000', '0x164000'], tık farkları=[151, 150, 150, 150], oran=[1.0, 0.993, 0.993, 0.993]
+SMP tık 4: GS=['0x2060d80', '0x142000', '0x153000', '0x164000'], tık farkları=[159, 159, 159, 159], oran=[1.0, 1.0, 1.0, 1.0]
+GS ring3 1: kullanıcı tabanı=0, sistem çağrısı=7, BSP tabanı=0x21a4d80
+GS ring3 4: kullanıcı tabanı=0, sistem çağrısı=7, BSP tabanı=0x21a4d80
+```

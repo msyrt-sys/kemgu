@@ -182,3 +182,4 @@ calistir_yigin_geri	101	host
 calistir_paylasim_denetimi	60	host
 calistir_bm_x86_smp_kesif	60	qemu-x86
 calistir_bm_x86_smp_ap	86	qemu-x86
+calistir_bm_x86_smp_tik	87	qemu-x86

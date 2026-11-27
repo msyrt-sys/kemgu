@@ -94,7 +94,12 @@ ltr %ax"#
             şablon: r#"movq $0, %rdi
 movq $1, %rsi
 subq $$128, %rsp
+pushfq
+cli
+swapgs
 call kdl_x86_ring3_gir
+swapgs
+popfq
 addq $$128, %rsp"#
             girdi("r", rip) girdi("r", rsp)
             bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}")

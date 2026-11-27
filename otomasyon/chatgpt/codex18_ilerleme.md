@@ -165,3 +165,9 @@ Ham `-j10 test_tumu` 1485 sn, ölçümlü takım 1386 sn, ek check/baremetal dif
 Disk build: önce 14470782976 B, sonra 14471913472 B, büyüme +1130496 B
 Geçici dizin: önce 0, sonra 0, yeni 0
 ```
+
+## Bölüm 11 — çekirdek başı tablolar ve yerel saat
+
+C ve self-host ile ortak IDT, dört ayrı GS/GDT/TSS, 12 IST yığını ve fiziksel tık sayaçları doğrulandı. Dört vCPU'da C tık farkları 151/150/150/150, self-host 159/159/159/159. Normal kullanıcı ELF'sinde bir ve dört vCPU ile yedi sistem çağrısı ve doğru GS dönüşü ölçüldü. §7 kapıları ve ek istisna/ABI/keşif/başlatma kapıları 407 sn, make/tee rc=0.
+
+AP saatleri kaldırılınca sayaçlar 159/0/0/0, kapı rc=1. BSP TSS adayı özel sayfa denetiminde reddedildi, AP onayı gelmedi (rc=1). Aynı TSS'i canlı çekirdeklere yükleyip yığın bozma sabotajı uygulanmadı. D-757 tek vCPU çift hata kapısı iki derleyicide 10/10 geçti. AP2 çift hata denemesinde QEMU'nun iothread denetimi süreci durdurdu. Ayrı bir deneyde gerçek IST1 kesmesi dört çekirdekte dört ayrı yığın ve sağlam kanarya gösterdi. PVH kapısının iki eşzamanlı çağrısındaki dosya çakışması süreçler arası kilitle giderildi. Bölüm süresi 26 dk 22 sn.

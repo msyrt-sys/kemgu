@@ -1,6 +1,7 @@
 """OVMF SMP kapılarında MADT'yi, QEMU CPU kimliklerini ve fiziksel belleği okur."""
 
 import argparse
+import os
 import re
 import shutil
 import struct
@@ -196,32 +197,164 @@ def ap_baslatma(q, seri, w, sim, adet):
     )
 
 
+def tablo_taban(durum, ad, secici=False):
+    sec = r"[0-9a-fA-F]+\s+" if secici else ""
+    es = re.search(rf"^{ad}\s*=\s*{sec}([0-9a-fA-F]+)", durum, re.MULTILINE)
+    assert es, (ad, durum)
+    return int(es[1], 16)
+
+
+def tik_kayitlari(q, w, sim, adet):
+    ids, _ = cpu_listesi(q, adet)
+    kayit = sayac(q, w, sim["smp_ap_kayitlari"])
+    adresler = []
+    gdtler, tssler, araliklar = set(), set(), []
+    for no, id_ in enumerate(ids):
+        durum = q.call(
+            "human-monitor-command", {"command-line": "info registers", "cpu-index": no}
+        )
+        gs = tablo_taban(durum, "GS", True)
+        adr = sayac(q, w, kayit + no * 64 + 48) if adet > 1 else sim["kdl_cekirdek_bsp"]
+        assert gs == adr and adr not in adresler, (no, gs, adr, adresler)
+        adresler.append(adr)
+        n, kimlik, _, _, alt, ust, tss, gdt, *kalan = struct.unpack(
+            "<12Q", bellek(q, w, adr, 96)
+        )
+        istler, cr3 = kalan[:3], kalan[3]
+        assert (n, kimlik, cr3) == (no, id_, yazmac(durum, "CR3"))
+        assert tablo_taban(durum, "IDT") == sim["kdl_idt"]
+        assert tablo_taban(durum, "GDT") == gdt and gdt not in gdtler
+        assert tablo_taban(durum, "TR", True) == tss and tss not in tssler
+        assert tablo_taban(durum, "TR") == 0x28
+        gdtler.add(gdt)
+        tssler.add(tss)
+        tanim, yuksek = struct.unpack("<QQ", bellek(q, w, gdt + 40, 16))
+        gercek = (tanim >> 16 & 0xFFFFFF) | (tanim >> 32 & 0xFF000000) | (yuksek << 32)
+        assert gercek == tss and tanim & 0xFFFF == 103
+        assert (tanim >> 40 & 0x8F) == 0x8B
+        ham = bellek(q, w, tss, 104)
+        assert struct.unpack_from("<3Q", ham, 36) == tuple(istler)
+        assert struct.unpack_from("<H", ham, 102)[0] == 104
+        if no:
+            assert struct.unpack_from("<Q", ham, 4)[0] == ust
+        for ilk, son in [(alt, ust)] + [(son - 16384, son) for son in istler]:
+            assert ilk < son and all(son <= a or b <= ilk for a, b in araliklar), (
+                no,
+                ilk,
+                son,
+                araliklar,
+            )
+            araliklar.append((ilk, son))
+        for son in istler:
+            assert sayac(q, w, son - 16384) == 0x4B454D4755495354
+    return adresler
+
+
+def tik(q, p, seri, w, sim, adet):
+    bekle(
+        "UEFI ana döngüsü",
+        lambda: seri_oku(seri),
+        lambda s: b"UEFI_HAZIR\n" in s,
+        sure=30,
+        surec=p,
+    )
+    adr = tik_kayitlari(q, w, sim, adet)
+
+    def ornek():
+        # Saat ve CPU'lar dururken bütün çekirdekler aynı anda örneklenir.
+        q.call("stop")
+        try:
+            return [sayac(q, w, a + 16) for a in adr]
+        finally:
+            q.call("cont")
+
+    ilk = ornek()
+    son = bekle(
+        "BSP'de 150 LAPIC tıkı",
+        ornek,
+        lambda s: s[0] - ilk[0] >= 150,
+        sure=15,
+        aralik=0.1,
+        surec=p,
+    )
+    fark = [b - a for a, b in zip(ilk, son)]
+    assert all(abs(x - fark[0]) * 5 <= fark[0] for x in fark), (
+        "çekirdek tık farkları",
+        fark,
+    )
+    print(
+        f"SMP tık {adet}: GS={list(map(hex, adr))}, tık farkları={fark}, oran={[round(n / fark[0], 3) for n in fark]}",
+        flush=True,
+    )
+
+
+def gs_kabuk(dizin):
+    from surec_imaj import imajlar
+
+    exe = "/diskler/usb0p2/bin/merhaba.elf"
+    for adet in (1, 4):
+        usb, nvme, sata = imajlar(
+            dizin, {"merhaba.elf": (dizin / "kullanici/merhaba.elf").read_bytes()}
+        )
+        with boot(dizin, usb[0], nvme, sata, smp=adet) as (q, p, seri):
+            c = Console(dizin, q, p, seri)
+            adr = c.symbols["kdl_cekirdek_bsp"]
+            ilk = sayac(q, dizin, adr + 96)
+            c.run(
+                f"calistir {exe} Ağaç",
+                f"{exe}\nAğaç\n[merhaba.elf pid=1 cikis=2]\n".encode(),
+            )
+            n, kullanici_gs = struct.unpack("<QQ", bellek(q, dizin, adr + 96, 16))
+            durum = q.call(
+                "human-monitor-command",
+                {"command-line": "info registers", "cpu-index": 0},
+            )
+            assert (
+                n > ilk and kullanici_gs == 0 and tablo_taban(durum, "GS", True) == adr
+            )
+            c.shutdown()
+        print(
+            f"GS ring3 {adet}: kullanıcı tabanı={kullanici_gs}, sistem çağrısı={n - ilk}, BSP tabanı={adr:#x}",
+            flush=True,
+        )
+
+
 def kabuk(dizin):
     usb, nvme, sata = images(dizin, 1)
     with boot(dizin, usb[0], nvme, sata, smp=4) as (q, p, seri):
         c = Console(dizin, q, p, seri)
         ap_baslatma(q, seri, dizin, c.symbols, 4)
         c.shutdown()
-    print("SMP UEFI kabuğu: dört işlemci uzun kipte, kabuk hazır ve düzenli kapanış.", flush=True)
+    print(
+        "SMP UEFI kabuğu: dört işlemci uzun kipte, kabuk hazır ve düzenli kapanış.",
+        flush=True,
+    )
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("dizin", type=Path)
-    ap.add_argument("kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk"))
+    ap.add_argument(
+        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik")
+    )
     ap.add_argument("--adet", nargs="+", type=int, default=None)
     a = ap.parse_args()
     dizin = a.dizin.resolve()
     if a.kip == "kabuk":
-        kabuk(dizin)
+        if os.environ.get("SMP_KABUK_GS") == "1":
+            gs_kabuk(dizin)
+        else:
+            kabuk(dizin)
         return
     sim = semboller(dizin / "k.elf")
-    for adet in a.adet or ([1, 2, 4, 8] if a.kip == "kesif" else [2, 4, 8]):
+    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4]}[a.kip]:
         w = dizin / f"{a.kip}-{adet}"
         with acilis(w, dizin / "pc.img", adet) as (q, p, seri):
             kesif(q, p, seri, w, sim, adet)
             if a.kip == "ap":
                 ap_baslatma(q, seri, w, sim, adet)
+            elif a.kip == "tik":
+                tik(q, p, seri, w, sim, adet)
 
 
 if __name__ == "__main__":

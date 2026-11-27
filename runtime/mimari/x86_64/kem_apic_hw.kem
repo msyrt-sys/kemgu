@@ -26,7 +26,9 @@ outb %al, $$64"# bozulan("~{rax}") bozulan("~{memory}") } }
  kem_port_yaz8(64 olarak dtam16,156 olarak dtam8);
  kem_port_yaz8(64 olarak dtam16,46 olarak dtam8);kz_irq_ac();
 }
-gerçekzamanlı çıplak işlev kdl_apic_timer_irq() { eğer değil kesme_geldi(48,3) { ver; } kem_tik=kem_tik+1; kap_lapic_tik=kap_lapic_tik+1; }
+gerçekzamanlı çıplak işlev kdl_apic_timer_irq() {
+ güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"incq kdl_cekirdek_bsp+16(%rip)"# bozulan("~{cc}") bozulan("~{memory}") } }
+ eğer değil kesme_geldi(48,3) { ver; } kem_tik=kem_tik+1; kap_lapic_tik=kap_lapic_tik+1; }
 çıplak işlev kap_pit_oku() -> tam64 {
  değişken n: tam64 = 0;
  güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq kap_pit_tik(%rip), $0"# çıktı("=r",&n) bozulan("~{memory}") } }
@@ -138,6 +140,7 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   değişken id: tam32 = ((kem_mmio_oku32(a+32)>>24)&255) olarak tam32;
   güvensiz {
    smp_bsp_kimligi=id olarak tam64;
+   kem_mmio_yaz64(smp_bsp_verisi()+8,id olarak tam64);
    değişken kayit_ptr: *tam64 = (&smp_bsp_kimligi) olarak *tam64;
    smp_kimlik_sayfasi=kayit_ptr olarak tam64;
    smp_cekirdek_sayisi=1;
@@ -178,6 +181,7 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   değişken periyot: tam64 = fark/sure;
   eğer periyot < 100 veya periyot > 2147483647 { ver hata("LAPIC kalibrasyon araligi"); }
   eşleş kap_yol_kur(m,0,32,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
+  güvensiz { smp_lapic_periyodu=periyot; }
   kap_dok("APIC_KAL",sure,fark,periyot);
   kem_mmio_yaz32(a+800,131120);kem_mmio_yaz32(a+896,periyot);
   kz_irq_ac();
@@ -311,8 +315,57 @@ addq $$128, %rsp"#
     }
 }
 
+küresel değişken smp_lapic_periyodu: tam64 = 0;
+
+// Çekirdek numarası yalnızca çekirdek GS bağlamında okunur.
+çıplak işlev cekirdek_no() -> tam64 {
+    değişken no: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %gs:0, $0"# çıktı("=r",&no) bozulan("~{memory}") } }
+    ver no;
+}
+gerçekzamanlı çıplak işlev smp_ap_zaman_irq() {
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"incq %gs:16"# bozulan("~{cc}") bozulan("~{memory}") } }
+}
+çıplak işlev smp_bsp_verisi() -> tam64 {
+    değişken adr: tam64 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"leaq kdl_cekirdek_bsp(%rip), $0"# çıktı("=r",&adr) } }
+    ver adr;
+}
+çıplak işlev smp_ap_tablo_kur(t: tam64, no: tam32, id: tam32, alt: tam64, ust: tam64) -> tam32 {
+    değişken rc: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari:x86_64
+        şablon:r#"movq $1, %rdi
+movl $2, %esi
+movl $3, %edx
+movq $4, %rcx
+movq $5, %r8
+movq %rsp, %r11
+subq $$128, %rsp
+andq $$-16, %rsp
+subq $$16, %rsp
+movq %r11, (%rsp)
+call kdl_smp_ap_kur
+movq (%rsp), %rsp"#
+        çıktı("={ax}",&rc) girdi("r",t) girdi("r",no) girdi("r",id) girdi("r",alt) girdi("r",ust)
+        bozulan("~{rdi}") bozulan("~{rsi}") bozulan("~{rdx}") bozulan("~{rcx}") bozulan("~{r8}")
+        bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}")
+    } }
+    ver rc;
+}
+çıplak işlev smp_ap_saat_kur() {
+    değişken a: tam64 = kap_lapic;
+    kap_msr_yaz(a|(kap_msr_oku()&4095)|2048);
+    kem_mmio_yaz32(a+128,0);
+    kem_mmio_yaz32(a+848,65536);
+    kem_mmio_yaz32(a+864,65536);
+    kem_mmio_yaz32(a+240,511);
+    kem_mmio_yaz32(a+992,3);
+    kem_mmio_yaz32(a+800,131121);
+    kem_mmio_yaz32(a+896,smp_lapic_periyodu);
+}
+
 // Kayıt yayımlanmadan BSP bu parametreleri başka AP için kullanamaz.
-// Girişte yalnız ilgili AP kendi kaydını yazar ve kesmeleri kapalı tutar.
+// Yalnız ilgili AP kendi kaydını yazar. Tablolar kurulduktan sonra IRQ açılır.
 çıplak işlev kem_ap_giris(no: tam32) {
     kg_irq_kapat();
     değişken k: tam64 = smp_ap_kayitlari + (no olarak tam64)*64;
@@ -321,10 +374,15 @@ addq $$128, %rsp"#
     değişken ust: tam64 = kem_mmio_oku64(k+16);
     değişken id: tam64 = (kem_mmio_oku32(kap_lapic+32)>>24)&255;
     eğer rsp >= alt ve rsp < ust ve id == (smp_apic_kimligi(no) olarak tam64) {
+        değişken t: tam64 = kem_mmio_oku64(k+48);
+        eğer smp_ap_tablo_kur(t,no,id olarak tam32,alt,ust) == 0 { ver; }
+        eğer cekirdek_no() != (no olarak tam64) { ver; }
+        smp_ap_saat_kur();
         kem_mmio_yaz64(k+24,rsp);
         kem_mmio_yaz64(k+32,kxm_cr3_oku());
         kem_mmio_yaz64(k+40,id);
         kem_mmio_yaz64(k,1);
+        kz_irq_ac();
     }
     iken doğru { güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } } }
 }
@@ -341,12 +399,17 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
         eğer kayit == 0 { ver hata("AP kayitlari icin RAM yok"); }
         memset(kayit olarak *tam8,0,(n olarak tam64)*64);
         smp_ap_kayitlari = kayit;
+        kem_mmio_yaz64(kayit+48,smp_bsp_verisi());
         kap_dok("SMP_SAYFA",sayfa,kem_pvh_bilgi(),cr3);
         değişken no: tam32 = 1;
         iken no < n {
             değişken alt: tam64 = uefi_surec_ayir(4);
             eğer alt == 0 { ver hata("AP yigini icin RAM yok"); }
             değişken k: tam64 = kayit + (no olarak tam64)*64;
+            değişken veri: tam64 = uefi_surec_ayir(13);
+            eğer veri == 0 { ver hata("AP GDT/TSS/IST icin RAM yok"); }
+            memset(veri olarak *tam8,0,4096);
+            kem_mmio_yaz64(k+48,veri);
             kem_mmio_yaz64(k+8,alt); kem_mmio_yaz64(k+16,alt+16384);
             no = no + 1;
         }
