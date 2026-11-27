@@ -318,9 +318,9 @@ addq $$128, %rsp"#
 küresel değişken smp_lapic_periyodu: tam64 = 0;
 
 // Çekirdek numarası yalnızca çekirdek GS bağlamında okunur.
-çıplak işlev cekirdek_no() -> tam64 {
+gerçekzamanlı çıplak işlev cekirdek_no() -> tam64 {
     değişken no: tam64 = 0;
-    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %gs:0, $0"# çıktı("=r",&no) bozulan("~{memory}") } }
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:16 şablon:r#"movq %gs:0, $0"# çıktı("=r",&no) bozulan("~{memory}") } }
     ver no;
 }
 gerçekzamanlı çıplak işlev smp_ap_zaman_irq() {
@@ -365,6 +365,18 @@ movq (%rsp), %rsp"#
 }
 
 küresel değişken smp_deney_alani: tam64=0;
+çıplak işlev smp_olcum_boyu(n:tam32) -> tam32 {
+    değişken boy:tam32=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $1,%edi
+movq %rsp,%r11
+subq $$128,%rsp
+andq $$-16,%rsp
+subq $$16,%rsp
+movq %r11,(%rsp)
+call kem_ap_olcum_boyu
+movq (%rsp),%rsp"# çıktı("={ax}",&boy) girdi("r",n) bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rdi}") bozulan("~{rsi}") bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{cc}") bozulan("~{memory}") } }
+    ver boy;
+}
 çıplak işlev smp_deney_var() -> mantıksal {
     değişken adr:tam64=0;
     güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"subq $$128,%rsp
@@ -417,11 +429,18 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
     eğer cr3 <= 0 veya cr3 >= 4294967296 veya (cr3&4095) != 0 { ver hata("AP CR3 araligi"); }
     güvensiz {
         değişken n: tam32 = smp_cekirdek_sayisi;
-        değişken kayit: tam64 = uefi_surec_ayir((n*64+4095)/4096);
+        değişken kayit: tam64 = uefi_surec_ayir((n*192+4095)/4096);
         eğer kayit == 0 { ver hata("AP kayitlari icin RAM yok"); }
-        memset(kayit olarak *tam8,0,(n olarak tam64)*64);
+        memset(kayit olarak *tam8,0,(n olarak tam64)*192);
+        değişken j:tam32=0;
+        iken j<n {
+            kem_mmio_yaz64(kayit+(j olarak tam64)*64+56,kayit+(n olarak tam64)*64+(j olarak tam64)*128);
+            j=j+1;
+        }
         eğer smp_deney_var() {
-            değişken sayfa_sayisi:tam32=(256+n*64+4095)/4096;
+            değişken boy:tam32=smp_olcum_boyu(n);
+            eğer boy<=0 veya boy>2097152 { ver hata("SMP deney boyu gecersiz"); }
+            değişken sayfa_sayisi:tam32=(boy+4095)/4096;
             smp_deney_alani=uefi_surec_ayir(sayfa_sayisi);
             eğer smp_deney_alani==0 { ver hata("SMP deney bellegi yok"); }
             memset(smp_deney_alani olarak *tam8,0,(sayfa_sayisi olarak tam64)*4096);
@@ -471,3 +490,108 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
 }
 
 çıplak işlev smp_cevrimici_say() -> tam32 { ver smp_cevrimici; }
+
+// Her çevrimiçi CPU kendi 128 baytlık kutusunu tüketir. Durum ve alan sırası
+// x86-TSO ile yayımlanır. Kutu yalnız doğru gönderici biletiyle serbest bırakılır.
+// Bunlar kutunun hizalı normal RAM sözcükleridir. ISR'nin her erişimi tek komuttur.
+gerçekzamanlı çıplak işlev ipi_oku(p:tam64) -> tam64 {
+    değişken v:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:32 şablon:r#"movq ($1),$0"# çıktı("=r",&v) girdi("r",p) bozulan("~{memory}") } }
+    ver v;
+}
+gerçekzamanlı çıplak işlev ipi_yaz(p:tam64,v:tam64) {
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:32 şablon:r#"movq $1,($0)"# girdi("r",p) girdi("r",v) bozulan("~{memory}") } }
+}
+gerçekzamanlı çıplak işlev ipi_kutusu(hedef:tam32) -> tam64 {
+    eğer hedef<0 veya hedef>=smp_cevrimici veya smp_ap_kayitlari==0 { ver 0; }
+    ver ipi_oku(smp_ap_kayitlari+(hedef olarak tam64)*64+56);
+}
+çıplak işlev ipi_bos_al(p:tam64) -> mantıksal {
+    değişken v:tam32=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"xorl %eax,%eax
+movl $$1,%edx
+lock cmpxchgq %rdx,($1)
+sete %al
+movzbl %al,$0"# çıktı("=r",&v) girdi("r",p) bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+    ver v!=0;
+}
+çıplak işlev ipi_kesme_sakla() -> tam64 {
+    değişken f:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+popq $0
+cli"# çıktı("=r",&f) bozulan("~{memory}") } }
+    ver f;
+}
+çıplak işlev ipi_kesme_geri(f:tam64) { eğer (f&512)!=0 { kz_irq_ac(); } }
+çıplak işlev ipi_iste(hedef:tam32,tur:tam32,islem:tam32,veri:tam64) -> tam64 {
+    değişken p:tam64=ipi_kutusu(hedef);
+    eğer p==0 veya tur<80 veya tur>82 { ver -1; }
+    eğer tur==80 ve (islem<1 veya islem>2) { ver -1; }
+    değişken f:tam64=ipi_kesme_sakla();
+    eğer değil ipi_bos_al(p) { ipi_kesme_geri(f); ver -2; }
+    eğer değil smp_icr_bekle() { ipi_yaz(p,0); ipi_kesme_geri(f); ver -3; }
+    değişken s:tam64=ipi_oku(p+8)+1;
+    eğer s<=0 { s=1; }
+    ipi_yaz(p+8,s); ipi_yaz(p+16,cekirdek_no());
+    ipi_yaz(p+24,tur olarak tam64); ipi_yaz(p+32,veri);
+    ipi_yaz(p+72,islem olarak tam64);
+    ipi_yaz(p,2);
+    değişken id:tam32=smp_apic_kimligi(hedef);
+    kem_mmio_yaz32(kap_lapic+784,(id olarak tam64)<<24);
+    kem_mmio_yaz32(kap_lapic+768,tur olarak tam64);
+    ipi_kesme_geri(f); ver s;
+}
+çıplak işlev ipi_gonder(hedef:tam32,tur:tam32) -> tam64 { ver ipi_iste(hedef,tur,1,0); }
+çıplak işlev ipi_cagir(hedef:tam32,islem:tam32,veri:tam64) -> tam64 {
+    ver ipi_iste(hedef,80,islem,veri);
+}
+gerçekzamanlı çıplak işlev ipi_yerel_tik() -> tam64 {
+    değişken v:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:16 şablon:r#"movq %gs:16,$0"# çıktı("=r",&v) bozulan("~{memory}") } }
+    ver v;
+}
+// Çağrı kutusunun ilk çekirdek işlevi hedef kimliğini isteğin üst bitlerine yazar.
+gerçekzamanlı çıplak işlev ipi_kimlik_oku(veri:tam64) -> tam64 {
+    ver veri|((cekirdek_no()+1)<<48);
+}
+gerçekzamanlı çıplak işlev kem_ipi_isle(tur:tam32) -> tam32 {
+    değişken p:tam64=ipi_kutusu(cekirdek_no() olarak tam32);
+    eğer p==0 { ver 0; }
+    eğer ipi_oku(p)!=2 veya ipi_oku(p+24)!=(tur olarak tam64) { ver 0; }
+    değişken v:tam64=0;
+    eğer tur==80 {
+        eğer ipi_oku(p+72)==2 { v=ipi_yerel_tik(); }
+        değilse { v=ipi_kimlik_oku(ipi_oku(p+32)); }
+    }
+    eğer tur==81 { ipi_yaz(p+56,ipi_oku(p+56)+1); }
+    eğer tur==82 { ipi_yaz(p+64,1); }
+    ipi_yaz(p+40,v);
+    ipi_yaz(p+48,ipi_oku(p+48)+1);
+    ipi_yaz(p,3);
+    eğer tur==82 { ver 1; } ver 0;
+}
+çıplak işlev ipi_bekle(hedef:tam32,bilet:tam64,ms:tam32) -> tam64 {
+    değişken p:tam64=ipi_kutusu(hedef);
+    eğer p==0 veya bilet<=0 veya ms<0 veya ms>60000 { ver -1; }
+    eğer ipi_oku(p)==0 veya ipi_oku(p+8)!=bilet veya ipi_oku(p+16)!=cekirdek_no() { ver -1; }
+    değişken ilk:tam64=bm_tsc_oku();
+    iken ipi_oku(p)!=3 {
+        eğer bm_tsc_oku()-ilk >= kap_tsc_ms*(ms olarak tam64) { ver -4; }
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } }
+    }
+    değişken v:tam64=ipi_oku(p+40);
+    ipi_yaz(p,0); ver v;
+}
+çıplak işlev ipi_hepsine(tur:tam32) -> tam32 {
+    değişken hedef:tam32=0; değişken bitti:tam32=0;
+    iken hedef<smp_cevrimici {
+        eğer hedef!=(cekirdek_no() olarak tam32) {
+            değişken b:tam64=ipi_gonder(hedef,tur);
+            eğer b<0 { ver b olarak tam32; }
+            eğer ipi_bekle(hedef,b,1000)<0 { ver -4; }
+            bitti=bitti+1;
+        }
+        hedef=hedef+1;
+    }
+    ver bitti;
+}

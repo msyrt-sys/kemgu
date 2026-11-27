@@ -5452,3 +5452,8 @@ test_tumu: calistir_bm_x86_smp_kilit
 calistir_bm_x86_smp_kilit: $(X86_SMP_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/smp/kilit_model_test.kem
 	@bash test/bm_x86_smp_harness.sh kilit
+
+.PHONY: calistir_bm_x86_smp_ipi
+test_tumu: calistir_bm_x86_smp_ipi
+calistir_bm_x86_smp_ipi: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh ipi

@@ -62,6 +62,28 @@ Kesme işleyicisinin de kullandığı kilitlerde `kilit_al_kesmesiz` önce RFLAG
 
 `make calistir_bm_x86_smp_kilit` iki derleyicide sekiz istemcili FIFO modelini 100.000 adım yürütür. QEMU'da dört ve sekiz vCPU'nun her biri ortak sayacı bir milyon kez kilit altında artırır. İlk 8.192 artışta bütün vCPU'lar, kalanında ikili gruplar yarışır. QMP her çekirdeğin iki aşamadaki katkısını, biletleri, toplamı ve çekişme sayaçlarını fiziksel bellekten okur. Sekiz vCPU'nun deney boyunca birlikte yarıştığı ayrı C koşumu 378,842 saniyede 8.000.000 artış verdi. Bu süre ARM üzerinde çok iş parçacıklı TCG ölçümüdür.
 
+## İşlemciler arası kesmeler
+
+SMP açılışında çekirdek kayıtlarının ardından her hedef için 128 bayt ayrılır. Kayıt +56 kutunun fiziksel adresidir. Kutu, çekirdek çevrimdışı veya tek vCPU açılışında kullanılmaz. Hedef numarası MADT dizisinden gerçek xAPIC kimliğine çevrilir. Gönderen, ICR yüksek/düşük yazım çifti sırasında kendi kesmelerini kapatır ve önceki IF durumunu geri yükler.
+
+| Vektör | Hedefteki iş |
+|---:|---|
+| 80 | Kayıtlı çekirdek işlevini çalıştırır. İşlem 1 çağrı verisine hedef kimliğini ekler. İşlem 2 hedefin yerel zamanlayıcı tıkını okur. |
+| 81 | Hedefin yeniden zamanlama istek sayısını artırır. |
+| 82 | Duruşu kaydeder, EOI verir, kesmeleri kapalı olarak HLT döngüsüne girer. |
+
+| Bayt | 64 bit alan |
+|---:|---|
+| 0 | Durum. 0 boş, 1 yazılıyor, 2 teslim bekliyor, 3 onaylandı. |
+| 8, 16, 24 | Bilet, gönderen çekirdek, vektör |
+| 32, 40 | İşlev girdisi ve dönüş değeri |
+| 48, 56, 64 | Teslim sayısı, yeniden zamanlama sayısı, durdu bilgisi |
+| 72 | Çekirdek işlev numarası |
+
+`ipi_cagir(hedef, islem, veri)` ve `ipi_gonder(hedef, tur)` bir bilet döndürür. Atomik karşılaştırma/değiştirme boş kutuyu edinir. Yanlış argüman −1, dolu kutu −2, önceki ICR aktarımının süreyi aşması −3 verir. `ipi_bekle(hedef, bilet, ms)` doğru gönderen ve bilet için sonucu okur, sonra kutuyu boşaltır. Süre aşımı −4 döndürür ve kutu sahipliği korunur. Aynı bileti yeniden beklemek mümkündür. `ipi_hepsine(tur)` diğer çevrimiçi çekirdeklere sırayla gönderir, her teslimi bekler ve onay sayısını döndürür. Sabit sayıda RAM erişimi yapan kesme işleyicisi kullanıcı kipinden giriş ve çıkışta GS tabanını değiştirir.
+
+`make calistir_bm_x86_smp_ipi` bütün sıralı çekirdek çiftlerini, kendine gönderim dahil, biner kez çalıştırır. QMP her sonuçtaki hedefi, kaynağı ve sırayı, çekirdek başına teslimleri ve tüm gidiş-dönüş sürelerini fiziksel bellekten okur. Dört vCPU'nun ardışık kimliklerine ek olarak iki soket × üç çekirdek topolojisinde APIC kimlikleri 0, 1, 2, 4, 5, 6'dır. TSC/ms PIT kalibrasyonundan gelir. Süreler ARM ana makinede çok iş parçacıklı x86 TCG'ye aittir.
+
 ## Kilitler, IPI ve adres alanı tasarımı
 
 İlk sürümde sistem çağrıları ve sürücüler büyük çekirdek kilidi altında çalışır. Çerçeve ayırıcısı ve heap girişleri kendi paylaşımlarını korur. Kilit sırası ve kesme durumunun korunması edinim noktalarında denetlenir. Çağrı kutusu, yeniden zamanlama ve durdurma için ayrı IPI vektörleri ayrılır. Bir eşleme kaldırıldığında o adres alanını kullanan diğer çekirdeklerin TLB geçersizleme onayları beklenir.

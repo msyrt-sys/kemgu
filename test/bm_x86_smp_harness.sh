@@ -13,7 +13,7 @@ calisma_izle "$w"
 for derleyici in kemgu codegen; do
     tur="$w/$derleyici"
     deney=""
-    if [[ $kip == kilit ]]; then deney=kilit; fi
+    if [[ $kip == kilit || $kip == ipi ]]; then deney=$kip; fi
     UEFI_SMP_DENEY="$deney" UEFI_KAYNAK=test/ornekler/kem_os_x86_uefi.kem UEFI_DERLEYICI="build/$derleyici" \
         UEFI_CALISMA_DIZINI="$tur" UEFI_PC_URET=1 UEFI_PC_GECICI=1 UEFI_YALNIZ_DERLE=1 \
         bash test/bm_x86_uefi_harness.sh

@@ -660,6 +660,8 @@ int kdl_smp_ap_kur(struct ApTablolari *p, unsigned no, unsigned id,
 }
 
 extern void smp_ap_zaman_irq(void) __attribute__((weak));
+extern int kem_ipi_isle(int) __attribute__((weak));
+extern void kdl_ipi_80(void), kdl_ipi_81(void), kdl_ipi_82(void);
 extern uintptr_t kdl_lapic_taban;
 __attribute__((naked)) static void kdl_ap_zaman_kocani(void) {
     __asm__ volatile(
@@ -700,6 +702,11 @@ void kdl_idt_kur(void) {
     if (kdl_xhci_irq) kdl_idt_gate(65, (uintptr_t)&kdl_xhci_kocani, 0);
     kdl_idt_gate(48, (uintptr_t)&kdl_lapic_timer_stub, 0);
     if (smp_ap_zaman_irq) kdl_idt_gate(49, (uintptr_t)&kdl_ap_zaman_kocani, 0);
+    if (kem_ipi_isle) {
+        kdl_idt_gate(80, (uintptr_t)&kdl_ipi_80, 0);
+        kdl_idt_gate(81, (uintptr_t)&kdl_ipi_81, 0);
+        kdl_idt_gate(82, (uintptr_t)&kdl_ipi_82, 0);
+    }
     kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
     extern void *kdl_msi_kocanlari[14];
     for (int i = 0; i < 14; ++i) kdl_idt_gate(66 + i, (uintptr_t)kdl_msi_kocanlari[i], 0);

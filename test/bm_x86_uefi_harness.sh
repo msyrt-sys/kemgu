@@ -68,6 +68,7 @@ KEM_KILIT
 fi
 if [[ -n ${UEFI_SMP_DENEY:-} ]]; then
     case "$UEFI_SMP_DENEY" in
+        ipi) cat tests/qemu/smp_ipi_konuk.kem >> "$W/comb.kem" ;;
         kilit) cat tests/qemu/smp_kilit_konuk.kem >> "$W/comb.kem" ;;
         *) echo "Bilinmeyen SMP deneyi: $UEFI_SMP_DENEY" >&2; exit 1 ;;
     esac

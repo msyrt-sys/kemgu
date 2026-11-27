@@ -1261,3 +1261,20 @@ UEFI PC regresyonunun bir çalışmasında USB aktarım zaman aşımı geldi. Ba
 Saat etiketli son `-j10` koşumunda kilit kapısının tarifleri 22,612 sn sürdü. Daha yüklü ayrı `-j10` koşumunda sekiz vCPU sayma süreleri C 173,729 sn ve self-host 100,712 sn idi. O koşumun takım başlangıcı 07:53:00, bitmiş dört ölçümün gözlendiği saat 07:59:06. Tarif bazında saat kaydı bulunmayan bu koşum için kapı süresinin üst sınırı 366 sn. Bütçe bu üst sınırın 1,5 katı, 549 sn.
 
 Saf modelde sıradaki bilet denetimi çıkarıldığında model kâhini C çalıştırmasında 4 verdi (sarmalayıcı rc=1). Yeniden kurulan hata ayıklama imajında ters edinim deneyi de panik ve rc=1 üretti.
+
+## Bölüm 13 — IPI teslimleri
+
+Gerçek KEMGU çağrı ve kesme yollarında, QMP'nin fiziksel bellekten okuduğu her sonuç için gönderici, hedef, sıra, pozitif çevrim farkı ve hedefteki toplam teslim sayısı doğrulandı. Her gönderici sırayla bütün hedeflere ulaştı. Göndericinin kendi hedefi de matristedir. İkinci çağrı işlevi hedef çekirdeğin GS üzerinden okuduğu yerel tıkı döndürdü. Kâhin bu değeri hedefin güncel fiziksel sayacıyla karşılaştırdı.
+
+| Derleyici | APIC kimlikleri | Çift × yineleme | Kayıp | Gidiş-dönüş medyan / p99 (µs) |
+|---|---|---:|---:|---:|
+| C | 0,1,2,3 | 16 × 1000 | 0 | 8,223 / 21,737 |
+| C | 0,1,2,4,5,6 | 36 × 1000 | 0 | 7,783 / 20,543 |
+| Self | 0,1,2,3 | 16 × 1000 | 0 | 6,983 / 20,220 |
+| Self | 0,1,2,4,5,6 | 36 × 1000 | 0 | 9,261 / 25,539 |
+
+ARM ana makinedeki TCG iş parçacıklarının ayrı kimlikleri QMP ile ölçüldü. Kesme girişi, işlev, haberleşme ve göndericinin onay okuması bu sürelere dahildir. Dolu kutu, eski bilet, geçersiz hedef/işlem ve sıfır süreli bekleme gerçek konukta sınandı.
+
+IPI koçanının EOI yazımı ayrı bir imajda kaldırıldı. Kendine ilk yeniden zamanlama teslim edildi, sıradaki aynı öncelik sınıfındaki çağrı teslim edilemedi. QMP'de gönderen 0, hata −4, kapı rc=1. Hedef APIC kimliği yerine mantıksal numara yazıldığında dört çekirdek **sessiz** kaldı (16.000/16.000, rc=0). İki soket × üç çekirdeğin gerçek APIC kimlikleri 0,1,2,4,5,6 olunca aynı imajda teslim süre aşımı −4, rc=1. Her iki değişiklik de özel derleme ağaçlarındaydı.
+
+Duruş vektörü de son kapıya alındı. BSP diğer çekirdeklere 82 gönderdi. QMP her AP'de gerçek HLT=1, RFLAGS.IF=0 ve kutuda duruş onayını okudu. Bu sürümde iki derleyici × iki topoloji kapısı toplam 31,937 sn sürdü. 4/6 vCPU için C medyan/p99 değerleri 8,158/29,372 ve 9,372/32,824 µs, self-host değerleri 9,490/32,935 ve 8,992/31,871 µs idi.

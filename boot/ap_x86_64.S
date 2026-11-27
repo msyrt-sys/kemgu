@@ -123,4 +123,18 @@ kem_ap_acilis_dene:
     jmp *%rax
 1:  ret
 .size kem_ap_acilis_dene, .-kem_ap_acilis_dene
+/* Deneyin QMP ölçüm alanı. Normal açılış bu yordamı çağırmaz. */
+.weak kem_smp_olcum_boyu
+.global kem_ap_olcum_boyu
+.type kem_ap_olcum_boyu,@function
+kem_ap_olcum_boyu:
+    movabsq $kem_smp_olcum_boyu,%rax
+    testq %rax,%rax
+    jnz 1f
+    movl %edi,%eax
+    shll $6,%eax
+    addl $256,%eax
+    ret
+1:  jmp *%rax
+.size kem_ap_olcum_boyu,.-kem_ap_olcum_boyu
 .section .note.GNU-stack,"",@progbits

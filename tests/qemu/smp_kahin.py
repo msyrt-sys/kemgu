@@ -16,7 +16,7 @@ from dalga12_kahin import Console, Qmp, boot
 
 
 @contextmanager
-def acilis(w, imaj, adet):
+def acilis(w, imaj, adet, topoloji=None):
     w.mkdir(parents=True, exist_ok=True)
     qmp = w / "qmp.sock"
     seri = w / "seri.log"
@@ -32,7 +32,7 @@ def acilis(w, imaj, adet):
         "-accel",
         "tcg,thread=multi",
         "-smp",
-        str(adet),
+        topoloji or str(adet),
         "-m",
         "256M",
         "-display",
@@ -331,6 +331,59 @@ def kilit(q, p, seri, w, sim, adet, tekrar, sure):
           f"host süre={time.monotonic()-bas:.3f} sn", flush=True)
 
 
+def ipi(q, p, seri, w, sim, adet):
+    def durum():
+        adres = sayac(q, w, sim["smp_ipi_olcum"])
+        if not adres:
+            return None
+        h = bellek(q, w, adres, 128)
+        n, sira, bitti, tsc_ms = struct.unpack_from("<4Q", h)
+        hatalar = struct.unpack_from(f"<{adet}q", h, 64)
+        assert not any(hatalar), ("IPI teslim", sira, hatalar)
+        return adres, n, sira, bitti, tsc_ms
+
+    adres, n, sira, bitti, tsc_ms = bekle(
+        "her gönderici ve hedefin bin onayı", durum, lambda a: a and a[3] == 1,
+        sure=60, aralik=.05, surec=p)
+    assert n == sira == adet and bitti == 1 and tsc_ms > 0
+    veri = bekle("IPI seri özeti", lambda: seri_oku(seri),
+                 lambda s: re.search(rb"^SMP_IPI ([0-9a-fA-F]+) ([0-9a-fA-F]+)$", s, re.MULTILINE),
+                 sure=3, surec=p)
+    ozet, = re.findall(rb"^SMP_IPI ([0-9a-fA-F]+) ([0-9a-fA-F]+)$", veri, re.MULTILINE)
+    assert tuple(int(s, 16) for s in ozet) == (adres, n)
+    kayit = sayac(q, w, sim["smp_ap_kayitlari"])
+    for hedef in range(n):
+        kutu = sayac(q, w, kayit + hedef * 64 + 56)
+        assert kutu == kayit + n * 64 + hedef * 128
+        hucre = struct.unpack("<9Q", bellek(q, w, kutu, 72))
+        adet_beklenen = n*1000+1+int(hedef == 1)+int(hedef != 0)
+        assert hucre[0] == 0 and hucre[1] == hucre[6] == adet_beklenen, (hedef, hucre)
+        if hedef == 1:
+            hedef_veri = sayac(q, w, kayit + 64 + 48)
+            assert 0 < sayac(q, w, adres + 32) <= sayac(q, w, hedef_veri + 16)
+        assert hucre[7:9] == (1, int(hedef != 0)), (hedef, hucre)
+        if hedef:
+            def durus(cpu=hedef):
+                return q.call("human-monitor-command", {"command-line": "info registers", "cpu-index": cpu})
+            r = bekle("durdur IPI ardından CLI/HLT", durus, lambda r: "HLT=1" in r, sure=3, surec=p)
+            assert not yazmac(r, "RFL") & 512 and hucre[3] == 82
+    olcum = bellek(q, w, adres + 256, n*n*16000)
+    sureler = []
+    for gonderen in range(n):
+        for hedef in range(n):
+            for i in range(1000):
+                sonuc, cevrim = struct.unpack_from("<2Q", olcum, ((gonderen*n+hedef)*1000+i)*16)
+                assert sonuc == ((hedef+1)<<48 | gonderen<<32 | i+1), (gonderen, hedef, i, sonuc)
+                assert cevrim > 0
+                sureler.append(cevrim)
+    sureler.sort()
+    def yuzdelik(yuzde):
+        return sureler[(len(sureler)*yuzde+99)//100-1]*1000/tsc_ms
+    print(f"IPI {n} vCPU: {len(sureler)} çağrı, {n*n} sıralı çift, kayıp 0, "
+          f"gidiş-dönüş medyan={yuzdelik(50):.3f} µs, p99={yuzdelik(99):.3f} µs, "
+          f"TSC/ms={tsc_ms}", flush=True)
+
+
 def gs_kabuk(dizin):
     from surec_imaj import imajlar
 
@@ -378,7 +431,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("dizin", type=Path)
     ap.add_argument(
-        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit")
+        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit", "ipi")
     )
     ap.add_argument("--adet", nargs="+", type=int, default=None)
     ap.add_argument("--tekrar", type=int, default=1000000)
@@ -392,14 +445,20 @@ def main():
             kabuk(dizin)
         return
     sim = semboller(dizin / "k.elf")
-    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8]}[a.kip]:
+    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8], "ipi": [4, 6]}[a.kip]:
         w = dizin / f"{a.kip}-{adet}"
-        with acilis(w, dizin / "pc.img", adet) as (q, p, seri):
+        topoloji = "6,sockets=2,cores=3,threads=1" if a.kip == "ipi" and adet == 6 else None
+        with acilis(w, dizin / "pc.img", adet, topoloji) as (q, p, seri):
+            if topoloji:
+                ids, _ = cpu_listesi(q, adet)
+                assert sorted(ids) != list(range(adet)), ("seyrek APIC kimlikleri", ids)
             kesif(q, p, seri, w, sim, adet)
             if a.kip == "ap":
                 ap_baslatma(q, seri, w, sim, adet)
             elif a.kip == "tik":
                 tik(q, p, seri, w, sim, adet)
+            elif a.kip == "ipi":
+                ipi(q, p, seri, w, sim, adet)
             elif a.kip == "kilit":
                 kilit(q, p, seri, w, sim, adet, a.tekrar, a.sure)
 

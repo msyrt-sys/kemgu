@@ -177,3 +177,9 @@ AP saatleri kaldırılınca sayaçlar 159/0/0/0, kapı rc=1. BSP TSS adayı öze
 C ve self-host FIFO modelinde 100.000 geçiş, QEMU'da dört ve sekiz çekirdeğin her birinden bir milyon kilitli artış geçti. Dolu ve boş deneme, iç içe kesme durumu, 32 bit sarma ve biletler QMP ile doğrulandı. Sekiz vCPU tüm deney boyunca aynı anda yarıştığında C sayacı da 8.000.000 oldu (378,842 sn). Düzenli kapıda ilk 8.192 artış bütün çekirdeklerde, kalanlar ikili gruplarda gerçekleşti. Kilit kapısı son `-j10` ölçümünde 22,612 sn. TCG zamanlaması ve C18-001 yerleşik ad çakışması bulgu dosyasında.
 
 Sayısal kontrolde kilit kaldırılınca 2.494.650 artış kaldı. Atomik önek kaldırılınca sayaç durdu (rc=1). 20→10 edinme gerçek hata ayıklama imajında panik verdi. Modelin FIFO denetimi kaldırılınca C ikilisi 4 döndü. Regresyonda PVH COM1 FIFO ve S5 beklemesi düzeltildi. Ekran kâhini hızlandırıldı ve eski görüntülerle her piksel karşılaştırıldı. §7'nin tamamı, iki sans-IO kapısı, ChatGPT köprüsü, seçici, paylaşım ve tip kontrolü son koşumda 319 sn, make/tee rc=0. Bölüm süresi 38 dk 28 sn.
+
+## Bölüm 13 — işlemciler arası kesmeler
+
+80/81/82 vektörleri, açılışta fiziksel RAM'den ayrılan çekirdek başı kutu, tek hedefe ve diğer çekirdeklere yayın, süreli onay ve dolu kutu hatası eklendi. Her derleyicide 4 vCPU ile 16.000, seyrek kimlikli 6 vCPU ile 36.000 çağrı sıralı ve eksiksiz ölçüldü. QMP tüm dönüşleri, hedeflerin sayaçlarını, yerel tıkı ve durdurulan AP'lerde IF=0/HLT=1 durumunu okudu. Son kapıda gidiş-dönüş medyanı 8,158–9,490 µs, p99 29,372–32,935 µs. ARM host üzerinde x86 TCG ölçümüdür.
+
+EOI atlanınca sonraki teslim süre aşımı −4 ile kırmızı. Hedefe mantıksal numara gönderilince ardışık kimliklerde **sessiz**, 0,1,2,4,5,6 kimliklerinde kırmızı. §7, tip kontrolü, SMP tık/kilit ve IPI kapıları toplam 419 sn, make/tee rc=0. Bölüm süresi 13 dk 15 sn.
