@@ -13,6 +13,11 @@ Ana hedefler:
 - **Güvenlik:** Buffer overflow, null pointer, use-after-free dil tasarımı seviyesinde imkansız
 - **Çökmezlik:** Exception yok (`sonuç<T,H>`), null yok (`seçimlik<T>`)
 - **Hız:** GC yok, bölge tabanlı bellek modeli (region-based, zero-pause)
+  - ⚠ **[D-780 KARARI, henüz UYGULANMADI]** E4k-A devreye girince bu ilke şöyle yazılacak:
+    *arka plan GC'si ve öngörülemeyen duraklama yok; ömür boyu döngülerde, derleyicinin
+    seçtiği güvenli noktada, tipten üretilmiş bölge tahliyesi var* (duraklama canlı durumla
+    orantılı, boşta sıfır). O güne kadar yukarıdaki ifade doğrudur. Ayrıntı:
+    `belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md` §7–§9.
 - **Taşınabilirlik:** x86_64 ve ARM64 (DGX Spark, Android) hedefleri
 
 ---
@@ -223,7 +228,8 @@ Exception: YOK — sonuç<T,H> ile tamam/hata
 
 ### Bellek Modeli
 ```
-- Bölge tabanlı (region-based), GC yok
+- Bölge tabanlı (region-based), GC yok (⚠ D-780: ömür boyu döngüler için tahliye
+  kararlaştırıldı, henüz yok — yukarıdaki "Hız" maddesine bak)
 - Compiler bölgeleri otomatik çıkarsar (programcı annotation yazmaz)
 - & güvenli referans (her yerde), * ham pointer (sadece güvensiz blokta)
 - Bileşik tipler otomatik referansla aktarılır
