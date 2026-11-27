@@ -12,28 +12,32 @@ YOL = re.compile(rf"\bkullan\b{ARA}({AD}(?:{ARA}::{ARA}{AD})*)", re.DOTALL)
 YORUM = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 
+def dogrudan_moduller(kaynak, kok):
+    for es in YOL.finditer(kaynak.read_text(encoding="utf-8")):
+        adlar = re.findall(AD, YORUM.sub("", es[1]))
+        # Eski çıplak içe aktarmalarda son bileşen bir üye de olabilir.
+        for son in range(1, len(adlar) + 1):
+            bagil = Path(*adlar[:son]).with_suffix(".kem")
+            for dizin in (kaynak.parent, kok, kok / "kütüphane"):
+                aday = dizin / bagil
+                if aday.is_file():
+                    yield bagil, aday
+                    break
+
+
 def modul_ozeti(giris):
     ozet = hashlib.sha256()
     sirada = [giris]
     gorulen = {giris.resolve()}
     while sirada:
         kaynak = sirada.pop()
-        for es in YOL.finditer(kaynak.read_text(encoding="utf-8")):
-            adlar = re.findall(AD, YORUM.sub("", es[1]))
-            # Eski çıplak içe aktarmalarda son bileşen bir üye de olabilir.
-            for son in range(1, len(adlar) + 1):
-                bagil = Path(*adlar[:son]).with_suffix(".kem")
-                for kok in (kaynak.parent, Path("."), Path("kütüphane")):
-                    aday = kok / bagil
-                    if not aday.is_file():
-                        continue
-                    yol = aday.resolve()
-                    if yol not in gorulen:
-                        gorulen.add(yol)
-                        sirada.append(aday)
-                        ozet.update(bagil.as_posix().encode("utf-8") + b"\0")
-                        ozet.update(hashlib.sha256(aday.read_bytes()).digest())
-                    break
+        for bagil, aday in dogrudan_moduller(kaynak, Path(".")):
+            yol = aday.resolve()
+            if yol not in gorulen:
+                gorulen.add(yol)
+                sirada.append(aday)
+                ozet.update(bagil.as_posix().encode("utf-8") + b"\0")
+                ozet.update(hashlib.sha256(aday.read_bytes()).digest())
     return ozet.hexdigest()
 
 

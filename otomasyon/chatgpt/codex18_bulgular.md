@@ -1058,3 +1058,75 @@ GNU make'in çözdüğü hedefler (isteğe bağlılar ve desen kuralları dahil)
 | j20-iki | 15 | 27 | 1 | 23.53 |
 | j10 | 23 | 17 | 1 | 9.84 |
 | seri | 288 | 2 | 17 | 1.13 |
+
+## Bölüm 7 — değişikliğe göre kapı seçimi
+
+`test_secili` tabana göre çalışma ağacındaki, indeksteki ve izlenmeyen dosyaları okur. Yeniden adlandırma silme ve ekleme olarak değerlendirilir. Eşleme bulunmazsa sonuç `test_tumu` olur. Her yol için eşleşen desen basılır. Sürücü kuralı uygulanacaksa izlenen tablo, güncel kaynaklardan üretilen satırlarla karşılaştırılır. Fark varsa tam takım seçilir. Açık bir taban Git tarafından çözülemezse işlem hatayla sona erer.
+
+Sürücü eşlemesi GNU make tarifleri ve önkoşullarından kabuk/Python girişlerini bulur. Doğrudan derlenen kaynakları, dosya desenlerini ve KEMGU `kullan` yollarını transitif olarak izler. Tablo yalnız `test_tumu` içinde erişilen kapıları içerir. Çalışma anında dal seçen ortak harness'lar için bütün olası kaynaklar kapsandığından bir sürücü satırı fazladan kapı seçebilir. Çekirdek önbelleğiyle aynı içe aktarma çözümü kullanılıyor. Önceki ve yeni modül özetleri 24 gerçek çekirdek ve qtest girdisinde aynı çıktı. GNU make'in Windows değişkenleri ve QEMU/OVMF önkoşulu kapalıyken üretilen tablo da aynı çıktı. Bu karşılaştırma Linux üzerinde yapıldı.
+
+| Sürücü alanı | Seçilen kapı |
+|---|---:|
+| acilis | 78 |
+| acpi | 80 |
+| ag | 80 |
+| ahci | 82 |
+| bellek | 78 |
+| blok | 84 |
+| disk | 81 |
+| duzenle | 58 |
+| ekran | 86 |
+| elf | 79 |
+| fs | 85 |
+| girdi | 76 |
+| nvme | 82 |
+| ortak | 94 |
+| pci | 79 |
+| ps2 | 79 |
+| sim | 1 |
+| usb | 82 |
+| uygulama | 59 |
+| virtio | 3 |
+| zaman | 81 |
+
+Genel belgeler için JSON belge/ölçüm kapısı ve gerçek konukta program örneğini ve kabuk komutlarını ölçen `belge15` koşar. Dil kartı için köprü, gramer için anahtar kelime kapısı, ABI tablosu için doğrudan ya da soket senaryosunda ABI denetimini çağıran dört kapı eklenir.
+
+**Geriye dönük ölçüm.** Dalın Bölüm 6 sonundaki 30 commit'i ilk ebeveynine göre karşılaştırıldı. Her commit'in kendi Git arşivinden Make önkoşulları ve kaynak tüketicileri okundu. Korunan ortak yapım girdilerinde o sürümün bütün QEMU kapıları gerekli sayıldı. Diğer yollarda gerekli kapılar, değişen kaynağı kullanan QEMU hedefleriyle kesişimden hesaplandı. 26 tam takım ve dört belge seçimi vardı. Bu aralıkta yalnız sürücü değiştiren gerçek commit yoktu. Beş sürücü alanı için bağımsız sabit beklentiler ayrıca kapıda denendi.
+
+| Commit | Dosya | Seçim | Değişikliğe bağlı QEMU kapısı | Eksik |
+|---|---:|---|---:|---:|
+| 0cbdefd7 | 29 | tam takım | 98 | 0 |
+| eec055b6 | 39 | tam takım | 98 | 0 |
+| b0d09eef | 11 | tam takım | 98 | 0 |
+| be1cd2c8 | 20 | tam takım | 71 | 0 |
+| 2ce7ef0f | 74 | tam takım | 77 | 0 |
+| abf1265f | 9 | tam takım | 77 | 0 |
+| 0ce56bf1 | 9 | tam takım | 77 | 0 |
+| 21a75819 | 1 | calistir_belge_kapisi calistir_bm_x86_belge15 | 0 | 0 |
+| 56177d1e | 1 | tam takım | 27 | 0 |
+| 37639955 | 2 | calistir_belge_kapisi calistir_bm_x86_belge15 | 0 | 0 |
+| 14fc95c2 | 3 | tam takım | 77 | 0 |
+| e6696869 | 2 | tam takım | 77 | 0 |
+| 54f80372 | 1 | calistir_belge_kapisi calistir_bm_x86_belge15 | 0 | 0 |
+| 7bd36a30 | 1 | calistir_belge_kapisi calistir_bm_x86_belge15 | 0 | 0 |
+| 9070ec70 | 3 | tam takım | 77 | 0 |
+| cdf62656 | 3 | tam takım | 77 | 0 |
+| 38ffa38a | 124 | tam takım | 76 | 0 |
+| 9c961b60 | 3 | tam takım | 47 | 0 |
+| bd8e3b69 | 2 | tam takım | 76 | 0 |
+| a574aa68 | 12 | tam takım | 76 | 0 |
+| 4952ce15 | 10 | tam takım | 76 | 0 |
+| 463a7348 | 16 | tam takım | 59 | 0 |
+| b2acc00c | 10 | tam takım | 55 | 0 |
+| 325dadbd | 10 | tam takım | 55 | 0 |
+| 747df15d | 11 | tam takım | 76 | 0 |
+| 7fa52376 | 12 | tam takım | 74 | 0 |
+| 4b017441 | 13 | tam takım | 73 | 0 |
+| 31e27dd7 | 14 | tam takım | 72 | 0 |
+| 65674dfe | 19 | tam takım | 71 | 0 |
+| 0cb5a22e | 13 | tam takım | 70 | 0 |
+30 commit, 0 eksik QEMU kapısı.
+
+**Eksik satır deneyi.** `drivers/sim/*` satırı gerçekten silindi. Seçici `drivers/sim/kabuk.kem` için tam takıma döndü. Sabit beklenti olan `calistir_chatgpt_kopru` tek başına seçilmediği için `calistir_kapi_secici` make rc=2 verdi. Satır geri konunca aynı kapı 1 sn içinde geçti. Git fikstürü ayrıca temiz ağaç, silinen dosya, izlenmeyen dosya ve adında boşluk ve Türkçe harf olan yeniden adlandırmayı denetler.
+
+Gerçek Make girişinde özel Git indekslerinden üretilen iki karşılaştırma ağacı kullanıldı. Yalnız LOOP.md farkında iki belge kapısı 72 sn, yalnız sim sürücüsü farkında köprü kapısı 151 sn sürdü. İkisi de make/tee rc=0. §7 kapıları ve paylaşım/seçim denetimleri 317 sn, make/tee rc=0.

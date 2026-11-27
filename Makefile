@@ -5410,3 +5410,13 @@ calistir_paylasim_denetimi:
 test_tumu: calistir_kapi_kapsam
 calistir_kapi_kapsam:
 	@python3 tools/kapi/kapsam_listesi.py
+
+.PHONY: test_secili calistir_kapi_secici
+TABAN ?= origin/main
+test_secili: export TABAN := $(TABAN)
+test_secili:
+	@python3 tools/kapi/kapi_secici.py --calistir
+
+test_tumu: calistir_kapi_secici
+calistir_kapi_secici:
+	@python3 tools/kapi/secici_ornekleri.py

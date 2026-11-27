@@ -124,6 +124,7 @@ calistir_json_test	60	host
 calistir_kanal_omru	60	host
 calistir_kapi_butcesi	60	host
 calistir_kapi_kapsam	60	host
+calistir_kapi_secici	60	host
 calistir_kdl_bolge_test	60	host
 calistir_kem_malloc_kompozisyon	60	host
 calistir_kem_os_arm	60	qemu-arm

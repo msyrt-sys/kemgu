@@ -117,3 +117,9 @@ Paylaşım denetimi 428 sabit kaynak ailesini ve 1.283 sahiplik kaydını tarad�
 Aynı çalışma dizini verilen iki gerçek kapıyı statik denetim adlarıyla bildirdi. Aynı değişiklikle paralel koşumda parser 2/15, checker 311/321, make rc=2. Özel dizinler geri gelince 15/15 ve 321/321 geçti. Altı qtest aygıtı, iki derleyici ve 24 ayrı TCP dinleyicisiyle ek koşumlar geçti.
 
 Streste QMP'nin dinlemeye başlaması, 100 çocuğun PID ilerlemesi ve iki host eşzamanlılık gözlemcisi düzeltildi. Son ağaçta arka arkaya iki tam `-j20` koşumu 14 dk 59 sn ve 15 dk 10 sn, ikisinde de make/tee rc=0. Ölçümlü `-j10` koşumu 23 dk 24 sn, make/tee rc=0. 170 kapı içinde en uzunu 8 dk 41 sn. Ölçüm sonunda geride kalan koşum dizini 0. Tek işli tam koşum 4 sa 48 dk 11 sn, make/tee rc=0. §7 ek x86 çekirdek ve ARM DTB kapıları 55 sn sürdü. Üç isteğe bağlı DTB deneyi ilk koşumda sistemde dtc bulunmadığı için atlandı. Çalışma dizininde dtc 1.7.0 ile yinelenen gerçek ARM kapısı, hücre genişliği/GIC adı, 2 GiB bellek ve aygıt adres çevirisini 129 sn içinde doğruladı. Bölüm süresi 6 sa 46 dk.
+
+## Bölüm 7 — değişen dosyalardan kapı seçimi
+
+21 sürücü alanı için tablo Make tariflerinden, harness girdilerinden ve KEMGU içe aktarmalarından üretiliyor. Eşlenmeyen dosya tam takımı seçiyor. Son 30 commit kendi kaynaklarıyla denetlendi. 26 tam takım, dört belge seçimi, eksik QEMU kapısı 0. Yalnız sürücü değiştiren commit bu aralıkta yoktu. Beş sürücü alanını ayrıca sabit örneklerle ölçtük.
+
+Gerçek `make test_secili` girişinde yalnız `LOOP.md` farkı iki kapı seçti (72 sn), yalnız `drivers/sim/kabuk.kem` farkı tek köprü kapısı seçti (151 sn), ikisi de rc=0. Sürücü satırını silme deneyinde seçici tam takıma düştü, seçim denetimi beklenen tek kapının eksikliğini bildirdi (make rc=2). Satır geri gelince kapı yeşil. §7 ortak x86 kapıları, paylaşım denetimi ve yeni seçici birlikte 317 sn, make/tee rc=0. Bölüm süresi 10 dk 49 sn.
