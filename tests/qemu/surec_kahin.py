@@ -291,14 +291,17 @@ def tekrar_kos(c, exe, bos):
         print(f"SMP tek vCPU: boş={bos}, ELF={sayfa} sayfa, toplam={bos+sayfa}, "
               f"kabuk heap={once}/{sonra}, süreç artışı={surec_artisi}", flush=True)
         assert bos + sayfa == 53132, (bos, sayfa)
-        # D-772'nin taban koşumlarında ve aynı kullanıcı imajıyla tekrarında ölçülen çiftler.
-        taban = {
-            "kemgu": {(4788464, 5247552)},
-            "codegen": {(5050928, 5510016), (5116512, 5510016),
-                        (5116512, 5575600), (5182096, 5575600)},
-        }
+        # [D-784] Kesin (önce, sonra) çiftleri D-772 ayırıcısına göre ölçülmüştü (C 4788464/5247552;
+        # self-host dört çift, 5,05-5,18 MB → zamanlamaya bağlı ±1 blok oynuyordu). D-777 (yerinde
+        # uzatma) ve D-778 (dar eleman) sonrası aynı senaryo C 2820848/2886432, self-host
+        # 3083312/3148896 verdi; 50 tekrardaki büyüme ~6-7 bloktan 1 bloğa indi. Kesin çift
+        # sabitlemek hem bu meşru iyileşmeyi hem zamanlama oynamasını kırmızı sayar; korunan
+        # özellik iki sınırdır: süreç turları kabuk heap'ini en çok iki bölge bloğu büyütür ve
+        # açılıştaki taban 4 MB'ı aşmaz (D-778'in geri alınması tabanı ~4,8 MB'a çıkarır).
         derleyici = Path(os.environ["SUREC_KAHIN_DERLEYICI"]).stem
-        assert (once, sonra) in taban[derleyici], (derleyici, once, sonra)
+        blok = 65584
+        assert sonra - once <= 2 * blok, (derleyici, once, sonra, "50 tekrarda kabuk heap'i iki bloktan fazla büyüdü")
+        assert once <= 4 * 1024 * 1024, (derleyici, once, "açılış heap tabanı 4 MB'ı aştı")
         assert surec_artisi == 0
     print(f"✓ 50 tekrar: {bos} boş çerçeve; süreç heap +{surec_artisi}; kabuk heap {once} → {sonra} bayt", flush=True)
 
