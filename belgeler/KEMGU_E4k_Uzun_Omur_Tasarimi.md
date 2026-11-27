@@ -255,8 +255,12 @@ Komutlar: `bagla --yazilabilir`, `cd`, `mkdir`, `cd`, `yaz`, `cp`, `mv`, `cat`, 
 - **Ölçülmeyen:** `metin` ve dizi dışı yapı tahsislerinin canlı baytı. 117 bölge içi işaretçi
   bunları gösteriyor; çoğunun kısa ad/yol metni olması beklenir ama bu ÖLÇÜLMEDİ. Taşıma maliyeti
   tahmini bu yüzden bir alt sınırdır.
-- **Çıkarım:** tahliye başına kopyalanacak canlı veri birkaç yüz KB'tır; eşik tetikli tahliye
-  ucuzdur. A **uygulanabilir**.
+- **Canlının kaynağı (ikinci koşum, `scratchpad/a0_buyume.py`):** 9 komuttan sonra canlı 147 başlık
+  (163.584 B) var. Bunların **56'sı (131.520 B) açılıştan** geliyor ve A bunları taşımaz (ana bölge).
+  **Döngüde oluşan canlı yalnız 91 başlık, 32.064 B.** Tahliye başına KOPYALANACAK dizi verisi bu
+  kadardır (+ ölçülmemiş metin); açılış verisi yalnız izlenir.
+- **Çıkarım:** tahliye başına kopyalanacak canlı veri onlarca KB, izlenecek canlı veri birkaç yüz
+  KB'tır; eşik tetikli tahliye ucuzdur. A **uygulanabilir**.
 
 ### A0-4 Yol üstü bulgu: metin runtime'ı bölgeyi yok sayıyor
 `metin` üreten yerleşikler çağıranın bölgesini **almıyor**, doğrudan ana (küresel) bölgeye tahsis
@@ -292,10 +296,14 @@ A bunlara dokunmadan uygulanırsa **metin çöpü sızmaya devam eder**. Bu, A2'
   olur.
 - **R dışındaki nesneler asla taşınmaz.** Ana bölgedeki açılış verisinin adresi bir tamsayıda
   gizli olabilir (§8 A0-2, `uefi_surec_ayirici`); onu taşımak sessizce bozardı.
-- **Açık soru (A2'de ölçülecek).** Döngüden önce oluşturulmuş bir dizi, döngüde büyürse yeni
-  tamponunu kendi bölgesinden (ana bölge, D-770) alır ve büyüme artığı orada kalır. Seçenek: böyle
-  bir dizinin yeni tamponu R'den alınır. Başlık yerinde kalır, tampon taşınabilir olur; başlığın
-  `bolge` alanı tahliyede R'den yeni bölge R' değerine güncellenir. Bu dizilerin payı ölçülmeden karar verilmeyecek.
+- **Döngü öncesi dizinin büyümesi — ÖLÇÜLDÜ, bugün sorun değil.** Döngüden önce oluşturulmuş bir
+  dizi döngüde büyürse yeni tamponunu kendi bölgesinden (ana bölge, D-770) alır ve büyüme artığı
+  orada kalır; A bunu toplamaz. Ölçüm (`a0_buyume.py`): açılıştaki 1712 dizi başlığının **hiçbirinin**
+  tamponu 9 dosya komutu boyunca yeniden tahsis edilmedi (aynı adresteki başlığın `veri`
+  işaretçisi değişmedi; ana bölge boşaltılmadığı için adres yeniden kullanılmaz). Bu yüzden basit
+  tasarım yeterli: döngü öncesi dizi kendi bölgesinden büyümeye devam eder. Bir gün gerekirse:
+  böyle bir dizinin yeni tamponu R'den alınır, başlık yerinde kalır, `bolge` alanı tahliyede R'den
+  yeni bölge R' değerine güncellenir. A2 kapısı bu ölçümü tekrarlamalı (sınıf sessizce büyümesin).
 
 ### 9.2 Döngü çıkışı
 Döngüden `ver` ile (ör. `ver hata(...)`) çıkılırsa R serbest bırakılmaz. Dönen değer R'yi

@@ -3403,5 +3403,9 @@
   baytlarının %83'ü çöp. metin ve dizi dışı yapıların canlı baytı ÖLÇÜLMEDİ (117 bölge içi dizi-dışı işaretçi).
   A0-4 metin runtime'ı %rho'yu yok sayıyor: çekirdekte 4 işlev (kdl_metin_birlestir/_kes, kdl_kod_metin,
   kdl_tam_metin), host'ta kdl_sizan_al üzerinden 14 işlev doğrudan ana bölgeye → A2 ön koşulu (%rho parametresi).
+  İKİNCİ KOŞUM (a0_buyume.py): açılıştaki 1712 dizi başlığının HİÇBİRİNİN tamponu 9 komutta yeniden tahsis
+  edilmedi (döngü öncesi dizinin büyüme artığı bugün sınıf değil); komut sonrası canlı 147 başlık / 163.584 B'ın
+  56'sı (131.520 B) açılıştan (A taşımaz), döngüde oluşan canlı yalnız 91 başlık / 32.064 B → tahliye başına
+  kopyalanacak dizi verisi onlarca KB.
   ⚠ ÖLÇÜM DERSİ: ilk tarama yalnız doğrudan dönüşümü saydı ve 'gizli adres riski yapısal olarak yok' sonucunu
   verdi; siteleri okumak düzeltti (D-500). Kod değişikliği YOK; ölçüm araçları scratchpad'de kaldı.
