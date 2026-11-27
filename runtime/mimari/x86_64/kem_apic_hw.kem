@@ -188,7 +188,7 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   güvensiz { eğer uefi_surec_ayirici != 0 ve smp_birden_cok {
    eşleş smp_baslat(b,m) { hata(e) => { ver hata(e); } tamam(v) => {} }
   } }
-  bm_yaz("APIC_HAZIR");ver tamam(doğru);
+  bm_yaz("APIC_HAZIR"); güvensiz { eğer smp_cevrimici > 1 { smp_acilis_dene(0); } } ver tamam(doğru);
  } }
 }
 
@@ -364,6 +364,27 @@ movq (%rsp), %rsp"#
     kem_mmio_yaz32(a+896,smp_lapic_periyodu);
 }
 
+küresel değişken smp_deney_alani: tam64=0;
+çıplak işlev smp_deney_var() -> mantıksal {
+    değişken adr:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"subq $$128,%rsp
+call kem_ap_deney_adresi
+addq $$128,%rsp"# çıktı("={ax}",&adr) bozulan("~{memory}") bozulan("~{cc}") } }
+    ver adr!=0;
+}
+// İsteğe bağlı bağlanmış açılış deneyi. Olağan imajda zayıf sembol sıfırdır.
+çıplak işlev smp_acilis_dene(no: tam32) {
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $0, %edi
+movq %rsp, %r11
+subq $$128, %rsp
+andq $$-16, %rsp
+subq $$16, %rsp
+movq %r11, (%rsp)
+call kem_ap_acilis_dene
+movq (%rsp), %rsp"# girdi("r",no) bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rdi}") bozulan("~{rsi}")
+     bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{memory}") bozulan("~{cc}") } }
+}
+
 // Kayıt yayımlanmadan BSP bu parametreleri başka AP için kullanamaz.
 // Yalnız ilgili AP kendi kaydını yazar. Tablolar kurulduktan sonra IRQ açılır.
 çıplak işlev kem_ap_giris(no: tam32) {
@@ -383,6 +404,7 @@ movq (%rsp), %rsp"#
         kem_mmio_yaz64(k+40,id);
         kem_mmio_yaz64(k,1);
         kz_irq_ac();
+        smp_acilis_dene(no);
     }
     iken doğru { güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } } }
 }
@@ -398,6 +420,12 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
         değişken kayit: tam64 = uefi_surec_ayir((n*64+4095)/4096);
         eğer kayit == 0 { ver hata("AP kayitlari icin RAM yok"); }
         memset(kayit olarak *tam8,0,(n olarak tam64)*64);
+        eğer smp_deney_var() {
+            değişken sayfa_sayisi:tam32=(256+n*64+4095)/4096;
+            smp_deney_alani=uefi_surec_ayir(sayfa_sayisi);
+            eğer smp_deney_alani==0 { ver hata("SMP deney bellegi yok"); }
+            memset(smp_deney_alani olarak *tam8,0,(sayfa_sayisi olarak tam64)*4096);
+        }
         smp_ap_kayitlari = kayit;
         kem_mmio_yaz64(kayit+48,smp_bsp_verisi());
         kap_dok("SMP_SAYFA",sayfa,kem_pvh_bilgi(),cr3);

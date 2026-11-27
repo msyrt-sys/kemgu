@@ -6,6 +6,7 @@ import re
 import shutil
 import struct
 import subprocess
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -288,6 +289,48 @@ def tik(q, p, seri, w, sim, adet):
     )
 
 
+def kilit(q, p, seri, w, sim, adet, tekrar, sure):
+    bas = time.monotonic()
+    son_toplam, son_ilerleme = -1, bas
+
+    def durum():
+        nonlocal son_toplam, son_ilerleme
+        seri_sonu = seri_oku(seri)[-800:]
+        adr = sayac(q, w, sim["smp_kilit_alan"])
+        if not adr:
+            return seri_sonu, None
+        h = bellek(q, w, adr, 160)
+        bilet = struct.unpack_from("<II", h)
+        durum = struct.unpack_from("<4Q", h, 128)
+        if durum[2] and not durum[3]:
+            if durum[0] != son_toplam:
+                son_toplam, son_ilerleme = durum[0], time.monotonic()
+            elif time.monotonic() - son_ilerleme > 35:
+                raise AssertionError(("35 sn boyunca kilit sayacı ilerlemedi", bilet, durum))
+        return seri_sonu, (bilet, durum)
+
+    desen = rb"^SMP_KILIT ([a-fA-F0-9]+) ([a-fA-F0-9]+) ([a-fA-F0-9]+)$"
+    veri, _ = bekle("bütün çekirdeklerin bilet stresi", durum,
+                    lambda v: re.search(desen, v[0], re.MULTILINE) or b"KILIT TERS SIRA" in v[0] or b"\nPANIK " in v[0] or b"\nISTISNA tip=" in v[0],
+                    sure=sure, aralik=.5, surec=p)
+    es = re.search(desen, veri, re.MULTILINE)
+    assert es, veri[-800:]
+    adr, n, toplam = (int(x, 16) for x in es.groups())
+    assert sayac(q, w, sim["smp_kilit_alan"]) == adr
+    ham = bellek(q, w, adr, 256 + adet * 64)
+    sonraki, sunulan = struct.unpack_from("<II", ham)
+    biten = [struct.unpack_from("<3Q", ham, 256 + i * 64) for i in range(adet)]
+    gercek = struct.unpack_from("<Q", ham, 128)[0]
+    assert n == adet and toplam == gercek == adet * tekrar, (n, toplam, gercek, adet, tekrar)
+    assert biten == [(1, tekrar, 8192)] * adet, biten
+    assert sonraki == sunulan == toplam + 3 and struct.unpack_from("<Q", ham, 16)[0] == 0
+    kayit = sayac(q, w, sim["smp_ap_kayitlari"])
+    beklemeler = [sayac(q, w, sayac(q, w, kayit + 64*i + 48) + 120) for i in range(adet)]
+    assert sum(beklemeler) > 0, beklemeler
+    print(f"SMP kilit {adet}: toplam={gercek}, bilet={sunulan}, çekirdek başı bekleme={beklemeler}, "
+          f"host süre={time.monotonic()-bas:.3f} sn", flush=True)
+
+
 def gs_kabuk(dizin):
     from surec_imaj import imajlar
 
@@ -335,9 +378,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("dizin", type=Path)
     ap.add_argument(
-        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik")
+        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit")
     )
     ap.add_argument("--adet", nargs="+", type=int, default=None)
+    ap.add_argument("--tekrar", type=int, default=1000000)
+    ap.add_argument("--sure", type=int, default=480)
     a = ap.parse_args()
     dizin = a.dizin.resolve()
     if a.kip == "kabuk":
@@ -347,7 +392,7 @@ def main():
             kabuk(dizin)
         return
     sim = semboller(dizin / "k.elf")
-    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4]}[a.kip]:
+    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8]}[a.kip]:
         w = dizin / f"{a.kip}-{adet}"
         with acilis(w, dizin / "pc.img", adet) as (q, p, seri):
             kesif(q, p, seri, w, sim, adet)
@@ -355,6 +400,8 @@ def main():
                 ap_baslatma(q, seri, w, sim, adet)
             elif a.kip == "tik":
                 tik(q, p, seri, w, sim, adet)
+            elif a.kip == "kilit":
+                kilit(q, p, seri, w, sim, adet, a.tekrar, a.sure)
 
 
 if __name__ == "__main__":

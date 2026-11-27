@@ -1,0 +1,41 @@
+kullan drivers::smp::kilit_model::{ BiletModeli, bilet_yeni, bilet_iste, bilet_gir, bilet_birak };
+
+işlev main() -> tam32 {
+    değişken m: BiletModeli = bilet_yeni();
+    değişken bilet: Dizi<tam64> = [-1,-1,-1,-1,-1,-1,-1,-1];
+    değişken sira: Dizi<tam32> = [0,0,0,0,0,0,0,0];
+    değişken tohum: tam64 = 7919;
+    değişken son: tam64 = 0;
+    değişken ilk: tam64 = 0;
+    değişken sahip: tam32 = -1;
+    değişken adim: tam32 = 0;
+    eğer bilet_gir(&değişken m,0,0) veya bilet_birak(&değişken m,-1) { ver 1; }
+    iken adim < 100000 {
+        tohum=(tohum*48271)%2147483647;
+        değişken no: tam32 = ((tohum/256)%8) olarak tam32;
+        değişken b: tam64 = dizi_al(bilet,no);
+        eğer b < 0 {
+            değişken gelen: tam64 = bilet_iste(&değişken m);
+            eğer gelen != son { ver 2; }
+            dizi_yaz(sira,(son%8) olarak tam32,no); dizi_yaz(bilet,no,gelen); son=son+1;
+        } değilse eğer sahip == no {
+            eğer değil bilet_birak(&değişken m,no) { ver 3; }
+            sahip=-1; ilk=ilk+1; dizi_yaz(bilet,no,-1);
+        } değilse {
+            değişken izin: mantıksal = sahip == -1 ve dizi_al(sira,(ilk%8) olarak tam32) == no;
+            eğer bilet_gir(&değişken m,b,no) != izin { ver 4; }
+            eğer izin { sahip=no; }
+        }
+        eğer m.sahip != sahip veya m.sunulan != ilk veya m.sonraki != son veya son-ilk > 8 { ver 5; }
+        adim=adim+1;
+    }
+    // Yeni istek eklemeden kalan her biletin FIFO sırasında bitebildiğini ölç.
+    iken ilk < son {
+        değişken no: tam32 = dizi_al(sira,(ilk%8) olarak tam32);
+        eğer sahip == -1 ve değil bilet_gir(&değişken m,dizi_al(bilet,no),no) { ver 6; }
+        eğer değil bilet_birak(&değişken m,no) { ver 7; }
+        sahip=-1; ilk=ilk+1;
+    }
+    eğer m.sunulan != son veya son < 1000 { ver 8; }
+    yazdir_metin("Bilet modeli: 100000 adim, sekiz cekirdek, tek sahip ve FIFO."); ver 0;
+}

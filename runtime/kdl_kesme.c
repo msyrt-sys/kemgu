@@ -574,6 +574,7 @@ struct CekirdekVeri {
     uint64_t no, apic, tik, surec;
     uint64_t yigin_alt, yigin_ust, tss, gdt, ist[3], cr3;
     uint64_t kullanici_giris, kullanici_gs;
+    uint64_t kilit_sirasi, kilit_beklemeleri;
 };
 struct ApTablolari {
     struct CekirdekVeri veri;
@@ -584,6 +585,8 @@ _Static_assert(__builtin_offsetof(struct CekirdekVeri, tik) == 16, "GS tik");
 _Static_assert(__builtin_offsetof(struct CekirdekVeri, surec) == 24, "GS surec");
 _Static_assert(__builtin_offsetof(struct CekirdekVeri, cr3) == 88, "GS CR3");
 _Static_assert(__builtin_offsetof(struct CekirdekVeri, kullanici_giris) == 96, "GS ring3");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, kilit_sirasi) == 112, "GS kilit sirasi");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, kilit_beklemeleri) == 120, "GS kilit bekleme");
 _Static_assert(sizeof(struct ApTablolari) <= 4096, "AP tablolarinin sayfasi");
 struct CekirdekVeri kdl_cekirdek_bsp __attribute__((aligned(64)));
 

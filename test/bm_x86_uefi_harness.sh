@@ -30,7 +30,7 @@ if [[ -n "$KENDI_W" ]]; then
     calisma_izle "$W"
 fi
 mkdir -p "$W/esp/EFI/BOOT" "$W/esp/KEMGU"
-RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_ps2_hw.kem"
+RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_ps2_hw.kem"
 KAYNAK="${UEFI_KAYNAK:-test/ornekler/kem_os_x86_uefi.kem}"
 case "${KAYNAK##*/}" in
  kem_os_x86_kabuk.kem) RT="$RT runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem test/ornekler/kem_os_x86_vfs_ortak.kem" ;;
@@ -53,6 +53,24 @@ arama = 'değişken k: tam32 = bd_pci_yetenek(bdf,5);'
 assert s.count(arama) == 1
 p.write_text(s.replace(arama, 'değişken k: tam32 = 0;'), encoding='utf-8')
 KEM_MSI
+fi
+# Konuk deneyi yalnız ayrıca bağlanan test görüntüsünde mevcuttur.
+if [[ ${KEMGU_KILIT_DENETIM:-0} == 1 ]]; then
+    python3 - "$W/comb.kem" <<'KEM_KILIT'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text(encoding="utf-8")
+ayar = "sabit KEMGU_KILIT_DENETIM: mantıksal = yanlış;"
+assert s.count(ayar) == 1
+p.write_text(s.replace(ayar, ayar.replace("yanlış", "doğru")), encoding="utf-8")
+KEM_KILIT
+fi
+if [[ -n ${UEFI_SMP_DENEY:-} ]]; then
+    case "$UEFI_SMP_DENEY" in
+        kilit) cat tests/qemu/smp_kilit_konuk.kem >> "$W/comb.kem" ;;
+        *) echo "Bilinmeyen SMP deneyi: $UEFI_SMP_DENEY" >&2; exit 1 ;;
+    esac
 fi
 DERLEYICI="${UEFI_DERLEYICI:-build/kemgu}"
 OBJ=("${BM_BASLANGIC_NESNESI:-build/bm_x86_start.o}" build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o build/bm_x86_panik.o)

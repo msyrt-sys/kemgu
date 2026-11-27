@@ -1223,3 +1223,41 @@ SMP tık 4: GS=['0x2060d80', '0x142000', '0x153000', '0x164000'], tık farkları
 GS ring3 1: kullanıcı tabanı=0, sistem çağrısı=7, BSP tabanı=0x21a4d80
 GS ring3 4: kullanıcı tabanı=0, sistem çağrısı=7, BSP tabanı=0x21a4d80
 ```
+
+## Bölüm 12 — çekirdek bilet kilidi
+
+### C18-001 — yerleşik adla aynı imzayı taşımayan çıplak işlev
+
+Küçük tekrar üretimi aşağıdadır.
+
+```kem
+çıplak işlev kilit_al(k: tam64) { }
+işlev main() -> tam32 { kilit_al(8 olarak tam64); ver 0; }
+```
+
+Bu iki satır `ad.kem` olarak kaydedildiğinde `build/kemgu --check ad.kem` ve `build/kemgu --llvm ad.kem` rc=0 verir. `build/codegen --check ad.kem` rc=0 ile `T001 2 37` yazdı, `build/codegen --llvm ad.kem` aynı tanıyla rc=1 verdi. Self-host'ta metin alan yerleşik `kilit_al` ve `kilit_birak` imzaları var. İki derleyiciyle aynı sonucu almak için çekirdekte `smp_kilit_al` ve `smp_kilit_birak` kullanıldı. Derleyici veya muafiyet listesi değişmedi.
+
+İki derleyicide sekiz istemcili 100.000 geçişli model FIFO kuyruğunu bağımsız sıra ve sahip kaydıyla karşılaştırdı. Bekleyen tüm biletler yeni iş eklenmeden sırasıyla tamamlandı. Donanım kapısında boş/dolu `kilit_dene`, iki 32 bit sayacın sarması ve kesmeler açıkken iç içe IF saklama sınandı.
+
+| Derleyici | vCPU | Ortak sayı (QMP) | Sunulan ve sonraki bilet | Ölçüm (sn) |
+|---|---:|---:|---:|---:|
+| C | 4 | 4.000.000 | 4.000.003 | 1,515 |
+| C | 8 | 8.000.000 | 8.000.003 | 2,524 |
+| Self | 4 | 4.000.000 | 4.000.003 | 1,514 |
+| Self | 8 | 8.000.000 | 8.000.003 | 3,026 |
+
+Her çekirdekten ilk 8.192 artış ortak turda geldi. Kalan artışlarda sıra komşu çiftlere verildi. Kâhin kişi başı bir milyonu ayrıca okudu. Bu düzen `-j10` altında bir bilet sahibinin host zamanlayıcısını beklemesi yüzünden sekiz vCPU'nun birlikte oyalanmasını sınırlar. Ayrı C deneyinde **bütün** tekrarlar boyunca 4/8 çekirdek birlikte yarıştı. Süreler 2,059 ve 378,842 sn, sonuçlar 4.000.000 ve 8.000.000. Sekiz çekirdekte çekişmeli edinimler sırasıyla 999945, 999837, 999958, 998473, 999965, 999945, 999962, 999966. QMP sekiz ayrı TCG iş parçacığını doğruladı. Gerçek x86 işlemcide aynı gecikme veya serpiştirme beklenmez.
+
+Sekiz vCPU'nun yalnız sayı artırma deneyinde kilidi tamamen çıkarınca toplam 2.494.650 oldu (beklenen 8.000.000). Bilet almadan yalnız `lock` önekini çıkaran ayrı imajda biletler 56.409/56.409, toplam 56.412 durumunda en az 35 saniye ilerleme olmadı, kapı rc=1. Hata ayıklama imajında 20→10 edinme seri günlüğe `KILIT TERS SIRA` yazdı, kapı rc=1. Her üçü ayrı imaj ve çalışma dizininde gerçekten uygulandı.
+
+Son iki aşamalı kapıda da atomik önek çıkarıldı. Sekiz vCPU'da biletler 36.780/36.780, artırılan sayı 36.780, bitiş bayrağı 0 iken en az 35 saniye ilerleme olmadı (kâhin rc=1).
+
+PVH ring3 seri giriş kapısında kısa yankı ölçüldü. Aynı imajla 30 tekrarda normal TCG 3, tek iş parçacıklı TCG 2 ve talimat sayımlı kip 2 kez satırı eksik aldı. PVH platform açılışında COM1 alıcı FIFO'su etkinleştirildi. Host dokuz baytı FIFO kurulduktan sonraki ilk blok kanıtı üzerine gönderiyor. FIFO eşiği bir baytken 17. denemede yalnız “K” okundu. Eşik 14 bayt olunca aynı gerçek QEMU düzeninde 30/30 tam yankı, ring3 başarı satırı ve son işaret alındı (13 sn). QEMU 8.2.2 alıcı boşken karakter aygıtına eşiğe kadar boş yer bildirir. [QEMU seri aygıtı](https://github.com/qemu/qemu/blob/v8.2.2/hw/char/serial.c#L519-L537)
+
+Yüklü bir S5 koşumunda PM1 isteği ile QEMU kapanışı arasında port-0x80 yoklama döngüsü sona erdi ve hata dönüşü 1 geldi. Kalibrasyonu olan konukta S5'in 250 ms sınırı PIT ile ölçülmüş TSC'ye bağlandı. İlk önbellek denemesinde iki derleme arasında kaynak değişmişti, ikinci derleme isabet sayılmadı. Çakışan iki ayrı -j10 takımında ayrıca açılış süre aşımı ve kabuk komut/piksel uyuşmazlıkları kaydedildi. Hatalı koşumlar başarı sayısına dahil edilmedi.
+
+UEFI PC regresyonunun bir çalışmasında USB aktarım zaman aşımı geldi. Başka bir çalışmada yedi komut, 70 satır ve son GOP karşılaştırması doğruydu, üçüncü açılışın 60 saniyelik duvar sınırı aşıldı. Aynı eşiği ve ekran denetimlerini korumak için Python ekran modelinde bir karedeki aynı renkli glifleri yeniden kullandık. Tam eşit RGB karelerinde üç kanalı topluca karşılaştırıyoruz. Farklı karede eski yol tüm pikselleri sayıyor ve ilk farklı koordinatı bildiriyor. Eski ve yeni model 640×480, 641×497 ve 1280×800'de boş ekran, Türkçe/kaydırmalı metin ve uzun girdiyle dokuz kez her pikselde aynıydı. Her görüntünün 15 rastgele kanal baytı değiştirildiğinde fark sayısı ve ilk yanlış piksel de eşleşti. 1280×800 model üretimi aynı makinede 155–156 ms'den 2–5 ms'ye indi.
+
+Saat etiketli son `-j10` koşumunda kilit kapısının tarifleri 22,612 sn sürdü. Daha yüklü ayrı `-j10` koşumunda sekiz vCPU sayma süreleri C 173,729 sn ve self-host 100,712 sn idi. O koşumun takım başlangıcı 07:53:00, bitmiş dört ölçümün gözlendiği saat 07:59:06. Tarif bazında saat kaydı bulunmayan bu koşum için kapı süresinin üst sınırı 366 sn. Bütçe bu üst sınırın 1,5 katı, 549 sn.
+
+Saf modelde sıradaki bilet denetimi çıkarıldığında model kâhini C çalıştırmasında 4 verdi (sarmalayıcı rc=1). Yeniden kurulan hata ayıklama imajında ters edinim deneyi de panik ve rc=1 üretti.

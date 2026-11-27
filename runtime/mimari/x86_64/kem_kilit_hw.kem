@@ -1,0 +1,80 @@
+// 32 bayt, en az 8 hizalı. +0 sıradaki bilet, +4 sunulan bilet (32 bit),
+// +8 sıra numarası, +16 sahip no+1 (0 boş), +24 önceki sıra (64 bit).
+sabit KEMGU_KILIT_DENETIM: mantıksal = yanlış;
+
+çıplak işlev kilit_kur(k: tam64, sira: tam64) {
+    kem_mmio_yaz64(k,0);
+    kem_mmio_yaz64(k+8,sira);
+    kem_mmio_yaz64(k+16,0);
+    kem_mmio_yaz64(k+24,0);
+}
+çıplak işlev kilit_yerel_sira() -> tam64 {
+    değişken v: tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %gs:112, $0"# çıktı("=r",&v) bozulan("~{memory}") } }
+    ver v;
+}
+çıplak işlev kilit_sira_yaz(v: tam64) {
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $0, %gs:112"# girdi("r",v) bozulan("~{memory}") } }
+}
+çıplak işlev kilit_sira_denetle(k: tam64) {
+    eğer KEMGU_KILIT_DENETIM ve kem_mmio_oku64(k+8) <= kilit_yerel_sira() { kdl_panik("KILIT TERS SIRA"); }
+}
+çıplak işlev kilit_sahiplen(k: tam64) {
+    kem_mmio_yaz64(k+16,cekirdek_no()+1);
+    eğer KEMGU_KILIT_DENETIM {
+        kem_mmio_yaz64(k+24,kilit_yerel_sira());
+        kilit_sira_yaz(kem_mmio_oku64(k+8));
+    }
+}
+çıplak işlev smp_kilit_al(k: tam64) {
+    kilit_sira_denetle(k);
+    // Kısa kritik bölümde sıradaki sahip ilerleyebilir. Uzayan beklemede PAUSE uygulanır.
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1, %eax
+lock xaddl %eax, ($0)
+cmpl %eax, 4($0)
+je 2f
+incq %gs:120
+1: movl $$1024, %edx
+3: cmpl %eax, 4($0)
+je 2f
+decl %edx
+jnz 3b
+pause
+jmp 1b
+2:"# girdi("r",k) bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+    kilit_sahiplen(k);
+}
+çıplak işlev kilit_dene(k: tam64) -> mantıksal {
+    kilit_sira_denetle(k);
+    değişken oldu: tam32=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl 4($1), %eax
+leal 1(%rax), %edx
+lock cmpxchgl %edx, ($1)
+sete %al
+movzbl %al, $0"# çıktı("=r",&oldu) girdi("r",k) bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+    eğer oldu != 0 { kilit_sahiplen(k); ver doğru; }
+    ver yanlış;
+}
+çıplak işlev smp_kilit_birak(k: tam64) {
+    eğer KEMGU_KILIT_DENETIM {
+        eğer kem_mmio_oku64(k+16) != cekirdek_no()+1 veya kem_mmio_oku64(k+8) != kilit_yerel_sira() {
+            kdl_panik("KILIT SAHIP VEYA SIRA"); ver;
+        }
+        kilit_sira_yaz(kem_mmio_oku64(k+24));
+    }
+    kem_mmio_yaz64(k+16,0);
+    // Sunulan sayacın tek yazarı mevcut sahiptir. x86-TSO yayım sırasını korur.
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"incl 4($0)"# girdi("r",k) bozulan("~{memory}") bozulan("~{cc}") } }
+}
+çıplak işlev kilit_al_kesmesiz(k: tam64) -> tam64 {
+    değişken bayrak: tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+popq $0
+cli"# çıktı("=r",&bayrak) bozulan("~{memory}") } }
+    smp_kilit_al(k);
+    ver bayrak;
+}
+çıplak işlev kilit_birak_kesmesiz(k: tam64, bayrak: tam64) {
+    smp_kilit_birak(k);
+    eğer (bayrak&512) != 0 { kz_irq_ac(); } değilse { kg_irq_kapat(); }
+}

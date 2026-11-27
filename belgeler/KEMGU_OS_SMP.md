@@ -47,6 +47,21 @@ make -j10 --output-sync=target calistir_bm_x86_smp_tik
 
 Kapı dört vCPU'da gerçek GS, GDT, TR ve IDT tabanlarını QMP ile okur. TSS tanımlayıcılarını, on iki IST aralığını ve kanaryaları fiziksel bellekte doğrular. QEMU duraklatılarak alınan iki örnekte BSP en az 150 tık ilerler. AP farklarının BSP farkına göre sapma sınırı %20'dir. Ayrı kabuk senaryosu bir ve dört vCPU'da kullanıcı ELF'sini çalıştırıp sistem çağrısı, kullanıcı GS tabanı ve dönüşten sonraki BSP GS tabanını doğrular.
 
+## Bilet kilidi
+
+Bir kilit en az 8 bayta hizalı 32 bayt kaplar. İlk iki 32 bit sözcük alınacak ve sunulan bilettir. İzleyen üç 64 bit sözcük kilit sırasını, sahibin çekirdek numarası artı biri ve sahibin önceki sırasını tutar. Sahip alanında sıfır boş demektir. Bir çekirdek aynı anda bir bekleyen bilet tutabilir. Bu sınır altında 32 bit sarma, FIFO sırasını korur.
+
+`kilit_kur` kilidi paylaşmadan önce bir kez çağrılır. `smp_kilit_al` atomik `lock xaddl` ile bilet alır. Bilet sunulmadıysa çekirdeğin çekişme sayacını artırıp bekler. Kısa sorgulama döngüsünün her 1.024 başarısız karşılaştırmasında `pause` çalışır. `smp_kilit_birak` önce sahip alanını sıfırlar, ardından sunulan bileti ilerletir. Sunulan sayaca yalnız kilidin sahibi yazar. `kilit_dene` tek bir `lock cmpxchgl` ile boş kilidi alabilir. Başarısız deneme kuyrukta bilet bırakmaz.
+
+Kesme işleyicisinin de kullandığı kilitlerde `kilit_al_kesmesiz` önce RFLAGS değerini saklar ve yerel kesmeleri kapatır. `kilit_birak_kesmesiz` önce kilidi bırakır, sonra saklanan IF bitini geri yükler. İç içe çağrıda iç kilidi bırakmak kesmeleri erken açmaz. `KEMGU_KILIT_DENETIM=1` ile oluşturulan UEFI çekirdeği kilidi ancak daha büyük sıra numarasıyla edinir ve bırakırken sahibi ve sırayı doğrular. Çekirdeğin etkin sırası GS+112, çekişme sayacı GS+120 konumundadır.
+
+| Bölüm 12 kapısında sınanan kilit | Sıra |
+|---|---:|
+| Paylaşılan sayı ve dış kilit | 10 |
+| İç içe kesme durumu ve 32 bit sarma | 20 |
+
+`make calistir_bm_x86_smp_kilit` iki derleyicide sekiz istemcili FIFO modelini 100.000 adım yürütür. QEMU'da dört ve sekiz vCPU'nun her biri ortak sayacı bir milyon kez kilit altında artırır. İlk 8.192 artışta bütün vCPU'lar, kalanında ikili gruplar yarışır. QMP her çekirdeğin iki aşamadaki katkısını, biletleri, toplamı ve çekişme sayaçlarını fiziksel bellekten okur. Sekiz vCPU'nun deney boyunca birlikte yarıştığı ayrı C koşumu 378,842 saniyede 8.000.000 artış verdi. Bu süre ARM üzerinde çok iş parçacıklı TCG ölçümüdür.
+
 ## Kilitler, IPI ve adres alanı tasarımı
 
 İlk sürümde sistem çağrıları ve sürücüler büyük çekirdek kilidi altında çalışır. Çerçeve ayırıcısı ve heap girişleri kendi paylaşımlarını korur. Kilit sırası ve kesme durumunun korunması edinim noktalarında denetlenir. Çağrı kutusu, yeniden zamanlama ve durdurma için ayrı IPI vektörleri ayrılır. Bir eşleme kaldırıldığında o adres alanını kullanan diğer çekirdeklerin TLB geçersizleme onayları beklenir.

@@ -1,0 +1,21 @@
+// Tek geçiş bir bilet alma, girme veya bırakma adımıdır.
+genel yapı BiletModeli { sonraki: tam64; sunulan: tam64; sahip: tam32; }
+genel işlev bilet_yeni() -> BiletModeli {
+    ver BiletModeli { sonraki: 0, sunulan: 0, sahip: -1 };
+}
+genel işlev bilet_iste(m: &değişken BiletModeli) -> tam64 {
+    değişken b: tam64 = m.sonraki;
+    m.sonraki = b + 1;
+    ver b;
+}
+genel işlev bilet_gir(m: &değişken BiletModeli, b: tam64, no: tam32) -> mantıksal {
+    eğer no < 0 veya m.sahip != -1 veya b != m.sunulan veya b >= m.sonraki { ver yanlış; }
+    m.sahip = no;
+    ver doğru;
+}
+genel işlev bilet_birak(m: &değişken BiletModeli, no: tam32) -> mantıksal {
+    eğer no < 0 veya no != m.sahip { ver yanlış; }
+    m.sahip = -1;
+    m.sunulan = m.sunulan + 1;
+    ver doğru;
+}

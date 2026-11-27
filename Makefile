@@ -2012,7 +2012,7 @@ _kem_os_x86_kos: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/kem_dtb.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ps2_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/kem_dtb.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ps2_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
 	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
@@ -2216,20 +2216,18 @@ _kem_os_x86_kos: $(BUILD)/kemgu$(EXE) \
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_istisna_isle$$' || { echo "FAIL: kdl_istisna_isle (guclu) .kem'den gelmiyor"; exit 1; }
 	@# [D-712] Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku, 5 yanki,
 	@# 26 cekirdek-ptr reddi). AYNI imaj iki sonuc: normal kosumda seri girdi YOK → EOF;
-	@# ucuncu kosumda -chardev file,input-path= ile "KEMGU-RX" satiri → OK + ring3 yankisi.
-	@# Ilk kosum (-serial file) DEGISMEDI; girdi dosyasi yalniz bu kosumda.
+	@# ucuncu kosumda RX FIFO hazir olunca COM1 ile "KEMGU-RX" satiri → OK + ring3 yankisi.
+	@# Ilk kosum (-serial file) DEGISMEDI; seri girdi yalniz bu kosumda.
 	@echo "  Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku + 5 yanki; girdisiz EOF, girdili satir)..."
 	@grep -qxF "X86 [12] UART RX EOF" $(BUILD)/kem_os_x86.out || { echo "FAIL: girdisiz kosumda 'X86 [12] UART RX EOF' yok"; exit 1; }
 	@if grep -qF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86.out; then echo "FAIL: girdisiz kosum satir okudu"; exit 1; fi
-	@rm -f $(BUILD)/kem_os_x86_rx.out; printf 'KEMGU-RX\n' > $(BUILD)/kem_os_x86_rx.in; \
-	timeout 8 qemu-system-x86_64 -M microvm -display none \
+	@python3 tests/qemu/pvh_uart_girdi.py $(BUILD)/kem_os_x86_rx.out -- \
+		qemu-system-x86_64 -M microvm -display none -monitor none \
 		-global virtio-mmio.force-legacy=false \
 		-drive file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 \
 		-device virtio-blk-device,drive=d0 \
 		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-		-kernel $(BUILD)/kem_os_x86.elf \
-		-chardev file,id=c0,path=$(BUILD)/kem_os_x86_rx.out,input-path=$(BUILD)/kem_os_x86_rx.in \
-		-serial chardev:c0 2>/dev/null || true
+		-kernel $(BUILD)/kem_os_x86.elf -chardev stdio,id=c0,signal=off -serial chardev:c0
 	@grep -qxF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out || { echo "FAIL: girdili kosumda 'X86 [12] UART RX OK' yok:"; grep -F "UART RX" $(BUILD)/kem_os_x86_rx.out; exit 1; }
 	@v=`grep -B1 -xF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out | head -1`; \
 	if [ "$$v" = "KEMGU-RX" ]; then echo "    ring3 yankisi = $$v"; \
@@ -5448,3 +5446,9 @@ test_tumu: calistir_bm_x86_smp_tik
 calistir_bm_x86_smp_tik: $(X86_SMP_ON)
 	@bash test/bm_x86_smp_harness.sh tik
 	@SMP_KABUK_GS=1 SUREC_KAHIN=smp_kahin SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_kilit
+test_tumu: calistir_bm_x86_smp_kilit
+calistir_bm_x86_smp_kilit: $(X86_SMP_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/smp/kilit_model_test.kem
+	@bash test/bm_x86_smp_harness.sh kilit

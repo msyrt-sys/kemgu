@@ -105,4 +105,22 @@ kem_ap_sayfa_hazirla:
     mfence
     ret
 .size kem_ap_sayfa_hazirla, .-kem_ap_sayfa_hazirla
+
+/* Açılış kâhini ayrı bir konuk işlevi bağladıysa aynı CPU'da çağır. */
+.weak kem_smp_acilis_deneyi
+.globl kem_ap_deney_adresi
+.type kem_ap_deney_adresi,@function
+kem_ap_deney_adresi:
+    movabsq $kem_smp_acilis_deneyi, %rax
+    ret
+.size kem_ap_deney_adresi, .-kem_ap_deney_adresi
+.globl kem_ap_acilis_dene
+.type kem_ap_acilis_dene,@function
+kem_ap_acilis_dene:
+    movabsq $kem_smp_acilis_deneyi, %rax
+    testq %rax, %rax
+    jz 1f
+    jmp *%rax
+1:  ret
+.size kem_ap_acilis_dene, .-kem_ap_acilis_dene
 .section .note.GNU-stack,"",@progbits

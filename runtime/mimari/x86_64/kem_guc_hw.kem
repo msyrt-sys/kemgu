@@ -94,7 +94,8 @@ cpuid"#
  eğer guc_pm1a > 0 {
   guc_pm1_yaz(guc_pm1a,guc_s5a);
   eğer guc_pm1b > 0 { guc_pm1_yaz(guc_pm1b,guc_s5b); }
-  kem_bekle_us(250000);
+  // Kapanma isteğini QEMU aygıt iş parçacığı tamamlar. Port okuma sayısı bir saat değildir.
+  eğer kap_tsc_ms > 0 { smp_gecik_us(250000); } değilse { kem_bekle_us(250000); }
  }
  kis_metin("KABUK HATA ACPI S5 kapanmadi");kis_satir();
  kis_metin("Sistem durduruldu; güç tuşuna basın.");kis_satir();

@@ -72,6 +72,8 @@ sabit VM_YUVA_SAYISI: tam32 = 24;
 // Blok ihtiyacı ~800 B; ağ ~19 KB (NO_TXBUF+2048 + RX 8×2048 ≈ 19 KB) → arada
 // 64 KB boşluk güvenli.
 çıplak işlev kem_platform_kur() {
+    // PVH COM1, RX FIFO için 14 bayt eşiği seçer. Dokuz baytlık bir satır FIFO’ya sığar.
+    kem_port_yaz8(1018,193);
     değişken t: tam64 = kem_platform_dma_tabani();
     eğer t > 0 {
         vblk_dma = t;

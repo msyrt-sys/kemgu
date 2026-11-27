@@ -1,0 +1,103 @@
+// Bu modül yalnız kilit kapısının UEFI imajına bağlanır.
+sabit SMP_KILIT_TEKRAR: tam64 = 1000000;
+küresel değişken smp_kilit_alan: tam64=0;
+
+çıplak işlev smp_kilit_alan_oku() -> tam64 {
+    güvensiz {
+        değişken adres:*tam64=(&smp_kilit_alan) olarak *tam64;
+        ver kem_mmio_oku64(adres olarak tam64);
+    }
+}
+çıplak işlev smp_kilit_bayrak() -> tam64 {
+    değişken r:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+popq $0"# çıktı("=r",&r) bozulan("~{memory}") } }
+    ver r;
+}
+çıplak işlev smp_kilit_tik_bekle() {
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } }
+}
+çıplak işlev smp_kilit_artir(p:tam64,adet:tam64) {
+    değişken i:tam64=0;
+    iken i<adet {
+        smp_kilit_al(p);
+        değişken v:tam64=kem_mmio_oku64(p+128);
+        kem_mmio_yaz64(p+128,v+1);
+        smp_kilit_birak(p);
+        i=i+1;
+    }
+}
+çıplak işlev smp_kilit_deney_say(p:tam64,no:tam32) {
+    değişken yuva:tam64=p+256+(no olarak tam64)*64;
+    eğer no==1 {
+        eğer kilit_dene(p) { kdl_panik("KILIT DOLU DENE"); ver; }
+        kem_mmio_yaz64(p+136,1);
+    }
+    kem_mmio_yaz64(yuva,1);
+    iken kem_mmio_oku64(p+144)==0 { güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } } }
+    // İlk tur bütün vCPU'ları aynı anda kuyruğa sokar. Sonra komşu çiftler
+    // aynı sayaçta devam eder. Bekleyen çiftler LAPIC tıkıyla uyanır.
+    değişken ortak:tam64=8192;
+    smp_kilit_artir(p,ortak);
+    kem_mmio_yaz64(yuva+16,ortak);
+    değişken n:tam32=smp_cevrimici_say();
+    değişken j:tam32=0;
+    iken j<n {
+        değişken diger:tam64=p+256+(j olarak tam64)*64;
+        iken kem_mmio_oku64(diger+16)==0 { smp_kilit_tik_bekle(); }
+        eğer j/2<no/2 {
+            iken kem_mmio_oku64(diger+8)==0 { smp_kilit_tik_bekle(); }
+        }
+        j=j+1;
+    }
+    smp_kilit_artir(p,SMP_KILIT_TEKRAR-ortak);
+    kem_mmio_yaz64(yuva+8,SMP_KILIT_TEKRAR);
+}
+çıplak işlev kem_smp_acilis_deneyi(no:tam32) {
+    eğer no!=0 {
+        değişken p:tam64=smp_kilit_alan_oku();
+        iken p==0 { p=smp_kilit_alan_oku(); }
+        güvensiz { smp_kilit_deney_say(p,no); } ver;
+    }
+    değişken n:tam32=smp_cevrimici_say();
+    değişken p:tam64=smp_deney_alani;
+    eğer p==0 { kdl_panik("KILIT DENEY RAM"); ver; }
+    güvensiz { memset(p olarak *tam8,0,256+(n olarak tam64)*64); }
+    kilit_kur(p,10); kilit_kur(p+64,20);
+    eğer değil kilit_dene(p) { kdl_panik("KILIT DENE ILK"); ver; }
+    smp_kilit_birak(p);
+    değişken once:tam64=smp_kilit_bayrak()&512;
+    değişken bayrak:tam64=kilit_al_kesmesiz(p);
+    değişken ic:tam64=smp_kilit_bayrak()&512;
+    değişken ic_bayrak:tam64=kilit_al_kesmesiz(p+64);
+    kilit_birak_kesmesiz(p+64,ic_bayrak);
+    değişken ic_son:tam64=smp_kilit_bayrak()&512;
+    kilit_birak_kesmesiz(p,bayrak);
+    eğer once!=512 veya ic!=0 veya ic_son!=0 veya (smp_kilit_bayrak()&512)!=once {
+        kdl_panik("KILIT IF"); ver;
+    }
+    // İki 32 bit bilet 0xffffffff değerinden sıfıra birlikte dönmelidir.
+    kem_mmio_yaz64(p+64,0-1);
+    eğer değil kilit_dene(p+64) { kdl_panik("KILIT SARMA DENE"); ver; }
+    smp_kilit_birak(p+64);
+    eğer kem_mmio_oku64(p+64)!=0 { kdl_panik("KILIT SARMA"); ver; }
+    smp_kilit_al(p);
+    güvensiz { smp_kilit_alan=p; }
+    iken kem_mmio_oku64(p+136)==0 { }
+    smp_kilit_birak(p);
+    değişken j:tam32=1;
+    iken j<n {
+        iken kem_mmio_oku64(p+256+(j olarak tam64)*64)==0 { }
+        j=j+1;
+    }
+    kem_mmio_yaz64(p+144,1);
+    smp_kilit_deney_say(p,0);
+    j=1;
+    iken j<n {
+        iken kem_mmio_oku64(p+264+(j olarak tam64)*64)==0 { }
+        j=j+1;
+    }
+    kem_mmio_yaz64(p+152,1);
+    kis_metin("SMP_KILIT "); kis_onaltilik(p olarak dtam64); kis_metin(" ");
+    kis_onaltilik(n olarak dtam64); kis_metin(" "); kis_onaltilik(kem_mmio_oku64(p+128) olarak dtam64); kis_satir();
+}

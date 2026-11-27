@@ -221,7 +221,7 @@ fi
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
-BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
 cat $BM_KABUK_PARCALAR > "$W/kem_bm_kabuk_kapi.kem"
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_kabuk_kapi.kem" >/dev/null 2>&1; then
@@ -283,7 +283,7 @@ else
   "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ps2_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
 
-BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem"
+BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem"
 cat $BM_UEFI_PARCALAR > "$W/kem_bm_uefi_kapi.kem"
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_uefi_kapi.kem" >/dev/null 2>&1; then

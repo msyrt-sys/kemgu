@@ -2,7 +2,8 @@
 """[D-748/D-749] Ekran kâhinlerinin ORTAK, KEMGU'dan BAĞIMSIZ parçaları: fikstür kaynağından
 font baytları, PSF1/PSF2 ayrıştırma (ilk glif kazanır), glif geri düşmesi (glif → U+FFFD →
 '?' → arka dolgu), drivers/ekran/konsol.kem semantiğinin Python modeli ve QMP screendump."""
-import re, json, struct
+import re, json, struct, sys
+from array import array
 from pathlib import Path
 
 def font_baytlari():
@@ -102,6 +103,20 @@ def screendump(f, yol, yanit):
     return int(t.group(1)), int(t.group(2)), b[t.end():]
 
 def karsilastir(px, beklenen, gen):
+    # Sağlam karede her renk kanalını C düzeyinde karşılaştır. Farklı karede
+    # aşağıdaki piksel sayımı aynı koordinatı ve gerçek renkleri raporlar.
+    if len(px) == 3 * len(beklenen):
+        try:
+            renkler = array('I', beklenen)
+        except OverflowError:
+            renkler = None
+        if renkler is not None and renkler.itemsize == 4:
+            if sys.byteorder == 'little':
+                renkler.byteswap()
+            ham = renkler.tobytes()
+            if (px[0::3] == ham[1::4] and px[1::3] == ham[2::4]
+                    and px[2::3] == ham[3::4] and not any(ham[0::4])):
+                return 0, None
     fark = 0; ilk = None
     for i, e in enumerate(beklenen):
         g = (px[3 * i] << 16) | (px[3 * i + 1] << 8) | px[3 * i + 2]
@@ -120,10 +135,21 @@ def kabuk_goruntu(akis, girdi='', imlec=None, gen=640, yuk=480):
     satir=('> '+girdi[bas:]).ljust(sut)[:sut]
     for c,ch in enumerate(satir):izg[y*sut+c]=ord(ch)
     img=[arka]*(gen*yuk)
-    for r in range(sat):
-        for c in range(sut):
-            ters=r==y and c==2+imlec-bas
-            glif_ciz(img,gen,yuk,font,8+c*fw,8+r*fh,izg[r*sut+c],arka if ters else on,on if ters else arka)
+    # Hücreler örtüşmez. Aynı glifi aynı renklerde yalnız bir kez hesapla.
+    glifler = {}
+    for i, kod in enumerate(izg):
+        r, c = divmod(i, sut)
+        ters = r == y and c == 2 + imlec - bas
+        anahtar = kod, ters
+        if anahtar not in glifler:
+            hucre = [arka] * (fw * fh)
+            glif_ciz(hucre, fw, fh, font, 0, 0, kod, arka if ters else on, on if ters else arka)
+            glifler[anahtar] = [(j, hucre[j*fw:(j+1)*fw]) for j in range(fh)
+                                if any(v != arka for v in hucre[j*fw:(j+1)*fw])]
+        baslangic = (8+r*fh)*gen + 8+c*fw
+        for j, renkler in glifler[anahtar]:
+            konum = baslangic + j*gen
+            img[konum:konum+fw] = renkler
     return img
 
 # KEMGU çiziminden bağımsız sabit 7×7 imleç maskesi; save-under tüm ekranla sınanır.
