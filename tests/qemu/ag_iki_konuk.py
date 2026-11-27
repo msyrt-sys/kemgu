@@ -59,6 +59,10 @@ def arm(kok,imaj):
             c.run('ag ayarla 192.0.2.1/24 192.0.2.2',b'AG AYAR OK\n')
             c.run('ag tcp dinle',b'TCP dinle 9001\n')
             once=c.heap(),c.bos_cerceve()
+            # Intel RDLEN bayt cinsinden, her RX tanımlayıcısı 16 bayt.
+            rdlen=int.from_bytes(c.mem(c.sayi('ag_bar')+0x2808,4),'little')
+            rx_yuva=rdlen//16
+            assert rx_yuva>=4 and rdlen%16==0,rdlen
             with arm_ac(a,imaj,hat(yol,False),'192.0.2.1','192.0.2.2',9001,0) as (_,p,s):
                 wait_for(p,lambda:s.exists() and b'KEMGU KEM-OS OK' in s.read_bytes(),seconds=100)
                 seri=s.read_bytes()
@@ -69,6 +73,10 @@ def arm(kok,imaj):
         assert f.read(len(TCP))==TCP
     with (w/'ag.pcap').open('rb') as f:
         paketler=list(pcap_kayitlari(f))
+    synack=next(p for p in paketler if p.kaynak_port==9001 and p.bayrak==18)
+    pencere=int.from_bytes(synack.yuk[14:16],'big')
+    assert 0<pencere<=((rx_yuva-2)//2)*1460,(pencere,rx_yuva)
+    print('QMP RX halkası',rx_yuva,'SYN-ACK yankı penceresi',pencere,flush=True)
     for giden in (False,True):
         assert pcap_akim(paketler,9001,giden,bytes.fromhex('525400170017'))==TCP
     print('AG19 x86 ARM iki yon 1 MiB SHA256',hashlib.sha256(TCP).hexdigest(),'heap/cerceve',once,flush=True)

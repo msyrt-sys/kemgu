@@ -92,6 +92,16 @@ SMP açılışında çekirdek kayıtlarının ardından her hedef için 128 bayt
 
 `make calistir_bm_x86_smp_ipi` bütün sıralı çekirdek çiftlerini, kendine gönderim dahil, biner kez çalıştırır. QMP her sonuçtaki hedefi, kaynağı ve sırayı, çekirdek başına teslimleri ve tüm gidiş-dönüş sürelerini fiziksel bellekten okur. Dört vCPU'nun ardışık kimliklerine ek olarak iki soket × üç çekirdek topolojisinde APIC kimlikleri 0, 1, 2, 4, 5, 6'dır. TSC/ms PIT kalibrasyonundan gelir. Süreler ARM ana makinede çok iş parçacıklı x86 TCG'ye aittir.
 
+## TLB geçersizleme ve çerçeve iadesi
+
+`smp_alan_degistir` yerel kesmeleri saklar, GS+128 sürümünü tek yapar, donanım CR3'ünü ve GS'deki CR3/PID çiftini değiştirir, ardından çift sürümü yayımlar. Bu yol PCID kullanmaz. Kök değiştirmek önceki küresel olmayan çevirileri boşaltır. Bir tarama sürerken geçişte yakalanan çekirdek de hedeflere dahil edilir.
+
+`smp_esleme_kaldir` kullanıcıya açık dört düzeyli, 4 KiB, küresel olmayan yaprağı doğrular. Atomik karşılaştırma ve değiştirme ile tek bir sahip PTE'yi sıfırlayabilir. Yerel INVLPG'den sonra aynı kökü kullanabilecek uzak çekirdeklere vektör 83 gider. Kutu+32 sanal adresi, +80 kökü, +88 gerçek uzak INVLPG sayısını taşır. İşleyici donanım CR3 hâlâ eşleşiyorsa INVLPG çalıştırır ve ardından onay yayımlar. Büyük sayfa, küresel eşleme ve belirtilen aralığın dışı hata döndürür.
+
+Dolu kutuda −2, süre aşımında −4 döner. Çağıran çerçeveyi ve `SmpTlbIade` kaydını saklar. Aynı gönderici `smp_tlb_tamamla` ile beklemeyi kaldığı hedeften sürdürür. Fiziksel adres son onaydan sonra bir kez döner. Çağıran bu süre boyunca kökü ve ara tabloları korur. Kabuğun sonlanmış süreç temizliği ayrıca eski kökün hiçbir işlemcide etkin olmadığını denetler. Süreç yaşam döngüsünde yalnız tüm adres alanı serbest bırakılır.
+
+`make calistir_bm_x86_smp_tlb` iki çekirdeğin paylaştığı kullanıcı sayfasının iki okumasını, ayrı kökte kalan iki çekirdeği, gerçek PTE'yi, uzak onayı ve sıkıştırılmış fiziksel bitmap'teki tahsis bitini QMP ile okur. AP1'in sonraki okuması normal sayfa hatası işleyicisine girer. CR2 hem seri günlükte hem donanım yazmacında doğrulanır. Aynı kapı dört vCPU'lu süreç kabuğunda kullanıcı PTE izinlerini, NX ve koruma sayfasını ve yüz çocuk sürecin yalıtımını da sınar.
+
 ## Kilitler, IPI ve adres alanı tasarımı
 
 İlk sürümde sistem çağrıları ve sürücüler büyük çekirdek kilidi altında çalışır. Çerçeve ayırıcısı ve heap girişleri kendi paylaşımlarını korur. Kilit sırası ve kesme durumunun korunması edinim noktalarında denetlenir. Çağrı kutusu, yeniden zamanlama ve durdurma için ayrı IPI vektörleri ayrılır. Bir eşleme kaldırıldığında o adres alanını kullanan diğer çekirdeklerin TLB geçersizleme onayları beklenir.

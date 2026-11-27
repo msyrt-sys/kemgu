@@ -70,13 +70,24 @@ def baglanti(es,i,adet,q=None):
     assert (p.bayrak,p.onay,p.hedef_port)==(18,seq+1,sp)
     seq+=1
     ack=(p.sira+1)&MASKE
+    pencere=int.from_bytes(p.yuk[14:16],"big")
     es.yolla(sp,9001,seq,ack,16)
     giden=0
     giden_sha=hashlib.sha256()
     gelen_sha=hashlib.sha256()
     desen=bytes((j*37+i)&255 for j in range(256))*50
     while giden<adet:
-        n=min(1400 if giden<2800 else 11200,adet-giden)
+        # Bu eş pencere ölçeklemesi istemez. Her tur bir önceki verinin
+        # yankısını ve ACK'ini aldıktan sonra açılan gerçek pencereyi kullanır.
+        if pencere==0:
+            p,b=es.al(8)
+            assert not b and p.onay==seq, (p.onay,seq,len(b))
+            pencere=int.from_bytes(p.yuk[14:16],"big")
+            continue
+        dilim=min(11200,pencere)
+        if dilim>=1400:
+            dilim-=dilim%1400
+        n=min(1400 if giden<2800 else dilim,dilim,adet-giden)
         bas=giden%256
         beklenen=desen[bas:bas+n]
         for ofset in range(0,n,1400):
@@ -90,6 +101,7 @@ def baglanti(es,i,adet,q=None):
                 raise TimeoutError((giden,n,got,alindi-seq))
             try:
                 p,b=es.al(.45)
+                pencere=int.from_bytes(p.yuk[14:16],"big")
             except TimeoutError:
                 if alindi<son:
                     ofset=alindi-seq

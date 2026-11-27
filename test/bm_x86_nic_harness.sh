@@ -89,8 +89,9 @@ for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
     elif [[ "${1:-e1000}" == secenek ]]; then
         python3 tests/qemu/ag_tcp_secenek.py "$w" secenek
     elif [[ "${1:-e1000}" == verim ]]; then
-        python3 tests/qemu/ag_tcp_secenek.py "$w" olcekli
-        python3 tests/qemu/ag_tcp_secenek.py "$w" olceksiz
+        for nokta in ${NIC_VERIM_KIPI:-olcekli olceksiz}; do
+            python3 tests/qemu/ag_tcp_secenek.py "$w" "$nokta"
+        done
     elif [[ "${1:-e1000}" == kayip ]]; then
         python3 tests/qemu/ag_tcp_kayip.py "$w"
     elif [[ "${1:-e1000}" == tcp ]]; then

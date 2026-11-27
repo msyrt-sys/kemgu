@@ -574,8 +574,9 @@ struct CekirdekVeri {
     uint64_t no, apic, tik, surec;
     uint64_t yigin_alt, yigin_ust, tss, gdt, ist[3], cr3;
     uint64_t kullanici_giris, kullanici_gs;
-    uint64_t kilit_sirasi, kilit_beklemeleri;
+    uint64_t kilit_sirasi, kilit_beklemeleri, alan_surumu;
 };
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, alan_surumu) == 128, "GS CR3 surumu");
 struct ApTablolari {
     struct CekirdekVeri veri;
     uint64_t gdt[7];
@@ -661,7 +662,7 @@ int kdl_smp_ap_kur(struct ApTablolari *p, unsigned no, unsigned id,
 
 extern void smp_ap_zaman_irq(void) __attribute__((weak));
 extern int kem_ipi_isle(int) __attribute__((weak));
-extern void kdl_ipi_80(void), kdl_ipi_81(void), kdl_ipi_82(void);
+extern void kdl_ipi_80(void), kdl_ipi_81(void), kdl_ipi_82(void), kdl_ipi_83(void);
 extern uintptr_t kdl_lapic_taban;
 __attribute__((naked)) static void kdl_ap_zaman_kocani(void) {
     __asm__ volatile(
@@ -706,6 +707,7 @@ void kdl_idt_kur(void) {
         kdl_idt_gate(80, (uintptr_t)&kdl_ipi_80, 0);
         kdl_idt_gate(81, (uintptr_t)&kdl_ipi_81, 0);
         kdl_idt_gate(82, (uintptr_t)&kdl_ipi_82, 0);
+        kdl_idt_gate(83, (uintptr_t)&kdl_ipi_83, 0);
     }
     kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
     extern void *kdl_msi_kocanlari[14];

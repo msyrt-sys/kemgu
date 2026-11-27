@@ -69,6 +69,7 @@ KEM_KILIT
 fi
 if [[ -n ${UEFI_SMP_DENEY:-} ]]; then
     case "$UEFI_SMP_DENEY" in
+        tlb) cat tests/qemu/smp_tlb_konuk.kem >> "$W/comb.kem" ;;
         bellek) cat tests/qemu/smp_bellek_konuk.kem >> "$W/comb.kem" ;;
         ipi) cat tests/qemu/smp_ipi_konuk.kem >> "$W/comb.kem" ;;
         kilit) cat tests/qemu/smp_kilit_konuk.kem >> "$W/comb.kem" ;;

@@ -189,3 +189,53 @@ EOI atlanınca sonraki teslim süre aşımı −4 ile kırmızı. Hedefe mantık
 Çerçeve ayırıcı ve heap girişleri ayrı bilet kilitleri kullanıyor. Dört vCPU'da 40.000 tahsis/iade çifti, tüm olayların host'ta tekrarı, dört eşzamanlı sahip ve sonunda aynı fiziksel bitmap iki derleyicide doğrulandı. Tek vCPU'da 50 süreç için süreç heap artışı sıfır, kabuk heap değerleri D-772 örnekleriyle eşleşti. C'de 49 ve self-host'ta 71 ek boş çerçeve var. Her iki fark da ELF'in küçüldüğü sayfa sayısına eşit. Mutlak boş çerçeve sayısı D-772'den farklı.
 
 Canlı ayırıcı kilidini kaldırma sabotajı uygulanmadı. Ayrı sayısal sahiplik deneyinde üç çekirdeğin çakışması kapıyı kırdı. §7, ARM çekirdek ve QEMU, tip, IPI ve bellek kapıları koşuldu. Toplu koşumdaki iki USB giriş kırmızısı için kâhin gerçek HID DMA raporunu bekliyor. İki hedef birlikte 250 sn, rc=0. Diğer hedefler 357 sn'lik koşumda yeşil. Ölçümler ayrı iş parçacıklı x86 TCG'de. Bölüm süresi 27 dk 52 sn.
+
+## Bölüm 15 — TLB geçersizleme ve çerçeve iadesi
+
+CPU0 ve CPU1 aynı kullanıcı sayfasını iki derleyicide de okudu. CPU0 yaprağı kaldırdıktan sonra AP1 uzak INVLPG ve onay verdi. Host sayfa tablolarını, ayırıcı bitini ve AP1'in sonraki erişiminde donanımın ürettiği #PF ile CR2'yi (0x8000000000) doğruladı. Önceden dolu IPI kutusu çerçeveyi tutuyor ve aynı işlem daha sonra tamamlanabiliyor. Dört vCPU'da W^X ve süreç yalıtımı geçti. Bölüm kapıları, §7, bellek, IPI, tip kontrolü ve bare-metal fark denetimi birlikte 466 sn, rc=0.
+
+Uzak INVLPG'yi atlayarak eski eşlemeden okuma sabotajı uygulanmadı. Gerçek uzak geçersizlemeden sonra yalnız onay kaldırılınca kapı −4 bekleme sonucu ve ayrılmış çerçeve ile rc=1 verdi. Ara regresyonda USB giriş kaybı ortak kâhinde gerçek HID raporu beklenerek giderildi. TCP kapısı iki derleyici × iki pencere kipine bölündü. Önceki ve yeni Makefile aynı dört bağımsız kâhin çağrısını üretti. Ölçeksiz self-host çağrısının çıkarıldığı özel Makefile denetimde adıyla kırmızı oldu. Paket hazırlama sırasında geçici bölge tahsisi kaldırıldı. Her aktarımda 64 MiB veri, PCAP SHA-256 ve 0,25 MiB/s eşiği denetlendi.
+
+Hub üzerinden ön plan dosya gezgininden kabuğa dönüşte basılı q tekrarının komut satırına sızması düzeltildi. İki derleyici × iki hub derinliği 193 sn, rc=0. Klavye tekrarında 68 tik isteyen host 87 tik ölçtüğünde 9 glif doğrudur. Kâhin gerçek LAPIC aralığıyla GOP'u karşılaştırıyor. PS/2 ve USB ile her iki derleyicide kısa basış tek, 68 tikte 5, 87 tikte 9 glif verdi. İlk gecikmeyi sıfırlayan çekirdek kısa basışta 6 glifle kırmızı oldu.
+
+İlk ölçümlü takımda HTTP'nin son bağımsız senaryosu önceki bağlantılar TIME_WAIT'teyken sekiz TCP yuvasını doldurdu. Kâhin kapanmayı QMP'den bekliyor ve doğru isteğin sunucuya ulaştığını doğruluyor. İki derleyiciyle 283 sn, rc=0. Ölçümlü takımda 713 sn süren 100+100 MiB aktarım için alım DMA kopyası ve TCP'nin aygıt yoklamasındaki sırası düzeltildi. Ayrı self-host koşumunda aynı SHA-256, bağlantı kesintisi, yeniden iletim ve sabit kaynak sayılarıyla 466 sn ölçüldü.
+
+Altıncı ham takımda konuk diskinde doğru olan 1 MiB TCP aktarımı, PCAP'taki geç gelen segment yüzünden reddedildi. İki yönde sıra numarası, yinelenen bayt eşitliği, kesintisiz 1 MiB ve FIN konumu doğrulandı. Aynı PCAP'tan bir segment çıkarıldığında 1460 baytlık boşluk bulundu. İki konuk kapısı iki derleyiciyle 333 sn, rc=0.
+
+İkinci ölçümlü turda 181 işlev kapısı 20 dk 26 sn içinde geçti. Disk kapısı önceki kırmızı koşumların kökte kalan 33 tanı dizinini bildirdi. Dosya ve PCAP'lar bir dizin eşlemesiyle arşivlendi ve sıkı disk denetimi tekrarlandı.
+
+Yedinci ham takımda yalnız Ethernet eşinin DHCP kirası başarısız oldu. Paketteki dört DISCOVER'a karşılık OFFER görülmedi. Eşin iki ucuna koşuma özel adres verildi. Host iş parçacığındaki ilk hata ve son konuk durumu görünür hale getirildi. Yeni kâhin dört DHCP mesajının sırasını ve işlem kimliğini PCAP'ta doğruluyor.
+
+Ağ araçları kapısının iki derleyicili tekrarı 80 sn, rc=0. C için 0x173d59a0 ve self-host için 0x17406b0f işlem kimliklerinde DHCP paket türleri 1, 2, 3, 5. İki yönlü 1 MiB boru aktarımının iki SHA-256 değeri ve sekiz UDP sayaç artışı da doğrulandı.
+
+64 MiB hız ölçümündeki host alıcısı geç gelen bir TCP segmenti nedeniyle 19 sıra dışı segmenti attı. Eş artık ilan ettiği pencereye uyan veriyi tutup kesintisiz aralığı onaylıyor. Eski kayıtta bu değişiklik o ana dek eksiksiz alınan veriyi 2.908 bayt artırdı. Hız eşiği, bağımsız PCAP, FIN ve SHA denetimleri korundu.
+
+Canlı alıcı düzeltmesinin seçili tekrarı 108 sn, rc=0. 64 MiB için C ölçekli 48,572 sn (1,318 MiB/s) ve self-host ölçeksiz 95,887 sn (0,667 MiB/s). İkisi de aynı SHA-256 ile bitti, konuk heap'i ve boş çerçeve sayısı sabit kaldı.
+
+x86–ARM canlı aktarımının bir koşumunda ARM'in 18 saniyelik ilerleme sınırı doldu. x86'nın sekiz tanımlayıcılı e1000 üzerinde 65.535 baytlık yankı penceresi ilan ettiği ölçüldü. Dahili yankı hizmetinin penceresi RX halkasıyla sınırlandı. Yeni ikilide QMP sekiz yuva, SYN-ACK 4.380 bayt gösterdi. Her iki yönde ve ARM diskinde 1 MiB doğruydu.
+
+İki derleyiciyle temel TCP ve iki konuk denetimleri geçti. Önceki host eşinin ilan edilen pencereyi aşan açık aktarımı durduruldu. Pencereye uyan self-host 100+100 MiB tekrarı 510 sn, rc=0. Veri süresi 502,52 sn, SHA-256 `0742ba24…83d1e`, heap 4.066.976 ve boş çerçeve 45.455 olarak sabit kaldı.
+
+Son ham -j10 koşumu 1309 sn, ölçümlü -j10 koşumu 1332 sn, her ikisi rc=0 ve tee=0. Bölüm süresi 5 sa 5 dk 39 sn.
+
+```text
+=== ZAMAN RAPORU: duvar saati 22 dk 10 sn · 181 kapı · kapı toplamı 3 sa 21 dk 58 sn · derleme/diğer 00 dk 00 sn ===
+       08 dk 32 sn  %38.5  calistir_bm_x86_ag_saglamlik_self_aktarim
+       06 dk 30 sn  %29.3  calistir_bm_x86_ekran_fare
+       06 dk 23 sn  %28.8  calistir_codegen_bootstrap
+       06 dk 12 sn  %28.0  calistir_bm_x86_tftp_teshis
+       05 dk 30 sn  %24.8  calistir_bm_x86_ps2_irq_self
+       05 dk 23 sn  %24.3  calistir_bm_x86_dosyalar
+       04 dk 59 sn  %22.5  calistir_bm_x86_tcp_kayip
+       04 dk 52 sn  %21.9  calistir_bm_x86_cok_surec_cocuk
+       04 dk 41 sn  %21.2  calistir_bm_x86_apic
+       04 dk 33 sn  %20.5  calistir_bm_x86_kaynak_cocuk
+       04 dk 29 sn  %20.2  calistir_bm_x86_ps2_irq_c
+       04 dk 21 sn  %19.6  calistir_bm_x86_v1_tam
+       04 dk 19 sn  %19.5  calistir_kem_os_pc_matris_gpt
+       04 dk 12 sn  %19.0  calistir_kem_os_pc_matris_mbr
+       04 dk 09 sn  %18.7  calistir_bm_x86_klavye16
+  disk: build 40G · boş 312 GiB
+Disk build: önce 42618396672 B, sonra 42619535360 B, büyüme +1138688 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```

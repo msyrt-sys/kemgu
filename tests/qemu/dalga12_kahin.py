@@ -213,8 +213,21 @@ class Console:
         return int.from_bytes(self.mem(self.symbols['kap_lapic_tik'], 8), 'little')
 
     def key(self, ad, bas):
-        self.tus_gonder(ad, bas)
-        tik_bekle(self.tik, surec=self.p)
+        # USB ana bilgisayarı iki ayrı QMP olayını konuk HID raporunda
+        # birleştirebilir. Önceki raporun fiziksel DMA tamponuna ulaşmasını bekle.
+        secim = self.symbols.get('kl_hid_indeksi')
+        if secim and int.from_bytes(self.mem(secim, 4), 'little', signed=True) >= 0:
+            def tampon():
+                kayit = int.from_bytes(self.mem(self.symbols['bh_kayitlar'], 8), 'little')
+                return int.from_bytes(self.mem(kayit+32, 8), 'little') if kayit else 0
+            adres = bekle('USB klavye DMA tamponu', tampon, sure=8, surec=self.p)
+            once = self.mem(adres, 8)
+            self.tus_gonder(ad, bas)
+            bekle(f"HID {ad} {'bas' if bas else 'bırak'}", lambda: self.mem(adres, 8),
+                  lambda rapor: rapor != once, sure=8, aralik=.002, surec=self.p)
+        else:
+            self.tus_gonder(ad, bas)
+            tik_bekle(self.tik, surec=self.p)
 
     def run(self,text,out=b''):
         before = self.heap()

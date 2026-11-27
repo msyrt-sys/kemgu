@@ -10,11 +10,12 @@ from surec_imaj import imajlar
 from surec_kahin import SurecConsole
 
 
-def tekrar(c, sure, alt, ust):
+def tekrar(c, sure):
     # QEMU'nun sanal milisaniyesi yük altında işlenen LAPIC tikinden ayrılabilir.
     # Basılı süreyi konuk make kodunu aldıktan sonra donanım tikleriyle ölç.
     def kod():
         return int.from_bytes(c.mem(c.symbols['kt_kod'], 4), 'little')
+    once = c.tik()
     c.tus_gonder('a', True)
     bekle('tekrar deneyi: A basma kodu', kod, lambda k: k == 30, aralik=.001, surec=c.p)
     ilk = c.tik()
@@ -22,6 +23,17 @@ def tekrar(c, sure, alt, ust):
                   aralik=.001, surec=c.p)
     c.tus_gonder('a', False)
     bekle('tekrar deneyi: A bırakma kodu', kod, lambda k: k == 0, aralik=.001, surec=c.p)
+    son = c.tik()
+    # Belgelenen ilk tekrar 50, sonraki tekrarlar 5 tiktir. Ana makine QMP
+    # yoklamasını geç yaparsa gerçek basılı aralık hedef süreden uzun olabilir.
+    def beklenen(tik):
+        return 1 if tik < 50 else 2 + (tik-50)//5
+    if sure < 50:
+        assert son-once < 50, ("kısa basış gözlenemedi", once, son)
+        alt = ust = 1
+    else:
+        alt = max(2, beklenen(birak-ilk)-1)
+        ust = beklenen(son-once)+1
     # Komut öneki de tekrarlanabilir. Basılı tuşun etkisini doğrudan giriş satırından say.
     font = font_yukle()
     fw, fh = font[1][:2]
@@ -41,7 +53,7 @@ def tekrar(c, sure, alt, ust):
             adet += 1
         return adet
     adet = bekle('GOP üzerinde yinelenen A glifleri', harf_say, lambda n: n >= alt, surec=c.p)
-    print('TEKRAR',sure,adet,'ölçülen tik',birak-ilk,flush=True)
+    print('TEKRAR',sure,adet,'ölçülen tik aralığı',birak-ilk,son-once,'beklenen glif',alt,ust,flush=True)
     assert alt <= adet <= ust, (sure,adet,alt,ust)
     for _ in range(adet):
         tus(c,'backspace')
@@ -61,8 +73,9 @@ def kos(w, tur):
     with boot(w,usb[0],nvme,sata,klavye=tur,fare=tur) as (q,p,s):
         c = SurecConsole(w,q,p,s)
         assert b'PS2_FARE 3 4\n' in s.read_bytes()
-        tekrar(c,20,1,1)
-        tekrar(c,68,4,6)
+        tekrar(c,20)
+        tekrar(c,68)
+        tekrar(c,87)
         c.run('hassasiyet 0', b'HATA hassasiyet 1..4\n')
         c.run('hassasiyet 2')
         c.run('bagla --yazilabilir usb0p2')

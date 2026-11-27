@@ -924,7 +924,7 @@ kdl_ipi_\n:
     pushq $\n
     jmp .Lkem_ipi_ortak
 .endm
-.irp n,80,81,82
+.irp n,80,81,82,83
     KEM_IPI \n
 .endr
 .Lkem_ipi_ortak:

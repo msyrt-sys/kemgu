@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make tariflerini açar ve sekiz şemsiye hedefin kâhin çağrılarını sayar."""
+"""Make tariflerini açar ve bölünmüş şemsiye hedeflerin kâhin çağrılarını sayar."""
 import argparse
 import os
 import shlex
@@ -14,7 +14,7 @@ KOK = Path(__file__).resolve().parents[2]
 TABAN = KOK / 'test/olcum/kapsam_taban.tsv'
 KAPILAR = ('bm_x86_ag_saglamlik', 'bm_x86_cok_surec', 'bm_x86_kabuk14',
            'bm_x86_kaynak', 'bm_x86_ps2_irq', 'bm_x86_ps2_karma',
-           'bm_x86_v1', 'kem_os_pc_matris')
+           'bm_x86_tcp_verim', 'bm_x86_v1', 'kem_os_pc_matris')
 sys.path.insert(0, str(KOK / 'tests/qemu'))
 from pc_matris import durumlar
 
@@ -29,6 +29,9 @@ def olaylar(program, ortam, arg):
         for d in derleyiciler('NIC_DERLEYICILER'):
             if kip == 'ag_pc':
                 yield d, 'ag_pc_matris.py'
+            elif kip == 'verim':
+                for nokta in ortam.get('NIC_VERIM_KIPI', 'olcekli olceksiz').split():
+                    yield d, 'ag_tcp_secenek.py', nokta
             elif kip == 'saglamlik_ag':
                 for senaryo in ortam.get('NIC_SAGLAMLIK', 'cerceve aktarim zaman').split():
                     yield d, 'ag_saglamlik_tel.py', senaryo

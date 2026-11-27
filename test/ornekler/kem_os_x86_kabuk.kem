@@ -921,6 +921,10 @@ işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     değişken r: tam64 = kxs_baglam(y);
     değişken fizik: tam64 = kxm_o64(r+KXS_CR3_OFS);
     değişken yer: KxsYer = kxs_yer(kxm_o64(r+256));
+    // Tam kökün çekirdek dalları da silinecek. Aktif bir CR3'ü geri verme.
+    eğer değil smp_alan_bos(fizik) { ver -16; }
+    // Kapanan ön plan uygulamasının basılı tuşu yeni sahibin satırında yinelenmesin.
+    güvensiz { eğer kxs_on_pid==ks_pid(y) { kt_kod=0; } }
     güvensiz { memset(fizik olarak *tam8,0,(yer.tablo olarak tam64)*4096); }
     değişken ayirici: CerceveAyirici = uefi_ayirici_al();
     eşleş uefi_cerceve_iade(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {
@@ -1761,8 +1765,7 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
     değişken t: tam64 = ag_dma+4096+(ag_tx olarak tam64)*16;
     eğer (kem_fiz_oku8(t+12)&1)==0 { ver -11; }
     değişken a: tam64 = kem_mmio_oku64(t);
-    değişken i: tam32 = 0;
-    iken i<boy { kem_fiz_yaz8(a+(i olarak tam64),kem_fiz_oku8(adres+(i olarak tam64))); i=i+1; }
+    memcpy(a olarak *tam8,adres olarak *tam8,boy olarak tam64);
     eğer ag_model==3 { kem_mmio_yaz64(t+8,igb_tx_sozcugu(boy)); }
     değilse { kem_mmio_yaz64(t+8,e1k_tx_sozcugu(boy)); }
     ag_tx=(ag_tx+1)%E1K_ADET;
@@ -1772,11 +1775,18 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
 }
 işlev ag_al() {
     güvensiz {
-    eğer ag_bar==0 { ver; }
-    eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
-    ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_ntp_adim(); ag_tcp_adim();
-    eğer ag_model==6 { ag_ecm_al(); ver; }
-    eğer ag_model==4 { ag_vrx(); ver; }
+        eğer ag_bar==0 { ver; }
+        eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
+        ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_ntp_adim();
+        eğer ag_model==6 { ag_ecm_al(); }
+        değilse eğer ag_model==4 { ag_vrx(); }
+        değilse { ag_e1k_al(); }
+        // Yeni veri veya ACK'den doğan gönderim, bir sonraki kesmeyi beklemesin.
+        ag_tcp_adim();
+    }
+}
+işlev ag_e1k_al() {
+    güvensiz {
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
         değişken t: tam64 = ag_dma+(ag_rx olarak tam64)*16;
@@ -1786,8 +1796,8 @@ işlev ag_al() {
         eğer n==0 { ver; }
         eğer n>0 {
             değişken a: tam64 = ag_dma+8192+(ag_rx olarak tam64)*2048;
-            değişken j: tam32 = 0;
-            iken j<n { kem_fiz_yaz8(ag_dma+40960+(j olarak tam64),kem_fiz_oku8(a+(j olarak tam64))); j=j+1; }
+            kem_dma_bariyeri();
+            memcpy((ag_dma+40960) olarak *tam8,a olarak *tam8,n olarak tam64);
             ag_son_boy=n; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+(n olarak tam64); ag_l3_girdi();
         } değilse { ag_atilan=ag_atilan+1; }
         kem_mmio_yaz64(t,ag_dma+8192+(ag_rx olarak tam64)*2048);
@@ -2227,6 +2237,13 @@ işlev ag_tcp_ac(ip: tam64,es: tam64,port: tam32,ep: tam32,uyg: tam32,aktif: man
         iken i<8 {
             değişken k: tam64 = ag_tcp_alan+1052672*(i olarak tam64); i=i+1;
             eğer kem_mmio_oku32(k+576)==0 {
+                // Küçük E1000 halkasında yankının her MSS'si için bir veri ve bir
+                // onay tanımlayıcısı gerekir. İki yuva denetim trafiğine ayrılır.
+                değişken al_boyu:tam32=131072;
+                eğer uyg==1 ve ag_model>=1 ve ag_model<=3 ve (es>>24)!=127 {
+                    al_boyu=((E1K_ADET-2)/2)*1460;
+                }
+                ag_dizi_baslik(k+512,k+1024,al_boyu,4);
                 ag_tcp_kim=ag_tcp_kim+1;
                 değişken b: TcpBag = tcp_yeni(ip,es,port,ep,(ag_us()*4+ag_tcp_kim*65537)&4294967295,ag_dizi8(k+512),ag_dizi8(k+544));
                 b.olcek_iste=ag_tcp_olcek; b.damga_iste=doğru; b.gecikmeli=doğru; b.nagle=doğru; b.canli_ms=ag_tcp_canli_ms; b.canli_son=ag_us()/1000;
@@ -2279,6 +2296,15 @@ işlev ag_tcp_girdi(b: Dizi<dtam8>,n: tam32,lo: mantıksal) -> mantıksal {
         tcp_al(&değişken s,&v,b,h,ag_us()/1000); *p=s; ver doğru;
     }
 }
+// Kalıcı ağ tamponu çağıranın mülkiyetindedir. Bu döngü geçici bölge ayırmaz.
+çıplak işlev ag_aktarim_doldur(buf: Dizi<dtam8>, adet: tam32, bas: tam64) {
+    değişken i:tam32=0;
+    iken i<adet {
+        değişken j:tam64=bas+(i olarak tam64);
+        dizi_yaz(buf,i,(((j*37+j/251)&255) olarak tam32) olarak dtam8);
+        i=i+1;
+    }
+}
 // Soket ABI'sinden önceki yankı ve aktarım sınaması aynı gönder/al halkalarını kullanır.
 işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
     güvensiz {
@@ -2300,7 +2326,7 @@ işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
         değişken kalan: tam64 = ag_tcp_hedef_boy-ag_tcp_yazilan;
         eğer kalan>0 ve s.tx_boy<dizi_boyut(s.tx) {
             değişken adet: tam32 = 1460; eğer kalan<1460 { adet=kalan olarak tam32; } eğer adet>dizi_boyut(s.tx)-s.tx_boy { adet=dizi_boyut(s.tx)-s.tx_boy; }
-            değişken i: tam32 = 0; iken i<adet { değişken j: tam64 = ag_tcp_yazilan+(i olarak tam64); ag_y8(buf,i,j*37+j/251); i=i+1; }
+            ag_aktarim_doldur(buf,adet,ag_tcp_yazilan);
             adet=tcp_yaz(s,buf,0,adet); eğer adet>0 { ag_tcp_yazilan=ag_tcp_yazilan+(adet olarak tam64); }
         }
         eğer (ag_tcp_tek_yon veya ag_tcp_okunan==ag_tcp_hedef_boy) ve ag_tcp_yazilan==ag_tcp_hedef_boy { tcp_kapat_iste(s); }
@@ -2326,11 +2352,22 @@ işlev ag_tcp_adim() {
             değişken uyg: tam32 = kem_mmio_oku32(k+576) olarak tam32;
             eğer uyg>0 {
                 değişken p: *TcpBag = k olarak *TcpBag; değişken s: TcpBag = *p;
-                ag_tcp_uygulama(&değişken s,uyg,buf); değişken once: TcpBag = s;
-                değişken n: tam32 = tcp_cikar(&değişken s,tx,34,ms); *p=s;
-                eğer n>0 {
-                    değişken aktarim: tam32 = ag_tcp_paket(tx,n,s.ip,s.es);
-                    eğer aktarim<0 { *p=once; } değilse { ag_tcp_tekrar=ag_tcp_tekrar+s.yeniden-once.yeniden; ag_tcp_yoklama=ag_tcp_yoklama+s.yoklama_adet-once.yoklama_adet; }
+                // Bir aygıt yoklamasında hazır veriyi gönder; dolu NIC veya TCP penceresi işi sonraki tura bırakır.
+                değişken kalan:tam32=8;
+                iken kalan>0 {
+                    ag_tcp_uygulama(&değişken s,uyg,buf);
+                    değişken once:TcpBag=s;
+                    değişken n:tam32=tcp_cikar(&değişken s,tx,34,ms);
+                    *p=s;
+                    eğer n<=0 { kalan=0; }
+                    değilse eğer ag_tcp_paket(tx,n,s.ip,s.es)<0 { s=once; *p=s; kalan=0; }
+                    değilse {
+                        ag_tcp_tekrar=ag_tcp_tekrar+s.yeniden-once.yeniden;
+                        ag_tcp_yoklama=ag_tcp_yoklama+s.yoklama_adet-once.yoklama_adet;
+                        kalan=kalan-1;
+                        eğer uyg!=1 veya s.es>>24==127 veya s.durum!=TCP_BAGLI
+                            veya (s.tx_boy<=s.tx_ucus ve s.rx_boy==0) { kalan=0; }
+                    }
                 }
                 eğer s.durum==TCP_KAPALI {
                     değişken sahip: tam64 = kxm_o64(k+608);
@@ -2463,15 +2500,19 @@ işlev ag_l3_kur() -> mantıksal {
         eğer değil ag_l5_kur() { ver yanlış; } ver ag_parca_kur();
     }
 }
+// Boy ve kapasite çağıranda doğrulanır. Ağ dizisini DMA için sıkıştır.
+çıplak işlev ag_tel_kopyala(a: tam64, b: Dizi<dtam8>, n: tam32) -> tam32 {
+    değişken i:tam32=0;
+    iken i<n { kem_fiz_yaz8(a+(i olarak tam64),dizi_al(b,i) olarak tam32); i=i+1; }
+    // Kısa çerçevenin dolgusunda önceki paketten bayt kalmasın.
+    iken i<60 { kem_fiz_yaz8(a+(i olarak tam64),0); i=i+1; }
+    ver i;
+}
 işlev ag_dizi_gonder(b: Dizi<dtam8>,n: tam32) -> tam32 {
     güvensiz {
         eğer ag_l3_alan==0 veya n<14 veya n>dizi_boyut(b) veya n>1518 { ver -90; }
         değişken a: tam64 = ag_l3_alan+20480;
-        değişken i: tam32 = 0;
-        iken i<n { kem_fiz_yaz8(a+(i olarak tam64),ag_b8(b,i)); i=i+1; }
-        // Kısa Ethernet çerçevesinin dolgusu daha önceki paketin baytlarını taşımamalı.
-        iken i<60 { kem_fiz_yaz8(a+(i olarak tam64),0); i=i+1; }
-        ver ag_gonder(a,i);
+        ver ag_gonder(a,ag_tel_kopyala(a,b,n));
     }
 }
 işlev ag_l3_isle(rx: Dizi<dtam8>,n: tam32,tx: Dizi<dtam8>,ms: tam64,lo: mantıksal) -> tam32 {
@@ -2490,6 +2531,15 @@ işlev ag_l3_ping(tx: Dizi<dtam8>,ip: tam64,mac: tam64,hedef: tam64,kim: tam32,s
         *p=s; ver n;
     }
 }
+// NIC'in teslim ettiği sıkışık Ethernet baytlarını L3 dizisinin 32 bitlik elemanlarına aç.
+çıplak işlev ag_tel_ac(kaynak: tam64, hedef: tam64, boy: tam32) {
+    değişken i:tam32=0;
+    iken i<boy {
+        değişken hucre:*tam32=(hedef+(i olarak tam64)*4) olarak *tam32;
+        *hucre=kem_fiz_oku8(kaynak+(i olarak tam64));
+        i=i+1;
+    }
+}
 işlev ag_l3_girdi() {
     güvensiz {
         eğer ag_l3_alan==0 veya ag_son_boy<14 veya ag_son_boy>1518 { ver; }
@@ -2497,8 +2547,7 @@ işlev ag_l3_girdi() {
         değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
         eğer t!=2048 ve t!=2054 { değişken yeni: AgL3 = *s; yeni.bilinmeyen=yeni.bilinmeyen+1; *s=yeni; ver; }
         değişken rx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
-        değişken i: tam32 = 0;
-        iken i<ag_son_boy { ag_y8(rx,i,kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64); i=i+1; }
+        ag_tel_ac(ag_dma+40960,kem_mmio_oku64(ag_l3_alan+256),ag_son_boy);
         eğer t==2048 ve (ag_be16(rx,20)&16383)!=0 ve ip4_baslik(rx,ag_son_boy)>=0 { ag_parca_girdi(rx,ag_son_boy,ag_us()/1000); ver; }
         eğer t==2048 ve (ag_udp_girdi(rx,ag_son_boy) veya ag_tcp_girdi(rx,ag_son_boy,yanlış)) { ver; }
         değişken once: tam64 = (*s).cakisma;

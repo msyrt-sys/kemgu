@@ -406,13 +406,9 @@ işlev kxs_hazirla(ayirici: tam64, e: Elf64, argv: Dizi<metin>, ebeveyn: tam64) 
     kxm_y64(kayit+KXS_DURUM_OFS,KXS_KOSUYOR);
     kx_sis_vekil=kxs_hizmet_adresi();
     değişken cr0: tam64 = kxs_fpu_kapat();
-    kxm_cr3_yaz(kxs_cr3);
-    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $0, %gs:24
-movq $1, %gs:88"# girdi("r",kxs_pid) girdi("r",kxs_cr3) bozulan("~{memory}") } }
+    smp_alan_degistir(kxs_cr3,kxs_pid);
     değişken durdu: tam64 = kxs_dilim(kayit);
-    kxm_cr3_yaz(ana);
-    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $$0, %gs:24
-movq $0, %gs:88"# girdi("r",ana) bozulan("~{memory}") } }
+    smp_alan_degistir(ana,0);
     kxs_fpu_geri(cr0);
     kx_sis_vekil=0;
     eğer durdu == 0 {

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from dalga12_fat import Fat
 from dalga12_kahin import boot, fsck, wait_for
-from duzenle_kahin import ge_ekran, ge_girdiler, tamam, tus
+from duzenle_kahin import ge_ekran, ge_girdiler, tamam
 from pci16_kahin import dugumler
 from surec_imaj import imajlar
 from surec_kahin import SurecConsole
@@ -25,6 +25,9 @@ def hmp_agaci(q):
 def envanter(c):
     rapor = []
     c.run('donanim',rapor.append)
+    if not rapor[0].startswith(b'CPU '):
+        ayna = c.mem(c.sayi('EKRAN_AYNA_TABAN'), 160).split(b'\n', 1)[0]
+        raise AssertionError(('donanim komutu ve yanıtı', ayna, rapor[0]))
     siniflar = {int(y):int(t) for y,t in re.findall(rb'^USB (\d+) \w{4}:\w{4} (\d+)$',rapor[0],re.M)}
     q = c.q
     x = next(a for a in dugumler(q.call('query-pci')[0]['devices']) if a.get('qdev_id')=='x')
@@ -86,7 +89,13 @@ def kos(w, derinlik, hizli):
             for bas in (True,False):
                 q.call('input-send-event',{'events':[{'type':'btn','data':{'button':'wheel-down','down':bas}}]})
             ge_ekran(c,yol,adlar,3)
-            tus(c,'q'); tamam(c,'dosyalar',1)
+            # Uygulamayı kapatan tuşu yineleme süresinden uzun tut. Kabuk
+            # odağı alınca eski sahibin tuşu komut satırına sızmamalı.
+            c.key('q',True)
+            tamam(c,'dosyalar',1)
+            ilk=c.tik()
+            wait_for(p,lambda:c.tik()>=ilk+65)
+            c.key('q',False)
         alt = '.'.join(['1']*derinlik+['4'])
         farklar=[]
         for ad,aygit in [('bir','usb-tablet'),('iki','usb-hub')]:

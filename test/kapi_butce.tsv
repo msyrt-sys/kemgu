@@ -81,6 +81,10 @@ calistir_bm_x86_tcp_kayip	431	qemu-x86
 calistir_bm_x86_tcp_secenek	60	qemu-x86
 calistir_bm_x86_tcp_temel	66	qemu-x86
 calistir_bm_x86_tcp_verim	562	qemu-x86
+calistir_bm_x86_tcp_verim_c_olcekli	281	qemu-x86
+calistir_bm_x86_tcp_verim_c_olceksiz	276	qemu-x86
+calistir_bm_x86_tcp_verim_self_olcekli	350	qemu-x86
+calistir_bm_x86_tcp_verim_self_olceksiz	345	qemu-x86
 calistir_bm_x86_tftp_teshis	592	qemu-x86
 calistir_bm_x86_uefi	65	qemu-x86
 calistir_bm_x86_uefi_kabuk	560	qemu-x86
@@ -186,3 +190,4 @@ calistir_bm_x86_smp_kesif	60	qemu-x86
 calistir_bm_x86_smp_ap	86	qemu-x86
 calistir_bm_x86_smp_tik	87	qemu-x86
 calistir_bm_x86_smp_kilit	549	qemu-x86
+calistir_bm_x86_smp_tlb	416	qemu-x86

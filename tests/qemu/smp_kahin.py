@@ -434,6 +434,71 @@ def bellek_stresi(q, p, seri, w, sim, n):
           f"boş çerçeve {ilk}→{bos}, bit eşlemi aynı, kilit edinimi çerçeve={f1-f0} heap={h1-h0}", flush=True)
 
 
+def tlb(q, p, seri, w, sim, n):
+    va = 1 << 39
+    adres = bekle("TLB deney kaydı", lambda: sayac(q, w, sim["smp_tlb_olcum"]), sure=15, surec=p)
+    deger = 1953260081
+    bekle("iki vCPU aynı kullanıcı sayfasını okudu", lambda: bellek(q, w, adres+24, 16),
+          lambda ham: struct.unpack("<QQ", ham) == (deger, deger), sure=10, surec=p)
+    kok, veri, ana = struct.unpack("<3Q", bellek(q, w, adres, 24))
+    assert kok != ana and sayac(q, w, veri) == deger
+    kayit = sayac(q, w, sim["smp_ap_kayitlari"])
+
+    def yazmaclar(no):
+        return q.call("human-monitor-command", {"command-line": "info registers", "cpu-index": no})
+
+    for no in range(n):
+        cpu = sayac(q, w, kayit+no*64+48)
+        assert sayac(q, w, cpu+88) == yazmac(yazmaclar(no), "CR3") == (kok if no < 2 else ana)
+        assert sayac(q, w, cpu+128) % 2 == 0
+    tablo = kok
+    for kay in (39, 30, 21, 12):
+        yuva = tablo + ((va >> kay) & 511) * 8
+        girdi = sayac(q, w, yuva)
+        assert girdi & 5 == 5 and (kay == 12 or girdi & 128 == 0)
+        tablo = girdi & 0x000ffffffffff000
+    assert tablo == veri and not girdi & 2
+    bit, _ = cerceve_haritasi(q, w, sim)
+    ayirici = sayac(q, w, sim["uefi_surec_ayirici"])
+    bolgeler = sayac(q, w, ayirici)
+    ilk, adet = struct.unpack("<QI", bellek(q, w, bolgeler, 12))
+    sayfa = 0
+    for bas, boy, tur in struct.iter_unpack("<QQI4x", bellek(q, w, ilk, 24*adet)):
+        assert tur == 1 and bas % 4096 == boy % 4096 == 0
+        if bas <= veri < bas + boy:
+            sayfa += (veri - bas) // 4096
+            break
+        sayfa += boy // 4096
+    else:
+        raise AssertionError(f"Fiziksel çerçeve ayırıcı bölgelerinde yok: {veri:#x}")
+    indeks, maske = sayfa // 8, 1 << (sayfa % 8)
+    assert bit[indeks] & maske
+    q.call("human-monitor-command", {"command-line": "o /b 0x3ff 0xa1"})
+    durum = bekle("uzak geçersizleme ve çerçeve iadesi", lambda: sayac(q, w, adres+48), sure=10, surec=p)
+    sonraki, _ = cerceve_haritasi(q, w, sim)
+    assert sayac(q, w, yuva) == 0
+    sonuc, = struct.unpack("<q", bellek(q, w, adres+40, 8))
+    assert struct.unpack("<q", bellek(q, w, adres+64, 8)) == (-2,)
+    kutu = sayac(q, w, kayit+64+56)
+    assert sayac(q, w, kutu+88) == 1
+    if durum != 1:
+        assert sonuc < 0 and sonraki[indeks] & maske
+        raise AssertionError(f"TLB onayı eksik, sonuç={sonuc}, çerçeve ayrılmış, yeniden kullanım engellendi")
+    assert sonuc == veri and not (sonraki[indeks] & maske)
+    for no in range(n):
+        kutu = sayac(q, w, kayit+no*64+56)
+        assert sayac(q, w, kutu+88) == int(no == 1)
+    assert yazmac(yazmaclar(0), "CR3") == ana and yazmac(yazmaclar(1), "CR3") == kok
+    q.call("human-monitor-command", {"command-line": "o /b 0x3ff 0xa2"})
+    desen = rb"ISTISNA tip=0x0*e a=0x0+ b=0x[0-9a-f]+ adr=0x0*8000000000\r?\n"
+    bekle("AP1 donanım sayfa hatası", lambda: seri_oku(seri),
+          lambda s: re.search(desen, s, re.IGNORECASE), sure=10, surec=p)
+    assert yazmac(yazmaclar(1), "CR2") == va and sayac(q, w, adres+56) == 0
+    assert all(yazmac(yazmaclar(i), "CR2") != va for i in range(n) if i != 1)
+    print(f"TLB: CPU0/1 CR3={kok:#x}, VA={va:#x}, iki okuma={deger}, uzak INVLPG/onay=1, "
+          f"çerçeve={veri:#x} serbest, AP1 #PF CR2={va:#x}", flush=True)
+
+
 def gs_kabuk(dizin):
     from surec_imaj import imajlar
 
@@ -481,7 +546,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("dizin", type=Path)
     ap.add_argument(
-        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit", "ipi", "bellek")
+        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit", "ipi", "bellek", "tlb")
     )
     ap.add_argument("--adet", nargs="+", type=int, default=None)
     ap.add_argument("--tekrar", type=int, default=1000000)
@@ -495,7 +560,7 @@ def main():
             kabuk(dizin)
         return
     sim = semboller(dizin / "k.elf")
-    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8], "ipi": [4, 6], "bellek": [4]}[a.kip]:
+    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8], "ipi": [4, 6], "bellek": [4], "tlb": [4]}[a.kip]:
         w = dizin / f"{a.kip}-{adet}"
         topoloji = "6,sockets=2,cores=3,threads=1" if a.kip == "ipi" and adet == 6 else None
         with acilis(w, dizin / "pc.img", adet, topoloji) as (q, p, seri):
@@ -505,6 +570,8 @@ def main():
             kesif(q, p, seri, w, sim, adet)
             if a.kip == "ap":
                 ap_baslatma(q, seri, w, sim, adet)
+            elif a.kip == "tlb":
+                tlb(q, p, seri, w, sim, adet)
             elif a.kip == "tik":
                 tik(q, p, seri, w, sim, adet)
             elif a.kip == "bellek":

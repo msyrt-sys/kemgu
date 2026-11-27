@@ -5312,10 +5312,23 @@ test_tumu: calistir_bm_x86_tcp_secenek
 calistir_bm_x86_tcp_secenek: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh secenek
 
-.PHONY: calistir_bm_x86_tcp_verim
+PARCALAR_X86_TCP_VERIM := calistir_bm_x86_tcp_verim_c_olcekli calistir_bm_x86_tcp_verim_c_olceksiz calistir_bm_x86_tcp_verim_self_olcekli calistir_bm_x86_tcp_verim_self_olceksiz
+.PHONY: calistir_bm_x86_tcp_verim $(PARCALAR_X86_TCP_VERIM)
 test_tumu: calistir_bm_x86_tcp_verim
-calistir_bm_x86_tcp_verim: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@bash test/bm_x86_nic_harness.sh verim
+calistir_bm_x86_tcp_verim: $(PARCALAR_X86_TCP_VERIM)
+$(PARCALAR_X86_TCP_VERIM): $(X86_KAHIN_ON)
+
+calistir_bm_x86_tcp_verim_c_olcekli:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_VERIM_KIPI=olcekli bash test/bm_x86_nic_harness.sh verim
+
+calistir_bm_x86_tcp_verim_c_olceksiz:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_VERIM_KIPI=olceksiz bash test/bm_x86_nic_harness.sh verim
+
+calistir_bm_x86_tcp_verim_self_olcekli:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_VERIM_KIPI=olcekli bash test/bm_x86_nic_harness.sh verim
+
+calistir_bm_x86_tcp_verim_self_olceksiz:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_VERIM_KIPI=olceksiz bash test/bm_x86_nic_harness.sh verim
 
 .PHONY: calistir_bm_x86_soket
 test_tumu: calistir_bm_x86_soket
@@ -5464,3 +5477,9 @@ test_tumu: calistir_bm_x86_smp_bellek
 calistir_bm_x86_smp_bellek: $(X86_SMP_ON)
 	@bash test/bm_x86_smp_harness.sh bellek
 	@SMP_TEK_BELLEK=1 SUREC_SENARYO=tekrar SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_tlb
+test_tumu: calistir_bm_x86_smp_tlb
+calistir_bm_x86_smp_tlb: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh tlb
+	@SUREC_SMP=4 SUREC_SENARYO="tus-usb cocuk" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh

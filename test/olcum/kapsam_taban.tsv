@@ -172,6 +172,10 @@ calistir_bm_x86_ps2_karma	kemgu	bm_uefi.py	UEFI_PS2_KARMA	test/ornekler/kem_os_x
 calistir_bm_x86_ps2_karma	kemgu	bm_uefi.py	UEFI_PS2_KARMA	test/ornekler/kem_os_x86_kabuk.kem	kabuk=1	usb	256M	7
 calistir_bm_x86_ps2_karma	kemgu	bm_uefi.py	UEFI_PS2_KARMA	test/ornekler/kem_os_x86_kabuk.kem	kabuk=1	usb	256M	8
 calistir_bm_x86_ps2_karma	kemgu	bm_uefi.py	UEFI_PS2_KARMA	test/ornekler/kem_os_x86_kabuk.kem	kabuk=1	usb	256M	9
+calistir_bm_x86_tcp_verim	codegen	ag_tcp_secenek.py	olcekli
+calistir_bm_x86_tcp_verim	codegen	ag_tcp_secenek.py	olceksiz
+calistir_bm_x86_tcp_verim	kemgu	ag_tcp_secenek.py	olcekli
+calistir_bm_x86_tcp_verim	kemgu	ag_tcp_secenek.py	olceksiz
 calistir_bm_x86_v1	codegen	surec_kahin.py	v1	1
 calistir_bm_x86_v1	codegen	surec_kahin.py	v1	10
 calistir_bm_x86_v1	codegen	surec_kahin.py	v1	2

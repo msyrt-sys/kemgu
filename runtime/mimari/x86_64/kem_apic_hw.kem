@@ -526,9 +526,9 @@ cli"# çıktı("=r",&f) bozulan("~{memory}") } }
     ver f;
 }
 çıplak işlev ipi_kesme_geri(f:tam64) { eğer (f&512)!=0 { kz_irq_ac(); } }
-çıplak işlev ipi_iste(hedef:tam32,tur:tam32,islem:tam32,veri:tam64) -> tam64 {
+çıplak işlev ipi_iste_alan(hedef:tam32,tur:tam32,islem:tam32,veri:tam64,kok:tam64) -> tam64 {
     değişken p:tam64=ipi_kutusu(hedef);
-    eğer p==0 veya tur<80 veya tur>82 { ver -1; }
+    eğer p==0 veya tur<80 veya tur>83 { ver -1; }
     eğer tur==80 ve (islem<1 veya islem>2) { ver -1; }
     değişken f:tam64=ipi_kesme_sakla();
     eğer değil ipi_bos_al(p) { ipi_kesme_geri(f); ver -2; }
@@ -537,12 +537,16 @@ cli"# çıktı("=r",&f) bozulan("~{memory}") } }
     eğer s<=0 { s=1; }
     ipi_yaz(p+8,s); ipi_yaz(p+16,cekirdek_no());
     ipi_yaz(p+24,tur olarak tam64); ipi_yaz(p+32,veri);
-    ipi_yaz(p+72,islem olarak tam64);
+    ipi_yaz(p+72,islem olarak tam64); ipi_yaz(p+80,kok);
     ipi_yaz(p,2);
     değişken id:tam32=smp_apic_kimligi(hedef);
     kem_mmio_yaz32(kap_lapic+784,(id olarak tam64)<<24);
     kem_mmio_yaz32(kap_lapic+768,tur olarak tam64);
     ipi_kesme_geri(f); ver s;
+}
+çıplak işlev ipi_iste(hedef:tam32,tur:tam32,islem:tam32,veri:tam64) -> tam64 {
+    eğer tur>82 { ver -1; }
+    ver ipi_iste_alan(hedef,tur,islem,veri,0);
 }
 çıplak işlev ipi_gonder(hedef:tam32,tur:tam32) -> tam64 { ver ipi_iste(hedef,tur,1,0); }
 çıplak işlev ipi_cagir(hedef:tam32,islem:tam32,veri:tam64) -> tam64 {
@@ -568,6 +572,15 @@ gerçekzamanlı çıplak işlev kem_ipi_isle(tur:tam32) -> tam32 {
     }
     eğer tur==81 { ipi_yaz(p+56,ipi_oku(p+56)+1); }
     eğer tur==82 { ipi_yaz(p+64,1); }
+    eğer tur==83 {
+        // CR3 başka bir alana geçtiyse o geçiş eski TLB girdilerini boşalttı.
+        değişken kok:tam64=0;
+        güvensiz { satıriçi_asm { mimari:x86_64 çevrim:64 şablon:r#"movq %cr3,$0"# çıktı("=r",&kok) bozulan("~{memory}") } }
+        eğer kok==ipi_oku(p+80) {
+            smp_tlb_yerel(ipi_oku(p+32));
+            ipi_yaz(p+88,ipi_oku(p+88)+1);
+        }
+    }
     ipi_yaz(p+40,v);
     ipi_yaz(p+48,ipi_oku(p+48)+1);
     ipi_yaz(p,3);
@@ -597,4 +610,87 @@ gerçekzamanlı çıplak işlev kem_ipi_isle(tur:tam32) -> tam32 {
         hedef=hedef+1;
     }
     ver bitti;
+}
+
+// CR3 ve GS kaydı kesmeler kapalıyken tek geçiş olarak yayımlanır.
+// Tek sürümde olmayan okuyucu hedefi geçersizleme kümesine dahil eder.
+çıplak işlev smp_alan_degistir(kok:tam64,pid:tam64) {
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+cli
+lock incq %gs:128
+movq $0,%cr3
+movq $0,%gs:88
+movq $1,%gs:24
+lock incq %gs:128
+popfq"# girdi("r",kok) girdi("r",pid) bozulan("~{cc}") bozulan("~{memory}") } }
+}
+çıplak işlev smp_alan_kullaniyor(no:tam32,kok:tam64) -> mantıksal {
+    değişken d:tam64=ipi_oku(smp_ap_kayitlari+(no olarak tam64)*64+48);
+    değişken s:tam64=ipi_oku(d+128);
+    değişken alan:tam64=ipi_oku(d+88);
+    ver (s&1)!=0 veya alan==kok veya ipi_oku(d+128)!=s;
+}
+// Çağıran zamanlayıcı sonlandırılmış sürecin yeniden kuyruğa girmesini önler.
+çıplak işlev smp_alan_bos(kok:tam64) -> mantıksal {
+    eğer kxm_cr3_oku()==kok { ver yanlış; }
+    eğer smp_cevrimici<=1 { ver doğru; }
+    değişken no:tam32=0;
+    iken no<smp_cevrimici {
+        eğer smp_alan_kullaniyor(no,kok) { ver yanlış; }
+        no=no+1;
+    }
+    ver doğru;
+}
+gerçekzamanlı çıplak işlev smp_tlb_yerel(va:tam64) {
+    güvensiz { satıriçi_asm { mimari:x86_64 çevrim:128 şablon:r#"invlpg ($0)"# girdi("r",va) bozulan("~{memory}") } }
+}
+// Bekleyen kayıt çerçevenin sahibinde kalır. Aynı çekirdek süre aşımı
+// sonrasında mevcut bileti bekler. Son hedef onay verince fiziksel adres döner.
+yapı SmpTlbIade { kok:tam64; va:tam64; fizik:tam64; gonderen:tam64; hedef:tam32; bilet:tam64; }
+çıplak işlev smp_tlb_tamamla(i: &değişken SmpTlbIade) -> tam64 {
+    eğer i.fizik<=0 veya i.gonderen!=cekirdek_no() { ver -1; }
+    iken i.hedef<smp_cevrimici {
+        eğer i.bilet==0 ve (i.hedef olarak tam64)!=i.gonderen ve smp_alan_kullaniyor(i.hedef,i.kok) {
+            değişken b:tam64=ipi_iste_alan(i.hedef,83,0,i.va,i.kok);
+            eğer b<0 { ver b; }
+            i.bilet=b;
+        }
+        eğer i.bilet>0 {
+            değişken v:tam64=ipi_bekle(i.hedef,i.bilet,1000);
+            eğer v<0 { ver v; }
+            i.bilet=0;
+        }
+        i.hedef=i.hedef+1;
+    }
+    değişken serbest:tam64=i.fizik;
+    i.fizik=0; ver serbest;
+}
+// Çağıran kök ve alt tabloları işlem süresince tutar. Yalnız kullanıcıya
+// açık 4 KiB yapraklar. Eşzamanlı A/D güncellemesi karşılaştırmayı bozarsa
+// yaprak yerinde kalır ve çağıran işlemi yeniden başlatabilir.
+çıplak işlev smp_esleme_kaldir(kok:tam64,va:tam64,i: &değişken SmpTlbIade) -> tam64 {
+    eğer i.fizik!=0 { ver -2; }
+    eğer kok<=0 veya (kok&4095)!=0 veya va<0 veya va>=140737488355328 veya (va&4095)!=0 { ver -1; }
+    değişken tablo:tam64=kok;
+    değişken kay:tam64=39;
+    iken kay>=12 {
+        değişken p:tam64=tablo+((va>>kay)&511)*8;
+        değişken g:tam64=ipi_oku(p);
+        eğer (g&5)!=5 { ver -1; }
+        eğer kay>12 ve (g&128)!=0 { ver -1; }
+        tablo=g&4503599627366400;
+        eğer kay==12 {
+            eğer (g&256)!=0 { ver -1; }
+            değişken eski:tam64=0;
+            güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $2,%rax
+xorq %rcx,%rcx
+lock cmpxchgq %rcx,($1)
+movq %rax,$0"# çıktı("=r",&eski) girdi("r",p) girdi("r",g) bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{cc}") bozulan("~{memory}") } }
+            eğer eski!=g { ver -11; }
+        }
+        kay=kay-9;
+    }
+    smp_tlb_yerel(va);
+    i.kok=kok; i.va=va; i.fizik=tablo; i.gonderen=cekirdek_no(); i.hedef=0; i.bilet=0;
+    ver smp_tlb_tamamla(i);
 }

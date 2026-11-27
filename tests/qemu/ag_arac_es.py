@@ -6,7 +6,8 @@ import sys
 import threading
 
 from ag_arac_kahin import komut, dinleyici_bekle, MAC
-from ag_es import EthernetEs, TcpEs, ES_IP, ES_MAC, KONUK_IP, dns_a_yanit, ethernet, ipv4, udp
+from bekle import bekle
+from ag_es import EthernetEs, TcpEs, ES_IP, ES_MAC, KONUK_IP, dhcp_secenekleri, dns_a_yanit, ethernet, ipv4, udp
 from dalga12_kahin import boot, wait_for
 from pcap_oku import cerceve_oku, pcap_kayitlari
 from surec_imaj import imajlar
@@ -18,8 +19,9 @@ def kos(w):
     udp_yanit=Queue()
     tcp_gelen=Queue()
     hatalar=[]
+    dhcp_izi=[]
     pcap=w/'arac-dgram.pcap'
-    with EthernetEs() as hat:
+    with EthernetEs(dizin=w) as hat:
         dur=threading.Event()
         def tel():
             try:
@@ -37,7 +39,10 @@ def kos(w):
                     elif v.protokol==17 and v.hedef_port==18811: udp_yanit.put(v.yuk[8:])
                     else:
                         cevap=hat.yanit(ham)
-                        if cevap: hat.gonder(cevap)
+                        if cevap:
+                            hat.gonder(cevap)
+                            if (v.kaynak_port, v.hedef_port) == (68, 67):
+                                dhcp_izi.append((hat.konuk, len(ham), len(cevap)))
             except Exception as exc: hatalar.append(exc)
         t=threading.Thread(target=tel)
         t.start()
@@ -46,7 +51,12 @@ def kos(w):
                  '-object',f'filter-dump,id=f0,netdev=n0,file={pcap}')
             with boot(w,disk[0],nvme,sata,ag_aygitlari=net) as (q,p,seri):
                 c=SurecConsole(w,q,p,seri)
-                wait_for(p,lambda:int.from_bytes(c.mem(c.sayi('ag_l5'),4),'little')==3,seconds=15)
+                def kira():
+                    if hatalar:
+                        raise RuntimeError("Ethernet eşi durdu") from hatalar[0]
+                    return int.from_bytes(c.mem(c.sayi('ag_l5'),4),'little'), dhcp_izi.copy()
+                bekle('DHCP kira durumu ve geri gönderilen paketler', kira,
+                      lambda s: s[0]==3, sure=15, surec=p)
                 once=c.heap(),c.bos_cerceve()
                 assert b'198.51.100.17\n' in komut(c,'cozumle ornek.test')
                 assert b'192.0.2.1 '+ES_MAC.hex(':').encode() in komut(c,'ag arp')
@@ -87,6 +97,17 @@ def kos(w):
             dur.set();t.join(3)
         assert not hatalar and not t.is_alive(),hatalar
     with pcap.open('rb') as f: paketler=list(pcap_kayitlari(f))
+    # Aynı işlem kimliğinde DISCOVER/OFFER/REQUEST/ACK telde sırasıyla görünür.
+    dhcp = [(p.yuk[12:16], dhcp_secenekleri(p.yuk[8:])[53][0]) for p in paketler
+            if (p.kaynak_port, p.hedef_port) in ((67,68), (68,67))]
+    for kimlik, tur in dhcp:
+        if tur == 1:
+            turler = iter(t for k,t in dhcp if k==kimlik)
+            if all(beklenen in turler for beklenen in (1,2,3,5)):
+                break
+    else:
+        raise AssertionError(f'DHCP kira alışverişi eksik: {dhcp}')
+    print('DHCP işlem ve paket türleri', [(k.hex(),t) for k,t in dhcp], flush=True)
     assert sum(p.protokol==17 and p.hedef_port==18811 for p in paketler)==8
     assert sum(p.protokol==17 and p.hedef_port==53 for p in paketler)==1
     assert any(p.protokol==6 and p.kaynak_port==9143 and p.hedef_port==28811 and p.bayrak==18 for p in paketler)

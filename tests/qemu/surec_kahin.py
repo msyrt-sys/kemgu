@@ -75,22 +75,6 @@ class SurecConsole(Console):
         return fiziksel_cerceve_haritasi(self.mem, self.sayi("uefi_surec_ayirici"))[1]
 
 
-class UsbRaporConsole(SurecConsole):
-    """Her tuşu gerçek aygıtın değiştirdiği HID DMA raporuna bağla."""
-
-    def key(self, ad, bas):
-        if not hasattr(self, "hid_tampon"):
-            def tampon():
-                kayit = self.sayi("bh_kayitlar")
-                return int.from_bytes(self.mem(kayit+32, 8), "little") if kayit else 0
-            self.hid_tampon = bekle("USB klavye DMA tamponu", tampon, bool, sure=8, surec=self.p)
-        once = self.mem(self.hid_tampon, 8)
-        self.tus_gonder(ad, bas)
-        bekle(f"HID {ad} {'bas' if bas else 'bırak'}", lambda: self.mem(self.hid_tampon, 8),
-              lambda rapor: rapor != once, sure=8, aralik=.002, surec=self.p)
-
-
-
 def uefi_alan_denetle(c, taban):
     assert taban % SAYFA == 0 and taban >= 0x100000
     b = int(re.search(rb"BILGI_ADRES (\d+)", c.ser.read_bytes())[1])
@@ -324,6 +308,7 @@ def diskleri_koru(once, esp_bolum, esp):
 
 
 def kos(w, tekrar, senaryo, ilk=1):
+    smp = int(os.environ["SUREC_SMP"]) if "SUREC_SMP" in os.environ else None
     if ilk < 1 or tekrar < 1:
         raise ValueError("İlk açılış ve tekrar sayısı pozitif olmalı")
     programlar = {p.name: p.read_bytes() for p in (w / "kullanici").glob("*.elf")}
@@ -336,9 +321,12 @@ def kos(w, tekrar, senaryo, ilk=1):
         if kip not in ("kaynak-editor","yazma","duzenle-icerik","duzenle","gezgin","v1","v1-kesinti"):
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
-        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin","v1","v1-kesinti") else "ps2") as (q, p, seri):
-            konsol = UsbRaporConsole if kip.startswith("v1") or kip == "tekrar" else SurecConsole
-            c = konsol(w, q, p, seri)
+        with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, smp=smp, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin","v1","v1-kesinti") else "ps2") as (q, p, seri):
+            c = SurecConsole(w, q, p, seri)
+            if smp:
+                cpular = q.call("query-cpus-fast")
+                assert len(cpular) == smp == len({cpu["thread-id"] for cpu in cpular})
+                assert int.from_bytes(c.mem(c.symbols["smp_cevrimici"], 4), "little") == smp
             bos = c.bos_cerceve()
             assert bos >= 8 * CERCEVELER
             exe = "/diskler/usb0p2/bin/merhaba.elf"
