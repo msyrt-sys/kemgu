@@ -350,6 +350,20 @@
       kilit_al(k: tam64) { }` + `kilit_al(8 olarak tam64)` → C (--check/--llvm) rc=0 (kullanıcı tanımı yerleşiği gölgeler),
       self-host T001 2 37 (yerleşiğin `metin` imzası kullanılıyor). Codex çekirdekte smp_kilit_al/_birak adlarıyla dolaştı.
       Önce karar: gölgeleme mi (C davranışı) yoksa ikisinde de RED (T024 benzeri) mi? Sonra parite + fikstür + sabotaj.
+      ⚠ ÖLÇÜLDÜ (2026-11-27, uygulanmadı): 123 yerleşik adın her biri için `işlev N(a: tam32)->tam32 {ver a+1;}` +
+      `N(41)` matrisi. C'nin gölgelemesi BİLİNÇLİ DEĞİL (tip_kontrol.c yorumu: "Yan etki: ... önceden T024").
+      (1) 76 sembol tablosu yerleşiği: C gölgeliyor (42); self 73'ünü yerleşik imzasıyla reddediyor (T001/T010/T020)
+      — kök: yerlesik_imzalari_kur kayıtları önce, aramalar ilk eşleşmeyi döndürüyor. (2) 38 ada özel yerleşik
+      (dizi_*, kanal_*, görev_*, bir, sıfır, dondur, tekkez_olustur, sabitsüre_olustur, ifşa, mmio_*, vektor_*,
+      bölge_al, soket_baglan, yetki_olustur): C hiçbir biçimde gölgelemiyor; self 25'ini kabul edip YANLIŞ kod
+      üretiyor — SESSİZ YANLIŞ CEVAP: bir→1, sıfır→0, dondur/sabitsüre_olustur/tekkez_olustur→41; dizi_al/ekle/yaz/
+      kapasite_ayarla'da self derleyici ÇÖKÜYOR (SEGV); 9'unda LINK-RED. Ayrıca p4: kullanıcı `dizi_boyut(d: Dizi<T>)`
+      → C 42, self 3 (C009 sınıfının kalanı; self ifade_uret'teki ada özel dallar fn_var_mi'ye bakmıyor).
+      KARAR (muhafazakâr, T024 tasarımı FAT32 dosya_*/self metin_biter/D-303 alan'ı kırardı): (A) 38 ada özel ad
+      ayrılmış → kullanıcı tanımı iki derleyicide T024 (C pre_populate_islev; self dup_kontrol 4. geçiş + modül üyeleri;
+      alan/gönderen/dur muaf, repo etkisi 0); (B) self tip denetimi üst düzey kullanıcı tanımında yerleşik kaydını
+      gölgeler (Ayr.fn_yerlesik_n). Sonra matrisi yeniden koş, kalan codegen dallarını D-725 `.` önekiyle kapat.
+      Ayrı borç: anahtar kelime adlı işlev C P014 / self P000 (C0a).
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
