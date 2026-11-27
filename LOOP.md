@@ -12,7 +12,9 @@
 4. Bu dosyayi guncelle: maddeyi Sirada'dan cikar, Gunluk'e tek satir ekle (tarih + ne yapildi + sonuc). Yeni is ciktiysa Sirada'nin sonuna ekle.
 
 ## Sirada
-- [ ] TEST ALTYAPISI DENETİMİ + DETAYLI ÖLÇÜM (kullanıcı isteği, 2026-11-25). Tetikleyici: tam takım 4,5-5 sa,
+- [x] TEST ALTYAPISI DENETİMİ + DETAYLI ÖLÇÜM → ✓ D-784 (Codex dalga 18; (a)-(f) teslim: 190 kapı -j10 ~20 dk,
+      yeni geçici dizin 0; CI Linux test adımı 9-20 → 3,5 dk, Windows 33-47 → 19-29 dk, D-786'da ölçüldü).
+      (kullanıcı isteği, 2026-11-25). Tetikleyici: tam takım 4,5-5 sa,
       20 çekirdekte yük ~1 (seri), her koşum ~25 GB geçici dizin bırakıyordu (D-771) ve aynı çekirdek ≥73 kez
       derleniyordu (D-772). Kimse süreyi/diski ÖLÇMÜYORDU — doğruluk kapıları var, maliyet kapısı yoktu.
       Araç hazır: `make test_tumu_olcum` (kapı başına süre, en yavaş 15, build/ boyutu; D-772). Yapılacak:
@@ -312,8 +314,9 @@
       ✓ KARAR (2026-11-27, D-780, Opus önerileri): A (ömür boyu döngüde, derleyicinin seçtiği güvenli noktada
       tipten üretilmiş BÖLGE TAHLİYESİ) KABUL — koşullu; D-756'nın escape v3 kararı GERİ ALINDI. Bayrakla açılan
       genel derleyici mekanizması, önce çekirdek, host'ta ASan ile sınanır. A0 fizibilite ölçümü ✓ (canlı dizi
-      grafiği ~160-210 KB, durum tiplerinde *T/&T/kapanış yok). SIRADAKİ: A1 kopyalayıcı üretimi (host). A4
-      (çekirdekte açma) dalga 18'in çok çekirdek kuralını bekler. Tasarım: belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md §7-§9.
+      grafiği ~160-210 KB, durum tiplerinde *T/&T/kapanış yok). A4'ün çok çekirdek ön koşulu ✓ D-786 (§9.6 sonuç (a):
+      AP'de koşabilen 77 işlevin hepsi çıplak, BSP ham işaretçilerine ve tahsise dokunmuyor; §10.6). Kesin onay
+      Mehmet'te. SIRADAKİ: A1 kopyalayıcı üretimi (host). Tasarım: belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md §7-§10.
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
@@ -3510,3 +3513,20 @@
   KVM 6/20 → Bölüm 5'te hazır bayrağı beklemesi. ARM QEMU: 76 `timeout N` çağrısı, çoğu sabit süre bekliyor → Bölüm 3
   yürütücüsü (KVM/TCG seçimi + son satırda çıkış). Kapsam sınırı: ARM kapılarının çoğu test_tumu'da değil, takım süresini
   x86 TCG kapıları belirliyor — ARM temasının asıl değeri GICv3 (modern ARM donanımı + KVM) ve ARM SMP.
+- 2026-11-27 D-786: E4k §9.6 ÇOK ÇEKİRDEK ÖLÇÜMÜ (dalga 18 birleştikten sonra; tasarım belgesi §10.6; derleyici kodu değişmedi).
+  SONUÇ (a): çekirdekler arasında el değiştiren hiçbir nesne bölge nesnesi değil → R çekirdek başına (yalnız BSP kabuk
+  döngüsü), tahliye yerel; D-780 koşul (ii) karşılandı, kesin onay Mehmet'te. YÖNTEM: x86 kabuk birleşik birimi
+  harness'la birebir (RT + kabuk ekleri + x86_heap_bagla + --llvm --mimari x86_64-none; 230.271 satır IR, 1.379 işlev),
+  yeni tools/smp_ap_erisim.py AP köklerinden FAZLA yaklaşımlı erişilebilirlik (her @ başvurusu + asm `call AD`/`AD(%rip)`).
+  Kökler kaynakta doğrulandı: kem_ap_giris (trampolin `leaq`), kxs_smp_isci (zaman kancası), smp_ap_zaman_irq (v49),
+  kem_ipi_isle (v80-83), kdl_istisna_isle, kdl_panik. ÖLÇÜLEN: 77 işlev · `ptr %rho` alan 0 (hepsi çıplak; E013) ·
+  ks_yonetim/ksv_ekran_adr/ksv_baglam_adresi/kxs_ek_vekil başvurusu 0 (kontrol: tüm IR'da 3/5/2/2) · tahsis girişi 0 ·
+  declare dış çağrı 0. Aygıt kesmeleri BSP'ye yönlendirilmiş (IO-APIC hedefi + MSI adresi kurucunun APIC kimliği); yine
+  de kdl_disk_irq+kdl_xhci_irq kümesi de temiz. AYIRT EDİCİLİK: sabotaj (kxs_smp_isci'ye `ks_yonetim` okuması) → BULGU,
+  çıkış 1 · pozitif kontrol (kök ks_adim) → 611 işlev, 375'i %rho, üç ham işaretçi + kdl_bolge_olustur bulundu ·
+  yanlış kök → çıkış 2. A3 İÇİN YOL ÜSTÜ: üç ham işaretçi DİNAMİK KAPSAMLI (yalnız kzs_hizmet/kxs_bir_dilim penceresi;
+  ksv_dagit'ten — 695 işlev — ks_adim/ks_bekle'ye yol YOK → pencerede tahliye noktası yok); ksv_ekran_adr UZUN ÖMÜRLÜ
+  (kabuk() girişinde bir kez; hedef `ke`nin yığında olduğu A3'te doğrulanmalı). ARAÇ BUGÜN KAPI DEĞİL (D-446): kural A4'te
+  yük taşır, A4 onu kapıya bağlamalı. YAN ÖLÇÜM (kullanıcı sorusu "neden uzun sürüyor"): dalga 18 sonrası CI test adımı
+  Linux 9-20 → 3,5 dk (190 kapı, kapı toplamı 12:55), Windows 33-47 → 19-29 dk; benim 33-47 dk tahminim dalga 18 öncesi
+  koşulara dayanıyordu, YANLIŞTI. Ayrıca LOOP başındaki TEST ALTYAPISI maddesi D-784'te teslim edilmişti → [x].

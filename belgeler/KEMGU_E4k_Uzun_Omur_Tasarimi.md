@@ -167,6 +167,7 @@ Her tahsisi "duruma ulaşır → sahibin bölgesi / ulaşmaz → ρ_tur" diye ay
    - (i) A0 fizibilite ölçümü (§8) — **yapıldı**.
    - (ii) Dalga 18'in çok çekirdekli yapısı bilinmeli. Çekirdekler arasında el değiştiren hiçbir
      nesne R'de olmamalı (§9.6). Kesin onay dalga 18 birleşince verilir.
+     **Ölçüldü (D-786, §10.6): koşul tutuyor.** Kesin onay Mehmet'in.
 
    Koşul tutmazsa geriye B (dil yüzeyi) kalır. Bu karar **D-756'nın "escape v3" önerisini geri
    alır**: C ölçülen çöpün çoğunu kapsamıyor (§4.C) ve sağlamlık riski en yüksek seçenekti.
@@ -382,6 +383,9 @@ ve R referansı taşıyabiliyorlar mı? İki olası sonuç:
 
 Çekirdekleri durduran bir el sıkışma (stop-the-world) **seçenek değildir**; ilkeyle çelişir.
 
+**Sonuç (D-786, dalga 18 birleştikten sonra ölçüldü): (a).** AP'de koşabilen kod (77 işlev) bölge
+taşımıyor, tahsis yapmıyor ve BSP'nin ham işaretçilerine dokunmuyor. Ayrıntı §10.6.
+
 ### 9.7 Aşamalar (güncel)
 - **A0 ✓** Fizibilite ölçümü (§8).
 - **A1** Kopyalayıcı üretimi; iki derleyici, host. ASan birim testleri şunları ölçer: paylaşım,
@@ -393,7 +397,8 @@ ve R referansı taşıyabiliyorlar mı? İki olası sonuç:
   altında da koşar.
 - **A3** Gizli kanal kuralları (§9.4) + opak tutamakta tahliyeyi kapatma. Her kural için olumsuz
   fikstür ve sabotaj.
-- **A4** KEMGU-OS'ta açma; önce §9.6'daki çok çekirdek kuralı karşılanmalı. Kapılar: tam takım +
+- **A4** KEMGU-OS'ta açma; önce §9.6'daki çok çekirdek kuralı karşılanmalı (✓ ölçüldü, D-786/§10.6;
+  A4'te `tools/smp_ap_erisim.py` kapıya bağlanır). Kapılar: tam takım +
   uzun oturum (≥ 1000 komut). README ve CLAUDE.md ilke metni (§7.1) o gün güncellenir.
 
 ## 10. A1 öncesi ölçümler ve ayrıntılı tasarım (D-781)
@@ -499,4 +504,82 @@ yapıyor. `mv` = okuma + `Yaz` planı + `DosyaSil` planı (`kd_kopyala`) → çe
 - **Kalan soru (dalga 18 birleşince ölçülecek):** AP'de çalışan bir işleyici `ks_yonetim`,
   `ksv_ekran_adr` ya da `ksv_baglam_adresi` ham işaretçileri üzerinden BSP'nin durum yapılarına
   (ve onların R'deki dizilerine) erişiyor mu? Erişiyorsa o erişim BSP'nin tahliyesiyle yarışır.
-  Ayrıca AP kodu kendi tahsislerinde hangi `%rho`yu kullanıyor?
+  Ayrıca AP kodu kendi tahsislerinde hangi `%rho`yu kullanıyor? → **Yanıt §10.6: erişmiyor;
+  AP kodu hiç `%rho` taşımıyor ve hiç tahsis yapmıyor.**
+
+### 10.6 Çok çekirdek — kesin ölçüm (dalga 18 birleştikten sonra, D-786)
+**Sonuç: §9.6 (a).** Çekirdekler arasında el değiştiren hiçbir nesne bölge nesnesi değildir. R
+yalnız BSP'nin kabuk döngüsüne aittir ve tahliye yerel kalır. D-780'in (ii) koşulu (§7.1)
+karşılanmıştır; çekirdekleri durduran bir el sıkışma gerekmez.
+
+**Yöntem.** IR, `test/bm_x86_uefi_harness.sh`'ın birleştirmesiyle birebir üretildi:
+1. harness'taki `RT` listesi,
+2. kabuk ekleri (`kem_surec_hw.kem`, `kem_rtc_hw.kem`, `kem_os_x86_blok_ortak.kem`,
+   `kem_os_x86_vfs_ortak.kem`),
+3. `kem_os_x86_kabuk.kem`,
+4. `test/x86_heap_bagla.py`,
+5. `build/kemgu --llvm --mimari x86_64-none`.
+
+Birim 12.618 satır kaynak, 230.271 satır IR ve 1.379 işlevdir. `tools/smp_ap_erisim.py` AP
+köklerinden fazla yaklaşımlı erişilebilirlik hesaplar: her `@` başvurusu ve asm metnindeki
+`call AD` / `AD(%rip)` bir kenar sayılır. Fazla yaklaşım yanlış-negatif üretmez.
+
+AP kökleri (kaynakta doğrulandı):
+
+| kök | neden AP'de koşar |
+|---|---|
+| `kem_ap_giris` | AP giriş noktası (`smp_trampolin_yaz`: `leaq kem_ap_giris(%rip)`) |
+| `kxs_smp_isci` | AP zaman kancası (`kzs_baslat`: `leaq kxs_smp_isci(%rip)` → `smp_zaman_kanca`) |
+| `smp_ap_zaman_irq` | vektör 49, AP yerel zamanlayıcısı |
+| `kem_ipi_isle` | vektör 80–83 (IPI, TLB vurgulama) |
+| `kdl_istisna_isle` | çekirdek kipindeki istisnalar (isr0..31) |
+| `kdl_panik` | AP'den çağrılan panik yolu |
+
+Aygıt kesmeleri AP'de koşmaz. IO-APIC hedefi BSP kurulumunda okunan yerel APIC kimliğidir
+(`kem_apic_hw.kem`, `kap_yol_kur` çağrıları). MSI adresi de kuran işlemcinin, yani BSP'nin
+kimliğini taşır (`kem_os_x86_kabuk.kem`, `0xFEE00000 | id<<12`). Yine de ölçüldü:
+`kdl_disk_irq` + `kdl_xhci_irq` kümesi (3 işlev) de temiz.
+
+| ölçüm | sonuç |
+|---|---|
+| AP-erişilebilir tanımlı işlev | 77 |
+| `ptr %rho` alan (bölge taşıyan) | **0**: hepsi `çıplak`; E013 bunu durağan olarak zorlar |
+| `ks_yonetim` / `ksv_ekran_adr` / `ksv_baglam_adresi` / `kxs_ek_vekil` başvurusu | **0** (kontrol: tüm IR'da 3/5/2/2 işlev başvuruyor) |
+| tahsis girişi (bölge, dizi, metin üreticisi, `malloc`) | **0**; `declare` edilmiş dış çağrı da 0 |
+| AP'nin okuduğu küreseller | yalnız sayıl/ham tutamaçlar: `kap_lapic`, `kap_tsc_ms`, `kdl_cekirdek_bsp`, `kdl_dilim_tablo`, `kdl_istisna_ileti`, `kgun_*`, `kis_*`, `smp_*`, `ekran_panik_taban` |
+
+Ayırt edicilik (D-425):
+1. **Sabotaj.** `kxs_smp_isci` gövdesine `eğer ks_yonetim == 12345 { ver 0; }` eklendi. Araç
+   `BULGU kxs_smp_isci: ham=['ks_yonetim']` verdi, çıkış 1.
+2. **Pozitif kontrol.** Kök `ks_adim` (BSP adımı) seçildi. 611 işlev çıktı; 375'i `%rho` alıyor;
+   üç ham işaretçi ile `kdl_bolge_olustur` ve `kdl_metin_birlestir` bulundu.
+3. **Yanlış kök.** Çıkış 2 ("ölçüm geçersiz").
+
+**Mekanizma** (kod okuması, ölçümle tutarlı):
+- AP yalnız atanan kullanıcı çerçevesini yürütür (`kxs_smp_isci` → `kxs_smp_gir`).
+- Her tuzak ve sistem çağrısı `kdl_smp_dilim_yakala` (C) ile çekirdek başı GS alanına yazılır.
+  AP vektörü, hata kodunu ve CR2'yi 64 baytlık zamanlayıcı kaydına koyar ve evreyi 3'e
+  ("BSP hizmeti bekliyor") çeker. Bu kayıt sabit çerçeve belleğindedir (`ipi_oku`/`ipi_yaz`).
+- Sistem çağrısını yalnız BSP yürütür, `kzs_hizmet` içinde (`kem_surec_hw.kem`).
+  `ks_yonetim`, `ksv_baglam_adresi` ve `kxs_ek_vekil` bu çağrının hemen öncesinde kurulur, hemen
+  sonrasında sıfırlanır (`kem_os_x86_kabuk.kem`, `ks_adim`).
+- Süreç kaydı (durum, PID, CR3, dilim, vektör…) ham bellektir (`kxm_o64`/`kxm_y64`), bölge nesnesi
+  değil.
+- AP'nin panik ekranı `ekran_panik_taban`ı kullanır (D-755, çerçeve ayırıcısından);
+  `ksv_ekran_adr`a dokunmaz.
+- Çekirdek günlüğü (`kgun_adres`) `malloc` ile alınır, yani R'nin dışındadır.
+
+**A3 (§9.4) için yol üstü girdiler** (çok çekirdekle ilgisiz, BSP içi):
+- `ks_yonetim`, `ksv_baglam_adresi` ve `kxs_ek_vekil` **dinamik kapsamlıdır**: yalnız bir hizmet
+  çağrısı süresince kuruludurlar. Sistem çağrısı dağıtıcısı `ksv_dagit`ten (fazla yaklaşımla 695
+  işlev) `ks_adim` ya da `ks_bekle`ye yol yoktur; bu pencerede döngünün geri dönüş kenarına,
+  yani tahliye noktasına ulaşılmaz. Hedefleri de yığındadır (`&b` yerel kopyası, çağıranın `p`
+  yapısı) ve §9.4-2'deki yığın-hedef muafiyetine uyar. A3 bu gözlemi bir kural olarak
+  sabitlemelidir: pencere içinde tahliye noktası olmamalı.
+- `ksv_ekran_adr` **uzun ömürlüdür**: `kabuk(...)` girişinde bir kez kurulur ve döngü boyunca
+  yaşar. Hedefi `ke: &değişken KabukEkran`, yani çağıranın yapısıdır. Hedefin yığında olduğu
+  A3'te doğrulanmalıdır. Yığındaysa §9.4-2 muafiyeti geçerlidir; değilse yükseltme gerekir.
+
+**A4 için.** Kural ancak tahliye çekirdekte açılınca yük taşır. A4, `tools/smp_ap_erisim.py`'yi
+bu birleşik birimin IR'ında kapıya bağlamalıdır; araç bugün kapı **değildir** (D-446). Yeni bir
+AP girişi eklendiğinde (yeni IPI vektörü, yeni kanca) kök listesi güncellenmelidir.
