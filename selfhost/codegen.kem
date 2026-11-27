@@ -15430,6 +15430,20 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken hc: tam32 = dizi_al(p.a_cs, idx);
         değişken hedef: tam32 = dizi_al(p.cocuk, hb);
         eğer tf_on_kontrol(p, idx, hedef) { ver 0; }   // [D-711 turbofish] T044
+        // [D-788] E4t: ayrılmış yerleşik adı YEREL bağlamayla gölgelenemez (C
+        // `ayrilmis_yerel_cagri` aynası; konum CAGRI düğümü, çağrının geri kalanı
+        // denetlenmez). Öncesinde yerel kapanış `bir()` bu derleyicide yerleşiğe
+        // gidiyordu (1, doğrusu 42). `yerel_var_mi` işlev geneli dilimdir (D-421:
+        // kardeş blok bağlaması da sayılır) — belirsizlikte tanıyı korur.
+        eğer metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") {
+            değişken yad: metin = dizi_al(p.a_deg, hedef);
+            eğer ayrilmis_yerlesik_mi(yad) ve yerel_var_mi(p, yad) {
+                dizi_ekle(p.th_kod, "T024");
+                dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+                dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
+                ver 0;
+            }
+        }
         // [D-517] HAM BELLEK YERLEŞİKLERİ `güvensiz` İSTER — C tip_kontrol.c
         // ve selfhost/checker.kem aynası. `bellek_*` `metin` olarak tiplendiği
         // için G001'in `*T` koşulu onlara HİÇ uygulanmıyordu → `güvensiz`siz

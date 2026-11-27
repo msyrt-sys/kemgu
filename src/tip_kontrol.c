@@ -2832,6 +2832,9 @@ static int turbofish_on_kontrol(TipKontrol *tk, const Dugum *d) {
     return 0;
 }
 
+/* [D-788] ileride tanımlı; çağrı işleyicileri kullanır. */
+static int ayrilmis_yerel_cagri(TipKontrol *tk, const Dugum *d);
+
 TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
     if (!d) return t_hata(tk);
 
@@ -3404,6 +3407,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
         /* === Cagri === */
         case DUGUM_CAGRI: {
             if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D-711 turbofish] */
+            if (ayrilmis_yerel_cagri(tk, d)) return t_hata(tk);  /* [D-788] */
             /* [D-517] HAM BELLEK YERLESIKLERI `güvensiz` ISTER.
              * OLCULEN ACIK: `bellek_al` / `bellek_kopyala` / `bellek_serbest`
              * `metin` olarak TIPLENIYOR (D-459: "HAM BELLEK", opak) — bu yuzden
@@ -5273,6 +5277,10 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
         int bir_mi = (buz == 3 && memcmp(bad, "bir", 3) == 0);
         int sifir_mi = (buz == 7 &&
                         memcmp(bad, "s\xc4\xb1" "f\xc4\xb1" "r", 7) == 0);
+        /* [D-788] Bu özel durum `switch`ten ÖNCE: yerel bağlama denetimi
+         * CAGRI dalına varmadan burada da sorulmalı (ilk sürüm kaçırdı:
+         * yerel `bir` kapanışıyla `bir()` C'de OK kalıyordu). */
+        if ((bir_mi || sifir_mi) && ayrilmis_yerel_cagri(tk, d)) return t_hata(tk);
         if (bir_mi || sifir_mi) {
             if (d->veri.cagri.sayi != 0) {
                 tip_hata(tk, d, "T010",
@@ -5354,6 +5362,7 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
 
         case DUGUM_CAGRI: {
             if (turbofish_on_kontrol(tk, d)) return t_hata(tk);  /* [D-711 turbofish] */
+            if (ayrilmis_yerel_cagri(tk, d)) return t_hata(tk);  /* [D-788] */
             /* C3: çeşit varyant yapıcısı (Cesit::V(args)) — beklenen-bağlam
              * yolunda da modül-fonksiyon çağrısından ÖNCE dene. Generic çeşit
              * T'si beklenen'den (Secim<tam32>) substitue edilir (D-302). */
@@ -5729,6 +5738,32 @@ static int ayrilmis_yerlesik_mi(const char *ad, int uz) {
     for (size_t i = 0; i < n; i++) {
         const char *a = AYRILMIS_YERLESIKLER[i];
         if (strlen(a) == (size_t)uz && memcmp(a, ad, (size_t)uz) == 0) return 1;
+    }
+    return 0;
+}
+
+/* [D-788] E4t: aynı sınıfın BAĞLAMA yüzü. Ayrılmış bir ad çağrı yerinde DAİMA
+ * yerleşiktir (D-787). Kapsamda aynı adlı YEREL bir bağlama (değişken, parametre,
+ * lambda parametresi, döngü/desen bağlaması) varken çağrı belirsizdir: C yerleşik
+ * kurallarını uyguluyordu (yerel kapanış `dondur(41)` -> yanlış DRF005), self-host
+ * yerleşiği çağırıyordu (`bir()` kapanışı -> 1, doğrusu 42: SESSİZ YANLIŞ CEVAP).
+ * Çağrı yerinde T024 + çağrının geri kalanı denetlenmez (art arda tanı yok).
+ * Çağrılmayan bağlama serbesttir (`değişken bir: tam32` 10 yerde kullanılıyor).
+ * Yalnız YEREL kapsamlar (işlev/blok) taranır; modül/global üye işlev değildir. */
+static int ayrilmis_yerel_cagri(TipKontrol *tk, const Dugum *d) {
+    if (!d->veri.cagri.hedef || d->veri.cagri.hedef->tip != DUGUM_TANIMLAYICI)
+        return 0;
+    const char *ad = d->veri.cagri.hedef->veri.tanimlayici.metin;
+    int uz = d->veri.cagri.hedef->veri.tanimlayici.uzunluk;
+    if (!ayrilmis_yerlesik_mi(ad, uz)) return 0;
+    for (const Scope *sc = tk->scope;
+         sc && (sc->kategori == SCOPE_ISLEV || sc->kategori == SCOPE_BLOK);
+         sc = sc->parent) {
+        if (sembol_bul_yerel(sc, ad, uz)) {
+            tip_hata(tk, d, "T024",
+                     "ayrilmis yerlesik adi yerel baglamayla golgelenemez");
+            return 1;
+        }
     }
     return 0;
 }

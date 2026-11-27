@@ -223,7 +223,8 @@ Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 `soket_baglan`, `yetki_olustur`): bu adla işlev tanımı **T024**. Liste iki yerde ve AYNI olmalı:
 `src/tip_kontrol.c` `AYRILMIS_YERLESIKLER` + `selfhost/codegen.kem` `ayrilmis_yerlesik_mi`;
 `tc72_01` ikisini satır satır karşılaştırır. `alan`/`gönderen` (D-303) bilerek gölgelenebilir.
-⚠ Bağlama yüzü AÇIK (E4t): bu adı taşıyan yerel kapanış/parametre çağrısı self'te yerleşiğe gidiyor.
+Ayrılmış adın çağrısı, kapsamda aynı adlı YEREL bağlama varken de T024 (D-788); çağrılmayan
+bağlama serbest (`değişken bir: tam32` geçerli).
 
 ### Tip Sistemi
 ```

@@ -1,0 +1,42 @@
+// [D-788] E4t: ayrılmış yerleşik adı YEREL bağlamayla gölgelenemez. Ayrılmış ad
+// çağrı yerinde daima yerleşiktir (D-787); aynı adlı yerel bağlama varken çağrı
+// belirsizdir → çağrı yerinde T024. Öncesinde C yerleşik kurallarını uyguluyordu
+// (`dondur(41)` → yanlış DRF005), self-host yerleşiği çağırıyordu (yerel kapanış
+// `bir()` → 1, doğrusu 42: SESSİZ YANLIŞ CEVAP).
+// Olumsuz: yerel kapanış · parametre · lambda parametresi · işlev değeri takma adı ·
+// iç blok bağlaması. POZİTİF: çağrılmayan bağlama (`bir` 10 yerde değişken adı),
+// yerel bağlaması olmayan işlevde yerleşik `bir()`, ayrılmamış adlı kapanış.
+işlev kirk() -> tam32 { ver 40; }
+işlev yerel_kapanis() -> tam32 {
+    değişken bir: işlev() -> tam32 = || 42;
+    ver bir();
+}
+işlev parametre(dondur: işlev(tam32) -> tam32) -> tam32 { ver dondur(41); }
+// Lambda parametresi BİLEREK bildirimsiz bağlamada: bildirimli bağlamada C, lambda
+// gövdesindeki HERHANGİ bir hatadan sonra ek T001 basar, self basmaz (önceden var olan
+// art arda tanı farkı; T002 ile de aynı — E4u).
+işlev lambda_param() -> tam32 {
+    değişken g = |kanal_al: işlev() -> tam32| kanal_al();
+    ver g(|| 1);
+}
+işlev takma_ad() -> tam32 {
+    değişken sıfır = kirk;
+    ver sıfır();
+}
+işlev ic_blok() -> tam32 {
+    eğer doğru {
+        değişken tekkez_olustur: işlev(tam32) -> tam32 = |x: tam32| x;
+        ver tekkez_olustur(3);
+    }
+    ver 0;
+}
+işlev pozitif_deger() -> tam32 {
+    değişken bir: tam32 = 40;
+    ver bir + 2;
+}
+işlev pozitif_yerlesik() -> tam32 {
+    değişken x: tam32 = bir();
+    değişken artir: işlev(tam32) -> tam32 = |y: tam32| y + 1;
+    ver artir(x);
+}
+işlev main() -> tam32 { ver pozitif_deger() + pozitif_yerlesik() - 2; }
