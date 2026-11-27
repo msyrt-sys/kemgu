@@ -73,3 +73,24 @@ Linux işi paralellik için `nproc`, MSYS2 işi `NUMBER_OF_PROCESSORS` kullanır
 | Bölüm 6, 20 işçi | 14:59 / 15:10 | |
 
 İkinci taban koşumunda semafor gözlemcisi aralıklı hata verdi. Bölüm 6'da gözlemci düzeltildikten sonra tablodaki son dört koşum geçti. Bu makinede x86 konuklar TCG ile çalışır. Host yükü, kullanılabilen araçlar, önbellek ve koşulacak kapılar değiştiğinde süreler de değişir. Ham ölçümlerin, geçici dizinlerin ve hataların ayrıntıları [Dalga 18 bulgularında](../otomasyon/chatgpt/codex18_bulgular.md) yer alır.
+
+## Altyapı kapılarının ölçülen kapsamı
+
+| Değişiklik | Ölçüm ve kâhin |
+|---|---|
+| Kapı bütçesi | Üç taban koşumu kapı başına ayrı kaydedildi. 120 sn ek bekleme, 60 sn bütçede sıkı rapora rc=3 verdi. |
+| Disk sahipliği | Temizliği kaldırılan MSI koşumu geçti. Disk denetimi koşumdan kalan dört dizini adıyla buldu. Hata dizinleri tanı için korunur. |
+| Çekirdek önbelleği | Sekiz PVH girişinde dokuz derleme yolunun toplamı 23,220 sn'den 0,746 sn'ye indi. Önbelleğin kendi deneyi çıkarıldığında tam takımda isabet 122'den 133'e, derleme 11'den sıfıra gitti. |
+| Bölünmüş hedefler | Sekiz şemsiye ve 21 parçada 288 kâhin işlemi, gerçek QEMU günlüklerinde önce ve sonra aynı 302 sonuç. |
+| Olay beklemeleri | 68 eski bekleme sınıflandırıldı. RTC 20/20 açılışta ilerledi. Durmuş RTC ve hiç gelmeyen hazır işareti süre sınırında saptandı. |
+| Paralel kaynaklar | 428 kaynak ailesi ve 1.283 sahiplik kaydı denetlendi. Aynı dizini paylaşan iki tarif statik denetimde ve gerçek paralel koşumda yakalandı. |
+| Kapı seçimi | 30 geçmiş commit'te 26 tam takım, dört belge seçimi. Kaçırılan QEMU kapısı sıfır. Bu örneklemde yalnız sürücü değiştiren commit yoktu. Beş sürücü alanı ayrıca sabit örneklerle sınandı. |
+| CI | D-772'de iş süreleri Linux 35:17, Windows 1:03:43. İki işte altışar Make komutu, CI'ın verdiği işlemci sayısıyla paralel çalışır. |
+
+`KEMGU_QEMU_SMP=4` ile genel UEFI kabuk kâhini dört vCPU kullanır. Süreç senaryosu için açıkça verilen `SUREC_SMP` önceliklidir. Kâhin işlemci numaralarını ve host iş parçacıklarını QMP üzerinden okur. PC matrisi her disk, klavye ve bölüm birleşiminin üç açılışını 1, 2 ve 4 vCPU'ya dağıtır. İki derleyici toplam 72 açılış yapar. [SMP kapıları ve ölçümleri](KEMGU_OS_SMP.md)
+
+Tam takımda GNU make dış işleri dağıtır. Süreç testlerinin her biri C ve self-host turunu çalıştırır. `nproc` bulunduğunda dış işçi sayısı ile kapıdaki derleyici sayısının çarpımı kullanılabilir CPU sayısını aşıyorsa kapı iki derleyiciyi sırayla çalıştırır. Örneğin 20 CPU'da `-j10` ile iki tur aynı anda, `-j20` ile yirmi bağımsız tarif içinde birer tur çalışabilir. Tek kapının doğrudan çağrılması ve açık `SUREC_PARALEL=0/1` seçimi önceki davranışı korur.
+
+## X86 SMP dahil son tam takım
+
+Aynı DGX Spark üzerinde `make -j10 --output-sync=target test_tumu_olcum` 22:53 sürdü. 187 kapı içinde en uzun hedef `calistir_bm_x86_ag_saglamlik_self_aktarim` (6:51) oldu. `make -j20 --output-sync=target test_tumu` 18:43 sürdü. İki takım da geçti. Ölçümlü koşum sonunda geçici dizin sayısı sıfırdı. [Kapı başına son süre ve bütçe tablosu](../otomasyon/chatgpt/codex18_bulgular.md#son-kapı-bütçeleri)

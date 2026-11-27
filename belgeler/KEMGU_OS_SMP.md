@@ -39,7 +39,7 @@ Her işlemcinin çekirdek GS tabanı kendi `CekirdekVeri` kaydını gösterir. `
 
 BSP'nin IDT'si ortaktır. AP kendi GDT'sini, 0x08 kod seçicisini ve 0x28 TSS seçicisini yükler. Üç IST sırasıyla çift hata, NMI ve makine denetimi içindir. Panik yolu etkin TR ve GDTR'den o işlemcinin TSS'ine ulaşır ve üç yığının alt sınırındaki kanaryayı denetler. Normal kullanıcı zaman dilimi kurulurken süreç kimliği ve CR3 kayda yazılır. Ring3 girişinde `swapgs` kullanıcı tabanını seçer. Kullanıcıdan gelen sistem çağrısının dağıtımı çekirdek tabanını kullanır. Dilim bittiğinde önceki GS ve kesme durumu geri yüklenir.
 
-AP'ler ortak sayfa tablolarını kullanırken BSP'nin PAT ve CR0 önbellek ayarlarını devralır. Yerel zamanlayıcıların bölücüsü ve başlangıç değeri BSP'nin PIT kalibrasyonundan gelir. BSP vektör 48 üzerinden sistem saatini de ilerletir. AP'ler vektör 49 üzerinden yalnız kendi tıklarına yazar ve kendi LAPIC'lerine EOI verir.
+AP'ler ortak sayfa tablolarını kullanırken BSP'nin PAT ve CR0 önbellek ayarlarını devralır. Yerel zamanlayıcıların bölücüsü ve başlangıç değeri BSP'nin PIT kalibrasyonundan gelir. BSP, kanal 0'ın on kesmesi boyunca geçen LAPIC ve TSC sayımlarını alır. Kanal 2 tek atımının üç ölçümünden en kısa geçerli TSC örneğini kullanarak 10 ms'lik LAPIC periyodunu hesaplar. Kanal 2 kullanılamazsa kanal 0 ölçümüne döner. BSP vektör 48 üzerinden sistem saatini de ilerletir. AP'ler vektör 49 üzerinden yalnız kendi tıklarına yazar ve kendi LAPIC'lerine EOI verir.
 
 ```sh
 make -j10 --output-sync=target calistir_bm_x86_smp_tik
@@ -55,6 +55,12 @@ Bir kilit en az 8 bayta hizalı 32 bayt kaplar. İlk iki 32 bit sözcük alınac
 
 Kesme işleyicisinin de kullandığı kilitlerde `kilit_al_kesmesiz` önce RFLAGS değerini saklar ve yerel kesmeleri kapatır. `kilit_birak_kesmesiz` önce kilidi bırakır, sonra saklanan IF bitini geri yükler. İç içe çağrıda iç kilidi bırakmak kesmeleri erken açmaz. `KEMGU_KILIT_DENETIM=1` ile oluşturulan UEFI çekirdeği kilidi ancak daha büyük sıra numarasıyla edinir ve bırakırken sahibi ve sırayı doğrular. Çekirdeğin etkin sırası GS+112, çekişme sayacı GS+120 konumundadır.
 
+| Üretim kilidi | Sıra | Korunan veri |
+|---|---:|---|
+| Büyük çekirdek kilidi | 10 | Süreç seçimi, kuyruklar ve BSP hizmeti |
+| Çerçeve ayırıcısı | 20 | Fiziksel sayfa sahiplik bitleri |
+| Heap | 30 | Serbest liste ve bump konumu |
+
 | Bölüm 12 kapısında sınanan kilit | Sıra |
 |---|---:|
 | Paylaşılan sayı ve dış kilit | 10 |
@@ -64,7 +70,7 @@ Kesme işleyicisinin de kullandığı kilitlerde `kilit_al_kesmesiz` önce RFLAG
 
 ## Fiziksel çerçeveler ve heap
 
-Çok işlemcili açılış, çekirdek kayıtları ve IPI kutuları için ayrılan fiziksel alanın sonuna iki bilet kilidi yerleştirir. Çerçeve ayırıcısının sırası 20, heap'in sırası 30'dur. Her iki girişte kesmeler saklanır, bırakırken önceki IF geri yüklenir. BSP, kilitleri AP'lere SIPI göndermeden kurar. Tek işlemcide kilit tabanı sıfırdır.
+Çok işlemcili açılış, çekirdek kayıtları ve IPI kutuları için ayrılan fiziksel alanın sonuna üç bilet kilidi yerleştirir. Çerçeve ayırıcısının sırası 20, heap'in sırası 30'dur. Her iki girişte kesmeler saklanır, bırakırken önceki IF geri yüklenir. BSP, kilitleri AP'lere SIPI göndermeden kurar. Tek işlemcide kilit tabanı sıfırdır.
 
 `uefi_cerceve_ayir` ve `uefi_cerceve_iade` bir aralığın tamamı için sahipliği değiştirir. Süreçlerin, RAM diskin ve sayfa tablolarının kullandığı ortak bit eşlemine bu girişlerden erişilir. `uefi_bos_say` aynı kilitle tutarlı bir anlık sayım yapar. Kilitli x86 imajının `malloc` ve `free` girişleri, aynı serbest liste ve bump algoritmasını tek bir heap kilidiyle çağırır. ARM ve konak bileşimleri paylaşılan dosyanın yalın girişlerini kullanır. `test/x86_heap_bagla.py` x86 SMP bileşiminde iki geçişi doğrular ve ilgili KEMGU işlevlerine bağlar. Bileşimin son baytları çekirdek önbelleği anahtarına girer.
 
@@ -79,6 +85,7 @@ SMP açılışında çekirdek kayıtlarının ardından her hedef için 128 bayt
 | 80 | Kayıtlı çekirdek işlevini çalıştırır. İşlem 1 çağrı verisine hedef kimliğini ekler. İşlem 2 hedefin yerel zamanlayıcı tıkını okur. |
 | 81 | Hedefin yeniden zamanlama istek sayısını artırır. |
 | 82 | Duruşu kaydeder, EOI verir, kesmeleri kapalı olarak HLT döngüsüne girer. |
+| 83 | Hedef CR3 eşleşirse sanal adres için INVLPG yürütür ve bileti onaylar. |
 
 | Bayt | 64 bit alan |
 |---:|---|
@@ -87,6 +94,7 @@ SMP açılışında çekirdek kayıtlarının ardından her hedef için 128 bayt
 | 32, 40 | İşlev girdisi ve dönüş değeri |
 | 48, 56, 64 | Teslim sayısı, yeniden zamanlama sayısı, durdu bilgisi |
 | 72 | Çekirdek işlev numarası |
+| 80, 88 | TLB hedefinin CR3 değeri, yürütülen uzak INVLPG sayısı |
 
 `ipi_cagir(hedef, islem, veri)` ve `ipi_gonder(hedef, tur)` bir bilet döndürür. Atomik karşılaştırma/değiştirme boş kutuyu edinir. Yanlış argüman −1, dolu kutu −2, önceki ICR aktarımının süreyi aşması −3 verir. `ipi_bekle(hedef, bilet, ms)` doğru gönderen ve bilet için sonucu okur, sonra kutuyu boşaltır. Süre aşımı −4 döndürür ve kutu sahipliği korunur. Aynı bileti yeniden beklemek mümkündür. `ipi_hepsine(tur)` diğer çevrimiçi çekirdeklere sırayla gönderir, her teslimi bekler ve onay sayısını döndürür. Sabit sayıda RAM erişimi yapan kesme işleyicisi kullanıcı kipinden giriş ve çıkışta GS tabanını değiştirir.
 
@@ -102,16 +110,7 @@ Dolu kutuda −2, süre aşımında −4 döner. Çağıran çerçeveyi ve `SmpT
 
 `make calistir_bm_x86_smp_tlb` iki çekirdeğin paylaştığı kullanıcı sayfasının iki okumasını, ayrı kökte kalan iki çekirdeği, gerçek PTE'yi, uzak onayı ve sıkıştırılmış fiziksel bitmap'teki tahsis bitini QMP ile okur. AP1'in sonraki okuması normal sayfa hatası işleyicisine girer. CR2 hem seri günlükte hem donanım yazmacında doğrulanır. Aynı kapı dört vCPU'lu süreç kabuğunda kullanıcı PTE izinlerini, NX ve koruma sayfasını ve yüz çocuk sürecin yalıtımını da sınar.
 
-## Kilitler, IPI ve adres alanı tasarımı
-
-İlk sürümde sistem çağrıları ve sürücüler büyük çekirdek kilidi altında çalışır. Çerçeve ayırıcısı ve heap girişleri kendi paylaşımlarını korur. Kilit sırası ve kesme durumunun korunması edinim noktalarında denetlenir. Çağrı kutusu, yeniden zamanlama ve durdurma için ayrı IPI vektörleri ayrılır. Bir eşleme kaldırıldığında o adres alanını kullanan diğer çekirdeklerin TLB geçersizleme onayları beklenir.
-
-## Donanım ve ölçüm kapsamı
-
-Dalga x86-64 UEFI ve xAPIC yolunu hedefler. ARM SMP, x2APIC, NUMA, işlemci hotplug, süreç içi iş parçacıkları ve fiziksel makine koşumu ayrı çalışmalardır. ARM ana makinedeki x86 TCG, paralel host iş parçacıkları kullansa da kesme gecikmeleri ve bellek işlemlerinin serpiştirilmesi gerçek x86 donanımından farklıdır.
-
-
-### Kullanıcı süreçlerinin zamanlanması
+## Kullanıcı süreçlerinin zamanlanması
 
 Çok çekirdekli x86 kabuğunda her mantıksal işlemcinin sekiz yuvalı hazır
 kuyruğu vardır. Yerel tarama son kullanılan yuvadan devam eder. Boş işlemci
@@ -136,7 +135,7 @@ APIC kimliği, yerel tık, çalıştırılan farklı PID sayısı ve boşta tık
 taşır. ABI 91–94 aynı bilgilere ve işlemci yakınlığına kullanıcı erişimi
 verir. İşlemci numarası sistem çağrısına girilen noktada kaydedilir.
 
-### Aygıt kesmeleri, kilit bekleme ve panik
+## Aygıt kesmeleri, kilit bekleme ve panik
 
 BSP, IOAPIC klavye/fare hedefini ve AHCI MSI ile NVMe MSI-X adreslerinin hedef alanını kendi LAPIC kimliğiyle kurar. Aygıt kesmeleri BSP'ye gelir. Her AP kendi zamanlayıcısını ve IPI'lerini işler. Kesme işleyicisi ile paylaşılabilen kilidi alan normal kod, aynı işlemcide yeniden giriş olmasını önlemek için IF'yi saklayan kesmesiz edinimi kullanır.
 
@@ -145,3 +144,25 @@ Bilet bekleyen işlemci, PIT ile kalibre edilmiş TSC'yi denetler. İki saniyeyi
 SMP etkinleştiğinde ilk panikleyen yerel APIC, kimliğiyle tek yazıcı olarak seçilir. Diğer işlemcilere gönderilen NMI türü IPI, maskeli kesmelerle ve dolu çağrı kutusuyla da teslim edilebilir. NMI girişinde panik etkinse işlemci özel IST2 üzerinde CLI/HLT durumuna geçer. Panik sahibi seri iletiyi ve GOP ekranını tamamlayıp durur. Normal NMI, önceki istisna yolunu kullanır.
 
 `make calistir_bm_x86_smp_saglamlik` dört hesap sürecinin yanında gerçek NVMe okumalarını QEMU blok sayacı ve MSI-X teslimleriyle eşler. Veri denetimi disk imajından hesaplanır. PS/2 halka kaybı, klavye kesmeleri, Ethernet yanıtları, çekirdek heap'i ve fiziksel çerçeveler canlı konuktan okunur. Özel test imajı son komutta panik üretir. HMP dört vCPU'nun halt ve IF durumunu, QMP ekran görüntüsü panik renklerini doğrular.
+
+## Donanım ve ölçüm kapsamı
+
+Dalga x86-64 UEFI ve xAPIC yolunu hedefler. ARM SMP, x2APIC, NUMA, işlemci hotplug, süreç içi iş parçacıkları ve fiziksel makine koşumu ayrı çalışmalardır. ARM ana makinedeki x86 TCG, paralel host iş parçacıkları kullansa da kesme gecikmeleri ve bellek işlemlerinin serpiştirilmesi gerçek x86 donanımından farklıdır.
+
+## Kullanıcı arayüzü ve ölçümler
+
+ABI 91 çevrimiçi işlemci sayısını, 92 çağrının geldiği işlemciyi verir. ABI 93 çağıran süreci bir işlemciye bağlar veya −1 ile bağı kaldırır. ABI 94 bir işlemcinin 64 baytlık kaydını kullanıcı tamponuna yazar. 95–99 gelecek genişletmelere ayrılmıştır. [Sistem çağrısı tablosu](KEMGU_OS_Syscall_ABI.md#işlemci-kaydı)
+
+| Dört hesap süreci, duvar saati | 1 vCPU | 4 vCPU | Hızlanma |
+|---|---:|---:|---:|
+| C | 6,444 sn | 2,283 sn | 2,823× |
+| Self-host | 5,646 sn | 1,701 sn | 3,319× |
+
+Aynı QMP duraklamasında dört ayrı PID, kullanıcı kipinde dört ayrı CR3 ve her işlemcinin kendi TSS kaydı okundu. Asal programı 32 topoloji ve çocuk sayısı birleşiminde 2.063.689 verdi. Dört çocuk, sekiz vCPU için duvar süresi C'de 0,719 ve self-host'ta 0,622 saniyeydi. Sekiz süreç yuvasından birini ebeveyn kullanır. Sekiz parçalı işte son çocuk ilk sonuç toplandıktan sonra başlar. [Tüm hızlanma eğrileri ve host hesabı](../otomasyon/chatgpt/codex18_bulgular.md#bölüm-17--asal-sayımının-duvar-süresi)
+
+| IPI gidiş dönüşü | 4 vCPU medyan / p99 | 6 vCPU medyan / p99 |
+|---|---:|---:|
+| C | 8,158 / 29,372 µs | 9,372 / 32,824 µs |
+| Self-host | 9,490 / 32,935 µs | 8,992 / 31,871 µs |
+
+Bu ölçümde her sıralı çiftte 1.000 onay alındı. Tam takım yükünde self-host ve dört vCPU ile p99 ayrıca 310,472 µs ölçüldü. Donanım gecikmesi ve zamanlayıcı davranışı için fiziksel makine ölçümü gerekir. [Fiziksel kontrol listesi](X86_Fiziksel_Donanim_Kontrol_Listesi.md)

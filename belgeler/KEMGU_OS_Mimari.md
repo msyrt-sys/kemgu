@@ -20,6 +20,8 @@ Saf testleri `tests/drivers/` altına ekleyin. Yeni test dizinini Makefile'daki 
 
 IDT ve TSS denetimi çekirdek girişinde kurulur. IOAPIC, PS/2 IRQ1 ve IRQ12'yi hedef vektöre yönlendirir. Gerçek zamanlı kesme işleyicisi gelen baytı halkaya ekler. Tuş ve fare paketleri tüketici bağlamında çözülür. xHCI MSI-X vektörü 65 kullanır. PIT ile kalibre edilen LAPIC dilimi 10 ms'dir. Kullanıcı `int 0x80` ile hizmet ister. Her süreç kendi CR3 kökü, kullanıcı yığını ve ELF sayfalarıyla çalışır. Uyku, girdi, çocuk veya boru bekleyen süreç hazır kuyruğuna koşulu gerçekleştiğinde döner. Son çalışan ön plan süreci ekranı ve klavyeyi kullanır. Çıkışta fd uçları ve fiziksel çerçeveler bırakılır. Ebeveyn sonuç kaydını toplar. [Giriş koçanları](../boot/start_x86_64.S) · [APIC](../runtime/mimari/x86_64/kem_apic_hw.kem) · [Süreç adres alanı](../runtime/mimari/x86_64/kem_surec_hw.kem)
 
+BSP, MADT listesindeki etkin işlemciler için düşük bellekte bir trampolin kurar. Her AP kendi GS kaydı, GDT, TSS, IST yığınları ve LAPIC zamanlayıcısıyla çalışır. IDT ortaktır. Hazır süreç yerel kuyruktan seçilir. Yakınlığı uygun bir süreç başka bir kuyruğa geçebilir. Kullanıcı kodu işlemcilerde eşzamanlı yürür. Aygıt işlemlerini ve sistem çağrısı hizmetlerini BSP sıraya alır. Kabukta `islemci` ile her işlemcinin APIC kimliğini, yerel tıkını, PID sayısını ve boşta yüzdesini okuyabilirsiniz. [SMP mimarisi ve ölçümleri](KEMGU_OS_SMP.md)
+
 ## PCI, bellek ve güç
 
 MCFG bir kesim 0 penceresi verirse çekirdek ECAM kullanır. MCFG bulunmayan makinede CF8/CFC ilk 256 baytı sağlar. Köprülerin ikincil ve alt veri yolları izlenir. BAR boyutu ölçülürken I/O ve bellek çözme geçici olarak kapatılır, 64 bitlik BAR iki yarısıyla geri yüklenir. Aygıt MMIO sayfaları UC olarak eşlenir. GOP için IA32_PAT girdisi 7 WC yapılır. Yalnız framebuffer içindeki 4 KiB yapraklarda PAT, PCD ve PWT birlikte kurulur.
@@ -69,6 +71,7 @@ Aşağıdaki açıklamalar `yardim <komut>` ile okunabilir. Yalın program adlar
 | `yardim` | yardim &lt;komut&gt; komutun kullanımını gösterir. |
 | `kapat` | kapat diskleri eşitler ve sistemi kapatır. |
 | `yenidenbaslat` | yenidenbaslat diskleri eşitler ve sistemi yeniden başlatır. |
+| `islemci` | islemci: no, APIC, tik, ayrı süreç sayısı, boşta yüzde. |
 | `donanim` | donanim aygıtları listeler. donanim kaydet &lt;yol&gt; raporu yazar. donanim gonder &lt;ip&gt; &lt;port&gt; kaydı yollar. |
 | `log` | log [sayfa] günlük halkasını gösterir. log kaydet &lt;yol&gt; dosyaya yazar. log gonder &lt;ip&gt; &lt;port&gt; bir anlık görüntü yollar. |
 | `hassasiyet` | hassasiyet &lt;1..4&gt; fare hızını ayarlar. |

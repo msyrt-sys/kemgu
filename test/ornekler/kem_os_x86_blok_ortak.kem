@@ -330,8 +330,21 @@ sti"# çıktı("=r",&bayrak) bozulan("~{memory}") }
         // Arka uçta sıralanan disk isteği birden çok zamanlayıcı dilimi sürebilir.
         // TSC yanında bağımsız tur sınırı da bozuk saat yolunu sonlandırır.
         değişken sinir: tam64 = 500*kap_tsc_ms;
+        değişken saat: mantıksal = yanlış;
+        eğer kap_lapic!=0 {
+            değişken lvt: tam64=kem_mmio_oku32(kap_lapic+800);
+            saat=(lvt&458752)==131072 ve (lvt&240)>(kem_mmio_oku32(kap_lapic+160)&240) ve kem_mmio_oku32(kap_lapic+896)!=0;
+        }
         iken kem_mmio_oku64(p+8) == bas ve bm_tsc_oku()-t < sinir ve i < 50000000 {
-            satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") }
+            eğer saat {
+                // Sayacı kapalı kesmelerle yeniden denetle. STI gölgesi, MSI'ın
+                // son okuma ile HLT arasına düşüp uyanışı kaybettirmesini önler.
+                kg_irq_kapat();
+                eğer kem_mmio_oku64(p+8) == bas {
+                    satıriçi_asm { mimari:x86_64 şablon:r#"sti
+hlt"# bozulan("~{memory}") }
+                } değilse { kg_irq_ac2(); }
+            } değilse { satıriçi_asm { mimari:x86_64 şablon:r#"pause"# bozulan("~{memory}") } }
             i=i+1;
         }
         eğer (bayrak&512) == 0 { kg_irq_kapat(); }

@@ -1,7 +1,7 @@
 """Gerçek i8042 IRQ1/IRQ12, hızlı tuşlar, kayık AUX baytı ve save-under kâhini."""
 from bekle import bekle as kosul_bekle, gozle, hlt_bekle, tam_seri, tik_bekle
 from protokol_suresi import BOSTA_GOZLEM
-import time,subprocess,re,os
+import subprocess,re,os
 from psf_kahin import screendump,kabuk_goruntu,karsilastir,fare_imleci
 
 def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
@@ -21,13 +21,15 @@ def denetle(command,response,f,w,serial,p,expected,akis,start,gw,gh):
         assert serial.read_bytes()[start:]==expected,'boşta IRQ kabuğu değişti'
     gozle('PS/2 boşta IRQ kabuğu',BOSTA_GOZLEM,sessiz,surec=p)
     assert mem(symbols['kem_bump'])==heap,'timer uyanışları heap tüketti'
-    assert 400<=mem(symbols['kap_lapic_tik'])-ticks<=1200,'boşta LAPIC ilerlemedi'
+    fark=tik()-ticks
+    assert 400<=fark<=1200, ('boşta LAPIC tıkları', ticks, fark)
     if not karma:
         hlt_bekle(command,p)
-    end=time.monotonic()+25;cursor=None
+    cursor=None
     def actual():return serial.read_bytes()[start:]
     def bekle():
-        tam_seri('PS/2 tam seri',actual,expected,p,end-time.monotonic())
+        # Önceki komutların piksel karşılaştırması bu olayın yanıt süresini tüketmez.
+        tam_seri('PS/2 tam seri',actual,expected,p,5)
     def ekran():
         exp=kabuk_goruntu(akis,'',gen=gw,yuk=gh)
         if cursor is not None:fare_imleci(exp,gw,gh,*cursor)

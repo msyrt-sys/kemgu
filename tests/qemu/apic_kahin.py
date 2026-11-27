@@ -50,7 +50,11 @@ def denetle(command,dump,w,descriptors,text):
         v=mem(pt+((a>>21)&511)*8)
         assert v&0x9b==0x9b and v&((1<<52)-(1<<21))==a&~((1<<21)-1),(hex(a),hex(v))
     kal=re.search(r'APIC_KAL (\d+) (\d+) (\d+)',text);assert kal
-    ticks,elapsed,period=map(int,kal.groups());assert 10<=ticks<=100 and period==elapsed//ticks and period>=100
+    ticks,elapsed,period=map(int,kal.groups())
+    ref=re.search(r'APIC_REF (\d+) (\d+) (\d+)',text)
+    assert ref and 10<=ticks<=100 and period>=100, kal.groups()
+    tsc,tsc_ms,referans=map(int,ref.groups())
+    assert tsc>0 and 0<tsc_ms and period==referans==elapsed*(tsc_ms*10)//tsc
     # HMP durumları ayrıca ham kanıt olarak saklanır; aşağıdaki sayım donanım davranışıdır.
     hw={}
     for name in ('lapic','pic'):

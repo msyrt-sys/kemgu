@@ -163,3 +163,5 @@ tık yüzdesi, başka kuyruktan çalınan dilim sayısı, çalışan PID ve haz�
 sayısıdır. PID sıfırsa o anda kullanıcı süreci yoktur. Bir süreç başka bir işlemcide
 devam edebileceğinden iki bağımsız çağrı arasındaki işlemci numarası değişebilir.
 95–99 sonraki genişletmelere ayrılmıştır.
+
+`sis_yakinlik_ayarla(sis_islemci_sayisi()-1)` son çevrimiçi işlemciyi seçer. Başarıdan sonra `sis_islemci_no()` ile seçimi okuyun. `sis_yakinlik_ayarla(-1)` süreç için iş çalmaya yeniden izin verir. `calistir_bm_x86_belge15` örneğin çıktısını QMP'deki işlemci sayısıyla karşılaştırır. [Çalışan kullanıcı programı](KEMGU_OS_Program_Yazma.md#süreci-bir-işlemciye-bağlama)

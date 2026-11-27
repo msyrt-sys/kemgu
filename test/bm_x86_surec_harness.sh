@@ -56,7 +56,22 @@ if [[ -n "${SUREC_USB_CIKTI:-}" ]]; then tur "${DERLEYICILER[0]}"; exit 0; fi
 # [D-772] İki derleyicinin turları BİRBİRİNDEN BAĞIMSIZDIR (ayrı mktemp dizini, ayrı QEMU, ayrı seri/QMP
 # dosyası) → eşzamanlı koşar; en uzun kapılar (kaynak/kabuk14/v1/cok_surec…) yarıya iner. SUREC_PARALEL=0 sıralı.
 # Çıktı karışmasın diye her tur kendi günlüğüne yazar, sonunda sırayla basılır; biri düşerse kapı düşer.
-if [[ "${SUREC_PARALEL:-1}" != 1 || ${#DERLEYICILER[@]} -lt 2 ]]; then
+# Tam takımda her dış make işi bir konuk çalıştırabilir. İkinci derleyici
+# turunu ancak bu iki kat paralellik ana makinenin CPU sayısına sığıyorsa aç.
+paralel=${SUREC_PARALEL:-1}
+if [[ -z ${SUREC_PARALEL+x} && ${KEMGU_TAM_TAKIM:-0} == 1 && ${#DERLEYICILER[@]} -gt 1 ]]; then
+    isci=1
+    if [[ ${MAKEFLAGS:-} =~ (^|[[:space:]])-j([0-9]+)($|[[:space:]]) ]]; then
+        isci=${BASH_REMATCH[2]}
+    elif [[ ${MAKEFLAGS:-} =~ (^|[[:space:]])-j($|[[:space:]]) ]]; then
+        paralel=0
+    fi
+    if command -v nproc >/dev/null; then
+        cpu=$(nproc)
+        if (( isci * ${#DERLEYICILER[@]} > cpu )); then paralel=0; fi
+    fi
+fi
+if [[ "$paralel" != 1 || ${#DERLEYICILER[@]} -lt 2 ]]; then
     for d in "${DERLEYICILER[@]}"; do tur "$d"; done
     exit 0
 fi

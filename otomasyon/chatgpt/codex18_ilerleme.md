@@ -271,3 +271,31 @@ PC matrisinin 72 açılışı geçti. 1/2/4 vCPU başına 24 açılışta QMP, g
 Varsayılan 1 vCPU ile tam takım 1.465 sn. Önceki x86 kapıları geçti. Yeni SMP bellek kâhini self-host kabuğunun başlangıç/son heap çiftini reddetti (make rc=2). Aynı kullanıcı dosyaları ve arşivdeki D-772 ELF'si sekiz açılışta iki ek çifti birebir verdi. Ölçülen çiftlerle düzeltilen bellek kapısı iki derleyicide 98 sn, rc=0. Süreç heap artışı 0 bayt. Soğuk 100+100 MiB self-host TCP kapısı 718,772 sn ile süre hedefini aştı.
 
 Dört vCPU ile cok_surec, boru, kabuk14, dosyalar, donanim, log, program15, ag_l3, ag_udp ve ag_parca geçti. İlk grup 402 sn, düzeltilen arka plan senaryosu 169 sn. ARM, kapsam, seçici ve paylaşım 20 sn, ek x86 çekirdek 20 sn. Bu bölümde ayrıca sabotaj istenmedi. Bölüm süresi 36 dk 7 sn.
+
+## Bölüm 20 — kullanıcı belgesi ve son regresyon
+
+SMP mimarisi, üretim kilit sırası, IPI ve TLB, ABI 91–99, hızlanma ve gecikme ölçümleri belgelendi. Yol haritasında H10i ve H14'ün QEMU kapıları gösterildi. Fiziksel koşum açık. Sabotaj envanterinde sessiz sonuçlar ve beş uygulanmayan canlı deney ayrı belirtildi. Kabuk yardımı ve kitap örnekleri iki derleyicide konukta sınandı. Yakınlık örneği tek vCPU'da CPU 0 ve dört vCPU'da CPU 3 verdi. Bu bölümde ayrıca sabotaj istenmedi.
+
+§7, belge, tip ve bare-metal fark denetimleri ile 100+100 MiB self-host TCP kapısı 7:49 sürdü. Ölçümlü `-j10` 22:53, ham `-j20` 18:43. Her ikisinde make/tee rc=0. Son ölçümde 187 kapı, en uzun 6:51. İlk 20 işçili denemede iki 64 MiB TCP verim kapısı süre sınırına takıldı. Gönderim halkası düzeltildikten sonra eşik ve PCAP özeti korundu. PS/2 hızlı yazma testinde süreyi her gerçek girişten başlattık. PIT kanal 0 gecikmesiyle yavaş kalan LAPIC için aynı 8 sn deneyinde eski imaj 199, kanal 2 referansıyla düzeltilen imaj 801 tık verdi. USB klavye kâhini sürücünün tükettiği raporu da bekliyor. 192 KiB/sn yazma hızındaki gerçek USB diskte iki eski qtest ikilisi zaman aşımına düştü. Süreyi xHCI MFINDEX üzerinden ölçen iki ikili de yazma, flush, geri okuma ve dış FAT denetimini geçti. Kısa tuş basışı deneyi, 800 ms host gecikmesinde QEMU’nun sanal saatiyle bir glif verdi. MSI beklemesi maskesiz yerel zamanlayıcı varsa HLT kullanıyor. Tam takımda süreçlerin ek derleyici turu dış işçi ve CPU sayısına göre dağıtılıyor. İki SIPI birlikte çıkarıldığında iki derleyicide de AP onayı zaman aşımı ve rc=1 görüldü. Bölüm süresi 2 sa 56 dk 4 sn.
+
+```text
+=== ZAMAN RAPORU: duvar saati 22 dk 53 sn · 187 kapı · kapı toplamı 3 sa 37 dk 17 sn · derleme/diğer 00 dk 00 sn ===
+       06 dk 51 sn  %29.9  calistir_bm_x86_ag_saglamlik_self_aktarim
+       06 dk 42 sn  %29.3  calistir_bm_x86_ekran_fare
+       06 dk 22 sn  %27.8  calistir_codegen_bootstrap
+       06 dk 11 sn  %27.1  calistir_bm_x86_tftp_teshis
+       06 dk 11 sn  %27.0  calistir_bm_x86_ps2_irq_self
+       05 dk 52 sn  %25.6  calistir_bm_x86_dosyalar
+       05 dk 17 sn  %23.1  calistir_bm_x86_tcp_kayip
+       04 dk 56 sn  %21.5  calistir_bm_x86_cok_surec_cocuk
+       04 dk 49 sn  %21.1  calistir_bm_x86_kaynak_editor
+       04 dk 45 sn  %20.8  calistir_bm_x86_kaynak_cocuk
+       04 dk 44 sn  %20.7  calistir_bm_x86_apic
+       04 dk 43 sn  %20.6  calistir_kem_os_pc_matris_mbr
+       04 dk 42 sn  %20.5  calistir_kem_os_pc_matris_gpt
+       04 dk 40 sn  %20.4  calistir_bm_x86_v1_tam
+       04 dk 29 sn  %19.6  calistir_bm_x86_ag_saglamlik_c_aktarim
+  disk: build 54G · boş 294 GiB
+Disk build: önce 57848848384 B, sonra 57850281984 B, büyüme +1433600 B
+Geçici dizin: önce 0, sonra 0, yeni 0
+```

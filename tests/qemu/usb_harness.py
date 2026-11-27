@@ -77,7 +77,11 @@ def qemu_kos(w,exe,eksik=False):
     if MODE=='usb_depo':kos(['mkfs.fat','--invariant','-F','32','-s','1','-n','USBQTEST',str(w/'disk.img')],stdout=subprocess.DEVNULL)
     mp=w/'girdi.qmp'
     mp.unlink(missing_ok=True)
-    cmd=['qemu-system-x86_64','-machine','q35','-accel','tcg','-bios',str(w/'dur.bin'),'-display','none','-nodefaults','-m','64M','-qtest',f'tcp:127.0.0.1:0,server=on,wait={"off" if MODE in ["usb_kbd","usb_fare"] else "on"}','-qtest-log','/dev/null','-device','qemu-xhci,id=x','-drive',f'file={w}/disk.img,if=none,id=u0,format=raw','-device','usb-storage,bus=x.0,drive=u0']
+    disk=f'file={w}/disk.img,if=none,id=u0,format=raw'
+    if MODE=='usb_depo':
+        # 64 KiB yazma yaklaşık 333 ms sürer. BOT sürücüsünün 1 sn bütçesi aygıt zamanıdır.
+        disk+=',bps_wr=196608'
+    cmd=['qemu-system-x86_64','-machine','q35','-accel','tcg','-bios',str(w/'dur.bin'),'-display','none','-nodefaults','-m','64M','-qtest',f'tcp:127.0.0.1:0,server=on,wait={"off" if MODE in ["usb_kbd","usb_fare"] else "on"}','-qtest-log','/dev/null','-device','qemu-xhci,id=x','-drive',disk,'-device','usb-storage,bus=x.0,drive=u0']
     if MODE in ['usb_kbd','usb_fare']:cmd+=['-qmp',f'unix:{mp},server=on,wait=off']
     if not eksik:cmd+=['-device',('usb-mouse' if MODE=='usb_fare' else 'usb-kbd')+',bus=x.0']
     with (w/'qemu.log').open('w') as log:

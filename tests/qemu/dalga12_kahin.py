@@ -227,12 +227,17 @@ class Console:
         if secim and int.from_bytes(self.mem(secim, 4), 'little', signed=True) >= 0:
             def tampon():
                 kayit = int.from_bytes(self.mem(self.symbols['bh_kayitlar'], 8), 'little')
-                return int.from_bytes(self.mem(kayit+32, 8), 'little') if kayit else 0
-            adres = bekle('USB klavye DMA tamponu', tampon, sure=8, surec=self.p)
-            once = self.mem(adres, 8)
+                if kayit:
+                    baslik = self.mem(kayit+32, 32)
+                    adres = int.from_bytes(baslik[:8], 'little')
+                    if adres:
+                        return kayit, adres, baslik[24:]
+            kayit, adres, once = bekle('USB klavye DMA tamponu', tampon, sure=8, surec=self.p)
             self.tus_gonder(ad, bas)
-            bekle(f"HID {ad} {'bas' if bas else 'bırak'}", lambda: self.mem(adres, 8),
-                  lambda rapor: rapor != once, sure=8, aralik=.002, surec=self.p)
+            bekle(f"HID {ad} {'bas' if bas else 'bırak'}",
+                  lambda: self.mem(kayit+56, 8),
+                  lambda rapor: rapor != once and rapor == self.mem(adres, 8),
+                  sure=8, aralik=.002, surec=self.p)
         else:
             self.tus_gonder(ad, bas)
             tik_bekle(self.tik, surec=self.p)
@@ -253,7 +258,11 @@ class Console:
         self.akis += '> '+text+'\n'+tail.decode()
         def matches():
             actual=self.output()
-            assert self.expected.startswith(actual),(text,actual,self.expected)
+            if not self.expected.startswith(actual):
+                taban=int.from_bytes(self.mem(self.symbols['EKRAN_AYNA_TABAN'],8),'little')
+                ayna=self.mem(taban,4096).rstrip(b'\0')
+                (self.w/'komut-ayna.bin').write_bytes(ayna)
+                raise AssertionError((text, actual[-320:], self.expected[-320:], ayna[-320:]))
             return actual==self.expected
         wait_for(self.p,matches)
         after=self.heap()

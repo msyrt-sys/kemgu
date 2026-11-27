@@ -17,7 +17,7 @@ from surec_kahin import SurecConsole
 def kos(w):
     metin=Path('belgeler/KEMGU_OS_Program_Yazma.md').read_text(encoding='utf-8')
     ornekler=re.findall(r'<!-- program: (\w+) -->\s*```kem\n(.*?)\n```',metin,re.S)
-    assert len(ornekler)==metin.count('```kem\n')==5
+    assert len(ornekler)==metin.count('```kem\n')==6
     programlar={}
     for ad,kaynak in ornekler:
         p=w/(ad+'.kem')
@@ -54,9 +54,11 @@ def kos(w):
                 cevap=havuz.submit(gonder)
                 c.run('baslat bekleornek',b'UDP 9118 9119 hazir\n'+veri+f'[bekleornek.elf pid={pid} cikis=0]\n'.encode())
                 cevap.result()
+        son_cpu = len(q.call('query-cpus-fast')) - 1
+        c.run('baslat yakornek', f'CPU {son_cpu}\n[yakornek.elf pid=7 cikis=0]\n'.encode())
         tablo=Path('belgeler/KEMGU_OS_Mimari.md').read_text(encoding='utf-8').split('## Kabuk komutları')[1]
         yardim=re.findall(r'^\| `(\w+)` \| ([^|]+) \|$',tablo,re.M)
-        assert {'bilgi','kopyala','tasi','duzen','girdisay','kesme','pci'} <= dict(yardim).keys()
+        assert {'bilgi','kopyala','tasi','duzen','girdisay','kesme','pci','islemci'} <= dict(yardim).keys()
         assert len(dict(yardim))==len(yardim)
         def adlari_denetle(ham):
             adlar=ham.decode().split()
@@ -65,6 +67,11 @@ def kos(w):
         for ad,acik in yardim:
             c.run('yardim '+ad,(html.unescape(acik)+'\n').encode())
         c.run('yardim bilinmeyen',b'HATA yardim konusu bulunamadi\n')
+        c.shutdown()
+    with boot(w,usb[0],nvme,sata,klavye='ps2',smp=4) as (q,p,s):
+        c = SurecConsole(w,q,p,s)
+        son_cpu = len(q.call('query-cpus-fast')) - 1
+        c.run('baslat yakornek', f'CPU {son_cpu}\n[yakornek.elf pid=1 cikis=0]\n'.encode())
         c.shutdown()
     print(f'BELGE15 OK {len(ornekler)} kaynak, {len(yardim)} komut',flush=True)
 

@@ -177,12 +177,27 @@ işlev uefi_apic_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
   değişken fark: tam64 = 4294967295-kem_mmio_oku32(a+912);
   değişken sure: tam64 = kap_pit_oku()-bas;
   eğer sure < 10 veya sure > 100 { ver hata("PIT olcum araligi"); }
-  güvensiz {
-   kap_tsc_ms=(bm_tsc_oku()-tsc_ilk)/(sure*10);
-   // LAPIC kurulduktan sonra sürücüler mevcut PIT kanal 0 ölçüsünü paylaşır.
-   eğer kap_tsc_ms >= 1000 { bm_cevrim_us=kap_tsc_ms/1000; }
-  }
+  değişken tsc_farki: tam64 = bm_tsc_oku()-tsc_ilk;
+  eğer tsc_farki<=0 { ver hata("TSC kalibrasyon araligi"); }
   değişken periyot: tam64 = fark/sure;
+  değişken tsc_ms: tam64 = tsc_farki/(sure*10);
+  // Kanal 0 tek atımı IRQ'da yeniden kurulur. Geciken teslimi 10 ms saymak
+  // yerine kanal 2 ile TSC hızını, aynı TSC aralığıyla LAPIC hızını ölç.
+  değişken en_iyi: tam64=0; değişken i: tam32=0;
+  iken i<3 {
+   değişken hiz: tam64=bm_pit_olc();
+   eğer hiz>0 ve (en_iyi==0 veya hiz<en_iyi) { en_iyi=hiz; }
+   i=i+1;
+  }
+  eğer en_iyi>0 ve en_iyi<=100000 {
+   tsc_ms=en_iyi*1000;
+   periyot=(fark*(tsc_ms*10))/tsc_farki;
+   kap_dok("APIC_REF",tsc_farki,tsc_ms,periyot);
+  }
+  güvensiz {
+   kap_tsc_ms=tsc_ms;
+   eğer kap_tsc_ms>=1000 { bm_cevrim_us=kap_tsc_ms/1000; }
+  }
   eğer periyot < 100 veya periyot > 2147483647 { ver hata("LAPIC kalibrasyon araligi"); }
   eşleş kap_yol_kur(m,0,32,id,doğru) { hata(e) => { ver hata(e); } tamam(v) => { } }
   güvensiz { smp_lapic_periyodu=periyot; }

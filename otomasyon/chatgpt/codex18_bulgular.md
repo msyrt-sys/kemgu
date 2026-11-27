@@ -1421,3 +1421,264 @@ USB, NVMe ve SATA açılışlarının her biri PS/2 ve USB klavye ile, hem GPT h
 Varsayılanı açıkça 1 vCPU seçen tam takım 1.465 sn sürdü. Önceki x86 kapıları ve 72 PC matris açılışı geçti. Matrisin üç topolojisi 24'er kez doğrulandı. Günlükte tek vCPU için 549 ayrı QMP örneği var. Yeni SMP bellek kapısının self-host kabuk denetimi 5.116.512 → 5.510.016 bayt çiftini ilk üç taban koşumunda görmemişti. Sonraki denemede 5.182.096 → 5.575.600 çifti görüldü. Aynı kullanıcı imajıyla D-772'nin arşivdeki 1.775.368 baytlık ELF'si sekiz kez açıldı. Eski çekirdek ilk çifti altı, ikincisini iki kez verdi. Kâhin yalnız bağımsız taban koşumunda ölçülmüş tam çiftleri kabul ediyor. Sekiz koşumda da 50 süreçte heap artışı 0 bayt, boş çerçeve 45.385 idi. Yeni çekirdekte ELF kapsamı ile boş çerçeve toplamı her iki derleyicide 53.132.
 
 Tek self-host 100+100 MiB TCP kapısı soğuk kurulumla 718,772 sn sürdü. Veri özeti, bağlantı kesintisi, yeniden teslim, heap ve çerçeve denetimleri geçti. Ayrı 12+12 MiB deneyinde host ACK'lerini birleştirmek 97,04 sn yerine 96,23 sn verdi. Bu değişiklik alınmadı.
+
+## Bölüm 20 — belge örnekleri ve son ölçüm
+
+Kabuk listesi ve mimari tablosu `islemci` komutunu içerir. Belge kâhini altı kaynağı yeniden derler. Yeni yakınlık örneğinin seri çıktısını aynı konuğun QMP işlemci sayısıyla eşler. Dört vCPU'da ikinci bir gerçek açılış son işlemciye göçü sınar.
+
+Bölüm 19'daki soğuk TCP süre aşımı için yankı hizmetinde iki halkadaki bitişik aralıklar doğrudan kopyalanıyor. Pencere, kapanış, sıralama, yeniden teslim ve 100+100 MiB kapsamı korunuyor. İzole 12+12 MiB denemesinde aynı anda başlayan eski ve ham kopyalı imaj 62,12 ve 39,30 sn sürdü. Birleşen sürüm tipli dizi erişimi kullanıyor. Ayrı açılışta 39,91 sn, aynı veri özeti, yeniden teslim ve sabit kaynak sayıları görüldü.
+
+Taban `0ce56bf` ile güncel `main` arasında gelen çalışmalarda test tarifi ve veri yerleşimi de değişti. `git merge-tree` kontrolü Makefile, iki heap harness'ı ve süreç kâhininde dört çakışma buldu. Entegrasyonu Claude yürütür. Dalganın test ve süreleri görevde belirtilen tabana aittir.
+
+### Varsayımlar ve kalan doğrulamalar
+
+- Hız ölçümlerinin kapsamı bu ARM ana makinede x86 TCG'dir. Host işlemci yükü ve QEMU sürümü özellikle IPI p99'unu ve TCP duvar saatini etkiler. Fiziksel PC açılışı, süre ve kesme yönlendirme ölçümleri Mehmet'in kontrol listesinde açıktır.
+- Çekirdekler arası süreç göçü için kullanıcı dilimleri paraleldir. BSP aygıtları ve sistem çağrısı hizmetlerini yürütür. Sekiz süreç yuvasında sekiz çocuk isteyen asal programı son çocuğu bir yuva boşalınca başlatır. ARM tek işlemcili kapılarda sınandı. ARM SMP, x2APIC ve CPU hotplug ayrı çalışmalardır.
+- Tek işlemcide boş çerçeve karşılaştırması aynı yüklenebilir ELF kapsamına göre yapılır. Ham sayılar ve ELF sayfa sayıları Bölüm 10, 14 ve 19'da ayrı verilmiştir. Kabuk heap ölçümleri D-772'den alınır, süreç tekrarı boyunca süreç heap artışı sıfırdır.
+- Ortak IDT ile özel GDT/TSS/IST kullanılır. AP2'de gerçek çift hataya QEMU iothread hatası engel oldu. Dört çekirdekte ölçülen IST1 girişi ve D-757 tek işlemci çift hatası ayrı kanıtlardır. Canlı yığın, TSS, ayırıcı, eski TLB ve GS deneylerinin kapsamı [sabotaj envanterinde](../../belgeler/KEMGU_OS_Sabotaj_Envanteri.md#uygulanmayan-deneyler) kayıtlıdır.
+
+Son §7 koşumunda belge kâhini iki kez `BELGE15 OK 6 kaynak, 49 komut` verdi. Self-host 100+100 MiB kapısında aynı SHA-256 (`0742ba24c68d455b95ad0807a4b5d33c36c235ab2de58626bd87082721a83d1e`) ve gerçek yeniden iletim görüldü. Veri aktarımı 352,67 sn, soğuk derleme ve konuk hazırlığı dahil tarif 469,288 sn. Bir önceki soğuk tarif 718,772 sn idi. Bu koşumda derleyici ve test ikilileri önceki ağacın ürünlerini kullanmadı.
+
+İlk ölçümlü son takım 23:38, 187 kapı, en uzun 7:01, rc=0. Onu izleyen 20 işçili ham koşumda aynı anda çalışan iki self-host 64 MiB TCP senaryosu 256 sn duvar saati sınırında sırasıyla 57.265.504 ve 57.786.784 bayta ulaşabildi (0,213 ve 0,215 MiB/sn). C senaryoları 200,610 ve 198,724 sn'de geçti. Aynı self-host senaryoları ölçümlü 10 işçili koşumda 139,004 ve 139,423 sn sürmüştü. Pencere ve SHA kontrolleri ile 0,25 MiB/sn sınırı korundu. Gönderici belirleyici deseni geçici diziye doldurup halkaya yeniden kopyalıyordu. Artık doğrudan halkayı, sarma noktasında iki bitişik parça halinde dolduruyor. Her 251 bayttaki desen geçişi host hesabıyla doğrulanır. Tek yönlü akış, TCP penceresi, tıkanıklık ve NIC kuyruğu izin verdiğinde bir yoklamada en çok sekiz segment üretir.
+
+İki SIPI'nin birlikte çıkarıldığı ek fazlalık deneyi `c9382d7` kaynağının yalıtılmış kopyasında yürütüldü. İki derleyicinin iki vCPU'lu gerçek UEFI konuğunda da BSP `AP cevrimici zaman asimi` bildirdi. AP onayı gelmedi, her kâhin rc=1. Deney toplam 22 sn sürdü. İkinci SIPI'nin tek başına çıkarıldığı önceki altı yeşil QEMU açılışıyla birlikte değerlendirilir.
+
+Doğrudan gönderim halkasıyla dört 64 MiB aktarımı ilk odaklı koşumda geçti. Ölçekli/ölçeksiz duvar süreleri C 63,491/59,641 sn, self-host 115,424/117,044 sn. Self-host QEMU CPU süreleri 90,27/90,22 sn. Uç noktaların ve PCAP'ın SHA-256 değeri dört koşumda da `9de7fd40017b1af57ae88b1b75ce0efe74b9b464b7a71009ae1b0dfccdb1b814`. Önceki 20 işçili aday koşumun iki tanı dizini ve PCAP dosyaları arşivlendi.
+
+| 64 MiB, güncel imaj | C ölçekli / ölçeksiz | Self-host ölçekli / ölçeksiz |
+|---|---:|---:|
+| Tam takım, 10 işçi | 90,972 / 88,580 sn | 122,097 / 125,785 sn |
+| Tam takım, 20 işçi | 172,743 / 165,598 sn | 221,686 / 219,747 sn |
+
+İki koşumda da her akış 67.108.864 bayta ulaştı. Paketlerdeki sıra ve TCP seçenekleri, gerçek veri akışının ve PCAP'ın özetleri ve kaynak sayımları kapıda doğrulandı.
+
+İkinci 20 işçili koşum dört TCP hız kapısını geçti. Self-host PS/2 kesme kâhininde 7. açılışın son hızlı tuş dizisi için ortak 25 saniyelik sayacın yalnız 0,363 saniyesi kalmıştı. Seri kayıt `l` dizisi dahil ilk on bir doğru 48 karakterli çıktıyı ve istemleri içeriyordu. Süre, her komuttan önce yapılan bağımsız girişler ile on bir tam ekranın yaklaşık 11 milyon piksel karşılaştırmasını da kapsıyordu. Seri yanıtın beş saniyelik sınırı artık ilgili olay gönderildiğinde başlar. Her hızlı tuş, halka sarımı, sıfır kayıp, piksel eşitliği, 12 dizi ve 10 açılış koşulu korunur. Seri çıktıda hatalı bir bayt ilk okumada reddedilir.
+
+Üçüncü 20 işçili denemede farklı iki hata görüldü. PS/2 boşta sayacı sekiz saniyede beklenen aralığa ulaşmadı. Başarısız çekirdeğin gerçek seri kaydında PIT IRQ0 üzerinden hesaplanan LAPIC periyodu 2.131.390 idi. Yeşil açılışlarda yaklaşık 626.000–634.000. Kanal 0 tek atımını ISR yeniden kurduğundan, vCPU uzun süre çalışamazsa on IRQ arasındaki süre de uzuyor. Çekirdek kanal 0 ölçümünü koruyor. TSC hızını ayrıca mevcut kanal 2 sayacıyla üç kez ölçüp en kısa geçerli örneği alıyor. LAPIC periyodunu kanal 0 örneğinin gerçek TSC süresine göre hesaplıyor. Host `APIC_REF` ve `APIC_KAL` değerlerinden bölümü bağımsız tekrar hesaplıyor. Sekiz saniyedeki 400–1200 tık sınırı değişmedi.
+
+Ayrıca büyük ELF'nin kabuk komutu tek açılışta bilinmeyen komut verdi. Önceki kâhin yalnız xHCI'nin DMA yazısını görüyordu. Klavye aktarım kaydının boş son sözcüğü artık yazılımın çözdüğü son raporu tutuyor. Kâhin bir sonraki olayı göndermeden donanımdaki baytlarla tüketilen raporun eşleşmesini bekliyor. Komut yanıtının farklı olduğu durumda konuk ekran aynası da tanı dizinine yazılıyor.
+
+Ayrı QEMU fikstüründe yalnız kanal 0 tek atım böleni 11.932'den 47.728'e çıkarıldı. Aynı sekiz saniyelik donanım gözleminde eski imaj 199 tık ve 2.508.271 periyot verdi. Yeni imaj 801 tık ve 624.360 periyot verdi. Yeni seri kaydında 401.048.247 TSC çevrimi, ms başına 999.000 çevrim ve 25.064.941 LAPIC sayımı vardı. QEMU ve PIT kanal 2 değişmedi.
+
+Dördüncü 20 işçili tam takım 737 sn sonunda qtest USB depolamada kırmızıydı. Self-host gerçek QEMU ile kapasiteyi 131072×512 okudu ve yazma sırasında süresi doldu. Taşıyıcı, BOT'un her 1000 µs bekleme isteğinde yalnız bir yazmaç okuyordu. Çalışan xHCI için taşıyıcı artık RTSOFF'taki 14 bitlik MFINDEX sayacının ileri gidişini ölçüyor. 125 µs alt çerçeve başlangıç fazı ile sayaç sarımı hesaba katılıyor. Hareketsiz sayaç açık hata veriyor. Sürücünün 1000 yoklama sınırı korundu.
+
+QEMU blok yazma hızının 196608 bayt/sn olduğu eş koşulda eski C ve self-host ikilileri aynı `usb zaman asimi is=11` sonucunu verdi. Yeni ikililerin ikisi de yazma, flush ve geri okumayı tamamladı. Konuk dışından fsck ve Python, 1300 baytın içeriğini, üç kümeyi, iki FAT kopyasını ve FSInfo’da 129018 serbest küme olduğunu doğruladı. Bu disk hızı normal USB depo regresyonuna alındı. Test dalının toplam bütçesi hâlâ 58 sn.
+
+Beşinci 20 işçili tam takımda USB depolama C ve self-host ile 19,97 sn sürdü. Girdi15'te 20 tık olması istenen kısa basış, host iki QMP komutunu ayrı ayrı göndermeye çalışırken 44–122 konuk tıkına yayıldı. Yeni kısa basış tek QMP isteğinin 200 ms sanal tutma süresini kullanır. Konukta basma ve bırakmanın işlendiği doğrulanır ve GOP'ta tam bir A glifi aranır. Aynı kaydedilmiş self-host imajında, olay gönderildikten sonra host gözlemine 800 ms gecikme eklenince eski kâhin 29–129 tıkla kırmızı, yeni kâhin bir glifle yeşil çıktı. 68 ve 87 tıklık uzun basışlar ayrı ayrı sürüyor.
+
+Aynı takımda ağ PC matrisinin SATA yolu, bağlama sırasında AHCI'nin 500 ms MSI beklemesini aştı ve yoklamaya geçti. Donanım bekleyicisi, periyodik ve maskesiz yerel zamanlayıcı önceliği işlemcinin etkin önceliğinden yüksekken, işlemciyi disk kesmesi veya zamanlayıcı tıkına kadar HLT'de uyutuyor. Kesme sayacı kapalı kesmelerle tekrar okunur, STI ve HLT bitişiktir. Önceki IF, zaman sınırı, yoklama yolu ve bağımsız MSI denetimi korunur.
+
+20 dış işçide iki derleyiciyi kendi içinde paralel başlatan tarifler, 20 CPU'lu makinede aynı anda ikişer konuk çalıştırabiliyordu. Süreç harness'ı tam takımda dış paralellik ve kullanılabilir CPU sayısından ikinci turun yeri olup olmadığını hesaplıyor. Her iki derleyici ve tüm senaryolar koşuyor. 10 ve 20 işçi, sınırsız `-j`, doğrudan çağrı ve açık paralellik seçimi ayrı denendi. Beşinci koşumun kapanışında üç Bash süreci ve odaklı denemedeki bir Bash, açık betiğin değişmiş metnini eski okuma konumundan sürdürmeye çalıştı. Konuk denetimleri geçmişti, kabuk çıkışı 2 oldu. Bu çıktılar arşivlendi ve sabit kaynakla son tam takımlar geçti.
+
+### Son süreler
+
+| Takım | D-772 veya ilk bölüm | Son ölçülen çalışma | Koşul |
+|---|---:|---:|---|
+| Seri | 5 sa 25 dk (önceki dalganın kaydı) | 4 sa 48 dk 11 sn | Görev §2 uyarınca tek seri ölçüm Bölüm 6'da |
+| 10 işçi | 37:31 / 35:00 / 34:18 | 22:53 | Bölüm 20, 187 kapı, en uzun 6:51 |
+| 20 işçi | Taban tek işçi sayısıyla alındı | 18:43 | Bölüm 20, ham tam takım. Bölüm 6 stres çifti 14:59 / 15:10 |
+
+Son ölçümde `calistir_bm_x86_ag_saglamlik_self_aktarim` 411.171 sn. Self-host 100+100 MiB akışı kapının tüm hazırlığıyla 411.171 sn. Ölçümlü takımın günlüğünde 185 isabet ve 0 derleme satırı var. Önbelleğin kendi geçersizleme deneyleri bu iki sayıya dahildir. Ölçümlü koşum ve 20 işçili stresin make ve tee çıkış kodları 0.
+
+### Son kapı bütçeleri
+
+| Kapı | Sınıf | Bütçe (sn) | Son ölçüm (sn) |
+|---|---|---:|---:|
+| `calistir_ag_es` | host | 60 | 6.823 |
+| `calistir_ag_kosum` | host | 60 | 0.289 |
+| `calistir_anahtar_kelime_kapisi` | derleme | 60 | 0.058 |
+| `calistir_arena_test` | host | 60 | 0.011 |
+| `calistir_arm64_test` | derleme | 60 | 0.073 |
+| `calistir_asan_denetim` | host | 83 | 48.842 |
+| `calistir_asan_matris` | host | 60 | 4.903 |
+| `calistir_ast_test` | host | 60 | 0.012 |
+| `calistir_baremetal_diff` | derleme | 60 | 28.678 |
+| `calistir_belge_kapisi` | host | 60 | 0.039 |
+| `calistir_bm_x86_acilis_suresi` | qemu-x86 | 77 | 71.431 |
+| `calistir_bm_x86_ag_arac` | qemu-x86 | 170 | 78.396 |
+| `calistir_bm_x86_ag_iki` | qemu-x86 | 381 | 128.468 |
+| `calistir_bm_x86_ag_l3` | qemu-x86 | 155 | 92.916 |
+| `calistir_bm_x86_ag_parca` | qemu-x86 | 60 | 21.630 |
+| `calistir_bm_x86_ag_pc` | qemu-x86 | 259 | 136.804 |
+| `calistir_bm_x86_ag_saglamlik` | qemu-x86 | 1747 | Ayrı hedef |
+| `calistir_bm_x86_ag_saglamlik_c_aktarim` | qemu-x86 | 600 | 268.674 |
+| `calistir_bm_x86_ag_saglamlik_c_cerceve` | qemu-x86 | 70 | 26.107 |
+| `calistir_bm_x86_ag_saglamlik_c_zaman` | qemu-x86 | 60 | 15.768 |
+| `calistir_bm_x86_ag_saglamlik_self_aktarim` | qemu-x86 | 600 | 411.171 |
+| `calistir_bm_x86_ag_saglamlik_self_cerceve` | qemu-x86 | 72 | 30.225 |
+| `calistir_bm_x86_ag_saglamlik_self_zaman` | qemu-x86 | 60 | 16.599 |
+| `calistir_bm_x86_ag_udp` | qemu-x86 | 144 | 63.750 |
+| `calistir_bm_x86_ahci` | qemu-x86 | 60 | 15.294 |
+| `calistir_bm_x86_apic` | qemu-x86 | 412 | 284.041 |
+| `calistir_bm_x86_arac16` | qemu-x86 | 130 | 76.239 |
+| `calistir_bm_x86_belge15` | qemu-x86 | 142 | 101.985 |
+| `calistir_bm_x86_blok` | qemu-x86 | 60 | 8.335 |
+| `calistir_bm_x86_boru` | qemu-x86 | 107 | 85.222 |
+| `calistir_bm_x86_buyuk_elf` | qemu-x86 | 299 | 168.002 |
+| `calistir_bm_x86_cok_surec` | qemu-x86 | 898 | Ayrı hedef |
+| `calistir_bm_x86_cok_surec_arka` | qemu-x86 | 302 | 162.887 |
+| `calistir_bm_x86_cok_surec_cocuk` | qemu-x86 | 408 | 295.627 |
+| `calistir_bm_x86_cok_surec_hesap` | qemu-x86 | 262 | 173.451 |
+| `calistir_bm_x86_disk` | qemu-x86 | 158 | 94.174 |
+| `calistir_bm_x86_disk_hata` | qemu-x86 | 102 | 87.349 |
+| `calistir_bm_x86_donanim` | qemu-x86 | 60 | 49.726 |
+| `calistir_bm_x86_dosyalar` | qemu-x86 | 674 | 351.576 |
+| `calistir_bm_x86_duzenle` | qemu-x86 | 440 | 245.995 |
+| `calistir_bm_x86_e1000` | qemu-x86 | 60 | 36.629 |
+| `calistir_bm_x86_ekran` | qemu-x86 | 60 | 1.121 |
+| `calistir_bm_x86_ekran_fare` | qemu-x86 | 667 | 402.240 |
+| `calistir_bm_x86_girdi15` | qemu-x86 | 103 | 78.587 |
+| `calistir_bm_x86_guc` | qemu-x86 | 220 | 39.651 |
+| `calistir_bm_x86_http` | qemu-x86 | 335 | 217.230 |
+| `calistir_bm_x86_istisna` | qemu-x86 | 88 | 30.578 |
+| `calistir_bm_x86_kabuk` | qemu-x86 | 310 | 67.876 |
+| `calistir_bm_x86_kabuk14` | qemu-x86 | 1055 | Ayrı hedef |
+| `calistir_bm_x86_kabuk14_1` | qemu-x86 | 528 | 211.460 |
+| `calistir_bm_x86_kabuk14_6` | qemu-x86 | 529 | 212.168 |
+| `calistir_bm_x86_kapat` | qemu-x86 | 60 | 45.697 |
+| `calistir_bm_x86_kaynak` | qemu-x86 | 1200 | Ayrı hedef |
+| `calistir_bm_x86_kaynak_cocuk` | qemu-x86 | 533 | 285.263 |
+| `calistir_bm_x86_kaynak_editor` | qemu-x86 | 600 | 289.207 |
+| `calistir_bm_x86_klavye16` | qemu-x86 | 404 | 258.173 |
+| `calistir_bm_x86_log` | qemu-x86 | 60 | 47.135 |
+| `calistir_bm_x86_msi` | qemu-x86 | 181 | 44.513 |
+| `calistir_bm_x86_nic_matris` | qemu-x86 | 215 | 135.457 |
+| `calistir_bm_x86_ntp` | qemu-x86 | 60 | 15.620 |
+| `calistir_bm_x86_nvme` | qemu-x86 | 60 | 16.561 |
+| `calistir_bm_x86_paket` | qemu-x86 | 142 | 71.189 |
+| `calistir_bm_x86_panik` | qemu-x86 | 60 | 2.795 |
+| `calistir_bm_x86_pat` | qemu-x86 | 60 | 11.869 |
+| `calistir_bm_x86_pci16` | qemu-x86 | 84 | 79.447 |
+| `calistir_bm_x86_program15` | qemu-x86 | 91 | 76.120 |
+| `calistir_bm_x86_ps2` | qemu-x86 | 382 | 68.288 |
+| `calistir_bm_x86_ps2_irq` | qemu-x86 | 1177 | Ayrı hedef |
+| `calistir_bm_x86_ps2_irq_c` | qemu-x86 | 558 | 267.364 |
+| `calistir_bm_x86_ps2_irq_self` | qemu-x86 | 576 | 371.278 |
+| `calistir_bm_x86_ps2_karma` | qemu-x86 | 964 | Ayrı hedef |
+| `calistir_bm_x86_ps2_karma_c` | qemu-x86 | 462 | 212.650 |
+| `calistir_bm_x86_ps2_karma_self` | qemu-x86 | 463 | 221.926 |
+| `calistir_bm_x86_ramdisk` | qemu-x86 | 262 | 77.801 |
+| `calistir_bm_x86_saglamlik` | qemu-x86 | 104 | 80.176 |
+| `calistir_bm_x86_smp_ap` | qemu-x86 | 86 | 42.171 |
+| `calistir_bm_x86_smp_bellek` | qemu-x86 | 475 | 121.937 |
+| `calistir_bm_x86_smp_ipi` | qemu-x86 | 60 | 18.868 |
+| `calistir_bm_x86_smp_kesif` | qemu-x86 | 60 | 28.553 |
+| `calistir_bm_x86_smp_kilit` | qemu-x86 | 549 | 23.973 |
+| `calistir_bm_x86_smp_paralel` | qemu-x86 | 126 | 63.890 |
+| `calistir_bm_x86_smp_saglamlik` | qemu-x86 | 240 | 27.082 |
+| `calistir_bm_x86_smp_surec_boru` | qemu-x86 | 305 | 77.521 |
+| `calistir_bm_x86_smp_surec_dosyalar` | qemu-x86 | 301 | 73.818 |
+| `calistir_bm_x86_smp_surec_hesap` | qemu-x86 | 498 | 112.268 |
+| `calistir_bm_x86_smp_surec_kabuk14` | qemu-x86 | 315 | 82.800 |
+| `calistir_bm_x86_smp_tik` | qemu-x86 | 87 | 38.337 |
+| `calistir_bm_x86_smp_tlb` | qemu-x86 | 416 | 89.350 |
+| `calistir_bm_x86_soket` | qemu-x86 | 60 | 19.010 |
+| `calistir_bm_x86_surec` | qemu-x86 | 589 | 193.061 |
+| `calistir_bm_x86_surec_abi` | qemu-x86 | 60 | 8.633 |
+| `calistir_bm_x86_tcp_kayip` | qemu-x86 | 431 | 317.030 |
+| `calistir_bm_x86_tcp_secenek` | qemu-x86 | 60 | 16.034 |
+| `calistir_bm_x86_tcp_temel` | qemu-x86 | 66 | 34.125 |
+| `calistir_bm_x86_tcp_verim` | qemu-x86 | 562 | Ayrı hedef |
+| `calistir_bm_x86_tcp_verim_c_olcekli` | qemu-x86 | 281 | 97.920 |
+| `calistir_bm_x86_tcp_verim_c_olceksiz` | qemu-x86 | 276 | 102.288 |
+| `calistir_bm_x86_tcp_verim_self_olcekli` | qemu-x86 | 350 | 133.917 |
+| `calistir_bm_x86_tcp_verim_self_olceksiz` | qemu-x86 | 345 | 136.360 |
+| `calistir_bm_x86_tftp_teshis` | qemu-x86 | 592 | 371.482 |
+| `calistir_bm_x86_uefi` | qemu-x86 | 65 | 36.068 |
+| `calistir_bm_x86_uefi_kabuk` | qemu-x86 | 560 | 219.361 |
+| `calistir_bm_x86_uefi_pc` | qemu-x86 | 354 | 123.484 |
+| `calistir_bm_x86_usb` | qemu-x86 | 60 | 11.319 |
+| `calistir_bm_x86_usb_ag` | qemu-x86 | 312 | 170.501 |
+| `calistir_bm_x86_usb_hub` | qemu-x86 | 122 | 82.962 |
+| `calistir_bm_x86_v1` | qemu-x86 | 987 | Ayrı hedef |
+| `calistir_bm_x86_v1_kesinti` | qemu-x86 | 439 | 233.950 |
+| `calistir_bm_x86_v1_tam` | qemu-x86 | 566 | 279.782 |
+| `calistir_bolge_atama_test` | host | 60 | 0.011 |
+| `calistir_bolge_operand` | host | 60 | 6.604 |
+| `calistir_bolge_sayac_yarisi` | host | 60 | 1.146 |
+| `calistir_bolge_test` | host | 60 | 0.011 |
+| `calistir_bolge_yonlendirme` | host | 60 | 0.025 |
+| `calistir_capability_test` | host | 60 | 0.026 |
+| `calistir_cekirdek_onbellek` | derleme | 138 | 102.588 |
+| `calistir_chatgpt_kopru` | host | 254 | 195.135 |
+| `calistir_check_genis` | derleme | 60 | 3.328 |
+| `calistir_check_kapisi` | derleme | 60 | 4.258 |
+| `calistir_checker_diff` | derleme | 60 | 4.731 |
+| `calistir_ciplak_region_free` | host | 60 | 0.738 |
+| `calistir_codegen_bootstrap` | host | 539 | 382.161 |
+| `calistir_codegen_diff` | host | 60 | 31.209 |
+| `calistir_codegen_genis` | host | 60 | 22.172 |
+| `calistir_ct_bariyer` | derleme | 60 | 1.401 |
+| `calistir_derleme_olcum` | derleme | 152 | 123.278 |
+| `calistir_disk_denetimi` | host | 60 | Ayrı hedef |
+| `calistir_dizi_perf_test` | host | 60 | 0.362 |
+| `calistir_dizi_sinir_test` | host | 60 | 15.523 |
+| `calistir_drf_gorunurluk` | host | 60 | 0.278 |
+| `calistir_drf_test` | host | 60 | 0.028 |
+| `calistir_e4k_bellek` | host | 60 | 2.280 |
+| `calistir_escape_test` | host | 60 | 0.012 |
+| `calistir_eszamanli_kosum` | host | 60 | 0.535 |
+| `calistir_fuzz_advanced` | host | 60 | 0.825 |
+| `calistir_fuzz_test` | host | 60 | 0.522 |
+| `calistir_gorev_msan` | host | 60 | 0.625 |
+| `calistir_gorev_rt_test` | host | 60 | 0.125 |
+| `calistir_json_test` | host | 60 | 0.010 |
+| `calistir_kanal_omru` | host | 60 | 0.724 |
+| `calistir_kapi_butcesi` | host | 60 | 0.234 |
+| `calistir_kapi_kapsam` | host | 60 | 0.208 |
+| `calistir_kapi_secici` | host | 60 | 0.597 |
+| `calistir_kdl_bolge_test` | host | 60 | 0.010 |
+| `calistir_kem_malloc_kompozisyon` | host | 60 | 0.874 |
+| `calistir_kem_os_arm` | qemu-arm | 60 | 15.437 |
+| `calistir_kem_os_arm_ag` | qemu-arm | 64 | 30.111 |
+| `calistir_kem_os_ayristirici` | qemu-x86 | 64 | 56.291 |
+| `calistir_kem_os_pc_matris` | qemu-x86 | 829 | Ayrı hedef |
+| `calistir_kem_os_pc_matris_gpt` | qemu-x86 | 449 | 282.160 |
+| `calistir_kem_os_pc_matris_mbr` | qemu-x86 | 452 | 283.082 |
+| `calistir_kripto_check` | derleme | 60 | 0.049 |
+| `calistir_kripto_kosum` | host | 60 | 1.064 |
+| `calistir_lambda_test` | host | 60 | 0.296 |
+| `calistir_lean_sorry` | host | 60 | 0.091 |
+| `calistir_lexer_diff` | host | 60 | 0.195 |
+| `calistir_linear_test` | host | 60 | 0.032 |
+| `calistir_llvm_dogrula_test` | host | 60 | 0.010 |
+| `calistir_llvm_test` | host | 60 | 17.340 |
+| `calistir_lsp_test` | host | 60 | 0.031 |
+| `calistir_mmio_bare_metal` | derleme | 60 | 0.026 |
+| `calistir_mmio_test` | host | 60 | 0.016 |
+| `calistir_mmio_volatile` | derleme | 60 | 13.149 |
+| `calistir_modul_codegen` | derleme | 60 | 7.862 |
+| `calistir_otp_cli_test` | host | 60 | 0.082 |
+| `calistir_panik_test` | host | 60 | 0.009 |
+| `calistir_parser_diff` | host | 60 | 0.305 |
+| `calistir_parser_test` | host | 60 | 0.017 |
+| `calistir_paylasim_denetimi` | host | 60 | 0.534 |
+| `calistir_perf_bellek` | host | 60 | 1.384 |
+| `calistir_qemu_cekirdek` | qemu-x86 | 60 | 0.015 |
+| `calistir_qemu_smoke` | qemu-arm | 60 | 8.017 |
+| `calistir_qtest` | qemu-x86 | 60 | 26.292 |
+| `calistir_ring3_page_test_x86` | qemu-x86 | 60 | 20.100 |
+| `calistir_runtime_link_test` | host | 60 | 0.004 |
+| `calistir_sabitsure_test` | host | 60 | 0.022 |
+| `calistir_self_driver` | host | 317 | 226.679 |
+| `calistir_sembol_test` | host | 60 | 0.022 |
+| `calistir_sifir_bolme` | host | 60 | 25.789 |
+| `calistir_sifir_uyari` | derleme | 60 | 2.266 |
+| `calistir_simd_llvm_test` | host | 60 | 0.294 |
+| `calistir_simd_test` | host | 60 | 0.018 |
+| `calistir_snapshot_test` | host | 60 | 0.068 |
+| `calistir_stdlib_check` | derleme | 60 | 1.241 |
+| `calistir_stdlib_ithal` | derleme | 60 | 1.859 |
+| `calistir_surucu_diff` | host | 60 | 3.757 |
+| `calistir_surucu_kosum` | host | 60 | 2.242 |
+| `calistir_tasma` | host | 60 | 0.710 |
+| `calistir_tip_kontrol_test` | host | 60 | 0.051 |
+| `calistir_tip_test` | host | 60 | 0.011 |
+| `calistir_uart_16550_test` | host | 60 | 0.042 |
+| `calistir_uart_merhaba_bare_metal` | derleme | 60 | Ayrı hedef |
+| `calistir_uart_pl011_test` | host | 60 | 0.038 |
+| `calistir_uart_vtable_test` | host | 60 | 0.010 |
+| `calistir_wcet_test` | host | 60 | 0.022 |
+| `calistir_yapi_diff` | host | 60 | 4.640 |
+| `calistir_yazdir_bare_test` | host | 60 | 0.009 |
+| `calistir_yigin_geri` | host | 101 | 85.435 |

@@ -347,8 +347,7 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 - [x] **H10h (✓ Dalga 15, calistir_bm_x86_donanim. Yazılabilir açılış köküne donanim.txt ve host donanım karşılaştırması.) [M] Teşhis paketi:** açılışta `donanim.txt` (PCI listesi, ACPI tabloları,
       bellek haritası, bulunan/bulunamayan aygıtlar) → FS'e yazılır. Seri port yokken
       sorun bildirmenin tek yolu.
-- [ ] **H10i [S] SMP (isteğe bağlı):** LAPIC INIT-SIPI (`smp_x86.c` referans). Tek
-      çekirdekle de hedef karşılanır; ertelenebilir.
+- [x] **H10i [S] x86 SMP.** UEFI yolunda LAPIC INIT-SIPI-SIPI ve çekirdek başına zamanlama, QEMU'da 1/2/4/8 vCPU ile doğrulandı. Kanıtlar H14'te.
 
 ---
 
@@ -409,6 +408,16 @@ büyümesi beklenir → derleme altyapısı (H1) önemlidir.
 H13 işaretleri ilgili işlevin belirtilen kapıdan geçtiğini gösterir. Uygulanmayan ve yalnız host düzeyinde ölçülen sabotajlar [sabotaj envanterinde](KEMGU_OS_Sabotaj_Envanteri.md) bölüm bazında kayıtlıdır.
 
 IPv6 ve TLS bu dalganın kapsamı dışındadır.
+
+## H14. x86 çok işlemci desteği
+
+| Durum | İş | Çalıştırılabilir kanıt |
+|---|---|---|
+| Tamam | MADT, düşük bellek, AP başlatma ve GDT/TSS/IST | `calistir_bm_x86_smp_kesif`, `calistir_bm_x86_smp_ap`, `calistir_bm_x86_smp_tik` |
+| Tamam | Bilet sırası, IPI teslimi, çerçeve ve heap sahipliği, uzak TLB onayı | `calistir_bm_x86_smp_kilit`, `calistir_bm_x86_smp_ipi`, `calistir_bm_x86_smp_bellek`, `calistir_bm_x86_smp_tlb` |
+| Tamam | İş çalma, yakınlık, paralel hesap ve panik duruşu | `calistir_bm_x86_smp_surec`, `calistir_bm_x86_smp_paralel`, `calistir_bm_x86_smp_saglamlik` |
+| Tamam | 1/2/4 vCPU ile depolama ve klavye matrisi | `calistir_kem_os_pc_matris` |
+| Fiziksel ölçüm bekliyor | Gerçek makinede MADT, işlemci sayısı ve asal programı | [Fiziksel donanım kontrol listesi](X86_Fiziksel_Donanim_Kontrol_Listesi.md) |
 
 ## Bağımlılık özeti (kritik yol)
 

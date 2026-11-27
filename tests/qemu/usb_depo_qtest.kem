@@ -52,6 +52,7 @@ işlev akis(q: &değişken Qt, s: &değişken XhciDurum) -> sonuç<mantıksal,me
         eğer ar.sinif == 8 {
             eşleş xhci_depo_hazir(s,i) { hata(e) => { ver hata(e); } tamam(v) => { } }
             eşleş xhci_qsur(q,s) { hata(e) => { ver hata(e); } tamam(v) => { } }
+            q.xhci_mfindex = XHCI_BAR + s.c.rtsoff;
             eşleş usb_depo_yeni(a.dma,s.c.dboff+(a.yuva olarak tam64)*4,s.c.rtsoff+56,a.yuva,2,129,ar.no) { hata(e) => { ver hata(e); } tamam(v) => { değişken d: UsbDepo = v; ver dosya(q,&değişken d); } }
         } i=i+1;
     } ver hata("usb depo yok");

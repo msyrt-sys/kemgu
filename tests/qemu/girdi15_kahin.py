@@ -15,25 +15,32 @@ def tekrar(c, sure):
     # Basılı süreyi konuk make kodunu aldıktan sonra donanım tikleriyle ölç.
     def kod():
         return int.from_bytes(c.mem(c.symbols['kt_kod'], 4), 'little')
-    once = c.tik()
-    c.tus_gonder('a', True)
-    bekle('tekrar deneyi: A basma kodu', kod, lambda k: k == 30, aralik=.001, surec=c.p)
-    ilk = c.tik()
-    birak = bekle(f'tekrar için {sure} LAPIC tiki', c.tik, lambda t: t-ilk >= sure,
-                  aralik=.001, surec=c.p)
-    c.tus_gonder('a', False)
-    bekle('tekrar deneyi: A bırakma kodu', kod, lambda k: k == 0, aralik=.001, surec=c.p)
-    son = c.tik()
-    # Belgelenen ilk tekrar 50, sonraki tekrarlar 5 tiktir. Ana makine QMP
-    # yoklamasını geç yaparsa gerçek basılı aralık hedef süreden uzun olabilir.
     def beklenen(tik):
         return 1 if tik < 50 else 2 + (tik-50)//5
     if sure < 50:
-        assert son-once < 50, ("kısa basış gözlenemedi", once, son)
+        # QEMU basma ve bırakmayı tek istekte kendi sanal saatiyle zamanlar.
+        # Host'un iki QMP çağrısı arasında çalıştırılmaması basışı uzatamaz.
+        def son_tarih():
+            return int.from_bytes(c.mem(c.symbols['kt_sonraki'], 8), 'little')
+        eski = son_tarih()
+        c.q.call('send-key', {'keys':[{'type':'qcode','data':'a'}], 'hold-time':sure*10})
+        bekle('kısa basışın konukta işlenmesi', son_tarih, lambda t: t != eski, surec=c.p)
+        bekle('kısa basışın bırakılması', kod, lambda k: k == 0, surec=c.p)
+        aralik = f'{sure*10} sanal ms'
         alt = ust = 1
     else:
+        once = c.tik()
+        c.tus_gonder('a', True)
+        bekle('tekrar deneyi: A basma kodu', kod, lambda k: k == 30, aralik=.001, surec=c.p)
+        ilk = c.tik()
+        birak = bekle(f'tekrar için {sure} LAPIC tiki', c.tik, lambda t: t-ilk >= sure,
+                      aralik=.001, surec=c.p)
+        c.tus_gonder('a', False)
+        bekle('tekrar deneyi: A bırakma kodu', kod, lambda k: k == 0, aralik=.001, surec=c.p)
+        son = c.tik()
         alt = max(2, beklenen(birak-ilk)-1)
         ust = beklenen(son-once)+1
+        aralik = f'{birak-ilk}..{son-once} konuk tiki'
     # Komut öneki de tekrarlanabilir. Basılı tuşun etkisini doğrudan giriş satırından say.
     font = font_yukle()
     fw, fh = font[1][:2]
@@ -53,7 +60,7 @@ def tekrar(c, sure):
             adet += 1
         return adet
     adet = bekle('GOP üzerinde yinelenen A glifleri', harf_say, lambda n: n >= alt, surec=c.p)
-    print('TEKRAR',sure,adet,'ölçülen tik aralığı',birak-ilk,son-once,'beklenen glif',alt,ust,flush=True)
+    print('TEKRAR',sure,adet,'basılı süre',aralik,'beklenen glif',alt,ust,flush=True)
     assert alt <= adet <= ust, (sure,adet,alt,ust)
     for _ in range(adet):
         tus(c,'backspace')

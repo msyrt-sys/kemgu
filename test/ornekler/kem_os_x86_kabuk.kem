@@ -2305,14 +2305,41 @@ işlev ag_tcp_girdi(b: Dizi<dtam8>,n: tam32,lo: mantıksal) -> mantıksal {
         tcp_al(&değişken s,&v,b,h,ag_us()/1000); *p=s; ver doğru;
     }
 }
-// Kalıcı ağ tamponu çağıranın mülkiyetindedir. Bu döngü geçici bölge ayırmaz.
-çıplak işlev ag_aktarim_doldur(buf: Dizi<dtam8>, adet: tam32, bas: tam64) {
-    değişken i:tam32=0;
-    iken i<adet {
-        değişken j:tam64=bas+(i olarak tam64);
-        dizi_yaz(buf,i,(((j*37+j/251)&255) olarak tam32) olarak dtam8);
-        i=i+1;
+// [bas, bas+adet) aktarım desenini gönderim halkasının bitişik bölümüne yaz.
+çıplak işlev ag_aktarim_doldur(hedef: Dizi<dtam8>, ofset: tam32, adet: tam32, bas: tam64) {
+    değişken son: tam32=ofset+adet;
+    değişken i: tam32=ofset;
+    değişken deger: tam32=((bas*37+bas/251)&255) olarak tam32;
+    değişken sinir: tam32=i+251-(bas%251) olarak tam32;
+    iken i<son {
+        değişken bitis: tam32=sinir;
+        eğer bitis>son { bitis=son; }
+        iken i<bitis {
+            dizi_yaz(hedef,i,(deger&255) olarak dtam8);
+            deger=deger+37; i=i+1;
+        }
+        deger=deger+1; sinir=sinir+251;
     }
+}
+// Her iki halkada bitişik kalan bölümü aktar, sarma noktasında yeni aralık seç.
+çıplak işlev ag_tcp_yankila(s: &değişken TcpBag, n: tam32) {
+    değişken al_kap: tam32=dizi_boyut(s.rx);
+    değişken yaz_kap: tam32=dizi_boyut(s.tx);
+    değişken al: tam32=s.rx_ilk;
+    değişken yaz: tam32=(s.tx_ilk+s.tx_boy)%yaz_kap;
+    değişken kalan: tam32=n;
+    iken kalan>0 {
+        değişken kesit: tam32=kalan;
+        eğer kesit>al_kap-al { kesit=al_kap-al; }
+        eğer kesit>yaz_kap-yaz { kesit=yaz_kap-yaz; }
+        değişken i: tam32=0;
+        iken i<kesit { dizi_yaz(s.tx,yaz+i,dizi_al(s.rx,al+i)); i=i+1; }
+        al=al+kesit; eğer al==al_kap { al=0; }
+        yaz=yaz+kesit; eğer yaz==yaz_kap { yaz=0; }
+        kalan=kalan-kesit;
+    }
+    eğer s.rx_boy==al_kap { s.onay=doğru; }
+    s.rx_ilk=al; s.rx_boy=s.rx_boy-n; s.tx_boy=s.tx_boy+n;
 }
 // Soket ABI'sinden önceki yankı ve aktarım sınaması aynı gönder/al halkalarını kullanır.
 işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
@@ -2321,7 +2348,10 @@ işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
     değişken n: tam32 = s.rx_boy; eğer n>1460 { n=1460; }
     eğer uyg==1 {
         değişken yer: tam32 = dizi_boyut(s.tx)-s.tx_boy; eğer n>yer { n=yer; }
-        eğer n>0 { n=tcp_oku(s,buf,0,n); tcp_yaz(s,buf,0,n); }
+        eğer n>0 {
+            eğer s.kapat { tcp_oku(s,buf,0,n); }
+            değilse { ag_tcp_yankila(s,n); }
+        }
         eğer s.durum==TCP_KAPAT_BEKLE ve s.rx_boy==0 { tcp_kapat_iste(s); }
     } değilse eğer uyg==2 {
         eğer n>0 {
@@ -2333,10 +2363,18 @@ işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
             } ag_tcp_okunan=ag_tcp_okunan+(n olarak tam64);
         }
         değişken kalan: tam64 = ag_tcp_hedef_boy-ag_tcp_yazilan;
-        eğer kalan>0 ve s.tx_boy<dizi_boyut(s.tx) {
-            değişken adet: tam32 = 1460; eğer kalan<1460 { adet=kalan olarak tam32; } eğer adet>dizi_boyut(s.tx)-s.tx_boy { adet=dizi_boyut(s.tx)-s.tx_boy; }
-            ag_aktarim_doldur(buf,adet,ag_tcp_yazilan);
-            adet=tcp_yaz(s,buf,0,adet); eğer adet>0 { ag_tcp_yazilan=ag_tcp_yazilan+(adet olarak tam64); }
+        değişken kapasite: tam32=dizi_boyut(s.tx);
+        eğer kalan>0 ve değil s.kapat ve s.tx_boy<kapasite {
+            değişken adet: tam32=1460;
+            eğer kalan<1460 { adet=kalan olarak tam32; }
+            eğer adet>kapasite-s.tx_boy { adet=kapasite-s.tx_boy; }
+            değişken ofset: tam32=(s.tx_ilk+s.tx_boy)%kapasite;
+            değişken ilk: tam32=adet;
+            eğer ilk>kapasite-ofset { ilk=kapasite-ofset; }
+            ag_aktarim_doldur(s.tx,ofset,ilk,ag_tcp_yazilan);
+            eğer ilk<adet { ag_aktarim_doldur(s.tx,0,adet-ilk,ag_tcp_yazilan+(ilk olarak tam64)); }
+            s.tx_boy=s.tx_boy+adet;
+            ag_tcp_yazilan=ag_tcp_yazilan+(adet olarak tam64);
         }
         eğer (ag_tcp_tek_yon veya ag_tcp_okunan==ag_tcp_hedef_boy) ve ag_tcp_yazilan==ag_tcp_hedef_boy { tcp_kapat_iste(s); }
     }
@@ -2374,8 +2412,9 @@ işlev ag_tcp_adim() {
                         ag_tcp_tekrar=ag_tcp_tekrar+s.yeniden-once.yeniden;
                         ag_tcp_yoklama=ag_tcp_yoklama+s.yoklama_adet-once.yoklama_adet;
                         kalan=kalan-1;
-                        eğer uyg!=1 veya s.es>>24==127 veya s.durum!=TCP_BAGLI
-                            veya (s.tx_boy<=s.tx_ucus ve s.rx_boy==0) { kalan=0; }
+                        değişken uret: mantıksal=uyg==2 ve ag_tcp_tek_yon ve ag_tcp_yazilan<ag_tcp_hedef_boy;
+                        eğer (uyg!=1 ve değil uret) veya s.es>>24==127 veya s.durum!=TCP_BAGLI
+                            veya (s.tx_boy<=s.tx_ucus ve s.rx_boy==0 ve değil uret) { kalan=0; }
                     }
                 }
                 eğer s.durum==TCP_KAPALI {
@@ -3120,7 +3159,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer metin_uzunluk(arg) > 0 { ver kd_yardim(arg); }
         ekran_cift_yaz("ls cd pwd cat echo yaz cp mv sil mkdir rmdir diskler bagla sync saat");
         ekran_cift_yaz("calistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat");
-        ekran_cift_yaz("donanim log hassasiyet goster bul hesapla duzenle dosyalar");
+        ekran_cift_yaz("donanim islemci log hassasiyet goster bul hesapla duzenle dosyalar");
         ekran_cift_yaz("bilgi duzen kopyala tasi girdisay kesme pci");
         ekran_cift_yaz("ag ping cozumle nc indir sunucu tftp paket");
         ver tamam(doğru);
