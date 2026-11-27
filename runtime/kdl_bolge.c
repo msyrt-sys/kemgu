@@ -75,6 +75,27 @@ static uint64_t hiza_yukari(uint64_t x) {
     return (x + (KDL_BOLGE_HIZA - 1)) & ~(uint64_t)(KDL_BOLGE_HIZA - 1);
 }
 
+/* [D-783] E4q: glibc varsayılanı, yığın tepesindeki 128 KB'ı aşan boş alanı her free()'de
+ * çekirdeğe iade eder (systrim -> sbrk). Bölge blokları 64 KB'tir ve bölgeler sık açılıp kapanır
+ * (rho_yerel/rho_tur): her kapanış bloğu iade eder, her açılış yeniden ister -> brk gidiş-gelişi.
+ * Ölçüm: self-host derleyicinin çekirdek biriminde zamanın ~%70'i __brk/malloc içindeydi;
+ * eşik 64 MB ile 9,05 -> 4,03 sn, zirve RSS değişmedi (167 MB). Yalnız glibc (bare-metal ve
+ * Windows'ta bu blok yok). mallopt idempotent ve iş parçacığı güvenlidir; iş parçacığı başına
+ * bayrak, paylaşılan bir bayrağın veri yarışından kaçınır. ASan kendi ayırıcısını kullandığı
+ * için orada etkisizdir (UAF tespiti etkilenmez). */
+#if defined(__GLIBC__) && !defined(KEMGU_BARE_METAL)
+#include <malloc.h>
+#define KDL_BOLGE_KIRPMA_ESIGI (64 * 1024 * 1024)
+static _Thread_local char kdl_ayirici_ayarli;
+static void kdl_ayirici_ayarla(void) {
+    if (kdl_ayirici_ayarli) return;
+    kdl_ayirici_ayarli = 1;
+    (void)mallopt(M_TRIM_THRESHOLD, KDL_BOLGE_KIRPMA_ESIGI);
+}
+#else
+static void kdl_ayirici_ayarla(void) { }
+#endif
+
 /* kap baytlık veri kapasiteli yeni blok malloc'la. Taşma/bellek hatasında NULL. */
 static KdlBolgeBlok *blok_olustur(uint64_t kap) {
     /* sizeof(header) + kap size_t'te taşmasın (kap çok büyükse). */
@@ -88,6 +109,7 @@ static KdlBolgeBlok *blok_olustur(uint64_t kap) {
 }
 
 KdlBolge *kdl_bolge_olustur(void) {
+    kdl_ayirici_ayarla();   /* [D-783] */
     KdlBolge *b = (KdlBolge *)malloc(sizeof(KdlBolge));
     if (!b) return NULL;
     b->bas = blok_olustur(KDL_BOLGE_VARSAYILAN);
