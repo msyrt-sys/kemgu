@@ -2,8 +2,9 @@
 
 Durum: **KARAR VERİLDİ (Mehmet, 2026-11-27, D-780) — A kabul edildi (koşullu).** A0 fizibilite
 ölçümü yapıldı ve A'yı destekliyor, bir düzeltmeyle (§8). Kesin onay dalga 18 (çok çekirdek)
-birleşince verilecek (§9.6). Kararlar §7'de, güncel tasarım §9'da; §1–§6 karar öncesi kayıttır.
-Tarih: 2026-11-27. İlgili: D-747, D-756, D-770, D-774/775, D-776, D-777, D-778, D-779, D-780.
+birleşince verilecek (§9.6). Kararlar §7'de, güncel tasarım §9'da, A1 öncesi ölçümler ve ayrıntılı
+tasarım §10'da (D-781; D-779'daki bir sayı hatasının düzeltmesi dahil); §1–§6 karar öncesi kayıttır.
+Tarih: 2026-11-27. İlgili: D-747, D-756, D-770, D-774/775, D-776, D-777, D-778, D-779, D-780, D-781.
 
 ## 1. Sorun
 
@@ -33,8 +34,10 @@ Referans taraması **geçişsizdir** → gerçek çöp oranının **alt sınır�
 gösterdiği dizi "referanslı" sayılır). Büyüme artıkları ve dizi dışı tahsisler (yapı, metin)
 tabloya girmez; onlar da büyük olasılıkla çöptür.
 
-`mv` oluşturucu dağılımı (ilk 6): `bayt_sifir` 181× (LFN tamponu — `dizin_coz` aynı dizini
-**181 kez** yeniden ayrıştırıyor), `onbellek.kopya` 39×, `onbellek.sona` 28×,
+`mv` oluşturucu dağılımı (ilk 6): `bayt_sifir` 181× (⚠ D-781 DÜZELTMESİ: bunların hepsi LFN
+tamponu DEĞİL; boyuta göre ayrılınca yalnız **17**'si `dizin_coz`un 520 baytlık LFN tamponu, geri
+kalanı USB G/Ç geçicileri — §10.1. Burada önceden "`dizin_coz` aynı dizini 181 kez ayrıştırıyor"
+yazıyordu ve YANLIŞTI), `onbellek.kopya` 39×, `onbellek.sona` 28×,
 `utf8_bayt_coz` 113×, `fsy_dizin` 28×, `bm_bellek_oku` 151× (aygıt durum yoklaması, 16 B).
 
 **Zamanlama bağımlılığı:** aynı kaynağın yalnız ölü kodla farklı iki derlemesi 2,42 MB /
@@ -110,7 +113,7 @@ Her tahsisi "duruma ulaşır → sahibin bölgesi / ulaşmaz → ρ_tur" diye ay
 
 ### D. Algoritmik azaltma (A/B/C'den bağımsız, hemen yapılabilir)
 - `dizin_coz`: dizin ayrıştırma sonucunu (FAT nesli + küme numarasıyla anahtarlı) önbelleğe
-  al; `mv` başına 181 ayrıştırma → birkaç.
+  al; `mv` başına **17** ayrıştırma (D-781 ölçümü; D-779'da 181 yazılmıştı, yanlıştı) → ~3.
 - G/Ç bekleme yoklaması: yanıt dizisini her turda üretmek yerine sabit tampona yaz (D-747
   seçenek (a)'nın dar biçimi — yalnız **durum yoklaması** yanıtları; veri yanıtları değil).
 - Kazanç: sabit çarpan (tahminen 2–4×); mekanizmayı kapatmaz ama A'nın taşıma sıklığını ve
@@ -178,6 +181,10 @@ Her tahsisi "duruma ulaşır → sahibin bölgesi / ulaşmaz → ρ_tur" diye ay
    - Kapı: `dizin_coz` çağrı sayısı (deterministik) + mevcut FAT/fsck kapıları.
    - **D(2) durum yoklaması sabit tamponu ertelendi.** A yoklama yanıtlarını da toplar. D(2)
      yalnız sabit çarpan kazandırır ve sürücü yüzeyine yayılır.
+   - ⚠ D-781: bu karar "`mv` başına 181 ayrıştırma" sayısına dayanıyordu; gerçek sayı **17**
+     (§10.1). D(1)'in kazancı sanılandan küçüktür; asıl çarpan her işlemin taze `FatSektor` ile
+     aynı sektörleri diskten yeniden okumasıdır. Güncel öneri §10.1'de; dalga 19 kapsamı Mehmet'le
+     yeniden konuşulacak.
 
 ## 8. A0 — fizibilite ölçümü (2026-11-27, güncel `main`, C çekirdeği)
 
@@ -326,11 +333,16 @@ A0-2'deki kanal birlikte çalışan iki katmanla kapatılır:
    (U ≠ T) dönüşümü yeni bir tanı alır, eğer T bölge referansı taşıyorsa (`metin`, `Dizi<T>` ya da
    bunları içeren yapı/çeşit). Bu dönüşüm referansın **bitlerini** tamsayıya ya da başka bir
    işaretçi tipine çevirir. `uefi_bellek_kur_ic` açılışta, çağrı ağacının dışında çalışır ve
-   etkilenmemeli; bu ölçülecek.
+   etkilenmemeli; bu ölçülecek. Aynı tipe dönüşüm (`&T → *T`) serbest kalır: referanslar asla bölge
+   belleğini göstermez (§10.2-4).
 2. **Ham işaretçi yazımında yükseltme.** `güvensiz` blokta ham işaretçi üzerinden yazılan değer
-   bölge referansı içeriyorsa önce **ana bölgeye derin kopyalanır**. Böylece ham işaretçinin
-   arkasında R'yi gösteren hiçbir şey kalmaz ve izleyicinin göremediği bir kök oluşmaz. Maliyet
-   yalnız `güvensiz` yazımlarda ödenir.
+   bölge referansı içeriyorsa ve **hedef yığının dışındaysa** önce **ana bölgeye derin kopyalanır**.
+   Böylece ham işaretçinin arkasında R'yi gösteren hiçbir şey kalmaz ve izleyicinin göremediği bir
+   kök oluşmaz. Maliyet yalnız `güvensiz` yazımlarda ödenir.
+   - ⚠ D-781: hedef yığındaysa yükseltme YOK. Sistem çağrısı işleyicileri tur içinde yığındaki
+     durum yapılarına (`ks_yonetim`, `ksv_ekran_adr`) ham işaretçiyle yazar; o hedef ya bir köktür
+     (güvenli noktada izlenir) ya da ölü bir çağrılan çerçevesidir (güvenli noktada önemsiz). Her
+     yazımı yükseltmek bu yolları ana bölge sızıntısına geri çevirirdi.
 
    Alternatif: izleme sırasında `tam64` ve `*T` alanları ile küresel sözcükler **muhafazakâr**
    taranır ve R'yi gösterenler **sabitlenir** ("çoğunlukla kopyalayan" tasarım). Daha az derleyici
@@ -383,3 +395,108 @@ ve R referansı taşıyabiliyorlar mı? İki olası sonuç:
   fikstür ve sabotaj.
 - **A4** KEMGU-OS'ta açma; önce §9.6'daki çok çekirdek kuralı karşılanmalı. Kapılar: tam takım +
   uzun oturum (≥ 1000 komut). README ve CLAUDE.md ilke metni (§7.1) o gün güncellenir.
+
+## 10. A1 öncesi ölçümler ve ayrıntılı tasarım (D-781)
+
+### 10.1 D(1) için düzeltilmiş ölçüm
+D-779'da `mv` başına "181 `dizin_coz`" yazılmıştı. 181, `bayt_sifir` çağrılarının **toplamıydı**.
+Atıf yamalı çekirdekte (`scratchpad/e4k_kaynak_boy.py`) boyuta göre ayrılınca `mv` tek komutta:
+
+| Boy (bayt) | Adet | Anlamı |
+|---|---|---|
+| 520 | **17** | `dizin_coz` LFN tamponu (`drivers/fs/fat32_dizin.kem:42`) — gerçek ayrıştırma sayısı |
+| 16 | 100 | xHCI TRB (USB yığın depolama) |
+| 512 | 24 | sektör tamponu |
+| 31 | 19 | USB CBW |
+| 10 | 19 | SCSI READ/WRITE(10) CDB |
+| 64 | 2 | — |
+
+Diğer komutlar: `cp` 10, `yaz` 7, `mkdir` 3, `cd` 1–3 ayrıştırma.
+
+Host ölçümü (`scratchpad/d1olc`; `fat32_sektor_yaz_test.kem`deki yeniden deneme öykünmesi, sayaçlı):
+taze FAT32 imajında (70000 ve 131072 sektör) tek yazma planı 6–7 koşu ve koşu başına 1 `dizin_coz`
+yapıyor. `mv` = okuma + `Yaz` planı + `DosyaSil` planı (`kd_kopyala`) → çekirdekteki 17 ile tutarlı.
+
+**Sonuç:**
+- Ayrıştırmayı `FatSektor` ömrüne bağlayan önbellek `mv`de 17'yi ~3'e indirir. Gerçek, ama D-779'un
+  ima ettiğinden ~6 kat küçük bir kazanç.
+- Daha büyük çarpan **G/Ç**: her işlem taze bir `FatSektor` ile başladığı için aynı sektörler her
+  işlemde diskten yeniden okunur (`mv`de ~19 sektör G/Ç'si; her biri ~5 TRB + CBW + CDB + 512 B).
+  İşlemler arası sektör önbelleği `kd_icerik_surumu` ile geçersizlenebilir (emsal:
+  `ks_program_hazirla`).
+- Bellek tarafını A zaten toplayacak; D'nin kalan değeri **süre** (G/Ç gidiş-dönüşü). Dalga 19
+  kapsamı bu sayılarla yeniden değerlendirilecek.
+
+### 10.2 Ölçülen olgular (A1'in dayanağı)
+1. **Bölgede duran her `metin` ayrı bir tahsisin başıdır.** Metin üreten yerleşikler her çağrıda taze
+   tahsis yapar. Güvenli kodda bir tahsisin ortasını gösteren `metin` yoktur. → Yönlendirme tablosu
+   başlangıç adresiyle anahtarlanabilir.
+2. **`metin` tipli opak tutamaklar bölge dışındadır:** `bellek_al` → `malloc`, `dosya_oku` → `malloc`
+   tamponu, `dosya_ac` → `FILE*`, kilit/semafor/bariyer → runtime nesnesi, `arg_al` → argv. Üyelik
+   sınaması kesin kaldıkça (yalnız R blokları) bunlar asla "metin olarak kopyalanmaz". ⚠ Sınama
+   gevşetilirse (ör. "ana bölge veya R") bu tutamaklar NUL'a kadar kopyalanıp bozulur → A1 birim
+   testi: opak tutamak taşınmaz.
+3. **Gizli adres kanallarının hepsi `güvensiz` ister.** `(&x) olarak *U` güvenli kodda E002 verir;
+   `güvensiz` içinde hem okuma (dizi başlığının bitlerini `tam64` olarak) hem yazma (dizi işaretçisini
+   `tam64` alana) kabul edilir. → Güvenli alt küme tahliye için kendiliğinden sağlamdır; A3 kuralları
+   yalnız `güvensiz` kodda çalışır.
+4. **Referanslar asla bölge belleğini göstermez.**
+   - `f(&değişken xs[0])` → T022 ("elemanı yerele al, değiştir, `dizi_yaz` ile geri yaz").
+   - `&değişken d.k` (yerel yapının alanı) kabul edilir; referent yığındadır.
+   - `oku(&xs[0])` (değişmez) kabul edilir, ama iki derleyici de elemanı **yığındaki geçici bir
+     kopyaya** alıp onun adresini geçirir (`kdl_dizi_al_yapi` → `alloca`).
+
+   → `&T → *T` dönüşümleri (`ks_adim`, `kabuk`) daima yığın adresi üretir ve tahliyeden etkilenmez.
+   A3 için tehlikeli olan yalnız bir bölge referansının **bitlerini** başka tip olarak okuyan ya da
+   yazan yeniden yorumlamadır (§9.4-1).
+5. **C derleyicisinde yığın dizisi yalnız açıklamasız dizi literali yerelinde çıkar**
+   (`değişken a = [1,2,3]` → `alloca [3 x i32]`). Açıklamalı `Dizi<T>` ve yapı alanı her zaman heap
+   başlığıdır; self-host heap-tekdüzedir. → Döngüye taşınan böyle bir yerel by-value `[N x T]` kök
+   olarak izlenir (elemanları referans içerebilir) ve taşınmaz.
+6. **Elle kurulmuş başlık** (UEFI sayfası, `bolge = 0`) döngüde büyürse yeni tamponunu bugün
+   çağıranın bölgesinden (= R) alır. Başlık izlenmeyen bellekte durduğu için bu, R'ye gizli bir
+   işaretçi olur. Öneri (A3, önce ölçülecek): `bolge = 0` başlığın büyümesi ana bölgeden yapılır
+   (ana bölge taşınmaz → güvenli; sızar ama UAF yok).
+
+### 10.3 Taşıyıcının yapısı
+- Derleyici her tip için bir **yürüyücü** üretir: `__tasi_<T>(ctx, yer)`. `yer`, bir T değerinin
+  bulunduğu bellek adresidir (yığın yuvası, yapı alanı, dizi elemanı).
+  - **Referans tipler** (`Dizi`, `metin`): `*yer` R'de mi? Evetse yönlendirme tablosuna bakılır;
+    kayıt yoksa nesne R''ye kopyalanır ve kaydedilir; `*yer` yeni adresle değiştirilir. Ardından
+    nesnenin (yeni ya da R dışı) içi iş listesine konur.
+  - **Değer tipleri** (yapı, çeşit, `sonuç`, `seçimlik`, `[N x T]`): yerinde, alan alan yürünür;
+    çeşit/`sonuç`/`seçimlik` için etikete göre yalnız etkin yük.
+- **Özyineleme yalnız tip iç içeliği kadar derindir** (durağan). Dinamik derinlik (`Dizi<Dugum>`
+  ağacı, döngüsel grafik) iş listesinden geçer. Girdi = (dizi içi yürüyücü, başlık adresi).
+- **Ziyaret kümesi R dışı başlıkları da kapsar**; böylece R dışı döngüsel bir grafikte izleme sonsuza
+  dek yürümez.
+- **Dizi tamponunun boyu** `kapasite × eleman_byte`tır; `eleman_byte` başlıktan okunur (D-778).
+  Başlık R dışında olup tamponu R'de olabilir (madde 6) → tampon ayrıca sınanır; başlık yerinde
+  kalır, yalnız `veri` güncellenir.
+- **Bağlam (ctx):** R'nin blok aralıkları (eşik/64 KB ≈ 8 blok → doğrusal tarama yeter), hedef R',
+  yönlendirme tablosu + ziyaret kümesi + iş listesi. Son üçü geçici bir bölgededir ve tahliye
+  sonunda topluca serbest bırakılır.
+- **Üretim kümesi:** her ömür boyu döngünün köklerinden ulaşılan tiplerin kapanışı; generic
+  örnekler monomorftur. Kapanışta kapanış/`görev`/`kanal`/`yetki`/`tekkez`/`*T` alanı varsa o
+  döngüde tahliye kapalıdır. Bu sessiz olmaz: derleyici bir bilgi notu basar.
+
+### 10.4 A1 test planı (host, ASan)
+- **Runtime birim testleri** (C, `test_kdl_bolge.c` tarzı): üyelik sınaması, yönlendirme tablosu,
+  metin ve dizi kopyası (eb 1/2/4/8 + yapı elemanı), R dışı nesneye dokunmama, opak tutamağın
+  taşınmaması, paylaşım (aynı dizi iki alanda → tek kopya), döngüsel grafik, tahliye sonrası R'nin
+  tamamen boş olması.
+- **Derleyici paritesi:** üretilen yürüyücülerin yapısal paritesi (`yapi_diff`).
+- **Davranış (A2 ile birlikte):** döngülü host programı bayrakla koşar. Çıktı bayraksızla birebir
+  aynı olmalı, ana bölge sınırlı kalmalı, ASan temiz olmalı. Yanlış taşıma UAF olarak görünür ve
+  ASan bu sınıfı GÖRÜR, çünkü R gerçekten serbest bırakılır.
+
+### 10.5 Çok çekirdek — ön ölçüm (dalga 18 bölüm 16, birleşmeden salt okuma)
+- Çekirdekler arası el değiştiren süreç kaydı **ham bellektir**: alanlar `kxm_o64`/`kxm_y64` ile
+  sabit ofsetlerden okunup yazılır (durum, PID, CR3, dilim, vektör, hata, RIP, CR2, çıkış kodu).
+  Zamanlayıcı yolunda bölge nesnesi el değiştirmiyor → §9.6 sonuç (a) olası: R çekirdek başına
+  (kabuk döngüsü BSP'de), tahliye yerel.
+- Dosya ve aygıt çağrıları BSP'de sıraya alınıp kabuk döngüsü içinde hizmet ediliyor.
+- **Kalan soru (dalga 18 birleşince ölçülecek):** AP'de çalışan bir işleyici `ks_yonetim`,
+  `ksv_ekran_adr` ya da `ksv_baglam_adresi` ham işaretçileri üzerinden BSP'nin durum yapılarına
+  (ve onların R'deki dizilerine) erişiyor mu? Erişiyorsa o erişim BSP'nin tahliyesiyle yarışır.
+  Ayrıca AP kodu kendi tahsislerinde hangi `%rho`yu kullanıyor?
