@@ -338,7 +338,9 @@
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
-- [ ] E4q [M] DERLEYICI PERFORMANSI (self-host): birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
+- [~] E4q [M] DERLEYICI PERFORMANSI (self-host): ✓ D-782 KÖK 1 (sözcük çözümleme O(n²), 97,5 → 7,6 sn). KALAN: bölge
+      bloklarında brk ping-pong (glibc kırpma kapatılınca 7,7 → 4,1 sn; ölçüldü, onarım ayrı adım). Eski not:
+      birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
       --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
       egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
@@ -3428,3 +3430,31 @@
   yığındaki durum yapılarına yazar; her yazımı yükseltmek sızıntıyı geri getirirdi). (6) Dalga 18 bölüm 16 (birleşmeden,
   salt okuma): çekirdekler arası süreç kaydı HAM bellek (kxm_o64/kxm_y64 ofsetleri) → bölge nesnesi el değiştirmiyor;
   kalan soru: AP işleyicileri ks_yonetim/ksv_* üzerinden BSP durumuna erişiyor mu.
+- 2026-11-27 D-782: E4q — SELF-HOST SÖZCÜK ÇÖZÜMLEME O(n²) İDİ; KAYNAK PARÇALARA BÖLÜNDÜ (97,5 → 7,6 sn, IR BİREBİR).
+  ÖLÇÜM (LOOP E4q'nun istediği gibi kök tahmin edilmedi): 11.421 satırlık çekirdek birimi (modüllerle) self-host --llvm
+  97,5 sn, C 0,76 sn (~128×). Derleyici ikilisi -O0 bağlanıyor (Makefile: `clang -x ir build/codegen.ll`); -O2 yalnız %19
+  (79,1 sn, IR aynı) → kök algoritmik. perf YETKİSİZ (perf_event_paranoid=4; sistem ayarına dokunulmadı); IR PGO
+  sayaçları (-fprofile-generate) ad aramalarını gösterdi (ad_tanimli_mi 43,9 M, fn_ptip_bul 34,7 M yineleme) ama ZAMAN
+  vermez → gdb ile alt-süreç örnekleyicisi (SIGINT + bt; `startup-with-shell off` ŞART: runtime argv'yi
+  /proc/self/cmdline'dan okuyor, kabukla başlatınca kullanım iletisi basıyordu): 56 örneğin 46'sı (%82) __strlen_asimd,
+  çağıran kdl_metin_bayt ← bayt ← lex_et/kimlik_*/ikinci_bayt. KÖK: runtime `metin_bayt(s,i)` ve `metin_kes(s,..)` her
+  çağrıda strlen(s) hesaplar (metin uzunluk taşımaz) → kaynağı bayt bayt okuyan sözcük çözümleyici O(n²). Runtime'da
+  (işaretçi, uzunluk) önbelleği REDDEDİLDİ: bölge serbest kalınca aynı adreste başka metin olabilir → eski uzunluk YANLIŞ
+  CEVAP. ONARIM (yalnız selfhost/codegen.kem): kaynak bir kez KP_BOY=512 baytlık parçalara bölünür (iki düzeyli: 64 KB
+  blok → 512 B parça), `kb` = `bayt`, `kk` = `metin_kes` ile BİREBİR anlam (aralık dışı 0; aynı kırpma kuralları);
+  lex_et + 9 yardımcı (59 erişim), lex_i ve METIN/KARAKTER literal çözümü parça üstünden. SONUÇ: çekirdek birimi 7,6 sn
+  (12,9×), üretilen IR birebir AYNI (cmp).
+  KAPILAR (nice, Codex'le eşzamanlı): self_driver TÜM MODLAR + FIXPOINT ✓ · codegen_diff 231/231 · checker_diff 321/321
+  (0 muaf) · yapi_diff · bolge_operand · surucu_diff 17/17 · check_genis 159/159 · modul_codegen · baremetal_diff ·
+  ct_bariyer 16/16 · parser_diff 15/15 · lexer_diff 22/22 (son ikisi yalnız C kâhinini okur; self lexer'ı self_driver
+  --token ölçer). Tam takım YEREL KOŞULMADI (Codex dalga 18'in son tam takımlarıyla yarışmasın) → CI + dalga 18
+  birleştirmesinin tam takımı. FİKSTÜR cg_uzun_metin_parca.kem: 1200 B (≥3 parça) + 600 B (2 parça) literal, parça
+  sınırına düşen tanımlayıcılar. SABOTAJ: S281 (kk döngüsü `k <= son`) → codegen_diff çok sayıda dosyada kırmızı (iki
+  parçalı yol korpusta zaten sık) · S282 (`k < son - 1`, yalnız ≥3 parça yolu) → YALNIZ yeni fikstür kırmızı (230/231)
+  → fikstür olmadan bu yol hiçbir kapıda ölçülmüyordu (D-356 sınıfı).
+  ⚠ YOL ÜSTÜ: toplu değiştirme `bayt(kaynak, ` desenini `ikinci_bayt(kaynak, ` içinde de yakaladı (9 site `ikinci_kb`
+  oldu) → C derleyicisi T002 ile yakaladı, düzeltildi.
+  KALAN (ölçüldü, ayrı adım): yeni profilde zamanın ~%70'i bellek ayırıcısında (__brk/sbrk 12/26 örnek + malloc iç).
+  glibc yığın kırpması kapatılınca (MALLOC_TRIM_THRESHOLD_/MALLOC_TOP_PAD_ ortam değişkeni, kod değişikliği YOK)
+  7,7 → 4,1 sn, çıktı aynı → bölge blokları (64 KB) her free'de işletim sistemine iade edilip yeniden isteniyor
+  (brk ping-pong). Aday onarım: runtime'da mallopt (yalnız __GLIBC__) ya da bölge bloğu havuzu (ASan zehirlemesiyle).
