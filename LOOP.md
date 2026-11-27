@@ -3346,3 +3346,24 @@
   (361/383, 0 RED). S276 (test çekirdeğine tip hatası) → birleşik denetim KIRMIZI.
   KALAN E4k: yoklama döngüsü tahsisleri (zamanlamaya bağlı, gerçek donanımda daha kötü) + çağrı sonucu/durum yazımı
   (D-776 notu) + (a) gerçek 1/2 baytlık eleman (4×).
+- 2026-11-27 D-778: E4k (a) — GERÇEK DAR ELEMAN. Dizi<tam8/dtam8> 1, Dizi<tam16/dtam16> 2 baytlık yuva (önceden her
+  eleman 4 bayt = bayt tamponları 4×). Tasarım en dar yüzey: `_tam` erişimci imzaları DEĞİŞMEDİ (i32 taşıyıcı); host
+  kdl_dizi.inc ve çekirdek kem_heap.kem erişimcileri eleman_byte'a duyarlı (1/2 → dar yuva, diğer → 32 bit, büyüme aynı
+  genişlikle). Derleyiciler oluşturmada i8→1, i16→2 (C kdl_eleman_byte_yaz + dizi_olustur; self dizi_eleman_byte).
+  D-776'nın 4'e hizalaması böylece ters yönde, ama artık erişimciler de aynı genişlikte (taşma sınıfı kapalı kalır).
+  Runtime SIFIR-genişletir (işaret bilinmez) → derleyici okumada eleman genişliğine daraltıp ifadenin işaretine göre
+  genişletmeli. C zaten yapıyordu; self-host `dizi_al(...)` yerleşiği DARALTMIYORDU (indeksleme D-714'te onarılmıştı)
+  → işaretli tam8 -100 yerine 156; mevcut cg_dizi_dar_eleman fikstürü YAKALADI, onarıldı. Ham dizi tampon erişimi yalnız
+  kem_dizi_genis.kem'de ve eb ile adımlı; süreç ABI'si dizi iç yapısına dokunmuyor (ölçüldü). ÖLÇÜM: çekirdek dosya
+  oturumu ~0,75 MB (D-777 sonrası 1,40-1,62; zamanlama gürültüsü payıyla ~yarı). Kapılar: bm_x86_heap_uzat'a dar eleman
+  fazı (64 × 1024 Dizi<dtam8>: bump 65584 iki derleyici, eşik 150000; değerler ≥128) · dizi_uzat_test 7/7 (bayt düzeni
+  doğrudan). Sabotajlar: S277 C oluşturma 4 → C bump 262336 · S278 self oluşturma 4 → self · S279 çekirdek eb yok
+  sayılır → ikisi · S280 host eb yok sayılır → bayt düzeni testleri. Hepsi KIRMIZI. Hedefli: codegen_diff 230/230 ·
+  yapi_diff 208/208 · bolge_operand 232/232 · llvm 321/321 · snapshot 50/50 · dizi_sinir 39/39 · FIXPOINT ✓.
+  Tam takım (nice -j6, Codex seri ölçümüyle aynı anda; 155 kapı, 48 dk): iki kırmızı (bm_x86_kaynak, bm_x86_ag_pc), TEK
+  kök ÖLÇÜM ARACINDA: surec_kahin.bos_cerceve konuk belleğindeki ayırıcı bitmap'ini (Dizi<dtam8>) "her eleman 32 bitlik
+  yuvada" varsayımıyla `[::4]` okuyordu → süreç 3594 yerine "896 çerçeve" göründü. Çekirdeğe geçici yazdırmayla ELF
+  girişi DOĞRU (0x54200000) ölçüldü; host ve bare-metal probe'larında oku_le64 doğru → derleyici/çekirdek kusuru DEĞİL.
+  Okuyucu artık yuva genişliğini başlıktan (eleman_byte @16) alır; iki kapı yeşil (kaynak tam 3594 iddiasıyla).
+  ⚠ DERS: dizi yerleşimini değiştirmek konuk belleğini HAM okuyan Python kâhinlerini de etkiler; tarama `[::4]`
+  ile yapıldı, diğer eşleşme (ag_l3_kahin) yalnız hata mesajında.

@@ -81,13 +81,23 @@ KdlDizi *kdl_dizi_olustur(KdlBolge *rho, int32_t eleman_byte) {
     return d;
 }
 
+/* [D-778] DAR ELEMAN: `_tam` ailesi `eleman_byte`a duyarli. tam8/dtam8 dizisi 1, tam16/dtam16
+ * 2 baytlik yuvada tutulur (onceden her eleman 4 bayt = bayt tamponlari 4x). Deger ABI'si
+ * degismez (i32 tasiyici): derleyici okumada `trunc` yaptigi icin ust bitler onemsizdir.
+ * Bilinmeyen/4 genislik eski 32 bit yolu. Ayni kural kem_heap.kem'de (cekirdek). */
+static int32_t kdl_dizi_skaler_eb(const KdlDizi *d) {
+    return (d->eleman_byte == 1 || d->eleman_byte == 2) ? d->eleman_byte : 4;
+}
 void kdl_dizi_ekle_tam(KdlBolge *rho, KdlDizi *d, int32_t deger) {
     if (!d) return;
+    int32_t eb = kdl_dizi_skaler_eb(d);
     if (d->boyut == d->kapasite) {
         int32_t yk = d->kapasite ? d->kapasite * 2 : 4;
-        kdl_dizi_buyut(rho, d, yk, sizeof(int32_t));
+        kdl_dizi_buyut(rho, d, yk, (size_t)eb);
     }
-    ((int32_t *)d->veri)[d->boyut++] = deger;
+    if (eb == 1) ((uint8_t *)d->veri)[d->boyut++] = (uint8_t)deger;
+    else if (eb == 2) ((uint16_t *)d->veri)[d->boyut++] = (uint16_t)deger;
+    else ((int32_t *)d->veri)[d->boyut++] = deger;
 }
 
 void kdl_dizi_ekle_tam64(KdlBolge *rho, KdlDizi *d, int64_t deger) {
@@ -142,6 +152,9 @@ static __attribute__((noreturn)) void kdl_dizi_oob(int32_t i, int32_t boyut) {
 int32_t kdl_dizi_al_tam(KdlDizi *d, int32_t i) {
     if (!d) return 0;
     if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
+    int32_t eb = kdl_dizi_skaler_eb(d);   /* [D-778] */
+    if (eb == 1) return (int32_t)((uint8_t *)d->veri)[i];
+    if (eb == 2) return (int32_t)((uint16_t *)d->veri)[i];
     return ((int32_t *)d->veri)[i];
 }
 
@@ -160,7 +173,10 @@ void *kdl_dizi_al_ptr(KdlDizi *d, int32_t i) {
 void kdl_dizi_yaz_tam(KdlDizi *d, int32_t i, int32_t deger) {
     if (!d) return;
     if (i < 0 || i >= d->boyut) kdl_dizi_oob(i, d->boyut);
-    ((int32_t *)d->veri)[i] = deger;
+    int32_t eb = kdl_dizi_skaler_eb(d);   /* [D-778] */
+    if (eb == 1) ((uint8_t *)d->veri)[i] = (uint8_t)deger;
+    else if (eb == 2) ((uint16_t *)d->veri)[i] = (uint16_t)deger;
+    else ((int32_t *)d->veri)[i] = deger;
 }
 
 void kdl_dizi_yaz_tam64(KdlDizi *d, int32_t i, int64_t deger) {
