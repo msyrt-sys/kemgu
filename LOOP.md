@@ -3367,3 +3367,14 @@
   Okuyucu artık yuva genişliğini başlıktan (eleman_byte @16) alır; iki kapı yeşil (kaynak tam 3594 iddiasıyla).
   ⚠ DERS: dizi yerleşimini değiştirmek konuk belleğini HAM okuyan Python kâhinlerini de etkiler; tarama `[::4]`
   ile yapıldı, diğer eşleşme (ag_l3_kahin) yalnız hata mesajında.
+- 2026-11-27 D-779: E4k KALAN İŞ — TASARIM (belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md, karar bekliyor). Ölçümler
+  (güncel main, C çekirdeği): BOŞTA büyüme 40 sn'de +752 B (yoklama boşta SIZDIRMAZ; zamanlama bağımlılığı yalnız G/Ç
+  beklerken) · komut sonrası yeni dizi başlıklarının REFERANSSIZ (kesin çöp) oranı cat 98/113, mkdir 381/433, yaz
+  413/459, mv 790/873 (mv baytta ≥%73; geçişsiz tarama = ALT sınır) · mv'de dizin_coz aynı dizini 181 kez ayrıştırıyor
+  (bayt_sifir 520 B LFN tamponu). ÇIKARIM: baskın kalem geçici çalışma verisi; hayatta kalan durum adlı ve küçük
+  (döngüden önce bildirilen yereller + &değişken parametreler). ⚠ ÖLÇÜLDÜ: güvenli kodda yapı alanı &T ve *T
+  tutabilir → derin kopyalayıcı yönlendirme tablosu + çalışma anı bölge üyeliği sınaması ister. Öneri: D (dizin
+  önbelleği + durum yoklaması sabit tampon; sürücü işi) hemen; A (tur sonu eşik tetikli durum taşıma, derleyici
+  üretimli tip yönlendirmeli kopyalayıcı) Mehmet kararından sonra — "GC yok" ilkesiyle ilişkisi açık soru. B
+  (sahiplikli alan yazımı) ve C (escape v3) ertelenir. En büyük risk: adresi tam64'e çeviren güvensiz kod
+  kopyalayıcıya görünmez.
