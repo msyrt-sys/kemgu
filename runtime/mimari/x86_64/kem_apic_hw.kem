@@ -429,9 +429,12 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
     eğer cr3 <= 0 veya cr3 >= 4294967296 veya (cr3&4095) != 0 { ver hata("AP CR3 araligi"); }
     güvensiz {
         değişken n: tam32 = smp_cekirdek_sayisi;
-        değişken kayit: tam64 = uefi_surec_ayir((n*192+4095)/4096);
+        değişken kayit: tam64 = uefi_surec_ayir((n*192+128+4095)/4096);
         eğer kayit == 0 { ver hata("AP kayitlari icin RAM yok"); }
-        memset(kayit olarak *tam8,0,(n olarak tam64)*192);
+        memset(kayit olarak *tam8,0,(n olarak tam64)*192+128);
+        değişken kilit:tam64=kayit+(n olarak tam64)*192;
+        kilit_kur(kilit,20); kilit_kur(kilit+64,30);
+        smp_bellek_kilitleri=kilit;
         değişken j:tam32=0;
         iken j<n {
             kem_mmio_yaz64(kayit+(j olarak tam64)*64+56,kayit+(n olarak tam64)*64+(j olarak tam64)*128);

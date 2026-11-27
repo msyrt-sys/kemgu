@@ -196,11 +196,11 @@ işlev kd_tur(a: BlokDonanim) -> metin {
 // Dosya zinciri boyunca bitişik LBA'ları tek DMA dizisine dönüştür.
 işlev kd_gecici_kur(d: &değişken KabukDisk) -> sonuç<mantıksal,metin> {
     değişken say: tam32 = 8; değişken cer: CerceveAyirici = uefi_ayirici_al();
-    eşleş ayir_ardisik(&değişken cer,say) { hiç => { ver hata("/ram icin sekiz cerceve yok"); } değer(taban) => {
+    eşleş uefi_cerceve_ayir(&değişken cer,say) { hiç => { ver hata("/ram icin sekiz cerceve yok"); } değer(taban) => {
         değişken adet: tam64 = (say olarak tam64)*8;
-        eşleş ram_blok_yeni(taban,adet*512) { hata(e) => { serbest_ardisik(&değişken cer,taban,say); ver hata(e); } tamam(ram) => {
+        eşleş ram_blok_yeni(taban,adet*512) { hata(e) => { uefi_cerceve_iade(&değişken cer,taban,say); ver hata(e); } tamam(ram) => {
             değişken blok: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ram(ram) };
-            eşleş bd_yeni("/ram",0,blok) { hata(e) => { serbest_ardisik(&değişken cer,taban,say); ver hata(e); } tamam(ay) => {
+            eşleş bd_yeni("/ram",0,blok) { hata(e) => { uefi_cerceve_iade(&değişken cer,taban,say); ver hata(e); } tamam(ay) => {
                 değişken i: tam32 = dizi_boyut(d.aygitlar); dizi_ekle(d.aygitlar,ay);
                 // Ortak VFS okuma planı sektörleri çerçevelere eşler. Düğüm tablosu RAM'e aittir.
                 değişken p: DiskBolumu = DiskBolumu {no:0,bas:0,adet:adet,tur:[],mbr_tur:0,kimlik:[]};
@@ -287,20 +287,20 @@ işlev kd_ramdisk_dosya(d: &değişken KabukDisk,k: KabukBag,g: DizinGirdisi) ->
     değişken say: tam32 = ((g.boyut+4095)/4096) olarak tam32;
     değişken fs: tam32 = ((k.bpb.kume_sayisi+1025)/1024) olarak tam32;
     değişken adres: tam64 = 0; değişken fat: tam64 = 0;
-    eşleş ayir_ardisik(&değişken cer,say) { hiç => { ver hata("ramdisk icin bitisik cerceve yok"); } değer(a) => { adres=a; } }
-    eşleş ayir_ardisik(&değişken cer,fs) {
-        hiç => { serbest_ardisik(&değişken cer,adres,say); ver hata("ramdisk FAT icin cerceve yok"); }
+    eşleş uefi_cerceve_ayir(&değişken cer,say) { hiç => { ver hata("ramdisk icin bitisik cerceve yok"); } değer(a) => { adres=a; } }
+    eşleş uefi_cerceve_ayir(&değişken cer,fs) {
+        hiç => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata("ramdisk FAT icin cerceve yok"); }
         değer(a) => { fat=a; }
     }
     değişken ay: BlokDonanim = dizi_al(d.aygitlar,k.indeks);
     değişken r: sonuç<mantıksal,metin> = kd_ram_zincir(&değişken ay,k,g,adres,fat);
-    dizi_yaz(d.aygitlar,k.indeks,ay); serbest_ardisik(&değişken cer,fat,fs);
-    eşleş r { hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(v) => { } }
-    eşleş ram_blok_yeni(adres,g.boyut) { hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(ram) => {
+    dizi_yaz(d.aygitlar,k.indeks,ay); uefi_cerceve_iade(&değişken cer,fat,fs);
+    eşleş r { hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(v) => { } }
+    eşleş ram_blok_yeni(adres,g.boyut) { hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(ram) => {
         değişken blok: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ram(ram) };
-        eşleş bd_yeni("ram0",0,blok) { hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(v) => {
+        eşleş bd_yeni("ram0",0,blok) { hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(v) => {
             eşleş kd_ramdisk_bagla(d,v) {
-                hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(w) => { }
+                hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(w) => { }
             }
         } }
     } }
@@ -923,7 +923,7 @@ işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     değişken yer: KxsYer = kxs_yer(kxm_o64(r+256));
     güvensiz { memset(fizik olarak *tam8,0,(yer.tablo olarak tam64)*4096); }
     değişken ayirici: CerceveAyirici = uefi_ayirici_al();
-    eşleş serbest_ardisik(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {
+    eşleş uefi_cerceve_iade(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {
         hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
         tamam(v) => { }
     }
@@ -1343,7 +1343,7 @@ işlev kd_bilgi(d: &değişken KabukDisk,indeks: tam32,us: mantıksal) -> sonuç
     ekran_cift_yaz(kd_tamsayi("CALISMA ms",sure));
     eğer uefi_mi() {
         değişken c: CerceveAyirici = uefi_ayirici_al();
-        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("CERCEVE bos toplam",cerceve_bos(&c) olarak tam64),c.toplam olarak tam64));
+        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("CERCEVE bos toplam",uefi_bos_say() olarak tam64),c.toplam olarak tam64));
     } değilse { ekran_cift_yaz("CERCEVE PVH haritasi yok"); }
     ekran_cift_yaz(kd_tamsayi("HEAP bayt",kem_heap_kullanimi()));
     değişken say: tam64 = 0; değişken i: tam64 = 0;

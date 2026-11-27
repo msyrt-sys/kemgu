@@ -2013,6 +2013,7 @@ _kem_os_x86_kos: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
 	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/kem_dtb.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ps2_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	@python3 test/x86_heap_bagla.py $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
 	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
@@ -5457,3 +5458,9 @@ calistir_bm_x86_smp_kilit: $(X86_SMP_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(
 test_tumu: calistir_bm_x86_smp_ipi
 calistir_bm_x86_smp_ipi: $(X86_SMP_ON)
 	@bash test/bm_x86_smp_harness.sh ipi
+
+.PHONY: calistir_bm_x86_smp_bellek
+test_tumu: calistir_bm_x86_smp_bellek
+calistir_bm_x86_smp_bellek: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh bellek
+	@SMP_TEK_BELLEK=1 SUREC_SENARYO=tekrar SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh

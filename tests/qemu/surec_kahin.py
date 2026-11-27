@@ -4,6 +4,7 @@
 from bekle import bekle, gozle, tam_seri
 from protokol_suresi import BOSTA_GOZLEM
 import argparse
+import os
 import re
 import struct
 import subprocess
@@ -38,6 +39,15 @@ VARSAYILAN = ("baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2",
              "bolme", "tekrar", "dosya", "yazma")
 
 
+def fiziksel_cerceve_haritasi(oku, ayirici):
+    _, bitmap, _, toplam = struct.unpack("<3QI", oku(ayirici, 28))
+    adres, boy = struct.unpack("<QI", oku(bitmap, 12))
+    assert boy == (toplam + 7) // 8
+    # Dizi<dtam8> her elemanı bir 32 bitlik yuvada tutar.
+    bitler = oku(adres, boy * 4)[::4]
+    return bitler, toplam - sum(v.bit_count() for v in bitler)
+
+
 class SurecConsole(Console):
     def input(self, text):
         tr = {"&": ("6", True), "ü": ("bracket_right", False), "ö": ("comma", False),
@@ -62,14 +72,23 @@ class SurecConsole(Console):
         return struct.unpack("<Q", self.mem(self.symbols[sembol], 8))[0]
 
     def bos_cerceve(self):
-        # Sürücünün sayacını değil, fiziksel ayırıcının gerçek bitmap'ini say.
-        ayirici = self.sayi("uefi_surec_ayirici")
-        _, bitmap, _, toplam = struct.unpack("<3QI", self.mem(ayirici, 28))
-        adres, boy = struct.unpack("<QI", self.mem(bitmap, 12))
-        assert boy == (toplam + 7) // 8
-        # Dizi<dtam8> çalışma zamanında her elemanı 32 bitlik yuvada tutar.
-        bitler = self.mem(adres, boy * 4)[::4]
-        return toplam - sum(v.bit_count() for v in bitler)
+        return fiziksel_cerceve_haritasi(self.mem, self.sayi("uefi_surec_ayirici"))[1]
+
+
+class UsbRaporConsole(SurecConsole):
+    """Her tuşu gerçek aygıtın değiştirdiği HID DMA raporuna bağla."""
+
+    def key(self, ad, bas):
+        if not hasattr(self, "hid_tampon"):
+            def tampon():
+                kayit = self.sayi("bh_kayitlar")
+                return int.from_bytes(self.mem(kayit+32, 8), "little") if kayit else 0
+            self.hid_tampon = bekle("USB klavye DMA tamponu", tampon, bool, sure=8, surec=self.p)
+        once = self.mem(self.hid_tampon, 8)
+        self.tus_gonder(ad, bas)
+        bekle(f"HID {ad} {'bas' if bas else 'bırak'}", lambda: self.mem(self.hid_tampon, 8),
+              lambda rapor: rapor != once, sure=8, aralik=.002, surec=self.p)
+
 
 
 def uefi_alan_denetle(c, taban):
@@ -270,6 +289,27 @@ def tekrar_kos(c, exe, bos):
         surec_artisi += cikis - giris
     sonra = c.heap()
     assert surec_artisi <= 64 * 1024 + 80, surec_artisi
+    if os.environ.get("SMP_TEK_BELLEK") == "1":
+        cpular = c.q.call("query-cpus-fast")
+        assert len(cpular) == 1
+        elf = (c.w/"k.elf").read_bytes()
+        ph, = struct.unpack_from("<Q", elf, 32)
+        adim, adet = struct.unpack_from("<2H", elf, 54)
+        alanlar = []
+        for i in range(adet):
+            tip, _, _, _, fizik, _, boy, _ = struct.unpack_from("<II6Q", elf, ph+i*adim)
+            if tip == 1 and boy:
+                alanlar.append((fizik//4096, (fizik+boy+4095)//4096))
+        sayfa = max(b for _, b in alanlar) - min(a for a, _ in alanlar)
+        print(f"SMP tek vCPU: boş={bos}, ELF={sayfa} sayfa, toplam={bos+sayfa}, "
+              f"kabuk heap={once}/{sonra}, süreç artışı={surec_artisi}", flush=True)
+        assert bos + sayfa == 53132, (bos, sayfa)
+        # D-772'nin üç koşumunda görülen kabuk heap çiftleri.
+        taban = {"kemgu": {(4788464, 5247552)},
+                 "codegen": {(5050928, 5510016), (5116512, 5575600)}}
+        derleyici = Path(os.environ["SUREC_KAHIN_DERLEYICI"]).stem
+        assert (once, sonra) in taban[derleyici], (derleyici, once, sonra)
+        assert surec_artisi == 0
     print(f"✓ 50 tekrar: {bos} boş çerçeve; süreç heap +{surec_artisi}; kabuk heap {once} → {sonra} bayt", flush=True)
 
 
@@ -297,7 +337,8 @@ def kos(w, tekrar, senaryo, ilk=1):
             once[usb[0].disk] = sha(usb[0].disk)
         esp = sha256(usb[0].read()).digest()
         with diskleri_koru(once, usb[0], esp), boot(w, usb[0], nvme, sata, klavye="ps2" if kip in ("tus-ps2","ekran-ps2") else "usb", fare="usb" if kip in ("ekran-usb","gezgin-salt","gezgin","v1","v1-kesinti") else "ps2") as (q, p, seri):
-            c = SurecConsole(w, q, p, seri)
+            konsol = UsbRaporConsole if kip.startswith("v1") or kip == "tekrar" else SurecConsole
+            c = konsol(w, q, p, seri)
             bos = c.bos_cerceve()
             assert bos >= 8 * CERCEVELER
             exe = "/diskler/usb0p2/bin/merhaba.elf"

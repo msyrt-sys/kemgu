@@ -384,6 +384,56 @@ def ipi(q, p, seri, w, sim, adet):
           f"TSC/ms={tsc_ms}", flush=True)
 
 
+def cerceve_haritasi(q, w, sim):
+    from surec_kahin import fiziksel_cerceve_haritasi
+    return fiziksel_cerceve_haritasi(lambda a, boy: bellek(q, w, a, boy),
+                                     sayac(q, w, sim["uefi_surec_ayirici"]))
+
+
+def bellek_stresi(q, p, seri, w, sim, n):
+    adr = bekle("sahiplik deneyinin fiziksel adresi", lambda: sayac(q, w, sim["smp_bellek_olcum"]),
+                sure=20, surec=p)
+    once, ilk = cerceve_haritasi(q, w, sim)
+    assert sayac(q, w, adr+8) == ilk
+    q.call("human-monitor-command", {"command-line": "o /b 0x3ff 0xa1"})
+
+    def durum():
+        ham = bellek(q, w, adr, 128+64*n)
+        durumlar = [struct.unpack_from("<q", ham, 128+j*64)[0] for j in range(n)]
+        assert min(durumlar) >= 0, ("çerçeve/heap sahipliği", durumlar)
+        return ham if struct.unpack_from("<Q", ham, 32)[0] else None
+
+    ham = bekle("çekirdek başına on bin çerçeve", durum, sure=150, aralik=.1, surec=p)
+    bekle("bellek son işareti", lambda: seri_oku(seri), lambda s: b"\nSMP_BELLEK " in s,
+          sure=3, surec=p)
+    son, bos = cerceve_haritasi(q, w, sim)
+    olay, ilk_konuk, son_konuk, sayi, _, f0, h0, f1, h1 = struct.unpack_from("<9Q", ham)
+    assert once == son and ilk == bos == ilk_konuk == son_konuk
+    assert sayi == n and olay == n*20000
+    assert (f1-f0)&0xffffffff >= olay and (h1-h0)&0xffffffff >= olay, (f0, h0, f1, h1, olay)
+    yuvalar = [struct.unpack_from("<4Q", ham, 128+j*64) for j in range(n)]
+    assert all((dur, isler) == (1, 10000) for dur, isler, _, _ in yuvalar)
+    assert len({sayfa for _, _, sayfa, _ in yuvalar}) == n
+    assert len({heap for _, _, _, heap in yuvalar}) == n
+    assert not any(bellek(q, w, adr+4096, 524288)), "iade edilmemiş sahiplik"
+    iz = bellek(q, w, adr+528384, olay*8)
+    sahipler, sayaclar, zirve = {}, [0]*n, 0
+    for (veri,) in struct.iter_unpack("<Q", iz):
+        sayfa, no = veri >> 8, (veri >> 1) & 127
+        assert 0 < sayfa < 65536 and no < n
+        if veri & 1:
+            assert sayfa not in sahipler, ("iki canlı sahip", sayfa, no)
+            sahipler[sayfa] = no
+            zirve = max(zirve, len(sahipler))
+        else:
+            assert sahipler.pop(sayfa) == no
+            sayaclar[no] += 1
+    assert not sahipler and sayaclar == [10000]*n and zirve == n
+    q.call("human-monitor-command", {"command-line": "o /b 0x3ff 0xa2"})
+    print(f"SMP bellek {n}: {sayaclar} ver/iade, canlı zirvesi={zirve}, "
+          f"boş çerçeve {ilk}→{bos}, bit eşlemi aynı, kilit edinimi çerçeve={f1-f0} heap={h1-h0}", flush=True)
+
+
 def gs_kabuk(dizin):
     from surec_imaj import imajlar
 
@@ -431,7 +481,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("dizin", type=Path)
     ap.add_argument(
-        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit", "ipi")
+        "kip", nargs="?", default="kabuk", choices=("kesif", "ap", "kabuk", "tik", "kilit", "ipi", "bellek")
     )
     ap.add_argument("--adet", nargs="+", type=int, default=None)
     ap.add_argument("--tekrar", type=int, default=1000000)
@@ -445,7 +495,7 @@ def main():
             kabuk(dizin)
         return
     sim = semboller(dizin / "k.elf")
-    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8], "ipi": [4, 6]}[a.kip]:
+    for adet in a.adet or {"kesif": [1, 2, 4, 8], "ap": [2, 4, 8], "tik": [4], "kilit": [4, 8], "ipi": [4, 6], "bellek": [4]}[a.kip]:
         w = dizin / f"{a.kip}-{adet}"
         topoloji = "6,sockets=2,cores=3,threads=1" if a.kip == "ipi" and adet == 6 else None
         with acilis(w, dizin / "pc.img", adet, topoloji) as (q, p, seri):
@@ -457,6 +507,8 @@ def main():
                 ap_baslatma(q, seri, w, sim, adet)
             elif a.kip == "tik":
                 tik(q, p, seri, w, sim, adet)
+            elif a.kip == "bellek":
+                bellek_stresi(q, p, seri, w, sim, adet)
             elif a.kip == "ipi":
                 ipi(q, p, seri, w, sim, adet)
             elif a.kip == "kilit":

@@ -183,3 +183,9 @@ Sayısal kontrolde kilit kaldırılınca 2.494.650 artış kaldı. Atomik önek 
 80/81/82 vektörleri, açılışta fiziksel RAM'den ayrılan çekirdek başı kutu, tek hedefe ve diğer çekirdeklere yayın, süreli onay ve dolu kutu hatası eklendi. Her derleyicide 4 vCPU ile 16.000, seyrek kimlikli 6 vCPU ile 36.000 çağrı sıralı ve eksiksiz ölçüldü. QMP tüm dönüşleri, hedeflerin sayaçlarını, yerel tıkı ve durdurulan AP'lerde IF=0/HLT=1 durumunu okudu. Son kapıda gidiş-dönüş medyanı 8,158–9,490 µs, p99 29,372–32,935 µs. ARM host üzerinde x86 TCG ölçümüdür.
 
 EOI atlanınca sonraki teslim süre aşımı −4 ile kırmızı. Hedefe mantıksal numara gönderilince ardışık kimliklerde **sessiz**, 0,1,2,4,5,6 kimliklerinde kırmızı. §7, tip kontrolü, SMP tık/kilit ve IPI kapıları toplam 419 sn, make/tee rc=0. Bölüm süresi 13 dk 15 sn.
+
+## Bölüm 14 — SMP bellek sahipliği
+
+Çerçeve ayırıcı ve heap girişleri ayrı bilet kilitleri kullanıyor. Dört vCPU'da 40.000 tahsis/iade çifti, tüm olayların host'ta tekrarı, dört eşzamanlı sahip ve sonunda aynı fiziksel bitmap iki derleyicide doğrulandı. Tek vCPU'da 50 süreç için süreç heap artışı sıfır, kabuk heap değerleri D-772 örnekleriyle eşleşti. C'de 49 ve self-host'ta 71 ek boş çerçeve var. Her iki fark da ELF'in küçüldüğü sayfa sayısına eşit. Mutlak boş çerçeve sayısı D-772'den farklı.
+
+Canlı ayırıcı kilidini kaldırma sabotajı uygulanmadı. Ayrı sayısal sahiplik deneyinde üç çekirdeğin çakışması kapıyı kırdı. §7, ARM çekirdek ve QEMU, tip, IPI ve bellek kapıları koşuldu. Toplu koşumdaki iki USB giriş kırmızısı için kâhin gerçek HID DMA raporunu bekliyor. İki hedef birlikte 250 sn, rc=0. Diğer hedefler 357 sn'lik koşumda yeşil. Ölçümler ayrı iş parçacıklı x86 TCG'de. Bölüm süresi 27 dk 52 sn.

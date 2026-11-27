@@ -16,6 +16,7 @@ OBJ=("${BM_BASLANGIC_NESNESI:-build/bm_x86_start.o}" build/bm_x86_kesme.o build/
 
 RT="$RT runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem runtime/mimari/x86_64/kem_surec_hw.kem test/ornekler/kem_os_x86_vfs_ortak.kem"
 cat $RT test/ornekler/kem_os_x86_kabuk.kem > "$W/comb.kem" || exit 2
+python3 test/x86_heap_bagla.py "$W/comb.kem" || exit 2
 cekirdek_onbellek "$W" "${BM_DERLEYICI:-build/kemgu}" linker/bare-metal-x86_64.ld "${OBJ[@]}" || exit 2
 grep -q 'target triple = "x86_64-unknown-none-elf"' "$W/ham.ll" || { echo "  🔴 üçlü bare-metal değil"; exit 2; }
 if [[ ${BM_YALNIZ_DERLE:-0} == 1 ]]; then exit 0; fi

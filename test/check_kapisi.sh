@@ -223,6 +223,7 @@ BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"  
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
 cat $BM_KABUK_PARCALAR > "$W/kem_bm_kabuk_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_kabuk_kapi.kem" || exit 1
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_kabuk_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_kabuk (birleşik bare-metal KABUK, $(echo $BM_KABUK_PARCALAR | wc -w) parça) --check geçti"
@@ -285,6 +286,7 @@ fi
 
 BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem"
 cat $BM_UEFI_PARCALAR > "$W/kem_bm_uefi_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_uefi_kapi.kem" || exit 1
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_uefi_kapi.kem" >/dev/null 2>&1; then
  echo "  ✅ kem_os_x86_uefi birleşik --check geçti"
@@ -295,6 +297,7 @@ fi
 
 BM_GUC_PARCALAR="${BM_UEFI_PARCALAR/test\/ornekler\/kem_os_x86_uefi.kem/test\/ornekler\/kem_os_x86_guc.kem} runtime/mimari/x86_64/kem_ps2_hw.kem"
 cat $BM_GUC_PARCALAR > "$W/kem_bm_guc_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_guc_kapi.kem" || exit 1
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_guc_kapi.kem" >/dev/null 2>&1; then
  echo "  ✅ kem_os_x86_guc birleşik --check geçti"
@@ -304,6 +307,7 @@ else
 fi
 BM_BLOK_PARCALAR="${BM_GUC_PARCALAR/test\/ornekler\/kem_os_x86_guc.kem/test\/ornekler\/kem_os_x86_blok.kem} test/ornekler/kem_os_x86_blok_ortak.kem"
 cat $BM_BLOK_PARCALAR > "$W/kem_bm_blok_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_blok_kapi.kem" || exit 1
 tot=$((tot + 1))
 if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_blok_kapi.kem" >/dev/null 2>&1; then
  echo "  ✅ kem_os_x86_blok birleşik --check geçti"

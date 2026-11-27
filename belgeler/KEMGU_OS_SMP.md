@@ -62,6 +62,14 @@ Kesme işleyicisinin de kullandığı kilitlerde `kilit_al_kesmesiz` önce RFLAG
 
 `make calistir_bm_x86_smp_kilit` iki derleyicide sekiz istemcili FIFO modelini 100.000 adım yürütür. QEMU'da dört ve sekiz vCPU'nun her biri ortak sayacı bir milyon kez kilit altında artırır. İlk 8.192 artışta bütün vCPU'lar, kalanında ikili gruplar yarışır. QMP her çekirdeğin iki aşamadaki katkısını, biletleri, toplamı ve çekişme sayaçlarını fiziksel bellekten okur. Sekiz vCPU'nun deney boyunca birlikte yarıştığı ayrı C koşumu 378,842 saniyede 8.000.000 artış verdi. Bu süre ARM üzerinde çok iş parçacıklı TCG ölçümüdür.
 
+## Fiziksel çerçeveler ve heap
+
+Çok işlemcili açılış, çekirdek kayıtları ve IPI kutuları için ayrılan fiziksel alanın sonuna iki bilet kilidi yerleştirir. Çerçeve ayırıcısının sırası 20, heap'in sırası 30'dur. Her iki girişte kesmeler saklanır, bırakırken önceki IF geri yüklenir. BSP, kilitleri AP'lere SIPI göndermeden kurar. Tek işlemcide kilit tabanı sıfırdır.
+
+`uefi_cerceve_ayir` ve `uefi_cerceve_iade` bir aralığın tamamı için sahipliği değiştirir. Süreçlerin, RAM diskin ve sayfa tablolarının kullandığı ortak bit eşlemine bu girişlerden erişilir. `uefi_bos_say` aynı kilitle tutarlı bir anlık sayım yapar. Kilitli x86 imajının `malloc` ve `free` girişleri, aynı serbest liste ve bump algoritmasını tek bir heap kilidiyle çağırır. ARM ve konak bileşimleri paylaşılan dosyanın yalın girişlerini kullanır. `test/x86_heap_bagla.py` x86 SMP bileşiminde iki geçişi doğrular ve ilgili KEMGU işlevlerine bağlar. Bileşimin son baytları çekirdek önbelleği anahtarına girer.
+
+`make calistir_bm_x86_smp_bellek` dört gerçek vCPU'da çekirdek başına 10.000 tahsis ve iade yapar. Aynı döngü `malloc(32)` ile aldığı bloğu kullanır ve serbest bırakır. Host konuk başlamadan ayırıcının fiziksel bit eşlemini okur. Sonunda aynı bitlerin geri geldiğini, ayrı sahiplik tablosunun boşaldığını ve 80.000 olayda her iadenin o anda sayfanın sahibi olan çekirdekten geldiğini doğrular. İlk turda dört farklı çerçeve ve dört farklı heap bloğu aynı anda tutulur. Tek vCPU'daki ayrı kabuk ölçümü 50 kullanıcı sürecini çalıştırır.
+
 ## İşlemciler arası kesmeler
 
 SMP açılışında çekirdek kayıtlarının ardından her hedef için 128 bayt ayrılır. Kayıt +56 kutunun fiziksel adresidir. Kutu, çekirdek çevrimdışı veya tek vCPU açılışında kullanılmaz. Hedef numarası MADT dizisinden gerçek xAPIC kimliğine çevrilir. Gönderen, ICR yüksek/düşük yazım çifti sırasında kendi kesmelerini kapatır ve önceki IF durumunu geri yükler.

@@ -42,6 +42,7 @@ clang --target=x86_64-unknown-windows -ffreestanding -fno-stack-protector -fno-b
 # argümanları POSIX yolu sanıp `D:/.../msys64/nodefaultlib`e çeviriyordu.
 lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:"$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/stub.obj"
 cat $RT "$KAYNAK" > "$W/comb.kem"
+python3 test/x86_heap_bagla.py "$W/comb.kem" || exit 2
 # QEMU 8.2 ich9-ahci MSI yeteneğini kapatamıyor. Ayrı test çekirdeğinde yalnız keşfi atla.
 if [[ "${UEFI_AHCI_MSI_YOK:-0}" == 1 ]]; then
     python3 - "$W/comb.kem" <<'KEM_MSI'
@@ -68,6 +69,7 @@ KEM_KILIT
 fi
 if [[ -n ${UEFI_SMP_DENEY:-} ]]; then
     case "$UEFI_SMP_DENEY" in
+        bellek) cat tests/qemu/smp_bellek_konuk.kem >> "$W/comb.kem" ;;
         ipi) cat tests/qemu/smp_ipi_konuk.kem >> "$W/comb.kem" ;;
         kilit) cat tests/qemu/smp_kilit_konuk.kem >> "$W/comb.kem" ;;
         *) echo "Bilinmeyen SMP deneyi: $UEFI_SMP_DENEY" >&2; exit 1 ;;

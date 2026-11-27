@@ -1278,3 +1278,20 @@ ARM ana makinedeki TCG iş parçacıklarının ayrı kimlikleri QMP ile ölçül
 IPI koçanının EOI yazımı ayrı bir imajda kaldırıldı. Kendine ilk yeniden zamanlama teslim edildi, sıradaki aynı öncelik sınıfındaki çağrı teslim edilemedi. QMP'de gönderen 0, hata −4, kapı rc=1. Hedef APIC kimliği yerine mantıksal numara yazıldığında dört çekirdek **sessiz** kaldı (16.000/16.000, rc=0). İki soket × üç çekirdeğin gerçek APIC kimlikleri 0,1,2,4,5,6 olunca aynı imajda teslim süre aşımı −4, rc=1. Her iki değişiklik de özel derleme ağaçlarındaydı.
 
 Duruş vektörü de son kapıya alındı. BSP diğer çekirdeklere 82 gönderdi. QMP her AP'de gerçek HLT=1, RFLAGS.IF=0 ve kutuda duruş onayını okudu. Bu sürümde iki derleyici × iki topoloji kapısı toplam 31,937 sn sürdü. 4/6 vCPU için C medyan/p99 değerleri 8,158/29,372 ve 9,372/32,824 µs, self-host değerleri 9,490/32,935 ve 8,992/31,871 µs idi.
+
+## Bölüm 14 — çerçeve ve heap sahipliği
+
+Dört x86 vCPU aynı fiziksel ayırıcıyı ve çekirdek malloc/free girişlerini kullandı. İlk turda her vCPU kendi çerçevesini ve heap bloğunu diğer üçü de hazır olana dek tuttu. QMP, 65.536 sahip sözcüğünün sonda temiz olduğunu, iki fiziksel bitmap görüntüsünün bayt bayt eşitliğini ve 80.000 olayı ayrı ayrı doğruladı. Host olaylardan sahipleri yeniden hesapladı. Canlı çerçeve zirvesi dört, çifte sahip sıfır. Çerçeve bilet farkı 80.001 (son sayım dahil), heap farkı 80.000. C'de boş çerçeve 47.751 → 47.751, self-host'ta 47.749 → 47.749. İlk kâhin ham bitmap'i bitişik bayt sandığı için yanıldı. KEMGU dizisinde her bayt dört baytlık yuvanın ilk baytıdır. Süreç ve SMP kâhinleri artık aynı çözücüyü kullanıyor.
+
+| 1 vCPU, 50 gerçek süreç | D-772 boş | B14 boş | D-772 / B14 ELF sayfası | Süreç heap artışı |
+|---|---:|---:|---:|---:|
+| C | 45.416 | 45.465 | 7.716 / 7.667 | 0 |
+| Self-host | 45.385 | 45.456 | 7.747 / 7.676 | 0 |
+
+Her dört imajda boş çerçeve ve yüklü ELF sayfalarının toplamı 53.132. İstenen mutlak boş çerçeve eşitliği sağlanmadı. C'de 49, self-host'ta 71 fazla boş çerçeve var. Boş çerçeve sayısındaki fark imajların PT_LOAD kapsamındaki fark kadar. Tek çekirdekte C kabuğu D-772'nin üç koşumundaki 4.788.464 → 5.247.552 bayt çiftini üretti. D-772 self-host kayıtlarında 5.050.928 → 5.510.016 bir kez ve 5.116.512 → 5.575.600 iki kez görüldü. Her iki çift de bu bölümde yeniden ölçüldü. Kâhin derleyiciye göre bu gerçek taban çiftlerini denetliyor.
+
+Canlı fiziksel ayırıcının kilidini kaldırma sabotajı **uygulanmadı**. Ayrı imajda dört QEMU vCPU'su aynı sayısal aday için yarıştı. Sahiplik kontrolünde durumlar [1, −2, −2, −2], kapı rc=1. Bu deney fiziksel çerçeve dağıtmadı. Ölçüm ARM ana makinede ayrı iş parçacıklı x86 TCG ile yapıldı.
+
+Heap algoritması aynı kaldı. Birleşik SMP imajı malloc/free sarmallarını iki mimariyi aynı asm birimine sokmadan x86 bilet kilidine bağlıyor. Ortak ve ARM imajları aynı heap işlevine doğrudan giriyor. İlk toplu koşum sürerken süreç betiğine derleyici etiketini ekledim. Çalışan Bash eski konumdan okumayı sürdürdüğü için beş alt hedef son satırda sözdizimi hatasıyla çıktı. Betiğin tamamı sabitken bütün bölüm kapıları yeniden çalıştırıldı.
+
+Sabit betikle yapılan 357 sn'lik toplu koşumda iki USB klavye hatası kaldı. Bellek tekrarında komut bulunamadı, v1 kesinti koşumunda dosya gezginini başlatan komut eksik ulaştı. Tık sayacı USB raporunun geldiğini garanti etmiyordu. Bu iki kâhinde her tuşa karşılık DMA tamponundaki sekiz baytın gerçekten değişmesi bekleniyor. Aynı iki hedefin yeni davranışla toplu tekrarı 250 sn, make ve tee rc=0. İki derleyicinin bellek kapısı ayrıca tek başına da geçti.

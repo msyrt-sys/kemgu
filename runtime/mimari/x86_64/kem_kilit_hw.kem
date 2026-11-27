@@ -78,3 +78,22 @@ cli"# çıktı("=r",&bayrak) bozulan("~{memory}") } }
     smp_kilit_birak(k);
     eğer (bayrak&512) != 0 { kz_irq_ac(); } değilse { kg_irq_kapat(); }
 }
+
+// SMP açılışında önce kilitler kurulur, sonra AP'ler başlatılır. Tek CPU'da taban sıfırdır.
+küresel değişken smp_bellek_kilitleri:tam64=0;
+çıplak işlev smp_bellek_kilit_al(ofs:tam64) -> tam64 {
+    eğer smp_bellek_kilitleri==0 { ver -1; }
+    ver kilit_al_kesmesiz(smp_bellek_kilitleri+ofs);
+}
+çıplak işlev smp_bellek_kilit_birak(ofs:tam64,f:tam64) {
+    eğer f>=0 { kilit_birak_kesmesiz(smp_bellek_kilitleri+ofs,f); }
+}
+çıplak işlev smp_heap_ayir(n:tam64) -> *tam8 {
+    değişken f:tam64=smp_bellek_kilit_al(64);
+    değişken p:*tam8=kem_heap_ayir(n);
+    smp_bellek_kilit_birak(64,f); ver p;
+}
+çıplak işlev smp_heap_iade(p:*tam8) {
+    değişken f:tam64=smp_bellek_kilit_al(64);
+    kem_heap_iade(p); smp_bellek_kilit_birak(64,f);
+}

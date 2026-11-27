@@ -37,7 +37,7 @@ tur() (
         return 0
     fi
     for senaryo in ${SUREC_SENARYO:-matris}; do
-        python3 tests/qemu/surec_kahin.py "$w" --ilk "${SUREC_ILK:-1}" --tekrar "${SUREC_TEKRAR:-10}" --senaryo "$senaryo"
+        SUREC_KAHIN_DERLEYICI="$derleyici" python3 tests/qemu/surec_kahin.py "$w" --ilk "${SUREC_ILK:-1}" --tekrar "${SUREC_TEKRAR:-10}" --senaryo "$senaryo"
     done
     # [D-771] Başarılı turun çalışma dizini silinir (her tam koşum ~25 GB bırakıp diski dolduruyordu);
     # başarısız turda set -e erken çıkar ve dizin teşhis için kalır.
