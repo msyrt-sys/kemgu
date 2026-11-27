@@ -288,9 +288,12 @@ def tekrar_kos(c, exe, bos):
         print(f"SMP tek vCPU: boş={bos}, ELF={sayfa} sayfa, toplam={bos+sayfa}, "
               f"kabuk heap={once}/{sonra}, süreç artışı={surec_artisi}", flush=True)
         assert bos + sayfa == 53132, (bos, sayfa)
-        # D-772'nin üç koşumunda görülen kabuk heap çiftleri.
-        taban = {"kemgu": {(4788464, 5247552)},
-                 "codegen": {(5050928, 5510016), (5116512, 5575600)}}
+        # D-772'nin taban koşumlarında ve aynı kullanıcı imajıyla tekrarında ölçülen çiftler.
+        taban = {
+            "kemgu": {(4788464, 5247552)},
+            "codegen": {(5050928, 5510016), (5116512, 5510016),
+                        (5116512, 5575600), (5182096, 5575600)},
+        }
         derleyici = Path(os.environ["SUREC_KAHIN_DERLEYICI"]).stem
         assert (once, sonra) in taban[derleyici], (derleyici, once, sonra)
         assert surec_artisi == 0
@@ -308,7 +311,8 @@ def diskleri_koru(once, esp_bolum, esp):
 
 
 def kos(w, tekrar, senaryo, ilk=1):
-    smp = int(os.environ["SUREC_SMP"]) if "SUREC_SMP" in os.environ else None
+    ayar = os.environ.get("SUREC_SMP", os.environ.get("KEMGU_QEMU_SMP"))
+    smp = int(ayar) if ayar is not None else None
     if ilk < 1 or tekrar < 1:
         raise ValueError("İlk açılış ve tekrar sayısı pozitif olmalı")
     programlar = {p.name: p.read_bytes() for p in (w / "kullanici").glob("*.elf")}

@@ -98,3 +98,9 @@ Aynı çözünürlükte üç soğuk açılış yapın. Her açılış için PAT_
 - Desteklenmeyen bir Realtek dahili NIC görülürse satıcı ve aygıt kimliğini raporda tutun. USB CDC-ECM sınıfı (iletişim sınıfı 02, ECM alt sınıfı 06, CDC veri sınıfı 0a) sunan adaptörü doğrudan USB porta veya desteklenen huba takın. Yeni MAC ve bağlantı satırını kaydedip aynı DHCP, ping ve indirme adımlarını tekrarlayın.
 - `baslat saat metin`, `ag ntp <sunucu-ip>` ve tekrar `baslat saat metin` çalıştırın. İlk ve son UTC zamanı ile bildirilen ofset/gecikmeyi kaydedin.
 - Test ağındaki bilgisayarda `python3 tools/codex/teshis_al.py donanim.txt --adres <alıcı-ip> --port 9140` çalıştırın. Konukta aynı dizinden `donanim gonder <alıcı-ip> 9140` ile raporu gönderin. Alıcıdaki bayt sayısını ve rapordaki NIC kimliğini doğrulayın. USB bellek bu işlem boyunca takılı kalır.
+
+### x86 SMP ve paralel kullanıcı programı
+
+1. Firmware'de etkin mantıksal işlemci sayısını kaydedin. Mevcut Linux kurulumunda `lscpu -e=CPU,CORE,SOCKET,ONLINE` ve ACPI araçlarıyla alınan `acpidump -n APIC` çıktısını saklayın. MADT tür 0 girdilerindeki etkin veya çevrimiçi yapılabilir farklı xAPIC kimliklerini sayın. x2APIC yolu ayrı çalışmadır.
+2. Test USB'sinden UEFI ile açın. Seri kayıttaki `SMP_AP` satırları ile `islemci` tablosundaki APIC kimliklerini MADT ile karşılaştırın. BSP de sayıya dahildir. Birkaç saniye sonra tekrar `islemci` çalıştırın ve her tık sayacının ilerlediğini görün. Düşük trampolin sayfası bulunamazsa tek çekirdeğe düşüş iletisini ve firmware sürümünü kaydedin.
+3. `calistir /diskler/usb0p2/bin/paralel.elf 4` çalıştırın. Dört parça sıra bağımsız olarak 0→564163, 1→513708, 2→497790, 3→488028 vermelidir. Son iki satır `ASAL TOPLAM 4 2063689` ve `[paralel.elf pid=… cikis=0]` olmalıdır. Aynı komutu 1, 2 ve 8 ile deneyin. Toplam aynı kalır. Duvar süresini, işlemci modelini ve firmware sürümünü sonuç kaydına ekleyin.

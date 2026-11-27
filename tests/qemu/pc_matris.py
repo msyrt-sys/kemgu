@@ -34,7 +34,7 @@ def mbr_yaz(bolumler):
         f.write(bytes(33*512))
 
 
-def kos(w, durum):
+def kos(w, durum, smp=1):
     aygit, klavye, ram, tablo = durum
     birimler, nvme, sata = imajlar(w, {'merhaba.elf': (w/'kullanici/merhaba.elf').read_bytes()})
     esp, veri = birimler
@@ -45,8 +45,9 @@ def kos(w, durum):
     ad = aygit+'0p2'
     yol = '/diskler/'+ad
     metin = ' '.join(durum)
-    with boot(w, esp, nvme, sata, klavye=klavye, acilis=aygit, ram=ram) as (q, p, seri):
+    with boot(w, esp, nvme, sata, klavye=klavye, acilis=aygit, ram=ram, smp=smp) as (q, p, seri):
         c = SurecConsole(w, q, p, seri, disk={'usb':'USB', 'nvme':'NVMe', 'sata':'AHCI'}[aygit])
+        assert len(q.call('query-cpus-fast')) == smp
         assert q.call('query-memory-size-summary')['base-memory'] == {'256M':256, '1G':1024, '4G':4096}[ram]*2**20
         c.run('bagla --yazilabilir '+ad)
         c.run(f'yaz {yol}/matris.txt {metin}')
@@ -72,11 +73,13 @@ if __name__ == '__main__':
         if a.tablo and durum[-1] != a.tablo:
             continue
         for tur in range(a.tekrar):
+            # Aynı disk, RAM ve klavye ile üç gerçek donanım topolojisi.
+            smp = (1, 2, 4)[tur % 3]
             try:
-                kos(a.dizin.resolve(), durum)
-                print('MATRIS OK', *durum, tur+1, flush=True)
+                kos(a.dizin.resolve(), durum, smp)
+                print('MATRIS OK', *durum, tur+1, f'vCPU={smp}', flush=True)
             except Exception as exc:
                 hatalar[durum] += 1
-                print('MATRIS HATA', *durum, tur+1, repr(exc)[:350], flush=True)
+                print('MATRIS HATA', *durum, tur+1, f'vCPU={smp}', repr(exc)[:350], flush=True)
     if hatalar:
         raise SystemExit(f'Matris başarısızlıkları {dict(hatalar)}')

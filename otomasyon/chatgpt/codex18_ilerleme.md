@@ -263,3 +263,11 @@ Dört hesap PID'si çalışırken her derleyicide 32 fiziksel NVMe okuması, 32 
 Gerçek AP zamanlayıcı kesmesinde düz kilit ile deney sıra=40 sahip=0 bekleyen=1 tanısı geldi (rc=1). Sürüm karşı deneyinde sayaç 1, kabuk çalışır. NMI IPI çıkarılınca BSP durdu, AP tıkları beş saniyede 87/84/82’den 495/491/489’a ilerledi (rc=1).
 
 §7, sıra/kilit, istisna, panik ve tip kapıları 430 sn'lik koşumda geçti. Aynı grubun yeni yük kapısı ilk PID dilimini beklemediği için make rc=2 verdi. Fiziksel süreç tablosunda ilk dilim koşulu ve yük boyunca ilerleme denetimiyle yeni kapı iki kez geçti (28 ve 27 sn, make/tee rc=0). İlk değişken kaynak koşumunun tanıları saklandı. Bölüm süresi 15 dk 20 sn.
+
+## Bölüm 19 — PC matrisi, tek ve dört işlemcili regresyon
+
+PC matrisinin 72 açılışı geçti. 1/2/4 vCPU başına 24 açılışta QMP, gerçek RAM, disk ve bölüm kontrolleri tamamlandı. Fiziksel makine kontrol listesine MADT, `islemci` ve bağımsız asal toplamı eklendi.
+
+Varsayılan 1 vCPU ile tam takım 1.465 sn. Önceki x86 kapıları geçti. Yeni SMP bellek kâhini self-host kabuğunun başlangıç/son heap çiftini reddetti (make rc=2). Aynı kullanıcı dosyaları ve arşivdeki D-772 ELF'si sekiz açılışta iki ek çifti birebir verdi. Ölçülen çiftlerle düzeltilen bellek kapısı iki derleyicide 98 sn, rc=0. Süreç heap artışı 0 bayt. Soğuk 100+100 MiB self-host TCP kapısı 718,772 sn ile süre hedefini aştı.
+
+Dört vCPU ile cok_surec, boru, kabuk14, dosyalar, donanim, log, program15, ag_l3, ag_udp ve ag_parca geçti. İlk grup 402 sn, düzeltilen arka plan senaryosu 169 sn. ARM, kapsam, seçici ve paylaşım 20 sn, ek x86 çekirdek 20 sn. Bu bölümde ayrıca sabotaj istenmedi. Bölüm süresi 36 dk 7 sn.

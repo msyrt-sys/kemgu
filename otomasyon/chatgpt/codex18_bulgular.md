@@ -1398,3 +1398,26 @@ IPI'siz imajın ikinci gözleminde BSP tıkı 84'te, IF=0 ve HLT=1 kaldı. AP1/2
 İki derleyiciyle son yük kapısı 28 sn (make/tee rc=0). C'de kararlı heap 4.591.680 bayt ve boş çerçeve 31.008, self-host'ta 4.788.528 ve 30.573. Dört işlem toplandığında açılışta ölçülen 45.384 ve 44.949 boş çerçeve geri geldi. Bunlar hata ayıklama imajının sayılarıdır. Her derleyicide 32 NVMe kesmesi, 32 PS/2 kesmesi, 21 doğru ICMP cevabı, 0 halka kaybı ve 0 kilit zaman aşımı görüldü. Panik sonrasında dört IF biti sıfır, dört HLT biti bir, GOP 1280×800 ve iki okumada değişmeyen tıklar görüldü. İlk self-host koşumunda son başlatılan PID hazırken sayaç henüz sıfırdı. Son kapı ilk dilim için fiziksel süreç tablosunu bekler ve dört sayacın yük sırasında ayrıca ilerlediğini doğrular.
 
 İlk toplu koşum 359 sn, rc=2. Birleşim harness'ı koşarken düzenlendiği için açık eski bash dosyasının ofsetinden yeni metin okundu. Bu turların tanı dizinleri indekslendi ve kaynak sabitken §7 yeniden koşuldu. Son yük kapısında ayrıca 240 sn'lik tüm-konuk süre sınırı uygulanır. Bu sürüm iki derleyiciyle 27 sn'de geçti.
+
+## Bölüm 19 — PC matrisinde örnekleme
+
+USB, NVMe ve SATA açılışlarının her biri PS/2 ve USB klavye ile, hem GPT hem MBR görüntüde sınanır. Önceki 256 MiB, 1 GiB ve 4 GiB RAM dönüşümü korunur. Her birleşimin üç açılışı sırasıyla 1, 2 ve 4 vCPU kullanır. Böylece iki derleyiciyle 72 gerçek açılış olur. Her denemede host QMP üzerinden işlemci sayısı ve RAM boyutunu, kapanışta disk içeriği, fsck, ESP ve diğer disklerin özetlerini denetler. Fiziksel kontrol listesindeki beklenen asal parçaları Bölüm 17'nin bağımsız host hesabından gelir.
+
+| Dört vCPU ile mevcut kapı (calistir_bm_x86_ öneki) | Yeşil tarif süreleri |
+|---|---:|
+| cok_surec | 197.6 sn / 293.5 sn / 168.4 sn |
+| boru | 96.0 sn |
+| kabuk14 | 277.4 sn / 276.7 sn |
+| dosyalar | 401.6 sn |
+| donanim | 73.1 sn |
+| log | 68.1 sn |
+| program15 | 88.9 sn |
+| ag_l3 | 98.5 sn |
+| ag_udp | 67.8 sn |
+| ag_parca | 26.7 sn |
+
+İlk grupta arka plan süreci kâhini ortamdan verilen dört CPU için tek CPU durum metni bekledi. İki derleyicide de ps çıktısında çalışan PID ve yüzlerce dilim görüldü. Süreç kâhini genel ve özel topoloji ayarını aynı öncelikle çözüyor. Aynı hedef iki derleyicide toplam 20 gerçek açılışla geçti (169 sn). İlk seçili grupta 134, arka plan tekrarında 20 QMP topoloji kaydı alındı. ARM ve paylaşılan kapıların ek koşumu 20 sn, rc=0.
+
+Varsayılanı açıkça 1 vCPU seçen tam takım 1.465 sn sürdü. Önceki x86 kapıları ve 72 PC matris açılışı geçti. Matrisin üç topolojisi 24'er kez doğrulandı. Günlükte tek vCPU için 549 ayrı QMP örneği var. Yeni SMP bellek kapısının self-host kabuk denetimi 5.116.512 → 5.510.016 bayt çiftini ilk üç taban koşumunda görmemişti. Sonraki denemede 5.182.096 → 5.575.600 çifti görüldü. Aynı kullanıcı imajıyla D-772'nin arşivdeki 1.775.368 baytlık ELF'si sekiz kez açıldı. Eski çekirdek ilk çifti altı, ikincisini iki kez verdi. Kâhin yalnız bağımsız taban koşumunda ölçülmüş tam çiftleri kabul ediyor. Sekiz koşumda da 50 süreçte heap artışı 0 bayt, boş çerçeve 45.385 idi. Yeni çekirdekte ELF kapsamı ile boş çerçeve toplamı her iki derleyicide 53.132.
+
+Tek self-host 100+100 MiB TCP kapısı soğuk kurulumla 718,772 sn sürdü. Veri özeti, bağlantı kesintisi, yeniden teslim, heap ve çerçeve denetimleri geçti. Ayrı 12+12 MiB deneyinde host ACK'lerini birleştirmek 97,04 sn yerine 96,23 sn verdi. Bu değişiklik alınmadı.

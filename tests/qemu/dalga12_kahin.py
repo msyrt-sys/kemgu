@@ -149,7 +149,15 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
         try:
             with qmp_baglan(path,proc,sure=15) as sock:
                 with sock.makefile('wb', buffering=0) as f, sock.makefile('rb') as reader:
-                    yield Qmp(f, reader),proc,ser
+                    q = Qmp(f, reader)
+                    if smp != 1 or os.environ.get('KEMGU_QEMU_SMP'):
+                        # Her seçilmiş koşumda sayıyı ve MTTCG iş parçacıklarını hosttan oku.
+                        cpular = q.call('query-cpus-fast')
+                        assert sorted(c['cpu-index'] for c in cpular) == list(range(smp))
+                        tid = {c['thread-id'] for c in cpular}
+                        assert len(tid) == smp and min(tid) > 0
+                        print(f'QMP SMP={smp} thread-id={sorted(tid)}', flush=True)
+                    yield q,proc,ser
         finally:
             if proc.poll() is None:
                 proc.kill()
