@@ -1,0 +1,54 @@
+kullan drivers::smp::islemci::{ smp_islemciler };
+kullan drivers::acpi::madt::{ MadtGirdisi };
+
+işlev girdi(t: tam32, id: tam32, bayrak: tam64) -> MadtGirdisi {
+    ver MadtGirdisi { tur: t, islemci: id, apic: id, bayraklar: bayrak, adres: 0,
+        gsi: 0, veriyolu: 0, kaynak: 0, lint: 0 };
+}
+
+işlev reddetti(xs: Dizi<MadtGirdisi>, bsp: tam32, neden: metin) -> mantıksal {
+    eşleş smp_islemciler(xs, bsp) {
+        hata(e) => { ver metin_esit(e, neden); }
+        tamam(son) => { ver yanlış; }
+    }
+    ver yanlış;
+}
+
+işlev main() -> tam32 {
+    değişken xs: Dizi<MadtGirdisi> = [];
+    eğer değil reddetti(xs, 0, "MADT BSP bulunamadi") { ver 1; }
+    dizi_ekle(xs, girdi(1, 9, 1));
+    dizi_ekle(xs, girdi(0, 8, 0));
+    dizi_ekle(xs, girdi(0, 19, 2));
+    dizi_ekle(xs, girdi(0, 7, 1));
+    dizi_ekle(xs, girdi(0, 201, 3));
+    eşleş smp_islemciler(xs, 7) {
+        hata(e) => { ver 2; }
+        tamam(ids) => {
+            eğer dizi_boyut(ids) != 3 { ver 3; }
+            eğer dizi_al(ids, 0) != 7 veya dizi_al(ids, 1) != 19 veya dizi_al(ids, 2) != 201 { ver 4; }
+        }
+    }
+    eğer değil reddetti(xs, 8, "MADT BSP bulunamadi") { ver 5; }
+    dizi_ekle(xs, girdi(0, 19, 1));
+    eğer değil reddetti(xs, 7, "yinelenen APIC kimligi") { ver 6; }
+    değişken tek: Dizi<MadtGirdisi> = [];
+    dizi_ekle(tek, girdi(0, 7, 1));
+    dizi_ekle(tek, girdi(0, 7, 2));
+    eğer değil reddetti(tek, 7, "yinelenen APIC kimligi") { ver 12; }
+    değişken kotu: Dizi<MadtGirdisi> = [];
+    dizi_ekle(kotu, girdi(0, 256, 1));
+    eğer değil reddetti(kotu, 0, "APIC kimligi gecersiz") { ver 7; }
+    eğer değil reddetti(kotu, -1, "BSP kimligi gecersiz") { ver 8; }
+    değişken cok: Dizi<MadtGirdisi> = [];
+    değişken i: tam32 = 0;
+    iken i < 256 { dizi_ekle(cok, girdi(0, i, 1)); i = i + 1; }
+    eşleş smp_islemciler(cok, 200) {
+        hata(e) => { ver 9; }
+        tamam(ids) => { eğer dizi_boyut(ids) != 256 veya dizi_al(ids, 0) != 200 { ver 10; } }
+    }
+    dizi_ekle(cok, girdi(0, 0, 1));
+    eğer değil reddetti(cok, 200, "256 yerel APIC siniri") { ver 11; }
+    yazdir_metin("SMP MADT: tur, bayrak, BSP, tekrar, bozuk kimlik, 0/256/257 yerel islemci gecti");
+    ver 0;
+}

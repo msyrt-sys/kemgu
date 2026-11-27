@@ -1,0 +1,20 @@
+// Gerçek UEFI aktarımı ve KEMGU bellek haritasıyla işlemci keşif kapısı.
+işlev smp_acilis(b: UefiBilgi) -> sonuç<mantıksal, metin> {
+    eşleş uefi_bellek_kur_surec(b) { hata(e) => { ver hata(e); } tamam(v) => {} }
+    eşleş uefi_acpi_dok(b) { hata(e) => { ver hata(e); } tamam(v) => {} }
+    ver smp_kesfet(b);
+}
+
+işlev main() -> tam32 {
+    eşleş uefi_bilgi() {
+        hata(e) => { bm_yaz(metin_birlestir("SMP_HATA ", e)); kem_qemu_cik(1); }
+        tamam(b) => {
+            eşleş smp_acilis(b) {
+                hata(e) => { bm_yaz(metin_birlestir("SMP_HATA ", e)); kem_qemu_cik(1); }
+                tamam(v) => { bm_yaz("SMP_KESIF_HAZIR"); }
+            }
+        }
+    }
+    iken doğru { kdl_idle(); }
+    ver 0;
+}

@@ -1143,3 +1143,26 @@ Taban commit'i `0ce56bf` için GitHub Actions koşumu 45807330890. Aşağıdaki 
 Linux ve Windows'taki altışar Make tarifi paralel çalışacak şekilde değişti. Linux ölçümlü takım raporunu yazar ve alt sürecin hatasını korur. YAML karşılaştırmasında değişiklikler bu 12 tarifle sınırlı kaldı. Gerçek YAML'den çıkarılan komutlar bir argüman kaydedicisiyle Bash altında yürütüldü. Linux'ta make başarı/hata ve rapor var/yok bileşimlerinin dördü denendi. Windows komutundaki işlemci sayısı değişkeninin açılımı Linux'ta MSYS sözdizimi ile sınandı.
 
 Sonraki CI süreleri gerçek draft PR koşumuna bağlı. Dal öneki push tetikleyicisine girmiyor ve kullanıcı draft PR'ı Bölüm 20 sonuna ayırdı. Bu yerel doğrulamalar Actions'ta geçen süre olarak tabloya yazılmadı.
+
+## Bölüm 9 — x86 işlemci keşfi
+
+OVMF q35, 256 MiB RAM ve x86 TCG çok iş parçacığı kipinde iki ayrı UEFI çekirdeği ölçüldü. CPU sırası, QOM APIC kimliği, seri kayıt, fiziksel kimlik sayfası ve ham MADT sağlama toplamı karşılaştırıldı. BSP kimliği LAPIC yazmacından geldi. Her satır kendi QEMU sürecidir.
+
+| Derleyici | vCPU | APIC kimlikleri | QMP host thread-id |
+|---|---:|---|---|
+| C | 1 | [0] | 368271 |
+| C | 2 | [0, 1] | 369675, 369676 |
+| C | 4 | [0, 1, 2, 3] | 371064, 371065, 371066, 371067 |
+| C | 8 | [0, 1, 2, 3, 4, 5, 6, 7] | 372467, 372468, 372469, 372470, 372471, 372472, 372473, 372474 |
+| self-host | 1 | [0] | 375635 |
+| self-host | 2 | [0, 1] | 376096, 376097 |
+| self-host | 4 | [0, 1, 2, 3] | 376847, 376848, 376849, 376850 |
+| self-host | 8 | [0, 1, 2, 3, 4, 5, 6, 7] | 377501, 377502, 377503, 377504, 377505, 377506, 377507, 377508 |
+
+Bütün yerel APIC kayıtları tür 0 ve bayrak 1 idi. Ayrı host iş parçacıkları MTTCG çalışmasını doğruluyor. Keşif anında AP'lere henüz konuk işi gönderilmediğinden bu ölçüm AP yürütme süresini göstermez. ARM ana makinedeki x86 TCG serpiştirmesi gerçek x86 donanımından farklıdır.
+
+**Bit 1 deneyi.** Özel kaynak ağacında `bayraklar & 3` gerçekten `bayraklar & 1` yapıldı. Dört QEMU topolojisi de yeşil kaldı. Sebep firmware'in yalnız etkin bitini vermesiydi. Çevrimiçi-yapılabilir tekil kaydı olan host fikstürü iki derleyicide de rc=3 döndürdü. İkinci gerçek deneyde etkin APIC 1 kaydı süzgeçten çıkarıldı. İki vCPU'lu konuk yalnız BSP'yi bildirdi, QMP iki CPU gösterdi ve kapı rc=1 döndü. Temiz kaynak ağacı deney süresince ayrı tutuldu.
+
+İlk geliştirme denemesinde yalnız yazılan iki dahili küresel değişken LLVM iyileştirmesinde siliniyordu. Konuk listesi doğruydu ancak QMP fiziksel kayıt denetimi eksik sembolde durdu. Çekirdek numarasını doğrulayarak fiziksel listeden APIC kimliğini alan çalışma zamanı erişimcisi eklendi. Ardından iki derleyiciyle ELF sembolleri ve bellek değerleri doğrulandı.
+
+Temiz keşif kapısı sıcak önbellekte 26 sn, iki derleyici için boş özel önbellekte 37 sn sürdü. Kapı bütçesi 60 sn. §7 ve sans-IO regresyonları dahil birleşik koşum 315 sn, rc=0.

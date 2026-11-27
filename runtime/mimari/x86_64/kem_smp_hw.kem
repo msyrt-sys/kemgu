@@ -1,0 +1,30 @@
+// xAPIC'in MMIO penceresi uefi_bellek_kur_surec tarafından eşlenir.
+kullan drivers::smp::islemci::{ smp_islemciler };
+
+küresel değişken smp_kimlik_sayfasi: tam64 = 0;
+küresel değişken smp_cekirdek_sayisi: tam32 = 0;
+
+işlev smp_kesfet(b: UefiBilgi) -> sonuç<mantıksal, metin> {
+    eşleş uefi_madt(b) { hata(e) => { ver hata(e); } tamam(m) => {
+        değişken bsp: tam32 = ((kem_mmio_oku32(m.lapic_adresi + 32) >> 24) & 255) olarak tam32;
+        eşleş smp_islemciler(m.girdiler, bsp) { hata(e) => { ver hata(e); } tamam(ids) => {
+            değişken sayfa: tam64 = uefi_surec_ayir(1);
+            eğer sayfa == 0 { ver hata("SMP kimlik sayfasi icin RAM yok"); }
+            değişken no: tam32 = 0;
+            için id: ids {
+                kem_mmio_yaz64(sayfa + (no olarak tam64) * 8, id olarak tam64);
+                kap_dok("SMP_CPU", no olarak tam64, id olarak tam64, bsp olarak tam64);
+                no = no + 1;
+            }
+            güvensiz { smp_kimlik_sayfasi = sayfa; smp_cekirdek_sayisi = no; }
+            ver tamam(doğru);
+        } }
+    } }
+    ver hata("SMP MADT");
+}
+
+// Daha sonraki IPI hedefleri de çekirdek numarasından donanım kimliğine bu yolla geçer.
+çıplak işlev smp_apic_kimligi(no: tam32) -> tam32 {
+    eğer no < 0 veya no >= smp_cekirdek_sayisi { ver -1; }
+    ver kem_mmio_oku64(smp_kimlik_sayfasi + (no olarak tam64) * 8) olarak tam32;
+}

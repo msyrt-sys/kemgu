@@ -129,3 +129,9 @@ Gerçek `make test_secili` girişinde yalnız `LOOP.md` farkı iki kapı seçti 
 İki işte altışar yapım/test çağrısı paralel ve hedefe göre eşzamanlanmış çıktıyla çalışıyor. Linux ölçümlü tam takımın raporunu basıyor. YAML karşılaştırması ve gerçek tariflerden alınan komutların başarı/hata deneyi geçti. §7 x86 kapıları ve kapı seçici 313 sn, make/tee rc=0. Bölüm için ayrıca sabotaj tanımlanmamıştı. Ölçüm, bütçe, önbellek, paylaşım, kapı seçimi ve CI kullanımı `belgeler/KEMGU_Test_Altyapisi.md` içinde.
 
 Taban Actions koşumunda Linux işi 35:17 (tam takım adımı 35:00), Windows işi 1:03:43 (adım 1:02:45). İki ham günlük ve adım zamanları incelendi. Değişiklik sonrası Actions süresi, Bölüm 20 sonunda açılacak draft PR ile ölçülebilir. Dal öneki mevcut push tetikleyicisine girmiyor. Yerel bölüm süresi 6 dk 11 sn.
+
+## Bölüm 9 — işlemci keşfi ve SMP kâhini
+
+BSP kimliği LAPIC yazmacından, işlemci listesi UEFI MADT'den geliyor. C ve self-host UEFI imajlarının her birinde 1/2/4/8 vCPU için ham MADT, QOM APIC kimliği, QMP fiziksel kayıt ve seri liste eşleşti. Her vCPU ayrı TCG host iş parçacığına sahipti. Bu koşum ARM host üzerinde x86 emülasyonudur.
+
+Bit 1'i yok sayma sabotajı, gerçek firmware bütün kayıtlarda yalnız bit 0'ı verdiği için dört topolojide sessiz kaldı. Host'ta yalnız bit 1'i açık kayıt ile iki derleyici de rc=3 verdi. Ek deneyde etkin APIC 1 listeden çıkarılınca iki vCPU'lu QEMU kapısı rc=1 verdi. Normal keşif kapısı isabette 26 sn, yeni önbellekle 37 sn, bütçe 60 sn. §7 x86 kapıları, üç sans-IO kapısı, paylaşım ve seçim denetimleriyle 315 sn, make/tee rc=0. Bölüm süresi 9 dk 57 sn.
