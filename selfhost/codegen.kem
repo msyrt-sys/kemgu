@@ -20,6 +20,8 @@ kullan selfhost::konak::{konak_mimari, konak_triple};
 
 yapı Ayr {
     kaynak: metin;
+    // [D-782] E4q: kaynağın KP_BOY baytlık parçaları (lex_et kurar; lex_i ve literal çözümü okur).
+    kparca: Dizi<metin>;
     // Token tablosu (lex çıktısı)
     t_ad: Dizi<metin>;
     t_sat: Dizi<tam32>;
@@ -448,6 +450,57 @@ işlev tok_ekle(p: &değişken Ayr, ad: metin, satir: tam32, sutun: tam32, offse
 }
 
 // ---- Lexer çekirdeği (selfhost/lexer.kem ile BİREBİR; emit→tok_ekle) ----
+// [D-782] E4q — SÖZCÜK ÇÖZÜMLEME O(n²) İDİ. `metin_bayt(s, i)` ve `metin_kes(s, ..)` runtime'da her
+// çağrıda `strlen(s)` hesaplar (metin uzunluk taşımaz; NUL sonlu). Sözcük çözümleyici kaynağı bayt bayt
+// okuduğu için 11.421 satırlık çekirdek biriminde (modüllerle ~1,3 MB) süre ~97 sn'ye çıkıyordu; gdb
+// örneklemesinde zamanın %82'si `strlen` içindeydi. Runtime'da önbellekle onarmak GÜVENSİZDİR (bölge
+// serbest kalınca aynı adreste başka bir metin olabilir → eski uzunluk yanlış cevap). Bunun yerine kaynak
+// bir kez KP_BOY baytlık parçalara bölünür; her erişim yalnız kendi parçasının strlen'ini öder.
+// Davranış birebir: `kb` = `bayt`, `kk` = `metin_kes` (aynı kırpma kuralları).
+sabit KP_BOY: tam32 = 512;
+// İki düzeyli bölme: önce 64 KB bloklar (her biri kaynağın strlen'i), sonra bloktan 512 B parçalar
+// (her biri yalnız bloğun strlen'i). 65536, KP_BOY'un katı → parça k = [k*KP_BOY, (k+1)*KP_BOY).
+işlev kaynak_parcala(s: metin, uz: tam32) -> Dizi<metin> {
+    değişken kp: Dizi<metin> = dizi_olustur(0);
+    değişken bb: tam32 = 0;
+    iken bb < uz {
+        değişken blok: metin = metin_kes(s, bb, 65536);
+        değişken bu: tam32 = metin_uzunluk(blok);
+        değişken j: tam32 = 0;
+        iken j < bu { dizi_ekle(kp, metin_kes(blok, j, KP_BOY)); j = j + KP_BOY; }
+        bb = bb + 65536;
+    }
+    ver kp;
+}
+// `bayt(kaynak, i)` ile birebir: aralık dışı (i < 0 ya da i >= uzunluk) → 0; işaret düzeltmesi aynı.
+işlev kb(kp: Dizi<metin>, i: tam32) -> tam32 {
+    eğer i < 0 { ver 0; }
+    değişken pi: tam32 = i / KP_BOY;
+    eğer pi >= dizi_boyut(kp) { ver 0; }
+    değişken b: tam32 = metin_bayt(dizi_al(kp, pi), i % KP_BOY) olarak tam32;
+    eğer b < 0 { ver b + 256; }
+    ver b;
+}
+// `metin_kes(kaynak, bas, uz)` ile birebir: bas [0, n]'e, uz [0, n-bas]'a kırpılır (uz < 0 → kalanın tamamı).
+işlev kk(kp: Dizi<metin>, bas: tam32, uz: tam32) -> metin {
+    değişken np: tam32 = dizi_boyut(kp);
+    değişken n: tam32 = 0;
+    eğer np > 0 { n = (np - 1) * KP_BOY + metin_uzunluk(dizi_al(kp, np - 1)); }
+    değişken b0: tam32 = bas;
+    eğer b0 < 0 { b0 = 0; }
+    eğer b0 > n { b0 = n; }
+    değişken kalan: tam32 = n - b0;
+    değişken u: tam32 = uz;
+    eğer u < 0 veya u > kalan { u = kalan; }
+    eğer u == 0 { ver ""; }
+    değişken i0: tam32 = b0 / KP_BOY;
+    değişken son: tam32 = (b0 + u - 1) / KP_BOY;
+    eğer i0 == son { ver metin_kes(dizi_al(kp, i0), b0 % KP_BOY, u); }
+    değişken r: metin = metin_kes(dizi_al(kp, i0), b0 % KP_BOY, KP_BOY);
+    değişken k: tam32 = i0 + 1;
+    iken k < son { r = metin_birlestir(r, dizi_al(kp, k)); k = k + 1; }
+    ver metin_birlestir(r, metin_kes(dizi_al(kp, son), 0, (b0 + u) - son * KP_BOY));
+}
 işlev bayt(s: metin, i: tam32) -> tam32 {
     değişken b: tam32 = metin_bayt(s, i) olarak tam32;
     eğer b < 0 { ver b + 256; }
@@ -471,21 +524,21 @@ işlev turkce_2byte_mi(b0: tam32, b1: tam32) -> mantıksal {
     eğer b0 == 197 { ver (b1 == 159) veya (b1 == 158); }
     ver yanlış;
 }
-işlev kimlik_basi_uz(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+işlev kimlik_basi_uz(kaynak: Dizi<metin>, pos: tam32, uz: tam32) -> tam32 {
     eğer pos >= uz { ver 0; }
-    değişken b0: tam32 = bayt(kaynak, pos);
+    değişken b0: tam32 = kb(kaynak, pos);
     eğer harf_mi(b0) veya (b0 == 95) { ver 1; }
     eğer pos + 1 < uz {
-        eğer turkce_2byte_mi(b0, bayt(kaynak, pos + 1)) { ver 2; }
+        eğer turkce_2byte_mi(b0, kb(kaynak, pos + 1)) { ver 2; }
     }
     ver 0;
 }
-işlev kimlik_devam_uz(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
+işlev kimlik_devam_uz(kaynak: Dizi<metin>, pos: tam32, uz: tam32) -> tam32 {
     eğer pos >= uz { ver 0; }
-    değişken b0: tam32 = bayt(kaynak, pos);
+    değişken b0: tam32 = kb(kaynak, pos);
     eğer harf_mi(b0) veya rakam_mi(b0) veya (b0 == 95) { ver 1; }
     eğer pos + 1 < uz {
-        eğer turkce_2byte_mi(b0, bayt(kaynak, pos + 1)) { ver 2; }
+        eğer turkce_2byte_mi(b0, kb(kaynak, pos + 1)) { ver 2; }
     }
     ver 0;
 }
@@ -538,8 +591,8 @@ işlev anahtar_tip(w: metin) -> metin {
     eğer metin_esit(w, "satıriçi_asm") { ver "SATIRICI_ASM"; }
     ver "TANIMLAYICI";
 }
-işlev ikinci_bayt(kaynak: metin, pos: tam32, uz: tam32) -> tam32 {
-    eğer pos < uz { ver bayt(kaynak, pos); }
+işlev ikinci_bayt(kaynak: Dizi<metin>, pos: tam32, uz: tam32) -> tam32 {
+    eğer pos < uz { ver kb(kaynak, pos); }
     ver 0;
 }
 işlev hex_rakam_mi(b: tam32) -> mantıksal {
@@ -552,20 +605,20 @@ işlev utf8_uz(b: tam32) -> tam32 {
     eğer (b >= 240) ve (b <= 247) { ver 4; }
     ver 0;
 }
-işlev ham_basi_mi(kaynak: metin, pos: tam32, uz: tam32) -> mantıksal {
+işlev ham_basi_mi(kaynak: Dizi<metin>, pos: tam32, uz: tam32) -> mantıksal {
     değişken s: tam32 = ikinci_bayt(kaynak, pos + 1, uz);
     eğer s == 34 { ver doğru; }
     eğer s == 35 {
         değişken b: tam32 = pos + 1;
-        iken (b < uz) ve (bayt(kaynak, b) == 35) { b = b + 1; }
-        eğer (b < uz) ve (bayt(kaynak, b) == 34) { ver doğru; }
+        iken (b < uz) ve (kb(kaynak, b) == 35) { b = b + 1; }
+        eğer (b < uz) ve (kb(kaynak, b) == 34) { ver doğru; }
     }
     ver yanlış;
 }
 
 // Operatör (maximal munch) — tüketilen bayt; tok_ekle ile tabloya yazar.
-işlev op_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
-    değişken b0: tam32 = bayt(kaynak, pos);
+işlev op_emit(p: &değişken Ayr, kaynak: Dizi<metin>, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+    değişken b0: tam32 = kb(kaynak, pos);
     değişken b1: tam32 = ikinci_bayt(kaynak, pos + 1, uz);
     değişken b2: tam32 = ikinci_bayt(kaynak, pos + 2, uz);
     eğer b0 == 43 {
@@ -633,50 +686,50 @@ işlev op_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: 
     eğer b0 == 59 { tok_ekle(p, "NOKTALI_VIRGUL", satir, sutun, pos, 1); ver 1; }
     tok_ekle(p, "HATALI", satir, sutun, pos, 1); ver 1;
 }
-işlev sayi_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+işlev sayi_emit(p: &değişken Ayr, kaynak: Dizi<metin>, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
     değişken pp: tam32 = pos;
     değişken ondalik: tam32 = 0;
-    eğer bayt(kaynak, pp) == 48 {
+    eğer kb(kaynak, pp) == 48 {
         değişken s: tam32 = ikinci_bayt(kaynak, pp + 1, uz);
         eğer (s == 120) veya (s == 88) {
             pp = pp + 2;
-            iken (pp < uz) ve (hex_rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            iken (pp < uz) ve (hex_rakam_mi(kb(kaynak, pp)) veya (kb(kaynak, pp) == 95)) { pp = pp + 1; }
             tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); ver pp - pos;
         }
         eğer (s == 98) veya (s == 66) {
             pp = pp + 2;
-            iken (pp < uz) ve ((bayt(kaynak, pp) == 48) veya (bayt(kaynak, pp) == 49) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            iken (pp < uz) ve ((kb(kaynak, pp) == 48) veya (kb(kaynak, pp) == 49) veya (kb(kaynak, pp) == 95)) { pp = pp + 1; }
             tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); ver pp - pos;
         }
         eğer (s == 111) veya (s == 79) {
             pp = pp + 2;
-            iken (pp < uz) ve (((bayt(kaynak, pp) >= 48) ve (bayt(kaynak, pp) <= 55)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            iken (pp < uz) ve (((kb(kaynak, pp) >= 48) ve (kb(kaynak, pp) <= 55)) veya (kb(kaynak, pp) == 95)) { pp = pp + 1; }
             tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); ver pp - pos;
         }
     }
-    iken (pp < uz) ve (rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
-    eğer (pp < uz) ve (bayt(kaynak, pp) == 46) {
+    iken (pp < uz) ve (rakam_mi(kb(kaynak, pp)) veya (kb(kaynak, pp) == 95)) { pp = pp + 1; }
+    eğer (pp < uz) ve (kb(kaynak, pp) == 46) {
         eğer ikinci_bayt(kaynak, pp + 1, uz) != 46 {
             ondalik = 1;
             pp = pp + 1;
-            iken (pp < uz) ve (rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+            iken (pp < uz) ve (rakam_mi(kb(kaynak, pp)) veya (kb(kaynak, pp) == 95)) { pp = pp + 1; }
         }
     }
-    eğer (pp < uz) ve ((bayt(kaynak, pp) == 101) veya (bayt(kaynak, pp) == 69)) {
+    eğer (pp < uz) ve ((kb(kaynak, pp) == 101) veya (kb(kaynak, pp) == 69)) {
         ondalik = 1;
         pp = pp + 1;
-        eğer (pp < uz) ve ((bayt(kaynak, pp) == 43) veya (bayt(kaynak, pp) == 45)) { pp = pp + 1; }
-        iken (pp < uz) ve (rakam_mi(bayt(kaynak, pp)) veya (bayt(kaynak, pp) == 95)) { pp = pp + 1; }
+        eğer (pp < uz) ve ((kb(kaynak, pp) == 43) veya (kb(kaynak, pp) == 45)) { pp = pp + 1; }
+        iken (pp < uz) ve (rakam_mi(kb(kaynak, pp)) veya (kb(kaynak, pp) == 95)) { pp = pp + 1; }
     }
     eğer ondalik == 1 { tok_ekle(p, "ONDALIK", satir, sutun, pos, pp - pos); }
     değilse { tok_ekle(p, "TAMSAYI", satir, sutun, pos, pp - pos); }
     ver pp - pos;
 }
-işlev dize_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+işlev dize_emit(p: &değişken Ayr, kaynak: Dizi<metin>, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
     değişken pp: tam32 = pos + 1;
     değişken durum: tam32 = 0;
     iken (pp < uz) ve (durum == 0) {
-        değişken c: tam32 = bayt(kaynak, pp);
+        değişken c: tam32 = kb(kaynak, pp);
         eğer c == 34 { durum = 1; }
         değilse {
             eğer c == 92 { pp = pp + 1; eğer pp < uz { pp = pp + 1; } }
@@ -689,43 +742,43 @@ işlev dize_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir
     eğer durum == 1 { pp = pp + 1; tok_ekle(p, "METIN", satir, sutun, pos, pp - pos); ver pp - pos; }
     tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
 }
-işlev karakter_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+işlev karakter_emit(p: &değişken Ayr, kaynak: Dizi<metin>, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
     değişken pp: tam32 = pos + 1;
-    eğer (pp >= uz) veya (bayt(kaynak, pp) == 39) {
+    eğer (pp >= uz) veya (kb(kaynak, pp) == 39) {
         eğer pp < uz { pp = pp + 1; }
         tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
     }
-    eğer bayt(kaynak, pp) == 92 {
+    eğer kb(kaynak, pp) == 92 {
         pp = pp + 1;
         eğer pp < uz { pp = pp + 1; }
     } değilse {
-        değişken cl: tam32 = utf8_uz(bayt(kaynak, pp));
+        değişken cl: tam32 = utf8_uz(kb(kaynak, pp));
         eğer cl == 0 { cl = 1; }
         değişken i: tam32 = 0;
         iken i < cl { eğer pp < uz { pp = pp + 1; } i = i + 1; }
     }
-    eğer (pp >= uz) veya (bayt(kaynak, pp) != 39) {
-        iken (pp < uz) ve (bayt(kaynak, pp) != 39) ve (bayt(kaynak, pp) != 10) { pp = pp + 1; }
-        eğer (pp < uz) ve (bayt(kaynak, pp) == 39) { pp = pp + 1; }
+    eğer (pp >= uz) veya (kb(kaynak, pp) != 39) {
+        iken (pp < uz) ve (kb(kaynak, pp) != 39) ve (kb(kaynak, pp) != 10) { pp = pp + 1; }
+        eğer (pp < uz) ve (kb(kaynak, pp) == 39) { pp = pp + 1; }
         tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
     }
     pp = pp + 1;
     tok_ekle(p, "KARAKTER", satir, sutun, pos, pp - pos); ver pp - pos;
 }
-işlev ham_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
+işlev ham_emit(p: &değişken Ayr, kaynak: Dizi<metin>, pos: tam32, uz: tam32, satir: tam32, sutun: tam32) -> tam32 {
     değişken pp: tam32 = pos + 1;
     değişken hash_sayisi: tam32 = 0;
-    iken (pp < uz) ve (bayt(kaynak, pp) == 35) { hash_sayisi = hash_sayisi + 1; pp = pp + 1; }
-    eğer (pp >= uz) veya (bayt(kaynak, pp) != 34) {
+    iken (pp < uz) ve (kb(kaynak, pp) == 35) { hash_sayisi = hash_sayisi + 1; pp = pp + 1; }
+    eğer (pp >= uz) veya (kb(kaynak, pp) != 34) {
         tok_ekle(p, "HATALI", satir, sutun, pos, pp - pos); ver pp - pos;
     }
     pp = pp + 1;
     değişken bitti: tam32 = 0;
     iken (pp < uz) ve (bitti == 0) {
-        eğer bayt(kaynak, pp) == 34 {
+        eğer kb(kaynak, pp) == 34 {
             pp = pp + 1;
             değişken kapanan: tam32 = 0;
-            iken (pp < uz) ve (bayt(kaynak, pp) == 35) ve (kapanan < hash_sayisi) {
+            iken (pp < uz) ve (kb(kaynak, pp) == 35) ve (kapanan < hash_sayisi) {
                 kapanan = kapanan + 1; pp = pp + 1;
             }
             eğer kapanan == hash_sayisi { bitti = 1; }
@@ -739,34 +792,35 @@ işlev ham_emit(p: &değişken Ayr, kaynak: metin, pos: tam32, uz: tam32, satir:
 
 // Kaynağı token tablosuna lex et (C lexer ile birebir; DOSYA_SONU dahil).
 işlev lex_et(p: &değişken Ayr) -> tam32 {
-    değişken kaynak: metin = p.kaynak;
-    değişken uz: tam32 = metin_uzunluk(kaynak);
+    değişken uz: tam32 = metin_uzunluk(p.kaynak);
+    p.kparca = kaynak_parcala(p.kaynak, uz);
+    değişken kaynak: Dizi<metin> = p.kparca;
     değişken pos: tam32 = 0;
     değişken satir: tam32 = 1;
     değişken sutun: tam32 = 1;
     iken doğru {
         değişken trivia: mantıksal = doğru;
         iken trivia {
-            eğer (pos < uz) ve bosluk_mu(bayt(kaynak, pos)) {
-                eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
+            eğer (pos < uz) ve bosluk_mu(kb(kaynak, pos)) {
+                eğer kb(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
                 değilse { sutun = sutun + 1; }
                 pos = pos + 1;
             } değilse {
-                eğer (pos < uz) ve (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
+                eğer (pos < uz) ve (kb(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
                     pos = pos + 2; sutun = sutun + 2;
-                    iken (pos < uz) ve (bayt(kaynak, pos) != 10) { pos = pos + 1; sutun = sutun + 1; }
+                    iken (pos < uz) ve (kb(kaynak, pos) != 10) { pos = pos + 1; sutun = sutun + 1; }
                 } değilse {
-                    eğer (pos < uz) ve (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
+                    eğer (pos < uz) ve (kb(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
                         pos = pos + 2; sutun = sutun + 2;
                         değişken derinlik: tam32 = 1;
                         iken (pos < uz) ve (derinlik > 0) {
-                            eğer (bayt(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
+                            eğer (kb(kaynak, pos) == 47) ve (ikinci_bayt(kaynak, pos + 1, uz) == 42) {
                                 pos = pos + 2; sutun = sutun + 2; derinlik = derinlik + 1;
                             } değilse {
-                                eğer (bayt(kaynak, pos) == 42) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
+                                eğer (kb(kaynak, pos) == 42) ve (ikinci_bayt(kaynak, pos + 1, uz) == 47) {
                                     pos = pos + 2; sutun = sutun + 2; derinlik = derinlik - 1;
                                 } değilse {
-                                    eğer bayt(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
+                                    eğer kb(kaynak, pos) == 10 { satir = satir + 1; sutun = 1; }
                                     değilse { sutun = sutun + 1; }
                                     pos = pos + 1;
                                 }
@@ -780,7 +834,7 @@ işlev lex_et(p: &değişken Ayr) -> tam32 {
         }
         eğer pos >= uz { tok_ekle(p, "DOSYA_SONU", satir, sutun, pos, 0); ver 0; }
 
-        değişken tb: tam32 = bayt(kaynak, pos);
+        değişken tb: tam32 = kb(kaynak, pos);
         değişken t_off: tam32 = pos;
         değişken t_sat: tam32 = satir;
         değişken t_sut: tam32 = sutun;
@@ -795,7 +849,7 @@ işlev lex_et(p: &değişken Ayr) -> tam32 {
                     değişken hlen: tam32 = ham_emit(p, kaynak, pos, uz, t_sat, t_sut);
                     değişken k: tam32 = 0;
                     iken k < hlen {
-                        eğer bayt(kaynak, pos + k) == 10 { satir = satir + 1; sutun = 1; }
+                        eğer kb(kaynak, pos + k) == 10 { satir = satir + 1; sutun = 1; }
                         değilse { sutun = sutun + 1; }
                         k = k + 1;
                     }
@@ -808,7 +862,7 @@ işlev lex_et(p: &değişken Ayr) -> tam32 {
                         eğer du == 0 { devam = yanlış; }
                         değilse { pos = pos + du; sutun = sutun + du; }
                     }
-                    değişken w: metin = metin_kes(kaynak, t_off, pos - t_off);
+                    değişken w: metin = kk(kaynak, t_off, pos - t_off);
                     tok_ekle(p, anahtar_tip(w), t_sat, t_sut, t_off, pos - t_off);
                 }
             } değilse {
@@ -1016,7 +1070,7 @@ işlev tip_i(p: &değişken Ayr, i: tam32) -> metin {
 }
 işlev lex_i(p: &değişken Ayr, i: tam32) -> metin {
     eğer i >= dizi_boyut(p.t_ad) { ver ""; }
-    ver metin_kes(p.kaynak, dizi_al(p.t_off, i), dizi_al(p.t_uz, i));
+    ver kk(p.kparca, dizi_al(p.t_off, i), dizi_al(p.t_uz, i));
 }
 işlev simdiki(p: &değişken Ayr) -> metin {
     değişken t: metin = tip_i(p, p.imlec);
@@ -1481,7 +1535,7 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
         değişken ln: tam32 = dizi_al(p.t_uz, p.imlec);
         değişken icuz: tam32 = ln - 2;
         eğer icuz < 0 { icuz = 0; }
-        değişken ic: metin = metin_kes(p.kaynak, off + 1, icuz);
+        değişken ic: metin = kk(p.kparca, off + 1, icuz);
         ilerle(p);
         ver dugum0(p, "METIN", ic, s, u);
     }
@@ -1489,7 +1543,7 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
         değişken off: tam32 = dizi_al(p.t_off, p.imlec);
         değişken ln: tam32 = dizi_al(p.t_uz, p.imlec);
         değişken kp: tam32 = 0;
-        eğer ln >= 3 { kp = bayt(p.kaynak, off + 1); }
+        eğer ln >= 3 { kp = kb(p.kparca, off + 1); }
         ilerle(p);
         ver dugum0(p, "KARAKTER", karakter_deger(kp), s, u);
     }
@@ -17203,7 +17257,7 @@ işlev kontrol_program(p: &değişken Ayr, kok: tam32) -> tam32 {
 
 işlev ayr_olustur(kaynak: metin) -> Ayr {
     ver Ayr {
-        kaynak: kaynak,
+        kaynak: kaynak, kparca: [],
         t_ad: [], t_sat: [], t_sut: [], t_off: [], t_uz: [],
         imlec: 0,
         a_ad: [], a_deg: [], a_sat: [], a_sut: [], a_cb: [], a_cs: [], cocuk: [],
