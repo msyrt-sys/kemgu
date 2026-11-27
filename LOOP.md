@@ -360,15 +360,21 @@
       (B) self tip denetimi üst düzey kullanıcı tanımında aynı adlı yerleşik imza kaydını boşaltır (Ayr.fn_yerlesik_n).
       SONRA: matris 76 OK|OK · 38 T024|T024 · 6 anahtar kelime P014|P000 (C0a) · 3 bellek_* G001|G001 (iki
       tarafta aynı ada-bağlı güvenlik kuralı). Kod üretimi dalına ek onarım GEREKMEDİ (C009 koruması yetiyordu).
-- [ ] E4t [S] AYNI SINIF, BAĞLAMA YÜZÜ (D-787 sırasında ölçüldü; D-787'den ÖNCE de vardı): yerel kapanış ya da
-      parametre ayrılmış yerleşik adını taşıyorsa çağrı self kod üretiminde YERLEŞİĞE gidiyor — SESSİZ YANLIŞ CEVAP.
-      q1 `değişken bir: işlev()->tam32 = || 42; ver bir();` → C 42, self 1 · q2 `işlev f(dondur: işlev(tam32)->tam32)
-      { ver dondur(41); }` → C DRF005 (yanlış RED: C tip denetimi de ada özel kuralı yerel bağlamadan önce uyguluyor),
-      self 41 (yerleşik `dondur` = özdeşlik). Bağlamaları da ayrılmış saymak REDDEDİLDİ: `bir` 10 yerde değişken/
-      parametre adı (drivers/ag/http.kem, drivers/ekran/psf.kem, kem_ekran_bga.kem, stdlib/kripto.kem). Öneri: YEREL-ÖNCE
-      çözüm — çağrı hedefi bir yerel bağlamaysa (değişken/parametre/lambda parametresi) ada özel yerleşik dalları iki
-      tip denetiminde ve self kod üretiminde atlanır (C kod üretimi zaten yerel-önce: q1 42). Fikstür q1+q2 + pozitif
-      (aynı adlı kapanış OLMAYAN bağlama: `değişken bir: tam32` aritmetikte) + sabotaj.
+- [x] E4t [S] ✓ D-788 AYNI SINIF, BAĞLAMA YÜZÜ: yerel kapanış/parametre ayrılmış yerleşik adını taşıyınca çağrı self'te
+      YERLEŞİĞE gidiyordu (SESSİZ YANLIŞ CEVAP: yerel `bir()` C 42 / self 1; parametre `dondur(41)` C yanlış DRF005 /
+      self 41). 38 ad × {yerel kapanış, parametre} matrisi: C 76/76 yerleşik kuralıyla RED, self 25 adda yanlış kod.
+      KARAR: bağlamaları ayrılmış saymak REDDEDİLDİ (`bir` 10 yerde değişken adı); yerel-önce çözüm REDDEDİLDİ (iki tip
+      denetimindeki ada bağlı tüm kurallar — DRF/CT/MM/G003/BL — yeniden yazılırdı). UYGULANAN: ayrılmış ad çağrı yerinde
+      DAİMA yerleşiktir (D-787 uzantısı) → kapsamda aynı adlı YEREL bağlama varken çağrı T024 (C ayrilmis_yerel_cagri:
+      tip_belirle + tip_belirle_beklenen CAGRI girişi + switch ÖNCESİ bir()/sıfır() özel durumu — ilk sürüm onu kaçırdı;
+      self kontrol_dugum CAGRI, turbofish'ten hemen sonra; çağrının geri kalanı denetlenmez). Çağrılmayan bağlama serbest;
+      repo etkisi 0 (aynı işlevde ayrılmış adlı bağlama + çağrı: 0). SONRA MATRİS: 76/76 T024|T024.
+- [ ] E4u [S] C ART ARDA T001 (D-788 fikstürü sırasında ölçüldü; ÖNCEDEN VAR): lambda gövdesinde HERHANGİ bir hata
+      (T002 de: `değişken g: işlev()->tam32 = || yok();`) → C bildirimli bağlamada ek `T001 <bağlama>` basıyor, self
+      basmıyor (lambda dönüş tipi TIP_HATA iken tip_esit uyumsuz diyor). Argüman olarak geçen lambdada da aynı (`f(|h| h())`
+      → C ek T001). Ayrıca argüman lambdasının gövdesi İKİ KEZ denetleniyor: aynı tanı iki kez (iki tarafta AYNI, parite
+      sorunu değil ama gürültü). Öneri: C'de bağlama/argüman uyumluluğunda değer tipi TIP_HATA içeriyorsa T001 basma;
+      fikstür q5/q6/q8 biçimleri. Kapı: checker_diff (bu şekiller bugün korpusta YOK).
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
@@ -3574,3 +3580,18 @@
   build/checkdiff.* (S290-S293'ün başarısız koşuları, harness bilerek bırakır) + 1 eski ro-deneme; yeni 0; arşive taşındı.
   YOL ÜSTÜ (ayrı madde E4t): aynı sınıfın BAĞLAMA yüzü — yerel kapanış `bir()` C 42 / self 1, parametre `dondur(41)` C
   DRF005 / self 41.
+- 2026-11-27 D-788: E4t — AYRILMIŞ YERLEŞİK ADI YEREL BAĞLAMAYLA GÖLGELENEMEZ (D-787'nin bağlama yüzü). ÖLÇÜM: 38 ayrılmış
+  ad × {yerel kapanış `değişken N: işlev(tam32)->tam32 = |x| x+1; ver N(41);`, parametre kapanışı}: C her biçimde yerleşik
+  kuralıyla RED (DRF005/T010/…, ad yerel bağlama olsa bile), self 25 adda yerleşiği çağırıyordu (bir→1, sıfır→0,
+  dondur/tekkez_olustur/sabitsüre_olustur→41, LLVM-RED/LINK-RED). Kök: self kod üretiminde yerel kapanış dalı (D-322)
+  ada özel dalların ÇOĞUNDAN SONRA geliyor; C tip denetiminin ada özel zinciri yerel bağlamaya bakmıyor. KARAR: ayrılmış
+  ad çağrı yerinde daima yerleşik (D-787 uzantısı); aynı adlı yerel bağlama varken çağrı T024 — bağlamaları ayrılmış
+  saymak `bir` değişkenini kullanan 10 yeri kırardı, yerel-önce çözüm iki tip denetimindeki tüm ada bağlı kuralları
+  yeniden yazmayı isterdi. UYGULAMA: C `ayrilmis_yerel_cagri` (yalnız SCOPE_ISLEV/SCOPE_BLOK zinciri; iki CAGRI girişi +
+  `switch` ÖNCESİ bir()/sıfır() — ilk sürümde q1 C'de OK kaldı, ölçümle yakalandı); self kontrol_dugum CAGRI
+  (`yerel_var_mi`, D-421 yaklaşığı: belirsizlikte tanıyı korur). Repo etkisi 0. SONRA MATRİS: 76/76 T024|T024. FİKSTÜR
+  tc73_01: yerel kapanış · parametre · lambda parametresi (BİLEREK bildirimsiz — bildirimli bağlamada C'nin önceden var
+  olan art arda T001'i karışırdı, E4u) · işlev değeri takma adı · iç blok + POZİTİF çağrılmayan `bir: tam32`, yerel
+  bağlaması olmayan işlevde yerleşik `bir()`, ayrılmamış adlı kapanış; C=self 5 tanı birebir. SABOTAJ 2/2: S294 C
+  yardımcısı kapalı → checker_diff 322/323 (C DRF005/DRF004'e döner) · S295 self denetimi kapalı → 322/323.
+  TAM TAKIM (-j10 ölçümlü): 190 kapı, 18:52, rc=0 (geçici dizin önce 0 sonra 0); checker_diff 323/323 (0 muaf), FIXPOINT ✓.
