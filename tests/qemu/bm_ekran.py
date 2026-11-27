@@ -3,8 +3,8 @@
 piksel piksel karşılaştırır. Yazı tipi baytları fikstür KAYNAĞINDAN okunur (KEMGU derlenmez),
 PSF ayrıştırma ve glif geri düşme kuralı (glif → U+FFFD → '?' → arka dolgu) burada yeniden
 yazılmıştır."""
-from bekle import bekle, seri_oku
-import re, sys, os, json, time, socket, struct, subprocess
+from bekle import bekle, qmp_baglan, seri_oku
+import re, sys, os, json, time, struct, subprocess
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from psf_kahin import font_baytlari, psf, glif_ciz, font_yukle, screendump, karsilastir
@@ -28,10 +28,12 @@ def acilis(elf, w, n, exp):
            '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04']
     bas = time.monotonic()
     p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    s = None
     try:
         bekle('EKRAN_HAZIR',lambda: seri_oku(ser),lambda b:b'EKRAN_HAZIR' in b,sure=60,surec=p)
         print(f'  boot-ready {time.monotonic()-bas:.4f} s', flush=True)
-        s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(str(q)); f = s.makefile('rwb', buffering=0)
+        s = qmp_baglan(q, p)
+        f = s.makefile('rwb', buffering=0)
         def yanit():
             while True:
                 d = json.loads(f.readline())
@@ -50,8 +52,8 @@ def acilis(elf, w, n, exp):
         if fark: raise AssertionError(f'açılış {n}: {fark} piksel FARKLI, ilk (x,y,gelen,beklenen)={ilk}')
         satir = [l for l in ser.read_bytes().decode('utf-8', 'replace').splitlines() if l.startswith('DISPI')]
         print(f'  ✓ ekran açılış {n}: 640x480 {GEN*YUK} piksel BİREBİR · {satir[0] if satir else ""}', flush=True)
-        s.close()
     finally:
+        if s is not None: s.close()
         if p.poll() is None: p.kill(); p.wait()
 
 def main():

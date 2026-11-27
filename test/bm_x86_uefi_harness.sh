@@ -12,6 +12,15 @@ fi
 # altında uefi/uefi_kabuk/apic/ps2_irq aynı build/_bm_uefi'yi yarışarak yazıp okuyordu (yedi kapı kırmızı).
 # Başarılı açılıştan sonra silinir; başarısızlıkta teşhis için kalır. Yalnız-derle kipinde (dışarıdan
 # tüketen araçlar: blok harness'ı öncesi, tools/codex/*_sabotaj.py) eski sabit yol korunur.
+# Eski araçlar derleme-yalnız çıktısını ve yayımlanan PC imajını sabit adla açar.
+# Okuyucu QEMU da bitene kadar bu iki dış ürün aynı kilidin altında kalır.
+if [[ ${UEFI_KILIT_ICINDE:-0} != 1 ]] && {
+    [[ ${UEFI_YALNIZ_DERLE:-0} == 1 && -z ${UEFI_CALISMA_DIZINI:-} ]] ||
+    [[ ${UEFI_PC_URET:-0} == 1 && ${UEFI_PC_GECICI:-0} != 1 ]];
+}; then
+    export UEFI_KILIT_ICINDE=1
+    exec python3 tools/kapi/kilitli.py build/kilitler/uefi.lock bash test/bm_x86_uefi_harness.sh "$@"
+fi
 KENDI_W=""
 if [ -n "${UEFI_CALISMA_DIZINI:-}" ]; then W="$UEFI_CALISMA_DIZINI"
 elif [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then W=build/_bm_uefi
@@ -51,9 +60,10 @@ source test/cekirdek_onbellek.sh
 cekirdek_onbellek "$W" "$DERLEYICI" linker/bare-metal-uefi-x86_64.ld "${OBJ[@]}"
 cp "$W/k.elf" "$W/esp/KEMGU/CEKIRDEK.ELF"
 if [ "${UEFI_PC_URET:-0}" = 1 ]; then
- if [[ ${UEFI_PC_GECICI:-0} == 1 ]]; then export UEFI_PC_IMG="$W/pc.img"; fi
+ if [[ ${UEFI_PC_GECICI:-0} == 1 ]]; then export UEFI_PC_IMG="$W/pc.img"
+ else export UEFI_PC_IMG="${UEFI_PC_IMG:-build/kem_os_pc.img}"; fi
  # [D-772] Paralel kapılar aynı imajı ezmesin: hedef UEFI_PC_IMG (bm_uefi.py de onu açar).
- python3 tests/qemu/uefi_imaj.py "${UEFI_PC_IMG:-build/kem_os_pc.img}" "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
+ python3 tests/qemu/uefi_imaj.py "$UEFI_PC_IMG" "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
 fi
 if [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then exit 0; fi
 python3 tests/qemu/bm_uefi.py "$W"

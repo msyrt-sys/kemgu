@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gerçek #DE/#UD/#GP/#PF/#DF, OOB; bağımsız seri/PSF, IST ve HLT kâhini."""
-from bekle import bekle, hlt_bekle, seri_oku, soket_bekle
-import os,sys,json,socket,subprocess,re,struct
+from bekle import bekle, hlt_bekle, seri_oku, qmp_baglan
+import os,sys,json,subprocess,re,struct
 from pathlib import Path
 from psf_kahin import font_yukle,glif_ciz,screendump,karsilastir
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve()
@@ -10,10 +10,10 @@ for kip in os.environ.get('ISTISNA_KIPLER','de ud gp pf df oob eksi').split():
  for n in range(1,int(os.environ.get('ISTISNA_TEKRAR','10'))+1):
   ser=w/'seri';q=w/'qmp';q.unlink(missing_ok=True);ser.unlink(missing_ok=True)
   p=subprocess.Popen(['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-vga','std','-no-reboot','-serial',f'file:{ser}','-qmp',f'unix:{q},server=on,wait=off','-kernel',str(elf),'-append',kip],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
-  sock=socket.socket(socket.AF_UNIX)
+  sock=None
   try:
-   soket_bekle(q,p)
-   sock.settimeout(3);sock.connect(str(q));f=sock.makefile('rwb',buffering=0);f.readline()
+   sock=qmp_baglan(q,p,sure=10,okuma_suresi=3)
+   f=sock.makefile('rwb',buffering=0);f.readline()
    def yanit():
     while True:
      d=json.loads(f.readline());assert 'error' not in d,d
@@ -52,5 +52,5 @@ for kip in os.environ.get('ISTISNA_KIPLER','de ud gp pf df oob eksi').split():
    assert p.poll() is None and ser.read_text()==expected
    print(f'✓ istisna {kip} #{n}: tek açılış, tam seri/piksel, HLT, IST kanaryaları',flush=True)
   finally:
-   sock.close()
+   if sock is not None: sock.close()
    if p.poll() is None:p.kill();p.wait()

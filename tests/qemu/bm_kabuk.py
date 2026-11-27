@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Gerçek CPU/USB klavye: üç disk türü, beş açılış, tam seri çıktı eşitliği."""
-from bekle import bekle, gozle, konuk_sayaci, seri_oku, soket_bekle, tam_seri
+from bekle import bekle, gozle, konuk_sayaci, seri_oku, qmp_baglan, tam_seri
 from protokol_suresi import BOSTA_GOZLEM
 from pathlib import Path
-import os,sys,socket,json,time,subprocess,hashlib
+import os,sys,json,time,subprocess,hashlib
 from fat_yazici import hazirla,MERHABA,NOT,KAYDIR
 from psf_kahin import font_yukle,glif_ciz,konsol,screendump,karsilastir,kabuk_goruntu
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve()
@@ -28,10 +28,10 @@ def boot(mode,n):
     deadline=time.monotonic()+60
     with (w/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=log)
-        sock=socket.socket(socket.AF_UNIX)
+        sock=None
         try:
-            soket_bekle(qmp,p,sure=60)
-            sock.settimeout(5);sock.connect(str(qmp));f=sock.makefile('rwb',buffering=0)
+            sock=qmp_baglan(qmp,p,sure=60,okuma_suresi=5)
+            f=sock.makefile('rwb',buffering=0)
             def response():
                 while True:
                     d=json.loads(f.readline())
@@ -117,7 +117,7 @@ def boot(mode,n):
             assert hashlib.sha256(disk.read_bytes()).hexdigest()==before,'salt okuma diski değiştirdi'
             print(f'✓ kabuk {mode} klavye={os.environ.get("KABUK_KLAVYE","usb")} açılış {n}: 7 komut, canlı yankı/geri silme/imleç/70 satır, tam seri UTF-8, ekran 640x480 BİREBİR ve disk SHA256 aynı',flush=True)
         finally:
-            sock.close()
+            if sock is not None: sock.close()
             if p.poll() is None:p.kill();p.wait()
             out=w
             if serial.exists():(out/f'kabuk-{mode}-{n}.seri').write_bytes(serial.read_bytes())

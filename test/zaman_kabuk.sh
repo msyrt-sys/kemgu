@@ -10,5 +10,16 @@ fi
 hedef=$1; shift
 s=$(date +%s.%N)
 /bin/bash "$@"; rc=$?
-printf '%s\t%s\t%s\t%d\n' "$hedef" "$s" "$(date +%s.%N)" "$rc" >> "$KEMGU_ZAMAN_DOSYASI"
-exit $rc
+son=$(date +%s.%N)
+if command -v flock >/dev/null 2>&1; then
+    # Bütün zaman satırı tek kilit altında yazılır, tarif çıkışı ayrıca korunur.
+    {
+        flock -x 9 || exit 1
+        printf '%s\t%s\t%s\t%d\n' "$hedef" "$s" "$son" "$rc" >> "$KEMGU_ZAMAN_DOSYASI" || exit 1
+    } 9>> "$KEMGU_ZAMAN_DOSYASI.kilit"
+else
+    python3 tools/kapi/kilitli.py "$KEMGU_ZAMAN_DOSYASI.kilit" bash -c \
+        'printf "%s\t%s\t%s\t%d\n" "$@" >> "$KEMGU_ZAMAN_DOSYASI"' \
+        bash "$hedef" "$s" "$son" "$rc" || exit 1
+fi
+exit "$rc"

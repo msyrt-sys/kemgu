@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Ayrı kullanıcı ELF'lerini gerçek QEMU ve OVMF ile sınar."""
 
-from bekle import bekle, gozle
+from bekle import bekle, gozle, tam_seri
 from protokol_suresi import BOSTA_GOZLEM
 import argparse
 import re
 import struct
 import subprocess
+import time
 from hashlib import sha256
 from contextlib import contextmanager
 from pathlib import Path
@@ -131,11 +132,7 @@ def etkin_tablolar(c, elf):
 
 
 def tam_seri_bekle(c):
-    def uygun():
-        gercek = c.output()
-        assert c.expected.startswith(gercek), (gercek, c.expected)
-        return gercek == c.expected
-    wait_for(c.p, uygun)
+    tam_seri("süreç seri çıktısı", c.output, c.expected, c.p, 15)
 
 
 def tus_kos(c, metin, elf):
@@ -240,7 +237,24 @@ def cocuk_kos(c, bos):
     son = "[surecden.elf pid=2 cikis=0]\nKABUK_HAZIR\n"
     c.expected += son.encode()
     c.akis += "> " + komut + "\n" + son
-    tam_seri_bekle(c)
+    # Tek bir seri satırı yüz tahsisi özetler. Her tahsisi gözlemek gerekmez,
+    # ancak PID ilerlemeden geçen süreyi ve tüm deneyin süresini ayrı sınırla.
+    bas = son_ilerleme = time.monotonic()
+    son_pid = 2
+    def cocuk_durumu():
+        nonlocal son_pid, son_ilerleme
+        veri = c.output()
+        assert c.expected.startswith(veri), veri[-240:]
+        pid = c.sayi("kxs_pid_son")
+        assert son_pid <= pid <= 102, (son_pid, pid)
+        if pid > son_pid:
+            son_pid, son_ilerleme = pid, time.monotonic()
+        assert time.monotonic() - son_ilerleme < 15, f"çocuk PID {pid} ilerlemedi, seri={veri[-120:]!r}"
+        return pid, veri
+
+    bekle("100 çocuk toplandı", cocuk_durumu,
+          lambda durum: durum == (102, c.expected), sure=90, aralik=.2, surec=c.p)
+    print(f"Çocuklar son PID={son_pid}, {time.monotonic()-bas:.2f} sn", flush=True)
     assert c.bos_cerceve() == bos, "süreç çerçevesi geri dönmedi"
     print(f"✓ 100 çocuk, aynı VA için {len(fizikler)} farklı fiziksel sayfa, {bos} boş çerçeve", flush=True)
 

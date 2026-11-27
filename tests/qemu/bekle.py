@@ -1,4 +1,5 @@
 """QEMU ve host koşulları için sınırlı bekleme; hata anındaki son gözlemi saklar."""
+import socket
 import subprocess
 import time
 
@@ -40,8 +41,24 @@ def hlt_bekle(komut, surec, sure=5):
                  lambda r: 'HLT=1' in r, sure=sure, surec=surec)
 
 
-def soket_bekle(yol, surec, sure=10):
-    return bekle(f'QMP soketi {yol}', yol.exists, sure=sure, surec=surec)
+def qmp_baglan(yol, surec, *, sure=10, okuma_suresi=10):
+    """Unix soketi bind ile görünür; hazır saymak için gerçek bağlantıyı tut."""
+    def dene():
+        sock = socket.socket(socket.AF_UNIX)
+        try:
+            sock.settimeout(min(1, sure))
+            sock.connect(str(yol))
+            sock.settimeout(okuma_suresi)
+            return sock
+        except (FileNotFoundError, ConnectionRefusedError, BlockingIOError, TimeoutError) as hata:
+            sock.close()
+            return str(hata)
+        except BaseException:
+            sock.close()
+            raise
+
+    return bekle(f'QMP bağlantısı {yol}', dene, lambda s: isinstance(s, socket.socket),
+                 sure=sure, surec=surec)
 
 
 def tik_bekle(oku, adet=2, *, surec=None):

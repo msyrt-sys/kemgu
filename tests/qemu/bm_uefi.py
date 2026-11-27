@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Gerçek OVMF: EFI yükleme, ABI ve kendi CR3/GDT'si; KEMGU'dan bağımsız kâhin."""
-from bekle import bekle, seri_oku, soket_bekle
+from bekle import bekle, seri_oku, qmp_baglan
 from pathlib import Path
-import os,sys,shutil,subprocess,time,socket,json,struct,re,uuid,hashlib
+import os,sys,shutil,subprocess,time,json,struct,re,uuid,hashlib
 from psf_kahin import font_yukle, glif_ciz, screendump, karsilastir
 from acpi_uefi_kahin import denetle as acpi_denetle
 from fat_yazici import hazirla
@@ -30,10 +30,10 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
         cmd+=['-device',{'nvme':'nvme,drive=d0,serial=kemgu10','usb':'usb-storage,bus=x.0,drive=d0,bootindex=1','ahci':'ide-hd,drive=d0,bus=ide.0,bootindex=1'}[mode]]
         before=hashlib.sha256((W/'disk.img').read_bytes()).hexdigest()
     with (W/'qemu.log').open('w') as log:
-        p=subprocess.Popen(cmd,stdout=log,stderr=log);s=socket.socket(socket.AF_UNIX);limit=time.monotonic()+60
+        p=subprocess.Popen(cmd,stdout=log,stderr=log);s=None;limit=time.monotonic()+60
         try:
-            soket_bekle(q,p,sure=60)
-            s.settimeout(10);s.connect(str(q));f=s.makefile('rwb',buffering=0)
+            s=qmp_baglan(q,p,sure=60,okuma_suresi=10)
+            f=s.makefile('rwb',buffering=0)
             def response():
                 while True:
                     line=f.readline();assert line,'QMP kapandı';d=json.loads(line)
@@ -130,7 +130,7 @@ def boot(n=1,negative=False,ram='256M',mode='nvme'):
                 assert hashlib.sha256((W/'disk.img').read_bytes()).hexdigest()==before,'açılış/kapanış diski değiştirdi'
                 print(f'✓ Disk {mode}: yazılan bayt=0, açılış/kapanış SHA256={before}',flush=True)
         finally:
-            s.close()
+            if s is not None: s.close()
             if p.poll() is None:p.kill()
             p.wait()
 

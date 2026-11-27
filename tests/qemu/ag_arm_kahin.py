@@ -1,4 +1,5 @@
 """ARM virtio-mmio ağının gerçek eşini ve TCP/HTTP konuk diskini karşılaştırır."""
+from bekle import qmp_baglan
 import argparse
 from contextlib import contextmanager
 import hashlib
@@ -75,10 +76,7 @@ def arm_ac(w,imaj,net,es,yerel,tcp,http):
              '-qmp',f'unix:{yol},server=on,wait=off','-kernel',str(imaj)]
         p=subprocess.Popen(cmd,stdout=log,stderr=log)
         try:
-            wait_for(p,yol.exists)
-            with socket.socket(socket.AF_UNIX) as s:
-                s.settimeout(10)
-                s.connect(str(yol))
+            with qmp_baglan(yol,p,sure=15) as s:
                 with s.makefile('wb',buffering=0) as f,s.makefile('rb') as r:
                     yield Qmp(f,r),p,seri
         finally:

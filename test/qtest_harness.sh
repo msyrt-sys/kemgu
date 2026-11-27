@@ -57,15 +57,17 @@ for s in range(len(b) // 512):
         b[base + j] = (s * 7 + j * 13 + 5) & 255
 open(sys.argv[1], "wb").write(b)
 PY
-  PORT=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
   "$QEMU" -machine q35 -accel tcg -S -display none -nodefaults -m 256M \
-     -qtest "tcp:127.0.0.1:$PORT,server=on,wait=on" -qtest-log /dev/null \
+     -qtest "tcp:127.0.0.1:0,server=on,wait=on" -qtest-log /dev/null \
      "${AYGIT_ARG[@]}" > "$W/qemu.log" 2>&1 &
   QPID=$!
   # QEMU dinlemeye başlayana kadar bekle (en çok 10 sn). BAĞLANMADAN bak:
   # wait=on soketi tek istemci kabul eder; yoklama bağlantısı onu tüketirdi.
-  dinliyor() { ss -ltnH "sport = :$PORT" 2>/dev/null | grep -q .; }
-  calisma_kosul_bekle "qtest TCP $PORT dinleyicisi" 10 dinliyor || exit 1
+  yerel_pid=$QPID
+  if [[ ${OS:-} == Windows_NT && -r /proc/$QPID/winpid ]]; then
+      read -r yerel_pid < "/proc/$QPID/winpid"
+  fi
+  PORT=$(python3 tests/qemu/qtest_portu.py "$yerel_pid") || exit 1
   timeout 120 "$W/$d" "$PORT" > "$W/$d.out" 2>&1; rc=$?
   kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QPID=""
   cat "$W/$d.out"

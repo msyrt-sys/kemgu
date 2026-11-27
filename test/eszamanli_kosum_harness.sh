@@ -41,6 +41,7 @@ for cift in kilit:kilit semafor:semafor semafor:semafor_n bariyer:bariyer; do
     lib="${cift%%:*}"; m="${cift#*:}"
     LIB="stdlib/$lib.kem"
     TST="test/eszamanli/${m}_kosum.kem"
+    if [[ $m == semafor_n ]]; then TST=test/olcum/semafor_n_kosum.kem; fi
     for f in "$LIB" "$TST"; do
         [ -f "$f" ] || { echo "🔴 HATA: $f YOK — kapı KOŞMADI"; exit 1; }
     done
@@ -57,7 +58,16 @@ for cift in kilit:kilit semafor:semafor semafor:semafor_n bariyer:bariyer; do
 
     kotu=0
     for tur in $(seq 1 "$TUR"); do
-        "$TMP/$m.out" >/dev/null 2>&1; son=$?
+        if [[ $m == semafor_n ]]; then
+            # Tek izin veya takılan işçi çift buluşmasını sonsuza dek beklemesin.
+            timeout 10 "$TMP/$m.out" >/dev/null 2>&1; son=$?
+            if [[ $son == 124 ]]; then
+                echo "  $m tur $tur/$TUR: iki izinli buluşma zaman aşımı (10 sn)" | tee -a "$TMP/hatali-turlar.log"
+                kotu=$((kotu+1)); break
+            fi
+        else
+            "$TMP/$m.out" >/dev/null 2>&1; son=$?
+        fi
         if [ "$son" -ne 42 ]; then
             echo "  $m tur $tur/$TUR: çıkış $son" | tee -a "$TMP/hatali-turlar.log"
             kotu=$((kotu+1))
@@ -65,7 +75,7 @@ for cift in kilit:kilit semafor:semafor semafor:semafor_n bariyer:bariyer; do
     done
     if [ "$kotu" -ne 0 ]; then
         case "$m" in
-            semafor_n) echo "  🔴 $m — $TUR turun $kotu'inde semafor n>1 sozlesmesi BOZUK (1=n asildi 2=kilit gibi 3=olcum guvenilmez)" ;;
+            semafor_n) echo "  🔴 $m — $tur koşumda $kotu hata (1=izin aşıldı, 2=örtüşme yok, 3=sayaç, 124=buluşma zaman aşımı)" ;;
             bariyer)   echo "  🔴 $m — $TUR turun $kotu'inde bariyer sozlesmesi BOZUK (1=erken gecirdi 3=sayac bozuk)" ;;
             *)         echo "  🔴 $m — $TUR turun $kotu'inde sayaç yanlış (karşılıklı dışlama YOK)" ;;
         esac

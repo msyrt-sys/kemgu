@@ -826,3 +826,235 @@ Son üç ölçüm sırasında 60 saniyede bir sayılan QEMU süreçleri. Diğer 
 | 1 | 23 | 17 | 1 | 9.39 |
 | 2 | 23 | 16 | 0 | 9.29 |
 | 3 | 23 | 15 | 0 | 9.39 |
+
+## Bölüm 6 — sabit kaynakların sahipliği ve paralel koşum
+
+GNU make'in çözdüğü hedefler (isteğe bağlılar ve desen kuralları dahil), kabuk tarifleri ve Python AST'si tarandı. Kabuk çağrıları ve yerel Python içe aktarmaları boyunca erişilebilen kaynaklar tüketici hedeflere bağlandı. Aynı yardımcıya ulaşan iki hedef için kip koşulu çalıştırılmadan olası erişim sayılır. Denetim kabuğun tamamını yorumlamaz. Dinamik olarak üretilen adlar ve kullanıcı ortamından sağlanan özel yollar için koşum deneyi gerekir.
+
+`python3 tools/kapi/paylasim_denetimi.py --envanter build/paylasim.tsv` her yazıcının hedef, kaynak satırı, tür ve gerekçesini ayrı verir. Aşağıdaki anlık envanter 428 yol/uç ailesi ve 1.283 sahiplik kaydı içerir. Kaynak adları `build/` dizinine göredir. Açılı ayraç içindeki bileşen derleme veya modül desenidir. Son taramada sabit host TCP/UDP dinleyicisi görülmedi.
+
+| Ortak kaynak | Olası sahip | Birlikte kullanım biçimi |
+|---|---:|---|
+| `_bm_uefi` | 94 | Eski derleme-yalnız çıktısını üretenler aynı UEFI kilidini alır. Normal açılışlar özel dizinde koşar. |
+| `kem_os_pc.img` | 94 | Yayımlanan PC imajını üreten tarif, QEMU okuması bitene kadar UEFI kilidini tutar. |
+| `kilitler/uefi.lock` | 94 | Sabit UEFI ürünlerini kullanan üreticilerin ortak kilit dosyası. |
+| `cekirdek_onbellek` | 104 | Üretim özel dizinde, anahtar içerikten, yayımlama atomik. |
+| `zaman.tsv` | 232 | Ölçümün ana hedefi ve olası 231 alt tarif. Tam ölçüm boyunca `kilitler/zaman.lock`, tek kayıt eklerken `zaman.tsv.kilit` tutulur. |
+| `zaman.tsv.kilit` | 231 | Tariflerin aynı günlüğe kayıt eklemek için tuttuğu dosya kilidi. |
+
+**Tek sahipli kaynaklar.** Tam listedeki diğer 422 kaynak aşağıda aynı üreticiye göre gruplanmıştır.
+
+| Üretici | Kaynaklar |
+|---|---|
+| `_test_tumu_olcum` | `disk_baslangic.json`, `zaman_raporu.txt` |
+| `build/%.o` | `<desen>.o` |
+| `build/bm_a64_bolge.o` | `bm_a64_bolge.o` |
+| `build/bm_a64_bolge_kemregion.o` | `bm_a64_bolge_kemregion.o` |
+| `build/bm_a64_gorev.o` | `bm_a64_gorev.o` |
+| `build/bm_a64_heap.o` | `bm_a64_heap.o` |
+| `build/bm_a64_heap_kemmalloc.o` | `bm_a64_heap_kemmalloc.o` |
+| `build/bm_a64_kanal.o` | `bm_a64_kanal.o` |
+| `build/bm_a64_kesme.o` | `bm_a64_kesme.o` |
+| `build/bm_a64_metin.o` | `bm_a64_metin.o` |
+| `build/bm_a64_mmio.o` | `bm_a64_mmio.o` |
+| `build/bm_a64_mmio_kem.o` | `bm_a64_mmio_kem.o` |
+| `build/bm_a64_mmu.o` | `bm_a64_mmu.o` |
+| `build/bm_a64_panik.o` | `bm_a64_panik.o` |
+| `build/bm_a64_start.o` | `bm_a64_start.o` |
+| `build/bm_a64_uart.o` | `bm_a64_uart.o` |
+| `build/bm_a64_virtio.o` | `bm_a64_virtio.o` |
+| `build/bm_a64_virtio_net.o` | `bm_a64_virtio_net.o` |
+| `build/bm_a64_yazdir.o` | `bm_a64_yazdir.o` |
+| `build/bm_a64_yetki.o` | `bm_a64_yetki.o` |
+| `build/bm_a64_zaman.o` | `bm_a64_zaman.o` |
+| `build/bm_x86_bolge.o` | `bm_x86_bolge.o` |
+| `build/bm_x86_gorev.o` | `bm_x86_gorev.o` |
+| `build/bm_x86_heap.o` | `bm_x86_heap.o` |
+| `build/bm_x86_kesme.o` | `bm_x86_kesme.o` |
+| `build/bm_x86_panik.o` | `bm_x86_panik.o` |
+| `build/bm_x86_start.o` | `bm_x86_start.o` |
+| `build/bm_x86_uart.o` | `bm_x86_uart.o` |
+| `build/bm_x86_yazdir.o` | `bm_x86_yazdir.o` |
+| `build/bm_x86_zaman.o` | `bm_x86_zaman.o` |
+| `build/codegen` | `codegen` |
+| `build/codegen.ll` | `codegen.ll` |
+| `build/kdl_bolge.o` | `kdl_bolge.o` |
+| `build/kdl_runtime.o` | `kdl_runtime.o` |
+| `build/kdl_runtime_mmio.o` | `kdl_runtime_mmio.o` |
+| `build/kdl_uart_pl011_aarch64.o` | `kdl_uart_pl011_aarch64.o` |
+| `build/kem_user.elf` | `kem_user.elf`, `kem_user.ll`, `kem_user.o` |
+| `build/kemgu` | `kemgu` |
+| `build/kullanici/%.elf` | `kullanici/<desen>.elf` |
+| `build/kullanici/self/%.elf` | `kullanici/self/<desen>.elf` |
+| `build/test_arena` | `test_arena` |
+| `build/test_ast` | `test_ast` |
+| `build/test_bench` | `test_bench` |
+| `build/test_bolge` | `test_bolge` |
+| `build/test_bolge_atama` | `test_bolge_atama` |
+| `build/test_capability` | `test_capability` |
+| `build/test_dizi_perf` | `test_dizi_perf` |
+| `build/test_drf` | `test_drf` |
+| `build/test_escape` | `test_escape` |
+| `build/test_fuzz` | `test_fuzz` |
+| `build/test_fuzz_advanced` | `test_fuzz_advanced` |
+| `build/test_gorev_rt` | `test_gorev_rt` |
+| `build/test_json` | `test_json` |
+| `build/test_kdl_bolge` | `test_kdl_bolge` |
+| `build/test_lexer` | `test_lexer` |
+| `build/test_lexer.o` | `test_lexer.o` |
+| `build/test_linear` | `test_linear` |
+| `build/test_llvm` | `test_llvm` |
+| `build/test_llvm_dogrula` | `test_llvm_dogrula` |
+| `build/test_lsp` | `test_lsp` |
+| `build/test_mmio` | `test_mmio` |
+| `build/test_otp_cli` | `test_otp_cli` |
+| `build/test_panik` | `test_panik` |
+| `build/test_parser` | `test_parser` |
+| `build/test_runtime_link` | `test_runtime_link` |
+| `build/test_sabitsure` | `test_sabitsure` |
+| `build/test_sembol` | `test_sembol` |
+| `build/test_simd` | `test_simd` |
+| `build/test_simd_llvm` | `test_simd_llvm` |
+| `build/test_snapshot` | `test_snapshot` |
+| `build/test_tip` | `test_tip` |
+| `build/test_tip_kontrol` | `test_tip_kontrol` |
+| `build/test_uart_16550` | `test_uart_16550` |
+| `build/test_uart_16550_tx` | `test_uart_16550_tx` |
+| `build/test_uart_pl011` | `test_uart_pl011` |
+| `build/test_uart_pl011_tx` | `test_uart_pl011_tx` |
+| `build/test_uart_vtable` | `test_uart_vtable` |
+| `build/test_wcet` | `test_wcet` |
+| `build/test_yazdir_bare` | `test_yazdir_bare` |
+| `calistir_arm64_test` | `kernel.ll`, `kernel_aarch64.o` |
+| `calistir_arp_scan_test_arm` | `arp_scan_arm.elf`, `arp_scan_arm.o`, `arp_scan_arm.out` |
+| `calistir_capstone_arm` | `capstone_arm.elf`, `capstone_arm.o`, `capstone_arm.out` |
+| `calistir_capstone_x86` | `capstone_x86.elf`, `capstone_x86.o`, `capstone_x86.out` |
+| `calistir_crashfs_test_arm` | `crashfs_arm.elf`, `crashfs_arm.o`, `crashfs_arm.out`, `disk_crashfs.img` |
+| `calistir_dhcp_lease_test_arm` | `dhcp_lease_arm.elf`, `dhcp_lease_arm.o`, `dhcp_lease_arm.out` |
+| `calistir_dhcp_test_arm` | `dhcp_arm.elf`, `dhcp_arm.o`, `dhcp_arm.out` |
+| `calistir_diag_heap_yaz_arm` | `diag_heap.elf`, `diag_heap.ll`, `diag_heap.o`, `diag_heap.out` |
+| `calistir_dns_ptr_test_arm` | `dns_ptr_arm.elf`, `dns_ptr_arm.o`, `dns_ptr_arm.out` |
+| `calistir_dns_resolver_test_arm` | `dns_resolver_arm.elf`, `dns_resolver_arm.o`, `dns_resolver_arm.out` |
+| `calistir_dns_test_arm` | `dns_arm.elf`, `dns_arm.o`, `dns_arm.out` |
+| `calistir_dosya_test_arm` | `dosya_arm.elf`, `dosya_arm.o`, `dosya_arm.out` |
+| `calistir_fs_journal_test_arm` | `disk_fs_journal.img`, `fs_journal_arm.elf`, `fs_journal_arm.o`, `fs_journal_arm.out` |
+| `calistir_geri_al_test_arm` | `geri_al_arm.elf`, `geri_al_arm.o`, `geri_al_arm.out` |
+| `calistir_guvenlik_bombardiman_test_arm` | `guvenlik_bombardiman_arm.elf`, `guvenlik_bombardiman_arm.o`, `guvenlik_bombardiman_arm.out` |
+| `calistir_guvenlik_kalici_test_arm` | `disk_guvenlik_kalici.img`, `guvenlik_kalici_arm.elf`, `guvenlik_kalici_arm.o`, `guvenlik_kalici_arm.out` |
+| `calistir_guvenlik_oku_test_arm` | `guvenlik_oku_arm.elf`, `guvenlik_oku_arm.o`, `guvenlik_oku_arm.out` |
+| `calistir_guvenlik_spawn_test_arm` | `guvenlik_spawn_arm.elf`, `guvenlik_spawn_arm.o`, `guvenlik_spawn_arm.out` |
+| `calistir_guvenlik_test_arm` | `guvenlik_arm.elf`, `guvenlik_arm.o`, `guvenlik_arm.out` |
+| `calistir_http_get_test_arm` | `http_get_arm.elf`, `http_get_arm.o`, `http_get_arm.out`, `http_get_arm.pcap` |
+| `calistir_istisna_test_x86` | `istisna_x86.elf`, `istisna_x86.o`, `istisna_x86.out` |
+| `calistir_kalici_test_arm` | `disk_kalici.img`, `kalici_arm.elf`, `kalici_arm.o`, `kalici_b1.out`, `kalici_b2.out` |
+| `calistir_kanal_ipc_test_arm` | `kanal_ipc_arm.elf`, `kanal_ipc_arm.o`, `kanal_ipc_arm.out` |
+| `calistir_kanal_test_arm` | `kanal_arm.elf`, `kanal_arm.o`, `kanal_arm.out` |
+| `calistir_kem_os_arm` | `kem_os.elf`, `kem_os.img`, `kem_os.ll`, `kem_os.o`, `kem_os.out`, `kem_os_comb.kem`, `kem_os_disk.img`, `kem_os_ham.ll`, `kem_os_routed.o` |
+| `calistir_kem_os_arm_ag` | `arm_ag` |
+| `calistir_kem_os_dtb_arm` | `dtb_<MB>.out`, `hucre.out`, `hucre_2_1.dtb`, `soc.out`, `soc_ranges.dtb`, `ust2g.out` |
+| `calistir_kem_os_x86` | `kem_os_x86.elf`, `kem_os_x86.ll`, `kem_os_x86.o`, `kem_os_x86.out`, `kem_os_x86_comb.kem`, `kem_os_x86_disk.img`, `kem_os_x86_ham.ll`, `kem_os_x86_ist.out`, `kem_os_x86_rx.in` |
+| `calistir_kemgu_os_arm` | `kemgu_init_el0.o`, `kemgu_os_arm.elf`, `kemgu_os_arm.o`, `kemgu_os_arm.out`, `kemgu_os_disk.img`, `kemgu_shell_el0.o` |
+| `calistir_kernel_dizi_bare_metal` | `kernel_dizi.elf`, `kernel_dizi.ll`, `kernel_dizi.o`, `kernel_dizi.out` |
+| `calistir_kernel_dizi_x86_bare_metal` | `kernel_dizi_x86.elf`, `kernel_dizi_x86.ll`, `kernel_dizi_x86.o`, `kernel_dizi_x86.out` |
+| `calistir_kripto_check` | `_kripto_<bname>.kem`, `_kripto_base.kem` |
+| `calistir_ls_test_arm` | `ls_arm.elf`, `ls_arm.o`, `ls_arm.out` |
+| `calistir_metin_test_arm` | `metin_arm.elf`, `metin_arm.o`, `metin_arm.out` |
+| `calistir_minifs_crud_test_arm` | `disk_minifs_crud.img`, `minifs_crud_arm.elf`, `minifs_crud_arm.o`, `minifs_crud_arm.out` |
+| `calistir_minifs_test_arm` | `disk_minifs.img`, `minifs_arm.elf`, `minifs_arm.o`, `minifs_arm.out` |
+| `calistir_mmio_bare_metal` | `kdl_runtime_mmio_bare.o` |
+| `calistir_ntp_test_arm` | `ntp_arm.elf`, `ntp_arm.o`, `ntp_arm.out`, `ntp_arm.pcap` |
+| `calistir_panik_bare_metal` | `kdl_panik_aarch64.o` |
+| `calistir_pci_enum_test_x86` | `pci_enum_x86.elf`, `pci_enum_x86.o`, `pci_enum_x86.out` |
+| `calistir_ping_sweep_test_arm` | `ping_sweep_arm.elf`, `ping_sweep_arm.o`, `ping_sweep_arm.out` |
+| `calistir_port_scan_test_arm` | `port_scan_arm.elf`, `port_scan_arm.o`, `port_scan_arm.out`, `port_scan_arm.pcap` |
+| `calistir_preempt_test_x86` | `preempt_x86.elf`, `preempt_x86.o`, `preempt_x86.out` |
+| `calistir_priority_test_arm` | `priority_arm.elf`, `priority_arm.o`, `priority_arm.out` |
+| `calistir_qemu_smoke` | `qemu_smoke.out` |
+| `calistir_recon_shell2_test_arm` | `recon_shell2_arm.elf`, `recon_shell2_arm.o`, `recon_shell2_arm.out` |
+| `calistir_recon_shell_test_arm` | `recon_shell_arm.elf`, `recon_shell_arm.o`, `recon_shell_arm.out` |
+| `calistir_ring3_page_test_x86` | `ring3_page_x86.elf`, `ring3_page_x86.o`, `ring3_page_x86.out` |
+| `calistir_ring3_proc_test_x86` | `ring3_proc_x86.elf`, `ring3_proc_x86.o`, `ring3_proc_x86.out` |
+| `calistir_ring3_test_x86` | `ring3_x86.elf`, `ring3_x86.o`, `ring3_x86.out` |
+| `calistir_rtc_test_arm` | `rtc_arm.elf`, `rtc_arm.o`, `rtc_arm.out` |
+| `calistir_rtc_test_x86` | `rtc_x86.elf`, `rtc_x86.o`, `rtc_x86.out` |
+| `calistir_sched_test_arm` | `sched_arm.elf`, `sched_arm.o`, `sched_arm.out` |
+| `calistir_sched_test_x86` | `sched_x86.elf`, `sched_x86.o`, `sched_x86.out` |
+| `calistir_sched_x86_test` | `sched_x86_coop.elf`, `sched_x86_coop.o`, `sched_x86_coop.out` |
+| `calistir_shell_script_test_arm` | `shell_script_arm.elf`, `shell_script_arm.o`, `shell_script_arm.out` |
+| `calistir_sil_test_arm` | `sil_arm.elf`, `sil_arm.o`, `sil_arm.out` |
+| `calistir_sleep_test_arm` | `sleep_arm.elf`, `sleep_arm.o`, `sleep_arm.out` |
+| `calistir_smp4_test_arm` | `smp4_arm.elf`, `smp4_arm.o`, `smp4_arm.out` |
+| `calistir_smp4_test_x86` | `smp4_x86.elf`, `smp4_x86.o`, `smp4_x86.out` |
+| `calistir_smp_atomic_test_arm` | `smp_atomic_arm.elf`, `smp_atomic_arm.o`, `smp_atomic_arm.out` |
+| `calistir_smp_barrier_test_arm` | `smp_barrier_arm.elf`, `smp_barrier_arm.o`, `smp_barrier_arm.out` |
+| `calistir_smp_compute_test_arm` | `smp_compute_arm.elf`, `smp_compute_arm.o`, `smp_compute_arm.out` |
+| `calistir_smp_mcs_test_arm` | `smp_mcs_arm.elf`, `smp_mcs_arm.o`, `smp_mcs_arm.out` |
+| `calistir_smp_prodcons_test_arm` | `smp_prodcons_arm.elf`, `smp_prodcons_arm.o`, `smp_prodcons_arm.out` |
+| `calistir_smp_queue_test_arm` | `smp_queue_arm.elf`, `smp_queue_arm.o`, `smp_queue_arm.out` |
+| `calistir_smp_rwlock_test_arm` | `smp_rwlock_arm.elf`, `smp_rwlock_arm.o`, `smp_rwlock_arm.out` |
+| `calistir_smp_seqlock_test_arm` | `smp_seqlock_arm.elf`, `smp_seqlock_arm.o`, `smp_seqlock_arm.out` |
+| `calistir_smp_sort_test_arm` | `smp_sort_arm.elf`, `smp_sort_arm.o`, `smp_sort_arm.out` |
+| `calistir_smp_test_arm` | `smp_arm.elf`, `smp_arm.o`, `smp_arm.out` |
+| `calistir_smp_test_x86` | `smp_x86.elf`, `smp_x86.o`, `smp_x86.out` |
+| `calistir_smp_ticket_test_arm` | `smp_ticket_arm.elf`, `smp_ticket_arm.o`, `smp_ticket_arm.out` |
+| `calistir_stdlib_check` | `_run_<mod>`, `_run_<mod>.kem`, `_run_<mod>.ll`, `_stdlib_<mod>.kem` |
+| `calistir_syscall_abi_test_x86` | `syscall_abi_x86.elf`, `syscall_abi_x86.o`, `syscall_abi_x86.out` |
+| `calistir_syscall_test_x86` | `syscall_x86.elf`, `syscall_x86.o`, `syscall_x86.out` |
+| `calistir_tcp_close_test_arm` | `tcp_close_arm.elf`, `tcp_close_arm.o`, `tcp_close_arm.out`, `tcp_close_arm.pcap` |
+| `calistir_tcp_connect_test_arm` | `tcp_connect_arm.elf`, `tcp_connect_arm.o`, `tcp_connect_arm.out`, `tcp_connect_arm.pcap` |
+| `calistir_tcp_test_arm` | `tcp_arm.elf`, `tcp_arm.o`, `tcp_arm.out`, `tcp_arm.pcap` |
+| `calistir_timer_test_x86` | `timer_x86.elf`, `timer_x86.o`, `timer_x86.out` |
+| `calistir_traceroute_test_arm` | `traceroute_arm.elf`, `traceroute_arm.o`, `traceroute_arm.out`, `traceroute_arm.pcap` |
+| `calistir_uart_16550_bare_metal` | `kdl_uart_16550_x86_64.o` |
+| `calistir_uart_echo_bare_metal` | `kernel_echo.elf`, `start_aarch64.o`, `uart_echo.ll`, `uart_echo.o`, `uart_pl011_bm.o`, `yazdir_bare_bm.o` |
+| `calistir_uart_merhaba_bare_metal` | `kernel.elf`, `uart_merhaba.ll`, `uart_merhaba.o` |
+| `calistir_uart_merhaba_x86_bare_metal` | `kernel_x86.elf`, `qemu_smoke_x86.out`, `uart_merhaba_x86.ll`, `uart_merhaba_x86.o` |
+| `calistir_udp_test_arm` | `udp.pcap`, `udp_arm.elf`, `udp_arm.o`, `udp_arm.out` |
+| `calistir_userspace_dhcp_test_arm` | `userspace_dhcp_arm.elf`, `userspace_dhcp_arm.o`, `userspace_dhcp_arm.out`, `userspace_dhcp_arm.pcap` |
+| `calistir_userspace_dns_test_arm` | `userspace_dns_arm.elf`, `userspace_dns_arm.o`, `userspace_dns_arm.out`, `userspace_dns_arm.pcap` |
+| `calistir_userspace_fiber_test_arm` | `userspace_fiber_arm.elf`, `userspace_fiber_arm.o`, `userspace_fiber_arm.out` |
+| `calistir_userspace_http_test_arm` | `userspace_http_arm.elf`, `userspace_http_arm.o`, `userspace_http_arm.out`, `userspace_http_arm.pcap` |
+| `calistir_userspace_jmp_test_arm` | `userspace_jmp_arm.elf`, `userspace_jmp_arm.o`, `userspace_jmp_arm.out` |
+| `calistir_userspace_malloc_test_arm` | `userspace_malloc_arm.elf`, `userspace_malloc_arm.o`, `userspace_malloc_arm.out` |
+| `calistir_userspace_net_test_arm` | `userspace_net_arm.elf`, `userspace_net_arm.o`, `userspace_net_arm.out` |
+| `calistir_userspace_ping_test_arm` | `userspace_ping_arm.elf`, `userspace_ping_arm.o`, `userspace_ping_arm.out`, `userspace_ping_arm.pcap` |
+| `calistir_userspace_post_test_arm` | `userspace_post_arm.elf`, `userspace_post_arm.o`, `userspace_post_arm.out`, `userspace_post_arm.pcap` |
+| `calistir_userspace_sched_test_arm` | `userspace_sched_arm.elf`, `userspace_sched_arm.o`, `userspace_sched_arm.out` |
+| `calistir_userspace_shm_test_arm` | `userspace_shm_arm.elf`, `userspace_shm_arm.o`, `userspace_shm_arm.out` |
+| `calistir_userspace_tcp_test_arm` | `userspace_tcp_arm.elf`, `userspace_tcp_arm.o`, `userspace_tcp_arm.out`, `userspace_tcp_arm.pcap` |
+| `calistir_userspace_test_arm` | `userspace_arm.elf`, `userspace_arm.o`, `userspace_arm.out` |
+| `calistir_userspace_tftp_test_arm` | `tftp`, `tftp/dosya.txt`, `userspace_tftp_arm.elf`, `userspace_tftp_arm.o`, `userspace_tftp_arm.out`, `userspace_tftp_arm.pcap` |
+| `calistir_yazdir_bare_bare_metal` | `kdl_yazdir_bare_aarch64.o` |
+| `kem_os_paket_deposu` | `paket_deposu` |
+| `kemgu_self` | `kemgu_self`, `kemgu_self.ll` |
+| `test_tumu_olcum` | `kilitler/zaman.lock` |
+
+**Çakışmalar ve koşum kanıtları**
+
+- Önceki Makefile tarifleri iki PL011 derlemesinin aynı nesneyi yazdığını gösterdi. İki tüketici artık başlık ve C kaynağına bağımlı tek nesne hedefini kullanıyor. Her iki çapraz derleme kapısı geçti.
+- ARM DTB kapısı ana ARM kapısının ürettiği çekirdek imajını kullanıyor. DTB önyüklemelerinde QEMU disk yazılarını kendi geçici katmanına alıyor. Yayımlanan UEFI PC imajı ile derleme-yalnız dizini, her iki ürünü de kullanan kipte tek kilitle korunuyor.
+- Host TCP gidiş-dönüşünde 12 eşzamanlı kapı × iki derleyici 24 ayrı dinleyici portu kullandı. Altı qtest aygıtı iki derleyiciyle 19 saniyede geçti. QEMU port 0 ile kendisi dinliyor. Kâhin PID'den portu bulurken tek qtest bağlantısını tüketmiyor. USB kâhininin QMP soketi ve hata günlüğü koşum dizininde.
+- İki bağımsız ölçüm üreticisi aynı dosya kilidinde sıraya girdi. Her alt make içinde dört işin aynı anda çalıştığı ölçüldü. 24 yazıcıdan gelen 128 süre kaydının tamamı doğru biçimde okundu. Bunlar hem shell `flock` hem Python POSIX kilidiyle aynı dosyaya yazıldı. Deney başarılı ve rc=7 döndüren tarifleri ayrı doğruladı.
+- Sabotajda parser ve tip denetimi harness'larına aynı `build/_b6_ortak` çalışma dizini verildi. Statik kapı iki hedefin ve iki betiğin adını bildirdi (make rc=2). Aynı değişiklikle iki kapı gerçek `-j10` koşumunda yarıştı. Parser AST yerine tip denetiminin `CP006` satırını okudu. Parser 2/15, tip denetimi 311/321, make rc=2. Özel dizinler geri gelince aynı iki hedef 15/15 ve 321/321 geçti.
+- İlk tam `-j20` denemesinde 703 saniye sonra make rc=2 döndü. Tek kırmızı hedef `calistir_bm_x86_cok_surec_cocuk` idi. İki derleyici de gerçek çocukların ayrı sayfalarını gördü ve yüz çocuğun tamamlanmasını bildiren son seri satırında eski 15 saniyelik sınıra ulaştı. İki QEMU çalışma dizini ve derleyici günlükleri ölçümün tanı dizininde saklandı.
+- Çocuk kâhini artık QMP ile son tahsis edilen PID'yi ve gerçek seri çıktısını birlikte okuyor. PID ilerlemesi durursa 15 saniye, bütün deney için 90 saniye sınırı var. Başarı için PID 102, beklenen seri baytları, iki ayrı fiziksel sayfa ve geri verilen çerçeveler birlikte doğrulanıyor. İkinci stres denemesindeki 20 açılışta C çekirdeği 45.416, self-host 45.385 başlangıç çerçevesine döndü. Çocukların toplanması 11,69–13,05 saniye sürdü.
+- İkinci tam `-j20` denemesinde 656 saniyede tek hata `calistir_bm_x86_apic` oldu. Altı C açılışı tamamlandı. Yedincide Unix soketi dosya sisteminde göründüğü anda yapılan QMP bağlantısı errno 111 döndürdü. Yerel Unix soketinde `bind` ve `listen` aralığı kontrollü olarak tekrarlandı. Bağlantıyı kabul etmeyen soket tanıda errno 111 ile zaman aşımına uğradı. Aynı sunucu 122 ms sonra dinlemeye geçtiğinde yeni kâhin ilk gerçek bağlantıdan iletilen üç baytı okudu. x86 ve ARM QMP başlatıcıları bu yordamı kullanıyor.
+- QMP bağlantı onarımından sonraki ilk tam `-j20` koşumu 914 sn ve rc=0. Yüz çocuk için son PID=102 gözlenirken bazı kapanışlar 17 saniyeyi geçti. Eski 15 saniyelik ortak sınır, sağlıklı ve ilerlemekte olan konuğu bu yükte kesiyordu.
+- Ardından `semafor_n` 12. turda rc=2 verdi. İlk tabandaki aralıklı hatanın bu kez çıkış kodu ve ikilisi saklandı. Aynı eski ikili tek host CPU'ya bağlandığında 30 turun 23'ünde rc=2, 7'sinde rc=42 döndü. Boş döngü iki izin sahibinin örtüşmesini garanti etmiyordu. Yeni fikstürde dört işçi her tur başında buluşuyor ve izin alan ilk işçi ikincisiyle buluşana kadar içeride kalıyor. Bağımsız kilitle tepe, 800 giriş ve kapanıştaki sıfır bakiye denetleniyor. İki derleyici tek host CPU üzerinde ayrı ayrı 100/100 geçti. Fikstürde izin sayısı 1 yapıldığında her iki ikili 2 sn deney sınırında takıldı. İzin sayısı 4 yapıldığında her iki ikili 20/20 turda üst sınır ihlalini rc=1 ile saptadı. Normal kapıda buluşma zaman aşımı 10 saniyedir.
+- Başka bir `-j20` denemesinde standart kütüphane bariyerinin gözlemcisi hata verdi. Önceki üç katılımcılı örnekte iki işçi bariyere gelmeden önce aynı tam sayıyı kilitsiz okuyup artırıyordu. Aynı kayıtlı ikili 2.000 koşumda 24 kez “sayac 2 degil” dedi. Yeni koşum örneğinde her işçi kendi varış alanını yazar. Ana görev iki alanın da beklenen nesli gösterdiğini görevleri birleştirmeden önce okur. Tek katılımcıda iki buluşma ve üç katılımcıda beş yeniden kullanım ölçüldü. C ve self-host ayrı ayrı 500/500 geçti. Teste bağlanan geçici modülde buluşma atlandığında iki derleyici ayrı ayrı 20/20 rc=1 verdi. Eski kaynak tip denetiminden geçmeye devam ediyor.
+
+| Koşum | Duvar saati | 100 çocuk, en kısa/uzun | make / tee |
+|---|---:|---:|---|
+| Seri, SUREC_PARALEL=0 | 4 sa 48 dk 11 sn (17291 sn) | 11.73 / 12.32 sn | 0 / 0 |
+| -j10 ölçümlü | 23 dk 24 sn (1404 sn) | 11.97 / 13.06 sn | 0 / 0 |
+| -j20 ilk | 14 dk 59 sn (899 sn) | 12.23 / 17.16 sn | 0 / 0 |
+| -j20 ikinci | 15 dk 10 sn (910 sn) | 12.04 / 17.97 sn | 0 / 0 |
+
+Ölçümlü alt takımda 170 kapı, en uzun calistir_bm_x86_ag_saglamlik_self_aktarim (521.2 sn). Başarıdan sonra kalan koşum dizini 0. §7 ortak x86 kapıları takım içinde geçti. Ek x86 çekirdek ve ARM DTB kapıları 55 sn, rc=0. Özel DTC 1.7.0 ile hücre genişliği ve GIC adı, 2 GiB bellek ve iç içe aygıt adresi çevirisi üçü de gerçek ARM konuğunda geçti (129 sn, rc=0). Bölüm süresi 6 sa 46 dk 00 sn.
+
+| Örneklenen koşum | Dakikalık örnek | Yerel QEMU en çok | Diğer QEMU en çok | Sistem yükü medyanı |
+|---|---:|---:|---:|---:|
+| j20-bir | 15 | 29 | 1 | 23.33 |
+| j20-iki | 15 | 27 | 1 | 23.53 |
+| j10 | 23 | 17 | 1 | 9.84 |
+| seri | 288 | 2 | 17 | 1.13 |

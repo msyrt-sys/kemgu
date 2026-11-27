@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """USB dalları: gerçek QEMU, C ve self için ayrı süreç/imaj, toplam 58 sn sınır."""
-from bekle import bekle
+from bekle import qmp_baglan
+from qtest_portu import qtest_portu
 from pathlib import Path
-import os,sys,socket,subprocess,time,shutil
+import os,sys,subprocess,time
 from calisma_dizini import calisma_dizini
 from fat_kahin import dogrula as fat_dogrula
 ROOT=Path(__file__).resolve().parents[2]
@@ -19,12 +20,8 @@ def kalan():
 def kos(cmd,**kw):
     return subprocess.run(cmd,timeout=kalan(),check=True,**kw)
 
-def port():
-    with socket.socket() as s:
-        s.bind(('127.0.0.1',0));return s.getsockname()[1]
-
 # QMP sözlüğü tools/codex/dalga6_sabit.py ile sabit QEMU sürümünden doğrulanır.
-def girdi_kos(exe,qp,mp):
+def girdi_kos(exe,qp,mp,p):
     import json,selectors
     events=[]
     def key(k,down):events.append([{'type':'key','data':{'down':down,'key':{'type':'qcode','data':k}}}])
@@ -34,7 +31,7 @@ def girdi_kos(exe,qp,mp):
         if shift:key('shift',False)
     if MODE=='usb_fare':
         events=[[{'type':'rel','data':{'axis':'x','value':x}}, {'type':'rel','data':{'axis':'y','value':y}}, {'type':'btn','data':{'down':down,'button':'left'}}] for x,y,down in [(17,9,True),(-5,-7,False)]]
-    with socket.create_connection(('127.0.0.1',mp),timeout=kalan()) as sock:
+    with qmp_baglan(mp,p,sure=min(10,kalan()),okuma_suresi=kalan()) as sock:
         f=sock.makefile('rwb',buffering=0)
         def response():
             while True:
@@ -78,25 +75,21 @@ def girdi_kos(exe,qp,mp):
 def qemu_kos(w,exe,eksik=False):
     with (w/'disk.img').open('wb') as f:f.truncate((64 if MODE=='usb_depo' else 4)*1024*1024)
     if MODE=='usb_depo':kos(['mkfs.fat','--invariant','-F','32','-s','1','-n','USBQTEST',str(w/'disk.img')],stdout=subprocess.DEVNULL)
-    qp=port();mp=port()
-    cmd=['qemu-system-x86_64','-machine','q35','-accel','tcg','-bios',str(w/'dur.bin'),'-display','none','-nodefaults','-m','64M','-qtest',f'tcp:127.0.0.1:{qp},server=on,wait={"off" if MODE in ["usb_kbd","usb_fare"] else "on"}','-qtest-log','/dev/null','-device','qemu-xhci,id=x','-drive',f'file={w}/disk.img,if=none,id=u0,format=raw','-device','usb-storage,bus=x.0,drive=u0']
-    if MODE in ['usb_kbd','usb_fare']:cmd+=['-qmp',f'tcp:127.0.0.1:{mp},server=on,wait=off']
+    mp=w/'girdi.qmp'
+    mp.unlink(missing_ok=True)
+    cmd=['qemu-system-x86_64','-machine','q35','-accel','tcg','-bios',str(w/'dur.bin'),'-display','none','-nodefaults','-m','64M','-qtest',f'tcp:127.0.0.1:0,server=on,wait={"off" if MODE in ["usb_kbd","usb_fare"] else "on"}','-qtest-log','/dev/null','-device','qemu-xhci,id=x','-drive',f'file={w}/disk.img,if=none,id=u0,format=raw','-device','usb-storage,bus=x.0,drive=u0']
+    if MODE in ['usb_kbd','usb_fare']:cmd+=['-qmp',f'unix:{mp},server=on,wait=off']
     if not eksik:cmd+=['-device',('usb-mouse' if MODE=='usb_fare' else 'usb-kbd')+',bus=x.0']
     with (w/'qemu.log').open('w') as log:
         p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT)
         try:
-            def dinleme():
-                return subprocess.run(['ss','-ltnH',f'sport = :{qp}'],capture_output=True,timeout=kalan(),check=True).stdout.strip()
-            bekle(f'qtest TCP dinleyicisi {qp}',dinleme,sure=kalan(),surec=p)
-            r=girdi_kos(exe,qp,mp) if MODE in ['usb_kbd','usb_fare'] else subprocess.run([str(exe),str(qp)]+(["iz"] if os.environ.get("USB_QTEST_IZ") and not eksik else []),capture_output=True,text=True,timeout=kalan())
+            qp=qtest_portu(p.pid, min(10,kalan()), p)
+            r=girdi_kos(exe,qp,mp,p) if MODE in ['usb_kbd','usb_fare'] else subprocess.run([str(exe),str(qp)]+(["iz"] if os.environ.get("USB_QTEST_IZ") and not eksik else []),capture_output=True,text=True,timeout=kalan())
             if MODE not in ['usb_kbd','usb_fare']:print(r.stdout,end='')
             if eksik:
                 if r.returncode!=1 or 'QTEST_XHCI HATA xhci aygit sayisi' not in r.stdout:raise RuntimeError('eksik aygıt olumsuzu yakalanmadı')
             elif r.returncode!=0 or f'QTEST_{MODE.upper()} OK' not in r.stdout:
                 raise RuntimeError(f'{exe.name}: rc={r.returncode}, {r.stderr}')
-        except Exception:
-            out=ROOT/'build/codex6';out.mkdir(exist_ok=True)
-            shutil.copyfile(w/'qemu.log',out/'usb-son-qemu.log');raise
         finally:
             p.terminate()
             try:p.wait(timeout=2)

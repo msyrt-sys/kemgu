@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Make tariflerini açar ve sekiz şemsiye hedefin kâhin çağrılarını sayar."""
 import argparse
-from collections import Counter
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
+from collections import Counter
+from pathlib import Path
+
+from make_tarifleri import make_programi
 
 KOK = Path(__file__).resolve().parents[2]
 TABAN = KOK / 'test/olcum/kapsam_taban.tsv'
@@ -69,8 +71,9 @@ def liste(makefile):
     for ad in KAPILAR:
         hedef = 'calistir_' + ad
         tarif = subprocess.check_output(
-            [os.environ.get('MAKE', 'make'), '--no-print-directory', '-n', '-f', makefile, hedef],
-            cwd=KOK, encoding='utf-8', errors='replace')
+            [make_programi(), '--no-print-directory', '-n', '-f', makefile, hedef],
+            cwd=KOK, env={**os.environ, 'MAKEFLAGS':'', 'MFLAGS':''},
+            encoding='utf-8', errors='replace')
         for satir in tarif.splitlines():
             if 'bash test/bm_x86_' not in satir:
                 continue

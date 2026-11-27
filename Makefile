@@ -908,7 +908,8 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		mod=$${spec%%:*}; bek=$${spec##*:}; \
 		f="stdlib/$$mod.kem"; \
 		[ -f "$$f" ] || f="stdlib/temel/$$mod.kem"; \
-		test_f="test/stdlib/test_$$mod.kem"; \
+		test_f="test/stdlib/test_$$mod.kem"; kosucu=; \
+		if [ "$$mod" = bariyer ]; then test_f="test/olcum/bariyer_kosum.kem"; kosucu="timeout 10"; fi; \
 		[ -f "$$f" ] || { echo "FAIL(kaynak yok): $$mod"; exit 1; }; \
 		[ -f "$$test_f" ] || { echo "FAIL(test yok): $$mod"; exit 1; }; \
 		c="$(BUILD)/_run_$$mod.kem"; cat "$$f" "$$test_f" > "$$c"; \
@@ -917,7 +918,7 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		clang -x ir "$(BUILD)/_run_$$mod.ll" -x none $(BUILD)/kdl_runtime.o \
 			-o "$(BUILD)/_run_$$mod$(EXE)" 2>/dev/null || \
 			{ echo "FAIL(link): $$mod"; exit 1; }; \
-		./$(BUILD)/_run_$$mod$(EXE); rc=$$?; \
+		$$kosucu ./$(BUILD)/_run_$$mod$(EXE); rc=$$?; \
 		[ "$$rc" = "$$bek" ] || \
 			{ echo "FAIL(kosum): $$mod - beklenen cikis $$bek, gelen $$rc"; exit 1; }; \
 		rm -f "$$c" "$(BUILD)/_run_$$mod.ll" "$(BUILD)/_run_$$mod$(EXE)"; \
@@ -1017,13 +1018,15 @@ calistir_yazdir_bare_test: $(BUILD)/test_yazdir_bare$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_yazdir_bare$(EXE)
 
 # === yazdir_bare bare-metal cross-compile dogrulamasi ===
-calistir_yazdir_bare_bare_metal:
-	@echo "yazdir_bare (PL011 backend) bare-metal cross-compile dogrulamasi..."
+$(BUILD)/kdl_uart_pl011_aarch64.o: runtime/kdl_runtime_uart_pl011.c runtime/kdl_uart.h | $(BUILD)
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
 		-Wall -Wextra -Wpedantic -std=c11 -O2 \
 		-DKEMGU_BARE_METAL -Iruntime \
 		-c runtime/kdl_runtime_uart_pl011.c \
-		-o $(BUILD)/kdl_uart_pl011_aarch64.o
+		-o $@
+
+calistir_yazdir_bare_bare_metal: $(BUILD)/kdl_uart_pl011_aarch64.o
+	@echo "yazdir_bare (PL011 backend) bare-metal cross-compile dogrulamasi..."
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
 		-Wall -Wextra -Wpedantic -std=c11 -O2 \
 		-DKEMGU_BARE_METAL -Iruntime \
@@ -1321,7 +1324,6 @@ $(BUILD)/kem_user.elf: test/ornekler/kem_kullanici.kem linker/user-aarch64.ld $(
 # İkisi de onarıldı; ELF yolu da [21]/[22] geçiyor.)
 calistir_kem_os_dtb_arm: calistir_kem_os_arm
 	@echo "AH-2: DTB kesfi — ayni ikili, IKI farkli bellek boyutu:"
-	@llvm-objcopy -O binary $(BUILD)/kem_os.elf $(BUILD)/kem_os.img
 	@if ! command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		echo "  QEMU yok — AH-2 kapisi atlandi."; exit 0; \
 	fi
@@ -1330,7 +1332,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/dtb_$$MB.out; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m $$MB \
 			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
 			-serial file:$(BUILD)/dtb_$$MB.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
@@ -1382,7 +1384,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/hucre.out; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 128 \
 			-dtb $(BUILD)/hucre_2_1.dtb -global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/hucre.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		if ! grep -q "RAM  = 0x40000000 + 0x8000000" $(BUILD)/hucre.out 2>/dev/null; then \
@@ -1396,7 +1398,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/ust2g.out; \
 		timeout 30 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 2048 \
 			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/ust2g.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		if ! grep -q "MAP  = 0x400 blok" $(BUILD)/ust2g.out 2>/dev/null; then \
@@ -1412,7 +1414,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/soc.out; \
 		timeout 25 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 128 \
 			-dtb $(BUILD)/soc_ranges.dtb -global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/soc.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		if ! grep -q "UART = 0x9000000" $(BUILD)/soc.out 2>/dev/null; then \
@@ -4659,13 +4661,8 @@ calistir_uart_16550_bare_metal:
 	@echo "16550A bare-metal dogrulamasi basarili!"
 
 # === PL011 bare-metal cross-compile dogrulamasi (libc yok) ===
-calistir_uart_pl011_bare_metal:
+calistir_uart_pl011_bare_metal: $(BUILD)/kdl_uart_pl011_aarch64.o
 	@echo "PL011 bare-metal cross-compile + symbol dogrulamasi..."
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 \
-		-DKEMGU_BARE_METAL -Iruntime \
-		-c runtime/kdl_runtime_uart_pl011.c \
-		-o $(BUILD)/kdl_uart_pl011_aarch64.o
 	@echo ""
 	@echo "Uretilen ARM64 ELF object:"
 	@file $(BUILD)/kdl_uart_pl011_aarch64.o
@@ -4767,8 +4764,12 @@ SHELL := $(abspath test/zaman_kabuk.sh)
 .SHELLFLAGS = $@ -c
 export KEMGU_ZAMAN_DOSYASI := $(abspath $(ZAMAN_KAYDI))
 endif
-.PHONY: test_tumu_olcum calistir_kapi_butcesi calistir_disk_denetimi
+.PHONY: test_tumu_olcum _test_tumu_olcum calistir_kapi_butcesi calistir_disk_denetimi
 test_tumu_olcum: | $(BUILD)
+	+@python3 tools/kapi/kilitli.py $(BUILD)/kilitler/zaman.lock "$(MAKE)" --no-print-directory _test_tumu_olcum
+
+# Aynı çalışma ağacında yayımlanan zaman.tsv, disk tabanı ve rapor bir takıma aittir.
+_test_tumu_olcum: | $(BUILD)
 	@python3 test/disk_denetimi.py basla $(BUILD) $(BUILD)/disk_baslangic.json
 	@rm -f $(BUILD)/zaman.tsv; takim=0; rapor=0; \
 	 $(MAKE) -k test_tumu ZAMAN_KAYDI=$(BUILD)/zaman.tsv || takim=$$?; \
@@ -4955,7 +4956,7 @@ calistir_bm_x86_uefi_kabuk: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD
 kem_os_pc_img: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@UEFI_YALNIZ_DERLE=1 UEFI_PC_URET=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 calistir_bm_x86_uefi_pc: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@UEFI_KABUK=1 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc.img UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
+	@UEFI_KABUK=1 UEFI_PC_URET=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_apic
 calistir_bm_x86_apic: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
@@ -5398,6 +5399,12 @@ calistir_bm_x86_ag_iki: calistir_kem_os_arm $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(E
 	@bash test/bm_x86_nic_harness.sh iki_konuk
 calistir_bm_x86_ag_pc: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh ag_pc
+
+.PHONY: calistir_paylasim_denetimi
+test_tumu: calistir_paylasim_denetimi
+calistir_paylasim_denetimi:
+	@python3 tools/kapi/paylasim_ornekleri.py
+	@python3 tools/kapi/paylasim_denetimi.py
 
 .PHONY: calistir_kapi_kapsam
 test_tumu: calistir_kapi_kapsam

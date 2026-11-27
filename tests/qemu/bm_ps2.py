@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """USB klavyesiz gerçek QEMU i8042: denetim baytı ve tarama baytları."""
-from bekle import bekle, seri_oku, soket_bekle
-import sys,socket,json,subprocess,os
+from bekle import bekle, seri_oku, qmp_baglan
+import sys,json,subprocess,os
 from pathlib import Path
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve();ser=w/'ps2.seri';q=w/'ps2.qmp';q.unlink(missing_ok=True)
 p=subprocess.Popen(['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-no-reboot','-serial',f'file:{ser}','-qmp',f'unix:{q},server=on,wait=off','-kernel',str(elf),'-device','isa-debug-exit,iobase=0xf4,iosize=0x04'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
-sock=socket.socket(socket.AF_UNIX)
+sock=None
 try:
- soket_bekle(q,p,sure=30)
- sock.settimeout(5);sock.connect(str(q));f=sock.makefile('rwb',buffering=0);f.readline()
+ sock=qmp_baglan(q,p,sure=30,okuma_suresi=5)
+ f=sock.makefile('rwb',buffering=0);f.readline()
  def yanit():
   while True:
    d=json.loads(f.readline())
@@ -39,5 +39,5 @@ try:
  assert list(map(int,satirlar[2:-1]))==[30,158,26,154,52,180,42,40,168,170,224,75,224,203],text
  print('PS2 SET1 OK: gerçek QEMU baytları ve XLATE')
 finally:
- sock.close()
+ if sock is not None: sock.close()
  if p.poll() is None:p.kill();p.wait()

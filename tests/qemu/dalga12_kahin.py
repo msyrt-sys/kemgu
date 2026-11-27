@@ -1,5 +1,5 @@
 """OVMF + üç disk. ELF, bölüm kimliği, seri/GOP ve host disk baytları ölçülür."""
-from bekle import bekle, tik_bekle
+from bekle import bekle, qmp_baglan, tik_bekle
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from hashlib import file_digest, sha256
@@ -8,7 +8,6 @@ import json
 import os
 import re
 import shutil
-import socket
 import struct
 import subprocess
 import sys
@@ -144,10 +143,7 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
     with (w/'dalga12-qemu.log').open('w') as err:
         proc = subprocess.Popen(cmd,stdout=err,stderr=err)
         try:
-            wait_for(proc,path.exists)
-            with socket.socket(socket.AF_UNIX) as sock:
-                sock.settimeout(10)
-                sock.connect(str(path))
+            with qmp_baglan(path,proc,sure=15) as sock:
                 with sock.makefile('wb', buffering=0) as f, sock.makefile('rb') as reader:
                     yield Qmp(f, reader),proc,ser
         finally:

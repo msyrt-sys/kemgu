@@ -20,7 +20,6 @@ set -u
 KEMGU=${KEMGU:-build/kemgu${EXE}}
 CODEGEN=${CODEGEN:-build/codegen${EXE}}
 CC_HOST=${CC_HOST:-gcc}
-PORT=58421
 # [D-562] GECICI DIZIN DEPO-GORELI. `/tmp` KULLANILAMAZ: Windows'ta
 # recipe kabugu (Git-for-Windows sh) ile MSYS2 araclari (diff, cmp)
 # AYRI `/tmp` baglamalari cozer -> ayni dizgi iki farkli gercek dizine
@@ -49,22 +48,34 @@ if ! $CC_HOST -O2 test/ag/dinleyici.c -o "$DINLE" -lws2_32 2>/dev/null; then
     fi
 fi
 
-kosum() {   # $1 = derleyici yolu, $2 = etiket
-    local ll="$TMP/$2.ll" exe="$TMP/$2.exe" log="$TMP/$2.srv"
-    if ! "$1" --llvm test/ag/istemci.kem > "$ll" 2>/dev/null; then
-        echo "  🔴 $2 — IR uretilemedi"; return 1
+kosum() (   # $1 = derleyici yolu, $2 = etiket
+    local ll="$TMP/$2.ll" exe="$TMP/$2.exe" log="$TMP/$2.srv" port spid='' deneme
+    trap 'if [[ -n $spid ]]; then kill "$spid" 2>/dev/null; wait "$spid" 2>/dev/null; fi' EXIT
+    # Çekirdeğin seçtiği geçici portu gerçek dinleyici sahiplenir. Seçim ile
+    # bind arasında başka süreç kazanırsa o dinleyiciye istemci gönderilmez.
+    for deneme in 1 2 3 4; do
+        port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])') || return 1
+        "$DINLE" "$port" >"$log" 2>&1 &
+        spid=$!
+        dinleyici_durumu() { grep -q HAZIR "$log" || ! kill -0 "$spid" 2>/dev/null; }
+        calisma_kosul_bekle "Dinleyici HAZIR: $log" 5 dinleyici_durumu || return 1
+        if grep -q HAZIR "$log"; then break; fi
+        wait "$spid"; spid=''
+    done
+    if [[ -z $spid ]]; then cat "$log" >&2; return 1; fi
+    python3 - "$port" "$TMP/$2.kem" <<'PORT_KEM' || return 1
+from pathlib import Path
+import sys
+s = Path('test/ag/istemci.kem').read_text(encoding='utf-8')
+eski = '"127.0.0.1", 58421'
+assert s.count(eski) == 1
+Path(sys.argv[2]).write_text(s.replace(eski, f'"127.0.0.1", {int(sys.argv[1])}'), encoding='utf-8')
+PORT_KEM
+    if ! "$1" --llvm "$TMP/$2.kem" > "$ll"; then
+        echo "  🔴 $2 — IR üretilemedi"; return 1
     fi
-    if ! clang -x ir "$ll" -x none build/kdl_runtime.o -o "$exe" 2>/dev/null; then
-        echo "  🔴 $2 — link edilemedi"; return 1
-    fi
-    "$DINLE" "$PORT" > "$log" 2>&1 &
-    local spid=$!
-    # Dinleyici "HAZIR" yazana dek bekle (sabit sleep YERINE kosula bak:
-    # sabit gecikme yavas makinede ARALIKLI kirmizi uretirdi).
-    if ! calisma_kosul_bekle "Dinleyici HAZIR: $log" 5 grep -q HAZIR "$log"; then
-        cat "$log" >&2
-        kill "$spid" 2>/dev/null; wait "$spid" 2>/dev/null
-        return 1
+    if ! clang -x ir "$ll" -x none build/kdl_runtime.o -o "$exe"; then
+        echo "  🔴 $2 — bağlama başarısız"; return 1
     fi
     # ⚠ ZAMAN AŞIMI ŞART — SABOTAJLA ÖLÇÜLDÜ (S66): yetki argümanı düşürülmezse
     # istemci yanlış register'lardan okuyup çöp handle üretiyor, dinleyici ise
@@ -75,12 +86,11 @@ kosum() {   # $1 = derleyici yolu, $2 = etiket
     local rc=$?
     if [ "$rc" -eq 124 ]; then
         echo "  🔴 $2 — istemci ZAMAN AŞIMI (15 sn)"
-        kill $spid 2>/dev/null; wait $spid 2>/dev/null
         return 1
     fi
     # Dinleyici hâlâ bekliyor olabilir (istemci hiç bağlanmadıysa) — öldür.
     kill $spid 2>/dev/null
-    wait $spid 2>/dev/null
+    wait "$spid" 2>/dev/null; spid=''
     if [ "$rc" -ne 42 ]; then
         echo "  🔴 $2 — istemci exit=$rc (42 bekleniyor)"
         sed 's/^/      /' "$TMP/$2.out" 2>/dev/null | head -3
@@ -93,7 +103,7 @@ kosum() {   # $1 = derleyici yolu, $2 = etiket
     fi
     echo "  ✅ $2 — gidiş-dönüş tamam (istemci 42, sunucu veriyi aldı)"
     return 0
-}
+)
 
 fail=0
 kosum "$KEMGU"   "C-oracle" || fail=$((fail+1))

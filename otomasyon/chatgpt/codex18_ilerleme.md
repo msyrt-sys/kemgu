@@ -109,3 +109,11 @@ Sekiz eski hedef 21 bağımsız parçaya açıldı. Önce/sonra 288 kâhin işle
 Disk build: önce 23757295616 B, sonra 23758569472 B, büyüme +1273856 B
 Geçici dizin: önce 0, sonra 0, yeni 0
 ```
+
+## Bölüm 6 — paralel kaynaklar ve stres
+
+Paylaşım denetimi 428 sabit kaynak ailesini ve 1.283 sahiplik kaydını taradı. Kalan çakışma 0. PL011 nesnesi, DTB çalıştırmalarının diski, UEFI ürünleri, süre günlüğü ve QEMU/host dinleyicileri için üretim ve kullanım sınırları düzeltildi. Envanter ve tanı sonuçları bulgular belgesinde.
+
+Aynı çalışma dizini verilen iki gerçek kapıyı statik denetim adlarıyla bildirdi. Aynı değişiklikle paralel koşumda parser 2/15, checker 311/321, make rc=2. Özel dizinler geri gelince 15/15 ve 321/321 geçti. Altı qtest aygıtı, iki derleyici ve 24 ayrı TCP dinleyicisiyle ek koşumlar geçti.
+
+Streste QMP'nin dinlemeye başlaması, 100 çocuğun PID ilerlemesi ve iki host eşzamanlılık gözlemcisi düzeltildi. Son ağaçta arka arkaya iki tam `-j20` koşumu 14 dk 59 sn ve 15 dk 10 sn, ikisinde de make/tee rc=0. Ölçümlü `-j10` koşumu 23 dk 24 sn, make/tee rc=0. 170 kapı içinde en uzunu 8 dk 41 sn. Ölçüm sonunda geride kalan koşum dizini 0. Tek işli tam koşum 4 sa 48 dk 11 sn, make/tee rc=0. §7 ek x86 çekirdek ve ARM DTB kapıları 55 sn sürdü. Üç isteğe bağlı DTB deneyi ilk koşumda sistemde dtc bulunmadığı için atlandı. Çalışma dizininde dtc 1.7.0 ile yinelenen gerçek ARM kapısı, hücre genişliği/GIC adı, 2 GiB bellek ve aygıt adres çevirisini 129 sn içinde doğruladı. Bölüm süresi 6 sa 46 dk.
