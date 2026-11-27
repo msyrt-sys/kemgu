@@ -309,6 +309,11 @@
       yeniden kullanım (yeni `dizi_bosalt(d)`: boyut=0, tampon korunur) → üzerine yazma çöpü kalkar · (c) dönemsel
       durum kopyalama (D-756'da RED). gdb (QEMU gdbstub) kesme noktası örnekleyicisi denendi: kararsız (VM durdukça
       QMP tuşları reddediyor) → bırakıldı; içerik dökümü ucuz ve yeterli.
+      ✓ KARAR (2026-11-27, D-780, Opus önerileri): A (ömür boyu döngüde, derleyicinin seçtiği güvenli noktada
+      tipten üretilmiş BÖLGE TAHLİYESİ) KABUL — koşullu; D-756'nın escape v3 kararı GERİ ALINDI. Bayrakla açılan
+      genel derleyici mekanizması, önce çekirdek, host'ta ASan ile sınanır. A0 fizibilite ölçümü ✓ (canlı dizi
+      grafiği ~160-210 KB, durum tiplerinde *T/&T/kapanış yok). SIRADAKİ: A1 kopyalayıcı üretimi (host). A4
+      (çekirdekte açma) dalga 18'in çok çekirdek kuralını bekler. Tasarım: belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md §7-§9.
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
@@ -3378,3 +3383,25 @@
   üretimli tip yönlendirmeli kopyalayıcı) Mehmet kararından sonra — "GC yok" ilkesiyle ilişkisi açık soru. B
   (sahiplikli alan yazımı) ve C (escape v3) ertelenir. En büyük risk: adresi tam64'e çeviren güvensiz kod
   kopyalayıcıya görünmez.
+- 2026-11-27 D-780: E4k KARARLAR + A0 FİZİBİLİTE ÖLÇÜMÜ (Mehmet Opus önerilerini kabul etti; tasarım belgesi §7-§9).
+  KARARLAR: (1) A kabul — ilke dürüstçe yeniden yazılır (arka plan GC'si ve öngörülemeyen duraklama yok; ömür boyu
+  döngülerde derleyicinin seçtiği güvenli noktada tipten üretilmiş bölge tahliyesi var); koşullu: A0 ✓ + dalga 18
+  çok çekirdek kuralı (çekirdekler arası el değiştiren nesne R'de olamaz). D-756 escape v3 GERİ ALINDI. CLAUDE.md'ye
+  'henüz uygulanmadı' notuyla işlendi; README A4'te. (2) Kapsam: genel mekanizma, bayrakla, önce çekirdek, host'ta
+  ASan. (3) Codex dalga 19'a yalnız D(1) dizin önbelleği (kd_icerik_surumu ile geçersizleme; kapı dizin_coz çağrı
+  sayısı + FAT/fsck); D(2) yoklama sabit tamponu ERTELENDİ.
+  A0 (güncel main, C çekirdeği): A0-1 döngüye taşınan durumun tip kapanışı 49 tip, hiçbirinde *T/&T/işlev/görev/
+  kanal/yetki/tekkez alanı yok. A0-2 birleşik çekirdek biriminde (comb.kem + modüller) tip denetleyicisinin
+  yazdırmalı kopyasıyla 120 işaretçi-benzeri dönüşüm: 112 *T→tam64 + 8 &T→*T, doğrudan metin/Dizi/yapı→tamsayı 0.
+  ⚠ AMA 8 site tek tek okununca işaretçi yeniden yorumlama kanalı çıktı: uefi_bellek_kur_ic `(&sakla) olarak *tam64`
+  bir Dizi<CerceveAyirici> veri tampon adresini uefi_surec_ayirici küreseline gizliyor (açılışta, ana bölge; döngüde
+  yalnız okunuyor → bugün güvenli ama YAPISAL DEĞİL). Diğer 7: tamsayı→metin/Dizi (IPC, kullanıcı tamponu, UEFI
+  sayfasında elle kurulmuş ağ başlığı) ve yığındaki durum yapılarının adresi → küresel tam64 (ks_yonetim,
+  ksv_ekran_adr, ksv_baglam_adresi). → A3: &T→*U tanısı + ham işaretçi yazımında ana bölgeye yükseltme.
+  A0-3 QMP konuk belleği, kökler .data+.bss+tüm yığın, muhafazakâr geçişli işaretleme: açılış canlı dizi 208.200 B
+  (105 başlık) / ana bölge 598.312; 9 dosya komutu sonrası canlı 163.536 B (145) / ana bölge 1.328.960, dizi
+  baytlarının %83'ü çöp. metin ve dizi dışı yapıların canlı baytı ÖLÇÜLMEDİ (117 bölge içi dizi-dışı işaretçi).
+  A0-4 metin runtime'ı %rho'yu yok sayıyor: çekirdekte 4 işlev (kdl_metin_birlestir/_kes, kdl_kod_metin,
+  kdl_tam_metin), host'ta kdl_sizan_al üzerinden 14 işlev doğrudan ana bölgeye → A2 ön koşulu (%rho parametresi).
+  ⚠ ÖLÇÜM DERSİ: ilk tarama yalnız doğrudan dönüşümü saydı ve 'gizli adres riski yapısal olarak yok' sonucunu
+  verdi; siteleri okumak düzeltti (D-500). Kod değişikliği YOK; ölçüm araçları scratchpad'de kaldı.
