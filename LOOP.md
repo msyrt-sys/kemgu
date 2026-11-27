@@ -338,8 +338,8 @@
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
-- [~] E4q [M] DERLEYICI PERFORMANSI (self-host): ✓ D-782 KÖK 1 (sözcük çözümleme O(n²), 97,5 → 7,6 sn). KALAN: bölge
-      bloklarında brk ping-pong (glibc kırpma kapatılınca 7,7 → 4,1 sn; ölçüldü, onarım ayrı adım). Eski not:
+- [~] E4q [M] DERLEYICI PERFORMANSI (self-host): ✓ D-782 KÖK 1 (sözcük çözümleme O(n²), 97,5 → 7,6 sn) · ✓ D-783 KÖK 2
+      (bölge kapanışında glibc kırpması, 7,6 → 4,2 sn). KALAN: C ile fark hâlâ ~5,5× (0,76 sn) — yeni profil gerekirse. Eski not:
       birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
       --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
       egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
@@ -3458,3 +3458,20 @@
   glibc yığın kırpması kapatılınca (MALLOC_TRIM_THRESHOLD_/MALLOC_TOP_PAD_ ortam değişkeni, kod değişikliği YOK)
   7,7 → 4,1 sn, çıktı aynı → bölge blokları (64 KB) her free'de işletim sistemine iade edilip yeniden isteniyor
   (brk ping-pong). Aday onarım: runtime'da mallopt (yalnız __GLIBC__) ya da bölge bloğu havuzu (ASan zehirlemesiyle).
+- 2026-11-27 D-783: E4q KÖK 2 — BÖLGE KAPANIŞINDA glibc YIĞIN KIRPMASI (brk gidiş-gelişi). D-782 sonrası profil: zamanın
+  ~%70'i bellek ayırıcısında; gdb zincirleri 12 __brk örneğinin 11'ini `free → systrim → sbrk` yolunda gösterdi (biri
+  kdl_bolge_olustur → blok_olustur → malloc → sysmalloc). glibc varsayılanı tepedeki 128 KB'ı aşan boş alanı her free'de
+  çekirdeğe iade eder; bölge blokları 64 KB ve bölgeler sık açılıp kapanır → her kapanış iade, her açılış yeniden ister.
+  Ölçüm (yalnız ortam değişkeni, kod değişikliği yok): TRIM_THRESHOLD=64 MB → 9,05 → 4,03 sn, zirve RSS AYNI (167 MB);
+  TOP_PAD tek başına 4,57 sn (gereksiz). ONARIM: runtime/kdl_bolge.c kdl_bolge_olustur ilk çağrıda
+  mallopt(M_TRIM_THRESHOLD, 64 MB) — yalnız __GLIBC__ (bare-metal/Windows'ta blok yok); iş parçacığı başına bayrak
+  (mallopt idempotent, paylaşılan bayrak veri yarışı olurdu); ASan kendi ayırıcısını kullandığı için UAF tespiti
+  etkilenmez. SONUÇ: çekirdek birimi self-host 7,6 → 4,2 sn (E4q toplamı 97,5 → 4,2 sn, ~23×), IR birebir aynı.
+  KAPI: test/test_bolge_kirpma.c (calistir_bolge_kirpma_test, test_tumu'da; ASan'sız, glibc dışında bildirerek atlar):
+  2000 tur × 4 blok; kesme noktası bloklar ayrıldıktan sonra ve bölge kapandıktan sonra okunur, bir kez geri çekilirse
+  kırmızı. ⚠ İLK SÜRÜM YANLIŞ ÖLÇÜYORDU: yalnız tur sonlarını karşılaştırıyordu; glibc aynı turda büyütüp kırptığı için
+  iki durumda da değerler eşitti ve sabotaj S283 (mallopt kaldır) SESSİZ kaldı. Sessizlik testi şüpheli kıldı (D-402);
+  ölçüm tur içine alınınca S283 → kırmızı (rc=2).
+  KAPILAR: kdl_bolge (ASan) · bolge_kirpma · dizi_uzat · runtime_link · gorev_rt 16/16 · bolge_sayac_yarisi (TSan) ·
+  perf_bellek 4 ölçüm eşik altında (zirve RSS değişmedi) · dizi_perf 6/6 · kanal_omru 10/10 · asan_matris 12/12 · llvm_test
+  321/321 · sıfır uyarı 38/0 · self_driver FIXPOINT ✓ (69 sn; D-778 ölçümlü koşuda 193 sn) · codegen_diff 231/231.
