@@ -1130,3 +1130,16 @@ Genel belgeler için JSON belge/ölçüm kapısı ve gerçek konukta program ör
 **Eksik satır deneyi.** `drivers/sim/*` satırı gerçekten silindi. Seçici `drivers/sim/kabuk.kem` için tam takıma döndü. Sabit beklenti olan `calistir_chatgpt_kopru` tek başına seçilmediği için `calistir_kapi_secici` make rc=2 verdi. Satır geri konunca aynı kapı 1 sn içinde geçti. Git fikstürü ayrıca temiz ağaç, silinen dosya, izlenmeyen dosya ve adında boşluk ve Türkçe harf olan yeniden adlandırmayı denetler.
 
 Gerçek Make girişinde özel Git indekslerinden üretilen iki karşılaştırma ağacı kullanıldı. Yalnız LOOP.md farkında iki belge kapısı 72 sn, yalnız sim sürücüsü farkında köprü kapısı 151 sn sürdü. İkisi de make/tee rc=0. §7 kapıları ve paylaşım/seçim denetimleri 317 sn, make/tee rc=0.
+
+## Bölüm 8 — CI işlerinde paralellik
+
+Taban commit'i `0ce56bf` için GitHub Actions koşumu 45807330890. Aşağıdaki süreler Actions iş ve adım zaman damgalarının farkıdır. İki ham iş günlüğü de indirilerek takımın gerçekten seri Make komutu ile çalıştığı doğrulandı. Günlükte komut ile son başarı satırı arası Linux için 2.099,94 sn, Windows için 3.764,97 sn sürdü.
+
+| Platform | Eski iş süresi | Eski tam takım adımı | Sonuç |
+|---|---:|---:|---|
+| [Linux](https://github.com/msyrt-sys/kemgu/actions/runs/45807330890/job/139865903237) | 35 dk 17 sn | 35 dk 00 sn | success |
+| [Windows](https://github.com/msyrt-sys/kemgu/actions/runs/45807330890/job/139865903738) | 1 sa 03 dk 43 sn | 1 sa 02 dk 45 sn | success |
+
+Linux ve Windows'taki altışar Make tarifi paralel çalışacak şekilde değişti. Linux ölçümlü takım raporunu yazar ve alt sürecin hatasını korur. YAML karşılaştırmasında değişiklikler bu 12 tarifle sınırlı kaldı. Gerçek YAML'den çıkarılan komutlar bir argüman kaydedicisiyle Bash altında yürütüldü. Linux'ta make başarı/hata ve rapor var/yok bileşimlerinin dördü denendi. Windows komutundaki işlemci sayısı değişkeninin açılımı Linux'ta MSYS sözdizimi ile sınandı.
+
+Sonraki CI süreleri gerçek draft PR koşumuna bağlı. Dal öneki push tetikleyicisine girmiyor ve kullanıcı draft PR'ı Bölüm 20 sonuna ayırdı. Bu yerel doğrulamalar Actions'ta geçen süre olarak tabloya yazılmadı.
