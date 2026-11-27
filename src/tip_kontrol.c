@@ -5701,7 +5701,45 @@ static TipBilgisi *pre_populate_islev_imzasi(TipKontrol *tk, const Dugum *islev)
     return islev_tipi;
 }
 
+/* [D-787] E4s: dil içi (ada özel) yerleşikler AYRILMIŞTIR. Bu adlar sembol
+ * tablosunda değil, çağrı denetiminde ve kod üretiminde ADA göre ele alınır.
+ * C bunları hiçbir biçimde gölgelemiyordu (çağrı yeri yerleşik kurallarıyla
+ * denetleniyor); self-host ise kullanıcı tanımını kabul edip YANLIŞ kod
+ * üretiyordu (ölçüldü: bir(41) -> 1, sıfır -> 0, dondur/tekkez_olustur/
+ * sabitsüre_olustur -> 41; dizi_al/ekle/yaz/kapasite_ayarla'da derleyici
+ * çöküyor). Kullanıcı tanımı tanım yerinde T024 alır. AYNI liste
+ * selfhost/codegen.kem `ayrilmis_yerlesik_mi`dedir (D-407); fikstür
+ * tc72_01 ikisini satır satır karşılaştırır. Sembol tablosu yerleşikleri
+ * (EKLE_BUILTIN) gölgelenebilir kalır; `alan`/`gönderen` (D-303, bilerek
+ * gölgelenebilir) listede YOK. */
+static const char *const AYRILMIS_YERLESIKLER[] = {
+    "bir", "b\xc3\xb6lge_al", "dizi_al", "dizi_boyut", "dizi_ekle",
+    "dizi_kapasite", "dizi_kapasite_ayarla", "dizi_olustur", "dizi_yaz",
+    "dondur", "g\xc3\xb6rev_ba\xc5\x9flat", "g\xc3\xb6rev_birle\xc5\x9ftir",
+    "if\xc5\x9f" "a", "kanal_al", "kanal_g\xc3\xb6nder", "kanal_olu\xc5\x9ftur",
+    "mmio_oku16", "mmio_oku32", "mmio_oku64",
+    "mmio_yaz16", "mmio_yaz32", "mmio_yaz64",
+    "sabits\xc3\xbcre_olustur", "s\xc4\xb1" "f\xc4\xb1r", "soket_baglan",
+    "tekkez_olustur", "vektor_buyuk", "vektor_doldur", "vektor_eleman",
+    "vektor_esit", "vektor_kucuk", "vektor_max", "vektor_min", "vektor_sec",
+    "vektor_topla", "vektor_ve_azalt", "vektor_veya_azalt", "yetki_olustur",
+};
+static int ayrilmis_yerlesik_mi(const char *ad, int uz) {
+    size_t n = sizeof(AYRILMIS_YERLESIKLER) / sizeof(AYRILMIS_YERLESIKLER[0]);
+    for (size_t i = 0; i < n; i++) {
+        const char *a = AYRILMIS_YERLESIKLER[i];
+        if (strlen(a) == (size_t)uz && memcmp(a, ad, (size_t)uz) == 0) return 1;
+    }
+    return 0;
+}
+
 static void pre_populate_islev(TipKontrol *tk, const Dugum *islev) {
+    /* [D-787] Ayrılmış yerleşik adı: sembol_ekle'den ÖNCE (çift tanım da
+     * varsa sıra: ayrılmış ad, sonra çakışma). */
+    if (ayrilmis_yerlesik_mi(islev->veri.islev.ad, islev->veri.islev.ad_uzunluk)) {
+        tip_hata(tk, islev, "T024",
+                 "islev adi ayrilmis bir dil yerlesigiyle cakisiyor");
+    }
     /* Adları eski sırada kaydet: modül/işlev çakışması ve gölgeleme korunur. */
     Sembol s;
     memset(&s, 0, sizeof(s));

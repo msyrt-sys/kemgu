@@ -1,0 +1,14 @@
+// [D-787] C18-001: sembol tablosu yerleşikleri gölgelenebilir; çağrı KULLANICI
+// işlevine gitmeli (C009 sınıfı). Değerler ayırt edici: yerleşik çağrılsaydı
+// metin_uzunluk("abc") 3, yaz_tam ise değer döndürmeyen yazdırma olurdu.
+// Pozitif denetim: gölgelenmeyen yerleşik (dizi_boyut) yine yerleşiktir.
+çıplak işlev kilit_al(k: tam64) { }
+işlev metin_uzunluk(s: metin) -> tam32 { ver 7; }
+işlev yaz_tam(x: tam32) -> tam32 { ver x + 23; }
+işlev main() -> tam32 {
+    kilit_al(8 olarak tam64);
+    değişken a: tam32 = metin_uzunluk("abc");
+    değişken b: tam32 = yaz_tam(a);
+    değişken xs: Dizi<tam32> = [1, 2, 3, 4, 5];
+    ver a + b + dizi_boyut(xs);
+}
