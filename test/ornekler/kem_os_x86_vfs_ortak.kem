@@ -602,7 +602,10 @@ işlev ksv_tus_kuyruk(b: &değişken KsvBaglam,o: TusHamOlay) -> tam64 {
 çıplak işlev ksv_hid_oku(h: &değişken HidKlavye,tr: &değişken KlavyeDurumu,tampon: Dizi<TusHamOlay>) -> tam32 {
     değişken rapor: tam64 = 0;
     eğer değil bh_klavye_raporu(&değişken rapor) { ver -1; }
-    ver hid_klavye_ham_doldur(h,tr,rapor,tampon);
+    değişken n: tam32=hid_klavye_ham_doldur(h,tr,rapor,tampon);
+    // Aktarım kaydının son sözcüğü tüketicinin çözümlediği son geçerli rapordur.
+    güvensiz { eğer n>=0 { kem_mmio_yaz64(bh_kayitlar+56,rapor); } }
+    ver n;
 }
 işlev ksv_tus_doldur(b: &değişken KsvBaglam) -> tam64 {
     değişken led: tam32 = klavye_led(&değişken b.tr,b.klavye_indeksi >= 0);

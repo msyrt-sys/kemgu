@@ -30,8 +30,9 @@ CODEGEN=${CODEGEN:-build/codegen${EXE}}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/chkgenis.XXXXXX" 2>/dev/null || echo "build/chkgenis.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/chkgenis) || exit 1
+calisma_izle "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
 # [D-486] EKSIK IKILI = HATA, ATLAMA DEGIL. Bu kapinin make hedefi

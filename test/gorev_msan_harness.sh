@@ -6,8 +6,9 @@
 # @ kdl_runtime.c (kdl_gorev_birlestir), rc != 0.
 set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
-TMP=$(mktemp -d "build/gorev_msan.XXXXXX" 2>/dev/null || echo "build/gorev_msan.$$")
-mkdir -p "$TMP"; trap 'rm -rf "$TMP"' EXIT
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/gorev_msan) || exit 1
+calisma_izle "$TMP"
 msan_var=0
 if [ -z "$EXE" ] && command -v clang >/dev/null 2>&1 \
    && printf 'int main(void){return 0;}\n' > "$TMP/p.c" \

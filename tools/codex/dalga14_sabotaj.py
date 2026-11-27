@@ -47,7 +47,8 @@ def run(name):
         if file.endswith(".S"):
             obj = work / "build/bm_x86_start.o"
             obj.unlink()
-            subprocess.run(["clang", "-target", "x86_64-none-elf", "-c", file, "-o", obj],
+            # Gerçek başlangıç nesnesi BSP ve AP kodunu birlikte taşır.
+            subprocess.run(["make", "-f", str(ROOT / "Makefile"), "build/bm_x86_start.o"],
                            check=True, cwd=work)
         result = subprocess.run(["bash", "test/bm_x86_surec_harness.sh"], cwd=work,
                                 env={**os.environ, "SUREC_DERLEYICILER": "build/kemgu",

@@ -6,7 +6,9 @@ if ! command -v qemu-system-x86_64 >/dev/null; then
     echo 'ATLANDI (QEMU yok)'
     exit 0
 fi
-W="build/_bm_surec_abi"
+W=$(mktemp -d build/surec_abi.XXXXXX) || exit 1
+source test/calisma_dizini.sh
+calisma_izle "$W"
 mkdir -p "$W"
 RT=$(python3 - <<'PY'
 from pathlib import Path

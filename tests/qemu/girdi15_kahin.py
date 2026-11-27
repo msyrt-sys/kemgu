@@ -1,6 +1,6 @@
 """Gerçek QMP girişini kabuk çıktısı ve uygulamaların GOP görüntüsünde ölçer."""
+from bekle import bekle, tik_bekle
 import argparse
-import time
 from pathlib import Path
 
 from dalga12_kahin import boot, wait_for
@@ -10,12 +10,37 @@ from surec_imaj import imajlar
 from surec_kahin import SurecConsole
 
 
-def tekrar(c, sure, alt, ust):
-    # QEMU basma ve bırakmayı kendi sanal saatinde programlar. Host iki QMP
-    # çağrısı arasında bekletilirse tuşun basılı süresi uzamaz.
-    ilk = c.sayi('kap_lapic_tik')
-    c.q.call('send-key', {'keys':[{'type':'qcode','data':'a'}], 'hold-time':sure*10})
-    wait_for(c.p, lambda: c.sayi('kap_lapic_tik')-ilk >= sure+3 and int.from_bytes(c.mem(c.symbols['kt_kod'],4),'little') == 0)
+def tekrar(c, sure):
+    # QEMU'nun sanal milisaniyesi yük altında işlenen LAPIC tikinden ayrılabilir.
+    # Basılı süreyi konuk make kodunu aldıktan sonra donanım tikleriyle ölç.
+    def kod():
+        return int.from_bytes(c.mem(c.symbols['kt_kod'], 4), 'little')
+    def beklenen(tik):
+        return 1 if tik < 50 else 2 + (tik-50)//5
+    if sure < 50:
+        # QEMU basma ve bırakmayı tek istekte kendi sanal saatiyle zamanlar.
+        # Host'un iki QMP çağrısı arasında çalıştırılmaması basışı uzatamaz.
+        def son_tarih():
+            return int.from_bytes(c.mem(c.symbols['kt_sonraki'], 8), 'little')
+        eski = son_tarih()
+        c.q.call('send-key', {'keys':[{'type':'qcode','data':'a'}], 'hold-time':sure*10})
+        bekle('kısa basışın konukta işlenmesi', son_tarih, lambda t: t != eski, surec=c.p)
+        bekle('kısa basışın bırakılması', kod, lambda k: k == 0, surec=c.p)
+        aralik = f'{sure*10} sanal ms'
+        alt = ust = 1
+    else:
+        once = c.tik()
+        c.tus_gonder('a', True)
+        bekle('tekrar deneyi: A basma kodu', kod, lambda k: k == 30, aralik=.001, surec=c.p)
+        ilk = c.tik()
+        birak = bekle(f'tekrar için {sure} LAPIC tiki', c.tik, lambda t: t-ilk >= sure,
+                      aralik=.001, surec=c.p)
+        c.tus_gonder('a', False)
+        bekle('tekrar deneyi: A bırakma kodu', kod, lambda k: k == 0, aralik=.001, surec=c.p)
+        son = c.tik()
+        alt = max(2, beklenen(birak-ilk)-1)
+        ust = beklenen(son-once)+1
+        aralik = f'{birak-ilk}..{son-once} konuk tiki'
     # Komut öneki de tekrarlanabilir. Basılı tuşun etkisini doğrudan giriş satırından say.
     font = font_yukle()
     fw, fh = font[1][:2]
@@ -34,8 +59,8 @@ def tekrar(c, sure, alt, ust):
                 break
             adet += 1
         return adet
-    adet = wait_for(c.p,harf_say)
-    print('TEKRAR',sure,adet,flush=True)
+    adet = bekle('GOP üzerinde yinelenen A glifleri', harf_say, lambda n: n >= alt, surec=c.p)
+    print('TEKRAR',sure,adet,'basılı süre',aralik,'beklenen glif',alt,ust,flush=True)
     assert alt <= adet <= ust, (sure,adet,alt,ust)
     for _ in range(adet):
         tus(c,'backspace')
@@ -44,7 +69,7 @@ def tekrar(c, sure, alt, ust):
 def teker(c, yon):
     for bas in (True,False):
         c.q.call('input-send-event', {'events':[{'type':'btn','data':{'button':'wheel-'+yon,'down':bas}}]})
-        time.sleep(.04)
+        tik_bekle(c.tik,surec=c.p)
 
 
 def kos(w, tur):
@@ -55,8 +80,9 @@ def kos(w, tur):
     with boot(w,usb[0],nvme,sata,klavye=tur,fare=tur) as (q,p,s):
         c = SurecConsole(w,q,p,s)
         assert b'PS2_FARE 3 4\n' in s.read_bytes()
-        tekrar(c,20,1,1)
-        tekrar(c,68,4,6)
+        tekrar(c,20)
+        tekrar(c,68)
+        tekrar(c,87)
         c.run('hassasiyet 0', b'HATA hassasiyet 1..4\n')
         c.run('hassasiyet 2')
         c.run('bagla --yazilabilir usb0p2')

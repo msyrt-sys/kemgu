@@ -1,0 +1,64 @@
+// D-668: dört koşucu × 200 giriş. Her turda dört katılımcı yarışır.
+// İzin alan ilk katılımcı eşini görmeden çıkamaz. Sayaçlar bağımsız kilittedir.
+küresel değişken iceride: tam32 = 0;
+küresel değişken tepe: tam32 = 0;
+küresel değişken girisler: tam32 = 0;
+
+işlev kos(s: Semafor, k: metin, basla: metin, cift: metin) -> tam32 {
+    değişken tur: tam32 = 0;
+    iken tur < 200 {
+        bariyer_bekle(basla);
+        semaforda(s, || {
+            kilit_al(k);
+            güvensiz {
+                iceride = iceride + 1;
+                girisler = girisler + 1;
+                eğer iceride > tepe { tepe = iceride; }
+            }
+            kilit_birak(k);
+            bariyer_bekle(cift);
+            kilit_al(k);
+            güvensiz { iceride = iceride - 1; }
+            kilit_birak(k);
+            ver 0;
+        });
+        tur = tur + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken s: Semafor = olustur(2);
+    değişken k: metin = kilit_olustur();
+    değişken basla: metin = bariyer_olustur(4);
+    değişken cift: metin = bariyer_olustur(2);
+    eşleş görev_başlat(|| kos(s, k, basla, cift)) {
+        tamam(g1) => {
+            eşleş görev_başlat(|| kos(s, k, basla, cift)) {
+                tamam(g2) => {
+                    eşleş görev_başlat(|| kos(s, k, basla, cift)) {
+                        tamam(g3) => {
+                            kos(s, k, basla, cift);
+                            görev_birleştir(g1);
+                            görev_birleştir(g2);
+                            görev_birleştir(g3);
+                        }
+                        hata(e3) => { görev_birleştir(g1); görev_birleştir(g2); ver 3; }
+                    }
+                }
+                hata(e2) => { görev_birleştir(g1); ver 3; }
+            }
+        }
+        hata(e1) => { ver 3; }
+    }
+    bariyer_yok(cift);
+    bariyer_yok(basla);
+    kilit_yok(k);
+    yok_et(s);
+    güvensiz {
+        eğer iceride != 0 veya girisler != 800 { ver 3; }
+        eğer tepe > 2 { ver 1; }
+        eğer tepe < 2 { ver 2; }
+    }
+    ver 42;
+}

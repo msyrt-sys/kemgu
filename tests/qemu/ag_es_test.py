@@ -4,7 +4,7 @@ import shutil
 import socket
 import struct
 import subprocess
-import tempfile
+from calisma_dizini import calisma_dizini
 import time
 import unittest
 from pathlib import Path
@@ -84,7 +84,7 @@ def firmware():
     if not qemu:
         print('ATLANDI (QEMU yok): host Ethernet eşi iPXE açılışı')
         return
-    with tempfile.TemporaryDirectory(prefix='ag17-') as dizin, EthernetEs() as es:
+    with calisma_dizini(prefix='ag17-') as dizin, EthernetEs() as es:
         kayit = Path(dizin)/'ag.pcap'
         komut = [qemu, '-M','q35','-display','none','-nodefaults','-no-reboot','-boot','n',
                  '-netdev', es.qemu_netdev(), '-device','e1000,netdev=n0,bootindex=1,mac='+MAC.hex(':'),

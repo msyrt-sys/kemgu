@@ -25,8 +25,9 @@ KORPUS=${KORPUS:-test/cg_korpus}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/cgdiff.XXXXXX" 2>/dev/null || echo "build/cgdiff.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/cgdiff) || exit 1
+calisma_izle "$TMP"
 
 if [ ! -x "$CODEGEN" ]; then
     # [D-486] Bu mesaj BAYATTI (D-072/CG1 donemi); kapi artik 155/155.
@@ -48,15 +49,9 @@ link_retry() {   # $1=ll  $2=exe
 # Yeni .exe ilk exec'te Defender taraması yüzünden 127 (command-not-found) verebilir;
 # korpusta hiçbir program 127 dönmez → 127 DAİMA ortamsal (gerçek codegen hatası kesin
 # bir exit verir: 139 segfault / yanlış değer, asla 127). OS dosyayı bırakana dek bekle +
-# tekrar dene (RC global, en çok 12 tur ~3.6s). Kalıcı 127 → çağıran ⚠ ATLAR (fail DEĞİL).
+# tekrar dene (RC global, en çok 4 sn). Kalıcı 127 → çağıran ⚠ ATLAR (fail DEĞİL).
 run_exe() {   # $1=exe
-    "$1" >/dev/null 2>&1; RC=$?
-    deneme=0
-    while [ "$RC" -eq 127 ] && [ "$deneme" -lt 12 ]; do
-        sleep 0.3
-        "$1" >/dev/null 2>&1; RC=$?
-        deneme=$((deneme+1))
-    done
+    calisma_127_dene "$1" >/dev/null 2>&1; RC=$?
     # [D-572] AYIRT EDICI: Defender yarisi ILK EXEC'e ozgudur (dosya taranmamis).
     # Yeni bir yola KOPYALAYIP tekrar denemek yarisi cozer; PROGRAM COKUYORSA
     # kopya da ayni kodu verir. Bu sart, cunku Windows'ta cokme 127 gorunebilir
@@ -65,8 +60,7 @@ run_exe() {   # $1=exe
     KALICI127=0
     if [ "$RC" -eq 127 ]; then
         cp "$1" "$1.r2.exe" 2>/dev/null || { KALICI127=1; return 0; }
-        sleep 0.3
-        "$1.r2.exe" >/dev/null 2>&1; RC=$?
+        calisma_127_dene "$1.r2.exe" >/dev/null 2>&1; RC=$?
         [ "$RC" -eq 127 ] && KALICI127=1
     fi
     return 0

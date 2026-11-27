@@ -1,5 +1,4 @@
 """Geçmiş, imleç ve tamamlama için bağımsız kabuk ekranı."""
-import time
 from dalga12_kahin import wait_for
 from duzenle_kahin import tus, yaz
 from psf_kahin import kabuk_goruntu, screendump, karsilastir
@@ -20,7 +19,7 @@ def enter(c,s,out):
     wait_for(c.p,lambda:c.output()==c.expected)
 
 def kabuk14_kos(c):
-    c.run("yardim",b"ls cd pwd cat echo yaz cp mv sil mkdir rmdir diskler bagla sync saat\ncalistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat\ndonanim log hassasiyet goster bul hesapla duzenle dosyalar\nbilgi duzen kopyala tasi girdisay kesme pci\nag ping cozumle nc indir sunucu tftp paket\n")
+    c.run("yardim",b"ls cd pwd cat echo yaz cp mv sil mkdir rmdir diskler bagla sync saat\ncalistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat\ndonanim islemci log hassasiyet goster bul hesapla duzenle dosyalar\nbilgi duzen kopyala tasi girdisay kesme pci\nag ping cozumle nc indir sunucu tftp paket\n")
     c.run("merhaba",b"/diskler/usb0p2/bin/merhaba.elf\n[merhaba.elf pid=2 cikis=1]\n")
     c.run("sonuc",b"1\n")
     c.run("kedi /diskler/usb0p2/notlar/günlük.txt","Ağaç ve İş\n[kedi.elf pid=3 cikis=0]\n".encode())
@@ -44,4 +43,4 @@ def kabuk14_kos(c):
     girdi(c,"taslak")
     for _ in "taslak":tus(c,"backspace")
     girdi(c,"")
-    once=c.heap();time.sleep(8);assert c.heap()==once
+    c.bosta_gozle()

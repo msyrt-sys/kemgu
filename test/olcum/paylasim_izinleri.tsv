@@ -1,0 +1,8 @@
+# kaynak	dosya	gerekçe
+build/_bm_uefi	test/bm_x86_uefi_harness.sh	Eski derleme-yalnız tüketicisinin sabit dizini. Üreticiler uefi.lock ile sıraya girer. Normal QEMU açılışları mktemp veya çağıranın özel dizinini kullanır.
+build/kem_os_pc.img	test/bm_x86_uefi_harness.sh	Yayımlanan PC disk imajı. uefi.lock hem üretim hem aynı kapıdaki QEMU okuması bitene kadar tutulur.
+build/kilitler/uefi.lock	test/bm_x86_uefi_harness.sh	Sabit UEFI ürünlerinin ortak kilit dosyası. POSIX flock veya Windows bölge kilidi süreç çıkışında serbest kalır.
+build/cekirdek_onbellek	test/cekirdek_onbellek.sh	İçerik anahtarı farklı girdileri ayırır. Aynı anahtarla yarışan üreticiler özel mktemp dizininden atomik mv -T ile tam kayıt yayımlar.
+build/zaman.tsv	Makefile	Ölçümlü takımın giriş, kayıt ve rapor adımları zaman.lock altında çalışır.
+build/zaman.tsv	test/zaman_kabuk.sh	Her tarif tek satır ekler. Satır POSIX flock veya Windows bölge kilidi altında yazılır.
+build/zaman.tsv.kilit	test/zaman_kabuk.sh	Süre günlüğüne ekleyen bütün tarifler aynı kilit dosyasını açar.

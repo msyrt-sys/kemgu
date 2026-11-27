@@ -10,6 +10,8 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
 fi
 export UEFI_CALISMA_DIZINI
 UEFI_CALISMA_DIZINI=$(mktemp -d build/guc.XXXXXX)
+source test/calisma_dizini.sh
+calisma_izle "$UEFI_CALISMA_DIZINI"
 for derleyici in build/kemgu build/codegen; do
  for kip in yenidenbaslat kapat 8042 uclu; do
   kaynak=test/ornekler/kem_os_x86_kabuk.kem

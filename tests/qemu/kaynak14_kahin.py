@@ -36,7 +36,7 @@ def cocuk(c, acilis):
     assert bos - ana == SUREC_CERCEVESI
     if acilis == 1:
         heap = c.heap()
-        time.sleep(8)
+        c.bosta_gozle()
         assert (ana, heap) == (c.bos_cerceve(), c.heap())
 
     def basladi():

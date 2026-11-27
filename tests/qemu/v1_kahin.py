@@ -1,6 +1,5 @@
 """İki veri diski, iki kullanıcı arayüzü ve kalıcılık aynı OVMF açılışında."""
 import re
-import time
 from dalga12_fat import Fat
 from dalga12_kahin import fsck
 from duzenle_kahin import du_ekran, ge_cift_tik, ge_ekran, ge_girdiler, tamam, tus, yaz
@@ -21,7 +20,7 @@ def kos(c,part,kesinti=False):
     cmd="duzenle "+YOL
     c.input(cmd);c.akis+="> "+cmd+"\n"
     du_ekran(c,YOL,["Ağaç ve İş",""],0,0)
-    h=c.heap();time.sleep(8);assert h==c.heap()
+    c.bosta_gozle()
     tus(c,"down");yaz(c,"İş\nAğaç");tus(c,"s",ctrl=True)
     ilk=["Ağaç ve İş","İş","Ağaç"]
     du_ekran(c,YOL,ilk,2,4,False,"  Kaydedildi")
@@ -50,5 +49,6 @@ def kos(c,part,kesinti=False):
     c.run("kedi /diskler/nvme0p1/merhaba.txt",MERHABA+b"[kedi.elf pid=6 cikis=0]\n")
     c.run("baslat hesap &",b"pid=7\n")
     def ps(veri):
-        m=re.fullmatch(rb"7 hazir hesap.elf (\d+)\n",veri);assert m and int(m[1])>=1,veri
+        durum = rb"(?:hazir|kosuyor)" if len(c.q.call("query-cpus-fast"))>1 else rb"hazir"
+        m=re.fullmatch(rb"7 "+durum+rb" hesap\.elf (\d+)\n",veri);assert m and int(m[1])>=1,veri
     c.run("ps",ps);c.run("sonlandir 7");c.run("bekle 7",b"[hesap.elf pid=7 SONLANDIRILDI: sonlandir (kullanici)]\n")

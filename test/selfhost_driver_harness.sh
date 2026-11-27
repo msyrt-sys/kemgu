@@ -34,8 +34,9 @@ SRC=${SRC:-selfhost/codegen.kem}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/selfdrv.XXXXXX" 2>/dev/null || echo "build/selfdrv.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/selfdrv) || exit 1
+calisma_izle "$TMP"
 genel_fail=0
 
 link() {  # $1=ll $2=exe ; Win11 Defender exec yarışı → 3 deneme

@@ -1,0 +1,84 @@
+// Kapının 256 MiB konuk fiziksel uzayı için bir sahip sözcüğü ve bütün ver/iade olayları.
+küresel değişken smp_bellek_olcum:tam64=0;
+çıplak işlev kem_smp_olcum_boyu(n:tam32) -> tam32 { ver 528384+n*160000; }
+çıplak işlev bellek_olcum_al() -> tam64 {
+    güvensiz { değişken a:*tam64=(&smp_bellek_olcum) olarak *tam64; ver kem_mmio_oku64(a olarak tam64); }
+}
+çıplak işlev bellek_sahip_degistir(p:tam64,eski:tam64,yeni:tam64) -> mantıksal {
+    değişken ok:tam32=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $2,%rax
+lock cmpxchgq $3,($1)
+sete %al
+movzbl %al,$0"# çıktı("=r",&ok) girdi("r",p) girdi("r",eski) girdi("r",yeni) bozulan("~{rax}") bozulan("~{cc}") bozulan("~{memory}") } }
+    ver ok!=0;
+}
+çıplak işlev bellek_olay(p:tam64,no:tam32,sayfa:tam64,aldi:tam64) {
+    değişken i:tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $$1,%rax
+lock xaddq %rax,($1)
+movq %rax,$0"# çıktı("=r",&i) girdi("r",p) bozulan("~{rax}") bozulan("~{cc}") bozulan("~{memory}") } }
+    kem_mmio_yaz64(p+528384+i*8,(sayfa<<8)|((no olarak tam64)<<1)|aldi);
+}
+çıplak işlev bellek_dongu(p:tam64,no:tam32,n:tam32) -> tam64 {
+    değişken h:tam64=no olarak tam64;
+    değişken yuva:tam64=p+128+h*64;
+    değişken i:tam64=0;
+    iken i<10000 {
+        değişken a:tam64=uefi_surec_ayir(1);
+        eğer a<=0 veya (a&4095)!=0 veya a>=268435456 { ver -1; }
+        değişken sayfa:tam64=a/4096;
+        değişken sahip:tam64=p+4096+sayfa*8;
+        eğer değil bellek_sahip_degistir(sahip,0,h+1) { ver -2; }
+        bellek_olay(p,no,sayfa,1);
+        değişken blok:*tam8=malloc(32);
+        eğer (blok olarak tam64)==0 { ver -3; }
+        değişken deger:tam64=(h<<32)|i;
+        kem_mmio_yaz64(blok olarak tam64,deger);
+        eğer i==0 {
+            kem_mmio_yaz64(yuva+16,a); kem_mmio_yaz64(yuva+24,blok olarak tam64);
+            değişken j:tam32=0;
+            iken j<n {
+                iken kem_mmio_oku64(p+152+(j olarak tam64)*64)==0 { }
+                j=j+1;
+            }
+        }
+        eğer kem_mmio_oku64(blok olarak tam64)!=deger { ver -4; }
+        free(blok);
+        bellek_olay(p,no,sayfa,0);
+        eğer değil bellek_sahip_degistir(sahip,h+1,0) { ver -5; }
+        eşleş uefi_surec_iade_sonuc(a,1) { hata(e) => { ver -6; } tamam(v) => {} }
+        i=i+1;
+    }
+    kem_mmio_yaz64(yuva+8,i); ver 1;
+}
+çıplak işlev kem_smp_acilis_deneyi(no:tam32) {
+    değişken p:tam64=0;
+    eğer no==0 {
+        p=smp_deney_alani;
+        eğer p==0 { kdl_panik("BELLEK DENEY RAM"); ver; }
+        kem_mmio_yaz64(p+8,uefi_bos_say() olarak tam64);
+        kem_mmio_yaz64(p+40,kem_mmio_oku64(smp_bellek_kilitleri)&4294967295);
+        kem_mmio_yaz64(p+48,kem_mmio_oku64(smp_bellek_kilitleri+64)&4294967295);
+        kem_mmio_yaz64(p+24,smp_cevrimici_say() olarak tam64);
+        kem_port_yaz8(1023,0);
+        güvensiz { smp_bellek_olcum=p; }
+    } değilse { iken p==0 { p=bellek_olcum_al(); } }
+    değişken n:tam32=kem_mmio_oku64(p+24) olarak tam32;
+    // Host başlangıç bit eşlemini okuduktan sonra 16550 scratch yazmacını değiştirir.
+    iken kem_port_oku8(1023)!=161 { }
+    değişken s:tam64=bellek_dongu(p,no,n);
+    kem_mmio_yaz64(p+128+(no olarak tam64)*64,s);
+    eğer no!=0 veya s!=1 { ver; }
+    değişken i:tam32=1;
+    iken i<n {
+        iken kem_mmio_oku64(p+128+(i olarak tam64)*64)==0 { }
+        i=i+1;
+    }
+    kem_mmio_yaz64(p+16,uefi_bos_say() olarak tam64);
+    kem_mmio_yaz64(p+56,kem_mmio_oku64(smp_bellek_kilitleri)&4294967295);
+    kem_mmio_yaz64(p+64,kem_mmio_oku64(smp_bellek_kilitleri+64)&4294967295);
+    kem_mmio_yaz64(p+32,1);
+    kis_metin("SMP_BELLEK ");kis_onaltilik(p olarak dtam64);kis_metin(" ");
+    kis_onaltilik(kem_mmio_oku64(p+16) olarak dtam64);kis_satir();
+    iken kem_port_oku8(1023)!=162 { }
+}

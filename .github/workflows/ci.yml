@@ -51,37 +51,39 @@ jobs:
         id: w_derle
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make
+          mingw32-make -j"${NUMBER_OF_PROCESSORS}" --output-sync=target
 
       - name: Tum testler (mingw32-make test_tumu)
         id: w_tumu
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make test_tumu
+          # [D-784] -k: ilk kırmızıda yeni kapı başlatmayı bırakmasın — Windows'ta tek koşuda bütün
+          # kırmızılar görünsün (Linux adımı test_tumu_olcum üzerinden zaten -k ile koşuyor).
+          mingw32-make -k -j"${NUMBER_OF_PROCESSORS}" --output-sync=target test_tumu
 
       - name: Stdlib --check
         id: w_stdlib
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make calistir_stdlib_check
+          mingw32-make -j"${NUMBER_OF_PROCESSORS}" --output-sync=target calistir_stdlib_check
 
       - name: Snapshot test
         id: w_snap
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make calistir_snapshot_test
+          mingw32-make -j"${NUMBER_OF_PROCESSORS}" --output-sync=target calistir_snapshot_test
 
       - name: Fuzzer (10000 iter ASan)
         id: w_fuzz
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make calistir_fuzz_test
+          mingw32-make -j"${NUMBER_OF_PROCESSORS}" --output-sync=target calistir_fuzz_test
 
       - name: Runtime link test
         id: w_rt
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make calistir_runtime_link_test
+          mingw32-make -j"${NUMBER_OF_PROCESSORS}" --output-sync=target calistir_runtime_link_test
 
       - name: Test sayisi ozeti
         if: always()
@@ -133,27 +135,36 @@ jobs:
 
       - name: Derle (make)
         id: l_derle
-        run: make
+        run: make -j"$(nproc)" --output-sync=target
 
       - name: Tum testler (make test_tumu)
         id: l_tumu
-        run: make test_tumu
+        run: |
+          rc=0
+          make -j"$(nproc)" --output-sync=target test_tumu_olcum || rc=$?
+          if [[ -f build/zaman_raporu.txt ]]; then
+            cat build/zaman_raporu.txt
+          elif (( rc == 0 )); then
+            echo "Ölçümlü takımın süre raporu eksik" >&2
+            exit 1
+          fi
+          exit "$rc"
 
       - name: Stdlib --check
         id: l_stdlib
-        run: make calistir_stdlib_check
+        run: make -j"$(nproc)" --output-sync=target calistir_stdlib_check
 
       - name: Snapshot test
         id: l_snap
-        run: make calistir_snapshot_test
+        run: make -j"$(nproc)" --output-sync=target calistir_snapshot_test
 
       - name: Fuzzer (10000 iter ASan + UBSan)
         id: l_fuzz
-        run: make calistir_fuzz_test
+        run: make -j"$(nproc)" --output-sync=target calistir_fuzz_test
 
       - name: Runtime link test
         id: l_rt
-        run: make calistir_runtime_link_test
+        run: make -j"$(nproc)" --output-sync=target calistir_runtime_link_test
 
       - name: Linux test ozeti
         if: always()

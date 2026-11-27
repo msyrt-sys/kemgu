@@ -36,7 +36,9 @@ N=test/cg_korpus/cg_kanal_kacan_uc.kem
 #   BAŞARISIZ olur → gerçekten ÇALIŞTIĞINI ölç (asan_matris_calistir.sh aynası).
 ASAN_RUN=""
 if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
-W=build/kanal_kapi; mkdir -p "$W"
+W=$(mktemp -d build/kanal_kapi.XXXXXX) || exit 1
+source test/calisma_dizini.sh
+calisma_izle "$W"
 hata=0
 
 [ -f "$F" ] || { echo "🔴 fikstur yok: $F"; exit 2; }

@@ -1,6 +1,7 @@
 """TCP uzantılarının tel değerleri, gecikmeli ACK, canlılık ve 64 MiB aktarım."""
 import argparse
 import hashlib
+import heapq
 import os
 from pathlib import Path
 import struct
@@ -9,7 +10,7 @@ import time
 from ag_es import ES_IP, KONUK_IP, EthernetEs, TcpEs
 from ag_tcp_kahin import MAC, MASKE, MSS
 from dalga12_kahin import boot, wait_for
-from pcap_oku import cerceve_oku, pcap_kayitlari
+from pcap_oku import cerceve_oku, pcap_kayitlari, tcp_akimi
 from surec_imaj import imajlar
 from surec_kahin import SurecConsole
 
@@ -83,17 +84,29 @@ def verim(es,adet,olcek):
     es.yolla(9001,port,seq-1,bas,18,win=65535,sec=secenek)
     elde=0
     digest=hashlib.sha256()
+    bekleyen=[]
+    dongu=bytes((i*37+i//251)&255 for i in range(251*256))
+    desen=dongu+dongu
     while True:
-        assert time.monotonic()-bas_ms<256, '64 MiB aktarımı 0.25 MiB/s eşiğinin altında'
+        gecen=time.monotonic()-bas_ms
+        assert gecen<256, (f'64 MiB aktarımı 0.25 MiB/s eşiğinin altında: '
+                           f'{elde}/{adet} bayt, {gecen:.3f} sn, {elde/1048576/gecen:.3f} MiB/s')
         p,b=es.al(8)
         stamp,yanki=zaman(p)
         assert p.hedef_port==9001 and p.onay==seq and yanki>=500
         ofs=(p.sira-bas)&MASKE
         if b:
-            if ofs<=elde<ofs+len(b):
-                ilk=elde-ofs
-                digest.update(b[ilk:]);elde+=len(b)-ilk
-            assert elde<=adet
+            # Alıcı ilan ettiği pencereye sığan sıra dışı segmenti saklar.
+            # ACK yalnız boşluksuz alınan son baytı izler.
+            assert ofs+len(b)<=min(adet, elde+(65535 << (2 if olcek else 0)))
+            j=ofs%len(dongu)
+            assert b==desen[j:j+len(b)], ("TCP yükü farklı",ofs)
+            heapq.heappush(bekleyen,(ofs,b))
+            while bekleyen and bekleyen[0][0]<=elde:
+                baslangic,veri=heapq.heappop(bekleyen)
+                if baslangic+len(veri)>elde:
+                    digest.update(veri[elde-baslangic:])
+                    elde=baslangic+len(veri)
             es.yolla(9001,port,seq,bas+elde,16,win=65535,sec=ts(peer_ts(),stamp))
         if p.bayrak&1:
             assert ofs==adet and elde==adet,(ofs,elde)
@@ -102,7 +115,7 @@ def verim(es,adet,olcek):
             assert son.bayrak==16 and son.onay==seq+1
             break
     sure=time.monotonic()-bas_ms
-    dongu=bytes((i*37+i//251)&255 for i in range(251*256))
+    assert not bekleyen
     beklenen=hashlib.sha256()
     for i in range(0,adet,len(dongu)): beklenen.update(dongu[:min(len(dongu),adet-i)])
     assert digest.digest()==beklenen.digest()
@@ -137,21 +150,17 @@ def kos(w,kip):
                 wait_for(p,lambda:c.sayi('ag_tcp_bitti')==1,seconds=9)
             assert (c.heap(),c.bos_cerceve())==(heap,bos)
             c.shutdown()
-        sayi=0; wire=hashlib.sha256(); taban=None; uzunluk=0
         with pcap.open('rb') as f:
-            for v in pcap_kayitlari(f):
-                if v.protokol!=6 or v.kaynak!=MAC: continue
-                sayi+=1
-                if v.bayrak&2: taban=(v.sira+1)&MASKE
-                if kip!='secenek' and taban is not None:
-                    yuk=v.yuk[4*(v.yuk[12]>>4):];ofs=(v.sira-taban)&MASKE
-                    if ofs<=uzunluk<ofs+len(yuk):
-                        ilave=yuk[uzunluk-ofs:];wire.update(ilave);uzunluk+=len(ilave)
+            paketler=pcap_kayitlari(f)
+            if kip=='secenek':
+                assert sum(v.protokol==6 and v.kaynak==MAC for v in paketler)>=5
+            else:
+                tel=tcp_akimi(paketler,9001,True,MAC)
+                assert len(tel)==64*1024*1024 and hashlib.sha256(tel).hexdigest()==h
         if kip=='secenek':
-            assert sayi>=5
             print(f'TCP SECENEK OK ACK {gecikme:.3f}s, pencere {pencere}, keepalive=3 heap={heap} boş={bos}',flush=True)
         else:
-            assert uzunluk==64*1024*1024 and wire.hexdigest()==h and 64/sure>=.25
+            assert 64/sure>=.25
             print(f'TCP VERIM OK {kip} 64 MiB süre={sure:.3f}s hız={64/sure:.3f} MiB/s QEMU_CPU={cpu} SHA256={h} heap={heap} boş={bos}',flush=True)
 
 

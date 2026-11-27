@@ -59,8 +59,9 @@ esac
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/perfbellek.XXXXXX" 2>/dev/null || echo "build/perfbellek.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/perfbellek) || exit 1
+calisma_izle "$TMP"
 hata=0; olculen=0
 
 for c in "$KEMGU:C" "$CODEGEN:SELF"; do

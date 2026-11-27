@@ -158,16 +158,29 @@ def dns_a_yanit(sorgu, adres, ttl=2):
 
 
 class EthernetEs(AbstractContextManager):
-    def __init__(self, ip=ES_IP, mac=ES_MAC, yanki_portu=9000):
+    def __init__(self, ip=ES_IP, mac=ES_MAC, yanki_portu=9000, *, dizin=None):
         self.ip, self.mac, self.yanki_portu = ip, mac, yanki_portu
-        self.soket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.soket.bind(('127.0.0.1', 0))
-        self.konuk = None
+        self.dizin = dizin
+        if dizin is None:
+            self.soket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.soket.bind(('127.0.0.1', 0))
+            self.konuk = None
+        else:
+            # İki uç da bu koşuma ait. Yanıtın adresi ilk UDP paketinden öğrenilmez.
+            self.soket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            self.konuk = str(dizin/'nic.sock')
+            self.soket.bind(str(dizin/'es.sock'))
 
     def __exit__(self, *hata):
         self.soket.close()
+        if self.dizin is not None:
+            for ad in ('es.sock', 'nic.sock'):
+                (self.dizin/ad).unlink(missing_ok=True)
 
     def qemu_netdev(self):
+        if self.dizin is not None:
+            return (f'dgram,id=n0,local.type=unix,local.path={self.konuk},'
+                    f'remote.type=unix,remote.path={self.soket.getsockname()}')
         # Konuk ucunda da portu işletim sistemi ayırır. İlk çerçeve dönüş adresini verir.
         return ('dgram,id=n0,local.type=inet,local.host=127.0.0.1,local.port=0,'
                 f'remote.type=inet,remote.host=127.0.0.1,remote.port={self.soket.getsockname()[1]}')

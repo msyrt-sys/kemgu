@@ -6,7 +6,13 @@ if ! command -v qemu-system-x86_64 >/dev/null || ! command -v fsck.fat >/dev/nul
  echo "ATLANDI (QEMU, OVMF veya fsck.fat yok)"
  exit 0
 fi
-W="${DALGA12_CALISMA_DIZINI:-build/_bm_disk}"
+if [[ -n "${DALGA12_CALISMA_DIZINI:-}" ]]; then
+    W=$DALGA12_CALISMA_DIZINI
+else
+    W=$(mktemp -d build/disk.XXXXXX)
+    source test/calisma_dizini.sh
+    calisma_izle "$W"
+fi
 for c in ${DALGA12_DERLEYICILER:-build/kemgu build/codegen}; do
  echo "DALGA12 DERLEYICI $c"
  UEFI_CALISMA_DIZINI="$W" UEFI_YALNIZ_DERLE=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI="$c" bash test/bm_x86_uefi_harness.sh

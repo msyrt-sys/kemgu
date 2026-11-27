@@ -1,0 +1,69 @@
+// Yalnız IPI kapısının imajı. Her çiftte sıra ve dönüş değerini host yeniden hesaplar.
+küresel değişken smp_ipi_olcum:tam64=0;
+çıplak işlev kem_smp_olcum_boyu(n:tam32) -> tam32 { ver 256+n*n*16000; }
+çıplak işlev ipi_olcum_al() -> tam64 {
+    güvensiz { değişken a:*tam64=(&smp_ipi_olcum) olarak *tam64; ver kem_mmio_oku64(a olarak tam64); }
+}
+çıplak işlev ipi_deney_hata(p:tam64,no:tam32,h:tam64) {
+    kem_mmio_yaz64(p+64+(no olarak tam64)*8,h);
+}
+çıplak işlev ipi_deney_turu(p:tam64,no:tam32,n:tam32) {
+    değişken hedef:tam32=0;
+    iken hedef<n {
+        değişken i:tam64=1;
+        iken i<=1000 {
+            değişken veri:tam64=((no olarak tam64)<<32)|i;
+            değişken bas:tam64=bm_tsc_oku();
+            değişken b:tam64=ipi_cagir(hedef,1,veri);
+            eğer b<0 { ipi_deney_hata(p,no,b); ver; }
+            değişken v:tam64=ipi_bekle(hedef,b,1000);
+            değişken son:tam64=bm_tsc_oku();
+            eğer v<0 { ipi_deney_hata(p,no,v); ver; }
+            değişken konum:tam64=p+256+(((no*n+hedef) olarak tam64)*1000+i-1)*16;
+            kem_mmio_yaz64(konum,v); kem_mmio_yaz64(konum+8,son-bas);
+            i=i+1;
+        }
+        hedef=hedef+1;
+    }
+    kem_mmio_yaz64(p+8,(no olarak tam64)+1);
+}
+çıplak işlev kem_smp_acilis_deneyi(no:tam32) {
+    değişken p:tam64=0;
+    eğer no==0 {
+        değişken n:tam32=smp_cevrimici_say();
+        eğer n<2 veya n>8 { kdl_panik("IPI DENEY SAYI"); ver; }
+        p=smp_deney_alani;
+        eğer p==0 { kdl_panik("IPI DENEY RAM"); ver; }
+        kem_mmio_yaz64(p,n olarak tam64); kem_mmio_yaz64(p+24,kap_tsc_ms);
+        güvensiz { smp_ipi_olcum=p; }
+        // Kendimize gönderip IRQ'lar kapalıyken dolu kutu ve süre aşımını sınarız.
+        değişken f:tam64=ipi_kesme_sakla();
+        değişken b:tam64=ipi_gonder(0,81);
+        değişken dolu:tam64=ipi_gonder(0,81);
+        değişken bek:tam64=ipi_bekle(0,b,0);
+        ipi_kesme_geri(f);
+        eğer b<=0 veya dolu!=-2 veya bek!=-4 veya ipi_bekle(0,b,1000)!=0 {
+            ipi_deney_hata(p,no,-11); ver;
+        }
+        eğer ipi_cagir(0,3,0)!=-1 veya ipi_gonder(n,80)!=-1 veya ipi_bekle(0,b,0)!=-1 { ipi_deney_hata(p,no,-12); ver; }
+    } değilse {
+        iken p==0 { p=ipi_olcum_al(); }
+    }
+    değişken n:tam32=kem_mmio_oku64(p) olarak tam32;
+    iken kem_mmio_oku64(p+8)!=(no olarak tam64) {
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } }
+    }
+    ipi_deney_turu(p,no,n);
+    eğer no!=0 { ver; }
+    iken kem_mmio_oku64(p+8)!=(n olarak tam64) {
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"hlt"# bozulan("~{memory}") } }
+    }
+    eğer ipi_hepsine(81)!=n-1 { ipi_deney_hata(p,no,-13); ver; }
+    değişken b:tam64=ipi_cagir(1,2,0);
+    değişken tik:tam64=ipi_bekle(1,b,1000);
+    eğer tik<=0 { ipi_deney_hata(p,no,-14); ver; }
+    kem_mmio_yaz64(p+32,tik);
+    eğer ipi_hepsine(82)!=n-1 { ipi_deney_hata(p,no,-15); ver; }
+    kem_mmio_yaz64(p+16,1);
+    kis_metin("SMP_IPI "); kis_onaltilik(p olarak dtam64); kis_metin(" "); kis_onaltilik(n olarak dtam64); kis_satir();
+}

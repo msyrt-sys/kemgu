@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """USB klavyesiz gerçek QEMU i8042: denetim baytı ve tarama baytları."""
-import sys,socket,json,subprocess,time,os
+from bekle import bekle, seri_oku, qmp_baglan
+import sys,json,subprocess,os
 from pathlib import Path
 elf=Path(sys.argv[1]).resolve();w=Path(sys.argv[2]).resolve();ser=w/'ps2.seri';q=w/'ps2.qmp';q.unlink(missing_ok=True)
 p=subprocess.Popen(['qemu-system-x86_64','-M','q35','-m','256M','-display','none','-no-reboot','-serial',f'file:{ser}','-qmp',f'unix:{q},server=on,wait=off','-kernel',str(elf),'-device','isa-debug-exit,iobase=0xf4,iosize=0x04'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
-sock=socket.socket(socket.AF_UNIX)
+sock=None
 try:
- son=time.monotonic()+30
- while not q.exists():
-  if time.monotonic()>son:raise TimeoutError()
-  time.sleep(.01)
- sock.settimeout(5);sock.connect(str(q));f=sock.makefile('rwb',buffering=0);f.readline()
+ sock=qmp_baglan(q,p,sure=30,okuma_suresi=5)
+ f=sock.makefile('rwb',buffering=0);f.readline()
  def yanit():
   while True:
    d=json.loads(f.readline())
@@ -25,11 +23,14 @@ try:
  allowed={m['name'] for m in enum['members']}
  events=[('a',True),('a',False),('bracket_left',True),('bracket_left',False),('dot',True),('dot',False),('shift',True),('apostrophe',True),('apostrophe',False),('shift',False),('left',True),('left',False)]
  assert all(k in allowed for k,d in events)
- while b'PS2_HAZIR\n' not in (ser.read_bytes() if ser.exists() else b''):
-  if p.poll() is not None or time.monotonic()>son:raise RuntimeError(ser.read_bytes() if ser.exists() else b'')
-  time.sleep(.01)
+ hazir=b'PS2_HAZIR\n'
+ bekle('PS2_HAZIR',lambda:seri_oku(ser),lambda b:hazir in b,sure=30,surec=p)
+ adet=0
  for k,d in events:
-  komut('input-send-event',{'events':[{'type':'key','data':{'down':d,'key':{'type':'qcode','data':k}}}]});time.sleep(.03)
+  komut('input-send-event',{'events':[{'type':'key','data':{'down':d,'key':{'type':'qcode','data':k}}}]})
+  adet+=2 if k=='left' else 1
+  bekle(f'PS/2 set 1 {adet} bayt',lambda:seri_oku(ser).partition(hazir)[2],
+        lambda b:b.count(b'\n')>=adet,surec=p)
  p.wait(timeout=10);text=ser.read_text();print(text,end='');assert p.returncode==1,p.returncode
  # İlk gerçek QEMU ölçümü: 30/158=a, 26/154=ğ, 52/180=ç,
  # Shift 42/170 + 40/168=İ, E0 75/E0 203=sol; set 1.
@@ -38,5 +39,5 @@ try:
  assert list(map(int,satirlar[2:-1]))==[30,158,26,154,52,180,42,40,168,170,224,75,224,203],text
  print('PS2 SET1 OK: gerçek QEMU baytları ve XLATE')
 finally:
- sock.close()
+ if sock is not None: sock.close()
  if p.poll() is None:p.kill();p.wait()

@@ -4,7 +4,9 @@
 set -u
 cd "$(dirname "$0")/.."
 EXE="${EXE-}"; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) EXE="${EXE:-.exe}";; esac
-W=$(mktemp -d build/e4k.XXXXXX); trap 'rm -rf "$W"' EXIT
+W=$(mktemp -d build/e4k.XXXXXX)
+source test/calisma_dizini.sh
+calisma_izle "$W"
 fail=0
 for c in kemgu codegen; do
   "build/$c$EXE" --llvm test/e4k/yerel_buyume.kem > "$W/$c.ll" 2> "$W/$c.err" || { echo "🔴 $c --llvm başarısız"; cat "$W/$c.err"; fail=1; continue; }

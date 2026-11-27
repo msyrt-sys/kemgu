@@ -19,17 +19,18 @@ cd "$(dirname "$0")/.."
 KEMGU=build/kemgu${EXE}
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
 # recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
-TMP=$(mktemp -d "build/ciplak_rf.XXXXXX" 2>/dev/null || echo "build/ciplak_rf.$$")
-mkdir -p "$TMP"
-# [D-775] Self-host ikilisi KAPININ KENDİ dizinine kurulur. Önceden ortak build/codegen'in ÜZERİNE
-# bağlanıyordu: -j altında o anda build/codegen'i kullanan kapılar (check_genis ölçüldü: mtime koşum
-# ortasında değişti, birkaç dosyada self-host çıktısı BOŞ) yarım yazılmış ikiliyle karşılaşıyordu.
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/ciplak_rf) || exit 1
+calisma_izle "$TMP"
+# Diğer kapıların kullandığı derleyici, bu turun yeniden bağlamasından etkilenmez.
+# [D-775] Self-host ikilisi KAPININ KENDİ dizinine kurulur (ortak build/codegen'in üzerine bağlanmaz):
+# -j altında o anda build/codegen'i kullanan kapılar yarım yazılmış ikiliyle karşılaşıyordu.
 SELF="$TMP/codegen${EXE}"
 gecti=0; kaldi=0
 
 # self-host binary'yi HER ZAMAN güncel codegen.kem'den üret (stale binary = yanlış PASS).
-"$KEMGU" --llvm selfhost/codegen.kem > "$TMP/self.ll" 2>/dev/null
-clang -x ir "$TMP/self.ll" -x none build/kdl_runtime.o -o "$SELF" -Wno-override-module 2>/dev/null
+"$KEMGU" --llvm selfhost/codegen.kem > "$TMP/self.ll" || exit 1
+clang -x ir "$TMP/self.ll" -x none build/kdl_runtime.o -o "$SELF" -Wno-override-module || exit 1
 if [ ! -x "$SELF" ]; then echo "  ❌ self-host codegen.exe üretilemedi"; exit 1; fi
 
 # çıplak fn gövdesindeki region-symbol sayısını dön (fn TANIMI → sonraki '}' arası).
@@ -97,6 +98,5 @@ else
     echo "  ❌ normal döngü: self-host ρ_iter KAYBOLDU ($nr) — F4.3 regresyonu"; kaldi=$((kaldi+1))
 fi
 
-rm -rf "$TMP"
 echo "=== çıplak region-free IR parite: $gecti/$((gecti+kaldi)) ==="
 [ "$kaldi" -eq 0 ]

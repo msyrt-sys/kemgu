@@ -29,10 +29,9 @@ RT=${RT:-build/kdl_runtime.o}
 TEST=${TEST:-test/stdlib/test_kripto_kosum.kem}
 ETIKET=${ETIKET:-C}   # [D-714] hangi derleyici olculuyor
 # Paralel koşumda birbirini ezmesin (D-297 dersi): PID ile benzersiz yol.
-TMP="build/_kripto_kosum_$$"
-mkdir -p "$TMP"
-temizle() { rm -rf "$TMP"; }
-trap temizle EXIT
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/_kripto_kosum) || exit 1
+calisma_izle "$TMP"
 
 BEKLENEN=255  # D-713: +128 OS rastgele · D-710: +64 BLAKE3 · D-709: +16 çok bloklu SHA-256, +32 HMAC-SHA256 (RFC 4231)
 
@@ -52,13 +51,13 @@ if ! clang -x ir "$TMP/bundle.ll" -x none "$RT" -o "$TMP/bundle.exe" 2>"$TMP/lin
     echo "FAIL: clang bağlama"; grep -v "overriding the module target" "$TMP/link.log" | head -20; exit 1
 fi
 
-CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
-
-# Win11: taze .exe ilk exec'te Defender taramasında 127 verebilir (ortamsal).
-# Gerçek panik de 127 döner AMA stdout'a "PANIK:" yazar → ikisini AYIR.
-if [ "$RC" -eq 127 ] && [ -z "$CIKTI" ]; then
-    sleep 2; CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
-fi
+# Panik de 127 dönebilir. Çıktılı 127 kesin sonuçtur; yalnız boş ilk çalıştırmayı yinele.
+kripto_dene() {
+    CIKTI=$("$TMP/bundle.exe" 2>&1); RC=$?
+    if [[ $RC == 127 && -z $CIKTI ]]; then return 127; fi
+    return 0
+}
+calisma_127_dene kripto_dene
 
 echo "=== stdlib/kripto bilinen-cevap koşumu [$ETIKET] ==="
 [ -n "$CIKTI" ] && echo "  çalışma-anı çıktısı: $CIKTI"

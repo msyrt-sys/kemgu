@@ -78,6 +78,18 @@ def kos(w, tur):
         alinan = []
         alt = {}
         ust = sayaclar()
+        cpular = sorted(q.call('query-cpus-fast'), key=lambda v:v['cpu-index'])
+        apic = [q.call('qom-get', {'path':v['qom-path'], 'property':'apic-id'}) for v in cpular]
+        cp = [c.symbols['kdl_cekirdek_bsp']]
+        if len(cpular)>1:
+            kayit = int.from_bytes(c.mem(c.symbols['smp_ap_kayitlari'],8),'little')
+            cp += [int.from_bytes(c.mem(kayit+i*64+48,8),'little') for i in range(1,len(cpular))]
+        def tikler():
+            veri = [c.mem(adr+16,200) for adr in cp]
+            return [(int.from_bytes(v[:8],'little'),int.from_bytes(v[192:200],'little')) for v in veri]
+        ekran_tik_alt = tikler()
+        disk_tik_alt = [(0,0)]*len(cp)
+        disk_tik_ust = ekran_tik_alt
         ekran_alt = nic_sayaclari()
         disk_alt = (0,) * len(nic_alanlari)
         disk_ust = ekran_alt
@@ -86,13 +98,16 @@ def kos(w, tur):
             alinan.append(b)
         c.run('donanim', rapor)
         ekran_ust = nic_sayaclari()
+        ekran_tik_ust = tikler()
         if tur == 'gpt':
             c.run('bagla --yazilabilir usb0p2')
             alt = sayaclar()
             disk_alt = nic_sayaclari()
+            disk_tik_alt = tikler()
             c.run('donanim kaydet /diskler/usb0p2/donanim.txt')
             ust = sayaclar()
             disk_ust = nic_sayaclari()
+            disk_tik_ust = tikler()
         c.shutdown()
     fsck(w, disk, 'donanim')
     kayit = Fat(disk.read()).get('/donanim.txt')
@@ -100,13 +115,20 @@ def kos(w, tur):
     kalip = rb'^KESME (\d+) (\d+) (\d+)\n'
     # Otomatik MBR raporu ilk DHCP çerçevesinden önce diske yazılabilir.
     nic_kalibi = rb' rx (\d+) tx (\d+) rx_bayt (\d+) tx_bayt (\d+) atilan (\d+)(?= vektor )'
-    def sabit_alanlar(rapor, once, sonra):
+    cpu_kalibi = rb'^ISLEMCI (\d+) (\d+) (\d+) (\d+) (\d+)$'
+    def sabit_alanlar(rapor, once, sonra, tik_alt, tik_ust):
+        satirlar = [tuple(map(int, s)) for s in re.findall(cpu_kalibi, rapor, re.M)]
+        assert len(satirlar)==len(cp) and [s[1] for s in satirlar]==apic, satirlar
+        for i,(no,_,tik,dilim,bosta) in enumerate(satirlar):
+            assert no==i and tik_alt[i][0]<=tik<=tik_ust[i][0] and dilim==0 and 0<=bosta<=100
+            assert tik_alt[i][1]*100//max(1,tik_ust[i][0])<=bosta<=min(100,tik_ust[i][1]*100//max(1,tik_alt[i][0]))
+        rapor = re.sub(cpu_kalibi, rb'ISLEMCI \g<1> \g<2> tik \g<4> bosta', rapor, flags=re.M)
         nic = re.findall(nic_kalibi, rapor)
         assert len(nic) == 1, rapor
         degerler = tuple(map(int, nic[0]))
         assert all(a <= n <= b for a, n, b in zip(once, degerler, sonra)), (once, degerler, sonra)
         return re.sub(nic_kalibi, b'', re.sub(kalip, b'', rapor, flags=re.M))
-    assert sabit_alanlar(kayit, disk_alt, disk_ust) == sabit_alanlar(alinan[0], ekran_alt, ekran_ust)
+    assert sabit_alanlar(kayit, disk_alt, disk_ust, disk_tik_alt, disk_tik_ust) == sabit_alanlar(alinan[0], ekran_alt, ekran_ust, ekran_tik_alt, ekran_tik_ust)
     sayilan = {int(v):(int(k),int(n)) for v,k,n in re.findall(kalip,kayit,re.M)}
     beklenen = set(ust) if tur == 'gpt' else set(ust)-{65}
     assert set(sayilan) == beklenen,(sayilan,ust)

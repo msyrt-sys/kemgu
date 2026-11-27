@@ -7,7 +7,8 @@ from pathlib import Path
 
 from dalga12_fat import Fat
 from dalga12_imaj import images
-from dalga12_kahin import Console, boot
+from dalga12_kahin import boot
+from surec_kahin import SurecConsole
 from donanim_kahin import pci_kumesi
 
 
@@ -43,7 +44,8 @@ def yaprak(c, adres):
 def kos(w, tur):
     usb, nvme, sata = images(w, 'gpt')
     with boot(w, usb[0], nvme, sata, pci_topolojisi=tur) as (q,p,seri):
-        c = Console(w,q,p,seri)
+        # USB tuşlarının arasını konuk LAPIC tikleriyle ölç.
+        c = SurecConsole(w,q,p,seri)
         agac = list(dugumler(q.call('query-pci')[0]['devices']))
         ilk_pci = pci_kumesi(q)
         if tur == 'kopru':

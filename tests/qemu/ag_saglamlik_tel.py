@@ -1,4 +1,6 @@
 """Hızı sınırlı yerel QEMU trafiğini ve her iş yükündeki çekirdek kaynaklarını ölçer."""
+from bekle import bekle
+from protokol_suresi import TCP_ACK_GECIKMESI
 import argparse
 import hashlib
 from pathlib import Path
@@ -35,7 +37,7 @@ def yankila(es,i):
     raise AssertionError('ICMP yanıtı gelmedi')
 
 
-def ornekler(es):
+def ornekler(es, c):
     rng=random.Random(170018)
     for i in range(10000):
         govde=rng.randbytes(16+i%61)
@@ -52,8 +54,10 @@ def ornekler(es):
             icmp=bytearray(yankilama(8,18,i,govde))
             icmp[2]^=1
             paket=ethernet(MAC,ES_MAC,2048,ipv4(ES_IP,KONUK_IP,1,icmp))
+        once=c.sayi('ag_rx_sayi')
         es.gonder(paket)
-        time.sleep(.001)
+        bekle('yerel konuğun RX sayacı',lambda:c.sayi('ag_rx_sayi'),
+              lambda n:n>once,surec=c.p,aralik=.001)
         if i%128==127:
             yankila(es,i)
 
@@ -66,13 +70,24 @@ def baglanti(es,i,adet,q=None):
     assert (p.bayrak,p.onay,p.hedef_port)==(18,seq+1,sp)
     seq+=1
     ack=(p.sira+1)&MASKE
+    pencere=int.from_bytes(p.yuk[14:16],"big")
     es.yolla(sp,9001,seq,ack,16)
     giden=0
     giden_sha=hashlib.sha256()
     gelen_sha=hashlib.sha256()
     desen=bytes((j*37+i)&255 for j in range(256))*50
     while giden<adet:
-        n=min(1400 if giden<2800 else 11200,adet-giden)
+        # Bu eş pencere ölçeklemesi istemez. Her tur bir önceki verinin
+        # yankısını ve ACK'ini aldıktan sonra açılan gerçek pencereyi kullanır.
+        if pencere==0:
+            p,b=es.al(8)
+            assert not b and p.onay==seq, (p.onay,seq,len(b))
+            pencere=int.from_bytes(p.yuk[14:16],"big")
+            continue
+        dilim=min(11200,pencere)
+        if dilim>=1400:
+            dilim-=dilim%1400
+        n=min(1400 if giden<2800 else dilim,dilim,adet-giden)
         bas=giden%256
         beklenen=desen[bas:bas+n]
         for ofset in range(0,n,1400):
@@ -86,6 +101,7 @@ def baglanti(es,i,adet,q=None):
                 raise TimeoutError((giden,n,got,alindi-seq))
             try:
                 p,b=es.al(.45)
+                pencere=int.from_bytes(p.yuk[14:16],"big")
             except TimeoutError:
                 if alindi<son:
                     ofset=alindi-seq
@@ -103,7 +119,7 @@ def baglanti(es,i,adet,q=None):
                 if q is not None and giden==1400 and not got:
                     # İlk kopyayı onaylamadan kabloyu kes ve aynı sıranın yeniden geldiğini gör.
                     q.call('set_link',{'name':'ag0','up':False})
-                    time.sleep(.45)
+                    time.sleep(TCP_ACK_GECIKMESI)
                     q.call('set_link',{'name':'ag0','up':True})
                     while True:
                         tekrar,veri=es.al(8)
@@ -205,7 +221,7 @@ def kos(w,kip):
                 def sayaclar():
                     return struct.unpack('<QQ',c.mem(l3+72,16))
                 ilk=sayaclar()
-                ornekler(es)
+                ornekler(es,c)
                 assert c.sayi('ag_rx_sayi')-say>=10000
                 son=sayaclar()
                 fark=tuple(a-b for a,b in zip(son,ilk))
@@ -214,7 +230,6 @@ def kos(w,kip):
                 olc(c,'10000-karisik',once)
                 for i in range(10000):
                     yankila(es,i)
-                    time.sleep(.0005)
                 olc(c,'10000-ping',once)
                 biten=c.sayi('ag_tcp_bitti')
                 for i in range(500):

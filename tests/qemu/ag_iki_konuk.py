@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import shutil
 import sys
-import tempfile
+from calisma_dizini import calisma_dizini
 
 from ag_arac_kahin import komut, pcap_akim
 from ag_arm_kahin import TCP, arm_ac
@@ -53,12 +53,16 @@ def arm(kok,imaj):
     w=hazir(kok,'es-x86')
     disk=imajlar(w,{})
     a=kok/'es-arm'
-    with tempfile.TemporaryDirectory(prefix='kem-ag-') as tmp:
+    with calisma_dizini(prefix='kem-ag-') as tmp:
         yol=Path(tmp)/'ether'
         with pc(w,disk,hat(yol,True),'52:54:00:17:19:01') as c:
             c.run('ag ayarla 192.0.2.1/24 192.0.2.2',b'AG AYAR OK\n')
             c.run('ag tcp dinle',b'TCP dinle 9001\n')
             once=c.heap(),c.bos_cerceve()
+            # Intel RDLEN bayt cinsinden, her RX tanımlayıcısı 16 bayt.
+            rdlen=int.from_bytes(c.mem(c.sayi('ag_bar')+0x2808,4),'little')
+            rx_yuva=rdlen//16
+            assert rx_yuva>=4 and rdlen%16==0,rdlen
             with arm_ac(a,imaj,hat(yol,False),'192.0.2.1','192.0.2.2',9001,0) as (_,p,s):
                 wait_for(p,lambda:s.exists() and b'KEMGU KEM-OS OK' in s.read_bytes(),seconds=100)
                 seri=s.read_bytes()
@@ -69,6 +73,10 @@ def arm(kok,imaj):
         assert f.read(len(TCP))==TCP
     with (w/'ag.pcap').open('rb') as f:
         paketler=list(pcap_kayitlari(f))
+    synack=next(p for p in paketler if p.kaynak_port==9001 and p.bayrak==18)
+    pencere=int.from_bytes(synack.yuk[14:16],'big')
+    assert 0<pencere<=((rx_yuva-2)//2)*1460,(pencere,rx_yuva)
+    print('QMP RX halkası',rx_yuva,'SYN-ACK yankı penceresi',pencere,flush=True)
     for giden in (False,True):
         assert pcap_akim(paketler,9001,giden,bytes.fromhex('525400170017'))==TCP
     print('AG19 x86 ARM iki yon 1 MiB SHA256',hashlib.sha256(TCP).hexdigest(),'heap/cerceve',once,flush=True)
@@ -92,7 +100,7 @@ def x86(kok,arp_kapali=False):
     sag={ad+'.elf':(kok/(ad+'.elf')).read_bytes() for ad in ('indir','nc','paket','tftp','ping')}
     sol_disk=imajlar(a,{} if arp_kapali else sol)
     sag_disk=imajlar(b,sag)
-    with tempfile.TemporaryDirectory(prefix='kem-iki-') as tmp:
+    with calisma_dizini(prefix='kem-iki-') as tmp:
         yol=Path(tmp)/'ether'
         with pc(a,sol_disk,hat(yol,True),'52:54:00:17:19:01') as c,pc(b,sag_disk,hat(yol,False),'52:54:00:17:19:02') as d:
             c.run('ag ayarla 192.0.2.1/24 192.0.2.2',b'AG AYAR OK\n')

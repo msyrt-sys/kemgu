@@ -26,7 +26,8 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
 }
 
 // C-ABI malloc: void* malloc(size_t) → @malloc(i64)->ptr.
-çıplak işlev malloc(n: tam64) -> *tam8 {
+çıplak işlev malloc(n: tam64) -> *tam8 { ver kem_heap_ayir(n); }
+çıplak işlev kem_heap_ayir(n: tam64) -> *tam8 {
     değişken istek: tam64 = n;
     eğer istek == 0 { istek = 1; }               // 0-bayt → benzersiz geçerli ptr
     değişken toplam: tam64 = ((istek + 31) / 16) * 16;   // header(16)+istek, 16-hizalı
@@ -65,7 +66,8 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
 }
 
 // C-ABI free: void free(void*) → @free(ptr).
-çıplak işlev free(p: *tam8) {
+çıplak işlev free(p: *tam8) { kem_heap_iade(p); }
+çıplak işlev kem_heap_iade(p: *tam8) {
     değişken pa: tam64 = p olarak tam64;         // ptrtoint
     eğer pa == 0 { ver; }
     değişken h: tam64 = pa - 16;                 // header

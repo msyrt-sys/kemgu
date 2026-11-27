@@ -6,7 +6,7 @@ kullan drivers::pci::yapilandirma::{ bar_boyu, bar_boyu64 };
 kullan drivers::bellek::harita::{ BellekBolgesi };
 kullan drivers::bellek::cerceve::{ CerceveAyirici, cerceve_yeni, cerceve_bos, ayir_ardisik, serbest_ardisik };
 işlev uefi_tahsis(d: &değişken CerceveAyirici, sayfa: tam32, ad: metin) -> sonuç<tam64,metin> {
- eşleş ayir_ardisik(d,sayfa) {
+ eşleş uefi_cerceve_ayir(d,sayfa) {
   hiç => { ver hata(metin_birlestir("UEFI RAM yetmedi: ",ad)); }
   değer(t) => {
    değişken m: metin = metin_birlestir(metin_birlestir("TAHSIS ",ad)," ");
@@ -22,23 +22,35 @@ küresel değişken uefi_surec_ayirici: tam64 = 0;
  değişken ptr: *CerceveAyirici = uefi_surec_ayirici olarak *CerceveAyirici;
  ver *ptr;
 }
-işlev uefi_surec_ayir(adet: tam32) -> tam64 {
- güvensiz {
-  değişken d: CerceveAyirici = uefi_ayirici_al();
-  eşleş ayir_ardisik(&değişken d,adet) {
-   hiç => { ver 0; }
-   değer(t) => { ver t; }
-  }
- }
+çıplak işlev uefi_cerceve_ayir(d:&değişken CerceveAyirici,adet:tam32) -> seçimlik<tam64> {
+ değişken f:tam64=smp_bellek_kilit_al(0);
+ değişken adres:seçimlik<tam64> = ayir_ardisik(d,adet);
+ smp_bellek_kilit_birak(0,f); ver adres;
+}
+çıplak işlev uefi_cerceve_iade(d:&değişken CerceveAyirici,t:tam64,adet:tam32) -> sonuç<mantıksal,metin> {
+ değişken f:tam64=smp_bellek_kilit_al(0);
+ değişken sonuc:sonuç<mantıksal,metin> = serbest_ardisik(d,t,adet);
+ smp_bellek_kilit_birak(0,f); ver sonuc;
+}
+çıplak işlev uefi_surec_ayir(adet: tam32) -> tam64 {
+ değişken d:CerceveAyirici=uefi_ayirici_al();
+ eşleş uefi_cerceve_ayir(&değişken d,adet) { hiç => { ver 0; } değer(t) => { ver t; } }
+}
+çıplak işlev uefi_surec_iade_sonuc(t:tam64,adet:tam32) -> sonuç<mantıksal,metin> {
+ değişken d:CerceveAyirici=uefi_ayirici_al();
+ ver uefi_cerceve_iade(&değişken d,t,adet);
 }
 işlev uefi_surec_iade(t: tam64,adet: tam32) {
- güvensiz {
-  değişken d: CerceveAyirici = uefi_ayirici_al();
-  eşleş serbest_ardisik(&değişken d,t,adet) {
-   hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
-   tamam(v) => { }
-  }
+ eşleş uefi_surec_iade_sonuc(t,adet) {
+  hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
+  tamam(v) => {}
  }
+}
+çıplak işlev uefi_bos_say() -> tam32 {
+ değişken f:tam64=smp_bellek_kilit_al(0);
+ değişken d:CerceveAyirici=uefi_ayirici_al();
+ değişken bos:tam32=cerceve_bos(&d);
+ smp_bellek_kilit_birak(0,f); ver bos;
 }
 işlev uefi_bellek_kur(b: UefiBilgi) -> sonuç<mantıksal,metin> {
  ver uefi_bellek_kur_ic(b,yanlış);
@@ -61,7 +73,7 @@ işlev uefi_bellek_kur_ic(b: UefiBilgi,surec: mantıksal) -> sonuç<mantıksal,m
   eşleş uefi_apic_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş uefi_guc_esle(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
   eşleş pat_gop_kur(&değişken d,b) { hata(e) => { ver hata(e); } tamam(v) => { } }
-  eğer surec {
+  eğer surec veya smp_birden_cok {
    değişken sakla: Dizi<CerceveAyirici> = [d];
    değişken adres: *tam64 = (&sakla) olarak *tam64;
    uefi_surec_ayirici=kxm_o64(*adres);

@@ -10,7 +10,9 @@ set -u
 cd "$(dirname "$0")/.."
 KEMGU="${KEMGU:-build/kemgu}"; CODEGEN="${CODEGEN:-build/codegen}"
 [ -x "$KEMGU" ] && [ -x "$CODEGEN" ] || { echo "  🔴 derleyici ikilisi yok"; exit 2; }
-W="build/_stdlib_ithal_$$"; mkdir -p "$W"; trap 'rm -rf "$W"' EXIT
+source test/calisma_dizini.sh
+W=$(calisma_ac build/_stdlib_ithal) || exit 1
+calisma_izle "$W"
 # MUAFİYET = AÇIK BORÇ ENVANTERİ. Satır silinince kapı onu ölçer; muaf modül
 # EŞLEŞİRSE kapı uyarır ("artık geçiyor, satırı sil").
 # [D-756] BOŞ: `karsilastir` (modülle aynı adlı üye, T024) ve `sonuc` (imzada seçili

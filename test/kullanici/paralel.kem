@@ -1,0 +1,101 @@
+// Her çocuk kendi yarı açık aralığında bölütlü Eratosten eleği çalıştırır.
+sabit PAR_SINIR: tam64 = 33554432;
+sabit PAR_BLOK: tam64 = 32768;
+sabit PAR_KOK: tam64 = 5793;
+çıplak işlev par_koy(p:tam64,i:tam64,v:tam64) {
+    değişken q:*tam64=(p+8*i) olarak *tam64; *q=v;
+}
+çıplak işlev par_isaret(p:tam64,i:tam64) {
+    değişken q:*dtam8=(p+i) olarak *dtam8; *q=1 olarak dtam8;
+}
+çıplak işlev par_bos(p:tam64,i:tam64) -> mantıksal {
+    değişken q:*dtam8=(p+i) olarak *dtam8; ver (*q) olarak tam32==0;
+}
+çıplak işlev par_asal(taban:tam64,alt:tam64,ust:tam64) -> tam64 { güvensiz {
+    değişken blok:tam64=taban+PAR_KOK;
+    memset(taban olarak *tam8,0,PAR_KOK);
+    değişken bolen:tam64=2;
+    iken bolen*bolen<PAR_KOK {
+        eğer par_bos(taban,bolen) {
+            değişken kat:tam64=bolen*bolen;
+            iken kat<PAR_KOK { par_isaret(taban,kat); kat=kat+bolen; }
+        }
+        bolen=bolen+1;
+    }
+    değişken adet:tam64=0;
+    iken alt<ust {
+        değişken son:tam64=alt+PAR_BLOK;
+        eğer son>ust { son=ust; }
+        memset(blok olarak *tam8,0,son-alt);
+        bolen=2;
+        iken bolen*bolen<son {
+            eğer par_bos(taban,bolen) {
+                değişken kat:tam64=((alt+bolen-1)/bolen)*bolen;
+                eğer kat<bolen*bolen { kat=bolen*bolen; }
+                iken kat<son { par_isaret(blok,kat-alt); kat=kat+bolen; }
+            }
+            bolen=bolen+1;
+        }
+        değişken k:tam64=alt;
+        eğer k<2 { k=2; }
+        iken k<son { eğer par_bos(blok,k-alt) { adet=adet+1; } k=k+1; }
+        alt=son;
+    }
+    ver adet;
+} }
+işlev par_rakam(s:metin) -> tam64 {
+    eğer metin_uzunluk(s)!=1 { ver -1; }
+    ver (metin_bayt(s,0) olarak tam64)-48;
+}
+işlev par_cocuk(p:tam64,n:tam64,i:tam64) -> tam64 { güvensiz {
+    eğer i<0 veya i>=n { ver 3; }
+    sis_kapat(0);
+    değişken elek:tam64=malloc(PAR_KOK+PAR_BLOK) olarak tam64;
+    eğer elek==0 { ver 4; }
+    değişken adet:tam64=par_asal(elek,i*PAR_SINIR/n,(i+1)*PAR_SINIR/n);
+    free(elek olarak *tam8);
+    par_koy(p,0,i); par_koy(p,1,adet);
+    eğer sis_yaz(1,p,16)!=16 { ver 5; }
+    ver 0;
+} }
+işlev par_baslat(yol:metin,p:tam64,n:tam64,i:tam64) -> tam64 {
+    // Başlangıçtaki iki tanıtıcı çocuğun stdin/stdout eşlemesidir.
+    par_koy(p,2,sis_metin_adres(tam_metin(n)));
+    par_koy(p,3,sis_metin_adres(tam_metin(i)));
+    par_koy(p,4,0);
+    ver sis_baslat_eslemeli(yol,p+16,p);
+}
+işlev par_satir(on:metin,a:tam64,b:tam64) {
+    değişken s:metin=metin_birlestir(on,tam_metin(a));
+    sis_metin(metin_birlestir(metin_birlestir(s," "),tam_metin(b)));
+    sis_bayt_yaz(1,10);
+}
+işlev kullanici_main(argc:tam64,argv:tam64) -> tam64 { güvensiz {
+    eğer argc!=2 ve argc!=3 { sis_metin("paralel 1|2|4|8\n"); ver 1; }
+    değişken n:tam64=par_rakam(sis_argv(argv,1));
+    eğer n!=1 ve n!=2 ve n!=4 ve n!=8 { ver 1; }
+    değişken p:tam64=malloc(256) olarak tam64;
+    eğer p==0 { ver 2; }
+    eğer argc==3 { ver par_cocuk(p,n,par_rakam(sis_argv(argv,2))); }
+    eğer sis_boru(p)!=0 { ver 6; }
+    par_satir("ASAL BAS ",n,PAR_SINIR);
+    değişken acilan:tam64=0; değişken biten:tam64=0; değişken toplam:tam64=0;
+    değişken maske:tam64=0;
+    iken biten<n {
+        // Sekiz yuvaya ebeveyn de dahildir. İlk çocuk toplanınca sekizinci açılır.
+        iken acilan<n ve acilan-biten<7 {
+            değişken pid:tam64=par_baslat(sis_argv(argv,0),p,n,acilan);
+            eğer pid<1 { ver 7; }
+            par_koy(p,8+acilan,pid); acilan=acilan+1;
+        }
+        eğer sis_oku(sis_alan(p,0),p+128,16)!=16 { ver 8; }
+        değişken i:tam64=sis_alan(p+128,0); değişken sayi:tam64=sis_alan(p+128,1);
+        eğer i<0 veya i>=acilan veya sayi<0 veya (maske&(1<<i))!=0 { ver 9; }
+        eğer sis_bekle(sis_alan(p,8+i),p+160)!=0 veya sis_alan(p+160,0)!=0 veya sis_alan(p+160,1)!=0 { ver 10; }
+        maske=maske|(1<<i); biten=biten+1;
+        toplam=toplam+sayi;
+        par_satir("ASAL PARCA ",i,sayi);
+    }
+    sis_kapat(sis_alan(p,1)); sis_kapat(sis_alan(p,0));
+    par_satir("ASAL TOPLAM ",n,toplam); ver 0;
+} }

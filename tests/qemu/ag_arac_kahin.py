@@ -10,7 +10,7 @@ import sys
 from boru_kahin import BoruConsole
 from dalga12_kahin import boot, fsck, wait_for
 from dalga12_fat import Fat
-from pcap_oku import pcap_kayitlari
+from pcap_oku import pcap_kayitlari, tcp_akimi
 from surec_imaj import imajlar
 from surec_kahin import SurecConsole
 
@@ -72,21 +72,7 @@ def udp_es(s):
 
 
 def pcap_akim(paketler, port, giden, mac=MAC):
-    sec = [p for p in paketler if p.protokol==6 and
-           (p.kaynak==mac and p.hedef_port==port if giden else p.hedef==mac and p.kaynak_port==port)]
-    syn = next(p for p in sec if p.bayrak&2)
-    birikim = bytearray()
-    for p in sec:
-        b = p.yuk[4*(p.yuk[12]>>4):]
-        if b:
-            ofs = (p.sira-syn.sira-1)&0xffffffff
-            assert ofs<=len(birikim), (ofs,len(birikim))
-            ilk = min(len(b),len(birikim)-ofs)
-            assert birikim[ofs:ofs+ilk]==b[:ilk]
-            birikim.extend(b[ilk:])
-    assert any(p.bayrak&1 for p in sec)
-    return bytes(birikim)
-
+    return tcp_akimi(paketler, port, giden, mac)
 
 def kos(w):
     progs = {a+'.elf':(w/(a+'.elf')).read_bytes() for a in ('nc','ag','agakim','echo','cozumle')}

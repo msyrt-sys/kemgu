@@ -1,0 +1,123 @@
+// 32 bayt, en az 8 hizalı. +0 sıradaki bilet, +4 sunulan bilet (32 bit),
+// +8 sıra numarası, +16 sahip no+1 (0 boş), +24 önceki sıra (64 bit).
+sabit KEMGU_KILIT_DENETIM: mantıksal = yanlış;
+
+çıplak işlev kilit_kur(k: tam64, sira: tam64) {
+    kem_mmio_yaz64(k,0);
+    kem_mmio_yaz64(k+8,sira);
+    kem_mmio_yaz64(k+16,0);
+    kem_mmio_yaz64(k+24,0);
+}
+çıplak işlev kilit_yerel_sira() -> tam64 {
+    değişken v: tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %gs:112, $0"# çıktı("=r",&v) bozulan("~{memory}") } }
+    ver v;
+}
+çıplak işlev kilit_sira_yaz(v: tam64) {
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq $0, %gs:112"# girdi("r",v) bozulan("~{memory}") } }
+}
+çıplak işlev kilit_sira_denetle(k: tam64) {
+    eğer KEMGU_KILIT_DENETIM ve kem_mmio_oku64(k+8) <= kilit_yerel_sira() { kdl_panik("KILIT TERS SIRA"); }
+}
+çıplak işlev kilit_sahiplen(k: tam64) {
+    kem_mmio_yaz64(k+16,cekirdek_no()+1);
+    eğer KEMGU_KILIT_DENETIM {
+        kem_mmio_yaz64(k+24,kilit_yerel_sira());
+        kilit_sira_yaz(kem_mmio_oku64(k+8));
+    }
+}
+// İki saniyelik süre PIT ile kalibre edilmiş TSC üzerinden ölçülür.
+küresel değişken smp_kilit_zaman_asimi:tam64=0;
+çıplak işlev kilit_gecikme(k:tam64) {
+    güvensiz { değişken adres:*tam64=(&smp_kilit_zaman_asimi) olarak *tam64;
+        satıriçi_asm { mimari:x86_64 şablon:r#"lock incq ($0)"#
+        girdi("r",adres olarak tam64) bozulan("~{cc}") bozulan("~{memory}") } }
+    eğer KEMGU_KILIT_DENETIM {
+        kis_ileti_basla(); kis_ileti_metin("KILIT ZAMAN ASIMI ");
+        değişken s:tam64=kem_mmio_oku64(k+8);
+        eğer s==10 { kis_ileti_metin("cekirdek"); } değilse eğer s==20 { kis_ileti_metin("cerceve"); }
+        değilse eğer s==30 { kis_ileti_metin("heap"); } değilse { kis_ileti_metin("deney"); }
+        kis_ileti_metin(" sira="); kis_ileti_sayi(s olarak dtam64,10);
+        kis_ileti_metin(" sahip="); kis_ileti_sayi((kem_mmio_oku64(k+16)-1) olarak dtam64,10);
+        kis_ileti_metin(" bekleyen="); kis_ileti_sayi(cekirdek_no() olarak dtam64,10);
+        kdl_panik(kis_ileti_metin_al());
+    }
+}
+çıplak işlev smp_kilit_al(k: tam64) {
+    kilit_sira_denetle(k);
+    değişken bilet:tam32=1;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"lock xaddl $0, ($2)"#
+        çıktı("=r",&bilet) girdi("0",bilet) girdi("r",k) bozulan("~{cc}") bozulan("~{memory}") } }
+    eğer (kem_mmio_oku32(k+4) olarak tam32)!=bilet {
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"incq %gs:120"# bozulan("~{cc}") bozulan("~{memory}") } }
+        değişken bas:tam64=bm_tsc_oku();
+        değişken alindi:tam32=0;
+        iken alindi==0 {
+            güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1024,%edx
+1: cmpl $2,4($1)
+je 2f
+decl %edx
+jnz 1b
+pause
+2: cmpl $2,4($1)
+sete %al
+movzbl %al,$0"# çıktı("=r",&alindi) girdi("r",k) girdi("r",bilet)
+                bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+            eğer alindi==0 ve bm_tsc_oku()-bas>kap_tsc_ms*2000 { kilit_gecikme(k); bas=bm_tsc_oku(); }
+        }
+    }
+    kilit_sahiplen(k);
+}
+çıplak işlev kilit_dene(k: tam64) -> mantıksal {
+    kilit_sira_denetle(k);
+    değişken oldu: tam32=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl 4($1), %eax
+leal 1(%rax), %edx
+lock cmpxchgl %edx, ($1)
+sete %al
+movzbl %al, $0"# çıktı("=r",&oldu) girdi("r",k) bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+    eğer oldu != 0 { kilit_sahiplen(k); ver doğru; }
+    ver yanlış;
+}
+çıplak işlev smp_kilit_birak(k: tam64) {
+    eğer KEMGU_KILIT_DENETIM {
+        eğer kem_mmio_oku64(k+16) != cekirdek_no()+1 veya kem_mmio_oku64(k+8) != kilit_yerel_sira() {
+            kdl_panik("KILIT SAHIP VEYA SIRA"); ver;
+        }
+        kilit_sira_yaz(kem_mmio_oku64(k+24));
+    }
+    kem_mmio_yaz64(k+16,0);
+    // Sunulan sayacın tek yazarı mevcut sahiptir. x86-TSO yayım sırasını korur.
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"incl 4($0)"# girdi("r",k) bozulan("~{memory}") bozulan("~{cc}") } }
+}
+çıplak işlev kilit_al_kesmesiz(k: tam64) -> tam64 {
+    değişken bayrak: tam64=0;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"pushfq
+popq $0
+cli"# çıktı("=r",&bayrak) bozulan("~{memory}") } }
+    smp_kilit_al(k);
+    ver bayrak;
+}
+çıplak işlev kilit_birak_kesmesiz(k: tam64, bayrak: tam64) {
+    smp_kilit_birak(k);
+    eğer (bayrak&512) != 0 { kz_irq_ac(); } değilse { kg_irq_kapat(); }
+}
+
+// SMP açılışında önce kilitler kurulur, sonra AP'ler başlatılır. Tek CPU'da taban sıfırdır.
+küresel değişken smp_bellek_kilitleri:tam64=0;
+çıplak işlev smp_bellek_kilit_al(ofs:tam64) -> tam64 {
+    eğer smp_bellek_kilitleri==0 { ver -1; }
+    ver kilit_al_kesmesiz(smp_bellek_kilitleri+ofs);
+}
+çıplak işlev smp_bellek_kilit_birak(ofs:tam64,f:tam64) {
+    eğer f>=0 { kilit_birak_kesmesiz(smp_bellek_kilitleri+ofs,f); }
+}
+çıplak işlev smp_heap_ayir(n:tam64) -> *tam8 {
+    değişken f:tam64=smp_bellek_kilit_al(64);
+    değişken p:*tam8=kem_heap_ayir(n);
+    smp_bellek_kilit_birak(64,f); ver p;
+}
+çıplak işlev smp_heap_iade(p:*tam8) {
+    değişken f:tam64=smp_bellek_kilit_al(64);
+    kem_heap_iade(p); smp_bellek_kilit_birak(64,f);
+}

@@ -1,0 +1,58 @@
+// Aynı kökü iki çekirdekte kullan. Deney sayfası ve dört sayfa tablosu
+// fiziksel ayırıcıdan gelir. Yoklama ancak host onay verdikten sonra yapılır.
+sabit SMP_TLB_VA:tam64=549755813888;
+sabit SMP_TLB_DEGER:tam64=1953260081;
+küresel değişken smp_tlb_olcum:tam64=0;
+çıplak işlev kem_smp_olcum_boyu(n:tam32) -> tam32 { ver 4096; }
+çıplak işlev tlb_olcum_al() -> tam64 {
+    güvensiz { değişken a:*tam64=(&smp_tlb_olcum) olarak *tam64; ver ipi_oku(a olarak tam64); }
+}
+çıplak işlev kem_smp_acilis_deneyi(no:tam32) {
+    eğer no>1 { ver; }
+    değişken p:tam64=smp_deney_alani;
+    değişken kok:tam64=0;
+    eğer no==0 {
+        değişken ana:tam64=kxm_cr3_oku();
+        kok=uefi_surec_ayir(4);
+        değişken veri:tam64=uefi_surec_ayir(1);
+        eğer kok==0 veya veri==0 { kdl_panik("TLB test alani"); ver; }
+        değişken j:tam64=0;
+        iken j<4096 { ipi_yaz(kok+j,ipi_oku(ana+j)); j=j+8; }
+        memset((kok+4096) olarak *tam8,0,12288);
+        // Özel kökün 512 GiB dalı yalnız deney VA'sına ayrılır. OVMF kökü korunur.
+        ipi_yaz(kok+8,(kok+4096)|7);
+        ipi_yaz(kok+4096,(kok+8192)|7);
+        ipi_yaz(kok+8192,(kok+12288)|7);
+        ipi_yaz(kok+12288,veri|5); ipi_yaz(veri,SMP_TLB_DEGER);
+        ipi_yaz(p,kok); ipi_yaz(p+8,veri); ipi_yaz(p+16,ana);
+        kem_port_yaz8(1023,0);
+        güvensiz { smp_tlb_olcum=p; }
+    } değilse {
+        iken tlb_olcum_al()==0 { }
+        kok=ipi_oku(p);
+    }
+    smp_alan_degistir(kok,1);
+    ipi_yaz(p+24+(no olarak tam64)*8,ipi_oku(SMP_TLB_VA));
+    eğer no==0 {
+        iken kem_port_oku8(1023)!=161 { }
+        değişken iade:SmpTlbIade=SmpTlbIade {kok:0,va:0,fizik:0,gonderen:0,hedef:0,bilet:0};
+        // Önce önceki çağrının kutuyu tuttuğu durumda çerçeveyi koru.
+        değişken eski:tam64=ipi_cagir(1,1,0);
+        değişken pa:tam64=smp_esleme_kaldir(kok,SMP_TLB_VA,&değişken iade);
+        ipi_yaz(p+64,pa);
+        eğer pa!=-2 veya iade.fizik!=ipi_oku(p+8) veya ipi_bekle(1,eski,1000)<0 { ipi_yaz(p+48,4); ver; }
+        pa=smp_tlb_tamamla(&değişken iade);
+        ipi_yaz(p+40,pa);
+        eğer pa!=ipi_oku(p+8) { ipi_yaz(p+48,2); ver; }
+        eşleş uefi_surec_iade_sonuc(pa,1) {
+            hata(e) => { ipi_yaz(p+48,3); ver; } tamam(v) => {}
+        }
+        smp_alan_degistir(ipi_oku(p+16),0);
+        ipi_yaz(p+48,1);
+        iken kem_port_oku8(1023)!=163 { }
+    } değilse {
+        iken kem_port_oku8(1023)!=162 { }
+        // Eski eşleme sonlandı. Normal #PF koçanı CR2'yi yazar.
+        ipi_yaz(p+56,ipi_oku(SMP_TLB_VA));
+    }
+}

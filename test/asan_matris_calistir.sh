@@ -47,8 +47,9 @@ if setarch -R true >/dev/null 2>&1; then ASAN_RUN="setarch -R"; fi
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/asan_matris.XXXXXX" 2>/dev/null || echo "build/asan_matris.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/asan_matris) || exit 1
+calisma_izle "$TMP"
 pass=0; fail=0
 
 for f in "$DIR"/m*.kem; do
@@ -65,11 +66,7 @@ for f in "$DIR"/m*.kem; do
 # D-413). `codegen_genis`/`codegen_diff` bu yeniden-denemeye ZATEN sahipti;
 # bu harness'ta YOKTU ve Windows CI'da SELF tarafinin 11 olcumu birden
 # exit=127 verdi (beklenen 134) — kusur derleyicide degil ORTAMDAYDI.
-    timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
-    d127=0
-    while [ "$nrc" -eq 127 ] && [ "$d127" -lt 12 ]; do
-        sleep 0.3; timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?; d127=$((d127+1))
-    done
+    calisma_127_dene timeout 60 "$TMP/n.exe" >/dev/null 2>&1; nrc=$?
     # 2) ASan/UBSan: bellek güvenliği (exit 42 + 0 ihlal)
     clang -fsanitize=address,undefined -x ir "$TMP/m.ll" -x none $RT_SRC -o "$TMP/a.exe" 2>/dev/null
     aout=$($ASAN_RUN timeout 60 "$TMP/a.exe" 2>&1); arc=$?

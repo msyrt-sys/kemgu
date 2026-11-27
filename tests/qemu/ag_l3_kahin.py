@@ -1,4 +1,5 @@
 """Gerçek kullanıcı ELF'i, teldeki ARP/ICMP paketleri ve bağımsız pcap okuması."""
+from protokol_suresi import ARP_YASLANMA
 import argparse
 import contextlib
 from pathlib import Path
@@ -90,7 +91,7 @@ def kos(w, slirp=False):
                     once_pcap=pcap.stat().st_size
                     ping(c,'127.0.0.1',3)
                     assert pcap.stat().st_size==once_pcap,'loopback sırasında dış trafik'
-                    time.sleep(31)
+                    time.sleep(ARP_YASLANMA)
                     ping(c,gecit,1)
                 finally:
                     bitti.set()

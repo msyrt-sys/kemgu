@@ -208,3 +208,43 @@ Codex'in "uygulanmadı" dediği değişiklikler tek tek uygulandı. Sessiz kalan
 | S247 | 12 | Yönlendirme içi `yon>=5` sınırı gevşetildi → SESSİZ. Ölçülmüş fazlalık: döngü koşulu `iken yon<=5` ve sonraki `ver -40` aynı sınırı yeniden uygular | — | 1 |
 | S247b | 12 | Sınır iki yerde birden 5→6 → yedinci istek `/yon6` gitti, kâhin altı istek bekliyordu | `calistir_bm_x86_http` | 1 |
 | S248 | 6 | Parça yuvası yaşlanması kaldırıldı → `parca_test` exit 7 | `calistir_chatgpt_kopru` | Host |
+
+## Dalga 18
+
+Bir deneyin kâhini kırdığı ortam aşağıda belirtilmiştir. Ayrı sütunlarda aynı değişikliğin sessiz kaldığı düzenek ve çalıştırılmayan deney görülebilir. [Deney çıktıları ve süreler](../otomasyon/chatgpt/codex18_bulgular.md)
+
+| Bölüm | Uygulanan değişiklik ve gözlenen sonuç |
+|---:|---|
+| 1 | 120 sn bekleme, 60 sn bütçede sıkı raporu rc=3 yaptı. Tablodan silinen kapı için bütçe eksik uyarısı geldi. |
+| 2 | MSI temizliği atlandı. İşlev testi geçti, disk denetimi kalan dört dizini bildirdi. |
+| 3 | Nesne girdisi ve MSI yaması ayrı ayrı anahtar dışında bırakıldı. İki yanlış isabet deneyi rc=1 verdi. |
+| 4 | Bölünmüş hedeften bir senaryo çıkarıldı. Kapsam karşılaştırması eksik senaryoyu adlandırdı. |
+| 5 | RTC'nin ilerlemediği iki deney ve hiç gelmeyen hazır işareti zaman sınırında kırmızı oldu. |
+| 6 | İki kapıda aynı yazılabilir dizin kullanıldı. Statik denetim iki hedefi buldu. Paralel koşumda parser 2/15 ve checker 311/321 kaldı. |
+| 7 | Sürücü eşleme satırı silindi. Seçici tam takıma geçti, beklenen seçimi sınayan kapı rc=2 verdi. |
+| 9 | Yalnız MADT bit 1 açık host kaydı iki derleyicide rc=3 verdi. Etkin APIC 1'i çıkaran ayrı QEMU deneyi rc=1 verdi. |
+| 10 | Yanlış SIPI sayfası onay süresini doldurdu. BSP yığınının tepesini bildiren aday, ilk SIPI'den önce reddedildi. |
+| 11 | AP saatlerini durdurmak 159/0/0/0 tık ve rc=1 verdi. Paylaşılmış TSS adayı AP'ye yüklenmeden reddedildi. |
+| 12 | Sayısal artışta kilit yokken 2.494.650 artış kaldı. Atomik önek kaldırılınca ilerleme durdu. Ters sıra hatası gerçek konukta panik verdi. |
+| 13 | EOI kaldırılınca sonraki teslim −4 verdi. Mantıksal sıra numarasıyla adresleme seyrek APIC topolojisinde kırıldı. |
+| 14 | Ayrı sayısal sahiplik deneyinde üç çekirdek aynı sahipliği aldı. Kâhin çakışmayı bildirdi. |
+| 15 | Gerçek uzak INVLPG sonrasındaki onay kaldırıldı. Çerçevenin tahsis biti korundu ve bekleme −4 döndürdü. |
+| 16 | İş çalma kapatıldığında tek CPU'da çalışma gözlendi. Göç denetimine eski CPU numarası verildiğinde konuk kullanıcı kipine dönmeden panikledi. |
+| 17 | Son parçanın toplama işlemi kaldırıldı. Dilimler doğruyken toplam 1.575.661 oldu, beklenen 2.063.689. |
+| 18 | Deney kilidinde kesmeli bekleyiş sahibini ve bekleyeni raporladı. Panik NMI yayını kaldırıldığında BSP durdu, üç AP'nin tıkları ilerledi. |
+
+### Sessiz sonuçlar ve kanıt sınırları
+
+- **9. bölüm.** MADT bit 1 denetimini kaldırmak QEMU firmware'inde sessiz kaldı. Verdiği her kayıtta bit 0 açıktı. Yalnız bit 1 taşıyan kayıtta host deneyi ayrımı gördü.
+- **13. bölüm.** Mantıksal sıra numarası ve APIC kimliği ardışık topolojide eşitti. Yanlış adresleme o topolojide sessiz kaldı. Kimlikler 0,1,2,4,5,6 olduğunda aynı değişiklik yakalandı.
+- **18. bölüm.** Sürüm imajında üç saniyelik bekleyiş panik üretmedi. Bekleme sayacı 1 oldu. Bu imajın beklenen davranışıdır.
+
+### Ölçülmüş fazlalık
+
+**10. bölüm, QEMU 8.2.2.** İkinci SIPI silinince altı açılış da geçti. İzole Bölüm 10 kaynağında iki SIPI de çıkarıldığında iki derleyicide AP onayı zaman aşımına uğradı ve iki vCPU'lu kapı rc=1 verdi. Bu QEMU topolojilerinde ilk SIPI yeterliydi. Fiziksel işlemci için ölçüm açıktır.
+
+### Uygulanmayan deneyler
+
+- **10 ve 11. bölümler.** AP'yi canlı BSP yığınında yürütme ve iki canlı çekirdeğe aynı TSS'i yükleyerek yığını bozma uygulanmadı. Ayrı TSS'li AP2'de kasıtlı çift hata denemesi QEMU iothread denetiminde sonlandı. Gerçek IST1 girişleri ayrıca dört işlemcide ölçüldü.
+- **14, 15 ve 16. bölümler.** Canlı çerçeve ayırıcı kilidini kaldırma, uzak INVLPG'yi atlayıp eski eşlemeyi okuma ve göç sırasında canlı GS güncellemesini kapatma uygulanmadı. Yukarıdaki sahiplik, onay ve kimlik deneyleri ayrı sonuçlardır.
+- 8, 19 ve 20. bölümlerde ayrıca sabotaj istenmedi.

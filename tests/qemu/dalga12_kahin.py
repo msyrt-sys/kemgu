@@ -1,4 +1,5 @@
 """OVMF + üç disk. ELF, bölüm kimliği, seri/GOP ve host disk baytları ölçülür."""
+from bekle import bekle, qmp_baglan, tik_bekle
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from hashlib import file_digest, sha256
@@ -7,11 +8,9 @@ import json
 import os
 import re
 import shutil
-import socket
 import struct
 import subprocess
 import sys
-import time
 
 from dalga12_imaj import images, gpt, DATA
 from fat_yazici import MERHABA
@@ -19,6 +18,10 @@ from psf_kahin import screendump, kabuk_goruntu, karsilastir
 from uefi_kabuk_kahin import keys
 
 RTC = datetime(2026,7,14,9,42)
+
+
+class QmpKapandi(AssertionError):
+    pass
 
 
 class Qmp:
@@ -32,7 +35,8 @@ class Qmp:
     def response(self, greeting=False):
         while True:
             line = self.reader.readline()
-            assert line, 'QMP kapandı'
+            if not line:
+                raise QmpKapandi('QMP kapandı')
             reply = json.loads(line)
             if 'event' in reply:
                 self.olaylar.append(reply)
@@ -46,19 +50,15 @@ class Qmp:
 
 
 def wait_for(proc, fn, seconds=15):
-    end = time.monotonic()+seconds
-    while time.monotonic()<end:
-        v = fn()
-        if v:
-            return v
-        assert proc.poll() is None, (proc.returncode, v)
-        time.sleep(.02)
-    raise AssertionError('QEMU sonucu gelmedi')
+    kod = getattr(fn, '__code__', None)
+    ad = getattr(fn, '__qualname__', repr(fn))
+    if kod is not None: ad = f'{Path(kod.co_filename).name}:{kod.co_firstlineno} {ad}'
+    return bekle(ad, fn, sure=seconds, surec=proc)
 
 
 @contextmanager
 def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
-         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False, ag_aygitlari=()):
+         acilis="usb", ram="256M", xhci=True, sata_takili=True, nvme_ns=True, klavye_izi=False, i8042=True, pci_topolojisi="duz", disk_hatasi=None, hub_derinligi=0, debug_cikis=True, yalniz_firmware_diski=False, ag_aygitlari=(), smp=None):
     path = w/'dalga12.sock'
     path.unlink(missing_ok=True)
     ser = w/'dalga12.seri'
@@ -74,6 +74,10 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
            '-drive',f'if=pflash,format=raw,file={w}/dalga12-vars.fd',
            '-serial',f'file:{ser}','-qmp',f'unix:{path},server=on,wait=off',
            '-rtc',f'base={RTC.isoformat()},clock=vm']
+    if smp is None:
+        smp = int(os.environ.get('KEMGU_QEMU_SMP', '1'))
+    if smp != 1:
+        cmd.extend(['-smp', str(smp), '-accel', 'tcg,thread=multi'])
     if debug_cikis:
         cmd.extend(['-device','isa-debug-exit,iobase=0xf4,iosize=0x04'])
     if klavye_izi:
@@ -143,12 +147,17 @@ def boot(w, usb, nvme, sata, usb2=None, *, klavye="usb", fare="ps2",
     with (w/'dalga12-qemu.log').open('w') as err:
         proc = subprocess.Popen(cmd,stdout=err,stderr=err)
         try:
-            wait_for(proc,path.exists)
-            with socket.socket(socket.AF_UNIX) as sock:
-                sock.settimeout(10)
-                sock.connect(str(path))
+            with qmp_baglan(path,proc,sure=15) as sock:
                 with sock.makefile('wb', buffering=0) as f, sock.makefile('rb') as reader:
-                    yield Qmp(f, reader),proc,ser
+                    q = Qmp(f, reader)
+                    if smp != 1 or os.environ.get('KEMGU_QEMU_SMP'):
+                        # Her seçilmiş koşumda sayıyı ve MTTCG iş parçacıklarını hosttan oku.
+                        cpular = q.call('query-cpus-fast')
+                        assert sorted(c['cpu-index'] for c in cpular) == list(range(smp))
+                        tid = {c['thread-id'] for c in cpular}
+                        assert len(tid) == smp and min(tid) > 0
+                        print(f'QMP SMP={smp} thread-id={sorted(tid)}', flush=True)
+                    yield q,proc,ser
         finally:
             if proc.poll() is None:
                 proc.kill()
@@ -201,9 +210,37 @@ class Console:
             if shifted:
                 seq = [('shift',True),*seq,('shift',False)]
             for name,down in seq:
-                self.q.call('input-send-event',{'events':[dict(type='key',data=dict(
-                    down=down,key=dict(type='qcode',data=name)))]})
-                time.sleep(.012)
+                self.key(name, down)
+
+    def tus_gonder(self, ad, bas):
+        assert ad in self.qcodes, ad
+        self.q.call('input-send-event', {'events': [dict(type='key', data=dict(
+            down=bas, key=dict(type='qcode', data=ad)))]})
+
+    def tik(self):
+        return int.from_bytes(self.mem(self.symbols['kap_lapic_tik'], 8), 'little')
+
+    def key(self, ad, bas):
+        # USB ana bilgisayarı iki ayrı QMP olayını konuk HID raporunda
+        # birleştirebilir. Önceki raporun fiziksel DMA tamponuna ulaşmasını bekle.
+        secim = self.symbols.get('kl_hid_indeksi')
+        if secim and int.from_bytes(self.mem(secim, 4), 'little', signed=True) >= 0:
+            def tampon():
+                kayit = int.from_bytes(self.mem(self.symbols['bh_kayitlar'], 8), 'little')
+                if kayit:
+                    baslik = self.mem(kayit+32, 32)
+                    adres = int.from_bytes(baslik[:8], 'little')
+                    if adres:
+                        return kayit, adres, baslik[24:]
+            kayit, adres, once = bekle('USB klavye DMA tamponu', tampon, sure=8, surec=self.p)
+            self.tus_gonder(ad, bas)
+            bekle(f"HID {ad} {'bas' if bas else 'bırak'}",
+                  lambda: self.mem(kayit+56, 8),
+                  lambda rapor: rapor != once and rapor == self.mem(adres, 8),
+                  sure=8, aralik=.002, surec=self.p)
+        else:
+            self.tus_gonder(ad, bas)
+            tik_bekle(self.tik, surec=self.p)
 
     def run(self,text,out=b''):
         before = self.heap()
@@ -221,7 +258,11 @@ class Console:
         self.akis += '> '+text+'\n'+tail.decode()
         def matches():
             actual=self.output()
-            assert self.expected.startswith(actual),(text,actual,self.expected)
+            if not self.expected.startswith(actual):
+                taban=int.from_bytes(self.mem(self.symbols['EKRAN_AYNA_TABAN'],8),'little')
+                ayna=self.mem(taban,4096).rstrip(b'\0')
+                (self.w/'komut-ayna.bin').write_bytes(ayna)
+                raise AssertionError((text, actual[-320:], self.expected[-320:], ayna[-320:]))
             return actual==self.expected
         wait_for(self.p,matches)
         after=self.heap()
@@ -229,13 +270,16 @@ class Console:
         print(f'HEAP {text!r} +{after-before} toplam={after}',flush=True)
 
     def shutdown(self):
+        for harf in 'kapat':
+            self.key(harf, True)
+            self.key(harf, False)
+        # Bu basış S5'i başlatır. Aygıt sökülürken tuş bırakma veya pmemsave isteme.
         try:
-            self.input('kapat')
-        except (BrokenPipeError,ConnectionResetError,TimeoutError,AssertionError):
-            # S5 son Enter basışında QMP'yi kapatabilir. Son tuş/tik yanıtı
-            # gelmese de aşağıda hem gerçek süreç çıkışı hem tam seri çıktı şarttır.
+            self.tus_gonder('ret', True)
+        except (BrokenPipeError, ConnectionResetError, QmpKapandi):
             pass
-        assert self.p.wait(timeout=5)==0
+        kod = self.p.wait(timeout=5)
+        assert kod == 0, ('S5 QEMU çıkışı', kod, self.output()[-400:])
         assert self.output()==self.expected+'Sistem kapatılıyor.\n'.encode()
 
     def screen(self):

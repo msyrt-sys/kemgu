@@ -6,7 +6,7 @@ import re
 import struct
 import shutil
 import subprocess
-import tempfile
+from calisma_dizini import calisma_dizini
 from pathlib import Path
 
 PENCERE = 0x54200000
@@ -99,7 +99,7 @@ def denetle(elf):
 def derle(derleyici, kaynak, hedef, eski=False):
     hedef.parent.mkdir(parents=True, exist_ok=True)
     hedef.unlink(missing_ok=True)
-    with tempfile.TemporaryDirectory(prefix="elf-", dir=hedef.parent) as tmp:
+    with calisma_dizini(prefix="elf-", dir=hedef.parent) as tmp:
         w = Path(tmp)
         birlesik, ham, ir, nesne, elf = (w / f"u.{uzanti}" for uzanti in ("kem", "ham.ll", "ll", "o", "elf"))
         ek = ("runtime/kullanici/x86_64/kem_http.kem",) if Path(kaynak).stem in {"indir", "sunucu", "paket"} else ()

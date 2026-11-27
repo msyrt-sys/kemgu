@@ -18,14 +18,18 @@ KEM=test/ornekler/kem_malloc.kem
 HARNESS=test/kem_malloc_kompozisyon.c
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
 # recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
-TMP=$(mktemp -d "build/kemmalloc.XXXXXX" 2>/dev/null || echo "build/kemmalloc.$$")
-mkdir -p "$TMP"
-SELF="$TMP/codegen${EXE}"   # [D-775] ortak build/codegen'in üzerine bağlama (-j yarışı; ciplak_region_free ile aynı)
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/kemmalloc) || exit 1
+calisma_izle "$TMP"
+# Diğer kapıların kullandığı derleyici, bu turun yeniden bağlamasından etkilenmez.
+SELF="$TMP/codegen${EXE}"
+# [D-775] Self-host ikilisi KAPININ KENDİ dizinine kurulur (ortak build/codegen'in üzerine bağlanmaz):
+# -j altında o anda build/codegen'i kullanan kapılar yarım yazılmış ikiliyle karşılaşıyordu.
 gecti=0; kaldi=0
 
 # self-host binary'yi güncel codegen.kem'den üret (stale = yanlış PASS).
-"$KEMGU" --llvm selfhost/codegen.kem > "$TMP/self.ll" 2>/dev/null
-clang -x ir "$TMP/self.ll" -x none build/kdl_runtime.o -o "$SELF" -Wno-override-module 2>/dev/null
+"$KEMGU" --llvm selfhost/codegen.kem > "$TMP/self.ll" || exit 1
+clang -x ir "$TMP/self.ll" -x none build/kdl_runtime.o -o "$SELF" -Wno-override-module || exit 1
 if [ ! -x "$SELF" ]; then echo "  ❌ self-host codegen.exe üretilemedi"; exit 1; fi
 
 kontrol() {
@@ -57,6 +61,5 @@ for cg in C SELF; do
     fi
 done
 
-rm -rf "$TMP"
 echo "=== kem_malloc kompozisyon (circularity kırıldı): $gecti/$((gecti+kaldi)) ==="
 [ "$kaldi" -eq 0 ]

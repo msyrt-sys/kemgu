@@ -17,6 +17,10 @@ set -u
 : "${EXE=$(test -x build/kemgu.exe && echo .exe)}"
 KEMGU="${KEMGU:-build/kemgu${EXE}}"
 [ -x "$KEMGU" ] || KEMGU="build/kemgu"
+mkdir -p build
+W=$(mktemp -d build/check-kapisi.XXXXXX) || exit 1
+source test/calisma_dizini.sh
+calisma_izle "$W"
 # [D-487] EKSIK IKILI = HATA (D-486 dersinin genellemesi). Hedef
 # `$(BUILD)/kemgu$(EXE)`e BAGIMLI -> make yolunda ikili GARANTI, yani bu
 # dal OLU KOD; tek islevi bir YOL HATASINI SESSIZCE YUTMAKTI. Yukaridaki
@@ -137,19 +141,18 @@ kemos_eksik=0
 for p in $KEMOS_PARCALAR; do [ -f "$p" ] || kemos_eksik=1; done
 if [ "$kemos_eksik" -eq 0 ]; then
   mkdir -p build
-  cat $KEMOS_PARCALAR > build/kem_os_kapi.kem
+  cat $KEMOS_PARCALAR > "$W/kem_os_kapi.kem"
   tot=$((tot + 1))
   # --mimari arm64 ŞART: satıriçi_asm arch etiketleri hedefe bağlıdır (AS001).
-  if "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem >/dev/null 2>&1; then
+  if "$KEMGU" --check --mimari arm64 "$W/kem_os_kapi.kem" >/dev/null 2>&1; then
     echo "  ✅ kem_os (birleşik kaynak, 17 parça) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os birleşik kaynak --check'ten geçmiyor:"
-    "$KEMGU" --check --mimari arm64 build/kem_os_kapi.kem 2>&1 \
+    "$KEMGU" --check --mimari arm64 "$W/kem_os_kapi.kem" 2>&1 \
       | grep -m5 "hata\[" | sed 's/^/       /'
     echo "       (--tip-atla EKLEMEYİN — kök nedeni düzeltin.)"
   fi
-  rm -f build/kem_os_kapi.kem
 else
   echo "  ⏭  kem_os parçaları eksik — birleşik kontrol atlandı"
 fi
@@ -164,17 +167,16 @@ kemos_x86_eksik=0
 for p in $KEMOS_X86_PARCALAR; do [ -f "$p" ] || kemos_x86_eksik=1; done
 if [ "$kemos_x86_eksik" -eq 0 ]; then
   mkdir -p build
-  cat $KEMOS_X86_PARCALAR > build/kem_os_x86_kapi.kem
+  cat $KEMOS_X86_PARCALAR > "$W/kem_os_x86_kapi.kem"
   tot=$((tot + 1))
-  if "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem >/dev/null 2>&1; then
+  if "$KEMGU" --check --mimari x86_64-none "$W/kem_os_x86_kapi.kem" >/dev/null 2>&1; then
     echo "  ✅ kem_os_x86 (birleşik kaynak, $(echo $KEMOS_X86_PARCALAR | wc -w) parça, --mimari x86_64-none) --check geçti"
   else
     red=$((red + 1))
     echo "  🔴 kem_os_x86 birleşik kaynak --check'ten geçmiyor:"
-    "$KEMGU" --check --mimari x86_64-none build/kem_os_x86_kapi.kem 2>&1 \
+    "$KEMGU" --check --mimari x86_64-none "$W/kem_os_x86_kapi.kem" 2>&1 \
       | grep -m5 "hata\[" | sed 's/^/       /'
   fi
-  rm -f build/kem_os_x86_kapi.kem
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86 parçaları eksik — birleşik x86 kontrolü KOŞAMADI"
@@ -185,83 +187,78 @@ fi
 BM_NVME_PARCALAR="$(echo $KEMOS_X86_PARCALAR | tr ' ' '\n' | grep '^runtime/' | grep -v kem_pci_hw | tr '\n' ' ') runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem test/ornekler/kem_os_x86_nvme.kem"
 mkdir -p build
 BM_NVME_PARCALAR="$BM_NVME_PARCALAR runtime/mimari/x86_64/kem_gc_yurut.kem"
-cat $BM_NVME_PARCALAR > build/kem_bm_nvme_kapi.kem
+cat $BM_NVME_PARCALAR > "$W/kem_bm_nvme_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_nvme_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_nvme_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_nvme (birleşik bare-metal NVMe, $(echo $BM_NVME_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_nvme birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_nvme_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_nvme_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_nvme_kapi.kem
 
 BM_AHCI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_ahci.kem}"
-cat $BM_AHCI_PARCALAR > build/kem_bm_ahci_kapi.kem
+cat $BM_AHCI_PARCALAR > "$W/kem_bm_ahci_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_ahci_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ahci_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_ahci (birleşik bare-metal AHCI, $(echo $BM_AHCI_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_ahci birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_ahci_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ahci_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_ahci_kapi.kem
 
 BM_USB_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_usb.kem}"
-cat $BM_USB_PARCALAR > build/kem_bm_usb_kapi.kem
+cat $BM_USB_PARCALAR > "$W/kem_bm_usb_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_usb_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_usb_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_usb (birleşik bare-metal USB, $(echo $BM_USB_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_usb birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_usb_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_usb_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_usb_kapi.kem
 
 BM_KABUK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_kabuk.kem}"
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
 BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
-BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
-cat $BM_KABUK_PARCALAR > build/kem_bm_kabuk_kapi.kem
+BM_KABUK_PARCALAR="$BM_KABUK_PARCALAR test/ornekler/kem_os_x86_vfs_ortak.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem runtime/mimari/x86_64/kem_rtc_hw.kem"
+cat $BM_KABUK_PARCALAR > "$W/kem_bm_kabuk_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_kabuk_kapi.kem" || exit 1
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_kabuk_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_kabuk (birleşik bare-metal KABUK, $(echo $BM_KABUK_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_kabuk birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_kabuk_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_kabuk_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_kabuk_kapi.kem
 
 # [D-748] bare-metal ekran (std VGA + Bochs DISPI + PSF) — kabuk deseninin aynısı.
 BM_EKRAN_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_ekran.kem}"
 BM_EKRAN_PARCALAR="$BM_EKRAN_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # [D-749] ortak ekran modülü
-cat $BM_EKRAN_PARCALAR > build/kem_bm_ekran_kapi.kem
+cat $BM_EKRAN_PARCALAR > "$W/kem_bm_ekran_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_ekran_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ekran_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_ekran (birleşik bare-metal EKRAN, $(echo $BM_EKRAN_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_ekran birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_ekran_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ekran_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_ekran_kapi.kem
 
 # [D-748] bare-metal panik (std VGA + Bochs DISPI + PSF) — kabuk deseninin aynısı.
 BM_PANIK_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_panik.kem}"
 BM_PANIK_PARCALAR="$BM_PANIK_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # Ortak ekran modülü; panik birleşik biriminde de denetlenir.
-cat $BM_PANIK_PARCALAR > build/kem_bm_panik_kapi.kem
+cat $BM_PANIK_PARCALAR > "$W/kem_bm_panik_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_panik_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_panik_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_panik (birleşik bare-metal PANIK, $(echo $BM_PANIK_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_panik birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_panik_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_panik_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_panik_kapi.kem
 
 # [D-777] heap yerinde uzatma test çekirdeği — bm_x86_heap_uzat_harness.sh ile AYNI parça listesi.
 BM_HEAP_UZAT_PARCALAR="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem test/ornekler/kem_os_x86_heap_uzat.kem"
@@ -278,62 +275,60 @@ rm -f build/kem_bm_heap_uzat_kapi.kem
 
 BM_ISTISNA_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_istisna.kem}"
 BM_ISTISNA_PARCALAR="$BM_ISTISNA_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # Ortak ekran modülü; istisna birleşik biriminde de denetlenir.
-cat $BM_ISTISNA_PARCALAR > build/kem_bm_istisna_kapi.kem
+cat $BM_ISTISNA_PARCALAR > "$W/kem_bm_istisna_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_istisna_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_istisna_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_istisna (birleşik bare-metal ISTISNA, $(echo $BM_ISTISNA_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_istisna birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_istisna_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_istisna_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_istisna_kapi.kem
 
 BM_PS2_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_ps2.kem}"
 BM_PS2_PARCALAR="$BM_PS2_PARCALAR runtime/mimari/x86_64/kem_ekran_bga.kem"   # Ortak ekran modülü; PS/2 birleşik biriminde de denetlenir.
 BM_PS2_PARCALAR="$BM_PS2_PARCALAR runtime/mimari/x86_64/kem_ps2_hw.kem"
-cat $BM_PS2_PARCALAR > build/kem_bm_ps2_kapi.kem
+cat $BM_PS2_PARCALAR > "$W/kem_bm_ps2_kapi.kem"
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_ps2_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ps2_kapi.kem" >/dev/null 2>&1; then
   echo "  ✅ kem_os_x86_ps2 (birleşik bare-metal PS2, $(echo $BM_PS2_PARCALAR | wc -w) parça) --check geçti"
 else
   red=$((red + 1))
   echo "  🔴 kem_os_x86_ps2 birleşik kaynak --check'ten geçmiyor:"
-  "$KEMGU" --check --mimari x86_64-none build/kem_bm_ps2_kapi.kem 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
+  "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_ps2_kapi.kem" 2>&1 | grep -m5 "hata\[" | sed 's/^/       /'
 fi
-rm -f build/kem_bm_ps2_kapi.kem
 
-BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem"
-cat $BM_UEFI_PARCALAR > build/kem_bm_uefi_kapi.kem
+BM_UEFI_PARCALAR="${BM_NVME_PARCALAR/test\/ornekler\/kem_os_x86_nvme.kem/test\/ornekler\/kem_os_x86_uefi.kem} runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem"
+cat $BM_UEFI_PARCALAR > "$W/kem_bm_uefi_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_uefi_kapi.kem" || exit 1
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_uefi_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_uefi_kapi.kem" >/dev/null 2>&1; then
  echo "  ✅ kem_os_x86_uefi birleşik --check geçti"
 else
  red=$((red + 1)); echo "  🔴 kem_os_x86_uefi birleşik --check başarısız"
- "$KEMGU" --check --mimari x86_64-none build/kem_bm_uefi_kapi.kem
+ "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_uefi_kapi.kem"
 fi
-rm -f build/kem_bm_uefi_kapi.kem
 
 BM_GUC_PARCALAR="${BM_UEFI_PARCALAR/test\/ornekler\/kem_os_x86_uefi.kem/test\/ornekler\/kem_os_x86_guc.kem} runtime/mimari/x86_64/kem_ps2_hw.kem"
-cat $BM_GUC_PARCALAR > build/kem_bm_guc_kapi.kem
+cat $BM_GUC_PARCALAR > "$W/kem_bm_guc_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_guc_kapi.kem" || exit 1
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_guc_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_guc_kapi.kem" >/dev/null 2>&1; then
  echo "  ✅ kem_os_x86_guc birleşik --check geçti"
 else
  red=$((red + 1)); echo "  🔴 kem_os_x86_guc birleşik --check başarısız"
- "$KEMGU" --check --mimari x86_64-none build/kem_bm_guc_kapi.kem
+ "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_guc_kapi.kem"
 fi
-rm -f build/kem_bm_guc_kapi.kem
 BM_BLOK_PARCALAR="${BM_GUC_PARCALAR/test\/ornekler\/kem_os_x86_guc.kem/test\/ornekler\/kem_os_x86_blok.kem} test/ornekler/kem_os_x86_blok_ortak.kem"
-cat $BM_BLOK_PARCALAR > build/kem_bm_blok_kapi.kem
+cat $BM_BLOK_PARCALAR > "$W/kem_bm_blok_kapi.kem"
+python3 test/x86_heap_bagla.py "$W/kem_bm_blok_kapi.kem" || exit 1
 tot=$((tot + 1))
-if "$KEMGU" --check --mimari x86_64-none build/kem_bm_blok_kapi.kem >/dev/null 2>&1; then
+if "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_blok_kapi.kem" >/dev/null 2>&1; then
  echo "  ✅ kem_os_x86_blok birleşik --check geçti"
 else
  red=$((red + 1)); echo "  🔴 kem_os_x86_blok birleşik --check başarısız"
- "$KEMGU" --check --mimari x86_64-none build/kem_bm_blok_kapi.kem
+ "$KEMGU" --check --mimari x86_64-none "$W/kem_bm_blok_kapi.kem"
 fi
-rm -f build/kem_bm_blok_kapi.kem
 
 
 # MODEL B kullanıcı programı: çekirdekten AYRI derlenir, kendi başına tam bir

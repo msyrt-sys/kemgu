@@ -1,0 +1,29 @@
+// xAPIC kimliği sekiz bittir. Çekirdek numarası sıfır her zaman BSP'ye aittir.
+kullan drivers::acpi::madt::{ MadtGirdisi };
+
+genel işlev smp_islemciler(girdiler: Dizi<MadtGirdisi>, bsp: tam32) -> sonuç<Dizi<tam32>, metin> {
+    eğer bsp < 0 veya bsp > 255 { ver hata("BSP kimligi gecersiz"); }
+    değişken kimlikler: Dizi<tam32> = [bsp];
+    değişken bsp_goruldu: mantıksal = yanlış;
+    değişken yerel: tam32 = 0;
+    için g: girdiler {
+        eğer g.tur == 0 {
+            yerel = yerel + 1;
+            eğer yerel > 256 { ver hata("256 yerel APIC siniri"); }
+            eğer g.apic < 0 veya g.apic > 255 { ver hata("APIC kimligi gecersiz"); }
+            eğer (g.bayraklar & 3) != 0 {
+                eğer g.apic == bsp {
+                    eğer bsp_goruldu { ver hata("yinelenen APIC kimligi"); }
+                    bsp_goruldu = doğru;
+                } değilse {
+                    için id: kimlikler {
+                        eğer id == g.apic { ver hata("yinelenen APIC kimligi"); }
+                    }
+                    dizi_ekle(kimlikler, g.apic);
+                }
+            }
+        }
+    }
+    eğer değil bsp_goruldu { ver hata("MADT BSP bulunamadi"); }
+    ver tamam(kimlikler);
+}

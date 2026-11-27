@@ -25,8 +25,10 @@ command -v lean >/dev/null 2>&1 || {
 
 # [D-562] GECICI DIZIN DEPO-GORELI (bkz. digger harness'lar): /tmp Windows'ta
 # recipe kabugu ile MSYS2 araclari arasinda AYRI baglamalara cozulur.
-TMP="$(mktemp -d "build/tmp.XXXXXX" 2>/dev/null || echo "build/tmp.$$")"
-trap 'rm -rf "$TMP"' EXIT
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/tmp) || exit 1
+calisma_izle "$TMP"
+
 cd "$KOK" || exit 1
 
 # --- 1) Derleme (bağımlılık sırası: birden çok pas, ilerleme durunca dur) ---

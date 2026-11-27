@@ -71,7 +71,10 @@ basarili=0
 basarisiz=0
 toplam=${#TESTLER[@]}
 
-mkdir -p build/llvm_test
+mkdir -p build
+W=$(mktemp -d build/llvm-test.XXXXXX) || exit 1
+source test/calisma_dizini.sh
+calisma_izle "$W"
 
 echo "=== KEMGU LLVM + Stdlib Entegrasyon Testi ($toplam test) ==="
 echo
@@ -79,9 +82,9 @@ echo
 for satir in "${TESTLER[@]}"; do
     read -r dosya beklenen <<< "$satir"
     ad="$(basename "$dosya" .kem)"
-    exe="build/llvm_test/${ad}.exe"
-    ir="build/llvm_test/${ad}.ll"
-    out_actual="build/llvm_test/${ad}.out.actual"
+    exe="$W/${ad}.exe"
+    ir="$W/${ad}.ll"
+    out_actual="$W/${ad}.out.actual"
     out_expected="test/ornekler/${ad}.out"
 
     printf "  %-22s -> exit %3s " "$ad" "$beklenen"

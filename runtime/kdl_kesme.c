@@ -569,8 +569,215 @@ static void kdl_ist_kur(void) {
     __asm__ volatile("ltr %w0" : : "r"((uint16_t)40) : "memory");
 }
 
+/* GS bloğunun ilk alanları KEMGU ve QMP ile ortak, tamamı 64 bit. */
+struct CekirdekVeri {
+    uint64_t no, apic, tik, surec;
+    uint64_t yigin_alt, yigin_ust, tss, gdt, ist[3], cr3;
+    uint64_t kullanici_giris, kullanici_gs;
+    uint64_t kilit_sirasi, kilit_beklemeleri, alan_surumu;
+    uint64_t dilim, donus_rsp, donus_rip, onceki_rsp0, vektor, hata, hata_adresi;
+    uint64_t tek_dilim, bekliyor, bosta_tik, gecis_hedef;
+    uint64_t farkli_surec, yuva_pid[8];
+};
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, alan_surumu) == 128, "GS CR3 surumu");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, dilim) == 136, "GS dilim");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, hata_adresi) == 184, "GS CR2");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, bosta_tik) == 208, "GS bosta");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, gecis_hedef) == 216, "GS sonraki CR3");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, farkli_surec) == 224, "GS PID sayaci");
+struct ApTablolari {
+    struct CekirdekVeri veri;
+    uint64_t gdt[7];
+    uint8_t tss[104] __attribute__((aligned(16)));
+};
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, tik) == 16, "GS tik");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, surec) == 24, "GS surec");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, cr3) == 88, "GS CR3");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, kullanici_giris) == 96, "GS ring3");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, kilit_sirasi) == 112, "GS kilit sirasi");
+_Static_assert(__builtin_offsetof(struct CekirdekVeri, kilit_beklemeleri) == 120, "GS kilit bekleme");
+_Static_assert(sizeof(struct ApTablolari) <= 4096, "AP tablolarinin sayfasi");
+struct CekirdekVeri kdl_cekirdek_bsp __attribute__((aligned(64)));
+
+static void kdl_gs_kur(struct CekirdekVeri *c) {
+    uintptr_t a = (uintptr_t)c;
+    __asm__ volatile("wrmsr" : : "c"(UINT32_C(0xc0000101)),
+                     "a"((uint32_t)a), "d"((uint32_t)(a >> 32)) : "memory");
+    __asm__ volatile("wrmsr" : : "c"(UINT32_C(0xc0000102)), "a"(0u), "d"(0u) : "memory");
+}
+
+struct KdlTabloYazmaci {
+    uint16_t limit;
+    uintptr_t taban;
+} __attribute__((packed));
+
+/* Panik, kesilen işlemcinin gerçek TR/GDTR çiftindeki IST sınırlarını denetler. */
+int kdl_smp_ist_denetle(void) {
+    struct KdlTabloYazmaci g;
+    uint16_t secici;
+    __asm__ volatile("sgdt %0" : "=m"(g));
+    __asm__ volatile("str %0" : "=r"(secici));
+    if (secici != 40 || g.limit < 55) return 0;
+    const uint64_t *tanim = (const uint64_t *)(g.taban + secici);
+    uint64_t d = tanim[0];
+    if ((d & 0xffff) != 103 || ((d >> 40) & 0x8f) != 0x8b) return 0;
+    uintptr_t a = ((d >> 16) & 0xffffff) | ((d >> 32) & 0xff000000) | (tanim[1] << 32);
+    const struct KdlTssIst *t = (const struct KdlTssIst *)a;
+    for (unsigned i = 0; i < 3; ++i) {
+        if (t->ist[i] < 16384 ||
+            *(const volatile uint64_t *)(t->ist[i] - 16384) != UINT64_C(0x4b454d4755495354)) return 0;
+    }
+    return 1;
+}
+
+/* Bir AP için ilk sayfa veri/GDT/TSS, arkasında üç ayrı 16 KiB IST bulunur. */
+int kdl_smp_ap_kur(struct ApTablolari *p, unsigned no, unsigned id,
+                   uintptr_t alt, uintptr_t ust) {
+    uintptr_t bas = (uintptr_t)p;
+    if (!bas || (bas & 4095) || !no || ust - alt != 16384 ||
+        (bas < ust && bas + 13 * 4096 > alt)) return 0;
+    struct CekirdekVeri *c = &p->veri;
+    struct KdlTssIst *t = (struct KdlTssIst *)p->tss;
+    uintptr_t a = (uintptr_t)t;
+    if (a < bas || a + sizeof(*t) > bas + 4096) return 0;
+    c->no = no;
+    c->apic = id;
+    c->yigin_alt = alt;
+    c->yigin_ust = ust;
+    c->gdt = (uintptr_t)p->gdt;
+    c->tss = a;
+    __asm__ volatile("mov %%cr3,%0" : "=r"(c->cr3));
+    for (unsigned i = 0; i < 3; ++i) {
+        uintptr_t taban = bas + 4096 + i * 16384;
+        *(uint64_t *)taban = UINT64_C(0x4b454d4755495354);
+        c->ist[i] = t->ist[i] = taban + 16384;
+    }
+    __builtin_memcpy(p->tss + 4, &ust, sizeof(ust));
+    t->iopb = 104;
+    for (unsigned i = 0; i < 5; ++i) p->gdt[i] = kdl_x86_gdt[i];
+    p->gdt[5] = 103 | ((a & 0xffffff) << 16) | (UINT64_C(0x89) << 40) | ((a & 0xff000000) << 32);
+    p->gdt[6] = a >> 32;
+    const struct KdlTabloYazmaci gdtr = {sizeof(p->gdt) - 1, c->gdt};
+    const struct KdlTabloYazmaci idtr = {sizeof(kdl_idt) - 1, (uintptr_t)kdl_idt};
+    /* Eski trampolin CS=0x18 idi. Kalıcı çekirdek kod seçicisini de yükle. */
+    __asm__ volatile("lgdt %0\n lidt %1\n subq $128,%%rsp\n pushq $8\n leaq 1f(%%rip),%%rax\n pushq %%rax\n lretq\n"
+                     "1: addq $128,%%rsp\n movw $16,%%ax\n movw %%ax,%%ds\n movw %%ax,%%es\n movw %%ax,%%ss\n"
+                     "movw $40,%%ax\n ltr %%ax"
+                     : : "m"(gdtr), "m"(idtr) : "rax", "memory");
+    kdl_gs_kur(c);
+    return 1;
+}
+
+extern void smp_ap_zaman_irq(void) __attribute__((weak));
+extern int kem_ipi_isle(int) __attribute__((weak));
+extern void kdl_ipi_80(void), kdl_ipi_81(void), kdl_ipi_82(void), kdl_ipi_83(void);
+extern uintptr_t kdl_lapic_taban;
+__attribute__((naked)) static void kdl_ap_zaman_kocani(void) {
+    __asm__ volatile(
+        "testb $3,8(%rsp)\n jz 1f\n swapgs\n 1:\n"
+        "pushq %rax\n pushq %rcx\n pushq %rdx\n pushq %rsi\n pushq %rdi\n"
+        "pushq %r8\n pushq %r9\n pushq %r10\n pushq %r11\n pushq %rbp\n"
+        "movq %rsp,%rbp\n andq $-16,%rsp\n cld\n call smp_ap_zaman_irq\n"
+        "movq kdl_lapic_taban(%rip),%rax\n movl $0,0xb0(%rax)\n movq %rbp,%rsp\n"
+        "popq %rbp\n popq %r11\n popq %r10\n popq %r9\n popq %r8\n popq %rdi\n"
+        "popq %rsi\n popq %rdx\n popq %rcx\n popq %rax\n"
+        "testb $3,8(%rsp)\n jz 2f\n swapgs\n 2: iretq");
+}
+
+/* SMP diliminde donanımın kesme çerçevesini yalnız yerel GS kaydına aktar.
+ * Eski çekirdek ve tek çekirdekli kullanıcı girişleri kendi koçanlarını kullanır. */
+volatile int kdl_smp_dilim_acik;
+extern void kdl_apic_timer_irq(void);
+__attribute__((naked, used)) static void kdl_smp_dilim_yakala(void) {
+    __asm__ volatile(
+        "pushq %rax\n pushq %rbx\n pushq %rcx\n pushq %rdx\n pushq %rsi\n pushq %rdi\n"
+        "pushq %rbp\n pushq %r8\n pushq %r9\n pushq %r10\n pushq %r11\n pushq %r12\n"
+        "pushq %r13\n pushq %r14\n pushq %r15\n cld\n"
+        "movq %rsp,%rsi\n movq %gs:136,%rdi\n movl $15,%ecx\n rep movsq\n"
+        "lodsq\n movq %rax,%gs:168\n lodsq\n movq %rax,%gs:176\n"
+        "movq %cr2,%rax\n movq %rax,%gs:184\n movl $5,%ecx\n rep movsq\n"
+        "andq $-16,%rsp\n cmpq $48,%gs:168\n je 1f\n cmpq $49,%gs:168\n je 2f\n"
+        "cmpq $128,%gs:168\n jne 4f\n incq %gs:96\n movl $0xc0000102,%ecx\n"
+        "rdmsr\n shlq $32,%rdx\n orq %rdx,%rax\n movq %rax,%gs:104\n jmp 4f\n"
+        "1: call kdl_apic_timer_irq\n jmp 3f\n 2: call smp_ap_zaman_irq\n"
+        "3: lock incq kdl_dilim_sayisi(%rip)\n movq kdl_lapic_taban(%rip),%rax\n movl $0,176(%rax)\n"
+        "4: movq %gs:144,%rsp\n jmp *%gs:152");
+}
+#define KDL_SMP_KAPI(vektor, cs, hata, eski)                                 \
+    __attribute__((naked)) static void kdl_smp_kapi_##vektor(void) {          \
+        __asm__ volatile("testb $3," #cs "(%rsp)\n jz 2f\n"                  \
+                         "cmpl $0,kdl_smp_dilim_acik(%rip)\n je 2f\n"         \
+                         "swapgs\n cmpq $0,%gs:136\n jne 1f\n swapgs\n"         \
+                         "2: jmp " eski "\n1: " hata "pushq $" #vektor       \
+                         "\n jmp kdl_smp_dilim_yakala");                       \
+    }
+#define KDL_SMP_KAPILAR(X) \
+    X(0,    8, "pushq $0\n", "*kdl_isr_tablo(%rip)") \
+    X(1,    8, "pushq $0\n", "*kdl_isr_tablo+8(%rip)") \
+    X(3,    8, "pushq $0\n", "*kdl_isr_tablo+24(%rip)") \
+    X(4,    8, "pushq $0\n", "*kdl_isr_tablo+32(%rip)") \
+    X(5,    8, "pushq $0\n", "*kdl_isr_tablo+40(%rip)") \
+    X(6,    8, "pushq $0\n", "*kdl_isr_tablo+48(%rip)") \
+    X(7,    8, "pushq $0\n", "*kdl_isr_tablo+56(%rip)") \
+    X(10,  16, "", "*kdl_isr_tablo+80(%rip)") \
+    X(11,  16, "", "*kdl_isr_tablo+88(%rip)") \
+    X(12,  16, "", "*kdl_isr_tablo+96(%rip)") \
+    X(13,  16, "", "*kdl_isr_tablo+104(%rip)") \
+    X(14,  16, "", "*kdl_isr_tablo+112(%rip)") \
+    X(16,   8, "pushq $0\n", "*kdl_isr_tablo+128(%rip)") \
+    X(17,  16, "", "*kdl_isr_tablo+136(%rip)") \
+    X(19,   8, "pushq $0\n", "*kdl_isr_tablo+152(%rip)") \
+    X(48,   8, "pushq $0\n", "kdl_lapic_timer_stub") \
+    X(49,   8, "pushq $0\n", "kdl_ap_zaman_kocani") \
+    X(128,  8, "pushq $0\n", "kdl_syscall_stub")
+KDL_SMP_KAPILAR(KDL_SMP_KAPI)
+#undef KDL_SMP_KAPI
+
+/* BSP ilk AP'yi uyandırmadan önce IDT kurulur, canlı bir IDT girdisi yamanmaz. */
+static void kdl_smp_kapilari_kur(void) {
+#define KDL_DILIM_KAPISI(v, cs, hata, eski) kdl_idt_gate(v, (uintptr_t)&kdl_smp_kapi_##v, 0);
+    KDL_SMP_KAPILAR(KDL_DILIM_KAPISI)
+    kdl_idt[128].tip_oz = 0xee;
+#undef KDL_DILIM_KAPISI
+}
+#undef KDL_SMP_KAPILAR
+
+/* Panik sırasında NMI teslimi IF, bilet kilitleri ve normal IPI kutusundan bağımsızdır. */
+static unsigned kdl_panik_lider __attribute__((used));
+void kdl_smp_panik_gir(uintptr_t lapic) {
+    if (!lapic) return;
+    volatile uint32_t *tablo = (volatile uint32_t *)lapic;
+    unsigned kim = (tablo[0x20 / 4] >> 24) + 1;
+    unsigned eski = 0;
+    if (__atomic_compare_exchange_n(&kdl_panik_lider, &eski, kim, 0,
+                                    __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        /* Kendi ICR teslimimiz bitince tüm diğer yerel APIC'lere NMI gönder. */
+        for (unsigned i = 0; i < 1000000 && (tablo[0x300 / 4] & 0x1000); ++i)
+            __asm__ volatile("pause");
+        tablo[0x300 / 4] = 0xc4400;
+    } else if (eski != kim) {
+        for (;;) __asm__ volatile("cli; hlt");
+    }
+}
+__attribute__((naked)) static void kdl_panik_nmi(void) {
+    __asm__ volatile("cmpl $0,kdl_panik_lider(%rip)\n"
+                     "je 2f\n cli\n 1: hlt\n jmp 1b\n"
+                     "2: jmp *kdl_isr_tablo+16(%rip)");
+}
+
 void kdl_idt_kur(void) {
     kdl_ist_kur();
+    struct CekirdekVeri *c = &kdl_cekirdek_bsp;
+    extern char __stack_top[], __bss_end[];
+    c->yigin_ust = (uintptr_t)__stack_top;
+    c->yigin_alt = ((uintptr_t)__bss_end + 15) & ~(uintptr_t)15;
+    c->tss = (uintptr_t)kdl_x86_tss;
+    c->gdt = (uintptr_t)kdl_x86_gdt;
+    c->ist[0] = (uintptr_t)kdl_ist1_ust;
+    c->ist[1] = (uintptr_t)kdl_ist2_ust;
+    c->ist[2] = (uintptr_t)kdl_ist3_ust;
+    __asm__ volatile("mov %%cr3,%0" : "=r"(c->cr3));
+    kdl_gs_kur(c);
     for (int i = 0; i < 32; i++)
         kdl_idt_gate(i, (uint64_t)(uintptr_t)kdl_isr_tablo[i], i == 8 ? 1 : i == 2 ? 2 : i == 18 ? 3 : 0);   /* istisnalar 0-31 */
     kdl_idt_gate(32, (uint64_t)(uintptr_t)&kdl_irq0_stub, 0);        /* IRQ0 → vektör 32 */
@@ -584,6 +791,16 @@ void kdl_idt_kur(void) {
     kdl_idt_gate(44, (uintptr_t)&kdl_irq12_stub, 0);
     if (kdl_xhci_irq) kdl_idt_gate(65, (uintptr_t)&kdl_xhci_kocani, 0);
     kdl_idt_gate(48, (uintptr_t)&kdl_lapic_timer_stub, 0);
+    if (smp_ap_zaman_irq) kdl_idt_gate(49, (uintptr_t)&kdl_ap_zaman_kocani, 0);
+    if (kem_ipi_isle) {
+        kdl_idt_gate(2, (uintptr_t)&kdl_panik_nmi, 2);
+        kdl_idt_gate(80, (uintptr_t)&kdl_ipi_80, 0);
+        kdl_idt_gate(81, (uintptr_t)&kdl_ipi_81, 0);
+        kdl_idt_gate(82, (uintptr_t)&kdl_ipi_82, 0);
+        kdl_idt_gate(83, (uintptr_t)&kdl_ipi_83, 0);
+    }
+    extern void kxs_smp_isci(void) __attribute__((weak));
+    if (kxs_smp_isci) kdl_smp_kapilari_kur();
     kdl_idt_gate(255, (uintptr_t)&kdl_spurious_stub, 0);
     extern void *kdl_msi_kocanlari[14];
     for (int i = 0; i < 14; ++i) kdl_idt_gate(66 + i, (uintptr_t)kdl_msi_kocanlari[i], 0);

@@ -7,7 +7,7 @@
 kullan drivers::ortak::gc::{ GcIstek, GcYanit, gc_bos };
 kullan drivers::pci::yapilandirma::{ PciAygit, pci_coz };
 
-genel yapı Qt { h: metin; tampon: metin; hata_sayisi: tam32; }
+genel yapı Qt { h: metin; tampon: metin; hata_sayisi: tam32; xhci_mfindex: tam64; }
 
 genel işlev qt_ac(port: tam32) -> sonuç<Qt, metin> {
     değişken y: yetki<Soket> = yetki_olustur(2, 1);
@@ -15,7 +15,7 @@ genel işlev qt_ac(port: tam32) -> sonuç<Qt, metin> {
     geri_al(y);
     eğer soket_gecerli(h) == yanlış { ver hata("qtest baglantisi kurulamadi"); }
     soket_zaman_asimi(h, 30000);
-    ver tamam(Qt { h: h, tampon: "", hata_sayisi: 0 });
+    ver tamam(Qt { h: h, tampon: "", hata_sayisi: 0, xhci_mfindex: 0 });
 }
 
 genel işlev qt_kapat(q: &değişken Qt) {
@@ -262,6 +262,29 @@ genel işlev qt_bellek_yaz(q: &değişken Qt, adres: tam64, b: Dizi<dtam8>) -> s
     ver tamam(doğru);
 }
 
+// Çalışan xHCI'de MFINDEX her 125 µs'de artar ve 14 bitte sarar.
+işlev qt_xhci_bekle(q: &değişken Qt, us: tam32) -> sonuç<mantıksal, metin> {
+    değişken komut: metin = komut2("readl", q.xhci_mfindex);
+    değişken son: tam64 = 0;
+    eşleş qt_oku(q, komut) { hata(e) => { ver hata(e); } tamam(v) => { son = v & 16383; } }
+    // Başlangıcın çerçeve içindeki konumu bilinmiyor. Sonraki tam aralığı da bekle.
+    değişken kalan: tam64 = ((us olarak tam64) + 124) / 125 + 1;
+    değişken duran: tam32 = 0;
+    iken kalan > 0 {
+        eşleş qt_oku(q, komut) {
+            hata(e) => { ver hata(e); }
+            tamam(v) => {
+                değişken simdi: tam64 = v & 16383;
+                değişken fark: tam64 = (simdi - son + 16384) & 16383;
+                eğer fark > 0 { kalan = kalan - fark; duran = 0; }
+                değilse { duran = duran + 1; eğer duran >= 8192 { ver hata("xHCI MFINDEX ilerlemedi"); } }
+                son = simdi;
+            }
+        }
+    }
+    ver tamam(doğru);
+}
+
 // ---- sans-IO yürütücüsü ----
 // `bar`: aygıt yazmaçlarının fiziksel tabanı (GcIstek ofsetleri ona görelidir).
 genel işlev qt_yurut(q: &değişken Qt, bar: tam64, i: GcIstek) -> GcYanit {
@@ -286,13 +309,12 @@ genel işlev qt_yurut(q: &değişken Qt, bar: tam64, i: GcIstek) -> GcYanit {
             eşleş qt_bellek_yaz(q, a, b) { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
         }
         GcIstek::Bekle(us) => {
-            // `clock_step` yalnız qtest HIZLANDIRICISINDA var; bu kurulum `-accel tcg -S`
-            // (Ubuntu QEMU 8.2 qtest hızlandırıcısı içermiyor — ölçüldü). Aygıt modelleri
-            // (NVMe/AHCI/xHCI) kuyrukları BH ile işler ve BH'ler her qtest komutu arasında
-            // ana döngüde koşar → zararsız bir okuma bir döngü turu yeter. Sanal saat
-            // İLERLEMEZ: zamanlayıcıya dayanan bir aygıt yolu burada asılır ve sürücünün
-            // zaman aşımı onu GÜRÜLTÜLÜ yakalar (sessiz geçmez).
-            eşleş qt_komut(q, "readl 0") { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
+            eğer us > 0 ve q.xhci_mfindex != 0 {
+                eşleş qt_xhci_bekle(q, us) { hata(e) => { y.basarili = yanlış; yazdir_metin(e); } tamam(x) => { } }
+            } değilse {
+                // Durdurulmuş TCG'de sanal saat ilerlemez. Tek okuma QEMU ana döngüsünü çalıştırır.
+                eşleş qt_komut(q, "readl 0") { hata(e) => { y.basarili = yanlış; yazdir_metin(metin_birlestir("qtest tasiyici: ", e)); } tamam(x) => { } }
+            }
         }
         _ => { }
     }

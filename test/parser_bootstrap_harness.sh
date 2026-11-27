@@ -24,8 +24,9 @@ RT=${RT:-build/kdl_runtime.o}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/parseboot.XXXXXX" 2>/dev/null || echo "build/parseboot.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/parseboot) || exit 1
+calisma_izle "$TMP"
 
 if ! "$KEMGU" --llvm selfhost/parser.kem > "$TMP/p.ll" 2>/dev/null; then
     echo "🔴 KEMGU-parser --llvm üretemedi"; exit 1

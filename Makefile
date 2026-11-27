@@ -927,7 +927,8 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		mod=$${spec%%:*}; bek=$${spec##*:}; \
 		f="stdlib/$$mod.kem"; \
 		[ -f "$$f" ] || f="stdlib/temel/$$mod.kem"; \
-		test_f="test/stdlib/test_$$mod.kem"; \
+		test_f="test/stdlib/test_$$mod.kem"; kosucu=; \
+		if [ "$$mod" = bariyer ]; then test_f="test/olcum/bariyer_kosum.kem"; kosucu="timeout 10"; fi; \
 		[ -f "$$f" ] || { echo "FAIL(kaynak yok): $$mod"; exit 1; }; \
 		[ -f "$$test_f" ] || { echo "FAIL(test yok): $$mod"; exit 1; }; \
 		c="$(BUILD)/_run_$$mod.kem"; cat "$$f" "$$test_f" > "$$c"; \
@@ -936,7 +937,7 @@ calistir_stdlib_check: $(BUILD)/kemgu$(EXE) calistir_kripto_check | $(BUILD)
 		clang -x ir "$(BUILD)/_run_$$mod.ll" -x none $(BUILD)/kdl_runtime.o \
 			-o "$(BUILD)/_run_$$mod$(EXE)" 2>/dev/null || \
 			{ echo "FAIL(link): $$mod"; exit 1; }; \
-		./$(BUILD)/_run_$$mod$(EXE); rc=$$?; \
+		$$kosucu ./$(BUILD)/_run_$$mod$(EXE); rc=$$?; \
 		[ "$$rc" = "$$bek" ] || \
 			{ echo "FAIL(kosum): $$mod - beklenen cikis $$bek, gelen $$rc"; exit 1; }; \
 		rm -f "$$c" "$(BUILD)/_run_$$mod.ll" "$(BUILD)/_run_$$mod$(EXE)"; \
@@ -1036,13 +1037,15 @@ calistir_yazdir_bare_test: $(BUILD)/test_yazdir_bare$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_yazdir_bare$(EXE)
 
 # === yazdir_bare bare-metal cross-compile dogrulamasi ===
-calistir_yazdir_bare_bare_metal:
-	@echo "yazdir_bare (PL011 backend) bare-metal cross-compile dogrulamasi..."
+$(BUILD)/kdl_uart_pl011_aarch64.o: runtime/kdl_runtime_uart_pl011.c runtime/kdl_uart.h | $(BUILD)
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
 		-Wall -Wextra -Wpedantic -std=c11 -O2 \
 		-DKEMGU_BARE_METAL -Iruntime \
 		-c runtime/kdl_runtime_uart_pl011.c \
-		-o $(BUILD)/kdl_uart_pl011_aarch64.o
+		-o $@
+
+calistir_yazdir_bare_bare_metal: $(BUILD)/kdl_uart_pl011_aarch64.o
+	@echo "yazdir_bare (PL011 backend) bare-metal cross-compile dogrulamasi..."
 	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
 		-Wall -Wextra -Wpedantic -std=c11 -O2 \
 		-DKEMGU_BARE_METAL -Iruntime \
@@ -1340,7 +1343,6 @@ $(BUILD)/kem_user.elf: test/ornekler/kem_kullanici.kem linker/user-aarch64.ld $(
 # İkisi de onarıldı; ELF yolu da [21]/[22] geçiyor.)
 calistir_kem_os_dtb_arm: calistir_kem_os_arm
 	@echo "AH-2: DTB kesfi — ayni ikili, IKI farkli bellek boyutu:"
-	@llvm-objcopy -O binary $(BUILD)/kem_os.elf $(BUILD)/kem_os.img
 	@if ! command -v qemu-system-aarch64 > /dev/null 2>&1; then \
 		echo "  QEMU yok — AH-2 kapisi atlandi."; exit 0; \
 	fi
@@ -1349,7 +1351,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/dtb_$$MB.out; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m $$MB \
 			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
 			-serial file:$(BUILD)/dtb_$$MB.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
@@ -1401,7 +1403,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/hucre.out; \
 		timeout 20 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 128 \
 			-dtb $(BUILD)/hucre_2_1.dtb -global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/hucre.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		if ! grep -q "RAM  = 0x40000000 + 0x8000000" $(BUILD)/hucre.out 2>/dev/null; then \
@@ -1415,7 +1417,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/ust2g.out; \
 		timeout 30 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 2048 \
 			-global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/ust2g.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		if ! grep -q "MAP  = 0x400 blok" $(BUILD)/ust2g.out 2>/dev/null; then \
@@ -1431,7 +1433,7 @@ calistir_kem_os_dtb_arm: calistir_kem_os_arm
 		rm -f $(BUILD)/soc.out; \
 		timeout 25 qemu-system-aarch64 -M virt -cpu cortex-a72 -display none -m 128 \
 			-dtb $(BUILD)/soc_ranges.dtb -global virtio-mmio.force-legacy=false \
-			-drive file=$(BUILD)/kem_os_disk.img,format=raw,if=none,id=d0 \
+			-drive file=$(BUILD)/kem_os_disk.img,snapshot=on,format=raw,if=none,id=d0 \
 			-device virtio-blk-device,drive=d0 \
 			-serial file:$(BUILD)/soc.out -kernel $(BUILD)/kem_os.img 2>/dev/null || true; \
 		if ! grep -q "UART = 0x9000000" $(BUILD)/soc.out 2>/dev/null; then \
@@ -1937,13 +1939,18 @@ $(BUILD)/bm_x86_heap.o: runtime/kdl_bare_heap.c runtime/kdl_dizi.inc runtime/kdl
 $(BUILD)/bm_x86_panik.o: runtime/kdl_runtime_panik.c runtime/kdl_panik.h | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) $(BM_X86_UART) -c $< -o $@
 $(BUILD)/bm_x86_kesme.o: runtime/kdl_kesme.c | $(BUILD)
-	$(BM_X86) $(BM_X86_CF) -c $< -o $@
+	$(BM_X86) $(BM_X86_CF) -mno-red-zone -c $< -o $@
 $(BUILD)/bm_x86_zaman.o: runtime/kdl_zaman.c | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
 $(BUILD)/bm_x86_gorev.o: runtime/kdl_gorev.c | $(BUILD)
 	$(BM_X86) $(BM_X86_CF) -c $< -o $@
-$(BUILD)/bm_x86_start.o: boot/start_x86_64.S | $(BUILD)
+$(BUILD)/bm_x86_bsp.o: boot/start_x86_64.S | $(BUILD)
 	$(BM_X86) -c $< -o $@
+$(BUILD)/bm_x86_ap.o: boot/ap_x86_64.S | $(BUILD)
+	$(BM_X86) -c $< -o $@
+# Bütün x86 çağıranları ve çekirdek önbelleği aynı başlangıç nesnesini tüketir.
+$(BUILD)/bm_x86_start.o: $(BUILD)/bm_x86_bsp.o $(BUILD)/bm_x86_ap.o
+	ld.lld -m elf_x86_64 -r -o $@ $^
 
 BM_X86_OBJS = $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
               $(BUILD)/bm_x86_bolge.o $(BUILD)/bm_x86_heap.o $(BUILD)/bm_x86_panik.o \
@@ -2015,12 +2022,17 @@ calistir_uart_merhaba_x86_bare_metal: $(BUILD)/kemgu$(EXE) $(BM_X86_OBJS)
 #          (IR'da sayılır) ve imajda RSP altına erişim 0.
 # Kanıt 26 (D-699): "X86 RING3 OK" — ring3 (CPL 3) giriş, ring3 int 0x80 (DPL3 kapı),
 #          #GP/#PF ile çekirdeğe kontrollü dönüş; yapısal: iretq + 0xee kapı baytı.
-calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
+# PVH kanıtlarının aynı imajı, seri günlüğü ve ara IR'ı bütün koşum boyunca korunur.
+.PHONY: _kem_os_x86_kos
+calistir_kem_os_x86: | $(BUILD)
+	+@python3 tools/kapi/kilitli.py $(BUILD)/kilitler/kem_os_x86.lock "$(MAKE)" --no-print-directory _kem_os_x86_kos
+_kem_os_x86_kos: $(BUILD)/kemgu$(EXE) \
 		$(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o \
 		$(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o \
 		$(BUILD)/bm_x86_panik.o
 	@echo "Bare-metal kem_os x86_64 (saf-.kem allocator): CAT -> LLVM IR..."
-	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/kem_dtb.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ps2_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	cat runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/mimari/x86_64/kem_surec_hw.kem runtime/kem_dtb.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_ps2_hw.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_algoritma.kem test/ornekler/kem_os_cekirdek_ortak.kem test/ornekler/kem_os_x86.kem > $(BUILD)/kem_os_x86_comb.kem
+	@python3 test/x86_heap_bagla.py $(BUILD)/kem_os_x86_comb.kem
 	./$(BUILD)/kemgu$(EXE) --llvm --mimari x86_64-none $(BUILD)/kem_os_x86_comb.kem > $(BUILD)/kem_os_x86_ham.ll
 	@grep -q 'target triple = "x86_64-unknown-none-elf"' $(BUILD)/kem_os_x86_ham.ll || { echo "FAIL: x86 IR uclusu bare-metal degil"; exit 1; }
 	@grep -m1 'target triple' $(BUILD)/kem_os_x86_ham.ll
@@ -2224,20 +2236,18 @@ calistir_kem_os_x86: $(BUILD)/kemgu$(EXE) \
 	@llvm-nm $(BUILD)/kem_os_x86.o | grep -qE ' T kdl_istisna_isle$$' || { echo "FAIL: kdl_istisna_isle (guclu) .kem'den gelmiyor"; exit 1; }
 	@# [D-712] Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku, 5 yanki,
 	@# 26 cekirdek-ptr reddi). AYNI imaj iki sonuc: normal kosumda seri girdi YOK → EOF;
-	@# ucuncu kosumda -chardev file,input-path= ile "KEMGU-RX" satiri → OK + ring3 yankisi.
-	@# Ilk kosum (-serial file) DEGISMEDI; girdi dosyasi yalniz bu kosumda.
+	@# ucuncu kosumda RX FIFO hazir olunca COM1 ile "KEMGU-RX" satiri → OK + ring3 yankisi.
+	@# Ilk kosum (-serial file) DEGISMEDI; seri girdi yalniz bu kosumda.
 	@echo "  Kanit 29: kullanici kipinden UART satir okuma (ring3 int 0x80: 26 oku + 5 yanki; girdisiz EOF, girdili satir)..."
 	@grep -qxF "X86 [12] UART RX EOF" $(BUILD)/kem_os_x86.out || { echo "FAIL: girdisiz kosumda 'X86 [12] UART RX EOF' yok"; exit 1; }
 	@if grep -qF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86.out; then echo "FAIL: girdisiz kosum satir okudu"; exit 1; fi
-	@rm -f $(BUILD)/kem_os_x86_rx.out; printf 'KEMGU-RX\n' > $(BUILD)/kem_os_x86_rx.in; \
-	timeout 8 qemu-system-x86_64 -M microvm -display none \
+	@python3 tests/qemu/pvh_uart_girdi.py $(BUILD)/kem_os_x86_rx.out -- \
+		qemu-system-x86_64 -M microvm -display none -monitor none \
 		-global virtio-mmio.force-legacy=false \
 		-drive file=$(BUILD)/kem_os_x86_disk.img,format=raw,if=none,id=d0 \
 		-device virtio-blk-device,drive=d0 \
 		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-		-kernel $(BUILD)/kem_os_x86.elf \
-		-chardev file,id=c0,path=$(BUILD)/kem_os_x86_rx.out,input-path=$(BUILD)/kem_os_x86_rx.in \
-		-serial chardev:c0 2>/dev/null || true
+		-kernel $(BUILD)/kem_os_x86.elf -chardev stdio,id=c0,signal=off -serial chardev:c0
 	@grep -qxF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out || { echo "FAIL: girdili kosumda 'X86 [12] UART RX OK' yok:"; grep -F "UART RX" $(BUILD)/kem_os_x86_rx.out; exit 1; }
 	@v=`grep -B1 -xF "X86 [12] UART RX OK" $(BUILD)/kem_os_x86_rx.out | head -1`; \
 	if [ "$$v" = "KEMGU-RX" ]; then echo "    ring3 yankisi = $$v"; \
@@ -4678,13 +4688,8 @@ calistir_uart_16550_bare_metal:
 	@echo "16550A bare-metal dogrulamasi basarili!"
 
 # === PL011 bare-metal cross-compile dogrulamasi (libc yok) ===
-calistir_uart_pl011_bare_metal:
+calistir_uart_pl011_bare_metal: $(BUILD)/kdl_uart_pl011_aarch64.o
 	@echo "PL011 bare-metal cross-compile + symbol dogrulamasi..."
-	clang -target aarch64-unknown-none -ffreestanding -nostdlib \
-		-Wall -Wextra -Wpedantic -std=c11 -O2 \
-		-DKEMGU_BARE_METAL -Iruntime \
-		-c runtime/kdl_runtime_uart_pl011.c \
-		-o $(BUILD)/kdl_uart_pl011_aarch64.o
 	@echo ""
 	@echo "Uretilen ARM64 ELF object:"
 	@file $(BUILD)/kdl_uart_pl011_aarch64.o
@@ -4711,7 +4716,7 @@ calistir_uart_pl011_bare_metal:
 # (2) Saf-mantık sürücü testleri (ortak/ps2/disk/fs/acpi) İKİ derleyicide
 #     derlenip koşar + stdout eşitliği. Yeni test dosyası kendiliğinden kapsanır.
 #     surucu_diff yalnız YAPIYI ölçer (linklemez); bu kapı DAVRANIŞI ölçer.
-CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/ag/*_test.kem tests/drivers/blok/*_test.kem tests/drivers/usb/*_test.kem tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
+CHATGPT_TESTLER := $(sort $(wildcard tests/drivers/smp/*_test.kem tests/drivers/ag/*_test.kem tests/drivers/blok/*_test.kem tests/drivers/usb/*_test.kem tests/drivers/ahci/*_test.kem tests/drivers/nvme/*_test.kem tests/drivers/acilis/*_test.kem tests/drivers/ortak/*_test.kem tests/drivers/ps2/*_test.kem \
                      tests/drivers/disk/*_test.kem tests/drivers/fs/*_test.kem tests/drivers/acpi/*_test.kem tests/drivers/pci/*_test.kem tests/drivers/bellek/*_test.kem tests/drivers/elf/*_test.kem tests/drivers/ekran/*_test.kem tests/drivers/girdi/*_test.kem tests/drivers/sim/*_test.kem tests/drivers/bulanik/*_test.kem tests/drivers/sinir/*_test.kem tests/drivers/uygulama/*_test.kem))
 calistir_chatgpt_kopru: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
 	@echo "=== ChatGPT köprüsü: dil kartı + saf-mantık sürücü testleri ==="
@@ -4786,12 +4791,39 @@ SHELL := $(abspath test/zaman_kabuk.sh)
 .SHELLFLAGS = $@ -c
 export KEMGU_ZAMAN_DOSYASI := $(abspath $(ZAMAN_KAYDI))
 endif
-.PHONY: test_tumu_olcum
-test_tumu_olcum:
-	@rm -f $(BUILD)/zaman.tsv; rc=0; $(MAKE) -k test_tumu ZAMAN_KAYDI=$(BUILD)/zaman.tsv || rc=$$?; \
-	 python3 test/zaman_raporu.py $(BUILD)/zaman.tsv $(BUILD) 15 | tee $(BUILD)/zaman_raporu.txt; exit $$rc
+.PHONY: test_tumu_olcum _test_tumu_olcum calistir_kapi_butcesi calistir_disk_denetimi
+test_tumu_olcum: | $(BUILD)
+	+@python3 tools/kapi/kilitli.py $(BUILD)/kilitler/zaman.lock "$(MAKE)" --no-print-directory _test_tumu_olcum
 
-test_tumu: calistir_cekirdek_onbellek calistir_bm_x86_surec_abi calistir_bm_x86_surec calistir_bm_x86_disk calistir_bm_x86_heap_uzat calistir_bm_x86_blok calistir_bm_x86_guc calistir_bm_x86_ps2_karma calistir_bm_x86_ps2_irq calistir_bm_x86_apic calistir_bm_x86_istisna calistir_bm_x86_uefi_pc calistir_bm_x86_uefi_kabuk calistir_bm_x86_uefi calistir_bm_x86_ps2 calistir_bm_x86_panik calistir_stdlib_ithal calistir_bm_x86_ekran calistir_bm_x86_kabuk calistir_bm_x86_usb calistir_bm_x86_ahci calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_dizi_uzat_test calistir_bolge_kirpma_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_surucu_kosum calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test calistir_chatgpt_kopru calistir_qtest calistir_bm_x86_nvme
+# Aynı çalışma ağacında yayımlanan zaman.tsv, disk tabanı ve rapor bir takıma aittir.
+_test_tumu_olcum: | $(BUILD)
+	@python3 test/disk_denetimi.py basla $(BUILD) $(BUILD)/disk_baslangic.json
+	@rm -f $(BUILD)/zaman.tsv; takim=0; rapor=0; \
+	 $(MAKE) -k test_tumu ZAMAN_KAYDI=$(BUILD)/zaman.tsv || takim=$$?; \
+	 python3 test/zaman_raporu.py $(BUILD)/zaman.tsv $(BUILD) 15 > $(BUILD)/zaman_raporu.txt || rapor=$$?; \
+	 disk=0; python3 test/disk_denetimi.py denetle $(BUILD) $(BUILD)/disk_baslangic.json >> $(BUILD)/zaman_raporu.txt || disk=$$?; \
+	 cat $(BUILD)/zaman_raporu.txt || exit $$?; \
+	 if [ "$$takim" -eq 0 ] && [ "$$disk" -ne 0 ]; then exit "$$disk"; fi; \
+	 if [ "$$takim" -ne 0 ]; then exit "$$takim"; fi; exit "$$rapor"
+
+# İlk kullanımda karşılaştırma için gerçek takımın başlangıç kaydını oluştur.
+$(BUILD)/disk_baslangic.json: | $(BUILD)
+	+$(MAKE) -j10 --output-sync=target test_tumu_olcum
+
+calistir_disk_denetimi: $(BUILD)/disk_baslangic.json
+	@python3 test/disk_denetimi.py denetle $(BUILD) $(BUILD)/disk_baslangic.json
+
+# Bölüm 4: uzun QEMU aktarımlarını kısa konak kapılarının arkasında bekletme.
+X86_KAHIN_ON := $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+test_tumu: calistir_kapi_butcesi
+calistir_kapi_butcesi: | $(BUILD)
+	@python3 test/kapi_butce_test.py
+
+X86_UZUN_KAPILAR := $(addprefix calistir_bm_x86_,\
+	ag_saglamlik_c_aktarim ag_saglamlik_self_aktarim dosyalar ekran_fare kaynak \
+	kabuk14 v1 tftp_teshis tcp_verim ps2_irq ps2_karma)
+test_tumu: export KEMGU_TAM_TAKIM := 1
+test_tumu: $(X86_UZUN_KAPILAR) calistir_cekirdek_onbellek calistir_bm_x86_surec_abi calistir_bm_x86_surec calistir_bm_x86_disk calistir_bm_x86_heap_uzat calistir_bm_x86_blok calistir_bm_x86_guc calistir_bm_x86_ps2_karma calistir_bm_x86_ps2_irq calistir_bm_x86_apic calistir_bm_x86_istisna calistir_bm_x86_uefi_pc calistir_bm_x86_uefi_kabuk calistir_bm_x86_uefi calistir_bm_x86_ps2 calistir_bm_x86_panik calistir_stdlib_ithal calistir_bm_x86_ekran calistir_bm_x86_kabuk calistir_bm_x86_usb calistir_bm_x86_ahci calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_dizi_uzat_test calistir_bolge_kirpma_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_surucu_kosum calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test calistir_chatgpt_kopru calistir_qtest calistir_bm_x86_nvme
 	@echo "Tum testler gecti!"
 
 # ============================================================================
@@ -4952,7 +4984,7 @@ calistir_bm_x86_uefi_kabuk: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD
 kem_os_pc_img: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@UEFI_YALNIZ_DERLE=1 UEFI_PC_URET=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 calistir_bm_x86_uefi_pc: $(BUILD)/kemgu$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@UEFI_KABUK=1 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc.img UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
+	@UEFI_KABUK=1 UEFI_PC_URET=1 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_apic
 calistir_bm_x86_apic: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
@@ -4960,14 +4992,30 @@ calistir_bm_x86_apic: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x8
 	@UEFI_APIC=1 UEFI_TEKRAR=10 UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_ps2_irq
-calistir_bm_x86_ps2_irq: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@UEFI_PS2_IRQ=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-	@UEFI_PS2_IRQ=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
+PARCALAR_X86_PS2_IRQ := calistir_bm_x86_ps2_irq_c \
+	calistir_bm_x86_ps2_irq_self
+.PHONY: $(PARCALAR_X86_PS2_IRQ)
+calistir_bm_x86_ps2_irq: $(PARCALAR_X86_PS2_IRQ)
+$(PARCALAR_X86_PS2_IRQ): $(X86_KAHIN_ON)
+
+calistir_bm_x86_ps2_irq_c:
+	@UEFI_DERLEYICI=$(BUILD)/kemgu$(EXE) UEFI_PS2_IRQ=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
+
+calistir_bm_x86_ps2_irq_self:
+	@UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) UEFI_PS2_IRQ=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_ps2_karma
-calistir_bm_x86_ps2_karma: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc_ps2karma.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
-	@UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_IMG=build/kem_os_pc_ps2karma.img UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) bash test/bm_x86_uefi_harness.sh
+PARCALAR_X86_PS2_KARMA := calistir_bm_x86_ps2_karma_c \
+	calistir_bm_x86_ps2_karma_self
+.PHONY: $(PARCALAR_X86_PS2_KARMA)
+calistir_bm_x86_ps2_karma: $(PARCALAR_X86_PS2_KARMA)
+$(PARCALAR_X86_PS2_KARMA): $(X86_KAHIN_ON)
+
+calistir_bm_x86_ps2_karma_c:
+	@UEFI_DERLEYICI=$(BUILD)/kemgu$(EXE) UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_GECICI=1 UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
+
+calistir_bm_x86_ps2_karma_self:
+	@UEFI_DERLEYICI=$(BUILD)/codegen$(EXE) UEFI_PS2_KARMA=1 UEFI_KABUK=1 UEFI_RAM=256M UEFI_TEKRAR=10 UEFI_PC_URET=1 UEFI_PC_GECICI=1 UEFI_PC_TURLER=usb UEFI_KAYNAK=test/ornekler/kem_os_x86_kabuk.kem bash test/bm_x86_uefi_harness.sh
 
 .PHONY: calistir_bm_x86_guc
 calistir_bm_x86_guc: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
@@ -5014,13 +5062,31 @@ calistir_bm_x86_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x
 
 .PHONY: calistir_bm_x86_kaynak
 test_tumu: calistir_bm_x86_kaynak
-calistir_bm_x86_kaynak: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@SUREC_SENARYO="kaynak-cocuk kaynak-editor" bash test/bm_x86_surec_harness.sh
+PARCALAR_X86_KAYNAK := calistir_bm_x86_kaynak_cocuk \
+	calistir_bm_x86_kaynak_editor
+.PHONY: $(PARCALAR_X86_KAYNAK)
+calistir_bm_x86_kaynak: $(PARCALAR_X86_KAYNAK)
+$(PARCALAR_X86_KAYNAK): $(X86_KAHIN_ON)
+
+calistir_bm_x86_kaynak_cocuk:
+	@SUREC_SENARYO=kaynak-cocuk bash test/bm_x86_surec_harness.sh
+
+calistir_bm_x86_kaynak_editor:
+	@SUREC_SENARYO=kaynak-editor bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_v1
 test_tumu: calistir_bm_x86_v1
-calistir_bm_x86_v1: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@SUREC_SENARYO="v1 v1-kesinti" bash test/bm_x86_surec_harness.sh
+PARCALAR_X86_V1 := calistir_bm_x86_v1_tam \
+	calistir_bm_x86_v1_kesinti
+.PHONY: $(PARCALAR_X86_V1)
+calistir_bm_x86_v1: $(PARCALAR_X86_V1)
+$(PARCALAR_X86_V1): $(X86_KAHIN_ON)
+
+calistir_bm_x86_v1_tam:
+	@SUREC_SENARYO=v1 bash test/bm_x86_surec_harness.sh
+
+calistir_bm_x86_v1_kesinti:
+	@SUREC_SENARYO=v1-kesinti bash test/bm_x86_surec_harness.sh
 
 .PHONY: kem_os_usb.img
 kem_os_usb.img: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
@@ -5028,8 +5094,17 @@ kem_os_usb.img: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_star
 
 .PHONY: calistir_bm_x86_kabuk14
 test_tumu: calistir_bm_x86_kabuk14
-calistir_bm_x86_kabuk14: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@SUREC_SENARYO=kabuk14 bash test/bm_x86_surec_harness.sh
+PARCALAR_X86_KABUK14 := calistir_bm_x86_kabuk14_1 \
+	calistir_bm_x86_kabuk14_6
+.PHONY: $(PARCALAR_X86_KABUK14)
+calistir_bm_x86_kabuk14: $(PARCALAR_X86_KABUK14)
+$(PARCALAR_X86_KABUK14): $(X86_KAHIN_ON)
+
+calistir_bm_x86_kabuk14_1:
+	@SUREC_SENARYO=kabuk14 SUREC_ILK=1 SUREC_TEKRAR=5 bash test/bm_x86_surec_harness.sh
+
+calistir_bm_x86_kabuk14_6:
+	@SUREC_SENARYO=kabuk14 SUREC_ILK=6 SUREC_TEKRAR=5 bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_dosyalar
 test_tumu: calistir_bm_x86_dosyalar
@@ -5054,10 +5129,22 @@ calistir_bm_x86_buyuk_elf: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/
 
 .PHONY: calistir_bm_x86_cok_surec
 test_tumu: calistir_bm_x86_cok_surec
-calistir_bm_x86_cok_surec: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@SUREC_SENARYO="hesap arka cocuk" bash test/bm_x86_surec_harness.sh
+PARCALAR_X86_COK_SUREC := calistir_bm_x86_cok_surec_hesap \
+	calistir_bm_x86_cok_surec_arka \
+	calistir_bm_x86_cok_surec_cocuk
+.PHONY: $(PARCALAR_X86_COK_SUREC)
+calistir_bm_x86_cok_surec: $(PARCALAR_X86_COK_SUREC)
+$(PARCALAR_X86_COK_SUREC): $(X86_KAHIN_ON)
 
-# [D-763] yığın geri alma değişmezi (self-host döngü geçicileri)
+calistir_bm_x86_cok_surec_hesap:
+	@SUREC_SENARYO=hesap bash test/bm_x86_surec_harness.sh
+
+calistir_bm_x86_cok_surec_arka:
+	@SUREC_SENARYO=arka bash test/bm_x86_surec_harness.sh
+
+calistir_bm_x86_cok_surec_cocuk:
+	@SUREC_SENARYO=cocuk bash test/bm_x86_surec_harness.sh
+
 .PHONY: calistir_e4k_bellek
 test_tumu: calistir_e4k_bellek
 # [D-770] E4k-A: dizi büyütmesi kendi bölgesinden + iş parçacığı kuralı (TSan).
@@ -5085,8 +5172,17 @@ calistir_bm_x86_log: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86
 	@SUREC_KAHIN=log_kahin bash test/bm_x86_surec_harness.sh
 .PHONY: calistir_kem_os_pc_matris
 test_tumu: calistir_kem_os_pc_matris
-calistir_kem_os_pc_matris: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@SUREC_KAHIN=pc_matris bash test/bm_x86_surec_harness.sh
+PARCALAR_PC_MATRIS := calistir_kem_os_pc_matris_gpt \
+	calistir_kem_os_pc_matris_mbr
+.PHONY: $(PARCALAR_PC_MATRIS)
+calistir_kem_os_pc_matris: $(PARCALAR_PC_MATRIS)
+$(PARCALAR_PC_MATRIS): $(X86_KAHIN_ON)
+
+calistir_kem_os_pc_matris_gpt:
+	@PC_MATRIS_TABLO=gpt SUREC_KAHIN=pc_matris bash test/bm_x86_surec_harness.sh
+
+calistir_kem_os_pc_matris_mbr:
+	@PC_MATRIS_TABLO=mbr SUREC_KAHIN=pc_matris bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_kem_os_ayristirici
 test_tumu: calistir_kem_os_ayristirici
@@ -5109,6 +5205,17 @@ test_tumu: calistir_bm_x86_program15
 calistir_bm_x86_program15: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/uygulama/program_test.kem tests/drivers/ekran/bmp_test.kem
 	@SUREC_KAHIN=program15_kahin bash test/bm_x86_surec_harness.sh
+
+# RTC stresini ayrı çağır: make -j20 --output-sync=target calistir_bm_x86_rtc_stres
+RTC_TURLARI := 1 2 3 4 5 6 7 8 9 10
+RTC_C_TURLARI := $(addprefix calistir_bm_x86_rtc_c_,$(RTC_TURLARI))
+RTC_SELF_TURLARI := $(addprefix calistir_bm_x86_rtc_self_,$(RTC_TURLARI))
+.PHONY: calistir_bm_x86_rtc_stres $(RTC_C_TURLARI) $(RTC_SELF_TURLARI)
+calistir_bm_x86_rtc_stres: $(RTC_C_TURLARI) $(RTC_SELF_TURLARI)
+$(RTC_C_TURLARI): RTC_DERLEYICI = $(BUILD)/kemgu$(EXE)
+$(RTC_SELF_TURLARI): RTC_DERLEYICI = $(BUILD)/codegen$(EXE)
+$(RTC_C_TURLARI) $(RTC_SELF_TURLARI): $(X86_KAHIN_ON)
+	@PROGRAM15_TEK=saat SUREC_KAHIN=program15_kahin SUREC_DERLEYICILER=$(RTC_DERLEYICI) bash test/bm_x86_surec_harness.sh
 
 .PHONY: calistir_bm_x86_boru
 test_tumu: calistir_bm_x86_boru
@@ -5230,10 +5337,23 @@ test_tumu: calistir_bm_x86_tcp_secenek
 calistir_bm_x86_tcp_secenek: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh secenek
 
-.PHONY: calistir_bm_x86_tcp_verim
+PARCALAR_X86_TCP_VERIM := calistir_bm_x86_tcp_verim_c_olcekli calistir_bm_x86_tcp_verim_c_olceksiz calistir_bm_x86_tcp_verim_self_olcekli calistir_bm_x86_tcp_verim_self_olceksiz
+.PHONY: calistir_bm_x86_tcp_verim $(PARCALAR_X86_TCP_VERIM)
 test_tumu: calistir_bm_x86_tcp_verim
-calistir_bm_x86_tcp_verim: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@bash test/bm_x86_nic_harness.sh verim
+calistir_bm_x86_tcp_verim: $(PARCALAR_X86_TCP_VERIM)
+$(PARCALAR_X86_TCP_VERIM): $(X86_KAHIN_ON)
+
+calistir_bm_x86_tcp_verim_c_olcekli:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_VERIM_KIPI=olcekli bash test/bm_x86_nic_harness.sh verim
+
+calistir_bm_x86_tcp_verim_c_olceksiz:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_VERIM_KIPI=olceksiz bash test/bm_x86_nic_harness.sh verim
+
+calistir_bm_x86_tcp_verim_self_olcekli:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_VERIM_KIPI=olcekli bash test/bm_x86_nic_harness.sh verim
+
+calistir_bm_x86_tcp_verim_self_olceksiz:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_VERIM_KIPI=olceksiz bash test/bm_x86_nic_harness.sh verim
 
 .PHONY: calistir_bm_x86_soket
 test_tumu: calistir_bm_x86_soket
@@ -5290,8 +5410,33 @@ calistir_kem_os_arm_ag: calistir_kem_os_arm $(BUILD)/codegen$(EXE)
 
 .PHONY: calistir_bm_x86_ag_saglamlik
 test_tumu: calistir_bm_x86_ag_saglamlik
-calistir_bm_x86_ag_saglamlik: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
-	@bash test/bm_x86_nic_harness.sh saglamlik_ag
+PARCALAR_X86_AG_SAGLAMLIK := calistir_bm_x86_ag_saglamlik_c_aktarim \
+	calistir_bm_x86_ag_saglamlik_c_cerceve \
+	calistir_bm_x86_ag_saglamlik_c_zaman \
+	calistir_bm_x86_ag_saglamlik_self_aktarim \
+	calistir_bm_x86_ag_saglamlik_self_cerceve \
+	calistir_bm_x86_ag_saglamlik_self_zaman
+.PHONY: $(PARCALAR_X86_AG_SAGLAMLIK)
+calistir_bm_x86_ag_saglamlik: $(PARCALAR_X86_AG_SAGLAMLIK)
+$(PARCALAR_X86_AG_SAGLAMLIK): $(X86_KAHIN_ON)
+
+calistir_bm_x86_ag_saglamlik_c_aktarim:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_SAGLAMLIK=aktarim bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+calistir_bm_x86_ag_saglamlik_c_cerceve:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_SAGLAMLIK=cerceve bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+calistir_bm_x86_ag_saglamlik_c_zaman:
+	@NIC_DERLEYICILER=$(BUILD)/kemgu$(EXE) NIC_SAGLAMLIK=zaman bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+calistir_bm_x86_ag_saglamlik_self_aktarim:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_SAGLAMLIK=aktarim bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+calistir_bm_x86_ag_saglamlik_self_cerceve:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_SAGLAMLIK=cerceve bash test/bm_x86_nic_harness.sh saglamlik_ag
+
+calistir_bm_x86_ag_saglamlik_self_zaman:
+	@NIC_DERLEYICILER=$(BUILD)/codegen$(EXE) NIC_SAGLAMLIK=zaman bash test/bm_x86_nic_harness.sh saglamlik_ag
 
 .PHONY: calistir_bm_x86_ag_iki calistir_bm_x86_ag_pc
 test_tumu: calistir_bm_x86_ag_iki
@@ -5300,3 +5445,92 @@ calistir_bm_x86_ag_iki: calistir_kem_os_arm $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(E
 	@bash test/bm_x86_nic_harness.sh iki_konuk
 calistir_bm_x86_ag_pc: $(PAKET_DEPOSU_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_nic_harness.sh ag_pc
+
+.PHONY: calistir_paylasim_denetimi
+test_tumu: calistir_paylasim_denetimi
+calistir_paylasim_denetimi:
+	@python3 tools/kapi/paylasim_ornekleri.py
+	@python3 tools/kapi/paylasim_denetimi.py
+
+.PHONY: calistir_kapi_kapsam
+test_tumu: calistir_kapi_kapsam
+calistir_kapi_kapsam:
+	@python3 tools/kapi/kapsam_listesi.py
+
+.PHONY: test_secili calistir_kapi_secici
+TABAN ?= origin/main
+test_secili: export TABAN := $(TABAN)
+test_secili:
+	@python3 tools/kapi/kapi_secici.py --calistir
+
+test_tumu: calistir_kapi_secici
+calistir_kapi_secici:
+	@python3 tools/kapi/secici_ornekleri.py
+
+# QEMU/OVMF bulunmayan konakta SMP kapıları hazırlık derlemesinden önce atlar.
+X86_SMP_ON := $(if $(PAKET_DEPOSU_ON),$(X86_KAHIN_ON))
+.PHONY: calistir_bm_x86_smp_kesif
+test_tumu: calistir_bm_x86_smp_kesif
+calistir_bm_x86_smp_kesif: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh kesif
+
+.PHONY: calistir_bm_x86_smp_ap
+test_tumu: calistir_bm_x86_smp_ap
+calistir_bm_x86_smp_ap: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh ap
+	@SUREC_KAHIN=smp_kahin SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_tik
+test_tumu: calistir_bm_x86_smp_tik
+calistir_bm_x86_smp_tik: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh tik
+	@SMP_KABUK_GS=1 SUREC_KAHIN=smp_kahin SUREC_DERLEYICILER=$(BUILD)/kemgu$(EXE) bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_kilit
+test_tumu: calistir_bm_x86_smp_kilit
+calistir_bm_x86_smp_kilit: $(X86_SMP_ON) $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o $(BUILD)/kdl_runtime_mmio.o
+	@bash otomasyon/chatgpt/dogrula.sh tests/drivers/smp/kilit_model_test.kem
+	@bash test/bm_x86_smp_harness.sh kilit
+
+.PHONY: calistir_bm_x86_smp_ipi
+test_tumu: calistir_bm_x86_smp_ipi
+calistir_bm_x86_smp_ipi: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh ipi
+
+.PHONY: calistir_bm_x86_smp_bellek
+test_tumu: calistir_bm_x86_smp_bellek
+calistir_bm_x86_smp_bellek: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh bellek
+	@SMP_TEK_BELLEK=1 SUREC_SENARYO=tekrar SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_tlb
+test_tumu: calistir_bm_x86_smp_tlb
+calistir_bm_x86_smp_tlb: $(X86_SMP_ON)
+	@bash test/bm_x86_smp_harness.sh tlb
+	@SUREC_SMP=4 SUREC_SENARYO="tus-usb cocuk" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+
+# Tek vCPU zamanlamasını ve dört vCPU üzerinde her eski kullanıcı senaryosunu da çalıştır.
+SMP_SUREC_PARCA := $(addprefix calistir_bm_x86_smp_surec_,hesap boru kabuk14 dosyalar)
+.PHONY: calistir_bm_x86_smp_surec $(SMP_SUREC_PARCA)
+test_tumu: calistir_bm_x86_smp_surec
+calistir_bm_x86_smp_surec: $(SMP_SUREC_PARCA)
+$(SMP_SUREC_PARCA): $(X86_SMP_ON)
+calistir_bm_x86_smp_surec_hesap:
+	@SUREC_KAHIN=smp_surec_kahin bash test/bm_x86_surec_harness.sh
+	@SUREC_SMP=4 SUREC_SENARYO="hesap arka cocuk" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+calistir_bm_x86_smp_surec_boru:
+	@KEMGU_QEMU_SMP=4 SUREC_KAHIN=boru_kahin bash test/bm_x86_surec_harness.sh
+calistir_bm_x86_smp_surec_kabuk14:
+	@SUREC_SMP=4 SUREC_SENARYO=kabuk14 SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+calistir_bm_x86_smp_surec_dosyalar:
+	@SUREC_SMP=4 SUREC_SENARYO="gezgin gezgin-salt" SUREC_TEKRAR=1 bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_paralel
+test_tumu: calistir_bm_x86_smp_paralel
+calistir_bm_x86_smp_paralel: $(X86_SMP_ON)
+	@SUREC_KAHIN=smp_paralel_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_saglamlik
+test_tumu: calistir_bm_x86_smp_saglamlik
+calistir_bm_x86_smp_saglamlik: $(X86_SMP_ON)
+	@UEFI_SMP_DENEY=saglamlik KEMGU_KILIT_DENETIM=1 SUREC_KAHIN=smp_saglamlik_kahin bash test/bm_x86_surec_harness.sh

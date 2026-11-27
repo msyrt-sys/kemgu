@@ -1,0 +1,51 @@
+// Her görevin varış yuvası tek yazıcılıdır. Ana görev iki varışı gerçek
+// bariyerin ardından ve görevleri birleştirmeden önce ayrı ayrı gözler.
+küresel değişken ilk_varis: tam32 = 0;
+küresel değişken ikinci_varis: tam32 = 0;
+
+işlev katil(b: Bariyer, ilk: mantıksal) -> tam32 {
+    değişken tur: tam32 = 1;
+    iken tur <= 5 {
+        güvensiz {
+            eğer ilk { ilk_varis = tur; } değilse { ikinci_varis = tur; }
+        }
+        bekle(b);
+        // Ana görev bu neslin iki yuvasını okuyana kadar yeniden yazma.
+        bekle(b);
+        tur = tur + 1;
+    }
+    ver 0;
+}
+
+işlev main() -> tam32 {
+    değişken tek: Bariyer = olustur(1);
+    bekle(tek);
+    bekle(tek);
+    yok_et(tek);
+
+    değişken b: Bariyer = olustur(3);
+    değişken g1: sonuç<görev<tam32>, metin> = görev_başlat(|| katil(b, doğru));
+    değişken g2: sonuç<görev<tam32>, metin> = görev_başlat(|| katil(b, yanlış));
+    değişken hatalar: tam32 = 0;
+    değişken tur: tam32 = 1;
+    iken tur <= 5 {
+        bekle(b);
+        güvensiz {
+            eğer ilk_varis != tur veya ikinci_varis != tur { hatalar = hatalar + 1; }
+        }
+        bekle(b);
+        tur = tur + 1;
+    }
+    eşleş g1 {
+        tamam(t1) => { görev_birleştir(t1); }
+        hata(e1) => { hatalar = hatalar + 1; }
+    }
+    eşleş g2 {
+        tamam(t2) => { görev_birleştir(t2); }
+        hata(e2) => { hatalar = hatalar + 1; }
+    }
+    yok_et(b);
+    eğer hatalar == 0 { yazdir_metin("bariyer: TUM TESTLER GECTI"); ver 0; }
+    yazdir_metin("bariyer: varis nesli veya gorev sonucu hatali");
+    ver 1;
+}

@@ -1,0 +1,58 @@
+// Çocuklar ortak boruda ebeveyni bekler, sonuç kayıtları PIPE_BUF'tan küçüktür.
+çıplak işlev od_koy(p: tam64, i: tam64, v: tam64) {
+    değişken q: *tam64 = (p+i*8) olarak *tam64; *q=v;
+}
+çıplak işlev od_topla(n: tam64) -> tam64 {
+    değişken t: tam64=0;
+    güvensiz { satıriçi_asm {
+        mimari: x86_64 şablon:r#"movq $1,%rcx
+xorq $0,$0
+1: addq %rcx,$0
+decq %rcx
+jnz 1b"#
+        çıktı("=r",&t) girdi("r",n) bozulan("~{rcx}") bozulan("~{cc}")
+    } }
+    ver t;
+}
+işlev od_cocuk(p: tam64, i: tam64) -> tam64 {
+    eğer i<0 veya i>3 veya sis_oku(0,p,1)!=1 { ver 11; }
+    değişken n: tam64=600000000+i*1009;
+    od_koy(p,0,i); od_koy(p,1,od_topla(n)); od_koy(p,2,sis_islemci_no());
+    eğer sis_yaz(1,p,24)!=24 { ver 12; } ver 0;
+}
+işlev kullanici_main(argc: tam64, argv: tam64) -> tam64 { güvensiz {
+    değişken p: tam64=malloc(256) olarak tam64;
+    eğer p==0 { ver 1; }
+    eğer argc==2 { ver od_cocuk(p,(metin_bayt(sis_argv(argv,1),0) olarak tam64)-48); }
+    değişken adet: tam64=sis_islemci_sayisi();
+    eğer adet<1 veya sis_yakinlik_ayarla(adet)!= -22 veya sis_islemci_kayit(adet,p,64)!= -22
+        veya sis_islemci_kayit(0,p,63)!= -22 veya sis_islemci_kayit(0,0,64)!= -14 { ver 2; }
+    eğer sis_yakinlik_ayarla(adet-1)!=0 veya sis_islemci_no()!=adet-1
+        veya sis_islemci_kayit(adet-1,p,64)!=0 veya sis_alan(p,0)!=adet-1
+        veya sis_yakinlik_ayarla(0)!=0 veya sis_islemci_no()!=0 veya sis_yakinlik_ayarla(-1)!=0 { ver 3; }
+    eğer sis_boru(p)!=0 veya sis_boru(p+16)!=0 { ver 4; }
+    od_koy(p,4,sis_alan(p,0)); od_koy(p,5,sis_alan(p,3)); od_koy(p,7,0);
+    değişken i: tam64=0;
+    iken i<4 {
+        od_koy(p,6,sis_metin_adres(tam_metin(i)));
+        değişken pid: tam64=sis_baslat_eslemeli("/diskler/usb0p2/bin/smpden.elf",p+48,p+32);
+        eğer pid<1 { ver 5; } od_koy(p,8+i,pid); i=i+1;
+    }
+    sis_kapat(sis_alan(p,0)); sis_kapat(sis_alan(p,3));
+    sis_metin("SMP BAS"); sis_bayt_yaz(1,10);
+    eğer sis_yaz(sis_alan(p,1),p+128,4)!=4 { ver 6; }
+    sis_kapat(sis_alan(p,1));
+    i=0; iken i<4 {
+        eğer sis_oku(sis_alan(p,2),p+128,24)!=24 { ver 7; }
+        değişken satir:metin=metin_birlestir("SMP SONUC ",tam_metin(sis_alan(p+128,0)));
+        satir=metin_birlestir(metin_birlestir(satir," "),tam_metin(sis_alan(p+128,1)));
+        satir=metin_birlestir(metin_birlestir(satir," "),tam_metin(sis_alan(p+128,2)));
+        sis_metin(satir); sis_bayt_yaz(1,10); i=i+1;
+    }
+    sis_kapat(sis_alan(p,2));
+    i=0; iken i<4 {
+        eğer sis_bekle(sis_alan(p,8+i),p+128)<0 veya sis_alan(p+128,0)!=0 veya sis_alan(p+128,1)!=0 { ver 8; }
+        i=i+1;
+    }
+    sis_metin("SMP BITTI"); sis_bayt_yaz(1,10); ver 0;
+} }

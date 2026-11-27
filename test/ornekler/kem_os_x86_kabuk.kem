@@ -196,11 +196,11 @@ işlev kd_tur(a: BlokDonanim) -> metin {
 // Dosya zinciri boyunca bitişik LBA'ları tek DMA dizisine dönüştür.
 işlev kd_gecici_kur(d: &değişken KabukDisk) -> sonuç<mantıksal,metin> {
     değişken say: tam32 = 8; değişken cer: CerceveAyirici = uefi_ayirici_al();
-    eşleş ayir_ardisik(&değişken cer,say) { hiç => { ver hata("/ram icin sekiz cerceve yok"); } değer(taban) => {
+    eşleş uefi_cerceve_ayir(&değişken cer,say) { hiç => { ver hata("/ram icin sekiz cerceve yok"); } değer(taban) => {
         değişken adet: tam64 = (say olarak tam64)*8;
-        eşleş ram_blok_yeni(taban,adet*512) { hata(e) => { serbest_ardisik(&değişken cer,taban,say); ver hata(e); } tamam(ram) => {
+        eşleş ram_blok_yeni(taban,adet*512) { hata(e) => { uefi_cerceve_iade(&değişken cer,taban,say); ver hata(e); } tamam(ram) => {
             değişken blok: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ram(ram) };
-            eşleş bd_yeni("/ram",0,blok) { hata(e) => { serbest_ardisik(&değişken cer,taban,say); ver hata(e); } tamam(ay) => {
+            eşleş bd_yeni("/ram",0,blok) { hata(e) => { uefi_cerceve_iade(&değişken cer,taban,say); ver hata(e); } tamam(ay) => {
                 değişken i: tam32 = dizi_boyut(d.aygitlar); dizi_ekle(d.aygitlar,ay);
                 // Ortak VFS okuma planı sektörleri çerçevelere eşler. Düğüm tablosu RAM'e aittir.
                 değişken p: DiskBolumu = DiskBolumu {no:0,bas:0,adet:adet,tur:[],mbr_tur:0,kimlik:[]};
@@ -287,20 +287,20 @@ işlev kd_ramdisk_dosya(d: &değişken KabukDisk,k: KabukBag,g: DizinGirdisi) ->
     değişken say: tam32 = ((g.boyut+4095)/4096) olarak tam32;
     değişken fs: tam32 = ((k.bpb.kume_sayisi+1025)/1024) olarak tam32;
     değişken adres: tam64 = 0; değişken fat: tam64 = 0;
-    eşleş ayir_ardisik(&değişken cer,say) { hiç => { ver hata("ramdisk icin bitisik cerceve yok"); } değer(a) => { adres=a; } }
-    eşleş ayir_ardisik(&değişken cer,fs) {
-        hiç => { serbest_ardisik(&değişken cer,adres,say); ver hata("ramdisk FAT icin cerceve yok"); }
+    eşleş uefi_cerceve_ayir(&değişken cer,say) { hiç => { ver hata("ramdisk icin bitisik cerceve yok"); } değer(a) => { adres=a; } }
+    eşleş uefi_cerceve_ayir(&değişken cer,fs) {
+        hiç => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata("ramdisk FAT icin cerceve yok"); }
         değer(a) => { fat=a; }
     }
     değişken ay: BlokDonanim = dizi_al(d.aygitlar,k.indeks);
     değişken r: sonuç<mantıksal,metin> = kd_ram_zincir(&değişken ay,k,g,adres,fat);
-    dizi_yaz(d.aygitlar,k.indeks,ay); serbest_ardisik(&değişken cer,fat,fs);
-    eşleş r { hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(v) => { } }
-    eşleş ram_blok_yeni(adres,g.boyut) { hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(ram) => {
+    dizi_yaz(d.aygitlar,k.indeks,ay); uefi_cerceve_iade(&değişken cer,fat,fs);
+    eşleş r { hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(v) => { } }
+    eşleş ram_blok_yeni(adres,g.boyut) { hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(ram) => {
         değişken blok: BlokAygiti = BlokAygiti { durum:BlokCesidi::Ram(ram) };
-        eşleş bd_yeni("ram0",0,blok) { hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(v) => {
+        eşleş bd_yeni("ram0",0,blok) { hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(v) => {
             eşleş kd_ramdisk_bagla(d,v) {
-                hata(e) => { serbest_ardisik(&değişken cer,adres,say); ver hata(e); } tamam(w) => { }
+                hata(e) => { uefi_cerceve_iade(&değişken cer,adres,say); ver hata(e); } tamam(w) => { }
             }
         } }
     } }
@@ -921,9 +921,13 @@ işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     değişken r: tam64 = kxs_baglam(y);
     değişken fizik: tam64 = kxm_o64(r+KXS_CR3_OFS);
     değişken yer: KxsYer = kxs_yer(kxm_o64(r+256));
+    // Tam kökün çekirdek dalları da silinecek. Aktif bir CR3'ü geri verme.
+    eğer değil smp_alan_bos(fizik) { ver -16; }
+    // Kapanan ön plan uygulamasının basılı tuşu yeni sahibin satırında yinelenmesin.
+    güvensiz { eğer kxs_on_pid==ks_pid(y) { kt_kod=0; } }
     güvensiz { memset(fizik olarak *tam8,0,(yer.tablo olarak tam64)*4096); }
     değişken ayirici: CerceveAyirici = uefi_ayirici_al();
-    eşleş serbest_ardisik(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {
+    eşleş uefi_cerceve_iade(&değişken ayirici,fizik,kxs_cerceve_sayisi(yer)) {
         hata(e) => { bm_yaz(e); kem_qemu_cik(1); }
         tamam(v) => { }
     }
@@ -943,6 +947,7 @@ işlev ks_birak(y: tam64,b: &değişken KsvBaglam) -> tam64 {
 }
 işlev ks_sonlandir(y: tam64,b: &değişken KsvBaglam) -> tam64 {
     değişken r: tam64 = kxs_baglam(y);
+    güvensiz { eğer smp_cevrimici>1 ve değil kzs_iptal(y) { ver -16; } }
     kxm_y64(r+KXS_DURUM_OFS,KXS_OLDURULDU); kxm_y64(r+KXS_VEKTOR_OFS,15);
     ver ks_birak(y,b);
 }
@@ -957,6 +962,8 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
         ag_al();
         bh_olaylar();
         değişken n: tam64 = 0;
+        kzs_baslat();
+        değişken cok:mantıksal=smp_cevrimici>1;
         iken n < KXS_YUVA_ADEDI {
             değişken y: tam64 = (p.sonraki+n)%KXS_YUVA_ADEDI;
             eğer ks_durum(y) != KXS_BOS ve değil ks_bitti(ks_durum(y)) {
@@ -981,7 +988,8 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
                     dizi_yaz(p.baglamlar,i,b);
                 }
                 ks_uyandir(y,&b);
-                eğer ks_durum(y) == KXS_HAZIR {
+                eğer cok ve ks_durum(y)==KXS_HAZIR { kzs_hazirla(y); }
+                eğer (değil cok ve ks_durum(y)==KXS_HAZIR) veya (cok ve ipi_oku(kzs_is(y))==3) {
                     b.x=*x; b.h=*h; b.tr=*tr;
                     değişken isaret: *KsvBaglam = (&b) olarak *KsvBaglam;
                     ksv_baglam_adresi=isaret olarak tam64;
@@ -989,7 +997,8 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
                     ks_yonetim=yonetim olarak tam64;
                     kxs_ek_vekil=ksv_vekil_adresi();
                     kxs_cikis_eslendi=dizi_al(b.fds,1).acik;
-                    kxs_bir_dilim(y); b.dilim_calisti=doğru;
+                    eğer cok { kzs_hizmet(y); } değilse { kxs_bir_dilim(y); }
+                    b.dilim_calisti=doğru;
                     kxs_cikis_eslendi=yanlış;
                     ks_yonetim=0; ksv_baglam_adresi=0; kxs_ek_vekil=0;
                     *x=b.x; *h=b.h; *tr=b.tr;
@@ -1003,12 +1012,16 @@ işlev ks_adim(p: &değişken KsKabukSureci,x: &değişken XhciDurum,h: &değiş
             }
             n=n+1;
         }
+        eğer cok { ver kxs_smp_isci(0)!=0; }
     }
     ver yanlış;
 }
 çıplak işlev ps2_tus_var() -> mantıksal { ver ps2_halka_var(ps2_irq_klavye); }
-çıplak işlev ks_hlt() { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti
-hlt"# bozulan("~{memory}") } } }
+çıplak işlev ks_hlt() { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"cli
+movq $$1,kdl_cekirdek_bsp+200(%rip)
+sti
+hlt
+movq $$0,kdl_cekirdek_bsp+200(%rip)"# bozulan("~{memory}") } } }
 işlev ks_bekle(p: &değişken KsKabukSureci,y: tam64,x: &değişken XhciDurum,h: &değişken HidKlavye,tr: &değişken KlavyeDurumu) {
     iken değil ks_bitti(ks_durum(y)) {
         eğer değil ks_adim(p,x,h,tr) { güvensiz { satıriçi_asm { mimari: x86_64 şablon: r#"sti
@@ -1343,7 +1356,7 @@ işlev kd_bilgi(d: &değişken KabukDisk,indeks: tam32,us: mantıksal) -> sonuç
     ekran_cift_yaz(kd_tamsayi("CALISMA ms",sure));
     eğer uefi_mi() {
         değişken c: CerceveAyirici = uefi_ayirici_al();
-        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("CERCEVE bos toplam",cerceve_bos(&c) olarak tam64),c.toplam olarak tam64));
+        ekran_cift_yaz(kd_tamsayi(kd_tamsayi("CERCEVE bos toplam",uefi_bos_say() olarak tam64),c.toplam olarak tam64));
     } değilse { ekran_cift_yaz("CERCEVE PVH haritasi yok"); }
     ekran_cift_yaz(kd_tamsayi("HEAP bayt",kem_heap_kullanimi()));
     değişken say: tam64 = 0; değişken i: tam64 = 0;
@@ -1761,8 +1774,7 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
     değişken t: tam64 = ag_dma+4096+(ag_tx olarak tam64)*16;
     eğer (kem_fiz_oku8(t+12)&1)==0 { ver -11; }
     değişken a: tam64 = kem_mmio_oku64(t);
-    değişken i: tam32 = 0;
-    iken i<boy { kem_fiz_yaz8(a+(i olarak tam64),kem_fiz_oku8(adres+(i olarak tam64))); i=i+1; }
+    memcpy(a olarak *tam8,adres olarak *tam8,boy olarak tam64);
     eğer ag_model==3 { kem_mmio_yaz64(t+8,igb_tx_sozcugu(boy)); }
     değilse { kem_mmio_yaz64(t+8,e1k_tx_sozcugu(boy)); }
     ag_tx=(ag_tx+1)%E1K_ADET;
@@ -1772,11 +1784,18 @@ işlev ag_gonder(adres: tam64,boy: tam32) -> tam32 {
 }
 işlev ag_al() {
     güvensiz {
-    eğer ag_bar==0 { ver; }
-    eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
-    ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_ntp_adim(); ag_tcp_adim();
-    eğer ag_model==6 { ag_ecm_al(); ver; }
-    eğer ag_model==4 { ag_vrx(); ver; }
+        eğer ag_bar==0 { ver; }
+        eğer ag_parca_aktif>0 { ag_parca_sure(ag_us()/1000); }
+        ag_bekleyenleri_isle(); ag_dhcp_adim(); ag_ntp_adim();
+        eğer ag_model==6 { ag_ecm_al(); }
+        değilse eğer ag_model==4 { ag_vrx(); }
+        değilse { ag_e1k_al(); }
+        // Yeni veri veya ACK'den doğan gönderim, bir sonraki kesmeyi beklemesin.
+        ag_tcp_adim();
+    }
+}
+işlev ag_e1k_al() {
+    güvensiz {
     değişken i: tam32 = 0;
     iken i<E1K_ADET {
         değişken t: tam64 = ag_dma+(ag_rx olarak tam64)*16;
@@ -1786,8 +1805,8 @@ işlev ag_al() {
         eğer n==0 { ver; }
         eğer n>0 {
             değişken a: tam64 = ag_dma+8192+(ag_rx olarak tam64)*2048;
-            değişken j: tam32 = 0;
-            iken j<n { kem_fiz_yaz8(ag_dma+40960+(j olarak tam64),kem_fiz_oku8(a+(j olarak tam64))); j=j+1; }
+            kem_dma_bariyeri();
+            memcpy((ag_dma+40960) olarak *tam8,a olarak *tam8,n olarak tam64);
             ag_son_boy=n; ag_rx_sayi=ag_rx_sayi+1; ag_rx_bayt=ag_rx_bayt+(n olarak tam64); ag_l3_girdi();
         } değilse { ag_atilan=ag_atilan+1; }
         kem_mmio_yaz64(t,ag_dma+8192+(ag_rx olarak tam64)*2048);
@@ -2227,6 +2246,13 @@ işlev ag_tcp_ac(ip: tam64,es: tam64,port: tam32,ep: tam32,uyg: tam32,aktif: man
         iken i<8 {
             değişken k: tam64 = ag_tcp_alan+1052672*(i olarak tam64); i=i+1;
             eğer kem_mmio_oku32(k+576)==0 {
+                // Küçük E1000 halkasında yankının her MSS'si için bir veri ve bir
+                // onay tanımlayıcısı gerekir. İki yuva denetim trafiğine ayrılır.
+                değişken al_boyu:tam32=131072;
+                eğer uyg==1 ve ag_model>=1 ve ag_model<=3 ve (es>>24)!=127 {
+                    al_boyu=((E1K_ADET-2)/2)*1460;
+                }
+                ag_dizi_baslik(k+512,k+1024,al_boyu,4);
                 ag_tcp_kim=ag_tcp_kim+1;
                 değişken b: TcpBag = tcp_yeni(ip,es,port,ep,(ag_us()*4+ag_tcp_kim*65537)&4294967295,ag_dizi8(k+512),ag_dizi8(k+544));
                 b.olcek_iste=ag_tcp_olcek; b.damga_iste=doğru; b.gecikmeli=doğru; b.nagle=doğru; b.canli_ms=ag_tcp_canli_ms; b.canli_son=ag_us()/1000;
@@ -2279,6 +2305,42 @@ işlev ag_tcp_girdi(b: Dizi<dtam8>,n: tam32,lo: mantıksal) -> mantıksal {
         tcp_al(&değişken s,&v,b,h,ag_us()/1000); *p=s; ver doğru;
     }
 }
+// [bas, bas+adet) aktarım desenini gönderim halkasının bitişik bölümüne yaz.
+çıplak işlev ag_aktarim_doldur(hedef: Dizi<dtam8>, ofset: tam32, adet: tam32, bas: tam64) {
+    değişken son: tam32=ofset+adet;
+    değişken i: tam32=ofset;
+    değişken deger: tam32=((bas*37+bas/251)&255) olarak tam32;
+    değişken sinir: tam32=i+251-(bas%251) olarak tam32;
+    iken i<son {
+        değişken bitis: tam32=sinir;
+        eğer bitis>son { bitis=son; }
+        iken i<bitis {
+            dizi_yaz(hedef,i,(deger&255) olarak dtam8);
+            deger=deger+37; i=i+1;
+        }
+        deger=deger+1; sinir=sinir+251;
+    }
+}
+// Her iki halkada bitişik kalan bölümü aktar, sarma noktasında yeni aralık seç.
+çıplak işlev ag_tcp_yankila(s: &değişken TcpBag, n: tam32) {
+    değişken al_kap: tam32=dizi_boyut(s.rx);
+    değişken yaz_kap: tam32=dizi_boyut(s.tx);
+    değişken al: tam32=s.rx_ilk;
+    değişken yaz: tam32=(s.tx_ilk+s.tx_boy)%yaz_kap;
+    değişken kalan: tam32=n;
+    iken kalan>0 {
+        değişken kesit: tam32=kalan;
+        eğer kesit>al_kap-al { kesit=al_kap-al; }
+        eğer kesit>yaz_kap-yaz { kesit=yaz_kap-yaz; }
+        değişken i: tam32=0;
+        iken i<kesit { dizi_yaz(s.tx,yaz+i,dizi_al(s.rx,al+i)); i=i+1; }
+        al=al+kesit; eğer al==al_kap { al=0; }
+        yaz=yaz+kesit; eğer yaz==yaz_kap { yaz=0; }
+        kalan=kalan-kesit;
+    }
+    eğer s.rx_boy==al_kap { s.onay=doğru; }
+    s.rx_ilk=al; s.rx_boy=s.rx_boy-n; s.tx_boy=s.tx_boy+n;
+}
 // Soket ABI'sinden önceki yankı ve aktarım sınaması aynı gönder/al halkalarını kullanır.
 işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
     güvensiz {
@@ -2286,7 +2348,10 @@ işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
     değişken n: tam32 = s.rx_boy; eğer n>1460 { n=1460; }
     eğer uyg==1 {
         değişken yer: tam32 = dizi_boyut(s.tx)-s.tx_boy; eğer n>yer { n=yer; }
-        eğer n>0 { n=tcp_oku(s,buf,0,n); tcp_yaz(s,buf,0,n); }
+        eğer n>0 {
+            eğer s.kapat { tcp_oku(s,buf,0,n); }
+            değilse { ag_tcp_yankila(s,n); }
+        }
         eğer s.durum==TCP_KAPAT_BEKLE ve s.rx_boy==0 { tcp_kapat_iste(s); }
     } değilse eğer uyg==2 {
         eğer n>0 {
@@ -2298,10 +2363,18 @@ işlev ag_tcp_uygulama(s: &değişken TcpBag,uyg: tam32,buf: Dizi<dtam8>) {
             } ag_tcp_okunan=ag_tcp_okunan+(n olarak tam64);
         }
         değişken kalan: tam64 = ag_tcp_hedef_boy-ag_tcp_yazilan;
-        eğer kalan>0 ve s.tx_boy<dizi_boyut(s.tx) {
-            değişken adet: tam32 = 1460; eğer kalan<1460 { adet=kalan olarak tam32; } eğer adet>dizi_boyut(s.tx)-s.tx_boy { adet=dizi_boyut(s.tx)-s.tx_boy; }
-            değişken i: tam32 = 0; iken i<adet { değişken j: tam64 = ag_tcp_yazilan+(i olarak tam64); ag_y8(buf,i,j*37+j/251); i=i+1; }
-            adet=tcp_yaz(s,buf,0,adet); eğer adet>0 { ag_tcp_yazilan=ag_tcp_yazilan+(adet olarak tam64); }
+        değişken kapasite: tam32=dizi_boyut(s.tx);
+        eğer kalan>0 ve değil s.kapat ve s.tx_boy<kapasite {
+            değişken adet: tam32=1460;
+            eğer kalan<1460 { adet=kalan olarak tam32; }
+            eğer adet>kapasite-s.tx_boy { adet=kapasite-s.tx_boy; }
+            değişken ofset: tam32=(s.tx_ilk+s.tx_boy)%kapasite;
+            değişken ilk: tam32=adet;
+            eğer ilk>kapasite-ofset { ilk=kapasite-ofset; }
+            ag_aktarim_doldur(s.tx,ofset,ilk,ag_tcp_yazilan);
+            eğer ilk<adet { ag_aktarim_doldur(s.tx,0,adet-ilk,ag_tcp_yazilan+(ilk olarak tam64)); }
+            s.tx_boy=s.tx_boy+adet;
+            ag_tcp_yazilan=ag_tcp_yazilan+(adet olarak tam64);
         }
         eğer (ag_tcp_tek_yon veya ag_tcp_okunan==ag_tcp_hedef_boy) ve ag_tcp_yazilan==ag_tcp_hedef_boy { tcp_kapat_iste(s); }
     }
@@ -2326,11 +2399,23 @@ işlev ag_tcp_adim() {
             değişken uyg: tam32 = kem_mmio_oku32(k+576) olarak tam32;
             eğer uyg>0 {
                 değişken p: *TcpBag = k olarak *TcpBag; değişken s: TcpBag = *p;
-                ag_tcp_uygulama(&değişken s,uyg,buf); değişken once: TcpBag = s;
-                değişken n: tam32 = tcp_cikar(&değişken s,tx,34,ms); *p=s;
-                eğer n>0 {
-                    değişken aktarim: tam32 = ag_tcp_paket(tx,n,s.ip,s.es);
-                    eğer aktarim<0 { *p=once; } değilse { ag_tcp_tekrar=ag_tcp_tekrar+s.yeniden-once.yeniden; ag_tcp_yoklama=ag_tcp_yoklama+s.yoklama_adet-once.yoklama_adet; }
+                // Bir aygıt yoklamasında hazır veriyi gönder; dolu NIC veya TCP penceresi işi sonraki tura bırakır.
+                değişken kalan:tam32=8;
+                iken kalan>0 {
+                    ag_tcp_uygulama(&değişken s,uyg,buf);
+                    değişken once:TcpBag=s;
+                    değişken n:tam32=tcp_cikar(&değişken s,tx,34,ms);
+                    *p=s;
+                    eğer n<=0 { kalan=0; }
+                    değilse eğer ag_tcp_paket(tx,n,s.ip,s.es)<0 { s=once; *p=s; kalan=0; }
+                    değilse {
+                        ag_tcp_tekrar=ag_tcp_tekrar+s.yeniden-once.yeniden;
+                        ag_tcp_yoklama=ag_tcp_yoklama+s.yoklama_adet-once.yoklama_adet;
+                        kalan=kalan-1;
+                        değişken uret: mantıksal=uyg==2 ve ag_tcp_tek_yon ve ag_tcp_yazilan<ag_tcp_hedef_boy;
+                        eğer (uyg!=1 ve değil uret) veya s.es>>24==127 veya s.durum!=TCP_BAGLI
+                            veya (s.tx_boy<=s.tx_ucus ve s.rx_boy==0 ve değil uret) { kalan=0; }
+                    }
                 }
                 eğer s.durum==TCP_KAPALI {
                     değişken sahip: tam64 = kxm_o64(k+608);
@@ -2463,15 +2548,19 @@ işlev ag_l3_kur() -> mantıksal {
         eğer değil ag_l5_kur() { ver yanlış; } ver ag_parca_kur();
     }
 }
+// Boy ve kapasite çağıranda doğrulanır. Ağ dizisini DMA için sıkıştır.
+çıplak işlev ag_tel_kopyala(a: tam64, b: Dizi<dtam8>, n: tam32) -> tam32 {
+    değişken i:tam32=0;
+    iken i<n { kem_fiz_yaz8(a+(i olarak tam64),dizi_al(b,i) olarak tam32); i=i+1; }
+    // Kısa çerçevenin dolgusunda önceki paketten bayt kalmasın.
+    iken i<60 { kem_fiz_yaz8(a+(i olarak tam64),0); i=i+1; }
+    ver i;
+}
 işlev ag_dizi_gonder(b: Dizi<dtam8>,n: tam32) -> tam32 {
     güvensiz {
         eğer ag_l3_alan==0 veya n<14 veya n>dizi_boyut(b) veya n>1518 { ver -90; }
         değişken a: tam64 = ag_l3_alan+20480;
-        değişken i: tam32 = 0;
-        iken i<n { kem_fiz_yaz8(a+(i olarak tam64),ag_b8(b,i)); i=i+1; }
-        // Kısa Ethernet çerçevesinin dolgusu daha önceki paketin baytlarını taşımamalı.
-        iken i<60 { kem_fiz_yaz8(a+(i olarak tam64),0); i=i+1; }
-        ver ag_gonder(a,i);
+        ver ag_gonder(a,ag_tel_kopyala(a,b,n));
     }
 }
 işlev ag_l3_isle(rx: Dizi<dtam8>,n: tam32,tx: Dizi<dtam8>,ms: tam64,lo: mantıksal) -> tam32 {
@@ -2490,6 +2579,15 @@ işlev ag_l3_ping(tx: Dizi<dtam8>,ip: tam64,mac: tam64,hedef: tam64,kim: tam32,s
         *p=s; ver n;
     }
 }
+// NIC'in teslim ettiği sıkışık Ethernet baytlarını L3 dizisinin 32 bitlik elemanlarına aç.
+çıplak işlev ag_tel_ac(kaynak: tam64, hedef: tam64, boy: tam32) {
+    değişken i:tam32=0;
+    iken i<boy {
+        değişken hucre:*tam32=(hedef+(i olarak tam64)*4) olarak *tam32;
+        *hucre=kem_fiz_oku8(kaynak+(i olarak tam64));
+        i=i+1;
+    }
+}
 işlev ag_l3_girdi() {
     güvensiz {
         eğer ag_l3_alan==0 veya ag_son_boy<14 veya ag_son_boy>1518 { ver; }
@@ -2497,8 +2595,7 @@ işlev ag_l3_girdi() {
         değişken s: *AgL3 = ag_l3_alan olarak *AgL3;
         eğer t!=2048 ve t!=2054 { değişken yeni: AgL3 = *s; yeni.bilinmeyen=yeni.bilinmeyen+1; *s=yeni; ver; }
         değişken rx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+256); değişken tx: Dizi<dtam8> = ag_dizi8(ag_l3_alan+288);
-        değişken i: tam32 = 0;
-        iken i<ag_son_boy { ag_y8(rx,i,kem_fiz_oku8(ag_dma+40960+(i olarak tam64)) olarak tam64); i=i+1; }
+        ag_tel_ac(ag_dma+40960,kem_mmio_oku64(ag_l3_alan+256),ag_son_boy);
         eğer t==2048 ve (ag_be16(rx,20)&16383)!=0 ve ip4_baslik(rx,ag_son_boy)>=0 { ag_parca_girdi(rx,ag_son_boy,ag_us()/1000); ver; }
         eğer t==2048 ve (ag_udp_girdi(rx,ag_son_boy) veya ag_tcp_girdi(rx,ag_son_boy,yanlış)) { ver; }
         değişken once: tam64 = (*s).cakisma;
@@ -2704,8 +2801,17 @@ işlev ag_komut(arg: metin) -> sonuç<mantıksal,metin> {
     }
 }
 
+işlev kd_islemci(no:tam64) -> metin {
+    değişken satir:metin=kd_tamsayi("ISLEMCI",no);
+    değişken i:tam64=1;
+    iken i<=4 { satir=kd_tamsayi(satir,kzs_olcu(no,i)); i=i+1; }
+    ver satir;
+}
 işlev kd_donanim_satirlari(d: &değişken KabukDisk,x: &değişken XhciDurum,indeks: tam32,usb_fare: mantıksal) -> sonuç<Dizi<metin>,metin> {
     değişken satirlar: Dizi<metin> = []; dizi_ekle(satirlar,kd_cpu());
+    güvensiz { değişken no:tam64=0;
+        iken no<(smp_cevrimici olarak tam64) { dizi_ekle(satirlar,kd_islemci(no)); no=no+1; }
+    }
     eğer uefi_mi() {
         eşleş uefi_bilgi() { hata(e) => { ver hata(e); } tamam(b) => {
             değişken harita: tam64 = dizi_al(b.alan,9);
@@ -2965,6 +3071,7 @@ işlev kd_yardim(ad: metin) -> sonuç<mantıksal,metin> {
     eğer bm_esit(ad,"yardim") { ekran_cift_yaz("yardim <komut> komutun kullanımını gösterir."); ver tamam(doğru); }
     eğer bm_esit(ad,"kapat") { ekran_cift_yaz("kapat diskleri eşitler ve sistemi kapatır."); ver tamam(doğru); }
     eğer bm_esit(ad,"yenidenbaslat") { ekran_cift_yaz("yenidenbaslat diskleri eşitler ve sistemi yeniden başlatır."); ver tamam(doğru); }
+    eğer bm_esit(ad,"islemci") { ekran_cift_yaz("islemci: no, APIC, tik, ayrı süreç sayısı, boşta yüzde."); ver tamam(doğru); }
     eğer bm_esit(ad,"donanim") { ekran_cift_yaz("donanim aygıtları listeler. donanim kaydet <yol> raporu yazar. donanim gonder <ip> <port> kaydı yollar."); ver tamam(doğru); }
     eğer bm_esit(ad,"log") { ekran_cift_yaz("log [sayfa] günlük halkasını gösterir. log kaydet <yol> dosyaya yazar. log gonder <ip> <port> bir anlık görüntü yollar."); ver tamam(doğru); }
     eğer bm_esit(ad,"hassasiyet") { ekran_cift_yaz("hassasiyet <1..4> fare hızını ayarlar."); ver tamam(doğru); }
@@ -3028,6 +3135,12 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         } }
     }
     eğer bm_esit(cmd,"log") { ver kd_log(d,arg); }
+    eğer bm_esit(cmd,"islemci") {
+        güvensiz { değişken no:tam64=0;
+            iken no<(smp_cevrimici olarak tam64) { ekran_cift_yaz(kd_islemci(no)); no=no+1; }
+        }
+        ver tamam(doğru);
+    }
     eğer bm_esit(cmd,"donanim") {
         eğer metin_uzunluk(arg) == 0 { ver kd_donanim(d,x,indeks,bh_fare() >= 0,""); }
         değişken bos: tam32 = kd_bosluk(arg);
@@ -3046,7 +3159,7 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         eğer metin_uzunluk(arg) > 0 { ver kd_yardim(arg); }
         ekran_cift_yaz("ls cd pwd cat echo yaz cp mv sil mkdir rmdir diskler bagla sync saat");
         ekran_cift_yaz("calistir baslat bekle ps sonlandir sonuc temizle yardim kapat yenidenbaslat");
-        ekran_cift_yaz("donanim log hassasiyet goster bul hesapla duzenle dosyalar");
+        ekran_cift_yaz("donanim islemci log hassasiyet goster bul hesapla duzenle dosyalar");
         ekran_cift_yaz("bilgi duzen kopyala tasi girdisay kesme pci");
         ekran_cift_yaz("ag ping cozumle nc indir sunucu tftp paket");
         ver tamam(doğru);
@@ -3056,7 +3169,11 @@ işlev komut(d: &değişken KabukDisk,p: &değişken KsKabukSureci,satir: metin,
         iken y < KXS_YUVA_ADEDI {
             eğer ks_durum(y) != KXS_BOS {
                 değişken m: metin = metin_birlestir(tam_metin(ks_pid(y))," ");
-                m=metin_birlestir(m,ks_durum_adi(ks_durum(y)));
+                değişken ad:metin=ks_durum_adi(ks_durum(y));
+                güvensiz { eğer smp_cevrimici>1 ve ks_durum(y)==KXS_KOSUYOR {
+                    eğer ipi_oku(kzs_is(y))==2 { ad="kosuyor"; } değilse { ad="hazir"; }
+                } }
+                m=metin_birlestir(m,ad);
                 m=metin_birlestir(metin_birlestir(m," "),dizi_al(p.adlar,y olarak tam32));
                 ekran_cift_yaz(metin_birlestir(metin_birlestir(m," "),tam_metin(kxm_o64(kxs_baglam(y)+KXS_DILIM_OFS))));
             }

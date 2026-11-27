@@ -12,12 +12,25 @@ fi
 # altında uefi/uefi_kabuk/apic/ps2_irq aynı build/_bm_uefi'yi yarışarak yazıp okuyordu (yedi kapı kırmızı).
 # Başarılı açılıştan sonra silinir; başarısızlıkta teşhis için kalır. Yalnız-derle kipinde (dışarıdan
 # tüketen araçlar: blok harness'ı öncesi, tools/codex/*_sabotaj.py) eski sabit yol korunur.
+# Eski araçlar derleme-yalnız çıktısını ve yayımlanan PC imajını sabit adla açar.
+# Okuyucu QEMU da bitene kadar bu iki dış ürün aynı kilidin altında kalır.
+if [[ ${UEFI_KILIT_ICINDE:-0} != 1 ]] && {
+    [[ ${UEFI_YALNIZ_DERLE:-0} == 1 && -z ${UEFI_CALISMA_DIZINI:-} ]] ||
+    [[ ${UEFI_PC_URET:-0} == 1 && ${UEFI_PC_GECICI:-0} != 1 ]];
+}; then
+    export UEFI_KILIT_ICINDE=1
+    exec python3 tools/kapi/kilitli.py build/kilitler/uefi.lock bash test/bm_x86_uefi_harness.sh "$@"
+fi
 KENDI_W=""
 if [ -n "${UEFI_CALISMA_DIZINI:-}" ]; then W="$UEFI_CALISMA_DIZINI"
 elif [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then W=build/_bm_uefi
 else mkdir -p build; W=$(mktemp -d build/uefi.XXXXXX); KENDI_W=1; fi
+if [[ -n "$KENDI_W" ]]; then
+    source test/calisma_dizini.sh
+    calisma_izle "$W"
+fi
 mkdir -p "$W/esp/EFI/BOOT" "$W/esp/KEMGU"
-RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_ps2_hw.kem"
+RT="runtime/kem_heap.kem runtime/kem_zaman.kem runtime/mimari/x86_64/kem_zaman_hw.kem runtime/kem_gorev_cekirdek.kem runtime/mimari/x86_64/kem_gorev_hw.kem runtime/mimari/x86_64/kem_uart.kem runtime/mimari/x86_64/kem_bariyer.kem runtime/mimari/x86_64/kem_platform.kem runtime/kem_virtio_blk.kem runtime/kem_minifs.kem runtime/kem_virtio_net.kem runtime/mimari/x86_64/kem_pvh.kem runtime/mimari/x86_64/kem_kesif.kem runtime/mimari/x86_64/kem_mmu_hw.kem runtime/mimari/x86_64/kem_ring3_hw.kem runtime/kem_dtb.kem runtime/kem_dizi_genis.kem runtime/mimari/x86_64/kem_pci_hw.kem runtime/mimari/x86_64/kem_gc_yurut.kem runtime/mimari/x86_64/kem_ekran_bga.kem runtime/mimari/x86_64/kem_uefi.kem runtime/mimari/x86_64/kem_ekran_gop.kem runtime/mimari/x86_64/kem_bellek_harita.kem runtime/mimari/x86_64/kem_acpi_uefi.kem runtime/mimari/x86_64/kem_apic_hw.kem runtime/mimari/x86_64/kem_kilit_hw.kem runtime/mimari/x86_64/kem_guc_hw.kem runtime/mimari/x86_64/kem_ps2_hw.kem"
 KAYNAK="${UEFI_KAYNAK:-test/ornekler/kem_os_x86_uefi.kem}"
 case "${KAYNAK##*/}" in
  kem_os_x86_kabuk.kem) RT="$RT runtime/mimari/x86_64/kem_surec_hw.kem runtime/mimari/x86_64/kem_rtc_hw.kem test/ornekler/kem_os_x86_blok_ortak.kem test/ornekler/kem_os_x86_vfs_ortak.kem" ;;
@@ -29,6 +42,7 @@ clang --target=x86_64-unknown-windows -ffreestanding -fno-stack-protector -fno-b
 # argümanları POSIX yolu sanıp `D:/.../msys64/nodefaultlib`e çeviriyordu.
 lld-link -subsystem:efi_application -entry:efi_main -nodefaultlib -out:"$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/stub.obj"
 cat $RT "$KAYNAK" > "$W/comb.kem"
+python3 test/x86_heap_bagla.py "$W/comb.kem" || exit 2
 # QEMU 8.2 ich9-ahci MSI yeteneğini kapatamıyor. Ayrı test çekirdeğinde yalnız keşfi atla.
 if [[ "${UEFI_AHCI_MSI_YOK:-0}" == 1 ]]; then
     python3 - "$W/comb.kem" <<'KEM_MSI'
@@ -41,51 +55,43 @@ assert s.count(arama) == 1
 p.write_text(s.replace(arama, 'değişken k: tam32 = 0;'), encoding='utf-8')
 KEM_MSI
 fi
-DERLEYICI="${UEFI_DERLEYICI:-build/kemgu}"
-NESNELER="build/bm_x86_start.o build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o build/bm_x86_panik.o"
-CLANG_IR="clang -target x86_64-unknown-none -ffreestanding -nostdlib -mgeneral-regs-only -O2 -Wno-override-module"
-# [D-772] Çekirdek önbelleği. Aynı derleyici + aynı birleşik kaynak tam takımda onlarca kez
-# derleniyordu (self-host 74,5 sn, C 10,7 sn; bir koşumda ≥73 derleme). Anahtar ÇIKTIYI
-# belirleyen her girdinin içeriğidir: derleyici ikilisi, birleşik kaynak (MSI yamasından SONRA),
-# awk süzgeci, bağlayıcı betiği, altı başlangıç nesnesi, IR derleme komutu ve araç sürümleri.
-# Herhangi biri değişirse anahtar değişir → yeniden derlenir. KEMGU_CEKIRDEK_ONBELLEK=0 kapatır.
-cekirdek_derle() {
-    "$DERLEYICI" --llvm --mimari x86_64-none "$W/comb.kem" > "$W/ham.ll"
-    awk -f test/strip_defined_declares.awk "$W/ham.ll" > "$W/k.ll"
-    $CLANG_IR -x ir "$W/k.ll" -c -o "$W/k.o"
-    # shellcheck disable=SC2086
-    ld.lld -m elf_x86_64 -T linker/bare-metal-uefi-x86_64.ld -o "$W/k.elf" "$W/k.o" $NESNELER
-}
-if [ "${KEMGU_CEKIRDEK_ONBELLEK:-1}" = 1 ]; then
-    OB_KOK="${KEMGU_CEKIRDEK_ONBELLEK_KOK:-build/cekirdek_onbellek}"
-    # shellcheck disable=SC2086
-    ANAHTAR=$( { printf '%s\n' "$CLANG_IR" "$(clang --version | head -1)" "$(ld.lld --version | head -1)";
-                sha256sum "$DERLEYICI" "$W/comb.kem" test/strip_defined_declares.awk \
-                          linker/bare-metal-uefi-x86_64.ld $NESNELER | cut -d' ' -f1; } | sha256sum | cut -c1-32)
-    OB="$OB_KOK/$ANAHTAR"
-    # Paralel koşumda başka bir süreç kaydı tam kopyalama sırasında silebilir (eskime); kopya
-    # düşerse sessizce yanlış ürün kullanılmaz, yeniden derlenir.
-    if [ -f "$OB/k.elf" ] && cp "$OB/ham.ll" "$OB/k.ll" "$OB/k.o" "$OB/k.elf" "$W/" 2>/dev/null; then
-        touch "$OB"
-        echo "CEKIRDEK_ONBELLEK isabet ${ANAHTAR:0:12} ($DERLEYICI)"
-    else
-        cekirdek_derle
-        mkdir -p "$OB_KOK"; ara=$(mktemp -d "$OB_KOK/.yaz.XXXXXX")
-        cp "$W/ham.ll" "$W/k.ll" "$W/k.o" "$W/k.elf" "$ara/"
-        # Yarışta başka bir koşum aynı anahtarı yazdıysa ikinci kopya atılır (içerik aynı).
-        mv -T "$ara" "$OB" 2>/dev/null || rm -rf "$ara"
-        # Disk sınırı: en son KULLANILAN 64 kayıt kalır (kayıt başına ~20 MB; tek tam koşum ~18 ayrı anahtar).
-        ls -1dt "$OB_KOK"/*/ 2>/dev/null | tail -n +65 | xargs -r rm -rf
-        echo "CEKIRDEK_ONBELLEK derlendi ${ANAHTAR:0:12} ($DERLEYICI)"
-    fi
-else
-    cekirdek_derle
+# Konuk deneyi yalnız ayrıca bağlanan test görüntüsünde mevcuttur.
+if [[ ${KEMGU_KILIT_DENETIM:-0} == 1 ]]; then
+    python3 - "$W/comb.kem" <<'KEM_KILIT'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text(encoding="utf-8")
+ayar = "sabit KEMGU_KILIT_DENETIM: mantıksal = yanlış;"
+assert s.count(ayar) == 1
+p.write_text(s.replace(ayar, ayar.replace("yanlış", "doğru")), encoding="utf-8")
+KEM_KILIT
 fi
+if [[ -n ${UEFI_SMP_DENEY:-} ]]; then
+    case "$UEFI_SMP_DENEY" in
+        saglamlik)
+            # Yalnız bu test imajında mevcut kesme sınama komutu kasıtlı paniğe girer.
+            sed -i '/^işlev kd_kesme_sina() .* {/a\    kdl_panik("SMP DURUS DENEYI");' "$W/comb.kem"
+            sed -i '/ver kd_kesme_sina(); }/a\    eğer bm_esit(cmd,"kesme") ve bm_esit(arg,"disk") { ver smp_disk_sina(d); }' "$W/comb.kem"
+            cat tests/qemu/smp_saglamlik_konuk.kem >> "$W/comb.kem"
+            ;;
+        tlb) cat tests/qemu/smp_tlb_konuk.kem >> "$W/comb.kem" ;;
+        bellek) cat tests/qemu/smp_bellek_konuk.kem >> "$W/comb.kem" ;;
+        ipi) cat tests/qemu/smp_ipi_konuk.kem >> "$W/comb.kem" ;;
+        kilit) cat tests/qemu/smp_kilit_konuk.kem >> "$W/comb.kem" ;;
+        *) echo "Bilinmeyen SMP deneyi: $UEFI_SMP_DENEY" >&2; exit 1 ;;
+    esac
+fi
+DERLEYICI="${UEFI_DERLEYICI:-build/kemgu}"
+OBJ=("${BM_BASLANGIC_NESNESI:-build/bm_x86_start.o}" build/bm_x86_kesme.o build/bm_x86_gorev.o build/bm_x86_uart.o build/bm_x86_yazdir.o build/bm_x86_panik.o)
+source test/cekirdek_onbellek.sh
+cekirdek_onbellek "$W" "$DERLEYICI" linker/bare-metal-uefi-x86_64.ld "${OBJ[@]}"
 cp "$W/k.elf" "$W/esp/KEMGU/CEKIRDEK.ELF"
 if [ "${UEFI_PC_URET:-0}" = 1 ]; then
+ if [[ ${UEFI_PC_GECICI:-0} == 1 ]]; then export UEFI_PC_IMG="$W/pc.img"
+ else export UEFI_PC_IMG="${UEFI_PC_IMG:-build/kem_os_pc.img}"; fi
  # [D-772] Paralel kapılar aynı imajı ezmesin: hedef UEFI_PC_IMG (bm_uefi.py de onu açar).
- python3 tests/qemu/uefi_imaj.py "${UEFI_PC_IMG:-build/kem_os_pc.img}" "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
+ python3 tests/qemu/uefi_imaj.py "$UEFI_PC_IMG" "$W/esp/EFI/BOOT/BOOTX64.EFI" "$W/k.elf"
 fi
 if [ "${UEFI_YALNIZ_DERLE:-0}" = 1 ]; then exit 0; fi
 python3 tests/qemu/bm_uefi.py "$W"
-if [ -n "$KENDI_W" ]; then rm -rf "$W"; fi

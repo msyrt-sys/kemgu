@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source test/calisma_dizini.sh
 if ! command -v qemu-system-x86_64 >/dev/null || [[ ! -r /usr/share/OVMF/OVMF_CODE_4M.fd ]]; then
     echo 'ATLANDI (QEMU veya OVMF yok): NIC gidiş dönüşü'
     exit 0
 fi
 for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
     w=$(mktemp -d build/nic.XXXXXX)
+    trap 'calisma_hatasi "$?" "$w" || exit "$?"' EXIT
     echo "NIC derleyicisi $derleyici ($w)"
     kaynak=test/ornekler/kem_os_x86_kabuk.kem
     if [[ "${1:-e1000}" == saglamlik_ag ]]; then
@@ -54,9 +56,9 @@ for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
         fi
     elif [[ "${1:-e1000}" == saglamlik_ag ]]; then
         python3 tests/qemu/surec_elf.py "$w/sunucu.elf" --kaynak test/kullanici/sunucu.kem --derleyici "$derleyici"
-        python3 tests/qemu/ag_saglamlik_tel.py "$w" cerceve
-        python3 tests/qemu/ag_saglamlik_tel.py "$w" aktarim
-        python3 tests/qemu/ag_saglamlik_tel.py "$w" zaman
+        for senaryo in ${NIC_SAGLAMLIK:-cerceve aktarim zaman}; do
+            python3 tests/qemu/ag_saglamlik_tel.py "$w" "$senaryo"
+        done
     elif [[ "${1:-e1000}" == paket ]]; then
         python3 tests/qemu/surec_elf.py "$w/paket.elf" --kaynak test/kullanici/paket.kem --derleyici "$derleyici"
         python3 tests/qemu/ag_paket_kahin.py "$w"
@@ -87,8 +89,9 @@ for derleyici in ${NIC_DERLEYICILER:-build/kemgu build/codegen}; do
     elif [[ "${1:-e1000}" == secenek ]]; then
         python3 tests/qemu/ag_tcp_secenek.py "$w" secenek
     elif [[ "${1:-e1000}" == verim ]]; then
-        python3 tests/qemu/ag_tcp_secenek.py "$w" olcekli
-        python3 tests/qemu/ag_tcp_secenek.py "$w" olceksiz
+        for nokta in ${NIC_VERIM_KIPI:-olcekli olceksiz}; do
+            python3 tests/qemu/ag_tcp_secenek.py "$w" "$nokta"
+        done
     elif [[ "${1:-e1000}" == kayip ]]; then
         python3 tests/qemu/ag_tcp_kayip.py "$w"
     elif [[ "${1:-e1000}" == tcp ]]; then

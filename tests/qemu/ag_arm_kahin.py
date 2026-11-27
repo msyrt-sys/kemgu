@@ -1,4 +1,5 @@
 """ARM virtio-mmio ağının gerçek eşini ve TCP/HTTP konuk diskini karşılaştırır."""
+from bekle import qmp_baglan
 import argparse
 from contextlib import contextmanager
 import hashlib
@@ -8,7 +9,7 @@ import socket
 from socketserver import ThreadingTCPServer, BaseRequestHandler
 import struct
 import subprocess
-import tempfile
+from calisma_dizini import calisma_dizini
 import threading
 import time
 
@@ -66,7 +67,7 @@ def arm_ac(w,imaj,net,es,yerel,tcp,http):
         f.write(Path('build/kem_user.elf').read_bytes())
         f.seek(128*512)
         f.write(struct.pack('!8s4s4sHH',b'KEMAG017',socket.inet_aton(es),socket.inet_aton(yerel),tcp,http))
-    with tempfile.TemporaryDirectory(prefix='kemgu-arm-') as tmp, (w/'qemu.log').open('w') as log:
+    with calisma_dizini(prefix='kemgu-arm-') as tmp, (w/'qemu.log').open('w') as log:
         yol=Path(tmp)/'qmp'
         cmd=['qemu-system-aarch64','-M','virt','-cpu','cortex-a72','-m','128M','-no-reboot','-display','none',
              '-global','virtio-mmio.force-legacy=false','-drive',f'file={disk},format=raw,if=none,id=d0',
@@ -75,10 +76,7 @@ def arm_ac(w,imaj,net,es,yerel,tcp,http):
              '-qmp',f'unix:{yol},server=on,wait=off','-kernel',str(imaj)]
         p=subprocess.Popen(cmd,stdout=log,stderr=log)
         try:
-            wait_for(p,yol.exists)
-            with socket.socket(socket.AF_UNIX) as s:
-                s.settimeout(10)
-                s.connect(str(yol))
+            with qmp_baglan(yol,p,sure=15) as s:
                 with s.makefile('wb',buffering=0) as f,s.makefile('rb') as r:
                     yield Qmp(f,r),p,seri
         finally:

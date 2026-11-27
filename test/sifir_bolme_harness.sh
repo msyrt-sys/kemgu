@@ -49,8 +49,9 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) ABORT_RC=127 ;;
     *)                    ABORT_RC=134 ;;
 esac
-TMP=$(mktemp -d "build/sifir_bolme.XXXXXX" 2>/dev/null || echo "build/sifir_bolme.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/sifir_bolme) || exit 1
+calisma_izle "$TMP"
 hata=0; olculen=0
 
 kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
@@ -61,16 +62,13 @@ kos() {   # $1=derleyici $2=etiket $3=dosya $4=beklenen_exit [$5=beklenen_mesaj]
 # D-413). `codegen_genis`/`codegen_diff` bu yeniden-denemeye ZATEN sahipti;
 # bu harness'ta YOKTU ve Windows CI'da SELF tarafinin 11 olcumu birden
 # exit=127 verdi (beklenen 134) — kusur derleyicide degil ORTAMDAYDI.
-    out=$(timeout 30 "$TMP/a.exe" 2>&1); rc=$?
-    d127=0
-    while [ "$rc" -eq 127 ] && [ "$d127" -lt 12 ]; do
-        sleep 0.3; out=$(timeout 30 "$TMP/a.exe" 2>&1); rc=$?; d127=$((d127+1))
-    done
+    dene() { out=$(timeout 30 "$TMP/a.exe" 2>&1); }
+    calisma_127_dene dene; rc=$?
     olculen=$((olculen+1))
     if [ "$rc" -ne "$4" ]; then
         echo "  🔴 $2 $(basename $3): exit=$rc (beklenen $4)"
         if [ "$rc" -eq 127 ]; then
-            # [D-565] 127 ISRARLI (12 yeniden-deneme cozmedi) -> Defender
+            # [D-565] 127 ISRARLI (sureli yeniden-deneme cozmedi) -> Defender
             # yarisi DEGIL. Tahmin yerine OLC: exe var mi, boyutu ne,
             # ham kosumda stderr ne diyor, TMP nerede.
             echo "     TESHIS: TMP=$TMP  derleyici=$1"

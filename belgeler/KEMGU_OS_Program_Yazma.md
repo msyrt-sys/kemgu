@@ -69,7 +69,7 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
 
 Kod ve verinin başlangıcı `0x54200000`, üst sınırı `0x54600000` olur. Kullanıcı heap'i 8 MiB'dir. ELF yükleyicisi örtüşen segmentleri, yazılabilir ve çalıştırılabilir bir sayfayı ve görüntü alanı dışındaki hedefi reddeder. En fazla sekiz süreç yuvası ve süreç başına 16 fd bulunur. Bir çağrıda en çok 16 KiB okunur veya 4 KiB yazılır. FAT32 yazma sınırı dosya başına 64 KiB'dir. Komut en çok 32 argüman alır. Hata numaraları, kayıtlardaki alanların sırası ve boru uçlarının sahipliği ABI tablosundadır. [Sistem çağrıları](KEMGU_OS_Syscall_ABI.md)
 
-`make calistir_bm_x86_belge15` bu sayfadaki üç kaynak bloğunu çıkarır, iki derleyiciyle yeniden üretir ve OVMF altında çalıştırır.
+`make calistir_bm_x86_belge15` bu sayfadaki altı kaynak bloğunu çıkarır, iki derleyiciyle yeniden üretir ve OVMF altında çalıştırır.
 
 ## IPv4 adresine ICMP echo gönderme
 
@@ -127,5 +127,21 @@ işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
     sis_kapat(a);
     sis_kapat(b);
     ver kod;
+}
+```
+
+## Süreci bir işlemciye bağlama
+
+`baslat yakornek` son çevrimiçi işlemciyi seçer. Yakınlık çağrısı başarılı olduğunda süreç sonraki kullanıcı dilimini o işlemcide alır. Örnek gerçek numarayı yazdırır ve süreç için bütün işlemcileri yeniden kullanılabilir yapar. Bir işlemcili açılışta çıktı `CPU 0`, dört işlemcili açılışta `CPU 3` olur.
+
+<!-- program: yakornek -->
+```kem
+işlev kullanici_main(argc: tam64,argv: tam64) -> tam64 {
+    değişken adet: tam64=sis_islemci_sayisi();
+    eğer adet<1 veya sis_yakinlik_ayarla(adet-1)!=0 { ver 1; }
+    değişken no: tam64=sis_islemci_no();
+    eğer sis_yakinlik_ayarla(-1)!=0 veya no!=adet-1 { ver 2; }
+    kag_satir(metin_birlestir("CPU ",tam_metin(no)));
+    ver 0;
 }
 ```

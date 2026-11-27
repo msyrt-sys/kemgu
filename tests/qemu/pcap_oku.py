@@ -101,6 +101,43 @@ def pcap_kayitlari(f):
         yield cerceve_oku(ham)
 
 
+def tcp_akimi(paketler, port, giden, mac):
+    # Aynı akışın sıra dışı gelen veya yeniden iletilen parçalarını gerçek
+    # TCP sıra numaralarıyla birleştir. Boşluklar ve çelişen kopyalar hatadır.
+    parcalar = []
+    sonlar = set()
+    syn = None
+    for p in paketler:
+        if p.protokol != 6:
+            continue
+        if giden:
+            if p.kaynak != mac or p.hedef_port != port:
+                continue
+        elif p.hedef != mac or p.kaynak_port != port:
+            continue
+        if syn is None:
+            assert p.bayrak & 2, "TCP başlangıcı eksik"
+            syn = p
+        assert (p.ip_kaynak,p.ip_hedef,p.kaynak_port,p.hedef_port)==(
+            syn.ip_kaynak,syn.ip_hedef,syn.kaynak_port,syn.hedef_port), "beklenmeyen TCP akışı"
+        if p.bayrak&2:
+            assert p.sira==syn.sira, "beklenmeyen TCP başlangıç sırası"
+        b = p.yuk[4*(p.yuk[12]>>4):]
+        ofs = (p.sira+(1 if p.bayrak&2 else 0)-syn.sira-1)&0xffffffff
+        if b:
+            parcalar.append((ofs,b))
+        if p.bayrak&1:
+            sonlar.add(ofs+len(b))
+    birikim = bytearray()
+    for ofs,b in sorted(parcalar,key=lambda parca:parca[0]):
+        assert ofs<=len(birikim), ("PCAP akışında boşluk",ofs,len(birikim))
+        ortak = min(len(b),len(birikim)-ofs)
+        assert birikim[ofs:ofs+ortak]==b[:ortak], ("PCAP kopyası farklı",ofs)
+        birikim.extend(b[ortak:])
+    assert sonlar=={len(birikim)}, ("TCP FIN konumu",sonlar,len(birikim))
+    return bytes(birikim)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('pcap', type=Path)

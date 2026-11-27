@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source test/calisma_dizini.sh
 if [[ -z "${SUREC_USB_CIKTI:-}" ]] && { ! command -v qemu-system-x86_64 >/dev/null || [[ ! -f /usr/share/OVMF/OVMF_CODE_4M.fd ]]; }; then
     echo 'ATLANDI (QEMU veya OVMF yok)'
     exit 0
 fi
 # [D-772] Bir derleyicinin turu: kullanıcı ELF'leri + çekirdek + kâhin. Dizin turun kendisine aittir.
-tur() {
+tur() (
     local derleyici=$1 w ad kaynak senaryo
     w=$(mktemp -d build/surec.XXXXXX)
+    calisma_izle "$w"
     mkdir -p "$w/kullanici"
-    for kaynak in test/kullanici/*.kem; do
+    local -a kaynaklar=(test/kullanici/*.kem)
+    if [[ ${SUREC_KAHIN:-} == program15_kahin && ${PROGRAM15_TEK:-} == saat ]]; then
+        kaynaklar=(test/kullanici/saat.kem)
+    fi
+    if [[ ${SUREC_KAHIN:-} == smp_surec_kahin ]]; then
+        kaynaklar=(test/kullanici/smpden.kem)
+    elif [[ ${SUREC_KAHIN:-} == smp_saglamlik_kahin ]]; then
+        kaynaklar=(test/kullanici/hesap.kem)
+    elif [[ ${SUREC_KAHIN:-} == smp_paralel_kahin ]]; then
+        kaynaklar=(test/kullanici/paralel.kem)
+    fi
+    for kaynak in "${kaynaklar[@]}"; do
         ad="${kaynak##*/}"
         python3 tests/qemu/surec_elf.py "$w/kullanici/${ad%.kem}.elf" \
             --kaynak "$kaynak" --derleyici "$derleyici"
@@ -28,16 +41,14 @@ tur() {
     echo "Süreç derleyicisi: $derleyici; ölçüm dizini: $w"
     if [[ -n "${SUREC_KAHIN:-}" ]]; then
         SUREC_KAHIN_DERLEYICI="$derleyici" python3 "tests/qemu/$SUREC_KAHIN.py" "$w"
-        rm -rf "$w"   # [D-771] aşağıdaki temizlikle aynı kural; bu dal ondan önce döner
         return 0
     fi
     for senaryo in ${SUREC_SENARYO:-matris}; do
-        python3 tests/qemu/surec_kahin.py "$w" --tekrar "${SUREC_TEKRAR:-10}" --senaryo "$senaryo"
+        SUREC_KAHIN_DERLEYICI="$derleyici" python3 tests/qemu/surec_kahin.py "$w" --ilk "${SUREC_ILK:-1}" --tekrar "${SUREC_TEKRAR:-10}" --senaryo "$senaryo"
     done
     # [D-771] Başarılı turun çalışma dizini silinir (her tam koşum ~25 GB bırakıp diski dolduruyordu);
     # başarısız turda set -e erken çıkar ve dizin teşhis için kalır.
-    rm -rf "$w"
-}
+)
 
 DERLEYICILER=(${SUREC_DERLEYICILER:-build/kemgu build/codegen})
 # USB imaj üretimi tek derleyiciyle tek iş (eski davranış: ilk turdan sonra çıkış).
@@ -45,7 +56,22 @@ if [[ -n "${SUREC_USB_CIKTI:-}" ]]; then tur "${DERLEYICILER[0]}"; exit 0; fi
 # [D-772] İki derleyicinin turları BİRBİRİNDEN BAĞIMSIZDIR (ayrı mktemp dizini, ayrı QEMU, ayrı seri/QMP
 # dosyası) → eşzamanlı koşar; en uzun kapılar (kaynak/kabuk14/v1/cok_surec…) yarıya iner. SUREC_PARALEL=0 sıralı.
 # Çıktı karışmasın diye her tur kendi günlüğüne yazar, sonunda sırayla basılır; biri düşerse kapı düşer.
-if [[ "${SUREC_PARALEL:-1}" != 1 || ${#DERLEYICILER[@]} -lt 2 ]]; then
+# Tam takımda her dış make işi bir konuk çalıştırabilir. İkinci derleyici
+# turunu ancak bu iki kat paralellik ana makinenin CPU sayısına sığıyorsa aç.
+paralel=${SUREC_PARALEL:-1}
+if [[ -z ${SUREC_PARALEL+x} && ${KEMGU_TAM_TAKIM:-0} == 1 && ${#DERLEYICILER[@]} -gt 1 ]]; then
+    isci=1
+    if [[ ${MAKEFLAGS:-} =~ (^|[[:space:]])-j([0-9]+)($|[[:space:]]) ]]; then
+        isci=${BASH_REMATCH[2]}
+    elif [[ ${MAKEFLAGS:-} =~ (^|[[:space:]])-j($|[[:space:]]) ]]; then
+        paralel=0
+    fi
+    if command -v nproc >/dev/null; then
+        cpu=$(nproc)
+        if (( isci * ${#DERLEYICILER[@]} > cpu )); then paralel=0; fi
+    fi
+fi
+if [[ "$paralel" != 1 || ${#DERLEYICILER[@]} -lt 2 ]]; then
     for d in "${DERLEYICILER[@]}"; do tur "$d"; done
     exit 0
 fi
@@ -59,5 +85,4 @@ for k in "${!pidler[@]}"; do
     echo "── süreç turu: $d (rc=$r)"; cat "$g/${d##*/}.log"
     [[ $r -eq 0 ]] || kod=$r
 done
-rm -rf "$g"
-exit "$kod"
+calisma_bitir "$kod" "$g" || exit "$?"

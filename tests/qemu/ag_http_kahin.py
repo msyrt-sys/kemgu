@@ -12,6 +12,7 @@ from pathlib import Path
 from contextlib import contextmanager, closing
 
 from ag_arac_kahin import komut
+from bekle import bekle
 from pcap_oku import pcap_kayitlari
 from uefi_kabuk_kahin import keys
 from dalga12_fat import Fat
@@ -112,10 +113,21 @@ def kos(w):
         assert all(r[2]==f'10.0.2.2:{port}' for r in kayit),kayit
         s=komut(c,f'indir {url}/son /ram/ufak.bin',35)
         assert f'indir tamam {len(KUCUK)}\n'.encode() in s,s
+        # Bağımsız senaryolarda önceki FIN'ler dört saniyelik TIME_WAIT'te
+        # sekiz TCP yuvasını tutabilir. Gerçek havuzun geri verilmesini ölç.
+        def tcp_bos():
+            return int.from_bytes(c.mem(c.symbols['ag_tcp_etkin'],4),'little')
+        def kapanislari_bekle():
+            ilk = tcp_bos()
+            bekle('HTTP bağlantılarının TCP havuzuna iadesi', tcp_bos, lambda n:n==0,
+                  sure=18, aralik=.05, surec=p)
+            print('HTTP TCP etkin yuva', ilk, '→ 0', flush=True)
+        kapanislari_bekle()
         s=komut(c,f'indir {url}/yon0 korun.bin',35)
         assert b'indir hata -40' in s and [r[0] for r in kayit[-6:]]==[f'/yon{i}' for i in range(6)],(s,kayit)
+        kapanislari_bekle()
         s=komut(c,f'indir {url}/eksik kisa.bin',35)
-        assert b'indir hata -74' in s,s
+        assert b'indir hata -74' in s and kayit[-1][0]=='/eksik',(s,kayit[-1])
         son=c.heap(),c.bos_cerceve()
         assert once[1]==son[1],(once,son)
         print('HTTP istemci heap/boş çerçeve',once,son,flush=True)

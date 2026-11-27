@@ -913,3 +913,60 @@ kdl_msi_kocanlari:
 .irp n,66,67,68,69,70,71,72,73,74,75,76,77,78,79
     .quad kdl_msi_stub_\n
 .endr
+
+/* Yerel APIC IPI kapıları. Çekirdek GS'siyle gir, çağrı yazmaçlarını koru. */
+.section .text
+.code64
+.weak kem_ipi_isle
+.macro KEM_IPI n
+.global kdl_ipi_\n
+kdl_ipi_\n:
+    pushq $\n
+    jmp .Lkem_ipi_ortak
+.endm
+.irp n,80,81,82,83
+    KEM_IPI \n
+.endr
+.Lkem_ipi_ortak:
+    testb $3,16(%rsp)
+    jz 1f
+    swapgs
+1:  pushq %rax
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+    pushq %rbp
+    movq %rsp,%rbp
+    movq 80(%rbp),%rdi
+    andq $-16,%rsp
+    cld
+    call kem_ipi_isle
+    movq kdl_lapic_taban(%rip),%rcx
+    movl $0,176(%rcx)
+    testl %eax,%eax
+    jnz .Lkem_ipi_dur
+    movq %rbp,%rsp
+    popq %rbp
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rax
+    addq $8,%rsp
+    testb $3,8(%rsp)
+    jz 2f
+    swapgs
+2:  iretq
+.Lkem_ipi_dur:
+    cli
+3:  hlt
+    jmp 3b

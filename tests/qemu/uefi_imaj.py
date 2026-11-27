@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Bağımsız Python FAT32 + GPT ESP yazıcısı; KEMGU sürücüsü çağrılmaz."""
 from pathlib import Path
-import sys,struct,zlib,uuid,subprocess,tempfile
+import sys,struct,zlib,uuid,subprocess
+from calisma_dizini import calisma_dizini
 from fat_yazici import hazirla,oku,MERHABA,NOT,KAYDIR
 
 def hazirla_uefi(path,efi,elf,ramdisk=None,*,ntp_otomatik=False):
     path=Path(path)
-    with tempfile.TemporaryDirectory(dir=path.parent) as tmp:
+    with calisma_dizini(dir=path.parent) as tmp:
         base=Path(tmp)/'base.fat';hazirla(base,False,True);b=bytearray(base.read_bytes())
     sb=512;ayr=struct.unpack_from('<H',b,14)[0];fs=struct.unpack_from('<I',b,36)[0]
     ilk=ayr+2*fs;toplam=len(b)//sb
@@ -75,7 +76,7 @@ def hazirla_uefi(path,efi,elf,ramdisk=None,*,ntp_otomatik=False):
     assert oku(path,'/EFI/BOOT/BOOTX64.EFI')==efi
     assert oku(path,'/KEMGU/CEKIRDEK.ELF')==elf
     assert oku(path,'/merhaba.txt')==MERHABA and oku(path,'/belgeler/not.txt')==NOT and oku(path,'/kaydir.txt')==KAYDIR
-    with tempfile.TemporaryDirectory(dir=path.parent) as tmp:
+    with calisma_dizini(dir=path.parent) as tmp:
         fat=Path(tmp)/'esp.fat';fat.write_bytes(b);subprocess.run(['fsck.fat','-n',str(fat)],check=True)
     print(f'UEFI_IMAJ OK: GPT ESP {len(disk)} bayt; EFI={len(efi)}, ELF={len(elf)}, FAT iki kopya, Python okuyucu + fsck temiz',flush=True)
 if __name__=='__main__':hazirla_uefi(*sys.argv[1:])

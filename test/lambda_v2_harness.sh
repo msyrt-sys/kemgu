@@ -14,8 +14,9 @@ KEMGU=${KEMGU:-build/kemgu${EXE}}; RT=${RT:-build/kdl_runtime.o}
 # isaret eder ve dosya 'yok' gorunur. D-561'de olculdu: `[ -f ]` VAR
 # derken `diff` 'No such file' diyordu ve bu 'STDOUT farkli' diye
 # YANLIS ATFEDILIYORDU. build/ zaten .gitignore'da.
-TMP=$(mktemp -d "build/lambdav2.XXXXXX" 2>/dev/null || echo "build/lambdav2.$$")
-mkdir -p "$TMP"
+source test/calisma_dizini.sh
+TMP=$(calisma_ac build/lambdav2) || exit 1
+calisma_izle "$TMP"
 pass=0; fail=0
 calistir() {  # ad dosya beklenen_rc
     local ad="$1" dosya="$2" brc="$3"
