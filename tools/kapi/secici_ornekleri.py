@@ -1,5 +1,7 @@
 """Sabit değişiklik örnekleri, gerçek kaynak kâhinleri ve bildirim tazeliği."""
 
+import os
+import stat
 import sys
 from pathlib import Path
 
@@ -40,6 +42,13 @@ def git_ornegi():
             set(degisenler(kok, taban)) == beklenen,
             "Git ekleme, silme veya yeniden adlandırma eksik",
         )
+        # [D-784] Windows'ta git nesneleri salt okunurdur ve bu dizinin temizliği WinError 5 ile
+        # düşüyordu (calisma_dizini.guvenli_sil). POSIX'te aynı yolu tetiklemek için bir nesne
+        # dizinini salt okunur yap; temizlik yine de dizini SİLMELİ.
+        nesne = sorted(p for p in (kok / ".git" / "objects").iterdir() if p.is_dir() and len(p.name) == 2)
+        dogrula(nesne, "Git nesne dizini oluşmadı")
+        os.chmod(nesne[0], stat.S_IREAD | stat.S_IEXEC)
+    dogrula(not Path(dizin).exists(), "Salt okunur nesneli geçici git deposu silinmedi")
 
 
 def main():

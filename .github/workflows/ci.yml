@@ -57,7 +57,9 @@ jobs:
         id: w_tumu
         run: |
           export PATH=/clang64/bin:$PATH
-          mingw32-make -j"${NUMBER_OF_PROCESSORS}" --output-sync=target test_tumu
+          # [D-784] -k: ilk kırmızıda yeni kapı başlatmayı bırakmasın — Windows'ta tek koşuda bütün
+          # kırmızılar görünsün (Linux adımı test_tumu_olcum üzerinden zaten -k ile koşuyor).
+          mingw32-make -k -j"${NUMBER_OF_PROCESSORS}" --output-sync=target test_tumu
 
       - name: Stdlib --check
         id: w_stdlib
