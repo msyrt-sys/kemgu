@@ -1,0 +1,62 @@
+// [D-787] E4s: yerleşik adlı kullanıcı işlevleri — tanı paritesi.
+// (1) Dil içi (ada özel) 38 yerleşik AYRILMIŞTIR: tanım T024 alır. Listenin TAMAMI
+//     burada; C (tip_kontrol.c AYRILMIS_YERLESIKLER) ile self-host
+//     (codegen.kem ayrilmis_yerlesik_mi) listeleri ayrışırsa checker_diff kırmızı.
+//     Biçimler: düz · `dışa` (konum İÇ işlev düğümü) · `genel` · modül üyesi ·
+//     iç içe modül (C pre_populate_uyeler sırası: üyeler modül kaydından ÖNCE).
+// (2) POZİTİF (C18-001): sembol tablosu yerleşikleri gölgelenebilir — çağrılar
+//     KULLANICI imzasıyla denetlenir, tanı ÜRETMEZ. Yalnız negatif olsaydı
+//     "yerleşik adlı her tanımı reddet" sabotajı kapıdan geçerdi (D-425).
+// (3) POZİTİF: D-303'ün bilerek gölgelenebilir bıraktığı `alan`.
+işlev bir(a: tam32) -> tam32 { ver a; }
+işlev bölge_al(a: tam32) -> tam32 { ver a; }
+işlev dizi_al(a: tam32) -> tam32 { ver a; }
+işlev dizi_boyut(a: tam32) -> tam32 { ver a; }
+işlev dizi_ekle(a: tam32) -> tam32 { ver a; }
+işlev dizi_kapasite(a: tam32) -> tam32 { ver a; }
+işlev dizi_kapasite_ayarla(a: tam32) -> tam32 { ver a; }
+işlev dizi_olustur(a: tam32) -> tam32 { ver a; }
+işlev dizi_yaz(a: tam32) -> tam32 { ver a; }
+işlev dondur(a: tam32) -> tam32 { ver a; }
+işlev görev_başlat(a: tam32) -> tam32 { ver a; }
+işlev görev_birleştir(a: tam32) -> tam32 { ver a; }
+işlev ifşa(a: tam32) -> tam32 { ver a; }
+işlev kanal_al(a: tam32) -> tam32 { ver a; }
+işlev kanal_gönder(a: tam32) -> tam32 { ver a; }
+işlev kanal_oluştur(a: tam32) -> tam32 { ver a; }
+işlev mmio_oku16(a: tam32) -> tam32 { ver a; }
+işlev mmio_oku32(a: tam32) -> tam32 { ver a; }
+işlev mmio_oku64(a: tam32) -> tam32 { ver a; }
+işlev mmio_yaz16(a: tam32) -> tam32 { ver a; }
+işlev mmio_yaz32(a: tam32) -> tam32 { ver a; }
+işlev mmio_yaz64(a: tam32) -> tam32 { ver a; }
+işlev sabitsüre_olustur(a: tam32) -> tam32 { ver a; }
+işlev sıfır(a: tam32) -> tam32 { ver a; }
+işlev soket_baglan(a: tam32) -> tam32 { ver a; }
+işlev tekkez_olustur(a: tam32) -> tam32 { ver a; }
+işlev vektor_buyuk(a: tam32) -> tam32 { ver a; }
+işlev vektor_doldur(a: tam32) -> tam32 { ver a; }
+işlev vektor_eleman(a: tam32) -> tam32 { ver a; }
+işlev vektor_esit(a: tam32) -> tam32 { ver a; }
+işlev vektor_kucuk(a: tam32) -> tam32 { ver a; }
+işlev vektor_max(a: tam32) -> tam32 { ver a; }
+işlev vektor_min(a: tam32) -> tam32 { ver a; }
+işlev vektor_sec(a: tam32) -> tam32 { ver a; }
+işlev vektor_topla(a: tam32) -> tam32 { ver a; }
+işlev vektor_ve_azalt(a: tam32) -> tam32 { ver a; }
+dışa işlev yetki_olustur(a: tam32) -> tam32 { ver a; }
+genel işlev vektor_veya_azalt(a: tam32) -> tam32 { ver a; }
+modül m {
+    işlev dondur(a: tam32) -> tam32 { ver a; }
+    modül n {
+        işlev sıfır(a: tam32) -> tam32 { ver a; }
+    }
+    işlev ifşa(a: tam32) -> tam32 { ver a; }
+}
+çıplak işlev kilit_al(k: tam64) { }
+işlev metin_uzunluk(s: metin) -> tam32 { ver 7; }
+işlev alan(x: tam32) -> tam32 { ver x; }
+işlev main() -> tam32 {
+    kilit_al(8 olarak tam64);
+    ver metin_uzunluk("abc") + alan(35);
+}

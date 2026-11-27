@@ -38,6 +38,8 @@
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
       Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79. ESLENEN: 28 kod.
+      ⚠ D-787 yol üstü: anahtar kelime adlı işlev tanımı (`işlev değer(..)`, `hata`, `tamam`, `kendin`, `delege`,
+      `geri_al`) → C P014, self P000 (eşlenmemiş bir site daha; fikstür yok).
       YONTEM (D-647'de kuruldu, her turda ise yariyor): hata SEKLINI yaz, C'ye
       sor, KONUM uyusuyorsa siteyi esle; uyusmuyorsa davranis farki demektir.
       ⚠ D-647'DE OLCULDU: token -> kod eslemesi MEKANIK DEGIL. Tek basina
@@ -346,10 +348,27 @@
       birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
       --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
       egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
-- [ ] E4s [S] C18-001 (Codex dalga 18 bulgusu) PARİTE: yerleşikle AYNI ADLI kullanıcı işlevi. `çıplak işlev
-      kilit_al(k: tam64) { }` + `kilit_al(8 olarak tam64)` → C (--check/--llvm) rc=0 (kullanıcı tanımı yerleşiği gölgeler),
-      self-host T001 2 37 (yerleşiğin `metin` imzası kullanılıyor). Codex çekirdekte smp_kilit_al/_birak adlarıyla dolaştı.
-      Önce karar: gölgeleme mi (C davranışı) yoksa ikisinde de RED (T024 benzeri) mi? Sonra parite + fikstür + sabotaj.
+- [x] E4s [S] ✓ D-787 C18-001 PARİTE: yerleşikle AYNI ADLI kullanıcı işlevi. Ölçüm (123 adlık matris,
+      `işlev N(a: tam32)->tam32 {ver a+1;}` + `N(41)`): C'nin gölgelemesi BİLİNÇLİ DEĞİLDİ (tip_kontrol.c yorumu:
+      "Yan etki: ... önceden T024"); C sembol tablosundaki 76 yerleşiği gölgeliyor, 38 ada özel yerleşiği hiçbir
+      biçimde gölgelemiyordu. Self-host 73 sembol tablosu adını yerleşik imzasıyla REDDEDİYOR (C18-001) ve 25 ada özel
+      adı kabul edip YANLIŞ kod üretiyordu (SESSİZ YANLIŞ CEVAP: bir→1, sıfır→0, dondur/sabitsüre_olustur/
+      tekkez_olustur→41; dizi_al/ekle/yaz/kapasite_ayarla'da self derleyici SEGV; 9 LINK-RED; p4 `dizi_boyut(d:
+      Dizi<T>)` C 42 / self 3). KARAR (muhafazakâr; T024-hepsi FAT32 dosya_*, self metin_biter ve D-303 alan'ı
+      kırardı): (A) 38 ada özel ad AYRILMIŞ → kullanıcı işlev tanımı iki derleyicide T024 (C pre_populate_islev;
+      self dup_kontrol 4. geçiş + modül üyeleri, C sırası birebir; alan/gönderen/dur muaf; repo etkisi 0);
+      (B) self tip denetimi üst düzey kullanıcı tanımında aynı adlı yerleşik imza kaydını boşaltır (Ayr.fn_yerlesik_n).
+      SONRA: matris 76 OK|OK · 38 T024|T024 · 6 anahtar kelime P014|P000 (C0a) · 3 bellek_* G001|G001 (iki
+      tarafta aynı ada-bağlı güvenlik kuralı). Kod üretimi dalına ek onarım GEREKMEDİ (C009 koruması yetiyordu).
+- [ ] E4t [S] AYNI SINIF, BAĞLAMA YÜZÜ (D-787 sırasında ölçüldü; D-787'den ÖNCE de vardı): yerel kapanış ya da
+      parametre ayrılmış yerleşik adını taşıyorsa çağrı self kod üretiminde YERLEŞİĞE gidiyor — SESSİZ YANLIŞ CEVAP.
+      q1 `değişken bir: işlev()->tam32 = || 42; ver bir();` → C 42, self 1 · q2 `işlev f(dondur: işlev(tam32)->tam32)
+      { ver dondur(41); }` → C DRF005 (yanlış RED: C tip denetimi de ada özel kuralı yerel bağlamadan önce uyguluyor),
+      self 41 (yerleşik `dondur` = özdeşlik). Bağlamaları da ayrılmış saymak REDDEDİLDİ: `bir` 10 yerde değişken/
+      parametre adı (drivers/ag/http.kem, drivers/ekran/psf.kem, kem_ekran_bga.kem, stdlib/kripto.kem). Öneri: YEREL-ÖNCE
+      çözüm — çağrı hedefi bir yerel bağlamaysa (değişken/parametre/lambda parametresi) ada özel yerleşik dalları iki
+      tip denetiminde ve self kod üretiminde atlanır (C kod üretimi zaten yerel-önce: q1 42). Fikstür q1+q2 + pozitif
+      (aynı adlı kapanış OLMAYAN bağlama: `değişken bir: tam32` aritmetikte) + sabotaj.
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
@@ -3530,3 +3549,28 @@
   yük taşır, A4 onu kapıya bağlamalı. YAN ÖLÇÜM (kullanıcı sorusu "neden uzun sürüyor"): dalga 18 sonrası CI test adımı
   Linux 9-20 → 3,5 dk (190 kapı, kapı toplamı 12:55), Windows 33-47 → 19-29 dk; benim 33-47 dk tahminim dalga 18 öncesi
   koşulara dayanıyordu, YANLIŞTI. Ayrıca LOOP başındaki TEST ALTYAPISI maddesi D-784'te teslim edilmişti → [x].
+- 2026-11-27 D-787: E4s — YERLEŞİK ADLI KULLANICI İŞLEVİ (C18-001) + AYRILMIŞ DİL İÇİ YERLEŞİKLER. ÖLÇÜM: 123 adlık matris
+  (`işlev N(a: tam32)->tam32 {ver a+1;}` + `N(41)`, iki derleyici, check+llvm+bağla+çalıştır). C'nin gölgelemesi
+  BİLİNÇLİ DEĞİLDİ (tip_kontrol.c: "Yan etki: ... önceden T024"): sembol tablosundaki 76 yerleşiği gölgeliyor, 38 ada
+  özel yerleşiği HİÇBİR biçimde gölgelemiyordu (çağrı yeri yerleşik kurallarıyla). Self-host 73 sembol tablosu adını
+  yerleşik imzasıyla REDDEDİYOR (kök: yerlesik_imzalari_kur kayıtları fn_ad'ın başında, aramalar ilk eşleşme) ve 25 ada
+  özel adı kabul edip YANLIŞ kod üretiyordu — SESSİZ YANLIŞ CEVAP bir→1, sıfır→0, dondur/sabitsüre_olustur/
+  tekkez_olustur→41; dizi_al/ekle/yaz/kapasite_ayarla'da self derleyici SEGV; 9 LINK-RED; p4 `dizi_boyut(d: Dizi<T>)`
+  C 42 / self 3 (C009'un kapanmamış kalanı: ifade_uret'teki ada özel dallar fn_var_mi'ye bakmıyor). KARAR (muhafazakâr):
+  T024-hepsi REDDEDİLDİ (repoda 18 yerleşik adlı tanım: FAT32 dosya_oku/yaz/sil, self metin_biter, D-303 alan, C009
+  fikstürleri — hepsi sembol tablosu adı); gölgele-hepsi REDDEDİLDİ (C tip denetiminin ada özel zinciri + self'te 68
+  dal; kabul edilen dili genişletir). UYGULANAN: (A) 38 ada özel ad AYRILMIŞ → kullanıcı işlev tanımı T024 (C
+  pre_populate_islev, sembol_ekle'den önce; self dup_kontrol 4. geçiş + modül üyeleri — C pre_populate_uyeler sırası:
+  üyeler modül kaydından ÖNCE; konum İÇ işlev düğümü, dışa/genel dâhil); alan/gönderen/dur muaf (iki tarafta zaten
+  gölgeleniyordu); repo etkisi 0 (gömülü C test kaynakları dâhil tarandı). (B) self tip denetimi: üst düzey kullanıcı
+  tanımı aynı adlı yerleşik imza kaydının adını boşaltır (Ayr.fn_yerlesik_n; modül üyeleri C'de yalnız kendi modülünde
+  gölgelediği için kapsam dışı). SONRA MATRİS: 76 OK|OK · 38 T024|T024 · 6 anahtar kelime P014|P000 (C0a notu) · 3 bellek_*
+  G001|G001. Kod üretimine ek onarım GEREKMEDİ. FİKSTÜR: tc72_01 (38 adın TAMAMI + dışa/genel/modül/iç içe modül;
+  C=self 41 tanı birebir) + pozitif (kilit_al tam64, metin_uzunluk, alan); cg_yerlesik_golge (C=self 42; yerleşik çağrılsa
+  34). SABOTAJ 4/4 geçerli: S290 C denetimi kapalı → checker_diff 321/322 (tc72 "OK" vs 41) · S291 self denetimi → 321/322 ·
+  S292 gölgeleme kapalı → 321/322 (T001 60:16) · S293 self listesinden vektor_sec → 321/322 (44:1 eksik). ⚠ S292b
+  GEÇERSİZDİ: codegen_diff iki tarafa --tip-atla geçirir (D-424 simetrisi), tip denetimi sabotajını tasarım gereği görmez.
+  TAM TAKIM (-j10 ölçümlü): 190 kapı yeşil, 19:04, "Tum testler gecti"; sarmal rc=2'yi YALNIZ disk denetimi verdi — 4
+  build/checkdiff.* (S290-S293'ün başarısız koşuları, harness bilerek bırakır) + 1 eski ro-deneme; yeni 0; arşive taşındı.
+  YOL ÜSTÜ (ayrı madde E4t): aynı sınıfın BAĞLAMA yüzü — yerel kapanış `bir()` C 42 / self 1, parametre `dondur(41)` C
+  DRF005 / self 41.

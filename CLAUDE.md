@@ -216,6 +216,15 @@ linear consume olarak ikinci anlama sahip — `kullan(t)`. `görev`, `kanal`
 Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 `sabitsüre`, `gerçekzamanlı`, `yetki`, `delege`, `geri_al`, `vektör`.
 
+**Yerleşik adlar (D-787):** sembol tablosu yerleşikleri (`metin_uzunluk`, `kilit_al`,
+`dosya_oku`…) kullanıcı işleviyle **gölgelenebilir**; çağrı kullanıcıya gider (C009).
+**Dil içi (ada özel) 38 yerleşik AYRILMIŞTIR** (`dizi_*`, `kanal_*`, `görev_*`, `bir`, `sıfır`,
+`dondur`, `tekkez_olustur`, `sabitsüre_olustur`, `ifşa`, `mmio_*`, `vektor_*`, `bölge_al`,
+`soket_baglan`, `yetki_olustur`): bu adla işlev tanımı **T024**. Liste iki yerde ve AYNI olmalı:
+`src/tip_kontrol.c` `AYRILMIS_YERLESIKLER` + `selfhost/codegen.kem` `ayrilmis_yerlesik_mi`;
+`tc72_01` ikisini satır satır karşılaştırır. `alan`/`gönderen` (D-303) bilerek gölgelenebilir.
+⚠ Bağlama yüzü AÇIK (E4t): bu adı taşıyan yerel kapanış/parametre çağrısı self'te yerleşiğe gidiyor.
+
 ### Tip Sistemi
 ```
 Basit:    tam8-64, dtam8-64, kesirli32-64, mantıksal, karakter, metin, boş
