@@ -14,6 +14,11 @@ def bagla(yol):
         if metin.count(imza) != 1 or f"çıplak işlev {hedef}(" not in metin:
             raise ValueError(f"{yol}: {islem} için tek heap girişi ve SMP sarmalı gerekli")
         metin = metin.replace(imza, imza.replace(kaynak, hedef))
+    # Ortak görev/kanal paniği de SMP açılışından sonra aynı sahip seçimine girer.
+    panik = "çıplak işlev kem_panik(m: metin) {"
+    if metin.count(panik) != 1:
+        raise ValueError(f"{yol}: ortak panik girişi bulunamadı")
+    metin = metin.replace(panik, panik + "\n    eğer kis_panik_lapic!=0 { kdl_panik(m); ver; }")
     yol.write_text(metin, encoding="utf-8")
 
 

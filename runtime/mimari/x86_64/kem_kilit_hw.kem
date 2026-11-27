@@ -26,22 +26,46 @@ sabit KEMGU_KILIT_DENETIM: mantıksal = yanlış;
         kilit_sira_yaz(kem_mmio_oku64(k+8));
     }
 }
+// İki saniyelik süre PIT ile kalibre edilmiş TSC üzerinden ölçülür.
+küresel değişken smp_kilit_zaman_asimi:tam64=0;
+çıplak işlev kilit_gecikme(k:tam64) {
+    güvensiz { değişken adres:*tam64=(&smp_kilit_zaman_asimi) olarak *tam64;
+        satıriçi_asm { mimari:x86_64 şablon:r#"lock incq ($0)"#
+        girdi("r",adres olarak tam64) bozulan("~{cc}") bozulan("~{memory}") } }
+    eğer KEMGU_KILIT_DENETIM {
+        kis_ileti_basla(); kis_ileti_metin("KILIT ZAMAN ASIMI ");
+        değişken s:tam64=kem_mmio_oku64(k+8);
+        eğer s==10 { kis_ileti_metin("cekirdek"); } değilse eğer s==20 { kis_ileti_metin("cerceve"); }
+        değilse eğer s==30 { kis_ileti_metin("heap"); } değilse { kis_ileti_metin("deney"); }
+        kis_ileti_metin(" sira="); kis_ileti_sayi(s olarak dtam64,10);
+        kis_ileti_metin(" sahip="); kis_ileti_sayi((kem_mmio_oku64(k+16)-1) olarak dtam64,10);
+        kis_ileti_metin(" bekleyen="); kis_ileti_sayi(cekirdek_no() olarak dtam64,10);
+        kdl_panik(kis_ileti_metin_al());
+    }
+}
 çıplak işlev smp_kilit_al(k: tam64) {
     kilit_sira_denetle(k);
-    // Kısa kritik bölümde sıradaki sahip ilerleyebilir. Uzayan beklemede PAUSE uygulanır.
-    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1, %eax
-lock xaddl %eax, ($0)
-cmpl %eax, 4($0)
-je 2f
-incq %gs:120
-1: movl $$1024, %edx
-3: cmpl %eax, 4($0)
+    değişken bilet:tam32=1;
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"lock xaddl $0, ($2)"#
+        çıktı("=r",&bilet) girdi("0",bilet) girdi("r",k) bozulan("~{cc}") bozulan("~{memory}") } }
+    eğer (kem_mmio_oku32(k+4) olarak tam32)!=bilet {
+        güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"incq %gs:120"# bozulan("~{cc}") bozulan("~{memory}") } }
+        değişken bas:tam64=bm_tsc_oku();
+        değişken alindi:tam32=0;
+        iken alindi==0 {
+            güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movl $$1024,%edx
+1: cmpl $2,4($1)
 je 2f
 decl %edx
-jnz 3b
+jnz 1b
 pause
-jmp 1b
-2:"# girdi("r",k) bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+2: cmpl $2,4($1)
+sete %al
+movzbl %al,$0"# çıktı("=r",&alindi) girdi("r",k) girdi("r",bilet)
+                bozulan("~{rax}") bozulan("~{rdx}") bozulan("~{cc}") bozulan("~{memory}") } }
+            eğer alindi==0 ve bm_tsc_oku()-bas>kap_tsc_ms*2000 { kilit_gecikme(k); bas=bm_tsc_oku(); }
+        }
+    }
     kilit_sahiplen(k);
 }
 çıplak işlev kilit_dene(k: tam64) -> mantıksal {

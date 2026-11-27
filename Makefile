@@ -5504,3 +5504,8 @@ calistir_bm_x86_smp_surec_dosyalar:
 test_tumu: calistir_bm_x86_smp_paralel
 calistir_bm_x86_smp_paralel: $(X86_SMP_ON)
 	@SUREC_KAHIN=smp_paralel_kahin bash test/bm_x86_surec_harness.sh
+
+.PHONY: calistir_bm_x86_smp_saglamlik
+test_tumu: calistir_bm_x86_smp_saglamlik
+calistir_bm_x86_smp_saglamlik: $(X86_SMP_ON)
+	@UEFI_SMP_DENEY=saglamlik KEMGU_KILIT_DENETIM=1 SUREC_KAHIN=smp_saglamlik_kahin bash test/bm_x86_surec_harness.sh

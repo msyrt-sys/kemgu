@@ -255,3 +255,11 @@ C ile dört hesap süreci tek vCPU'da 6.444 sn, dört vCPU'da 2.283 sn (2.823×)
 Bölütlü asal eleği iki derleyicide, 1/2/4/8 vCPU ve 1/2/4/8 çocukla 32 matris noktasında 2.063.689 verdi. Her dilim bağımsız Python eleğiyle eşleşti. 8 vCPU ve N=4 ile C 0,719 sn, self-host 0,622 sn. Tam tablolar bulgularda. Son parçayı toplamayan ELF 1.575.661 verdi, kâhin 7 sn içinde rc=1 döndü. Süre yalnız raporlanır.
 
 Matris kapısı 83,58 sn. §7, tip, paylaşım ve seçici kapıları 271 sn, make/tee rc=0. Bölüm süresi 6 dk 50 sn.
+
+## Bölüm 18 — kesme, kilit ve sistem çapında panik
+
+Dört hesap PID'si çalışırken her derleyicide 32 fiziksel NVMe okuması, 32 MSI-X teslimi, 32 PS/2 kesmesi ve 21 ICMP cevabı doğrulandı. Kararlı C/self-host heap değerleri 4.591.680/4.788.528 bayt. Çerçeveler dört işlem toplandığında başlangıç değerlerine geri döndü. Panik sahibi ekranı çizdi. Dört vCPU'da IF=0, HLT=1 ve sabit yerel tıklar QMP ile doğrulandı.
+
+Gerçek AP zamanlayıcı kesmesinde düz kilit ile deney sıra=40 sahip=0 bekleyen=1 tanısı geldi (rc=1). Sürüm karşı deneyinde sayaç 1, kabuk çalışır. NMI IPI çıkarılınca BSP durdu, AP tıkları beş saniyede 87/84/82’den 495/491/489’a ilerledi (rc=1).
+
+§7, sıra/kilit, istisna, panik ve tip kapıları 430 sn'lik koşumda geçti. Aynı grubun yeni yük kapısı ilk PID dilimini beklemediği için make rc=2 verdi. Fiziksel süreç tablosunda ilk dilim koşulu ve yük boyunca ilerleme denetimiyle yeni kapı iki kez geçti (28 ve 27 sn, make/tee rc=0). İlk değişken kaynak koşumunun tanıları saklandı. Bölüm süresi 15 dk 20 sn.

@@ -1,0 +1,24 @@
+// Tek DMA sayfası sekiz gerçek NVMe isteğinde yeniden kullanılır.
+işlev smp_disk_sina(d: &değişken KabukDisk) -> sonuç<mantıksal,metin> {
+    için k: d.baglar {
+        eğer bm_esit(k.kayit.ad,"/diskler/nvme0p1") {
+            değişken a:BlokDonanim=dizi_al(d.aygitlar,k.indeks);
+            değişken p:tam64=uefi_surec_ayir(1);
+            eğer p==0 { ver hata("SMP disk DMA"); }
+            değişken i:tam64=0; değişken toplam:tam64=0;
+            iken i<8 {
+                eşleş ksa_disk(&değişken a,k.bolum.bas+i,1,p,yanlış) {
+                    hata(e)=>{ uefi_surec_iade(p,1); ver hata(e); } tamam(v)=>{}
+                }
+                değişken b:tam64=0;
+                iken b<512 {
+                    toplam=toplam+(i*512+b+1)*(kem_fiz_oku8(p+b) olarak tam64); b=b+1;
+                }
+                i=i+1;
+            }
+            dizi_yaz(d.aygitlar,k.indeks,a); uefi_surec_iade(p,1);
+            kap_dok("SMP_GC",8,512,toplam); ver tamam(doğru);
+        }
+    }
+    ver hata("SMP NVMe bolumu");
+}

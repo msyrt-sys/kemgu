@@ -470,7 +470,7 @@ işlev smp_baslat(b: UefiBilgi, m: Madt) -> sonuç<mantıksal,metin> {
         memset(kayit olarak *tam8,0,(n olarak tam64)*256+704);
         değişken kilit:tam64=kayit+(n olarak tam64)*192;
         kilit_kur(kilit,20); kilit_kur(kilit+64,30); kilit_kur(kilit+128,10);
-        smp_bellek_kilitleri=kilit;
+        smp_bellek_kilitleri=kilit; kis_panik_lapic=kap_lapic;
         değişken j:tam32=0;
         iken j<n {
             kem_mmio_yaz64(kayit+(j olarak tam64)*64+56,kayit+(n olarak tam64)*64+(j olarak tam64)*128);

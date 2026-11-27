@@ -196,3 +196,4 @@ calistir_bm_x86_smp_surec_boru	305	qemu-x86
 calistir_bm_x86_smp_surec_kabuk14	315	qemu-x86
 calistir_bm_x86_smp_surec_dosyalar	301	qemu-x86
 calistir_bm_x86_smp_paralel	126	qemu-x86
+calistir_bm_x86_smp_saglamlik	240	qemu-x86

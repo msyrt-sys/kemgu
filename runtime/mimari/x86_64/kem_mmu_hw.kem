@@ -521,8 +521,22 @@ movq %rax, %cr0"#
 // kem_panik'e (kem_heap.kem, COM1) aktarılır: gerçek bir ihlal temiz durur.
 // PVH varsayılanı; UEFI çerçeve ayırıcısı adresi açılışta değiştirir.
 küresel değişken ekran_panik_taban: tam64 = 209780736;
+küresel değişken kis_panik_lapic: tam64 = 0;
+çıplak işlev kis_panik_gir() {
+    eğer kis_panik_lapic==0 { ver; }
+    güvensiz { satıriçi_asm { mimari:x86_64 şablon:r#"movq %rsp,%r11
+subq $$128,%rsp
+andq $$-16,%rsp
+subq $$16,%rsp
+movq %r11,(%rsp)
+movq $0,%rdi
+call kdl_smp_panik_gir
+movq (%rsp),%rsp"# girdi("r",kis_panik_lapic) bozulan("~{rdi}")
+        bozulan("~{rax}") bozulan("~{rcx}") bozulan("~{rdx}") bozulan("~{rsi}")
+        bozulan("~{r8}") bozulan("~{r9}") bozulan("~{r10}") bozulan("~{r11}") bozulan("~{cc}") bozulan("~{memory}") } }
+}
 çıplak işlev kdl_panik(m: metin) {
-    kg_irq_kapat();
+    kg_irq_kapat(); kis_panik_gir();
     eğer değil kis_ist_denetle() { kis_metin("IST KANARYA BOZUK"); kis_satir(); }
     // Ekran modülüne sembol bağımlılığı yok: ekransız birleşik çekirdekler de bağlanır.
     // Sabit kayıt ekran_panik_kur tarafından TAMAMLANINCA bayraklanır; panikte heap yok.
@@ -608,7 +622,7 @@ küresel değişken kis_ileti_aktif: tam32 = 0;
  eğer r < 10 { kis_ileti_bayt(r+48); } değilse { kis_ileti_bayt(r+87); }
 }
 çıplak işlev kis_ileti_basla() {
- kg_irq_kapat();
+ kg_irq_kapat(); kis_panik_gir();
  eğer kis_ileti_aktif != 0 { kis_metin("PANIK yeniden giris"); kis_satir(); iken doğru { kdl_idle(); } }
  kis_ileti_aktif=1; kis_ileti_n=0; kis_buf_yaz8(kis_ileti_adr(),0,0);
 }

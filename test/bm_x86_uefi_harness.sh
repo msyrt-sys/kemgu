@@ -69,6 +69,12 @@ KEM_KILIT
 fi
 if [[ -n ${UEFI_SMP_DENEY:-} ]]; then
     case "$UEFI_SMP_DENEY" in
+        saglamlik)
+            # Yalnız bu test imajında mevcut kesme sınama komutu kasıtlı paniğe girer.
+            sed -i '/^işlev kd_kesme_sina() .* {/a\    kdl_panik("SMP DURUS DENEYI");' "$W/comb.kem"
+            sed -i '/ver kd_kesme_sina(); }/a\    eğer bm_esit(cmd,"kesme") ve bm_esit(arg,"disk") { ver smp_disk_sina(d); }' "$W/comb.kem"
+            cat tests/qemu/smp_saglamlik_konuk.kem >> "$W/comb.kem"
+            ;;
         tlb) cat tests/qemu/smp_tlb_konuk.kem >> "$W/comb.kem" ;;
         bellek) cat tests/qemu/smp_bellek_konuk.kem >> "$W/comb.kem" ;;
         ipi) cat tests/qemu/smp_ipi_konuk.kem >> "$W/comb.kem" ;;

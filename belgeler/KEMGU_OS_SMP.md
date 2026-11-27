@@ -135,3 +135,13 @@ dilim yolunu kullanır.
 APIC kimliği, yerel tık, çalıştırılan farklı PID sayısı ve boşta tık yüzdesini
 taşır. ABI 91–94 aynı bilgilere ve işlemci yakınlığına kullanıcı erişimi
 verir. İşlemci numarası sistem çağrısına girilen noktada kaydedilir.
+
+### Aygıt kesmeleri, kilit bekleme ve panik
+
+BSP, IOAPIC klavye/fare hedefini ve AHCI MSI ile NVMe MSI-X adreslerinin hedef alanını kendi LAPIC kimliğiyle kurar. Aygıt kesmeleri BSP'ye gelir. Her AP kendi zamanlayıcısını ve IPI'lerini işler. Kesme işleyicisi ile paylaşılabilen kilidi alan normal kod, aynı işlemcide yeniden giriş olmasını önlemek için IF'yi saklayan kesmesiz edinimi kullanır.
+
+Bilet bekleyen işlemci, PIT ile kalibre edilmiş TSC'yi denetler. İki saniyeyi aşan her bekleme aralığı ortak sayaca atomik eklenir. Hata ayıklama imajı kilidin adını, sırasını, sahibini ve bekleyeni yazar. Sürüm imajı aynı bileti beklemeyi sürdürür.
+
+SMP etkinleştiğinde ilk panikleyen yerel APIC, kimliğiyle tek yazıcı olarak seçilir. Diğer işlemcilere gönderilen NMI türü IPI, maskeli kesmelerle ve dolu çağrı kutusuyla da teslim edilebilir. NMI girişinde panik etkinse işlemci özel IST2 üzerinde CLI/HLT durumuna geçer. Panik sahibi seri iletiyi ve GOP ekranını tamamlayıp durur. Normal NMI, önceki istisna yolunu kullanır.
+
+`make calistir_bm_x86_smp_saglamlik` dört hesap sürecinin yanında gerçek NVMe okumalarını QEMU blok sayacı ve MSI-X teslimleriyle eşler. Veri denetimi disk imajından hesaplanır. PS/2 halka kaybı, klavye kesmeleri, Ethernet yanıtları, çekirdek heap'i ve fiziksel çerçeveler canlı konuktan okunur. Özel test imajı son komutta panik üretir. HMP dört vCPU'nun halt ve IF durumunu, QMP ekran görüntüsü panik renklerini doğrular.

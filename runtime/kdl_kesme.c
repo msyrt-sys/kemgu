@@ -742,6 +742,29 @@ static void kdl_smp_kapilari_kur(void) {
 }
 #undef KDL_SMP_KAPILAR
 
+/* Panik sırasında NMI teslimi IF, bilet kilitleri ve normal IPI kutusundan bağımsızdır. */
+static unsigned kdl_panik_lider __attribute__((used));
+void kdl_smp_panik_gir(uintptr_t lapic) {
+    if (!lapic) return;
+    volatile uint32_t *tablo = (volatile uint32_t *)lapic;
+    unsigned kim = (tablo[0x20 / 4] >> 24) + 1;
+    unsigned eski = 0;
+    if (__atomic_compare_exchange_n(&kdl_panik_lider, &eski, kim, 0,
+                                    __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        /* Kendi ICR teslimimiz bitince tüm diğer yerel APIC'lere NMI gönder. */
+        for (unsigned i = 0; i < 1000000 && (tablo[0x300 / 4] & 0x1000); ++i)
+            __asm__ volatile("pause");
+        tablo[0x300 / 4] = 0xc4400;
+    } else if (eski != kim) {
+        for (;;) __asm__ volatile("cli; hlt");
+    }
+}
+__attribute__((naked)) static void kdl_panik_nmi(void) {
+    __asm__ volatile("cmpl $0,kdl_panik_lider(%rip)\n"
+                     "je 2f\n cli\n 1: hlt\n jmp 1b\n"
+                     "2: jmp *kdl_isr_tablo+16(%rip)");
+}
+
 void kdl_idt_kur(void) {
     kdl_ist_kur();
     struct CekirdekVeri *c = &kdl_cekirdek_bsp;
@@ -770,6 +793,7 @@ void kdl_idt_kur(void) {
     kdl_idt_gate(48, (uintptr_t)&kdl_lapic_timer_stub, 0);
     if (smp_ap_zaman_irq) kdl_idt_gate(49, (uintptr_t)&kdl_ap_zaman_kocani, 0);
     if (kem_ipi_isle) {
+        kdl_idt_gate(2, (uintptr_t)&kdl_panik_nmi, 2);
         kdl_idt_gate(80, (uintptr_t)&kdl_ipi_80, 0);
         kdl_idt_gate(81, (uintptr_t)&kdl_ipi_81, 0);
         kdl_idt_gate(82, (uintptr_t)&kdl_ipi_82, 0);
