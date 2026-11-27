@@ -343,6 +343,10 @@
       birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
       --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
       egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
+- [ ] E4s [S] C18-001 (Codex dalga 18 bulgusu) PARİTE: yerleşikle AYNI ADLI kullanıcı işlevi. `çıplak işlev
+      kilit_al(k: tam64) { }` + `kilit_al(8 olarak tam64)` → C (--check/--llvm) rc=0 (kullanıcı tanımı yerleşiği gölgeler),
+      self-host T001 2 37 (yerleşiğin `metin` imzası kullanılıyor). Codex çekirdekte smp_kilit_al/_birak adlarıyla dolaştı.
+      Önce karar: gölgeleme mi (C davranışı) yoksa ikisinde de RED (T024 benzeri) mi? Sonra parite + fikstür + sabotaj.
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
@@ -3475,3 +3479,24 @@
   KAPILAR: kdl_bolge (ASan) · bolge_kirpma · dizi_uzat · runtime_link · gorev_rt 16/16 · bolge_sayac_yarisi (TSan) ·
   perf_bellek 4 ölçüm eşik altında (zirve RSS değişmedi) · dizi_perf 6/6 · kanal_omru 10/10 · asan_matris 12/12 · llvm_test
   321/321 · sıfır uyarı 38/0 · self_driver FIXPOINT ✓ (69 sn; D-778 ölçümlü koşuda 193 sn) · codegen_diff 231/231.
+- 2026-11-27 D-784: CODEX DALGA 18 BİRLEŞTİRİLDİ (altyapı + x86 SMP; PR #257, 20 bölüm, Codex 2026-11-26 14:07 → 11-27 18:10).
+  İÇERİK (Codex): ölçüm tabanı + kapı başına bütçe (kapi_butce.tsv), geçici dizin/disk denetimi (calisma_dizini.sh),
+  ortak çekirdek önbelleği (8 harness), kritik yol bölme, sabit beklemelerin kaldırılması, paralel güvenlik + stres,
+  değişikliğe göre kapı seçimi (kapi_haritasi.tsv + kapi_secici), CI paralelliği; x86 SMP: MADT keşfi, UEFI yolunda
+  INIT-SIPI-SIPI, çekirdek başı GDT/TSS/IDT + LAPIC zamanlayıcı, bilet kilidi, IPI, SMP-güvenli çerçeve ayırıcısı + heap
+  kilidi, TLB vurgulama, kullanıcı süreçlerinin çekirdekler arasında zamanlanması (iş çalma), paralel asal sayımı
+  (4 vCPU 2,87× C), kilit zaman aşımı + tüm işlemcilerde panik, PC matrisi 1/2/4 vCPU (72 açılış), belgeler.
+  Codex ölçümü: 187 kapı, -j10 22:53, -j20 18:43 (dalga başında 155 kapı seri ~35-37 dk). Derleyici bulgusu C18-001 → E4s.
+  BİRLEŞTİRME (Claude, main D-776..D-783 → dal): 4 çakışma — (1) surec_kahin.py: Codex'in ortak fiziksel_cerceve_haritasi
+  işlevi korundu, İÇİNE D-778 dar eleman düzeltmesi taşındı (eski `[::4]`; smp_kahin.py de kullanıyor); (2)(3) iki harness:
+  aynı -j yarışının iki çözümü, Codex'in calisma_dizini sürümü + D-775 gerekçesi; (4) Makefile test_tumu: Codex düzeni +
+  main'in 3 kapısı (heap_uzat, dizi_uzat_test, bolge_kirpma_test; üç yönlü fark: Codex hiçbir kapı çıkarmamıştı).
+  kapi_haritasi.tsv üreticiyle yenilendi (calistir_kapi_secici geçti), kapi_butce.tsv'ye 3 bütçe.
+  TAM TAKIM (-j10 ölçümlü): 190 kapı 21:12, TEK kırmızı calistir_bm_x86_smp_bellek — surec_kahin.tekrar_kos kabuk heap'ini
+  D-772 ayırıcısına göre KESİN (önce,sonra) çiftleriyle karşılaştırıyordu; D-777/D-778 sonrası taban 4,8-5,2 → 2,8-3,1 MB,
+  50 tekrarda büyüme 6-7 → 1 blok (meşru iyileşme). Kesin çift yerine iki sınır: büyüme ≤ 2 blok, taban ≤ 4 MB. Sabotaj
+  S284 (çekirdekte yerinde uzatma kapalı) → iki derleyicide kırmızı (C +6, self +5 blok). calistir_codegen_bootstrap
+  (Codex'te 6:22) D-782/D-783 sonrası en yavaş 15'ten çıktı.
+  İKİNCİ TAM TAKIM (düzeltmeden sonra): 190/190 kapı geçti, duvar 19:56, yeni geçici dizin 0. Sarmal rc=2'yi YALNIZ
+  disk denetimi verdi: bu çalışma ağacının build/'inde aylardır biriken 934 ESKİ geçici dizin ("önceden vardı") —
+  kod değil ortam; build/eski_gecici_arsiv/ altına taşındı (silinmedi), denetim 0 görüyor. CI temiz checkout'ta etkilenmez.
