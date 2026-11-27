@@ -75,6 +75,27 @@ static uint64_t hiza_yukari(uint64_t x) {
     return (x + (KDL_BOLGE_HIZA - 1)) & ~(uint64_t)(KDL_BOLGE_HIZA - 1);
 }
 
+/* [D-783] E4q: glibc varsayılanı, yığın tepesindeki 128 KB'ı aşan boş alanı her free()'de
+ * çekirdeğe iade eder (systrim -> sbrk). Bölge blokları 64 KB'tir ve bölgeler sık açılıp kapanır
+ * (rho_yerel/rho_tur): her kapanış bloğu iade eder, her açılış yeniden ister -> brk gidiş-gelişi.
+ * Ölçüm: self-host derleyicinin çekirdek biriminde zamanın ~%70'i __brk/malloc içindeydi;
+ * eşik 64 MB ile 9,05 -> 4,03 sn, zirve RSS değişmedi (167 MB). Yalnız glibc (bare-metal ve
+ * Windows'ta bu blok yok). mallopt idempotent ve iş parçacığı güvenlidir; iş parçacığı başına
+ * bayrak, paylaşılan bir bayrağın veri yarışından kaçınır. ASan kendi ayırıcısını kullandığı
+ * için orada etkisizdir (UAF tespiti etkilenmez). */
+#if defined(__GLIBC__) && !defined(KEMGU_BARE_METAL)
+#include <malloc.h>
+#define KDL_BOLGE_KIRPMA_ESIGI (64 * 1024 * 1024)
+static _Thread_local char kdl_ayirici_ayarli;
+static void kdl_ayirici_ayarla(void) {
+    if (kdl_ayirici_ayarli) return;
+    kdl_ayirici_ayarli = 1;
+    (void)mallopt(M_TRIM_THRESHOLD, KDL_BOLGE_KIRPMA_ESIGI);
+}
+#else
+static void kdl_ayirici_ayarla(void) { }
+#endif
+
 /* kap baytlık veri kapasiteli yeni blok malloc'la. Taşma/bellek hatasında NULL. */
 static KdlBolgeBlok *blok_olustur(uint64_t kap) {
     /* sizeof(header) + kap size_t'te taşmasın (kap çok büyükse). */
@@ -88,6 +109,7 @@ static KdlBolgeBlok *blok_olustur(uint64_t kap) {
 }
 
 KdlBolge *kdl_bolge_olustur(void) {
+    kdl_ayirici_ayarla();   /* [D-783] */
     KdlBolge *b = (KdlBolge *)malloc(sizeof(KdlBolge));
     if (!b) return NULL;
     b->bas = blok_olustur(KDL_BOLGE_VARSAYILAN);
@@ -150,10 +172,30 @@ void kdl_bolge_serbest(KdlBolge *b) {
 int kdl_bolge_bu_is_parcacigi(const KdlBolge *b) {   /* [D-770] */
     return b && b->sahip_ip == KDL_BOLGE_IP_ISARET;
 }
+
+/* [D-777] Yerinde uzatma: p aktif blogun EN SON tahsisiyse (eski_n bayt, 16-hizali
+ * sonu bump ucuna denk) ve ek alan blokta varsa tahsisi yeni_n bayta uzatir, 1 doner.
+ * Degilse hicbir sey yapmaz, 0 doner (cagiran yeni tampon + kopya yoluna gider).
+ * Dizi buyumesinde eski tamponun bolgede cop olarak kalmasini onler. */
+int kdl_bolge_uzat(KdlBolge *b, void *p, uint64_t eski_n, uint64_t yeni_n) {
+    if (!b || !p || !b->bas || yeni_n < eski_n) return 0;
+    KdlBolgeBlok *blok = b->bas;
+    uint64_t e = hiza_yukari(eski_n), y = hiza_yukari(yeni_n);
+    if (e < eski_n || y < yeni_n) return 0;                 /* hizalama tasmasi */
+    uintptr_t uc = (uintptr_t)blok->veri + (uintptr_t)blok->kullanilan;
+    if ((uintptr_t)p + (uintptr_t)e != uc) return 0;        /* en son tahsis degil */
+    if (y - e > blok->kapasite - blok->kullanilan) return 0; /* yer yok */
+    blok->kullanilan += y - e;
+    return 1;
+}
 #else
 /* KEM_MALLOC (kem_os saf-.kem bolgeleri): cekirdek ayiricisi tek baglamli
  * kabul edilir (kem_heap.kem buyumeyi zaten kendi bolgesinden yapar). */
 int kdl_bolge_bu_is_parcacigi(const KdlBolge *b) { return b != 0; }
+/* [D-777] KEM_MALLOC: yerinde uzatma kem_heap.kem'in kem_dizi_buyut'unda yapilir. */
+int kdl_bolge_uzat(KdlBolge *b, void *p, uint64_t eski_n, uint64_t yeni_n) {
+    (void)b; (void)p; (void)eski_n; (void)yeni_n; return 0;
+}
 #endif  /* !KEMGU_KEM_MALLOC — region primitifleri .kem'den (kem_os) */
 
 int kdl_bolge_bakiye(void) {

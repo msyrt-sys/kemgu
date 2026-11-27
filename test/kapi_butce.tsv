@@ -197,3 +197,6 @@ calistir_bm_x86_smp_surec_kabuk14	315	qemu-x86
 calistir_bm_x86_smp_surec_dosyalar	301	qemu-x86
 calistir_bm_x86_smp_paralel	126	qemu-x86
 calistir_bm_x86_smp_saglamlik	240	qemu-x86
+calistir_bm_x86_heap_uzat	60	qemu-x86
+calistir_dizi_uzat_test	60	host
+calistir_bolge_kirpma_test	60	host

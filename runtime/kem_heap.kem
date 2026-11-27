@@ -248,7 +248,35 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken hb: *tam8 = bolge;
     değişken gv: tam64 = *gp;
     eğer gv != 0 { hb = gv olarak *tam8; }
+    // [D-777] D-579'un ÇEKİRDEK yarısı (host kdl_dizi_buyut ile birebir). Eskiden
+    // tahsis başarısızsa `veri = 0` ve büyük `kapasite` yazılıyordu; çağıran HEMEN
+    // ardından yazdığı için fiziksel 0 adresinin üstüne yazılırdı (heap tükenince =
+    // E4k'nin sonucu). Büyüme daima ARTMALI; artmıyorsa int32 taşmıştır.
+    değişken eski_kp: *tam32 = (da + 12) olarak *tam32;
+    değişken eski_kap: tam32 = *eski_kp;
+    eğer yeni_kap <= eski_kap { kem_panik("PANIK: dizi kapasitesi tasti (buyume int32 sinirini asti)"); }
+    // [D-777] YERİNDE UZATMA. Bump bölgede büyüyen dizi çoğunlukla aktif bloğun EN SON
+    // tahsisidir; o zaman tampon olduğu yerde uzatılır (kopya yok, eski tampon çöp
+    // olarak KALMAZ). Koşul kesin: eski tamponun 16-hizalı sonu = bloğun bump ucu ve
+    // ek alan blokta var. Aksi hâlde eski yol (yeni tampon + kopya) aynen.
+    değişken ev: tam64 = *((da olarak tam64) olarak *tam64);
+    eğer ev != 0 ve (hb olarak tam64) != 0 {
+        değişken blok: tam64 = *((hb olarak tam64) olarak *tam64);
+        eğer blok != 0 {
+            değişken bkp: *tam64 = (blok + 8) olarak *tam64;
+            değişken bup: *tam64 = (blok + 16) olarak *tam64;
+            değişken eski_n: tam64 = (((eski_kap olarak tam64) * eb + 15) / 16) * 16;
+            değişken yeni_n: tam64 = (((yeni_kap olarak tam64) * eb + 15) / 16) * 16;
+            değişken uc: tam64 = (blok + 24) + *bup;
+            eğer ev + eski_n == uc ve *bup + (yeni_n - eski_n) <= *bkp {
+                *bup = *bup + (yeni_n - eski_n);
+                *eski_kp = yeni_kap;
+                ver;
+            }
+        }
+    }
     değişken yeni: *tam8 = kdl_bolge_ayir(hb, (yeni_kap olarak tam64) * eb);
+    eğer (yeni olarak tam64) == 0 { kem_panik("PANIK: dizi buyutulemedi (tahsis basarisiz)"); }
     değişken vp: *tam64 = da olarak *tam64;
     değişken eski_veri: tam64 = *vp;
     değişken bp: *tam32 = (da + 8) olarak *tam32;
@@ -266,9 +294,29 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
 }
 
 // kdl_dizi_ekle_tam(bolge, d, deger) : dolu ise büyüt, sonra ((i32*)veri)[boyut++]=deger.
+// [D-778] DAR ELEMAN: `_tam` ailesi eleman_byte'a duyarlı (host kdl_dizi.inc ile birebir).
+// tam8/dtam8 → 1, tam16/dtam16 → 2 baytlık yuva; diğerleri eski 32 bit yol.
+çıplak işlev kem_dizi_skaler_eb(da: tam64) -> tam64 {
+    değişken ep: *tam32 = (da + 16) olarak *tam32;
+    değişken e: tam32 = *ep;
+    eğer e == 1 { ver 1; }
+    eğer e == 2 { ver 2; }
+    ver 4;
+}
+çıplak işlev kem_dizi_skaler_yaz(adr: tam64, eb: tam64, deger: tam32) {
+    eğer eb == 1 { değişken p8: *dtam8 = adr olarak *dtam8; *p8 = ((deger & 255) olarak dtam32) olarak dtam8; ver; }
+    eğer eb == 2 { değişken p16: *dtam16 = adr olarak *dtam16; *p16 = ((deger & 65535) olarak dtam32) olarak dtam16; ver; }
+    değişken p32: *tam32 = adr olarak *tam32; *p32 = deger;
+}
+çıplak işlev kem_dizi_skaler_oku(adr: tam64, eb: tam64) -> tam32 {
+    eğer eb == 1 { değişken p8: *dtam8 = adr olarak *dtam8; değişken v8: dtam8 = *p8; ver (v8 olarak dtam32) olarak tam32; }
+    eğer eb == 2 { değişken p16: *dtam16 = adr olarak *dtam16; değişken v16: dtam16 = *p16; ver (v16 olarak dtam32) olarak tam32; }
+    değişken p32: *tam32 = adr olarak *tam32; ver *p32;
+}
 çıplak işlev kdl_dizi_ekle_tam(bolge: *tam8, d: *tam8, deger: tam32) {
     eğer (d olarak tam64) == 0 { ver; }
     değişken da: tam64 = d olarak tam64;
+    değişken eb: tam64 = kem_dizi_skaler_eb(da);
     değişken bp: *tam32 = (da + 8) olarak *tam32;
     değişken boyut: tam32 = *bp;
     değişken kp: *tam32 = (da + 12) olarak *tam32;
@@ -276,12 +324,11 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     eğer boyut == kapasite {
         değişken yk: tam32 = 4;
         eğer kapasite != 0 { yk = kapasite * 2; }
-        kem_dizi_buyut(bolge, d, yk, 4);
+        kem_dizi_buyut(bolge, d, yk, eb);
     }
     değişken vp: *tam64 = da olarak *tam64;
     değişken veri: tam64 = *vp;                      // büyüme sonrası TAZE oku
-    değişken elem: *tam32 = (veri + (boyut olarak tam64) * 4) olarak *tam32;
-    *elem = deger;
+    kem_dizi_skaler_yaz(veri + (boyut olarak tam64) * eb, eb, deger);
     *bp = boyut + 1;                                 // boyut++
 }
 
@@ -295,8 +342,8 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     eğer i >= boyut { kdl_dizi_oob(i, boyut); }
     değişken vp: *tam64 = da olarak *tam64;
     değişken veri: tam64 = *vp;
-    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
-    ver *elem;
+    değişken eb: tam64 = kem_dizi_skaler_eb(da);    // [D-778]
+    ver kem_dizi_skaler_oku(veri + (i olarak tam64) * eb, eb);
 }
 
 // [D-600] kdl_dizi_yaz_tam(d, i, deger) : sınır-kontrollü yerinde yaz
@@ -312,8 +359,8 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     eğer i >= boyut { kdl_dizi_oob(i, boyut); }
     değişken vp: *tam64 = da olarak *tam64;
     değişken veri: tam64 = *vp;
-    değişken elem: *tam32 = (veri + (i olarak tam64) * 4) olarak *tam32;
-    *elem = deger;
+    değişken eb: tam64 = kem_dizi_skaler_eb(da);    // [D-778]
+    kem_dizi_skaler_yaz(veri + (i olarak tam64) * eb, eb, deger);
 }
 
 // kdl_dizi_boyut(d) -> i32.
@@ -334,7 +381,22 @@ küresel değişken kem_global_bolge: tam64 = 0;   // K4b: lazy tek global bölg
     değişken ep: *tam32 = (da + 16) olarak *tam32;
     değişken eb: tam32 = *ep;
     eğer eb <= 0 { eb = 4; }
-    kem_dizi_buyut(bolge, d, yeni_kapasite, eb olarak tam64);
+    // [D-777] Host kdl_dizi_kapasite_ayarla ile aynı: tahsis başarısızsa diziye
+    // DOKUNMA (çağıran yazmaz → sessiz dönüş doğru). Büyütme yolunun paniği burada
+    // istenmez: rezervasyon bir ipucudur, gerekirse ekleme yolu kendi büyür.
+    değişken gp2: *tam64 = (da + 24) olarak *tam64;
+    değişken hb2: *tam8 = bolge;
+    değişken gv2: tam64 = *gp2;
+    eğer gv2 != 0 { hb2 = gv2 olarak *tam8; }
+    değişken yeni: *tam8 = kdl_bolge_ayir(hb2, (yeni_kapasite olarak tam64) * (eb olarak tam64));
+    eğer (yeni olarak tam64) == 0 { ver; }
+    değişken vp: *tam64 = da olarak *tam64;
+    değişken eski_veri: tam64 = *vp;
+    değişken bp: *tam32 = (da + 8) olarak *tam32;
+    değişken boyut: tam32 = *bp;
+    eğer eski_veri != 0 ve boyut > 0 { memcpy(yeni, eski_veri olarak *tam8, (boyut olarak tam64) * (eb olarak tam64)); }
+    *vp = yeni olarak tam64;
+    *kp = yeni_kapasite;
 }
 
 // ============================================================================

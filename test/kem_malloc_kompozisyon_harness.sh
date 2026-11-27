@@ -23,6 +23,8 @@ TMP=$(calisma_ac build/kemmalloc) || exit 1
 calisma_izle "$TMP"
 # Diğer kapıların kullandığı derleyici, bu turun yeniden bağlamasından etkilenmez.
 SELF="$TMP/codegen${EXE}"
+# [D-775] Self-host ikilisi KAPININ KENDİ dizinine kurulur (ortak build/codegen'in üzerine bağlanmaz):
+# -j altında o anda build/codegen'i kullanan kapılar yarım yazılmış ikiliyle karşılaşıyordu.
 gecti=0; kaldi=0
 
 # self-host binary'yi güncel codegen.kem'den üret (stale = yanlış PASS).

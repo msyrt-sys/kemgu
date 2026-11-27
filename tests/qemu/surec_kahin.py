@@ -41,10 +41,13 @@ VARSAYILAN = ("baslat", "dosya", "buyuk", "yazma", "tus-usb", "tus-ps2",
 
 def fiziksel_cerceve_haritasi(oku, ayirici):
     _, bitmap, _, toplam = struct.unpack("<3QI", oku(ayirici, 28))
-    adres, boy = struct.unpack("<QI", oku(bitmap, 12))
+    # KdlDizi başlığı { veri@0, boyut@8, kapasite@12, eleman_byte@16 }. [D-778] Yuva genişliği
+    # BAŞLIKTAN okunur: dar eleman (dtam8) artık 1 bayt; eski düzen 4 bayttı (`[::4]` varsayımı
+    # D-778'de bm_x86_kaynak ve bm_x86_ag_pc kapılarını yanlış "896 çerçeve" ile düşürmüştü).
+    adres, boy, _kap, eb = struct.unpack("<QiiI", oku(bitmap, 20))
     assert boy == (toplam + 7) // 8
-    # Dizi<dtam8> her elemanı bir 32 bitlik yuvada tutar.
-    bitler = oku(adres, boy * 4)[::4]
+    adim = eb if eb in (1, 2) else 4
+    bitler = oku(adres, boy * adim)[::adim]
     return bitler, toplam - sum(v.bit_count() for v in bitler)
 
 

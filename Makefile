@@ -454,6 +454,9 @@ $(BUILD):
 -include $(OBJS:.o=.d)
 -include $(BUILD)/ana.d
 -include $(BUILD)/test_lexer.d
+# [D-777] kdl_runtime.o OBJS'ta degil; .d'si dahil edilmeyince kdl_dizi.inc / kdl_bolge.c /
+# kdl_bolge.h degisiklikleri artimli yapimda nesneyi YENIDEN KURMUYORDU (kapilar bayat runtime olcuyordu).
+-include $(BUILD)/kdl_runtime.d
 
 # === Test calistirma hedefleri ===
 
@@ -546,6 +549,21 @@ calistir_runtime_link_test: $(BUILD)/test_runtime_link$(EXE)
 
 calistir_kdl_bolge_test: $(BUILD)/test_kdl_bolge$(EXE)
 	$(ASAN_RUN) ./$(BUILD)/test_kdl_bolge$(EXE)
+
+# [D-777] Host dizi büyütmesinde yerinde uzatma (işaretçi kararlılığı + iç içe içerik).
+$(BUILD)/test_dizi_uzat$(EXE): $(BUILD)/kdl_runtime.o $(TESTDIR)/test_dizi_uzat.c | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread
+.PHONY: calistir_dizi_uzat_test
+calistir_dizi_uzat_test: $(BUILD)/test_dizi_uzat$(EXE)
+	./$(BUILD)/test_dizi_uzat$(EXE)
+
+# [D-783] E4q: bölge kapanışı glibc yığınını çekirdeğe iade etmemeli (sbrk(0) geri çekilmez).
+# ASan'sız (ASan kendi ayırıcısını kullanır); glibc dışında bildirerek atlar.
+$(BUILD)/test_bolge_kirpma$(EXE): runtime/kdl_bolge.c runtime/kdl_bolge.h $(TESTDIR)/test_bolge_kirpma.c | $(BUILD)
+	$(CC) $(CFLAGS) -Iruntime -o $@ runtime/kdl_bolge.c $(TESTDIR)/test_bolge_kirpma.c
+.PHONY: calistir_bolge_kirpma_test
+calistir_bolge_kirpma_test: $(BUILD)/test_bolge_kirpma$(EXE)
+	./$(BUILD)/test_bolge_kirpma$(EXE)
 
 # [D-665] Bolge sayaclari eszamanli dogruluk kapisi: duz sayim + ThreadSanitizer.
 # ASan bu sinifi GORMEZ; depodaki ilk TSan kapisi.
@@ -817,7 +835,8 @@ calistir_codegen_bootstrap: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
 # codegen_diff exit-kodu bunu yakalayamaz (çıplak allocator host'ta linklenir → sızıntı
 # exit'te görünmez). Çıplak+döngü fn'de @kdl_bolge_olustur/serbest/global_bolge_al = 0
 # HEM C-codegen HEM self-host için; normal döngüde ρ_iter korunur (F4.3 regresyon kontrolü).
-calistir_ciplak_region_free: $(BUILD)/kemgu$(EXE) $(BUILD)/kdl_runtime.o
+# [D-775] harness build/codegen kullanır; bağımlılık yoktu -> -j altında derleyici kurulurken koşabiliyordu.
+calistir_ciplak_region_free: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/kdl_runtime.o
 	@bash test/ciplak_region_free_harness.sh
 
 # F3 (D-259): SAF-.kem çıplak+küresel allocator KOMPOZİSYON gate'i — iki primitif
@@ -4804,7 +4823,7 @@ X86_UZUN_KAPILAR := $(addprefix calistir_bm_x86_,\
 	ag_saglamlik_c_aktarim ag_saglamlik_self_aktarim dosyalar ekran_fare kaynak \
 	kabuk14 v1 tftp_teshis tcp_verim ps2_irq ps2_karma)
 test_tumu: export KEMGU_TAM_TAKIM := 1
-test_tumu: $(X86_UZUN_KAPILAR) calistir_cekirdek_onbellek calistir_bm_x86_surec_abi calistir_bm_x86_surec calistir_bm_x86_disk calistir_bm_x86_blok calistir_bm_x86_guc calistir_bm_x86_ps2_karma calistir_bm_x86_ps2_irq calistir_bm_x86_apic calistir_bm_x86_istisna calistir_bm_x86_uefi_pc calistir_bm_x86_uefi_kabuk calistir_bm_x86_uefi calistir_bm_x86_ps2 calistir_bm_x86_panik calistir_stdlib_ithal calistir_bm_x86_ekran calistir_bm_x86_kabuk calistir_bm_x86_usb calistir_bm_x86_ahci calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_surucu_kosum calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test calistir_chatgpt_kopru calistir_qtest calistir_bm_x86_nvme
+test_tumu: $(X86_UZUN_KAPILAR) calistir_cekirdek_onbellek calistir_bm_x86_surec_abi calistir_bm_x86_surec calistir_bm_x86_disk calistir_bm_x86_heap_uzat calistir_bm_x86_blok calistir_bm_x86_guc calistir_bm_x86_ps2_karma calistir_bm_x86_ps2_irq calistir_bm_x86_apic calistir_bm_x86_istisna calistir_bm_x86_uefi_pc calistir_bm_x86_uefi_kabuk calistir_bm_x86_uefi calistir_bm_x86_ps2 calistir_bm_x86_panik calistir_stdlib_ithal calistir_bm_x86_ekran calistir_bm_x86_kabuk calistir_bm_x86_usb calistir_bm_x86_ahci calistir_lexer_test calistir_arena_test calistir_ast_test calistir_parser_test calistir_tip_test calistir_sembol_test calistir_tip_kontrol_test calistir_bolge_test calistir_bolge_atama_test calistir_escape_test calistir_json_test calistir_lsp_test calistir_llvm_test calistir_llvm_dogrula_test calistir_linear_test calistir_sabitsure_test calistir_wcet_test calistir_capability_test calistir_mmio_test calistir_mmio_bare_metal calistir_drf_test calistir_simd_test calistir_simd_llvm_test calistir_snapshot_test calistir_fuzz_test calistir_fuzz_advanced calistir_runtime_link_test calistir_gorev_rt_test calistir_kdl_bolge_test calistir_dizi_uzat_test calistir_bolge_kirpma_test calistir_bolge_sayac_yarisi calistir_gorev_msan calistir_otp_cli_test calistir_dizi_perf_test calistir_stdlib_check calistir_kripto_kosum calistir_uart_pl011_test calistir_yazdir_bare_test calistir_uart_16550_test calistir_panik_test calistir_uart_vtable_test calistir_dizi_sinir_test calistir_lambda_test calistir_codegen_diff calistir_codegen_genis calistir_modul_codegen calistir_ct_bariyer calistir_baremetal_diff calistir_yapi_diff calistir_surucu_diff calistir_surucu_kosum calistir_belge_kapisi calistir_check_genis calistir_ag_kosum calistir_ciplak_region_free calistir_kem_malloc_kompozisyon calistir_codegen_bootstrap calistir_self_driver calistir_check_kapisi calistir_bolge_yonlendirme calistir_bolge_operand calistir_drf_gorunurluk calistir_eszamanli_kosum calistir_lean_sorry calistir_anahtar_kelime_kapisi calistir_sifir_uyari calistir_sifir_bolme calistir_tasma calistir_kanal_omru calistir_perf_bellek calistir_checker_diff calistir_qemu_cekirdek calistir_parser_diff calistir_lexer_diff calistir_asan_denetim calistir_asan_matris calistir_arm64_test calistir_chatgpt_kopru calistir_qtest calistir_bm_x86_nvme
 	@echo "Tum testler gecti!"
 
 # ============================================================================
@@ -5009,6 +5028,11 @@ calistir_bm_x86_blok: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x8
 .PHONY: calistir_bm_x86_disk
 calistir_bm_x86_disk: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
 	@bash test/bm_x86_disk_harness.sh
+
+# [D-777] Çekirdek dizi büyütmesinde yerinde uzatma (deterministik; iki derleyici).
+.PHONY: calistir_bm_x86_heap_uzat
+calistir_bm_x86_heap_uzat: $(BUILD)/kemgu$(EXE) $(BUILD)/codegen$(EXE) $(BUILD)/bm_x86_start.o $(BUILD)/bm_x86_kesme.o $(BUILD)/bm_x86_gorev.o $(BUILD)/bm_x86_uart.o $(BUILD)/bm_x86_yazdir.o $(BUILD)/bm_x86_panik.o
+	@bash test/bm_x86_heap_uzat_harness.sh
 
 
 .PHONY: calistir_bm_x86_surec_abi

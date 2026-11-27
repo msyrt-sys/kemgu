@@ -157,6 +157,27 @@ static void test_yogun(void) {
     kdl_bolge_serbest(b);
 }
 
+/* === T8 [D-777]: yerinde uzatma — yalniz EN SON tahsis, yalniz yer varsa === */
+static void test_uzat(void) {
+    printf("\n[T8] yerinde uzatma (kdl_bolge_uzat)\n");
+    KdlBolge *b = kdl_bolge_olustur();
+    unsigned char *a = (unsigned char *)kdl_bolge_ayir(b, 40);
+    for (int i = 0; i < 40; i++) a[i] = (unsigned char)i;
+    onayla("son tahsis uzar (40 -> 400)", kdl_bolge_uzat(b, a, 40, 400) == 1);
+    int saglam = 1;
+    for (int i = 0; i < 40; i++) if (a[i] != (unsigned char)i) saglam = 0;
+    onayla("uzatma icerigi korur", saglam);
+    for (int i = 0; i < 400; i++) a[i] = 7;
+    unsigned char *c = (unsigned char *)kdl_bolge_ayir(b, 16);
+    onayla("sonraki tahsis uzatilmis alanla ORTUSMEZ", c >= a + 400);
+    onayla("son olmayan tahsis UZAMAZ", kdl_bolge_uzat(b, a, 400, 800) == 0);
+    onayla("uzatma reddinde blok degismez", kdl_bolge_ayir(b, 16) >= (void *)(c + 16));
+    onayla("blokta yer yoksa UZAMAZ", kdl_bolge_uzat(b, c, 16, 70000) == 0);
+    onayla("kuculme istegi reddedilir", kdl_bolge_uzat(b, c, 16, 8) == 0);
+    onayla("NULL bolge reddedilir", kdl_bolge_uzat(NULL, c, 16, 32) == 0);
+    kdl_bolge_serbest(b);
+}
+
 int main(void) {
     printf("KEMGU Bolge Arena Allokatoru Birim Testi (F4.0)\n");
     printf("================================================\n");
@@ -167,6 +188,7 @@ int main(void) {
     test_hizalama();
     test_yogun();
     test_kenar();
+    test_uzat();
     printf("------------------------------------------------\n");
     printf("Toplam: %d | Basarili: %d | Basarisiz: %d\n", toplam, basarili, basarisiz);
     printf("Sizinti bakiyesi (test sonu): %d (0 beklenir)\n", kdl_bolge_bakiye());

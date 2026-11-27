@@ -1,0 +1,58 @@
+// [D-782] E4q: self-host sözcük çözümleyicisi kaynağı 512 baytlık parçalara böler (`kb`/`kk`).
+// Bu dosya parça sınırını aşan sözcükleri ve 512/1024 bayttan uzun metin literallerini ölçer:
+// 1200 baytlık literal en az üç parçaya yayılır (kk'nin çok parçalı döngüsü), 600 baytlık iki
+// parçaya (döngüsüz iki parça yolu). Dolgu satırları tanımlayıcıları parça sınırlarına düşürür.
+// İçerik C ile AYNI olmalı; çıkış 42.
+işlev main() -> tam32 {
+    değişken dolgu_000: tam32 = 0;
+    değişken dolgu_001: tam32 = 1;
+    değişken dolgu_002: tam32 = 2;
+    değişken dolgu_003: tam32 = 3;
+    değişken dolgu_004: tam32 = 4;
+    değişken dolgu_005: tam32 = 5;
+    değişken dolgu_006: tam32 = 6;
+    değişken dolgu_007: tam32 = 7;
+    değişken dolgu_008: tam32 = 8;
+    değişken dolgu_009: tam32 = 9;
+    değişken dolgu_010: tam32 = 10;
+    değişken dolgu_011: tam32 = 11;
+    değişken dolgu_012: tam32 = 12;
+    değişken dolgu_013: tam32 = 13;
+    değişken dolgu_014: tam32 = 14;
+    değişken dolgu_015: tam32 = 15;
+    değişken dolgu_016: tam32 = 16;
+    değişken dolgu_017: tam32 = 17;
+    değişken dolgu_018: tam32 = 18;
+    değişken dolgu_019: tam32 = 19;
+    değişken dolgu_020: tam32 = 20;
+    değişken dolgu_021: tam32 = 21;
+    değişken dolgu_022: tam32 = 22;
+    değişken dolgu_023: tam32 = 23;
+    değişken dolgu_024: tam32 = 24;
+    değişken dolgu_025: tam32 = 25;
+    değişken dolgu_026: tam32 = 26;
+    değişken dolgu_027: tam32 = 27;
+    değişken dolgu_028: tam32 = 28;
+    değişken dolgu_029: tam32 = 29;
+    değişken dolgu_030: tam32 = 30;
+    değişken dolgu_031: tam32 = 31;
+    değişken dolgu_032: tam32 = 32;
+    değişken dolgu_033: tam32 = 33;
+    değişken dolgu_034: tam32 = 34;
+    değişken dolgu_035: tam32 = 35;
+    değişken dolgu_036: tam32 = 36;
+    değişken dolgu_037: tam32 = 37;
+    değişken dolgu_038: tam32 = 38;
+    değişken dolgu_039: tam32 = 39;
+    değişken u: metin = "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+    değişken o: metin = "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij";
+    eğer metin_uzunluk(u) != 1200 { ver 1; }
+    eğer metin_uzunluk(o) != 600 { ver 2; }
+    eğer metin_bayt(u, 511) != (49 olarak tam8) { ver 3; }
+    eğer metin_bayt(u, 512) != (50 olarak tam8) { ver 4; }
+    eğer metin_bayt(u, 1023) != (51 olarak tam8) { ver 5; }
+    eğer metin_bayt(u, 1199) != (57 olarak tam8) { ver 6; }
+    eğer metin_bayt(o, 599) != (106 olarak tam8) { ver 7; }
+    eğer dolgu_039 != 39 { ver 8; }
+    ver 42;
+}

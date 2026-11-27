@@ -298,6 +298,22 @@
       yolları; `değişken w = V[0]` gibi iç işaretçi takma adları İZLENMELİ, yoksa UAF) · E her aşamanın self-host karşılığı.
       ⚠ Tek bölge parametresi hem sonucu hem durum büyümesini taşıdığından `&değişken` durum dizisine yazan sürücü
       işlevleri B'yi GEÇEMEZ; A bu yüzden ön koşul (büyüme artık dizinin kendi bölgesinden).
+      ⚠ D-776 ÖLÇÜMÜ (D AŞAMASINI DEĞİŞTİRİR): kaçış değil ÜZERİNE YAZMA. Sızıntının baskın yolu `&değişken` durum
+      işlevleri ve durum alanına her adımda yeni dizi atanması (`s.kuyruk=[]`, `s.sonuc=[]`, `n.sayfalar=[]`; sürücülerde
+      11 yer). Eski dizi erişilemez ama durumun bölgesinde (ana bölge) kalır → HİÇBİR kaçış analizi onu serbest
+      bırakamaz; D-756'nın "escape v3" kararı bu sınıfı KAPATMAZ. İçerik dökümüyle (komut öncesi/sonrası ana bölgedeki
+      yeni KdlDizi başlıkları) iki ÇARPAN ölçüldü: (1) Dizi<tam8/dtam8/tam16> elemanları 4 baytlık `_tam` yuvasında —
+      512 baytlık sektör tamponu ~2 KB; (2) ikiye katlama büyümesi eski tamponları bırakır (~2×). Sektör okuması ~6 KB.
+      `mv` +720 KB'ın baskını kap=512/1024 bayt/tamsayı tamponları. Seçenekler: (a) gerçek 1/2 baytlık eleman
+      erişimcisi (iki derleyici + host runtime + kem_heap.kem; ABI) → 4× · (b) sürücülerde sabit kapasite + yerinde
+      yeniden kullanım (yeni `dizi_bosalt(d)`: boyut=0, tampon korunur) → üzerine yazma çöpü kalkar · (c) dönemsel
+      durum kopyalama (D-756'da RED). gdb (QEMU gdbstub) kesme noktası örnekleyicisi denendi: kararsız (VM durdukça
+      QMP tuşları reddediyor) → bırakıldı; içerik dökümü ucuz ve yeterli.
+      ✓ KARAR (2026-11-27, D-780, Opus önerileri): A (ömür boyu döngüde, derleyicinin seçtiği güvenli noktada
+      tipten üretilmiş BÖLGE TAHLİYESİ) KABUL — koşullu; D-756'nın escape v3 kararı GERİ ALINDI. Bayrakla açılan
+      genel derleyici mekanizması, önce çekirdek, host'ta ASan ile sınanır. A0 fizibilite ölçümü ✓ (canlı dizi
+      grafiği ~160-210 KB, durum tiplerinde *T/&T/kapanış yok). SIRADAKİ: A1 kopyalayıcı üretimi (host). A4
+      (çekirdekte açma) dalga 18'in çok çekirdek kuralını bekler. Tasarım: belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md §7-§9.
 - [x] E4l [S] ✓ D-750 (G003 yerleşiklere genişletildi; kod üretimi değil TİP KURALI). C `dizi_al(l, i)` ANNOTASYONSUZ STACK dizide (`değişken l = [40, 2]`): yerleşik stack
       `[N x T]`'yi heap KdlDizi BASLIGI sanip okuyor (olculdu: "PANIK: dizi sinir ihlali (i=0,
       boyut=-858880828)"). Panik TESADUF (cop boyut negatif); pozitif cop sessiz yanlis/segfault olur.
@@ -322,7 +338,9 @@
       panik kaydı/font kopyası 200 MiB+64 KiB, DMA 128 MiB. QEMU q35 -m 256M'de doğru; gerçek PC'de
       bellek haritasından ayrılmalı (H2d fiziksel bellek yöneticisi). Panik bayrağı 64 bit sihirli
       değer (rastlantı olasılığı ihmal edilir) ama < 256 MB RAM'li makinede alan HİÇ yoktur.
-- [ ] E4q [M] DERLEYICI PERFORMANSI (self-host): birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
+- [~] E4q [M] DERLEYICI PERFORMANSI (self-host): ✓ D-782 KÖK 1 (sözcük çözümleme O(n²), 97,5 → 7,6 sn) · ✓ D-783 KÖK 2
+      (bölge kapanışında glibc kırpması, 7,6 → 4,2 sn). KALAN: C ile fark hâlâ ~5,5× (0,76 sn) — yeni profil gerekirse. Eski not:
+      birlesik x86 biriminde satir +%8 (5712 -> 6184) iken self-host
       --llvm suresi +%27 (6,7 -> 8,5 sn, Spark); C ayni birimde 0,06 sn (~140x). Buyume ORANSIZ — once olcekleme
       egrisini OLC (ayni korpusun 1x/2x/4x'i), kok tahmin etme; Windows CI butcesi (240 sn) bunu sakliyor.
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
@@ -3233,4 +3251,227 @@
   SÜREÇ TURLARI EŞZAMANLI (bm_x86_surec_harness: iki derleyicinin turu ayrı mktemp/QEMU ile aynı anda; SUREC_PARALEL=0
   sıralı): bm_x86_kaynak 24,5 → 12,9 dk. TAM TAKIM -j10 (main'e yeniden temellenmiş): rc=0, "Tum testler gecti!", FIXPOINT ✓,
   DUVAR 33 dk 41 sn (seri 5 sa 25 dk → ~9,7×), kapı toplamı 3 sa 48 dk. Yeni kritik yol bm_x86_ag_saglamlik 16,6 dk.
-
+- 2026-11-26 D-773: Codex dalga 18 promptu (otomasyon/chatgpt/CODEX_GOREV_18.md) — TEST ALTYAPISI + x86 SMP, YİRMİ bölüm.
+  Kullanıcı seçimi ("Altyapı + SMP"). Bölüm 1-8 altyapı: süre bütçesi + gerileme kapısı, bütün harness'larda geçici dizin
+  denetimi, önbellek mantığı tek kaynaklı kütüphaneye + kendi çekirdeğini derleyen 8 harness, ≤10 dk kuralıyla kapı bölme
+  (kapsam multiset kanıtı), program15 RTC + 58 sabit `sleep` sınıflandırması, statik paylaşım denetimi + -j20 stres,
+  değişikliğe göre kapı seçici (eşlenmeyen dosya → tam takım), CI -j. Bölüm 9-20 SMP: MADT işlemci süzgeci + QMP
+  query-cpus-fast kâhini, UEFI bellek haritasından trampolin sayfası + INIT-SIPI-SIPI (yeni boot/ap_x86_64.S), GS tabanlı
+  çekirdek başı veri + AP TSS/LAPIC, bilet kilidi + sıra denetimi + saf model, IPI, SMP-güvenli çerçeve ayırıcı + heap
+  kilidi, TLB vurgulama, iş çalan zamanlayıcı + büyük çekirdek kilidi, ABI 91-99, paralel kullanıcı programı, sağlamlık,
+  PC matrisi -smp ekseni. Claude doğruladı: son ABI çağrısı 90; `-smp 4 -accel tcg,thread=multi` uyarısız açılıyor;
+  madt.kem + smp_x86.c (başvuru) mevcut; satıriçi_asm x86 çekirdekte kullanılabilir; belge/kapı adları Makefile'da var.
+  Ön koşul: D-772 (#245) ve D-773 main'de.
+- 2026-11-26 D-774: E4k AŞAMA B — "DÖNÜŞ-SAF" ÇAĞRILAN ÖZETİ (C src/escape.c ds_* + self-host codegen.kem aynası).
+  f bölgeye ayırdığı her şeyi yalnız dönüşle veriyorsa çağıran ona %rho yerine KENDİ ρ_yerel'ini verir:
+  (a) sonuç hapsedilmiş Dizi<skaler> bağlaması (ÇAĞRI düğümü kesin_yerel), (b) dönüş yok/skaler. VARSAYILAN RED:
+  P1 imza skaler/metin/Dizi<skaler> (referans/işaretçi/yapı/kendin/generic/çıplak RED) · P2 atama kökü yalnız yerel ·
+  P3 Dizi parametresi ve TAKMA ADI (bağlama/atama değeri param adını ya da herhangi bir çağrıyı içeriyorsa; sabit
+  noktaya kadar) dizi_ekle/kapasite_ayarla arg0 OLAMAZ — elle kurulmuş başlıkta bolge=0 iken büyütme çağıranın
+  %rho'suna düşer, kalıcı dizi ölen tampona işaret ederdi (UAF) · P4 kapanış/görev/kanal/dondur/güvensiz/asm/yöntem/
+  modül/dolaylı çağrı RED · P5 kullanıcı çağrısı TEKİL adla + özyinelemeli dönüş-saf, özyineleme/derinlik>24 RED ·
+  P6 tanınmayan düğüm RED. Self-host'ta ek: işlevde kapanış varsa (a) yolu kapalı (mevcut bolge_yerel_yonlendir
+  koruyucusu); kararlar fikstürde C ile birebir. ÖLÇÜM (yardımcı yap()ı çağırıp yerelde okuyor, 200K çağrı): zirve
+  407 MB → 1,1 MB, iki derleyici. Döngünün doğrudan main'de olduğu örüntü DEĞİŞMEZ (tahsis main'in ρ_yerel'inde
+  birikir → tur başına bölge, E4k-C; self-host'ta F4.3 rho_iter VAR, C'de YOK). ⚠ ÇEKİRDEK ETKİSİ YOK: kabuk komut
+  heap artışı toplamı 877,7 → 877,9 MB (32 KB blok gürültüsü) — komut işleyicileri `&değişken` durum aldığı için
+  dönüş-saf DEĞİL; çekirdeğin kapanışı D (alan/eşleş türevleri) + durum parametreli işlevler ister. Kapı
+  calistir_e4k_bellek genişledi: test/e4k/donus_saf.kem 13 çağrının ρ kararı beklenen tabloyla (iki derleyici) +
+  ASan 42 · cagri_sonucu.kem ana bölge ≤2 blok. Sabotaj 8/8 kırmızı: S252 ds_islev hep doğru · S253 C seçici
+  kapalı (127 blok) · S254 P3 kapalı · S255 takma ad yayılımı kapalı · S256 self seçici kapalı · S257 self P3 · S258
+  self takma ad · S259 self özyinelemeli denetim kapalı. P2 ölçülmüş FAZLALIK: küresel yazım güvensiz/çıplak ister,
+  ikisi de P4/P1'de zaten RED. Tam takım -j10: rc=0, 36 dk 23 sn, FIXPOINT ✓. ASan E2E 133/0, ASan matris 12/12.
+- 2026-11-26 D-775: E4k AŞAMA C — TUR BÖLGESİ. C'ye self-host F4.3 aynası: en dış döngünün gövde girişinde ρ_tur,
+  geri dalıştan ve döngü içi her `ver`den önce serbest, lambda gövdelerine sızmaz, çıplakta yok. Döngü gövdesinde
+  bildirilmiş hapsedilmiş Dizi<skaler> (literal, dizi_olustur, dönüş-saf çağrı sonucu) ρ_tur'a; skaler dönen
+  dönüş-saf çağrı döngü içinde ρ_tur'a. Self-host'ta dönüş-saf çağrı yolu rho_iter'e bağlandı (kararlar birebir).
+  ÖLÇÜM: döngü doğrudan main'de, 200K tur: 407 MB → 1,3 MB (C). E4k kapısı: dongu_sonucu zirve <8 MB (908/940 KB),
+  donus_saf'a 'tur' sınıfı + dışarı atanan döngü dizisi. ⚠ KÂHİN KÖRDÜ: ASan IR erişimini denetler ama dizi okuması
+  ASan'sız runtime'da (kdl_dizi_al_*) → serbest bölgeden okuma GÖRÜNMEZDİ; S262 (her döngü dizisini kanıtsız
+  ρ_tur'a) ilk denemede SESSİZ → kapı ASan'lı runtime ile bağlanınca KIRMIZI (UAF). Sabotajlar: S260 tur serbesti
+  yok (zirve 20 GB) · S261 C çağrı→ρ_yerel (41 MB + tablo) · S262 kanıtsız ρ_tur (ASan UAF) · S263 self rho_iter
+  yok (41 MB) · S264 self kanıtsız rho_iter (ASan UAF) — hepsi KIRMIZI; S265 `dongu>0` denetimi kaldırıldı →
+  SESSİZ = ölçülmüş FAZLALIK (döngü dışında ρ_tur yok).
+  ⚠ YERLEŞİK İZİN LİSTESİ (B'ye de uygulanır): ilk sürüm tanınmayan adı (yerleşik / gövdesiz dış işlev = çekirdekte
+  asm/C sembolü) dönüş-saf sayıyordu — "varsayılan RED" ihlali; KEMGU'da adres tam64 olarak dolaşır, böyle bir
+  işlev tahsisin adresini saklayabilir/döndürebilir. Artık yalnız argüman tutmayan/adres vermeyen yerleşikler (dizi
+  okuma/yazma, saf metin, sayı↔metin, çıktı, değer kurucuları). ⚠ DÜRÜSTÇE: tam takımda 5 kapı (ciplak_region_free,
+  bm_x86_msi/pci16/cok_surec/ps2_irq; msi C çekirdeğinde `cat` "bulunamadi") kırmızıydı; izin listesiyle 5/5 yeşil
+  AMA S266 (izin listesini C'de kaldır) msi+pci16'da SESSİZ → bu kırmızılar izin listesine BAĞLANAMADI. Koşum Codex
+  dalga 18'in aynı makinedeki -j10 tam takımıyla ÇAKIŞIYORDU (80+ QEMU, yük 11) — en olası kök, kanıtsız. Ayrıca
+  calistir_ciplak_region_free build/codegen'e bağımlı değildi (kurulurken koştu) → bağımlılık eklendi.
+  #247 (B) bu yüzden birleşmeden kapatıldı; B+C+izin listesi tek PR. Host kapıları (-j4, Codex çalışırken): ASan E2E
+  133/0, matris 12/12, LLVM 321/321, checker 321/321, codegen_diff 229/229, yapi_diff 207/207, bolge_operand 231/231,
+  E4k 12/12, FIXPOINT ✓. Çekirdek heap etkisi: B'de ölçüldü (yok); tam takım Codex'in taban ölçümü bitince.
+  ⚠⚠ KÖK BULUNDU — İKİ AYRI SORUN, ikisi de SAĞLAMLIK DEĞİL:
+  (1) PERFORMANS: C'nin ρ_tur'u her en dış döngünün HER turunda (içinde tahsis olmasa da) kdl_bolge_olustur/serbest
+  yapıyordu; çekirdekte tur'a giden dizi tahsisi 0, açılan tur bölgesi 1031 çağrı noktası → açılış 300 → 530-577 ms
+  (acilis_suresi kırmızı), yük altında donanım bekleme döngüleri zaman aşımı ("QEMU sonucu gelmedi", PS/2 karakter
+  kaybı, `cat` "bulunamadi", "bilinmeyen komut" — bellek bozulması gibi GÖRÜNÜYORDU). Onarım: TEMBEL tur bölgesi
+  (yalnız gövde alt ağacında tur-yerel bağlama varsa; tur_gerekli_mi) + skaler dönüş-saf çağrı ρ_yerel'e (iki
+  derleyici). Çekirdekte döngü-içi bölge 1031 → 2; açılış C 300 / self 339 ms (taban). dongu_sonucu hâlâ ~900 KB.
+  (2) PARALEL YARIŞ (D-772'den beri, E4k'den bağımsız): calistir_ciplak_region_free ve calistir_kem_malloc_kompozisyon
+  self-host ikilisini ORTAK build/codegen'in ÜZERİNE bağlıyordu (`clang … -o build/codegen`); -j altında o anda onu
+  kullanan kapılar yarım yazılmış ikiliyle BOŞ çıktı aldı (check_genis: test_bit, sonra matris+metin; build/codegen
+  mtime koşum ortasında 17:17:59 — zaman.tsv'den o anda koşan kapılar çıkarılıp bulundu). 2880 paralel tekrar ve
+  ASan'lı self-host taraması (292 dosya + çekirdek) temizdi → derleyici çökmesi DEĞİL. İki harness artık kendi
+  mktemp dizinine kurar. Benim eklediğim ciplak→codegen bağımlılığı kapının zamanlamasını kaydırıp yarışı SIKLAŞTIRDI.
+- 2026-11-26 D-776: C DERLEYİCİSİNDE DAR ELEMAN TAŞMASI (E4k-D ölçümü sırasında). `Dizi<dtam8>`/`Dizi<tam16>` BOŞ
+  literali (`[]`) başlığa eleman_byte 1/2 yazıyordu (`kdl_eleman_byte_yaz`); skaler erişimciler (`kdl_dizi_*_tam`) DAİMA
+  4 baytlık yuva yazar ve büyüme 4 ile yapılır, `eleman_byte`ı yalnız `kdl_dizi_kapasite_ayarla` (+ yapı yolu) okur →
+  `[]` + `dizi_kapasite_ayarla(d,N)` N bayt ayırıp 4N bayt yazdırıyordu: AYNI bölge bloğundaki komşu diziyi ezen taşma,
+  `güvensiz` YOK, --check temiz → SEGV (ölçüldü). ASan GÖRMEZ (bölge-içi bump tahsisi; ASan'lı runtime ile de temiz).
+  `dizi_olustur(N)` yolu ("i8/i16/i32 -> 4") ve self-host zaten 4 yazıyordu → yalnız literal yolu ayrışıyordu (D-407).
+  Bulunuşu: çekirdek ana bölgesinin içerik dökümünde eb=1 başlıklarının verisi 4 baytlık adımla yazılmıştı. Onarım tek
+  yardımcıda (i8/i16 → 4). Fikstür cg_korpus/cg_dar_eleman_kapasite.kem — tam8 + tam16 + POZİTİF tam32, ölçüm KOMŞU
+  dizinin bütünlüğü (ASan kör olduğu için). S270 (onarımı geri al) → fikstür SEGV (rc=139); geri → 42. Kapılar:
+  codegen_diff 230/230 · yapi_diff 208/208 (24 muaf) · bolge_operand 232/232 · llvm_test 321/321 · snapshot 50/50 ·
+  sıfır uyarı 38/0.
+- 2026-11-27 D-777: E4k-D (b) — YERİNDE UZATMA + çekirdek OOM koruması + kalıcı ölçüm. Mehmet (b)'yi seçti (sabit kapasite
+  + yerinde yeniden kullanım). ÖLÇÜM PLANI DEĞİŞTİRDİ: (1) `s.sonuc=[]` türü alan sıfırlamaları yalnız 32 B başlık ayırır
+  ve `s.kimlik=s.sonuc` gibi takma adlar var → `dizi_bosalt` ile yerinde boşaltma YANLIŞ SONUÇ üretirdi; yerleşik
+  EKLENMEDİ (güvenli + değerli kullanım yeri bulunamadı). (2) Oluşturucu atfı (çekirdek IR'ında kdl_dizi_olustur'a
+  llvm.returnaddress → başlık ofset 20): `mv`de bayt_sifir 181 dizi/135 KB, onbellek.kopya 39/81 KB, fsy_dizin, depo,
+  bm_bellek_oku (247 × 16 B yoklama) — ama oluşturan ile BÜYÜTEN farklı; üreticilerde kapasite rezervasyonu (5 yer)
+  ölçülebilir kazanç VERMEDİ → geri alındı. (3) ⚠ DOSYA OTURUMU HEAP KULLANIMI ZAMANLAMAYA BAĞLI: aygıt yoklama
+  döngüleri her turda tahsis eder; aynı kaynağın yalnız ÖLÜ kodla farklı iki derlemesi 2,42 MB / 1,62 MB verdi (kod
+  yerleşimi → TCG hızı → yoklama sayısı). Toplam-bayt bütçe kapısı bu yüzden AYIRT EDİCİ DEĞİL (S271 sessiz kaldı) →
+  eklenmedi. ÇÖZÜM SİSTEMİK: bump bölgede büyüyen dizi çoğunlukla aktif bloğun EN SON tahsisidir → tampon yerinde
+  uzatılır (kem_heap.kem kem_dizi_buyut + host kdl_bolge_uzat/kdl_dizi_buyut, aynı kural). Gerçek etki ~%13-15
+  (dosya oturumu 1,62 → 1,40 MB); 64 KB'ı aşan tampon adanmış blokta durur, orada uzatma yok. Yol üstünde: çekirdek
+  kem_dizi_buyut tahsis başarısızsa `veri=0` + büyük kapasite yazıyordu (D-579'un çekirdek yarısı AÇIKTI) → heap
+  tükenince fiziksel düşük adreslere sessiz yazma; artık host ile birebir temiz panik; kapasite_ayarla başarısızlıkta
+  dokunmaz. Ayrıca Makefile kdl_runtime.d'yi DAHİL ETMİYORDU → kdl_dizi.inc/kdl_bolge.c değişince artımlı yapım
+  runtime'ı YENİDEN KURMUYORDU (kapılar bayat runtime ölçüyordu; CI temiz kurduğu için görünmez). Kapılar:
+  calistir_bm_x86_heap_uzat (deterministik, yoklama yok: 64 dizi × 1024 eleman; bump açık C 262336 / self 327952,
+  kapalı C 524672 / self 590288 → eşik 400000; + `oom` kipi temiz panik) · calistir_dizi_uzat_test (host: işaretçi
+  kararlılığı + iç içe içerik) · test_kdl_bolge T8 (41/41). Sabotajlar: S271 çekirdek uzatma kapalı → bump eşik üstü ·
+  S272 "en son tahsis" koşulu kalktı → içerik bozuk · S273 host uzatma daima 0 → işaretçi testi · S274 host koşul kalktı
+  → iç içe içerik · S275 çekirdek OOM koruması yok → #PF, panik yok. Hepsi KIRMIZI.
+  Tam takım (-j10, 156 kapı, 36 dk): tek kırmızı check_kapisi — yeni test çekirdeği tek başına --check'ten geçmez
+  (runtime sembolleri birleşik birimde); deponun x86 deseniyle "parça" muaf + birleşik birim denetimi eklendi
+  (361/383, 0 RED). S276 (test çekirdeğine tip hatası) → birleşik denetim KIRMIZI.
+  KALAN E4k: yoklama döngüsü tahsisleri (zamanlamaya bağlı, gerçek donanımda daha kötü) + çağrı sonucu/durum yazımı
+  (D-776 notu) + (a) gerçek 1/2 baytlık eleman (4×).
+- 2026-11-27 D-778: E4k (a) — GERÇEK DAR ELEMAN. Dizi<tam8/dtam8> 1, Dizi<tam16/dtam16> 2 baytlık yuva (önceden her
+  eleman 4 bayt = bayt tamponları 4×). Tasarım en dar yüzey: `_tam` erişimci imzaları DEĞİŞMEDİ (i32 taşıyıcı); host
+  kdl_dizi.inc ve çekirdek kem_heap.kem erişimcileri eleman_byte'a duyarlı (1/2 → dar yuva, diğer → 32 bit, büyüme aynı
+  genişlikle). Derleyiciler oluşturmada i8→1, i16→2 (C kdl_eleman_byte_yaz + dizi_olustur; self dizi_eleman_byte).
+  D-776'nın 4'e hizalaması böylece ters yönde, ama artık erişimciler de aynı genişlikte (taşma sınıfı kapalı kalır).
+  Runtime SIFIR-genişletir (işaret bilinmez) → derleyici okumada eleman genişliğine daraltıp ifadenin işaretine göre
+  genişletmeli. C zaten yapıyordu; self-host `dizi_al(...)` yerleşiği DARALTMIYORDU (indeksleme D-714'te onarılmıştı)
+  → işaretli tam8 -100 yerine 156; mevcut cg_dizi_dar_eleman fikstürü YAKALADI, onarıldı. Ham dizi tampon erişimi yalnız
+  kem_dizi_genis.kem'de ve eb ile adımlı; süreç ABI'si dizi iç yapısına dokunmuyor (ölçüldü). ÖLÇÜM: çekirdek dosya
+  oturumu ~0,75 MB (D-777 sonrası 1,40-1,62; zamanlama gürültüsü payıyla ~yarı). Kapılar: bm_x86_heap_uzat'a dar eleman
+  fazı (64 × 1024 Dizi<dtam8>: bump 65584 iki derleyici, eşik 150000; değerler ≥128) · dizi_uzat_test 7/7 (bayt düzeni
+  doğrudan). Sabotajlar: S277 C oluşturma 4 → C bump 262336 · S278 self oluşturma 4 → self · S279 çekirdek eb yok
+  sayılır → ikisi · S280 host eb yok sayılır → bayt düzeni testleri. Hepsi KIRMIZI. Hedefli: codegen_diff 230/230 ·
+  yapi_diff 208/208 · bolge_operand 232/232 · llvm 321/321 · snapshot 50/50 · dizi_sinir 39/39 · FIXPOINT ✓.
+  Tam takım (nice -j6, Codex seri ölçümüyle aynı anda; 155 kapı, 48 dk): iki kırmızı (bm_x86_kaynak, bm_x86_ag_pc), TEK
+  kök ÖLÇÜM ARACINDA: surec_kahin.bos_cerceve konuk belleğindeki ayırıcı bitmap'ini (Dizi<dtam8>) "her eleman 32 bitlik
+  yuvada" varsayımıyla `[::4]` okuyordu → süreç 3594 yerine "896 çerçeve" göründü. Çekirdeğe geçici yazdırmayla ELF
+  girişi DOĞRU (0x54200000) ölçüldü; host ve bare-metal probe'larında oku_le64 doğru → derleyici/çekirdek kusuru DEĞİL.
+  Okuyucu artık yuva genişliğini başlıktan (eleman_byte @16) alır; iki kapı yeşil (kaynak tam 3594 iddiasıyla).
+  ⚠ DERS: dizi yerleşimini değiştirmek konuk belleğini HAM okuyan Python kâhinlerini de etkiler; tarama `[::4]`
+  ile yapıldı, diğer eşleşme (ag_l3_kahin) yalnız hata mesajında.
+- 2026-11-27 D-779: E4k KALAN İŞ — TASARIM (belgeler/KEMGU_E4k_Uzun_Omur_Tasarimi.md, karar bekliyor). Ölçümler
+  (güncel main, C çekirdeği): BOŞTA büyüme 40 sn'de +752 B (yoklama boşta SIZDIRMAZ; zamanlama bağımlılığı yalnız G/Ç
+  beklerken) · komut sonrası yeni dizi başlıklarının REFERANSSIZ (kesin çöp) oranı cat 98/113, mkdir 381/433, yaz
+  413/459, mv 790/873 (mv baytta ≥%73; geçişsiz tarama = ALT sınır) · mv'de dizin_coz aynı dizini 181 kez ayrıştırıyor [⚠ D-781: YANLIŞ — 17]
+  (bayt_sifir 520 B LFN tamponu). ÇIKARIM: baskın kalem geçici çalışma verisi; hayatta kalan durum adlı ve küçük
+  (döngüden önce bildirilen yereller + &değişken parametreler). ⚠ ÖLÇÜLDÜ: güvenli kodda yapı alanı &T ve *T
+  tutabilir → derin kopyalayıcı yönlendirme tablosu + çalışma anı bölge üyeliği sınaması ister. Öneri: D (dizin
+  önbelleği + durum yoklaması sabit tampon; sürücü işi) hemen; A (tur sonu eşik tetikli durum taşıma, derleyici
+  üretimli tip yönlendirmeli kopyalayıcı) Mehmet kararından sonra — "GC yok" ilkesiyle ilişkisi açık soru. B
+  (sahiplikli alan yazımı) ve C (escape v3) ertelenir. En büyük risk: adresi tam64'e çeviren güvensiz kod
+  kopyalayıcıya görünmez.
+- 2026-11-27 D-780: E4k KARARLAR + A0 FİZİBİLİTE ÖLÇÜMÜ (Mehmet Opus önerilerini kabul etti; tasarım belgesi §7-§9).
+  KARARLAR: (1) A kabul — ilke dürüstçe yeniden yazılır (arka plan GC'si ve öngörülemeyen duraklama yok; ömür boyu
+  döngülerde derleyicinin seçtiği güvenli noktada tipten üretilmiş bölge tahliyesi var); koşullu: A0 ✓ + dalga 18
+  çok çekirdek kuralı (çekirdekler arası el değiştiren nesne R'de olamaz). D-756 escape v3 GERİ ALINDI. CLAUDE.md'ye
+  'henüz uygulanmadı' notuyla işlendi; README A4'te. (2) Kapsam: genel mekanizma, bayrakla, önce çekirdek, host'ta
+  ASan. (3) Codex dalga 19'a yalnız D(1) dizin önbelleği (kd_icerik_surumu ile geçersizleme; kapı dizin_coz çağrı
+  sayısı + FAT/fsck); D(2) yoklama sabit tamponu ERTELENDİ.
+  A0 (güncel main, C çekirdeği): A0-1 döngüye taşınan durumun tip kapanışı 49 tip, hiçbirinde *T/&T/işlev/görev/
+  kanal/yetki/tekkez alanı yok. A0-2 birleşik çekirdek biriminde (comb.kem + modüller) tip denetleyicisinin
+  yazdırmalı kopyasıyla 120 işaretçi-benzeri dönüşüm: 112 *T→tam64 + 8 &T→*T, doğrudan metin/Dizi/yapı→tamsayı 0.
+  ⚠ AMA 8 site tek tek okununca işaretçi yeniden yorumlama kanalı çıktı: uefi_bellek_kur_ic `(&sakla) olarak *tam64`
+  bir Dizi<CerceveAyirici> veri tampon adresini uefi_surec_ayirici küreseline gizliyor (açılışta, ana bölge; döngüde
+  yalnız okunuyor → bugün güvenli ama YAPISAL DEĞİL). Diğer 7: tamsayı→metin/Dizi (IPC, kullanıcı tamponu, UEFI
+  sayfasında elle kurulmuş ağ başlığı) ve yığındaki durum yapılarının adresi → küresel tam64 (ks_yonetim,
+  ksv_ekran_adr, ksv_baglam_adresi). → A3: &T→*U tanısı + ham işaretçi yazımında ana bölgeye yükseltme.
+  A0-3 QMP konuk belleği, kökler .data+.bss+tüm yığın, muhafazakâr geçişli işaretleme: açılış canlı dizi 208.200 B
+  (105 başlık) / ana bölge 598.312; 9 dosya komutu sonrası canlı 163.536 B (145) / ana bölge 1.328.960, dizi
+  baytlarının %83'ü çöp. metin ve dizi dışı yapıların canlı baytı ÖLÇÜLMEDİ (117 bölge içi dizi-dışı işaretçi).
+  A0-4 metin runtime'ı %rho'yu yok sayıyor: çekirdekte 4 işlev (kdl_metin_birlestir/_kes, kdl_kod_metin,
+  kdl_tam_metin), host'ta kdl_sizan_al üzerinden 14 işlev doğrudan ana bölgeye → A2 ön koşulu (%rho parametresi).
+  İKİNCİ KOŞUM (a0_buyume.py): açılıştaki 1712 dizi başlığının HİÇBİRİNİN tamponu 9 komutta yeniden tahsis
+  edilmedi (döngü öncesi dizinin büyüme artığı bugün sınıf değil); komut sonrası canlı 147 başlık / 163.584 B'ın
+  56'sı (131.520 B) açılıştan (A taşımaz), döngüde oluşan canlı yalnız 91 başlık / 32.064 B → tahliye başına
+  kopyalanacak dizi verisi onlarca KB.
+  ⚠ ÖLÇÜM DERSİ: ilk tarama yalnız doğrudan dönüşümü saydı ve 'gizli adres riski yapısal olarak yok' sonucunu
+  verdi; siteleri okumak düzeltti (D-500). Kod değişikliği YOK; ölçüm araçları scratchpad'de kaldı.
+- 2026-11-27 D-781: E4k A1 ÖNCESİ ÖLÇÜMLER + D-779 SAYI DÜZELTMESİ (tasarım belgesi §10; kod değişikliği YOK).
+  DÜZELTME: D-779'daki 'mv başına 181 dizin_coz' YANLIŞTI — 181 bayt_sifir çağrısının TOPLAMIYDI. Atıf yamalı çekirdekte
+  boyuta göre ayrılınca mv: 520 B LFN tamponu (=dizin_coz) 17 · 16 B xHCI TRB 100 · 512 B sektör 24 · 31 B USB CBW 19 ·
+  10 B SCSI CDB 19 · 64 B 2. Diğer: cp 10, yaz 7, mkdir 3 ayrıştırma. Host ölçümü (fat32_sektor_yaz_test öykünmesi,
+  sayaçlı; 70000 ve 131072 sektörlük taze imaj): tek yazma planı 6-7 koşu, koşu başına 1 dizin_coz; mv = oku + Yaz +
+  DosyaSil → 17 ile tutarlı. SONUÇ: D(1) (FatSektor ömürlü ayrıştırma önbelleği) mv'de 17 → ~3, kazanç D-779'un ima
+  ettiğinden ~6 kat küçük; asıl çarpan her işlemin TAZE FatSektor ile aynı sektörleri diskten yeniden okuması (mv'de ~19
+  sektör G/Ç'si). Dalga 19 kapsamı yeniden değerlendirilecek (Mehmet).
+  ⚠ ÖLÇÜM DERSİ: oluşturucu atfı ÇAĞRILANI (bayt_sifir) gösterir, ÇAĞIRANI değil; bir sayıyı tek bir çağırana yormadan
+  önce boyut/örnek dağılımına bak (tek 'örnek' satırı dağılım değildir).
+  A1 OLGULARI (hepsi ölçüldü): (1) bölgedeki her metin ayrı bir tahsisin başı; metin tipli opak tutamaklar (bellek_al,
+  dosya_oku → malloc; dosya_ac FILE*; kilit/semafor/bariyer) bölge DIŞINDA. (2) `(&x) olarak *U` güvenli kodda E002;
+  güvensiz'de okuma/yazma yeniden yorumlaması kabul → gizli kanalların HEPSİ güvensiz ister, güvenli alt küme
+  kendiliğinden sağlam. (3) Referanslar asla bölge belleğini göstermez: `&değişken xs[0]` T022, `&xs[0]` iki derleyicide
+  yığın kopyası → `&T → *T` dönüşümleri daima yığın adresi. (4) C'de yığın dizisi yalnız açıklamasız literal yerelde.
+  (5) §9.4-2 İNCELTİLDİ: ham işaretçi yazımında yükseltme yalnız hedef yığın DIŞINDAYSA (sistem çağrısı işleyicileri
+  yığındaki durum yapılarına yazar; her yazımı yükseltmek sızıntıyı geri getirirdi). (6) Dalga 18 bölüm 16 (birleşmeden,
+  salt okuma): çekirdekler arası süreç kaydı HAM bellek (kxm_o64/kxm_y64 ofsetleri) → bölge nesnesi el değiştirmiyor;
+  kalan soru: AP işleyicileri ks_yonetim/ksv_* üzerinden BSP durumuna erişiyor mu.
+- 2026-11-27 D-782: E4q — SELF-HOST SÖZCÜK ÇÖZÜMLEME O(n²) İDİ; KAYNAK PARÇALARA BÖLÜNDÜ (97,5 → 7,6 sn, IR BİREBİR).
+  ÖLÇÜM (LOOP E4q'nun istediği gibi kök tahmin edilmedi): 11.421 satırlık çekirdek birimi (modüllerle) self-host --llvm
+  97,5 sn, C 0,76 sn (~128×). Derleyici ikilisi -O0 bağlanıyor (Makefile: `clang -x ir build/codegen.ll`); -O2 yalnız %19
+  (79,1 sn, IR aynı) → kök algoritmik. perf YETKİSİZ (perf_event_paranoid=4; sistem ayarına dokunulmadı); IR PGO
+  sayaçları (-fprofile-generate) ad aramalarını gösterdi (ad_tanimli_mi 43,9 M, fn_ptip_bul 34,7 M yineleme) ama ZAMAN
+  vermez → gdb ile alt-süreç örnekleyicisi (SIGINT + bt; `startup-with-shell off` ŞART: runtime argv'yi
+  /proc/self/cmdline'dan okuyor, kabukla başlatınca kullanım iletisi basıyordu): 56 örneğin 46'sı (%82) __strlen_asimd,
+  çağıran kdl_metin_bayt ← bayt ← lex_et/kimlik_*/ikinci_bayt. KÖK: runtime `metin_bayt(s,i)` ve `metin_kes(s,..)` her
+  çağrıda strlen(s) hesaplar (metin uzunluk taşımaz) → kaynağı bayt bayt okuyan sözcük çözümleyici O(n²). Runtime'da
+  (işaretçi, uzunluk) önbelleği REDDEDİLDİ: bölge serbest kalınca aynı adreste başka metin olabilir → eski uzunluk YANLIŞ
+  CEVAP. ONARIM (yalnız selfhost/codegen.kem): kaynak bir kez KP_BOY=512 baytlık parçalara bölünür (iki düzeyli: 64 KB
+  blok → 512 B parça), `kb` = `bayt`, `kk` = `metin_kes` ile BİREBİR anlam (aralık dışı 0; aynı kırpma kuralları);
+  lex_et + 9 yardımcı (59 erişim), lex_i ve METIN/KARAKTER literal çözümü parça üstünden. SONUÇ: çekirdek birimi 7,6 sn
+  (12,9×), üretilen IR birebir AYNI (cmp).
+  KAPILAR (nice, Codex'le eşzamanlı): self_driver TÜM MODLAR + FIXPOINT ✓ · codegen_diff 231/231 · checker_diff 321/321
+  (0 muaf) · yapi_diff · bolge_operand · surucu_diff 17/17 · check_genis 159/159 · modul_codegen · baremetal_diff ·
+  ct_bariyer 16/16 · parser_diff 15/15 · lexer_diff 22/22 (son ikisi yalnız C kâhinini okur; self lexer'ı self_driver
+  --token ölçer). Tam takım YEREL KOŞULMADI (Codex dalga 18'in son tam takımlarıyla yarışmasın) → CI + dalga 18
+  birleştirmesinin tam takımı. FİKSTÜR cg_uzun_metin_parca.kem: 1200 B (≥3 parça) + 600 B (2 parça) literal, parça
+  sınırına düşen tanımlayıcılar. SABOTAJ: S281 (kk döngüsü `k <= son`) → codegen_diff çok sayıda dosyada kırmızı (iki
+  parçalı yol korpusta zaten sık) · S282 (`k < son - 1`, yalnız ≥3 parça yolu) → YALNIZ yeni fikstür kırmızı (230/231)
+  → fikstür olmadan bu yol hiçbir kapıda ölçülmüyordu (D-356 sınıfı).
+  ⚠ YOL ÜSTÜ: toplu değiştirme `bayt(kaynak, ` desenini `ikinci_bayt(kaynak, ` içinde de yakaladı (9 site `ikinci_kb`
+  oldu) → C derleyicisi T002 ile yakaladı, düzeltildi.
+  KALAN (ölçüldü, ayrı adım): yeni profilde zamanın ~%70'i bellek ayırıcısında (__brk/sbrk 12/26 örnek + malloc iç).
+  glibc yığın kırpması kapatılınca (MALLOC_TRIM_THRESHOLD_/MALLOC_TOP_PAD_ ortam değişkeni, kod değişikliği YOK)
+  7,7 → 4,1 sn, çıktı aynı → bölge blokları (64 KB) her free'de işletim sistemine iade edilip yeniden isteniyor
+  (brk ping-pong). Aday onarım: runtime'da mallopt (yalnız __GLIBC__) ya da bölge bloğu havuzu (ASan zehirlemesiyle).
+- 2026-11-27 D-783: E4q KÖK 2 — BÖLGE KAPANIŞINDA glibc YIĞIN KIRPMASI (brk gidiş-gelişi). D-782 sonrası profil: zamanın
+  ~%70'i bellek ayırıcısında; gdb zincirleri 12 __brk örneğinin 11'ini `free → systrim → sbrk` yolunda gösterdi (biri
+  kdl_bolge_olustur → blok_olustur → malloc → sysmalloc). glibc varsayılanı tepedeki 128 KB'ı aşan boş alanı her free'de
+  çekirdeğe iade eder; bölge blokları 64 KB ve bölgeler sık açılıp kapanır → her kapanış iade, her açılış yeniden ister.
+  Ölçüm (yalnız ortam değişkeni, kod değişikliği yok): TRIM_THRESHOLD=64 MB → 9,05 → 4,03 sn, zirve RSS AYNI (167 MB);
+  TOP_PAD tek başına 4,57 sn (gereksiz). ONARIM: runtime/kdl_bolge.c kdl_bolge_olustur ilk çağrıda
+  mallopt(M_TRIM_THRESHOLD, 64 MB) — yalnız __GLIBC__ (bare-metal/Windows'ta blok yok); iş parçacığı başına bayrak
+  (mallopt idempotent, paylaşılan bayrak veri yarışı olurdu); ASan kendi ayırıcısını kullandığı için UAF tespiti
+  etkilenmez. SONUÇ: çekirdek birimi self-host 7,6 → 4,2 sn (E4q toplamı 97,5 → 4,2 sn, ~23×), IR birebir aynı.
+  KAPI: test/test_bolge_kirpma.c (calistir_bolge_kirpma_test, test_tumu'da; ASan'sız, glibc dışında bildirerek atlar):
+  2000 tur × 4 blok; kesme noktası bloklar ayrıldıktan sonra ve bölge kapandıktan sonra okunur, bir kez geri çekilirse
+  kırmızı. ⚠ İLK SÜRÜM YANLIŞ ÖLÇÜYORDU: yalnız tur sonlarını karşılaştırıyordu; glibc aynı turda büyütüp kırptığı için
+  iki durumda da değerler eşitti ve sabotaj S283 (mallopt kaldır) SESSİZ kaldı. Sessizlik testi şüpheli kıldı (D-402);
+  ölçüm tur içine alınınca S283 → kırmızı (rc=2).
+  KAPILAR: kdl_bolge (ASan) · bolge_kirpma · dizi_uzat · runtime_link · gorev_rt 16/16 · bolge_sayac_yarisi (TSan) ·
+  perf_bellek 4 ölçüm eşik altında (zirve RSS değişmedi) · dizi_perf 6/6 · kanal_omru 10/10 · asan_matris 12/12 · llvm_test
+  321/321 · sıfır uyarı 38/0 · self_driver FIXPOINT ✓ (69 sn; D-778 ölçümlü koşuda 193 sn) · codegen_diff 231/231.

@@ -1,0 +1,21 @@
+// [D-775] E4k-C: döngü doğrudan uzun ömürlü işlevde (main). Gövdede bildirilmiş hapsedilmiş
+// dizi ve dönüş-saf çağrının sonucu TUR bölgesine gider ve her turda serbest kalır. Önceden
+// main'in ρ_yerel'inde (C) birikiyordu: 20K turda ~40 MB. Kapı zirve belleği ölçer (<8 MB).
+işlev yap(n: tam32) -> Dizi<tam32> {
+    değişken d: Dizi<tam32> = [];
+    değişken j: tam32 = 0;
+    iken j < 256 { dizi_ekle(d, n + j); j = j + 1; }
+    ver d;
+}
+işlev main() -> tam32 {
+    değişken t: tam64 = 0;
+    değişken i: tam32 = 0;
+    iken i < 20000 {
+        değişken r: Dizi<tam32> = yap(i);
+        değişken yerel: Dizi<tam32> = [i, i + 1, i + 2];
+        t = t + (dizi_al(r, 255) olarak tam64) + (dizi_al(yerel, 2) olarak tam64);
+        i = i + 1;
+    }
+    eğer t < 0 { ver 1; }
+    ver 0;
+}

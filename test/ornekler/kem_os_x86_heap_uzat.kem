@@ -1,0 +1,94 @@
+// [D-777] Çekirdek dizi büyütmesinde YERİNDE UZATMA kâhini (deterministik, yoklama yok).
+// Malloc bump işaretçisinin ilerlemesi seri porta yazılır. Yerinde uzatma yoksa her ikiye katlama eski tamponu bölgede bırakır ve
+// bölge yeni 64 KB bloklar ister. İç içe büyüyen iki dizi (biri bloğun ucunda DEĞİL)
+// içerik doğruluğunu ölçer: yerinde uzatma yalnız EN SON tahsiste olmalı.
+çıplak işlev uzat_bump() -> tam64 { ver kem_bump; }
+çıplak işlev uzat_sayi(x: tam64) {
+    eğer x >= 10 { uzat_sayi(x / 10); }
+    kem_uart_bayt(((x % 10) + 48) olarak tam32);
+}
+// [D-777] `oom` kipi: dizi bellek bitene kadar büyütülür. Büyütme tahsisi başarısız
+// olunca TEMİZ PANİK beklenir ("PANIK: dizi buyutulemedi"). Koruma yokken tampon
+// NULL'a kurulup fiziksel 0 adresinin üstüne yazılıyordu (sessiz bozulma).
+işlev oom_dene() {
+    değişken d: Dizi<tam64> = [];
+    değişken i: tam64 = 0;
+    iken doğru { dizi_ekle(d, i); i = i + 1; }
+}
+işlev main() -> tam32 {
+    eğer kem_pvh_cmdline_esit("oom") == 1 { oom_dene(); güvensiz { bm_yaz_ham("HEAP_UZAT oom PANIKSIZ"); kem_uart_bayt(10); } kem_qemu_cik(1); }
+    // 64 dizi SIRAYLA 1024 elemana büyütülür ve canlı tutulur (her biri büyürken
+    // bloğun en son tahsisidir). Yerinde uzatma yoksa her dizi ~4 KB eski tampon
+    // bırakır (64 x ~4 KB); varsa bırakmaz. Tamponlar blok boyunun (64 KB) altında
+    // kalmalı: daha büyüğü adanmış blokta durur ve uzatılacak yer yoktur.
+    değişken tum: Dizi<Dizi<tam32>> = [];
+    dizi_kapasite_ayarla(tum, 64);
+    değişken b0: tam64 = uzat_bump();
+    değişken k: tam32 = 0;
+    iken k < 64 {
+        değişken d: Dizi<tam32> = [];
+        değişken i: tam32 = 0;
+        iken i < 1024 { dizi_ekle(d, k * 10000 + i); i = i + 1; }
+        dizi_ekle(tum, d);
+        k = k + 1;
+    }
+    değişken b1: tam64 = uzat_bump();
+    // İç içe büyüyen iki dizi: biri bloğun ucunda DEĞİL → yerinde uzatma yalnız EN SON
+    // tahsiste olmalı; içerik bozulursa yanlis_kod != 0.
+    değişken a: Dizi<tam32> = [];
+    değişken c: Dizi<tam64> = [];
+    değişken i: tam32 = 0;
+    iken i < 3000 { dizi_ekle(a, i * 3); dizi_ekle(c, (i olarak tam64) * 8589934592); i = i + 1; }
+    değişken yanlis_kod: tam32 = 0;
+    k = 0;
+    iken k < 64 {
+        değişken d: Dizi<tam32> = dizi_al(tum, k);
+        i = 0;
+        iken i < 1024 { eğer dizi_al(d, i) != k * 10000 + i { yanlis_kod = 1; } i = i + 1; }
+        k = k + 1;
+    }
+    i = 0;
+    iken i < 3000 {
+        eğer dizi_al(a, i) != i * 3 { yanlis_kod = 2; }
+        eğer dizi_al(c, i) != (i olarak tam64) * 8589934592 { yanlis_kod = 3; }
+        i = i + 1;
+    }
+    // [D-778] DAR ELEMAN: 64 Dizi<dtam8> x 1024 eleman. Yuva 1 baytsa ~64 KB, eski
+    // 4 baytlık yuvayla ~256 KB. Değerler ≥128 (işaretsiz genişletme de ölçülür).
+    değişken tb: Dizi<Dizi<dtam8>> = [];
+    dizi_kapasite_ayarla(tb, 64);
+    değişken b2: tam64 = uzat_bump();
+    k = 0;
+    iken k < 64 {
+        değişken e: Dizi<dtam8> = [];
+        i = 0;
+        iken i < 1024 { dizi_ekle(e, ((128 + (i + k) % 128) olarak tam32) olarak dtam8); i = i + 1; }
+        dizi_ekle(tb, e);
+        k = k + 1;
+    }
+    değişken b3: tam64 = uzat_bump();
+    k = 0;
+    iken k < 64 {
+        değişken e: Dizi<dtam8> = dizi_al(tb, k);
+        i = 0;
+        iken i < 1024 { eğer (dizi_al(e, i) olarak tam32) != 128 + (i + k) % 128 { yanlis_kod = 4; } i = i + 1; }
+        k = k + 1;
+    }
+    güvensiz {
+        bm_yaz_ham("HEAP_UZAT bayt ");
+        uzat_sayi(b3 - b2);
+        kem_uart_bayt(10);
+        bm_yaz_ham("HEAP_UZAT bump ");
+        uzat_sayi(b1 - b0);
+        bm_yaz_ham(" hata ");
+        uzat_sayi(yanlis_kod olarak tam64);
+        kem_uart_bayt(10);
+    }
+    kem_qemu_cik(0);
+    ver 0;
+}
+çıplak işlev bm_yaz_ham(m: metin) {
+    değişken n: tam32 = metin_uzunluk(m);
+    değişken k: tam32 = 0;
+    iken k < n { kem_uart_bayt(metin_bayt(m, k) olarak tam32); k = k + 1; }
+}
