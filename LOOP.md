@@ -3500,3 +3500,13 @@
   İKİNCİ TAM TAKIM (düzeltmeden sonra): 190/190 kapı geçti, duvar 19:56, yeni geçici dizin 0. Sarmal rc=2'yi YALNIZ
   disk denetimi verdi: bu çalışma ağacının build/'inde aylardır biriken 934 ESKİ geçici dizin ("önceden vardı") —
   kod değil ortam; build/eski_gecici_arsiv/ altına taşındı (silinmedi), denetim 0 görüyor. CI temiz checkout'ta etkilenmez.
+- 2026-11-27 D-785: CODEX DALGA 19 PROMPTU (otomasyon/chatgpt/CODEX_GOREV_19.md) — ARM: GICv3 + KVM + ARM SMP (Bölüm 1-16),
+  FAT32 dizin ayrıştırma önbelleği D(1) (17), süreç fd yalıtımı H9j/E3f (18), regresyon + belgeler (19-20). Dayanak
+  ölçümler (Claude): /dev/kvm ACL ile erişilebilir; Spark KVM GICv2 öykünmesini DESTEKLEMİYOR; KEMGU-OS ARM KVM+GICv3'te
+  ve TCG+gic-version=3'te aynı zamanlayıcı fazında takılıyor (sürücü yalnız GICv2: kem_zaman_hw.kem); duman çekirdeği ve
+  smp_queue_arm KVM'de gerçek çekirdeklerde koşuyor; QEMU virt DTB'si dumpdtb ile döküldü (GICv3 GICD 0x08000000, GICR
+  0x080A0000+0xF60000, PSCI hvc 0xC4000003, CNTV INTID 27). D-490 sabotajı KVM'de yeşil (S2FWB olasılığı) → KVM fiziksel
+  doğrulamanın yerini tutmaz; prompt bunu açıkça yazdırıyor. smp_queue_arm 'KISMI' (bir çekirdek tüm işi alıyor) TCG 1/20,
+  KVM 6/20 → Bölüm 5'te hazır bayrağı beklemesi. ARM QEMU: 76 `timeout N` çağrısı, çoğu sabit süre bekliyor → Bölüm 3
+  yürütücüsü (KVM/TCG seçimi + son satırda çıkış). Kapsam sınırı: ARM kapılarının çoğu test_tumu'da değil, takım süresini
+  x86 TCG kapıları belirliyor — ARM temasının asıl değeri GICv3 (modern ARM donanımı + KVM) ve ARM SMP.
