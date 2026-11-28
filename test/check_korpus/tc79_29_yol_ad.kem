@@ -1,0 +1,3 @@
+// [D-802] P124 — nitelikli tip yolunda `::` sonrası ad yerine sayı (C ifade.c:910).
+işlev f(x: a::5) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

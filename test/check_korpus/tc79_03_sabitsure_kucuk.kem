@@ -1,0 +1,3 @@
+// [D-802] P340 — `sabitsüre` sonrası `<` eksik (C ifade.c:732).
+işlev f(x: sabitsüre tam32>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

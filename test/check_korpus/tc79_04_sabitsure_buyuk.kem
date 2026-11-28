@@ -1,0 +1,3 @@
+// [D-802] P341 — `sabitsüre<..>` kapanış `>` eksik (C ifade.c:735).
+işlev f(x: sabitsüre<tam32) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

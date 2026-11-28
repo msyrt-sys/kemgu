@@ -1,0 +1,3 @@
+// [D-802] P353 — `vektör<T N>` virgül eksik (C ifade.c:786).
+işlev f(x: vektör<tam32 4>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

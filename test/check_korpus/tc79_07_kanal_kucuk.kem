@@ -1,0 +1,3 @@
+// [D-802] P362 — `kanal` sonrası `<` eksik (C ifade.c:758).
+işlev f(x: kanal tam32>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

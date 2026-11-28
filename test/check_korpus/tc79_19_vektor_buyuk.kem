@@ -1,0 +1,3 @@
+// [D-802] P355 — `vektör<..>` kapanış `>` eksik (C ifade.c:805).
+işlev f(x: vektör<tam32, 4) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

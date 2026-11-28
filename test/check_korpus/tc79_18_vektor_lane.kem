@@ -1,0 +1,3 @@
+// [D-802] P354 — `vektör` kanal sayısı tamsayı literali değil (C ifade.c:800, ilerlemez); ardından P355 aynı konumda.
+işlev f(x: vektör<tam32, N>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

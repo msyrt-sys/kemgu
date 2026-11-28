@@ -1,0 +1,3 @@
+// [D-802] P024 — tip parametresi adı yerine sayı (C parser.c:431); P025 aynı konumda.
+yapı K<5> { x: tam32; }
+işlev main() -> tam32 { ver 0; }

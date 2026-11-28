@@ -1,0 +1,3 @@
+// [D-802] POZİTİF — tip parametre listesinde sondaki virgül GEÇERLİ (C parser.c:430). Öncesinde self bunu reddediyordu.
+yapı K<T,> { x: T; }
+işlev main() -> tam32 { ver 0; }

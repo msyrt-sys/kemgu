@@ -1,0 +1,3 @@
+// [D-802] P350 — `yetki` sonrası `<` eksik (C ifade.c:771).
+işlev f(x: yetki MMIO>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

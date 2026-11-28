@@ -1,0 +1,3 @@
+// [D-802] P310 — `seçimlik` sonrası `<` eksik (C ifade.c:818).
+işlev f(x: seçimlik tam32>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

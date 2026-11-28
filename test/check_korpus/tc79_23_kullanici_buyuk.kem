@@ -1,0 +1,4 @@
+// [D-802] P319 — kullanıcı generic tipinde kapanış `>` eksik (C ifade.c:680).
+yapı Kutu<T> { x: T; }
+işlev f(x: Kutu<tam32) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

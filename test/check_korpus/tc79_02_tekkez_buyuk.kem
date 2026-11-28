@@ -1,0 +1,3 @@
+// [D-802] P331 — `tekkez<..>` kapanış `>` eksik (C ifade.c:722). Öncesinde self `>` yolunda tanı kaydetmiyordu; tek hata buysa çıktı konumsuz `P000 0 0` idi.
+işlev f(x: tekkez<tam32) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,3 @@
+// [D-802] P025 — tip parametre listesinde kapanış `>` eksik (C parser.c:462).
+yapı K<T { x: T; }
+işlev main() -> tam32 { ver 0; }

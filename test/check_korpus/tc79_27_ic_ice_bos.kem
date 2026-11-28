@@ -1,0 +1,4 @@
+// [D-802] P318 — `Dizi<Kutu<>>`: C `>>`yi önce böler, boş listeyi ilk `>`de raporlar. Öncesinde self P011 basıyordu.
+yapı Kutu<T> { x: T; }
+işlev f(x: Dizi<Kutu<>>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

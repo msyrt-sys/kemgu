@@ -1,0 +1,3 @@
+// [D-802] P351 — `yetki<..>` kapanış `>` eksik (C ifade.c:774).
+işlev f(x: yetki<MMIO) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }
