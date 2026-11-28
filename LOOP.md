@@ -41,7 +41,9 @@
       dosyaları (ham.ll · k.ll · k.o · k.elf) D-791 ve D-792 koşuları arasında BAYT BAYT AYNIYDI; tek başına 423,5 /
       516,1 ms. Tırmanışın kaynağı makinedeki dış iş yüküydü (11 saattir koşan `bindcraft.py`, başka bir Claude
       oturumunun paralel indirmesi + MQTT, GNOME `tracker-miner-f`). Yani kapı derleyici dışı yükü ölçüyor.
-- [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
+- [x] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27) — D-795'te KAYIT KAPATILDI: planlanan iki adimin
+      ikisi de bitmis (D-623 kanal, D-624 gorev); tarif edilen bosluk (ilkeller cekirdekte calismiyordu) kapali; SMP
+      devami ayri kalemlerde (E2a-E2e). OLCUM: gorev/kanal
       HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
       cekirdekte HIC CALISMIYORDU (D-527 ABI'yi yalniz DERLIYORDU).
@@ -55,7 +57,12 @@
 - [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
-      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79. ESLENEN: 28 kod.
+      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76. ESLENEN: 29 kod
+      (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24).
+      ⚠ D-795 YOL USTU (davranis farki, mekanik DEGIL — ayri dilim): `özellik` ve `uygula` govde donguleri. C islev-disi
+      bir token gorunce P202 (`ozellik govdesinde 'islev' bekleniyor`, parser.c:741) / P211 (parser.c:817) basar, panik
+      senkronu yapar ve donguden CIKAR; self P000 + art arda P001 basiyor (olculdu: `özellik Oz { işlev hata() .. }` ve
+      `uygula K { işlev değer(kendin) .. }` — P014 artik iki tarafta ayni, ayrisma bunun ARDINDAN).
       ⚠ D-787 yol üstü: anahtar kelime adlı işlev tanımı (`işlev değer(..)`, `hata`, `tamam`, `kendin`, `delege`,
       `geri_al`) → C P014, self P000 (eşlenmemiş bir site daha; fikstür yok).
       YONTEM (D-647'de kuruldu, her turda ise yariyor): hata SEKLINI yaz, C'ye
@@ -3831,3 +3838,18 @@
   464 sn sessizlik beklendi → çekişme 0 ile 509,8 ms → geçti. D-794 olmasa bu koşum kalemin tarif ettiği sahte
   kırmızıyı verirdi. Bedel: kapı 9:49 sürdü (bütçe uyarısı 588,8 > 77 sn — bekleme yolunun işareti, log'da
   ACILIS_KARAR satırları), takım duvarı yalnız ~41 sn uzadı (24:37 → 25:18; kapı beklerken tek iş yuvası tuttu).
+- 2026-11-28 D-795: C0a — P014 (işlev adı) eşlendi + eşzamanlılık kalemi kaydı kapatıldı.
+  Kuyruğun başındaki `[~] KEMGU-OS ESZAMANLILIK` kalemi ÖLÇÜLDÜ: planlanan iki adımın ikisi de bitmiş (D-623/D-624),
+  "adım 3" hiçbir yerde planlanmamış, SMP devamı E2a-E2e'de → kayıt kapatıldı (iş yapılmadı). Sıradaki C0a: D-787'nin
+  yol üstünde not ettiği site. Ölçüldü (12 şekil): anahtar kelime adlı işlev (`değer` `hata` `tamam` `kendin` `delege`
+  `geri_al`), sayı adı, `çıplak`/`gerçekzamanlı` değiştiricili biçim ve dosya sonu → C P014, self P000, KONUM AYNI,
+  ardından gelen basamaklanma birebir → (a) sınıfı mekanik eşleme: `parse_islev_genel`deki `bekle` → `bekle_k(..,
+  "P014")` (C parser.c:333). Sonuç 12 şeklin 10'u AYNI. Kalan 2 (`özellik` / `uygula` içinde) AYRI site: C gövde
+  döngüsünde işlev-dışı token → P202/P211 + panik + çık; self P000 + art arda P001 → davranış farkı, C0a'ya not edildi.
+  `selfhost/checker.kem` DONDURULMUŞ olduğu için (D-734) yalnız `codegen.kem` değişti; referans `parser.kem` kod
+  üretmiyor. Fikstür tc48_24 (tek hata şekli). Eşlenmemiş `bekle(p, "` 77 → 76. SABOTAJ S347 (eşlemeyi geri al) →
+  checker_diff 328/329, fark `P014 4 8` / `P000 4 8`; sabotaj betiği tanı dizinini temizledi (D-794 süreç düzeltmesi
+  işe yaradı: kalıntı 0).
+  TAM TAKIM (-j10 ölçümlü, 26:40): 191 kapının 191'i geçti, rc=0, disk denetimi temiz, checker_diff 329/329,
+  FIXPOINT ✓. D-794'ün bekleme yolu İKİNCİ kez gerçek koşulda ateşlendi: self 16 yabancı QEMU altında 659,2 ms →
+  468 sn beklendi → 513,8 ms ile geçti (yeniden ölçümde çekişme 1: sessizlik sağlandıktan sonra bir QEMU başladı).
