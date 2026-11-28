@@ -1,0 +1,3 @@
+// [D-804] T001 — `dosya_dizin_listele` `metin` döner ('/' ayraçlı liste), mantıksal değil.
+işlev f() -> tam32 { değişken b: mantıksal = dosya_dizin_listele("d"); ver 0; }
+işlev main() -> tam32 { ver 0; }

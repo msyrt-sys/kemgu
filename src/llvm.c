@@ -1936,7 +1936,8 @@ static int builtin_metin_donus_mu(const char *ad, int uz) {
         "dosya_oku", "dosya_gecersiz", "arg_al", "ondalik_bicimle",
         "kesirli_metin",   /* D-457 */
         "kod_metin",       /* D-458 */
-        "tam_metin"        /* D-459 */
+        "tam_metin",       /* D-459 */
+        "dosya_dizin_listele"   /* D-804: gercek dizgi (ya da NULL) */
     };
     size_t i;
     if (!ad || uz <= 0) return 0;
@@ -6315,6 +6316,13 @@ static IfadeSonuc ifade_uret(LlvmGen *g, const Dugum *d,
                     kdl_donus = "ptr";  /* [D-449] NULL sentinel */
                 } else if (n == 11 && memcmp(kdl_dosya_buf + 4, "dosya_boyut", 11) == 0) {
                     kdl_donus = "i64";
+                } else if ((n == 14 && memcmp(kdl_dosya_buf + 4, "dosya_bayt_oku", 14) == 0) ||
+                           (n == 14 && memcmp(kdl_dosya_buf + 4, "dosya_bayt_yaz", 14) == 0) ||
+                           (n == 19 && memcmp(kdl_dosya_buf + 4, "dosya_dizin_olustur", 19) == 0) ||
+                           (n == 15 && memcmp(kdl_dosya_buf + 4, "dosya_dizin_sil", 15) == 0)) {
+                    kdl_donus = "i32";   /* [D-804] */
+                } else if (n == 18 && memcmp(kdl_dosya_buf + 4, "dosya_dizin_var_mi", 18) == 0) {
+                    kdl_donus = "i1";    /* [D-804] */
                 } else {
                     kdl_donus = "ptr";
                 }
@@ -9159,6 +9167,13 @@ int llvm_ir_uret(const Dugum *program, FILE *out) {
     fputs("declare i32 @kdl_dosya_sil(ptr)\n", out);
     fputs("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)\n", out);
     fputs("declare i64 @kdl_dosya_boyut(ptr)\n", out);
+    /* [D-804] D5g: bayt G/C + dizin. */
+    fputs("declare i32 @kdl_dosya_bayt_oku(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_bayt_yaz(ptr, i32)\n", out);
+    fputs("declare i32 @kdl_dosya_dizin_olustur(ptr)\n", out);
+    fputs("declare i32 @kdl_dosya_dizin_sil(ptr)\n", out);
+    fputs("declare i1 @kdl_dosya_dizin_var_mi(ptr)\n", out);
+    fputs("declare ptr @kdl_dosya_dizin_listele(ptr)\n", out);
 
     /* V2-F4.2a: region-passing — main/lambda ρ-seed bu global bölgeyi kullanır. */
     fputs("declare ptr @kdl_global_bolge_al()\n", out);

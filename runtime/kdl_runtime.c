@@ -1940,6 +1940,173 @@ int64_t kdl_dosya_boyut(const char *yol) {
     return n < 0 ? -1 : (int64_t)n;
 }
 
+/* === [D-804] D5g: ikili (bayt) G/C + dizin yerlesikleri ===
+ * KARAR (2026-11-06, LOOP D5g): yetki<Dosya> YOK, mevcut `yapı tekkez Dosya`
+ * modeli; ikili okuma stdlib'de `Dizi<dtam8>` doner (metin NUL'da KIRPAR —
+ * olculdu: `kopyala` 5 baytlik `ab\0cd`yi 2 bayta indirip `tamam(2)` diyordu).
+ * Yerlesikler bilerek Dizi ALMAZ/DONDURMEZ: bayt duzeyinde, MEVCUT handle
+ * uzerinde calisirlar ve diziyi stdlib KEMGU'da kurar. Dizi parametreli bir
+ * yerlesik C'de dogrudan `[..]` literalini YIGIN dizisi olarak gecirirdi
+ * (F-dizi-arg yalniz `dizi_*` yerlesiklerinde heap'e zorlar) ve calisma
+ * zamani onu KdlDizi basligi sanardi (D-572 sinifi). */
+#ifndef _WIN32
+#include <sys/stat.h>   /* mkdir, stat, S_ISDIR */
+#include <dirent.h>     /* opendir, readdir, closedir */
+#include <unistd.h>     /* rmdir */
+#endif
+
+/* dosya_bayt_oku: handle'dan BIR bayt. 0..255; dosya sonu -1; okuma hatasi
+ * ya da NULL handle -2. EOF ile hata AYRI: Linux'ta bir DIZIN `rb` ile
+ * acilabilir ve fgetc hemen EOF doner (EISDIR) — ayrim olmasa bos dosya
+ * gibi SESSIZCE `tamam([])` donerdi. */
+int32_t kdl_dosya_bayt_oku(void *f) {
+    if (!f) return -2;
+    int c = fgetc((FILE *)f);
+    if (c == EOF) return ferror((FILE *)f) ? -2 : -1;
+    return (int32_t)(unsigned char)c;
+}
+
+/* dosya_bayt_yaz: handle'a BIR bayt. Yazildiysa 1; NULL handle, 0..255 DISI
+ * deger ya da yazma hatasi 0. Aralik disi deger KIRPILMAZ (sessiz yanlis
+ * bayt yerine acik basarisizlik). */
+int32_t kdl_dosya_bayt_yaz(void *f, int32_t b) {
+    if (!f || b < 0 || b > 255) return 0;
+    return fputc(b, (FILE *)f) == EOF ? 0 : 1;
+}
+
+#ifdef _WIN32
+/* UTF-8 yol -> UTF-16 (kdl_fopen_utf8 ile ayni gerekce, D-362). */
+static int kdl_yol_genis(const char *yol, wchar_t *w, int n) {
+    return MultiByteToWideChar(CP_UTF8, 0, yol, -1, w, n) > 0;
+}
+#endif
+
+/* dosya_dizin_olustur: 0 basari, -1 hata (zaten varsa da -1). */
+int32_t kdl_dosya_dizin_olustur(const char *yol) {
+    if (!yol || !*yol) return -1;
+#ifdef _WIN32
+    wchar_t w[1024];
+    if (!kdl_yol_genis(yol, w, 1024)) return -1;
+    return CreateDirectoryW(w, NULL) ? 0 : -1;
+#else
+    return mkdir(yol, 0777) == 0 ? 0 : -1;
+#endif
+}
+
+/* dosya_dizin_sil: YALNIZ bos dizin. 0 basari, -1 hata. */
+int32_t kdl_dosya_dizin_sil(const char *yol) {
+    if (!yol || !*yol) return -1;
+#ifdef _WIN32
+    wchar_t w[1024];
+    if (!kdl_yol_genis(yol, w, 1024)) return -1;
+    return RemoveDirectoryW(w) ? 0 : -1;
+#else
+    return rmdir(yol) == 0 ? 0 : -1;
+#endif
+}
+
+/* dosya_dizin_var_mi: yol VAR ve DIZIN mi (dosya_var_mi'nin aksine duz dosya
+ * icin yanlis). */
+int kdl_dosya_dizin_var_mi(const char *yol) {
+    if (!yol || !*yol) return 0;
+#ifdef _WIN32
+    wchar_t w[1024];
+    if (!kdl_yol_genis(yol, w, 1024)) return 0;
+    DWORD a = GetFileAttributesW(w);
+    return (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) ? 1 : 0;
+#else
+    struct stat st;
+    return (stat(yol, &st) == 0 && S_ISDIR(st.st_mode)) ? 1 : 0;
+#endif
+}
+
+static int kdl_dizin_ad_karsilastir(const void *a, const void *b) {
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+/* Toplanan adlara bir ad ekle (kopyalayarak). 0 basari, -1 bellek yok. */
+static int kdl_dizin_ad_ekle(char ***adlar, size_t *n, size_t *kap,
+                             const char *ad, size_t uz) {
+    if (*n == *kap) {
+        size_t yk = *kap ? *kap * 2 : 16;
+        char **y = (char **)realloc(*adlar, yk * sizeof(char *));
+        if (!y) return -1;
+        *adlar = y; *kap = yk;
+    }
+    char *k = (char *)malloc(uz + 1);
+    if (!k) return -1;
+    memcpy(k, ad, uz);
+    k[uz] = '\0';
+    (*adlar)[(*n)++] = k;
+    return 0;
+}
+
+/* dosya_dizin_listele: girdiler (`.` ve `..` HARIC) BAYT sirasiyla siralanip
+ * '/' ile birlestirilir. '/' bir dosya ADINDA bulunamaz (POSIX ve Windows),
+ * dolayisiyla ayirac belirsizlik yaratmaz. Bos dizin "" doner; acilamazsa
+ * NULL (dosya_ac ile AYNI temsil, `dosya_gecerli` ile sinanir). Siralama
+ * belirlenimcilik icindir: readdir/FindNextFile sirasi dosya sistemine bagli. */
+const char *kdl_dosya_dizin_listele(const char *yol) {
+    if (!yol || !*yol) return NULL;
+    char **adlar = NULL;
+    size_t n = 0, kap = 0, toplam = 0, i;
+    int hata = 0;
+#ifdef _WIN32
+    wchar_t w[1030];
+    int wn = MultiByteToWideChar(CP_UTF8, 0, yol, -1, w, 1024);
+    if (wn <= 0) return NULL;
+    wn -= 1;   /* sondaki NUL */
+    if (wn > 0 && w[wn - 1] != L'\\' && w[wn - 1] != L'/') w[wn++] = L'\\';
+    w[wn++] = L'*';
+    w[wn] = 0;
+    WIN32_FIND_DATAW fd;
+    HANDLE hd = FindFirstFileW(w, &fd);
+    if (hd == INVALID_HANDLE_VALUE) return NULL;
+    do {
+        const wchar_t *a = fd.cFileName;
+        if (a[0] == L'.' && (a[1] == 0 || (a[1] == L'.' && a[2] == 0))) continue;
+        int bn = WideCharToMultiByte(CP_UTF8, 0, a, -1, NULL, 0, NULL, NULL);
+        if (bn <= 0) { hata = 1; break; }
+        char *tmp = (char *)malloc((size_t)bn);
+        if (!tmp) { hata = 1; break; }
+        WideCharToMultiByte(CP_UTF8, 0, a, -1, tmp, bn, NULL, NULL);
+        int r = kdl_dizin_ad_ekle(&adlar, &n, &kap, tmp, (size_t)bn - 1);
+        free(tmp);
+        if (r != 0) { hata = 1; break; }
+    } while (FindNextFileW(hd, &fd));
+    FindClose(hd);
+#else
+    DIR *dz = opendir(yol);
+    if (!dz) return NULL;
+    struct dirent *e;
+    while ((e = readdir(dz)) != NULL) {
+        const char *a = e->d_name;
+        if (a[0] == '.' && (a[1] == 0 || (a[1] == '.' && a[2] == 0))) continue;
+        if (kdl_dizin_ad_ekle(&adlar, &n, &kap, a, strlen(a)) != 0) { hata = 1; break; }
+    }
+    closedir(dz);
+#endif
+    char *sonuc = NULL;
+    if (!hata) {
+        if (n > 1) qsort(adlar, n, sizeof(char *), kdl_dizin_ad_karsilastir);
+        for (i = 0; i < n; i++) toplam += strlen(adlar[i]) + 1;
+        sonuc = (char *)malloc(toplam + 1);
+        if (sonuc) {
+            size_t k = 0;
+            for (i = 0; i < n; i++) {
+                size_t u = strlen(adlar[i]);
+                if (i > 0) sonuc[k++] = '/';
+                memcpy(sonuc + k, adlar[i], u);
+                k += u;
+            }
+            sonuc[k] = '\0';
+        }
+    }
+    for (i = 0; i < n; i++) free(adlar[i]);
+    free(adlar);
+    return sonuc;
+}
+
 /* V2-F4.1: kdl_bolge_metin_birlestir(KdlArena*) SİLİNDİ — ölü KdlArena
  * kümesinin parçasıydı (sıfır çağıran; codegen kullanmıyor). */
 

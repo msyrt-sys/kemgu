@@ -215,7 +215,9 @@
       dosya: dizin olustur/listele, ikili oku/yaz, yol birlestir, uzanti — dizin ve ikili G/C
       RUNTIME YERLESIGI ister (dil yuzeyi karari, Mehmet).
 - [x] D5f [S] ✓ D-731 metin: yukaridaki saf-KEMGU eksiklerini yaz + test_metin'e ekle.
-- [ ] D5g [M] dosya: dizin/ikili G/C yerlesikleri. KARAR (2026-11-06, Opus onerisi): yetki<Dosya>
+- [x] D5g -> D-804 (6 yerlesik: dosya_bayt_oku/yaz handle uzerinde + dosya_dizin_olustur/sil/var_mi/listele;
+      stdlib: ikili_oku/ikili_yaz/dizin_*/yol_birlestir/uzanti; `kopyala` artik bayt bayt).
+      [M] dosya: dizin/ikili G/C yerlesikleri. KARAR (2026-11-06, Opus onerisi): yetki<Dosya>
       YOK (mevcut `yapı tekkez Dosya` modeli); ikili okuma `Dizi<dtam8>` doner (metin NUL kirpar).
       Yetki gelecekse TUM dosya API'sine birden, ayri kararla.
 - [x] D5b -> D-710 (BLAKE3 agac modu, `stdlib/kripto/blake3.kem`).
@@ -636,6 +638,22 @@
       fiksturlerinde, onlar codegen'e ulasmaz) → etki GNU as `%` mod operatoru gibi nadir bicimlerle sinirli, ama
       sinif deponun en agiri (derleme temiz, cevap yanlis).
       Onarim: renumber cift tirnak icini atlamali; fikstur: `#(101%1)` (iki tarafta exit 0), sabotaj: atlamayi kaldir.
+- [ ] G18 [S] SELF-HOST TUTAMAC DISIPLINI (D-570/D-571) `kd_kacti`de YALNIZ KILIT AILESINI TANIYOR (D-804 yol ustu,
+      onceden var). C `kd_kacti` "bilinen yerlesik" sorusunu kilit+dosya+soket BIRLESIMINE sorar
+      (`kd_izlenen_yerlesik`); self `kd_kilit_yerlesigi`ne soruyor → dosya/soket ailesi cagrisinin DOGRUDAN
+      tanimlayici argumani self'te KACIS sayiliyor, izleme birakiliyor. OLCULDU (eski ikilide de ayni):
+      `değişken n: tam32 = dosya_yaz(h, "a"); dosya_kapat(h); dosya_kapat(h);` → C L002, self OK; soket_gonder ile
+      ayni. Sonuc: self cift kapatmayi / kapatilmayan handle'i (L001) bu sekilde KACIRIYOR. D-804'un
+      `değişken b: tam32 = dosya_bayt_oku(h)` dogal kullanimi da bu sekle duser (fikstur bilerek kullanmiyor).
+      Onarim: self `kd_kacti`deki `kd_kilit_yerlesigi` → uc ailenin birlesimi; fikstur g01 bicimi (C L002 = self),
+      sabotaj: kilit-yalniz yuklemine geri don.
+- [ ] G19 [S] `stdlib/dosya.kem` SATIR ISLEVLERI YANLIS (D-804 yol ustu, onceden var): (a) `ekle_satir` satir
+      sonu yerine IKI KARAKTER (`\` + `n`) yaziyor — KEMGU dizgisinde kacis YOK (D-400/D-458). OLCULDU:
+      `ekle_satir("log.txt", "ab")` → dosya baytlari `a b \ n`, donus `tamam(3)` (yazilan 4). (b) `oku_satirlar`
+      dosyayi HIC okumuyor. OLCULDU: 3 satirlik dosya → `tamam([])`; VAR OLMAYAN dosya da `tamam([])` (hata
+      yok). Yorumu "tek elemanli dizi" diyor, o da dogru degil.
+      Onarim: (a) `kod_metin(10)`; (b) metin_bayt/metin_kes ile `\n`den bol. `test_dosya` main'i ikisini de
+      CAGIRMIYOR → kapiya baglanmali (D-440 sinifi: kosmayan test).
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -4092,3 +4110,39 @@
   checker_diff 452/452, FIXPOINT ✓ (stage1 == stage2, 110470 satır), atlama izleri D-802 ile birebir aynı. D-794'ün
   bekleme yolu bu koşumda ateşlenmedi (iki medyan 442,8 / 592,1 ms, eşik 650). Bütçe uyarısı yalnız codegen_diff'te
   (66 sn > 60 sn); önceki yedi koşumun hepsinde de var (66-90 sn), yeni değil.
+- 2026-11-28 D-804: D5g — dosya: bayt G/Ç + dizin yerleşikleri; `kopyala` artık NUL'da kırpmıyor.
+  KARAR (2026-11-06) uygulandı: `yetki<Dosya>` YOK, mevcut `Dosya` modeli; ikili okuma stdlib'de `Dizi<dtam8>`
+  döner. Altı yerleşik (C + self-host + runtime): `dosya_bayt_oku(h) -> tam32` (0..255 · dosya sonu -1 · okuma
+  hatası ya da NULL handle -2) · `dosya_bayt_yaz(h, b) -> tam32` (yazıldı 1; 0..255 dışı / NULL / hata 0 — KIRPMA
+  YOK) · `dosya_dizin_olustur` / `dosya_dizin_sil` (0 · -1) · `dosya_dizin_var_mi` · `dosya_dizin_listele` (`.` ve
+  `..` hariç, BAYT sırasıyla sıralı, '/' ayraçlı metin; açılamazsa NULL). Stdlib: `ikili_oku` / `ikili_yaz` ·
+  `dizin_olustur` / `dizin_sil` / `dizin_var_mi` / `dizin_listele` · `yol_birlestir` · `uzanti`.
+  TASARIM SEÇİMİ: yerleşikler Dizi ALMAZ/DÖNDÜRMEZ. C'nin F-dizi-arg kuralı çıplak `[..]` literalini yalnız `dizi_*`
+  yerleşiklerinde heap'e zorlar (llvm.c, okundu); Dizi parametreli yeni bir yerleşiğe doğrudan literal geçilince C
+  YIĞIN dizisi yollar, runtime onu KdlDizi başlığı sanırdı (D-572 sınıfı). Bayt düzeyi + mevcut handle bu yüzeyi
+  hiç açmıyor; dizi stdlib'de KEMGU ile kuruluyor.
+  KUSUR KAPANDI: `kopyala` `dosya_oku` (metin) ile okuyup ilk NUL'da KIRPIYORDU — ölçüldü: 5 baytlık `ab\0cd` →
+  2 baytlık kopya, `tamam(2)`. Artık bayt bayt. EOF ile okuma hatası AYRI (-1/-2): Linux'ta bir dizin `okuma`
+  kipinde açılabiliyor ve ilk okuma hemen bitiyor; ayrım olmasa `ikili_oku(dizin)` boş dosya gibi `tamam([])`
+  dönerdi (S495/S501 ölçtü). Tutamaç disiplini: bayt yerleşikleri D-570 dosya ailesine eklendi (C + self) →
+  kapalı handle kullanımı CP005, kapatılmayan handle L001.
+  Windows dalı (CreateDirectoryW / RemoveDirectoryW / GetFileAttributesW / FindFirstFileW + UTF-8↔UTF-16) bu
+  makinede DERLENEMEDİ (MinGW yok); CI'nin Windows işi `stdlib_check`i koşar, davranış orada ölçülür.
+  FİKSTÜR: tc81_01..08 (CP005 ×2 · L001 · pozitif · T010+CP005 · T001 ×3; iki tarafta birebir) +
+  `cg_dosya_bayt_dizin` (dosya sistemine YAZMADAN 8 çağrı — codegen_diff ile self_driver aynı fikstürü eşzamanlı
+  koşabilir; C = self = 42). `test_dosya` main'ine dört bölüm: ikili gidiş-dönüş (gömülü NUL, 128, 255, 10) +
+  bayt-tam `kopyala` · ham uçlar · dizin yaşam döngüsü (8 girdi) · yol yardımcıları. Self-host ile `test_dosya`
+  ayrıca derlenip koşuldu (çıkış 0; `stdlib_check` yalnız C ile koşar).
+  SABOTAJ S485-S504: 19/20 rc=2 — C aile ×2 · C imza/dönüş ×2 · C llvm dönüş/declare ×2 · self aile/imza ×2 · self
+  dönüş/declare ×2 · runtime ferror/NULL/aralık/nokta ×4 · stdlib eski kopyala / hata denetimi / çift bölü /
+  gizli nokta / son girdi ×5. ⚠ S498 (runtime sıralamayı kaldır) SESSİZ KALDI: test iki girdi kullanıyordu ve bu
+  ext4'te o iki adın karma sırası tesadüfen zaten `a, b` idi (ölçüldü). Test sekiz karışık girdiye çıkarıldı (ham
+  readdir: a h e b f g c d); aynı sabotaj S505 artık rc=2, S506/S507 (nokta girdileri, son girdi) yeniden rc=2.
+  YOL ÜSTÜ (iki madde Sırada sonuna, ikisi de önceden var): G18 — self `kd_kacti` yalnız kilit ailesini tanıyor
+  (D-570/D-571 portundan kalma) → `değişken n = dosya_yaz(h, ..)` + çift kapatma: C L002, self OK (eski ikilide
+  de); G19 — `ekle_satir` satır sonu yerine `\`+`n` yazıyor, `oku_satirlar` dosyayı hiç okumuyor (ikisi ölçüldü).
+  TAM TAKIM (-j10 ölçümlü, 24:53): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 460/460, codegen_diff 233/233 (+1 = yeni fikstür), FIXPOINT ✓ (stage1 == stage2, 110687 satır),
+  stdlib davranış testleri geçti (yeni `test_dosya` bölümleri dahil), atlama izleri D-803 ile aynı. D-794'ün bekleme
+  yolu ateşlenmedi (iki medyan 475,2 / 641,3 ms, eşik 650). Bütçe uyarıları (çekirdek_onbellek 158 sn, asan_denetim
+  83,1 sn, codegen_diff 67,5 sn) önceki koşumlarda da var, yeni değil.

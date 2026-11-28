@@ -1,0 +1,7 @@
+// [D-804] L001 — `dosya_bayt_yaz` ile kullanılıp kapatılmayan handle (aile üyeliği izlemeyi sürdürür).
+işlev f() -> tam32 {
+    değişken h: metin = dosya_ac("x.bin", "yazma");
+    dosya_bayt_yaz(h, 65);
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

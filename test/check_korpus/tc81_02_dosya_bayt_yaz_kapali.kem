@@ -1,0 +1,8 @@
+// [D-804] CP005 — kapatılmış handle'a `dosya_bayt_yaz` (deyim biçimi).
+işlev f() -> tam32 {
+    değişken h: metin = dosya_ac("x.bin", "yazma");
+    dosya_kapat(h);
+    dosya_bayt_yaz(h, 65);
+    ver 0;
+}
+işlev main() -> tam32 { ver 0; }

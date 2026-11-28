@@ -1,0 +1,11 @@
+// [D-804] POZİTİF — bayt ve dizin yerleşiklerinin doğru kullanımı; tanı ÜRETMEMELİ (imza + dönüş tipleri).
+işlev f() -> tam32 {
+    değişken h: metin = dosya_ac("x.bin", "yazma");
+    dosya_bayt_yaz(h, 65);
+    dosya_kapat(h);
+    değişken r: tam32 = dosya_dizin_olustur("d");
+    değişken v: mantıksal = dosya_dizin_var_mi("d");
+    değişken l: metin = dosya_dizin_listele("d");
+    ver r + dosya_dizin_sil("d");
+}
+işlev main() -> tam32 { ver 0; }

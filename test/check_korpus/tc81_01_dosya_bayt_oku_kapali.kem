@@ -1,0 +1,7 @@
+// [D-804] CP005 — kapatılmış handle'dan `dosya_bayt_oku` (bayt G/Ç dosya ailesinde; aile dışında kalsa handle izlemeden bırakılır, tanı gelmezdi).
+işlev f() -> tam32 {
+    değişken h: metin = dosya_ac("x.bin", "okuma");
+    dosya_kapat(h);
+    ver dosya_bayt_oku(h);
+}
+işlev main() -> tam32 { ver 0; }
