@@ -253,6 +253,9 @@
       ⚠ D-808: ikinci onkosul P6'ydi (KAPANDI): takma adi olan YAKALANAN dizinin buyutulmesi, disaridaki kaba
       isaretci yazma, yeniden atama ve parametresini buyuten yardimci — hepsi bugun iki derleyicide canli UAF'ti.
       Genisletmede r12-r16 de yesil kalmali.
+      ⚠ D-809: ucuncu onkosul P4 ad cozumuydu (KAPANDI): adla cagrilan yakalanmis kapanis, yerlesik adli kapanis
+      ve kuresel islevi gölgeleyen kapanis kanitin gozunden kaciyordu. `metin_uzunluk` (gölgelenebilir ad, D-787)
+      beyaz listeye ancak bu sayede girebilir: adla verilen "bu bir yerlesik" karari P4'e dayanir. r17-r20 yesil kalmali.
 - [x] D6g -> D-807 (D6f olcumu sirasinda bulundu; CANLI, SESSIZ UAF C oracle'da): gorev kaniti P5 —
       erisilebilir kumede `kanal_al(k)` varsa `k`nin yuku KANITLI skaler olmali. Kanal yuku TASINMIYOR
       (G23), gorev alip buyutunce tampon rho_sahip'te (D-770); kanit bayrak 1 verip join'de serbest
@@ -263,6 +266,10 @@
       OLMAYAN deger YAZILIYORSA (`dizi_yaz`, `x[i] = v`) hedef gorevin KENDI ayirdigi taze dizi olmali. D-505
       yakalamayi ADA gore tasir; ayni nesnenin takma adlari (`e = d`, `[d]`, `Kap { xs: d }`) ana is parcaciginda
       kalir, gorev buyutunce tampon rho_sahip'te (D-770) → join'de serbest birakmak UAF'ti.
+- [x] D6i -> D-809 (D6f olcumu sirasinda bulundu; CANLI, SESSIZ UAF self'te 3 sekil, C'de 1): gorev kaniti P4
+      (dolayli cagri) ADLA cozuyordu — self yalniz hedefin DUGUM turune bakiyordu (adla cagrilan kapanisin govdesi
+      hic taranmiyordu), C `islev_bul` ile gölgelenen kuresel islevin zararsiz govdesine iniyordu. Onarim: C
+      `cozum_sembol` islev-disiysa DENY; self ayni adla (kokte ya da dis kapsamda) baglama varsa DENY.
 - [ ] D7a [M] Ayrik derleme: arayuz dosyalari (imza-only cikti).
 - [ ] D7b [M] Ayrik derleme: glob import.
 - [ ] D7c [M] Ayrik derleme: opak tipler.
@@ -739,6 +746,21 @@
       ASan'siz PANIK; self dogru (heap-uniform). `dizi_yaz(dd, 0, [40, 2])` C'de DOGRU — kusur yalniz atama degeri
       konumunda. D-572'nin (cesit yuku) indeks-atama karsiligi. Onarim: hedef `Dizi<Dizi<T>>` elemaniysa degere
       beklenen tipi gecir; fikstur: atama + alan atamasi + skaler pozitif, sabotaj: baglami kaldir.
+- [ ] G26 [S] `calistir_derleme_olcum` MUTLAK SANIYE ESIKLERI CI KOSUCU HIZINA DUYARLI (D-808 sirasinda olculdu).
+      PR #280 Linux CI: `20000 kemgu saniye 0.4608 > 0.39` → kirmizi. Ayni birim onceki iki CI kosumunda 0.2049 /
+      0.1916; uretilen IR BIREBIR (105777 satir) → kod degismedi. Tum kosum duzgun bicimde yavasti: duvar saati 6:32
+      (onceki 4:05 / 3:56), self `kabuk` 12.82 sn (7.33 / 7.22), C 5000 satir 0.0777 (0.0411 / 0.0401) → ~1.8x yavas
+      kosucu. Is BIR KEZ yeniden kosturuldu → 4:35'te GECTI (ayni commit). Kapi bu sinifta ARALIKLI kirmizi verir
+      (D-794 acilis suresi kapisinin cozdugu sinif). Onarim adaylari: (a) sure olcutunu ayni kosumda olculen bir referans is yukune oranla,
+      (b) sureyi yalniz RAPOR et, kapiyi deterministik olcutlerde (IR satiri, en buyuk islev, RSS) tut. (b) daha
+      muhafazakar: gercek bir derleme suresi gerilemesi IR/RSS'de de gorunmeyebilir — once olc.
+- [ ] G27 [S] ⚠ SELF: YEREL KAPANIS AYNI ADLI KURESEL ISLEVI GÖLGELEDIGINDE CAGRI KURESELE GIDIYOR — SESSIZ
+      YANLIS CEVAP (D-809 yol ustu, onceden var). OLCULDU (gorev YOK): `işlev f() -> tam32 { ver 1; }` + main'de
+      `değişken f: işlev() -> tam32 = || 2; ver f();` → C 2 (sozcuksel gölgeleme), self 1 (`call i32 @f`). Iki
+      checker da OK. Gorev lambdasinda da ayni (r19: self kuresel `f`yi cagiriyor; fikstur bu yuzden kapanisin
+      etkisinden bagimsiz okur). Onarim: self cagri cozumunde yerel baglama (cg_var) KULLANICI ISLEVINDEN ONCE
+      sorulmali (C `cozum_sembol` sirasi); fikstur: gorevsiz + lambda ici iki sekil, C = self = 2; sabotaj: sirayi
+      geri cevir.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -4379,3 +4401,44 @@
   izlenmiyordu; commit sonrası kapı ayrıca koşuldu). Bu koşumda D-794 bekleme yolu ateşlenmedi (639,8 ms < 650 eşik).
   Bütçe uyarıları (çekirdek_onbellek, asan_denetim, codegen_diff, pci16, açılış süresi) hepsi önceki koşumlarda da
   görüldü (pci16: D-801/D-802).
+- 2026-11-28 D-809: GÜVENLİK — görev bölgesi kanıtının P4'ü (dolaylı çağrı) ADLA çözüyordu: kapanışın gövdesi taranmıyordu
+  (self'te üç, C'de bir şekilde CANLI, SESSİZ UAF). Sırada'nın en üstü yine D6f'ti; aday listesindeki `metin_uzunluk`
+  GÖLGELENEBİLİR bir yerleşik adıdır (D-787), yani "bu çağrı bir yerleşik mi" kararının adla verilip verilemeyeceği önce
+  ölçüldü. Ölçülen: (1) SELF — görev, yakalanan kapanışı ADIYLA çağırıp sonucu bir değişkene alıyor (`değişken z = f();
+  ver z;` — P1 geçer). Self P4 yalnız hedefin DÜĞÜM türüne bakıyordu (tanımlayıcı = doğrudan çağrı); `fn_node_bul` kapanışı
+  bulamıyor, gövdesi hiç taranmıyordu → kapanış ρ_sahip dizisini kanala gönderince bayrak 1, ASan heap-use-after-free; C 0.
+  Aynısı kapanışın adı `metin_uzunluk` iken ve çağrılan bir yardımcının işlev tipli PARAMETRESİ çağrılırken (`g(x)`). (2) C —
+  yerel kapanış `f` aynı adlı küresel işlevi GÖLGELEDİĞİNDE C kanıtı `islev_bul` ile ADLA arayıp küresel `f`nin zararsız
+  gövdesine iniyor, çalışan kapanışı görmüyordu → bayrak 1, ASan heap-use-after-free. İlk problar (`ver f()` biçimi) P1
+  yüzünden zaten 0 verdi — ayırt edici DEĞİLDİ; sonucu döndürülmeyen çağrı ayırdı. D6f'nin beyaz listesi bu deliklerin
+  üstüne kurulsaydı `metin_uzunluk` adlı bir kapanış "yerleşik" sayılırdı → önce P4; D6f açık kaldı, notu güncellendi.
+  ONARIM: C — hedef TANIMLAYICI'nın `cozum_sembol`ü işlev-dışı (değişken/parametre/sabit) ise DENY, `islev_bul`dan ÖNCE
+  (yerleşikler ve kullanıcı işlevleri SEMBOL_ISLEV ya da bağlamasızdır). Mevcut "sembol var ama işlev kaydı yok → DENY"
+  dalı BİLEREK gevşetilmedi: gövdesiz SEMBOL_ISLEV'leri de reddediyor (ilk taslak onu da değiştiriyordu, uygulanmadan
+  geri çekildi). Self — ad tabanlı (D-805): çağrılan adla kökte bir bağlama (değişken/parametre/desen) ya da görev
+  gövdesinde dış kapsamda bir bağlama (`cg_var_bul`) varsa DENY. P1 değiştirilmedi: P4 her çağrı düğümünü gördüğü için
+  yeterli; P1'e ek denetim ayırt edilemez kod olurdu (D-430).
+  FİKSTÜRLER: r17 adla çağrılan yakalanmış kapanış (0) · r18 yerleşik adlı kapanış (0) · r19 küresel işlevi gölgeleyen
+  kapanış (0; G27 yüzünden self küresel `f`yi çağırıyor — fikstür kapanışın etkisinden bağımsız `e[0]`ı okur, iki
+  derleyicide exit 42) · r20 yardımcının işlev tipli parametresi (0). ⚠ r20'nin ilk sürümü kapanış geçiriyordu ve
+  checker'da G005 aldı (işaretçi yakalayan kapanış argüman olarak kaçamaz, D-323) → adlandırılmış işlev değerine geçildi.
+  Eski davranış sabotajla yeniden üretildi: kuralı kaldırınca self r17/r18/r20'de, C r19'da bayrak 1 + ASan UAF.
+  YOL ÜSTÜ (Sırada sonuna): G26 — `calistir_derleme_olcum` saniye eşikleri CI koşucu hızına duyarlı (PR #280 Linux
+  kırmızısı: `20000 kemgu 0.4608 > 0.39`; önceki CI 0.20/0.19, IR birebir, tüm koşum ~1.8× yavaş; iş bir kez yeniden
+  koşturuldu ve aynı commit 4:35'te geçti). G27 — SELF, yerel kapanış aynı adlı küresel işlevi gölgelediğinde çağrıyı KÜRESEL işleve bağlıyor (görev
+  yokken de: C 2, self 1) → sessiz yanlış cevap.
+  Korpus bayrakları değişmedi (kapı paritesi 30 dosyada yeşil).
+  SABOTAJ S540-S542: 3/3 kırmızı, sağlamsızların hepsi ASan heap-use-after-free: C gölgeleme denetimi yok (r19) · self
+  kök bağlama denetimi yok (r20) · self dış bağlama denetimi yok (r17, r18).
+  TAM TAKIM (-j10 ölçümlü, 25:52): 192 kapının 192'si geçti, rc=0, geçici dizin önce 0 / sonra 0, checker_diff
+  460/460 (0 muaf), codegen_diff 233/233, codegen_genis 77/77, FIXPOINT ✓ (stage1 == stage2, 112033 satır), atlama
+  izleri D-808 ile birebir (32 satır). `calistir_gorev_rho` parite 30 dosya · 20 fikstür (r17-r20 koşum anında
+  izlenmiyordu; commit sonrası kapı ayrıca koşuldu). Bütçe uyarıları (açılış süresi, codegen_diff, pci16,
+  asan_denetim, çekirdek_onbellek) hepsi önceki koşumlarda da görüldü.
+- 2026-11-28 D-810: OTOMASYON — Codex dalga 19 promptuna (D-785) dalga 18'den devreden üç iş eklendi, kullanıcı isteğiyle
+  (ayrı PR #282, yalnız `otomasyon/chatgpt/CODEX_GOREV_19.md`). Dalga yirmi üç bölüm: yeni Bölüm 19 x86 SMP'nin
+  uygulanmayan beş canlı sabotajı (envanter "Uygulanmayan deneyler"), Bölüm 20 `calistir_derleme_olcum` saniye
+  eşiğinin koşucu hızından bağımsızlaşması (G26'nın ölçümü), Bölüm 21 `stdlib/dosya.kem` satır işlevleri (G19'un
+  ölçümü); regresyon/belgeler 22-23'e kaydı. G19 ve G26 Codex'e devredildi (Sırada'da kalır, Codex teslim edince
+  kapanır). Prompt `src/` ve `selfhost/`i yasaklamaya devam ediyor → Claude'un açık PR zinciriyle çakışma yok. Ayrı
+  git worktree'de `origin/main` üstünde hazırlandı (D-809'un tam takımı ana ağaçta koşarken).

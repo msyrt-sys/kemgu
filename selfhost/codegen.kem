@@ -9323,6 +9323,19 @@ işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam3
             ver doğru;   // P4: dolaylı/hesaplanmış çağrı → gövdesi bilinmez
         }
         değişken fad: metin = dizi_al(p.a_deg, hed);
+        // [D-809] P4: çağrılan ad bir BAĞLAMAYA (değişken/parametre/desen) çözülüyorsa çağrı
+        // DOLAYLIDIR, gövdesi bilinmez. Önceden yalnız hedefin DÜĞÜM türüne bakılıyordu: adla
+        // çağrılan yakalanmış kapanış (`değişken z = f();`) tanımlayıcıdır, `fn_node_bul`
+        // onu bulamaz ve gövdesi HİÇ taranmıyordu → kanala ρ_sahip dizisi gönderen kapanış
+        // bayrak 1 (ölçüldü: ASan heap-use-after-free; C 0). Ad tabanlı (D-805): kökte ya da
+        // görev gövdesinde dış kapsamda aynı adla bağlama varsa DENY — yerleşik adı taşıyan
+        // kapanış (`metin_uzunluk`) da böyle yakalanır.
+        eğer metin_esit(ha, "TANIMLAYICI") {
+            eğer rho_ad_baglama_var(p, kok, fad) { ver doğru; }
+            eğer rho_dis_kapsam_mi(p, kok) {
+                eğer metin_esit(cg_var_bul(p, fad), "") == yanlış { ver doğru; }
+            }
+        }
         eğer metin_esit(fad, "görev_başlat") { ver doğru; }   // P3: iç-içe görev
         eğer metin_esit(fad, "kanal_gönder") {                // P2: yük skaler mi?
             eğer cs < 3 { ver doğru; }

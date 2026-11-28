@@ -1,0 +1,21 @@
+// RHO_BEKLE: 0
+// [D-809] P4 (self) — kapanış GÖLGELENEBİLİR bir yerleşik adını taşıyor (`metin_uzunluk`, D-787):
+// ad tabanlı bir "bu bir yerleşik çağrısıdır" kararı onu yerleşik sanırdı. Gövdesi ρ_sahip
+// dizisini kanala gönderir. Eski self: bayrak 1, ASan heap-use-after-free; C 0.
+işlev main() -> tam32 {
+    değişken k: kanal<Dizi<tam32>> = kanal_oluştur(1);
+    değişken metin_uzunluk: işlev(metin) -> tam32 = |m: metin| {
+        değişken d: Dizi<tam32> = [40, 2];
+        kanal_gönder(k, d);
+        ver 0;
+    };
+    eşleş görev_başlat(|| { değişken z: tam32 = metin_uzunluk("ab"); ver z; }) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);
+            değişken x: Dizi<tam32> = kanal_al(k);
+            ver dizi_al(x, 0) + dizi_al(x, 1) + z;
+        }
+        hata(h) => { ver 1; }
+    }
+    ver 99;
+}
