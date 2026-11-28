@@ -1,0 +1,5 @@
+// [D-796] P051 — `genel` sonrası izin verilmeyen tanım (C parser.c:1044). İkinci `genel`
+// senkron belirteci DEĞİLDİR: panik onu yutar ve `işlev f` üst düzeyde ayrıştırılır. Öncesinde
+// self'te tek hata buydu ve tanı kaydedilmediği için D-648 emniyet ağı konumsuz `P000 0 0` basıyordu.
+genel genel işlev f() -> tam32 { ver 1; }
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,5 @@
+// [D-796] P212 — `uygula` gövdesi dosya sonunda kapanmıyor (C parser.c:823).
+işlev main() -> tam32 { ver 0; }
+yapı K { x: tam32; }
+uygula K {
+    işlev a(kendin) -> tam32 { ver 1; }

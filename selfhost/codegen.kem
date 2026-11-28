@@ -2595,15 +2595,24 @@ işlev parse_ozellik(p: &değişken Ayr) -> tam32 {
     değişken ad: metin = sim_lex(p);
     bekle_k(p, "TANIMLAYICI", "P200");   // [D-653] C parser.c:719 ozellik adi
     atla_tip_paramlar(p);
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P201");   // [D-796] C parser.c:728
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "CIPLAK") {
             dizi_ekle(kids, parse_islev_genel(p, 1));
-        } değilse { devam = yanlış; }
+        } değilse eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") {
+            devam = yanlış;
+        } değilse {
+            // [D-796] C parser.c:741 — işlev-dışı üye: tanı + panik senkron + döngüden çık.
+            // Öncesinde döngü SESSİZCE bitiyor, tanıyı kapanış `}` beklentisi (P000)
+            // basıyor ve üst düzey art arda P001 üretiyordu.
+            parse_hata_kaydet(p, "P202");
+            panik_senkron(p);
+            devam = yanlış;
+        }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P203");   // [D-796] C parser.c:747
     ver dugum_n(p, "OZELLIK", ad, s, u, kids);
 }
 işlev parse_uygula(p: &değişken Ayr) -> tam32 {
@@ -2619,14 +2628,21 @@ işlev parse_uygula(p: &değişken Ayr) -> tam32 {
     } değilse {
         dizi_ekle(kids, birinci);       // inherent: hedef = birinci
     }
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P210");   // [D-796] C parser.c:804
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "ISLEV") veya sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "CIPLAK") {
             dizi_ekle(kids, parse_islev(p));
-        } değilse { devam = yanlış; }
+        } değilse eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") {
+            devam = yanlış;
+        } değilse {
+            // [D-796] C parser.c:817 — `parse_ozellik` ile aynı toparlanma.
+            parse_hata_kaydet(p, "P211");
+            panik_senkron(p);
+            devam = yanlış;
+        }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P212");   // [D-796] C parser.c:823
     ver dugum_n(p, "UYGULA", "", s, u, kids);
 }
 işlev parse_sabit(p: &değişken Ayr) -> tam32 {
@@ -2703,20 +2719,24 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
     ver dugum0(p, "KULLAN", yol, s, u);
 }
 // genel/dışa sonrası tanım (işlev/yapı/çeşit/sabit).
-işlev parse_disa_govde(p: &değişken Ayr) -> tam32 {
+işlev parse_disa_govde(p: &değişken Ayr, kod: metin) -> tam32 {
     eğer sim_mi(p, "GERCEKZAMANLI") veya sim_mi(p, "ISLEV") veya sim_mi(p, "CIPLAK") { ver parse_islev(p); }
     eğer sim_mi(p, "YAPI") { ver parse_yapi(p); }
     eğer sim_mi(p, "CESIT") { ver parse_cesit(p); }
     eğer sim_mi(p, "SABIT") { ver parse_sabit(p); }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
-    p.hata_say = p.hata_say + 1;
-    ilerle(p);
+    // [D-796] C parser.c:1007 (`dışa` P050) / :1044 (`genel` P051): önekten sonraki
+    // belirtece tanı + HATA düğümü + panik senkron. Öncesinde sayaç artıyor ama TANI
+    // KAYDEDİLMİYORDU (D-648 emniyet ağı konumsuz `P000 0 0` basıyordu) ve yalnız
+    // tek belirteç ilerleniyordu → izleyen üst düzey öğe sahte P001 alıyordu.
+    parse_hata_kaydet(p, kod);
+    panik_senkron(p);
     ver dugum0(p, "HATA", "", s, u);
 }
 işlev parse_disa(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // dışa
-    ver dugum1(p, "DISA", "", s, u, parse_disa_govde(p));
+    ver dugum1(p, "DISA", "", s, u, parse_disa_govde(p, "P050"));
 }
 // genel SARMALAMAZ — iç tanımı doğrudan döner (genel_mi bayrağı dump'ta yok).
 işlev parse_genel(p: &değişken Ayr) -> tam32 {
@@ -2724,7 +2744,7 @@ işlev parse_genel(p: &değişken Ayr) -> tam32 {
     // D-363: `genel` düğüme yansımıyor (parse_disa_govde ÇIPLAK tanım döner) →
     // `genel işlev f` ile `işlev f` ayırt edilemiyordu. Yan-kanal: işaretli
     // düğümler. T041 (private-by-default) bu ayrımın üstünde duruyor.
-    değişken n: tam32 = parse_disa_govde(p);
+    değişken n: tam32 = parse_disa_govde(p, "P051");
     dizi_ekle(p.gen_node, n);
     ver n;
 }
@@ -2733,14 +2753,14 @@ işlev parse_modul(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // modül
     değişken ad: metin = sim_lex(p);
     bekle_k(p, "TANIMLAYICI", "P060");   // [D-652] C parser.c:1069 modul adi
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P061");     // [D-796] C parser.c:1071
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
         değilse { dizi_ekle(kids, parse_ust_oge(p)); }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P062");     // [D-796] C parser.c:1081
     ver dugum_n(p, "MODUL", ad, s, u, kids);
 }
 işlev parse_ust_oge(p: &değişken Ayr) -> tam32 {

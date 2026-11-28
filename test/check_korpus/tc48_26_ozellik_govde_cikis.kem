@@ -1,0 +1,9 @@
+// [D-796] P202 + döngüden ÇIKIŞ. Hatalı üyeden sonra gelen işlev C'de gövdeye ALINMAZ: panik `;`
+// tüketir, döngü biter, P203 `işlev`e takılır ve `işlev b` üst düzeyde gövdesiz kalır (P017).
+// Döngüden çıkmayan bir toparlanma burada yalnız P202 basar — bu fikstür o farkı ölçer.
+özellik Oz {
+    işlev a() -> tam32;
+    5;
+    işlev b() -> tam32;
+}
+işlev main() -> tam32 { ver 0; }

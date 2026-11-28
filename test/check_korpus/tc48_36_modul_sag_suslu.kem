@@ -1,0 +1,5 @@
+// [D-796] P062 — `modül` gövdesi dosya sonunda kapanmıyor (C parser.c:1081). Aynı site,
+// modül içinde `dışa }` gibi gövde kapanışını panik senkronun tükettiği şekillerde de ateşlenir.
+işlev main() -> tam32 { ver 0; }
+modül m {
+    işlev f() -> tam32 { ver 1; }

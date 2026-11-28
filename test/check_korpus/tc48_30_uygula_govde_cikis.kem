@@ -1,0 +1,9 @@
+// [D-796] P211 + P212. Üye konumundaki `sabit` bir senkron anahtar kelimesidir: panik onu
+// TÜKETMEZ, döngü biter, P212 aynı konumda `}` bekler ve `sabit` üst düzeyde geçerli tanım
+// olarak ayrıştırılır; kapanış `}` sahipsiz kalır (P001).
+yapı K { x: tam32; }
+uygula K {
+    işlev a(kendin) -> tam32 { ver 1; }
+    sabit Q: tam32 = 1;
+}
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,5 @@
+// [D-796] P050 — `dışa` sonrası izin verilmeyen tanım (C parser.c:1007). `özellik` bir senkron
+// anahtar kelimesidir: panik onu tüketmez, `özellik Oz { }` üst düzeyde ayrıştırılır. Öncesinde
+// self tanı KAYDETMEDEN sayacı artırıp tek belirteç ilerliyordu → sahte P001 1 17.
+dışa özellik Oz { }
+işlev main() -> tam32 { ver 0; }

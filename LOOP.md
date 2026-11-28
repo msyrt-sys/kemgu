@@ -57,14 +57,15 @@
 - [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
-      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76. ESLENEN: 29 kod
-      (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24).
-      ⚠ D-795 YOL USTU (davranis farki, mekanik DEGIL — ayri dilim): `özellik` ve `uygula` govde donguleri. C islev-disi
-      bir token gorunce P202 (`ozellik govdesinde 'islev' bekleniyor`, parser.c:741) / P211 (parser.c:817) basar, panik
-      senkronu yapar ve donguden CIKAR; self P000 + art arda P001 basiyor (olculdu: `özellik Oz { işlev hata() .. }` ve
-      `uygula K { işlev değer(kendin) .. }` — P014 artik iki tarafta ayni, ayrisma bunun ARDINDAN).
-      ⚠ D-787 yol üstü: anahtar kelime adlı işlev tanımı (`işlev değer(..)`, `hata`, `tamam`, `kendin`, `delege`,
-      `geri_al`) → C P014, self P000 (eşlenmemiş bir site daha; fikstür yok).
+      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796).
+      ESLENEN: 39 kod (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
+      ✓ D-796 govde/onek toparlanmasi: `özellik` P201/P202/P203 · `uygula` P210/P211/P212 · `modül` P061/P062 ·
+      `dışa`/`genel` oneki P050/P051; tc48_25..36; 49 sekil: once 44'u farkli, sonra hepsi C ile birebir).
+      ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
+      tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
+      S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
+      checker_diff'in 60 sn siniri yakaladi.
+      ✓ (D-787 yol ustu, D-795'te kapandi) anahtar kelime adli islev tanimi → P014.
       YONTEM (D-647'de kuruldu, her turda ise yariyor): hata SEKLINI yaz, C'ye
       sor, KONUM uyusuyorsa siteyi esle; uyusmuyorsa davranis farki demektir.
       ⚠ D-647'DE OLCULDU: token -> kod eslemesi MEKANIK DEGIL. Tek basina
@@ -532,6 +533,11 @@
       kapisi yalniz `$KEMGU`yu kullaniyor, self-host ikilisine hic dokunmuyor.)
 - [ ] G6  [S] `P000` yer tutucu envanteri (iki dosyada 3'er yer) — C0a ilerledikce
       sifira inmeli; kalanlar listelenmeli.
+      D-796 OLCUMU — tanisiz sayac siteleri (`p.hata_say = p.hata_say + 1`, ph_ekle haric): 9 -> 8. Kapanan:
+      `parse_disa_govde` (`dışa`/`genel` oneki → P050/P051; oncesinde dosyadaki tek hata buysa D-648 emniyet agi
+      konumsuz `P000 0 0` basiyordu). KALAN parser siteleri: bekle_buyuk · parse_parametre · parse_desen ·
+      asm_kisit_atla · asm_kisit_al · parse_cesit; codegen asamasi (emniyet agina girmez): ifade_uret · deyim_uret.
+      (`codegen.kem` emniyet agi yorumundaki "Kalan 12 site" sayisi D-648'den kalma, bayat.)
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
 - [x] G8  ✓ D-751 (369/429 bildirim genel; testler modül sistemiyle derleniyor, calistir_stdlib_ithal). [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
       bu yuzden testleri `cat` ile birlestiriliyor. Dil yuzeyi karari gerekebilir.
@@ -3853,3 +3859,26 @@
   TAM TAKIM (-j10 ölçümlü, 26:40): 191 kapının 191'i geçti, rc=0, disk denetimi temiz, checker_diff 329/329,
   FIXPOINT ✓. D-794'ün bekleme yolu İKİNCİ kez gerçek koşulda ateşlendi: self 16 yabancı QEMU altında 659,2 ms →
   468 sn beklendi → 513,8 ms ile geçti (yeniden ölçümde çekişme 1: sessizlik sağlandıktan sonra bir QEMU başladı).
+- 2026-11-28 D-796: C0a — `özellik`/`uygula` gövde toparlanması + `modül` ve `dışa`/`genel` tanıları.
+  D-795'in yol üstü notu. 49 hata şekli ölçüldü (özellik/uygula/modül/dışa/genel, iç içe modül, panik senkronunun
+  `}` tükettiği şekiller, gövdede senkron anahtar kelime, değiştiricili üyeler, geçerli biçimler): HEAD ikilisinde
+  44'ü C'den farklıydı, şimdi 49'u da birebir. Üç site:
+  (1) `özellik`/`uygula` gövde döngüsü işlev-dışı belirteçte SESSİZCE bitiyordu → tanıyı kapanış `}` beklentisi
+  (P000) basıyor, üst düzey art arda P001 üretiyordu. Artık C gibi P202 (parser.c:741) / P211 (parser.c:817) +
+  panik senkron + döngüden çık; iki işlevin `{`/`}` beklentileri P201/P203 ve P210/P212 ile eşlendi.
+  (2) `dışa`/`genel` öneki izin verilmeyen belirteçle → self sayacı artırıyor ama TANI KAYDETMİYOR ve tek belirteç
+  ilerliyordu (izleyen öğe sahte P001; dosyadaki tek hata buysa D-648 emniyet ağı konumsuz `P000 0 0`). Artık
+  P050 (parser.c:1007) / P051 (parser.c:1044) + HATA düğümü + panik senkron. Tanısız sayaç sitesi 9 → 8 (ph_ekle
+  hariç; kalanlar G6'da listelendi).
+  (3) Komşu şekil ölçülürken: `modül` gövdesinin `{`/`}` beklentileri → P061/P062 (parser.c:1071/1081).
+  `selfhost/checker.kem` dondurulmuş (D-734) → yalnız `codegen.kem`. Eşlenmemiş `bekle(p, "` 76 → 70. Fikstür
+  tc48_25..36 (12 dosya, tek hata şekli; her biri eski ikilide farklı, yenide C ile aynı). checker_diff 341/341.
+  SABOTAJ S348-S362, 15/15 rc=2: sekiz kod eşlemesi · iki panik senkron · `dışa` yolunu eski sessiz hâline
+  döndür · panik yerine tek ilerleme · P050/P051 takası · iki döngü çıkışı. S353 (`uygula` döngüsünden çıkışı
+  kaldır) derleyiciyi ASTI: gövdedeki `sabit` senkron anahtar kelimesidir, panik onu tüketmez → aynı konumda
+  sonsuz döngü; checker_diff'in 60 sn sınırı yakaladı. Yani döngüden çıkış YÜK TAŞIYOR, süs değil. (S350'nin
+  `özellik` karşılığı asmadı çünkü fikstürde `5;` var — panik `;` tüketip `işlev b`yi üye olarak ayrıştırıyor;
+  yakalayan tc48_26'nın P203 basamaklanması.)
+  TAM TAKIM (-j10 ölçümlü, 25:27): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 341/341, FIXPOINT ✓ (109970 satır), atlama izleri D-795 ile aynı desen (25). Açılış süresi kapısı
+  bu kez beklemeden geçti (medyan 488,9 / 644,2 ms < 650, çekişme 17 / 15).
