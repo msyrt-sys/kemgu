@@ -12404,34 +12404,141 @@ işlev tip_kesin_farkli(a: metin, b: metin) -> mantıksal {
     }
     ver metin_esit(a, b) == yanlış;
 }
-// TIP_ISLEV annotasyonu + LAMBDA değeri: uyuşmazlık → T001 (1 = hata verildi).
-işlev t001_lambda_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
-    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
-    değişken ti: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
-    eğer metin_esit(dizi_al(p.a_ad, ti), "TIP_ISLEV") == yanlış { ver 0; }
-    değişken lam: tam32 = son_cocuk(p, idx);
-    eğer lam < 0 { ver 0; }
-    eğer metin_esit(dizi_al(p.a_ad, lam), "LAMBDA") == yanlış { ver 0; }
-    değişken tcs: tam32 = dizi_al(p.a_cs, ti);
-    eğer tcs == 0 { ver 0; }              // dönüş tipi çocuğu yok → emin değiliz
-    değişken tpn: tam32 = tcs - 1;        // annot parametre sayısı (son çocuk = dönüş)
-    değişken kotu: mantıksal = yanlış;
-    eğer tpn == param_say(p, lam) {
+// ==== [D-790] E4v: İŞLEV TİPİ UYUMLULUĞU — ortak kural (C `tip_esit` aynası) ====
+// Self'in tip dizgileri işlev tipini temsil ETMEZ (`tip_str` → "?"), bu yüzden
+// `metin_esit(vt, "?")` ile korunan her uyumluluk denetimi işlev tipli değeri
+// atlıyordu. İmza = [dönüş, p0, p1, ...]; BOŞ dizi = bilinmiyor (karşılaştırılmaz).
+// TIP_ISLEV düğümünden imza: çocuklar parametreler + SON çocuk dönüş (ayrıştırıcı
+// `->`i zorunlu tutar). Bileşenler `tip_str`ten.
+işlev islev_imza_tn(p: &değişken Ayr, tn: tam32) -> Dizi<metin> {
+    değişken r: Dizi<metin> = [];
+    eğer tn < 0 { ver r; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_ISLEV") == yanlış { ver r; }
+    değişken cs: tam32 = dizi_al(p.a_cs, tn);
+    eğer cs == 0 { ver r; }
+    değişken cb: tam32 = dizi_al(p.a_cb, tn);
+    dizi_ekle(r, tip_str(p, dizi_al(p.cocuk, cb + cs - 1)));
+    değişken i: tam32 = 0;
+    iken i < cs - 1 {
+        dizi_ekle(r, tip_str(p, dizi_al(p.cocuk, cb + i)));
+        i = i + 1;
+    }
+    ver r;
+}
+// Kullanıcı işlevinin imza-tablosu satırı (-1: yok). Yerleşikler ATLANIR — D-787:
+// `fn_ad`in ilk `fn_yerlesik_n` satırı yerleşiktir (gölgelenen satır boşaltılmıştır).
+işlev fn_kullanici_idx(p: &değişken Ayr, ad: metin) -> tam32 {
+    değişken i: tam32 = p.fn_yerlesik_n;
+    iken i < dizi_boyut(p.fn_ad) {
+        eğer metin_esit(dizi_al(p.fn_ad, i), ad) { ver i; }
+        i = i + 1;
+    }
+    ver 0 - 1;
+}
+// İşlev tipli DEĞERİN imzası: LAMBDA · işlev tipli YEREL (annotasyon düğümünden;
+// yerel, aynı adlı işlevi GÖLGELER) · üst düzey kullanıcı işlevinin ADI. Başka her
+// şey (çağrı sonucu, alan, dizi elemanı, annotasyonsuz yerel) → boş = bilinmiyor.
+işlev islev_imza_deger(p: &değişken Ayr, v: tam32) -> Dizi<metin> {
+    değişken r: Dizi<metin> = [];
+    eğer v < 0 { ver r; }
+    değişken ad: metin = dizi_al(p.a_ad, v);
+    eğer metin_esit(ad, "LAMBDA") {
+        dizi_ekle(r, lam_donus_str(p, v));
+        değişken n: tam32 = param_say(p, v);
         değişken i: tam32 = 0;
-        iken i < tpn {
-            değişken lp: tam32 = lam_param_idx(p, lam, i);
-            eğer lp >= 0 {
-                eğer tip_kesin_farkli(tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, ti) + i)),
-                                      param_tip_str(p, lp)) { kotu = doğru; }
-            }
+        iken i < n {
+            değişken lp: tam32 = lam_param_idx(p, v, i);
+            eğer lp >= 0 { dizi_ekle(r, param_tip_str(p, lp)); } değilse { dizi_ekle(r, "?"); }
             i = i + 1;
         }
-        eğer tip_kesin_farkli(tip_str(p, dizi_al(p.cocuk, dizi_al(p.a_cb, ti) + tpn)),
-                              lam_donus_str(p, lam)) { kotu = doğru; }
-    } değilse {
-        kotu = doğru;                     // arite farkı — C tip_esit de reddeder
+        ver r;
     }
-    eğer kotu {
+    eğer metin_esit(ad, "TANIMLAYICI") == yanlış { ver r; }
+    değişken isim: metin = dizi_al(p.a_deg, v);
+    eğer yerel_var_mi(p, isim) { ver islev_imza_tn(p, bag_tn(p, isim)); }
+    değişken k: tam32 = fn_kullanici_idx(p, isim);
+    eğer k < 0 { ver r; }
+    dizi_ekle(r, dizi_al(p.fn_donus, k));
+    değişken b: tam32 = dizi_al(p.fn_pbase, k);
+    değişken j: tam32 = 0;
+    iken j < dizi_al(p.fn_psay, k) {
+        dizi_ekle(r, dizi_al(p.fn_ptip, b + j));
+        j = j + 1;
+    }
+    ver r;
+}
+// İşlev-DIŞI BİLİNEN tip mi? ("?", generic param ve bilinmeyen ad → hayır.) İşlev
+// tipleri self'te dizgiye hiç girmez ("?"), yani "bilinen" demek "işlev değil" demektir.
+işlev islev_disi_bilinen_mi(p: &değişken Ayr, t: metin) -> mantıksal {
+    eğer metin_esit(t, "?") { ver yanlış; }
+    eğer generic_param_adi_mi(p, t) { ver yanlış; }
+    eğer bilinen_tip_mi(t) { ver doğru; }
+    ver tip_adi_bilinir_mi(p, t);
+}
+// İmzada bilgi taşımayan bileşen var mı ("?" ya da bilinmeyen ad; generic SAYILMAZ)?
+işlev imza_eksik_mi(p: &değişken Ayr, s: Dizi<metin>) -> mantıksal {
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(s) {
+        değişken c: metin = dizi_al(s, i);
+        eğer (generic_param_adi_mi(p, c) == yanlış) ve (islev_disi_bilinen_mi(p, c) == yanlış) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// İmza bileşeni KESİN farklı mı? Generic param (C: uyumlu sayar; D-698 burada sahte
+// T001 veriyordu — `işlev() -> T = || 42`) ve DEĞER tarafında bilinmeyen ad
+// (`|x: Yokk|` — C'de HATA) farklı SAYILMAZ. Beklenen taraftaki bilinmeyen ad
+// karşılaştırılır: C de basar (E4w ölçümü, bildirim noktası).
+işlev imza_bilesen_farkli(p: &değişken Ayr, bek: metin, deg: metin) -> mantıksal {
+    eğer metin_esit(bek, "?") veya metin_esit(deg, "?") { ver yanlış; }
+    eğer generic_param_adi_mi(p, bek) veya generic_param_adi_mi(p, deg) { ver yanlış; }
+    eğer islev_disi_bilinen_mi(p, deg) == yanlış { ver yanlış; }
+    ver tip_kesin_farkli(bek, deg);
+}
+işlev islev_imza_farkli(p: &değişken Ayr, bek: Dizi<metin>, deg: Dizi<metin>) -> mantıksal {
+    eğer (dizi_boyut(bek) == 0) veya (dizi_boyut(deg) == 0) { ver yanlış; }
+    eğer dizi_boyut(bek) != dizi_boyut(deg) { ver doğru; }   // arite — C tip_esit reddeder
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(bek) {
+        eğer imza_bilesen_farkli(p, dizi_al(bek, i), dizi_al(deg, i)) { ver doğru; }
+        i = i + 1;
+    }
+    ver yanlış;
+}
+// Beklenen tip (DÜĞÜMÜ `bek_tn`, yoksa -1; dizgisi `bek`) ile değer `v` arasında
+// İŞLEV TÜRÜ uyuşmazlığı var mı? Üç durum, üçü de C'de T001 (ölçüldü):
+//  (1) ikisi de işlev → yapısal karşılaştırma (arite + bileşenler),
+//  (2) işlev beklenir, değer BİLİNEN işlev-dışı tip (`= 5`, `tam32` yerel) — çağrılınca çöker,
+//  (3) işlev-dışı bilinen tip beklenir, değer işlev (lambda · işlev adı · işlev tipli yerel).
+// `alt_hata`: değerin alt ağacında tanı çıktı. C, değer tipi HATA içeriyorsa basmaz
+// (D-789); self'te "?" hem "bilinmiyor" hem "hata" demek, ikisini bu ayırır:
+// hata + eksik imza → HATA sayılır (`|| yok()` arite/param farkıyla, ölçüldü);
+// hata + tam imza → bilgi sağlam, karşılaştırılır (`|| { yok(); ver "a"; }`, C de basar).
+// (2)'de self tipi bilinen ama C'de HATA olabilir (`1 + yok()`) → hata varsa basılmaz.
+işlev islev_tur_uyumsuz(p: &değişken Ayr, bek_tn: tam32, bek: metin, v: tam32, alt_hata: mantıksal) -> mantıksal {
+    değişken se: Dizi<metin> = islev_imza_tn(p, bek_tn);
+    değişken sv: Dizi<metin> = islev_imza_deger(p, v);
+    eğer (dizi_boyut(sv) > 0) ve alt_hata ve imza_eksik_mi(p, sv) { ver yanlış; }
+    eğer (dizi_boyut(se) > 0) ve (dizi_boyut(sv) > 0) { ver islev_imza_farkli(p, se, sv); }
+    eğer dizi_boyut(se) > 0 {
+        eğer alt_hata { ver yanlış; }
+        ver islev_disi_bilinen_mi(p, ifade_tip(p, v, "?"));
+    }
+    eğer dizi_boyut(sv) > 0 { ver islev_disi_bilinen_mi(p, bek); }
+    ver yanlış;
+}
+// Bildirim/`sabit` + İŞLEV TİPİ uyumluluğu → T001 (1 = hata verildi). D-698 yalnız
+// "TIP_ISLEV annotasyonu + LAMBDA" şeklini karşılaştırıyordu; [D-790] ortak kurala
+// taşındı. Ölçüldü (E4v): işlev ADI, işlev tipli yerel, işlev beklenen yere işlev-dışı
+// değer ve tersi self'te SESSİZCE geçiyordu (`değişken g: işlev() -> tam32 = 5;
+// ver g();` → çalışınca çöküş).
+işlev t001_lambda_kontrol(p: &değişken Ayr, idx: tam32, alt_hata: mantıksal) -> tam32 {
+    eğer dizi_al(p.a_cs, idx) < 2 { ver 0; }
+    değişken ti: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, idx));
+    eğer metin_baslar(dizi_al(p.a_ad, ti), "TIP_") == yanlış { ver 0; }
+    değişken v: tam32 = son_cocuk(p, idx);
+    eğer v < 0 { ver 0; }
+    eğer islev_tur_uyumsuz(p, ti, annot_str(p, idx), v, alt_hata) {
         dizi_ekle(p.th_kod, "T001");
         dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
         dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
@@ -12440,8 +12547,8 @@ işlev t001_lambda_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
     ver 0;
 }
 // T001: annotation vs değer tipi (DEGISKEN/SABIT). Güvenli — yalnız emin olunca.
-işlev t001_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
-    eğer t001_lambda_kontrol(p, idx) == 1 { ver 0; }   // D-698
+işlev t001_kontrol(p: &değişken Ayr, idx: tam32, alt_hata: mantıksal) -> tam32 {
+    eğer t001_lambda_kontrol(p, idx, alt_hata) == 1 { ver 0; }   // D-698 → D-790
     değişken annot: metin = annot_str(p, idx);
     eğer metin_esit(annot, "?") {
         // [D-732] annotasyonsuz bağlamada da C değeri bağlamsız tipler → literal
@@ -15778,7 +15885,13 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
     }
     değişken i: tam32 = 0;
-    iken i < cs { kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1; }
+    // [D-790] SON çocuğun (DEGISKEN/SABIT'te değer) alt ağacından önceki tanı sayısı:
+    // değerde hata çıktı mı → C'nin D-789 `tip_hata_icerir` bastırmasının vekili.
+    değişken th_son: tam32 = dizi_boyut(p.th_kod);
+    iken i < cs {
+        eğer i == cs - 1 { th_son = dizi_boyut(p.th_kod); }
+        kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1;
+    }
     p.aktif_donus = eski_ad_d627;
     p.odunc_lam = eski_odunc_lam;
     p.dizi_bek = eski_bek;
@@ -15796,7 +15909,9 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         }
     }
     // DEGISKEN/SABIT: çocuk T002'lerinden SONRA T001; VER: T020 (C sırası)
-    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { t001_kontrol(p, idx); }
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
+        t001_kontrol(p, idx, dizi_boyut(p.th_kod) > th_son);
+    }
     // D-367 CT003: sabitsüre değer NORMAL tipli bağlamaya implicit akamaz.
     eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") {
         değişken can: tam32 = annot_node(p, idx);

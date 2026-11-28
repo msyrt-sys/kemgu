@@ -226,14 +226,17 @@ Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 Ayrılmış adın çağrısı, kapsamda aynı adlı YEREL bağlama varken de T024 (D-788); çağrılmayan
 bağlama serbest (`değişken bir: tam32` geçerli).
 
-**⚠ İşlev tipi uyumluluğu (D-789 matrisi, E4v AÇIK):** self-host işlev tipli DEĞERLERİ
-neredeyse hiç karşılaştırmıyor. Tek yapısal şekil: bildirim/`sabit` + LAMBDA LİTERALİ
-(`t001_lambda_kontrol`, D-698). Argüman konumundaki lambda ya da işlev adı, bildirimdeki işlev
-ADI, `ver`, alana atama, yapı alanı, dizi literali, `dizi_ekle`/`dizi_yaz`, metot argümanı ve
-ikili op denetlenmiyor (`ifade_tip` lambda için "?" döner). `ver || "a"` (beklenen
-`işlev() -> tam32`) C'de T020, self'te OK ve çalışınca YANLIŞ DEĞER verir. Kapanana kadar işlev
-tipli değerlerde self `--check` OK'u kanıt DEĞİLDİR. C tarafında: değer tipi HATA içeriyorsa
-(iç içe dâhil) uyumsuzluk tanısı basılmaz (`tip_hata_icerir`; bildirim · argüman · `sabit`).
+**⚠ İşlev tipi uyumluluğu (E4v KISMİ):** self'in tip dizgileri işlev tipini temsil ETMEZ
+(`tip_str` → "?"), bu yüzden `metin_esit(vt, "?")` ile korunan uyumluluk denetimleri işlev
+tipli değeri atlar. Ortak kural `islev_tur_uyumsuz` (D-790, `selfhost/codegen.kem`): iki taraf
+işlev → yapısal; işlev beklenir/değer bilinen işlev-dışı; tersi. Generic ve değer tarafında
+bilinmeyen ad joker; değerin alt ağacında tanı + eksik imza → HATA (C D-789 aynası). Bugün
+YALNIZ bildirim/`sabit` noktası kullanıyor; argüman, metot argümanı, `ver`, alana atama, yapı
+alanı ve dizi literali hâlâ AÇIK — `ver || "a"` (beklenen `işlev() -> tam32`) C'de T020, self'te
+OK ve çalışınca YANLIŞ DEĞER verir. O noktalarda işlev tipli değer için self `--check` OK'u
+kanıt DEĞİLDİR. C tarafında: değer tipi HATA içeriyorsa (iç içe dâhil) uyumsuzluk tanısı
+basılmaz (`tip_hata_icerir`; bildirim · argüman · `sabit`). `dizi_ekle`/`dizi_yaz` eleman tipi
+ve eşitlik operand uyumu self'te İŞLEV-DIŞI tiplerde de yok (E4z).
 
 ### Tip Sistemi
 ```
