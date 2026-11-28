@@ -247,6 +247,14 @@
       INDEKS kuraliyla ayni), `dizi_boyut`, `metin_uzunluk`. Ayrica self'te desen/`için` baglamalari ve
       cagrilan govdedeki kuresel adlar BILEREK kanitlanmaz (C bunlari kesin bilir) — korpusta bugun parite
       farki yok; olusursa `calistir_gorev_rho` kirmizi verir.
+      ⚠ D-807: bu maddenin SAGLAMLIK onkosulu P5'ti (KAPANDI). P1'i genisletmek, kanaldan alinan PAYLASILAN
+      diziyi buyuten gorevlere de bayrak 1 verdirirdi (UAF); P5 onlari ayrica dusurur. Genisletmede r07/r11
+      (kanal ve yon ucu, ASan kosumlu) yesil kalmali; G22 (`&değişken` yakalamasi) da ayni sinif — once o.
+- [x] D6g -> D-807 (D6f olcumu sirasinda bulundu; CANLI, SESSIZ UAF C oracle'da): gorev kaniti P5 —
+      erisilebilir kumede `kanal_al(k)` varsa `k`nin yuku KANITLI skaler olmali. Kanal yuku TASINMIYOR
+      (G23), gorev alip buyutunce tampon rho_sahip'te (D-770); kanit bayrak 1 verip join'de serbest
+      birakiyordu → ASan heap-use-after-free, ASan'siz kosum exit 42. Yol ustunde self `ll_ic_tip`
+      `alan<T>`/`gönderen<T>` yon uclarini tanimiyordu (P5 parite farki + onceden var LINK-RED) → kapandi.
 - [ ] D7a [M] Ayrik derleme: arayuz dosyalari (imza-only cikti).
 - [ ] D7b [M] Ayrik derleme: glob import.
 - [ ] D7c [M] Ayrik derleme: opak tipler.
@@ -677,6 +685,39 @@
       `store ptr %<i64>` (inttoptr yok). Ust duzey `ver x` (tanimlayici) CALISIYOR (r02 exit 42).
       Maskeledigi: test/gorev_rho/r05 yalniz YAPISAL olculebiliyor
       (`KOSUM: yok`). Onarim sonrasi r05 kosuma alinmali.
+- [ ] G21 [S] SELF: GOREV LAMBDASINA YAKALANAN KANALIN IC TIPI KAYBOLUYOR (D-807 yol ustu, onceden var;
+      LINK-RED, sessiz degil). OLCULDU: main'de `değişken k: kanal<Dizi<tam32>>`, gorev blok govdesinde
+      `değişken a: Dizi<tam32> = kanal_al(k);` → self `store ptr %<i64>` ("defined with type 'i64' but
+      expected 'ptr'"), C dogru. KOK OKUNDU: `lam_emit` yakalamalari `cg_var_ekle(p, cad, .., cir, "", "")`
+      ile kaydediyor — `cg_aic` (ic tip) tasinmiyor → `cagri_ic_tip` "" → i64 daraltilmiyor. Ayni sinifin
+      yon ucu annotasyonu yarisi D-807'de kapandi (`ll_ic_tip`). Maskeledigi: test/gorev_rho/r08 yalniz
+      YAPISAL (`KOSUM: yok`). Onarim: yakalama kaydina spawn yerindeki baglamanin `cg_aic`ini tasi; r08
+      kosuma alinmali. G24 ile AYNI kok (yakalama kaydi tip bilgisi tasimiyor) — birlikte ele alinmali.
+- [ ] G22 [M] DRF: `&değişken Dizi<T>` GOREVE YAKALANIYOR (D-807 yol ustu, onceden var). OLCULDU:
+      `değişken r: &değişken Dizi<tam32> = &değişken d;` + gorevde `dizi_ekle(r, j)` → iki checker da OK
+      (D-505 yalniz `Dizi<T>` DEGERINI tasir; referans muaf), iki derleyicide kanit bayragi 1, kosum
+      SEGV (exit 139; C ve self). (a) codegen: yakalanan referans uzerinden `dizi_ekle` cokuyor; (b) ASIL:
+      referansla paylasim DRF'yi deliyor (ana is parcacigi ve gorev ayni diziye yazabilir) VE (a) onarilirsa
+      gorevin buyuttugu tampon rho_sahip'te olur → bayrak 1 yuzunden join'de UAF; P-kurallari yakalanan
+      REFERANSI gormuyor. Onarim sirasi: once (b) (referans yakalayan goreve kanit verme ya da
+      R-YAKALAMA-THREAD'i referansa uygula), sonra (a) — tersi sessiz UAF acar.
+- [ ] G23 [M] R-KANAL GONDERIMDE TASIMA UYGULANMIYOR (D-807 yol ustu, onceden var). Spec (KEMGU_Bellek_Modeli.md
+      R-KANAL, Gonderim): `sahiplik_transfer(v, ρ_kanal(k))`, `Γ' = Γ \ {v}` — gonderilen deger gonderenin
+      baglamindan CIKAR. OLCULDU: `kanal_gönder(k, d)` (d: Dizi<tam32>) sonrasi gonderen `dizi_yaz(d, 0, 9)`
+      yapiyor, gorev ayni diziye `kanal_al` ile ulasip yaziyor → iki checker da OK (eszamanli yazma = veri
+      yarisi; DRF teoreminin disi). D-807 P5 bunun UAF yarisini kapatti (bolge serbest birakilmiyor), YARISI
+      DEGIL. Onarim (dil yuzeyi): isaretci-benzeri yukun gonderiminde degeri TASI (L002; D-505'in kanal
+      karsiligi, `metin` degismez oldugu icin muaf). Etki alani once olculmeli (korpusta kanal yuku olarak
+      `Dizi<T>` gonderen dosyalar).
+- [ ] G24 [M] ⚠ SESSIZ YANLIS CEVAP, C ORACLE DAHIL: KAPANISA YAKALANAN `Dizi<T>`NIN ELEMAN TIPI LIFTED
+      GOVDEDE KAYBOLUYOR (D-807 yol ustu, onceden var). OLCULDU (2^33 ayirt edici, D-535): `değişken d:
+      Dizi<tam64> = [8589934592, 2];` (a) genel kapanis `değişken f: işlev() -> tam64 = || dizi_al(d, 0);`
+      → C 40, self 40 (dogrusu 42): C `define i32 @lambda_0` + `@kdl_dizi_al_tam` (bildirilen `-> tam64`
+      ile uyusmuyor; dolayli cagri imza denetlemez, D-295/D-325), self `@kdl_dizi_al_tam`; (b) gorev
+      lambdasi `ver (x / 4294967296) olarak tam32` → C 42 (dogru, `_tam64`), self 40. Kok self'te okundu
+      (`lam_emit` yakalama kaydinda eleman tipi bos); C'nin genel kapanis yolu AYRICA okunmali. `tam32`
+      elemanla GORUNMEZ (ayni IR). Onarim: yakalama kaydina eleman tipi/isaretsizlik/metin-lik yan
+      kanallarini tasi (G21 ile ayni kok); fikstur: iki sekil + `Dizi<metin>`, sabotaj: kaydi bosalt.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -4226,3 +4267,47 @@
   dökümü biçimini, LSP'yi ve iki checker'ı birden değiştiren ayrı bir dil yüzeyi işidir. Kanıtın kendisi D-805'ten
   beri `calistir_gorev_rho` ile ölçülüyor. Kod değişikliği YOK; gerçek bir ihtiyaç ölçülürse (çok sayıda işaretçi
   döndüren görevin bellek sızıntısı) uyarı sınıfı tasarımıyla yeniden açılır.
+- 2026-11-28 D-807: GÜVENLİK — görev bölgesi kanıtına P5: `kanal_al` yükü KANITLI skaler olmalı (C oracle'da CANLI,
+  SESSİZ UAF). Sırada'nın en üstü D6f'ti (P1 hassasiyeti: kanıtı yerleşiklerin skaler dönüşlerine genişlet).
+  Genişletmeden önce kanıtın neyi SORMADIĞI ölçüldü: P1-P4 yalnız görevden KAÇAN işaretçiyi sorar. Oysa görev, başka
+  bir iş parçacığının elindeki bir diziyi büyütürse yeni tampon görevin bölgesinden ayrılır (D-770) ve join'de serbest
+  bırakılır. Paylaşılan diziye ulaşmanın yolları tek tek denendi: yakalanan `Dizi<T>` (D-505) ve dizi içeren yapı
+  (D-523) TAŞINIR → çağıran sonra kullanamaz (ölçüldü: L002, iki checker); `&değişken` yakalaması iki checker'dan da
+  geçiyor ama codegen çöküyor (G22); KANAL yükü ise TAŞINMIYOR (R-KANAL uygulanmıyor: G23). Ölçülen UAF: ana iş
+  parçacığı diziyi kanaldan gönderip elinde tutuyor, görev `kanal_al` ile alıp 1000 kez büyütüyor ve `ver 0` dönüyor →
+  C bayrak 1, ASan heap-use-after-free; ASan'sız koşum DOĞRU cevabı veriyor (exit 42: serbest bellek eski değerleri
+  taşıyor). Alma ve büyütme bir yardımcıya taşınınca da (`buyut(k)`) aynı. D6f'yi önce yapmak bu deliği BÜYÜTÜRDÜ
+  (daha çok görev bayrak 1 alırdı) → önce P5; D6f açık kaldı, notu eklendi.
+  KURAL (P5): görevin erişilebilir kümesinde `kanal_al(k)` varsa `k`nin yükü kanıtlı skaler olmalı; değilse kanıt
+  düşer (bölge sızar, UAF olmaz — D-309 ilkesi). C: argüman TANIMLAYICI, `cozum_sembol` tipi TIP_KANAL (yön uçları
+  da TIP_KANAL) ve iç tip işaretçi-benzeri değil. Self: D-805'in tüm-bağlama kuralı, yeni `kip 2` (= `kanal<skaler>`
+  ya da `alan<skaler>`): kökteki TÜM bağlamalar ve görev gövdesinde dış bağlama (`cg_var_ic_bul`) skaler yük taşımalı;
+  argüman tanımlayıcı değilse (ör. `kanal_al(alan(k))`) kanıtlanamaz — C ile aynı.
+  YOL ÜSTÜNDE KAPANAN: self `ll_ic_tip` `alan<T>`/`gönderen<T>` yön uçlarını (TIP_KULLANICI, kids[1] = yük)
+  tanımıyordu. (a) P5'in SOKTUĞU parite farkı: yön ucundan alınan skaler yük self'te kanıtlanamıyordu (C 1, self 0 —
+  güvenli yönde ama kapının öncülü paritedir); (b) ÖNCEDEN VAR: `u: alan<Dizi<T>>` parametresinden `kanal_al(u)`
+  i64'ü işaretçiye daraltmıyordu → self LINK-RED (`store ptr %<i64>`), C doğru (exit 42). Tek dal ikisini kapattı;
+  ilk tam takım koşumu bu yüzden 7. dakikada DURDURULDU (kaynak değişecekti, sonuç bayat olurdu) ve yarıda kalan
+  harness'ların bıraktığı 10 geçici dizin silindi.
+  FİKSTÜRLER (test/gorev_rho): r07 kanal + yardımcı (0, ASan koşumu) · r08 kanal doğrudan (0, yalnız yapısal: G21) ·
+  r09 POZİTİF kanaldan skaler (1) · r10 POZİTİF `alan<tam64>` iki AYRI yol — dış bağlama ve çağrılan parametre (1,1) ·
+  r11 `alan<Dizi<T>>` parametresi (0, ASan koşumu). Pozitifler olmasa "her `kanal_al`ı reddet" kapıdan geçerdi (D-425).
+  KAPI DÜZELTMESİ: `calistir_gorev_rho` dosya listesi artık `git ls-files -z | xargs -0`. Düz `git ls-files` ASCII
+  dışı yolları TIRNAKLI kaçışla basıyor (`"k\303\274t\303\274phane/..."`), `grep` o adı bulamıyor ve dosya SESSİZCE
+  atlanıyordu (ölçüldü: kütüphane/dizi.kem). Korpus bayrakları değişmedi: görev başlatan 14 depo dosyasında 14 yerde 1,
+  10 yerde 0, C↔self parite farkı 0 (D-805/D-806 kaydıyla birebir) — korpusta işaretçi yükü kanaldan alan görev yoktu.
+  SABOTAJ S518-S526: 9/9 kırmızı, beklendiği gibi — C P5 yok · self P5 yok · C aşırı tutucu · self aşırı tutucu ·
+  self kanal yük denetimi yok · self dış bağlama denetimi yok (ilk altısı yön ucu onarımından ÖNCE koşuldu; onarım
+  yalnız S522'nin hedef satırını değiştirdi, onun yeni koddaki eşdeğeri S525'tir) · self `ll_ic_tip` yön ucu dalı yok (r10 0,0 + r11 LINK-RED) · self `kip 2` yük
+  denetimi yok (r07 ve r11 bayrak 1 VE ASan heap-use-after-free) · self `kip 2` TIP_KULLANICI reddi (r10 1,0: iki
+  görevin iki yolu ayrı ölçtüğünün kanıtı). h1 (yapı içinde dizi) ayırt edici DEĞİLDİ: D-523 yapıyı taşıyor, L002.
+  YOL ÜSTÜ (Sırada sonuna): G21 (self lambdaya yakalanan kanalın iç tipi → LINK-RED; kök okundu) · G22 (`&değişken`
+  yakalaması: DRF deliği + SEGV, iki derleyicide bayrak 1) · G23 (R-KANAL gönderimde taşıma yok → veri yarışı) ·
+  G24 (⚠ SESSİZ YANLIŞ CEVAP, C dahil: yakalanan `Dizi<tam64>` elemanı lifted gövdede 32 bite kırpılıyor —
+  genel kapanışta C 40 / self 40, görev lambdasında self 40; doğrusu 42).
+  TAM TAKIM (-j10 ölçümlü, 25:35): 192 kapının 192'si geçti, rc=0, geçici dizin önce 0 / sonra 0, checker_diff
+  460/460 (0 muaf), codegen_diff 233/233, codegen_genis 77/77, FIXPOINT ✓ (stage1 == stage2, 111334 satır), atlama
+  izleri D-805 ile birebir (32 satır). `calistir_gorev_rho` parite 20 dosya · 11 fikstür: r07-r11 koşum anında
+  izlenmediği için parite listesinde değildi (`git ls-files`); commit sonrası kapı ayrıca koşuldu. D-794'ün bekleme
+  yolu yine ateşlendi: 664,9 ms (çekişme 15) → 484 sn sessizlik → 504,1 ms (çekişme 1) → geçti. Bütçe uyarıları
+  (açılış süresi, codegen_diff) önceki koşumlarda da var.

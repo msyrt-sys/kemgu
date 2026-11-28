@@ -1,0 +1,17 @@
+// [D-807] POZİTİF — P5 yalnız işaretçi yükünü reddeder: kanaldan SKALER alan görevin bölgesi
+// join'de serbest bırakılmaya devam eder (aşırı tutucu sabotajı bunu kırmızıya çevirir).
+// RHO_BEKLE: 1
+işlev main() -> tam32 {
+    değişken k: kanal<tam64> = kanal_oluştur(1);
+    kanal_gönder(k, 40);
+    eşleş görev_başlat(|| {
+        değişken v: tam64 = kanal_al(k);
+        değişken d: Dizi<tam32> = [2];
+        değişken t: tam32 = d[0];
+        ver t + (v olarak tam32);
+    }) {
+        tamam(g) => { ver görev_birleştir(g); }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}

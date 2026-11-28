@@ -4511,6 +4511,17 @@ işlev ll_ic_tip(p: &değişken Ayr, tip_idx: tam32) -> metin {
     eğer metin_esit(ta, "TIP_DIZI") {
         ver ll_ic_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
     }
+    // [D-807] `alan<T>`/`gönderen<T>` yön uçları: TIP_KULLANICI generic, kids[0] = ad
+    // düğümü, kids[1] = T (ll_tip handle'ı zaten `ptr` yapıyor, D-303). İç tip KANAL ile
+    // aynıdır. Bu dal olmadan `kanal_al(u)` (u: alan<Dizi<T>>) i64'ü işaretçiye
+    // DARALTMIYORDU (ölçüldü: self `store ptr %<i64>` → LINK-RED; C doğru) ve P5 kanıtı
+    // yönü uç üzerinden alınan yükü bilemiyordu (C 1, self 0).
+    eğer metin_esit(ta, "TIP_KULLANICI") ve (dizi_al(p.a_cs, tip_idx) >= 2) {
+        değişken uad: metin = dizi_al(p.a_deg, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx)));
+        eğer metin_esit(uad, "gönderen") veya metin_esit(uad, "alan") {
+            ver ll_tip(p, dizi_al(p.cocuk, dizi_al(p.a_cb, tip_idx) + 1));
+        }
+    }
     ver "";
 }
 // CG8: eleman LLVM tipi → kdl_dizi_olustur eleman_byte ("8"=ptr/i64, "4"=diğer).
@@ -9087,9 +9098,10 @@ işlev rho_desen_yapi_baglar(p: &değişken Ayr, dn: tam32, ad: metin) -> mantı
     }
     ver yanlış;
 }
-// `ad`ın kök alt ağacındaki TÜM bağlamaları skaler mi? (`elem` doğruysa: hepsi
-// `Dizi<skaler>` mi — `xs[i]` eleman-kopya kanıtı için.) Bağlama yoksa doğru.
-işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, elem: mantıksal) -> mantıksal {
+// `ad`ın kök alt ağacındaki TÜM bağlamaları skaler mi? `kip`: 0 = değerin kendisi skaler,
+// 1 = `Dizi<skaler>` (`xs[i]` eleman-kopya kanıtı), 2 = `kanal<skaler>` ([D-807] P5:
+// alınan yük). Bağlama yoksa doğru.
+işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, kip: tam32) -> mantıksal {
     eğer kok < 0 { ver doğru; }
     değişken na: metin = dizi_al(p.a_ad, kok);
     değişken cb: tam32 = dizi_al(p.a_cb, kok);
@@ -9099,13 +9111,21 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, elem: mant
             // Annotasyon = İLK çocuk (TIP_*); yoksa kanıtlanamaz.
             eğer cs == 0 { ver yanlış; }
             değişken t0: tam32 = dizi_al(p.cocuk, cb);
-            eğer elem {
+            eğer kip == 1 {
                 eğer metin_esit(dizi_al(p.a_ad, t0), "TIP_DIZI") == yanlış { ver yanlış; }
                 eğer rho_skaler_ir(ll_eleman_tip(p, t0)) == yanlış { ver yanlış; }
+            } değilse { eğer kip == 2 {
+                // `kanal<T>` (TEK çocuk = yük, parse_tek_arg) ya da `alan<T>`/`gönderen<T>`
+                // yön ucu (TIP_KULLANICI; kids[1] = yük). İkisinin iç tipini de ll_ic_tip
+                // verir; başka bir kullanıcı tipi "" döner → kanıtlanamaz.
+                değişken t0a: metin = dizi_al(p.a_ad, t0);
+                eğer metin_esit(t0a, "TIP_KANAL") { eğer dizi_al(p.a_cs, t0) < 1 { ver yanlış; } }
+                değilse { eğer metin_esit(t0a, "TIP_KULLANICI") == yanlış { ver yanlış; } }
+                eğer rho_skaler_ir(ll_ic_tip(p, t0)) == yanlış { ver yanlış; }
             } değilse {
                 eğer metin_baslar(dizi_al(p.a_ad, t0), "TIP_") == yanlış { ver yanlış; }
                 eğer rho_skaler_ir(ll_tip(p, t0)) == yanlış { ver yanlış; }
-            }
+            } }
         }
     }
     eğer metin_esit(na, "ICIN") veya metin_esit(na, "DESEN_TANIMLAYICI") {
@@ -9114,7 +9134,7 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, elem: mant
     eğer metin_esit(na, "DESEN_YAPI") ve rho_desen_yapi_baglar(p, kok, ad) { ver yanlış; }
     değişken i: tam32 = 0;
     iken i < cs {
-        eğer rho_ad_hepsi_skaler(p, dizi_al(p.cocuk, cb + i), ad, elem) == yanlış { ver yanlış; }
+        eğer rho_ad_hepsi_skaler(p, dizi_al(p.cocuk, cb + i), ad, kip) == yanlış { ver yanlış; }
         i = i + 1;
     }
     ver doğru;
@@ -9126,6 +9146,26 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, elem: mant
 işlev rho_dis_kapsam_mi(p: &değişken Ayr, kok: tam32) -> mantıksal {
     eğer kok < 0 { ver yanlış; }
     ver metin_esit(dizi_al(p.a_ad, kok), "ISLEV") == yanlış;
+}
+// [D-807] P5: `kanal_al(k)`nin yükü KANITLI skaler mi? Alınan işaretçi PAYLAŞILIR
+// (gönderim sahipliği taşımaz); görev onu büyütürse yeni tampon ρ_sahip'ten ayrılır
+// (D-770) ve gönderenin elindeki dizi başlığına yazılır → join'de serbest bırakmak UAF
+// (ölçüldü, C'de ASan heap-use-after-free). Kanal yalnız TANIMLAYICI ise ve TÜM
+// bağlamaları `kanal<skaler>` ya da `alan<skaler>` (görev gövdesinde dış bağlama:
+// `cg_var_ic_bul`) ise kanıtlı.
+işlev rho_kanal_yuku_skaler(p: &değişken Ayr, arg: tam32, kok: tam32) -> mantıksal {
+    eğer arg < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, arg), "TANIMLAYICI") == yanlış { ver yanlış; }
+    değişken kad: metin = dizi_al(p.a_deg, arg);
+    değişken ic: mantıksal = rho_ad_baglama_var(p, kok, kad);
+    değişken dis: mantıksal = yanlış;
+    eğer rho_dis_kapsam_mi(p, kok) { dis = metin_esit(cg_var_bul(p, kad), "") == yanlış; }
+    eğer ic == yanlış ve dis == yanlış { ver yanlış; }
+    eğer ic {
+        eğer rho_ad_hepsi_skaler(p, kok, kad, 2) == yanlış { ver yanlış; }
+    }
+    eğer dis { ver rho_skaler_ir(cg_var_ic_bul(p, kad)); }
+    ver doğru;
 }
 // İfade KANITLI skaler mi? (kok = kapsayan fn gövdesi — ad çözümü için)
 işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksal {
@@ -9145,7 +9185,7 @@ işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksa
         eğer rho_dis_kapsam_mi(p, kok) { dis = metin_esit(cg_var_bul(p, tad), "") == yanlış; }
         eğer ic == yanlış ve dis == yanlış { ver yanlış; }
         eğer ic {
-            eğer rho_ad_hepsi_skaler(p, kok, tad, yanlış) == yanlış { ver yanlış; }
+            eğer rho_ad_hepsi_skaler(p, kok, tad, 0) == yanlış { ver yanlış; }
         }
         eğer dis { ver rho_skaler_ir(cg_var_tip_bul(p, tad)); }
         ver doğru;
@@ -9181,7 +9221,7 @@ işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksa
             eğer metin_esit(cg_var_bul(p, xad), "") == yanlış { ver yanlış; }
         }
         eğer rho_ad_baglama_var(p, kok, xad) == yanlış { ver yanlış; }
-        ver rho_ad_hepsi_skaler(p, kok, xad, doğru);
+        ver rho_ad_hepsi_skaler(p, kok, xad, 1);
     }
     eğer metin_esit(a, "CAGRI") {
         // Kullanıcı işlevi + BİLDİRİLEN dönüşü skaler → sonuç kopya değer.
@@ -9232,6 +9272,10 @@ işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam3
         eğer metin_esit(fad, "kanal_gönder") {                // P2: yük skaler mi?
             eğer cs < 3 { ver doğru; }
             eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb + 2), kok) == yanlış { ver doğru; }
+        }
+        eğer metin_esit(fad, "kanal_al") {                    // [D-807] P5: alınan yük skaler mi?
+            eğer cs < 2 { ver doğru; }
+            eğer rho_kanal_yuku_skaler(p, dizi_al(p.cocuk, cb + 1), kok) == yanlış { ver doğru; }
         }
         // Kullanıcı işlevi → gövdesine in (call-graph kapanışı).
         değişken fi: tam32 = fn_node_bul(p, fad);

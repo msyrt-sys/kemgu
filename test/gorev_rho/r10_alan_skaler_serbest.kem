@@ -1,0 +1,31 @@
+// RHO_BEKLE: 1,1
+// [D-807] POZİTİF (P5, yön ucu): kanal `alan<T>` ucundan okunuyor ve yük SKALER → kanıt
+// tutar, bölge join'de serbest bırakılır. İki AYRI yol ölçülür:
+//   (1) görev gövdesinde DIŞ bağlama `a: alan<tam64>` (self: `cg_var_ic_bul`),
+//   (2) çağrılan işlevin PARAMETRESİ `u: alan<tam64>` (self: kök = ISLEV, annotasyon).
+// Self `alan<T>`yi tanımadan önce ikisinde de 0 veriyordu (C 1): güvenli yönde ama
+// parite farkı. (1) ve (2) ayrı görevlerde: biri düşerse bayrak dizisi hangisini söyler.
+işlev al_ver(u: alan<tam64>) -> tam32 {
+    değişken v: tam64 = kanal_al(u);
+    değişken d: Dizi<tam32> = [1];
+    ver (v olarak tam32) + d[0];
+}
+işlev main() -> tam32 {
+    değişken k: kanal<tam64> = kanal_oluştur(2);
+    değişken a: alan<tam64> = alan(k);
+    kanal_gönder(k, 20);
+    kanal_gönder(k, 20);
+    değişken t: tam32 = 0;
+    eşleş görev_başlat(|| {
+        değişken v: tam64 = kanal_al(a);
+        ver v olarak tam32;
+    }) {
+        tamam(g) => { t = t + görev_birleştir(g); }
+        hata(e) => { ver 1; }
+    }
+    eşleş görev_başlat(|| al_ver(a)) {
+        tamam(g) => { t = t + görev_birleştir(g); }
+        hata(e) => { ver 2; }
+    }
+    ver t + 1;
+}

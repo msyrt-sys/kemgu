@@ -1,0 +1,25 @@
+// [D-807] P5 — kanal muafiyeti + çağrı grafı: ana iş parçacığı diziyi kanaldan GÖNDERİP elinde tutar
+// (gönderim sahipliği taşımaz); görev alma ve büyütmeyi bir yardımcıya yaptırır → yeni tampon ρ_sahip'te
+// (D-770) ve paylaşılan dizi başlığına yazılır. Görev skaler döndüğü için P1-P4 geçiyordu → iki derleyici
+// de bayrak 1, join'de serbest → ana iş parçacığı SERBEST bellekten okur (ASan heap-use-after-free).
+// RHO_BEKLE: 0
+işlev buyut(k: kanal<Dizi<tam32>>) -> tam32 {
+    değişken a: Dizi<tam32> = kanal_al(k);
+    değişken j: tam32 = 0;
+    iken j < 1000 { dizi_ekle(a, j); j = j + 1; }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken k: kanal<Dizi<tam32>> = kanal_oluştur(1);
+    değişken d: Dizi<tam32> = [1];
+    kanal_gönder(k, d);
+    eşleş görev_başlat(|| buyut(k)) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);
+            eğer dizi_boyut(d) != 1001 { ver 3; }
+            ver dizi_al(d, 1000) + z - 957;
+        }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}
