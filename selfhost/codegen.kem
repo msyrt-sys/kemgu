@@ -2308,7 +2308,7 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     bekle(p, "ISLEV");
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
+    bekle_k(p, "TANIMLAYICI", "P014");   // [D-795] C parser.c:333 işlev adı (anahtar kelime/sayı/EOF)
     değişken fg_gp0: tam32 = dizi_boyut(p.gp_ad);   // [D-711 turbofish]
     atla_tip_paramlar(p);
     değişken fg_gp1: tam32 = dizi_boyut(p.gp_ad);

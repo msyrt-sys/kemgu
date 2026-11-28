@@ -1,0 +1,5 @@
+// [D-795] P014 — işlev adı yerine anahtar kelime (C parser.c:333). D-787'de ölçülmüştü: C P014,
+// self P000 (eşlenmemiş `bekle`). Aynı site sayı adını, değiştiricili biçimleri ve dosya sonunu da
+// karşılar; ardından gelen basamaklanma iki tarafta zaten birebirdi.
+işlev değer(x: tam32) -> tam32 { ver x; }
+işlev main() -> tam32 { ver 0; }
