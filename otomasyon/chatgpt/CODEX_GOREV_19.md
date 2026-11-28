@@ -1,4 +1,4 @@
-# CODEX GÖREVİ 19 — ARM: GICv3 + KVM + çok çekirdek (SMP) · dosya sistemi dizin önbelleği · süreç yalıtımı
+# CODEX GÖREVİ 19 — ARM: GICv3 + KVM + çok çekirdek (SMP) · dosya sistemi dizin önbelleği · süreç yalıtımı · dalga 18'den devreden işler
 
 Dalga 1'in kuralları geçerlidir (`otomasyon/chatgpt/CODEX_GOREV.md` §2, §3, §5 — yeniden oku),
 aşağıdaki **izin genişletmesi** dışında. Dalga 6'nın gerçek-QEMU kâhin kuralı da geçerlidir
@@ -8,25 +8,26 @@ aşağıdaki **izin genişletmesi** dışında. Dalga 6'nın gerçek-QEMU kâhin
 kaydet ve geç.
 
 ## ⏱ Çalışma biçimi — bu dalga da uzundur
-- Bu dalga **yirmi bölümdür, HEPSİ zorunlu ve sırayla yapılır.** Bölüm 1-7 ARM kesme denetleyicisi ve KVM,
-  Bölüm 8-16 ARM SMP, Bölüm 17-20 dosya sistemi, yalıtım, regresyon ve belgelerdir. KVM bölümleri SMP
+- Bu dalga **yirmi üç bölümdür, HEPSİ zorunlu ve sırayla yapılır.** Bölüm 1-7 ARM kesme denetleyicisi ve KVM,
+  Bölüm 8-16 ARM SMP, Bölüm 17-18 dosya sistemi ve yalıtım, Bölüm 19-21 dalga 18'den devreden işler, Bölüm 22-23
+  regresyon ve belgelerdir. KVM bölümleri SMP
   bölümlerinin koşum süresini doğrudan kısaltır; sırayı bozma. **30+ saat normaldir.**
 - Bir bölümü bitirince **durma, rapor yazıp bekleme, özet sunup onay isteme — sonraki bölüme geç.** "Bu kadar
-  yeterli" deme; yirmi bölümün hepsi bitene ya da her biri için takılma notu yazılana kadar çalış.
+  yeterli" deme; yirmi üç bölümün hepsi bitene ya da her biri için takılma notu yazılana kadar çalış.
 - Her bölümün sonunda: (1) o bölümün kapıları + sabotajları, (2) ayrı commit
   (`SURUCU(codex): Dalga 19 bölüm N — ...` ya da `ALTYAPI(codex): Dalga 19 bölüm N — ...`), (3)
   `codex19_ilerleme.md`'ye kısa not (yapılan, ölçümler, sabotaj sonuçları, süre). Dalga yarıda kesilse bile
   biten bölümler kullanılabilir olmalı.
 - Gerçekten takılırsan (60 dk ilerleme yok): `codex19_bulgular.md`'ye yaz, bölümün yapılabilen kısmını
   kapılı bırak ve **sonraki bölüme geç**.
-- Her 5 bölümde bir (5, 10, 15) ara regresyon: `make -j10 --output-sync=target test_tumu`; kırmızı varsa
+- Her 5 bölümde bir (5, 10, 15, 20) ara regresyon: `make -j10 --output-sync=target test_tumu`; kırmızı varsa
   bir sonraki bölüme geçmeden önce kökünü bul.
 - **Her sabotajı gerçekten uygula, çıktısını yaz.** Uygulamadığın sabotaj varsa bunu AÇIKÇA yaz; "benzer bir
   sabotaj" ile değiştirme. Sabotaj sessiz kalırsa önce korpusu/kâhini düzelt (dalga 17 ve 18'de defalarca
   oldu: korunan şekli korpus üretmiyordu ya da ölçüm yanlış yerdeydi); fazlalıksa ikisini birden kaldırıp
   ayrıca ölç ve ikisini de yaz.
 - **Draft PR'ı açtıktan sonra son commit'i değiştirip zorla gönderme**; ek değişiklik gerekiyorsa yeni commit.
-- Draft PR'ı yalnız yirmi bölüm bittikten (ya da her biri için takılma notu yazıldıktan) sonra aç.
+- Draft PR'ı yalnız yirmi üç bölüm bittikten (ya da her biri için takılma notu yazıldıktan) sonra aç.
 
 ---
 
@@ -49,11 +50,16 @@ ekler, fiziksel çerçeve ayırıcısını ve heap'i ARM'de de SMP-güvenli yapa
 matrisinde kanıtlar. Dalga 18'in x86 SMP tasarımı (`belgeler/KEMGU_OS_SMP.md`) başvurudur; ARM'in farkları
 (PSCI, GICv3 SGI, yayınlı TLBI, zayıf bellek sıralaması) açıkça ele alınır.
 
-**(C) Dosya sistemi, yalıtım, regresyon (Bölüm 17-20).** FAT32 sürücüsünde dizin ayrıştırma önbelleği (D(1)),
+**(C) Dosya sistemi, yalıtım, regresyon (Bölüm 17-18, 22-23).** FAT32 sürücüsünde dizin ayrıştırma önbelleği (D(1)),
 süreç dosya tanımlayıcısı yalıtım kapısı (H9j/E3f), tam regresyon ve belgeler.
 
 Kapsam DIŞI: ARM'de ACPI, ITS/LPI ve MSI (ITS DTB'de var ama kullanılmaz), GICv4, NUMA, CPU hotplug, büyük.KÜÇÜK
-çekirdek farkına göre zamanlama, x86 değişiklikleri (Bölüm 17-18 ve paylaşılan sürücüler hariç), derleyici.
+çekirdek farkına göre zamanlama, x86 değişiklikleri (Bölüm 17-19 ve paylaşılan sürücüler hariç), derleyici.
+
+**(D) Dalga 18'den devreden işler (Bölüm 19-21).** (1) Dalga 18'in x86 SMP bölümlerinde UYGULANMAYAN beş canlı
+sabotaj (`belgeler/KEMGU_OS_Sabotaj_Envanteri.md` "Uygulanmayan deneyler"); (2) `calistir_derleme_olcum`
+kapısının mutlak saniye eşiklerinin CI koşucu hızına duyarlılığı (Claude ölçtü, §6 Bölüm 20); (3)
+`stdlib/dosya.kem` satır işlevlerinin iki ölçülmüş kusuru (Bölüm 21).
 
 ---
 
@@ -200,7 +206,16 @@ Tek dal, tek draft PR. ⚠ Claude bu dalga sırasında derleyicide ve bölge tah
 **Dosya sistemi ve yalıtım (Bölüm 17-18):**
 - `drivers/fs/*.kem`, `tests/drivers/fs/*`, `test/ornekler/kem_os_x86_kabuk.kem` ve `kem_os_x86_vfs_ortak.kem`
   (yalnız `FatSektor` kullanımı ve yalıtım kapısının gerektirdiği yerler), `test/kullanici/*.kem`.
-**Belgeler (Bölüm 20):** `belgeler/KEMGU_OS_*.md` (yeni `KEMGU_OS_ARM_SMP.md` dahil),
+**Dalga 18'den devreden işler (Bölüm 19-21):**
+- Bölüm 19: `test/*.sh`, `tests/qemu/*`, `test/ornekler/kem_os_x86*.kem` (sabotaj/kâhin için ayrı deney çekirdeği
+  dahil). Sabotajın kendisi `runtime/mimari/x86_64/*.kem`, `boot/start_x86_64.S` ve `boot/ap_x86_64.S` (AP başlatma kodu) üzerinde GEÇİCİ değişikliktir —
+  commit EDİLMEZ, ölçülüp geri alınır. Bir sabotaj GERÇEK bir kusur açarsa (kâhin doğru, kod yanlış) onarım yalnız
+  `runtime/mimari/x86_64/{kem_apic_hw,kem_gorev_hw,kem_kilit_hw,kem_mmu_hw,kem_surec_hw}.kem` içinde ve aynı
+  commit'te bir kapıyla.
+- Bölüm 20: `test/olcum/derleme.py`, `test/olcum/derleme_harness.sh`, `test/olcum/esikler.json`,
+  `test/kapi_butce.tsv`.
+- Bölüm 21: `stdlib/dosya.kem` (yalnız `ekle_satir` ve `oku_satirlar`), `test/stdlib/test_dosya.kem`.
+**Belgeler (Bölüm 23):** `belgeler/KEMGU_OS_*.md` (yeni `KEMGU_OS_ARM_SMP.md` dahil),
 `ARM64_Fiziksel_Donanim_Kontrol_Listesi.md`, `KEMGU_OS_Donanim_Yol_Haritasi.md`, `KEMGU_Test_Altyapisi.md`.
 
 **YASAK:** `src/`, `selfhost/`, `boot/efi/`, `linker/` (hepsi), runtime C dosyaları, `test/bare_metal/*.c`
@@ -236,7 +251,7 @@ komutu, beklenen/gerçek sonuç), dolan. Muafiyet listelerine satır EKLEME.
 
 ---
 
-## 6. İş listesi — yirmi bölüm, HEPSİ zorunlu, sırayla
+## 6. İş listesi — yirmi üç bölüm, HEPSİ zorunlu, sırayla
 
 ### Bölüm 1 — ARM ölçüm tabanı ve KVM denemelerinin tekrarı
 - Makefile'daki bütün `qemu-system-aarch64` çağrılarını envantere al (hedef, `-M/-cpu/-smp`, bekleme biçimi:
@@ -376,12 +391,58 @@ komutu, beklenen/gerçek sonuç), dolan. Muafiyet listelerine satır EKLEME.
   izin veriyorsa ARM'de de.
 - Sabotaj: fd tablosunu süreçler arası paylaştır → kırmızı.
 
-### Bölüm 19 — Regresyon (tam takım + CI taklidi)
+### Bölüm 19 — x86 SMP: dalga 18'in uygulanmayan beş canlı sabotajı
+Dalga 18 bu beşini "uygulanmadı" olarak bıraktı (envanter, "Uygulanmayan deneyler"). Her birini GERÇEKTEN uygula,
+çıktısını yaz; "benzer bir sabotaj" ile değiştirme:
+  1. AP'yi canlı BSP yığınında yürüt (AP'ye kendi yığını yerine BSP'ninkini ver).
+  2. İki canlı çekirdeğe AYNI TSS'i yükle ve yığını boz.
+  3. Canlı fiziksel çerçeve ayırıcısının kilidini kaldır (çok çekirdekli ayırma yarışı).
+  4. Uzak TLB geçersizlemesini (INVLPG IPI) atla, başka çekirdekte eski eşlemeyi oku.
+  5. Süreç başka çekirdeğe göç ederken canlı GS güncellemesini kapat.
+- Beklenen: her biri mevcut bir kapıyı (ya da bu bölümde eklenen bir kâhini) KIRMIZI yapar. Sessiz kalırsa önce
+  kâhini düzelt (korunan durumu gözlemleyen bağımsız bir ölçüm: QMP bellek okuması, çekirdek başı sayaç, kanarya),
+  kuralı silme; düzeltilmiş kâhinle sabotajı TEKRAR uygula ve iki sonucu da yaz.
+- Dalga 18'in engeli ölçüldü: AP2'de kasıtlı çift hata denemesi QEMU iothread denetiminde sonlandı. Böyle bir
+  QEMU sınırına takılırsan farklı bir gözlem yolu dene (ör. çift hata yerine kanarya/sayaç bozulması), deneyi ve
+  sınırı `codex19_bulgular.md`'ye yaz; bölümü takılma notuyla kapat.
+- Sonuç tablosu: sabotaj · uygulandı mı · hangi kapı · rc · kâhin düzeltmesi gerekti mi. Envanterdeki
+  "Uygulanmayan deneyler" maddesini sonuca göre güncelle.
+
+### Bölüm 20 — `calistir_derleme_olcum`: süre eşiği koşucu hızından bağımsız olsun
+- Claude ölçtü (2026-11-28, PR #280 Linux CI): `20000 kemgu saniye 0.4608 > 0.39` → kapı kırmızı. Aynı birim
+  önceki iki CI koşumunda 0.2049 / 0.1916 sn; üretilen IR BİREBİR (105777 satır), yani derleyici değişmedi. Tüm
+  koşum düzgün biçimde yavaştı: duvar saati 6:32 (önceki 4:05 / 3:56), self `kabuk` 12.82 sn (7.33 / 7.22), C
+  5000 satır 0.0777 (0.0411 / 0.0401) → ~1.8× yavaş koşucu. İş bir kez yeniden koşturulunca aynı commit 4:35'te
+  geçti. Yani kapı bu sınıfta ARALIKLI kırmızı verir (D-794'ün açılış süresi kapısında çözdüğü sınıf).
+- Kendin doğrula: CI'nın son Linux koşumlarından `derleme_olcum` tablolarını topla (en az 5 koşum), dağılımı yaz.
+- İstenen: süre ölçütü koşucu hızından bağımsız bir karar versin. Aday (a): aynı koşumda ölçülen bir REFERANS
+  iş yüküne oran (ör. sabit bir referans birimin derleme süresi) ve oran eşiği. Aday (b): süre yalnız rapor
+  edilir, kapı deterministik ölçütlerde (IR satırı, en büyük işlev, RSS) kalır. Seç, gerekçesini ölçümle yaz.
+  Eşikler ölçümden türetilir (DGX Spark + CI); tahmin YOK.
+- Kapı iki yönde ölçülür: (i) düzgün yavaş koşucu öykünmesi (ör. ölçümü `taskset` ile tek çekirdeğe ve düşük
+  önceliğe sıkıştır ya da aynı anda CPU yükü ver) → YEŞİL kalmalı; (ii) gerçek bir derleme süresi gerilemesi
+  öykünmesi (yalnız ölçülen birimi iki katına çıkar, referans değişmesin) → KIRMIZI olmalı. İkisinin de çıktısını
+  yaz. Derleyiciye (`src/`, `selfhost/`) DOKUNMA.
+
+### Bölüm 21 — `stdlib/dosya.kem` satır işlevleri
+Claude ölçtü (D-804 yol üstü, önceden var):
+- (a) `ekle_satir` satır sonu yerine İKİ KARAKTER (`\` + `n`) yazıyor — KEMGU dizgisinde kaçış YOK (D-400/D-458).
+  Ölçüldü: `ekle_satir("log.txt", "ab")` → dosya baytları `a b \ n`, dönüş `tamam(3)` (yazılan 4).
+- (b) `oku_satirlar` dosyayı HİÇ okumuyor: 3 satırlık dosya → `tamam([])`; VAR OLMAYAN dosya da `tamam([])` (hata
+  yok). Yorumu "tek elemanlı dizi" diyor, o da doğru değil.
+- Onarım: (a) satır sonu `kod_metin(10)` ile; (b) dosyayı oku, `metin_bayt`/`metin_kes` ile `\n`'den böl, var
+  olmayan dosyada `hata`. Son satırda satır sonu yoksa da o satır döner; boş dosya `tamam([])`.
+- `test/stdlib/test_dosya.kem` main'i ikisini de ÇAĞIRMALI (bugün çağırmıyor — D-440 sınıfı: koşmayan test).
+  Kapı `calistir_stdlib_check` (C ve self-host). Bayt düzeyinde denetle: dönüş değeri yetmez (D-443).
+- Sabotaj: (a)'yı eski hâline döndür → kırmızı; (b)'de bölmeyi kaldır (tek eleman döndür) → kırmızı; var olmayan
+  dosyada `tamam([])` döndür → kırmızı.
+
+### Bölüm 22 — Regresyon (tam takım + CI taklidi)
 - `make -j10 --output-sync=target test_tumu_olcum` (KVM'li) ve `KEMGU_ARM_HIZ=tcg` ile ikinci koşum (CI'yı
   taklit eder): ikisi de rc=0. `-j20` stres koşumu.
 - Süre tablosu: taban (Bölüm 1) / son; ARM kapıları ayrı.
 
-### Bölüm 20 — Belgeler, yol haritası, sabotaj envanteri
+### Bölüm 23 — Belgeler, yol haritası, sabotaj envanteri
 - Yeni `belgeler/KEMGU_OS_ARM_SMP.md` (GIC katmanı, PSCI, kilitler, SGI, TLB, zamanlama, ölçümler), yol haritası
   (H14 ARM SMP), `KEMGU_Test_Altyapisi.md` (ARM yürütücüsü, KVM/TCG), sabotaj envanteri, D-490 notu.
 
@@ -390,11 +451,11 @@ komutu, beklenen/gerçek sonuç), dolan. Muafiyet listelerine satır EKLEME.
 ## 7. Kapılar (her bölümden sonra)
 - O bölümün yeni kapıları + sabotajları (çıktılarıyla).
 - `calistir_kem_os_arm` (GICv2 TCG ve GICv3) + `calistir_qemu_cekirdek` + `calistir_kem_os_arm_ag`.
-- x86'ya dokunan bölümlerde (17-18) ilgili x86 kapıları; her 5 bölümde tam takım.
+- x86'ya dokunan bölümlerde (17-19) ilgili x86 kapıları; Bölüm 21'de `calistir_stdlib_check`; her 5 bölümde tam takım.
 - `calistir_kapi_secici` (kapı haritası güncel mi) ve `calistir_kapi_butcesi`.
 
 ## 8. Bitirince
-Draft PR `codex/arm-smp-dalga19`, gövde `codex19_ilerleme.md` (yirmi bölümün her biri için: yapılanlar,
+Draft PR `codex/arm-smp-dalga19`, gövde `codex19_ilerleme.md` (yirmi üç bölümün her biri için: yapılanlar,
 kapılar, sabotaj sonuçları — uygulanmayan sabotaj varsa AÇIKÇA, süre). `codex19_bulgular.md`: taban ve son
 süre tabloları (TCG / KVM, `-j10` / `-j20`), ARM QEMU envanteri, GIC sürüm matrisi, SMP ölçümleri (çekirdek
 başlatma süresi, tık oranları, kilit stresi, SGI gecikmesi, TLB, hızlanma eğrisi), D(1) önce/sonra, yalıtım
@@ -404,4 +465,4 @@ sonra commit'leri yeniden yazma.
 ## 9. Bu dalganın DIŞINDA
 - E4k (bölge tahliyesi), derleyici, metin runtime'ı: Claude.
 - ARM ACPI, ITS/LPI/MSI, GICv4, NUMA, CPU hotplug, büyük.KÜÇÜK çekirdek ayrımına göre zamanlama, x86 SMP
-  değişiklikleri, IPv6/TLS, pencere yöneticisi, ses, KEMFS, fiziksel makine koşumları (Mehmet).
+  değişiklikleri (Bölüm 19'daki sabotajın gösterdiği kusurun onarımı hariç), IPv6/TLS, pencere yöneticisi, ses, KEMFS, fiziksel makine koşumları (Mehmet).
