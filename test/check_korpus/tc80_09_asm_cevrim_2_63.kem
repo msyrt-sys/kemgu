@@ -1,0 +1,2 @@
+// [D-803] P268 — 2^63 int64 olarak negatif okunur (C ifade.c bit deseni, `deger >= 0`). Self eskiden sessizce kabul ediyordu.
+işlev f() -> tam32 { güvensiz { satıriçi_asm { mimari: arm64 şablon: "nop" çevrim: 9223372036854775808 } } ver 0; }

@@ -1,0 +1,8 @@
+// [D-803] P262 — `çevrim` sonrası `:` eksik (C parser.c:1694).
+işlev f() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: "nop" çevrim 5 }
+    }
+    ver x;
+}

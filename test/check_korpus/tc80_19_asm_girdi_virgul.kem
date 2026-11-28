@@ -1,0 +1,6 @@
+// [D-803] P264 — girdi kısıtından sonra `,` eksik (C parser.c:1754).
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mov %%0, #1"# girdi("r" x) } }
+    ver x;
+}

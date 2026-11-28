@@ -1,0 +1,8 @@
+// [D-803] P263 — `bozulan()` kısıtsız; C panik senkron yapıp clause'u atlar (C parser.c:1768). Self eskiden tanısız sayaçla `P000 0 0` basıyordu.
+işlev f() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: "nop" bozulan() }
+    }
+    ver x;
+}

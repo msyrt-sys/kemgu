@@ -1,0 +1,6 @@
+// [D-803] P269 — çıktı hedefinde `&` eksik; tanı geçerli belirtece bağlı, tüketilmez (C parser.c:1710).
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mov %%0, #1"# çıktı("=r", x) } }
+    ver x;
+}
