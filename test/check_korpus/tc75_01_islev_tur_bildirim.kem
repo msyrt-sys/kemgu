@@ -1,0 +1,61 @@
+// [D-790] E4v: bildirim/`sabit` noktasında İŞLEV TİPİ uyumluluğu. Self'in tip dizgileri
+// işlev tipini temsil etmez ("?"), bu yüzden D-698 yalnız "işlev annotasyonu + LAMBDA"
+// şeklini karşılaştırıyordu; aşağıdaki T001'lerin hepsi self'te SESSİZDİ ve `= 5` gibi
+// şekiller çalışınca çöker. OLUMSUZ: işlev adı · işlev tipli yerel · arite · gölgeleyen
+// skaler yerel · işlev beklenen yere sayı · işlev-dışı yere lambda/işlev adı · `sabit`.
+// POZİTİF (tanı YOK): uyumlu işlev adı ve yerel; generic `işlev() -> T = || 42` (D-698
+// burada sahte T001 veriyordu); değerin tipi HATA içeriyorsa T001 basılmaz (C D-789):
+// `|x: Yokk|` · `|| yok()` arite/param farkıyla · bilinmeyen tipli yerelin kullanımı.
+// Hata dönüş tipini etkilemiyorsa (`|| { yok(); ver "a"; }`) T001 YİNE basılır; hata
+// ANNOTASYONDA ise (değer temiz) arite farkı da basılır — "değerde hata" yalnız değerin
+// alt ağacından ölçülür.
+yapı Nokta { x: tam32; }
+işlev selam() -> metin { ver "a"; }
+işlev topla(a: tam32, b: tam32) -> tam32 { ver a + b; }
+işlev nokta_yap() -> Nokta { ver Nokta { x: 1 }; }
+sabit F: işlev() -> tam32 = selam;
+sabit S: tam32 = || 1;
+işlev yerel_param(g: işlev() -> tam32) -> tam32 {
+    değişken h: işlev() -> metin = g;
+    değişken u: işlev() -> tam32 = g;
+    ver 0;
+}
+işlev islev_adi() -> tam32 {
+    değişken a: işlev() -> tam32 = selam;
+    değişken b: işlev(tam32) -> tam32 = topla;
+    değişken c: işlev() -> metin = selam;
+    değişken d: metin = selam;
+    ver 0;
+}
+işlev tur_farki() -> tam32 {
+    değişken g: işlev() -> tam32 = 5;
+    değişken x: tam32 = || 1;
+    değişken n: Nokta = || 1;
+    ver 0;
+}
+işlev golge() -> tam32 {
+    değişken topla: tam32 = 5;
+    değişken g: işlev(tam32, tam32) -> tam32 = topla;
+    ver 0;
+}
+işlev generic_t<T>(x: T) -> tam32 {
+    değişken g: işlev() -> T = || 42;
+    ver 0;
+}
+işlev hatali_deger() -> tam32 {
+    değişken a: işlev(tam32) -> tam32 = |x: Yokk| 1;
+    değişken b: işlev(tam32) -> tam32 = || yok_bir();
+    değişken c: işlev(tam32) -> tam32 = |x: metin| yok_iki();
+    değişken d: işlev() -> tam32 = || { yok_uc(); ver "a"; };
+    ver 0;
+}
+işlev bilinmeyen_yerel() -> tam32 {
+    değişken q: işlev(Yokk) -> tam32 = |x: Yokk| 1;
+    değişken h: işlev(tam32) -> tam32 = q;
+    ver 0;
+}
+işlev annot_hatali() -> tam32 {
+    değişken g: işlev(Yokk) -> tam32 = || nokta_yap();
+    ver 0;
+}
+işlev main() -> tam32 { ver yerel_param(|| 1) + islev_adi() + tur_farki() + golge(); }

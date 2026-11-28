@@ -380,8 +380,18 @@
       karşılaştırılmıyor → E4v. İlk kaydım "argüman pozitifte AYNI" diyordu — pozitif `kare("metin")`, yani işlev
       DIŞI bir değerdi. DERS: pozitif kontrol ayrışmanın SINIFINDAN seçilmeli (lambda), komşu sınıftan (düz değer)
       DEĞİL. Beklenen taraf (bildirim/parametre/dönüş tipi HATA içeriyor) ayrı sınıf → E4w.
-- [ ] E4v [M] 🔴 SELF-HOST SAĞLAMLIK: işlev tipli DEĞER uyumluluğu neredeyse hiç DENETLENMİYOR (D-789 matrisinde
-      ölçüldü, önceden var). Self'in yapısal karşılaştırdığı TEK şekil: bildirim/`sabit` + LAMBDA LİTERALİ
+- [~] E4v [M] 🔴 SELF-HOST SAĞLAMLIK: işlev tipli DEĞER uyumluluğu neredeyse hiç DENETLENMİYOR (D-789 matrisinde
+      ölçüldü, önceden var). ✓ D-790 (E4v-0): bildirim/`sabit` noktası TAMAM — ortak kural `islev_tur_uyumsuz`
+      (`selfhost/codegen.kem`): (1) iki taraf işlev → yapısal (arite + bileşen), (2) işlev beklenir/değer bilinen
+      işlev-dışı (`= 5` → çalışınca ÇÖKÜŞ), (3) tersi (`tam32 = || 1`, `metin = selam`). Generic ve değer tarafında
+      bilinmeyen ad JOKER; `alt_hata` (değerin alt ağacında tanı) + eksik imza → HATA sayılır (C D-789 aynası).
+      Kapanan: D-698'in generic sahte T001'i + D-789'un üç yan etkisi (aşağıda). KALAN noktalar (hepsi aynı kuralı
+      kullanacak; `alt_hata` her noktada `kontrol_dugum(deger)` çevresinde ölçülür; C'de o noktaya `tip_hata_icerir`):
+      (A) kullanıcı işlevi argümanı (lambda exit 44 · lambda param SEGV 139 · işlev adı exit 76) + metot argümanı
+      (exit 76; C 4600) · (B) `ver` (exit 28; `aktif_donus` işlev tipinde "?" → dönüş tip DÜĞÜMÜ gerekir; C 6648)
+      · (C) alana atama (exit 44) · yapı alanı · dizi literali annotasyonlu/çıplak (üçü LLVM-RED; beklenen tip
+      DÜĞÜMÜ gerekir). `dizi_ekle`/`dizi_yaz` ve ikili op ölçülünce lambdaya ÖZGÜ çıkmadı → E4z.
+      (ESKİ METİN:) Self'in yapısal karşılaştırdığı TEK şekil: bildirim/`sabit` + LAMBDA LİTERALİ
       (`t001_lambda_kontrol`, D-698); diğer noktalarda `ifade_tip` lambda için "?" döner ve denetim atlanır. Pozitif
       kontrol — hatasız ama uyumsuz lambda (`|| "a"`, beklenen `işlev() -> tam32`) ya da işlev ADI (`selam`, `-> metin`):
       C reddediyor, self `--check` OK. 11 şekil: kullanıcı işlevi argümanı (lambda · lambda parametre tipi · işlev adı)
@@ -406,6 +416,13 @@
 - [ ] E4y [S] ARGÜMAN LAMBDASININ GÖVDESİ İKİ KEZ DENETLENİYOR: `uygula_g(|h| yok_iki())` → aynı T002 iki kez,
       İKİ TARAFTA AYNI (parite sorunu değil, kullanıcıya çift tanı). tc74_01 17:65 ×2 bunu SABİTLER — onarılınca
       fikstür beklentisi de güncellenmeli (sabitlenmiş gürültü, D-441 deseni). Kök ölçülmedi.
+- [ ] E4z [M] SELF-HOST İŞLEV-DIŞI UYUMLULUK BOŞLUKLARI (D-790 matrisinde ölçüldü, önceden var; üçü AYRI kök):
+      (a) `dizi_ekle(d, "a")` / `dizi_yaz(d, 0, "a")` (d: `Dizi<tam32>`) → C T001, self OK: eleman tipi HİÇ
+      denetlenmiyor (lambdaya özgü değil; self'te bu iki yerleşik için T001 noktası YOK). Çalışma zamanı sonucu
+      ölçülmedi. (b) `a == "x"` (a: tam32) → C T001 "ikili operator iki tarafi ayni tip olmali", self OK: eşitlik
+      operand uyumu yok. (c) `değişken x: metin = 1 + yok();` → C yalnız T002, self T002+T001: `ifade_tip` hatalı
+      operandlı ikili ifadeye BİLİNEN tip (tam32) veriyor, C'de sonuç HATA → art arda T001 basılmaz (E4v'nin
+      `alt_hata` kuralının genel noktadaki eşi). Kapı: checker_diff (bugün korpusta bu şekiller YOK).
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
@@ -3647,3 +3664,26 @@
   Beklenen: yeni yardımcı yalnız uyumsuzluk dalında çalışır (`!tip_esit(..) && ..` kısa devresi).
   SON TAM TAKIM (üç nokta, -j10 ölçümlü): 190 kapı, 26:47, rc=0 (geçici dizin önce 0 sonra 0); checker_diff
   324/324 (0 muaf), FIXPOINT ✓. `⚠ BÜTÇE` satırları ölümcül olmayan uyarı (yük; süre 18:52/22:19 → 26:47).
+- 2026-11-28 D-790: E4v-0 — SELF-HOST BİLDİRİM/`sabit` NOKTASINDA İŞLEV TİPİ UYUMLULUĞU TAMAMLANDI (sağlamlık).
+  Self'in tip dizgileri işlev tipini temsil etmiyor (`tip_str` → "?"); D-698 yalnız "işlev annotasyonu + LAMBDA"
+  şeklini karşılaştırıyordu. ÖLÇÜLEN KAÇAKLAR (C T001, self OK): işlev ADI değer olarak (`= selam`) · işlev tipli
+  yerel/parametre · arite ve parametre farkı · gölgeleyen skaler yerel · işlev beklenen yere sayı (`= 5`; çalışınca
+  çöker) · işlev-dışı yere lambda ya da işlev adı · `sabit` biçimleri. ONARIM: ortak `islev_tur_uyumsuz` (üç durum)
+  + imza yardımcıları (`islev_imza_tn` / `islev_imza_deger` / `islev_imza_farkli`). İşlev adının imzası mevcut
+  `fn_donus`/`fn_ptip`/`fn_psay` tablolarından (yeni paralel tablo YOK — D-452 kayma riski), yerelinki `bag_tn`dan;
+  yerleşikler `fn_yerlesik_n` (D-787) ile dışarıda. KAPANAN İKİ SAPMA: (a) D-698'in generic sahte T001'i
+  (`işlev() -> T = || 42`, C uyumlu sayar); (b) D-789'UN YAN ETKİSİ: D-789 C'ye değer-HATA bastırmasını eklerken D-698
+  bunu bilmiyordu → `|x: Yokk|` ve `|| yok()` + arite/param farkı şekillerinde C yalnız T011/T002, self ek T001
+  (D-789'dan ÖNCE iki taraf da basıyordu; şekiller korpusta yoktu, kapılar görmedi). Kural: değerin alt ağacında
+  tanı (`alt_hata`, gezgin döngüsünde SON çocuktan ölçülür) + eksik imza → HATA say. Hata dönüş tipini etkilemiyorsa
+  (`|| { yok(); ver "a"; }`) C de basar → korunur. ÖLÇÜM: `ifade_tip`in T043'ü düğüm başına tekilleşiyor (ikinci
+  çağrı çift tanı üretmez); C lambda gövdesini beklenen dönüşle ÇIKARSAMIYOR (`işlev() -> tam64 = || 1` C'de de T001)
+  → `lam_donus_str`in "?" bağlamı doğru ayna. FİKSTÜR tc75_01: 19 tanı C=self birebir; eski self 14 noktada
+  ayrışıyordu. SABOTAJ 8/8 (S299 generic · S300 alt_hata · S301 işlev adı · S302 kural 2 · S303 kural 3 · S304
+  değer-tarafı bilinmeyen ad · S305 yerel dalı · S306 sayımın yeri) → hepsi checker_diff 324/325, fark tam beklenen
+  satırlarda. DEPO TARAMASI (1334 `.kem`, C × eski self × yeni self): değişen dosya 0 (şekiller depoda yoktu →
+  yanlış-pozitif yok). YAN BULGU → E4z (önceden var, işlev-dışı): `dizi_ekle`/`dizi_yaz` eleman tipi ve eşitlik
+  operand uyumu self'te hiç denetlenmiyor; hatalı operandlı ikili ifadeye self bilinen tip veriyor (ek T001).
+  TAM TAKIM (-j10 ölçümlü): 190 kapı, 24:32; tek kırmızı `calistir_bm_x86_acilis_suresi` açılış eşiği (yük: medyan
+  679,6 > 650 ms; çekirdek derlendi ve 5/5 açıldı) → kapı tek başına yeniden: medyan 400,8 / 501,8 ms, rc=0.
+  checker_diff 325/325 (0 muaf), FIXPOINT ✓. Kod üretim yoluna dokunulmadı (denetleyici gezgini + tip kuralı).
