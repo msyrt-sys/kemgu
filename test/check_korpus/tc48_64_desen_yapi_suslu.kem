@@ -1,0 +1,7 @@
+// [D-799] P215 — yapı deseninde `}` eksik (C parser.c:1417).
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K { a: 1 };
+    eşleş k { K { a => 1; }
+    ver 0;
+}

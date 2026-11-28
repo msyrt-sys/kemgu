@@ -1,0 +1,7 @@
+// [D-799] P214 — yapı deseninde alan adı yerine sayı (C parser.c:1409); ardından P215 aynı konumda.
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K { a: 1 };
+    eşleş k { K { 5 } => 1; }
+    ver 0;
+}

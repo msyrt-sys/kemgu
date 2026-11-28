@@ -1,0 +1,8 @@
+// [D-799] İLERLEMESİZ `eşleş` döngüsü: kapanmamış `eşleş`ten sonra gelen `işlev` hiçbir kol beklentisini
+// karşılamaz ve hiçbir belirteç tüketilmez. C'nin döngüsünde ilerleme koruması YOKTUR; hata sınırına
+// (100 tanı) kadar döner ve `hata_sayisi >= PARSER_MAX_HATA` ile çıkar (parser.c:1529). Self aynı çıkışı
+// `ph_kis` ile yapar; o çıkış olmadan bu dosya derleyiciyi ASAR (sabotajla ölçüldü).
+işlev f() -> tam32 {
+    değişken x: tam32 = 1;
+    eşleş x { 1 => 2;
+işlev main() -> tam32 { ver 0; }

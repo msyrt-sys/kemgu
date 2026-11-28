@@ -1,0 +1,7 @@
+// [D-799] P211 — kol desen ile başlamıyor (C parser.c:1485). C tanıyı basıp İLERLEMEDEN döner; öncesinde
+// self tanısız bir belirteç tüketiyordu ve izleyen `=>` beklentisi bir belirteç sağa kayıyordu.
+işlev main() -> tam32 {
+    değişken x: tam32 = 1;
+    eşleş x { ; }
+    ver 0;
+}
