@@ -4,6 +4,8 @@
 // Runtime primitif HAZIRLANDI (Madde G — runtime/kdl_runtime.c):
 //   dosya_ac, dosya_oku, dosya_yaz, dosya_kapat,
 //   dosya_var_mi, dosya_sil, dosya_yeniden_adlandir, dosya_boyut
+// [D-804] D5g: dosya_bayt_oku, dosya_bayt_yaz (handle üzerinde BAYT G/Ç) ·
+//   dosya_dizin_olustur, dosya_dizin_sil, dosya_dizin_var_mi, dosya_dizin_listele
 //
 // Bu modul stdlib wrapper — KEMGU API uyumu icin sonuc<T,E> donus
 // stili kullanir (her hata acik, runtime patlatma yok). Runtime
@@ -196,15 +198,159 @@ genel işlev yeniden_adlandir(eski: metin, yeni: metin) -> sonuç<tam32, metin> 
     ver tamam(0);
 }
 
-// Kopyala.
+// Kopyala — BAYT BAYT.
+// ⚠ [D-804] Eskiden `dosya_oku` (metin) ile okuyup `dosya_yaz` ile yazıyordu;
+// metin NUL'da BİTER, bu yüzden ilk NUL baytta KIRPIYORDU ve yine `tamam`
+// diyordu (ölçüldü: 5 baytlık `ab\0cd` → 2 baytlık kopya, sonuç `tamam(2)`).
 genel işlev kopyala(kaynak: metin, hedef: metin) -> sonuç<tam32, metin> {
     eğer metin_uzunluk(kaynak) == 0 { ver hata("bos kaynak"); }
     eğer metin_uzunluk(hedef) == 0 { ver hata("bos hedef"); }
     eğer değil dosya_var_mi(kaynak) { ver hata("kaynak yok"); }
-    değişken icerik: metin = dosya_oku(kaynak);
+    değişken veri: Dizi<dtam8> = [];
+    eşleş ikili_oku(kaynak) {
+        tamam(v) => { veri = v; }
+        hata(e) => { ver hata(e); }
+    }
     değişken h: metin = dosya_ac(hedef, "yazma");
     eğer değil handle_gecerli_mi(h) { ver hata("hedef acilamadi"); }
-    değişken n: tam32 = dosya_yaz(h, icerik);
+    değişken yazildi: mantıksal = bayt_yaz_hepsi(h, veri);
     dosya_kapat(h);
-    ver tamam(n);
+    eğer değil yazildi { ver hata("yazma hatasi"); }
+    ver tamam(dizi_boyut(veri));
+}
+
+// =============================================================================
+// [D-804] İkili (bayt) G/Ç — D5g
+// =============================================================================
+//
+// KARAR (2026-11-06): `yetki<Dosya>` YOK, mevcut `Dosya` modeli; ikili okuma
+// `Dizi<dtam8>` döner (metin NUL'da kırpar). Yerleşikler bayt düzeyindedir ve
+// mevcut handle üzerinde çalışır; dizi burada KEMGU'da kurulur. Bilerek böyle:
+// `Dizi` parametreli bir yerleşik, C derleyicide doğrudan `[..]` literalini
+// YIĞIN dizisi olarak geçirirdi ve çalışma zamanı onu dizi başlığı sanardı.
+
+// Açık handle'a dizinin TÜM baytlarını yaz; hepsi yazıldıysa doğru (iç yardımcı).
+işlev bayt_yaz_hepsi(h: metin, veri: Dizi<dtam8>) -> mantıksal {
+    değişken n: tam32 = dizi_boyut(veri);
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer dosya_bayt_yaz(h, dizi_al(veri, i) olarak tam32) != 1 { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+
+// Tüm dosyayı bayt dizisi olarak oku. NUL dahil her bayt korunur.
+// `dosya_bayt_oku`: 0..255 · dosya sonu -1 · okuma hatası -2. Ayrım şart:
+// Linux'ta bir DİZİN `okuma` kipinde açılabilir ve ilk okuma hemen biter —
+// ayrım olmasa boş dosya gibi `tamam([])` dönerdi.
+genel işlev ikili_oku(yol: metin) -> sonuç<Dizi<dtam8>, metin> {
+    eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
+    eğer değil dosya_var_mi(yol) { ver hata("dosya yok"); }
+    değişken h: metin = dosya_ac(yol, "okuma");
+    eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
+    değişken veri: Dizi<dtam8> = [];
+    değişken b: tam32 = dosya_bayt_oku(h);
+    iken b >= 0 {
+        dizi_ekle(veri, b olarak dtam8);
+        b = dosya_bayt_oku(h);
+    }
+    dosya_kapat(h);
+    eğer b != -1 { ver hata("okuma hatasi"); }
+    ver tamam(veri);
+}
+
+// Dosyayı bayt dizisiyle **üzerine yaz**. Yazılan bayt sayısını döner.
+genel işlev ikili_yaz(yol: metin, veri: Dizi<dtam8>) -> sonuç<tam32, metin> {
+    eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
+    değişken h: metin = dosya_ac(yol, "yazma");
+    eğer değil handle_gecerli_mi(h) { ver hata("dosya acilamadi"); }
+    değişken yazildi: mantıksal = bayt_yaz_hepsi(h, veri);
+    dosya_kapat(h);
+    eğer değil yazildi { ver hata("yazma hatasi"); }
+    ver tamam(dizi_boyut(veri));
+}
+
+// =============================================================================
+// [D-804] Dizin — D5g
+// =============================================================================
+
+// Dizin oluştur. Zaten varsa da hata (sessizce "oldu" demez).
+genel işlev dizin_olustur(yol: metin) -> sonuç<tam32, metin> {
+    eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
+    eğer dosya_dizin_olustur(yol) != 0 { ver hata("dizin olusturulamadi"); }
+    ver tamam(0);
+}
+
+// Dizin sil — YALNIZ boş dizin.
+genel işlev dizin_sil(yol: metin) -> sonuç<tam32, metin> {
+    eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
+    eğer dosya_dizin_sil(yol) != 0 { ver hata("dizin silinemedi"); }
+    ver tamam(0);
+}
+
+// Yol var VE dizin mi (`var_mi`nin aksine düz dosya için yanlış).
+genel işlev dizin_var_mi(yol: metin) -> mantıksal {
+    eğer metin_uzunluk(yol) == 0 { ver yanlış; }
+    ver dosya_dizin_var_mi(yol);
+}
+
+// Dizin girdileri (`.` ve `..` hariç), BAYT sırasıyla sıralı. Sıralama
+// belirlenimcilik içindir (dosya sisteminin sırası platforma bağlı).
+// Çalışma zamanı adları '/' ile birleştirir: '/' bir dosya ADINDA bulunamaz,
+// bu yüzden bölme belirsizlik yaratmaz.
+genel işlev dizin_listele(yol: metin) -> sonuç<Dizi<metin>, metin> {
+    eğer metin_uzunluk(yol) == 0 { ver hata("bos yol"); }
+    değişken r: metin = dosya_dizin_listele(yol);
+    eğer değil dosya_gecerli(r) { ver hata("dizin okunamadi"); }
+    değişken adlar: Dizi<metin> = [];
+    değişken n: tam32 = metin_uzunluk(r);
+    değişken bas: tam32 = 0;
+    değişken i: tam32 = 0;
+    iken i < n {
+        eğer metin_bayt(r, i) == 47 {
+            dizi_ekle(adlar, metin_kes(r, bas, i - bas));
+            bas = i + 1;
+        }
+        i = i + 1;
+    }
+    eğer n > 0 { dizi_ekle(adlar, metin_kes(r, bas, n - bas)); }
+    ver tamam(adlar);
+}
+
+// =============================================================================
+// [D-804] Yol yardımcıları — D5g (ayıraç '/'; Windows API'leri de kabul eder)
+// =============================================================================
+
+// İki yolu TEK '/' ile birleştir. `a` boşsa `b`, `b` boşsa `a`. `b` mutlak
+// ('/' ile başlıyor) olsa da `a` ATILMAZ — düz birleştirme; Python
+// `os.path.join`dan BİLEREK farklı (sessiz ezme yok).
+genel işlev yol_birlestir(a: metin, b: metin) -> metin {
+    değişken na: tam32 = metin_uzunluk(a);
+    değişken nb: tam32 = metin_uzunluk(b);
+    eğer na == 0 { ver b; }
+    eğer nb == 0 { ver a; }
+    değişken a_bolu: mantıksal = metin_bayt(a, na - 1) == 47;
+    değişken b_bolu: mantıksal = metin_bayt(b, 0) == 47;
+    eğer a_bolu ve b_bolu { ver metin_birlestir(a, metin_kes(b, 1, nb - 1)); }
+    eğer a_bolu veya b_bolu { ver metin_birlestir(a, b); }
+    ver metin_birlestir(metin_birlestir(a, "/"), b);
+}
+
+// Uzantı: SON yol bileşeninde son '.'dan sonraki kısım, noktasız
+// (`a.tar.gz` → `gz`). Yoksa "". Baştaki nokta uzantı DEĞİLDİR (`.gizli` →
+// ""), sondaki nokta boş uzantı verir (`a.` → "").
+genel işlev uzanti(yol: metin) -> metin {
+    değişken n: tam32 = metin_uzunluk(yol);
+    değişken bas: tam32 = 0;
+    değişken nokta: tam32 = -1;
+    değişken i: tam32 = 0;
+    iken i < n {
+        değişken c: tam8 = metin_bayt(yol, i);
+        eğer c == 47 { bas = i + 1; nokta = -1; }
+        değilse { eğer c == 46 { nokta = i; } }
+        i = i + 1;
+    }
+    eğer nokta <= bas { ver ""; }
+    ver metin_kes(yol, nokta + 1, n - nokta - 1);
 }

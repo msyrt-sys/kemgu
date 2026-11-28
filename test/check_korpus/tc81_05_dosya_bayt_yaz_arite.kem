@@ -1,0 +1,7 @@
+// [D-804] T010 + CP005 — `dosya_bayt_yaz` iki argüman ister; aritesi bozuk çağrı yine kapalı handle kullanımıdır.
+işlev f() -> tam32 {
+    değişken h: metin = dosya_ac("x.bin", "yazma");
+    dosya_kapat(h);
+    ver dosya_bayt_yaz(h);
+}
+işlev main() -> tam32 { ver 0; }

@@ -253,6 +253,188 @@ işlev gidis_donus() -> tam32 {
     ver h;
 }
 
+// ============================================================================
+// [D-804] D5g — ikili (bayt) G/Ç + dizin + yol yardımcıları
+// ============================================================================
+
+// İki bayt dizisi birebir aynı mı (boyut + her bayt).
+işlev bayt_ayni(ad: metin, a: Dizi<dtam8>, b: Dizi<dtam8>) -> tam32 {
+    eğer dizi_boyut(a) != dizi_boyut(b) {
+        yazdir_metin(metin_birlestir("BASARISIZ boyut farkli: ", ad));
+        ver 1;
+    }
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(a) {
+        eğer dizi_al(a, i) != dizi_al(b, i) {
+            yazdir_metin(metin_birlestir("BASARISIZ bayt farkli: ", ad));
+            ver 1;
+        }
+        i = i + 1;
+    }
+    ver 0;
+}
+
+// Örnek veri: gömülü NUL (metin onu ilk baytta KIRPARDI), işaret biti (128,
+// 255 — işaretli genişletme hatası -1/-128 üretirdi) ve satır sonu (10).
+işlev ornek_bayt() -> Dizi<dtam8> {
+    değişken v: Dizi<dtam8> = [0, 255, 128, 10, 65, 0, 66];
+    ver v;
+}
+
+işlev ikili_gidis_donus() -> tam32 {
+    değişken h: tam32 = 0;
+    değişken yol: metin = "kemgu_test_d804.bin";
+    değişken veri: Dizi<dtam8> = ornek_bayt();
+    eşleş ikili_yaz(yol, veri) {
+        tamam(n) => { eğer n != 7 { yazdir_metin("BASARISIZ ikili_yaz: sayi 7 degil"); h = h + 1; } }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ ikili_yaz: ", e)); h = h + 1; }
+    }
+    eşleş boyut(yol) {
+        tamam(s) => { eğer s != 7 { yazdir_metin("BASARISIZ ikili boyut 7 degil"); h = h + 1; } }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ ikili boyut: ", e)); h = h + 1; }
+    }
+    eşleş ikili_oku(yol) {
+        tamam(v) => { h = h + bayt_ayni("ikili_oku", v, veri); }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ ikili_oku: ", e)); h = h + 1; }
+    }
+    // kopyala artık BAYT BAYT: ilk bayt NUL olduğu için eski sürüm BOŞ dosya
+    // yazıp `tamam(0)` dönerdi.
+    değişken kopya: metin = "kemgu_test_d804_kopya.bin";
+    eşleş kopyala(yol, kopya) {
+        tamam(n) => { eğer n != 7 { yazdir_metin("BASARISIZ kopyala: sayi 7 degil"); h = h + 1; } }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ kopyala: ", e)); h = h + 1; }
+    }
+    eşleş ikili_oku(kopya) {
+        tamam(v) => { h = h + bayt_ayni("kopya", v, veri); }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ kopya oku: ", e)); h = h + 1; }
+    }
+    h = h + bekle_tamam_t("sil kopya", sil(kopya));
+    h = h + bekle_tamam_t("sil ikili", sil(yol));
+    // Boş dizi: 0 baytlık dosya, okunca boş dizi.
+    değişken bos: Dizi<dtam8> = [];
+    h = h + bekle_tamam_t("ikili_yaz bos", ikili_yaz(yol, bos));
+    eşleş ikili_oku(yol) {
+        tamam(v) => { h = h + bayt_ayni("ikili_oku bos", v, bos); }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ ikili_oku bos: ", e)); h = h + 1; }
+    }
+    h = h + bekle_tamam_t("sil bos", sil(yol));
+    eşleş ikili_oku(yol) {
+        tamam(v) => { yazdir_metin("BASARISIZ ikili_oku(yok): tamam dondu"); h = h + 1; }
+        hata(e) => { h = h + mesaj_bekle("ikili_oku(yok)", "dosya yok", e); }
+    }
+    ver h;
+}
+
+// Ham yerleşiklerin uç durumları: NULL handle ve 0..255 dışı bayt.
+işlev ham_bayt_uclari() -> tam32 {
+    değişken h: tam32 = 0;
+    eğer dosya_bayt_oku(dosya_gecersiz()) != -2 { yazdir_metin("BASARISIZ bayt_oku(NULL) -2 degil"); h = h + 1; }
+    eğer dosya_bayt_yaz(dosya_gecersiz(), 65) != 0 { yazdir_metin("BASARISIZ bayt_yaz(NULL) 0 degil"); h = h + 1; }
+    değişken yol: metin = "kemgu_test_d804_ham.bin";
+    değişken f: metin = dosya_ac(yol, "yazma");
+    eğer dosya_bayt_yaz(f, 256) != 0 { yazdir_metin("BASARISIZ bayt_yaz(256) yazildi"); h = h + 1; }
+    eğer dosya_bayt_yaz(f, -1) != 0 { yazdir_metin("BASARISIZ bayt_yaz(-1) yazildi"); h = h + 1; }
+    eğer dosya_bayt_yaz(f, 255) != 1 { yazdir_metin("BASARISIZ bayt_yaz(255) yazilmadi"); h = h + 1; }
+    dosya_kapat(f);
+    // Aralık dışı değerler KIRPILMAMALI: dosyada yalnız 255 olmalı.
+    eşleş ikili_oku(yol) {
+        tamam(v) => {
+            eğer dizi_boyut(v) != 1 { yazdir_metin("BASARISIZ ham: boyut 1 degil (kirpma?)"); h = h + 1; }
+            değilse { eğer (dizi_al(v, 0) olarak tam32) != 255 { yazdir_metin("BASARISIZ ham: bayt 255 degil"); h = h + 1; } }
+        }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ ham oku: ", e)); h = h + 1; }
+    }
+    h = h + bekle_tamam_t("sil ham", sil(yol));
+    eğer dosya_gecerli(dosya_dizin_listele("")) { yazdir_metin("BASARISIZ dizin_listele(bos) NULL degil"); h = h + 1; }
+    ver h;
+}
+
+işlev dizin_yasam_dongusu() -> tam32 {
+    değişken h: tam32 = 0;
+    değişken d: metin = "kemgu_test_d804_dizin";
+    h = h + bekle_tamam_t("dizin_olustur", dizin_olustur(d));
+    h = h + bekle_hata_t("dizin_olustur(var)", "dizin olusturulamadi", dizin_olustur(d));
+    eğer değil dizin_var_mi(d) { yazdir_metin("BASARISIZ dizin_var_mi yanlis"); h = h + 1; }
+    // Bir DİZİNİ ikili okumak `tamam` dönmemeli. Linux'ta dizin `okuma` kipinde
+    // AÇILIR ve ilk okuma hemen biter (EISDIR) → "okuma hatasi"; Windows'ta
+    // açılamaz → "dosya yok". Mesaj platforma bağlı, sözleşme değil: HATA.
+    eşleş ikili_oku(d) {
+        tamam(v) => { yazdir_metin("BASARISIZ ikili_oku(dizin): tamam dondu"); h = h + 1; }
+        hata(e) => { }
+    }
+    // SEKİZ girdi, karışık oluşturma sırasıyla. ⚠ [D-804] İlk sürüm İKİ girdi
+    // kullanıyordu ve sıralama sabotajı (S498) SESSİZ kaldı: ext4 karma sırası o
+    // iki ad için tesadüfen zaten `a, b` idi. Bu sekiz adın ham `readdir` sırası
+    // bu makinede ölçüldü: a h e b f g c d — sıralı DEĞİL. Rastgele bir dosya
+    // sisteminde sekiz adın tesadüfen sıralı gelme olasılığı 1/40320.
+    değişken olusum: Dizi<metin> = ["h.txt", "c.txt", "f.txt", "a.txt", "g.txt", "b.txt", "e.txt", "d.txt"];
+    değişken sirali: Dizi<metin> = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt", "f.txt", "g.txt", "h.txt"];
+    değişken i: tam32 = 0;
+    iken i < dizi_boyut(olusum) {
+        h = h + bekle_tamam_t("yaz girdi", yaz_metin(yol_birlestir(d, dizi_al(olusum, i)), "x"));
+        i = i + 1;
+    }
+    değişken fa: metin = yol_birlestir(d, "a.txt");
+    eğer dizin_var_mi(fa) { yazdir_metin("BASARISIZ dizin_var_mi(dosya) dogru"); h = h + 1; }
+    eşleş dizin_listele(d) {
+        tamam(l) => {
+            eğer dizi_boyut(l) != 8 { yazdir_metin("BASARISIZ dizin_listele: 8 girdi degil"); h = h + 1; }
+            değilse {
+                değişken k: tam32 = 0;
+                iken k < 8 {
+                    h = h + mesaj_bekle("liste sirasi", dizi_al(sirali, k), dizi_al(l, k));
+                    k = k + 1;
+                }
+            }
+        }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ dizin_listele: ", e)); h = h + 1; }
+    }
+    eşleş dizin_listele(fa) {
+        tamam(l) => { yazdir_metin("BASARISIZ dizin_listele(dosya): tamam dondu"); h = h + 1; }
+        hata(e) => { h = h + mesaj_bekle("dizin_listele(dosya)", "dizin okunamadi", e); }
+    }
+    h = h + bekle_hata_t("dizin_sil(dolu)", "dizin silinemedi", dizin_sil(d));
+    i = 0;
+    iken i < dizi_boyut(olusum) {
+        h = h + bekle_tamam_t("sil girdi", sil(yol_birlestir(d, dizi_al(olusum, i))));
+        i = i + 1;
+    }
+    eşleş dizin_listele(d) {
+        tamam(l) => { eğer dizi_boyut(l) != 0 { yazdir_metin("BASARISIZ bos dizin listesi bos degil"); h = h + 1; } }
+        hata(e) => { yazdir_metin(metin_birlestir("BASARISIZ bos dizin listesi: ", e)); h = h + 1; }
+    }
+    h = h + bekle_tamam_t("dizin_sil", dizin_sil(d));
+    eğer dizin_var_mi(d) { yazdir_metin("BASARISIZ silinen dizin hala var"); h = h + 1; }
+    eşleş dizin_listele(d) {
+        tamam(l) => { yazdir_metin("BASARISIZ dizin_listele(yok): tamam dondu"); h = h + 1; }
+        hata(e) => { h = h + mesaj_bekle("dizin_listele(yok)", "dizin okunamadi", e); }
+    }
+    h = h + bekle_hata_t("dizin_olustur bos", "bos yol", dizin_olustur(""));
+    eğer dizin_var_mi("") { yazdir_metin("BASARISIZ dizin_var_mi(bos) dogru"); h = h + 1; }
+    ver h;
+}
+
+işlev yol_yardimcilari() -> tam32 {
+    değişken h: tam32 = 0;
+    h = h + mesaj_bekle("yb a b", "a/b", yol_birlestir("a", "b"));
+    h = h + mesaj_bekle("yb a/ b", "a/b", yol_birlestir("a/", "b"));
+    h = h + mesaj_bekle("yb a /b", "a/b", yol_birlestir("a", "/b"));
+    h = h + mesaj_bekle("yb a/ /b", "a/b", yol_birlestir("a/", "/b"));
+    h = h + mesaj_bekle("yb bos b", "b", yol_birlestir("", "b"));
+    h = h + mesaj_bekle("yb a bos", "a", yol_birlestir("a", ""));
+    h = h + mesaj_bekle("yb /k x", "/k/x", yol_birlestir("/k", "x"));
+    h = h + mesaj_bekle("uz txt", "txt", uzanti("a.txt"));
+    h = h + mesaj_bekle("uz tar.gz", "gz", uzanti("a.tar.gz"));
+    h = h + mesaj_bekle("uz gizli", "", uzanti(".gizli"));
+    h = h + mesaj_bekle("uz sondaki nokta", "", uzanti("a."));
+    h = h + mesaj_bekle("uz dizinde nokta", "", uzanti("d.d/dosya"));
+    h = h + mesaj_bekle("uz dizin gizli", "", uzanti("d/.g"));
+    h = h + mesaj_bekle("uz dizin x.y", "y", uzanti("d/x.y"));
+    h = h + mesaj_bekle("uz turkce", "öz", uzanti("çığ.öz"));
+    h = h + mesaj_bekle("uz yok", "", uzanti("dosya"));
+    ver h;
+}
+
 işlev main() -> tam32 {
     değişken h: tam32 = 0;
     // (1) handle + mod sabitleri
@@ -286,6 +468,11 @@ işlev main() -> tam32 {
     eğer test_var_mi_dolu() { yazdir_metin("B: var_mi_dolu (yok olmali)"); h = h + 1; }
     // (4) GERÇEK I/O gidiş-dönüşü (kendi temizliğini yapar)
     h = h + gidis_donus();
+    // (5) [D-804] D5g: ikili G/Ç (bayt-tam kopyala dahil) · ham uçlar · dizin · yol
+    h = h + ikili_gidis_donus();
+    h = h + ham_bayt_uclari();
+    h = h + dizin_yasam_dongusu();
+    h = h + yol_yardimcilari();
     eğer h == 0 { yazdir_metin("dosya: TUM TESTLER GECTI"); ver 0; }
     yazdir_metin("dosya: BASARISIZ");
     ver 1;

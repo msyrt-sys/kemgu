@@ -1,0 +1,16 @@
+// [D-804] D5g yerleşiklerinin C ↔ self çalışma zamanı paritesi. Dosya sistemine
+// YAZMAZ (codegen_diff ve self_driver aynı fikstürü eşzamanlı koşabilir; ortak
+// dosya adı D-297 çarpışması olurdu): yalnız NULL handle, boş yol ve var olan
+// çalışma dizini ("."). Her yerleşiğin bildirimi + dönüş IR tipi ölçülür; yanlış
+// dönüş tipi (ör. `void`) çağrı sonucunu bozar ve çıkış kodu ayrışır.
+işlev main() -> tam32 {
+    eğer dosya_bayt_oku(dosya_gecersiz()) != -2 { ver 1; }
+    eğer dosya_bayt_yaz(dosya_gecersiz(), 65) != 0 { ver 2; }
+    eğer dosya_dizin_olustur("") != -1 { ver 3; }
+    eğer dosya_dizin_sil("") != -1 { ver 4; }
+    eğer dosya_dizin_var_mi("") { ver 5; }
+    eğer değil dosya_dizin_var_mi(".") { ver 6; }
+    eğer dosya_gecerli(dosya_dizin_listele("")) { ver 7; }
+    eğer değil dosya_gecerli(dosya_dizin_listele(".")) { ver 8; }
+    ver 42;
+}

@@ -1,0 +1,3 @@
+// [D-804] T001 — `dtam8` örtük genişlemez; çağıran `olarak tam32` yazmalı (stdlib `bayt_yaz_hepsi` öyle yapar).
+işlev f(x: dtam8) -> tam32 { ver dosya_bayt_yaz(dosya_gecersiz(), x); }
+işlev main() -> tam32 { ver 0; }

@@ -581,6 +581,46 @@ void tip_kontrol_baslat(TipKontrol *tk, Arena *a, Scope *global,
         EKLE_BUILTIN("dosya_boyut", 11, p, 1, tip_olustur_basit(a, TIP_TAM64));
     }
 
+    /* [D-804] D5g: ikili (bayt) G/C + dizin yerlesikleri. Dizi ALMAZ/DONDURMEZ:
+     * bayt duzeyinde mevcut handle uzerinde calisir, `Dizi<dtam8>`yi stdlib
+     * kurar (gerekce runtime/kdl_runtime.c D-804 basliginda). */
+    /* dosya_bayt_oku(h: metin) -> tam32   (0..255 · dosya sonu -1 · hata -2) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_bayt_oku", 14, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+    /* dosya_bayt_yaz(h: metin, b: tam32) -> tam32   (yazildi 1 · degilse 0) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *) * 2);
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        p[1] = tip_olustur_basit(a, TIP_TAM32);
+        EKLE_BUILTIN("dosya_bayt_yaz", 14, p, 2, tip_olustur_basit(a, TIP_TAM32));
+    }
+    /* dosya_dizin_olustur(yol) / dosya_dizin_sil(yol) -> tam32   (0 · -1) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_dizin_olustur", 19, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_dizin_sil", 15, p, 1, tip_olustur_basit(a, TIP_TAM32));
+    }
+    /* dosya_dizin_var_mi(yol) -> mantiksal */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_dizin_var_mi", 18, p, 1, tip_olustur_basit(a, TIP_MANTIKSAL));
+    }
+    /* dosya_dizin_listele(yol) -> metin   (sirali, '/' ayracli; hata NULL) */
+    {
+        TipBilgisi **p = (TipBilgisi **)arena_ayir(a, sizeof(TipBilgisi *));
+        p[0] = tip_olustur_basit(a, TIP_METIN);
+        EKLE_BUILTIN("dosya_dizin_listele", 19, p, 1, tip_olustur_basit(a, TIP_METIN));
+    }
+
     /* === Adim 1 (OTP CLI): CLI args + OTP yardimcilari === */
 
     /* arg_sayi() -> tam32 */
@@ -7521,7 +7561,11 @@ static int kd_kilit_yerlesigi(const char *ad, int uz) {
 static int kd_dosya_yerlesigi(const char *ad, int uz) {
     return kd_ad_esit(ad, uz, "dosya_ac", 8) || kd_ad_esit(ad, uz, "dosya_kapat", 11)
         || kd_ad_esit(ad, uz, "dosya_oku", 9) || kd_ad_esit(ad, uz, "dosya_yaz", 9)
-        || kd_ad_esit(ad, uz, "dosya_boyut", 11);
+        || kd_ad_esit(ad, uz, "dosya_boyut", 11)
+        /* [D-804] bayt G/C ayni handle'i kullanir: aileye girmezse kapali
+         * handle'dan okuma CP005, kapatilmayan handle L001 ALMAZDI (aile disi
+         * cagriya gecen baglama izlemeden birakilir). */
+        || kd_ad_esit(ad, uz, "dosya_bayt_oku", 14) || kd_ad_esit(ad, uz, "dosya_bayt_yaz", 14);
 }
 /* [D-571] Soket ailesi. `Baglanti` stdlib'de `yapi tekkez`tir ama
  * `soket_baglan`/`soket_kapat` YERLESIKTIR -> sarmalayici atlanirsa koruma

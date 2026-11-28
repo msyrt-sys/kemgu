@@ -1,0 +1,3 @@
+// [D-804] T001 — `dosya_bayt_yaz`ın bayt argümanı `tam32`; metin verilemez.
+işlev f() -> tam32 { ver dosya_bayt_yaz(dosya_gecersiz(), "a"); }
+işlev main() -> tam32 { ver 0; }

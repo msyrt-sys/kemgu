@@ -4879,6 +4879,11 @@ işlev builtin_ret(ad: metin) -> metin {
     eğer metin_esit(ad, "dosya_yaz") veya metin_esit(ad, "dosya_sil") veya metin_esit(ad, "dosya_yeniden_adlandir")
          veya metin_esit(ad, "arg_sayi") veya metin_esit(ad, "oku_karakter") { ver "i32"; }
     eğer metin_esit(ad, "dosya_boyut") { ver "i64"; }
+    // [D-804] D5g bayt G/C + dizin — C `src/llvm.c` dosya_ önek tablosuyla AYNI.
+    eğer metin_esit(ad, "dosya_bayt_oku") veya metin_esit(ad, "dosya_bayt_yaz")
+         veya metin_esit(ad, "dosya_dizin_olustur") veya metin_esit(ad, "dosya_dizin_sil") { ver "i32"; }
+    eğer metin_esit(ad, "dosya_dizin_var_mi") { ver "i1"; }
+    eğer metin_esit(ad, "dosya_dizin_listele") { ver "ptr"; }
     eğer metin_baslar(ad, "metin_") veya metin_esit(ad, "dosya_oku") veya metin_esit(ad, "dosya_ac")
          veya metin_esit(ad, "arg_al") veya metin_esit(ad, "ondalik_bicimle") { ver "ptr"; }
     ver "void";   // yaz_*/yazdir_*/dosya_kapat → void
@@ -5030,6 +5035,13 @@ işlev runtime_header_yaz(p: &değişken Ayr) -> tam32 {
     yaz_str("declare i32 @kdl_dosya_sil(ptr)"); yb(10);
     yaz_str("declare i32 @kdl_dosya_yeniden_adlandir(ptr, ptr)"); yb(10);
     yaz_str("declare i64 @kdl_dosya_boyut(ptr)"); yb(10);
+    // [D-804] D5g: bayt G/C + dizin.
+    yaz_str("declare i32 @kdl_dosya_bayt_oku(ptr)"); yb(10);
+    yaz_str("declare i32 @kdl_dosya_bayt_yaz(ptr, i32)"); yb(10);
+    yaz_str("declare i32 @kdl_dosya_dizin_olustur(ptr)"); yb(10);
+    yaz_str("declare i32 @kdl_dosya_dizin_sil(ptr)"); yb(10);
+    yaz_str("declare i1 @kdl_dosya_dizin_var_mi(ptr)"); yb(10);
+    yaz_str("declare ptr @kdl_dosya_dizin_listele(ptr)"); yb(10);
     yaz_str("declare void @kdl_yazdir_tam(i32)"); yb(10);
     yaz_str("declare ptr @llvm.stacksave.p0()"); yb(10);          // [D-753] C10-002
     yaz_str("declare void @llvm.stackrestore.p0(ptr)"); yb(10);   // [D-753] C10-002
@@ -5442,6 +5454,7 @@ işlev ifade_metin(p: &değişken Ayr, idx: tam32) -> tam32 {
           veya metin_esit(fad, "kesirli_metin")   // [D-457]
           veya metin_esit(fad, "kod_metin")       // [D-458]
           veya metin_esit(fad, "tam_metin")       // [D-459]
+          veya metin_esit(fad, "dosya_dizin_listele")   // [D-804] gerçek dizgi (ya da NULL)
           veya metin_esit(fad, "dosya_oku") veya metin_esit(fad, "dosya_gecersiz") { ver 1; }
         ver fn_rmet_bul(p, cagri_hedef_coz(p, h));
     }
@@ -11083,6 +11096,9 @@ işlev builtin_ekle(p: &değişken Ayr) -> tam32 {
     g_ekle(p, "tam_metin"); g_ekle(p, "metin_tam"); g_ekle(p, "metin_tam_gecerli");   // [D-459]
     g_ekle(p, "metin_kesirli"); g_ekle(p, "metin_kesirli_gecerli");   // [D-460]
     g_ekle(p, "dosya_sil"); g_ekle(p, "dosya_yeniden_adlandir");
+    g_ekle(p, "dosya_bayt_oku"); g_ekle(p, "dosya_bayt_yaz");   // [D-804]
+    g_ekle(p, "dosya_dizin_olustur"); g_ekle(p, "dosya_dizin_sil");   // [D-804]
+    g_ekle(p, "dosya_dizin_var_mi"); g_ekle(p, "dosya_dizin_listele");   // [D-804]
     g_ekle(p, "otp_anahtar_uret"); g_ekle(p, "otp_xor_uygula");
     // özel-builtin'ler (CAGRI handler'ında, EKLE_BUILTIN değil)
     g_ekle(p, "bir"); g_ekle(p, "sıfır");   // [D-454]
@@ -11955,6 +11971,13 @@ işlev yerlesik_imzalari_kur(p: &değişken Ayr) -> tam32 {
     yerlesik_ekle(p, "dosya_sil", "tam32", ["metin"]);
     yerlesik_ekle(p, "dosya_yeniden_adlandir", "tam32", ["metin", "metin"]);
     yerlesik_ekle(p, "dosya_boyut", "tam64", ["metin"]);
+    // [D-804] D5g bayt G/C + dizin (C src/tip_kontrol.c EKLE_BUILTIN aynası).
+    yerlesik_ekle(p, "dosya_bayt_oku", "tam32", ["metin"]);
+    yerlesik_ekle(p, "dosya_bayt_yaz", "tam32", ["metin", "tam32"]);
+    yerlesik_ekle(p, "dosya_dizin_olustur", "tam32", ["metin"]);
+    yerlesik_ekle(p, "dosya_dizin_sil", "tam32", ["metin"]);
+    yerlesik_ekle(p, "dosya_dizin_var_mi", "mantıksal", ["metin"]);
+    yerlesik_ekle(p, "dosya_dizin_listele", "metin", ["metin"]);
     yerlesik_ekle(p, "arg_sayi", "tam32", bos);
     yerlesik_ekle(p, "arg_al", "metin", ["tam32"]);
     yerlesik_ekle(p, "otp_anahtar_uret", "tam32", ["metin", "tam32"]);
@@ -17452,6 +17475,9 @@ işlev kd_dosya_yerlesigi(ad: metin) -> mantıksal {
     eğer metin_esit(ad, "dosya_kapat") { ver doğru; }
     eğer metin_esit(ad, "dosya_oku") { ver doğru; }
     eğer metin_esit(ad, "dosya_yaz") { ver doğru; }
+    // [D-804] bayt G/C aynı handle'ı kullanır (C kd_dosya_yerlesigi aynası).
+    eğer metin_esit(ad, "dosya_bayt_oku") { ver doğru; }
+    eğer metin_esit(ad, "dosya_bayt_yaz") { ver doğru; }
     ver metin_esit(ad, "dosya_boyut");
 }
 // [D-571] Soket ailesi — `dosya` ile AYNI durum anlamları (0=açık, 2=kapalı).
