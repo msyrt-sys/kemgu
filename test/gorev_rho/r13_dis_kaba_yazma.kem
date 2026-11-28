@@ -1,0 +1,44 @@
+// RHO_BEKLE: 0,0
+// [D-808] P6 — görev ρ_sahip'te kurduğu bir diziyi DIŞARIDAKİ bir kaba yazıyor:
+//   (1) `dizi_yaz(dd, 0, yeni)` (yakalanan kap), (2) indeks ataması `k[0] = v` (yardımcının
+//   PARAMETRESİ olan kap). Ana iş parçacığı aynı kaba takma adıyla join'den sonra bakar →
+// kanıt bölgeyi serbest bırakırsa yazılan iç dizi SERBEST bellektir. Eski hâl: iki
+// derleyicide bayrak 1,1, ASan heap-use-after-free.
+// ⚠ İki şekil bilerek KAÇINILDI, ikisi de C'de AYRI eski kusurlara düşer ve kapıyı YANLIŞ
+// SEBEPLE kırardı: bağlamsız literal değer (`dizi_yaz(dd, 0, [40, 2])` — C yığın dizisi) ve
+// lambdaya YAKALANAN kaba indeks ataması (`ee[0] = yeni` — C ham store, heap-buffer-overflow).
+işlev koy(k: Dizi<Dizi<tam32>>, v: Dizi<tam32>) -> tam32 {
+    k[0] = v;
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    değişken dd: Dizi<Dizi<tam32>> = [[1]];
+    değişken dd2: Dizi<Dizi<tam32>> = dd;
+    eşleş görev_başlat(|| {
+        değişken yeni: Dizi<tam32> = [20, 1];
+        dizi_yaz(dd, 0, yeni);
+        ver 0;
+    }) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);   // ÖNCE join: okuma görevin yazısından sonra
+            değişken x: Dizi<tam32> = dizi_al(dd2, 0);
+            t = t + z + dizi_al(x, 0) + dizi_al(x, 1);
+        }
+        hata(h) => { ver 1; }
+    }
+    değişken ee: Dizi<Dizi<tam32>> = [[1]];
+    değişken ee2: Dizi<Dizi<tam32>> = ee;
+    eşleş görev_başlat(|| {
+        değişken yeni: Dizi<tam32> = [20, 0];
+        ver koy(ee, yeni);
+    }) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);
+            değişken y: Dizi<tam32> = dizi_al(ee2, 0);
+            t = t + z + dizi_al(y, 0) + dizi_al(y, 1);
+        }
+        hata(h) => { ver 2; }
+    }
+    ver t + 1;
+}

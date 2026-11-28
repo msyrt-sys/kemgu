@@ -1,0 +1,27 @@
+// RHO_BEKLE: 0
+// [D-808] P6 — ad tabanlı kuralın tuzağı: görev yakalanan `d`yi büyütür, SONRA iç blokta aynı
+// adla TAZE bir yerel `d` bildirir. Kökte `d`nin tek bağlaması taze dizidir; yalnız ona bakan
+// bir kural büyütülen diziyi "görevin kendi dizisi" sanar. C sembolle kesin çözer (büyütülen
+// `d`nin bildirimi spawn eden işlevde); self aynı ada sahip DIŞ bağlamayı (`cg_var_bul`)
+// görünce kanıtlamaz. Ana iş parçacığı takma adla join'den sonra okur.
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [1];
+    değişken e: Dizi<tam32> = d;
+    eşleş görev_başlat(|| {
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(d, j); j = j + 1; }
+        eğer j > 0 {
+            değişken d: Dizi<tam32> = [7];
+            dizi_ekle(d, 8);
+        }
+        ver 0;
+    }) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);
+            eğer dizi_boyut(e) != 1001 { ver 3; }
+            ver dizi_al(e, 1000) + z - 957;
+        }
+        hata(h) => { ver 1; }
+    }
+    ver 99;
+}

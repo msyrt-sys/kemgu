@@ -2833,15 +2833,33 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
  *       DEĞERİ üzerinden dolaylı çağrı DENY (gövdesi bilinmez).
  *   P5  [D-807] erişilebilir kümede `kanal_al(k)` varsa k'nin yükü KANITLI
  *       skaler (alınan işaretçi paylaşılır; büyütülürse ρ_sahip ona yazılır).
+ *   P6  [D-808] erişilebilir kümede bir dizi BÜYÜTÜLÜYORSA (`dizi_ekle`,
+ *       `dizi_kapasite_ayarla`) ya da bir nesneye kanıtlı-skaler OLMAYAN değer
+ *       YAZILIYORSA (`dizi_yaz`, `x[i] = v`, `s.a = v`, `*p = v`), hedef görevin
+ *       KENDİ ayırdığı taze bir dizinin bağlaması olmalı. P1-P5 ρ_sahip
+ *       işaretçisinin görevden ÇIKIŞINI soruyordu; bu yol, dışarıdan gelen bir
+ *       nesnenin ρ_sahip'i GÖSTERMEYE başlamasıdır (D-505 yakalamayı ADA göre
+ *       taşır, aynı nesnenin takma adlarını göremez).
  * =================================================================== */
 
 #define RHO_MAX_GORULEN 64   /* call-graph kapanışı: ziyaret edilen fn tavanı */
+#define RHO_MAX_YEREL   64   /* [D-808] P6 tablo tavanı (taşan bildirim hedef OLAMAZ) */
 
 typedef struct {
     LlvmGen *g;
     const Dugum *gorulen[RHO_MAX_GORULEN];   /* döngü kırıcı (özyineleme) */
     int gorulen_sayi;
     int ihlal;                               /* 1 = kanıt düştü */
+    /* [D-808] P6: yürüyüşte görülen TAZE dizi bildirimleri (görevin kendi nesneleri),
+     * yerel hedef kabul edilen bağlamalar ve taze olmayan değerle YENİDEN atanan
+     * (takma ad olabilecek) bağlamalar. İki liste sıra bağımsızlığı içindir: hangisi
+     * önce görülürse görülsün ikincisi çelişkiyi yakalar. */
+    const Dugum *yerel[RHO_MAX_YEREL];
+    int yerel_sayi;
+    const Sembol *hedef[RHO_MAX_YEREL];
+    int hedef_sayi;
+    const Sembol *zehir[RHO_MAX_YEREL];
+    int zehir_sayi;
 } RhoConfineCtx;
 
 /* TipBilgisi işaretçi-benzeri mi? Bilinmeyen/çözülemeyen → 1 (DENY tarafı). */
@@ -2931,6 +2949,58 @@ static int rho_skaler_ifade(LlvmGen *g, const Dugum *d) {
     }
 }
 
+/* [D-808] P6 — değer TAZE bir dizi ayırımı mı (`[..]` literali ya da `dizi_olustur(n)`)?
+ * `dizi_olustur` ayrılmış yerleşiktir (T024): kullanıcı işlevi o adı alamaz. */
+static int rho_taze_dizi(const Dugum *v) {
+    if (!v) return 0;
+    if (v->tip == DUGUM_DIZI_OLUSTUR) return 1;
+    if (v->tip == DUGUM_CAGRI && v->veri.cagri.hedef &&
+        v->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI) {
+        int uz = 0;
+        const char *ad = rho_cagri_adi_ileri(v->veri.cagri.hedef, &uz);
+        return ad && uz == 12 && memcmp(ad, "dizi_olustur", 12) == 0;
+    }
+    return 0;
+}
+
+static int rho_sembol_listede(const Sembol *const *l, int n, const Sembol *s) {
+    for (int i = 0; i < n; i++) if (l[i] == s) return 1;
+    return 0;
+}
+
+/* [D-808] P6 — `h` görevin KENDİ ayırdığı bir dizinin bağlaması mı? Kesin çözüm: sembolün
+ * bildirimi bu kanıt yürüyüşünde görülmüş bir `değişken` olmalı ve başlatıcısı taze dizi
+ * olmalı. Yakalanan bağlamanın bildirimi spawn eden işlevdedir, parametre ise dışarıdan
+ * gelir → ikisi de hedef OLAMAZ. Kabul edilen bağlama `hedef`e yazılır: sonradan görülen
+ * taze olmayan yeniden atama (`x = d`) da ihlaldir. */
+static int rho_yerel_hedef(RhoConfineCtx *c, const Dugum *h) {
+    if (!h || h->tip != DUGUM_TANIMLAYICI || !h->cozum_sembol) return 0;
+    const Sembol *s = (const Sembol *)h->cozum_sembol;
+    if (s->kategori != SEMBOL_DEGISKEN || !s->ast_dugumu) return 0;
+    int gorulen = 0;
+    for (int i = 0; i < c->yerel_sayi && !gorulen; i++) gorulen = c->yerel[i] == s->ast_dugumu;
+    if (!gorulen) return 0;
+    if (rho_sembol_listede(c->zehir, c->zehir_sayi, s)) return 0;
+    if (!rho_sembol_listede(c->hedef, c->hedef_sayi, s)) {
+        if (c->hedef_sayi >= RHO_MAX_YEREL) return 0;
+        c->hedef[c->hedef_sayi++] = s;
+    }
+    return 1;
+}
+
+/* [D-808] P6 — işaretçi-benzeri bağlama taze olmayan bir değerle YENİDEN atandı: artık
+ * dışarıdaki bir nesnenin takma adı olabilir. Daha önce yerel hedef kabul edildiyse kanıt
+ * düşer; kaydedilemezse (tablo dolu) de düşer — unutulan zehir sağlamsızlık olurdu. */
+static void rho_zehirle(RhoConfineCtx *c, const Dugum *h) {
+    if (!h || h->tip != DUGUM_TANIMLAYICI || !h->cozum_sembol) return;
+    const Sembol *s = (const Sembol *)h->cozum_sembol;
+    if (!rho_tip_isaretci_benzeri(s->tip)) return;   /* skaler bağlama hedef olamaz */
+    if (rho_sembol_listede(c->hedef, c->hedef_sayi, s)) { c->ihlal = 1; return; }
+    if (rho_sembol_listede(c->zehir, c->zehir_sayi, s)) return;
+    if (c->zehir_sayi >= RHO_MAX_YEREL) { c->ihlal = 1; return; }
+    c->zehir[c->zehir_sayi++] = s;
+}
+
 static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d);
 
 static void rho_confine_liste(RhoConfineCtx *c, Dugum **l, int n) {
@@ -2990,6 +3060,25 @@ static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d) {
                     c->ihlal = 1; return;
                 }
             }
+            /* [D-808] P6: dizi BÜYÜTME ve dizi elemanına işaretçi YAZMA yalnız görevin
+             * kendi taze dizisine. Büyüme yeni tamponu ρ_sahip'ten ayırır (D-770); dışarıdaki
+             * bir dizi (yakalanan + takma adı olan, yardımcının parametresi) o tamponu join'den
+             * sonra gösterir → serbest bırakmak USE-AFTER-FREE (ölçüldü: iki derleyicide ASan
+             * heap-use-after-free, ASan'sız exit 42 = SESSİZ). Skaler `dizi_yaz` büyütmez. */
+            if ((uz == 9 && memcmp(ad, "dizi_ekle", 9) == 0) ||
+                (uz == 20 && memcmp(ad, "dizi_kapasite_ayarla", 20) == 0)) {
+                if (d->veri.cagri.sayi < 1 ||
+                    !rho_yerel_hedef(c, d->veri.cagri.argumanlar[0])) {
+                    c->ihlal = 1; return;
+                }
+            }
+            if (uz == 8 && memcmp(ad, "dizi_yaz", 8) == 0) {
+                if (d->veri.cagri.sayi < 3 ||
+                    (!rho_skaler_ifade(c->g, d->veri.cagri.argumanlar[2]) &&
+                     !rho_yerel_hedef(c, d->veri.cagri.argumanlar[0]))) {
+                    c->ihlal = 1; return;
+                }
+            }
             /* Kullanıcı işlevi → gövdesine in (call-graph kapanışı). */
             IslevKayit *ik = islev_bul(c->g, ad, uz);
             if (ik && ik->ast) {
@@ -3018,10 +3107,26 @@ static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d) {
         case DUGUM_BLOK:
             rho_confine_liste(c, d->veri.blok.deyimler, d->veri.blok.sayi); return;
         case DUGUM_DEGISKEN:
+            /* [D-808] P6: taze dizi ile başlatılan bildirim görevin kendi nesnesidir.
+             * Tablo doluysa kaydedilmez → o bağlama hedef olamaz (DENY tarafı). */
+            if (rho_taze_dizi(d->veri.degisken.deger) && c->yerel_sayi < RHO_MAX_YEREL)
+                c->yerel[c->yerel_sayi++] = d;
             rho_confine_tara(c, d->veri.degisken.deger); return;
-        case DUGUM_ATAMA:
-            rho_confine_tara(c, d->veri.atama.hedef);
-            rho_confine_tara(c, d->veri.atama.deger); return;
+        case DUGUM_ATAMA: {
+            const Dugum *ah = d->veri.atama.hedef, *av = d->veri.atama.deger;
+            if (ah && ah->tip == DUGUM_TANIMLAYICI) {
+                /* Bağlamayı yeniden atamak dışarı sızmaz (D-309 (4)); ama taze olmayan değer
+                 * onu dışarıdaki bir nesnenin TAKMA ADI yapabilir → P6 hedefi olamaz. */
+                if (!rho_taze_dizi(av)) { rho_zehirle(c, ah); if (c->ihlal) return; }
+            } else if (!rho_skaler_ifade(c->g, av)) {
+                /* [D-808] P6: nesneye (indeks/alan/deref) işaretçi YAZMA yalnız görevin taze
+                 * dizisinin elemanına (`x[i] = v`). Alan ve deref hedefi izlenmez → DENY. */
+                const Dugum *taban = (ah && ah->tip == DUGUM_INDEKS) ? ah->veri.indeks.nesne : NULL;
+                if (!rho_yerel_hedef(c, taban)) { c->ihlal = 1; return; }
+            }
+            rho_confine_tara(c, ah);
+            rho_confine_tara(c, av); return;
+        }
         case DUGUM_IFADE_DEYIMI:
             rho_confine_tara(c, d->veri.ifade_deyimi.ifade); return;
         case DUGUM_EGER:
@@ -3090,6 +3195,7 @@ static int gorev_rho_confined(LlvmGen *g, const Dugum *lambda_d) {
     if (govde->tip != DUGUM_BLOK && !rho_skaler_ifade(g, govde)) return 0;
     RhoConfineCtx c;
     c.g = g; c.gorulen_sayi = 0; c.ihlal = 0;
+    c.yerel_sayi = 0; c.hedef_sayi = 0; c.zehir_sayi = 0;   /* [D-808] P6 */
     rho_confine_tara(&c, govde);
     return !c.ihlal;
 }

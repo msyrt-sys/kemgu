@@ -1,0 +1,28 @@
+// RHO_BEKLE: 1
+// [D-808] POZİTİF (P6): görev YALNIZ kendi taze dizilerini değiştiriyor — büyütme (`dizi_ekle`,
+// `dizi_kapasite_ayarla`), işaretçi yazma (`dizi_yaz`, indeks ataması) ve taze değerle yeniden
+// atama — ve skaler döner → kanıt tutar, bölge join'de serbest bırakılır. Bu dosya olmasa
+// "her dizi değişikliğini reddet" kuralı kapıdan geçerdi (D-425).
+işlev main() -> tam32 {
+    eşleş görev_başlat(|| {
+        değişken x: Dizi<tam32> = [0];
+        x = [5];
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(x, j); j = j + 1; }
+        değişken dd: Dizi<Dizi<tam32>> = [[1]];
+        değişken yeni: Dizi<tam32> = [40, 2];
+        dizi_yaz(dd, 0, yeni);
+        değişken yeni2: Dizi<tam32> = [30, 2];
+        dd[0] = yeni2;
+        değişken y: Dizi<tam32> = dizi_olustur(4);
+        dizi_kapasite_ayarla(y, 64);
+        dizi_ekle(y, 7);
+        değişken z: Dizi<tam32> = dizi_al(dd, 0);
+        değişken s: tam32 = dizi_al(z, 0) + dizi_al(z, 1) + dizi_al(y, 0) + dizi_al(x, 1000) - 996;
+        ver s;
+    }) {
+        tamam(g) => { ver görev_birleştir(g); }
+        hata(h) => { ver 1; }
+    }
+    ver 99;
+}
