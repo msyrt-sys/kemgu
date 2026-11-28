@@ -1,0 +1,6 @@
+// [D-799] P210 — yapıcı deseninde `)` eksik (C parser.c:1448).
+işlev main() -> tam32 {
+    değişken s: seçimlik<tam32> = hiç;
+    eşleş s { değer(v => 1; _ => 2; }
+    ver 0;
+}

@@ -1828,11 +1828,15 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "TANIMLAYICI") veya sim_mi(p, "HIC") veya sim_mi(p, "DEGER")
       veya sim_mi(p, "TAMAM") veya sim_mi(p, "HATA") {
         değişken ad: metin = sim_lex(p);
+        // [D-799] C yapı desenini YALNIZ düz tanımlayıcı adla açar (parser.c:1400); `hiç`/`değer`/
+        // `tamam`/`hata` ardından `{` gelirse yapıcı/tanımlayıcı desendir. Öncesinde self
+        // `hiç { a } => 1;` gibi bir kolu yapı deseni sayıp SESSİZCE kabul ediyordu (C P220+P101+P211).
+        değişken ad_tan: mantıksal = sim_mi(p, "TANIMLAYICI");
         ilerle(p);
         eğer sim_mi(p, "CIFT_IKI_NOKTA") {        // Çeşit::Varyant [(payload)]
             ilerle(p);
             değişken vad: metin = sim_lex(p);
-            bekle(p, "TANIMLAYICI");
+            bekle_k(p, "TANIMLAYICI", "P212");   // [D-799] C parser.c:1367
             değişken kids: Dizi<tam32> = [];
             eğer sim_mi(p, "SOL_PAREN") {
                 ilerle(p);
@@ -1845,7 +1849,7 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
                         değilse { devam = yanlış; }
                     }
                 }
-                bekle(p, "SAG_PAREN");
+                bekle_k(p, "SAG_PAREN", "P213");   // [D-799] C parser.c:1389
             }
             ver dugum_n(p, "DESEN_YOL", metin_birlestir(metin_birlestir(ad, "::"), vad), s, u, kids);
         }
@@ -1853,7 +1857,7 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
         // Desen POZİSYONUNDA `{` belirsiz DEĞİLDİR (kol gövdesi `=>` sonrası).
         // Düğüm dump'ı C ile AYNI: değer BOŞ, çocuk YOK → --ast paritesi korunur;
         // yapı/alan adları YAN-KANALA yazılır (çeşit cv_*/cc_* deseni).
-        eğer sim_mi(p, "SOL_SUSLU") {
+        eğer ad_tan ve sim_mi(p, "SOL_SUSLU") {
             ilerle(p);   // {
             değişken alanlar: Dizi<metin> = [];
             değişken dvm: mantıksal = doğru;
@@ -1861,12 +1865,12 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
                 eğer sim_mi(p, "SAG_SUSLU") { dvm = yanlış; }
                 değilse {
                     dizi_ekle(alanlar, sim_lex(p));
-                    bekle(p, "TANIMLAYICI");
+                    bekle_k(p, "TANIMLAYICI", "P214");   // [D-799] C parser.c:1409
                     eğer sim_mi(p, "VIRGUL") { ilerle(p); }
                     değilse { dvm = yanlış; }
                 }
             }
-            bekle(p, "SAG_SUSLU");
+            bekle_k(p, "SAG_SUSLU", "P215");   // [D-799] C parser.c:1417
             değişken dn: tam32 = dugum0(p, "DESEN_YAPI", "", s, u);
             dizi_ekle(p.dy_node, dn);
             dizi_ekle(p.dy_yapi, ad);
@@ -1890,7 +1894,7 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
                     değilse { devam = yanlış; }
                 }
             }
-            bekle(p, "SAG_PAREN");
+            bekle_k(p, "SAG_PAREN", "P210");   // [D-799] C parser.c:1448
             ver dugum_n(p, "DESEN_YAPICI", ad, s, u, kids);
         }
         ver dugum0(p, "DESEN_TANIMLAYICI", ad, s, u);
@@ -1900,8 +1904,11 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
       veya sim_mi(p, "BOS") {
         ver dugum1(p, "DESEN_LITERAL", "", s, u, parse_ifade(p));
     }
-    p.hata_say = p.hata_say + 1;
-    ilerle(p);
+    // [D-799] C parser.c:1485 — tanı bas, İLERLEMEDEN dön (HATA düğümü). Öncesinde sayaç
+    // artıyor ama TANI KAYDEDİLMİYORDU ve bir belirteç tüketiliyordu → izleyen `=>` beklentisi
+    // kayıyordu. İlerlememek `eşleş` döngüsünü ilerlemesiz bırakabilir; C orada hata sınırıyla
+    // çıkar (parser.c:1529) → `parse_esles` aynı çıkışı `ph_kis` ile yapar.
+    parse_hata_kaydet(p, "P211");
     ver dugum0(p, "HATA", "", s, u);
 }
 işlev parse_esles_kolu(p: &değişken Ayr) -> tam32 {
@@ -1922,7 +1929,13 @@ işlev parse_esles(p: &değişken Ayr) -> tam32 {
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
-        değilse { dizi_ekle(kids, parse_esles_kolu(p)); }
+        değilse {
+            dizi_ekle(kids, parse_esles_kolu(p));
+            // [D-799] C parser.c:1529 — döngüde ilerleme koruması YOK; kol hiçbir belirteç
+            // tüketmezse C hata sınırına (aynı-konum tekrarı ya da 100 tanı) kadar döner ve
+            // `hata_sayisi >= PARSER_MAX_HATA` ile çıkar. Self'te o sınır `ph_kis`tir.
+            eğer p.ph_kis == 1 { devam = yanlış; }
+        }
     }
     bekle_k(p, "SAG_SUSLU", "P231");   // [D-798] C parser.c:1531
     ver dugum_n(p, "ESLES", "", s, u, kids);

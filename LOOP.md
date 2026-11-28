@@ -58,8 +58,11 @@
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
       Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796)
-      -> 58 (D-797) -> 48 (D-798). ESLENEN: 62 kod (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF /
-      degistiricili bicimler; tc48_24.
+      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799). ESLENEN KOD (D-799'da OLCULDU: self'in yaydigi farkli P kodu,
+      P000 haric; C'de 111): D-795 36 · D-796 44 · D-797 57 · D-798 65 · D-799 68. ⚠ Onceki elle tutulan sayac
+      (29/39/52/62) YANLISTI: tabani farkliydi ve birden cok yapida ortak kodlar (P200/P201, P210..P212) iki kez
+      sayilmisti. Sayaci elle artirma; `bekle_k`/`parse_hata_*` cagrilarindaki kodlari say.
+      (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
       ✓ D-796 govde/onek toparlanmasi: `özellik` P201/P202/P203 · `uygula` P210/P211/P212 · `modül` P061/P062 ·
       `dışa`/`genel` oneki P050/P051; tc48_25..36; 49 sekil: once 44'u farkli, sonra hepsi C ile birebir.
       ✓ D-797 ust duzey bildirimler: `sabit` P031/P032/P033 · `küresel` P034..P038 · `yapı` P023 · `çeşit`
@@ -67,15 +70,22 @@
       farkli, sonra hepsi C ile birebir.
       ✓ D-798 deyim ailesi: atama `;` P100 · `için` P200/P201 · `eşleş` P230/P231 · `eşleş` kolu `=>` P220 ·
       `güvensiz` acıklaması P240..P243; tc48_51..60; 27 sekil: once 23'u farkli, sonra 25'i C ile birebir.
-      Kalan 2 sekil (`eşleş x { ; }`, `eşleş x { => 1; }`) BILEREK ertelendi: kok `parse_desen`in tanisiz
-      sayac yolu (C P211 "desen bekleniyor", ilerlemeden doner).
-      ⚠ D-798 YOL USTU (bir sonraki dilim = desen ailesi): `parse_desen` C gibi ilerlemeden donerse self'in
-      `eşleş` dongusu ASILABILIR. C'nin dongusunde ilerleme korumasi YOK; aynı-konum-aynı-kod tekrari
-      `hata_sayisi`ni MAX'a cekip `if (p->hata_sayisi >= PARSER_MAX_HATA) break;` ile cikar (parser.c:1529).
-      Self'te ph_ekle yalniz `ph_kis` kurar, dongu kirilmaz → desen dilimi `ph_kis` ile cikisi DA eklemeli.
-      KALAN 48 site (D-798 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · parse_birincil 6 ·
-      parse_desen 5 · parse_kullan 5 · parse_sonek 3 · parse_yapi_olustur 3 · atla_tip_paramlar_sahipli 2 ·
-      parse_generic_args/parse_islev_genel/parse_lambda/parse_tek_arg 1'er.
+      Kalan 2 sekil (`eşleş x { ; }`, `eşleş x { => 1; }`) D-798'de ertelendi → ✓ D-799'da kapandi.
+      ✓ D-799 desen ailesi: `Çeşit::` varyant adi P212 · payload `)` P213 · yapi deseni alan adi P214 / `}` P215 ·
+      yapici `)` P210 · desen degil P211 (tanisiz sayac yoluydu; C gibi tani + ILERLEMEDEN don) · yapi deseni
+      yalniz duz tanimlayici adla (C parser.c:1400; self `hiç { a }`yi SESSIZCE kabul ediyordu) · `eşleş`
+      dongusune `ph_kis` cikisi (C parser.c:1529 `hata_sayisi >= PARSER_MAX_HATA`). tc48_61..68; 25 sekil: once
+      20'si farkli, sonra 24'u birebir (kalan `d8` baska site: P130/P131, ifade.c). C'nin kendisi bazi bozuk
+      desenlerde ilerlemesiz `eşleş` dongusunde 100 taniya kadar doner (`değer(;)`, kapanmamis `eşleş` + izleyen
+      `işlev`); self artik ayni 100 taniyi basip cikiyor. Cikis olmadan self 44 sn'de 4 GB sinirina buyuyup
+      D-579 panigiyle dusuyordu (S397, olculdu).
+      ⚠ D-799 OLCUMU: C 7 dongude hata siniriyla cikar (yapi 578 · cesit 670 · modul 1079 · blok 1169 · eşleş 1529 ·
+      satirici_asm 1778 · ust duzey 1873); self'te `ph_kis` cikisi YALNIZ `eşleş`te var, digerleri ilerleme
+      korumasina (blok D-650, yapi D-657) ya da panik senkrona dayaniyor. Yeni bir dongu ilerlemesiz kalabilirse
+      ayni cikisi eklemek gerekir; tanilar zaten `ph_kis` ile dusuruldugu icin cikti degismez.
+      KALAN 43 site (D-799 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · parse_birincil 6 ·
+      parse_kullan 5 · parse_sonek 3 · parse_yapi_olustur 3 · atla_tip_paramlar_sahipli 2 · parse_generic_args/
+      parse_islev_genel/parse_lambda/parse_tek_arg 1'er.
       ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
       tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
       S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
@@ -551,8 +561,8 @@
       D-796 OLCUMU — tanisiz sayac siteleri (`p.hata_say = p.hata_say + 1`, ph_ekle haric): 9 -> 8. Kapanan:
       `parse_disa_govde` (`dışa`/`genel` oneki → P050/P051; oncesinde dosyadaki tek hata buysa D-648 emniyet agi
       konumsuz `P000 0 0` basiyordu). KALAN parser siteleri: bekle_buyuk · parse_parametre · parse_desen ·
-      asm_kisit_atla · asm_kisit_al · ~~parse_cesit~~ (✓ D-797 → P352); codegen asamasi (emniyet agina girmez):
-      ifade_uret · deyim_uret. D-797'den sonra 8 -> 7.
+      asm_kisit_atla · asm_kisit_al · ~~parse_cesit~~ (✓ D-797 → P352) · ~~parse_desen~~ (✓ D-799 → P211);
+      codegen asamasi (emniyet agina girmez): ifade_uret · deyim_uret. D-797'den sonra 8 -> 7, D-799'dan sonra 7 -> 6.
       (`codegen.kem` emniyet agi yorumundaki "Kalan 12 site" sayisi D-648'den kalma, bayat.)
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
 - [x] G8  ✓ D-751 (369/429 bildirim genel; testler modül sistemiyle derleniyor, calistir_stdlib_ithal). [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
@@ -3928,3 +3938,21 @@
   TAM TAKIM (-j10 ölçümlü, 25:15): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
   checker_diff 365/365, FIXPOINT ✓, atlama izleri D-797 ile aynı desen (25). Açılış süresi beklemeden geçti
   (medyan 542,2 / 642,3 ms < 650, çekişme 16 / 15).
+- 2026-11-28 D-799: C0a — desen ailesi tanıları + ilerlemesiz `eşleş` döngüsünde hata sınırı çıkışı.
+  D-798'de ertelenen dilim. `parse_desen`: `Çeşit::` varyant adı P212 / payload `)` P213 (parser.c:1367/1389) · yapı
+  deseni alan adı P214 / `}` P215 (1409/1417) · yapıcı `)` P210 (1448) · desen değil → tanısız sayaç + bir belirteç
+  tüketme yerine C gibi P211 + İLERLEMEDEN dön (1485) · yapı deseni yalnız düz tanımlayıcı adla (1400; self
+  `hiç { a } => 1;`yi SESSİZCE kabul ediyordu, C P220+P101+P211). İlerlemeden dönmek `eşleş` döngüsünü ilerlemesiz
+  bırakabilir: C'de ilerleme koruması yok, hata sınırıyla çıkar (1529) → `parse_esles`e `ph_kis` çıkışı. `değer(;)`
+  ve kapanmamış `eşleş` + izleyen `işlev`te C ve self aynı 100 tanıyı basıp çıkıyor; çıkış olmadan self 44 sn'de
+  4 GB sınırına büyüyüp D-579 paniğiyle düşüyordu (S397; harness rc=134'ü asılma değil fark sayıyor, yine kırmızı).
+  25 hata şekli (13 doğrudan + 12 komşu): HEAD ikilisinde 20'si farklıydı, şimdi 24'ü birebir (kalan 1 başka site:
+  P130/P131, ifade.c). Yalnız `codegen.kem` (D-734). Eşlenmemiş `bekle(p, "` 48 → 43; tanısız sayaç sitesi 7 → 6.
+  Yol üstünde C0a'nın elle tutulan "eşlenen kod" sayacı ÖLÇÜLDÜ ve yanlış çıktı (62 değil 65; ortak kodlar iki kez
+  sayılmış) → sayaç ölçülen değerle değiştirildi: 68 farklı kod (C'de 111).
+  Fikstür tc48_61..68 (8 dosya; her biri eski ikilide farklı, yenide C ile aynı). checker_diff 373/373.
+  SABOTAJ S389-S398, 10/10 rc=2 (S395 ilk koşumda iki eşleşen desen yüzünden uygulanmadı, benzersiz desenle
+  yeniden koşuldu).
+  TAM TAKIM (-j10 ölçümlü, 24:17): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 373/373, FIXPOINT ✓, atlama izleri D-798 ile aynı desen (25). Açılış süresi beklemeden geçti
+  (medyan 525,4 / 601,2 ms < 650, çekişme 12 / 15).

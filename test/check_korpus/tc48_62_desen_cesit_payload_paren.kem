@@ -1,0 +1,7 @@
+// [D-799] P213 — `Çeşit::V(...)` payload deseninde `)` eksik (C parser.c:1389).
+çeşit R { A(tam32), B }
+işlev main() -> tam32 {
+    değişken r: R = R::B;
+    eşleş r { R::A(a => 1; _ => 2; }
+    ver 0;
+}
