@@ -1,0 +1,6 @@
+// [D-798] P230 — `eşleş` gövdesi için `{` eksik (C parser.c:1520).
+işlev main() -> tam32 {
+    değişken x: tam32 = 1;
+    eşleş x 1 => 2; _ => 3; }
+    ver 0;
+}

@@ -1,0 +1,4 @@
+// [D-798] P231 — `eşleş` gövdesi dosya sonunda kapanmıyor (C parser.c:1531).
+işlev main() -> tam32 {
+    değişken x: tam32 = 1;
+    eşleş x { 1 => 2; _ => 3;

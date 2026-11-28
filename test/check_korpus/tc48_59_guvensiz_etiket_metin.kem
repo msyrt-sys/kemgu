@@ -1,0 +1,5 @@
+// [D-798] P242 — `güvensiz` açıklaması metin değil (C parser.c:1559); ardından P243 aynı konumda.
+işlev main() -> tam32 {
+    güvensiz [neden: 5] { }
+    ver 0;
+}
