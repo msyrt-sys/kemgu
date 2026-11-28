@@ -1,0 +1,6 @@
+// [D-803] P262 — `mimari` sonrası `:` eksik (C parser.c:1669).
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari arm64 şablon: r#"nop"# } }
+    ver x;
+}

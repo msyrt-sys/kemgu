@@ -1,0 +1,6 @@
+// [D-803] P269 + P264 — alan adı yoksa zincir KESİLİR (C parser.c:1728 `break`).
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"nop"# çıktı("=r", &x. .y) } }
+    ver x;
+}

@@ -1970,12 +1970,8 @@ işlev parse_esles(p: &değişken Ayr) -> tam32 {
 }
 // satıriçi_asm { mimari: X  şablon: r#".."#  çıktı("k",&v) girdi("k",e) bozulan("k") çevrim: N }
 // Yalnız `girdi` ifadeleri AST çocuğu (C ast_duz_yaz); gerisi tüketilir.
-işlev asm_kisit_atla(p: &değişken Ayr) -> tam32 {
-    eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") { ilerle(p); ver 1; }
-    p.hata_say = p.hata_say + 1; ver 0;
-}
-// D-416: dizgi simgesini TÜKETMEDEN ÖNCE değerini al. `asm_kisit_atla` yalnız
-// tüketiyordu; şablon/kısıt/bozulan metinleri BÖYLECE ATILIYORDU ve codegen'in
+// D-416: dizgi simgesini TÜKETMEDEN ÖNCE değerini al. Eski `asm_kisit_atla` yalnız
+// tüketiyordu (D-803'te çağıranı kalmadığı için silindi); şablon/kısıt/bozulan metinleri BÖYLECE ATILIYORDU ve codegen'in
 // asm yayması imkânsızdı. Düğüme alan eklemek `--ast` paritesini bozacağı için
 // yan-kanal (D-373 `asm_mim` deseni).
 işlev asm_kisit_al(p: &değişken Ayr) -> metin {
@@ -1998,7 +1994,10 @@ işlev asm_kisit_al(p: &değişken Ayr) -> metin {
         }
         ver v;
     }
-    p.hata_say = p.hata_say + 1;
+    // [D-803] Çağıranların hepsi metni ÖNCEDEN denetler (C `asm_kisit_oku`
+    // aynası); bu yol ulaşılamaz. Yine de tanısız sayaç bırakılmaz (G6): bir
+    // çağıran denetimi atlarsa C'nin kodu (P263) görünür.
+    parse_hata_kaydet(p, "P263");
     ver "";
 }
 // D-416: "," ile listeye ekle (boşsa ilk öğe).
@@ -2208,7 +2207,7 @@ işlev asm_sablon_yaz(s: metin) -> tam32 {
 işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // satıriçi_asm
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P260");   // [D-803] C parser.c:1649
     değişken kids: Dizi<tam32> = [];   // girdi ifadeleri
     değişken mim: metin = "";          // D-373: `mimari:` etiketi (AS001 yan-kanalı)
     değişken cev_var: tam32 = 0;       // D-553: `çevrim:` anotasyonu görüldü mü
@@ -2224,61 +2223,107 @@ işlev parse_satirici_asm(p: &değişken Ayr) -> tam32 {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
         değilse {
             değişken lx: metin = sim_lex(p);
+            // [D-803] clause belirtecinin konumu: C P268'i (çevrim) değere değil
+            // clause belirtecine bağlar (parser.c:1699).
+            değişken cs: tam32 = sim_sat(p);  değişken cu: tam32 = sim_sut(p);
             eğer metin_esit(lx, "mimari") {
-                ilerle(p); bekle(p, "IKI_NOKTA");
-                mim = sim_lex(p);   // D-373: etiketi YAKALA (düğüme alan eklemek
-                                    // `--ast` paritesini bozardı → yan-kanal)
-                bekle(p, "TANIMLAYICI");
+                ilerle(p); bekle_k(p, "IKI_NOKTA", "P262");   // [D-803] C parser.c:1669
+                // [D-803] C mimariyi YALNIZ tanımlayıcıysa kaydeder (1672). Self her
+                // belirteci kaydediyordu → `mimari: 5` P266 almıyordu.
+                eğer sim_mi(p, "TANIMLAYICI") {
+                    mim = sim_lex(p);   // D-373: etiketi YAKALA (düğüme alan eklemek
+                                        // `--ast` paritesini bozardı → yan-kanal)
+                }
+                bekle_k(p, "TANIMLAYICI", "P261");            // [D-803] C parser.c:1670
             } değilse {
             eğer metin_esit(lx, "şablon") {
-                ilerle(p); bekle(p, "IKI_NOKTA"); sab = asm_kisit_al(p);   // D-416
+                ilerle(p); bekle_k(p, "IKI_NOKTA", "P262");   // [D-803] C parser.c:1679
+                // [D-803] metin değilse C P263 basar ve belirteci TÜKETİR (1687).
+                eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") {
+                    sab = asm_kisit_al(p);                     // D-416
+                } değilse {
+                    parse_hata_kaydet(p, "P263"); ilerle(p);
+                }
             } değilse {
             eğer metin_esit(lx, "çevrim") {
-                ilerle(p); bekle(p, "IKI_NOKTA"); parse_ifade(p); cev_var = 1;
+                ilerle(p); bekle_k(p, "IKI_NOKTA", "P262");   // [D-803] C parser.c:1694
+                // [D-803] C negatif olmayan tamsayı LİTERALİ ister (1696): düğüm TAM
+                // olmalı ve değeri int64 olarak >= 0 olmalı. 2^63 ve üstü negatif
+                // okunur (`tamsayi_deger` C ile aynı bit desenini verir, D-629).
+                // Self hiç denetlemiyordu: `çevrim: x` sessizce kabul ediliyordu.
+                değişken ce: tam32 = parse_ifade(p);
+                eğer metin_esit(dizi_al(p.a_ad, ce), "TAM") ve (bayt(dizi_al(p.a_deg, ce), 0) != 45) {
+                    cev_var = 1;
+                } değilse {
+                    parse_hata_konum(p, "P268", cs, cu);
+                }
             } değilse {
             eğer metin_esit(lx, "çıktı") {
-                ilerle(p); bekle(p, "SOL_PAREN");
-                ck = vir_ekle(ck, asm_kisit_al(p));                        // D-416
-                bekle(p, "VIRGUL"); bekle(p, "VE_BIT");
-                eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
-                değişken hn: metin = sim_lex(p);
-                değişken hs: tam32 = sim_sat(p);  değişken hu: tam32 = sim_sut(p);
-                cv = vir_ekle(cv, hn);   // D-416: çıktı KÖK DEĞİŞKEN adı
-                // [D-643] C aynasi (parser.c asm clause): P269 hedef adi, P264 paren.
-                bekle_k(p, "TANIMLAYICI", "P269");
-                // [D-722] `&ad.alan...` — C parser.c aynası: SINIRLI lvalue zinciri.
-                // ERISIM düğümleri asm'in ÇOCUĞU YAPILMAZ (`--ast` paritesi: C
-                // dökümü çıktı hedeflerini basmaz); indeksleri yan kanalda.
-                değişken hd: tam32 = 0 - 1;
-                eğer sim_mi(p, "NOKTA") {
-                    hd = dugum0(p, "TANIMLAYICI", hn, hs, hu);
-                    iken sim_mi(p, "NOKTA") {
-                        değişken ns: tam32 = sim_sat(p);  değişken nu: tam32 = sim_sut(p);
-                        ilerle(p);
-                        değişken alan: metin = sim_lex(p);
-                        bekle_k(p, "TANIMLAYICI", "P269");
-                        hd = dugum1(p, "ERISIM", alan, ns, nu, hd);
+                ilerle(p); bekle_k(p, "SOL_PAREN", "P264");   // [D-803] C parser.c:1705
+                // [D-803] kısıt metin değilse C P263 basar, panik senkron yapar ve
+                // clause'un GERİSİNİ atlar (`asm_kisit_oku` + `continue`, 1707).
+                eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") {
+                    ck = vir_ekle(ck, asm_kisit_al(p));                        // D-416
+                    bekle_k(p, "VIRGUL", "P264");                  // [D-803] C parser.c:1708
+                    // [D-803] `&` yoksa C P269'u GEÇERLİ belirtece bağlar, tüketmez (1710).
+                    eğer sim_mi(p, "VE_BIT") { ilerle(p); } değilse { parse_hata_kaydet(p, "P269"); }
+                    eğer sim_mi(p, "DEGISKEN") { ilerle(p); }
+                    değişken hn: metin = sim_lex(p);
+                    değişken hs: tam32 = sim_sat(p);  değişken hu: tam32 = sim_sut(p);
+                    cv = vir_ekle(cv, hn);   // D-416: çıktı KÖK DEĞİŞKEN adı
+                    // [D-643] C aynasi (parser.c asm clause): P269 hedef adi, P264 paren.
+                    değişken h_ok: tam32 = bekle_k(p, "TANIMLAYICI", "P269");
+                    // [D-722] `&ad.alan...` — C parser.c aynası: SINIRLI lvalue zinciri.
+                    // ERISIM düğümleri asm'in ÇOCUĞU YAPILMAZ (`--ast` paritesi: C
+                    // dökümü çıktı hedeflerini basmaz); indeksleri yan kanalda.
+                    // [D-803] Zincire YALNIZ hedef tanımlayıcıysa girilir (C 1720) ve
+                    // alan adı yoksa zincir KESİLİR (C 1728 `break`).
+                    değişken hd: tam32 = 0 - 1;
+                    eğer h_ok == 1 ve sim_mi(p, "NOKTA") {
+                        hd = dugum0(p, "TANIMLAYICI", hn, hs, hu);
+                        değişken zincir: mantıksal = doğru;
+                        iken zincir ve sim_mi(p, "NOKTA") {
+                            değişken ns: tam32 = sim_sat(p);  değişken nu: tam32 = sim_sut(p);
+                            ilerle(p);
+                            değişken alan: metin = sim_lex(p);
+                            eğer bekle_k(p, "TANIMLAYICI", "P269") == 1 {
+                                hd = dugum1(p, "ERISIM", alan, ns, nu, hd);
+                            } değilse { zincir = yanlış; }
+                        }
                     }
+                    cn = vir_ekle(cn, tam64_str(hd olarak tam64));
+                    eğer hd >= 0 { dizi_ekle(hnl, hd); } değilse { dizi_ekle(hnl, dugum0(p, "TANIMLAYICI", hn, hs, hu)); }   // [D-723]
+                    bekle_k(p, "SAG_PAREN", "P264");
+                } değilse {
+                    parse_hata_kaydet(p, "P263"); panik_senkron(p);   // [D-803] C 1707
                 }
-                cn = vir_ekle(cn, tam64_str(hd olarak tam64));
-                eğer hd >= 0 { dizi_ekle(hnl, hd); } değilse { dizi_ekle(hnl, dugum0(p, "TANIMLAYICI", hn, hs, hu)); }   // [D-723]
-                bekle_k(p, "SAG_PAREN", "P264");
             } değilse {
             eğer metin_esit(lx, "girdi") {
-                ilerle(p); bekle(p, "SOL_PAREN");
-                gk = vir_ekle(gk, asm_kisit_al(p));                        // D-416
-                bekle(p, "VIRGUL"); dizi_ekle(kids, parse_ifade(p)); bekle(p, "SAG_PAREN");
+                ilerle(p); bekle_k(p, "SOL_PAREN", "P264");   // [D-803] C parser.c:1751
+                eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") {
+                    gk = vir_ekle(gk, asm_kisit_al(p));                        // D-416
+                    bekle_k(p, "VIRGUL", "P264");              // [D-803] C parser.c:1754
+                    dizi_ekle(kids, parse_ifade(p));
+                    bekle_k(p, "SAG_PAREN", "P264");           // [D-803] C parser.c:1756
+                } değilse {
+                    parse_hata_kaydet(p, "P263"); panik_senkron(p);   // [D-803] C 1753
+                }
             } değilse {
             eğer metin_esit(lx, "bozulan") {
-                ilerle(p); bekle(p, "SOL_PAREN");
-                bz = vir_ekle(bz, asm_kisit_al(p)); bekle(p, "SAG_PAREN"); // D-416
+                ilerle(p); bekle_k(p, "SOL_PAREN", "P264");   // [D-803] C parser.c:1766
+                eğer sim_mi(p, "METIN") veya sim_mi(p, "HAM_METIN") {
+                    bz = vir_ekle(bz, asm_kisit_al(p));                        // D-416
+                    bekle_k(p, "SAG_PAREN", "P264");           // [D-803] C parser.c:1769
+                } değilse {
+                    parse_hata_kaydet(p, "P263"); panik_senkron(p);   // [D-803] C 1768
+                }
             } değilse {
-                parse_hata_kaydet(p, "P261"); ilerle(p);   // [D-649] C parser.c:1751
+                parse_hata_kaydet(p, "P261"); ilerle(p);   // [D-649] C parser.c:1773
             } } } } } }
         }
     }
-    bekle_k(p, "SAG_SUSLU", "P260");   // [D-653] C parser.c:1758
-    // [D-653] ZORUNLU CLAUSE DENETIMLERI — C parser.c:1761-1769 aynasi.
+    bekle_k(p, "SAG_SUSLU", "P260");   // [D-653] C parser.c:1780
+    // [D-653] ZORUNLU CLAUSE DENETIMLERI — C parser.c:1784-1791 aynasi.
     // Self-host'ta BU DENETIMLER HIC YOKTU: `satıriçi_asm { şablon: ... }`
     // (mimari YOK) sessizce KABUL ediliyordu, C ise P266 ile reddediyor (olculdu).
     // Konum `satıriçi_asm` anahtar kelimesidir (s,u), kapanis `}` DEGIL.

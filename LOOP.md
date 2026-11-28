@@ -54,15 +54,21 @@
       `test_tumu` + onceden ATLANAN tum alt adimlar (Stdlib --check, Snapshot,
       Fuzzer, Runtime link) `success`. Yol: D-655 (yutulan stderr acildi) ->
       D-658 (kok: uretilen konak modulu mojibake oluyordu).
-- [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
+- [x] C0a -> D-803 (TAMAMLANDI: eslenmemis `bekle` cagrisi 0; C'nin parser.c+ifade.c'deki 112 P kodunun
+      112'si self'te). [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
       Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796)
-      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800) -> 24 (D-801) -> 11 (D-802; kalan YALNIZ satirici asm).
+      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800) -> 24 (D-801) -> 11 (D-802; kalan YALNIZ satirici asm)
+      -> 0 (D-803; sayi SATIR basina, 11 satirda 13 cagri vardi).
       ESLENEN KOD (D-799'da OLCULDU: self'in yaydigi farkli P kodu, P000 haric): D-795 36 · D-796 44 · D-797 57 ·
       D-798 65 · D-799 68 · D-800 74 · D-801 84 · D-802 102 (C'de 112; ikisi de P318b dahil) + ayristirici RT006. ⚠ Onceki elle tutulan sayac
       (29/39/52/62) YANLISTI: tabani farkliydi ve birden cok yapida ortak kodlar (P200/P201, P210..P212) iki kez
       sayilmisti. Sayaci elle artirma; `bekle_k`/`parse_hata_*` cagrilarindaki kodlari say.
+      ⚠ D-803'TE SAYIM TANIMI YENIDEN KURULDU: yukaridaki desen KAYDEDILMEMISTI ve yeniden uretilemedi (D-802'nin
+      HEAD'inde denenen iki desen 108 ve 103 verdi, 102 degil). Yeni tanim: yorumlar haric, tani yardimcilarinin
+      (`bekle_k`/`parse_hata_*`/`ph_ekle`/`bekle_buyuk`/`parse_tek_arg`/`parse_disa_govde`) argumanlarindaki P
+      kodlari, C'nin parser.c+ifade.c kumesiyle kesisim: D-801 86/112 · D-802 109/112 · D-803 112/112.
       (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
       ✓ D-796 govde/onek toparlanmasi: `özellik` P201/P202/P203 · `uygula` P210/P211/P212 · `modül` P061/P062 ·
       `dışa`/`genel` oneki P050/P051; tc48_25..36; 49 sekil: once 44'u farkli, sonra hepsi C ile birebir.
@@ -103,8 +109,20 @@
       gecerli. `Dizi<Kutu<>>`: C `>>`yi once boler, self SAGA_KAYDIR'i da kapanis sayar. tc79_01..32; 52 sekil: once
       42'si farkli, sonra hepsi birebir. Generic `<` (P318) cagiranlar `<`yi onceden denetledigi icin ULASILAMAZ
       (C'de de oyle); `atla_tip_paramlar_sahipli`deki korumali `<` `ilerle`ye cevrildi (C `parser_tuket`, kodu yok).
-      KALAN 11 site (D-802 olcumu): YALNIZ parse_satirici_asm (TANIMLAYICI/SOL_PAREN/SAG_PAREN/IKI_NOKTA/VIRGUL/
-      SOL_SUSLU).
+      ✓ D-803 satirici asm ailesi (SON aile): acilis `{` P260 · `:` P262 (mimari/şablon/çevrim) · mimari adi P261 ·
+      kisit metin degil P263 · `(`/`,`/`)` P264 (çıktı/girdi/bozulan) · cikti hedefinde `&` yok P269 (tuketmez).
+      Dort DAVRANIS farki kapandi: (1) `mimari: 5` — C mimariyi yalniz tanimlayiciysa kaydeder, P266 de gelir;
+      (2) şablon/kisit metin degilse C P263 basar: şablonda belirteci tuketir, çıktı/girdi/bozulan'da panik senkron
+      yapip clause'un GERISINI atlar (self tanisiz sayaca dusup uzun P000/P261 cagleyani basiyordu; `bozulan()`
+      dosyadaki tek hataysa konumsuz `P000 0 0`); (3) SESSIZ KABUL: `çevrim` negatif olmayan tamsayi LITERALI
+      olmali (C P268, clause belirtecine bagli) — self `çevrim: -1`, `çevrim: x` ve 2^63'u kabul ediyordu (2^63 ve
+      ustu int64 olarak negatif okunur; `tamsayi_deger` C ile ayni bit desenini verir, D-629); (4) çıktı hedefinde
+      `.alan` zincirine yalniz hedef tanimlayiciysa girilir, alan adi yoksa zincir KESILIR. Olu `asm_kisit_atla`
+      silindi (cagirani yoktu); `asm_kisit_al`in geri dusus yolu tanisiz sayac yerine P263 basiyor (cagiranlar
+      metni onceden denetledigi icin ULASILAMAZ; S484 sessiz kaldi). tc80_01..23; 72 sekil: once 48'i farkli,
+      sonra hepsi birebir.
+      KALAN 0 site (D-803 olcumu). Tanisiz sayac siteleri G6'da: parser asamasinda YALNIZ parse_parametre
+      (ULASILABILIR, D-803'te olculdu — G6).
       ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
       tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
       S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
@@ -581,8 +599,12 @@
       `parse_disa_govde` (`dışa`/`genel` oneki → P050/P051; oncesinde dosyadaki tek hata buysa D-648 emniyet agi
       konumsuz `P000 0 0` basiyordu). KALAN parser siteleri: bekle_buyuk · parse_parametre · parse_desen ·
       asm_kisit_atla · asm_kisit_al · ~~parse_cesit~~ (✓ D-797 → P352) · ~~parse_desen~~ (✓ D-799 → P211) ·
-      ~~bekle_buyuk~~ (✓ D-802 → cagri yerine gore kod); codegen asamasi (emniyet agina girmez): ifade_uret ·
-      deyim_uret. D-797'den sonra 8 -> 7, D-799'dan sonra 7 -> 6, D-802'den sonra 6 -> 5.
+      ~~bekle_buyuk~~ (✓ D-802 → cagri yerine gore kod) · ~~asm_kisit_atla~~ (✓ D-803 silindi, cagirani yoktu) ·
+      ~~asm_kisit_al~~ (✓ D-803 → P263; ulasilamaz); codegen asamasi (emniyet agina girmez): ifade_uret ·
+      deyim_uret. D-797'den sonra 8 -> 7, D-799'dan sonra 7 -> 6, D-802'den sonra 6 -> 5, D-803'ten sonra 5 -> 3.
+      SIRADAKI: parse_parametre — ULASILABILIR ve farkli (D-803'te olculdu): `işlev f(&değişken x: tam32)` icin C
+      `değişken` belirtecinde P012 basip P016/P017/P001'i AYNI konumda verir; self `&değişken`i tanisiz sayacla
+      tuketir, P012'yi basmaz, kalan tanilari baska konumda verir. Ayni yol `uygula` govdesinde de (P211 ile).
       (`codegen.kem` emniyet agi yorumundaki "Kalan 12 site" sayisi D-648'den kalma, bayat.)
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
 - [x] G8  ✓ D-751 (369/429 bildirim genel; testler modül sistemiyle derleniyor, calistir_stdlib_ithal). [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
@@ -600,6 +622,20 @@
       belgelenmemis bir fikstur mu? ONCE OLC, sonra sil ya da yerine tasi.
 - [ ] G10 [S] `runtime/kdl_runtime.c` gecerli UTF-8 DEGIL (CLAUDE.md'de kayitli
       tuzak; D-633'te 2328 satir kaybina yol acti). Kodlama borcu kapatilmali.
+- [ ] G16 [S] SELF-HOST `asm_kisit_al` COK-DIYEZLI HAM DIZGIYI SOYMUYOR (D-803 yol ustu, onceden var). D-416
+      yalniz `r#"..."#`i soyuyor; `r##"..."##` ham simge metniyle IR'a gidiyor. OLCULDU: `şablon: r##"nop"##` →
+      C `asm sideeffect "nop"`, link + exit 42; self `asm sideeffect "r##\22nop\22##"` → LINK-RED (gurultulu).
+      Lexer cok diyezi taniyor (`--check` iki tarafta OK); C `metin_token_icerik` (parser.c) N diyezi sayiyor.
+      Ayni yardimci kisit/bozulan metinlerini de soyar → onlar da etkileniyor. Onarim: diyez sayisini say; fikstur
+      cg_korpus'ta (codegen_diff), sabotaj: tek diyeze geri don.
+- [ ] G17 [S] C ORACLE `hoist_renumber` ASM SABLONUNDAKI `%<rakam>`I YENIDEN NUMARALIYOR → SESSIZ YANLIS CEVAP
+      (D-803 yol ustu, onceden var; self DOGRU). `src/llvm.c` hoist_renumber satirdaki HER `%` + rakami SSA
+      yazmaci sayiyor, tirnak icindeki asm sablonu dahil. OLCULDU (arm64): `şablon: r#"mov $0, #(101%1)"#` → C IR
+      `#(101%2)`, exit 1; self `#(101%1)`, exit 0 (dogrusu 0). `#(100%2)` → C `#(100%0)` → assembler red. Gecerli
+      sablonlar operand icin `$N` kullanir (depodaki 765 sablon tarandi: `%<rakam>` yalniz tc80 ayristirma
+      fiksturlerinde, onlar codegen'e ulasmaz) → etki GNU as `%` mod operatoru gibi nadir bicimlerle sinirli, ama
+      sinif deponun en agiri (derleme temiz, cevap yanlis).
+      Onarim: renumber cift tirnak icini atlamali; fikstur: `#(101%1)` (iki tarafta exit 0), sabotaj: atlamayi kaldir.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -4018,3 +4054,41 @@
   checker_diff 429/429, FIXPOINT ✓ (stage1 == stage2, 110261 satır — generic ayrıştırma değişikliği self-host'un
   kendi kaynağında sapma yaratmadı), atlama izleri D-801 ile aynı desen (25). D-794'ün bekleme yolu DÖRDÜNCÜ kez
   ateşlendi: 659,4 ms (çekişme 15) → 473 sn sessizlik → 516,7 ms (çekişme 1) → geçti.
+- 2026-11-28 D-803: C0a TAMAMLANDI — satırıçi asm ailesi tanıları (son aile; `çevrim` sessiz kabulü kapandı).
+  Kalan 11 satır / 13 `bekle` çağrısının hepsi `parse_satirici_asm`'deydi. Kod eşlemesi: açılış `{` P260 · `:` P262
+  (mimari/şablon/çevrim) · mimari adı P261 · `(`/`,`/`)` P264 (çıktı/girdi/bozulan) · çıktı hedefinde `&` yok P269
+  (C tüketmez). C'nin `parse_satirici_asm`'i (parser.c:1645-1791) satır satır okundu; kod eşlemesinin ötesinde DÖRT
+  davranış farkı çıktı ve kapandı: (1) `mimari: 5` — C mimariyi yalnız tanımlayıcıysa kaydeder, P266 de gelir (self
+  her belirteci kaydediyordu); (2) şablon/kısıt metin değil → C P263: şablonda belirteci TÜKETİR, çıktı/girdi/bozulan'da
+  `asm_kisit_oku` başarısız olunca panik senkron yapıp clause'un gerisini atlar (`continue`) — self tanısız sayaca
+  düşüp uzun P000/P261 çağlayanı basıyordu, `bozulan()` dosyadaki tek hataysa konumsuz `P000 0 0`; (3) SESSİZ KABUL:
+  `çevrim` negatif olmayan tamsayı LİTERALİ olmalı (C P268, clause belirtecine bağlı) — self `çevrim: -1`, `çevrim: x`
+  ve 2^63'ü kabul ediyordu. 2^63 ve üstü C'de int64 bit deseniyle negatif okunur (D-629); self aynı deseni
+  `tamsayi_deger`den alıp TAM düğümü değerinin `-` ile başlayıp başlamadığını sorar; (4) çıktı hedefinde `.alan`
+  zincirine yalnız hedef tanımlayıcıysa girilir, alan adı yoksa zincir KESİLİR (C 1720/1728). Ölü `asm_kisit_atla`
+  silindi (çağıranı yoktu); `asm_kisit_al`ın geri düşüş yolu tanısız sayaç yerine P263 basıyor (çağıranlar metni
+  önceden denetlediği için ULAŞILAMAZ). Yorumlardaki bayat C satır numaraları düzeltildi (P261 1751→1773, kapanış P260
+  1758→1780, zorunlu clause'lar 1761-1769→1784-1791). `şablon: ""` ölçüldü: C de P267 veriyor (boş şablon "yok"
+  sayılıyor) → ayrı bayrak gerekmedi. Yalnız `codegen.kem` (D-734).
+  ÖLÇÜM: 72 asm şekli (31 doğrudan + 35 komşu + 6 zincir/sınır): HEAD ikilisinde 48'i farklıydı, şimdi 72'si de C ile
+  birebir. Eşlenmemiş `bekle(p, "` 11 satır → 0; tanısız sayaç sitesi 5 → 3 (parser'da yalnız parse_parametre kaldı:
+  ULAŞILABİLİR ve farklı, ölçüldü → G6'ya yazıldı). SAYIM TANIMI YENİDEN KURULDU: D-795..D-802'nin "farklı kod" sayısı
+  kaydedilmemiş bir desenle sayılmıştı ve yeniden üretilemedi (D-802 HEAD'inde denenen iki desen 108 ve 103 verdi, 102
+  değil). Yeni tanım: yorumlar hariç, tanı yardımcılarının argümanlarındaki P kodları ∩ C'nin parser.c+ifade.c kümesi
+  → D-801 86/112 · D-802 109/112 · D-803 112/112.
+  Fikstür tc80_01..23: 22 hata şekli (hepsi eski ikilide farklı, yenide C ile aynı) + 2^63-1 pozitif sınırı (iki
+  ikilide de OK; yeni denetimin sınırı reddetmediğini sabitler). checker_diff 452/452 (0 muaf).
+  SABOTAJ S456-S483 28/28 rc=2: her kod eşlemesi · mimari kayıt koşulu · şablon P263 kodu ve tüketimi · çevrim
+  denetimi / işaret denetimi / P268 konumu · üç kısıt ön-denetimi + üç panik · `&` kodu ve tüketimi · zincir koruması
+  ve kesme. S484 (`asm_kisit_al` geri düşüşünü tanısız sayaca döndür) BEKLENDİĞİ GİBİ SESSİZ kaldı (rc=0): yol
+  gerçekten ulaşılamaz.
+  YOL ÜSTÜ (iki madde Sırada sonuna eklendi, ikisi de önceden var): G16 — self `asm_kisit_al` `r##"..."##`i soymuyor
+  (`şablon: r##"nop"##` → C link + exit 42, self LINK-RED); G17 — C oracle `hoist_renumber` asm şablonundaki
+  `%<rakam>`ı SSA yazmacı sanıp yeniden numaralıyor: `mov $0, #(101%1)` C'de `#(101%2)` olup exit 1 veriyor (doğrusu 0,
+  self doğru) = SESSİZ YANLIŞ CEVAP. Depodaki 765 şablonun codegen'e ulaşan hiçbiri `%<rakam>` içermiyor.
+  ⚠ İLK `r##` ÖLÇÜMÜM GEÇERSİZDİ: `bozulan(r##"memory"##)` yazmıştım ve C de reddetti — bozulan kısıtı `~{memory}`
+  biçiminde olmalı (depoda 135 kullanım). Geçerli kısıtla yinelendi; fark yalnız self'te kaldı.
+  TAM TAKIM (-j10 ölçümlü, 23:35): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 452/452, FIXPOINT ✓ (stage1 == stage2, 110470 satır), atlama izleri D-802 ile birebir aynı. D-794'ün
+  bekleme yolu bu koşumda ateşlenmedi (iki medyan 442,8 / 592,1 ms, eşik 650). Bütçe uyarısı yalnız codegen_diff'te
+  (66 sn > 60 sn); önceki yedi koşumun hepsinde de var (66-90 sn), yeni değil.

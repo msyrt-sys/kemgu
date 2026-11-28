@@ -1,0 +1,6 @@
+// [D-803] P263 — şablon metin değil; C belirteci TÜKETİR, P267 de gelir (C parser.c:1687).
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: 5 } }
+    ver x;
+}

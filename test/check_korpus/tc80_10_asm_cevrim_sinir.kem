@@ -1,0 +1,6 @@
+// [D-803] POZİTİF — `çevrim: 2^63-1` geçerli; yeni denetim sınırı reddetmemeli.
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"nop"# çevrim: 9223372036854775807 } }
+    ver x;
+}

@@ -1,0 +1,6 @@
+// [D-803] P268 — `çevrim` değeri literal değil (C parser.c:1699). Self eskiden sessizce kabul ediyordu.
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz { satıriçi_asm { mimari: arm64 şablon: r#"mov %%0, #1"# çevrim: x } }
+    ver x;
+}

@@ -1,0 +1,8 @@
+// [D-803] P269 + P264 — hedef adı yok; `.alan` zincirine yalnız hedef tanımlayıcıysa girilir (C parser.c:1720).
+işlev f() -> tam32 {
+    değişken x: tam32 = 0;
+    güvensiz {
+        satıriçi_asm { mimari: arm64 şablon: "nop" çıktı("=r", &.x) }
+    }
+    ver x;
+}
