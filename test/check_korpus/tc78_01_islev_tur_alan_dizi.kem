@@ -1,0 +1,89 @@
+// [D-793] E4v-C: ATAMA, YAPI ALANI ve DİZİ LİTERALİ noktalarında İŞLEV TİPİ uyumluluğu
+// (D-790 ortak kuralı). Self'in tip dizgisi işlev tipini "?" yapıyordu; bu noktalarda denetim
+// atlanıyordu: `k.f = || "a"` çalışınca exit 44 veriyordu, dizi/yapı şekilleri LLVM-RED.
+// OLUMSUZ (T001 atama/alan · T013 dizi elemanı): lambda · sayı · işlev adı · işlev-dışı yere
+// lambda · `&değişken` ve INDEKS alıcı · dizinin işlev ya da skaler bağlamı (bildirim, `ver`,
+// yapı alanı, atama, iç içe) · bağlamsız dizide ilk elemana göre fark. POZİTİF (tanı YOK):
+// uyumlu lambda / işlev adı · generic yapı alanında lambda · ÇAĞRI ARGÜMANINDAKİ dizi
+// (bağlam yalnız doğrudan çocuğa geçer: annotasyonlu dış dizinin skaler bağlamı argümana
+// SIZMAMALI). HATA (yalnız T002): değer, eleman ya da bağlamsız dizinin İLK elemanı hatalıysa
+// art arda T001/T013 basılmaz (C'ye bu artımda eklendi). G004'te değer denetlenmez.
+yapı Kap { f: işlev() -> tam32; n: tam32; }
+yapı Kd { fs: Dizi<işlev() -> tam32>; }
+yapı Kutu<T> { f: T; }
+işlev selam() -> metin { ver "a"; }
+işlev sayi_ver() -> tam32 { ver 1; }
+işlev al_islev_dizi(x: Dizi<işlev() -> tam32>) -> tam32 { ver 0; }
+işlev al_metin_dizi(x: Dizi<işlev() -> metin>) -> Dizi<işlev() -> tam32> { ver [|| 1]; }
+işlev atama() -> tam32 {
+    değişken k: Kap = Kap { f: || 1, n: 1 };
+    k.f = || "a";
+    k.f = 5;
+    k.f = selam;
+    k.n = || 1;
+    k.f = || 2;
+    k.f = sayi_ver;
+    değişken r: &değişken Kap = &değişken k;
+    r.f = || "a";
+    değişken ks: Dizi<Kap> = [Kap { f: || 1, n: 1 }];
+    ks[0].f = || "a";
+    değişken d: Dizi<işlev() -> tam32> = [|| 1];
+    d[0] = || "a";
+    d[0] = 5;
+    d[0] = || 3;
+    değişken x: tam32 = 1;
+    x = || 1;
+    değişken g: işlev() -> tam32 = || 1;
+    g = || "a";
+    k.f = || yok_bir();
+    k.n = || yok_iki();
+    d = [|| "a"];
+    d = [5];
+    değişken dt: Dizi<tam32> = [1];
+    dt = [|| 1];
+    ver 0;
+}
+işlev alan() -> tam32 {
+    değişken a: Kap = Kap { f: || "a", n: 1 };
+    değişken b: Kap = Kap { f: 5, n: 1 };
+    değişken c: Kap = Kap { f: selam, n: 1 };
+    değişken e: Kap = Kap { f: || 1, n: || 1 };
+    değişken h: Kap = Kap { f: || yok_uc(), n: 1 };
+    değişken h2: Kap = Kap { f: || 1, n: || yok_dort() };
+    değişken u: Kap = Kap { f: sayi_ver, n: 1 };
+    değişken gk = Kutu { f: || 1 };
+    değişken kd: Kd = Kd { fs: [|| "a"] };
+    ver 0;
+}
+işlev dizi_bagli() -> tam32 {
+    değişken a: Dizi<işlev() -> tam32> = [|| "a"];
+    değişken b: Dizi<işlev() -> tam32> = [5];
+    değişken c: Dizi<tam32> = [|| 1];
+    değişken e: Dizi<işlev() -> tam32> = [5, "a"];
+    değişken f: Dizi<Dizi<işlev() -> tam32>> = [[|| "a"]];
+    değişken h: Dizi<tam32> = [1, || 1, "a"];
+    değişken i: Dizi<işlev() -> tam32> = [|| yok_bes()];
+    değişken j: Dizi<tam32> = [|| yok_alti()];
+    değişken u: Dizi<işlev() -> tam32> = [|| 1, sayi_ver];
+    değişken q: Dizi<tam32> = [al_islev_dizi([|| 1])];
+    değişken s: Dizi<işlev() -> tam32> = al_metin_dizi([|| "a"]);
+    ver 0;
+}
+işlev dizi_ver() -> Dizi<işlev() -> tam32> { ver [|| "a"]; }
+işlev dizi_bagsiz() -> tam32 {
+    değişken a = [|| 1, || "a"];
+    değişken b = [|| 1, 5];
+    değişken c = [5, || 1];
+    değişken e = [selam, 5];
+    değişken f = [|| { yok_yedi(); ver 1; }, || "a"];
+    değişken h = [|| yok_sekiz(), || 1];
+    değişken i = [yok_dokuz(), 1];
+    değişken j = [|| 1, || yok_on()];
+    değişken k = [5, || yok_onbir()];
+    değişken m = [1 + yok_oniki(), || 1];
+    değişken n = [|x: Yokk| 1, || 1];
+    değişken u = [|| 1, sayi_ver];
+    değişken w = [|| 1, || 2];
+    ver 0;
+}
+işlev main() -> tam32 { ver atama() + alan() + dizi_bagli() + dizi_bagsiz(); }

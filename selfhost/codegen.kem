@@ -273,6 +273,8 @@ yapı Ayr {
                              // TIP_KULLANICI'ya düşer ve ADI düğümde tutulmaz.
     drf_bek: metin;          // D-366: aktif `görev<kesirli*>`/`kanal<kesirli*>` bağlamı
     dizi_bek: metin;         // D-354: aktif Dizi<E> bağlamının eleman tipi ("?"=yok)
+    dizi_bek_tn: tam32;      // [D-793] dizi literali eleman bağlamının tip DÜĞÜMÜ — yalnız DOĞRUDAN
+                             // çocuğa (ebeveyn kurar, `kontrol_dugum` girişte tüketir); -1 = yok
     kur_ad: Dizi<metin>;     // D-351: küresel değişken adları (E010; checker prepass)
     si_ad: Dizi<metin>;      // D-361: seçili import adları (`kullan m::{a,b}`) — niteliksiz gelir
     si_yol: Dizi<metin>;     // D-361: si_ad ile paralel — hangi modülden (T042 belirsizliği)
@@ -12536,7 +12538,11 @@ işlev islev_imza_farkli(p: &değişken Ayr, bek: Dizi<metin>, deg: Dizi<metin>)
 // hata + tam imza → bilgi sağlam, karşılaştırılır (`|| { yok(); ver "a"; }`, C de basar).
 // (2)'de self tipi bilinen ama C'de HATA olabilir (`1 + yok()`) → hata varsa basılmaz.
 işlev islev_tur_uyumsuz(p: &değişken Ayr, bek_tn: tam32, bek: metin, v: tam32, alt_hata: mantıksal) -> mantıksal {
-    değişken se: Dizi<metin> = islev_imza_tn(p, bek_tn);
+    ver islev_tur_uyumsuz_se(p, islev_imza_tn(p, bek_tn), bek, v, alt_hata);
+}
+// [D-793] Aynı kural, beklenen İMZA bir tip düğümünden değil hazır verilir: bağlamsız
+// dizi literalinde referans İLK ELEMANDIR (C DUGUM_DIZI_OLUSTUR (b) yolu, `ilk`).
+işlev islev_tur_uyumsuz_se(p: &değişken Ayr, se: Dizi<metin>, bek: metin, v: tam32, alt_hata: mantıksal) -> mantıksal {
     değişken sv: Dizi<metin> = islev_imza_deger(p, v);
     eğer (dizi_boyut(sv) > 0) ve alt_hata ve imza_eksik_mi(p, sv) { ver yanlış; }
     eğer (dizi_boyut(se) > 0) ve (dizi_boyut(sv) > 0) { ver islev_imza_farkli(p, se, sv); }
@@ -12546,6 +12552,34 @@ işlev islev_tur_uyumsuz(p: &değişken Ayr, bek_tn: tam32, bek: metin, v: tam32
     }
     eğer dizi_boyut(sv) > 0 { ver islev_disi_bilinen_mi(p, bek); }
     ver yanlış;
+}
+// [D-793] `Dizi<E>` tip düğümü → E düğümü; başka şekil (ya da -1) → -1.
+işlev dizi_eleman_tn(p: &değişken Ayr, tn: tam32) -> tam32 {
+    eğer tn < 0 { ver 0 - 1; }
+    eğer metin_esit(dizi_al(p.a_ad, tn), "TIP_DIZI") == yanlış { ver 0 - 1; }
+    eğer dizi_al(p.a_cs, tn) < 1 { ver 0 - 1; }
+    ver dizi_al(p.cocuk, dizi_al(p.a_cb, tn));
+}
+// [D-793] Atama HEDEFİNİN bildirilen tip DÜĞÜMÜ (-1: bilinmiyor → işlev türü kuralı
+// yalnız dizgiyle çalışır). Önce `ifade_tn` (annotasyon · `&K` alıcı · iç içe alan).
+// Çözülemezse ERISIM'de alıcının yapı adı önce alıcının KENDİ düğümünden (INDEKS alıcı
+// `ks[0].f`, ölçüldü: C T001), yoksa DİZGİ tipinden (`ifade_tip`in ERISIM yolunun
+// aynası). INDEKS → dizinin (`&` soyulmuş) eleman düğümü.
+işlev hedef_tn(p: &değişken Ayr, h: tam32) -> tam32 {
+    eğer h < 0 { ver 0 - 1; }
+    değişken t: tam32 = ifade_tn(p, h);
+    eğer t >= 0 { ver t; }
+    eğer dizi_al(p.a_cs, h) < 1 { ver 0 - 1; }
+    değişken a: metin = dizi_al(p.a_ad, h);
+    değişken ic: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, h));
+    eğer metin_esit(a, "ERISIM") {
+        değişken yad: metin = tn_yapi_adi(p, tn_soy(p, hedef_tn(p, ic)));
+        eğer yapi_var_mi(p, yad) == yanlış { yad = ifade_tip(p, ic, "?"); }
+        eğer yapi_var_mi(p, yad) { ver tn_soy(p, alan_tn_bul(p, yad, dizi_al(p.a_deg, h))); }
+        ver 0 - 1;
+    }
+    eğer metin_esit(a, "INDEKS") { ver dizi_eleman_tn(p, tn_soy(p, hedef_tn(p, ic))); }
+    ver 0 - 1;
 }
 // Bildirim/`sabit` + İŞLEV TİPİ uyumluluğu → T001 (1 = hata verildi). D-698 yalnız
 // "TIP_ISLEV annotasyonu + LAMBDA" şeklini karşılaştırıyordu; [D-790] ortak kurala
@@ -14087,7 +14121,13 @@ işlev bolge_al_kontrol(p: &değişken Ayr, idx: tam32, fad: metin) -> mantıksa
     sekil_hata(p, idx, "BL001");
     ver doğru;
 }
-işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
+// [D-793] E4v-C: İŞLEV TİPİ uyumluluğu (D-790 ortak kuralı), T013 elemanda. `dbt` = bağlamın
+// eleman tip DÜĞÜMÜ (yalnız doğrudan ebeveynden; -1 = yok), `th_el` = her elemanın alt
+// ağacından önceki/sonraki tanı sayısı (değerde hata → C D-789 bastırması). Ölçüldü (C T013,
+// self OK): `Dizi<işlev() -> tam32> = [|| "a"]` / `[5]` · `Dizi<tam32> = [|| 1]` · bağlamsız
+// `[|| 1, || "a"]` / `[|| 1, 5]` / `[5, || 1]` (üçü LLVM-RED). Her elemanda dizgi denetimi
+// önce; işlev değeri "?" verdiği için ikisi birbirini dışlar (C eleman sırası korunur).
+işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32, dbt: tam32, th_el: Dizi<tam32>) -> tam32 {
     değişken n: tam32 = dizi_al(p.a_cs, idx);
     eğer n == 0 {                 // D-376: boş dizi → bağlam yoksa T014
         eğer t14_muaf_mi(p, idx) == yanlış { sekil_hata(p, idx, "T014"); }
@@ -14103,14 +14143,64 @@ işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
             odunc_kacis(p, e);
             eğer (metin_esit(t, "?") == yanlış) ve (metin_esit(t, bek) == yanlış) {
                 sekil_hata(p, e, "T013");
+            } değilse eğer (dbt >= 0) ve islev_tur_uyumsuz(p, dbt, tip_str(p, dbt), e, eleman_hata(th_el, i)) {
+                sekil_hata(p, e, "T013");   // [D-793]
             }
             i = i + 1;
         }
         ver 0;
     }
-    değişken ilk: metin = ifade_tip(p, dizi_al(p.cocuk, cb), "?");   // (b) bağlamsız
-    odunc_kacis(p, dizi_al(p.cocuk, cb));
-    eğer metin_esit(ilk, "?") { ver 0; }
+    // [D-793] Bağlam İŞLEV tipi: dizgisi "?" olduğu için buraya (b) yoluna düşerdi; C ise
+    // her elemanı bağlama karşı denetler ((a) yolu) → aynısı, (b) karşılaştırması YAPILMAZ
+    // (yoksa işlev-dışı elemanlar hem bağlama hem ilk elemana karşı iki kez suçlanırdı).
+    eğer dizi_boyut(islev_imza_tn(p, dbt)) > 0 {
+        değişken k: tam32 = 0;
+        iken k < n {
+            değişken ek: tam32 = dizi_al(p.cocuk, cb + k);
+            odunc_kacis(p, ek);
+            eğer islev_tur_uyumsuz(p, dbt, "?", ek, eleman_hata(th_el, k)) { sekil_hata(p, ek, "T013"); }
+            k = k + 1;
+        }
+        ver 0;
+    }
+    // [D-793] Bağlam işlev-dışı ama dizgide yok (atama hedefi: dizgi bağlamı kurulmaz) →
+    // yalnız işlev değerli elemanlar bağlama karşı (kural 3); (b) aşağıda AYNEN sürer.
+    değişken bek_n: metin = "?";
+    eğer dbt >= 0 { bek_n = tip_str(p, dbt); }
+    değişken e0: tam32 = dizi_al(p.cocuk, cb);
+    değişken ilk: metin = ifade_tip(p, e0, "?");   // (b) bağlamsız
+    odunc_kacis(p, e0);
+    eğer (metin_esit(bek_n, "?") == yanlış) ve islev_tur_uyumsuz(p, dbt, bek_n, e0, eleman_hata(th_el, 0)) {
+        sekil_hata(p, e0, "T013");
+    }
+    // [D-793] Bağlam YOKSA (`dbt` -1) referans İLK elemandır (C (b) yolu): ilk eleman işlev
+    // ise sonrakiler onun imzasına karşı, işlev-dışı ise işlev değerli elemanlar ona karşı.
+    // İlk elemanda hata: imzası eksikse C `ilk`i HATA sayar (bu artımda C'ye eklendi) → atla;
+    // işlev-dışı ilk elemanda self tipi HATA'dan ayıramaz (`1 + yok()`, E4z(c)) → atla.
+    değişken se0: Dizi<metin> = islev_imza_deger(p, e0);
+    değişken bagsiz: mantıksal = dbt < 0;
+    eğer eleman_hata(th_el, 0) {
+        eğer (dizi_boyut(se0) == 0) veya imza_eksik_mi(p, se0) { bagsiz = yanlış; }
+    }
+    eğer metin_esit(ilk, "?") {
+        eğer bagsiz ve (dizi_boyut(se0) > 0) {
+            değişken q: tam32 = 1;
+            iken q < n {
+                değişken eq: tam32 = dizi_al(p.cocuk, cb + q);
+                eğer islev_tur_uyumsuz_se(p, se0, "?", eq, eleman_hata(th_el, q)) { sekil_hata(p, eq, "T013"); }
+                q = q + 1;
+            }
+        }
+        eğer metin_esit(bek_n, "?") == yanlış {   // atama hedefi bağlamı: işlev değerli elemanlar
+            değişken r: tam32 = 1;
+            iken r < n {
+                değişken er: tam32 = dizi_al(p.cocuk, cb + r);
+                eğer islev_tur_uyumsuz(p, dbt, bek_n, er, eleman_hata(th_el, r)) { sekil_hata(p, er, "T013"); }
+                r = r + 1;
+            }
+        }
+        ver 0;
+    }
     değişken j: tam32 = 1;
     iken j < n {
         değişken e2: tam32 = dizi_al(p.cocuk, cb + j);
@@ -14125,10 +14215,19 @@ işlev dizi_eleman_kontrol(p: &değişken Ayr, idx: tam32) -> tam32 {
         // ayni kurali uyguluyor. "?" guardi C'nin TIP_HATA guardinin aynasidir.
         eğer (metin_esit(t2, "?") == yanlış) ve (metin_esit(t2, ilk) == yanlış) {
             sekil_hata(p, e2, "T013");
+        } değilse eğer metin_esit(bek_n, "?") == yanlış {
+            eğer islev_tur_uyumsuz(p, dbt, bek_n, e2, eleman_hata(th_el, j)) { sekil_hata(p, e2, "T013"); }   // [D-793]
+        } değilse eğer bagsiz {
+            eğer islev_tur_uyumsuz_se(p, se0, ilk, e2, eleman_hata(th_el, j)) { sekil_hata(p, e2, "T013"); }   // [D-793]
         }
         j = j + 1;
     }
     ver 0;
+}
+// [D-793] Dizi literalinin `k`. elemanının alt ağacında tanı çıktı mı (`th_el` sınırları)?
+işlev eleman_hata(th_el: Dizi<tam32>, k: tam32) -> mantıksal {
+    eğer k + 1 >= dizi_boyut(th_el) { ver yanlış; }
+    ver dizi_al(th_el, k + 1) > dizi_al(th_el, k);
 }
 // T007: `x.alan` — x bilinen bir SKALER ise yapı değildir.
 // [D-730] T009: bilinen YAPI alıcısında olmayan ALAN (`x.yok`) — C tip_belirle
@@ -15301,6 +15400,12 @@ işlev yerel_topla(p: &değişken Ayr, idx: tam32) -> tam32 {
 // İfade alt-ağacında T002 (tanımsız) + DEGISKEN/SABIT T001. Tip/desen/yol atla.
 işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     değişken ad: metin = dizi_al(p.a_ad, idx);
+    // [D-793] Ebeveynin BU düğüme verdiği dizi eleman bağlamı (tip düğümü) burada TÜKETİLİR:
+    // torunlara sızmaz. `dizi_bek` dizgisi sızar (ölçüldü: annotasyonlu dizinin bağlamı
+    // çağrı argümanına geçip `[f(["a"])]`de sahte T013 üretiyor — ayrı LOOP kalemi);
+    // işlev türü kuralı o sızıntıyı miras almasın diye ayrı ve dar taşınır.
+    değişken dbt: tam32 = p.dizi_bek_tn;
+    p.dizi_bek_tn = 0 - 1;
     // [D-723] satıriçi_asm C SIRASIYLA: G002 → AS001 → çıktılar → girdiler
     // (girdiler tip_belirle ile BU noktada gezilir). Genel çocuk gezintisi
     // girdileri AS001'den ÖNCE gezdiği için tanı sırası ayrışıyordu.
@@ -15763,7 +15868,14 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
             dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
         }
         kontrol_dugum(p, hedef);
+        // [D-793] değer alt ağacındaki tanı sayısı (C D-789 bastırmasının vekili) +
+        // dizi literali değerine hedefin eleman tip DÜĞÜMÜ (C: değer `ht` bağlamında).
+        değişken htn: tam32 = hedef_tn(p, hedef);
+        değişken th_deg: tam32 = dizi_boyut(p.th_kod);
+        p.dizi_bek_tn = dizi_eleman_tn(p, htn);
         kontrol_dugum(p, deger);
+        p.dizi_bek_tn = 0 - 1;
+        değişken deg_hata: mantıksal = dizi_boyut(p.th_kod) > th_deg;
         eğer (metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI") == yanlış)
           veya (kuresel_ad_mi(p, dizi_al(p.a_deg, hedef)) ve (yerel_var_mi(p, dizi_al(p.a_deg, hedef)) == yanlış)) {
             eğer odunc_kacis(p, deger) { ver 0; }
@@ -15772,7 +15884,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
         değişken g004: mantıksal = metin_esit(dizi_al(p.a_ad, hedef), "TANIMLAYICI")
           ve bag_biti(p, dizi_al(p.a_deg, hedef), 1);
         eğer g004 { sekil_hata(p, idx, "G004"); }
-        değişken ht: metin = ifade_tip(p, hedef, "?");   // TANIMLAYICI → var_tip; ERISIM/INDEKS → "?"
+        değişken ht: metin = ifade_tip(p, hedef, "?");   // TANIMLAYICI → var_tip; ERISIM → alan; INDEKS → eleman
         eğer metin_esit(ht, "?") == yanlış {
             değişken dt: metin = ifade_tip(p, deger, ht);
             eğer (metin_esit(dt, "?") == yanlış) ve (metin_esit(dt, ht) == yanlış) {
@@ -15780,6 +15892,15 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
             }
+        }
+        // [D-793] E4v-C: İŞLEV TİPİ uyumluluğu (D-790 ortak kuralı; yukarıdaki dizgi denetimi
+        // işlev değerinde "?" gördüğü için ikisi birbirini dışlar). Ölçüldü (C T001, self OK):
+        // `k.f = || "a"` (çalışınca exit 44) · `k.f = 5` / `= selam` · `k.n = || 1` ·
+        // `d[0] = || "a"` / `= 5` · `x = || 1` (x: tam32). G004'te C `break` eder → atla.
+        eğer (g004 == yanlış) ve islev_tur_uyumsuz(p, htn, ht, deger, deg_hata) {
+            dizi_ekle(p.th_kod, "T001");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, idx));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, idx));
         }
         eğer g004 == yanlış { e4p_rapor(p, idx); }   // [D-754] C: G004 → break (E4p atlanır)
         ver 0;
@@ -15808,9 +15929,14 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                 değişken val: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, aa));
                 // C006: C kontrol_yapi_olustur_ic gibi alanın dizi bağlamını ver.
                 değişken ft: metin = alan_tip_bul(p, tad, fad);
+                değişken ftn: tam32 = alan_tn_bul(p, tad, fad);   // [D-793]
                 değişken eski_db: metin = p.dizi_bek;
                 p.dizi_bek = dizi_ic_tip(ft);
+                değişken th_alan: tam32 = dizi_boyut(p.th_kod);   // [D-793] değerde hata?
+                p.dizi_bek_tn = dizi_eleman_tn(p, ftn);
                 kontrol_dugum(p, val);
+                p.dizi_bek_tn = 0 - 1;
+                değişken alan_hata: mantıksal = dizi_boyut(p.th_kod) > th_alan;
                 p.dizi_bek = eski_db;
                 // [D-470] LİNEER YAPI ALANI DEĞERİ TÜKETİR (checker.kem ile
                 // aynı). Öncesinde `S { t: t }` tüketmiyordu → lineer bir
@@ -15823,6 +15949,15 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
                         dizi_ekle(p.th_sat, dizi_al(p.a_sat, aa));
                         dizi_ekle(p.th_sut, dizi_al(p.a_sut, aa));
                     }
+                }
+                // [D-793] E4v-C: İŞLEV TİPİ uyumluluğu (D-790 ortak kuralı). Ölçüldü (C T001,
+                // self OK): `Kap { f: || "a" }` · `{ f: 5 }` · `{ f: selam }` · `{ n: || 1 }`.
+                // Generic alan (`Kutu<işlev..> { f: .. }`) ikame EDİLMEZ: alan tipi `T` →
+                // kural atlar (muhafazakâr kaçırma; C ikame edip T001 verir — LOOP).
+                eğer islev_tur_uyumsuz(p, ftn, ft, val, alan_hata) {
+                    dizi_ekle(p.th_kod, "T001");
+                    dizi_ekle(p.th_sat, dizi_al(p.a_sat, aa));
+                    dizi_ekle(p.th_sut, dizi_al(p.a_sut, aa));
                 }
             }
             i = i + 1;
@@ -15945,10 +16080,23 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // [D-790] SON çocuğun (DEGISKEN/SABIT'te değer) alt ağacından önceki tanı sayısı:
     // değerde hata çıktı mı → C'nin D-789 `tip_hata_icerir` bastırmasının vekili.
     değişken th_son: tam32 = dizi_boyut(p.th_kod);
+    // [D-793] Çocuğa verilecek dizi eleman bağlamı (düğüm) — `dizi_bek` ile AYNI kaynaklar:
+    // bildirim/`sabit` annotasyonu ve `ver` dönüşü (yalnız DEĞER çocuğuna, son çocuk),
+    // dizi literali (her ELEMANINA: kendi bağlamının elemanı). Kapanış blok gövdesinde
+    // `aktif_donus_tn` -1'dir (D-792) → `ver` bağlam vermez.
+    değişken cbt: tam32 = 0 - 1;
+    eğer metin_esit(ad, "DEGISKEN") veya metin_esit(ad, "SABIT") { cbt = dizi_eleman_tn(p, annot_node(p, idx)); }
+    eğer metin_esit(ad, "VER") { cbt = dizi_eleman_tn(p, p.aktif_donus_tn); }
+    eğer metin_esit(ad, "DIZI_OLUSTUR") { cbt = dizi_eleman_tn(p, dbt); }
+    değişken th_el: Dizi<tam32> = [];   // [D-793] DIZI_OLUSTUR: eleman alt ağaçlarının tanı sınırları
     iken i < cs {
         eğer i == cs - 1 { th_son = dizi_boyut(p.th_kod); }
+        dizi_ekle(th_el, dizi_boyut(p.th_kod));
+        eğer (i == cs - 1) veya metin_esit(ad, "DIZI_OLUSTUR") { p.dizi_bek_tn = cbt; }
         kontrol_dugum(p, dizi_al(p.cocuk, cb + i)); i = i + 1;
+        p.dizi_bek_tn = 0 - 1;
     }
+    dizi_ekle(th_el, dizi_boyut(p.th_kod));
     p.aktif_donus = eski_ad_d627;
     p.aktif_donus_tn = eski_adt_d792;
     p.odunc_lam = eski_odunc_lam;
@@ -16030,7 +16178,7 @@ işlev kontrol_dugum(p: &değişken Ayr, idx: tam32) -> tam32 {
     // `mimari:` etiketi hedef mimariyle uyuşmalı.
     eğer metin_esit(ad, "ERISIM") { t007_kontrol(p, idx); }     // D-353 T007
     eğer metin_esit(ad, "ERISIM") ve (idx != p.cagri_hedef) { t009_alan_kontrol(p, idx); }   // [D-730]
-    eğer metin_esit(ad, "DIZI_OLUSTUR") { dizi_eleman_kontrol(p, idx); }   // D-354 T013
+    eğer metin_esit(ad, "DIZI_OLUSTUR") { dizi_eleman_kontrol(p, idx, dbt, th_el); }   // D-354 T013 + [D-793]
     ver 0;
 }
 // D-370: İMZA GEÇİŞİ. C, tipleri `pre_populate`de çözer → TÜM imza/alan tanıları
@@ -17555,7 +17703,7 @@ işlev ayr_olustur(kaynak: metin) -> Ayr {
         str_deg: [],
         tp_yad: [], tp_ad: [], tp_pending: [], mono_sp: [], mono_si: [], mono_mangled: [], mono_yad: [], mono_fields: [], fs_node: [], fs_ad: [], fs_sp: [], fs_si: [], fs_sm: [], fs_emit: [], fs_onek: [], bek_pointee: "", fn_ad_zorla: "", hedef_mim: "x86_64", hedef_triple: "",
         yapi_ad: [], yapi_abase: [], yapi_acount: [], alan_ad: [], alan_tip: [], alan_tn: [], t14_muaf: [], m4_node: [], m4_tn: [], alan_elem: [], alan_tnode: [],
-        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], cap_cip: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", kur_ad: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_hb: [], asm_hs: [], asm_hn: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_cn: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_donus_tn: 0 - 1, aktif_fn: 0 - 1,
+        g_isim: [], g_kuresel_ad: [], g_kuresel_tip: [], pi_ad: [], pi_base: [], pi_say: [], pi_tip: [], g_sabit_ad: [], g_sabit_deger: [], g_sabit_tip: [], g_ciplak: [], cap_cip: [], rt_node: [], kd_ad: [], kd_durum: [], kd_aile: [], asm_cev: [], rt_yigin: [], rt_yigin_n: 0, rt_sessiz: 0, rt_dongu: 0, yerel: [], yerel_tip: [], yerel_ptr: [], yerel_ham: [], yerel_dizi: [], yerel_tn: [], yerel_yig: [], yerel_fn: [], yerel_yet: [], yerel_yon: [], yerel_sab: [], drf_bek: "", dizi_bek: "?", dizi_bek_tn: 0 - 1, kur_ad: [], si_ad: [], si_yol: [], si_sat: [], si_sut: [], mod_ad: [], al_ad: [], al_yol: [], asm_node: [], asm_hb: [], asm_hs: [], asm_hn: [], asm_mim: [], asm_sab: [], asm_ck: [], asm_cv: [], asm_cn: [], asm_gk: [], asm_bz: [], gp_ad: [], gp_sahip: [], gp_idx: [], gp_bound: [], oz_ad: [], uyg_tip: [], uyg_oz: [], gen_node: [], priv_mod: [], priv_ad: [], yerel_basla: 0, aktif_donus: "boş", aktif_donus_tn: 0 - 1, aktif_fn: 0 - 1,
         fn_donus: [], fn_psay: [], fn_pbase: [], fn_ptip: [], fn_ptn: [], fn_plin: [], fn_pdizi: [],
         giris_dizin: "", kullan_gorulen: [],
         ly_ad: [], lyf_yapi: [], lyf_alan: [], lin_ad: [], lin_sat: [], lin_sut: [], lin_tuk: [], dy_node: [], dy_yapi: [], dyf_node: [], dyf_alan: [], lin_maske: [], lin_fnk: [], lin_tek: [], lin_yet: [], gtas_ad: [], e4p_ad: [], e4p_sev: [], e4p_n: 0, e4p_taban: 0, e4p_atama: [], e4p_ref: [], kt_ad: [], snap_tuk: [], snap_maske: [], snap_top: 0, imha_bag: 0, guv_bag: 0, odunc_arg: 0 - 1, odunc_lam: 0 - 1, odunc_hata_node: [], odunc_hata_yerel: [], yer_son: 0, tuk_kapali: 0, cast_sessiz: 0, cast_hata_var: 0, cip_bag: 0, lin_basla: 0,

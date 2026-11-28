@@ -391,7 +391,7 @@
       karşılaştırılmıyor → E4v. İlk kaydım "argüman pozitifte AYNI" diyordu — pozitif `kare("metin")`, yani işlev
       DIŞI bir değerdi. DERS: pozitif kontrol ayrışmanın SINIFINDAN seçilmeli (lambda), komşu sınıftan (düz değer)
       DEĞİL. Beklenen taraf (bildirim/parametre/dönüş tipi HATA içeriyor) ayrı sınıf → E4w.
-- [~] E4v [M] 🔴 SELF-HOST SAĞLAMLIK: işlev tipli DEĞER uyumluluğu neredeyse hiç DENETLENMİYOR (D-789 matrisinde
+- [x] E4v [M] ✓ D-790→D-793 TAMAM (dört nokta grubu) — SELF-HOST SAĞLAMLIK: işlev tipli DEĞER uyumluluğu neredeyse hiç DENETLENMİYOR (D-789 matrisinde
       ölçüldü, önceden var). ✓ D-790 (E4v-0): bildirim/`sabit` noktası TAMAM — ortak kural `islev_tur_uyumsuz`
       (`selfhost/codegen.kem`): (1) iki taraf işlev → yapısal (arite + bileşen), (2) işlev beklenir/değer bilinen
       işlev-dışı (`= 5` → çalışınca ÇÖKÜŞ), (3) tersi (`tam32 = || 1`, `metin = selam`). Generic ve değer tarafında
@@ -400,8 +400,12 @@
       kullanacak; `alt_hata` her noktada `kontrol_dugum(deger)` çevresinde ölçülür; C'de o noktaya `tip_hata_icerir`):
       ✓ D-791 (A) kullanıcı işlevi argümanı (lambda exit 44 · lambda param SEGV 139 · işlev adı exit 76) + metot
       argümanı (exit 76; C 4600'e `tip_hata_icerir`) · ✓ D-792 (B) `ver` (exit 28; dönüş tip DÜĞÜMÜ `aktif_donus_tn`; C 6648)
-      · (C) alana atama (exit 44) · yapı alanı · dizi literali annotasyonlu/çıplak (üçü LLVM-RED; beklenen tip
-      DÜĞÜMÜ gerekir). `dizi_ekle`/`dizi_yaz` ve ikili op ölçülünce lambdaya ÖZGÜ çıkmadı → E4z.
+      · ✓ D-793 (C) alana/göze/yerele atama (exit 44; hedef tip DÜĞÜMÜ `hedef_tn`: annotasyon · `&K` alıcı · INDEKS
+      alıcı `ks[0].f` · dizi gözesi) · yapı alanı · dizi literali (bildirim · `ver` · yapı alanı · atama · iç içe;
+      eleman bağlamı DÜĞÜMÜ `dizi_bek_tn` YALNIZ doğrudan çocuğa — `dizi_bek` dizgisi gibi sızmaz, E5a; bağlamsız
+      dizide referans ilk eleman, `islev_tur_uyumsuz_se`). Kapsam dışı kalan (muhafazakâr kaçırma, ayrı kökler):
+      annotasyonsuz yapı/işlev bağlaması (E5b), generic yapı alanı ikamesi (E5c). `dizi_ekle`/`dizi_yaz` ve ikili op
+      ölçülünce lambdaya ÖZGÜ çıkmadı → E4z.
       (ESKİ METİN:) Self'in yapısal karşılaştırdığı TEK şekil: bildirim/`sabit` + LAMBDA LİTERALİ
       (`t001_lambda_kontrol`, D-698); diğer noktalarda `ifade_tip` lambda için "?" döner ve denetim atlanır. Pozitif
       kontrol — hatasız ama uyumsuz lambda (`|| "a"`, beklenen `işlev() -> tam32`) ya da işlev ADI (`selam`, `-> metin`):
@@ -434,6 +438,33 @@
       operand uyumu yok. (c) `değişken x: metin = 1 + yok();` → C yalnız T002, self T002+T001: `ifade_tip` hatalı
       operandlı ikili ifadeye BİLİNEN tip (tam32) veriyor, C'de sonuç HATA → art arda T001 basılmaz (E4v'nin
       `alt_hata` kuralının genel noktadaki eşi). Kapı: checker_diff (bugün korpusta bu şekiller YOK).
+      D-793 (c)'yi bir noktada GÖRÜNÜR yaptı: C'ye bağlamsız dizinin İLK elemanı için `tip_hata_icerir(ilk)` eklendi →
+      `[1 + yok(), "a"]` C yalnız T002, self T002+T013 (önceden ikisi de art arda basıyordu = tesadüfen AYNI). Aynı
+      artım dört şekil sınıfını AYNI yaptı (`[yok(), 1]` · `[|| yok(), || 1]` · `[[yok()], [1]]` · `[|x: Yokk| 1, ..]`).
+      (c) onarılınca bu şekil kendiliğinden AYNI olur; D-793 depo taramasında (1338 `.kem`) hiçbir dosyada yok.
+- [ ] E5a [S] SELF-HOST DİZİ BAĞLAMI ÇAĞRI ARGÜMANINA SIZIYOR + ARGÜMAN PARAMETRE TİPİYLE BAĞLAMLANMIYOR (D-793'te
+      ölçüldü, önceden var): `değişken d: Dizi<tam32> = [f(["a", "b"])];` (f: `Dizi<metin>`) → C OK, self T013 ×4 —
+      GEÇERLİ PROGRAMI REDDEDİYOR (her eleman iki kez: argümanlar iki geçişte geziliyor). Kök: `dizi_bek` dizgisi
+      bildirimden kurulup alt ağacın TAMAMINA geçiyor (çağrı argümanı, kapanış gövdesindeki atama da onu görür).
+      İkinci yüz: argümandaki dizi C'de ikinci geçişte parametrenin eleman tipine karşı denetlenir → `f(x:
+      Dizi<metin>)` + `f([1, "a"])` C T013 2:36 + 2:33, self 2:36 ×2 (işlev tipli eşi `Dizi<işlev() -> metin>` +
+      `[|| 1, || "a"]` aynı biçimde). Onarım: argümanın dizi bağlamı parametre tipinden (C ikinci geçiş sırası) +
+      bildirim bağlamı CAGRI sınırında kesilmeli. D-793'ün düğüm bağlamı (`dizi_bek_tn`) bu yüzden yalnız DOĞRUDAN
+      çocuğa taşınır (S325: girişteki tüketim kaldırılınca `al_metin_dizi([|| "a"])`de sahte T013). Kapı:
+      checker_diff (bugün korpusta bu şekiller YOK).
+- [ ] E5b [S] SELF-HOST ANNOTASYONSUZ BAĞLAMA TİPSİZ (D-793'te ölçüldü, önceden var; İŞLEV-DIŞI da): yapı —
+      `değişken k = Kap { f: || 1, n: 1 };` sonrası `k.n = "a"` / `değişken q: metin = k.n` / `k.f = || "a"` → C T001,
+      self OK (`var_tip` yapı literalinden çıkarım yapmıyor → alan tipi hiç çözülmüyor). İşlev — `değişken g = || 1;`
+      sonrası `g = 5` → C G004, self OK (`yerel_fn` biti yalnız annotasyonlu bağlamada) ve `değişken y: tam32 = g` →
+      C T001, self OK (imza yalnız annotasyondan). Çalışma zamanı sonucu ölçülmedi. Onarım: annotasyonsuz bağlamaya
+      değerin tipini (yapı adı / lambda imzası) kaydetmek — `var_tip`/`bag_tn` belirsizlik disiplini (D-421)
+      korunarak. Kapı: checker_diff.
+- [ ] E5c [S] SELF-HOST GENERIC YAPI ALANI İKAMESİ YOK (D-793'te ölçüldü, önceden var; İŞLEV-DIŞI da):
+      `değişken k: Kutu<tam32> = Kutu { f: "a" };` (`yapı Kutu<T> { f: T; }`) → C T001 3:40, self OK; işlev eşi
+      `Kutu<işlev() -> tam32> = Kutu { f: || "a" }` → C T001, self OK. C alan tipini beklenen tipten ikame eder
+      (`substitusyon`); self alanı `T` görüp atlar (D-793'ün kuralı generic `T`yi JOKER sayar → yanlış-pozitif yok,
+      tc78_01'deki `Kutu { f: || 1 }` pozitifi bunu ölçer). D-423'ün `m4_*` (çeşit yükü) ikamesinin yapı alanı
+      karşılığı. Kapı: checker_diff.
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
@@ -3732,3 +3763,33 @@
   S317 C bastırması) → hepsi checker_diff 326/327. TAM TAKIM (-j10): 190 kapı, 26:38; tek kırmızı yine açılış süresi
   (yük altında 720,6 > 650 ms) — çekirdek dosyaları D-791 koşusuyla bayt bayt AYNI, tek başına 423,5 / 516,1 ms rc=0
   (test altyapısı kalemine işlendi). checker_diff 327/327 (0 muaf), FIXPOINT ✓.
+- 2026-11-28 D-793: E4v-C — ATAMA, YAPI ALANI VE DİZİ LİTERALİNDE İŞLEV TİPİ UYUMLULUĞU (E4v KAPANDI).
+  Ölçülen (C T001/T013, self OK): `k.f = || "a"` (çalışınca exit 44) · `k.f = 5` / `= selam` · `k.n = || 1` ·
+  `r.f` (`&değişken` alıcı) · `ks[0].f` · `d[0] = || "a"` / `= 5` · `x = || 1` (x: tam32) · `Kap { f: || "a" }` /
+  `{ f: 5 }` / `{ f: selam }` / `{ n: || 1 }` · `Dizi<işlev() -> tam32> = [|| "a"]` / `[5]` · `Dizi<tam32> = [|| 1]` ·
+  bağlamsız `[|| 1, || "a"]` / `[|| 1, 5]` / `[5, || 1]` / `[selam, 5]` (dizi ve yapı şekilleri LLVM-RED). ONARIM
+  (D-790'ın ortak kuralı): atama → hedefin tip DÜĞÜMÜ `hedef_tn` (ERISIM'de alıcının yapı adı önce kendi
+  düğümünden — INDEKS alıcı —, sonra dizgisinden; G004'te C `break` ettiği için atlanır) · yapı alanı →
+  `alan_tn_bul` · dizi literali → yeni `Ayr` alanı `dizi_bek_tn` YALNIZ doğrudan çocuğa (ebeveyn kurar,
+  `kontrol_dugum` girişte TÜKETİR): bildirim/`sabit` ve `ver` değeri, yapı alanı değeri, atama değeri, dizi
+  elemanları. İşlev tipi bağlamda (dizgisi "?") her eleman bağlama karşı ve (b) karşılaştırması YAPILMAZ (yoksa
+  işlev-dışı eleman iki kez suçlanırdı); bağlamsızda referans ilk eleman (`islev_tur_uyumsuz_se`); ilk elemanda
+  hata + eksik imza ya da işlev-dışı hatalı ilk eleman → atla. `alt_hata` dizide eleman başına (`th_el`). C: atama,
+  yapı alanı, bağlamlı ve bağlamsız dizi noktalarına `tip_hata_icerir`; bağlamsızda referans `ilk` için de (ileri
+  bildirim gerekti). YAN BULGULAR (önceden var, kuyruğa): `dizi_bek` dizgisi çağrı argümanına SIZIYOR — geçerli
+  program sahte T013 (E5a) · annotasyonsuz yapı/işlev bağlaması tipsiz (E5b) · generic yapı alanı ikamesi yok (E5c)
+  · E4z(c)'nin ilk-eleman yüzü (`[1 + yok(), "a"]`; C artık bastırıyor, self basıyor). FİKSTÜR tc78_01: 45 tanı
+  C=self birebir; eski self 29 tanıyı kaçırıyordu (13 T001 · 16 T013), eski C 12 art arda tanı basıyordu. SABOTAJ
+  22/22 (S318-S334 self: üç noktanın kuralı, G004 koruması, üç `alt_hata` ölçümü, beş bağlam kenarı, girişteki
+  tüketim — kaldırılınca `al_metin_dizi([|| "a"])`de sahte T013 —, işlev-bağlam dalı, bağlamsız iki kural,
+  ilk-eleman koruması, INDEKS alıcı; S335-S339 C: beş bastırma) → hepsi checker_diff 327/328, fark beklenen
+  satırlarda. DEPO TARAMASI (1338 `.kem`, eski/yeni C × eski/yeni self): self yalnız fikstürde değişti; C ayrıca
+  parse korpusu `p1_05_bilesik`te 1 art arda T013 bıraktı (self o satırda zaten basmıyordu); AYNI→FARKLI geçişi
+  YOK (1269/69 → 1270/68). TAM TAKIM (-j10 ölçümlü): 190 kapının 190'ı geçti ("Tum testler gecti!"), 24:37;
+  `rc=2` kapıdan değil DİSK DENETİMİNDEN geldi: `build/` altında 22 `checkdiff.*` tanı dizini — `calisma_bitir`
+  başarısız koşumun dizinini bilerek bırakır ve 22 sabotajın 22'si kasıtlı başarısızdı (zaman damgaları sabotaj
+  penceresinde, takımdan ÖNCE; takımın kendisi yeni dizin bırakmadı). Silindi, denetim rc=0. Süreç düzeltmesi:
+  sabotaj betikleri artık kendi tanı dizinlerini temizliyor. Üç bütçe uyarısı (`cekirdek_onbellek` 163 sn ·
+  `asan_denetim` 84,6 · `codegen_diff` 69) önceki koşumların aralığında (157–202 · 84–109 · 68–87) ve yükle
+  açıklanıyor: self checker `selfhost/codegen.kem` üzerinde eski 0,90–0,91 sn / yeni 0,91–0,92 sn, çıktı birebir.
+  checker_diff 328/328 (0 muaf), codegen semantik 232/232, FIXPOINT ✓.
