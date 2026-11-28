@@ -30,6 +30,10 @@
       çekirdek IR'ı aynı). Seçenekler: eşiği yükten arındır (ölçüm sırasında yük/çekirdek sayısını kaydet ve ölçekle),
       bu kapıyı takımın sonunda seri koş, ya da konuk-içi zaman damgalarını (devir→kabuk) duvar saatinin yerine kullan.
       ⚠ Eşiği körü körüne yükseltme: gerçek bir açılış gerilemesini gizler; seçim ölçümle yapılmalı.
+      D-792'de KANITLANDI: yük altı medyan 645,8 → 679,6 → 685,4 → 720,6 ms tırmanırken kapının kullandığı çekirdek
+      dosyaları (ham.ll · k.ll · k.o · k.elf) D-791 ve D-792 koşuları arasında BAYT BAYT AYNIYDI; tek başına 423,5 /
+      516,1 ms. Tırmanışın kaynağı makinedeki dış iş yüküydü (11 saattir koşan `bindcraft.py`, başka bir Claude
+      oturumunun paralel indirmesi + MQTT, GNOME `tracker-miner-f`). Yani kapı derleyici dışı yükü ölçüyor.
 - [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
       HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
@@ -395,7 +399,7 @@
       Kapanan: D-698'in generic sahte T001'i + D-789'un üç yan etkisi (aşağıda). KALAN noktalar (hepsi aynı kuralı
       kullanacak; `alt_hata` her noktada `kontrol_dugum(deger)` çevresinde ölçülür; C'de o noktaya `tip_hata_icerir`):
       ✓ D-791 (A) kullanıcı işlevi argümanı (lambda exit 44 · lambda param SEGV 139 · işlev adı exit 76) + metot
-      argümanı (exit 76; C 4600'e `tip_hata_icerir`) · (B) `ver` (exit 28; `aktif_donus` işlev tipinde "?" → dönüş tip DÜĞÜMÜ gerekir; C 6648)
+      argümanı (exit 76; C 4600'e `tip_hata_icerir`) · ✓ D-792 (B) `ver` (exit 28; dönüş tip DÜĞÜMÜ `aktif_donus_tn`; C 6648)
       · (C) alana atama (exit 44) · yapı alanı · dizi literali annotasyonlu/çıplak (üçü LLVM-RED; beklenen tip
       DÜĞÜMÜ gerekir). `dizi_ekle`/`dizi_yaz` ve ikili op ölçülünce lambdaya ÖZGÜ çıkmadı → E4z.
       (ESKİ METİN:) Self'in yapısal karşılaştırdığı TEK şekil: bildirim/`sabit` + LAMBDA LİTERALİ
@@ -411,7 +415,7 @@
       noktalarda değer tarafı `tip_hata_icerir` (yoksa lambda-gövde-hatası şekilleri bu kez TERS yönde ayrışır — C
       art arda basar, self basmaz; ölçüldü, 9/9). Fikstür: her nokta için pozitif + HATA şekli. Kapı: checker_diff
       (bugün korpusta bu şekiller YOK). ÖNCELİK: kuyruğun başı — sessiz yanlış cevap sınıfı.
-- [ ] E4w [S] BEKLENEN TARAFTA HATA (D-789 matrisinde ölçüldü): parametre `f(g: işlev() -> Yokk)` + `f(|| 1)` →
+- [x] E4w [S] ✓ D-791+D-792: üç şeklin üçü de artık AYNI (iki taraf da basıyor) — BEKLENEN TARAFTA HATA (D-789 matrisinde ölçüldü): parametre `f(g: işlev() -> Yokk)` + `f(|| 1)` →
       C T011+T001, self yalnız T011 (✓ D-791'den sonra AYNI — iki taraf da basıyor, tahmin edildiği gibi) · dönüş `-> işlev() -> Yokk` + `ver || 1` → C T011+T020, self T011 · bildirim
       `değişken g: işlev() -> Yokk = || 1` → İKİ TARAF DA T001. İlk ikisi E4v ile İÇ İÇE (self argüman ve `ver`
       noktalarında lambdayı hiç karşılaştırmıyor); E4v'den sonra YENİDEN ÖLÇ — muhtemelen kendiliğinden AYNI olur
@@ -3710,3 +3714,21 @@
   TAM TAKIM (-j10 ölçümlü): 190 kapı, 25:55; tek kırmızı yine açılış süresi eşiği (yük; medyan 685,4 > 650 ms) →
   tek başına 421,7 / 521,6 ms, rc=0. Aynı kapı D-789 koşusunda 645,8 ms ile kıl payı geçmişti → önceden var olan yük
   duyarlılığı, kuyruğa yazıldı (test altyapısı). checker_diff 326/326 (0 muaf), FIXPOINT ✓.
+- 2026-11-28 D-792: E4v-B — `ver` NOKTASINDA İŞLEV TİPİ UYUMLULUĞU + "?" DÖNÜŞTE ÇIPLAK `ver;`.
+  `t020_kontrol` dönüş DİZGİSİ "?" iken (işlev tipi · generic `T` · bilinmeyen ad · bilinmeyen elemanlı `Dizi`)
+  TÜMÜYLE atlıyordu. Ölçülen (C T020, self OK): `ver || "a"` / `ver 5` / `ver selam` / `ver g` (işlev tipli dönüş;
+  `ver || "a"` çalışınca exit 28) · `ver || 1` / `ver selam` işlev-dışı dönüşte · çıplak `ver;` generic, bilinmeyen
+  ad ve `Dizi<Nokta>` dönüşünde (işlev-dışı yan kazanç). ONARIM: yeni `Ayr` alanı `aktif_donus_tn` (dönüş tip
+  DÜĞÜMÜ; `kontrol_govde` kurar, kapanış blok gövdesinde `aktif_donus` ile birlikte -1 yapılıp geri yüklenir — yoksa
+  D-627'nin tuzağı düğüm yolunda geri gelirdi; S315 bunu ölçer). "?" dalı: düğüm varsa `ver;` → T020, değer →
+  `islev_tur_uyumsuz(tn, tip_str(tn), ..)`; mevcut dalda işlev değeri işlev-dışı dönüşe → kural 3. `alt_hata` VER
+  değerinin alt ağacından (gezgin `th_son`). C: `ver` noktasına `tip_hata_icerir` (hatalı lambdada art arda T020).
+  E4w'nin dönüş şekli AYNI oldu → E4w kapandı. FİKSTÜR tc77_01: 16 tanı C=self birebir; eski self 12 T020'yi
+  kaçırıyordu, eski C 2 art arda T020 basıyordu. DEPO TARAMASI (1336 `.kem`): self 1 dosyada değişti — parse
+  korpusu `p1_05_bilesik` (+2 T020, C zaten basıyordu → C'ye YAKLAŞTI); C 15 dosyada 95 T020 KAYBETTİ, hiç yeni tanı
+  yok — hepsi tek başına denetlenince adları çözülmeyen OS parçalarında HATA'lı değerin art arda T020'si (birleşik
+  birimlerde değer HATA taşımaz). Hepsi önceden de FARKLI'ydı; parite sayıları değişmedi (1268/68).
+  SABOTAJ 6/6 (S312 "?" değer kuralı · S313 `ver;` · S314 kural 3 · S315 kapanış sıfırlaması · S316 `alt_hata` ·
+  S317 C bastırması) → hepsi checker_diff 326/327. TAM TAKIM (-j10): 190 kapı, 26:38; tek kırmızı yine açılış süresi
+  (yük altında 720,6 > 650 ms) — çekirdek dosyaları D-791 koşusuyla bayt bayt AYNI, tek başına 423,5 / 516,1 ms rc=0
+  (test altyapısı kalemine işlendi). checker_diff 327/327 (0 muaf), FIXPOINT ✓.

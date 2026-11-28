@@ -6646,7 +6646,7 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     ct003_leak_kontrol(tk, d, deger, tk->aktif_donus_tipi)) {
                     /* hata raporlandı */
                 } else if (!tip_esit(deger, tk->aktif_donus_tipi) &&
-                    deger->kategori != TIP_HATA &&
+                    !tip_hata_icerir(deger) &&   /* [D-792] D-789 kuralı */
                     tk->aktif_donus_tipi->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T020",
                              "ver tipi islev donus tipi ile uyumsuz");
