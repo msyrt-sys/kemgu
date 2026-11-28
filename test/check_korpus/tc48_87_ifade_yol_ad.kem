@@ -1,0 +1,5 @@
+// [D-801] P123 — `::` sonrası ad yerine sayı (C ifade.c:591); ardından P082.
+işlev main() -> tam32 {
+    değişken b: tam32 = m::5;
+    ver 0;
+}
