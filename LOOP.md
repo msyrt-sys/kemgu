@@ -230,8 +230,13 @@
       [M] Gorev govdesi icin escape ozeti (D9a'ya bagli). ⚠ D-805 OLCUMU: ozgun D6 maddesi README'nin
       "gorev bolgesi HIC serbest birakilmiyor" cumlesinden kopyalanmisti — D-309'dan beri BAYATTI.
       Kalan hassasiyet borcu → D6f.
-- [ ] D6b [M] Hapsedilme kurali + yeni tani kodu. (D-309 bilerek tani KOYMADI: kanitsiz gorev bolgesi
-      sizar = guvenli taraf. Yeni tani kodu gerekip gerekmedigi henuz OLCULMEDI.)
+- [x] D6b -> D-806 KARAR (2026-11-28, Opus onerisi): YENI TANI KODU YOK. [M] Hapsedilme kurali + yeni tani
+      kodu. OLCULDU: dilin tani sistemi TEK sinif (`hata[KOD]`, src/hata.h) — uyari sinifi yok; yani bir hapsedilme
+      tanisi bugun ancak RET olabilir. Kanitsiz gorev GUVENLIDIR (bolge sizar, UAF olmaz; D-309 ilkesi). Ret,
+      korpusta kanitin 0 verdigi 10 baslatma yerini (6 dosya: gorev_temel ornegi, DRF gorunurluk testi, D-628
+      bagli kapanis, D-309 kacis fiksturu dahil) GECERSIZ kilardi. Kanit paritesini D-805 kapisi zaten olcuyor.
+      Gercek ihtiyac (cok sayida isaretci donduren gorevin bellek sizintisi) olculurse uyari sinifi tasarimiyla
+      yeniden acilir.
 - [x] D6c -> D-309 (kanit varsa join'de `kdl_bolge_serbest`; D-805'te olculdu: korpusta 14 gorev baslatma yerinde bayrak 1).
 - [x] D6d -> D-805 (`calistir_gorev_rho`: C↔self bayrak paritesi + test/gorev_rho beklentileri + IKI
       derleyiciyle ASan; runtime ASan'la KAYNAKTAN derlenir).
@@ -4210,3 +4215,14 @@
   satır), atlama izleri D-804 ile aynı. D-794'ün bekleme yolu ateşlendi: 654,8 ms (çekişme 15) → sessizlik →
   507,7 ms (çekişme 0) → geçti. Bütçe uyarıları (açılış süresi, çekirdek_onbellek, asan_denetim, codegen_diff)
   önceki koşumlarda da var.
+- 2026-11-28 D-806: D6b KARAR — görev hapsedilme kanıtı için YENİ TANI KODU EKLENMEDİ (Opus önerisi, muhafazakâr).
+  Sırada'nın en üstü D6b'ydi ("hapsedilme kuralı + yeni tanı kodu"). ÖLÇÜLDÜ: KEMGU'nun tanı sistemi tek sınıftır
+  (`hata[KOD]`, src/hata.h: biçim, LSP geri çağırımı ve `hata_raporla` — uyarı/seviye kavramı YOK). Dolayısıyla bir
+  hapsedilme tanısı bugün yalnız bir RET olabilir. Kanıtsız görev ise güvenlidir: bölge join'de serbest bırakılmaz,
+  sızar; UAF olmaz (D-309'un "sızıntı bir hata, UAF bir felaket" ilkesi; D-591 kararı sızıntıyı kabul etmişti).
+  Retin bedeli ölçüldü: D-805 paritesinin bayrak dökümüne göre korpusta kanıtın 0 verdiği 10 başlatma yeri, 6 geçerli
+  dosyada (test/ornekler/gorev_temel · test/drf_gorunurluk · cg_gorev_bagli_kapanis [D-628] · cg_gorev_desen_ic_tip ·
+  cg_rho_sahip_kacis [D-309 kaçış fikstürü] · e4k/gorev_buyume). Hepsi reddedilirdi. Uyarı sınıfı eklemek ise tanı
+  dökümü biçimini, LSP'yi ve iki checker'ı birden değiştiren ayrı bir dil yüzeyi işidir. Kanıtın kendisi D-805'ten
+  beri `calistir_gorev_rho` ile ölçülüyor. Kod değişikliği YOK; gerçek bir ihtiyaç ölçülürse (çok sayıda işaretçi
+  döndüren görevin bellek sızıntısı) uyarı sınıfı tasarımıyla yeniden açılır.
