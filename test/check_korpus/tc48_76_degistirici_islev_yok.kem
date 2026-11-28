@@ -1,0 +1,4 @@
+// [D-800] P018 — değiştiriciden sonra `işlev` yok (C parser.c:326). C tanıyı basıp HATA düğümüyle HEMEN döner;
+// `yapı K { .. }` üst düzeyde ayrıştırılır. Öncesinde self ad/parametre/gövde beklentilerini de basıyordu.
+çıplak yapı K { x: tam32; }
+işlev main() -> tam32 { ver 0; }

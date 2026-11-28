@@ -2312,14 +2312,29 @@ işlev parse_islev_genel(p: &değişken Ayr, imza_yeterli: tam32) -> tam32 {
     değişken rt_mi: tam32 = 0;   // D-550
     değişken devam_mod: mantıksal = doğru;
     iken devam_mod {
-        eğer sim_mi(p, "GERCEKZAMANLI") { ilerle(p); rt_mi = 1; }
+        eğer sim_mi(p, "GERCEKZAMANLI") {
+            // [D-800] C parser.c:304 — aynı değiştirici iki kez. Öncesinde self bunu SESSİZCE
+            // kabul ediyordu (`OK`); C RT006 / P039 basar ve ayrıştırmaya devam eder.
+            eğer rt_mi == 1 { parse_hata_kaydet(p, "RT006"); }
+            ilerle(p); rt_mi = 1;
+        }
         değilse {
-            eğer sim_mi(p, "CIPLAK") { ciplak = 1; ilerle(p); }
+            eğer sim_mi(p, "CIPLAK") {
+                eğer ciplak == 1 { parse_hata_kaydet(p, "P039"); }   // [D-800] C parser.c:313
+                ciplak = 1; ilerle(p);
+            }
             değilse { devam_mod = yanlış; }
         }
     }
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
-    bekle(p, "ISLEV");
+    eğer sim_mi(p, "ISLEV") == yanlış {
+        // [D-800] C parser.c:326 — değiştiriciden sonra `işlev` yok: tanı + HATA düğümüyle HEMEN
+        // dön (ilerleme yok). Öncesinde self beklemeye devam edip ad/parametre/gövde
+        // beklentilerini (P014/P015/P012/P016/P017) de basıyordu.
+        parse_hata_kaydet(p, "P018");
+        ver dugum0(p, "HATA", "", s, u);
+    }
+    ilerle(p);  // işlev
     değişken ad: metin = sim_lex(p);
     bekle_k(p, "TANIMLAYICI", "P014");   // [D-795] C parser.c:333 işlev adı (anahtar kelime/sayı/EOF)
     değişken fg_gp0: tam32 = dizi_boyut(p.gp_ad);   // [D-711 turbofish]
@@ -2708,7 +2723,7 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
                 // olarak kaydedilmezse geçerli kullanımları sahte T002 alır
                 // (ana_secili.kem ile ölçüldü). Aynı ad iki modülden gelirse T042.
                 değişken sad: metin = sim_lex(p);
-                bekle(p, "TANIMLAYICI");
+                bekle_k(p, "TANIMLAYICI", "P043");   // [D-800] C parser.c:910
                 dizi_ekle(p.si_ad, sad);
                 dizi_ekle(p.si_yol, yol);
                 dizi_ekle(p.si_sat, s);
@@ -2716,11 +2731,11 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
                 eğer sim_mi(p, "VIRGUL") { ilerle(p); }
                 değilse { d2 = yanlış; }
             }
-            bekle(p, "SAG_SUSLU");
+            bekle_k(p, "SAG_SUSLU", "P044");   // [D-800] C parser.c:920
             devam = yanlış;
         } değilse {
             değişken seg: metin = sim_lex(p);
-            bekle(p, "TANIMLAYICI");
+            bekle_k(p, "TANIMLAYICI", "P041");   // [D-800] C parser.c:944
             yol = metin_birlestir(metin_birlestir(yol, "::"), seg);
         }
     }
@@ -2732,9 +2747,9 @@ işlev parse_kullan(p: &değişken Ayr) -> tam32 {
         // `m::topla` → `@mat.topla` çevirisi için ÇİFTİ ister.
         dizi_ekle(p.al_ad, sim_lex(p));
         dizi_ekle(p.al_yol, yol);
-        bekle(p, "TANIMLAYICI");
+        bekle_k(p, "TANIMLAYICI", "P045");   // [D-800] C parser.c:965
     }
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P042");   // [D-800] C parser.c:981
     ver dugum0(p, "KULLAN", yol, s, u);
 }
 // genel/dışa sonrası tanım (işlev/yapı/çeşit/sabit).

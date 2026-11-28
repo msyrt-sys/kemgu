@@ -1,0 +1,6 @@
+// [D-800] P018 `özellik` gövdesinde: HATA düğümü döner, gövde döngüsü `sabit`i işlev-dışı üye olarak görür
+// (P202 + panik, `sabit` tüketilmez), P203 aynı konumda; `sabit` üst düzeyde ayrıştırılır, `}` sahipsiz (P001).
+özellik Oz {
+    çıplak sabit Q: tam32 = 1;
+}
+işlev main() -> tam32 { ver 0; }
