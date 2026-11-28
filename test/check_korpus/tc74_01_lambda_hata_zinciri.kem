@@ -1,0 +1,23 @@
+// [D-789] E4u: lambda gövdesindeki bir hata, lambda tipini `işlev(..) -> HATA` yapar.
+// C üst düzey `kategori != TIP_HATA` denetimiyle bunu görmüyor; bildirimli bağlamada,
+// argümanda ve `sabit` bildiriminde ART ARDA T001 basıyordu; self basmıyordu. Asıl hata
+// (T002) raporlanır. ⚠ Self lambdayı yapısal olarak YALNIZ bildirim/`sabit` + lambda
+// literalinde karşılaştırır (D-698); argümandaki lambdayı hiç karşılaştırmaz (E4v) — bu
+// fikstür E4v gelince self'in HATA bastırmasını da korur. Argüman pozitifi işlev DIŞI.
+// POZİTİF: hatasız ama gerçekten uyumsuz değerler HÂLÂ T001 alır — yoksa
+// "lambda bağlamasında T001'i hiç basma" sabotajı kapıdan geçerdi (D-425).
+sabit ZINCIR: işlev() -> tam32 = || yok_uc();
+sabit POZITIF: işlev() -> tam32 = || "metin";
+işlev uygula_g(f: işlev(işlev() -> tam32) -> tam32) -> tam32 { ver f(|| 1); }
+işlev kare(x: tam32) -> tam32 { ver x * x; }
+işlev bagla() -> tam32 {
+    değişken g: işlev() -> tam32 = || yok();
+    ver g();
+}
+işlev arguman() -> tam32 { ver uygula_g(|h: işlev() -> tam32| yok_iki()); }
+işlev pozitif_bagla() -> tam32 {
+    değişken g: işlev() -> tam32 = || "metin";
+    ver g();
+}
+işlev pozitif_arguman() -> tam32 { ver kare("metin"); }
+işlev main() -> tam32 { ver 42; }
