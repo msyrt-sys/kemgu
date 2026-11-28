@@ -369,12 +369,43 @@
       tip_belirle + tip_belirle_beklenen CAGRI girişi + switch ÖNCESİ bir()/sıfır() özel durumu — ilk sürüm onu kaçırdı;
       self kontrol_dugum CAGRI, turbofish'ten hemen sonra; çağrının geri kalanı denetlenmez). Çağrılmayan bağlama serbest;
       repo etkisi 0 (aynı işlevde ayrılmış adlı bağlama + çağrı: 0). SONRA MATRİS: 76/76 T024|T024.
-- [ ] E4u [S] C ART ARDA T001 (D-788 fikstürü sırasında ölçüldü; ÖNCEDEN VAR): lambda gövdesinde HERHANGİ bir hata
-      (T002 de: `değişken g: işlev()->tam32 = || yok();`) → C bildirimli bağlamada ek `T001 <bağlama>` basıyor, self
-      basmıyor (lambda dönüş tipi TIP_HATA iken tip_esit uyumsuz diyor). Argüman olarak geçen lambdada da aynı (`f(|h| h())`
-      → C ek T001). Ayrıca argüman lambdasının gövdesi İKİ KEZ denetleniyor: aynı tanı iki kez (iki tarafta AYNI, parite
-      sorunu değil ama gürültü). Öneri: C'de bağlama/argüman uyumluluğunda değer tipi TIP_HATA içeriyorsa T001 basma;
-      fikstür q5/q6/q8 biçimleri. Kapı: checker_diff (bu şekiller bugün korpusta YOK).
+- [x] E4u [S] ✓ D-789 C ART ARDA T001: lambda gövdesindeki herhangi bir hata lambda tipini `işlev(..)->HATA`
+      yapıyor; C'nin üst düzey `kategori != TIP_HATA` denetimi bunu görmediği için ek T001 basıyordu (self basmıyordu).
+      Onarım: `tip_hata_icerir` (özyineli: işlev parametre/dönüş, dizi, seçimlik, sonuç, referans, işaretçi, tekkez)
+      DEĞER tarafında üç noktada: değişken bildirimi · kullanıcı işlevi argümanı · `sabit` bildirimi (HATA şekli
+      ayrışıyordu → AYNI). 12 noktalık matris ölçüldü: kalan 9 noktada C'nin art arda tanısı DA var, ama orada self
+      işlev tipini HİÇ karşılaştırmıyor → C tarafı E4v'nin iki taraflı onarımına bırakıldı. ⚠ DÜZELTME (aynı
+      artımda ölçüldü): self'in yapısal karşılaştırdığı TEK şekil "bildirim/`sabit` + LAMBDA LİTERALİ"dir
+      (`t001_lambda_kontrol`, D-698); argüman konumundaki lambda/işlev adı ve bildirimdeki işlev ADI da hiç
+      karşılaştırılmıyor → E4v. İlk kaydım "argüman pozitifte AYNI" diyordu — pozitif `kare("metin")`, yani işlev
+      DIŞI bir değerdi. DERS: pozitif kontrol ayrışmanın SINIFINDAN seçilmeli (lambda), komşu sınıftan (düz değer)
+      DEĞİL. Beklenen taraf (bildirim/parametre/dönüş tipi HATA içeriyor) ayrı sınıf → E4w.
+- [ ] E4v [M] 🔴 SELF-HOST SAĞLAMLIK: işlev tipli DEĞER uyumluluğu neredeyse hiç DENETLENMİYOR (D-789 matrisinde
+      ölçüldü, önceden var). Self'in yapısal karşılaştırdığı TEK şekil: bildirim/`sabit` + LAMBDA LİTERALİ
+      (`t001_lambda_kontrol`, D-698); diğer noktalarda `ifade_tip` lambda için "?" döner ve denetim atlanır. Pozitif
+      kontrol — hatasız ama uyumsuz lambda (`|| "a"`, beklenen `işlev() -> tam32`) ya da işlev ADI (`selam`, `-> metin`):
+      C reddediyor, self `--check` OK. 11 şekil: kullanıcı işlevi argümanı (lambda · lambda parametre tipi · işlev adı)
+      · bildirim + işlev ADI · `ver` (C T020) · alana atama `k.f = ..` · yapı alanı `Kap { f: .. }` · dizi literali
+      annotasyonlu ve çıplak (T013) · `dizi_ekle` / `dizi_yaz` elemanı · metot argümanı · ikili op `a == (|| ..)` (diğerleri
+      T001). (`değer(..)`/`tamam(..)` yapıcılarında HATA şekli AYNI.) SONUÇ ÖLÇÜLDÜ: `ver || "a"` + çağrı → self check OK, link OK,
+      **exit 28 = SESSİZ YANLIŞ CEVAP** (doğrusu derleme zamanı T020); dizi ve yapı şekilleri LLVM-RED. Onarım iki
+      taraflı ve BİRLİKTE: self'te bu noktalarda `t001_lambda_kontrol`un yaptığı yapısal karşılaştırma (lambda literali)
+      + işlev ADI için imza karşılaştırması; C'de aynı
+      noktalarda değer tarafı `tip_hata_icerir` (yoksa lambda-gövde-hatası şekilleri bu kez TERS yönde ayrışır — C
+      art arda basar, self basmaz; ölçüldü, 9/9). Fikstür: her nokta için pozitif + HATA şekli. Kapı: checker_diff
+      (bugün korpusta bu şekiller YOK). ÖNCELİK: kuyruğun başı — sessiz yanlış cevap sınıfı.
+- [ ] E4w [S] BEKLENEN TARAFTA HATA (D-789 matrisinde ölçüldü): parametre `f(g: işlev() -> Yokk)` + `f(|| 1)` →
+      C T011+T001, self yalnız T011 · dönüş `-> işlev() -> Yokk` + `ver || 1` → C T011+T020, self T011 · bildirim
+      `değişken g: işlev() -> Yokk = || 1` → İKİ TARAF DA T001. İlk ikisi E4v ile İÇ İÇE (self argüman ve `ver`
+      noktalarında lambdayı hiç karşılaştırmıyor); E4v'den sonra YENİDEN ÖLÇ — muhtemelen kendiliğinden AYNI olur
+      (iki taraf da basar). Beklenen taraftaki art arda tanıyı bastırmak ise ayrı bir karar (bugün C de basıyor).
+- [ ] E4x [S] G004'TE C ATANAN DEĞERİ HİÇ DENETLEMİYOR: işlev tipli `h` için `h = || yok();` → C yalnız G004
+      (`break` değeri `tip_belirle`ye sokmadan çıkıyor), self T002 4:12 + G004 4:5. Değerdeki her hata C'de raporlanmıyor;
+      program yine reddedildiği için sağlamlık değil, eksik tanı. Sıra da ayrışıyor (self T002'yi G004'ten ÖNCE basar)
+      → C onarımı değeri G004 denetiminden önce gezmeli. Kapı: checker_diff.
+- [ ] E4y [S] ARGÜMAN LAMBDASININ GÖVDESİ İKİ KEZ DENETLENİYOR: `uygula_g(|h| yok_iki())` → aynı T002 iki kez,
+      İKİ TARAFTA AYNI (parite sorunu değil, kullanıcıya çift tanı). tc74_01 17:65 ×2 bunu SABİTLER — onarılınca
+      fikstür beklentisi de güncellenmeli (sabitlenmiş gürültü, D-441 deseni). Kök ölçülmedi.
 - [ ] E4r [S] Yapisal kapilar cesit donduren islevleri olcemiyor: C cesidi ADLANDIRIR (`define %GcIstek @f`),
       self satir ici yazar (`define {i8, i64, ...} @f`; D-439 temsil farki, davranissal olarak esdeger). Bu yuzden
       kabuk/blok birlesik birimleri (dalga 12) baremetal_diff disinda — yalniz birlesik --check + C/self QEMU
@@ -3595,3 +3626,24 @@
   bağlaması olmayan işlevde yerleşik `bir()`, ayrılmamış adlı kapanış; C=self 5 tanı birebir. SABOTAJ 2/2: S294 C
   yardımcısı kapalı → checker_diff 322/323 (C DRF005/DRF004'e döner) · S295 self denetimi kapalı → 322/323.
   TAM TAKIM (-j10 ölçümlü): 190 kapı, 18:52, rc=0 (geçici dizin önce 0 sonra 0); checker_diff 323/323 (0 muaf), FIXPOINT ✓.
+- 2026-11-28 D-789: E4u — C'DE LAMBDA HATASINDAN SONRA ART ARDA T001 (D-788 fikstürü sırasında ölçüldü, önceden var).
+  `değişken g: işlev()->tam32 = || yok();` → C T002+T001, self yalnız T002; argüman lambdası `f(|h| yok())` → C ek T001.
+  Kök: lambda tipi `işlev(..) -> HATA`; C'nin uyumluluk denetimi yalnız EN ÜST kategoride TIP_HATA arıyordu. Onarım:
+  `tip_hata_icerir` (özyineli) DEĞER tarafında üç noktada — değişken bildirimi · kullanıcı işlevi argümanı · `sabit`.
+  12 NOKTALIK MATRİS (her nokta için HATA şekli + POZİTİF hatasız-uyumsuz LAMBDA şekli, C↔self): 9 noktada lambda
+  pozitifi de FARKLI — self işlev tipini HİÇ karşılaştırmıyor (`ver || "a"` → self check OK, çalışınca exit 28 = sessiz
+  yanlış cevap) → AYRI kalem E4v (öncelikli). ⚠ KENDİ İDDİAMI DÜZELTTİM: argüman noktasını "self yapısal
+  karşılaştırıyor" diye kaydetmiştim; pozitifim `kare("metin")` (işlev DIŞI) idi. Lambda/işlev adı argümanla
+  yeniden ölçüldü → FARKLI (self OK). Self'in tek yapısal şekli bildirim/`sabit` + LAMBDA LİTERALİ (D-698). C
+  onarımı yine doğru (art arda tanı her durumda basılmamalı); E4v self'e karşılaştırmayı eklerken bu fikstür self'in
+  HATA bastırmasını da korur. Beklenen tarafta HATA → E4w; G004'te C değeri hiç denetlemiyor → E4x; argüman
+  lambdası iki kez denetleniyor → E4y.
+  FİKSTÜR tc74_01: üç zincir şekli + üç POZİTİF (sabit 10:1, bildirim 19:5, argüman 22:46 HÂLÂ T001); C=self 7 tanı
+  birebir. SABOTAJ 3/3: S296 bildirim → checker_diff 323/324 (T001 14:5 geri) · S297 argüman → 323/324 (T001 17:42
+  geri) · S298 sabit → 323/324 (T001 9:1 geri).
+  İLK TAM TAKIM (iki nokta): 190 kapı, tek kırmızı `calistir_derleme_olcum` bütçesi (20000 kemgu 0.3963 > 0.39). YÜK:
+  aynı koşumda D-789'dan etkilenmeyen codegen de yavaşladı (1.25→1.53 sn); kapı tek başına yeniden → OK (0.2479). A/B
+  (HEAD ↔ D-789, aynı girdi, tek çekirdeğe sabitli, 15 tekrar): medyan farkı %1–3, minimumlar örtüşüyor, IR birebir.
+  Beklenen: yeni yardımcı yalnız uyumsuzluk dalında çalışır (`!tip_esit(..) && ..` kısa devresi).
+  SON TAM TAKIM (üç nokta, -j10 ölçümlü): 190 kapı, 26:47, rc=0 (geçici dizin önce 0 sonra 0); checker_diff
+  324/324 (0 muaf), FIXPOINT ✓. `⚠ BÜTÇE` satırları ölümcül olmayan uyarı (yük; süre 18:52/22:19 → 26:47).

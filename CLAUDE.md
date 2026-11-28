@@ -226,6 +226,15 @@ Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 Ayrılmış adın çağrısı, kapsamda aynı adlı YEREL bağlama varken de T024 (D-788); çağrılmayan
 bağlama serbest (`değişken bir: tam32` geçerli).
 
+**⚠ İşlev tipi uyumluluğu (D-789 matrisi, E4v AÇIK):** self-host işlev tipli DEĞERLERİ
+neredeyse hiç karşılaştırmıyor. Tek yapısal şekil: bildirim/`sabit` + LAMBDA LİTERALİ
+(`t001_lambda_kontrol`, D-698). Argüman konumundaki lambda ya da işlev adı, bildirimdeki işlev
+ADI, `ver`, alana atama, yapı alanı, dizi literali, `dizi_ekle`/`dizi_yaz`, metot argümanı ve
+ikili op denetlenmiyor (`ifade_tip` lambda için "?" döner). `ver || "a"` (beklenen
+`işlev() -> tam32`) C'de T020, self'te OK ve çalışınca YANLIŞ DEĞER verir. Kapanana kadar işlev
+tipli değerlerde self `--check` OK'u kanıt DEĞİLDİR. C tarafında: değer tipi HATA içeriyorsa
+(iç içe dâhil) uyumsuzluk tanısı basılmaz (`tip_hata_icerir`; bildirim · argüman · `sabit`).
+
 ### Tip Sistemi
 ```
 Basit:    tam8-64, dtam8-64, kesirli32-64, mantıksal, karakter, metin, boş

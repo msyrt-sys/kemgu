@@ -2832,6 +2832,31 @@ static int turbofish_on_kontrol(TipKontrol *tk, const Dugum *d) {
     return 0;
 }
 
+/* [D-789] E4u: tip ya da bileşenlerinden biri TIP_HATA mı? Lambda gövdesindeki bir
+ * hata, lambda tipini `işlev(..) -> HATA` yapar; üst düzey `kategori != TIP_HATA`
+ * denetimi bunu görmediği için bildirimli bağlamada, argümanda ve `sabit`
+ * bildiriminde ART ARDA T001 basılıyordu (self basmıyordu; ölçüldü:
+ * `değişken g: işlev()->tam32 = || yok();` C T002+T001, self yalnız T002). Asıl hata
+ * zaten raporlanmıştır. Yalnız DEĞER tarafı: beklenen taraf ayrı sınıf (E4v/E4w). */
+static int tip_hata_icerir(const TipBilgisi *t) {
+    if (!t) return 0;
+    switch (t->kategori) {
+    case TIP_HATA: return 1;
+    case TIP_REFERANS: return tip_hata_icerir(t->veri.referans.hedef);
+    case TIP_POINTER: return tip_hata_icerir(t->veri.pointer.hedef);
+    case TIP_DIZI: return tip_hata_icerir(t->veri.dizi.eleman);
+    case TIP_SECIMLIK: return tip_hata_icerir(t->veri.secimlik.ic);
+    case TIP_SONUC:
+        return tip_hata_icerir(t->veri.sonuc.deger) || tip_hata_icerir(t->veri.sonuc.hata);
+    case TIP_TEKKEZ: return tip_hata_icerir(t->veri.tekkez.ic);
+    case TIP_ISLEV:
+        for (int i = 0; i < t->veri.islev.param_sayi; i++)
+            if (tip_hata_icerir(t->veri.islev.parametreler[i])) return 1;
+        return tip_hata_icerir(t->veri.islev.donus);
+    default: return 0;
+    }
+}
+
 /* [D-788] ileride tanımlı; çağrı işleyicileri kullanır. */
 static int ayrilmis_yerel_cagri(TipKontrol *tk, const Dugum *d);
 
@@ -4699,7 +4724,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                                         arg_tip, param_tip)) {
                     /* hata raporlandı */
                 } else if (!tip_esit(arg_tip, bek) &&
-                    arg_tip->kategori != TIP_HATA) {
+                    !tip_hata_icerir(arg_tip)) {   /* [D-789] */
                     tip_hata(tk, d->veri.cagri.argumanlar[i], "T001",
                              "arguman tipi parametre tipi ile uyumsuz");
                 }
@@ -6492,7 +6517,7 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                     ct003_leak_kontrol(tk, d, deger_tip, annot)) {
                     /* hata raporlandı, atla */
                 } else if (!tip_esit(annot, deger_tip) &&
-                    deger_tip->kategori != TIP_HATA &&
+                    !tip_hata_icerir(deger_tip) &&   /* [D-789] */
                     annot->kategori != TIP_HATA) {
                     tip_hata(tk, d, "T001",
                              "degisken tip annot ile baslangic uyumsuz");
@@ -7277,7 +7302,7 @@ static void tip_kontrol_tanim(TipKontrol *tk, const Dugum *d) {
             TipBilgisi *deger = tip_belirle_beklenen(tk,
                 d->veri.sabit.deger, annot);
             if (!tip_esit(deger, annot) &&
-                deger->kategori != TIP_HATA &&
+                !tip_hata_icerir(deger) &&   /* [D-789] */
                 annot->kategori != TIP_HATA) {
                 tip_hata(tk, d, "T001", "sabit deger tip annot ile uyumsuz");
             }
