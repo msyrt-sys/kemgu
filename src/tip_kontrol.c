@@ -4599,7 +4599,7 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                             TipBilgisi *at = tip_belirle_beklenen(tk,
                                 d->veri.cagri.argumanlar[i], pt);
                             if (!tip_esit(at, pt) &&
-                                at->kategori != TIP_HATA) {
+                                !tip_hata_icerir(at)) {   /* [D-791] D-789 kuralı */
                                 tip_hata(tk, d->veri.cagri.argumanlar[i],
                                     "T001", "method arg tipi uyumsuz");
                             }

@@ -23,6 +23,13 @@
       (d) paralel koşum ön koşulları: paylaşılan build/ yazımları (D-468), sabit portlar, QEMU soket adları;
       (e) tekrar eden işler (aynı ELF/imaj, aynı fsck) ve sleep/zaman aşımı payları; (f) değişikliğe göre
       kapı seçimi (belge-yalnız değişiklikte tam takım gereksiz).
+- [ ] AÇILIŞ SÜRESİ KAPISI YÜK ALTINDA EŞİKTE (D-791'de ölçüldü): `calistir_bm_x86_acilis_suresi`in ikinci
+      yapılandırması `-j10` tam takımda üç koşuda medyan 645,8 (geçti) / 679,6 / 685,4 ms (düştü); kapı tek başına
+      501,8 / 521,6 ms; eşik 650 ms. Ölçüm duvar saatidir ve QEMU'lar çekirdekleri paylaşır → yükle ~%30 şişiyor; kapı
+      derleyici değişikliğinden BAĞIMSIZ olarak tesadüfen kırmızı veriyor (D-790/D-791 kod üretimine dokunmuyordu,
+      çekirdek IR'ı aynı). Seçenekler: eşiği yükten arındır (ölçüm sırasında yük/çekirdek sayısını kaydet ve ölçekle),
+      bu kapıyı takımın sonunda seri koş, ya da konuk-içi zaman damgalarını (devir→kabuk) duvar saatinin yerine kullan.
+      ⚠ Eşiği körü körüne yükseltme: gerçek bir açılış gerilemesini gizler; seçim ölçümle yapılmalı.
 - [~] KEMGU-OS ESZAMANLILIK KATMANI (kullanici istegi, 2026-09-27). OLCUM: gorev/kanal
       HOST'ta tam (D-291..D-543) ama D-592'den beri kem_os yalniz boot .S + SAF-.kem
       bagliyor -> C kdl_kanal.c/kdl_gorev.c LINKLENMIYOR; dilin kanal/gorev ilkelleri
@@ -387,8 +394,8 @@
       bilinmeyen ad JOKER; `alt_hata` (değerin alt ağacında tanı) + eksik imza → HATA sayılır (C D-789 aynası).
       Kapanan: D-698'in generic sahte T001'i + D-789'un üç yan etkisi (aşağıda). KALAN noktalar (hepsi aynı kuralı
       kullanacak; `alt_hata` her noktada `kontrol_dugum(deger)` çevresinde ölçülür; C'de o noktaya `tip_hata_icerir`):
-      (A) kullanıcı işlevi argümanı (lambda exit 44 · lambda param SEGV 139 · işlev adı exit 76) + metot argümanı
-      (exit 76; C 4600) · (B) `ver` (exit 28; `aktif_donus` işlev tipinde "?" → dönüş tip DÜĞÜMÜ gerekir; C 6648)
+      ✓ D-791 (A) kullanıcı işlevi argümanı (lambda exit 44 · lambda param SEGV 139 · işlev adı exit 76) + metot
+      argümanı (exit 76; C 4600'e `tip_hata_icerir`) · (B) `ver` (exit 28; `aktif_donus` işlev tipinde "?" → dönüş tip DÜĞÜMÜ gerekir; C 6648)
       · (C) alana atama (exit 44) · yapı alanı · dizi literali annotasyonlu/çıplak (üçü LLVM-RED; beklenen tip
       DÜĞÜMÜ gerekir). `dizi_ekle`/`dizi_yaz` ve ikili op ölçülünce lambdaya ÖZGÜ çıkmadı → E4z.
       (ESKİ METİN:) Self'in yapısal karşılaştırdığı TEK şekil: bildirim/`sabit` + LAMBDA LİTERALİ
@@ -405,7 +412,7 @@
       art arda basar, self basmaz; ölçüldü, 9/9). Fikstür: her nokta için pozitif + HATA şekli. Kapı: checker_diff
       (bugün korpusta bu şekiller YOK). ÖNCELİK: kuyruğun başı — sessiz yanlış cevap sınıfı.
 - [ ] E4w [S] BEKLENEN TARAFTA HATA (D-789 matrisinde ölçüldü): parametre `f(g: işlev() -> Yokk)` + `f(|| 1)` →
-      C T011+T001, self yalnız T011 · dönüş `-> işlev() -> Yokk` + `ver || 1` → C T011+T020, self T011 · bildirim
+      C T011+T001, self yalnız T011 (✓ D-791'den sonra AYNI — iki taraf da basıyor, tahmin edildiği gibi) · dönüş `-> işlev() -> Yokk` + `ver || 1` → C T011+T020, self T011 · bildirim
       `değişken g: işlev() -> Yokk = || 1` → İKİ TARAF DA T001. İlk ikisi E4v ile İÇ İÇE (self argüman ve `ver`
       noktalarında lambdayı hiç karşılaştırmıyor); E4v'den sonra YENİDEN ÖLÇ — muhtemelen kendiliğinden AYNI olur
       (iki taraf da basar). Beklenen taraftaki art arda tanıyı bastırmak ise ayrı bir karar (bugün C de basıyor).
@@ -3687,3 +3694,19 @@
   TAM TAKIM (-j10 ölçümlü): 190 kapı, 24:32; tek kırmızı `calistir_bm_x86_acilis_suresi` açılış eşiği (yük: medyan
   679,6 > 650 ms; çekirdek derlendi ve 5/5 açıldı) → kapı tek başına yeniden: medyan 400,8 / 501,8 ms, rc=0.
   checker_diff 325/325 (0 muaf), FIXPOINT ✓. Kod üretim yoluna dokunulmadı (denetleyici gezgini + tip kuralı).
+- 2026-11-28 D-791: E4v-A — İŞLEV VE METOT ARGÜMANINDA İŞLEV TİPİ UYUMLULUĞU (D-790'ın ortak kuralı).
+  `arite_arg_kontrol` (ikinci geçiş) ve `metot_arg_kontrol`daki dizgi denetimi işlev tipli parametre/argümanda "?"
+  yüzünden atlanıyordu; ölçülen sonuçlar self'te: `f(|| "a")` exit 44 · `f(|x: metin| ..)` SEGV · `f(selam)` ve
+  `s.al_f(|| "a")` exit 76 (C dördünde T001). ONARIM: mevcut T001 bloğunun hemen ardına `islev_tur_uyumsuz(fn_ptn,
+  pt, arg, alt_hata)`; `alt_hata` argümanın `kontrol_dugum`undan itibaren ölçülür (ara `ifade_tip` T043'ü de sayılır).
+  İki denetim birbirini DIŞLAR (işlev tipli değerde `ifade_tip` "?" döner; ölçüldü: `h(selam)` öncesinde OK) → çift
+  T001 yok. Metot imzaları `imza_kaydet`ten geçtiği için `fn_ptn` metot parametrelerini de taşıyor. C: metot argümanı
+  noktası D-789 korumasını almamıştı → hatalı lambda metot argümanında art arda T001 (`tip_hata_icerir` eklendi).
+  E4w'nin parametre şekli (`f(g: işlev() -> Yokk)` + `f(|| 1)`) tahmin edildiği gibi kendiliğinden AYNI oldu.
+  FİKSTÜR tc76_01: 17 tanı C=self birebir; eski self 11 T001'i kaçırıyordu, eski C 2 art arda T001 basıyordu.
+  SABOTAJ 5/5 (S307 işlev noktası · S308 metot noktası · S309 C metot bastırması · S310/S311 iki noktanın
+  `alt_hata` ölçümü) → hepsi checker_diff 325/326, fark beklenen satırlarda. DEPO TARAMASI (1335 `.kem`, eski/yeni C ×
+  eski/yeni self): C davranışı 0 dosyada, self davranışı 0 dosyada değişti.
+  TAM TAKIM (-j10 ölçümlü): 190 kapı, 25:55; tek kırmızı yine açılış süresi eşiği (yük; medyan 685,4 > 650 ms) →
+  tek başına 421,7 / 521,6 ms, rc=0. Aynı kapı D-789 koşusunda 645,8 ms ile kıl payı geçmişti → önceden var olan yük
+  duyarlılığı, kuyruğa yazıldı (test altyapısı). checker_diff 326/326 (0 muaf), FIXPOINT ✓.
