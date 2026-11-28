@@ -6603,6 +6603,9 @@ Sessiz sabotaj, sıfır bulgu, "kanca ateşlenmiyor" — hepsinin ilk açıklama
 - [ ] **`sed`/`awk` Türkçe UTF-8 `.kem`/`.c` dosyasında KULLANMA** — Edit aracı.
       *(D-461: `awk`ta `&` "tüm eşleşme" demek → 17 satır bozuldu.
       D-490: `sed` `\n`'i gerçek satır sonuna çevirip C dizgisini kırdı.)*
+- [ ] **Python sabotajında bayt kodu önbelleğini kapat** (`PYTHONDONTWRITEBYTECODE=1` + `__pycache__`'i sil).
+      *(D-794: `.pyc` geçerliliği kaynak mtime SANİYESİ + boyutla denetlenir; aynı saniyede aynı boyutta iki
+      sabotaj → ikincisi birincinin bayat bayt kodunu koştu ve YANLIŞ duruma yakalanmış göründü.)*
 - [ ] **Sabotaj döngüsünden sonra `.o` VE ikiliyi `rm -f`.**
       *(D-457: `cp` mtime'ı bozar, make objeyi güncel sanır.)*
 

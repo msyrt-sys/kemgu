@@ -1,4 +1,5 @@
 """OVMF seri devir işaretini gerçek kabuk istemi ve konuk TSC ölçümüyle eşler."""
+from acilis_karar import karar, yabanci_qemu
 from bekle import bekle, seri_oku
 import argparse
 import re
@@ -13,6 +14,8 @@ ASAMALAR = ['devir','bellek','acpi','pci','usb','diskler','kabuk']
 
 
 def olc(w):
+    # [D-794] Çekişme örneği kendi QEMU'muz kapalıyken alınır (açılıştan önce ve sonra).
+    cekisme=yabanci_qemu()
     usb,nvme,sata=imajlar(w,{})
     with boot(w,usb[0],nvme,sata) as (q,p,s):
         ilk=None
@@ -36,7 +39,14 @@ def olc(w):
         print('ACILIS_MS', ' '.join(f'{ad}={v/hiz:.1f}' for ad,v in damgalar),f'host={host:.1f}',flush=True)
         c=Console(w,q,p,s)
         c.shutdown()
-    return host,guest
+    return host,guest,max(cekisme,yabanci_qemu())
+
+
+def tur(w,tekrar,esik):
+    host,konuk,cekisme=zip(*(olc(w) for _ in range(tekrar)))
+    print(f'ACILIS_MEDYAN host={median(host):.1f} konuk={median(konuk):.1f} esik={esik:.1f} '
+          f'cekisme={max(cekisme)}',flush=True)
+    return median(host),median(konuk),max(cekisme)
 
 
 if __name__ == '__main__':
@@ -46,6 +56,5 @@ if __name__ == '__main__':
     p.add_argument('--esik',type=float,default=650)
     a=p.parse_args()
     assert a.tekrar > 0
-    host,konuk=zip(*(olc(a.dizin.resolve()) for _ in range(a.tekrar)))
-    print(f'ACILIS_MEDYAN host={median(host):.1f} konuk={median(konuk):.1f} esik={a.esik:.1f}',flush=True)
-    assert median(host) < a.esik and median(konuk) < a.esik
+    w=a.dizin.resolve()
+    assert karar(lambda: tur(w,a.tekrar,a.esik),a.esik),'açılış süresi eşiği aşıldı'
