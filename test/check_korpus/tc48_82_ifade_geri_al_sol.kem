@@ -1,0 +1,5 @@
+// [D-801] P150 — `geri_al` ifadesinde `(` eksik (C ifade.c:410).
+işlev main() -> tam32 {
+    geri_al y);
+    ver 0;
+}

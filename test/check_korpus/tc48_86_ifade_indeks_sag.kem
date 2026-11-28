@@ -1,0 +1,6 @@
+// [D-801] P121 — indekste `]` eksik (C ifade.c:532).
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [1];
+    değişken b: tam32 = xs[0;
+    ver 0;
+}

@@ -58,9 +58,9 @@
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
       Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796)
-      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800). ESLENEN KOD (D-799'da OLCULDU: self'in yaydigi
-      farkli P kodu, P000 haric; C'de 111): D-795 36 · D-796 44 · D-797 57 · D-798 65 · D-799 68 · D-800 74
-      (+ ayristirici RT006). ⚠ Onceki elle tutulan sayac
+      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800) -> 24 (D-801). ESLENEN KOD (D-799'da OLCULDU:
+      self'in yaydigi farkli P kodu, P000 haric; C'de 111): D-795 36 · D-796 44 · D-797 57 · D-798 65 · D-799 68 ·
+      D-800 74 · D-801 84 (+ ayristirici RT006). ⚠ Onceki elle tutulan sayac
       (29/39/52/62) YANLISTI: tabani farkliydi ve birden cok yapida ortak kodlar (P200/P201, P210..P212) iki kez
       sayilmisti. Sayaci elle artirma; `bekle_k`/`parse_hata_*` cagrilarindaki kodlari say.
       (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
@@ -88,9 +88,14 @@
       P045 takma ad · ayni degistirici iki kez RT006 (`gerçekzamanlı`) / P039 (`çıplak`) — self SESSIZCE kabul
       ediyordu · degistiriciden sonra `işlev` yok → P018 + HATA ile HEMEN don (self ad/parametre/govde beklentilerini
       de basiyordu). tc48_69..77; 30 sekil: once 27'si farkli, sonra hepsi birebir.
-      KALAN 37 site (D-800 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · parse_birincil 6 ·
-      parse_sonek 3 · parse_yapi_olustur 3 · atla_tip_paramlar_sahipli 2 · parse_generic_args/parse_lambda/
-      parse_tek_arg 1'er.
+      ✓ D-801 ifade ailesi: `kullan(..)` P130/P131 · `imha(..)` P132/P133 · `delege`/`geri_al` `(` P150 · parantez
+      `)` P110 · `.` sonrasi ad P120 · `]` P121 · `::` sonrasi ad P123 · yapi olusturma alan adi P130 / `:` P131 /
+      `}` P132 · lambda kapanis `|` P140. ⚠ YANLIS ESLEME DUZELTILDI: `delege`/`geri_al` kapanisinda D-652 cagri
+      `)` kodunu (P122) eslemisti; C P151 (ifade.c:422) — konum dogru, KOD YANLISTI. Yapi olusturma dongusu C gibi
+      EOF'u ayrica denetlemiyor (self erken cikip P130/P131/P010'u atliyordu). tc48_78..92; 29 sekil: once 25'i
+      farkli, sonra hepsi birebir; D-799'dan kalan `d8` de kapandi.
+      KALAN 24 site (D-801 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · atla_tip_paramlar_sahipli 2 ·
+      parse_generic_args 1 · parse_tek_arg 1. Yani iki aile kaldi: satirici asm ve tip.
       ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
       tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
       S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
@@ -3973,3 +3978,16 @@
   TAM TAKIM (-j10 ölçümlü, 24:14): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
   checker_diff 382/382, FIXPOINT ✓, atlama izleri D-799 ile aynı desen (25). Açılış süresi beklemeden geçti
   (medyan 483,0 / 612,5 ms < 650, çekişme 14 / 16).
+- 2026-11-28 D-801: C0a — ifade ailesi tanıları + D-652'den kalan yanlış P122 eşlemesi düzeltildi.
+  13 eşlenmemiş `bekle` sitesi (ifade.c): `kullan(..)` P130/P131 (375/378) · `imha(..)` P132/P133 (390/393) ·
+  `delege`/`geri_al` `(` P150 (410) · parantez `)` P110 (361) · `.` sonrası ad P120 (515) · `]` P121 (532) · `::`
+  sonrası ad P123 (591) · yapı oluşturma alan adı P130 / `:` P131 / `}` P132 (144/146/161) · lambda kapanış `|` P140
+  (217). YANLIŞ EŞLEME: `delege`/`geri_al` kapanışında D-652 çağrı `)` kodunu (P122) eşlemişti, C P151 (422) —
+  konum doğru, kod yanlış (ölçüldü). Yapı oluşturma döngüsü C gibi EOF'u ayrıca denetlemiyor (self erken çıkıp
+  P130/P131/P010'u atlıyordu). 29 hata şekli (15 doğrudan + 14 komşu): HEAD ikilisinde 25'i farklıydı, şimdi
+  29'u da birebir; D-799'dan kalan `d8` de kapandı. Yalnız `codegen.kem` (D-734). Eşlenmemiş `bekle(p, "` 37 → 24
+  (kalan yalnız satırıçi asm 11 + tip 13). Farklı P kodu 74 → 84. Fikstür tc48_78..92 (15 dosya; her biri eski
+  ikilide farklı, yenide C ile aynı). checker_diff 397/397. SABOTAJ S409-S423 15/15 rc=2.
+  TAM TAKIM (-j10 ölçümlü, 25:22): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 397/397, FIXPOINT ✓, atlama izleri D-800 ile aynı desen (25). D-794'ün bekleme yolu ÜÇÜNCÜ kez
+  gerçek koşulda ateşlendi: 15 yabancı QEMU altında 668,0 ms → 447 sn sessizlik → çekişme 1 ile 515,7 ms → geçti.

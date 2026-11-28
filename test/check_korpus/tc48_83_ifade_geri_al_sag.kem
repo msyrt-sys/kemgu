@@ -1,0 +1,6 @@
+// [D-801] P151 — `geri_al(..)` / `delege(..)` kapanışında `)` eksik (C ifade.c:422). D-652 burada çağrı `)`
+// kodunu (P122) eşlemişti: konum doğruydu, KOD YANLIŞTI.
+işlev main() -> tam32 {
+    geri_al(y;
+    ver 0;
+}

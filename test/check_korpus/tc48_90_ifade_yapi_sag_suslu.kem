@@ -1,0 +1,6 @@
+// [D-801] P132 — yapı oluşturmada `}` eksik (C ifade.c:161).
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K { a: 1 ;
+    ver 0;
+}

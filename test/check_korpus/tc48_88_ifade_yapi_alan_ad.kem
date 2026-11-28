@@ -1,0 +1,6 @@
+// [D-801] P130 — yapı oluşturmada alan adı yerine sayı (C ifade.c:144); P131/P132 ve üst düzey basamaklanma C ile birebir.
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K { 5: 1 };
+    ver 0;
+}

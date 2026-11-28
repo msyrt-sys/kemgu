@@ -1366,19 +1366,22 @@ işlev parse_yapi_olustur(p: &değişken Ayr, tip_ad: metin, s: tam32, u: tam32)
     değişken kids: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
     iken devam {
-        eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
+        // [D-801] C ifade.c:137-160 döngüsü dosya sonunu AYRICA denetlemez: EOF'ta gövdeye girip P130/
+        // P131/P010 basar, virgül olmadığı için çıkar. Self önceden çıkıp yalnız P132 basıyordu.
+        // Sonlanma korunur: gövde virgül tüketmediği sürece döngü biter.
+        eğer sim_mi(p, "SAG_SUSLU") { devam = yanlış; }
         değilse {
             değişken as: tam32 = sim_sat(p);  değişken au: tam32 = sim_sut(p);
             değişken alan: metin = sim_lex(p);
-            bekle(p, "TANIMLAYICI");
-            bekle(p, "IKI_NOKTA");
+            bekle_k(p, "TANIMLAYICI", "P130");   // [D-801] C ifade.c:144
+            bekle_k(p, "IKI_NOKTA", "P131");     // [D-801] C ifade.c:146
             değişken dg: tam32 = parse_ifade(p);
             dizi_ekle(kids, dugum1(p, "ALAN_ATAMA", alan, as, au, dg));
             eğer sim_mi(p, "VIRGUL") { ilerle(p); }
             değilse { devam = yanlış; }
         }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P132");   // [D-801] C ifade.c:161
     ver dugum_n(p, "YAPI_OLUSTUR", tip_ad, s, u, kids);
 }
 // Dizi oluşturma: [e1, e2, ...] (poz = '[').
@@ -1499,7 +1502,7 @@ işlev parse_lambda(p: &değişken Ayr) -> tam32 {
             değilse { devam = yanlış; }
         }
     }
-    bekle(p, "VEYA_BIT");  // kapanış '|'
+    bekle_k(p, "VEYA_BIT", "P140");  // kapanış '|' — [D-801] C ifade.c:217
     eğer sim_mi(p, "SOL_SUSLU") { dizi_ekle(kids, parse_blok(p)); }
     değilse { dizi_ekle(kids, parse_ifade(p)); }
     ver dugum_n(p, "LAMBDA", "", s, u, kids);
@@ -1555,23 +1558,23 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
     eğer metin_esit(t, "VEYA_BIT") { ver parse_lambda(p); }
     eğer metin_esit(t, "KULLAN") {
         ilerle(p);
-        bekle(p, "SOL_PAREN");
+        bekle_k(p, "SOL_PAREN", "P130");   // [D-801] C ifade.c:375
         değişken e: tam32 = parse_ifade(p);
-        bekle(p, "SAG_PAREN");
+        bekle_k(p, "SAG_PAREN", "P131");   // [D-801] C ifade.c:378
         ver dugum1(p, "KULLAN_IFADE", "", s, u, e);
     }
     eğer metin_esit(t, "IMHA") {
         ilerle(p);
-        bekle(p, "SOL_PAREN");
+        bekle_k(p, "SOL_PAREN", "P132");   // [D-801] C ifade.c:390
         değişken e: tam32 = parse_ifade(p);
-        bekle(p, "SAG_PAREN");
+        bekle_k(p, "SAG_PAREN", "P133");   // [D-801] C ifade.c:393
         ver dugum1(p, "IMHA_IFADE", "", s, u, e);
     }
     // delege(y, izin) / geri_al(y) → DUGUM_CAGRI (hedef = TANIMLAYICI "delege"/"geri_al")
     eğer metin_esit(t, "DELEGE") veya metin_esit(t, "GERI_AL") {
         değişken ad: metin = sim_lex(p);
         ilerle(p);
-        bekle(p, "SOL_PAREN");
+        bekle_k(p, "SOL_PAREN", "P150");   // [D-801] C ifade.c:410
         değişken kids: Dizi<tam32> = [];
         dizi_ekle(kids, dugum0(p, "TANIMLAYICI", ad, s, u));  // hedef
         eğer sim_mi(p, "SAG_PAREN") == yanlış {
@@ -1582,13 +1585,15 @@ işlev parse_birincil(p: &değişken Ayr) -> tam32 {
                 değilse { devam = yanlış; }
             }
         }
-        bekle_k(p, "SAG_PAREN", "P122");   // [D-652] C ifade.c:549 cagri ')'
+        // [D-801] C ifade.c:422 P151 — `delege`/`geri_al` kapanışı. D-652 burada çağrı `)`
+        // kodunu (P122) eşlemişti; konum doğru, KOD YANLIŞTI (ölçüldü: C P151, self P122).
+        bekle_k(p, "SAG_PAREN", "P151");
         ver dugum_n(p, "CAGRI", "", s, u, kids);
     }
     eğer metin_esit(t, "SOL_PAREN") {
         ilerle(p);
         değişken ic: tam32 = parse_ifade(p);
-        bekle(p, "SAG_PAREN");
+        bekle_k(p, "SAG_PAREN", "P110");   // [D-801] C ifade.c:361
         ver ic;
     }
     // P1 dışı: hata düğümü. [D-650] C `ifade.c:441` aynası — kod P010.
@@ -1657,13 +1662,13 @@ işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
     eğer metin_esit(t, "NOKTA") {
         ilerle(p);
         değişken alan: metin = sim_lex(p);
-        bekle(p, "TANIMLAYICI");
+        bekle_k(p, "TANIMLAYICI", "P120");   // [D-801] C ifade.c:515
         ver dugum1(p, "ERISIM", alan, s, u, sol);
     }
     eğer metin_esit(t, "SOL_KOSELI") {
         ilerle(p);
         değişken idx: tam32 = parse_ifade(p);
-        bekle(p, "SAG_KOSELI");
+        bekle_k(p, "SAG_KOSELI", "P121");   // [D-801] C ifade.c:532
         ver dugum2(p, "INDEKS", "", s, u, sol, idx);
     }
     eğer metin_esit(t, "SOL_PAREN") {
@@ -1700,7 +1705,7 @@ işlev parse_sonek(p: &değişken Ayr, sol: tam32) -> tam32 {
             ver tc;
         }
         değişken sag: metin = sim_lex(p);
-        bekle(p, "TANIMLAYICI");
+        bekle_k(p, "TANIMLAYICI", "P123");   // [D-801] C ifade.c:591
         ver dugum1(p, "YOL", sag, s, u, sol);
     }
     eğer metin_esit(t, "OLARAK") {

@@ -1,0 +1,6 @@
+// [D-801] P131 — yapı oluşturmada alan adından sonra `:` eksik (C ifade.c:146).
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K { a 1 };
+    ver 0;
+}

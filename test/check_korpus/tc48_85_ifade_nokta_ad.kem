@@ -1,0 +1,7 @@
+// [D-801] P120 — `.` sonrası alan adı yerine sayı (C ifade.c:515); ardından P082.
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K { a: 1 };
+    değişken b: tam32 = k.5;
+    ver 0;
+}

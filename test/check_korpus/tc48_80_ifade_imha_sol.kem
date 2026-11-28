@@ -1,0 +1,6 @@
+// [D-801] P132 — `imha` ifadesinde `(` eksik (C ifade.c:390).
+işlev main() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(1);
+    imha t);
+    ver 0;
+}

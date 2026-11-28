@@ -1,0 +1,6 @@
+// [D-801] P130 — `kullan` tüketim ifadesinde `(` eksik (C ifade.c:375).
+işlev main() -> tam32 {
+    değişken t: tekkez<tam32> = tekkez_olustur(1);
+    değişken a: tam32 = kullan t);
+    ver 0;
+}

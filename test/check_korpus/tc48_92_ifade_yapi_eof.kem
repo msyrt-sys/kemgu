@@ -1,0 +1,5 @@
+// [D-801] Yapı oluşturma dosya sonunda kesik. C döngüsü EOF'u ayrıca denetlemez: gövdeye girip P130/P131/P010
+// basar, sonra P132. Öncesinde self EOF'ta erken çıkıp yalnız P132 basıyordu.
+yapı K { a: tam32; }
+işlev main() -> tam32 {
+    değişken k: K = K {

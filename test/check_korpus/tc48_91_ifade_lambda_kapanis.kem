@@ -1,0 +1,5 @@
+// [D-801] P140 — lambda parametrelerinden sonra kapanış `|` eksik (C ifade.c:217).
+işlev main() -> tam32 {
+    değişken f: işlev(tam32) -> tam32 = |x: tam32 x + 1;
+    ver 0;
+}
