@@ -1,0 +1,52 @@
+// [D-791] E4v-A: kullanıcı işlevi ve METOT argümanında İŞLEV TİPİ uyumluluğu (D-790'ın
+// ortak kuralı `islev_tur_uyumsuz`). Self'te bu şekillerin hepsi SESSİZDİ: `f(|| "a")`
+// çalışınca exit 44, `f(|x: metin| ..)` SEGV, `f(selam)` / `s.al_f(|| "a")` exit 76.
+// OLUMSUZ (T001, argüman konumunda): yanlış dönüşlü lambda · yanlış parametreli lambda ·
+// işlev adı · işlev parametresine sayı · işlev-dışı parametreye lambda ya da işlev adı —
+// her biri hem işlev hem metot çağrısında. POZİTİF (tanı YOK): uyumlu lambda ve işlev
+// adı · generic `işlev() -> T` parametresi. Değerin tipi HATA içeriyorsa T001 basılmaz
+// (C D-789; metot noktasına bu artımda eklendi): yalnız T002 — işlev çağrısında İKİ kez
+// (D-375 çift gezinti, iki tarafta aynı), metotta bir kez.
+yapı Sayac { n: tam32; }
+uygula Sayac {
+    işlev al_f(kendin, f: işlev() -> tam32) -> tam32 { ver f(); }
+    işlev al_p(kendin, f: işlev(tam32) -> tam32) -> tam32 { ver f(1); }
+    işlev al_n(kendin, x: tam32) -> tam32 { ver x; }
+}
+işlev f(g: işlev() -> tam32) -> tam32 { ver g(); }
+işlev fp(g: işlev(tam32) -> tam32) -> tam32 { ver g(1); }
+işlev h(x: tam32) -> tam32 { ver x; }
+işlev u<T>(g: işlev() -> T) -> tam32 { ver 0; }
+işlev kirk() -> tam32 { ver 40; }
+işlev selam() -> metin { ver "a"; }
+işlev islev_cagrisi() -> tam32 {
+    değişken a: tam32 = f(|| "a");
+    değişken b: tam32 = fp(|x: metin| 1);
+    değişken c: tam32 = f(selam);
+    değişken d: tam32 = f(5);
+    değişken e: tam32 = h(|| 1);
+    değişken g: tam32 = h(selam);
+    ver 0;
+}
+işlev metot_cagrisi() -> tam32 {
+    değişken s: Sayac = Sayac { n: 1 };
+    değişken a: tam32 = s.al_f(|| "a");
+    değişken b: tam32 = s.al_p(|x: metin| 1);
+    değişken c: tam32 = s.al_f(selam);
+    değişken d: tam32 = s.al_f(5);
+    değişken e: tam32 = s.al_n(|| 1);
+    ver 0;
+}
+işlev pozitif() -> tam32 {
+    değişken s: Sayac = Sayac { n: 1 };
+    ver f(|| 1) + f(kirk) + s.al_f(kirk) + s.al_n(2) + fp(|x: tam32| x) + u(|| 42) + u(selam);
+}
+işlev hatali_deger() -> tam32 {
+    değişken s: Sayac = Sayac { n: 1 };
+    değişken a: tam32 = f(|| yok_a());
+    değişken b: tam32 = s.al_f(|| yok_b());
+    değişken c: tam32 = h(|| yok_c());
+    değişken d: tam32 = s.al_n(|| yok_d());
+    ver 0;
+}
+işlev main() -> tam32 { ver islev_cagrisi() + metot_cagrisi() + pozitif() + hatali_deger(); }

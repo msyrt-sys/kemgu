@@ -11122,6 +11122,7 @@ işlev arite_arg_kontrol(p: &değişken Ayr, idx: tam32, fad: metin, cad: metin)
         değişken eski_oa2: tam32 = p.odunc_arg;
         p.odunc_arg = 0 - 1;
         eğer odunc_tip_mi(fn_ptip_bul(p, fad, a - 1)) { p.odunc_arg = arg; }
+        değişken th_arg: tam32 = dizi_boyut(p.th_kod);   // [D-791] argümanda hata var mı
         kontrol_dugum(p, arg);
         p.odunc_arg = eski_oa2;
         değişken pt: metin = fn_ptip_bul(p, fad, a - 1);
@@ -11137,6 +11138,17 @@ işlev arite_arg_kontrol(p: &değişken Ayr, idx: tam32, fad: metin, cad: metin)
                 dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
             }
+        }
+        // [D-791] İŞLEV TİPİ: param ya da argüman işlev tipliyse yukarıdaki dizgi
+        // denetimi "?" yüzünden atlanır → ortak kural (D-790). Ölçüldü: `f(|| "a")`
+        // exit 44, `f(|x: metin| ..)` SEGV, `f(selam)` exit 76, `f(5)` (işlev param)
+        // — C dördünde de T001. İki denetim birbirini dışlar: işlev tipli değer için
+        // `ifade_tip` "?" döner (yukarısı susar), dizgisi bilinen değerin imzası boştur.
+        eğer (odunc_kaciyor == yanlış)
+             ve islev_tur_uyumsuz(p, fn_ptn_bul(p, fad, a - 1), pt, arg, dizi_boyut(p.th_kod) > th_arg) {
+            dizi_ekle(p.th_kod, "T001");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
         }
         eğer (odunc_kaciyor == yanlış) ve (fn_plin_bul(p, fad, a - 1) == 1) { lin_tuket_dugum(p, arg); }   // TC5b move
         g003_kontrol(p, fad, a - 1, arg);   // D-358: C sırası — lineer tüketimden SONRA
@@ -11327,6 +11339,7 @@ işlev metot_arg_kontrol(p: &değişken Ayr, idx: tam32, key: metin) -> tam32 {
     değişken a: tam32 = 1;
     iken a < hc {
         değişken arg: tam32 = dizi_al(p.cocuk, hb + a);
+        değişken th_arg: tam32 = dizi_boyut(p.th_kod);   // [D-791] argümanda hata var mı
         kontrol_dugum(p, arg);
         değişken pt: metin = fn_ptip_bul(p, key, a - 1 + ofs);
         eğer metin_esit(pt, "?") == yanlış {
@@ -11336,6 +11349,12 @@ işlev metot_arg_kontrol(p: &değişken Ayr, idx: tam32, key: metin) -> tam32 {
                 dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
                 dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
             }
+        }
+        // [D-791] İŞLEV TİPİ (D-790 ortak kuralı) — `s.m(|| "a")` exit 76, C T001.
+        eğer islev_tur_uyumsuz(p, fn_ptn_bul(p, key, a - 1 + ofs), pt, arg, dizi_boyut(p.th_kod) > th_arg) {
+            dizi_ekle(p.th_kod, "T001");
+            dizi_ekle(p.th_sat, dizi_al(p.a_sat, arg));
+            dizi_ekle(p.th_sut, dizi_al(p.a_sut, arg));
         }
         a = a + 1;
     }
