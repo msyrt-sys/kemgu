@@ -1,0 +1,3 @@
+// [D-802] P318 (boş liste) + P318b (`Dizi` aritesi), bu sırayla — C ile birebir. Öncesinde self `OK` diyordu.
+işlev f(x: Dizi<>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

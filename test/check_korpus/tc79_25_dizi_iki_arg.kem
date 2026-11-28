@@ -1,0 +1,3 @@
+// [D-802] P318b — `Dizi` tam bir argüman ister (C ifade.c:933); tanı `Dizi` belirtecine bağlanır. Öncesinde self SESSİZCE kabul ediyordu.
+işlev f(x: Dizi<tam32, tam32>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

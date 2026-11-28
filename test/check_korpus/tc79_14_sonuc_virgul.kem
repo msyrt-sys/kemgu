@@ -1,0 +1,3 @@
+// [D-802] P313 — `sonuç<T H>` virgül eksik (C ifade.c:833).
+işlev f(x: sonuç<tam32 metin>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

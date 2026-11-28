@@ -1,0 +1,3 @@
+// [D-802] P311 — `seçimlik<..>` kapanış `>` eksik (C ifade.c:821).
+işlev f(x: seçimlik<tam32) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

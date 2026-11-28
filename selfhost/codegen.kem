@@ -1082,7 +1082,7 @@ işlev simdiki(p: &değişken Ayr) -> metin {
     ver t;
 }
 // Generic kapanışı `>` bekle; `>>` (SAGA_KAYDIR) iki `>`'a böl (parser_buyuk_ayir).
-işlev bekle_buyuk(p: &değişken Ayr) -> tam32 {
+işlev bekle_buyuk(p: &değişken Ayr, kod: metin) -> tam32 {
     değişken t: metin = tip_i(p, p.imlec);  // RAW (sk_pending atla)
     eğer metin_esit(t, "BUYUK") { ilerle(p); ver 1; }
     eğer metin_esit(t, "SAGA_KAYDIR") {
@@ -1090,7 +1090,11 @@ işlev bekle_buyuk(p: &değişken Ayr) -> tam32 {
         p.sk_pending = 1;  // ilk > tüketildi (ilerleme yok)
         ver 1;
     }
-    p.hata_say = p.hata_say + 1;
+    // [D-802] Kapanış `>` beklentisi C'de çağrı yerine göre farklı kod basar (tekkez P331 ·
+    // sabitsüre P341 · görev P361 · kanal P363 · yetki P351 · seçimlik P311 · sonuç P314 ·
+    // vektör P355 · generic argüman P319 · tip parametresi P025). Öncesinde burada sayaç
+    // artıyor ama TANI KAYDEDİLMİYORDU → dosyadaki tek hata buysa çıktı konumsuz `P000 0 0`.
+    ph_ekle(p, kod, sim_sat(p), sim_sut(p));
     ver 0;
 }
 işlev simdiki_buyuk_mu(p: &değişken Ayr) -> mantıksal { ver metin_esit(simdiki(p), "BUYUK"); }
@@ -1223,23 +1227,31 @@ işlev ikili_op_ad(t: metin) -> metin {
 
 // Generic argüman listesi `< T1, T2, ... >` → çocuk Dizi (>> kapanış böl).
 işlev parse_generic_args(p: &değişken Ayr) -> Dizi<tam32> {
-    bekle(p, "KUCUK");
+    bekle_k(p, "KUCUK", "P318");   // [D-802] C ifade.c:664 (parse_generic_listesi)
     değişken args: Dizi<tam32> = [];
     değişken devam: mantıksal = doğru;
-    eğer simdiki_buyuk_mu(p) { devam = yanlış; }
+    // [D-802] C ifade.c:666-669 — boş liste (`Kutu<>`, `Dizi<Kutu<>>`) P318 "boş olamaz"; `>>`
+    // C'de önce bölünür, bu yüzden SAGA_KAYDIR da kapanış sayılır. Öncesinde self boş listeyi
+    // SESSİZCE kabul ediyor (`Dizi<>` → OK) ya da iç içe şekilde P011 basıyordu.
+    eğer simdiki_buyuk_mu(p) veya sim_mi(p, "SAGA_KAYDIR") { parse_hata_kaydet(p, "P318"); devam = yanlış; }
     iken devam {
-        dizi_ekle(args, parse_tip(p));
-        eğer sim_mi(p, "VIRGUL") { ilerle(p); }
-        değilse { devam = yanlış; }
+        // [D-802] C döngüsü her turda önce kapanışa bakar → sondaki virgül geçerlidir
+        // (`Kutu<tam32,>`). Öncesinde self burada P011 ile GEÇERLİ programı reddediyordu.
+        eğer simdiki_buyuk_mu(p) veya sim_mi(p, "SAGA_KAYDIR") { devam = yanlış; }
+        değilse {
+            dizi_ekle(args, parse_tip(p));
+            eğer sim_mi(p, "VIRGUL") { ilerle(p); }
+            değilse { devam = yanlış; }
+        }
     }
-    bekle_buyuk(p);
+    bekle_buyuk(p, "P319");   // [D-802] C ifade.c:680
     ver args;
 }
 // Tek-argümanlı generic tip (seçimlik/tekkez/sabitsüre/görev/kanal/yetki).
-işlev parse_tek_arg(p: &değişken Ayr, dad: metin, s: tam32, u: tam32) -> tam32 {
-    bekle(p, "KUCUK");
+işlev parse_tek_arg(p: &değişken Ayr, dad: metin, s: tam32, u: tam32, kod_ac: metin, kod_kapa: metin) -> tam32 {
+    bekle_k(p, "KUCUK", kod_ac);    // [D-802] kod kurucuya göre (C ifade.c:719..822)
     değişken ic: tam32 = parse_tip(p);
-    bekle_buyuk(p);
+    bekle_buyuk(p, kod_kapa);
     ver dugum1(p, dad, "", s, u, ic);
 }
 
@@ -1259,37 +1271,38 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
         ilerle(p);
         ver dugum1(p, "TIP_POINTER", "", s, u, parse_tip(p));
     }
-    eğer metin_esit(t, "TEKKEZ") { ilerle(p); ver parse_tek_arg(p, "TIP_TEKKEZ", s, u); }
-    eğer metin_esit(t, "SABITSURE") { ilerle(p); ver parse_tek_arg(p, "TIP_SABITSURE", s, u); }
-    eğer metin_esit(t, "GOREV") { ilerle(p); ver parse_tek_arg(p, "TIP_GOREV", s, u); }
-    eğer metin_esit(t, "KANAL") { ilerle(p); ver parse_tek_arg(p, "TIP_KANAL", s, u); }
-    eğer metin_esit(t, "YETKI") { ilerle(p); ver parse_tek_arg(p, "TIP_YETKI", s, u); }
-    eğer metin_esit(t, "SECIMLIK") { ilerle(p); ver parse_tek_arg(p, "TIP_SECIMLIK", s, u); }
+    // [D-802] C ifade.c:719/722 · 732/735 · 745/748 · 758/761 · 771/774 · 818/821
+    eğer metin_esit(t, "TEKKEZ") { ilerle(p); ver parse_tek_arg(p, "TIP_TEKKEZ", s, u, "P330", "P331"); }
+    eğer metin_esit(t, "SABITSURE") { ilerle(p); ver parse_tek_arg(p, "TIP_SABITSURE", s, u, "P340", "P341"); }
+    eğer metin_esit(t, "GOREV") { ilerle(p); ver parse_tek_arg(p, "TIP_GOREV", s, u, "P360", "P361"); }
+    eğer metin_esit(t, "KANAL") { ilerle(p); ver parse_tek_arg(p, "TIP_KANAL", s, u, "P362", "P363"); }
+    eğer metin_esit(t, "YETKI") { ilerle(p); ver parse_tek_arg(p, "TIP_YETKI", s, u, "P350", "P351"); }
+    eğer metin_esit(t, "SECIMLIK") { ilerle(p); ver parse_tek_arg(p, "TIP_SECIMLIK", s, u, "P310", "P311"); }
     // sonuç<T,H>
     eğer metin_esit(t, "SONUC") {
         ilerle(p);
-        bekle(p, "KUCUK");
+        bekle_k(p, "KUCUK", "P312");    // [D-802] C ifade.c:831
         değişken dt: tam32 = parse_tip(p);
-        bekle(p, "VIRGUL");
+        bekle_k(p, "VIRGUL", "P313");   // [D-802] C ifade.c:833
         değişken ht: tam32 = parse_tip(p);
-        bekle_buyuk(p);
+        bekle_buyuk(p, "P314");         // [D-802] C ifade.c:836
         ver dugum2(p, "TIP_SONUC", "", s, u, dt, ht);
     }
     // vektör<T, N> (N = compile-time tamsayı)
     eğer metin_esit(t, "VEKTOR") {
         ilerle(p);
-        bekle(p, "KUCUK");
+        bekle_k(p, "KUCUK", "P352");    // [D-802] C ifade.c:784
         değişken et: tam32 = parse_tip(p);
-        bekle(p, "VIRGUL");
+        bekle_k(p, "VIRGUL", "P353");   // [D-802] C ifade.c:786
         değişken lane: metin = sim_lex(p);
-        bekle(p, "TAMSAYI");
-        bekle_buyuk(p);
+        bekle_k(p, "TAMSAYI", "P354");  // [D-802] C ifade.c:800 (ilerlemez)
+        bekle_buyuk(p, "P355");         // [D-802] C ifade.c:805
         ver dugum1(p, "TIP_VEKTOR", lane, s, u, et);
     }
     // işlev(T1, ...) -> T
     eğer metin_esit(t, "ISLEV") {
         ilerle(p);
-        bekle(p, "SOL_PAREN");
+        bekle_k(p, "SOL_PAREN", "P315");   // [D-802] C ifade.c:848
         değişken kids: Dizi<tam32> = [];
         eğer sim_mi(p, "SAG_PAREN") == yanlış {
             değişken devam: mantıksal = doğru;
@@ -1302,8 +1315,8 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
                 }
             }
         }
-        bekle(p, "SAG_PAREN");
-        bekle(p, "OK");
+        bekle_k(p, "SAG_PAREN", "P316");   // [D-802] C ifade.c:859
+        bekle_k(p, "OK", "P317");          // [D-802] C ifade.c:861
         dizi_ekle(kids, parse_tip(p));   // dönüş tipi (çocukların SONU)
         ver dugum_n(p, "TIP_ISLEV", "", s, u, kids);
     }
@@ -1325,7 +1338,7 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
             iken sim_mi(p, "CIFT_IKI_NOKTA") {
                 ilerle(p);
                 değişken sag: metin = sim_lex(p);
-                bekle(p, "TANIMLAYICI");
+                bekle_k(p, "TANIMLAYICI", "P124");   // [D-802] C ifade.c:910
                 yol = dugum1(p, "YOL", sag, s, u, yol);
             }
             nitelikli = doğru;
@@ -1333,6 +1346,11 @@ işlev parse_tip(p: &değişken Ayr) -> tam32 {
         // generic argümanlar?
         eğer sim_mi(p, "KUCUK") {
             değişken args: Dizi<tam32> = parse_generic_args(p);
+            // [D-802] C ifade.c:933 — niteliksiz `Dizi` TAM BİR argüman ister; tanı `Dizi` belirtecine
+            // bağlanır. Öncesinde self `Dizi<tam32, tam32>` ve `Dizi<>`yi SESSİZCE kabul ediyordu.
+            eğer (nitelikli == yanlış) ve metin_esit(ad, "Dizi") ve (dizi_boyut(args) != 1) {
+                parse_hata_konum(p, "P318b", s, u);
+            }
             // Dizi<T> özel (yalnız niteliksiz)
             eğer (nitelikli == yanlış) ve metin_esit(ad, "Dizi") ve (dizi_boyut(args) == 1) {
                 ver dugum1(p, "TIP_DIZI", "", s, u, dizi_al(args, 0));
@@ -1449,18 +1467,22 @@ işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
     // yüzden her çağrıda temizle, sonuç sızmasın).
     p.tp_pending = [];
     eğer sim_mi(p, "KUCUK") == yanlış { ver 0; }
-    bekle(p, "KUCUK");
+    ilerle(p);   // '<' — yukarıda denetlendi (C `parser_tuket`, kodu yok)
     değişken devam: mantıksal = doğru;
     değişken pi: tam32 = 0;
     eğer simdiki_buyuk_mu(p) { devam = yanlış; }
     iken devam {
+      // [D-802] C parser.c:430 döngüsü her turda önce `>`e bakar → sondaki virgül geçerli (`K<T,>`).
+      // Öncesinde self burada GEÇERLİ programı reddediyordu.
+      eğer simdiki_buyuk_mu(p) { devam = yanlış; }
+      değilse {
         dizi_ekle(p.tp_pending, sim_lex(p));  // param adı yakala (bekle'den ÖNCE)
         // D-370: param ADI da yan-kanala — T011 evreninde generic paramlar MUAF.
         // Kapsam-duyarsız (tüm bildirimlerin paramları tek listede): yalnız
         // EKSİK tanı üretebilir, YANLIŞ tanı üretemez.
         dizi_ekle(p.gp_ad, sim_lex(p));
         değişken bl: metin = "";          // [D-728] bu parametrenin bound listesi
-        bekle(p, "TANIMLAYICI");          // param adı
+        bekle_k(p, "TANIMLAYICI", "P024");   // param adı — [D-802] C parser.c:431
         eğer sim_mi(p, "IKI_NOKTA") {     // bound listesi
             ilerle(p);
             değişken b1: metin = sim_lex(p);
@@ -1485,8 +1507,9 @@ işlev atla_tip_paramlar_sahipli(p: &değişken Ayr, sahip: metin) -> tam32 {
         pi = pi + 1;
         eğer sim_mi(p, "VIRGUL") { ilerle(p); }
         değilse { devam = yanlış; }
+      }
     }
-    bekle_buyuk(p);
+    bekle_buyuk(p, "P025");   // [D-802] C parser.c:462
     ver 0;
 }
 // Lambda: |p: t, ...| ifade  veya  |...| { blok } (poz = ilk '|').

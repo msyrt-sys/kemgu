@@ -1,0 +1,3 @@
+// [D-802] P330 — `tekkez` sonrası `<` eksik (C ifade.c:719).
+işlev f(x: tekkez tam32>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

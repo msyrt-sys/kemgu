@@ -1,0 +1,4 @@
+// [D-802] POZİTİF — generic argüman listesinde sondaki virgül GEÇERLİ (C döngüsü her turda önce `>`e bakar). Öncesinde self bu geçerli programı P011 ile reddediyordu.
+yapı Kutu<T> { x: T; }
+işlev f(x: Kutu<tam32,>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

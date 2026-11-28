@@ -1,0 +1,4 @@
+// [D-802] P318 — generic argüman listesi boş (C ifade.c:668). Öncesinde self bunu SESSİZCE kabul ediyordu.
+yapı Kutu<T> { x: T; }
+işlev f(x: Kutu<>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

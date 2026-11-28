@@ -58,9 +58,9 @@
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
       Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796)
-      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800) -> 24 (D-801). ESLENEN KOD (D-799'da OLCULDU:
-      self'in yaydigi farkli P kodu, P000 haric; C'de 111): D-795 36 · D-796 44 · D-797 57 · D-798 65 · D-799 68 ·
-      D-800 74 · D-801 84 (+ ayristirici RT006). ⚠ Onceki elle tutulan sayac
+      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800) -> 24 (D-801) -> 11 (D-802; kalan YALNIZ satirici asm).
+      ESLENEN KOD (D-799'da OLCULDU: self'in yaydigi farkli P kodu, P000 haric): D-795 36 · D-796 44 · D-797 57 ·
+      D-798 65 · D-799 68 · D-800 74 · D-801 84 · D-802 102 (C'de 112; ikisi de P318b dahil) + ayristirici RT006. ⚠ Onceki elle tutulan sayac
       (29/39/52/62) YANLISTI: tabani farkliydi ve birden cok yapida ortak kodlar (P200/P201, P210..P212) iki kez
       sayilmisti. Sayaci elle artirma; `bekle_k`/`parse_hata_*` cagrilarindaki kodlari say.
       (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
@@ -94,8 +94,17 @@
       `)` kodunu (P122) eslemisti; C P151 (ifade.c:422) — konum dogru, KOD YANLISTI. Yapi olusturma dongusu C gibi
       EOF'u ayrica denetlemiyor (self erken cikip P130/P131/P010'u atliyordu). tc48_78..92; 29 sekil: once 25'i
       farkli, sonra hepsi birebir; D-799'dan kalan `d8` de kapandi.
-      KALAN 24 site (D-801 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · atla_tip_paramlar_sahipli 2 ·
-      parse_generic_args 1 · parse_tek_arg 1. Yani iki aile kaldi: satirici asm ve tip.
+      ✓ D-802 tip ailesi: `>` beklentisini paylasan `bekle_buyuk` TANISIZDI (tek hata buysa cikti konumsuz
+      `P000 0 0`) → kurucu basina kod: tekkez P330/P331 · sabitsüre P340/P341 · görev P360/P361 · kanal P362/P363 ·
+      yetki P350/P351 · seçimlik P310/P311 · sonuç P312/P313/P314 · vektör P352/P353/P354/P355 · işlev tipi
+      P315/P316/P317 · generic arguman P318/P319 · nitelikli tip yolu P124 · tip parametresi P024/P025. Iki SESSIZ
+      KABUL kapandi: bos generic liste (`Kutu<>`, `Dizi<>`; C P318) ve `Dizi` aritesi (`Dizi<A, B>`; C P318b). Iki
+      YANLIS RET kapandi: sondaki virgul generic argumanda (`Kutu<tam32,>`) ve tip parametresinde (`K<T,>`) C'de
+      gecerli. `Dizi<Kutu<>>`: C `>>`yi once boler, self SAGA_KAYDIR'i da kapanis sayar. tc79_01..32; 52 sekil: once
+      42'si farkli, sonra hepsi birebir. Generic `<` (P318) cagiranlar `<`yi onceden denetledigi icin ULASILAMAZ
+      (C'de de oyle); `atla_tip_paramlar_sahipli`deki korumali `<` `ilerle`ye cevrildi (C `parser_tuket`, kodu yok).
+      KALAN 11 site (D-802 olcumu): YALNIZ parse_satirici_asm (TANIMLAYICI/SOL_PAREN/SAG_PAREN/IKI_NOKTA/VIRGUL/
+      SOL_SUSLU).
       ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
       tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
       S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
@@ -571,8 +580,9 @@
       D-796 OLCUMU — tanisiz sayac siteleri (`p.hata_say = p.hata_say + 1`, ph_ekle haric): 9 -> 8. Kapanan:
       `parse_disa_govde` (`dışa`/`genel` oneki → P050/P051; oncesinde dosyadaki tek hata buysa D-648 emniyet agi
       konumsuz `P000 0 0` basiyordu). KALAN parser siteleri: bekle_buyuk · parse_parametre · parse_desen ·
-      asm_kisit_atla · asm_kisit_al · ~~parse_cesit~~ (✓ D-797 → P352) · ~~parse_desen~~ (✓ D-799 → P211);
-      codegen asamasi (emniyet agina girmez): ifade_uret · deyim_uret. D-797'den sonra 8 -> 7, D-799'dan sonra 7 -> 6.
+      asm_kisit_atla · asm_kisit_al · ~~parse_cesit~~ (✓ D-797 → P352) · ~~parse_desen~~ (✓ D-799 → P211) ·
+      ~~bekle_buyuk~~ (✓ D-802 → cagri yerine gore kod); codegen asamasi (emniyet agina girmez): ifade_uret ·
+      deyim_uret. D-797'den sonra 8 -> 7, D-799'dan sonra 7 -> 6, D-802'den sonra 6 -> 5.
       (`codegen.kem` emniyet agi yorumundaki "Kalan 12 site" sayisi D-648'den kalma, bayat.)
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
 - [x] G8  ✓ D-751 (369/429 bildirim genel; testler modül sistemiyle derleniyor, calistir_stdlib_ithal). [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
@@ -3991,3 +4001,20 @@
   TAM TAKIM (-j10 ölçümlü, 25:22): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
   checker_diff 397/397, FIXPOINT ✓, atlama izleri D-800 ile aynı desen (25). D-794'ün bekleme yolu ÜÇÜNCÜ kez
   gerçek koşulda ateşlendi: 15 yabancı QEMU altında 668,0 ms → 447 sn sessizlik → çekişme 1 ile 515,7 ms → geçti.
+- 2026-11-28 D-802: C0a — tip ailesi tanıları (tanısız `>` yolu, iki sessiz kabul, iki yanlış ret).
+  Kök: `>` beklentisini 6 tek-argümanlı kurucu + `sonuç` + `vektör` + kullanıcı generic argümanı + tip parametre
+  listesi aynı `bekle_buyuk` ile paylaşıyordu ve başarısızlık TANISIZDI (tek hata buysa çıktı konumsuz `P000 0 0`).
+  `bekle_buyuk` kod alıyor, `parse_tek_arg` kurucu başına `<`/`>` kodu taşıyor: tekkez P330/P331 · sabitsüre
+  P340/P341 · görev P360/P361 · kanal P362/P363 · yetki P350/P351 · seçimlik P310/P311 · sonuç P312/P313/P314 · vektör
+  P352/P353/P354/P355 · işlev tipi P315/P316/P317 · generic argüman P318/P319 · nitelikli tip yolu P124 · tip
+  parametresi P024/P025. SESSİZ KABUL kapandı: boş generic liste (`Kutu<>`, `Dizi<>`; C P318) ve `Dizi<A, B>` (C
+  P318b). YANLIŞ RET kapandı: sondaki virgül generic argümanda (`Kutu<tam32,>`) ve tip parametresinde (`K<T,>`) C'de
+  geçerli. 52 tip şekli (36 + 16 komşu): HEAD ikilisinde 42'si farklıydı, şimdi 52'si de birebir. Yalnız
+  `codegen.kem` (D-734). Eşlenmemiş `bekle(p, "` 24 → 11 (kalan YALNIZ satırıçi asm); tanısız sayaç sitesi 6 → 5;
+  farklı kod 84 → 102 (C'de 112, P318b dâhil). Fikstür tc79_01..32 (30 hata + 2 pozitif; her biri eski ikilide
+  farklı, yenide C ile aynı). checker_diff 429/429. SABOTAJ S424-S455 32/32 rc=2 (S455 tanısız yolu geri getirince
+  12 fikstür `P000 0 0` ile düştü; ilk koşumda iki eşleşen desen yüzünden uygulanmamıştı, benzersiz desenle yinelendi).
+  TAM TAKIM (-j10 ölçümlü, 27:15): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 429/429, FIXPOINT ✓ (stage1 == stage2, 110261 satır — generic ayrıştırma değişikliği self-host'un
+  kendi kaynağında sapma yaratmadı), atlama izleri D-801 ile aynı desen (25). D-794'ün bekleme yolu DÖRDÜNCÜ kez
+  ateşlendi: 659,4 ms (çekişme 15) → 473 sn sessizlik → 516,7 ms (çekişme 1) → geçti.

@@ -1,0 +1,3 @@
+// [D-802] P363 — `kanal<..>` kapanış `>` eksik (C ifade.c:761).
+işlev f(x: kanal<tam32) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }

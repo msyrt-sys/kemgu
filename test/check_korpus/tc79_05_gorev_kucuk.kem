@@ -1,0 +1,3 @@
+// [D-802] P360 — `görev` sonrası `<` eksik (C ifade.c:745).
+işlev f(x: görev tam32>) -> tam32 { ver 0; }
+işlev main() -> tam32 { ver 0; }
