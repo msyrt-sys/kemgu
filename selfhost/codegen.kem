@@ -9049,52 +9049,83 @@ işlev rho_skaler_ir(t: metin) -> mantıksal {
     eğer metin_esit(t, "float") veya metin_esit(t, "double") { ver doğru; }
     ver c == 105;   // 'i' → i1/i8/i16/i32/i64
 }
-// `ad` adlı bağlama, taranan altağaçta (fn gövdesi) SKALER annotasyonla
-// bildirilmiş mi? DEGISKEN/PARAMETRE düğümlerini ara. Bulunamazsa 0 (DENY).
-işlev rho_ad_skaler(p: &değişken Ayr, kok: tam32, ad: metin) -> mantıksal {
+// [D-805] SAĞLAMLIK — BAĞLAMA ÇÖZÜMÜ. Eski `rho_ad_skaler` / `rho_ad_elem_skaler`
+// `ver x`in BAĞLI olduğu bildirimi aramıyordu: alt ağaçta HERHANGİ bir skaler `x`
+// bildirimi (ya da yoksa dış kapsamdaki skaler `x`) "kanıt" sayılıyordu. Gölgelenen
+// işaretçi `x` böylece skaler geçiyor, ρ_sahip join'de serbest bırakılıyor ve çağıran
+// döndürülen diziyi SERBEST bellekten okuyordu — ölçüldü: ASan heap-use-after-free,
+// ASan'sız exit 42 (SESSİZ UAF). C bağlamayı `cozum_sembol` ile KESİN bilir; self'te
+// kapsam izlenmediği için kural MUHAFAZAKÂR: adın taranan kökteki TÜM bağlamaları
+// skaler olmalı — `ver x` hangisine bağlı olursa olsun skalerdir.
+// Bağlama = DEGISKEN/PARAMETRE (annotasyonlu), ayrıca `için` döngü değişkeni (ICIN) ve
+// `eşleş` desen bağlamaları (DESEN_TANIMLAYICI, yapı deseni alanları `dyf_*` yan
+// kanalı). Son ikisinin tipi bu taramada bilinmez → skaler SAYILMAZ.
+// `ad` kök alt ağacında herhangi bir biçimde BAĞLANIYOR mu?
+işlev rho_ad_baglama_var(p: &değişken Ayr, kok: tam32, ad: metin) -> mantıksal {
     eğer kok < 0 { ver yanlış; }
     değişken na: metin = dizi_al(p.a_ad, kok);
-    eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") {
-        eğer metin_esit(dizi_al(p.a_deg, kok), ad) {
-            // Annotasyon = İLK çocuk (TIP_*); yoksa kanıtlanamaz.
-            değişken cb: tam32 = dizi_al(p.a_cb, kok);
-            değişken cs: tam32 = dizi_al(p.a_cs, kok);
-            eğer cs == 0 { ver yanlış; }
-            değişken t0: tam32 = dizi_al(p.cocuk, cb);
-            eğer metin_baslar(dizi_al(p.a_ad, t0), "TIP_") == yanlış { ver yanlış; }
-            ver rho_skaler_ir(ll_tip(p, t0));
-        }
+    eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") veya metin_esit(na, "ICIN")
+      veya metin_esit(na, "DESEN_TANIMLAYICI") {
+        eğer metin_esit(dizi_al(p.a_deg, kok), ad) { ver doğru; }
     }
-    değişken cb2: tam32 = dizi_al(p.a_cb, kok);
-    değişken cs2: tam32 = dizi_al(p.a_cs, kok);
+    eğer metin_esit(na, "DESEN_YAPI") ve rho_desen_yapi_baglar(p, kok, ad) { ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
     değişken i: tam32 = 0;
-    iken i < cs2 {
-        eğer rho_ad_skaler(p, dizi_al(p.cocuk, cb2 + i), ad) { ver doğru; }
+    iken i < cs {
+        eğer rho_ad_baglama_var(p, dizi_al(p.cocuk, cb + i), ad) { ver doğru; }
         i = i + 1;
     }
     ver yanlış;
 }
-// `ad` Dizi<T> bildirimli ve T SKALER mi? (xs[i] eleman-kopya kanıtı için)
-işlev rho_ad_elem_skaler(p: &değişken Ayr, kok: tam32, ad: metin) -> mantıksal {
-    eğer kok < 0 { ver yanlış; }
-    değişken na: metin = dizi_al(p.a_ad, kok);
-    eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") {
-        eğer metin_esit(dizi_al(p.a_deg, kok), ad) {
-            değişken cb: tam32 = dizi_al(p.a_cb, kok);
-            eğer dizi_al(p.a_cs, kok) == 0 { ver yanlış; }
-            değişken t0: tam32 = dizi_al(p.cocuk, cb);
-            eğer metin_esit(dizi_al(p.a_ad, t0), "TIP_DIZI") == yanlış { ver yanlış; }
-            ver rho_skaler_ir(ll_eleman_tip(p, t0));
-        }
-    }
-    değişken cb2: tam32 = dizi_al(p.a_cb, kok);
-    değişken cs2: tam32 = dizi_al(p.a_cs, kok);
+// Yapı deseni düğümü `dn` alanı `ad`ı bağlıyor mu (D-318 yan kanalı)?
+işlev rho_desen_yapi_baglar(p: &değişken Ayr, dn: tam32, ad: metin) -> mantıksal {
     değişken i: tam32 = 0;
-    iken i < cs2 {
-        eğer rho_ad_elem_skaler(p, dizi_al(p.cocuk, cb2 + i), ad) { ver doğru; }
+    iken i < dizi_boyut(p.dyf_node) {
+        eğer dizi_al(p.dyf_node, i) == dn ve metin_esit(dizi_al(p.dyf_alan, i), ad) { ver doğru; }
         i = i + 1;
     }
     ver yanlış;
+}
+// `ad`ın kök alt ağacındaki TÜM bağlamaları skaler mi? (`elem` doğruysa: hepsi
+// `Dizi<skaler>` mi — `xs[i]` eleman-kopya kanıtı için.) Bağlama yoksa doğru.
+işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, elem: mantıksal) -> mantıksal {
+    eğer kok < 0 { ver doğru; }
+    değişken na: metin = dizi_al(p.a_ad, kok);
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") {
+        eğer metin_esit(dizi_al(p.a_deg, kok), ad) {
+            // Annotasyon = İLK çocuk (TIP_*); yoksa kanıtlanamaz.
+            eğer cs == 0 { ver yanlış; }
+            değişken t0: tam32 = dizi_al(p.cocuk, cb);
+            eğer elem {
+                eğer metin_esit(dizi_al(p.a_ad, t0), "TIP_DIZI") == yanlış { ver yanlış; }
+                eğer rho_skaler_ir(ll_eleman_tip(p, t0)) == yanlış { ver yanlış; }
+            } değilse {
+                eğer metin_baslar(dizi_al(p.a_ad, t0), "TIP_") == yanlış { ver yanlış; }
+                eğer rho_skaler_ir(ll_tip(p, t0)) == yanlış { ver yanlış; }
+            }
+        }
+    }
+    eğer metin_esit(na, "ICIN") veya metin_esit(na, "DESEN_TANIMLAYICI") {
+        eğer metin_esit(dizi_al(p.a_deg, kok), ad) { ver yanlış; }
+    }
+    eğer metin_esit(na, "DESEN_YAPI") ve rho_desen_yapi_baglar(p, kok, ad) { ver yanlış; }
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer rho_ad_hepsi_skaler(p, dizi_al(p.cocuk, cb + i), ad, elem) == yanlış { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
+// [D-805] Dış (spawn yeri) kapsam YALNIZ görev gövdesi taranırken geçerlidir: çağrılan
+// bir işlevin gövdesinde (kök = ISLEV düğümü) `cg_var` tablosu SPAWN EDEN işlevin
+// değişkenlerini tutar — yanlış kapsam. Ölçüldü: yardımcının parametresi `v`, spawn
+// edendeki skaler `v` sanılıp kanala giden ρ_sahip dizisi skaler geçiyordu (UAF).
+işlev rho_dis_kapsam_mi(p: &değişken Ayr, kok: tam32) -> mantıksal {
+    eğer kok < 0 { ver yanlış; }
+    ver metin_esit(dizi_al(p.a_ad, kok), "ISLEV") == yanlış;
 }
 // İfade KANITLI skaler mi? (kok = kapsayan fn gövdesi — ad çözümü için)
 işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksal {
@@ -9104,15 +9135,20 @@ işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksa
       veya metin_esit(a, "MANTIKSAL") veya metin_esit(a, "KARAKTER") { ver doğru; }
     eğer metin_esit(a, "TANIMLAYICI") {
         değişken tad: metin = dizi_al(p.a_deg, idx);
-        eğer rho_ad_skaler(p, kok, tad) { ver doğru; }
-        // YAKALANAN değişken: bildirimi taranan altağaçta DEĞİL, çevre kapsamda.
-        // Spawn yerinde çevre codegen kapsamı CANLI → cg_var tablosu kullanılır.
-        // cg_var_bul "" döner = yok (cg_var_tip_bul'un "i32" varsayılanı sessiz
-        // yanlış cevap olurdu → varlık kontrolü ÖNCE).
-        eğer metin_esit(cg_var_bul(p, tad), "") == yanlış {
-            ver rho_skaler_ir(cg_var_tip_bul(p, tad));
+        // [D-805] Adın kökteki TÜM bağlamaları ve (görev gövdesinde) dış bağlaması skaler
+        // olmalı; bağlama hiç yoksa kanıtlanamaz. YAKALANAN değişkenin bildirimi çevre
+        // kapsamdadır: spawn yerinde çevre codegen kapsamı CANLI → cg_var tablosu
+        // (cg_var_bul "" = yok; cg_var_tip_bul'un "i32" varsayılanı sessiz yanlış cevap
+        // olurdu → varlık kontrolü ÖNCE).
+        değişken ic: mantıksal = rho_ad_baglama_var(p, kok, tad);
+        değişken dis: mantıksal = yanlış;
+        eğer rho_dis_kapsam_mi(p, kok) { dis = metin_esit(cg_var_bul(p, tad), "") == yanlış; }
+        eğer ic == yanlış ve dis == yanlış { ver yanlış; }
+        eğer ic {
+            eğer rho_ad_hepsi_skaler(p, kok, tad, yanlış) == yanlış { ver yanlış; }
         }
-        ver yanlış;
+        eğer dis { ver rho_skaler_ir(cg_var_tip_bul(p, tad)); }
+        ver doğru;
     }
     değişken cb: tam32 = dizi_al(p.a_cb, idx);
     değişken cs: tam32 = dizi_al(p.a_cs, idx);
@@ -9138,7 +9174,14 @@ işlev rho_skaler_ifade(p: &değişken Ayr, idx: tam32, kok: tam32) -> mantıksa
         eğer cs < 1 { ver yanlış; }
         değişken nes: tam32 = dizi_al(p.cocuk, cb);
         eğer metin_esit(dizi_al(p.a_ad, nes), "TANIMLAYICI") == yanlış { ver yanlış; }
-        ver rho_ad_elem_skaler(p, kok, dizi_al(p.a_deg, nes));
+        // [D-805] Aynı muhafazakâr kural: TÜM iç bağlamalar `Dizi<skaler>` olmalı; dış
+        // bağlama varsa (eleman tipi burada bilinmez) kanıtlanamaz.
+        değişken xad: metin = dizi_al(p.a_deg, nes);
+        eğer rho_dis_kapsam_mi(p, kok) {
+            eğer metin_esit(cg_var_bul(p, xad), "") == yanlış { ver yanlış; }
+        }
+        eğer rho_ad_baglama_var(p, kok, xad) == yanlış { ver yanlış; }
+        ver rho_ad_hepsi_skaler(p, kok, xad, doğru);
     }
     eğer metin_esit(a, "CAGRI") {
         // Kullanıcı işlevi + BİLDİRİLEN dönüşü skaler → sonuç kopya değer.
@@ -9170,7 +9213,11 @@ işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam3
     eğer metin_esit(a, "VER") {
         eğer cs == 0 { ver yanlış; }
         eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb), kok) == yanlış { ver doğru; }
-        ver yanlış;
+        // [D-805] Dönüş ifadesinin İÇİ de taranmalı (C `rho_confine_tara` VER aynası).
+        // Önceden `ver yanlış;` ile dönülüyordu → `ver gonder(k, d)` içindeki çağrının
+        // gövdesi HİÇ taranmıyor, orada ρ_sahip dizisini kanala gönderen P2 ihlali
+        // görünmüyordu (ölçüldü: self bayrak 1, ASan heap-use-after-free; C bayrak 0).
+        ver rho_ihlal_tara(p, dizi_al(p.cocuk, cb), kok, derinlik);
     }
     // --- P2/P3/P4: çağrılar ---
     eğer metin_esit(a, "CAGRI") {
@@ -9191,7 +9238,9 @@ işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam3
         eğer fi >= 0 {
             değişken fgov: tam32 = fn_govde_bul(p, fi);
             eğer fgov < 0 { ver doğru; }
-            eğer rho_ihlal_tara(p, fgov, fgov, derinlik + 1) { ver doğru; }
+            // [D-805] Kök = ISLEV düğümü: parametreler de bağlama sayılır ve dış (spawn
+            // yeri) kapsam KAPANIR (`rho_dis_kapsam_mi`).
+            eğer rho_ihlal_tara(p, fgov, fi, derinlik + 1) { ver doğru; }
         }
         // Argümanları da tara (iç lambda/çağrı olabilir).
         değişken ai: tam32 = 1;
