@@ -249,12 +249,20 @@
       farki yok; olusursa `calistir_gorev_rho` kirmizi verir.
       ⚠ D-807: bu maddenin SAGLAMLIK onkosulu P5'ti (KAPANDI). P1'i genisletmek, kanaldan alinan PAYLASILAN
       diziyi buyuten gorevlere de bayrak 1 verdirirdi (UAF); P5 onlari ayrica dusurur. Genisletmede r07/r11
-      (kanal ve yon ucu, ASan kosumlu) yesil kalmali; G22 (`&değişken` yakalamasi) da ayni sinif — once o.
+      (kanal ve yon ucu, ASan kosumlu) yesil kalmali; G22'nin UAF yarisi D-808 ile kapandi.
+      ⚠ D-808: ikinci onkosul P6'ydi (KAPANDI): takma adi olan YAKALANAN dizinin buyutulmesi, disaridaki kaba
+      isaretci yazma, yeniden atama ve parametresini buyuten yardimci — hepsi bugun iki derleyicide canli UAF'ti.
+      Genisletmede r12-r16 de yesil kalmali.
 - [x] D6g -> D-807 (D6f olcumu sirasinda bulundu; CANLI, SESSIZ UAF C oracle'da): gorev kaniti P5 —
       erisilebilir kumede `kanal_al(k)` varsa `k`nin yuku KANITLI skaler olmali. Kanal yuku TASINMIYOR
       (G23), gorev alip buyutunce tampon rho_sahip'te (D-770); kanit bayrak 1 verip join'de serbest
       birakiyordu → ASan heap-use-after-free, ASan'siz kosum exit 42. Yol ustunde self `ll_ic_tip`
       `alan<T>`/`gönderen<T>` yon uclarini tanimiyordu (P5 parite farki + onceden var LINK-RED) → kapandi.
+- [x] D6h -> D-808 (D6f olcumu sirasinda bulundu; CANLI, SESSIZ UAF IKI derleyicide): gorev kaniti P6 —
+      erisilebilir kumede bir dizi BUYUTULUYORSA (`dizi_ekle`, `dizi_kapasite_ayarla`) ya da bir nesneye skaler
+      OLMAYAN deger YAZILIYORSA (`dizi_yaz`, `x[i] = v`) hedef gorevin KENDI ayirdigi taze dizi olmali. D-505
+      yakalamayi ADA gore tasir; ayni nesnenin takma adlari (`e = d`, `[d]`, `Kap { xs: d }`) ana is parcaciginda
+      kalir, gorev buyutunce tampon rho_sahip'te (D-770) → join'de serbest birakmak UAF'ti.
 - [ ] D7a [M] Ayrik derleme: arayuz dosyalari (imza-only cikti).
 - [ ] D7b [M] Ayrik derleme: glob import.
 - [ ] D7c [M] Ayrik derleme: opak tipler.
@@ -701,6 +709,8 @@
       gorevin buyuttugu tampon rho_sahip'te olur → bayrak 1 yuzunden join'de UAF; P-kurallari yakalanan
       REFERANSI gormuyor. Onarim sirasi: once (b) (referans yakalayan goreve kanit verme ya da
       R-YAKALAMA-THREAD'i referansa uygula), sonra (a) — tersi sessiz UAF acar.
+      ⚠ D-808: (b)'nin UAF yarisi P6 ile KAPANDI — yakalanan referans uzerinden buyutme kaniti dusuruyor (iki
+      derleyicide bayrak 1 → 0). DRF yarisi (iki is parcacigi ayni diziye yazar) ve (a) ACIK.
 - [ ] G23 [M] R-KANAL GONDERIMDE TASIMA UYGULANMIYOR (D-807 yol ustu, onceden var). Spec (KEMGU_Bellek_Modeli.md
       R-KANAL, Gonderim): `sahiplik_transfer(v, ρ_kanal(k))`, `Γ' = Γ \ {v}` — gonderilen deger gonderenin
       baglamindan CIKAR. OLCULDU: `kanal_gönder(k, d)` (d: Dizi<tam32>) sonrasi gonderen `dizi_yaz(d, 0, 9)`
@@ -718,6 +728,17 @@
       (`lam_emit` yakalama kaydinda eleman tipi bos); C'nin genel kapanis yolu AYRICA okunmali. `tam32`
       elemanla GORUNMEZ (ayni IR). Onarim: yakalama kaydina eleman tipi/isaretsizlik/metin-lik yan
       kanallarini tasi (G21 ile ayni kok); fikstur: iki sekil + `Dizi<metin>`, sabotaj: kaydi bosalt.
+      ⚠ D-808 OLCUMU (C'de BELLEK GUVENLIGI, ayni aile): lambdaya (gorev ya da genel kapanis) YAKALANAN `Dizi<tam32>`ye
+      indeks atamasi (`d[0] = 40`) C'de heap erisimcisi yerine ham GEP+store → ASan heap-buffer-overflow, ASan'siz
+      sessiz baslik bozulmasi; self dogru (`kdl_dizi_yaz`). Yakalanan kaba baglamsiz literal yazma (`dizi_yaz(dd, 0,
+      [40, 2])`, dd yakalanan) da C'de SEGV. `güvensiz` YOK, `--check` temiz. Onarim ayni yerde: C yakalama kaydi
+      dizinin heap-ligini/eleman tipini tasimali.
+- [ ] G25 [S] C: INDEKS ATAMASINDA BAGLAMSIZ DIZI LITERALI YIGIN DIZISINE DUSUYOR (D-808 yol ustu, onceden var;
+      BELLEK GUVENLIGI). OLCULDU (gorev YOK, main'de): `değişken dd: Dizi<Dizi<tam32>> = [[1]]; dd[0] = [40, 2];` →
+      C `alloca [2 x i32]` → heap dizisine YIGIN isaretcisi yaziliyor → `dizi_al(dizi_al(dd, 0), 0)` SEGV (ASan),
+      ASan'siz PANIK; self dogru (heap-uniform). `dizi_yaz(dd, 0, [40, 2])` C'de DOGRU — kusur yalniz atama degeri
+      konumunda. D-572'nin (cesit yuku) indeks-atama karsiligi. Onarim: hedef `Dizi<Dizi<T>>` elemaniysa degere
+      beklenen tipi gecir; fikstur: atama + alan atamasi + skaler pozitif, sabotaj: baglami kaldir.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -4311,3 +4332,50 @@
   izlenmediği için parite listesinde değildi (`git ls-files`); commit sonrası kapı ayrıca koşuldu. D-794'ün bekleme
   yolu yine ateşlendi: 664,9 ms (çekişme 15) → 484 sn sessizlik → 504,1 ms (çekişme 1) → geçti. Bütçe uyarıları
   (açılış süresi, codegen_diff) önceki koşumlarda da var.
+- 2026-11-28 D-808: GÜVENLİK — görev bölgesi kanıtına P6: büyütülen ya da işaretçi yazılan dizi görevin KENDİ taze dizisi
+  olmalı (İKİ derleyicide CANLI, SESSİZ UAF). Sırada'nın en üstü yine D6f'ti. D-807'nin "kanıt neyi SORMUYOR" sorusu bu
+  kez yakalanan dizinin TAKMA ADLARINA soruldu: D-505 yakalamayı ADA göre taşır (L002 `d`ye), aynı KdlDizi'yi gösteren
+  diğer yolları görmez. Ölçülen altı şekil — hepsi `--check` temiz, iki derleyicide bayrak 1, ASan heap-use-after-free,
+  ASan'sız exit 42 (sessiz): görev yakalanan `d`yi büyütür (tampon ρ_sahip'te — D-770), ana iş parçacığı onu (1) atama
+  takma adı `e = d`, (2) dizi içinde dizi `[d]`, (3) yapı alanı `Kap { xs: d }` üzerinden okur; (4) görev ρ_sahip'te
+  kurduğu diziyi DIŞARIDAKİ bir kaba yazar (`dizi_yaz(dd, 0, yeni)` · yardımcıda `k[0] = v`); (5) görevin taze `x`i
+  yakalanan `d`ye yeniden atanıp büyütülür; (6) yardımcı PARAMETRESİNİ büyütür. D6f (P1'i genişletmek) bunların
+  hepsinin erişimini büyütürdü → önce P6; D6f açık kaldı, notu güncellendi.
+  KURAL (P6): erişilebilir kümede `dizi_ekle`/`dizi_kapasite_ayarla` hedefi ve kanıtlı-skaler OLMAYAN değer yazan
+  `dizi_yaz`/`x[i] = v` hedefi görevin kendi taze dizisi olmalı; alana (`s.a = v`) ve deref'e (`*p = v`) işaretçi yazma
+  izlenmez → DENY; skaler yazma serbest (büyütmez, işaretçi taşımaz). "Taze" = `[..]` literali ya da `dizi_olustur(n)`
+  ile başlatılan `değişken`. C sembolle kesin çözer: bildirim bu kanıt yürüyüşünde görülmüş olmalı (yakalananın bildirimi
+  spawn eden işlevde, parametre dışarıdan gelir) ve taze olmayan değerle yeniden atanmamış olmalı; iki liste
+  (`hedef`/`zehir`) sırayı bağımsız kılar, skaler bağlama zehirlenmez (tablo boşa dolmasın), zehir tablosu taşarsa kanıt
+  düşer. Self ad tabanlı (D-805): kökte en az bir bağlama, TÜM bağlamalar taze `değişken` (yeni `kip 3`), görev
+  gövdesinde aynı adla dış bağlama yok, kökte taze olmayan yeniden atama yok. Bilinçli bedel: gölgelenen ya da aynı adla
+  ikinci kez bağlanan yerel dizi self'te kanıtlanmaz (C kabul eder) — güvenli yön; korpusta oluşursa kapı parite
+  kırmızısı verir.
+  YAN KAZANÇ: G22'nin UAF yarısı kapandı — yakalanan `&değişken` referansı üzerinden büyütme artık kanıtı düşürüyor (iki
+  derleyicide bayrak 1 → 0); codegen çökmesi ve DRF yarısı açık.
+  FİKSTÜRLER (test/gorev_rho): r12 takma ad üç yol (0,0,0) · r13 dış kaba yazma — yakalanan kaba `dizi_yaz` + yardımcı
+  parametresinde indeks ataması (0,0) · r14 yeniden atama + parametresini büyüten yardımcı (0,0) · r15 POZİTİF: yalnız
+  kendi taze dizilerini büyüten/yazan/taze değerle yeniden atayan görev (1) · r16 yakalananı büyütüp SONRA iç blokta
+  aynı adla taze yerel bildiren görev (0 — self'in dış bağlama denetimini ayırt eden tek şekil: kökteki tek bağlama
+  tazedir). Pozitif olmasa "her dizi değişikliğini reddet" kapıdan geçerdi (D-425).
+  ⚠ FİKSTÜR HATALARIM (sonuç okunmadan yakalandı): r13'ün ilk sürümü takma adı `görev_birleştir`den ÖNCE okuyordu —
+  kendi kurduğum veri yarışıydı, panik derleyiciden değildi; ayırıcı ölçüm: IR'da bayraklar 0'a zorlanıp koşuldu, panik
+  sürünce join öne alındı. r12/r14'te toplam sabitleri yanlıştı (38/40). İlk P1 pozitifi (b5) `ver dizi_al(..) + ..`
+  ile döndüğü için P6'dan bağımsız olarak bayrak 0'dı (D6f'in kendi sınırı) → pozitif `ver s` (skaler değişken) ile kuruldu.
+  YOL ÜSTÜ — C ORACLE'DA İKİ AYRI BELLEK GÜVENLİĞİ KUSURU (fikstürler bilerek kaçınıyor, iki kez belgelendi): (a) lambdaya
+  YAKALANAN diziye indeks ataması (`d[0] = 40`) C'de ham GEP+store → ASan heap-buffer-overflow; self doğru → G24'e eklendi
+  (aynı "yakalama kaydı bilgi taşımıyor" ailesi). (b) indeks atamasında bağlamsız dizi literali (`dd[0] = [40, 2]`, görev
+  yok) C'de `alloca` yığın dizisi → okuma SEGV; `dizi_yaz(dd, 0, [40, 2])` doğru → G25.
+  Korpus bayrakları değişmedi (14 dosyada 14×1, 10×0, C↔self parite farkı 0): korpustaki bayrak-1 görevlerin hiçbiri bir
+  diziyi değiştirmiyor.
+  SABOTAJ S527-S539: 13/13 kırmızı, beklendiği gibi — her biri hedeflenen fikstür BÖLÜMÜNDE (bayrak dizisi hangi yolun
+  düştüğünü söylüyor) ve sağlamsız olanların HEPSİ ayrıca ASan heap-use-after-free verdi: C büyütme denetimi yok (r12
+  1,1,1 + r14 1,1) · C `dizi_yaz` denetimi yok (r13 1,0) · C atama nesne yazma denetimi yok (r13 0,1) · C takma ad zehiri
+  yok (r14 1,0) · C aşırı tutucu (r15 0) · aynı beşi self'te · self `kip 3` her bağlamayı kabul (r13 0,1 + r14 0,1:
+  parametre) · self dış bağlama denetimi yok (r16 1) · self taze-dizi her değeri kabul (r14 1,0) · self aşırı tutucu (r15 0).
+  TAM TAKIM (-j10 ölçümlü, 25:47): 192 kapının 192'si geçti, rc=0, geçici dizin önce 0 / sonra 0, checker_diff
+  460/460 (0 muaf), codegen_diff 233/233, codegen_genis 77/77, FIXPOINT ✓ (stage1 == stage2, 111988 satır), atlama
+  izleri D-807 ile birebir (32 satır). `calistir_gorev_rho` parite 25 dosya · 16 fikstür (r12-r16 koşum anında
+  izlenmiyordu; commit sonrası kapı ayrıca koşuldu). Bu koşumda D-794 bekleme yolu ateşlenmedi (639,8 ms < 650 eşik).
+  Bütçe uyarıları (çekirdek_onbellek, asan_denetim, codegen_diff, pci16, açılış süresi) hepsi önceki koşumlarda da
+  görüldü (pci16: D-801/D-802).

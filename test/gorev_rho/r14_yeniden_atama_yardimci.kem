@@ -1,0 +1,32 @@
+// RHO_BEKLE: 0,0
+// [D-808] P6 — hedef görevin KENDİ dizisi gibi görünüyor ama değil:
+//   (1) taze `x` yakalanan `d`ye YENİDEN atanıyor, sonra büyütülüyor;
+//   (2) görev yakaladığı diziyi bir yardımcıya veriyor, yardımcı PARAMETRESİNİ büyütüyor.
+// Eski hâl: iki derleyicide bayrak 1,1, ASan heap-use-after-free.
+işlev doldur(x: Dizi<tam32>) -> tam32 {
+    değişken j: tam32 = 0;
+    iken j < 1000 { dizi_ekle(x, j); j = j + 1; }
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    değişken d: Dizi<tam32> = [1];
+    değişken e: Dizi<tam32> = d;
+    eşleş görev_başlat(|| {
+        değişken x: Dizi<tam32> = [0];
+        x = d;
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(x, j); j = j + 1; }
+        ver 0;
+    }) {
+        tamam(g) => { t = t + görev_birleştir(g) + dizi_al(e, 1000) - 978; }
+        hata(h) => { ver 1; }
+    }
+    değişken d2: Dizi<tam32> = [1];
+    değişken e2: Dizi<tam32> = d2;
+    eşleş görev_başlat(|| doldur(d2)) {
+        tamam(g) => { t = t + görev_birleştir(g) + dizi_al(e2, 1000) - 978; }
+        hata(h) => { ver 2; }
+    }
+    ver t;
+}

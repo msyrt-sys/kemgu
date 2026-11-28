@@ -1,0 +1,45 @@
+// RHO_BEKLE: 0,0,0
+// [D-808] P6 — YAKALANAN dizi büyütülüyor ama ana iş parçacığında bir TAKMA ADI var.
+// D-505 yakalamayı ADA göre taşır (L002 `d`ye), aynı nesneyi gösteren diğer yolları görmez:
+//   (1) atama takma adı `e = d`, (2) dizi içinde dizi `[d]`, (3) yapı alanı `Kap { xs: d }`.
+// Görev diziyi büyütünce yeni tampon ρ_sahip'ten ayrılır (D-770); kanıt bölgeyi join'de
+// serbest bırakırsa ana iş parçacığı takma adla SERBEST belleği okur. Eski hâl: iki derleyicide
+// bayrak 1,1,1, ASan heap-use-after-free; ASan'sız koşum exit 42 (SESSİZ).
+yapı Kap { xs: Dizi<tam32>; }
+işlev main() -> tam32 {
+    değişken t: tam32 = 0;
+    değişken d1: Dizi<tam32> = [1];
+    değişken e1: Dizi<tam32> = d1;
+    eşleş görev_başlat(|| {
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(d1, j); j = j + 1; }
+        ver 0;
+    }) {
+        tamam(g) => { t = t + görev_birleştir(g) + dizi_al(e1, 1000) - 985; }
+        hata(h) => { ver 1; }
+    }
+    değişken d2: Dizi<tam32> = [1];
+    değişken k2: Dizi<Dizi<tam32>> = [d2];
+    eşleş görev_başlat(|| {
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(d2, j); j = j + 1; }
+        ver 0;
+    }) {
+        tamam(g) => {
+            değişken x2: Dizi<tam32> = dizi_al(k2, 0);
+            t = t + görev_birleştir(g) + dizi_al(x2, 1000) - 985;
+        }
+        hata(h) => { ver 2; }
+    }
+    değişken d3: Dizi<tam32> = [1];
+    değişken s3: Kap = Kap { xs: d3 };
+    eşleş görev_başlat(|| {
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(d3, j); j = j + 1; }
+        ver 0;
+    }) {
+        tamam(g) => { t = t + görev_birleştir(g) + dizi_al(s3.xs, 1000) - 985; }
+        hata(h) => { ver 3; }
+    }
+    ver t;
+}

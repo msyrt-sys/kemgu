@@ -9100,7 +9100,8 @@ işlev rho_desen_yapi_baglar(p: &değişken Ayr, dn: tam32, ad: metin) -> mantı
 }
 // `ad`ın kök alt ağacındaki TÜM bağlamaları skaler mi? `kip`: 0 = değerin kendisi skaler,
 // 1 = `Dizi<skaler>` (`xs[i]` eleman-kopya kanıtı), 2 = `kanal<skaler>` ([D-807] P5:
-// alınan yük). Bağlama yoksa doğru.
+// alınan yük), 3 = TAZE dizi ile başlatılan `değişken` ([D-808] P6: görevin kendi nesnesi).
+// Bağlama yoksa doğru.
 işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, kip: tam32) -> mantıksal {
     eğer kok < 0 { ver doğru; }
     değişken na: metin = dizi_al(p.a_ad, kok);
@@ -9108,6 +9109,11 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, kip: tam32
     değişken cs: tam32 = dizi_al(p.a_cs, kok);
     eğer metin_esit(na, "DEGISKEN") veya metin_esit(na, "PARAMETRE") {
         eğer metin_esit(dizi_al(p.a_deg, kok), ad) {
+          eğer kip == 3 {
+            // [D-808] Parametre dışarıdan gelir; değer = SON çocuk (annotasyon önünde olabilir).
+            eğer metin_esit(na, "PARAMETRE") veya (cs == 0) { ver yanlış; }
+            eğer rho_taze_dizi(p, dizi_al(p.cocuk, cb + cs - 1)) == yanlış { ver yanlış; }
+          } değilse {
             // Annotasyon = İLK çocuk (TIP_*); yoksa kanıtlanamaz.
             eğer cs == 0 { ver yanlış; }
             değişken t0: tam32 = dizi_al(p.cocuk, cb);
@@ -9126,6 +9132,7 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, kip: tam32
                 eğer metin_baslar(dizi_al(p.a_ad, t0), "TIP_") == yanlış { ver yanlış; }
                 eğer rho_skaler_ir(ll_tip(p, t0)) == yanlış { ver yanlış; }
             } }
+          }
         }
     }
     eğer metin_esit(na, "ICIN") veya metin_esit(na, "DESEN_TANIMLAYICI") {
@@ -9139,6 +9146,37 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, kip: tam32
     }
     ver doğru;
 }
+// [D-808] P6: değer TAZE bir dizi ayırımı mı (`[..]` literali ya da `dizi_olustur(n)`)?
+// `dizi_olustur` ayrılmış yerleşiktir (T024): kullanıcı işlevi o adı alamaz.
+işlev rho_taze_dizi(p: &değişken Ayr, v: tam32) -> mantıksal {
+    eğer v < 0 { ver yanlış; }
+    değişken a: metin = dizi_al(p.a_ad, v);
+    eğer metin_esit(a, "DIZI_OLUSTUR") { ver doğru; }
+    eğer metin_esit(a, "CAGRI") == yanlış { ver yanlış; }
+    eğer dizi_al(p.a_cs, v) < 1 { ver yanlış; }
+    değişken h: tam32 = dizi_al(p.cocuk, dizi_al(p.a_cb, v));
+    eğer metin_esit(dizi_al(p.a_ad, h), "TANIMLAYICI") == yanlış { ver yanlış; }
+    ver metin_esit(dizi_al(p.a_deg, h), "dizi_olustur");
+}
+// [D-808] P6: kökte `ad`a taze OLMAYAN bir değerle yeniden atama var mı? Varsa bağlama
+// dışarıdaki bir nesnenin takma adı olabilir (`x = d`) → yerel hedef sayılmaz.
+işlev rho_ad_atama_taze(p: &değişken Ayr, kok: tam32, ad: metin) -> mantıksal {
+    eğer kok < 0 { ver doğru; }
+    değişken cb: tam32 = dizi_al(p.a_cb, kok);
+    değişken cs: tam32 = dizi_al(p.a_cs, kok);
+    eğer metin_esit(dizi_al(p.a_ad, kok), "ATAMA") ve (cs >= 2) {
+        değişken hd: tam32 = dizi_al(p.cocuk, cb);
+        eğer metin_esit(dizi_al(p.a_ad, hd), "TANIMLAYICI") ve metin_esit(dizi_al(p.a_deg, hd), ad) {
+            eğer rho_taze_dizi(p, dizi_al(p.cocuk, cb + 1)) == yanlış { ver yanlış; }
+        }
+    }
+    değişken i: tam32 = 0;
+    iken i < cs {
+        eğer rho_ad_atama_taze(p, dizi_al(p.cocuk, cb + i), ad) == yanlış { ver yanlış; }
+        i = i + 1;
+    }
+    ver doğru;
+}
 // [D-805] Dış (spawn yeri) kapsam YALNIZ görev gövdesi taranırken geçerlidir: çağrılan
 // bir işlevin gövdesinde (kök = ISLEV düğümü) `cg_var` tablosu SPAWN EDEN işlevin
 // değişkenlerini tutar — yanlış kapsam. Ölçüldü: yardımcının parametresi `v`, spawn
@@ -9146,6 +9184,23 @@ işlev rho_ad_hepsi_skaler(p: &değişken Ayr, kok: tam32, ad: metin, kip: tam32
 işlev rho_dis_kapsam_mi(p: &değişken Ayr, kok: tam32) -> mantıksal {
     eğer kok < 0 { ver yanlış; }
     ver metin_esit(dizi_al(p.a_ad, kok), "ISLEV") == yanlış;
+}
+// [D-808] P6: `arg` görevin KENDİ ayırdığı bir dizinin bağlaması mı? Ad tabanlı (D-805
+// tüm-bağlama kuralı; C bunu sembolle kesin bilir): kökte en az bir bağlama, TÜM
+// bağlamalar taze dizili `değişken` (kip 3), görev gövdesinde aynı adla DIŞ bağlama yok
+// (yakalanan olabilir) ve taze olmayan bir değerle yeniden atama yok. Bilinçli bedel:
+// gölgelenen ya da aynı adla ikinci kez bağlanan yerel dizi self'te kanıtlanmaz (C kabul
+// eder) — güvenli yön; korpusta oluşursa `calistir_gorev_rho` parite kırmızısı verir.
+işlev rho_yerel_taze(p: &değişken Ayr, arg: tam32, kok: tam32) -> mantıksal {
+    eğer arg < 0 { ver yanlış; }
+    eğer metin_esit(dizi_al(p.a_ad, arg), "TANIMLAYICI") == yanlış { ver yanlış; }
+    değişken ad: metin = dizi_al(p.a_deg, arg);
+    eğer rho_ad_baglama_var(p, kok, ad) == yanlış { ver yanlış; }
+    eğer rho_dis_kapsam_mi(p, kok) {
+        eğer metin_esit(cg_var_bul(p, ad), "") == yanlış { ver yanlış; }
+    }
+    eğer rho_ad_hepsi_skaler(p, kok, ad, 3) == yanlış { ver yanlış; }
+    ver rho_ad_atama_taze(p, kok, ad);
 }
 // [D-807] P5: `kanal_al(k)`nin yükü KANITLI skaler mi? Alınan işaretçi PAYLAŞILIR
 // (gönderim sahipliği taşımaz); görev onu büyütürse yeni tampon ρ_sahip'ten ayrılır
@@ -9277,6 +9332,19 @@ işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam3
             eğer cs < 2 { ver doğru; }
             eğer rho_kanal_yuku_skaler(p, dizi_al(p.cocuk, cb + 1), kok) == yanlış { ver doğru; }
         }
+        // [D-808] P6: dizi BÜYÜTME ve elemana işaretçi YAZMA yalnız görevin kendi taze
+        // dizisine (büyüme yeni tamponu ρ_sahip'ten ayırır — D-770; dışarıdaki dizi onu
+        // join'den sonra gösterirdi). Skaler `dizi_yaz` büyütmez.
+        eğer metin_esit(fad, "dizi_ekle") veya metin_esit(fad, "dizi_kapasite_ayarla") {
+            eğer cs < 2 { ver doğru; }
+            eğer rho_yerel_taze(p, dizi_al(p.cocuk, cb + 1), kok) == yanlış { ver doğru; }
+        }
+        eğer metin_esit(fad, "dizi_yaz") {
+            eğer cs < 4 { ver doğru; }
+            eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb + 3), kok) == yanlış {
+                eğer rho_yerel_taze(p, dizi_al(p.cocuk, cb + 1), kok) == yanlış { ver doğru; }
+            }
+        }
         // Kullanıcı işlevi → gövdesine in (call-graph kapanışı).
         değişken fi: tam32 = fn_node_bul(p, fad);
         eğer fi >= 0 {
@@ -9293,6 +9361,19 @@ işlev rho_ihlal_tara(p: &değişken Ayr, idx: tam32, kok: tam32, derinlik: tam3
             ai = ai + 1;
         }
         ver yanlış;
+    }
+    // [D-808] P6: nesneye (indeks/alan/deref) kanıtlı-skaler OLMAYAN değer yazma yalnız
+    // görevin taze dizisinin elemanına (`x[i] = v`). Bağlamanın kendisine atama dışarı
+    // sızmaz (D-309 (4)); takma ad etkisi hedef denetiminde (`rho_ad_atama_taze`) yakalanır.
+    eğer metin_esit(a, "ATAMA") ve (cs >= 2) {
+        değişken hd: tam32 = dizi_al(p.cocuk, cb);
+        eğer metin_esit(dizi_al(p.a_ad, hd), "TANIMLAYICI") == yanlış {
+            eğer rho_skaler_ifade(p, dizi_al(p.cocuk, cb + 1), kok) == yanlış {
+                eğer metin_esit(dizi_al(p.a_ad, hd), "INDEKS") == yanlış { ver doğru; }
+                eğer dizi_al(p.a_cs, hd) < 1 { ver doğru; }
+                eğer rho_yerel_taze(p, dizi_al(p.cocuk, dizi_al(p.a_cb, hd)), kok) == yanlış { ver doğru; }
+            }
+        }
     }
     // --- gövde/deyim/ifade yapıları: çocukları tara ---
     eğer metin_esit(a, "BLOK") veya metin_esit(a, "DEGISKEN") veya metin_esit(a, "ATAMA")
