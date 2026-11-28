@@ -2566,6 +2566,9 @@ static TipBilgisi *kontrol_ikili_mantiksal(TipKontrol *tk, const Dugum *d,
     return taint_yay(tk, base, sol, sag);
 }
 
+/* [D-793] ileride tanimli (D-789); yapi alani denetimi de kullanir. */
+static int tip_hata_icerir(const TipBilgisi *t);
+
 /* Yardimci: yapi olusturma alan kontrolu (beklenen tip varsa generic
  * substitusyon yapilir — Kutu<tam32> { eleman: 5 } gibi durumlarda) */
 static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
@@ -2606,7 +2609,7 @@ static TipBilgisi *kontrol_yapi_olustur_ic(TipKontrol *tk, const Dugum *d,
             continue;
         }
         if (!tip_esit(alan_tipi, deger_tip) &&
-            deger_tip->kategori != TIP_HATA) {
+            !tip_hata_icerir(deger_tip)) {   /* [D-793] D-789 kurali */
             tip_hata(tk, aa, "T001", "alan tipi uyumsuz");
             hata = 1;
         }
@@ -5021,7 +5024,11 @@ TipBilgisi *tip_belirle(TipKontrol *tk, const Dugum *d) {
                 TipBilgisi *e = tip_belirle(tk,
                     d->veri.dizi_olustur.elemanlar[i]);
                 yetki_kacis_kontrol(tk, d->veri.dizi_olustur.elemanlar[i], e);
-                if (!tip_esit(ilk, e) && e->kategori != TIP_HATA) {
+                /* [D-793] D-789 kurali iki tarafta: referans `ilk` de bir DEGERDIR;
+                 * ilk eleman hataliysa (`[yok(), 1]`, `[|| yok(), || 1]`) sonrakiler
+                 * art arda suclaniyordu (self basmiyor; olculdu). */
+                if (!tip_esit(ilk, e) && !tip_hata_icerir(e) &&
+                    !tip_hata_icerir(ilk)) {
                     tip_hata(tk, d->veri.dizi_olustur.elemanlar[i], "T013",
                              "dizi elemanlari farkli tipte");
                 }
@@ -5376,7 +5383,8 @@ TipBilgisi *tip_belirle_beklenen(TipKontrol *tk, const Dugum *d,
                     d->veri.dizi_olustur.elemanlar[i], eleman_t);
                 /* CP006: bağlamlı dizi. */
                 yetki_kacis_kontrol(tk, d->veri.dizi_olustur.elemanlar[i], e);
-                if (!tip_esit(e, eleman_t) && e->kategori != TIP_HATA) {
+                if (!tip_esit(e, eleman_t) &&
+                    !tip_hata_icerir(e)) {   /* [D-793] D-789 kurali */
                     tip_hata(tk, d->veri.dizi_olustur.elemanlar[i],
                              "T013", "dizi elemani beklenen tip ile uyumsuz");
                 }
@@ -6602,7 +6610,8 @@ static void tip_kontrol_deyim(TipKontrol *tk, const Dugum *d) {
                 ct003_leak_kontrol(tk, d, dt, ht)) {
                 /* hata raporlandı */
             } else if (!tip_esit(ht, dt) &&
-                ht->kategori != TIP_HATA && dt->kategori != TIP_HATA) {
+                ht->kategori != TIP_HATA &&
+                !tip_hata_icerir(dt)) {   /* [D-793] D-789 kurali */
                 tip_hata(tk, d, "T001", "atama tipi uyumsuz");
             }
             e4p_denetle(tk, hedef, d->veri.atama.deger);   /* [D-754] */

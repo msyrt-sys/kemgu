@@ -226,17 +226,23 @@ Diğer spec'lerle birlikte tam keyword tablosu: 35 yukarıda + `olarak`,
 Ayrılmış adın çağrısı, kapsamda aynı adlı YEREL bağlama varken de T024 (D-788); çağrılmayan
 bağlama serbest (`değişken bir: tam32` geçerli).
 
-**⚠ İşlev tipi uyumluluğu (E4v KISMİ):** self'in tip dizgileri işlev tipini temsil ETMEZ
-(`tip_str` → "?"), bu yüzden `metin_esit(vt, "?")` ile korunan uyumluluk denetimleri işlev
+**⚠ İşlev tipi uyumluluğu (E4v TAMAM, D-790→D-793):** self'in tip dizgileri işlev tipini temsil
+ETMEZ (`tip_str` → "?"), bu yüzden `metin_esit(vt, "?")` ile korunan uyumluluk denetimleri işlev
 tipli değeri atlar. Ortak kural `islev_tur_uyumsuz` (D-790, `selfhost/codegen.kem`): iki taraf
 işlev → yapısal; işlev beklenir/değer bilinen işlev-dışı; tersi. Generic ve değer tarafında
 bilinmeyen ad joker; değerin alt ağacında tanı + eksik imza → HATA (C D-789 aynası). Kullanan
 noktalar: bildirim/`sabit` (D-790) · işlev ve metot argümanı (D-791) · `ver` (D-792; dönüş
-dizgisi "?" iken tip DÜĞÜMÜ `aktif_donus_tn` kullanılır, kapanış blok gövdesinde -1). Alana
-atama, yapı alanı ve dizi literali hâlâ AÇIK — orada işlev tipli değer için self `--check` OK'u
-kanıt DEĞİLDİR. C tarafında: değer tipi HATA içeriyorsa (iç içe dâhil) uyumsuzluk tanısı
-basılmaz (`tip_hata_icerir`; bildirim · argüman · metot argümanı · `ver` · `sabit`).
-`dizi_ekle`/`dizi_yaz` eleman tipi ve eşitlik operand uyumu self'te İŞLEV-DIŞI tiplerde de yok (E4z).
+dizgisi "?" iken tip DÜĞÜMÜ `aktif_donus_tn` kullanılır, kapanış blok gövdesinde -1) · atama
+(yerel/alan/göze; hedef tip DÜĞÜMÜ `hedef_tn`), yapı alanı ve dizi literali (D-793). Dizi
+elemanının bağlam DÜĞÜMÜ `dizi_bek_tn` YALNIZ doğrudan çocuğa geçer (ebeveyn kurar, `kontrol_dugum`
+girişte tüketir) — `dizi_bek` dizgisi alt ağaca SIZAR ve çağrı argümanında sahte T013 üretir
+(E5a); yeni bir bağlam eklerken sızan dizgiyi değil düğüm kenarını kullan. Bağlamsız dizide
+referans ilk elemandır (`islev_tur_uyumsuz_se`). Annotasyonsuz yapı/işlev bağlaması (E5b) ve
+generic yapı alanı ikamesi (E5c) self'te tipsiz → oralarda self `--check` OK'u kanıt DEĞİLDİR.
+C tarafında: değer tipi HATA içeriyorsa (iç içe dâhil) uyumsuzluk tanısı basılmaz
+(`tip_hata_icerir`; bildirim · argüman · metot argümanı · `ver` · `sabit` · atama · yapı alanı ·
+dizi elemanı; bağlamsız dizide referans ilk eleman da). `dizi_ekle`/`dizi_yaz` eleman tipi ve
+eşitlik operand uyumu self'te İŞLEV-DIŞI tiplerde de yok (E4z).
 
 ### Tip Sistemi
 ```
