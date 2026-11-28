@@ -1,0 +1,4 @@
+// [D-800] RT006 — `gerçekzamanlı` değiştiricisi iki kez (C parser.c:304; ayrıştırıcı tanısı, WCET geçişi değil).
+// Öncesinde self bunu SESSİZCE kabul ediyordu (`OK`).
+gerçekzamanlı gerçekzamanlı işlev f() -> tam32 { ver 1; }
+işlev main() -> tam32 { ver 0; }

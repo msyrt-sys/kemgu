@@ -1,0 +1,3 @@
+// [D-800] P039 — `çıplak` değiştiricisi iki kez (C parser.c:313). Öncesinde self bunu SESSİZCE kabul ediyordu.
+çıplak çıplak işlev f() -> tam32 { ver 1; }
+işlev main() -> tam32 { ver 0; }

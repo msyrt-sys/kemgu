@@ -58,8 +58,9 @@
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
       Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796)
-      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799). ESLENEN KOD (D-799'da OLCULDU: self'in yaydigi farkli P kodu,
-      P000 haric; C'de 111): D-795 36 · D-796 44 · D-797 57 · D-798 65 · D-799 68. ⚠ Onceki elle tutulan sayac
+      -> 58 (D-797) -> 48 (D-798) -> 43 (D-799) -> 37 (D-800). ESLENEN KOD (D-799'da OLCULDU: self'in yaydigi
+      farkli P kodu, P000 haric; C'de 111): D-795 36 · D-796 44 · D-797 57 · D-798 65 · D-799 68 · D-800 74
+      (+ ayristirici RT006). ⚠ Onceki elle tutulan sayac
       (29/39/52/62) YANLISTI: tabani farkliydi ve birden cok yapida ortak kodlar (P200/P201, P210..P212) iki kez
       sayilmisti. Sayaci elle artirma; `bekle_k`/`parse_hata_*` cagrilarindaki kodlari say.
       (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
@@ -83,9 +84,13 @@
       satirici_asm 1778 · ust duzey 1873); self'te `ph_kis` cikisi YALNIZ `eşleş`te var, digerleri ilerleme
       korumasina (blok D-650, yapi D-657) ya da panik senkrona dayaniyor. Yeni bir dongu ilerlemesiz kalabilirse
       ayni cikisi eklemek gerekir; tanilar zaten `ph_kis` ile dusuruldugu icin cikti degismez.
-      KALAN 43 site (D-799 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · parse_birincil 6 ·
-      parse_kullan 5 · parse_sonek 3 · parse_yapi_olustur 3 · atla_tip_paramlar_sahipli 2 · parse_generic_args/
-      parse_islev_genel/parse_lambda/parse_tek_arg 1'er.
+      ✓ D-800 `kullan` + degistirici ailesi: `kullan` P041 segment · P042 `;` · P043 secili ad · P044 secili `}` ·
+      P045 takma ad · ayni degistirici iki kez RT006 (`gerçekzamanlı`) / P039 (`çıplak`) — self SESSIZCE kabul
+      ediyordu · degistiriciden sonra `işlev` yok → P018 + HATA ile HEMEN don (self ad/parametre/govde beklentilerini
+      de basiyordu). tc48_69..77; 30 sekil: once 27'si farkli, sonra hepsi birebir.
+      KALAN 37 site (D-800 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · parse_birincil 6 ·
+      parse_sonek 3 · parse_yapi_olustur 3 · atla_tip_paramlar_sahipli 2 · parse_generic_args/parse_lambda/
+      parse_tek_arg 1'er.
       ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
       tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
       S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
@@ -3956,3 +3961,15 @@
   TAM TAKIM (-j10 ölçümlü, 24:17): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
   checker_diff 373/373, FIXPOINT ✓, atlama izleri D-798 ile aynı desen (25). Açılış süresi beklemeden geçti
   (medyan 525,4 / 601,2 ms < 650, çekişme 12 / 15).
+- 2026-11-28 D-800: C0a — `kullan` ve işlev değiştirici tanıları (iki sessiz kabul kapandı).
+  `kullan`: P041 segment · P042 `;` · P043 seçili ad · P044 seçili `}` · P045 takma ad (parser.c:944/981/910/920/965).
+  `parse_islev_genel`: aynı değiştirici iki kez → `gerçekzamanlı` RT006 (304, ayrıştırıcı tanısı) / `çıplak` P039 (313);
+  self ikisini de SESSİZCE kabul ediyordu (`OK`). Değiştiriciden sonra `işlev` yok → C P018 + HATA ile HEMEN döner
+  (326); self ad/parametre/gövde beklentilerini (P014/P015/P012/P016/P017) de basıyordu. Aynı yol `özellik`/`uygula`
+  gövdesinde ve `dışa`/`genel` önekinde ölçüldü. 30 hata şekli (16 doğrudan + 14 komşu): HEAD ikilisinde 27'si
+  farklıydı, şimdi 30'u da birebir. Yalnız `codegen.kem` (D-734). Eşlenmemiş `bekle(p, "` 43 → 37; farklı P kodu
+  68 → 74 (P018 `parse_alan`da zaten vardı) + RT006. Fikstür tc48_69..77 (9 dosya; her biri eski ikilide farklı,
+  yenide C ile aynı). checker_diff 382/382. SABOTAJ S399-S408 10/10 rc=2.
+  TAM TAKIM (-j10 ölçümlü, 24:14): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 382/382, FIXPOINT ✓, atlama izleri D-799 ile aynı desen (25). Açılış süresi beklemeden geçti
+  (medyan 483,0 / 612,5 ms < 650, çekişme 14 / 16).
