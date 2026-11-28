@@ -1,0 +1,21 @@
+// [D-805] Çağrı grafı: görev ρ_sahip dizisini bir yardımcıya verir, yardımcı onu PARAMETRESİYLE kanala
+// gönderir (P2). Eski self yardımcının `v`sini spawn edendeki skaler `v` sandı (yanlış kapsam) VE
+// `ver` ifadesinin içini hiç taramıyordu.
+// RHO_BEKLE: 0
+işlev gonder(k: kanal<Dizi<tam32>>, v: Dizi<tam32>) -> tam32 {
+    kanal_gönder(k, v);
+    ver 0;
+}
+işlev main() -> tam32 {
+    değişken v: tam32 = 7;
+    değişken k: kanal<Dizi<tam32>> = kanal_oluştur(1);
+    eşleş görev_başlat(|| { değişken d: Dizi<tam32> = [40, 2]; ver gonder(k, d); }) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);
+            değişken al: Dizi<tam32> = kanal_al(k);
+            ver dizi_al(al, 0) + dizi_al(al, 1) + z + v - 7;
+        }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}

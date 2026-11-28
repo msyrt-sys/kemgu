@@ -226,11 +226,27 @@
       basarisizlikta PANIK). Bare-metal (RNDR/RDRAND) KAPSAM DISI, ayri is.
 - [x] D5e -> D-709/710/713; D-714 kapiyi IKI derleyiciye genisletti (self-host 7/255 idi:
       `sabitsure<dtam64>` ll_tip kirpmasi + dar eleman INDEKS).
-- [ ] D6a [M] Gorev govdesi icin escape ozeti (D9a'ya bagli).
-- [ ] D6b [M] Hapsedilme kurali + yeni tani kodu.
-- [ ] D6c [M] Kanit varsa bolgeyi serbest birak.
-- [ ] D6d [M] ASan altinda UAF kapisi.
-- [ ] D6e [S] Sabotaj: hapsedilme denetimini gevset -> ASan kirmizi OLMALI.
+- [x] D6a -> D-309 (kanit P1-P4 + cagri grafi kapanisi, C) + D-805 (self aynasi SAGLAMSIZDI, onarildi).
+      [M] Gorev govdesi icin escape ozeti (D9a'ya bagli). ⚠ D-805 OLCUMU: ozgun D6 maddesi README'nin
+      "gorev bolgesi HIC serbest birakilmiyor" cumlesinden kopyalanmisti — D-309'dan beri BAYATTI.
+      Kalan hassasiyet borcu → D6f.
+- [x] D6b -> D-806 KARAR (2026-11-28, Opus onerisi): YENI TANI KODU YOK. [M] Hapsedilme kurali + yeni tani
+      kodu. OLCULDU: dilin tani sistemi TEK sinif (`hata[KOD]`, src/hata.h) — uyari sinifi yok; yani bir hapsedilme
+      tanisi bugun ancak RET olabilir. Kanitsiz gorev GUVENLIDIR (bolge sizar, UAF olmaz; D-309 ilkesi). Ret,
+      korpusta kanitin 0 verdigi 10 baslatma yerini (6 dosya: gorev_temel ornegi, DRF gorunurluk testi, D-628
+      bagli kapanis, D-309 kacis fiksturu dahil) GECERSIZ kilardi. Kanit paritesini D-805 kapisi zaten olcuyor.
+      Gercek ihtiyac (cok sayida isaretci donduren gorevin bellek sizintisi) olculurse uyari sinifi tasarimiyla
+      yeniden acilir.
+- [x] D6c -> D-309 (kanit varsa join'de `kdl_bolge_serbest`; D-805'te olculdu: korpusta 14 gorev baslatma yerinde bayrak 1).
+- [x] D6d -> D-805 (`calistir_gorev_rho`: C↔self bayrak paritesi + test/gorev_rho beklentileri + IKI
+      derleyiciyle ASan; runtime ASan'la KAYNAKTAN derlenir).
+- [x] D6e -> D-805 (S508/S509/S511/S515/S516 → ASan heap-use-after-free ya da beklenti/parite kirmizi).
+- [ ] D6f [M] P1 HASSASIYETI (D-805 olcumu): kanit yerlesik cagrinin SKALER donusunu taniyamiyor →
+      `ver dizi_al(d, 0) + dizi_al(d, 1)` (Dizi<tam32>) IKI derleyicide de bayrak 0 (gorev bolgesi sizar).
+      Korpusta etkilenen: test/e4k/gorev_buyume (`ver dizi_boyut(d)`). Aday: `dizi_al` (eleman skaler,
+      INDEKS kuraliyla ayni), `dizi_boyut`, `metin_uzunluk`. Ayrica self'te desen/`için` baglamalari ve
+      cagrilan govdedeki kuresel adlar BILEREK kanitlanmaz (C bunlari kesin bilir) — korpusta bugun parite
+      farki yok; olusursa `calistir_gorev_rho` kirmizi verir.
 - [ ] D7a [M] Ayrik derleme: arayuz dosyalari (imza-only cikti).
 - [ ] D7b [M] Ayrik derleme: glob import.
 - [ ] D7c [M] Ayrik derleme: opak tipler.
@@ -634,7 +650,8 @@
       (D-803 yol ustu, onceden var; self DOGRU). `src/llvm.c` hoist_renumber satirdaki HER `%` + rakami SSA
       yazmaci sayiyor, tirnak icindeki asm sablonu dahil. OLCULDU (arm64): `şablon: r#"mov $0, #(101%1)"#` → C IR
       `#(101%2)`, exit 1; self `#(101%1)`, exit 0 (dogrusu 0). `#(100%2)` → C `#(100%0)` → assembler red. Gecerli
-      sablonlar operand icin `$N` kullanir (depodaki 765 sablon tarandi: `%<rakam>` yalniz tc80 ayristirma
+      sablonlar operand icin `$N` kullanir (depodaki 249 sablon tarandi — D-803'un "765"i git'in yok saydigi
+      `.claude/worktrees` kopyalarini da sayiyordu, D-805'te duzeltildi: `%<rakam>` yalniz tc80 ayristirma
       fiksturlerinde, onlar codegen'e ulasmaz) → etki GNU as `%` mod operatoru gibi nadir bicimlerle sinirli, ama
       sinif deponun en agiri (derleme temiz, cevap yanlis).
       Onarim: renumber cift tirnak icini atlamali; fikstur: `#(101%1)` (iki tarafta exit 0), sabotaj: atlamayi kaldir.
@@ -654,6 +671,12 @@
       yok). Yorumu "tek elemanli dizi" diyor, o da dogru degil.
       Onarim: (a) `kod_metin(10)`; (b) metin_bayt/metin_kes ile `\n`den bol. `test_dosya` main'i ikisini de
       CAGIRMIYOR → kapiya baglanmali (D-440 sinifi: kosmayan test).
+- [ ] G20 [S] GOREV BLOK-FORM GOVDESINDE ISARETCI DONDUREN BAZI `ver`LER IKI DERLEYICIDE DE GECERSIZ IR
+      (D-805 yol ustu, onceden var; LINK-RED, sessiz degil). OLCULDU: (a) `eğer`/`eşleş` kolu icinde `ver x`
+      (x: Dizi<T>), (b) ust duzeyde `ver y[0]` (y: Dizi<Dizi<T>>) → C `ret i64 %<ptr>` (ptrtoint yok), self
+      `store ptr %<i64>` (inttoptr yok). Ust duzey `ver x` (tanimlayici) CALISIYOR (r02 exit 42).
+      Maskeledigi: test/gorev_rho/r05 yalniz YAPISAL olculebiliyor
+      (`KOSUM: yok`). Onarim sonrasi r05 kosuma alinmali.
 
 ## Gunluk
 - 2026-08-31 D-523: `Dizi<T>` iceren kullanici yapisi goreve yakalanirsa L002 (C + checker.kem + codegen.kem). Skaler alanli yapi MUAF. checker_diff 169/169, ct_bariyer 14/14, codegen_diff 162/162, drf_test 54/54.
@@ -4146,3 +4169,60 @@
   stdlib davranış testleri geçti (yeni `test_dosya` bölümleri dahil), atlama izleri D-803 ile aynı. D-794'ün bekleme
   yolu ateşlenmedi (iki medyan 475,2 / 641,3 ms, eşik 650). Bütçe uyarıları (çekirdek_onbellek 158 sn, asan_denetim
   83,1 sn, codegen_diff 67,5 sn) önceki koşumlarda da var, yeni değil.
+- 2026-11-28 D-805: D6 — görev bölgesi (ρ_sahip) hapsedilme kanıtının SELF-HOST aynası SAĞLAMSIZDI (canlı UAF).
+  Sırada'nın en üstü D6a ("görev gövdesi için escape özeti, D9a'ya bağlı") idi. ÖNCE ÖLÇÜLDÜ: özgün D6 maddesi
+  README'nin "görev bölgesi HİÇ serbest bırakılmıyor" cümlesinden kopyalanmıştı ve D-309'dan beri BAYATTI — C kanıtı
+  (P1 dönüş skaler · P2 kanal yükü skaler · P3 iç görev yok · P4 dolaylı çağrı yok + çağrı grafı kapanışı) ve join'de
+  koşullu serbest bırakma VAR. Ama iki derleyicinin kanıt PARİTESİNİ hiçbir kapı ölçmüyordu (`codegen_diff` çıkış
+  koduna bakar; serbest bellekteki eski değerler yüzünden UAF'lı program yine 42 döner). Düşmanca problar self'te
+  ÜÇ sağlamlık açığı buldu; üçü de ASan heap-use-after-free, ASan'sız exit 42 (SESSİZ UAF), C üçünde de doğru (0):
+  (1) BAĞLAMA ÇÖZÜMÜ: `rho_ad_skaler` `ver x`in bağlı olduğu bildirimi aramıyordu — alt ağaçta HERHANGİ bir skaler
+  `x`, yoksa dış kapsamdaki skaler `x` yetiyordu. Ölçülen: dış işlevde `değişken x: tam32` + görevde `değişken x:
+  Dizi<tam32> = [40, 2]; ver x;` → self bayrak 1; gövde içi iç-blok gölgelemesi de aynı. (2) YANLIŞ KAPSAM: çağrı
+  grafı kapanışında çağrılan işlevin gövdesi kök alınıyor, parametreleri bağlama sayılmıyor ve bağlanmamış adlar
+  SPAWN EDEN işlevin `cg_var` tablosundan çözülüyordu: yardımcının parametresi `v` spawn edendeki skaler `v` sanıldı,
+  kanala giden ρ_sahip dizisi P2'den geçti. (3) `ver` İFADESİNİN İÇİ TARANMIYORDU (`ver yanlış;`): `ver gonder(k, d)`
+  içindeki çağrının gövdesi hiç taranmıyor → P2/P3/P4 görünmüyordu (C `rho_confine_tara(ver.deger)` tarar).
+  ONARIM (yalnız self; C bağlamayı `cozum_sembol` ile kesin bilir): adın kökteki TÜM bağlamaları (değişken/parametre
+  annotasyonu skaler; `için` değişkeni ve `eşleş` desen bağlamaları — yapı deseni alanları `dyf_*` dahil — tipi
+  bilinmediği için skaler SAYILMAZ) ve görev gövdesinde dış bağlaması skaler olmalı; çağrılan gövdede kök = ISLEV
+  düğümü (parametreler bağlama) ve dış kapsam KAPALI; `ver` ifadesi taranır. Eski `rho_ad_skaler`/`rho_ad_elem_skaler`
+  silindi. Bedel (bilinçli): desen/`için` bağlamaları ve çağrılan gövdedeki küresel adlar self'te kanıtlanmaz — korpusta
+  bugün parite farkı YOK (ölçüldü); oluşursa yeni kapı kırmızı verir → D6f'e yazıldı.
+  YENİ KAPI `calistir_gorev_rho` (test_tumu'da): (1) PARİTE — görev başlatan her depo dosyasında C ve self aynı bayrak
+  dizisi (14 dosya; yalnız biri IR üretirse de kırmızı); (2) BEKLENTİ — test/gorev_rho/r01..r06 `RHO_BEKLE` başlığı,
+  iki derleyicide; (3) SAĞLIK — iki derleyiciyle ASan altında koşum (exit 42 + ASan hatası yok); çalışma zamanı ASan'la
+  KAYNAKTAN derlenir. Fikstürler: r01 dış skaler gölge · r02 iç blok gölge · r03 çağrılan parametre (P2) · r04 `ver`
+  içinde iç görev (P3; bayrak 1,0) · r05 desen gölgesi (yalnız yapısal: G20) · r06 POZİTİF (dizi ayırır, skaler döner →
+  1). Eski self r01/r02/r03/r05'te 1, r04'te 1,1 veriyordu.
+  SABOTAJ S508-S517: 7/7 kırmızı (self `ver` taraması · tüm-bağlama kuralı · çağrılan kök · desen bağlaması · aşırı
+  tutucu kural [parite 4 dosyada + r06] · C TANIMLAYICI daima skaler · runtime bayrağı yok sayar → YALNIZ ASan
+  yakaladı, bayraklar değişmedi: (3)'ün bağımsız değeri). 3/3 BEKLENEN SESSİZ: çağrılan gövdede dış kapsam koruması
+  ve `için` bağlaması savunma amaçlı (iyi tipli ayırt edici şekil kurulamadı — işaretçi dönen görevin son `ver`i
+  P1'den zaten düşüyor; eski self de 0 veriyor); enstrümansız runtime + bayrağı yok sayan runtime → ASan KÖR (harness
+  açıklamasının iddiası ÖLÇÜLDÜ).
+  ⚠ ÖLÇÜM ARACI: kapının ilk sürümü 46 yerine ~150 dosya ölçtü — düz `grep -r .`, git'in yok saydığı
+  `.claude/worktrees/` altındaki başka oturumların kopyalarını tarıyordu. Kendi kabuğumda görünmüyordu çünkü orada
+  `grep` bir kabuk İŞLEVİYDİ ve o dizinleri atlıyordu (ölçüldü: 0 / 106 eşleşme). Kapı `git ls-files`e geçti. Aynı
+  hata D-803'ün G17 notundaki "765 şablon" sayımını da şişirmişti (Python `os.walk`): depo dosyalarında 249; sonuç
+  (codegen'e ulaşan `%<rakam>` yok) değişmedi, not düzeltildi.
+  ⚠ PROB HATALARI: g2 ve g10b ayırt edici DEĞİLDİ — ikinci `ver` zaten bir dizi döndürüyordu / çağrılan işlevin
+  `ver tamam(d)` dönüşü P1'den düşüyordu, eski self de 0 veriyordu. Sonuç tek başına ölçülmeden fikstür yapılmadı.
+  YOL ÜSTÜ (Sırada'ya): D6f (P1 yerleşik dönüşü: `ver dizi_al(d,0)+dizi_al(d,1)` iki derleyicide 0) · G20 (görev
+  blok-form gövdesinde işaretçi döndüren iç-blok `ver x` ve üst düzey `ver y[0]` iki derleyicide de geçersiz IR).
+  TAM TAKIM (-j10 ölçümlü, 25:28): 192 kapının 192'si geçti (yeni `calistir_gorev_rho` dahil), rc=0, disk denetimi
+  temiz (yeni geçici dizin 0), checker_diff 460/460, codegen_diff 233/233, FIXPOINT ✓ (stage1 == stage2, 111011
+  satır), atlama izleri D-804 ile aynı. D-794'ün bekleme yolu ateşlendi: 654,8 ms (çekişme 15) → sessizlik →
+  507,7 ms (çekişme 0) → geçti. Bütçe uyarıları (açılış süresi, çekirdek_onbellek, asan_denetim, codegen_diff)
+  önceki koşumlarda da var.
+- 2026-11-28 D-806: D6b KARAR — görev hapsedilme kanıtı için YENİ TANI KODU EKLENMEDİ (Opus önerisi, muhafazakâr).
+  Sırada'nın en üstü D6b'ydi ("hapsedilme kuralı + yeni tanı kodu"). ÖLÇÜLDÜ: KEMGU'nun tanı sistemi tek sınıftır
+  (`hata[KOD]`, src/hata.h: biçim, LSP geri çağırımı ve `hata_raporla` — uyarı/seviye kavramı YOK). Dolayısıyla bir
+  hapsedilme tanısı bugün yalnız bir RET olabilir. Kanıtsız görev ise güvenlidir: bölge join'de serbest bırakılmaz,
+  sızar; UAF olmaz (D-309'un "sızıntı bir hata, UAF bir felaket" ilkesi; D-591 kararı sızıntıyı kabul etmişti).
+  Retin bedeli ölçüldü: D-805 paritesinin bayrak dökümüne göre korpusta kanıtın 0 verdiği 10 başlatma yeri, 6 geçerli
+  dosyada (test/ornekler/gorev_temel · test/drf_gorunurluk · cg_gorev_bagli_kapanis [D-628] · cg_gorev_desen_ic_tip ·
+  cg_rho_sahip_kacis [D-309 kaçış fikstürü] · e4k/gorev_buyume). Hepsi reddedilirdi. Uyarı sınıfı eklemek ise tanı
+  dökümü biçimini, LSP'yi ve iki checker'ı birden değiştiren ayrı bir dil yüzeyi işidir. Kanıtın kendisi D-805'ten
+  beri `calistir_gorev_rho` ile ölçülüyor. Kod değişikliği YOK; gerçek bir ihtiyaç ölçülürse (çok sayıda işaretçi
+  döndüren görevin bellek sızıntısı) uyarı sınıfı tasarımıyla yeniden açılır.

@@ -1,0 +1,14 @@
+// [D-805] Görev gövdesi İÇİNDE gölgeleme: skaler `x` iç blokta (önce), işaretçi `x` üst düzeyde ve `ver x`.
+// Eski self alt ağaçtaki HERHANGİ bir skaler `x` bildirimini kanıt sayıyordu.
+// RHO_BEKLE: 0
+işlev main() -> tam32 {
+    eşleş görev_başlat(|| {
+        eğer doğru { değişken x: tam32 = 1; }
+        değişken x: Dizi<tam32> = [40, 2];
+        ver x;
+    }) {
+        tamam(g) => { değişken d: Dizi<tam32> = görev_birleştir(g); ver dizi_al(d, 0) + dizi_al(d, 1); }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}

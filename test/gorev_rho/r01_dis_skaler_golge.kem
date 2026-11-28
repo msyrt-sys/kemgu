@@ -1,0 +1,12 @@
+// [D-805] Dış işlevde SKALER `x`; görev gövdesi kendi `x`ini ρ_sahip'te DİZİ olarak bildirip döndürür.
+// Eski self dış `x`i bulup bayrağı 1 yapıyordu → join'de serbest → çağıran SERBEST bellekten okur
+// (ASan heap-use-after-free; ASan'sız exit 42 = SESSİZ UAF). C bağlamayı kesin bilir: 0.
+// RHO_BEKLE: 0
+işlev main() -> tam32 {
+    değişken x: tam32 = 5;
+    eşleş görev_başlat(|| { değişken x: Dizi<tam32> = [40, 2]; ver x; }) {
+        tamam(g) => { değişken d: Dizi<tam32> = görev_birleştir(g); ver dizi_al(d, 0) + dizi_al(d, 1) + x - 5; }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}

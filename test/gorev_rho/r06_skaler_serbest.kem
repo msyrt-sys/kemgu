@@ -1,0 +1,10 @@
+// [D-805] POZİTİF: gövde ρ_sahip'te dizi ayırır, SKALER döndürür → bölge join'de serbest bırakılır.
+// Kural aşırı tutucu hâle gelirse (her şeyi reddeden sabotaj) bu fikstür kırmızıya döner.
+// RHO_BEKLE: 1
+işlev main() -> tam32 {
+    eşleş görev_başlat(|| { değişken d: Dizi<tam32> = [40, 2]; değişken t: tam32 = d[0] + d[1]; ver t; }) {
+        tamam(g) => { ver görev_birleştir(g); }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}

@@ -1,0 +1,18 @@
+// [D-805] P3 `ver` içinde: görev, kendisi iç içe görev başlatan bir yardımcının sonucunu döndürür.
+// İç görev (`|| 21`) serbest bırakılabilir (1), dış görev P3 yüzünden bırakılamaz (0).
+// Eski self `ver` ifadesini taramadığı için dış görevi de 1 yapıyordu.
+// RHO_BEKLE: 1,0
+işlev ic_baslat() -> tam32 {
+    eşleş görev_başlat(|| 21) {
+        tamam(g) => { ver görev_birleştir(g) * 2; }
+        hata(e) => { ver 0; }
+    }
+    ver 0;
+}
+işlev main() -> tam32 {
+    eşleş görev_başlat(|| { değişken d: Dizi<tam32> = [1]; ver ic_baslat(); }) {
+        tamam(g) => { ver görev_birleştir(g); }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}

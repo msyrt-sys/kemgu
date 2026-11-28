@@ -1,0 +1,16 @@
+// [D-805] Desen bağlaması gölgeliyor: dış SKALER `x`; görev içinde `tamam(x)`/`hata(x)` ρ_sahip dizisine
+// bağlanır ve döndürülür. Eski self 1 veriyordu; yalnız YAPISAL ölçülür.
+// RHO_BEKLE: 0
+// KOSUM: yok (G20: iç içe blokta işaretçi döndüren `ver` iki derleyicide de bağlanamıyor)
+işlev main() -> tam32 {
+    değişken x: tam32 = 5;
+    eşleş görev_başlat(|| {
+        değişken d: Dizi<tam32> = [40, 2];
+        değişken r: sonuç<Dizi<tam32>, Dizi<tam32>> = tamam(d);
+        eşleş r { tamam(x) => { ver x; } hata(x) => { ver x; } }
+    }) {
+        tamam(g) => { değişken d: Dizi<tam32> = görev_birleştir(g); ver dizi_al(d, 0) + dizi_al(d, 1) + x - 5; }
+        hata(e) => { ver 1; }
+    }
+    ver 99;
+}
