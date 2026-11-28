@@ -23,7 +23,14 @@
       (d) paralel koşum ön koşulları: paylaşılan build/ yazımları (D-468), sabit portlar, QEMU soket adları;
       (e) tekrar eden işler (aynı ELF/imaj, aynı fsck) ve sleep/zaman aşımı payları; (f) değişikliğe göre
       kapı seçimi (belge-yalnız değişiklikte tam takım gereksiz).
-- [ ] AÇILIŞ SÜRESİ KAPISI YÜK ALTINDA EŞİKTE (D-791'de ölçüldü): `calistir_bm_x86_acilis_suresi`in ikinci
+- [x] ✓ D-794 — AÇILIŞ SÜRESİ KAPISI ÇEKİŞME KARARI: eşik ve ölçüm DEĞİŞMEDİ; çekişme altında (başka `qemu-system`
+      süreçleri koşarken) eşiği aşan ölçüm karar sayılmıyor → sessizlik beklenir (≤20 dk), yeniden ölçülür, kararı
+      sessiz ölçüm verir; çekişmesiz aşım HEMEN kırmızı (`tests/qemu/acilis_karar.py` + QEMU'suz kapı
+      `calistir_acilis_karar`, sabotaj 7/7). Ölçülenler: konuk TSC TCG'de host saatinden türer (konuk 708,9 / host
+      720,6) → "konuk damgası" seçeneği ÇÜRÜDÜ; uzun QEMU kapılarına barikat yetmez (bittiklerinde 70+ kapı hâlâ
+      koşuyor); kapının iki yapılandırması kendi içinde EŞZAMANLI koşuyor (kardeş etkisi küçük: C 402→387, self
+      502→508 ms; self çekirdeği C'den ~%30 yavaş açılıyor — ayrı not).
+      (ESKİ METİN:) AÇILIŞ SÜRESİ KAPISI YÜK ALTINDA EŞİKTE (D-791'de ölçüldü): `calistir_bm_x86_acilis_suresi`in ikinci
       yapılandırması `-j10` tam takımda üç koşuda medyan 645,8 (geçti) / 679,6 / 685,4 ms (düştü); kapı tek başına
       501,8 / 521,6 ms; eşik 650 ms. Ölçüm duvar saatidir ve QEMU'lar çekirdekleri paylaşır → yükle ~%30 şişiyor; kapı
       derleyici değişikliğinden BAĞIMSIZ olarak tesadüfen kırmızı veriyor (D-790/D-791 kod üretimine dokunmuyordu,
@@ -3793,3 +3800,34 @@
   `asan_denetim` 84,6 · `codegen_diff` 69) önceki koşumların aralığında (157–202 · 84–109 · 68–87) ve yükle
   açıklanıyor: self checker `selfhost/codegen.kem` üzerinde eski 0,90–0,91 sn / yeni 0,91–0,92 sn, çıktı birebir.
   checker_diff 328/328 (0 muaf), codegen semantik 232/232, FIXPOINT ✓.
+- 2026-11-28 D-794: AÇILIŞ SÜRESİ KAPISI ÇEKİŞME KARARI (test altyapısı; derleyici değişikliği YOK).
+  Kuyruğun başındaki kalem. Üç seçenek ÖLÇÜLDÜ: (1) konuk-içi zaman damgası ÇÜRÜDÜ — x86 konuk ARM64 konakta TCG ile
+  koşuyor, konuk TSC'si host saatinden türüyor; yük altında konuk ve host aynı oranda şişiyor (708,9 / 720,6 ms; yedi
+  takım logunda fark ≤%2). (2) "takımın sonunda seri koş": `build/zaman.tsv` zaman çizelgesi uzun QEMU kapılarına
+  (X86_UZUN_KAPILAR) barikatın YETMEDİĞİNİ gösterdi — sonuncusu 739. sn'de bitiyor, o andan sonra 70+ kapı (takımın
+  yarısı) koşuyor, açılış kapısıyla eşzamanlı 13 kapı vardı; tam barikat `test_tumu`yu iki faza bölmeyi gerektirir ve
+  kapı seçici/harita araçları önkoşul ağacını okuyor (`make_tarifleri.py`). (3) eşiği yükseltmek yasaktı. SEÇİLEN
+  (muhafazakâr): eşik ve ölçüm aynen; karar `tests/qemu/acilis_karar.py`ye taşındı — ilk ölçüm eşik altıysa geçer,
+  aşım + çekişme YOKSA hemen kırmızı, aşım + çekişme (ölçüm sırasında başka `qemu-system` süreci; /proc taraması,
+  kendi QEMU'muz o an kapalı — `boot` çıkışta öldürüp bekliyor) VARSA ≤20 dk sessizlik (3 sn kesintisiz sıfır)
+  beklenir, yeniden ölçülür, kararı o verir; sessizlik sağlanamazsa da yeniden ölçüm karar verir. Sessiz ortamda
+  eşiği aşan hiçbir açılış geçmez. YOL ÜSTÜNDE ÖLÇÜLDÜ: kapının iki yapılandırması (C/self çekirdeği) kendi içinde
+  EŞZAMANLI koşuyor (`SUREC_PARALEL`, tam takımda da: 10×2 = 20 CPU sınırını aşmıyor) ve birbirinin QEMU'sunu görüyor
+  (izle: ebeveyni kardeş kâhin olan qemu); sıralı koşumla kardeş etkisi küçük (C 402→387, self 502→508 ms) ama süre
+  60 → 113 sn → paralel korundu, kardeş de çekişme sayılıyor (daha muhafazakâr). Self çekirdeği C'den ~%30 yavaş
+  açılıyor (sıralı 387 / 504 ms) — ayrı performans notu. GERÇEK QEMU DENEYLERİ (geçici sarmalayıcı, eşik 300, commit
+  edilmedi): T1 eşik 650 → çekişme 1, bekleme yok, geçti · T2 sıralı → çekişme 0, HEMEN kırmızı · T3 paralel → C
+  çekişmesiz hemen kırmızı, self çekişme 1 → 3 sn bekleme → çekişme 0 ile yeniden ölçüm → kırmızı. KAPI
+  `calistir_acilis_karar` (QEMU'suz, takımda): 8 karar durumu + sahte /proc sayımı + sessizlik/zaman aşımı + kâhinin
+  karara bağlılığı. SABOTAJ 7/7 (S340 çekişmesiz aşım geçer · S341 yeniden ölçüm yok sayılır · S342 yalnız host ·
+  S343 QEMU sayılmaz · S344 zaman aşımı sessiz sayılır · S345 eşiğe eşit geçer · S346 kâhin karara bağlı değil) →
+  hepsi rc=2, her biri kendi beklenen durumunda. ⚠ ÖLÇÜM ARACI HATASI: ilk zincirde S341 S340'ın mesajını verdi —
+  Python `.pyc` geçerliliği (kaynak mtime saniyesi + boyut); iki sabotaj aynı saniyede aynı boyutta (−1 bayt) dosya
+  üretti, bayat bayt kodu koştu. `PYTHONDONTWRITEBYTECODE=1` + önbellek silinerek yinelendi (CLAUDE.md kontrol listesine
+  eklendi). Deneylerin tanı dizinleri temizlendi (disk denetimi rc=0).
+  TAM TAKIM (-j10 ölçümlü, 25:18): 191 kapının 191'i geçti (yeni `calistir_acilis_karar` dâhil), rc=0, disk denetimi
+  temiz, checker_diff 328/328, FIXPOINT ✓. YENİ YOL GERÇEK KOŞULDA ATEŞLENDİ: C yapılandırması 14 yabancı QEMU
+  altında 531,9 ms (eşik altı, bekleme yok); self yapılandırması 17 yabancı QEMU altında 662,5 ms → eşik aşıldı →
+  464 sn sessizlik beklendi → çekişme 0 ile 509,8 ms → geçti. D-794 olmasa bu koşum kalemin tarif ettiği sahte
+  kırmızıyı verirdi. Bedel: kapı 9:49 sürdü (bütçe uyarısı 588,8 > 77 sn — bekleme yolunun işareti, log'da
+  ACILIS_KARAR satırları), takım duvarı yalnız ~41 sn uzadı (24:37 → 25:18; kapı beklerken tek iş yuvası tuttu).

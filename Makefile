@@ -4819,6 +4819,13 @@ test_tumu: calistir_kapi_butcesi
 calistir_kapi_butcesi: | $(BUILD)
 	@python3 test/kapi_butce_test.py
 
+# [D-794] Açılış süresi kapısının çekişme kararı (QEMU'suz): çekişmesiz aşım hemen kırmızı,
+# çekişmeli aşımda kararı sessiz yeniden ölçüm verir. Karar mantığı tests/qemu/acilis_karar.py.
+.PHONY: calistir_acilis_karar
+test_tumu: calistir_acilis_karar
+calistir_acilis_karar: | $(BUILD)
+	@python3 test/acilis_karar_test.py
+
 X86_UZUN_KAPILAR := $(addprefix calistir_bm_x86_,\
 	ag_saglamlik_c_aktarim ag_saglamlik_self_aktarim dosyalar ekran_fare kaynak \
 	kabuk14 v1 tftp_teshis tcp_verim ps2_irq ps2_karma)
