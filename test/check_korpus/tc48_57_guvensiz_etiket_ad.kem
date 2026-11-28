@@ -1,0 +1,7 @@
+// [D-798] P240 — `güvensiz` açıklama adı yerine sayı (C parser.c:1556). P240..P243 aynı konumda
+// basamaklanır. Öncesinde dördü de P000 basıyordu ve aynı-konum-aynı-kod bastırması (eşik 3)
+// sonraki TÜM tanıları yutuyordu: C 9 tanı, self 3. Kodlar ayrışınca bastırma tetiklenmiyor.
+işlev main() -> tam32 {
+    güvensiz [5: "a"] { }
+    ver 0;
+}

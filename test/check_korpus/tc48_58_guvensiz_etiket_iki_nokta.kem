@@ -1,0 +1,5 @@
+// [D-798] P241 — `güvensiz` açıklama adından sonra `:` eksik (C parser.c:1558).
+işlev main() -> tam32 {
+    güvensiz [neden "a"] { }
+    ver 0;
+}

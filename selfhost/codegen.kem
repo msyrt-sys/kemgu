@@ -1770,7 +1770,7 @@ işlev parse_ifade_veya_atama(p: &değişken Ayr) -> tam32 {
     eğer sim_mi(p, "ESIT") {
         ilerle(p);
         değişken dg: tam32 = parse_ifade(p);
-        bekle(p, "NOKTALI_VIRGUL");
+        bekle_k(p, "NOKTALI_VIRGUL", "P100");   // [D-798] C parser.c:1247
         ver dugum2(p, "ATAMA", "", s, u, e, dg);
     }
     bekle_k(p, "NOKTALI_VIRGUL", "P101");   // [D-650] C parser.c:1254
@@ -1800,8 +1800,8 @@ işlev parse_icin(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // için
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
-    bekle(p, "IKI_NOKTA");
+    bekle_k(p, "TANIMLAYICI", "P200");   // [D-798] C parser.c:1322
+    bekle_k(p, "IKI_NOKTA", "P201");     // [D-798] C parser.c:1324
     değişken kol: tam32 = parse_kosul(p);
     değişken govde: tam32 = parse_blok(p);
     ver dugum2(p, "ICIN", ad, s, u, kol, govde);
@@ -1811,10 +1811,10 @@ işlev parse_guvensiz(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // güvensiz
     eğer sim_mi(p, "SOL_KOSELI") {     // [etiket: "..."] (dump'ta yok, tüket)
         ilerle(p);
-        bekle(p, "TANIMLAYICI");
-        bekle(p, "IKI_NOKTA");
-        bekle(p, "METIN");
-        bekle(p, "SAG_KOSELI");
+        bekle_k(p, "TANIMLAYICI", "P240");   // [D-798] C parser.c:1556
+        bekle_k(p, "IKI_NOKTA", "P241");     // [D-798] C parser.c:1558
+        bekle_k(p, "METIN", "P242");         // [D-798] C parser.c:1559
+        bekle_k(p, "SAG_KOSELI", "P243");    // [D-798] C parser.c:1561
     }
     ver dugum1(p, "GUVENSIZ", "", s, u, parse_blok(p));
 }
@@ -1907,7 +1907,7 @@ işlev parse_desen(p: &değişken Ayr) -> tam32 {
 işlev parse_esles_kolu(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     değişken desen: tam32 = parse_desen(p);
-    bekle(p, "KALIN_OK");
+    bekle_k(p, "KALIN_OK", "P220");   // [D-798] C parser.c:1493
     değişken govde: tam32 = 0;
     eğer sim_mi(p, "SOL_SUSLU") { govde = parse_blok(p); }
     değilse { govde = parse_ifade(p); bekle_k(p, "NOKTALI_VIRGUL", "P221"); }   // [D-653] C parser.c:1501
@@ -1918,13 +1918,13 @@ işlev parse_esles(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // eşleş
     değişken kids: Dizi<tam32> = [];
     dizi_ekle(kids, parse_kosul(p));   // eşleşen değer
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P230");   // [D-798] C parser.c:1520
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
         değilse { dizi_ekle(kids, parse_esles_kolu(p)); }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P231");   // [D-798] C parser.c:1531
     ver dugum_n(p, "ESLES", "", s, u, kids);
 }
 // satıriçi_asm { mimari: X  şablon: r#".."#  çıktı("k",&v) girdi("k",e) bozulan("k") çevrim: N }

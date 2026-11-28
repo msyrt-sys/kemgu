@@ -1,0 +1,6 @@
+// [D-798] P201 — `için` değişkeninden sonra `:` eksik (C parser.c:1324).
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [1];
+    için x xs { }
+    ver 0;
+}

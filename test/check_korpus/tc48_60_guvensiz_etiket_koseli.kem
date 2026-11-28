@@ -1,0 +1,5 @@
+// [D-798] P243 — `güvensiz` açıklamasında `]` eksik (C parser.c:1561).
+işlev main() -> tam32 {
+    güvensiz [neden: "a" { }
+    ver 0;
+}

@@ -1,0 +1,7 @@
+// [D-798] P100 — atama deyiminden sonra `;` eksik (C parser.c:1247); tanı izleyen `ver`e bağlanır.
+işlev main() -> tam32 {
+    değişken x: tam32 = 0;
+    x = 1
+    ver x;
+    ver 0;
+}

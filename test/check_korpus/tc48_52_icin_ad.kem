@@ -1,0 +1,6 @@
+// [D-798] P200 — `için` döngü değişkeni yerine sayı (C parser.c:1322); ardından P201 aynı konumda.
+işlev main() -> tam32 {
+    değişken xs: Dizi<tam32> = [1];
+    için 5: xs { }
+    ver 0;
+}

@@ -1,0 +1,6 @@
+// [D-798] P220 — `eşleş` kolunda `=>` eksik (C parser.c:1493).
+işlev main() -> tam32 {
+    değişken x: tam32 = 1;
+    eşleş x { 1 2; _ => 3; }
+    ver 0;
+}
