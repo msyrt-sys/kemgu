@@ -3029,6 +3029,16 @@ static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d) {
             int uz = 0;
             const char *ad = rho_cagri_adi_ileri(d->veri.cagri.hedef, &uz);
             if (!ad) { c->ihlal = 1; return; }   /* P4: dolaylı/hesaplanmış çağrı */
+            /* [D-809] P4: hedef bir DEĞİŞKEN/PARAMETRE bağlamasına çözülüyorsa çağrı DOLAYLIDIR
+             * — aynı adlı küresel bir işlev olsa bile yerel bağlama onu gölgeler. Aşağıdaki
+             * `islev_bul` ADLA arar: yerel kapanış `f` küresel `f`yi gölgelediğinde kanıt küresel
+             * `f`nin zararsız gövdesine iniyor, ÇALIŞAN kapanışın gövdesini hiç görmüyordu
+             * (ölçüldü: bayrak 1, ASan heap-use-after-free). Yerleşikler ve kullanıcı işlevleri
+             * SEMBOL_ISLEV'dir (ya da bağlamasızdır). */
+            if (d->veri.cagri.hedef->tip == DUGUM_TANIMLAYICI && d->veri.cagri.hedef->cozum_sembol &&
+                ((const Sembol *)d->veri.cagri.hedef->cozum_sembol)->kategori != SEMBOL_ISLEV) {
+                c->ihlal = 1; return;
+            }
 
             /* P3: iç-içe görev_başlat — iç görev ρ'yu env'inde tutabilir. */
             if (uz == 14 && memcmp(ad, "g\xc3\xb6rev_ba\xc5\x9f" "lat", 14) == 0) {

@@ -1,0 +1,21 @@
+// RHO_BEKLE: 0
+// [D-809] P4 (C) — yerel kapanış `f`, aynı adlı KÜRESEL işlevi gölgeliyor. Görev `f()`yi çağırıyor;
+// çalışan, yakalanan `d`yi büyüten kapanıştır (takma adı `e` ana iş parçacığında). Eski C kanıtı
+// `islev_bul` ile ADLA arıyor, küresel `f`nin zararsız gövdesine iniyordu: bayrak 1, ASan
+// heap-use-after-free. ⚠ Self bu çağrıyı küresel `f`ye bağlıyor (G27: sessiz yanlış cevap); iki
+// derleyicide de çıkış 42 olsun diye ana iş parçacığı büyümeden bağımsız `e[0]`ı okur.
+işlev f() -> tam32 { ver 0; }
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [1];
+    değişken e: Dizi<tam32> = d;
+    değişken f: işlev() -> tam32 = || {
+        değişken j: tam32 = 0;
+        iken j < 1000 { dizi_ekle(d, j); j = j + 1; }
+        ver 0;
+    };
+    eşleş görev_başlat(|| { değişken z: tam32 = f(); ver z; }) {
+        tamam(g) => { ver görev_birleştir(g) + dizi_al(e, 0) + 41; }
+        hata(h) => { ver 1; }
+    }
+    ver 99;
+}

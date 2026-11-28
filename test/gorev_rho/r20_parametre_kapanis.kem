@@ -1,0 +1,28 @@
+// RHO_BEKLE: 0
+// [D-809] P4 (self, çağrı grafı) — görev bir yardımcıya İŞLEV DEĞERİ verir; yardımcı işlev tipli
+// PARAMETRESİNİ adıyla çağırır (`g(x)`). Kökte (yardımcının ISLEV düğümü) `g` bir parametre
+// bağlamasıdır: çağrı dolaylı, gövde bilinmez → kanıt düşmeli. Gerçekte çalışan `buyut`,
+// yakalanan diziyi büyütür (takma adı `e` ana iş parçacığında; tampon ρ_sahip'te, D-770).
+// Kapanış yerine adlandırılmış işlev: işaretçi yakalayan kapanış argüman olarak kaçamaz (G005).
+işlev buyut(x: Dizi<tam32>) -> tam32 {
+    değişken j: tam32 = 0;
+    iken j < 1000 { dizi_ekle(x, j); j = j + 1; }
+    ver 0;
+}
+işlev cagir(g: işlev(Dizi<tam32>) -> tam32, x: Dizi<tam32>) -> tam32 {
+    değişken z: tam32 = g(x);
+    ver z;
+}
+işlev main() -> tam32 {
+    değişken d: Dizi<tam32> = [1];
+    değişken e: Dizi<tam32> = d;
+    eşleş görev_başlat(|| cagir(buyut, d)) {
+        tamam(g) => {
+            değişken z: tam32 = görev_birleştir(g);
+            eğer dizi_boyut(e) != 1001 { ver 3; }
+            ver dizi_al(e, 1000) + z - 957;
+        }
+        hata(h) => { ver 1; }
+    }
+    ver 99;
+}
