@@ -2831,6 +2831,8 @@ static IfadeSonuc yapi_olustur_uret(LlvmGen *g, const Dugum *d) {
  *       tutup dış join'i aşabilir),
  *   P4  her çağrı hedefi çözülebilir kullanıcı-işlevi ya da built-in; işlev
  *       DEĞERİ üzerinden dolaylı çağrı DENY (gövdesi bilinmez).
+ *   P5  [D-807] erişilebilir kümede `kanal_al(k)` varsa k'nin yükü KANITLI
+ *       skaler (alınan işaretçi paylaşılır; büyütülürse ρ_sahip ona yazılır).
  * =================================================================== */
 
 #define RHO_MAX_GORULEN 64   /* call-graph kapanışı: ziyaret edilen fn tavanı */
@@ -2968,6 +2970,23 @@ static void rho_confine_tara(RhoConfineCtx *c, const Dugum *d) {
             if (uz == 13 && memcmp(ad, "kanal_g\xc3\xb6nder", 13) == 0) {
                 if (d->veri.cagri.sayi < 2 ||
                     !rho_skaler_ifade(c->g, d->veri.cagri.argumanlar[1])) {
+                    c->ihlal = 1; return;
+                }
+            }
+            /* [D-807] P5: kanal_al(k) — alınan değer DIŞARIDAN gelir ve PAYLAŞILIR:
+             * gönderim sahipliği taşımaz, gönderen dizisini elinde tutmaya devam eder.
+             * Görev işaretçi yükünü büyütürse yeni tampon ρ_sahip'ten ayrılır (D-770:
+             * büyüten iş parçacığı bölgenin sahibi değil) ve paylaşılan dizi başlığına
+             * yazılır → join'de serbest bırakmak gönderende USE-AFTER-FREE (ölçüldü:
+             * ASan heap-use-after-free; ASan'sız exit 42 = SESSİZ). Yük KANITLI skaler
+             * değilse DENY. P1-P4 yalnız ρ_sahip işaretçisinin görevden ÇIKIŞINI
+             * soruyordu; bu yol, dışarıdan GELEN bir nesneye ρ_sahip yazılmasıdır. */
+            if (uz == 8 && memcmp(ad, "kanal_al", 8) == 0) {
+                const Dugum *k = d->veri.cagri.sayi >= 1 ? d->veri.cagri.argumanlar[0] : NULL;
+                const TipBilgisi *kt = (k && k->tip == DUGUM_TANIMLAYICI && k->cozum_sembol)
+                    ? ((const Sembol *)k->cozum_sembol)->tip : NULL;
+                if (!kt || kt->kategori != TIP_KANAL ||
+                    rho_tip_isaretci_benzeri(kt->veri.kanal.ic)) {
                     c->ihlal = 1; return;
                 }
             }

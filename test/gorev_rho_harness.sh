@@ -48,7 +48,9 @@ bayrak() {   # $1 = .ll → "0,1,..." (spawn sırasıyla)
 # 46 yerine ~150 dosya). Geliştirici kabuğunda görünmüyordu: orada `grep` bir kabuk
 # İŞLEVİYDİ ve o dizinleri atlıyordu (ölçüldü: 0 / 106 eşleşme); harness etkileşimsiz
 # koşar ve gerçek `grep`i kullanır.
-git ls-files '*.kem' 2>/dev/null | xargs grep -l "görev_başlat" 2>/dev/null | sort > "$W/liste"
+# ⚠ `-z` / `xargs -0` ŞART: düz `git ls-files` ASCII dışı yolları TIRNAKLI kaçışla basar
+# (`"k\303\274t\303\274phane/..."`), `grep` o adı bulamaz ve dosya SESSİZCE atlanırdı.
+git ls-files -z '*.kem' 2>/dev/null | xargs -0 grep -l "görev_başlat" 2>/dev/null | sort > "$W/liste"
 n=0
 while IFS= read -r f; do
     c=""; s=""
