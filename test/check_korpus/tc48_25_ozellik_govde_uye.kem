@@ -1,0 +1,7 @@
+// [D-796] P202 — `özellik` gövdesinde işlev-dışı üye (C parser.c:741). C tanıyı basar, panik
+// senkronu yapar ve gövde döngüsünden ÇIKAR. Öncesinde self döngüyü sessizce bitiriyor, tanıyı
+// kapanış beklentisi (P000) basıyor ve üst düzey art arda iki P001 üretiyordu.
+özellik Oz {
+    x: tam32;
+}
+işlev main() -> tam32 { ver 0; }

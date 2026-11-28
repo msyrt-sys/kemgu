@@ -1,0 +1,5 @@
+// [D-796] P061 — `modül` gövdesi için `{` eksik (C parser.c:1071).
+modül m
+    işlev f() -> tam32 { ver 1; }
+}
+işlev main() -> tam32 { ver 0; }

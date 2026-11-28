@@ -1,0 +1,7 @@
+// [D-796] P211 — `uygula` gövdesinde işlev-dışı üye (C parser.c:817). `tc48_25` ile aynı
+// toparlanma: tanı + panik senkron + döngüden çık.
+yapı K { x: tam32; }
+uygula K {
+    x: tam32;
+}
+işlev main() -> tam32 { ver 0; }

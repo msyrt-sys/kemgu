@@ -1,0 +1,4 @@
+// [D-796] P203 — `özellik` gövdesi dosya sonunda kapanmıyor (C parser.c:747).
+işlev main() -> tam32 { ver 0; }
+özellik Oz {
+    işlev a() -> tam32;

@@ -1,0 +1,5 @@
+// [D-796] P201 — `özellik` gövdesi için `{` eksik (C parser.c:728).
+özellik Oz
+    işlev a() -> tam32;
+}
+işlev main() -> tam32 { ver 0; }
