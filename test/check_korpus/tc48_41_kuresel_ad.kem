@@ -1,0 +1,4 @@
+// [D-797] P035 — `küresel değişken` adı yerine sayı (C parser.c:1104). Hiçbir beklenti belirteç
+// tüketmediği için P036/P011/P037/P038 aynı konumda basamaklanır; bu basamaklanma da C ile birebir.
+küresel değişken 5: tam32 = 1;
+işlev main() -> tam32 { ver 0; }

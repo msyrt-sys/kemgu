@@ -1,0 +1,3 @@
+// [D-797] P033 — `sabit` değerinden sonra `;` eksik (C parser.c:854); tanı izleyen belirtece bağlanır.
+sabit A: tam32 = 1
+işlev main() -> tam32 { ver 0; }

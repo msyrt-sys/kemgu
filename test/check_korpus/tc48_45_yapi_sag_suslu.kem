@@ -1,0 +1,3 @@
+// [D-797] P023 — `yapı` gövdesi dosya sonunda kapanmıyor (C parser.c:580).
+işlev main() -> tam32 { ver 0; }
+yapı K { x: tam32;

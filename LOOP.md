@@ -57,10 +57,18 @@
 - [~] C0a [M] Kalan `bekle` sitelerini C kodlariyla esle. ESLENEN: 22 kod
       (D-643'te 3, D-647'de 4, D-648 P017, D-649 P261, D-650 P015/P016/P012/P013/
       P081/P082/P010/P101, D-651 P001, D-652 P350/P150/P122/P060/P040).
-      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796).
-      ESLENEN: 39 kod (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili bicimler; tc48_24.
+      Eslenmemis `bekle` cagrisi: 91 -> 85 -> 79 -> (D-795 olcumu, ayni desen `bekle(p, "`) 77 -> 76 -> 70 (D-796)
+      -> 58 (D-797). ESLENEN: 52 kod (✓ D-795 P014 islev adi — anahtar kelime / sayi / EOF / degistiricili
+      bicimler; tc48_24.
       ✓ D-796 govde/onek toparlanmasi: `özellik` P201/P202/P203 · `uygula` P210/P211/P212 · `modül` P061/P062 ·
-      `dışa`/`genel` oneki P050/P051; tc48_25..36; 49 sekil: once 44'u farkli, sonra hepsi C ile birebir).
+      `dışa`/`genel` oneki P050/P051; tc48_25..36; 49 sekil: once 44'u farkli, sonra hepsi C ile birebir.
+      ✓ D-797 ust duzey bildirimler: `sabit` P031/P032/P033 · `küresel` P034..P038 · `yapı` P023 · `çeşit`
+      P351/P352/P354/P355 (P352 tanisiz sayac yoluydu → tani + panik + cik); tc48_37..50; 35 sekil: once 29'u
+      farkli, sonra hepsi C ile birebir).
+      KALAN 58 site (D-797 olcumu, islev basina): parse_satirici_asm 11 · parse_tip 9 · parse_birincil 6 ·
+      parse_desen 5 · parse_kullan 5 · parse_guvensiz 4 · parse_esles 2 · parse_icin 2 · parse_sonek 3 ·
+      parse_yapi_olustur 3 · atla_tip_paramlar_sahipli 2 · parse_esles_kolu/parse_generic_args/parse_ifade_veya_atama/
+      parse_islev_genel/parse_lambda/parse_tek_arg 1'er.
       ✓ D-796 (D-795 yol ustu notu KAPANDI): `özellik`/`uygula` govde dongusu islev-disi token gorunce artik C gibi
       tani + panik senkron + donguden CIKAR (oncesi: sessiz son + P000 + art arda P001). Donguden cikis YUK TASIYOR:
       S353 ile kaldirilinca `uygula` govdesindeki `sabit` (senkron anahtar kelime, panik TUKETMEZ) derleyiciyi ASTI;
@@ -536,7 +544,8 @@
       D-796 OLCUMU — tanisiz sayac siteleri (`p.hata_say = p.hata_say + 1`, ph_ekle haric): 9 -> 8. Kapanan:
       `parse_disa_govde` (`dışa`/`genel` oneki → P050/P051; oncesinde dosyadaki tek hata buysa D-648 emniyet agi
       konumsuz `P000 0 0` basiyordu). KALAN parser siteleri: bekle_buyuk · parse_parametre · parse_desen ·
-      asm_kisit_atla · asm_kisit_al · parse_cesit; codegen asamasi (emniyet agina girmez): ifade_uret · deyim_uret.
+      asm_kisit_atla · asm_kisit_al · ~~parse_cesit~~ (✓ D-797 → P352); codegen asamasi (emniyet agina girmez):
+      ifade_uret · deyim_uret. D-797'den sonra 8 -> 7.
       (`codegen.kem` emniyet agi yorumundaki "Kalan 12 site" sayisi D-648'den kalma, bayat.)
 - [ ] G7  [S] `tumu*.log` .gitignore'a (loop.log ile ayni sinif: kosum ciktisi).
 - [x] G8  ✓ D-751 (369/429 bildirim genel; testler modül sistemiyle derleniyor, calistir_stdlib_ithal). [?] stdlib modulleri `genel` DEGIL -> secili import ile tuketilemiyorlar;
@@ -3882,3 +3891,19 @@
   TAM TAKIM (-j10 ölçümlü, 25:27): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
   checker_diff 341/341, FIXPOINT ✓ (109970 satır), atlama izleri D-795 ile aynı desen (25). Açılış süresi kapısı
   bu kez beklemeden geçti (medyan 488,9 / 644,2 ms < 650, çekişme 17 / 15).
+- 2026-11-28 D-797: C0a — üst düzey bildirim tanıları (`sabit` / `küresel` / `yapı` / `çeşit`).
+  D-796'nın ardından sıradaki C0a dilimi: 12 eşlenmemiş `bekle` sitesi + `çeşit` gövdesinde bir tanısız sayaç yolu.
+  `sabit` P031/P032/P033 (parser.c:850/852/854) · `küresel` P034..P038 (1103..1110) · `yapı` P023 (580) · `çeşit`
+  P351/P354/P355 (623/656/672). `çeşit` gövdesinde varyant adı olmayan belirteç → self sayacı artırıp TANI
+  KAYDETMİYOR ve tek belirteç ilerliyordu (D-796'nın `dışa`/`genel` sınıfı); artık P352 (parser.c:637) + panik +
+  döngüden çık. Tanısız sayaç sitesi 8 → 7 (ph_ekle hariç). 35 hata şekli (18 doğrudan + 17 komşu: modül içi,
+  generic çeşit, `genel`/`dışa` önekli, anahtar kelime adlı varyant, çift virgül, payload'da sayı, dosya sonları,
+  geçerli biçimler): HEAD ikilisinde 29'u farklıydı, şimdi 35'i de birebir. Yalnız `codegen.kem` (D-734).
+  Eşlenmemiş `bekle(p, "` 70 → 58. Fikstür tc48_37..50 (14 dosya; her biri eski ikilide farklı, yenide C ile aynı).
+  checker_diff 355/355. SABOTAJ S363-S378, 16/16 rc=2: 12 kod eşlemesi · P352 kodu · eski sessiz yol · panik
+  kaldırma · döngü çıkışı. S378 (`çeşit` döngüsünden çıkış) İKİ fikstürde derleyiciyi ASTI: tc48_50'de `sabit`
+  senkron anahtar kelimesini panik tüketmez; tc48_49'da panik `}`yi tükettikten sonra döngü üst düzey `işlev`e
+  takılır. İkisinde de aynı konumda sonsuz döngü; checker_diff'in 60 sn sınırı yakaladı (D-796 S353'ün aynısı).
+  TAM TAKIM (-j10 ölçümlü, 26:07): 191 kapının 191'i geçti, rc=0, disk denetimi temiz (yeni geçici dizin 0),
+  checker_diff 355/355, FIXPOINT ✓, atlama izleri D-796 ile aynı desen (25). Açılış süresi beklemeden geçti
+  (medyan 527,3 / 632,9 ms < 650, çekişme 15 / 17).

@@ -1,0 +1,3 @@
+// [D-797] P034 — `küresel` sonrasında `değişken` eksik (C parser.c:1103).
+küresel g: tam32 = 1;
+işlev main() -> tam32 { ver 0; }

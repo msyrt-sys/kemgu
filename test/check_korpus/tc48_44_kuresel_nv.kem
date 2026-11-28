@@ -1,0 +1,3 @@
+// [D-797] P038 — `küresel` başlangıç değerinden sonra `;` eksik (C parser.c:1110).
+küresel değişken g: tam32 = 1
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,3 @@
+// [D-797] P031 — `sabit` adından sonra `:` eksik (C parser.c:850).
+sabit A tam32 = 1;
+işlev main() -> tam32 { ver 0; }

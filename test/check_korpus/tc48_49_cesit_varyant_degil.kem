@@ -1,0 +1,5 @@
+// [D-797] P352 — varyant adı yerine sayı (C parser.c:637). C tanıyı basar, panik senkronu yapar
+// (`5`, `,`, `B` yutulur, `}` tüketilir) ve döngüden çıkar; kapanış beklentisi P355 izleyen `işlev`e
+// takılır. Öncesinde self sayacı artırıp TANI KAYDETMİYOR ve tek belirteç ilerliyordu (P000 + P001).
+çeşit R { A, 5, B }
+işlev main() -> tam32 { ver 0; }
