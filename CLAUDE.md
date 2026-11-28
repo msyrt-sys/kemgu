@@ -231,12 +231,12 @@ bağlama serbest (`değişken bir: tam32` geçerli).
 tipli değeri atlar. Ortak kural `islev_tur_uyumsuz` (D-790, `selfhost/codegen.kem`): iki taraf
 işlev → yapısal; işlev beklenir/değer bilinen işlev-dışı; tersi. Generic ve değer tarafında
 bilinmeyen ad joker; değerin alt ağacında tanı + eksik imza → HATA (C D-789 aynası). Kullanan
-noktalar: bildirim/`sabit` (D-790) · işlev ve metot argümanı (D-791). `ver`, alana atama, yapı
-alanı ve dizi literali hâlâ AÇIK — `ver || "a"` (beklenen `işlev() -> tam32`) C'de T020, self'te
-OK ve çalışınca YANLIŞ DEĞER verir. O noktalarda işlev tipli değer için self `--check` OK'u
+noktalar: bildirim/`sabit` (D-790) · işlev ve metot argümanı (D-791) · `ver` (D-792; dönüş
+dizgisi "?" iken tip DÜĞÜMÜ `aktif_donus_tn` kullanılır, kapanış blok gövdesinde -1). Alana
+atama, yapı alanı ve dizi literali hâlâ AÇIK — orada işlev tipli değer için self `--check` OK'u
 kanıt DEĞİLDİR. C tarafında: değer tipi HATA içeriyorsa (iç içe dâhil) uyumsuzluk tanısı
-basılmaz (`tip_hata_icerir`; bildirim · argüman · metot argümanı · `sabit`). `dizi_ekle`/
-`dizi_yaz` eleman tipi ve eşitlik operand uyumu self'te İŞLEV-DIŞI tiplerde de yok (E4z).
+basılmaz (`tip_hata_icerir`; bildirim · argüman · metot argümanı · `ver` · `sabit`).
+`dizi_ekle`/`dizi_yaz` eleman tipi ve eşitlik operand uyumu self'te İŞLEV-DIŞI tiplerde de yok (E4z).
 
 ### Tip Sistemi
 ```

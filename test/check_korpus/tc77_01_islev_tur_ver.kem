@@ -1,0 +1,32 @@
+// [D-792] E4v-B: `ver` noktasında İŞLEV TİPİ uyumluluğu + dönüş dizgisi "?" iken çıplak
+// `ver;`. Self'in dönüş dizgisi işlev tipinde (ve generic `T`, bilinmeyen ad, bilinmeyen
+// elemanlı `Dizi`de) "?" oluyordu ve T020 denetimi TÜMÜYLE atlanıyordu: `ver || "a"`
+// (beklenen `işlev() -> tam32`) çalışınca exit 28 veriyordu. Artık dönüş tip DÜĞÜMÜYLE
+// denetleniyor. OLUMSUZ (T020): lambda · sayı · işlev adı · işlev tipli parametre ·
+// işlev-dışı dönüşe lambda/işlev adı · "?" dönüşte `ver;`. POZİTİF (tanı YOK): uyumlu
+// işlev adı · generic `-> T` içinde lambda · kapanış GÖVDESİNDEKİ `ver` (D-627: kapanışın
+// dönüşüdür, çevreleyen işlevin değil — düğüm yolu da onu atlamalı). Değer HATA içeriyorsa
+// T020 basılmaz (C'ye bu artımda eklendi): `ver || yok()` yalnız T002.
+yapı Nokta { x: tam32; }
+işlev selam() -> metin { ver "a"; }
+işlev d_lambda() -> işlev() -> tam32 { ver || "a"; }
+işlev d_sayi() -> işlev() -> tam32 { ver 5; }
+işlev d_skaler_lambda() -> tam32 { ver || 1; }
+işlev d_islevadi_uyumlu() -> işlev() -> metin { ver selam; }
+işlev d_islevadi_uyumsuz() -> işlev() -> tam32 { ver selam; }
+işlev d_param(g: işlev() -> metin) -> işlev() -> tam32 { ver g; }
+işlev d_metin_islevadi() -> metin { ver selam; }
+işlev d_kullanici_lambda() -> Nokta { ver || 1; }
+işlev d_bos_islev() -> işlev() -> tam32 { ver; }
+işlev d_bos_generic<T>(x: T) -> T { ver; }
+işlev d_bos_dizi() -> Dizi<Nokta> { ver; }
+işlev d_bos_bilinmeyen() -> Yokk { ver; }
+işlev d_beklenen_hata() -> işlev() -> Yokk { ver || 1; }
+işlev d_generic_lambda<T>(x: T) -> T { ver || 1; }
+işlev d_kapanis_ici() -> tam32 {
+    değişken g: işlev() -> işlev() -> tam32 = || { ver || 1; };
+    ver 0;
+}
+işlev d_hatali() -> işlev() -> tam32 { ver || yok(); }
+işlev d_hatali_skaler() -> tam32 { ver || yok_iki(); }
+işlev main() -> tam32 { ver d_kapanis_ici(); }
