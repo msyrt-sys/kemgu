@@ -1,0 +1,5 @@
+// [D-797] P352 + P355 aynı konumda. Varyant konumundaki `sabit` senkron anahtar kelimesidir: panik
+// onu TÜKETMEZ, döngü biter, `sabit` üst düzeyde geçerli tanım olarak ayrıştırılır ve kapanış `}`
+// sahipsiz kalır (P001). Döngüden çıkılmasaydı aynı konumda sonsuza dönerdi (D-796 S353 sınıfı).
+çeşit R { A, sabit Q: tam32 = 1; }
+işlev main() -> tam32 { ver 0; }

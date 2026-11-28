@@ -1,0 +1,3 @@
+// [D-797] P354 — `çeşit` varyant payload'ında `)` eksik (C parser.c:656).
+çeşit R { A(tam32, B }
+işlev main() -> tam32 { ver 0; }

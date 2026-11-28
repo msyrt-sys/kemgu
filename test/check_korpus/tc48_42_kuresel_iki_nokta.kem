@@ -1,0 +1,3 @@
+// [D-797] P036 — `küresel` değişken adından sonra `:` eksik (C parser.c:1106).
+küresel değişken g tam32 = 1;
+işlev main() -> tam32 { ver 0; }

@@ -2402,7 +2402,7 @@ işlev parse_yapi(p: &değişken Ayr) -> tam32 {
             }
         }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P023");   // [D-797] C parser.c:580
     tip_param_kaydet(p, ad);   // D-307: yakalanan generic paramları ad'a bağla
     ver dugum_n(p, "YAPI", ad, s, u, kids);
 }
@@ -2424,14 +2424,20 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
     değişken ad: metin = sim_lex(p);
     bekle_k(p, "TANIMLAYICI", "P350");   // [D-652] C parser.c:607 cesit adi
     atla_tip_paramlar(p);   // D-307: generic çeşit paramlarını yakala (tp_pending)
-    bekle(p, "SOL_SUSLU");
+    bekle_k(p, "SOL_SUSLU", "P351");   // [D-797] C parser.c:623
     değişken kids: Dizi<tam32> = [];   // payload tip düğümleri (varyant-sırası düz)
     değişken devam: mantıksal = doğru;
     iken devam {
         eğer sim_mi(p, "SAG_SUSLU") veya sim_mi(p, "DOSYA_SONU") { devam = yanlış; }
         değilse {
-            eğer sim_mi(p, "TANIMLAYICI") == yanlış {  // anti-hang (C panik_sync+break)
-                p.hata_say = p.hata_say + 1; ilerle(p); devam = yanlış;
+            eğer sim_mi(p, "TANIMLAYICI") == yanlış {
+                // [D-797] C parser.c:637 — varyant adı değil: tanı + panik senkron + döngüden
+                // çık. Öncesinde sayaç artıyor ama TANI KAYDEDİLMİYORDU ve tek belirteç
+                // ilerleniyordu (D-796'nın `dışa`/`genel` sınıfı) → kapanış beklentisi P000,
+                // üst düzey P001 basıyordu.
+                parse_hata_kaydet(p, "P352");
+                panik_senkron(p);
+                devam = yanlış;
             } değilse {
             değişken vad: metin = sim_lex(p);   // varyant adı (dump'a girmez)
             ilerle(p);
@@ -2448,7 +2454,7 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
                         değilse { d2 = yanlış; }
                     }
                 }
-                bekle(p, "SAG_PAREN");
+                bekle_k(p, "SAG_PAREN", "P354");   // [D-797] C parser.c:656
             }
             // D3 yan-kanal: varyant disc=cv_* pozisyonu; çeşit-bazlı sıra korunur.
             dizi_ekle(p.cv_cesit, ad);
@@ -2478,7 +2484,7 @@ işlev parse_cesit(p: &değişken Ayr) -> tam32 {
             }
         }
     }
-    bekle(p, "SAG_SUSLU");
+    bekle_k(p, "SAG_SUSLU", "P355");   // [D-797] C parser.c:672
     değişken cn: tam32 = dugum_n(p, "CESIT", ad, s, u, kids);
     dizi_ekle(p.cc_ad, ad);       // D3: çeşit-node registry (payload struct için)
     dizi_ekle(p.cc_node, cn);
@@ -2650,25 +2656,25 @@ işlev parse_sabit(p: &değişken Ayr) -> tam32 {
     ilerle(p);  // sabit
     değişken ad: metin = sim_lex(p);
     bekle_k(p, "TANIMLAYICI", "P030");   // [D-653] C parser.c:848 sabit adi
-    bekle(p, "IKI_NOKTA");
+    bekle_k(p, "IKI_NOKTA", "P031");        // [D-797] C parser.c:850
     değişken tip: tam32 = parse_tip(p);
-    bekle(p, "ESIT");
+    bekle_k(p, "ESIT", "P032");             // [D-797] C parser.c:852
     değişken dg: tam32 = parse_ifade(p);
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P033");   // [D-797] C parser.c:854
     ver dugum2(p, "SABIT", ad, s, u, tip, dg);
 }
 // D-253: küresel değişken ad: tip = init;  → "KURESEL" düğüm (C parser.c parite).
 işlev parse_kuresel(p: &değişken Ayr) -> tam32 {
     değişken s: tam32 = sim_sat(p);  değişken u: tam32 = sim_sut(p);
     ilerle(p);  // küresel
-    bekle(p, "DEGISKEN");
+    bekle_k(p, "DEGISKEN", "P034");         // [D-797] C parser.c:1103
     değişken ad: metin = sim_lex(p);
-    bekle(p, "TANIMLAYICI");
-    bekle(p, "IKI_NOKTA");
+    bekle_k(p, "TANIMLAYICI", "P035");      // [D-797] C parser.c:1104
+    bekle_k(p, "IKI_NOKTA", "P036");        // [D-797] C parser.c:1106
     değişken tip: tam32 = parse_tip(p);
-    bekle(p, "ESIT");
+    bekle_k(p, "ESIT", "P037");             // [D-797] C parser.c:1108
     değişken dg: tam32 = parse_ifade(p);
-    bekle(p, "NOKTALI_VIRGUL");
+    bekle_k(p, "NOKTALI_VIRGUL", "P038");   // [D-797] C parser.c:1110
     ver dugum2(p, "KURESEL", ad, s, u, tip, dg);
 }
 // ---- P5: modül / kullan / dışa / genel ----

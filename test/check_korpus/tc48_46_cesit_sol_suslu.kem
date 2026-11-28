@@ -1,0 +1,3 @@
+// [D-797] P351 — `çeşit` gövdesi için `{` eksik (C parser.c:623).
+çeşit R A, B }
+işlev main() -> tam32 { ver 0; }

@@ -1,0 +1,3 @@
+// [D-797] P355 — `çeşit` gövdesi dosya sonunda kapanmıyor (C parser.c:672).
+işlev main() -> tam32 { ver 0; }
+çeşit R { A, B
